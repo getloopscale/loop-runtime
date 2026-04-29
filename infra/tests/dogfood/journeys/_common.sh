@@ -137,26 +137,44 @@ print(len(matched))
   return 0
 }
 
-# Prova de Morte — verify cleanup. Args: tenant project env max_seconds
+# Prova de Morte — verify cleanup of a single PROJECT. The tenant namespace
+# AND the ArgoCD App (`<tenant>-<env>`) are SHARED across projects in the
+# same env. Cleanup verification per-project must therefore look at
+# label-selected resources within the shared namespace, not at ns/app
+# existence.
+#
+# Args: tenant project env max_seconds
 prove_dead() {
   local tenant=$1 project=$2 env=$3 max_seconds=${4:-300}
   local ns="loopzero-${tenant}-${env}"
-  local app_name="${tenant}-${env}"  # ArgoCD app naming convention
   local elapsed=0
-  journey_log "Prova de Morte: ns=$ns app=$app_name (max ${max_seconds}s)"
+  journey_log "Prova de Morte: ns=$ns project=$project (max ${max_seconds}s)"
 
   while (( elapsed < max_seconds )); do
-    local ns_exists=0 app_exists=0
-    kubectl --context "$WORKLOAD_CTX" get ns "$ns" >/dev/null 2>&1 && ns_exists=1
-    kubectl --context "$MGMT_CTX" -n argocd get application "$app_name" >/dev/null 2>&1 && app_exists=1
-    if (( ns_exists == 0 && app_exists == 0 )); then
-      journey_log "Prova de Morte: cleanup complete after ${elapsed}s"
+    # If the tenant namespace itself is gone, the project is gone too.
+    if ! kubectl --context "$WORKLOAD_CTX" get ns "$ns" >/dev/null 2>&1; then
+      journey_log "Prova de Morte: tenant namespace gone (project guaranteed gone)"
       return 0
     fi
+
+    # Per-project cleanup: zero resources with loopzero.io/project=<project> label.
+    local res_count
+    res_count=$(kubectl --context "$WORKLOAD_CTX" -n "$ns" \
+      get deploy,svc,ingressroute.traefik.io,certificate.cert-manager.io \
+      -l "loopzero.io/project=$project" \
+      --no-headers 2>/dev/null | wc -l)
+    if (( res_count == 0 )); then
+      journey_log "Prova de Morte: cleanup complete after ${elapsed}s (zero resources for project=$project)"
+      return 0
+    fi
+
     sleep 10
     elapsed=$(( elapsed + 10 ))
   done
-  journey_log "Prova de Morte: cleanup INCOMPLETE after ${max_seconds}s (ns_exists=$ns_exists app_exists=$app_exists)"
+  journey_log "Prova de Morte: cleanup INCOMPLETE after ${max_seconds}s — resources still labeled with project=$project"
+  kubectl --context "$WORKLOAD_CTX" -n "$ns" \
+    get deploy,svc,ingressroute.traefik.io,certificate.cert-manager.io \
+    -l "loopzero.io/project=$project" >&2 || true
   return 1
 }
 

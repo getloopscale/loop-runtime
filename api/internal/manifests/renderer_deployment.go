@@ -12,10 +12,13 @@ import (
 func buildDeployment(ri RenderInput, app AppManifestInput, port int) k8sDeployment {
 	ns := namespace(ri.TenantID, ri.Environment)
 	labels := commonLabels(ri, app)
+	resName := resourceName(ri.ProjectID, app.Name)
+	// Selector must use the project-scoped `app` label so two projects with
+	// an app of the same name never share pods (Achado #17).
 	selectorLabels := map[string]string{
-		"app":              app.Name,
-		"loopzero.io/tenant":   ri.TenantID,
-		"loopzero.io/project":  ri.ProjectID,
+		"app":             resName,
+		"loopzero.io/tenant":  ri.TenantID,
+		"loopzero.io/project": ri.ProjectID,
 	}
 
 	falseVal := false
@@ -115,7 +118,7 @@ func buildDeployment(ri RenderInput, app AppManifestInput, port int) k8sDeployme
 		APIVersion: "apps/v1",
 		Kind:       "Deployment",
 		Metadata: k8sMetadata{
-			Name:      app.Name,
+			Name:      resName,
 			Namespace: ns,
 			Labels:    labels,
 			Annotations: map[string]string{
@@ -178,11 +181,12 @@ func buildHPA(ri RenderInput, app AppManifestInput) k8sHPA {
 		targetCPU = 80
 	}
 
+	resName := resourceName(ri.ProjectID, app.Name)
 	return k8sHPA{
 		APIVersion: "autoscaling/v2",
 		Kind:       "HorizontalPodAutoscaler",
 		Metadata: k8sMetadata{
-			Name:      app.Name,
+			Name:      resName,
 			Namespace: ns,
 			Labels:    labels,
 		},
@@ -190,7 +194,7 @@ func buildHPA(ri RenderInput, app AppManifestInput) k8sHPA {
 			ScaleTargetRef: k8sScaleTargetRef{
 				APIVersion: "apps/v1",
 				Kind:       "Deployment",
-				Name:       app.Name,
+				Name:       resName,
 			},
 			MinReplicas: minR,
 			MaxReplicas: maxR,
@@ -228,16 +232,17 @@ func buildScaledObject(ri RenderInput, app AppManifestInput) kedaScaledObject {
 		cooldown = 300
 	}
 
+	resName := resourceName(ri.ProjectID, app.Name)
 	return kedaScaledObject{
 		APIVersion: "keda.sh/v1alpha1",
 		Kind:       "ScaledObject",
 		Metadata: k8sMetadata{
-			Name:      app.Name + "-scaledobject",
+			Name:      resName + "-scaledobject",
 			Namespace: namespace(ri.TenantID, ri.Environment),
 			Labels:    commonLabels(ri, app),
 		},
 		Spec: kedaScaledObjectSpec{
-			ScaleTargetRef:  kedaScaleTargetRef{Name: app.Name},
+			ScaleTargetRef:  kedaScaleTargetRef{Name: resName},
 			MinReplicaCount: 0,
 			MaxReplicaCount: maxR,
 			CooldownPeriod:  cooldown,
@@ -278,11 +283,12 @@ func buildHTTPScaledObject(ri RenderInput, app AppManifestInput) kedaHTTPScaledO
 		cooldown = 300
 	}
 
+	resName := resourceName(ri.ProjectID, app.Name)
 	return kedaHTTPScaledObject{
 		APIVersion: "http.keda.sh/v1alpha1",
 		Kind:       "HTTPScaledObject",
 		Metadata: k8sMetadata{
-			Name:      app.Name + "-httpso",
+			Name:      resName + "-httpso",
 			Namespace: namespace(ri.TenantID, ri.Environment),
 			Labels:    commonLabels(ri, app),
 		},
@@ -290,8 +296,8 @@ func buildHTTPScaledObject(ri RenderInput, app AppManifestInput) kedaHTTPScaledO
 			Hosts:                 hosts,
 			TargetPendingRequests: 100,
 			ScaleTargetRef: kedaHTTPScaleTargetRef{
-				Name:    app.Name,
-				Service: app.Name,
+				Name:    resName,
+				Service: resName,
 				Port:    port,
 			},
 			Replicas:        &kedaHTTPReplicas{Min: 0, Max: maxR},
@@ -304,8 +310,9 @@ func buildHTTPScaledObject(ri RenderInput, app AppManifestInput) kedaHTTPScaledO
 func buildPDB(ri RenderInput, app AppManifestInput) k8sPDB {
 	ns := namespace(ri.TenantID, ri.Environment)
 	labels := commonLabels(ri, app)
+	resName := resourceName(ri.ProjectID, app.Name)
 	selectorLabels := map[string]string{
-		"app":             app.Name,
+		"app":             resName,
 		"loopzero.io/tenant":  ri.TenantID,
 		"loopzero.io/project": ri.ProjectID,
 	}
@@ -314,7 +321,7 @@ func buildPDB(ri RenderInput, app AppManifestInput) k8sPDB {
 		APIVersion: "policy/v1",
 		Kind:       "PodDisruptionBudget",
 		Metadata: k8sMetadata{
-			Name:      app.Name + "-pdb",
+			Name:      resName + "-pdb",
 			Namespace: ns,
 			Labels:    labels,
 		},

@@ -138,9 +138,11 @@ func TestRender_IngressRouteTLS_UsesSecretName(t *testing.T) {
 		t.Error("IngressRoute must not contain certResolver — should use tls.secretName")
 	}
 
-	// Verify tls.secretName references the Certificate secret
-	if !strings.Contains(result, "secretName: tls-api") {
-		t.Error("IngressRoute must contain 'secretName: tls-api' referencing the Certificate secret")
+	// Verify tls.secretName references the project-scoped Certificate secret
+	// (Achado #17: tls-<project>-<app> avoids collision with same-named apps
+	// in other projects sharing the tenant env namespace).
+	if !strings.Contains(result, "secretName: tls-webapp-api") {
+		t.Error("IngressRoute must contain 'secretName: tls-webapp-api' referencing the project-scoped Certificate secret")
 	}
 
 	// Verify a Certificate CR is generated
@@ -559,8 +561,9 @@ func TestRender_ServerApp_PDB(t *testing.T) {
 	if pdb.APIVersion != "policy/v1" {
 		t.Errorf("PDB apiVersion: got %q, want policy/v1", pdb.APIVersion)
 	}
-	if pdb.Metadata.Name != "api-pdb" {
-		t.Errorf("PDB name: got %q, want api-pdb", pdb.Metadata.Name)
+	// Achado #17: PDB name is project-scoped.
+	if pdb.Metadata.Name != "webapp-api-pdb" {
+		t.Errorf("PDB name: got %q, want webapp-api-pdb", pdb.Metadata.Name)
 	}
 	if pdb.Spec.MaxUnavailable != 1 {
 		t.Errorf("PDB maxUnavailable: got %d, want 1", pdb.Spec.MaxUnavailable)
