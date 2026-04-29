@@ -64,7 +64,7 @@ done
 JOURNEYS=(
   "preflight"
   "journey-01-solo-deploy"
-  "journey-02-multi-app"
+  "journey-02-multi-server"
   "journey-03-secrets"
   "journey-04-scale"
   "journey-05-promote"

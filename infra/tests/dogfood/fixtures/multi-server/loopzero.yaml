@@ -1,0 +1,16 @@
+version: 1
+project: multi-server
+
+apps:
+  api:
+    path: api
+    framework: express
+    type: server
+    build: dockerfile
+    port: 3001
+
+  worker:
+    path: worker
+    framework: express
+    type: worker
+    build: dockerfile
