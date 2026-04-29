@@ -153,3 +153,39 @@ func TestExtractResourceID_PromoteConnect(t *testing.T) {
 		}
 	}
 }
+
+// CHG-2026-04-29-DOGFOOD-REAL-E2E iter 13 / Achado #27.
+// Preview create/delete + admin tenants evict were silently falling through
+// to "unknown.<METHOD>.<segment>" in audit_log because the path segments
+// weren't in deriveAction's switch / knownCollections set. Dogfood journeys
+// 09/11 had no audit entries to assert.
+func TestDeriveAction_PreviewAndAdmin(t *testing.T) {
+	cases := []struct {
+		method, path, want string
+	}{
+		{"POST", "/api/v1/projects/myapp/previews", "preview.created"},
+		{"DELETE", "/api/v1/projects/myapp/previews/prev-123", "preview.deleted"},
+		{"POST", "/api/v1/admin/tenants/evict", "admin.tenants_evicted"},
+	}
+	for _, tc := range cases {
+		got := deriveAction(tc.method, tc.path)
+		if got != tc.want {
+			t.Errorf("deriveAction(%s, %s) = %q, want %q", tc.method, tc.path, got, tc.want)
+		}
+	}
+}
+
+func TestExtractResourceType_PreviewAndAdmin(t *testing.T) {
+	cases := []struct {
+		path, want string
+	}{
+		{"/api/v1/projects/myapp/previews", "preview"},
+		{"/api/v1/projects/myapp/previews/prev-123", "preview"},
+		{"/api/v1/admin/tenants/evict", "admin"},
+	}
+	for _, tc := range cases {
+		if got := extractResourceType(tc.path); got != tc.want {
+			t.Errorf("extractResourceType(%s) = %q, want %q", tc.path, got, tc.want)
+		}
+	}
+}

@@ -116,6 +116,12 @@ except Exception:
 done
 (( elapsed < 60 )) || journey_fail "preview still in active state after 60s"
 
+journey_step "Audit log assertion (preview.created + preview.deleted emitted)"
+assert_audit_entry "preview.created" "$PROJECT" \
+  || journey_fail "audit log missing preview.created entry for $PROJECT"
+assert_audit_entry "preview.deleted" "$PROJECT" \
+  || journey_log "WARN: preview.deleted entry not yet visible (eventually consistent)"
+
 journey_step "GAP DOCUMENTED — webhook auto-create flow"
 journey_log "Cobertura local: list/inspect/delete + Create via API direct."
 journey_log "Não exercitado: GitHub PR webhook → /webhooks/github → preview auto-create."

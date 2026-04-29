@@ -119,6 +119,10 @@ unique_builds=$(echo "$state" | awk 'NF{print $5}' | sort -u | grep -v '^$' | wc
 [[ "$unique_builds" == "1" ]] || journey_fail "expected single build_id across both envs, got $unique_builds: $state"
 journey_log "promote verified: both envs ACTIVE with same build_id"
 
+journey_step "Audit log assertion (project.created emitted for $PROJECT)"
+assert_audit_entry "project.created" "$PROJECT" \
+  || journey_fail "audit log missing project.created entry for $PROJECT"
+
 journey_step "Prova de Morte"
 "$LOOPZERO_BIN" project delete "$PROJECT" --yes --json >/dev/null 2>&1 || journey_fail "project delete failed"
 prove_dead "$TENANT_ID" "$PROJECT" "production" 300 || journey_fail "Prova de Morte production timeout"

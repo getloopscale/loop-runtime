@@ -219,9 +219,13 @@ skip_cmd "loopzero platform secrets"      "interactive"
 # =============================================================================
 
 # Aggregate results from RESULTS_FILE (one JSON object per line).
-PASS=$(grep -c '"status":"PASS"' "$RESULTS_FILE" 2>/dev/null || echo 0)
-FAIL=$(grep -c '"status":"FAIL"' "$RESULTS_FILE" 2>/dev/null || echo 0)
-SKIP=$(grep -c '"status":"SKIP"' "$RESULTS_FILE" 2>/dev/null || echo 0)
+# Note: `grep -c` exits 1 with no matches (still prints "0" to stdout).
+# `|| echo 0` concatenates a second "0" → the variable becomes "0\n0" and
+# arithmetic fails with "syntax error in expression". Use `grep | wc -l`
+# which always exits 0 and produces a clean single-line count.
+PASS=$(grep '"status":"PASS"' "$RESULTS_FILE" 2>/dev/null | wc -l | tr -d '[:space:]')
+FAIL=$(grep '"status":"FAIL"' "$RESULTS_FILE" 2>/dev/null | wc -l | tr -d '[:space:]')
+SKIP=$(grep '"status":"SKIP"' "$RESULTS_FILE" 2>/dev/null | wc -l | tr -d '[:space:]')
 TOTAL=$((PASS+FAIL+SKIP))
 
 joined=$(paste -sd, "$RESULTS_FILE")

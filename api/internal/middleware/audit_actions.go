@@ -60,6 +60,14 @@ func deriveAction(method, path string) string {
 			if strings.Contains(path, "/projects/") {
 				return "repository.connected"
 			}
+		case "previews":
+			// /api/v1/projects/{p}/previews — manual / webhook-driven create.
+			// CHG-2026-04-29-DOGFOOD iter 13 / Achado #27.
+			return "preview.created"
+		case "evict":
+			if strings.Contains(path, "/admin/") {
+				return "admin.tenants_evicted"
+			}
 		}
 	case "DELETE":
 		switch segment {
@@ -77,6 +85,9 @@ func deriveAction(method, path string) string {
 			if strings.Contains(path, "/projects/") {
 				return "repository.disconnected"
 			}
+		case "previews":
+			// /api/v1/projects/{p}/previews/{id}
+			return "preview.deleted"
 		}
 	case "PATCH":
 		if segment == "members" {
@@ -122,6 +133,10 @@ func extractResourceType(path string) string {
 		return "source"
 	case "connect":
 		return "repository"
+	case "previews":
+		return "preview"
+	case "evict":
+		return "admin"
 	default:
 		return segment
 	}
@@ -176,6 +191,8 @@ var knownCollections = map[string]bool{
 	"upload":       true,
 	"promote":      true,
 	"connect":      true,
+	"previews":     true,
+	"evict":        true,
 }
 
 // extractSegment returns the last meaningful URL segment for action/resource mapping.

@@ -133,6 +133,12 @@ except Exception:
 done
 (( elapsed < 60 )) || journey_fail "domain still listed in non-removed state after 60s"
 
+journey_step "Audit log assertion (domain.added + domain.removed emitted)"
+assert_audit_entry "domain.added" "$TEST_DOMAIN" \
+  || journey_fail "audit log missing domain.added entry for $TEST_DOMAIN"
+assert_audit_entry "domain.removed" "$TEST_DOMAIN" \
+  || journey_log "WARN: domain.removed entry not yet visible (eventually consistent)"
+
 journey_step "GAP DOCUMENTED — verify/active require CF Zone (production-only)"
 journey_log "Cobertura local: register/list/status/remove (4 dos 5 verbos do §7)."
 journey_log "Não exercitado: domain verify (TXT lookup) → ns_active → provisioning → active."

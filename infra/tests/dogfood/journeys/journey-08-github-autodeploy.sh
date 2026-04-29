@@ -99,6 +99,12 @@ db_count3=$(kubectl --context "$MGMT_CTX" -n loopzero-system exec postgresql-0 -
 [[ "$db_count3" == "0" ]] || journey_fail "disconnect did not clear DB row (count=$db_count3)"
 journey_log "DB row cleared"
 
+journey_step "Audit log assertion (repository.connected + repository.disconnected emitted)"
+assert_audit_entry "repository.connected" "$PROJECT" \
+  || journey_fail "audit log missing repository.connected entry for $PROJECT"
+assert_audit_entry "repository.disconnected" "$PROJECT" \
+  || journey_log "WARN: repository.disconnected entry not yet visible (eventually consistent)"
+
 journey_step "GAP DOCUMENTED — webhook→autodeploy flow"
 journey_log "Cobertura local: connect/disconnect persistence + idempotency."
 journey_log "Não exercitado: GitHub webhook → /webhooks/github → autodeploy build."

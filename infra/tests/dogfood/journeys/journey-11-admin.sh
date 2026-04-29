@@ -70,5 +70,12 @@ still_present=$(kubectl --context "$MGMT_CTX" -n loopzero-system exec postgresql
 [[ "$still_present" == "1" ]] || journey_fail "dry-run unexpectedly mutated DB — tn-e2etest is gone"
 journey_log "dry-run safety verified: tn-e2etest still in DB post dry-run"
 
+# Note on audit: this journey only exercises dry-run (read-only). Live evict
+# would emit `admin.tenants_evicted` (added to audit_actions.go in iter 13),
+# but executing it would tear down the seeded tenant and break every other
+# journey. Audit emission for live evict is covered by the unit test
+# TestDeriveAction_PreviewAndAdmin in api/internal/middleware/audit_actions_test.go.
+journey_log "Audit assertion intentionally skipped — dry-run is read-only by design"
+
 journey_log "Journey 11 GREEN — admin evict authentication + dry-run + safety validated"
 exit 0

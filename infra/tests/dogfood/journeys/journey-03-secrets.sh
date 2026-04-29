@@ -127,6 +127,10 @@ echo "$body" | grep -q '"secret_ping":"unset"' || \
   journey_fail "expected secret_ping=unset after delete+redeploy, got: $body"
 journey_log "secret no longer visible in pod env"
 
+journey_step "Audit log assertion (project.created emitted for $PROJECT)"
+assert_audit_entry "project.created" "$PROJECT" \
+  || journey_fail "audit log missing project.created entry for $PROJECT"
+
 journey_step "Prova de Morte"
 "$LOOPZERO_BIN" project delete "$PROJECT" --yes --json >/dev/null 2>&1 || journey_fail "project delete failed"
 prove_dead "$TENANT_ID" "$PROJECT" "$ENV" 300 || journey_fail "Prova de Morte timeout"
