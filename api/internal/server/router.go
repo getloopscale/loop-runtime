@@ -69,6 +69,10 @@ func NewRouter(cfg Config) *chi.Mux {
 	}
 	r.Get("/api/v1/health", health.Health)
 	r.Get("/api/v1/health/deep", health.DeepHealth)
+	// F-07 (CHG-2026-04-29-DOGFOOD T5.2) — public endpoint, no auth.
+	// Returns binary metadata (version, commit, build_date, go_version, platform).
+	// Stable schema per Rule 5 (loopzero CLI --json contract analogue).
+	r.Get("/api/v1/version", routes.VersionHandler())
 
 	// Internal-only routes (no auth — called by platform controllers, not users)
 	if cfg.BootstrapStore != nil {

@@ -103,6 +103,9 @@ export function registerAuthCommands(deps: CommandDeps): void {
 
       const logoutCmd = new LogoutCommand({
         clearToken: () => configStore.clearToken(),
+        // F-06 (CHG-2026-04-29-DOGFOOD T1.2) — passar checagem de sessão
+        // para que LogoutCommand distinga "cancelled" de "no session".
+        hasToken: () => Boolean(configStore.getToken()),
         writeTo,
         // CHG-2026-04-23-AUDIT-9: shared promptConfirm with non-TTY safety.
         confirm: (message: string) => promptConfirm(message + ' '),

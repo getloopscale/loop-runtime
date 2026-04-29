@@ -5,13 +5,25 @@
 # pushed to k3d-loopzero-registry. dev/prod profiles continue to use values.yaml
 # default (DO Registry REDACTED_SECRET_061).
 image:
+  # F-09 (CHG-2026-04-29-DOGFOOD T4.1) — rebuild com NotFound discrimination
+  # em ensurePullSecret. Antes: log "pull secret ensure failed" em loop.
   repository: k3d-loopzero-registry:5000/loopzero-tenant-controller
-  tag: b69-fix
+  tag: f09-fix
   pullPolicy: IfNotPresent
 
 # B82 (end-to-end-deploy-validation-plan iter 12 / 2026-04-29) — point
 # AppProject + ArgoCD Application destination at the k3d workload cluster
 # instead of the default in-cluster (mgmt) URL. Same docker-bridge IP that
 # scoped-kubeconfig.sh writes into the runtime kubeconfig (B82 there).
+#
+# F-10 (CHG-2026-04-29-DOGFOOD T4.2) — desabilitar OTel tracing em
+# standalone-multi. Sem este overlay, tenant-controller usa default endpoint
+# `otel-collector.loopzero-system.svc.cluster.local:4317` que não existe nesse
+# profile (otel-collector chart não é instalado pelo helmfile mgmt em
+# standalone-multi). Resultado pré-fix: log "rpc error: code = Unavailable
+# desc = name resolver error" a cada 30s. Em dev/prod a env var fica unset →
+# fallback para DefaultEndpoint, tracing ativo. Pattern opt-out localizado
+# preserva backward compat.
 env:
   WORKLOAD_CLUSTER_URL: "https://172.18.0.10:6443"
+  LOOPZERO_TRACING_ENABLED: "false"

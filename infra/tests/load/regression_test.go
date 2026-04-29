@@ -1107,6 +1107,354 @@ func TestB82ScopedKubeconfigK3dRewrite(t *testing.T) {
 	}
 }
 
+// =============================================================================
+// CHG-2026-04-29-DOGFOOD — F-01..F-13 regression tests (dogfood remediation)
+// =============================================================================
+
+// TestF01LoopZeroApiNodePortInStandaloneMulti — em standalone-multi o overlay
+// values-standalone-multi.yaml DEVE setar service.type=NodePort com
+// nodePort=30001 (mapeado por k3d-mgmt para host:13001) e ingress.localhost=
+// true. Sem isso, `loopzero whoami`/`loopzero deploy` retornam SERVICE_UNAVAILABLE
+// porque nada ocupa NodePort 30001 no mgmt cluster.
+func TestF01LoopZeroApiNodePortInStandaloneMulti(t *testing.T) {
+	data, err := os.ReadFile("../../helm/loopzero-api/values-standalone-multi.yaml")
+	if err != nil {
+		t.Fatalf("read standalone-multi overlay: %v", err)
+	}
+	s := string(data)
+	if !strings.Contains(s, "type: NodePort") {
+		t.Error("F-01 regression: values-standalone-multi.yaml must set service.type=NodePort")
+	}
+	if !strings.Contains(s, "nodePort: 30001") {
+		t.Error("F-01 regression: nodePort must be 30001 (k3d host:13001 mapping)")
+	}
+	if !strings.Contains(s, "localhost: true") {
+		t.Error("F-01 regression: ingress.localhost must be true so IngressRoute matches `localhost`")
+	}
+}
+
+// TestF01LoopZeroApiHasLocalhostIngressRoute — quando ingress.localhost=true, o
+// template renderiza Route com Host(`localhost`) || Host(`127.0.0.1`) ||
+// Host(`api.loopzero.local`) em entry point `web` (HTTP, sem TLS para localhost).
+func TestF01LoopZeroApiHasLocalhostIngressRoute(t *testing.T) {
+	data, err := os.ReadFile("../../helm/loopzero-api/templates/ingressroute.yaml")
+	if err != nil {
+		t.Fatalf("read ingressroute template: %v", err)
+	}
+	s := string(data)
+	if !strings.Contains(s, "{{- if .Values.ingress.localhost }}") {
+		t.Error("F-01 regression: ingressroute template must gate localhost route on .Values.ingress.localhost")
+	}
+	for _, host := range []string{"localhost", "127.0.0.1", "api.loopzero.local"} {
+		if !strings.Contains(s, host) {
+			t.Errorf("F-01 regression: localhost IngressRoute must match Host(`%s`)", host)
+		}
+	}
+	// Em entry point web (HTTP) — TLS não funciona com localhost sem cert custom.
+	if !strings.Contains(s, "name: loopzero-api-localhost") {
+		t.Error("F-01 regression: localhost IngressRoute must be named loopzero-api-localhost (separate from prod)")
+	}
+}
+
+// TestF01DefaultProfileKeepsClusterIP — backward compat: dev/prod profiles
+// (sem overlay standalone-multi) DEVEM manter Service ClusterIP + 1
+// IngressRoute apenas (a de api.{domain}). Sem isso, mudanças no overlay
+// vazam para production.
+func TestF01DefaultProfileKeepsClusterIP(t *testing.T) {
+	data, err := os.ReadFile("../../helm/loopzero-api/values.yaml")
+	if err != nil {
+		t.Fatalf("read default values: %v", err)
+	}
+	s := string(data)
+	if !strings.Contains(s, "type: ClusterIP") {
+		t.Error("F-01 regression: default values.yaml must keep service.type=ClusterIP for dev/prod")
+	}
+	// nodePort default null → não renderiza nodePort field (cluster aloca random ou skip).
+	if !strings.Contains(s, "nodePort: null") {
+		t.Error("F-01 regression: default values.yaml must set service.nodePort=null (NodePort field absent in dev/prod)")
+	}
+	if !strings.Contains(s, "localhost: false") {
+		t.Error("F-01 regression: default values.yaml must set ingress.localhost=false (only standalone-multi opts in)")
+	}
+}
+
+// TestF03CommanderExitOverrideRegistered — index.ts DEVE registrar
+// configureOutput.writeErr que seta process.exitCode=1 e program.exitOverride
+// que captura codes de parse error. Sem isso, `loopzero nonexistent-command` ou
+// `loopzero deploy --bogus-flag` retornam exit 0 (Rule 4 violation).
+func TestF03CommanderExitOverrideRegistered(t *testing.T) {
+	data, err := os.ReadFile("../../../cli/src/index.ts")
+	if err != nil {
+		t.Fatalf("read cli index.ts: %v", err)
+	}
+	s := string(data)
+	// writeErr seta exitCode=1 (cobre parse errors via configureOutput path).
+	if !strings.Contains(s, "process.exitCode = 1") {
+		t.Error("F-03 regression: index.ts writeErr/exitOverride must set process.exitCode = 1 for parse errors")
+	}
+	// exitOverride com lista de codes Commander.
+	for _, code := range []string{
+		"commander.unknownCommand",
+		"commander.unknownOption",
+		"commander.missingArgument",
+	} {
+		if !strings.Contains(s, code) {
+			t.Errorf("F-03 regression: exitOverride must handle %q", code)
+		}
+	}
+}
+
+// TestF05InitPreflightAuthDep — InitDeps DEVE expor preflightAuth opcional;
+// quando não-offline e preflight falha, init retorna exit 4/5 ANTES de
+// escrever loopzero.yaml. Anti-pattern silent-success (Rule 8) eliminado.
+func TestF05InitPreflightAuthDep(t *testing.T) {
+	data, err := os.ReadFile("../../../cli/src/commands/init.ts")
+	if err != nil {
+		t.Fatalf("read init.ts: %v", err)
+	}
+	s := string(data)
+	if !strings.Contains(s, "preflightAuth?:") {
+		t.Error("F-05 regression: InitDeps must declare optional preflightAuth")
+	}
+	if !strings.Contains(s, "offline?:") {
+		t.Error("F-05 regression: InitOptions must declare optional offline flag")
+	}
+	if !strings.Contains(s, "AUTH_FAILED") {
+		t.Error("F-05 regression: init must emit code=AUTH_FAILED on 401/403 preflight")
+	}
+	if !strings.Contains(s, "PREFLIGHT_FAILED") {
+		t.Error("F-05 regression: init must emit code=PREFLIGHT_FAILED on 5xx/network preflight")
+	}
+}
+
+// TestF06LogoutHasTokenDep — LogoutDeps DEVE expor hasToken para distinguir
+// "cancelled" de "no session". Sem isso, `loopzero logout` sem auth fica
+// confuso ("Logout cancelled." sem ter havido prompt).
+func TestF06LogoutHasTokenDep(t *testing.T) {
+	data, err := os.ReadFile("../../../cli/src/commands/logout.ts")
+	if err != nil {
+		t.Fatalf("read logout.ts: %v", err)
+	}
+	s := string(data)
+	if !strings.Contains(s, "hasToken?:") {
+		t.Error("F-06 regression: LogoutDeps must declare optional hasToken")
+	}
+	if !strings.Contains(s, "Already logged out") {
+		t.Error("F-06 regression: logout must emit \"Already logged out\" when hasToken=false")
+	}
+	if !strings.Contains(s, "already_logged_out") {
+		t.Error("F-06 regression: logout JSON must set status=already_logged_out")
+	}
+	// Wire-up no register.
+	regData, err := os.ReadFile("../../../cli/src/register/auth.ts")
+	if err != nil {
+		t.Fatalf("read register/auth.ts: %v", err)
+	}
+	if !strings.Contains(string(regData), "hasToken: () => Boolean") {
+		t.Error("F-06 regression: register/auth.ts must wire hasToken to LogoutCommand")
+	}
+}
+
+// TestF07VersionEndpointRegistered — router.go DEVE registrar GET
+// /api/v1/version sem middleware de auth (mesmo pattern que /health).
+func TestF07VersionEndpointRegistered(t *testing.T) {
+	data, err := os.ReadFile("../../../api/internal/server/router.go")
+	if err != nil {
+		t.Fatalf("read router.go: %v", err)
+	}
+	s := string(data)
+	if !strings.Contains(s, `r.Get("/api/v1/version"`) {
+		t.Error("F-07 regression: router must register GET /api/v1/version")
+	}
+	if !strings.Contains(s, "routes.VersionHandler") {
+		t.Error("F-07 regression: route must call routes.VersionHandler()")
+	}
+	// Handler module exists.
+	if _, err := os.Stat("../../../api/internal/routes/version.go"); err != nil {
+		t.Errorf("F-07 regression: api/internal/routes/version.go missing: %v", err)
+	}
+}
+
+// TestF10TracingDisabledInStandaloneMulti — em standalone-multi o
+// otel-collector chart NÃO é instalado pelo helmfile mgmt. O default do
+// operator (`otel-collector.loopzero-system.svc.cluster.local:4317`) gera
+// "rpc error: code = Unavailable" em loop. Overlay deve setar
+// LOOPZERO_TRACING_ENABLED=false. Em dev/prod o env não é setado → tracing
+// ativo via DefaultEndpoint (backward compat).
+func TestF10TracingDisabledInStandaloneMulti(t *testing.T) {
+	data, err := os.ReadFile("../../helm/tenant-controller/values-standalone-multi.yaml")
+	if err != nil {
+		t.Fatalf("read tenant-controller standalone-multi overlay: %v", err)
+	}
+	s := string(data)
+	if !strings.Contains(s, "LOOPZERO_TRACING_ENABLED") {
+		t.Error("F-10 regression: standalone-multi overlay must set LOOPZERO_TRACING_ENABLED env")
+	}
+	if !strings.Contains(s, `LOOPZERO_TRACING_ENABLED: "false"`) {
+		t.Error("F-10 regression: LOOPZERO_TRACING_ENABLED must be \"false\" in standalone-multi (no otel-collector chart)")
+	}
+	// Default values.yaml NÃO seta LOOPZERO_TRACING_ENABLED — preserve dev/prod.
+	defaults, err := os.ReadFile("../../helm/tenant-controller/values.yaml")
+	if err != nil {
+		t.Fatalf("read tenant-controller defaults: %v", err)
+	}
+	if strings.Contains(string(defaults), "LOOPZERO_TRACING_ENABLED") {
+		t.Error("F-10 regression: default values.yaml must NOT set LOOPZERO_TRACING_ENABLED (only standalone-multi opts out)")
+	}
+}
+
+// TestF08LoopZeroApiServiceMonitorOptIn — chart DEVE renderizar metrics port
+// no Service + Deployment + ServiceMonitor opt-in via toggle. Em
+// standalone-multi sem prometheus-operator, ServiceMonitor não renderiza
+// (toggle=false default) — evita erro de CRD missing em kubeconform.
+func TestF08LoopZeroApiServiceMonitorOptIn(t *testing.T) {
+	dep, err := os.ReadFile("../../helm/loopzero-api/templates/deployment.yaml")
+	if err != nil {
+		t.Fatalf("read deployment.yaml: %v", err)
+	}
+	depStr := string(dep)
+	// Container expõe :9090.
+	if !strings.Contains(depStr, "containerPort: 9090") {
+		t.Error("F-08 regression: deployment template must declare containerPort 9090 for metrics scraping")
+	}
+	if !strings.Contains(depStr, "name: metrics") {
+		t.Error("F-08 regression: container port must be named `metrics` (referenced by Service.targetPort)")
+	}
+	// Service expõe metrics port.
+	if !strings.Contains(depStr, "targetPort: metrics") {
+		t.Error("F-08 regression: Service must include port targetPort=metrics so ServiceMonitor scrape works")
+	}
+	// ServiceMonitor template existe + condicional.
+	sm, err := os.ReadFile("../../helm/loopzero-api/templates/servicemonitor.yaml")
+	if err != nil {
+		t.Fatalf("F-08 regression: servicemonitor.yaml missing: %v", err)
+	}
+	smStr := string(sm)
+	if !strings.Contains(smStr, "{{- if .Values.serviceMonitor.enabled }}") {
+		t.Error("F-08 regression: ServiceMonitor must be opt-in via .Values.serviceMonitor.enabled")
+	}
+	if !strings.Contains(smStr, "port: metrics") {
+		t.Error("F-08 regression: ServiceMonitor endpoints must reference port name=metrics")
+	}
+	// Default values.yaml: opt-out (standalone-multi sem prom-operator).
+	values, err := os.ReadFile("../../helm/loopzero-api/values.yaml")
+	if err != nil {
+		t.Fatalf("read values.yaml: %v", err)
+	}
+	if !strings.Contains(string(values), "serviceMonitor:") {
+		t.Error("F-08 regression: values.yaml must declare serviceMonitor block (default enabled=false)")
+	}
+	if !strings.Contains(string(values), "enabled: false") {
+		t.Error("F-08 regression: serviceMonitor.enabled default must be false (opt-in via overlay)")
+	}
+}
+
+// TestF11ArgocdLuaHealthChecksDefined — argocd values.yaml DEVE declarar
+// Lua health checks para Traefik IngressRoute / Middleware / TLSOption +
+// cert-manager Certificate. Sem isso, ArgoCD reporta health="" para esses
+// CRDs e Apps ficam stuck em Progressing infinito.
+func TestF11ArgocdLuaHealthChecksDefined(t *testing.T) {
+	data, err := os.ReadFile("../../helm/argocd/values.yaml")
+	if err != nil {
+		t.Fatalf("read argocd values.yaml: %v", err)
+	}
+	s := string(data)
+	expected := []string{
+		"resource.customizations.health.traefik.io_IngressRoute",
+		"resource.customizations.health.traefik.io_Middleware",
+		"resource.customizations.health.cert-manager.io_Certificate",
+	}
+	for _, key := range expected {
+		if !strings.Contains(s, key) {
+			t.Errorf("F-11 regression: argocd values.yaml must declare %q Lua health check", key)
+		}
+	}
+	// Lua deve usar `obj.spec` para IngressRoute (não `obj.status` — IngressRoute
+	// não tem .status field).
+	if !strings.Contains(s, "obj.spec.routes") {
+		t.Error("F-11 regression: IngressRoute health must check obj.spec.routes (no .status field)")
+	}
+	// Certificate deve parsear .status.conditions Ready type.
+	if !strings.Contains(s, "obj.status.conditions") || !strings.Contains(s, `c.type == "Ready"`) {
+		t.Error("F-11 regression: Certificate health must parse status.conditions Ready type")
+	}
+}
+
+// TestF12LoopZeroApiTokensSecretGenerated — generate-secrets.sh DEVE criar
+// loopzero-api-tokens Secret com argocd-token JWT. Sem isso, /api/v1/health/deep
+// reporta argocd:auth_failed degraded em standalone-multi.
+func TestF12LoopZeroApiTokensSecretGenerated(t *testing.T) {
+	data, err := os.ReadFile("../../helmfile/scripts/generate-secrets.sh")
+	if err != nil {
+		t.Fatalf("read generate-secrets.sh: %v", err)
+	}
+	s := string(data)
+	if !strings.Contains(s, "loopzero-api-tokens") {
+		t.Error("F-12 regression: generate-secrets.sh must create loopzero-api-tokens Secret")
+	}
+	if !strings.Contains(s, "argocd-token") {
+		t.Error("F-12 regression: loopzero-api-tokens must include argocd-token key (JWT for /health/deep probe)")
+	}
+	if !strings.Contains(s, "/api/v1/session") {
+		t.Error("F-12 regression: script must POST to argocd /api/v1/session for JWT generation")
+	}
+	// Idempotência: se login falhar, preserve existing token.
+	if !strings.Contains(s, `get_existing loopzero-api-tokens loopzero-system argocd-token`) {
+		t.Error("F-12 regression: script must fall back to existing token when login fails (mid-bootstrap idempotency)")
+	}
+	// loopzero-api template DEVE referenciar o Secret.
+	dep, err := os.ReadFile("../../helm/loopzero-api/templates/deployment.yaml")
+	if err != nil {
+		t.Fatalf("read loopzero-api deployment: %v", err)
+	}
+	depStr := string(dep)
+	if !strings.Contains(depStr, "name: ARGOCD_TOKEN") {
+		t.Error("F-12 regression: loopzero-api Deployment must export env ARGOCD_TOKEN")
+	}
+	if !strings.Contains(depStr, "name: loopzero-api-tokens") {
+		t.Error("F-12 regression: ARGOCD_TOKEN must come from secretKeyRef loopzero-api-tokens")
+	}
+}
+
+// TestF13WorkflowHasPodGC — F-13 fix: workflow_builder.go DEVE setar
+// PodGC.Strategy=OnPodCompletion com DeleteDelayDuration=5m. Sem isso,
+// pods de step com Failed acumulam na ns argo até GC do Workflow (24h).
+func TestF13WorkflowHasPodGC(t *testing.T) {
+	data, err := os.ReadFile("../../../api/internal/argo/workflow_builder.go")
+	if err != nil {
+		t.Fatalf("read workflow_builder.go: %v", err)
+	}
+	s := string(data)
+	if !strings.Contains(s, "PodGC: &forge.PodGC{") {
+		t.Error("F-13 regression: Workflow spec must include PodGC field")
+	}
+	if !strings.Contains(s, `Strategy:            "OnPodCompletion"`) &&
+		!strings.Contains(s, `Strategy: "OnPodCompletion"`) {
+		t.Error("F-13 regression: PodGC.Strategy must be OnPodCompletion (deletes Failed pods, not just Success)")
+	}
+	if !strings.Contains(s, `DeleteDelayDuration: "5m"`) {
+		t.Error("F-13 regression: PodGC.DeleteDelayDuration must be 5m (debug window before delete)")
+	}
+}
+
+// TestF09EnsurePullSecretHandlesNotFound — operator DEVE distinguir
+// errors.IsNotFound (esperado em standalone-multi sem registry privado)
+// de outras falhas. Sem isso, log "pull secret ensure failed" em loop.
+func TestF09EnsurePullSecretHandlesNotFound(t *testing.T) {
+	data, err := os.ReadFile("../../../operators/internal/controller/environment_rbac.go")
+	if err != nil {
+		t.Fatalf("read environment_rbac.go: %v", err)
+	}
+	s := string(data)
+	if !strings.Contains(s, "errors.IsNotFound") {
+		t.Error("F-09 regression: ensurePullSecret path must check errors.IsNotFound to distinguish missing source from real failures")
+	}
+	// Condition reason "SourceMissing" para o caso esperado.
+	if !strings.Contains(s, `"SourceMissing"`) {
+		t.Error("F-09 regression: NotFound case must set condition reason=SourceMissing")
+	}
+}
+
 // TestCleanIncrementalScript — exists + preserves cluster state.
 func TestCleanIncrementalScript(t *testing.T) {
 	if _, err := os.Stat("../../scripts/clean-incremental.sh"); err != nil {

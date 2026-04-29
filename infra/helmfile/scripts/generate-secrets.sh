@@ -193,6 +193,48 @@ stringData:
   password: ${GITEA_TOKEN}
 EOF
 
+# F-12 (CHG-2026-04-29-DOGFOOD T5.4) — loopzero-api `/api/v1/health/deep` probe
+# de ArgoCD requer um JWT válido. Pré-fix: ARGOCD_TOKEN nunca era setado em
+# standalone-multi → API responde `{"argocd":"auth_failed","status":"degraded"}`
+# HTTP 503 mesmo com ArgoCD saudável. Fix idempotente: login admin via REST,
+# capturar JWT, persistir em Secret `loopzero-api-tokens` (loopzero-system) com chave
+# `argocd-token` — exatamente o key esperado pelo Tilt manifest e pelo
+# helmfile loopzero-api Deployment template.
+#
+# Login pattern: argocd-server expõe HTTP plain em port 80 (server.insecure:
+# true via Helm overlay). Token JWT default validade ~24h — refresh é
+# responsabilidade de iter 2 (fora do escopo deste fix). Falha silenciosa
+# se ArgoCD não estiver Ready (ex: bootstrap mid-flight): loopzero-api volta a
+# reportar degraded até o próximo sync, comportamento aceitável (não bloqueia
+# install).
+if kubectl get namespace argocd >/dev/null 2>&1 && \
+   kubectl get secret -n argocd argocd-initial-admin-secret >/dev/null 2>&1; then
+  ADMIN_PW=$(kubectl get secret -n argocd argocd-initial-admin-secret -o jsonpath='{.data.password}' 2>/dev/null | base64 -d)
+  ARGOCD_HOST="argocd-server.argocd.svc.cluster.local"
+  if [[ -n "$ADMIN_PW" ]]; then
+    # Run login via short-lived debug Pod (kubectl run + curl). Idempotente:
+    # mesmo password produz tokens novos a cada call — preserva existing
+    # Secret se login falhar (mantém valor anterior em vez de zerar).
+    ARGOCD_TOKEN=$(kubectl run argocd-token-bootstrap-$$ \
+      --rm -i --restart=Never --image=curlimages/curl:8.5.0 \
+      --command -- curl -s --max-time 5 \
+        -X POST -H "Content-Type: application/json" \
+        -d "{\"username\":\"admin\",\"password\":\"$ADMIN_PW\"}" \
+        "http://${ARGOCD_HOST}/api/v1/session" 2>/dev/null \
+      | python3 -c 'import sys,json; print(json.loads(sys.stdin.read() or "{}").get("token",""))' 2>/dev/null || true)
+    if [[ -z "$ARGOCD_TOKEN" ]]; then
+      ARGOCD_TOKEN=$(get_or_generate loopzero-api-tokens loopzero-system argocd-token)
+      [[ -n "$ARGOCD_TOKEN" ]] && log "preserving existing argocd-token (login failed; cluster likely mid-bootstrap)"
+    fi
+    if [[ -n "$ARGOCD_TOKEN" ]]; then
+      apply_secret loopzero-api-tokens loopzero-system \
+        --from-literal=argocd-token="$ARGOCD_TOKEN" \
+        --from-literal=gitea-token="$GITEA_TOKEN"
+      log "F-12: loopzero-api-tokens applied (argocd-token JWT + gitea-token)"
+    fi
+  fi
+fi
+
 # 3) MinIO / S3 root creds — IDEMPOTENT.
 # Cloud (DO Spaces): uses LOOPZERO_SPACES_KEY / LOOPZERO_SPACES_SECRET from Pulumi.
 # Standalone: generates with MinIO chart defaults (minioadmin/minioadmin).

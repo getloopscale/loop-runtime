@@ -50,6 +50,15 @@ spec:
           ports:
             - containerPort: {{ .Values.service.port }}
               name: http
+            # F-08 (CHG-2026-04-29-DOGFOOD T5.3) — metrics port declarado
+            # explicitamente para que ServiceMonitor (Prometheus Operator)
+            # consiga scrape. Em standalone-multi sem prometheus-operator,
+            # ServiceMonitor não é renderizado mas o port permanece exposto
+            # — pode ser scraped via `kubectl port-forward` ou via Prometheus
+            # standalone scrape config.
+            - containerPort: 9090
+              name: metrics
+              protocol: TCP
           volumeMounts:
             - name: cluster-kubeconfigs
               mountPath: /etc/loopzero/kubeconfigs
@@ -97,6 +106,18 @@ spec:
                   name: {{ .Values.dbCredentialsSecret | quote }}
                   key: uri
                   optional: true
+            # F-12 (CHG-2026-04-29-DOGFOOD T5.4) — JWT admin token p/ ArgoCD
+            # populado por generate-secrets.sh (login REST + persist em
+            # loopzero-api-tokens Secret). Sem este token, /api/v1/health/deep
+            # reporta `argocd: auth_failed` mesmo com ArgoCD healthy.
+            # Default in-cluster URL via config.go já resolve para
+            # argocd-server.argocd.svc.cluster.local:80 (server.insecure: true).
+            - name: ARGOCD_TOKEN
+              valueFrom:
+                secretKeyRef:
+                  name: loopzero-api-tokens
+                  key: argocd-token
+                  optional: true
           envFrom:
             - configMapRef:
                 name: {{ .Values.wiringConfigMap | quote }}
@@ -137,5 +158,19 @@ spec:
       targetPort: http
       protocol: TCP
       name: http
+      {{- if and (eq .Values.service.type "NodePort") .Values.service.nodePort }}
+      # F-01 (CHG-2026-04-29-DOGFOOD T2.1) — fixed NodePort para que k3d-mgmt
+      # serverlb forwarde host:13001 → cluster:30001 → este Service. Permite
+      # CLI alcançar API em standalone-multi sem `tilt up` ou port-forward.
+      nodePort: {{ .Values.service.nodePort }}
+      {{- end }}
+    # F-08 (CHG-2026-04-29-DOGFOOD T5.3) — metrics port no Service para
+    # scraping pelo Prometheus / Loki / Grafana. ServiceMonitor target this
+    # port via name=metrics (não port number direto, para resiliência a
+    # mudanças de port). Permanece ClusterIP — não exposto externamente.
+    - port: 9090
+      targetPort: metrics
+      protocol: TCP
+      name: metrics
   selector:
     app: loopzero-api

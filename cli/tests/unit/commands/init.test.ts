@@ -876,4 +876,104 @@ describe('InitCommand', () => {
       }
     });
   });
+
+  // F-05 (CHG-2026-04-29-DOGFOOD T1.3) — preflight auth check ANTES de
+  // escrever loopzero.yaml. Token rejeitado pela API → exit 4 sem artifacts
+  // órfãos. Token válido OU --offline → comportamento atual preservado.
+  describe('F-05: preflight auth fail-fast', () => {
+    it('exits 4 BEFORE writing loopzero.yaml when API returns 401', async () => {
+      const preflightAuth = jest.fn().mockResolvedValue({
+        ok: false,
+        status: 401,
+        reason: 'Token expired',
+      });
+      const deps = createMockDeps(tmpDir, { preflightAuth });
+      const cmd = new InitCommand(deps);
+
+      const exitCode = await cmd.execute({ yes: true, json: true });
+
+      expect(exitCode).toBe(4);
+      expect(fs.existsSync(path.join(tmpDir, 'loopzero.yaml'))).toBe(false);
+      expect(preflightAuth).toHaveBeenCalledTimes(1);
+      expect(deps.createProject).not.toHaveBeenCalled();
+
+      const out = (deps.writeTo as jest.Mock).mock.calls.map((c: string[]) => c[0]).join('');
+      const parsed = JSON.parse(out);
+      expect(parsed.code).toBe('AUTH_FAILED');
+      expect(parsed.exit_code).toBe(4);
+    });
+
+    it('exits 4 when API returns 403 (forbidden)', async () => {
+      const preflightAuth = jest.fn().mockResolvedValue({ ok: false, status: 403 });
+      const deps = createMockDeps(tmpDir, { preflightAuth });
+      const cmd = new InitCommand(deps);
+
+      const exitCode = await cmd.execute({ yes: true });
+
+      expect(exitCode).toBe(4);
+      expect(fs.existsSync(path.join(tmpDir, 'loopzero.yaml'))).toBe(false);
+    });
+
+    it('exits 5 (partial) when API unreachable (5xx / network)', async () => {
+      const preflightAuth = jest.fn().mockResolvedValue({
+        ok: false,
+        status: 503,
+        reason: 'Service unavailable',
+      });
+      const deps = createMockDeps(tmpDir, { preflightAuth });
+      const cmd = new InitCommand(deps);
+
+      const exitCode = await cmd.execute({ yes: true, json: true });
+
+      expect(exitCode).toBe(5);
+      expect(fs.existsSync(path.join(tmpDir, 'loopzero.yaml'))).toBe(false);
+
+      const out = (deps.writeTo as jest.Mock).mock.calls.map((c: string[]) => c[0]).join('');
+      const parsed = JSON.parse(out);
+      expect(parsed.code).toBe('PREFLIGHT_FAILED');
+      // Mensagem deve sugerir --offline para escape hatch.
+      expect(parsed.error).toMatch(/--offline/);
+    });
+
+    it('--offline flag bypasses preflight (creates loopzero.yaml without API check)', async () => {
+      const preflightAuth = jest.fn().mockResolvedValue({ ok: false, status: 401 });
+      // createProject também falha — simula API totalmente offline.
+      const createProject = jest.fn().mockRejectedValue(
+        Object.assign(new Error('ECONNREFUSED'), { statusCode: undefined }),
+      );
+      const deps = createMockDeps(tmpDir, { preflightAuth, createProject });
+      const cmd = new InitCommand(deps);
+
+      const exitCode = await cmd.execute({ yes: true, offline: true });
+
+      expect(preflightAuth).not.toHaveBeenCalled();
+      expect(fs.existsSync(path.join(tmpDir, 'loopzero.yaml'))).toBe(true);
+      // network error → warning, exit 0 (existing behavior preserved).
+      expect(exitCode).toBe(0);
+    });
+
+    it('proceeds to createProject when preflight returns ok', async () => {
+      const preflightAuth = jest.fn().mockResolvedValue({ ok: true });
+      const deps = createMockDeps(tmpDir, { preflightAuth });
+      const cmd = new InitCommand(deps);
+
+      const exitCode = await cmd.execute({ yes: true });
+
+      expect(preflightAuth).toHaveBeenCalledTimes(1);
+      expect(deps.createProject).toHaveBeenCalledTimes(1);
+      expect(fs.existsSync(path.join(tmpDir, 'loopzero.yaml'))).toBe(true);
+      expect(exitCode).toBe(0);
+    });
+
+    it('skips preflight when preflightAuth dep is not provided (backward compat)', async () => {
+      // Sem preflightAuth → mantém comportamento legado (init sempre prossegue).
+      const deps = createMockDeps(tmpDir); // no preflightAuth
+      const cmd = new InitCommand(deps);
+
+      const exitCode = await cmd.execute({ yes: true });
+
+      expect(deps.createProject).toHaveBeenCalled();
+      expect(exitCode).toBe(0);
+    });
+  });
 });

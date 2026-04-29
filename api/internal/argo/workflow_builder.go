@@ -205,6 +205,20 @@ func (b *WorkflowBuilder) Build(spec services.WorkflowSpec) (*forge.Workflow, er
 			SecondsAfterSuccess:    ptr(ttlAfterSuccess),
 			SecondsAfterFailure:    ptr(ttlAfterFailure),
 		},
+		// F-13 (CHG-2026-04-29-DOGFOOD T5.5) — `OnPodCompletion` deleta o pod
+		// individual após cada step finalizar (Success OU Error). Sem isso,
+		// pods de step com Error ficavam acumulando na ns `argo` até o
+		// Workflow inteiro ser GC'd via TTLStrategy (default 4h success /
+		// 24h failure) — observado: 7+ pods Error pós iter 12.
+		// `DeleteDelayDuration: 5m` mantém pod visível 5 minutos para
+		// inspeção (`kubectl logs`/`describe`) antes do delete — janela
+		// suficiente para debug local + curta o suficiente para evitar
+		// acúmulo. Em produção, ttlAfterFailure (24h) ainda preserva o
+		// Workflow completo + artifacts em S3, então debug deep continua OK.
+		PodGC: &forge.PodGC{
+			Strategy:            "OnPodCompletion",
+			DeleteDelayDuration: "5m",
+		},
 		Labels: map[string]string{
 			labelTenant:      spec.TenantID,
 			labelProject:     spec.ProjectID,

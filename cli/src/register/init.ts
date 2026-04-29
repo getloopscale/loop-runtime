@@ -19,6 +19,7 @@ export function registerInitCommand(deps: CommandDeps): void {
     .option('--yes', 'Skip confirmation prompts (required in CI)')
     .option('--force', 'Overwrite existing loopzero.yaml')
     .option('--name <name>', 'Project name')
+    .option('--offline', 'Skip server-side token validation; create loopzero.yaml locally only (F-05)')
     .action(async (cmdOpts) => {
       const globalOpts = getGlobalOpts();
       const token = configStore.getToken();
@@ -29,6 +30,21 @@ export function registerInitCommand(deps: CommandDeps): void {
         hasGitRepo,
         detectMonorepo: (dir: string) => detectMonorepoTool(dir),
         detectFramework: (dir: string) => detectFramework(dir),
+        // F-05 (CHG-2026-04-29-DOGFOOD T1.3) — preflightAuth chamado antes de
+        // escrever loopzero.yaml. Skipped quando --offline.
+        preflightAuth: async () => {
+          try {
+            const client = new ApiClient({ baseURL: apiUrl, token: token ?? undefined });
+            await client.get('/api/v1/auth/whoami');
+            return { ok: true };
+          } catch (err) {
+            const e = err as { statusCode?: number; message?: string };
+            if (e.statusCode === 401 || e.statusCode === 403) {
+              return { ok: false, status: e.statusCode, reason: e.message };
+            }
+            return { ok: false, status: e.statusCode, reason: e.message || 'Unknown error contacting API' };
+          }
+        },
         createProject: async (input) => {
           const authedClient = new ApiClient({ baseURL: apiUrl, token: token ?? undefined, onUnauthorized: handleUnauthorized });
           return authedClient.post<{ id: string; name: string; team: string }>(
@@ -50,6 +66,7 @@ export function registerInitCommand(deps: CommandDeps): void {
           yes: cmdOpts.yes,
           force: cmdOpts.force,
           name: cmdOpts.name,
+          offline: cmdOpts.offline,
           json: globalOpts.json,
         }),
         API_REQUEST_TIMEOUT_MS + 10_000,

@@ -29,6 +29,11 @@ export interface InitDeps {
   detectMonorepo: (dir: string) => MonorepoResult | null;
   detectFramework: (dir: string) => FrameworkResult;
   createProject: (input: { name: string; apps: AppSpec[] }) => Promise<CreateProjectResult>;
+  // F-05 (CHG-2026-04-29-DOGFOOD T1.3) — fail-fast: validar token contra a API
+  // antes de escrever loopzero.yaml. Se 401/403 → exit 4 sem artifacts órfãos.
+  // Se network/5xx → exit 5 (partial) — usuário pode forçar local-only com
+  // `--offline` flag. Quando offline, esta dep não é chamada.
+  preflightAuth?: () => Promise<{ ok: boolean; status?: number; reason?: string }>;
   writeTo: (msg: string) => void;
   writeError: (msg: string) => void;
   isCI: boolean;
@@ -71,6 +76,10 @@ export interface InitOptions {
   force?: boolean;
   name?: string;
   json?: boolean;
+  // F-05 (CHG-2026-04-29-DOGFOOD T1.3) — opt-in para criar loopzero.yaml sem
+  // validar token contra a API. Útil em CI bootstrap onde a API ainda não
+  // está reachable. Em modo offline, init não chama preflightAuth.
+  offline?: boolean;
 }
 
 export class InitCommand {
@@ -81,9 +90,30 @@ export class InitCommand {
   }
 
   async execute(opts: InitOptions): Promise<number> {
-    // Auth check
+    // Auth check (token presence)
     if (!this.deps.getToken()) {
       return this.exitWithError(opts, 'Not authenticated. Run: loopzero login', 4, 'AUTH_REQUIRED');
+    }
+
+    // F-05 (CHG-2026-04-29-DOGFOOD T1.3) — validar que o token É aceito pela
+    // API ANTES de escrever loopzero.yaml. Anti-pattern silent-success (Rule 8):
+    // sem este check, `init` com token expirado completava com warning e
+    // exit 5; usuário pensava que projeto fora criado e o `loopzero deploy`
+    // seguinte falhava com erro críptico de project_not_found.
+    if (!opts.offline && this.deps.preflightAuth) {
+      const auth = await this.deps.preflightAuth();
+      if (!auth.ok) {
+        if (auth.status === 401 || auth.status === 403) {
+          const msg = 'Authentication failed. Your token may be expired, revoked, or missing required scopes.\n' +
+            'Run: loopzero login --token <new-token>\n' +
+            'Or use --offline to create loopzero.yaml without validating against the API.';
+          return this.exitWithError(opts, msg, 4, 'AUTH_FAILED');
+        }
+        // 5xx, network, timeout → partial. Sugere --offline.
+        const msg = (auth.reason || 'API unreachable.') +
+          ' Use --offline to create loopzero.yaml without server validation.';
+        return this.exitWithError(opts, msg, 5, 'PREFLIGHT_FAILED');
+      }
     }
 
     // Git repo check — warn if not a git repository

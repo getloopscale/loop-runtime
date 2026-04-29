@@ -44,4 +44,30 @@ spec:
     name: {{ .Values.ingress.certIssuer | quote }}
     kind: ClusterIssuer
 {{- end }}
+{{- if .Values.ingress.localhost }}
+---
+# F-01 (CHG-2026-04-29-DOGFOOD T2.1) — IngressRoute adicional para localhost.
+# Em standalone-multi o CLI default endpoint é http://localhost:13001 que k3d
+# mapeia para NodePort 30001 do mgmt-serverlb. Esta route faz Traefik aceitar
+# o Host header `localhost`, `127.0.0.1` e `api.loopzero.local` no entry point
+# `web` (HTTP) — sem TLS para evitar self-signed cert warnings em dev local.
+apiVersion: traefik.io/v1alpha1
+kind: IngressRoute
+metadata:
+  name: loopzero-api-localhost
+  labels:
+    app: loopzero-api
+    app.kubernetes.io/managed-by: {{ .Release.Service | quote }}
+    loopzero.io/component: loopzero-api
+    loopzero.io/profile: standalone-multi
+spec:
+  entryPoints:
+    - web
+  routes:
+    - match: Host(`localhost`) || Host(`127.0.0.1`) || Host(`api.loopzero.local`)
+      kind: Rule
+      services:
+        - name: loopzero-api
+          port: {{ .Values.service.port }}
+{{- end }}
 {{- end }}

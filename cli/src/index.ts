@@ -84,6 +84,12 @@ export function createProgram(): Command {
     .option('--json', 'Output in JSON format');
 
   // F-05: Configure Commander to output JSON errors when --json is present.
+  // F-03 (CHG-2026-04-29-DOGFOOD T1.2): Commander's outputError fires for
+  // parse errors (unknown option/command, missing arg). We seta
+  // `process.exitCode = 1` here como guarantee — em algumas versões do
+  // Commander, exitOverride é silenciosamente engolido quando configureOutput
+  // está presente, então este é o mais confiável "ponto de set" para exit
+  // code 1 em parse errors.
   program.configureOutput({
     writeOut: (str: string) => process.stdout.write(str),
     writeErr: (str: string) => {
@@ -97,6 +103,8 @@ export function createProgram(): Command {
       } else {
         process.stderr.write(str);
       }
+      // F-03: Rule 4 mandates exit 1 for usage errors. Set exitCode here.
+      process.exitCode = 1;
     },
     outputError: (str: string, write: (s: string) => void) => write(str),
   });
@@ -192,6 +200,38 @@ export function createProgram(): Command {
     }
   });
 
+  // F-03 (CHG-2026-04-29-DOGFOOD T1.2) — exitOverride para parse errors
+  // (unknown option/command, missing required arg). Sem isso, Commander.js
+  // imprime "error: unknown option" no stderr mas o processo termina com
+  // exit 0, mascarando typos em scripts CI/CD com `set -e`. Rule 4 exige
+  // exit 1 para usage errors. Para help/version (também throw via
+  // exitOverride) precisamos exit 0 — não são erros, são modos legítimos.
+  // Para ambos os caminhos: silenciar a re-throw (parseAsync resolve
+  // limpo); para usage errors o exitCode=1 já foi setado via writeErr.
+  program.exitOverride((err) => {
+    // Help / version são exit 0 success cases. Não throw, deixa o caller
+    // resolver sem ruído de "Error: (outputHelp)" no stderr.
+    if (err.code === 'commander.helpDisplayed' || err.code === 'commander.version' || err.code === 'commander.help') {
+      return;
+    }
+    // Parse errors: exitCode=1 já foi setado por writeErr; re-throw para
+    // que parseAsync rejeite e o bin/loopzero .catch handle propagation.
+    const usageCodes = new Set([
+      'commander.unknownCommand',
+      'commander.unknownOption',
+      'commander.missingArgument',
+      'commander.missingMandatoryOptionValue',
+      'commander.optionMissingArgument',
+      'commander.invalidOptionArgument',
+      'commander.invalidArgument',
+      'commander.excessArguments',
+    ]);
+    if (usageCodes.has(err.code)) {
+      process.exitCode = 1;
+    }
+    throw err;
+  });
+
   return program;
 }
 
@@ -205,7 +245,10 @@ if (require.main === module) {
     await shutdownTracing();
   });
 
-  program.exitOverride();
+  // F-03 (CHG-2026-04-29-DOGFOOD T1.2) — exitOverride já é configurado em
+  // createProgram() com tratamento granular de codes de parse error.
+  // Removido o `program.exitOverride()` placeholder que sobrescrevia esse
+  // tratamento sem preservar o exit code 1 para usage errors.
 
   // Root span wrapping the entire CLI command execution.
   const commandName = process.argv.slice(2).find(a => !a.startsWith('-')) ?? 'unknown';

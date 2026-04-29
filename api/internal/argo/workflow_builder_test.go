@@ -90,6 +90,19 @@ func TestWorkflowBuilder_Build_SpecFields(t *testing.T) {
 	if wf.TTLStrategy.SecondsAfterFailure == nil || *wf.TTLStrategy.SecondsAfterFailure != 86400 {
 		t.Errorf("SecondsAfterFailure = %v, want 86400 (24h)", wf.TTLStrategy.SecondsAfterFailure)
 	}
+
+	// F-13 (CHG-2026-04-29-DOGFOOD T5.5) — PodGC.Strategy = OnPodCompletion
+	// remove pods de step individuais (Success OU Error) após DeleteDelayDuration.
+	// Sem isso, pods Failed acumulam até GC do Workflow inteiro (24h).
+	if wf.PodGC == nil {
+		t.Fatal("F-13 regression: PodGC must be set on Workflow spec")
+	}
+	if wf.PodGC.Strategy != "OnPodCompletion" {
+		t.Errorf("F-13 regression: PodGC.Strategy = %q, want OnPodCompletion", wf.PodGC.Strategy)
+	}
+	if wf.PodGC.DeleteDelayDuration != "5m" {
+		t.Errorf("F-13 regression: PodGC.DeleteDelayDuration = %q, want 5m (debug window)", wf.PodGC.DeleteDelayDuration)
+	}
 }
 
 // BLOCKER-2 fix: Workspace and manifests volumes are now emptyDir (not PVCs).
