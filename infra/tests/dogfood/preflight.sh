@@ -371,6 +371,26 @@ check_cluster_issuer() {
 }
 
 # -----------------------------------------------------------------------------
+# T0.9 — ESO ClusterSecretStore `loopzero-mgmt-store` Ready=True
+# -----------------------------------------------------------------------------
+# Discovered live during journey-03 (CHG-2026-04-29-DOGFOOD-REAL-E2E):
+# standalone-multi (helmfile L2) não provisionava o CSS que Pulumi
+# (runtime-bootstrap.ts) cria em prod. Sem CSS, ESO não sync secrets
+# para tenant pods → CreateContainerConfigError em qualquer app com
+# `secrets:` declarado em loopzero.yaml. Fix: bootstrap-eso-cluster-secret-store.sh.
+check_eso_cluster_secret_store() {
+  local id="T0.9"
+  local status
+  status=$(kubectl --context "$WORKLOAD_CTX" get clustersecretstore loopzero-mgmt-store \
+    -o jsonpath='{.status.conditions[?(@.type=="Ready")].status}' 2>/dev/null || echo "")
+  if [[ "$status" != "True" ]]; then
+    record "$id" "FAIL" "ClusterSecretStore loopzero-mgmt-store not Ready (got: '$status'). Run: bash infra/helmfile/scripts/bootstrap-eso-cluster-secret-store.sh"
+    return
+  fi
+  record "$id" "PASS" "ClusterSecretStore loopzero-mgmt-store Ready=True (ESO can sync mgmt→runtime secrets)"
+}
+
+# -----------------------------------------------------------------------------
 # Driver
 # -----------------------------------------------------------------------------
 require_bin kubectl
@@ -394,6 +414,7 @@ check_traefik_lb
 check_networkpolicy_traefik_target
 check_service_auth
 check_cluster_issuer
+check_eso_cluster_secret_store
 
 elapsed=$(( $(date +%s) - start ))
 
