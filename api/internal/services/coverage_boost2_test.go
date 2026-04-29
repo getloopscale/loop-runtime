@@ -94,6 +94,10 @@ func (f *fakeReleaseConvergenceStoreForCallback) GetByIDTx(_ context.Context, _ 
 	return nil, nil
 }
 
+func (f *fakeReleaseConvergenceStoreForCallback) CancelAllByEnv(_ context.Context, _ db.DBTX, _, _, _ string) (int, error) {
+	return 0, nil
+}
+
 func TestNewSyncCallbackActivator(t *testing.T) {
 	store := &fakeReleaseConvergenceStoreForCallback{}
 	activator := NewSyncCallbackActivator(store, nil, nil, nil, "dev.loopzero.example", nil)

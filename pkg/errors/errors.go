@@ -133,10 +133,12 @@ var (
 		HTTPStatus: 404,
 	}
 
-	// ErrNoActiveRelease is returned when rollback is attempted but no release is active.
+	// ErrNoActiveRelease is returned when rollback or promote is attempted but
+	// the source environment has no active release. Shared by both flows so the
+	// message must stay neutral (no "rollback"/"promote" wording).
 	ErrNoActiveRelease = &LoopZeroError{
 		Code:       "NO_ACTIVE_RELEASE",
-		Message:    "No active release found. Deploy at least once before rolling back.",
+		Message:    "No active release found in the source environment. Deploy at least once before promoting or rolling back.",
 		HTTPStatus: 404,
 	}
 

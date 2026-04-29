@@ -74,6 +74,9 @@ func (f *fakeReleaseStoreReaper) FindActiveReleases(_ context.Context, _ string)
 func (f *fakeReleaseStoreReaper) GetByIDTx(_ context.Context, _ db.DBTX, id string) (*db.Release, error) {
 	return f.releases[id], nil
 }
+func (f *fakeReleaseStoreReaper) CancelAllByEnv(_ context.Context, _ db.DBTX, _, _, _ string) (int, error) {
+	return 0, nil
+}
 
 type fakeStaleReleaseChecker struct {
 	result []StaleRelease

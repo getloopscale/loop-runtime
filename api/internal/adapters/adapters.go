@@ -384,6 +384,7 @@ func (a *StatusReleaseStoreAdapter) GetActiveByEnv(ctx context.Context, tenantID
 	}
 	return &routes.StatusRelease{
 		ID:        release.ID,
+		BuildID:   release.BuildID,
 		Status:    release.Status,
 		GitCommit: release.GitCommit,
 		CreatedAt: release.CreatedAt,

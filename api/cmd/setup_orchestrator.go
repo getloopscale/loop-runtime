@@ -148,6 +148,7 @@ func setupOrchestrator(
 	projectDeleter := services.NewProjectDeleter(services.ProjectDeleterDeps{
 		BuildStore:        stores.BuildStore,
 		EnvTargetStore:    stores.EnvTargetStore,
+		ReleaseStore:      stores.ReleaseStore,
 		ProjectStore:      &db.PostgresProjectStore{DB: dbAdapter},
 		Locker:            stores.Locker,
 		GitOps:            workflows.GitOpsPusher,

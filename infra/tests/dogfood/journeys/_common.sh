@@ -96,13 +96,23 @@ wait_http_200() {
 
 # Poll a build to terminal (SUCCEEDED/FAILED/CANCELLED).
 # Args: build_id max_seconds. Echoes final status.
+# Note: refreshes auth on 401s — local seed token TTL (~30m) can expire
+# mid-loop on slow builds, and silently 401-polling for 25min looked like
+# a journey hang. Now we re-call ensure_token whenever the API rejects auth.
 wait_build_terminal() {
   local build_id=$1 max_seconds=${2:-1200}
-  local elapsed=0 status
+  local elapsed=0 status http_code
   while (( elapsed < max_seconds )); do
-    status=$(curl -sS "${LOOPZERO_URL}/api/v1/builds/${build_id}" \
-      -H "Authorization: Bearer ${LOOPZERO_TOKEN}" 2>/dev/null \
-      | python3 -c "import sys,json; print(json.load(sys.stdin).get('status','?'))" 2>/dev/null || echo "?")
+    http_code=$(curl -sS -o /tmp/.build-status-body -w '%{http_code}' \
+      "${LOOPZERO_URL}/api/v1/builds/${build_id}" \
+      -H "Authorization: Bearer ${LOOPZERO_TOKEN}" 2>/dev/null || echo 000)
+    if [[ "$http_code" == "401" ]]; then
+      journey_log "wait_build_terminal: auth expired mid-poll, regenerating"
+      LOOPZERO_TOKEN=""
+      ensure_token
+      continue
+    fi
+    status=$(python3 -c "import sys,json; print(json.load(sys.stdin).get('status','?'))" < /tmp/.build-status-body 2>/dev/null || echo "?")
     case "$status" in
       SUCCEEDED|FAILED|CANCELLED)
         echo "$status"
@@ -113,6 +123,47 @@ wait_build_terminal() {
     elapsed=$(( elapsed + 15 ))
   done
   echo "TIMEOUT"
+  return 1
+}
+
+# Wait for release tied to a SPECIFIC build to reach ACTIVE in DB.
+# Critical: prior-run releases can linger as ACTIVE because `loopzero project delete`
+# does not transition them (state machine forbids ACTIVE→CANCELLED — they're only
+# superseded via NewReleaseActivated when the convergence loop activates the next
+# release). A wait that just checks "any active release" can return immediately on
+# stale rows. We must verify the build_id matches.
+# Args: project env build_id max_seconds
+wait_release_active() {
+  local project=$1 env=$2 build_id=$3 max_seconds=${4:-180}
+  local elapsed=0 status active_build http_code
+  journey_log "waiting for release ACTIVE in DB for build=$build_id (project=$project env=$env max ${max_seconds}s)"
+  while (( elapsed < max_seconds )); do
+    http_code=$(curl -sS -o /tmp/.release-status-body -w '%{http_code}' \
+      "${LOOPZERO_URL}/api/v1/projects/${project}/status?env=${env}" \
+      -H "Authorization: Bearer ${LOOPZERO_TOKEN}" 2>/dev/null || echo 000)
+    if [[ "$http_code" == "401" ]]; then
+      journey_log "wait_release_active: auth expired mid-poll, regenerating"
+      LOOPZERO_TOKEN=""
+      ensure_token
+      continue
+    fi
+    read -r status active_build <<<"$(python3 -c "
+import sys, json
+try:
+    d = json.load(sys.stdin)
+    ar = d.get('active_release') or {}
+    print(ar.get('status', '_'), ar.get('build_id', '_'))
+except Exception:
+    print('_ _')
+" < /tmp/.release-status-body 2>/dev/null || echo '_ _')"
+    if [[ "$status" == "ACTIVE" && "$active_build" == "$build_id" ]]; then
+      journey_log "release ACTIVE confirmed for build=$build_id (after ${elapsed}s)"
+      return 0
+    fi
+    sleep 5
+    elapsed=$(( elapsed + 5 ))
+  done
+  journey_log "timeout — release for build=$build_id not ACTIVE after ${max_seconds}s (last status='${status}', active_build='${active_build}')"
   return 1
 }
 

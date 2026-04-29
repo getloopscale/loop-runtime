@@ -29,6 +29,7 @@ type ArgoSyncer interface {
 type ProjectDeleterDeps struct {
 	BuildStore        db.BuildStore
 	EnvTargetStore    db.EnvironmentTargetStore
+	ReleaseStore      db.ReleaseStore // nil-safe: when nil, skips release cascade-cancel (legacy callers)
 	ProjectStore      ProjectDeleteProjectStore
 	Locker            EnvironmentLocker
 	GitOps            GitOpsPusher
@@ -46,6 +47,7 @@ type ProjectDeleteProjectStore interface {
 type ProjectDeleter struct {
 	buildStore        db.BuildStore
 	envTargetStore    db.EnvironmentTargetStore
+	releaseStore      db.ReleaseStore
 	projectStore      ProjectDeleteProjectStore
 	locker            EnvironmentLocker
 	gitops            GitOpsPusher
@@ -58,6 +60,7 @@ func NewProjectDeleter(deps ProjectDeleterDeps) *ProjectDeleter {
 	return &ProjectDeleter{
 		buildStore:        deps.BuildStore,
 		envTargetStore:    deps.EnvTargetStore,
+		releaseStore:      deps.ReleaseStore,
 		projectStore:      deps.ProjectStore,
 		locker:            deps.Locker,
 		gitops:            deps.GitOps,
@@ -182,7 +185,7 @@ func (d *ProjectDeleter) deleteEnvironment(ctx context.Context, req routes.Proje
 		buildProjectID = req.ProjectID // fallback to UUID if name unavailable
 	}
 
-	// Phase 1 (Lock): Cancel active builds + delete environment target
+	// Phase 1 (Lock): Cancel active builds + cascade-cancel releases + delete environment target
 	err := d.locker.WithLock(ctx, req.TenantID, buildProjectID, env, func(tx db.DBTX) error {
 		// Cancel active builds inside the lock (Rule 6)
 		cancelled, wfIDs, err := d.buildStore.CancelActiveBuilds(ctx, tx, req.TenantID, buildProjectID, env)
@@ -191,6 +194,21 @@ func (d *ProjectDeleter) deleteEnvironment(ctx context.Context, req routes.Proje
 		}
 		cancelledBuilds = cancelled
 		workflowIDs = wfIDs
+
+		// Cascade-cancel non-terminal releases. Without this, ACTIVE/PENDING rows
+		// linger in DB after the workload is gone — promote/rollback would resolve
+		// to those zombie rows on the next deploy and use stale git commits.
+		if d.releaseStore != nil {
+			cancelledReleases, releaseErr := d.releaseStore.CancelAllByEnv(ctx, tx, req.TenantID, buildProjectID, env)
+			if releaseErr != nil {
+				return fmt.Errorf("cancel releases cascade: %w", releaseErr)
+			}
+			if cancelledReleases > 0 {
+				slog.Info("project delete: cancelled releases via state-machine cascade",
+					"tenant_id", req.TenantID, "project", buildProjectID, "environment", env,
+					"cancelled", cancelledReleases)
+			}
+		}
 
 		// Delete environment target (uses project name, not UUID — same as builds)
 		if err := d.envTargetStore.DeleteTarget(ctx, tx, req.TenantID, buildProjectID, env); err != nil {

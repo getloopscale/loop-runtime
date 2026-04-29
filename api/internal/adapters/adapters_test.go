@@ -409,6 +409,9 @@ func (f *fakeStatusReleaseStore) FindPendingReleases(_ context.Context, _ string
 func (f *fakeStatusReleaseStore) FindActiveReleases(_ context.Context, _ string) ([]db.Release, error) {
 	return nil, nil
 }
+func (f *fakeStatusReleaseStore) CancelAllByEnv(_ context.Context, _ db.DBTX, _, _, _ string) (int, error) {
+	return 0, nil
+}
 func (f *fakeStatusReleaseStore) FindPendingReleasesByTenantEnv(_ context.Context, _, _ string) ([]db.Release, error) {
 	return nil, nil
 }

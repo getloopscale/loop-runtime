@@ -85,6 +85,10 @@ func (f *fakeConvergenceReleaseStore) GetByIDTx(_ context.Context, _ db.DBTX, id
 	return &db.Release{ID: id, Status: status}, nil
 }
 
+func (f *fakeConvergenceReleaseStore) CancelAllByEnv(_ context.Context, _ db.DBTX, _, _, _ string) (int, error) {
+	return 0, nil
+}
+
 func safeTransitionRelease(m *statemachine.Machine, current statemachine.State, event statemachine.Event) (newState statemachine.State, err error) {
 	defer func() {
 		if r := recover(); r != nil {

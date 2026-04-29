@@ -315,8 +315,14 @@ export class ApiClient {
 
   private mapError(
     status: number,
-    body?: { code?: string; message?: string } | null,
+    body?: { code?: string; message?: string; error?: string } | null,
   ): ApiError {
-    return ApiError.fromHttpStatus(status, body?.message, body?.code);
+    // Some legacy routes (e.g. /api/v1/domains) respond with {"error": "..."}
+    // instead of the canonical {"code", "message"} shape. We accept either so
+    // the CLI surfaces the specific server-side message instead of falling
+    // back to "Request failed (HTTP 400). Check your command arguments." —
+    // a Rule 8 (fail-clear) violation observed during dogfood iter 13.
+    const message = body?.message ?? body?.error;
+    return ApiError.fromHttpStatus(status, message, body?.code);
   }
 }

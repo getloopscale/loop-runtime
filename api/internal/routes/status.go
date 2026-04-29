@@ -50,6 +50,7 @@ type StatusReleaseStore interface {
 // StatusRelease is the release representation used by the status handler.
 type StatusRelease struct {
 	ID        string
+	BuildID   string
 	Status    string
 	GitCommit string
 	CreatedAt time.Time
@@ -92,6 +93,7 @@ type lastBuildResponse struct {
 // activeReleaseResponse is the JSON representation of the active release.
 type activeReleaseResponse struct {
 	ID        string `json:"id"`
+	BuildID   string `json:"build_id"`
 	Status    string `json:"status"`
 	GitCommit string `json:"git_commit"`
 	CreatedAt string `json:"created_at"`
@@ -193,6 +195,7 @@ func (h *StatusHandler) Get(w http.ResponseWriter, r *http.Request) {
 	if release != nil {
 		resp.ActiveRelease = &activeReleaseResponse{
 			ID:        release.ID,
+			BuildID:   release.BuildID,
 			Status:    release.Status,
 			GitCommit: release.GitCommit,
 			CreatedAt: release.CreatedAt.UTC().Format(time.RFC3339),

@@ -158,10 +158,26 @@ describe('ApiClient', () => {
   });
 
   describe('HTTP error → exit code mapping', () => {
-    it('401 → exit code 4 with auth message', async () => {
+    it('401 → exit code 4 (uses server message when present, generic fallback otherwise)', async () => {
+      // With body.error → server message used. Server-side 401 emits a generic
+      // "unauthorized" but real responses (Hydra/Kratos auth chain) usually
+      // include actionable details — the CLI must surface them.
       const fetchFn = fakeFetch(401, { error: 'unauthorized' });
       const client = new ApiClient({ baseURL, token: null, fetchFn });
 
+      try {
+        await client.get('/tenants');
+        fail('should have thrown');
+      } catch (err) {
+        const apiErr = err as ApiError;
+        expect(apiErr.exitCode).toBe(4);
+        expect(apiErr.message).toBe('unauthorized');
+      }
+    });
+
+    it('401 with empty body → generic fallback prompts loopzero login', async () => {
+      const fetchFn = fakeFetch(401, {});
+      const client = new ApiClient({ baseURL, token: null, fetchFn });
       try {
         await client.get('/tenants');
         fail('should have thrown');
@@ -219,8 +235,8 @@ describe('ApiClient', () => {
       }
     });
 
-    it('422 → message about invalid request', async () => {
-      const fetchFn = fakeFetch(422, { error: 'validation failed' });
+    it('422 → surfaces server-side error message verbatim (Rule 8 fail-clear)', async () => {
+      const fetchFn = fakeFetch(422, { error: 'validation failed: project name must be lowercase' });
       const client = new ApiClient({ baseURL, token: null, fetchFn });
 
       try {
@@ -229,12 +245,28 @@ describe('ApiClient', () => {
       } catch (err) {
         const apiErr = err as ApiError;
         expect(apiErr.exitCode).toBe(1);
+        // Specific server message takes precedence over the generic fallback
+        // ("Invalid request. Check your command arguments."). Generic only
+        // fires when the body has no message AND no error field.
+        expect(apiErr.message).toContain('validation failed');
+      }
+    });
+
+    it('422 with empty body → generic fallback', async () => {
+      const fetchFn = fakeFetch(422, {});
+      const client = new ApiClient({ baseURL, token: null, fetchFn });
+
+      try {
+        await client.post('/tenants', {});
+        fail('should have thrown');
+      } catch (err) {
+        const apiErr = err as ApiError;
         expect(apiErr.message).toContain('Invalid request');
       }
     });
 
-    it('500 → message about service unavailable', async () => {
-      const fetchFn = fakeFetch(500, { error: 'internal' });
+    it('500 → surfaces server-side error message verbatim', async () => {
+      const fetchFn = fakeFetch(500, { error: 'internal: database connection refused' });
       const client = new ApiClient({ baseURL, token: null, fetchFn });
 
       try {
@@ -243,6 +275,19 @@ describe('ApiClient', () => {
       } catch (err) {
         const apiErr = err as ApiError;
         expect(apiErr.exitCode).toBe(3);
+        expect(apiErr.message).toContain('database connection refused');
+      }
+    });
+
+    it('500 with empty body → generic fallback', async () => {
+      const fetchFn = fakeFetch(500, {});
+      const client = new ApiClient({ baseURL, token: null, fetchFn });
+
+      try {
+        await client.get('/health');
+        fail('should have thrown');
+      } catch (err) {
+        const apiErr = err as ApiError;
         expect(apiErr.message).toContain('unavailable');
       }
     });

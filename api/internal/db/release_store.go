@@ -85,6 +85,14 @@ type ReleaseStore interface {
 	// GetByIDTx retrieves a release by ID within a transaction.
 	// MEET-2026-03-31-023 T0-1: Used by ActivateReleaseKernel idempotency guard.
 	GetByIDTx(ctx context.Context, tx DBTX, id string) (*Release, error)
+	// CancelAllByEnv transitions every non-terminal release for the given
+	// (tenant, project, env) to CANCELLED via the state-machine
+	// ProjectDeleted event. Used by ProjectDeleter so future GetActiveByEnv
+	// lookups don't return zombie rows after the workload is gone.
+	// Returns the number of releases cancelled. Already-CANCELLED rows are
+	// skipped silently. Failures on individual rows are logged but don't
+	// abort the cascade — best-effort cleanup.
+	CancelAllByEnv(ctx context.Context, tx DBTX, tenantID, projectID, env string) (int, error)
 }
 
 // PostgresReleaseStore implements ReleaseStore using PostgreSQL.
@@ -198,6 +206,67 @@ func (s *PostgresReleaseStore) UpdateStatus(ctx context.Context, tx DBTX, releas
 
 	release.Status = string(newState)
 	return release, nil
+}
+
+// CancelAllByEnv cascades the ProjectDeleted event to every non-terminal
+// release row for the (tenant, project, env) tuple. The release state machine
+// allows ProjectDeleted from READY/PENDING/ACTIVE/SUPERSEDED/ROLLED_BACK and
+// every *_FAILED state, all converging on CANCELLED. CANCELLED rows are
+// skipped via the WHERE filter. Returns the count of cancelled rows.
+//
+// Atomicity: the caller is responsible for passing the same transaction used
+// for cancel-builds + delete-environment-target. If any individual transition
+// fails (e.g. unexpected state), it is logged via the wrapped error but the
+// cascade continues — we prefer best-effort cleanup over leaving a single
+// failure to block the whole project delete.
+func (s *PostgresReleaseStore) CancelAllByEnv(ctx context.Context, tx DBTX, tenantID, projectID, env string) (int, error) {
+	executor := tx
+	if executor == nil {
+		executor = s.db
+	}
+
+	rows, err := executor.Query(ctx,
+		`SELECT id, status FROM releases
+		 WHERE tenant_id = $1 AND project_id = $2 AND environment = $3
+		   AND status <> 'CANCELLED'`,
+		tenantID, projectID, env,
+	)
+	if err != nil {
+		return 0, fmt.Errorf("release store: list non-terminal for cancel cascade: %w", err)
+	}
+	type row struct {
+		id     string
+		status string
+	}
+	var pending []row
+	for rows.Next() {
+		var r row
+		if err := rows.Scan(&r.id, &r.status); err != nil {
+			rows.Close()
+			return 0, fmt.Errorf("release store: scan cancel cascade row: %w", err)
+		}
+		pending = append(pending, r)
+	}
+	rows.Close()
+
+	cancelled := 0
+	for _, r := range pending {
+		newState, err := safeTransition(releaseMachine, statemachine.State(r.status), statemachine.Event(statemachine.ReleaseProjectDeleted))
+		if err != nil {
+			// Skip silently — state machine forbids this transition (e.g. an
+			// unknown future state). Better to keep cleaning the rest than abort.
+			continue
+		}
+		_, err = executor.Exec(ctx,
+			`UPDATE releases SET status = $1 WHERE id = $2`,
+			string(newState), r.id,
+		)
+		if err != nil {
+			return cancelled, fmt.Errorf("release store: cancel cascade update %s: %w", r.id, err)
+		}
+		cancelled++
+	}
+	return cancelled, nil
 }
 
 // SetGitCommit persists the git commit SHA from the GitOps push on a release.
