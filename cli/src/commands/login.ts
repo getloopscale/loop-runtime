@@ -56,17 +56,6 @@ export class LoginCommand {
       );
     }
 
-    // Deprecation warning for GitHub PAT tokens
-    // JWT tokens (3 dot-separated segments) are the new standard.
-    // PAT tokens (ghp_, gho_, github_pat_) are deprecated.
-    if (this.isGitHubPAT(opts.token) && !this.isSuppressed() && !opts.json) {
-      this.deps.writeError(
-        'Warning: Token-based authentication is deprecated.\n' +
-        'Run `loopzero login` (without --token) to switch to the new login flow.\n' +
-        'Token support will be removed in a future version.'
-      );
-    }
-
     const result = await this.deps.validateToken(opts.token);
 
     if (!result.valid || !result.email) {
@@ -76,9 +65,7 @@ export class LoginCommand {
         return this.exitWithError(
           opts,
           'Authentication failed. Your token may be expired, revoked, or missing required scopes.\n' +
-          'LoopZero requires a GitHub token with read:user scope (Classic PAT) or a GitHub OAuth token.\n' +
-          'Create a Classic PAT at: https://github.com/settings/tokens/new?scopes=read:user\n' +
-          'Then run: loopzero login --token <new-token>',
+          'Sign up or sign in at https://app.dev.loopzero.example to obtain a token, then run: loopzero login --token <token>',
           4,
           'AUTH_FAILED'
         );
@@ -200,14 +187,6 @@ export class LoginCommand {
     }
 
     return this.exitWithError(opts, 'No teams available for this account.', 1, 'NO_TEAMS');
-  }
-
-  private isGitHubPAT(token: string): boolean {
-    return token.startsWith('ghp_') || token.startsWith('gho_') || token.startsWith('github_pat_');
-  }
-
-  private isSuppressed(): boolean {
-    return process.env.LOOPZERO_SUPPRESS_DEPRECATION === '1';
   }
 
   private exitWithError(opts: LoginOptions, message: string, exitCode: number, code: string): number {

@@ -34,8 +34,9 @@ export function registerAuthCommands(deps: CommandDeps): void {
           sleep: (ms: number) => new Promise(r => setTimeout(r, ms)),
         }),
         validateToken: async (token: string) => {
-          // Try cloud service /v1/auth/me first (for Hydra JWTs)
-          // Falls back to engine API /api/v1/auth/whoami (for GitHub PATs)
+          // Try cloud service /v1/auth/me first (Hydra JWTs from platform
+          // sign-up). Falls back to engine API /api/v1/auth/whoami for
+          // service tokens issued internally.
           try {
             const cloudResp = await globalThis.fetch(`${cloudUrl}/v1/auth/me`, {
               headers: { Authorization: `Bearer ${token}` },
