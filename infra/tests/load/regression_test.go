@@ -1451,6 +1451,63 @@ func TestF04MigrationScriptExists(t *testing.T) {
 	}
 }
 
+// TestT12ExitCodeContractTestExists — T1.2 (CHG-2026-04-29-DOGFOOD).
+// Garante que o fork-based exit code contract test exists e cobre matrix
+// mínima de comandos (auth-gated, validate, parse errors, help/version).
+// Sem este test, regressão em F-02 (exit code drift) volta silenciosa.
+func TestT12ExitCodeContractTestExists(t *testing.T) {
+	const path = "../../../cli/tests/integration/exit-code-contract.test.ts"
+	if _, err := os.Stat(path); err != nil {
+		t.Fatalf("T1.2 regression: contract test missing: %v", err)
+	}
+	data, err := os.ReadFile(path)
+	if err != nil {
+		t.Fatalf("read contract test: %v", err)
+	}
+	s := string(data)
+	if !strings.Contains(s, "spawnSync") {
+		t.Error("T1.2 regression: contract test must use child_process.spawnSync to invoke real process")
+	}
+	for _, cmd := range []string{"whoami", "deploy", "validate", "build", "secret", "rollback"} {
+		if !strings.Contains(s, "'"+cmd+"'") && !strings.Contains(s, `"`+cmd+`"`) {
+			t.Errorf("T1.2 regression: contract matrix must cover %q command", cmd)
+		}
+	}
+	// help/version SÃO exit 0, não erros — contract deve testar isso.
+	if !strings.Contains(s, "--help") || !strings.Contains(s, "--version") {
+		t.Error("T1.2 regression: contract test must cover --help / --version (exit 0 expected)")
+	}
+}
+
+// TestT61DogfoodLoopH1TestExists — T6.1 (CHG-2026-04-29-DOGFOOD).
+// Gate de release: dogfood loop H1 valida jornada user-real
+// (login → init → deploy → status → delete) gated em LOOPZERO_E2E_DOGFOOD=1.
+func TestT61DogfoodLoopH1TestExists(t *testing.T) {
+	const path = "../../../infra/tests/e2e/dogfood_loop_h1_test.go"
+	if _, err := os.Stat(path); err != nil {
+		t.Fatalf("T6.1 regression: dogfood loop H1 test missing: %v", err)
+	}
+	data, err := os.ReadFile(path)
+	if err != nil {
+		t.Fatalf("read dogfood test: %v", err)
+	}
+	s := string(data)
+	if !strings.Contains(s, "LOOPZERO_E2E_DOGFOOD") {
+		t.Error("T6.1 regression: gating env var must be LOOPZERO_E2E_DOGFOOD")
+	}
+	if !strings.Contains(s, "func TestDogfoodLoopH1(") {
+		t.Error("T6.1 regression: TestDogfoodLoopH1 function must exist")
+	}
+	// Cleanup: defer project delete é obrigatório (Prova de Morte).
+	if !strings.Contains(s, `"project", "delete"`) {
+		t.Error("T6.1 regression: test must defer project delete for cleanup (Prova de Morte)")
+	}
+	// Rule 3 enforcement scan.
+	if !strings.Contains(s, "ArgoCD") || !strings.Contains(s, "GitOps") {
+		t.Error("T6.1 regression: test must scan output for forbidden internal terms (Rule 3)")
+	}
+}
+
 // TestF13WorkflowHasPodGC — F-13 fix: workflow_builder.go DEVE setar
 // PodGC.Strategy=OnPodCompletion com DeleteDelayDuration=5m. Sem isso,
 // pods de step com Failed acumulam na ns argo até GC do Workflow (24h).
