@@ -15,6 +15,8 @@ import (
 	"k8s.io/apimachinery/pkg/runtime"
 	clientgoscheme "k8s.io/client-go/kubernetes/scheme"
 	ctrl "sigs.k8s.io/controller-runtime"
+	"sigs.k8s.io/controller-runtime/pkg/cache"
+	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/healthz"
 	"sigs.k8s.io/controller-runtime/pkg/log/zap"
 	metricsserver "sigs.k8s.io/controller-runtime/pkg/metrics/server"
@@ -76,6 +78,13 @@ func main() {
 		shared.StartPprofServer()
 	}
 
+	// CHG-2026-04-30-INFRA-NORMALIZE / Phase 2 condition C16. Cache
+	// scoping per ADR-0018 v2 C9 + operator-split-invariants.md I-1.
+	// PlatformBootstrap, GitRepositoryBinding, ClusterCredential all
+	// live in `loopzero-system` only.
+	platformCRDNamespaces := map[string]cache.Config{
+		constants.NamespacePlatformSystem: {},
+	}
 	mgr, err := ctrl.NewManager(ctrl.GetConfigOrDie(), ctrl.Options{
 		Scheme: scheme,
 		Metrics: metricsserver.Options{
@@ -84,6 +93,13 @@ func main() {
 		HealthProbeBindAddress: healthProbeAddr,
 		LeaderElection:         enableLeaderElection,
 		LeaderElectionID:       "loopzero-platform-operator.loopzero.io",
+		Cache: cache.Options{
+			ByObject: map[client.Object]cache.ByObject{
+				&loopzerov1.PlatformBootstrap{}:    {Namespaces: platformCRDNamespaces},
+				&loopzerov1.GitRepositoryBinding{}: {Namespaces: platformCRDNamespaces},
+				&loopzerov1.ClusterCredential{}:    {Namespaces: platformCRDNamespaces},
+			},
+		},
 	})
 	if err != nil {
 		setupLog.Error(err, "unable to create manager")
