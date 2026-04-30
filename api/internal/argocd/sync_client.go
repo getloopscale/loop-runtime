@@ -149,6 +149,14 @@ func (c *SyncClient) TriggerSync(ctx context.Context, appName string) error {
 	defer func() { _ = resp.Body.Close() }()
 
 	if resp.StatusCode == 401 || resp.StatusCode == 403 {
+		// CHG-2026-04-30-DOGFOOD-LOCAL-HEAL NEW-15: signal the token provider
+		// to mint a fresh token. KubeMintingTokenProvider implements
+		// AuthFailureNotifier; StaticTokenProvider does not — it's a no-op.
+		// The next caller (or the circuit-breaker retry) picks up the new
+		// token via tokenProvider.Token() in subsequent requests.
+		if notifier, ok := c.tokenProvider.(AuthFailureNotifier); ok {
+			notifier.OnAuthFailure()
+		}
 		span.RecordError(loopzeroerrors.ErrDeployServiceAuthFailed)
 		span.SetStatus(codes.Error, "auth failed")
 		return loopzeroerrors.ErrDeployServiceAuthFailed
