@@ -42,9 +42,10 @@ func TestCapacityLoopZeroAPIBuildsSubmit(t *testing.T) {
 	t.Logf("config: rps=%v duration=%v workers=%d", cfg.RPS, cfg.Duration, cfg.Workers)
 
 	lat := NewLatencies(int(cfg.RPS*cfg.Duration.Seconds()) + 1000)
+	// total + errors protected via atomic ops below — no Mutex needed.
+	// (Earlier revision had a sync.Mutex here; go vet 2026-04-30 caught a
+	// dead-code copy: `_ = mu` flagged "assignment copies lock value to _".)
 	var total, errors int64
-	var mu sync.Mutex
-	_ = mu
 
 	ctx, cancel := context.WithTimeout(context.Background(), cfg.Duration+30*time.Second)
 	defer cancel()
