@@ -46,24 +46,30 @@ fail() { log "FAIL: $*"; exit "${2:-1}"; }
 cleanup() {
   log "cleanup..."
   k3d cluster delete "$CLUSTER_NAME" 2>/dev/null || true
-  # Restore the original build cluster we paused to free RAM.
+  # Restore the original build + workload clusters we paused to free RAM.
   k3d cluster start loopzero-build 2>/dev/null || true
+  k3d cluster start loopzero-workload 2>/dev/null || true
 }
 trap cleanup EXIT
 
 # 1) Pre-flight: refuse to run if we're already RAM-starved.
-log "step 1a: pre-flight RAM check (need ≥4 GiB available after pause)"
+# Achado #131 (CHG-2026-04-30 iter 3) — virgin install with 27 charts × `helm
+# --wait` parallel = OOM at host level when only 1 cluster paused. Pause BOTH
+# loopzero-build AND loopzero-workload during the test (workload tenants are zumbi-free
+# from earlier dogfood — no live customers). Total free RAM ≥7 GiB after.
+log "step 1a: pre-flight RAM check (need ≥7 GiB available after both pauses)"
 avail_kb=$(awk '/MemAvailable/ {print $2}' /proc/meminfo)
 avail_gib=$(( avail_kb / 1024 / 1024 ))
-log "  available: ${avail_gib} GiB (will gain ~1.9 GiB after loopzero-build stop)"
-if (( avail_gib + 2 < 4 )); then
-  fail "insufficient RAM for virgin install (need ≥4 GiB post-pause, have ${avail_gib} pre-pause)" 1
+log "  available: ${avail_gib} GiB (will gain ~3.5 GiB after build+workload stop)"
+if (( avail_gib + 3 < 7 )); then
+  fail "insufficient RAM for virgin install (need ≥7 GiB post-pause, have ${avail_gib} pre-pause)" 1
 fi
 
-# 1b) Free RAM by pausing build cluster (we don't need image building during
-#    the standalone install).
-log "step 1b: pausing loopzero-build cluster to free ~1.9 GiB RAM"
-k3d cluster stop loopzero-build 2>&1 | tail -2 || log "  warning: loopzero-build stop returned non-zero"
+# 1b) Free RAM by pausing build AND workload clusters.
+log "step 1b: pausing loopzero-build cluster (~1.9 GiB)"
+k3d cluster stop loopzero-build 2>&1 | tail -1 || log "  warning: loopzero-build stop returned non-zero"
+log "step 1c: pausing loopzero-workload cluster (~1.7 GiB)"
+k3d cluster stop loopzero-workload 2>&1 | tail -1 || log "  warning: loopzero-workload stop returned non-zero"
 
 # 2) Optional docker prune to reclaim disk.
 # WARNING (Achado #30): `docker system prune -a --volumes` ALSO deletes
@@ -83,14 +89,15 @@ if k3d cluster list --no-headers 2>/dev/null | awk '{print $1}' | grep -qx "$CLU
   k3d cluster delete "$CLUSTER_NAME" 2>&1 | tail -2 || true
 fi
 
-log "step 3: creating virgin k3d cluster '$CLUSTER_NAME'"
+log "step 3: creating virgin k3d cluster '$CLUSTER_NAME' with 2 agents (capacity for 27 charts)"
 # Achado #31: k3d ships Traefik pre-installed in kube-system. Our Helmfile
-# installs Traefik in `traefik` ns and the IngressClass adoption fails:
-#   "IngressClass 'traefik' exists ... release-namespace must equal 'traefik'"
-# Disable k3d's default Traefik so Helmfile owns it cleanly. Same flag
-# disables servicelb (we use Traefik LB type via the chart).
+# installs Traefik in `traefik` ns and the IngressClass adoption fails.
+# Disable via --k3s-arg.
+# Achado #131: 1 agent runs OOM when `helm --wait` paralleliza 27+ charts.
+# 2 agents distributes pod load. With build+workload paused, host has
+# ~9 GiB free — virgin needs ~3 GiB total (server+2agents+full install).
 if ! k3d cluster create "$CLUSTER_NAME" \
-    --servers 1 --agents 1 \
+    --servers 1 --agents 2 \
     --port "${VIRGIN_PORT_HTTPS}:443@loadbalancer" \
     --port "${VIRGIN_PORT_HTTP}:80@loadbalancer" \
     --api-port "${VIRGIN_PORT_API}" \
