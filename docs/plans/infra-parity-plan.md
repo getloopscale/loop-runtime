@@ -48,6 +48,8 @@ Implicação: se rodarmos `loopzero platform install -f values.yaml` num cluster
 
 ## ADRs
 
+> **D1-D7 promovidos a `docs/decisions/ADR-0020-infra-parity-decisions.md` (2026-04-30).** O ADR consolida rationale + verification matrix + negative consequences. As seções abaixo permanecem aqui para implementadores que estão lendo o plano linearmente; mudanças nas decisões devem ser feitas no ADR (source of truth) e refletidas aqui.
+
 ### D1 — Imagens via tag semver | SHA | latest (não branch hot-patch)
 
 **Decision (revisado 2026-04-30):** Toda imagem LoopZero referenciada em Helmfile usa **uma das três formas**:
