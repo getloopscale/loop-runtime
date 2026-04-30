@@ -117,8 +117,22 @@ func (r *DynamicRouter) refresh(ctx context.Context) error {
 }
 
 // Resolve returns the CellConfig for the given cell_id.
+//
+// Emits loopzero_cell_routing_decisions_total{cell, decision} per
+// MEET-INFRA-NORMALIZE-T3-multi-cell C19 + ADR D6.
+//
+// Decisions:
+//   "assigned" — cell found, returned normally
+//   "error"    — cell_id empty OR unknown; caller gets a typed error
+//
+// "fallback" decision is reserved for a future enhancement (graceful
+// degradation to default-cell when primary unavailable). Today the
+// router does not fall back — unknown cells are errors, by design,
+// because silent fallback would mask routing drift. Plan v2 D3 Stage
+// 5b reconsiders if/when stage 4 surfaces real demand.
 func (r *DynamicRouter) Resolve(_ context.Context, cellID string) (*CellConfig, error) {
 	if cellID == "" {
+		metrics.CellRoutingDecisions.WithLabelValues("", "error").Inc()
 		return nil, fmt.Errorf("cell router: empty cell_id")
 	}
 
@@ -127,8 +141,10 @@ func (r *DynamicRouter) Resolve(_ context.Context, cellID string) (*CellConfig, 
 	r.mu.RUnlock()
 
 	if !ok {
+		metrics.CellRoutingDecisions.WithLabelValues(cellID, "error").Inc()
 		return nil, fmt.Errorf("cell router: unknown cell_id %q (known: %d cells)", cellID, len(r.cells))
 	}
+	metrics.CellRoutingDecisions.WithLabelValues(cellID, "assigned").Inc()
 	return &cfg, nil
 }
 
