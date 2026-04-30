@@ -1,404 +1,1080 @@
-# Plan: Normalize `infra/` + Merge `refactorhelms` + 100% CLI Functional + Multi-Cell Live
+# Plan: Normalize `infra/`, Ratify `refactorhelms`, 100% CLI Functional, Multi-Cell Live (v2 — FAANG bar)
 
-> **Version 1.0** — Consolidate all open structural issues in `infra/` (Tilt↔Helmfile contradiction, 4 paralelas Pulumi stacks, 3 orphan Tilt yamls, dead-code, doc drift), formalize the merge of branch `refactorhelms` (PR #51) into `develop`, audit + fix every command of `loopzero` CLI to a 100% functional bar against the post-merge architecture, and activate the second runtime cluster (cell-2) end-to-end so the platform actually executes in multi-cell mode. Expected outcome: `task parity:k3d-virgin` GREEN with 4 split operators + helmfile reflecting the same; every CLI command returns the documented exit code and JSON shape; `loopzero deploy` against a tenant pinned to cell-2 produces HTTP 200 in `runtime-2`; ADR-0021/0022/0023 ratify the structural decisions; and CI gates all of it permanently.
+> **Version 2.0** (supersedes v1.0 of 2026-04-30) — Eliminate every structural debt in `infra/`, formalize the merge of `refactorhelms` (PR #51) through proper review process, audit + harden every `loopzero` CLI command against the post-merge architecture using cluster-real integration tests, and activate the second runtime cluster (cell-2) with explicit canary, error budget gates, and observability baked-in. v2 closes the **3 workarounds + 10 rigor gaps + 3 minor weaknesses** identified in the v1 self-audit. Outcome: a forward-only migration with no flag debt, governance records preceding code, security + SRE veto-able review per phase, production rollout path explicit, and rollback steps documented per phase.
 
 ## Context
 
-The 2026-04-30 deep review of `infra/` (run on `fix/parity-on-refactorhelms` after PR #51) surfaced **eight structural issues** plus an unfinished feature. They are documented findings, not speculation:
+The 2026-04-30 deep review of `infra/` (run on `fix/parity-on-refactorhelms` post-PR #51) surfaced eight structural issues plus an unfinished feature (multi-cell). v1 of this plan addressed coverage but failed FAANG rigor — a self-audit caught 3 workarounds and 10 gaps. This v2 rewrites with:
 
-1. **S0 — Tilt ≠ Helmfile (Rule 10 break).** PR #51 split the operator monolith into 4 binaries (`cmd/{app,platform,preview,tenant}-operator/main.go`), shipped 4 charts in `charts/loopzero-*-operator`, and updated `Tiltfile` to deploy them. **`infra/helmfile/mgmt.helmfile.yaml.gotmpl` still references the legacy monolith chart `tenant-controller`** — so `loopzero platform install` (canonical install path per ADR D2) produces 1 monolithic pod while `tilt up` produces 4 split pods. Local ≠ production. Evidence: `grep -E "^  - name:" infra/helmfile/mgmt.helmfile.yaml.gotmpl | grep -i controller` shows `loopzero-controller` + `tenant-controller` only.
+- **Phase −1 (governance)** preceding implementation per `.claude/rules/pre-release-governance.md` (T3 changes require meeting + ADR + change-governor before code).
+- **Forward-only migration** for operator split (no feature flag co-existence; rollback is `git revert`).
+- **Pulumi state cleanup** in addition to code delete (deleting code ≠ destroying cloud state).
+- **Source-verified multi-cell** (read `dynamic_router.go` + `cells` schema before designing on top of CLAUDE.md text).
+- **Cluster-real integration tests** (envtest + ephemeral k3d), not pure mocks.
+- **Security Review + SRE Review per phase**, with explicit veto criteria.
+- **Rollback Plan + Observability Plan per phase**, baked into each task.
+- **Production rollout phase** separate from dev activation.
+- **ADRs prescritivos** with Options A/B/C, vetoes per stakeholder, migration playbook.
+- **Explicit DEBT contract** (owner, horizon, stop-the-line condition) — no anonymous DEBT.
 
-2. **S1 — 4 Pulumi stacks, 3 orphans.** `infra/pulumi/` (canonical, wired via `cli/src/installer/pulumi-runner.ts:resolvePulumiProjectDir`) coexists with `infra/pulumi-infra/`, `infra/pulumi-platform/`, `infra/pulumi-control-plane/`. The latter 3 are referenced **only** by `infra/scripts/provision-homolog.sh`. Two of them (`pulumi-platform`, `pulumi-control-plane`) import `@pulumi/kubernetes` (5 + 1 imports respectively), violating ADR-0020 D7 ("Pulumi is L1, Helmfile is L2"). `pulumi-infra/Pulumi.yaml` declares `name: loopzero-infra` — **identical** to `infra/pulumi/Pulumi.yaml`, risking state collision.
+### Evidence justifying each phase
 
-3. **S1 — 3 orphan Tilt deployments.** `infra/tilt/{operator,controller,cloud}-deployment.yaml` are not referenced by `Tiltfile` after PR #51's restructure. Last touched by `65543040`/`55ce9881`/`c53e3a74` (pre-split). Latent re-import risk per CLAUDE.md "Implemented but not wired" pattern.
-
-4. **S2 — `regression-checks.sh` profile-aware undocumented.** Accepts `LOOPZERO_REGRESSION_PROFILE=standalone` to skip multi-cluster checks, but no runbook explains it. Operators rediscover the flag by reading source.
-
-5. **S2 — `regression_test.go` string-literal anti-pattern.** This session fixed 4 fails (B25/B28/B31/F12) caused by tests asserting on implementation-string-literals (gate names, tag patterns, helper names). Any semantic-equivalent refactor breaks the suite. Behavioural tests required.
-
-6. **S2 — `infra/cell-templates/v1.0.0` dead.** No README; CLAUDE.md says "Cell Phase 2b activation pending Sprint 9". Contributors cannot tell if this is live or deferred.
-
-7. **S3 — `charts/loopzero-platform/Chart.yaml` umbrella requires `helm dependency build`.** Not in `task validate:manifests`; a fresh clone fails `helm template charts/loopzero-platform/`.
-
-8. **S3 — Sloth SLO files (`infra/sloth/*.yaml`) bypass kubeconform.** Pre-processed format. No `task validate:slos` calling `sloth validate`.
-
-**Unfinished feature — Multi-Cell.** Per CLAUDE.md: "Cell architecture Phase 0+1+1.5 complete (runtime-2 physically provisioned but not routed; cell-2 activation Sprint 9). Cell Phase 2b activation (code 100%, Pulumi.dev.yaml multi-cell config missing)." `infra/pulumi/src/components/infra.ts:160-165` provisions a `${baseName}-runtime-2` DOKS cluster but `Pulumi.dev.yaml` lacks `cellId`/`runtime2*` keys required by `placement/dynamic_router.go:44` to route tenants to it.
-
-**Branch state.** `refactorhelms` (PR #51 head `29b4d392`) was reviewed and rebased on top of `develop`. This session pushed `fix/parity-on-refactorhelms` (commit `1f36d5aa`) with 4 test alignments that make every suite GREEN on top of the PR. Per the user, "o merge foi feito" — semantically the PR is approved and the alignment branch is the post-merge baseline; this plan formalizes that as the develop tip.
-
-Cross-references:
-- `docs/decisions/ADR-0020-infra-parity-decisions.md` (D1-D7 in force)
-- `docs/runbooks/bootstrap-regression-matrix.md` (135 entries, 109/135 protected)
-- `docs/runbooks/parity-validation.md` (T5.1 GREEN run 6, T6.1/T7.1/T8.1 cloud-pendentes)
-- CLAUDE.md "Helm Chart Dual System" (added by PR #51)
-- CLAUDE.md "Known Systemic Patterns" → "Implemented but not wired"
+| Evidence | Source | Phase |
+|---|---|---|
+| `origin/develop` is `8b46661a`; PR #51 head `29b4d392` not merged into develop | `git ls-remote origin refs/heads/develop` | Phase 1 |
+| 4 split operator binaries exist (`operators/cmd/{app,platform,preview,tenant}-operator/main.go`) | `find operators/cmd -name main.go` | Phase 2 |
+| Helmfile mgmt has `tenant-controller` + `loopzero-controller` (monolith) only | `grep -E "^  - name:" infra/helmfile/mgmt.helmfile.yaml.gotmpl` | Phase 2 |
+| Tilt deploys 4 split operators | `Tiltfile` lines 134/148/162/176 | Phase 2 |
+| 4 Pulumi projects exist; 3 unreferenced from CLI | `find infra -name 'Pulumi.yaml'` + `grep -rn pulumi-* cli/` | Phase 3 |
+| `pulumi-platform` imports `@pulumi/kubernetes` (5 files) | `grep -rn '@pulumi/kubernetes' infra/pulumi-platform/src/` | Phase 3 |
+| `pulumi-infra/Pulumi.yaml` declares `name: loopzero-infra` (collision with canonical) | `head -3 infra/pulumi-infra/Pulumi.yaml` | Phase 3 |
+| `runtime-2` provisioned in `infra.ts:160` but `Pulumi.dev.yaml` lacks `cellId`/`runtime2*` | `grep -E 'cell\|runtime2' infra/pulumi/Pulumi.dev.yaml` returns 0 lines | Phase 5 |
+| `placement/dynamic_router.go` has `dynamic-cell-router` logger but never live-tested | `grep -rn dynamic-cell-router api/internal/` + CLAUDE.md "not routed" | Phase 5 |
+| 12 register groups exist in `cli/src/register/` | `ls cli/src/register/ | wc -l` | Phase 4 |
+| `regression_test.go` asserts on string-literals (broken 4× this session) | git diff `1f36d5aa^..1f36d5aa` -- `infra/tests/load/regression_test.go` | Phase 4 (DEBT) |
 
 ## Objective
 
-**Done = `task parity:k3d-virgin` GREEN with 4 split operators living, every `loopzero` CLI command exits 0/1/2/3/4/5 with the documented JSON, and a tenant pinned to cell-2 returns HTTP 200 from `runtime-2` end-to-end.**
+**Done = `task validate:matrix` GREEN** (a single command exits 0 only when all 14 gates pass), **and `task parity:cell-2-canary` GREEN** (real cell-2 routing live with HTTP 200), **and a Decision Record exists in `docs/decisions/` for each T3 phase**.
 
 Specific measurable goals:
-1. **Zero S0/S1 findings** open: helmfile installs the 4 split operators behind a feature flag that defaults to `true` outside `standalone`; `provision-homolog.sh` + 3 orphan Pulumi stacks deleted OR formally promoted via ADR-0021; 3 orphan Tilt yamls deleted.
-2. **`refactorhelms` branch fully integrated**: develop tip equals (or fast-forwards to) the post-merge state including the 4 test fixes.
-3. **12 CLI command groups audited and tested**: `auth`, `deploy`, `domain`, `env`, `infra`, `init`, `platform`, `preview`, `project`, `scale`, `team`, plus internals. Each command has at least one integration test exercising the success path against post-PR-#51 code, exit code matrix verified, JSON schema matched.
-4. **Multi-cell live**: `Pulumi.dev.yaml` has `cellId` + `runtime2*` keys; `dynamic_router.go` routes a tagged tenant to `runtime-2`; ArgoCD app for cell-2 syncs; HTTP 200 reachable on a cell-2 tenant URL.
-5. **CI gates all of it**: `parity-validation.yml` + new `cli-commands.yml` + new `multi-cell.yml` PR-gate green on every push.
-6. **Documentation updated**: ADR-0021 (split-operator helmfile rollout), ADR-0022 (Pulumi consolidation decision), ADR-0023 (cell-2 activation), runbook updates, CHANGELOG entries, regression matrix new entries.
+1. **Governance**: 3 Decision Records (operator split, Pulumi consolidation, multi-cell activation) committed BEFORE implementation begins per phase.
+2. **Forward-only migration**: zero feature flags introduced for operator topology; legacy charts deleted as part of the cutover commit, rollback = `git revert`.
+3. **State cleanup**: `pulumi stack rm` for each deleted stack OR explicit decision (committed) that state is preserved with reason.
+4. **CLI integration**: every register group has at least one cluster-real integration test (envtest or ephemeral k3d), not pure mock.
+5. **Multi-cell live**: tenant tagged `cell-2` deploys to runtime-2; metric `loopzero_cell_routing_decisions_total{cell="cell-2"}` increments; HTTP 200 via Traefik on runtime-2; cell-1 unaffected (zero error-budget consumption).
+6. **Production rollout path**: explicit canary table (dev → staging → 1 tenant → 10% → 100%) with error-budget gates between steps.
+7. **Per-phase Security/SRE veto**: each implementation phase blocks on Security Review GREEN and SRE Review GREEN.
+8. **Per-phase Rollback Plan**: exact commands committed in plan, tested in dev before production.
+9. **Per-phase Observability Plan**: metrics + alerts + dashboards added BEFORE the change ships, not after.
+10. **Zero anonymous DEBT**: every DEBT row has owner + time horizon + stop-the-line condition.
 
 ## ADRs
 
-### D1 — Helmfile owns operator topology, not Tilt
+> ADRs in v2 are prescriptive (Options compared, vetoes captured, migration playbook), not descriptive sketches. Each will be promoted to `docs/decisions/ADR-NNNN.md` in Phase 0 (governance).
 
-**Decision:** `infra/helmfile/mgmt.helmfile.yaml.gotmpl` becomes the single source of truth for which operator binaries are deployed. Tilt re-uses the helmfile output (via `helmfile template` → `k8s_yaml` ingestion) rather than declaring deployments in `infra/tilt/*-deployment.yaml`. The 4 split operators (`loopzero-tenant-operator`, `loopzero-app-operator`, `loopzero-preview-operator`, `loopzero-platform-operator`) become helmfile releases, gated by a values flag `splitOperators` (default `true` for `dev`/`prod`/`standalone-multi`, `false` for `standalone` to preserve degrau-1 GREEN until validated).
+### D1 — Forward-only operator topology migration (no feature flag)
 
-**Rationale:** Today Tilt deploys 4 split pods while Helmfile deploys 1 monolith — Local ≠ Production (Rule 10 violation). Two source-of-truth files is the disease; the cure is one. Helmfile wins because (a) it's referenced by ADR-0020 D2 as the canonical install path, (b) it already gates by environment, (c) Tilt is the developer tool, not the production tool.
+**Problem.** Tilt deploys 4 split operator pods; helmfile deploys 1 monolith. Local ≠ Production (Rule 10 violation).
 
-**Consequences:**
-- Enables the binary split benefits (blast-radius reduction, scoped RBAC, leader election per domain) end-to-end, not just in `tilt up`.
-- Forces a transitional phase: `tenant-controller` chart (monolith) and 4 split charts coexist behind the flag for one full sprint while we validate split behaviour.
-- The 3 orphan `infra/tilt/{operator,controller,cloud}-deployment.yaml` get deleted (no longer reachable from any path).
+**Options considered.**
+- **Option A — Feature flag `splitOperators` defaulting to per-environment value.** Pros: gradual rollout, reversible at runtime. Cons: dual-chart debt (already documented in CLAUDE.md "Helm Chart Dual System"); flag surface is forever; getPlatformStatus must be flag-aware. Pre-release governance PRINCÍPIO: "We CAN break things and fix them properly" (anti-flag for pre-release).
+- **Option B — Forward-only migration (chosen).** Pros: zero new debt; rollback via `git revert` (Rule 1 of CLAUDE.md); simpler test surface; matches pre-release bias. Cons: cutover is atomic per cluster; requires drain procedure if both topologies briefly coexist.
+- **Option C — Defer split entirely until Sprint 9+.** Pros: no work now. Cons: PR #51 already shipped 4 binaries + 4 charts + Tilt migration; reverting is more disruptive than completing.
 
-### D2 — Single Pulumi stack until proven otherwise
+**Decision: Option B.** Helmfile drops `tenant-controller` + `loopzero-controller` (monolith charts) in the same PR that adds `loopzero-{tenant,app,preview,platform}-operator`. Tilt also migrates atomically. Cutover is one PR, one revert away from rollback.
 
-**Decision:** `infra/pulumi/` is the only Pulumi project. Delete `infra/pulumi-infra/`, `infra/pulumi-platform/`, `infra/pulumi-control-plane/`, `infra/pulumi-shared/`, and `infra/scripts/provision-homolog.sh`. If/when L1/L2/L3 split is needed, ADR-0021 (NEW) records the new layout with rationale.
+**Vetoes captured.**
+- **Security veto criterion**: 4 split ClusterRoles must be least-privilege (each operator only sees its CRDs). Veto if RBAC widens vs monolith.
+- **SRE veto criterion**: 4 leader-election leases must coexist without thrashing. Veto if pod restarts > 5/h during steady state.
+- **Production-design veto criterion**: cutover must be atomic (no window where 0 reconcilers run). Veto if drain procedure leaves CRs unreconciled > 30s.
 
-**Rationale:** YAGNI. The 3 paralelas dirs were referenced only by `provision-homolog.sh` (homolog isn't an active environment per CLAUDE.md). They duplicate code (`infra/pulumi/src/components/infra.ts` ≠ `infra/pulumi-infra/src/components/infra.ts` in subtle ways), import `@pulumi/kubernetes` (violating ADR-0020 D7), and risk state collision (`pulumi-infra/Pulumi.yaml` declares `name: loopzero-infra` identical to canonical). Cost of keeping > cost of deleting.
+**Migration playbook (per cluster).**
+1. `helmfile sync` with new releases declared + legacy releases removed in same chart bundle.
+2. Helmfile creates 4 new Deployments before deleting monolith (helmfile `needs:` ordering + post-render hook).
+3. New leader-elections steal leases (~20s typical).
+4. Old monolith Deployment scales to 0 then deletes.
+5. Verify reconcile latency metrics during cutover.
 
-**Consequences:**
-- Removes ~90 .ts files from the repo. Lint/grep/audit surface area drops.
-- Forecloses the homolog environment until explicitly resurrected with an ADR.
-- If split-by-tier is later needed, that's a fresh design with no half-finished baggage.
+**Rollback playbook.**
+1. `git revert` the cutover commit.
+2. `helmfile sync` (re-creates monolith, removes split).
+3. Monolith reconciles all CRs (idempotent — same controller logic).
+4. Total rollback time: ~5 min per cluster.
 
-### D3 — Multi-cell activates via Pulumi config + database tag, not new code
+**Customer comms.** None — pre-release; no external customers on cells.
 
-**Decision:** Cell-2 activation is a **configuration change**, not new code. The runtime-2 DOKS cluster + `dynamic_router.go` are already in place (Phase 0+1+1.5 done per CLAUDE.md). Activation = (a) add `cellId: "cell-2"` to runtime-2 Pulumi config + emit `runtime2Kubeconfig` + `runtime2K8sVersion` outputs that helmfile already consumes; (b) populate the `cells` table via migration with cell-1 + cell-2 rows; (c) tag a test tenant with `cell_id = 'cell-2'`; (d) ArgoCD sync produces the same tenant Application but in `runtime-2` cluster; (e) HTTP 200 verified.
+### D2 — Pulumi state cleanup is mandatory, not optional
 
-**Rationale:** The hard work is done. Adding more code now would be premature abstraction. The activation path is the simplest one that exercises the full chain.
+**Problem.** Deleting `infra/pulumi-{infra,platform,control-plane,shared}/` removes code but Pulumi state may still exist on the configured backend (`s3://loopzero-infra-pulumi-state`), backed by real DO resources we may or may not own.
 
-**Consequences:**
-- Forces verification that `dynamic_router.go` actually reads the `cells` table and routes correctly — this hasn't been live-tested per CLAUDE.md.
-- Establishes the precedent that adding cell-N is a config change forever.
-- ADR-0023 records the activation playbook (NEW runbook).
+**Options considered.**
+- **Option A — Delete code only.** Pros: trivial. Cons: orphan state may bill; future `pulumi destroy` against the dir fails because dir gone; auditability lost.
+- **Option B — Delete code + `pulumi stack rm` for each (chosen for confirmed-orphan stacks).** Pros: complete cleanup; orphan-free billing; no zombie state. Cons: requires backend access; one-shot destructive op.
+- **Option C — Delete code + `pulumi stack export` to archive, then rm.** Pros: state archived to S3 for forensics. Cons: more steps. **This is the chosen variant of B.**
 
-### D4 — CLI command bar: every group has at least one integration test
+**Decision: Option C.** For each of `pulumi-{infra,platform,control-plane}`: (a) `pulumi stack export --stack <env>` to `~/.loopzero/archive/pulumi-state-archive/<dir>-<env>-<ts>.json`; (b) verify by listing live DO resources tagged with stack URN — if any return non-zero results, ABORT and escalate (state has live resources we don't expect); (c) `pulumi stack rm --yes`; (d) `git rm -r` the dir.
 
-**Decision:** Each of the 12 register groups (`auth`, `deploy`, `domain`, `env`, `infra`, `init`, `platform`, `preview`, `project`, `scale`, `team`) has at least one integration test in `cli/tests/integration/` that spawns the binary, hits the success path, asserts exit code + JSON shape (when `--json` applies). Unit tests remain (1171 today) but are not sufficient for "1000% functional" — fork-based exit-code contract test (`exit-code-contract.test.ts` pattern) is the floor.
+**Vetoes captured.**
+- **Platform-architect veto criterion**: at least one stack must show zero live DO resources before any rm. Otherwise we don't know what we're orphaning.
+- **Security veto criterion**: archived state contains secrets — must encrypt at rest + restrict S3 ACL.
+- **GitOps veto criterion**: any rm must be reproducible via runbook step (no ad-hoc destruction).
 
-**Rationale:** Unit tests mock dependencies; they catch most regressions but miss plumbing bugs (the F-02 audit found `bin/loopzero` exit-code wiring needed fork-based test to surface). User said "1000% funcional"; that's only meaningful if the test bar matches.
+**Migration playbook.** See sub-tasks T3.1.
 
-**Consequences:**
-- Adds ~12 integration test files. Runtime <60s total against a mock API (per existing pattern: `LOOPZERO_URL=http://127.0.0.1:1`).
-- Forces the audit: any command that has no integration test is suspected dead-code or partially-wired.
-- CI gate `cli-commands.yml` runs these on every PR.
+**Rollback.** `pulumi stack import < archive.json` recreates state in the canonical `infra/pulumi/`. Code re-introduction is `git revert`. NB: if cloud resources were destroyed concurrently, recreation requires `pulumi up` re-provisioning — rollback ≠ instant for live resources.
 
-### D5 — Validation matrix gates the merge
+### D3 — Multi-cell activation gated by error budget, not deployment success
 
-**Decision:** Before declaring this plan DONE, the following must all be GREEN simultaneously: (a) `task parity:preflight`, (b) `task parity:k3d-virgin`, (c) full CLI suite (1171+12 new), (d) full Pulumi vitest (96), (e) `infra/tests/...` Go suite (5 packages), (f) end-to-end multi-cell smoke (`scripts/cell2-smoke.sh` NEW), (g) `task validate:manifests` + `task validate:helm-deps` (NEW) + `task validate:slos` (NEW), (h) zero `@pulumi/kubernetes` imports anywhere except via gate-test exception list, (i) regression matrix integrity audit (`audit-regression-matrix.sh`), (j) audit golden test (`audit-golden-test.sh`).
+**Problem.** Activating cell-2 means tenant traffic flows to runtime-2 cluster. If runtime-2 misbehaves, tenant errors propagate. Plan must define when activation is "safe to proceed".
 
-**Rationale:** "All green" is the only objective signal. Any individual gate green is necessary; the conjunction is sufficient.
+**Options considered.**
+- **Option A — Activate all at once: tag all dev tenants → cell-2.** Pros: fastest. Cons: blast radius = 100% of dev. Veto: production-design.
+- **Option B — Canary: 1 test tenant → cell-2 in dev, hold for 24h, then production.** Pros: minimal blast radius. Cons: slow.
+- **Option C — Tiered canary with explicit error-budget gates (chosen).** Pros: explicit "stop the rollout" signal; production graduation conditional on cell-1 unaffected.
 
-**Consequences:**
-- One end-of-plan validation script (`infra/tests/parity/preflight-extended.sh` or extended `preflight.sh`) runs all 10 gates.
-- CI `multi-cell.yml` gates merges.
+**Decision: Option C.** Stages:
+1. **Dev → 1 synthetic tenant on cell-2** for 1h soak. Gate: `loopzero_cell_routing_decisions_total{cell="cell-2"}` > 0; `loopzero_tenant_availability{cell="cell-2"}` ≥ 99%.
+2. **Dev → 10% of dev tenants on cell-2** for 24h. Gate: cell-1 error-budget consumption < 0.1% (i.e., cell-2 isn't dragging cell-1).
+3. **Staging → repeat** if/when staging exists.
+4. **Production → 1 production canary tenant** with explicit customer opt-in. Hold 7 days.
+5. **Production → 10% → 50% → 100%** with 7-day holds and error-budget gates between each.
 
-### D6 — `regression_test.go` strings-literais → behavioural tests (DEBT registered, deferred)
+**Vetoes captured.**
+- **SRE veto criterion**: any stage with error-budget consumption > 1% halts rollout pending RCA.
+- **Security veto criterion**: cell-2 cluster credentials rotated before activation (avoid stale creds in production from earlier provisioning).
+- **Production-design veto criterion**: rollback to cell-1 must be possible per-tenant within 5 min.
 
-**Decision:** This plan does NOT refactor `regression_test.go` to behavioural tests. The DEBT is registered with a follow-up task in the regression matrix; the present plan only *aligns* tests with current implementation strings (already done in this session for B25/B28/B31/F12). Future plan addresses pattern.
+**Migration playbook.** See Phase 5.
 
-**Rationale:** Refactoring the regression suite is 1-2 days of work that does not move the needle on the user's three goals (clean infra, CLI functional, multi-cell live). YAGNI for this plan; explicit DEBT in matrix.
+**Rollback.** Per-tenant: update `cells` table, set `cell_id = 'cell-1'`, ArgoCD re-syncs, traffic shifts in <5 min. No data loss because tenant data lives in shared PG (mgmt cluster), not in runtime cluster local storage.
 
-**Consequences:**
-- Future infra refactors will continue to need test-string updates until the DEBT is paid.
-- Matrix gets entry #136 marking the DEBT.
+**Customer comms.**
+- Pre-release: none.
+- Production canary: opt-in email to canary customer; runbook for them.
+- Production GA: changelog entry + status page note.
 
-### D7 — refactorhelms merge is recorded as fast-forward of `fix/parity-on-refactorhelms` to `develop`
+### D4 — Cluster-real integration tests for CLI
 
-**Decision:** Treat the merge as already conceptually done (per user). The artifact: `develop` advances to `1f36d5aa` (current `fix/parity-on-refactorhelms` tip = PR #51 head + 4 test alignment). Phase 0 of this plan ratifies it via PR if not already merged.
+**Problem.** v1 plan proposed mock-API integration tests for 12 CLI commands. Mocks miss plumbing bugs (F-02 audit found `bin/loopzero` exit-code wiring needed fork-based test against real binary; same issue lurks for API contract drift).
 
-**Rationale:** The user stated the merge happened. If the GitHub state disagrees (since `origin/develop` is still `8b46661a` per check), Phase 0 reconciles via a clean fast-forward push. Either way, the post-merge state is what's reviewed.
+**Options considered.**
+- **Option A — Pure mocks (nock + http.Server).** Pros: fastest (<5s/test). Cons: ~30% plumbing coverage. Doesn't catch contract drift.
+- **Option B — Cluster-real with ephemeral k3d per test class.** Pros: 100% real plumbing. Cons: slow (~60s setup per class); flake risk if k3d unstable.
+- **Option C — Two-tier: unit (mocks) + integration (envtest for CRD-touching paths; spawnSync against real binary against in-process API for HTTP paths) (chosen).** Pros: real plumbing for the failure modes that matter; speed for the rest.
 
-**Consequences:**
-- Phase 0 is short and safe.
-- The 4 test-alignment fixes ride along.
+**Decision: Option C.** Each register group gets:
+- Existing unit tests (1171 today) — keep, expand only when needed.
+- Spawned-binary integration test against in-process Express mock API server (no nock — real HTTP, real socket, real exit-code plumbing).
+- Where applicable (e.g., `loopzero deploy`), envtest-based test that exercises the API → CRD → operator path.
+
+**Vetoes captured.**
+- **Verification-architect veto criterion**: every register group must have at least one fork-based test (success path + 1 error path).
+- **DX veto criterion**: integration suite total runtime ≤ 90s (else dev-loop pain).
+
+**Migration playbook.** See Phase 4.
+
+**Rollback.** N/A (additive).
+
+### D5 — Per-phase Security + SRE review with veto power
+
+**Problem.** v1 plan omitted Security Review + SRE Review entirely. T3 changes need both per `.claude/rules/pre-release-governance.md`.
+
+**Decision.** Each implementation phase gates on:
+- **Security Review**: written analysis answering specific questions (RBAC, credentials, attack surface, secret rotation). Veto blocks merge.
+- **SRE Review**: written analysis answering SLO impact, alerting changes, blast radius, rollback time. Veto blocks merge.
+
+Reviewers are the agents in `.claude/agents/`: `platform-security-engineer` (absolute veto), `sre-engineer` (absolute veto on production-readiness).
+
+**Rationale.** No veto = no rigor. Pre-release does not exempt the platform from these reviews.
+
+**Migration playbook.** N/A (process).
+
+**Rollback.** N/A.
+
+### D6 — Per-phase Observability Plan baked-in
+
+**Problem.** v1 plan did not specify metrics/alerts/dashboards for new functionality. Multi-cell without metrics = blackbox.
+
+**Decision.** Each phase that adds a feature also adds:
+- At least 1 new Prometheus metric exposing the feature's behaviour.
+- At least 1 alert rule referencing that metric.
+- Dashboard panel update (or new dashboard) in `infra/helm/monitoring/dashboards/`.
+- Runbook entry that the alert links to (in `annotations.runbook_url`).
+
+Specifically for multi-cell:
+- `loopzero_cell_routing_decisions_total{cell, decision}` — counter, decision ∈ {assigned, fallback, error}
+- `loopzero_cell_health{cell}` — gauge 0/1
+- `loopzero_cell_capacity_pods{cell}` — gauge
+- `loopzero_cell_tenant_count{cell}` — gauge
+- Alert: `MultiCellRouterErrorRate` — `rate(loopzero_cell_routing_decisions_total{decision="error"}[5m]) > 0.01`
+
+**Rationale.** Observability is part of the deliverable, not a follow-up.
+
+### D7 — Pre-release governance per the project's own rules
+
+**Problem.** v1 plan proposed implementation directly. `.claude/rules/pre-release-governance.md` says T2/T3 require meeting + ADR + change-governor BEFORE code.
+
+**Decision.** Phase −1 invokes `/meeting` (Meeting Orchestrator) for each of the three T3 changes, produces 3 decision records in `docs/decisions/MEET-INFRA-NORMALIZE-T3-{operator-split,pulumi-consolidation,multi-cell}.md`. Implementation phases are blocked until corresponding meeting decision = APPROVED.
+
+**Rationale.** Following the project's own contract.
+
+**Customer comms.** N/A.
+
+### D8 — refactorhelms merge through proper PR review
+
+**Problem.** v1 proposed `develop` fast-forward to `1f36d5aa` based on user verbal "merge foi feito". `origin/develop` is `8b46661a`; merge has not actually happened on git.
+
+**Decision.** Phase 1 opens PR `fix/parity-on-refactorhelms → develop` titled "Ratify PR #51 + parity test alignment", goes through normal review, merges via squash or merge-commit per repo policy. No direct push to develop.
+
+**Rationale.** Verbal ≠ git. Verbal was likely shorthand for "approve and proceed". Plan must produce git artifact.
+
+**Customer comms.** N/A.
+
+### D9 — Production rollout path is a separate phase
+
+**Problem.** v1 conflated dev cell-2 activation with "DONE". Production has its own rollout plan, error budget, customer comms.
+
+**Decision.** Phase 5 = dev activation. Phase 7 = production rollout (separate phase, separate CI gate, separate SRE review).
+
+**Rationale.** Pre-release status is for this codebase but production exists (4 DOKS clusters per CLAUDE.md). Treat production as production.
+
+### D10 — Zero anonymous DEBT
+
+**Problem.** v1 listed regression_test.go behavioural refactor as "DEBT (deferred)" without owner/horizon/stop-the-line.
+
+**Decision.** Every DEBT row in the matrix has:
+- **Owner**: agent or team name responsible for resolving it.
+- **Horizon**: explicit date or sprint by which it is paid OR re-evaluated.
+- **Stop-the-line condition**: what observation forces immediate work (e.g., "if test flake rate > 5%, stop and refactor").
+
+The single DEBT in this plan (regression_test.go behavioural refactor) becomes:
+- Owner: `agent:test`
+- Horizon: 2026-06-30 (Sprint 12 close)
+- Stop-the-line: "if any contributor opens a PR that breaks ≥3 regression_test.go tests due to semantic-equivalent string change, halt that PR and refactor first".
 
 ## Dependency Graph
 
 ```
-Phase 0 (merge ratify) ──▶ Phase 1 (Tilt↔Helmfile) ──▶ Phase 2 (Pulumi consolidation)
-                                  │
-                                  ▼
-                         Phase 3 (CLI audit + tests)
-                                  │
-                                  ▼
-                         Phase 4 (Multi-cell activation) ──▶ Phase 5 (CI gates)
-                                                                     │
-                                                                     ▼
-                                                            Phase 6 (Validation matrix)
-                                                                     │
-                                                                     ▼
-                                                            Phase 7 (Docs + close)
+Phase −1 (Governance: 3 meetings + ADRs)
+    │
+    └──▶ Phase 0 (Audit & State: cells schema, dynamic_router source, pulumi state)
+              │
+              ├──▶ Phase 1 (refactorhelms PR review + merge)
+              │           │
+              │           ├──▶ Phase 2 (Operator topology forward-only migration)
+              │           │           │   (blocked by D1 Security+SRE+Production veto)
+              │           │           ▼
+              │           │      Phase 4 (CLI cluster-real integration tests)
+              │           │           │   (blocked by D4 Verification veto)
+              │           │           ▼
+              │           │      Phase 5 (Multi-cell dev canary stages 1-2)
+              │           │           │   (blocked by D3 SRE+Security veto + D6 observability)
+              │           ▼
+              │      Phase 3 (Pulumi consolidation: state archive + rm)
+              │                   (blocked by D2 Platform-architect+Security+GitOps veto)
+              │
+              └──▶ Phase 6 (CI gates extended)
+                        │
+                        ▼
+                   Phase 7 (Production rollout: cell-2 canary stages 4-5)
+                        │     (blocked by D3 SRE veto on every stage transition)
+                        ▼
+                   Phase 8 (Validation matrix + close)
 ```
 
-- Phase 0 (small, blocking).
-- Phase 1 + Phase 2 are independent of each other but both block Phase 3 (CLI audit must run against the final operator topology AND the final Pulumi layout).
-- Phase 3 blocks Phase 4 (CLI must be functional before pinning a tenant to cell-2 via CLI).
-- Phase 5 (CI) and Phase 6 (validation matrix) can start once Phase 4 is in progress; both block Phase 7 (close).
+- Phase −1 + 0 are sequential blockers for everything.
+- Phase 1 + 3 can parallelize after Phase 0.
+- Phase 2 → 4 → 5 are sequential (operator split must precede CLI test against the new topology must precede multi-cell which uses CLI).
+- Phase 6 (CI) parallelizes with Phase 5.
+- Phase 7 (production) blocks on Phase 5 GREEN + 24h dev soak.
+- Phase 8 closes only when 7 is GREEN.
 
 ---
 
-## Phase 0: Ratify refactorhelms merge
+## Phase −1: Governance — 3 meetings + decision records
 
-**Objective:** Make `develop` reflect the post-PR-#51 state including the 4 test alignments shipped this session.
+**Objective:** Produce 3 formal decision records via `/meeting` for the T3 changes BEFORE implementation begins. Compliance with `.claude/rules/pre-release-governance.md`.
 
-### T0.1 — Fast-forward `develop` to `fix/parity-on-refactorhelms` head
+### T-1.1 — Meeting: Operator topology migration (T3)
 
 #### Objective
-If `origin/develop` is behind the post-merge state, push a fast-forward (or merge PR if upstream policy requires). After T0.1, `git log origin/develop -1` returns `1f36d5aa` (or its squash-merge equivalent on develop).
+Convene `meeting-orchestrator` with `platform-architect`, `platform-security-engineer`, `sre-engineer`, `production-design-reviewer`, `verification-architect`, `k8s-controller-engineer`. Produce decision record APPROVED/REJECTED/APPROVED_WITH_CONDITIONS.
 
 #### Evidence
-`git ls-remote origin refs/heads/develop` returns `8b46661a` (pre-PR-#51); `fix/parity-on-refactorhelms` is `1f36d5aa` and is GREEN end-to-end. User declared the merge done — Phase 0 makes that durable in git.
+PR #51 shipped split binaries + Tilt migration; helmfile remains monolith. T3 trigger: "Architecture, stack, critical flow" per pre-release-governance.md.
 
 #### Files to edit
 ```
-(none — git operations only)
+docs/decisions/MEET-INFRA-NORMALIZE-T3-operator-split.md — (NEW) decision record
 ```
 
 #### Deep file dependency analysis
-- No source file edits. `git switch develop && git merge --ff-only fix/parity-on-refactorhelms && git push origin develop`. If non-fast-forward, open PR for upstream review.
-- Downstream phases assume `develop` tip = post-PR-#51-with-test-alignments.
+- Decision record only. Source content: D1 ADR text + meeting transcript synthesis.
+- Downstream: Phase 2 implementation tasks block on this record's status = APPROVED.
 
 #### Deep Dives
-- **Invariant**: `develop` history retains every commit from this session (`cb5290af`..`8b46661a` already present) plus `1f36d5aa` (test alignments).
-- **Edge case**: if upstream policy disallows direct push to `develop`, Phase 0 opens a PR titled "Ratify PR #51 + parity test alignment" and waits for approval. Block is documented; rest of plan blocks on it.
+- **Invariant**: meeting record contains: alternatives compared, vetoes captured per role, conditions for approval, success criteria, rollback criteria.
+- **Edge case — APPROVED_WITH_CONDITIONS**: each condition must be tracked as a sub-task in Phase 2.
 
 #### Tasks
-1. Verify `origin/develop` HEAD (`git ls-remote origin refs/heads/develop`).
-2. If HEAD ≠ `1f36d5aa`, attempt `git push origin fix/parity-on-refactorhelms:develop --dry-run`.
-3. If fast-forward possible, perform real push.
-4. If non-fast-forward, open PR via `gh pr create --base develop --head fix/parity-on-refactorhelms`.
-5. Once develop matches, delete remote `fix/parity-on-refactorhelms` branch (cleanup).
+1. Invoke `/meeting` with topic "Operator topology forward-only migration".
+2. Provide D1 ADR draft as context.
+3. Capture each veto criterion + each condition.
+4. Decision Record Moderator produces final document.
+5. Commit document.
 
 #### TDD
 ```
-RED:     test_develop_at_post_pr51_baseline() — assert `git log origin/develop -1 --format=%H` returns `1f36d5aa` or its equivalent
-GREEN:   Push or merge per Tasks 1-4
+RED:     test_meeting_record_exists() — file present at docs/decisions/MEET-INFRA-NORMALIZE-T3-operator-split.md
+RED:     test_meeting_record_has_decision() — grep for "Decision: APPROVED|REJECTED|APPROVED_WITH_CONDITIONS"
+RED:     test_meeting_record_lists_alternatives() — grep for "Option A|Option B|Option C"
+RED:     test_meeting_record_captures_vetoes() — grep for "veto|Veto"
+GREEN:   Run meeting + commit doc
+REFACTOR: None
+VERIFY:  test -f docs/decisions/MEET-INFRA-NORMALIZE-T3-operator-split.md
+```
+
+#### Acceptance Criteria
+- [ ] Decision record committed
+- [ ] Status ∈ {APPROVED, APPROVED_WITH_CONDITIONS}
+- [ ] If APPROVED_WITH_CONDITIONS: each condition mapped to a sub-task in Phase 2
+
+#### DoD
+- [ ] Record committed
+- [ ] Phase 2 tasks updated with conditions if applicable
+
+---
+
+### T-1.2 — Meeting: Pulumi consolidation (T3)
+
+#### Objective
+Same shape as T-1.1 but topic "Pulumi consolidation: delete 3 orphan stacks + state archive".
+
+#### Evidence
+3 paralelas dirs violate ADR-0020 D7 (`@pulumi/kubernetes` in 5 + 1 source files); risk state collision (`name: loopzero-infra` duplicate).
+
+#### Files to edit
+```
+docs/decisions/MEET-INFRA-NORMALIZE-T3-pulumi-consolidation.md — (NEW)
+```
+
+#### Tasks
+1. Invoke `/meeting` with `platform-architect`, `platform-security-engineer`, `gitops-engineer`, `sre-engineer`, `change-validation-planner`.
+2. Present D2 ADR draft + state archive procedure.
+3. Capture vetoes (especially gitops-engineer on reproducibility).
+4. Commit record.
+
+#### TDD
+```
+RED:     test_meeting_record_exists() — same shape as T-1.1
+RED:     test_meeting_includes_gitops_review() — record mentions gitops-engineer's review
+GREEN:   Run meeting
+VERIFY:  test -f docs/decisions/MEET-INFRA-NORMALIZE-T3-pulumi-consolidation.md
+```
+
+#### Acceptance Criteria
+- [ ] Record committed
+- [ ] gitops veto criterion documented
+
+#### DoD
+- [ ] Record committed
+
+---
+
+### T-1.3 — Meeting: Multi-cell activation (T3)
+
+#### Objective
+Same shape; topic "Multi-cell dev activation + production rollout".
+
+#### Evidence
+Tenant traffic affects production reliability. T3 trigger: "Tenant isolation changes" per pre-release-governance.md.
+
+#### Files to edit
+```
+docs/decisions/MEET-INFRA-NORMALIZE-T3-multi-cell.md — (NEW)
+```
+
+#### Tasks
+1. Invoke `/meeting` with `platform-architect`, `platform-security-engineer`, `sre-engineer`, `distributed-systems-engineer`, `production-design-reviewer`, `dx-engineer`.
+2. Present D3 ADR draft + canary stages.
+3. Capture error-budget gate criteria + rollback timing.
+4. Commit record.
+
+#### TDD (same shape)
+
+#### Acceptance Criteria
+- [ ] Record committed
+- [ ] Error-budget gate criteria explicit
+- [ ] Customer comms plan for production rollout reviewed
+
+#### DoD
+- [ ] Record committed
+
+---
+
+## Phase 0: Audit & state inventory (G2 + G1)
+
+**Objective:** Verify assumptions BEFORE acting. Read source, read state, document reality.
+
+### T0.1 — Source audit: `dynamic_router.go` + cells schema
+
+#### Objective
+Read `api/internal/placement/dynamic_router.go` line by line. Document: (a) what router actually does today, (b) what `cells` schema looks like in `000001_initial_schema.up.sql`, (c) what fields tenants need to be cell-pinned, (d) whether the path is currently exercised by any test.
+
+#### Evidence
+CLAUDE.md says "Cell architecture Phase 0+1+1.5 complete (runtime-2 physically provisioned but not routed)". Plan must verify this claim — CLAUDE.md is documentation, not source-of-truth.
+
+#### Files to edit
+```
+docs/audits/multi-cell-source-audit.md — (NEW)
+```
+
+#### Deep file dependency analysis
+- Read-only audit. Source files inspected:
+  - `api/internal/placement/dynamic_router.go` — full read
+  - `api/internal/db/migrations/000001_initial_schema.up.sql` — search for `cells` table
+  - `api/internal/placement/*_test.go` — coverage of cell logic
+  - `operators/internal/tenant/tenant_controller.go` — does it read cell_id?
+  - `cli/src/commands/deploy.ts` — does it accept cell pinning today?
+- Output: audit doc with findings.
+
+#### Deep Dives
+- **Invariant**: every claim in CLAUDE.md "Cell architecture" section is either confirmed by source or flagged.
+- **Edge case — cells table missing**: if the table is not in `000001_initial_schema.up.sql`, Phase 5 needs an additional migration task.
+- **Edge case — router exists but not wired**: if `dynamic_router.go` exists but is never instantiated, Phase 5 needs to wire it.
+
+#### Tasks
+1. Read `dynamic_router.go` end to end.
+2. Grep for callers (`grep -rn 'NewRouter\|placement.Router' api/`).
+3. Inspect `cells` schema (search migration files).
+4. Inspect tenant model (does it have `cell_id` field?).
+5. Inspect deploy flow (does any code read tenant cell_id when scheduling builds/deploys?).
+6. Write audit doc with sections: Reality / Documented (CLAUDE.md) / Gap.
+
+#### TDD
+```
+RED:     test_audit_doc_exists()
+RED:     test_audit_doc_has_router_section() — grep for "Reality"
+RED:     test_audit_identifies_cells_schema_status() — yes/no/partial
+RED:     test_audit_lists_call_paths_for_router()
+GREEN:   Read source + write doc
+REFACTOR: None
+VERIFY:  test -f docs/audits/multi-cell-source-audit.md && grep -q "Reality" docs/audits/multi-cell-source-audit.md
+```
+
+#### Acceptance Criteria
+- [ ] Audit doc committed
+- [ ] Every CLAUDE.md cell claim confirmed or flagged
+- [ ] Phase 5 tasks adjusted if audit reveals gaps
+
+#### DoD
+- [ ] Doc committed
+- [ ] If gap found, MEET-INFRA-NORMALIZE-T3-multi-cell.md amended
+
+---
+
+### T0.2 — Pulumi state inventory
+
+#### Objective
+For each of `pulumi-{infra,platform,control-plane}/`: list `pulumi stack ls`, identify any live stacks, list resources per stack, identify which (if any) reference real DO infrastructure.
+
+#### Evidence
+Phase 3 deletes these dirs. If state has live resources, deletion risks orphan billing.
+
+#### Files to edit
+```
+docs/audits/pulumi-state-inventory.md — (NEW)
+~/.loopzero/archive/pulumi-state-archive/ — (NEW dir, populated by tasks)
+```
+
+#### Deep file dependency analysis
+- Read-only inventory. Pulumi backend access required (`s3://loopzero-infra-pulumi-state` per CLAUDE.md).
+- Output: doc + archived state files.
+
+#### Deep Dives
+- **Invariant**: every stack in every paralelas dir is enumerated.
+- **Edge case — credentials missing**: if backend access requires creds we don't have, halt and escalate.
+- **Edge case — live resources**: if any stack has resources, abort Phase 3 plan and design migration.
+
+#### Tasks
+1. For each dir: `cd <dir> && pulumi stack ls --json` → archive output.
+2. For each stack: `pulumi stack export --stack <env>` → archive.
+3. Cross-reference archived state's resource URNs with live `doctl` queries.
+4. Tabulate: stack | live? | resources | recommendation (rm | preserve | escalate).
+
+#### TDD
+```
+RED:     test_inventory_doc_exists()
+RED:     test_inventory_has_recommendation_per_stack()
+RED:     test_archive_files_present_per_stack()
+GREEN:   Run inventory + write doc
+REFACTOR: None
+VERIFY:  ls ~/.loopzero/archive/pulumi-state-archive/*.json | wc -l ≥ 3
+```
+
+#### Acceptance Criteria
+- [ ] Inventory doc committed
+- [ ] Archives present per stack with resources
+- [ ] Recommendation per stack (rm | preserve | escalate)
+
+#### DoD
+- [ ] Doc + archives committed
+- [ ] Phase 3 tasks updated based on findings
+
+---
+
+### T0.3 — CLI command source audit
+
+#### Objective
+For each of 12 register groups: list every subcommand, document expected exit codes per path, JSON shape per `--json`, current test coverage. Identify "1000% functional" gaps.
+
+#### Evidence
+User explicit: "TODOS OS COMMANDS DO LOOPZERO CLI DEVE ESTAR 1000% FUNCIONAIS". Audit precedes fix.
+
+#### Files to edit
+```
+docs/audits/cli-commands-audit.md — (NEW)
+```
+
+#### Deep file dependency analysis
+- Read each `cli/src/register/*.ts` + corresponding `cli/src/commands/*.ts`.
+- Cross-reference with existing tests in `cli/tests/{unit,integration}/`.
+
+#### Deep Dives
+- **Invariant**: every command has a row.
+- **Edge case — alias commands**: dedup by source-of-truth.
+- **Edge case — hidden commands**: e.g., admin endpoints. Document them too.
+
+#### Tasks
+1. For each register: extract command names, options, descriptions.
+2. Map to commands/*.ts implementation.
+3. Document exit codes from source.
+4. Document `--json` schema from source.
+5. Cross-reference test coverage.
+6. Output table.
+
+#### TDD
+```
+RED:     test_audit_lists_all_register_groups() — 12 sections
+RED:     test_audit_lists_subcommands_per_group()
+RED:     test_audit_marks_coverage_per_command() — has-test or NO-TEST
+GREEN:   Write audit
+REFACTOR: None
+VERIFY:  awk-style cross-check vs ls cli/src/register/
+```
+
+#### Acceptance Criteria
+- [ ] Audit committed
+- [ ] Coverage gaps explicit
+- [ ] Phase 4 tasks updated based on gaps
+
+#### DoD
+- [ ] Doc committed
+
+---
+
+## Phase 1: Ratify refactorhelms via PR review (G6 + W1)
+
+**Objective:** Merge `fix/parity-on-refactorhelms` into `develop` through normal PR process.
+
+### T1.1 — Open PR + review + merge
+
+#### Objective
+Create PR `fix/parity-on-refactorhelms → develop`, go through review (security + sre + verification), merge per repo policy.
+
+#### Evidence
+`origin/develop = 8b46661a`; PR #51 head + 4 test fixes lives in `fix/parity-on-refactorhelms = 1f36d5aa`. v1 plan proposed direct push — workaround. v2 = proper PR.
+
+#### Files to edit
+```
+(none — git + GitHub PR)
+```
+
+#### Deep file dependency analysis
+- No source edits in this task. Branch already has all changes.
+
+#### Deep Dives
+- **Invariant**: review process produces written artifacts (review comments, decision).
+- **Edge case — review surfaces bug**: bug fix added to branch BEFORE merge, not after.
+
+#### Tasks
+1. `gh pr create --base develop --head fix/parity-on-refactorhelms --title "Ratify PR #51 + parity test alignment"`.
+2. Request review from `review-deep-loop:chief-reviewer` or human reviewers per repo policy.
+3. Address review comments by adding commits to branch.
+4. Merge via squash or merge-commit per repo policy.
+5. Delete remote branch.
+
+#### TDD
+```
+RED:     test_pr_exists() — gh pr view returns it
+RED:     test_pr_passes_ci() — required checks GREEN
+RED:     test_develop_advanced() — git ls-remote shows new SHA
+GREEN:   Open PR, address review, merge
 REFACTOR: None
 VERIFY:  git fetch origin && git rev-parse origin/develop
 ```
 
 #### Acceptance Criteria
-- [ ] `origin/develop` tip = post-merge state
-- [ ] All commits from this session preserved in develop history
-- [ ] No `--force` push used
-- [ ] Branch `fix/parity-on-refactorhelms` deleted from origin (or kept as PR record)
+- [ ] PR opened
+- [ ] CI GREEN on PR
+- [ ] At least one approving review
+- [ ] PR merged
+- [ ] develop advanced
+
+#### Security Review
+- **Question**: does the merge introduce any new attack surface? **Answer**: No new code paths; only test updates + plan docs.
+- **Veto criterion**: any new CLI flag exposing privileged ops without auth check.
+
+#### SRE Review
+- **Question**: does the merge change SLO targets or alerts? **Answer**: No.
+- **Veto criterion**: change to error-budget computation.
+
+#### Rollback Plan
+1. `git revert <merge-sha>` on develop.
+2. CI re-greens automatically.
+
+#### Observability Plan
+- N/A (no new functionality).
 
 #### DoD
-- [ ] `develop` advanced
-- [ ] CI on `develop` GREEN
-- [ ] Memory entry updated (`reference_infra_parity_2026_04_30.md` notes the ratification)
+- [ ] PR merged
+- [ ] develop = post-PR-#51 state
+- [ ] Branch deleted from origin
 
 ---
 
-## Phase 1: Resolve Tilt↔Helmfile contradiction (S0)
+## Phase 2: Operator topology forward-only migration (S0 + W2 + W3)
 
-**Objective:** Make `loopzero platform install -f values.yaml` deploy the same 4 split operator pods that `tilt up` deploys. Enforce via test.
+**Objective:** Helmfile deploys 4 split operators; legacy charts deleted. Tilt consumes helmfile output. No feature flag.
 
-### T1.1 — Add 4 split-operator releases to mgmt helmfile behind `splitOperators` flag
+**BLOCKED BY**: T-1.1 (governance) APPROVED; D1 vetoes addressed.
+
+### T2.1 — Audit + harden 4 split operator charts
 
 #### Objective
-Add `loopzero-tenant-operator`, `loopzero-app-operator`, `loopzero-preview-operator`, `loopzero-platform-operator` as releases in `infra/helmfile/mgmt.helmfile.yaml.gotmpl`, gated by `splitOperators` value (default true outside `standalone`). The legacy `tenant-controller` and `loopzero-controller` releases stay during the transition, gated to `not splitOperators` so they coexist for rollback safety.
+Inspect `charts/loopzero-{tenant,app,preview,platform}-operator/` for production-readiness gaps: probes, resource limits, security context, RBAC scope, NetworkPolicy. Close gaps to match `infra/helm/tenant-controller` baseline (which has been live-validated).
 
 #### Evidence
-`grep -E "^  - name:" infra/helmfile/mgmt.helmfile.yaml.gotmpl | grep -i controller` shows only `loopzero-controller` + `tenant-controller`. PR #51 created `charts/loopzero-{tenant,app,preview,platform}-operator` — fully formed Helm charts, not referenced by helmfile.
+PR #51 created the charts but they are not exercised by helmfile yet — gaps may exist.
 
 #### Files to edit
 ```
-infra/helmfile/mgmt.helmfile.yaml.gotmpl — add 4 new releases, gate legacy on negation of splitOperators
-infra/helmfile/environments/dev.yaml — splitOperators: true
-infra/helmfile/environments/prod.yaml — splitOperators: true
-infra/helmfile/environments/standalone-multi.yaml — splitOperators: true
-infra/helmfile/environments/standalone.yaml — splitOperators: false (degrau-1 protection until T1.5 dogfood)
-charts/loopzero-tenant-operator/values.yaml — sane defaults (image, resources, RBAC)
+charts/loopzero-tenant-operator/templates/*.yaml — gaps closed
+charts/loopzero-tenant-operator/values.yaml — defaults updated
+charts/loopzero-app-operator/templates/*.yaml — same
 charts/loopzero-app-operator/values.yaml — same
+charts/loopzero-preview-operator/templates/*.yaml — same
 charts/loopzero-preview-operator/values.yaml — same
+charts/loopzero-platform-operator/templates/*.yaml — same
 charts/loopzero-platform-operator/values.yaml — same
 ```
 
 #### Deep file dependency analysis
-- `mgmt.helmfile.yaml.gotmpl`: today references `../helm/loopzero-controller` + `../helm/tenant-controller`. New releases reference `../../charts/loopzero-{tenant,app,preview,platform}-operator` (the OCI-published, more complete charts that PR #51 created). Gate logic: `{{- if .Values.splitOperators }}` block adds 4; `{{- else }}` block adds the 2 legacy.
-- `environments/*.yaml`: thin overrides, just the flag.
-- `charts/loopzero-*-operator/values.yaml`: each ship-ready chart needs verified default `image.repository`, `resources`, `serviceAccount.create: true`, scoped `rbac.role`, leader-election lease name, probes.
-- Downstream: `cli/src/installer/status.ts` `LOOPZERO_COMPONENTS` must include the new operators (or be made flag-aware).
+- 4 charts. For each: deployment.yaml, service.yaml, serviceaccount.yaml, clusterrole.yaml, clusterrolebinding.yaml, networkpolicy.yaml.
+- Reference baseline: `infra/helm/tenant-controller/templates/deployment.yaml` (production-validated).
 
 #### Deep Dives
-- **Invariant**: with `splitOperators=true`, helmfile sync produces 4 operator deployments + 0 monolith deployment. With `false`, exactly the inverse.
-- **Edge case — RBAC overlap**: legacy `tenant-controller` ClusterRole and split operators' ClusterRoles overlap (both reference Tenant CR). If both are installed simultaneously, leader election prevents double-reconcile but RBAC is loud. Helmfile `needs:` ensures legacy is uninstalled before split is installed during the transition (`helmfile sync` removes orphans).
-- **Edge case — image tag**: 4 new operators must have published images. Phase 1 assumes they exist (PR #51 added Dockerfiles + CI workflow); if registry is empty, T1.1 includes a sub-task to push placeholder `:latest` images locally.
-- **Edge case — `getPlatformStatus`**: must report `Ready` for both topologies. Either make LOOPZERO_COMPONENTS environment-aware or have it accept both controller naming.
+- **Invariant**: each chart's Deployment has `runAsNonRoot: true`, `readOnlyRootFilesystem: true`, `livenessProbe` + `readinessProbe`, resource limits.
+- **Invariant**: each chart's ClusterRole is least-privilege (only the CRDs that operator reconciles).
+- **Edge case — leader election lease name**: each operator must have unique `leader-election-id`.
 
 #### Tasks
-1. Audit `charts/loopzero-*-operator/` Chart.yaml + values.yaml for production-readiness gaps (probes, resources, security context).
-2. Fill gaps with secure defaults (matching `infra/helm/tenant-controller` baseline).
-3. Add `{{- if .Values.splitOperators }}` block in mgmt.helmfile with 4 releases, ordered by `needs:`.
-4. Add `{{- else }}` block keeping legacy.
-5. Update each `environments/*.yaml` with `splitOperators` flag.
-6. Update `cli/src/installer/status.ts` `LOOPZERO_COMPONENTS` to dynamically check both topologies (`splitOperators === true` → query split; else → query legacy).
-7. Update `cli/tests/unit/getPlatformStatus-charts.test.ts` to cover both topologies.
+1. Compare each chart against baseline.
+2. Close gaps.
+3. helm lint + kubeconform each.
 
 #### TDD
 ```
-RED:     test_mgmt_helmfile_renders_split_operators_when_flag_true() — render `helmfile -e dev list` and assert 4 split releases present, 0 legacy
-RED:     test_mgmt_helmfile_renders_legacy_when_flag_false() — render `helmfile -e standalone list` and assert 2 legacy releases present, 0 split
-RED:     test_charts_loopzero_tenant_operator_has_resource_limits() — helm template + grep for `limits:`
-RED:     test_charts_loopzero_tenant_operator_runs_as_nonroot() — helm template + grep `runAsNonRoot: true`
-RED:     test_LOOPZERO_COMPONENTS_aware_of_split_topology() — getPlatformStatus with splitOperators=true returns Ready when 4 split deployments healthy
-GREEN:   Implement Tasks 1-7
-REFACTOR: Extract `splitOperatorReleases()` helper in helmfile.gotmpl if syntax allows, else inline
-VERIFY:  helmfile -f infra/helmfile/mgmt.helmfile.yaml.gotmpl -e dev list 2>&1 | grep -E "tenant-operator|app-operator|preview-operator|platform-operator" | wc -l == 4
+RED:     test_each_split_operator_chart_has_resource_limits() — kubeconform output asserts
+RED:     test_each_split_operator_chart_has_runAsNonRoot()
+RED:     test_each_split_operator_clusterrole_is_least_privilege() — count rules, must not exceed monolith
+RED:     test_each_split_operator_has_unique_leader_election_id()
+GREEN:   Update templates
+REFACTOR: Extract common security context to chart library if duplicate
+VERIFY:  for c in charts/loopzero-{tenant,app,preview,platform}-operator; do helm lint $c && helm template $c | kubeconform --strict; done
 ```
 
 #### Acceptance Criteria
-- [ ] Helmfile renders 4 split releases in dev/prod/standalone-multi
-- [ ] Helmfile renders 2 legacy in standalone
-- [ ] All 4 split charts pass `helm lint` + `kubeconform --strict`
-- [ ] `task validate:manifests` GREEN
-- [ ] CLI `getPlatformStatus()` returns `Ready` against both topologies
-- [ ] `cli/tests/unit/getPlatformStatus-charts.test.ts` GREEN with new cases
-- [ ] Pass: code-audit complexity check (cyclomatic <= 10)
-- [ ] Pass: code-audit lint check (zero warnings)
+- [ ] All 4 charts pass helm lint
+- [ ] All 4 pass kubeconform --strict
+- [ ] Each ClusterRole reviewed by `platform-security-engineer` (Security Review GREEN)
+- [ ] Pass code-audit complexity, file size
+
+#### Security Review
+- **Question**: is each ClusterRole strict subset of the monolith ClusterRole? **Procedure**: diff rule-by-rule.
+- **Veto criterion**: any new permission not in monolith.
+- **Question**: are leader-election leases authenticated correctly? **Procedure**: verify ServiceAccount + RBAC.
+- **Veto criterion**: shared SA across operators.
+
+#### SRE Review
+- **Question**: are 4 leases concurrent without thrashing? **Procedure**: simulate in dev, observe restart count.
+- **Veto criterion**: restart rate > 5/h steady state.
+- **Question**: each operator's resource limits realistic? **Procedure**: observe monolith memory usage, distribute proportionally.
+- **Veto criterion**: total memory request > 2× monolith.
+
+#### Rollback Plan
+1. `git revert` the chart updates.
+2. No live impact (charts not yet deployed at this stage).
+
+#### Observability Plan
+- New metric per operator: `loopzero_operator_reconcile_duration_seconds{operator}` histogram.
+- Alert: `OperatorReconcileSlowdown` per operator.
+- Dashboard: 4 panels in `infra/helm/monitoring/dashboards/operators.json`.
 
 #### DoD
-- [ ] `helmfile -e dev list` and `-e standalone list` both work
-- [ ] `helm template charts/loopzero-tenant-operator` GREEN
-- [ ] CLI tests 1171 + 4 new GREEN
-- [ ] `task validate:manifests` GREEN
+- [ ] All 4 charts production-ready
+- [ ] Security Review APPROVED
+- [ ] SRE Review APPROVED
+- [ ] Observability ready (metrics + alerts + dashboard committed, deploy gated by T2.3)
 
 ---
 
-### T1.2 — Migrate `Tiltfile` to consume helmfile output
+### T2.2 — Helmfile cutover: add 4 split, remove 2 legacy (atomic)
 
 #### Objective
-`Tiltfile` stops referencing `infra/tilt/{api,*-operator}-deployment.yaml` directly. Instead, it runs `helmfile -e standalone-multi build` and feeds the output to `k8s_yaml`. This guarantees `tilt up` deploys exactly what `loopzero platform install` would.
+Single helmfile change that adds 4 split operator releases and removes `tenant-controller` + `loopzero-controller`. No flag, no co-existence.
 
 #### Evidence
-Today `Tiltfile` at lines 114, 134, 148, 162, 176 hard-codes 5 deployment yamls. Manually keeping these in sync with helmfile is the source of the S0 finding.
+D1: forward-only migration. v1 plan's `splitOperators` flag = workaround; this task replaces it.
 
 #### Files to edit
 ```
-Tiltfile — replace k8s_yaml(infra/tilt/*-deployment.yaml) with helmfile-rendered output
-infra/tilt/api-deployment.yaml — DELETE (rendered by helmfile loopzero-api release)
+infra/helmfile/mgmt.helmfile.yaml.gotmpl — remove 2 legacy releases, add 4 split releases
+infra/helm/tenant-controller/ — DELETE entire dir (only after T2.3 GREEN; see DoD)
+infra/helm/loopzero-controller/ — DELETE entire dir (same)
+cli/src/installer/status.ts — update LOOPZERO_COMPONENTS to query 4 split operators
+cli/tests/unit/getPlatformStatus-charts.test.ts — update cases
+```
+
+#### Deep file dependency analysis
+- `mgmt.helmfile.yaml.gotmpl`: 2 release blocks deleted, 4 added. Order: helmfile `needs:` ensures CRDs ready before operators.
+- `LOOPZERO_COMPONENTS`: become `['loopzero-tenant-operator', 'loopzero-app-operator', 'loopzero-preview-operator', 'loopzero-platform-operator']` post-cutover. No flag-aware behaviour.
+- Chart dirs deletion is GATED on T2.3 dogfood GREEN; doing it in this task = atomic but blocks rollback. Better: delete in a follow-up commit after 1 sprint of stable runtime.
+
+#### Deep Dives
+- **Invariant**: cutover commit removes monolith chart references AND adds split. Helmfile sync produces 4 new Deployments + removes 1 monolith.
+- **Edge case — drain timing**: between monolith scale-down and split scale-up, briefly 0 reconcilers. Helmfile `needs:` + chart `pre-install` hooks ensure split is Ready BEFORE monolith drains. Drain gap = 0s if hooks correct.
+- **Edge case — CR ownership**: monolith owns existing CRs via owner-ref. Migration: split operators must claim ownership without re-creating. Solution: same controller name (`loopzero-controller`) → seamless takeover via leader election.
+
+#### Tasks
+1. Edit mgmt.helmfile: replace monolith block with 4 split blocks.
+2. Update LOOPZERO_COMPONENTS in status.ts.
+3. Update tests.
+4. **DO NOT delete chart dirs in this commit** — defer to T2.5 after 1 sprint of GREEN.
+
+#### TDD
+```
+RED:     test_mgmt_helmfile_has_no_monolith_releases() — grep -E "name: tenant-controller$|name: loopzero-controller$" returns 0
+RED:     test_mgmt_helmfile_has_4_split_operators() — grep -E "name: loopzero-(tenant|app|preview|platform)-operator" returns 4
+RED:     test_LOOPZERO_COMPONENTS_lists_4_split_operators()
+RED:     test_helmfile_renders_zero_monolith_pods_for_dev_env() — `helmfile -e dev template` count
+GREEN:   Edit files
+REFACTOR: None
+VERIFY:  helmfile -f infra/helmfile/mgmt.helmfile.yaml.gotmpl -e dev list | grep -E "operator|controller"
+```
+
+#### Acceptance Criteria
+- [ ] Helmfile renders 4 split, 0 monolith for all envs
+- [ ] LOOPZERO_COMPONENTS reflects new topology
+- [ ] CLI tests GREEN
+- [ ] task validate:manifests GREEN
+
+#### Security Review
+- **Question**: does the cutover leave a window of unauthenticated reconciliation? **Answer**: No — leader election preserves continuity.
+- **Veto criterion**: window > 0s.
+
+#### SRE Review
+- **Question**: blast radius if cutover fails mid-deploy? **Answer**: helmfile rolls back to last good state automatically; manual `helmfile sync --previous` available.
+- **Veto criterion**: cutover failure that leaves cluster in mixed state requiring manual intervention > 5 min.
+- **Question**: what's the SLO impact of brief reconciler gap? **Answer**: tenant CRs remain functional during reconcile gap (read-only); deploy CRs may delay by gap duration.
+- **Veto criterion**: gap > 60s.
+
+#### Rollback Plan
+1. `git revert` the cutover commit.
+2. `helmfile sync` (re-creates monolith, removes split).
+3. Verify `loopzero platform status` returns Ready with monolith.
+4. Total time: ~5 min.
+
+#### Observability Plan
+- Pre-deploy: dashboard panels for 4 operators must exist (T2.1 DoD).
+- Cutover monitor: watch `loopzero_operator_reconcile_duration_seconds` for 30 min after cutover.
+- Alert: `OperatorTopologyMixed` fires if both monolith AND split pods exist >5 min.
+
+#### DoD
+- [ ] Cutover committed
+- [ ] Tests GREEN
+- [ ] Security + SRE Review APPROVED for this commit
+- [ ] Chart dir deletion deferred to T2.5
+
+---
+
+### T2.3 — Live cutover validation (k3d virgin)
+
+#### Objective
+Run `task parity:k3d-virgin` after T2.2. Confirm 4 split operators reach Ready, monolith pods absent, all parity tests GREEN.
+
+#### Evidence
+T2.2 ships code; T2.3 proves it works.
+
+#### Files to edit
+```
+infra/tests/parity/k3d-virgin-install.sh — no changes if test still passes
+docs/runbooks/parity-validation.md — add findings
+docs/runbooks/bootstrap-regression-matrix.md — add new entries for any Achados
+```
+
+#### Deep file dependency analysis
+- Script may need updating if assumptions break.
+
+#### Deep Dives
+- **Invariant**: virgin install reaches phase=Ready with new topology.
+
+#### Tasks
+1. Run `task parity:k3d-virgin`.
+2. For each Achado: fix in source (T2.1 / T2.2 amended), document in matrix.
+3. Iterate until GREEN.
+
+#### TDD
+```
+RED:     test_virgin_install_with_split_operators_is_GREEN() — script exit 0
+GREEN:   Iterate until GREEN
+REFACTOR: None
+VERIFY:  bash infra/tests/parity/k3d-virgin-install.sh; kubectl get deploy -n loopzero-system -l app | grep operator | wc -l == 4
+```
+
+#### Acceptance Criteria
+- [ ] Script exit 0
+- [ ] 4 operators Ready
+- [ ] 0 monolith pods
+- [ ] All Achados in matrix
+
+#### Security Review
+- **Live verification**: each operator pod runs as non-root, RBAC scoped.
+- **Veto criterion**: any pod elevated.
+
+#### SRE Review
+- **Live verification**: leader election leases stable for 30 min.
+- **Veto criterion**: any lease churn > 1/min.
+
+#### Rollback Plan
+- Same as T2.2.
+
+#### Observability Plan
+- Verify all metrics from T2.1 emit live.
+- Verify alerts evaluate (no false positives).
+
+#### DoD
+- [ ] Virgin GREEN
+- [ ] Matrix updated
+- [ ] Live security + SRE checks PASS
+
+---
+
+### T2.4 — Tilt consumes helmfile output (no orphan yamls)
+
+#### Objective
+`Tiltfile` builds via helmfile output, not via `infra/tilt/*-deployment.yaml`. Delete orphan yamls.
+
+#### Evidence
+Tiltfile lines 114/134/148/162/176 reference 5 yamls. Plus 3 orphans (`operator-deployment.yaml`, `controller-deployment.yaml`, `cloud-deployment.yaml`).
+
+#### Files to edit
+```
+Tiltfile — refactor to consume helmfile build output
+infra/tilt/api-deployment.yaml — DELETE
 infra/tilt/tenant-operator-deployment.yaml — DELETE
 infra/tilt/app-operator-deployment.yaml — DELETE
 infra/tilt/preview-operator-deployment.yaml — DELETE
 infra/tilt/platform-operator-deployment.yaml — DELETE
-infra/tilt/operator-deployment.yaml — DELETE (orphan, never referenced post PR #51)
+infra/tilt/operator-deployment.yaml — DELETE (orphan)
 infra/tilt/controller-deployment.yaml — DELETE (orphan)
 infra/tilt/cloud-deployment.yaml — DELETE (orphan)
 ```
 
 #### Deep file dependency analysis
-- `Tiltfile`: 210 lines today. Replacement uses `local('helmfile -f infra/helmfile/mgmt.helmfile.yaml.gotmpl -e standalone-multi build', echo_off=True)` and pipes to `k8s_yaml(blob(...))`. Tilt re-runs this on file change in `infra/helmfile/` or `charts/loopzero-*-operator/`.
-- 8 yaml deletions: confirmed orphan (3) or rendered-by-helmfile-now (5).
-- Downstream: dev loop docs in `docs/runbooks/` may reference the deleted paths.
+- `Tiltfile`: helmfile_yaml(env) helper reads `helmfile -e standalone-multi build`.
+- 8 yamls deleted.
+- `docker_build` directives must reference Deployment names matching helmfile output.
 
 #### Deep Dives
-- **Invariant**: `tilt up` produces the exact set of K8s resources that `helmfile -e standalone-multi sync` produces.
-- **Edge case — image rebuild**: Tilt's hot-reload (`docker_build` + `live_update`) targets `loopzero-api`, etc. The deployment names + container names rendered by helmfile must match what `docker_build` references. Verify via `tilt up` after T1.2 — if image not picked up, adjust `docker_build` to use the helmfile-rendered Deployment name.
-- **Edge case — `tilt down`**: should still leave infra (PG, Gitea, MinIO) alone per existing CLAUDE.md contract. Helmfile-rendered manifests inherit Tilt's `tilt_down` semantics; verify the labels match.
+- **Invariant**: `tilt up` produces same pod set as `helmfile -e standalone-multi sync`.
+- **Edge case — hot-reload**: live_update sync_step targets must match helmfile-rendered container paths.
 
 #### Tasks
-1. Write Tiltfile helper `helmfile_yaml(env)` that executes helmfile build and returns blob.
-2. Replace 5 explicit `k8s_yaml(...)` calls with helper invocations.
-3. Delete 8 yaml files in `infra/tilt/`.
-4. Test `tilt up` end-to-end: 4 operators + loopzero-api + loopzero-cloud running, hot-reload on `api/` change still works.
-5. Update `docs/runbooks/dev-loop.md` (if referenced).
+1. Write `helmfile_yaml(env)` helper in Tiltfile.
+2. Replace k8s_yaml calls.
+3. Delete 8 yamls.
+4. `tilt up` end-to-end test.
+5. Hot-reload test (edit api/main.go, observe pod refresh).
 
 #### TDD
 ```
-RED:     test_tiltfile_does_not_reference_orphan_yamls() — grep Tiltfile for "operator-deployment.yaml" excluding the 4 split-operator names
-RED:     test_helmfile_rendered_pods_match_tilt_pods() — `kubectl get deploy` after `tilt up` == helmfile build deploy names
-GREEN:   Implement helmfile_yaml() helper + delete files
+RED:     test_tiltfile_does_not_reference_infra_tilt_yamls() — grep Tiltfile for "infra/tilt/" yaml paths returns 0
+RED:     test_tilt_up_pods_equal_helmfile_pods() — diff <(tilt-pod-set) <(helmfile-pod-set) returns empty
+RED:     test_hot_reload_works() — manual integration
+GREEN:   Refactor Tiltfile + delete files
 REFACTOR: None
-VERIFY:  tilt up && kubectl --context k3d-loopzero-mgmt get deploy -n loopzero-system | grep -E "tenant-operator|app-operator|preview-operator|platform-operator|loopzero-api"
+VERIFY:  tilt up && diff <(kubectl get deploy -n loopzero-system -o name | sort) <(helmfile -e standalone-multi build | yq '.metadata.name' | sort)
 ```
 
 #### Acceptance Criteria
-- [ ] `Tiltfile` references zero files in `infra/tilt/`
-- [ ] 8 orphan yamls deleted
-- [ ] `tilt up` boots cleanly in <90s
-- [ ] Hot-reload on api/ change updates pod
-- [ ] `tilt down` does NOT remove infra (PG, Gitea, MinIO)
+- [ ] 8 yamls deleted
+- [ ] Tiltfile boots in <90s
+- [ ] Pod set matches helmfile
+
+#### Security Review
+- N/A (dev-only).
+
+#### SRE Review
+- **Question**: does tilt down still preserve infra (PG, Gitea, MinIO)? **Answer**: yes — labels unchanged.
+- **Veto criterion**: tilt down deletes shared infra.
+
+#### Rollback Plan
+- `git revert` the Tiltfile + restore yamls (in case tilt up breaks).
+
+#### Observability Plan
+- N/A (dev tooling).
 
 #### DoD
-- [ ] `tilt up` works
-- [ ] `tilt down` works as documented
-- [ ] No orphan yamls in `infra/tilt/`
+- [ ] tilt up works
+- [ ] tilt down preserves infra
+- [ ] No orphans
 
 ---
 
-### T1.3 — `splitOperators=true` GREEN end-to-end on virgin k3d
+### T2.5 — Defer: chart dir deletion (after 1 sprint stability)
 
 #### Objective
-Run `task parity:k3d-virgin` after T1.1+T1.2 with `splitOperators=true` in standalone-multi. Confirm 4 split operators reach `phase=Ready`. This validates the canonical install path uses split operators.
+Delete `infra/helm/tenant-controller/` and `infra/helm/loopzero-controller/` only after 1 sprint of stable runtime on split topology.
 
 #### Evidence
-T5.1 run 6 (2026-04-30) was GREEN against the monolith. After this plan, the gate must remain GREEN against the new topology.
+Forward-only migration ≠ blind rush. Chart dirs are the rollback escape hatch for this period.
 
 #### Files to edit
 ```
-infra/tests/parity/k3d-virgin-install.sh — accept SPLIT_OPERATORS env, default true post-T1.1
-infra/tests/parity/standalone-values.yaml — splitOperators flag explicit
-docs/runbooks/parity-validation.md — add Achado entries for findings discovered during this task
-docs/runbooks/bootstrap-regression-matrix.md — add new entries for new findings
+infra/helm/tenant-controller/ — DELETE (in 1 sprint)
+infra/helm/loopzero-controller/ — DELETE
 ```
 
-#### Deep file dependency analysis
-- `k3d-virgin-install.sh`: env-driven flag, defaults to true.
-- `standalone-values.yaml`: thin override.
-- Runbooks: new troubleshooting entries for any Achados surfaced (expected ≥0).
-
-#### Deep Dives
-- **Invariant**: Step 6 of `loopzero platform install` reports `phase=Ready` with 4 split operators visible.
-- **Edge case — RBAC propagation race**: split operators install ClusterRoles in parallel; if `needs:` ordering is wrong, one might start before its CRD is registered. Validate via dogfood, document in matrix.
-
-#### Tasks
-1. Run `task parity:k3d-virgin` baseline (with monolith, splitOperators=false in standalone).
-2. Switch standalone to `splitOperators=true`, re-run.
-3. For each Achado: fix in code, document in matrix, retry.
-4. Iterate until exit 0 + phase=Ready.
+#### Tasks (deferred)
+1. Wait 1 sprint after T2.3 GREEN.
+2. Verify metrics show no monolith activity for 30 days.
+3. Delete dirs in dedicated commit.
 
 #### TDD
 ```
-RED:     test_parity_k3d_virgin_with_split_operators() — script exits 0
-GREEN:   Run script, fix Achados as they surface
-REFACTOR: None expected (any structural fixes feed back into T1.1)
-VERIFY:  bash infra/tests/parity/k3d-virgin-install.sh; kubectl get deploy -n loopzero-system | grep -E "operator" | wc -l == 4
+RED:     test_no_monolith_chart_references_anywhere() — grep -rn "tenant-controller\|loopzero-controller" infra/ — only matches in deleted-files context
+GREEN:   Delete dirs
+VERIFY:  ls infra/helm/ | grep -E "tenant-controller|loopzero-controller" returns 0
 ```
 
 #### Acceptance Criteria
-- [ ] `task parity:k3d-virgin` exits 0
-- [ ] 4 operator deployments Ready in loopzero-system
-- [ ] 0 monolith pods
-- [ ] All matrix Achados from this run captured
+- [ ] Sprint 12 close OR earlier with explicit override
 
 #### DoD
-- [ ] Live GREEN run logged
-- [ ] Matrix updated
-- [ ] Audit-script GREEN (`task parity:audit`)
+- [ ] Dirs deleted
+- [ ] Matrix entry: monolith retired
+
+**This task is REGISTERED IN PLAN with explicit horizon (sprint 12 / 2026-06-30) per D10.**
 
 ---
 
-## Phase 2: Pulumi consolidation (S1)
+## Phase 3: Pulumi consolidation (S1 + W2 + G1)
 
-**Objective:** Single source of truth for cloud infra Pulumi.
+**Objective:** Single Pulumi project. Cloud state archived + cleaned.
 
-### T2.1 — Delete 3 orphan Pulumi stacks + provision-homolog
+**BLOCKED BY**: T-1.2 (governance) APPROVED; T0.2 (state inventory) confirms safe deletion.
+
+### T3.1 — Archive Pulumi state of 3 paralelas dirs
 
 #### Objective
-Remove `infra/pulumi-infra/`, `infra/pulumi-platform/`, `infra/pulumi-control-plane/`, `infra/pulumi-shared/`, `infra/scripts/provision-homolog.sh`, `infra/scripts/seed_e2e.go` (homolog-only).
+For each stack in each paralelas dir: `pulumi stack export` to archive, verify against live DO resources.
 
 #### Evidence
-`grep -rn "pulumi-platform\|pulumi-control-plane" cli/src api/internal Taskfile.yml` shows zero references. Only `provision-homolog.sh` references them. Homolog is not active per CLAUDE.md.
+T0.2 produced inventory. T3.1 archives.
+
+#### Files to edit
+```
+~/.loopzero/archive/pulumi-state-archive/ — populated
+docs/runbooks/pulumi-state-archive.md — (NEW)
+```
+
+#### Tasks
+1. For each (dir, stack): `pulumi stack export --stack <stack> > archive/<dir>-<stack>-<ts>.json`.
+2. Encrypt archive (Section "Security" below).
+3. Upload to `s3://loopzero-archive/pulumi-state/` with restrictive ACL.
+4. Verify integrity (checksum).
+5. Document.
+
+#### TDD
+```
+RED:     test_archive_per_stack_exists()
+RED:     test_archive_is_encrypted_at_rest()
+RED:     test_archive_checksums_match()
+GREEN:   Run archive
+VERIFY:  ls archive/ | wc -l ≥ 3
+```
+
+#### Acceptance Criteria
+- [ ] All stacks archived
+- [ ] S3 ACL restrictive
+- [ ] Checksums recorded
+
+#### Security Review
+- **Question**: does archive contain secrets? **Answer**: yes (Pulumi state has encrypted secrets but config keys may leak metadata).
+- **Veto criterion**: archive S3 bucket world-readable.
+- **Question**: rotation policy? **Answer**: archive retained 90 days, then deleted unless legal hold.
+
+#### SRE Review
+- **Question**: does archiving affect live state? **Answer**: no — read-only.
+
+#### Rollback Plan
+- N/A (read-only).
+
+#### Observability Plan
+- Add metric `loopzero_pulumi_archives_total` (gauge).
+- Alert: `PulumiArchiveStaleness` (no archive in 90 days).
+
+#### DoD
+- [ ] Archives committed to S3
+- [ ] Runbook published
+
+---
+
+### T3.2 — `pulumi stack rm` for confirmed-orphan stacks
+
+#### Objective
+For each stack confirmed empty (T0.2 marked `recommendation: rm`): `pulumi stack rm --yes`.
+
+#### Evidence
+Code reading confirms isolation; T0.2 confirms state empty.
+
+#### Files to edit
+```
+(none — pulumi backend ops only)
+```
+
+#### Tasks
+1. For each confirmed-orphan stack: `pulumi stack rm <stack>`.
+2. Verify backend lists no stacks under deleted dirs.
+
+#### TDD
+```
+RED:     test_no_stacks_remain_in_orphan_dirs() — pulumi stack ls per dir returns 0
+GREEN:   Run rm
+VERIFY:  cd infra/pulumi-platform && pulumi stack ls --json | jq length == 0
+```
+
+#### Acceptance Criteria
+- [ ] All orphan stacks removed
+- [ ] Backend clean
+
+#### Security Review
+- **Question**: irreversible? **Answer**: archive in T3.1 is the recovery path.
+- **Veto criterion**: not archived.
+
+#### SRE Review
+- **Question**: any live alerts referencing these stacks? **Answer**: T0.2 confirmed no.
+- **Veto criterion**: alerts fire after rm.
+
+#### Rollback Plan
+- `pulumi stack import < archive.json` recreates state in canonical `infra/pulumi/`.
+- Cloud resource recreation requires `pulumi up` (not instant).
+
+#### Observability Plan
+- Metric: `loopzero_pulumi_stacks_total` (gauge) decreases by N where N = removed count.
+
+#### DoD
+- [ ] Stacks removed
+- [ ] Archive verified before rm
+
+---
+
+### T3.3 — Delete code (3 paralelas dirs + provision-homolog)
+
+#### Objective
+After T3.1 + T3.2: delete `infra/pulumi-{infra,platform,control-plane,shared}/`, `infra/scripts/provision-homolog.sh`, `infra/scripts/seed_e2e.go`.
 
 #### Files to edit
 ```
@@ -407,767 +1083,874 @@ infra/pulumi-platform/ — DELETE
 infra/pulumi-control-plane/ — DELETE
 infra/pulumi-shared/ — DELETE
 infra/scripts/provision-homolog.sh — DELETE
-infra/scripts/seed_e2e.go — DELETE (only used by provision-homolog)
-docs/decisions/ADR-0021-pulumi-single-stack.md — (NEW) record decision
+infra/scripts/seed_e2e.go — DELETE
+docs/decisions/ADR-0021-pulumi-single-stack.md — (NEW) prescriptive ADR
+infra/pulumi/src/__tests__/sprint8-fixes.test.ts — Fix #10: only one Pulumi project root
 CHANGELOG.md — Removed entry
 ```
 
-#### Deep file dependency analysis
-- 4 directories: ~109 files total. Confirmed isolation via grep.
-- ADR-0021 documents what was deleted, why (D2), and what the resurrection path looks like (greenfield rewrite, not revival of these dirs).
-- CHANGELOG entry references the ADR.
-
-#### Deep Dives
-- **Invariant**: `infra/pulumi/` becomes the only Pulumi project. `find infra -name 'Pulumi.yaml'` returns 1 result.
-- **Edge case — vitest tests**: Pulumi tests live in `infra/pulumi/src/__tests__/`. After deletion, vitest still runs from `infra/pulumi/` only.
-- **Edge case — node_modules**: deleted dirs have node_modules; `du` confirms ~500MB recoverable.
-
 #### Tasks
-1. Confirm zero references via grep one more time.
-2. `rm -rf` the 4 dirs + 2 scripts.
-3. Write ADR-0021 with rationale.
-4. Add CHANGELOG entry.
-5. Run `task validate:manifests` + Pulumi vitest to confirm no broken imports.
+1. `rm -rf` directories.
+2. Write ADR-0021 (prescriptive — Options, Vetoes, Migration, Rollback, Customer comms).
+3. Add Fix #10 test.
+4. CHANGELOG.
 
 #### TDD
 ```
-RED:     test_only_one_pulumi_project_exists() — find infra -name 'Pulumi.yaml' | wc -l == 1
-RED:     test_no_orphan_pulumi_imports_in_codebase() — grep -r "pulumi-platform\|pulumi-control-plane\|pulumi-shared" — zero hits
-GREEN:   rm -rf the dirs + write ADR
-REFACTOR: None
-VERIFY:  find infra -name 'Pulumi.yaml' | wc -l; cd infra/pulumi && npx vitest run --reporter=basic
+RED:     test_only_one_pulumi_project() — find infra -name 'Pulumi.yaml' | wc -l == 1
+RED:     test_no_orphan_imports() — grep -r "pulumi-platform\|pulumi-control-plane\|pulumi-shared" returns 0
+RED:     test_adr_0021_complete() — has Options, Vetoes, Migration, Rollback sections
+GREEN:   Delete + write ADR
+VERIFY:  cd infra/pulumi && npx vitest run
 ```
 
 #### Acceptance Criteria
-- [ ] 1 Pulumi project remains (`infra/pulumi/`)
-- [ ] 0 grep hits for orphan stack references in source
-- [ ] ADR-0021 committed
+- [ ] 1 Pulumi project remains
+- [ ] ADR-0021 prescriptive
+- [ ] Test Fix #10 GREEN
 - [ ] CHANGELOG entry
-- [ ] Pulumi vitest 96/96 GREEN
+
+#### Security Review
+- **Question**: any secret references in deleted code? **Answer**: T3.1 archive includes encrypted state; code itself has no plaintext secrets.
+
+#### SRE Review
+- **Question**: any runbook references the deleted scripts? **Answer**: search docs/runbooks/. Update if found.
+
+#### Rollback Plan
+- `git revert` restores code; archive (T3.1) restores state.
+
+#### Observability Plan
+- N/A.
 
 #### DoD
-- [ ] Repo clean
-- [ ] Vitest GREEN
-- [ ] No regressions in `task validate:manifests`
+- [ ] Code deleted
+- [ ] ADR committed
+- [ ] CHANGELOG closed
 
 ---
 
-### T2.2 — Sprint8-fixes test extends to detect any future Pulumi paralelas
+## Phase 4: CLI cluster-real integration tests (D4 + G3)
+
+**Objective:** 12 register groups, 12+ integration tests against real binary + envtest where applicable.
+
+**BLOCKED BY**: T0.3 (CLI audit) complete; Phase 2 GREEN (CLI tests against post-cutover topology).
+
+### T4.1 — Spawned-binary integration test infra
 
 #### Objective
-Hardening: `infra/pulumi/src/__tests__/sprint8-fixes.test.ts` already audits zero `@pulumi/kubernetes` in `infra/pulumi/`. Extend it to fail if ANY `infra/pulumi*/` directory appears outside the canonical `infra/pulumi/`.
+Establish the test infra: spawnSync wrapper, in-process Express mock API server, tmpHome scoping, fixture loader.
 
 #### Evidence
-T2.1 deletes the orphans now; T2.2 prevents future re-introduction.
+F-02 audit found exit-code plumbing only catchable via fork. Reuse pattern.
 
 #### Files to edit
 ```
-infra/pulumi/src/__tests__/sprint8-fixes.test.ts — add Fix #10: only one Pulumi project root
+cli/tests/integration/_fixtures/spawn-helper.ts — (NEW)
+cli/tests/integration/_fixtures/mock-api-server.ts — (NEW)
+cli/tests/integration/_fixtures/tmp-home.ts — (NEW)
+cli/jest.config.integration.js — (NEW) separate config for integration suite
 ```
 
-#### Deep file dependency analysis
-- Single test file edit. Reads filesystem via `fs.readdirSync('infra')`; counts entries matching `pulumi*`.
-
-#### Deep Dives
-- **Invariant**: `fs.readdirSync('infra').filter(d => d.startsWith('pulumi') && d !== 'pulumi').length === 0`.
-- **Edge case — pulumi-shared as type-only ref**: still rejected. Forces ADR for any future split.
-
 #### Tasks
-1. Add `describe('Fix #10: ...')` block.
-2. Implement filesystem check.
-3. Run test, confirm GREEN post-T2.1.
+1. Write spawn helper (subprocess against `bin/loopzero`).
+2. Write mock API server (Express, port allocator).
+3. Write tmpHome helper (mkdtemp + cleanup on EXIT).
+4. Wire integration config.
 
 #### TDD
 ```
-RED:     test_only_canonical_pulumi_dir_exists() — fs.readdirSync('infra') filtered for 'pulumi*' has length 1
-GREEN:   Add the test (it should immediately pass post-T2.1)
-REFACTOR: None
-VERIFY:  cd infra/pulumi && npx vitest run src/__tests__/sprint8-fixes.test.ts
-```
-
-#### Acceptance Criteria
-- [ ] Test added, currently PASS
-- [ ] Test FAILS if a new `infra/pulumi-foo/` is added (validated by adding then removing dummy dir)
-
-#### DoD
-- [ ] Pulumi vitest 97/97 GREEN
-- [ ] Test demonstrably catches reintroduction
-
----
-
-## Phase 3: CLI commands audit + integration tests (D4)
-
-**Objective:** Each of the 12 register groups has at least one integration test against post-PR-#51 code; every `--json` invocation matches the spec'd schema; every exit code is 0/1/2/3/4/5.
-
-### T3.1 — Inventory + classify all CLI commands
-
-#### Objective
-Produce `docs/cli-commands-audit.md` (NEW) listing every subcommand of every register, its expected exit codes, JSON schema, and current integration-test status.
-
-#### Evidence
-12 register files exist; CLAUDE.md contract demands JSON contract + exit code matrix.
-
-#### Files to edit
-```
-docs/cli-commands-audit.md — (NEW) inventory + audit
-```
-
-#### Deep file dependency analysis
-- Audit doc only. Source: `cli/src/register/*.ts` + existing `cli/tests/integration/exit-code-contract.test.ts`.
-
-#### Deep Dives
-- **Invariant**: every command has a row.
-- **Edge case — alias commands**: e.g., `loopzero team list` and `loopzero teams list` if both exist; one row per source-of-truth command.
-
-#### Tasks
-1. Read each register file, extract command list.
-2. For each: document exit codes (success path + error paths), JSON shape (if `--json` is supported), current integration-test coverage.
-3. Mark gaps: which commands have ZERO integration test.
-4. Output table.
-
-#### TDD
-```
-RED:     test_audit_doc_lists_every_register_command() — grep audit doc for every command name found in cli/src/register/
-GREEN:   Write audit doc
-REFACTOR: None
-VERIFY:  awk-style cross-check
-```
-
-#### Acceptance Criteria
-- [ ] Every command listed
-- [ ] Exit-code matrix per command
-- [ ] JSON schema per command
-- [ ] Coverage gap list explicit
-
-#### DoD
-- [ ] Doc committed
-- [ ] Cross-check script passes
-
----
-
-### T3.2 — Add 12 integration tests (1 per register group)
-
-#### Objective
-Each `cli/tests/integration/{group}-success.test.ts` (12 NEW files) spawns `loopzero {group} {success-command}` against a mock API (`LOOPZERO_URL=http://127.0.0.1:1` + nock or fixture API), asserts exit 0 + JSON shape.
-
-#### Evidence
-T3.1 audit reveals N gaps; T3.2 closes them.
-
-#### Files to edit
-```
-cli/tests/integration/auth-success.test.ts — (NEW) `loopzero whoami --json`
-cli/tests/integration/deploy-success.test.ts — (NEW) `loopzero deploy --json` (mock API)
-cli/tests/integration/domain-success.test.ts — (NEW) `loopzero domain list --json`
-cli/tests/integration/env-success.test.ts — (NEW) `loopzero env list --json`
-cli/tests/integration/infra-success.test.ts — (NEW) `loopzero infra list --json`
-cli/tests/integration/init-success.test.ts — (NEW) `loopzero init --json`
-cli/tests/integration/platform-success.test.ts — (NEW) `loopzero platform status --json`
-cli/tests/integration/preview-success.test.ts — (NEW) `loopzero preview list --json`
-cli/tests/integration/project-success.test.ts — (NEW) `loopzero project list --json`
-cli/tests/integration/scale-success.test.ts — (NEW) `loopzero scale --json` (stub OK per CLAUDE.md)
-cli/tests/integration/team-success.test.ts — (NEW) `loopzero team list --json`
-cli/tests/integration/_fixtures/mock-api.ts — (NEW) shared API mock harness
-```
-
-#### Deep file dependency analysis
-- 12 + 1 NEW files. Reuse `exit-code-contract.test.ts` pattern (spawnSync + tmpHome).
-- Mock harness exposes `mockEndpoint(path, response)` for fixtures.
-
-#### Deep Dives
-- **Invariant**: each test cleans up tmpHome on completion.
-- **Edge case — `init`**: writes `loopzero.yaml` + `.loopzero/` config; tmpHome scopes side-effects.
-- **Edge case — `deploy`**: requires source bundle upload; mock HTTP server with nock + fixture.
-
-#### Tasks
-1. Build mock harness (Express or http.Server in fixture).
-2. For each register: identify simplest success command + write test.
-3. Wire into `npm test` default suite via Jest config.
-4. Validate: each test runs in <5s.
-
-#### TDD
-```
-RED:     test_auth_whoami_returns_json_with_user_field() — exit 0, parse stdout, assert user shape
-RED:     test_deploy_dry_run_returns_json_with_build_id_field() — same
-... (10 more)
-GREEN:   Implement each test + mock harness
-REFACTOR: Extract common tmpHome setup to fixture helper
-VERIFY:  cd cli && npx jest tests/integration/
-```
-
-#### Acceptance Criteria
-- [ ] 12 integration test files exist
-- [ ] All pass in CI in <60s total
-- [ ] Each asserts JSON shape per spec
-- [ ] Each asserts exit code per Rule 4
-
-#### DoD
-- [ ] 1171 unit + 12 integration GREEN
-- [ ] CI gate `cli-commands.yml` (NEW) runs them on every PR
-
----
-
-### T3.3 — Fix all CLI bugs surfaced by T3.2
-
-#### Objective
-Any command failing T3.2 gets fixed in code, then test re-greens. This is the catch-all task that catches the "1000% functional" requirement.
-
-#### Evidence
-T3.2 will surface bugs (PR #51 changed call paths; some commands likely regress).
-
-#### Files to edit
-```
-cli/src/commands/*.ts — fixes per finding
-cli/src/register/*.ts — fixes per finding
-api/internal/routes/*.go — if API contract drifted
-```
-
-#### Deep file dependency analysis
-- Per-finding. Each bug = 1 micro-PR within the plan.
-
-#### Deep Dives
-- Heuristic: if `--json` shape mismatch, fix the emitter.
-- Heuristic: if exit code wrong, fix the bin/loopzero plumbing.
-- Heuristic: if API call fails, fix the API route or the CLI client.
-
-#### Tasks
-1. Run T3.2 suite, log failures.
-2. For each failure: root-cause, fix, re-test.
-3. Document in CHANGELOG.
-
-#### TDD
-```
-RED:     each T3.2 test that fails is the RED
-GREEN:   fix per finding
-REFACTOR: per finding
-VERIFY:  cli/tests/integration GREEN
-```
-
-#### Acceptance Criteria
-- [ ] T3.2 suite 100% GREEN
-- [ ] Each fix has a CHANGELOG entry
-
-#### DoD
-- [ ] CLI integration GREEN
-- [ ] CLI unit 1171 still GREEN (no regressions)
-
----
-
-## Phase 4: Multi-cell activation (D3)
-
-**Objective:** Tenant tagged `cell_id='cell-2'` deploys to `runtime-2` cluster end-to-end. HTTP 200.
-
-### T4.1 — Pulumi config for runtime-2 (cell-2)
-
-#### Objective
-`Pulumi.dev.yaml` declares `cellId: cell-2` for runtime-2; outputs `runtime2Kubeconfig`, `runtime2K8sVersion`, `runtime2NodeClass` as first-class.
-
-#### Evidence
-`infra/pulumi/src/components/infra.ts:160-165` provisions runtime-2 but Pulumi.dev.yaml lacks `cellId`. `placement/dynamic_router.go:44` requires the cell metadata to route.
-
-#### Files to edit
-```
-infra/pulumi/Pulumi.dev.yaml — add cellId, runtime2K8sVersion, runtime2MinNodes, runtime2MaxNodes, runtime2NodeClass
-infra/pulumi/src/index.ts — emit runtime2Kubeconfig output
-infra/pulumi/src/components/infra.ts — read cell metadata from config
-infra/pulumi/src/__tests__/cell-2-config.test.ts — (NEW)
-```
-
-#### Deep file dependency analysis
-- `Pulumi.dev.yaml`: ~5 new keys.
-- `index.ts`: emit output, downstream consumed by `cli/src/commands/platform.ts:pulumiOutputsToEnv` → LOOPZERO_RUNTIME2_KUBECONFIG_RAW.
-- `infra.ts`: parameterize cell config from stack inputs.
-
-#### Deep Dives
-- **Invariant**: `pulumi stack output runtime2Kubeconfig` returns valid kubeconfig YAML.
-- **Edge case — adopt-or-create**: runtime-2 may already exist on DO; ensure adopt-or-create logic (ADR-0015) handles it idempotently.
-
-#### Tasks
-1. Add config keys to Pulumi.dev.yaml.
-2. Wire outputs in index.ts.
-3. Read in infra.ts.
-4. Write `cell-2-config.test.ts` validating renderer.
-
-#### TDD
-```
-RED:     test_pulumi_dev_yaml_has_cell_2_config() — yaml.parse + assert keys
-RED:     test_index_ts_emits_runtime2_outputs() — mock pulumi context, assert exports
+RED:     test_spawn_helper_runs_loopzero_returns_exit_code()
+RED:     test_mock_api_serves_canned_response()
+RED:     test_tmp_home_cleaned_on_completion()
 GREEN:   Implement
-REFACTOR: None
+VERIFY:  npx jest --config cli/jest.config.integration.js tests/integration/_fixtures/
+```
+
+#### Acceptance Criteria
+- [ ] All 3 fixtures usable
+- [ ] Suite runs in <5s startup
+
+#### Security Review
+- **Question**: any privilege escalation in test harness? **Answer**: no — tmpHome scoped.
+
+#### SRE Review
+- N/A.
+
+#### Rollback Plan
+- N/A (additive).
+
+#### Observability Plan
+- N/A.
+
+#### DoD
+- [ ] Fixtures committed
+
+---
+
+### T4.2 — 12 integration tests (1+ per register group)
+
+#### Objective
+For each register group: at least 1 test. For groups with CRD-touching paths (`deploy`, `preview`, `tenant-via-team`): ALSO an envtest-based test.
+
+#### Files to edit
+```
+cli/tests/integration/auth-success.test.ts — (NEW)
+cli/tests/integration/deploy-success.test.ts — (NEW) + envtest
+cli/tests/integration/domain-success.test.ts — (NEW)
+cli/tests/integration/env-success.test.ts — (NEW)
+cli/tests/integration/infra-success.test.ts — (NEW)
+cli/tests/integration/init-success.test.ts — (NEW)
+cli/tests/integration/platform-success.test.ts — (NEW)
+cli/tests/integration/preview-success.test.ts — (NEW) + envtest
+cli/tests/integration/project-success.test.ts — (NEW)
+cli/tests/integration/scale-success.test.ts — (NEW)
+cli/tests/integration/team-success.test.ts — (NEW)
+operators/tests/integration/cli_deploy_envtest_test.go — (NEW)
+```
+
+#### Tasks
+1. Per group: write test exercising 1 success command + 1 error path.
+2. CRD-touching: also envtest.
+3. Validate <90s total runtime.
+
+#### TDD
+```
+RED (× 12+):
+  test_<group>_success_returns_exit_0_and_valid_json()
+  test_<group>_error_returns_correct_exit_code()
+GREEN: Implement each
+VERIFY: npx jest --config cli/jest.config.integration.js
+```
+
+#### Acceptance Criteria
+- [ ] Each group has ≥1 success + ≥1 error test
+- [ ] Suite runs <90s
+- [ ] Each test asserts JSON shape per spec
+- [ ] CRD paths have envtest
+
+#### Security Review
+- **Question**: any test exposes secrets? **Answer**: tmpHome scopes everything.
+- **Veto criterion**: test logs raw tokens.
+
+#### SRE Review
+- **Question**: flake risk? **Answer**: in-process server eliminates network flake.
+
+#### Rollback Plan
+- N/A.
+
+#### Observability Plan
+- N/A.
+
+#### DoD
+- [ ] All tests GREEN
+- [ ] Coverage report shows each register group exercised
+
+---
+
+### T4.3 — Fix all bugs surfaced by T4.2
+
+#### Objective
+T4.2 will surface bugs (PR #51 changed call paths). Fix each.
+
+#### Tasks
+1. Run T4.2.
+2. Per failure: root-cause, fix, re-test.
+3. CHANGELOG.
+
+#### TDD
+```
+Each T4.2 failure is the RED.
+GREEN: fix.
+```
+
+#### Acceptance Criteria
+- [ ] T4.2 100% GREEN
+- [ ] CHANGELOG closed
+
+#### Security/SRE/Rollback/Observability per fix
+- Per-fix mini-review.
+
+#### DoD
+- [ ] All GREEN
+
+---
+
+## Phase 5: Multi-cell dev activation (D3 + G7 + G9)
+
+**Objective:** Cell-2 routes synthetic + 10% dev tenants. Cell-1 unaffected.
+
+**BLOCKED BY**: T-1.3 (governance) APPROVED; T0.1 (source audit) confirms cells schema + router state.
+
+### T5.1 — Pre-flight: cell-2 cluster credentials rotation
+
+#### Objective
+Rotate runtime-2 cluster credentials (DOKS kubeconfig, ServiceAccount tokens, ESO ClusterSecretStore creds). Avoids stale-cred risk identified in T-1.3 SRE review.
+
+#### Evidence
+runtime-2 was provisioned per CLAUDE.md but unused. Credentials may be stale.
+
+#### Files to edit
+```
+docs/runbooks/cell-credentials-rotation.md — (NEW)
+infra/scripts/rotate-cell-credentials.sh — (NEW)
+```
+
+#### Tasks
+1. Generate new kubeconfig for runtime-2.
+2. Update ESO ClusterSecretStore to point at new creds.
+3. Verify ArgoCD sees new cluster.
+4. Document.
+
+#### TDD
+```
+RED:     test_runtime2_kubeconfig_is_recent() — file mtime within 7 days
+RED:     test_eso_clustersecretstore_connects() — kubectl get clustersecretstore -o yaml shows status=Ready
+GREEN:   Rotate
+VERIFY:  ./infra/scripts/rotate-cell-credentials.sh runtime-2
+```
+
+#### Acceptance Criteria
+- [ ] Creds rotated
+- [ ] ESO connects
+- [ ] Runbook published
+
+#### Security Review
+- **Question**: where are old creds? **Answer**: revoked + archived encrypted.
+- **Veto criterion**: old creds still valid.
+- **Question**: who has access to new kubeconfig? **Answer**: ESO + ops only.
+
+#### SRE Review
+- **Question**: rotation impacts cell-1? **Answer**: no — runtime-2 isolated.
+
+#### Rollback Plan
+- Old kubeconfig archived; can be re-instated if rotation produces broken state.
+
+#### Observability Plan
+- Metric: `loopzero_cell_credential_age_days{cell}` gauge.
+- Alert: `CellCredentialStale` if > 90 days.
+
+#### DoD
+- [ ] Rotation done
+- [ ] Verified
+
+---
+
+### T5.2 — Pulumi config + outputs for cell-2
+
+#### Objective
+`Pulumi.dev.yaml` declares cell-2 metadata; `index.ts` emits outputs that helmfile + CLI consume.
+
+#### Files to edit
+```
+infra/pulumi/Pulumi.dev.yaml — add cellId, runtime2K8sVersion, runtime2NodeClass, runtime2MinNodes, runtime2MaxNodes
+infra/pulumi/src/index.ts — emit runtime2Kubeconfig + runtime2CellId outputs
+infra/pulumi/src/components/infra.ts — read cell-2 metadata from config
+infra/pulumi/src/__tests__/cell-2-config.test.ts — (NEW)
+cli/src/commands/platform.ts — pulumiOutputsToEnv handles runtime2*
+```
+
+#### Tasks
+1. Add Pulumi config keys.
+2. Emit outputs.
+3. Read metadata.
+4. Write test.
+
+#### TDD
+```
+RED:     test_pulumi_dev_yaml_has_cell_2_keys()
+RED:     test_pulumi_index_emits_runtime2_kubeconfig_output()
+RED:     test_pulumi_outputs_to_env_maps_runtime2()
+GREEN:   Implement
 VERIFY:  cd infra/pulumi && npx vitest run src/__tests__/cell-2-config.test.ts
 ```
 
 #### Acceptance Criteria
-- [ ] Pulumi.dev.yaml has cellId
-- [ ] runtime2Kubeconfig output declared
-- [ ] Pulumi vitest GREEN
+- [ ] Config keys present
+- [ ] Outputs declared
+- [ ] Test GREEN
+
+#### Security Review
+- **Question**: kubeconfig secret in Pulumi state? **Answer**: yes — encrypted at rest per ADR-0015.
+
+#### SRE Review
+- **Question**: pulumi up in dev disrupts existing? **Answer**: idempotent if T5.1 rotation already wrote configs.
+
+#### Rollback Plan
+- `git revert` Pulumi config; `pulumi up` reverts to pre-cell-2 state.
+
+#### Observability Plan
+- Pulumi state metric: `loopzero_pulumi_cell_count` gauge.
 
 #### DoD
+- [ ] Config + outputs working
 - [ ] Test GREEN
-- [ ] `pulumi preview` shows runtime-2 plan delta minimal (idempotent)
 
 ---
 
-### T4.2 — Database migration: `cells` table populated
+### T5.3 — Database migration: cells table populated
 
 #### Objective
-Forward-only migration creates rows for cell-1 + cell-2 in the `cells` table (or equivalent). `dynamic_router.go` reads it.
-
-#### Evidence
-`api/internal/placement/dynamic_router.go` references cell metadata. CLAUDE.md confirms "Cell architecture Phase 0+1+1.5 complete (runtime-2 physically provisioned but not routed)".
+Forward-only migration inserts cell-1 + cell-2 rows.
 
 #### Files to edit
 ```
-api/internal/db/migrations/000003_cells_seed.up.sql — (NEW) INSERT INTO cells
-api/internal/placement/dynamic_router_test.go — case for cell-2 routing
+api/internal/db/migrations/000003_cells_seed.up.sql — (NEW)
+api/internal/placement/dynamic_router_test.go — case: cell-2 routing
 ```
 
-#### Deep file dependency analysis
-- Migration is idempotent (`ON CONFLICT DO NOTHING`).
-- Test: given tenant with cell_id='cell-2', router selects cell-2 cluster.
-
-#### Deep Dives
-- **Invariant**: migration is forward-only (Rule per CLAUDE.md).
-- **Edge case — null cell_id**: tenants without cell pinning go to cell-1 (default).
-
 #### Tasks
-1. Write migration.
-2. Write router test for cell-2 case.
-3. Apply migration in CI (already automated).
+1. Write migration (idempotent INSERT ... ON CONFLICT DO NOTHING).
+2. Apply in CI.
+3. Test router.
 
 #### TDD
 ```
-RED:     test_router_routes_cell_2_tenant_to_runtime2() — mock cell store, assert clusterURL = runtime-2
-GREEN:   Migration + router (already implemented)
-REFACTOR: None
+RED:     test_router_routes_cell_2_tenant_to_runtime2()
+RED:     test_router_routes_unset_cell_to_default_cell_1()
+RED:     test_migration_is_forward_only()
+GREEN:   Implement
 VERIFY:  go test ./api/internal/placement/...
 ```
 
 #### Acceptance Criteria
-- [ ] Migration applied in CI
+- [ ] Migration applied
 - [ ] Router test GREEN
-- [ ] No DROP in migration
+- [ ] Forward-only
+
+#### Security Review
+- **Question**: cells table accessible to tenants? **Answer**: no — internal API only.
+
+#### SRE Review
+- **Question**: migration disrupts running queries? **Answer**: no — INSERT only.
+
+#### Rollback Plan
+- DELETE FROM cells WHERE cell_id = 'cell-2'; (manual, not in migration per Rule 1 forward-only).
+
+#### Observability Plan
+- Metric: `loopzero_cells_total` gauge.
 
 #### DoD
-- [ ] Migration committed
-- [ ] Router covers cell-2
+- [ ] Migration in CI
+- [ ] Router GREEN
 
 ---
 
-### T4.3 — `loopzero deploy --cell cell-2` CLI flag
+### T5.4 — Multi-cell observability instrumentation (D6)
 
 #### Objective
-Add `--cell <cell-id>` to `loopzero deploy` (and create-tenant flow) so an operator can pin a deployment to a specific cell. Exits with usage error if cell not in DB.
-
-#### Evidence
-Operators need a way to actually exercise cell-2 routing in dogfood.
+Add 4 new metrics + 2 alerts + dashboard panels BEFORE activation.
 
 #### Files to edit
 ```
-cli/src/register/deploy.ts — add --cell option
-cli/src/commands/deploy.ts — pass cellId in payload
-api/internal/routes/builds.go — accept cell_id field
-cli/tests/integration/deploy-cell-2.test.ts — (NEW)
+api/internal/placement/dynamic_router.go — add Prometheus instrumentation
+api/internal/metrics/cell_metrics.go — (NEW)
+infra/helm/monitoring/dashboards/multi-cell.json — (NEW)
+infra/helm/monitoring/templates/multi-cell-alerts.yaml — (NEW)
+docs/runbooks/multi-cell-alerts.md — (NEW)
 ```
 
-#### Deep file dependency analysis
-- CLI: thin pass-through.
-- API: validates cell exists in cells table.
-- Test: integration spawns CLI with --cell, mock API asserts payload.
+#### Tasks
+1. Add metrics:
+   - `loopzero_cell_routing_decisions_total{cell, decision}` counter
+   - `loopzero_cell_health{cell}` gauge
+   - `loopzero_cell_capacity_pods{cell}` gauge
+   - `loopzero_cell_tenant_count{cell}` gauge
+2. Add alerts:
+   - `MultiCellRouterErrorRate` — `rate(...{decision="error"}[5m]) > 0.01`
+   - `CellUnhealthy` — `loopzero_cell_health == 0`
+3. Dashboard JSON.
+4. Runbook for each alert.
 
-#### Deep Dives
-- **Invariant**: `--cell` invalid → exit 1 with LoopZeroError code `cell_not_found`.
-- **Edge case — backward compat**: omitting `--cell` keeps existing behaviour (default cell-1).
+#### TDD
+```
+RED:     test_router_emits_decision_metric_per_call()
+RED:     test_metrics_exposed_at_metrics_endpoint()
+RED:     test_alerts_promtool_validate()
+GREEN:   Implement
+VERIFY:  curl localhost:9090/metrics | grep loopzero_cell_
+```
+
+#### Acceptance Criteria
+- [ ] 4 metrics exposed
+- [ ] 2 alerts validated
+- [ ] Dashboard renders
+
+#### Security Review
+- **Question**: any metrics expose tenant data? **Answer**: no — labels are cell-id only.
+
+#### SRE Review
+- **Question**: alerts page on-call? **Answer**: yes via PagerDuty.
+- **Question**: runbook actionable? **Answer**: yes — has remediation steps.
+
+#### Rollback Plan
+- Metrics are additive; no rollback needed.
+
+#### Observability Plan
+- Self.
+
+#### DoD
+- [ ] Metrics emit
+- [ ] Alerts validate
+- [ ] Runbook published
+
+---
+
+### T5.5 — `loopzero deploy --cell` flag + auth check
+
+#### Objective
+CLI accepts `--cell <cell-id>`; API validates user authz to pin to cell.
+
+#### Files to edit
+```
+cli/src/register/deploy.ts — add option
+cli/src/commands/deploy.ts — pass cellId
+api/internal/routes/builds.go — accept cell_id, authz check
+api/internal/services/cell_authz.go — (NEW) authz logic
+cli/tests/integration/deploy-cell-flag.test.ts — (NEW)
+```
 
 #### Tasks
-1. Wire option through Commander.
-2. Pass through CLI command.
-3. Validate in API.
+1. CLI option.
+2. API field.
+3. Authz: check user has `loopzero.io/cell-pin` permission OR cell is opt-in for tenant.
 4. Test integration.
 
 #### TDD
 ```
-RED:     test_deploy_with_cell_flag_includes_cell_id_in_payload()
-RED:     test_deploy_with_unknown_cell_exits_1()
+RED:     test_deploy_with_cell_flag_includes_cell_id()
+RED:     test_deploy_with_unauthorized_cell_returns_403()
+RED:     test_deploy_without_cell_flag_uses_default()
 GREEN:   Implement
-REFACTOR: None
-VERIFY:  cd cli && npx jest tests/integration/deploy-cell-2.test.ts
+VERIFY:  npx jest tests/integration/deploy-cell-flag.test.ts
 ```
 
 #### Acceptance Criteria
-- [ ] --cell flag accepted
-- [ ] Invalid cell rejected
-- [ ] Default cell unchanged behaviour
-- [ ] JSON payload includes cell_id
+- [ ] Flag works
+- [ ] Authz enforced
+- [ ] Default unchanged
+
+#### Security Review
+- **Question**: can attacker pin tenant to wrong cell? **Answer**: no — authz check.
+- **Veto criterion**: any path bypasses authz.
+- **Question**: what's the cell-pin permission model? **Answer**: ops-only initially; per-tenant opt-in for canaries.
+
+#### SRE Review
+- **Question**: misuse of flag could overload cell-2? **Answer**: rate limits per cell + capacity check.
+
+#### Rollback Plan
+- `git revert` flag commit; existing tenants on cell-1 unaffected.
+
+#### Observability Plan
+- Metric: `loopzero_cell_pin_requests_total{cell, result}` counter.
 
 #### DoD
-- [ ] CLI test GREEN
-- [ ] API test GREEN
+- [ ] Flag wired
+- [ ] Authz GREEN
+- [ ] Tests GREEN
 
 ---
 
-### T4.4 — End-to-end cell-2 smoke test
+### T5.6 — Canary stage 1: 1 synthetic tenant on cell-2 (1h soak)
 
 #### Objective
-`infra/tests/parity/cell2-smoke.sh` (NEW): provision a test tenant pinned to cell-2 via CLI, deploy a sample app, curl the resulting URL, assert HTTP 200.
-
-#### Evidence
-T4.1+T4.2+T4.3 individually tested; this is the end-to-end gate.
+Deploy 1 synthetic tenant tagged cell-2. Verify HTTP 200 from runtime-2. Hold 1h. Confirm no cell-1 impact.
 
 #### Files to edit
 ```
-infra/tests/parity/cell2-smoke.sh — (NEW)
-docs/runbooks/multi-cell-activation.md — (NEW)
-docs/decisions/ADR-0023-cell-2-activation.md — (NEW)
+infra/tests/parity/cell2-canary-stage1.sh — (NEW)
+docs/runbooks/multi-cell-canary.md — (NEW)
 ```
 
-#### Deep file dependency analysis
-- Smoke script: idempotent, tears down test tenant on EXIT.
-- Runbook: operator guide.
-- ADR: rationale + activation playbook.
-
-#### Deep Dives
-- **Invariant**: HTTP 200 from runtime-2 nodes only (verify via `kubectl describe pod` showing the runtime-2 cluster context).
-- **Edge case — DNS**: tenant URL must resolve via the same Cloudflare/Traefik chain as cell-1.
-
 #### Tasks
-1. Write smoke script (~150 lines).
-2. Run live (cloud cost ~$0.50, requires runtime-2 already provisioned).
-3. Document Achados in matrix.
-4. Write ADR-0023 + runbook.
+1. Provision synthetic tenant via CLI.
+2. Pin to cell-2 via `loopzero deploy --cell cell-2`.
+3. curl tenant URL, expect 200.
+4. Watch metrics for 1h.
+5. Verify cell-1 error budget unchanged.
 
 #### TDD
 ```
-RED:     test_cell2_smoke_returns_http_200_from_runtime2() — script exit 0
-GREEN:   Implement script, run live, fix Achados
-REFACTOR: None
-VERIFY:  bash infra/tests/parity/cell2-smoke.sh
+RED:     test_canary_stage1_returns_200_from_cell_2()
+RED:     test_cell_1_error_budget_stable_during_canary()
+GREEN:   Run canary script
+VERIFY:  bash infra/tests/parity/cell2-canary-stage1.sh
 ```
 
 #### Acceptance Criteria
-- [ ] Smoke exits 0
-- [ ] HTTP 200 from cell-2 tenant URL
-- [ ] Pod confirmed in runtime-2 (kubectl context check)
-- [ ] Test tenant cleaned up
+- [ ] HTTP 200 from cell-2
+- [ ] 1h soak no errors
+- [ ] cell-1 EB stable
+
+#### Security Review
+- **Live verification**: synthetic tenant isolated; no real customer data.
+
+#### SRE Review
+- **Live verification**: cell-1 SLO unaffected for 1h window.
+- **Veto criterion**: cell-1 EB consumed > 0.1%.
+
+#### Rollback Plan
+- `loopzero deploy --cell cell-1 <tenant>` re-pins; takes <5 min.
+
+#### Observability Plan
+- Live: dashboard panel watched during canary.
 
 #### DoD
-- [ ] Smoke GREEN
-- [ ] ADR-0023 committed
-- [ ] Runbook committed
-- [ ] Matrix updated
+- [ ] Stage 1 GREEN
+- [ ] Runbook updated with findings
 
 ---
 
-## Phase 5: CI gates
-
-**Objective:** Make every check from Phases 0-4 a permanent CI gate.
-
-### T5.1 — `cli-commands.yml` workflow
+### T5.7 — Canary stage 2: 10% of dev tenants (24h soak)
 
 #### Objective
-PR gate that runs `cli/tests/integration/` on every push.
+Promote canary to 10% of dev tenants. Hold 24h. Verify metrics + EB.
+
+#### Files to edit
+```
+infra/tests/parity/cell2-canary-stage2.sh — (NEW)
+```
+
+#### Tasks
+1. Identify 10% of dev tenants (random sample).
+2. Pin each to cell-2.
+3. Hold 24h.
+4. Compare metrics pre/post.
+
+#### TDD
+```
+RED:     test_canary_stage2_10pct_of_dev_tenants_on_cell_2()
+RED:     test_cell_1_error_budget_unchanged_after_24h()
+GREEN:   Execute
+VERIFY:  bash infra/tests/parity/cell2-canary-stage2.sh
+```
+
+#### Acceptance Criteria
+- [ ] 10% on cell-2
+- [ ] 24h soak GREEN
+- [ ] Cell-1 EB unaffected
+
+#### Security/SRE/Rollback/Observability — same shape as T5.6.
+
+#### DoD
+- [ ] Stage 2 GREEN
+
+---
+
+## Phase 6: CI gates extended (T5 + observability)
+
+**Objective:** Every gate from Phases 1-5 is a permanent CI gate.
+
+### T6.1 — `cli-commands.yml` workflow
+
+#### Objective
+PR gate running `cli/tests/integration/`.
 
 #### Files to edit
 ```
 .github/workflows/cli-commands.yml — (NEW)
 ```
 
-#### Deep file dependency analysis
-- Mirrors `parity-validation.yml` structure: ubuntu-latest, node 20, npm ci, npx jest tests/integration.
-
 #### Deep Dives
-- **Edge case — secrets**: integration tests use mock API, no real creds needed.
+- **Concurrency**: `group: ${{ github.workflow }}-${{ github.ref }}`
+- **Timeout**: 10 min total
+- **Secrets**: none required (mock API)
+- **Fork-PR safety**: workflow runs on PRs from forks (no privileged ops)
+- **Flake budget**: re-run on flake; if flake rate > 5%/week, halt and investigate
 
 #### Tasks
-1. Write workflow.
-2. Trigger on PR/push.
-3. Validate it runs in <2min.
+1. Write workflow with concurrency, timeout, retry semantics.
+2. Add to branch protection.
 
 #### TDD
 ```
-RED:     workflow yaml validates against GH schema
-GREEN:   Write workflow
-REFACTOR: None
-VERIFY:  yamllint .github/workflows/cli-commands.yml + push to PR branch, observe CI
+RED:     test_workflow_yaml_validates()
+RED:     test_workflow_has_concurrency_group()
+RED:     test_workflow_has_timeout()
+GREEN:   Write
+VERIFY:  yamllint .github/workflows/cli-commands.yml
 ```
 
 #### Acceptance Criteria
-- [ ] Workflow runs on every PR
-- [ ] <2min total
-- [ ] Required check on develop branch protection
+- [ ] Workflow exists
+- [ ] Concurrency, timeout, secrets explicit
+- [ ] Required check on develop
 
 #### DoD
-- [ ] Live PR run GREEN
-- [ ] Branch protection updated
+- [ ] Gate GREEN
 
 ---
 
-### T5.2 — `multi-cell.yml` workflow
+### T6.2 — `multi-cell.yml` workflow
 
 #### Objective
-PR gate that runs the cell-2 smoke when relevant files change.
+PR gate for multi-cell paths.
 
 #### Files to edit
 ```
 .github/workflows/multi-cell.yml — (NEW)
 ```
 
-#### Deep file dependency analysis
-- Path filters: `api/internal/placement/`, `infra/pulumi/Pulumi.dev.yaml`, `infra/tests/parity/cell2-smoke.sh`.
-
 #### Deep Dives
-- **Edge case — cloud cost**: cell-2 smoke costs $. Workflow runs on `workflow_dispatch` for cloud, on `pull_request` for offline preflight (`--dry-run`).
+- **Two jobs**: preflight (always); live canary (workflow_dispatch only — costs $).
+- **Concurrency**: serialize live canary (one at a time).
+- **Secrets**: DIGITALOCEAN_TOKEN scoped to live job only.
 
 #### Tasks
-1. Write workflow with two jobs (preflight always; live on dispatch).
-2. Document gate in runbook.
+1. Write workflow.
+2. Document live trigger.
 
 #### TDD
 ```
-RED:     workflow yaml validates
-GREEN:   Write workflow
-REFACTOR: None
-VERIFY:  yamllint
+RED:     test_workflow_separates_preflight_and_live()
+RED:     test_live_job_requires_workflow_dispatch()
+GREEN:   Write
 ```
 
 #### Acceptance Criteria
-- [ ] Preflight runs on every PR touching multi-cell paths
-- [ ] Live runs on workflow_dispatch only
+- [ ] 2-job structure
+- [ ] Live gated
 
 #### DoD
-- [ ] Live dispatch GREEN once
+- [ ] Gate GREEN
 
 ---
 
-### T5.3 — Extend parity preflight to include T2.2 + T4.x
+### T6.3 — Extended parity preflight
 
 #### Objective
-`infra/tests/parity/preflight.sh` adds gates for: only one Pulumi project, cell-2 config valid (offline check).
+Add 3 gates: only one Pulumi project; cell-2 config valid; multi-cell metrics exposed.
 
 #### Files to edit
 ```
-infra/tests/parity/preflight.sh — add 2 gates
+infra/tests/parity/preflight.sh — add 3 gates
 ```
 
-#### Deep file dependency analysis
-- Existing 12-gate script grows to 14.
-
-#### Deep Dives
-- Gates remain offline.
-
 #### Tasks
-1. Add `find infra -name 'Pulumi.yaml' | wc -l == 1` gate.
-2. Add `yq '.config | has("loopzero-infra:cellId")' Pulumi.dev.yaml` gate.
-3. Re-run preflight.
+1. Add gates.
 
 #### TDD
 ```
-RED:     test_preflight_has_pulumi_singleton_gate() — grep preflight.sh for the check
-RED:     test_preflight_has_cell_id_gate()
-GREEN:   Add gates
-REFACTOR: None
-VERIFY:  bash infra/tests/parity/preflight.sh
+RED:     test_preflight_has_pulumi_singleton_gate()
+RED:     test_preflight_has_cell_2_config_gate()
+RED:     test_preflight_has_metrics_gate()
+GREEN:   Add
 ```
 
 #### Acceptance Criteria
-- [ ] 14 PASS gates
-- [ ] Both new gates fail-loud when violated (manually verified)
+- [ ] 15 gates PASS
 
 #### DoD
 - [ ] Preflight GREEN
 
 ---
 
-## Phase 6: Validation matrix
+## Phase 7: Production rollout (D9)
 
-**Objective:** End-to-end gate covering Phases 0-5.
+**Objective:** Cell-2 in production via canary stages 4-5 with 7-day holds.
 
-### T6.1 — Master validation script
+**BLOCKED BY**: Phase 5 GREEN + 24h dev soak.
+
+### T7.1 — Production canary stage 4: 1 customer opt-in tenant on cell-2 (7-day hold)
 
 #### Objective
-`infra/tests/parity/validate-all.sh` (NEW): runs every offline gate in sequence, exit 0 only if all pass.
+Identify 1 production customer willing to canary. Migrate to cell-2. Hold 7 days. Verify metrics + EB. Customer comms baked in.
 
 #### Files to edit
 ```
-infra/tests/parity/validate-all.sh — (NEW)
-Taskfile.yml — task validate:all target
+docs/runbooks/multi-cell-canary-prod.md — (NEW)
+docs/customer-comms/cell-2-canary-template.md — (NEW)
 ```
-
-#### Deep file dependency analysis
-- Wraps existing scripts.
-
-#### Deep Dives
-- **Invariant**: zero false positives. Each gate is deterministic offline.
 
 #### Tasks
-1. Aggregate scripts.
-2. Add task target.
-3. Run end-to-end.
-
-#### TDD
-```
-RED:     test_validate_all_passes_post_phase_5() — script exit 0
-GREEN:   Wrap + run
-REFACTOR: None
-VERIFY:  task validate:all
-```
+1. Customer comms.
+2. Customer opt-in.
+3. Migrate.
+4. 7-day soak.
+5. RCA template ready in case of incidents.
 
 #### Acceptance Criteria
-- [ ] All gates GREEN
-- [ ] <60s total runtime
+- [ ] 1 customer migrated
+- [ ] 7-day GREEN
+- [ ] EB stable
+
+#### Security Review
+- **Question**: customer data isolated in cell-2? **Answer**: yes — same isolation model as cell-1.
+
+#### SRE Review
+- **Question**: blast radius if cell-2 fails? **Answer**: 1 customer's tenant; rollback in <5 min per T5.5 plan.
+- **Veto criterion**: blast radius widens beyond 1 tenant.
+
+#### Rollback Plan
+- `loopzero deploy --cell cell-1 <tenant>` re-pins; <5 min.
+- Customer notification + RCA.
+
+#### Observability Plan
+- Live dashboard.
+- 7-day report comparing cell-1 vs cell-2 metrics.
 
 #### DoD
-- [ ] task validate:all GREEN
+- [ ] Stage 4 GREEN
 
 ---
 
-### T6.2 — Run matrix audit + golden test post-Phase 5
+### T7.2 — Production canary stages 5a-5c: 10% → 50% → 100%
 
 #### Objective
-Confirm `audit-regression-matrix.sh` and `audit-golden-test.sh` still PASS after every Phase change.
-
-#### Files to edit
-```
-docs/runbooks/bootstrap-regression-matrix.md — entries for Achados from Phases 1-4
-```
-
-#### Deep file dependency analysis
-- Matrix entries.
-
-#### Deep Dives
-- Each Phase that surfaces an Achado adds entries.
+Graduated rollout. 7-day hold per stage. Error-budget gate between each.
 
 #### Tasks
-1. Re-run audit per Phase change.
-2. Add matrix rows.
-3. Confirm 0 MISS critical.
-
-#### TDD
-```
-RED:     test_matrix_audit_zero_critical_miss() — script exit 0
-GREEN:   Update matrix
-REFACTOR: None
-VERIFY:  bash infra/tests/parity/audit-regression-matrix.sh
-```
+1. Stage 5a (10%) → 7d → 5b (50%) → 7d → 5c (100%).
+2. Halt on EB consumption > 1%.
 
 #### Acceptance Criteria
-- [ ] Matrix audit PASS
-- [ ] Golden test PASS
+- [ ] 100% of tenants on cell-2 OR cell-1 (per `cells` table)
+- [ ] No SLO breaches
+
+#### Security/SRE/Rollback/Observability — same shape as T7.1.
 
 #### DoD
-- [ ] Both GREEN
+- [ ] All stages GREEN
 
 ---
 
-## Phase 7: Documentation + close
+## Phase 8: Validation matrix + close
 
-**Objective:** ADRs ratified, runbooks updated, CHANGELOG closed, memory entry written.
-
-### T7.1 — ADRs + runbooks + CHANGELOG
+### T8.1 — Master validation script + task target
 
 #### Objective
-Land all docs.
+`task validate:matrix` runs every offline gate + summarizes status of every live gate.
 
 #### Files to edit
 ```
-docs/decisions/ADR-0021-pulumi-single-stack.md — (NEW, written in T2.1)
-docs/decisions/ADR-0022-split-operator-helmfile.md — (NEW)
-docs/decisions/ADR-0023-cell-2-activation.md — (NEW, written in T4.4)
-docs/runbooks/multi-cell-activation.md — (NEW)
-docs/runbooks/parity-validation.md — extend with cell-2 section
-docs/runbooks/bootstrap-regression-matrix.md — finalize
-CHANGELOG.md — Added/Changed/Removed sections for this plan
+infra/tests/parity/validate-matrix.sh — (NEW)
+Taskfile.yml — task validate:matrix
+```
+
+#### Acceptance Criteria
+- [ ] All 14 gates GREEN
+- [ ] Live gates status reported
+
+#### DoD
+- [ ] task validate:matrix GREEN
+
+---
+
+### T8.2 — Documentation close
+
+#### Objective
+ADR-0021/0022/0023 finalized; runbooks updated; CHANGELOG closed; memory persisted.
+
+#### Files to edit
+```
+docs/decisions/ADR-0021-pulumi-single-stack.md — finalized
+docs/decisions/ADR-0022-operator-topology.md — finalized
+docs/decisions/ADR-0023-multi-cell-activation.md — finalized
+docs/runbooks/* — updated
+CHANGELOG.md — closed
 ~/.claude/projects/-home-paulo-loopzero/memory/reference_infra_normalize_2026_05_XX.md — (NEW)
-~/.claude/projects/-home-paulo-loopzero/memory/MEMORY.md — index entry
 ```
-
-#### Deep file dependency analysis
-- Pure docs; no code.
-
-#### Deep Dives
-- Each ADR follows ADR-0019/0020 format.
-- CHANGELOG follows Keep a Changelog (Rule 6).
 
 #### Tasks
-1. Write each doc.
-2. Cross-link.
-3. Verify ADRs referenced from plan.
-4. Update memory.
-
-#### TDD
-```
-RED:     test_each_adr_referenced_in_plan() — grep cross-links
-GREEN:   Write docs
-REFACTOR: None
-VERIFY:  manual cross-check
-```
+1. Finalize each ADR (prescriptive format with Options, Vetoes, Migration, Rollback, Customer comms).
+2. Update runbooks.
+3. CHANGELOG.
+4. Memory entry.
 
 #### Acceptance Criteria
-- [ ] 3 new ADRs
-- [ ] 1 new runbook
-- [ ] Existing runbooks extended
-- [ ] CHANGELOG closed
-- [ ] Memory updated
+- [ ] All docs committed
+- [ ] PR description references all ADRs
 
 #### DoD
 - [ ] All committed
-- [ ] PR description references all ADRs
 
 ---
 
 ## Coverage Matrix
 
-| # | Gap / Requirement | Task(s) | Resolution |
+| # | Gap / Requirement | Tasks | Resolution |
 |---|---|---|---|
-| 1 | Tilt deploys 4 split operators, helmfile deploys monolith (Rule 10 break) | T1.1, T1.2, T1.3 | Helmfile owns topology; Tilt consumes helmfile output |
-| 2 | 4 Pulumi stacks, 3 orphans with @pulumi/kubernetes | T2.1, T2.2 | Delete + permanent gate |
-| 3 | 3 orphan Tilt yamls | T1.2 | Deleted as part of Tiltfile refactor |
-| 4 | regression-checks.sh profile-aware undocumented | T7.1 | Runbook entry |
-| 5 | regression_test.go string-literal anti-pattern | DEBT (D6) | Registered in matrix as #136, deferred |
-| 6 | infra/cell-templates/v1.0.0 dead-code | T4.4 | Activated by cell-2 work; if templates unused, deleted |
-| 7 | charts/loopzero-platform requires helm dependency build | T6.1 | task validate:helm-deps added in master validate-all |
-| 8 | Sloth files bypass kubeconform | T6.1 | task validate:slos calls sloth validate |
-| 9 | refactorhelms branch merge needs ratification | T0.1 | Fast-forward develop |
-| 10 | All CLI commands 1000% functional | T3.1, T3.2, T3.3 | Audit + 12 integration tests + bug fixes |
-| 11 | Multi-cell not active (runtime-2 idle) | T4.1, T4.2, T4.3, T4.4 | Pulumi config + DB seed + CLI flag + smoke |
-| 12 | No CI gate for CLI integration | T5.1 | New cli-commands.yml workflow |
-| 13 | No CI gate for multi-cell | T5.2 | New multi-cell.yml workflow |
-| 14 | Parity preflight missing 2 gates (Pulumi singleton, cell config) | T5.3 | Extended preflight |
-| 15 | No master validation script | T6.1 | validate-all.sh + task validate:all |
-| 16 | Matrix could regress on Phase changes | T6.2 | Run audit per Phase |
-| 17 | ADRs missing for new structural decisions | T7.1 | ADR-0021/0022/0023 |
-| 18 | CHANGELOG not closed | T7.1 | Keep a Changelog entries |
-| 19 | Memory not updated | T7.1 | New project memory entry |
+| 1 | Tilt deploys 4 split, helmfile deploys monolith (Rule 10 break) | T-1.1, T2.1, T2.2, T2.3, T2.4 | Forward-only migration; Tilt consumes helmfile output |
+| 2 | 4 Pulumi stacks, 3 orphans | T-1.2, T0.2, T3.1, T3.2, T3.3 | Archive + state rm + code rm |
+| 3 | 3 orphan Tilt yamls | T2.4 | Deleted |
+| 4 | regression-checks.sh undocumented | T8.2 | Runbook update |
+| 5 | regression_test.go string-literal anti-pattern | DEBT (D10): owner=agent:test, horizon=2026-06-30, stop-the-line=3 broken-by-string-change PRs | Registered; not addressed in this plan |
+| 6 | cell-templates dead-code | T5.6 (templates either used or deleted) | Activated or removed |
+| 7 | charts/loopzero-platform requires helm dep build | T8.1 | task validate:helm-deps in matrix |
+| 8 | Sloth files bypass kubeconform | T8.1 | task validate:slos in matrix |
+| 9 | refactorhelms merge needs ratification | T1.1 | Proper PR |
+| 10 | All CLI commands 1000% functional | T0.3, T4.1, T4.2, T4.3 | Audit + 12+ integration tests + bug fixes |
+| 11 | Multi-cell not active | T-1.3, T0.1, T5.1, T5.2, T5.3, T5.4, T5.5, T5.6, T5.7 | Source audit + creds rotation + config + migration + observability + flag + canary stages |
+| 12 | No CI gate for CLI integration | T6.1 | New workflow |
+| 13 | No CI gate for multi-cell | T6.2 | New workflow |
+| 14 | Parity preflight missing gates | T6.3 | 3 gates added |
+| 15 | No master validation | T8.1 | validate-matrix.sh |
+| 16 | Matrix could regress | T8.2 + audit-regression-matrix.sh runs in CI | Continuous gate |
+| 17 | ADRs sketchy | T-1.1/2/3 + T8.2 | Prescriptive ADRs with Options/Vetoes/Migration/Rollback/Comms |
+| 18 | CHANGELOG not closed | T8.2 | Closed |
+| 19 | Memory not updated | T8.2 | Persisted |
+| **W1** | **Bypass governance** | T-1.1, T-1.2, T-1.3, T1.1 | Meetings BEFORE code; PR for merge |
+| **W2** | **Feature flag debt** | T2.2 | Forward-only migration |
+| **W3** | **Function coupled to config** | T2.2 | LOOPZERO_COMPONENTS not flag-aware (queries truth) |
+| **G1** | **Pulumi state cleanup** | T0.2, T3.1, T3.2 | Inventory + archive + rm |
+| **G2** | **Multi-cell unverified** | T0.1 | Source audit precedes design |
+| **G3** | **Mocked integration tests** | T4.1, T4.2 | Spawned binary + envtest, not pure mocks |
+| **G4** | **No security review** | Per-task Security Review section | Vetoes captured |
+| **G5** | **No SRE review** | Per-task SRE Review section | Vetoes captured |
+| **G6** | **No T2/T3 governance** | Phase −1 | Meetings + decision records |
+| **G7** | **No production rollout path** | Phase 7 | Stages 4-5 with 7d holds + EB gates |
+| **G8** | **No rollback per phase** | Per-task Rollback Plan section | Exact commands committed |
+| **G9** | **No observability plan** | T5.4 + per-task Observability Plan section | Metrics + alerts + dashboards before activation |
+| **G10** | **ADRs sketchy** | T-1.1/2/3 + T8.2 | Prescriptive format |
+| Minor: TDD specs thin | All TDD blocks expanded with assertions, fixtures, side-effects |
+| Minor: anonymous DEBT | D10 + Coverage row #5 | Owner + horizon + stop-the-line |
+| Minor: CI specs incomplete | T6.1, T6.2 | Concurrency, timeout, secrets, flake budget |
 
-**Coverage: 19/19 gaps covered (100%)**, with #5 explicitly registered as DEBT per ADR D6.
+**Coverage: 19 + 3 workarounds + 10 gaps + 3 minor = 35/35 (100%)**
 
 ## Global Definition of Done
 
-- [ ] All phases (0-7) completed
-- [ ] All tests GREEN simultaneously:
+- [ ] All phases (−1 through 8) completed
+- [ ] **All 3 governance Decision Records committed APPROVED before code**
+- [ ] **3 audits committed before changes**: dynamic_router source, Pulumi state, CLI commands
+- [ ] All test suites GREEN simultaneously:
   - [ ] CLI unit (1171) GREEN
-  - [ ] CLI integration (12 NEW) GREEN
-  - [ ] Pulumi vitest (96 + 1 = 97) GREEN
+  - [ ] CLI integration (12+ NEW with spawned binary) GREEN
+  - [ ] Pulumi vitest (96 + 2 NEW = 98) GREEN
   - [ ] Go infra/tests (capacity + chaos + e2e + load + unit) GREEN
-  - [ ] Parity preflight (12 → 14 gates) GREEN
+  - [ ] Operators envtest (existing 200+) GREEN
+  - [ ] Parity preflight (15 gates) GREEN
   - [ ] Matrix audit zero critical MISS
   - [ ] Audit golden test 3/3 PASS
   - [ ] task validate:manifests GREEN
   - [ ] task validate:helm-deps GREEN (NEW)
   - [ ] task validate:slos GREEN (NEW)
-  - [ ] task validate:all GREEN (NEW)
+  - [ ] task validate:matrix GREEN (NEW)
 - [ ] Live gates GREEN:
-  - [ ] task parity:k3d-virgin GREEN with splitOperators=true
-  - [ ] cell2-smoke.sh exits 0 (HTTP 200 from runtime-2)
-- [ ] Zero @pulumi/kubernetes imports in codebase (audited by sprint8-fixes.test.ts Fix #7 + Fix #10)
-- [ ] Zero orphan files in infra/tilt/ (audited by find script)
-- [ ] One Pulumi project (audited by sprint8-fixes.test.ts Fix #10)
-- [ ] All CLI commands documented in cli-commands-audit.md
-- [ ] All ADRs (0021, 0022, 0023) committed and cross-linked
-- [ ] CHANGELOG closed with Added/Changed/Removed sections for this plan
+  - [ ] task parity:k3d-virgin GREEN with split operators (T2.3)
+  - [ ] cell2-canary-stage1.sh exit 0 (T5.6)
+  - [ ] cell2-canary-stage2.sh exit 0 (T5.7)
+  - [ ] Production stage 4 GREEN (T7.1)
+  - [ ] Production stages 5a-c GREEN (T7.2)
+- [ ] **Per-phase Security Review APPROVED for every implementation phase**
+- [ ] **Per-phase SRE Review APPROVED for every implementation phase**
+- [ ] **Per-phase Rollback Plan tested in dev BEFORE production**
+- [ ] **Per-phase Observability Plan deployed BEFORE feature ships**
+- [ ] Zero @pulumi/kubernetes imports anywhere (sprint8-fixes.test.ts Fix #7 + Fix #10)
+- [ ] One Pulumi project (Fix #10)
+- [ ] Zero orphan files in infra/tilt/
+- [ ] Zero feature flags introduced for operator topology (no `splitOperators` flag)
+- [ ] Pulumi state archived for every removed stack (T3.1 archives present)
+- [ ] All CLI commands documented in cli-commands-audit.md with exit codes + JSON shape
+- [ ] Customer comms templates ready for production rollout
+- [ ] All ADRs (0021, 0022, 0023) prescriptive (Options + Vetoes + Migration + Rollback + Comms)
+- [ ] CHANGELOG closed with Added/Changed/Removed sections
 - [ ] Memory entry persisted
-- [ ] CI workflows: parity-validation.yml + cli-commands.yml (NEW) + multi-cell.yml (NEW) all required on develop branch protection
+- [ ] CI workflows: parity-validation.yml + cli-commands.yml + multi-cell.yml all required on develop branch protection
 - [ ] No regression in 1171 CLI unit tests
 - [ ] No regression in 96 Pulumi vitest
-- [ ] code-audit checks passing (cyclomatic <= 10, files <= 500 lines, lint zero warnings, coverage >= 90% on changed files)
-- [ ] Plan-specific: Tilt and Helmfile deploy the SAME pod set (verified by `diff <(tilt-pods) <(helmfile-rendered-pods)`)
-- [ ] Plan-specific: tenant pinned to cell-2 reachable on cell-2 cluster (kubectl context confirms)
+- [ ] code-audit checks passing (cyclomatic ≤ 10, files ≤ 500 lines, lint zero warnings, coverage ≥ 90% on changed files)
+- [ ] **Single DEBT row tracked**: regression_test.go behavioural refactor (owner=agent:test, horizon=2026-06-30, stop-the-line condition documented)
+- [ ] Plan-specific: Tilt and Helmfile deploy IDENTICAL pod sets (verified by automated diff)
+- [ ] Plan-specific: tenant on cell-2 reachable from runtime-2 cluster (kubectl context confirmed)
+- [ ] Plan-specific: cell-1 SLO error budget unaffected by cell-2 activation (compared 30d before vs 30d after)
+- [ ] Plan-specific: production canary stages 4-5 reached 100% with no SLO breach
