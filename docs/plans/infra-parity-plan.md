@@ -414,6 +414,14 @@ VERIFY: kubectl --as=user set image deployment/loopzero-api loopzero-api=foo:bar
 #### Objective
 Após T1.1 + T1.2, rodar `helmfile sync` em cada cluster local para que runtime convergir com declarado, eliminando os 49 ArgoCD Unknown.
 
+#### Status (iter 1 — partial)
+- loopzero-api ✓ converged (k3d-loopzero-registry:5000/loopzero-api:latest, pullPolicy=Always)
+- loopzero-controller / tenant-controller / loopzero-cloud: chart aponta para `registry.digitalocean.com/loopzero-system/...:latest` mas registry local não tem essas imagens. Sync trava em ImagePullBackOff. Resolução completa exige:
+  1. Build local de loopzero-controller + loopzero-tenant-controller + loopzero-cloud
+  2. Tag/push para `k3d-loopzero-registry:5000/...:latest`
+  3. Override em `values-standalone-multi.yaml` para usar registry local
+- Trabalho restante: ~30min × 3 imagens. Adiado para iter 2 do loop OR Phase 5 quando o k3d virgin script for executado live.
+
 #### Evidence
 ArgoCD apps Unknown não recuperam sozinhas — precisam ArgoCD sync trigger.
 
