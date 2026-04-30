@@ -1304,6 +1304,39 @@ tasks:
       - task: setup
       - echo "Clusters and dependencies are ready. Run 'tilt up' to start the dev loop."
 
+  k3d:bootstrap-workload:
+    desc: |
+      Bootstrap the workload (k3d-loopzero-workload) cluster with cert-manager +
+      traefik + external-secrets via helmfile. Idempotent — `helmfile sync`
+      no-ops if releases match desired state. Required after fresh
+      `k3d cluster create loopzero-workload` (the runtime helmfile usually only
+      runs in production cells).
+      Discovered LIVE 2026-04-30: ArgoCD app sync to runtime fails with
+      "Certificate CRD not found" until this is run.
+    cmds:
+      - helmfile -f infra/helmfile/runtime.helmfile.yaml.gotmpl -e standalone-multi --kube-context k3d-loopzero-workload --selector name=cert-manager sync
+      - helmfile -f infra/helmfile/runtime.helmfile.yaml.gotmpl -e standalone-multi --kube-context k3d-loopzero-workload --selector name=traefik sync
+      - helmfile -f infra/helmfile/runtime.helmfile.yaml.gotmpl -e standalone-multi --kube-context k3d-loopzero-workload --selector name=external-secrets sync
+
+  k3d:heal:
+    desc: |
+      Idempotent recovery of cross-cluster connectivity in local k3d standalone-multi
+      after `k3d cluster stop/start` cycles. Codifies the 9 manual workarounds
+      (H1-H9) discovered LIVE during dogfood E2E unblock 2026-04-30:
+        H1 — reattach build/runtime nodes to shared k3d-loopzero network
+        H2 — refresh loopzero-cluster-kubeconfigs Secret with current IPs (insecure-skip-tls)
+        H3 — recreate ArgoCD cluster Secrets (force discovery cache invalidate)
+        H4 — add k3d-loopzero-registry hostAlias to /etc/hosts on build + runtime nodes
+        H5 — bind kube-system:default SA to cluster-admin in build + runtime (LOCAL-ONLY)
+        H6 — empty buildkit-registry-config when DOCR creds absent
+        H7 — loopzero-minio-credentials with mgmt NodePort URL
+        H8 — LOOPZERO_*_IMAGE env overrides on loopzero-api Deployment
+        H9 — loopzero-build-cwts release with images.cloneRunner local registry override
+      Production has scoped SAs + permanent helmfile values; this is a LOCAL-DEV recovery only.
+      Safe to re-run after every restart.
+    cmds:
+      - bash infra/scripts/k3d-cross-cluster-heal.sh
+
   cli:link:
     desc: Symlink 'loopzero' CLI to PATH (makes `loopzero` available globally)
     cmds:
