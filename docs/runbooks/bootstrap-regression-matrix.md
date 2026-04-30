@@ -149,17 +149,22 @@
 | 124| ENVTEST_LEAK      | namespaces `loopzero-test-*` Terminating eternamente após envtest cleanup race | infra-parity audit 2026-04-30 | preflight T0.10 + scripts/cleanup-terminating-namespaces.sh idempotente + allowlist-gated; usa /finalize subresource (não só metadata.finalizers); cascata força tenant/env CRs Deleting a destravar | (b)(c) | preflight T0.10 + 16/16 PASS post-fix | NÃO | SIM (T0.1) |
 | 125| OBSERVABILITY     | dangling DOKS kubeconfig contexts confundem operator (typos batem em cluster fantasma) | infra-parity audit 2026-04-30 | preflight T0.11 (WARN level): probe via `kubectl get ns kube-system` 5s timeout; lista contexts dead | (c) | preflight WARN counter | NÃO | SIM (T0.3) |
 | 126| API_RULE_5        | `loopzero platform install` sem `--json` quebra automação CI/CD (operator não pode parsear progresso) | infra-parity audit 2026-04-30 | --json global flag emite JSONL `{step, phase, status, ts}` per step + final summary `{status, endpoints, errors}` | (a) | TestPlatformInstallJson (4 cases) | NÃO | SIM (T2.2) |
+| 127| BOOTSTRAP_DB      | bitnami postgres `initdb.scripts` schema antigo silently ignored em chart 18.6.2 — kratos/hydra/harbor crash em "database does not exist" no fresh install (Achado #29 iter-3) | T5.1 live virgin install 2026-04-30 | infra/helm/postgresql/values.yaml: mover scripts para `primary.initdb.scripts` (chart schema atual). Live verified via `helm get values postgresql` | (b) | helm template + first-boot CREATE DATABASE in psql output | NÃO | partial (T5.1 retry pending) |
+| 128| BOOTSTRAP_SCRIPT  | k3d-virgin-install.sh `docker system prune -a --volumes` deletou cluster loopzero-build (Exited containers) — bug do prune scope (Achado #30) | T5.1 live virgin install 2026-04-30 | scripts/k3d-virgin-install.sh: replace prune com `docker image prune -f` (dangling-only, safe). Adicionado pre-flight RAM check (≥4 GiB) | (b)(c) | manual review of script | NÃO | SIM (script-runtime) |
+| 129| BOOTSTRAP_K3D     | k3d default Traefik in kube-system bloqueia install do nosso traefik release (IngressClass adoption fail) (Achado #31) | T5.1 live virgin install 2026-04-30 | virgin script: `--k3s-arg "--disable=traefik@server:0"` quando criar cluster | (b) | virgin run 3 succeeded past traefik, failed at loopzero-api image | NÃO | SIM (script-runtime) |
+| 130| HELMFILE_GATE     | `clusterTopology=multi-cluster` gate excluía standalone env (single-cluster); standalone DOCR images ImagePullBackOff (Achado #32) | T5.1 live virgin install 2026-04-30 | mgmt.helmfile.yaml.gotmpl: 4 gates trocados de `clusterTopology=multi-cluster` para `clusterRole=standalone` (cobre standalone E standalone-multi) | (b) | helmfile -e standalone list mostra overrides aplicados | NÃO | partial (T5.1 retry pending) |
+| 131| CAPACITY_VIRGIN   | k3d virgin 1+1 nodes ~5 GiB RAM insuficiente para `helm --wait` paralelo de 27+ charts mid-install (Achado #33) | T5.1 live virgin install 2026-04-30 | TBD: opções (a) virgin com agents=2+, (b) helmfile sem `--wait` em wave-3 charts, (c) install em fases. Phase 5 followup. | TBD | TBD | partial | partial (T5.1 retry pending) |
 
 ---
 
 ## Coverage Summary
 
-- **Total problems:** 126 (44 originais + 31 mgmt bootstrap iter 22-27 + 8 multi-cluster bootstrap iter 1-5 + 5 product reconcile iter 7-8 + 4 build pipeline iter 9 + 5 deploy completion iter 10-11 + 6 deploy E2E iter 12 + 8 dogfood iter 1 + 3 dogfood iter 2 + 1 dogfood iter 3 + 11 dogfood real e2e iter-13 + infra-parity 2026-04-30)
-- **NÃO recorre (eliminada):** 101 _(+ 11 iter-13/parity entries 116-126)_
-- **PARCIAL (detecta runtime):** 2 _(B58 environmental + F-04 architectural prevention pendente T2)_
+- **Total problems:** 131 (44 originais + 31 mgmt bootstrap iter 22-27 + 8 multi-cluster bootstrap iter 1-5 + 5 product reconcile iter 7-8 + 4 build pipeline iter 9 + 5 deploy completion iter 10-11 + 6 deploy E2E iter 12 + 8 dogfood iter 1 + 3 dogfood iter 2 + 1 dogfood iter 3 + 11 dogfood real e2e iter-13 + 11 infra-parity 2026-04-30 + 5 T5.1 live discoveries)
+- **NÃO recorre (eliminada):** 104 _(+ 3 T5.1 entries 128-130 protected; 127+131 partial)_
+- **PARCIAL (detecta runtime):** 4 _(B58 + F-04 + Achado #29 retry pending + Achado #33 capacity TBD)_
 - **N/A (low severity / out of scope):** 3 (gitea_pusher wrap, git push race, DOCR QPS)
 - **SIM (sem proteção):** 2 _(B58 environmental + T2 redesign Apps L3 governance)_
-- **CRITÉRIO DE SAÍDA**: para os 44 problemas originais, atingido (0 SIMs). 101/126 (80%) têm proteção permanente; 2 PARCIAL; 0 carry-over não-classificado.
+- **CRITÉRIO DE SAÍDA**: para os 44 problemas originais, atingido (0 SIMs). 104/131 (79%) têm proteção permanente; 4 PARCIAL (todos T5.1 followup-able); 0 carry-over não-classificado.
 
 ## Loop Back Checkpoint (per phase)
 
