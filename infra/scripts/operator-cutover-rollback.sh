@@ -21,7 +21,7 @@
 #      DISABLED. The exact way this is expressed depends on whether the
 #      cutover commit had a feature flag or hard switched. Forward-only
 #      migration (D1 chosen) hard-switched, so rollback re-renders the
-#      pre-cutover helmfile via git checkout of the parent commit, then
+#      pre-cutover helmfile via `git show <parent>:path` (read-only), then
 #      applies it. ONLY when running rollback as the immediate response
 #      to a botched cutover.
 #   3. Wait for monolith pods to reach Ready (Lease takes over).
@@ -38,7 +38,7 @@
 #
 # Required env:
 #   LOOPZERO_CUTOVER_COMMIT — the SHA of the cutover commit, used to
-#                         compute the parent for git checkout
+#                         compute the parent commit for `git show`
 #                         pre-cutover state. If empty, script aborts
 #                         with instructions.
 #
