@@ -1608,16 +1608,34 @@ tasks:
         # Iter 20: helmfiles are .gotmpl with go-template placeholders.
         # We strip them via shell sed before yaml.safe_load (Python regex with
         # the templating syntax conflicts with Task's own go-template parser).
+        #
+        # 2026-04-30 fix (NEW-7): the original `TPL_RE.sub('false', content)`
+        # broke YAML when a go-template directive started a line — a bare
+        # whole-line directive collapsed to literal `false` in column 1,
+        # invalidating the indented mapping context (validate:bootstrap fail
+        # on mgmt.helmfile.yaml.gotmpl line 185). Two-pass:
+        #   1. WHOLE_LINE_TPL strips lines that are ONLY a directive (with
+        #      optional surrounding whitespace) — they collapse to empty,
+        #      preserving YAML structure.
+        #   2. INLINE_TPL replaces remaining inline directives with `false`.
+        # NB: do NOT write literal go-template directive syntax in this
+        # Taskfile — Task parses double-brace pairs as go-template before
+        # the script reaches bash. Use chr(123) and chr(125) only.
         repo_urls = {}
         releases = []
         OPEN = chr(123) + chr(123)
         CLOSE = chr(125) + chr(125)
         import re as _re
-        TPL_RE = _re.compile(_re.escape(OPEN) + r'[^}]*' + _re.escape(CLOSE))
+        WHOLE_LINE_TPL = _re.compile(
+            r'^[ \t]*' + _re.escape(OPEN) + r'-?[^}]*-?' + _re.escape(CLOSE) + r'[ \t]*$',
+            _re.MULTILINE,
+        )
+        INLINE_TPL = _re.compile(_re.escape(OPEN) + r'[^}]*' + _re.escape(CLOSE))
         for hf in helmfiles:
             with open(hf) as f:
                 content = f.read()
-            content = TPL_RE.sub('false', content)
+            content = WHOLE_LINE_TPL.sub('', content)
+            content = INLINE_TPL.sub('false', content)
             for doc in yaml.safe_load_all(content):
                 if not doc:
                     continue
