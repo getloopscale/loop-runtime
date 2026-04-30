@@ -47,6 +47,8 @@ export interface PlatformInstallOptions {
   restoreSecretsFile?: string;
   /** From CLI: --no-restore-secrets */
   skipRestoreSecrets?: boolean;
+  /** From CLI global: --json. Emits per-step JSONL to stdout, suppresses prose. */
+  json?: boolean;
 }
 
 /**
@@ -102,12 +104,26 @@ export async function platformInstall(
   optsOrFile: PlatformInstallOptions | string,
   legacyProfile?: string,
 ): Promise<number> {
-  const { writeTo, writeError } = deps;
+  const { writeError } = deps;
   // Backwards-compat: callers may pass (deps, valuesFile, profile) (old signature).
   const opts: PlatformInstallOptions =
     typeof optsOrFile === 'string'
       ? { valuesFile: optsOrFile, profile: legacyProfile }
       : optsOrFile;
+
+  // CHG-2026-04-30-INFRA-PARITY / T2.2 — `--json` mode emits JSONL per step
+  // and suppresses prose, so CI pipelines can pipe to jq. Final emission is
+  // a summary {status, components, errors}. Rule 5 stable contract.
+  const isJson = opts.json === true || process.argv.includes('--json');
+  const progress = (step: string, phase: string, status: 'running' | 'complete' | 'failed' | 'skipped', extra?: Record<string, unknown>): void => {
+    if (isJson) {
+      deps.writeTo(JSON.stringify({ step, phase, status, ts: new Date().toISOString(), ...extra }));
+    }
+  };
+  // writeTo emits prose only when not in --json mode. Errors always go to stderr.
+  const writeTo = (msg: string): void => {
+    if (!isJson) deps.writeTo(msg);
+  };
 
   // Load customer values
   let config: PlatformConfig;
@@ -150,7 +166,7 @@ export async function platformInstall(
   writeTo('');
 
   // ── Step 1: Validate ──────────────────────────────────────────────
-  writeTo('Step 1/6: Validating configuration...');
+  progress('1/6', 'validate', 'running'); writeTo('Step 1/6: Validating configuration...');
   if (!useInfra) {
     const validation = validateCluster();
     for (const check of validation.checks) {
@@ -165,7 +181,7 @@ export async function platformInstall(
   }
 
   // ── Step 2: Preflight ─────────────────────────────────────────────
-  writeTo('Step 2/6: Preflight checks...');
+  progress('2/6', 'preflight', 'running'); writeTo('Step 2/6: Preflight checks...');
   const helmfileCheck = ensureHelmfileAvailable();
   if (!helmfileCheck.ok) {
     writeError(`  ✗ ${helmfileCheck.error}`);
@@ -185,7 +201,7 @@ export async function platformInstall(
   // ── Step 3: Infrastructure (CONDITIONAL — only with --provider) ────
   let extraEnv: Record<string, string> = {};
   if (useInfra) {
-    writeTo('Step 3/6: Provisioning cloud infrastructure (Pulumi L1)...');
+    progress('3/6', 'infrastructure', 'running'); writeTo('Step 3/6: Provisioning cloud infrastructure (Pulumi L1)...');
     const pulumiCtx = {
       projectDir: resolvePulumiProjectDir(projectRoot),
       stack: environment,
@@ -276,7 +292,7 @@ export async function platformInstall(
   }
 
   // ── Step 4: Bootstrap (Helmfile L2) ────────────────────────────────
-  writeTo('Step 4/6: Installing platform via Helmfile...');
+  progress('4/6', 'helmfile', 'running'); writeTo('Step 4/6: Installing platform via Helmfile...');
   const clusterRoles: Array<'mgmt' | 'build' | 'runtime'> = useInfra
     ? ['build', 'mgmt', 'runtime']
     : ['mgmt']; // standalone
@@ -326,7 +342,7 @@ export async function platformInstall(
   }
 
   // ── Step 5: Wire ───────────────────────────────────────────────────
-  writeTo('Step 5/6: Wiring cross-cluster connectivity...');
+  progress('5/6', 'wire', 'running'); writeTo('Step 5/6: Wiring cross-cluster connectivity...');
   if (useInfra && !opts.dryRun) {
     
     const wireScript = `${projectRoot}/infra/helmfile/scripts/wire-clusters.sh`;
@@ -344,7 +360,7 @@ export async function platformInstall(
   }
 
   // ── Step 6: Validate ───────────────────────────────────────────────
-  writeTo('Step 6/6: Validating installation...');
+  progress('6/6', 'validate-install', 'running'); writeTo('Step 6/6: Validating installation...');
   if (!opts.dryRun) {
     const status = getPlatformStatus();
     writeTo(`  Platform phase: ${status.phase}`);
@@ -353,8 +369,19 @@ export async function platformInstall(
     }
     if (status.phase !== 'Ready' && status.phase !== 'Installing') {
       writeError('Installation completed but platform is not Ready.');
+      progress('6/6', 'validate-install', 'failed', { phase: status.phase });
+      if (isJson) {
+        deps.writeTo(JSON.stringify({
+          status: 'failed',
+          phase: status.phase,
+          domain: config.domain,
+          components: status.components,
+          errors: ['platform is not Ready'],
+        }));
+      }
       return 5;
     }
+    progress('6/6', 'validate-install', 'complete', { phase: status.phase });
   }
 
   writeTo('');
@@ -362,6 +389,20 @@ export async function platformInstall(
   writeTo(`    Domain:    https://${config.domain}`);
   writeTo(`    API:       https://api.${config.domain}`);
   writeTo(`    Dashboard: https://app.${config.domain}`);
+  if (isJson) {
+    deps.writeTo(JSON.stringify({
+      status: 'ready',
+      domain: config.domain,
+      endpoints: {
+        api: `https://api.${config.domain}`,
+        dashboard: `https://app.${config.domain}`,
+      },
+      profile: config.profile,
+      provider: config.provider ?? 'standalone',
+      environment,
+      errors: [],
+    }));
+  }
   return 0;
 }
 

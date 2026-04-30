@@ -46,6 +46,18 @@ vaps:
   # Enabling before clearing misplaced CRs causes self-inflicted DoS —
   # status subresource updates rejected → operator stops reconciling.
   tenantNamespace: false
+  # CHG-2026-04-30-INFRA-PARITY / T1.2 / ADR D3 — block kubectl set image
+  # on LoopZero-managed Deployments. Default OFF: dev workflow needs to adapt
+  # to "rebuild → push :latest → kubectl rollout restart" before enable.
+  # Enable via overlay (prod first, dev last after Phase 1 stable).
+  noRuntimeImageMutations: false
+  # When `noRuntimeImageMutations` is on, what action to enforce.
+  # Warn  — admit + log (Sprint 8 default)
+  # Deny  — reject the UPDATE (production)
+  noRuntimeImageMutationsAction: Warn
+  # Failure policy. Ignore is the safest default — VAP outage doesn't break
+  # rollouts. Switch to Fail once policy is stable in production.
+  noRuntimeImageMutationsFailurePolicy: Ignore
 
 # Toggle the policy-controller PrometheusRule (alerts).
 alerts:
