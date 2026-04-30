@@ -753,10 +753,12 @@ Proteção permanente:
 
 #### Files to edit
 ```
-infra/tests/parity/droplet-install.sh — (NEW)
-infra/tests/parity/droplet-cloud-init.sh — (NEW) cloud-init que instala k3d + loopzero CLI
-docs/runbooks/parity-validation.md — adicionar seção
+infra/tests/parity/droplet-install.sh        — (DONE) doctl provision + cloud-init wait + dogfood + cleanup trap. --dry-run valida pre-flight offline.
+infra/tests/parity/droplet-cloud-init.sh     — (DONE) instala docker, kubectl, helm, helmfile + helm-diff, k3d, doctl, node, loopzero CLI. Idempotente. /var/log/loopzero-parity-ready handshake.
+docs/runbooks/parity-validation.md           — adicionar seção (cloud-pendente)
 ```
+
+**Status (2026-04-30):** Scripts offline-deliverable concluídos. Dry-run exit 0. Live run pendente aprovação de custo (~$0.50, ~30min).
 
 #### Tasks
 1. `doctl compute droplet create loopzero-virgin --size s-2vcpu-4gb-amd --image ubuntu-24-04-x64 ...`
@@ -787,12 +789,19 @@ VERIFY: bash infra/tests/parity/droplet-install.sh
 
 ### T7.1 — `infra/tests/parity/doks-install.sh`
 
+#### Files
+```
+infra/tests/parity/doks-install.sh — (DONE) pulumi up parity-test + loopzero platform install --provider digitalocean + dogfood + pulumi destroy com timer DoD #2 (<5min). --dry-run roda pulumi preview.
+```
+
 #### Tasks
 1. Pulumi up novo stack `parity-test`
 2. Install via `loopzero platform install -f values.yaml --provider digitalocean`
-3. Dogfood subset
-4. `pulumi destroy`
-5. Verify `pulumi destroy` <5min
+3. Dogfood subset (journey-01-solo-deploy, journey-03-secrets, journey-08-rollback)
+4. `pulumi destroy` com timeout 300s (DoD #2)
+5. Verify `pulumi destroy` <5min via timer no script
+
+**Status (2026-04-30):** Script offline-deliverable concluído. Dry-run exit 0 (pulumi preview falha sem AWS creds para s3 state — esperado). Live run pendente aprovação de custo (~$5, ~60min).
 
 #### Acceptance Criteria
 - [ ] DoD #2 (pulumi destroy <5min) verificado live
@@ -812,9 +821,13 @@ VERIFY: bash infra/tests/parity/droplet-install.sh
 
 #### Files to edit
 ```
-cli/src/commands/platform.ts — Step 6 condicional
-infra/tests/load/l3_smoke_test.go — (existing) reused
+cli/src/commands/platform.ts            — (DONE) Step 6.5 condicional após Step 6 phase=Ready. Spawn `go test -tags=l3 -timeout=30m -run TestRealDeploy_L3RealisticWithChurn`. Falha → exit 5 (partial failure).
+cli/src/register/platform.ts            — (DONE) Commander option `--validate-l3` registrada com help text.
+cli/tests/unit/platform-install-validate-l3.test.ts — (DONE) 4 cases TDD-pinned: default off, on+Ready spawns, on+fail→exit 5, --json emits l3 progress event.
+infra/tests/load/l3_variants_test.go    — (existing) `TestRealDeploy_L3RealisticWithChurn` (100 tenants, churn 10%) reused; ADR D5 release gate.
 ```
+
+**Status (2026-04-30):** Flag implementada + 4 unit tests GREEN. Live run pendente aprovação de custo + DOKS provisionado (T7.1).
 
 #### Acceptance Criteria
 - [ ] p95 tenant create-to-active ≤ 2min

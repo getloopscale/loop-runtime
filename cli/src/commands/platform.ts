@@ -49,6 +49,14 @@ export interface PlatformInstallOptions {
   skipRestoreSecrets?: boolean;
   /** From CLI global: --json. Emits per-step JSONL to stdout, suppresses prose. */
   json?: boolean;
+  /**
+   * From CLI: --validate-l3. After Step 6 reaches phase=Ready, run the L3
+   * 100-tenant smoke test (TestRealDeploy_L3RealisticWithChurn) as a release
+   * gate (DoD #20 / ADR D5). If L3 fails, exit code 5 (partial failure: install
+   * is up, but capacity assertions miss). Skipped silently when phase!=Ready.
+   * CHG-2026-04-30-INFRA-PARITY / T8.1.
+   */
+  validateL3?: boolean;
 }
 
 /**
@@ -382,6 +390,40 @@ export async function platformInstall(
       return 5;
     }
     progress('6/6', 'validate-install', 'complete', { phase: status.phase });
+
+    // ── Step 6.5: --validate-l3 (T8.1, ADR D5) ──────────────────────
+    // Optional release gate: 100-tenant smoke against the freshly installed
+    // platform. Only runs when phase=Ready (no point hammering a broken
+    // install). Failure → exit 5 (partial failure: install is up, capacity
+    // assertions missed). Skipped silently when flag absent.
+    if (opts.validateL3 && status.phase === 'Ready') {
+      progress('6.5', 'validate-l3', 'running');
+      writeTo('Step 6.5: L3 100-tenant smoke (--validate-l3)...');
+      const l3 = spawnSync('go', [
+        'test',
+        '-tags=l3',
+        '-timeout=30m',
+        '-run', 'TestRealDeploy_L3RealisticWithChurn',
+        './infra/tests/load',
+      ], { stdio: isJson ? 'pipe' : 'inherit', env: process.env });
+      if (l3.status !== 0) {
+        writeError('  ✗ L3 smoke failed (DoD #20 miss)');
+        progress('6.5', 'validate-l3', 'failed', { exit: l3.status ?? -1 });
+        if (isJson) {
+          deps.writeTo(JSON.stringify({
+            status: 'failed',
+            phase: 'l3-smoke',
+            domain: config.domain,
+            errors: ['L3 100-tenant smoke failed'],
+          }));
+        }
+        return 5;
+      }
+      writeTo('  ✓ L3 smoke passed (100/100 tenants healthy)');
+      progress('6.5', 'validate-l3', 'complete');
+    } else if (opts.validateL3) {
+      progress('6.5', 'validate-l3', 'skipped', { reason: `phase=${status.phase}` });
+    }
   }
 
   writeTo('');

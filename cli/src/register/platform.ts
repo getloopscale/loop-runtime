@@ -33,6 +33,7 @@ export function registerPlatformCommands(deps: CommandDeps): void {
     .option('--skip-infra', 'Skip Pulumi L1 (use existing infrastructure outputs)', false)
     .option('--restore-secrets <file>', 'Restore LoopZero Secrets from backup file before helmfile sync')
     .option('--no-restore-secrets', 'Skip Secret restore even if a backup is detected')
+    .option('--validate-l3', 'After install, run 100-tenant smoke test as release gate (DoD #20). Adds ~30min, requires Go toolchain.', false)
     .action(async (opts) => {
       const code = await platformInstall({ writeTo, writeError }, {
         valuesFile: opts.values,
@@ -44,6 +45,7 @@ export function registerPlatformCommands(deps: CommandDeps): void {
         // The string-arg variant lands in opts.restoreSecrets as a path.
         restoreSecretsFile: typeof opts.restoreSecrets === 'string' ? opts.restoreSecrets : undefined,
         skipRestoreSecrets: opts.restoreSecrets === false,
+        validateL3: opts.validateL3 === true,
       });
       process.exit(code);
     });
