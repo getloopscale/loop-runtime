@@ -77,13 +77,24 @@ if command -v docker >/dev/null 2>&1; then
   fi
 fi
 
-# 3) Create virgin cluster.
+# 3) Create virgin cluster (delete-if-exists first so reruns are clean).
+if k3d cluster list --no-headers 2>/dev/null | awk '{print $1}' | grep -qx "$CLUSTER_NAME"; then
+  log "step 3a: removing orphan '$CLUSTER_NAME' from prior aborted run"
+  k3d cluster delete "$CLUSTER_NAME" 2>&1 | tail -2 || true
+fi
+
 log "step 3: creating virgin k3d cluster '$CLUSTER_NAME'"
+# Achado #31: k3d ships Traefik pre-installed in kube-system. Our Helmfile
+# installs Traefik in `traefik` ns and the IngressClass adoption fails:
+#   "IngressClass 'traefik' exists ... release-namespace must equal 'traefik'"
+# Disable k3d's default Traefik so Helmfile owns it cleanly. Same flag
+# disables servicelb (we use Traefik LB type via the chart).
 if ! k3d cluster create "$CLUSTER_NAME" \
     --servers 1 --agents 1 \
     --port "${VIRGIN_PORT_HTTPS}:443@loadbalancer" \
     --port "${VIRGIN_PORT_HTTP}:80@loadbalancer" \
     --api-port "${VIRGIN_PORT_API}" \
+    --k3s-arg "--disable=traefik@server:0" \
     --registry-use k3d-loopzero-registry:5000 2>&1 | tail -10; then
   fail "k3d cluster create failed" 1
 fi
