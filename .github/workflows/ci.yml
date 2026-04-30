@@ -167,6 +167,30 @@ jobs:
           done
           exit $FAILED
 
+  # CHG-2026-04-30-INFRA-NORMALIZE / Phase 2 condition C20.
+  # RBAC subset checker — split operator ClusterRoles must be ⊆ monolith
+  # ClusterRole ∪ explicit allowlist. Prevents privilege escalation via
+  # the operator-split path. Source:
+  #   docs/decisions/MEET-INFRA-NORMALIZE-T3-operator-split.md C20.
+  rbac-subset:
+    name: RBAC subset check (operator split)
+    runs-on: ubuntu-latest
+    timeout-minutes: 3
+    needs: changes
+    if: >-
+      needs.changes.outputs.helm == 'true' ||
+      needs.changes.outputs.go-operators == 'true'
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install Helm
+        uses: azure/setup-helm@v4
+        with:
+          version: v3.16.4
+      - name: Install PyYAML
+        run: pip install pyyaml
+      - name: Run RBAC subset check
+        run: bash infra/scripts/rbac-subset-check.sh --verbose
+
   # T1.2 / VAL-001: detect orphan alert rules — alerts that reference
   # Prometheus metrics not registered anywhere in Go source. Prevents
   # the recurring "alert dark zone" pattern where rules fire on metrics
