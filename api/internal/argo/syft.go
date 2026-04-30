@@ -119,7 +119,7 @@ echo "SBOM generated and uploaded successfully"
 
 	return &forge.Container{
 		Name:    fmt.Sprintf("sbom-%s", appName),
-		Image:   imageSyftScanner,
+		Image:   loopzeroSyftImage(),
 		Command: []string{"sh", "-c", script},
 		Outputs: []forge.Parameter{
 			{

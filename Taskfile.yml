@@ -1255,7 +1255,7 @@ tasks:
   # S0.13: Build pipeline tooling images
   # ---------------------------------------------------------------------------
   images:build:
-    desc: Build and push tooling images (clone-runner, packs-runner, syft-scanner) to local k3d registry
+    desc: Build and push tooling images (clone-runner, packs-runner, syft-scanner, cosign-signer) to local k3d registry
     cmds:
       - |
         echo "=== Building loopzero-clone-runner ==="
@@ -1272,6 +1272,15 @@ tasks:
         docker build -t localhost:5000/loopzero-syft-scanner:latest infra/images/syft-scanner/
         docker push localhost:5000/loopzero-syft-scanner:latest
         echo "  Pushed: localhost:5000/loopzero-syft-scanner:latest"
+      - |
+        echo "=== Building loopzero-cosign-signer (Sprint 6 supply-chain) ==="
+        # 2026-04-30 NEW-12 fix: cosign-signer was excluded from this list,
+        # so dogfood E2E sign-image step always 401-ed against DOCR. With
+        # the LOOPZERO_COSIGN_IMAGE env override now wired (NEW-11), local
+        # builds can short-circuit to this image.
+        docker build -t localhost:5000/loopzero-cosign-signer:latest infra/images/cosign-signer/
+        docker push localhost:5000/loopzero-cosign-signer:latest
+        echo "  Pushed: localhost:5000/loopzero-cosign-signer:latest"
 
   # ---------------------------------------------------------------------------
   # S0.14: Composite tasks

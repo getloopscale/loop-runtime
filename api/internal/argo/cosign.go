@@ -5,10 +5,33 @@ package argo
 
 import (
 	"fmt"
+	"os"
 
 	forge "github.com/getloopscale/loopzero-forge"
 	"github.com/getloopscale/loopzero-forge/model"
 )
+
+// loopzeroCosignImage returns the loopzero-cosign-signer image, allowing override via env var.
+// Local dev sets LOOPZERO_COSIGN_IMAGE to use the k3d registry image.
+// Mirrors the loopzeroPacks() pattern in languages.go (NEW-11 fix 2026-04-30:
+// dogfood E2E unblock surfaced that DOCR images were hardcoded for cosign +
+// syft, with the override pattern only applied to packs-runner. Without
+// this, local builds always 401 against DOCR for the sign-image step).
+func loopzeroCosignImage() string {
+	if v := os.Getenv("LOOPZERO_COSIGN_IMAGE"); v != "" {
+		return v
+	}
+	return imageCosignSigner
+}
+
+// loopzeroSyftImage returns the loopzero-syft-scanner image, allowing override via env var.
+// Local dev sets LOOPZERO_SYFT_IMAGE to use the k3d registry image.
+func loopzeroSyftImage() string {
+	if v := os.Getenv("LOOPZERO_SYFT_IMAGE"); v != "" {
+		return v
+	}
+	return imageSyftScanner
+}
 
 // cosignSignTemplate generates an inline container template that signs a
 // container image with cosign after BuildKit pushes it.
@@ -86,7 +109,7 @@ echo "Image signed successfully"
 
 	return &forge.Container{
 		Name:    fmt.Sprintf("sign-image-%s", appName),
-		Image:   imageCosignSigner,
+		Image:   loopzeroCosignImage(),
 		Command: []string{"sh", "-c", script},
 		Outputs: []forge.Parameter{
 			{
