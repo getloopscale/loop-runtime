@@ -12,6 +12,7 @@ import (
 	"k8s.io/apimachinery/pkg/runtime/schema"
 	"k8s.io/client-go/dynamic"
 	"k8s.io/client-go/kubernetes"
+	"k8s.io/client-go/rest"
 	"k8s.io/client-go/tools/clientcmd"
 )
 
@@ -31,14 +32,27 @@ var externalSecretGVR = schema.GroupVersionResource{
 
 // NewSecretK8sManager creates a manager that can create K8s Secrets on mgmt
 // and ExternalSecret CRs on runtime cluster.
+//
+// CHG-2026-04-30-DOGFOOD-LOCAL-HEAL NEW-15 follow-up: prefer in-cluster
+// rest config for the mgmt client so loopzero-api SA RBAC applies (Secret
+// read/write granted via clusterrolebinding/loopzero-api). The previous
+// out-of-cluster path used a kubeconfig with kube-system:default SA token
+// which doesn't have those permissions, producing 403 on every loopzero
+// secret set call.
 func NewSecretK8sManager(mgmtKubeconfig, mgmtContext, runtimeKubeconfig, runtimeContext string) (*SecretK8sManager, error) {
-	// Mgmt cluster — typed client for Secret creation
-	mgmtConfig, err := clientcmd.NewNonInteractiveDeferredLoadingClientConfig(
-		&clientcmd.ClientConfigLoadingRules{ExplicitPath: mgmtKubeconfig},
-		&clientcmd.ConfigOverrides{CurrentContext: mgmtContext},
-	).ClientConfig()
-	if err != nil {
-		return nil, fmt.Errorf("secret k8s manager: mgmt config: %w", err)
+	// Mgmt cluster — typed client for Secret creation. In-cluster preferred.
+	var mgmtConfig *rest.Config
+	if inCfg, inErr := rest.InClusterConfig(); inErr == nil {
+		mgmtConfig = inCfg
+	} else {
+		var err error
+		mgmtConfig, err = clientcmd.NewNonInteractiveDeferredLoadingClientConfig(
+			&clientcmd.ClientConfigLoadingRules{ExplicitPath: mgmtKubeconfig},
+			&clientcmd.ConfigOverrides{CurrentContext: mgmtContext},
+		).ClientConfig()
+		if err != nil {
+			return nil, fmt.Errorf("secret k8s manager: mgmt config: %w", err)
+		}
 	}
 	mgmtClient, err := kubernetes.NewForConfig(mgmtConfig)
 	if err != nil {
