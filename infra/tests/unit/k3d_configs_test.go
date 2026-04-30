@@ -132,13 +132,37 @@ func TestK3dKubeAPIPorts(t *testing.T) {
 	}
 }
 
+// TestK3dAgentCount enforces the per-cluster agent capacity each cluster
+// actually needs.
+//
+//   - loopzero-mgmt   — 2 agents: hosts CRDs + 4 controllers + ArgoCD + Gitea HA
+//     + Kratos + Hydra + Postgres + Harbor + Traefik + cert-manager.
+//     1 agent OOM's mid-bootstrap (Achado #131, T5.1 run 4).
+//   - loopzero-build  — 1 agent:  only runs Argo Workflows + BuildKit; concurrency
+//     is bounded by the workflow controller, not node count.
+//   - loopzero-workload — 1 agent: tenant pods scale horizontally, but the
+//     cluster itself doesn't need a second node for HA in dev.
+//
+// Tightening this beyond actual need wastes ~1.7 GiB RAM per cluster on
+// the developer host (cf. T5.1 capacity findings).
 func TestK3dAgentCount(t *testing.T) {
 	configs := loadK3dConfigs(t)
 
+	expected := map[string]int{
+		"loopzero-mgmt":     2,
+		"loopzero-build":    1,
+		"loopzero-workload": 1,
+	}
+
 	for _, cfg := range configs {
 		name := cfg.Metadata.Name
-		if cfg.Agents != 2 {
-			t.Errorf("cluster %q: expected agents: 2, got %d", name, cfg.Agents)
+		want, ok := expected[name]
+		if !ok {
+			t.Errorf("cluster %q: not in expected map (add it or rename the cluster)", name)
+			continue
+		}
+		if cfg.Agents != want {
+			t.Errorf("cluster %q: expected agents: %d, got %d", name, want, cfg.Agents)
 		}
 	}
 }

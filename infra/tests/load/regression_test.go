@@ -14,6 +14,7 @@ import (
 	"bytes"
 	"os"
 	"os/exec"
+	"regexp"
 	"strings"
 	"testing"
 )
@@ -221,15 +222,33 @@ func TestB23ServiceMonitorDisabled(t *testing.T) {
 }
 
 // TestB25MinioDistributedConditional — values-distributed.yaml must only apply
-// in cloud profiles (not standalone).
+// in cloud profiles (not standalone or standalone-multi).
+//
+// History: original implementation used `{{- if ne .Environment.Name "standalone" }}`
+// (negation). After standalone-multi was introduced, the gate was rewritten as a
+// positive allowlist (`dev` OR `prod`) so future environments default to OFF for
+// distributed MinIO — safer policy. Test asserts the allowlist exists immediately
+// before the values-distributed.yaml include.
 func TestB25MinioDistributedConditional(t *testing.T) {
 	data, err := os.ReadFile("../../helmfile/mgmt.helmfile.yaml.gotmpl")
 	if err != nil {
 		t.Fatalf("read mgmt helmfile: %v", err)
 	}
 	s := string(data)
-	if !strings.Contains(s, `{{- if ne .Environment.Name "standalone" }}`) {
-		t.Errorf("B25 regression: minio values-distributed.yaml must be conditional on profile != standalone")
+	idx := strings.Index(s, "../helm/minio/values-distributed.yaml")
+	if idx < 0 {
+		t.Fatal("B25: values-distributed.yaml include not found")
+	}
+	// Walk back ~400 chars and assert one of: legacy negation OR positive allowlist.
+	start := idx - 400
+	if start < 0 {
+		start = 0
+	}
+	context := s[start:idx]
+	gateLegacy := strings.Contains(context, `{{- if ne .Environment.Name "standalone" }}`)
+	gateAllowlist := strings.Contains(context, `{{- if or (eq .Environment.Name "dev") (eq .Environment.Name "prod") }}`)
+	if !gateLegacy && !gateAllowlist {
+		t.Errorf("B25 regression: minio values-distributed.yaml must be gated to cloud profiles only (dev|prod)")
 	}
 }
 
@@ -261,6 +280,9 @@ func TestB27PostgresInitdbAllDBs(t *testing.T) {
 }
 
 // TestB28GiteaHaConditional — gitea values-ha.yaml must be cloud-profile only.
+//
+// History: same as B25 — gate migrated from `ne standalone` (negation) to
+// `dev OR prod` (positive allowlist) when standalone-multi was added.
 func TestB28GiteaHaConditional(t *testing.T) {
 	data, err := os.ReadFile("../../helmfile/mgmt.helmfile.yaml.gotmpl")
 	if err != nil {
@@ -277,8 +299,10 @@ func TestB28GiteaHaConditional(t *testing.T) {
 		end = len(s) - idx
 	}
 	block := s[idx : idx+10+end]
-	if !strings.Contains(block, `{{- if ne .Environment.Name "standalone" }}`) {
-		t.Errorf("B28 regression: gitea values-ha.yaml + nfs-server-provisioner must be conditional on profile != standalone")
+	gateLegacy := strings.Contains(block, `{{- if ne .Environment.Name "standalone" }}`)
+	gateAllowlist := strings.Contains(block, `{{- if or (eq .Environment.Name "dev") (eq .Environment.Name "prod") }}`)
+	if !gateLegacy && !gateAllowlist {
+		t.Errorf("B28 regression: gitea values-ha.yaml must be gated to cloud profiles only (dev|prod)")
 	}
 }
 
@@ -297,24 +321,40 @@ func TestB29RedisServiceHostname(t *testing.T) {
 	}
 }
 
-// TestB31ImageTagsPinned — controllers/api/cloud must pin to CI-published tag.
+// TestB31ImageTagsPinned — controllers/api/cloud tags must match the canonical
+// regex defined in ADR-0020 D1: semver | sha-* | latest.
+//
+// History: original test required pinning to a single branch hot-patch tag
+// (`REDACTED_SECRET_061`). That was the exact anti-pattern ADR-0020 banned —
+// branch tags mask the Git ↔ runtime relationship. The decision now permits:
+//
+//   - semver: v0.x.y, v1.0.0-rc1
+//   - SHA: sha-{hex} or {hex}
+//   - latest: dev convention with pullPolicy=Always (regression matrix #119)
+//
+// VAP `loopzero-disallow-latest-tag` blocks `:latest` in workload tenants in
+// production. Branch-name tags remain rejected.
 func TestB31ImageTagsPinned(t *testing.T) {
-	files := map[string]string{
-		"../../helm/loopzero-api/values.yaml":          "tag: REDACTED_SECRET_061",
-		"../../helm/loopzero-controller/values.yaml":   "tag: REDACTED_SECRET_061",
-		"../../helm/tenant-controller/values.yaml": "tag: REDACTED_SECRET_061",
+	files := []string{
+		"../../helm/loopzero-api/values.yaml",
+		"../../helm/loopzero-controller/values.yaml",
+		"../../helm/tenant-controller/values.yaml",
 	}
-	for f, want := range files {
+	semverRE := regexp.MustCompile(`(?m)^\s*tag:\s*v\d+\.\d+\.\d+(-[a-z0-9.-]+)?\s*$`)
+	shaRE := regexp.MustCompile(`(?m)^\s*tag:\s*(sha-)?[a-f0-9]{8,40}\s*$`)
+	latestRE := regexp.MustCompile(`(?m)^\s*tag:\s*latest\s*$`)
+	branchRE := regexp.MustCompile(`(?m)^\s*tag:\s*(chg|feat|fix|hotfix|achado)[a-z0-9-]*\s*$`)
+	for _, f := range files {
 		data, err := os.ReadFile(f)
 		if err != nil {
 			t.Fatalf("read %s: %v", f, err)
 		}
 		s := string(data)
-		if strings.Contains(s, "tag: latest") {
-			t.Errorf("B31 regression: %s pinned to 'latest' (not published by CI)", f)
+		if branchRE.MatchString(s) {
+			t.Errorf("B31 regression: %s pins to a branch-name tag (banned by ADR-0020 D1)", f)
 		}
-		if !strings.Contains(s, want) {
-			t.Errorf("B31 regression: %s must pin tag to %s", f, want)
+		if !(semverRE.MatchString(s) || shaRE.MatchString(s) || latestRE.MatchString(s)) {
+			t.Errorf("B31 regression: %s tag must match semver | sha-* | latest (ADR-0020 D1)", f)
 		}
 	}
 }
@@ -1398,9 +1438,13 @@ func TestF12LoopZeroApiTokensSecretGenerated(t *testing.T) {
 	if !strings.Contains(s, "/api/v1/session") {
 		t.Error("F-12 regression: script must POST to argocd /api/v1/session for JWT generation")
 	}
-	// Idempotência: se login falhar, preserve existing token.
-	if !strings.Contains(s, `get_existing loopzero-api-tokens loopzero-system argocd-token`) {
-		t.Error("F-12 regression: script must fall back to existing token when login fails (mid-bootstrap idempotency)")
+	// Idempotência: se login falhar, preserve existing token. Helper renamed
+	// from `get_existing` to `get_or_generate` (latter handles both branches).
+	if !strings.Contains(s, "loopzero-api-tokens loopzero-system argocd-token") {
+		t.Error("F-12 regression: script must look up existing argocd-token in loopzero-api-tokens for mid-bootstrap idempotency")
+	}
+	if !strings.Contains(s, "preserving existing argocd-token") {
+		t.Error("F-12 regression: script must log preservation of existing argocd-token on login failure")
 	}
 	// loopzero-api template DEVE referenciar o Secret.
 	dep, err := os.ReadFile("../../helm/loopzero-api/templates/deployment.yaml")
