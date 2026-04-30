@@ -48,6 +48,11 @@
 #   H9 — loopzero-build-cwts release: chart values default `images.cloneRunner`
 #        to DOCR. Override at helm-upgrade time when env != "prod".
 #
+#   H10 — tenant-controller Deployment env WORKLOAD_CLUSTER_URL drifts every
+#         k3d restart (current values overlay hardcodes a stale IP). Patch
+#         live + roll the controller; existing ArgoCD Apps with stale
+#         destination get a one-shot patch too.
+#
 # Idempotent — safe to re-run after every `k3d cluster start`.
 #
 # Pre-flight: requires kubectl + docker + k3d on PATH and three k3d
@@ -322,6 +327,96 @@ if command -v helm >/dev/null 2>&1; then
 else
   warn "helm not on PATH — H9 skipped"
 fi
+
+# ---------------------------------------------------------------------------
+# H10 — tenant-controller Deployment env: WORKLOAD_CLUSTER_URL must point at
+# the runtime cluster apiServer IP (current). Hardcoded YAML overlay
+# `infra/helm/tenant-controller/values-standalone-multi.yaml:28` uses an IP
+# that drifts every k3d restart. Patch live until permanent solution
+# (operator reads ClusterCredential CR for runtime → automatic).
+# Discovered LIVE 2026-04-30 — NEW-14: ArgoCD App destination went to BUILD
+# cluster IP (172.18.0.10) because tenant-controller was started with the
+# stale value baked into the helm overlay before the most recent restart.
+# ---------------------------------------------------------------------------
+log "H10: ensuring tenant-controller WORKLOAD_CLUSTER_URL points at runtime"
+WORKLOAD_URL="https://${RT_IP}:6443"
+TC_DEPLOY=$(kubectl --context "$MGMT_CTX" -n loopzero-system get deploy -l app=tenant-controller -o name 2>/dev/null | head -1)
+[[ -z "$TC_DEPLOY" ]] && TC_DEPLOY="deploy/tenant-controller"
+CURRENT_URL=$(kubectl --context "$MGMT_CTX" -n loopzero-system get "$TC_DEPLOY" \
+  -o jsonpath='{.spec.template.spec.containers[0].env[?(@.name=="WORKLOAD_CLUSTER_URL")].value}' 2>/dev/null)
+if [[ "$CURRENT_URL" == "$WORKLOAD_URL" ]]; then
+  log "  $TC_DEPLOY: WORKLOAD_CLUSTER_URL already $WORKLOAD_URL"
+else
+  kubectl --context "$MGMT_CTX" -n loopzero-system set env "$TC_DEPLOY" \
+    WORKLOAD_CLUSTER_URL="$WORKLOAD_URL" >/dev/null 2>&1
+  log "  $TC_DEPLOY: $CURRENT_URL → $WORKLOAD_URL"
+fi
+
+# Roll tenant-controller so existing ArgoCD Apps get re-templated with new
+# destination URL on the next reconcile. Tenant CR list is small in dev.
+kubectl --context "$MGMT_CTX" -n loopzero-system rollout restart "$TC_DEPLOY" >/dev/null 2>&1
+log "  $TC_DEPLOY: rolled to refresh existing Apps"
+
+# Force tenant-controller to re-emit Application destination on existing
+# tenants by triggering a reconcile via touch annotation. Use first tenant
+# that has Active phase as smoke proof.
+TENANTS=$(kubectl --context "$MGMT_CTX" -n loopzero-system get tenants \
+  --no-headers 2>/dev/null | awk '$2=="Active" {print $1}' | head -3)
+for t in $TENANTS; do
+  kubectl --context "$MGMT_CTX" -n loopzero-system annotate tenant "$t" \
+    loopzero.io/heal-trigger="$(date +%s)" --overwrite >/dev/null 2>&1
+done
+[[ -n "$TENANTS" ]] && log "  triggered reconcile on $(echo $TENANTS | wc -w) Active tenant(s)"
+
+# Patch only TENANT ArgoCD Applications carrying a stale URL. Heuristic:
+# tenant apps are labeled `loopzero.io/managed-by=tenant-controller`. Apps
+# managed by Helm AppOfApps for build/runtime infra MUST keep their own
+# destination URLs (they target build-argocd-cluster or runtime-argocd-cluster
+# respectively, identified by name labels not destination IP).
+TENANT_APPS=$(kubectl --context "$MGMT_CTX" -n argocd get applications \
+  -l loopzero.io/managed-by=tenant-controller \
+  -o jsonpath='{range .items[*]}{.metadata.name} {.spec.destination.server}{"\n"}{end}' \
+  2>/dev/null)
+if [[ -n "$TENANT_APPS" ]]; then
+  while read -r app stale_url; do
+    [[ -z "$app" ]] && continue
+    [[ "$stale_url" == "$WORKLOAD_URL" ]] && continue
+    kubectl --context "$MGMT_CTX" -n argocd patch application "$app" \
+      --type=json -p="[{\"op\":\"replace\",\"path\":\"/spec/destination/server\",\"value\":\"$WORKLOAD_URL\"}]" \
+      >/dev/null 2>&1 && log "  tenant app $app: $stale_url → $WORKLOAD_URL"
+  done <<< "$TENANT_APPS"
+fi
+
+# Restore build-* and runtime-* AppOfApps destination URLs from cluster
+# secret server URLs (these are the in-ArgoCD secrets healed by H3).
+ARGO_APPS=$(kubectl --context "$MGMT_CTX" -n argocd get applications \
+  -o jsonpath='{range .items[*]}{.metadata.name}{"\n"}{end}' 2>/dev/null)
+BUILD_URL_FROM_SECRET=$(kubectl --context "$MGMT_CTX" -n argocd get secret \
+  build-argocd-cluster -o jsonpath='{.data.server}' 2>/dev/null | base64 -d 2>/dev/null)
+RUNTIME_URL_FROM_SECRET=$(kubectl --context "$MGMT_CTX" -n argocd get secret \
+  runtime-argocd-cluster -o jsonpath='{.data.server}' 2>/dev/null | base64 -d 2>/dev/null)
+for app in $ARGO_APPS; do
+  case "$app" in
+    build-*)
+      [[ -z "$BUILD_URL_FROM_SECRET" ]] && continue
+      cur=$(kubectl --context "$MGMT_CTX" -n argocd get application "$app" \
+        -o jsonpath='{.spec.destination.server}' 2>/dev/null)
+      [[ "$cur" == "$BUILD_URL_FROM_SECRET" ]] && continue
+      kubectl --context "$MGMT_CTX" -n argocd patch application "$app" \
+        --type=json -p="[{\"op\":\"replace\",\"path\":\"/spec/destination/server\",\"value\":\"$BUILD_URL_FROM_SECRET\"}]" \
+        >/dev/null 2>&1 && log "  build app $app: $cur → $BUILD_URL_FROM_SECRET"
+      ;;
+    runtime-*)
+      [[ -z "$RUNTIME_URL_FROM_SECRET" ]] && continue
+      cur=$(kubectl --context "$MGMT_CTX" -n argocd get application "$app" \
+        -o jsonpath='{.spec.destination.server}' 2>/dev/null)
+      [[ "$cur" == "$RUNTIME_URL_FROM_SECRET" ]] && continue
+      kubectl --context "$MGMT_CTX" -n argocd patch application "$app" \
+        --type=json -p="[{\"op\":\"replace\",\"path\":\"/spec/destination/server\",\"value\":\"$RUNTIME_URL_FROM_SECRET\"}]" \
+        >/dev/null 2>&1 && log "  runtime app $app: $cur → $RUNTIME_URL_FROM_SECRET"
+      ;;
+  esac
+done
 
 # ---------------------------------------------------------------------------
 # Restart loopzero-api so kubeconfigs Secret refresh takes effect (H2).
