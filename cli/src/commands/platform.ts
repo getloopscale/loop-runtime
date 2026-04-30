@@ -29,6 +29,8 @@ import {
   resolvePulumiProjectDir,
   resolveProjectRoot,
 } from '../installer/pulumi-runner';
+import { detectDrift } from '../installer/drift';
+import { decideRestore } from '../installer/secret-backups';
 
 export interface PlatformDeps {
   writeTo: (msg: string) => void;
@@ -41,6 +43,10 @@ export interface PlatformInstallOptions {
   provider?: 'digitalocean' | 'aws' | 'k3d';
   dryRun?: boolean;
   skipInfra?: boolean;
+  /** From CLI: --restore-secrets <file> */
+  restoreSecretsFile?: string;
+  /** From CLI: --no-restore-secrets */
+  skipRestoreSecrets?: boolean;
 }
 
 /**
@@ -214,6 +220,59 @@ export async function platformInstall(
     writeTo(`  ✓ stack outputs captured: ${Object.keys(extraEnv).length} env vars`);
   } else {
     writeTo('Step 3/6: Skipping infrastructure (no --provider) — using existing cluster');
+  }
+
+  // ── Step 3.5: Secret backup restore (ADR D2) ──────────────────────
+  // Detect ~/.loopzero/backups/secrets-*.yaml from a prior install. CI mode
+  // requires explicit --restore-secrets <file> or --no-restore-secrets.
+  // Interactive mode prompts. Without this, destroy + install loses every
+  // tenant secret silently and tenant pods fail at CreateContainerConfigError.
+  if (!opts.dryRun) {
+    const decision = decideRestore({
+      isCI: process.env.CI === 'true',
+      restoreFile: opts.restoreSecretsFile,
+      skip: opts.skipRestoreSecrets,
+    });
+    switch (decision.action) {
+      case 'restore': {
+        writeTo(`Step 3.5/6: Restoring Secrets from ${decision.file}...`);
+        const r = spawnSync('kubectl', ['apply', '-f', decision.file], { stdio: 'inherit' });
+        if (r.status !== 0) {
+          writeError('  ✗ kubectl apply failed during Secret restore');
+          return 3;
+        }
+        writeTo('  ✓ Secrets restored');
+        break;
+      }
+      case 'fail':
+        writeError(`Step 3.5/6: ${decision.error}`);
+        return 1;
+      case 'prompt': {
+        writeTo(`Step 3.5/6: Found Secret backup ${decision.latest.path} (${decision.latest.mtime.toISOString()}).`);
+        const { createInterface } = await import('readline');
+        const rl = createInterface({ input: process.stdin, output: process.stdout });
+        const answer = await new Promise<string>((resolve) =>
+          rl.question('  Restore Secrets from this backup before helmfile sync? (yes/no) ', (a) => {
+            rl.close();
+            resolve(a.trim().toLowerCase());
+          }),
+        );
+        if (answer === 'yes' || answer === 'y') {
+          const r = spawnSync('kubectl', ['apply', '-f', decision.latest.path], { stdio: 'inherit' });
+          if (r.status !== 0) {
+            writeError('  ✗ kubectl apply failed during Secret restore');
+            return 3;
+          }
+          writeTo('  ✓ Secrets restored');
+        } else {
+          writeTo('  Skipped Secret restore (operator declined)');
+        }
+        break;
+      }
+      case 'skip':
+        writeTo(`Step 3.5/6: Skipping Secret restore (${decision.reason})`);
+        break;
+    }
   }
 
   // ── Step 4: Bootstrap (Helmfile L2) ────────────────────────────────
@@ -408,28 +467,70 @@ export async function platformSecretsList(deps: PlatformDeps): Promise<number> {
 }
 
 /**
- * `loopzero platform status`
+ * `loopzero platform status [--json]`
+ *
+ * Exit codes:
+ *   0  — Ready, no drift
+ *   1  — not Ready (degraded, failed, not installed)
+ *   5  — Ready but runtime diverged from Git (drift detected; ADR D3)
  */
-export async function platformStatus(deps: PlatformDeps): Promise<number> {
+export async function platformStatus(
+  deps: PlatformDeps,
+  opts: { json?: boolean } = {},
+): Promise<number> {
   const { writeTo } = deps;
   const status = getPlatformStatus();
-  writeTo('');
-  writeTo(`  Phase: ${status.phase}`);
-  if (status.version) writeTo(`  Version: ${status.version}`);
-  writeTo(`  CRDs installed: ${status.crdsInstalled}`);
-  writeTo('');
-  writeTo('  Components:');
-  for (const c of status.components) {
-    const replicas = c.replicas ? ` (${c.replicas})` : '';
-    writeTo(`    ${c.status === 'Running' ? '✓' : '✗'} ${c.name}${replicas}`);
-  }
-  if (status.endpoints.api) {
+  const driftReport = detectDrift();
+  const hasDrift = driftReport.drift.length > 0;
+
+  if (opts.json) {
+    writeTo(JSON.stringify({
+      phase: status.phase,
+      version: status.version,
+      crdsInstalled: status.crdsInstalled,
+      components: status.components,
+      endpoints: status.endpoints,
+      sync: {
+        total: driftReport.total,
+        synced: driftReport.synced,
+        drift: driftReport.drift,
+      },
+    }));
+  } else {
     writeTo('');
-    writeTo('  Endpoints:');
-    writeTo(`    API:       ${status.endpoints.api}`);
-    if (status.endpoints.dashboard) writeTo(`    Dashboard: ${status.endpoints.dashboard}`);
+    writeTo(`  Phase: ${status.phase}`);
+    if (status.version) writeTo(`  Version: ${status.version}`);
+    writeTo(`  CRDs installed: ${status.crdsInstalled}`);
+    writeTo('');
+    writeTo('  Components:');
+    for (const c of status.components) {
+      const replicas = c.replicas ? ` (${c.replicas})` : '';
+      writeTo(`    ${c.status === 'Running' ? '✓' : '✗'} ${c.name}${replicas}`);
+    }
+    if (driftReport.total > 0) {
+      writeTo('');
+      writeTo(`  Sync: ${driftReport.synced}/${driftReport.total} apps in sync`);
+      if (hasDrift) {
+        writeTo('  Drift detected:');
+        for (const d of driftReport.drift.slice(0, 10)) {
+          writeTo(`    ✗ ${d.name} (sync=${d.sync}, health=${d.health})`);
+        }
+        if (driftReport.drift.length > 10) {
+          writeTo(`    ... +${driftReport.drift.length - 10} more`);
+        }
+      }
+    }
+    if (status.endpoints.api) {
+      writeTo('');
+      writeTo('  Endpoints:');
+      writeTo(`    API:       ${status.endpoints.api}`);
+      if (status.endpoints.dashboard) writeTo(`    Dashboard: ${status.endpoints.dashboard}`);
+    }
   }
-  return status.phase === 'Ready' ? 0 : 1;
+
+  if (status.phase !== 'Ready') return 1;
+  if (hasDrift) return 5;
+  return 0;
 }
 
 /**

@@ -31,6 +31,8 @@ export function registerPlatformCommands(deps: CommandDeps): void {
     .option('--provider <provider>', 'Provision cloud infra: digitalocean | aws | k3d')
     .option('--dry-run', 'Show plan via helmfile diff without applying changes', false)
     .option('--skip-infra', 'Skip Pulumi L1 (use existing infrastructure outputs)', false)
+    .option('--restore-secrets <file>', 'Restore LoopZero Secrets from backup file before helmfile sync')
+    .option('--no-restore-secrets', 'Skip Secret restore even if a backup is detected')
     .action(async (opts) => {
       const code = await platformInstall({ writeTo, writeError }, {
         valuesFile: opts.values,
@@ -38,15 +40,24 @@ export function registerPlatformCommands(deps: CommandDeps): void {
         provider: opts.provider,
         dryRun: opts.dryRun,
         skipInfra: opts.skipInfra,
+        // Commander negates --no-restore-secrets to opts.restoreSecrets=false
+        // The string-arg variant lands in opts.restoreSecrets as a path.
+        restoreSecretsFile: typeof opts.restoreSecrets === 'string' ? opts.restoreSecrets : undefined,
+        skipRestoreSecrets: opts.restoreSecrets === false,
       });
       process.exit(code);
     });
 
   platform
     .command('status')
-    .description('Show platform installation status')
+    .description('Show platform installation status (and runtime drift)')
     .action(async () => {
-      const code = await platformStatus({ writeTo, writeError });
+      // --json is a GLOBAL option (registered in src/index.ts:84).
+      // Subcommand options would shadow it; use deps.getGlobalOpts() if exposed,
+      // or process.argv as a hard-truth fallback (matches existing pattern in
+      // register/scale.ts and register/project.ts).
+      const json = process.argv.includes('--json');
+      const code = await platformStatus({ writeTo, writeError }, { json });
       process.exit(code);
     });
 
