@@ -51,16 +51,29 @@ cleanup() {
 }
 trap cleanup EXIT
 
-# 1) Free RAM by pausing build cluster (we don't need image building during
+# 1) Pre-flight: refuse to run if we're already RAM-starved.
+log "step 1a: pre-flight RAM check (need ≥4 GiB available after pause)"
+avail_kb=$(awk '/MemAvailable/ {print $2}' /proc/meminfo)
+avail_gib=$(( avail_kb / 1024 / 1024 ))
+log "  available: ${avail_gib} GiB (will gain ~1.9 GiB after loopzero-build stop)"
+if (( avail_gib + 2 < 4 )); then
+  fail "insufficient RAM for virgin install (need ≥4 GiB post-pause, have ${avail_gib} pre-pause)" 1
+fi
+
+# 1b) Free RAM by pausing build cluster (we don't need image building during
 #    the standalone install).
-log "step 1: pausing loopzero-build cluster to free ~1.9 GiB RAM"
+log "step 1b: pausing loopzero-build cluster to free ~1.9 GiB RAM"
 k3d cluster stop loopzero-build 2>&1 | tail -2 || log "  warning: loopzero-build stop returned non-zero"
 
 # 2) Optional docker prune to reclaim disk.
+# WARNING (Achado #30): `docker system prune -a --volumes` ALSO deletes
+# containers in `Exited` state — including k3d clusters that were just
+# `k3d cluster stop`'d. That destroyed `loopzero-build` during the first
+# T5.1 live run on 2026-04-30. Default is now image-only prune (safe).
 if command -v docker >/dev/null 2>&1; then
-  log "step 2: docker system prune (skip with PRUNE=0)"
+  log "step 2: docker image prune (dangling only — preserves stopped k3d clusters)"
   if [[ "${PRUNE:-1}" == "1" ]]; then
-    docker system prune -f 2>&1 | tail -3 || true
+    docker image prune -f 2>&1 | tail -3 || true
   fi
 fi
 
