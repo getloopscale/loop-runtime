@@ -1,0 +1,117 @@
+# CHG-2026-04-30-INFRA-PARITY — PR gate for the parity test suite.
+#
+# Runs every offline-checkable validation across infra/tests/parity/ on each
+# PR + push to develop/main. Designed as a fast pre-merge gate (<30s):
+#   - shellcheck on every parity .sh
+#   - bash -n syntax check on every script
+#   - regression matrix integrity audit
+#   - droplet-install.sh / doks-install.sh --dry-run with mock creds
+#   - k3d-virgin-install.sh structural sanity
+#
+# Live validations (T5.1 against k3d, T6.1 droplet, T7.1 DOKS, T8.1 L3) are
+# NOT part of this gate — they require cloud credentials and cost ~$15. They
+# run on-demand via workflow_dispatch.
+
+name: parity-validation
+
+on:
+  pull_request:
+    paths:
+      - "infra/tests/parity/**"
+      - "docs/runbooks/bootstrap-regression-matrix.md"
+      - "cli/src/installer/status.ts"
+      - "cli/src/installer/drift.ts"
+      - "cli/src/installer/secret-backups.ts"
+      - "cli/src/commands/platform.ts"
+      - "cli/src/register/platform.ts"
+      - ".github/workflows/parity-validation.yml"
+  push:
+    branches: [main, develop]
+    paths:
+      - "infra/tests/parity/**"
+      - "docs/runbooks/bootstrap-regression-matrix.md"
+  workflow_dispatch:
+    inputs:
+      strict:
+        description: "Treat shellcheck warnings as failures"
+        required: false
+        default: "false"
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  parity-preflight:
+    name: parity preflight (offline gates)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install shellcheck
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y -qq shellcheck
+
+      - name: Run parity preflight
+        run: |
+          if [[ "${{ inputs.strict }}" == "true" ]]; then
+            bash infra/tests/parity/preflight.sh --strict
+          else
+            bash infra/tests/parity/preflight.sh
+          fi
+
+  cli-tests-parity:
+    name: CLI tests — parity-related
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+          cache: npm
+          cache-dependency-path: cli/package-lock.json
+
+      - name: Install CLI dependencies
+        working-directory: cli
+        run: npm ci
+
+      - name: Run parity-related CLI tests
+        working-directory: cli
+        run: |
+          npx jest \
+            tests/unit/getPlatformStatus-charts.test.ts \
+            tests/unit/platform-status-drift.test.ts \
+            tests/unit/platform-install-json.test.ts \
+            tests/unit/platform-install-validate-l3.test.ts \
+            tests/unit/bundle-rule3-clean.test.ts \
+            --verbose
+
+  pulumi-parity-tests:
+    name: Pulumi tests — parity-related
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+          cache: npm
+          cache-dependency-path: infra/pulumi/package-lock.json
+
+      - name: Install Pulumi deps
+        working-directory: infra/pulumi
+        run: npm ci
+
+      - name: Run parity-related Pulumi tests
+        working-directory: infra/pulumi
+        run: |
+          npx vitest run \
+            src/__tests__/helmfile-environments-parity.test.ts \
+            src/__tests__/image-tag-format.test.ts \
+            src/__tests__/sprint8-fixes.test.ts \
+            --reporter=verbose

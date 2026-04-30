@@ -80,6 +80,10 @@ done
 bash "${PARITY_DIR}/audit-regression-matrix.sh" >/dev/null 2>&1
 result $? "matrix-integrity-audit"
 
+# Gate 3b: golden test for the audit script itself (catches audit regressions)
+bash "${PARITY_DIR}/audit-golden-test.sh" >/dev/null 2>&1
+result $? "matrix-audit:golden-test"
+
 # Gate 4: droplet --dry-run with mock creds
 DIGITALOCEAN_ACCESS_TOKEN=mock DROPLET_SSH_KEY_FP=00:00:00:00 \
   bash "${PARITY_DIR}/droplet-install.sh" --dry-run >/dev/null 2>&1

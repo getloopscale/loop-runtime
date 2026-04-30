@@ -28,7 +28,9 @@
 set -uo pipefail
 
 REPO_ROOT="$(cd "$(dirname "$0")/../../.." && pwd)"
-MATRIX="${REPO_ROOT}/docs/runbooks/bootstrap-regression-matrix.md"
+# MATRIX path is overridable via env var so the golden test (audit-golden-test.sh)
+# can point at a fabricated matrix without touching the real one.
+MATRIX="${MATRIX:-${REPO_ROOT}/docs/runbooks/bootstrap-regression-matrix.md}"
 STRICT=0
 
 for arg in "$@"; do
