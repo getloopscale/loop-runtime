@@ -88,6 +88,14 @@ func NewRouter(cfg Config) *chi.Mux {
 		r.Post("/api/v1/webhooks/github", cfg.GitHubWebhookHandler.ServeHTTP)
 	}
 
+	// Admin endpoints — operator primitives, X-Service-Auth only (no user
+	// context). Handler enforces LOOPZERO_ADMIN_API=true + service-auth match
+	// itself (admin_evict.go:73-83). Sibling of /webhooks/github so it
+	// bypasses the user-auth middleware that requires identity headers.
+	if cfg.AdminEvictor != nil {
+		r.Post("/api/v1/admin/tenants/evict", routes.AdminEvictHandler(cfg.AdminEvictor))
+	}
+
 	// Protected routes (auth required)
 	if cfg.TokenValidator != nil && cfg.MemberStore != nil {
 		r.Group(func(r chi.Router) {
@@ -328,11 +336,11 @@ func registerProtectedRoutes(
 	if cfg.AuditHandler != nil {
 		r.Get("/api/v1/audit", cfg.AuditHandler.List)
 	}
-
-	// Admin: bulk tenant eviction (T-02).
-	if cfg.AdminEvictor != nil {
-		r.Post("/api/v1/admin/tenants/evict", routes.AdminEvictHandler(cfg.AdminEvictor))
-	}
+	// NOTE: Admin endpoints are deliberately registered OUTSIDE this function
+	// (in registerRoutes, alongside the GitHub webhook). They use only
+	// X-Service-Auth — putting them under middleware.Auth (which requires
+	// X-LoopZero-User-ID/Tenant identity headers too) breaks operator CLI auth.
+	// See Achado #25 (CHG-2026-04-29-DOGFOOD iter 13).
 }
 
 // corsMiddleware adds CORS headers for the dashboard to call the API cross-origin.

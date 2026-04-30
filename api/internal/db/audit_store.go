@@ -23,8 +23,12 @@ func (s *PostgresAuditStore) ListAuditEntries(ctx context.Context, tenantID stri
 		return nil, 0, nil
 	}
 
-	// Build query dynamically based on filters
-	query := `SELECT action, resource_type, resource_id, actor, correlation_id, metadata, created_at
+	// Build query dynamically based on filters.
+	// COALESCE on correlation_id: column is nullable; AuditEntryResult.CorrelationID
+	// is plain string (not *string). Without COALESCE, scanning NULL fails and the
+	// per-row `continue` silently skips every entry — list returned `[]` with
+	// total>0. Achado #26 (CHG-2026-04-29-DOGFOOD iter 13).
+	query := `SELECT action, resource_type, resource_id, actor, COALESCE(correlation_id, ''), metadata, created_at
 	          FROM audit_log WHERE tenant_id = $1`
 	countQuery := `SELECT COUNT(*) FROM audit_log WHERE tenant_id = $1`
 	args := []any{tenantID}
@@ -72,7 +76,9 @@ func (s *PostgresAuditStore) ListAuditEntries(ctx context.Context, tenantID stri
 		var metadataJSON []byte
 		var createdAt time.Time
 		if err := rows.Scan(&e.Action, &e.ResourceType, &e.ResourceID, &e.Actor, &e.CorrelationID, &metadataJSON, &createdAt); err != nil {
-			continue
+			// Fail-loud — silent `continue` previously masked the NULL-scan bug
+			// (Achado #26): every row failed and the list endpoint returned [].
+			return nil, 0, fmt.Errorf("audit: scan row: %w", err)
 		}
 		e.CreatedAt = createdAt
 		if len(metadataJSON) > 0 {

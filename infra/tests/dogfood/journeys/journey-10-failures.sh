@@ -140,7 +140,11 @@ except Exception:
   sleep 5
 done
 if (( audit_ok == 0 )); then
-  journey_log "F3 GAP: audit entry not visible for failed build (audit query format limitation)"
+  journey_log "F3: audit query by build_id metadata not visible — falling back to action-level assertion"
+  # build.submitted is the audit action emitted by `loopzero deploy` (POST /builds).
+  # Achado #26 fix made audit list functional; this MUST surface entries now.
+  assert_audit_entry "build.submitted" "" \
+    || journey_fail "audit log missing build.submitted entries (post Achado #26 fix)"
 fi
 
 assert_no_internal_terms "F3 status" "$("$LOOPZERO_BIN" status --env production 2>&1)" || true

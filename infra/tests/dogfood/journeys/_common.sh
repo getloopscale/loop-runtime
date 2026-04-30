@@ -167,24 +167,38 @@ except Exception:
   return 1
 }
 
-# Assert audit log has an entry matching action filter.
-# Args: action substring [project]
+# Assert audit log has an entry matching action filter (substring match).
+# Optional second arg filters further by project_name in metadata or resource_id.
+# Queries via direct curl with limit=200 so journeys looking for recent
+# entries don't miss them in the default 20-row page.
+# Args: action_substring [project_name_filter]
 assert_audit_entry() {
   local action=$1 project=${2:-}
+  local body
+  body=$(curl -sS "${LOOPZERO_URL}/api/v1/audit?limit=200" \
+    -H "Authorization: Bearer ${LOOPZERO_TOKEN}" 2>/dev/null)
   local entries
-  entries=$("$LOOPZERO_BIN" audit --json 2>/dev/null \
-    | python3 -c "
+  entries=$(python3 -c "
 import sys, json
-d = json.load(sys.stdin)
-matched = [e for e in d.get('entries', d.get('items', []))
-           if '$action' in e.get('action', '') ]
+d = json.loads(sys.argv[1])
+project = sys.argv[2]
+matched = []
+for e in d.get('entries', d.get('items', [])):
+    if '$action' not in e.get('action', ''):
+        continue
+    if project:
+        meta = e.get('metadata') or {}
+        rid = e.get('resource_id', '')
+        if project not in str(meta) and project not in rid:
+            continue
+    matched.append(e)
 print(len(matched))
-" 2>/dev/null || echo 0)
+" "$body" "$project" 2>/dev/null || echo 0)
   if [[ "$entries" -lt 1 ]]; then
-    journey_log "audit assertion FAILED — no entry with action='$action'"
+    journey_log "audit assertion FAILED — no entry with action='$action'${project:+ project='$project'}"
     return 1
   fi
-  journey_log "audit OK: $entries entries with action='$action'"
+  journey_log "audit OK: $entries entries with action='$action'${project:+ project='$project'}"
   return 0
 }
 

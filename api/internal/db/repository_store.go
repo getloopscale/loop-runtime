@@ -103,11 +103,27 @@ func (s *PostgresRepositoryStore) DeleteInstallation(ctx context.Context, instal
 	return nil
 }
 
-// LinkRepository connects a LoopZero project to a GitHub repository.
+// LinkRepository connects a LoopZero project to a GitHub repository. Idempotent
+// re-link is required by the CLI's `loopzero connect` contract: re-running with
+// the same params (or updated branch/installation) must succeed, not 500.
+//
+// repo_full_name has a UNIQUE constraint, so a naive INSERT explodes on the
+// second call. We use ON CONFLICT (repo_full_name) DO UPDATE to refresh
+// tenant/project/installation/branch fields and bump updated_at. The
+// pre-INSERT lookup in the route handler still rejects cross-tenant or
+// cross-project re-links, so this only handles the legitimate "same caller
+// re-connects" path.
 func (s *PostgresRepositoryStore) LinkRepository(ctx context.Context, tenantID, projectName, repoFullName string, installationID int64, defaultBranch string) error {
 	_, err := s.DB.Exec(ctx,
 		`INSERT INTO project_repositories (id, tenant_id, project_name, provider, repo_full_name, installation_id, default_branch, auto_deploy, created_at, updated_at)
-		 VALUES ($1, $2, $3, 'github', $4, $5, $6, true, now(), now())`,
+		 VALUES ($1, $2, $3, 'github', $4, $5, $6, true, now(), now())
+		 ON CONFLICT (repo_full_name) DO UPDATE SET
+		   tenant_id = EXCLUDED.tenant_id,
+		   project_name = EXCLUDED.project_name,
+		   installation_id = EXCLUDED.installation_id,
+		   default_branch = EXCLUDED.default_branch,
+		   auto_deploy = true,
+		   updated_at = now()`,
 		generateRepoID(), tenantID, projectName, repoFullName, installationID, defaultBranch,
 	)
 	if err != nil {

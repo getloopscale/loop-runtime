@@ -6,6 +6,7 @@ package db
 import (
 	"context"
 	"errors"
+	"strings"
 	"testing"
 	"time"
 
@@ -271,6 +272,30 @@ func TestRepositoryStore_LinkRepository_Success(t *testing.T) {
 	err := store.LinkRepository(context.Background(), "tn-acme", "myapp", "octocat/myapp", 12345, "main")
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
+	}
+}
+
+// CHG-2026-04-29-DOGFOOD-REAL-E2E iter 13 / Achado #23.
+// project_repositories.repo_full_name has a UNIQUE constraint and the CLI
+// `loopzero connect` contract requires idempotency (re-run with same params must
+// succeed). Without ON CONFLICT, the second LinkRepository call exploded with
+// a constraint violation, surfacing as 500. This test asserts the upsert
+// pattern is in the generated SQL so the next refactor can't silently lose it.
+func TestRepositoryStore_LinkRepository_UsesUpsertForIdempotency(t *testing.T) {
+	fake := &fakeDBTX{}
+	store := &PostgresRepositoryStore{DB: fake}
+
+	if err := store.LinkRepository(context.Background(), "tn-acme", "myapp", "octocat/myapp", 12345, "main"); err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if !strings.Contains(fake.capturedSQL, "ON CONFLICT (repo_full_name)") {
+		t.Errorf("expected upsert ON CONFLICT (repo_full_name), got SQL:\n%s", fake.capturedSQL)
+	}
+	if !strings.Contains(fake.capturedSQL, "DO UPDATE SET") {
+		t.Errorf("expected DO UPDATE SET in upsert, got SQL:\n%s", fake.capturedSQL)
+	}
+	if !strings.Contains(fake.capturedSQL, "updated_at = now()") {
+		t.Errorf("expected updated_at refresh in conflict path, got SQL:\n%s", fake.capturedSQL)
 	}
 }
 
