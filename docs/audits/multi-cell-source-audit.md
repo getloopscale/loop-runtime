@@ -227,7 +227,7 @@ Or scoped to dev/prod profiles only (keep standalone single-cell).
 | A1 | ~~Amend plan v2 T5.3 to remove `cells` table migration~~ — **RESOLVED**: migration `000003_cells.up.sql` shipped with 8 unit tests GREEN. T5.3 stays. | **DONE** |
 | A2 | Design `clustercredential-create.sh` lib script | PENDING |
 | A3 | Add `loopzero-runtime-2` ClusterCredential bootstrap to wire-clusters.sh | PENDING |
-| A4 | Set `LOOPZERO_DYNAMIC_ROUTER=true` in loopzero-api values for cloud profiles | PENDING |
+| A4 | ~~Set `LOOPZERO_DYNAMIC_ROUTER=true` in loopzero-api values for cloud profiles~~ — **RESOLVED 2026-04-30**: `infra/helm/loopzero-api/values.yaml` declares `LOOPZERO_DYNAMIC_ROUTER: "false"` default; `values-dev.yaml` + `values-prod.yaml` overlays set "true". Standalone profiles inherit default (single-cell) — same as before. | **DONE** |
 | A5 | Add `loopzero_cluster_credential_status{cell, connected}` metric | PENDING |
 | A6 | Pre-flight check before stage 1 canary: `kubectl get clustercredentials -n loopzero-system -l loopzero.io/cell=cell-2` returns Ready=True | PENDING |
 

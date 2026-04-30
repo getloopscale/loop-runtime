@@ -1074,7 +1074,9 @@ VERIFY:  cd infra/pulumi-platform && pulumi stack ls --json | jq length == 0
 ### T3.3 — Delete code (3 paralelas dirs + provision-homolog)
 
 #### Objective
-After T3.1 + T3.2: delete `infra/pulumi-{infra,platform,control-plane,shared}/`, `infra/scripts/provision-homolog.sh`, `infra/scripts/seed_e2e.go`.
+After T3.1 + T3.2: delete `infra/pulumi-{infra,platform,control-plane,shared}/` + `infra/scripts/provision-homolog.sh`.
+
+> **Amended 2026-04-30 per C28 finding** (recorded in `docs/audits/pulumi-consolidation-log.md`): `infra/scripts/seed_e2e.go` is canonical (E2E test data seeder, 2 Taskfile callers, no paralelas references) and **must be KEPT**. Earlier draft of this task instructed deletion; that was a misread.
 
 #### Files to edit
 ```
@@ -1083,7 +1085,7 @@ infra/pulumi-platform/ — DELETE
 infra/pulumi-control-plane/ — DELETE
 infra/pulumi-shared/ — DELETE
 infra/scripts/provision-homolog.sh — DELETE
-infra/scripts/seed_e2e.go — DELETE
+# NOTE: infra/scripts/seed_e2e.go is canonical — KEEP (per C28 finding, audit log entry 2026-04-30)
 docs/decisions/ADR-0021-pulumi-single-stack.md — (NEW) prescriptive ADR
 infra/pulumi/src/__tests__/sprint8-fixes.test.ts — Fix #10: only one Pulumi project root
 CHANGELOG.md — Removed entry

@@ -65,6 +65,12 @@ env:
   LOOPZERO_API_PORT: "8080"
   LOOPZERO_LOG_LEVEL: "info"
   LOOPZERO_CLUSTER_ISSUER: "letsencrypt-prod"
+  # CHG-2026-04-30-INFRA-NORMALIZE / Phase 5 T5.4 — DynamicRouter
+  # default. Standalone profiles override to "false" (single-cell).
+  # Cloud profiles (dev/prod) override to "true" via overlay (sets
+  # LOOPZERO_DYNAMIC_ROUTER=true so api/cmd/setup_background.go takes
+  # the K8sCellStore path instead of falling back to StaticRouter).
+  LOOPZERO_DYNAMIC_ROUTER: "false"
   # B76 (end-to-end-deploy-validation-plan iter 11) — loopzero-api default
   # was `gitea-http.gitea.svc.cluster.local` but our Gitea installs in
   # `loopzero-system` namespace (single helmfile mgmt — no separate `gitea`

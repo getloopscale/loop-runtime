@@ -1,0 +1,12 @@
+# Production overrides for loopzero-api.
+#
+# CHG-2026-04-30-INFRA-NORMALIZE / Phase 5 T5.4. Closes T0.1 audit
+# Gap 4 ("LOOPZERO_DYNAMIC_ROUTER missing in loopzero-api values for cloud
+# profiles → silent single-cell fallback").
+
+env:
+  # DynamicRouter discovers cells from ClusterCredential CRs in
+  # `loopzero-system` (per K8sCellStore). Setting this enables the
+  # multi-cell code path; cells.status (in DB) gates which cells
+  # accept tenant pinning.
+  LOOPZERO_DYNAMIC_ROUTER: "true"

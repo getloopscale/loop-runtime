@@ -35,6 +35,33 @@ This file is an **append-only audit trail** of every action taken during Phase 3
 
 ---
 
+## 2026-04-30 — C28 finding: seed_e2e.go is canonical, KEEP
+
+**Author.** Claude Code (Ralph loop iter 13).
+
+**Action.** Read `infra/scripts/seed_e2e.go` to determine scope per condition C28 ("scope verified by reading; relocated or deleted per finding").
+
+**Finding.** The script is a 60-line wrapper around `infra/tests/seed/seed.go`. Per its file header: "thin wrapper around the seed package for standalone use ... delegates all seeding logic to infra/tests/seed and adds an optional API health check". It seeds E2E test data (Postgres rows + Tenant CR + namespace reconcile) — none of which is paralelas-specific.
+
+`grep -rn 'scripts/seed_e2e'` returns:
+- `Taskfile.yml:517` — `task` invocation
+- `Taskfile.yml:1145` — `task` invocation
+- `CHANGELOG.md:1706` — release note from previous refactor
+
+NO references in `infra/pulumi-{infra,platform,control-plane}/` or `provision-homolog.sh`. `awk '/(homolog|pulumi-platform|pulumi-infra|pulumi-control-plane)/' seed_e2e.go` returns zero matches.
+
+**Decision.** Per C28 ("relocated or deleted per finding"), **KEEP** at its current path `infra/scripts/seed_e2e.go`. Plan T3.3 must NOT include this file in the delete list. The plan was wrong; this commit patches the plan to align with the C28 finding.
+
+**State transitions.** None — file is unchanged.
+
+**Verification.** Cross-referenced with `infra/tests/seed/seed.go` (the package it delegates to) — same finding. Both Taskfile call sites (`task: dev:seed:e2e` at 517, and the `task: e2e:run` at 1145) remain functional.
+
+**Plan amendment.** `docs/plans/infra-normalize-multicell-plan.md` patched to remove `seed_e2e.go` from the T3.3 delete list. Reference: this audit entry.
+
+**Next entry.** Operator-driven T3.1 archive run (per first entry of this log).
+
+---
+
 ## Schema for future entries
 
 Each entry MUST contain:
