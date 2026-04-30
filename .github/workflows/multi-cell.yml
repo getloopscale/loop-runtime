@@ -1,0 +1,238 @@
+# CHG-2026-04-30-INFRA-NORMALIZE / Phase 6 T6.2.
+#
+# CI gate for multi-cell paths. Mirrors plan v2 D5 specification:
+#   • two-job structure: preflight (always) + live (workflow_dispatch only)
+#   • path filters limit blast radius (only relevant changes trigger)
+#   • concurrency serializes live runs (one canary at a time)
+#   • secrets scoped to live job (preflight runs without creds)
+#   • timeouts explicit
+#
+# The preflight job validates the offline contract:
+#   • cells migration syntax + tests
+#   • ClusterCredential bootstrap lib executable
+#   • wire-clusters.sh wires the lib
+#   • multi-cell PromRule has the 7 alerts
+#   • admin_pin_cell endpoint + tests pass
+#   • CLI admin tenants pin integration tests pass
+#   • DynamicRouter metrics tests pass
+#
+# The live job is gated on workflow_dispatch with a `stage` input:
+#   • stage=1 — synthetic tenant on cell-2, 1h soak (~$0.50)
+#   • stage=2 — 10% of dev tenants, 24h soak (~$2)
+#   • stage=4-prod — 1 customer, 7d soak (manual approval req'd)
+#   • stage=5a/5b/5c — production graduated (10/50/100%)
+# Live job is NEVER triggered on push or pull_request.
+
+name: multi-cell
+
+on:
+  pull_request:
+    paths:
+      - 'api/internal/placement/**'
+      - 'api/internal/db/migrations/000003_cells*'
+      - 'api/internal/services/cell_pinner*'
+      - 'api/internal/routes/admin_pin_cell*'
+      - 'api/internal/metrics/metrics.go'
+      - 'infra/helm/monitoring/manifests/prometheusrule-multi-cell.yaml'
+      - 'infra/helmfile/scripts/lib/clustercredential-create.sh'
+      - 'infra/helmfile/scripts/wire-clusters.sh'
+      - 'infra/pulumi/Pulumi.dev.yaml'
+      - 'infra/pulumi/src/components/infra.ts'
+      - 'infra/pulumi/src/index.ts'
+      - 'cli/src/register/infra.ts'
+      - 'cli/tests/integration/admin-tenants-pin.test.ts'
+      - 'docs/runbooks/multi-cell-alerts.md'
+      - 'docs/decisions/MEET-INFRA-NORMALIZE-T3-multi-cell.md'
+      - '.github/workflows/multi-cell.yml'
+  push:
+    branches: [main, develop, homolog]
+    paths:
+      - 'api/internal/placement/**'
+      - 'api/internal/db/migrations/000003_cells*'
+      - 'api/internal/services/cell_pinner*'
+      - 'api/internal/routes/admin_pin_cell*'
+      - 'infra/helm/monitoring/manifests/prometheusrule-multi-cell.yaml'
+      - 'infra/helmfile/scripts/lib/clustercredential-create.sh'
+  # Live canary jobs MUST NOT run on push or PR — they cost money and
+  # affect tenants. workflow_dispatch only.
+  workflow_dispatch:
+    inputs:
+      stage:
+        description: 'Canary stage to execute'
+        required: true
+        type: choice
+        options:
+          - preflight-only
+          - 1-synthetic-1h
+          - 2-dev-10pct-24h
+          - 4-prod-canary-7d
+          - 5a-prod-10pct
+          - 5b-prod-50pct
+          - 5c-prod-100pct
+        default: preflight-only
+
+permissions:
+  contents: read
+
+# Serialize live canary runs cluster-wide. Preflight may parallelize
+# per-PR, but live touches shared infra → 1-at-a-time.
+concurrency:
+  group: ${{ github.event_name == 'workflow_dispatch' && 'multi-cell-live' || format('multi-cell-preflight-{0}', github.ref) }}
+  cancel-in-progress: ${{ github.event_name != 'workflow_dispatch' }}
+
+jobs:
+  # =====================================================================
+  # JOB 1: preflight — always runs, no creds required.
+  # =====================================================================
+  preflight:
+    name: multi-cell preflight (offline)
+    runs-on: ubuntu-latest
+    timeout-minutes: 8
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup Go
+        uses: actions/setup-go@v5
+        with:
+          go-version: '1.25.x'
+          cache-dependency-path: |
+            api/go.sum
+            operators/go.sum
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: npm
+          cache-dependency-path: |
+            cli/package-lock.json
+            infra/pulumi/package-lock.json
+
+      - name: API — cells migration tests
+        working-directory: api
+        run: go test ./tests/unit/... -run Migration003Cells -v
+
+      - name: API — admin_pin_cell handler tests
+        working-directory: api
+        run: go test ./internal/routes/... -run AdminPinCell -v
+
+      - name: API — cell_pinner service tests
+        working-directory: api
+        run: go test ./internal/services/... -run CellPinner -v
+
+      - name: API — DynamicRouter routing-decision metric tests
+        working-directory: api
+        run: go test ./internal/placement/... -run CellRouting -v
+
+      - name: CLI — install + build
+        working-directory: cli
+        run: |
+          npm ci
+          npm run build
+
+      - name: CLI — admin tenants pin integration test
+        working-directory: cli
+        run: npx jest tests/integration/admin-tenants-pin.test.ts --verbose
+
+      - name: PromRule — alert count
+        run: |
+          set -e
+          rule="infra/helm/monitoring/manifests/prometheusrule-multi-cell.yaml"
+          test -f "$rule"
+          count=$(grep -cE "^        - alert: " "$rule")
+          echo "alerts in rule: $count"
+          test "$count" -ge 7
+
+      - name: ClusterCredential bootstrap lib — usage gate
+        run: |
+          set -e
+          lib="infra/helmfile/scripts/lib/clustercredential-create.sh"
+          test -x "$lib"
+          # Usage gate (no args) → exit 1 with "usage:" message.
+          out=$(bash "$lib" 2>&1) && rc=0 || rc=$?
+          test "$rc" = "1"
+          echo "$out" | grep -q "usage:"
+          # Bad cell-id pattern → exit 1.
+          out=$(bash "$lib" "BadCell" "x" "/etc/passwd" 2>&1) && rc=0 || rc=$?
+          test "$rc" = "1"
+          echo "$out" | grep -q "invalid cell-id"
+
+      - name: wire-clusters.sh wires cc-bootstrap lib
+        run: |
+          grep -F "clustercredential-create.sh" infra/helmfile/scripts/wire-clusters.sh
+
+      - name: Parity preflight (transitive — full validation)
+        run: bash infra/tests/parity/preflight.sh
+
+  # =====================================================================
+  # JOB 2: live canary — workflow_dispatch only, charges cloud.
+  # =====================================================================
+  live-canary:
+    name: ${{ inputs.stage }} live canary
+    needs: preflight
+    if: github.event_name == 'workflow_dispatch' && inputs.stage != 'preflight-only'
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    environment:
+      # Production stages route through `prod-canary` GitHub environment
+      # which requires manual approval (configure in repo settings).
+      # Dev stages use the always-on `dev` environment.
+      name: ${{ startsWith(inputs.stage, '4-prod') || startsWith(inputs.stage, '5') && 'prod-canary' || 'dev' }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup tools
+        run: |
+          # doctl
+          DOCTL_VERSION=$(curl -sf https://api.github.com/repos/digitalocean/doctl/releases/latest | jq -r .tag_name | sed 's/^v//')
+          curl -fsSL "https://github.com/digitalocean/doctl/releases/download/v${DOCTL_VERSION}/doctl-${DOCTL_VERSION}-linux-amd64.tar.gz" | tar -xz -C /tmp
+          sudo install -m 0755 /tmp/doctl /usr/local/bin/doctl
+
+      - name: Authenticate doctl
+        env:
+          DIGITALOCEAN_TOKEN: ${{ secrets.DIGITALOCEAN_TOKEN }}
+        run: doctl auth init --access-token "$DIGITALOCEAN_TOKEN"
+
+      - name: Run canary stage ${{ inputs.stage }}
+        env:
+          DIGITALOCEAN_TOKEN: ${{ secrets.DIGITALOCEAN_TOKEN }}
+          LOOPZERO_ADMIN_SERVICE_AUTH: ${{ secrets.LOOPZERO_ADMIN_SERVICE_AUTH }}
+        run: |
+          set -e
+          case "${{ inputs.stage }}" in
+            1-synthetic-1h)
+              echo "Stage 1 — synthetic tenant on cell-2, 1h soak"
+              # bash infra/tests/parity/cell2-canary-stage1.sh   (planned T5.6 deliverable)
+              echo "STAGE 1 SCRIPT NOT YET LANDED — placeholder; will exit 1 until T5.6 ships"
+              exit 1
+              ;;
+            2-dev-10pct-24h)
+              echo "Stage 2 — 10% of dev tenants on cell-2, 24h soak"
+              # bash infra/tests/parity/cell2-canary-stage2.sh   (planned T5.7)
+              echo "STAGE 2 SCRIPT NOT YET LANDED — placeholder; will exit 1 until T5.7 ships"
+              exit 1
+              ;;
+            4-prod-canary-7d|5a-prod-10pct|5b-prod-50pct|5c-prod-100pct)
+              echo "Production stage ${{ inputs.stage }} — requires customer comms + 7d hold"
+              # Phase 7 deliverables (T7.1 / T7.2). Until those land, fail
+              # loud so this workflow can never accidentally run prod
+              # canary against a half-built rollout.
+              echo "PRODUCTION STAGES BLOCKED until Phase 7 ships"
+              exit 1
+              ;;
+            *)
+              echo "Unknown stage: ${{ inputs.stage }}"
+              exit 1
+              ;;
+          esac
+
+      - name: Upload canary artefacts
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: canary-${{ inputs.stage }}-${{ github.run_id }}
+          path: |
+            /tmp/canary-*.log
+            /tmp/canary-*.json
+          if-no-files-found: ignore
+          retention-days: 30
