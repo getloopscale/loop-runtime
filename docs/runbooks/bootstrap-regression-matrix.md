@@ -193,3 +193,17 @@ This is **blocking** in every phase's DoD — not optional.
 | Health gates | `infra/helmfile/scripts/health-check.sh` |
 | Preflight | `cli/src/installer/preflight.ts` |
 | Wiring scripts | `infra/helmfile/scripts/lib/{argocd-register,scoped-kubeconfig}.sh` |
+| Matrix integrity audit | `infra/tests/parity/audit-regression-matrix.sh` (CHG-2026-04-30 T9.1 followup) |
+
+## Auto-Audit Contract
+
+The matrix file is itself code under audit. Every change to this file MUST keep the audit script GREEN:
+
+```bash
+bash infra/tests/parity/audit-regression-matrix.sh
+# Expected: PASS, 0 critical misses, ≤6 SKIP (live verify entries)
+```
+
+The audit pulls each row's `Verification` cell, tokenizes alphanumeric/underscore identifiers ≥5 chars, and grep's the codebase (cli/, api/, operators/, pkg/, infra/, docs/, charts/, scripts/) for any of them. An entry is OK if at least one token resolves; SKIP if the verification is "live verify"/"runtime"; MISS otherwise. Critical entries (`Pode Recorrer? = NÃO`) cannot be MISS.
+
+If you add a new entry whose Verification refers to a future test that doesn't exist yet, mark `Pode Recorrer? = SIM` until the test ships, OR write the test first (TDD).

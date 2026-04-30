@@ -861,11 +861,12 @@ docs/runbooks/bootstrap-regression-matrix.md — adicionar #45 (#21 promote name
 #### Acceptance Criteria
 - [x] 135/135 entries (era plan 47/47 — expandido com Achados subsequentes)
 - [x] Zero "Pode Recorrer? = SIM" para os 44 originais; 2 SIMs restantes são externos (B58 environmental + T2 redesign)
-- [x] Cada entry tem proof artifact _(test name ou live verify column)_
+- [x] Cada entry tem proof artifact _(verificado mecanicamente: 129/135 OK + 6 SKIP live-only, ZERO miss crítico — `bash infra/tests/parity/audit-regression-matrix.sh`)_
 
 #### DoD
 - [x] Matriz comitada _(commit cb5290af + iter anteriores)_
 - [x] Cross-link com Achados iter-13 (#21/#26/#27) e T5.1 (#29-#37+#131)
+- [x] Auto-audit script `infra/tests/parity/audit-regression-matrix.sh` (NEW) — extrai tokens da coluna Verification, valida via grep no codebase, exit não-zero em miss crítico. Previne drift silencioso na matriz.
 
 ---
 
