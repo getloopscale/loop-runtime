@@ -1,0 +1,81 @@
+# CHG-2026-04-30-INFRA-NORMALIZE / Phase 3 condition C20.
+# Source: docs/decisions/MEET-INFRA-NORMALIZE-T3-pulumi-consolidation.md
+#
+# Pulumi state observability — pairs with loopzero_pulumi_archives_total +
+# loopzero_pulumi_stacks_total metrics in api/internal/metrics/metrics.go.
+#
+# Alerts:
+#   • PulumiArchiveStaleness — no Pulumi archive in 90d (rotation gap).
+#   • PulumiOrphanStackDetected — stack discovered outside canonical
+#     project name (paralelas re-introduction). Pairs with the
+#     `find infra -name 'Pulumi.yaml' | wc -l == 1` regression test
+#     (T-14, condition C25).
+#
+# Both alerts page SRE on-call. PulumiOrphanStackDetected is the
+# automated form of the C26 replay-drill protection — it fires before
+# a 14-day drill could re-discover the regression.
+apiVersion: monitoring.coreos.com/v1
+kind: PrometheusRule
+metadata:
+  name: loopzero-pulumi-state-alerts
+  namespace: monitoring
+  labels:
+    release: monitoring
+    loopzero.io/component: pulumi-consolidation
+spec:
+  groups:
+    - name: loopzero.pulumi-state
+      rules:
+        - alert: PulumiArchiveStaleness
+          expr: |
+            loopzero_pulumi_archives_total
+              and on() (time() - (loopzero_pulumi_archives_total > 0)) > 90 * 86400
+          for: 1h
+          labels:
+            severity: medium
+            loopzero_component: pulumi-archive
+          annotations:
+            summary: "No Pulumi archive in 90 days (rotation gap)"
+            description: |
+              loopzero_pulumi_archives_total has not incremented in >90
+              days. The archive bucket s3://loopzero-archive/pulumi-state/
+              should be receiving quarterly snapshots per condition
+              C12 (.github/workflows/pulumi-archive.yml). Either:
+              (a) the workflow is broken/disabled (check Actions tab);
+              (b) Pulumi backend is producing 0 stacks (also fires
+                  PulumiStacksTotalZero — investigate together);
+              (c) AWS S3 access for the archive bucket is broken
+                  (check archive runbook).
+            runbook_url: "https://github.com/getloopscale/loopzero/blob/develop/docs/runbooks/pulumi-consolidation.md#archive-staleness"
+
+        - alert: PulumiOrphanStackDetected
+          # Per condition C20 + C25: any stack outside the canonical
+          # `loopzero-infra` project name suggests paralelas re-introduction
+          # OR an experimental stack that wasn't cleaned up. Either is
+          # a process violation worth paging.
+          #
+          # The regex below assumes Pulumi stack names are exposed
+          # through loopzero_pulumi_stacks_total with a `stack` label
+          # carrying the canonical project URI. Until a collector
+          # ships that label, the alert relies on count comparison
+          # against an expected baseline of 4 (dev, prod, staging,
+          # homolog).
+          expr: |
+            loopzero_pulumi_stacks_total > 4
+          for: 6h
+          labels:
+            severity: high
+            loopzero_component: pulumi-archive
+          annotations:
+            summary: "Pulumi stack count exceeds expected baseline (potential paralelas regression)"
+            description: |
+              loopzero_pulumi_stacks_total = {{ $value }} for >6h, exceeds
+              the expected baseline of 4 (dev/prod/staging/homolog).
+              Unexpected stacks suggest paralelas re-introduction —
+              an operator or workflow created a stack outside the
+              canonical infra/pulumi/ project. Verify via:
+                cd infra/pulumi && pulumi stack ls --json | jq '.[].name'
+              Compare against canonical names. Remove or document
+              the new stack per C26 (paralelas-style re-introduction
+              process).
+            runbook_url: "https://github.com/getloopscale/loopzero/blob/develop/docs/runbooks/pulumi-consolidation.md#orphan-stack-detected"

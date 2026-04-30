@@ -366,6 +366,25 @@ var (
 		Name: "loopzero_cluster_credential_status",
 		Help: "1 if ClusterCredential.status.connected=true, 0 otherwise. Per-cell.",
 	}, []string{"cell", "connected"})
+
+	// PulumiArchivesTotal tracks the number of Pulumi state archives
+	// in s3://loopzero-archive/pulumi-state/. CHG-2026-04-30-INFRA-NORMALIZE
+	// Phase 3 condition C20. Updated by the quarterly archive scan
+	// (.github/workflows/pulumi-archive.yml). Alert
+	// PulumiArchiveStaleness fires when no archive in 90d.
+	PulumiArchivesTotal = promauto.NewGauge(prometheus.GaugeOpts{
+		Name: "loopzero_pulumi_archives_total",
+		Help: "Number of Pulumi state archives currently in S3 (loopzero-archive/pulumi-state/).",
+	})
+
+	// PulumiStacksTotal tracks the number of live Pulumi stacks across
+	// the canonical project. C20 + monitors paralelas-stack
+	// re-introduction (any stack outside the canonical name set →
+	// PulumiOrphanStackDetected alert).
+	PulumiStacksTotal = promauto.NewGauge(prometheus.GaugeOpts{
+		Name: "loopzero_pulumi_stacks_total",
+		Help: "Number of live Pulumi stacks in the canonical project (loopzero-infra).",
+	})
 )
 
 // Leader election metrics — MEET-2026-04-04-029 P1.
