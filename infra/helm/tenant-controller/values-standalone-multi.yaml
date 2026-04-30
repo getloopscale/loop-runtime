@@ -8,8 +8,8 @@ image:
   # ADR-0018 v2 / T3.1 — rebuild com cache scope per-Kind (C9) + startup
   # misplaced scan (C2/C5). Inclui também F-09 fix de iter 1.
   repository: k3d-loopzero-registry:5000/loopzero-tenant-controller
-  tag: c9-fix
-  pullPolicy: IfNotPresent
+  tag: latest
+  pullPolicy: Always
 
 # B82 (end-to-end-deploy-validation-plan iter 12 / 2026-04-29) — point
 # AppProject + ArgoCD Application destination at the k3d workload cluster

@@ -347,6 +347,10 @@ releases:
       - loopzero-system/loopzero-crds
     values:
       - ../helm/loopzero-controller/values.yaml
+      # CHG-2026-04-30-INFRA-PARITY / T1.3 — local registry override.
+{{- if eq (.Values | get "clusterTopology" "single-cluster") "multi-cluster" }}
+      - ../helm/loopzero-controller/values-standalone-multi.yaml
+{{- end }}
 
   - name: tenant-controller
     namespace: loopzero-system
@@ -371,6 +375,10 @@ releases:
       - loopzero-system/loopzero-api
     values:
       - ../helm/loopzero-cloud/values.yaml
+      # CHG-2026-04-30-INFRA-PARITY / T1.3 — local registry override.
+{{- if eq (.Values | get "clusterTopology" "single-cluster") "multi-cluster" }}
+      - ../helm/loopzero-cloud/values-standalone-multi.yaml
+{{- end }}
 
   # Wave 99: Validation
   - name: smoke-test

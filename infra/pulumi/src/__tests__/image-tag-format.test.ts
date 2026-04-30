@@ -66,9 +66,9 @@ describe('image tag format enforcement (ADR D1)', () => {
   const helmDir = path.join(REPO_ROOT, 'infra', 'helm');
   const tags = findHelmTagsInDir(helmDir);
 
-  // Filter only tags from LoopZero charts (not third-party). LoopZero charts live
-  // under infra/helm/loopzero-*/.
-  const loopzeroTags = tags.filter((t) => /infra\/helm\/loopzero-/.test(t.context));
+  // Filter only tags from LoopZero charts (not third-party). LoopZero charts include
+  // loopzero-* AND tenant-controller (sibling without prefix).
+  const loopzeroTags = tags.filter((t) => /infra\/helm\/(loopzero-|tenant-controller\/)/.test(t.context));
 
   it('found at least one LoopZero chart tag to validate', () => {
     expect(loopzeroTags.length).toBeGreaterThan(0);
