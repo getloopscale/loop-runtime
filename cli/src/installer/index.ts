@@ -1,18 +1,16 @@
 // SPDX-License-Identifier: Apache-2.0
 // Copyright 2025-2026 The LoopZero Authors
 //
-// CHG-2026-04-28-LAYERED-BOOTSTRAP / T3.1 + T3.2.
-//
-// Most installer modules (bootstrap.ts, components.ts, prerequisites.ts) are
-// LEGACY — replaced by Helmfile L2. They remain in the tree for backward
-// compatibility while we migrate downstream test suites. New code should use
-// `helmfile-runner` and `pulumi-runner`.
+// CHG-2026-04-30-INFRA-PARITY / T3.1 — installer/ é exclusivamente Helmfile L2 +
+// Pulumi L1 + status query. Os antigos `bootstrap.ts`, `components.ts`,
+// `prerequisites.ts` (legacy pré-Helmfile) foram deletados — continham strings
+// com termos internos (Rule 3) que vazariam para o bundle final do CLI.
 
 export { PlatformConfig, PlatformStatus, ComponentStatus } from './types';
 export { validateCluster } from './validator';
 
-// Status-only API still used by `loopzero platform status`.
-export { getPlatformStatus } from './components';
+// Status query — neutro, sem termos internos.
+export { getPlatformStatus } from './status';
 
 // Helmfile-based runners (NEW — primary mechanism)
 export {

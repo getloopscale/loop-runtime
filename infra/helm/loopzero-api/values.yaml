@@ -6,8 +6,8 @@ image:
   # tags (e.g., commit-sha, release-tag), not `:latest`. Pinned to the
   # tag last published to DO Registry. In production, Pulumi (or a
   # GitOps-managed values overlay) sets this from CI build metadata.
-  tag: REDACTED_SECRET_061
-  pullPolicy: IfNotPresent
+  tag: latest
+  pullPolicy: Always
 
 imagePullSecrets:
   - name: loopzero-registry-pull

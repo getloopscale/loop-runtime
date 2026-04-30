@@ -44,6 +44,7 @@ declare -a RESULTS=()
 PASS=0
 FAIL=0
 SKIP=0
+WARN=0
 
 # log writes to stderr unless --json mode
 log() { [[ "$JSON_ONLY" -eq 1 ]] || echo "[preflight] $*" >&2; }
@@ -64,6 +65,10 @@ record() {
     SKIP)
       SKIP=$((SKIP+1))
       log "[$id] SKIP — $evidence"
+      ;;
+    WARN)
+      WARN=$((WARN+1))
+      log "[$id] WARN — $evidence"
       ;;
     *)
       FAIL=$((FAIL+1))
@@ -391,6 +396,50 @@ check_eso_cluster_secret_store() {
 }
 
 # -----------------------------------------------------------------------------
+# T0.10 — No namespaces stuck in Terminating phase
+# -----------------------------------------------------------------------------
+# Discovered live (CHG-2026-04-30-INFRA-PARITY): operator finalizers race
+# externally-deleted resources, leaving ns in Terminating with no owner.
+# Subsequent `loopzero env create` for same name fails ("already exists").
+# Fix: scripts/cleanup-terminating-namespaces.sh (idempotent, allowlist-gated).
+check_no_terminating_namespaces() {
+  local id="T0.10"
+  local count
+  count=$(kubectl --context "$WORKLOAD_CTX" get ns --no-headers 2>/dev/null | awk '$2=="Terminating"' | wc -l | tr -d '[:space:]')
+  if [[ "$count" -gt 0 ]]; then
+    record "$id" "FAIL" "$count namespaces stuck in Terminating on workload cluster. Run: bash infra/tests/dogfood/scripts/cleanup-terminating-namespaces.sh"
+    return
+  fi
+  record "$id" "PASS" "no Terminating namespaces on workload cluster"
+}
+
+# -----------------------------------------------------------------------------
+# T0.11 — No dangling kubeconfig contexts (WARN level)
+# -----------------------------------------------------------------------------
+# DOKS contexts ficam em ~/.kube/config após pulumi destroy. Operator typos
+# tipo `kubectl --context loopzero-mgmt` (sem prefixo k3d-) podem mirar cluster
+# inexistente e produzir errors confusos. Detecta via 5s probe; reporta WARN
+# (não FAIL — usuário pode legitimamente ter DOKS dormindo).
+check_dangling_kubecontexts() {
+  local id="T0.11"
+  local dangling=()
+  local ctx
+  while IFS= read -r ctx; do
+    [[ -z "$ctx" ]] && continue
+    [[ "$ctx" == k3d-* ]] && continue
+    if ! timeout 5 kubectl --context "$ctx" get ns kube-system >/dev/null 2>&1; then
+      dangling+=("$ctx")
+    fi
+  done < <(kubectl config get-contexts -o name 2>/dev/null | grep -E "^(loopzero|do-)")
+
+  if [[ ${#dangling[@]} -gt 0 ]]; then
+    record "$id" "WARN" "${#dangling[@]} dangling kubecontext(s): $(IFS=,; echo "${dangling[*]}"). Remove via: for c in ${dangling[*]}; do kubectl config delete-context \$c; done"
+    return
+  fi
+  record "$id" "PASS" "no dangling kubecontexts"
+}
+
+# -----------------------------------------------------------------------------
 # Driver
 # -----------------------------------------------------------------------------
 require_bin kubectl
@@ -415,12 +464,14 @@ check_networkpolicy_traefik_target
 check_service_auth
 check_cluster_issuer
 check_eso_cluster_secret_store
+check_no_terminating_namespaces
+check_dangling_kubecontexts
 
 elapsed=$(( $(date +%s) - start ))
 
 # Build JSON output
 joined=$(IFS=,; echo "${RESULTS[*]}")
-json="{\"phase\":0,\"results\":[${joined}],\"summary\":{\"pass\":$PASS,\"fail\":$FAIL,\"skip\":$SKIP,\"elapsed_sec\":$elapsed}}"
+json="{\"phase\":0,\"results\":[${joined}],\"summary\":{\"pass\":$PASS,\"fail\":$FAIL,\"skip\":$SKIP,\"warn\":$WARN,\"elapsed_sec\":$elapsed}}"
 
 if [[ "$JSON_ONLY" -eq 1 ]]; then
   echo "$json"

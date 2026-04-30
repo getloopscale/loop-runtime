@@ -8,8 +8,8 @@ image:
   # F-07 (CHG-2026-04-29-DOGFOOD T5.2) — rebuild com `/api/v1/version`
   # endpoint público. Antes: localhost:13001/api/v1/version → 404.
   repository: k3d-loopzero-registry:5000/loopzero-api
-  tag: f07-fix
-  pullPolicy: IfNotPresent
+  tag: latest
+  pullPolicy: Always
 
 # F-01 (CHG-2026-04-29-DOGFOOD T2.1) — expor loopzero-api ao usuário em
 # standalone-multi. NodePort 30001 é mapeado por k3d-mgmt para host:13001

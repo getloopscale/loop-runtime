@@ -88,7 +88,7 @@ function pulumiOutputsToEnv(outputs: Record<string, unknown>): Record<string, st
  *   4. Bootstrap (helmfile sync per cluster role)
  *      → multi-cluster: build → mgmt → runtime × N
  *      → standalone: mgmt only with environment="standalone"
- *   5. Wire (cross-cluster: ArgoCD register, RBAC, wiring ConfigMap)
+ *   5. Wire (cross-cluster: register clusters, RBAC, wiring ConfigMap)
  *   6. Validate (smoke test, regression checks)
  */
 export async function platformInstall(
