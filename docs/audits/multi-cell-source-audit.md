@@ -16,7 +16,13 @@ CLAUDE.md claims **"Cell architecture Phase 0+1+1.5 complete; runtime-2 physical
 | `Pulumi.dev.yaml multi-cell config missing` | `Pulumi.dev.yaml` has `runtimeK8sVersion`, `runtimeNodeClass`, `runtimeMinNodes`, `runtimeMaxNodes` — but only one set; runtime-2 reuses these (see `infra.ts:165-170`). No `cell-2`-specific config keys. No `cellId` mapping. | **CONFIRMED** |
 | `cells table` schema (per plan v1 ADR D3 task T5.3) | **NOT FOUND**. `000001_initial_schema.up.sql` has `cell_id TEXT NOT NULL DEFAULT 'cell-default'` columns on `tenants`, `builds`, `releases`, `plan_limits` (lines 89, 126, 162, 344) and `populate_cell_id_from_tenant()` trigger (line 59), but **no `cells` table**. Cells are **K8s-native** via `ClusterCredential` CRDs, not SQL. | **REVISES PLAN** |
 
-**Implication for plan v2**: Phase 5 task T5.3 ("Database migration: cells table populated") is **wrong** — there is no SQL `cells` table. The activation path is creating a `ClusterCredential` CR with `spec.cellID: cell-2` and `status.connected: true`. Plan must be amended.
+**Implication for plan v2** (amended 2026-04-30 post-user-direction): the `cells` SQL table is NOW created by `000003_cells.up.sql` as **operational SoT** for cell metadata (capacity gates, audit trail, status). The K8s `ClusterCredential` CRD remains SoT for **connectivity** (kubeconfig, status.connected). Two SoTs answer different questions:
+  - "How do I reach cell-2's API server?" → ClusterCredential CR (K8s).
+  - "Is cell-2 accepting new tenants?" → cells table `status` column.
+  - "Is cell-2 at capacity?" → cells table `capacity_tenants_max` (planned consumer in placement layer).
+  - "When was cell-2 activated, by whom?" → cells table `created_at`/`updated_at` + audit_log entries referencing cell_id.
+
+A reconciler (planned T5.4) keeps both consistent: when a CC's `status.connected` flips, mirror to `cells.status` (active/maintenance). When `cells.status='retired'`, the operator can remove the CC after drain. Task T5.3 in plan v2 is therefore VALID after this migration lands; the CC bootstrap (originally Gap 1's recommended replacement for T5.3) becomes a SEPARATE task (renamed T5.3b "ClusterCredential bootstrap for cell-2 via wire-clusters.sh extension").
 
 ## Reality vs Documented (CLAUDE.md)
 
@@ -140,19 +146,31 @@ if cfg.DynamicRouter {
 
 ## Gaps (vs plan v2)
 
-### Gap 1 — Plan v2 T5.3 references a non-existent `cells` table
+### Gap 1 — RESOLVED 2026-04-30: cells SQL table now exists
 
-Plan line 1357-1377:
+Originally found "no SQL `cells` table; plan T5.3 references non-existent table." After user direction, migration `000003_cells.up.sql` was created as the operational SoT companion to ClusterCredential CRDs. Schema:
 
+```sql
+CREATE TABLE cells (
+    cell_id              TEXT PRIMARY KEY  CHECK (cell_id ~ '^cell-[a-z0-9-]+$'),
+    display_name         TEXT NOT NULL,
+    status               TEXT NOT NULL DEFAULT 'active'
+                              CHECK (status IN ('active', 'draining', 'maintenance', 'retired')),
+    region               TEXT NOT NULL DEFAULT 'unknown',
+    capacity_tenants_max INTEGER CHECK (capacity_tenants_max IS NULL OR capacity_tenants_max >= 0),
+    notes                TEXT NOT NULL DEFAULT '',
+    created_at           TIMESTAMPTZ NOT NULL DEFAULT now(),
+    updated_at           TIMESTAMPTZ NOT NULL DEFAULT now()
+);
 ```
-### T5.3 — Database migration: cells table populated
-...
-api/internal/db/migrations/000003_cells_seed.up.sql — (NEW) INSERT INTO cells
-```
 
-**Reality**: there is no `cells` table. The schema uses `tenants.cell_id` for per-tenant pinning. Cells themselves are K8s ClusterCredential CRs.
+Seed: `cell-default` (active), `cell-1` (active), `cell-2` (maintenance — admits no traffic until canary flips it).
 
-**Fix**: rewrite T5.3 as **"ClusterCredential bootstrap for cell-2"** — creates the `Secret` + `ClusterCredential` CR for runtime-2 in `loopzero-system`. Migration optional (only if we add a `cells` metadata table for capacity tracking, which is **not in current scope**).
+Pattern matches `ClusterCredentialSpec.CellID` kubebuilder validation (`^cell-[a-z0-9-]+$`) so the two SoTs cannot drift on the cell_id format.
+
+8 unit tests in `api/tests/unit/migration_003_cells_test.go` enforce: table creation, cell_id pattern, status enum, capacity NULL/non-negative, audit columns + trigger, seed rows + idempotency, forward-only invariants, status+capacity index.
+
+T5.3 in plan v2 is **valid as written** (creates the table). T5.3b NEW (ClusterCredential bootstrap for cell-2) is a sibling task — see Gap 2.
 
 ### Gap 2 — `wire-clusters.sh` does not create ClusterCredential CR
 
@@ -206,7 +224,7 @@ Or scoped to dev/prod profiles only (keep standalone single-cell).
 
 | ID | Task | Status |
 |---|---|---|
-| A1 | Amend plan v2 T5.3 to remove `cells` table migration | **PENDING** |
+| A1 | ~~Amend plan v2 T5.3 to remove `cells` table migration~~ — **RESOLVED**: migration `000003_cells.up.sql` shipped with 8 unit tests GREEN. T5.3 stays. | **DONE** |
 | A2 | Design `clustercredential-create.sh` lib script | PENDING |
 | A3 | Add `loopzero-runtime-2` ClusterCredential bootstrap to wire-clusters.sh | PENDING |
 | A4 | Set `LOOPZERO_DYNAMIC_ROUTER=true` in loopzero-api values for cloud profiles | PENDING |
