@@ -48,7 +48,7 @@ if [[ -n "${LOOPZERO_RUNTIME2_KUBECONFIG:-}" ]]; then
   SCOPED=$(KUBECONFIG="$LOOPZERO_RUNTIME2_KUBECONFIG" "$SCRIPT_DIR/lib/scoped-kubeconfig.sh" runtime-2 "$LOOPZERO_RUNTIME2_KUBECONFIG")
   KUBECONFIG="$LOOPZERO_MGMT_KUBECONFIG" "$SCRIPT_DIR/lib/argocd-register.sh" runtime-2 "$SCOPED"
   # T5.3b: cell-2 maps to runtime-2. Cell starts in 'maintenance' status
-  # per cells migration 000003 seed, so admin pin admission rejects
+  # per cells migration 000006 seed, so admin pin admission rejects
   # until canary stage 1 flips it 'active'.
   KUBECONFIG="$LOOPZERO_MGMT_KUBECONFIG" "$SCRIPT_DIR/lib/clustercredential-create.sh" \
     cell-2 runtime-2 "$SCOPED" \

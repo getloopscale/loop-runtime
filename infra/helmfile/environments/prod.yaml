@@ -47,7 +47,7 @@ underlyingStorageClass: do-block-storage
 
 # CHG-2026-04-30-INFRA-NORMALIZE / Phase 5 T5.2 — multi-cell metadata.
 # Production: runtime → cell-1, runtime-2 → cell-2. Seeded in cells
-# table (migration 000003). cell-2 in 'maintenance' until canary
+# table (migration 000006). cell-2 in 'maintenance' until canary
 # stage 4 (T7.1) flips it 'active' with explicit customer opt-in.
 runtimeCellId: cell-1
 runtime2CellId: cell-2

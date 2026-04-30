@@ -237,14 +237,17 @@ func TestT10_AdminPinEndpointShipped(t *testing.T) {
 }
 
 // T-11 — cells migration in place + tests.
+// Numbered 000006 (was 000003 — renumbered 2026-04-30 after LIVE discovery
+// that golang-migrate silently skipped 000003 on existing DBs at
+// schema_migrations.version >= 5). The 000003 slot is now reserved/empty.
 func TestT11_CellsMigrationPresent(t *testing.T) {
-	path := filepath.Join(repoRoot(), "api", "internal", "db", "migrations", "000003_cells.up.sql")
+	path := filepath.Join(repoRoot(), "api", "internal", "db", "migrations", "000006_cells.up.sql")
 	if _, err := os.Stat(path); err != nil {
-		t.Fatalf("000003_cells.up.sql missing: %v", err)
+		t.Fatalf("000006_cells.up.sql missing: %v", err)
 	}
-	testPath := filepath.Join(repoRoot(), "api", "tests", "unit", "migration_003_cells_test.go")
+	testPath := filepath.Join(repoRoot(), "api", "tests", "unit", "migration_006_cells_test.go")
 	if _, err := os.Stat(testPath); err != nil {
-		t.Errorf("migration_003_cells_test.go missing — C1 of T-1.3 incomplete: %v", err)
+		t.Errorf("migration_006_cells_test.go missing — C1 of T-1.3 incomplete: %v", err)
 	}
 }
 
