@@ -13,6 +13,7 @@ import (
 
 	corev1 "k8s.io/api/core/v1"
 	k8serrors "k8s.io/apimachinery/pkg/api/errors"
+	apiextclientset "k8s.io/apiextensions-apiserver/pkg/client/clientset/clientset"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/client-go/kubernetes"
 	"k8s.io/client-go/tools/clientcmd"
@@ -55,6 +56,22 @@ func skipIfNoBuildCluster(t *testing.T) string {
 	defer cancel()
 	if _, err := clientset.CoreV1().Namespaces().List(ctx, metav1.ListOptions{Limit: 1}); err != nil {
 		t.Skipf("build cluster not reachable: %v", err)
+	}
+
+	// 2026-04-30 LIVE finding: a build cluster with valid kubeconfig but
+	// missing Argo Workflows CRDs (e.g., after a k3d cluster stop/start
+	// where etcd wasn't persisted, or before bootstrap completes) caused
+	// these tests to fail confusingly with `the server could not find the
+	// requested resource` instead of skipping. The skip protocol promises
+	// "tests are skipped — not faked". Probe the CRD before proceeding.
+	apiextClient, err := apiextclientset.NewForConfig(cfg)
+	if err != nil {
+		t.Skipf("apiext client failed: %v", err)
+	}
+	if _, err := apiextClient.ApiextensionsV1().CustomResourceDefinitions().Get(
+		ctx, "workflows.argoproj.io", metav1.GetOptions{},
+	); err != nil {
+		t.Skipf("Argo Workflows CRD not installed in build cluster: %v", err)
 	}
 
 	return kubeconfig
