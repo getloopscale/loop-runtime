@@ -49,9 +49,9 @@ describe("Sprint 8 v3.2 — fixes preserved across L1/L2 split", () => {
   });
 
   describe("Fix #2: KEDA HTTP add-on chart name — migrated to runtime.helmfile.yaml", () => {
-    const helmfile = readIfExists("runtime.helmfile.yaml", helmfileDir);
+    const helmfile = readIfExists("runtime.helmfile.yaml.gotmpl", helmfileDir);
 
-    it("runtime.helmfile.yaml exists (T2.3 deliverable)", () => {
+    it("runtime.helmfile.yaml.gotmpl exists (T2.3 deliverable)", () => {
       expect(helmfile).not.toBeNull();
     });
 
@@ -62,7 +62,7 @@ describe("Sprint 8 v3.2 — fixes preserved across L1/L2 split", () => {
   });
 
   describe("Fix #3: policy-controller helm chart — runtime.helmfile.yaml", () => {
-    const helmfile = readIfExists("runtime.helmfile.yaml", helmfileDir);
+    const helmfile = readIfExists("runtime.helmfile.yaml.gotmpl", helmfileDir);
 
     it("policy-controller release present in runtime helmfile", () => {
       expect(helmfile).toMatch(/name:\s*policy-controller/);
@@ -78,7 +78,7 @@ describe("Sprint 8 v3.2 — fixes preserved across L1/L2 split", () => {
 
   describe("Fix #4: cloudflared K8s objects migrated from tunnel.ts to Helmfile (ADR D9)", () => {
     const tunnel = read(path.join("..", "providers", "cloudflare", "tunnel.ts"));
-    const helmfile = readIfExists("runtime.helmfile.yaml", helmfileDir);
+    const helmfile = readIfExists("runtime.helmfile.yaml.gotmpl", helmfileDir);
 
     it("tunnel.ts no longer imports @pulumi/kubernetes", () => {
       expect(tunnel).not.toMatch(/import.*\*.*from\s+["']@pulumi\/kubernetes["']/);

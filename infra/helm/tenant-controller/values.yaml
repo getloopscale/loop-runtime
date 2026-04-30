@@ -11,8 +11,8 @@ image:
   # to switch to k3d-loopzero-registry/loopzero-tenant-controller:b69-fix
   # (local image with B69 fix until CI republishes with that fix).
   repository: registry.digitalocean.com/loopzero-system/loopzero-tenant-controller
-  tag: REDACTED_SECRET_061
-  pullPolicy: IfNotPresent
+  tag: latest
+  pullPolicy: Always
 
 imagePullSecrets:
   - name: loopzero-registry-pull

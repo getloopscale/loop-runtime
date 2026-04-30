@@ -1314,6 +1314,36 @@ tasks:
       - task: lint
       - task: validate:manifests
 
+  parity:preflight:
+    desc: Run parity validation suite preflight (offline, <2s) — shellcheck + audit + dry-runs
+    cmds:
+      - bash infra/tests/parity/preflight.sh
+
+  parity:audit:
+    desc: Verify regression matrix integrity (every entry's Verification token resolves in repo)
+    cmds:
+      - bash infra/tests/parity/audit-regression-matrix.sh
+
+  parity:audit:golden:
+    desc: Golden test for the audit script (catches audit regressions)
+    cmds:
+      - bash infra/tests/parity/audit-golden-test.sh
+
+  parity:k3d-virgin:
+    desc: T5.1 — k3d virgin install (degrau 1, $0, ~10min)
+    cmds:
+      - bash infra/tests/parity/k3d-virgin-install.sh
+
+  parity:droplet:
+    desc: 'T6.1 — Droplet install (degrau 2, ~$0.50, ~30min). DRY_RUN=1 for offline preflight.'
+    cmds:
+      - bash infra/tests/parity/droplet-install.sh {{.CLI_ARGS}}
+
+  parity:doks:
+    desc: 'T7.1 — DOKS install (degrau 3, ~$5, ~60min). DRY_RUN=1 for offline preflight.'
+    cmds:
+      - bash infra/tests/parity/doks-install.sh {{.CLI_ARGS}}
+
   test:all:
     desc: Run everything — unit + integration + E2E (requires running clusters)
     cmds:

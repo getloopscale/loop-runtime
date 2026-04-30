@@ -334,7 +334,7 @@ releases:
       - ../helm/loopzero-api/values.yaml
       # B77 (end-to-end-deploy-validation-plan iter 11) — overlay only in
       # standalone-multi to use locally-built image with GITEA_ORG support.
-{{- if eq (.Values | get "clusterTopology" "single-cluster") "multi-cluster" }}
+{{- if eq (.Values | get "clusterRole" "dev") "standalone" }}
       - ../helm/loopzero-api/values-standalone-multi.yaml
 {{- end }}
 
@@ -347,6 +347,10 @@ releases:
       - loopzero-system/loopzero-crds
     values:
       - ../helm/loopzero-controller/values.yaml
+      # CHG-2026-04-30-INFRA-PARITY / T1.3 — local registry override.
+{{- if eq (.Values | get "clusterRole" "dev") "standalone" }}
+      - ../helm/loopzero-controller/values-standalone-multi.yaml
+{{- end }}
 
   - name: tenant-controller
     namespace: loopzero-system
@@ -359,7 +363,7 @@ releases:
       - ../helm/tenant-controller/values.yaml
       # B69 (end-to-end-deploy-validation-plan iter 8) — overlay only in
       # standalone-multi to use locally-built image with GITEA_ORG support.
-{{- if eq (.Values | get "clusterTopology" "single-cluster") "multi-cluster" }}
+{{- if eq (.Values | get "clusterRole" "dev") "standalone" }}
       - ../helm/tenant-controller/values-standalone-multi.yaml
 {{- end }}
 
@@ -371,6 +375,10 @@ releases:
       - loopzero-system/loopzero-api
     values:
       - ../helm/loopzero-cloud/values.yaml
+      # CHG-2026-04-30-INFRA-PARITY / T1.3 — local registry override.
+{{- if eq (.Values | get "clusterRole" "dev") "standalone" }}
+      - ../helm/loopzero-cloud/values-standalone-multi.yaml
+{{- end }}
 
   # Wave 99: Validation
   - name: smoke-test

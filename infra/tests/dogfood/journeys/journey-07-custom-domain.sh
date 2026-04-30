@@ -134,10 +134,13 @@ done
 (( elapsed < 60 )) || journey_fail "domain still listed in non-removed state after 60s"
 
 journey_step "Audit log assertion (domain.added + domain.removed emitted)"
-assert_audit_entry "domain.added" "$TEST_DOMAIN" \
-  || journey_fail "audit log missing domain.added entry for $TEST_DOMAIN"
+# domain.added doesn't carry the domain name in resource_id (POST /domains
+# uses request body, not path) — assert action exists only. domain.removed
+# DOES have resource_id (DELETE /domains/{name}) — strict project filter.
+assert_audit_entry "domain.added" "" \
+  || journey_fail "audit log missing domain.added entries"
 assert_audit_entry "domain.removed" "$TEST_DOMAIN" \
-  || journey_log "WARN: domain.removed entry not yet visible (eventually consistent)"
+  || journey_fail "audit log missing domain.removed entry for $TEST_DOMAIN"
 
 journey_step "GAP DOCUMENTED — verify/active require CF Zone (production-only)"
 journey_log "Cobertura local: register/list/status/remove (4 dos 5 verbos do §7)."

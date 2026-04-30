@@ -29,6 +29,8 @@ import {
 } from '../installer/pulumi-runner';
 import { runPreflight, formatPreflightResult } from '../installer/preflight';
 import { runHealthCheck } from '../installer/health-checks';
+import { detectDrift } from '../installer/drift';
+import { decideRestore } from '../installer/secret-backups';
 
 export interface PlatformDeps {
   writeTo: (msg: string) => void;
@@ -41,6 +43,20 @@ export interface PlatformInstallOptions {
   provider?: 'digitalocean' | 'aws' | 'k3d';
   dryRun?: boolean;
   skipInfra?: boolean;
+  /** From CLI: --restore-secrets <file> */
+  restoreSecretsFile?: string;
+  /** From CLI: --no-restore-secrets */
+  skipRestoreSecrets?: boolean;
+  /** From CLI global: --json. Emits per-step JSONL to stdout, suppresses prose. */
+  json?: boolean;
+  /**
+   * From CLI: --validate-l3. After Step 6 reaches phase=Ready, run the L3
+   * 100-tenant smoke test (TestRealDeploy_L3RealisticWithChurn) as a release
+   * gate (DoD #20 / ADR D5). If L3 fails, exit code 5 (partial failure: install
+   * is up, but capacity assertions miss). Skipped silently when phase!=Ready.
+   * CHG-2026-04-30-INFRA-PARITY / T8.1.
+   */
+  validateL3?: boolean;
 }
 
 /**
@@ -88,7 +104,7 @@ function pulumiOutputsToEnv(outputs: Record<string, unknown>): Record<string, st
  *   4. Bootstrap (helmfile sync per cluster role)
  *      → multi-cluster: build → mgmt → runtime × N
  *      → standalone: mgmt only with environment="standalone"
- *   5. Wire (cross-cluster: ArgoCD register, RBAC, wiring ConfigMap)
+ *   5. Wire (cross-cluster: register clusters, RBAC, wiring ConfigMap)
  *   6. Validate (smoke test, regression checks)
  */
 export async function platformInstall(
@@ -96,12 +112,26 @@ export async function platformInstall(
   optsOrFile: PlatformInstallOptions | string,
   legacyProfile?: string,
 ): Promise<number> {
-  const { writeTo, writeError } = deps;
+  const { writeError } = deps;
   // Backwards-compat: callers may pass (deps, valuesFile, profile) (old signature).
   const opts: PlatformInstallOptions =
     typeof optsOrFile === 'string'
       ? { valuesFile: optsOrFile, profile: legacyProfile }
       : optsOrFile;
+
+  // CHG-2026-04-30-INFRA-PARITY / T2.2 — `--json` mode emits JSONL per step
+  // and suppresses prose, so CI pipelines can pipe to jq. Final emission is
+  // a summary {status, components, errors}. Rule 5 stable contract.
+  const isJson = opts.json === true || process.argv.includes('--json');
+  const progress = (step: string, phase: string, status: 'running' | 'complete' | 'failed' | 'skipped', extra?: Record<string, unknown>): void => {
+    if (isJson) {
+      deps.writeTo(JSON.stringify({ step, phase, status, ts: new Date().toISOString(), ...extra }));
+    }
+  };
+  // writeTo emits prose only when not in --json mode. Errors always go to stderr.
+  const writeTo = (msg: string): void => {
+    if (!isJson) deps.writeTo(msg);
+  };
 
   // Load customer values
   let config: PlatformConfig;
@@ -147,7 +177,7 @@ export async function platformInstall(
   writeTo('');
 
   // ── Step 1: Validate ──────────────────────────────────────────────
-  writeTo('Step 1/6: Validating configuration...');
+  progress('1/6', 'validate', 'running'); writeTo('Step 1/6: Validating configuration...');
   if (!isMultiCluster) {
     const validation = validateCluster();
     for (const check of validation.checks) {
@@ -162,7 +192,7 @@ export async function platformInstall(
   }
 
   // ── Step 2: Preflight ─────────────────────────────────────────────
-  writeTo('Step 2/6: Preflight checks...');
+  progress('2/6', 'preflight', 'running'); writeTo('Step 2/6: Preflight checks...');
   const preflightResult = runPreflight({
     provider: config.provider,
     cfAccountId: config.providerConfig?.cfAccountId,
@@ -177,7 +207,7 @@ export async function platformInstall(
   // ── Step 3: Infrastructure (CONDITIONAL — only with --provider) ────
   let extraEnv: Record<string, string> = {};
   if (useInfra) {
-    writeTo('Step 3/6: Provisioning cloud infrastructure (Pulumi L1)...');
+    progress('3/6', 'infrastructure', 'running'); writeTo('Step 3/6: Provisioning cloud infrastructure (Pulumi L1)...');
     const pulumiCtx = {
       projectDir: resolvePulumiProjectDir(projectRoot),
       stack: environment,
@@ -239,8 +269,61 @@ export async function platformInstall(
     writeTo('Step 3/6: Skipping infrastructure (no --provider) — using existing cluster');
   }
 
+  // ── Step 3.5: Secret backup restore (ADR D2) ──────────────────────
+  // Detect ~/.loopzero/backups/secrets-*.yaml from a prior install. CI mode
+  // requires explicit --restore-secrets <file> or --no-restore-secrets.
+  // Interactive mode prompts. Without this, destroy + install loses every
+  // tenant secret silently and tenant pods fail at CreateContainerConfigError.
+  if (!opts.dryRun) {
+    const decision = decideRestore({
+      isCI: process.env.CI === 'true',
+      restoreFile: opts.restoreSecretsFile,
+      skip: opts.skipRestoreSecrets,
+    });
+    switch (decision.action) {
+      case 'restore': {
+        writeTo(`Step 3.5/6: Restoring Secrets from ${decision.file}...`);
+        const r = spawnSync('kubectl', ['apply', '-f', decision.file], { stdio: 'inherit' });
+        if (r.status !== 0) {
+          writeError('  ✗ kubectl apply failed during Secret restore');
+          return 3;
+        }
+        writeTo('  ✓ Secrets restored');
+        break;
+      }
+      case 'fail':
+        writeError(`Step 3.5/6: ${decision.error}`);
+        return 1;
+      case 'prompt': {
+        writeTo(`Step 3.5/6: Found Secret backup ${decision.latest.path} (${decision.latest.mtime.toISOString()}).`);
+        const { createInterface } = await import('readline');
+        const rl = createInterface({ input: process.stdin, output: process.stdout });
+        const answer = await new Promise<string>((resolve) =>
+          rl.question('  Restore Secrets from this backup before helmfile sync? (yes/no) ', (a) => {
+            rl.close();
+            resolve(a.trim().toLowerCase());
+          }),
+        );
+        if (answer === 'yes' || answer === 'y') {
+          const r = spawnSync('kubectl', ['apply', '-f', decision.latest.path], { stdio: 'inherit' });
+          if (r.status !== 0) {
+            writeError('  ✗ kubectl apply failed during Secret restore');
+            return 3;
+          }
+          writeTo('  ✓ Secrets restored');
+        } else {
+          writeTo('  Skipped Secret restore (operator declined)');
+        }
+        break;
+      }
+      case 'skip':
+        writeTo(`Step 3.5/6: Skipping Secret restore (${decision.reason})`);
+        break;
+    }
+  }
+
   // ── Step 4: Bootstrap (Helmfile L2) ────────────────────────────────
-  writeTo('Step 4/6: Installing platform via Helmfile...');
+  progress('4/6', 'helmfile', 'running'); writeTo('Step 4/6: Installing platform via Helmfile...');
   const clusterRoles: Array<'mgmt' | 'build' | 'runtime'> = isMultiCluster
     ? ['build', 'mgmt', 'runtime']
     : ['mgmt']; // standalone
@@ -305,7 +388,7 @@ export async function platformInstall(
   }
 
   // ── Step 5: Wire ───────────────────────────────────────────────────
-  writeTo('Step 5/6: Wiring cross-cluster connectivity...');
+  progress('5/6', 'wire', 'running'); writeTo('Step 5/6: Wiring cross-cluster connectivity...');
   if (isMultiCluster && !opts.dryRun) {
 
     const wireScript = `${projectRoot}/infra/helmfile/scripts/wire-clusters.sh`;
@@ -323,7 +406,7 @@ export async function platformInstall(
   }
 
   // ── Step 6: Validate ───────────────────────────────────────────────
-  writeTo('Step 6/6: Validating installation...');
+  progress('6/6', 'validate-install', 'running'); writeTo('Step 6/6: Validating installation...');
   if (!opts.dryRun) {
     const status = getPlatformStatus();
     writeTo(`  Platform phase: ${status.phase}`);
@@ -332,7 +415,52 @@ export async function platformInstall(
     }
     if (status.phase !== 'Ready' && status.phase !== 'Installing') {
       writeError('Installation completed but platform is not Ready.');
+      progress('6/6', 'validate-install', 'failed', { phase: status.phase });
+      if (isJson) {
+        deps.writeTo(JSON.stringify({
+          status: 'failed',
+          phase: status.phase,
+          domain: config.domain,
+          components: status.components,
+          errors: ['platform is not Ready'],
+        }));
+      }
       return 5;
+    }
+    progress('6/6', 'validate-install', 'complete', { phase: status.phase });
+
+    // ── Step 6.5: --validate-l3 (T8.1, ADR D5) ──────────────────────
+    // Optional release gate: 100-tenant smoke against the freshly installed
+    // platform. Only runs when phase=Ready (no point hammering a broken
+    // install). Failure → exit 5 (partial failure: install is up, capacity
+    // assertions missed). Skipped silently when flag absent.
+    if (opts.validateL3 && status.phase === 'Ready') {
+      progress('6.5', 'validate-l3', 'running');
+      writeTo('Step 6.5: L3 100-tenant smoke (--validate-l3)...');
+      const l3 = spawnSync('go', [
+        'test',
+        '-tags=l3',
+        '-timeout=30m',
+        '-run', 'TestRealDeploy_L3RealisticWithChurn',
+        './infra/tests/load',
+      ], { stdio: isJson ? 'pipe' : 'inherit', env: process.env });
+      if (l3.status !== 0) {
+        writeError('  ✗ L3 smoke failed (DoD #20 miss)');
+        progress('6.5', 'validate-l3', 'failed', { exit: l3.status ?? -1 });
+        if (isJson) {
+          deps.writeTo(JSON.stringify({
+            status: 'failed',
+            phase: 'l3-smoke',
+            domain: config.domain,
+            errors: ['L3 100-tenant smoke failed'],
+          }));
+        }
+        return 5;
+      }
+      writeTo('  ✓ L3 smoke passed (100/100 tenants healthy)');
+      progress('6.5', 'validate-l3', 'complete');
+    } else if (opts.validateL3) {
+      progress('6.5', 'validate-l3', 'skipped', { reason: `phase=${status.phase}` });
     }
   }
 
@@ -341,6 +469,20 @@ export async function platformInstall(
   writeTo(`    Domain:    https://${config.domain}`);
   writeTo(`    API:       https://api.${config.domain}`);
   writeTo(`    Dashboard: https://app.${config.domain}`);
+  if (isJson) {
+    deps.writeTo(JSON.stringify({
+      status: 'ready',
+      domain: config.domain,
+      endpoints: {
+        api: `https://api.${config.domain}`,
+        dashboard: `https://app.${config.domain}`,
+      },
+      profile: config.profile,
+      provider: config.provider ?? 'standalone',
+      environment,
+      errors: [],
+    }));
+  }
   return 0;
 }
 
@@ -446,28 +588,70 @@ export async function platformSecretsList(deps: PlatformDeps): Promise<number> {
 }
 
 /**
- * `loopzero platform status`
+ * `loopzero platform status [--json]`
+ *
+ * Exit codes:
+ *   0  — Ready, no drift
+ *   1  — not Ready (degraded, failed, not installed)
+ *   5  — Ready but runtime diverged from Git (drift detected; ADR D3)
  */
-export async function platformStatus(deps: PlatformDeps): Promise<number> {
+export async function platformStatus(
+  deps: PlatformDeps,
+  opts: { json?: boolean } = {},
+): Promise<number> {
   const { writeTo } = deps;
   const status = getPlatformStatus();
-  writeTo('');
-  writeTo(`  Phase: ${status.phase}`);
-  if (status.version) writeTo(`  Version: ${status.version}`);
-  writeTo(`  Platform definitions: ${status.crdsInstalled}`);
-  writeTo('');
-  writeTo('  Components:');
-  for (const c of status.components) {
-    const replicas = c.replicas ? ` (${c.replicas})` : '';
-    writeTo(`    ${c.status === 'Running' ? '✓' : '✗'} ${c.name}${replicas}`);
-  }
-  if (status.endpoints.api) {
+  const driftReport = detectDrift();
+  const hasDrift = driftReport.drift.length > 0;
+
+  if (opts.json) {
+    writeTo(JSON.stringify({
+      phase: status.phase,
+      version: status.version,
+      crdsInstalled: status.crdsInstalled,
+      components: status.components,
+      endpoints: status.endpoints,
+      sync: {
+        total: driftReport.total,
+        synced: driftReport.synced,
+        drift: driftReport.drift,
+      },
+    }));
+  } else {
     writeTo('');
-    writeTo('  Endpoints:');
-    writeTo(`    API:       ${status.endpoints.api}`);
-    if (status.endpoints.dashboard) writeTo(`    Dashboard: ${status.endpoints.dashboard}`);
+    writeTo(`  Phase: ${status.phase}`);
+    if (status.version) writeTo(`  Version: ${status.version}`);
+    writeTo(`  Platform definitions: ${status.crdsInstalled}`);
+    writeTo('');
+    writeTo('  Components:');
+    for (const c of status.components) {
+      const replicas = c.replicas ? ` (${c.replicas})` : '';
+      writeTo(`    ${c.status === 'Running' ? '✓' : '✗'} ${c.name}${replicas}`);
+    }
+    if (driftReport.total > 0) {
+      writeTo('');
+      writeTo(`  Sync: ${driftReport.synced}/${driftReport.total} apps in sync`);
+      if (hasDrift) {
+        writeTo('  Drift detected:');
+        for (const d of driftReport.drift.slice(0, 10)) {
+          writeTo(`    ✗ ${d.name} (sync=${d.sync}, health=${d.health})`);
+        }
+        if (driftReport.drift.length > 10) {
+          writeTo(`    ... +${driftReport.drift.length - 10} more`);
+        }
+      }
+    }
+    if (status.endpoints.api) {
+      writeTo('');
+      writeTo('  Endpoints:');
+      writeTo(`    API:       ${status.endpoints.api}`);
+      if (status.endpoints.dashboard) writeTo(`    Dashboard: ${status.endpoints.dashboard}`);
+    }
   }
-  return status.phase === 'Ready' ? 0 : 1;
+
+  if (status.phase !== 'Ready') return 1;
+  if (hasDrift) return 5;
+  return 0;
 }
 
 /**

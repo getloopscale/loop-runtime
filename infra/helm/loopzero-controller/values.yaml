@@ -19,8 +19,8 @@ replicaCount: 0
 # happens, both point to the same image so the install path works.
 image:
   repository: registry.digitalocean.com/loopzero-system/loopzero-tenant-controller
-  tag: REDACTED_SECRET_061
-  pullPolicy: IfNotPresent
+  tag: latest
+  pullPolicy: Always
 
 imagePullSecrets:
   - name: loopzero-registry-pull
