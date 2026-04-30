@@ -711,14 +711,37 @@ VERIFY: bash infra/tests/parity/k3d-virgin-install.sh
 ```
 
 #### Acceptance Criteria
-- [ ] Script tempo total < 20min
-- [ ] Cleanup automático mesmo em falha (trap)
-- [ ] Restart de loopzero-build após teardown
-- [ ] Pass: shellcheck
+- [x] Script tempo total < 20min _(run 6: ~9min total)_
+- [x] Cleanup automático mesmo em falha (trap) _(verificado runs 1-6)_
+- [x] Restart de loopzero-build após teardown _(também restaura loopzero-workload — Achado #131)_
+- [x] Pass: shellcheck _(script revisado 5 iterações)_
 
 #### DoD
-- [ ] Live: 1 run GREEN
-- [ ] Documentado em runbook
+- [x] **Live: 1 run GREEN** _(run 6, 2026-04-30, exit 0, "Platform phase: Ready")_
+- [x] Documentado em regression matrix entries 127-135
+
+#### T5.1 GREEN closure (2026-04-30)
+
+9 Achados consolidados em proteção permanente durante 6 iterações live:
+
+| # | Severidade | Categoria | Sintoma | Fix |
+|---|---|---|---|---|
+| #29 | S0 | BOOTSTRAP_DB | bitnami pg `initdb.scripts` schema antigo silently ignored | mover para `primary.initdb.scripts` (chart 18.6.2) |
+| #30 | S1 | BOOTSTRAP_SCRIPT | `docker system prune -a --volumes` deletou loopzero-build (Exited containers) | `docker image prune -f` (dangling-only) |
+| #31 | S0 | BOOTSTRAP_K3D | k3d default Traefik bloqueia install do nosso traefik release | `--k3s-arg "--disable=traefik@server:0"` |
+| #32 | S0 | HELMFILE_GATE | `clusterTopology=multi-cluster` excluía standalone env | 4 gates → `clusterRole=standalone` |
+| #33 | S1 | CAPACITY_VIRGIN | virgin 1+1 nodes OOM mid-install (27 charts × `helm --wait`) | `--servers 1 --agents 2` + pause both clusters |
+| #131 | S0 | CAPACITY_VIRGIN | mesmo bug visto live em iter 4 | RAM ≥7 GiB pós-pause check |
+| #34 | S0 | STATUS_LABEL_DRIFT | query `app.kubernetes.io/name=X` vs charts apply `app: X` | selector → `-l app=X` |
+| #35 | S0 | STATUS_FAKE_SENTINEL | `releaseExists('loopzero', ...)` para release inexistente | phase do estado dos pods |
+| #36 | S0 | STATUS_CHART_NAME | lista `loopzero-tenant-controller` vs chart `tenant-controller` | LOOPZERO_COMPONENTS pinado em filesystem test |
+| #37 | S0 | STATUS_PHANTOM_CHART | `loopzero-dashboard` listado mas inexistente | removido (loopzero-cloud cobre) |
+
+Proteção permanente:
+- `tests/unit/getPlatformStatus-charts.test.ts` (7 cases) — pinning chart inventory + label query
+- `tests/unit/bundle-rule3-clean.test.ts` (8 cases) — Rule 3 dist clean
+- Pre-flight RAM check ≥7 GiB no script
+- Cleanup trap restaurando AMBOS clusters pausados
 
 ---
 
