@@ -1319,6 +1319,16 @@ tasks:
     cmds:
       - bash infra/tests/parity/preflight.sh
 
+  validate:matrix:
+    desc: Master validation matrix — every offline gate (Phase 8 T8.1)
+    cmds:
+      - bash infra/tests/parity/validate-matrix.sh
+
+  validate:matrix:quick:
+    desc: validate:matrix without operators envtest (faster signal)
+    cmds:
+      - bash infra/tests/parity/validate-matrix.sh --quick
+
   parity:audit:
     desc: Verify regression matrix integrity (every entry's Verification token resolves in repo)
     cmds:

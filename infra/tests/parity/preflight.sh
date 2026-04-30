@@ -105,6 +105,69 @@ for step in "${expect_steps[@]}"; do
 done
 result $((1 - all_present)) "k3d-virgin-install:structure"
 
+# === Phase 6 T6.3 extensions ===
+# Gate 7: ONE Pulumi project (closes T-1.2 condition + T2.2 sprint8-fixes
+# Fix #10). After Phase 3 stack-rm completes, only infra/pulumi/ should
+# remain. For now we count and warn if multiple exist (becomes hard
+# fail post-Phase 3 commit).
+pulumi_count=$(find "${REPO_ROOT}/infra" -maxdepth 2 -name 'Pulumi.yaml' -type f 2>/dev/null | wc -l)
+if [[ $pulumi_count -le 1 ]]; then
+  result 0 "pulumi:singleton (count=$pulumi_count)"
+else
+  # Phase 3 not yet executed; SKIP rather than FAIL so this gate doesn't
+  # block CI before consolidation lands. Will flip to hard-fail in T3.3.
+  result 2 "pulumi:singleton (count=$pulumi_count, Phase 3 pending)"
+fi
+
+# Gate 8: cells migration present + matches kubebuilder cell_id pattern.
+# Closes T0.1 audit Gap 1 + T-1.3 condition C1 (migration must create
+# table AND seed in one forward-only file).
+if [[ -f "${REPO_ROOT}/api/internal/db/migrations/000003_cells.up.sql" ]]; then
+  if grep -qF "cell_id ~ '^cell-[a-z0-9-]+\$'" "${REPO_ROOT}/api/internal/db/migrations/000003_cells.up.sql"; then
+    result 0 "cells-migration:pattern-matches-CC-kubebuilder"
+  else
+    result 1 "cells-migration:CHECK-constraint-missing-or-mismatched"
+  fi
+else
+  result 1 "cells-migration:000003_cells.up.sql-missing"
+fi
+
+# Gate 9: ClusterCredential bootstrap lib present.
+# Closes T0.1 audit Gap 2 + Action Item A2.
+if [[ -x "${REPO_ROOT}/infra/helmfile/scripts/lib/clustercredential-create.sh" ]]; then
+  result 0 "cc-bootstrap-lib:executable"
+else
+  result 1 "cc-bootstrap-lib:missing-or-not-executable"
+fi
+
+# Gate 10: wire-clusters.sh wires the CC lib (closes A3).
+if grep -qF "clustercredential-create.sh" "${REPO_ROOT}/infra/helmfile/scripts/wire-clusters.sh" 2>/dev/null; then
+  result 0 "wire-clusters:invokes-cc-bootstrap-lib"
+else
+  result 1 "wire-clusters:does-not-invoke-cc-bootstrap-lib"
+fi
+
+# Gate 11: multi-cell PromRule present + has the 7 alerts T5.4 specifies.
+mc_rule="${REPO_ROOT}/infra/helm/monitoring/manifests/prometheusrule-multi-cell.yaml"
+if [[ -f "$mc_rule" ]]; then
+  alert_count=$(grep -cE "^        - alert: " "$mc_rule")
+  if (( alert_count >= 7 )); then
+    result 0 "multi-cell-alerts:rule-present (alerts=$alert_count)"
+  else
+    result 1 "multi-cell-alerts:expected ≥7 alerts, got $alert_count"
+  fi
+else
+  result 1 "multi-cell-alerts:rule-missing"
+fi
+
+# Gate 12: admin pin endpoint present + has cell pattern validation.
+pin_h="${REPO_ROOT}/api/internal/routes/admin_pin_cell.go"
+if [[ -f "$pin_h" ]] && grep -qF '^cell-[a-z0-9-]+$' "$pin_h"; then
+  result 0 "admin-pin-cell:handler-present-with-pattern"
+else
+  result 1 "admin-pin-cell:handler-missing-or-pattern-missing"
+fi
+
 echo
 echo "[parity-preflight] summary"
 echo "  PASS: $pass"
