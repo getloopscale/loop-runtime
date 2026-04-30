@@ -25,5 +25,14 @@ image:
 # fallback para DefaultEndpoint, tracing ativo. Pattern opt-out localizado
 # preserva backward compat.
 env:
-  WORKLOAD_CLUSTER_URL: "https://172.18.0.10:6443"
+  # WORKLOAD_CLUSTER_URL — k3d server IPs rotate every cluster restart, so a
+  # hardcoded value here drifts. The infra/scripts/k3d-cross-cluster-heal.sh
+  # script (`task k3d:heal`) patches this env on the live Deployment to the
+  # current k3d-loopzero-workload-server-0 IP on the shared k3d-loopzero network.
+  # Permanent fix is wired in operator (read from ClusterCredential CR) —
+  # tracked in CHG-2026-04-30-DOGFOOD-LOCAL-HEAL H10. Until then, this is a
+  # placeholder so chart renders; heal script overwrites.
+  # 2026-04-30 NEW-14: was a stale IP that caused ArgoCD apps to point at
+  # build cluster instead of runtime cluster, silently dropping all deploys.
+  WORKLOAD_CLUSTER_URL: "https://workload-cluster.local:6443"
   LOOPZERO_TRACING_ENABLED: "false"
