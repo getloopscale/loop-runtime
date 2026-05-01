@@ -9,9 +9,10 @@ import (
 	"testing"
 )
 
-// =============================================================================
-// ConstraintEngine.GetCell tests (previously 0% coverage)
-// =============================================================================
+// CHG-2026-04-30-DELETE-SINGLE-CELL: this file lost the
+// ConstraintEngine.GetCell coverage tests when ConstraintEngine was
+// deleted. RoundRobinEngine.GetCell + DynamicRouter.Stop coverage
+// retained.
 
 type fakeGetCellQuerier struct {
 	cellID   string
@@ -30,38 +31,8 @@ func (f *fakeGetCellQuerier) CountByCell(_ context.Context) (map[string]int, err
 	return map[string]int{}, nil
 }
 
-func TestConstraintEngine_GetCell_Success(t *testing.T) {
-	q := &fakeGetCellQuerier{cellID: "cell-us-east-1"}
-	engine := NewConstraintEngine(nil, q, nil, 100)
-
-	cellID, err := engine.GetCell(context.Background(), "tn-acme")
-	if err != nil {
-		t.Fatalf("unexpected error: %v", err)
-	}
-	if cellID != "cell-us-east-1" {
-		t.Errorf("expected cell-us-east-1, got %q", cellID)
-	}
-}
-
-func TestConstraintEngine_GetCell_Error(t *testing.T) {
-	q := &fakeGetCellQuerier{err: errors.New("not found")}
-	engine := NewConstraintEngine(nil, q, nil, 100)
-
-	_, err := engine.GetCell(context.Background(), "tn-unknown")
-	if err == nil {
-		t.Fatal("expected error")
-	}
-}
-
-func TestNewConstraintEngine_DefaultMaxPerCell(t *testing.T) {
-	engine := NewConstraintEngine(nil, nil, nil, 0) // 0 should default to 500
-	if engine.maxPerCell != 500 {
-		t.Errorf("expected default 500, got %d", engine.maxPerCell)
-	}
-}
-
 // =============================================================================
-// RoundRobinEngine.GetCell tests (previously 75% → cover error path)
+// RoundRobinEngine.GetCell tests
 // =============================================================================
 
 func TestRoundRobinEngine_GetCell_Error(t *testing.T) {

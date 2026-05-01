@@ -53,6 +53,11 @@
 #         live + roll the controller; existing ArgoCD Apps with stale
 #         destination get a one-shot patch too.
 #
+#   H11 — ArgoCD token in loopzero-api-tokens Secret expired (24h-session token
+#         instead of loopzero-api:apiKey non-expiring). loopzero-api can't trigger
+#         post-deploy / post-delete sync → resources orphaned in workload.
+#         Detect via JWT exp claim, regenerate via provision-api-tokens.sh.
+#
 # Idempotent — safe to re-run after every `k3d cluster start`.
 #
 # Pre-flight: requires kubectl + docker + k3d on PATH and three k3d
@@ -417,6 +422,47 @@ for app in $ARGO_APPS; do
       ;;
   esac
 done
+
+# ---------------------------------------------------------------------------
+# H11 — ArgoCD token expired. loopzero-api-tokens Secret may have expired (24h
+# admin session token if provisioned with the wrong path). Detect via JWT
+# exp claim and regenerate via provision-api-tokens.sh which mints from the
+# `loopzero-api:apiKey` ArgoCD account (non-expiring).
+# Discovered LIVE 2026-04-30 — NEW-15: project delete failed to trigger
+# ArgoCD prune sync because [DEPLOY_SERVICE_AUTH_FAILED] — token had
+# expired 13.8h before. Cleanup of solo-server resources never happened,
+# Prova de Morte timed out 300s.
+# ---------------------------------------------------------------------------
+log "H11: ensuring ArgoCD token in loopzero-api-tokens Secret is valid"
+TOKEN_RAW=$(kubectl --context "$MGMT_CTX" -n loopzero-system get secret loopzero-api-tokens \
+  -o jsonpath='{.data.argocd-token}' 2>/dev/null | base64 -d 2>/dev/null || true)
+TOKEN_VALID="false"
+if [[ -n "$TOKEN_RAW" ]]; then
+  PAYLOAD=$(echo "$TOKEN_RAW" | cut -d. -f2)
+  PAD=$(( 4 - ${#PAYLOAD} % 4 ))
+  [[ $PAD -lt 4 ]] && PAYLOAD="${PAYLOAD}$(printf '%.0s=' $(seq 1 $PAD))"
+  EXP=$(echo "$PAYLOAD" | tr '_-' '/+' | base64 -d 2>/dev/null \
+    | python3 -c 'import sys,json; print(json.load(sys.stdin).get("exp",0))' 2>/dev/null || echo 0)
+  NOW=$(date +%s)
+  # exp=0 means non-expiring (loopzero-api:apiKey style). Anything >300s in the
+  # future is fine; under that or already past = regenerate.
+  if [[ "$EXP" == "0" ]] || (( EXP > NOW + 300 )); then
+    TOKEN_VALID="true"
+  fi
+fi
+if [[ "$TOKEN_VALID" == "true" ]]; then
+  log "  argocd-token already valid (exp=$EXP, now=$NOW)"
+else
+  log "  argocd-token invalid/expired (exp=${EXP:-missing}); regenerating via provision-api-tokens.sh"
+  REPO_ROOT=$(cd "$(dirname "$0")/../.." && pwd)
+  if [[ -x "$REPO_ROOT/infra/scripts/provision-api-tokens.sh" ]]; then
+    bash "$REPO_ROOT/infra/scripts/provision-api-tokens.sh" >/dev/null 2>&1 \
+      && log "  argocd-token regenerated (loopzero-api:apiKey, non-expiring)" \
+      || warn "provision-api-tokens.sh failed — argocd sync calls may keep failing"
+  else
+    warn "provision-api-tokens.sh missing — manual regen required"
+  fi
+fi
 
 # ---------------------------------------------------------------------------
 # Restart loopzero-api so kubeconfigs Secret refresh takes effect (H2).

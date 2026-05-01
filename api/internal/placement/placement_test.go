@@ -13,49 +13,14 @@ import (
 	"time"
 )
 
-// --- DefaultEngine tests ---
-
-func TestDefaultEngine_AssignCell(t *testing.T) {
-	engine := NewDefaultEngine()
-	cellID, err := engine.AssignCell(context.Background())
-	if err != nil {
-		t.Fatalf("expected no error, got %v", err)
-	}
-	if cellID != DefaultCellID {
-		t.Errorf("expected %q, got %q", DefaultCellID, cellID)
-	}
-}
-
-func TestDefaultEngine_GetCell(t *testing.T) {
-	engine := NewDefaultEngine()
-	cellID, err := engine.GetCell(context.Background(), "tn-acme")
-	if err != nil {
-		t.Fatalf("expected no error, got %v", err)
-	}
-	if cellID != DefaultCellID {
-		t.Errorf("expected %q, got %q", DefaultCellID, cellID)
-	}
-}
-
-func TestDefaultEngine_GetCell_AnyTenantReturnsSameCell(t *testing.T) {
-	engine := NewDefaultEngine()
-	tenants := []string{"tn-acme", "tn-globex", "tn-initech"}
-	for _, tenant := range tenants {
-		cellID, err := engine.GetCell(context.Background(), tenant)
-		if err != nil {
-			t.Fatalf("tenant %s: expected no error, got %v", tenant, err)
-		}
-		if cellID != DefaultCellID {
-			t.Errorf("tenant %s: expected %q, got %q", tenant, DefaultCellID, cellID)
-		}
-	}
-}
+// CHG-2026-04-30-DELETE-SINGLE-CELL: DefaultEngine tests deleted with the
+// type. Multi-cell is the only architecture.
 
 // --- PassthroughRouter tests ---
 
 func TestPassthroughRouter_Resolve(t *testing.T) {
 	router := NewPassthroughRouter(CellConfig{
-		CellID:        DefaultCellID,
+		CellID:        "cell-default",
 		KubeConfig:    "/path/to/kubeconfig",
 		KubeContext:   "k3d-loopzero-workload",
 		ArgocdURL:     "http://argocd:80",
@@ -77,7 +42,7 @@ func TestPassthroughRouter_Resolve(t *testing.T) {
 
 func TestPassthroughRouter_Resolve_AnyCellID(t *testing.T) {
 	router := NewPassthroughRouter(CellConfig{
-		CellID:      DefaultCellID,
+		CellID:      "cell-default",
 		KubeContext: "default-context",
 	})
 
@@ -95,7 +60,7 @@ func TestPassthroughRouter_Resolve_AnyCellID(t *testing.T) {
 }
 
 func TestPassthroughRouter_Resolve_EmptyCellID(t *testing.T) {
-	router := NewPassthroughRouter(CellConfig{CellID: DefaultCellID})
+	router := NewPassthroughRouter(CellConfig{CellID: "cell-default"})
 
 	_, err := router.Resolve(context.Background(), "")
 	if err == nil {
@@ -105,7 +70,7 @@ func TestPassthroughRouter_Resolve_EmptyCellID(t *testing.T) {
 
 func TestPassthroughRouter_ListCells(t *testing.T) {
 	router := NewPassthroughRouter(CellConfig{
-		CellID:      DefaultCellID,
+		CellID:      "cell-default",
 		KubeContext: "k3d-loopzero-workload",
 	})
 
@@ -116,8 +81,8 @@ func TestPassthroughRouter_ListCells(t *testing.T) {
 	if len(cells) != 1 {
 		t.Fatalf("expected 1 cell, got %d", len(cells))
 	}
-	if cells[0].CellID != DefaultCellID {
-		t.Errorf("expected %q, got %q", DefaultCellID, cells[0].CellID)
+	if cells[0].CellID != "cell-default" {
+		t.Errorf("expected %q, got %q", "cell-default", cells[0].CellID)
 	}
 }
 
@@ -265,14 +230,8 @@ func TestRoundRobinEngine_BalancedDistribution(t *testing.T) {
 }
 
 // --- Interface compliance ---
-
-func TestDefaultEngine_ImplementsEngine(t *testing.T) {
-	var _ Engine = (*DefaultEngine)(nil)
-}
-
-func TestRoundRobinEngine_ImplementsEngine(t *testing.T) {
-	var _ Engine = (*RoundRobinEngine)(nil)
-}
+// CHG-2026-04-30-DELETE-SINGLE-CELL: Engine interface deleted. Compliance
+// test for RoundRobinEngine implementing Engine no longer applies.
 
 func TestPassthroughRouter_ImplementsRouter(t *testing.T) {
 	var _ Router = (*PassthroughRouter)(nil)
@@ -551,7 +510,7 @@ func TestPlacement_ConcurrentCreation_WithoutSerializerHotSpots(t *testing.T) {
 func TestRouting_CellDefault_BackwardCompat(t *testing.T) {
 	router, err := NewStaticRouter([]CellConfig{
 		{
-			CellID:        DefaultCellID,
+			CellID:        "cell-default",
 			KubeConfig:    "/legacy/kubeconfig",
 			KubeContext:   "cell-default",
 			ArgocdURL:     "http://argocd-legacy.argocd.svc",
@@ -573,12 +532,12 @@ func TestRouting_CellDefault_BackwardCompat(t *testing.T) {
 
 	// Legacy tenant lookup: cell-default must resolve to the legacy
 	// cluster, not the new one.
-	cfg, err := router.Resolve(context.Background(), DefaultCellID)
+	cfg, err := router.Resolve(context.Background(), "cell-default")
 	if err != nil {
 		t.Fatalf("Resolve(cell-default): %v", err)
 	}
-	if cfg.CellID != DefaultCellID {
-		t.Errorf("expected CellID=%q, got %q", DefaultCellID, cfg.CellID)
+	if cfg.CellID != "cell-default" {
+		t.Errorf("expected CellID=%q, got %q", "cell-default", cfg.CellID)
 	}
 	if cfg.KubeContext != "cell-default" {
 		t.Errorf("expected KubeContext=cell-default, got %q", cfg.KubeContext)
@@ -612,8 +571,8 @@ func TestRouting_CellDefault_BackwardCompat(t *testing.T) {
 // --- ExtractRegion tests ---
 
 func TestExtractRegion_Default(t *testing.T) {
-	if got := ExtractRegion(DefaultCellID); got != "default" {
-		t.Errorf("ExtractRegion(%q) = %q, want default", DefaultCellID, got)
+	if got := ExtractRegion("cell-default"); got != "default" {
+		t.Errorf("ExtractRegion(%q) = %q, want default", "cell-default", got)
 	}
 }
 
@@ -791,14 +750,14 @@ func TestDynamicRouter_SkipsEmptyCellID(t *testing.T) {
 // --- PassthroughRouter additional ---
 
 func TestPassthroughRouter_DiscoveredCellCount(t *testing.T) {
-	r := NewPassthroughRouter(CellConfig{CellID: DefaultCellID})
+	r := NewPassthroughRouter(CellConfig{CellID: "cell-default"})
 	if got := r.DiscoveredCellCount(); got != 1 {
 		t.Errorf("DiscoveredCellCount = %d, want 1", got)
 	}
 }
 
 func TestPassthroughRouter_IsDynamic(t *testing.T) {
-	r := NewPassthroughRouter(CellConfig{CellID: DefaultCellID})
+	r := NewPassthroughRouter(CellConfig{CellID: "cell-default"})
 	if r.IsDynamic() {
 		t.Error("PassthroughRouter.IsDynamic should return false")
 	}
@@ -873,20 +832,9 @@ func TestRoundRobinEngine_AssignAndExecute_WithSerializer(t *testing.T) {
 	}
 }
 
-func TestDefaultEngine_AssignAndExecute(t *testing.T) {
-	engine := NewDefaultEngine()
-	var assignedCell string
-	err := engine.AssignAndExecute(context.Background(), func(ctx context.Context, cellID string) error {
-		assignedCell = cellID
-		return nil
-	})
-	if err != nil {
-		t.Fatalf("AssignAndExecute: %v", err)
-	}
-	if assignedCell != DefaultCellID {
-		t.Errorf("expected %q, got %q", DefaultCellID, assignedCell)
-	}
-}
+// CHG-2026-04-30-DELETE-SINGLE-CELL: TestDefaultEngine_AssignAndExecute
+// removed — DefaultEngine deleted. RoundRobinEngine.AssignAndExecute is
+// covered by TestPlacement_ConcurrentCreation_NoTOCTOU above.
 
 // --- NewAdvisoryLockSerializer(nil) ---
 

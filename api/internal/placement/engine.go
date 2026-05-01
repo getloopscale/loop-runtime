@@ -2,10 +2,21 @@
 // Copyright 2025-2026 The LoopZero Authors
 
 // Package placement implements the Cell placement and routing layer.
-// ADR-0008: Cell-Based Architecture for 50k+ app scale.
+// ADR-0008 Phase 1+: Multi-cell only — no DefaultEngine / single-cell mode.
 //
-// Phase 0: DefaultEngine returns "cell-default" for all tenants.
-// Phase 1+: Real engines implement bin-packing, affinity, and capacity constraints.
+// Production wiring:
+//
+//	DynamicRouter   ← discovers cells from ClusterCredential CRs
+//	RoundRobinEngine ← assigns NEW tenants to least-loaded cell, sticky for
+//	                   existing tenants. Wrapped by an advisory-lock
+//	                   Serializer in production to prevent TOCTOU on
+//	                   concurrent tenant creation.
+//
+// CHG-2026-04-30-DELETE-SINGLE-CELL: DefaultEngine, DefaultCellID,
+// Engine interface, ExtractRegion, ConstraintEngine + CellLabelQuerier
+// were deleted. All were unused in production paths. The cell-default
+// row in tenants.cell_id remains as the SQL DEFAULT — this is data, not
+// code, and has its own comment in 000001_initial_schema.up.sql.
 package placement
 
 import (
@@ -13,52 +24,27 @@ import (
 	"fmt"
 )
 
-// DefaultCellID is the cell_id used when only one Cell exists (Phase 0).
-const DefaultCellID = "cell-default"
-
-// Engine decides which Cell a tenant should be placed in.
-// Implementations must be safe for concurrent use.
-type Engine interface {
-	// AssignCell returns the cell_id for a new tenant.
-	// Called during tenant creation (bootstrap).
-	AssignCell(ctx context.Context) (cellID string, err error)
-
-	// GetCell returns the cell_id for an existing tenant.
-	// Called during operations to resolve the target Cell.
-	GetCell(ctx context.Context, tenantID string) (cellID string, err error)
+// TenantCellQuerier abstracts tenant-to-cell lookups against the DB.
+type TenantCellQuerier interface {
+	// CountByCell returns tenant count per cell_id.
+	CountByCell(ctx context.Context) (map[string]int, error)
+	// GetTenantCellID returns the cell_id for a specific tenant.
+	GetTenantCellID(ctx context.Context, tenantID string) (string, error)
 }
 
-// DefaultEngine always returns DefaultCellID.
-// This is the Phase 0 implementation — all tenants in one Cell.
-type DefaultEngine struct{}
-
-// NewDefaultEngine creates a Phase 0 placement engine.
-func NewDefaultEngine() *DefaultEngine {
-	return &DefaultEngine{}
-}
-
-// AssignCell returns "cell-default" for all new tenants.
-func (e *DefaultEngine) AssignCell(_ context.Context) (string, error) {
-	return DefaultCellID, nil
-}
-
-// GetCell returns "cell-default" for all existing tenants.
-func (e *DefaultEngine) GetCell(_ context.Context, _ string) (string, error) {
-	return DefaultCellID, nil
-}
-
-// AssignAndExecute runs the callback with "cell-default" (no serialization needed).
-func (e *DefaultEngine) AssignAndExecute(ctx context.Context, fn func(ctx context.Context, cellID string) error) error {
-	return fn(ctx, DefaultCellID)
-}
-
-// ExtractRegion derives region from cell_id.
-// "cell-default" → "default", "cell-sfo3-02" → "sfo3".
+// ExtractRegion derives a region label from a cell_id.
+// Convention: cell-{region}-{nn}. Examples:
+//   "cell-default" → "default" (legacy single-cell installs)
+//   "cell-sfo3-02" → "sfo3"
+//   "cell-1"       → "1" (no region encoded; rare)
+//
+// Used by services/cell_service.go to populate CellStatus.Region in
+// API responses.
 func ExtractRegion(cellID string) string {
-	if cellID == DefaultCellID {
+	if cellID == "cell-default" {
 		return "default"
 	}
-	if len(cellID) > 5 { // "cell-" prefix
+	if len(cellID) > 5 { // strip "cell-" prefix
 		rest := cellID[5:]
 		for i := len(rest) - 1; i >= 0; i-- {
 			if rest[i] == '-' {
@@ -70,28 +56,15 @@ func ExtractRegion(cellID string) string {
 	return cellID
 }
 
-// TenantCellQuerier abstracts tenant-to-cell lookups.
-// Implemented by the DB layer.
-type TenantCellQuerier interface {
-	// CountByCell returns tenant count per cell_id.
-	CountByCell(ctx context.Context) (map[string]int, error)
-	// GetTenantCellID returns the cell_id for a specific tenant.
-	GetTenantCellID(ctx context.Context, tenantID string) (string, error)
-}
-
 // Serializer wraps a callback in a critical section so concurrent callers
 // cannot both read the same tenant count and both assign to the same cell.
 // In production the wrapper acquires a process-wide `pg_advisory_xact_lock`
-// on a well-known id so even multi-replica API deployments serialize their
-// placement decisions through Postgres. In tests a simple `sync.Mutex.Lock`
+// on PlacementLockID so multi-replica API deployments serialize their
+// placement decisions through Postgres. In tests a `sync.Mutex.Lock`
 // wrapper is enough.
 //
 // The callback must be called exactly once and its error returned verbatim.
 // The Serializer must NOT swallow the callback error.
-//
-// Roadmap 06 — fixes the Read-Count → Decide → (race) → Insert TOCTOU in
-// AssignCell that hot-spots all concurrent tenant creates into the same
-// cell before any of them persist.
 type Serializer func(ctx context.Context, fn func(ctx context.Context) error) error
 
 // PlacementLockID is the Postgres advisory lock id used by production
@@ -103,12 +76,11 @@ const PlacementLockID int64 = 0x706C636D746C636B
 
 // RoundRobinEngine assigns new tenants to the Cell with fewest tenants.
 // Existing tenants keep their cell_id (sticky assignment).
-// ADR-0008 Phase 1.
 type RoundRobinEngine struct {
 	router     Router
 	querier    TenantCellQuerier
 	maxPerCell int
-	serialize  Serializer // optional — nil means no serialization (single-writer safe only)
+	serialize  Serializer // nil → single-writer mode (tests only)
 }
 
 // NewRoundRobinEngine creates a placement engine that distributes tenants
@@ -125,12 +97,10 @@ func NewRoundRobinEngine(router Router, querier TenantCellQuerier, maxPerCell in
 	}
 }
 
-// WithSerializer returns a shallow copy of the engine that runs every
-// AssignCell call inside the given serializer. Use this in production with
-// a pg_advisory_xact_lock wrapper so concurrent tenant creations cannot
+// WithSerializer returns a copy of the engine that runs every AssignCell
+// call inside the given serializer. Use this in production with a
+// pg_advisory_xact_lock wrapper so concurrent tenant creations cannot
 // both observe the same counts and both pick the same cell (TOCTOU).
-//
-// The method returns a pointer to the new engine so call sites can chain:
 //
 //	engine := placement.NewRoundRobinEngine(router, querier, 500).
 //	    WithSerializer(advisoryLockSerializer(pool))
@@ -145,11 +115,6 @@ func (e *RoundRobinEngine) WithSerializer(s Serializer) *RoundRobinEngine {
 
 // AssignCell returns the cell_id of the Cell with fewest tenants (bin-packing).
 // Returns error if all Cells are at capacity.
-//
-// When a Serializer was attached via WithSerializer, the entire
-// count-and-pick operation runs inside the serialized critical section so
-// concurrent AssignCell calls execute sequentially from the database's
-// perspective and cannot both pick the same cell.
 func (e *RoundRobinEngine) AssignCell(ctx context.Context) (string, error) {
 	var cellID string
 	run := func(ctx context.Context) error {
@@ -211,13 +176,6 @@ func (e *RoundRobinEngine) assignLocked(ctx context.Context) (string, error) {
 // AssignAndExecute picks a cell AND runs the given callback inside the same
 // serialized transaction. This fixes the TOCTOU bug (MEET-053 D-01) where
 // AssignCell runs under the advisory lock but the tenant INSERT runs outside it.
-//
-// The callback receives the assigned cellID and a context that contains the
-// serializer's transaction (retrievable via placement.TxFromContext). The
-// callback MUST use this context for its database operations.
-//
-// When no serializer is attached, the callback runs without a transaction
-// (single-replica safe).
 func (e *RoundRobinEngine) AssignAndExecute(ctx context.Context, fn func(ctx context.Context, cellID string) error) error {
 	run := func(txCtx context.Context) error {
 		cellID, err := e.assignLocked(txCtx)

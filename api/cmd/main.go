@@ -144,9 +144,13 @@ func main() {
 		ghDeps = setupGitHub(dbAdapter, stores, orchDeps.Orchestrator, cfg, shutdownCtx, logger)
 	}
 
+	// CHG-2026-04-30-DELETE-SINGLE-CELL: cellRouter is always DynamicRouter
+	// when DB + workflows are wired. The previous PassthroughRouter pre-wire
+	// was an artifact of single-cell mode; in startup paths where the router
+	// is not yet built (test stubs without DB), routes that need cells get
+	// a nil router and must handle it.
 	var bgWg sync.WaitGroup
-	cellRouter := placement.Router(placement.NewPassthroughRouter(
-		placement.CellConfig{CellID: placement.DefaultCellID}))
+	var cellRouter placement.Router
 	var cellStore *db.PostgresCellStore
 	var domainHandler *routes.DomainHandler
 

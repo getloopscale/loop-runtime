@@ -196,17 +196,10 @@ type Config struct {
 	// Env: LOOPZERO_USE_PG_CLAIMS
 	UsePGClaims bool
 
-	// DynamicRouter enables the DynamicRouter that discovers cells from
-	// ClusterCredential CRDs (Phase 0.3, scale-50k-plan). When true and
-	// cells are found, the API auto-discovers new cells without restart.
-	// Env: LOOPZERO_DYNAMIC_ROUTER
-	DynamicRouter bool
-
-	// SingleCell forces StaticRouter regardless of DynamicRouter config.
-	// Use as rollback mechanism when multi-cell discovery has issues.
-	// MEET-2026-04-18-053: multi-cell-default rollback flag.
-	// Env: LOOPZERO_SINGLE_CELL
-	SingleCell bool
+	// CHG-2026-04-30-DELETE-SINGLE-CELL: removed cfg.DynamicRouter and
+	// cfg.SingleCell. Multi-cell is the only architecture. DynamicRouter
+	// is used unconditionally; single-cell is the degenerate case of N=1
+	// ClusterCredentials discovered. See setup_background.go:setupCellRouter.
 
 	// ServiceAuthSecretCreatedAt is the ISO 8601 timestamp of when the
 	// current service auth secret was created. Used to compute the age
@@ -369,10 +362,9 @@ func Load() Config {
 		MaxConcurrentBuildsPerTenant: envInt("MAX_CONCURRENT_BUILDS_PER_TENANT", 3),
 		PGCircuitBreakerThresholdPct: envInt("PG_CIRCUIT_BREAKER_THRESHOLD_PCT", 90),
 
-		// Scale 50k plan — Phase 0.2/0.3 feature flags.
-		UsePGClaims:   os.Getenv("LOOPZERO_USE_PG_CLAIMS") == "true",
-		DynamicRouter: os.Getenv("LOOPZERO_DYNAMIC_ROUTER") != "false",
-		SingleCell:    os.Getenv("LOOPZERO_SINGLE_CELL") == "true",
+		// Scale 50k plan — Phase 0.2 feature flag (Phase 0.3 multi-cell is
+		// no longer toggle-gated; see CHG-2026-04-30-DELETE-SINGLE-CELL).
+		UsePGClaims: os.Getenv("LOOPZERO_USE_PG_CLAIMS") == "true",
 
 		// WS.1: Service auth secret rotation monitoring.
 		ServiceAuthSecretCreatedAt: envTime("LOOPZERO_SERVICE_AUTH_SECRET_CREATED_AT"),

@@ -101,53 +101,47 @@ func startNonLeaderReelection(leaderConn *pgxpool.Conn, shutdownCtx context.Cont
 	}()
 }
 
-// setupCellRouter creates the cell placement router (dynamic or static).
+// setupCellRouter creates the DynamicRouter — the ONE router used in
+// production. There is no single-cell mode, no PassthroughRouter, no
+// StaticRouter fallback. If ClusterCredential discovery returns 0 cells
+// the API fails fast on boot — there is nowhere to route requests.
+//
+// CHG-2026-04-30-DELETE-SINGLE-CELL: removed cfg.SingleCell + cfg.DynamicRouter
+// toggles. Single-cell is the degenerate case of multi-cell with 1 CC
+// discovered. N CCs = router distributes; pre-release governance:
+// no feature flags, no rollback paths.
 func setupCellRouter(
 	cfg config.Config,
 	shutdownCtx context.Context,
 	bgWg *sync.WaitGroup,
 	logger *slog.Logger,
 ) placement.Router {
-	if cfg.SingleCell {
-		logger.Warn("cell router: LOOPZERO_SINGLE_CELL=true — forced single-cell mode (rollback)")
-		return placement.NewPassthroughRouter(placement.CellConfig{CellID: placement.DefaultCellID})
-	}
-
-	if cfg.DynamicRouter {
-		k8sCellStore, k8sErr := placement.NewK8sCellStore(nil, "loopzero-system")
-		if k8sErr == nil {
-			dynRouter := placement.NewDynamicRouter(k8sCellStore, 60*time.Second, logger)
-			cells, loadErr := k8sCellStore.LoadCells(context.Background())
-			if loadErr == nil && len(cells) > 0 {
-				bgWg.Add(1)
-				go func() {
-					defer bgWg.Done()
-					dynRouter.Start(shutdownCtx)
-				}()
-				logger.Info("cell router: DynamicRouter active", "cells_discovered", len(cells))
-				return dynRouter
-			}
-			logger.Info("cell router: no ClusterCredentials found, falling back to StaticRouter",
-				"load_err", loadErr, "cells_found", len(cells))
-		} else {
-			logger.Warn("cell router: K8sCellStore init failed, falling back to StaticRouter", "error", k8sErr)
-		}
-	}
-
-	staticRouter, err := placement.NewStaticRouter([]placement.CellConfig{{
-		CellID:        placement.DefaultCellID,
-		KubeConfig:    cfg.RuntimeKubeconfig,
-		KubeContext:   cfg.RuntimeKubeContext,
-		ArgocdURL:     cfg.ArgocdURL,
-		ArgocdToken:   cfg.ArgocdToken,
-		IngressDomain: cfg.BaseDomain,
-	}})
-	if err != nil {
-		logger.Error("failed to create cell router", "error", err)
+	k8sCellStore, k8sErr := placement.NewK8sCellStore(nil, "loopzero-system")
+	if k8sErr != nil {
+		logger.Error("cell router: K8sCellStore init failed — fatal, no fallback by design",
+			"error", k8sErr)
 		os.Exit(1)
 	}
-	logger.Info("cell router: StaticRouter with cell-default (single cell)")
-	return staticRouter
+	dynRouter := placement.NewDynamicRouter(k8sCellStore, 60*time.Second, logger)
+	cells, loadErr := k8sCellStore.LoadCells(context.Background())
+	if loadErr != nil {
+		logger.Error("cell router: initial cell load failed — fatal, no fallback by design",
+			"error", loadErr)
+		os.Exit(1)
+	}
+	if len(cells) == 0 {
+		logger.Error("cell router: 0 ClusterCredentials discovered — fatal, no fallback by design",
+			"hint", "create at least one ClusterCredential CR with status.connected=true in loopzero-system",
+			"docs", "docs/runbooks/multi-cell-canary-prod.md#pre-conditions")
+		os.Exit(1)
+	}
+	bgWg.Add(1)
+	go func() {
+		defer bgWg.Done()
+		dynRouter.Start(shutdownCtx)
+	}()
+	logger.Info("cell router: DynamicRouter active", "cells_discovered", len(cells))
+	return dynRouter
 }
 
 // DomainDeps holds domain-related components created during background setup.
