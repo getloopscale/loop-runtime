@@ -8,6 +8,9 @@ import (
 	"log/slog"
 	"os"
 
+	"k8s.io/client-go/dynamic"
+	"k8s.io/client-go/rest"
+
 	"github.com/loopzero/loopzero/api/internal/config"
 	"github.com/loopzero/loopzero/api/internal/db"
 	"github.com/loopzero/loopzero/api/internal/middleware"
@@ -146,7 +149,10 @@ func buildServerConfig(
 		// no consumer, returning 404. loopzero admin tenants pin --cell <id>
 		// is the only path to override automatic cell assignment for a
 		// tenant.
-		sc.AdminPinner = services.NewCellPinner(&db.PostgresCellStore{DB: dbAdapter})
+		// CHG-2026-04-30-DELETE-SINGLE-CELL: pinner also patches Tenant CR
+		// so operator reconcile re-emits ArgoCD destination with new cell.
+		sc.AdminPinner = services.NewCellPinner(&db.PostgresCellStore{DB: dbAdapter}).
+			WithKubeClient(buildMgmtDynamicClient(logger), "loopzero-system")
 		sc.AuditWriter = func(tenantID, action, actor, resourceType, resourceID, correlationID string, metadata map[string]any) {
 			entry := db.AuditEntry{
 				TenantID: tenantID, Action: action, Actor: actor,
@@ -240,4 +246,28 @@ func toSBOMURLGenerator(stores *StoreDeps) routes.SBOMURLGenerator {
 		return g
 	}
 	return nil
+}
+
+// buildMgmtDynamicClient constructs a dynamic.Interface for the mgmt
+// cluster. CHG-2026-04-30-DELETE-SINGLE-CELL: required by CellPinner to
+// patch tenant.spec.cellID after a successful DB update. Prefers
+// in-cluster config so loopzero-api SA's RBAC applies (loopzero.io/tenants
+// resource permission granted via clusterrolebinding/loopzero-api).
+//
+// Returns nil on failure (logged) — pinner falls back to DB-only mode
+// which logs a manual `kubectl patch` hint when the CR patch is skipped.
+func buildMgmtDynamicClient(logger *slog.Logger) dynamic.Interface {
+	cfg, err := rest.InClusterConfig()
+	if err != nil {
+		logger.Warn("cell pinner: in-cluster config unavailable, CR patches disabled",
+			"error", err)
+		return nil
+	}
+	dyn, err := dynamic.NewForConfig(cfg)
+	if err != nil {
+		logger.Warn("cell pinner: dynamic.NewForConfig failed, CR patches disabled",
+			"error", err)
+		return nil
+	}
+	return dyn
 }

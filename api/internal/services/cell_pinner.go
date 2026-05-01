@@ -17,11 +17,26 @@ package services
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"fmt"
+	"log/slog"
 
 	"github.com/jackc/pgx/v5"
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/apimachinery/pkg/runtime/schema"
+	"k8s.io/apimachinery/pkg/types"
+	"k8s.io/client-go/dynamic"
 )
+
+// tenantGVR is the GroupVersionResource for the Tenant CR. Hardcoded
+// here (instead of importing operators/api/v1) so this service has no
+// operator-package dependency.
+var tenantGVR = schema.GroupVersionResource{
+	Group:    "loopzero.io",
+	Version:  "v1",
+	Resource: "tenants",
+}
 
 // CellPinnerStore is the persistence interface CellPinner depends on.
 // Implementation lives in db/cell_pinner_store.go (sibling, ships in
@@ -55,21 +70,82 @@ var (
 // CellPinner is the routes.CellPinner consumer (see admin_pin_cell.go).
 // It's a thin orchestration over CellPinnerStore so the route layer
 // doesn't depend on db internals.
+//
+// CHG-2026-04-30-DELETE-SINGLE-CELL: in addition to updating the DB
+// (single-source for placement state), the pinner ALSO patches
+// tenant.spec.cellID on the Tenant CR so the operator's next reconcile
+// re-emits ArgoCD Application + AppProject with the new destination.
+// Without the CR patch, the DB and the K8s state diverge and the
+// operator continues writing the previous cell.
 type CellPinner struct {
-	store CellPinnerStore
+	store     CellPinnerStore
+	mgmtKube  dynamic.Interface // optional: when nil, CR patch is skipped
+	mgmtNS    string            // namespace where Tenant CRs live (default "loopzero-system")
 }
 
 // NewCellPinner constructs a pinner with the given persistence backend.
+// The mgmtKube + namespace can be nil/empty in tests; the production
+// wireup (api/cmd/setup_server.go) passes a real dynamic client so the
+// CR patch happens on every successful pin.
 func NewCellPinner(store CellPinnerStore) *CellPinner {
-	return &CellPinner{store: store}
+	return &CellPinner{store: store, mgmtNS: "loopzero-system"}
+}
+
+// WithKubeClient returns a copy of the pinner that also patches the
+// Tenant CR after a successful DB update. Returns the receiver
+// unchanged when client is nil — preserves test ergonomics.
+func (p *CellPinner) WithKubeClient(client dynamic.Interface, namespace string) *CellPinner {
+	cp := *p
+	cp.mgmtKube = client
+	if namespace != "" {
+		cp.mgmtNS = namespace
+	}
+	return &cp
 }
 
 // Pin satisfies the routes.CellPinner interface from admin_pin_cell.go.
+//
+// Flow:
+//  1. DB UPDATE via CellPinnerStore (validates tenant + cell + capacity).
+//  2. If a kube client is wired: strategic-merge patch the Tenant CR
+//     spec.cellID. Failure is LOGGED and does NOT roll back the DB —
+//     the operator's reconcile loop will re-converge once the CR is
+//     manually patched OR if the next pin call retries the same cell.
+//
+// Returning the previous cell_id allows callers to surface "moved from
+// X to Y" in the response.
 func (p *CellPinner) Pin(ctx context.Context, tenantID, cellID string) (string, error) {
 	if p.store == nil {
 		return "", fmt.Errorf("cell pinner: store not configured")
 	}
-	return p.store.PinTenantToCell(ctx, tenantID, cellID)
+	prev, err := p.store.PinTenantToCell(ctx, tenantID, cellID)
+	if err != nil {
+		return "", err
+	}
+	if p.mgmtKube != nil {
+		if patchErr := p.patchTenantCR(ctx, tenantID, cellID); patchErr != nil {
+			slog.Warn("cell pinner: DB updated but Tenant CR patch failed — operator will continue using previous cellID until the CR is patched manually",
+				"tenant", tenantID, "new_cell", cellID, "error", patchErr,
+				"manual_fix", fmt.Sprintf("kubectl -n %s patch tenant %s --type=merge -p '{\"spec\":{\"cellID\":%q}}'", p.mgmtNS, tenantID, cellID))
+		}
+	}
+	return prev, nil
+}
+
+// patchTenantCR applies a strategic-merge patch to spec.cellID on the
+// named Tenant CR. Idempotent — re-pinning to the same cell is a no-op
+// from the operator's perspective.
+func (p *CellPinner) patchTenantCR(ctx context.Context, tenantID, cellID string) error {
+	patch, err := json.Marshal(map[string]any{"spec": map[string]any{"cellID": cellID}})
+	if err != nil {
+		return fmt.Errorf("marshal patch: %w", err)
+	}
+	_, err = p.mgmtKube.Resource(tenantGVR).Namespace(p.mgmtNS).
+		Patch(ctx, tenantID, types.MergePatchType, patch, metav1.PatchOptions{})
+	if err != nil {
+		return fmt.Errorf("patch tenant %s: %w", tenantID, err)
+	}
+	return nil
 }
 
 // pinTenantToCellSQL is the canonical query the store implementation
