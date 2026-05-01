@@ -58,6 +58,15 @@
 #         post-deploy / post-delete sync → resources orphaned in workload.
 #         Detect via JWT exp claim, regenerate via provision-api-tokens.sh.
 #
+#   H12 — ClusterCredential cell-1 missing despite cells SQL row status=active.
+#         Discovered LIVE 2026-05-01 (regression matrix entry 153): cells
+#         table seed creates 3 rows (cell-default, cell-1, cell-2) but
+#         wire-clusters.sh non-fatal "WARN: continuing" path silently failed
+#         on cell-1 → DynamicRouter.Resolve("cell-1") = unknown cell. Pin
+#         para cell-1 atualizaria DB + CR, mas operator deploy falharia.
+#         Fix: invoke clustercredential-create.sh directly using the workload
+#         cluster scoped kubeconfig. Idempotent (kubectl apply).
+#
 # Idempotent — safe to re-run after every `k3d cluster start`.
 #
 # Pre-flight: requires kubectl + docker + k3d on PATH and three k3d
@@ -466,6 +475,39 @@ else
       || warn "provision-api-tokens.sh failed — argocd sync calls may keep failing"
   else
     warn "provision-api-tokens.sh missing — manual regen required"
+  fi
+fi
+
+# ---------------------------------------------------------------------------
+# H12 — ClusterCredential cell-1 bootstrap (regression matrix entry 153).
+# wire-clusters.sh has cell-1 logic but `|| log WARN: continuing` masks
+# silent failures. Codify the recovery here so every `task k3d:heal`
+# converges to {cell-default, cell-1, cell-2} ClusterCredentials.
+# ---------------------------------------------------------------------------
+log "H12: ensuring ClusterCredential cell-1 exists for loopzero-workload"
+WORKLOAD_CTX="k3d-loopzero-workload"
+CELL1_EXISTS=$(kubectl --context "$MGMT_CTX" -n loopzero-system get clustercredential cell-1 \
+  -o jsonpath='{.status.connected}' 2>/dev/null || echo "")
+if [[ "$CELL1_EXISTS" == "true" ]]; then
+  log "  ClusterCredential cell-1 already connected — skip"
+else
+  REPO_ROOT=$(cd "$(dirname "$0")/../.." && pwd)
+  CC_LIB="$REPO_ROOT/infra/helmfile/scripts/lib/clustercredential-create.sh"
+  SCOPED_LIB="$REPO_ROOT/infra/helmfile/scripts/lib/scoped-kubeconfig.sh"
+  WORKLOAD_KUBECONFIG=$(mktemp)
+  trap "rm -f '$WORKLOAD_KUBECONFIG'" RETURN
+  k3d kubeconfig get loopzero-workload > "$WORKLOAD_KUBECONFIG" 2>/dev/null
+  if [[ -x "$CC_LIB" ]] && [[ -x "$SCOPED_LIB" ]] && [[ -s "$WORKLOAD_KUBECONFIG" ]]; then
+    SCOPED=$(KUBECONFIG="$WORKLOAD_KUBECONFIG" "$SCOPED_LIB" runtime "$WORKLOAD_KUBECONFIG" 2>/dev/null || echo "")
+    if [[ -n "$SCOPED" ]] && [[ -s "$SCOPED" ]]; then
+      KUBECONFIG="" "$CC_LIB" cell-1 runtime "$SCOPED" >/dev/null 2>&1 \
+        && log "  ClusterCredential cell-1 created/refreshed" \
+        || warn "clustercredential-create.sh cell-1 failed — see matrix entry 153 fix path (b)"
+    else
+      warn "scoped-kubeconfig.sh cell-1 produced empty output"
+    fi
+  else
+    warn "wire-clusters lib scripts missing or workload kubeconfig empty"
   fi
 fi
 
