@@ -1895,13 +1895,13 @@ CHANGELOG.md — CHG-2026-04-30-INFRA-NORMALIZE entry block under Added/Changed/
 | 7 | charts/loopzero-platform requires helm dep build | T8.1 — RESOLVED 2026-05-01 | task validate:helm-deps wired into validate-matrix.sh as Gate 9.6 (11 charts: loopzero-api, loopzero-app-operator, loopzero-cloud, loopzero-controller, loopzero-crds, loopzero-dashboard, loopzero-platform, loopzero-platform-operator, loopzero-preview-operator, loopzero-tenant-controller, loopzero-tenant-operator). Gate respeita HELM_REPOS_UNREACHABLE=1 fallback. |
 | 8 | Sloth files bypass kubeconform | T8.1 — RESOLVED 2026-05-01 | infra/sloth/validate.py (95 LOC) + Taskfile validate:slos + validate-matrix.sh Gate 9.5 wired (commit 7f346b81). 7/7 SLO files validate GREEN; supports both Sloth SLI specs (events + raw) |
 | 9 | refactorhelms merge needs ratification | T1.1 | Proper PR |
-| 10 | All CLI commands 1000% functional | T0.3, T4.1, T4.2, T4.3 | Audit + 12+ integration tests + bug fixes |
-| 11 | Multi-cell not active | T-1.3, T0.1, T5.1, T5.2, T5.3, T5.4, T5.5, T5.6, T5.7 | Source audit + creds rotation + config + migration + observability + flag + canary stages |
+| 10 | All CLI commands 1000% functional | T0.3, T4.1, T4.2, T4.3 — RESOLVED 2026-05-01 | docs/audits/cli-commands-audit.md (199 LOC) + 14 integration suites in cli/tests/integration/ + 72 tests (20.15s) + bug fixes per CHANGELOG (audit assertion drift, audit_store NULL scan, loopzero connect upsert, mapError body.error fallback). 1243 unit + 72 integration GREEN. |
+| 11 | Multi-cell not active | T-1.3, T0.1, T5.1, T5.2, T5.3, T5.4, T5.5, T5.6, T5.7 — CODE GREEN 2026-04-30; LIVE soaks cloud-bound | T-1.3 governance APPROVED_WITH_CONDITIONS · T0.1 audit shipped · T5.1/T5.2/T5.5 [N/A]-superseded with successor tests (CC-bootstrap-lib + helmfile-cell-metadata + admin-tenants-pin) · T5.3 cells migration 000006 + 8 tests · T5.4 4 metrics + 7 alerts + dashboard · T5.6/T5.7 scripts shipped offline (242+214 LOC, dry-run GREEN), LIVE 1h+24h soaks cloud-pendentes |
 | 12 | No CI gate for CLI integration | T6.1 | New workflow |
 | 13 | No CI gate for multi-cell | T6.2 | New workflow |
-| 14 | Parity preflight missing gates | T6.3 | 3 gates added |
-| 15 | No master validation | T8.1 | validate-matrix.sh |
-| 16 | Matrix could regress | T8.2 + audit-regression-matrix.sh runs in CI | Continuous gate |
+| 14 | Parity preflight missing gates | T6.3 — RESOLVED 2026-05-01 | preflight.sh now has 16 sub-gates (was 15 plan target); verified GREEN 16 PASS / 0 FAIL post-iter-2 cleanup-terminating-namespaces.sh codification |
+| 15 | No master validation | T8.1 — RESOLVED 2026-05-01 | infra/tests/parity/validate-matrix.sh shipped + Taskfile validate:matrix + validate:matrix:quick. 13 gates orquestrados (Gates 1-9.6 + envtest); 12 PASS quick / 13 PASS full. Iters 16-29 added 3 new gates (9.5 SLOs + 9.55 Rules + 9.6 helm-deps). |
+| 16 | Matrix could regress | T8.2 + audit-regression-matrix.sh runs in CI — RESOLVED 2026-05-01 | infra/tests/parity/audit-regression-matrix.sh in CI; Gate 8 + Gate 9 explicit in master matrix; audit golden test self-check; 152 entries / 144 OK / 8 SKIP / 0 MISS verified |
 | 17 | ADRs sketchy | T-1.1/2/3 + T8.2 | Prescriptive ADRs with Options/Vetoes/Migration/Rollback/Comms |
 | 18 | CHANGELOG not closed | T8.2 | Closed |
 | 19 | Memory not updated | T8.2 | Persisted |
