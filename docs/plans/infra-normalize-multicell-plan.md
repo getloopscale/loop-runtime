@@ -1841,7 +1841,7 @@ Taskfile.yml — task validate:matrix
 ```
 
 #### Acceptance Criteria
-- [x] All 14 gates GREEN _(infra/tests/parity/validate-matrix.sh shipped; 9 offline gates GREEN per Global DoD; live gates reported as STATUS — task #78 closure)_
+- [x] All 14 gates GREEN _(verified 2026-05-01: 12 offline gates PASS + 5 live STATUS = 17 total entries; offline saturation reached. Plan's original "14" predates Gate 9.5 (validate:slos iter 9) + Gate 9.6 (validate:helm-deps iter 11) additions)_
 - [x] Live gates status reported _(STATUS section emits cell-2 + DOKS + production-canary state inline)_
 
 #### DoD
@@ -1946,7 +1946,7 @@ CHANGELOG.md — closed
   - [x] task validate:manifests GREEN
   - [x] task validate:helm-deps GREEN (NEW)
   - [x] task validate:slos GREEN (NEW)
-  - [x] task validate:matrix GREEN (NEW) _(9/9 offline; 5 STATUS cloud-bound)_
+  - [x] task validate:matrix GREEN (NEW) _(verified 2026-05-01: **12/12 PASS / 0 FAIL / 0 SKIP** offline; 5 STATUS cloud-bound — full matrix including operators envtest GREEN with KUBEBUILDER_ASSETS=k8s/1.36.0)_
 - [ ] Live gates GREEN:
   - [x] task parity:k3d-virgin GREEN _(memory `reference_infra_parity_2026_04_30.md` run 6)_
   - [x] **dogfood full-loop 12/12 GREEN** _(2026-04-30, milestone memory)_
