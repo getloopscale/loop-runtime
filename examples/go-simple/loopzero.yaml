@@ -1,6 +1,0 @@
-project: go-api
-
-apps:
-  go-api:
-    path: .
-    framework: custom

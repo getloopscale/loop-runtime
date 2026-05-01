@@ -1,9 +1,0 @@
-{
-  "name": "@monorepo/api",
-  "version": "1.0.0",
-  "main": "index.js",
-  "dependencies": {
-    "@monorepo/shared": "*",
-    "express": "^4.21.2"
-  }
-}

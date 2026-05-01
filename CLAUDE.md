@@ -8,15 +8,15 @@ LoopZero is a **CLI-first Kubernetes PaaS** for monorepo deployments. Vercel-qua
 
 The authoritative specification is **`docs/cli-reference.md`**. If this file and the system design conflict, the system design wins.
 
-**Status:** Pre-release, Starter + Pro tiers launchable (98% confidence — E2E validated 2026-04-23). 25/30 E2E tests pass. Sprints 0-7, 10, 11 complete. Sprint 6 (security + supply chain) — **fully shipped** 2026-04-26 (CHG-2026-04-26-SPRINT6-IMPL): cosign + syft SBOM (CycloneDX per release in S3 with presigned URL endpoint) + sigstore policy-controller installed on runtime cluster (deny-by-default in effect — bootstrap procedure must apply at least one warn-mode ClusterImagePolicy as Day-0 step, see B16 in docs/runbooks/sprint8-l3-stabilization.md; Deny-flip + cosign keyless verification pending Sprint 9 with Fulcio). Sprint 5 (preview envs) — **ALL 14 plan tasks done** with E2E validated against live k3d (CHG-2026-04-26-PREVIEW-IMPL). **Sprint 8 v3.2 / Phase -1 + Phase 0 + Phase 2-subset shipped 2026-04-27** (CHG-2026-04-27-001 + CHG-2026-04-27-002a, MEET-060 + MEET-061, ADR-0015 + ADR-0016, 14/14 validation matrix GREEN): 4 DOKS bootstrapped fresh on DO (mgmt + build + runtime + runtime-2 with Sprint 8 sizing — mgmt s-4vcpu-8gb-amd × 3 medium, PG db-s-2vcpu-4gb medium, Valkey managed db-amd-1vcpu-2gb), Chaos Mesh CRDs registered in 4 clusters, Gitea HA 4/4 with RWX NFS, Harbor HA core 2/2 + registry 2/2 + Valkey externo (Pulumi component `mgmt-redis-ha.ts` NEW + Secret `harbor-redis-credentials`), tenant-health Grafana dashboard, MAINTENANCE_MODE middleware, ADR-0015 adopt-or-create policy (registry/VPC/CF), 4 runbooks (sprint8-bootstrap, pulumi-state-repair, cf-tunnel-cleanup, minio-distributed-migration), 42 vitest specs (adopt-or-create + sprint8-fixes), CI gates (validate:helm-charts, validate:k8s-versions, validate:bootstrap), Taskfile chaos:install/uninstall, GitHub workflow pulumi-validate.yml. 195 healthy pods across 4 clusters. mgmt memory 36-39% idle (target ADR-0010 #6 met). Sprint 8 Phase 1+3+4+5+6 deferred to CHG-002b/c (require new T3 meeting + 24h HA stable; eligible 2026-04-28 19:55 UTC). Sprint 9 not started. Hardening H1-H7 complete. AUDIT series (21 fixes) hardened CLI↔API contracts. KEDA scale-to-zero done. Cell architecture Phase 0+1+1.5 complete (runtime-2 physically provisioned but not routed; cell-2 activation Sprint 9). 1079 CLI tests + 41 Go packages + 200+ envtest specs + 42 pulumi specs passing. Production on DigitalOcean (4 DOKS + Loki + ESO + CF Tunnel + DO Spaces CDN + Valkey managed).
+**Status:** Pre-release, Starter + Pro tiers launchable (98% confidence — E2E validated 2026-04-23). 25/30 E2E tests pass. Sprints 0-8 (partial), 10, 11 complete. Sprint 6 (security + supply chain) — **fully shipped** (CHG-2026-04-26-SPRINT6-IMPL): cosign + syft SBOM + policy-controller deny-by-default + ClusterImagePolicy `loopzero-images-warn` shipped as Helm chart. Deny-flip + cosign keyless verification pending Sprint 9. Sprint 5 (preview envs) — **fully shipped** (CHG-2026-04-26-PREVIEW-IMPL). Sprint 8 Phase -1 + Phase 0 + Phase 2-subset GREEN (CHG-2026-04-27); Phase 1+3+4+5+6 deferred to CHG-002b/c. Sprint 9 not started. Hardening H1-H7 complete. KEDA scale-to-zero done. **Operator multi-binary split shipped** (CHG-2026-04-30-INFRA-PARITY): 4 independent binaries (tenant-operator, app-operator, preview-operator, platform-operator), each with own Helm chart, RBAC, Dockerfile, leader election. **Multi-cell infra-normalize shipped** (CHG-2026-04-30-INFRA-NORMALIZE): `cells` table (migration 000006), 4 cell metrics + 7 alerts, `loopzero admin tenants pin`, ClusterCredential bootstrap, validation matrix (10 offline gates), 2 new CI workflows (cli-commands, multi-cell). **Layered bootstrap shipped** (CHG-2026-04-28-LAYERED-BOOTSTRAP): Pulumi L1-only + Helmfile L2 + ArgoCD L3 App-of-Apps. **Full dogfood validated** (CHG-2026-04-29): 13 iterations, 102+ bugs found/fixed, `loopzero deploy` end-to-end CLI→API→Argo→BuildKit→Gitea→ArgoCD→workload confirmed. 1171+ CLI tests + 41 Go packages + 200+ envtest specs + 96 pulumi specs passing. Production on DigitalOcean (4 DOKS + Loki + ESO + CF Tunnel + DO Spaces CDN + Valkey managed + Harbor).
 
 **Pricing:** Starter (Free, 1 project), Pro ($29/mo, 3 projects), Team ($79/mo, 10 projects), Enterprise (custom).
 
-**Completed:** deploy happy path, scaling+HPA (Starter=2/Pro=5/Team=10), promote staging→prod, rollback, secrets via ESO, custom domains v2 (CF Zone Mgmt, model Vercel), GitHub App auto-deploy (~4min), monorepo validator (30 frameworks), cosign image signing, plan enforcement, audit log, RSA-only JWT auth, two-host gateway, concurrent deploy rejection (1×202+1×409), JSON contracts (8/8), observability (43 loopzero_* metrics + Grafana + SLO alerts), KEDA scale-to-zero, cell architecture (Phase 0+1).
+**Completed:** deploy happy path (full E2E dogfood validated), scaling+HPA (Starter=2/Pro=5/Team=10), promote staging→prod, rollback, secrets via ESO, custom domains v2 (CF Zone Mgmt, model Vercel), GitHub App auto-deploy (~4min), monorepo validator (30 frameworks), cosign image signing + syft SBOM (CycloneDX), supply-chain admission (policy-controller deny-by-default + warn-mode ClusterImagePolicy + digest enforcement in manifests), plan enforcement, audit log, RSA-only JWT auth, two-host gateway, concurrent deploy rejection (1×202+1×409), JSON contracts (8/8), observability (43+ loopzero_* metrics + 4 cell metrics + Grafana + SLO alerts + 7 multi-cell alerts), KEDA scale-to-zero, cell architecture (Phase 0+1+1.5 + cells table + admin pin), operator multi-binary split (4 binaries), layered bootstrap (Pulumi L1 + Helmfile L2 + ArgoCD L3), `loopzero admin tenants pin/evict`.
 
-**Not built:** SSO/SAML, `loopzero scale` DB persistence (stub returns 202 acknowledged — use loopzero.yaml + loopzero deploy), Loki cross-cluster streaming (infra gap, not code), Cell Phase 2b activation (code 100%, Pulumi.dev.yaml multi-cell config missing). Sprint 5 / Preview Environments **fully shipped** (CHG-2026-04-26-PREVIEW-IMPL). Sprint 6 / Supply chain **shipped with caveats** (CHG-2026-04-26-SPRINT6-IMPL + CHG-2026-04-28-LAYERED-BOOTSTRAP T0.1 — cosign signing in pipeline + syft SBOM + policy-controller installed in deny-by-default mode + ClusterImagePolicy `loopzero-images-warn` shipped as Helm chart `infra/helm/admission-policies/`. Deny-flip + cosign keyless verification pending Sprint 9 with Fulcio).
+**Not built:** SSO/SAML, `loopzero scale` DB persistence (stub returns 202 acknowledged — use loopzero.yaml + loopzero deploy), Loki cross-cluster streaming (infra gap, not code), Cell-2 activation (cell-2 seeded as `maintenance` in cells table, ClusterCredential wired, but not routed — activation pending Sprint 9), cosign keyless verification with Fulcio (pending Sprint 9), Sprint 8 Phase 1+3+4+5+6 (require new T3 meeting).
 
-**Known issues:** AppSecret controller not implemented (ESO works directly, no lifecycle automation); Pulumi consolidation pending (GitHub App envFrom, CF_ZONE_MANAGEMENT, PG keepalive). _NOTE: previously listed 10 failing tests in `api/internal/k8s` were resolved — verified `go test -count=1 ./api/internal/k8s` PASS as of 2026-04-28._
+**Known issues:** AppSecret controller not implemented (ESO works directly, no lifecycle automation); Pulumi L1 refactored (CHG-2026-04-28-LAYERED-BOOTSTRAP removed `@pulumi/kubernetes`, 33 L2 files deleted) but consolidation of remaining env vars pending (GitHub App envFrom, CF_ZONE_MANAGEMENT, PG keepalive).
 
 ---
 
@@ -34,7 +34,7 @@ task test:e2e            # E2E (Ginkgo)
 task lint                # golangci-lint + ESLint
 task validate:manifests  # kubeconform --strict
 
-cd cli && npm test       # CLI (Jest, 1079 tests, 59 suites)
+cd cli && npm test       # CLI (Jest, 1171+ tests)
 cd api && go test ./...  # API (41 packages)
 cd operators && go test ./...  # Operators (Ginkgo + envtest)
 cd pkg && go test ./...  # Shared libs
@@ -85,11 +85,11 @@ cd infra/pulumi && npx pulumi preview --stack dev # Preview
 | Auth | Ory Kratos + Ory Hydra + Redis |
 | Edge | Cloudflare Tunnel + Worker + KV |
 | Autoscaling | KEDA 2.16.1 + HTTP Add-on 0.8.0 |
-| IaC | Pulumi (TS) — DO + CF + K8s providers, 3-phase (infra → bootstrap → expose) |
+| IaC | Pulumi (TS) — L1-only (DO + CF providers, zero K8s resources); Helmfile L2 (bootstrap); ArgoCD L3 (Day-2 GitOps) |
 | Local clusters | k3d × 3 (mgmt, build, workload) |
-| Dev loop | Tilt + Taskfile (1695 lines) |
-| Helm | 22 charts (pinned versions) |
-| CI/CD | GitHub Actions (14 workflows) |
+| Dev loop | Tilt + Taskfile (2296 lines) |
+| Helm | 33 bootstrap charts (`infra/helm/`) + 15 published charts (`charts/`) |
+| CI/CD | GitHub Actions (19 workflows) |
 | Migrations | golang-migrate (forward-only `.up.sql`) |
 
 ---
