@@ -88,6 +88,7 @@ type Config struct {
 	AuditHandler            *routes.AuditHandler
 	TenantDeletionStore     routes.TenantDeletionStore
 	AdminEvictor            routes.TenantEvictor
+	AdminPinner             routes.CellPinner // CHG-2026-04-30-DELETE-SINGLE-CELL
 	PlanLimiter             *enforcement.PlanLimiter
 	UpgradeURL              string
 	PGPoolStatsFunc              func() (inUse int32, total int32)

@@ -140,6 +140,13 @@ func buildServerConfig(
 		sc.AuthUserLookup = teamStore
 		sc.AuditHandler = routes.NewAuditHandler(&db.PostgresAuditStore{DB: dbAdapter})
 		sc.AdminEvictor = buildAdminEvictor(cfg, dbAdapter)
+		// CHG-2026-04-30-DELETE-SINGLE-CELL: wire the CellPinner so the
+		// /api/v1/admin/tenants/pin endpoint registered in router.go can
+		// actually serve requests. Previously the handler existed but had
+		// no consumer, returning 404. loopzero admin tenants pin --cell <id>
+		// is the only path to override automatic cell assignment for a
+		// tenant.
+		sc.AdminPinner = services.NewCellPinner(&db.PostgresCellStore{DB: dbAdapter})
 		sc.AuditWriter = func(tenantID, action, actor, resourceType, resourceID, correlationID string, metadata map[string]any) {
 			entry := db.AuditEntry{
 				TenantID: tenantID, Action: action, Actor: actor,
