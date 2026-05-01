@@ -21,6 +21,7 @@ continue.txt
 MELHORIAS.txt
 ralph-loop.local.md
 .claude/ralph-loop.local.md
+*.tgz
 # --------------------------------------------
 # Node.js / TypeScript (cli/)
 # --------------------------------------------
