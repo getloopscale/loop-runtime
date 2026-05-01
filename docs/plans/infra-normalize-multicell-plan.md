@@ -983,8 +983,9 @@ T0.2 produced inventory. T3.1 archives.
 
 #### Files to edit
 ```
-~/.loopzero/archive/pulumi-state-archive/ — populated
-docs/runbooks/pulumi-state-archive.md — (NEW)
+~/.loopzero/archive/pulumi-state-archive/ — populated (live, requires backend creds)
+docs/runbooks/pulumi-consolidation.md — covers T3.1+T3.2+T3.3 (replaces planned pulumi-state-archive.md; shipped per pulumi-consolidation-log.md 2026-04-30 entry)
+docs/runbooks/pulumi-state-restore.md — URN-rewrite restore procedure (sibling, shipped same date)
 ```
 
 #### Tasks
@@ -1093,7 +1094,7 @@ infra/pulumi-control-plane/ — DELETE
 infra/pulumi-shared/ — DELETE
 infra/scripts/provision-homolog.sh — DELETE
 # NOTE: infra/scripts/seed_e2e.go is canonical — KEEP (per C28 finding, audit log entry 2026-04-30)
-docs/decisions/ADR-0021-pulumi-single-stack.md — (NEW) prescriptive ADR
+docs/decisions/ADR-0021-infra-normalize-decisions.md — Pulumi consolidation rationale wrapped in this combined ADR (per Global DoD line 1956: "0022/0023 wrapped into 0021")
 infra/pulumi/src/__tests__/sprint8-fixes.test.ts — Fix #10: only one Pulumi project root
 CHANGELOG.md — Removed entry
 ```
@@ -1300,8 +1301,9 @@ runtime-2 was provisioned per CLAUDE.md but unused. Credentials may be stale.
 
 #### Files to edit
 ```
-docs/runbooks/cell-credentials-rotation.md — (NEW)
-infra/scripts/rotate-cell-credentials.sh — (NEW)
+[N/A — task superseded; see Acceptance Criteria below]
+Original plan referenced: docs/runbooks/cell-credentials-rotation.md + infra/scripts/rotate-cell-credentials.sh
+Reality: replaced by infra/helmfile/scripts/lib/clustercredential-create.sh + wire-clusters.sh + scoped-kubeconfig.sh (commit f7c6dd0a). Rotation = re-run wire-clusters.sh against runtime-2.
 ```
 
 #### Tasks
@@ -1852,16 +1854,16 @@ Taskfile.yml — task validate:matrix
 ### T8.2 — Documentation close
 
 #### Objective
-ADR-0021/0022/0023 finalized; runbooks updated; CHANGELOG closed; memory persisted.
+ADRs finalized; runbooks updated; CHANGELOG closed; memory persisted.
 
-#### Files to edit
+#### Files to edit (RESOLVED 2026-05-01)
 ```
-docs/decisions/ADR-0021-pulumi-single-stack.md — finalized
-docs/decisions/ADR-0022-operator-topology.md — finalized
-docs/decisions/ADR-0023-multi-cell-activation.md — finalized
-docs/runbooks/* — updated
-CHANGELOG.md — closed
-~/.claude/projects/-home-paulo-loopzero/memory/reference_infra_normalize_2026_05_XX.md — (NEW)
+docs/decisions/ADR-0021-infra-normalize-decisions.md — finalized (consolidates planned 0021+0022+0023 per Global DoD line 1956)
+docs/decisions/ADR-0020-infra-parity-decisions.md — sibling, finalizes parity decisions
+docs/decisions/MEET-INFRA-NORMALIZE-T3-{operator-split,pulumi-consolidation,multi-cell}.md — 3 governance records APPROVED_WITH_CONDITIONS
+docs/runbooks/* — updated (multi-cell-canary, multi-cell-canary-prod, multi-cell-alerts, multi-cell-rca-template, pulumi-consolidation, pulumi-state-restore, cluster-cleanup all shipped)
+CHANGELOG.md — CHG-2026-04-30-INFRA-NORMALIZE entry block under Added/Changed/Fixed
+~/.claude/projects/-home-paulo-loopzero/memory/reference_multicell_activation_2026_04_30.md — persisted
 ```
 
 #### Tasks
