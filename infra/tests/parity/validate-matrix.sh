@@ -21,6 +21,7 @@
 #   8. matrix-integrity audit
 #   9. matrix-audit golden test
 #  9.5. validate:slos                — 7 Sloth SLO files (Coverage Matrix #8)
+#  9.55 validate:rules               — 12 PrometheusRule files (Plan T5.4 TDD analog)
 #  9.6. validate:helm-deps           — 11 charts buildable (Coverage Matrix #7)
 #  10. operators tests (envtest)  — when KUBEBUILDER_ASSETS is set
 #
@@ -148,6 +149,17 @@ if command -v python3 >/dev/null 2>&1; then
   fi
 else
   result 2 "validate:slos (python3 missing)"
+fi
+
+# Gate 9.55: PrometheusRule structural validation (Plan T5.4 TDD analog).
+if command -v python3 >/dev/null 2>&1; then
+  if python3 "${REPO_ROOT}/infra/helm/monitoring/validate-rules.py" >/dev/null 2>&1; then
+    result 0 "validate:rules (12 PrometheusRule files)"
+  else
+    result 1 "validate:rules"
+  fi
+else
+  result 2 "validate:rules (python3 missing)"
 fi
 
 # Gate 9.6: helm dependency build for umbrella charts (Coverage Matrix #7).

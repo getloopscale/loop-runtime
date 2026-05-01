@@ -1883,6 +1883,18 @@ tasks:
     cmds:
       - python3 infra/sloth/validate.py
 
+  validate:rules:
+    desc: |
+      Structural validator for PrometheusRule manifests in
+      infra/helm/monitoring/manifests/. Plan T5.4 TDD test_alerts_promtool_validate
+      translated to offline check when promtool is missing. Validates apiVersion,
+      kind, group/rule structure, severity ∈ {critical,warning,info}, summary
+      annotation, runbook reference. Caught severity drift in
+      prometheusrule-pulumi-state.yaml during iter 17 (medium→warning,
+      high→critical normalization).
+    cmds:
+      - python3 infra/helm/monitoring/validate-rules.py
+
   validate:k8s-versions:
     desc: |
       Validates that K8s versions in Pulumi.{stack}.yaml are still supported by
