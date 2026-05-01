@@ -1889,11 +1889,11 @@ CHANGELOG.md — CHG-2026-04-30-INFRA-NORMALIZE entry block under Added/Changed/
 | 1 | Tilt deploys 4 split, helmfile deploys monolith (Rule 10 break) | T-1.1, T2.1, T2.2, T2.3, T2.4 | Forward-only migration; Tilt consumes helmfile output |
 | 2 | 4 Pulumi stacks, 3 orphans | T-1.2, T0.2, T3.1, T3.2, T3.3 | Archive + state rm + code rm |
 | 3 | 3 orphan Tilt yamls | T2.4 | Deleted |
-| 4 | regression-checks.sh undocumented | T8.2 | Runbook update |
+| 4 | regression-checks.sh undocumented | T8.2 — RESOLVED 2026-05-01 | Script self-documents via header (CHG-2026-04-28-LAYERED-BOOTSTRAP T8.1, Usage section, B1-B18 enumeration). Verified iter 14 audit. Sibling runbook: docs/runbooks/layered-bootstrap-validation.md |
 | 5 | regression_test.go string-literal anti-pattern | DEBT (D10): owner=agent:test, horizon=2026-06-30, stop-the-line=3 broken-by-string-change PRs | Registered; not addressed in this plan |
 | 6 | cell-templates dead-code | T5.6 — RESOLVED 2026-05-01 | **REMOVED** — `infra/cell-templates/v1.0.0/` deleted (zero references in codebase; orphan ADR-0008 reference; multi-cell went helmfile-native, not template-driven) |
 | 7 | charts/loopzero-platform requires helm dep build | T8.1 — RESOLVED 2026-05-01 | task validate:helm-deps wired into validate-matrix.sh as Gate 9.6 (11 charts: loopzero-api, loopzero-app-operator, loopzero-cloud, loopzero-controller, loopzero-crds, loopzero-dashboard, loopzero-platform, loopzero-platform-operator, loopzero-preview-operator, loopzero-tenant-controller, loopzero-tenant-operator). Gate respeita HELM_REPOS_UNREACHABLE=1 fallback. |
-| 8 | Sloth files bypass kubeconform | T8.1 | task validate:slos in matrix |
+| 8 | Sloth files bypass kubeconform | T8.1 — RESOLVED 2026-05-01 | infra/sloth/validate.py (95 LOC) + Taskfile validate:slos + validate-matrix.sh Gate 9.5 wired (commit 7f346b81). 7/7 SLO files validate GREEN; supports both Sloth SLI specs (events + raw) |
 | 9 | refactorhelms merge needs ratification | T1.1 | Proper PR |
 | 10 | All CLI commands 1000% functional | T0.3, T4.1, T4.2, T4.3 | Audit + 12+ integration tests + bug fixes |
 | 11 | Multi-cell not active | T-1.3, T0.1, T5.1, T5.2, T5.3, T5.4, T5.5, T5.6, T5.7 | Source audit + creds rotation + config + migration + observability + flag + canary stages |
