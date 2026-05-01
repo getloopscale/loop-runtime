@@ -20,6 +20,7 @@
 #   7. helm lint × 4 split charts
 #   8. matrix-integrity audit
 #   9. matrix-audit golden test
+#  9.5. validate:slos                — 7 Sloth SLO files (Coverage Matrix #8)
 #  10. operators tests (envtest)  — when KUBEBUILDER_ASSETS is set
 #
 # Usage:
@@ -136,6 +137,17 @@ result $? "matrix-integrity-audit:explicit"
 # Gate 9: matrix-audit golden test (audit script self-test).
 bash "${REPO_ROOT}/infra/tests/parity/audit-golden-test.sh" >/dev/null 2>&1
 result $? "matrix-audit-golden:explicit"
+
+# Gate 9.5: Sloth SLO file validation (Coverage Matrix #8).
+if command -v python3 >/dev/null 2>&1; then
+  if python3 "${REPO_ROOT}/infra/sloth/validate.py" >/dev/null 2>&1; then
+    result 0 "validate:slos (7 SLO files)"
+  else
+    result 1 "validate:slos"
+  fi
+else
+  result 2 "validate:slos (python3 missing)"
+fi
 
 # Gate 10: operators envtest (only when KUBEBUILDER_ASSETS set).
 if [[ -n "${KUBEBUILDER_ASSETS:-}" ]]; then

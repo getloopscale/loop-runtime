@@ -1873,6 +1873,16 @@ tasks:
     cmds:
       - bash infra/tests/dogfood/repro-findings.sh
 
+  validate:slos:
+    desc: |
+      Validates Sloth SLO files in infra/sloth/ (Coverage Matrix #8 — closes
+      "Sloth files bypass kubeconform" gap). Offline schema check covering
+      version, top-level keys, sli.events queries, multi-burn-rate alerting.
+      Does NOT exercise sloth CLI (not installed locally); CI workflow can
+      add `sloth validate` later. Plan ref: T8.1 / Coverage Matrix #8.
+    cmds:
+      - python3 infra/sloth/validate.py
+
   validate:k8s-versions:
     desc: |
       Validates that K8s versions in Pulumi.{stack}.yaml are still supported by
