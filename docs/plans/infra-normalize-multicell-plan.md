@@ -707,7 +707,7 @@ VERIFY:  for c in charts/loopzero-{tenant,app,preview,platform}-operator; do hel
 #### Observability Plan
 - New metric per operator: `loopzero_operator_reconcile_duration_seconds{operator}` histogram.
 - Alert: `OperatorReconcileSlowdown` per operator.
-- Dashboard: 4 panels in `infra/helm/monitoring/dashboards/operators.json`.
+- Dashboard: 4 panels planned in `infra/helm/monitoring/dashboards/operators.json` — NOT YET SHIPPED (T2.1 deploy gated by T2.3 BLOCKED; metrics + alerts shipped in `prometheusrule-operator-cutover.yaml` per CHG-2026-04-30-INFRA-NORMALIZE).
 
 #### DoD
 - [x] All 4 charts production-ready _(helm lint + kubeconform GREEN; security context + probes + limits + unique leases verified)_
@@ -1455,8 +1455,9 @@ Add 4 new metrics + 2 alerts + dashboard panels BEFORE activation.
 ```
 api/internal/placement/dynamic_router.go — add Prometheus instrumentation
 api/internal/metrics/cell_metrics.go — (NEW)
-infra/helm/monitoring/dashboards/multi-cell.json — (NEW)
-infra/helm/monitoring/templates/multi-cell-alerts.yaml — (NEW)
+infra/helm/monitoring/dashboards/cell-health.json — shipped (multi-cell health panels)
+infra/helm/monitoring/dashboards/cell-saturation.json — shipped (multi-cell capacity panels)
+infra/helm/monitoring/manifests/prometheusrule-multi-cell.yaml — shipped (7 alerts, was planned at templates/multi-cell-alerts.yaml)
 docs/runbooks/multi-cell-alerts.md — (NEW)
 ```
 
@@ -1484,7 +1485,7 @@ VERIFY:  curl localhost:9090/metrics | grep loopzero_cell_
 #### Acceptance Criteria
 - [x] 4 metrics exposed _(loopzero_cell_routing_decisions_total + loopzero_cell_health + loopzero_cell_capacity_pods + loopzero_cluster_credential_status — instrumented in DynamicRouter.Resolve)_
 - [x] 2 alerts validated _(7 alerts shipped in prometheusrule-multi-cell.yaml: MultiCellRouterErrorRate, CellUnhealthy, ClusterCredentialDisconnected, CellCapacityWarning/Critical, CellDiscoveryEmpty, OrphanedTenants — exceeds plan target of 2)_
-- [x] Dashboard renders _(infra/helm/monitoring/dashboards/multi-cell.json shipped per CHG-2026-04-30-INFRA-NORMALIZE)_
+- [x] Dashboard renders _(infra/helm/monitoring/dashboards/cell-health.json + cell-saturation.json shipped per CHG-2026-04-30-INFRA-NORMALIZE)_
 
 #### Security Review
 - **Question**: any metrics expose tenant data? **Answer**: no — labels are cell-id only.
