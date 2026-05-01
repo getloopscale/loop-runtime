@@ -373,18 +373,23 @@ for t in $TENANTS; do
 done
 [[ -n "$TENANTS" ]] && log "  triggered reconcile on $(echo $TENANTS | wc -w) Active tenant(s)"
 
-# Patch only TENANT ArgoCD Applications carrying a stale URL. Heuristic:
-# tenant apps are labeled `loopzero.io/managed-by=tenant-controller`. Apps
-# managed by Helm AppOfApps for build/runtime infra MUST keep their own
-# destination URLs (they target build-argocd-cluster or runtime-argocd-cluster
-# respectively, identified by name labels not destination IP).
+# Patch only TENANT ArgoCD Applications carrying a stale URL.
+# CHG-2026-04-30-DELETE-SINGLE-CELL: skip apps that use destination.name
+# (cell-aware multi-cell pattern). Only patch ones that still use legacy
+# destination.server with stale IP. tenant-controller v0.4.1+ writes
+# `name: <cellID>` for non-default cells — those resolve via ArgoCD's
+# cluster registry and don't need IP patching.
 TENANT_APPS=$(kubectl --context "$MGMT_CTX" -n argocd get applications \
   -l loopzero.io/managed-by=tenant-controller \
-  -o jsonpath='{range .items[*]}{.metadata.name} {.spec.destination.server}{"\n"}{end}' \
+  -o jsonpath='{range .items[*]}{.metadata.name}|{.spec.destination.server}|{.spec.destination.name}{"\n"}{end}' \
   2>/dev/null)
 if [[ -n "$TENANT_APPS" ]]; then
-  while read -r app stale_url; do
+  while IFS='|' read -r app stale_url dest_name; do
     [[ -z "$app" ]] && continue
+    if [[ -n "$dest_name" ]]; then
+      log "  tenant app $app: uses name=$dest_name (cell-aware), skipping URL patch"
+      continue
+    fi
     [[ "$stale_url" == "$WORKLOAD_URL" ]] && continue
     kubectl --context "$MGMT_CTX" -n argocd patch application "$app" \
       --type=json -p="[{\"op\":\"replace\",\"path\":\"/spec/destination/server\",\"value\":\"$WORKLOAD_URL\"}]" \
