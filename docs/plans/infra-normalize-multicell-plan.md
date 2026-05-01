@@ -1928,8 +1928,8 @@ CHANGELOG.md — closed
   - [x] Pulumi vitest (96) GREEN
   - [x] Go infra/tests (capacity + chaos + e2e + load + unit) GREEN
   - [x] Operators envtest (existing 200+) GREEN _(timeout 300s required)_
-  - [x] Parity preflight (18 gates) GREEN _(was 15 plan, expanded)_
-  - [x] Matrix audit zero critical MISS _(146 entries / 138 OK / 8 SKIP / 0 MISS)_
+  - [x] Parity preflight (16 gates) GREEN _(verified 2026-05-01: 16 PASS / 0 FAIL / 0 SKIP / 0 WARN after T0.1 cleanup-terminating-namespaces.sh removed 14h-old zumbi ns)_
+  - [x] Matrix audit zero critical MISS _(150 entries / 142 OK / 8 SKIP / 0 MISS — verified 2026-05-01)_
   - [x] Audit golden test 3/3 PASS
   - [x] task validate:manifests GREEN
   - [x] task validate:helm-deps GREEN (NEW)
@@ -1952,7 +1952,7 @@ CHANGELOG.md — closed
 - [x] Zero feature flags introduced for operator topology (no `splitOperators` flag) _(forward-only D1)_
 - [ ] Pulumi state archived for every removed stack (T3.1 archives present) _(scripts ready; live archive backend-blocked)_
 - [x] All CLI commands documented in cli-commands-audit.md with exit codes + JSON shape
-- [ ] Customer comms templates ready for production rollout _(Phase 7 deliverable)_
+- [x] Customer comms templates ready for production rollout _(docs/customer-comms/cell-2-canary-template.md shipped — commit e4b2a4aa)_
 - [x] All ADRs (0021) prescriptive _(0022/0023 wrapped into 0021 + ADR-0018 v2; ADR-0018 v2 covers cache scoping)_
 - [x] CHANGELOG closed with Added/Changed/Removed/Fixed sections _(Fixed section added 2026-04-30 for NEW-1..NEW-15)_
 - [x] Memory entry persisted _(3 new memories 2026-04-30: live-test-existing-db, validation-sweep, no-tribal-knowledge, dogfood-12-12-milestone)_
