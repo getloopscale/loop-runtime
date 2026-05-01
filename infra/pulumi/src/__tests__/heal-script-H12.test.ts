@@ -85,3 +85,46 @@ describe("k3d-cross-cluster-heal.sh H12 invariants (matrix #153)", () => {
     expect(h12Block).toMatch(/CELL1_CONNECTED.*==.*"true"[\s\S]{0,200}skip/);
   });
 });
+
+describe("k3d-cross-cluster-heal.sh H13 invariants (matrix #154)", () => {
+  const text = readFileSync(SCRIPT, "utf-8");
+  const h13Match = text.match(/log "H13: ensuring[\s\S]+?(?=\n# ---|$)/);
+  const h13Block = h13Match?.[0] ?? "";
+
+  it("script contains H13 block", () => {
+    expect(text).toMatch(/^log "H13: ensuring/m);
+  });
+
+  it("H13 documents matrix entry 154 in header", () => {
+    expect(text).toMatch(/H13 —[\s\S]{0,400}matrix entry 154/);
+  });
+
+  it("detection queries spec.cellID=='cell-default' (consistency with H12)", () => {
+    expect(h13Block).toMatch(/items\[\?\(@\.spec\.cellID==["']cell-default["']\)\]/);
+  });
+
+  it("mints fresh SA token via 'kubectl create token loopzero-system/default'", () => {
+    expect(h13Block).toMatch(/create token default --duration=24h/);
+  });
+
+  it("preserves CA from existing Secret (no regen)", () => {
+    expect(h13Block).toMatch(/certificate-authority-data.*\$H13_CA/s);
+  });
+
+  it("uses in-cluster server URL (kubernetes.default.svc:443)", () => {
+    expect(h13Block).toMatch(/https:\/\/kubernetes\.default\.svc:443/);
+  });
+
+  it("patches Secret data.kubeconfig (NOT recreates)", () => {
+    // Bash line-continuation backslash + newline + spaces between args.
+    expect(h13Block).toMatch(/patch secret cell-default-kubeconfig[\s\\]+--type=merge/);
+  });
+
+  it("idempotent skip when cell-default already connected", () => {
+    expect(h13Block).toMatch(/CELL_DEFAULT_CONNECTED.*==.*"true"[\s\S]{0,200}skip/);
+  });
+
+  it("warn-cites matrix entry 154 on patch failure (fail-clear)", () => {
+    expect(h13Block).toMatch(/matrix entry 154/);
+  });
+});
