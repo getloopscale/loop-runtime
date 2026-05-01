@@ -1888,7 +1888,7 @@ CHANGELOG.md — closed
 | 3 | 3 orphan Tilt yamls | T2.4 | Deleted |
 | 4 | regression-checks.sh undocumented | T8.2 | Runbook update |
 | 5 | regression_test.go string-literal anti-pattern | DEBT (D10): owner=agent:test, horizon=2026-06-30, stop-the-line=3 broken-by-string-change PRs | Registered; not addressed in this plan |
-| 6 | cell-templates dead-code | T5.6 (templates either used or deleted) | Activated or removed |
+| 6 | cell-templates dead-code | T5.6 — RESOLVED 2026-05-01 | **REMOVED** — `infra/cell-templates/v1.0.0/` deleted (zero references in codebase; orphan ADR-0008 reference; multi-cell went helmfile-native, not template-driven) |
 | 7 | charts/loopzero-platform requires helm dep build | T8.1 | task validate:helm-deps in matrix |
 | 8 | Sloth files bypass kubeconform | T8.1 | task validate:slos in matrix |
 | 9 | refactorhelms merge needs ratification | T1.1 | Proper PR |
