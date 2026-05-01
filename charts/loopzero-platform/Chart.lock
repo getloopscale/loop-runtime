@@ -8,9 +8,18 @@ dependencies:
 - name: loopzero-api
   repository: file://../loopzero-api
   version: 0.2.0
-- name: loopzero-tenant-controller
-  repository: file://../loopzero-tenant-controller
-  version: 0.2.0
+- name: loopzero-tenant-operator
+  repository: file://../loopzero-tenant-operator
+  version: 0.1.0
+- name: loopzero-app-operator
+  repository: file://../loopzero-app-operator
+  version: 0.1.0
+- name: loopzero-preview-operator
+  repository: file://../loopzero-preview-operator
+  version: 0.1.0
+- name: loopzero-platform-operator
+  repository: file://../loopzero-platform-operator
+  version: 0.1.0
 - name: loopzero-controller
   repository: file://../loopzero-controller
   version: 0.2.0
@@ -29,5 +38,5 @@ dependencies:
 - name: loopzero-admission-policies
   repository: file://../loopzero-admission-policies
   version: 0.2.0
-digest: sha256:b8acd6be344ba1f8ddaeec0a39bd956f2df660fea87dac41dbc77ff7cfcb537b
-generated: "2026-04-24T12:06:16.842965427-03:00"
+digest: sha256:d6968347ad18c037b2506ae521028c9bb05c748405c2b919ce19973887992f0a
+generated: "2026-04-28T19:10:29.501460874-03:00"

@@ -1,0 +1,145 @@
+// SPDX-License-Identifier: Apache-2.0
+// Copyright 2025-2026 The LoopZero Authors
+
+// Group D: Platform infrastructure controllers.
+// ClusterCredential + GitRepositoryBinding + PlatformBootstrap.
+// Low frequency, no external provisioner clients.
+package main
+
+import (
+	"context"
+	"flag"
+	"fmt"
+	"os"
+
+	"k8s.io/apimachinery/pkg/runtime"
+	clientgoscheme "k8s.io/client-go/kubernetes/scheme"
+	ctrl "sigs.k8s.io/controller-runtime"
+	"sigs.k8s.io/controller-runtime/pkg/cache"
+	"sigs.k8s.io/controller-runtime/pkg/client"
+	"sigs.k8s.io/controller-runtime/pkg/healthz"
+	"sigs.k8s.io/controller-runtime/pkg/log/zap"
+	metricsserver "sigs.k8s.io/controller-runtime/pkg/metrics/server"
+
+	"go.opentelemetry.io/otel/trace"
+
+	loopzerov1 "github.com/loopzero/loopzero/operators/api/v1"
+	"github.com/loopzero/loopzero/operators/internal/constants"
+	"github.com/loopzero/loopzero/operators/internal/platform"
+	"github.com/loopzero/loopzero/operators/internal/httpclient"
+	"github.com/loopzero/loopzero/operators/internal/shared"
+	"github.com/loopzero/loopzero/operators/internal/tracing"
+	"github.com/loopzero/loopzero/pkg/logging"
+
+	_ "github.com/loopzero/loopzero/operators/internal/metrics"
+)
+
+var scheme = runtime.NewScheme()
+
+func init() {
+	if err := clientgoscheme.AddToScheme(scheme); err != nil {
+		panic(fmt.Sprintf("failed to register client-go scheme: %v", err))
+	}
+	if err := loopzerov1.AddToScheme(scheme); err != nil {
+		panic(fmt.Sprintf("failed to register loopzero/v1 scheme: %v", err))
+	}
+}
+
+func main() {
+	var metricsAddr string
+	var healthProbeAddr string
+	var enableLeaderElection bool
+
+	flag.StringVar(&metricsAddr, "metrics-bind-address", ":8080", "The address the metric endpoint binds to.")
+	flag.StringVar(&healthProbeAddr, "health-probe-bind-address", ":8081", "The address the health probe endpoint binds to.")
+	flag.BoolVar(&enableLeaderElection, "leader-elect", true,
+		"Enable leader election for controller manager.")
+	flag.Parse()
+
+	opts := zap.Options{Development: false}
+	ctrl.SetLogger(zap.New(zap.UseFlagOptions(&opts)))
+	setupLog := ctrl.Log.WithName("setup")
+
+	tracingShutdown, tracingErr := tracing.Init(context.Background(), "loopzero-platform-operator")
+	if tracingErr != nil {
+		setupLog.Error(tracingErr, "tracing init failed — continuing without tracing")
+	}
+	defer func() { _ = tracingShutdown(context.Background()) }()
+
+	logging.RegisterTraceExtractor(func(ctx context.Context) (string, string) {
+		sc := trace.SpanContextFromContext(ctx)
+		if !sc.IsValid() {
+			return "", ""
+		}
+		return sc.TraceID().String(), sc.SpanID().String()
+	})
+
+	if shared.PprofEnabled() {
+		shared.StartPprofServer()
+	}
+
+	// CHG-2026-04-30-INFRA-NORMALIZE / Phase 2 condition C16. Cache
+	// scoping per ADR-0018 v2 C9 + operator-split-invariants.md I-1.
+	// PlatformBootstrap, GitRepositoryBinding, ClusterCredential all
+	// live in `loopzero-system` only.
+	platformCRDNamespaces := map[string]cache.Config{
+		constants.NamespacePlatformSystem: {},
+	}
+	mgr, err := ctrl.NewManager(ctrl.GetConfigOrDie(), ctrl.Options{
+		Scheme: scheme,
+		Metrics: metricsserver.Options{
+			BindAddress: metricsAddr,
+		},
+		HealthProbeBindAddress: healthProbeAddr,
+		LeaderElection:         enableLeaderElection,
+		LeaderElectionID:       "loopzero-platform-operator.loopzero.io",
+		Cache: cache.Options{
+			ByObject: map[client.Object]cache.ByObject{
+				&loopzerov1.PlatformBootstrap{}:    {Namespaces: platformCRDNamespaces},
+				&loopzerov1.GitRepositoryBinding{}: {Namespaces: platformCRDNamespaces},
+				&loopzerov1.ClusterCredential{}:    {Namespaces: platformCRDNamespaces},
+			},
+		},
+	})
+	if err != nil {
+		setupLog.Error(err, "unable to create manager")
+		os.Exit(1)
+	}
+
+	argoCDNamespace := os.Getenv("ARGOCD_NAMESPACE")
+	if argoCDNamespace == "" {
+		argoCDNamespace = constants.DefaultArgoCDNamespace
+	}
+
+	httpClient := httpclient.New()
+
+	if err := platform.SetupClusterCredentialController(mgr, argoCDNamespace); err != nil {
+		setupLog.Error(err, "unable to setup ClusterCredentialController")
+		os.Exit(1)
+	}
+
+	if err := platform.SetupGitRepositoryBindingController(mgr, httpClient); err != nil {
+		setupLog.Error(err, "unable to setup GitRepositoryBindingController")
+		os.Exit(1)
+	}
+
+	if err := platform.SetupPlatformBootstrapController(mgr, httpClient); err != nil {
+		setupLog.Error(err, "unable to setup PlatformBootstrapController")
+		os.Exit(1)
+	}
+
+	if err := mgr.AddHealthzCheck("healthz", healthz.Ping); err != nil {
+		setupLog.Error(err, "unable to set up health check")
+		os.Exit(1)
+	}
+	if err := mgr.AddReadyzCheck("readyz", healthz.Ping); err != nil {
+		setupLog.Error(err, "unable to set up ready check")
+		os.Exit(1)
+	}
+
+	setupLog.Info("starting platform-operator", "leaderElection", enableLeaderElection)
+	if err := mgr.Start(ctrl.SetupSignalHandler()); err != nil {
+		setupLog.Error(err, "problem running manager")
+		os.Exit(1)
+	}
+}

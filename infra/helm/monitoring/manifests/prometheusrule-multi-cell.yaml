@@ -1,0 +1,143 @@
+# CHG-2026-04-30-INFRA-NORMALIZE / Phase 5 T5.4 — Multi-cell alerting.
+#
+# Plan v2 ADR D6 mandates observability BEFORE feature ships. This rule
+# set lands metrics + alerts + runbook references AHEAD of cell-2
+# canary stages 1-2 (T5.6/T5.7) so on-call has signal from minute zero.
+#
+# Alerts here pair 1:1 with metrics emitted from
+# api/internal/metrics/metrics.go (CellRoutingDecisions, CellHealth,
+# CellCapacityPods, ClusterCredentialStatus) and from the existing
+# Cell metrics (CellTenantCount, CellDiscoveryCount, OrphanedTenants —
+# from MEET-053 / ADR-0008).
+#
+# Each alert references runbook annotation in
+# docs/runbooks/multi-cell-alerts.md (matching alertname).
+apiVersion: monitoring.coreos.com/v1
+kind: PrometheusRule
+metadata:
+  name: loopzero-multi-cell-alerts
+  namespace: monitoring
+  labels:
+    release: monitoring
+    loopzero.io/component: multi-cell
+spec:
+  groups:
+    - name: loopzero.multi-cell
+      rules:
+        # === Routing decisions ===
+        - alert: MultiCellRouterErrorRate
+          expr: |
+            sum by (cell) (rate(loopzero_cell_routing_decisions_total{decision="error"}[5m])) > 0.01
+          for: 5m
+          labels:
+            severity: critical
+            loopzero_component: cell-router
+          annotations:
+            summary: "Cell router emitting error decisions for {{ $labels.cell }}"
+            description: |
+              DynamicRouter.Resolve() returned error for cell {{ $labels.cell }}
+              at rate > 0.01/s for 5m. Either the cell_id is unknown to the
+              router (check ClusterCredential CR exists with status.connected=true)
+              or empty cell_ids are reaching Resolve() (caller bug).
+            runbook_url: "https://github.com/getloopscale/loopzero/blob/develop/docs/runbooks/multi-cell-alerts.md#MultiCellRouterErrorRate"
+
+        # === Cell connectivity / health ===
+        - alert: CellUnhealthy
+          expr: loopzero_cell_health == 0
+          for: 2m
+          labels:
+            severity: critical
+            loopzero_component: cell-router
+          annotations:
+            summary: "Cell {{ $labels.cell }} unhealthy"
+            description: |
+              loopzero_cell_health for cell {{ $labels.cell }} has been 0 for 2m.
+              Either the ClusterCredential reports status.connected=false or
+              the active probe failed. Tenants pinned to this cell cannot
+              deploy. Confirm via:
+                kubectl get clustercredential -n loopzero-system -l loopzero.io/cell={{ $labels.cell }} -o yaml
+            runbook_url: "https://github.com/getloopscale/loopzero/blob/develop/docs/runbooks/multi-cell-alerts.md#CellUnhealthy"
+
+        - alert: ClusterCredentialDisconnected
+          expr: loopzero_cluster_credential_status{connected="false"} == 1
+          for: 1m
+          labels:
+            severity: critical
+            loopzero_component: cluster-credential
+          annotations:
+            summary: "ClusterCredential for cell {{ $labels.cell }} disconnected"
+            description: |
+              ClusterCredential CR reports status.connected=false for cell
+              {{ $labels.cell }}. New tenant pinning to this cell will be
+              rejected; existing tenants may degrade depending on action
+              types. Verify backing cluster API server is reachable and
+              kubeconfig credentials valid.
+            runbook_url: "https://github.com/getloopscale/loopzero/blob/develop/docs/runbooks/multi-cell-alerts.md#ClusterCredentialDisconnected"
+
+        # === Capacity ===
+        - alert: CellCapacityWarning
+          expr: |
+            loopzero_cell_capacity_pods{cell!=""} > 800
+          for: 10m
+          labels:
+            severity: warning
+            loopzero_component: cell-router
+          annotations:
+            summary: "Cell {{ $labels.cell }} approaching pod capacity"
+            description: |
+              Cell {{ $labels.cell }} has {{ $value }} pods scheduled
+              (warn threshold 800). Plan capacity expansion or freeze new
+              tenant pinning to this cell. See cells table:
+                psql> UPDATE cells SET status='draining' WHERE cell_id='{{ $labels.cell }}';
+            runbook_url: "https://github.com/getloopscale/loopzero/blob/develop/docs/runbooks/multi-cell-alerts.md#CellCapacityWarning"
+
+        - alert: CellCapacityCritical
+          expr: |
+            loopzero_cell_capacity_pods{cell!=""} > 1500
+          for: 5m
+          labels:
+            severity: critical
+            loopzero_component: cell-router
+          annotations:
+            summary: "Cell {{ $labels.cell }} at critical pod capacity"
+            description: |
+              Cell {{ $labels.cell }} has {{ $value }} pods (critical
+              threshold 1500). New tenant pinning to this cell MUST stop
+              immediately. Set cells.status='draining' and provision a
+              new cell.
+            runbook_url: "https://github.com/getloopscale/loopzero/blob/develop/docs/runbooks/multi-cell-alerts.md#CellCapacityCritical"
+
+        # === Discovery + orphans (existing metrics, paired alerts) ===
+        - alert: CellDiscoveryEmpty
+          expr: loopzero_cell_discovery_count == 0
+          for: 2m
+          labels:
+            severity: critical
+            loopzero_component: cell-router
+          annotations:
+            summary: "Cell router discovered zero cells"
+            description: |
+              loopzero_cell_discovery_count == 0 for 2m. Either no
+              ClusterCredential CRs exist with status.connected=true, or
+              the K8sCellStore lost connectivity to the K8s API. NO
+              tenant deploys can route until at least one cell is
+              discovered. The router has stale-data protection — if it
+              previously had cells, it should refuse to clear them
+              (check api logs for "refusing to clear N known cells").
+            runbook_url: "https://github.com/getloopscale/loopzero/blob/develop/docs/runbooks/multi-cell-alerts.md#CellDiscoveryEmpty"
+
+        - alert: OrphanedTenants
+          expr: loopzero_orphaned_tenants > 0
+          for: 5m
+          labels:
+            severity: warning
+            loopzero_component: cell-router
+          annotations:
+            summary: "{{ $value }} tenants orphaned (assigned to missing cells)"
+            description: |
+              {{ $value }} tenants are assigned to cell_ids not present in
+              the discovered cell list. These tenants cannot deploy. Either
+              restore the missing cell (recreate ClusterCredential CR with
+              correct status.connected=true) or migrate the tenants to a
+              live cell via the placement layer.
+            runbook_url: "https://github.com/getloopscale/loopzero/blob/develop/docs/runbooks/multi-cell-alerts.md#OrphanedTenants"

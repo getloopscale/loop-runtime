@@ -1,0 +1,87 @@
+# CHG-2026-04-30-INFRA-NORMALIZE / Phase 6 T6.1.
+#
+# CI gate for the CLI integration test suite shipped in Phase 4. Spawned-
+# binary tests against in-process mock API. Closes the T0.3 audit gap
+# where 56/59 CLI subcommands had zero integration coverage.
+#
+# Workflow design points (per plan v2 D5):
+#   • concurrency       — same-branch in-flight runs cancelled (saves CI)
+#   • timeout-minutes:6 — generous over the 22s observed locally; flake
+#                         budget lives here, not in test code
+#   • secrets           — none; mock API is in-process, no creds needed
+#   • fork-PR safe      — runs on PRs from forks (no privileged access)
+#   • node 20           — pinned to package.json engines
+
+name: cli-commands
+
+on:
+  pull_request:
+    paths:
+      - 'cli/**'
+      - '.github/workflows/cli-commands.yml'
+  push:
+    branches: [main, develop, homolog]
+    paths:
+      - 'cli/**'
+
+permissions:
+  contents: read
+
+concurrency:
+  group: cli-commands-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  integration:
+    name: CLI integration tests (fork-based + mock API)
+    runs-on: ubuntu-latest
+    timeout-minutes: 6
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'npm'
+          cache-dependency-path: cli/package-lock.json
+
+      - name: Install CLI deps
+        working-directory: cli
+        run: npm ci
+
+      - name: Build CLI
+        working-directory: cli
+        run: npm run build
+
+      - name: Run CLI unit tests
+        working-directory: cli
+        run: npx jest tests/unit/ --reporters=default
+
+      - name: Run CLI integration tests
+        working-directory: cli
+        run: npx jest tests/integration/ --reporters=default
+        env:
+          # No real API. Mock server uses random localhost ports.
+          CI: 'true'
+
+  harness-smoke:
+    name: Harness self-test
+    runs-on: ubuntu-latest
+    timeout-minutes: 3
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'npm'
+          cache-dependency-path: cli/package-lock.json
+      - name: Install + build CLI
+        working-directory: cli
+        run: |
+          npm ci
+          npm run build
+      - name: Harness self-test
+        working-directory: cli
+        run: npx jest tests/integration/_fixtures/harness-smoke.test.ts --verbose

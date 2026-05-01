@@ -34,12 +34,25 @@ if [[ -n "${LOOPZERO_RUNTIME_KUBECONFIG:-}" ]]; then
   log "wiring runtime cluster..."
   SCOPED=$(KUBECONFIG="$LOOPZERO_RUNTIME_KUBECONFIG" "$SCRIPT_DIR/lib/scoped-kubeconfig.sh" runtime "$LOOPZERO_RUNTIME_KUBECONFIG")
   KUBECONFIG="$LOOPZERO_MGMT_KUBECONFIG" "$SCRIPT_DIR/lib/argocd-register.sh" runtime "$SCOPED"
+  # CHG-2026-04-30-INFRA-NORMALIZE T5.3b: also create ClusterCredential CR
+  # so K8sCellStore.LoadCells() picks it up. cell-1 maps to the canonical
+  # first runtime cluster. Failure is non-fatal (operator can rerun the
+  # lib script directly) — preserves wire-clusters.sh idempotency intent.
+  KUBECONFIG="$LOOPZERO_MGMT_KUBECONFIG" "$SCRIPT_DIR/lib/clustercredential-create.sh" \
+    cell-1 runtime "$SCOPED" \
+    || log "WARN: ClusterCredential cell-1 creation failed (continuing)"
 fi
 
 if [[ -n "${LOOPZERO_RUNTIME2_KUBECONFIG:-}" ]]; then
   log "wiring runtime-2 cluster..."
   SCOPED=$(KUBECONFIG="$LOOPZERO_RUNTIME2_KUBECONFIG" "$SCRIPT_DIR/lib/scoped-kubeconfig.sh" runtime-2 "$LOOPZERO_RUNTIME2_KUBECONFIG")
   KUBECONFIG="$LOOPZERO_MGMT_KUBECONFIG" "$SCRIPT_DIR/lib/argocd-register.sh" runtime-2 "$SCOPED"
+  # T5.3b: cell-2 maps to runtime-2. Cell starts in 'maintenance' status
+  # per cells migration 000003 seed, so admin pin admission rejects
+  # until canary stage 1 flips it 'active'.
+  KUBECONFIG="$LOOPZERO_MGMT_KUBECONFIG" "$SCRIPT_DIR/lib/clustercredential-create.sh" \
+    cell-2 runtime-2 "$SCOPED" \
+    || log "WARN: ClusterCredential cell-2 creation failed (continuing)"
 fi
 
 # B11 fix — Gitea repos archived: re-activate any archived repos so tenant

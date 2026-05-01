@@ -108,7 +108,7 @@ jobs:
           doctl kubernetes cluster kubeconfig save "$CLUSTER"
 
           START=$(date +%s)
-          for deploy in loopzero-api loopzero-controller tenant-controller loopzero-cloud loopzero-dashboard; do
+          for deploy in loopzero-api tenant-operator app-operator preview-operator platform-operator loopzero-cloud loopzero-dashboard; do
             if kubectl get deploy "$deploy" -n loopzero-system >/dev/null 2>&1; then
               kubectl rollout restart deploy "$deploy" -n loopzero-system
               echo "Restarted: $deploy"
@@ -116,8 +116,10 @@ jobs:
           done
 
           echo "Waiting for rollouts..."
-          for deploy in loopzero-api loopzero-controller tenant-controller; do
-            kubectl rollout status deploy "$deploy" -n loopzero-system --timeout=120s
+          for deploy in loopzero-api tenant-operator app-operator preview-operator platform-operator; do
+            if kubectl get deploy "$deploy" -n loopzero-system >/dev/null 2>&1; then
+              kubectl rollout status deploy "$deploy" -n loopzero-system --timeout=120s
+            fi
           done
           DURATION=$(( $(date +%s) - START ))
 

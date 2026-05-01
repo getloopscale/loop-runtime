@@ -182,7 +182,7 @@ releases:
     chart: gitea-charts/gitea
     version: 10.6.0
     needs:
-{{- if ne .Environment.Name "standalone" }}
+{{- if or (eq .Environment.Name "dev") (eq .Environment.Name "prod") }}
       # B28: NFS RWX storage only required for HA gitea (Cloud profiles with
       # multi-replica). Standalone runs single-replica with local PVC (RWO),
       # which works on any K8s including k3d (no NFS kernel module dep).
@@ -205,7 +205,7 @@ releases:
       # works on any K8s). HA on a single-cluster deploy adds operational
       # complexity without real availability gain (cluster failure = both
       # replicas die anyway).
-{{- if ne .Environment.Name "standalone" }}
+{{- if or (eq .Environment.Name "dev") (eq .Environment.Name "prod") }}
       - ../helm/gitea/values-ha.yaml
 {{- end }}
 
@@ -221,7 +221,7 @@ releases:
       # forcing 16 minio pods + 200Gi raw storage is anti-Rule-10 and causes
       # post-install hook timeouts on k3d (4 pods × 60s init > 60s helm wait).
       # Distributed only applies to LoopZero Cloud profiles.
-{{- if ne .Environment.Name "standalone" }}
+{{- if or (eq .Environment.Name "dev") (eq .Environment.Name "prod") }}
       - ../helm/minio/values-distributed.yaml
 {{- end }}
 

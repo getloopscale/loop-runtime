@@ -27,6 +27,10 @@ func NewRouter(cfg Config) *chi.Mux {
 	// Must be early middleware so preflight OPTIONS get handled before auth.
 	r.Use(corsMiddleware(cfg.CORSAllowedOrigin, cfg.IsProduction))
 
+	// Maintenance mode: block mutating requests during infrastructure operations
+	// (e.g., PG resize). Must come before auth so 503 is returned without token check.
+	r.Use(middleware.MaintenanceMode)
+
 	// Middleware chain: metrics → otel-tracing → correlation-id → logging → backpressure
 	r.Use(metrics.HTTPMetrics)
 	r.Use(middleware.OtelHTTP)

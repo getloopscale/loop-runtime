@@ -215,6 +215,20 @@ Defined but unwired (❌): AppSecret (CRD only, no controller — ESO works dire
 | Domain | pending_ns → ns_active → provisioning → active | — |
 | Environment | Creating → Active → Deleting → Deleted | — |
 
+### Helm Chart Dual System
+
+Two chart systems coexist with distinct purposes (ADR D1, bootstrap-integrity-fixes-plan):
+
+| System | Path | Purpose | Used by |
+|--------|------|---------|---------|
+| **Bootstrap charts** | `infra/helm/` | Lightweight, inline values, direct install | Helmfile L2 (`infra/helmfile/`) |
+| **Published charts** | `charts/` | OCI registry, loopzero-common library, full RBAC/monitoring | ArgoCD L3 (Day-2 GitOps), CI (`helm-charts.yml`) |
+
+- `infra/helm/` is canonical for `helmfile sync` (bootstrap). Charts are simple, standalone, with hardcoded defaults.
+- `charts/` is canonical for OCI publishing and ArgoCD. Charts use `loopzero-common` library for consistent labels and security contexts.
+- Changes to shared templates must be propagated to both systems.
+- The operator binary is **monolithic** (`operators/cmd/main.go`): all 8 controllers run in one process. `infra/helm/tenant-controller` deploys this binary. The split charts in `charts/` (`loopzero-app-operator`, `loopzero-platform-operator`, `loopzero-tenant-operator`, `loopzero-preview-operator`) are forward-looking preparation for binary split (Sprint 9+).
+
 ### Production Infrastructure (DigitalOcean)
 
 3 DOKS clusters (v1.32.13, 2 nodes, SFO3) · PostgreSQL 16 managed · DO Container Registry (`registry.digitalocean.com/loopzero-infra-registry`) · CF Tunnel (zero public IPs, all runtime via CF edge) · CF Worker `loopzero-static-delivery` · CF KV `loopzero-routing` · CF Zone Mgmt for custom domains · GitHub App `LoopZero Platform` (ID 3319955) · DO Spaces `loopzero-static-assets` + CDN · State backend `s3://loopzero-infra-pulumi-state`.

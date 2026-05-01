@@ -488,4 +488,92 @@ export function registerInfraCommands(deps: CommandDeps): void {
       );
       process.exitCode = exitCode;
     });
+
+  // CHG-2026-04-30-INFRA-NORMALIZE / Phase 5 T5.5 — pin tenant to cell.
+  // Wraps POST /api/v1/admin/tenants/pin (admin_pin_cell.go).
+  // Mirrors the evict command's auth pattern: X-Service-Auth required;
+  // user-bearer-token NOT used (this is operator-only per
+  // MEET-INFRA-NORMALIZE-T3-multi-cell C8).
+  adminTenantsCmd
+    .command('pin')
+    .description('Pin a tenant to a specific cell (operator-only)')
+    .requiredOption('--tenant <id>', 'Tenant ID to pin')
+    .requiredOption('--cell <cellId>', "Cell ID (must match ^cell-[a-z0-9-]+$)")
+    .action(async (cmdOpts: { tenant: string; cell: string }) => {
+      const globalOpts = getGlobalOpts();
+      const isJson = globalOpts.json === true || process.argv.includes('--json');
+      const serviceAuth = process.env.LOOPZERO_SERVICE_AUTH ?? '';
+
+      if (!serviceAuth) {
+        if (isJson) {
+          writeTo(JSON.stringify({ code: 'forbidden', message: 'LOOPZERO_SERVICE_AUTH env var required for admin commands' }));
+        } else {
+          writeError('LOOPZERO_SERVICE_AUTH env var required for admin commands.');
+        }
+        process.exitCode = 4;
+        return;
+      }
+
+      try {
+        const res = await fetch(`${apiUrl}/api/v1/admin/tenants/pin`, {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            'X-Service-Auth': serviceAuth,
+          },
+          body: JSON.stringify({ tenant_id: cmdOpts.tenant, cell_id: cmdOpts.cell }),
+        });
+
+        const body = await res.text();
+        let parsed: unknown = null;
+        try {
+          parsed = JSON.parse(body);
+        } catch {
+          // tolerate non-JSON error bodies
+        }
+
+        if (res.ok) {
+          if (isJson) {
+            writeTo(body);
+          } else {
+            const r = parsed as { tenant_id: string; previous_cell: string; new_cell: string; updated: boolean } | null;
+            if (r) {
+              writeTo(`Tenant ${r.tenant_id}: ${r.previous_cell} → ${r.new_cell}${r.updated ? '' : ' (no change)'}`);
+            } else {
+              writeTo(body);
+            }
+          }
+          process.exitCode = 0;
+          return;
+        }
+
+        // Map HTTP status → CLI exit code (Rule 4):
+        //   400/404 → 1 (usage / not found)
+        //   403/401 → 4 (auth)
+        //   409     → 5 (partial — cell at capacity / not pinnable)
+        //   5xx     → 3 (deploy-class failure)
+        if (isJson) {
+          writeTo(body || JSON.stringify({ code: 'http_error', status: res.status }));
+        } else {
+          writeError(`pin failed (HTTP ${res.status}): ${body}`);
+        }
+        if (res.status === 401 || res.status === 403) {
+          process.exitCode = 4;
+        } else if (res.status === 409) {
+          process.exitCode = 5;
+        } else if (res.status >= 500) {
+          process.exitCode = 3;
+        } else {
+          process.exitCode = 1;
+        }
+      } catch (err) {
+        const msg = err instanceof Error ? err.message : String(err);
+        if (isJson) {
+          writeTo(JSON.stringify({ code: 'network', message: msg }));
+        } else {
+          writeError(`pin failed: ${msg}`);
+        }
+        process.exitCode = 5;
+      }
+    });
 }

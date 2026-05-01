@@ -207,11 +207,13 @@ releases:
       - ../helm/static-assets/values.yaml
 {{- if eq (.Values | get "clusterTopology" "single-cluster") "multi-cluster" }}
       # In standalone-multi the workload cluster cannot resolve the mgmt-cluster
-      # service DNS, so we use the docker-bridge mgmt-server-0 IP + NodePort
+      # service DNS, so we use the docker-bridge mgmt IP + NodePort
       # exposed by minio (32000 → 9000). This mirrors the build cluster pattern.
+      # LOOPZERO_MGMT_BRIDGE_IP is resolved by wire-clusters.sh or defaults to
+      # the k3d mgmt server container IP.
       - s3:
           bucket: loopzero-static-assets
-          server: 172.18.0.3
+          server: {{ env "LOOPZERO_MGMT_BRIDGE_IP" | default "172.18.0.3" }}
           port: 32000
           proto: http
 {{- end }}

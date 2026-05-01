@@ -1,0 +1,154 @@
+# CHG-2026-04-30-INFRA-NORMALIZE / Phase 3 condition C12.
+# Source: docs/decisions/MEET-INFRA-NORMALIZE-T3-pulumi-consolidation.md
+#
+# Quarterly archive scan — re-archives all live Pulumi stacks even if
+# they were already archived. Detects drift (state changed since last
+# archive) and ensures the `loopzero_pulumi_archives_total` gauge keeps
+# incrementing, blocking the `PulumiArchiveStaleness` alert.
+#
+# Per condition C12: archive runs in `--archive-only` mode quarterly
+# AND on workflow_dispatch for ad-hoc operator-driven archives.
+#
+# Per condition C13: this workflow is the EXECUTION path; the deliverable
+# (the archive script + S3 bucket + audit log) was shipped in commit
+# 56ffc342 (Phase 3 deliverables). This workflow is the runtime that
+# uses those deliverables on a schedule.
+#
+# Concurrency: serialized — never two archive runs in parallel against
+# the same backend (Pulumi backend has its own lock semantics, but
+# defense-in-depth at the GHA layer).
+#
+# Secrets scope: AWS + Pulumi creds only. NO production cluster access
+# is required (this is state archival, not state mutation).
+
+name: pulumi-archive
+
+on:
+  schedule:
+    # Quarterly: 1st day of Jan/Apr/Jul/Oct at 06:00 UTC.
+    # Cron syntax doesn't natively support "every 3 months"; equivalent
+    # is the per-month days. We pick the 1st-of-quarter to align with
+    # quarterly snapshot reviews + budget retros.
+    - cron: '0 6 1 1,4,7,10 *'
+
+  workflow_dispatch:
+    inputs:
+      mode:
+        description: 'Archive mode'
+        required: true
+        type: choice
+        options:
+          - archive-only
+          - dry-run
+        default: archive-only
+      reason:
+        description: 'Reason for ad-hoc archive (logged to audit trail)'
+        required: false
+        default: 'operator-initiated'
+
+permissions:
+  contents: read
+
+concurrency:
+  # Hard serialization — only one archive run at a time across the
+  # whole repository. C12 doesn't require this, but Pulumi state
+  # locks don't compose well with parallel exports.
+  group: pulumi-archive
+  cancel-in-progress: false
+
+jobs:
+  archive:
+    name: Quarterly Pulumi state archive
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    environment:
+      # Per condition C8: CloudTrail logs every action against the
+      # archive bucket. This GitHub Environment scopes the AWS creds
+      # so only this workflow can write to s3://loopzero-archive/.
+      name: pulumi-archive
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install Pulumi CLI (pinned 3.140.0 per condition C17)
+        uses: pulumi/actions@v6
+        with:
+          pulumi-version: 3.140.0
+
+      - name: Install jq + aws cli + sha256sum
+        run: |
+          # ubuntu-latest has these by default but we assert presence.
+          which jq aws sha256sum
+
+      - name: Pulumi backend login
+        env:
+          PULUMI_ACCESS_TOKEN: ${{ secrets.PULUMI_ACCESS_TOKEN }}
+        run: |
+          pulumi version
+          pulumi whoami
+
+      - name: Configure AWS for archive bucket
+        env:
+          AWS_ACCESS_KEY_ID: ${{ secrets.PULUMI_ARCHIVE_AWS_ACCESS_KEY_ID }}
+          AWS_SECRET_ACCESS_KEY: ${{ secrets.PULUMI_ARCHIVE_AWS_SECRET_ACCESS_KEY }}
+          AWS_REGION: ${{ secrets.PULUMI_ARCHIVE_AWS_REGION }}
+        run: |
+          aws s3api head-bucket --bucket loopzero-archive
+          # Verify SSE-KMS (C4)
+          enc=$(aws s3api get-bucket-encryption --bucket loopzero-archive \
+                  --query 'ServerSideEncryptionConfiguration.Rules[0].ApplyServerSideEncryptionByDefault.SSEAlgorithm' \
+                  --output text)
+          if [ "$enc" != "aws:kms" ]; then
+            echo "::error::archive bucket missing SSE-KMS (got: $enc; C4 requires aws:kms)"
+            exit 1
+          fi
+
+      - name: Run archive script
+        env:
+          AWS_ACCESS_KEY_ID: ${{ secrets.PULUMI_ARCHIVE_AWS_ACCESS_KEY_ID }}
+          AWS_SECRET_ACCESS_KEY: ${{ secrets.PULUMI_ARCHIVE_AWS_SECRET_ACCESS_KEY }}
+          AWS_REGION: ${{ secrets.PULUMI_ARCHIVE_AWS_REGION }}
+          PULUMI_ACCESS_TOKEN: ${{ secrets.PULUMI_ACCESS_TOKEN }}
+          PULUMI_CONFIG_PASSPHRASE: ${{ secrets.PULUMI_CONFIG_PASSPHRASE }}
+        run: |
+          if [[ "${{ inputs.mode }}" == "dry-run" ]]; then
+            bash infra/scripts/pulumi-archive.sh --dry-run
+          else
+            # Quarterly + workflow_dispatch archive-only mode: re-archive
+            # all stacks even if previously archived. The script's
+            # idempotency check (C11) ensures bit-identical archives
+            # produce identical S3 keys (modulo timestamp suffix).
+            bash infra/scripts/pulumi-archive.sh --archive-only
+          fi
+
+      - name: Append audit-log entry
+        if: always()
+        env:
+          REASON: ${{ inputs.reason || 'scheduled-quarterly' }}
+        run: |
+          # In a real production CI, this would commit-back to the audit
+          # log via a PR. For now we just emit to the workflow logs;
+          # the human operator running the workflow_dispatch is
+          # responsible for pasting the audit entry.
+          cat <<EOF
+          # Audit-log candidate entry (paste into docs/audits/pulumi-consolidation-log.md):
+
+          ## $(date -u +%Y-%m-%d) — Quarterly archive run via .github/workflows/pulumi-archive.yml
+
+          **Author.** github-actions (workflow ID ${{ github.run_id }}, attempt ${{ github.run_attempt }}).
+          **Action.** Quarterly archive run via .github/workflows/pulumi-archive.yml.
+          **Reason.** ${REASON}.
+          **State transitions.** S3 archive bucket: see workflow logs for archive count + SHAs.
+          **Verification.** This workflow exit ${{ job.status }}.
+          **Next entry.** Next quarterly run, or operator-initiated.
+          EOF
+
+      - name: Upload archive logs (artefact)
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: pulumi-archive-${{ github.run_id }}
+          path: |
+            /tmp/pulumi-archive-*.log
+            /tmp/pulumi-archive-*.json
+          if-no-files-found: ignore
+          retention-days: 365   # archive run logs retained 1y to match CloudTrail (C8)

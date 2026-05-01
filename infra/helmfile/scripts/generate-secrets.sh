@@ -175,7 +175,7 @@ apply_secret gitea-admin loopzero-system \
 # field is a *prefix* of the App's repoURL. Without this credential template
 # every Application stays sync=Unknown with "authentication required" in
 # operationState.message.
-kubectl get namespace argocd >/dev/null 2>&1 && \
+ensure_namespace argocd
 cat <<EOF | kubectl apply -f - >/dev/null
 apiVersion: v1
 kind: Secret
@@ -223,7 +223,7 @@ if kubectl get namespace argocd >/dev/null 2>&1 && \
         "http://${ARGOCD_HOST}/api/v1/session" 2>/dev/null \
       | python3 -c 'import sys,json; print(json.loads(sys.stdin.read() or "{}").get("token",""))' 2>/dev/null || true)
     if [[ -z "$ARGOCD_TOKEN" ]]; then
-      ARGOCD_TOKEN=$(get_existing loopzero-api-tokens loopzero-system argocd-token)
+      ARGOCD_TOKEN=$(get_or_generate loopzero-api-tokens loopzero-system argocd-token)
       [[ -n "$ARGOCD_TOKEN" ]] && log "preserving existing argocd-token (login failed; cluster likely mid-bootstrap)"
     fi
     if [[ -n "$ARGOCD_TOKEN" ]]; then
@@ -235,11 +235,19 @@ if kubectl get namespace argocd >/dev/null 2>&1 && \
   fi
 fi
 
-# 3) MinIO root creds (from Pulumi/cloud — passthrough, no generation).
+# 3) MinIO / S3 root creds — IDEMPOTENT.
+# Cloud (DO Spaces): uses LOOPZERO_SPACES_KEY / LOOPZERO_SPACES_SECRET from Pulumi.
+# Standalone: generates with MinIO chart defaults (minioadmin/minioadmin).
 if [[ -n "${LOOPZERO_SPACES_KEY:-}" ]]; then
   apply_secret minio-credentials loopzero-system \
     --from-literal=accesskey="${LOOPZERO_SPACES_KEY}" \
     --from-literal=secretkey="${LOOPZERO_SPACES_SECRET:-}"
+else
+  MINIO_ACCESS="${MINIO_ROOT_USER:-minioadmin}"
+  MINIO_SECRET="${MINIO_ROOT_PASSWORD:-$(get_or_generate minio-credentials loopzero-system secretkey)}"
+  apply_secret minio-credentials loopzero-system \
+    --from-literal=accesskey="$MINIO_ACCESS" \
+    --from-literal=secretkey="$MINIO_SECRET"
 fi
 
 # 4) Harbor admin password — IDEMPOTENT.

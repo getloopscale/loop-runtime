@@ -58,6 +58,20 @@ jest.mock('../../src/installer/pulumi-runner', () => ({
   resolvePulumiProjectDir: jest.fn(() => '/tmp/pulumi'),
   resolveProjectRoot: jest.fn(() => '/tmp/loopzero'),
 }));
+// CHG-2026-04-30 — PR #51 (refactorhelms) wired runPreflight + runHealthCheck
+// into platformInstall as new gates between L1→L2 and after each helmfile
+// sync. Stub them out so this T8.1 unit test still exercises only the Step
+// 6.5 / --validate-l3 logic without spinning up a real cluster.
+jest.mock('../../src/installer/preflight', () => ({
+  runPreflight: jest.fn(() => ({ ok: true, results: [] })),
+  formatPreflightResult: jest.fn(),
+}));
+jest.mock('../../src/installer/health-checks', () => ({
+  runHealthCheck: jest.fn(() => ({ status: 'pass', exitCode: 0, durationMs: 1, stderr: '' })),
+}));
+jest.mock('../../src/installer/drift', () => ({
+  detectDrift: jest.fn(() => []),
+}));
 
 import { platformInstall, PlatformDeps } from '../../src/commands/platform';
 

@@ -6,6 +6,7 @@ package controller
 import (
 	"context"
 	"fmt"
+	"strings"
 	"time"
 
 	corev1 "k8s.io/api/core/v1"
@@ -16,7 +17,6 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/types"
 	"k8s.io/apimachinery/pkg/util/intstr"
-	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/controller/controllerutil"
 
 	loopzerov1 "github.com/loopzero/loopzero/operators/api/v1"
@@ -24,6 +24,13 @@ import (
 	k "github.com/loopzero/loopzero/operators/internal/constants"
 	"github.com/loopzero/loopzero/pkg/naming"
 )
+
+// errSecretTypeMismatch is returned when a Secret exists with the wrong type
+// (e.g., DockerConfigJson instead of Opaque). The Secret is deleted inside the
+// mutator and this error triggers a requeue so the next reconcile creates it
+// fresh. This eliminates the TOCTOU race of doing Delete + CreateOrUpdate as
+// two separate operations.
+var errSecretTypeMismatch = fmt.Errorf("secret type mismatch: deleted for recreation on next reconcile")
 
 // reconcileBuildNamespace orchestrates the build-{tenantID} namespace provisioning.
 // Each step is idempotent via CreateOrUpdate. Steps are extracted into focused functions.
@@ -261,9 +268,11 @@ func (r *TenantReconciler) isRegistryTokenFresh(ctx context.Context, namespace s
 
 // containsDOCRHost is a tiny helper to keep the host check in one place.
 // Kept package-private and minimal to avoid a heavier abstraction layer.
+// Requires exact match or a sub-path (e.g., registry.digitalocean.com/v2)
+// to prevent prefix-spoofing (registry.digitalocean.com.evil.com).
 func containsDOCRHost(host string) bool {
 	return host == "registry.digitalocean.com" ||
-		(len(host) > len("registry.digitalocean.com") && host[:len("registry.digitalocean.com")] == "registry.digitalocean.com")
+		strings.HasPrefix(host, "registry.digitalocean.com/")
 }
 
 // ensureBuildExecutorRBAC creates the Role and RoleBinding for Argo Workflow executor pods.
@@ -449,20 +458,23 @@ func (r *TenantReconciler) ensureBuildkitRegistrySecret(ctx context.Context, nam
 	}
 
 	desiredType := corev1.SecretTypeOpaque
-	// Pre-flight: heal stale Secrets that were created with DockerConfigJson
-	// type by a prior controller version.
-	existing := &corev1.Secret{}
-	getErr := r.BuildClient.Get(ctx, client.ObjectKey{Name: k.SecretBuildKitRegistryConfig, Namespace: namespace}, existing)
-	if getErr == nil && existing.Type != desiredType {
-		if delErr := r.BuildClient.Delete(ctx, existing); delErr != nil && !errors.IsNotFound(delErr) {
-			return fmt.Errorf("delete legacy registry secret: %w", delErr)
-		}
-	}
 
 	secret := &corev1.Secret{
 		ObjectMeta: metav1.ObjectMeta{Name: k.SecretBuildKitRegistryConfig, Namespace: namespace},
 	}
 	_, err = controllerutil.CreateOrUpdate(ctx, r.BuildClient, secret, func() error {
+		// Type migration: if the Secret exists with a legacy type (e.g.,
+		// DockerConfigJson from a prior controller version), K8s won't let us
+		// Update it to Opaque. Delete it inside the mutator and return a
+		// sentinel error that triggers requeue — next pass creates it fresh.
+		// This eliminates the TOCTOU race of separate Delete + CreateOrUpdate.
+		if secret.Type != "" && secret.Type != desiredType {
+			if delErr := r.BuildClient.Delete(ctx, secret); delErr != nil && !errors.IsNotFound(delErr) {
+				return fmt.Errorf("delete legacy registry secret: %w", delErr)
+			}
+			return errSecretTypeMismatch
+		}
+
 		secret.Labels = map[string]string{
 			k.LabelTenant:    tenantName,
 			k.LabelComponent: k.ComponentBuild,

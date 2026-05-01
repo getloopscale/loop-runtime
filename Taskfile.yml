@@ -1319,6 +1319,16 @@ tasks:
     cmds:
       - bash infra/tests/parity/preflight.sh
 
+  validate:matrix:
+    desc: Master validation matrix — every offline gate (Phase 8 T8.1)
+    cmds:
+      - bash infra/tests/parity/validate-matrix.sh
+
+  validate:matrix:quick:
+    desc: validate:matrix without operators envtest (faster signal)
+    cmds:
+      - bash infra/tests/parity/validate-matrix.sh --quick
+
   parity:audit:
     desc: Verify regression matrix integrity (every entry's Verification token resolves in repo)
     cmds:
@@ -1516,6 +1526,26 @@ tasks:
           echo "SKIP: golangci-lint not installed — install: https://golangci-lint.run/welcome/install/"
         fi
       - cd cli && npx eslint src/
+
+  validate:helm-deps:
+    desc: |
+      Run `helm dependency build` on every chart with file:// deps so
+      umbrella charts (loopzero-platform) + 4 split-operator charts can
+      `helm template` cleanly. Closes condition C24 of
+      MEET-INFRA-NORMALIZE-T3-operator-split.
+    cmds:
+      - |
+        set -e
+        for chart in charts/loopzero-api charts/loopzero-app-operator charts/loopzero-cloud \
+                     charts/loopzero-controller charts/loopzero-crds charts/loopzero-dashboard \
+                     charts/loopzero-platform charts/loopzero-platform-operator \
+                     charts/loopzero-preview-operator charts/loopzero-tenant-controller \
+                     charts/loopzero-tenant-operator; do
+          if [[ -d "$chart" ]]; then
+            echo "==> helm dependency build: $chart"
+            (cd "$chart" && helm dependency build) || exit 1
+          fi
+        done
 
   validate:manifests:
     desc: Validate all K8s manifests with kubeconform

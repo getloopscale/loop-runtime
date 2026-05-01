@@ -18,17 +18,17 @@ import {
 import {
   helmfileSync,
   helmfileDestroy,
-  ensureHelmfileAvailable,
   resolveHelmfilePath,
 } from '../installer/helmfile-runner';
 import {
   pulumiUp,
   pulumiOutputs,
   pulumiDestroy,
-  ensurePulumiAvailable,
   resolvePulumiProjectDir,
   resolveProjectRoot,
 } from '../installer/pulumi-runner';
+import { runPreflight, formatPreflightResult } from '../installer/preflight';
+import { runHealthCheck } from '../installer/health-checks';
 import { detectDrift } from '../installer/drift';
 import { decideRestore } from '../installer/secret-backups';
 
@@ -152,12 +152,15 @@ export async function platformInstall(
   }
 
   const useInfra = !!config.provider && !opts.skipInfra;
+  const isMultiCluster = !!config.provider;
   const projectRoot = resolveProjectRoot();
   // Pick environment:
   //   --provider set + profile=production → prod
   //   --provider set + profile=minimal    → dev
   //   no --provider                       → standalone (single cluster)
-  const environment = !useInfra
+  // Note: --skip-infra with --provider still uses the cloud environment
+  // (to match cached outputs and select correct cluster roles).
+  const environment = !isMultiCluster
     ? 'standalone'
     : config.profile === 'production'
       ? 'prod'
@@ -175,7 +178,7 @@ export async function platformInstall(
 
   // ── Step 1: Validate ──────────────────────────────────────────────
   progress('1/6', 'validate', 'running'); writeTo('Step 1/6: Validating configuration...');
-  if (!useInfra) {
+  if (!isMultiCluster) {
     const validation = validateCluster();
     for (const check of validation.checks) {
       writeTo(`  ${check.ok ? '✓' : '✗'} ${check.name}: ${check.detail}`);
@@ -190,20 +193,15 @@ export async function platformInstall(
 
   // ── Step 2: Preflight ─────────────────────────────────────────────
   progress('2/6', 'preflight', 'running'); writeTo('Step 2/6: Preflight checks...');
-  const helmfileCheck = ensureHelmfileAvailable();
-  if (!helmfileCheck.ok) {
-    writeError(`  ✗ ${helmfileCheck.error}`);
+  const preflightResult = runPreflight({
+    provider: config.provider,
+    cfAccountId: config.providerConfig?.cfAccountId,
+    cfZoneId: config.providerConfig?.cfZoneId,
+  });
+  formatPreflightResult(preflightResult, writeTo);
+  if (!preflightResult.ok) {
+    writeError('Preflight checks failed. Fix the issues above and retry.');
     return 1;
-  }
-  writeTo(`  ✓ helmfile ${helmfileCheck.version}`);
-
-  if (useInfra) {
-    const pulumiCheck = ensurePulumiAvailable();
-    if (!pulumiCheck.ok) {
-      writeError(`  ✗ ${pulumiCheck.error}`);
-      return 1;
-    }
-    writeTo(`  ✓ pulumi ${pulumiCheck.version}`);
   }
 
   // ── Step 3: Infrastructure (CONDITIONAL — only with --provider) ────
@@ -242,6 +240,31 @@ export async function platformInstall(
     }
     extraEnv = pulumiOutputsToEnv(outputs);
     writeTo(`  ✓ stack outputs captured: ${Object.keys(extraEnv).length} env vars`);
+
+    // Cache outputs for --skip-infra retry (ADR D5)
+    const cacheDir = `${process.env.HOME}/.loopzero`;
+    if (!fs.existsSync(cacheDir)) fs.mkdirSync(cacheDir, { recursive: true, mode: 0o700 });
+    const cachePath = `${cacheDir}/pulumi-outputs.json`;
+    fs.writeFileSync(cachePath, JSON.stringify({ environment, outputs }, null, 2), { mode: 0o600 });
+  } else if (opts.skipInfra && config.provider) {
+    // --skip-infra retry: read cached outputs from previous L1 run
+    writeTo('Step 3/6: Skipping infrastructure (--skip-infra) — reading cached outputs...');
+    const cachePath = `${process.env.HOME}/.loopzero/pulumi-outputs.json`;
+    if (fs.existsSync(cachePath)) {
+      try {
+        const cached = JSON.parse(fs.readFileSync(cachePath, 'utf-8'));
+        if (cached.environment === environment && cached.outputs) {
+          extraEnv = pulumiOutputsToEnv(cached.outputs);
+          writeTo(`  ✓ cached outputs loaded: ${Object.keys(extraEnv).length} env vars`);
+        } else {
+          writeTo(`  ! cached outputs are for environment '${cached.environment}', expected '${environment}' — proceeding without`);
+        }
+      } catch {
+        writeTo('  ! failed to parse cached outputs — proceeding without');
+      }
+    } else {
+      writeTo('  ! no cached outputs found — run without --skip-infra first');
+    }
   } else {
     writeTo('Step 3/6: Skipping infrastructure (no --provider) — using existing cluster');
   }
@@ -301,13 +324,13 @@ export async function platformInstall(
 
   // ── Step 4: Bootstrap (Helmfile L2) ────────────────────────────────
   progress('4/6', 'helmfile', 'running'); writeTo('Step 4/6: Installing platform via Helmfile...');
-  const clusterRoles: Array<'mgmt' | 'build' | 'runtime'> = useInfra
+  const clusterRoles: Array<'mgmt' | 'build' | 'runtime'> = isMultiCluster
     ? ['build', 'mgmt', 'runtime']
     : ['mgmt']; // standalone
 
   for (const role of clusterRoles) {
     const filePath = resolveHelmfilePath(projectRoot, role);
-    const kubeconfig = useInfra ? `${process.env.HOME}/.kube/loopzero-${role}.yaml` : undefined;
+    const kubeconfig = isMultiCluster ? `${process.env.HOME}/.kube/loopzero-${role}.yaml` : undefined;
 
     // Pre-sync secret generation (replaces helmfile prepare hooks; idempotent).
     if (!opts.dryRun) {
@@ -347,12 +370,27 @@ export async function platformInstall(
       return 3;
     }
     writeTo(`  ✓ helmfile ${role} complete (${(result.durationMs / 1000).toFixed(1)}s)`);
+
+    // Health gate: verify cluster role is healthy before proceeding to the next.
+    if (!opts.dryRun) {
+      writeTo(`  → health-check ${role}`);
+      const hc = runHealthCheck(role, {
+        domain: config.domain,
+        extraEnv: { ...extraEnv, LOOPZERO_PROFILE: environment },
+      });
+      if (hc.status !== 'pass') {
+        writeError(`  ✗ health-check ${role} failed (exit ${hc.exitCode})`);
+        if (hc.stderr) writeError(`    ${hc.stderr.split('\n').slice(-3).join('\n    ')}`);
+        return 3;
+      }
+      writeTo(`  ✓ health-check ${role} passed (${(hc.durationMs / 1000).toFixed(1)}s)`);
+    }
   }
 
   // ── Step 5: Wire ───────────────────────────────────────────────────
   progress('5/6', 'wire', 'running'); writeTo('Step 5/6: Wiring cross-cluster connectivity...');
-  if (useInfra && !opts.dryRun) {
-    
+  if (isMultiCluster && !opts.dryRun) {
+
     const wireScript = `${projectRoot}/infra/helmfile/scripts/wire-clusters.sh`;
     const wireResult = spawnSync('bash', [wireScript, environment], {
       env: { ...process.env, ...extraEnv },
@@ -583,7 +621,7 @@ export async function platformStatus(
     writeTo('');
     writeTo(`  Phase: ${status.phase}`);
     if (status.version) writeTo(`  Version: ${status.version}`);
-    writeTo(`  CRDs installed: ${status.crdsInstalled}`);
+    writeTo(`  Platform definitions: ${status.crdsInstalled}`);
     writeTo('');
     writeTo('  Components:');
     for (const c of status.components) {

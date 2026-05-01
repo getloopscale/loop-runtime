@@ -1,0 +1,29 @@
+FROM golang:1.25.9-alpine3.22 AS builder
+WORKDIR /workspace
+
+ENV GOWORK=off
+
+COPY pkg/go.mod ./pkg/go.mod
+COPY operators/go.mod operators/go.sum ./operators/
+
+RUN --mount=type=cache,target=/root/go/pkg/mod \
+    cd operators && go mod download
+
+COPY pkg/ ./pkg/
+COPY operators/ ./operators/
+
+RUN --mount=type=cache,target=/root/go/pkg/mod \
+    --mount=type=cache,target=/root/.cache/go-build \
+    cd operators && CGO_ENABLED=0 go build -trimpath -ldflags="-s -w" -o /loopzero-platform-operator ./cmd/platform-operator/main.go
+
+FROM gcr.io/distroless/static-debian12:nonroot
+
+LABEL org.opencontainers.image.source="https://github.com/loopzero/loopzero"
+LABEL org.opencontainers.image.title="loopzero-platform-operator"
+LABEL org.opencontainers.image.description="LoopZero PaaS Platform Infrastructure operator"
+
+COPY --from=builder /loopzero-platform-operator /usr/local/bin/loopzero-platform-operator
+EXPOSE 8080 8081
+
+ENTRYPOINT ["loopzero-platform-operator"]
+CMD ["--leader-elect=true"]

@@ -121,19 +121,62 @@ k8s_resource(
 )
 
 # ---------------------------------------------------------------------------
-# TenantController operator — build and deploy
+# Operator binaries — 4 independent deployments (multi-binary split)
 # ---------------------------------------------------------------------------
+
+# Group A: Tenant + Environment (heaviest — all provisioners + multi-cluster)
 docker_build(
-    "loopzero-tenant-controller",
+    "loopzero-tenant-operator",
     context=".",
-    dockerfile="operators/Dockerfile",
-    only=["operators/", "pkg/", "go.work", "go.work.sum", "api/go.mod", "api/go.sum", "infra/tests/go.mod", "infra/tests/go.sum", "infra/scripts/"],
+    dockerfile="operators/Dockerfile.tenant-operator",
+    only=["operators/", "pkg/", "go.work", "go.work.sum"],
+)
+k8s_yaml("infra/tilt/tenant-operator-deployment.yaml")
+k8s_resource(
+    "tenant-operator",
+    resource_deps=["crds", "loopzero-api", "gitea", "minio"],
+    labels=["loopzero"],
 )
 
-k8s_yaml("infra/tilt/operator-deployment.yaml")
+# Group B: Application + Exposure (lightest — mgmt cluster only)
+docker_build(
+    "loopzero-app-operator",
+    context=".",
+    dockerfile="operators/Dockerfile.app-operator",
+    only=["operators/", "pkg/", "go.work", "go.work.sum"],
+)
+k8s_yaml("infra/tilt/app-operator-deployment.yaml")
 k8s_resource(
-    "tenant-controller",  # K8s resource name (from deployment manifest)
-    resource_deps=["crds", "loopzero-api", "gitea", "minio"],
+    "app-operator",
+    resource_deps=["crds"],
+    labels=["loopzero"],
+)
+
+# Group C: Preview (self-contained — runtime cluster + TTL checks)
+docker_build(
+    "loopzero-preview-operator",
+    context=".",
+    dockerfile="operators/Dockerfile.preview-operator",
+    only=["operators/", "pkg/", "go.work", "go.work.sum"],
+)
+k8s_yaml("infra/tilt/preview-operator-deployment.yaml")
+k8s_resource(
+    "preview-operator",
+    resource_deps=["crds"],
+    labels=["loopzero"],
+)
+
+# Group D: Platform infra (ClusterCredential + GitRepoBinding + PlatformBootstrap)
+docker_build(
+    "loopzero-platform-operator",
+    context=".",
+    dockerfile="operators/Dockerfile.platform-operator",
+    only=["operators/", "pkg/", "go.work", "go.work.sum"],
+)
+k8s_yaml("infra/tilt/platform-operator-deployment.yaml")
+k8s_resource(
+    "platform-operator",
+    resource_deps=["crds", "gitea"],
     labels=["loopzero"],
 )
 

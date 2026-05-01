@@ -1,0 +1,34 @@
+{{- if .Values.rbac.create }}
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: {{ include "loopzero-common.fullname" . }}
+  labels:
+    {{- include "loopzero-common.labels" . | nindent 4 }}
+rules:
+  # --- LoopZero CRDs: clustercredentials, gitrepositorybindings, platformbootstraps ---
+  - apiGroups: ["loopzero.io"]
+    resources: ["clustercredentials", "gitrepositorybindings", "platformbootstraps"]
+    verbs: ["get", "list", "watch", "create", "update", "patch", "delete"]
+  - apiGroups: ["loopzero.io"]
+    resources: ["clustercredentials/status", "gitrepositorybindings/status", "platformbootstraps/status"]
+    verbs: ["get", "update", "patch"]
+  - apiGroups: ["loopzero.io"]
+    resources: ["clustercredentials/finalizers", "gitrepositorybindings/finalizers", "platformbootstraps/finalizers"]
+    verbs: ["update"]
+
+  # --- Secrets: kubeconfig and ArgoCD secrets ---
+  - apiGroups: [""]
+    resources: ["secrets"]
+    verbs: ["get", "list", "watch", "create", "update"]
+
+  # --- Events: emit Kubernetes events for observability ---
+  - apiGroups: [""]
+    resources: ["events"]
+    verbs: ["create"]
+
+  # --- Leader election: coordination lease for HA ---
+  - apiGroups: ["coordination.k8s.io"]
+    resources: ["leases"]
+    verbs: ["get", "list", "watch", "create", "update", "patch", "delete"]
+{{- end }}

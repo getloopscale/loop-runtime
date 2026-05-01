@@ -72,6 +72,11 @@ jobs:
       build_api: ${{ steps.resolve.outputs.build_api }}
       build_operator: ${{ steps.resolve.outputs.build_operator }}
       build_cloud: ${{ steps.resolve.outputs.build_cloud }}
+      # Multi-binary operator split: all 4 share the same change detection flag
+      build_tenant_operator: ${{ steps.resolve.outputs.build_operator }}
+      build_app_operator: ${{ steps.resolve.outputs.build_operator }}
+      build_preview_operator: ${{ steps.resolve.outputs.build_operator }}
+      build_platform_operator: ${{ steps.resolve.outputs.build_operator }}
     steps:
       - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
         with:
@@ -190,8 +195,11 @@ jobs:
           echo "- \`${{ env.REGISTRY }}/loopzero-api:${TAG}\`" >> "$GITHUB_STEP_SUMMARY"
           echo "- Digest: \`${DIGEST}\`" >> "$GITHUB_STEP_SUMMARY"
 
-  build-operator:
-    name: Build loopzero-tenant-controller
+  # Multi-binary operator split: 4 independent build jobs replace the monolithic build-operator.
+  # All share the same change detection (operators/ or pkg/ changed) but build separate Dockerfiles.
+
+  build-tenant-operator:
+    name: Build loopzero-tenant-operator
     runs-on: ubuntu-latest
     timeout-minutes: 15
     needs: resolve
@@ -210,30 +218,152 @@ jobs:
       - run: doctl registry login --expiry-seconds 600
       - uses: docker/setup-buildx-action@b5ca514318bd6ebac0fb2aedd5d36ec1b5c232a2 # v3.10.0
       - run: echo "SOURCE_DATE_EPOCH=$(git log -1 --pretty=%ct)" >> $GITHUB_ENV
-
-      - name: Build and push loopzero-tenant-controller
+      - name: Build and push loopzero-tenant-operator
         id: build
         run: |
           TAG="${{ needs.resolve.outputs.tag }}"
           SHA="${{ needs.resolve.outputs.sha_tag }}"
           ENV_TAG="${{ needs.resolve.outputs.env_tag }}"
-
-          docker buildx build -f operators/Dockerfile \
+          docker buildx build -f operators/Dockerfile.tenant-operator \
             --provenance=true --sbom=true \
             --build-arg SOURCE_DATE_EPOCH=${{ env.SOURCE_DATE_EPOCH }} \
-            --cache-from type=registry,ref=${{ env.REGISTRY }}/loopzero-tenant-controller:cache \
-            --cache-to type=registry,ref=${{ env.REGISTRY }}/loopzero-tenant-controller:cache,mode=max \
-            -t ${{ env.REGISTRY }}/loopzero-tenant-controller:${TAG} \
-            -t ${{ env.REGISTRY }}/loopzero-tenant-controller:${SHA} \
-            $([ -n "$ENV_TAG" ] && [ "$ENV_TAG" != "$TAG" ] && echo "-t ${{ env.REGISTRY }}/loopzero-tenant-controller:${ENV_TAG}") \
+            --cache-from type=registry,ref=${{ env.REGISTRY }}/loopzero-tenant-operator:cache \
+            --cache-to type=registry,ref=${{ env.REGISTRY }}/loopzero-tenant-operator:cache,mode=max \
+            -t ${{ env.REGISTRY }}/loopzero-tenant-operator:${TAG} \
+            -t ${{ env.REGISTRY }}/loopzero-tenant-operator:${SHA} \
+            $([ -n "$ENV_TAG" ] && [ "$ENV_TAG" != "$TAG" ] && echo "-t ${{ env.REGISTRY }}/loopzero-tenant-operator:${ENV_TAG}") \
             --push .
-
-          DIGEST=$(docker buildx imagetools inspect "${{ env.REGISTRY }}/loopzero-tenant-controller:${TAG}" --format '{{json .Manifest.Digest}}' | tr -d '"')
+          DIGEST=$(docker buildx imagetools inspect "${{ env.REGISTRY }}/loopzero-tenant-operator:${TAG}" --format '{{json .Manifest.Digest}}' | tr -d '"')
           echo "digest=${DIGEST}" >> "$GITHUB_OUTPUT"
-          echo "image=${{ env.REGISTRY }}/loopzero-tenant-controller" >> "$GITHUB_OUTPUT"
+          echo "image=${{ env.REGISTRY }}/loopzero-tenant-operator" >> "$GITHUB_OUTPUT"
+          echo "### loopzero-tenant-operator" >> "$GITHUB_STEP_SUMMARY"
+          echo "- \`${{ env.REGISTRY }}/loopzero-tenant-operator:${TAG}\`" >> "$GITHUB_STEP_SUMMARY"
+          echo "- Digest: \`${DIGEST}\`" >> "$GITHUB_STEP_SUMMARY"
 
-          echo "### loopzero-tenant-controller" >> "$GITHUB_STEP_SUMMARY"
-          echo "- \`${{ env.REGISTRY }}/loopzero-tenant-controller:${TAG}\`" >> "$GITHUB_STEP_SUMMARY"
+  build-app-operator:
+    name: Build loopzero-app-operator
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    needs: resolve
+    if: needs.resolve.outputs.build_operator == 'true'
+    environment: ${{ needs.resolve.outputs.environment }}
+    outputs:
+      digest: ${{ steps.build.outputs.digest }}
+      image: ${{ steps.build.outputs.image }}
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+        with:
+          ref: ${{ github.sha }}
+      - uses: digitalocean/action-doctl@3cb3953159719656269e044e0e24ca16dd2a690f # v2.5.2
+        with:
+          token: ${{ secrets.DIGITALOCEAN_TOKEN }}
+      - run: doctl registry login --expiry-seconds 600
+      - uses: docker/setup-buildx-action@b5ca514318bd6ebac0fb2aedd5d36ec1b5c232a2 # v3.10.0
+      - run: echo "SOURCE_DATE_EPOCH=$(git log -1 --pretty=%ct)" >> $GITHUB_ENV
+      - name: Build and push loopzero-app-operator
+        id: build
+        run: |
+          TAG="${{ needs.resolve.outputs.tag }}"
+          SHA="${{ needs.resolve.outputs.sha_tag }}"
+          ENV_TAG="${{ needs.resolve.outputs.env_tag }}"
+          docker buildx build -f operators/Dockerfile.app-operator \
+            --provenance=true --sbom=true \
+            --build-arg SOURCE_DATE_EPOCH=${{ env.SOURCE_DATE_EPOCH }} \
+            --cache-from type=registry,ref=${{ env.REGISTRY }}/loopzero-app-operator:cache \
+            --cache-to type=registry,ref=${{ env.REGISTRY }}/loopzero-app-operator:cache,mode=max \
+            -t ${{ env.REGISTRY }}/loopzero-app-operator:${TAG} \
+            -t ${{ env.REGISTRY }}/loopzero-app-operator:${SHA} \
+            $([ -n "$ENV_TAG" ] && [ "$ENV_TAG" != "$TAG" ] && echo "-t ${{ env.REGISTRY }}/loopzero-app-operator:${ENV_TAG}") \
+            --push .
+          DIGEST=$(docker buildx imagetools inspect "${{ env.REGISTRY }}/loopzero-app-operator:${TAG}" --format '{{json .Manifest.Digest}}' | tr -d '"')
+          echo "digest=${DIGEST}" >> "$GITHUB_OUTPUT"
+          echo "image=${{ env.REGISTRY }}/loopzero-app-operator" >> "$GITHUB_OUTPUT"
+          echo "### loopzero-app-operator" >> "$GITHUB_STEP_SUMMARY"
+          echo "- \`${{ env.REGISTRY }}/loopzero-app-operator:${TAG}\`" >> "$GITHUB_STEP_SUMMARY"
+          echo "- Digest: \`${DIGEST}\`" >> "$GITHUB_STEP_SUMMARY"
+
+  build-preview-operator:
+    name: Build loopzero-preview-operator
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    needs: resolve
+    if: needs.resolve.outputs.build_operator == 'true'
+    environment: ${{ needs.resolve.outputs.environment }}
+    outputs:
+      digest: ${{ steps.build.outputs.digest }}
+      image: ${{ steps.build.outputs.image }}
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+        with:
+          ref: ${{ github.sha }}
+      - uses: digitalocean/action-doctl@3cb3953159719656269e044e0e24ca16dd2a690f # v2.5.2
+        with:
+          token: ${{ secrets.DIGITALOCEAN_TOKEN }}
+      - run: doctl registry login --expiry-seconds 600
+      - uses: docker/setup-buildx-action@b5ca514318bd6ebac0fb2aedd5d36ec1b5c232a2 # v3.10.0
+      - run: echo "SOURCE_DATE_EPOCH=$(git log -1 --pretty=%ct)" >> $GITHUB_ENV
+      - name: Build and push loopzero-preview-operator
+        id: build
+        run: |
+          TAG="${{ needs.resolve.outputs.tag }}"
+          SHA="${{ needs.resolve.outputs.sha_tag }}"
+          ENV_TAG="${{ needs.resolve.outputs.env_tag }}"
+          docker buildx build -f operators/Dockerfile.preview-operator \
+            --provenance=true --sbom=true \
+            --build-arg SOURCE_DATE_EPOCH=${{ env.SOURCE_DATE_EPOCH }} \
+            --cache-from type=registry,ref=${{ env.REGISTRY }}/loopzero-preview-operator:cache \
+            --cache-to type=registry,ref=${{ env.REGISTRY }}/loopzero-preview-operator:cache,mode=max \
+            -t ${{ env.REGISTRY }}/loopzero-preview-operator:${TAG} \
+            -t ${{ env.REGISTRY }}/loopzero-preview-operator:${SHA} \
+            $([ -n "$ENV_TAG" ] && [ "$ENV_TAG" != "$TAG" ] && echo "-t ${{ env.REGISTRY }}/loopzero-preview-operator:${ENV_TAG}") \
+            --push .
+          DIGEST=$(docker buildx imagetools inspect "${{ env.REGISTRY }}/loopzero-preview-operator:${TAG}" --format '{{json .Manifest.Digest}}' | tr -d '"')
+          echo "digest=${DIGEST}" >> "$GITHUB_OUTPUT"
+          echo "image=${{ env.REGISTRY }}/loopzero-preview-operator" >> "$GITHUB_OUTPUT"
+          echo "### loopzero-preview-operator" >> "$GITHUB_STEP_SUMMARY"
+          echo "- \`${{ env.REGISTRY }}/loopzero-preview-operator:${TAG}\`" >> "$GITHUB_STEP_SUMMARY"
+          echo "- Digest: \`${DIGEST}\`" >> "$GITHUB_STEP_SUMMARY"
+
+  build-platform-operator:
+    name: Build loopzero-platform-operator
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    needs: resolve
+    if: needs.resolve.outputs.build_operator == 'true'
+    environment: ${{ needs.resolve.outputs.environment }}
+    outputs:
+      digest: ${{ steps.build.outputs.digest }}
+      image: ${{ steps.build.outputs.image }}
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+        with:
+          ref: ${{ github.sha }}
+      - uses: digitalocean/action-doctl@3cb3953159719656269e044e0e24ca16dd2a690f # v2.5.2
+        with:
+          token: ${{ secrets.DIGITALOCEAN_TOKEN }}
+      - run: doctl registry login --expiry-seconds 600
+      - uses: docker/setup-buildx-action@b5ca514318bd6ebac0fb2aedd5d36ec1b5c232a2 # v3.10.0
+      - run: echo "SOURCE_DATE_EPOCH=$(git log -1 --pretty=%ct)" >> $GITHUB_ENV
+      - name: Build and push loopzero-platform-operator
+        id: build
+        run: |
+          TAG="${{ needs.resolve.outputs.tag }}"
+          SHA="${{ needs.resolve.outputs.sha_tag }}"
+          ENV_TAG="${{ needs.resolve.outputs.env_tag }}"
+          docker buildx build -f operators/Dockerfile.platform-operator \
+            --provenance=true --sbom=true \
+            --build-arg SOURCE_DATE_EPOCH=${{ env.SOURCE_DATE_EPOCH }} \
+            --cache-from type=registry,ref=${{ env.REGISTRY }}/loopzero-platform-operator:cache \
+            --cache-to type=registry,ref=${{ env.REGISTRY }}/loopzero-platform-operator:cache,mode=max \
+            -t ${{ env.REGISTRY }}/loopzero-platform-operator:${TAG} \
+            -t ${{ env.REGISTRY }}/loopzero-platform-operator:${SHA} \
+            $([ -n "$ENV_TAG" ] && [ "$ENV_TAG" != "$TAG" ] && echo "-t ${{ env.REGISTRY }}/loopzero-platform-operator:${ENV_TAG}") \
+            --push .
+          DIGEST=$(docker buildx imagetools inspect "${{ env.REGISTRY }}/loopzero-platform-operator:${TAG}" --format '{{json .Manifest.Digest}}' | tr -d '"')
+          echo "digest=${DIGEST}" >> "$GITHUB_OUTPUT"
+          echo "image=${{ env.REGISTRY }}/loopzero-platform-operator" >> "$GITHUB_OUTPUT"
+          echo "### loopzero-platform-operator" >> "$GITHUB_STEP_SUMMARY"
+          echo "- \`${{ env.REGISTRY }}/loopzero-platform-operator:${TAG}\`" >> "$GITHUB_STEP_SUMMARY"
           echo "- Digest: \`${DIGEST}\`" >> "$GITHUB_STEP_SUMMARY"
 
   build-cloud:
@@ -432,7 +562,7 @@ jobs:
     name: "Sign & attest: ${{ matrix.component }}"
     runs-on: ubuntu-latest
     timeout-minutes: 10
-    needs: [resolve, build-api, build-operator, build-cloud, build-dashboard, build-harbor-init]
+    needs: [resolve, build-api, build-tenant-operator, build-app-operator, build-preview-operator, build-platform-operator, build-cloud, build-dashboard, build-harbor-init]
     if: always()
     environment: ${{ needs.resolve.outputs.environment }}
     strategy:
@@ -444,11 +574,26 @@ jobs:
             result: ${{ needs.build-api.result }}
             image: ${{ needs.build-api.outputs.image || '' }}
             digest: ${{ needs.build-api.outputs.digest || '' }}
-          - component: loopzero-tenant-controller
-            build_job: build-operator
-            result: ${{ needs.build-operator.result }}
-            image: ${{ needs.build-operator.outputs.image || '' }}
-            digest: ${{ needs.build-operator.outputs.digest || '' }}
+          - component: loopzero-tenant-operator
+            build_job: build-tenant-operator
+            result: ${{ needs.build-tenant-operator.result }}
+            image: ${{ needs.build-tenant-operator.outputs.image || '' }}
+            digest: ${{ needs.build-tenant-operator.outputs.digest || '' }}
+          - component: loopzero-app-operator
+            build_job: build-app-operator
+            result: ${{ needs.build-app-operator.result }}
+            image: ${{ needs.build-app-operator.outputs.image || '' }}
+            digest: ${{ needs.build-app-operator.outputs.digest || '' }}
+          - component: loopzero-preview-operator
+            build_job: build-preview-operator
+            result: ${{ needs.build-preview-operator.result }}
+            image: ${{ needs.build-preview-operator.outputs.image || '' }}
+            digest: ${{ needs.build-preview-operator.outputs.digest || '' }}
+          - component: loopzero-platform-operator
+            build_job: build-platform-operator
+            result: ${{ needs.build-platform-operator.result }}
+            image: ${{ needs.build-platform-operator.outputs.image || '' }}
+            digest: ${{ needs.build-platform-operator.outputs.digest || '' }}
           - component: loopzero-cloud
             build_job: build-cloud
             result: ${{ needs.build-cloud.result }}

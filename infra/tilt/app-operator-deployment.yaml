@@ -1,0 +1,136 @@
+# App Operator — manages LoopZeroApplication and ExposedRoute CRDs
+# Split from monolithic operator-deployment.yaml for independent scaling and faster dev loops.
+---
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: app-operator
+  namespace: loopzero-system
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: app-operator
+rules:
+  # --- LoopZero CRDs: LoopZeroApplication + ExposedRoute lifecycle ---
+  - apiGroups: ["loopzero.io"]
+    resources: ["loopzeroapplications", "exposedroutes"]
+    verbs: ["get", "list", "watch", "create", "update", "patch", "delete"]
+  - apiGroups: ["loopzero.io"]
+    resources: ["loopzeroapplications/status", "exposedroutes/status"]
+    verbs: ["get", "update", "patch"]
+  - apiGroups: ["loopzero.io"]
+    resources: ["loopzeroapplications/finalizers", "exposedroutes/finalizers"]
+    verbs: ["update"]
+
+  # --- Secrets: read-only for app config references ---
+  - apiGroups: [""]
+    resources: ["secrets"]
+    verbs: ["get", "list", "watch"]
+
+  # --- Services: read-only for routing validation ---
+  - apiGroups: [""]
+    resources: ["services"]
+    verbs: ["get", "list"]
+
+  # --- Ingresses: manage routing for exposed routes ---
+  - apiGroups: ["networking.k8s.io"]
+    resources: ["ingresses"]
+    verbs: ["get", "list", "watch"]
+
+  # --- Events: emit Kubernetes events for observability ---
+  - apiGroups: [""]
+    resources: ["events"]
+    verbs: ["create"]
+
+  # --- Leader election: coordination lease ---
+  - apiGroups: ["coordination.k8s.io"]
+    resources: ["leases"]
+    verbs: ["get", "list", "watch", "create", "update", "patch", "delete"]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRoleBinding
+metadata:
+  name: app-operator
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: ClusterRole
+  name: app-operator
+subjects:
+  - kind: ServiceAccount
+    name: app-operator
+    namespace: loopzero-system
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: app-operator
+  namespace: loopzero-system
+  labels:
+    app: app-operator
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: app-operator
+  template:
+    metadata:
+      labels:
+        app: app-operator
+    spec:
+      serviceAccountName: app-operator
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 1000
+        fsGroup: 1000
+      containers:
+        - name: operator
+          image: loopzero-app-operator
+          args:
+            - "--leader-elect=false"
+            - "--health-probe-bind-address=:8081"
+            - "--metrics-bind-address=:8080"
+          env:
+            - name: BASE_DOMAIN
+              value: "loopzero.local"
+          ports:
+            - containerPort: 8081
+              name: health
+              protocol: TCP
+            - containerPort: 8080
+              name: metrics
+              protocol: TCP
+          readinessProbe:
+            httpGet:
+              path: /readyz
+              port: 8081
+            initialDelaySeconds: 5
+            periodSeconds: 5
+          livenessProbe:
+            httpGet:
+              path: /healthz
+              port: 8081
+            initialDelaySeconds: 10
+            periodSeconds: 10
+          resources:
+            limits:
+              cpu: "200m"
+              memory: "128Mi"
+            requests:
+              cpu: "50m"
+              memory: "32Mi"
+          volumeMounts:
+            - name: tmp
+              mountPath: /tmp
+          securityContext:
+            runAsNonRoot: true
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+            capabilities:
+              drop:
+                - ALL
+            seccompProfile:
+              type: RuntimeDefault
+      volumes:
+        - name: tmp
+          emptyDir: {}

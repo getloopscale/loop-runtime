@@ -1,0 +1,124 @@
+// SPDX-License-Identifier: Apache-2.0
+// Copyright 2025-2026 The LoopZero Authors
+//
+// CHG-2026-04-30-INFRA-NORMALIZE / Phase 2 condition C16.
+// Source: docs/decisions/MEET-INFRA-NORMALIZE-T3-operator-split.md
+// Source: docs/decisions/operator-split-invariants.md (I-1)
+//
+// Pins that the split operators that handle namespace-scoped CRDs
+// (Tenant/Environment in tenant-operator; ClusterCredential/
+// GitRepoBinding/PlatformBootstrap in platform-operator) carry the
+// cache.Options scoping per ADR-0018 v2 C9.
+//
+// Static-source check rather than envtest because:
+// (a) running envtest requires KUBEBUILDER_ASSETS + ~30s setup per test,
+//     CI cost-prohibitive for a contract this thin;
+// (b) the contract IS source-level: if the cache.Options block is
+//     present with the right ByObject keys, controller-runtime applies
+//     the scope. Live verification belongs in the cutover-canary phase
+//     (T-13/T-14 already SKIP cloud-pendente).
+//
+// If a future refactor moves the cache.Options to a helper, this test
+// must be updated to chase the helper. That's intentional — pinning
+// the source string forces conscious review of cache changes.
+
+package unit
+
+import (
+	"os"
+	"path/filepath"
+	"strings"
+	"testing"
+)
+
+func TestCacheScoping_TenantOperatorScopesTenantAndEnvironment(t *testing.T) {
+	path := filepath.Join(repoRoot(), "operators", "cmd", "tenant-operator", "main.go")
+	data, err := os.ReadFile(path)
+	if err != nil {
+		t.Fatalf("tenant-operator main.go missing: %v", err)
+	}
+	text := string(data)
+
+	for _, must := range []string{
+		"platformCRDNamespaces",
+		"constants.NamespacePlatformSystem",
+		"Cache: cache.Options",
+		"ByObject: map[client.Object]cache.ByObject",
+		"&loopzerov1.Tenant{}",
+		"&loopzerov1.Environment{}",
+	} {
+		if !strings.Contains(text, must) {
+			t.Errorf("tenant-operator main.go missing C16/I-1 cache scoping clause: %s", must)
+		}
+	}
+}
+
+func TestCacheScoping_PlatformOperatorScopesPlatformCRDs(t *testing.T) {
+	path := filepath.Join(repoRoot(), "operators", "cmd", "platform-operator", "main.go")
+	data, err := os.ReadFile(path)
+	if err != nil {
+		t.Fatalf("platform-operator main.go missing: %v", err)
+	}
+	text := string(data)
+
+	for _, must := range []string{
+		"platformCRDNamespaces",
+		"Cache: cache.Options",
+		"&loopzerov1.PlatformBootstrap{}",
+		"&loopzerov1.GitRepositoryBinding{}",
+		"&loopzerov1.ClusterCredential{}",
+	} {
+		if !strings.Contains(text, must) {
+			t.Errorf("platform-operator main.go missing C16/I-1 cache scoping clause: %s", must)
+		}
+	}
+}
+
+func TestCacheScoping_AppOperatorDoesNOTScope_WorkloadCRDs(t *testing.T) {
+	// Per ADR-0018 v2 C9: LoopZeroApplication / PreviewEnvironment /
+	// ExposedRoute MUST remain cluster-wide because they are deployed
+	// per-tenant in `loopzero-tenant-{id}` namespaces. Restricting their
+	// cache to a single namespace would BREAK reconciliation. This
+	// test is the negative pin — fails if a future commit accidentally
+	// applies cache scoping to these CRDs in the app or preview
+	// operators.
+	for _, op := range []string{"app-operator", "preview-operator"} {
+		path := filepath.Join(repoRoot(), "operators", "cmd", op, "main.go")
+		data, err := os.ReadFile(path)
+		if err != nil {
+			t.Fatalf("%s main.go missing: %v", op, err)
+		}
+		text := string(data)
+
+		// If we see ANY ByObject entry for the workload CRDs, that's
+		// a regression we want to catch.
+		for _, forbidden := range []string{
+			"&loopzerov1.LoopZeroApplication{}:      {Namespaces:",
+			"&loopzerov1.PreviewEnvironment{}:    {Namespaces:",
+			"&loopzerov1.ExposedRoute{}:          {Namespaces:",
+		} {
+			if strings.Contains(text, forbidden) {
+				t.Errorf("%s applies forbidden namespace scoping to workload CRD: %s — ADR-0018 C9 mandates cluster-wide", op, forbidden)
+			}
+		}
+	}
+}
+
+func TestCacheScoping_MonolithStillScopes(t *testing.T) {
+	// The monolith retains its scoping until T2.5 deletion (sprint 12).
+	// During the migration window, a cutover failure mid-flight could
+	// leave both topologies running briefly; if the monolith somehow
+	// regressed, this test catches it before merge.
+	path := filepath.Join(repoRoot(), "operators", "cmd", "main.go")
+	data, err := os.ReadFile(path)
+	if err != nil {
+		t.Fatalf("monolith main.go missing: %v", err)
+	}
+	text := string(data)
+	if !strings.Contains(text, "platformCRDNamespaces") {
+		t.Error("monolith main.go missing platformCRDNamespaces — ADR-0018 C9 regression")
+	}
+	if !strings.Contains(text, "Cache: cache.Options") {
+		t.Error("monolith main.go missing Cache: cache.Options — ADR-0018 C9 regression")
+	}
+}

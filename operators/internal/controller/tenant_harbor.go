@@ -21,6 +21,7 @@ import (
 	"github.com/loopzero/loopzero/operators/internal/conditions"
 	k "github.com/loopzero/loopzero/operators/internal/constants"
 	"github.com/loopzero/loopzero/operators/internal/harbor"
+	"github.com/loopzero/loopzero/operators/internal/metrics"
 	"github.com/loopzero/loopzero/pkg/naming"
 )
 
@@ -167,6 +168,7 @@ func (r *TenantReconciler) ensureHarborRobotAccounts(ctx context.Context, tenant
 				if errors.IsNotFound(err) {
 					slog.Info("harbor pull secret skipped — workload namespace not yet ready",
 						"tenant", tenant.Name, "namespace", envNs)
+					metrics.ReconcileErrors.WithLabelValues("tenant", "pull_secret_namespace_not_ready").Inc()
 					continue
 				}
 				return fmt.Errorf("harbor pull secret for %s/%s: %w", tenant.Name, env.Name, err)
@@ -256,35 +258,23 @@ func (r *TenantReconciler) ensureHarborRegistrySecret(ctx context.Context, names
 
 	desiredType := corev1.SecretTypeOpaque
 
-	// Pre-flight: if a stale Secret exists with the legacy DockerConfigJson
-	// Type (from prior controller versions), delete it so CreateOrUpdate can
-	// recreate it as Opaque with key `config.json`.
-	existing := &corev1.Secret{}
-	getErr := r.BuildClient.Get(ctx, client.ObjectKey{Name: k.SecretHarborRegistryConfig, Namespace: namespace}, existing)
-	priorAuthsJSON := []byte(nil)
-	if getErr == nil {
-		if existing.Type != desiredType {
-			slog.Info("registry secret type mismatch, deleting for recreate",
-				"namespace", namespace, "old_type", existing.Type, "new_type", desiredType)
-			if delErr := r.BuildClient.Delete(ctx, existing); delErr != nil && !errors.IsNotFound(delErr) {
-				return fmt.Errorf("delete legacy registry secret: %w", delErr)
-			}
-		} else if existing.Data != nil {
-			priorAuthsJSON = existing.Data[k.KeyDockerConfigJSON]
-		}
-	}
-
-	mergedJSON, err := mergeAuthsByHost(priorAuthsJSON, map[string]mergedAuthEntry{
-		r.HarborRegistryHost: authEntryFromBasic(creds.Username, creds.Secret),
-	})
-	if err != nil {
-		return fmt.Errorf("ensureHarborRegistrySecret: merge auths: %w", err)
-	}
-
 	secret := &corev1.Secret{
 		ObjectMeta: metav1.ObjectMeta{Name: k.SecretHarborRegistryConfig, Namespace: namespace},
 	}
-	_, err = controllerutil.CreateOrUpdate(ctx, r.BuildClient, secret, func() error {
+	_, err := controllerutil.CreateOrUpdate(ctx, r.BuildClient, secret, func() error {
+		// Type migration: if the Secret exists with a legacy type (e.g.,
+		// DockerConfigJson from a prior controller version), K8s won't let us
+		// Update it to Opaque. Delete inside the mutator and return sentinel
+		// error — next reconcile pass creates it fresh. Eliminates TOCTOU race.
+		if secret.Type != "" && secret.Type != desiredType {
+			slog.Info("registry secret type mismatch, deleting for recreate",
+				"namespace", namespace, "old_type", secret.Type, "new_type", desiredType)
+			if delErr := r.BuildClient.Delete(ctx, secret); delErr != nil && !errors.IsNotFound(delErr) {
+				return fmt.Errorf("delete legacy registry secret: %w", delErr)
+			}
+			return errSecretTypeMismatch
+		}
+
 		secret.Labels = map[string]string{
 			k.LabelTenant:    tenantName,
 			k.LabelComponent: k.ComponentBuild,
@@ -299,7 +289,7 @@ func (r *TenantReconciler) ensureHarborRegistrySecret(ctx context.Context, names
 		// independent: each writer owns its own.
 		secret.Annotations[k.AnnotationHarborTokenExpiresAt] = creds.ExpiresAt.Format("2006-01-02T15:04:05Z07:00")
 		secret.Type = desiredType
-		// Re-merge inside the mutator using whatever the live Secret holds
+		// Merge inside the mutator using whatever the live Secret holds
 		// right now — controllerutil.CreateOrUpdate may re-invoke this
 		// closure with refreshed state. Re-running the merge keeps it
 		// idempotent and tolerant of concurrent writes from the DOCR side.
@@ -312,11 +302,6 @@ func (r *TenantReconciler) ensureHarborRegistrySecret(ctx context.Context, names
 		})
 		if mergeErr != nil {
 			return mergeErr
-		}
-		// Fall back to the pre-computed merge if the in-mutator one returned
-		// an unexpectedly empty result (defensive — should never happen).
-		if len(nextJSON) == 0 {
-			nextJSON = mergedJSON
 		}
 		secret.Data = map[string][]byte{
 			k.KeyDockerConfigJSON: nextJSON,

@@ -44,8 +44,11 @@ curl -sk https://api.dev.loopzero.example/healthz
    ```bash
    # Check if the tunnel still exists in CF
    # Visit: https://dash.cloudflare.com → Zero Trust → Access → Tunnels
-   # If deleted, re-create via Pulumi:
-   cd /home/paulo/Projetos/loopzero/loopzero/infra/pulumi-platform
+   # If deleted, re-create via the canonical Pulumi project.
+   # (Per CHG-2026-04-30-INFRA-NORMALIZE Phase 3 condition C21, the
+   # legacy `infra/pulumi-platform/` referenced in earlier revisions
+   # is being consolidated into `infra/pulumi/` — use that.)
+   cd "$(git rev-parse --show-toplevel)/infra/pulumi"
    npx pulumi up --stack dev
    ```
 

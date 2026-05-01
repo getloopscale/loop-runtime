@@ -56,3 +56,19 @@ inClusterPostgres: false
 
 # B20: NFS server provisioner underlying storage class. DOKS default.
 underlyingStorageClass: do-block-storage
+
+# CHG-2026-04-30-INFRA-NORMALIZE / Phase 5 T5.2 — multi-cell metadata.
+# cellId names the cell that runtime cluster X belongs to. Per T0.1
+# audit Gap 3: cell-id is K8s/ArgoCD metadata, NOT cloud infra — so it
+# lives in helmfile env (not Pulumi.dev.yaml).
+#
+# In dev: runtime cluster maps to cell-1; runtime-2 to cell-2. Both
+# seeded in cells SQL table (migration 000003); cell-2 starts in
+# 'maintenance' status (no traffic until canary stage 1 flips it).
+runtimeCellId: cell-1
+runtime2CellId: cell-2
+
+# CHG-2026-04-30-INFRA-NORMALIZE / Phase 5 T5.4 — enable DynamicRouter
+# in loopzero-api so it consumes ClusterCredential CRs and routes per-tenant
+# to cell-1 or cell-2. Audit T0.1 Gap 4 (was: silently single-cell).
+dynamicRouter: true

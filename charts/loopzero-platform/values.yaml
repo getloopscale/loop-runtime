@@ -10,7 +10,16 @@ loopzero-crds:
 loopzero-api:
   enabled: true
 
-loopzero-tenant-controller:
+loopzero-tenant-operator:
+  enabled: true
+
+loopzero-app-operator:
+  enabled: true
+
+loopzero-preview-operator:
+  enabled: true
+
+loopzero-platform-operator:
   enabled: true
 
 loopzero-controller:
