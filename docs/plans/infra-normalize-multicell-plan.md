@@ -1940,7 +1940,7 @@ CHANGELOG.md — CHG-2026-04-30-INFRA-NORMALIZE entry block under Added/Changed/
 - [x] All test suites GREEN simultaneously:
   - [x] CLI unit (1243) GREEN _(was 1171 plan, expanded)_
   - [x] CLI integration (12+ NEW with spawned binary) GREEN
-  - [x] Pulumi vitest (96) GREEN
+  - [x] Pulumi vitest (269) GREEN _(was 96 plan baseline; iters 16-27 expanded with invariant tests for charts/workflows/canaries/migrations/SLOs/PrometheusRules/audits/DRs/ADRs)_
   - [x] Go infra/tests (capacity + chaos + e2e + load + unit) GREEN
   - [x] Operators envtest (existing 200+) GREEN _(timeout 300s required)_
   - [x] Parity preflight (16 gates) GREEN _(verified 2026-05-01: 16 PASS / 0 FAIL / 0 SKIP / 0 WARN after T0.1 cleanup-terminating-namespaces.sh removed 14h-old zumbi ns)_
@@ -1973,7 +1973,7 @@ CHANGELOG.md — CHG-2026-04-30-INFRA-NORMALIZE entry block under Added/Changed/
 - [x] Memory entry persisted _(3 new memories 2026-04-30: live-test-existing-db, validation-sweep, no-tribal-knowledge, dogfood-12-12-milestone)_
 - [x] CI workflows: cli-commands.yml + multi-cell.yml + parity-validation present _(parity-validation.yml deferred — vitest-driven gate equivalent)_
 - [x] No regression in CLI unit tests _(1243 PASS, was 1171 baseline)_
-- [x] No regression in Pulumi vitest _(96 PASS)_
+- [x] No regression in Pulumi vitest _(269 PASS verified 2026-05-01; +173 from iters 16-27 invariant pinning)_
 - [x] code-audit checks passing _(go vet GREEN; gofmt clean on session-touched files; tsc GREEN; ESLint 0 errors)_
 - [x] **Single DEBT row tracked**: regression_test.go behavioural refactor _(owner=agent:test, horizon=2026-06-30; documented in CHANGELOG via NEW-7 + NEW-15 fixes)_
 - [ ] Plan-specific: Tilt and Helmfile deploy IDENTICAL pod sets _(deferred — Phase 2 T2.4 cutover)_

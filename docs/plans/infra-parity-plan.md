@@ -902,7 +902,7 @@ docs/runbooks/bootstrap-regression-matrix.md — adicionar #45 (#21 promote name
 ## Global Definition of Done
 
 - [x] Phases 0-5 completed; Phases 6-8 offline-deliverables done (live cloud-pendente); Phase 9 done
-- [x] All TDD tests passing (Go + TypeScript) _(1243 CLI tests + 96 Pulumi + 41 Go packages — verified 2026-05-01)_
+- [x] All TDD tests passing (Go + TypeScript) _(1243 CLI tests + 269 Pulumi + 41 Go packages — verified 2026-05-01; Pulumi expanded from 96 baseline via iters 16-27 invariant pinning)_
 - [x] Zero ESLint/golangci-lint warnings _(verificado iter atual)_
 - [x] code-audit checks passing em modificados _(scripts shellcheck clean; tests <500 LOC)_
 - [x] **Live: k3d virgin install (T5.1) GREEN** _(run 6, 2026-04-30, exit 0, "Platform phase: Ready")_

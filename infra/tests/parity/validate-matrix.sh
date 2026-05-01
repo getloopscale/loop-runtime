@@ -15,7 +15,7 @@
 #   2. CLI unit tests             — 1243
 #   3. CLI integration tests      — 72 (excluding cli-e2e gated suite)
 #   4. API tests                  — routes + services + placement + db
-#   5. Pulumi vitest              — 96
+#   5. Pulumi vitest              — 269 (was 96 in plan baseline; iters 16-27 expanded)
 #   6. infra/tests Go suite       — capacity + chaos + e2e + load + unit
 #   7. helm lint × 4 split charts
 #   8. matrix-integrity audit
@@ -95,7 +95,7 @@ else
   result 2 "api: go not installed"
 fi
 
-# Gate 5: Pulumi vitest (96+).
+# Gate 5: Pulumi vitest (269+ verified 2026-05-01).
 if (cd "${REPO_ROOT}/infra/pulumi" && npx vitest run --reporter=basic >/dev/null 2>&1); then
   result 0 "pulumi:vitest"
 else
