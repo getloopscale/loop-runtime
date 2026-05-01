@@ -1312,9 +1312,9 @@ VERIFY:  ./infra/scripts/rotate-cell-credentials.sh runtime-2
 ```
 
 #### Acceptance Criteria
-- [ ] Creds rotated
-- [ ] ESO connects
-- [ ] Runbook published
+- [N/A] Creds rotated _(superseded by T5.3b CC-bootstrap-lib: `infra/helmfile/scripts/lib/clustercredential-create.sh` + `wire-clusters.sh` — fresh creds on every bootstrap; rotation = re-run, no separate rotate.sh needed; commit f7c6dd0a)_
+- [N/A] ESO connects _(verified live 2026-04-30: `loopzero_cluster_credential_status{cell="cell-2",connected="true"}=1` per memory `reference_multicell_activation_2026_04_30.md`)_
+- [N/A] Runbook published _(replaced by `docs/runbooks/multi-cell-canary-prod.md` — operator runbook covers credential lifecycle within the canary procedure)_
 
 #### Security Review
 - **Question**: where are old creds? **Answer**: revoked + archived encrypted.
@@ -1332,8 +1332,8 @@ VERIFY:  ./infra/scripts/rotate-cell-credentials.sh runtime-2
 - Alert: `CellCredentialStale` if > 90 days.
 
 #### DoD
-- [ ] Rotation done
-- [ ] Verified
+- [N/A] Rotation done _(superseded — see Acceptance Criteria above)_
+- [N/A] Verified _(superseded — see Acceptance Criteria above)_
 
 ---
 
@@ -1367,9 +1367,9 @@ VERIFY:  cd infra/pulumi && npx vitest run src/__tests__/cell-2-config.test.ts
 ```
 
 #### Acceptance Criteria
-- [ ] Config keys present
-- [ ] Outputs declared
-- [ ] Test GREEN
+- [N/A] Config keys present _(superseded by helmfile-native approach per audit Gap 3 — cell metadata embedded in `infra/helmfile/environments/{prod,standalone-multi,dev}.yaml` instead of `Pulumi.dev.yaml`; cells SoT is now `cells` PG table + ClusterCredential CRs, not Pulumi config)_
+- [N/A] Outputs declared _(superseded — `wire-clusters.sh` reads ClusterCredentials directly from K8s API; Pulumi outputs unnecessary)_
+- [N/A] Test GREEN _(replaced by `helmfile-environments-parity.test.ts` 4 cases GREEN + `migration_006_cells_test.go` 8 cases GREEN)_
 
 #### Security Review
 - **Question**: kubeconfig secret in Pulumi state? **Answer**: yes — encrypted at rest per ADR-0015.
@@ -1384,8 +1384,8 @@ VERIFY:  cd infra/pulumi && npx vitest run src/__tests__/cell-2-config.test.ts
 - Pulumi state metric: `loopzero_pulumi_cell_count` gauge.
 
 #### DoD
-- [ ] Config + outputs working
-- [ ] Test GREEN
+- [N/A] Config + outputs working _(superseded — see Acceptance Criteria above)_
+- [N/A] Test GREEN _(superseded — see Acceptance Criteria above)_
 
 ---
 
@@ -1527,9 +1527,9 @@ VERIFY:  npx jest tests/integration/deploy-cell-flag.test.ts
 ```
 
 #### Acceptance Criteria
-- [ ] Flag works
-- [ ] Authz enforced
-- [ ] Default unchanged
+- [N/A] Flag works _(superseded by `loopzero admin tenants pin --tenant X --cell Y` operator command per CHG-2026-04-30-INFRA-NORMALIZE — operator-only path is more auditable than per-deploy flag; `loopzero deploy` reads tenant.cell_id server-side via api/internal/routes/builds.go:272 cellResolver.GetTenantCellID)_
+- [N/A] Authz enforced _(replaced by X-Service-Auth + LOOPZERO_ADMIN_API=true gates on POST /api/v1/admin/tenants/pin per commit 8cd616e8)_
+- [N/A] Default unchanged _(default cellID still 'cell-default' via SQL DEFAULT in tenants.cell_id column; unchanged for tenants without explicit pin)_
 
 #### Security Review
 - **Question**: can attacker pin tenant to wrong cell? **Answer**: no — authz check.
@@ -1546,9 +1546,9 @@ VERIFY:  npx jest tests/integration/deploy-cell-flag.test.ts
 - Metric: `loopzero_cell_pin_requests_total{cell, result}` counter.
 
 #### DoD
-- [ ] Flag wired
-- [ ] Authz GREEN
-- [ ] Tests GREEN
+- [N/A] Flag wired _(superseded by `loopzero admin tenants pin` — see Acceptance Criteria above)_
+- [N/A] Authz GREEN _(operator-only authz on /api/v1/admin/tenants/pin — 12 handler tests + 7 service tests + 6 CLI integration tests GREEN per CHANGELOG)_
+- [N/A] Tests GREEN _(replaced by admin-tenants-pin.test.ts integration suite GREEN 2026-05-01)_
 
 ---
 
