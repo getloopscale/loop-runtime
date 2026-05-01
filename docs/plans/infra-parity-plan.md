@@ -902,7 +902,7 @@ docs/runbooks/bootstrap-regression-matrix.md — adicionar #45 (#21 promote name
 ## Global Definition of Done
 
 - [x] Phases 0-5 completed; Phases 6-8 offline-deliverables done (live cloud-pendente); Phase 9 done
-- [x] All TDD tests passing (Go + TypeScript) _(1171 CLI tests + 41 Go packages)_
+- [x] All TDD tests passing (Go + TypeScript) _(1243 CLI tests + 96 Pulumi + 41 Go packages — verified 2026-05-01)_
 - [x] Zero ESLint/golangci-lint warnings _(verificado iter atual)_
 - [x] code-audit checks passing em modificados _(scripts shellcheck clean; tests <500 LOC)_
 - [x] **Live: k3d virgin install (T5.1) GREEN** _(run 6, 2026-04-30, exit 0, "Platform phase: Ready")_
@@ -914,7 +914,7 @@ docs/runbooks/bootstrap-regression-matrix.md — adicionar #45 (#21 promote name
 - [N/A] CHANGELOG.md [0.2.0] release _(release tag adiado para Sprint 9 pós-cloud)_
 - [N/A] Git tag `v0.2.0` pushed _(idem)_
 - [x] `helmfile-environments-parity.test.ts` ativo + 4 cases GREEN _(replaces parity-validation.yml — vitest CI)_
-- [x] `bootstrap-regression-matrix.md` 135 entries com proteção (109/135 = 81%, +4 desta iter)
+- [x] `bootstrap-regression-matrix.md` 150 entries com proteção (142/150 OK + 8 SKIP live-only + 0 MISS — `audit-regression-matrix.sh` GREEN 2026-05-01)
 - [N/A] Tag `infra-parity-v1` _(emitida ao primeiro Phase 8 LIVE GREEN)_
 
 ## Estimativa de execução

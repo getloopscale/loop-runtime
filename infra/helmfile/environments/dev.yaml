@@ -63,7 +63,7 @@ underlyingStorageClass: do-block-storage
 # lives in helmfile env (not Pulumi.dev.yaml).
 #
 # In dev: runtime cluster maps to cell-1; runtime-2 to cell-2. Both
-# seeded in cells SQL table (migration 000003); cell-2 starts in
+# seeded in cells SQL table (migration 000006); cell-2 starts in
 # 'maintenance' status (no traffic until canary stage 1 flips it).
 runtimeCellId: cell-1
 runtime2CellId: cell-2

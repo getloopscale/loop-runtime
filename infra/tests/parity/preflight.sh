@@ -122,14 +122,16 @@ fi
 # Gate 8: cells migration present + matches kubebuilder cell_id pattern.
 # Closes T0.1 audit Gap 1 + T-1.3 condition C1 (migration must create
 # table AND seed in one forward-only file).
-if [[ -f "${REPO_ROOT}/api/internal/db/migrations/000003_cells.up.sql" ]]; then
-  if grep -qF "cell_id ~ '^cell-[a-z0-9-]+\$'" "${REPO_ROOT}/api/internal/db/migrations/000003_cells.up.sql"; then
+# Numbered 000006 (renumbered from 000003 on 2026-04-30 — original number
+# would have been silently skipped on every existing DB at version >= 5).
+if [[ -f "${REPO_ROOT}/api/internal/db/migrations/000006_cells.up.sql" ]]; then
+  if grep -qF "cell_id ~ '^cell-[a-z0-9-]+\$'" "${REPO_ROOT}/api/internal/db/migrations/000006_cells.up.sql"; then
     result 0 "cells-migration:pattern-matches-CC-kubebuilder"
   else
     result 1 "cells-migration:CHECK-constraint-missing-or-mismatched"
   fi
 else
-  result 1 "cells-migration:000003_cells.up.sql-missing"
+  result 1 "cells-migration:000006_cells.up.sql-missing"
 fi
 
 # Gate 9: ClusterCredential bootstrap lib present.

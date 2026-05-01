@@ -95,6 +95,10 @@ func NewRouter(cfg Config) *chi.Mux {
 	if cfg.AdminEvictor != nil {
 		r.Post("/api/v1/admin/tenants/evict", routes.AdminEvictHandler(cfg.AdminEvictor))
 	}
+	// CHG-2026-04-30-DELETE-SINGLE-CELL: pin tenants to specific cell.
+	if cfg.AdminPinner != nil {
+		r.Post("/api/v1/admin/tenants/pin", routes.AdminPinCellHandler(cfg.AdminPinner))
+	}
 
 	// Protected routes (auth required)
 	if cfg.TokenValidator != nil && cfg.MemberStore != nil {

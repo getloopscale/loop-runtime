@@ -16,18 +16,18 @@ config:
   loopzero-infra:domain: dev.loopzero.example
   loopzero-infra:dnsZone: loopzero.example
   loopzero-infra:infraVersion: v3
-  loopzero-infra:mgmtK8sVersion: 1.33.9-do.3
+  loopzero-infra:mgmtK8sVersion: 1.33.9-do.4
   loopzero-infra:mgmtNodeClass: medium
   loopzero-infra:mgmtMinNodes: "3"
   loopzero-infra:mgmtMaxNodes: "5"
-  loopzero-infra:runtimeK8sVersion: 1.33.9-do.3
+  loopzero-infra:runtimeK8sVersion: 1.33.9-do.4
   loopzero-infra:runtimeNodeClass: small
   loopzero-infra:runtimeMinNodes: "2"
   # CHG-2026-04-28-LAYERED-BOOTSTRAP T0.2 + B18 — runtime burst capacity for L3-100.
   # 3 nodes was insufficient (50 vCPU L3 deploy left tail tenants pending).
   # 8 nodes covers worst-case scheduling pressure during L3 burst.
   loopzero-infra:runtimeMaxNodes: "8"
-  loopzero-infra:buildK8sVersion: 1.33.9-do.3
+  loopzero-infra:buildK8sVersion: 1.33.9-do.4
   loopzero-infra:buildNodeClass: medium
   loopzero-infra:buildMinNodes: "2"
   loopzero-infra:buildMaxNodes: "5"

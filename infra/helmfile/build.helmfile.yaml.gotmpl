@@ -70,8 +70,14 @@ releases:
       - {}
     # Skip ServiceAccount/RBAC duplication — argo-workflows release already
     # creates loopzero-build-sa with the right permissions.
+    # 2026-04-30 NEW-8 fix: chart templates read `workflow.serviceAccount.create`
+    # (with the `workflow.` prefix), but the gate was setting plain
+    # `serviceAccount.create`. The override was ignored and the install would
+    # fail with "ServiceAccount loopzero-build-sa exists and cannot be imported"
+    # whenever argo-workflows had created it first. Discovered LIVE during
+    # full-dogfood unblock attempt 2026-04-30.
     set:
-      - name: serviceAccount.create
+      - name: workflow.serviceAccount.create
         value: "false"
 
   # Wave 0: Loki for build logs (NodePort 30100 for cross-cluster scrape)

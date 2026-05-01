@@ -39,12 +39,19 @@ type Router interface {
 }
 
 // PassthroughRouter always returns the same CellConfig regardless of cell_id.
-// This is the Phase 0 implementation — single Cell.
+//
+// CHG-2026-04-30-DELETE-SINGLE-CELL: this router is no longer used in
+// production. DynamicRouter is the only router used. PassthroughRouter
+// is retained ONLY for unit-test fixtures that need a deterministic
+// single-cell stub WITHOUT spinning up a fake K8sCellStore. A go vet
+// rule (TODO) will eventually fail builds if this constructor is called
+// from production paths. Do NOT introduce new production callers.
 type PassthroughRouter struct {
 	defaultCell CellConfig
 }
 
-// NewPassthroughRouter creates a Phase 0 router that always returns the given config.
+// NewPassthroughRouter creates a single-cell stub router. TEST FIXTURE ONLY.
+// CHG-2026-04-30-DELETE-SINGLE-CELL: no production callers permitted.
 func NewPassthroughRouter(cfg CellConfig) *PassthroughRouter {
 	return &PassthroughRouter{defaultCell: cfg}
 }

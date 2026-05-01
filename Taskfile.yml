@@ -1255,7 +1255,7 @@ tasks:
   # S0.13: Build pipeline tooling images
   # ---------------------------------------------------------------------------
   images:build:
-    desc: Build and push tooling images (clone-runner, packs-runner, syft-scanner) to local k3d registry
+    desc: Build and push tooling images (clone-runner, packs-runner, syft-scanner, cosign-signer) to local k3d registry
     cmds:
       - |
         echo "=== Building loopzero-clone-runner ==="
@@ -1272,6 +1272,15 @@ tasks:
         docker build -t localhost:5000/loopzero-syft-scanner:latest infra/images/syft-scanner/
         docker push localhost:5000/loopzero-syft-scanner:latest
         echo "  Pushed: localhost:5000/loopzero-syft-scanner:latest"
+      - |
+        echo "=== Building loopzero-cosign-signer (Sprint 6 supply-chain) ==="
+        # 2026-04-30 NEW-12 fix: cosign-signer was excluded from this list,
+        # so dogfood E2E sign-image step always 401-ed against DOCR. With
+        # the LOOPZERO_COSIGN_IMAGE env override now wired (NEW-11), local
+        # builds can short-circuit to this image.
+        docker build -t localhost:5000/loopzero-cosign-signer:latest infra/images/cosign-signer/
+        docker push localhost:5000/loopzero-cosign-signer:latest
+        echo "  Pushed: localhost:5000/loopzero-cosign-signer:latest"
 
   # ---------------------------------------------------------------------------
   # S0.14: Composite tasks
@@ -1294,6 +1303,39 @@ tasks:
     cmds:
       - task: setup
       - echo "Clusters and dependencies are ready. Run 'tilt up' to start the dev loop."
+
+  k3d:bootstrap-workload:
+    desc: |
+      Bootstrap the workload (k3d-loopzero-workload) cluster with cert-manager +
+      traefik + external-secrets via helmfile. Idempotent — `helmfile sync`
+      no-ops if releases match desired state. Required after fresh
+      `k3d cluster create loopzero-workload` (the runtime helmfile usually only
+      runs in production cells).
+      Discovered LIVE 2026-04-30: ArgoCD app sync to runtime fails with
+      "Certificate CRD not found" until this is run.
+    cmds:
+      - helmfile -f infra/helmfile/runtime.helmfile.yaml.gotmpl -e standalone-multi --kube-context k3d-loopzero-workload --selector name=cert-manager sync
+      - helmfile -f infra/helmfile/runtime.helmfile.yaml.gotmpl -e standalone-multi --kube-context k3d-loopzero-workload --selector name=traefik sync
+      - helmfile -f infra/helmfile/runtime.helmfile.yaml.gotmpl -e standalone-multi --kube-context k3d-loopzero-workload --selector name=external-secrets sync
+
+  k3d:heal:
+    desc: |
+      Idempotent recovery of cross-cluster connectivity in local k3d standalone-multi
+      after `k3d cluster stop/start` cycles. Codifies the 9 manual workarounds
+      (H1-H9) discovered LIVE during dogfood E2E unblock 2026-04-30:
+        H1 — reattach build/runtime nodes to shared k3d-loopzero network
+        H2 — refresh loopzero-cluster-kubeconfigs Secret with current IPs (insecure-skip-tls)
+        H3 — recreate ArgoCD cluster Secrets (force discovery cache invalidate)
+        H4 — add k3d-loopzero-registry hostAlias to /etc/hosts on build + runtime nodes
+        H5 — bind kube-system:default SA to cluster-admin in build + runtime (LOCAL-ONLY)
+        H6 — empty buildkit-registry-config when DOCR creds absent
+        H7 — loopzero-minio-credentials with mgmt NodePort URL
+        H8 — LOOPZERO_*_IMAGE env overrides on loopzero-api Deployment
+        H9 — loopzero-build-cwts release with images.cloneRunner local registry override
+      Production has scoped SAs + permanent helmfile values; this is a LOCAL-DEV recovery only.
+      Safe to re-run after every restart.
+    cmds:
+      - bash infra/scripts/k3d-cross-cluster-heal.sh
 
   cli:link:
     desc: Symlink 'loopzero' CLI to PATH (makes `loopzero` available globally)
@@ -1608,16 +1650,34 @@ tasks:
         # Iter 20: helmfiles are .gotmpl with go-template placeholders.
         # We strip them via shell sed before yaml.safe_load (Python regex with
         # the templating syntax conflicts with Task's own go-template parser).
+        #
+        # 2026-04-30 fix (NEW-7): the original `TPL_RE.sub('false', content)`
+        # broke YAML when a go-template directive started a line — a bare
+        # whole-line directive collapsed to literal `false` in column 1,
+        # invalidating the indented mapping context (validate:bootstrap fail
+        # on mgmt.helmfile.yaml.gotmpl line 185). Two-pass:
+        #   1. WHOLE_LINE_TPL strips lines that are ONLY a directive (with
+        #      optional surrounding whitespace) — they collapse to empty,
+        #      preserving YAML structure.
+        #   2. INLINE_TPL replaces remaining inline directives with `false`.
+        # NB: do NOT write literal go-template directive syntax in this
+        # Taskfile — Task parses double-brace pairs as go-template before
+        # the script reaches bash. Use chr(123) and chr(125) only.
         repo_urls = {}
         releases = []
         OPEN = chr(123) + chr(123)
         CLOSE = chr(125) + chr(125)
         import re as _re
-        TPL_RE = _re.compile(_re.escape(OPEN) + r'[^}]*' + _re.escape(CLOSE))
+        WHOLE_LINE_TPL = _re.compile(
+            r'^[ \t]*' + _re.escape(OPEN) + r'-?[^}]*-?' + _re.escape(CLOSE) + r'[ \t]*$',
+            _re.MULTILINE,
+        )
+        INLINE_TPL = _re.compile(_re.escape(OPEN) + r'[^}]*' + _re.escape(CLOSE))
         for hf in helmfiles:
             with open(hf) as f:
                 content = f.read()
-            content = TPL_RE.sub('false', content)
+            content = WHOLE_LINE_TPL.sub('', content)
+            content = INLINE_TPL.sub('false', content)
             for doc in yaml.safe_load_all(content):
                 if not doc:
                     continue
@@ -1812,6 +1872,16 @@ tasks:
       least one FIXED (matrix needs update).
     cmds:
       - bash infra/tests/dogfood/repro-findings.sh
+
+  validate:slos:
+    desc: |
+      Validates Sloth SLO files in infra/sloth/ (Coverage Matrix #8 — closes
+      "Sloth files bypass kubeconform" gap). Offline schema check covering
+      version, top-level keys, sli.events queries, multi-burn-rate alerting.
+      Does NOT exercise sloth CLI (not installed locally); CI workflow can
+      add `sloth validate` later. Plan ref: T8.1 / Coverage Matrix #8.
+    cmds:
+      - python3 infra/sloth/validate.py
 
   validate:k8s-versions:
     desc: |

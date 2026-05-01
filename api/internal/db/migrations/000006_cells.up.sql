@@ -1,4 +1,8 @@
--- Migration 000003: cells table — operational source of truth for cell metadata.
+-- Migration 000006: cells table — operational source of truth for cell metadata.
+-- (Renumbered from 000003 — that slot was consumed before this migration was
+-- authored, so golang-migrate would silently skip it on existing DBs at
+-- schema_migrations.version >= 5. See CHANGELOG entry [Unreleased] for fix
+-- discovered LIVE 2026-04-30 during multi-cell validation.)
 --
 -- Design context (per docs/audits/multi-cell-source-audit.md):
 --   • ClusterCredential CRDs (K8s) are SoT for cell *connectivity*
@@ -125,9 +129,7 @@ VALUES
                      'production canary stages 4-5 (1 customer + tiered).')
 ON CONFLICT (cell_id) DO NOTHING;
 
-COMMENT ON TABLE cells IS
-    'Operational source of truth for cell metadata (capacity, status, audit). ' ||
-    'Connectivity SoT remains ClusterCredential CRD. Two SoTs answer different questions.';
+COMMENT ON TABLE cells IS 'Operational source of truth for cell metadata (capacity, status, audit). Connectivity SoT remains ClusterCredential CRD. Two SoTs answer different questions.';
 
 COMMENT ON COLUMN cells.status IS
     'active=accept new pinning; draining=existing only; maintenance=reject all; retired=terminal.';

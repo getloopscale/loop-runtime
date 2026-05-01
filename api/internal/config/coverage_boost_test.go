@@ -170,10 +170,7 @@ func TestLoad_CustomPort(t *testing.T) {
 	}
 }
 
-func TestLoad_SingleCell(t *testing.T) {
-	t.Setenv("LOOPZERO_SINGLE_CELL", "true")
-	cfg := Load()
-	if !cfg.SingleCell {
-		t.Error("expected SingleCell=true")
-	}
-}
+// CHG-2026-04-30-DELETE-SINGLE-CELL: TestLoad_SingleCell removed —
+// LOOPZERO_SINGLE_CELL env var + cfg.SingleCell field deleted. Multi-cell
+// is the only architecture; LOOPZERO_SINGLE_CELL=true is now ignored
+// silently (env vars without consumers are no-ops in our config style).

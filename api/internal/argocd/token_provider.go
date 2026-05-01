@@ -24,6 +24,19 @@ type TokenProvider interface {
 	Refresh() error
 }
 
+// AuthFailureNotifier is implemented by TokenProvider variants that can
+// react to a 401/403 from ArgoCD by minting a fresh token. SyncClient
+// type-asserts on this interface and calls OnAuthFailure() when an auth
+// error is detected. Providers that don't implement this (eg.
+// StaticTokenProvider, FileWatchTokenProvider) are simply skipped.
+//
+// CHG-2026-04-30-DOGFOOD-LOCAL-HEAL NEW-15: motivated by ArgoCD admin
+// session tokens expiring after 24h, leaving loopzero-api with no in-process
+// recovery path. KubeMintingTokenProvider implements this.
+type AuthFailureNotifier interface {
+	OnAuthFailure()
+}
+
 // StaticTokenProvider returns a fixed token string.
 // Used in tests and local development where token rotation is not needed.
 type StaticTokenProvider struct {

@@ -64,7 +64,8 @@ func (r *TenantReconciler) reconcileArgoCDApp(ctx context.Context, tenant *loopz
 		TenantID:              tenant.Name,
 		SourceRepos:           []string{repoURL},
 		DestinationNamespaces: destNamespaces,
-		DestinationServer:     r.WorkloadClusterURL, // SEC-007: explicit server instead of wildcard
+		DestinationServer:     r.WorkloadClusterURL, // legacy fallback when CellID empty
+		CellID:                tenant.Spec.CellID,   // CHG-2026-04-30: cell-aware AppProject destinations
 	}
 	if err := r.ArgoCDProvisioner.EnsureAppProject(ctx, projSpec); err != nil {
 		return fmt.Errorf("argocd appproject %s: %w", tenant.Name, err)

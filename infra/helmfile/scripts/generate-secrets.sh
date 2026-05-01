@@ -232,6 +232,21 @@ if kubectl get namespace argocd >/dev/null 2>&1 && \
         --from-literal=gitea-token="$GITEA_TOKEN"
       log "F-12: loopzero-api-tokens applied (argocd-token JWT + gitea-token)"
     fi
+
+    # CHG-2026-04-30-DOGFOOD-LOCAL-HEAL NEW-15 — argocd-refresh-credentials
+    # Secret consumed by api/internal/argocd/KubeMintingTokenProvider. Two
+    # supported credential modes:
+    #   (a) bearer: long-lived loopzero-api apiKey token persisted as
+    #       data.argocd-account-token. Preferred; survives admin password
+    #       rotation and never expires when sourced from a configured
+    #       account: loopzero-api: { apiKey: true } in argocd-cm.
+    #   (b) password: data.argocd-username + data.argocd-password fallback
+    #       to admin/initial-admin-password. Local k3d only.
+    # The provider reads (a) first, falls back to (b). Storing both is OK.
+    apply_secret argocd-refresh-credentials loopzero-system \
+      --from-literal=argocd-username=admin \
+      --from-literal=argocd-password="$ADMIN_PW"
+    log "F-12: argocd-refresh-credentials applied (admin password fallback for in-process token mint)"
   fi
 fi
 

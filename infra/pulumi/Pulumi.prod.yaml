@@ -6,17 +6,17 @@ config:
   loopzero-infra:dnsZone: loopzero.example
   loopzero-infra:infraVersion: v1
   # Management cluster — platform services (ArgoCD, API, Traefik, cert-manager)
-  loopzero-infra:mgmtK8sVersion: "1.33.9-do.3"
+  loopzero-infra:mgmtK8sVersion: "1.33.9-do.4"
   loopzero-infra:mgmtNodeClass: medium
   loopzero-infra:mgmtMinNodes: "3"
   loopzero-infra:mgmtMaxNodes: "5"
   # Runtime cluster — user applications
-  loopzero-infra:runtimeK8sVersion: "1.33.9-do.3"
+  loopzero-infra:runtimeK8sVersion: "1.33.9-do.4"
   loopzero-infra:runtimeNodeClass: medium
   loopzero-infra:runtimeMinNodes: "3"
   loopzero-infra:runtimeMaxNodes: "6"
   # Build cluster — Argo Workflows + BuildKit
-  loopzero-infra:buildK8sVersion: "1.33.9-do.3"
+  loopzero-infra:buildK8sVersion: "1.33.9-do.4"
   loopzero-infra:buildNodeClass: medium
   loopzero-infra:buildMinNodes: "2"
   loopzero-infra:buildMaxNodes: "4"

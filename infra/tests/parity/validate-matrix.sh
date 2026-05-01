@@ -11,8 +11,8 @@
 # are reported as STATUS only, NOT executed here — they require cloud.
 #
 # Gates orchestrated:
-#   1. parity-preflight.sh        — 17 sub-gates (parity infra)
-#   2. CLI unit tests             — 1171
+#   1. parity-preflight.sh        — 16 sub-gates (parity infra)
+#   2. CLI unit tests             — 1243
 #   3. CLI integration tests      — 72 (excluding cli-e2e gated suite)
 #   4. API tests                  — routes + services + placement + db
 #   5. Pulumi vitest              — 96
@@ -20,6 +20,7 @@
 #   7. helm lint × 4 split charts
 #   8. matrix-integrity audit
 #   9. matrix-audit golden test
+#  9.5. validate:slos                — 7 Sloth SLO files (Coverage Matrix #8)
 #  10. operators tests (envtest)  — when KUBEBUILDER_ASSETS is set
 #
 # Usage:
@@ -60,13 +61,13 @@ result() {
 
 echo "[validate-matrix] gates:"
 
-# Gate 1: parity preflight (17 sub-gates including matrix audit + golden + 5 T6.3 ext).
+# Gate 1: parity preflight (16 sub-gates including matrix audit + golden + T6.3 extensions; verified 2026-05-01).
 bash "${REPO_ROOT}/infra/tests/parity/preflight.sh" >/dev/null 2>&1
-result $? "parity-preflight (17 sub-gates)"
+result $? "parity-preflight (16 sub-gates)"
 
-# Gate 2: CLI unit tests (1171).
+# Gate 2: CLI unit tests (1243 verified 2026-05-01).
 if (cd "${REPO_ROOT}/cli" && npx jest tests/unit/ --silent 2>&1 | grep -qE "^Tests:.*[0-9]+ passed"); then
-  result 0 "cli:unit-tests (1171+)"
+  result 0 "cli:unit-tests (1243+)"
 else
   # Re-run loud to surface the failure.
   (cd "${REPO_ROOT}/cli" && npx jest tests/unit/ 2>&1 | tail -5) >&2 || true
@@ -136,6 +137,17 @@ result $? "matrix-integrity-audit:explicit"
 # Gate 9: matrix-audit golden test (audit script self-test).
 bash "${REPO_ROOT}/infra/tests/parity/audit-golden-test.sh" >/dev/null 2>&1
 result $? "matrix-audit-golden:explicit"
+
+# Gate 9.5: Sloth SLO file validation (Coverage Matrix #8).
+if command -v python3 >/dev/null 2>&1; then
+  if python3 "${REPO_ROOT}/infra/sloth/validate.py" >/dev/null 2>&1; then
+    result 0 "validate:slos (7 SLO files)"
+  else
+    result 1 "validate:slos"
+  fi
+else
+  result 2 "validate:slos (python3 missing)"
+fi
 
 # Gate 10: operators envtest (only when KUBEBUILDER_ASSETS set).
 if [[ -n "${KUBEBUILDER_ASSETS:-}" ]]; then
