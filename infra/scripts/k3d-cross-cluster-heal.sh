@@ -485,26 +485,35 @@ fi
 # converges to {cell-default, cell-1, cell-2} ClusterCredentials.
 # ---------------------------------------------------------------------------
 log "H12: ensuring ClusterCredential cell-1 exists for loopzero-workload"
-WORKLOAD_CTX="k3d-loopzero-workload"
-CELL1_EXISTS=$(kubectl --context "$MGMT_CTX" -n loopzero-system get clustercredential cell-1 \
-  -o jsonpath='{.status.connected}' 2>/dev/null || echo "")
-if [[ "$CELL1_EXISTS" == "true" ]]; then
-  log "  ClusterCredential cell-1 already connected — skip"
+# Note: K8sCellStore uses spec.cellID (not CR name) per
+# api/internal/placement/k8s_cell_store.go MEET-053 fix B9. The CR is
+# named after the k3d cluster id ("workload") so scoped-kubeconfig.sh
+# can resolve k3d-loopzero-workload-server-0 docker container IP. Using
+# cluster-name="runtime" would fail B82 docker-resolution (container
+# k3d-loopzero-runtime-server-0 doesn't exist locally).
+CELL1_CONNECTED=$(kubectl --context "$MGMT_CTX" -n loopzero-system \
+  get clustercredentials -o jsonpath='{.items[?(@.spec.cellID=="cell-1")].status.connected}' \
+  2>/dev/null || echo "")
+if [[ "$CELL1_CONNECTED" == "true" ]]; then
+  log "  ClusterCredential with spec.cellID=cell-1 already connected — skip"
 else
   REPO_ROOT=$(cd "$(dirname "$0")/../.." && pwd)
   CC_LIB="$REPO_ROOT/infra/helmfile/scripts/lib/clustercredential-create.sh"
   SCOPED_LIB="$REPO_ROOT/infra/helmfile/scripts/lib/scoped-kubeconfig.sh"
   WORKLOAD_KUBECONFIG=$(mktemp)
-  trap "rm -f '$WORKLOAD_KUBECONFIG'" RETURN
+  H12_TMP="$WORKLOAD_KUBECONFIG"
+  trap 'rm -f "$H12_TMP"' EXIT
   k3d kubeconfig get loopzero-workload > "$WORKLOAD_KUBECONFIG" 2>/dev/null
   if [[ -x "$CC_LIB" ]] && [[ -x "$SCOPED_LIB" ]] && [[ -s "$WORKLOAD_KUBECONFIG" ]]; then
-    SCOPED=$(KUBECONFIG="$WORKLOAD_KUBECONFIG" "$SCOPED_LIB" runtime "$WORKLOAD_KUBECONFIG" 2>/dev/null || echo "")
+    # CLUSTER_NAME=workload matches k3d-loopzero-workload-server-0 container
+    # so scoped-kubeconfig can rewrite SERVER to docker bridge IP.
+    SCOPED=$(KUBECONFIG="$WORKLOAD_KUBECONFIG" "$SCOPED_LIB" workload "$WORKLOAD_KUBECONFIG" 2>/dev/null | grep -oE '/[^[:space:]]+kube[^[:space:]]*' | head -1 || echo "")
     if [[ -n "$SCOPED" ]] && [[ -s "$SCOPED" ]]; then
-      KUBECONFIG="" "$CC_LIB" cell-1 runtime "$SCOPED" >/dev/null 2>&1 \
-        && log "  ClusterCredential cell-1 created/refreshed" \
+      KUBECONFIG="" "$CC_LIB" cell-1 workload "$SCOPED" >/dev/null 2>&1 \
+        && log "  ClusterCredential 'workload' (cellID=cell-1) created/refreshed" \
         || warn "clustercredential-create.sh cell-1 failed — see matrix entry 153 fix path (b)"
     else
-      warn "scoped-kubeconfig.sh cell-1 produced empty output"
+      warn "scoped-kubeconfig.sh produced empty output for workload cluster"
     fi
   else
     warn "wire-clusters lib scripts missing or workload kubeconfig empty"
