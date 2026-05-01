@@ -32,7 +32,7 @@ spec:
               and on() (time() - (loopzero_pulumi_archives_total > 0)) > 90 * 86400
           for: 1h
           labels:
-            severity: medium
+            severity: warning
             loopzero_component: pulumi-archive
           annotations:
             summary: "No Pulumi archive in 90 days (rotation gap)"
@@ -64,7 +64,7 @@ spec:
             loopzero_pulumi_stacks_total > 4
           for: 6h
           labels:
-            severity: high
+            severity: critical
             loopzero_component: pulumi-archive
           annotations:
             summary: "Pulumi stack count exceeds expected baseline (potential paralelas regression)"

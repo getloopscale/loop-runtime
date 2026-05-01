@@ -293,6 +293,42 @@ Build Plane         Argo Workflows + BuildKit (rootless) + cosign signing
 Workload Plane      User applications managed by ArgoCD + KEDA autoscaling
 ```
 
+### Multi-Cell Routing
+
+Tenant workloads run on independent K8s clusters called **cells** (`cell-default`, `cell-1`, `cell-2`, ...). Routing is **placement once, route many** — not load-balanced.
+
+```
+loopzero bootstrap (NEW tenant)
+  -> RoundRobinEngine.AssignAndExecute (PG advisory lock + SERIALIZABLE)
+     -> picks least-loaded cell with capacity (default cap=500 tenants)
+     -> writes tenants.cell_id (canonical SoT) + Tenant CR spec.cellID
+     -> sticky: tenant stays on this cell forever unless operator pins
+
+loopzero deploy / promote / rollback / logs / status
+  -> reads tenants.cell_id from PG
+  -> DynamicRouter.Resolve(cellID) -> hash lookup, ZERO decision
+  -> returns CellConfig {kubeconfig, ArgoCD URL/token, base domain}
+  -> ArgoCD client / kubectl client uses that config
+
+loopzero admin tenants pin --tenant X --cell Y    (operator override only)
+  -> CellPinner.Pin atomically:
+     - DB UPDATE tenants.cell_id (with capacity gate)
+     - Tenant CR MergePatch spec.cellID := Y
+  -> operator reconcile re-emits ArgoCD App+AppProj with destination.name=Y
+```
+
+**Key components:**
+
+| Layer | File | Purpose |
+|---|---|---|
+| Placement engine | `api/internal/placement/engine.go` | Bin-packing least-loaded; sticky reads |
+| Router cache | `api/internal/placement/dynamic_router.go` | Hash lookup `cellID -> CellConfig` |
+| Cell store | `api/internal/placement/k8s_cell_store.go` | Polls ClusterCredential CRs every 60s by `spec.cellID` |
+| Operator pin | `api/internal/services/cell_pinner.go` | DB UPDATE + Tenant CR MergePatch |
+| Self-healing | `infra/scripts/k3d-cross-cluster-heal.sh` (H12+H13) | Auto-recovers cell-1 missing CC + cell-default SA token rotation |
+
+**No automatic rebalancing.** Tenant assignment is sticky to preserve DNS continuity, ESO/MinIO state affinity, and ArgoCD App/Project bindings. Cell drain (`cells.status='draining'`) is operator-driven via `loopzero admin tenants pin --to cell-novo`. See ADR-0008 + ADR-0021 D3.
+
 ### Deploy Flow
 
 ```

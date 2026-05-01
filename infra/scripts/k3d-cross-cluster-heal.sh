@@ -58,6 +58,23 @@
 #         post-deploy / post-delete sync → resources orphaned in workload.
 #         Detect via JWT exp claim, regenerate via provision-api-tokens.sh.
 #
+#   H13 — cell-default ClusterCredential SA token rotated/invalidated.
+#         Discovered LIVE 2026-05-01 17:40Z (regression matrix entry 154):
+#         loopzero-system:default SA recreation during certain rollouts → SA UID
+#         change → cached 24h token in cell-default-kubeconfig Secret returns
+#         401 "the server has asked for the client to provide credentials".
+#         Detection: connected=false. Fix: mint fresh `kubectl create token`,
+#         patch Secret data.kubeconfig (preserves CA + in-cluster server URL).
+#
+#   H12 — ClusterCredential cell-1 missing despite cells SQL row status=active.
+#         Discovered LIVE 2026-05-01 (regression matrix entry 153): cells
+#         table seed creates 3 rows (cell-default, cell-1, cell-2) but
+#         wire-clusters.sh non-fatal "WARN: continuing" path silently failed
+#         on cell-1 → DynamicRouter.Resolve("cell-1") = unknown cell. Pin
+#         para cell-1 atualizaria DB + CR, mas operator deploy falharia.
+#         Fix: invoke clustercredential-create.sh directly using the workload
+#         cluster scoped kubeconfig. Idempotent (kubectl apply).
+#
 # Idempotent — safe to re-run after every `k3d cluster start`.
 #
 # Pre-flight: requires kubectl + docker + k3d on PATH and three k3d
@@ -466,6 +483,109 @@ else
       || warn "provision-api-tokens.sh failed — argocd sync calls may keep failing"
   else
     warn "provision-api-tokens.sh missing — manual regen required"
+  fi
+fi
+
+# ---------------------------------------------------------------------------
+# H12 — ClusterCredential cell-1 bootstrap (regression matrix entry 153).
+# wire-clusters.sh has cell-1 logic but `|| log WARN: continuing` masks
+# silent failures. Codify the recovery here so every `task k3d:heal`
+# converges to {cell-default, cell-1, cell-2} ClusterCredentials.
+# ---------------------------------------------------------------------------
+log "H12: ensuring ClusterCredential cell-1 exists for loopzero-workload"
+# Note: K8sCellStore uses spec.cellID (not CR name) per
+# api/internal/placement/k8s_cell_store.go MEET-053 fix B9. The CR is
+# named after the k3d cluster id ("workload") so scoped-kubeconfig.sh
+# can resolve k3d-loopzero-workload-server-0 docker container IP. Using
+# cluster-name="runtime" would fail B82 docker-resolution (container
+# k3d-loopzero-runtime-server-0 doesn't exist locally).
+CELL1_CONNECTED=$(kubectl --context "$MGMT_CTX" -n loopzero-system \
+  get clustercredentials -o jsonpath='{.items[?(@.spec.cellID=="cell-1")].status.connected}' \
+  2>/dev/null || echo "")
+if [[ "$CELL1_CONNECTED" == "true" ]]; then
+  log "  ClusterCredential with spec.cellID=cell-1 already connected — skip"
+else
+  REPO_ROOT=$(cd "$(dirname "$0")/../.." && pwd)
+  CC_LIB="$REPO_ROOT/infra/helmfile/scripts/lib/clustercredential-create.sh"
+  SCOPED_LIB="$REPO_ROOT/infra/helmfile/scripts/lib/scoped-kubeconfig.sh"
+  WORKLOAD_KUBECONFIG=$(mktemp)
+  H12_TMP="$WORKLOAD_KUBECONFIG"
+  trap 'rm -f "$H12_TMP"' EXIT
+  k3d kubeconfig get loopzero-workload > "$WORKLOAD_KUBECONFIG" 2>/dev/null
+  if [[ -x "$CC_LIB" ]] && [[ -x "$SCOPED_LIB" ]] && [[ -s "$WORKLOAD_KUBECONFIG" ]]; then
+    # CLUSTER_NAME=workload matches k3d-loopzero-workload-server-0 container
+    # so scoped-kubeconfig can rewrite SERVER to docker bridge IP.
+    SCOPED=$(KUBECONFIG="$WORKLOAD_KUBECONFIG" "$SCOPED_LIB" workload "$WORKLOAD_KUBECONFIG" 2>/dev/null | grep -oE '/[^[:space:]]+kube[^[:space:]]*' | head -1 || echo "")
+    if [[ -n "$SCOPED" ]] && [[ -s "$SCOPED" ]]; then
+      KUBECONFIG="" "$CC_LIB" cell-1 workload "$SCOPED" >/dev/null 2>&1 \
+        && log "  ClusterCredential 'workload' (cellID=cell-1) created/refreshed" \
+        || warn "clustercredential-create.sh cell-1 failed — see matrix entry 153 fix path (b)"
+    else
+      warn "scoped-kubeconfig.sh produced empty output for workload cluster"
+    fi
+  else
+    warn "wire-clusters lib scripts missing or workload kubeconfig empty"
+  fi
+fi
+
+# ---------------------------------------------------------------------------
+# H13 — cell-default ClusterCredential SA token expired/rotated.
+# Discovered LIVE 2026-05-01 17:40Z (regression matrix entry 154):
+# loopzero-system:default SA gets recreated during certain rollouts/operations
+# → SA UID changes → 24h-duration token in cell-default-kubeconfig Secret
+# becomes invalid (server returns 401 "the server has asked for the client
+# to provide credentials") even before its exp claim. ClusterCredential
+# probe fails → connected=false → DynamicRouter loses cell-default →
+# pin to cell-default would fail at deploy time.
+#
+# Fix: detect connected=false on cell-default, mint fresh 24h SA token via
+# `kubectl create token`, patch the Secret data.kubeconfig with new token
+# (preserves CA + server fields). Controller probes ~30-60s later.
+# Idempotent (skips if already connected).
+# ---------------------------------------------------------------------------
+log "H13: ensuring ClusterCredential cell-default has valid SA token"
+CELL_DEFAULT_CONNECTED=$(kubectl --context "$MGMT_CTX" -n loopzero-system \
+  get clustercredentials -o jsonpath='{.items[?(@.spec.cellID=="cell-default")].status.connected}' \
+  2>/dev/null || echo "")
+if [[ "$CELL_DEFAULT_CONNECTED" == "true" ]]; then
+  log "  cell-default already connected — skip"
+else
+  log "  cell-default disconnected — refreshing SA token"
+  H13_NEW_TOKEN=$(kubectl --context "$MGMT_CTX" -n loopzero-system create token default --duration=24h 2>/dev/null || echo "")
+  if [[ -z "$H13_NEW_TOKEN" ]]; then
+    warn "kubectl create token loopzero-system/default failed — manual SA recovery required"
+  else
+    H13_CA=$(kubectl --context "$MGMT_CTX" -n loopzero-system get secret cell-default-kubeconfig \
+      -o jsonpath='{.data.kubeconfig}' 2>/dev/null | base64 -d 2>/dev/null \
+      | grep "certificate-authority-data:" | awk '{print $2}' || echo "")
+    if [[ -z "$H13_CA" ]]; then
+      warn "cell-default-kubeconfig Secret missing or malformed — cannot extract CA"
+    else
+      H13_KUBECONFIG_B64=$(cat <<EOF | base64 -w0
+apiVersion: v1
+kind: Config
+clusters:
+- name: in-cluster
+  cluster:
+    server: https://kubernetes.default.svc:443
+    certificate-authority-data: $H13_CA
+contexts:
+- name: in-cluster
+  context:
+    cluster: in-cluster
+    user: in-cluster
+current-context: in-cluster
+users:
+- name: in-cluster
+  user:
+    token: $H13_NEW_TOKEN
+EOF
+      )
+      kubectl --context "$MGMT_CTX" -n loopzero-system patch secret cell-default-kubeconfig \
+        --type=merge -p "{\"data\":{\"kubeconfig\":\"$H13_KUBECONFIG_B64\"}}" >/dev/null 2>&1 \
+        && log "  cell-default-kubeconfig Secret patched with fresh 24h SA token" \
+        || warn "Secret patch failed — see matrix entry 154"
+    fi
   fi
 fi
 

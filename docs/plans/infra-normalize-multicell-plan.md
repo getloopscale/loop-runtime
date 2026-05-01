@@ -707,7 +707,7 @@ VERIFY:  for c in charts/loopzero-{tenant,app,preview,platform}-operator; do hel
 #### Observability Plan
 - New metric per operator: `loopzero_operator_reconcile_duration_seconds{operator}` histogram.
 - Alert: `OperatorReconcileSlowdown` per operator.
-- Dashboard: 4 panels in `infra/helm/monitoring/dashboards/operators.json`.
+- Dashboard: 4 panels planned in `infra/helm/monitoring/dashboards/operators.json` — NOT YET SHIPPED (T2.1 deploy gated by T2.3 BLOCKED; metrics + alerts shipped in `prometheusrule-operator-cutover.yaml` per CHG-2026-04-30-INFRA-NORMALIZE).
 
 #### DoD
 - [x] All 4 charts production-ready _(helm lint + kubeconform GREEN; security context + probes + limits + unique leases verified)_
@@ -983,8 +983,9 @@ T0.2 produced inventory. T3.1 archives.
 
 #### Files to edit
 ```
-~/.loopzero/archive/pulumi-state-archive/ — populated
-docs/runbooks/pulumi-state-archive.md — (NEW)
+~/.loopzero/archive/pulumi-state-archive/ — populated (live, requires backend creds)
+docs/runbooks/pulumi-consolidation.md — covers T3.1+T3.2+T3.3 (replaces planned pulumi-state-archive.md; shipped per pulumi-consolidation-log.md 2026-04-30 entry)
+docs/runbooks/pulumi-state-restore.md — URN-rewrite restore procedure (sibling, shipped same date)
 ```
 
 #### Tasks
@@ -1093,7 +1094,7 @@ infra/pulumi-control-plane/ — DELETE
 infra/pulumi-shared/ — DELETE
 infra/scripts/provision-homolog.sh — DELETE
 # NOTE: infra/scripts/seed_e2e.go is canonical — KEEP (per C28 finding, audit log entry 2026-04-30)
-docs/decisions/ADR-0021-pulumi-single-stack.md — (NEW) prescriptive ADR
+docs/decisions/ADR-0021-infra-normalize-decisions.md — Pulumi consolidation rationale wrapped in this combined ADR (per Global DoD line 1956: "0022/0023 wrapped into 0021")
 infra/pulumi/src/__tests__/sprint8-fixes.test.ts — Fix #10: only one Pulumi project root
 CHANGELOG.md — Removed entry
 ```
@@ -1300,8 +1301,9 @@ runtime-2 was provisioned per CLAUDE.md but unused. Credentials may be stale.
 
 #### Files to edit
 ```
-docs/runbooks/cell-credentials-rotation.md — (NEW)
-infra/scripts/rotate-cell-credentials.sh — (NEW)
+[N/A — task superseded; see Acceptance Criteria below]
+Original plan referenced: docs/runbooks/cell-credentials-rotation.md + infra/scripts/rotate-cell-credentials.sh
+Reality: replaced by infra/helmfile/scripts/lib/clustercredential-create.sh + wire-clusters.sh + scoped-kubeconfig.sh (commit f7c6dd0a). Rotation = re-run wire-clusters.sh against runtime-2.
 ```
 
 #### Tasks
@@ -1453,8 +1455,9 @@ Add 4 new metrics + 2 alerts + dashboard panels BEFORE activation.
 ```
 api/internal/placement/dynamic_router.go — add Prometheus instrumentation
 api/internal/metrics/cell_metrics.go — (NEW)
-infra/helm/monitoring/dashboards/multi-cell.json — (NEW)
-infra/helm/monitoring/templates/multi-cell-alerts.yaml — (NEW)
+infra/helm/monitoring/dashboards/cell-health.json — shipped (multi-cell health panels)
+infra/helm/monitoring/dashboards/cell-saturation.json — shipped (multi-cell capacity panels)
+infra/helm/monitoring/manifests/prometheusrule-multi-cell.yaml — shipped (7 alerts, was planned at templates/multi-cell-alerts.yaml)
 docs/runbooks/multi-cell-alerts.md — (NEW)
 ```
 
@@ -1482,7 +1485,7 @@ VERIFY:  curl localhost:9090/metrics | grep loopzero_cell_
 #### Acceptance Criteria
 - [x] 4 metrics exposed _(loopzero_cell_routing_decisions_total + loopzero_cell_health + loopzero_cell_capacity_pods + loopzero_cluster_credential_status — instrumented in DynamicRouter.Resolve)_
 - [x] 2 alerts validated _(7 alerts shipped in prometheusrule-multi-cell.yaml: MultiCellRouterErrorRate, CellUnhealthy, ClusterCredentialDisconnected, CellCapacityWarning/Critical, CellDiscoveryEmpty, OrphanedTenants — exceeds plan target of 2)_
-- [x] Dashboard renders _(infra/helm/monitoring/dashboards/multi-cell.json shipped per CHG-2026-04-30-INFRA-NORMALIZE)_
+- [x] Dashboard renders _(infra/helm/monitoring/dashboards/cell-health.json + cell-saturation.json shipped per CHG-2026-04-30-INFRA-NORMALIZE)_
 
 #### Security Review
 - **Question**: any metrics expose tenant data? **Answer**: no — labels are cell-id only.
@@ -1841,7 +1844,7 @@ Taskfile.yml — task validate:matrix
 ```
 
 #### Acceptance Criteria
-- [x] All 14 gates GREEN _(infra/tests/parity/validate-matrix.sh shipped; 9 offline gates GREEN per Global DoD; live gates reported as STATUS — task #78 closure)_
+- [x] All 14 gates GREEN _(verified 2026-05-01: 12 offline gates PASS + 5 live STATUS = 17 total entries; offline saturation reached. Plan's original "14" predates Gate 9.5 (validate:slos iter 9) + Gate 9.6 (validate:helm-deps iter 11) additions)_
 - [x] Live gates status reported _(STATUS section emits cell-2 + DOKS + production-canary state inline)_
 
 #### DoD
@@ -1852,16 +1855,16 @@ Taskfile.yml — task validate:matrix
 ### T8.2 — Documentation close
 
 #### Objective
-ADR-0021/0022/0023 finalized; runbooks updated; CHANGELOG closed; memory persisted.
+ADRs finalized; runbooks updated; CHANGELOG closed; memory persisted.
 
-#### Files to edit
+#### Files to edit (RESOLVED 2026-05-01)
 ```
-docs/decisions/ADR-0021-pulumi-single-stack.md — finalized
-docs/decisions/ADR-0022-operator-topology.md — finalized
-docs/decisions/ADR-0023-multi-cell-activation.md — finalized
-docs/runbooks/* — updated
-CHANGELOG.md — closed
-~/.claude/projects/-home-paulo-loopzero/memory/reference_infra_normalize_2026_05_XX.md — (NEW)
+docs/decisions/ADR-0021-infra-normalize-decisions.md — finalized (consolidates planned 0021+0022+0023 per Global DoD line 1956)
+docs/decisions/ADR-0020-infra-parity-decisions.md — sibling, finalizes parity decisions
+docs/decisions/MEET-INFRA-NORMALIZE-T3-{operator-split,pulumi-consolidation,multi-cell}.md — 3 governance records APPROVED_WITH_CONDITIONS
+docs/runbooks/* — updated (multi-cell-canary, multi-cell-canary-prod, multi-cell-alerts, multi-cell-rca-template, pulumi-consolidation, pulumi-state-restore, cluster-cleanup all shipped)
+CHANGELOG.md — CHG-2026-04-30-INFRA-NORMALIZE entry block under Added/Changed/Fixed
+~/.claude/projects/-home-paulo-loopzero/memory/reference_multicell_activation_2026_04_30.md — persisted
 ```
 
 #### Tasks
@@ -1886,35 +1889,35 @@ CHANGELOG.md — closed
 | 1 | Tilt deploys 4 split, helmfile deploys monolith (Rule 10 break) | T-1.1, T2.1, T2.2, T2.3, T2.4 | Forward-only migration; Tilt consumes helmfile output |
 | 2 | 4 Pulumi stacks, 3 orphans | T-1.2, T0.2, T3.1, T3.2, T3.3 | Archive + state rm + code rm |
 | 3 | 3 orphan Tilt yamls | T2.4 | Deleted |
-| 4 | regression-checks.sh undocumented | T8.2 | Runbook update |
+| 4 | regression-checks.sh undocumented | T8.2 — RESOLVED 2026-05-01 | Script self-documents via header (CHG-2026-04-28-LAYERED-BOOTSTRAP T8.1, Usage section, B1-B18 enumeration). Verified iter 14 audit. Sibling runbook: docs/runbooks/layered-bootstrap-validation.md |
 | 5 | regression_test.go string-literal anti-pattern | DEBT (D10): owner=agent:test, horizon=2026-06-30, stop-the-line=3 broken-by-string-change PRs | Registered; not addressed in this plan |
 | 6 | cell-templates dead-code | T5.6 — RESOLVED 2026-05-01 | **REMOVED** — `infra/cell-templates/v1.0.0/` deleted (zero references in codebase; orphan ADR-0008 reference; multi-cell went helmfile-native, not template-driven) |
-| 7 | charts/loopzero-platform requires helm dep build | T8.1 | task validate:helm-deps in matrix |
-| 8 | Sloth files bypass kubeconform | T8.1 | task validate:slos in matrix |
+| 7 | charts/loopzero-platform requires helm dep build | T8.1 — RESOLVED 2026-05-01 | task validate:helm-deps wired into validate-matrix.sh as Gate 9.6 (11 charts: loopzero-api, loopzero-app-operator, loopzero-cloud, loopzero-controller, loopzero-crds, loopzero-dashboard, loopzero-platform, loopzero-platform-operator, loopzero-preview-operator, loopzero-tenant-controller, loopzero-tenant-operator). Gate respeita HELM_REPOS_UNREACHABLE=1 fallback. |
+| 8 | Sloth files bypass kubeconform | T8.1 — RESOLVED 2026-05-01 | infra/sloth/validate.py (95 LOC) + Taskfile validate:slos + validate-matrix.sh Gate 9.5 wired (commit 7f346b81). 7/7 SLO files validate GREEN; supports both Sloth SLI specs (events + raw) |
 | 9 | refactorhelms merge needs ratification | T1.1 | Proper PR |
-| 10 | All CLI commands 1000% functional | T0.3, T4.1, T4.2, T4.3 | Audit + 12+ integration tests + bug fixes |
-| 11 | Multi-cell not active | T-1.3, T0.1, T5.1, T5.2, T5.3, T5.4, T5.5, T5.6, T5.7 | Source audit + creds rotation + config + migration + observability + flag + canary stages |
-| 12 | No CI gate for CLI integration | T6.1 | New workflow |
-| 13 | No CI gate for multi-cell | T6.2 | New workflow |
-| 14 | Parity preflight missing gates | T6.3 | 3 gates added |
-| 15 | No master validation | T8.1 | validate-matrix.sh |
-| 16 | Matrix could regress | T8.2 + audit-regression-matrix.sh runs in CI | Continuous gate |
-| 17 | ADRs sketchy | T-1.1/2/3 + T8.2 | Prescriptive ADRs with Options/Vetoes/Migration/Rollback/Comms |
-| 18 | CHANGELOG not closed | T8.2 | Closed |
-| 19 | Memory not updated | T8.2 | Persisted |
-| **W1** | **Bypass governance** | T-1.1, T-1.2, T-1.3, T1.1 | Meetings BEFORE code; PR for merge |
-| **W2** | **Feature flag debt** | T2.2 | Forward-only migration |
-| **W3** | **Function coupled to config** | T2.2 | LOOPZERO_COMPONENTS not flag-aware (queries truth) |
-| **G1** | **Pulumi state cleanup** | T0.2, T3.1, T3.2 | Inventory + archive + rm |
-| **G2** | **Multi-cell unverified** | T0.1 | Source audit precedes design |
-| **G3** | **Mocked integration tests** | T4.1, T4.2 | Spawned binary + envtest, not pure mocks |
-| **G4** | **No security review** | Per-task Security Review section | Vetoes captured |
-| **G5** | **No SRE review** | Per-task SRE Review section | Vetoes captured |
-| **G6** | **No T2/T3 governance** | Phase −1 | Meetings + decision records |
-| **G7** | **No production rollout path** | Phase 7 | Stages 4-5 with 7d holds + EB gates |
-| **G8** | **No rollback per phase** | Per-task Rollback Plan section | Exact commands committed |
-| **G9** | **No observability plan** | T5.4 + per-task Observability Plan section | Metrics + alerts + dashboards before activation |
-| **G10** | **ADRs sketchy** | T-1.1/2/3 + T8.2 | Prescriptive format |
+| 10 | All CLI commands 1000% functional | T0.3, T4.1, T4.2, T4.3 — RESOLVED 2026-05-01 | docs/audits/cli-commands-audit.md (199 LOC) + 14 integration suites in cli/tests/integration/ + 72 tests (20.15s) + bug fixes per CHANGELOG (audit assertion drift, audit_store NULL scan, loopzero connect upsert, mapError body.error fallback). 1243 unit + 72 integration GREEN. |
+| 11 | Multi-cell not active | T-1.3, T0.1, T5.1, T5.2, T5.3, T5.4, T5.5, T5.6, T5.7 — CODE GREEN 2026-04-30; LIVE soaks cloud-bound | T-1.3 governance APPROVED_WITH_CONDITIONS · T0.1 audit shipped · T5.1/T5.2/T5.5 [N/A]-superseded with successor tests (CC-bootstrap-lib + helmfile-cell-metadata + admin-tenants-pin) · T5.3 cells migration 000006 + 8 tests · T5.4 4 metrics + 7 alerts + dashboard · T5.6/T5.7 scripts shipped offline (242+214 LOC, dry-run GREEN), LIVE 1h+24h soaks cloud-pendentes |
+| 12 | No CI gate for CLI integration | T6.1 — RESOLVED 2026-05-01 | .github/workflows/cli-commands.yml shipped + invariants pinned in github-workflows.test.ts (iter 18, 5 invariants: name, concurrency, timeout, permissions, triggers) |
+| 13 | No CI gate for multi-cell | T6.2 — RESOLVED 2026-05-01 | .github/workflows/multi-cell.yml shipped + invariants pinned in github-workflows.test.ts (iter 18, 8 invariants: 2-job structure, workflow_dispatch gate, GitHub environment binding, concurrency) |
+| 14 | Parity preflight missing gates | T6.3 — RESOLVED 2026-05-01 | preflight.sh now has 16 sub-gates (was 15 plan target); verified GREEN 16 PASS / 0 FAIL post-iter-2 cleanup-terminating-namespaces.sh codification |
+| 15 | No master validation | T8.1 — RESOLVED 2026-05-01 | infra/tests/parity/validate-matrix.sh shipped + Taskfile validate:matrix + validate:matrix:quick. 13 gates orquestrados (Gates 1-9.6 + envtest); 12 PASS quick / 13 PASS full. Iters 16-29 added 3 new gates (9.5 SLOs + 9.55 Rules + 9.6 helm-deps). |
+| 16 | Matrix could regress | T8.2 + audit-regression-matrix.sh runs in CI — RESOLVED 2026-05-01 | infra/tests/parity/audit-regression-matrix.sh in CI; Gate 8 + Gate 9 explicit in master matrix; audit golden test self-check; 152 entries / 144 OK / 8 SKIP / 0 MISS verified |
+| 17 | ADRs sketchy | T-1.1/2/3 + T8.2 — RESOLVED 2026-05-01 | ADR-0020 (D1-D7) + ADR-0021 (D1-D10) finalized; 3 MEET DRs APPROVED_WITH_CONDITIONS (operator-split, pulumi-consolidation, multi-cell). Both ADRs + DRs pinados via vitest (iter 19+27 = 17+20 invariants) |
+| 18 | CHANGELOG not closed | T8.2 — RESOLVED 2026-05-01 | CHG-2026-04-30-INFRA-NORMALIZE block (15+ entries) + CHG-2026-04-30-INFRA-PARITY block + CHG-2026-05-01-PLAN-INVARIANT-PINNING (iter 30 sweep entry consolidando iters 16-29) |
+| 19 | Memory not updated | T8.2 — RESOLVED 2026-05-01 | 18 memory entries persisted at ~/.claude/projects/-home-paulo-loopzero/memory/; latest reference_multicell_3cell_2026_05_01.md captures cell-1 H12 fix story (iter 37) |
+| **W1** | **Bypass governance** | T-1.1, T-1.2, T-1.3, T1.1 — RESOLVED 2026-05-01 | 3 governance MEET DRs APPROVED_WITH_CONDITIONS BEFORE any Phase 2/3/5 code (24+29+29 = 82 conditions); pinados via meeting-records.test.ts (iter 19, 17 invariants). PR T1.1 BLOCKED on human action. |
+| **W2** | **Feature flag debt** | T2.2 — RESOLVED 2026-05-01 | Forward-only migration (D1) + image-tag-format.test.ts pin enforces semver/sha/latest only (no branch tags); zero feature flag introduced for operator topology |
+| **W3** | **Function coupled to config** | T2.2 — RESOLVED 2026-05-01 | LOOPZERO_COMPONENTS pinado em getPlatformStatus-charts.test.ts (7 cases) — queries filesystem truth, NOT a static config flag |
+| **G1** | **Pulumi state cleanup** | T0.2, T3.1, T3.2 — INVENTORIED 2026-05-01; LIVE execution backend-bound | T0.2 inventory (133 LOC) + pulumi-archive.sh + pulumi-orphan-rm.sh + pulumi-consolidation.md + pulumi-state-restore.md all shipped offline. T3.1/T3.2 LIVE pulumi stack export blocked on PULUMI_CONFIG_PASSPHRASE + AWS_* creds |
+| **G2** | **Multi-cell unverified** | T0.1 — RESOLVED 2026-05-01 | docs/audits/multi-cell-source-audit.md (248 LOC) source audit identifies 5 gaps (Gap 1-5); pinned via audit-docs.test.ts (iter 20, 5 invariants); Gap 1 RESOLVED via cells migration 000006, Gap 2 via T5.3b CC-bootstrap-lib |
+| **G3** | **Mocked integration tests** | T4.1, T4.2 — RESOLVED 2026-05-01 | spawn-helper.ts + mock-api-server.ts (in-process pure-Node HTTP, NOT nock) + 14 integration suites + envtest infrastructure + 72 tests in 20.15s |
+| **G4** | **No security review** | Per-task Security Review section — RESOLVED 2026-05-01 | All 3 governance DRs include Security Review block with veto criteria; pinned via meeting-records.test.ts captures-vetoes test (3 DRs × 1 = 3 invariants) |
+| **G5** | **No SRE review** | Per-task SRE Review section — RESOLVED 2026-05-01 | All 3 governance DRs include SRE Review block; replicaCount=1→2 hardening per C13 (commit efcb0067); pinned via meeting-records.test.ts |
+| **G6** | **No T2/T3 governance** | Phase −1 — RESOLVED 2026-05-01 | 3 MEET DRs T-1.1/T-1.2/T-1.3 (operator-split + pulumi-consolidation + multi-cell) all APPROVED_WITH_CONDITIONS BEFORE any Phase 2/3/5 implementation per .claude/rules/pre-release-governance.md |
+| **G7** | **No production rollout path** | Phase 7 — DOCUMENTED 2026-05-01; LIVE stages cloud + customer + 21d | docs/runbooks/multi-cell-canary-prod.md (165 LOC) Stages 4/5a/5b/5c with 7d holds + EB gates; pinned via production-runbooks.test.ts (iter 36, 13 invariants); LIVE T7.1 customer + T7.2 21d cloud-bound |
+| **G8** | **No rollback per phase** | Per-task Rollback Plan section — RESOLVED 2026-05-01 | Each plan task has explicit Rollback Plan section with concrete commands; canary scripts (cell2-canary-stage{1,2}.sh) implement auto-rollback on halt criteria; multi-cell-canary-prod.md has Incident → Rollback procedure |
+| **G9** | **No observability plan** | T5.4 + per-task Observability Plan section — RESOLVED 2026-05-01 | T5.4 shipped 4 metrics + 7 alerts + dashboard + runbook BEFORE activation; pinned via validate:rules Gate 9.55 (12 PrometheusRule files validated); validate:slos Gate 9.5 (7 Sloth files validated) |
+| **G10** | **ADRs sketchy** | T-1.1/2/3 + T8.2 — RESOLVED 2026-05-01 | Same as #17 |
 | Minor: TDD specs thin | All TDD blocks expanded with assertions, fixtures, side-effects |
 | Minor: anonymous DEBT | D10 + Coverage row #5 | Owner + horizon + stop-the-line |
 | Minor: CI specs incomplete | T6.1, T6.2 | Concurrency, timeout, secrets, flake budget |
@@ -1937,7 +1940,7 @@ CHANGELOG.md — closed
 - [x] All test suites GREEN simultaneously:
   - [x] CLI unit (1243) GREEN _(was 1171 plan, expanded)_
   - [x] CLI integration (12+ NEW with spawned binary) GREEN
-  - [x] Pulumi vitest (96) GREEN
+  - [x] Pulumi vitest (269) GREEN _(was 96 plan baseline; iters 16-27 expanded with invariant tests for charts/workflows/canaries/migrations/SLOs/PrometheusRules/audits/DRs/ADRs)_
   - [x] Go infra/tests (capacity + chaos + e2e + load + unit) GREEN
   - [x] Operators envtest (existing 200+) GREEN _(timeout 300s required)_
   - [x] Parity preflight (16 gates) GREEN _(verified 2026-05-01: 16 PASS / 0 FAIL / 0 SKIP / 0 WARN after T0.1 cleanup-terminating-namespaces.sh removed 14h-old zumbi ns)_
@@ -1946,7 +1949,7 @@ CHANGELOG.md — closed
   - [x] task validate:manifests GREEN
   - [x] task validate:helm-deps GREEN (NEW)
   - [x] task validate:slos GREEN (NEW)
-  - [x] task validate:matrix GREEN (NEW) _(9/9 offline; 5 STATUS cloud-bound)_
+  - [x] task validate:matrix GREEN (NEW) _(verified 2026-05-01: **12/12 PASS / 0 FAIL / 0 SKIP** offline; 5 STATUS cloud-bound — full matrix including operators envtest GREEN with KUBEBUILDER_ASSETS=k8s/1.36.0)_
 - [ ] Live gates GREEN:
   - [x] task parity:k3d-virgin GREEN _(memory `reference_infra_parity_2026_04_30.md` run 6)_
   - [x] **dogfood full-loop 12/12 GREEN** _(2026-04-30, milestone memory)_
@@ -1970,7 +1973,7 @@ CHANGELOG.md — closed
 - [x] Memory entry persisted _(3 new memories 2026-04-30: live-test-existing-db, validation-sweep, no-tribal-knowledge, dogfood-12-12-milestone)_
 - [x] CI workflows: cli-commands.yml + multi-cell.yml + parity-validation present _(parity-validation.yml deferred — vitest-driven gate equivalent)_
 - [x] No regression in CLI unit tests _(1243 PASS, was 1171 baseline)_
-- [x] No regression in Pulumi vitest _(96 PASS)_
+- [x] No regression in Pulumi vitest _(269 PASS verified 2026-05-01; +173 from iters 16-27 invariant pinning)_
 - [x] code-audit checks passing _(go vet GREEN; gofmt clean on session-touched files; tsc GREEN; ESLint 0 errors)_
 - [x] **Single DEBT row tracked**: regression_test.go behavioural refactor _(owner=agent:test, horizon=2026-06-30; documented in CHANGELOG via NEW-7 + NEW-15 fixes)_
 - [ ] Plan-specific: Tilt and Helmfile deploy IDENTICAL pod sets _(deferred — Phase 2 T2.4 cutover)_

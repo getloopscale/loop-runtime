@@ -139,7 +139,7 @@ Trigger conditions (any one):
 
 ### Post-incident
 
-- [ ] Full RCA within 5 business days (template at `docs/runbooks/rca-template.md`).
+- [ ] Full RCA within 5 business days (template at `docs/runbooks/multi-cell-rca-template.md`).
 - [ ] Halt remaining stages until RCA action items shipped.
 - [ ] Customer-success follows up at day +3 and day +7.
 
@@ -152,7 +152,7 @@ Trigger conditions (any one):
 | ArgoCD sync drift | sync status by cell | `app=${TENANT_ID}-production` |
 | Token refresh health | confirms self-healing token alive | `loopzero_argocd_token_*` series |
 
-## Promethus alerts (must be live before stage 4)
+## Prometheus alerts (must be live before stage 4)
 
 ```yaml
 # Burn-rate on canary tenants — page on >2x normal
