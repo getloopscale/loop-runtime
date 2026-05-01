@@ -21,6 +21,7 @@
 #   8. matrix-integrity audit
 #   9. matrix-audit golden test
 #  9.5. validate:slos                — 7 Sloth SLO files (Coverage Matrix #8)
+#  9.6. validate:helm-deps           — 11 charts buildable (Coverage Matrix #7)
 #  10. operators tests (envtest)  — when KUBEBUILDER_ASSETS is set
 #
 # Usage:
@@ -147,6 +148,33 @@ if command -v python3 >/dev/null 2>&1; then
   fi
 else
   result 2 "validate:slos (python3 missing)"
+fi
+
+# Gate 9.6: helm dependency build for umbrella charts (Coverage Matrix #7).
+# Closes "charts/loopzero-platform requires helm dep build" gap. Reaches network
+# to refresh helm repos — gate is SKIP when offline (HELM_REPOS_UNREACHABLE=1).
+if command -v helm >/dev/null 2>&1; then
+  if [[ "${HELM_REPOS_UNREACHABLE:-0}" == "1" ]]; then
+    result 2 "validate:helm-deps (HELM_REPOS_UNREACHABLE=1)"
+  else
+    deps_fail=0
+    for chart in loopzero-api loopzero-app-operator loopzero-cloud loopzero-controller loopzero-crds \
+                 loopzero-dashboard loopzero-platform loopzero-platform-operator \
+                 loopzero-preview-operator loopzero-tenant-controller loopzero-tenant-operator; do
+      cd="${REPO_ROOT}/charts/$chart"
+      [[ -d "$cd" ]] || continue
+      if ! (cd "$cd" && helm dependency build >/dev/null 2>&1); then
+        deps_fail=$((deps_fail + 1))
+      fi
+    done
+    if (( deps_fail == 0 )); then
+      result 0 "validate:helm-deps (umbrella charts buildable)"
+    else
+      result 1 "validate:helm-deps ($deps_fail charts failed)"
+    fi
+  fi
+else
+  result 2 "validate:helm-deps (helm missing)"
 fi
 
 # Gate 10: operators envtest (only when KUBEBUILDER_ASSETS set).

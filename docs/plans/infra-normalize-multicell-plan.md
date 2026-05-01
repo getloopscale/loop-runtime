@@ -1889,7 +1889,7 @@ CHANGELOG.md — closed
 | 4 | regression-checks.sh undocumented | T8.2 | Runbook update |
 | 5 | regression_test.go string-literal anti-pattern | DEBT (D10): owner=agent:test, horizon=2026-06-30, stop-the-line=3 broken-by-string-change PRs | Registered; not addressed in this plan |
 | 6 | cell-templates dead-code | T5.6 — RESOLVED 2026-05-01 | **REMOVED** — `infra/cell-templates/v1.0.0/` deleted (zero references in codebase; orphan ADR-0008 reference; multi-cell went helmfile-native, not template-driven) |
-| 7 | charts/loopzero-platform requires helm dep build | T8.1 | task validate:helm-deps in matrix |
+| 7 | charts/loopzero-platform requires helm dep build | T8.1 — RESOLVED 2026-05-01 | task validate:helm-deps wired into validate-matrix.sh as Gate 9.6 (11 charts: loopzero-api, loopzero-app-operator, loopzero-cloud, loopzero-controller, loopzero-crds, loopzero-dashboard, loopzero-platform, loopzero-platform-operator, loopzero-preview-operator, loopzero-tenant-controller, loopzero-tenant-operator). Gate respeita HELM_REPOS_UNREACHABLE=1 fallback. |
 | 8 | Sloth files bypass kubeconform | T8.1 | task validate:slos in matrix |
 | 9 | refactorhelms merge needs ratification | T1.1 | Proper PR |
 | 10 | All CLI commands 1000% functional | T0.3, T4.1, T4.2, T4.3 | Audit + 12+ integration tests + bug fixes |
