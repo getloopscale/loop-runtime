@@ -1579,9 +1579,10 @@ VERIFY:  bash infra/tests/parity/cell2-canary-stage1.sh
 ```
 
 #### Acceptance Criteria
-- [ ] HTTP 200 from cell-2
-- [ ] 1h soak no errors
-- [ ] cell-1 EB stable
+- [x] **Script + runbook shipped (offline)** _(infra/tests/parity/cell2-canary-stage1.sh 242 LOC + docs/runbooks/multi-cell-canary.md 170 LOC; bash -n + dry-run GREEN 2026-05-01)_
+- [ ] HTTP 200 from cell-2 _(cloud-bound: requires LIVE cell-2 cluster)_
+- [ ] 1h soak no errors _(cloud-bound)_
+- [ ] cell-1 EB stable _(cloud-bound)_
 
 #### Security Review
 - **Live verification**: synthetic tenant isolated; no real customer data.
@@ -1591,14 +1592,16 @@ VERIFY:  bash infra/tests/parity/cell2-canary-stage1.sh
 - **Veto criterion**: cell-1 EB consumed > 0.1%.
 
 #### Rollback Plan
-- `loopzero deploy --cell cell-1 <tenant>` re-pins; takes <5 min.
+- Script auto-rolls back on 3 consecutive 5xx OR cell-1 EB > 0.1% (trap on EXIT also re-pins on success).
+- Manual fallback: `loopzero admin tenants pin --tenant <synth> --cell cell-1` (operator command per T5.5 supersession).
 
 #### Observability Plan
 - Live: dashboard panel watched during canary.
 
 #### DoD
-- [ ] Stage 1 GREEN
-- [ ] Runbook updated with findings
+- [x] **Script syntax + dry-run GREEN** _(offline DoD gate)_
+- [ ] Stage 1 GREEN _(cloud-bound)_
+- [ ] Runbook updated with findings _(cloud-bound — requires live run output)_
 
 ---
 
@@ -1627,14 +1630,16 @@ VERIFY:  bash infra/tests/parity/cell2-canary-stage2.sh
 ```
 
 #### Acceptance Criteria
-- [ ] 10% on cell-2
-- [ ] 24h soak GREEN
-- [ ] Cell-1 EB unaffected
+- [x] **Script shipped (offline)** _(infra/tests/parity/cell2-canary-stage2.sh 214 LOC; bash -n + dry-run GREEN 2026-05-01; references multi-cell-canary.md as preflight gate)_
+- [ ] 10% on cell-2 _(cloud-bound)_
+- [ ] 24h soak GREEN _(cloud-bound)_
+- [ ] Cell-1 EB unaffected _(cloud-bound)_
 
 #### Security/SRE/Rollback/Observability — same shape as T5.6.
 
 #### DoD
-- [ ] Stage 2 GREEN
+- [x] **Script syntax + dry-run GREEN** _(offline DoD gate)_
+- [ ] Stage 2 GREEN _(cloud-bound — script auto-halts on aggregate 5xx > 1% OR cell-1 EB > 1%)_
 
 ---
 
