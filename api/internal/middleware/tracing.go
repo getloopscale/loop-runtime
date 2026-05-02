@@ -56,10 +56,3 @@ func contextWithLogger(ctx context.Context, logger *slog.Logger) context.Context
 	return context.WithValue(ctx, loggerCtxKey{}, logger)
 }
 
-// LoggerFromContext retrieves the trace-enriched logger, falling back to slog.Default().
-func LoggerFromContext(ctx context.Context) *slog.Logger {
-	if l, ok := ctx.Value(loggerCtxKey{}).(*slog.Logger); ok {
-		return l
-	}
-	return slog.Default()
-}

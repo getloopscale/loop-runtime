@@ -14,6 +14,16 @@ import (
 	"github.com/loopzero/loopzero/pkg/statemachine"
 )
 
+// contains checks if a string slice contains a value.
+func contains(ss []string, s string) bool {
+	for _, v := range ss {
+		if v == s {
+			return true
+		}
+	}
+	return false
+}
+
 // --- Test doubles for ContainerDeliveryActivator ---
 
 type fakeReleaseStoreContainer struct {

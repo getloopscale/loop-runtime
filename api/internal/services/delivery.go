@@ -5,7 +5,6 @@ package services
 
 import (
 	"context"
-	"encoding/json"
 	"errors"
 
 	"github.com/loopzero/loopzero/api/internal/db"
@@ -43,57 +42,6 @@ type DeliveryActivator interface {
 	// State machine transitions (ACTIVE→ROLLED_BACK, SUPERSEDED→ACTIVE) are handled
 	// by the RollbackOrchestrator, NOT by this method.
 	Rollback(ctx context.Context, req RollbackDeliveryRequest) error
-}
-
-// DispatchingDeliveryActivator selects between container and static delivery
-// based on whether any app in the build result has a static delivery model.
-//
-// ARCH-009 fix: Previously, the BuildOrchestrator always defaulted to
-// ContainerDeliveryActivator because StaticDeliveryActivator was never wired
-// in main.go. This dispatcher makes the selection explicit.
-//
-// NOTE: Full delivery model dispatch requires adding delivery_model to the
-// builds table (migration). For now, the dispatcher checks the result apps.
-type DispatchingDeliveryActivator struct {
-	Container DeliveryActivator
-	Static    DeliveryActivator
-}
-
-func (d *DispatchingDeliveryActivator) Activate(ctx context.Context, build *db.Build, result BuildCallbackRequest) error {
-	if d.Static != nil && hasStaticApps(result) {
-		return d.Static.Activate(ctx, build, result)
-	}
-	return d.Container.Activate(ctx, build, result)
-}
-
-func (d *DispatchingDeliveryActivator) Rollback(ctx context.Context, req RollbackDeliveryRequest) error {
-	if d.Static != nil && isStaticRelease(req.TargetRelease) {
-		return d.Static.Rollback(ctx, req)
-	}
-	return d.Container.Rollback(ctx, req)
-}
-
-// isStaticRelease checks whether a release was produced by the static delivery
-// pipeline by inspecting the "delivery" field in its artifacts JSON.
-func isStaticRelease(release *db.Release) bool {
-	if release == nil || release.Artifacts == nil {
-		return false
-	}
-	var artifacts map[string]string
-	if err := json.Unmarshal(release.Artifacts, &artifacts); err != nil {
-		return false
-	}
-	return artifacts["delivery"] == "static"
-}
-
-// hasStaticApps checks if any app in the result has a static delivery type.
-func hasStaticApps(result BuildCallbackRequest) bool {
-	for _, app := range result.Apps {
-		if app.Type == "frontend" {
-			return true
-		}
-	}
-	return false
 }
 
 // RollbackDeliveryRequest contains the delivery-specific inputs for rollback.

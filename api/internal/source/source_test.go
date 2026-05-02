@@ -261,91 +261,6 @@ func TestNewGiteaSourceStore_ValidConfig(t *testing.T) {
 	}
 }
 
-// --- GoGitSourceStore constructor ---
-
-func TestNewGoGitSourceStore_EmptyURL_ReturnsError(t *testing.T) {
-	_, err := NewGoGitSourceStore(GoGitSourceStoreConfig{
-		BaseURL: "",
-		Token:   "token",
-		OrgName: "loopzero",
-	})
-	if err == nil {
-		t.Error("expected error for empty base URL")
-	}
-}
-
-func TestNewGoGitSourceStore_ValidConfig(t *testing.T) {
-	store, err := NewGoGitSourceStore(GoGitSourceStoreConfig{
-		BaseURL: "http://gitea:3000",
-		Token:   "token",
-		OrgName: "loopzero",
-	})
-	if err != nil {
-		t.Fatalf("unexpected error: %v", err)
-	}
-	if store == nil {
-		t.Error("expected non-nil store")
-	}
-}
-
-// --- computeDirHashGogit ---
-
-func TestComputeDirHashGogit_Deterministic(t *testing.T) {
-	tmpDir := t.TempDir()
-	mustWriteFile(t, filepath.Join(tmpDir, "a.txt"), []byte("hello"))
-	mustWriteFile(t, filepath.Join(tmpDir, "b.txt"), []byte("world"))
-
-	h1, err := computeDirHashGogit(tmpDir)
-	if err != nil {
-		t.Fatalf("first hash: %v", err)
-	}
-	h2, err := computeDirHashGogit(tmpDir)
-	if err != nil {
-		t.Fatalf("second hash: %v", err)
-	}
-	if h1 != h2 {
-		t.Errorf("hashes differ: %s vs %s", h1, h2)
-	}
-}
-
-func TestComputeDirHashGogit_MatchesComputeDirHash(t *testing.T) {
-	tmpDir := t.TempDir()
-	mustWriteFile(t, filepath.Join(tmpDir, "app.go"), []byte("package main"))
-	mustWriteFile(t, filepath.Join(tmpDir, "go.mod"), []byte("module test"))
-
-	h1, err := computeDirHash(tmpDir)
-	if err != nil {
-		t.Fatalf("computeDirHash: %v", err)
-	}
-	h2, err := computeDirHashGogit(tmpDir)
-	if err != nil {
-		t.Fatalf("computeDirHashGogit: %v", err)
-	}
-	if h1 != h2 {
-		t.Errorf("hashes differ: computeDirHash=%s computeDirHashGogit=%s", h1, h2)
-	}
-}
-
-func TestComputeDirHashGogit_SkipsGitDir(t *testing.T) {
-	tmpDir := t.TempDir()
-	mustWriteFile(t, filepath.Join(tmpDir, "app.js"), []byte("code"))
-	hashWithout, err := computeDirHashGogit(tmpDir)
-	if err != nil {
-		t.Fatal(err)
-	}
-
-	mustMkdir(t, filepath.Join(tmpDir, ".git", "objects"))
-	mustWriteFile(t, filepath.Join(tmpDir, ".git", "HEAD"), []byte("ref: refs/heads/main"))
-	hashWith, err := computeDirHashGogit(tmpDir)
-	if err != nil {
-		t.Fatal(err)
-	}
-
-	if hashWithout != hashWith {
-		t.Errorf(".git directory changed hash: %s vs %s", hashWithout, hashWith)
-	}
-}
-
 func TestComputeDirHash_DifferentContent_DifferentHash(t *testing.T) {
 	dir1 := t.TempDir()
 	mustWriteFile(t, filepath.Join(dir1, "a.txt"), []byte("hello"))
@@ -381,26 +296,6 @@ func TestComputeDirHash_EmptyDir(t *testing.T) {
 
 func TestGiteaSourceStore_PushBundle_EmptyBundle(t *testing.T) {
 	store, err := NewGiteaSourceStore(GiteaSourceStoreConfig{
-		BaseURL: "http://localhost:3000",
-		Token:   "fake",
-		OrgName: "loopzero",
-	})
-	if err != nil {
-		t.Fatalf("unexpected error: %v", err)
-	}
-	_, err = store.PushBundle(context.Background(), "tenant", "project", bytes.NewReader([]byte{}))
-	if err == nil {
-		t.Fatal("expected error for empty bundle")
-	}
-	if !strings.Contains(err.Error(), "empty") {
-		t.Errorf("expected empty error, got: %v", err)
-	}
-}
-
-// --- GoGitSourceStore.PushBundle empty bundle ---
-
-func TestGoGitSourceStore_PushBundle_EmptyBundle(t *testing.T) {
-	store, err := NewGoGitSourceStore(GoGitSourceStoreConfig{
 		BaseURL: "http://localhost:3000",
 		Token:   "fake",
 		OrgName: "loopzero",
@@ -463,9 +358,8 @@ apps:
 // --- SourceStore interface ---
 
 func TestSourceStore_InterfaceCompliance(t *testing.T) {
-	// Compile-time check that both stores implement SourceStore
+	// Compile-time check that GiteaSourceStore implements SourceStore
 	var _ SourceStore = (*GiteaSourceStore)(nil)
-	var _ SourceStore = (*GoGitSourceStore)(nil)
 }
 
 // --- PushResult ---
