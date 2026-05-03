@@ -272,64 +272,12 @@ func TestComputeDirHash_DifferentFilenames_DifferentHash(t *testing.T) {
 	}
 }
 
-func TestComputeDirHashGogit_SubdirFiles(t *testing.T) {
-	dir := t.TempDir()
-	mustMkdir(t, filepath.Join(dir, "sub"))
-	mustWriteFile(t, filepath.Join(dir, "sub", "file.txt"), []byte("data"))
-
-	h, err := computeDirHashGogit(dir)
-	if err != nil {
-		t.Fatalf("unexpected error: %v", err)
-	}
-	if len(h) != 64 {
-		t.Errorf("expected 64-char hex, got %d", len(h))
-	}
-}
-
-func TestComputeDirHashGogit_IncludesGithubDir(t *testing.T) {
-	dir := t.TempDir()
-	mustWriteFile(t, filepath.Join(dir, "app.js"), []byte("code"))
-	hashWithout, err := computeDirHashGogit(dir)
-	if err != nil {
-		t.Fatal(err)
-	}
-
-	mustMkdir(t, filepath.Join(dir, ".github", "workflows"))
-	mustWriteFile(t, filepath.Join(dir, ".github", "workflows", "ci.yml"), []byte("name: CI"))
-	hashWith, err := computeDirHashGogit(dir)
-	if err != nil {
-		t.Fatal(err)
-	}
-
-	if hashWithout == hashWith {
-		t.Error(".github directory should change hash for gogit variant too")
-	}
-}
-
 // ---------------------------------------------------------------------------
 // PushBundle format detection (gzip magic bytes)
 // ---------------------------------------------------------------------------
 
 func TestGiteaSourceStore_PushBundle_InvalidGzipData_ReturnsError(t *testing.T) {
 	store, err := NewGiteaSourceStore(GiteaSourceStoreConfig{
-		BaseURL: "http://localhost:3000",
-		Token:   "fake",
-		OrgName: "loopzero",
-	})
-	if err != nil {
-		t.Fatalf("unexpected error: %v", err)
-	}
-
-	// Data that starts with gzip magic but is not valid gzip
-	invalidGzip := []byte{0x1f, 0x8b, 0x00, 0x00, 0x00}
-	_, err = store.PushBundle(t.Context(), "tenant", "project", strings.NewReader(string(invalidGzip)))
-	if err == nil {
-		t.Fatal("expected error for invalid gzip data")
-	}
-}
-
-func TestGoGitSourceStore_PushBundle_InvalidGzipData_ReturnsError(t *testing.T) {
-	store, err := NewGoGitSourceStore(GoGitSourceStoreConfig{
 		BaseURL: "http://localhost:3000",
 		Token:   "fake",
 		OrgName: "loopzero",
@@ -392,38 +340,6 @@ func TestGiteaSourceStore_PushBundle_ValidTarGz_FailsAtEnsureRepo(t *testing.T) 
 	}
 }
 
-func TestGoGitSourceStore_PushBundle_ValidTarGz_FailsAtEnsureRepo(t *testing.T) {
-	ts := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		w.WriteHeader(http.StatusInternalServerError)
-	}))
-	defer ts.Close()
-
-	store, err := NewGoGitSourceStore(GoGitSourceStoreConfig{
-		BaseURL: ts.URL,
-		Token:   "test-token",
-		OrgName: "loopzero",
-	})
-	if err != nil {
-		t.Fatalf("unexpected error: %v", err)
-	}
-
-	tmpDir := t.TempDir()
-	archivePath := filepath.Join(tmpDir, "source.tar.gz")
-	createTestTarGz(t, archivePath, []testTarEntry{
-		{Name: "app.js", Typeflag: tar.TypeReg, Content: "console.log('hi')"},
-	})
-
-	data, err := os.ReadFile(archivePath)
-	if err != nil {
-		t.Fatalf("read archive: %v", err)
-	}
-
-	_, err = store.PushBundle(t.Context(), "tenant", "project", bytes.NewReader(data))
-	if err == nil {
-		t.Fatal("expected error (EnsureRepo should fail)")
-	}
-}
-
 // ---------------------------------------------------------------------------
 // PushBundle — git bundle path (non-gzip data)
 // ---------------------------------------------------------------------------
@@ -452,28 +368,6 @@ func TestGiteaSourceStore_PushBundle_NonGzipData_FailsAtEnsureRepo(t *testing.T)
 	// Should fail at ensure repo (500 from test server)
 	if !strings.Contains(err.Error(), "ensure repo") {
 		t.Errorf("expected ensure repo error, got: %v", err)
-	}
-}
-
-func TestGoGitSourceStore_PushBundle_NonGzipData_FailsAtEnsureRepo(t *testing.T) {
-	ts := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		w.WriteHeader(http.StatusInternalServerError)
-	}))
-	defer ts.Close()
-
-	store, err := NewGoGitSourceStore(GoGitSourceStoreConfig{
-		BaseURL: ts.URL,
-		Token:   "test-token",
-		OrgName: "loopzero",
-	})
-	if err != nil {
-		t.Fatalf("unexpected error: %v", err)
-	}
-
-	bundleData := []byte("# v2 git bundle\nsome fake bundle data here")
-	_, err = store.PushBundle(t.Context(), "tenant", "project", bytes.NewReader(bundleData))
-	if err == nil {
-		t.Fatal("expected error")
 	}
 }
 
@@ -516,37 +410,6 @@ func TestGiteaSourceStore_PushBundle_TarGz_EnsureRepoOK_GitFails(t *testing.T) {
 	}
 }
 
-func TestGoGitSourceStore_PushBundle_TarGz_EnsureRepoOK_GitFails(t *testing.T) {
-	ts := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		w.WriteHeader(http.StatusOK)
-	}))
-	defer ts.Close()
-
-	store, err := NewGoGitSourceStore(GoGitSourceStoreConfig{
-		BaseURL: ts.URL,
-		Token:   "test-token",
-		OrgName: "loopzero",
-	})
-	if err != nil {
-		t.Fatalf("unexpected error: %v", err)
-	}
-
-	tmpDir := t.TempDir()
-	archivePath := filepath.Join(tmpDir, "source.tar.gz")
-	createTestTarGz(t, archivePath, []testTarEntry{
-		{Name: "index.js", Typeflag: tar.TypeReg, Content: "module.exports = {}"},
-	})
-	data, err := os.ReadFile(archivePath)
-	if err != nil {
-		t.Fatalf("read archive: %v", err)
-	}
-
-	_, err = store.PushBundle(t.Context(), "tenant", "project", bytes.NewReader(data))
-	if err == nil {
-		t.Fatal("expected error at git push phase")
-	}
-}
-
 func TestGiteaSourceStore_PushBundle_GitBundle_EnsureRepoOK_CloneFails(t *testing.T) {
 	ts := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.WriteHeader(http.StatusOK)
@@ -572,28 +435,6 @@ func TestGiteaSourceStore_PushBundle_GitBundle_EnsureRepoOK_CloneFails(t *testin
 	// Should fail at git fetch from bundle
 	if !strings.Contains(err.Error(), "fetch") && !strings.Contains(err.Error(), "pull") && !strings.Contains(err.Error(), "bundle") {
 		t.Logf("error (acceptable): %v", err)
-	}
-}
-
-func TestGoGitSourceStore_PushBundle_GitBundle_EnsureRepoOK_CloneFails(t *testing.T) {
-	ts := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		w.WriteHeader(http.StatusOK)
-	}))
-	defer ts.Close()
-
-	store, err := NewGoGitSourceStore(GoGitSourceStoreConfig{
-		BaseURL: ts.URL,
-		Token:   "test-token",
-		OrgName: "loopzero",
-	})
-	if err != nil {
-		t.Fatalf("unexpected error: %v", err)
-	}
-
-	bundleData := []byte("not-a-real-bundle")
-	_, err = store.PushBundle(t.Context(), "tenant", "project", bytes.NewReader(bundleData))
-	if err == nil {
-		t.Fatal("expected error")
 	}
 }
 

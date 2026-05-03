@@ -1559,6 +1559,45 @@ tasks:
       - task: test:chaos:argocd-crash
       - task: test:chaos:gitea-outage
 
+  dead-code:
+    desc: Detect implemented-but-not-wired code (report only)
+    cmds:
+      - |
+        if ! command -v deadcode >/dev/null 2>&1; then
+          echo "Installing deadcode..."
+          go install golang.org/x/tools/cmd/deadcode@latest
+        fi
+      - |
+        echo "=== Go API ==="
+        cd api && deadcode ./cmd/... 2>&1 | grep "^internal/" || echo "(none)"
+      - |
+        echo "=== Go Operators ==="
+        cd operators && deadcode ./cmd/main.go ./cmd/tenant-operator/ ./cmd/app-operator/ ./cmd/preview-operator/ ./cmd/platform-operator/ 2>&1 | grep "^internal/" || echo "(none)"
+      - |
+        echo "=== TypeScript CLI ==="
+        cd cli && npx knip --production --no-exit-code 2>&1 || echo "(knip not installed — run: cd cli && npm i -D knip)"
+
+  dead-code:strict:
+    desc: Dead code check that fails on new findings (CI gate)
+    cmds:
+      - |
+        if ! command -v deadcode >/dev/null 2>&1; then
+          go install golang.org/x/tools/cmd/deadcode@latest
+        fi
+      - |
+        API_DEAD=$(cd api && deadcode ./cmd/... 2>&1 | grep "^internal/" | wc -l)
+        OPS_DEAD=$(cd operators && deadcode ./cmd/main.go ./cmd/tenant-operator/ ./cmd/app-operator/ ./cmd/preview-operator/ ./cmd/platform-operator/ 2>&1 | grep "^internal/" | wc -l)
+        TOTAL=$((API_DEAD + OPS_DEAD))
+        echo "Dead code: API=$API_DEAD Operators=$OPS_DEAD Total=$TOTAL"
+        # Baseline after initial cleanup — adjust as dead code is removed
+        BASELINE=85
+        if [ "$TOTAL" -gt "$BASELINE" ]; then
+          echo "FAIL: Dead code count ($TOTAL) exceeds baseline ($BASELINE)"
+          echo "New dead code was introduced. Run 'task dead-code' to see details."
+          exit 1
+        fi
+        echo "PASS: Dead code count ($TOTAL) is within baseline ($BASELINE)"
+
   lint:
     desc: Lint all components
     cmds:
