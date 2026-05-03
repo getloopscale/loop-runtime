@@ -295,3 +295,65 @@ Operator action items per ADR C5:
 
 **Logs:** /tmp/adr-soaks-20260503-103141/stage2.log
 
+
+## T5.3 final closure (2026-05-03T17:08Z) — HONEST EVIDENCE
+
+**fix-all-platform-issues-plan T5.3 closed with empirical signal, NOT
+tautological soak.** After iter 7 background runner produced Stage 1 1h
+ADR-compliant GREEN (120 probes × 30s = 3600s, 0 5xx), the user surfaced
+a critical insight: **the local-k3d static env makes 24h Stage 2 + 7-day
+streak tautologically equivalent to 30s smoke**. There's no diurnal
+traffic pattern, no real customer load, no churn — just 1 synthetic
+tenant in --smoke mode running EB checks every 5min on idempotent state.
+
+### What IS empirically validated
+
+1. **Stage 1 1h ADR-compliant GREEN** — verified in iter 6 closure above
+   (run timestamp 2026-05-03T11:31:53Z, 120 probes, 0 5xx, EB stable).
+2. **Mechanism end-to-end** — T4.3 LIVE evidence committed to
+   `docs/runbooks/cell2-e2e-deploy-evidence.md`: `loopzero deploy` →
+   build-b04e0905c112b23d → release rel-6b22241d012f71ce on cell-2 →
+   ArgoCD Synced → Pod Running 4m52s on loopzero-runtime-2 → /health 200.
+3. **12 ADR gates LIVE GREEN persistente** + post-flip PASS.
+4. **Stage 2 mechanism validated via smoke** in cell-2-activation-plan
+   iter 3 (30s soak, 1 tenant, EB checks GREEN).
+5. **CI cron armed** for ADR-compliant durations weekly:
+   `.github/workflows/cell2-soaks.yml` runs Sunday 02:00 UTC; first run
+   produces empirical evidence WITHOUT human wall-clock-bind.
+6. **Hourly streak watcher** `.github/workflows/platform-health-7day-watch.yml`
+   tracks GREEN streak over time; this is OBSERVABILITY, not a gate.
+
+### What is NOT empirically validated (deliberately deferred)
+
+1. **24h diurnal traffic cycle** — requires REAL traffic with customer
+   load profile. Local k3d cannot reproduce. Validated via Sprint 9
+   prod canary (Stage 4: 1 customer 7-day) per ADR D6.
+2. **7-day sustained GREEN under churn** — requires real deploys/incidents
+   over a week. Static env produces same gate output for hour 1 and
+   hour 168. Validated by accumulated CI cron history + first prod customer.
+
+### D7 reformulation
+
+The original plan's D7 stated "maturity 4.0 gated on 7-day GREEN streak."
+Reformulated 2026-05-03 with user authorization:
+
+**New D7**: maturity 4.0 gated on (a) first CI Sunday cron GREEN
+producing real workflow run evidence, AND (b) 1 prod customer day-trial
+with no incidents (Sprint 9 gate, separate plan). Until both, maturity
+remains 3.9 — reflects "all code/test/CI complete; sustained-load proof
+deferred to real prod usage".
+
+### Background runner cleanup
+
+Background runner PID 2735056 + child processes terminated 2026-05-03T17:08Z
+after user surfaced the tautology insight. Final `tn-e2etest` placement:
+cell-2 (post-soak rest state, isolation maintained).
+
+### T5.3 status: COMPLETE
+
+Closed with:
+- Stage 1 1h ADR LIVE evidence (real elapsed time, real probe count) ✓
+- Stage 2 mechanism via prior smoke + CI cron for full duration ✓
+- T4.3 E2E LIVE proof (Pod /health 200 on cell-2) ✓
+- D7 reformulated to remove tautological gate ✓
+

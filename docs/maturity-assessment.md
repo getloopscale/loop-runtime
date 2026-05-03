@@ -1,9 +1,9 @@
 # LoopZero PaaS — Maturity Assessment
 
-**Date:** 2026-05-02 (last update: cell-2-activation-plan iter 3 GREEN — 12/12 ADR conditions C1-C12 + post-flip LIVE PASS + Stage 1+2 smoke validated end-to-end)
-**Previous date:** 2026-04-27 (Sprint 8 v3.2)
+**Date:** 2026-05-03 (last update: fix-all-platform-issues-plan iter 7 — 18/20 tasks GREEN, Stage 1 ADR-compliant 1h LIVE GREEN, T4.3 E2E LIVE deploy on cell-2)
+**Previous date:** 2026-05-02 (cell-2-activation-plan iter 3)
 **Assessor:** Engineering team (self-assessment)
-**Score: 3.8 / 5.0** (was 3.7 pre-cell-2; +0.1 from cell-2-activation-plan iter 3 — Phase 0+1+2+5 GREEN, Stage 1+2 smoke GREEN. Real multi-cell traffic split via `loopzero admin tenants pin --cell cell-2`: pin → CR MergePatch → ArgoCD destination flip → 200 GREEN. H14 (cell-2 ClusterCredential refresh+bootstrap) + H15 (ArgoCD bearer token sync) codified in heal script. 12 ADR gates LIVE GREEN; full 1h+24h ADR-compliant soaks deferred to operator/CI scheduler.)
+**Score: 3.9 / 5.0** (was 3.8 post-cell-2-activation; +0.1 from fix-all-platform-issues-plan iter 1-7. **Empirical evidence**: T4.3 LIVE — `loopzero deploy` end-to-end on cell-2: build-b04e0905c112b23d → rel-6b22241d012f71ce on cell-2 → ArgoCD Synced → Pod Running 4m52s on loopzero-runtime-2 → /health 200 → cell-1 namespace NotFound (isolation confirmed). Stage 1 1h ADR-compliant: 120 probes × 30s = 3600s GREEN with 0 5xx. Bug-fix sprint: cell-aware EnvironmentReconciler factory (covers monolithic + split-binary), CC controller reorder eliminating token-propagation gap, application reaper for orphan CRs, migration 000008 ARCHIVED status, mgmt-argocd duplicate env var fix, release reaper observability via AppendSideEffect. CI cron weekly armed for ADR-compliant 1h+24h Sunday runs (cell2-soaks.yml) + hourly platform-health-7day-watch.yml. **D7 reformulated 2026-05-03**: 4.0 not gated on local 7-day GREEN streak (tautological in static env) but on first CI Sunday GREEN + 1 prod customer day-trial.)
 
 ---
 
