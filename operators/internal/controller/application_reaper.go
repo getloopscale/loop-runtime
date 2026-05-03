@@ -29,6 +29,8 @@ import (
 	"strconv"
 	"time"
 
+	"github.com/loopzero/loopzero/pkg/statemachine"
+
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/controller/controllerutil"
@@ -115,8 +117,24 @@ func MarkAsCleaned(ctx context.Context, c client.Client, app *loopzerov1.LoopZer
 		return nil // idempotent
 	}
 
-	// 1. Update phase + condition via status sub-resource.
-	app.Status.Phase = loopzerov1.ApplicationPhaseCleaned
+	// 1. Validate transition via state machine (CLAUDE.md Rule 8).
+	// Compliance review fix 2026-05-03 — was direct assignment, now goes
+	// through ApplicationOrphaned event registered in pkg/statemachine/
+	// application.go. Empty/unknown phase from older CRs is normalized
+	// via Empty→Progressing first, so reaper still fires on legacy data.
+	machine := statemachine.NewApplicationMachine()
+	current := statemachine.State(app.Status.Phase)
+	if current == statemachine.ApplicationEmpty {
+		current = statemachine.ApplicationProgressing
+	}
+	next, err := machine.TryTransition(current, statemachine.ApplicationOrphaned)
+	if err != nil {
+		return fmt.Errorf("MarkAsCleaned: invalid transition %s→Cleaned for %s: %w",
+			current, app.Name, err)
+	}
+
+	// 2. Update phase + condition via status sub-resource.
+	app.Status.Phase = loopzerov1.ApplicationPhase(next)
 	cond := metav1.Condition{
 		Type:               "Cleaned",
 		Status:             metav1.ConditionTrue,
