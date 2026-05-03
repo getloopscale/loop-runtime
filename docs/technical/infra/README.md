@@ -16,9 +16,10 @@ Aqui, "infra" não significa apenas provisionar recursos. No LoopZero, `infra/` 
 | Documento | Finalidade |
 |---|---|
 | [architecture.md](./architecture.md) | Mapa por pastas, camadas e fronteiras da infraestrutura |
-| [sota-gates.md](./sota-gates.md) | Gates SOTA claros, com critérios de aprovação e evidências esperadas |
+| [sota-gates.md](./sota-gates.md) | Gates SOTA claros, com critérios de aprovação e evidências esperadas (15 gates + 4 propostos) |
 | [research-basis.md](./research-basis.md) | Base de pesquisa oficial e evidências do código atual |
 | [paas-benchmark.md](./paas-benchmark.md) | Benchmark de infraestrutura de PaaS e GitOps no contexto do LoopZero |
+| [improvement-roadmap.md](./improvement-roadmap.md) | **Roadmap de melhorias SOTA** — gap analysis, quick wins, Sprint 9 targets, gates propostos (pesquisa 2026-05-03) |
 
 ## Resumo Executivo
 
