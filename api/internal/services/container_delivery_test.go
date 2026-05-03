@@ -635,3 +635,8 @@ func TestPhaseACreateRelease_MultiApp_PrimaryOnly(t *testing.T) {
 		t.Errorf("expected primary (Apps[0]) digest, got %v", rel.ImageDigest)
 	}
 }
+
+// AppendSideEffect — fix-all-platform-issues-plan T4.1 stub.
+func (f *fakeReleaseStoreContainer) AppendSideEffect(_ context.Context, _ db.DBTX, _ string, _ map[string]any) error {
+	return nil
+}

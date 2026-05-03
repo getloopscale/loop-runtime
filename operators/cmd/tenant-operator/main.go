@@ -272,7 +272,11 @@ func main() {
 		os.Exit(1)
 	}
 
-	if err := tenant.SetupEnvironmentController(mgr, runtimeClient); err != nil {
+	// fix-all-platform-issues-plan T1.1: cell-aware Environment reconciler.
+	// Routes namespace/RBAC/NetworkPolicy/Quota writes per tenant.spec.cellID.
+	envFactory := shared.NewCellAwareRuntimeClientFactory(
+		mgr.GetClient(), runtimeClient, "loopzero-system")
+	if err := tenant.SetupEnvironmentControllerWithFactory(mgr, runtimeClient, envFactory); err != nil {
 		setupLog.Error(err, "unable to setup EnvironmentController")
 		os.Exit(1)
 	}

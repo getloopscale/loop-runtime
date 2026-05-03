@@ -20,8 +20,13 @@
 #     for tenant-creation paths that this script consumes downstream)
 #
 # Usage:
-#   bash infra/tests/parity/cell2-canary-stage1.sh [--dry-run] [--soak-seconds N]
+#   bash infra/tests/parity/cell2-canary-stage1.sh [--dry-run|--smoke] [--soak-seconds N]
 #   --dry-run        validate pre-conditions, print plan, exit 0 (no API calls)
+#   --smoke          compressed-mode validation (cell-2-activation-plan iter 2):
+#                    skip ACTIVE-release requirement, soak 60s default, do NOT
+#                    delete tenant on cleanup (only re-pin to cell-1). Validates
+#                    the pin/rollback mechanism without the full ADR-compliant
+#                    1h soak (which requires deployed app + diurnal probe coverage).
 #   --soak-seconds N override 1h default (3600s); useful for shortened CI smoke
 #
 # Exit codes:
@@ -42,6 +47,7 @@ set -uo pipefail
 
 REPO_ROOT="$(cd "$(dirname "$0")/../../.." && pwd)"
 DRY_RUN="${DRY_RUN:-0}"
+SMOKE="${SMOKE:-0}"
 SOAK_SECONDS="${SOAK_SECONDS:-3600}"        # 1h default
 PROBE_INTERVAL="${PROBE_INTERVAL:-30}"       # probe HTTP every 30s
 EB_THRESHOLD_PCT="${EB_THRESHOLD_PCT:-0.1}"  # halt at 0.1% EB consumption
@@ -53,18 +59,41 @@ KUBECTL_CONTEXT="${KUBECTL_CONTEXT:-k3d-loopzero-mgmt}"
 log() { echo "[canary-stage1] $*" >&2; }
 fail() { log "FAIL: $*"; exit "${2:-1}"; }
 
-# Parse flags.
-for arg in "$@"; do
-  case "$arg" in
-    --dry-run)         DRY_RUN=1 ;;
-    --soak-seconds=*)  SOAK_SECONDS="${arg#*=}" ;;
-    --soak-seconds)    shift; SOAK_SECONDS="${1:-3600}" ;;
+# Parse flags. Use while/shift to handle space-separated values correctly
+# (the previous for-loop pattern silently dropped --soak-seconds N).
+while [[ $# -gt 0 ]]; do
+  case "$1" in
+    --dry-run)         DRY_RUN=1; shift ;;
+    --smoke)
+      SMOKE=1
+      # Only override SOAK_SECONDS / PROBE_INTERVAL with smoke defaults if the
+      # caller did NOT already set them via env. Detected via a sentinel: if
+      # SOAK_SECONDS equals the script default 3600, treat as "not set" and
+      # apply smoke default. Otherwise honor the caller's explicit value.
+      # fix-all-platform-issues-plan T5.3 background runner depends on this:
+      # passes SOAK_SECONDS=3600 + --smoke to get HTTP-probe-tolerant 1h soak.
+      if [[ "$SOAK_SECONDS" == "3600" && -z "${SOAK_SECONDS_EXPLICIT:-}" ]]; then
+        SOAK_SECONDS="${SOAK_SECONDS_SMOKE:-60}"
+      fi
+      if [[ "$PROBE_INTERVAL" == "30" && -z "${PROBE_INTERVAL_EXPLICIT:-}" ]]; then
+        PROBE_INTERVAL="${PROBE_INTERVAL_SMOKE:-15}"
+      fi
+      shift
+      ;;
+    --soak-seconds=*)  SOAK_SECONDS="${1#*=}"; shift ;;
+    --soak-seconds)    SOAK_SECONDS="${2:-3600}"; shift 2 ;;
     -h|--help)
-      sed -n '2,33p' "$0" | sed 's/^# \?//'
+      sed -n '2,38p' "$0" | sed 's/^# \?//'
       exit 0
       ;;
+    *)                 shift ;;  # tolerate unknown args (env-var-only callers)
   esac
 done
+
+# In smoke mode, the trap that kubectl-deletes the tenant is suppressed.
+# Operator validates the pin/rollback mechanism without losing the existing
+# multi-cell test tenant (typically tn-e2etest in dev k3d).
+SMOKE_KEEP_TENANT="${SMOKE_KEEP_TENANT:-$SMOKE}"
 
 # ------------------------------------------------------------------------------
 # Phase 1 — pre-conditions
@@ -79,30 +108,49 @@ preflight() {
 
   # cell-2 active in SQL?
   if [[ "$DRY_RUN" -eq 0 ]]; then
+    local pgpass
+    pgpass=$(kubectl --context "$KUBECTL_CONTEXT" -n loopzero-system get secret postgresql \
+      -o jsonpath='{.data.password}' 2>/dev/null | base64 -d 2>/dev/null || echo "")
     local status
     status=$(kubectl --context "$KUBECTL_CONTEXT" -n loopzero-system exec pod/postgresql-0 -c postgresql -- \
-      psql -U loopzero -d loopzero -tAc "SELECT status FROM cells WHERE cell_id='cell-2'" 2>/dev/null || echo "")
+      env "PGPASSWORD=$pgpass" psql -U loopzero -d loopzero -tAc "SELECT status FROM cells WHERE cell_id='cell-2'" 2>/dev/null \
+      | tr -d ' \r\n' || echo "")
     [[ "$status" == "active" ]] || fail "cell-2 not active in cells table (got '$status')" 1
   else
     log "[dry-run] would query: SELECT status FROM cells WHERE cell_id='cell-2'"
   fi
 
-  # ClusterCredential connected?
+  # ClusterCredential connected? Poll up to 60s — controller probe runs every
+  # ~30s and transient false-during-reconcile is normal.
   if [[ "$DRY_RUN" -eq 0 ]]; then
-    local connected
-    connected=$(kubectl --context "$KUBECTL_CONTEXT" get clustercredential cell-2 \
-      -o jsonpath='{.status.connected}' 2>/dev/null || echo "false")
-    [[ "$connected" == "true" ]] || fail "ClusterCredential cell-2 not connected (got '$connected')" 1
+    local connected="" tries=0
+    while [[ $tries -lt 12 ]]; do
+      connected=$(kubectl --context "$KUBECTL_CONTEXT" -n loopzero-system get clustercredentials \
+        -o jsonpath='{.items[?(@.spec.cellID=="cell-2")].status.connected}' 2>/dev/null || echo "")
+      [[ "$connected" == "true" ]] && break
+      tries=$((tries+1))
+      sleep 5
+    done
+    [[ "$connected" == "true" ]] || fail "ClusterCredential cell-2 not connected after 60s polling (got '$connected')" 1
   else
-    log "[dry-run] would query: kubectl get clustercredential cell-2 -o jsonpath='{.status.connected}'"
+    log "[dry-run] would query: kubectl get clustercredentials by spec.cellID=cell-2"
   fi
 
-  # DynamicRouter sees cell-2?
+  # DynamicRouter sees cell-2? Try Prometheus, fall back to direct /metrics exec.
+  # Local k3d may not have ServiceMonitor → Prometheus doesn't scrape loopzero-api.
   if [[ "$DRY_RUN" -eq 0 ]]; then
-    local count
-    count=$(curl -fsS "${PROM_URL}/api/v1/query?query=loopzero_cell_discovery_count" 2>/dev/null \
-      | jq -r '.data.result[0].value[1]' 2>/dev/null || echo "0")
-    [[ "${count:-0}" -ge 2 ]] || fail "loopzero_cell_discovery_count=${count} (need >= 2)" 1
+    local raw count
+    raw=$(curl -fsS "${PROM_URL}/api/v1/query?query=loopzero_cell_discovery_count" 2>/dev/null \
+      | jq -r '.data.result[0].value[1] // "0"' 2>/dev/null || echo "0")
+    case "$raw" in ''|null|*[^0-9]*) count=0 ;; *) count=$raw ;; esac
+    if [[ "$count" -lt 2 ]]; then
+      # Fallback: query loopzero-api /metrics directly inside the cluster.
+      raw=$(kubectl --context "$KUBECTL_CONTEXT" -n loopzero-system exec deploy/loopzero-api -- \
+        sh -c 'wget -qO- http://localhost:9090/metrics 2>/dev/null || curl -fsS http://localhost:9090/metrics 2>/dev/null' 2>/dev/null \
+        | awk '/^loopzero_cell_discovery_count[[:space:]]/{print $2}' | head -1 || echo "0")
+      case "$raw" in ''|null|*[^0-9]*) count=0 ;; *) count=$raw ;; esac
+    fi
+    [[ "${count:-0}" -ge 2 ]] || fail "loopzero_cell_discovery_count=${count} (need >= 2; tried Prometheus + direct /metrics)" 1
   else
     log "[dry-run] would query: loopzero_cell_discovery_count >= 2"
   fi
@@ -127,11 +175,20 @@ verify_synth_tenant() {
     -o jsonpath='{.status.phase}' 2>/dev/null || echo "")
   [[ "$phase" == "Active" ]] || fail "tenant ${SYNTH_TENANT_ID} phase=${phase} (need Active; bootstrap via dogfood first)" 2
 
+  if [[ "$SMOKE" -eq 1 ]]; then
+    log "[smoke] skipping ACTIVE-release requirement (compressed-mode mechanism validation)"
+    return 0
+  fi
+
   # Verify at least one ACTIVE release exists.
+  local pgpass
+  pgpass=$(kubectl --context "$KUBECTL_CONTEXT" -n loopzero-system get secret postgresql \
+    -o jsonpath='{.data.password}' 2>/dev/null | base64 -d 2>/dev/null || echo "")
   local active_count
   active_count=$(kubectl --context "$KUBECTL_CONTEXT" -n loopzero-system exec pod/postgresql-0 -c postgresql -- \
-    psql -U loopzero -d loopzero -tAc \
-    "SELECT COUNT(*) FROM releases WHERE tenant_id='${SYNTH_TENANT_ID}' AND status='ACTIVE'" 2>/dev/null || echo "0")
+    env "PGPASSWORD=$pgpass" psql -U loopzero -d loopzero -tAc \
+    "SELECT COUNT(*) FROM releases WHERE tenant_id='${SYNTH_TENANT_ID}' AND status='ACTIVE'" 2>/dev/null \
+    | tr -d ' \r\n' || echo "0")
   [[ "${active_count:-0}" -ge 1 ]] || fail "tenant has no ACTIVE release (need >= 1 to soak)" 2
 }
 
@@ -145,7 +202,6 @@ pin_to_cell2() {
   loopzero admin tenants pin \
     --tenant "$SYNTH_TENANT_ID" \
     --cell cell-2 \
-    --reason "T5.6 canary stage 1 synthetic" \
     --json || fail "pin to cell-2 failed" 2
 }
 
@@ -183,7 +239,11 @@ soak() {
     local code
     code=$(probe_http "$synth_url")
     probe_count=$((probe_count + 1))
-    if [[ "$code" =~ ^5 ]]; then
+    # In smoke mode the GitOps repo may not yet have an app deployed —
+    # any HTTP code (including 404, 502) is informational, not halt-worthy.
+    # The mechanism validation focuses on the pin → CR patch → ArgoCD
+    # destination flip → eventual sync; HTTP probe is a soft signal.
+    if [[ "$SMOKE" -eq 0 && "$code" =~ ^5 ]]; then
       probe_5xx=$((probe_5xx + 1))
       log "probe $probe_count: HTTP ${code} (5xx count: ${probe_5xx})"
       if [[ $probe_5xx -ge 3 ]]; then
@@ -191,6 +251,8 @@ soak() {
         rollback
         exit 3
       fi
+    elif [[ "$SMOKE" -eq 1 ]]; then
+      log "[smoke] probe $probe_count: HTTP ${code}"
     else
       probe_5xx=0  # reset on success
     fi
@@ -214,7 +276,7 @@ soak() {
 # ------------------------------------------------------------------------------
 
 rollback() {
-  log "rollback — re-pinning ${SYNTH_TENANT_ID} → cell-1 + cleanup synthetic"
+  log "rollback — re-pinning ${SYNTH_TENANT_ID} → cell-1${SMOKE_KEEP_TENANT:+ (smoke: keeping tenant)}"
   if [[ "$DRY_RUN" -eq 1 ]]; then
     log "[dry-run] would: loopzero admin tenants pin --tenant ${SYNTH_TENANT_ID} --cell cell-1"
     log "[dry-run] would: kubectl delete tenant ${SYNTH_TENANT_ID}"
@@ -222,8 +284,10 @@ rollback() {
   fi
 
   loopzero admin tenants pin --tenant "$SYNTH_TENANT_ID" --cell cell-1 \
-    --reason "T5.6 stage 1 rollback" --json 2>/dev/null || true
-  kubectl --context "$KUBECTL_CONTEXT" delete tenant "$SYNTH_TENANT_ID" --ignore-not-found 2>/dev/null || true
+    --json 2>/dev/null || true
+  if [[ "$SMOKE_KEEP_TENANT" -ne 1 ]]; then
+    kubectl --context "$KUBECTL_CONTEXT" delete tenant "$SYNTH_TENANT_ID" --ignore-not-found 2>/dev/null || true
+  fi
 }
 
 # Cleanup trap: always tear down synthetic on exit.

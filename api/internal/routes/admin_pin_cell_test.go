@@ -12,8 +12,13 @@ import (
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
+	"os"
 	"testing"
 )
+
+// osReadFileC11 — local alias avoiding clash with any other test helper named
+// readFile in this package (defensive, since multiple *_test.go files exist).
+var osReadFileC11 = os.ReadFile
 
 type fakePinner struct {
 	prev string
@@ -187,3 +192,113 @@ func TestAdminPinCell_CellAtCapacity_Returns409(t *testing.T) {
 type errString string
 
 func (e errString) Error() string { return string(e) }
+
+// ---------------------------------------------------------------------------
+// cell-2-activation-plan T1.4 / ADR C11 — authz on --cell flag in 3 paths.
+//
+// Path 1 (CLI): loopzero admin tenants pin without LOOPZERO_SERVICE_AUTH → exit 4.
+//               CLI behavior tested in cli/tests/integration/admin-tenants-pin.test.ts.
+//               Here we cover the matching API-level guarantee.
+// Path 2 (API): curl POST /api/v1/admin/tenants/pin without X-Service-Auth → 403.
+// Path 3 (Webhook): GitHub App auto-deploy MUST NOT set cell_id from payload.
+//                   Verified by code-grep + godoc invariant on autodeploy.go.
+//
+// Drift on any path lets a bypass route compromise placement isolation.
+// ---------------------------------------------------------------------------
+
+func TestAdminPinCell_AuthzInvariantC11Path1_CLIRequiresServiceAuth(t *testing.T) {
+	// CLI's exit-code-4 contract is mirrored at the API layer: without
+	// X-Service-Auth header AND with admin flag enabled, the API returns
+	// 403 — the CLI maps this to exit 4 per Rule 4. This test pins the
+	// API contract; the CLI integration test (admin-tenants-pin.test.ts)
+	// pins the exit code mapping.
+	env := map[string]string{
+		"LOOPZERO_ADMIN_API":                 "true",
+		"LOOPZERO_ADMIN_SERVICE_AUTH_SECRET": "secret",
+	}
+	rec := doPin(t, AdminPinCellInput{TenantID: "tn-x", CellID: "cell-2"}, &fakePinner{}, env, nil)
+	if rec.Code != http.StatusForbidden {
+		t.Errorf("C11 path 1: expected 403 without X-Service-Auth, got %d", rec.Code)
+	}
+}
+
+func TestAdminPinCell_AuthzInvariantC11Path2_APIDirect403(t *testing.T) {
+	// curl POST without X-Service-Auth → must NOT be allowed even though
+	// the request shape is otherwise valid (full body, valid IDs, pinner
+	// available).
+	env := map[string]string{
+		"LOOPZERO_ADMIN_API":                 "true",
+		"LOOPZERO_ADMIN_SERVICE_AUTH_SECRET": "the-real-secret",
+	}
+	headers := map[string]string{} // no X-Service-Auth
+	pinner := &fakePinner{prev: "cell-1"}
+	rec := doPin(t, AdminPinCellInput{TenantID: "tn-x", CellID: "cell-2"}, pinner, env, headers)
+	if rec.Code != http.StatusForbidden {
+		t.Errorf("C11 path 2: expected 403 from API without auth, got %d", rec.Code)
+	}
+	// Defensive: pinner MUST NOT be invoked if auth fails.
+	if pinner.calledTenant != "" || pinner.calledCell != "" {
+		t.Errorf("C11 path 2: pinner invoked despite auth failure — tenant=%q cell=%q",
+			pinner.calledTenant, pinner.calledCell)
+	}
+}
+
+func TestAdminPinCell_AuthzInvariantC11Path3_NoCellIDInWebhookPath(t *testing.T) {
+	// Path 3 is a code-shape invariant, not a runtime test:
+	// the GitHub auto-deploy code MUST NOT contain cell_id parsing from
+	// webhook payload. We grep autodeploy.go + preview_deploy.go for the
+	// forbidden tokens to catch drift.
+	for _, path := range []string{
+		"../../internal/github/autodeploy.go",
+		"../../internal/github/preview_deploy.go",
+	} {
+		data, err := readFileContent(path)
+		if err != nil {
+			t.Logf("skipping %s — not present in this repo state", path)
+			continue
+		}
+		// Forbidden patterns: any direct read of cell_id from webhook input.
+		for _, forbidden := range []string{
+			`payload.cell_id`,
+			`"cell_id"`,            // direct JSON parse
+			`webhook.CellID`,       // struct field
+			`pushEvent.CellID`,     // GitHub PushEvent extension
+			`AutoDeployInput.Cell`, // typed input field
+		} {
+			if containsToken(data, forbidden) {
+				t.Errorf("C11 path 3 invariant violated: %s contains forbidden token %q",
+					path, forbidden)
+			}
+		}
+	}
+	// Bonus: also confirm the godoc INVARIANT comment is present on
+	// AutoDeployConfig (catches drift if someone removes the warning).
+	data, err := readFileContent("../../internal/github/autodeploy.go")
+	if err == nil {
+		if !containsToken(data, "ADR C11 path 3") {
+			t.Errorf("C11 path 3: godoc invariant marker 'ADR C11 path 3' missing from autodeploy.go")
+		}
+		if !containsToken(data, "MUST NOT set tenant.cell_id") {
+			t.Errorf("C11 path 3: godoc invariant 'MUST NOT set tenant.cell_id' missing from autodeploy.go")
+		}
+	}
+}
+
+// readFileContent + containsToken — tiny helpers kept inline.
+// Bytes-based grep so the test stays pure-stdlib.
+func readFileContent(relPath string) (string, error) {
+	b, err := osReadFileC11(relPath)
+	return string(b), err
+}
+
+func containsToken(haystack, needle string) bool {
+	if len(needle) == 0 || len(haystack) < len(needle) {
+		return false
+	}
+	for i := 0; i+len(needle) <= len(haystack); i++ {
+		if haystack[i:i+len(needle)] == needle {
+			return true
+		}
+	}
+	return false
+}

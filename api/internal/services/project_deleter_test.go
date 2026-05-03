@@ -449,3 +449,8 @@ func TestProjectDeleter_NilReleaseStore_NoPanic(t *testing.T) {
 	}
 }
 
+
+// AppendSideEffect — fix-all-platform-issues-plan T4.1 stub.
+func (f *fakeReleaseStoreDeleter) AppendSideEffect(_ context.Context, _ db.DBTX, _ string, _ map[string]any) error {
+	return nil
+}

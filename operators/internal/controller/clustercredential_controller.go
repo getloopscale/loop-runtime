@@ -80,17 +80,30 @@ func (r *ClusterCredentialReconciler) Reconcile(ctx context.Context, req ctrl.Re
 		return result, err
 	}
 
-	// Step 2: Validate cluster connectivity.
+	// Step 2 (fix-all-platform-issues-plan T1.2): ALWAYS reconcile ArgoCD
+	// cluster secret to mirror the kubeconfig Secret token, BEFORE
+	// connectivity check. Previously the early-return on connectivity=false
+	// (Step 3 below) skipped this sync, leaving the ArgoCD secret with a
+	// stale token even after heal scripts (H14/H15) refreshed the kubeconfig.
+	// Effect: when operator action rotates the token in cell-X-kubeconfig,
+	// the controller propagates it to <cell>-argocd-cluster on the next
+	// reconcile (event-driven via the Secret watcher in SetupClusterCredentialController),
+	// independent of whether the destination cluster is currently reachable.
+	if cr.Spec.Scope.ArgoCD {
+		if err := r.reconcileArgoCDClusterSecret(ctx, &cr, kubeconfigData); err != nil {
+			// Non-fatal: log and continue to connectivity check. The
+			// ArgoCD secret may be malformed (missing fields), but
+			// connectivity probe is independent — surface its status
+			// in CR.status.conditions for operator triage.
+			log.FromContext(ctx).Error(err, "argocd cluster secret sync failed (non-fatal)",
+				"cluster", cr.Spec.ClusterName)
+		}
+	}
+
+	// Step 3: Validate cluster connectivity.
 	connected, result, err := r.checkConnectivity(ctx, &cr, kubeconfigData)
 	if err != nil || !connected {
 		return result, err
-	}
-
-	// Step 3: Create/Update ArgoCD cluster secret.
-	if cr.Spec.Scope.ArgoCD {
-		if err := r.reconcileArgoCDClusterSecret(ctx, &cr, kubeconfigData); err != nil {
-			return ctrl.Result{}, err
-		}
 	}
 
 	// MEET-053 D-03: Record observed generation for change detection.

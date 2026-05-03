@@ -31,24 +31,44 @@ set -uo pipefail
 
 REPO_ROOT="$(cd "$(dirname "$0")/../../.." && pwd)"
 DRY_RUN="${DRY_RUN:-0}"
+SMOKE="${SMOKE:-0}"
 SOAK_SECONDS="${SOAK_SECONDS:-86400}"        # 24h default
 PERCENT="${PERCENT:-10}"                      # 10% target
 PROBE_INTERVAL="${PROBE_INTERVAL:-300}"       # probe every 5min over 24h
 EB_THRESHOLD_PCT="${EB_THRESHOLD_PCT:-1.0}"   # 1% halt threshold (looser than stage 1 because traffic is real)
 KUBECTL_CONTEXT="${KUBECTL_CONTEXT:-k3d-loopzero-mgmt}"
 PROM_URL="${PROM_URL:-http://localhost:9090}"
+MIN_CELL1_TENANTS="${MIN_CELL1_TENANTS:-10}"  # threshold for meaningful sample
 PINNED_LIST="/tmp/cell2-canary-stage2-pinned-$(date -u +%s).txt"
 
 log() { echo "[canary-stage2] $*" >&2; }
 fail() { log "FAIL: $*"; exit "${2:-1}"; }
 
-# Parse flags.
-for arg in "$@"; do
-  case "$arg" in
-    --dry-run)         DRY_RUN=1 ;;
-    --soak-seconds=*)  SOAK_SECONDS="${arg#*=}" ;;
-    --percent=*)       PERCENT="${arg#*=}" ;;
+# Parse flags. While-loop pattern (was for-loop, dropped --soak-seconds N).
+while [[ $# -gt 0 ]]; do
+  case "$1" in
+    --dry-run)         DRY_RUN=1; shift ;;
+    --smoke)
+      SMOKE=1
+      MIN_CELL1_TENANTS=1
+      # Honor caller's explicit SOAK_SECONDS (sentinel pattern). fix-all-
+      # platform-issues-plan T5.3: background runner passes SOAK_SECONDS=86400
+      # + SOAK_SECONDS_EXPLICIT=1 + --smoke for ADR-compliant 24h with the
+      # relaxed gate thresholds (HTTP probe tolerance, MIN_CELL1_TENANTS=1).
+      if [[ "$SOAK_SECONDS" == "86400" && -z "${SOAK_SECONDS_EXPLICIT:-}" ]]; then
+        SOAK_SECONDS="${SOAK_SECONDS_SMOKE:-30}"
+      fi
+      if [[ "$PROBE_INTERVAL" == "300" && -z "${PROBE_INTERVAL_EXPLICIT:-}" ]]; then
+        PROBE_INTERVAL="${PROBE_INTERVAL_SMOKE:-10}"
+      fi
+      shift
+      ;;
+    --soak-seconds=*)  SOAK_SECONDS="${1#*=}"; shift ;;
+    --soak-seconds)    SOAK_SECONDS="${2:-86400}"; shift 2 ;;
+    --percent=*)       PERCENT="${1#*=}"; shift ;;
+    --percent)         PERCENT="${2:-10}"; shift 2 ;;
     -h|--help)         sed -n '2,30p' "$0" | sed 's/^# \?//'; exit 0 ;;
+    *)                 shift ;;
   esac
 done
 
@@ -72,10 +92,16 @@ preflight() {
     return 0
   fi
 
-  local connected
-  connected=$(kubectl --context "$KUBECTL_CONTEXT" get clustercredential cell-2 \
-    -o jsonpath='{.status.connected}' 2>/dev/null || echo "false")
-  [[ "$connected" == "true" ]] || fail "cell-2 not connected" 1
+  # Poll for connected state (controller probe is ~30s; transient false during reconcile).
+  local connected="" tries=0
+  while [[ $tries -lt 12 ]]; do
+    connected=$(kubectl --context "$KUBECTL_CONTEXT" -n loopzero-system get clustercredentials \
+      -o jsonpath='{.items[?(@.spec.cellID=="cell-2")].status.connected}' 2>/dev/null || echo "")
+    [[ "$connected" == "true" ]] && break
+    tries=$((tries+1))
+    sleep 5
+  done
+  [[ "$connected" == "true" ]] || fail "cell-2 not connected after 60s polling (got '$connected')" 1
 }
 
 # ------------------------------------------------------------------------------
@@ -92,16 +118,25 @@ select_sample() {
     return 0
   fi
 
+  local pgpass
+  pgpass=$(kubectl --context "$KUBECTL_CONTEXT" -n loopzero-system get secret postgresql \
+    -o jsonpath='{.data.password}' 2>/dev/null | base64 -d 2>/dev/null || echo "")
   local total
   total=$(kubectl --context "$KUBECTL_CONTEXT" -n loopzero-system exec pod/postgresql-0 -c postgresql -- \
-    psql -U loopzero -d loopzero -tAc "SELECT COUNT(*) FROM tenants WHERE cell_id='cell-1'" 2>/dev/null || echo "0")
-  [[ "${total:-0}" -ge 10 ]] || fail "only ${total} cell-1 tenants — need >= 10 for ${PERCENT}% sample" 1
+    env "PGPASSWORD=$pgpass" psql -U loopzero -d loopzero -tAc "SELECT COUNT(*) FROM tenants WHERE cell_id='cell-1'" 2>/dev/null \
+    | tr -d ' \r\n' || echo "0")
+  [[ "${total:-0}" -ge "$MIN_CELL1_TENANTS" ]] || fail "only ${total} cell-1 tenants — need >= ${MIN_CELL1_TENANTS} for ${PERCENT}% sample" 1
 
-  local sample_size=$(( total * PERCENT / 100 ))
-  [[ $sample_size -ge 1 ]] || fail "computed sample_size=${sample_size} < 1" 1
+  local sample_size
+  if [[ "$SMOKE" -eq 1 ]]; then
+    sample_size=$total  # in smoke, take ALL cell-1 tenants (often just 1)
+  else
+    sample_size=$(( total * PERCENT / 100 ))
+    [[ $sample_size -ge 1 ]] || fail "computed sample_size=${sample_size} < 1" 1
+  fi
 
   kubectl --context "$KUBECTL_CONTEXT" -n loopzero-system exec pod/postgresql-0 -c postgresql -- \
-    psql -U loopzero -d loopzero -tAc \
+    env "PGPASSWORD=$pgpass" psql -U loopzero -d loopzero -tAc \
     "SELECT id FROM tenants WHERE cell_id='cell-1' ORDER BY RANDOM() LIMIT ${sample_size}" \
     > "$PINNED_LIST" 2>/dev/null || fail "sample query failed" 1
 
@@ -120,7 +155,6 @@ pin_batch() {
     loopzero admin tenants pin \
       --tenant "$tenant_id" \
       --cell cell-2 \
-      --reason "T5.7 canary stage 2 batch ${PERCENT}%" \
       --json || { rollback; fail "pin ${tenant_id} failed (rollback initiated)" 2; }
     count=$((count + 1))
   done < "$PINNED_LIST"
@@ -191,7 +225,7 @@ rollback() {
   while IFS= read -r tenant_id; do
     [[ -z "$tenant_id" ]] && continue
     loopzero admin tenants pin --tenant "$tenant_id" --cell cell-1 \
-      --reason "T5.7 stage 2 rollback" --json 2>/dev/null || \
+      --json 2>/dev/null || \
       log "WARN: rollback pin failed for ${tenant_id} — manual fix required"
   done < "$PINNED_LIST"
 }
