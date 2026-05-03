@@ -291,6 +291,12 @@ func (f *fakeReleaseStoreOrch) FindActiveReleases(_ context.Context, _ string) (
 	return active, nil
 }
 
+// AppendSideEffect — fix-all-platform-issues-plan T4.1 stub for tests.
+// In-memory fake just no-ops; real RCA captures only matter in LIVE PG.
+func (f *fakeReleaseStoreOrch) AppendSideEffect(_ context.Context, _ db.DBTX, _ string, _ map[string]any) error {
+	return nil
+}
+
 // fakeEnvTargetStoreOrch implements db.EnvironmentTargetStore.
 type fakeEnvTargetStoreOrch struct {
 	desired map[string]string // key: tenant:project:env -> releaseID

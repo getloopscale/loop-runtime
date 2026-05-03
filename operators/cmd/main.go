@@ -36,6 +36,7 @@ import (
 	"github.com/loopzero/loopzero/operators/internal/argocd"
 	"github.com/loopzero/loopzero/operators/internal/constants"
 	"github.com/loopzero/loopzero/operators/internal/controller"
+	"github.com/loopzero/loopzero/operators/internal/shared"
 	"github.com/loopzero/loopzero/operators/internal/gitea"
 	"github.com/loopzero/loopzero/operators/internal/harbor"
 	"github.com/loopzero/loopzero/operators/internal/httpclient"
@@ -334,7 +335,13 @@ func setupControllers(setupLog logr.Logger, mgr ctrl.Manager, deps provisionerDe
 		os.Exit(1)
 	}
 
-	if err := controller.SetupEnvironmentController(mgr, deps.runtimeClient); err != nil {
+	// cell-2-activation-plan iter 4 BUG-FIX: cell-aware Environment reconciler.
+	// The factory routes namespace/RBAC/NetworkPolicy/Quota writes to the
+	// right runtime cluster based on tenant.spec.cellID. cell-default routes
+	// to the legacy runtimeClient (preserves single-cell behavior).
+	envFactory := shared.NewCellAwareRuntimeClientFactory(
+		mgr.GetClient(), deps.runtimeClient, "loopzero-system")
+	if err := controller.SetupEnvironmentControllerWithFactory(mgr, deps.runtimeClient, envFactory); err != nil {
 		setupLog.Error(err, "unable to setup EnvironmentController")
 		os.Exit(1)
 	}

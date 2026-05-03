@@ -33,9 +33,15 @@ controller:
   # causing sync latency >15min. Sharding cuts p95 sync below 60s.
   # Plan: docs/plans/50k-immediate-focus.md
   replicas: 3
+  # fix-all-platform-issues-plan T3.1 BUG-FIX (mgmt-argocd duplicate env var):
+  # The upstream argo-cd chart 7.3.11 auto-injects ARGOCD_CONTROLLER_REPLICAS
+  # from .Values.controller.replicas at templates/argocd-application-controller/
+  # statefulset.yaml:80. Our manual `env: - name: ARGOCD_CONTROLLER_REPLICAS`
+  # entry caused a duplicate, breaking ArgoCD's structured-merge-diff calculation
+  # — the entire mgmt-argocd app went to status=Unknown with ComparisonError:
+  # "duplicate entries for key [name=ARGOCD_CONTROLLER_REPLICAS]".
+  # Removed the manual entry; upstream injection is authoritative.
   env:
-    - name: ARGOCD_CONTROLLER_REPLICAS
-      value: "3"
     # Workqueue rate limiting — prevent CPU amplification from apps in
     # persistent error state (e.g., ComparisonError with empty repos).
     # Default maxdelay is 1s which means 100 broken apps = 100 retries/sec.
@@ -93,10 +99,12 @@ repoServer:
     # where tenants are created+destroyed frequently.
     - name: ARGOCD_REPO_SERVER_REPO_CACHE_EXPIRATION
       value: "10m"
-    # Force re-fetch on every sync request — prevents serving stale clones
-    # of recently-recreated tenant repos (B11 + B17 interaction).
-    - name: ARGOCD_REPO_SERVER_DISABLE_TLS
-      value: "false"
+    # fix-all-platform-issues-plan T3.1: ARGOCD_REPO_SERVER_DISABLE_TLS
+    # removed because the upstream argo-cd chart already injects this env
+    # var (template repo-server/deployment.yaml). Manual entry caused
+    # duplicate that broke ArgoCD structured-merge-diff for mgmt-argocd
+    # (sync stuck at Unknown). Setting via configs.params.server.disable.tls
+    # if needed.
   metrics:
     enabled: true
     serviceMonitor:

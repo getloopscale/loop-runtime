@@ -8,7 +8,7 @@ import (
 )
 
 // ApplicationPhase represents the lifecycle phase of a LoopZeroApplication.
-// +kubebuilder:validation:Enum=Progressing;Serving;Reachable;Degraded;Down
+// +kubebuilder:validation:Enum=Progressing;Serving;Reachable;Degraded;Down;Cleaned
 type ApplicationPhase string
 
 const (
@@ -17,6 +17,11 @@ const (
 	ApplicationPhaseReachable   ApplicationPhase = "Reachable"
 	ApplicationPhaseDegraded    ApplicationPhase = "Degraded"
 	ApplicationPhaseDown        ApplicationPhase = "Down"
+	// ApplicationPhaseCleaned is a terminal state set by the reaper when the
+	// CR has been Progressing for > grace period AND the GitOps source no
+	// longer contains its manifest. CR record is preserved for audit trail.
+	// fix-all-platform-issues-plan T2.2.
+	ApplicationPhaseCleaned ApplicationPhase = "Cleaned"
 )
 
 // LoopZeroApplication is the Schema for the loopzeroapplications API.

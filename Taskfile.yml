@@ -17,6 +17,13 @@ vars:
   MGMT_CONTEXT: k3d-loopzero-mgmt
   BUILD_CONTEXT: k3d-loopzero-build
   WORKLOAD_CONTEXT: k3d-loopzero-workload
+  # cell-2-activation-plan T0.1 — second runtime cluster mapped to cells.cell_id='cell-2'.
+  # Provisioned by infra/k3d/runtime-2-cluster.yaml. Cluster name `loopzero-runtime-2`
+  # matches production wire-clusters.sh + Pulumi convention (LOOPZERO_RUNTIME2_KUBECONFIG).
+  # ClusterCredential CR is named `cell-2` with spec.clusterName=loopzero-runtime-2.
+  # Status starts 'maintenance' in cells SQL table (migration 000006); migration
+  # 000007 flips to 'active' after cell2-activation-gates.sh passes 12/12.
+  RUNTIME2_CONTEXT: k3d-loopzero-runtime-2
   # Standardized port-forward ports (avoid conflicts between tasks)
   PG_PORT: 15432
   PG_HOST: localhost
@@ -102,7 +109,7 @@ tasks:
 
         echo ""
         echo "=== k3d Clusters ==="
-        for CLUSTER in loopzero-mgmt loopzero-build loopzero-workload; do
+        for CLUSTER in loopzero-mgmt loopzero-build loopzero-workload loopzero-runtime-2; do
           if k3d cluster list -o json 2>/dev/null | grep -q "\"name\":\"$CLUSTER\""; then
             echo "  [PASS] $CLUSTER cluster exists"
             PASS=$((PASS+1))
@@ -114,7 +121,7 @@ tasks:
 
         echo ""
         echo "=== Cluster Connectivity ==="
-        for CTX in k3d-loopzero-mgmt k3d-loopzero-build k3d-loopzero-workload; do
+        for CTX in k3d-loopzero-mgmt k3d-loopzero-build k3d-loopzero-workload k3d-loopzero-runtime-2; do
           if kubectl --context "$CTX" cluster-info >/dev/null 2>&1; then
             echo "  [PASS] $CTX reachable"
             PASS=$((PASS+1))
@@ -637,11 +644,14 @@ tasks:
       - k3d registry list -o json | grep -q '"name":"k3d-loopzero-registry"' || k3d registry create loopzero-registry --port 5000
 
   clusters:create:
-    desc: Create all 3 k3d clusters (mgmt, build, workload)
+    desc: Create all 4 k3d clusters (mgmt, build, workload, runtime-2)
     cmds:
       - k3d cluster list -o json | grep -q '"name":"loopzero-mgmt"' || k3d cluster create --config infra/k3d/mgmt-cluster.yaml
       - k3d cluster list -o json | grep -q '"name":"loopzero-build"' || k3d cluster create --config infra/k3d/build-cluster.yaml
       - k3d cluster list -o json | grep -q '"name":"loopzero-workload"' || k3d cluster create --config infra/k3d/workload-cluster.yaml
+      # cell-2-activation-plan T0.1: loopzero-runtime-2 maps to cells.cell_id='cell-2'.
+      # Idempotent: skips if already exists (per memory feedback_no_tribal_knowledge.md).
+      - k3d cluster list -o json | grep -q '"name":"loopzero-runtime-2"' || k3d cluster create --config infra/k3d/runtime-2-cluster.yaml
       - task: clusters:verify
 
   clusters:verify:
@@ -650,6 +660,7 @@ tasks:
       - kubectl --context {{.MGMT_CONTEXT}} cluster-info
       - kubectl --context {{.BUILD_CONTEXT}} cluster-info
       - kubectl --context {{.WORKLOAD_CONTEXT}} cluster-info
+      - kubectl --context {{.RUNTIME2_CONTEXT}} cluster-info
 
   clusters:delete:
     desc: Delete all k3d clusters
@@ -657,6 +668,7 @@ tasks:
       - k3d cluster delete loopzero-mgmt || true
       - k3d cluster delete loopzero-build || true
       - k3d cluster delete loopzero-workload || true
+      - k3d cluster delete loopzero-runtime-2 || true
 
   clusters:recreate:
     desc: Recreate a single k3d cluster (e.g., task clusters:recreate -- workload)
@@ -664,14 +676,15 @@ tasks:
       - |
         CLUSTER="{{.CLI_ARGS}}"
         if [ -z "$CLUSTER" ]; then
-          echo "Usage: task clusters:recreate -- <mgmt|build|workload>"
+          echo "Usage: task clusters:recreate -- <mgmt|build|workload|runtime-2>"
           exit 1
         fi
         case "$CLUSTER" in
-          mgmt)     CONFIG="infra/k3d/mgmt-cluster.yaml";     INSTALL_TASK="infra:install:mgmt" ;;
-          build)    CONFIG="infra/k3d/build-cluster.yaml";     INSTALL_TASK="infra:install:build" ;;
-          workload) CONFIG="infra/k3d/workload-cluster.yaml";  INSTALL_TASK="infra:install:workload" ;;
-          *)        echo "Unknown cluster: $CLUSTER. Use mgmt, build, or workload."; exit 1 ;;
+          mgmt)       CONFIG="infra/k3d/mgmt-cluster.yaml";       INSTALL_TASK="infra:install:mgmt" ;;
+          build)      CONFIG="infra/k3d/build-cluster.yaml";      INSTALL_TASK="infra:install:build" ;;
+          workload)   CONFIG="infra/k3d/workload-cluster.yaml";   INSTALL_TASK="infra:install:workload" ;;
+          runtime-2)  CONFIG="infra/k3d/runtime-2-cluster.yaml";  INSTALL_TASK="infra:install:workload" ;;
+          *)          echo "Unknown cluster: $CLUSTER. Use mgmt, build, workload, or runtime-2."; exit 1 ;;
         esac
         echo "Recreating loopzero-${CLUSTER}..."
         k3d cluster delete "loopzero-${CLUSTER}" 2>/dev/null || true

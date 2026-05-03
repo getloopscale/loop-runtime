@@ -558,3 +558,8 @@ func TestStaticDelivery_NoStaticApps_NoBackendNeeded(t *testing.T) {
 		t.Fatalf("expected no error when result has zero static apps, got: %v", err)
 	}
 }
+
+// AppendSideEffect — fix-all-platform-issues-plan T4.1 stub.
+func (f *fakeReleaseStoreStatic) AppendSideEffect(_ context.Context, _ db.DBTX, _ string, _ map[string]any) error {
+	return nil
+}

@@ -217,3 +217,8 @@ func TestReleaseReaper_CheckerError_ReturnsZero(t *testing.T) {
 		t.Fatalf("expected 0, got %d", reaped)
 	}
 }
+
+// AppendSideEffect — fix-all-platform-issues-plan T4.1 stub.
+func (f *fakeReleaseStoreReaper) AppendSideEffect(_ context.Context, _ db.DBTX, _ string, _ map[string]any) error {
+	return nil
+}

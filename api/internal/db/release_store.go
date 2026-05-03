@@ -64,6 +64,12 @@ type ReleaseStore interface {
 	Create(ctx context.Context, tx DBTX, release *Release) error
 	GetByID(ctx context.Context, id string) (*Release, error)
 	UpdateStatus(ctx context.Context, tx DBTX, id string, event string) (*Release, error)
+	// AppendSideEffect merges a JSON object into the release's side_effects column.
+	// Used by the release reaper (T4.1) to capture transition reasons in the
+	// audit trail. Idempotent: re-running with the same key overwrites that key
+	// only; other keys are preserved (jsonb || jsonb merge).
+	// fix-all-platform-issues-plan T4.1.
+	AppendSideEffect(ctx context.Context, tx DBTX, id string, patch map[string]any) error
 	SetGitCommit(ctx context.Context, tx DBTX, id string, commitSHA string) error
 	GetActiveByEnv(ctx context.Context, tenantID, projectID, env string) (*Release, error)
 	GetActiveByEnvTx(ctx context.Context, tx DBTX, tenantID, projectID, env string) (*Release, error)
@@ -206,6 +212,33 @@ func (s *PostgresReleaseStore) UpdateStatus(ctx context.Context, tx DBTX, releas
 
 	release.Status = string(newState)
 	return release, nil
+}
+
+// AppendSideEffect merges a JSON object into the release's side_effects.
+// fix-all-platform-issues-plan T4.1: capture reaper transition reasons in
+// the audit trail so future RCAs have actionable data instead of just a
+// status code. Implementation uses PostgreSQL `||` jsonb operator —
+// repeated keys are overwritten, others preserved.
+func (s *PostgresReleaseStore) AppendSideEffect(ctx context.Context, tx DBTX, id string, patch map[string]any) error {
+	if len(patch) == 0 {
+		return nil
+	}
+	executor := tx
+	if executor == nil {
+		executor = s.db
+	}
+	patchJSON, err := json.Marshal(patch)
+	if err != nil {
+		return fmt.Errorf("release store: marshal side_effects patch: %w", err)
+	}
+	_, err = executor.Exec(ctx,
+		`UPDATE releases SET side_effects = COALESCE(side_effects, '{}'::jsonb) || $1::jsonb WHERE id = $2`,
+		string(patchJSON), id,
+	)
+	if err != nil {
+		return fmt.Errorf("release store: append side_effects: %w", err)
+	}
+	return nil
 }
 
 // CancelAllByEnv cascades the ProjectDeleted event to every non-terminal

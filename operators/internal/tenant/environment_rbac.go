@@ -21,7 +21,12 @@ import (
 )
 
 // reconcileRBAC ensures ServiceAccount, Role, and RoleBinding exist in the namespace.
+// fix-all-platform-issues-plan T1.1 — cell-aware via runtimeClientForEnv.
 func (r *EnvironmentReconciler) reconcileRBAC(ctx context.Context, env *loopzerov1.Environment, nsName string) error {
+	runtimeClient, err := r.runtimeClientForEnv(ctx, env)
+	if err != nil {
+		return fmt.Errorf("rbac: cell-aware client: %w", err)
+	}
 	// ServiceAccount
 	sa := &corev1.ServiceAccount{
 		ObjectMeta: metav1.ObjectMeta{
@@ -29,7 +34,7 @@ func (r *EnvironmentReconciler) reconcileRBAC(ctx context.Context, env *loopzero
 			Namespace: nsName,
 		},
 	}
-	if _, err := controllerutil.CreateOrUpdate(ctx, r.RuntimeClient, sa, func() error {
+	if _, err := controllerutil.CreateOrUpdate(ctx, runtimeClient, sa, func() error {
 		if sa.Labels == nil {
 			sa.Labels = make(map[string]string)
 		}
@@ -46,7 +51,7 @@ func (r *EnvironmentReconciler) reconcileRBAC(ctx context.Context, env *loopzero
 			Namespace: nsName,
 		},
 	}
-	if _, err := controllerutil.CreateOrUpdate(ctx, r.RuntimeClient, role, func() error {
+	if _, err := controllerutil.CreateOrUpdate(ctx, runtimeClient, role, func() error {
 		role.Rules = rbacRulesForPlan(env.Spec.Plan)
 		return nil
 	}); err != nil {
@@ -60,7 +65,7 @@ func (r *EnvironmentReconciler) reconcileRBAC(ctx context.Context, env *loopzero
 			Namespace: nsName,
 		},
 	}
-	if _, err := controllerutil.CreateOrUpdate(ctx, r.RuntimeClient, rb, func() error {
+	if _, err := controllerutil.CreateOrUpdate(ctx, runtimeClient, rb, func() error {
 		rb.RoleRef = rbacv1.RoleRef{
 			APIGroup: rbacv1.GroupName,
 			Kind:     "Role",
@@ -85,7 +90,7 @@ func (r *EnvironmentReconciler) reconcileRBAC(ctx context.Context, env *loopzero
 	//   1. Copy the docker config from loopzero-system-source in loopzero-system
 	//      (seeded once at platform bootstrap) into this namespace as loopzero-system.
 	//   2. Attach it to loopzero-app SA.
-	if err := r.ensurePullSecret(ctx, nsName); err != nil {
+	if err := r.ensurePullSecret(ctx, env, nsName); err != nil {
 		// Non-fatal: pod may still pull if another mechanism (doctl integration,
 		// namespace-level auto-propagation) provides the secret later.
 		// Log but do not block Environment readiness.
@@ -98,7 +103,7 @@ func (r *EnvironmentReconciler) reconcileRBAC(ctx context.Context, env *loopzero
 	}
 
 	// Bug #24 complement: delete stuck ImagePullBackOff pods so ReplicaSet recreates them.
-	if err := r.kickStuckPullBackoffPods(ctx, nsName); err != nil {
+	if err := r.kickStuckPullBackoffPods(ctx, env, nsName); err != nil {
 		log.FromContext(ctx).Info("kick stuck pull-backoff pods failed (non-fatal)", "error", err.Error(), "namespace", nsName)
 	}
 
@@ -108,7 +113,7 @@ func (r *EnvironmentReconciler) reconcileRBAC(ctx context.Context, env *loopzero
 			Namespace: nsName,
 		},
 	}
-	if _, err := controllerutil.CreateOrUpdate(ctx, r.RuntimeClient, appSA, func() error {
+	if _, err := controllerutil.CreateOrUpdate(ctx, runtimeClient, appSA, func() error {
 		if appSA.Labels == nil {
 			appSA.Labels = make(map[string]string)
 		}
@@ -119,7 +124,7 @@ func (r *EnvironmentReconciler) reconcileRBAC(ctx context.Context, env *loopzero
 			{Name: "loopzero-system"},
 		}
 		var defaultSA corev1.ServiceAccount
-		if err := r.RuntimeClient.Get(ctx, client.ObjectKey{Namespace: nsName, Name: "default"}, &defaultSA); err == nil {
+		if err := runtimeClient.Get(ctx, client.ObjectKey{Namespace: nsName, Name: "default"}, &defaultSA); err == nil {
 			for _, ref := range defaultSA.ImagePullSecrets {
 				if ref.Name == "loopzero-system" {
 					continue
@@ -136,7 +141,12 @@ func (r *EnvironmentReconciler) reconcileRBAC(ctx context.Context, env *loopzero
 }
 
 // ensurePullSecret copies the registry pull secret from loopzero-system into the tenant namespace.
-func (r *EnvironmentReconciler) ensurePullSecret(ctx context.Context, nsName string) error {
+// fix-all-platform-issues-plan T1.1 — cell-aware via runtimeClientForEnv.
+func (r *EnvironmentReconciler) ensurePullSecret(ctx context.Context, env *loopzerov1.Environment, nsName string) error {
+	runtimeClient, err := r.runtimeClientForEnv(ctx, env)
+	if err != nil {
+		return fmt.Errorf("pull secret: cell-aware client: %w", err)
+	}
 	var src corev1.Secret
 	srcKey := client.ObjectKey{Namespace: constants.NamespacePlatformSystem, Name: "loopzero-system"}
 	if err := r.Get(ctx, srcKey, &src); err != nil {
@@ -149,7 +159,7 @@ func (r *EnvironmentReconciler) ensurePullSecret(ctx context.Context, nsName str
 			Namespace: nsName,
 		},
 	}
-	_, err := controllerutil.CreateOrUpdate(ctx, r.RuntimeClient, dst, func() error {
+	_, err = controllerutil.CreateOrUpdate(ctx, runtimeClient, dst, func() error {
 		dst.Type = corev1.SecretTypeDockerConfigJson
 		dst.Data = src.Data
 		if dst.Labels == nil {
@@ -166,9 +176,14 @@ func (r *EnvironmentReconciler) ensurePullSecret(ctx context.Context, nsName str
 
 // kickStuckPullBackoffPods deletes pods stuck in ImagePullBackOff or ErrImagePull.
 // Bug #24 complement (scale-50k L2). Idempotent — no-op if no stuck pods.
-func (r *EnvironmentReconciler) kickStuckPullBackoffPods(ctx context.Context, nsName string) error {
+// fix-all-platform-issues-plan T1.1 — cell-aware via runtimeClientForEnv.
+func (r *EnvironmentReconciler) kickStuckPullBackoffPods(ctx context.Context, env *loopzerov1.Environment, nsName string) error {
+	runtimeClient, err := r.runtimeClientForEnv(ctx, env)
+	if err != nil {
+		return fmt.Errorf("kick pods: cell-aware client: %w", err)
+	}
 	var pods corev1.PodList
-	if err := r.RuntimeClient.List(ctx, &pods, client.InNamespace(nsName)); err != nil {
+	if err := runtimeClient.List(ctx, &pods, client.InNamespace(nsName)); err != nil {
 		return fmt.Errorf("list pods in %s: %w", nsName, err)
 	}
 	var kicked int
@@ -180,7 +195,7 @@ func (r *EnvironmentReconciler) kickStuckPullBackoffPods(ctx context.Context, ns
 		for _, cs := range pod.Status.ContainerStatuses {
 			if cs.State.Waiting != nil &&
 				(cs.State.Waiting.Reason == "ImagePullBackOff" || cs.State.Waiting.Reason == "ErrImagePull") {
-				if err := r.RuntimeClient.Delete(ctx, pod); err != nil && !errors.IsNotFound(err) {
+				if err := runtimeClient.Delete(ctx, pod); err != nil && !errors.IsNotFound(err) {
 					log.FromContext(ctx).Info("kick pod failed",
 						"pod", pod.Name, "namespace", nsName, "error", err.Error())
 					continue

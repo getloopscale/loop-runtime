@@ -21,12 +21,16 @@ import (
 func (r *EnvironmentReconciler) reconcileNamespace(ctx context.Context, env *loopzerov1.Environment, nsName, tenantName string) error {
 	ctx, span := startChildSpan(ctx, "environment.namespace.ensure")
 	defer span.End()
+	runtimeClient, err := r.runtimeClientForEnv(ctx, env)
+	if err != nil {
+		return fmt.Errorf("namespace %s: %w", nsName, err)
+	}
 	ns := &corev1.Namespace{
 		ObjectMeta: metav1.ObjectMeta{
 			Name: nsName,
 		},
 	}
-	result, err := controllerutil.CreateOrUpdate(ctx, r.RuntimeClient, ns, func() error {
+	result, err := controllerutil.CreateOrUpdate(ctx, runtimeClient, ns, func() error {
 		if ns.Labels == nil {
 			ns.Labels = make(map[string]string)
 		}
@@ -48,6 +52,10 @@ func (r *EnvironmentReconciler) reconcileNamespace(ctx context.Context, env *loo
 
 // reconcileQuota ensures ResourceQuota and LimitRange exist if configured.
 func (r *EnvironmentReconciler) reconcileQuota(ctx context.Context, env *loopzerov1.Environment, nsName string) error {
+	runtimeClient, err := r.runtimeClientForEnv(ctx, env)
+	if err != nil {
+		return fmt.Errorf("quota: cell-aware client: %w", err)
+	}
 	// ResourceQuota (only if spec.resourceQuota is set)
 	if env.Spec.ResourceQuota != nil {
 		cpuQty, err := resource.ParseQuantity(env.Spec.ResourceQuota.CPU)
@@ -65,7 +73,7 @@ func (r *EnvironmentReconciler) reconcileQuota(ctx context.Context, env *loopzer
 				Namespace: nsName,
 			},
 		}
-		_, err = controllerutil.CreateOrUpdate(ctx, r.RuntimeClient, quota, func() error {
+		_, err = controllerutil.CreateOrUpdate(ctx, runtimeClient, quota, func() error {
 			quota.Spec.Hard = corev1.ResourceList{
 				corev1.ResourceRequestsCPU:            cpuQty,
 				corev1.ResourceRequestsMemory:         memQty,
@@ -93,7 +101,7 @@ func (r *EnvironmentReconciler) reconcileQuota(ctx context.Context, env *loopzer
 			Namespace: nsName,
 		},
 	}
-	_, err := controllerutil.CreateOrUpdate(ctx, r.RuntimeClient, lr, func() error {
+	_, err = controllerutil.CreateOrUpdate(ctx, runtimeClient, lr, func() error {
 		lr.Spec.Limits = []corev1.LimitRangeItem{
 			{
 				Type: corev1.LimitTypeContainer,

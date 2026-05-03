@@ -872,3 +872,116 @@ func TestRoundRobinEngine_WithSerializer_PropagatesError(t *testing.T) {
 		t.Error("serializer was not invoked")
 	}
 }
+
+// --- cell-2-activation-plan T1.1 / ADR C2 routing determinism ---
+//
+// These tests cement the INVARIANT documented on DynamicRouter.Resolve:
+// for a fixed cell_id, every call between two refreshes returns a
+// CellConfig that DeepEquals the previous call. Use a 24h refresh
+// interval so the background ticker (if Start were called, which we
+// don't) cannot fire and mask non-determinism.
+
+// TestDynamicRouter_Resolve_DeterministicAcrossCalls — sequential 100x.
+// Catches any introduced randomness or cache-invalidation drift in the
+// hot path between refreshes. Failure here means MEET-INFRA-NORMALIZE-T3
+// distributed-systems veto criterion is violated.
+func TestDynamicRouter_Resolve_DeterministicAcrossCalls(t *testing.T) {
+	store := &fakeCellStore{
+		cells: []CellConfig{
+			{CellID: "cell-default", APIServer: "https://default.example", IngressDomain: "loopzero.local"},
+			{CellID: "cell-1", APIServer: "https://cell-1.example", IngressDomain: "loopzero.local", SecretRefName: "cell-1-kubeconfig", SecretRefNamespace: "loopzero-system"},
+			{CellID: "cell-2", APIServer: "https://cell-2.example", IngressDomain: "loopzero.local", SecretRefName: "cell-2-kubeconfig", SecretRefNamespace: "loopzero-system"},
+		},
+	}
+	// 24h interval so the ticker cannot fire during the test (we never
+	// call Start; only refresh once manually).
+	router := NewDynamicRouter(store, 24*time.Hour, slog.Default())
+	if err := router.refresh(context.Background()); err != nil {
+		t.Fatalf("refresh: %v", err)
+	}
+
+	const N = 100
+	for _, cellID := range []string{"cell-default", "cell-1", "cell-2"} {
+		first, err := router.Resolve(context.Background(), cellID)
+		if err != nil {
+			t.Fatalf("Resolve(%q) initial: %v", cellID, err)
+		}
+		for i := 1; i < N; i++ {
+			cur, err := router.Resolve(context.Background(), cellID)
+			if err != nil {
+				t.Fatalf("Resolve(%q) call %d: %v", cellID, i, err)
+			}
+			// CellConfig is a value type; DeepEqual compares all fields.
+			// Field-level comparison is more informative than reflect.DeepEqual
+			// when failure occurs, so we check the load-bearing fields:
+			if cur.CellID != first.CellID ||
+				cur.APIServer != first.APIServer ||
+				cur.IngressDomain != first.IngressDomain ||
+				cur.SecretRefName != first.SecretRefName ||
+				cur.SecretRefNamespace != first.SecretRefNamespace {
+				t.Fatalf("Resolve(%q) drift on call %d: first=%+v cur=%+v",
+					cellID, i, first, cur)
+			}
+		}
+	}
+}
+
+// TestDynamicRouter_Resolve_DeterministicConcurrent — 100 goroutines × 10
+// calls each = 1000 concurrent Resolves. With go test -race, also asserts
+// no data race in the RWMutex-protected map read. Failure shape: race
+// detector fires OR any goroutine sees a CellConfig that differs from
+// the canonical first lookup.
+func TestDynamicRouter_Resolve_DeterministicConcurrent(t *testing.T) {
+	store := &fakeCellStore{
+		cells: []CellConfig{
+			{CellID: "cell-2", APIServer: "https://cell-2.example", IngressDomain: "loopzero.local", SecretRefName: "cell-2-kubeconfig", SecretRefNamespace: "loopzero-system"},
+		},
+	}
+	router := NewDynamicRouter(store, 24*time.Hour, slog.Default())
+	if err := router.refresh(context.Background()); err != nil {
+		t.Fatalf("refresh: %v", err)
+	}
+
+	canonical, err := router.Resolve(context.Background(), "cell-2")
+	if err != nil {
+		t.Fatalf("canonical Resolve: %v", err)
+	}
+
+	const goroutines = 100
+	const callsPerG = 10
+	var wg sync.WaitGroup
+	wg.Add(goroutines)
+
+	var drifts atomic.Int64
+	var errs atomic.Int64
+
+	for g := 0; g < goroutines; g++ {
+		go func() {
+			defer wg.Done()
+			for i := 0; i < callsPerG; i++ {
+				cur, err := router.Resolve(context.Background(), "cell-2")
+				if err != nil {
+					errs.Add(1)
+					return
+				}
+				if cur.CellID != canonical.CellID ||
+					cur.APIServer != canonical.APIServer ||
+					cur.IngressDomain != canonical.IngressDomain ||
+					cur.SecretRefName != canonical.SecretRefName ||
+					cur.SecretRefNamespace != canonical.SecretRefNamespace {
+					drifts.Add(1)
+				}
+			}
+		}()
+	}
+	wg.Wait()
+
+	if errs.Load() != 0 {
+		t.Fatalf("expected 0 errors across %d concurrent calls, got %d",
+			goroutines*callsPerG, errs.Load())
+	}
+	if drifts.Load() != 0 {
+		t.Fatalf("expected 0 drifts (deterministic) across %d concurrent calls, got %d",
+			goroutines*callsPerG, drifts.Load())
+	}
+}

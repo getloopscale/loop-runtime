@@ -11,36 +11,43 @@ import (
 	networkingv1 "k8s.io/api/networking/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/util/intstr"
+	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/controller/controllerutil"
 
+	loopzerov1 "github.com/loopzero/loopzero/operators/api/v1"
 	"github.com/loopzero/loopzero/operators/internal/constants"
 	"github.com/loopzero/loopzero/operators/internal/shared"
 )
 
 // reconcileNetworkPolicies ensures deny-all + allow-ingress + allow-egress policies exist.
-func (r *EnvironmentReconciler) reconcileNetworkPolicies(ctx context.Context, nsName string) error {
+// fix-all-platform-issues-plan T1.1 — cell-aware via runtimeClientForEnv.
+func (r *EnvironmentReconciler) reconcileNetworkPolicies(ctx context.Context, env *loopzerov1.Environment, nsName string) error {
 	ctx, span := shared.StartChildSpan(ctx, "environment.network_policies.ensure")
 	defer span.End()
-	if err := r.reconcileEnvDenyAllPolicy(ctx, nsName); err != nil {
+	runtimeClient, err := r.runtimeClientForEnv(ctx, env)
+	if err != nil {
+		return fmt.Errorf("network policies: cell-aware client: %w", err)
+	}
+	if err := r.reconcileEnvDenyAllPolicy(ctx, runtimeClient, nsName); err != nil {
 		return err
 	}
-	if err := r.reconcileEnvAllowIngressPolicy(ctx, nsName); err != nil {
+	if err := r.reconcileEnvAllowIngressPolicy(ctx, runtimeClient, nsName); err != nil {
 		return err
 	}
-	if err := r.reconcileEnvAllowEgressPolicy(ctx, nsName); err != nil {
+	if err := r.reconcileEnvAllowEgressPolicy(ctx, runtimeClient, nsName); err != nil {
 		return err
 	}
 	return nil
 }
 
-func (r *EnvironmentReconciler) reconcileEnvDenyAllPolicy(ctx context.Context, nsName string) error {
+func (r *EnvironmentReconciler) reconcileEnvDenyAllPolicy(ctx context.Context, runtimeClient client.Client, nsName string) error {
 	np := &networkingv1.NetworkPolicy{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      constants.NetworkPolicyDenyAll,
 			Namespace: nsName,
 		},
 	}
-	_, err := controllerutil.CreateOrUpdate(ctx, r.RuntimeClient, np, func() error {
+	_, err := controllerutil.CreateOrUpdate(ctx, runtimeClient, np, func() error {
 		np.Spec = networkingv1.NetworkPolicySpec{
 			PodSelector: metav1.LabelSelector{},
 			PolicyTypes: []networkingv1.PolicyType{
@@ -56,14 +63,14 @@ func (r *EnvironmentReconciler) reconcileEnvDenyAllPolicy(ctx context.Context, n
 	return nil
 }
 
-func (r *EnvironmentReconciler) reconcileEnvAllowIngressPolicy(ctx context.Context, nsName string) error {
+func (r *EnvironmentReconciler) reconcileEnvAllowIngressPolicy(ctx context.Context, runtimeClient client.Client, nsName string) error {
 	np := &networkingv1.NetworkPolicy{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      constants.NetworkPolicyAllowIngress,
 			Namespace: nsName,
 		},
 	}
-	_, err := controllerutil.CreateOrUpdate(ctx, r.RuntimeClient, np, func() error {
+	_, err := controllerutil.CreateOrUpdate(ctx, runtimeClient, np, func() error {
 		np.Spec = networkingv1.NetworkPolicySpec{
 			PodSelector: metav1.LabelSelector{},
 			PolicyTypes: []networkingv1.PolicyType{
@@ -91,7 +98,7 @@ func (r *EnvironmentReconciler) reconcileEnvAllowIngressPolicy(ctx context.Conte
 	return nil
 }
 
-func (r *EnvironmentReconciler) reconcileEnvAllowEgressPolicy(ctx context.Context, nsName string) error {
+func (r *EnvironmentReconciler) reconcileEnvAllowEgressPolicy(ctx context.Context, runtimeClient client.Client, nsName string) error {
 	dnsPort := intstr.FromInt32(constants.PortDNS)
 	apiPort := intstr.FromInt32(constants.PortHTTPS)
 	udp := corev1.ProtocolUDP
@@ -103,7 +110,7 @@ func (r *EnvironmentReconciler) reconcileEnvAllowEgressPolicy(ctx context.Contex
 			Namespace: nsName,
 		},
 	}
-	_, err := controllerutil.CreateOrUpdate(ctx, r.RuntimeClient, np, func() error {
+	_, err := controllerutil.CreateOrUpdate(ctx, runtimeClient, np, func() error {
 		np.Spec = networkingv1.NetworkPolicySpec{
 			PodSelector: metav1.LabelSelector{},
 			PolicyTypes: []networkingv1.PolicyType{

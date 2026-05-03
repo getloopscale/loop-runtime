@@ -43,6 +43,13 @@ describe("migration forward-only invariant (T5.3)", () => {
     // Match DROP <whitespace> + (TABLE|COLUMN|INDEX|CONSTRAINT) word-boundary,
     // case-insensitive, multiline. Allow 'IF EXISTS' between DROP and target.
     const DROP_RE = /\bDROP\s+(?:IF\s+EXISTS\s+)?(?:TABLE|COLUMN|INDEX|CONSTRAINT)\b/i;
+    // CHECK constraint replacement pattern (DROP CONSTRAINT X + ADD CONSTRAINT X CHECK)
+    // is NOT data-destructive — it's the only PostgreSQL idiom to extend a CHECK
+    // enum (see migration 000008_archive_stale_releases for the canonical example).
+    // We allow `DROP CONSTRAINT <name>` ONLY when an `ADD CONSTRAINT <name> CHECK`
+    // appears in the same file (same logical transaction).
+    const DROP_CONSTRAINT_RE = /\bDROP\s+(?:IF\s+EXISTS\s+)?CONSTRAINT\s+(\w+)\b/i;
+    const ADD_CHECK_RE = /\bADD\s+CONSTRAINT\s+(\w+)\s+CHECK\b/i;
 
     for (const f of upFiles) {
       it(f, () => {
@@ -53,7 +60,15 @@ describe("migration forward-only invariant (T5.3)", () => {
           .filter(({ line }) => {
             // Skip comment lines (-- prefix or /* ... */ blocks).
             const stripped = line.replace(/--.*$/, "").trim();
-            return stripped.length > 0 && DROP_RE.test(stripped);
+            if (stripped.length === 0 || !DROP_RE.test(stripped)) return false;
+            // Whitelist: DROP CONSTRAINT X is OK if same file has ADD CONSTRAINT X CHECK.
+            const dropMatch = stripped.match(DROP_CONSTRAINT_RE);
+            if (dropMatch) {
+              const cname = dropMatch[1];
+              const addCheckRe = new RegExp(`\\bADD\\s+CONSTRAINT\\s+${cname}\\s+CHECK\\b`, "i");
+              if (addCheckRe.test(text)) return false; // constraint replacement, not data drop
+            }
+            return true;
           });
         expect(
           offenders.length,

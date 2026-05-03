@@ -173,7 +173,29 @@ func (r *ReleaseReaper) reap(ctx context.Context) int {
 			}
 
 			_, err = r.releaseStore.UpdateStatus(ctx, tx, s.ID, string(s.Event))
-			return err
+			if err != nil {
+				return err
+			}
+
+			// fix-all-platform-issues-plan T4.1: capture reaper transition reason
+			// in side_effects for actionable RCA on future audits. Without this,
+			// failed releases show only `status=GIT_MIRROR_FAILED` with no
+			// indication of WHY (timeout? network? credentials?). The reason
+			// string + timestamp + previous state form the audit trail.
+			patch := map[string]any{
+				"reaper_event":     string(s.Event),
+				"reaper_reason":    reason,
+				"reaper_from":      string(s.State),
+				"reaper_at":        time.Now().UTC().Format(time.RFC3339),
+				"reaper_timeout_s": int(r.cfg.ReadyTimeout.Seconds()),
+			}
+			if err := r.releaseStore.AppendSideEffect(ctx, tx, s.ID, patch); err != nil {
+				// Non-fatal: status transition succeeded; side_effects audit
+				// is supplementary. Log and continue.
+				r.logger.Error("release reaper: failed to append side_effects audit",
+					"release_id", s.ID, "error", err)
+			}
+			return nil
 		})
 
 		if err != nil {

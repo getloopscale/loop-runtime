@@ -208,6 +208,11 @@ fi
 echo ""
 echo "[validate-matrix] live gates (status only — not executed):"
 echo "  STATUS  k3d-virgin-install: run via 'task parity:k3d-virgin' (\$0, ~10min)"
+# cell-2-activation-plan T0.3 / matrix entry 156: discovery invariant — needs
+# live k3d 4-cluster topology + loopzero-api + Prometheus port-forward to assert.
+echo "  STATUS  cell-2 discovery count >= 3: run via 'bash infra/tests/parity/cell2-activation-gates.sh --gates c1' after task k3d:heal (matrix #156)"
+# cell-2-activation-plan T1.5 / Phase 1 master gates: 12 ADR conditions verified.
+echo "  STATUS  cell-2 activation gates 12/12: run via 'bash infra/tests/parity/cell2-activation-gates.sh' after Phase 0 (matrix #157)"
 echo "  STATUS  cell-2 canary stage 1: 1h soak (cloud, awaiting Phase 5 T5.6)"
 echo "  STATUS  cell-2 canary stage 2: 24h soak (awaiting T5.7)"
 echo "  STATUS  prod canary stage 4: 7d soak (awaiting T7.1, customer opt-in)"

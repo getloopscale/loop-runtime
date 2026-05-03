@@ -26,6 +26,17 @@ import (
 )
 
 // AutoDeployConfig holds configuration for auto-deploy on push.
+//
+// INVARIANT (cell-2-activation-plan T1.4 / ADR C11 path 3):
+// Auto-deploy MUST NOT set tenant.cell_id from webhook payload. Cell
+// placement is operator-only via POST /api/v1/admin/tenants/pin (see
+// MEET-INFRA-NORMALIZE-T3-multi-cell C8 + admin_pin_cell.go). The webhook
+// path inherits the tenant's CURRENT cell_id from the database — never
+// overrides it. Drift here lets any GitHub push silently re-pin a tenant
+// across cells, breaking placement layer's capacity gate semantics.
+// Verified by: TestAdminPinCell_AuthzInvariantC11Path3_NoCellIDInWebhookPath
+// (admin_pin_cell_test.go) + grep regression in cell2-activation-gates.sh
+// gate_c11.
 type AutoDeployConfig struct {
 	AppClient      *AppClient
 	SourceStore    SourcePusher
