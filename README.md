@@ -43,9 +43,11 @@ No Kubernetes knowledge required. No Helm. No Dockerfile required. Just push.
 
 ## Project Status
 
-> **Phase: Pre-release.** Production infrastructure running on DigitalOcean (3 DOKS clusters, managed PG, CF Tunnel). Core deploy flow E2E validated. Not yet open to external users.
+> **Phase: Pre-release.** Production infrastructure running on DigitalOcean (4 DOKS clusters, managed PG, CF Tunnel). Core deploy flow E2E validated. **Multi-cell ACTIVATED + LIVE-validated** (cell-default + cell-1 + cell-2). Not yet open to external users.
 >
-> **Maturity: 3.6/5** -- strong technical foundation, commercially unvalidated. (was 3.2 pre-Sprint-5; +0.4 from Preview Environments fully shipped + E2E live validated against k3d 2026-04-26 / CHG-2026-04-26-PREVIEW-IMPL.) See [full assessment](docs/maturity-assessment.md).
+> **Maturity: 3.9/5** -- strong technical foundation, commercially unvalidated. (was 3.6 pre-cell-2; +0.3 from cell-2-activation-plan + fix-all-platform-issues-plan, 2026-05-03.) See [full assessment](docs/maturity-assessment.md).
+>
+> **Path to 4.0**: (a) first CI Sunday cron GREEN producing real `cell2-soaks.yml` 1h+24h workflow run evidence + (b) 1 prod customer day-trial with no incidents (Sprint 9 prod canary stage 4). Local 7-day GREEN streak NOT a gate (tautological in static dev env without diurnal traffic; CI cron + real prod usage are the legitimate signals — D7 reformulated 2026-05-03).
 
 ### What Works (E2E Validated on DigitalOcean)
 
@@ -75,7 +77,7 @@ No Kubernetes knowledge required. No Helm. No Dockerfile required. Just push.
 | Idempotency | Retry-safe via `Idempotency-Key` header |
 | Image signing (cosign) | Every container image signed post-build |
 | Scale-to-zero (KEDA) | Manifest generation + Helm charts + Pulumi bootstrap (cluster KEDA pending) |
-| Cell architecture (Phase 0+1) | PlacementEngine, DynamicRouter, cell-scoped queries, leader fencing, build admission gate, PG work queue, capacity tests. Pulumi cell.ts provisions full cells. Phase 2b activation pending (config only). |
+| Cell architecture (3 cells LIVE) | PlacementEngine, DynamicRouter (`loopzero_cell_discovery_count=3`), cell-scoped queries, leader fencing, build admission gate, PG work queue, capacity tests. **Cell-2 ACTIVATED 2026-05-03**: tenant pin via `loopzero admin tenants pin --cell cell-2` → CR MergePatch + ArgoCD destination flip → workload Pod Running on loopzero-runtime-2. 12/12 ADR gates LIVE GREEN persistente. Rollback SLO P50=648ms / P95=705ms (<<300s budget). EnvironmentReconciler cell-aware via `CellAwareRuntimeClientFactory` covers monolithic + split-binary builds. Heal H14+H15 codify cell-2 ClusterCredential refresh+bootstrap + ArgoCD bearer token sync. Production stages 4-5 (1 customer 7-day → 10/50/100%) pending Sprint 9 readiness review. |
 | SecurityContext (non-root pods) | `runAsNonRoot`, `drop: ALL`, `readOnlyRootFilesystem` |
 | PodSecurity Admission | `restricted` profile on all tenant namespaces |
 | NetworkPolicy | Mandatory deny-all + explicit allow rules |
@@ -88,10 +90,11 @@ No Kubernetes knowledge required. No Helm. No Dockerfile required. Just push.
 | Feature | Impact | Notes |
 |---------|--------|-------|
 | ~~Preview environments~~ | ~~High~~ | ✅ Shipped 2026-04-26 (Sprint 5 / CHG-2026-04-26-PREVIEW-IMPL). All 14 plan tasks done, E2E validated against live k3d (12 specs pass: PR opened→preview, synchronize→UPSERT, concurrent PRs, PR closed→cleanup + 8 CLI specs). |
-| SBOM generation (syft) | Medium | cosign signing done, syft not started. Sprint 6 remainder. |
-| Admission policy (reject unsigned images) | Medium | Sprint 6 remainder. |
+| ~~Cell-2 activation (multi-cell dev)~~ | ~~Low~~ | ✅ Shipped 2026-05-03 (cell-2-activation-plan + fix-all-platform-issues-plan). 12/12 ADR gates LIVE GREEN persistente. T4.3 LIVE: `loopzero deploy` → Pod Running on loopzero-runtime-2, `/health` 200, cell-1 NotFound (isolation). |
+| Cell-2 production canary (stages 4-5) | Medium | Stage 4: 1 customer 7-day. Stage 5: 10/50/100% with 7-day holds. Pending Sprint 9 readiness review per ADR D6. CI cron `cell2-soaks.yml` armed for ADR-compliant 1h+24h Sunday runs. |
+| ~~SBOM generation (syft)~~ | ~~Medium~~ | ✅ Shipped (Sprint 6). Per-release CycloneDX manifest persisted in S3 with presigned URL endpoint. |
+| Admission policy DENY mode | Medium | warn-mode shipped (Sprint 6). Deny-flip pending Sprint 9 with cosign keyless verification + Fulcio. |
 | `loopzero scale` persistence (DB) | Low | Endpoint returns 202 acknowledged as stub. Use loopzero.yaml + loopzero deploy. |
-| Cell-2 activation (multi-cell prod) | Low | Code 100% complete. Missing: Pulumi.dev.yaml config to invoke createCell(). |
 | Chaos engineering suite | Medium | Sprint 8 -- not started. |
 | Polish + onboarding (< 10 min) | High | Sprint 9 -- not started. |
 | SSO/SAML | Low | Phase 3. |
@@ -109,10 +112,13 @@ No Kubernetes knowledge required. No Helm. No Dockerfile required. Just push.
 
 | Component | Count | Status |
 |-----------|------:|--------|
-| CLI (Jest) | 1,079 | Passing (59 suites; 7 skipped) |
-| API + Shared libs (Go) | 41 packages | Passing (preview store/service/handler/webhook/comment +60 unit tests added 2026-04-26) |
-| Operators (Ginkgo + envtest) | 188+ specs | Passing (+2 preview unit tests) |
-| CI pipeline | 14 workflows | Green |
+| CLI (Jest) | 1,171+ | Passing (59 suites; 7 skipped) |
+| API + Shared libs (Go) | 41 packages | Passing (multi-cell: placement determinism with -race + admin_pin_cell C11 authz + migration_007/008 invariants + reaper observability) |
+| Operators (Ginkgo + envtest) | 200+ specs | Passing (+ application reaper 10 fake-client tests + cell-aware factory 7 tests, no envtest dependency) |
+| Pulumi (vitest) | 269+ specs | Passing (heal-script H14 24 invariants + migrations-forward-only 11 invariants) |
+| State machines | 10 application + 9 release + 7 build | Passing (`ApplicationCleaned` terminal state via `ApplicationOrphaned` event added 2026-05-03) |
+| CI pipeline | 16 workflows | Green (incl. `cell2-soaks.yml` weekly Sunday 02:00 UTC + `platform-health-7day-watch.yml` hourly) |
+| Regression matrix | 166 entries | 0 critical miss, audit GREEN |
 
 ---
 
