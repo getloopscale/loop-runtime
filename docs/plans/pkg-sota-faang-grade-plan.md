@@ -1,5 +1,7 @@
 # Plan: Shared Packages SOTA FAANG-Grade Improvement
 
+> **Version 1.4** — Updated 2026-05-04 post Ralph loop iter 6 closure. **Adoption Follow-up #1 FULLY CLOSED (8/8 controllers)**. Every LoopZero CR with kstatus conditions now traces to `pkg/conditions` as algorithmic core. T2.2 5/5 ✓ + Adoption #1 8/8 ✓ + Adoption #2 4/4 ✓ + Adoption #3 no-op ✓. Adoption #4 (WrapWithStack opt-in) is the only remaining incremental adoption work, and it is genuinely opt-in per ADR-0008 stack-capture semantics. 25 commits across iter 1-6. Plan transitions to v2.0 "IMPLEMENTATION COMPLETE — DOGFOOD VALIDATED" when `pkg-soak.yml` first cron run is GREEN.
+>
 > **Version 1.3** — Updated 2026-05-04 post Ralph loop iter 5 closure. **T2.2 ALL 5/5 Acceptance Criteria GREEN** (previously 3/5 at iter 1 close): pkg/conditions package + 12+ tests + 2 controllers migrated (tenant + environment via adapter pattern) + migration guide `docs/technical/pkg/conditions.md` + /code-audit. Adoption follow-up #1 advanced 0/8 → 2/8 controllers; remaining 6/8 trivial (1-line edit per controller per migration guide). T3.2 special validation criterion (c) "kstatus conditions visíveis em kubectl get tenant -o yaml" now empirically achievable. 23 commits across iter 1-5. Plan transitions to v2.0 "IMPLEMENTATION COMPLETE — DOGFOOD VALIDATED" when `pkg-soak.yml` first cron run is GREEN.
 >
 > **Version 1.2** — Updated 2026-05-04 post Ralph loop iter 4 closure. Phases 0-2 ✅ COMPLETE; Phase 3 ⏳ T3.1 ✅ DONE / T3.2 ⏳ infrastructure-encoded as `pkg-soak.yml` weekly cron (analog to `operator-split-soak.yml`). 21 commits across iter 1-4. Adoption follow-up #2 (CB Execute[T] migration) ✅ FULLY CLOSED iter 4 (4/4 operator consumers); #3 (ContextLogger migration) ✅ no-op confirmed (RegisterTraceExtractor unused in production); #1 + #4 tracked for separate change records. Plan transitions to v2.0 "IMPLEMENTATION COMPLETE — DOGFOOD VALIDATED" when `pkg-soak.yml` first cron run is GREEN.
@@ -84,9 +86,13 @@ When all of the above are true, the plan transitions to v2.0 marked `IMPLEMENTAT
 
 ## Adoption Follow-ups
 
-### #1 — pkg/conditions adoption in 8 operators (separate change record)
+### #1 — pkg/conditions adoption in 8 operators ✅ FULLY CLOSED (iter 5+6)
 
-Currently `operators/internal/conditions/` has equivalent implementation per ADR-0025. Migration requires adapter `func ToMetav1(c conditions.Condition) metav1.Condition` + corresponding `FromMetav1`. Per ADR-0032 follow-up — **non-blocking**, separate change record.
+All 8 controllers migrated to `conditions.SetReadinessSummaryViaPkg` (delegating to `pkg/conditions.SetReadinessSummary` via adapter):
+- iter 5: tenant + environment (reference implementations)
+- iter 6: application + exposure + preview + platform-bootstrap + git-repository-binding + cluster-credential
+
+The adapter (`operators/internal/conditions/pkgadapter.go`) provides lossless metav1 ↔ pkg/conditions conversion, so operator CR status fields stay `metav1.Condition`-typed (kubectl + kstatus + ArgoCD compatibility) while the algorithmic core lives in pkg/conditions. Migration guide: `docs/technical/pkg/conditions.md`.
 
 ### #2 — pkg/circuitbreaker.Execute[T] migration in 4 operator consumers ✅ COMPLETE (iter 4)
 
@@ -102,7 +108,7 @@ Currently opt-in — `Wrap()` remains the default for routine domain errors. Doc
 
 ### Status summary
 
-These follow-ups demonstrate the plan's incremental-friendly design: every change provides backward compat or deprecation window, so adoption can be paced by domain teams without blocking the core SOTA improvements. **Adoption #2 fully closed**; **#3 confirmed no-op**; **#1 + #4 tracked for separate change records**.
+These follow-ups demonstrate the plan's incremental-friendly design: every change provides backward compat or deprecation window, so adoption can be paced by domain teams without blocking the core SOTA improvements. **Adoption #1 fully closed** (8/8 controllers, iter 5+6); **#2 fully closed** (4/4 CB consumers, iter 4); **#3 confirmed no-op**; **#4 (WrapWithStack opt-in) is the only outstanding adoption — and it is genuinely opportunistic per ADR-0008 stack-capture semantics, not a tracking debt**.
 
 ---
 
