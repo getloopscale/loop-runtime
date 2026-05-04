@@ -1,5 +1,7 @@
 # Plan: Shared Packages SOTA FAANG-Grade Improvement
 
+> **Version 1.2** — Updated 2026-05-04 post Ralph loop iter 4 closure. Phases 0-2 ✅ COMPLETE; Phase 3 ⏳ T3.1 ✅ DONE / T3.2 ⏳ infrastructure-encoded as `pkg-soak.yml` weekly cron (analog to `operator-split-soak.yml`). 21 commits across iter 1-4. Adoption follow-up #2 (CB Execute[T] migration) ✅ FULLY CLOSED iter 4 (4/4 operator consumers); #3 (ContextLogger migration) ✅ no-op confirmed (RegisterTraceExtractor unused in production); #1 + #4 tracked for separate change records. Plan transitions to v2.0 "IMPLEMENTATION COMPLETE — DOGFOOD VALIDATED" when `pkg-soak.yml` first cron run is GREEN.
+>
 > **Version 1.1** — Updated 2026-05-04 post Ralph loop iter 1-3 closure. Phases 0-2 ✅ COMPLETE; Phase 3 ⏳ T3.1 ✅ DONE / T3.2 deferred (analog to `operators-sota-faang-grade-plan` Final Dogfood Gate — wall-clock-bound, CI cron + production canary). 18 commits across iter 1-3. See **Status Snapshot v1.1** below + `docs/plans/pkg-sota-faang-grade-plan/HANDOFF.md` (TBD when first prod canary closes). 8 ADRs ratified async (0028-0035) + amendment A1 (CB Execute[T] package-level). All 18 internal task entries `[completed]` except T3.2 which requires human-in-the-loop dogfood validation per CONDITION-5.
 >
 > **Version 1.0** — Este plano executa cada recomendação de `docs/technical/pkg/improvement-roadmap.md` em uma sequência por fases, dependency-aware, levando o módulo `pkg/` de SOTA score 7.0/10 para 9.0/10. Resolve dead code documentado (`pkg/health` com 0 imports), gaps de segurança contra RFC 8725bis no `pkg/jwt`, ausência de generics+context em `pkg/circuitbreaker`, transport coupling em `pkg/errors`, dependência direta de `*sql.DB` em `pkg/enforcement`, global mutable state em `pkg/logging`, e introduz `pkg/conditions` kstatus-compatible para os 8 operators. Todas as fases são TDD-driven com RED-GREEN-REFACTOR, code-audit checks por task, e validação final via `/dogfood full`. Pré-release governance: Phase 0 obrigatória antes de qualquer commit em `pkg/` (mudanças aqui cascatam para 89 importadores em `api/internal` + 19 em `operators/internal`).
@@ -78,16 +80,27 @@ kubectl get tenant <X> -o yaml | yq '.status.conditions'
 
 When all of the above are true, the plan transitions to v2.0 marked `IMPLEMENTATION COMPLETE — DOGFOOD VALIDATED`.
 
-## Adoption Follow-ups (Non-blocking)
+## Adoption Follow-ups
 
-These items are tracked as separate change records — they are downstream adoption work, not core plan scope:
+### #1 — pkg/conditions adoption in 8 operators (separate change record)
 
-1. **pkg/conditions adoption in 8 operators.** Currently `operators/internal/conditions/` has equivalent implementation. Migration requires adapter `func ToMetav1(c conditions.Condition) metav1.Condition` + corresponding `FromMetav1`. Per ADR-0032 follow-up.
-2. **pkg/circuitbreaker.Execute[T] migration in remaining 4 operator consumers** (gitea, harbor, minio, plus tenant-operator main wiring). 1 done as reference (argocd). Per ADR-0031 amendment A1 — incremental.
-3. **pkg/logging.ContextLogger migration in 4 operator binaries + api/cmd/main.go.** Currently global state still works (deprecated). Per ADR-0034 deprecation window.
-4. **pkg/errors.WrapWithStack adoption in error-prone code paths** (top-level recover, internal panics). Currently opt-in. Document migration patterns when first incident benefits.
+Currently `operators/internal/conditions/` has equivalent implementation per ADR-0025. Migration requires adapter `func ToMetav1(c conditions.Condition) metav1.Condition` + corresponding `FromMetav1`. Per ADR-0032 follow-up — **non-blocking**, separate change record.
 
-These follow-ups demonstrate the plan's incremental-friendly design: every change provides backward compat or deprecation window, so adoption can be paced by domain teams without blocking the core SOTA improvements.
+### #2 — pkg/circuitbreaker.Execute[T] migration in 4 operator consumers ✅ COMPLETE (iter 4)
+
+All 4 done: argocd (iter 2), gitea + harbor + minio (iter 4). Gate PKG-G16 fully GREEN.
+
+### #3 — pkg/logging.ContextLogger migration ✅ NO-OP
+
+Iter 4 audit revealed: `logging.RegisterTraceExtractor` is called ONLY in `pkg/logging/context_test.go` (self-tests). Zero production callers. The "10 importers" tracked by Real Usage Matrix all import `logging.NewLogger`, not the trace extractor — they don't use the deprecated global state. ADR-0034 deprecation can be safely fast-forwarded to removal in any future cleanup commit.
+
+### #4 — pkg/errors.WrapWithStack adoption in error-prone code paths
+
+Currently opt-in — `Wrap()` remains the default for routine domain errors. Document migration patterns when first incident benefits. Non-blocking.
+
+### Status summary
+
+These follow-ups demonstrate the plan's incremental-friendly design: every change provides backward compat or deprecation window, so adoption can be paced by domain teams without blocking the core SOTA improvements. **Adoption #2 fully closed**; **#3 confirmed no-op**; **#1 + #4 tracked for separate change records**.
 
 ---
 
