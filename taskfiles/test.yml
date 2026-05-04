@@ -41,6 +41,11 @@ tasks:
     cmds:
       - bash infra/scripts/gen-state-machine-dots.sh --write
 
+  pkg:soak:smoke:
+    desc: Local-equivalent of pkg-soak.yml T3.2 special validation (RFC 9457 + CB obs + kstatus); runs vs http://localhost:13001
+    cmds:
+      - bash infra/scripts/pkg-soak-smoke.sh
+
   parity:audit:
     desc: Verify regression matrix integrity (every entry's Verification token resolves in repo)
     cmds:
