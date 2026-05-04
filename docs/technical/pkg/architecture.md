@@ -36,7 +36,7 @@ CI gate `task pkg:usage-matrix:check` falha se a tabela estiver out-of-date (gat
 | Pacote | Total imports | api/internal | operators/internal | cloud | cli | Outros |
 |---|---:|---:|---:|---:|---:|---:|
 | `pkg/circuitbreaker` | 7 | 0 | 4 | 0 | 0 | 3 |
-| `pkg/conditions` | 0 ⚠️ **dead code candidate** | 0 | 0 | 0 | 0 | 0 |
+| `pkg/conditions` | 2 | 0 | 2 | 0 | 0 | 0 |
 | `pkg/enforcement` | 6 | 2 | 0 | 1 | 0 | 3 |
 | `pkg/errors` | 70 | 64 | 0 | 0 | 0 | 6 |
 | `pkg/id` | 5 | 5 | 0 | 0 | 0 | 0 |

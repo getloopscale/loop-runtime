@@ -161,7 +161,11 @@ func (r *TenantReconciler) Reconcile(ctx context.Context, req ctrl.Request) (res
 		if r.HarborClient == nil {
 			dt = dt[:len(dt)-1] // drop trailing TypeHarborProjectReady
 		}
-		conditions.SetReadinessSummary(&latest.Status.Conditions, latest.Generation, dt)
+		// Per pkg-sota-faang-grade-plan v1.2 T2.2 closure: delegate to
+		// pkg/conditions via adapter so the algorithmic core is shared
+		// across modules. Behavior identical to operator-local
+		// SetReadinessSummary (same algorithm).
+		conditions.SetReadinessSummaryViaPkg(&latest.Status.Conditions, latest.Generation, dt)
 		_ = r.Status().Update(ctx, latest)
 	}()
 
