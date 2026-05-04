@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: Apache-2.0
 // Copyright 2025-2026 The LoopZero Authors
 
-package controller
+package tenant
 
 import (
 	"testing"
@@ -9,7 +9,7 @@ import (
 	"github.com/loopzero/loopzero/operators/internal/constants"
 )
 
-// CHG-2026-04-29-DOGFOOD-FB — Helper tests for ingressNS().
+// CHG-2026-04-29-DOGFOOD-FB — Helper tests for ingressNS() (Environment side).
 //
 // Background: the operator-generated `allow-ingress-traefik` NetworkPolicy
 // MUST allow traffic from the namespace where Traefik runs. LoopZero's helmfile
@@ -17,6 +17,9 @@ import (
 // (`loopzero-system`) silently blocked Traefik from reaching tenant pods,
 // surfacing as HTTP 502 in any deploy. Tests pin both the default and the
 // env-var override path.
+//
+// Note: PreviewReconciler.ingressNS() tests live in
+// internal/preview/ingress_namespace_test.go (split per ADR-0023 D1).
 
 func TestEnvironmentReconciler_IngressNS_DefaultIsTraefikNamespace(t *testing.T) {
 	r := &EnvironmentReconciler{}
@@ -33,21 +36,6 @@ func TestEnvironmentReconciler_IngressNS_OverrideTakesPrecedence(t *testing.T) {
 	r := &EnvironmentReconciler{IngressNamespace: "custom-traefik"}
 	if got := r.ingressNS(); got != "custom-traefik" {
 		t.Errorf("ingressNS with override = %q, want %q", got, "custom-traefik")
-	}
-}
-
-func TestPreviewReconciler_IngressNS_DefaultIsTraefikNamespace(t *testing.T) {
-	r := &PreviewReconciler{}
-	got := r.ingressNS()
-	if got != constants.NamespaceIngress {
-		t.Errorf("preview ingressNS default = %q, want %q", got, constants.NamespaceIngress)
-	}
-}
-
-func TestPreviewReconciler_IngressNS_OverrideTakesPrecedence(t *testing.T) {
-	r := &PreviewReconciler{IngressNamespace: "alt-traefik"}
-	if got := r.ingressNS(); got != "alt-traefik" {
-		t.Errorf("preview ingressNS with override = %q, want %q", got, "alt-traefik")
 	}
 }
 

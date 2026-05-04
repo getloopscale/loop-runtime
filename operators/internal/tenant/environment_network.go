@@ -166,9 +166,16 @@ func (r *EnvironmentReconciler) reconcileEnvAllowEgressPolicy(ctx context.Contex
 }
 
 // ingressNS returns the namespace where the ingress controller runs.
+// CHG-2026-04-29-DOGFOOD-FB / drift-baseline.md port #4: defaults to
+// constants.NamespaceIngress ("traefik") so allow-ingress-traefik
+// NetworkPolicies admit traffic from the actual Traefik namespace, not
+// loopzero-system. Previously this returned NamespacePlatformSystem which
+// silently produced HTTP 502 in every deploy because Traefik couldn't
+// reach tenant pods. Override via EnvironmentReconciler.IngressNamespace
+// for operators that install Traefik elsewhere.
 func (r *EnvironmentReconciler) ingressNS() string {
 	if r.IngressNamespace != "" {
 		return r.IngressNamespace
 	}
-	return constants.NamespacePlatformSystem
+	return constants.NamespaceIngress
 }

@@ -4,7 +4,7 @@
 // fix-all-platform-issues-plan T2.2 — Application reaper unit tests.
 // Pure-Go fake client; no envtest required.
 
-package controller
+package app
 
 import (
 	"context"
