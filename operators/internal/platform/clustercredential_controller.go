@@ -150,7 +150,16 @@ func (r *ClusterCredentialReconciler) Reconcile(ctx context.Context, req ctrl.Re
 	}
 
 	logger.Info("reconciled cluster credential", "cluster", cr.Spec.ClusterName, "connected", cr.Status.Connected)
-	return ctrl.Result{RequeueAfter: constants.RequeuePeriodicCheck}, nil
+	// AP-4 fix per ADR-0023 plan T5.3: drop the periodic-check requeue on
+	// the SUCCESS path. SoT is the CR + Secret watch. Authoritative refresh:
+	//   - kubeconfig Secret edits → Watches(&corev1.Secret{}, ...) fires
+	//     immediate reconcile.
+	//   - K8sCellStore polls every 60s and reads CR.spec.cellID; cell
+	//     activation propagates within one poll cycle.
+	// Removing the periodic poll on success drops ~1 reconcile/min/CR of
+	// background load; failure paths below still requeue (RequeueSecretNotFound,
+	// RequeuePeriodicCheck) as healing fallback.
+	return ctrl.Result{}, nil
 }
 
 // resolveKubeconfig reads and parses the kubeconfig from the referenced Secret.
