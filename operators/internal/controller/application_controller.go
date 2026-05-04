@@ -177,6 +177,17 @@ func (r *ApplicationReconciler) reconcileRouteStatus(ctx context.Context, app *l
 	routeKey := client.ObjectKey{Name: routeName, Namespace: app.Namespace}
 
 	if err := r.Get(ctx, routeKey, route); err != nil {
+		// AP-3 fix: surface Get failures as a condition rather than silently
+		// swallowing them. NotFound is normal during initial reconcile;
+		// transient errors must be observable so operators can diagnose
+		// reconciler stalls. See ADR-0023 hoist condition + roadmap §AP-3.
+		if !errors.IsNotFound(err) {
+			log.FromContext(ctx).Error(err, "failed to read ExposedRoute for status sync",
+				"route", routeKey)
+		}
+		conditions.SetCondition(&app.Status.Conditions, conditions.TypeRouteReachable,
+			metav1.ConditionUnknown, conditions.ReasonNotFound,
+			"ExposedRoute not yet observable", app.Generation)
 		return
 	}
 
@@ -266,12 +277,14 @@ func (r *ApplicationReconciler) computePhase(app *loopzerov1.LoopZeroApplication
 	}
 	// Check conditions for degraded/down states.
 	// "Waiting" is normal progression (not yet reachable), "Failed" is degraded.
+	// AP-2 fix: use typed constants from internal/conditions instead of
+	// hardcoded string literals. See ADR-0023 hoist condition + roadmap §AP-2.
 	for _, c := range app.Status.Conditions {
-		if c.Type == "RouteReachable" && c.Status == "False" {
+		if c.Type == conditions.TypeRouteReachable && c.Status == metav1.ConditionFalse {
 			switch c.Reason {
-			case "Failed":
+			case conditions.ReasonFailed:
 				return loopzerov1.ApplicationPhaseDown
-			case "Degraded":
+			case conditions.ReasonDegraded:
 				return loopzerov1.ApplicationPhaseDegraded
 			default:
 				// "Waiting" or any other reason — still progressing

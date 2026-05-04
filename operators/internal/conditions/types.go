@@ -100,4 +100,9 @@ const (
 	ReasonNotFound    = "NotFound"
 	ReasonUnreachable = "Unreachable"
 	ReasonWaiting     = "Waiting"
+	// ReasonDegraded marks a partial-failure state where the resource is
+	// observable but not fully healthy. Used by AP-2 fix in
+	// application_controller.go:computePhase to map condition.Reason →
+	// ApplicationPhaseDegraded.
+	ReasonDegraded = "Degraded"
 )
