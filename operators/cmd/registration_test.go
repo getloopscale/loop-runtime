@@ -12,62 +12,137 @@ import (
 	"testing"
 )
 
-// TestSetupControllersWiresAllControllers enforces D5(a) from the operators
-// remediation plan: every exported Setup*Controller function in
-// internal/controller/ MUST be referenced by setupControllers in main.go.
+// binaryWiringEntry describes a single (binary, package) pair to verify.
 //
-// This is the systemic fix for the recurring "Implemented but not wired"
-// pattern (COMP-001 PreviewController, ARCH-001 MinIO CB wrapper, COMP-008
-// PR webhook handler).
-//
-// CURRENT STATUS (2026-04-26 — post T2.1): unskipped because
-// SetupPreviewController is now wired in setupControllers.
-// This test fails any future PR that adds an exported Setup*Controller
-// function without registering it in setupControllers.
-//
-// Plan reference: docs/plans/operators-deep-review-remediation-plan.md T3.8.
-// ADR reference: .claude/decisions/2026-04-26-operators-remediation-classification.md.
-func TestSetupControllersWiresAllControllers(t *testing.T) {
-	exported := exportedSetupControllerFuncs(t, "../internal/controller")
-	wired := wiredSetupControllerCalls(t, "main.go")
+// ADR-0023 D1: split binaries each wire their own controllers in main().
+// Unlike the deprecated monolith (cmd/main.go) which used a setupControllers
+// helper, split binaries call <pkg>.Setup* directly from main() — the AST
+// walker accepts either pattern.
+type binaryWiringEntry struct {
+	name      string // human-readable binary name (used in t.Run names)
+	pkgImport string // last segment of package import (e.g., "tenant", "app")
+	pkgDir    string // path relative to operators/cmd/ where Setup funcs live
+	mainPath  string // path to the binary's main.go (relative to operators/cmd/)
+	setupFunc string // function name that wires controllers ("main" for split, "setupControllers" for monolith)
+}
 
-	for _, fn := range exported {
-		if !contains(wired, fn) {
-			t.Errorf("internal/controller exports %s() but main.go:setupControllers does not call it. "+
-				"This is the 'Implemented but not wired' pattern (COMP-001 family). "+
-				"Either wire the controller in setupControllers or rename it to be unexported.", fn)
-		}
+// binaryWiringMatrix enumerates every operator binary that must satisfy the
+// "every exported Setup*Controller wired" invariant.
+//
+// Originally this test ran only against the monolith (cmd/main.go +
+// internal/controller/). T1.3 amplifies it to all 4 split binaries per
+// ADR-0023 D1; the monolith entry stays during the staged cutover (Stage A
+// coexistence) and gets removed at T1.4 alongside the monolith binary itself.
+var binaryWiringMatrix = []binaryWiringEntry{
+	{
+		name:      "monolith",
+		pkgImport: "controller",
+		pkgDir:    "../internal/controller",
+		mainPath:  "main.go",
+		setupFunc: "setupControllers",
+	},
+	{
+		name:      "tenant-operator",
+		pkgImport: "tenant",
+		pkgDir:    "../internal/tenant",
+		mainPath:  "tenant-operator/main.go",
+		setupFunc: "main",
+	},
+	{
+		name:      "app-operator",
+		pkgImport: "app",
+		pkgDir:    "../internal/app",
+		mainPath:  "app-operator/main.go",
+		setupFunc: "main",
+	},
+	{
+		name:      "preview-operator",
+		pkgImport: "preview",
+		pkgDir:    "../internal/preview",
+		mainPath:  "preview-operator/main.go",
+		setupFunc: "main",
+	},
+	{
+		name:      "platform-operator",
+		pkgImport: "platform",
+		pkgDir:    "../internal/platform",
+		mainPath:  "platform-operator/main.go",
+		setupFunc: "main",
+	},
+}
+
+// TestSetupControllersWiresAllControllers enforces D5(a) from the operators
+// remediation plan: every exported Setup*Controller function in the binary's
+// internal package MUST be referenced by the binary's wiring entrypoint.
+//
+// Matrix-driven (T1.3): runs as 5 sub-tests covering monolith + 4 split
+// binaries. Adding a new exported Setup* without wiring fails the relevant
+// sub-test.
+//
+// Plan reference: docs/plans/operators-sota-faang-grade-plan.md T1.3.
+// ADR reference: docs/meetings/adr/0023-split-tree-canonical.md.
+func TestSetupControllersWiresAllControllers(t *testing.T) {
+	for _, bin := range binaryWiringMatrix {
+		bin := bin // capture for sub-test
+		t.Run(bin.name, func(t *testing.T) {
+			exported := exportedSetupControllerFuncs(t, bin.pkgDir)
+			wired := wiredSetupControllerCalls(t, bin.mainPath, bin.pkgImport, bin.setupFunc)
+
+			for _, fn := range exported {
+				if !contains(wired, fn) {
+					t.Errorf("%s/ exports %s() but %s does not call it. "+
+						"This is the 'Implemented but not wired' pattern (COMP-001 family). "+
+						"Either wire the controller in %s or rename it to be unexported.",
+						bin.pkgDir, fn, bin.mainPath, bin.setupFunc)
+				}
+			}
+		})
 	}
 }
 
-// TestSetupControllersHasNoOrphanCalls catches the inverse pattern: main.go
-// references a Setup*Controller that no longer exists in internal/controller.
-// This protects against rename-without-update bugs.
+// TestSetupControllersHasNoOrphanCalls catches the inverse pattern: the
+// binary's wiring entrypoint references a Setup* that no longer exists in
+// its internal package. Protects against rename-without-update bugs.
 //
-// Always-on (no skip) — this direction must always hold.
+// Matrix-driven (T1.3): runs as 5 sub-tests.
 func TestSetupControllersHasNoOrphanCalls(t *testing.T) {
-	exported := exportedSetupControllerFuncs(t, "../internal/controller")
-	wired := wiredSetupControllerCalls(t, "main.go")
+	for _, bin := range binaryWiringMatrix {
+		bin := bin // capture for sub-test
+		t.Run(bin.name, func(t *testing.T) {
+			exported := exportedSetupControllerFuncs(t, bin.pkgDir)
+			wired := wiredSetupControllerCalls(t, bin.mainPath, bin.pkgImport, bin.setupFunc)
 
-	for _, fn := range wired {
-		if !contains(exported, fn) {
-			t.Errorf("main.go:setupControllers calls controller.%s() but no such exported function exists "+
-				"in internal/controller/. Likely a rename without main.go update.", fn)
-		}
+			for _, fn := range wired {
+				if !contains(exported, fn) {
+					t.Errorf("%s calls %s.%s() but no such exported function exists "+
+						"in %s/. Likely a rename without %s update.",
+						bin.mainPath, bin.pkgImport, fn, bin.pkgDir, bin.mainPath)
+				}
+			}
+		})
 	}
 }
 
 // SetupAllowlist contains exported Setup* function names that are intentionally
-// NOT wired in main.go's setupControllers. Each entry MUST have a justification.
+// NOT wired in any binary's main. Each entry MUST have a justification.
 // Adding a function here is governance-equivalent to wiring it — a reviewer
 // must approve the exception explicitly.
 //
-// Per ADR-0022: this allowlist itself is governed by the wired-gate
-// amplification policy (Plan T0.2 of `pre-launch-gaps-plan.md`).
+// Per ADR-0022 + ADR-0023: this allowlist itself is governed by the
+// wired-gate amplification policy.
+//
+// T1.3: keys may be qualified per binary (e.g., "tenant:SetupCacheReader") to
+// allow legitimate exceptions per binary. Bare keys apply to all binaries.
 var SetupAllowlist = map[string]string{
-	// (none yet — populate as legitimate exceptions arise)
-	// Example template:
-	// "SetupCacheReader": "test-only helper, not part of controller-runtime wiring",
+	// SetupEnvironmentController is the legacy single-cell wrapper that calls
+	// SetupEnvironmentControllerWithFactory(mgr, runtimeClient, nil). The
+	// tenant-operator binary always wires the cell-aware variant directly
+	// (mandatory per cell-2-activation-plan + fix-all-platform-issues-plan T1.1).
+	// The wrapper is retained as a public API for operatortest and external
+	// E2E tests that don't need cell-awareness; intentionally NOT wired in
+	// any binary's main(). Removing the wrapper would break operatortest's
+	// SetupEnvironmentController(mgr, runtimeClient) signature.
+	"SetupEnvironmentController": "wrapper for WithFactory(nil); operatortest API only, not binary-wired",
 }
 
 func exportedSetupControllerFuncs(t *testing.T, dir string) []string {
@@ -92,7 +167,7 @@ func exportedSetupControllerFuncs(t *testing.T, dir string) []string {
 				continue
 			}
 			name := fn.Name.Name
-			// AMPLIFIED gate (per ADR-0022 + Plan T0.2): match all exported `Setup*`
+			// AMPLIFIED gate (per ADR-0022 + ADR-0023): match all exported `Setup*`
 			// (was `Setup*Controller`). Catches webhooks, reconcilers, cache readers,
 			// metrics servers — any setup-pattern that landed exported but not wired.
 			// Allowlisted entries are skipped (intentional exceptions).
@@ -107,7 +182,13 @@ func exportedSetupControllerFuncs(t *testing.T, dir string) []string {
 	return found
 }
 
-func wiredSetupControllerCalls(t *testing.T, mainPath string) []string {
+// wiredSetupControllerCalls walks the main.go AST and finds calls of the form
+// <pkgImport>.Setup*(...) inside the function named setupFunc.
+//
+// For monolith (setupFunc="setupControllers"): scans inside the helper
+// function. For split binaries (setupFunc="main"): scans the entire main()
+// since wiring happens directly there.
+func wiredSetupControllerCalls(t *testing.T, mainPath, pkgImport, setupFunc string) []string {
 	t.Helper()
 	fset := token.NewFileSet()
 	f, err := parser.ParseFile(fset, mainPath, nil, 0)
@@ -117,7 +198,7 @@ func wiredSetupControllerCalls(t *testing.T, mainPath string) []string {
 	var found []string
 	for _, decl := range f.Decls {
 		fn, ok := decl.(*ast.FuncDecl)
-		if !ok || fn.Name.Name != "setupControllers" {
+		if !ok || fn.Name.Name != setupFunc {
 			continue
 		}
 		ast.Inspect(fn, func(n ast.Node) bool {
@@ -130,11 +211,11 @@ func wiredSetupControllerCalls(t *testing.T, mainPath string) []string {
 				return true
 			}
 			ident, ok := sel.X.(*ast.Ident)
-			if !ok || ident.Name != "controller" {
+			if !ok || ident.Name != pkgImport {
 				return true
 			}
 			name := sel.Sel.Name
-			// Match same pattern as exportedSetupControllerFuncs (Plan T0.2 + ADR-0022):
+			// Match same pattern as exportedSetupControllerFuncs:
 			// Setup* prefix only, no suffix constraint.
 			if strings.HasPrefix(name, "Setup") {
 				found = append(found, name)
