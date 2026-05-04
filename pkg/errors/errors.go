@@ -2,8 +2,17 @@
 // Copyright 2025-2026 The LoopZero Authors
 
 // Package errors defines typed error types for all LoopZero components.
-// All errors carry a code, message, and HTTP status for consistent
-// error handling across the system. See CLAUDE.md Rule 8.
+// All errors carry a code and message; HTTP transport mapping lives
+// in the sub-package pkg/errors/http (per ADR-0030 + gate PKG-G15).
+//
+// Stage C of the T2.3 staged rollout (CONDITION-2): the legacy
+// HTTPStatus field has been REMOVED from LoopZeroError. Callers that
+// need the HTTP status code MUST use:
+//
+//	import errorshttp "github.com/loopzero/loopzero/pkg/errors/http"
+//	status := errorshttp.Status(err)
+//
+// See CLAUDE.md Rule 8.
 package errors
 
 import (
@@ -17,18 +26,15 @@ import (
 // driver), and bounded so cost stays in the ~150ns range.
 const stackDepth = 32
 
-// LoopZeroError is a typed error with a code and HTTP status.
-// It implements the error interface and provides structured context
-// for error handling and API responses.
+// LoopZeroError is a typed, transport-agnostic error.
+// It carries a machine-readable Code and a human Message; HTTP status
+// mapping is the responsibility of pkg/errors/http.Status (ADR-0030).
 type LoopZeroError struct {
 	// Code is a machine-readable error code (e.g., "LOCK_TIMEOUT").
 	Code string
 
 	// Message is a human-readable error description with context.
 	Message string
-
-	// HTTPStatus is the suggested HTTP status code for API responses.
-	HTTPStatus int
 
 	// Cause is the underlying error that caused this LoopZeroError.
 	// Exposed via Unwrap() for use with errors.Is/errors.As chains.
@@ -66,23 +72,33 @@ func (e *LoopZeroError) Unwrap() error {
 	return e.Cause
 }
 
-// NewLoopZeroError creates a new LoopZeroError with the given code, message, and HTTP status.
-func NewLoopZeroError(code, message string, httpStatus int) *LoopZeroError {
+// NewLoopZeroError creates a new LoopZeroError with the given code and message.
+//
+// The third int parameter (formerly HTTPStatus) is kept in the signature
+// for backward compatibility with callers from before T2.3 Stage C; it
+// is now IGNORED. New code should use the 2-parameter form via direct
+// struct literal:
+//
+//	return &errors.LoopZeroError{Code: "X", Message: "y"}
+//
+// HTTP status is resolved at the transport boundary via
+// pkg/errors/http.Status(err). See ADR-0030.
+func NewLoopZeroError(code, message string, _ int) *LoopZeroError {
 	return &LoopZeroError{
-		Code:       code,
-		Message:    message,
-		HTTPStatus: httpStatus,
+		Code:    code,
+		Message: message,
 	}
 }
 
-// Wrap returns a new LoopZeroError with the same code and HTTP status but with
-// additional context prepended to the message.
+// Wrap returns a new LoopZeroError with the same code but with additional
+// context prepended to the message. HTTP status is resolved by the
+// registry at the transport boundary, so wrapping does not carry an
+// explicit status code (per ADR-0030 + gate PKG-G15).
 func (e *LoopZeroError) Wrap(context string) *LoopZeroError {
 	return &LoopZeroError{
-		Code:       e.Code,
-		Message:    fmt.Sprintf("%s: %s", context, e.Message),
-		HTTPStatus: e.HTTPStatus,
-		Cause:      e,
+		Code:    e.Code,
+		Message: fmt.Sprintf("%s: %s", context, e.Message),
+		Cause:   e,
 		// Carry forward any stack the source already captured. Wrap()
 		// itself does NOT capture — call WrapWithStack() to do that.
 		stack: e.stack,
@@ -106,11 +122,10 @@ func (e *LoopZeroError) Wrap(context string) *LoopZeroError {
 // Per pkg-sota-faang-grade-plan T1.6 + gate PKG-G08.
 func (e *LoopZeroError) WrapWithStack(context string) *LoopZeroError {
 	wrapped := &LoopZeroError{
-		Code:       e.Code,
-		Message:    fmt.Sprintf("%s: %s", context, e.Message),
-		HTTPStatus: e.HTTPStatus,
-		Cause:      e,
-		stack:      e.stack,
+		Code:    e.Code,
+		Message: fmt.Sprintf("%s: %s", context, e.Message),
+		Cause:   e,
+		stack:   e.stack,
 	}
 	if wrapped.stack == nil {
 		wrapped.stack = captureStack(2) // skip captureStack + WrapWithStack
@@ -161,7 +176,6 @@ var (
 	ErrLockTimeout = &LoopZeroError{
 		Code:       "LOCK_TIMEOUT",
 		Message:    "could not acquire environment lock within timeout",
-		HTTPStatus: 409,
 	}
 
 	// ErrInvalidTransition is returned when a state machine transition is
@@ -169,35 +183,30 @@ var (
 	ErrInvalidTransition = &LoopZeroError{
 		Code:       "INVALID_TRANSITION",
 		Message:    "invalid state transition",
-		HTTPStatus: 409,
 	}
 
 	// ErrTenantNotFound is returned when a referenced tenant does not exist.
 	ErrTenantNotFound = &LoopZeroError{
 		Code:       "TENANT_NOT_FOUND",
 		Message:    "tenant not found",
-		HTTPStatus: 404,
 	}
 
 	// ErrProjectNotFound is returned when a referenced project does not exist.
 	ErrProjectNotFound = &LoopZeroError{
 		Code:       "PROJECT_NOT_FOUND",
 		Message:    "project not found",
-		HTTPStatus: 404,
 	}
 
 	// ErrBuildNotFound is returned when a referenced build does not exist.
 	ErrBuildNotFound = &LoopZeroError{
 		Code:       "BUILD_NOT_FOUND",
 		Message:    "build not found",
-		HTTPStatus: 404,
 	}
 
 	// ErrReleaseNotFound is returned when a referenced release does not exist.
 	ErrReleaseNotFound = &LoopZeroError{
 		Code:       "RELEASE_NOT_FOUND",
 		Message:    "release not found",
-		HTTPStatus: 404,
 	}
 
 	// ErrPreviewNotFound is returned when a referenced preview environment
@@ -205,7 +214,6 @@ var (
 	ErrPreviewNotFound = &LoopZeroError{
 		Code:       "PREVIEW_NOT_FOUND",
 		Message:    "preview environment not found",
-		HTTPStatus: 404,
 	}
 
 	// ErrNoActiveRelease is returned when rollback or promote is attempted but
@@ -214,14 +222,12 @@ var (
 	ErrNoActiveRelease = &LoopZeroError{
 		Code:       "NO_ACTIVE_RELEASE",
 		Message:    "No active release found in the source environment. Deploy at least once before promoting or rolling back.",
-		HTTPStatus: 404,
 	}
 
 	// ErrNoPreviousRelease is returned when rollback is attempted but no previous release exists.
 	ErrNoPreviousRelease = &LoopZeroError{
 		Code:       "NO_PREVIOUS_RELEASE",
 		Message:    "No previous release found to rollback to. Deploy at least twice before rolling back.",
-		HTTPStatus: 404,
 	}
 
 	// ErrBuildAlreadyCompleted is returned when attempting to cancel a build
@@ -229,7 +235,6 @@ var (
 	ErrBuildAlreadyCompleted = &LoopZeroError{
 		Code:       "BUILD_ALREADY_COMPLETED",
 		Message:    "Build already completed.",
-		HTTPStatus: 409,
 	}
 
 	// ErrDeployInProgress is returned when a deploy is already in progress
@@ -237,7 +242,6 @@ var (
 	ErrDeployInProgress = &LoopZeroError{
 		Code:       "DEPLOY_IN_PROGRESS",
 		Message:    "a deploy is already in progress for this environment",
-		HTTPStatus: 409,
 	}
 
 	// ErrInvalidName is returned when a resource name does not conform to
@@ -245,7 +249,6 @@ var (
 	ErrInvalidName = &LoopZeroError{
 		Code:       "INVALID_NAME",
 		Message:    "resource name does not conform to RFC 1123",
-		HTTPStatus: 400,
 	}
 
 	// ErrIdempotencyConflict is returned when an idempotency key was already
@@ -253,21 +256,18 @@ var (
 	ErrIdempotencyConflict = &LoopZeroError{
 		Code:       "IDEMPOTENCY_CONFLICT",
 		Message:    "idempotency key was already used with a different request payload",
-		HTTPStatus: 422,
 	}
 
 	// ErrUnauthorized is returned when a request lacks valid authentication.
 	ErrUnauthorized = &LoopZeroError{
 		Code:       "UNAUTHORIZED",
 		Message:    "not authenticated",
-		HTTPStatus: 401,
 	}
 
 	// ErrInvalidRequest is returned when the request body cannot be parsed.
 	ErrInvalidRequest = &LoopZeroError{
 		Code:       "INVALID_REQUEST",
 		Message:    "invalid request body",
-		HTTPStatus: 400,
 	}
 
 	// ErrProjectExists is returned when a project with the same name
@@ -275,28 +275,24 @@ var (
 	ErrProjectExists = &LoopZeroError{
 		Code:       "PROJECT_EXISTS",
 		Message:    "a project with this name already exists in your team",
-		HTTPStatus: 409,
 	}
 
 	// ErrInternalError is returned for unexpected server-side failures.
 	ErrInternalError = &LoopZeroError{
 		Code:       "INTERNAL_ERROR",
 		Message:    "Something went wrong. Try again, or check `loopzero status` for details. If the problem persists, contact support.",
-		HTTPStatus: 500,
 	}
 
 	// ErrPayloadTooLarge is returned when the request body exceeds the size limit.
 	ErrPayloadTooLarge = &LoopZeroError{
 		Code:       "PAYLOAD_TOO_LARGE",
 		Message:    "request body exceeds the maximum allowed size",
-		HTTPStatus: 413,
 	}
 
 	// ErrValidationFailed is returned when input validation fails with field-specific details.
 	ErrValidationFailed = &LoopZeroError{
 		Code:       "VALIDATION_FAILED",
 		Message:    "validation failed",
-		HTTPStatus: 422,
 	}
 
 	// ErrFrontendMustBeStatic is returned when a frontend app doesn't use render: static.
@@ -304,7 +300,6 @@ var (
 	ErrFrontendMustBeStatic = &LoopZeroError{
 		Code:       "FRONTEND_MUST_BE_STATIC",
 		Message:    "frontend apps must use static delivery. Add 'render: static' to your loopzero.yaml",
-		HTTPStatus: 422,
 	}
 
 	// ErrPodLimitExceeded is returned when a project has more than 1 server or 1 worker.
@@ -312,21 +307,18 @@ var (
 	ErrPodLimitExceeded = &LoopZeroError{
 		Code:       "POD_LIMIT_EXCEEDED",
 		Message:    "project exceeds the maximum of 1 API service and 1 background worker",
-		HTTPStatus: 422,
 	}
 
 	// ErrMissingField is returned when a required field is missing from the request.
 	ErrMissingField = &LoopZeroError{
 		Code:       "MISSING_FIELD",
 		Message:    "a required field is missing",
-		HTTPStatus: 400,
 	}
 
 	// ErrSourceUploadFailed is returned when pushing the bundle to the source store fails.
 	ErrSourceUploadFailed = &LoopZeroError{
 		Code:       "SOURCE_UPLOAD_FAILED",
 		Message:    "Failed to upload source code. Ensure your git history is clean and try again.",
-		HTTPStatus: 500,
 	}
 
 	// ErrPlatformDegraded is returned when the deploy service circuit breaker is open.
@@ -334,7 +326,6 @@ var (
 	ErrPlatformDegraded = &LoopZeroError{
 		Code:       "PLATFORM_DEGRADED",
 		Message:    "deploy service is temporarily unavailable",
-		HTTPStatus: 503,
 	}
 
 	// ErrDeployServiceAuthFailed is returned when the deploy service rejects its credentials (401/403).
@@ -343,7 +334,6 @@ var (
 	ErrDeployServiceAuthFailed = &LoopZeroError{
 		Code:       "DEPLOY_SERVICE_AUTH_FAILED",
 		Message:    "deploy service credentials rejected — contact your platform administrator",
-		HTTPStatus: 503,
 	}
 
 	// ErrSyncOperationInProgress is returned when the deploy service has a sync already running (409).
@@ -353,7 +343,6 @@ var (
 	ErrSyncOperationInProgress = &LoopZeroError{
 		Code:       "SYNC_OPERATION_IN_PROGRESS",
 		Message:    "another sync operation is already in progress",
-		HTTPStatus: 409,
 	}
 
 	// ErrCellAtCapacity is returned when the cell's concurrent build budget
@@ -363,7 +352,6 @@ var (
 	ErrCellAtCapacity = &LoopZeroError{
 		Code:       "CELL_AT_CAPACITY",
 		Message:    "the platform is currently busy — retry in a few seconds",
-		HTTPStatus: 429,
 	}
 
 	// ErrTenantBuildQuota is returned when a single tenant already has the
@@ -373,7 +361,6 @@ var (
 	ErrTenantBuildQuota = &LoopZeroError{
 		Code:       "TENANT_BUILD_QUOTA",
 		Message:    "your team has too many builds in progress — wait for one to finish",
-		HTTPStatus: 429,
 	}
 
 	// ErrSameEnvironment is returned when a promote request specifies the same
@@ -381,7 +368,6 @@ var (
 	ErrSameEnvironment = &LoopZeroError{
 		Code:       "SAME_ENVIRONMENT",
 		Message:    "source and target environments must be different",
-		HTTPStatus: 400,
 	}
 
 	// ErrReplicasExceedPlan is returned when an app requests more replicas (or
@@ -391,7 +377,6 @@ var (
 	ErrReplicasExceedPlan = &LoopZeroError{
 		Code:       "REPLICAS_EXCEED_PLAN",
 		Message:    "requested replicas exceed your plan's limit",
-		HTTPStatus: 422,
 	}
 
 	// ErrScalingAmbiguous is returned when both `replicas` and `autoscaling`
@@ -400,7 +385,6 @@ var (
 	ErrScalingAmbiguous = &LoopZeroError{
 		Code:       "SCALING_AMBIGUOUS",
 		Message:    "'replicas' and 'autoscaling' are mutually exclusive — choose one",
-		HTTPStatus: 422,
 	}
 )
 
@@ -414,7 +398,6 @@ func NewReplicasExceedPlan(plan string, limit, requested int, appName string) *L
 			"App '%s' requested %d replicas — the %s plan allows up to %d per service. Upgrade at https://loopzero.example/pricing or lower the replica count.",
 			appName, requested, displayPlanName(plan), limit,
 		),
-		HTTPStatus: 422,
 	}
 }
 
@@ -441,7 +424,7 @@ func NewLockTimeout(detail string) *LoopZeroError {
 	if detail != "" {
 		msg = detail
 	}
-	return &LoopZeroError{Code: "LOCK_TIMEOUT", Message: msg, HTTPStatus: 409}
+	return &LoopZeroError{Code: "LOCK_TIMEOUT", Message: msg}
 }
 
 // NewInvalidTransition creates an INVALID_TRANSITION error with state context.
@@ -449,7 +432,6 @@ func NewInvalidTransition(from, event string) *LoopZeroError {
 	return &LoopZeroError{
 		Code:       "INVALID_TRANSITION",
 		Message:    fmt.Sprintf("invalid state transition: cannot apply '%s' in state '%s'", event, from),
-		HTTPStatus: 409,
 	}
 }
 
@@ -458,7 +440,6 @@ func NewTenantNotFound(tenantID string) *LoopZeroError {
 	return &LoopZeroError{
 		Code:       "TENANT_NOT_FOUND",
 		Message:    fmt.Sprintf("tenant '%s' not found", tenantID),
-		HTTPStatus: 404,
 	}
 }
 
@@ -467,7 +448,6 @@ func NewBuildNotFound(buildID string) *LoopZeroError {
 	return &LoopZeroError{
 		Code:       "BUILD_NOT_FOUND",
 		Message:    fmt.Sprintf("build '%s' not found", buildID),
-		HTTPStatus: 404,
 	}
 }
 
@@ -476,7 +456,6 @@ func NewReleaseNotFound(releaseID string) *LoopZeroError {
 	return &LoopZeroError{
 		Code:       "RELEASE_NOT_FOUND",
 		Message:    fmt.Sprintf("release '%s' not found", releaseID),
-		HTTPStatus: 404,
 	}
 }
 
@@ -485,7 +464,6 @@ func NewProjectNotFound(name string) *LoopZeroError {
 	return &LoopZeroError{
 		Code:       "PROJECT_NOT_FOUND",
 		Message:    fmt.Sprintf("project '%s' not found", name),
-		HTTPStatus: 404,
 	}
 }
 
@@ -494,7 +472,6 @@ func NewEnvironmentNotFound(name string) *LoopZeroError {
 	return &LoopZeroError{
 		Code:       "ENVIRONMENT_NOT_FOUND",
 		Message:    fmt.Sprintf("environment '%s' not found", name),
-		HTTPStatus: 404,
 	}
 }
 
@@ -505,7 +482,6 @@ func NewDomainNotFound(domain string) *LoopZeroError {
 	return &LoopZeroError{
 		Code:       "DOMAIN_NOT_FOUND",
 		Message:    fmt.Sprintf("domain '%s' not found", domain),
-		HTTPStatus: 404,
 	}
 }
 
@@ -519,7 +495,6 @@ func NewRepositoryNotLinked(project string) *LoopZeroError {
 	return &LoopZeroError{
 		Code:       "REPOSITORY_NOT_LINKED",
 		Message:    fmt.Sprintf("no repository linked to project '%s'", project),
-		HTTPStatus: 404,
 	}
 }
 
@@ -527,7 +502,6 @@ func NewRepositoryNotLinked(project string) *LoopZeroError {
 var ErrForbidden = &LoopZeroError{
 	Code:       "FORBIDDEN",
 	Message:    "this operation is not permitted",
-	HTTPStatus: 403,
 }
 
 // NewIdempotencyConflict creates an IDEMPOTENCY_CONFLICT error with key context.
@@ -535,6 +509,5 @@ func NewIdempotencyConflict(key string) *LoopZeroError {
 	return &LoopZeroError{
 		Code:       "IDEMPOTENCY_CONFLICT",
 		Message:    fmt.Sprintf("idempotency key '%s' was already used with a different request payload", key),
-		HTTPStatus: 422,
 	}
 }

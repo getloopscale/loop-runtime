@@ -56,19 +56,12 @@ func TestStatus_NonLoopZeroErrorReturns500(t *testing.T) {
 	}
 }
 
-func TestStatus_FallsBackToLegacyField(t *testing.T) {
-	// A custom code not in the registry — registry lookup misses, but
-	// HTTPStatus field provides 418 (teapot, for fun); Stage A compat.
-	custom := &loopzeroerrors.LoopZeroError{Code: "TEAPOT_BREW", Message: "I'm a teapot", HTTPStatus: 418}
-	if got := Status(custom); got != 418 {
-		t.Errorf("legacy HTTPStatus field fallback failed; got %d", got)
-	}
-}
-
-func TestStatus_UnregisteredCodeAndZeroFieldReturns500(t *testing.T) {
+func TestStatus_UnregisteredCodeReturns500(t *testing.T) {
+	// Stage C: HTTPStatus field removed; registry is now the only
+	// source of truth. Unregistered codes default to 500.
 	custom := &loopzeroerrors.LoopZeroError{Code: "NOT_REGISTERED_YET", Message: "x"}
 	if got := Status(custom); got != http.StatusInternalServerError {
-		t.Errorf("unregistered code with zero HTTPStatus must default to 500; got %d", got)
+		t.Errorf("unregistered code must default to 500; got %d", got)
 	}
 }
 
@@ -85,5 +78,26 @@ func TestStatus_PreservesIsAsCompatibility(t *testing.T) {
 	wrapped := loopzeroerrors.ErrLockTimeout.WrapWithStack("submit")
 	if got := Status(wrapped); got != http.StatusConflict {
 		t.Errorf("Status must traverse wrap chains; got %d", got)
+	}
+}
+
+// TestRegistry_CoversAllSentinelsCommonInAPI is a regression guard
+// ensuring the registry stays in sync with codes emitted by the api/
+// module. Newly introduced LoopZeroError codes that surface at the HTTP
+// boundary MUST be registered here or they default to 500 (silent).
+//
+// The list below is the minimum coverage discovered during T2.3
+// Stage C migration (2026-05-04). Add new entries when adding new
+// LoopZeroError codes; pair with sentinel definition for traceability.
+func TestRegistry_CoversAllSentinelsCommonInAPI(t *testing.T) {
+	required := []string{
+		"INVALID_ENVIRONMENT", "INVALID_CALLBACK", "VALIDATION_ERROR",
+		"USER_NOT_FOUND", "MEMBER_NOT_FOUND", "TEAM_MEMBER_NOT_FOUND",
+		"UNSUPPORTED_FRAMEWORK",
+	}
+	for _, code := range required {
+		if !IsRegistered(code) {
+			t.Errorf("registry must include %q (used by api/ — silent 500 if missing)", code)
+		}
 	}
 }

@@ -18,6 +18,7 @@ import (
 	"github.com/loopzero/loopzero/api/internal/domain"
 	"github.com/loopzero/loopzero/api/internal/middleware"
 	loopzeroerrors "github.com/loopzero/loopzero/pkg/errors"
+	errorshttp "github.com/loopzero/loopzero/pkg/errors/http"
 )
 
 var (
@@ -300,8 +301,9 @@ func writeJSON(w http.ResponseWriter, status int, data interface{}) {
 }
 
 // writeLoopZeroError writes a LoopZeroError as a JSON response with the correct HTTP status.
+// Status resolution lives in pkg/errors/http (Stage C of T2.3 / ADR-0030).
 func writeLoopZeroError(w http.ResponseWriter, err *loopzeroerrors.LoopZeroError) {
 	w.Header().Set("Content-Type", "application/json")
-	w.WriteHeader(err.HTTPStatus)
+	w.WriteHeader(errorshttp.Status(err))
 	_ = json.NewEncoder(w).Encode(err.ToJSON())
 }

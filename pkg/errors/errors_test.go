@@ -11,7 +11,7 @@ import (
 )
 
 func TestLoopZeroError_Error(t *testing.T) {
-	err := &LoopZeroError{Code: "TEST_CODE", Message: "test message", HTTPStatus: 500}
+	err := &LoopZeroError{Code: "TEST_CODE", Message: "test message"}
 	expected := "[TEST_CODE] test message"
 	if err.Error() != expected {
 		t.Errorf("expected %q, got %q", expected, err.Error())
@@ -24,21 +24,21 @@ func TestLoopZeroError_ImplementsError(t *testing.T) {
 
 func TestLoopZeroError_Is(t *testing.T) {
 	t.Run("matches by code", func(t *testing.T) {
-		err := &LoopZeroError{Code: "LOCK_TIMEOUT", Message: "custom", HTTPStatus: 409}
+		err := &LoopZeroError{Code: "LOCK_TIMEOUT", Message: "custom"}
 		if !stderrors.Is(err, ErrLockTimeout) {
 			t.Error("expected errors.Is to match by code")
 		}
 	})
 
 	t.Run("does not match different code", func(t *testing.T) {
-		err := &LoopZeroError{Code: "LOCK_TIMEOUT", Message: "custom", HTTPStatus: 409}
+		err := &LoopZeroError{Code: "LOCK_TIMEOUT", Message: "custom"}
 		if stderrors.Is(err, ErrBuildNotFound) {
 			t.Error("expected errors.Is not to match different code")
 		}
 	})
 
 	t.Run("does not match non-LoopZeroError", func(t *testing.T) {
-		err := &LoopZeroError{Code: "LOCK_TIMEOUT", Message: "custom", HTTPStatus: 409}
+		err := &LoopZeroError{Code: "LOCK_TIMEOUT", Message: "custom"}
 		if stderrors.Is(err, stderrors.New("some other error")) {
 			t.Error("expected errors.Is not to match non-LoopZeroError")
 		}
@@ -54,13 +54,12 @@ func TestLoopZeroError_Wrap(t *testing.T) {
 	if !strings.HasPrefix(wrapped.Message, "deploy-service: ") {
 		t.Errorf("expected message to start with context, got %q", wrapped.Message)
 	}
-	if wrapped.HTTPStatus != original.HTTPStatus {
-		t.Errorf("expected status %d, got %d", original.HTTPStatus, wrapped.HTTPStatus)
-	}
+	// Stage C: HTTP status now comes from pkg/errors/http.Status(err);
+	// Wrap preserves Code so the registered status carries through.
 }
 
 func TestLoopZeroError_ToJSON(t *testing.T) {
-	err := &LoopZeroError{Code: "MY_CODE", Message: "details here", HTTPStatus: 409}
+	err := &LoopZeroError{Code: "MY_CODE", Message: "details here"}
 	j := err.ToJSON()
 	if j["code"] != "MY_CODE" {
 		t.Errorf("expected code MY_CODE, got %q", j["code"])
@@ -71,6 +70,9 @@ func TestLoopZeroError_ToJSON(t *testing.T) {
 }
 
 func TestNewLoopZeroError(t *testing.T) {
+	// Stage C: NewLoopZeroError still accepts the int third parameter for
+	// backward compatibility with pre-T2.3 callers, but the value is
+	// ignored — HTTP status now resolves via pkg/errors/http.Status.
 	err := NewLoopZeroError("CUSTOM", "custom message", 418)
 	if err.Code != "CUSTOM" {
 		t.Errorf("expected code CUSTOM, got %q", err.Code)
@@ -78,52 +80,49 @@ func TestNewLoopZeroError(t *testing.T) {
 	if err.Message != "custom message" {
 		t.Errorf("expected message 'custom message', got %q", err.Message)
 	}
-	if err.HTTPStatus != 418 {
-		t.Errorf("expected status 418, got %d", err.HTTPStatus)
-	}
 }
 
 func TestPredefinedErrors(t *testing.T) {
+	// Stage C: HTTP status validation moved to pkg/errors/http
+	// mapping_test.go (registry coverage). This test now pins only
+	// Code + non-empty Message — the cross-cutting transport contract
+	// belongs to errorshttp.Status, not to the domain struct.
 	tests := []struct {
-		name       string
-		err        *LoopZeroError
-		code       string
-		httpStatus int
+		name string
+		err  *LoopZeroError
+		code string
 	}{
-		{"ErrLockTimeout", ErrLockTimeout, "LOCK_TIMEOUT", 409},
-		{"ErrInvalidTransition", ErrInvalidTransition, "INVALID_TRANSITION", 409},
-		{"ErrTenantNotFound", ErrTenantNotFound, "TENANT_NOT_FOUND", 404},
-		{"ErrProjectNotFound", ErrProjectNotFound, "PROJECT_NOT_FOUND", 404},
-		{"ErrBuildNotFound", ErrBuildNotFound, "BUILD_NOT_FOUND", 404},
-		{"ErrReleaseNotFound", ErrReleaseNotFound, "RELEASE_NOT_FOUND", 404},
-		{"ErrNoActiveRelease", ErrNoActiveRelease, "NO_ACTIVE_RELEASE", 404},
-		{"ErrNoPreviousRelease", ErrNoPreviousRelease, "NO_PREVIOUS_RELEASE", 404},
-		{"ErrBuildAlreadyCompleted", ErrBuildAlreadyCompleted, "BUILD_ALREADY_COMPLETED", 409},
-		{"ErrDeployInProgress", ErrDeployInProgress, "DEPLOY_IN_PROGRESS", 409},
-		{"ErrInvalidName", ErrInvalidName, "INVALID_NAME", 400},
-		{"ErrIdempotencyConflict", ErrIdempotencyConflict, "IDEMPOTENCY_CONFLICT", 422},
-		{"ErrUnauthorized", ErrUnauthorized, "UNAUTHORIZED", 401},
-		{"ErrInvalidRequest", ErrInvalidRequest, "INVALID_REQUEST", 400},
-		{"ErrProjectExists", ErrProjectExists, "PROJECT_EXISTS", 409},
-		{"ErrInternalError", ErrInternalError, "INTERNAL_ERROR", 500},
-		{"ErrPayloadTooLarge", ErrPayloadTooLarge, "PAYLOAD_TOO_LARGE", 413},
-		{"ErrValidationFailed", ErrValidationFailed, "VALIDATION_FAILED", 422},
-		{"ErrFrontendMustBeStatic", ErrFrontendMustBeStatic, "FRONTEND_MUST_BE_STATIC", 422},
-		{"ErrPodLimitExceeded", ErrPodLimitExceeded, "POD_LIMIT_EXCEEDED", 422},
-		{"ErrMissingField", ErrMissingField, "MISSING_FIELD", 400},
-		{"ErrSourceUploadFailed", ErrSourceUploadFailed, "SOURCE_UPLOAD_FAILED", 500},
-		{"ErrPlatformDegraded", ErrPlatformDegraded, "PLATFORM_DEGRADED", 503},
-		{"ErrDeployServiceAuthFailed", ErrDeployServiceAuthFailed, "DEPLOY_SERVICE_AUTH_FAILED", 503},
-		{"ErrSyncOperationInProgress", ErrSyncOperationInProgress, "SYNC_OPERATION_IN_PROGRESS", 409},
+		{"ErrLockTimeout", ErrLockTimeout, "LOCK_TIMEOUT"},
+		{"ErrInvalidTransition", ErrInvalidTransition, "INVALID_TRANSITION"},
+		{"ErrTenantNotFound", ErrTenantNotFound, "TENANT_NOT_FOUND"},
+		{"ErrProjectNotFound", ErrProjectNotFound, "PROJECT_NOT_FOUND"},
+		{"ErrBuildNotFound", ErrBuildNotFound, "BUILD_NOT_FOUND"},
+		{"ErrReleaseNotFound", ErrReleaseNotFound, "RELEASE_NOT_FOUND"},
+		{"ErrNoActiveRelease", ErrNoActiveRelease, "NO_ACTIVE_RELEASE"},
+		{"ErrNoPreviousRelease", ErrNoPreviousRelease, "NO_PREVIOUS_RELEASE"},
+		{"ErrBuildAlreadyCompleted", ErrBuildAlreadyCompleted, "BUILD_ALREADY_COMPLETED"},
+		{"ErrDeployInProgress", ErrDeployInProgress, "DEPLOY_IN_PROGRESS"},
+		{"ErrInvalidName", ErrInvalidName, "INVALID_NAME"},
+		{"ErrIdempotencyConflict", ErrIdempotencyConflict, "IDEMPOTENCY_CONFLICT"},
+		{"ErrUnauthorized", ErrUnauthorized, "UNAUTHORIZED"},
+		{"ErrInvalidRequest", ErrInvalidRequest, "INVALID_REQUEST"},
+		{"ErrProjectExists", ErrProjectExists, "PROJECT_EXISTS"},
+		{"ErrInternalError", ErrInternalError, "INTERNAL_ERROR"},
+		{"ErrPayloadTooLarge", ErrPayloadTooLarge, "PAYLOAD_TOO_LARGE"},
+		{"ErrValidationFailed", ErrValidationFailed, "VALIDATION_FAILED"},
+		{"ErrFrontendMustBeStatic", ErrFrontendMustBeStatic, "FRONTEND_MUST_BE_STATIC"},
+		{"ErrPodLimitExceeded", ErrPodLimitExceeded, "POD_LIMIT_EXCEEDED"},
+		{"ErrMissingField", ErrMissingField, "MISSING_FIELD"},
+		{"ErrSourceUploadFailed", ErrSourceUploadFailed, "SOURCE_UPLOAD_FAILED"},
+		{"ErrPlatformDegraded", ErrPlatformDegraded, "PLATFORM_DEGRADED"},
+		{"ErrDeployServiceAuthFailed", ErrDeployServiceAuthFailed, "DEPLOY_SERVICE_AUTH_FAILED"},
+		{"ErrSyncOperationInProgress", ErrSyncOperationInProgress, "SYNC_OPERATION_IN_PROGRESS"},
 	}
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			if tt.err.Code != tt.code {
 				t.Errorf("expected code %q, got %q", tt.code, tt.err.Code)
-			}
-			if tt.err.HTTPStatus != tt.httpStatus {
-				t.Errorf("expected status %d, got %d", tt.httpStatus, tt.err.HTTPStatus)
 			}
 			if tt.err.Message == "" {
 				t.Error("expected non-empty message")
@@ -195,9 +194,6 @@ func TestErrorFactories(t *testing.T) {
 		if !strings.Contains(err.Message, "QUEUED") || !strings.Contains(err.Message, "BuildSucceeded") {
 			t.Errorf("expected message to contain from and event, got %q", err.Message)
 		}
-		if err.HTTPStatus != 409 {
-			t.Errorf("expected status 409, got %d", err.HTTPStatus)
-		}
 	})
 
 	t.Run("NewTenantNotFound includes tenant ID", func(t *testing.T) {
@@ -226,18 +222,13 @@ func TestErrorFactories(t *testing.T) {
 		if !strings.Contains(err.Message, "key-abc") {
 			t.Errorf("expected message to contain key, got %q", err.Message)
 		}
-		if err.HTTPStatus != 422 {
-			t.Errorf("expected status 422, got %d", err.HTTPStatus)
-		}
+		// Status check belongs to pkg/errors/http (Stage C).
 	})
 
 	t.Run("NewProjectNotFound includes project name", func(t *testing.T) {
 		err := NewProjectNotFound("my-app")
 		if err.Code != "PROJECT_NOT_FOUND" {
 			t.Errorf("expected code PROJECT_NOT_FOUND, got %s", err.Code)
-		}
-		if err.HTTPStatus != 404 {
-			t.Errorf("expected status 404, got %d", err.HTTPStatus)
 		}
 		expected := "project 'my-app' not found"
 		if err.Message != expected {
@@ -247,10 +238,11 @@ func TestErrorFactories(t *testing.T) {
 }
 
 func TestLoopZeroError_Is_CodeOnlyComparison(t *testing.T) {
-	// Is() compares only Code, not HTTPStatus. This is documented behavior.
-	err := &LoopZeroError{Code: "LOCK_TIMEOUT", Message: "custom", HTTPStatus: 500}
+	// Is() compares only Code, which is the entire identity model after
+	// Stage C — HTTPStatus is no longer a LoopZeroError field.
+	err := &LoopZeroError{Code: "LOCK_TIMEOUT", Message: "custom"}
 	if !stderrors.Is(err, ErrLockTimeout) {
-		t.Error("expected errors.Is to match by code even with different HTTPStatus")
+		t.Error("expected errors.Is to match by code")
 	}
 }
 
@@ -320,9 +312,7 @@ func TestErrReplicasExceedPlan_Shape(t *testing.T) {
 	if ErrReplicasExceedPlan.Code != "REPLICAS_EXCEED_PLAN" {
 		t.Errorf("expected code REPLICAS_EXCEED_PLAN, got %q", ErrReplicasExceedPlan.Code)
 	}
-	if ErrReplicasExceedPlan.HTTPStatus != 422 {
-		t.Errorf("expected HTTP 422, got %d", ErrReplicasExceedPlan.HTTPStatus)
-	}
+	// Status check moved to pkg/errors/http (Stage C).
 }
 
 func TestErrScalingAmbiguous_Shape(t *testing.T) {
@@ -332,9 +322,6 @@ func TestErrScalingAmbiguous_Shape(t *testing.T) {
 	if ErrScalingAmbiguous.Code != "SCALING_AMBIGUOUS" {
 		t.Errorf("expected code SCALING_AMBIGUOUS, got %q", ErrScalingAmbiguous.Code)
 	}
-	if ErrScalingAmbiguous.HTTPStatus != 422 {
-		t.Errorf("expected HTTP 422, got %d", ErrScalingAmbiguous.HTTPStatus)
-	}
 	if !strings.Contains(ErrScalingAmbiguous.Message, "replicas") ||
 		!strings.Contains(ErrScalingAmbiguous.Message, "autoscaling") {
 		t.Errorf("ErrScalingAmbiguous must name both fields, got: %s", ErrScalingAmbiguous.Message)
@@ -343,8 +330,8 @@ func TestErrScalingAmbiguous_Shape(t *testing.T) {
 
 func TestNewReplicasExceedPlan_FormatsContext(t *testing.T) {
 	err := NewReplicasExceedPlan("starter", 2, 5, "api")
-	if err.Code != "REPLICAS_EXCEED_PLAN" || err.HTTPStatus != 422 {
-		t.Fatalf("unexpected shape: %+v", err)
+	if err.Code != "REPLICAS_EXCEED_PLAN" {
+		t.Fatalf("unexpected code: %+v", err)
 	}
 	msg := err.Message
 	if !strings.Contains(msg, "Starter") && !strings.Contains(msg, "starter") {

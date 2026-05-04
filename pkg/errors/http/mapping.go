@@ -50,9 +50,15 @@ var statusByCode = map[string]int{
 	"DOMAIN_NOT_FOUND":     http.StatusNotFound,         // 404
 	"REPOSITORY_NOT_LINKED": http.StatusNotFound,        // 404
 	"ENVIRONMENT_NOT_FOUND": http.StatusNotFound,        // 404
+	"USER_NOT_FOUND":         http.StatusNotFound, // 404 (teams.go)
+	"MEMBER_NOT_FOUND":       http.StatusNotFound, // 404 (teams.go)
+	"TEAM_MEMBER_NOT_FOUND":  http.StatusNotFound, // 404 (teams.go remove)
 
 	"INVALID_NAME":               http.StatusBadRequest, // 400
 	"INVALID_REQUEST":            http.StatusBadRequest, // 400
+	"INVALID_ENVIRONMENT":        http.StatusBadRequest, // 400 (builds.go DA-10)
+	"INVALID_CALLBACK":           http.StatusBadRequest, // 400 (build_orchestrator_complete.go DA-15)
+	"VALIDATION_ERROR":           http.StatusBadRequest, // 400 (db/scaling_store.go)
 	"MISSING_FIELD":              http.StatusBadRequest, // 400
 	"SAME_ENVIRONMENT":           http.StatusBadRequest, // 400
 
@@ -67,6 +73,7 @@ var statusByCode = map[string]int{
 	"POD_LIMIT_EXCEEDED":         422,
 	"REPLICAS_EXCEED_PLAN":       422,
 	"SCALING_AMBIGUOUS":          422,
+	"UNSUPPORTED_FRAMEWORK":      422, // (builds.go framework validation)
 
 	"CELL_AT_CAPACITY":     http.StatusTooManyRequests, // 429
 	"TENANT_BUILD_QUOTA":   http.StatusTooManyRequests, // 429
@@ -80,14 +87,16 @@ var statusByCode = map[string]int{
 
 // Status returns the HTTP status code for the given error.
 //
-// Lookup precedence (Stage A migration):
+// Lookup precedence (Stage C — HTTPStatus field removed):
 //
 //  1. The registered code in statusByCode (authoritative).
-//  2. The legacy loopzeroerrors.LoopZeroError.HTTPStatus field (compat).
-//  3. http.StatusInternalServerError (500) for non-LoopZeroError or
+//  2. http.StatusInternalServerError (500) for non-LoopZeroError or
 //     unregistered codes.
 //
-// After Stage C (HTTPStatus field removed) only steps 1 and 3 apply.
+// Adding a new LoopZeroError code without registering its status here
+// produces a silent 500 — pair every new sentinel with a registry
+// entry. The IsRegistered() helper is suitable for CI lint to enforce
+// this invariant.
 func Status(err error) int {
 	if err == nil {
 		return http.StatusOK
@@ -98,9 +107,6 @@ func Status(err error) int {
 	}
 	if s, ok := statusByCode[loopzeroErr.Code]; ok {
 		return s
-	}
-	if loopzeroErr.HTTPStatus != 0 {
-		return loopzeroErr.HTTPStatus
 	}
 	return http.StatusInternalServerError
 }

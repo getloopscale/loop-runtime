@@ -243,10 +243,12 @@ func enforceScaling(apps []AppSpec, checker PlanCapChecker, tenantID string, ked
 			// B15: observe mutual-exclusion rejections under the same metric so
 			// dashboards show a single plan-enforcement signal.
 			metrics.PlanLimitViolations.WithLabelValues("scaling_ambiguous", "").Inc()
+			// Stage C of T2.3: HTTPStatus is resolved by errorshttp.Status()
+			// from the registered code; the int param is ignored.
 			return loopzeroerrors.NewLoopZeroError(
 				loopzeroerrors.ErrScalingAmbiguous.Code,
 				fmt.Sprintf("App '%s': %s", a.Name, loopzeroerrors.ErrScalingAmbiguous.Message),
-				loopzeroerrors.ErrScalingAmbiguous.HTTPStatus,
+				0,
 			)
 		}
 		if checker == nil {

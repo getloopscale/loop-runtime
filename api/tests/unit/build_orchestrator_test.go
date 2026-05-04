@@ -16,6 +16,7 @@ import (
 	"github.com/loopzero/loopzero/api/internal/services"
 	"github.com/loopzero/loopzero/api/internal/sse"
 	loopzeroerrors "github.com/loopzero/loopzero/pkg/errors"
+	errorshttp "github.com/loopzero/loopzero/pkg/errors/http"
 	"github.com/loopzero/loopzero/pkg/statemachine"
 )
 
@@ -1013,8 +1014,8 @@ func TestBuildOrchestrator_OnBuildCompleted_SucceededWithEmptyApps(t *testing.T)
 	if !errors.As(err, &loopzeroErr) {
 		t.Fatalf("expected LoopZeroError, got %T: %v", err, err)
 	}
-	if loopzeroErr.HTTPStatus != 400 {
-		t.Errorf("expected HTTP 400, got %d", loopzeroErr.HTTPStatus)
+	if got := errorshttp.Status(loopzeroErr); got != 400 {
+		t.Errorf("expected HTTP 400, got %d", got)
 	}
 }
 
