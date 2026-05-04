@@ -162,6 +162,15 @@ else
   result 2 "validate:rules (python3 missing)"
 fi
 
+# Gate 9.56: pkg/ Real Usage Matrix freshness (PKG-G14, pkg-sota plan T1.7).
+# Fails when docs/technical/pkg/architecture.md does not reflect current
+# `pkg/X` import counts (gate runs `pkg-usage-matrix.sh --check`).
+if bash "${REPO_ROOT}/infra/scripts/pkg-usage-matrix.sh" --check >/dev/null 2>&1; then
+  result 0 "validate:pkg-usage-matrix (gate PKG-G14)"
+else
+  result 1 "validate:pkg-usage-matrix (run \`task pkg:usage-matrix:write\`)"
+fi
+
 # Gate 9.6: helm dependency build for umbrella charts (Coverage Matrix #7).
 # Closes "charts/loopzero-platform requires helm dep build" gap. Reaches network
 # to refresh helm repos — gate is SKIP when offline (HELM_REPOS_UNREACHABLE=1).

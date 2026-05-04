@@ -25,21 +25,26 @@ Elas existem para centralizar contratos que precisam permanecer iguais em múlti
 | `pkg/enforcement` | plan limits e enforcement compartilhado | product policy | ✅ active (acopla `*sql.DB` — ver roadmap S9-4) |
 | `pkg/jwt` | validação e emissão de JWT/session tokens | auth/token contracts | ✅ active (gaps RFC 8725bis — ver roadmap QW-2) |
 
+<!-- USAGE-MATRIX-START -->
+
 ## Real Usage Matrix
 
-Tabela gerada via grep de `import "github.com/loopzero/loopzero/pkg/X"` em 2026-05-04. Atualizar via script `task pkg:usage-matrix` (a criar — ver gate PKG-G14).
+Tabela gerada via grep de `import "github.com/loopzero/loopzero/pkg/X"` em **2026-05-04**.
+Atualizar via `task pkg:usage-matrix:write` (script: `infra/scripts/pkg-usage-matrix.sh`).
+CI gate `task pkg:usage-matrix:check` falha se a tabela estiver out-of-date (gate PKG-G14).
 
-| Pacote | Imports | api/internal | operators/internal | cloud | Outros |
-|---|---:|---:|---:|---:|---:|
-| `pkg/errors` | 70 | maioria | sim | sim | tests |
-| `pkg/statemachine` | 54 | sim | sim | — | tests |
-| `pkg/naming` | 13 | sim | sim | — | — |
-| `pkg/logging` | 10 | sim | sim | sim | — |
-| `pkg/jwt` | 6 | sim | — | sim | — |
-| `pkg/enforcement` | 6 | sim | — | — | tests |
-| `pkg/id` | 5 | sim | — | — | tests |
-| `pkg/circuitbreaker` | 5 | sim | sim | — | — |
-<!-- `pkg/health` DELETADO 2026-05-04 per ADR-0028 (was 0 imports) -->
+| Pacote | Total imports | api/internal | operators/internal | cloud | cli | Outros |
+|---|---:|---:|---:|---:|---:|---:|
+| `pkg/circuitbreaker` | 5 | 0 | 4 | 0 | 0 | 1 |
+| `pkg/enforcement` | 6 | 2 | 0 | 1 | 0 | 3 |
+| `pkg/errors` | 70 | 64 | 0 | 0 | 0 | 6 |
+| `pkg/id` | 5 | 5 | 0 | 0 | 0 | 0 |
+| `pkg/jwt` | 6 | 2 | 0 | 3 | 0 | 1 |
+| `pkg/logging` | 10 | 0 | 0 | 0 | 0 | 10 |
+| `pkg/naming` | 13 | 5 | 8 | 0 | 0 | 0 |
+| `pkg/statemachine` | 54 | 32 | 10 | 0 | 0 | 12 |
+
+<!-- USAGE-MATRIX-END -->
 
 **Top consumidores** (top-level packages que importam `pkg/`):
 
@@ -88,18 +93,18 @@ Arquivos âncora:
 - `pkg/id/id.go`
 - `pkg/naming/naming.go`
 
-### `error-and-health-contracts`
+### `error-contracts`
 
 Responsável por:
 
 - erros tipados e serializáveis;
-- contratos de health/readiness agregados;
 - consistência de interpretação por consumidores distintos.
 
 Arquivos âncora:
 
 - `pkg/errors/errors.go`
-- `pkg/health/*.go`
+
+> **Nota:** o domínio "health-contracts" foi removido em 2026-05-04 com a deleção de `pkg/health/` per ADR-0028. Phase aggregation reconvertida para `pkg/conditions` (kstatus-compatible) per ADR-0032 quando T2.2 do plan executar.
 
 ### `observability-and-resilience`
 

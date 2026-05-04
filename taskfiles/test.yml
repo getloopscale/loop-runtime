@@ -21,6 +21,16 @@ tasks:
     cmds:
       - bash infra/tests/parity/validate-matrix.sh --quick
 
+  pkg:usage-matrix:check:
+    desc: Verify docs/technical/pkg/architecture.md Real Usage Matrix is up-to-date (gate PKG-G14)
+    cmds:
+      - bash infra/scripts/pkg-usage-matrix.sh --check
+
+  pkg:usage-matrix:write:
+    desc: Regenerate Real Usage Matrix in architecture.md (run before commit if pkg imports changed)
+    cmds:
+      - bash infra/scripts/pkg-usage-matrix.sh --write
+
   parity:audit:
     desc: Verify regression matrix integrity (every entry's Verification token resolves in repo)
     cmds:
