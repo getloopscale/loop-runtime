@@ -74,12 +74,12 @@ Per ADR-0032 + plan v1.2 Adoption Follow-up #1:
 |---|---|---|---|
 | 1 | tenant | `operators/internal/tenant/tenant_controller.go` | ✅ migrated (iter 5) — reference impl |
 | 2 | environment | `operators/internal/tenant/environment_controller.go` | ✅ migrated (iter 5) — closes original T2.2 v1.0 criterion |
-| 3 | application | `operators/internal/app/application_controller.go` | ⏳ |
-| 4 | exposed-route | `operators/internal/controller/exposedroute_controller.go` | ⏳ |
-| 5 | preview | `operators/internal/preview/preview_controller.go` | ⏳ |
-| 6 | platform-bootstrap | `operators/internal/platform/platformbootstrap_controller.go` | ⏳ |
-| 7 | git-repository-binding | `operators/internal/controller/gitrepositorybinding_controller.go` | ⏳ |
-| 8 | cluster-credential | `operators/internal/controller/clustercredential_controller.go` | ⏳ |
+| 3 | application | `operators/internal/app/application_controller.go` | ✅ migrated (iter 6) |
+| 4 | exposure | `operators/internal/app/exposure_controller.go` | ✅ migrated (iter 6) |
+| 5 | preview | `operators/internal/preview/preview_controller.go` | ✅ migrated (iter 6) |
+| 6 | platform-bootstrap | `operators/internal/platform/platformbootstrap_controller.go` | ✅ migrated (iter 6) |
+| 7 | git-repository-binding | `operators/internal/platform/gitrepositorybinding_controller.go` | ✅ migrated (iter 6) |
+| 8 | cluster-credential | `operators/internal/platform/clustercredential_controller.go` | ✅ migrated (iter 6) — Adoption Follow-up #1 fully closed |
 
 Each migration is a single-line edit at the deferred-status-update
 site. Each can ship in its own commit, with envtest verification.

@@ -112,7 +112,7 @@ func (r *PreviewReconciler) Reconcile(ctx context.Context, req ctrl.Request) (re
 		if !latest.DeletionTimestamp.IsZero() {
 			return
 		}
-		conditions.SetReadinessSummary(&latest.Status.Conditions, latest.Generation, previewDetailTypes)
+		conditions.SetReadinessSummaryViaPkg(&latest.Status.Conditions, latest.Generation, previewDetailTypes)
 		_ = r.Status().Update(ctx, latest)
 	}()
 

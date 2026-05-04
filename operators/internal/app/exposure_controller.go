@@ -100,7 +100,7 @@ func (r *ExposureReconciler) Reconcile(ctx context.Context, req ctrl.Request) (r
 		if !latest.DeletionTimestamp.IsZero() {
 			return
 		}
-		conditions.SetReadinessSummary(&latest.Status.Conditions, latest.Generation, exposureDetailTypes)
+		conditions.SetReadinessSummaryViaPkg(&latest.Status.Conditions, latest.Generation, exposureDetailTypes)
 		_ = r.Status().Update(ctx, latest)
 	}()
 

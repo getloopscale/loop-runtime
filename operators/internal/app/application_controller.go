@@ -82,7 +82,7 @@ func (r *ApplicationReconciler) Reconcile(ctx context.Context, req ctrl.Request)
 		if !latest.DeletionTimestamp.IsZero() {
 			return
 		}
-		conditions.SetReadinessSummary(&latest.Status.Conditions, latest.Generation, applicationDetailTypes)
+		conditions.SetReadinessSummaryViaPkg(&latest.Status.Conditions, latest.Generation, applicationDetailTypes)
 		_ = r.Status().Update(ctx, latest)
 	}()
 

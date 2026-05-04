@@ -85,7 +85,7 @@ func (r *GitRepositoryBindingReconciler) Reconcile(ctx context.Context, req ctrl
 		if !latest.DeletionTimestamp.IsZero() {
 			return
 		}
-		conditions.SetReadinessSummary(&latest.Status.Conditions, latest.Generation, gitRepositoryBindingDetailTypes)
+		conditions.SetReadinessSummaryViaPkg(&latest.Status.Conditions, latest.Generation, gitRepositoryBindingDetailTypes)
 		_ = r.Status().Update(ctx, latest)
 	}()
 

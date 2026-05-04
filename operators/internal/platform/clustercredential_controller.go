@@ -90,7 +90,7 @@ func (r *ClusterCredentialReconciler) Reconcile(ctx context.Context, req ctrl.Re
 		if !latest.DeletionTimestamp.IsZero() {
 			return
 		}
-		conditions.SetReadinessSummary(&latest.Status.Conditions, latest.Generation, clusterCredentialDetailTypes)
+		conditions.SetReadinessSummaryViaPkg(&latest.Status.Conditions, latest.Generation, clusterCredentialDetailTypes)
 		_ = r.Status().Update(ctx, latest)
 	}()
 
