@@ -1,0 +1,28 @@
+digraph Build {
+	rankdir=LR;
+	node [shape=circle, fontsize=10];
+	edge [fontsize=8];
+
+	"CANCELLED" [shape=doublecircle];
+	"CANCELLING" [shape=circle];
+	"FAILED" [shape=doublecircle];
+	"QUEUED" [shape=circle];
+	"RELEASING" [shape=circle];
+	"RUNNING" [shape=circle];
+	"SUCCEEDED" [shape=doublecircle];
+
+	"CANCELLING" -> "CANCELLED" [label="BuildCancelConfirmed"];
+	"CANCELLING" -> "CANCELLED" [label="BuildCancelTimeout"];
+	"QUEUED" -> "CANCELLED" [label="BuildCancelRequested"];
+	"QUEUED" -> "FAILED" [label="BuildFailed"];
+	"QUEUED" -> "FAILED" [label="BuildQueueTimeout"];
+	"QUEUED" -> "RUNNING" [label="BuildStarted"];
+	"RELEASING" -> "CANCELLED" [label="BuildCancelRequested"];
+	"RELEASING" -> "SUCCEEDED" [label="BuildReleaseCompleted"];
+	"RELEASING" -> "FAILED" [label="BuildReleaseFailed"];
+	"RELEASING" -> "FAILED" [label="BuildReleaseTimeout"];
+	"RUNNING" -> "CANCELLING" [label="BuildCancelRequested"];
+	"RUNNING" -> "FAILED" [label="BuildFailed"];
+	"RUNNING" -> "RELEASING" [label="BuildSucceeded"];
+	"RUNNING" -> "FAILED" [label="BuildTimeout"];
+}

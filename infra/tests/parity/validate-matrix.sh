@@ -171,6 +171,13 @@ else
   result 1 "validate:pkg-usage-matrix (run \`task pkg:usage-matrix:write\`)"
 fi
 
+# Gate 9.57: state machine DOT files freshness (pkg-sota plan T2.7).
+if bash "${REPO_ROOT}/infra/scripts/gen-state-machine-dots.sh" --check >/dev/null 2>&1; then
+  result 0 "validate:state-machine-dots (T2.7)"
+else
+  result 1 "validate:state-machine-dots (run \`task pkg:state-machine-dots:write\`)"
+fi
+
 # Gate 9.6: helm dependency build for umbrella charts (Coverage Matrix #7).
 # Closes "charts/loopzero-platform requires helm dep build" gap. Reaches network
 # to refresh helm repos — gate is SKIP when offline (HELM_REPOS_UNREACHABLE=1).

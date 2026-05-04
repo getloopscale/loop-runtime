@@ -31,6 +31,16 @@ tasks:
     cmds:
       - bash infra/scripts/pkg-usage-matrix.sh --write
 
+  pkg:state-machine-dots:check:
+    desc: Verify docs/state-machines/*.dot match pkg/statemachine.Visualize() output (gate T2.7)
+    cmds:
+      - bash infra/scripts/gen-state-machine-dots.sh --check
+
+  pkg:state-machine-dots:write:
+    desc: Regenerate DOT files for every state machine (run before commit if statemachine changed)
+    cmds:
+      - bash infra/scripts/gen-state-machine-dots.sh --write
+
   parity:audit:
     desc: Verify regression matrix integrity (every entry's Verification token resolves in repo)
     cmds:
