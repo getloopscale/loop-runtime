@@ -90,10 +90,26 @@ These are explicitly out-of-scope:
 - **Comment polish (em-dash vs double-dash):** Cosmetic, classified as mechanical.
 - **Package declaration:** `package controller` → `package <split>` is the only intended difference per file.
 
+## Ports applied (Ralph loop iter 2 — 2026-05-04)
+
+All 3 semantic ports have been applied to the split tree. Build + vet GREEN.
+Re-computed diff sizes confirm only mechanical differences remain
+(package declaration, tracing helper indirection per ADR D7, comment polish).
+
+| Port | Diff before | Diff after | Status |
+|---|---|---|---|
+| #1 ClusterCredential reconcileArgoCDClusterSecret ALWAYS-call | 135 lines | 119 lines (mechanical only) | ✅ Applied |
+| #2 environment_rbac.go pull-secret NotFound switch case | 71 lines | 57 lines (mechanical only) | ✅ Applied |
+| #3 preview_controller.go IngressNamespace + ingressNS() + INGRESS_NAMESPACE env | 99 lines | 85 lines + preview_resources.go 24 → 33 lines (mechanical only) | ✅ Applied |
+
+T1.1 (mass-move 21 _test.go files monolith → split) is now UNBLOCKED from a
+semantic-equivalence standpoint. ClusterCredential 78-LOC drift is closed;
+all production behavior matches between trees during Stage A coexistence.
+
 ## Sign-off
 
 - Date: 2026-05-04
-- Author: Ralph loop iter 1 (operators-sota-faang-grade-plan)
+- Author: Ralph loop iter 1 + iter 2 (operators-sota-faang-grade-plan)
 - Reviewer requirement (per ADR-0023 condition #2): MUST be signed off by `agent:test` BEFORE T1.1 begins.
 - Async ratification status: PENDING human ratification.
 

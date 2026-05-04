@@ -90,16 +90,27 @@ func (r *EnvironmentReconciler) reconcileRBAC(ctx context.Context, env *loopzero
 	//   1. Copy the docker config from loopzero-system-source in loopzero-system
 	//      (seeded once at platform bootstrap) into this namespace as loopzero-system.
 	//   2. Attach it to loopzero-app SA.
-	if err := r.ensurePullSecret(ctx, env, nsName); err != nil {
-		// Non-fatal: pod may still pull if another mechanism (doctl integration,
-		// namespace-level auto-propagation) provides the secret later.
-		// Log but do not block Environment readiness.
+	// F-09 (CHG-2026-04-29-DOGFOOD T4.1 / drift-baseline.md port #2):
+	// quando source pull secret não existe (standalone-multi, k3d local com
+	// registry público), antes este path logava "pull secret ensure failed
+	// (non-fatal)" a cada reconcile. Agora distinguimos NotFound (esperado
+	// em alguns profiles) de falha real: NotFound vira condição
+	// TypePullSecretReady=False/SourceMissing SEM log (idempotente, sem
+	// ruído); outras falhas continuam logadas.
+	switch err := r.ensurePullSecret(ctx, env, nsName); {
+	case err == nil:
+		conditions.SetCondition(&env.Status.Conditions, conditions.TypePullSecretReady,
+			metav1.ConditionTrue, conditions.ReasonReady, "Pull secret provisioned", env.Generation)
+	case errors.IsNotFound(err):
+		// Source ausente: profile sem registry privado. Não é falha de runtime.
+		conditions.SetCondition(&env.Status.Conditions, conditions.TypePullSecretReady,
+			metav1.ConditionFalse, "SourceMissing",
+			"Source registry pull secret not present in loopzero-system; pods will rely on public images or external auto-mount.",
+			env.Generation)
+	default:
 		log.FromContext(ctx).Info("pull secret ensure failed (non-fatal)", "error", err.Error(), "namespace", nsName)
 		conditions.SetCondition(&env.Status.Conditions, conditions.TypePullSecretReady,
 			metav1.ConditionFalse, conditions.ReasonFailed, err.Error(), env.Generation)
-	} else {
-		conditions.SetCondition(&env.Status.Conditions, conditions.TypePullSecretReady,
-			metav1.ConditionTrue, conditions.ReasonReady, "Pull secret provisioned", env.Generation)
 	}
 
 	// Bug #24 complement: delete stuck ImagePullBackOff pods so ReplicaSet recreates them.

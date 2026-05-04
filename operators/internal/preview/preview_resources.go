@@ -90,13 +90,18 @@ func (r *PreviewReconciler) reconcilePreviewAllowIngressPolicy(ctx context.Conte
 			PolicyTypes: []networkingv1.PolicyType{
 				networkingv1.PolicyTypeIngress,
 			},
+			// drift-baseline.md port #3: allow ingress from the namespace
+			// where Traefik runs (configurable via INGRESS_NAMESPACE env,
+			// defaults to constants.NamespaceIngress). Previously this
+			// hardcoded NamespacePlatformSystem which broke ingress in
+			// preview environments using non-default ingress namespaces.
 			Ingress: []networkingv1.NetworkPolicyIngressRule{
 				{
 					From: []networkingv1.NetworkPolicyPeer{
 						{
 							NamespaceSelector: &metav1.LabelSelector{
 								MatchLabels: map[string]string{
-									constants.KubeMetadataNameLabel: constants.NamespacePlatformSystem,
+									constants.KubeMetadataNameLabel: r.ingressNS(),
 								},
 							},
 						},
