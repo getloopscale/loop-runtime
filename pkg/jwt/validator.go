@@ -3,6 +3,12 @@
 
 // Package jwt provides JWT validation against Ory Hydra's JWKS endpoint.
 // Shared between the cloud auth service and the engine API.
+//
+// Per ADR-0029, this package enforces RFC 8725bis hardening:
+//   - Algorithm whitelist via goJWT.WithValidMethods (defense in depth
+//     against algorithm confusion attacks; RFC 8725 §3.1).
+//   - typ header validation — only "JWT", "at+jwt", or absent are
+//     accepted (RFC 8725bis §2.6 cross-JWT confusion mitigation).
 package jwt
 
 import (
@@ -17,6 +23,42 @@ import (
 
 	goJWT "github.com/golang-jwt/jwt/v5"
 )
+
+// AllowedAccessAlgs is the whitelist of signing algorithms acceptable
+// for access tokens issued by Ory Hydra. Hydra produces RS256 by
+// default; widening this list MUST go through ADR-0029 review.
+var AllowedAccessAlgs = []string{"RS256"}
+
+// AllowedSessionAlgs is the whitelist of signing algorithms acceptable
+// for HMAC session tokens (dashboard → API).
+var AllowedSessionAlgs = []string{"HS256"}
+
+// allowedTypValues is the closed set of "typ" header values accepted
+// by LoopZero validators per RFC 7519 / RFC 9068. Empty (header absent)
+// is also accepted — RFC 7519 does not mandate the header.
+var allowedTypValues = map[string]struct{}{
+	"":       {}, // header absent is allowed
+	"JWT":    {}, // RFC 7519 default
+	"at+jwt": {}, // RFC 9068 OAuth access-token profile
+}
+
+// validateTypHeader rejects tokens whose "typ" header is set to a
+// value outside allowedTypValues. Closes the cross-JWT confusion
+// vector (RFC 8725bis §2.6).
+func validateTypHeader(token *goJWT.Token) error {
+	raw, ok := token.Header["typ"]
+	if !ok {
+		return nil
+	}
+	typ, ok := raw.(string)
+	if !ok {
+		return fmt.Errorf("typ header must be a string, got %T", raw)
+	}
+	if _, accepted := allowedTypValues[typ]; !accepted {
+		return fmt.Errorf("unexpected typ header: %q", typ)
+	}
+	return nil
+}
 
 // Claims represents the JWT claims extracted from a Hydra-issued token.
 // Subject is in RegisteredClaims.Subject — do NOT redeclare it here.
@@ -74,8 +116,20 @@ func NewValidator(jwksURL, issuer, audience string) *Validator {
 }
 
 // Validate parses and validates a JWT token, returning the claims.
+//
+// Validation steps (in order):
+//  1. Parser-level whitelist via WithValidMethods(AllowedAccessAlgs)
+//     rejects alg=none and alg!=RS256 BEFORE keyfunc runs.
+//  2. typ header validation rejects cross-JWT confusion attacks.
+//  3. Signing method type-assertion (defense in depth — should be
+//     redundant with step 1 but kept as belt-and-suspenders).
+//  4. JWKS lookup by kid + signature verification.
+//  5. Issuer / audience / exp claim checks.
 func (v *Validator) Validate(tokenString string) (*Claims, error) {
 	token, err := goJWT.ParseWithClaims(tokenString, &Claims{}, func(token *goJWT.Token) (interface{}, error) {
+		if err := validateTypHeader(token); err != nil {
+			return nil, err
+		}
 		if _, ok := token.Method.(*goJWT.SigningMethodRSA); !ok {
 			return nil, fmt.Errorf("unexpected signing method: %v", token.Header["alg"])
 		}
@@ -96,7 +150,12 @@ func (v *Validator) Validate(tokenString string) (*Claims, error) {
 			}
 		}
 		return key, nil
-	}, goJWT.WithIssuer(v.issuer), goJWT.WithAudience(v.audience), goJWT.WithExpirationRequired())
+	},
+		goJWT.WithValidMethods(AllowedAccessAlgs),
+		goJWT.WithIssuer(v.issuer),
+		goJWT.WithAudience(v.audience),
+		goJWT.WithExpirationRequired(),
+	)
 
 	if err != nil {
 		return nil, fmt.Errorf("token validation failed: %w", err)
@@ -197,11 +256,15 @@ func (s *SessionTokenIssuer) ValidateSession(tokenString string) (*SessionClaims
 
 func (s *SessionTokenIssuer) validateWithSecret(tokenString string, secret []byte) (*SessionClaims, error) {
 	token, err := goJWT.ParseWithClaims(tokenString, &SessionClaims{}, func(token *goJWT.Token) (interface{}, error) {
+		if err := validateTypHeader(token); err != nil {
+			return nil, err
+		}
 		if _, ok := token.Method.(*goJWT.SigningMethodHMAC); !ok {
 			return nil, fmt.Errorf("unexpected signing method: %v", token.Header["alg"])
 		}
 		return secret, nil
 	},
+		goJWT.WithValidMethods(AllowedSessionAlgs),
 		goJWT.WithIssuer(s.issuer),
 		goJWT.WithAudience(s.audience),
 		goJWT.WithExpirationRequired(),

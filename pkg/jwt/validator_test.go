@@ -913,3 +913,152 @@ func TestFetchJWKS_SkipsNonRSAKeys(t *testing.T) {
 		t.Errorf("expected 0 RSA keys, got %d", len(v.keys))
 	}
 }
+
+// ---------------------------------------------------------------------------
+// T1.2 — RFC 8725bis hardening per ADR-0029.
+// ---------------------------------------------------------------------------
+
+// TestValidate_RejectsNoneAlgorithm covers the classic "none" bypass.
+// An attacker submits a token with alg=none and no signature; the
+// validator MUST reject it because RS256 is the only allowed access alg.
+func TestValidate_RejectsNoneAlgorithm(t *testing.T) {
+	key := generateRSAKey(t)
+	srv := serveJWKS(t, jwksJSON(map[string]*rsa.PublicKey{"k1": &key.PublicKey}))
+
+	// Build an unsigned JWT manually: header.payload.''
+	header := base64.RawURLEncoding.EncodeToString([]byte(`{"alg":"none","typ":"JWT","kid":"k1"}`))
+	payload := base64.RawURLEncoding.EncodeToString([]byte(`{"iss":"test-issuer","aud":"test-audience","exp":99999999999}`))
+	tokenStr := header + "." + payload + "."
+
+	v := NewValidator(srv.URL, "test-issuer", "test-audience")
+	if _, err := v.Validate(tokenStr); err == nil {
+		t.Fatal("expected validator to reject alg=none, got nil error")
+	}
+}
+
+// TestValidate_RejectsHS256WithPublicKeyAsSecret covers the algorithm
+// confusion attack: attacker signs with HS256 using the RS256 public key
+// as the HMAC secret. The validator MUST reject because access tokens
+// are restricted to RS256.
+func TestValidate_RejectsHS256WithPublicKeyAsSecret(t *testing.T) {
+	key := generateRSAKey(t)
+	pubKeyBytes := jwksJSON(map[string]*rsa.PublicKey{"k1": &key.PublicKey})
+	srv := serveJWKS(t, pubKeyBytes)
+
+	// Sign HS256 with the JWKS payload as the HMAC secret. Real attacks
+	// use the public key bytes; using the JWKS payload is a stable proxy.
+	claims := goJWT.MapClaims{
+		"iss": "test-issuer",
+		"aud": "test-audience",
+		"exp": time.Now().Add(time.Hour).Unix(),
+	}
+	tk := goJWT.NewWithClaims(goJWT.SigningMethodHS256, claims)
+	tk.Header["kid"] = "k1"
+	signed, err := tk.SignedString(pubKeyBytes)
+	if err != nil {
+		t.Fatalf("sign HS256: %v", err)
+	}
+
+	v := NewValidator(srv.URL, "test-issuer", "test-audience")
+	if _, err := v.Validate(signed); err == nil {
+		t.Fatal("expected validator to reject HS256 access token, got nil error")
+	}
+}
+
+// TestValidate_RejectsUnexpectedTypHeader covers cross-JWT confusion
+// (RFC 8725bis §2.6). A token with typ="evil" MUST be rejected.
+func TestValidate_RejectsUnexpectedTypHeader(t *testing.T) {
+	key := generateRSAKey(t)
+	srv := serveJWKS(t, jwksJSON(map[string]*rsa.PublicKey{"k1": &key.PublicKey}))
+
+	tk := goJWT.NewWithClaims(goJWT.SigningMethodRS256, goJWT.MapClaims{
+		"iss": "test-issuer",
+		"aud": "test-audience",
+		"exp": time.Now().Add(time.Hour).Unix(),
+	})
+	tk.Header["kid"] = "k1"
+	tk.Header["typ"] = "evil"
+	signed, err := tk.SignedString(key)
+	if err != nil {
+		t.Fatalf("sign: %v", err)
+	}
+
+	v := NewValidator(srv.URL, "test-issuer", "test-audience")
+	if _, err := v.Validate(signed); err == nil {
+		t.Fatal("expected validator to reject typ=evil, got nil error")
+	}
+}
+
+// TestValidate_AcceptsCanonicalTypValues confirms backward compat —
+// "JWT" and "at+jwt" remain accepted.
+func TestValidate_AcceptsCanonicalTypValues(t *testing.T) {
+	for _, typ := range []string{"JWT", "at+jwt"} {
+		t.Run(typ, func(t *testing.T) {
+			key := generateRSAKey(t)
+			srv := serveJWKS(t, jwksJSON(map[string]*rsa.PublicKey{"k1": &key.PublicKey}))
+
+			tk := goJWT.NewWithClaims(goJWT.SigningMethodRS256, goJWT.MapClaims{
+				"iss": "test-issuer",
+				"aud": "test-audience",
+				"exp": time.Now().Add(time.Hour).Unix(),
+			})
+			tk.Header["kid"] = "k1"
+			tk.Header["typ"] = typ
+			signed, err := tk.SignedString(key)
+			if err != nil {
+				t.Fatalf("sign: %v", err)
+			}
+
+			v := NewValidator(srv.URL, "test-issuer", "test-audience")
+			if _, err := v.Validate(signed); err != nil {
+				t.Errorf("expected typ=%q to be accepted, got error: %v", typ, err)
+			}
+		})
+	}
+}
+
+// TestValidate_AcceptsTokenWithoutTypHeader covers backward compat —
+// RFC 7519 doesn't require typ; absent header MUST be accepted.
+func TestValidate_AcceptsTokenWithoutTypHeader(t *testing.T) {
+	key := generateRSAKey(t)
+	srv := serveJWKS(t, jwksJSON(map[string]*rsa.PublicKey{"k1": &key.PublicKey}))
+
+	tk := goJWT.NewWithClaims(goJWT.SigningMethodRS256, goJWT.MapClaims{
+		"iss": "test-issuer",
+		"aud": "test-audience",
+		"exp": time.Now().Add(time.Hour).Unix(),
+	})
+	tk.Header["kid"] = "k1"
+	delete(tk.Header, "typ")
+	signed, err := tk.SignedString(key)
+	if err != nil {
+		t.Fatalf("sign: %v", err)
+	}
+
+	v := NewValidator(srv.URL, "test-issuer", "test-audience")
+	if _, err := v.Validate(signed); err != nil {
+		t.Errorf("expected token without typ to be accepted, got: %v", err)
+	}
+}
+
+// TestValidateSession_RejectsRS256Token confirms session validator
+// (HS256-only) rejects access tokens (RS256). Defense against
+// substitution attack.
+func TestValidateSession_RejectsRS256Token(t *testing.T) {
+	rsaKey := generateRSAKey(t)
+	tk := goJWT.NewWithClaims(goJWT.SigningMethodRS256, goJWT.MapClaims{
+		"sub": "user-1",
+		"iss": "test-issuer",
+		"aud": "test-audience",
+		"exp": time.Now().Add(time.Hour).Unix(),
+	})
+	signed, err := tk.SignedString(rsaKey)
+	if err != nil {
+		t.Fatalf("sign RS256: %v", err)
+	}
+
+	issuer := NewSessionTokenIssuer("hmac-secret-32-bytes-padding-here", "test-issuer", "test-audience", time.Hour)
+	if _, err := issuer.ValidateSession(signed); err == nil {
+		t.Fatal("expected session validator to reject RS256 token, got nil error")
+	}
+}
