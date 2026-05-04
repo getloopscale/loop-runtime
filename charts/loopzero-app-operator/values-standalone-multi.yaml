@@ -13,4 +13,4 @@ global:
 
 image:
   repository: loopzero-app-operator
-  pullPolicy: Always   # local registry — re-pull on every rollout
+  pullPolicy: IfNotPresent   # FB-#1 (MEET-070): k3d image import populates node crictl cache; pullPolicy=Always cycles ImagePullBackOff because registry HTTP returns 404
