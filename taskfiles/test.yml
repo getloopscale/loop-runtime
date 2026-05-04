@@ -325,6 +325,19 @@ tasks:
           exit 1
         fi
 
+  validate:rbac:ast:
+    desc: |
+      ADR-0026 D4 condition #5 / plan T4.3 — AST analyzer that detects
+      RBAC anti-patterns the controller-gen pipeline can't catch:
+        - wildcard markers (resources=*, verbs=*) — security style guide
+        - missing markers vs r.Client.X call sites (basic correlation)
+      See operators/hack/validate-rbac/KNOWN_GAPS.md for blind spots.
+    cmds:
+      - cd operators && go run ./hack/validate-rbac -dir internal/tenant
+      - cd operators && go run ./hack/validate-rbac -dir internal/app
+      - cd operators && go run ./hack/validate-rbac -dir internal/preview
+      - cd operators && go run ./hack/validate-rbac -dir internal/platform
+
   validate:manifests:
     desc: Validate all K8s manifests with kubeconform
     cmds:
