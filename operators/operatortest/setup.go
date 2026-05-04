@@ -19,11 +19,14 @@ import (
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 
+	"github.com/loopzero/loopzero/operators/internal/app"
 	"github.com/loopzero/loopzero/operators/internal/argocd"
 	"github.com/loopzero/loopzero/operators/internal/constants"
-	"github.com/loopzero/loopzero/operators/internal/controller"
 	"github.com/loopzero/loopzero/operators/internal/gitea"
 	miniop "github.com/loopzero/loopzero/operators/internal/minio"
+	"github.com/loopzero/loopzero/operators/internal/platform"
+	"github.com/loopzero/loopzero/operators/internal/preview"
+	"github.com/loopzero/loopzero/operators/internal/tenant"
 )
 
 // GitRepoProvisioner is the interface for Git repository provisioning.
@@ -306,45 +309,69 @@ func (f *FakeMinIOProvisioner) DeleteTenantCredentials(_ context.Context, tenant
 // Use this in E2E tests to start the operator in-process against envtest.
 // buildClient and runtimeClient target the build and runtime clusters respectively.
 // In envtest, pass mgr.GetClient() for both (single API server).
+//
+// ADR-0023 D1: delegates to internal/tenant (canonical split-tree
+// implementation) instead of internal/controller (deprecated monolith).
 func SetupTenantController(mgr ctrl.Manager, gitProvisioner GitRepoProvisioner, argoCDProvisioner ArgoCDProvisioner, buildClient client.Client, runtimeClient client.Client) error {
-	return controller.SetupTenantController(mgr, gitProvisioner, argoCDProvisioner, buildClient, runtimeClient, controller.TenantControllerConfig{})
+	return tenant.SetupTenantController(mgr, gitProvisioner, argoCDProvisioner, buildClient, runtimeClient, tenant.TenantControllerConfig{})
 }
 
 // SetupClusterCredentialController registers the ClusterCredentialController with the given manager.
 // Use this in E2E tests to start the operator in-process against envtest.
+//
+// ADR-0023 D1: delegates to internal/platform.
 func SetupClusterCredentialController(mgr ctrl.Manager) error {
-	return controller.SetupClusterCredentialController(mgr, constants.DefaultArgoCDNamespace)
+	return platform.SetupClusterCredentialController(mgr, constants.DefaultArgoCDNamespace)
 }
 
 // SetupEnvironmentController registers the EnvironmentController with the given manager.
 // runtimeClient targets the runtime cluster; in envtest, pass mgr.GetClient().
 // Calls the cell-aware variant with factory=nil for legacy single-cell behavior.
+//
+// ADR-0023 D1: delegates to internal/tenant.
 func SetupEnvironmentController(mgr ctrl.Manager, runtimeClient client.Client) error {
-	return controller.SetupEnvironmentControllerWithFactory(mgr, runtimeClient, nil)
+	return tenant.SetupEnvironmentControllerWithFactory(mgr, runtimeClient, nil)
 }
 
 // SetupApplicationController registers the ApplicationController with the given manager.
 // baseDomain is the base domain for hostname assignment (e.g., "dev.loopzero.example").
+//
+// ADR-0023 D1: delegates to internal/app.
 func SetupApplicationController(mgr ctrl.Manager, baseDomain string) error {
-	return controller.SetupApplicationController(mgr, baseDomain)
+	return app.SetupApplicationController(mgr, baseDomain)
 }
 
 // SetupExposureController registers the ExposureController with the given manager.
 // Enables AllowProbeURLOverride for test environments (SEC-005).
+//
+// ADR-0023 D1: delegates to internal/app.
 func SetupExposureController(mgr ctrl.Manager) error {
-	return controller.SetupExposureController(mgr, controller.ExposureControllerConfig{
+	return app.SetupExposureController(mgr, app.ExposureControllerConfig{
 		AllowProbeURLOverride: true,
 	})
 }
 
 // SetupGitRepositoryBindingController registers the GitRepositoryBindingController with the given manager.
 // httpClient is used for Gitea API calls; pass nil to use http.DefaultClient.
+//
+// ADR-0023 D1: delegates to internal/platform.
 func SetupGitRepositoryBindingController(mgr ctrl.Manager, httpClient *http.Client) error {
-	return controller.SetupGitRepositoryBindingController(mgr, httpClient)
+	return platform.SetupGitRepositoryBindingController(mgr, httpClient)
 }
 
 // SetupPlatformBootstrapController registers the PlatformBootstrapController with the given manager.
 // httpClient is used for external API calls; pass nil to use http.DefaultClient.
+//
+// ADR-0023 D1: delegates to internal/platform.
 func SetupPlatformBootstrapController(mgr ctrl.Manager, httpClient *http.Client) error {
-	return controller.SetupPlatformBootstrapController(mgr, httpClient)
+	return platform.SetupPlatformBootstrapController(mgr, httpClient)
+}
+
+// SetupPreviewController registers the PreviewController with the given manager.
+// runtimeClient targets the runtime cluster; in envtest, pass mgr.GetClient().
+// baseDomain is used for preview URL hostnames.
+//
+// ADR-0023 D1: delegates to internal/preview.
+func SetupPreviewController(mgr ctrl.Manager, runtimeClient client.Client, baseDomain string) error {
+	return preview.SetupPreviewController(mgr, runtimeClient, baseDomain)
 }
