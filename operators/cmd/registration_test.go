@@ -30,17 +30,11 @@ type binaryWiringEntry struct {
 // "every exported Setup*Controller wired" invariant.
 //
 // Originally this test ran only against the monolith (cmd/main.go +
-// internal/controller/). T1.3 amplifies it to all 4 split binaries per
-// ADR-0023 D1; the monolith entry stays during the staged cutover (Stage A
-// coexistence) and gets removed at T1.4 alongside the monolith binary itself.
+// internal/controller/). T1.3 amplified it to all 4 split binaries per
+// ADR-0023 D1; T1.4 then removed the monolith entry alongside the monolith
+// binary deletion (LOCAL only — production retains the monolith Helm chart
+// until Stage D 30d gate per ADR-0023).
 var binaryWiringMatrix = []binaryWiringEntry{
-	{
-		name:      "monolith",
-		pkgImport: "controller",
-		pkgDir:    "../internal/controller",
-		mainPath:  "main.go",
-		setupFunc: "setupControllers",
-	},
 	{
 		name:      "tenant-operator",
 		pkgImport: "tenant",

@@ -1,12 +1,17 @@
 // SPDX-License-Identifier: Apache-2.0
 // Copyright 2025-2026 The LoopZero Authors
 
-package main
+package shared
 
 import (
 	"testing"
 )
 
+// TestPprofEnabled exercises shared.PprofEnabled (the canonical pprof gate
+// used by all 4 split binaries via cmd/{tenant,app,preview,platform}-operator).
+//
+// Migrated from cmd/pprof_test.go which exercised the monolith's
+// pprofEnabled() helper (deleted in T1.4).
 func TestPprofEnabled(t *testing.T) {
 	tests := []struct {
 		name     string
@@ -29,8 +34,8 @@ func TestPprofEnabled(t *testing.T) {
 			if tt.setEnv {
 				t.Setenv("LOOPZERO_PPROF_ENABLED", tt.envValue)
 			}
-			if got := pprofEnabled(); got != tt.want {
-				t.Errorf("pprofEnabled() = %v, want %v (env=%q, set=%v)", got, tt.want, tt.envValue, tt.setEnv)
+			if got := PprofEnabled(); got != tt.want {
+				t.Errorf("PprofEnabled() = %v, want %v (env=%q, set=%v)", got, tt.want, tt.envValue, tt.setEnv)
 			}
 		})
 	}
