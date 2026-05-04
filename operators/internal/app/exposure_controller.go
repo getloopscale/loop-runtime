@@ -52,6 +52,13 @@ type ExposureReconciler struct {
 	AllowProbeURLOverride bool // only true in test environments (SEC-005: prevents SSRF via annotation)
 }
 
+// exposureDetailTypes per ADR-0025 D3.
+var exposureDetailTypes = []string{
+	conditions.TypeIngressReady,
+	conditions.TypeCertificateIssued,
+	conditions.TypeRouteReachable,
+}
+
 // Reconcile handles the reconciliation loop for ExposedRoute resources.
 func (r *ExposureReconciler) Reconcile(ctx context.Context, req ctrl.Request) (result ctrl.Result, retErr error) {
 	ctx, span := shared.StartReconcileSpan(ctx, "exposure", req.Name, req.Namespace)
@@ -75,6 +82,19 @@ func (r *ExposureReconciler) Reconcile(ctx context.Context, req ctrl.Request) (r
 		}
 		return ctrl.Result{}, err
 	}
+
+	// kstatus universal per ADR-0025 D3 condition #1.
+	defer func() {
+		latest := &loopzerov1.ExposedRoute{}
+		if err := r.Get(ctx, req.NamespacedName, latest); err != nil {
+			return
+		}
+		if !latest.DeletionTimestamp.IsZero() {
+			return
+		}
+		conditions.SetReadinessSummary(&latest.Status.Conditions, latest.Generation, exposureDetailTypes)
+		_ = r.Status().Update(ctx, latest)
+	}()
 
 	// Handle deletion — remove finalizer immediately (v1: no external resources to clean up,
 	// namespace deletion handles IngressRoute/Certificate cleanup).

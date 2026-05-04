@@ -53,6 +53,14 @@ type PlatformBootstrapReconciler struct {
 	ArgoCDClientFunc   func(baseURL string) ArgoCDBootstrapClient    // factory, set at init; nil uses default (inline HTTP)
 }
 
+// platformBootstrapDetailTypes per ADR-0025 D3.
+var platformBootstrapDetailTypes = []string{
+	conditions.TypeGiteaReady,
+	conditions.TypeArgoCDReady,
+	conditions.TypeDatabaseSeeded,
+	conditions.TypeBootstrapComplete,
+}
+
 // Reconcile handles the reconciliation loop for PlatformBootstrap resources.
 func (r *PlatformBootstrapReconciler) Reconcile(ctx context.Context, req ctrl.Request) (result ctrl.Result, retErr error) {
 	ctx, span := shared.StartReconcileSpan(ctx, "bootstrap", req.Name, req.Namespace)
@@ -74,6 +82,19 @@ func (r *PlatformBootstrapReconciler) Reconcile(ctx context.Context, req ctrl.Re
 		}
 		return ctrl.Result{}, err
 	}
+
+	// kstatus universal per ADR-0025 D3 condition #1.
+	defer func() {
+		latest := &loopzerov1.PlatformBootstrap{}
+		if err := r.Get(ctx, req.NamespacedName, latest); err != nil {
+			return
+		}
+		if !latest.DeletionTimestamp.IsZero() {
+			return
+		}
+		conditions.SetReadinessSummary(&latest.Status.Conditions, latest.Generation, platformBootstrapDetailTypes)
+		_ = r.Status().Update(ctx, latest)
+	}()
 
 	// Handle deletion -- clean up platform-tokens secret if present.
 	if !pb.DeletionTimestamp.IsZero() {

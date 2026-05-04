@@ -33,6 +33,15 @@ type ApplicationReconciler struct {
 	BaseDomain string
 }
 
+// applicationDetailTypes per ADR-0025 D3.
+var applicationDetailTypes = []string{
+	conditions.TypeServiceResolved,
+	conditions.TypeIngressReady,
+	conditions.TypeCertificateIssued,
+	conditions.TypeRouteReachable,
+	conditions.TypeApplicationHealthy,
+}
+
 // Reconcile handles the reconciliation loop for LoopZeroApplication resources.
 func (r *ApplicationReconciler) Reconcile(ctx context.Context, req ctrl.Request) (result ctrl.Result, retErr error) {
 	ctx, span := shared.StartReconcileSpan(ctx, "application", req.Name, req.Namespace)
@@ -56,6 +65,19 @@ func (r *ApplicationReconciler) Reconcile(ctx context.Context, req ctrl.Request)
 		}
 		return ctrl.Result{}, err
 	}
+
+	// kstatus universal per ADR-0025 D3 condition #1.
+	defer func() {
+		latest := &loopzerov1.LoopZeroApplication{}
+		if err := r.Get(ctx, req.NamespacedName, latest); err != nil {
+			return
+		}
+		if !latest.DeletionTimestamp.IsZero() {
+			return
+		}
+		conditions.SetReadinessSummary(&latest.Status.Conditions, latest.Generation, applicationDetailTypes)
+		_ = r.Status().Update(ctx, latest)
+	}()
 
 	if !app.DeletionTimestamp.IsZero() {
 		return r.reconcileDelete(ctx, &app)

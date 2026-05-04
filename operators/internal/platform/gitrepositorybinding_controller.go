@@ -37,6 +37,14 @@ type GitRepositoryBindingReconciler struct {
 	HTTPClient *http.Client
 }
 
+// gitRepositoryBindingDetailTypes per ADR-0025 D3.
+var gitRepositoryBindingDetailTypes = []string{
+	conditions.TypeCredentialsResolved,
+	conditions.TypeRepositoryRegistered,
+	conditions.TypeRepositoryReachable,
+	conditions.TypeConsumerHealthy,
+}
+
 // Reconcile handles the reconciliation loop for GitRepositoryBinding resources.
 func (r *GitRepositoryBindingReconciler) Reconcile(ctx context.Context, req ctrl.Request) (result ctrl.Result, retErr error) {
 	ctx, span := shared.StartReconcileSpan(ctx, "gitrepobinding", req.Name, req.Namespace)
@@ -60,6 +68,19 @@ func (r *GitRepositoryBindingReconciler) Reconcile(ctx context.Context, req ctrl
 		}
 		return ctrl.Result{}, err
 	}
+
+	// kstatus universal per ADR-0025 D3 condition #1.
+	defer func() {
+		latest := &loopzerov1.GitRepositoryBinding{}
+		if err := r.Get(ctx, req.NamespacedName, latest); err != nil {
+			return
+		}
+		if !latest.DeletionTimestamp.IsZero() {
+			return
+		}
+		conditions.SetReadinessSummary(&latest.Status.Conditions, latest.Generation, gitRepositoryBindingDetailTypes)
+		_ = r.Status().Update(ctx, latest)
+	}()
 
 	// Handle deletion with finalizer pattern.
 	if !binding.DeletionTimestamp.IsZero() {

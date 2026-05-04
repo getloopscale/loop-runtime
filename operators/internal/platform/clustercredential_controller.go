@@ -37,6 +37,13 @@ type ClusterCredentialReconciler struct {
 	ArgoCDNamespace string
 }
 
+// clusterCredentialDetailTypes are the per-step conditions that
+// SetReadinessSummary classifies for kstatus. ClusterCredential only
+// surfaces TypeConnected — TypeSecretNotFound has inverted polarity
+// (True = bad) per ADR-0025 condition #3 (k8s-controller-engineer
+// review). Adding TypeSecretNotFound here would flip summary semantics.
+var clusterCredentialDetailTypes = []string{conditions.TypeConnected}
+
 // Reconcile handles the reconciliation loop for ClusterCredential resources.
 func (r *ClusterCredentialReconciler) Reconcile(ctx context.Context, req ctrl.Request) (result ctrl.Result, retErr error) {
 	ctx, span := shared.StartReconcileSpan(ctx, "clustercredential", req.Name, req.Namespace)
@@ -60,6 +67,25 @@ func (r *ClusterCredentialReconciler) Reconcile(ctx context.Context, req ctrl.Re
 		}
 		return ctrl.Result{}, err
 	}
+
+	// kstatus universal: SetReadinessSummary MUST be the LAST status
+	// mutation per ADR-0025. Defer ensures it runs even on early return
+	// or panic from internal helpers (resolveKubeconfig, checkConnectivity)
+	// that have their own Status().Update sites.
+	defer func() {
+		// Re-fetch to capture latest condition state after early-return
+		// Status updates from helpers. NotFound / DeletionTimestamp paths
+		// already returned before this defer fires for the success path.
+		latest := &loopzerov1.ClusterCredential{}
+		if err := r.Get(ctx, req.NamespacedName, latest); err != nil {
+			return
+		}
+		if !latest.DeletionTimestamp.IsZero() {
+			return
+		}
+		conditions.SetReadinessSummary(&latest.Status.Conditions, latest.Generation, clusterCredentialDetailTypes)
+		_ = r.Status().Update(ctx, latest)
+	}()
 
 	if !cr.DeletionTimestamp.IsZero() {
 		return r.reconcileDelete(ctx, &cr)

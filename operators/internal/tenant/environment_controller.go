@@ -86,6 +86,17 @@ func (r *EnvironmentReconciler) runtimeClientForEnv(ctx context.Context, env *lo
 	return c, nil
 }
 
+// environmentDetailTypes per ADR-0025 D3 — TypePullSecretReady is
+// informational only (per types.go:44 comment) and EXCLUDED from kstatus
+// classification so DOCR/standalone-multi profiles without source pull
+// secret don't permanently report Reconciling.
+var environmentDetailTypes = []string{
+	conditions.TypeEnvNamespaceReady,
+	conditions.TypeEnvRBACReady,
+	conditions.TypeEnvNetworkPolicyReady,
+	conditions.TypeEnvQuotaReady,
+}
+
 // Reconcile handles the reconciliation loop for Environment resources.
 func (r *EnvironmentReconciler) Reconcile(ctx context.Context, req ctrl.Request) (result ctrl.Result, retErr error) {
 	ctx, span := shared.StartReconcileSpan(ctx, "environment", req.Name, req.Namespace)
@@ -109,6 +120,19 @@ func (r *EnvironmentReconciler) Reconcile(ctx context.Context, req ctrl.Request)
 		}
 		return ctrl.Result{}, err
 	}
+
+	// kstatus universal per ADR-0025 D3 condition #1.
+	defer func() {
+		latest := &loopzerov1.Environment{}
+		if err := r.Get(ctx, req.NamespacedName, latest); err != nil {
+			return
+		}
+		if !latest.DeletionTimestamp.IsZero() {
+			return
+		}
+		conditions.SetReadinessSummary(&latest.Status.Conditions, latest.Generation, environmentDetailTypes)
+		_ = r.Status().Update(ctx, latest)
+	}()
 
 	// Handle deletion with verify-then-remove finalizer pattern
 	if !env.DeletionTimestamp.IsZero() {

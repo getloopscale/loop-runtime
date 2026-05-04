@@ -48,7 +48,7 @@ var _ = BeforeSuite(func() {
 	scheme = h.Scheme
 	ctx = h.Ctx
 	cancel = h.Cancel
-}, 60)
+})
 
 var _ = AfterSuite(func() {
 	cancel()

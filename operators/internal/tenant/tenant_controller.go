@@ -79,6 +79,24 @@ type TenantControllerConfig struct {
 	MaxConcurrentReconciles int                         // 0 defaults to 5 (MEET-052: backpressure for bulk deletion)
 }
 
+// tenantDetailTypes are the per-step conditions that SetReadinessSummary
+// classifies for kstatus. Per ADR-0025 D3.
+var tenantDetailTypes = []string{
+	conditions.TypeGitRepoReady,
+	conditions.TypeQuotaEnforced,
+	conditions.TypeBuildNamespaceReady,
+	conditions.TypePriorityClassReady,
+	conditions.TypeArgoCDAppReady,
+	// HarborProjectReady is only required when HarborClient is configured;
+	// included here so kstatus.Compute waits for it in Harbor mode. In DOCR
+	// mode the controller never sets it, so SetReadinessSummary classifies
+	// as Reconciling (missing detail). Acceptable: DOCR-mode tenants stay
+	// Reconciling forever from a kstatus standpoint UNTIL the per-tenant
+	// requiredProvisioningConditions() omits Harbor — TODO follow-up: add
+	// runtime-conditional detailTypes selector.
+	conditions.TypeHarborProjectReady,
+}
+
 // Reconcile handles the reconciliation loop for Tenant resources.
 func (r *TenantReconciler) Reconcile(ctx context.Context, req ctrl.Request) (result ctrl.Result, retErr error) {
 	ctx, span := shared.StartReconcileSpan(ctx, "tenant", req.Name, req.Namespace)
@@ -102,6 +120,26 @@ func (r *TenantReconciler) Reconcile(ctx context.Context, req ctrl.Request) (res
 		}
 		return ctrl.Result{}, err
 	}
+
+	// kstatus universal: SetReadinessSummary MUST be the LAST status
+	// mutation per ADR-0025 D3 condition #1. Defer ensures it runs even
+	// on early return / panic from internal helpers.
+	defer func() {
+		latest := &loopzerov1.Tenant{}
+		if err := r.Get(ctx, req.NamespacedName, latest); err != nil {
+			return
+		}
+		if !latest.DeletionTimestamp.IsZero() {
+			return
+		}
+		// Adjust detailTypes for DOCR mode (HarborClient nil → skip Harbor).
+		dt := tenantDetailTypes
+		if r.HarborClient == nil {
+			dt = dt[:len(dt)-1] // drop trailing TypeHarborProjectReady
+		}
+		conditions.SetReadinessSummary(&latest.Status.Conditions, latest.Generation, dt)
+		_ = r.Status().Update(ctx, latest)
+	}()
 
 	// Handle deletion with verify-then-remove finalizer pattern
 	if !tenant.DeletionTimestamp.IsZero() {
