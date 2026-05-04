@@ -20,7 +20,7 @@ Elas existem para centralizar contratos que precisam permanecer iguais em múlti
 | `pkg/naming` | nomes canônicos e compatibilidade RFC 1123 | naming contracts | ✅ active |
 | `pkg/id` | geração de IDs estruturados e estáveis | identity/resource IDs | ✅ active |
 | `pkg/logging` | enrich de logger com contexto transversal | observability/logging | ✅ active (global state — ver roadmap S9-5) |
-| `pkg/health` | agregação de saúde e fases | health contracts | ⚠️ **0 importadores em produção** — ver roadmap QW-1 |
+<!-- pkg/health DELETADO em 2026-05-04 per ADR-0028 (0 importadores). Substituído conceitualmente por pkg/conditions per ADR-0032. -->
 | `pkg/circuitbreaker` | contenção de falha externa compartilhada | resilience | ✅ active (v1-style — ver roadmap S9-1) |
 | `pkg/enforcement` | plan limits e enforcement compartilhado | product policy | ✅ active (acopla `*sql.DB` — ver roadmap S9-4) |
 | `pkg/jwt` | validação e emissão de JWT/session tokens | auth/token contracts | ✅ active (gaps RFC 8725bis — ver roadmap QW-2) |
@@ -39,7 +39,7 @@ Tabela gerada via grep de `import "github.com/loopzero/loopzero/pkg/X"` em 2026-
 | `pkg/enforcement` | 6 | sim | — | — | tests |
 | `pkg/id` | 5 | sim | — | — | tests |
 | `pkg/circuitbreaker` | 5 | sim | sim | — | — |
-| `pkg/health` | **0** | ❌ | ❌ | ❌ | ❌ |
+<!-- `pkg/health` DELETADO 2026-05-04 per ADR-0028 (was 0 imports) -->
 
 **Top consumidores** (top-level packages que importam `pkg/`):
 
@@ -57,7 +57,7 @@ Tabela gerada via grep de `import "github.com/loopzero/loopzero/pkg/X"` em 2026-
 **Observações:**
 
 - A shared layer é predominantemente **api↔operators**. A descrição original "API, operators, cloud services" gera expectativa errada — `cloud/` tem apenas 4 imports vs 89 da `api/`.
-- `pkg/health` é dead code documentado: `aggregator.go`, `phase.go`, `component.go` (253 LOC + 480 LOC tests) sem nenhum importador em produção. Decisão pendente em `improvement-roadmap.md` QW-1.
+- `pkg/health` foi DELETADO em 2026-05-04 per ADR-0028 (era dead code com 0 importadores). Phase aggregation conceitualmente correta migra para `pkg/conditions` per ADR-0032 quando T2.2 do plan executar.
 - `pkg/errors` (70 imports) é o pacote crítico cross-cutting; mudanças aqui exigem PKG-G13 a sério.
 
 ## Domínios Funcionais

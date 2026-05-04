@@ -162,19 +162,9 @@ O que sustentam:
 - enrich de logger via extractor registrável;
 - shared layer sem dependência direta obrigatória de OTel.
 
-### Health contracts
+### Health contracts (DELETED 2026-05-04 per ADR-0028)
 
-Arquivos:
-
-- `pkg/health/aggregator.go`
-- `pkg/health/component.go`
-- `pkg/health/phase.go`
-
-O que sustentam:
-
-- health como semântica compartilhada;
-- thresholds temporais explícitos;
-- agregação determinística.
+> `pkg/health/` foi removido em 2026-05-04. Era dead code com 0 importadores em produção. Phase aggregation conceitualmente correta migra para `pkg/conditions` per ADR-0032 (kstatus-compatible). Esta seção é mantida como histórico para audits.
 
 ### Resilience primitives
 
