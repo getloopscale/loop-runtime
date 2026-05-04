@@ -2,25 +2,53 @@
 // Copyright 2025-2026 The LoopZero Authors
 
 // Package enforcement checks plan limits before allowing mutations.
-// Shared between cloud and engine — zero external dependencies.
+// Shared between cloud and engine — zero external dependencies at the
+// API surface (database/sql is used only for the default SQL adapter).
+//
+// Per ADR-0033, PlanLimiter accepts a LimitsStore interface so callers
+// that want to test with an in-memory fake, route through OPA, or
+// otherwise decouple from the SQL backend can do so without rewriting
+// pkg/enforcement.
+//
+// Backward compatibility: NewPlanLimiter(*sql.DB, logger) continues to
+// work exactly as before — internally it wraps the *sql.DB in
+// NewSQLLimitsStore. New consumers should prefer
+// NewPlanLimiterWithStore for cleaner DIP.
 package enforcement
 
 import (
+	"context"
 	"database/sql"
+	"errors"
 	"fmt"
 	"log/slog"
 )
 
 // PlanLimiter checks if a tenant's operation is within their plan limits.
 type PlanLimiter struct {
-	db                *sql.DB
+	store             LimitsStore
+	db                *sql.DB // retained for the legacy API surface and tests
 	logger            *slog.Logger
 	OnFallbackStarter func() // Called when subscription row is missing (for metrics)
 }
 
-// NewPlanLimiter creates a limiter backed by the plan_limits and subscriptions tables.
+// NewPlanLimiter creates a limiter backed by a *sql.DB. This is the
+// legacy entry point used by api/cmd/main.go; under the hood it wraps
+// the DB in a SQL LimitsStore adapter so all internal lookups go
+// through the interface.
 func NewPlanLimiter(db *sql.DB, logger *slog.Logger) *PlanLimiter {
-	return &PlanLimiter{db: db, logger: logger}
+	var store LimitsStore
+	if db != nil {
+		store = NewSQLLimitsStore(db)
+	}
+	return &PlanLimiter{store: store, db: db, logger: logger}
+}
+
+// NewPlanLimiterWithStore creates a limiter backed by an arbitrary
+// LimitsStore. Use this in tests with an in-memory fake or in
+// alternate backends (OPA, file-based config) per ADR-0033.
+func NewPlanLimiterWithStore(store LimitsStore, logger *slog.Logger) *PlanLimiter {
+	return &PlanLimiter{store: store, logger: logger}
 }
 
 // LimitResult describes the outcome of a limit check.
@@ -33,9 +61,15 @@ type LimitResult struct {
 	SoftOver bool   // True if soft limit exceeded (Team plan: allowed but overage)
 }
 
+// hasStore reports whether the limiter has a usable backing store.
+// Used to short-circuit dev-mode fall-throughs (nil DB → nil store).
+func (l *PlanLimiter) hasStore() bool {
+	return l != nil && l.store != nil
+}
+
 // CheckLimit verifies if a tenant can perform an operation for the given metric.
 func (l *PlanLimiter) CheckLimit(tenantID, metric string, currentCount int) LimitResult {
-	if l == nil || l.db == nil {
+	if !l.hasStore() {
 		return LimitResult{Allowed: true, Plan: "dev", Metric: metric}
 	}
 
@@ -112,7 +146,7 @@ func (l *PlanLimiter) CheckLimit(tenantID, metric string, currentCount int) Limi
 // Reports LimitResult.Current as the REQUESTED value (not current usage),
 // so `FormatLimitError` surfaces it to the user.
 func (l *PlanLimiter) CheckValue(tenantID, metric string, requested int) LimitResult {
-	if l == nil || l.db == nil {
+	if !l.hasStore() {
 		return LimitResult{Allowed: true, Plan: "dev", Metric: metric, Current: requested}
 	}
 
@@ -158,7 +192,7 @@ func (l *PlanLimiter) CheckValue(tenantID, metric string, requested int) LimitRe
 
 // GetBuildTimeout returns the build timeout for a tenant's plan (in seconds).
 func (l *PlanLimiter) GetBuildTimeout(tenantID string) int {
-	if l == nil || l.db == nil {
+	if !l.hasStore() {
 		return 1800
 	}
 	plan := l.getTenantPlan(tenantID)
@@ -171,7 +205,7 @@ func (l *PlanLimiter) GetBuildTimeout(tenantID string) int {
 
 // GetRateLimit returns the API rate limit for a tenant's plan (requests per minute).
 func (l *PlanLimiter) GetRateLimit(tenantID string) int {
-	if l == nil || l.db == nil {
+	if !l.hasStore() {
 		return 300
 	}
 	plan := l.getTenantPlan(tenantID)
@@ -183,12 +217,8 @@ func (l *PlanLimiter) GetRateLimit(tenantID string) int {
 }
 
 func (l *PlanLimiter) getTenantPlan(tenantID string) string {
-	var plan string
-	err := l.db.QueryRow(
-		"SELECT plan FROM subscriptions WHERE tenant_id = $1 AND status IN ('active', 'trialing') LIMIT 1",
-		tenantID,
-	).Scan(&plan)
-	if err != nil {
+	plan, err := l.store.GetTenantPlan(context.Background(), tenantID)
+	if err != nil || plan == "" {
 		l.logger.Warn("subscription row missing — falling back to starter plan",
 			"tenant", tenantID, "error", err)
 		if l.OnFallbackStarter != nil {
@@ -200,24 +230,18 @@ func (l *PlanLimiter) getTenantPlan(tenantID string) string {
 }
 
 func (l *PlanLimiter) getLimits(plan, metric string) (hardLimit, softLimit int) {
-	var hard sql.NullInt64
-	var soft sql.NullInt64
-	err := l.db.QueryRow(
-		"SELECT hard_limit, soft_limit FROM plan_limits WHERE plan = $1 AND metric = $2",
-		plan, metric,
-	).Scan(&hard, &soft)
+	hard, soft, err := l.store.GetLimits(context.Background(), plan, metric)
 	if err != nil {
+		// sql.ErrNoRows OR comparable not-found → 0/0 sentinel preserved
+		// for fail-closed semantics. Other errors are also treated as
+		// missing row (defensive — limiter still surfaces denial via the
+		// limiter's "no limit configured" path).
+		if errors.Is(err, sql.ErrNoRows) {
+			return 0, 0
+		}
 		return 0, 0
 	}
-	hardVal := -1
-	if hard.Valid {
-		hardVal = int(hard.Int64)
-	}
-	softVal := 0
-	if soft.Valid {
-		softVal = int(soft.Int64)
-	}
-	return hardVal, softVal
+	return hard, soft
 }
 
 // FormatLimitError creates a user-facing error message for a plan limit violation.

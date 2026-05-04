@@ -9,7 +9,7 @@ import "time"
 // The query must have one $1 parameter (tenant_id) and return a single integer.
 func CountRows(limiter *PlanLimiter, query string) func(tenantID string) int {
 	return func(tenantID string) int {
-		if limiter == nil || limiter.db == nil {
+		if limiter == nil || !limiter.hasStore() || limiter.db == nil {
 			return 0
 		}
 		var count int
@@ -23,7 +23,7 @@ func CountRows(limiter *PlanLimiter, query string) func(tenantID string) int {
 // CountBuildsThisMonth returns a CountFn that counts builds created this month.
 func CountBuildsThisMonth(limiter *PlanLimiter) func(tenantID string) int {
 	return func(tenantID string) int {
-		if limiter == nil || limiter.db == nil {
+		if limiter == nil || !limiter.hasStore() || limiter.db == nil {
 			return 0
 		}
 		now := time.Now().UTC()
