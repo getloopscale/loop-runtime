@@ -16,9 +16,10 @@ O foco aqui não é apenas "escrever bons controllers". O foco é garantir que o
 | Documento | Finalidade |
 |---|---|
 | [architecture.md](./architecture.md) | Mapa por pastas, binários, domínios e fronteiras dos operators |
-| [sota-gates.md](./sota-gates.md) | Gates SOTA claros, com critérios de aprovação e evidências esperadas |
+| [sota-gates.md](./sota-gates.md) | Gates SOTA claros, com critérios de aprovação e evidências esperadas (OP-G01–G21) |
 | [research-basis.md](./research-basis.md) | Base de pesquisa oficial e evidências do código atual |
 | [paas-benchmark.md](./paas-benchmark.md) | Benchmark de operadores em PaaS usando Korifi e Epinio como referência |
+| [improvement-roadmap.md](./improvement-roadmap.md) | **Roadmap de melhorias FAANG-grade (Sprint 9 + post-launch)** com Quick Wins, novos gates OP-G17–G21, anti-patterns e source citations |
 
 ## Resumo Executivo
 

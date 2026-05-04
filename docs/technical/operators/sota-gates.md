@@ -369,14 +369,131 @@ Permitir evolução das CRDs e controllers sem quebrar instalações existentes.
 
 - Em uma PaaS, CRD é API pública entre componentes, mesmo que não seja API de usuário final direta.
 
+## Gate OP-G17: Predicate Filtering For Status-Heavy Controllers
+
+`Objetivo`
+
+Evitar reconcile storms causados por status updates do próprio controller.
+
+`Critério de aprovação`
+
+- Todo `For(...)` em `SetupXController` declara `builder.WithPredicates(...)` explícito.
+- Predicate inclui ao menos `GenerationChangedPredicate` ou racional documentado para o oposto.
+- Métrica `controller_runtime_reconcile_total` em produção mostra ratio reconciles/spec-changes < 5x (default sem predicate é frequentemente 50-500x).
+
+`Evidência esperada`
+
+- `predicate.Or(predicate.GenerationChangedPredicate{}, predicate.AnnotationChangedPredicate{}, predicate.LabelChangedPredicate{})` em todo SetupXController.
+- Test envtest: cria resource, atualiza status 100x, assert reconcile counter == 1.
+
+`Notas LoopZero`
+
+- Hoje **zero predicates** em todos os controllers — gap mais agressivo do benchmark vs Crossplane/CNPG/Kueue.
+- Quick Win em improvement-roadmap.md (QW-1).
+
+## Gate OP-G18: kstatus Compliance — Ready / Reconciling / Stalled
+
+`Objetivo`
+
+Permitir que ferramentas K8s-native (kubectl wait, kstatus library, Argo Rollouts, Flux) consumam status uniforme em todas as CRDs LoopZero.
+
+`Critério de aprovação`
+
+- Toda CRD LoopZero expõe `Ready`, `Reconciling`, `Stalled` no `status.conditions`.
+- `Ready=True` significa "fully reconciled, healthy"; `Reconciling=True` significa "controller working"; `Stalled=True` significa "cannot make progress, manual intervention".
+- `kubectl wait --for=condition=Ready` funciona em **toda** CRD.
+
+`Evidência esperada`
+
+- Constantes `TypeReady`, `TypeReconciling`, `TypeStalled` em `internal/conditions/types.go`.
+- Helper `SetReadinessSummary(conds, generation, detailTypes)` chamado ao fim de cada Reconcile.
+- Teste envtest com `kubectl wait` simulado em cada CRD.
+
+`Notas LoopZero`
+
+- Hoje só `TypeApplicationHealthy` e `TypeBootstrapComplete` cumprem semântica equivalente, sem padrão universal.
+- kpt convention adoção parcial (`ReasonReconciling` existe, `TypeStalled` não).
+
+## Gate OP-G19: RBAC Generated From Markers
+
+`Objetivo`
+
+Tornar o RBAC do controller derivável e auditável a partir do código que ele executa.
+
+`Critério de aprovação`
+
+- Cada Reconciler tem `kubebuilder:rbac` markers cobrindo todas as `r.Client.{Get,List,Create,Update,Patch,Delete}` calls.
+- `task generate:rbac` re-gera `config/rbac/role.yaml` e `charts/*/templates/role.yaml` a partir dos markers.
+- CI gate: PR que altera Reconcile sem atualizar markers → diff em `role.yaml` → CI falha.
+
+`Evidência esperada`
+
+- 0 hand-edited lines em `config/rbac/role.yaml` após o gate.
+- `make manifests` exit 0; `git diff config/rbac/role.yaml` é vazio em PR de pure-RBAC change unless markers changed.
+
+`Notas LoopZero`
+
+- Hoje **zero markers** em todo o módulo. RBAC é hand-written.
+- Gap vs Crossplane/CNPG/Korifi/Kueue (todos derivam RBAC).
+
+## Gate OP-G20: Operator Capability Level Declaration
+
+`Objetivo`
+
+Tornar explícito o nível de capacidade Operator SDK (I-V) que cada controller alcança, com matriz de evidência verificável.
+
+`Critério de aprovação`
+
+- ADR registrado declarando o Capability Level por controller.
+- `docs/technical/operators/capability-matrix.md` mapeia: controller → level → evidência (file:line + test).
+- Métricas Prometheus específicas para Level IV (deep insights) e Level V (auto pilot) existem e são alertáveis.
+
+`Evidência esperada`
+
+- ADR `NNNN-operator-capability-levels.md`.
+- Métricas Level V: `loopzero_self_heal_total{controller, action}`, `loopzero_orphan_cr_total{kind}`.
+
+`Notas LoopZero`
+
+- Hoje todos os ingredientes Level III sólido + Level IV parcial (43+ métricas, KEDA, application reaper) — mas sem declaração formal.
+- Reference: CloudNativePG declara L5 com link para implementation file por capacity.
+
+## Gate OP-G21: Single Source Of Truth For Controller Implementation
+
+`Objetivo`
+
+Eliminar a possibilidade de drift entre árvores duplicadas de controllers (`internal/controller/` vs `internal/{tenant,app,preview,platform}/`).
+
+`Critério de aprovação`
+
+- Cada controller tem **uma** implementação canônica.
+- `find operators/internal -name "*_controller.go" | xargs basename | sort | uniq -d` retorna vazio.
+- Test estrutural cobre TODOS os binários (tenant/app/preview/platform/monolith).
+- `operatortest/setup.go` importa de uma única árvore.
+
+`Evidência esperada`
+
+- ADR documenta a migração (split canônico vs monolith deprecated).
+- `internal/controller/` removido OR explicitamente designado como deprecated com data de remoção.
+- `cmd/registration_test.go` matriz multi-binário.
+
+`Notas LoopZero`
+
+- **Maior gap arquitetural detectado**: ~5800 LOC duplicadas entre as duas árvores; ClusterCredential já divergiu 78 linhas.
+- Sprint 9 target principal (S9-T1).
+
 ## Ordem De Prioridade
 
 1. `OP-G01`, `OP-G02`, `OP-G03`, `OP-G05`, `OP-G08`
 2. `OP-G04`, `OP-G09`, `OP-G10`, `OP-G11`, `OP-G12`
 3. `OP-G13`, `OP-G14`, `OP-G15`, `OP-G16`, `OP-G07`
+4. **`OP-G21`** (consolidação dual-tree — destrava maintenance debt)
+5. **`OP-G17`, `OP-G18`, `OP-G19`** (convenções K8s-native — Quick Wins)
+6. **`OP-G20`** (declaração de capability — depende dos demais)
 
 Justificativa:
 
 - primeiro, segurança de reconcile e isolamento;
 - depois, resiliência e modelagem correta;
-- por fim, disciplina estrutural, observabilidade e evolução.
+- por fim, disciplina estrutural, observabilidade e evolução;
+- novos gates G17–G21 elevam o módulo para FAANG bar pós-Sprint-9.
