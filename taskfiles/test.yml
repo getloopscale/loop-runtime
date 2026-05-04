@@ -276,6 +276,55 @@ tasks:
           fi
         done
 
+  generate:rbac:
+    desc: |
+      ADR-0026 D4 / plan T4.2 — generate ClusterRole rules from kubebuilder:rbac
+      markers in operators/internal/{tenant,app,preview,platform}/. Outputs
+      one role.yaml per binary chart so production RBAC stays in lockstep
+      with reconcile code.
+
+      Per ADR-0026 condition #4: paths= scoped per binary so each chart
+      receives only its own controllers' markers.
+
+      Run after editing any +kubebuilder:rbac marker. CI gate
+      (validate:rbac) checks `git diff` is clean.
+    cmds:
+      - |
+        set -e
+        cd operators
+        if [[ ! -x bin/controller-gen ]]; then
+          echo "FAIL: operators/bin/controller-gen not found. Run: cd operators && make controller-gen"
+          exit 1
+        fi
+        # Per-binary scope so each chart receives only its own markers.
+        bin/controller-gen rbac:roleName=loopzero-tenant-operator \
+          paths=./internal/tenant/... \
+          output:rbac:dir=../charts/loopzero-tenant-operator/templates/generated
+        bin/controller-gen rbac:roleName=loopzero-app-operator \
+          paths=./internal/app/... \
+          output:rbac:dir=../charts/loopzero-app-operator/templates/generated
+        bin/controller-gen rbac:roleName=loopzero-preview-operator \
+          paths=./internal/preview/... \
+          output:rbac:dir=../charts/loopzero-preview-operator/templates/generated
+        bin/controller-gen rbac:roleName=loopzero-platform-operator \
+          paths=./internal/platform/... \
+          output:rbac:dir=../charts/loopzero-platform-operator/templates/generated
+        echo "Generated RBAC for 4 split charts. Review with:"
+        echo "  git diff charts/loopzero-*-operator/templates/generated/"
+
+  validate:rbac:
+    desc: |
+      ADR-0026 / plan T4.3 — CI gate that fails if generated RBAC is
+      stale vs current markers. Run `task generate:rbac` to refresh.
+    cmds:
+      - task: generate:rbac
+      - |
+        if ! git diff --exit-code charts/loopzero-*-operator/templates/generated/ 2>&1; then
+          echo "FAIL: generated RBAC is out-of-sync with markers."
+          echo "Fix: run 'task generate:rbac' and commit the diff."
+          exit 1
+        fi
+
   validate:manifests:
     desc: Validate all K8s manifests with kubeconform
     cmds:
