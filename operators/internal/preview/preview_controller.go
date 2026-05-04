@@ -35,6 +35,15 @@ var previewSM = statemachine.NewPreviewMachine()
 
 // PreviewReconciler reconciles PreviewEnvironment CRs.
 // Creates temporary namespaces on the runtime cluster for PR previews.
+//
+// ADR-0026 D4 / plan T4.1: kubebuilder:rbac markers for the LOCAL
+// (mgmt cluster) RBAC. Cross-cluster RBAC for runtime cluster
+// (preview namespaces, NetworkPolicies, ResourceQuota, LimitRange) is
+// hand-maintained.
+//
+// +kubebuilder:rbac:groups=loopzero.io,resources=previewenvironments,verbs=get;list;watch;update;patch
+// +kubebuilder:rbac:groups=loopzero.io,resources=previewenvironments/status,verbs=get;update;patch
+// +kubebuilder:rbac:groups=loopzero.io,resources=previewenvironments/finalizers,verbs=update
 type PreviewReconciler struct {
 	client.Client
 	RuntimeClient client.Client

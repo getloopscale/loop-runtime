@@ -32,6 +32,13 @@ const (
 
 // GitRepositoryBindingReconciler reconciles a GitRepositoryBinding object.
 // It manages the lifecycle of ArgoCD repository Secrets based on the binding spec.
+//
+// ADR-0026 D4 / plan T4.1: kubebuilder:rbac markers.
+//
+// +kubebuilder:rbac:groups=loopzero.io,resources=gitrepositorybindings,verbs=get;list;watch;update;patch
+// +kubebuilder:rbac:groups=loopzero.io,resources=gitrepositorybindings/status,verbs=get;update;patch
+// +kubebuilder:rbac:groups=loopzero.io,resources=gitrepositorybindings/finalizers,verbs=update
+// +kubebuilder:rbac:groups="",resources=secrets,verbs=get;list;watch;create;update;patch;delete
 type GitRepositoryBindingReconciler struct {
 	client.Client
 	HTTPClient *http.Client

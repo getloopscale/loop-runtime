@@ -46,6 +46,13 @@ type ArgoCDBootstrapClient interface {
 // PlatformBootstrapReconciler reconciles a PlatformBootstrap object.
 // It configures Gitea, ArgoCD, and seeds the database via the API,
 // delegating external calls to typed clients (no inline HTTP).
+//
+// ADR-0026 D4 / plan T4.1: kubebuilder:rbac markers.
+//
+// +kubebuilder:rbac:groups=loopzero.io,resources=platformbootstraps,verbs=get;list;watch;update;patch
+// +kubebuilder:rbac:groups=loopzero.io,resources=platformbootstraps/status,verbs=get;update;patch
+// +kubebuilder:rbac:groups=loopzero.io,resources=platformbootstraps/finalizers,verbs=update
+// +kubebuilder:rbac:groups="",resources=secrets,verbs=get;list;watch;create;update;patch;delete
 type PlatformBootstrapReconciler struct {
 	client.Client
 	HTTPClient         *http.Client

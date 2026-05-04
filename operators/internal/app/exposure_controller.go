@@ -45,6 +45,14 @@ const (
 
 // ExposureReconciler reconciles an ExposedRoute object.
 // It manages certificate status checks and reachability probes.
+//
+// ADR-0026 D4 / plan T4.1: kubebuilder:rbac markers.
+//
+// +kubebuilder:rbac:groups=loopzero.io,resources=exposedroutes,verbs=get;list;watch;update;patch
+// +kubebuilder:rbac:groups=loopzero.io,resources=exposedroutes/status,verbs=get;update;patch
+// +kubebuilder:rbac:groups=loopzero.io,resources=exposedroutes/finalizers,verbs=update
+// +kubebuilder:rbac:groups=traefik.io,resources=ingressroutes;middlewares,verbs=get;list;watch;create;update;patch;delete
+// +kubebuilder:rbac:groups=cert-manager.io,resources=certificates,verbs=get;list;watch;create;update;patch;delete
 type ExposureReconciler struct {
 	client.Client
 	Scheme                *runtime.Scheme

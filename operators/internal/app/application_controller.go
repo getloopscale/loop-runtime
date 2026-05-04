@@ -27,6 +27,13 @@ const applicationFinalizer = constants.FinalizerApplication
 
 // ApplicationReconciler reconciles a LoopZeroApplication object.
 // It manages hostname assignment, ExposedRoute creation, and phase tracking.
+//
+// ADR-0026 D4 / plan T4.1: kubebuilder:rbac markers.
+//
+// +kubebuilder:rbac:groups=loopzero.io,resources=loopzeroapplications,verbs=get;list;watch;update;patch
+// +kubebuilder:rbac:groups=loopzero.io,resources=loopzeroapplications/status,verbs=get;update;patch
+// +kubebuilder:rbac:groups=loopzero.io,resources=loopzeroapplications/finalizers,verbs=update
+// +kubebuilder:rbac:groups=loopzero.io,resources=exposedroutes,verbs=get;list;watch;create;update;patch;delete
 type ApplicationReconciler struct {
 	client.Client
 	Scheme     *runtime.Scheme

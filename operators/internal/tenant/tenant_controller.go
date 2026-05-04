@@ -51,6 +51,22 @@ var tenantSM = statemachine.NewTenantMachine()
 //   - tenant_credentials.go: BuildClient, Credentials (DOToken, RegistryDockerConfig)
 //   - tenant_priority.go:   RuntimeClient
 //   - tenant_harbor.go:     HarborClient, HarborRegistryHost, BuildClient, RuntimeClient
+//
+// ADR-0026 D4 / plan T4.1: kubebuilder:rbac markers for the LOCAL
+// (mgmt cluster) RBAC. controller-gen rbac generates ClusterRole rules
+// from these. Cross-cluster RBAC (BuildClient, RuntimeClient) is
+// hand-maintained per ADR-0026 condition #2 and lives in
+// charts/loopzero-tenant-operator/templates/cross-cluster-rbac.yaml.
+//
+// +kubebuilder:rbac:groups=loopzero.io,resources=tenants,verbs=get;list;watch;update;patch
+// +kubebuilder:rbac:groups=loopzero.io,resources=tenants/status,verbs=get;update;patch
+// +kubebuilder:rbac:groups=loopzero.io,resources=tenants/finalizers,verbs=update
+// +kubebuilder:rbac:groups=loopzero.io,resources=environments,verbs=get;list;watch;create;update;patch;delete
+// +kubebuilder:rbac:groups="",resources=namespaces,verbs=get;list;watch;create;update;patch;delete
+// +kubebuilder:rbac:groups="",resources=secrets,verbs=get;list;watch;create;update;patch;delete
+// +kubebuilder:rbac:groups="",resources=resourcequotas,verbs=get;list;watch;create;update;patch;delete
+// +kubebuilder:rbac:groups=rbac.authorization.k8s.io,resources=roles;rolebindings,verbs=get;list;watch;create;update;patch;delete
+// +kubebuilder:rbac:groups=scheduling.k8s.io,resources=priorityclasses,verbs=get;list;watch;create;update;patch
 type TenantReconciler struct {
 	client.Client
 	Scheme             *runtime.Scheme

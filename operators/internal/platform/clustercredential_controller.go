@@ -32,6 +32,13 @@ const (
 )
 
 // ClusterCredentialReconciler reconciles a ClusterCredential object.
+//
+// ADR-0026 D4 / plan T4.1: kubebuilder:rbac markers.
+//
+// +kubebuilder:rbac:groups=loopzero.io,resources=clustercredentials,verbs=get;list;watch;update;patch
+// +kubebuilder:rbac:groups=loopzero.io,resources=clustercredentials/status,verbs=get;update;patch
+// +kubebuilder:rbac:groups=loopzero.io,resources=clustercredentials/finalizers,verbs=update
+// +kubebuilder:rbac:groups="",resources=secrets,verbs=get;list;watch;create;update;patch;delete
 type ClusterCredentialReconciler struct {
 	client.Client
 	ArgoCDNamespace string

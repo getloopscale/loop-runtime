@@ -44,6 +44,15 @@ var environmentSM = statemachine.NewEnvironmentMachine()
 //
 // All namespace/RBAC/NetworkPolicy/Quota writes MUST go through
 // runtimeClientForEnv() — direct r.RuntimeClient calls bypass cell awareness.
+//
+// ADR-0026 D4 / plan T4.1: kubebuilder:rbac markers for the LOCAL
+// (mgmt cluster) RBAC. Cross-cluster RBAC for runtime cluster
+// (namespaces/RBAC/NetworkPolicies in tenant envs) is hand-maintained.
+//
+// +kubebuilder:rbac:groups=loopzero.io,resources=environments,verbs=get;list;watch;update;patch
+// +kubebuilder:rbac:groups=loopzero.io,resources=environments/status,verbs=get;update;patch
+// +kubebuilder:rbac:groups=loopzero.io,resources=environments/finalizers,verbs=update
+// +kubebuilder:rbac:groups=loopzero.io,resources=tenants,verbs=get;list;watch
 type EnvironmentReconciler struct {
 	client.Client
 	RuntimeClient    client.Client
