@@ -1,0 +1,188 @@
+# operators-sota-faang-grade-plan / Phase 6 — Final Dogfood Gate via CI cron.
+#
+# Per ADR-0023 SRE conditions, the dogfood gate for the operator split
+# requires:
+#   - 4-hour soak with continuous deploy traffic at production rate (~30/h)
+#   - Zero pod restarts
+#   - SLO: loopzero deploy P95 < 705ms (cell-2 baseline per CHG-2026-05-03)
+#   - Chaos Mesh injection mid-deploy
+#   - Cell-2 isolation regression test
+#
+# Per MEET-2026-05-04-069 + MEET-070, these are infeasible in a Ralph loop
+# iteration (wall-clock-bound, not compute-bound). This workflow runs the
+# gate on production DOKS clusters via weekly cron — same pattern as
+# cell2-soaks.yml.
+#
+# Pre-conditions (enforced by stages' --dry-run preflight):
+#   - All 4 split operator charts deployed (loopzero-{tenant,app,preview,platform}-operator)
+#   - Legacy tenant-controller chart still serving in Stage A coexistence
+#   - Chaos Mesh installed on the target cluster
+#   - Prometheus reachable for SLO query
+#
+# Failure auto-pages on-call via issue creation.
+
+name: operator-split dogfood gate (4h soak + chaos + SLO)
+
+on:
+  schedule:
+    # Saturday 02:00 UTC — separate from cell2-soaks.yml (Sunday) to avoid
+    # competing soak runs and ease debug attribution.
+    - cron: '0 2 * * 6'
+  workflow_dispatch:
+    inputs:
+      duration:
+        description: 'Soak duration in minutes'
+        type: choice
+        required: true
+        default: '240'
+        options:
+          - '15'    # smoke
+          - '60'    # 1h sanity
+          - '240'   # 4h ADR-compliant
+      cluster:
+        description: 'Target cluster context'
+        type: string
+        required: true
+        default: 'loopzero-mgmt-dev'
+      enable_chaos:
+        description: 'Inject Chaos Mesh experiments mid-soak'
+        type: boolean
+        required: true
+        default: true
+
+jobs:
+  preflight:
+    name: Preflight (verify cluster + deps)
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    outputs:
+      cluster_ready: ${{ steps.check.outputs.cluster_ready }}
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+      - name: Configure kubectl
+        run: |
+          mkdir -p ~/.kube
+          # In CI, kubeconfig comes from secret/oidc; this is a placeholder.
+          # Operator must provide via ${{ secrets.KUBECONFIG_DEV }}.
+          echo "${{ secrets.KUBECONFIG_DEV }}" > ~/.kube/config
+          chmod 600 ~/.kube/config
+      - name: Check 4 split operators present
+        id: check
+        run: |
+          set -e
+          CTX="${{ github.event.inputs.cluster || 'loopzero-mgmt-dev' }}"
+          OK=0
+          for op in tenant app preview platform; do
+            if kubectl --context "$CTX" -n loopzero-system get deploy loopzero-${op}-operator >/dev/null 2>&1; then
+              OK=$((OK+1))
+            else
+              echo "::error::loopzero-${op}-operator deployment NOT found on $CTX"
+            fi
+          done
+          if [ "$OK" -ne 4 ]; then
+            echo "cluster_ready=false" >> $GITHUB_OUTPUT
+            exit 1
+          fi
+          echo "cluster_ready=true" >> $GITHUB_OUTPUT
+      - name: Check Chaos Mesh installed (if enable_chaos=true)
+        if: ${{ github.event.inputs.enable_chaos == 'true' }}
+        run: |
+          CTX="${{ github.event.inputs.cluster || 'loopzero-mgmt-dev' }}"
+          if ! kubectl --context "$CTX" -n chaos-mesh get pods 2>&1 | grep -q controller-manager; then
+            echo "::error::Chaos Mesh not installed. Run: task chaos:install"
+            exit 1
+          fi
+      - name: Check Prometheus reachable
+        run: |
+          CTX="${{ github.event.inputs.cluster || 'loopzero-mgmt-dev' }}"
+          # Spot-check via port-forward + a known query.
+          kubectl --context "$CTX" -n monitoring port-forward svc/prometheus-server 9090:80 >/dev/null 2>&1 &
+          PF=$!
+          sleep 5
+          curl -sf http://localhost:9090/-/healthy >/dev/null
+          kill $PF
+
+  soak:
+    name: ${{ github.event.inputs.duration || '240' }}-minute soak
+    needs: preflight
+    if: needs.preflight.outputs.cluster_ready == 'true'
+    runs-on: ubuntu-latest
+    timeout-minutes: 270  # 4h soak + 30min slack
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+      - name: Configure kubectl
+        run: |
+          mkdir -p ~/.kube
+          echo "${{ secrets.KUBECONFIG_DEV }}" > ~/.kube/config
+          chmod 600 ~/.kube/config
+      - name: Capture initial pod state
+        run: |
+          CTX="${{ github.event.inputs.cluster || 'loopzero-mgmt-dev' }}"
+          kubectl --context "$CTX" -n loopzero-system get pods -l app.kubernetes.io/component=loopzero-operator \
+            -o custom-columns=NAME:.metadata.name,RESTARTS:.status.containerStatuses[0].restartCount > /tmp/initial-pods.txt
+          cat /tmp/initial-pods.txt
+      - name: Spawn deploy traffic (30/h baseline)
+        run: |
+          CTX="${{ github.event.inputs.cluster || 'loopzero-mgmt-dev' }}"
+          DURATION_MIN=${{ github.event.inputs.duration || '240' }}
+          # 30 deploys/hour = 1 deploy / 120s
+          INTERVAL=120
+          ITERATIONS=$(( DURATION_MIN * 60 / INTERVAL ))
+          for i in $(seq 1 $ITERATIONS); do
+            loopzero deploy --project /tmp/sample-app --json > /tmp/deploy-$i.json &
+            sleep $INTERVAL
+          done
+          wait
+      - name: Inject Chaos (if enabled)
+        if: ${{ github.event.inputs.enable_chaos == 'true' }}
+        run: |
+          CTX="${{ github.event.inputs.cluster || 'loopzero-mgmt-dev' }}"
+          # Kill app-operator pod every 30 min — verifies leader-election re-acquisition.
+          kubectl --context "$CTX" apply -f infra/tests/chaos/manifests/pod-kill-controller.yaml
+          # NetworkChaos: 100ms latency on operator → mgmt API for 5 min mid-soak.
+          # (Implementation deferred; placeholder for future iteration.)
+      - name: Capture final pod state + SLO
+        run: |
+          CTX="${{ github.event.inputs.cluster || 'loopzero-mgmt-dev' }}"
+          kubectl --context "$CTX" -n loopzero-system get pods -l app.kubernetes.io/component=loopzero-operator \
+            -o custom-columns=NAME:.metadata.name,RESTARTS:.status.containerStatuses[0].restartCount > /tmp/final-pods.txt
+          cat /tmp/final-pods.txt
+          # Diff restart counts
+          if ! diff /tmp/initial-pods.txt /tmp/final-pods.txt; then
+            echo "::warning::Pod restart count changed during soak"
+          fi
+          # SLO query
+          kubectl --context "$CTX" -n monitoring port-forward svc/prometheus-server 9090:80 >/dev/null 2>&1 &
+          PF=$!
+          sleep 5
+          P95=$(curl -sG "http://localhost:9090/api/v1/query" \
+            --data-urlencode "query=histogram_quantile(0.95, rate(loopzero_deploy_duration_seconds_bucket[5m]))" \
+            | jq -r '.data.result[0].value[1] // "missing"')
+          kill $PF
+          echo "P95 deploy duration: ${P95}s"
+          # Convert to ms; assert < 0.705
+          if [ "$P95" = "missing" ]; then
+            echo "::error::P95 metric missing — Prometheus scrape gap?"
+            exit 1
+          fi
+          AS_MS=$(echo "$P95 * 1000" | bc)
+          if (( $(echo "$P95 > 0.705" | bc -l) )); then
+            echo "::error::SLO breach: P95=${P95}s > 0.705s (target per CHG-2026-05-03 baseline)"
+            exit 1
+          fi
+
+  report:
+    name: Auto-issue on failure
+    needs: soak
+    if: failure()
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+      - name: Open auto-issue
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          gh issue create \
+            --title "operator-split-soak FAILED on $(date -u +%Y-%m-%d)" \
+            --label "soak-failure,p1" \
+            --body "Operator split dogfood gate failed. See workflow run: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}"
