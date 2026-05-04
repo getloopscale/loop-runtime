@@ -16,6 +16,10 @@ var _ GitRepoProvisioner = (*CircuitBreakerProvisioner)(nil)
 // CircuitBreakerProvisioner wraps a GitRepoProvisioner with circuit breaker
 // protection for external Gitea API calls. MEET-052: prevents retry storms
 // when Gitea is saturated during bulk tenant deletion.
+//
+// Migrated to circuitbreaker.Execute (ADR-0031 + PKG-G16): context
+// cancellation no longer falsely advances the failure counter; the
+// inner provisioner observes ctx.Err on entry and aborts cleanly.
 type CircuitBreakerProvisioner struct {
 	inner  GitRepoProvisioner
 	cb     *circuitbreaker.Breaker
@@ -33,48 +37,48 @@ func NewCircuitBreakerProvisioner(inner GitRepoProvisioner, cb *circuitbreaker.B
 
 // EnsureRepo delegates to the inner provisioner with circuit breaker protection.
 func (p *CircuitBreakerProvisioner) EnsureRepo(ctx context.Context, name string, branch string) (string, error) {
-	if err := p.cb.PreCheck(); err != nil {
+	url, err := circuitbreaker.Execute(ctx, p.cb, func(ctx context.Context) (string, error) {
+		return p.inner.EnsureRepo(ctx, name, branch)
+	})
+	if err != nil && p.cb.State() == circuitbreaker.Open {
 		p.logger.WarnContext(ctx, "gitea circuit breaker open, skipping EnsureRepo",
 			"repo", name, "cb_state", p.cb.State().String())
-		return "", err
 	}
-	url, err := p.inner.EnsureRepo(ctx, name, branch)
-	p.cb.RecordResult(err)
 	return url, err
 }
 
 // RepoExists delegates to the inner provisioner with circuit breaker protection.
 func (p *CircuitBreakerProvisioner) RepoExists(ctx context.Context, name string) (bool, error) {
-	if err := p.cb.PreCheck(); err != nil {
+	exists, err := circuitbreaker.Execute(ctx, p.cb, func(ctx context.Context) (bool, error) {
+		return p.inner.RepoExists(ctx, name)
+	})
+	if err != nil && p.cb.State() == circuitbreaker.Open {
 		p.logger.WarnContext(ctx, "gitea circuit breaker open, skipping RepoExists",
 			"repo", name, "cb_state", p.cb.State().String())
-		return false, err
 	}
-	exists, err := p.inner.RepoExists(ctx, name)
-	p.cb.RecordResult(err)
 	return exists, err
 }
 
 // ArchiveRepo delegates to the inner provisioner with circuit breaker protection.
 func (p *CircuitBreakerProvisioner) ArchiveRepo(ctx context.Context, name string) error {
-	if err := p.cb.PreCheck(); err != nil {
+	_, err := circuitbreaker.Execute(ctx, p.cb, func(ctx context.Context) (struct{}, error) {
+		return struct{}{}, p.inner.ArchiveRepo(ctx, name)
+	})
+	if err != nil && p.cb.State() == circuitbreaker.Open {
 		p.logger.WarnContext(ctx, "gitea circuit breaker open, skipping ArchiveRepo",
 			"repo", name, "cb_state", p.cb.State().String())
-		return err
 	}
-	err := p.inner.ArchiveRepo(ctx, name)
-	p.cb.RecordResult(err)
 	return err
 }
 
 // UnarchiveRepo delegates to the inner provisioner with circuit breaker protection.
 func (p *CircuitBreakerProvisioner) UnarchiveRepo(ctx context.Context, name string) error {
-	if err := p.cb.PreCheck(); err != nil {
+	_, err := circuitbreaker.Execute(ctx, p.cb, func(ctx context.Context) (struct{}, error) {
+		return struct{}{}, p.inner.UnarchiveRepo(ctx, name)
+	})
+	if err != nil && p.cb.State() == circuitbreaker.Open {
 		p.logger.WarnContext(ctx, "gitea circuit breaker open, skipping UnarchiveRepo",
 			"repo", name, "cb_state", p.cb.State().String())
-		return err
 	}
-	err := p.inner.UnarchiveRepo(ctx, name)
-	p.cb.RecordResult(err)
 	return err
 }
