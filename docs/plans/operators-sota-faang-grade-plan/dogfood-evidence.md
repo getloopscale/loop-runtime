@@ -55,6 +55,74 @@ ok  hack/validate-rbac  (0.005s) — 6 unit
 9 packages, ~280+ specs, 0 failures
 ```
 
+### 3. Multi-controller (4 binaries) simultaneous boot — ✅ VALIDATED iter 12
+
+After applying FB-#1/#2/#3 fixes + FB-#4 (RBAC marker for
+clustercredentials in tenant-operator), all 4 split operators boot
+together on k3d-loopzero-mgmt:
+
+```
+$ kubectl --context k3d-loopzero-mgmt -n loopzero-system get pods \
+    -l app.kubernetes.io/component=loopzero-operator
+NAME                                      READY   STATUS    RESTARTS   AGE
+loopzero-app-operator-756775475b-77z9l        1/1     Running   0          40m
+loopzero-app-operator-756775475b-t5t54        1/1     Running   0          40m
+loopzero-platform-operator-68f57f9cd5-9xkxd   1/1     Running   0          39m
+loopzero-platform-operator-68f57f9cd5-n7cnk   1/1     Running   0          39m
+loopzero-preview-operator-7777465495-26dlm    1/1     Running   0          39m
+loopzero-preview-operator-7777465495-cwjqh    1/1     Running   0          39m
+loopzero-tenant-operator-6854644f64-7llmn     1/1     Running   0           2m
+loopzero-tenant-operator-6854644f64-dpdcq     1/1     Running   0           2m
+```
+
+**8/8 pods Running across 4 deployments.** Each binary acquired its
+own leader-election lease (loopzero.io/{tenant,app,preview,platform}-operator).
+
+Validates the dx-engineer condition #1 (shared label
+`app.kubernetes.io/component: loopzero-operator`): a single kubectl
+selector returns all 4 operator pods — fan-out queries work.
+
+### 4. ADR-0023 Stage A coexistence — ✅ VALIDATED iter 12
+
+Legacy `tenant-controller` deployment (monolith image, 1 pod, age 5d)
+coexists with the 4 split operators (8 pods, age <40m) in the same
+namespace WITHOUT lease conflict, RBAC collision, or pod eviction.
+
+This is the exact pattern ADR-0023 4-stage cutover specifies for
+Stage A. Production cutover (CHG-NNNN-OPERATOR-SPLIT-PROD) can use
+the same Stage A pattern with confidence.
+
+### 5. FB-#4 (NEW): tenant-operator RBAC missing clustercredentials list
+
+**Discovered LIVE iter 12.** tenant-operator's
+`shared.RuntimeClientFactory` LISTs ClusterCredentials to resolve
+cell→runtime-cluster mapping, but the T4.1 marker only covered
+tenants/environments. Crash log:
+
+```
+"User \"system:serviceaccount:loopzero-system:loopzero-tenant-operator\"
+cannot list resource \"clustercredentials\" in API group \"loopzero.io\"
+at the cluster scope"
+```
+
+**Fix applied (commit FB-#4):** added marker
+`+kubebuilder:rbac:groups=loopzero.io,resources=clustercredentials,verbs=get;list;watch`
+to TenantReconciler struct. Verified LIVE via patch
+`kubectl patch clusterrole loopzero-tenant-operator` — no more forbidden
+errors after patch.
+
+### 6. T5.4 cache scoping congruence — ✅ STILL PASSES post-iter-12
+
+```
+=== RUN   TestCacheScopingCongruence_Static
+--- PASS: TestCacheScopingCongruence_Static (0.00s)
+=== RUN   TestCacheScopingCongruence_Coverage
+--- PASS: TestCacheScopingCongruence_Coverage (0.00s)
+```
+
+Adding the FB-#4 marker did NOT introduce cache scoping overlap
+between binaries — the matrix gates still hold.
+
 ## ⏳ Items still requiring full live session
 
 The following acceptance criteria from ADR-0023 SRE conditions cannot

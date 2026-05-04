@@ -62,11 +62,19 @@ var tenantSM = statemachine.NewTenantMachine()
 // +kubebuilder:rbac:groups=loopzero.io,resources=tenants/status,verbs=get;update;patch
 // +kubebuilder:rbac:groups=loopzero.io,resources=tenants/finalizers,verbs=update
 // +kubebuilder:rbac:groups=loopzero.io,resources=environments,verbs=get;list;watch;create;update;patch;delete
+// +kubebuilder:rbac:groups=loopzero.io,resources=clustercredentials,verbs=get;list;watch
 // +kubebuilder:rbac:groups="",resources=namespaces,verbs=get;list;watch;create;update;patch;delete
 // +kubebuilder:rbac:groups="",resources=secrets,verbs=get;list;watch;create;update;patch;delete
 // +kubebuilder:rbac:groups="",resources=resourcequotas,verbs=get;list;watch;create;update;patch;delete
 // +kubebuilder:rbac:groups=rbac.authorization.k8s.io,resources=roles;rolebindings,verbs=get;list;watch;create;update;patch;delete
 // +kubebuilder:rbac:groups=scheduling.k8s.io,resources=priorityclasses,verbs=get;list;watch;create;update;patch
+//
+// FB-#4 (live boot iter 12): tenant-operator's shared.RuntimeClientFactory
+// LISTs ClusterCredentials to resolve cell→runtime-cluster mapping.
+// Marker added to satisfy clustercredentials.loopzero.io list permission;
+// otherwise tenant-operator crashes with "User \"system:serviceaccount:
+// loopzero-system:loopzero-tenant-operator\" cannot list resource clustercredentials"
+// on every reconcile of any cell-aware Tenant.
 type TenantReconciler struct {
 	client.Client
 	Scheme             *runtime.Scheme
