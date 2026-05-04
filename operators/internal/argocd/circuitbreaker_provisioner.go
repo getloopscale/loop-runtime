@@ -31,14 +31,18 @@ func NewCircuitBreakerProvisioner(inner Provisioner, cb *circuitbreaker.Breaker,
 }
 
 // EnsureAppProject delegates with circuit breaker protection.
+//
+// Migrated to circuitbreaker.Execute (ADR-0031 + PKG-G16): context
+// cancellation no longer falsely advances the failure counter; the
+// inner provisioner observes ctx.Err on entry and aborts cleanly.
 func (p *CircuitBreakerProvisioner) EnsureAppProject(ctx context.Context, spec AppProjectSpec) error {
-	if err := p.cb.PreCheck(); err != nil {
+	_, err := circuitbreaker.Execute(ctx, p.cb, func(ctx context.Context) (struct{}, error) {
+		return struct{}{}, p.inner.EnsureAppProject(ctx, spec)
+	})
+	if err != nil && p.cb.State() == circuitbreaker.Open {
 		p.logger.WarnContext(ctx, "argocd circuit breaker open, skipping EnsureAppProject",
 			"tenant", spec.TenantID, "cb_state", p.cb.State().String())
-		return err
 	}
-	err := p.inner.EnsureAppProject(ctx, spec)
-	p.cb.RecordResult(err)
 	return err
 }
 

@@ -133,6 +133,38 @@ JWT RFC 8725bis hardening é blocker para Sprint 9 launch readiness. Pode ser de
 
 `/dogfood full` em fresh infra é absolute gate. Tests passing ≠ system works. Only dogfood proves the contract layer mudanças não regridem produto.
 
+## Amendments After Initial Capture
+
+### Amendment A1 — ADR-0031 implementation pivot to package-level `Execute[T]` (2026-05-04)
+
+**Original ADR-0031 decision:** introduce `Breaker[T any]` generic type as primary
+v2 surface (sony/gobreaker v2 style).
+
+**Pivot:** during T2.1 implementation we discovered that introducing
+`Breaker[T any]` would require either: (a) renaming current `*Breaker` to a
+non-generic helper, breaking 5 importers in `operators/internal/{argocd,gitea,
+harbor,minio}/circuitbreaker_provisioner.go` plus `operators/cmd/tenant-operator/
+main.go`; or (b) shipping two parallel types, growing API surface and
+maintenance burden.
+
+**Adopted alternative:** package-level generic function `Execute[T any](ctx,
+*Breaker, fn) (T, error)`. This preserves 100% of v1 API (zero callsite
+churn), adds context-aware cancellation handling and typed return values,
+and matches mercari/go-circuitbreaker's "Execute" idiom — Go-idiomatic
+because methods cannot have type parameters.
+
+**Equivalence:** the four ADR-0031 success criteria still hold:
+- Generic typed return value: ✅ (`func Execute[T any] ... (T, error)`).
+- Context-aware: ✅ (`ctx context.Context` propagates into `fn`).
+- IsExcluded for cancellation: ✅ (`Config.IsExcluded` field with
+  `defaultIsExcluded` filter; `context.Canceled` and `DeadlineExceeded` do
+  not advance failure counter).
+- Migration window (1 release): ✅ (zero break — both styles coexist).
+
+**Consequences:** ADR-0031 remains canonical decision; this amendment is
+the implementation note. ADR-0031 status updated to "Accepted (implementation
+pivot to package-level Execute via MEET amendment A1)".
+
 ## Outstanding Items Pending Human Ratification
 
 1. ADRs 0028–0035 são draft `Status: Accepted (async, pending human ratification)`. Quando humano operador validar, mudar para `Accepted (ratified by <USER>)`.
