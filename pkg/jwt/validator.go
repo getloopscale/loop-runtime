@@ -9,12 +9,18 @@
 //     against algorithm confusion attacks; RFC 8725 §3.1).
 //   - typ header validation — only "JWT", "at+jwt", or absent are
 //     accepted (RFC 8725bis §2.6 cross-JWT confusion mitigation).
+//   - JWKS fetch wrapped by circuitbreaker.Execute (when configured)
+//     so that Hydra outages do not cascade into auth failures —
+//     cached keys are served during the circuit-open window
+//     (gate PKG-G16 eat-your-own-dogfood).
 package jwt
 
 import (
+	"context"
 	"crypto/rsa"
 	"crypto/sha256"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"math/big"
 	"net/http"
@@ -22,6 +28,7 @@ import (
 	"time"
 
 	goJWT "github.com/golang-jwt/jwt/v5"
+	"github.com/loopzero/loopzero/pkg/circuitbreaker"
 )
 
 // AllowedAccessAlgs is the whitelist of signing algorithms acceptable
@@ -97,6 +104,12 @@ type Validator struct {
 	keys    map[string]*rsa.PublicKey
 	fetched time.Time
 	ttl     time.Duration
+
+	// cb optionally wraps fetchJWKS calls under circuit breaker
+	// protection. When the breaker is Open, fetchJWKS short-circuits
+	// without contacting the JWKS endpoint; cached keys are served
+	// instead via getKey (graceful degradation).
+	cb *circuitbreaker.Breaker
 }
 
 // NewValidator creates a JWT validator that fetches JWKS from the given URL.
@@ -114,6 +127,27 @@ func NewValidator(jwksURL, issuer, audience string) *Validator {
 		ttl:  5 * time.Minute,
 	}
 }
+
+// WithCircuitBreaker attaches a shared circuit breaker that wraps
+// JWKS fetches. When the breaker opens (after repeated upstream
+// failures), the validator continues serving cached keys until the
+// breaker recovers — preventing Hydra outages from cascading into
+// blanket auth failures.
+//
+// Per pkg-sota-faang-grade-plan T1.4 + ADR-0029 + gate PKG-G16.
+//
+// Returns the Validator so callers can chain construction:
+//
+//	v := jwt.NewValidator(jwksURL, issuer, audience).WithCircuitBreaker(cb)
+func (v *Validator) WithCircuitBreaker(cb *circuitbreaker.Breaker) *Validator {
+	v.cb = cb
+	return v
+}
+
+// errJWKSCircuitOpen is returned by fetchJWKS when the circuit breaker
+// short-circuited the fetch. Callers (getKey) interpret this as
+// "use whatever cache you have".
+var errJWKSCircuitOpen = errors.New("jwks fetch skipped: circuit breaker open")
 
 // Validate parses and validates a JWT token, returning the claims.
 //
@@ -282,13 +316,24 @@ func (s *SessionTokenIssuer) validateWithSecret(tokenString string, secret []byt
 
 func (v *Validator) getKey(kid string) (*rsa.PublicKey, error) {
 	v.mu.RLock()
-	if time.Since(v.fetched) > v.ttl || len(v.keys) == 0 {
-		v.mu.RUnlock()
+	stale := time.Since(v.fetched) > v.ttl || len(v.keys) == 0
+	v.mu.RUnlock()
+	if stale {
 		if err := v.fetchJWKS(); err != nil {
-			return nil, err
+			// If the CB is open, fall through to cached lookup —
+			// graceful degradation. Any other fetch failure with
+			// an empty cache propagates up as the original error.
+			if !errors.Is(err, errJWKSCircuitOpen) {
+				v.mu.RLock()
+				cacheEmpty := len(v.keys) == 0
+				v.mu.RUnlock()
+				if cacheEmpty {
+					return nil, err
+				}
+			}
 		}
-		v.mu.RLock()
 	}
+	v.mu.RLock()
 	key, ok := v.keys[kid]
 	v.mu.RUnlock()
 	if !ok {
@@ -310,6 +355,38 @@ type jwkKey struct {
 }
 
 func (v *Validator) fetchJWKS() error {
+	// Fast path: cache still warm, nothing to do.
+	v.mu.RLock()
+	if time.Since(v.fetched) < v.ttl && len(v.keys) > 0 {
+		v.mu.RUnlock()
+		return nil
+	}
+	v.mu.RUnlock()
+
+	// Wrap actual HTTP fetch in circuit breaker when configured.
+	// gate PKG-G16: pkg/jwt eats its own dogfood (uses pkg/circuitbreaker).
+	doFetch := func(ctx context.Context) (struct{}, error) {
+		return struct{}{}, v.fetchJWKSLocked(ctx)
+	}
+	if v.cb != nil {
+		_, err := circuitbreaker.Execute(context.Background(), v.cb, doFetch)
+		if err != nil {
+			// Translate ErrCircuitOpen into our sentinel so getKey
+			// can decide to serve stale cache.
+			if errors.Is(err, circuitbreaker.ErrCircuitOpen) {
+				return errJWKSCircuitOpen
+			}
+			return err
+		}
+		return nil
+	}
+	_, err := doFetch(context.Background())
+	return err
+}
+
+// fetchJWKSLocked performs the actual HTTP GET + parse + cache update
+// under v.mu. Caller may run via Execute (CB) or directly.
+func (v *Validator) fetchJWKSLocked(ctx context.Context) error {
 	v.mu.Lock()
 	defer v.mu.Unlock()
 
@@ -317,7 +394,11 @@ func (v *Validator) fetchJWKS() error {
 		return nil
 	}
 
-	resp, err := v.httpClient.Get(v.jwksURL)
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, v.jwksURL, nil)
+	if err != nil {
+		return fmt.Errorf("JWKS request build failed: %w", err)
+	}
+	resp, err := v.httpClient.Do(req)
 	if err != nil {
 		return fmt.Errorf("JWKS fetch failed: %w", err)
 	}

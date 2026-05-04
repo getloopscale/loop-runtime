@@ -16,6 +16,7 @@ import (
 	"time"
 
 	goJWT "github.com/golang-jwt/jwt/v5"
+	"github.com/loopzero/loopzero/pkg/circuitbreaker"
 )
 
 // ---------------------------------------------------------------------------
@@ -1060,5 +1061,107 @@ func TestValidateSession_RejectsRS256Token(t *testing.T) {
 	issuer := NewSessionTokenIssuer("hmac-secret-32-bytes-padding-here", "test-issuer", "test-audience", time.Hour)
 	if _, err := issuer.ValidateSession(signed); err == nil {
 		t.Fatal("expected session validator to reject RS256 token, got nil error")
+	}
+}
+
+// ---------------------------------------------------------------------------
+// T1.4 — JWKS via pkg/circuitbreaker per ADR-0029 + PKG-G16.
+// ---------------------------------------------------------------------------
+
+func TestValidator_WithCircuitBreaker_AcceptsTokenWhenHealthy(t *testing.T) {
+	key := generateRSAKey(t)
+	srv := serveJWKS(t, jwksJSON(map[string]*rsa.PublicKey{"k1": &key.PublicKey}))
+
+	cb := circuitbreaker.New(circuitbreaker.Config{
+		Name:          "jwks-test",
+		OpenThreshold: 3,
+		RetryInterval: time.Second,
+	}, nil)
+
+	v := NewValidator(srv.URL, "test-issuer", "test-audience").WithCircuitBreaker(cb)
+	tk := goJWT.NewWithClaims(goJWT.SigningMethodRS256, goJWT.MapClaims{
+		"iss": "test-issuer",
+		"aud": "test-audience",
+		"exp": time.Now().Add(time.Hour).Unix(),
+	})
+	tk.Header["kid"] = "k1"
+	signed, err := tk.SignedString(key)
+	if err != nil {
+		t.Fatalf("sign: %v", err)
+	}
+	if _, err := v.Validate(signed); err != nil {
+		t.Errorf("validation should succeed in healthy CB state, got: %v", err)
+	}
+}
+
+func TestValidator_WithCircuitBreaker_OpensAfterRepeatedFetchFailures(t *testing.T) {
+	failingSrv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		http.Error(w, "down", http.StatusServiceUnavailable)
+	}))
+	t.Cleanup(failingSrv.Close)
+
+	cb := circuitbreaker.New(circuitbreaker.Config{
+		Name:          "jwks-fail",
+		OpenThreshold: 2,
+		RetryInterval: time.Hour,
+	}, nil)
+
+	v := NewValidator(failingSrv.URL, "test-issuer", "test-audience").WithCircuitBreaker(cb)
+	for i := 0; i < 3; i++ {
+		_ = v.fetchJWKS() // exercises CB
+	}
+	if cb.State() != circuitbreaker.Open {
+		t.Errorf("expected CB Open after repeated 503; got %v", cb.State())
+	}
+}
+
+func TestValidator_WithCircuitBreaker_ServesCachedKeysWhenOpen(t *testing.T) {
+	key := generateRSAKey(t)
+	calls := 0
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		calls++
+		if calls > 1 {
+			http.Error(w, "down", http.StatusServiceUnavailable)
+			return
+		}
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = w.Write(jwksJSON(map[string]*rsa.PublicKey{"k1": &key.PublicKey}))
+	}))
+	t.Cleanup(srv.Close)
+
+	cb := circuitbreaker.New(circuitbreaker.Config{
+		Name:          "jwks-stale",
+		OpenThreshold: 1,
+		RetryInterval: time.Hour,
+	}, nil)
+
+	v := NewValidator(srv.URL, "test-issuer", "test-audience").WithCircuitBreaker(cb)
+	v.ttl = 50 * time.Millisecond // fast TTL to force re-fetch attempt
+	// First fetch warms cache.
+	if err := v.fetchJWKS(); err != nil {
+		t.Fatalf("warm fetch failed: %v", err)
+	}
+	// Trip the CB.
+	time.Sleep(100 * time.Millisecond)
+	for i := 0; i < 3; i++ {
+		_ = v.fetchJWKS()
+	}
+	if cb.State() != circuitbreaker.Open {
+		t.Fatalf("expected CB Open; got %v", cb.State())
+	}
+
+	// Now build a token; getKey MUST serve cached key despite CB open.
+	tk := goJWT.NewWithClaims(goJWT.SigningMethodRS256, goJWT.MapClaims{
+		"iss": "test-issuer",
+		"aud": "test-audience",
+		"exp": time.Now().Add(time.Hour).Unix(),
+	})
+	tk.Header["kid"] = "k1"
+	signed, err := tk.SignedString(key)
+	if err != nil {
+		t.Fatalf("sign: %v", err)
+	}
+	if _, err := v.Validate(signed); err != nil {
+		t.Errorf("expected stale-cache fallback to validate token; got: %v", err)
 	}
 }
