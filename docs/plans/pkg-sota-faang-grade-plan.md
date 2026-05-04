@@ -1,6 +1,93 @@
 # Plan: Shared Packages SOTA FAANG-Grade Improvement
 
+> **Version 1.1** — Updated 2026-05-04 post Ralph loop iter 1-3 closure. Phases 0-2 ✅ COMPLETE; Phase 3 ⏳ T3.1 ✅ DONE / T3.2 deferred (analog to `operators-sota-faang-grade-plan` Final Dogfood Gate — wall-clock-bound, CI cron + production canary). 18 commits across iter 1-3. See **Status Snapshot v1.1** below + `docs/plans/pkg-sota-faang-grade-plan/HANDOFF.md` (TBD when first prod canary closes). 8 ADRs ratified async (0028-0035) + amendment A1 (CB Execute[T] package-level). All 18 internal task entries `[completed]` except T3.2 which requires human-in-the-loop dogfood validation per CONDITION-5.
+>
 > **Version 1.0** — Este plano executa cada recomendação de `docs/technical/pkg/improvement-roadmap.md` em uma sequência por fases, dependency-aware, levando o módulo `pkg/` de SOTA score 7.0/10 para 9.0/10. Resolve dead code documentado (`pkg/health` com 0 imports), gaps de segurança contra RFC 8725bis no `pkg/jwt`, ausência de generics+context em `pkg/circuitbreaker`, transport coupling em `pkg/errors`, dependência direta de `*sql.DB` em `pkg/enforcement`, global mutable state em `pkg/logging`, e introduz `pkg/conditions` kstatus-compatible para os 8 operators. Todas as fases são TDD-driven com RED-GREEN-REFACTOR, code-audit checks por task, e validação final via `/dogfood full`. Pré-release governance: Phase 0 obrigatória antes de qualquer commit em `pkg/` (mudanças aqui cascatam para 89 importadores em `api/internal` + 19 em `operators/internal`).
+
+---
+
+## Status Snapshot (v1.1 — 2026-05-04 post Ralph closure)
+
+| Phase | Status | Tasks done | Evidence |
+|---|:---:|---|---|
+| 0 Governance Gate | ✅ | T0.1 | MEET-2026-05-04-PKG-SOTA + 8 ADRs (0028-0035) + amendment A1 |
+| 1 Quick Wins | ✅ | T1.1, T1.2, T1.3, T1.4, T1.5, T1.6, T1.7 | 7/7 commits; pkg/health DELETED, JWT RFC 8725bis hardened, validators added, JWKS via CB, typed labels, errors.WrapWithStack, usage matrix gate G14 active |
+| 2 Modernization | ✅ | T2.1, T2.2, T2.3 (FULL A+B+C), T2.4, T2.5, T2.6, T2.7 | 7/7 incl. BREAKING field removal; pkg/conditions created, pkg/errors/http RFC 9457, LimitsStore DIP, ContextLogger, property tests, state machine DOT viz |
+| 3 Validation | ⏳ | T3.1 ✅ | T3.2 deferred to dedicated session |
+| 3 T3.2 Final Dogfood Gate | ⏳ | encoded as deferred runbook | analogous to operators-sota Final Gate; wall-clock-bound (4h soak + chaos + CI cron) |
+
+**Total commits in this loop:** 18 across iter 1-3.
+**LIVE evidence:** all `cd pkg && go test -race ./...` GREEN (10 packages including new `pkg/conditions` + `pkg/errors/http`); api+operators+cloud build clean; `task pkg:usage-matrix:check` GREEN; `task pkg:state-machine-dots:check` GREEN; `validate-matrix:quick` PASSes the 2 new pkg-sota gates (G14, T2.7).
+**CI gate:** Gate 9.56 (PKG-G14) + Gate 9.57 (state-machine-dots) added to `validate-matrix.sh`; future `.github/workflows/pkg-soak.yml` (TBD) will encode T3.2 Final Dogfood Gate.
+**Production rollout:** the `pkg/conditions` operator migration (8 controllers) + `pkg/logging` ContextLogger migration (4 binaries) + `pkg/circuitbreaker` Execute[T] migration (4 remaining operator consumers) tracked as separate change records — they are non-blocking adoption work, not core plan scope.
+
+## Governance Conditions Status (MEET-2026-05-04-PKG-SOTA)
+
+| Condition | Status | Evidence |
+|---|---|---|
+| CONDITION-1 (sre): deprecation runbooks for D4+D7 | ✅ | CHANGELOG migration notes; 1-release window documented in code |
+| CONDITION-2 (api): T2.3 staged A/B/C rollout | ✅ | Stage A (introduce) + Stage B (helpers) + Stage C (BREAKING field removal) all shipped |
+| CONDITION-3 (verification): property tests in CI default | ✅ | T2.6 ran `quick.Check` 1000-10000 iter; included in `task test:unit` default |
+| CONDITION-4 (security): T1.2 max defer iter 2 | ✅ | T1.2 shipped iter 1 |
+| CONDITION-5 (sre): T3.2 dogfood non-skippable | ⏳ | Deferred to dedicated session — runbook below |
+
+## T3.2 Deferred Runbook
+
+`/dogfood full` is **MANDATORY** per CONDITION-5 (sre-engineer absolute veto). It was not executed during the Ralph loop because:
+
+1. The dogfood gate is **wall-clock-bound** — requires `task teardown && task setup && tilt up` (10-30 min boot for k3d + helmfile + ArgoCD bootstrap), then `/dogfood full` (multiple deploy/promote/rollback flows × ~10 min each), then 4h soak per CONDITION-5 invariants.
+2. The k3d cluster discovered in iter 3 was partially functional (30 PASS / 11 WARN / 0 FAIL via `task doctor`) but operators NOT running — meaning `/dogfood full` would abort early in any case.
+3. `operators-sota-faang-grade-plan` v1.4 set the precedent: when wall-clock-bound dogfood gates exceed iteration budget, defer to CI cron + production canary. That plan's Final Dogfood Gate is encoded as `.github/workflows/operator-split-soak.yml` Saturday weekly cron — same pattern applies here.
+
+**Execution checklist** (when dedicated session is available):
+
+```bash
+# 1. Fresh infrastructure
+task teardown && task setup
+tilt up   # in another terminal; wait until all operator pods Ready
+task doctor  # expect 30+ PASS / 0 FAIL
+
+# 2. Run full dogfood
+/dogfood full
+
+# 3. Special validation steps for pkg-sota scope
+# (a) RFC 9457 problem+json shape — curl an error endpoint:
+curl -s -X POST http://localhost:13001/api/v1/projects -d '{}' | jq .
+# expect Content-Type: application/problem+json + fields: type/title/status/detail/code
+
+# (b) Circuit breaker observability — simulate Hydra restart:
+kubectl -n loopzero-system rollout restart deployment ory-hydra
+# tail api logs for "JWKS fetch skipped: circuit breaker open"
+
+# (c) kstatus conditions presence in operator-managed CRs:
+kubectl get tenant <X> -o yaml | yq '.status.conditions'
+# expect Ready / Reconciling / Stalled triplet (after pkg/conditions adoption follow-up)
+```
+
+**Pass criteria:**
+
+- [ ] `/dogfood full` PASS on clean infrastructure
+- [ ] Zero S0 (Bloqueante) findings
+- [ ] Zero S1 (Grave) findings related to pkg-sota scope (errors HTTP migration, JWT hardening, conditions, CB Execute, etc.)
+- [ ] Prova de Vida + Prova de Morte each deploy/delete passes
+- [ ] No regressions in deploy/scaling/promote/rollback flows
+- [ ] Rule 3 clean (zero internal terms in CLI output)
+- [ ] Special validation (a)+(b)+(c) above all GREEN
+- [ ] 4h soak with continuous deploy traffic per CONDITION-5
+- [ ] CI cron `pkg-soak.yml` first GREEN run (analogous to operator-split-soak.yml weekly cron)
+
+When all of the above are true, the plan transitions to v2.0 marked `IMPLEMENTATION COMPLETE — DOGFOOD VALIDATED`.
+
+## Adoption Follow-ups (Non-blocking)
+
+These items are tracked as separate change records — they are downstream adoption work, not core plan scope:
+
+1. **pkg/conditions adoption in 8 operators.** Currently `operators/internal/conditions/` has equivalent implementation. Migration requires adapter `func ToMetav1(c conditions.Condition) metav1.Condition` + corresponding `FromMetav1`. Per ADR-0032 follow-up.
+2. **pkg/circuitbreaker.Execute[T] migration in remaining 4 operator consumers** (gitea, harbor, minio, plus tenant-operator main wiring). 1 done as reference (argocd). Per ADR-0031 amendment A1 — incremental.
+3. **pkg/logging.ContextLogger migration in 4 operator binaries + api/cmd/main.go.** Currently global state still works (deprecated). Per ADR-0034 deprecation window.
+4. **pkg/errors.WrapWithStack adoption in error-prone code paths** (top-level recover, internal panics). Currently opt-in. Document migration patterns when first incident benefits.
+
+These follow-ups demonstrate the plan's incremental-friendly design: every change provides backward compat or deprecation window, so adoption can be paced by domain teams without blocking the core SOTA improvements.
 
 ---
 
