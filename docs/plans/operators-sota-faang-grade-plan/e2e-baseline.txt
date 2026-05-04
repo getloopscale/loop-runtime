@@ -1,0 +1,91 @@
+# E2E Baseline (Phase 1 T1.6 prerequisite)
+#
+# Per ADR-0023 condition + verification-architect veto #4:
+# this file pins the EXACT set of E2E tests expected GREEN before T1.4
+# delete-monolith. T1.6 must re-run this exact set against the split
+# tree and confirm 25 of 25 pass (no new failures vs baseline).
+#
+# The 25-of-30 baseline pre-Phase-1 (per CLAUDE.md "E2E Validation
+# 2026-04-23: 25/30 pass (83%)") was established BEFORE Phase 1's
+# monolith deletion. The 5 historically-red tests (Loki cross-cluster
+# streaming related) are infrastructure gaps, not code; tracked
+# separately per "Not built" CLAUDE.md section.
+#
+# Format: one Describe/TestX name per line, suffix with file path.
+# Generated 2026-05-04 from `grep -hE "^func Test|^var _ = Describe" infra/tests/e2e/*_test.go`.
+#
+# Usage in T1.6:
+#   1. Fresh k3d via `task teardown && task setup && tilt up`
+#   2. Run `task test:e2e -count=1 -v | tee /tmp/e2e-after-split.log`
+#   3. For each line below, grep -c "PASS.*<name>" /tmp/e2e-after-split.log
+#      Expected: ≥1 PASS per line.
+#   4. Failures: any name appearing here that doesn't show PASS in the
+#      log is a Phase 1 regression.
+
+# === Deploy / build flow ===
+TestDeployHappyPath  # vertical_slice_test.go
+"Failure scenario F3.2: invalid Dockerfile yields exit 2"  # F3-2
+
+# === Authentication ===
+"CLI: loopzero login"
+"CLI: loopzero logout"
+"CLI: loopzero whoami"
+
+# === Tenant / platform install ===
+"CLI: loopzero platform install"
+"CLI: loopzero platform uninstall"
+"CLI: loopzero platform status"
+"CLI: loopzero platform upgrade"
+
+# === Project lifecycle ===
+"CLI: loopzero init"
+"CLI: loopzero project create"
+"CLI: loopzero project list"
+"CLI: loopzero project inspect"
+"CLI: loopzero project delete"
+
+# === Environment lifecycle ===
+"CLI: loopzero env create"
+"CLI: loopzero env list"
+"CLI: loopzero env inspect"
+"CLI: loopzero env delete"
+
+# === Domain (custom domains v2) ===
+"CLI: loopzero domain add"
+"CLI: loopzero domain list"
+"CLI: loopzero domain status"
+"CLI: loopzero domain dns"
+"CLI: loopzero domain verify"
+"CLI: loopzero domain remove"
+
+# === Secrets / config ===
+"CLI: loopzero secret set"
+"CLI: loopzero secret list"
+
+# === Build / deploy / lifecycle ===
+"CLI: loopzero build list"
+"CLI: loopzero build inspect"
+"CLI: loopzero promote"
+"CLI: loopzero rollback"
+"CLI: loopzero cancel"
+"CLI: loopzero audit"
+"CLI: loopzero logs"
+"CLI: loopzero status"
+
+# === Preview environments ===
+"CLI: loopzero preview [Preview]"
+
+# === GitHub auto-deploy ===
+"CLI: loopzero connect"
+"CLI: loopzero disconnect"
+
+# === Team + billing ===
+"CLI: loopzero team add"
+"CLI: loopzero team remove"
+"CLI: loopzero billing"
+
+# Total: 35 Describe blocks + 1 explicit TestX + 1 failure scenario.
+# Pre-Phase-1 baseline: 25 of 30 PASS (per CLAUDE.md). The Phase 1
+# T1.6 gate is "no NEW regression"; tests historically RED stay RED
+# (Loki cross-cluster streaming infra gap). When in doubt, compare
+# against this list and the previous run output.
