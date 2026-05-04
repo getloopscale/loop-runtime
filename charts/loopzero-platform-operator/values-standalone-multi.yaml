@@ -14,3 +14,8 @@ global:
 image:
   repository: loopzero-platform-operator
   pullPolicy: IfNotPresent   # FB-#1 (MEET-070): k3d image import populates node crictl cache; pullPolicy=Always cycles ImagePullBackOff because registry HTTP returns 404
+
+# FB-#3 partial fix (MEET-070): platform-operator only needs
+# ARGOCD_NAMESPACE (the only os.Getenv in cmd/platform-operator/main.go).
+config:
+  argocdNamespace: argocd

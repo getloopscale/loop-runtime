@@ -63,7 +63,39 @@ mounts envFrom `Secret <chart-name>` which expects `GITEA_TOKEN`
 **Workaround for any live attempt:** kubectl patch the chart-created
 Secret with the actual token from `loopzero-api-tokens.gitea-token`.
 
-## FB-#3: split charts missing env vars + kubeconfig volume mounts — ❌ DEFERRED
+## FB-#3: split charts missing env vars + kubeconfig volume mounts — ⏳ PARTIAL FIX (iter 11)
+
+**Update 2026-05-04 iter 11:** Minimum-viable env-var distribution
+applied to all 4 split charts' `values-standalone-multi.yaml`:
+
+  - **loopzero-app-operator:** BASE_DOMAIN.
+  - **loopzero-platform-operator:** ARGOCD_NAMESPACE.
+  - **loopzero-preview-operator:** BASE_DOMAIN +
+    kubeconfig.runtime.existingConfigMap=loopzero-runtime-kubeconfig.
+  - **loopzero-tenant-operator:** GITEA_URL + BASE_DOMAIN + ARGOCD_NAMESPACE
+    + INGRESS_NAMESPACE + INSECURE_SKIP_TLS +
+    kubeconfig.{build,runtime}.existingConfigMap.
+
+**Still deferred for full production cutover:**
+
+  - HARBOR_URL/HARBOR_ADMIN_USERNAME/HARBOR_ADMIN_PASSWORD/HARBOR_REGISTRY_HOST
+    — production-specific; needs Harbor existingSecret reference.
+  - MINIO_ENDPOINT/MINIO_ACCESS_KEY/MINIO_SECRET_KEY — same pattern.
+  - SPACES_ACCESS_KEY_ID/SPACES_SECRET_ACCESS_KEY — DO Spaces creds.
+  - DIGITALOCEAN_TOKEN — DOKS API token.
+  - REGISTRY_DOCKER_CONFIG/REGISTRY_CIDRS — production registry config.
+  - WORKLOAD_CLUSTER_URL — patched at runtime by `task k3d:heal H10`
+    in LOCAL; production sets via Helm value during cutover.
+
+The minimum-viable set lets the binary boot in standalone-multi (all
+required env vars present); the deferred set is runtime-conditional
+(binary degrades gracefully when missing — e.g., Harbor mode skipped
+if HARBOR_URL is empty).
+
+**Verified:** `helm template + kubeconform --strict` passes for all
+4 charts after FB-#3 partial fix (9/8/8/12 resources valid).
+
+
 
 **Status:** Deferred to Phase 6 / `CHG-NNNN-OPERATOR-SPLIT-PROD`. This
 is the bulk of the cutover work; not feasible inside a Ralph loop

@@ -14,3 +14,30 @@ global:
 image:
   repository: loopzero-tenant-operator
   pullPolicy: IfNotPresent   # FB-#1 (MEET-070): k3d image import populates node crictl cache; pullPolicy=Always cycles ImagePullBackOff because registry HTTP returns 404
+
+# FB-#3 partial fix (MEET-070) — populate env vars per plan v1.1 T1.5
+# §"Env var distribution across 4 binaries". Minimum-viable for
+# standalone-multi boot; HARBOR_*/MINIO_*/SPACES_*/DIGITALOCEAN_TOKEN
+# are runtime-conditional and tracked in fb-cutover-backlog.md.
+config:
+  giteaUrl: "http://gitea-http.loopzero-system.svc.cluster.local:3000"
+  baseDomain: loopzero.local
+  argocdNamespace: argocd
+  workloadClusterUrl: ""   # patched at runtime by task k3d:heal H10
+  ingressNamespace: traefik
+  insecureSkipTls: "true"  # local k3d certs are self-signed
+
+# FB-#2 (MEET-070): the current chart Secret template ships empty
+# stringData. For LOCAL cutover, the deploy operator should patch
+# the Secret with the actual token from loopzero-api-tokens.gitea-token.
+# Tracked separately for proper existingSecret + key-remap implementation.
+secrets:
+  create: true
+  existingSecret: ""
+  giteaToken: ""
+
+kubeconfig:
+  build:
+    existingConfigMap: loopzero-build-kubeconfig
+  runtime:
+    existingConfigMap: loopzero-runtime-kubeconfig
