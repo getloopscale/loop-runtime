@@ -7,6 +7,8 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"io"
+	"log/slog"
 	"testing"
 )
 
@@ -103,5 +105,86 @@ func TestFromContext_WithCorrelationID(t *testing.T) {
 	}
 	if parsed["trace_id"] != "trace123" {
 		t.Errorf("expected trace_id 'trace123', got %v", parsed["trace_id"])
+	}
+}
+
+// ---------------------------------------------------------------------------
+// T2.5 — ContextLogger explicit DI per ADR-0034.
+// ---------------------------------------------------------------------------
+
+func TestContextLogger_FromContext_EnrichesWithTrace(t *testing.T) {
+	base := slog.New(slog.NewTextHandler(io.Discard, nil))
+	cl := NewContextLogger(base, func(ctx context.Context) (string, string) {
+		return "trace-abc", "span-def"
+	})
+	got := cl.FromContext(context.Background())
+	if got == nil {
+		t.Fatal("FromContext should return enriched logger")
+	}
+	if got == base {
+		t.Error("FromContext should NOT return the base logger when extractor produces a trace")
+	}
+}
+
+func TestContextLogger_FromContext_NilExtractorReturnsBase(t *testing.T) {
+	base := slog.New(slog.NewTextHandler(io.Discard, nil))
+	cl := NewContextLogger(base, nil)
+	got := cl.FromContext(context.Background())
+	if got != base {
+		t.Error("nil extractor should return the base logger unchanged")
+	}
+}
+
+func TestContextLogger_FromContext_EmptyTraceReturnsBase(t *testing.T) {
+	base := slog.New(slog.NewTextHandler(io.Discard, nil))
+	cl := NewContextLogger(base, func(ctx context.Context) (string, string) {
+		return "", ""
+	})
+	got := cl.FromContext(context.Background())
+	if got != base {
+		t.Error("empty trace_id should return the base logger unchanged")
+	}
+}
+
+func TestContextLogger_NilSafetyReturnsNil(t *testing.T) {
+	var cl *ContextLogger
+	if got := cl.FromContext(context.Background()); got != nil {
+		t.Errorf("nil ContextLogger.FromContext must return nil; got %v", got)
+	}
+	cl2 := NewContextLogger(nil, nil)
+	if got := cl2.FromContext(context.Background()); got != nil {
+		t.Errorf("nil base logger must produce nil; got %v", got)
+	}
+}
+
+func TestContextLogger_TwoInstancesIsolated(t *testing.T) {
+	// Two ContextLoggers with different extractors must not interfere.
+	base := slog.New(slog.NewTextHandler(io.Discard, nil))
+	cl1 := NewContextLogger(base, func(ctx context.Context) (string, string) {
+		return "trace-1", "span-1"
+	})
+	cl2 := NewContextLogger(base, func(ctx context.Context) (string, string) {
+		return "trace-2", "span-2"
+	})
+	if got1, got2 := cl1.FromContext(context.Background()), cl2.FromContext(context.Background()); got1 == got2 {
+		t.Error("two ContextLoggers with different extractors must yield distinct loggers (no shared state)")
+	}
+}
+
+func TestContextLogger_LegacyGlobalAPIStillWorks(t *testing.T) {
+	// Backward-compat regression guard: the deprecated global registry
+	// must keep working until the next major release.
+	RegisterTraceExtractor(func(ctx context.Context) (string, string) {
+		return "legacy-trace", "legacy-span"
+	})
+	defer RegisterTraceExtractor(nil) // reset for other tests
+
+	base := slog.New(slog.NewTextHandler(io.Discard, nil))
+	got := FromContext(context.Background(), base)
+	if got == nil {
+		t.Fatal("legacy FromContext should return a logger")
+	}
+	if got == base {
+		t.Error("legacy FromContext should enrich the logger when extractor is registered")
 	}
 }
