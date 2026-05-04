@@ -16,7 +16,7 @@
 //   - Capsule: e2e/new_namespace_test.go, e2e/tenant_resources_test.go
 //   - Behavioral contract: Capsule BC-001 (namespace + RoleBinding creation)
 //   - Translated to: LoopZero TenantController + EnvironmentController behaviors
-package controller_test
+package tenant_test
 
 import (
 	"fmt"

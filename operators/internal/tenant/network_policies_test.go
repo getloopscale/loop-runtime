@@ -17,7 +17,7 @@
 //     2. Runtime namespace: deny-all + allow-ingress-traefik + allow-egress (default-deny posture).
 //   - LoopZero's build policy protects against malicious Dockerfiles (spec §17.1).
 //   - No 0.0.0.0/0 CIDR is ever permitted in build or runtime egress rules.
-package controller_test
+package tenant_test
 
 import (
 	"fmt"

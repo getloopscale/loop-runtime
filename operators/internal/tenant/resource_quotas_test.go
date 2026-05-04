@@ -15,7 +15,7 @@
 //   - Build quota uses fixed platform constants (not configurable per tenant).
 //   - Runtime quota reflects Tenant CR spec.limits values.
 //   - Both controllers use CreateOrUpdate — drift is corrected on the next reconcile.
-package controller_test
+package tenant_test
 
 import (
 	"fmt"

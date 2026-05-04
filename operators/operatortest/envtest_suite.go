@@ -7,7 +7,6 @@ import (
 	"context"
 	"os"
 	"path/filepath"
-	"testing"
 	"time"
 
 	"k8s.io/apimachinery/pkg/runtime"
@@ -22,6 +21,15 @@ import (
 
 	loopzerov1 "github.com/loopzero/loopzero/operators/api/v1"
 )
+
+// TestT is the minimal subset of testing.TB / Ginkgo's FullGinkgoTInterface
+// that StartEnvtest needs. Defined as a local interface so callers can pass
+// either *testing.T (Helper + Fatalf) or ginkgo.GinkgoT() (Helper + Fatalf
+// without needing to satisfy testing.TB's unexported `private()` marker).
+type TestT interface {
+	Helper()
+	Fatalf(format string, args ...interface{})
+}
 
 // EnvtestHandle holds the shared envtest infrastructure each split package
 // consumes via BeforeSuite. Centralized here so that tenant/, app/, preview/,
@@ -84,7 +92,10 @@ type EnvtestConfig struct {
 //
 // CRITICAL: caller MUST defer h.Stop() (or AfterSuite -> h.Stop()) or the
 // envtest binary leaks across test runs.
-func StartEnvtest(t testing.TB, cfg EnvtestConfig) *EnvtestHandle {
+//
+// Accepts either *testing.T (for go test direct callers) or ginkgo.GinkgoT()
+// (for Ginkgo BeforeSuite blocks). Both satisfy TestT.
+func StartEnvtest(t TestT, cfg EnvtestConfig) *EnvtestHandle {
 	t.Helper()
 
 	logf.SetLogger(zap.New(zap.WriteTo(os.Stderr), zap.UseDevMode(true)))
