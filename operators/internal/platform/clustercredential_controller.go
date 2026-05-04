@@ -383,7 +383,7 @@ func SetupClusterCredentialController(mgr ctrl.Manager, argoCDNamespace string) 
 		ArgoCDNamespace: argoCDNamespace,
 	}
 	return ctrl.NewControllerManagedBy(mgr).
-		For(&loopzerov1.ClusterCredential{}).
+		For(&loopzerov1.ClusterCredential{}, shared.ForOption()).
 		// D-02: Watch Secrets -- when a kubeconfig Secret is updated (e.g.,
 		// rotated by Pulumi), find the ClusterCredentials that reference it
 		// and requeue them immediately.

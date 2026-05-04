@@ -299,7 +299,7 @@ func (r *ApplicationReconciler) computePhase(app *loopzerov1.LoopZeroApplication
 // SetupApplicationController registers the ApplicationController with the manager.
 func SetupApplicationController(mgr ctrl.Manager, baseDomain string) error {
 	return ctrl.NewControllerManagedBy(mgr).
-		For(&loopzerov1.LoopZeroApplication{}).
+		For(&loopzerov1.LoopZeroApplication{}, shared.ForOption()).
 		Owns(&loopzerov1.ExposedRoute{}).
 		Named("application").
 		Complete(&ApplicationReconciler{

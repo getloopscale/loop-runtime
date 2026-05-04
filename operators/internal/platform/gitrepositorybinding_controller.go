@@ -329,7 +329,7 @@ func (r *GitRepositoryBindingReconciler) reconcileDelete(ctx context.Context, bi
 // SetupGitRepositoryBindingController registers the GitRepositoryBindingController with the manager.
 func SetupGitRepositoryBindingController(mgr ctrl.Manager, httpClient *http.Client) error {
 	return ctrl.NewControllerManagedBy(mgr).
-		For(&loopzerov1.GitRepositoryBinding{}).
+		For(&loopzerov1.GitRepositoryBinding{}, shared.ForOption()).
 		Named("gitrepositorybinding").
 		Complete(&GitRepositoryBindingReconciler{
 			Client:     mgr.GetClient(),

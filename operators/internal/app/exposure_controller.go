@@ -326,7 +326,7 @@ func SetupExposureController(mgr ctrl.Manager, cfgs ...ExposureControllerConfig)
 		cfg = cfgs[0]
 	}
 	return ctrl.NewControllerManagedBy(mgr).
-		For(&loopzerov1.ExposedRoute{}).
+		For(&loopzerov1.ExposedRoute{}, shared.ForOption()).
 		Named("exposure").
 		Complete(&ExposureReconciler{
 			Client:                mgr.GetClient(),

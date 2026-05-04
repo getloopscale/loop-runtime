@@ -274,7 +274,7 @@ func SetupEnvironmentController(mgr ctrl.Manager, runtimeClient client.Client) e
 func SetupEnvironmentControllerWithFactory(mgr ctrl.Manager, runtimeClient client.Client, factory shared.RuntimeClientFactory) error {
 	ingressNS := os.Getenv("INGRESS_NAMESPACE")
 	return ctrl.NewControllerManagedBy(mgr).
-		For(&loopzerov1.Environment{}).
+		For(&loopzerov1.Environment{}, shared.ForOption()).
 		Named("environment").
 		Complete(&EnvironmentReconciler{
 			Client:           mgr.GetClient(),

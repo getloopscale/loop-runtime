@@ -321,7 +321,7 @@ func SetupTenantController(mgr ctrl.Manager, gitProvisioner gitea.GitRepoProvisi
 		maxConcurrent = 5 // MEET-052: default backpressure for bulk deletion
 	}
 	return ctrl.NewControllerManagedBy(mgr).
-		For(&loopzerov1.Tenant{}).
+		For(&loopzerov1.Tenant{}, shared.ForOption()).
 		Owns(&loopzerov1.Environment{}).
 		Named("tenant").
 		WithOptions(crcontroller.Options{MaxConcurrentReconciles: maxConcurrent}).

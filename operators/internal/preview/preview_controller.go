@@ -510,7 +510,7 @@ func (r *PreviewReconciler) bumpCleanupAttempts(preview *loopzerov1.PreviewEnvir
 func SetupPreviewController(mgr ctrl.Manager, runtimeClient client.Client, baseDomain string) error {
 	ingressNS := os.Getenv("INGRESS_NAMESPACE")
 	return ctrl.NewControllerManagedBy(mgr).
-		For(&loopzerov1.PreviewEnvironment{}).
+		For(&loopzerov1.PreviewEnvironment{}, shared.ForOption()).
 		Named("preview").
 		Complete(&PreviewReconciler{
 			Client:           mgr.GetClient(),

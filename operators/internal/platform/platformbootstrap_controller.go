@@ -288,7 +288,7 @@ func (r *PlatformBootstrapReconciler) updateSecretData(ctx context.Context, secr
 // SetupPlatformBootstrapController registers the PlatformBootstrapController with the manager.
 func SetupPlatformBootstrapController(mgr ctrl.Manager, httpClient *http.Client) error {
 	return ctrl.NewControllerManagedBy(mgr).
-		For(&loopzerov1.PlatformBootstrap{}).
+		For(&loopzerov1.PlatformBootstrap{}, shared.ForOption()).
 		Named("platformbootstrap").
 		Complete(&PlatformBootstrapReconciler{
 			Client:     mgr.GetClient(),
