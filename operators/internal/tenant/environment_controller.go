@@ -139,7 +139,9 @@ func (r *EnvironmentReconciler) Reconcile(ctx context.Context, req ctrl.Request)
 		if !latest.DeletionTimestamp.IsZero() {
 			return
 		}
-		conditions.SetReadinessSummary(&latest.Status.Conditions, latest.Generation, environmentDetailTypes)
+		// Per pkg-sota-faang-grade-plan v1.2 T2.2 closure: delegate to
+		// pkg/conditions via adapter (same algorithm, shared core).
+		conditions.SetReadinessSummaryViaPkg(&latest.Status.Conditions, latest.Generation, environmentDetailTypes)
 		_ = r.Status().Update(ctx, latest)
 	}()
 

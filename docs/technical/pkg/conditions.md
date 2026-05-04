@@ -73,7 +73,7 @@ Per ADR-0032 + plan v1.2 Adoption Follow-up #1:
 | # | Controller | File | Status |
 |---|---|---|---|
 | 1 | tenant | `operators/internal/tenant/tenant_controller.go` | ✅ migrated (iter 5) — reference impl |
-| 2 | environment | `operators/internal/controller/environment_controller.go` | ⏳ next |
+| 2 | environment | `operators/internal/tenant/environment_controller.go` | ✅ migrated (iter 5) — closes original T2.2 v1.0 criterion |
 | 3 | application | `operators/internal/app/application_controller.go` | ⏳ |
 | 4 | exposed-route | `operators/internal/controller/exposedroute_controller.go` | ⏳ |
 | 5 | preview | `operators/internal/preview/preview_controller.go` | ⏳ |
