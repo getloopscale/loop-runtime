@@ -4,6 +4,7 @@
 package main
 
 import (
+	"context"
 	"log/slog"
 	"net/http"
 	"time"
@@ -137,8 +138,26 @@ func setupOrchestrator(
 	statusReleaseStore := &adapters.StatusReleaseStoreAdapter{Store: stores.ReleaseStore}
 	statusHandler := routes.NewStatusHandler(projectStore, statusBuildStore, statusReleaseStore, cfg.BaseDomain)
 
-	// Scale handler — scaling configuration for apps (KEDA scale-to-zero gate)
-	scaleHandler := routes.NewScaleHandler(projectStore, cfg.KEDAEnabled)
+	// Scale handler — scaling configuration for apps (KEDA scale-to-zero gate).
+	// Plan T2.2: real persistence via PostgresScalingStore (was: stub-202 returning acknowledged).
+	// The closure adapts routes.ScaleConfigInput ↔ db.ScalingConfig (avoids circular import).
+	scalingStore := db.NewPostgresScalingStore(dbAdapter)
+	scaleApply := func(ctx context.Context, in routes.ScaleConfigInput) (bool, error) {
+		c := &db.ScalingConfig{
+			TenantID:     in.TenantID,
+			ProjectID:    in.ProjectID,
+			Environment:  in.Environment,
+			AppName:      in.AppName,
+			MinReplicas:  in.MinReplicas,
+			MaxReplicas:  in.MaxReplicas,
+			TargetCPUPct: in.TargetCPUPct,
+			ScaleToZero:  in.ScaleToZero,
+			UpdatedBy:    in.UpdatedBy,
+		}
+		_, changed, err := scalingStore.Upsert(ctx, dbAdapter, c)
+		return changed, err
+	}
+	scaleHandler := routes.NewScaleHandler(projectStore, scaleApply, cfg.KEDAEnabled)
 
 	// Build list handler — lists builds for a project with optional env filter
 	buildListHandler := routes.NewBuildListHandler(&adapters.BuildListStoreAdapter{Store: stores.BuildStore})

@@ -32,6 +32,23 @@ clusterImagePolicy:
     - "registry.digitalocean.com/loopzero-system/**"
     - "harbor.dev.loopzero.example/loopzero-platform/**"
 
+# INF-G16 + MEET-2026-05-03-063 (MEET-B Track-1).
+# loopzero-images-keyless: ClusterImagePolicy with Fulcio keyless authority.
+# Coexists with loopzero-images-warn during transition (≥ 7 days dual-signing).
+# After T4.4 cutover, loopzero-images-warn is REMOVED and this becomes sole policy.
+# Identity regex narrow: only signatures from this repo's GHA OIDC token are accepted.
+clusterImagePolicyKeyless:
+  enabled: false   # flip to true to install side-by-side warn-mode (T4.3)
+  name: loopzero-images-keyless
+  mode: warn       # warn during transition; flip to enforce at cutover
+  imageGlobs:
+    - "registry.digitalocean.com/loopzero-system/**"
+    - "harbor.dev.loopzero.example/loopzero-platform/**"
+  fulcioURL: https://fulcio.sigstore.dev
+  rekorURL: https://rekor.sigstore.dev
+  oidcIssuer: https://token.actions.githubusercontent.com
+  identityRegexp: "^https://github\\.com/getloopscale/loopzero/"
+
 # Toggle individual VAPs (enabled by default).
 vaps:
   disallowLatestTag: true

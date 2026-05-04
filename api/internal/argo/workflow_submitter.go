@@ -12,7 +12,6 @@ import (
 	"time"
 
 	forge "github.com/getloopscale/loopzero-forge"
-	"github.com/getloopscale/loopzero-forge/model"
 
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
@@ -53,6 +52,15 @@ type WorkflowSubmitterConfig struct {
 	RegistryInsecure  bool   // true for local dev registries without TLS
 	BaseDomain        string // e.g., "loopzero.local" — base domain for app hostnames
 	HarborRegistryURL string // MEET-048: secondary registry for dual-push. Empty = disabled.
+	// CosignKeyless toggles cosign signing mode in user-app build pipeline.
+	// false (default, Sprint 6+): key-based, uses cosign-signing-key Secret.
+	// true (Sprint 9+ deferred):  keyless via Fulcio + Rekor + projected SA token.
+	// Plan T4.1 / MEET-2026-05-03-063 (Track-2): keyless requires cluster OIDC
+	// infrastructure not yet provisioned. Code path is implemented and tested;
+	// runtime activation tracks separate change request.
+	CosignKeyless   bool
+	CosignFulcioURL string // optional override (default: https://fulcio.sigstore.dev)
+	CosignRekorURL  string // optional override (default: https://rekor.sigstore.dev)
 	// MinIO credentials are injected via K8s Secret (envFrom) in CWTs, not via workflow params.
 }
 
@@ -91,6 +99,9 @@ func NewWorkflowSubmitter(cfg WorkflowSubmitterConfig) (*WorkflowSubmitter, erro
 		RegistryInsecure:  cfg.RegistryInsecure,
 		BaseDomain:        cfg.BaseDomain,
 		HarborRegistryURL: cfg.HarborRegistryURL,
+		CosignKeyless:     cfg.CosignKeyless,
+		CosignFulcioURL:   cfg.CosignFulcioURL,
+		CosignRekorURL:    cfg.CosignRekorURL,
 	})
 
 	return &WorkflowSubmitter{
@@ -169,9 +180,17 @@ func (s *WorkflowSubmitter) Submit(ctx context.Context, spec services.WorkflowSp
 }
 
 // Cancel stops a running workflow by setting its shutdown strategy.
+// The patch document includes apiVersion + kind explicitly so K8s server-side
+// patching (and the fake dynamic client used in tests) accept the merge.
+// Without these, fake-server validation rejects the patch with
+// "patch: Invalid value: ...apiVersion:'',kind:''...".
 func (s *WorkflowSubmitter) Cancel(ctx context.Context, namespace, workflowID string) error {
-	shutdownPatch := model.WorkflowModel{
-		Spec: model.WorkflowSpec{Shutdown: "Stop"},
+	shutdownPatch := map[string]any{
+		"apiVersion": "argoproj.io/v1alpha1",
+		"kind":       "Workflow",
+		"spec": map[string]any{
+			"shutdown": "Stop",
+		},
 	}
 	patchBytes, err := json.Marshal(shutdownPatch)
 	if err != nil {

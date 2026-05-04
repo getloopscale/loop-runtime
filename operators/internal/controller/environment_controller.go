@@ -281,14 +281,6 @@ func (r *EnvironmentReconciler) reconcileDelete(ctx context.Context, env *loopze
 // The factory looks up tenant.spec.cellID and resolves the matching
 // ClusterCredential to build a runtime client for the right cell.
 //
-// cell-2-activation-plan iter 4 BUG-FIX: this entry point is the single
-// place to wire multi-cell awareness without invasive changes to call
-// sites; preserves backward compat by defaulting to single-cell when
-// factory is nil.
-func SetupEnvironmentController(mgr ctrl.Manager, runtimeClient client.Client) error {
-	return SetupEnvironmentControllerWithFactory(mgr, runtimeClient, nil)
-}
-
 // SetupEnvironmentControllerWithFactory is the cell-aware entrypoint.
 // Pass factory=nil for legacy single-cell behavior.
 func SetupEnvironmentControllerWithFactory(mgr ctrl.Manager, runtimeClient client.Client, factory shared.RuntimeClientFactory) error {

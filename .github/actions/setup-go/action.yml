@@ -1,0 +1,39 @@
+# Composite action: Setup Go with caching.
+# Per Plan T5.1 (composite variant): step-level reuse for workflows that
+# embed Go setup as one step among many. Use via:
+#
+#   - uses: ./.github/actions/setup-go
+#     with:
+#       go-version: '1.25.x'
+#
+# Plan T5.2 migrates 21 workflows to consume this action.
+
+name: Setup Go
+description: Setup Go with cache, configurable version, common dependency paths.
+
+inputs:
+  go-version:
+    description: "Go version (e.g., '1.25.x')"
+    required: false
+    default: "1.25.x"
+  cache-dependency-path:
+    description: "Newline-separated paths to go.sum files"
+    required: false
+    default: |
+      api/go.sum
+      operators/go.sum
+      pkg/go.sum
+
+runs:
+  using: composite
+  steps:
+    - name: Setup Go ${{ inputs.go-version }}
+      # pragma: allow-tag-pin
+      uses: actions/setup-go@v5
+      with:
+        go-version: ${{ inputs.go-version }}
+        cache-dependency-path: ${{ inputs.cache-dependency-path }}
+
+    - name: Verify Go version
+      shell: bash
+      run: go version

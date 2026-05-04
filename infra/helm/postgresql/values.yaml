@@ -57,9 +57,26 @@ primary:
       cpu: "100m"
       memory: "128Mi"
   podSecurityContext:
+    enabled: true
     runAsNonRoot: true
+    runAsUser: 1001
+    runAsGroup: 1001
+    fsGroup: 1001
+    seccompProfile:
+      type: RuntimeDefault
+  # PG primary writes to /bitnami/postgresql data dir which is mounted as PVC.
+  # readOnlyRootFilesystem: true is compatible because the data dir is a separate
+  # mount; the / FS is read-only.
   containerSecurityContext:
+    enabled: true
     runAsNonRoot: true
+    runAsUser: 1001
+    runAsGroup: 1001
+    readOnlyRootFilesystem: true
+    allowPrivilegeEscalation: false
+    capabilities:
+      drop:
+        - ALL
   persistence:
     size: 1Gi
   service:

@@ -57,6 +57,19 @@ func TestSetupControllersHasNoOrphanCalls(t *testing.T) {
 	}
 }
 
+// SetupAllowlist contains exported Setup* function names that are intentionally
+// NOT wired in main.go's setupControllers. Each entry MUST have a justification.
+// Adding a function here is governance-equivalent to wiring it — a reviewer
+// must approve the exception explicitly.
+//
+// Per ADR-0022: this allowlist itself is governed by the wired-gate
+// amplification policy (Plan T0.2 of `pre-launch-gaps-plan.md`).
+var SetupAllowlist = map[string]string{
+	// (none yet — populate as legitimate exceptions arise)
+	// Example template:
+	// "SetupCacheReader": "test-only helper, not part of controller-runtime wiring",
+}
+
 func exportedSetupControllerFuncs(t *testing.T, dir string) []string {
 	t.Helper()
 	matches, err := filepath.Glob(filepath.Join(dir, "*.go"))
@@ -79,7 +92,14 @@ func exportedSetupControllerFuncs(t *testing.T, dir string) []string {
 				continue
 			}
 			name := fn.Name.Name
-			if strings.HasPrefix(name, "Setup") && strings.HasSuffix(name, "Controller") && ast.IsExported(name) {
+			// AMPLIFIED gate (per ADR-0022 + Plan T0.2): match all exported `Setup*`
+			// (was `Setup*Controller`). Catches webhooks, reconcilers, cache readers,
+			// metrics servers — any setup-pattern that landed exported but not wired.
+			// Allowlisted entries are skipped (intentional exceptions).
+			if strings.HasPrefix(name, "Setup") && ast.IsExported(name) {
+				if _, allowed := SetupAllowlist[name]; allowed {
+					continue
+				}
 				found = append(found, name)
 			}
 		}
@@ -114,7 +134,9 @@ func wiredSetupControllerCalls(t *testing.T, mainPath string) []string {
 				return true
 			}
 			name := sel.Sel.Name
-			if strings.HasPrefix(name, "Setup") && strings.HasSuffix(name, "Controller") {
+			// Match same pattern as exportedSetupControllerFuncs (Plan T0.2 + ADR-0022):
+			// Setup* prefix only, no suffix constraint.
+			if strings.HasPrefix(name, "Setup") {
 				found = append(found, name)
 			}
 			return true

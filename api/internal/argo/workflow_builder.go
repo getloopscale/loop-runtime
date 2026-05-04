@@ -38,6 +38,21 @@ type InfraParams struct {
 	RegistryInsecure  bool   // true for local dev registries without TLS
 	BaseDomain        string // Base domain for app hostnames (e.g., "loopzero.local")
 	HarborRegistryURL string // MEET-048: secondary registry for dual-push. Empty = disabled.
+	// CosignKeyless toggles the signing mode used by cosignSignTemplate.
+	// false (default): key-based, COSIGN_KEY mounted from `cosign-signing-key` Secret.
+	// true:            keyless via Fulcio + Rekor; SA token mounted as OIDC bearer.
+	// Plan T4.1 / MEET-2026-05-03-063 (MEET-B Track-2): keyless requires the build
+	// cluster to issue OIDC tokens accepted by Fulcio (private Fulcio OR Spire OR
+	// configured public Fulcio). Until that infrastructure exists, leave false.
+	// The CODE supports both modes; runtime activation is the deferred part.
+	CosignKeyless bool
+	// CosignFulcioURL overrides the default Fulcio URL when CosignKeyless=true.
+	// Empty value = use sigstore.dev public Fulcio (https://fulcio.sigstore.dev).
+	// Set this to a private Fulcio endpoint when running in air-gapped clusters.
+	CosignFulcioURL string
+	// CosignRekorURL overrides the default Rekor URL when CosignKeyless=true.
+	// Empty value = use sigstore.dev public Rekor (https://rekor.sigstore.dev).
+	CosignRekorURL string
 }
 
 // WorkflowBuilder composes Argo Workflow CRs from ClusterWorkflowTemplate refs

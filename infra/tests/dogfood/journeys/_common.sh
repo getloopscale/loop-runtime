@@ -72,25 +72,49 @@ ensure_service_auth() {
   fi
 }
 
+# Plan T5.3 — resolve Traefik host-port for a given tenant (cell-aware).
+# Tenants pinned to cell-2 land on loopzero-runtime-2 cluster which exposes Traefik
+# on hostPort 8444 in k3d (vs loopzero-workload's 8443). Without resolution, probes
+# always hit cell-default ports → 404 even when deploy succeeded on cell-2.
+# Matrix entry LP-002 documents the divergence.
+#
+# Implementation: queries Tenant CR on mgmt cluster (`kubectl get tenant <id>`)
+# for spec.cellID. Falls back to TRAEFIK_HOST_PORT when kubectl unavailable OR
+# tenant CR absent.
+resolve_traefik_port_for_tenant() {
+  local tenant=$1
+  local cell
+  cell=$(kubectl --context k3d-loopzero-mgmt -n loopzero-system get tenant "$tenant" \
+    -o jsonpath='{.spec.cellID}' 2>/dev/null || echo "")
+  case "$cell" in
+    cell-2) echo "8444" ;;
+    *)      echo "${TRAEFIK_HOST_PORT}" ;;
+  esac
+}
+
 # Wait for HTTP 200 on a LoopZero IngressRoute host.
-# Args: host max_seconds [path]
+# Args: host max_seconds [path] [tenant_id_for_cell_lookup]
 wait_http_200() {
-  local host=$1 max_seconds=${2:-300} path=${3:-/}
-  local elapsed=0 code
-  journey_log "waiting for HTTP 200 at https://${host}${path} (max ${max_seconds}s)"
+  local host=$1 max_seconds=${2:-300} path=${3:-/} tenant=${4:-}
+  local elapsed=0 code port
+  port="${TRAEFIK_HOST_PORT}"
+  if [[ -n "$tenant" ]]; then
+    port=$(resolve_traefik_port_for_tenant "$tenant")
+  fi
+  journey_log "waiting for HTTP 200 at https://${host}${path} (port=${port}, max ${max_seconds}s)"
   while (( elapsed < max_seconds )); do
     code=$(curl -sS -o /dev/null -w '%{http_code}' \
-      --connect-to "${host}:443:127.0.0.1:${TRAEFIK_HOST_PORT}" \
+      --connect-to "${host}:443:127.0.0.1:${port}" \
       -k --max-time 5 \
       "https://${host}${path}" 2>/dev/null || echo 000)
     if [[ "$code" == "200" ]]; then
-      journey_log "HTTP 200 OK at ${host}${path} (after ${elapsed}s)"
+      journey_log "HTTP 200 OK at ${host}${path} (after ${elapsed}s, port=${port})"
       return 0
     fi
     sleep 5
     elapsed=$(( elapsed + 5 ))
   done
-  journey_log "timeout (${max_seconds}s); last code=${code}"
+  journey_log "timeout (${max_seconds}s); last code=${code} (port=${port})"
   return 1
 }
 

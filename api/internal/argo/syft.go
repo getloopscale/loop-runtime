@@ -55,10 +55,18 @@ func syftScanTemplate(
 		outComponentCountPath = "/tmp/sbom-component-count.txt"
 	)
 
+	// Plan T6.1 dogfood unblock: syft v1.x removed `--source-registry-insecure`
+	// CLI flag in favor of env vars `SYFT_REGISTRY_INSECURE_USE_HTTP` (HTTP
+	// registry) and `SYFT_REGISTRY_INSECURE_SKIP_TLS_VERIFY` (self-signed TLS).
+	// Old flag broke local k3d builds (`unknown flag` error). Env vars are
+	// emitted into the script when registry is local-dev (insecure).
+	// LOCAL ONLY (LP-001): TLS divergence — local registry is HTTP-only.
 	insecureFlag := ""
+	insecureEnv := ""
 	if insecureRegistry {
-		insecureFlag = " --source-registry-insecure --source-registry-token=insecure"
+		insecureEnv = "export SYFT_REGISTRY_INSECURE_USE_HTTP=true SYFT_REGISTRY_INSECURE_SKIP_TLS_VERIFY=true; "
 	}
+	_ = insecureFlag // kept as a marker for future syft flag additions; current syft v1.x uses env vars only
 
 	// Script:
 	// 1. Extract digest from BuildKit metadata.
@@ -81,8 +89,11 @@ if [ -z "$DIGEST" ]; then
 fi
 echo "Generating SBOM for image: %s@${DIGEST}"
 
+# Set syft v1.x env vars for HTTP/insecure registries (Plan T6.1 dogfood unblock).
+%s
+
 # Scan image and produce CycloneDX JSON. Pin by digest (signed bytes).
-syft scan registry:%s@${DIGEST}%s -o %s=%s
+syft scan registry:%s@${DIGEST} -o %s=%s
 if [ ! -s %s ]; then
   echo "ERROR: syft produced no output" >&2
   exit 1
@@ -106,7 +117,8 @@ echo "SBOM generated and uploaded successfully"
 `,
 		metadataFile,             // 1: metadata path
 		imageTag,                 // 2: image tag for echo
-		imageTag, insecureFlag,   // 3,4: scan target + insecure flag
+		insecureEnv,              // 3: syft env vars for insecure registry (Plan T6.1)
+		imageTag,                 // 4: scan target
 		sbomFormatCDXJSON, sbomLocalPath, // 5,6: format + local path
 		sbomLocalPath,            // 7: existence check path
 		sbomLocalPath,            // 8: count source path

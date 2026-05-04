@@ -1,0 +1,77 @@
+version: "3"
+
+# taskfiles/k3d.yml — k3d cluster lifecycle + heal + cluster operations.
+# Per Plan T1.3, this file extracts the `k3d:*`, `clusters:*`, `registry:*`
+# domains from the monolithic Taskfile.yml.
+#
+# Migration status: STUB — actual task migration pending iteration 2 of
+# infra-sota-hardening-plan.md. This stub establishes the includes contract.
+
+tasks:
+  # Migration target: extract from Taskfile.yml lines around 641-697 (registry,
+  # clusters), 1320-1352 (k3d:bootstrap-workload, k3d:heal).
+  # Until migration: tasks remain in Taskfile.yml. Adding new k3d:* tasks here
+  # works because Task v3 includes merge namespaces.
+
+  registry:create:
+    desc: Create shared container registry for local development
+    cmds:
+      - k3d registry list -o json | grep -q '"name":"k3d-loopzero-registry"' || k3d registry create loopzero-registry --port 5000
+
+  clusters:create:
+    desc: Create all 4 k3d clusters (mgmt, build, workload, runtime-2)
+    cmds:
+      - k3d cluster list -o json | grep -q '"name":"loopzero-mgmt"' || k3d cluster create --config infra/k3d/mgmt-cluster.yaml
+      - k3d cluster list -o json | grep -q '"name":"loopzero-build"' || k3d cluster create --config infra/k3d/build-cluster.yaml
+      - k3d cluster list -o json | grep -q '"name":"loopzero-workload"' || k3d cluster create --config infra/k3d/workload-cluster.yaml
+      # cell-2-activation-plan T0.1: loopzero-runtime-2 maps to cells.cell_id='cell-2'.
+      # Idempotent: skips if already exists (per memory feedback_no_tribal_knowledge.md).
+      - k3d cluster list -o json | grep -q '"name":"loopzero-runtime-2"' || k3d cluster create --config infra/k3d/runtime-2-cluster.yaml
+      - task: clusters:verify
+
+  clusters:verify:
+    desc: Verify all clusters are reachable
+    cmds:
+      - kubectl --context {{.MGMT_CONTEXT}} cluster-info
+      - kubectl --context {{.BUILD_CONTEXT}} cluster-info
+      - kubectl --context {{.WORKLOAD_CONTEXT}} cluster-info
+      - kubectl --context {{.RUNTIME2_CONTEXT}} cluster-info
+
+  clusters:delete:
+    desc: Delete all k3d clusters
+    cmds:
+      - k3d cluster delete loopzero-mgmt || true
+      - k3d cluster delete loopzero-build || true
+      - k3d cluster delete loopzero-workload || true
+      - k3d cluster delete loopzero-runtime-2 || true
+
+  clusters:recreate:
+    desc: Recreate a single k3d cluster (e.g., task clusters:recreate -- workload)
+    cmds:
+      - |
+        CLUSTER="{{.CLI_ARGS}}"
+        if [ -z "$CLUSTER" ]; then
+          echo "Usage: task clusters:recreate -- <mgmt|build|workload|runtime-2>"
+          exit 1
+        fi
+        case "$CLUSTER" in
+          mgmt)       CONFIG="infra/k3d/mgmt-cluster.yaml";       INSTALL_TASK="infra:install:mgmt" ;;
+          build)      CONFIG="infra/k3d/build-cluster.yaml";      INSTALL_TASK="infra:install:build" ;;
+          workload)   CONFIG="infra/k3d/workload-cluster.yaml";   INSTALL_TASK="infra:install:workload" ;;
+          runtime-2)  CONFIG="infra/k3d/runtime-2-cluster.yaml";  INSTALL_TASK="infra:install:workload" ;;
+          *)          echo "Unknown cluster: $CLUSTER. Use mgmt, build, workload, or runtime-2."; exit 1 ;;
+        esac
+        echo "Recreating loopzero-${CLUSTER}..."
+        k3d cluster delete "loopzero-${CLUSTER}" 2>/dev/null || true
+        k3d cluster create --config "$CONFIG"
+        echo "Installing components..."
+        task "$INSTALL_TASK"
+        echo "Done. loopzero-${CLUSTER} recreated."
+
+  # ---------------------------------------------------------------------------
+  # S0.3: Infrastructure install
+  # ---------------------------------------------------------------------------
+
+  # ---------------------------------------------------------------------------
+  # S0.5: Database
+  # ---------------------------------------------------------------------------

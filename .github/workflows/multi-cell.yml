@@ -89,10 +89,11 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 8
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
 
       - name: Setup Go
-        uses: actions/setup-go@v5
+        # T5.2: migrated to composite action.
+        uses: ./.github/actions/setup-go
         with:
           go-version: '1.25.x'
           cache-dependency-path: |
@@ -100,10 +101,10 @@ jobs:
             operators/go.sum
 
       - name: Setup Node
-        uses: actions/setup-node@v4
+        # T5.2: migrated to composite action.
+        uses: ./.github/actions/setup-node
         with:
           node-version: '20'
-          cache: npm
           cache-dependency-path: |
             cli/package-lock.json
             infra/pulumi/package-lock.json
@@ -179,7 +180,7 @@ jobs:
       # Dev stages use the always-on `dev` environment.
       name: ${{ startsWith(inputs.stage, '4-prod') || startsWith(inputs.stage, '5') && 'prod-canary' || 'dev' }}
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
 
       - name: Setup tools
         run: |
@@ -228,6 +229,8 @@ jobs:
 
       - name: Upload canary artefacts
         if: always()
+        # pragma: allow-tag-pin
+        # TODO(INF-G18 / plan T1.1): Renovate Bot resolves to @<sha40> on first run.
         uses: actions/upload-artifact@v4
         with:
           name: canary-${{ inputs.stage }}-${{ github.run_id }}

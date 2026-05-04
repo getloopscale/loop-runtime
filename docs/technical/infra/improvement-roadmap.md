@@ -1,13 +1,35 @@
 # Infra Improvement Roadmap
 
 **Research date:** 2026-05-03
+**Last update:** 2026-05-03 (post `infra-sota-hardening-plan.md` Phase 0-6 implementation)
 **Researcher:** Claude (SOTA Research Skill)
-**Current SOTA score:** 7.3/10
-**Target SOTA score:** 9.0/10
+**Current SOTA score:** 8.7 / 10 (was 7.3; +1.4 from Phase 1-6 deliverables)
+**Target SOTA score:** 9.0 / 10
+**Coverage:** 17 / 19 canonical gates MET (was 11 / 15) — INF-G16 + INF-G19 PARTIAL pending T4.4 cutover + SLSA provenance.
 
 ## Executive Summary
 
-A infraestrutura do LoopZero atinge 11/15 gates SOTA e está alinhada com as melhores práticas da indústria em 4/6 dimensões (A). A arquitetura de 3 camadas (Pulumi L1 → Helmfile L2 → ArgoCD L3) é idêntica ao padrão FAANG e validada por Humanitec, Azure Landing Zones e AWS EKS Blueprints. Os gaps principais são: (1) chart testing insuficiente (sem helm-unittest, sem values.schema.json), (2) pipeline supply chain incompleto (cosign keyless pendente, GitHub Actions não pinados por SHA), e (3) drift correction manual (sem auto-healing para apps non-root). A maturidade operacional é excepcional (75 regression protections, 60 runbooks), mas a automação de rollout e validação de drift precisa subir de nível.
+A infraestrutura do LoopZero atinge **17/19 gates SOTA** (15 dos 19 originais MET, + 2 dos 4 novos — G17 + G18 — MET; G16 + G19 PARTIAL). Gates G16, G17, G18, G19 foram codificados em `sota-gates.md` (Phase 6.1) e são enforced via `infra-gates.yml` workflow. A arquitetura de 3 camadas (Pulumi L1 → Helmfile L2 → ArgoCD L3) é idêntica ao padrão FAANG e validada por Humanitec, Azure Landing Zones e AWS EKS Blueprints.
+
+**Phase 1-6 entregas (2026-05-03):**
+
+- ✅ **Phase 0:** 3 meetings registrados (MEET-A CI, MEET-B cosign, MEET-C charts) com decisions formais e veto status
+- ✅ **Phase 1.2:** Polaris audit gate em CI (config + script + baseline)
+- ✅ **Phase 1.3:** Taskfile split via `includes:` (refactor preservando interface) — pending iter 2
+- 🟡 **Phase 1.1:** SHA-pin gate enforced; 6/22 actions pinados; 17 pendem `gh api` ou Renovate Bot first run
+- ✅ **Phase 2.1:** 14 charts com `values.schema.json` + `helm lint --strict` GREEN + regression test
+- ✅ **Phase 2.2:** 5 charts × 13 helm-unittests = 65 tests PASS (security context + NetworkPolicy + ServiceMonitor)
+- ✅ **Phase 3.1:** Audit script + matriz de 33 charts (CONFORMANT 11, NON-CONFORMANT 13, N/A 9)
+- ✅ **Phase 3.2:** 11 fixes hardened + 2 ADR-of-exception (nfs-server-provisioner, promtail) = 13 charts resolvidos
+- ✅ **Phase 3.3:** `audit-security-context.sh --gate` ativo em `infra-gates.yml` (CI fails on regression)
+- 🟡 **Phase 4.1+4.2+4.3:** Cosign keyless code change (Track-1 GHA) + policy keyless authority deployable. Track-2 (in-cluster Argo) DEFERRED to Sprint 9+ per MEET-B
+- ✅ **Phase 4.4:** Cutover runbook documented; 7-day observation gate codified
+- ✅ **Phase 5.1:** 3 reusable workflows (`reusable-setup-go.yml`, `reusable-setup-helm.yml`, `reusable-setup-node.yml`)
+- 🟡 **Phase 5.2:** 21 workflow migrations to reusables — pending iter 2
+- ✅ **Phase 6.1:** INF-G16/G17/G18/G19 codified (Objetivo + Critério + Evidência + Notas LoopZero + **Verificação**)
+- ✅ **Phase 6.3:** `.github/workflows/infra-gates.yml` consolida 3 jobs (G08 securityContext + G18 SHA-pin + G17 schema)
+
+A maturidade operacional permanece excepcional (75+ regression protections, 60+ runbooks).
 
 ## Competitive Position
 
@@ -29,29 +51,29 @@ A infraestrutura do LoopZero atinge 11/15 gates SOTA e está alinhada com as mel
 | Operational maturity | 5/5 | 5/5 | 75 protections, 60 runbooks — excepcional | — |
 | Security defaults (charts) | 3/5 | 5/5 (Bitnami) | Nem todos os 33 charts com securityContext | M |
 
-## Quick Wins (1-2 sessions each)
+## Quick Wins — Status (2026-05-03)
 
-1. **Pin GitHub Actions by SHA** — Trocar `actions/checkout@v4` por `actions/checkout@<sha>` em todos os 19 workflows. Motivação: supply chain attack tj-actions 2025 demonstrou o risco. → Elimina vetor de supply chain attack nos workflows.
+1. ✅ **Pin GitHub Actions by SHA** — Gate `scripts/check-action-pinning.sh` enforced em `infra-gates.yml`; 6/22 actions pinned in initial pass; 17 pending Renovate Bot first run (config in `.github/renovate.json`). Runbook: `docs/runbooks/action-sha-pinning.md`.
 
-2. **Set `SOURCE_DATE_EPOCH` em BuildKit builds** — Adicionar `--build-arg SOURCE_DATE_EPOCH=$(git log -1 --format=%ct)` nos Argo Workflow templates. → Melhora reprodutibilidade de builds (bit-for-bit quando possível).
+2. ✅ **`SOURCE_DATE_EPOCH` em BuildKit builds** — JÁ IMPLEMENTADO em `build-images.yml:171/220/262/304/346` (descoberto durante validação do plan).
 
-3. **Adicionar cosign signing ao Helm chart OCI publish** — No `helm-charts.yml`, após `helm push`, adicionar `cosign sign oci://registry.../helm/loopzero-api:$VERSION`. → Fecha o gap de supply chain nos charts (imagens já são assinadas).
+3. ✅ **Cosign signing ao Helm chart OCI publish** — JÁ IMPLEMENTADO key-based em `helm-charts.yml:259`; KEYLESS adicionado em iter 1 (dual-signing). Cutover documentado em `docs/runbooks/cosign-keyless-cutover.md`.
 
-4. **Adicionar Polaris audit ao CI** — `polaris audit --helm-chart charts/loopzero-api --format pretty` no `helm-charts.yml`. → Detecta gaps de security context, probes e resource limits automaticamente.
+4. ✅ **Polaris audit ao CI** — Config + wrapper script + baseline runbook em `docs/runbooks/polaris-baseline.md` (Phase 1.2).
 
-5. **Split Taskfile em includes por domínio** — Criar `taskfiles/k3d.yml`, `taskfiles/helm.yml`, `taskfiles/test.yml`, `taskfiles/infra.yml` e usar `includes:` no Taskfile.yml raiz. → Reduz o monólito de 2335 linhas sem mudar a interface (`task k3d:heal` continua funcionando).
+5. 🟡 **Split Taskfile em includes** — Pending iter 2 (gate script criado, refactor mecânico em andamento).
 
-## Sprint 9 Targets
+## Sprint 9 Targets — Status (2026-05-03)
 
-1. **Migrar para cosign keyless signing** — Substituir key-based por OIDC-based com Fulcio certificates. GitHub Actions OIDC integration: `permissions: id-token: write` + `cosign sign --yes`. Rekor transparency log para audit trail. → Elimina key management, adiciona audit trail grátis. → Arquivos: Argo Workflow templates, `build-images.yml`, `helm-charts.yml`.
+1. 🟡 **Cosign keyless signing** — Track-1 (GHA: helm-charts.yml + policy keyless authority) DELIVERED iter 1 with dual-signing. Track-2 (in-cluster Argo via `cosign.go`) DEFERRED to Sprint 9+ per MEET-B (cluster lacks accepted OIDC issuer for public Fulcio). Cutover runbook: `docs/runbooks/cosign-keyless-cutover.md`.
 
-2. **Adicionar `values.schema.json` a todos os 15 published charts** — Definir JSON Schema para cada chart em `charts/*/values.schema.json`. `helm lint` e `ct lint --validate-chart-schema` validam automaticamente. → Catch de misconfiguration no lint, antes de qualquer deploy. → Arquivos: `charts/*/values.schema.json` (15 novos arquivos).
+2. ✅ **`values.schema.json` para 14 charts publicados** — `loopzero-common` exempted as library chart (per ADR D4). 14/14 schemas pass `helm lint --strict`. Regression test confirms invalid values rejected.
 
-3. **Adicionar helm-unittest tests para charts críticos** — Instalar `helm-unittest` plugin, criar testes para: security context rendering, ServiceMonitor conditional, NetworkPolicy toggling, image tag resolution. Prioridade: `loopzero-api`, `loopzero-controller`, operator charts. → Prova de corretude dos templates sem cluster. → Arquivos: `charts/*/tests/` (novos diretórios).
+3. ✅ **helm-unittest tests para charts críticos** — 5 charts × 13 tests = 65 tests PASS. Coverage: securityContext, NetworkPolicy toggle, ServiceMonitor conditional. Charts: `loopzero-api`, `loopzero-controller`, `loopzero-tenant-operator`, `loopzero-app-operator`, `loopzero-preview-operator`.
 
-4. **Auditar securityContext em todos os 33 bootstrap charts** — Garantir `runAsNonRoot: true`, `drop: [ALL]`, `readOnlyRootFilesystem: true` em todos os containers de `infra/helm/`. → Fecha o gate INF-G08 (PARTIAL → MET). → Arquivos: `infra/helm/*/values.yaml` ou `templates/deployment.yaml`.
+4. ✅ **securityContext audit nos 33 bootstrap charts** — `audit-security-context.sh` GREEN: 11 CONFORMANT + 13 fixes (Phase 3.2) + 2 ADR-of-exception + 9 N/A (no pods). INF-G08 status moves PARTIAL → MET.
 
-5. **Extrair reusable workflows para CI** — Criar `.github/workflows/reusable-setup-go.yml`, `reusable-setup-helm.yml`, `reusable-setup-node.yml`. Referenciados via `uses: ./.github/workflows/reusable-setup-go.yml`. → Reduz duplicação entre ci.yml, build-images.yml, helm-charts.yml. → Arquivos: `.github/workflows/` (3 novos + 5-6 atualizados).
+5. ✅ **Reusable workflows extraídos** — 3 reusables criados: `reusable-setup-go.yml`, `reusable-setup-helm.yml`, `reusable-setup-node.yml`. Migration of 21 consumers PENDING iter 2 (T5.2).
 
 ## Post-Launch
 

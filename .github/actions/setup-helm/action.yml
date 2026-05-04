@@ -1,0 +1,44 @@
+# Composite action: Setup Helm with optional plugins.
+# Per Plan T5.1.
+
+name: Setup Helm
+description: Setup Helm with helm-diff and helm-unittest plugins (opt-in).
+
+inputs:
+  helm-version:
+    description: "Helm version"
+    required: false
+    default: "v3.14.4"
+  install-diff-plugin:
+    description: "Install helm-diff plugin"
+    required: false
+    default: "false"
+  install-unittest-plugin:
+    description: "Install helm-unittest plugin"
+    required: false
+    default: "false"
+
+runs:
+  using: composite
+  steps:
+    - name: Setup Helm
+      # pragma: allow-tag-pin
+      uses: azure/setup-helm@v4
+      with:
+        version: ${{ inputs.helm-version }}
+
+    - name: Install helm-diff plugin
+      if: ${{ inputs.install-diff-plugin == 'true' }}
+      shell: bash
+      run: helm plugin install https://github.com/databus23/helm-diff || helm plugin update diff
+
+    - name: Install helm-unittest plugin
+      if: ${{ inputs.install-unittest-plugin == 'true' }}
+      shell: bash
+      run: helm plugin install https://github.com/helm-unittest/helm-unittest || helm plugin update unittest
+
+    - name: Verify
+      shell: bash
+      run: |
+        helm version
+        helm plugin list

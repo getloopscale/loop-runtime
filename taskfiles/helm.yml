@@ -1,0 +1,107 @@
+version: "3"
+
+# taskfiles/helm.yml — Helm operations: install, upgrade, dependency, validate.
+# Migration target: helm:*, infra:install:*, dashboards:*, crds:*, validate:helm-charts.
+
+tasks:
+  helm:lint:
+    desc: Lint all Helm charts
+    cmds:
+      - |
+        FAILED=0
+        for chart in charts/*/; do
+          echo "Linting $chart..."
+          if ! helm lint "$chart" 2>&1; then
+            FAILED=1
+          fi
+        done
+        if [ "$FAILED" -ne 0 ]; then
+          echo "FAILED: one or more charts failed lint"
+          exit 1
+        fi
+        echo "All charts passed lint"
+
+  helm:template:
+    desc: Render all chart templates (dry-run)
+    cmds:
+      - helm template loopzero charts/loopzero-platform
+
+  helm:template:dev:
+    desc: Render templates with dev profile
+    cmds:
+      - helm template loopzero charts/loopzero-platform -f charts/loopzero-platform/profiles/dev.yaml
+
+  helm:template:prod:
+    desc: Render templates with prod profile
+    cmds:
+      - helm template loopzero charts/loopzero-platform -f charts/loopzero-platform/profiles/prod.yaml
+
+  helm:dep:update:
+    desc: Update dependencies for all charts (regenerates Chart.lock)
+    cmds:
+      - |
+        for chart in charts/*/; do
+          if [ -f "$chart/Chart.yaml" ] && grep -q "dependencies:" "$chart/Chart.yaml"; then
+            echo "Updating deps for $chart..."
+            helm dependency update "$chart"
+          fi
+        done
+        echo "All dependencies updated"
+
+  helm:sync-crds:
+    desc: Sync CRDs from operators/config/crd/bases/ to charts/loopzero-crds/templates/
+    cmds:
+      - |
+        SRC="operators/config/crd/bases"
+        DST="charts/loopzero-crds/templates"
+        COUNT=0
+        for crd_file in "$SRC"/loopzero.io_*.yaml; do
+          base=$(basename "$crd_file" .yaml)
+          short=${base#loopzero.io_}
+          template_file="$DST/${short}.yaml"
+          crd_name=$(grep "^  name:" "$crd_file" | head -1 | awk '{print $2}')
+          spec_content=$(sed -n '/^spec:/,$p' "$crd_file")
+          cat > "$template_file" << TMPL_EOF
+        {{- if .Values.crds.${short}.enabled }}
+        apiVersion: apiextensions.k8s.io/v1
+        kind: CustomResourceDefinition
+        metadata:
+          name: ${crd_name}
+          labels:
+            {{- include "loopzero-common.labels" . | nindent 4 }}
+          annotations:
+            "helm.sh/resource-policy": keep
+            controller-gen.kubebuilder.io/version: {{ .Values.controllerGenVersion | default "v0.17.2" }}
+        ${spec_content}
+        {{- end }}
+        TMPL_EOF
+          COUNT=$((COUNT + 1))
+        done
+        echo "Synced $COUNT CRDs from $SRC to $DST"
+
+  helm:install:dev:
+    desc: Install umbrella chart with dev profile on k3d
+    cmds:
+      - helm upgrade --install loopzero-crds charts/loopzero-crds -n loopzero-system --create-namespace
+      - helm upgrade --install loopzero charts/loopzero-platform -n loopzero-system -f charts/loopzero-platform/profiles/dev.yaml
+
+  helm:install:test:
+    desc: Run helm test hooks post-install
+    cmds:
+      - helm test loopzero -n loopzero-system
+  helm:repos:
+    desc: Add all required Helm repositories
+    cmds:
+      - helm repo add bitnami https://charts.bitnami.com/bitnami || true
+      - helm repo add gitea-charts https://dl.gitea.com/charts/ || true
+      - helm repo add minio https://charts.min.io/ || true
+      - helm repo add argo https://argoproj.github.io/argo-helm || true
+      - helm repo add traefik https://traefik.github.io/charts || true
+      - helm repo add jetstack https://charts.jetstack.io || true
+      - helm repo add prometheus-community https://prometheus-community.github.io/helm-charts || true
+      - helm repo add open-telemetry https://open-telemetry.github.io/opentelemetry-helm-charts || true
+      - helm repo add grafana https://grafana.github.io/helm-charts || true
+      - helm repo add external-secrets https://charts.external-secrets.io || true
+      - helm repo add ory https://k8s.ory.sh/helm/charts || true
+      - helm repo update
+

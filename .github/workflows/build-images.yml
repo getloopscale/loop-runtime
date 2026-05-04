@@ -637,6 +637,8 @@ jobs:
 
       - name: Install syft
         if: matrix.result == 'success' && matrix.digest != ''
+        # pragma: allow-tag-pin
+        # TODO(INF-G18 / plan T1.1): Renovate Bot resolves to @<sha40> on first run.
         uses: anchore/sbom-action/download-syft@v0.24.0
 
       - name: Scan image with Trivy
@@ -716,6 +718,8 @@ jobs:
 
       - name: Upload SBOM artifact
         if: matrix.result == 'success' && matrix.digest != ''
+        # pragma: allow-tag-pin
+        # TODO(INF-G18 / plan T1.1): Renovate Bot resolves to @<sha40> on first run.
         uses: actions/upload-artifact@v4
         with:
           name: sbom-${{ matrix.component }}

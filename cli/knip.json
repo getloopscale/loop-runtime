@@ -1,7 +1,16 @@
 {
   "$schema": "https://unpkg.com/knip@latest/schema.json",
-  "entry": ["src/index.ts", "src/commands/**/*.ts"],
+  "entry": [
+    "src/index.ts",
+    "src/register/**/*.ts",
+    "src/commands/**/*.ts"
+  ],
   "project": ["src/**/*.ts"],
-  "ignore": ["src/**/__mocks__/**", "dist/**"],
-  "ignoreDependencies": ["@types/*"]
+  "ignore": [
+    "src/**/__mocks__/**",
+    "dist/**",
+    "tests/**"
+  ],
+  "ignoreDependencies": ["@types/*"],
+  "ignoreExportsUsedInFile": true
 }

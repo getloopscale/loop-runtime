@@ -6,6 +6,7 @@ package routes
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"net/http"
 
 	"github.com/go-chi/chi/v5"
@@ -19,16 +20,41 @@ type ScaleProjectStore interface {
 	GetByName(ctx context.Context, tenantID, name string) (*ProjectResult, error)
 }
 
+// ScaleConfigInput is the routes-local mirror of db.ScalingConfig fields the
+// handler emits. Defined here to avoid circular import (db package already
+// imports routes for attestation_store wiring; routes cannot import db back).
+type ScaleConfigInput struct {
+	TenantID     string
+	ProjectID    string
+	Environment  string
+	AppName      string
+	MinReplicas  int32
+	MaxReplicas  int32
+	TargetCPUPct *int32
+	ScaleToZero  bool
+	UpdatedBy    string
+}
+
+// ScaleApplyFunc upserts the scaling config, returning (changed, error).
+// Bootstrap (api/cmd/setup_orchestrator.go) provides the closure that converts
+// ScaleConfigInput to db.ScalingConfig and calls db.PostgresScalingStore.Upsert.
+type ScaleApplyFunc func(ctx context.Context, cfg ScaleConfigInput) (changed bool, err error)
+
 // ScaleHandler provides the HTTP handler for scaling operations.
 type ScaleHandler struct {
 	projects    ScaleProjectStore
+	apply       ScaleApplyFunc // optional — when nil, falls back to stub-202 (legacy)
 	kedaEnabled bool
 }
 
 // NewScaleHandler creates a new ScaleHandler.
-func NewScaleHandler(projects ScaleProjectStore, kedaEnabled bool) *ScaleHandler {
+//
+// Plan T2.2: `apply` parameter may be nil during transition (stub-202 fallback).
+// Production callers MUST pass a real ScaleApplyFunc for persistence.
+func NewScaleHandler(projects ScaleProjectStore, apply ScaleApplyFunc, kedaEnabled bool) *ScaleHandler {
 	return &ScaleHandler{
 		projects:    projects,
+		apply:       apply,
 		kedaEnabled: kedaEnabled,
 	}
 }
@@ -126,16 +152,20 @@ func (h *ScaleHandler) Scale(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// Build response — config acknowledged but NOT persisted (stub).
-	// The user must also configure autoscaling in loopzero.yaml for the next deploy.
-	// TODO: persist to DB + withEnvironmentLock when scaling_config table lands.
+	// Build response — defaults computed before persistence.
 	resp := scaleResponse{
 		App:         req.App,
 		Environment: req.Environment,
 		Status:      "acknowledged",
 	}
 
+	var minR, maxR int32
+	var cpuPtr *int32
+	scaleToZero := false
+
 	if hasFixed {
+		minR = int32(*req.Replicas)
+		maxR = int32(*req.Replicas)
 		resp.Replicas = req.Replicas
 	} else {
 		as := &scaleAutoscaling{}
@@ -155,9 +185,52 @@ func (h *ScaleHandler) Scale(w http.ResponseWriter, r *http.Request) {
 		if as.Min == 0 {
 			defaultCooldown := 300
 			as.Cooldown = &defaultCooldown
+			scaleToZero = true
 		}
 		resp.Autoscaling = as
+		minR = int32(as.Min)
+		maxR = int32(as.Max)
+		c := int32(as.CPUTarget)
+		cpuPtr = &c
 	}
 
-	writeJSON(w, http.StatusAccepted, resp)
+	// Plan T2.2: persist via apply closure when available; otherwise return
+	// stub-202 (legacy, transitional). Once all bootstrap call sites pass a
+	// real ScaleApplyFunc, this fallback can be removed.
+	if h.apply == nil {
+		resp.Status = "acknowledged"
+		writeJSON(w, http.StatusAccepted, resp)
+		return
+	}
+
+	cfg := ScaleConfigInput{
+		TenantID:     uc.TenantID,
+		ProjectID:    project.ID,
+		Environment:  req.Environment,
+		AppName:      req.App,
+		MinReplicas:  minR,
+		MaxReplicas:  maxR,
+		TargetCPUPct: cpuPtr,
+		ScaleToZero:  scaleToZero,
+		UpdatedBy:    uc.UserID,
+	}
+
+	changed, err := h.apply(r.Context(), cfg)
+	if err != nil {
+		var te *loopzeroerrors.LoopZeroError
+		if errors.As(err, &te) {
+			writeLoopZeroError(w, te)
+			return
+		}
+		writeLoopZeroError(w, loopzeroerrors.ErrInternalError)
+		return
+	}
+
+	if changed {
+		resp.Status = "applied"
+	} else {
+		resp.Status = "no_change"
+	}
+
+	writeJSON(w, http.StatusOK, resp)
 }

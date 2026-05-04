@@ -421,6 +421,9 @@ func (f *fakeStatusReleaseStore) ListByEnv(_ context.Context, _, _, _ string, _ 
 func (f *fakeStatusReleaseStore) GetLatestByBuildID(_ context.Context, _ string) (*db.Release, error) {
 	return nil, nil
 }
+func (f *fakeStatusReleaseStore) AppendSideEffect(_ context.Context, _ db.DBTX, _ string, _ map[string]any) error {
+	return nil
+}
 
 // fakeBuildListStore implements ListByProjectAndEnv for BuildListStoreAdapter tests.
 type fakeBuildListStore struct {

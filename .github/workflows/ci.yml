@@ -49,7 +49,7 @@ jobs:
       charts: ${{ steps.filter.outputs.charts }}
       helmfile: ${{ steps.filter.outputs.helmfile }}
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
       - uses: dorny/paths-filter@v3
         id: filter
         with:
@@ -108,8 +108,8 @@ jobs:
       matrix:
         component: [pkg, operators, api]
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-go@v5
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+      - uses: ./.github/actions/setup-go
         with:
           go-version: ${{ env.GO_VERSION }}
           cache-dependency-path: ${{ matrix.component }}/go.sum
@@ -125,8 +125,8 @@ jobs:
     needs: changes
     if: needs.changes.outputs.cli == 'true'
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-node@v4
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+      - uses: ./.github/actions/setup-node
         with:
           node-version: ${{ env.NODE_VERSION }}
           cache: npm
@@ -148,8 +148,8 @@ jobs:
       needs.changes.outputs.go-pkg == 'true' ||
       needs.changes.outputs.go-infra == 'true'
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-go@v5
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+      - uses: ./.github/actions/setup-go
         with:
           go-version: ${{ env.GO_VERSION }}
       - name: Verify go.mod and go.sum are tidy
@@ -181,9 +181,9 @@ jobs:
       needs.changes.outputs.helm == 'true' ||
       needs.changes.outputs.go-operators == 'true'
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
       - name: Install Helm
-        uses: azure/setup-helm@v4
+        uses: ./.github/actions/setup-helm
         with:
           version: v3.16.4
       - name: Install PyYAML
@@ -207,7 +207,7 @@ jobs:
       needs.changes.outputs.go-operators == 'true' ||
       needs.changes.outputs.go-pkg == 'true'
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
       - name: Cross-reference alert metrics vs Go registrations
         run: |
           set -euo pipefail
@@ -250,7 +250,7 @@ jobs:
       needs.changes.outputs.go-operators == 'true' ||
       needs.changes.outputs.helm == 'true'
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
       - name: Install yq
         run: |
           sudo wget -qO /usr/local/bin/yq https://github.com/mikefarah/yq/releases/latest/download/yq_linux_amd64
@@ -302,8 +302,8 @@ jobs:
     needs: changes
     if: needs.changes.outputs.go-pkg == 'true'
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-go@v5
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+      - uses: ./.github/actions/setup-go
         with:
           go-version: ${{ env.GO_VERSION }}
           cache-dependency-path: pkg/go.sum
@@ -316,8 +316,8 @@ jobs:
     needs: changes
     if: needs.changes.outputs.go-api == 'true'
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-go@v5
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+      - uses: ./.github/actions/setup-go
         with:
           go-version: ${{ env.GO_VERSION }}
           cache-dependency-path: api/go.sum
@@ -330,8 +330,8 @@ jobs:
     needs: changes
     if: needs.changes.outputs.go-operators == 'true'
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-go@v5
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+      - uses: ./.github/actions/setup-go
         with:
           go-version: ${{ env.GO_VERSION }}
           cache-dependency-path: operators/go.sum
@@ -348,8 +348,8 @@ jobs:
     needs: changes
     if: needs.changes.outputs.go-infra == 'true'
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-go@v5
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+      - uses: ./.github/actions/setup-go
         with:
           go-version: ${{ env.GO_VERSION }}
           cache-dependency-path: infra/tests/go.sum
@@ -362,8 +362,8 @@ jobs:
     needs: changes
     if: needs.changes.outputs.cli == 'true'
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-node@v4
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+      - uses: ./.github/actions/setup-node
         with:
           node-version: ${{ env.NODE_VERSION }}
           cache: npm
@@ -384,8 +384,8 @@ jobs:
     needs: changes
     if: needs.changes.outputs.pulumi == 'true'
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-node@v4
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+      - uses: ./.github/actions/setup-node
         with:
           node-version: ${{ env.NODE_VERSION }}
           cache: npm
@@ -409,7 +409,7 @@ jobs:
       needs.changes.outputs.go-operators == 'true' ||
       needs.changes.outputs.helmfile == 'true'
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
       - name: Install kubeconform
         run: |
           curl -sSL -o kubeconform.tar.gz https://github.com/yannh/kubeconform/releases/download/${{ env.KUBECONFORM_VERSION }}/kubeconform-linux-amd64.tar.gz
@@ -446,7 +446,7 @@ jobs:
     needs: changes
     if: needs.changes.outputs.go-api == 'true'
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
       - name: Reject migrate force
         run: |
           matches=$(grep -rnE '(^|[[:space:]`"''])migrate([[:space:]]+-[^[:space:]]+)*[[:space:]]+force([[:space:]]+[0-9]+|$)' \
@@ -479,8 +479,8 @@ jobs:
     needs: changes
     if: needs.changes.outputs.charts == 'true'
     steps:
-      - uses: actions/checkout@v4
-      - uses: azure/setup-helm@v4
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+      - uses: ./.github/actions/setup-helm
         with:
           version: v3.14.4
       - name: Update deps + lint
@@ -516,13 +516,13 @@ jobs:
     timeout-minutes: 15
     needs: changes
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
         with:
           fetch-depth: 0
-      - uses: actions/setup-go@v5
+      - uses: ./.github/actions/setup-go
         with:
           go-version: ${{ env.GO_VERSION }}
-      - uses: actions/setup-node@v4
+      - uses: ./.github/actions/setup-node
         with:
           node-version: ${{ env.NODE_VERSION }}
           cache: npm
@@ -556,6 +556,8 @@ jobs:
           skip-dirs: infra/tests/e2e/fixtures,examples,loopzero-packs,loopzero-forge,referencias
 
       - name: TruffleHog secret scan
+        # pragma: allow-tag-pin
+        # TODO(INF-G18 / plan T1.1): Renovate Bot resolves to @<sha40> on first run.
         uses: trufflesecurity/trufflehog@v3.94.3
         with:
           extra_args: --only-verified --results=verified,unknown

@@ -5,6 +5,8 @@
 # Cross-cluster networking:
 # - Local (k3d): uses mgmt server NodePort (patched by update-cross-cluster-ips.sh)
 # - Production (DO): clusters in same VPC, use internal LB IP of Loki
+# LOCAL ONLY (LP-007): cross-cluster Loki streaming local usa NodePort hardcoded;
+# production Sprint 10+ migra para DO Spaces backend per CLAUDE.md "Known issues".
 config:
   clients:
     - url: http://172.18.0.3:30094/loki/api/v1/push

@@ -1,0 +1,691 @@
+version: "3"
+
+# taskfiles/test.yml — test orchestration: parity, validate-matrix.
+# Per Plan T1.3 + MEET-2026-05-03-062 (MEET-A): incremental migration; this is
+# Phase 3 (per-domain) iteration 1 — `parity:*` + `validate:matrix*`.
+# Future iterations expand to test:*, test:report:*, test:e2e:*, dead-code, lint.
+
+tasks:
+  parity:preflight:
+    desc: Run parity validation suite preflight (offline, <2s) — shellcheck + audit + dry-runs
+    cmds:
+      - bash infra/tests/parity/preflight.sh
+
+  validate:matrix:
+    desc: Master validation matrix — every offline gate (Phase 8 T8.1)
+    cmds:
+      - bash infra/tests/parity/validate-matrix.sh
+
+  validate:matrix:quick:
+    desc: validate:matrix without operators envtest (faster signal)
+    cmds:
+      - bash infra/tests/parity/validate-matrix.sh --quick
+
+  parity:audit:
+    desc: Verify regression matrix integrity (every entry's Verification token resolves in repo)
+    cmds:
+      - bash infra/tests/parity/audit-regression-matrix.sh
+
+  parity:audit:golden:
+    desc: Golden test for the audit script (catches audit regressions)
+    cmds:
+      - bash infra/tests/parity/audit-golden-test.sh
+
+  parity:k3d-virgin:
+    desc: T5.1 — k3d virgin install (degrau 1, $0, ~10min)
+    cmds:
+      - bash infra/tests/parity/k3d-virgin-install.sh
+
+  parity:droplet:
+    desc: 'T6.1 — Droplet install (degrau 2, ~$0.50, ~30min). DRY_RUN=1 for offline preflight.'
+    cmds:
+      - bash infra/tests/parity/droplet-install.sh {{.CLI_ARGS}}
+
+  parity:doks:
+    desc: 'T7.1 — DOKS install (degrau 3, ~$5, ~60min). DRY_RUN=1 for offline preflight.'
+    cmds:
+      - bash infra/tests/parity/doks-install.sh {{.CLI_ARGS}}
+  test:all:
+    desc: Run everything — unit + integration + E2E (requires running clusters)
+    cmds:
+      - task: test:unit
+      - task: test:integration
+      - task: lint
+      - task: validate:manifests
+      - task: test:e2e
+
+  test:unit:
+    desc: Run all unit tests
+    env:
+      KUBEBUILDER_ASSETS:
+        sh: 'setup-envtest use -p path 2>/dev/null || { echo "ERROR: setup-envtest not installed. Run: go install sigs.k8s.io/controller-runtime/tools/setup-envtest@latest" >&2; exit 1; }'
+    cmds:
+      - cd pkg && go test ./... -short
+      - cd operators && go test ./... -short
+      - cd api && go test ./... -short
+      - cd infra/tests && go test ./unit/... -short
+      - cd cli && npm test
+
+  test:integration:
+    desc: Run integration tests (requires running clusters)
+    env:
+      KUBEBUILDER_ASSETS:
+        sh: 'setup-envtest use -p path 2>/dev/null || { echo "ERROR: setup-envtest not installed. Run: go install sigs.k8s.io/controller-runtime/tools/setup-envtest@latest" >&2; exit 1; }'
+    cmds:
+      - cd operators && go test ./... -tags=integration -v -timeout 5m
+      - cd api && go test ./... -tags=integration -v -timeout 5m
+
+  test:e2e:
+    desc: Run E2E tests (requires running clusters + tilt up)
+    env:
+      LOOPZERO_E2E: "1"
+      KUBEBUILDER_ASSETS:
+        sh: 'setup-envtest use -p path 2>/dev/null || { echo "ERROR: setup-envtest not installed. Run: go install sigs.k8s.io/controller-runtime/tools/setup-envtest@latest" >&2; exit 1; }'
+    cmds:
+      - |
+        set -euo pipefail
+        OUTPUT_FILE="$(mktemp)"
+        trap 'rm -f "$OUTPUT_FILE"' EXIT
+        (cd infra/tests && go test ./e2e/... -v -timeout 15m) | tee "$OUTPUT_FILE"
+        if grep -q "Deploy Happy Path E2E Suite" "$OUTPUT_FILE" && grep -Eq "Ran[[:space:]]+0[[:space:]]+of[[:space:]]+5[[:space:]]+Specs" "$OUTPUT_FILE"; then
+          echo "E2E deploy suite was fully skipped (0/5 specs). Failing to avoid false green."
+          exit 1
+        fi
+
+  test:e2e:chaos:
+    desc: Run chaos engineering tests
+    env:
+      LOOPZERO_E2E: "1"
+    cmds:
+      - cd infra/tests && go test ./e2e/... -v -run "Chaos" -timeout 15m
+
+  test:coverage:
+    desc: Run all tests with coverage reports (HTML per component)
+    env:
+      KUBEBUILDER_ASSETS:
+        sh: 'setup-envtest use -p path 2>/dev/null || echo "/tmp"'
+    cmds:
+      - echo "Generating coverage reports..."
+      - cd pkg && go test ./... -short -coverprofile=coverage.out && go tool cover -html=coverage.out -o coverage.html 2>/dev/null || true
+      - cd api && go test ./... -short -coverprofile=coverage.out && go tool cover -html=coverage.out -o coverage.html 2>/dev/null || true
+      - cd operators && go test ./... -short -coverprofile=coverage.out && go tool cover -html=coverage.out -o coverage.html 2>/dev/null || true
+      - cd cli && npm test -- --coverage 2>/dev/null || true
+      - echo "Coverage reports generated:"
+      - echo "  pkg/coverage.html"
+      - echo "  api/coverage.html"
+      - echo "  operators/coverage.html"
+      - echo "  cli/coverage/"
+
+  test:coverage:summary:
+    desc: Show per-package coverage summary (no HTML)
+    cmds:
+      - echo "=== pkg/ ===" && cd pkg && go test ./... -short -coverprofile=/dev/stderr 2>&1 | grep "^ok" || true
+      - echo "=== api/ ===" && cd api && go test ./... -short -cover 2>&1 | grep "^ok" || true
+      - echo "=== operators/ ===" && cd operators && go test ./... -short -cover 2>&1 | grep "^ok" || true
+
+  # ─────────────────────────────────────────────
+  # k6 Load Testing (Grafana k6, industry standard)
+  # Replaces the previous shell-script smoke runners.
+  # See infra/tests/k6/README.md for details.
+  # ─────────────────────────────────────────────
+
+  test:load:l1:
+    desc: k6 load test — 10 tenants smoke (L1, ~15 min)
+    cmds:
+      - infra/tests/runner/run-k6.sh scripts/l1-10-tenants.js l1 10
+
+  test:load:l2:
+    desc: k6 load test — 50 tenants sustained (L2, ~35 min)
+    cmds:
+      - infra/tests/runner/run-k6.sh scripts/l2-50-tenants.js l2 50
+
+  test:load:l3:
+    desc: k6 load test — 100 tenants sustained (L3, ~65 min)
+    cmds:
+      - infra/tests/runner/run-k6.sh scripts/l3-100-tenants.js l3 100
+
+  test:load:stress:
+    desc: k6 stress test — ramp to break point (~15 min)
+    cmds:
+      - infra/tests/runner/run-k6.sh scripts/stress-break-point.js stress 50
+
+  # ─────────────────────────────────────────────
+  # Chaos Engineering (Chaos Mesh, CNCF incubating)
+  # Replaces the previous Ginkgo PIt stubs with real fault injection.
+  # See infra/tests/chaos/manifests/README.md for details.
+  # ─────────────────────────────────────────────
+
+  test:chaos:controller-kill:
+    desc: Chaos — kill loopzero-controller pod, verify recovery (~2 min)
+    cmds:
+      - infra/tests/runner/run-chaos.sh pod-kill-controller.yaml
+
+  test:chaos:api-leader-kill:
+    desc: Chaos — kill loopzero-api leader, verify failover (~1 min)
+    cmds:
+      - infra/tests/runner/run-chaos.sh pod-kill-api-leader.yaml
+
+  test:chaos:pg-latency:
+    desc: Chaos — 500ms PG latency, verify graceful degradation (~3 min)
+    cmds:
+      - infra/tests/runner/run-chaos.sh pg-network-latency.yaml
+
+  test:chaos:pg-saturation:
+    desc: Chaos — saturate PG pool, verify circuit breaker (~2 min)
+    cmds:
+      - infra/tests/runner/run-chaos.sh pg-connection-storm.yaml
+
+  test:chaos:argocd-crash:
+    desc: Chaos — kill ArgoCD server, verify blast radius (~1.5 min)
+    cmds:
+      - infra/tests/runner/run-chaos.sh argocd-crash.yaml
+
+  test:chaos:gitea-outage:
+    desc: Chaos — drop Gitea traffic, verify fast-fail (~2 min)
+    cmds:
+      - infra/tests/runner/run-chaos.sh gitea-outage.yaml
+
+  test:chaos:all:
+    desc: Run all Chaos Mesh experiments sequentially (~12 min)
+    cmds:
+      - task: test:chaos:api-leader-kill
+      - task: test:chaos:controller-kill
+      - task: test:chaos:pg-latency
+      - task: test:chaos:pg-saturation
+      - task: test:chaos:argocd-crash
+      - task: test:chaos:gitea-outage
+
+  dead-code:
+    desc: Detect implemented-but-not-wired code (report only)
+    cmds:
+      - |
+        if ! command -v deadcode >/dev/null 2>&1; then
+          echo "Installing deadcode..."
+          go install golang.org/x/tools/cmd/deadcode@latest
+        fi
+      - |
+        echo "=== Go API ==="
+        cd api && deadcode ./cmd/... 2>&1 | grep "^internal/" || echo "(none)"
+      - |
+        echo "=== Go Operators ==="
+        cd operators && deadcode ./cmd/main.go ./cmd/tenant-operator/ ./cmd/app-operator/ ./cmd/preview-operator/ ./cmd/platform-operator/ 2>&1 | grep "^internal/" || echo "(none)"
+      - |
+        echo "=== TypeScript CLI ==="
+        cd cli && npx knip --production --no-exit-code 2>&1 || echo "(knip not installed — run: cd cli && npm i -D knip)"
+
+  dead-code:strict:
+    desc: Dead code check that fails on new findings (CI gate)
+    cmds:
+      - |
+        if ! command -v deadcode >/dev/null 2>&1; then
+          go install golang.org/x/tools/cmd/deadcode@latest
+        fi
+      - |
+        API_DEAD=$(cd api && deadcode ./cmd/... 2>&1 | grep "^internal/" | wc -l)
+        OPS_DEAD=$(cd operators && deadcode ./cmd/main.go ./cmd/tenant-operator/ ./cmd/app-operator/ ./cmd/preview-operator/ ./cmd/platform-operator/ 2>&1 | grep "^internal/" | wc -l)
+        TOTAL=$((API_DEAD + OPS_DEAD))
+        echo "Dead code: API=$API_DEAD Operators=$OPS_DEAD Total=$TOTAL"
+        # Baseline after initial cleanup — adjust as dead code is removed
+        BASELINE=85
+        if [ "$TOTAL" -gt "$BASELINE" ]; then
+          echo "FAIL: Dead code count ($TOTAL) exceeds baseline ($BASELINE)"
+          echo "New dead code was introduced. Run 'task dead-code' to see details."
+          exit 1
+        fi
+        echo "PASS: Dead code count ($TOTAL) is within baseline ($BASELINE)"
+
+  lint:
+    desc: Lint all components
+    cmds:
+      - |
+        if command -v golangci-lint >/dev/null 2>&1; then
+          cd pkg && golangci-lint run ./...
+        else
+          echo "SKIP: golangci-lint not installed — install: https://golangci-lint.run/welcome/install/"
+        fi
+      - |
+        if command -v golangci-lint >/dev/null 2>&1; then
+          cd operators && golangci-lint run ./...
+        else
+          echo "SKIP: golangci-lint not installed — install: https://golangci-lint.run/welcome/install/"
+        fi
+      - |
+        if command -v golangci-lint >/dev/null 2>&1; then
+          cd api && golangci-lint run ./...
+        else
+          echo "SKIP: golangci-lint not installed — install: https://golangci-lint.run/welcome/install/"
+        fi
+      - cd cli && npx eslint src/
+  validate:helm-deps:
+    desc: |
+      Run `helm dependency build` on every chart with file:// deps so
+      umbrella charts (loopzero-platform) + 4 split-operator charts can
+      `helm template` cleanly. Closes condition C24 of
+      MEET-INFRA-NORMALIZE-T3-operator-split.
+    cmds:
+      - |
+        set -e
+        for chart in charts/loopzero-api charts/loopzero-app-operator charts/loopzero-cloud \
+                     charts/loopzero-controller charts/loopzero-crds charts/loopzero-dashboard \
+                     charts/loopzero-platform charts/loopzero-platform-operator \
+                     charts/loopzero-preview-operator charts/loopzero-tenant-controller \
+                     charts/loopzero-tenant-operator; do
+          if [[ -d "$chart" ]]; then
+            echo "==> helm dependency build: $chart"
+            (cd "$chart" && helm dependency build) || exit 1
+          fi
+        done
+
+  validate:manifests:
+    desc: Validate all K8s manifests with kubeconform
+    cmds:
+      - kubeconform --strict --skip CustomResourceDefinition operators/config/
+      - kubeconform --strict infra/tilt/api-deployment.yaml infra/tilt/operator-deployment.yaml
+      # ArgoCD templates use CRD kinds (AppProject, Application) — skip those
+      - kubeconform --strict --skip AppProject,Application infra/helm/argocd/templates/
+      # PodDisruptionBudgets
+      - kubeconform --strict infra/helm/postgresql/templates/pdb.yaml
+      - kubeconform --strict infra/helm/gitea/templates/pdb.yaml
+      - kubeconform --strict infra/helm/argocd/templates/pdb.yaml
+      # NetworkPolicies
+      # network-policies migrou de raw manifest para Helm chart (CHG-2026-04-28-LAYERED-BOOTSTRAP iter 5).
+      # `helm template` produz uma stream de YAML que kubeconform pode consumir via stdin.
+      - helm template network-policies infra/helm/network-policies/ | kubeconform --strict --summary
+      # Internal LoopZero charts (CHG-2026-04-28-LAYERED-BOOTSTRAP iter 5+).
+      # Skip Traefik IngressRoute and ClusterImagePolicy CRDs (not in default schema).
+      - helm template loopzero-api infra/helm/loopzero-api/ | kubeconform --strict --skip IngressRoute,Certificate --summary
+      - helm template loopzero-cloud infra/helm/loopzero-cloud/ | kubeconform --strict --skip IngressRoute,Certificate --summary
+      - helm template loopzero-controller infra/helm/loopzero-controller/ | kubeconform --strict --summary
+      - helm template tenant-controller infra/helm/tenant-controller/ | kubeconform --strict --summary
+      - helm template cloudflared infra/helm/cloudflared/ | kubeconform --strict --summary
+      - helm template smoke-test infra/helm/smoke-test/ | kubeconform --strict --summary
+      - helm template cluster-issuer infra/helm/cluster-issuer/ | kubeconform --strict --skip ClusterIssuer --summary
+      - helm template admission-policies infra/helm/admission-policies/ | kubeconform --strict --skip ClusterImagePolicy,ValidatingAdmissionPolicy,ValidatingAdmissionPolicyBinding,PrometheusRule --summary
+      # Monitoring manifests (ServiceMonitor, PrometheusRule are CRD kinds — skip those)
+      - kubeconform --strict --skip ServiceMonitor,PrometheusRule,Probe infra/helm/monitoring/manifests/
+      # infra/helm/argo-workflows/templates/ contains Go template syntax ({{ }}) — requires helm template to validate
+
+  # ---------------------------------------------------------------------------
+  # Sprint 8 v3.2 — bootstrap regression prevention
+  # ---------------------------------------------------------------------------
+
+  validate:helm-charts:
+    desc: |
+      Validates every Helmfile-referenced Helm chart resolves to its declared version
+      in the upstream repo index. Catches deprecated chart names and renames before
+      bootstrap. CHG-2026-04-28-LAYERED-BOOTSTRAP — reads from infra/helmfile/*.yaml
+      (replacing pre-refactor bootstrap-shared.ts).
+    cmds:
+      - |
+        python3 << 'PYEOF'
+        import re
+        import sys
+        import urllib.request
+        try:
+            import yaml
+        except ImportError:
+            print("Install pyyaml: pip install --user pyyaml", file=sys.stderr)
+            sys.exit(1)
+
+        helmfiles = [
+            "infra/helmfile/mgmt.helmfile.yaml.gotmpl",
+            "infra/helmfile/build.helmfile.yaml.gotmpl",
+            "infra/helmfile/runtime.helmfile.yaml.gotmpl",
+        ]
+
+        # Build mapping repo-name → repo-url AND release → (repo-name, chart-name, version)
+        # Iter 20: helmfiles are .gotmpl with go-template placeholders.
+        # We strip them via shell sed before yaml.safe_load (Python regex with
+        # the templating syntax conflicts with Task's own go-template parser).
+        #
+        # 2026-04-30 fix (NEW-7): the original `TPL_RE.sub('false', content)`
+        # broke YAML when a go-template directive started a line — a bare
+        # whole-line directive collapsed to literal `false` in column 1,
+        # invalidating the indented mapping context (validate:bootstrap fail
+        # on mgmt.helmfile.yaml.gotmpl line 185). Two-pass:
+        #   1. WHOLE_LINE_TPL strips lines that are ONLY a directive (with
+        #      optional surrounding whitespace) — they collapse to empty,
+        #      preserving YAML structure.
+        #   2. INLINE_TPL replaces remaining inline directives with `false`.
+        # NB: do NOT write literal go-template directive syntax in this
+        # Taskfile — Task parses double-brace pairs as go-template before
+        # the script reaches bash. Use chr(123) and chr(125) only.
+        repo_urls = {}
+        releases = []
+        OPEN = chr(123) + chr(123)
+        CLOSE = chr(125) + chr(125)
+        import re as _re
+        WHOLE_LINE_TPL = _re.compile(
+            r'^[ \t]*' + _re.escape(OPEN) + r'-?[^}]*-?' + _re.escape(CLOSE) + r'[ \t]*$',
+            _re.MULTILINE,
+        )
+        INLINE_TPL = _re.compile(_re.escape(OPEN) + r'[^}]*' + _re.escape(CLOSE))
+        for hf in helmfiles:
+            with open(hf) as f:
+                content = f.read()
+            content = WHOLE_LINE_TPL.sub('', content)
+            content = INLINE_TPL.sub('false', content)
+            for doc in yaml.safe_load_all(content):
+                if not doc:
+                    continue
+                for r in doc.get("repositories", []) or []:
+                    repo_urls[r["name"]] = r["url"]
+                for rel in doc.get("releases", []) or []:
+                    chart = rel.get("chart", "")
+                    version = rel.get("version")
+                    if not version:
+                        continue  # Local chart (../helm/X) — no upstream version
+                    if "/" not in chart or chart.startswith("../"):
+                        continue
+                    repo_name, chart_name = chart.split("/", 1)
+                    releases.append((rel["name"], repo_name, chart_name, version))
+
+        cache = {}
+        def fetch_index(repo_url: str):
+            if repo_url in cache:
+                return cache[repo_url]
+            url = repo_url.rstrip("/") + "/index.yaml"
+            try:
+                with urllib.request.urlopen(url, timeout=15) as r:
+                    cache[repo_url] = yaml.safe_load(r.read())
+                return cache[repo_url]
+            except Exception as e:
+                return {"_error": str(e)}
+
+        failed = []
+        skipped = []
+        ok = 0
+        for name, repo_name, chart_name, version in releases:
+            repo_url = repo_urls.get(repo_name)
+            if not repo_url:
+                skipped.append(f"  - {name}: repo '{repo_name}' not declared in helmfiles")
+                continue
+            idx = fetch_index(repo_url)
+            if "_error" in idx:
+                skipped.append(f"  - {name}: repo {repo_url} unreachable ({idx['_error']})")
+                continue
+            entries = idx.get("entries", {}).get(chart_name, [])
+            avail = [e.get("version") for e in entries]
+            # Strip leading 'v' for cert-manager etc. when present in helmfile but not index
+            version_clean = version.lstrip("v")
+            if version in avail or version_clean in avail or f"v{version_clean}" in avail:
+                print(f"OK  {name:30} → {chart_name}@{version}")
+                ok += 1
+            else:
+                latest = sorted(avail, reverse=True)[:3] if avail else ["<none>"]
+                failed.append(f"  - {name} ({chart_name}@{version}): not in repo {repo_url}. Latest 3: {latest}")
+
+        if skipped:
+            print("\nSkipped (no mapping or unreachable):")
+            print("\n".join(skipped))
+        if failed:
+            print("\nFAIL: Helm chart references stale or wrong:")
+            print("\n".join(failed))
+            sys.exit(2)
+        print(f"\n✓ {ok} chart references valid (out of {len(releases)} declared)")
+        PYEOF
+
+  validate:helmfile-scripts:
+    desc: |
+      Runs the offline helmfile-script regression tests. Validates that
+      generate-secrets.sh, generate-runtime-secrets.sh, and create-wiring-configmap.sh
+      produce correct kubectl invocations. CHG-2026-04-28-LAYERED-BOOTSTRAP / Phase 8.
+    cmds:
+      - bash infra/helmfile/scripts/test_helpers/run-all.sh
+
+  validate:internal-charts:
+    desc: |
+      Lints all internal LoopZero Helm charts (those referenced as `../helm/X` in
+      helmfiles). CHG-2026-04-28-LAYERED-BOOTSTRAP iteration 5+ created these
+      to close the chart-not-found gap. Validates each chart parses, templates,
+      and produces at least one K8s object.
+    cmds:
+      - |
+        FAIL=0
+        for d in admission-policies cloudflared cluster-issuer network-policies smoke-test tenant-controller loopzero-api loopzero-cloud loopzero-controller; do
+          if ! helm lint infra/helm/$d/ >/dev/null 2>&1; then
+            echo "FAIL  $d (helm lint)"; FAIL=$((FAIL+1)); continue
+          fi
+          COUNT=$(helm template "$d" "infra/helm/$d/" 2>/dev/null | grep -c "^kind:" || echo 0)
+          if [ "$COUNT" -lt 1 ]; then
+            echo "FAIL  $d (renders 0 K8s objects)"; FAIL=$((FAIL+1)); continue
+          fi
+          echo "PASS  $d ($COUNT K8s objects)"
+        done
+        if [ "$FAIL" -gt 0 ]; then
+          echo "Internal-chart validation FAILED ($FAIL chart(s))"
+          exit 1
+        fi
+        echo "✓ All 9 internal Helm charts lint and render correctly"
+
+  validate:helmfile-templates:
+    desc: |
+      CHG-2026-04-28-LAYERED-BOOTSTRAP iter 11 — renders ALL helmfile releases
+      (mgmt 287 + build 45 + runtime 213 = 545 K8s objects) and validates each
+      against its K8s schema via kubeconform. Catches:
+        - Deprecated apiVersion (e.g., policy/v1beta1 in PDBs)
+        - Invalid spec values (additionalProperties: false strict mode)
+        - Schema drift between chart upgrades
+      Uses local CRD schemas at infra/kubeconform-schemas/ for kinds not in
+      the default kubeconform schema repository (CustomResourceDefinition).
+    cmds:
+      # Delegate to a shell script — keeps kubeconform's {{...}} template
+      # placeholders out of Task's Go-template parser.
+      - bash infra/kubeconform-schemas/validate-helmfile-templates.sh
+
+  validate:argocd-sync-waves:
+    desc: |
+      Validates that the 38 ArgoCD App-of-Apps Application manifests have a
+      coherent sync-wave ordering — e.g., cert-manager (wave -3) before traefik
+      (-2) before loopzero-api (2) before smoke-test (99). Catches manual edits
+      that would make ArgoCD try to create resources before their CRDs exist.
+    cmds:
+      - python3 infra/argocd-bootstrap/validate-sync-waves.py
+
+  validate:layered-bootstrap:
+    desc: |
+      Aggregate validation for CHG-2026-04-28-LAYERED-BOOTSTRAP — runs the full
+      offline test suite (helm lint, helmfile YAML structure, regression tests).
+    cmds:
+      - task: validate:internal-charts
+      - task: validate:argocd-sync-waves
+      - task: validate:helmfile-templates
+      - bash infra/helmfile/scripts/test_helpers/run-all.sh
+      - go test ./infra/tests/load/ -run "TestRegression|TestB18|TestB16|TestL3CoverageMatrix" -count=1
+      - helmfile -f infra/helmfile/mgmt.helmfile.yaml.gotmpl -e dev list >/dev/null
+      - helmfile -f infra/helmfile/build.helmfile.yaml.gotmpl -e dev list >/dev/null
+      - helmfile -f infra/helmfile/runtime.helmfile.yaml.gotmpl -e dev list >/dev/null
+      - echo "✓ All layered-bootstrap offline validations PASS"
+
+  validate:k3d-integration:
+    desc: |
+      Runs the layered-bootstrap integration tests against a local k3d cluster.
+      Requires `k3d cluster create loopzero-test` to exist. Validates:
+        - admission-policies Helm chart installs cleanly + creates 6 VAPs
+        - scoped-kubeconfig.sh produces a working SA-backed kubeconfig
+        - argocd-register.sh creates ArgoCD cluster Secret with correct caData
+        - regression-checks.sh runs without bash syntax errors against real cluster
+        - 8/8 internal Helm charts install cleanly on real k8s
+      CHG-2026-04-28-LAYERED-BOOTSTRAP / Phase 7 partial real-cluster validation.
+    cmds:
+      - LOOPZERO_K3D_INTEGRATION=1 go test -timeout 5m ./infra/tests/load/ -run "TestK3d" -count=1 -v
+
+  validate:full:
+    desc: |
+      CHG-2026-04-28-LAYERED-BOOTSTRAP — runs ALL offline + k3d (if available)
+      validations as a single CI gate. Use this in PR CI to validate the entire
+      layered-bootstrap deliverable.
+
+      Includes:
+        - task lint (golangci-lint + ESLint with 0 errors)
+        - task validate:manifests (kubeconform on all chart-rendered K8s objects)
+        - task validate:internal-charts (helm lint + template on 9 internal charts)
+        - task validate:helm-charts (chart versions resolve in upstream repos)
+        - task validate:helmfile-scripts (3 shell tests with mock-kubectl)
+        - task validate:layered-bootstrap (aggregate offline)
+        - go test ./infra/tests/load/ regression
+        - cd cli && npm test (CLI 1114 tests)
+        - cd infra/pulumi && npx vitest run (Pulumi 75 tests)
+    cmds:
+      - task: lint
+      - task: validate:manifests
+      - task: validate:internal-charts
+      - task: validate:helm-charts
+      - task: validate:helmfile-scripts
+      - task: validate:layered-bootstrap
+      - go test ./infra/tests/load/ -run "TestRegression|TestB18|TestB16|TestL3CoverageMatrix" -count=1
+      - cd cli && npm test -- --silent 2>&1 | tail -3
+      - cd infra/pulumi && npx vitest run 2>&1 | tail -3
+      - echo "✓ All CHG-2026-04-28-LAYERED-BOOTSTRAP validations PASS"
+
+  migrate:tenants:
+    desc: |
+      F-04 (CHG-2026-04-29-DOGFOOD T3.3) — Reconcile Tenant + Environment
+      CRs duplicados entre namespaces para o canônico loopzero-system. Default
+      é dry-run; usar `task migrate:tenants -- --apply` para commit.
+
+      CRITICAL: este é o T1 fix (data cleanup). T3.1 (hard-code do
+      namespace no operator/API code) + T3.2 (ValidatingAdmissionPolicy
+      preventiva) ficam T2 governance per CLAUDE.md Pre-release rule
+      (touches tenant isolation contract).
+    cmds:
+      - bash infra/scripts/migrate-tenant-namespace.sh {{.CLI_ARGS}}
+
+  dogfood:repro:
+    desc: |
+      CHG-2026-04-29-DOGFOOD — Reproduce all 13 dogfood findings (F-01..F-13)
+      against k3d standalone-multi. Emits JSON to stdout + summary table to
+      stderr. Exit 0 when all REPRODUCED (consistent matrix), exit 1 when at
+      least one FIXED (matrix needs update).
+    cmds:
+      - bash infra/tests/dogfood/repro-findings.sh
+
+  validate:slos:
+    desc: |
+      Validates Sloth SLO files in infra/sloth/ (Coverage Matrix #8 — closes
+      "Sloth files bypass kubeconform" gap). Offline schema check covering
+      version, top-level keys, sli.events queries, multi-burn-rate alerting.
+      Does NOT exercise sloth CLI (not installed locally); CI workflow can
+      add `sloth validate` later. Plan ref: T8.1 / Coverage Matrix #8.
+    cmds:
+      - python3 infra/sloth/validate.py
+
+  validate:rules:
+    desc: |
+      Structural validator for PrometheusRule manifests in
+      infra/helm/monitoring/manifests/. Plan T5.4 TDD test_alerts_promtool_validate
+      translated to offline check when promtool is missing. Validates apiVersion,
+      kind, group/rule structure, severity ∈ {critical,warning,info}, summary
+      annotation, runbook reference. Caught severity drift in
+      prometheusrule-pulumi-state.yaml during iter 17 (medium→warning,
+      high→critical normalization).
+    cmds:
+      - python3 infra/helm/monitoring/validate-rules.py
+
+  validate:k8s-versions:
+    desc: |
+      Validates that K8s versions in Pulumi.{stack}.yaml are still supported by
+      DigitalOcean. DOKS rotates patch versions ~quarterly — catches stale slugs
+      before bootstrap fails with 422 invalid version slug. Sprint 8 v3.2 / Pilar 2.
+    cmds:
+      - |
+        python3 << 'PYEOF'
+        import json
+        import subprocess
+        import sys
+        import yaml
+
+        try:
+            supported_raw = subprocess.check_output(
+                ["doctl", "kubernetes", "options", "versions", "-o", "json"],
+                stderr=subprocess.DEVNULL, timeout=30,
+            )
+            supported = {v["slug"] for v in json.loads(supported_raw)}
+        except Exception as e:
+            print(f"FAIL: doctl unavailable or unauthenticated: {e}", file=sys.stderr)
+            sys.exit(1)
+
+        print(f"DO supports: {sorted(supported)}")
+
+        failed = []
+        for stack_yaml in ["Pulumi.dev.yaml", "Pulumi.staging.yaml", "Pulumi.homolog.yaml", "Pulumi.prod.yaml"]:
+            path = f"infra/pulumi/{stack_yaml}"
+            try:
+                cfg = yaml.safe_load(open(path)).get("config", {})
+            except FileNotFoundError:
+                print(f"  - {stack_yaml}: missing (skipped)")
+                continue
+            for key in ["mgmtK8sVersion", "runtimeK8sVersion", "buildK8sVersion"]:
+                slug = cfg.get(f"loopzero-infra:{key}")
+                if not slug:
+                    continue
+                if slug in supported:
+                    print(f"OK  {stack_yaml} {key} = {slug}")
+                else:
+                    failed.append(f"  - {stack_yaml} {key}: {slug} NOT in supported set")
+
+        if failed:
+            print("\nFAIL: Stale K8s versions detected:")
+            print("\n".join(failed))
+            sys.exit(2)
+        print("\n✓ All K8s version slugs supported by DO")
+        PYEOF
+
+  chaos:install:
+    desc: |
+      Sprint 8 v3.2 / CHG-002a / T0.3 — Install Chaos Mesh 2.7.0 in all 4 DOKS
+      clusters (mgmt + build + runtime + runtime-2). ADR-0016 D-4 hardening:
+      hardened RBAC (no cluster-admin default), Audit/Deny alignment with
+      Sprint 6 policy-controller. Idempotent — safe to re-run.
+    cmds:
+      - |
+        set -e
+        cd infra/helm/chaos-mesh
+        helm dependency update
+        cd /home/paulo/loopzero
+        for KCFG in ${HOME}/.kube/loopzero-loopzero-infra-dev-sfo3-mgmt.yaml \
+                    ${HOME}/.kube/loopzero-loopzero-infra-dev-sfo3-build.yaml \
+                    ${HOME}/.kube/loopzero-loopzero-infra-dev-sfo3-runtime.yaml \
+                    ${HOME}/.kube/loopzero-loopzero-infra-dev-sfo3-runtime-2.yaml; do
+          [ -f "$KCFG" ] || { echo "skip: $KCFG not found"; continue; }
+          NAME=$(basename "$KCFG" .yaml | sed 's/loopzero-//')
+          echo "=== Installing Chaos Mesh in $NAME ==="
+          KUBECONFIG=$KCFG helm upgrade --install loopzero-chaos-mesh infra/helm/chaos-mesh \
+            -n chaos-mesh --create-namespace \
+            -f infra/helm/chaos-mesh/values.yaml \
+            --wait --timeout 5m
+          echo ""
+          echo "verify CRDs:"
+          KUBECONFIG=$KCFG kubectl get crd podchaos.chaos-mesh.org stresschaos.chaos-mesh.org networkchaos.chaos-mesh.org 2>&1 | head -5
+        done
+
+  chaos:uninstall:
+    desc: |
+      Uninstall Chaos Mesh from all 4 clusters. Use only after CHG-002c chaos
+      validation completes. CRDs are NOT deleted by uninstall — must `kubectl
+      delete crd` separately if full removal is desired.
+    cmds:
+      - |
+        for KCFG in ${HOME}/.kube/loopzero-loopzero-infra-dev-sfo3-mgmt.yaml \
+                    ${HOME}/.kube/loopzero-loopzero-infra-dev-sfo3-build.yaml \
+                    ${HOME}/.kube/loopzero-loopzero-infra-dev-sfo3-runtime.yaml \
+                    ${HOME}/.kube/loopzero-loopzero-infra-dev-sfo3-runtime-2.yaml; do
+          [ -f "$KCFG" ] || continue
+          NAME=$(basename "$KCFG" .yaml)
+          echo "=== Uninstalling Chaos Mesh from $NAME ==="
+          KUBECONFIG=$KCFG helm uninstall loopzero-chaos-mesh -n chaos-mesh 2>&1 | head -3
+        done
+
+  validate:bootstrap:
+    desc: |
+      Composite Sprint 8 validation — runs all three Sprint 8 v3.2 checks
+      (helm-charts, k8s-versions, manifests) plus pulumi vitest suite.
+      Use as PR gate. Sprint 8 v3.2 / Pilar 2.
+    cmds:
+      - task: validate:helm-charts
+      - task: validate:k8s-versions
+      - task: validate:manifests
+      - cd infra/pulumi && npx vitest run src/__tests__/adopt-or-create.test.ts src/__tests__/sprint8-fixes.test.ts
+
+  # ---------------------------------------------------------------------------
+  # Monitoring

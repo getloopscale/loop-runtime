@@ -318,8 +318,9 @@ func SetupClusterCredentialController(mgr ctrl.Manager) error {
 
 // SetupEnvironmentController registers the EnvironmentController with the given manager.
 // runtimeClient targets the runtime cluster; in envtest, pass mgr.GetClient().
+// Calls the cell-aware variant with factory=nil for legacy single-cell behavior.
 func SetupEnvironmentController(mgr ctrl.Manager, runtimeClient client.Client) error {
-	return controller.SetupEnvironmentController(mgr, runtimeClient)
+	return controller.SetupEnvironmentControllerWithFactory(mgr, runtimeClient, nil)
 }
 
 // SetupApplicationController registers the ApplicationController with the given manager.

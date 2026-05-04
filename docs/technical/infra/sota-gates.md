@@ -351,14 +351,136 @@ Reduzir ambiguidade entre dev, prod, standalone e multi-cell.
 
 - esse gate é chave para evitar degeneração em “prod funciona porque alguém sabe como”.
 
+## Gate INF-G16: Supply Chain Integrity For Charts
+
+`Objetivo`
+
+Garantir que charts Helm publicados via OCI sejam assinados criptograficamente e verificáveis em produção.
+
+`Critério de aprovação`
+
+- todos os charts em `charts/` são assinados via cosign após push para o registry OCI;
+- assinaturas usam keyless (Fulcio + Rekor) — sem long-lived signing key;
+- ArgoCD Applications de produção referenciam charts por digest, não apenas por tag;
+- `policy-controller` valida assinaturas antes de admitir manifests gerados por chart.
+
+`Evidência esperada`
+
+- `cosign verify --certificate-oidc-issuer https://token.actions.githubusercontent.com` retorna OK para todos os 15 charts no registry;
+- `.github/workflows/helm-charts.yml` inclui step de signing após `helm push`;
+- Application manifests em `infra/argocd-bootstrap/apps/` referenciam chart por SHA digest quando aplicável;
+- `infra/helm/admission-policies/templates/cluster-image-policy.yaml` tem keyless authority configurada.
+
+`Verificação`
+
+- `bash scripts/cosign-coverage-audit.sh` exits 0 (todas imagens + charts dos últimos 7 dias têm assinatura keyless válida).
+
+`Notas LoopZero`
+
+- referência FAANG: Bitnami + Chainguard publicam todos os charts com cosign signatures e SBOMs como OCI artifacts.
+- Sprint 6 entregou key-based; INF-G16 codifica o destino keyless (MEET-2026-05-03-063 Track-1).
+
+## Gate INF-G17: Chart Schema Validation
+
+`Objetivo`
+
+Rejeitar valores Helm inválidos no `helm lint`, antes de qualquer deploy.
+
+`Critério de aprovação`
+
+- todos os 15 charts em `charts/` (publicados via OCI) têm `values.schema.json` válido (JSON Schema Draft 7);
+- `helm lint --strict <chart>` rejeita valores que violam o schema;
+- CI gate em `helm-charts.yml` rejeita PR que adicione chart sem schema;
+- charts em `infra/helm/` (bootstrap interno) ficam exemptos por ADR D4 do plano `infra-sota-hardening-plan.md` (consumo só interno via Helmfile com values fixos).
+
+`Evidência esperada`
+
+- 15 arquivos `charts/*/values.schema.json`;
+- `ajv compile charts/*/values.schema.json` succeeds para todos;
+- pipeline CI inclui step `helm lint --strict` para cada chart publicado;
+- regression test que tenta `helm template` com valor inválido (ex: `tag: 123` numérico) e espera exit ≠ 0.
+
+`Verificação`
+
+- `for c in charts/*/; do helm lint --strict "$c"; done` exits 0;
+- `for s in charts/*/values.schema.json; do ajv compile "$s"; done` exits 0.
+
+`Notas LoopZero`
+
+- referência FAANG: Bitnami inclui JSON Schema em todos os charts. `helm lint` valida automaticamente.
+- gate emparelhado com helm-unittest (T2.2) — schema valida shape; unittest valida lógica condicional security-critical.
+
+## Gate INF-G18: CI Pipeline Supply Chain Security
+
+`Objetivo`
+
+Tornar o pipeline CI imune a supply-chain attacks via tags GitHub Action mutáveis e secrets de longa duração.
+
+`Critério de aprovação`
+
+- todas as `uses:` references em `.github/workflows/*.yml` pinam por commit SHA (40 hex chars), nunca por tag;
+- exceção explícita apenas para reusable workflows internos (`uses: ./.github/workflows/*.yml`) marcada com `# pragma: allow-tag-pin`;
+- OIDC para autenticação com cloud providers (DigitalOcean, Cloudflare) — sem long-lived tokens em secrets;
+- `permissions:` declaradas em todos os workflows, com mínimo necessário (least privilege);
+- Renovate Bot configurado com `pinDigests: true` e revisão humana obrigatória de SHA bumps.
+
+`Evidência esperada`
+
+- 0 hits em `grep -rE "^\s*uses: [^.][^@]+@v[0-9]" .github/workflows/` (excluindo pragma);
+- `.github/renovate.json` com `pinDigests: true`;
+- workflows com `permissions:` block declarado;
+- audit log mostra Renovate como autor de SHA bumps com SHA → version mapping em PR description.
+
+`Verificação`
+
+- `bash scripts/check-action-pinning.sh` exits 0 (script criado em T1.1).
+
+`Notas LoopZero`
+
+- motivação: GitHub Security Roadmap 2026 cita SHA pinning após o ataque tj-actions/changed-files de março 2025.
+- OpenSSF Scorecard penaliza tag-based pinning. SHA pinning é a única forma imutável.
+
+## Gate INF-G19: Build Reproducibility
+
+`Objetivo`
+
+Garantir que o mesmo commit produza o mesmo artefato, verificável criptograficamente.
+
+`Critério de aprovação`
+
+- `SOURCE_DATE_EPOCH` setado em todas as builds BuildKit (já implementado em `build-images.yml:171/220/262/304/346`);
+- base images pinadas por digest (não tag) em Dockerfiles e Argo Workflow templates;
+- SLSA provenance attestation gerada em cada artefato (imagem + chart);
+- `cosign verify-attestation --type slsaprovenance` passa para artefatos publicados.
+
+`Evidência esperada`
+
+- duas builds do mesmo commit produzem images com mesmo digest (ou diferença explicável e documentada);
+- `cosign verify-attestation --type slsaprovenance --certificate-oidc-issuer https://token.actions.githubusercontent.com <image>` retorna OK;
+- Dockerfiles têm `FROM <base>@sha256:...` (digest pinning);
+- Argo Workflow templates em `api/internal/argo/*.go` injetam `SOURCE_DATE_EPOCH` via env.
+
+`Verificação`
+
+- `bash scripts/check-base-image-digests.sh` exits 0 (verifica que todos `FROM` em Dockerfiles e templates têm `@sha256:`);
+- `cosign verify-attestation --type slsaprovenance <image>` exits 0 para artefato recente (post-launch).
+
+`Notas LoopZero`
+
+- SOURCE_DATE_EPOCH já implementado (descoberto na validação do plano `infra-sota-hardening-plan.md`).
+- SLSA Level 2 provenance é post-launch (após Sprint 9) — codificado como gate canônico, mas evidência completa virá com produção real.
+- referência FAANG: NTT Labs demonstrou bit-for-bit reproducible builds com BuildKit + SOURCE_DATE_EPOCH. Chainguard publica SLSA provenance em todos os artefatos.
+
 ## Ordem De Prioridade
 
 1. `INF-G01`, `INF-G02`, `INF-G04`, `INF-G05`, `INF-G09`
-2. `INF-G03`, `INF-G06`, `INF-G07`, `INF-G08`, `INF-G10`
-3. `INF-G11`, `INF-G12`, `INF-G13`, `INF-G14`, `INF-G15`
+2. `INF-G03`, `INF-G06`, `INF-G07`, `INF-G08`, `INF-G10`, `INF-G18`
+3. `INF-G11`, `INF-G12`, `INF-G13`, `INF-G14`, `INF-G15`, `INF-G16`, `INF-G17`, `INF-G19`
 
 Justificativa:
 
-- primeiro, separação correta, bootstrap e wiring;
-- depois, governança contínua, segurança e observabilidade;
-- por fim, repair, rollout e escala.
+- primeiro, separação correta, bootstrap e wiring (G01-G09 originais);
+- depois, governança contínua, segurança e observabilidade — incluindo CI supply chain (G18) que protege a fundação;
+- por fim, repair, rollout, escala — incluindo supply chain de charts (G16), schema (G17) e reproducibility (G19) que aprimoram o produto.
+
+`G18` foi promovido para tier-2 (não tier-3) porque é mitigação de ameaça ativa: o ataque tj-actions/changed-files de 2025 demonstrou que tag-pinning é exploitable e o gate previne classe inteira de incidente.

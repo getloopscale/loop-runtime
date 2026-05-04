@@ -46,11 +46,27 @@ master:
       cpu: 200m
       memory: 128Mi
 
+  # Hardened securityContext (INF-G08 + plan ADR D7).
+  # Redis writes to /data which is the PVC mount; root FS can be read-only.
   podSecurityContext:
+    enabled: true
     runAsNonRoot: true
+    runAsUser: 1001
+    runAsGroup: 1001
+    fsGroup: 1001
+    seccompProfile:
+      type: RuntimeDefault
 
   containerSecurityContext:
+    enabled: true
     runAsNonRoot: true
+    runAsUser: 1001
+    runAsGroup: 1001
+    readOnlyRootFilesystem: true
+    allowPrivilegeEscalation: false
+    capabilities:
+      drop:
+        - ALL
 
 metrics:
   enabled: true

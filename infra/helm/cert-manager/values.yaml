@@ -8,6 +8,21 @@ resources:
 
 securityContext:
   runAsNonRoot: true
+  runAsUser: 1000
+  runAsGroup: 1000
+  fsGroup: 1000
+  seccompProfile:
+    type: RuntimeDefault
+
+# Container-level hardening (cert-manager v1.14+ pattern).
+# INF-G08 + plan ADR D7: hardened defaults uniformly across pod-bearing charts.
+containerSecurityContext:
+  readOnlyRootFilesystem: true
+  allowPrivilegeEscalation: false
+  runAsNonRoot: true
+  capabilities:
+    drop:
+      - ALL
 
 installCRDs: true
 

@@ -1,0 +1,90 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "loopzero-admission-policies values",
+  "description": "Schema for loopzero-admission-policies chart. Defines ValidatingAdmissionPolicies (VAP) for LoopZero platform constraints. Per INF-G17.",
+  "type": "object",
+  "additionalProperties": true,
+  "properties": {
+    "policies": {
+      "type": "object",
+      "description": "Per-policy enable toggles + configuration",
+      "properties": {
+        "requireResourceLimits": {
+          "type": "object",
+          "properties": {
+            "enabled": { "type": "boolean" }
+          }
+        },
+        "disallowLatestTag": {
+          "type": "object",
+          "properties": {
+            "enabled": { "type": "boolean" }
+          }
+        },
+        "restrictRegistries": {
+          "type": "object",
+          "properties": {
+            "enabled": { "type": "boolean" },
+            "allowedRegistries": {
+              "type": "array",
+              "items": { "type": "string", "minLength": 1 }
+            }
+          }
+        },
+        "requireImageSignature": {
+          "type": "object",
+          "properties": {
+            "enabled": { "type": "boolean" }
+          }
+        },
+        "argocdManagedBy": {
+          "type": "object",
+          "properties": {
+            "enabled": { "type": "boolean" }
+          }
+        },
+        "protectPlatformNetworkpolicies": {
+          "type": "object",
+          "properties": {
+            "enabled": { "type": "boolean" }
+          }
+        }
+      }
+    },
+    "namespaceSelector": {
+      "type": "object",
+      "description": "Selector limiting which namespaces the policies apply to",
+      "properties": {
+        "matchExpressions": { "type": "array" },
+        "matchLabels": { "type": "object" }
+      }
+    },
+    "validationActions": {
+      "type": "array",
+      "description": "List of actions when validation fails",
+      "items": {
+        "type": "string",
+        "enum": ["Deny", "Warn", "Audit"]
+      }
+    },
+    "clusterImagePolicy": {
+      "type": "object",
+      "properties": {
+        "enabled": { "type": "boolean" },
+        "name": { "type": "string" },
+        "mode": {
+          "type": "string",
+          "enum": ["enforce", "warn"]
+        },
+        "imageGlobs": {
+          "type": "array",
+          "items": { "type": "string" }
+        },
+        "staticAction": {
+          "type": "string",
+          "enum": ["pass", "fail"]
+        }
+      }
+    }
+  }
+}

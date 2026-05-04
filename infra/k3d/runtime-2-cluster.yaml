@@ -18,6 +18,8 @@ metadata:
 #   * 8091:80   — Traefik HTTP entrypoint (workload uses 8090)
 #   * 8444:443  — Traefik HTTPS entrypoint (workload uses 8443)
 #   * 30191:30091 — Traefik metrics NodePort (workload uses 30091:30091).
+# LOCAL ONLY (LP-002): k3d port mapping diverges from production single-DNS-per-cell.
+# Local probes need cellID-aware port resolution; matrix entry tracks closure.
 #     Inside the cluster the NodePort remains 30091 so cross-cluster Prometheus
 #     federation configs that reference port 30091 work without per-cell branches.
 #     Host port 30191 avoids collision with workload's 30091.

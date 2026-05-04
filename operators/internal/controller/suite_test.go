@@ -130,7 +130,7 @@ var _ = BeforeSuite(func() {
 	err = controller.SetupGitRepositoryBindingController(mgr, nil)
 	Expect(err).NotTo(HaveOccurred())
 
-	err = controller.SetupEnvironmentController(mgr, runtimeClient)
+	err = controller.SetupEnvironmentControllerWithFactory(mgr, runtimeClient, nil)
 	Expect(err).NotTo(HaveOccurred())
 
 	err = controller.SetupApplicationController(mgr, "dev.loopzero.example")

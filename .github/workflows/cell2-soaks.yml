@@ -47,7 +47,7 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 75  # 1h soak + 15min preflight + cleanup buffer
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
       - name: Configure kubectl + loopzero CLI
         run: |
           echo "${{ secrets.KUBECONFIG_DEV_MGMT }}" > /tmp/kubeconfig
@@ -70,7 +70,7 @@ jobs:
           bash infra/tests/parity/cell2-canary-stage1.sh
       - name: Open issue on failure
         if: failure()
-        uses: actions/github-script@v7
+        uses: actions/github-script@60a0d83039c74a4aee543508d2ffcb1c3799cdea # v7.0.1
         with:
           script: |
             github.rest.issues.create({
@@ -88,7 +88,7 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 1500  # 25h cap (24h soak + 1h overhead)
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
       - name: Configure kubectl + loopzero CLI
         run: |
           echo "${{ secrets.KUBECONFIG_DEV_MGMT }}" > /tmp/kubeconfig
@@ -127,7 +127,7 @@ jobs:
           } >> docs/runbooks/multi-cell-canary.md
       - name: Open issue on failure
         if: failure()
-        uses: actions/github-script@v7
+        uses: actions/github-script@60a0d83039c74a4aee543508d2ffcb1c3799cdea # v7.0.1
         with:
           script: |
             github.rest.issues.create({

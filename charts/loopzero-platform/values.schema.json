@@ -1,0 +1,32 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "loopzero-platform values",
+  "description": "Schema for loopzero-platform umbrella chart. Aggregates per-component sub-chart values. Per INF-G17.",
+  "type": "object",
+  "additionalProperties": true,
+  "properties": {
+    "global": {
+      "type": "object",
+      "properties": {
+        "registry": { "type": "string", "minLength": 1 },
+        "imagePullSecrets": { "type": "array" },
+        "environment": {
+          "type": "string",
+          "enum": ["dev", "staging", "prod"]
+        }
+      }
+    },
+    "loopzero-api": { "type": "object" },
+    "loopzero-controller": { "type": "object" },
+    "loopzero-tenant-operator": { "type": "object" },
+    "loopzero-app-operator": { "type": "object" },
+    "loopzero-platform-operator": { "type": "object" },
+    "loopzero-preview-operator": { "type": "object" },
+    "loopzero-cloud": { "type": "object" },
+    "loopzero-dashboard": { "type": "object" },
+    "loopzero-crds": { "type": "object" },
+    "loopzero-admission-policies": { "type": "object" },
+    "loopzero-monitoring": { "type": "object" },
+    "loopzero-build-cwts": { "type": "object" }
+  }
+}

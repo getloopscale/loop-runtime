@@ -6,6 +6,8 @@ package argo
 import (
 	"strings"
 	"testing"
+
+	forge "github.com/getloopscale/loopzero-forge"
 )
 
 // B7 (CHG-2026-04-22-001): when the registry is insecure (local dev k3d),
@@ -111,5 +113,113 @@ func TestCosignSignTemplate_ScriptWritesOutputFiles(t *testing.T) {
 	}
 	if !strings.Contains(script, pathDig) {
 		t.Errorf("script does not write digest to %s:\n%s", pathDig, script)
+	}
+}
+
+// Plan T4.1 Track-2 — keyless signing mode tests.
+// CODE supports both modes; runtime activation deferred to Sprint 9+.
+
+func TestCosignSignTemplateKeyless_UsesFulcioAndRekor(t *testing.T) {
+	c := cosignSignTemplateKeyless(CosignSignParams{
+		AppName:          "api",
+		ImageTag:         "registry.example.com/org/app:abc",
+		InsecureRegistry: false,
+		Keyless:          true,
+	})
+	script := c.Command[len(c.Command)-1]
+
+	// Must reference Fulcio + Rekor URLs.
+	if !strings.Contains(script, "fulcio.sigstore.dev") {
+		t.Errorf("keyless script must invoke Fulcio:\n%s", script)
+	}
+	if !strings.Contains(script, "rekor.sigstore.dev") {
+		t.Errorf("keyless script must record in Rekor:\n%s", script)
+	}
+	if !strings.Contains(script, "--fulcio-url") {
+		t.Errorf("keyless script must pass --fulcio-url to cosign:\n%s", script)
+	}
+	if !strings.Contains(script, "--rekor-url") {
+		t.Errorf("keyless script must pass --rekor-url to cosign:\n%s", script)
+	}
+
+	// Must NOT use --key (key-based signing flag).
+	if strings.Contains(script, "--key ") {
+		t.Errorf("keyless script must NOT pass --key:\n%s", script)
+	}
+
+	// Must read OIDC token.
+	if !strings.Contains(script, "SIGSTORE_ID_TOKEN") {
+		t.Errorf("keyless script must export SIGSTORE_ID_TOKEN:\n%s", script)
+	}
+	if !strings.Contains(script, "/var/run/secrets/sigstore/token") {
+		t.Errorf("keyless script must read OIDC token from projected SA volume:\n%s", script)
+	}
+
+	// Annotation marking the mode for audit trail.
+	if !strings.Contains(script, "mode=keyless") {
+		t.Errorf("keyless script must annotate mode=keyless:\n%s", script)
+	}
+}
+
+func TestCosignSignTemplateKeyless_PrivateFulcioOverride(t *testing.T) {
+	c := cosignSignTemplateKeyless(CosignSignParams{
+		AppName:   "api",
+		ImageTag:  "registry.example.com/org/app:abc",
+		Keyless:   true,
+		FulcioURL: "https://fulcio.loopzero.internal",
+		RekorURL:  "https://rekor.loopzero.internal",
+	})
+	script := c.Command[len(c.Command)-1]
+
+	if !strings.Contains(script, "fulcio.loopzero.internal") {
+		t.Errorf("private Fulcio URL must override default:\n%s", script)
+	}
+	if !strings.Contains(script, "rekor.loopzero.internal") {
+		t.Errorf("private Rekor URL must override default:\n%s", script)
+	}
+	if strings.Contains(script, "fulcio.sigstore.dev") {
+		t.Errorf("public Fulcio URL must NOT appear when private override is set:\n%s", script)
+	}
+}
+
+func TestCosignSignTemplateKeyless_NoCosignKeySecret(t *testing.T) {
+	c := cosignSignTemplateKeyless(CosignSignParams{
+		AppName:  "api",
+		ImageTag: "registry.example.com/org/app:abc",
+		Keyless:  true,
+	})
+
+	// Keyless must NOT mount the cosign-signing-key Secret (no long-lived key).
+	for _, vm := range c.VolumeMounts {
+		if sv, ok := vm.(*forge.SecretVolume); ok && sv.SecretName == secretCosignKey {
+			t.Errorf("keyless mode must NOT mount cosign-signing-key Secret (key-based residue)")
+		}
+	}
+
+	// Must NOT have COSIGN_PASSWORD env (no key-based password needed).
+	for _, e := range c.Env {
+		if se, ok := e.(forge.SecretEnv); ok && se.Name == "COSIGN_PASSWORD" {
+			t.Errorf("keyless mode must NOT inject COSIGN_PASSWORD")
+		}
+	}
+}
+
+func TestCosignSignTemplateWithParams_DispatchesByMode(t *testing.T) {
+	keyBased := cosignSignTemplateWithParams(CosignSignParams{
+		AppName:  "api",
+		ImageTag: "registry.example.com/org/app:abc",
+		Keyless:  false,
+	})
+	if !strings.Contains(keyBased.Command[len(keyBased.Command)-1], "--key ") {
+		t.Errorf("Keyless=false must dispatch to key-based template (which uses --key)")
+	}
+
+	keyless := cosignSignTemplateWithParams(CosignSignParams{
+		AppName:  "api",
+		ImageTag: "registry.example.com/org/app:abc",
+		Keyless:  true,
+	})
+	if strings.Contains(keyless.Command[len(keyless.Command)-1], "--key ") {
+		t.Errorf("Keyless=true must dispatch to keyless template (no --key flag)")
 	}
 }

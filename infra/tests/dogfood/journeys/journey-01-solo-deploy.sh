@@ -71,7 +71,7 @@ final=$(wait_build_terminal "$build_id" 1500)
 
 journey_step "Prova de Vida — HTTP 200 + TLS"
 host="${TENANT_ID}-${PROJECT}-${APP}-${ENV}.loopzero.local"
-wait_http_200 "$host" 300 "/health" || journey_fail "HTTP 200 timeout at $host"
+wait_http_200 "$host" 300 "/health" "$TENANT_ID" || journey_fail "HTTP 200 timeout at $host"
 # Sanity: GET / returns the project name
 body=$(curl -sS --connect-to "${host}:443:127.0.0.1:${TRAEFIK_HOST_PORT}" -k "https://${host}/")
 journey_log "GET / body: $body"

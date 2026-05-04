@@ -43,9 +43,9 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 5
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
 
-      - uses: actions/setup-node@v4
+      - uses: ./.github/actions/setup-node
         with:
           node-version: ${{ env.NODE_VERSION }}
           cache: npm
@@ -108,9 +108,9 @@ jobs:
       # Cloudflare — static frontend delivery (Sprint 10)
       CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
 
-      - uses: actions/setup-node@v4
+      - uses: ./.github/actions/setup-node
         with:
           node-version: ${{ env.NODE_VERSION }}
           cache: npm
@@ -131,6 +131,8 @@ jobs:
         run: pulumi login "$PULUMI_BACKEND_URL"
 
       - name: Run Pulumi preview
+        # pragma: allow-tag-pin
+        # TODO(INF-G18 / plan T1.1): Renovate Bot resolves to @<sha40> on first run.
         uses: pulumi/actions@v6
         with:
           command: preview
