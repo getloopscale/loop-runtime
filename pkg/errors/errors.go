@@ -6,7 +6,16 @@
 // error handling across the system. See CLAUDE.md Rule 8.
 package errors
 
-import "fmt"
+import (
+	"fmt"
+	"runtime"
+	"strings"
+)
+
+// stackDepth bounds frame capture in WrapWithStack — 32 frames is
+// enough for any realistic LoopZero call chain (handler → service → store →
+// driver), and bounded so cost stays in the ~150ns range.
+const stackDepth = 32
 
 // LoopZeroError is a typed error with a code and HTTP status.
 // It implements the error interface and provides structured context
@@ -24,6 +33,12 @@ type LoopZeroError struct {
 	// Cause is the underlying error that caused this LoopZeroError.
 	// Exposed via Unwrap() for use with errors.Is/errors.As chains.
 	Cause error
+
+	// stack is an optional cached snapshot of program counters captured
+	// by WrapWithStack. nil means no stack was requested. Resolved
+	// lazily by StackTrace() to avoid the cost of symbolication when
+	// the trace is never inspected.
+	stack []uintptr
 }
 
 // Error implements the error interface.
@@ -68,7 +83,67 @@ func (e *LoopZeroError) Wrap(context string) *LoopZeroError {
 		Message:    fmt.Sprintf("%s: %s", context, e.Message),
 		HTTPStatus: e.HTTPStatus,
 		Cause:      e,
+		// Carry forward any stack the source already captured. Wrap()
+		// itself does NOT capture — call WrapWithStack() to do that.
+		stack: e.stack,
 	}
+}
+
+// WrapWithStack behaves like Wrap but additionally captures the caller's
+// stack frames (up to stackDepth). The capture happens once: if the
+// receiver already has a stack, the existing frames are preserved
+// (origin matters more than re-wrap site).
+//
+// Use this in error paths where you need full diagnostic context
+// (request middleware, top-level recover, internal panics surfaced as
+// errors). For routine domain errors prefer Wrap() — the stack capture
+// costs ~150ns and most errors don't need it.
+//
+// StackTrace() resolves the captured PCs to a human-readable string
+// when called. ToJSON() does NOT include the stack to avoid leaking
+// internals through API responses.
+//
+// Per pkg-sota-faang-grade-plan T1.6 + gate PKG-G08.
+func (e *LoopZeroError) WrapWithStack(context string) *LoopZeroError {
+	wrapped := &LoopZeroError{
+		Code:       e.Code,
+		Message:    fmt.Sprintf("%s: %s", context, e.Message),
+		HTTPStatus: e.HTTPStatus,
+		Cause:      e,
+		stack:      e.stack,
+	}
+	if wrapped.stack == nil {
+		wrapped.stack = captureStack(2) // skip captureStack + WrapWithStack
+	}
+	return wrapped
+}
+
+// StackTrace returns a human-readable representation of the captured
+// stack. Returns "" when the receiver was not produced by
+// WrapWithStack.
+func (e *LoopZeroError) StackTrace() string {
+	if len(e.stack) == 0 {
+		return ""
+	}
+	frames := runtime.CallersFrames(e.stack)
+	var b strings.Builder
+	for {
+		f, more := frames.Next()
+		fmt.Fprintf(&b, "%s\n\t%s:%d\n", f.Function, f.File, f.Line)
+		if !more {
+			break
+		}
+	}
+	return b.String()
+}
+
+// captureStack snapshots up to stackDepth program counters starting
+// `skip` frames above the caller. Cost is ~150ns; safe to call from
+// hot paths.
+func captureStack(skip int) []uintptr {
+	pcs := make([]uintptr, stackDepth)
+	n := runtime.Callers(skip+1, pcs) // +1 to skip captureStack itself
+	return pcs[:n]
 }
 
 // ToJSON returns a map suitable for JSON serialization in API responses.

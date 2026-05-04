@@ -357,3 +357,55 @@ func TestNewReplicasExceedPlan_FormatsContext(t *testing.T) {
 		t.Errorf("message missing app name: %s", msg)
 	}
 }
+
+// ---------------------------------------------------------------------------
+// T1.6 — Stack capture (WrapWithStack) per gate PKG-G08 + ADR-0028 follow-up.
+// ---------------------------------------------------------------------------
+
+func TestWrapWithStack_captures_call_site(t *testing.T) {
+	err := ErrBuildNotFound.WrapWithStack("submit")
+	stack := err.StackTrace()
+	if stack == "" {
+		t.Fatal("WrapWithStack produced empty StackTrace()")
+	}
+	// Expect this test function name to appear in the captured frames.
+	if !strings.Contains(stack, "TestWrapWithStack_captures_call_site") {
+		t.Errorf("stack missing test function name; got:\n%s", stack)
+	}
+}
+
+func TestWrap_without_stack_returns_empty_stack_trace(t *testing.T) {
+	err := ErrBuildNotFound.Wrap("submit")
+	if got := err.StackTrace(); got != "" {
+		t.Errorf("legacy Wrap should not capture stack, got: %s", got)
+	}
+}
+
+func TestStackTrace_on_sentinel_returns_empty(t *testing.T) {
+	if got := ErrBuildNotFound.StackTrace(); got != "" {
+		t.Errorf("sentinel without Wrap should have empty stack, got: %s", got)
+	}
+}
+
+func TestToJSON_omits_stack_field(t *testing.T) {
+	err := ErrBuildNotFound.WrapWithStack("submit")
+	out := err.ToJSON()
+	if _, present := out["stack"]; present {
+		t.Errorf("ToJSON() must NOT leak stack into wire payload; got keys: %v", out)
+	}
+}
+
+func TestDoubleWrapWithStack_preserves_first_capture(t *testing.T) {
+	first := ErrBuildNotFound.WrapWithStack("first")
+	firstStack := first.StackTrace()
+	if firstStack == "" {
+		t.Fatal("first WrapWithStack returned empty stack")
+	}
+	// Wrap again with stack — second should keep first's frames since
+	// already captured (call-site origin is what matters).
+	second := first.WrapWithStack("second")
+	secondStack := second.StackTrace()
+	if secondStack != firstStack {
+		t.Errorf("double WrapWithStack lost or replaced first capture")
+	}
+}
