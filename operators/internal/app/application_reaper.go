@@ -36,6 +36,7 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/controller/controllerutil"
 
 	loopzerov1 "github.com/loopzero/loopzero/operators/api/v1"
+	"github.com/loopzero/loopzero/operators/internal/metrics"
 )
 
 // DefaultReaperGracePeriod is the minimum age of a Progressing CR before the
@@ -158,6 +159,14 @@ func MarkAsCleaned(ctx context.Context, c client.Client, app *loopzerov1.LoopZer
 	}
 	// Defensive: also call RemoveFinalizer for any specific operator finalizer.
 	controllerutil.RemoveFinalizer(app, "loopzero.io/application-cleanup")
+
+	// ADR-0027 D5 / plan T5.2 — emit L4 "Deep Insights" metrics.
+	// Per ADR-0027 capability matrix: this transition IS the Application
+	// controller's L5 evidence (in-process self-heal without operator
+	// action). Counters surface the rate operationally.
+	metrics.SelfHealTotal.WithLabelValues("application", "reaper_cleaned").Inc()
+	metrics.OrphanCRTotal.WithLabelValues("LoopZeroApplication").Inc()
+
 	return nil
 }
 
