@@ -449,6 +449,74 @@ func TestLabels_empty_values_are_allowed(t *testing.T) {
 }
 
 // ---------------------------------------------------------------------------
+// StandardLabels (T1.5 — typed labels per gate PKG-G02)
+// ---------------------------------------------------------------------------
+
+func TestLabel_constants_match_canonical_keys(t *testing.T) {
+	cases := []struct {
+		got, want string
+		name      string
+	}{
+		{LabelTenant, "loopzero.io/tenant", "LabelTenant"},
+		{LabelProject, "loopzero.io/project", "LabelProject"},
+		{LabelEnvironment, "loopzero.io/environment", "LabelEnvironment"},
+		{LabelManagedBy, "loopzero.io/managed-by", "LabelManagedBy"},
+		{ManagedByValue, "loopzero", "ManagedByValue"},
+	}
+	for _, c := range cases {
+		if c.got != c.want {
+			t.Errorf("%s = %q, want %q (canonical regression guard)", c.name, c.got, c.want)
+		}
+	}
+}
+
+func TestStandardLabels_AsMap_returns_canonical_shape(t *testing.T) {
+	sl := StandardLabels{Tenant: "acme", Project: "backend", Environment: "production"}
+	got := sl.AsMap()
+
+	expected := map[string]string{
+		LabelTenant:      "acme",
+		LabelProject:     "backend",
+		LabelEnvironment: "production",
+		LabelManagedBy:   "loopzero",
+	}
+	if len(got) != len(expected) {
+		t.Errorf("AsMap() returned %d keys, want %d", len(got), len(expected))
+	}
+	for k, want := range expected {
+		if got[k] != want {
+			t.Errorf("AsMap()[%q] = %q, want %q", k, got[k], want)
+		}
+	}
+}
+
+func TestStandardLabels_AsMap_independent_from_struct(t *testing.T) {
+	// Mutating the returned map MUST NOT affect future calls.
+	sl := StandardLabels{Tenant: "acme", Project: "backend", Environment: "production"}
+	m1 := sl.AsMap()
+	m1[LabelTenant] = "EVIL"
+	m2 := sl.AsMap()
+	if m2[LabelTenant] != "acme" {
+		t.Errorf("AsMap() leaked mutation: m2[tenant] = %q, want %q", m2[LabelTenant], "acme")
+	}
+}
+
+func TestStandardLabels_AsMap_is_compatible_with_legacy_Labels(t *testing.T) {
+	// Backward-compat invariant: same shape, same values.
+	sl := StandardLabels{Tenant: "acme", Project: "backend", Environment: "production"}
+	got := sl.AsMap()
+	legacy := Labels("acme", "backend", "production")
+	if len(got) != len(legacy) {
+		t.Fatalf("shape mismatch: AsMap() has %d keys, Labels() has %d", len(got), len(legacy))
+	}
+	for k, v := range legacy {
+		if got[k] != v {
+			t.Errorf("compat drift: AsMap()[%q] = %q, Labels()[%q] = %q", k, got[k], k, v)
+		}
+	}
+}
+
+// ---------------------------------------------------------------------------
 // GitRepoBindingName
 // ---------------------------------------------------------------------------
 

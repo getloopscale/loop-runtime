@@ -237,15 +237,59 @@ func ArgoRepoSecretName(tenantName string) (string, error) {
 	return name, nil
 }
 
+// Standard label keys for LoopZero Kubernetes resources. All use the
+// "loopzero.io/" prefix. Use these constants instead of string literals so
+// typos are caught at compile time and grep/audit is straightforward.
+//
+// Per pkg-sota-faang-grade-plan T1.5 + gate PKG-G02 (Minimal Public Surface).
+const (
+	LabelTenant      = "loopzero.io/tenant"
+	LabelProject     = "loopzero.io/project"
+	LabelEnvironment = "loopzero.io/environment"
+	LabelManagedBy   = "loopzero.io/managed-by"
+
+	// ManagedByValue is the canonical value for the LabelManagedBy key,
+	// stable across all LoopZero-owned resources.
+	ManagedByValue = "loopzero"
+)
+
+// StandardLabels is the typed representation of the four canonical LoopZero
+// labels applied to every owned Kubernetes resource. Use this struct
+// instead of the deprecated Labels() function so consumers get
+// compile-time safety against typos.
+//
+// Example:
+//
+//	sl := naming.StandardLabels{Tenant: tenantName, Project: projectName, Environment: envName}
+//	deployment.SetLabels(sl.AsMap())
+//
+// Per pkg-sota-faang-grade-plan T1.5 + gate PKG-G02.
+type StandardLabels struct {
+	Tenant      string
+	Project     string
+	Environment string
+}
+
+// AsMap returns the canonical label map for use in Kubernetes resource
+// metadata. The returned map is fresh on each call — mutating it does
+// not affect future invocations or other StandardLabels instances.
+func (l StandardLabels) AsMap() map[string]string {
+	return map[string]string{
+		LabelTenant:      l.Tenant,
+		LabelProject:     l.Project,
+		LabelEnvironment: l.Environment,
+		LabelManagedBy:   ManagedByValue,
+	}
+}
+
 // Labels returns the standard LoopZero labels for a Kubernetes resource.
 // All labels use the "loopzero.io/" prefix.
+//
+// Deprecated: prefer StandardLabels{...}.AsMap() — provides compile-time
+// safety against typos and reuses the typed constants. Backward-compat
+// kept until next major release.
 func Labels(tenant, project, env string) map[string]string {
-	return map[string]string{
-		"loopzero.io/tenant":      tenant,
-		"loopzero.io/project":     project,
-		"loopzero.io/environment": env,
-		"loopzero.io/managed-by":  "loopzero",
-	}
+	return StandardLabels{Tenant: tenant, Project: project, Environment: env}.AsMap()
 }
 
 // ImageTag returns the container image reference for a built app.
