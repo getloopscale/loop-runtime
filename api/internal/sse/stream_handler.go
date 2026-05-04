@@ -18,6 +18,7 @@ import (
 	"github.com/loopzero/loopzero/api/internal/metrics"
 	"github.com/loopzero/loopzero/api/internal/middleware"
 	loopzeroerrors "github.com/loopzero/loopzero/pkg/errors"
+	errorshttp "github.com/loopzero/loopzero/pkg/errors/http"
 	"github.com/loopzero/loopzero/pkg/statemachine"
 )
 
@@ -166,11 +167,10 @@ func (h *StreamHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// SEC-1: Verify tenant ownership — return 404 (not 403) to avoid leaking build existence.
+	// Per ADR-0030 + T2.3 closure: emit RFC 9457 problem+json (Stage C migration).
 	uc := middleware.GetUserContext(r.Context())
 	if uc == nil {
-		w.Header().Set("Content-Type", "application/json")
-		w.WriteHeader(http.StatusUnauthorized)
-		_ = json.NewEncoder(w).Encode(loopzeroerrors.ErrUnauthorized.ToJSON())
+		errorshttp.WriteJSON(w, r, loopzeroerrors.ErrUnauthorized)
 		return
 	}
 
@@ -178,24 +178,20 @@ func (h *StreamHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	build, err := h.buildStore.GetByID(r.Context(), buildID)
 	if err != nil {
 		if errors.Is(err, loopzeroerrors.ErrBuildNotFound) {
-			w.Header().Set("Content-Type", "application/json")
-			w.WriteHeader(http.StatusNotFound)
-			_ = json.NewEncoder(w).Encode(loopzeroerrors.ErrBuildNotFound.ToJSON())
+			errorshttp.WriteJSON(w, r, loopzeroerrors.ErrBuildNotFound)
 			return
 		}
 		h.logger.Error("stream handler: failed to fetch build",
 			"build_id", buildID,
 			"error", err,
 		)
-		http.Error(w, `{"code":"INTERNAL_ERROR","message":"failed to fetch build"}`, http.StatusInternalServerError)
+		errorshttp.WriteJSON(w, r, loopzeroerrors.NewLoopZeroError("INTERNAL_ERROR", "failed to fetch build", 0))
 		return
 	}
 
 	// SEC-1: Tenant isolation — user can only stream their own builds.
 	if build.TenantID != uc.TenantID {
-		w.Header().Set("Content-Type", "application/json")
-		w.WriteHeader(http.StatusNotFound)
-		_ = json.NewEncoder(w).Encode(loopzeroerrors.ErrBuildNotFound.ToJSON())
+		errorshttp.WriteJSON(w, r, loopzeroerrors.ErrBuildNotFound)
 		return
 	}
 
