@@ -9,6 +9,27 @@
 // (metav1.Condition) and should not be exposed via pkg/.
 package conditions
 
+// --- kstatus universal summary conditions ---
+//
+// ADR-0025 D3: every LoopZero CRD exposes Ready / Reconciling / Stalled in its
+// status.conditions, computed by conditions.SetReadinessSummary from the
+// per-step detail conditions defined below. Semantics follow the kpt CRD
+// Status Convention (https://kpt.dev/reference/schema/crd-status-convention/)
+// and are consumed by sigs.k8s.io/cli-utils/pkg/kstatus.Compute:
+//
+//   Ready=True       → kstatus returns "Current"      (fully reconciled)
+//   Reconciling=True → kstatus returns "InProgress"   (controller working)
+//   Stalled=True     → kstatus returns "Failed"       (manual intervention)
+//
+// The three are mutually exclusive in steady state (helper enforces).
+// Polarity: Ready/Reconciling are positive (True = good for Ready;
+// True = working for Reconciling); Stalled is negative (True = bad).
+const (
+	TypeReady       = "Ready"
+	TypeReconciling = "Reconciling"
+	TypeStalled     = "Stalled"
+)
+
 // --- Tenant conditions ---
 const (
 	TypeGitRepoReady        = "GitRepoReady"
@@ -93,6 +114,11 @@ const (
 
 // Reason constants are enumerated, not freeform. All condition reasons
 // must use one of these constants to ensure consistency across controllers.
+//
+// kstatus convention (ADR-0025): the helper SetReadinessSummary classifies
+// each detail condition's Reason as either {Reconciling, Progressing,
+// Waiting} (→ summary Reconciling=True) or {Failed, Stalled} (→ summary
+// Stalled=True; Stalled wins over Reconciling).
 const (
 	ReasonReconciling = "Reconciling"
 	ReasonReady       = "Ready"
@@ -105,4 +131,11 @@ const (
 	// application_controller.go:computePhase to map condition.Reason →
 	// ApplicationPhaseDegraded.
 	ReasonDegraded = "Degraded"
+	// ReasonProgressing — generic in-progress reason for kstatus consumers.
+	// Aliases ReasonReconciling for sites that prefer the kpt vocabulary.
+	ReasonProgressing = "Progressing"
+	// ReasonStalled — generic stalled reason. Aliases ReasonFailed for
+	// sites that prefer the kpt vocabulary; kstatus.Compute treats both
+	// identically when classifying the summary.
+	ReasonStalled = "Stalled"
 )
