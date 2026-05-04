@@ -13,17 +13,52 @@ Elas existem para centralizar contratos que precisam permanecer iguais em múlti
 
 ## Mapa Por Pacote
 
-| Pacote | Responsabilidade principal | Domínio |
-|---|---|---|
-| `pkg/statemachine` | invariantes de lifecycle e transições válidas | state contracts |
-| `pkg/errors` | erros tipados e serialização base | error contracts |
-| `pkg/naming` | nomes canônicos e compatibilidade RFC 1123 | naming contracts |
-| `pkg/id` | geração de IDs estruturados e estáveis | identity/resource IDs |
-| `pkg/logging` | enrich de logger com contexto transversal | observability/logging |
-| `pkg/health` | agregação de saúde e fases | health contracts |
-| `pkg/circuitbreaker` | contenção de falha externa compartilhada | resilience |
-| `pkg/enforcement` | plan limits e enforcement compartilhado | product policy |
-| `pkg/jwt` | validação e emissão de JWT/session tokens | auth/token contracts |
+| Pacote | Responsabilidade principal | Domínio | Status |
+|---|---|---|---|
+| `pkg/statemachine` | invariantes de lifecycle e transições válidas | state contracts | ✅ active |
+| `pkg/errors` | erros tipados e serialização base | error contracts | ✅ active |
+| `pkg/naming` | nomes canônicos e compatibilidade RFC 1123 | naming contracts | ✅ active |
+| `pkg/id` | geração de IDs estruturados e estáveis | identity/resource IDs | ✅ active |
+| `pkg/logging` | enrich de logger com contexto transversal | observability/logging | ✅ active (global state — ver roadmap S9-5) |
+| `pkg/health` | agregação de saúde e fases | health contracts | ⚠️ **0 importadores em produção** — ver roadmap QW-1 |
+| `pkg/circuitbreaker` | contenção de falha externa compartilhada | resilience | ✅ active (v1-style — ver roadmap S9-1) |
+| `pkg/enforcement` | plan limits e enforcement compartilhado | product policy | ✅ active (acopla `*sql.DB` — ver roadmap S9-4) |
+| `pkg/jwt` | validação e emissão de JWT/session tokens | auth/token contracts | ✅ active (gaps RFC 8725bis — ver roadmap QW-2) |
+
+## Real Usage Matrix
+
+Tabela gerada via grep de `import "github.com/loopzero/loopzero/pkg/X"` em 2026-05-04. Atualizar via script `task pkg:usage-matrix` (a criar — ver gate PKG-G14).
+
+| Pacote | Imports | api/internal | operators/internal | cloud | Outros |
+|---|---:|---:|---:|---:|---:|
+| `pkg/errors` | 70 | maioria | sim | sim | tests |
+| `pkg/statemachine` | 54 | sim | sim | — | tests |
+| `pkg/naming` | 13 | sim | sim | — | — |
+| `pkg/logging` | 10 | sim | sim | sim | — |
+| `pkg/jwt` | 6 | sim | — | sim | — |
+| `pkg/enforcement` | 6 | sim | — | — | tests |
+| `pkg/id` | 5 | sim | — | — | tests |
+| `pkg/circuitbreaker` | 5 | sim | sim | — | — |
+| `pkg/health` | **0** | ❌ | ❌ | ❌ | ❌ |
+
+**Top consumidores** (top-level packages que importam `pkg/`):
+
+| Top-level | Total imports |
+|---|---:|
+| `api/internal` | 89 |
+| `operators/internal` | 19 |
+| `api/tests` | 16 |
+| `api/cmd` | 5 |
+| `operators/cmd` | 4 |
+| `cloud/internal` | 2 |
+| `cloud/tests` | 1 |
+| `cloud/cmd` | 1 |
+
+**Observações:**
+
+- A shared layer é predominantemente **api↔operators**. A descrição original "API, operators, cloud services" gera expectativa errada — `cloud/` tem apenas 4 imports vs 89 da `api/`.
+- `pkg/health` é dead code documentado: `aggregator.go`, `phase.go`, `component.go` (253 LOC + 480 LOC tests) sem nenhum importador em produção. Decisão pendente em `improvement-roadmap.md` QW-1.
+- `pkg/errors` (70 imports) é o pacote crítico cross-cutting; mudanças aqui exigem PKG-G13 a sério.
 
 ## Domínios Funcionais
 

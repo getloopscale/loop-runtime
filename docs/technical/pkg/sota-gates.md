@@ -296,14 +296,131 @@ Evitar que mudanças em `pkg/` quebrem múltiplos módulos silenciosamente.
 
 - impacto de mudança em `pkg/` é multiplicado; a barra de compatibilidade precisa ser mais alta.
 
+## Gate PKG-G14: Documentation Reflects Real Usage
+
+`Objetivo`
+
+Eliminar drift entre `architecture.md` e o código real. Documentação que descreve um pacote como "shared contract" mas o código tem 0 importadores é dívida técnica invisível.
+
+`Critério de aprovação`
+
+- cada pacote em `pkg/` listado em `architecture.md` tem ≥ 1 importador real fora de `pkg/` em produção;
+- a tabela "Real Usage Matrix" em `architecture.md` é regenerada quando contagens mudam ±20%;
+- pacotes sem consumidor são marcados `experimental` ou removidos.
+
+`Evidência esperada`
+
+- script `task pkg:usage-matrix` gera tabela via `grep -r "github.com/loopzero/loopzero/pkg/X" --include="*.go"`;
+- CI step falha se a doc estiver out-of-date.
+
+`Notas LoopZero`
+
+- gate adicionado pela SOTA Research 2026-05-04 após detectar `pkg/health` documentado como flagship com 0 imports em produção.
+- referência FAANG: kstatus README e google/go-cloud marcam APIs `EXPERIMENTAL` quando ainda em flux.
+
+## Gate PKG-G15: No Transport Coupling In Domain Errors
+
+`Objetivo`
+
+Manter `pkg/errors` portável entre HTTP, gRPC, CLI, audit e logging. Erro de domínio não deve carregar campos específicos de transporte.
+
+`Critério de aprovação`
+
+- `LoopZeroError` não tem campos específicos de transport (HTTPStatus removido ou movido para sub-pacote `pkg/errors/http`);
+- mapeamento Code→HTTPStatus vive em `pkg/errors/http/`;
+- consumidores não-HTTP (CLI, operators) não importam `pkg/errors/http`;
+- formatação RFC 9457 problem+json é responsabilidade da camada de transporte.
+
+`Evidência esperada`
+
+- imports de `pkg/errors` por operators NÃO referenciam `HTTPStatus`;
+- RFC 9457 schema gerado via lookup table.
+
+`Notas LoopZero`
+
+- gate adicionado 2026-05-04. Estado atual: `pkg/errors/errors.go:14-27` mistura Code+Message com HTTPStatus.
+- referência FAANG: `google.rpc.Status` separa código (`int32`), `message` e `details []Any`. HTTP mapping é feito em grpc-gateway.
+
+## Gate PKG-G16: Contract Layer Eats Its Own Dogfood
+
+`Objetivo`
+
+Pacotes em `pkg/` USAM outros pacotes em `pkg/` quando aplicável. A shared layer deve ser auto-consistente.
+
+`Critério de aprovação`
+
+- chamadas externas em `pkg/jwt` (JWKS) são protegidas por `pkg/circuitbreaker`;
+- `pkg/enforcement` retorna `*errors.LoopZeroError`, não strings ad-hoc;
+- `pkg/statemachine.TryTransition` retorna `errors.NewInvalidTransition` em vez de `fmt.Errorf`;
+- nenhum pacote em `pkg/` reimplementa primitive já presente em outro `pkg/`.
+
+`Evidência esperada`
+
+- grep de `errors.New`/`fmt.Errorf` em `pkg/` retorna apenas casos justificados (validation, internal);
+- HTTP calls em `pkg/` passam por circuit breaker.
+
+`Notas LoopZero`
+
+- gate adicionado 2026-05-04. Estado atual: `pkg/jwt/validator.go:249-287` faz HTTP direto sem circuit breaker.
+- referência FAANG: `crossplane-runtime` usa seus próprios sub-pacotes; Kubernetes apimachinery usa apimachinery types em todo o code-tree.
+
+## Gate PKG-G17: Generics + Context-Aware Resilience Primitives
+
+`Objetivo`
+
+Resilience primitives modernos seguem standard Go 1.21+ (generics) e propagam `context.Context`.
+
+`Critério de aprovação`
+
+- `pkg/circuitbreaker.Breaker` é genérico em retorno (`Breaker[T any]`);
+- `Execute(ctx, fn)` aceita `context.Context` e propaga `context.Canceled`/`DeadlineExceeded` corretamente;
+- cancellation errors são excluídos de failure counts (`IsExcluded` pattern);
+- API ergonômica em consumidores: `cb.Execute(ctx, func(ctx context.Context) (Result, error) { ... })`.
+
+`Evidência esperada`
+
+- testes cobrem cancellation propagation;
+- v1 API existe lado a lado com deprecation warning durante 1 release.
+
+`Notas LoopZero`
+
+- gate adicionado 2026-05-04. Estado atual: `pkg/circuitbreaker/circuitbreaker.go` é v1-style sem generics nem context.
+- referência FAANG: `sony/gobreaker v2` (Sony) e `mercari/go-circuitbreaker` (Mercari).
+
+## Gate PKG-G18: Property-Based Tests For Invariant-Heavy Pkgs
+
+`Objetivo`
+
+State machines e naming são invariant-heavy: testes de exemplos não cobrem o espaço. Property-based tests verificam invariantes em milhares de inputs aleatórios.
+
+`Critério de aprovação`
+
+- `pkg/statemachine` tem property tests verificando: (a) terminais não aceitam eventos; (b) transições são únicas (não-determinismo é bug); (c) toda terminal alcançável via algum caminho;
+- `pkg/naming` tem property tests verificando: para qualquer `s`, `Sanitize(s)` é vazio OU `ValidateKubernetesName(Sanitize(s)) == nil`;
+- ≥ 1000 random iterations por property.
+
+`Evidência esperada`
+
+- uso de `testing/quick` ou `gopter` em `*_test.go`;
+- cobertura de invariantes acima da cobertura de linhas.
+
+`Notas LoopZero`
+
+- gate adicionado 2026-05-04. Estado atual: ~1500 LOC de testes em `statemachine/*_test.go` cobrem casos listados; faltam property-based.
+- referência FAANG: Crossplane-runtime usa `gopter`; CockroachDB usa property-based tests via `randgen`.
+
 ## Ordem De Prioridade
 
-1. `PKG-G01`, `PKG-G03`, `PKG-G04`, `PKG-G05`
-2. `PKG-G06`, `PKG-G07`, `PKG-G08`, `PKG-G11`
-3. `PKG-G02`, `PKG-G09`, `PKG-G10`, `PKG-G12`, `PKG-G13`
+1. `PKG-G01`, `PKG-G03`, `PKG-G04`, `PKG-G05`, `PKG-G14` — escopo, invariantes, doc honesta
+2. `PKG-G06`, `PKG-G07`, `PKG-G08`, `PKG-G11`, `PKG-G15` — contratos concretos sensíveis
+3. `PKG-G16`, `PKG-G17`, `PKG-G18` — modernização e disciplina estrutural
+4. `PKG-G02`, `PKG-G09`, `PKG-G10`, `PKG-G12`, `PKG-G13` — disciplina contínua
 
 Justificativa:
 
-- primeiro, escopo e invariantes corretos;
-- depois, contratos concretos mais sensíveis;
+- primeiro, escopo, invariantes corretos e doc alinhada com código (G14 acende cedo: drift hoje invalida várias afirmações);
+- depois, contratos concretos mais sensíveis (errors, security) com novo gate G15 que separa transporte de modelo;
+- depois, modernização (G16/G17/G18) — DRY no próprio pkg/, generics+context, property-based;
 - por fim, disciplina estrutural e evolução.
+
+> Gates G14-G18 adicionados na pesquisa SOTA 2026-05-04; ver `improvement-roadmap.md` para roadmap detalhado e referências externas.
