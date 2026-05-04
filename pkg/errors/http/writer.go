@@ -26,14 +26,21 @@ const ProblemTypeBase = "https://loopzero.example/errors/"
 //	  "title":    "Lock Timeout",
 //	  "status":   409,
 //	  "detail":   "could not acquire environment lock within timeout",
+//	  "message":  "could not acquire environment lock within timeout",
 //	  "code":     "LOCK_TIMEOUT",
 //	  "instance": "/projects/foo/environments/staging"
 //	}
+//
+// `message` is emitted alongside `detail` for backward compatibility
+// with pre-Stage-C clients/tests that read the legacy ToJSON field.
+// The two values are identical; clients can choose either. RFC 9457
+// itself permits extension members.
 type problemDetails struct {
 	Type     string `json:"type"`
 	Title    string `json:"title"`
 	Status   int    `json:"status"`
 	Detail   string `json:"detail"`
+	Message  string `json:"message"` // backward-compat alias for legacy clients
 	Code     string `json:"code"`
 	Instance string `json:"instance,omitempty"`
 }
@@ -64,11 +71,12 @@ func WriteJSON(w http.ResponseWriter, r *http.Request, err error) {
 	}
 
 	pd := problemDetails{
-		Type:   ProblemTypeBase + kebabCase(code),
-		Title:  titleFromCode(code),
-		Status: status,
-		Detail: detail,
-		Code:   code,
+		Type:    ProblemTypeBase + kebabCase(code),
+		Title:   titleFromCode(code),
+		Status:  status,
+		Detail:  detail,
+		Message: detail, // backward-compat alias (Stage C migration)
+		Code:    code,
 	}
 	if r != nil {
 		pd.Instance = r.URL.Path

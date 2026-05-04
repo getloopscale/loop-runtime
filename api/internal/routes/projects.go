@@ -301,9 +301,18 @@ func writeJSON(w http.ResponseWriter, status int, data interface{}) {
 }
 
 // writeLoopZeroError writes a LoopZeroError as a JSON response with the correct HTTP status.
-// Status resolution lives in pkg/errors/http (Stage C of T2.3 / ADR-0030).
+//
+// Per ADR-0030 + T2.3 closure: emits RFC 9457 problem+json shape via
+// errorshttp.WriteJSON. The CLI reads `body.code` (preserved across
+// formats) so backward compat is maintained for clients that only
+// inspect the code field.
+//
+// The legacy ToJSON shape is no longer emitted from production
+// handlers; pkg/errors.LoopZeroError.ToJSON remains for audit-log /
+// internal-tool callers that don't need RFC 9457 transport semantics.
 func writeLoopZeroError(w http.ResponseWriter, err *loopzeroerrors.LoopZeroError) {
-	w.Header().Set("Content-Type", "application/json")
-	w.WriteHeader(errorshttp.Status(err))
-	_ = json.NewEncoder(w).Encode(err.ToJSON())
+	// Pass nil for *http.Request — instance field is omitted by
+	// WriteJSON when r is nil. Future refactor can thread r through
+	// the call sites to populate instance with r.URL.Path.
+	errorshttp.WriteJSON(w, nil, err)
 }

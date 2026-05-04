@@ -135,12 +135,14 @@ func TestBootstrapRoute(t *testing.T) {
 			t.Fatalf("expected 400, got %d: %s", rec.Code, rec.Body.String())
 		}
 
-		var errBody map[string]string
+		// Stage C T2.3 migration: response is RFC 9457 problem+json which
+		// includes int `status` field; decode as map[string]any.
+		var errBody map[string]any
 		if err := json.NewDecoder(rec.Body).Decode(&errBody); err != nil {
 			t.Fatalf("failed to decode error: %v", err)
 		}
-		if errBody["code"] != "MISSING_FIELD" {
-			t.Errorf("expected code=MISSING_FIELD, got %q", errBody["code"])
+		if code, _ := errBody["code"].(string); code != "MISSING_FIELD" {
+			t.Errorf("expected code=MISSING_FIELD, got %q", code)
 		}
 	})
 
