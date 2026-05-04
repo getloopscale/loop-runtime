@@ -86,8 +86,9 @@ jobs:
               - 'infra/helm/smoke-test/**'
               - 'infra/helm/loopzero-api/**'
               - 'infra/helm/loopzero-cloud/**'
-              - 'infra/helm/loopzero-controller/**'
-              - 'infra/helm/tenant-controller/**'
+              # ADR-0023 / plan v1.1 T1.5: monolith chart paths removed.
+              # 4 split operator charts now live under charts/ and trigger
+              # via the existing 'charts: charts/**' filter above.
               - 'infra/argocd-bootstrap/**'
 
   # ─────────────────────────────────────────────
@@ -167,29 +168,16 @@ jobs:
           done
           exit $FAILED
 
-  # CHG-2026-04-30-INFRA-NORMALIZE / Phase 2 condition C20.
-  # RBAC subset checker — split operator ClusterRoles must be ⊆ monolith
-  # ClusterRole ∪ explicit allowlist. Prevents privilege escalation via
-  # the operator-split path. Source:
-  #   docs/decisions/MEET-INFRA-NORMALIZE-T3-operator-split.md C20.
-  rbac-subset:
-    name: RBAC subset check (operator split)
-    runs-on: ubuntu-latest
-    timeout-minutes: 3
-    needs: changes
-    if: >-
-      needs.changes.outputs.helm == 'true' ||
-      needs.changes.outputs.go-operators == 'true'
-    steps:
-      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
-      - name: Install Helm
-        uses: ./.github/actions/setup-helm
-        with:
-          version: v3.16.4
-      - name: Install PyYAML
-        run: pip install pyyaml
-      - name: Run RBAC subset check
-        run: bash infra/scripts/rbac-subset-check.sh --verbose
+  # ADR-0023 / plan v1.1 T1.5: rbac-subset-check.sh deleted.
+  # Original purpose was to ensure split operator ClusterRoles ⊆ monolith
+  # ClusterRole ∪ allowlist (privilege escalation gate during cutover).
+  # With the monolith chart deleted in T1.5, the comparison baseline no
+  # longer exists in this codebase. Phase 4 (RBAC pipeline / ADR-0026)
+  # introduces a forward-looking gate: kubebuilder:rbac markers + AST
+  # analyzer (hack/validate-rbac/) that enforces "every r.Client.X call
+  # has a corresponding marker". That gate replaces this subset check
+  # with stronger semantics (least-privilege from source-of-truth).
+  # Source: docs/meetings/adr/0026-rbac-from-markers.md.
 
   # T1.2 / VAL-001: detect orphan alert rules — alerts that reference
   # Prometheus metrics not registered anywhere in Go source. Prevents

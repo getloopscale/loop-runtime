@@ -1,11 +1,11 @@
 {{- if .Values.alerts.enabled }}
 # ADR-0018 v2 / C5 (MEET-ADR-0018) — Tenant SoT alerts.
 #
-# `loopzero_misplaced_tenant_total{namespace}` is exported by tenant-controller
-# at startup (runMisplacedTenantScan in operators/cmd/main.go) and from any
-# code path that detects a Tenant CR outside the canonical namespace
-# `loopzero-system`. Sustained >0 indicates someone (admin, restored backup,
-# operator misconfiguration) bypassed the VAP — fail-loud per C2.
+# `loopzero_misplaced_tenant_total{namespace}` is exported by tenant-operator
+# at startup (runMisplacedTenantScan in operators/cmd/tenant-operator/main.go)
+# and from any code path that detects a Tenant CR outside the canonical
+# namespace `loopzero-system`. Sustained >0 indicates someone (admin, restored
+# backup, operator misconfiguration) bypassed the VAP — fail-loud per C2.
 #
 # Alert fires on any namespace label != "loopzero-system" with value > 0 for
 # >5 min. Severity page (S1) — non-deterministic plan enforcement is the
@@ -17,7 +17,7 @@ metadata:
   namespace: {{ .Values.alerts.namespace | quote }}
   labels:
     release: {{ .Values.alerts.prometheusReleaseLabel | quote }}
-    loopzero.io/component: tenant-controller
+    loopzero.io/component: tenant-operator
     loopzero.io/sprint: "8"
     loopzero.io/adr: "0018"
 spec:

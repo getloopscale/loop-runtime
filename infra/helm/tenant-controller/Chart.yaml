@@ -1,6 +1,0 @@
-apiVersion: v2
-name: tenant-controller
-description: LoopZero Tenant controller — provisions Gitea repos, ArgoCD apps, runtime resources.
-type: application
-version: 0.1.0
-appVersion: "1.0.0"

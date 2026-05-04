@@ -21,6 +21,7 @@ spec:
       labels:
         {{- include "loopzero-common.selectorLabels" . | nindent 8 }}
         loopzero.io/component: control-plane
+        app.kubernetes.io/component: loopzero-operator
         {{- with .Values.podLabels }}
         {{- toYaml . | nindent 8 }}
         {{- end }}

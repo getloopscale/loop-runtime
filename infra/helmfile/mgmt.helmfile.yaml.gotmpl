@@ -117,11 +117,12 @@ releases:
   # B45 (CHG-2026-04-28-LAYERED-BOOTSTRAP) — LoopZero CRDs (10 kinds:
   # Tenant/Environment/LoopZeroApplication/ExposedRoute/PlatformBootstrap/
   # GitRepositoryBinding/ClusterCredential/PreviewEnvironment/AppSecret/
-  # ReconciliationReport). Without this release, loopzero-controller and
-  # tenant-controller crash at startup with `no matches for kind ...
-  # in version loopzero.io/v1`. Detected on standalone bootstrap 2026-04-28.
-  # Wave -3: must run BEFORE controllers register watches (loopzero-controller,
-  # tenant-controller). Lifecycle-independent: chart never deletes CRDs
+  # ReconciliationReport). Without this release, the 4 split operator
+  # binaries (loopzero-{tenant,app,preview,platform}-operator) crash at
+  # startup with `no matches for kind ... in version loopzero.io/v1`.
+  # Detected on standalone bootstrap 2026-04-28.
+  # Wave -3: must run BEFORE controllers register watches.
+  # Lifecycle-independent: chart never deletes CRDs
   # (helm.sh/resource-policy: keep) so re-runs are idempotent.
   - name: loopzero-crds
     namespace: loopzero-system
@@ -338,33 +339,66 @@ releases:
       - ../helm/loopzero-api/values-standalone-multi.yaml
 {{- end }}
 
-  - name: loopzero-controller
+  # ADR-0023 / plan v1.1 T1.5 — 4 split operator charts replace the
+  # deleted monolith chart `infra/helm/tenant-controller` and the
+  # redundant `infra/helm/loopzero-controller` (both pointed at the
+  # operators monolith binary built from the deleted `cmd/main.go`).
+  #
+  # Each chart deploys its own operator binary built from
+  # `operators/cmd/{tenant,app,preview,platform}-operator/main.go`,
+  # gets its own ServiceAccount + ClusterRole + Lease, and mounts
+  # only the env vars its controllers need.
+  #
+  # Production deployments are still on the legacy monolith image
+  # (built from commit b1a8618a or earlier) and are governed by
+  # CHG-NNNN-OPERATOR-SPLIT-PROD per ADR-0023 4-stage cutover.
+  - name: loopzero-tenant-operator
     namespace: loopzero-system
-    chart: ../helm/loopzero-controller
+    chart: ../../charts/loopzero-tenant-operator
     needs:
       - loopzero-system/loopzero-api
       # B45: LoopZero CRDs must exist before controller-runtime starts watches.
       - loopzero-system/loopzero-crds
     values:
-      - ../helm/loopzero-controller/values.yaml
-      # CHG-2026-04-30-INFRA-PARITY / T1.3 — local registry override.
+      - ../../charts/loopzero-tenant-operator/values.yaml
 {{- if eq (.Values | get "clusterRole" "dev") "standalone" }}
-      - ../helm/loopzero-controller/values-standalone-multi.yaml
+      - ../../charts/loopzero-tenant-operator/values-standalone-multi.yaml
 {{- end }}
 
-  - name: tenant-controller
+  - name: loopzero-app-operator
     namespace: loopzero-system
-    chart: ../helm/tenant-controller
+    chart: ../../charts/loopzero-app-operator
     needs:
       - loopzero-system/loopzero-api
-      # B45: LoopZero CRDs must exist before controller-runtime starts watches.
       - loopzero-system/loopzero-crds
     values:
-      - ../helm/tenant-controller/values.yaml
-      # B69 (end-to-end-deploy-validation-plan iter 8) — overlay only in
-      # standalone-multi to use locally-built image with GITEA_ORG support.
+      - ../../charts/loopzero-app-operator/values.yaml
 {{- if eq (.Values | get "clusterRole" "dev") "standalone" }}
-      - ../helm/tenant-controller/values-standalone-multi.yaml
+      - ../../charts/loopzero-app-operator/values-standalone-multi.yaml
+{{- end }}
+
+  - name: loopzero-preview-operator
+    namespace: loopzero-system
+    chart: ../../charts/loopzero-preview-operator
+    needs:
+      - loopzero-system/loopzero-api
+      - loopzero-system/loopzero-crds
+    values:
+      - ../../charts/loopzero-preview-operator/values.yaml
+{{- if eq (.Values | get "clusterRole" "dev") "standalone" }}
+      - ../../charts/loopzero-preview-operator/values-standalone-multi.yaml
+{{- end }}
+
+  - name: loopzero-platform-operator
+    namespace: loopzero-system
+    chart: ../../charts/loopzero-platform-operator
+    needs:
+      - loopzero-system/loopzero-api
+      - loopzero-system/loopzero-crds
+    values:
+      - ../../charts/loopzero-platform-operator/values.yaml
+{{- if eq (.Values | get "clusterRole" "dev") "standalone" }}
+      - ../../charts/loopzero-platform-operator/values-standalone-multi.yaml
 {{- end }}
 
   - name: loopzero-cloud
@@ -387,7 +421,9 @@ releases:
     needs:
       - loopzero-system/loopzero-api
       - loopzero-system/loopzero-cloud
-      - loopzero-system/loopzero-controller
-      - loopzero-system/tenant-controller
+      - loopzero-system/loopzero-tenant-operator
+      - loopzero-system/loopzero-app-operator
+      - loopzero-system/loopzero-preview-operator
+      - loopzero-system/loopzero-platform-operator
     values:
       - ../helm/smoke-test/values.yaml

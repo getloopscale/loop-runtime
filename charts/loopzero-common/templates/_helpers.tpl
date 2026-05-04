@@ -54,6 +54,27 @@ app.kubernetes.io/managed-by: {{ .Release.Service }}
 {{- end }}
 
 {{/*
+Operator component label — applied to all 4 split operator deployments
+(loopzero-tenant-operator, loopzero-app-operator, loopzero-preview-operator,
+loopzero-platform-operator). Enables fan-out queries like:
+  kubectl logs -l app.kubernetes.io/component=loopzero-operator -n loopzero-system \
+    --all-containers --max-log-requests=4 -f
+ServiceMonitor + NetworkPolicy + alert rule selectors use this label
+for split-binary topology compatibility.
+
+drift port for ADR-0023 / plan T1.5 / dx-engineer condition #1.
+
+Usage in operator chart deployment.yaml:
+  metadata:
+    labels:
+      {{- include "loopzero-common.operatorLabels" . | nindent 4 }}
+*/}}
+{{- define "loopzero-common.operatorLabels" -}}
+{{ include "loopzero-common.labels" . }}
+app.kubernetes.io/component: loopzero-operator
+{{- end }}
+
+{{/*
 Selector labels — subset used in matchLabels.
 */}}
 {{- define "loopzero-common.selectorLabels" -}}

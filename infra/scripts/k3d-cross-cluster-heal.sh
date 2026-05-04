@@ -388,19 +388,24 @@ else
 fi
 
 # ---------------------------------------------------------------------------
-# H10 — tenant-controller Deployment env: WORKLOAD_CLUSTER_URL must point at
+# H10 — tenant-operator Deployment env: WORKLOAD_CLUSTER_URL must point at
 # the runtime cluster apiServer IP (current). Hardcoded YAML overlay
-# `infra/helm/tenant-controller/values-standalone-multi.yaml:28` uses an IP
+# `charts/loopzero-tenant-operator/values-standalone-multi.yaml` uses an IP
 # that drifts every k3d restart. Patch live until permanent solution
 # (operator reads ClusterCredential CR for runtime → automatic).
 # Discovered LIVE 2026-04-30 — NEW-14: ArgoCD App destination went to BUILD
-# cluster IP (172.18.0.10) because tenant-controller was started with the
+# cluster IP (172.18.0.10) because the operator was started with the
 # stale value baked into the helm overlay before the most recent restart.
+# ADR-0023 / plan v1.1 T1.5 update: legacy `app=tenant-controller` selector
+# replaced with `app.kubernetes.io/component=loopzero-operator,app.kubernetes.io/name=loopzero-tenant-operator`
+# to match the split chart (loopzero-tenant-operator) — the only operator that
+# wires SetupTenantController and therefore needs WORKLOAD_CLUSTER_URL.
 # ---------------------------------------------------------------------------
-log "H10: ensuring tenant-controller WORKLOAD_CLUSTER_URL points at runtime"
+log "H10: ensuring loopzero-tenant-operator WORKLOAD_CLUSTER_URL points at runtime"
 WORKLOAD_URL="https://${RT_IP}:6443"
-TC_DEPLOY=$(kubectl --context "$MGMT_CTX" -n loopzero-system get deploy -l app=tenant-controller -o name 2>/dev/null | head -1)
-[[ -z "$TC_DEPLOY" ]] && TC_DEPLOY="deploy/tenant-controller"
+TC_DEPLOY=$(kubectl --context "$MGMT_CTX" -n loopzero-system get deploy \
+  -l app.kubernetes.io/name=loopzero-tenant-operator -o name 2>/dev/null | head -1)
+[[ -z "$TC_DEPLOY" ]] && TC_DEPLOY="deploy/loopzero-tenant-operator"
 CURRENT_URL=$(kubectl --context "$MGMT_CTX" -n loopzero-system get "$TC_DEPLOY" \
   -o jsonpath='{.spec.template.spec.containers[0].env[?(@.name=="WORKLOAD_CLUSTER_URL")].value}' 2>/dev/null)
 if [[ "$CURRENT_URL" == "$WORKLOAD_URL" ]]; then
@@ -411,12 +416,12 @@ else
   log "  $TC_DEPLOY: $CURRENT_URL → $WORKLOAD_URL"
 fi
 
-# Roll tenant-controller so existing ArgoCD Apps get re-templated with new
+# Roll the tenant-operator so existing ArgoCD Apps get re-templated with new
 # destination URL on the next reconcile. Tenant CR list is small in dev.
 kubectl --context "$MGMT_CTX" -n loopzero-system rollout restart "$TC_DEPLOY" >/dev/null 2>&1
 log "  $TC_DEPLOY: rolled to refresh existing Apps"
 
-# Force tenant-controller to re-emit Application destination on existing
+# Force the tenant-operator to re-emit Application destination on existing
 # tenants by triggering a reconcile via touch annotation. Use first tenant
 # that has Active phase as smoke proof.
 TENANTS=$(kubectl --context "$MGMT_CTX" -n loopzero-system get tenants \
@@ -430,9 +435,13 @@ done
 # Patch only TENANT ArgoCD Applications carrying a stale URL.
 # CHG-2026-04-30-DELETE-SINGLE-CELL: skip apps that use destination.name
 # (cell-aware multi-cell pattern). Only patch ones that still use legacy
-# destination.server with stale IP. tenant-controller v0.4.1+ writes
+# destination.server with stale IP. loopzero-tenant-operator v0.4.1+ writes
 # `name: <cellID>` for non-default cells — those resolve via ArgoCD's
 # cluster registry and don't need IP patching.
+# NOTE: the LABEL VALUE `tenant-controller` is the legacy-but-stable value
+# written by `constants.ManagedByTenantController` in the operator code
+# (preserves match with pre-existing Application objects). The BINARY that
+# writes it is now `loopzero-tenant-operator`.
 TENANT_APPS=$(kubectl --context "$MGMT_CTX" -n argocd get applications \
   -l loopzero.io/managed-by=tenant-controller \
   -o jsonpath='{range .items[*]}{.metadata.name}|{.spec.destination.server}|{.spec.destination.name}{"\n"}{end}' \

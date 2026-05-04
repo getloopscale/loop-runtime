@@ -106,15 +106,18 @@ metadata:
   namespace: loopzero-system
   labels:
     app: tenant-operator
+    app.kubernetes.io/component: loopzero-operator
 spec:
   replicas: 1
   selector:
     matchLabels:
       app: tenant-operator
+      app.kubernetes.io/component: loopzero-operator
   template:
     metadata:
       labels:
         app: tenant-operator
+        app.kubernetes.io/component: loopzero-operator
     spec:
       serviceAccountName: tenant-operator
       securityContext:

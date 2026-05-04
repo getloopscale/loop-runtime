@@ -194,6 +194,45 @@ tasks:
         fi
 
         echo ""
+        echo "=== Operator Pods (split-binary topology) ==="
+        # ADR-0023 / plan T1.5 + dx-engineer condition #2: per-binary
+        # rollout status. Catches "operator silently down" — a class of
+        # bugs the legacy single-pod monolith hid via aggregate health.
+        for OP in tenant-operator app-operator preview-operator platform-operator; do
+          DEPLOY="loopzero-${OP}"
+          if kubectl --context {{.MGMT_CONTEXT}} -n loopzero-system get deploy "$DEPLOY" >/dev/null 2>&1; then
+            READY=$(kubectl --context {{.MGMT_CONTEXT}} -n loopzero-system get deploy "$DEPLOY" -o jsonpath='{.status.readyReplicas}' 2>/dev/null)
+            DESIRED=$(kubectl --context {{.MGMT_CONTEXT}} -n loopzero-system get deploy "$DEPLOY" -o jsonpath='{.spec.replicas}' 2>/dev/null)
+            READY=${READY:-0}
+            DESIRED=${DESIRED:-1}
+            if [ "$READY" -ge "$DESIRED" ]; then
+              echo "  [PASS] $DEPLOY — $READY/$DESIRED ready"
+              PASS=$((PASS+1))
+            else
+              echo "  [FAIL] $DEPLOY — only $READY/$DESIRED ready"
+              FAIL=$((FAIL+1))
+            fi
+          else
+            # Tilt deployments use bare names (tenant-operator) instead
+            # of chart-prefixed names (loopzero-tenant-operator). Try both.
+            if kubectl --context {{.MGMT_CONTEXT}} -n loopzero-system get deploy "$OP" >/dev/null 2>&1; then
+              READY=$(kubectl --context {{.MGMT_CONTEXT}} -n loopzero-system get deploy "$OP" -o jsonpath='{.status.readyReplicas}' 2>/dev/null)
+              READY=${READY:-0}
+              if [ "$READY" -ge 1 ]; then
+                echo "  [PASS] $OP (Tilt) — $READY ready"
+                PASS=$((PASS+1))
+              else
+                echo "  [FAIL] $OP (Tilt) — 0 ready replicas"
+                FAIL=$((FAIL+1))
+              fi
+            else
+              echo "  [WARN] $OP — deployment not found (cluster booted but operator chart not applied)"
+              WARN=$((WARN+1))
+            fi
+          fi
+        done
+
+        echo ""
         echo "=== Summary ==="
         echo "  PASS: $PASS  |  WARN: $WARN  |  FAIL: $FAIL"
         if [ "$FAIL" -gt 0 ]; then
@@ -330,9 +369,52 @@ tasks:
       - kubectl --context {{.MGMT_CONTEXT}} -n loopzero-system logs -f deployment/loopzero-api --tail=100
 
   logs:operator:
-    desc: Tail tenant-controller logs (live)
+    desc: 'Tail logs for one operator (use NAME=tenant|app|preview|platform; default tenant)'
+    vars:
+      NAME: '{{.NAME | default "tenant"}}'
     cmds:
-      - kubectl --context {{.MGMT_CONTEXT}} -n loopzero-system logs -f deployment/tenant-controller --tail=100
+      - |
+        # ADR-0023 / plan T1.5 + dx-engineer condition #3.
+        # Try chart-prefixed name first (loopzero-X-operator), fall back to
+        # bare Tilt name (X-operator).
+        DEPLOY="loopzero-{{.NAME}}-operator"
+        if ! kubectl --context {{.MGMT_CONTEXT}} -n loopzero-system get deploy "$DEPLOY" >/dev/null 2>&1; then
+          DEPLOY="{{.NAME}}-operator"
+        fi
+        echo ">> tailing logs from deploy/$DEPLOY"
+        kubectl --context {{.MGMT_CONTEXT}} -n loopzero-system logs -f "deployment/$DEPLOY" --tail=100
+
+  logs:operators:
+    desc: 'Tail logs from ALL 4 operator pods (split-binary topology)'
+    cmds:
+      - |
+        # ADR-0023 / plan T1.5 + dx-engineer condition #1: shared
+        # `app.kubernetes.io/component: loopzero-operator` label enables this
+        # canonical fan-out command. Caps streams at 4 concurrent (one per
+        # binary).
+        kubectl --context {{.MGMT_CONTEXT}} -n loopzero-system logs \
+          -l app.kubernetes.io/component=loopzero-operator \
+          --all-containers --max-log-requests=4 --tail=50 -f
+
+  debug:operator:
+    desc: 'Port-forward dlv (delve debugger) for one operator (use NAME=tenant|app|preview|platform)'
+    vars:
+      NAME: '{{.NAME | default "tenant"}}'
+    cmds:
+      - |
+        # ADR-0023 / plan T1.5 + dx-engineer condition #4.
+        # Requires dlv inside the operator container (currently not in the
+        # default image — operator must be built with --gcflags='all=-N -l'
+        # and run with `dlv exec --headless --listen=:2345 --api-version=2 …`).
+        # This task assumes that custom image is loaded via Tilt's local_resource
+        # debug profile.
+        DEPLOY="loopzero-{{.NAME}}-operator"
+        if ! kubectl --context {{.MGMT_CONTEXT}} -n loopzero-system get deploy "$DEPLOY" >/dev/null 2>&1; then
+          DEPLOY="{{.NAME}}-operator"
+        fi
+        echo ">> port-forward 2345 → deploy/$DEPLOY (dlv headless)"
+        echo ">> in another shell: dlv connect localhost:2345"
+        kubectl --context {{.MGMT_CONTEXT}} -n loopzero-system port-forward "deploy/$DEPLOY" 2345:2345
 
   logs:builds:
     desc: Show recent build workflow pods and their status

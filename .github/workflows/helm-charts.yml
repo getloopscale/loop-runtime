@@ -60,7 +60,7 @@ jobs:
         run: |
           helm plugin install https://github.com/helm-unittest/helm-unittest 2>/dev/null || helm plugin update unittest
           FAILED=0
-          for chart in charts/loopzero-api charts/loopzero-controller charts/loopzero-tenant-operator charts/loopzero-app-operator charts/loopzero-preview-operator; do
+          for chart in charts/loopzero-api charts/loopzero-tenant-operator charts/loopzero-app-operator charts/loopzero-preview-operator charts/loopzero-platform-operator; do
             if [ -d "$chart/tests" ]; then
               echo "::group::helm unittest $chart"
               if ! helm unittest "$chart"; then

@@ -156,7 +156,7 @@ tasks:
   # ─────────────────────────────────────────────
 
   test:chaos:controller-kill:
-    desc: Chaos — kill loopzero-controller pod, verify recovery (~2 min)
+    desc: Chaos — kill loopzero-tenant-operator pod, verify recovery (~2 min)
     cmds:
       - infra/tests/runner/run-chaos.sh pod-kill-controller.yaml
 
@@ -266,9 +266,9 @@ tasks:
       - |
         set -e
         for chart in charts/loopzero-api charts/loopzero-app-operator charts/loopzero-cloud \
-                     charts/loopzero-controller charts/loopzero-crds charts/loopzero-dashboard \
+                     charts/loopzero-crds charts/loopzero-dashboard \
                      charts/loopzero-platform charts/loopzero-platform-operator \
-                     charts/loopzero-preview-operator charts/loopzero-tenant-controller \
+                     charts/loopzero-preview-operator \
                      charts/loopzero-tenant-operator; do
           if [[ -d "$chart" ]]; then
             echo "==> helm dependency build: $chart"
@@ -295,8 +295,8 @@ tasks:
       # Skip Traefik IngressRoute and ClusterImagePolicy CRDs (not in default schema).
       - helm template loopzero-api infra/helm/loopzero-api/ | kubeconform --strict --skip IngressRoute,Certificate --summary
       - helm template loopzero-cloud infra/helm/loopzero-cloud/ | kubeconform --strict --skip IngressRoute,Certificate --summary
-      - helm template loopzero-controller infra/helm/loopzero-controller/ | kubeconform --strict --summary
-      - helm template tenant-controller infra/helm/tenant-controller/ | kubeconform --strict --summary
+      # ADR-0023 / plan v1.1 T1.5: monolith charts deleted. The 4 split
+      # operator charts live in charts/ (validated by validate:helm-charts target).
       - helm template cloudflared infra/helm/cloudflared/ | kubeconform --strict --summary
       - helm template smoke-test infra/helm/smoke-test/ | kubeconform --strict --summary
       - helm template cluster-issuer infra/helm/cluster-issuer/ | kubeconform --strict --skip ClusterIssuer --summary
@@ -442,7 +442,7 @@ tasks:
     cmds:
       - |
         FAIL=0
-        for d in admission-policies cloudflared cluster-issuer network-policies smoke-test tenant-controller loopzero-api loopzero-cloud loopzero-controller; do
+        for d in admission-policies cloudflared cluster-issuer network-policies smoke-test loopzero-api loopzero-cloud; do
           if ! helm lint infra/helm/$d/ >/dev/null 2>&1; then
             echo "FAIL  $d (helm lint)"; FAIL=$((FAIL+1)); continue
           fi

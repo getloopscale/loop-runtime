@@ -6,11 +6,11 @@
 # that accidentally blocks traffic.
 #
 # Pod label references (verified against actual manifests):
-#   loopzero-api:           app: loopzero-api                          (infra/tilt/api-deployment.yaml)
-#   tenant-controller:  app: tenant-controller                 (infra/tilt/operator-deployment.yaml)
-#   postgresql:         app.kubernetes.io/name: postgresql      (Bitnami Helm chart)
-#   gitea:              app.kubernetes.io/name: gitea           (Gitea Helm chart)
-#   minio:              app: minio                               (MinIO Helm chart)
+#   loopzero-api:        app: loopzero-api                                       (infra/tilt/api-deployment.yaml)
+#   loopzero-operators:  app.kubernetes.io/component: loopzero-operator          (infra/tilt/{tenant,app,preview,platform}-operator-deployment.yaml)
+#   postgresql:      app.kubernetes.io/name: postgresql                  (Bitnami Helm chart)
+#   gitea:           app.kubernetes.io/name: gitea                       (Gitea Helm chart)
+#   minio:           app: minio                                          (MinIO Helm chart)
 #
 # Egress strategy: per-component policies instead of global blanket.
 # A global "Egress" policy with podSelector: {} would restrict ALL pods
@@ -131,16 +131,25 @@ spec:
     - Ingress
     - Egress
 ---
-# tenant-controller: egress to Gitea, ArgoCD, Kubernetes API, DNS
+# loopzero-operators: egress to Gitea, ArgoCD, Kubernetes API, DNS for all
+# 4 split operator pods. Selects via the shared label
+# `app.kubernetes.io/component: loopzero-operator` applied by:
+#   - infra/tilt/{tenant,app,preview,platform}-operator-deployment.yaml (LOCAL)
+#   - charts/loopzero-{tenant,app,preview,platform}-operator (production via CHG)
+#
+# Per ADR-0023 / plan v1.1 T1.4 + T1.5: monolith binary + chart deleted
+# LOCAL; no `app: tenant-controller` pod exists in this tree. Production
+# rollout is governed by separate CHG-NNNN-OPERATOR-SPLIT-PROD per
+# ADR-0023 4-stage cutover.
 apiVersion: networking.k8s.io/v1
 kind: NetworkPolicy
 metadata:
-  name: allow-tenant-controller
+  name: allow-loopzero-operators
   namespace: loopzero-system
 spec:
   podSelector:
     matchLabels:
-      app: tenant-controller
+      app.kubernetes.io/component: loopzero-operator
   ingress:
     - ports:
         - port: 8081
@@ -228,7 +237,7 @@ spec:
     - Ingress
     - Egress
 ---
-# Gitea: ingress from loopzero-api, tenant-controller, and ArgoCD repo-server + egress for DB and external
+# Gitea: ingress from loopzero-api, loopzero-operators, and ArgoCD repo-server + egress for DB and external
 apiVersion: networking.k8s.io/v1
 kind: NetworkPolicy
 metadata:
@@ -245,7 +254,7 @@ spec:
               app: loopzero-api
         - podSelector:
             matchLabels:
-              app: tenant-controller
+              app.kubernetes.io/component: loopzero-operator
         # ArgoCD repo-server needs to clone tenant repos from Gitea to generate manifests.
         # It runs in the argocd namespace, so we need a cross-namespace selector.
         - namespaceSelector:
@@ -302,7 +311,7 @@ spec:
               app: loopzero-api
         - podSelector:
             matchLabels:
-              app: tenant-controller
+              app.kubernetes.io/component: loopzero-operator
       ports:
         - port: 9000
           protocol: TCP
@@ -338,14 +347,14 @@ spec:
     matchLabels:
       app.kubernetes.io/name: hydra
   ingress:
-    # loopzero-api and tenant-controller need JWKS + token introspection
+    # loopzero-api and loopzero-operators need JWKS + token introspection
     - from:
         - podSelector:
             matchLabels:
               app: loopzero-api
         - podSelector:
             matchLabels:
-              app: tenant-controller
+              app.kubernetes.io/component: loopzero-operator
       ports:
         - port: 4444
           protocol: TCP
@@ -399,7 +408,7 @@ spec:
       ports:
         - port: 80
           protocol: TCP
-    # In-cluster smoke probes (loopzero-system tenant-controller / loopzero-api).
+    # In-cluster smoke probes (loopzero-system loopzero-operators / loopzero-api).
     - from:
         - namespaceSelector:
             matchLabels:

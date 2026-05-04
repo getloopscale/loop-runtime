@@ -229,7 +229,7 @@ Two chart systems coexist with distinct purposes (ADR D1, bootstrap-integrity-fi
 - `infra/helm/` is canonical for `helmfile sync` (bootstrap). Charts are simple, standalone, with hardcoded defaults.
 - `charts/` is canonical for OCI publishing and ArgoCD. Charts use `loopzero-common` library for consistent labels and security contexts.
 - Changes to shared templates must be propagated to both systems.
-- The operator binary is **monolithic** (`operators/cmd/main.go`): all 8 controllers run in one process. `infra/helm/tenant-controller` deploys this binary. The split charts in `charts/` (`loopzero-app-operator`, `loopzero-platform-operator`, `loopzero-tenant-operator`, `loopzero-preview-operator`) are forward-looking preparation for binary split (Sprint 9+).
+- The operators are deployed as **4 split binaries** (ADR-0023, plan `operators-sota-faang-grade-plan.md` Phase 1, 2026-05-04 LOCAL): `loopzero-tenant-operator`, `loopzero-app-operator`, `loopzero-preview-operator`, `loopzero-platform-operator`. Each has its own `operators/cmd/<name>/main.go`, Dockerfile, Helm chart in `charts/`, ServiceAccount + ClusterRole + leader-election Lease, and only mounts the env vars its controllers need. The legacy monolith chart `infra/helm/tenant-controller` and the redundant `infra/helm/loopzero-controller` were deleted in T1.5; production rollout is governed by separate `CHG-NNNN-OPERATOR-SPLIT-PROD` per ADR-0023's 4-stage cutover.
 
 ### Production Infrastructure (DigitalOcean)
 
