@@ -1,0 +1,46 @@
+# helm-unittest: ValidatingAdmissionPolicy rendering for loopzero-admission-policies.
+# Plan T1.5 + T1.2.
+
+suite: VAP rendering
+templates:
+  - vap-disallow-latest-tag.yaml
+  - vap-restrict-registries.yaml
+  - vap-require-resource-limits.yaml
+  - vap-require-image-signature.yaml
+  - vap-protect-platform-networkpolicies.yaml
+  - vap-argocd-managed-by.yaml
+
+tests:
+  - it: disallow-latest-tag renders as ValidatingAdmissionPolicy
+    template: vap-disallow-latest-tag.yaml
+    set:
+      policies.disallowLatestTag.enabled: true
+    asserts:
+      - hasDocuments:
+          count: 2  # Policy + Binding
+      - isAPIVersion:
+          of: admissionregistration.k8s.io/v1
+
+  - it: restrict-registries renders both Policy and Binding
+    template: vap-restrict-registries.yaml
+    set:
+      policies.restrictRegistries.enabled: true
+    asserts:
+      - hasDocuments:
+          count: 2
+
+  - it: require-resource-limits renders when enabled
+    template: vap-require-resource-limits.yaml
+    set:
+      policies.requireResourceLimits.enabled: true
+    asserts:
+      - hasDocuments:
+          count: 2
+
+  - it: argocd-managed-by renders when enabled
+    template: vap-argocd-managed-by.yaml
+    set:
+      policies.argocdManagedBy.enabled: true
+    asserts:
+      - hasDocuments:
+          count: 2

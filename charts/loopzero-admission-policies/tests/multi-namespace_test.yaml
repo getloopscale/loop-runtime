@@ -1,0 +1,65 @@
+# helm-unittest: Multi-namespace policy testing for loopzero-admission-policies.
+# Plan T7.5 (charts-sota Phase 7).
+# Validates that VAPBindings target tenant namespaces correctly via namespaceSelector.
+
+suite: VAPBinding multi-namespace selector
+templates:
+  - vap-disallow-latest-tag.yaml
+  - vap-restrict-registries.yaml
+  - vap-require-resource-limits.yaml
+  - vap-argocd-managed-by.yaml
+
+tests:
+  - it: VAPBinding disallow-latest-tag has namespaceSelector
+    template: vap-disallow-latest-tag.yaml
+    set:
+      policies.disallowLatestTag.enabled: true
+    documentIndex: 1
+    asserts:
+      - isKind:
+          of: ValidatingAdmissionPolicyBinding
+      - exists:
+          path: spec.matchResources.namespaceSelector
+
+  - it: VAPBinding restrict-registries scopes to tenant namespaces
+    template: vap-restrict-registries.yaml
+    set:
+      policies.restrictRegistries.enabled: true
+    documentIndex: 1
+    asserts:
+      - isKind:
+          of: ValidatingAdmissionPolicyBinding
+      - exists:
+          path: spec.matchResources.namespaceSelector
+
+  - it: VAPBinding require-resource-limits has matchResources scope
+    template: vap-require-resource-limits.yaml
+    set:
+      policies.requireResourceLimits.enabled: true
+    documentIndex: 1
+    asserts:
+      - isKind:
+          of: ValidatingAdmissionPolicyBinding
+      - exists:
+          path: spec.matchResources
+
+  - it: validationActions includes Deny for disallow-latest-tag
+    template: vap-disallow-latest-tag.yaml
+    set:
+      policies.disallowLatestTag.enabled: true
+    documentIndex: 1
+    asserts:
+      - contains:
+          path: spec.validationActions
+          content: Deny
+
+  - it: argocd-managed-by binding has correct namespaceSelector
+    template: vap-argocd-managed-by.yaml
+    set:
+      policies.argocdManagedBy.enabled: true
+    documentIndex: 1
+    asserts:
+      - isKind:
+          of: ValidatingAdmissionPolicyBinding
+      - exists:
+          path: spec.matchResources.namespaceSelector.matchLabels

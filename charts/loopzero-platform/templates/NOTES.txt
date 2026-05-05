@@ -16,9 +16,6 @@ Components:
 {{- if index .Values "loopzero-platform-operator" "enabled" }}
   - loopzero-platform-operator (platform bootstrap)
 {{- end }}
-{{- if index .Values "loopzero-controller" "enabled" }}
-  - loopzero-controller (background loops)
-{{- end }}
 {{- if index .Values "loopzero-cloud" "enabled" }}
   - loopzero-cloud (auth/billing)
 {{- end }}

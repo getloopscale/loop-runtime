@@ -22,9 +22,6 @@ loopzero-preview-operator:
 loopzero-platform-operator:
   enabled: true
 
-loopzero-controller:
-  enabled: true
-
 loopzero-cloud:
   enabled: true
 

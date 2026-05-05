@@ -1,0 +1,69 @@
+# charts-drift-cron — periodic drift detection in production-like clusters.
+# Plan T7.4 (charts-sota Phase 7).
+# Runs `infra/scripts/audit-helm-drift.sh` every 6h on develop branch.
+# Compares charts/ vs infra/helm/ — flags drifts not covered by approving ADR.
+
+name: Charts Drift Cron
+
+on:
+  schedule:
+    # Every 6 hours (00:00, 06:00, 12:00, 18:00 UTC).
+    - cron: '0 */6 * * *'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  issues: write  # for opening issues on drift detection
+
+jobs:
+  drift-check:
+    name: Audit charts/ vs infra/helm/ drift
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+
+      - name: Run drift detector
+        id: drift
+        run: |
+          set +e
+          bash infra/scripts/audit-helm-drift.sh json > /tmp/drift.json
+          echo "exit_code=$?" >> $GITHUB_OUTPUT
+          set -e
+
+      - name: Report status
+        run: |
+          if [ "${{ steps.drift.outputs.exit_code }}" == "0" ]; then
+            echo "::notice::No unapproved drifts detected — charts/ ↔ infra/helm/ aligned."
+          else
+            echo "::error::Drifts detected without approving ADR — see report."
+            cat /tmp/drift.json
+            exit 1
+          fi
+
+      - name: Open issue on drift (only if escalation required)
+        if: failure() && steps.drift.outputs.exit_code != '0'
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const fs = require('fs');
+            const drift = JSON.parse(fs.readFileSync('/tmp/drift.json', 'utf8'));
+            const body = [
+              '## Charts Drift Detected (cron run)',
+              '',
+              'The cron-based drift detector found unapproved drifts between `charts/` and `infra/helm/`.',
+              '',
+              '```json',
+              JSON.stringify(drift, null, 2),
+              '```',
+              '',
+              'See [docs/runbooks/charts-drift-audit.md](https://github.com/${{ github.repository }}/blob/develop/docs/runbooks/charts-drift-audit.md) to classify (intentional ADR or regression fix).',
+              '',
+              '_Run: ${{ github.run_id }}_'
+            ].join('\n');
+            github.rest.issues.create({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              title: `[charts-drift-cron] Unapproved drift detected (${new Date().toISOString().slice(0, 10)})`,
+              body,
+              labels: ['drift', 'charts', 'auto-detected']
+            });

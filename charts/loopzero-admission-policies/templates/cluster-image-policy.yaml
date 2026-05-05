@@ -1,0 +1,61 @@
+{{- if .Values.clusterImagePolicy.enabled }}
+# ClusterImagePolicy — sigstore policy-controller (B16).
+# Deny-by-default mode rejects ALL pods if no matching policy. This policy
+# covers LoopZero-approved registries and admits with mode={{ .Values.clusterImagePolicy.mode }}.
+# Sprint 6: warn-mode + static.action: pass (audit-only).
+# Sprint 9: enforce-mode + cosign keyless (Fulcio).
+apiVersion: policy.sigstore.dev/v1beta1
+kind: ClusterImagePolicy
+metadata:
+  name: {{ .Values.clusterImagePolicy.name }}
+  labels:
+    app.kubernetes.io/name: admission-policies
+    app.kubernetes.io/managed-by: {{ .Release.Service | quote }}
+    app.kubernetes.io/instance: {{ .Release.Name | quote }}
+    loopzero.io/component: policy-controller
+    loopzero.io/sprint: "6"
+spec:
+  mode: {{ .Values.clusterImagePolicy.mode | quote }}
+  images:
+    {{- range .Values.clusterImagePolicy.imageGlobs }}
+    - glob: {{ . | quote }}
+    {{- end }}
+  authorities:
+    - name: loopzero-static-pass
+      static:
+        action: {{ .Values.clusterImagePolicy.staticAction | quote }}
+{{- end }}
+{{- if and .Values.clusterImagePolicyKeyless .Values.clusterImagePolicyKeyless.enabled }}
+---
+# INF-G16 + MEET-2026-05-03-063 (MEET-B Track-1).
+# Keyless ClusterImagePolicy: accepts cosign signatures issued via GitHub OIDC →
+# Fulcio short-lived cert → Rekor transparency log entry. Coexists with
+# loopzero-images-warn (key-based authority) during transition (≥ 7 days dual-signing).
+# After T4.4 cutover, loopzero-images-warn is removed and this becomes sole policy.
+apiVersion: policy.sigstore.dev/v1beta1
+kind: ClusterImagePolicy
+metadata:
+  name: {{ .Values.clusterImagePolicyKeyless.name }}
+  labels:
+    app.kubernetes.io/name: admission-policies
+    app.kubernetes.io/managed-by: {{ .Release.Service | quote }}
+    app.kubernetes.io/instance: {{ .Release.Name | quote }}
+    loopzero.io/component: policy-controller
+    loopzero.io/sprint: "9"
+    loopzero.io/gate: INF-G16
+spec:
+  mode: {{ .Values.clusterImagePolicyKeyless.mode | quote }}
+  images:
+    {{- range .Values.clusterImagePolicyKeyless.imageGlobs }}
+    - glob: {{ . | quote }}
+    {{- end }}
+  authorities:
+    - name: loopzero-keyless-fulcio
+      keyless:
+        url: {{ .Values.clusterImagePolicyKeyless.fulcioURL | quote }}
+        identities:
+          - issuer: {{ .Values.clusterImagePolicyKeyless.oidcIssuer | quote }}
+            subjectRegExp: {{ .Values.clusterImagePolicyKeyless.identityRegexp | quote }}
+        ctlog:
+          url: {{ .Values.clusterImagePolicyKeyless.rekorURL | quote }}
+{{- end }}

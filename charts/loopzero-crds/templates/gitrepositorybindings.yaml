@@ -102,9 +102,10 @@ spec:
               repoURL:
                 description: |-
                   RepoURL is the Git repository URL to register with the consumer.
-                  SEC-003 / T3.5: must be an HTTPS URL or SSH git URL. Prevents SSRF
-                  via arbitrary URL schemes (file://, gopher://, etc.) reaching the
-                  HTTP client used by GitRepositoryBindingController.
+                  SEC-003 / T3.5: must be an HTTP(S) URL or SSH git URL. Prevents SSRF
+                  via arbitrary URL schemes (file://, gopher://, javascript:, etc.) reaching
+                  the HTTP client used by GitRepositoryBindingController. Plain http://
+                  is allowed for in-cluster Gitea services (e.g., http://gitea.loopzero-system.svc:3000).
                 maxLength: 2048
                 minLength: 1
                 pattern: ^(https?://[^\s]+|ssh://git@[^\s]+|git@[^\s:]+:[^\s]+)$

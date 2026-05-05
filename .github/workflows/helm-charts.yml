@@ -59,29 +59,56 @@ jobs:
       - name: Run helm-unittest (INF-G08 + plan T2.2)
         run: |
           helm plugin install https://github.com/helm-unittest/helm-unittest 2>/dev/null || helm plugin update unittest
+          # T3.5 + T1.5: auto-discover all charts/*/tests/ — replaces hardcoded list.
           FAILED=0
-          for chart in charts/loopzero-api charts/loopzero-tenant-operator charts/loopzero-app-operator charts/loopzero-preview-operator charts/loopzero-platform-operator; do
-            if [ -d "$chart/tests" ]; then
-              echo "::group::helm unittest $chart"
-              if ! helm unittest "$chart"; then
-                FAILED=1
-              fi
-              echo "::endgroup::"
+          for tests_dir in charts/*/tests/; do
+            chart=$(dirname "$tests_dir")
+            echo "::group::helm unittest $chart"
+            if ! helm unittest "$chart"; then
+              FAILED=1
             fi
+            echo "::endgroup::"
           done
           if [ "$FAILED" -ne 0 ]; then
             echo "::error::helm-unittest failed for ≥ 1 chart"
             exit 1
           fi
 
-      - name: Polaris audit (baseline-first, INF-G08)
-        # Per MEET-2026-05-03-062 condition #1: baseline-first with continue-on-error
-        # until baseline reviewed; promote to severity=danger after Phase 3.3 GREEN.
-        continue-on-error: true
+      - name: Polaris audit (severity=danger graduated, INF-G08 + T7.1)
+        # T7.1 (charts-sota Phase 7): graduated from baseline-first continue-on-error
+        # to severity=danger blocking. Per MEET-2026-05-03-062 condition #1, this
+        # graduation is the final step after baseline review. Severity=warning
+        # findings still reported (warnings only, non-blocking); danger findings fail CI.
         run: |
           curl -sL https://github.com/FairwindsOps/polaris/releases/latest/download/polaris_linux_amd64.tar.gz | tar -xz
           sudo install polaris /usr/local/bin/
-          bash scripts/run-polaris.sh --severity=warning
+          bash scripts/run-polaris.sh --severity=danger
+
+      - name: Audit drift between charts/ and infra/helm/ (CH-G16)
+        # ADR-0041 + charts-sota-implementation-plan T1.3.
+        # Advisory mode (continue-on-error) por 30 dias para classificação.
+        # Graduates to blocking pre-GA per CONDITION-3 (platform-security-engineer).
+        continue-on-error: true
+        run: |
+          bash infra/scripts/audit-helm-drift.sh github-annotations
+
+      - name: Conftest policies (T7.3 — charts-sota Phase 7)
+        # Validates Rego policies in policies/charts/: security_context, service_monitor_port,
+        # priority_class. Advisory initially; promote to blocking after baseline review.
+        continue-on-error: true
+        run: |
+          curl -sL https://github.com/open-policy-agent/conftest/releases/download/v0.55.0/conftest_0.55.0_Linux_x86_64.tar.gz | tar -xz
+          sudo install conftest /usr/local/bin/
+          FAILED=0
+          for chart in charts/*/; do
+            if grep -q "type: library" "$chart/Chart.yaml" 2>/dev/null; then continue; fi
+            name=$(basename "$chart")
+            if ! helm template "$name" "$chart" 2>/dev/null | conftest test -p policies/charts -; then
+              echo "::warning::Conftest violations for $name"
+              FAILED=1
+            fi
+          done
+          [ "$FAILED" == "0" ] && echo "All charts pass Conftest policies" || echo "Conftest reported violations (advisory mode)"
 
   validate:
     name: Validate Manifests
@@ -107,36 +134,194 @@ jobs:
             fi
           done
 
-      - name: Template + kubeconform
+      - name: Template + kubeconform multi-K8s matrix (CH-G18 / ADR-0039)
+        # charts-sota T3.4: matrix N-1, N, N+1 cobre janela DOKS upgrade.
         run: |
           FAILED=0
-          for chart in charts/*/; do
-            name=$(basename "$chart")
-            # Skip library charts
-            if grep -q "type: library" "$chart/Chart.yaml" 2>/dev/null; then
-              echo "Skipping library chart: $name"
-              continue
-            fi
-            echo "::group::Validating $name"
-            if ! helm template "$name" "$chart" 2>/dev/null | \
-              kubeconform --strict \
-                --ignore-missing-schemas \
-                --kubernetes-version 1.31.0 \
-                --summary; then
-              FAILED=1
-            fi
+          for k8s_version in 1.30.0 1.31.0 1.32.0; do
+            echo "::group::kubeconform K8s $k8s_version"
+            for chart in charts/*/; do
+              name=$(basename "$chart")
+              # Skip library charts
+              if grep -q "type: library" "$chart/Chart.yaml" 2>/dev/null; then
+                continue
+              fi
+              if ! helm template "$name" "$chart" 2>/dev/null | \
+                kubeconform --strict \
+                  --ignore-missing-schemas \
+                  --kubernetes-version "$k8s_version" \
+                  --summary > /dev/null 2>&1; then
+                echo "FAIL: $name on K8s $k8s_version"
+                FAILED=1
+              fi
+            done
             echo "::endgroup::"
           done
           if [ "$FAILED" -ne 0 ]; then
-            echo "::error::One or more charts failed validation"
+            echo "::error::One or more charts failed validation in K8s matrix"
             exit 1
           fi
+
+  ct-lint:
+    name: chart-testing lint (CH-G18 / ADR-0039)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+        with:
+          fetch-depth: 0
+
+      - name: Set up Helm
+        uses: ./.github/actions/setup-helm
+        with:
+          version: v3.14.4
+
+      - name: Set up chart-testing
+        uses: helm/chart-testing-action@v2.6.1
+
+      - name: ct lint
+        run: ct lint --config ct.yaml --target-branch ${{ github.event.repository.default_branch }} --check-version-increment=false
+
+  ct-install:
+    name: chart-testing install matrix (CH-G18 / ADR-0039)
+    runs-on: ubuntu-latest
+    if: github.event_name == 'pull_request'
+    strategy:
+      fail-fast: false
+      matrix:
+        k8s-version:
+          - v1.30.0
+          - v1.31.0
+          - v1.32.0
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+        with:
+          fetch-depth: 0
+
+      - name: Set up Helm
+        uses: ./.github/actions/setup-helm
+        with:
+          version: v3.14.4
+
+      - name: Create Kind cluster K8s ${{ matrix.k8s-version }}
+        # CONDITION-2: cache Kind images to keep CI ≤ 20min.
+        uses: helm/kind-action@v1.10.0
+        with:
+          cluster_name: chart-testing-${{ matrix.k8s-version }}
+          node_image: kindest/node:${{ matrix.k8s-version }}
+
+      - name: Set up chart-testing
+        uses: helm/chart-testing-action@v2.6.1
+
+      - name: ct install (changed charts)
+        # Restricts to changed charts via ct list-changed; full matrix on push to main.
+        run: ct install --config ct.yaml --target-branch ${{ github.event.repository.default_branch }}
+
+  chartsnap:
+    name: chartsnap whole-chart snapshot (CH-G12 / T4.2)
+    runs-on: ubuntu-latest
+    if: github.event_name == 'pull_request'
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+
+      - name: Set up Helm
+        uses: ./.github/actions/setup-helm
+        with:
+          version: v3.14.4
+
+      - name: Install helm-chartsnap
+        run: |
+          helm plugin install https://github.com/jlandowner/helm-chartsnap 2>/dev/null || \
+            helm plugin update chartsnap 2>/dev/null || true
+
+      - name: Update dependencies
+        run: |
+          for chart in charts/*/; do
+            if [ -f "$chart/Chart.yaml" ] && grep -q "dependencies:" "$chart/Chart.yaml"; then
+              helm dependency update "$chart" 2>/dev/null || true
+            fi
+          done
+
+      - name: chartsnap on loopzero-platform umbrella (advisory)
+        # Advisory mode initially — first GREEN run produces baseline.
+        # After baseline reviewed + committed, gate becomes blocking.
+        continue-on-error: true
+        run: |
+          if [ ! -d "charts/loopzero-platform/__snapshot__" ]; then
+            echo "::warning::chartsnap baseline not yet created. First run will populate __snapshot__/."
+            helm chartsnap charts/loopzero-platform --update || true
+          else
+            helm chartsnap charts/loopzero-platform || echo "::warning::chartsnap diff detected — review manifest changes."
+          fi
+
+  helm-diff:
+    name: helm-diff PR gate (CH-G05 / T4.3)
+    runs-on: ubuntu-latest
+    if: github.event_name == 'pull_request'
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+        with:
+          fetch-depth: 0
+
+      - name: Set up Helm
+        uses: ./.github/actions/setup-helm
+        with:
+          version: v3.14.4
+
+      - name: Install helm-diff
+        run: |
+          helm plugin install https://github.com/databus23/helm-diff 2>/dev/null || \
+            helm plugin update diff 2>/dev/null || true
+
+      - name: Update dependencies
+        run: |
+          for chart in charts/*/; do
+            if [ -f "$chart/Chart.yaml" ] && grep -q "dependencies:" "$chart/Chart.yaml"; then
+              helm dependency update "$chart" 2>/dev/null || true
+            fi
+          done
+
+      - name: helm diff against base branch (advisory)
+        # CONDITION: HELM_DIFF_THREE_WAY_MERGE + HELM_DIFF_NORMALIZE_MANIFESTS evita falsos positivos.
+        env:
+          HELM_DIFF_THREE_WAY_MERGE: "true"
+          HELM_DIFF_NORMALIZE_MANIFESTS: "true"
+        continue-on-error: true
+        run: |
+          # Render each chart from PR branch and from base branch, diff via helm-diff.
+          # Advisory: emits annotation; doesn't block.
+          for chart in charts/loopzero-platform charts/loopzero-api; do
+            name=$(basename "$chart")
+            echo "::group::helm diff for $name"
+            helm template "$name" "$chart" > /tmp/${name}-pr.yaml 2>/dev/null
+            git stash --include-untracked
+            git checkout "${{ github.event.pull_request.base.sha }}" -- "$chart" 2>/dev/null || true
+            helm template "$name" "$chart" > /tmp/${name}-base.yaml 2>/dev/null || echo "" > /tmp/${name}-base.yaml
+            git checkout HEAD -- "$chart" 2>/dev/null || true
+            git stash pop 2>/dev/null || true
+            if ! diff -u /tmp/${name}-base.yaml /tmp/${name}-pr.yaml > /tmp/${name}-diff.txt; then
+              echo "::warning::helm-diff for $name detected changes (advisory) — review manifest."
+              head -50 /tmp/${name}-diff.txt
+            else
+              echo "No diff for $name."
+            fi
+            echo "::endgroup::"
+          done
 
   crd-sync:
     name: CRD Sync Check
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+
+      - name: Set up Helm
+        uses: ./.github/actions/setup-helm
+        with:
+          version: v3.14.4
+
+      - name: Install yq
+        run: |
+          curl -sL https://github.com/mikefarah/yq/releases/download/v4.43.1/yq_linux_amd64 -o /usr/local/bin/yq
+          chmod +x /usr/local/bin/yq
 
       - name: Check CRD count
         run: |
@@ -149,29 +334,11 @@ jobs:
             exit 1
           fi
 
-      - name: Check CRD content drift
+      - name: Check CRD semantic spec drift (CH-G06)
+        # charts-sota T1.4: replaces the legacy `grep -q name` nominal check
+        # with a true semantic spec diff via `yq` (group, scope, versions[].schema, etc).
         run: |
-          DRIFT=0
-          for src in operators/config/crd/bases/loopzero.io_*.yaml; do
-            short=$(basename "$src" .yaml | sed 's/loopzero.io_//')
-            dst="charts/loopzero-crds/templates/${short}.yaml"
-            if [ ! -f "$dst" ]; then
-              echo "::error::Missing CRD template: $dst (source: $src)"
-              DRIFT=1
-              continue
-            fi
-            # Extract spec from source and check it exists in template
-            src_name=$(grep "^  name:" "$src" | head -1 | awk '{print $2}')
-            if ! grep -q "$src_name" "$dst"; then
-              echo "::error::CRD name mismatch for $short"
-              DRIFT=1
-            fi
-          done
-          if [ "$DRIFT" -ne 0 ]; then
-            echo "::error::CRD drift detected. Run 'task helm:sync-crds' to fix."
-            exit 1
-          fi
-          echo "CRDs are in sync"
+          bash infra/scripts/crd-semantic-diff.sh
 
   # ──────────────────────────────────────────────────────────────────────
   # Package + Push (only on push to main/develop/homolog, not PRs)
@@ -303,7 +470,45 @@ jobs:
             cosign sign --key env://COSIGN_KEY "$REF" || true
           done
 
-      - name: Verify keyless signature
+      - name: Generate + attest SBOM per chart (CH-G19 / ADR-0040)
+        # charts-sota Phase 5 (T5.1 + T5.2): syft → CycloneDX → cosign attest.
+        # Parity com container image SBOM Sprint 6.
+        env:
+          COSIGN_EXPERIMENTAL: "1"
+        run: |
+          # Install syft.
+          curl -sSfL https://raw.githubusercontent.com/anchore/syft/main/install.sh | sh -s -- -b /usr/local/bin v1.10.0
+          mkdir -p /tmp/sboms
+
+          for chart in charts/*/; do
+            name=$(yq '.name' "$chart/Chart.yaml")
+            version=$(yq '.version' "$chart/Chart.yaml")
+            if [ "$(yq '.type' "$chart/Chart.yaml")" = "library" ]; then
+              continue
+            fi
+            REF="${{ env.OCI_REGISTRY }}/$name:$version"
+            TGZ="/tmp/helm-packages/${name}-${version}.tgz"
+            SBOM="/tmp/sboms/${name}-${version}-sbom.json"
+
+            if [ ! -f "$TGZ" ]; then
+              # Re-package if missing (umbrella was re-packaged after rewrite).
+              helm package "$chart" --destination /tmp/helm-packages/ 2>/dev/null || continue
+            fi
+
+            echo "::group::SBOM + attest $name:$version"
+            # syft scans the .tgz for components (Helm chart files + values + dependencies).
+            syft "$TGZ" -o cyclonedx-json > "$SBOM" || {
+              echo "::warning::syft failed for $TGZ — skipping attestation"
+              echo "::endgroup::"
+              continue
+            }
+            # cosign attest binds the SBOM to the OCI artifact.
+            cosign attest --yes --predicate "$SBOM" --type cyclonedx "$REF" || \
+              echo "::warning::cosign attest failed for $REF"
+            echo "::endgroup::"
+          done
+
+      - name: Verify keyless signature + SBOM attestation (T5.4)
         run: |
           for chart in charts/*/; do
             name=$(yq '.name' "$chart/Chart.yaml")
@@ -317,6 +522,15 @@ jobs:
               --certificate-oidc-issuer https://token.actions.githubusercontent.com \
               --certificate-identity-regexp "^https://github\.com/${{ github.repository }}/" \
               || echo "::warning::keyless verify failed for $REF (may be propagation lag — Rekor entries take ~30s)"
+
+            # Verify SBOM attestation (CH-G19).
+            cosign verify-attestation "$REF" \
+              --type cyclonedx \
+              --certificate-oidc-issuer https://token.actions.githubusercontent.com \
+              --certificate-identity-regexp "^https://github\.com/${{ github.repository }}/" \
+              > /dev/null 2>&1 \
+              && echo "::notice::SBOM attestation verified for $REF" \
+              || echo "::warning::SBOM attestation missing or invalid for $REF"
           done
 
       - name: Verify published charts

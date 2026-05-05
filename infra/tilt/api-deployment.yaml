@@ -134,7 +134,7 @@ spec:
             # Workload LB IP on k3d-loopzero-workload network. Update after cluster recreate:
             #   docker inspect k3d-loopzero-workload-serverlb --format '{{json .NetworkSettings.Networks}}'
             - name: WORKLOAD_INGRESS_URL
-              value: "http://172.18.0.14:80"
+              value: "http://172.18.0.12:80"
             - name: BASE_DOMAIN
               value: "loopzero.local"
             # CHG-2026-04-22-001 B4 — JWKS wiring for local dev (Rule 10 parity).

@@ -1,32 +1,72 @@
 {
   "$schema": "http://json-schema.org/draft-07/schema#",
-  "title": "loopzero-platform values",
-  "description": "Schema for loopzero-platform umbrella chart. Aggregates per-component sub-chart values. Per INF-G17.",
+  "title": "loopzero-platform umbrella values",
+  "description": "Schema for loopzero-platform umbrella chart. Validates global.registry + sub-chart enable toggles. charts-sota T4.1 + ADR-0037. loopzero-controller ghost removed per ADR-0042.",
   "type": "object",
   "additionalProperties": true,
   "properties": {
     "global": {
       "type": "object",
       "properties": {
-        "registry": { "type": "string", "minLength": 1 },
-        "imagePullSecrets": { "type": "array" },
+        "registry": {
+          "type": "string",
+          "minLength": 1,
+          "pattern": "^[a-z0-9.-]+(/[a-z0-9._-]+)*$",
+          "description": "Container image registry (FQDN, no protocol). Default: registry.digitalocean.com/loopzero-system"
+        },
+        "imagePullSecrets": {
+          "type": "array",
+          "items": { "type": "object" }
+        },
         "environment": {
           "type": "string",
           "enum": ["dev", "staging", "prod"]
         }
       }
     },
-    "loopzero-api": { "type": "object" },
-    "loopzero-controller": { "type": "object" },
-    "loopzero-tenant-operator": { "type": "object" },
-    "loopzero-app-operator": { "type": "object" },
-    "loopzero-platform-operator": { "type": "object" },
-    "loopzero-preview-operator": { "type": "object" },
-    "loopzero-cloud": { "type": "object" },
-    "loopzero-dashboard": { "type": "object" },
-    "loopzero-crds": { "type": "object" },
-    "loopzero-admission-policies": { "type": "object" },
-    "loopzero-monitoring": { "type": "object" },
-    "loopzero-build-cwts": { "type": "object" }
+    "loopzero-crds": {
+      "type": "object",
+      "properties": { "enabled": { "type": "boolean" } }
+    },
+    "loopzero-api": {
+      "type": "object",
+      "properties": { "enabled": { "type": "boolean" } }
+    },
+    "loopzero-tenant-operator": {
+      "type": "object",
+      "properties": { "enabled": { "type": "boolean" } }
+    },
+    "loopzero-app-operator": {
+      "type": "object",
+      "properties": { "enabled": { "type": "boolean" } }
+    },
+    "loopzero-preview-operator": {
+      "type": "object",
+      "properties": { "enabled": { "type": "boolean" } }
+    },
+    "loopzero-platform-operator": {
+      "type": "object",
+      "properties": { "enabled": { "type": "boolean" } }
+    },
+    "loopzero-cloud": {
+      "type": "object",
+      "properties": { "enabled": { "type": "boolean" } }
+    },
+    "loopzero-dashboard": {
+      "type": "object",
+      "properties": { "enabled": { "type": "boolean" } }
+    },
+    "loopzero-build-cwts": {
+      "type": "object",
+      "properties": { "enabled": { "type": "boolean" } }
+    },
+    "loopzero-monitoring": {
+      "type": "object",
+      "properties": { "enabled": { "type": "boolean" } }
+    },
+    "loopzero-admission-policies": {
+      "type": "object",
+      "properties": { "enabled": { "type": "boolean" } }
+    }
   }
 }

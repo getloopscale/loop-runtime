@@ -39,10 +39,6 @@ dependencies:
     version: ">=0.1.0 <1.0.0"
     repository: "file://../loopzero-platform-operator"
     condition: loopzero-platform-operator.enabled
-  - name: loopzero-controller
-    version: ">=0.1.0 <1.0.0"
-    repository: "file://../loopzero-controller"
-    condition: loopzero-controller.enabled
   - name: loopzero-cloud
     version: ">=0.1.0 <1.0.0"
     repository: "file://../loopzero-cloud"

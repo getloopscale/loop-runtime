@@ -170,7 +170,7 @@ check_F09() {
     return
   fi
   local hits
-  hits=$(KUBECONFIG="$MGMT_KUBE" kubectl logs -n loopzero-system -l app=tenant-controller --since=5m 2>/dev/null \
+  hits=$(KUBECONFIG="$MGMT_KUBE" kubectl logs -n loopzero-system -l app.kubernetes.io/name=loopzero-tenant-operator --since=5m 2>/dev/null \
     | grep -c "pull secret ensure failed" 2>/dev/null || true)
   hits=${hits//[^0-9]/}
   hits=${hits:-0}
@@ -188,7 +188,7 @@ check_F10() {
     return
   fi
   local hits
-  hits=$(KUBECONFIG="$MGMT_KUBE" kubectl logs -n loopzero-system -l app=tenant-controller --since=5m 2>/dev/null \
+  hits=$(KUBECONFIG="$MGMT_KUBE" kubectl logs -n loopzero-system -l app.kubernetes.io/name=loopzero-tenant-operator --since=5m 2>/dev/null \
     | grep -c "traces export" 2>/dev/null || true)
   hits=${hits//[^0-9]/}
   hits=${hits:-0}

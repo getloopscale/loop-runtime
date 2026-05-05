@@ -1,0 +1,38 @@
+# helm-unittest: PrometheusRules rendering for loopzero-monitoring.
+# Plan T1.5.
+
+suite: prometheusrules rendering
+templates:
+  - prometheusrule-critical.yaml
+  - prometheusrule-warning.yaml
+  - prometheusrule-database.yaml
+
+tests:
+  - it: critical rules render as PrometheusRule kind
+    template: prometheusrule-critical.yaml
+    asserts:
+      - isKind:
+          of: PrometheusRule
+      - isAPIVersion:
+          of: monitoring.coreos.com/v1
+
+  - it: warning rules render as PrometheusRule kind
+    template: prometheusrule-warning.yaml
+    asserts:
+      - isKind:
+          of: PrometheusRule
+
+  - it: database rules render as PrometheusRule kind
+    template: prometheusrule-database.yaml
+    asserts:
+      - isKind:
+          of: PrometheusRule
+
+  - it: critical rules contain at least one group with rules
+    template: prometheusrule-critical.yaml
+    asserts:
+      - exists:
+          path: spec.groups
+      - notEqual:
+          path: spec.groups
+          value: []

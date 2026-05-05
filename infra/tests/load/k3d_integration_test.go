@@ -70,10 +70,12 @@ func TestK3d_InternalChartsAllInstall(t *testing.T) {
 		dir      string
 		extraArgs []string // e.g., --no-hooks for smoke-test
 	}
+	// Note: loopzero-controller and tenant-controller monolith charts removed
+	// pre-GA per ADR-0023 (operator split) + ADR-0042 (ghost chart deletion).
+	// Operator workloads now ship via 4 split charts: loopzero-tenant-operator,
+	// loopzero-app-operator, loopzero-preview-operator, loopzero-platform-operator.
 	charts := []chartCase{
 		{dir: "loopzero-api"},
-		{dir: "loopzero-controller"},
-		{dir: "tenant-controller"},
 		{dir: "loopzero-cloud"},
 		{dir: "cloudflared"},
 		{dir: "cluster-issuer"},

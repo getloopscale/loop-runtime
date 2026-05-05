@@ -315,6 +315,148 @@ NETWORK POLICY
 */}}
 
 {{/*
+----------------------------------------------------------------------
+TPLVALUES.RENDER (charts-sota T2.1 / ADR-0037)
+----------------------------------------------------------------------
+*/}}
+
+{{/*
+Render values that may contain Go template syntax. Bitnami common pattern.
+Usage:
+  {{ include "loopzero-common.tplvalues.render" (dict "value" .Values.podAnnotations "context" $) | nindent 8 }}
+*/}}
+{{- define "loopzero-common.tplvalues.render" -}}
+{{- $value := typeIs "string" .value | ternary .value (.value | toYaml) }}
+{{- if contains "{{" (toJson .value) }}
+  {{- if .scope }}
+    {{- tpl (cat "{{- with $.RelativeScope -}}" $value "{{- end }}") (merge (dict "RelativeScope" .scope) .context) }}
+  {{- else }}
+    {{- tpl $value .context }}
+  {{- end }}
+{{- else }}
+{{- $value }}
+{{- end }}
+{{- end -}}
+
+{{/*
+----------------------------------------------------------------------
+KUBE VERSION GUARD (charts-sota T2.2 / ADR-0037)
+----------------------------------------------------------------------
+*/}}
+
+{{/*
+Return target Kubernetes version. Allows .Values.kubeVersion override for
+test fixtures + matrix CI; otherwise uses cluster's actual version.
+Usage:
+  {{ if semverCompare ">=1.30" (include "loopzero-common.kubeVersion" .) }}...{{ end }}
+*/}}
+{{- define "loopzero-common.kubeVersion" -}}
+{{- default .Capabilities.KubeVersion.Version .Values.kubeVersion -}}
+{{- end -}}
+
+{{/*
+----------------------------------------------------------------------
+CHECKSUM ANNOTATIONS (charts-sota T2.3 — eliminates 5x duplication)
+----------------------------------------------------------------------
+*/}}
+
+{{/*
+ConfigMap + Secret checksum annotations for auto-restart on config change.
+Eliminates 5x duplication across operator deployments.
+Caller is responsible for ensuring configmap.yaml and secret.yaml exist in
+$.Template.BasePath. For charts without secret.yaml, use checksumAnnotationsConfigOnly.
+
+Usage in deployment.yaml:
+  metadata:
+    annotations:
+      {{- include "loopzero-common.checksumAnnotations" . | nindent 8 }}
+*/}}
+{{- define "loopzero-common.checksumAnnotations" -}}
+checksum/config: {{ include (print $.Template.BasePath "/configmap.yaml") . | sha256sum }}
+checksum/secret: {{ include (print $.Template.BasePath "/secret.yaml") . | sha256sum }}
+{{- end -}}
+
+{{/*
+Variant for charts without a secret.yaml template.
+*/}}
+{{- define "loopzero-common.checksumAnnotationsConfigOnly" -}}
+checksum/config: {{ include (print $.Template.BasePath "/configmap.yaml") . | sha256sum }}
+{{- end -}}
+
+{{/*
+----------------------------------------------------------------------
+IMAGE PULL SECRETS (charts-sota T2.4)
+----------------------------------------------------------------------
+*/}}
+
+{{/*
+Render imagePullSecrets list combining global + chart-local with dedup.
+Usage:
+  spec:
+    {{- include "loopzero-common.imagePullSecrets" . | nindent 6 }}
+*/}}
+{{- define "loopzero-common.imagePullSecrets" -}}
+{{- $globalSecrets := list -}}
+{{- if and .Values.global .Values.global.imagePullSecrets -}}
+  {{- $globalSecrets = .Values.global.imagePullSecrets -}}
+{{- end -}}
+{{- $localSecrets := default (list) .Values.imagePullSecrets -}}
+{{- $combined := concat $globalSecrets $localSecrets | uniq -}}
+{{- if $combined -}}
+imagePullSecrets:
+{{- toYaml $combined | nindent 0 }}
+{{- end -}}
+{{- end -}}
+
+{{/*
+----------------------------------------------------------------------
+SECRETS NAME (charts-sota T2.5 — existingSecret pattern)
+----------------------------------------------------------------------
+*/}}
+
+{{/*
+Resolve Secret name: use .Values.secrets.existingSecret if set, else fall back
+to chart fullname. Bitnami pattern.
+Usage:
+  envFrom:
+    - secretRef:
+        name: {{ include "loopzero-common.secrets.name" . }}
+*/}}
+{{- define "loopzero-common.secrets.name" -}}
+{{- if and .Values.secrets .Values.secrets.existingSecret -}}
+{{- .Values.secrets.existingSecret -}}
+{{- else -}}
+{{- include "loopzero-common.fullname" . -}}
+{{- end -}}
+{{- end -}}
+
+{{/*
+----------------------------------------------------------------------
+TMP VOLUME (charts-sota T2.6 — readOnlyRootFilesystem compat)
+----------------------------------------------------------------------
+*/}}
+
+{{/*
+emptyDir tmp volume mount for ROFS-enabled containers. Eliminates 5x duplication.
+Usage in deployment containers[]:
+  volumeMounts:
+    {{- include "loopzero-common.tmpVolumeMount" . | nindent 12 }}
+And in deployment.spec.template.spec.volumes:
+  {{- include "loopzero-common.tmpVolume" . | nindent 8 }}
+*/}}
+{{- define "loopzero-common.tmpVolumeMount" -}}
+- name: tmp
+  mountPath: /tmp
+{{- end -}}
+
+{{- define "loopzero-common.tmpVolume" -}}
+- name: tmp
+  emptyDir:
+    sizeLimit: {{ .Values.tmpVolume.sizeLimit | default "64Mi" }}
+{{- end -}}
+
+{{/*
+----------------------------------------------------------------------
 NetworkPolicy base — provides common egress rules (DNS, K8s API, PostgreSQL).
 Each chart adds custom ingress and extra egress via values.
 

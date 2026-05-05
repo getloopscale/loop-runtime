@@ -161,12 +161,12 @@ var _ = Describe("Chaos Engineering", func() {
 			// Wait for fault + recovery.
 			time.Sleep(10 * time.Second)
 
-			err := waitForPodReady("loopzero-system", "app=loopzero-controller", 120*time.Second)
+			err := waitForPodReady("loopzero-system", "app.kubernetes.io/component=loopzero-operator", 120*time.Second)
 			Expect(err).NotTo(HaveOccurred(), "controller pod did not recover within 120s")
 
 			// Verify leader lease was re-acquired.
 			out, err := kubectl("logs", "-n", "loopzero-system",
-				"-l", "app=loopzero-controller", "--tail=30")
+				"-l", "app.kubernetes.io/component=loopzero-operator", "--tail=30")
 			Expect(err).NotTo(HaveOccurred())
 			Expect(out).To(ContainSubstring("leader"),
 				"controller did not re-acquire leader lease after restart")
@@ -343,7 +343,7 @@ var _ = Describe("Chaos Engineering", func() {
 			out1, err1 := kubectl("delete", "pod", "-n", "loopzero-system",
 				"-l", "app=loopzero-api", "--wait=false")
 			out2, err2 := kubectl("delete", "pod", "-n", "loopzero-system",
-				"-l", "app=loopzero-controller", "--wait=false")
+				"-l", "app.kubernetes.io/component=loopzero-operator", "--wait=false")
 
 			Expect(err1).NotTo(HaveOccurred(), "API kill failed: %s", out1)
 			Expect(err2).NotTo(HaveOccurred(), "controller kill failed: %s", out2)
@@ -356,7 +356,7 @@ var _ = Describe("Chaos Engineering", func() {
 			err := waitForPodReady("loopzero-system", "app=loopzero-api", 180*time.Second)
 			Expect(err).NotTo(HaveOccurred(), "API did not recover within 3min")
 
-			err = waitForPodReady("loopzero-system", "app=loopzero-controller", 180*time.Second)
+			err = waitForPodReady("loopzero-system", "app.kubernetes.io/component=loopzero-operator", 180*time.Second)
 			Expect(err).NotTo(HaveOccurred(), "controller did not recover within 3min")
 
 			recoveryTime := time.Since(start)

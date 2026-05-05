@@ -8,7 +8,10 @@ inputs:
   helm-version:
     description: "Helm version"
     required: false
-    default: "v3.14.4"
+    # T7.2 (charts-sota Phase 7): bumped from v3.14.4 to v3.18.5.
+    # Helm 3.18.5 hardened JSON Schema validation (santhosh-tekuri/jsonschema/v6).
+    # LoopZero charts use additionalProperties: true (defensive), so no regression.
+    default: "v3.18.5"
   install-diff-plugin:
     description: "Install helm-diff plugin"
     required: false

@@ -85,8 +85,15 @@ tasks:
         --wait --timeout 5m
       # PodDisruptionBudgets: Helm charts create their own PDBs.
       # Manual apply removed — conflicts with chart-managed PDBs (minAvailable vs maxUnavailable).
-      # NetworkPolicies for loopzero-system namespace
-      - kubectl --context {{.MGMT_CONTEXT}} apply -f infra/helm/network-policies/loopzero-system.yaml
+      # NetworkPolicies for loopzero-system namespace.
+      # CHG-2026-05-05: file moved into Helm chart structure (templates/loopzero-system.yaml).
+      # Use helm install instead of raw manifest apply.
+      - >-
+        helm upgrade --install network-policies infra/helm/network-policies
+        --kube-context {{.MGMT_CONTEXT}}
+        --namespace loopzero-system
+        --create-namespace
+        --wait --timeout 1m
 
   infra:install:build:
     desc: Install platform components in build cluster
@@ -206,13 +213,15 @@ tasks:
         grafana_dashboard=1 |
         kubectl --context {{.MGMT_CONTEXT}} apply --server-side --force-conflicts
         --field-manager=loopzero-task -f -
-      # ServiceMonitors for mgmt cluster components (loopzero-api, gitea, minio, tenant-controller)
+      # ServiceMonitors for mgmt cluster components (loopzero-api, gitea, minio, loopzero operators).
+      # CHG-2026-05-05 (charts-sota dogfood): tenant-controller ServiceMonitor
+      # consolidated into servicemonitor-loopzero-operators.yaml after ADR-0023 operator split.
       - >-
         kubectl --context {{.MGMT_CONTEXT}} apply
         -f infra/helm/monitoring/manifests/servicemonitor.yaml
         -f infra/helm/monitoring/manifests/servicemonitor-gitea.yaml
         -f infra/helm/monitoring/manifests/servicemonitor-minio.yaml
-        -f infra/helm/monitoring/manifests/servicemonitor-tenant-controller.yaml
+        -f infra/helm/monitoring/manifests/servicemonitor-loopzero-operators.yaml
       # Cross-cluster metrics services (NodePort for Prometheus to scrape via additionalScrapeConfigs)
       - >-
         kubectl --context {{.BUILD_CONTEXT}} apply

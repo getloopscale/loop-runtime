@@ -1,3 +1,69 @@
+# loopzero-admission-policies values.yaml
+# Aligned with infra/helm/admission-policies (CH-G09 + CH-G11 fix per T1.2 + ADR-0040).
+
+# Domain used to derive Harbor registry hostname.
+domain: dev.loopzero.example
+
+# Approved registry prefixes used by ClusterImagePolicy and the
+# restrict-registries VAP.
+registries:
+  docrPrefix: "registry.digitalocean.com/loopzero-system/"
+  harborPrefix: "harbor.dev.loopzero.example/loopzero-platform/"
+  # Opt-in list of additional registry prefixes accepted by registry-restriction VAP.
+  # Default: empty (production only allows DOCR + Harbor). Standalone-multi overlay
+  # sets this to ["k3d-loopzero-registry:5000/<tenant>/"] for local builds.
+  additionalPrefixes: []
+
+# ClusterImagePolicy — sigstore policy-controller resource (B16, Sprint 6).
+# WARNING: policy-controller deny-by-default rejects ALL pods if no
+# ClusterImagePolicy matches. This chart MUST be installed before any
+# tenant workload starts.
+clusterImagePolicy:
+  enabled: true
+  name: loopzero-images-warn
+  # warn  — log audit, admit (Sprint 6 default)
+  # enforce — reject unsigned images (Sprint 9 cosign keyless)
+  mode: warn
+  # static action when no signature can be verified yet
+  staticAction: pass
+  imageGlobs:
+    - "registry.digitalocean.com/loopzero-system/**"
+    - "harbor.dev.loopzero.example/loopzero-platform/**"
+
+# INF-G16 + MEET-2026-05-03-063 (MEET-B Track-1) + ADR-0040 (charts SBOM parity).
+# loopzero-images-keyless: ClusterImagePolicy with Fulcio keyless authority.
+# Coexists with loopzero-images-warn during transition (≥ 7 days dual-signing).
+clusterImagePolicyKeyless:
+  enabled: false
+  name: loopzero-images-keyless
+  mode: warn
+  imageGlobs:
+    - "registry.digitalocean.com/loopzero-system/**"
+    - "harbor.dev.loopzero.example/loopzero-platform/**"
+  fulcioURL: https://fulcio.sigstore.dev
+  rekorURL: https://rekor.sigstore.dev
+  oidcIssuer: https://token.actions.githubusercontent.com
+  identityRegexp: "^https://github\\.com/getloopscale/loopzero/"
+
+# VAP toggles. Names match infra/helm/admission-policies for CH-G11 alignment.
+vaps:
+  disallowLatestTag: true
+  restrictRegistries: true
+  requireResourceLimits: true
+  protectPlatformNetworkpolicies: true
+  argocdManagedBy: true
+  requireImageSignature: true
+  # ADR-0018 v2 / T3.2 — Tenant + Environment CRs MUST live in `loopzero-system`.
+  tenantNamespace: false
+  # CHG-2026-04-30-INFRA-PARITY / T1.2 / ADR D3 — block kubectl set image
+  noRuntimeImageMutations: false
+  noRuntimeImageMutationsAction: Warn
+  noRuntimeImageMutationsFailurePolicy: Ignore
+
+# Compatibility shim: legacy values.yaml had `policies.<name>.enabled` structure.
+# Existing VAP templates (vap-disallow-latest-tag.yaml, etc) read from `.Values.policies.<name>.enabled`.
+# Keep both during transition; new VAPs (vap-no-runtime-image-mutations,
+# vap-tenant-namespace) read from `.Values.vaps.<name>` to match infra/helm bootstrap.
 policies:
   requireResourceLimits:
     enabled: true
@@ -15,6 +81,13 @@ policies:
   protectPlatformNetworkpolicies:
     enabled: true
 
+# PrometheusRule (alerts) toggle.
+alerts:
+  enabled: true
+  namespace: monitoring
+  prometheusReleaseLabel: monitoring
+
+# Default namespace selector for VAPBindings (applies to all except system namespaces).
 namespaceSelector:
   matchExpressions:
     - key: kubernetes.io/metadata.name

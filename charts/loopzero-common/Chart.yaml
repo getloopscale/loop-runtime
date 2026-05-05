@@ -2,7 +2,7 @@ apiVersion: v2
 name: loopzero-common
 description: Shared Helm helpers for the LoopZero PaaS platform
 type: library
-version: 0.2.0
+version: 0.3.0
 home: https://github.com/loopzero/loopzero
 sources:
   - https://github.com/loopzero/loopzero

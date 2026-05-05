@@ -7,3 +7,10 @@
 *~
 .idea/
 .vscode/
+# helm-chartsnap snapshots — exclude from packaging (charts-sota T4.2 + ADR-0040).
+# Note: chartsnap uses __snapshots__/ (plural); helm-unittest uses __snapshot__/ (singular).
+__snapshot__/
+__snapshots__/
+tests/__snapshot__/
+ci/
+
