@@ -621,7 +621,22 @@ log "H13: ensuring ClusterCredential cell-default has valid SA token"
 CELL_DEFAULT_CONNECTED=$(kubectl --context "$MGMT_CTX" -n loopzero-system \
   get clustercredentials -o jsonpath='{.items[?(@.spec.cellID=="cell-default")].status.connected}' \
   2>/dev/null || echo "")
-if [[ "$CELL_DEFAULT_CONNECTED" == "true" ]]; then
+# B29 fix (real-paas-cleanroom-dogfood-loop iter 27, 2026-05-05):
+# bootstrap-cell-default-cc.sh produces a kubeconfig that points at
+# loopzero-workload (cluster name `workload`) with a `loopzero-ctrl-runtime`
+# SA token in the workload cluster — correct for standalone-multi
+# where cell-default is colocated with workload. H13's design assumes
+# cell-default points at mgmt cluster; if H13 patches the kubeconfig
+# with a mgmt SA token + `https://kubernetes.default.svc:443` URL, it
+# breaks the standalone-multi setup. Skip H13 when the CR carries the
+# bootstrap-cell-default-cc managed-by label.
+H13_MANAGED_BY=$(kubectl --context "$MGMT_CTX" -n loopzero-system \
+  get clustercredential cell-default \
+  -o jsonpath='{.metadata.labels.app\.kubernetes\.io/managed-by}' \
+  2>/dev/null || echo "")
+if [[ "$H13_MANAGED_BY" == "bootstrap-cell-default-cc" ]]; then
+  log "  cell-default managed by bootstrap-cell-default-cc — skip H13 (workload-targeted)"
+elif [[ "$CELL_DEFAULT_CONNECTED" == "true" ]]; then
   log "  cell-default already connected — skip"
 else
   log "  cell-default disconnected — refreshing SA token"
