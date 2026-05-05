@@ -45,6 +45,17 @@ primary:
         CREATE DATABASE kratos OWNER loopzero;
         CREATE DATABASE hydra OWNER loopzero;
         CREATE DATABASE harbor OWNER loopzero;
+  # B2 (real-paas-cleanroom-dogfood-loop-plan iter 2, 2026-05-05) — disable
+  # Bitnami's chart-owned PDB. The Tiltfile applies a PDB at
+  # infra/helm/postgresql/templates/pdb.yaml with `minAvailable: 1`. Bitnami
+  # 18.6.2 ships its own PDB with `maxUnavailable: 1`. K8s rejects PDBs with
+  # both fields set, so the merged result on apply was rejected with
+  # `minAvailable and maxUnavailable cannot be both set` — discovered LIVE
+  # during cleanroom Phase 3 (tilt ci) which exited in 9 seconds. Sole-owner
+  # rule: Tilt manages the PDB; Bitnami stops creating one. Fix applied here
+  # (in scope: infra/helm/**) instead of Tiltfile (out of scope).
+  pdb:
+    create: false
   livenessProbe:
     enabled: true
   readinessProbe:
