@@ -253,22 +253,26 @@ YAML
   log "rbac patch applied: loopzero-api-cleanroom-extra"
 }
 
-# Phase 2.6: Bootstrap extras (B9/B10 fix, iter 9, 2026-05-05)
+# Phase 2.6: Bootstrap extras (B9/B10/B11 fix, iter 9-10, 2026-05-05)
 #
-# `task setup` (which calls infra:install:mgmt etc.) does NOT invoke the
-# helmfile-side bootstrap scripts that create LoopZero's platform Secrets and
-# the ESO ClusterSecretStore. Without these:
-#   - loopzero-db-credentials Secret is missing → seed-local-user.sh fails
-#     silently with empty PGPASS → preflight T0.2 fails ("token expiring"
-#     and seed re-run failed)
-#   - loopzero-mgmt-store ClusterSecretStore not Ready → preflight T0.9 fails
+# `task setup` does NOT invoke the helmfile-side bootstrap scripts AND does
+# NOT install ESO in the workload cluster. Without these:
+#   - B9: loopzero-db-credentials Secret missing → seed-local-user.sh fails
+#     silently with empty PGPASS → preflight T0.2 fails
+#   - B10: loopzero-mgmt-store ClusterSecretStore not Ready → preflight T0.9 fails
+#   - B11: ESO CRDs (ClusterSecretStore kind) absent in workload cluster
+#     → bootstrap-eso-cluster-secret-store.sh `kubectl apply` fails with
+#     `no matches for kind "ClusterSecretStore"`. Discovered iter 10.
 #
-# Both scripts are idempotent (designed to be re-runnable in helmfile sync).
-# Calling them here closes the standalone gap.
+# Sequence:
+#   1. generate-secrets.sh (mgmt cluster Secrets — fixes B9)
+#   2. task k3d:bootstrap-workload (installs ESO in workload — fixes B11)
+#   3. bootstrap-eso-cluster-secret-store.sh (provisions ClusterSecretStore
+#      that requires both 1+2 to succeed — fixes B10)
 phase_bootstrap_extras() {
-  log_phase "2.6/7 BOOTSTRAP EXTRAS (generate-secrets + ESO ClusterSecretStore)"
+  log_phase "2.6/7 BOOTSTRAP EXTRAS (generate-secrets + workload ESO + ClusterSecretStore)"
   if [[ "$DRY_RUN" -eq 1 ]]; then
-    log "DRY-RUN: bash generate-secrets.sh standalone mgmt && bash bootstrap-eso-cluster-secret-store.sh"
+    log "DRY-RUN: generate-secrets + task k3d:bootstrap-workload + bootstrap-eso"
     return 0
   fi
   if ! bash "${REPO_ROOT}/infra/helmfile/scripts/generate-secrets.sh" standalone mgmt; then
@@ -276,6 +280,11 @@ phase_bootstrap_extras() {
     return 38
   fi
   log "generate-secrets.sh OK (loopzero-db-credentials, loopzero-api-tokens, etc. applied)"
+  if ! task k3d:bootstrap-workload; then
+    log_err "phase_bootstrap_extras: task k3d:bootstrap-workload failed (ESO install in workload)"
+    return 38
+  fi
+  log "k3d:bootstrap-workload OK (cert-manager + traefik + ESO in workload)"
   if ! bash "${REPO_ROOT}/infra/helmfile/scripts/bootstrap-eso-cluster-secret-store.sh"; then
     log_err "phase_bootstrap_extras: bootstrap-eso-cluster-secret-store.sh failed"
     return 38
