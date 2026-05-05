@@ -156,6 +156,14 @@ spec:
             # placeholder; production sets via Pulumi mgmt-api.ts (random Output).
             - name: LOOPZERO_SERVICE_AUTH_SECRET
               value: "cleanroom-service-auth-secret-do-not-use-in-prod"
+            # CHG-2026-05-05-DOGFOOD-B38: enable admin API surface for
+            # journey-11 (admin tenant evict + cell pin). Both handlers
+            # gate on LOOPZERO_ADMIN_API=true (admin_evict.go:73, admin_pin_cell.go:78);
+            # without this they 404 with "Endpoint not available." even
+            # when X-Service-Auth is correct. Production sets via Pulumi
+            # mgmt-api.ts; standalone-multi previously skipped it.
+            - name: LOOPZERO_ADMIN_API
+              value: "true"
             - name: WORKLOAD_INGRESS_URL
               value: "http://172.18.0.12:80"
             - name: BASE_DOMAIN
