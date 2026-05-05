@@ -135,6 +135,7 @@ tasks:
           --wait --timeout 2m
       - bash infra/scripts/bootstrap-cell-default-cc.sh
       - HYDRA_NAMESPACE=loopzero-system bash infra/helmfile/scripts/seed-local-user.sh
+      - bash infra/scripts/bootstrap-seed-tenant-cr.sh
 
   dev:up:
     desc: Boot dev environment (clusters + Helm deps). Run `tilt up` separately for the dev loop.

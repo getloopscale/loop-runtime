@@ -1,40 +1,71 @@
 #!/usr/bin/env bash
 # infra/scripts/bootstrap-cell-default-cc.sh
 #
-# B24 fix (real-paas-cleanroom-dogfood-loop iter 22, 2026-05-05):
+# B24/B25 fix (real-paas-cleanroom-dogfood-loop iter 22, 2026-05-05):
 # bootstraps the cell-default ClusterCredential in standalone-multi mode.
-# wire-clusters.sh creates cell-1 and cell-2 CRs but not cell-default;
-# helm + heal codified the gap for cell-1/cell-2 only. Without this CR,
-# K8sCellStore.LoadCells() returns count=2 and the build_reconcile loop
-# never iterates cell-default → builds with cell_id=cell-default stay in
-# RUNNING state forever even after Argo Workflow Succeeded.
+# Self-sufficient: generates its own scoped kubeconfig (does NOT depend on
+# H12 having already created workload-kubeconfig).
 #
 # Why a separate script (not lib/clustercredential-create.sh): that lib
-# uses CLUSTER_NAME for both the CR name and the Secret name. Calling it
-# with cluster-name=workload would clash with the existing `workload`
-# CR (cellID=cell-1). This script applies a CR named `cell-default` that
-# REUSES workload-kubeconfig. K8sCellStore reads spec.cellID, not CR name,
-# so two CRs sharing one Secret + one apiServer is valid.
+# uses CLUSTER_NAME for both the CR name AND the Secret name. Calling it
+# with cluster-name=workload would clash with H12's `workload` CR
+# (cellID=cell-1). This script applies a CR named `cell-default` with a
+# dedicated `cell-default-kubeconfig` Secret. K8sCellStore reads
+# spec.cellID, not CR name, so two CRs against the same physical cluster
+# (loopzero-workload) work fine — they differ only in spec.cellID.
 #
 # Idempotent: kubectl apply.
 #
 # Pre-conditions:
 #   - mgmt cluster reachable via k3d-loopzero-mgmt context
-#   - workload-kubeconfig Secret exists in loopzero-system (created by H12)
+#   - loopzero-workload k3d cluster running
+#   - infra/helmfile/scripts/lib/scoped-kubeconfig.sh available
 #
 # SPDX-License-Identifier: Apache-2.0
-# Copyright 2025-2026 The LoopZero Authors
 
 set -euo pipefail
 
 CTX="${MGMT_CTX:-k3d-loopzero-mgmt}"
 NS="${LOOPZERO_NS:-loopzero-system}"
+SCOPED_LIB="$(cd "$(dirname "$0")/.." && pwd)/helmfile/scripts/lib/scoped-kubeconfig.sh"
 
-if ! kubectl --context "$CTX" -n "$NS" get secret workload-kubeconfig >/dev/null 2>&1; then
-  echo "[bootstrap-cell-default-cc] workload-kubeconfig Secret missing in ${NS}; skip" >&2
+log() { printf '[bootstrap-cell-default-cc] %s\n' "$*" >&2; }
+
+if ! command -v k3d >/dev/null 2>&1; then
+  log "k3d not on PATH; skip"
+  exit 0
+fi
+if ! command -v kubectl >/dev/null 2>&1; then
+  log "kubectl not on PATH; skip"
   exit 0
 fi
 
+# 1. Get a scoped kubeconfig for loopzero-workload (least-privilege; same
+#    pattern as heal H12 for cell-1).
+WORKLOAD_KC=$(mktemp)
+trap 'rm -f "$WORKLOAD_KC"' EXIT
+
+if ! k3d kubeconfig get loopzero-workload > "$WORKLOAD_KC" 2>/dev/null || [[ ! -s "$WORKLOAD_KC" ]]; then
+  log "loopzero-workload kubeconfig unavailable (cluster not running?); skip"
+  exit 0
+fi
+
+SCOPED=""
+if [[ -x "$SCOPED_LIB" ]]; then
+  SCOPED=$(KUBECONFIG="$WORKLOAD_KC" "$SCOPED_LIB" workload "$WORKLOAD_KC" 2>/dev/null \
+    | grep -oE '/[^[:space:]]+kube[^[:space:]]*' | head -1 || echo "")
+fi
+[[ -n "$SCOPED" && -s "$SCOPED" ]] || SCOPED="$WORKLOAD_KC"
+
+# 2. Apply Secret loopzero-system/cell-default-kubeconfig (separate from
+#    workload-kubeconfig owned by cell-1).
+kubectl --context "$CTX" create secret generic cell-default-kubeconfig \
+  -n "$NS" \
+  --from-file=kubeconfig="$SCOPED" \
+  --dry-run=client -o yaml \
+  | kubectl --context "$CTX" apply -f - >/dev/null
+
+# 3. Apply ClusterCredential cell-default referring to cell-default-kubeconfig.
 kubectl --context "$CTX" apply -f - <<'YAML'
 apiVersion: loopzero.io/v1
 kind: ClusterCredential
@@ -53,8 +84,8 @@ spec:
     argocd: true
     operators: true
   secretRef:
-    name: workload-kubeconfig
+    name: cell-default-kubeconfig
     namespace: loopzero-system
 YAML
 
-echo "[bootstrap-cell-default-cc] cell-default ClusterCredential applied" >&2
+log "cell-default ClusterCredential + cell-default-kubeconfig Secret applied"
