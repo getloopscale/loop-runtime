@@ -8,7 +8,7 @@
 # collision that broke every Node deploy through the previous
 # bash-based generator.
 
-FROM golang:1.25-alpine AS build
+FROM mirror.gcr.io/library/golang:1.25-alpine AS build
 
 RUN apk add --no-cache git
 WORKDIR /src
@@ -18,7 +18,7 @@ RUN git clone --depth 1 https://github.com/getloopscale/loopzero-packs.git . \
  && go mod download \
  && CGO_ENABLED=0 go build -ldflags="-s -w" -o /loopzeropacks-generate ./cmd/loopzeropacks-generate
 
-FROM alpine:3.21.6
+FROM mirror.gcr.io/library/alpine:3.21.6
 
 LABEL org.opencontainers.image.source="https://github.com/loopzero/loopzero"
 LABEL org.opencontainers.image.title="loopzero-packs-runner"
