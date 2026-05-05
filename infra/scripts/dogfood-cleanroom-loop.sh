@@ -305,6 +305,25 @@ phase_bootstrap_extras() {
     return 38
   fi
   log "bootstrap-oauth-clients.sh OK (loopzero-bootstrap-credentials present, Hydra clients registered)"
+  # B16 fix (iter 12, 2026-05-05): install sigstore policy-controller chart
+  # FIRST so its CRD `policy.sigstore.dev/v1beta1` ClusterImagePolicy is
+  # available for the admission-policies chart to reference. Otherwise
+  # `helm install admission-policies` fails with `no matches for kind
+  # "ClusterImagePolicy"`.
+  if ! helm repo list 2>/dev/null | grep -q '^sigstore'; then
+    helm repo add sigstore https://sigstore.github.io/helm-charts >/dev/null 2>&1 || true
+    helm repo update >/dev/null 2>&1 || true
+  fi
+  if ! helm upgrade --install policy-controller sigstore/policy-controller \
+       --version 0.8.1 \
+       --kube-context k3d-loopzero-workload \
+       --namespace cosign-system --create-namespace \
+       -f "${REPO_ROOT}/infra/helm/policy-controller/values.yaml" \
+       --wait --timeout 3m; then
+    log_err "phase_bootstrap_extras: policy-controller helm install failed"
+    return 38
+  fi
+  log "policy-controller installed in workload (CRDs ClusterImagePolicy ready)"
   # B13 fix (iter 11, 2026-05-05): install admission-policies chart in
   # workload cluster so ValidatingAdmissionPolicies loopzero-restrict-image-
   # registries and loopzero-require-image-signature exist (preflight T0.3).
