@@ -297,6 +297,17 @@ phase_bootstrap_extras() {
     return 38
   fi
   log "provision-api-tokens.sh re-run OK (real Gitea + ArgoCD tokens restored)"
+  # B21 fix (iter 18, 2026-05-05): generate cosign-signing-key Secret in
+  # build cluster. Without this, the sign-image step in Argo Workflow
+  # fails with `MountVolume.SetUp failed for volume "cosign-signing-key":
+  # secret "cosign-signing-key" not found` and the workflow hangs in
+  # Init:0/1 forever. generate-build-secrets.sh is idempotent (preserves
+  # existing key on re-run).
+  if ! bash "${REPO_ROOT}/infra/helmfile/scripts/generate-build-secrets.sh" standalone; then
+    log_err "phase_bootstrap_extras: generate-build-secrets.sh failed"
+    return 38
+  fi
+  log "generate-build-secrets.sh OK (cosign-signing-key in build cluster)"
   if ! task k3d:bootstrap-workload; then
     log_err "phase_bootstrap_extras: task k3d:bootstrap-workload failed (ESO install in workload)"
     return 38
