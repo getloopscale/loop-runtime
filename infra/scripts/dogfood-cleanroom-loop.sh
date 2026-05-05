@@ -411,6 +411,19 @@ phase_post_tilt_env() {
   log "LOOPZERO_SERVICE_AUTH_SECRET set on deploy/loopzero-api"
   # Wait for rollout so pod has env when preflight inspects.
   kubectl --context k3d-loopzero-mgmt -n loopzero-system rollout status deploy/loopzero-api --timeout=60s >/dev/null 2>&1 || true
+  # B22 fix (iter 18, 2026-05-05): re-run heal AFTER tilt so H8 (LOOPZERO_*_IMAGE
+  # overrides on loopzero-api Deployment) and H10 (WORKLOAD_CLUSTER_URL on
+  # tenant-operator) take effect. Pre-tilt heal is needed for H12-H15
+  # (ClusterCredentials before loopzero-api boot), but its H8/H10 patches were
+  # erased when tilt's `infra/tilt/api-deployment.yaml` apply replaced the
+  # Deployment spec. Without H8, Argo Workflow tries to pull
+  # registry.digitalocean.com/loopzero-system/loopzero-cosign-signer:v0.1.0 (DOCR
+  # default) and fails with 401 — local k3d-loopzero-registry:5000/* override
+  # is required. Heal is idempotent.
+  if ! task k3d:heal >/dev/null 2>&1; then
+    log_warn "post-tilt heal re-run reported non-zero (best-effort; H8/H10 may be partial)"
+  fi
+  log "post-tilt heal re-run OK (H8/H10 image+URL overrides on top of Tilt apply)"
   # B17 fix (iter 14): pre-mint local-dogfood-token via seed-local-user.sh
   # with HYDRA_NAMESPACE=loopzero-system override. preflight.sh hardcodes
   # `port-forward -n loopzero-auth` and won't pass the env, so the token must
