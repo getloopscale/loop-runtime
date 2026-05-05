@@ -154,6 +154,23 @@ phase_tilt_up() {
   fi
 }
 
+phase_post_tilt_heal() {
+  log_phase "4.5/7 POST-TILT HEAL (re-apply H8/H10 env overrides erased by tilt)"
+  # B31 fix (real-paas-cleanroom-dogfood-loop iter 26, 2026-05-05):
+  # Heal H8 (loopzero-api LOOPZERO_*_IMAGE) and H10 (tenant-operator
+  # WORKLOAD_CLUSTER_URL) `kubectl set env` the live deploys. Tilt's later
+  # apply replaces the deploy spec, restoring the YAML's static value
+  # (DNS name `k3d-loopzero-workload-server-0` which mgmt cluster pods can't
+  # resolve via Docker bridge DNS). Net effect: tenant-operator emits
+  # ArgoCD Apps with destination=DNS, ArgoCD's cluster Secret URL=IP,
+  # mismatch → "unable to find destination server" → sync never starts
+  # → build-reaper times out RELEASING build at 5min.
+  # heal is idempotent — second call is safe.
+  if ! run_or_skip "re-apply heal H1-H15 post-tilt" task k3d:heal; then
+    log_warn "phase_post_tilt_heal: best-effort; tenant-operator may emit DNS-form destinations"
+  fi
+}
+
 phase_wait_doctor() {
   log_phase "5/7 DOCTOR (task doctor, poll up to ${DOCTOR_TIMEOUT_SEC}s)"
   if [[ "$DRY_RUN" -eq 1 ]]; then
@@ -254,13 +271,14 @@ PY
 SECONDS=0
 log "sequence start"
 
-phase_destroy     || exit $?
-phase_setup       || exit $?
-phase_heal        || exit $?
-phase_tilt_up     || exit $?
-phase_wait_doctor || exit $?
-phase_dogfood     || exit $?
-post_validate     || exit $?
+phase_destroy        || exit $?
+phase_setup          || exit $?
+phase_heal           || exit $?
+phase_tilt_up        || exit $?
+phase_post_tilt_heal || exit $?
+phase_wait_doctor    || exit $?
+phase_dogfood        || exit $?
+post_validate        || exit $?
 
 log "sequence COMPLETE in ${SECONDS}s"
 log "all phases passed; report: ${LOG_FILE}; state: ${STATE_SNAPSHOT}"
