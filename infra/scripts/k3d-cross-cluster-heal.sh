@@ -401,11 +401,22 @@ fi
 # to match the split chart (loopzero-tenant-operator) — the only operator that
 # wires SetupTenantController and therefore needs WORKLOAD_CLUSTER_URL.
 # ---------------------------------------------------------------------------
-log "H10: ensuring loopzero-tenant-operator WORKLOAD_CLUSTER_URL points at runtime"
+log "H10: ensuring tenant-operator WORKLOAD_CLUSTER_URL points at runtime"
 WORKLOAD_URL="https://${RT_IP}:6443"
+# B27 fix (real-paas-cleanroom-dogfood-loop iter 25, 2026-05-05): match
+# both the split chart name (loopzero-tenant-operator) and the Tilt-applied
+# legacy name (tenant-operator). In cleanroom only `tenant-operator`
+# exists; production helmfile sync produces `loopzero-tenant-operator`.
+# Without matching both, H10 silently no-ops in cleanroom and the operator
+# keeps a stale IP / DNS-name baked into the Tilt YAML — ArgoCD App
+# destination then fails with "unable to find destination server".
 TC_DEPLOY=$(kubectl --context "$MGMT_CTX" -n loopzero-system get deploy \
   -l app.kubernetes.io/name=loopzero-tenant-operator -o name 2>/dev/null | head -1)
-[[ -z "$TC_DEPLOY" ]] && TC_DEPLOY="deploy/loopzero-tenant-operator"
+if [[ -z "$TC_DEPLOY" ]]; then
+  TC_DEPLOY=$(kubectl --context "$MGMT_CTX" -n loopzero-system get deploy \
+    -l app=tenant-operator -o name 2>/dev/null | head -1)
+fi
+[[ -z "$TC_DEPLOY" ]] && TC_DEPLOY="deploy/tenant-operator"
 CURRENT_URL=$(kubectl --context "$MGMT_CTX" -n loopzero-system get "$TC_DEPLOY" \
   -o jsonpath='{.spec.template.spec.containers[0].env[?(@.name=="WORKLOAD_CLUSTER_URL")].value}' 2>/dev/null)
 if [[ "$CURRENT_URL" == "$WORKLOAD_URL" ]]; then
