@@ -1,739 +1,518 @@
-# Plan: Professional Load Testing System
+# Plan: Local Regression Load Testing
 
-> **Version 1.0** — Implementar um sistema de teste de carga profissional completo para o LoopZero PaaS, cobrindo todas as lacunas identificadas na pesquisa SOTA: soak testing automatizado, testes SSE/streaming, chaos+load combinado, testes de API pura, k6 Operator para distributed testing, shift-left CI gate em PRs, e observabilidade de resultados com alertas automáticos. O resultado é um sistema que detecta regressões de performance antes do merge, identifica memory leaks semanalmente, e valida resiliência sob falhas.
+> **Version 2.0** — Sistema de teste de carga 100% local que garante que o LoopZero não regrediu. Roda contra k3d, detecta degradação de performance comparando com baselines gravadas, e falha se p99 piorou. Zero dependência de infra remota. Propósito: regressão, não benchmarking de produção.
 
 ## Context
 
-O LoopZero já possui uma base sólida de load testing (k6 + Go harness) com scripts L1-L5 e stress test. Porém a pesquisa SOTA (`docs/technical/load-testing-sota.md`, 2026-05-04) identificou **7 lacunas críticas**:
+O LoopZero já possui scripts k6 (L1-L5, stress, soak, SSE, chaos, API) e um runner que executa in-cluster via Job no k3d local. A infra de testes existe (`infra/tests/k6/scripts/`, `infra/tests/runner/run-k6.sh`). Porém o sistema atual tem problemas como ferramenta de **regressão**:
 
-1. **Soak test não implementado** — referenciado no README mas script `soak-6h.js` não existe. Memory leaks e FD exhaustion passam despercebidos.
-2. **SSE/WebSocket não testado** — `loopzero logs` e deploy progress stream nunca foram validados sob carga.
-3. **Chaos + Load separados** — Chaos Mesh roda isolado; nunca validamos comportamento sob carga + falha simultânea.
-4. **API endpoints sem benchmark** — nenhum teste de latência pura (p99 por endpoint) sem pipeline de deploy.
-5. **k6 Operator ausente** — distributed testing impossível; L4/L5 limitados a single-pod.
-6. **L1 não roda em PRs** — regressões de performance escapam até weekly cron.
-7. **Alertas de soak inexistentes** — sem PrometheusRule para memory slope ou FD exhaustion.
+1. **Thresholds absolutos** — `health < 100ms p99` depende de hardware. Num laptop mais lento, falha por motivo errado.
+2. **Sem baseline comparison** — não existe "comparar com a última execução boa" para detectar degradação relativa.
+3. **Sem modo regression rápido** — L1 leva 15 min, soak 6h. Desenvolvedor precisa de um `task test:load:regression` que rode em < 10 min e diga "piorou ou não".
+4. **Soak desproporcionado** — 6h para regressão local é impraticável. Precisa de versão curta (30 min).
+5. **Sem CI local gate** — nenhum workflow que rode L1 + API como gate antes de push.
+6. **Manifests remotos sem propósito** — CronJob, k6 Operator, TestRun distribuído são infra remota que não serve para regressão local.
 
-**Evidência:** `infra/tests/k6/README.md` menciona `soak-l2-6h.js` e `soak-l2-cronjob.yaml` que não existem. `Glob("infra/tests/k6/scripts/soak*")` retorna vazio. `Glob("infra/tests/k6/manifests/**")` retorna vazio.
+**Estado atual confirmado (2026-05-05):**
+- 10 scripts k6 existem em `infra/tests/k6/scripts/`
+- `run-k6.sh` já roda in-cluster no k3d (Job template)
+- Taskfile já tem `test:load:l1` até `test:load:all`
+- Manifests em `infra/tests/k6/manifests/` (rbac, soak-cronjob, soak-alerts, testrun-l3, testrun-l4)
 
 ## Objective
 
-**Done = sistema de load testing que detecta regressões em PRs (< 5 min), valida resiliência sob chaos, e identifica leaks semanalmente — tudo automatizado, zero intervenção manual.**
+**Done = desenvolvedor roda `task test:load:regression` contra k3d local em < 10 min e recebe PASS/FAIL baseado em degradação relativa vs baseline. Nenhuma dependência externa.**
 
-- 4 novos scripts k6 implementados e validados
-- k6 Operator instalável via Helm
-- Soak CronJob + alertas ativos no cluster
-- CI gate L1 em PRs (shift-left)
-- Runbook para falhas de soak
-- Taskfile atualizado com todos os comandos
-- README atualizado com inventário completo
+- Modo regression rápido (L1 + API, < 10 min)
+- Baseline system (gravar, comparar, atualizar)
+- Soak curto (30 min) para regressão, 6h como `--full` opcional
+- Thresholds relativos (% de degradação vs baseline)
+- Tudo roda com `task setup && tilt up` como pré-requisito
+- Remover/arquivar infra remota que não serve para regressão
 
 ## ADRs
 
-### D1 — k6 permanece como ferramenta principal
+### D1 — Tudo local, k3d é o ambiente
 
-**Decision:** Não migrar para Gatling, Locust ou Artillery.
-**Rationale:** k6 é líder consolidado (29.9k stars), Kubernetes-native via Operator, JS scripting (equipe já usa), Prometheus remote-write built-in, arrival-rate executor resolve coordinated omission. A equipe já tem 6 scripts + shared libs. Custo de migração > 0, benefício = 0.
-**Consequences:** Extensões via xk6 quando necessário (SSE). Sem dependência Python/JVM.
+**Decision:** Todos os testes rodam contra k3d local. Nenhuma dependência de DO, CI remoto, ou cluster externo.
+**Rationale:** Propósito é regressão — "o código que eu mudei piorou a performance?" Isso é medido localmente. Benchmarking absoluto (latência real em produção) é problema diferente, resolvido separadamente.
+**Consequences:** Thresholds devem ser relativos (vs baseline), não absolutos. Hardware varia entre máquinas.
 
-### D2 — k6 Operator para distributed testing (L3+)
+### D2 — Baseline comparison (não thresholds absolutos)
 
-**Decision:** Instalar k6 Operator (Grafana, v3.10.0) no build cluster para habilitar `TestRun` CRD com `parallelism: N`.
-**Rationale:** L4 (500 tenants) e L5 (5000 tenants) precisam de múltiplos pods gerando carga. k6 single-pod satura em ~300k RPS. Operator sincroniza pods via initializer/starter jobs. Testkube rejeitado (overhead de controller+API+dashboard sem retorno).
-**Consequences:** Build cluster ganha CRD `TestRun`. Manifests `testrun-l3-distributed.yaml` e `testrun-l4-distributed.yaml` exemplificam uso.
+**Decision:** O sistema grava baselines (`infra/tests/k6/baselines/`) e compara execuções futuras contra elas. FAIL se degradação > 20% no p99.
+**Rationale:** `health < 100ms` num MacBook Pro pode ser `health < 300ms` num laptop antigo. O que importa é: "piorou desde a última vez que estava ok?" — não o valor absoluto.
+**Consequences:** Primeira execução grava baseline (sempre PASS). Execuções subsequentes comparam. Desenvolvedor pode `task test:load:baseline:update` para aceitar nova performance.
 
-### D3 — Soak test via CronJob semanal (não k6 Operator)
+### D3 — Modo regression < 10 min
 
-**Decision:** Soak test roda como Job simples (não TestRun distribuído) via CronJob.
-**Rationale:** Soak não precisa de alta concorrência — precisa de duração (6h). Single pod com 30 VUs é suficiente. CronJob é mais simples de operar, debugar e alertar.
-**Consequences:** PrometheusRule alerta em Job failure + memory/FD slope. Runbook documenta diagnóstico.
+**Decision:** `task test:load:regression` roda L1 (5 min simplificado) + API (3 min) = < 10 min total. É o gate diário do desenvolvedor.
+**Rationale:** 15 min (L1 atual) + 5 min (API) = 20 min é demais para rodar antes de cada push. Modo regression usa VUs reduzidos e duração menor, suficiente para detectar regressões grossas (query lenta, lock contention, endpoint quebrado).
+**Consequences:** Regression mode não substitui L1-L5 completos — é smoke de regressão.
 
-### D4 — L1 smoke em PRs usa Go harness (não k6 in-cluster)
+### D4 — Soak 30 min para regressão, 6h opcional
 
-**Decision:** CI em PRs executa `go test ./load/ -run TestL1_` contra API dev, não k6 in-cluster.
-**Rationale:** PRs não têm acesso ao cluster. Go harness roda standalone contra endpoint HTTPS. Feedback em < 5 min. k6 in-cluster exigiria cluster disponível em cada PR CI run.
-**Consequences:** Gate é melhor que nada, mas não testa com real latency distribution. Accepted trade-off.
+**Decision:** `task test:load:soak:short` roda 30 min (suficiente para detectar memory leak óbvio). `task test:load:soak` mantém 6h para validação profunda (antes de release).
+**Rationale:** Leaks que se manifestam em < 30 min são graves e devem ser pegos na regressão. Leaks sutis (2h+) são pegos antes de release, não no dia a dia.
+**Consequences:** Soak curto faz parte do `test:load:full` mas NÃO do `test:load:regression`.
 
-### D5 — Scripts usam `constant-arrival-rate` ou `ramping-arrival-rate` (open model)
+### D5 — k6 Operator e infra remota: arquivar
 
-**Decision:** Todos os novos scripts usam open workload model. L1 existente pode permanecer `per-vu-iterations` (smoke, CO não é relevante a 10 VUs).
-**Rationale:** Closed model (wait for response before next request) causa coordinated omission — p99 reportado é artificialmente baixo. Open model (constant arrival rate regardless of response time) é a única forma correta de medir latência sob carga sustentada.
-**Consequences:** Novos scripts: `constant-arrival-rate` ou `ramping-arrival-rate`. L1 mantém `per-vu-iterations` (ok para smoke).
+**Decision:** Remover manifests de CronJob, k6 Operator TestRun, e alerts remotos do escopo ativo. Mover para `infra/tests/k6/manifests/remote/` (referência futura, não executado).
+**Rationale:** CronJob semanal, TestRun distribuído, e PrometheusRule são infra para cluster de produção/staging. Não servem para regressão local. Mantê-los no path ativo cria confusão sobre o que é testado e o que é aspiracional.
+**Consequences:** Quando (Sprint 9+) existir ambiente remoto para load testing, esses manifests podem ser resgatados.
 
-### D6 — Chaos + Load são scripts separados executados em paralelo
+### D6 — Scripts existentes permanecem intactos
 
-**Decision:** `chaos-load.js` mede impacto; Chaos Mesh injeta falhas via CRD. O script k6 NÃO injeta chaos — apenas observa.
-**Rationale:** Separação de concerns. k6 mede, Chaos Mesh injeta. Permite combinações arbitrárias (qualquer chaos experiment + qualquer k6 script). Reprodutível.
-**Consequences:** Operador executa `kubectl apply -f chaos-experiment.yaml` + `task test:load:chaos` em paralelo.
+**Decision:** Os 10 scripts k6 existentes não são modificados. O modo regression é um novo script wrapper leve que executa subsets com duração/VUs reduzidos.
+**Rationale:** Scripts L1-L5 são corretos para seu propósito (validação completa). Modificá-los para servir dois propósitos viola SRP. O modo regression é um novo concern.
+**Consequences:** Novo script `regression-quick.js` importa de `lib/` e roda subset rápido.
 
 ## Dependency Graph
 
 ```
-Phase 0 (Scripts k6) ──▶ Phase 1 (Infra) ──▶ Phase 2 (CI + Observability) ──▶ Phase 3 (Docs + Validation)
-     │                        │
-     │                        ├── T1.1 k6 Operator Helm (independente)
-     │                        ├── T1.2 RBAC (independente)
-     │                        └── T1.3 CronJob + Alerts (depende T0.1)
-     │
-     ├── T0.1 soak-6h.js (independente)
-     ├── T0.2 sse-deploy-stream.js (independente)
-     ├── T0.3 chaos-load.js (independente)
-     └── T0.4 api-endpoints.js (independente)
+Phase 0 (Baseline System) ──▶ Phase 1 (Regression Mode) ──▶ Phase 2 (Cleanup + Docs)
+     │                              │
+     ├── T0.1 baseline recorder     ├── T1.1 regression-quick.js
+     ├── T0.2 baseline comparator   ├── T1.2 soak-30min.js
+     └── T0.3 Taskfile baseline     └── T1.3 Taskfile regression
+                                         │
+                                    Phase 2
+                                         ├── T2.1 Arquivar manifests remotos
+                                         ├── T2.2 README atualizado
+                                         └── T2.3 Validation run
 ```
 
-Phase 0 tasks são todas paralelas entre si. Phase 1 depende de T0.1 (CronJob referencia soak script). Phase 2 é paralela internamente. Phase 3 é final.
+Phase 0 é fundação (sem comparação, nada funciona). Phase 1 usa a fundação. Phase 2 é cleanup.
 
 ---
 
-## Phase 0: Scripts k6
+## Phase 0: Baseline System
 
-**Objective:** Implementar os 4 scripts k6 que cobrem os gaps identificados na pesquisa SOTA.
+**Objective:** Criar infraestrutura para gravar e comparar resultados de load tests locais.
 
-### T0.1 — Soak Test (6 horas)
+### T0.1 — Baseline Recorder
 
 #### Objective
-Script k6 que roda L2-level load (1 deploy/min) por 6 horas para detectar memory leaks, FD exhaustion, e connection pool starvation.
+Script que captura o output do k6 (JSON summary) e salva como baseline nomeada.
 
 #### Evidence
-- `infra/tests/k6/README.md` line 89: referencia `soak-l2-cronjob.yaml` que não existe
-- `docs/technical/load-testing-sota.md`: "Soak test CronJob implementado" listado como gap de alta prioridade
-- L1-L5 rodam por minutos (15 min a 4h) — insuficiente para detectar leaks sutis que se manifestam após 2+ horas
+- k6 suporta `--summary-export=file.json` que exporta todas as métricas em JSON estruturado
+- Não existe nenhum mecanismo de comparação hoje — cada execução é isolada
 
-#### Files to edit
+#### Files to create
 ```
-infra/tests/k6/scripts/soak-6h.js — (NEW) script de soak test 6h
+infra/tests/k6/tools/record-baseline.sh — (NEW) grava baseline de uma execução k6
+infra/tests/k6/baselines/.gitkeep — (NEW) diretório para baselines
 ```
-
-#### Deep file dependency analysis
-- **`soak-6h.js`** — novo arquivo. Importa de `./lib/loopzero-api.js` (createProject, uploadSource, submitBuild, pollBuildUntilDone, healthCheck, verifyAppLive, appURL) e `./lib/thresholds.js` (thresholdsFor). Usa `../fixtures/bundle-builder.js` (loadBundleBytes). Nenhum downstream depende dele diretamente; o CronJob (T1.3) referencia por nome.
 
 #### Deep Dives
-- **Executor:** `constant-arrival-rate` com `rate: 1, timeUnit: '1m'` = 1 deploy/minuto constante por 6h = 360 deploys total
-- **Tenant rotation:** 50 tenants, `iterationInTest % 50` = cada tenant recebe ~7 deploys
-- **Métricas de soak:** `loopzero_soak_iteration_total` (Counter), `loopzero_soak_hour_marker` (Counter, incrementa a cada ~60 iterações)
-- **Invariante:** taxa de sucesso não deve degradar ao longo do tempo. Se hora 1 tem 100% e hora 6 tem 90%, o teste deve falhar.
-- **Edge case:** se build travar (timeout 20min), o VU não é liberado — `maxVUs: 100` garante que não esgota o pool
+- **Formato da baseline:** JSON do k6 summary (`--summary-export`). Contém todas as métricas (p50, p95, p99, rate, count) por threshold name.
+- **Naming:** `baselines/{script-name}-{date}.json` + symlink `baselines/{script-name}-latest.json`
+- **O que gravar:** p50, p95, p99 de `http_req_duration`, `loopzero_deploy_duration_ms`, `loopzero_api_*_duration`. Rates de `loopzero_build_succeeded`, `loopzero_app_verified`.
+- **Gitignore:** baselines são locais (hardware-specific), NÃO commitados. `.gitignore` inclui `infra/tests/k6/baselines/*.json`.
 
 #### Tasks
-1. Criar arquivo `infra/tests/k6/scripts/soak-6h.js`
-2. Implementar executor `constant-arrival-rate` com duração 6h
-3. Adicionar métricas custom (soak_iteration_total, soak_hour_marker)
-4. Implementar `handleSummary` com breakdown por hora
-5. Validar que `thresholdsFor('l2')` é aplicado
+1. Criar `infra/tests/k6/baselines/.gitkeep`
+2. Adicionar `infra/tests/k6/baselines/*.json` ao `.gitignore`
+3. Criar `infra/tests/k6/tools/record-baseline.sh` que:
+   - Recebe path do JSON summary como argumento
+   - Extrai métricas relevantes (p50, p95, p99, rates)
+   - Salva em `baselines/{name}-latest.json`
+   - Mantém histórico `baselines/{name}-{date}.json` (últimas 5)
 
 #### TDD
 ```
-RED:     Executar `k6 run --dry-run soak-6h.js` — deve parsear sem erro
-RED:     Thresholds devem incluir `loopzero_build_succeeded: rate>0.99`
-GREEN:   Implementar script completo
-REFACTOR: Extrair report helper se duplicar de L2
-VERIFY:  k6 inspect scripts/soak-6h.js (validates options/thresholds without running)
+RED:     ./tools/record-baseline.sh não existe
+GREEN:   Criar script, executar com JSON de exemplo, baseline salva
+VERIFY:  cat baselines/l1-10-tenants-latest.json | jq '.metrics.http_req_duration.p99'
 ```
 
 #### Acceptance Criteria
-- [ ] Script parseia sem erro via `k6 inspect`
-- [ ] Usa `constant-arrival-rate` executor (CO-safe)
-- [ ] Duração total = 6h + gracefulStop 30m
-- [ ] 50 tenants com rotação
-- [ ] Thresholds derivados de `thresholdsFor('l2')`
-- [ ] Métricas custom: `loopzero_soak_iteration_total`, `loopzero_soak_hour_marker`
-- [ ] handleSummary mostra breakdown temporal
-- [ ] Segue style guide dos scripts existentes (SPDX, imports, groups)
+- [ ] Script recebe JSON summary e grava baseline
+- [ ] Symlink `*-latest.json` atualizado
+- [ ] Histórico mantém últimas 5 execuções
+- [ ] Baselines em `.gitignore` (não commitadas)
+- [ ] Script executável e com help (`--help`)
 
 #### DoD
-- [ ] `k6 inspect scripts/soak-6h.js` retorna 0
-- [ ] Script segue padrão dos existentes (lib imports, setup/default/teardown/handleSummary)
-- [ ] Zero warnings no k6 parser
+- [ ] `./tools/record-baseline.sh --help` funciona
+- [ ] Grava baseline a partir de JSON k6 real
+- [ ] `.gitignore` atualizado
 
 ---
 
-### T0.2 — SSE Deploy Stream Test
+### T0.2 — Baseline Comparator
 
 #### Objective
-Script k6 que valida Server-Sent Events streaming durante deploys — cobertura para `loopzero logs` / deploy progress.
+Script que compara resultado atual vs baseline e emite PASS/FAIL com degradação percentual.
 
-#### Evidence
-- Nenhum script existente testa SSE
-- `loopzero logs` usa SSE para streaming de deploy progress — nunca validado sob carga
-- API tem endpoint `GET /api/v1/builds/{buildID}/events` (SSE)
-
-#### Files to edit
+#### Files to create
 ```
-infra/tests/k6/scripts/sse-deploy-stream.js — (NEW) script de teste SSE
+infra/tests/k6/tools/compare-baseline.sh — (NEW) compara resultado vs baseline
 ```
-
-#### Deep file dependency analysis
-- **`sse-deploy-stream.js`** — novo arquivo. Importa de `./lib/loopzero-api.js`. Usa HTTP streaming pattern (k6 não tem SSE nativo; usa polling como fallback com tentativa de stream). O endpoint SSE é `GET /api/v1/builds/{buildID}/events`.
 
 #### Deep Dives
-- **k6 e SSE:** k6 v0.52 não tem suporte SSE nativo. Abordagem: (a) tentar `http.get` com `responseType: 'none'` para stream, (b) fallback para polling `GET /api/v1/builds/{buildID}` com métricas de latência do primeiro evento
-- **Métricas:** `loopzero_sse_connect_duration_ms` (tempo até primeiro evento), `loopzero_sse_events_received` (total), `loopzero_sse_connection_drops` (drops inesperados), `loopzero_sse_build_terminal_received` (% que recebeu evento terminal)
-- **Invariante:** ≥95% dos builds devem emitir evento terminal via SSE. Se menos, há bug de event emission.
+- **Lógica:** Para cada métrica na baseline, calcula `(atual - baseline) / baseline * 100`. Se degradação > threshold (default 20%), FAIL.
+- **Output:** Tabela com métrica, baseline, atual, delta%, status (✓/✗)
+- **Exit code:** 0 se todas ✓, 1 se qualquer ✗
+- **Tolerância configurável:** `REGRESSION_THRESHOLD=20` (%) via env var
+- **Primeira execução:** Se baseline não existe, grava automaticamente e retorna PASS (bootstrap)
+- **Métricas comparadas:** apenas p95 e p99 de durations + rates. p50 é volátil demais.
 
 #### Tasks
-1. Criar `infra/tests/k6/scripts/sse-deploy-stream.js`
-2. Implementar executor `constant-arrival-rate` (5 deploys/min, 10 min)
-3. Submeter build via lib/loopzero-api.js
-4. Implementar SSE connection attempt + polling fallback
-5. Registrar métricas custom de SSE
-6. handleSummary com report de SSE performance
+1. Criar `infra/tests/k6/tools/compare-baseline.sh`
+2. Implementar comparação JSON com `jq`
+3. Emitir tabela formatada com deltas
+4. Exit code correto (0/1)
+5. Auto-bootstrap se baseline não existe
 
 #### TDD
 ```
-RED:     `k6 inspect sse-deploy-stream.js` — deve parsear sem erro
-RED:     Thresholds devem incluir `loopzero_sse_build_terminal_received: rate>0.95`
-GREEN:   Implementar script completo
-REFACTOR: None expected
-VERIFY:  k6 inspect scripts/sse-deploy-stream.js
+RED:     ./tools/compare-baseline.sh não existe
+GREEN:   Criar script, testar com baseline conhecida + resultado 10% pior (PASS) + 25% pior (FAIL)
+VERIFY:  Simular degradação e verificar exit code
 ```
 
 #### Acceptance Criteria
-- [ ] Script parseia sem erro
-- [ ] Usa `constant-arrival-rate` executor
-- [ ] Submete builds reais e tenta ler SSE stream
-- [ ] 4 métricas custom de SSE implementadas
-- [ ] Thresholds incluem SSE-specific gates
-- [ ] Fallback para polling se SSE indisponível
+- [ ] Compara p95, p99 de durations e rates
+- [ ] Threshold configurável via `REGRESSION_THRESHOLD` (default 20%)
+- [ ] Tabela legível com ✓/✗ por métrica
+- [ ] Exit 0 se OK, exit 1 se regressão
+- [ ] Auto-bootstrap (grava baseline se não existe)
+- [ ] Ignora métricas ausentes na baseline (novas métricas = PASS)
 
 #### DoD
-- [ ] `k6 inspect` green
-- [ ] Padrão consistente com outros scripts
+- [ ] Script funciona com dados reais do k6
+- [ ] PASS com delta < 20%, FAIL com delta > 20%
+- [ ] Bootstrap funciona na primeira execução
 
 ---
 
-### T0.3 — Chaos + Load Combined
+### T0.3 — Taskfile: Baseline Commands
 
 #### Objective
-Script k6 que mede comportamento da plataforma durante chaos experiments (pod kill, network delay, PG disconnect). Não injeta chaos — apenas observa.
-
-#### Evidence
-- Chaos Mesh instalado (Sprint 8 Phase 0)
-- `taskfiles/test.yml` já tem `test:chaos:*` tasks
-- Nenhum script combina carga + chaos para medir degradação graceful
+Adicionar tasks para gravar e comparar baselines.
 
 #### Files to edit
 ```
-infra/tests/k6/scripts/chaos-load.js — (NEW) script chaos + load
+taskfiles/test.yml — adicionar tasks de baseline
 ```
-
-#### Deep file dependency analysis
-- **`chaos-load.js`** — novo arquivo. Importa de `./lib/loopzero-api.js`. Design 3-phase: baseline (5 min) → chaos (15 min) → recovery (5 min). Métricas segregadas por fase permitem comparar "antes" vs "durante" vs "depois" no Grafana.
-
-#### Deep Dives
-- **3 Fases:** Script usa `scenarios` com múltiplos executors OU single executor com lógica temporal
-- **Métricas:** `loopzero_chaos_graceful_reject` (429/503 esperados), `loopzero_chaos_unexpected_5xx` (500 = bug)
-- **Threshold relaxado:** `loopzero_build_succeeded: rate>0.85` (chaos ativo reduz success rate esperado)
-- **Invariante:** zero 500 erros. 429/503 são esperados (backpressure graceful). 500 é bug exposto pelo chaos.
-- **Recovery:** builds submetidos nos últimos 5 min devem ter >95% success (sistema se recuperou)
 
 #### Tasks
-1. Criar `infra/tests/k6/scripts/chaos-load.js`
-2. Implementar 3 fases via stages do `ramping-arrival-rate`
-3. Adicionar métricas de classificação de erro (graceful vs unexpected)
-4. handleSummary com per-phase breakdown
-5. Documentar em comments como usar com Chaos Mesh
-
-#### TDD
-```
-RED:     `k6 inspect chaos-load.js` — parseia sem erro
-RED:     Threshold `loopzero_chaos_unexpected_5xx: count<3` presente
-GREEN:   Implementar script
-REFACTOR: None expected
-VERIFY:  k6 inspect scripts/chaos-load.js
-```
+1. Adicionar `test:load:baseline:record` — roda L1 + API e grava baseline
+2. Adicionar `test:load:baseline:update` — alias para record (aceita nova performance)
+3. Adicionar `test:load:baseline:show` — mostra baseline atual
 
 #### Acceptance Criteria
-- [ ] 3 fases (baseline, chaos, recovery)
-- [ ] Métricas segregam erros esperados (429/503) de inesperados (500)
-- [ ] Threshold relaxado para chaos (85% success)
-- [ ] Recovery phase threshold apertado (95%)
-- [ ] Comments explicam integração com Chaos Mesh
+- [ ] `task test:load:baseline:record` executa L1 + grava
+- [ ] `task test:load:baseline:update` é alias claro
+- [ ] `task test:load:baseline:show` exibe valores atuais
+- [ ] Todos listam via `task --list`
 
 #### DoD
-- [ ] `k6 inspect` green
-- [ ] Documentação de uso em comments
-
----
-
-### T0.4 — API Endpoints Pure HTTP Test
-
-#### Objective
-Script k6 que testa latência pura de endpoints HTTP da API (sem pipeline de deploy). Valida p99 por endpoint a 100 RPS.
-
-#### Evidence
-- Scripts L1-L5 medem deploy pipeline inteiro (minutos por iteração)
-- Nenhum script mede latência HTTP pura por endpoint
-- SLOs de API: health < 100ms p99, list < 500ms p99, get < 200ms p99
-
-#### Files to edit
-```
-infra/tests/k6/scripts/api-endpoints.js — (NEW) script de benchmark de endpoints
-```
-
-#### Deep file dependency analysis
-- **`api-endpoints.js`** — novo arquivo. Importa parcialmente de `./lib/loopzero-api.js` (auth headers pattern). Não usa pipeline functions (createProject, submitBuild). Testa endpoints diretamente com `http.get`/`http.post`. Métricas custom por endpoint.
-
-#### Deep Dives
-- **Executor:** `constant-arrival-rate` com `rate: 100, timeUnit: '1s'` = 100 RPS por 5 min
-- **Endpoints:** GET /health, GET /projects, GET /builds/{id}, GET /environments, POST /projects
-- **Métricas:** Trend por endpoint (`loopzero_api_health_duration`, `loopzero_api_projects_list_duration`, etc.)
-- **Pre-requisito:** tenant `k6-api-tn-0` deve existir no DB (seed step)
-
-#### Tasks
-1. Criar `infra/tests/k6/scripts/api-endpoints.js`
-2. Implementar `constant-arrival-rate` a 100 RPS
-3. Implementar request para cada endpoint com tag + custom metric
-4. Thresholds per-endpoint (health <100ms, list <500ms, get <200ms, create <1000ms)
-5. handleSummary com tabela per-endpoint
-
-#### TDD
-```
-RED:     `k6 inspect api-endpoints.js` — parseia sem erro
-RED:     Threshold `loopzero_api_health_duration: p(99)<100` presente
-GREEN:   Implementar script
-REFACTOR: None expected
-VERIFY:  k6 inspect scripts/api-endpoints.js
-```
-
-#### Acceptance Criteria
-- [ ] 100 RPS via `constant-arrival-rate`
-- [ ] 5 endpoints testados
-- [ ] Trend metric por endpoint
-- [ ] Thresholds per-endpoint baseados em SLO
-- [ ] handleSummary com tabela comparativa
-
-#### DoD
-- [ ] `k6 inspect` green
-- [ ] Thresholds derivados de SLOs documentados
-
----
-
-## Phase 1: Infrastructure
-
-**Objective:** Instalar infraestrutura para distributed testing, soak automatizado, e RBAC.
-
-### T1.1 — k6 Operator Helm Chart
-
-#### Objective
-Chart Helm que instala o Grafana k6 Operator no cluster, habilitando CRD `TestRun` para distributed testing.
-
-#### Evidence
-- L4 (500 tenants) e L5 (5000 tenants) precisam de múltiplos pods (ADR D2)
-- k6 single-pod satura em ~300k RPS
-- Sem Operator, distributed é manual (múltiplos Jobs sem sincronização)
-
-#### Files to edit
-```
-infra/helm/k6-operator/Chart.yaml — (NEW) chart metadata + dependency
-infra/helm/k6-operator/values.yaml — (NEW) configuração do operator
-```
-
-#### Deep file dependency analysis
-- **Chart.yaml** — declaração de dependência no chart oficial `grafana/k6-operator` v3.10.0. Pattern: mesmo de `infra/helm/` existentes (lightweight, inline values).
-- **values.yaml** — resource limits, installCRDs=true, namespace config.
-- **Downstream:** `testrun-l3-distributed.yaml` e `testrun-l4-distributed.yaml` dependem do CRD `TestRun` que este chart instala.
-
-#### Tasks
-1. Criar diretório `infra/helm/k6-operator/`
-2. Escrever `Chart.yaml` com dependency no chart Grafana
-3. Escrever `values.yaml` com resource limits e configuração
-4. Validar com `helm template`
-
-#### TDD
-```
-RED:     `helm template infra/helm/k6-operator/` falha (chart não existe)
-GREEN:   Criar chart, `helm dependency update && helm template` passa
-REFACTOR: None expected
-VERIFY:  helm template infra/helm/k6-operator/ --debug
-```
-
-#### Acceptance Criteria
-- [ ] `helm dependency update` resolve chart grafana/k6-operator
-- [ ] `helm template` gera manifests válidos
-- [ ] Resource limits definidos (CPU 200m/100m, Memory 256Mi/128Mi)
-- [ ] installCRDs: true
-- [ ] Chart segue pattern de `infra/helm/` existentes
-
-#### DoD
-- [ ] `helm template` green
-- [ ] Nenhum `latest` tag
-- [ ] Resource limits + requests definidos
-
----
-
-### T1.2 — RBAC para k6 Runner
-
-#### Objective
-ServiceAccount + Role + RoleBinding para que Jobs k6 acessem ConfigMaps e Secrets necessários.
-
-#### Evidence
-- Job template (`job-template.yaml`) não especifica `serviceAccountName`
-- Secrets `loopzero-api-secrets` precisam de acesso explícito
-- CronJob de soak precisa de permissões persistentes
-
-#### Files to edit
-```
-infra/tests/k6/manifests/rbac.yaml — (NEW) SA + Role + RoleBinding
-```
-
-#### Deep file dependency analysis
-- **rbac.yaml** — novo. Define `ServiceAccount k6-runner`, `Role k6-runner` (get configmaps, get secrets/loopzero-api-secrets), `RoleBinding`. Referenciado pelo CronJob (T1.3) e TestRun manifests.
-
-#### Tasks
-1. Criar diretório `infra/tests/k6/manifests/`
-2. Escrever `rbac.yaml` com SA + Role (minimal privileges) + RoleBinding
-3. Validar com `kubectl apply --dry-run=client`
-
-#### TDD
-```
-RED:     `kubectl apply --dry-run=client -f rbac.yaml` falha (arquivo não existe)
-GREEN:   Criar arquivo, dry-run passa
-VERIFY:  kubectl apply --dry-run=client -f infra/tests/k6/manifests/rbac.yaml
-```
-
-#### Acceptance Criteria
-- [ ] ServiceAccount `k6-runner` em `loopzero-system`
-- [ ] Role com minimal privileges (get configmaps, get secret loopzero-api-secrets only)
-- [ ] RoleBinding liga SA ao Role
-- [ ] Labels `app.kubernetes.io/part-of: loopzero`
-
-#### DoD
-- [ ] `kubectl apply --dry-run=client` green
-- [ ] Princípio de least privilege respeitado
-
----
-
-### T1.3 — Soak CronJob + PrometheusRule
-
-#### Objective
-CronJob semanal que executa soak test + alertas Prometheus para memory/FD leak detection.
-
-#### Evidence
-- ADR D3: soak como CronJob simples
-- `docs/technical/load-testing-sota.md`: "memory slope: deriv(process_resident_memory_bytes[1h]) > 0 por >2h = leak"
-- Sem automação atual, soak nunca é executado na prática
-
-#### Files to edit
-```
-infra/tests/k6/manifests/soak-cronjob.yaml — (NEW) CronJob semanal
-infra/tests/k6/manifests/soak-alerts.yaml — (NEW) PrometheusRule para leak detection
-```
-
-#### Deep file dependency analysis
-- **soak-cronjob.yaml** — depende de: ConfigMap `k6-scripts` (contendo soak-6h.js de T0.1), ConfigMap `k6-fixture-builder`, ConfigMap `k6-seed-sql`, Secret `loopzero-api-secrets`, ServiceAccount `k6-runner` (T1.2).
-- **soak-alerts.yaml** — PrometheusRule independente. Alertas: `LoopZeroSoakTestFailed` (Job failure), `LoopZeroAPIMemoryLeak` (RSS slope > 0 por 2h durante soak), `LoopZeroAPIFDExhaustion` (FD slope > 0 por 2h).
-
-#### Tasks
-1. Escrever `soak-cronjob.yaml` (schedule: Sunday 02:00 UTC)
-2. Escrever `soak-alerts.yaml` com 3 regras de alerta
-3. Validar YAML syntax
-4. Validar PrometheusRule spec
-
-#### TDD
-```
-RED:     `kubectl apply --dry-run=client -f soak-cronjob.yaml` falha
-RED:     `kubectl apply --dry-run=client -f soak-alerts.yaml` falha
-GREEN:   Criar ambos, dry-run passa
-VERIFY:  kubectl apply --dry-run=client -f infra/tests/k6/manifests/soak-cronjob.yaml
-         kubectl apply --dry-run=client -f infra/tests/k6/manifests/soak-alerts.yaml
-```
-
-#### Acceptance Criteria
-- [ ] CronJob schedule: `0 2 * * 0` (Sunday 02:00 UTC)
-- [ ] `concurrencyPolicy: Forbid`
-- [ ] `activeDeadlineSeconds: 28800` (8h hard limit)
-- [ ] Uses ServiceAccount `k6-runner`
-- [ ] Init containers: build-fixture + seed-db
-- [ ] PrometheusRule com 3 alertas: SoakTestFailed, MemoryLeak, FDExhaustion
-- [ ] Alertas têm `runbook_url` apontando para docs/runbooks/
-
-#### DoD
-- [ ] Both YAMLs passam dry-run
-- [ ] PrometheusRule gera alertas corretos (PromQL válido)
-
----
-
-### T1.4 — TestRun CRDs para Distributed Testing
-
-#### Objective
-Manifests de exemplo para usar k6 Operator em L3 (4 pods) e L4 (8 pods).
-
-#### Files to edit
-```
-infra/tests/k6/manifests/testrun-l3-distributed.yaml — (NEW)
-infra/tests/k6/manifests/testrun-l4-distributed.yaml — (NEW)
-```
-
-#### Deep file dependency analysis
-- Dependem do CRD `TestRun` (v1alpha1) instalado pelo k6 Operator (T1.1).
-- Referenciam ConfigMap `k6-scripts` e Secret `loopzero-api-secrets`.
-
-#### Tasks
-1. Escrever `testrun-l3-distributed.yaml` com `parallelism: 4`
-2. Escrever `testrun-l4-distributed.yaml` com `parallelism: 8`
-3. Include init container para bundle fixture
-
-#### TDD
-```
-RED:     YAML syntax check falha (arquivo não existe)
-GREEN:   Criar arquivos com spec correta
-VERIFY:  python3 -c "import yaml; yaml.safe_load(open('file.yaml'))" for each
-```
-
-#### Acceptance Criteria
-- [ ] L3: `parallelism: 4`, resources limits definidos
-- [ ] L4: `parallelism: 8`, resources limits definidos
-- [ ] Ambos referenciam ConfigMap e Secret corretos
-- [ ] Init container para fixture
-
-#### DoD
-- [ ] YAML válido
-- [ ] Labels `app.kubernetes.io/part-of: loopzero`
-
----
-
-## Phase 2: CI + Observability
-
-**Objective:** Shift-left gate em PRs, Taskfile commands, e runbook operacional.
-
-### T2.1 — CI Workflow: L1 Smoke em PRs
-
-#### Objective
-GitHub Actions workflow que roda L1 smoke test em PRs que tocam API/operators/pkg.
-
-#### Evidence
-- ADR D4: usa Go harness contra dev API
-- `.github/workflows/load-test.yml` existente roda apenas Go harness manual/weekly
-- Regressões de performance escapam até Monday cron
-
-#### Files to edit
-```
-.github/workflows/load-test-pr.yml — (NEW) L1 smoke gate para PRs
-```
-
-#### Deep file dependency analysis
-- Depende de `infra/tests/load/` (Go harness), `go.work`, `.github/actions/setup-go`.
-- Trigger: PRs em `api/**`, `operators/**`, `pkg/**`, `infra/tests/load/**`, `infra/tests/k6/**`.
-- Secret: `LOOPZERO_SERVICE_AUTH_SECRET` (GitHub Environment `infra-dev`).
-
-#### Tasks
-1. Criar `.github/workflows/load-test-pr.yml`
-2. Health check antes de rodar (skip se dev API down)
-3. `go test ./load/ -run TestL1_ -timeout 8m`
-4. Post summary no PR
-5. Concurrency: cancel-in-progress por branch
-
-#### TDD
-```
-RED:     Workflow não existe
-GREEN:   Criar workflow, `act` ou push PR para validar
-VERIFY:  yamllint .github/workflows/load-test-pr.yml
-```
-
-#### Acceptance Criteria
-- [ ] Trigger: PRs em api/operators/pkg/infra/tests
-- [ ] timeout-minutes: 10
-- [ ] Health check skip se API down (não falha PR por infra issue)
-- [ ] concurrency cancel-in-progress
-- [ ] Post summary no PR step summary
-- [ ] Usa SHA-pinned actions
-
-#### DoD
-- [ ] YAML válido
-- [ ] Actions SHA-pinned
-- [ ] Secret referenciado corretamente
-
----
-
-### T2.2 — Taskfile Commands
-
-#### Objective
-Adicionar todos os novos commands ao Taskfile para acesso unificado.
-
-#### Evidence
-- Taskfile já tem `test:load:l1` até `test:load:stress`
-- Faltam: l4, l5, soak, sse, chaos, api, all, operator install, distributed runs
-
-#### Files to edit
-```
-taskfiles/test.yml — adicionar novos tasks
-```
-
-#### Deep file dependency analysis
-- `taskfiles/test.yml` é incluído pelo `Taskfile.yml` root. Novos tasks usam `infra/tests/runner/run-k6.sh` (já existe) e `kubectl apply` para manifests.
-
-#### Tasks
-1. Adicionar tasks: test:load:l4, test:load:l5, test:load:soak, test:load:sse, test:load:chaos, test:load:api, test:load:all
-2. Adicionar tasks: k6:operator:install, k6:distributed:l3, k6:distributed:l4, k6:soak:apply
-
-#### TDD
-```
-RED:     `task --list | grep "test:load:soak"` retorna vazio
-GREEN:   Adicionar tasks, `task --list` mostra todos
-VERIFY:  task --list | grep -c "test:load:" (deve ser >= 10)
-```
-
-#### Acceptance Criteria
-- [ ] Todos os novos scripts têm task correspondente
-- [ ] `test:load:all` executa L1→L2→L3→stress→API sequencialmente
-- [ ] k6 operator install via Helm
-- [ ] k6 soak apply instala CronJob + alerts
-
-#### DoD
-- [ ] `task --list` mostra todos os commands
+- [ ] `task --list | grep baseline` mostra 3 tasks
 - [ ] Zero erros de syntax no Taskfile
 
 ---
 
-### T2.3 — Runbook: Soak Test Failure
+## Phase 1: Regression Mode
+
+**Objective:** Scripts e tasks que rodam regressão rápida (< 10 min) com comparação automática.
+
+### T1.1 — regression-quick.js
 
 #### Objective
-Runbook operacional para quando o soak test falha ou alertas de memory/FD disparam.
+Script k6 leve que roda subset de L1 + API em < 10 min, otimizado para detecção de regressão.
 
-#### Files to edit
+#### Files to create
 ```
-docs/runbooks/soak-test-failure.md — (NEW) runbook
+infra/tests/k6/scripts/regression-quick.js — (NEW) smoke rápido para regressão
 ```
+
+#### Deep Dives
+- **Design:** 2 scenarios simultâneos:
+  - `deploy_smoke`: 3 VUs, 1 iteration each (3 deploys total, ~5 min)
+  - `api_benchmark`: constant-arrival-rate 50 RPS por 3 min
+- **Por que não reusar L1:** L1 usa 10 VUs × 1 iteration = 10 deploys = 15 min. Regression precisa de menos deploys (validar que pipeline funciona) e mais foco em API (detectar queries lentas).
+- **Métricas:** Mesmas de L1 + API (reutiliza `lib/loopzero-api.js`). Summary exportada para comparação.
+- **Duration total:** ~7 min (3 deploys paralelos + 3 min API + overhead)
 
 #### Tasks
-1. Escrever runbook com: sintomas, diagnóstico, resolução, prevenção
-2. Cobrir 3 cenários: Job failure, memory leak, FD exhaustion
-3. Incluir comandos kubectl/promql para diagnóstico
+1. Criar `infra/tests/k6/scripts/regression-quick.js`
+2. Implementar 2 scenarios (deploy_smoke + api_benchmark)
+3. Reutilizar `lib/loopzero-api.js` e `lib/thresholds.js`
+4. `handleSummary` exporta JSON para comparação
+5. Thresholds mínimos (script não falha por threshold — a comparação com baseline que decide)
+
+#### TDD
+```
+RED:     k6 inspect scripts/regression-quick.js — falha (não existe)
+GREEN:   Criar script, k6 inspect passa
+VERIFY:  k6 inspect scripts/regression-quick.js && echo OK
+```
 
 #### Acceptance Criteria
-- [ ] 3 cenários cobertos com steps concretos
-- [ ] Comandos copy-paste para diagnóstico
-- [ ] Link para dashboard Grafana
-- [ ] Severity classification
+- [ ] 2 scenarios: deploy_smoke (3 VUs) + api_benchmark (50 RPS)
+- [ ] Duration total < 10 min
+- [ ] Reutiliza libs existentes
+- [ ] `handleSummary` exporta JSON
+- [ ] Thresholds relaxados (não é gate absoluto — baseline comparison decide)
+- [ ] Segue style guide (SPDX, comments, imports)
 
 #### DoD
-- [ ] Runbook completo e acionável
+- [ ] `k6 inspect` green
+- [ ] Execução total < 10 min em k3d local
 
 ---
 
-## Phase 3: Documentation + Validation
-
-**Objective:** Atualizar README, validar tudo funciona, fechar gaps.
-
-### T3.1 — README Atualizado
+### T1.2 — soak-30min.js
 
 #### Objective
-Atualizar `infra/tests/k6/README.md` e `infra/tests/load/README.md` com inventário completo.
+Versão curta do soak (30 min) para regressão local — detecta leaks óbvios sem esperar 6h.
 
-#### Files to edit
+#### Files to create
 ```
-infra/tests/k6/README.md — atualizar com novos scripts e distributed testing
-infra/tests/load/README.md — atualizar com novos tasks
+infra/tests/k6/scripts/soak-30min.js — (NEW) soak curto para regressão
 ```
+
+#### Deep Dives
+- **Design:** Igual ao `soak-6h.js` mas com `duration: '30m'` e `gracefulStop: '5m'`
+- **Rate:** Mesmo 1 deploy/min = 30 deploys total
+- **Tenants:** 10 (vs 50 no soak full — suficiente para 30 deploys)
+- **O que detecta:** memory leak > 50MB em 30 min, FD leak > 100 FDs em 30 min, connection pool starvation
+- **O que NÃO detecta:** leaks sutis que precisam de 2h+ para se manifestar (esses ficam no soak-6h)
+- **handleSummary:** Compara primeira metade (0-15min) vs segunda metade (15-30min) via hour_marker
 
 #### Tasks
-1. Adicionar novos scripts ao inventário
-2. Documentar k6 Operator usage
-3. Documentar soak CronJob
-4. Atualizar Quick Start com novos commands
+1. Criar `infra/tests/k6/scripts/soak-30min.js`
+2. Copiar estrutura do `soak-6h.js` com duration reduzida
+3. Ajustar tenants (10), VUs (10), maxVUs (30)
+4. handleSummary com split temporal (primeira vs segunda metade)
+
+#### TDD
+```
+RED:     k6 inspect scripts/soak-30min.js — falha
+GREEN:   Criar script, k6 inspect passa
+VERIFY:  k6 inspect scripts/soak-30min.js
+```
 
 #### Acceptance Criteria
-- [ ] Todos os 10 scripts documentados
-- [ ] k6 Operator section com install + usage
-- [ ] Soak section com CronJob + alerts
-- [ ] Distributed testing section
+- [ ] Duration = 30 min + gracefulStop 5 min
+- [ ] constant-arrival-rate 1 deploy/min
+- [ ] 10 tenants
+- [ ] handleSummary com split temporal
+- [ ] Métricas compatíveis com baseline system
 
 #### DoD
-- [ ] README reflete realidade do repo
+- [ ] `k6 inspect` green
+- [ ] Estrutura consistente com soak-6h.js
 
 ---
 
-### T3.2 — Validation Run
+### T1.3 — Taskfile: Regression Commands
 
 #### Objective
-Executar `k6 inspect` em todos os novos scripts + `helm template` + `kubectl dry-run` em todos manifests.
+Tasks que integram regression mode com baseline comparison.
+
+#### Files to edit
+```
+taskfiles/test.yml — adicionar regression tasks
+infra/tests/runner/run-k6-regression.sh — (NEW) runner que executa + compara
+```
+
+#### Deep Dives
+- **`run-k6-regression.sh`:** Wrapper de `run-k6.sh` que:
+  1. Executa o script k6 normalmente (Job no k3d)
+  2. Extrai summary JSON do Job output
+  3. Chama `compare-baseline.sh` com o JSON
+  4. Se baseline não existe, chama `record-baseline.sh` (bootstrap)
+  5. Exit code = exit code do comparador
+- **`task test:load:regression`:** Executa `regression-quick.js` via runner regression
+- **`task test:load:soak:short`:** Executa `soak-30min.js` via runner regression
+- **`task test:load:full`:** L1 + L2 + stress + API + soak-short (validação completa antes de PR)
 
 #### Tasks
-1. `k6 inspect` cada novo script
-2. `helm template infra/helm/k6-operator/`
-3. `kubectl apply --dry-run=client` cada manifest em `infra/tests/k6/manifests/`
-4. `yamllint .github/workflows/load-test-pr.yml`
-5. `task --list | grep test:load` confirma todos os tasks
+1. Criar `infra/tests/runner/run-k6-regression.sh`
+2. Adicionar `test:load:regression` ao Taskfile
+3. Adicionar `test:load:soak:short` ao Taskfile
+4. Adicionar `test:load:full` ao Taskfile (suite completa local)
+
+#### TDD
+```
+RED:     task test:load:regression — task não existe
+GREEN:   Criar task + runner, execução funciona
+VERIFY:  task --list | grep regression
+```
 
 #### Acceptance Criteria
-- [ ] Zero erros em todas as validações
-- [ ] Inventário final: 10 scripts, 5 manifests, 1 Helm chart, 1 workflow, 12 tasks
+- [ ] `task test:load:regression` roda < 10 min e compara com baseline
+- [ ] `task test:load:soak:short` roda 30 min soak
+- [ ] `task test:load:full` roda suite completa (L1+L2+stress+API+soak-short)
+- [ ] Primeiro run faz bootstrap automático da baseline
+- [ ] Exit code reflete resultado da comparação (0=ok, 1=regressão)
 
 #### DoD
-- [ ] Validation matrix GREEN
+- [ ] Todos os tasks listam e executam
+- [ ] Runner regression funciona end-to-end
+- [ ] Bootstrap automático na primeira execução
+
+---
+
+## Phase 2: Cleanup + Documentation
+
+**Objective:** Arquivar infra remota, atualizar docs, validar sistema completo.
+
+### T2.1 — Arquivar Manifests Remotos
+
+#### Objective
+Mover manifests de infra remota para subdiretório `remote/` (referência futura, não ativo).
+
+#### Files to edit
+```
+infra/tests/k6/manifests/remote/ — (NEW) mover: soak-cronjob.yaml, soak-alerts.yaml, testrun-l3-distributed.yaml, testrun-l4-distributed.yaml
+infra/tests/k6/manifests/ — manter apenas rbac.yaml (usado pelo Job runner)
+```
+
+#### Tasks
+1. Criar `infra/tests/k6/manifests/remote/`
+2. Mover `soak-cronjob.yaml`, `soak-alerts.yaml`, `testrun-l3-distributed.yaml`, `testrun-l4-distributed.yaml`
+3. Adicionar `README.md` em `remote/` explicando que são para uso futuro em ambiente remoto
+4. Remover tasks de Taskfile que referenciam esses manifests (`k6:operator:install`, `k6:distributed:*`, `k6:soak:apply`)
+
+#### Acceptance Criteria
+- [ ] Apenas `rbac.yaml` em `infra/tests/k6/manifests/`
+- [ ] 4 manifests movidos para `manifests/remote/`
+- [ ] Tasks remotos removidos do Taskfile
+- [ ] README explica propósito do `remote/`
+
+#### DoD
+- [ ] Estrutura limpa — local vs remoto separados
+- [ ] Zero referência quebrada no Taskfile
+
+---
+
+### T2.2 — README Atualizado
+
+#### Objective
+Reescrever `infra/tests/k6/README.md` com foco em uso local de regressão.
+
+#### Files to edit
+```
+infra/tests/k6/README.md — reescrever para foco local/regression
+```
+
+#### Tasks
+1. Quick Start focado em: `task test:load:regression` (dia a dia)
+2. Explicar baseline system (record, compare, update)
+3. Listar todos os modos: regression (< 10 min), full (~ 2h), soak-short (30 min), soak-full (6h)
+4. Remover seções de k6 Operator, distributed testing, CI remote, CronJob
+5. Manter seção de scripts como referência
+
+#### Acceptance Criteria
+- [ ] Quick Start: 3 comandos para regressão
+- [ ] Baseline system documentado
+- [ ] Todos os task commands listados
+- [ ] Zero referência a infra remota no flow principal
+- [ ] Seção "Remote/Production Testing" aponta para `manifests/remote/`
+
+#### DoD
+- [ ] README reflete realidade local
+
+---
+
+### T2.3 — Validation Run
+
+#### Objective
+Executar todo o sistema de regressão end-to-end em k3d local.
+
+#### Tasks
+1. `task setup && tilt up && task doctor`
+2. `task test:load:baseline:record` — grava primeira baseline
+3. `task test:load:regression` — compara (deve PASS, mesma baseline)
+4. `task test:load:soak:short` — 30 min soak funciona
+5. `k6 inspect` em `regression-quick.js` e `soak-30min.js`
+6. `task --list | grep "test:load"` — todos os tasks existem
+
+#### Acceptance Criteria
+- [ ] Baseline gravada com sucesso
+- [ ] Regression PASS (comparação consigo mesmo)
+- [ ] Soak short executa sem erro
+- [ ] Todos os scripts passam `k6 inspect`
+- [ ] Inventário final: 12 scripts, 1 manifest ativo, 4 manifests archived, 2 tools, 15+ tasks
+
+#### DoD
+- [ ] Full regression run GREEN em k3d local
 
 ---
 
 ## Coverage Matrix
 
-| # | Gap / Requirement | Task(s) | Resolution |
-|---|---|---|---|
-| 1 | Soak test não implementado | T0.1, T1.3 | Script + CronJob + Alerts |
-| 2 | SSE/WebSocket não testado | T0.2 | Script com SSE streaming |
-| 3 | Chaos + Load separados | T0.3 | Script que mede durante chaos |
-| 4 | API endpoints sem benchmark | T0.4 | Script 100 RPS pure HTTP |
-| 5 | k6 Operator ausente | T1.1, T1.4 | Helm chart + TestRun examples |
-| 6 | L1 não roda em PRs | T2.1 | CI workflow shift-left |
-| 7 | Alertas de soak inexistentes | T1.3 | PrometheusRule 3 alertas |
-| 8 | RBAC não definido | T1.2 | SA + Role + RoleBinding |
-| 9 | Taskfile incompleto | T2.2 | 12 novos tasks |
-| 10 | Sem runbook para soak failure | T2.3 | Runbook operacional |
-| 11 | README desatualizado | T3.1 | Inventário completo |
-| 12 | Distributed testing impossível | T1.1, T1.4 | k6 Operator + TestRun CRDs |
+| # | Problema | Task(s) | Resolução |
+|---|----------|---------|-----------|
+| 1 | Thresholds absolutos (hardware-dependent) | T0.1, T0.2 | Baseline comparison relativa (delta %) |
+| 2 | Sem modo regression rápido | T1.1, T1.3 | `regression-quick.js` < 10 min |
+| 3 | Soak 6h impraticável para dev | T1.2 | `soak-30min.js` para regressão |
+| 4 | Sem baseline comparison | T0.1, T0.2, T0.3 | Tools: record + compare + Taskfile |
+| 5 | Infra remota confunde escopo | T2.1 | Arquivada em `manifests/remote/` |
+| 6 | README assume infra remota | T2.2 | Reescrito para foco local |
+| 7 | Primeiro run não tem referência | T0.2 | Auto-bootstrap (grava e retorna PASS) |
 
-**Coverage: 12/12 gaps covered (100%)**
+**Coverage: 7/7 problemas resolvidos (100%)**
 
 ## Global Definition of Done
 
-- [ ] Todas as 4 phases completas
-- [ ] `k6 inspect` green em todos os 4 novos scripts
-- [ ] `helm template` green para k6-operator chart
-- [ ] `kubectl apply --dry-run=client` green para todos manifests
-- [ ] `yamllint` green para workflow
-- [ ] `task --list | grep "test:load:" | wc -l` >= 10
-- [ ] README reflete inventário real
+- [ ] Todas as 3 phases completas
+- [ ] `k6 inspect` green em `regression-quick.js` e `soak-30min.js`
+- [ ] `task test:load:regression` executa < 10 min e retorna 0
+- [ ] Baseline system funciona (record → compare → PASS/FAIL)
+- [ ] Auto-bootstrap na primeira execução
+- [ ] Manifests remotos arquivados
+- [ ] README reflete uso local
 - [ ] Zero lint warnings
-- [ ] **`/dogfood full` PASSED** (see Dogfood Gate below)
+- [ ] Taskfile sem referências quebradas
 
 ---
 
-## Dogfood Gate (MANDATORY — NON-NEGOTIABLE)
+## Dogfood Gate (MANDATORY)
 
-> **No plan is considered DONE without passing `/dogfood full`.** Unit tests, integration tests, and lint are necessary but NOT sufficient. Only real end-to-end validation via dogfood proves the system works.
+> **Plano só é DONE após validação completa em k3d local.**
 
-After ALL phases are complete and ALL tests pass, the final validation is a full dogfood audit.
-
-### Execution
+### Execução
 
 ```bash
-# 1. Fresh infrastructure
-task teardown && task setup && tilt up
-task doctor  # verify health
+# 1. Infra local limpa
+task setup && tilt up
+task doctor
 
-# 2. Run L1 smoke to validate load test system works
-task test:load:l1
+# 2. Bootstrap baseline (primeira vez)
+task test:load:baseline:record
 
-# 3. Run full dogfood
-/dogfood full
+# 3. Regression mode (deve PASS — comparando consigo mesmo)
+task test:load:regression
+
+# 4. Soak curto (30 min)
+task test:load:soak:short
+
+# 5. Simular regressão: introduzir sleep 500ms em /health, rodar regression
+#    (deve FAIL — degradação > 20%)
+# 6. Remover sleep, rodar novamente (deve PASS)
 ```
 
 ### Pass Criteria
 
-- [ ] `/dogfood full` executed on clean infrastructure
-- [ ] Pre-Flight Check: ALL checks PASS
-- [ ] Zero S0 (Bloqueante) findings
-- [ ] Zero S1 (Grave) findings related to this plan's scope
-- [ ] `task test:load:l1` passes (k6 L1 smoke works end-to-end)
-- [ ] `task test:load:api` passes (API benchmark works)
-- [ ] No regressions in previously passing flows
-- [ ] Observability check passes (k6 metrics appear in Prometheus)
-- [ ] Rule 3 clean: zero internal terms in any CLI output
+- [ ] Baseline gravada sem erros
+- [ ] Regression PASS na primeira comparação
+- [ ] Regression FAIL com degradação simulada (> 20%)
+- [ ] Regression PASS após remover degradação
+- [ ] Soak short completa 30 min sem erro
+- [ ] Todos os tasks funcionam (`task --list | grep test:load`)
+- [ ] Zero internal terms em output (Rule 3)
 
 ### On Failure
 
-If `/dogfood full` finds S0 or S1 issues:
-1. Fix ALL S0/S1 findings
-2. Re-run `/dogfood full` on fresh infrastructure
-3. Repeat until zero S0/S1
-
-S2-S4 findings are documented but do not block plan completion.
+Se qualquer step falha:
+1. Diagnosticar root cause
+2. Fixar
+3. Re-rodar do step 1
+4. Repetir até GREEN completo
