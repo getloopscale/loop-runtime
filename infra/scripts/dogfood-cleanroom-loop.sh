@@ -285,6 +285,18 @@ phase_bootstrap_extras() {
     return 38
   fi
   log "generate-secrets.sh OK (loopzero-db-credentials, loopzero-api-tokens, etc. applied)"
+  # B20 fix (iter 17, 2026-05-05): generate-secrets.sh OVERWRITES the real
+  # Gitea token in loopzero-api-tokens.gitea-token with a random unregistered
+  # value. provision-api-tokens.sh creates a token via Gitea API
+  # (POST /users/.../tokens) and stores the real value. We must re-run it
+  # after generate-secrets.sh to restore the registered token. Without this,
+  # source upload fails with `gitea source: ensure repo: create repo:
+  # status 401`.
+  if ! bash "${REPO_ROOT}/infra/scripts/provision-api-tokens.sh" >/dev/null 2>&1; then
+    log_err "phase_bootstrap_extras: provision-api-tokens.sh re-run failed"
+    return 38
+  fi
+  log "provision-api-tokens.sh re-run OK (real Gitea + ArgoCD tokens restored)"
   if ! task k3d:bootstrap-workload; then
     log_err "phase_bootstrap_extras: task k3d:bootstrap-workload failed (ESO install in workload)"
     return 38
