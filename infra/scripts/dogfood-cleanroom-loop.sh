@@ -35,7 +35,8 @@
 #   25  — phase 3 tilt ci failed (Tiltfile resource did not converge)
 #   30  — phase 4 heal failed (heal script regression)
 #   35  — phase 2.5 RBAC patch failed (B3 fix; mgmt cluster context broken)
-#   38  — phase 2.6 bootstrap extras failed (B9/B10; secrets/ESO bootstrap)
+#   38  — phase 2.6 bootstrap extras failed (B9/B10/B11/B12/B13)
+#   45  — phase 3.5 post-tilt env failed (B14; deploy/loopzero-api missing)
 #   40  — phase 5 doctor did not converge in 180s (control plane unhealthy)
 #   50  — phase 6 dogfood full-loop.sh exited non-zero (journey FAIL)
 #   60  — phase 7 post-validation failed (Rule 3 / state JSON anomaly)
@@ -253,22 +254,26 @@ YAML
   log "rbac patch applied: loopzero-api-cleanroom-extra"
 }
 
-# Phase 2.6: Bootstrap extras (B9/B10/B11 fix, iter 9-10, 2026-05-05)
+# Phase 2.6: Bootstrap extras (B9/B10/B11/B12 fix, iter 9-11, 2026-05-05)
 #
-# `task setup` does NOT invoke the helmfile-side bootstrap scripts AND does
-# NOT install ESO in the workload cluster. Without these:
-#   - B9: loopzero-db-credentials Secret missing → seed-local-user.sh fails
-#     silently with empty PGPASS → preflight T0.2 fails
+# `task setup` does NOT invoke the helmfile-side bootstrap scripts. Without
+# these:
+#   - B9: loopzero-db-credentials Secret missing → seed-local-user.sh fails with
+#     empty PGPASS → preflight T0.2 fails
 #   - B10: loopzero-mgmt-store ClusterSecretStore not Ready → preflight T0.9 fails
-#   - B11: ESO CRDs (ClusterSecretStore kind) absent in workload cluster
-#     → bootstrap-eso-cluster-secret-store.sh `kubectl apply` fails with
-#     `no matches for kind "ClusterSecretStore"`. Discovered iter 10.
+#   - B11: ESO CRDs absent in workload → bootstrap-eso-cluster-secret-store.sh
+#     fails with `no matches for kind "ClusterSecretStore"`. Iter 10.
+#   - B12: loopzero-bootstrap-credentials Secret missing (Hydra OAuth2 client
+#     not registered) → seed-local-user.sh succeeds for DB inserts but
+#     fails at JWT mint with empty `client_secret`. Iter 11. The token
+#     remains stale → preflight T0.2 still FAIL even after B9 fixed.
 #
 # Sequence:
-#   1. generate-secrets.sh (mgmt cluster Secrets — fixes B9)
-#   2. task k3d:bootstrap-workload (installs ESO in workload — fixes B11)
-#   3. bootstrap-eso-cluster-secret-store.sh (provisions ClusterSecretStore
-#      that requires both 1+2 to succeed — fixes B10)
+#   1. generate-secrets.sh (mgmt Secrets — fixes B9)
+#   2. task k3d:bootstrap-workload (ESO in workload — fixes B11)
+#   3. bootstrap-eso-cluster-secret-store.sh (ClusterSecretStore — B10)
+#   4. bootstrap-oauth-clients.sh (Hydra OAuth2 clients + loopzero-bootstrap-
+#      credentials Secret — fixes B12)
 phase_bootstrap_extras() {
   log_phase "2.6/7 BOOTSTRAP EXTRAS (generate-secrets + workload ESO + ClusterSecretStore)"
   if [[ "$DRY_RUN" -eq 1 ]]; then
@@ -290,6 +295,22 @@ phase_bootstrap_extras() {
     return 38
   fi
   log "bootstrap-eso-cluster-secret-store.sh OK (loopzero-mgmt-store Ready)"
+  if ! bash "${REPO_ROOT}/infra/helmfile/scripts/bootstrap-oauth-clients.sh"; then
+    log_err "phase_bootstrap_extras: bootstrap-oauth-clients.sh failed"
+    return 38
+  fi
+  log "bootstrap-oauth-clients.sh OK (loopzero-bootstrap-credentials present, Hydra clients registered)"
+  # B13 fix (iter 11, 2026-05-05): install admission-policies chart in
+  # workload cluster so ValidatingAdmissionPolicies loopzero-restrict-image-
+  # registries and loopzero-require-image-signature exist (preflight T0.3).
+  if ! helm upgrade --install admission-policies "${REPO_ROOT}/infra/helm/admission-policies" \
+       --kube-context k3d-loopzero-workload \
+       --namespace cosign-system --create-namespace \
+       --wait --timeout 2m; then
+    log_err "phase_bootstrap_extras: admission-policies helm install failed"
+    return 38
+  fi
+  log "admission-policies installed in workload (VAPs loopzero-restrict-image-registries + loopzero-require-image-signature)"
 }
 
 # Phase 3: Tilt CI
@@ -306,6 +327,34 @@ phase_tilt_up() {
     log_err "phase_tilt_up failed — Tiltfile resource did not converge within ${TILT_CI_TIMEOUT_SEC}s"
     return 25
   fi
+}
+
+# Phase 3.5: Post-tilt env (B14 fix, iter 11, 2026-05-05)
+#
+# preflight T0.7 expects LOOPZERO_SERVICE_AUTH_SECRET env var on the loopzero-api
+# Deployment (consumed by api/internal/middleware/auth.go for service-auth
+# routes; journey-11-admin requires it). The env var is NOT set in
+# infra/tilt/api-deployment.yaml (Tiltfile YAML, out of governance scope
+# for this plan). Workaround: kubectl set env after tilt creates the
+# Deployment. Pod restarts with the env in place; preflight T0.7 then
+# observes it.
+phase_post_tilt_env() {
+  log_phase "5.5/7 POST-TILT ENV (B14 — set LOOPZERO_SERVICE_AUTH_SECRET on loopzero-api)"
+  if [[ "$DRY_RUN" -eq 1 ]]; then
+    log "DRY-RUN: kubectl set env deploy/loopzero-api LOOPZERO_SERVICE_AUTH_SECRET=..."
+    return 0
+  fi
+  # Stable cleanroom-only secret value. journey-11-admin reads from .env or
+  # similar; this needs to match. Fallback to a deterministic placeholder.
+  local secret="${LOOPZERO_SERVICE_AUTH_SECRET:-cleanroom-service-auth-secret-do-not-use-in-prod}"
+  if ! kubectl --context k3d-loopzero-mgmt -n loopzero-system set env deploy/loopzero-api \
+       "LOOPZERO_SERVICE_AUTH_SECRET=${secret}" >/dev/null 2>&1; then
+    log_err "phase_post_tilt_env: kubectl set env failed (deploy/loopzero-api absent?)"
+    return 45
+  fi
+  log "LOOPZERO_SERVICE_AUTH_SECRET set on deploy/loopzero-api"
+  # Wait for rollout so pod has env when preflight inspects.
+  kubectl --context k3d-loopzero-mgmt -n loopzero-system rollout status deploy/loopzero-api --timeout=60s >/dev/null 2>&1 || true
 }
 
 # Phase 4: Heal
@@ -469,6 +518,7 @@ phase_rbac_patch        || exit $?
 phase_bootstrap_extras  || exit $?
 phase_heal              || exit $?
 phase_tilt_up           || exit $?
+phase_post_tilt_env     || exit $?
 phase_wait_doctor       || exit $?
 phase_dogfood           || exit $?
 post_validate           || exit $?
