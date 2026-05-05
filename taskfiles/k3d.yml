@@ -14,9 +14,20 @@ tasks:
   # works because Task v3 includes merge namespaces.
 
   registry:create:
-    desc: Create shared container registry for local development
+    desc: |
+      Create shared container registry for local development.
+
+      B6 fix (real-paas-cleanroom-dogfood-loop-plan iter 6): registry runs
+      as a Docker Hub pull-through proxy via --proxy-remote-url. Without
+      this, k3d clusters pulled third-party images (oryd/kratos, minio/mc,
+      bitnami/postgresql) directly from registry-1.docker.io, hitting the
+      anonymous rate-limit (100 pulls/6h) after ~5 cleanroom destroy/recreate
+      cycles. With pull-through, first pull populates the local cache;
+      subsequent destroy/recreate cycles serve from cache, no Docker Hub
+      involvement. The architecture invariant becomes "we don't depend on
+      Docker Hub for repeat builds" — true after first warm-up.
     cmds:
-      - k3d registry list -o json | grep -q '"name":"k3d-loopzero-registry"' || k3d registry create loopzero-registry --port 5000
+      - k3d registry list -o json | grep -q '"name":"k3d-loopzero-registry"' || k3d registry create loopzero-registry --port 5000 --proxy-remote-url https://registry-1.docker.io
 
   clusters:create:
     desc: Create all 4 k3d clusters (mgmt, build, workload, runtime-2)
