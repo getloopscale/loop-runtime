@@ -61,10 +61,24 @@ func (o *BuildOrchestrator) SubmitBuild(ctx context.Context, req SubmitBuildRequ
 			return loopzeroerrors.ErrDeployInProgress
 		}
 
+		// Step 2.2: B40 — resolve scaling from app_scaling_config DB rows BEFORE
+		// plan-cap enforcement. Per D1 (DB > loopzero.yaml when row exists), this
+		// closes the hole MEET-2026-04-23-059 Constraint 6 — plan caps must
+		// operate on the config that becomes K8s state, not on user-supplied
+		// yaml. Resolve runs inside the tx scope (serializable isolation
+		// guarantees no torn reads). Race condition with concurrent scale
+		// upsert is acceptable per eventual consistency (T2.1 Deep Dives).
+		resolvedApps, err := o.resolveScaling(ctx, req.TenantID, req.ProjectID, req.Environment, req.Apps)
+		if err != nil {
+			return fmt.Errorf("submit build: resolve scaling: %w", err)
+		}
+		req.Apps = resolvedApps
+
 		// Step 2.3: B15 scaling validation + plan-cap enforcement.
 		// This is the authoritative gate covering BOTH the CLI deploy path and
 		// the GitHub App auto-deploy path — bypass here means a plan-cap
-		// enforcement hole (MEET-2026-04-23-059 Constraint 6).
+		// enforcement hole (MEET-2026-04-23-059 Constraint 6). Operates on
+		// resolved AppSpec per B40 fix above.
 		if err := enforceScaling(req.Apps, o.planCap, req.TenantID, o.kedaEnabled); err != nil {
 			return err
 		}

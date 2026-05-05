@@ -221,6 +221,12 @@ type BuildOrchestratorDeps struct {
 	PlanCap PlanCapChecker
 	// KEDAEnabled gates scale-to-zero (MinReplicas=0). When false, min:0 is rejected.
 	KEDAEnabled bool
+	// B40: ScalingResolver merges yaml AppSpecs with persisted scaling config
+	// (app_scaling_config). When non-nil, Submit calls Resolve before
+	// enforceScaling + BuildAppSpec persistence so DB rows take precedence
+	// (D1) and plan caps operate on resolved config (MEET-2026-04-23-059
+	// Constraint 6). Nil = disabled (yaml-only — backward-compat).
+	ScalingResolver ScalingResolver
 	// Sprint 6 / T3.1: per-app attestation store. When non-nil, the
 	// container delivery activator persists per-app signature + SBOM
 	// metadata to release_app_attestations.
@@ -255,8 +261,9 @@ type BuildOrchestrator struct {
 	argocdSyncTimeout time.Duration
 	kvClient          StaticRoutingClient // CF KV client for static frontend routing
 	baseDomain        string
-	planCap           PlanCapChecker // B15: nil = enforcement disabled
-	kedaEnabled       bool           // gates scale-to-zero (min=0)
+	planCap           PlanCapChecker  // B15: nil = enforcement disabled
+	kedaEnabled       bool            // gates scale-to-zero (min=0)
+	scalingResolver   ScalingResolver // B40: nil = yaml-only (backward-compat)
 }
 
 // defaultArgocdSyncTimeout is used when no timeout is configured.
@@ -308,7 +315,29 @@ func NewBuildOrchestrator(deps BuildOrchestratorDeps) *BuildOrchestrator {
 		baseDomain:        deps.BaseDomain,
 		planCap:           deps.PlanCap, // B15: optional plan-cap enforcement
 		kedaEnabled:       deps.KEDAEnabled,
+		scalingResolver:   deps.ScalingResolver, // B40: nil-safe (resolveScaling handles)
 	}
+}
+
+// resolveScaling delegates to scalingResolver when wired; otherwise returns
+// apps unchanged. This nil-safe accessor keeps existing tests working without
+// requiring the resolver to be set (backward-compat per T1.2 Deep Dives).
+//
+// Per D1: when DB row exists, it overrides yaml; when absent, yaml preserved.
+// Race condition (T2.1 Deep Dive): resolve runs inside the submit transaction.
+// A concurrent `loopzero scale` Upsert running between resolve start and tx commit
+// produces a stale BuildAppSpec snapshot — acceptable per eventual consistency
+// (next deploy picks up the newer state). The serializable isolation level
+// guarantees no torn reads within this transaction.
+func (o *BuildOrchestrator) resolveScaling(
+	ctx context.Context,
+	tenantID, projectID, environment string,
+	apps []AppSpec,
+) ([]AppSpec, error) {
+	if o.scalingResolver == nil {
+		return apps, nil
+	}
+	return o.scalingResolver.Resolve(ctx, tenantID, projectID, environment, apps)
 }
 
 // FindReleaseForBuild returns the most recent release for a build, or nil if none exists.
