@@ -120,6 +120,16 @@ func (c *SyncClient) ValidateToken(ctx context.Context) error {
 // longer sets `argocd.argoproj.io/skip-reconcile`, so the API does not need
 // to remove it. Application CR metadata is owned exclusively by the operator
 // (K8s RBAC), not by the API (ArgoCD REST RBAC) — single-writer discipline.
+//
+// CHG-2026-05-05-DOGFOOD-B32: TriggerSync now hard-refreshes the Application
+// before submitting the sync operation. ArgoCD repo-server caches manifest
+// generation errors (e.g., "app path does not exist") for ~5 minutes per
+// (repo, path, revision). When tenant-controller bootstraps a gitops repo
+// with an empty initial commit before `loopzero deploy` writes manifests, the
+// first comparison caches the error. Subsequent syncs reuse the cache and
+// surface as "InvalidSpecError: Application referencing project X which does
+// not exist" — a misleading message that has nothing to do with the AppProject.
+// Hard-refresh (GET ?refresh=hard) drops the cache and forces re-clone.
 func (c *SyncClient) TriggerSync(ctx context.Context, appName string) error {
 	ctx, span := otel.Tracer("loopzero-api").Start(ctx, "loopzero.api.argocd.sync_trigger",
 		trace.WithAttributes(
@@ -129,6 +139,17 @@ func (c *SyncClient) TriggerSync(ctx context.Context, appName string) error {
 
 	// MEET-2026-04-22-058 (B12): no removeSkipReconcile call — operator no longer
 	// sets the annotation, so there is nothing to remove.
+
+	// CHG-2026-05-05-DOGFOOD-B32: best-effort hard-refresh to invalidate
+	// repo-server manifest error cache from prior failed comparisons.
+	// Failure does NOT block the sync — repo-server may have already
+	// invalidated the cache via the controller's normal refresh interval.
+	if err := c.hardRefresh(ctx, appName); err != nil {
+		slog.Warn("argocd: hard refresh before sync failed (proceeding)",
+			"app", appName, "error", err)
+		span.AddEvent("hard_refresh_failed",
+			trace.WithAttributes(attribute.String("error", err.Error())))
+	}
 
 	url := fmt.Sprintf("%s/api/v1/applications/%s/sync", c.baseURL, appName)
 
@@ -190,6 +211,50 @@ func (c *SyncClient) TriggerSync(ctx context.Context, appName string) error {
 // annotation is no longer set by the operator, so there is nothing to remove.
 // Operator owns Application CR metadata exclusively (K8s RBAC); the API does
 // not touch the Application CR via ArgoCD REST any more. Single-writer discipline.
+
+// hardRefresh forces ArgoCD repo-server to re-clone and re-render manifests
+// for an Application, invalidating cached errors from prior failed comparisons.
+//
+// CHG-2026-05-05-DOGFOOD-B32: see TriggerSync godoc for the bug context.
+// This method is intended to be called by TriggerSync as a defensive measure
+// before the sync POST. Best-effort: callers should NOT block on errors here.
+//
+// Uses a bounded timeout (15s) so a slow repo-server cannot stall sync.
+func (c *SyncClient) hardRefresh(ctx context.Context, appName string) error {
+	refreshCtx, cancel := context.WithTimeout(ctx, 15*time.Second)
+	defer cancel()
+
+	url := fmt.Sprintf("%s/api/v1/applications/%s?refresh=hard", c.baseURL, appName)
+	req, err := http.NewRequestWithContext(refreshCtx, http.MethodGet, url, nil)
+	if err != nil {
+		return fmt.Errorf("hard refresh: create request: %w", err)
+	}
+	req.Header.Set("Authorization", "Bearer "+c.tokenProvider.Token())
+
+	resp, err := c.client.Do(req)
+	if err != nil {
+		return fmt.Errorf("hard refresh: request failed: %w", err)
+	}
+	defer func() { _ = resp.Body.Close() }()
+
+	if resp.StatusCode == 401 || resp.StatusCode == 403 {
+		// Same auth-failure signal path as TriggerSync.
+		if notifier, ok := c.tokenProvider.(AuthFailureNotifier); ok {
+			notifier.OnAuthFailure()
+		}
+		return loopzeroerrors.ErrDeployServiceAuthFailed
+	}
+	if resp.StatusCode == 404 {
+		return fmt.Errorf("hard refresh: application %q not found", appName)
+	}
+	if resp.StatusCode >= 400 {
+		respBody, _ := io.ReadAll(resp.Body)
+		return fmt.Errorf("hard refresh: status %d: %s", resp.StatusCode, string(respBody))
+	}
+	// Drain body so HTTP keep-alive can reuse the connection.
+	_, _ = io.Copy(io.Discard, resp.Body)
+	return nil
+}
 
 // TerminateOperation cancels a running sync operation on an ArgoCD Application.
 // MEET-2026-03-29-019: Used when TriggerSync returns ErrSyncOperationInProgress
