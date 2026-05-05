@@ -174,6 +174,71 @@ tasks:
     cmds:
       - infra/tests/runner/run-k6.sh scripts/stress-break-point.js stress 50
 
+  test:load:l4:
+    desc: k6 load test — 500 tenants capacity (L4, ~2h)
+    cmds:
+      - infra/tests/runner/run-k6.sh scripts/l4-500-tenants.js l4 500
+
+  test:load:l5:
+    desc: k6 load test — 5000 tenants multi-cell (L5, ~4h)
+    cmds:
+      - infra/tests/runner/run-k6.sh scripts/l5-multicell.js l5 5000
+
+  test:load:soak:
+    desc: k6 soak test — 6h sustained at L2 (detects leaks/FD exhaustion)
+    cmds:
+      - infra/tests/runner/run-k6.sh scripts/soak-6h.js soak 50
+
+  test:load:sse:
+    desc: k6 SSE stream test — deploy event streaming under load (~15 min)
+    cmds:
+      - infra/tests/runner/run-k6.sh scripts/sse-deploy-stream.js l1 10
+
+  test:load:chaos:
+    desc: k6 chaos+load combined — run with active Chaos Mesh experiments (~25 min)
+    cmds:
+      - infra/tests/runner/run-k6.sh scripts/chaos-load.js chaos 30
+
+  test:load:api:
+    desc: k6 API endpoints — pure HTTP latency test at 100 RPS (~5 min)
+    cmds:
+      - infra/tests/runner/run-k6.sh scripts/api-endpoints.js api 1
+
+  test:load:all:
+    desc: Run full load test suite sequentially (L1 → L2 → L3 → stress → API)
+    cmds:
+      - task: test:load:l1
+      - task: test:load:l2
+      - task: test:load:l3
+      - task: test:load:stress
+      - task: test:load:api
+
+  # k6 Operator (distributed testing for L3+)
+  k6:operator:install:
+    desc: Install k6 Operator in build cluster (enables distributed TestRun CRD)
+    cmds:
+      - helm upgrade --install k6-operator infra/helm/k6-operator -n loopzero-system --create-namespace
+
+  k6:distributed:l3:
+    desc: Run distributed L3 test via k6 Operator (4 pods, ~65 min)
+    cmds:
+      - kubectl apply -f infra/tests/k6/manifests/testrun-l3-distributed.yaml
+      - echo "TestRun submitted. Monitor with: kubectl get testrun -n loopzero-system -w"
+
+  k6:distributed:l4:
+    desc: Run distributed L4 test via k6 Operator (8 pods, ~2h)
+    cmds:
+      - kubectl apply -f infra/tests/k6/manifests/testrun-l4-distributed.yaml
+      - echo "TestRun submitted. Monitor with: kubectl get testrun -n loopzero-system -w"
+
+  k6:soak:apply:
+    desc: Apply weekly soak CronJob + alerts to cluster
+    cmds:
+      - kubectl apply -f infra/tests/k6/manifests/rbac.yaml
+      - kubectl apply -f infra/tests/k6/manifests/soak-cronjob.yaml
+      - kubectl apply -f infra/tests/k6/manifests/soak-alerts.yaml
+      - echo "Soak CronJob applied. Next run: Sunday 02:00 UTC"
+
   # ─────────────────────────────────────────────
   # Chaos Engineering (Chaos Mesh, CNCF incubating)
   # Replaces the previous Ginkgo PIt stubs with real fault injection.

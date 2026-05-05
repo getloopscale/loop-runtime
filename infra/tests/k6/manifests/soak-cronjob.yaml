@@ -1,0 +1,124 @@
+# Soak test CronJob — runs every Sunday at 02:00 UTC.
+# Detects memory leaks, FD exhaustion, and pool starvation over 6 hours.
+#
+# Alert: if this Job fails, it creates a P1 alert via PrometheusRule.
+# Dashboard: load-test.json shows soak metrics with hourly annotations.
+apiVersion: batch/v1
+kind: CronJob
+metadata:
+  name: k6-soak-weekly
+  namespace: loopzero-system
+  labels:
+    app.kubernetes.io/name: k6-soak
+    app.kubernetes.io/part-of: loopzero
+    app.kubernetes.io/component: load-testing
+spec:
+  schedule: "0 2 * * 0"  # Every Sunday 02:00 UTC
+  concurrencyPolicy: Forbid
+  successfulJobsHistoryLimit: 4
+  failedJobsHistoryLimit: 4
+  jobTemplate:
+    spec:
+      backoffLimit: 0
+      activeDeadlineSeconds: 28800  # 8h hard limit (6h test + 2h buffer)
+      template:
+        metadata:
+          labels:
+            app.kubernetes.io/name: k6-soak
+          annotations:
+            prometheus.io/scrape: "false"
+        spec:
+          restartPolicy: Never
+          serviceAccountName: k6-runner
+          initContainers:
+            - name: build-fixture
+              image: alpine:3.21
+              command: ["sh", "/scripts/build-bundle.sh"]
+              volumeMounts:
+                - name: fixture-builder
+                  mountPath: /scripts
+                - name: fixtures
+                  mountPath: /fixtures
+              resources:
+                requests:
+                  cpu: 100m
+                  memory: 64Mi
+                limits:
+                  cpu: 500m
+                  memory: 256Mi
+            - name: seed-db
+              image: postgres:16-alpine
+              command: ["sh", "/seed/seed.sh"]
+              env:
+                - name: DATABASE_URL
+                  valueFrom:
+                    secretKeyRef:
+                      name: loopzero-api-secrets
+                      key: DATABASE_URL
+                - name: K6_SEED_COUNT
+                  value: "50"
+                - name: K6_SEED_LEVEL
+                  value: "soak"
+              volumeMounts:
+                - name: seed-sql
+                  mountPath: /seed
+              resources:
+                requests:
+                  cpu: 100m
+                  memory: 64Mi
+                limits:
+                  cpu: 500m
+                  memory: 256Mi
+          containers:
+            - name: k6
+              image: grafana/k6:0.52.0
+              command:
+                - k6
+                - run
+                - --out=experimental-prometheus-rw
+                - scripts/soak-6h.js
+              env:
+                - name: K6_API_URL
+                  value: "http://loopzero-api.loopzero-system.svc.cluster.local:8080"
+                - name: K6_SVC_AUTH
+                  valueFrom:
+                    secretKeyRef:
+                      name: loopzero-api-secrets
+                      key: LOOPZERO_SERVICE_AUTH_SECRET
+                - name: K6_BUNDLE_PATH
+                  value: "/fixtures/bundle.bin"
+                - name: K6_PROMETHEUS_RW_SERVER_URL
+                  value: "http://prometheus-server.loopzero-system.svc.cluster.local/api/v1/write"
+                - name: K6_PROMETHEUS_RW_TREND_STATS
+                  value: "p(50),p(95),p(99)"
+                - name: K6_PROMETHEUS_RW_PUSH_INTERVAL
+                  value: "30s"
+              resources:
+                requests:
+                  cpu: "500m"
+                  memory: "512Mi"
+                limits:
+                  cpu: "2"
+                  memory: "2Gi"
+              volumeMounts:
+                - name: scripts
+                  mountPath: /home/k6/scripts
+                  readOnly: true
+                - name: fixtures
+                  mountPath: /fixtures
+                  readOnly: true
+              workingDir: /home/k6
+          volumes:
+            - name: fixture-builder
+              configMap:
+                name: k6-fixture-builder
+                defaultMode: 0755
+            - name: seed-sql
+              configMap:
+                name: k6-seed-sql
+                defaultMode: 0755
+            - name: scripts
+              configMap:
+                name: k6-scripts
+            - name: fixtures
+              emptyDir: {}

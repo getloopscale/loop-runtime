@@ -1,0 +1,68 @@
+# L1 Smoke Load Test — runs on PRs that touch API/operators/pkg.
+# Fast gate (5 min max) to catch performance regressions before merge.
+#
+# Uses the Go harness (not k6 in-cluster) because:
+# 1. PR CI doesn't have access to the live cluster
+# 2. The Go harness can run against the dev API endpoint
+# 3. Fast feedback loop (< 5 min total)
+name: L1 Smoke (PR)
+
+on:
+  pull_request:
+    branches: [develop, main]
+    paths:
+      - 'api/**'
+      - 'operators/**'
+      - 'pkg/**'
+      - 'infra/tests/load/**'
+      - 'infra/tests/k6/**'
+
+permissions:
+  contents: read
+
+concurrency:
+  group: load-test-pr-${{ github.head_ref }}
+  cancel-in-progress: true
+
+env:
+  LOOPZERO_LOAD_TEST: "1"
+  LOOPZERO_API_URL: "https://api.dev.loopzero.example"
+
+jobs:
+  l1-smoke:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+
+      - uses: ./.github/actions/setup-go
+        with:
+          go-version-file: go.work
+          cache-dependency-path: infra/tests/go.sum
+
+      - name: Health check
+        env:
+          LOOPZERO_SERVICE_AUTH: ${{ secrets.LOOPZERO_SERVICE_AUTH_SECRET }}
+        run: |
+          STATUS=$(curl -s -o /dev/null -w "%{http_code}" "${LOOPZERO_API_URL}/api/v1/health" -H "X-Service-Auth: ${LOOPZERO_SERVICE_AUTH}")
+          if [ "$STATUS" != "200" ]; then
+            echo "::warning::Dev API unhealthy (HTTP $STATUS) — skipping load test"
+            echo "SKIP_LOAD=true" >> "$GITHUB_ENV"
+          fi
+
+      - name: Run L1 smoke
+        if: env.SKIP_LOAD != 'true'
+        env:
+          LOOPZERO_SERVICE_AUTH: ${{ secrets.LOOPZERO_SERVICE_AUTH_SECRET }}
+          LOOPZERO_LOAD_TENANT: "loadtest-tn-0"
+        run: |
+          cd infra/tests
+          go test ./load/ -v -run "TestL1_" -timeout 8m -count=1 2>&1 | tee /tmp/l1-output.txt
+
+      - name: Post result
+        if: always() && env.SKIP_LOAD != 'true'
+        run: |
+          echo "## L1 Smoke Load Test" >> "$GITHUB_STEP_SUMMARY"
+          echo '```' >> "$GITHUB_STEP_SUMMARY"
+          tail -30 /tmp/l1-output.txt >> "$GITHUB_STEP_SUMMARY" 2>/dev/null || echo "No output" >> "$GITHUB_STEP_SUMMARY"
+          echo '```' >> "$GITHUB_STEP_SUMMARY"
