@@ -205,7 +205,11 @@ func (h *ScaleHandler) Scale(w http.ResponseWriter, r *http.Request) {
 
 	cfg := ScaleConfigInput{
 		TenantID:     uc.TenantID,
-		ProjectID:    project.ID,
+		// B40 (CHG-2026-05-05-DOGFOOD-B40): persist with project NAME, not UUID.
+		// CLAUDE.md "Project name vs project ID": CLI sends name as project_id
+		// in builds; ScalingResolver consults app_scaling_config using
+		// req.ProjectID which IS the name. Storing UUID here breaks the chain.
+		ProjectID:    name,
 		Environment:  req.Environment,
 		AppName:      req.App,
 		MinReplicas:  minR,
