@@ -191,45 +191,53 @@ VERIFY: bash one-liner script returns 0 if all binaries present at min version
 - [ ] Comando único `task doctor` (existente) executa sem ERRO em pré-condição
 - [ ] Versões coletadas
 
-### T0.2 — Verify `.env` and `.env.local`
+### T0.2 — Verify CLI auth token will be seeded by `task setup`
+
+> **AMENDMENT 2026-05-05 (Trivial / D7):** Task originalmente exigia `GH_TOKEN` em `.env`. Auditoria empírica do código real revelou que **nenhum journey de dogfood usa `GH_TOKEN`**: `preflight.sh` lê `~/.loopzero/local-dogfood-token.txt` (JWT seedado por `seed-local-user.sh`), e `journey-08-github-autodeploy` documenta explicitamente que webhook→build não é exercitado em standalone-multi (sem public ingress) — apenas a persistência DB de `loopzero connect`/`disconnect` é validada, sem chamadas a GitHub API. A referência a `GH_TOKEN` veio de texto desatualizado em `dogfood/SKILL.md`, não do código. Sem mudança de DoD: ainda precisamos garantir que o token CLI estará disponível antes do `full-loop.sh`, mas a fonte é o seed local, não env var externa.
 
 #### Objective
-Garantir que credenciais locais (GH_TOKEN para journey-08-github-autodeploy + DB password override se necessário) estão presentes.
+Garantir que `task setup` (chamado em Phase 2) consegue gerar `~/.loopzero/local-dogfood-token.txt` automaticamente via `tokens:provision` → `seed-local-user.sh`. Sem esse arquivo, `preflight.sh` falha em T0.2 (token regeneration) antes das 11 journeys rodarem.
 
 #### Evidence
-Skill `dogfood` SKILL.md linha 110: "se GH_TOKEN não estiver em .env, journey-08 vai skipar — registrar como limitação". Para passar 12/12, `.env` deve estar populado.
+- `infra/tests/dogfood/preflight.sh:35` define `TOKEN_FILE="${HOME}/.loopzero/local-dogfood-token.txt"` e linhas 126-179 (`check_token`) regeneram via `seed-local-user.sh` se ausente/expirado.
+- `infra/helmfile/scripts/seed-local-user.sh` produz JWT machine-to-machine que o `loopzero login --token` aceita; idempotente (`ON CONFLICT DO NOTHING`).
+- `infra/tests/dogfood/journeys/journey-08-github-autodeploy.sh` cabeçalho linha 7-15: "standalone-multi has no public exposure for webhook delivery... validates everything UP TO that boundary".
+- `grep -l GH_TOKEN infra/tests/dogfood/journeys/*.sh` → 0 matches.
 
 #### Files to edit
 ```
-.env — deve existir com GH_TOKEN=ghp_xxxx (NÃO commitar; gitignored)
-.env.local — opcional, override de PG_USER/PG_PASS/PG_DB
+(no edits — verification only; .env NOT required for cleanroom dogfood)
 ```
 
 #### Deep file dependency analysis
-- `.env` lido por `infra/tests/dogfood/preflight.sh` linha ~110 e por `cli login --token`
-- `.env.local` carregado por `Taskfile.yml:13-14` via `dotenv:` directive — override transparente
+- `~/.loopzero/local-dogfood-token.txt` é cacheado entre runs; `task clean:all` (Phase 1) NÃO o remove; `seed-local-user.sh` regenera se inválido/expirado.
+- Auth do CLI: `loopzero login --token "$(cat ~/.loopzero/local-dogfood-token.txt)"` (Bearer JWT contra Hydra local). Sem dependência de GitHub OAuth.
 
 #### Deep Dives
-- GH_TOKEN precisa de scopes `repo` + `read:user` no mínimo para journey-08
-- Se token expirou, falha aparece em journey-08 como 401 — não em preflight; daí preflight precisa validar com `whoami`
+- **Quando `.env` ainda é útil:** override de `PG_USER`/`PG_PASS`/`PG_DB` via `.env.local` (Taskfile dotenv directive linha 13-14). Não bloqueante — defaults `loopzero`/`loopzero-dev-password`/`loopzero` funcionam para k3d local.
+- **GitHub App real só importa em DOKS staging.** Local journey-08 valida `loopzero connect` persistência DB + idempotência + `disconnect`, não webhook.
 
 #### Tasks
-1. `test -f .env || echo "MISSING"`
-2. `grep -E '^GH_TOKEN=' .env | head -1`
-3. Validar token com `gh auth status` ou `curl -H "Authorization: token $GH_TOKEN" https://api.github.com/user`
+1. `ls -la ~/.loopzero/local-dogfood-token.txt 2>/dev/null` (informacional — pode não existir antes do primeiro `task setup`; ok)
+2. Confirmar que `task setup` chama `tokens:provision` (já confirmado: `Taskfile.yml:87`)
+3. Confirmar que `tokens:provision` chama `seed-local-user.sh` ou equivalente
+4. (Opcional) Se `.env.local` existe, validar `PG_USER`/`PG_PASS`/`PG_DB` consistentes com defaults de `Taskfile.yml`
 
 #### TDD
 ```
-N/A — env validation; no code change
-VERIFY: GH_TOKEN responds 200 in GitHub API call
+N/A — verification of indirect dependency chain
+VERIFY: `grep -l GH_TOKEN infra/tests/dogfood/journeys/*.sh` returns ZERO files
+VERIFY: `infra/tests/dogfood/preflight.sh` references TOKEN_FILE="${HOME}/.loopzero/local-dogfood-token.txt"
 ```
 
 #### Acceptance Criteria
-- [ ] `.env` existe e contém `GH_TOKEN=`
-- [ ] Token responde GitHub API com 200
+- [ ] Confirmado: nenhum journey usa `GH_TOKEN` (grep clean)
+- [ ] Confirmado: `task setup` provisiona token via `tokens:provision`
+- [ ] (Opcional) `.env.local` documentado se override de DB necessário
 
 #### DoD
-- [ ] Pré-condição validada antes de iniciar Phase 1
+- [ ] Pré-condição (token será seedado em Phase 2) validada por evidência no código
+- [ ] Anti-pattern "confiar em SKILL.md sem cross-check com código" registrado para próximas iterações
 
 ### T0.3 — Working tree clean + baseline tag
 
