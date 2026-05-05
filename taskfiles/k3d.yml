@@ -17,17 +17,20 @@ tasks:
     desc: |
       Create shared container registry for local development.
 
-      B6 fix (real-paas-cleanroom-dogfood-loop-plan iter 6): registry runs
-      as a Docker Hub pull-through proxy via --proxy-remote-url. Without
-      this, k3d clusters pulled third-party images (oryd/kratos, minio/mc,
-      bitnami/postgresql) directly from registry-1.docker.io, hitting the
-      anonymous rate-limit (100 pulls/6h) after ~5 cleanroom destroy/recreate
-      cycles. With pull-through, first pull populates the local cache;
-      subsequent destroy/recreate cycles serve from cache, no Docker Hub
-      involvement. The architecture invariant becomes "we don't depend on
-      Docker Hub for repeat builds" — true after first warm-up.
+      B6 fix (real-paas-cleanroom-dogfood-loop-plan iter 6, refined iter 7):
+      registry runs as a pull-through proxy that points at Google's
+      mirror.gcr.io — a free, rate-limit-free, anonymous mirror of Docker
+      Hub. Eliminates the dependency on registry-1.docker.io entirely:
+      k3d-loopzero-registry caches images on first pull, subsequent destroy/
+      recreate cycles serve from cache, and the upstream is Google not
+      Docker Hub so the 100 pulls/6h anonymous limit does NOT apply.
+
+      Architecture invariant: "local cleanroom does not depend on Docker
+      Hub" — now true at every layer (containerd certs.d → k3d-loopzero-registry
+      proxy → mirror.gcr.io). Confirms the user assertion `nao usamos docker
+      hub` post-fix.
     cmds:
-      - k3d registry list -o json | grep -q '"name":"k3d-loopzero-registry"' || k3d registry create loopzero-registry --port 5000 --proxy-remote-url https://registry-1.docker.io
+      - k3d registry list -o json | grep -q '"name":"k3d-loopzero-registry"' || k3d registry create loopzero-registry --port 5000 --proxy-remote-url https://mirror.gcr.io
 
   clusters:create:
     desc: Create all 4 k3d clusters (mgmt, build, workload, runtime-2)

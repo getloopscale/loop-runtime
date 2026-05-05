@@ -33,9 +33,19 @@ check() {
 echo "B6 regression: k3d Docker Hub pull-through mirror"
 echo
 
-check "registry:create has --proxy-remote-url" \
+check "registry:create has --proxy-remote-url pointing at mirror.gcr.io (not docker.io)" \
   "${REPO_ROOT}/taskfiles/k3d.yml" \
-  '\-\-proxy-remote-url[[:space:]]+https://registry-1\.docker\.io'
+  '\-\-proxy-remote-url[[:space:]]+https://mirror\.gcr\.io'
+
+# Negative assertion: ensure registry-1.docker.io is NOT in the proxy URL.
+# B6 refined iter 7 — fully eliminate Docker Hub from the cleanroom path.
+if grep -qE '\-\-proxy-remote-url[[:space:]]+https://registry-1\.docker\.io' "${REPO_ROOT}/taskfiles/k3d.yml"; then
+  printf '  FAIL  proxy must NOT point at registry-1.docker.io (rate-limited)\n' >&2
+  FAIL=$((FAIL + 1))
+else
+  printf '  PASS  proxy does NOT use registry-1.docker.io\n'
+  PASS=$((PASS + 1))
+fi
 
 for cluster in mgmt build workload runtime-2; do
   yaml="${REPO_ROOT}/infra/k3d/${cluster}-cluster.yaml"
