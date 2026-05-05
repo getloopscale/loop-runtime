@@ -429,12 +429,24 @@ fi
 
 # Roll the tenant-operator so existing ArgoCD Apps get re-templated with new
 # destination URL on the next reconcile. Tenant CR list is small in dev.
+#
+# CHG-2026-05-05-DOGFOOD-B39: WAIT for the rollout to FINISH before
+# annotating tenants. Without this wait, the OLD pod (still running with
+# stale env=hostname during graceful shutdown) receives the annotation
+# event and reconciles BEFORE termination, overwriting the Application
+# destination with the stale URL. The new pod's later reconcile (after
+# init) then sees no spec drift and never re-emits the correct URL.
+# Discovered LIVE in real-paas-cleanroom-dogfood-loop iter 29:
+# Application stuck at hostname despite H10 patch + new pod with IP env.
 kubectl --context "$MGMT_CTX" -n loopzero-system rollout restart "$TC_DEPLOY" >/dev/null 2>&1
-log "  $TC_DEPLOY: rolled to refresh existing Apps"
+log "  $TC_DEPLOY: rolled, waiting for new pod ready..."
+kubectl --context "$MGMT_CTX" -n loopzero-system rollout status "$TC_DEPLOY" --timeout=60s >/dev/null 2>&1 \
+  && log "  $TC_DEPLOY: rollout complete (old pod terminated)" \
+  || warn "  $TC_DEPLOY: rollout status timeout (60s) — proceeding"
 
 # Force the tenant-operator to re-emit Application destination on existing
-# tenants by triggering a reconcile via touch annotation. Use first tenant
-# that has Active phase as smoke proof.
+# tenants by triggering a reconcile via touch annotation. ONLY the new pod
+# (env=fresh URL) sees this, since the old pod was killed above.
 TENANTS=$(kubectl --context "$MGMT_CTX" -n loopzero-system get tenants \
   --no-headers 2>/dev/null | awk '$2=="Active" {print $1}' | head -3)
 for t in $TENANTS; do
