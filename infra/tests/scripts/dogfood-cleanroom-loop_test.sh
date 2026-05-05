@@ -109,7 +109,7 @@ test_exit_code_map_complete() {
 
   # Header check: exact "  N  —" or "  NN  —" within the header comment block.
   # B3 (iter 3): adds exit code 35 for phase_rbac_patch failure.
-  for code in 0 1 10 20 25 30 35 40 50 60; do
+  for code in 0 1 10 20 25 30 35 38 40 50 60; do
     if ! grep -qE "^#   ${code}[[:space:]]+—" "$SCRIPT"; then
       missing_in_header+=("$code")
     fi
@@ -117,7 +117,7 @@ test_exit_code_map_complete() {
 
   # Body check: each non-zero failure code must appear in a `return N` or
   # `exit N` statement somewhere in the script body.
-  for code in 1 10 20 25 30 35 40 50 60; do
+  for code in 1 10 20 25 30 35 38 40 50 60; do
     if ! grep -qE "(return|exit)[[:space:]]+${code}" "$SCRIPT"; then
       missing_in_body+=("$code")
     fi

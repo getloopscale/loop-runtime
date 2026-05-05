@@ -35,6 +35,7 @@
 #   25  — phase 3 tilt ci failed (Tiltfile resource did not converge)
 #   30  — phase 4 heal failed (heal script regression)
 #   35  — phase 2.5 RBAC patch failed (B3 fix; mgmt cluster context broken)
+#   38  — phase 2.6 bootstrap extras failed (B9/B10; secrets/ESO bootstrap)
 #   40  — phase 5 doctor did not converge in 180s (control plane unhealthy)
 #   50  — phase 6 dogfood full-loop.sh exited non-zero (journey FAIL)
 #   60  — phase 7 post-validation failed (Rule 3 / state JSON anomaly)
@@ -252,6 +253,36 @@ YAML
   log "rbac patch applied: loopzero-api-cleanroom-extra"
 }
 
+# Phase 2.6: Bootstrap extras (B9/B10 fix, iter 9, 2026-05-05)
+#
+# `task setup` (which calls infra:install:mgmt etc.) does NOT invoke the
+# helmfile-side bootstrap scripts that create LoopZero's platform Secrets and
+# the ESO ClusterSecretStore. Without these:
+#   - loopzero-db-credentials Secret is missing → seed-local-user.sh fails
+#     silently with empty PGPASS → preflight T0.2 fails ("token expiring"
+#     and seed re-run failed)
+#   - loopzero-mgmt-store ClusterSecretStore not Ready → preflight T0.9 fails
+#
+# Both scripts are idempotent (designed to be re-runnable in helmfile sync).
+# Calling them here closes the standalone gap.
+phase_bootstrap_extras() {
+  log_phase "2.6/7 BOOTSTRAP EXTRAS (generate-secrets + ESO ClusterSecretStore)"
+  if [[ "$DRY_RUN" -eq 1 ]]; then
+    log "DRY-RUN: bash generate-secrets.sh standalone mgmt && bash bootstrap-eso-cluster-secret-store.sh"
+    return 0
+  fi
+  if ! bash "${REPO_ROOT}/infra/helmfile/scripts/generate-secrets.sh" standalone mgmt; then
+    log_err "phase_bootstrap_extras: generate-secrets.sh failed"
+    return 38
+  fi
+  log "generate-secrets.sh OK (loopzero-db-credentials, loopzero-api-tokens, etc. applied)"
+  if ! bash "${REPO_ROOT}/infra/helmfile/scripts/bootstrap-eso-cluster-secret-store.sh"; then
+    log_err "phase_bootstrap_extras: bootstrap-eso-cluster-secret-store.sh failed"
+    return 38
+  fi
+  log "bootstrap-eso-cluster-secret-store.sh OK (loopzero-mgmt-store Ready)"
+}
+
 # Phase 3: Tilt CI
 # Runs `tilt ci` (non-interactive convergence) with timeout. Tilt exits 0 once
 # all Tiltfile resources are healthy; if a resource never converges, tilt ci
@@ -423,14 +454,15 @@ log "sequence start"
 # redirected to /dev/null). Tilt's later apply re-establishes correct env.
 # ADR-0022 D7 amendment: DoD refinement of plan ADR D5 — heal still runs
 # AFTER setup, just BEFORE tilt instead of after. Documented in plan.
-phase_destroy     || exit $?
-phase_setup       || exit $?
-phase_rbac_patch  || exit $?
-phase_heal        || exit $?
-phase_tilt_up     || exit $?
-phase_wait_doctor || exit $?
-phase_dogfood     || exit $?
-post_validate     || exit $?
+phase_destroy           || exit $?
+phase_setup             || exit $?
+phase_rbac_patch        || exit $?
+phase_bootstrap_extras  || exit $?
+phase_heal              || exit $?
+phase_tilt_up           || exit $?
+phase_wait_doctor       || exit $?
+phase_dogfood           || exit $?
+post_validate           || exit $?
 
 log "sequence COMPLETE in ${SECONDS}s"
 log "all phases passed; report: ${LOG_FILE}; state: ${STATE_SNAPSHOT}"
