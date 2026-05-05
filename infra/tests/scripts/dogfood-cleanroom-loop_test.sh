@@ -108,7 +108,8 @@ test_exit_code_map_complete() {
   local code
 
   # Header check: exact "  N  —" or "  NN  —" within the header comment block.
-  for code in 0 1 10 20 25 30 40 50 60; do
+  # B3 (iter 3): adds exit code 35 for phase_rbac_patch failure.
+  for code in 0 1 10 20 25 30 35 40 50 60; do
     if ! grep -qE "^#   ${code}[[:space:]]+—" "$SCRIPT"; then
       missing_in_header+=("$code")
     fi
@@ -116,7 +117,7 @@ test_exit_code_map_complete() {
 
   # Body check: each non-zero failure code must appear in a `return N` or
   # `exit N` statement somewhere in the script body.
-  for code in 1 10 20 25 30 40 50 60; do
+  for code in 1 10 20 25 30 35 40 50 60; do
     if ! grep -qE "(return|exit)[[:space:]]+${code}" "$SCRIPT"; then
       missing_in_body+=("$code")
     fi
@@ -178,11 +179,44 @@ test_log_file_outside_report_dir() {
   return 0
 }
 
+# ---------------------------------------------------------------------------
+# Test 6 (regression for B3, iter 3, 2026-05-05): phase_rbac_patch must
+# exist AND be invoked between phase_setup and phase_tilt_up. Without the
+# patch, Tilt's narrow ClusterRole leaves loopzero-api SA without `secrets`
+# and `clustercredentials.loopzero.io` perms — pod CrashLoopBackOff and tilt ci
+# hits 600s timeout. The patch is additive (different ClusterRole name) so
+# it does not conflict with Tilt's apply.
+# ---------------------------------------------------------------------------
+test_rbac_patch_phase_exists_and_ordered() {
+  if ! grep -qE '^phase_rbac_patch\(\)' "$SCRIPT"; then
+    printf '    expected `phase_rbac_patch()` function in script\n' >&2
+    return 1
+  fi
+  if ! grep -q 'loopzero-api-cleanroom-extra' "$SCRIPT"; then
+    printf '    phase_rbac_patch must reference ClusterRole `loopzero-api-cleanroom-extra`\n' >&2
+    return 1
+  fi
+  if ! grep -q 'clustercredentials' "$SCRIPT"; then
+    printf '    phase_rbac_patch must grant `clustercredentials` perms\n' >&2
+    return 1
+  fi
+  # Ordering: phase_setup must come before phase_rbac_patch, which must come
+  # before phase_tilt_up in the main sequence.
+  local seq
+  seq=$(grep -E 'phase_(setup|rbac_patch|tilt_up)' "$SCRIPT" | tail -3)
+  if [[ "$seq" != *'phase_setup'*'phase_rbac_patch'*'phase_tilt_up'* ]]; then
+    printf '    phase ordering wrong; expected setup → rbac_patch → tilt_up; got:\n%s\n' "$seq" >&2
+    return 1
+  fi
+  return 0
+}
+
 run_test test_unknown_arg_returns_1
 run_test test_help_flag_exits_zero
 run_test test_dry_run_does_not_invoke_destroy
 run_test test_exit_code_map_complete
 run_test test_log_file_outside_report_dir
+run_test test_rbac_patch_phase_exists_and_ordered
 
 printf '\n%d/%d tests passed\n' "$PASS" "$((PASS + FAIL))"
 

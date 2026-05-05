@@ -34,6 +34,7 @@
 #   20  — phase 2 setup failed (bootstrap regression)
 #   25  — phase 3 tilt ci failed (Tiltfile resource did not converge)
 #   30  — phase 4 heal failed (heal script regression)
+#   35  — phase 2.5 RBAC patch failed (B3 fix; mgmt cluster context broken)
 #   40  — phase 5 doctor did not converge in 180s (control plane unhealthy)
 #   50  — phase 6 dogfood full-loop.sh exited non-zero (journey FAIL)
 #   60  — phase 7 post-validation failed (Rule 3 / state JSON anomaly)
@@ -172,6 +173,83 @@ phase_setup() {
     log_err "phase_setup failed — likely bug in bootstrap (helmfile, CRDs, migrations, or seed)"
     return 20
   fi
+}
+
+# Phase 2.5: RBAC patch (B3 fix, iter 3, 2026-05-05)
+#
+# Tilt's `infra/tilt/api-deployment.yaml` ships a narrow ClusterRole for the
+# loopzero-api SA — only `tenants` and `loopzeroapplications` from loopzero.io. Real
+# loopzero-api needs `secrets` (for argocd-refresh-credentials, ESO, etc.) and
+# `clustercredentials.loopzero.io` (for K8sCellStore.LoadCells, fatal at boot).
+# Discovered LIVE during cleanroom Phase 3 iter 2: loopzero-api CrashLoopBackOff,
+# tilt ci hit 600s timeout and exited 25.
+#
+# The proper fix is to update infra/tilt/api-deployment.yaml, but that path
+# is OUT OF the current governance approval scope. Instead, this phase
+# applies an ADDITIVE ClusterRole + Binding under a different name
+# (loopzero-api-cleanroom-extra) so it does NOT conflict with Tilt's apply.
+# RBAC bindings are additive across multiple ClusterRoleBindings — the SA
+# gets the union of all rules from all bindings that target it.
+#
+# This is a workaround per ADR D2 of the plan. ADR-0022 D7 amendment
+# (Trivial / Scope refinement): adds new phase to orchestrator, in-scope
+# `infra/scripts/**`, no DoD impact. The canonical fix tracked separately;
+# when in-scope governance includes infra/tilt/, the additive ClusterRole
+# can be removed in favour of fixing api-deployment.yaml directly.
+phase_rbac_patch() {
+  log_phase "2.5/7 RBAC PATCH (B3 — additive ClusterRole for loopzero-api)"
+  if [[ "$DRY_RUN" -eq 1 ]]; then
+    log "DRY-RUN: kubectl apply loopzero-api-cleanroom-extra ClusterRole+Binding"
+    return 0
+  fi
+  if ! kubectl --context k3d-loopzero-mgmt apply -f - <<'YAML'
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: loopzero-api
+  namespace: loopzero-system
+  labels:
+    app.kubernetes.io/name: loopzero-api
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: loopzero-api-cleanroom-extra
+  labels:
+    app.kubernetes.io/managed-by: dogfood-cleanroom-loop
+    app.kubernetes.io/part-of: loopzero
+rules:
+  # K8sCellStore.LoadCells() polls every 60s; missing perms → fatal boot.
+  - apiGroups: ["loopzero.io"]
+    resources: ["clustercredentials"]
+    verbs: ["get", "list", "watch"]
+  # KubeMintingTokenProvider (self-healing ArgoCD token), ESO sync,
+  # secret rotation, loopzero-cluster-kubeconfigs read/write.
+  - apiGroups: [""]
+    resources: ["secrets"]
+    verbs: ["get", "list", "watch", "create", "update", "patch"]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRoleBinding
+metadata:
+  name: loopzero-api-cleanroom-extra
+  labels:
+    app.kubernetes.io/managed-by: dogfood-cleanroom-loop
+    app.kubernetes.io/part-of: loopzero
+subjects:
+  - kind: ServiceAccount
+    name: loopzero-api
+    namespace: loopzero-system
+roleRef:
+  kind: ClusterRole
+  name: loopzero-api-cleanroom-extra
+  apiGroup: rbac.authorization.k8s.io
+YAML
+  then
+    log_err "phase_rbac_patch failed — kubectl apply error; mgmt cluster context broken?"
+    return 35
+  fi
+  log "rbac patch applied: loopzero-api-cleanroom-extra"
 }
 
 # Phase 3: Tilt CI
@@ -324,14 +402,15 @@ PY
 SECONDS=0
 log "sequence start"
 
-phase_destroy   || exit $?
-phase_setup     || exit $?
-phase_tilt_up   || exit $?
-phase_heal      || exit $?
+phase_destroy     || exit $?
+phase_setup       || exit $?
+phase_rbac_patch  || exit $?
+phase_tilt_up     || exit $?
+phase_heal        || exit $?
 phase_wait_doctor || exit $?
-phase_dogfood   || exit $?
-post_validate   || exit $?
+phase_dogfood     || exit $?
+post_validate     || exit $?
 
 log "sequence COMPLETE in ${SECONDS}s"
-log "all 7 phases passed; report: ${LOG_FILE}; state: ${STATE_SNAPSHOT}"
+log "all phases passed; report: ${LOG_FILE}; state: ${STATE_SNAPSHOT}"
 exit 0
