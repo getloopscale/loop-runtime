@@ -402,11 +402,22 @@ PY
 SECONDS=0
 log "sequence start"
 
+# B4 FIX (iter 4 → 5, 2026-05-05): phase_heal moved BEFORE phase_tilt_up.
+# Heal H12/H13/H14/H15 create the cell-default/cell-1/cell-2 ClusterCredential
+# CRs that loopzero-api reads at boot via K8sCellStore.LoadCells. With the old
+# order (heal AFTER tilt), tilt ci called loopzero-api which failed fatally with
+# `cell router: 0 ClusterCredentials discovered — fatal, no fallback by
+# design`, and tilt ci hit 600s timeout before heal ever ran.
+# Heal H8/H10 (loopzero-api Deployment env override) silently no-op when the
+# Deployment doesn't yet exist (set -uo pipefail without -e; kubectl errors
+# redirected to /dev/null). Tilt's later apply re-establishes correct env.
+# ADR-0022 D7 amendment: DoD refinement of plan ADR D5 — heal still runs
+# AFTER setup, just BEFORE tilt instead of after. Documented in plan.
 phase_destroy     || exit $?
 phase_setup       || exit $?
 phase_rbac_patch  || exit $?
-phase_tilt_up     || exit $?
 phase_heal        || exit $?
+phase_tilt_up     || exit $?
 phase_wait_doctor || exit $?
 phase_dogfood     || exit $?
 post_validate     || exit $?

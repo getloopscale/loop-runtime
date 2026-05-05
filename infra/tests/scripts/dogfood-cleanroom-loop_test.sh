@@ -200,14 +200,20 @@ test_rbac_patch_phase_exists_and_ordered() {
     printf '    phase_rbac_patch must grant `clustercredentials` perms\n' >&2
     return 1
   fi
-  # Ordering: phase_setup must come before phase_rbac_patch, which must come
-  # before phase_tilt_up in the main sequence.
+  # Ordering: phase_setup → phase_rbac_patch → phase_heal → phase_tilt_up.
+  # B4 (iter 4→5): heal MUST run before tilt so ClusterCredentials exist
+  # when loopzero-api boots. Look at the final main-sequence block specifically
+  # (tail), not docstrings.
   local seq
-  seq=$(grep -E 'phase_(setup|rbac_patch|tilt_up)' "$SCRIPT" | tail -3)
-  if [[ "$seq" != *'phase_setup'*'phase_rbac_patch'*'phase_tilt_up'* ]]; then
-    printf '    phase ordering wrong; expected setup → rbac_patch → tilt_up; got:\n%s\n' "$seq" >&2
-    return 1
-  fi
+  seq=$(grep -E '^phase_(setup|rbac_patch|heal|tilt_up)\b' "$SCRIPT" | tail -4 | tr '\n' '|')
+  case "$seq" in
+    'phase_setup'*'phase_rbac_patch'*'phase_heal'*'phase_tilt_up'*)
+      ;;
+    *)
+      printf '    phase ordering wrong; expected setup → rbac_patch → heal → tilt_up; got:\n%s\n' "$seq" >&2
+      return 1
+      ;;
+  esac
   return 0
 }
 

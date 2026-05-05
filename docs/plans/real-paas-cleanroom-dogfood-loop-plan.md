@@ -86,15 +86,23 @@
 - (+) Não consome dias de wall-clock em loop infinito
 - (−) Pode parar antes do "natural" se 5 fixes seguidos forem todos legítimos e ortogonais; aceitável (humano pode resetar contador com justificativa documentada)
 
-### D5 — `task k3d:heal` roda APÓS `task setup`, NÃO no lugar
+### D5 — `task k3d:heal` roda APÓS `task setup`, e ANTES de `tilt ci` (D7 amendment iter 5)
 
-**Decisão:** Sequência canônica: `clean:all → setup → tilt up → k3d:heal → doctor → full-loop.sh`. Heal NÃO substitui setup; complementa para os 15 workarounds de cross-cluster que `setup` ainda não codifica.
+> **AMENDMENT 2026-05-05 (ADR-0022 D7 — DoD refinement):** Sequência reordenada para `clean:all → setup → rbac_patch → heal → tilt → doctor → dogfood`. Heal mantém a precondição `setup-first` original; mover para antes de tilt é necessário porque heal H12/H13/H14/H15 criam os ClusterCredential CRs que `loopzero-api` lê fatalmente no boot (`cell router: 0 ClusterCredentials discovered — fatal, no fallback by design`). Com a ordem antiga (heal pós-tilt), o pod loopzero-api CrashLoopBackOff antes de heal poder rodar; tilt ci hit 600s timeout. H8/H10 (que dependem do Deployment criado por Tilt) silenciosamente no-op quando o Deployment não existe (`set -uo pipefail` sem `-e`; `kubectl 2>/dev/null`); Tilt aplica o Deployment depois, atendendo ao mesmo end-state. Bug B4 descoberto LIVE em iter 4. Categoria amendment: **DoD refinement** (sequência muda mas DoD do plano não); precedente em `feedback_no_tribal_knowledge` (cada workaround descoberto vira heal).
 
-**Rationale:** `setup` chama `crds:install + db:migrate + dev:seed + tokens:provision` — é o caminho oficial. Heal é "guard-rail" para os bugs históricos cross-cluster (RBAC, host aliases, kubeconfig IPs). Inverter ordem não funciona (heal depende de Secret que setup cria).
+**Decisão:** Sequência canônica: `clean:all → setup → rbac_patch → k3d:heal → tilt ci → doctor → full-loop.sh`. Heal NÃO substitui setup; complementa para os 15+ workarounds de cross-cluster que `setup` ainda não codifica, **incluindo** os ClusterCredential CRs que loopzero-api consume.
+
+**Rationale:** `setup` chama `crds:install + db:migrate + dev:seed + tokens:provision` — é o caminho oficial. Heal é "guard-rail" para os bugs históricos cross-cluster (RBAC, host aliases, kubeconfig IPs, ClusterCredential bootstrap). Heal precisa de:
+- CRDs instaladas (setup) ✓
+- loopzero-cluster-kubeconfigs Secret existir (setup → tokens:provision) ✓
+- Clusters acessíveis (setup → clusters:create) ✓
+Heal NÃO precisa de Tilt (loopzero-api Deployment) — H8/H10 toleram ausência via redirect.
 
 **Consequences:**
 - (+) Cada iteração que ativa um novo H-handler significa novo workaround foi descoberto e codificado — sinal positivo de convergência
+- (+) ClusterCredential CRs prontas antes do tilt iniciar loopzero-api → resolve B4 e classe inteira de "boot fatal sem cells"
 - (−) Se um fix local quebra `task setup` em si, heal não recupera; mas isso é caught no `task doctor` (gate antes do dogfood)
+- (−) H8/H10 rodam contra Deployment ausente — silencioso por design, não regride
 
 ### D6 — Pass criterion é multidimensional, não só exit 0
 
