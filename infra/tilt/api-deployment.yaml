@@ -19,6 +19,20 @@ rules:
   - apiGroups: ["loopzero.io"]
     resources: ["loopzeroapplications"]
     verbs: ["get", "create", "update", "patch"]
+  # --- ClusterCredential CRs: K8sCellStore.LoadCells() polls every 60s.
+  # B3 fix (real-paas-cleanroom-dogfood-loop iter 22, 2026-05-05): without
+  # this rule, loopzero-api boot fails fatally with `cell router: initial cell
+  # load failed — fatal, no fallback by design`. Aligned with the chart at
+  # infra/helm/loopzero-api/templates/serviceaccount.yaml; Tilt applies this
+  # YAML directly so the chart's RBAC is not enough on its own.
+  - apiGroups: ["loopzero.io"]
+    resources: ["clustercredentials"]
+    verbs: ["get", "list", "watch"]
+  # --- Secrets in loopzero-system: argocd-refresh-credentials, loopzero-cluster-
+  # kubeconfigs, KubeMintingTokenProvider rotation, ESO sync.
+  - apiGroups: [""]
+    resources: ["secrets"]
+    verbs: ["get", "list", "watch", "create", "update", "patch"]
 ---
 apiVersion: rbac.authorization.k8s.io/v1
 kind: ClusterRoleBinding
@@ -42,6 +56,14 @@ metadata:
     app: loopzero-api
 spec:
   replicas: 1
+  # B23 fix (real-paas-cleanroom-dogfood-loop iter 22, 2026-05-05): use
+  # Recreate strategy because loopzero-api uses leader election. RollingUpdate
+  # creates the new pod alongside the old one; the new pod retries
+  # `leader lock held by another instance` 12 times then exits → CrashLoop
+  # → old pod (without env updates) keeps serving. Recreate kills the old
+  # pod first, frees the lease, then the new pod boots cleanly.
+  strategy:
+    type: Recreate
   selector:
     matchLabels:
       app: loopzero-api
@@ -68,32 +90,20 @@ spec:
               value: "dev-callback-secret"
             - name: LOG_LEVEL
               value: "debug"
-            # Phase 0.1 (scale-50k-plan): When loopzero-controller is deployed
-            # alongside, set this to "true" so the API serves HTTP only.
-            # The controller binary owns all background loops.
             - name: LOOPZERO_DISABLE_LEGACY_LOOPS
               value: "false"
-            # W1: MinIO (real source store)
             - name: MINIO_ENDPOINT
               value: "http://minio.loopzero-system.svc.cluster.local:9000"
-            # Cross-cluster MinIO endpoint (for Argo Workflow cache pods in build cluster)
-            # Uses mgmt LB NodePort. Update after cluster recreate:
-            #   docker inspect k3d-loopzero-mgmt-serverlb --format '{{json .NetworkSettings.Networks}}'
             - name: MINIO_CROSS_CLUSTER_ENDPOINT
               value: "http://172.18.0.3:32000"
             - name: MINIO_ACCESS_KEY
               value: "loopzero-admin"
             - name: MINIO_SECRET_KEY
               value: "loopzero-dev-password"
-            # Gitea — uses NodePort for cross-cluster access (build cluster needs to reach it)
             - name: GITEA_URL
               value: "http://gitea-http.loopzero-system.svc.cluster.local:3000"
-            # Cross-cluster Gitea URL (for Argo Workflow parameters — build cluster → mgmt Gitea)
-            # IP = mgmt LB on k3d-loopzero-build network. Update after cluster recreate:
-            #   docker inspect k3d-loopzero-mgmt-serverlb --format '{{json .NetworkSettings.Networks}}'
             - name: GITEA_CROSS_CLUSTER_URL
               value: "http://172.18.0.3:30000"
-            # Cross-cluster API URL (for Argo Workflow callback — build cluster → mgmt API)
             - name: API_CROSS_CLUSTER_URL
               value: "http://172.18.0.3:30001"
             - name: GITEA_TOKEN
@@ -102,7 +112,6 @@ spec:
                   name: loopzero-api-tokens
                   key: gitea-token
                   optional: true
-            # W4: ArgoCD (real sync client)
             - name: ARGOCD_URL
               value: "http://argocd-server.argocd.svc.cluster.local:80"
             - name: ARGOCD_TOKEN
@@ -111,47 +120,39 @@ spec:
                   name: loopzero-api-tokens
                   key: argocd-token
                   optional: true
-            # W2: Build cluster (real workflow submitter)
             - name: BUILD_KUBECONFIG
               value: "/etc/loopzero/build-kubeconfig"
             - name: BUILD_KUBE_CONTEXT
               value: "build"
             - name: REGISTRY_URL
               value: "k3d-loopzero-registry:5000"
-            # BuildKit insecure flags are conditional on this.
-            # Set to "true" for dev (k3d registry has no TLS).
-            # Config.Validate() enforces "false" in production.
             - name: REGISTRY_INSECURE
               value: "true"
-            # Override loopzero-packs-runner image for local dev (k3d registry).
-            # Production uses the pinned image from constants.go.
+            # B22 fix (real-paas-cleanroom-dogfood-loop iter 22, 2026-05-05):
+            # all four image overrides set in YAML so Argo Workflow generated
+            # by API references the local k3d-loopzero-registry, not DOCR (which
+            # fails 401 in cleanroom because no DOCR creds).
             - name: LOOPZERO_PACKS_IMAGE
               value: "k3d-loopzero-registry:5000/loopzero-packs-runner:latest"
-            # Workload cluster ingress — Traefik LoadBalancer on k3d-loopzero-workload.
-            # Uses the Docker IP of k3d-loopzero-workload-serverlb directly because
-            # host.k3d.internal does not resolve from within mgmt cluster pods.
-            # The LB exposes port 80 (Traefik HTTP entrypoint).
-            # Workload LB IP on k3d-loopzero-workload network. Update after cluster recreate:
-            #   docker inspect k3d-loopzero-workload-serverlb --format '{{json .NetworkSettings.Networks}}'
+            - name: LOOPZERO_CLONE_IMAGE
+              value: "k3d-loopzero-registry:5000/loopzero-clone-runner:latest"
+            - name: LOOPZERO_SYFT_IMAGE
+              value: "k3d-loopzero-registry:5000/loopzero-syft-scanner:latest"
+            - name: LOOPZERO_COSIGN_IMAGE
+              value: "k3d-loopzero-registry:5000/loopzero-cosign-signer:latest"
+            # B14 fix (real-paas-cleanroom-dogfood-loop iter 22, 2026-05-05):
+            # service-auth secret for /api/v1/admin/* routes. Cleanroom-only
+            # placeholder; production sets via Pulumi mgmt-api.ts (random Output).
+            - name: LOOPZERO_SERVICE_AUTH_SECRET
+              value: "cleanroom-service-auth-secret-do-not-use-in-prod"
             - name: WORKLOAD_INGRESS_URL
               value: "http://172.18.0.12:80"
             - name: BASE_DOMAIN
               value: "loopzero.local"
-            # CHG-2026-04-22-001 B4 — JWKS wiring for local dev (Rule 10 parity).
-            # Engine is RSA-only (MEET-039 B3). Without these, no JWT validates
-            # and `loopzero login` → 401 across the board. Hydra runs in loopzero-system
-            # and exposes both URLs; consumed by api/cmd/setup_auth.go.
             - name: JWKS_URL
               value: "http://ory-hydra-public.loopzero-system.svc.cluster.local:4444/.well-known/jwks.json"
-            # JWT_ISSUER must match exactly the `iss` claim Hydra stamps into tokens.
-            # Local Hydra is configured with `urls.self.issuer=http://localhost:4444/`
-            # (see infra/helm/ory-hydra/values.yaml) so the API must validate against
-            # that exact string. JWKS is fetched in-cluster (correct URL above).
             - name: JWT_ISSUER
               value: "http://localhost:4444/"
-            # B14 (MEET-2026-04-23-058): cert-manager ClusterIssuer for TLS Certificates.
-            # Dev uses loopzero-ca-issuer (self-signed CA, already provisioned on workload cluster).
-            # Prod sets letsencrypt-prod via Pulumi mgmt-api.ts ConfigMap.
             - name: LOOPZERO_CLUSTER_ISSUER
               value: "loopzero-ca-issuer"
           ports:
