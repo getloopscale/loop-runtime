@@ -324,17 +324,20 @@ phase_bootstrap_extras() {
     return 38
   fi
   log "policy-controller installed in workload (CRDs ClusterImagePolicy ready)"
-  # B13 fix (iter 11, 2026-05-05): install admission-policies chart in
-  # workload cluster so ValidatingAdmissionPolicies loopzero-restrict-image-
-  # registries and loopzero-require-image-signature exist (preflight T0.3).
+  # B13/B18 fix (iter 11/14, 2026-05-05): install admission-policies chart in
+  # workload cluster. B18: VAP loopzero-restrict-image-registries needs
+  # additionalPrefixes to include k3d-loopzero-registry:5000/<tenant>/ so locally
+  # built images pass admission. Without this, preflight T0.3.vap-restrict
+  # fails with "VAP missing k3d-loopzero-registry:5000/ prefix".
   if ! helm upgrade --install admission-policies "${REPO_ROOT}/infra/helm/admission-policies" \
        --kube-context k3d-loopzero-workload \
        --namespace cosign-system --create-namespace \
+       --set 'registries.additionalPrefixes[0]=k3d-loopzero-registry:5000/' \
        --wait --timeout 2m; then
     log_err "phase_bootstrap_extras: admission-policies helm install failed"
     return 38
   fi
-  log "admission-policies installed in workload (VAPs loopzero-restrict-image-registries + loopzero-require-image-signature)"
+  log "admission-policies installed in workload (VAPs + k3d-loopzero-registry prefix)"
 }
 
 # Phase 3: Tilt CI
@@ -379,6 +382,17 @@ phase_post_tilt_env() {
   log "LOOPZERO_SERVICE_AUTH_SECRET set on deploy/loopzero-api"
   # Wait for rollout so pod has env when preflight inspects.
   kubectl --context k3d-loopzero-mgmt -n loopzero-system rollout status deploy/loopzero-api --timeout=60s >/dev/null 2>&1 || true
+  # B17 fix (iter 14): pre-mint local-dogfood-token via seed-local-user.sh
+  # with HYDRA_NAMESPACE=loopzero-system override. preflight.sh hardcodes
+  # `port-forward -n loopzero-auth` and won't pass the env, so the token must
+  # be fresh on disk before preflight runs (preflight skips re-mint when
+  # token is valid). seed-local-user.sh is idempotent — DB inserts use
+  # ON CONFLICT, JWT mint is fresh per call.
+  if HYDRA_NAMESPACE=loopzero-system bash "${REPO_ROOT}/infra/helmfile/scripts/seed-local-user.sh" >/dev/null 2>&1; then
+    log "seed-local-user.sh OK (~/.loopzero/local-dogfood-token.txt fresh)"
+  else
+    log_warn "seed-local-user.sh failed (preflight T0.2 may report stale token)"
+  fi
 }
 
 # Phase 4: Heal
