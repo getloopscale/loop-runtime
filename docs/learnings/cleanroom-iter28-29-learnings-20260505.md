@@ -161,7 +161,7 @@ journeys/_common.sh`.
 
 ---
 
-### B36 — Test contract drift: scale handler não é mais stub
+### B36 — Test contract drift: scale handler não é mais stub (PARCIAL — gap descoberto pós-fix)
 
 **Sintoma:** Journey-04 falha com
 `expected status=acknowledged (current stub contract), got: applied`.
@@ -172,10 +172,43 @@ no DB e retorna `applied`/`no_change` quando `h.apply != nil`.
 Legacy `acknowledged` só fires no fallback path (transitional). CLAUDE.md
 ainda descrevia o stub anterior — gap doc.
 
-**Fix canônico:** journey-04 aceita
-`{applied, no_change, acknowledged}`. Adicionei comment explícito
-que K8s `Deployment.spec.replicas` updates apenas no próximo `loopzero
-deploy` porque o renderer lê do DB no deploy time.
+**Fix aplicado:** journey-04 aceita
+`{applied, no_change, acknowledged}`.
+
+**GAP DESCOBERTO POST-FIX (B40 candidato):** afirmei na primeira versão
+deste documento que "K8s Deployment.spec.replicas updates apenas no
+próximo loopzero deploy porque o renderer lê do DB no deploy time". **ISSO
+ESTÁ INCORRETO.** Audit pós-sessão (2026-05-05, prompted by user
+question "LoopZero scale esta funcional?") revelou:
+
+- `api/internal/services/build_orchestrator_submit.go:114` populates
+  `BuildAppSpec.Replicas` direto de `req.Apps[].Replicas` — vem do
+  `loopzero.yaml` parsed pelo CLI client-side
+- `api/internal/manifests/renderer_deployment.go:114` lê
+  `app.Replicas` desse `BuildAppSpec`, NÃO do `app_scaling_config`
+- `app_scaling_config` é uma tabela ORFÃ — escrita por `loopzero scale`
+  handler, lida APENAS por unit tests do próprio store
+- Resultado real: `loopzero scale --replicas 3` grava DB mas próximo
+  `loopzero deploy` ignora e renderiza `Deployment.spec.replicas` do
+  `loopzero.yaml`
+
+**Por que journey-04 passou mesmo assim:** ele NÃO valida
+`Deployment.spec.replicas` no cluster — só valida response shape +
+HTTP 200. Test contract gap.
+
+**Plan T2.3 (renderer integration with scaling store) não shipped** —
+declared como complete in plan but actually missing. To finish B36
+properly need:
+1. Renderer (or build_orchestrator_submit) to query
+   `scalingStore.GetByApp` and prefer DB value over request body when
+   present
+2. Journey-04 to assert `kubectl get deploy -o jsonpath=
+   '{.spec.replicas}'` matches scaled value after `loopzero scale +
+   loopzero deploy`
+
+**Status atual (2026-05-05):** documentado em CLAUDE.md como
+"partially functional" + README como Medium-priority gap. CHG-2026-05-05-
+DOGFOOD-B40 candidate ABERTO mas não fixado nesta sessão.
 
 **Commit:** `a24eb995`
 **Arquivos:** `infra/tests/dogfood/journeys/journey-04-scale.sh`

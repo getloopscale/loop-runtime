@@ -73,7 +73,7 @@ No Kubernetes knowledge required. No Helm. No Dockerfile required. Just push.
 | `loopzero connect` / `disconnect` | GitHub App auto-deploy on push (~4min E2E) |
 | `loopzero audit` | Audit log with action/timestamp filters |
 | `loopzero validate` | Local loopzero.yaml validation |
-| `loopzero scale` | Scaling configuration -- DB persistence active via `PostgresScalingStore`. Returns `applied`/`no_change` (no longer stub-202). K8s Deployment.spec.replicas updates on next `loopzero deploy` (renderer reads from DB at deploy time). B36 fix 2026-05-05. |
+| `loopzero scale` | **Partially functional**. API persists to `app_scaling_config` and returns `applied`/`no_change`. **GAP**: renderer reads `Replicas` from request body (loopzero.yaml), NOT from `app_scaling_config` — the table is orphan from the deploy path. K8s `Deployment.spec.replicas` does NOT update via `loopzero scale`. Workaround: edit `loopzero.yaml` + `loopzero deploy`. See "Known issues" below. |
 | Plan enforcement (Starter/Pro/Team) | Limits on projects/builds/environments/members/replicas |
 | Concurrent deploy protection | `pg_advisory_xact_lock` -> exactly one 202, others get 409 |
 | Idempotency | Retry-safe via `Idempotency-Key` header |
@@ -96,7 +96,7 @@ No Kubernetes knowledge required. No Helm. No Dockerfile required. Just push.
 | Cell-2 production canary (stages 4-5) | Medium | Stage 4: 1 customer 7-day. Stage 5: 10/50/100% with 7-day holds. Pending Sprint 9 readiness review per ADR D6. CI cron `cell2-soaks.yml` armed for ADR-compliant 1h+24h Sunday runs. |
 | ~~SBOM generation (syft)~~ | ~~Medium~~ | ✅ Shipped (Sprint 6). Per-release CycloneDX manifest persisted in S3 with presigned URL endpoint. |
 | Admission policy DENY mode | Medium | warn-mode shipped (Sprint 6). Deny-flip pending Sprint 9 with cosign keyless verification + Fulcio. |
-| ~~`loopzero scale` persistence (DB)~~ | ~~Low~~ | ✅ Shipped (B36, 2026-05-05). PostgresScalingStore wired in `api/cmd/setup_orchestrator.go:144`. Handler returns `applied`/`no_change`. Validated via journey-04 in cleanroom dogfood. |
+| `loopzero scale` end-to-end persistence | Medium | **Partially shipped (B36).** API + DB row works; renderer integration (Plan T2.3) NOT shipped — `app_scaling_config` is orphan from deploy path. K8s `Deployment.spec.replicas` does NOT update via `loopzero scale`. Tracking as B40 candidate. Workaround: edit `loopzero.yaml` + `loopzero deploy`. |
 | Chaos engineering suite | Medium | Sprint 8 -- not started. |
 | Polish + onboarding (< 10 min) | High | Sprint 9 -- not started. |
 | SSO/SAML | Low | Phase 3. |
