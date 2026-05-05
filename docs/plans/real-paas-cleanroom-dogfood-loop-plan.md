@@ -815,14 +815,38 @@ S2-S4 findings documentados em `docs/reports/dogfood-cleanroom-{date}.md` mas N�
 
 ---
 
-## Convergence Log (preencher durante execução)
+## Convergence Log
 
 > Append-only durante Phase 3+. Cada iteração adiciona 1 entrada.
 
 | Iter | Date | Failed journey | Root-cause | Fix commit | Re-run result |
 |------|------|----------------|------------|------------|----------------|
-| 0 | TBD | TBD | (baseline) | n/a | TBD |
-| 1 | TBD | TBD | TBD | TBD | TBD |
-| ... | | | | | |
+| 0 | 2026-05-05 | (baseline) | n/a — initial cleanroom run | `df3e4b46` | full-loop FAIL |
+| 1-9 | 2026-05-05 | setup phase | Tilt/helm/PDB/registry/RBAC bootstrap gaps (B1-B11) | `87dad159..46ff3a25` | setup converges |
+| 10-15 | 2026-05-05 | bootstrap-extras phase | OAuth, ESO, admission-policies, VAP prefix, Hydra namespace, audit (B12-B18) | `f355b20e..33bfe896` | bootstrap converges |
+| 16-22 | 2026-05-05 | journey-01 build/sign | journey-01 fixture/git/cosign-signing/leader-deadlock (B19-B23); FAANG refactor consolidates orchestrator | `f28e71b7..22b99ede` | journey-01 reaches workflow Succeeded |
+| 23-26 | 2026-05-05 | journey-01 sync | bearer-token kubeconfig, gitea creds, post-tilt heal, H13 skip (B24-B31) | `601caaba..ed78eb85` | journey-01 reaches deployed pod via manual sync |
+| 27 | 2026-05-05 | journey-01 sync (auto) | (intermediate verification commits) | n/a | converges with manual `argocd app sync` only |
+| 28 | 2026-05-05 | journey-01..11 | ArgoCD repo cache + VAP+namespace deadlock + RUNTIME_KUBECONFIG + HYDRA_NAMESPACE regen + scale contract + rollback DB constraint + admin flag (B32-B38) | `7fed6600..441f5531` | 11/11 journeys + preflight GREEN manually post-rebuild |
+| 29 | 2026-05-05 | post-cleanroom journey-01 | heal H10 race (Pod-A env stale overwrites Pod-B env fresh) (B39) | `6ab84cb1` | **12/12 GREEN end-to-end** post fresh cleanroom — preflight 16/16 + journey-01..11 all PASS in ~33min total |
 
-**Final outcome:** TBD (PASS / FAILED-AT-CAP / ESCALATED-TO-MEETING)
+**Final outcome:** **PASS — 12/12 GREEN** (iter 29, post-fresh-cleanroom).
+
+- Total bugs identified + fixed: **39 (B1-B39)**.
+- Real product bugs caught (would leak to prod): ~12.
+- Bootstrap gaps codified into `task setup`: ~14.
+- Tilt YAML config gaps fixed: ~6.
+- Heal-script ordering issues resolved: ~5.
+- Test/journey contract drift items: ~2.
+- Final Rule 3 audit: **0 internal-term matches** in CLI output across all journey logs.
+- Total commits since baseline `dogfood-cleanroom-baseline-20260505`: 41.
+
+**Closing tag:** `dogfood-cleanroom-converged-20260505`.
+
+**Plan amendments executed (per ADR-0022):**
+- Iter 5: ADR-0022 trivial — heal moved AFTER setup (D5 amendment in-place).
+- Iter 22: User directive "sem nivel FAANG sem workarounds" — orchestrator refactored, all inline workarounds canonicalised (commit `5907af8c`). Treated as ADR-0022 trivial scope refinement.
+
+**Reference:**
+- Final report: `docs/reports/dogfood-cleanroom-20260505-progress.md` (CONVERGED section).
+- Memory: `/home/paulo/.claude/projects/-home-paulo-loopzero/memory/reference_cleanroom_iter29_2026_05_05.md`.
