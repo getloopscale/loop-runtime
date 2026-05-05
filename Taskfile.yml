@@ -114,12 +114,29 @@ tasks:
       - bash infra/helmfile/scripts/bootstrap-eso-cluster-secret-store.sh
       - HYDRA_NAMESPACE=loopzero-system bash infra/helmfile/scripts/bootstrap-oauth-clients.sh
       - bash infra/scripts/provision-api-tokens.sh
+      # B30 fix (real-paas-cleanroom-dogfood-loop iter 25, 2026-05-05):
+      # generate-secrets.sh creates `gitea-credentials-template` with a
+      # random GITEA_TOKEN and username `loopzero` (org name, not user). When
+      # ArgoCD picks this template (URL prefix matches), HTTP basic auth
+      # to Gitea fails with 401. provision-api-tokens.sh creates
+      # `argocd-creds-gitea` with the real registered token and username
+      # `gitea_admin`, but ArgoCD's first-match-wins order is undefined.
+      # Sync `gitea-credentials-template` to use the same registered
+      # username + password so either Secret produces a valid auth.
+      - |
+        REAL_PWD=$(kubectl --context k3d-loopzero-mgmt -n argocd get secret argocd-creds-gitea -o jsonpath='{.data.password}' | base64 -d)
+        REAL_USER=$(kubectl --context k3d-loopzero-mgmt -n argocd get secret argocd-creds-gitea -o jsonpath='{.data.username}' | base64 -d)
+        if [[ -n "$REAL_PWD" && -n "$REAL_USER" ]]; then
+          kubectl --context k3d-loopzero-mgmt -n argocd patch secret gitea-credentials-template \
+            --type=merge \
+            -p "{\"stringData\":{\"username\":\"${REAL_USER}\",\"password\":\"${REAL_PWD}\"}}"
+        fi
       # B28 fix (real-paas-cleanroom-dogfood-loop iter 23, 2026-05-05):
       # restart argocd-repo-server so it picks up the freshly written
-      # `argocd-creds-gitea` repo-creds Secret. Without restart, ArgoCD
-      # caches the previous (or empty) creds and returns
-      # `authentication required` when resolving tenant gitops repo
-      # revisions, which fails post-build sync and marks the build FAILED.
+      # repo-creds Secrets. Without restart, ArgoCD caches the previous
+      # (or empty) creds and returns `authentication required` when
+      # resolving tenant gitops repo revisions, which fails post-build
+      # sync and marks the build FAILED.
       - kubectl --context k3d-loopzero-mgmt -n argocd rollout restart deploy/argocd-repo-server
       - kubectl --context k3d-loopzero-mgmt -n argocd rollout status deploy/argocd-repo-server --timeout=60s
       - |

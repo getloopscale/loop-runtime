@@ -1,21 +1,25 @@
 #!/usr/bin/env bash
 # infra/scripts/bootstrap-cell-default-cc.sh
 #
-# B24/B25/B27 fix (real-paas-cleanroom-dogfood-loop iter 22-23, 2026-05-05):
+# B24/B25/B27/B29 fix (real-paas-cleanroom-dogfood-loop iter 22-25, 2026-05-05):
 # bootstraps the cell-default ClusterCredential in standalone-multi mode.
-# Self-sufficient: generates its own kubeconfig + dynamically resolves
-# the workload cluster IP (does NOT depend on H12 having already created
-# workload-kubeconfig).
 #
-# Why a separate script (not lib/clustercredential-create.sh): that lib
-# uses CLUSTER_NAME for both the CR name AND the Secret name. Calling it
-# with cluster-name=workload would clash with H12's `workload` CR
-# (cellID=cell-1). This script applies a CR named `cell-default` with a
-# dedicated `cell-default-kubeconfig` Secret (the kubeconfig itself
-# from `k3d kubeconfig get loopzero-workload`, server URL rewritten to the
-# Docker bridge IP — same pattern that workload CR uses for cell-1).
-# K8sCellStore reads spec.cellID, not CR name, so two CRs against the
-# same physical cluster (loopzero-workload) work fine.
+# Self-sufficient design:
+#   1. Mint a workload-cluster SA token via lib/scoped-kubeconfig.sh
+#      against `k3d kubeconfig get loopzero-workload`. Same token producer
+#      that heal H12 uses for cell-1 — guaranteed valid for the workload
+#      apiserver. (B29: prior version used the raw k3d admin kubeconfig
+#      which has client-cert auth; clustercredential_controller.go
+#      argoCDClusterConfig struct only supports BearerToken — empty
+#      token would land in the ArgoCD cluster Secret and ArgoCD would
+#      401 every sync.)
+#   2. Resolve loopzero-workload server IP on the k3d-loopzero Docker bridge
+#      (B27: CC controller in mgmt cluster cannot resolve the in-cluster
+#      DNS hostname `k3d-loopzero-workload-server-0` via Docker bridge DNS.)
+#   3. Apply ClusterCredential `cell-default` referencing a dedicated
+#      `cell-default-kubeconfig` Secret. CR name distinct from H12's
+#      `workload` so the lib script's CR_NAME=cluster-name pattern
+#      doesn't collide. K8sCellStore differentiates by spec.cellID.
 #
 # Idempotent: kubectl apply.
 #
@@ -25,6 +29,7 @@ set -euo pipefail
 
 CTX="${MGMT_CTX:-k3d-loopzero-mgmt}"
 NS="${LOOPZERO_NS:-loopzero-system}"
+SCOPED_LIB="$(cd "$(dirname "$0")/.." && pwd)/helmfile/scripts/lib/scoped-kubeconfig.sh"
 
 log() { printf '[bootstrap-cell-default-cc] %s\n' "$*" >&2; }
 
@@ -33,39 +38,58 @@ if ! command -v k3d >/dev/null 2>&1 || ! command -v kubectl >/dev/null 2>&1 || !
   exit 0
 fi
 
-# 1. Resolve loopzero-workload server IP on the k3d-loopzero bridge (current).
+# 1. Resolve loopzero-workload server IP on the k3d-loopzero bridge.
 WORKLOAD_IP=$(docker inspect k3d-loopzero-workload-server-0 \
-  --format '{{range .NetworkSettings.Networks}}{{if eq "k3d-loopzero" "k3d-loopzero"}}{{.IPAddress}}{{end}}{{end}}' 2>/dev/null \
+  --format '{{range .NetworkSettings.Networks}}{{.IPAddress}}{{end}}' 2>/dev/null \
   | head -1)
 if [[ -z "$WORKLOAD_IP" ]]; then
   log "k3d-loopzero-workload-server-0 not running; skip"
   exit 0
 fi
 
-# 2. Get a kubeconfig that points at the resolved IP. k3d kubeconfig
-#    defaults to localhost:port (which doesn't work from inside mgmt pods),
-#    so we rewrite the server URL to the bridge IP.
-KC_TMP=$(mktemp)
-trap 'rm -f "$KC_TMP"' EXIT
+# 2. Get raw kubeconfig for loopzero-workload (needed by scoped-kubeconfig.sh
+#    as the bootstrap kubeconfig — it talks to the workload apiserver to
+#    create the SA + ClusterRole + Secret).
+RAW_KC=$(mktemp)
+trap 'rm -f "$RAW_KC"' EXIT
 
-if ! k3d kubeconfig get loopzero-workload >"$KC_TMP" 2>/dev/null || [[ ! -s "$KC_TMP" ]]; then
+if ! k3d kubeconfig get loopzero-workload >"$RAW_KC" 2>/dev/null || [[ ! -s "$RAW_KC" ]]; then
   log "loopzero-workload kubeconfig unavailable"
   exit 0
 fi
 
-# Rewrite server URL to the bridge IP so the CC controller (inside mgmt
-# cluster) can reach the workload apiserver.
-sed -i "s|server: https://[^[:space:]]*|server: https://${WORKLOAD_IP}:6443|g" "$KC_TMP"
+# Rewrite server URL to bridge IP so scoped-kubeconfig.sh can reach the
+# workload apiserver from the host (k3d default points at localhost:port
+# via LB which only works from outside the docker network).
+sed -i "s|server: https://[^[:space:]]*|server: https://${WORKLOAD_IP}:6443|g" "$RAW_KC"
 
-# 3. Apply Secret loopzero-system/cell-default-kubeconfig (separate from
-#    workload-kubeconfig owned by H12's cell-1 CR).
+# 3. Mint SA token via scoped-kubeconfig.sh. Output is a kubeconfig with
+#    a bearer token for the `loopzero-ctrl-runtime` SA in workload cluster's
+#    loopzero-system namespace. SCOPED_KC will be the path printed by the lib.
+SCOPED_KC=""
+if [[ -x "$SCOPED_LIB" ]]; then
+  # The lib prints "[scoped-kubeconfig] wrote /path/to/kubeconfig.yaml"
+  # to stderr. We grep for the path token. Idempotent across runs.
+  SCOPED_KC=$( "$SCOPED_LIB" workload "$RAW_KC" 2>&1 \
+    | grep -oE '/[^[:space:]]+kube[^[:space:]]*\.yaml' | head -1 || echo "")
+fi
+if [[ -z "$SCOPED_KC" || ! -s "$SCOPED_KC" ]]; then
+  log "scoped-kubeconfig.sh did not produce output; falling back to raw kc (B29 risk)"
+  SCOPED_KC="$RAW_KC"
+fi
+
+# Rewrite scoped kubeconfig server URL too (in case lib left k3d default).
+sed -i "s|server: https://[^[:space:]]*|server: https://${WORKLOAD_IP}:6443|g" "$SCOPED_KC"
+
+# 4. Apply Secret loopzero-system/cell-default-kubeconfig with the bearer-token
+#    kubeconfig.
 kubectl --context "$CTX" create secret generic cell-default-kubeconfig \
   -n "$NS" \
-  --from-file=kubeconfig="$KC_TMP" \
+  --from-file=kubeconfig="$SCOPED_KC" \
   --dry-run=client -o yaml \
   | kubectl --context "$CTX" apply -f - >/dev/null
 
-# 4. Apply ClusterCredential cell-default with the resolved IP.
+# 5. Apply ClusterCredential cell-default with the resolved IP.
 cat <<YAML | kubectl --context "$CTX" apply -f -
 apiVersion: loopzero.io/v1
 kind: ClusterCredential
@@ -88,4 +112,4 @@ spec:
     namespace: loopzero-system
 YAML
 
-log "cell-default CC + cell-default-kubeconfig Secret applied (apiServer=https://${WORKLOAD_IP}:6443)"
+log "cell-default CC + cell-default-kubeconfig (bearer-token kc, apiServer=https://${WORKLOAD_IP}:6443) applied"
