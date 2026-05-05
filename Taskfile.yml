@@ -114,6 +114,14 @@ tasks:
       - bash infra/helmfile/scripts/bootstrap-eso-cluster-secret-store.sh
       - HYDRA_NAMESPACE=loopzero-system bash infra/helmfile/scripts/bootstrap-oauth-clients.sh
       - bash infra/scripts/provision-api-tokens.sh
+      # B28 fix (real-paas-cleanroom-dogfood-loop iter 23, 2026-05-05):
+      # restart argocd-repo-server so it picks up the freshly written
+      # `argocd-creds-gitea` repo-creds Secret. Without restart, ArgoCD
+      # caches the previous (or empty) creds and returns
+      # `authentication required` when resolving tenant gitops repo
+      # revisions, which fails post-build sync and marks the build FAILED.
+      - kubectl --context k3d-loopzero-mgmt -n argocd rollout restart deploy/argocd-repo-server
+      - kubectl --context k3d-loopzero-mgmt -n argocd rollout status deploy/argocd-repo-server --timeout=60s
       - |
         kubectl config use-context k3d-loopzero-build >/dev/null 2>&1
         bash infra/helmfile/scripts/generate-build-secrets.sh standalone
