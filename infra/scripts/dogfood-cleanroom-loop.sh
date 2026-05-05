@@ -395,35 +395,36 @@ phase_tilt_up() {
 # Deployment. Pod restarts with the env in place; preflight T0.7 then
 # observes it.
 phase_post_tilt_env() {
-  log_phase "5.5/7 POST-TILT ENV (B14 — set LOOPZERO_SERVICE_AUTH_SECRET on loopzero-api)"
+  log_phase "5.5/7 POST-TILT ENV (B14/B22/B23 — env vars + heal + leader-safe restart)"
   if [[ "$DRY_RUN" -eq 1 ]]; then
-    log "DRY-RUN: kubectl set env deploy/loopzero-api LOOPZERO_SERVICE_AUTH_SECRET=..."
+    log "DRY-RUN: kubectl set env + task k3d:heal + scale 0/1 cycle"
     return 0
   fi
-  # Stable cleanroom-only secret value. journey-11-admin reads from .env or
-  # similar; this needs to match. Fallback to a deterministic placeholder.
+  # Stable cleanroom-only service-auth secret.
   local secret="${LOOPZERO_SERVICE_AUTH_SECRET:-cleanroom-service-auth-secret-do-not-use-in-prod}"
   if ! kubectl --context k3d-loopzero-mgmt -n loopzero-system set env deploy/loopzero-api \
        "LOOPZERO_SERVICE_AUTH_SECRET=${secret}" >/dev/null 2>&1; then
-    log_err "phase_post_tilt_env: kubectl set env failed (deploy/loopzero-api absent?)"
+    log_err "phase_post_tilt_env: kubectl set env LOOPZERO_SERVICE_AUTH_SECRET failed"
     return 45
   fi
-  log "LOOPZERO_SERVICE_AUTH_SECRET set on deploy/loopzero-api"
-  # Wait for rollout so pod has env when preflight inspects.
-  kubectl --context k3d-loopzero-mgmt -n loopzero-system rollout status deploy/loopzero-api --timeout=60s >/dev/null 2>&1 || true
-  # B22 fix (iter 18, 2026-05-05): re-run heal AFTER tilt so H8 (LOOPZERO_*_IMAGE
-  # overrides on loopzero-api Deployment) and H10 (WORKLOAD_CLUSTER_URL on
-  # tenant-operator) take effect. Pre-tilt heal is needed for H12-H15
-  # (ClusterCredentials before loopzero-api boot), but its H8/H10 patches were
-  # erased when tilt's `infra/tilt/api-deployment.yaml` apply replaced the
-  # Deployment spec. Without H8, Argo Workflow tries to pull
-  # registry.digitalocean.com/loopzero-system/loopzero-cosign-signer:v0.1.0 (DOCR
-  # default) and fails with 401 — local k3d-loopzero-registry:5000/* override
-  # is required. Heal is idempotent.
+  # B22: re-run heal AFTER tilt for H8 (LOOPZERO_*_IMAGE) + H10 (WORKLOAD_CLUSTER_URL).
   if ! task k3d:heal >/dev/null 2>&1; then
-    log_warn "post-tilt heal re-run reported non-zero (best-effort; H8/H10 may be partial)"
+    log_warn "post-tilt heal re-run reported non-zero (best-effort)"
   fi
-  log "post-tilt heal re-run OK (H8/H10 image+URL overrides on top of Tilt apply)"
+  # B23 fix (iter 19, 2026-05-05): scale to 0 then 1 so the new pod takes
+  # the leader lock cleanly. With RollingUpdate, the new pod gets stuck
+  # `leader lock held by another instance` for 12 retries (~60s) then
+  # exits → CrashLoopBackOff → old pod (without env vars) keeps serving
+  # → workflow generated with DOCR refs that fail ImagePullBackOff in
+  # the build cluster (no DOCR creds in cleanroom).
+  kubectl --context k3d-loopzero-mgmt -n loopzero-system scale deploy/loopzero-api --replicas=0 >/dev/null 2>&1
+  # Wait for old pods to terminate so the lease is freed.
+  kubectl --context k3d-loopzero-mgmt -n loopzero-system wait --for=delete pod -l app=loopzero-api --timeout=60s >/dev/null 2>&1 || true
+  kubectl --context k3d-loopzero-mgmt -n loopzero-system scale deploy/loopzero-api --replicas=1 >/dev/null 2>&1
+  if ! kubectl --context k3d-loopzero-mgmt -n loopzero-system rollout status deploy/loopzero-api --timeout=120s >/dev/null 2>&1; then
+    log_warn "loopzero-api rollout did not complete in 120s after env+heal restart"
+  fi
+  log "post-tilt env applied; loopzero-api restarted clean (LOOPZERO_*_IMAGE + LOOPZERO_SERVICE_AUTH_SECRET active)"
   # B17 fix (iter 14): pre-mint local-dogfood-token via seed-local-user.sh
   # with HYDRA_NAMESPACE=loopzero-system override. preflight.sh hardcodes
   # `port-forward -n loopzero-auth` and won't pass the env, so the token must
