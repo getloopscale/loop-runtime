@@ -223,13 +223,13 @@ tasks:
     desc: Run distributed L3 test via k6 Operator (4 pods, ~65 min)
     cmds:
       - kubectl apply -f infra/tests/k6/manifests/testrun-l3-distributed.yaml
-      - echo "TestRun submitted. Monitor with: kubectl get testrun -n loopzero-system -w"
+      - 'echo "TestRun submitted. Monitor with: kubectl get testrun -n loopzero-system -w"'
 
   k6:distributed:l4:
     desc: Run distributed L4 test via k6 Operator (8 pods, ~2h)
     cmds:
       - kubectl apply -f infra/tests/k6/manifests/testrun-l4-distributed.yaml
-      - echo "TestRun submitted. Monitor with: kubectl get testrun -n loopzero-system -w"
+      - 'echo "TestRun submitted. Monitor with: kubectl get testrun -n loopzero-system -w"'
 
   k6:soak:apply:
     desc: Apply weekly soak CronJob + alerts to cluster
