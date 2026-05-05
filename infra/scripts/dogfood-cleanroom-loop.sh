@@ -314,6 +314,35 @@ phase_bootstrap_extras() {
   fi
   [[ -n "$_saved_ctx" ]] && kubectl config use-context "$_saved_ctx" >/dev/null 2>&1 || true
   log "generate-build-secrets.sh OK (cosign-signing-key in build cluster argo ns)"
+  # B24 fix (iter 20→21, 2026-05-05): create cell-default ClusterCredential.
+  # wire-clusters.sh creates cell-1 and cell-2 CRs but NOT cell-default. Heal
+  # H12+H14 codified cell-1 + cell-2 bootstrap, but cell-default remains a
+  # gap. Result: K8sCellStore.LoadCells() returns count=2, build_reconcile
+  # iterates [cell-1, cell-2] only, builds with cell_id=cell-default are
+  # never picked up → orphaned WARN every 60s + DB build.status stuck at
+  # RUNNING forever even after Argo Workflow Succeeded → journey-01
+  # `wait_build_terminal` times out at 1500s.
+  # Local fix: cell-default points at loopzero-workload (same cluster as cell-1).
+  # K8sCellStore differentiates by spec.cellID, not CR name. Two CRs against
+  # the same physical cluster work; tenants pinned to cell-default still
+  # land on loopzero-workload.
+  local CC_LIB="${REPO_ROOT}/infra/helmfile/scripts/lib/clustercredential-create.sh"
+  local SCOPED_LIB="${REPO_ROOT}/infra/helmfile/scripts/lib/scoped-kubeconfig.sh"
+  if [[ -x "$CC_LIB" && -x "$SCOPED_LIB" ]]; then
+    local _cd_kc; _cd_kc=$(mktemp)
+    if k3d kubeconfig get loopzero-workload > "$_cd_kc" 2>/dev/null && [[ -s "$_cd_kc" ]]; then
+      local _cd_scoped; _cd_scoped=$(KUBECONFIG="$_cd_kc" "$SCOPED_LIB" workload "$_cd_kc" 2>/dev/null \
+        | grep -oE '/[^[:space:]]+kube[^[:space:]]*' | head -1 || echo "")
+      if [[ -n "$_cd_scoped" && -s "$_cd_scoped" ]]; then
+        if KUBECONFIG="" INGRESS_DOMAIN="loopzero.local" "$CC_LIB" cell-default workload "$_cd_scoped" >/dev/null 2>&1; then
+          log "ClusterCredential cell-default created (points at loopzero-workload)"
+        else
+          log_warn "clustercredential-create cell-default failed (best-effort)"
+        fi
+      fi
+    fi
+    rm -f "$_cd_kc"
+  fi
   if ! task k3d:bootstrap-workload; then
     log_err "phase_bootstrap_extras: task k3d:bootstrap-workload failed (ESO install in workload)"
     return 38
