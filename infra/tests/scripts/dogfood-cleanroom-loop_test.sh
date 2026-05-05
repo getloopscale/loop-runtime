@@ -142,10 +142,47 @@ fi
 printf 'dogfood-cleanroom-loop.sh — test suite\n'
 printf 'script: %s\n\n' "$SCRIPT"
 
+# ---------------------------------------------------------------------------
+# Test 5 (regression for B1, iter 1, 2026-05-05): LOG_FILE must NOT live
+# under REPORT_DIR (.test-reports/), because Phase 1 destroy invokes
+# `task clean:all` -> `task clean` -> `rm -rf .test-reports/`, which would
+# orphan the tee FD and lose all output.
+# ---------------------------------------------------------------------------
+test_log_file_outside_report_dir() {
+  # Extract LOG_DIR and REPORT_DIR assignments from the script source.
+  local log_dir_decl report_dir_decl
+  log_dir_decl=$(grep -E '^LOG_DIR=' "$SCRIPT" | head -1)
+  report_dir_decl=$(grep -E '^REPORT_DIR=' "$SCRIPT" | head -1)
+
+  if [[ -z "$log_dir_decl" ]] || [[ -z "$report_dir_decl" ]]; then
+    printf '    expected both LOG_DIR= and REPORT_DIR= declarations in source\n' >&2
+    return 1
+  fi
+
+  # Static check: LOG_DIR and REPORT_DIR must resolve to different paths.
+  # (LOG_DIR=.test-reports-cleanroom; REPORT_DIR=.test-reports — distinct dirs)
+  if [[ "$log_dir_decl" == "${log_dir_decl/.test-reports-cleanroom/}" ]]; then
+    printf '    LOG_DIR must include .test-reports-cleanroom (sibling of .test-reports, safe from `task clean`)\n' >&2
+    printf '    got: %s\n' "$log_dir_decl" >&2
+    return 1
+  fi
+
+  # Verify LOG_FILE references LOG_DIR, not REPORT_DIR.
+  local log_file_decl
+  log_file_decl=$(grep -E '^LOG_FILE=' "$SCRIPT" | head -1)
+  if ! grep -q '${LOG_DIR}' <<<"$log_file_decl"; then
+    printf '    LOG_FILE must use ${LOG_DIR}, got: %s\n' "$log_file_decl" >&2
+    return 1
+  fi
+
+  return 0
+}
+
 run_test test_unknown_arg_returns_1
 run_test test_help_flag_exits_zero
 run_test test_dry_run_does_not_invoke_destroy
 run_test test_exit_code_map_complete
+run_test test_log_file_outside_report_dir
 
 printf '\n%d/%d tests passed\n' "$PASS" "$((PASS + FAIL))"
 

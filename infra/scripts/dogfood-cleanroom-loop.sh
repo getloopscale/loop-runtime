@@ -58,10 +58,21 @@ set -euo pipefail
 REPO_ROOT="$(cd "$(dirname "$0")/../.." && pwd)"
 DOGFOOD_FULL_LOOP="${REPO_ROOT}/infra/tests/dogfood/full-loop.sh"
 STATE_FILE="${HOME}/.loopzero/dogfood_state.json"
+# B1 FIX (iter 1, 2026-05-05): log MUST live OUTSIDE .test-reports/ because
+# `task clean` (called inside Phase 1 destroy via `task clean:all`) does
+# `rm -rf .test-reports/`, which orphans the tee FD and silently drops every
+# byte of subsequent output. Discovered LIVE during Phase 2 first-execution:
+# orchestrator died in setup/tilt boundary with zero log evidence.
+# Diagnosis from /proc/<tee-pid>/fd showed `(deleted)` on the log file ~1min
+# into the run. Cleanroom logs go to .test-reports-cleanroom/ which `task
+# clean` does NOT touch. State snapshots (post_validate) go to .test-reports/
+# but the dir is re-created defensively in post_validate.
 REPORT_DIR="${REPO_ROOT}/.test-reports"
+LOG_DIR="${REPO_ROOT}/.test-reports-cleanroom"
 TS="$(date +%Y%m%d-%H%M%S)"
-LOG_FILE="${REPORT_DIR}/dogfood-cleanroom-${TS}.log"
+LOG_FILE="${LOG_DIR}/dogfood-cleanroom-${TS}.log"
 STATE_SNAPSHOT="${REPORT_DIR}/dogfood-cleanroom-${TS}-state.json"
+EXIT_SENTINEL="${LOG_DIR}/dogfood-cleanroom-${TS}.exit"
 
 DOCTOR_TIMEOUT_SEC=180
 TILT_CI_TIMEOUT_SEC=600
@@ -119,6 +130,7 @@ done
 # Pre-flight (idempotent setup of report dir)
 # ---------------------------------------------------------------------------
 
+mkdir -p "$LOG_DIR"
 mkdir -p "$REPORT_DIR"
 mkdir -p "$(dirname "$STATE_FILE")"
 
@@ -126,7 +138,17 @@ if [[ "$DRY_RUN" -eq 0 ]]; then
   exec > >(tee -a "$LOG_FILE") 2>&1
 fi
 
-log "cleanroom loop starting (dry-run=${DRY_RUN}); log: ${LOG_FILE}"
+# B1 FIX: write exit code to sentinel on every termination so failure is
+# visible even if the log itself was somehow lost. EXIT_SENTINEL lives in
+# LOG_DIR (safe from `task clean`).
+write_exit_sentinel() {
+  local rc=$?
+  printf '%s exit=%d ts=%s\n' "$0" "$rc" "$(date -Iseconds)" >>"$EXIT_SENTINEL" 2>/dev/null || true
+  return "$rc"
+}
+trap write_exit_sentinel EXIT
+
+log "cleanroom loop starting (dry-run=${DRY_RUN}); log: ${LOG_FILE}; sentinel: ${EXIT_SENTINEL}"
 
 # ---------------------------------------------------------------------------
 # Phase functions
@@ -233,6 +255,9 @@ post_validate() {
     log "DRY-RUN: rule3 grep + state json check"
     return 0
   fi
+
+  # B1 FIX: re-create REPORT_DIR defensively — Phase 1 destroyed it.
+  mkdir -p "$REPORT_DIR"
 
   # Snapshot dogfood state.
   if [[ -f "$STATE_FILE" ]]; then
