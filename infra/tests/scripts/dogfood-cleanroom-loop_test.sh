@@ -217,12 +217,44 @@ test_rbac_patch_phase_exists_and_ordered() {
   return 0
 }
 
+# ---------------------------------------------------------------------------
+# Test 7 (regression for B5, iter 5, 2026-05-05): phase_dogfood must call
+# full-loop.sh TWICE — once with --reset (clears state), once without
+# (actually runs journeys). full-loop.sh's --reset path exits immediately
+# after re-initialising state.
+# ---------------------------------------------------------------------------
+test_dogfood_phase_calls_full_loop_twice() {
+  # Extract phase_dogfood body and check it has both invocations.
+  local body
+  body=$(awk '/^phase_dogfood\(\)/,/^}/' "$SCRIPT")
+  if [[ -z "$body" ]]; then
+    printf '    expected `phase_dogfood()` function in script\n' >&2
+    return 1
+  fi
+  local reset_count run_count
+  reset_count=$(grep -cE 'bash.*--reset' <<<"$body" || true)
+  # Match `bash "$DOGFOOD_FULL_LOOP"` NOT followed by --reset on same line.
+  # This catches the no-flag invocation regardless of trailing `; then`.
+  run_count=$(grep -E 'bash[[:space:]]+"\$DOGFOOD_FULL_LOOP"' <<<"$body" \
+    | grep -cv -- '--reset' || true)
+  if [[ "$reset_count" -lt 1 ]]; then
+    printf '    phase_dogfood must call `bash $DOGFOOD_FULL_LOOP --reset`\n' >&2
+    return 1
+  fi
+  if [[ "$run_count" -lt 1 ]]; then
+    printf '    phase_dogfood must also call `bash $DOGFOOD_FULL_LOOP` (no flags) to actually run journeys\n' >&2
+    return 1
+  fi
+  return 0
+}
+
 run_test test_unknown_arg_returns_1
 run_test test_help_flag_exits_zero
 run_test test_dry_run_does_not_invoke_destroy
 run_test test_exit_code_map_complete
 run_test test_log_file_outside_report_dir
 run_test test_rbac_patch_phase_exists_and_ordered
+run_test test_dogfood_phase_calls_full_loop_twice
 
 printf '\n%d/%d tests passed\n' "$PASS" "$((PASS + FAIL))"
 

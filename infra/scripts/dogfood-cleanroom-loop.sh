@@ -304,19 +304,29 @@ phase_wait_doctor() {
 }
 
 # Phase 6: Dogfood
-# Invokes the existing 12-journey orchestrator. Resets dogfood state so a
-# fresh cleanroom run starts from journey-01 (matches D1: full destroy).
+# Invokes the existing 12-journey orchestrator.
+#
+# B5 FIX (iter 5, 2026-05-05): full-loop.sh --reset ONLY resets state and
+# exits. A second invocation (without --reset) is required to actually run
+# the journeys. Discovered LIVE during cleanroom iter 5: phase_dogfood took
+# ~0s, post_validate found 0/12 journeys, exit code 60. Fix: call twice.
 phase_dogfood() {
-  log_phase "6/7 DOGFOOD (bash full-loop.sh --reset)"
+  log_phase "6/7 DOGFOOD (bash full-loop.sh — reset then run)"
   if [[ ! -x "$DOGFOOD_FULL_LOOP" ]]; then
     log_err "phase_dogfood: $DOGFOOD_FULL_LOOP missing or not executable"
     return 50
   fi
   if [[ "$DRY_RUN" -eq 1 ]]; then
-    log "DRY-RUN: bash $DOGFOOD_FULL_LOOP --reset"
+    log "DRY-RUN: bash $DOGFOOD_FULL_LOOP --reset && bash $DOGFOOD_FULL_LOOP"
     return 0
   fi
+  # Step 1: reset state (--reset exits 0 immediately after clearing state).
   if ! bash "$DOGFOOD_FULL_LOOP" --reset; then
+    log_err "phase_dogfood: full-loop.sh --reset failed"
+    return 50
+  fi
+  # Step 2: actually run the 12 journeys. Exit non-zero on any FAIL.
+  if ! bash "$DOGFOOD_FULL_LOOP"; then
     log_err "phase_dogfood: full-loop.sh reported FAIL — see ${STATE_FILE} for blocker journey"
     return 50
   fi
