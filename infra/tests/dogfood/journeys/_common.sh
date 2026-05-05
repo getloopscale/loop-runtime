@@ -39,12 +39,23 @@ journey_log() { echo "[$(basename "${BASH_SOURCE[1]:-journey}")] $*" >&2; }
 journey_step() { echo -e "\n[$(basename "${BASH_SOURCE[1]:-journey}")] === $* ===" >&2; }
 journey_fail() { echo "[$(basename "${BASH_SOURCE[1]:-journey}")] FAIL: $*" >&2; exit 1; }
 
+# CHG-2026-05-05-DOGFOOD-B35: in standalone-multi (k3d) Hydra runs in
+# loopzero-system, not loopzero-auth (production default). seed-local-user.sh
+# port-forwards Hydra; without HYDRA_NAMESPACE override, the regen path
+# silently fails (curl -sf returns empty TOKEN_RESP, the script exits 1
+# with `2>/dev/null`). Mid-journey token expiry (default Hydra TTL ~30min)
+# triggers the regen path, and the journey FAILs with the misleading
+# "seed-local-user.sh failed during regen" — even though the platform is
+# healthy. Forwarding HYDRA_NAMESPACE=loopzero-system fixes the regen.
+# `task bootstrap:standalone` already does this for the initial seed.
+SEED_HYDRA_NS="${SEED_HYDRA_NS:-loopzero-system}"
+
 # Make sure LOOPZERO_TOKEN is valid; regenerate via seed if needed.
 ensure_token() {
   if [[ -z "${LOOPZERO_TOKEN:-}" ]]; then
     if [[ ! -f "$TOKEN_FILE" ]]; then
       journey_log "no token file; running seed"
-      bash "$SEED_SCRIPT" >/dev/null 2>&1 || journey_fail "seed-local-user.sh failed"
+      HYDRA_NAMESPACE="$SEED_HYDRA_NS" bash "$SEED_SCRIPT" >/dev/null 2>&1 || journey_fail "seed-local-user.sh failed"
     fi
     LOOPZERO_TOKEN=$(cat "$TOKEN_FILE")
     export LOOPZERO_TOKEN
@@ -56,8 +67,12 @@ ensure_token() {
     -H "Authorization: Bearer ${LOOPZERO_TOKEN}" \
     "${LOOPZERO_URL}/api/v1/auth/whoami" 2>/dev/null || echo 000)
   if [[ "$code" != "200" ]]; then
-    journey_log "token invalid (whoami=$code); regenerating"
-    bash "$SEED_SCRIPT" >/dev/null 2>&1 || journey_fail "seed-local-user.sh failed during regen"
+    journey_log "token invalid (whoami=$code); regenerating with HYDRA_NAMESPACE=$SEED_HYDRA_NS"
+    # Capture seed output to surface real failure cause if regen fails.
+    local seed_log=/tmp/seed-regen.log
+    if ! HYDRA_NAMESPACE="$SEED_HYDRA_NS" bash "$SEED_SCRIPT" >"$seed_log" 2>&1; then
+      journey_fail "seed-local-user.sh failed during regen: $(tail -10 "$seed_log")"
+    fi
     LOOPZERO_TOKEN=$(cat "$TOKEN_FILE")
     export LOOPZERO_TOKEN
   fi

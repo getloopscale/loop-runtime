@@ -124,6 +124,17 @@ spec:
               value: "/etc/loopzero/build-kubeconfig"
             - name: BUILD_KUBE_CONTEXT
               value: "build"
+            # CHG-2026-05-05-DOGFOOD-B34: SecretK8sManager needs a kubeconfig
+            # for the workload (runtime) cluster to create ExternalSecret CRs
+            # and the user-secrets Secret. Without this, `loopzero secret set`
+            # silently no-ops (logger.Warn only) and Pods later fail with
+            # CreateContainerConfigError ("secret X not found"). Mounted from
+            # loopzero-cluster-kubeconfigs Secret (key: runtime.kubeconfig)
+            # written by infra/scripts/k3d-cross-cluster-heal.sh.
+            - name: RUNTIME_KUBECONFIG
+              value: "/etc/loopzero/runtime/kubeconfig"
+            - name: RUNTIME_KUBE_CONTEXT
+              value: "in-cluster"
             - name: REGISTRY_URL
               value: "k3d-loopzero-registry:5000"
             - name: REGISTRY_INSECURE
@@ -185,6 +196,9 @@ spec:
             - name: build-kubeconfig
               mountPath: /etc/loopzero
               readOnly: true
+            - name: runtime-kubeconfig
+              mountPath: /etc/loopzero/runtime
+              readOnly: true
             - name: tmp
               mountPath: /tmp
           securityContext:
@@ -201,6 +215,12 @@ spec:
             items:
               - key: config
                 path: build-kubeconfig
+        - name: runtime-kubeconfig
+          secret:
+            secretName: loopzero-cluster-kubeconfigs
+            items:
+              - key: runtime.kubeconfig
+                path: kubeconfig
 ---
 apiVersion: v1
 kind: Service
