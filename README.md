@@ -43,9 +43,11 @@ No Kubernetes knowledge required. No Helm. No Dockerfile required. Just push.
 
 ## Project Status
 
-> **Phase: Pre-release.** Production infrastructure running on DigitalOcean (4 DOKS clusters, managed PG, CF Tunnel). Core deploy flow E2E validated. **Multi-cell ACTIVATED + LIVE-validated** (cell-default + cell-1 + cell-2). Not yet open to external users.
+> **Phase: Pre-release.** Production infrastructure running on DigitalOcean (4 DOKS clusters, managed PG, CF Tunnel). Core deploy flow E2E validated. **Multi-cell ACTIVATED + LIVE-validated** (cell-default + cell-1 + cell-2). **Local cleanroom dogfood 12/12 GREEN end-to-end** (2026-05-05). Not yet open to external users.
 >
 > **Maturity: 3.9/5** -- strong technical foundation, commercially unvalidated. (was 3.6 pre-cell-2; +0.3 from cell-2-activation-plan + fix-all-platform-issues-plan, 2026-05-03.) See [full assessment](docs/maturity-assessment.md).
+>
+> **Local validation gate**: `bash infra/scripts/dogfood-cleanroom-loop.sh` destroys all 4 k3d clusters and re-runs `task setup` + `task k3d:heal` + tilt + 11 dogfood journeys + preflight, all PASS in ~33min without manual intervention. 39 systemic bugs (B1-B39) caught and canonically fixed across 29 iterations. Tag: `dogfood-cleanroom-converged-20260505`. Plan: [`docs/plans/real-paas-cleanroom-dogfood-loop-plan.md`](docs/plans/real-paas-cleanroom-dogfood-loop-plan.md). Final report: [`docs/reports/dogfood-cleanroom-20260505-progress.md`](docs/reports/dogfood-cleanroom-20260505-progress.md). Learnings: [`docs/learnings/cleanroom-iter28-29-learnings-20260505.md`](docs/learnings/cleanroom-iter28-29-learnings-20260505.md).
 >
 > **Path to 4.0**: (a) first CI Sunday cron GREEN producing real `cell2-soaks.yml` 1h+24h workflow run evidence + (b) 1 prod customer day-trial with no incidents (Sprint 9 prod canary stage 4). Local 7-day GREEN streak NOT a gate (tautological in static dev env without diurnal traffic; CI cron + real prod usage are the legitimate signals — D7 reformulated 2026-05-03).
 
@@ -71,7 +73,7 @@ No Kubernetes knowledge required. No Helm. No Dockerfile required. Just push.
 | `loopzero connect` / `disconnect` | GitHub App auto-deploy on push (~4min E2E) |
 | `loopzero audit` | Audit log with action/timestamp filters |
 | `loopzero validate` | Local loopzero.yaml validation |
-| `loopzero scale` | Scaling configuration (stub -- 202 acknowledged, apply via loopzero.yaml) |
+| `loopzero scale` | Scaling configuration -- DB persistence active via `PostgresScalingStore`. Returns `applied`/`no_change` (no longer stub-202). K8s Deployment.spec.replicas updates on next `loopzero deploy` (renderer reads from DB at deploy time). B36 fix 2026-05-05. |
 | Plan enforcement (Starter/Pro/Team) | Limits on projects/builds/environments/members/replicas |
 | Concurrent deploy protection | `pg_advisory_xact_lock` -> exactly one 202, others get 409 |
 | Idempotency | Retry-safe via `Idempotency-Key` header |
@@ -94,7 +96,7 @@ No Kubernetes knowledge required. No Helm. No Dockerfile required. Just push.
 | Cell-2 production canary (stages 4-5) | Medium | Stage 4: 1 customer 7-day. Stage 5: 10/50/100% with 7-day holds. Pending Sprint 9 readiness review per ADR D6. CI cron `cell2-soaks.yml` armed for ADR-compliant 1h+24h Sunday runs. |
 | ~~SBOM generation (syft)~~ | ~~Medium~~ | ✅ Shipped (Sprint 6). Per-release CycloneDX manifest persisted in S3 with presigned URL endpoint. |
 | Admission policy DENY mode | Medium | warn-mode shipped (Sprint 6). Deny-flip pending Sprint 9 with cosign keyless verification + Fulcio. |
-| `loopzero scale` persistence (DB) | Low | Endpoint returns 202 acknowledged as stub. Use loopzero.yaml + loopzero deploy. |
+| ~~`loopzero scale` persistence (DB)~~ | ~~Low~~ | ✅ Shipped (B36, 2026-05-05). PostgresScalingStore wired in `api/cmd/setup_orchestrator.go:144`. Handler returns `applied`/`no_change`. Validated via journey-04 in cleanroom dogfood. |
 | Chaos engineering suite | Medium | Sprint 8 -- not started. |
 | Polish + onboarding (< 10 min) | High | Sprint 9 -- not started. |
 | SSO/SAML | Low | Phase 3. |
@@ -119,6 +121,7 @@ No Kubernetes knowledge required. No Helm. No Dockerfile required. Just push.
 | State machines | 10 application + 9 release + 7 build | Passing (`ApplicationCleaned` terminal state via `ApplicationOrphaned` event added 2026-05-03) |
 | CI pipeline | 16 workflows | Green (incl. `cell2-soaks.yml` weekly Sunday 02:00 UTC + `platform-health-7day-watch.yml` hourly) |
 | Regression matrix | 166 entries | 0 critical miss, audit GREEN |
+| Cleanroom dogfood (E2E) | preflight + 11 journeys | **12/12 GREEN** end-to-end on fresh `k3d` destroy/setup cycle (2026-05-05, tag `dogfood-cleanroom-converged-20260505`). Validates: solo deploy, multi-server (api+worker), secrets via ESO, scale persistence, promote staging→production, rollback v2→v1 with state machine, custom domain register/list/status/remove, GitHub connect/disconnect, preview list/inspect/delete, failure modes (auth/cap/build), admin (evict dry-run + service-auth gating). Total: ~33min. Rule 3 audit: 0 internal-term matches in CLI output. |
 
 ---
 
