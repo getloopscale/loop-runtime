@@ -32,7 +32,14 @@ WORK_DIR="/tmp/dogfood-journey-01"
 journey_step "Setup fixture"
 rm -rf "$WORK_DIR"
 cp -r "${REPO_ROOT}/infra/tests/dogfood/fixtures/solo-server" "$WORK_DIR"
-journey_log "fixture copied to $WORK_DIR"
+# B19 fix (cleanroom iter 15, 2026-05-05): loopzero deploy uploads a git
+# bundle; non-git source returns SOURCE_UPLOAD_FAILED with hint "Ensure
+# your git history is clean". Initialise a fresh repo so the CLI has
+# something to bundle.
+( cd "$WORK_DIR" && git init --quiet && git add . && \
+  git -c user.name=dogfood -c user.email=dogfood@loopzero.local \
+      commit --quiet -m "fixture" )
+journey_log "fixture copied to $WORK_DIR (git initialised)"
 
 journey_step "Ensure auth"
 ensure_token
