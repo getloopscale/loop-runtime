@@ -1,0 +1,14 @@
+k6-operator:
+  manager:
+    resources:
+      limits:
+        cpu: 200m
+        memory: 256Mi
+      requests:
+        cpu: 100m
+        memory: 128Mi
+  # Install CRDs
+  installCRDs: true
+  # Namespace where k6 test runs will execute
+  namespace:
+    create: false
