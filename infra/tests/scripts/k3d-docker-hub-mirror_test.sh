@@ -33,17 +33,24 @@ check() {
 echo "B6 regression: k3d Docker Hub pull-through mirror"
 echo
 
-check "registry:create has --proxy-remote-url pointing at mirror.gcr.io (not docker.io)" \
-  "${REPO_ROOT}/taskfiles/k3d.yml" \
-  '\-\-proxy-remote-url[[:space:]]+https://mirror\.gcr\.io'
+# B7 (iter 7b refinement): registry is plain registry:2 (no --proxy-remote-url)
+# because proxy-mode rejects pushes. Docker Hub bypass moved to containerd
+# mirror layer. So we now assert the OPPOSITE of original B6: --proxy-remote-url
+# MUST NOT be present.
+if grep -qE '\-\-proxy-remote-url' "${REPO_ROOT}/taskfiles/k3d.yml"; then
+  printf '  FAIL  registry:create must NOT use --proxy-remote-url (breaks pushes)\n' >&2
+  FAIL=$((FAIL + 1))
+else
+  printf '  PASS  registry:create has no --proxy-remote-url (plain registry, pushes work)\n'
+  PASS=$((PASS + 1))
+fi
 
-# Negative assertion: ensure registry-1.docker.io is NOT in the proxy URL.
-# B6 refined iter 7 — fully eliminate Docker Hub from the cleanroom path.
+# Negative assertion: registry-1.docker.io must not appear as proxy URL anywhere.
 if grep -qE '\-\-proxy-remote-url[[:space:]]+https://registry-1\.docker\.io' "${REPO_ROOT}/taskfiles/k3d.yml"; then
   printf '  FAIL  proxy must NOT point at registry-1.docker.io (rate-limited)\n' >&2
   FAIL=$((FAIL + 1))
 else
-  printf '  PASS  proxy does NOT use registry-1.docker.io\n'
+  printf '  PASS  no registry-1.docker.io reference in proxy config\n'
   PASS=$((PASS + 1))
 fi
 
@@ -52,6 +59,9 @@ for cluster in mgmt build workload runtime-2; do
   check "${cluster}: registries.config block exists" "$yaml" '^[[:space:]]+config:[[:space:]]*\|'
   check "${cluster}: docker.io mirror endpoint" "$yaml" '"docker.io"'
   check "${cluster}: registry-1.docker.io mirror endpoint" "$yaml" '"registry-1.docker.io"'
+  # B7 (iter 7b): mirror endpoint MUST be mirror.gcr.io (Google free mirror),
+  # NOT k3d-loopzero-registry (which is now plain pull/push, no proxy mode).
+  check "${cluster}: mirror endpoint points at mirror.gcr.io" "$yaml" 'https://mirror\.gcr\.io'
 done
 
 echo

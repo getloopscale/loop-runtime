@@ -17,20 +17,25 @@ tasks:
     desc: |
       Create shared container registry for local development.
 
-      B6 fix (real-paas-cleanroom-dogfood-loop-plan iter 6, refined iter 7):
-      registry runs as a pull-through proxy that points at Google's
-      mirror.gcr.io — a free, rate-limit-free, anonymous mirror of Docker
-      Hub. Eliminates the dependency on registry-1.docker.io entirely:
-      k3d-loopzero-registry caches images on first pull, subsequent destroy/
-      recreate cycles serve from cache, and the upstream is Google not
-      Docker Hub so the 100 pulls/6h anonymous limit does NOT apply.
+      B6/B7 fix (real-paas-cleanroom-dogfood-loop-plan iter 6→7→7b, 2026-05-05):
+      registry is a plain registry:2 (read/write) for local image pushes
+      (loopzero-clone-runner, loopzero-packs-runner, etc. via `task images:build`).
+      It is NOT in pull-through proxy mode — registry:2 in proxy mode
+      REJECTS pushes with `error from registry: unsupported`, breaking
+      local builds. Discovered LIVE during iter 7.
 
-      Architecture invariant: "local cleanroom does not depend on Docker
-      Hub" — now true at every layer (containerd certs.d → k3d-loopzero-registry
-      proxy → mirror.gcr.io). Confirms the user assertion `nao usamos docker
-      hub` post-fix.
+      Docker Hub bypass is implemented at the containerd layer instead
+      (see infra/k3d/*-cluster.yaml `registries.config`): each cluster
+      points `docker.io` and `registry-1.docker.io` mirror endpoints
+      directly at https://mirror.gcr.io (Google's free, rate-limit-free
+      anonymous mirror of public Docker Hub images). Pulls of third-party
+      images go directly mirror.gcr.io → containerd. Pushes of our own
+      images go to k3d-loopzero-registry:5000 unchanged. No interference.
+
+      Architecture invariant preserved: "local cleanroom does not depend
+      on Docker Hub" — true at the containerd resolution layer.
     cmds:
-      - k3d registry list -o json | grep -q '"name":"k3d-loopzero-registry"' || k3d registry create loopzero-registry --port 5000 --proxy-remote-url https://mirror.gcr.io
+      - k3d registry list -o json | grep -q '"name":"k3d-loopzero-registry"' || k3d registry create loopzero-registry --port 5000
 
   clusters:create:
     desc: Create all 4 k3d clusters (mgmt, build, workload, runtime-2)

@@ -35,10 +35,10 @@ registries:
     mirrors:
       "docker.io":
         endpoint:
-          - http://k3d-loopzero-registry:5000
+          - https://mirror.gcr.io
       "registry-1.docker.io":
         endpoint:
-          - http://k3d-loopzero-registry:5000
+          - https://mirror.gcr.io
 options:
   k3d:
     wait: true
