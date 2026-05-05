@@ -135,7 +135,7 @@ tasks:
       - cd api && go test ./... -short -coverprofile=coverage.out && go tool cover -html=coverage.out -o coverage.html 2>/dev/null || true
       - cd operators && go test ./... -short -coverprofile=coverage.out && go tool cover -html=coverage.out -o coverage.html 2>/dev/null || true
       - cd cli && npm test -- --coverage 2>/dev/null || true
-      - echo "Coverage reports generated:"
+      - 'echo "Coverage reports generated:"'
       - echo "  pkg/coverage.html"
       - echo "  api/coverage.html"
       - echo "  operators/coverage.html"
@@ -237,7 +237,7 @@ tasks:
       - kubectl apply -f infra/tests/k6/manifests/rbac.yaml
       - kubectl apply -f infra/tests/k6/manifests/soak-cronjob.yaml
       - kubectl apply -f infra/tests/k6/manifests/soak-alerts.yaml
-      - echo "Soak CronJob applied. Next run: Sunday 02:00 UTC"
+      - 'echo "Soak CronJob applied. Next run: Sunday 02:00 UTC"'
 
   # ─────────────────────────────────────────────
   # Chaos Engineering (Chaos Mesh, CNCF incubating)
