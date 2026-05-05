@@ -53,21 +53,30 @@ final=$(wait_build_terminal "$build_id" 1500)
 HOST="${TENANT_ID}-${PROJECT}-${APP}-${ENV}.loopzero.local"
 wait_http_200 "$HOST" 300 "/health" || journey_fail "HTTP 200 timeout"
 
-journey_step "loopzero scale --replicas 3 (stub status — CLAUDE.md known gap)"
-# CLAUDE.md: "loopzero scale ... DB persistence stub (returns 202 acknowledged
-# — use loopzero.yaml + loopzero deploy real)". This validates current contract
-# (Rule 5 stable JSON shape) without asserting persistence — that's a
-# known pre-release gap, tracked separately.
+journey_step "loopzero scale --replicas 3 (DB persistence active — applied|no_change|acknowledged)"
+# CHG-2026-05-05-DOGFOOD-B36: scale handler is no longer a pure stub. Plan
+# T2.2 wired PostgresScalingStore (api/cmd/setup_orchestrator.go:144), and
+# api/internal/routes/scale.go now returns:
+#   - "applied"      when DB row was inserted/changed
+#   - "no_change"    when the new config matches the persisted one
+#   - "acknowledged" only when h.apply == nil (legacy fallback, transitional)
+# K8s Deployment.spec.replicas still requires a redeploy to pick up the
+# new value (the manifest renderer reads from DB at deploy time). Journey
+# accepts any of the three statuses to remain stable as the persistence
+# layer evolves.
 ( cd "$WORK_DIR" && "$LOOPZERO_BIN" scale --app "$APP" --env "$ENV" --replicas 3 --json ) > /tmp/journey-04-scale.json 2>&1 || \
   journey_fail "scale --replicas 3 failed: $(cat /tmp/journey-04-scale.json)"
 journey_log "scale 3 response: $(head -c 200 /tmp/journey-04-scale.json)"
 # Response shape contract: {app, environment, replicas, status}.
 status=$(python3 -c "import json,sys; print(json.load(sys.stdin).get('status',''))" < /tmp/journey-04-scale.json 2>/dev/null || echo "")
 got_replicas=$(python3 -c "import json,sys; print(json.load(sys.stdin).get('replicas',''))" < /tmp/journey-04-scale.json 2>/dev/null || echo "")
-[[ "$status" == "acknowledged" ]] || journey_fail "expected status=acknowledged (current stub contract), got: $status"
+case "$status" in
+  applied|no_change|acknowledged) : ;;
+  *) journey_fail "expected status in {applied,no_change,acknowledged}, got: $status" ;;
+esac
 [[ "$got_replicas" == "3" ]] || journey_fail "expected replicas=3 in response, got: $got_replicas"
-journey_log "Stub contract OK: status=acknowledged, replicas=3 echoed"
-journey_log "GAP (CLAUDE.md): persistence not implemented — Deployment.spec.replicas remains at loopzero.yaml default. Use loopzero.yaml + redeploy for real scale."
+journey_log "Scale contract OK: status=$status replicas=3"
+journey_log "NOTE: K8s Deployment.spec.replicas updates on next loopzero deploy (renderer reads from DB)."
 
 journey_step "loopzero scale --replicas 11 (over cap probe — gap in standalone-multi enterprise)"
 out=$(cd "$WORK_DIR" && "$LOOPZERO_BIN" scale --app "$APP" --env "$ENV" --replicas 11 --json 2>&1 || true)
