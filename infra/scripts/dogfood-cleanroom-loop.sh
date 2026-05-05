@@ -295,7 +295,12 @@ phase_bootstrap_extras() {
     return 38
   fi
   log "bootstrap-eso-cluster-secret-store.sh OK (loopzero-mgmt-store Ready)"
-  if ! bash "${REPO_ROOT}/infra/helmfile/scripts/bootstrap-oauth-clients.sh"; then
+  # B15 fix (iter 12): bootstrap-oauth-clients.sh defaults
+  # HYDRA_NAMESPACE=loopzero-auth, but standalone-multi installs Hydra in
+  # loopzero-system. Override env var so the readiness probe targets the
+  # right Service. Without this, script hits 120s timeout polling a
+  # namespace that doesn't exist.
+  if ! HYDRA_NAMESPACE=loopzero-system bash "${REPO_ROOT}/infra/helmfile/scripts/bootstrap-oauth-clients.sh"; then
     log_err "phase_bootstrap_extras: bootstrap-oauth-clients.sh failed"
     return 38
   fi
