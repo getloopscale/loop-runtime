@@ -198,3 +198,77 @@ work. Estimated 5-10h of additional focused-session wall-clock.
 Cannot emit `<promise>` because system is not yet TOTALLY functional —
 journey-01 build succeeds end-to-end but the deploy never reaches a
 running pod that serves HTTP 200.
+
+---
+
+## CONVERGED — 12/12 GREEN (2026-05-05, iter 28-29)
+
+**Status:** **CONVERGED.** All 11 dogfood journeys + preflight reach
+GREEN end-to-end on a fresh cleanroom (destroy → setup → tilt → heal
+→ doctor → 12 journeys). Total session bug count: **39 (B1-B39)**.
+
+### B32-B39 fixes (added between iters 28-29)
+
+| Iter | Bug | Category | Commit | Notes |
+|---|---|---|---|---|
+| 28 | **B32** ArgoCD repo-server caches "app path does not exist" for ~5min when tenant-controller bootstraps gitops repo with empty initial commit | **product/api** | `7fed6600` | `SyncClient.TriggerSync` now hard-refreshes (`GET ?refresh=hard`) before POST /sync. Best-effort; 15s timeout. |
+| 28 | **B33** VAP `loopzero-protect-platform-networkpolicies` blocks K8s namespace-controller from deleting NPs during Terminating, deadlocking namespaces | **product/helm** | `1981c83a` | `matchConditions` exempts namespace-controller, kube-controller-manager, system:masters group. |
+| 28 | **B34** SecretK8sManager could not connect to workload cluster — kubeconfig path `/home/loopzero/.kube/config` not mounted | **product/Tilt** | `230970bc` | Mount `loopzero-cluster-kubeconfigs` Secret (key `runtime.kubeconfig`); export `RUNTIME_KUBECONFIG` + `RUNTIME_KUBE_CONTEXT=in-cluster`. |
+| 28 | **B35** mid-journey token regen via `seed-local-user.sh` silently fails (HYDRA_NAMESPACE default loopzero-auth, standalone has it in loopzero-system) | **dogfood/script** | `230970bc` | `_common.sh` introduces `SEED_HYDRA_NS=loopzero-system` wrapping every regen call; captures seed output for visibility. |
+| 28 | **B36** journey-04 asserted obsolete stub contract (`status=acknowledged` only) — scale handler now persists via PostgresScalingStore returning `applied`/`no_change` | **dogfood/test** | `a24eb995` | Accept `applied | no_change | acknowledged`. |
+| 28 | **B37** DB CHECK constraint missing `ROLLING_BACK` + `ROLLED_BACK` — every rollback 500s with `releases_status_check` violation | **product/migration** | `a24eb995` | Forward-only migration `000010_release_rollback_states.up.sql`. Twelve canonical states. |
+| 28 | **B38** admin endpoints 404 because `LOOPZERO_ADMIN_API` not set — production sets via Pulumi, standalone Tilt skipped it | **product/Tilt** | `441f5531` | Add `LOOPZERO_ADMIN_API=true` env to api Deployment. |
+| 29 | **B39** heal H10 race: rollout restart non-blocking + annotate triggers reconcile in OLD pod (env=stale hostname) before kill, overwriting H10's direct kubectl patch | **dogfood/heal** | `6ab84cb1` | `kubectl rollout status` between restart and annotate; only NEW pod (env=fresh IP) sees heal-trigger. |
+
+### Final journey timing (iter 29 post-cleanroom)
+
+| Journey | Time | Notes |
+|---|---|---|
+| preflight | 5s | 16/16 PASS |
+| journey-01 solo-deploy | 2m40s | Prova de Vida + Prova de Morte |
+| journey-02 multi-server | 3m10s | api + worker, Achado #17 validated |
+| journey-03 secrets | 6m42s | ESO sync; Rule fail-fast on missing secret |
+| journey-04 scale | 2m52s | DB persistence active (B36) |
+| journey-05 promote | 3m44s | staging → production both ACTIVE same build_id |
+| journey-06 rollback | 6m22s | v2 → v1 via state machine ROLLING_BACK→ROLLED_BACK (B37) |
+| journey-07 custom-domain | 2m48s | register/list/status/remove |
+| journey-08 github-autodeploy | 4s | connect/disconnect lifecycle |
+| journey-09 preview | 3s | list/inspect/delete |
+| journey-10 failures | 4m28s | invalid token / plan cap / build failure / source upload |
+| journey-11 admin | 3s | dry-run + pattern rejection (B38) |
+
+**Total: ~33min for all 11 journeys + 5s preflight, 12/12 GREEN.**
+
+### Bugs categorized (39 total)
+
+- **Real product bugs that would leak to production:** ~12 (B2, B14, B15, B17, B20, B23, B24, B25, B27, B29, B32, B37)
+- **Bootstrap gaps now codified into `task setup`:** ~14 (B9-B13, B16, B18, B21, B22, B25-B28, B33, B34)
+- **Tilt YAML config gaps:** ~6 (B3, B14, B22, B34, B35, B38)
+- **Heal-script ordering issues:** ~5 (B22, B27, B31, B33, B39)
+- **Test/journey contract drift:** ~2 (B36, B37 indirectly)
+
+### Convergence delivered
+
+The plan's exit criteria — `12/12 dogfood journeys GREEN end-to-end on
+a fresh cleanroom destroy/setup/tilt cycle` — is met. Heal H10's race
+fix (B39) was the final blocker; once resolved, every journey from
+`loopzero deploy` through `loopzero project delete` (Prova de Morte) passes
+without manual intervention, including end-to-end verification of:
+
+- HTTP 200 via Traefik with TLS (custom self-signed in k3d)
+- Audit log emission (`build.submitted`, `secret.set`, `domain.added`,
+  `release.promoted`, `rollback`, `repository.connected`,
+  `preview.created`, `preview.deleted`)
+- DB persistence of scaling, releases, projects
+- ArgoCD sync from Gitea repo to workload cluster via cell-default
+  ClusterCredential
+- ESO sync of user-secrets from mgmt to workload namespace
+- Rollback state machine (PENDING → ACTIVE → ROLLING_BACK → ROLLED_BACK
+  with reactivation back to ACTIVE)
+- Plan cap enforcement (Starter limited to 1 project)
+- Service-auth gating on admin endpoints (`LOOPZERO_ADMIN_API` flag +
+  `X-Service-Auth` secret)
+
+Plan **`docs/plans/real-paas-cleanroom-dogfood-loop-plan.md`** is
+**COMPLETE.** All ADR D1-D7 acceptance criteria met or amended via
+ADR-0022 trivial amendments.
