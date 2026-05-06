@@ -66,6 +66,14 @@ func setupOrchestrator(
 	if planLimiter != nil {
 		planCap = &planLimiterCapAdapter{limiter: planLimiter}
 	}
+
+	// B40 (CHG-2026-05-05-DOGFOOD-B40): instantiated BEFORE BuildOrchestrator
+	// because the orchestrator depends on it via Deps.ScalingResolver. The
+	// `scaleApply` closure below reuses the same scalingStore (single source
+	// of truth for app_scaling_config IO).
+	scalingStore := db.NewPostgresScalingStore(dbAdapter)
+	scalingResolver := services.NewDBScalingResolver(scalingStore)
+
 	orch := services.NewBuildOrchestrator(services.BuildOrchestratorDeps{
 		BuildStore:        stores.BuildStore,
 		ReleaseStore:      stores.ReleaseStore,
@@ -81,6 +89,7 @@ func setupOrchestrator(
 		KVClient:          workflows.KVClient,
 		BaseDomain:        cfg.BaseDomain,
 		PlanCap:           planCap,
+		ScalingResolver:   scalingResolver, // B40
 		// Sprint 6 / T3.1: per-app attestation persistence (signature + SBOM).
 		AppAttestationStore: db.NewPostgresAppAttestationStore(dbAdapter),
 	})
@@ -141,7 +150,8 @@ func setupOrchestrator(
 	// Scale handler — scaling configuration for apps (KEDA scale-to-zero gate).
 	// Plan T2.2: real persistence via PostgresScalingStore (was: stub-202 returning acknowledged).
 	// The closure adapts routes.ScaleConfigInput ↔ db.ScalingConfig (avoids circular import).
-	scalingStore := db.NewPostgresScalingStore(dbAdapter)
+	// scalingStore declared above (before BuildOrchestrator) — single instance
+	// shared by scaleApply (write path) and ScalingResolver (read path).
 	scaleApply := func(ctx context.Context, in routes.ScaleConfigInput) (bool, error) {
 		c := &db.ScalingConfig{
 			TenantID:     in.TenantID,
