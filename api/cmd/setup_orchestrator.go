@@ -179,6 +179,7 @@ func setupOrchestrator(
 		EnvTargetStore:    stores.EnvTargetStore,
 		ReleaseStore:      stores.ReleaseStore,
 		ProjectStore:      &db.PostgresProjectStore{DB: dbAdapter},
+		ScalingStore:      scalingStore,
 		Locker:            stores.Locker,
 		GitOps:            workflows.GitOpsPusher,
 		WorkflowCanceller: workflows.WorkflowSubmitter,

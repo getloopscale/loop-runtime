@@ -13,6 +13,7 @@ package e2e
 
 import (
 	"fmt"
+	"os"
 
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
@@ -21,6 +22,7 @@ import (
 var _ = Describe("Journey 08: GitHub Autodeploy", Ordered, Label("journey"), func() {
 	var (
 		project string
+		workDir string
 	)
 
 	BeforeAll(func() {
@@ -28,20 +30,38 @@ var _ = Describe("Journey 08: GitHub Autodeploy", Ordered, Label("journey"), fun
 		seedE2E()
 
 		project = fmt.Sprintf("ginkgo-connect-%s", uniqueSuffix())
+
+		// loopzero connect / disconnect read the project name from loopzero.yaml in
+		// the working directory — the CLI does NOT have a --project flag
+		// (verified 2026-05-06: `loopzero connect --help` shows only --repo,
+		// --branch, --installation-id). Mirror infra/tests/dogfood/
+		// journeys/_legacy/journey-08-github-autodeploy.sh: write a minimal
+		// loopzero.yaml and exec connect from that dir.
+		var err error
+		workDir, err = os.MkdirTemp("", "loopzero-e2e-connect-")
+		Expect(err).NotTo(HaveOccurred())
+
+		loopzeroYAML := fmt.Sprintf(
+			"project: %s\napps:\n  - name: api\n    type: server\n    build:\n      dockerfile: Dockerfile\n",
+			project,
+		)
+		Expect(os.WriteFile(workDir+"/loopzero.yaml", []byte(loopzeroYAML), 0644)).To(Succeed())
 	})
 
 	AfterAll(func() {
-		// Cleanup: disconnect if still connected.
-		runLoopZero("disconnect", "--project", project, "--json")
+		// Cleanup: disconnect if still connected (best-effort).
+		runLoopZeroInDir(workDir, "disconnect", "--json")
 		ensureProjectDeleted(project)
+		if workDir != "" {
+			os.RemoveAll(workDir)
+		}
 	})
 
 	It("connects a GitHub repository", func() {
-		stdout, stderr, exitCode := runLoopZero("connect",
+		stdout, stderr, exitCode := runLoopZeroInDir(workDir, "connect",
 			"--repo", "getloopscale/loopzero-repotest",
 			"--installation-id", "99999999",
 			"--branch", "main",
-			"--project", project,
 			"--json")
 
 		Expect(exitCode).To(Equal(0),
@@ -59,11 +79,10 @@ var _ = Describe("Journey 08: GitHub Autodeploy", Ordered, Label("journey"), fun
 	})
 
 	It("idempotent reconnect succeeds without duplicate", func() {
-		stdout, _, exitCode := runLoopZero("connect",
+		stdout, _, exitCode := runLoopZeroInDir(workDir, "connect",
 			"--repo", "getloopscale/loopzero-repotest",
 			"--installation-id", "99999999",
 			"--branch", "main",
-			"--project", project,
 			"--json")
 
 		Expect(exitCode).To(Equal(0))
@@ -75,9 +94,7 @@ var _ = Describe("Journey 08: GitHub Autodeploy", Ordered, Label("journey"), fun
 	})
 
 	It("disconnects repository", func() {
-		stdout, stderr, exitCode := runLoopZero("disconnect",
-			"--project", project,
-			"--json")
+		stdout, stderr, exitCode := runLoopZeroInDir(workDir, "disconnect", "--json")
 
 		Expect(exitCode).To(Equal(0),
 			"loopzero disconnect should exit 0\nstdout: %s\nstderr: %s", stdout, stderr)

@@ -122,6 +122,12 @@ func SeedDatabase(dbURL string) error {
 -- the X-LoopZero-Tenant header today.
 DELETE FROM tenant_members
 WHERE user_id = 'loopzero-bootstrap' AND tenant_id <> '%s';
+
+-- Strip orphan app_scaling_config rows for this tenant. The project_deleter
+-- cascade was added 2026-05-06 (CHG-AUDIT-RESOURCE-ID + scaling cascade),
+-- so historical sessions may have left rows behind. Clean before seed so
+-- ScalingResolver sees pristine state when journeys (re)deploy fixtures.
+DELETE FROM app_scaling_config WHERE tenant_id = '%s';
 `+`
 INSERT INTO users (id, email, github_id, display_name, username)
 VALUES ('%s', '%s', %d, 'e2e-user', '%s')
@@ -148,6 +154,7 @@ VALUES ('%s', '%s', '%s', '%s')
 ON CONFLICT (id) DO NOTHING;
 `,
 		TenantID, // strip non-canonical bootstrap memberships
+		TenantID, // strip orphan app_scaling_config rows
 		UserID, Email, GitHubID, Username,
 		TenantID, DisplayName, TenantID, UserID, // slug = TenantID
 		TenantID, UserID, Role,
