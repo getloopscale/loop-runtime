@@ -5,7 +5,8 @@ import { ApiClient, ApiError } from '../api/client';
 import { LoginCommand } from '../commands/login';
 import { LogoutCommand } from '../commands/logout';
 import { WhoamiCommand } from '../commands/whoami';
-import { executeDeviceCodeFlow } from '../auth/device-flow';
+import { AuthRefreshCommand } from '../commands/auth-refresh';
+import { executeDeviceCodeFlow, refreshAccessToken } from '../auth/device-flow';
 import { openBrowser } from '../auth/open-browser';
 import { promptConfirm } from '../output/prompt-confirm';
 import { CommandDeps } from './types';
@@ -159,4 +160,34 @@ export function registerAuthCommands(deps: CommandDeps): void {
       });
       process.exitCode = exitCode;
     });
+
+  // --- auth refresh ---
+  // F-01 + F-03 fix from /dogfood full report (2026-05-06): operators
+  // re-authenticate via refresh token without going through the device
+  // flow again, eliminating the "JWT TTL=1h friction loop".
+  program
+    .command('auth')
+    .description('Authentication maintenance (refresh tokens)')
+    .addCommand(
+      program
+        .createCommand('refresh')
+        .description('Exchange the stored refresh token for a fresh access token')
+        .action(async () => {
+          const globalOpts = getGlobalOpts();
+          const refreshCmd = new AuthRefreshCommand({
+            getRefreshToken: () => configStore.getRefreshToken(),
+            saveToken: (token, email, team, refreshToken, expiresIn) =>
+              configStore.saveToken(token, email, team, refreshToken, expiresIn),
+            getEmail: () => configStore.getEmail(),
+            getTeam: () => configStore.getTeam(),
+            refreshFn: (refreshToken) =>
+              refreshAccessToken(globalThis.fetch, cloudUrl, refreshToken),
+            writeTo,
+            writeError,
+          });
+          process.exitCode = await refreshCmd.execute({
+            json: globalOpts.json,
+          });
+        }),
+    );
 }
