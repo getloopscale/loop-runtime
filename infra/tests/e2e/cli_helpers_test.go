@@ -26,34 +26,13 @@ import (
 	. "github.com/onsi/ginkgo/v2"
 )
 
-// internalTerms lists user-facing leaks forbidden by Rule 3 (CLAUDE.md).
-// Case-insensitive match; matched via regex word boundaries where applicable.
-var internalTerms = []string{
-	"ArgoCD",
-	"argocd",
-	"GitOps",
-	"gitops-push",
-	"CRD",
-	"tenant_id",
-	"advisory lock",
-	"pg_advisory",
-	"Gitea",
-	"MinIO",
-	"kubebuilder",
-	"envtest",
-	"Kaniko",
-}
+// internalTerms references the canonical list from constants_test.go.
+// Kept as alias for backward compatibility with existing tests.
+var internalTerms = forbiddenInternalTerms
 
-// allowedExitCodes lists the only exit codes LoopZero CLI is allowed to produce
-// per Rule 4 (CLAUDE.md). Any other code is a contract violation.
-var allowedExitCodes = map[int]string{
-	0: "success",
-	1: "usage error",
-	2: "build failure",
-	3: "deploy failure",
-	4: "auth error",
-	5: "partial failure",
-}
+// allowedExitCodes references the canonical map from constants_test.go.
+// Kept as alias for backward compatibility with existing tests.
+var allowedExitCodes = allowedExitCodesMap
 
 // runLoopZero executes `loopzero <args...>` with E2E env vars and captures
 // stdout/stderr/exitCode. The token is injected from LOOPZERO_TOKEN env or empty

@@ -860,4 +860,51 @@ tasks:
       - bash infra/tests/scripts/dogfood-cleanroom-loop_test.sh
 
   # ---------------------------------------------------------------------------
+  # E2E Ginkgo Tests (replaces bash journey scripts)
+  # ---------------------------------------------------------------------------
+
+  e2e:journey:
+    desc: Run all E2E journey tests (full deploy flows, ~30-45min)
+    env:
+      LOOPZERO_E2E: "1"
+    cmds:
+      - ginkgo -v --label-filter="journey" --timeout=60m ./infra/tests/e2e/
+
+  e2e:smoke:
+    desc: Run E2E smoke subset (<5 min)
+    env:
+      LOOPZERO_E2E: "1"
+    cmds:
+      - ginkgo -v --label-filter="smoke" --timeout=10m ./infra/tests/e2e/
+
+  e2e:edge:
+    desc: Run E2E edge case tests (concurrency, failures, state machine)
+    env:
+      LOOPZERO_E2E: "1"
+    cmds:
+      - ginkgo -v --label-filter="edge-case" --timeout=30m ./infra/tests/e2e/
+
+  e2e:all:
+    desc: Run ALL E2E tests (journeys + edge cases + existing specs)
+    env:
+      LOOPZERO_E2E: "1"
+    cmds:
+      - ginkgo -v --timeout=60m ./infra/tests/e2e/
+
+  e2e:focus:
+    desc: Run E2E tests matching a focus pattern (set FOCUS env var)
+    env:
+      LOOPZERO_E2E: "1"
+    cmds:
+      - ginkgo -v --focus="${FOCUS}" --timeout=60m ./infra/tests/e2e/
+
+  e2e:report:
+    desc: Run ALL E2E tests with JUnit XML report
+    env:
+      LOOPZERO_E2E: "1"
+      JUNIT_REPORT_PATH: "e2e-report.xml"
+    cmds:
+      - ginkgo -v --timeout=60m --junit-report=e2e-report.xml ./infra/tests/e2e/
+
+  # ---------------------------------------------------------------------------
   # Monitoring

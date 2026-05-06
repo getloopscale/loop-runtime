@@ -1,0 +1,10 @@
+version: 1
+project: versioned-app
+
+apps:
+  api:
+    path: .
+    framework: express
+    type: server
+    build: dockerfile
+    port: 3001

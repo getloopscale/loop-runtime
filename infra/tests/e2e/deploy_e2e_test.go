@@ -18,13 +18,13 @@ import (
 )
 
 const (
-	envFlag        = "LOOPZERO_E2E_DEPLOY"
-	testTenant     = "e2e-test"
-	testProject    = "repotest"
-	testRepoURL    = "https://github.com/getloopscale/loopzero-repotest"
-	testFramework  = "node"
-	deployTimeout  = 15 * time.Minute
-	probeTimeout   = 5 * time.Minute
+	envFlag       = "LOOPZERO_E2E_DEPLOY"
+	testTenant    = "e2e-test"
+	testProject   = "repotest"
+	testRepoURL   = "https://github.com/getloopscale/loopzero-repotest"
+	testFramework = "node"
+	// deployTimeout and probeTimeout are defined in constants_test.go.
+	// Use httpProbeTimeout for probe operations.
 )
 
 // requireE2EFlag skips the test unless LOOPZERO_E2E_DEPLOY=1.

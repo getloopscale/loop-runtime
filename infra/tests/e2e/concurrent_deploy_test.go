@@ -25,24 +25,9 @@ import (
 	"github.com/loopzero/loopzero/infra/tests/seed"
 )
 
-// forbiddenTerms are internal implementation details that must NEVER appear
-// in CLI output or API responses visible to users (Rule 3).
-var forbiddenTerms = []string{
-	"lock",
-	"advisory",
-	"pg_advisory",
-	"ArgoCD",
-	"argocd",
-	"GitOps",
-	"gitops-push",
-	"CRD",
-	"tenant_id",
-	"Gitea",
-	"MinIO",
-	"kubebuilder",
-	"envtest",
-	"Kaniko",
-}
+// forbiddenTerms references the canonical list from constants_test.go
+// with additional concurrency-specific terms.
+var forbiddenTerms = append(forbiddenInternalTerms, "lock", "advisory")
 
 // deployResult captures the output of a single loopzero deploy invocation.
 type deployResult struct {

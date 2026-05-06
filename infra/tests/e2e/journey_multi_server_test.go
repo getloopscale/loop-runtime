@@ -1,0 +1,128 @@
+// SPDX-License-Identifier: Apache-2.0
+// Copyright 2025-2026 The LoopZero Authors
+
+// Journey 02: Multi-Server Monorepo
+//
+// Migrated from: infra/tests/dogfood/journeys/journey-02-multi-server.sh
+//
+// Flow: validate (2 apps) → deploy → 2 builds → API HTTP 200 → worker pod Running → cleanup
+// Fixture: multi-server (api: server + worker: worker)
+package e2e
+
+import (
+	"os"
+	"os/exec"
+	"strings"
+
+	. "github.com/onsi/ginkgo/v2"
+	. "github.com/onsi/gomega"
+
+	"github.com/loopzero/loopzero/infra/tests/seed"
+)
+
+var _ = Describe("Journey 02: Multi-Server", Ordered, Label("journey"), func() {
+	const (
+		project = "multi-server"
+		env     = "production"
+	)
+
+	var (
+		workDir string
+		buildID string
+		apiHost string
+		ns      string
+	)
+
+	BeforeAll(func() {
+		skipIfNotE2E()
+		seedE2E()
+
+		apiHost = seed.TenantID + "-" + project + "-api-" + env + ".loopzero.local"
+		ns = "loopzero-" + seed.TenantID + "-" + env
+
+		ensureProjectDeleted(project)
+
+		workDir = copyFixture("multi-server")
+		initGitRepo(workDir)
+	})
+
+	AfterAll(func() {
+		if workDir != "" {
+			os.RemoveAll(workDir)
+		}
+	})
+
+	It("validates project with 2 apps", func() {
+		stdout, stderr, exitCode := runLoopZeroInDir(workDir, "validate", "--json")
+		Expect(exitCode).To(Equal(0),
+			"loopzero validate should exit 0\nstdout: %s\nstderr: %s", stdout, stderr)
+
+		assertNoForbiddenTermsInAll(map[string]string{
+			"validate stdout": stdout,
+			"validate stderr": stderr,
+		})
+	})
+
+	It("deploys and build succeeds", func() {
+		buildID, _ = deployAndWaitSuccess(workDir, env, deployTimeout)
+		Expect(buildID).NotTo(BeEmpty())
+	})
+
+	It("deployment names are project-scoped", func() {
+		cmd := exec.Command("kubectl", "--context", workloadKubeContext,
+			"-n", ns, "get", "deploy",
+			"-l", "loopzero.io/project="+project,
+			"--no-headers", "-o", "custom-columns=NAME:.metadata.name")
+		output, err := cmd.CombinedOutput()
+		Expect(err).NotTo(HaveOccurred(),
+			"kubectl get deploy failed: %s", string(output))
+
+		names := strings.Fields(strings.TrimSpace(string(output)))
+		Expect(names).To(ContainElement("multi-server-api"))
+		Expect(names).To(ContainElement("multi-server-worker"))
+	})
+
+	It("API responds HTTP 200", func() {
+		waitHTTP200WithHost(apiHost, "/health", httpProbeTimeout)
+
+		_, body, err := httpGetWithHost(apiHost, "/")
+		Expect(err).NotTo(HaveOccurred())
+		Expect(body).To(ContainSubstring("api"))
+		Expect(body).To(ContainSubstring(project))
+	})
+
+	It("worker has no IngressRoute", func() {
+		cmd := exec.Command("kubectl", "--context", workloadKubeContext,
+			"-n", ns, "get", "ingressroute.traefik.io",
+			"-l", "loopzero.io/project="+project+",loopzero.io/app-name=worker",
+			"--no-headers", "--ignore-not-found", "-o", "name")
+		output, err := cmd.CombinedOutput()
+		Expect(err).NotTo(HaveOccurred())
+		Expect(strings.TrimSpace(string(output))).To(BeEmpty(),
+			"worker should not have an IngressRoute")
+	})
+
+	It("worker pod is Running", func() {
+		cmd := exec.Command("kubectl", "--context", workloadKubeContext,
+			"-n", ns, "get", "pod",
+			"-l", "loopzero.io/app-name=worker",
+			"--field-selector=status.phase=Running",
+			"--no-headers", "-o", "name")
+		output, err := cmd.CombinedOutput()
+		Expect(err).NotTo(HaveOccurred())
+		Expect(strings.TrimSpace(string(output))).NotTo(BeEmpty(),
+			"expected at least one Running worker pod")
+	})
+
+	It("audit log records deploy", func() {
+		assertAuditEntry("build.submitted", project)
+	})
+
+	It("project delete succeeds and cleanup complete", func() {
+		stdout, stderr, exitCode := runLoopZeroInDir(workDir, "project", "delete", project, "--yes", "--json")
+		Expect(exitCode).To(Equal(0),
+			"project delete should exit 0\nstdout: %s\nstderr: %s", stdout, stderr)
+
+		proveDead(seed.TenantID, project, env)
+	})
+})

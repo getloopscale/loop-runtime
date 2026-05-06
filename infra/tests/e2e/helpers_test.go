@@ -5,20 +5,26 @@
 package e2e
 
 import (
+	"context"
 	"crypto/rand"
+	"crypto/tls"
 	"encoding/hex"
 	"encoding/json"
 	"fmt"
 	"io"
+	"net"
 	"net/http"
 	"os"
 	"os/exec"
 	"path/filepath"
 	"runtime"
+	"strings"
 	"time"
 
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
+
+	"github.com/loopzero/loopzero/infra/tests/seed"
 )
 
 // fixturesPath returns the absolute path to the E2E fixtures directory.
@@ -171,4 +177,394 @@ func verifyAPIHealth() error {
 		return fmt.Errorf("API health returned %d: %s", resp.StatusCode, body)
 	}
 	return nil
+}
+
+// --- Journey Helpers ---
+//
+// These helpers support full E2E journey tests migrated from bash scripts
+// in infra/tests/dogfood/journeys/. They use Eventually() for polling instead
+// of sleep loops.
+
+// waitBuildTerminal polls the build status API until the build reaches a terminal
+// state (SUCCEEDED, FAILED, CANCELLED, TIMEOUT) or the timeout expires.
+// Returns the final status string. Handles 401 by using the seed token.
+func waitBuildTerminal(buildID string, timeout time.Duration) string {
+	url := fmt.Sprintf("%s/api/v1/builds/%s", apiURL(), buildID)
+	client := &http.Client{Timeout: 10 * time.Second}
+	var finalStatus string
+
+	Eventually(func() bool {
+		req, err := http.NewRequest("GET", url, nil)
+		if err != nil {
+			return false
+		}
+		req.Header.Set("Authorization", "Bearer "+seed.AuthToken)
+
+		resp, err := client.Do(req)
+		if err != nil {
+			return false
+		}
+		defer resp.Body.Close()
+
+		// On 401, token might have expired — re-seed would be needed.
+		// For now, just retry with the static token.
+		if resp.StatusCode == http.StatusUnauthorized {
+			return false
+		}
+
+		var result map[string]interface{}
+		if err := json.NewDecoder(resp.Body).Decode(&result); err != nil {
+			return false
+		}
+
+		status, ok := result["status"].(string)
+		if !ok {
+			return false
+		}
+
+		if buildTerminalStates[status] {
+			finalStatus = status
+			return true
+		}
+		return false
+	}, timeout, buildPollInterval).Should(BeTrue(),
+		"build %s did not reach terminal state within %s", buildID, timeout)
+
+	return finalStatus
+}
+
+// proveDead verifies that all resources for a project are cleaned up
+// (namespace gone or zero resources with loopzero.io/project label).
+// This is the "Prova de Morte" assertion from bash journeys.
+func proveDead(tenant, project, env string) {
+	ns := fmt.Sprintf("loopzero-%s-%s", tenant, env)
+	ctx := workloadKubeContext
+
+	Eventually(func() bool {
+		// Check if namespace still exists.
+		checkNS := exec.Command("kubectl", "--context", ctx,
+			"get", "namespace", ns, "--no-headers", "-o", "name")
+		if checkNS.Run() != nil {
+			// Namespace doesn't exist — fully cleaned up.
+			return true
+		}
+
+		// Namespace exists — check for remaining labeled resources.
+		label := fmt.Sprintf("loopzero.io/project=%s", project)
+		for _, resource := range []string{"deployment", "service", "ingressroute.traefik.io"} {
+			checkRes := exec.Command("kubectl", "--context", ctx,
+				"-n", ns, "get", resource, "-l", label,
+				"--no-headers", "--ignore-not-found", "-o", "name")
+			output, err := checkRes.CombinedOutput()
+			if err == nil && strings.TrimSpace(string(output)) != "" {
+				return false
+			}
+		}
+		return true
+	}, cleanupTimeout, cleanupPollInterval).Should(BeTrue(),
+		"Prova de Morte failed: resources still exist for project %s in %s", project, ns)
+}
+
+// resolveTraefikPort returns the Traefik HTTPS port for a tenant based on cell assignment.
+// cell-2 uses port 8444, everything else uses 8443.
+func resolveTraefikPort(tenant string) string {
+	// Query the tenant's cell from the API or default.
+	url := fmt.Sprintf("%s/api/v1/admin/tenants/%s", apiURL(), tenant)
+	client := &http.Client{Timeout: 5 * time.Second}
+	req, err := http.NewRequest("GET", url, nil)
+	if err != nil {
+		return e2eTraefikPort
+	}
+	req.Header.Set("Authorization", "Bearer "+seed.AuthToken)
+
+	resp, err := client.Do(req)
+	if err != nil {
+		return e2eTraefikPort
+	}
+	defer resp.Body.Close()
+
+	var result map[string]interface{}
+	if err := json.NewDecoder(resp.Body).Decode(&result); err != nil {
+		return e2eTraefikPort
+	}
+
+	if cellID, ok := result["cell_id"].(string); ok && cellID == "cell-2" {
+		return e2eTraefikPortCell2
+	}
+	return e2eTraefikPort
+}
+
+// waitHTTP200WithHost polls an HTTPS endpoint via Traefik with a specific Host header.
+// Uses --connect-to equivalent to route through localhost Traefik.
+func waitHTTP200WithHost(host, path string, timeout time.Duration) {
+	port := resolveTraefikPort(e2eTenantID)
+	if path == "" {
+		path = "/"
+	}
+	if !strings.HasPrefix(path, "/") {
+		path = "/" + path
+	}
+
+	targetURL := fmt.Sprintf("https://%s%s", host, path)
+
+	// Create TLS client that connects to localhost:port but sends the host header.
+	transport := &http.Transport{
+		TLSClientConfig: &tls.Config{
+			InsecureSkipVerify: true, //nolint:gosec // E2E test against local k3d
+			ServerName:         host,
+		},
+		DialContext: func(_ context.Context, _, _ string) (net.Conn, error) {
+			// Override DNS resolution to point at localhost Traefik.
+			return net.DialTimeout("tcp", "127.0.0.1:"+port, 5*time.Second)
+		},
+	}
+	client := &http.Client{
+		Transport: transport,
+		Timeout:   10 * time.Second,
+	}
+
+	Eventually(func() int {
+		resp, err := client.Get(targetURL)
+		if err != nil {
+			GinkgoWriter.Printf("HTTP probe %s: %v\n", targetURL, err)
+			return 0
+		}
+		defer resp.Body.Close()
+		return resp.StatusCode
+	}, timeout, httpPollInterval).Should(Equal(http.StatusOK),
+		"expected HTTP 200 from %s via Traefik port %s", targetURL, port)
+}
+
+// httpGetWithHost performs an HTTP GET to a host via local Traefik and returns
+// status code and body.
+func httpGetWithHost(host, path string) (int, string, error) {
+	port := resolveTraefikPort(e2eTenantID)
+	if !strings.HasPrefix(path, "/") {
+		path = "/" + path
+	}
+
+	targetURL := fmt.Sprintf("https://%s%s", host, path)
+
+	transport := &http.Transport{
+		TLSClientConfig: &tls.Config{
+			InsecureSkipVerify: true, //nolint:gosec // E2E test against local k3d
+			ServerName:         host,
+		},
+		DialContext: func(_ context.Context, _, _ string) (net.Conn, error) {
+			return net.DialTimeout("tcp", "127.0.0.1:"+port, 5*time.Second)
+		},
+	}
+	client := &http.Client{
+		Transport: transport,
+		Timeout:   10 * time.Second,
+	}
+
+	resp, err := client.Get(targetURL)
+	if err != nil {
+		return 0, "", err
+	}
+	defer resp.Body.Close()
+
+	body, err := io.ReadAll(resp.Body)
+	if err != nil {
+		return resp.StatusCode, "", err
+	}
+	return resp.StatusCode, string(body), nil
+}
+
+// deployAndWaitSuccess runs loopzero deploy --json in the given directory, waits for
+// the build to reach SUCCEEDED, and returns the build ID and full JSON response.
+func deployAndWaitSuccess(dir, env string, timeout time.Duration) (buildID string, result map[string]interface{}) {
+	args := []string{"deploy", "--env", env, "--no-wait", "--json"}
+	cmd := exec.Command("loopzero", args...)
+	cmd.Dir = dir
+	cmd.Env = append(os.Environ(),
+		"LOOPZERO_API_URL="+apiURL(),
+		"LOOPZERO_TOKEN="+seed.AuthToken,
+	)
+
+	var stdoutBuf, stderrBuf strings.Builder
+	cmd.Stdout = &stdoutBuf
+	cmd.Stderr = &stderrBuf
+
+	err := cmd.Run()
+	exitCode := 0
+	if err != nil {
+		if exitErr, ok := err.(*exec.ExitError); ok {
+			exitCode = exitErr.ExitCode()
+		}
+	}
+
+	stdout := stdoutBuf.String()
+	stderr := stderrBuf.String()
+
+	Expect(exitCode).To(Equal(0),
+		"loopzero deploy failed with exit %d\nstdout: %s\nstderr: %s", exitCode, stdout, stderr)
+
+	// Parse JSON to extract build_id.
+	result = make(map[string]interface{})
+	lines := strings.Split(strings.TrimSpace(stdout), "\n")
+	for i := len(lines) - 1; i >= 0; i-- {
+		line := strings.TrimSpace(lines[i])
+		if strings.HasPrefix(line, "{") {
+			if err := json.Unmarshal([]byte(line), &result); err == nil {
+				break
+			}
+		}
+	}
+
+	Expect(result).To(HaveKey("build_id"),
+		"deploy JSON output missing build_id\nstdout: %s", stdout)
+
+	buildID, ok := result["build_id"].(string)
+	Expect(ok).To(BeTrue(), "build_id should be a string")
+	Expect(buildID).NotTo(BeEmpty())
+
+	// Wait for build to succeed.
+	status := waitBuildTerminal(buildID, timeout)
+	Expect(status).To(Equal("SUCCEEDED"),
+		"build %s ended with status %s, expected SUCCEEDED", buildID, status)
+
+	return buildID, result
+}
+
+// assertAuditEntry verifies that the audit log contains an entry with the
+// given action substring and optional project filter.
+func assertAuditEntry(action string, project string) {
+	url := fmt.Sprintf("%s/api/v1/audit?limit=200", apiURL())
+	client := &http.Client{Timeout: 10 * time.Second}
+
+	Eventually(func() bool {
+		req, err := http.NewRequest("GET", url, nil)
+		if err != nil {
+			return false
+		}
+		req.Header.Set("Authorization", "Bearer "+seed.AuthToken)
+
+		resp, err := client.Do(req)
+		if err != nil {
+			return false
+		}
+		defer resp.Body.Close()
+
+		var result map[string]interface{}
+		if err := json.NewDecoder(resp.Body).Decode(&result); err != nil {
+			return false
+		}
+
+		entries, ok := result["entries"].([]interface{})
+		if !ok {
+			// Try alternate key "items".
+			entries, ok = result["items"].([]interface{})
+			if !ok {
+				return false
+			}
+		}
+
+		for _, raw := range entries {
+			entry, ok := raw.(map[string]interface{})
+			if !ok {
+				continue
+			}
+
+			entryAction, _ := entry["action"].(string)
+			if !strings.Contains(entryAction, action) {
+				continue
+			}
+
+			// If project filter specified, check metadata/resource_id.
+			if project != "" {
+				entryJSON, _ := json.Marshal(entry)
+				if !strings.Contains(string(entryJSON), project) {
+					continue
+				}
+			}
+			return true
+		}
+		return false
+	}, 30*time.Second, 5*time.Second).Should(BeTrue(),
+		"expected audit entry with action %q for project %q", action, project)
+}
+
+// ensureProjectDeleted idempotently deletes a project if it exists.
+// Used for cleanup before/after journey tests.
+func ensureProjectDeleted(project string) {
+	cmd := exec.Command("loopzero", "project", "delete", project, "--yes", "--json")
+	cmd.Env = append(os.Environ(),
+		"LOOPZERO_API_URL="+apiURL(),
+		"LOOPZERO_TOKEN="+seed.AuthToken,
+	)
+	// Ignore errors — project may not exist.
+	_ = cmd.Run()
+}
+
+// skipIfNotE2E skips the current spec if E2E prerequisites are not met.
+func skipIfNotE2E() {
+	if os.Getenv("LOOPZERO_E2E") == "" {
+		Skip("Set LOOPZERO_E2E=1 to run E2E tests")
+	}
+	if !clusterRunning() {
+		Skip("kubectl cluster-info failed — clusters not running")
+	}
+	if !apiHealthy() {
+		Skip("API deep health check failed — API not ready")
+	}
+}
+
+// seedE2E runs the idempotent E2E seeder.
+func seedE2E() {
+	err := seed.Run(seed.Config{})
+	Expect(err).NotTo(HaveOccurred(), "E2E seed failed")
+}
+
+// assertNoForbiddenTermsInAll checks that none of the forbidden internal terms
+// appear in any of the provided strings. Uses the canonical forbiddenInternalTerms
+// list from constants_test.go.
+func assertNoForbiddenTermsInAll(outputs map[string]string) {
+	for label, output := range outputs {
+		lowered := strings.ToLower(output)
+		for _, term := range forbiddenInternalTerms {
+			Expect(lowered).NotTo(
+				ContainSubstring(strings.ToLower(term)),
+				"Rule 3 violation: %q found in %s", term, label,
+			)
+		}
+	}
+}
+
+// waitReleaseActive polls the project status API until the release for the
+// given build becomes ACTIVE.
+func waitReleaseActive(project, env, buildID string, timeout time.Duration) {
+	url := fmt.Sprintf("%s/api/v1/projects/%s/status?env=%s", apiURL(), project, env)
+	client := &http.Client{Timeout: 10 * time.Second}
+
+	Eventually(func() bool {
+		req, err := http.NewRequest("GET", url, nil)
+		if err != nil {
+			return false
+		}
+		req.Header.Set("Authorization", "Bearer "+seed.AuthToken)
+
+		resp, err := client.Do(req)
+		if err != nil {
+			return false
+		}
+		defer resp.Body.Close()
+
+		var result map[string]interface{}
+		if err := json.NewDecoder(resp.Body).Decode(&result); err != nil {
+			return false
+		}
+
+		activeRelease, ok := result["active_release"].(map[string]interface{})
+		if !ok {
+			return false
+		}
+
+		status, _ := activeRelease["status"].(string)
+		releaseBuildID, _ := activeRelease["build_id"].(string)
+
+		return status == "ACTIVE" && releaseBuildID == buildID
+	}, timeout, releasePollInterval).Should(BeTrue(),
+		"release for build %s did not become ACTIVE in env %s within %s", buildID, env, timeout)
 }

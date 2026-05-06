@@ -1,0 +1,12 @@
+version: 1
+project: secret-app
+
+apps:
+  api:
+    path: .
+    framework: express
+    type: server
+    build: dockerfile
+    port: 3001
+    secrets:
+      - SECRET_PING
