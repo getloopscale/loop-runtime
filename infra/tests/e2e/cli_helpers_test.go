@@ -130,6 +130,22 @@ func expectNoInternalTerms(text string, context string) {
 	}
 }
 
+// expectNoConcurrencyTerms asserts that `text` does not contain any forbidden
+// term from the stricter concurrencyForbiddenTerms list (Rule 3 + concurrency
+// hardening). Used by concurrent-deploy rejection tests where leaking "lock"
+// or "advisory" would expose internal locking primitives.
+func expectNoConcurrencyTerms(text string, context string) {
+	lowered := strings.ToLower(text)
+	for _, term := range concurrencyForbiddenTerms {
+		if strings.Contains(lowered, strings.ToLower(term)) {
+			Fail(fmt.Sprintf(
+				"Rule 3 (concurrency) violation: %q found in %s output\n--- output ---\n%s\n",
+				term, context, text,
+			))
+		}
+	}
+}
+
 // expectAllowedExitCode asserts that `code` is one of 0/1/2/3/4/5 per Rule 4.
 func expectAllowedExitCode(code int, context string) {
 	_, ok := allowedExitCodes[code]

@@ -60,9 +60,15 @@ func runLoopZeroDeploy(dir string, args ...string) (stdout, stderr string, exitC
 	allArgs := append([]string{"deploy"}, args...)
 	cmd := exec.Command("loopzero", allArgs...)
 	cmd.Dir = dir
+	// Honor LOOPZERO_TOKEN from the parent env (real JWT minted by Hydra) when set,
+	// falling back to seed.AuthToken (placeholder used by old tests).
+	token := os.Getenv("LOOPZERO_TOKEN")
+	if token == "" {
+		token = seed.AuthToken
+	}
 	cmd.Env = append(os.Environ(),
 		"LOOPZERO_API_URL="+apiURL(),
-		"LOOPZERO_TOKEN="+seed.AuthToken,
+		"LOOPZERO_TOKEN="+token,
 	)
 
 	var stdoutBuf, stderrBuf strings.Builder

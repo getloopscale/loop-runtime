@@ -198,7 +198,7 @@ func waitBuildTerminal(buildID string, timeout time.Duration) string {
 		if err != nil {
 			return false
 		}
-		req.Header.Set("Authorization", "Bearer "+seed.AuthToken)
+		req.Header.Set("Authorization", "Bearer "+resolveToken())
 
 		resp, err := client.Do(req)
 		if err != nil {
@@ -207,7 +207,7 @@ func waitBuildTerminal(buildID string, timeout time.Duration) string {
 		defer resp.Body.Close()
 
 		// On 401, token might have expired — re-seed would be needed.
-		// For now, just retry with the static token.
+		// For now, just retry with the resolved token.
 		if resp.StatusCode == http.StatusUnauthorized {
 			return false
 		}
@@ -275,7 +275,7 @@ func resolveTraefikPort(tenant string) string {
 	if err != nil {
 		return e2eTraefikPort
 	}
-	req.Header.Set("Authorization", "Bearer "+seed.AuthToken)
+	req.Header.Set("Authorization", "Bearer "+resolveToken())
 
 	resp, err := client.Do(req)
 	if err != nil {
@@ -380,7 +380,7 @@ func deployAndWaitSuccess(dir, env string, timeout time.Duration) (buildID strin
 	cmd.Dir = dir
 	cmd.Env = append(os.Environ(),
 		"LOOPZERO_API_URL="+apiURL(),
-		"LOOPZERO_TOKEN="+seed.AuthToken,
+		"LOOPZERO_TOKEN="+resolveToken(),
 	)
 
 	var stdoutBuf, stderrBuf strings.Builder
@@ -439,7 +439,7 @@ func assertAuditEntry(action string, project string) {
 		if err != nil {
 			return false
 		}
-		req.Header.Set("Authorization", "Bearer "+seed.AuthToken)
+		req.Header.Set("Authorization", "Bearer "+resolveToken())
 
 		resp, err := client.Do(req)
 		if err != nil {
@@ -492,10 +492,29 @@ func ensureProjectDeleted(project string) {
 	cmd := exec.Command("loopzero", "project", "delete", project, "--yes", "--json")
 	cmd.Env = append(os.Environ(),
 		"LOOPZERO_API_URL="+apiURL(),
-		"LOOPZERO_TOKEN="+seed.AuthToken,
+		"LOOPZERO_TOKEN="+resolveToken(),
 	)
 	// Ignore errors — project may not exist.
 	_ = cmd.Run()
+}
+
+// resolveToken returns the JWT to inject into spawned loopzero CLI processes.
+// Resolution order (first non-empty wins):
+//  1. process env LOOPZERO_TOKEN (CI/operator override — real Hydra-minted JWT)
+//  2. ~/.loopzero/local-dogfood-token.txt (dogfood-seeded JWT)
+//  3. seed.AuthToken (legacy placeholder; only valid in dev-mode API)
+func resolveToken() string {
+	if t := os.Getenv("LOOPZERO_TOKEN"); t != "" {
+		return t
+	}
+	if home, err := os.UserHomeDir(); err == nil {
+		if data, err := os.ReadFile(home + "/.loopzero/local-dogfood-token.txt"); err == nil {
+			if s := strings.TrimSpace(string(data)); s != "" {
+				return s
+			}
+		}
+	}
+	return seed.AuthToken
 }
 
 // skipIfNotE2E skips the current spec if E2E prerequisites are not met.
@@ -543,7 +562,7 @@ func waitReleaseActive(project, env, buildID string, timeout time.Duration) {
 		if err != nil {
 			return false
 		}
-		req.Header.Set("Authorization", "Bearer "+seed.AuthToken)
+		req.Header.Set("Authorization", "Bearer "+resolveToken())
 
 		resp, err := client.Do(req)
 		if err != nil {

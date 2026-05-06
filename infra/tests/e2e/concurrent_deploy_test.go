@@ -25,10 +25,6 @@ import (
 	"github.com/loopzero/loopzero/infra/tests/seed"
 )
 
-// forbiddenTerms references the canonical list from constants_test.go
-// with additional concurrency-specific terms.
-var forbiddenTerms = append(forbiddenInternalTerms, "lock", "advisory")
-
 // deployResult captures the output of a single loopzero deploy invocation.
 type deployResult struct {
 	stdout   string
@@ -47,18 +43,6 @@ func runDeployAsync(dir string, env string, barrier <-chan struct{}, wg *sync.Wa
 		stdout:   stdout,
 		stderr:   stderr,
 		exitCode: exitCode,
-	}
-}
-
-// assertNoForbiddenTerms checks that none of the forbidden internal terms
-// appear in the given output string.
-func assertNoForbiddenTerms(output string, label string) {
-	lower := strings.ToLower(output)
-	for _, term := range forbiddenTerms {
-		Expect(lower).NotTo(
-			ContainSubstring(strings.ToLower(term)),
-			fmt.Sprintf("%s should not contain forbidden term %q", label, term),
-		)
 	}
 }
 
@@ -180,10 +164,10 @@ var _ = Describe("Concurrent Deploy Rejection", Ordered, func() {
 		)
 
 		// Assert: no forbidden internal terms in ANY output from either deploy.
-		assertNoForbiddenTerms(r1.stdout, "deploy-1 stdout")
-		assertNoForbiddenTerms(r1.stderr, "deploy-1 stderr")
-		assertNoForbiddenTerms(r2.stdout, "deploy-2 stdout")
-		assertNoForbiddenTerms(r2.stderr, "deploy-2 stderr")
+		expectNoConcurrencyTerms(r1.stdout, "deploy-1 stdout")
+		expectNoConcurrencyTerms(r1.stderr, "deploy-1 stderr")
+		expectNoConcurrencyTerms(r2.stdout, "deploy-2 stdout")
+		expectNoConcurrencyTerms(r2.stderr, "deploy-2 stderr")
 
 		// Assert: the successful deploy's --json output is valid JSON.
 		successResult := r1
@@ -236,10 +220,10 @@ var _ = Describe("Concurrent Deploy Rejection", Ordered, func() {
 			"Second deploy should succeed.\nStdout: %s\nStderr: %s", r2.stdout, r2.stderr)
 
 		// Assert: no forbidden internal terms in any output.
-		assertNoForbiddenTerms(r1.stdout, "deploy-production stdout")
-		assertNoForbiddenTerms(r1.stderr, "deploy-production stderr")
-		assertNoForbiddenTerms(r2.stdout, "deploy-staging stdout")
-		assertNoForbiddenTerms(r2.stderr, "deploy-staging stderr")
+		expectNoConcurrencyTerms(r1.stdout, "deploy-production stdout")
+		expectNoConcurrencyTerms(r1.stderr, "deploy-production stderr")
+		expectNoConcurrencyTerms(r2.stdout, "deploy-staging stdout")
+		expectNoConcurrencyTerms(r2.stderr, "deploy-staging stderr")
 
 		// Assert: both outputs are valid JSON (--json flag was set).
 		for i, r := range []deployResult{r1, r2} {
