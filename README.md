@@ -105,9 +105,9 @@ No Kubernetes knowledge required. No Helm. No Dockerfile required. Just push.
 
 | Tier | Price | Projects | Builds/mo | Max Replicas |
 |------|-------|----------|-----------|-------------|
-| Starter | Free | 1 | 100 | 2 |
-| Pro | $29/mo | 3 | 500 | 5 |
-| Team | $79/mo | 10 | 2000 | 10 |
+| Starter | Free | 1 | 50 | 1 |
+| Pro | $29/mo | 2 | 300 | 4 |
+| Team | $79/mo | 5 | 600 | 10 |
 | Enterprise | Custom | Unlimited | Unlimited | Unlimited |
 
 ### Test Suite
