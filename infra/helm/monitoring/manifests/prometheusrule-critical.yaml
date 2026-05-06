@@ -61,17 +61,13 @@ spec:
             description: "Gitea has been unreachable for more than 2 minutes. Builds cannot clone source code. GitOps pushes will fail."
             runbook: "Check Gitea pod status. Verify PVC is bound. Check pod logs. If data loss, restore from MinIO backup (RPO: 6h)."
 
-        # T1.2 / VAL-001: loopzero_gitea_last_backup_timestamp not emitted
-        # (Gitea backup cron lacks Prometheus exporter integration).
-        - alert: LoopZeroGiteaBackupStale
-          expr: vector(0) > 1  # ORPHAN: loopzero_gitea_last_backup_timestamp not emitted
-          for: 0m
-          labels:
-            severity: critical
-          annotations:
-            summary: "Gitea backup is stale (>7h)"
-            description: "Last Gitea git bundle backup is older than 7 hours. RPO exceeded."
-            runbook: "Check Gitea backup CronJob. Verify MinIO connectivity. Trigger manual git bundle."
+        # ORPHAN alert removed by velero-backup-dr-plan v1.0 / T3.1.
+        # The legacy `LoopZeroGiteaBackupStale` rule referenced a metric
+        # (`loopzero_gitea_last_backup_timestamp`) that was never emitted.
+        # Replaced by `LoopZeroVeleroBackupStale` in
+        # infra/helm/monitoring/manifests/prometheusrule-velero.yaml,
+        # which covers Gitea AND every other scheduled scope (CRDs,
+        # ArgoCD, Secrets, full snapshot) via velero_backup_*.
 
         - alert: LoopZeroArgoCDCircuitOpen
           expr: loopzero_argocd_circuit_state == 1

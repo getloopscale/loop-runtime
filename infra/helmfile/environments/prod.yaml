@@ -56,3 +56,11 @@ runtime2CellId: cell-2
 # cells.status, so production traffic routes to cell-1 only until
 # canary promotion.
 dynamicRouter: true
+
+# velero-backup-dr-plan v1.0 / T0.2 — Velero BSL config. Bucket name comes
+# from Pulumi L1 (InfraOutputs.veleroBackupsBucketName) and is protected
+# from accidental destroy in prod (T0.1 protect:isProd).
+velero:
+  bucket: loopzero-infra-sfo3-velero-backups
+  region: sfo3
+  s3Url: https://sfo3.digitaloceanspaces.com

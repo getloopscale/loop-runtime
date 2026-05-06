@@ -1,0 +1,22 @@
+# SPDX-License-Identifier: Apache-2.0
+# velero-backup-dr-plan v1.0 / T1.1 — Velero wrapper for K8s resource
+# backups (CRDs, ArgoCD state, Gitea metadata, Secrets, full snapshots).
+# Pinned to vmware-tanzu/velero 7.2.1 (Velero 1.14.x).
+#
+# ADR D4: deployNodeAgent disabled — V1 backs up only K8s resources
+# (metadata), not PV data via restic/kopia. Gitea repos are small and
+# re-pushable; MinIO artifacts are reproducible build outputs.
+#
+# Deployed by Helmfile L2 in Wave -1 (stateful infra), needs:[cert-manager].
+
+apiVersion: v2
+name: loopzero-velero
+description: Velero wrapper for LoopZero platform K8s resource backups
+type: application
+version: 0.1.0
+appVersion: "1.14.1"
+
+dependencies:
+  - name: velero
+    version: 7.2.1
+    repository: https://vmware-tanzu.github.io/helm-charts

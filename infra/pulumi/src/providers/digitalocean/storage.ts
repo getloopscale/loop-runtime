@@ -17,15 +17,19 @@ export class DigitalOceanStorageProvider implements IProviderStorage {
     //
     // If an orphan bucket exists after partial destroy, resolve via CLI:
     //   pulumi import digitalocean:index/spacesBucket:SpacesBucket <name> <region>,<name>
-    const bucket = new digitalocean.SpacesBucket(spec.name, {
-      name: spec.name,
-      region: spec.region,
-      acl: "private",
-      forceDestroy: true,
-      versioning: {
-        enabled: spec.versioning ?? false,
+    const bucket = new digitalocean.SpacesBucket(
+      spec.name,
+      {
+        name: spec.name,
+        region: spec.region,
+        acl: "private",
+        forceDestroy: spec.forceDestroy ?? true,
+        versioning: {
+          enabled: spec.versioning ?? false,
+        },
       },
-    });
+      spec.protect ? { protect: true } : undefined,
+    );
 
     return {
       bucketName: bucket.name,

@@ -57,3 +57,12 @@ inClusterPostgres: true
 # default StorageClass (local-path on k3d, customer's default elsewhere).
 # Self-hosting must NOT assume DO-specific resources.
 underlyingStorageClass: ""
+
+# velero-backup-dr-plan v1.0 / T0.2 + ADR D5 — Velero BSL config in
+# standalone mode points to the in-cluster MinIO (not DO Spaces, no cloud
+# credentials available). The `velero-backups` bucket is pre-created by
+# the MinIO Helm values (EC-4 fix: see infra/helm/minio/values.yaml).
+velero:
+  bucket: velero-backups
+  region: us-east-1
+  s3Url: http://minio.loopzero-system.svc:9000

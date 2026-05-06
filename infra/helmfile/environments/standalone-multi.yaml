@@ -69,3 +69,10 @@ crossCluster:
   giteaApi: "http://host.k3d.internal:3000"
   harborApi: "http://host.k3d.internal:30002"
   prometheusApi: "http://host.k3d.internal:9090"
+
+# velero-backup-dr-plan v1.0 / T0.2 + ADR D5 — Velero BSL targets in-cluster
+# MinIO. Bucket pre-created by MinIO Helm values (EC-4).
+velero:
+  bucket: velero-backups
+  region: us-east-1
+  s3Url: http://minio.loopzero-system.svc:9000
