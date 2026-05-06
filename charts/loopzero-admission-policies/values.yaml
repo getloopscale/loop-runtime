@@ -45,7 +45,8 @@ clusterImagePolicyKeyless:
   oidcIssuer: https://token.actions.githubusercontent.com
   identityRegexp: "^https://github\\.com/getloopscale/loopzero/"
 
-# VAP toggles. Names match infra/helm/admission-policies for CH-G11 alignment.
+# VAP toggles. Unified schema — matches infra/helm/admission-policies (bootstrap).
+# All VAP templates read from .Values.vaps.<name> (boolean).
 vaps:
   disallowLatestTag: true
   restrictRegistries: true
@@ -59,27 +60,6 @@ vaps:
   noRuntimeImageMutations: false
   noRuntimeImageMutationsAction: Warn
   noRuntimeImageMutationsFailurePolicy: Ignore
-
-# Compatibility shim: legacy values.yaml had `policies.<name>.enabled` structure.
-# Existing VAP templates (vap-disallow-latest-tag.yaml, etc) read from `.Values.policies.<name>.enabled`.
-# Keep both during transition; new VAPs (vap-no-runtime-image-mutations,
-# vap-tenant-namespace) read from `.Values.vaps.<name>` to match infra/helm bootstrap.
-policies:
-  requireResourceLimits:
-    enabled: true
-  disallowLatestTag:
-    enabled: true
-  restrictRegistries:
-    enabled: true
-    allowedRegistries:
-      - "registry.digitalocean.com/loopzero-system/*"
-      - "k3d-loopzero-registry:5000/*"
-  requireImageSignature:
-    enabled: true
-  argocdManagedBy:
-    enabled: true
-  protectPlatformNetworkpolicies:
-    enabled: true
 
 # PrometheusRule (alerts) toggle.
 alerts:

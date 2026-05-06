@@ -114,12 +114,12 @@ No Kubernetes knowledge required. No Helm. No Dockerfile required. Just push.
 
 | Component | Count | Status |
 |-----------|------:|--------|
-| CLI (Jest) | 1,171+ | Passing (59 suites; 7 skipped) |
+| CLI (Jest) | 1,210+ | Passing |
 | API + Shared libs (Go) | 41 packages | Passing (multi-cell: placement determinism with -race + admin_pin_cell C11 authz + migration_007/008 invariants + reaper observability) |
 | Operators (Ginkgo + envtest) | 200+ specs | Passing (+ application reaper 10 fake-client tests + cell-aware factory 7 tests, no envtest dependency) |
-| Pulumi (vitest) | 269+ specs | Passing (heal-script H14 24 invariants + migrations-forward-only 11 invariants) |
+| Pulumi (vitest) | 310+ specs | Passing (heal-script H14 24 invariants + migrations-forward-only 11 invariants) |
 | State machines | 10 application + 9 release + 7 build | Passing (`ApplicationCleaned` terminal state via `ApplicationOrphaned` event added 2026-05-03) |
-| CI pipeline | 16 workflows | Green (incl. `cell2-soaks.yml` weekly Sunday 02:00 UTC + `platform-health-7day-watch.yml` hourly) |
+| CI pipeline | 29 workflows | Green (incl. `cell2-soaks.yml` weekly Sunday 02:00 UTC + `platform-health-7day-watch.yml` hourly) |
 | Regression matrix | 166 entries | 0 critical miss, audit GREEN |
 | Cleanroom dogfood (E2E) | preflight + 11 journeys | **12/12 GREEN** end-to-end on fresh `k3d` destroy/setup cycle (2026-05-05, tag `dogfood-cleanroom-converged-20260505`). Validates: solo deploy, multi-server (api+worker), secrets via ESO, scale persistence, promote staging→production, rollback v2→v1 with state machine, custom domain register/list/status/remove, GitHub connect/disconnect, preview list/inspect/delete, failure modes (auth/cap/build), admin (evict dry-run + service-auth gating). Total: ~33min. Rule 3 audit: 0 internal-term matches in CLI output. |
 
@@ -359,7 +359,7 @@ loopzero deploy (or git push)
 | CLI | TypeScript + Commander (36 commands) |
 | API | Go 1.25 + chi + pgx (connection pool) |
 | Operators | Go + kubebuilder + controller-runtime (10 CRDs, 8 controllers) |
-| Shared libs | Go -- errors, logging, naming, health, statemachine, jwt, enforcement, circuitbreaker |
+| Shared libs | Go -- errors, errors/http, logging, naming, conditions, statemachine, jwt, enforcement, circuitbreaker |
 | Auth | Ory Kratos (identity) + Ory Hydra (OAuth2/OIDC) |
 | Build engine | Argo Workflows + BuildKit (rootless) |
 | GitOps | ArgoCD (manual sync) + Gitea |
@@ -370,14 +370,14 @@ loopzero deploy (or git push)
 | Static assets | DigitalOcean Spaces + CDN |
 | Monitoring | Prometheus + Grafana + Loki + Tempo + OpenTelemetry |
 | IaC | Pulumi (TypeScript) -- DigitalOcean + Cloudflare |
-| CI/CD | GitHub Actions (14 workflows) |
-| Helm charts | 22 charts (all pinned versions) |
+| CI/CD | GitHub Actions (29 workflows) |
+| Helm charts | 32 bootstrap (`infra/helm/`) + 13 published (`charts/`) |
 
 ### Production Infrastructure (DigitalOcean)
 
 | Resource | Configuration |
 |----------|---------------|
-| 3 DOKS clusters | v1.32, 2 nodes each, SFO3 |
+| 4 DOKS clusters | v1.32, 2 nodes each, SFO3 (mgmt, build, runtime, runtime-2) |
 | PostgreSQL | v16, managed |
 | Container Registry | DigitalOcean (Professional) |
 | Edge proxy | Cloudflare Tunnel (zero public IPs, WAF/DDoS) |
@@ -405,7 +405,7 @@ Go 1.25+, Node.js 20+, Docker, [k3d](https://k3d.io), [Tilt](https://tilt.dev), 
 ### Setup
 
 ```bash
-task setup       # Create 3 k3d clusters + install all infrastructure (idempotent)
+task setup       # Create 4 k3d clusters + install all infrastructure (idempotent)
 tilt up          # Start dev loop with hot reload
 task doctor      # Verify everything is healthy
 ```
@@ -414,7 +414,7 @@ task doctor      # Verify everything is healthy
 
 ```bash
 task test                     # All tests
-cd cli && npm test            # CLI tests (Jest, 1079 tests)
+cd cli && npm test            # CLI tests (Jest, 1210+ tests)
 cd api && go test ./...       # API tests
 cd operators && go test ./... # Operator tests (Ginkgo + envtest)
 cd pkg && go test ./...       # Shared library tests
@@ -452,5 +452,5 @@ See [CONTRIBUTING.md](CONTRIBUTING.md). Every PR starts with a failing test.
 ## Links
 
 - [CLI Reference](docs/cli-reference.md) -- authoritative specification (commands, exit codes, JSON schemas, contracts)
-- [Maturity Assessment](docs/maturity-assessment.md) -- honest 3.6/5 self-assessment (post Sprint 5 preview-envs full shipment + live E2E) with path to 4.0 and 5.0
+- [Maturity Assessment](docs/maturity-assessment.md) -- 3.9/5 self-assessment (post cell-2 activation + cleanroom dogfood 12/12 GREEN) with path to 4.0 and 5.0
 - [Changelog](CHANGELOG.md)

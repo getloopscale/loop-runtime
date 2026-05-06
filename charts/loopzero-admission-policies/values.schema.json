@@ -17,45 +17,9 @@
         }
       }
     },
-    "policies": {
-      "type": "object",
-      "description": "Legacy per-policy enable toggles (compat with vap-* templates)",
-      "properties": {
-        "requireResourceLimits": {
-          "type": "object",
-          "properties": { "enabled": { "type": "boolean" } }
-        },
-        "disallowLatestTag": {
-          "type": "object",
-          "properties": { "enabled": { "type": "boolean" } }
-        },
-        "restrictRegistries": {
-          "type": "object",
-          "properties": {
-            "enabled": { "type": "boolean" },
-            "allowedRegistries": {
-              "type": "array",
-              "items": { "type": "string", "minLength": 1 }
-            }
-          }
-        },
-        "requireImageSignature": {
-          "type": "object",
-          "properties": { "enabled": { "type": "boolean" } }
-        },
-        "argocdManagedBy": {
-          "type": "object",
-          "properties": { "enabled": { "type": "boolean" } }
-        },
-        "protectPlatformNetworkpolicies": {
-          "type": "object",
-          "properties": { "enabled": { "type": "boolean" } }
-        }
-      }
-    },
     "vaps": {
       "type": "object",
-      "description": "VAP toggles aligned with infra/helm bootstrap (T1.2)",
+      "description": "VAP toggles — unified schema, matches infra/helm/admission-policies bootstrap",
       "properties": {
         "disallowLatestTag": { "type": "boolean" },
         "restrictRegistries": { "type": "boolean" },

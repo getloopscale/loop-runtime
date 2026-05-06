@@ -46,10 +46,10 @@ domain: dev.loopzero.example
 resources:
   requests:
     cpu: 100m
-    memory: 256Mi
+    memory: 64Mi
   limits:
-    cpu: 1000m
-    memory: 1Gi
+    cpu: 500m
+    memory: 256Mi
 
 # F-08 (CHG-2026-04-29-DOGFOOD T5.3) — ServiceMonitor opt-in.
 # Default false: standalone-multi sem prometheus-operator não renderiza o

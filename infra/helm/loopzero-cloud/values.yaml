@@ -31,11 +31,11 @@ domain: dev.loopzero.example
 
 resources:
   requests:
-    cpu: 100m
-    memory: 256Mi
+    cpu: 50m
+    memory: 64Mi
   limits:
-    cpu: 1000m
-    memory: 512Mi
+    cpu: 300m
+    memory: 128Mi
 
 env:
   # B50: PORT must match service.port. loopzero-cloud binary uses :13002 by default.

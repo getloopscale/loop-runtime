@@ -1,5 +1,5 @@
 # helm-unittest: ValidatingAdmissionPolicy rendering for loopzero-admission-policies.
-# Plan T1.5 + T1.2.
+# Plan T1.5 + T1.2. Unified to .Values.vaps.* schema (helm-chart-drift-alignment-plan T2.1).
 
 suite: VAP rendering
 templates:
@@ -14,7 +14,7 @@ tests:
   - it: disallow-latest-tag renders as ValidatingAdmissionPolicy
     template: vap-disallow-latest-tag.yaml
     set:
-      policies.disallowLatestTag.enabled: true
+      vaps.disallowLatestTag: true
     asserts:
       - hasDocuments:
           count: 2  # Policy + Binding
@@ -24,7 +24,9 @@ tests:
   - it: restrict-registries renders both Policy and Binding
     template: vap-restrict-registries.yaml
     set:
-      policies.restrictRegistries.enabled: true
+      vaps.restrictRegistries: true
+      registries.docrPrefix: "registry.digitalocean.com/loopzero-system/"
+      registries.harborPrefix: "harbor.dev.loopzero.example/loopzero-platform/"
     asserts:
       - hasDocuments:
           count: 2
@@ -32,7 +34,7 @@ tests:
   - it: require-resource-limits renders when enabled
     template: vap-require-resource-limits.yaml
     set:
-      policies.requireResourceLimits.enabled: true
+      vaps.requireResourceLimits: true
     asserts:
       - hasDocuments:
           count: 2
@@ -40,7 +42,31 @@ tests:
   - it: argocd-managed-by renders when enabled
     template: vap-argocd-managed-by.yaml
     set:
-      policies.argocdManagedBy.enabled: true
+      vaps.argocdManagedBy: true
+    asserts:
+      - hasDocuments:
+          count: 2
+
+  - it: protect-platform-networkpolicies has matchConditions (B33 regression guard)
+    template: vap-protect-platform-networkpolicies.yaml
+    set:
+      vaps.protectPlatformNetworkpolicies: true
+    documentIndex: 0
+    asserts:
+      - isKind:
+          of: ValidatingAdmissionPolicy
+      - exists:
+          path: spec.matchConditions
+      - contains:
+          path: spec.matchConditions
+          content:
+            name: skip-cluster-internal-gc
+          any: true
+
+  - it: require-image-signature renders when enabled
+    template: vap-require-image-signature.yaml
+    set:
+      vaps.requireImageSignature: true
     asserts:
       - hasDocuments:
           count: 2

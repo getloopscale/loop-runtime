@@ -1,5 +1,5 @@
 # helm-unittest: Multi-namespace policy testing for loopzero-admission-policies.
-# Plan T7.5 (charts-sota Phase 7).
+# Plan T7.5 (charts-sota Phase 7). Unified to .Values.vaps.* schema (helm-chart-drift-alignment-plan T2.1).
 # Validates that VAPBindings target tenant namespaces correctly via namespaceSelector.
 
 suite: VAPBinding multi-namespace selector
@@ -13,7 +13,7 @@ tests:
   - it: VAPBinding disallow-latest-tag has namespaceSelector
     template: vap-disallow-latest-tag.yaml
     set:
-      policies.disallowLatestTag.enabled: true
+      vaps.disallowLatestTag: true
     documentIndex: 1
     asserts:
       - isKind:
@@ -24,7 +24,9 @@ tests:
   - it: VAPBinding restrict-registries scopes to tenant namespaces
     template: vap-restrict-registries.yaml
     set:
-      policies.restrictRegistries.enabled: true
+      vaps.restrictRegistries: true
+      registries.docrPrefix: "registry.digitalocean.com/loopzero-system/"
+      registries.harborPrefix: "harbor.dev.loopzero.example/loopzero-platform/"
     documentIndex: 1
     asserts:
       - isKind:
@@ -35,7 +37,7 @@ tests:
   - it: VAPBinding require-resource-limits has matchResources scope
     template: vap-require-resource-limits.yaml
     set:
-      policies.requireResourceLimits.enabled: true
+      vaps.requireResourceLimits: true
     documentIndex: 1
     asserts:
       - isKind:
@@ -46,7 +48,7 @@ tests:
   - it: validationActions includes Deny for disallow-latest-tag
     template: vap-disallow-latest-tag.yaml
     set:
-      policies.disallowLatestTag.enabled: true
+      vaps.disallowLatestTag: true
     documentIndex: 1
     asserts:
       - contains:
@@ -56,7 +58,7 @@ tests:
   - it: argocd-managed-by binding has correct namespaceSelector
     template: vap-argocd-managed-by.yaml
     set:
-      policies.argocdManagedBy.enabled: true
+      vaps.argocdManagedBy: true
     documentIndex: 1
     asserts:
       - isKind:

@@ -1,4 +1,7 @@
-{{- if .Values.policies.protectPlatformNetworkpolicies.enabled }}
+{{- if .Values.vaps.protectPlatformNetworkpolicies }}
+# CHG-2026-05-05-DOGFOOD-B33: matchConditions exclude the K8s namespace
+# garbage collector and kube-controller-manager. Without this, namespace
+# deletion deadlocks in Terminating state forever (GC rejected by VAP).
 apiVersion: admissionregistration.k8s.io/v1
 kind: ValidatingAdmissionPolicy
 metadata:
@@ -14,6 +17,12 @@ spec:
     namespaceSelector:
       matchLabels:
         loopzero.io/managed-by: environment-controller
+  matchConditions:
+    - name: skip-cluster-internal-gc
+      expression: >-
+        request.userInfo.username != 'system:serviceaccount:kube-system:namespace-controller'
+        && request.userInfo.username != 'system:kube-controller-manager'
+        && !('system:masters' in request.userInfo.groups)
   validations:
     - expression: >-
         !has(object.metadata.labels) ||

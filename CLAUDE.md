@@ -8,7 +8,7 @@ LoopZero is a **CLI-first Kubernetes PaaS** for monorepo deployments. Vercel-qua
 
 The authoritative specification is **`docs/cli-reference.md`**. If this file and the system design conflict, the system design wins.
 
-**Status:** Pre-release, Starter + Pro tiers launchable (98% confidence). **Maturity 3.9 / 5.0** (was 3.8; +0.1 from cell-2-activation-plan + fix-all-platform-issues-plan, 2026-05-03). 25/30 E2E tests pass. **Local cleanroom dogfood 12/12 GREEN end-to-end** (CHG-2026-05-05-DOGFOOD-CLEANROOM, tag `dogfood-cleanroom-converged-20260505`, 2026-05-05): `bash infra/scripts/dogfood-cleanroom-loop.sh` destroys all 4 k3d clusters → `task setup` + `task k3d:heal` + tilt CI → preflight 16/16 + 11 dogfood journeys (solo-deploy, multi-server, secrets, scale, promote, rollback, custom-domain, github-autodeploy, preview, failures, admin) all PASS in ~33min total without manual intervention. 39 systemic bugs B1-B39 identified + canonically fixed in 29 iterations. Sprints 0-8 (partial), 10, 11 complete. Sprint 6 (security + supply chain) — **fully shipped** (CHG-2026-04-26-SPRINT6-IMPL): cosign + syft SBOM + policy-controller deny-by-default + ClusterImagePolicy `loopzero-images-warn` shipped as Helm chart. Deny-flip + cosign keyless verification pending Sprint 9. Sprint 5 (preview envs) — **fully shipped** (CHG-2026-04-26-PREVIEW-IMPL). Sprint 8 Phase -1 + Phase 0 + Phase 2-subset GREEN (CHG-2026-04-27); Phase 1+3+4+5+6 deferred to CHG-002b/c. Sprint 9 not started. Hardening H1-H7 complete. KEDA scale-to-zero done. **Operator multi-binary split shipped** (CHG-2026-04-30-INFRA-PARITY): 4 independent binaries (tenant-operator, app-operator, preview-operator, platform-operator), each with own Helm chart, RBAC, Dockerfile, leader election. **Multi-cell infra-normalize shipped** (CHG-2026-04-30-INFRA-NORMALIZE): `cells` table (migration 000006), 4 cell metrics + 7 alerts, `loopzero admin tenants pin`, ClusterCredential bootstrap, validation matrix (10 offline gates), 2 new CI workflows (cli-commands, multi-cell). **Cell-2 ACTIVATED + fully validated LIVE** (cell-2-activation-plan + fix-all-platform-issues-plan, 2026-05-03): migration 000007 active, 12/12 ADR gates GREEN persistente, T4.3 E2E `loopzero deploy` → Pod Running on loopzero-runtime-2 + /health 200 + cell-1 NotFound (isolation), Stage 1 1h ADR-compliant 120 probes 0 5xx, EnvironmentReconciler cell-aware via `CellAwareRuntimeClientFactory` (covers monolithic + split-binary), heal H14+H15 (cell-2 ClusterCredential refresh+bootstrap + ArgoCD bearer token sync, idempotent), application reaper for orphan CRs (state-machine-driven via `ApplicationOrphaned` event → terminal `Cleaned`), migration 000008 ARCHIVED status (64 stale records archived), CC controller reorder eliminating token-propagation gap, mgmt-argocd duplicate env var fix, release reaper observability via `AppendSideEffect`. CI cron weekly armed (cell2-soaks.yml + platform-health-7day-watch.yml). **Layered bootstrap shipped** (CHG-2026-04-28-LAYERED-BOOTSTRAP): Pulumi L1-only + Helmfile L2 + ArgoCD L3 App-of-Apps. **Full dogfood validated** (CHG-2026-04-29): 13 iterations, 102+ bugs found/fixed, `loopzero deploy` end-to-end CLI→API→Argo→BuildKit→Gitea→ArgoCD→workload confirmed. 1171+ CLI tests + 41 Go packages + 200+ envtest specs + 269+ pulumi vitest specs passing. Production on DigitalOcean (4 DOKS + Loki + ESO + CF Tunnel + DO Spaces CDN + Valkey managed + Harbor). **Regression matrix: 166 entries, 0 critical miss, audit GREEN.**
+**Status:** Pre-release, Starter + Pro tiers launchable (98% confidence). **Maturity 3.9 / 5.0** (was 3.8; +0.1 from cell-2-activation-plan + fix-all-platform-issues-plan, 2026-05-03). 25/30 E2E tests pass. **Local cleanroom dogfood 12/12 GREEN end-to-end** (CHG-2026-05-05-DOGFOOD-CLEANROOM, tag `dogfood-cleanroom-converged-20260505`, 2026-05-05): `bash infra/scripts/dogfood-cleanroom-loop.sh` destroys all 4 k3d clusters → `task setup` + `task k3d:heal` + tilt CI → preflight 16/16 + 11 dogfood journeys (solo-deploy, multi-server, secrets, scale, promote, rollback, custom-domain, github-autodeploy, preview, failures, admin) all PASS in ~33min total without manual intervention. 39 systemic bugs B1-B39 identified + canonically fixed in 29 iterations. Sprints 0-8 (partial), 10, 11 complete. Sprint 6 (security + supply chain) — **fully shipped** (CHG-2026-04-26-SPRINT6-IMPL): cosign + syft SBOM + policy-controller deny-by-default + ClusterImagePolicy `loopzero-images-warn` shipped as Helm chart. Deny-flip + cosign keyless verification pending Sprint 9. Sprint 5 (preview envs) — **fully shipped** (CHG-2026-04-26-PREVIEW-IMPL). Sprint 8 Phase -1 + Phase 0 + Phase 2-subset GREEN (CHG-2026-04-27); Phase 1+3+4+5+6 deferred to CHG-002b/c. Sprint 9 not started. Hardening H1-H7 complete. KEDA scale-to-zero done. **Operator multi-binary split shipped** (CHG-2026-04-30-INFRA-PARITY): 4 independent binaries (tenant-operator, app-operator, preview-operator, platform-operator), each with own Helm chart, RBAC, Dockerfile, leader election. **Multi-cell infra-normalize shipped** (CHG-2026-04-30-INFRA-NORMALIZE): `cells` table (migration 000006), 4 cell metrics + 7 alerts, `loopzero admin tenants pin`, ClusterCredential bootstrap, validation matrix (10 offline gates), 2 new CI workflows (cli-commands, multi-cell). **Cell-2 ACTIVATED + fully validated LIVE** (cell-2-activation-plan + fix-all-platform-issues-plan, 2026-05-03): migration 000007 active, 12/12 ADR gates GREEN persistente, T4.3 E2E `loopzero deploy` → Pod Running on loopzero-runtime-2 + /health 200 + cell-1 NotFound (isolation), Stage 1 1h ADR-compliant 120 probes 0 5xx, EnvironmentReconciler cell-aware via `CellAwareRuntimeClientFactory` (covers monolithic + split-binary), heal H14+H15 (cell-2 ClusterCredential refresh+bootstrap + ArgoCD bearer token sync, idempotent), application reaper for orphan CRs (state-machine-driven via `ApplicationOrphaned` event → terminal `Cleaned`), migration 000008 ARCHIVED status (64 stale records archived), CC controller reorder eliminating token-propagation gap, mgmt-argocd duplicate env var fix, release reaper observability via `AppendSideEffect`. CI cron weekly armed (cell2-soaks.yml + platform-health-7day-watch.yml). **Layered bootstrap shipped** (CHG-2026-04-28-LAYERED-BOOTSTRAP): Pulumi L1-only + Helmfile L2 + ArgoCD L3 App-of-Apps. **Full dogfood validated** (CHG-2026-04-29): 13 iterations, 102+ bugs found/fixed, `loopzero deploy` end-to-end CLI→API→Argo→BuildKit→Gitea→ArgoCD→workload confirmed. 1210+ CLI tests + 41 Go packages + 200+ envtest specs + 310+ pulumi vitest specs passing. Production on DigitalOcean (4 DOKS + Loki + ESO + CF Tunnel + DO Spaces CDN + Valkey managed + Harbor). **Regression matrix: 166 entries, 0 critical miss, audit GREEN.**
 
 **Pricing:** Starter (Free, 1 project), Pro ($29/mo, 3 projects), Team ($79/mo, 10 projects), Enterprise (custom).
 
@@ -20,7 +20,7 @@ The authoritative specification is **`docs/cli-reference.md`**. If this file and
 
 **Path to maturity 4.0** (currently 3.9): (a) first CI Sunday cron GREEN producing real `cell2-soaks.yml` workflow run evidence, AND (b) 1 prod customer day-trial with no incidents (Sprint 9 prod canary). Local 7-day GREEN streak DROPPED as a gate (D7 reformulated 2026-05-03 — tautological in static dev env without diurnal traffic; CI cron + real prod usage are the legitimate signals).
 
-**Known issues:** AppSecret controller not implemented (ESO works directly, no lifecycle automation); Pulumi L1 refactored (CHG-2026-04-28-LAYERED-BOOTSTRAP removed `@pulumi/kubernetes`, 33 L2 files deleted) but consolidation of remaining env vars pending (GitHub App envFrom, CF_ZONE_MANAGEMENT, PG keepalive); local k3d cert-manager letsencrypt-prod cannot issue for `*.loopzero.local` (no public DNS for ACME challenge) — production uses CF-managed TLS so no impact, but local Stage 1 canary HTTP probes report HTTP 000 in `--smoke` mode (probes informational only).
+**Known issues:** AppSecret controller not implemented (ESO works directly, no lifecycle automation — YAGNI until rotation/drift-detection needed); local k3d cert-manager letsencrypt-prod cannot issue for `*.loopzero.local` (no public DNS for ACME challenge) — self-signed CA issuer (`loopzero-local-ca-issuer`) fills local gap, production uses CF-managed TLS so no impact, local Stage 1 canary HTTP probes report HTTP 000 in `--smoke` mode (probes informational only).
 
 ---
 
@@ -38,7 +38,7 @@ task test:e2e            # E2E (Ginkgo)
 task lint                # golangci-lint + ESLint
 task validate:manifests  # kubeconform --strict
 
-cd cli && npm test       # CLI (Jest, 1171+ tests)
+cd cli && npm test       # CLI (Jest, 1210+ tests)
 cd api && go test ./...  # API (41 packages)
 cd operators && go test ./...  # Operators (Ginkgo + envtest)
 cd pkg && go test ./...  # Shared libs
@@ -76,7 +76,7 @@ cd infra/pulumi && npx pulumi preview --stack dev # Preview
 | CLI | TypeScript + Commander (`cli/`) |
 | API | Go 1.25 + chi + pgx (`api/`) |
 | Operators | Go 1.25 + kubebuilder + controller-runtime (`operators/`) |
-| Shared libs | Go (`pkg/`: errors, logging, id, naming, health, statemachine, jwt, enforcement, circuitbreaker) |
+| Shared libs | Go (`pkg/`: errors, errors/http, logging, id, naming, conditions, statemachine, jwt, enforcement, circuitbreaker) |
 | Database | PostgreSQL 16 (managed DO) |
 | Build | Argo Workflows + BuildKit (rootless) |
 | Image signing | cosign (in-pipeline, key-based) |
@@ -90,10 +90,10 @@ cd infra/pulumi && npx pulumi preview --stack dev # Preview
 | Edge | Cloudflare Tunnel + Worker + KV |
 | Autoscaling | KEDA 2.16.1 + HTTP Add-on 0.8.0 |
 | IaC | Pulumi (TS) — L1-only (DO + CF providers, zero K8s resources); Helmfile L2 (bootstrap); ArgoCD L3 (Day-2 GitOps) |
-| Local clusters | k3d × 3 (mgmt, build, workload) |
-| Dev loop | Tilt + Taskfile (2296 lines) |
-| Helm | 33 bootstrap charts (`infra/helm/`) + 15 published charts (`charts/`) |
-| CI/CD | GitHub Actions (19 workflows) |
+| Local clusters | k3d × 4 (mgmt, build, workload, runtime-2) |
+| Dev loop | Tilt + Taskfile (2826 lines across 7 files) |
+| Helm | 32 bootstrap charts (`infra/helm/`) + 13 published charts (`charts/`) |
+| CI/CD | GitHub Actions (29 workflows) |
 | Migrations | golang-migrate (forward-only `.up.sql`) |
 
 ---
@@ -103,17 +103,17 @@ cd infra/pulumi && npx pulumi preview --stack dev # Preview
 ```
 loopzero/
 ├── docs/                  ← cli-reference.md (spec), maturity-assessment.md, meetings/, runbooks/, strategy/
-├── pkg/                   ← shared Go: statemachine, errors, jwt, naming, health, id, logging, enforcement, circuitbreaker
-├── cli/                   ← @loopzero/cli — TS + Commander, 36 commands, 1079 tests
-├── api/internal/          ← routes (53), services (76), db, middleware (20), lock, sse, argo, argocd, cfkv, cfzone, github, gitops, source, s3, k8s, manifests, validation, metrics, health, config
+├── pkg/                   ← shared Go: statemachine, errors, errors/http, jwt, naming, conditions, id, logging, enforcement, circuitbreaker
+├── cli/                   ← @loopzero/cli — TS + Commander, 36 commands, 1210+ tests
+├── api/internal/          ← routes (31 files), services (40), db, middleware (13 files / 20 handlers), lock, sse, argo, argocd, cfkv, cfzone, github, gitops, source, s3, k8s, manifests, validation, metrics, health, config, placement
 ├── operators/             ← 8 controllers (Tenant, Environment, Application, Exposure, PlatformBootstrap, GitRepositoryBinding, ClusterCredential, Preview), 10 CRDs
 ├── infra/
 │   ├── pulumi/            ← IaC (TS), providers: digitalocean/, cloudflare/, aws/(stub)
-│   ├── helm/              ← 22 charts pinned
-│   ├── k3d/               ← 3 cluster configs
+│   ├── helm/              ← 32 charts pinned
+│   ├── k3d/               ← 4 cluster configs (mgmt, build, workload, runtime-2)
 │   ├── cloudflare/        ← CF Worker source (worker.mjs)
 │   └── tests/             ← e2e/ (Ginkgo), chaos/, unit/, load/
-└── .github/workflows/     ← 14 workflows: ci, build-images, infra-*, release, load-test
+└── .github/workflows/     ← 29 workflows: ci, build-images, infra-*, release, load-test, helm-charts, cell2-soaks, operator-split-soak, pkg-soak, chaos-suite, multi-cell, cli-commands
 ```
 
 Use `Glob` / `git ls-files` for current details.
@@ -176,7 +176,7 @@ Skills/slash commands (subset): `/sprint`, `/implement`, `/test`, `/review`, `/d
 
 **E2E Validation (2026-04-23):** 25/30 pass (83%). Confidence: deploy 99%, scaling 95%, promote 95%, rollback 99%, concurrent rejection 99%, JSON contracts 99%, internal terms (Rule 3) 99%. Log streaming 60% (infra gap, not code).
 
-**Maturity:** 3.7/5 (was 3.6 pre-Sprint-8; +0.1 from Sprint 8 v3.2 Phase -1 + Phase 0 + Phase 2-subset GREEN: bootstrap reproducibility via ADR-0015 adopt-or-create + 4 runbooks + 42 tests + CI gates; PG max_connections + mgmt memory + Chaos Mesh + Gitea HA + Harbor HA + Valkey externo all delivered with runtime evidence; mgmt memory 36-39% met ADR-0010 #6 target). Path to 4.0: CHG-002b L3 stabilization + CHG-002c Gate 2a Exit + Cell-2 activation + 1 external early adopter. Full: `docs/maturity-assessment.md`.
+**Maturity:** 3.9/5 (see line 11 for current assessment). Path to 4.0: (a) first CI Sunday cron GREEN, (b) 1 prod customer day-trial. Full: `docs/maturity-assessment.md`.
 
 ---
 
@@ -206,7 +206,7 @@ Wired (✅): Tenant, Environment, LoopZeroApplication, ExposedRoute, PlatformBoo
 Wired (✅): PreviewEnvironment — namespace + NetworkPolicy (deny-all/allow-ingress/allow-egress) + ResourceQuota + LimitRange + TTL + condition-wait flow (BuildSubmitted→BuildCompleted→WorkloadHealthy with grace period) + Failed transition + cleanup retry/CLEANUP_FAILED + finalizer + canonical naming via `naming.PreviewNamespace`. 12 envtest specs covering full lifecycle. E2E live validated against k3d.
 Defined but unwired (❌): AppSecret (CRD only, no controller — ESO works directly), ReconciliationReport (placeholder).
 
-### State Machines (9 in `pkg/statemachine/`)
+### State Machines (11 in `pkg/statemachine/`)
 
 | Machine | Flow | Timeouts |
 |---------|------|----------|
@@ -219,6 +219,8 @@ Defined but unwired (❌): AppSecret (CRD only, no controller — ESO works dire
 | Rollback | Validating → Reverting → Syncing → Completed | — |
 | Domain | pending_ns → ns_active → provisioning → active | — |
 | Environment | Creating → Active → Deleting → Deleted | — |
+| Application | Pending → Deploying → Running → Failed/Orphaned/Cleaned | — |
+| ExposedRoute | Pending → Active → Deleting → Deleted | — |
 
 ### Helm Chart Dual System
 
@@ -231,7 +233,9 @@ Two chart systems coexist with distinct purposes (ADR D1, bootstrap-integrity-fi
 
 - `infra/helm/` is canonical for `helmfile sync` (bootstrap). Charts are simple, standalone, with hardcoded defaults.
 - `charts/` is canonical for OCI publishing and ArgoCD. Charts use `loopzero-common` library for consistent labels and security contexts.
-- Changes to shared templates must be propagated to both systems.
+- **3 charts overlap functionally** (loopzero-api, loopzero-cloud, loopzero-admission-policies) — when patching one, apply the same fix to the other. `monitoring` / `loopzero-monitoring` are complementary layers (infra vs config), NOT overlapping.
+- **admission-policies**: Both systems use `.Values.vaps.*` for VAP toggles and `.Values.registries.*` for registry prefixes (unified 2026-05-06, helm-chart-drift-alignment-plan).
+- **loopzero-api / loopzero-cloud**: Both systems must share `runAsUser: 1000` (matching Dockerfile) and identical resource limits.
 - The operators are deployed as **4 split binaries** (ADR-0023, plan `operators-sota-faang-grade-plan.md` Phase 1, 2026-05-04 LOCAL): `loopzero-tenant-operator`, `loopzero-app-operator`, `loopzero-preview-operator`, `loopzero-platform-operator`. Each has its own `operators/cmd/<name>/main.go`, Dockerfile, Helm chart in `charts/`, ServiceAccount + ClusterRole + leader-election Lease, and only mounts the env vars its controllers need. The legacy monolith chart `infra/helm/tenant-controller` and the redundant `infra/helm/loopzero-controller` were deleted in T1.5; production rollout is governed by separate `CHG-NNNN-OPERATOR-SPLIT-PROD` per ADR-0023's 4-stage cutover.
 
 ### Production Infrastructure (DigitalOcean)
@@ -299,9 +303,7 @@ Cell drain (`cells.status='draining'`) is operator-driven — `loopzero admin te
 | `notifications.services` in ArgoCD Helm | Use `notifications.notifiers` |
 | `project.ID` (UUID) for build/release queries | Use project name from `loopzero.yaml` |
 | `gitops.Remove` error treated non-fatal | FATAL — delete must fail |
-| `GetActiveByEnvTx` without ORDER BY | Add `ORDER BY created_at ASC LIMIT 1` |
 | cert-manager Certificate for CF-managed domains | Skip Certificate CR (use `CFManaged`) |
-| `react`/`vue`/`svelte` not in `resolveLanguageStrategy()` | Map to `node` strategy in `build_plan.go` |
 | Forward-only migration violations (`DROP`) | Explicit sign-off required |
 | Writing prod code before failing test | Test first, always |
 | Multi-cell ClusterCredential CR name = cellID assumption | Wrong — `K8sCellStore` lookup is by `spec.cellID`, not metadata.name. CR named `workload` with `spec.cellID=cell-1` works fine (per H12). |
