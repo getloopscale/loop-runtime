@@ -688,3 +688,45 @@ memórias persistentes em `~/.claude/projects/-home-paulo-loopzero/memory/`
 capturam o aprendizado como referência para sessões futuras de Claude.
 Os dois são complementares — este doc é detail-heavy para humanos
 auditarem; as memórias são compactas para Claude consumir como contexto.
+
+---
+
+## B40 RESOLVED — 2026-05-06
+
+**Plan:** `docs/plans/loopzero-scale-end-to-end-plan.md`
+**Tag:** `scale-b40-converged-20260506`
+**Cleanroom result:** 12/12 GREEN end-to-end in 3144s (~52min)
+
+### Phase summary
+
+| Phase | Tasks | Result | Commits |
+|---|---|---|---|
+| 0 — Preconditions | T0.1 baseline tag, T0.2 RED proof | RED demonstrated live (replicas=1 despite scale=3) | `b70b0f61` |
+| 1 — ScalingResolver | T1.1 deep module, T1.2 wiring | 8 unit tests GREEN, no regressions | `355a4668`, `6bc148da` |
+| 2 — Submit integration | T2.1 resolve before enforceScaling | Race condition documented; tx isolation | (in `6bc148da`) |
+| 3 — Renderer fixtures | T3.1 (skipped — validated live in T6.1) | n/a | n/a |
+| 4 — Plan-cap on resolved | T4.1 (skipped — validated live in T5.1) | n/a | n/a |
+| 5 — Journey-04 hardening | T5.1 kubectl asserts + idempotency + plan-cap probe | journey-04 GREEN 5m12s standalone | `05935c84` |
+| 6 — Dogfood Gate | T6.1 cleanroom 12/12 GREEN | PASS, 3144s | (no new code) |
+| 7 — Closure | T7.1 docs, T7.2 tag | CLAUDE+README+plan+learnings updated | TBD this commit |
+
+### Bugs surfaced during execution
+
+| # | Pattern | Evidence | Fix |
+|---|---|---|---|
+| 1 | Scale handler persisted project UUID, resolver expected NAME | DB row `proj-2c94fdc3` ≠ build `solo-server` | `5ed939c9` — store name |
+| 2 | Taskfile.yml YAML colon parse error | `- echo "...:..."` → invalid keys | `469b69a7`+`211601c4` — single-quote |
+
+Pattern aprendido (#1): **convenções de identificador (NAME vs UUID) precisam ser explícitas em CADA tabela escrita por path diferente**. CLAUDE.md já documenta "Use name (not UUID) for build/release queries" — a regra precisa ser estendida formalmente para `app_scaling_config`. Adicionar entry ao "Common Mistakes" table:
+
+```
+| `app_scaling_config.project_id` armazenado como UUID | Use NAME — must match req.ProjectID in build/scale paths (B40) |
+```
+
+Pattern aprendido (#2): **Task v3 YAML parser ignora aspas duplas em `- echo "..."` quando string contém `:`**. Sempre usar single-quote externa: `- 'echo "..."'`. Adicionar regra ao validate:taskfile (não existente — proposta para Phase X).
+
+### Final outcome
+
+`loopzero scale --replicas N` + `loopzero deploy` agora propaga N para `Deployment.spec.replicas` no workload cluster. Plan-cap enforce funciona LIVE (Starter=2 cap rejeita replicas=3). Idempotência confirmada (re-run scale com mesmo valor → `no_change`). Backward-compat preservada (yaml-only deploys sem DB row → renderiza yaml value).
+
+B40 plan COMPLETE. Sistema 100% funcional para o escopo do plano.

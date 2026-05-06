@@ -964,17 +964,29 @@ S2-S4 findings documentados em report mas NÃO bloqueiam closeout (per learnings
 
 ---
 
-## Convergence Log (preencher durante execução)
+## Convergence Log
 
 > Append-only durante Phase 6+. Cada iteração adiciona 1 entrada.
 
 | Iter | Date | Failed journey | Root-cause | Fix commit | Re-run result |
 |------|------|----------------|------------|------------|----------------|
-| 0 | TBD | (baseline pré-fix) | n/a — replicas stays 1 | n/a | gap demonstrated |
-| 1 | TBD | TBD | TBD | TBD | TBD |
-| ... | | | | | |
+| 0 | 2026-05-05 | (baseline pré-fix) | replicas stays 1 — DB orphan | n/a (proof) | `b70b0f61` RED proof committed |
+| 1 | 2026-05-05 | n/a (Phase 1 GREEN) | ScalingResolver impl + 8 unit tests | `355a4668` | T1.1 GREEN |
+| 1.5 | 2026-05-05 | n/a (Phase 1.2 GREEN) | Wiring via Deps + setup_orchestrator | `6bc148da` | T1.2+T2.1 GREEN, all api tests pass |
+| 2 | 2026-05-05 | LIVE post-rebuild | scale handler persisted UUID, resolver expected NAME | `5ed939c9` | replicas=2 confirmed via kubectl after fix |
+| 3 | 2026-05-05 | n/a (Phase 5) | journey-04 hardened with kubectl asserts | `05935c84` | journey-04 standalone GREEN 5m12s |
+| 3.5 | 2026-05-06 00:00 | task clean:all (Taskfile YAML colon parse) | echo with colon → mapping | `469b69a7`+`211601c4` | task --list works |
+| 4 (final) | 2026-05-06 00:52 | n/a — 12/12 GREEN | cleanroom converged | n/a | preflight 6s + 11 journeys all PASS in 3144s |
 
-**Final outcome:** TBD (PASS / FAILED-AT-CAP / ESCALATED-TO-MEETING)
+**Final outcome:** **PASS — 12/12 GREEN** (cleanroom iter 4, 2026-05-06 00:52).
+
+- B40 chain CLOSED: loopzero scale → app_scaling_config → ScalingResolver → enforceScaling (resolved) → BuildAppSpec → renderer → Deployment.spec.replicas
+- Total commits since baseline `scale-b40-baseline-20260505`: 8
+- Bug discovered + fixed during cleanroom: 3 (UUID-vs-name in scale handler; Taskfile YAML colon × 2)
+- Cleanroom runtime: 3144s (~52min) — within budget (target <60min)
+- Rule 3 audit: 0 forbidden terms in CLI output
+
+**Closing tag:** `scale-b40-converged-20260506`.
 
 ---
 
