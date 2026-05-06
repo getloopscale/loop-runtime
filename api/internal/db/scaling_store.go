@@ -248,9 +248,18 @@ func (s *PostgresScalingStore) Delete(ctx context.Context, tx DBTX, tenantID, pr
 // DeleteByProject implements ScalingStore. Cascade for project deletion:
 // removes every scaling row tied to (tenant, project) regardless of
 // environment / app. Idempotent — returns nil if no rows match.
+//
+// Accepts a nil tx to support callers (ProjectDeleter) that run the
+// cascade outside an explicit transaction; falls back to the store's
+// own connection pool when tx is nil. A single-row DELETE doesn't
+// need a transaction for correctness.
 func (s *PostgresScalingStore) DeleteByProject(ctx context.Context, tx DBTX, tenantID, projectID string) error {
+	executor := DBTX(tx)
+	if executor == nil {
+		executor = s.db
+	}
 	const q = `DELETE FROM app_scaling_config WHERE tenant_id = $1 AND project_id = $2`
-	if _, err := tx.Exec(ctx, q, tenantID, projectID); err != nil {
+	if _, err := executor.Exec(ctx, q, tenantID, projectID); err != nil {
 		return fmt.Errorf("scaling_store: DeleteByProject: %w", err)
 	}
 	return nil

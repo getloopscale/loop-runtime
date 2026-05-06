@@ -21,11 +21,16 @@ import (
 
 // runLoopZeroInDir executes `loopzero <args...>` with the given working directory.
 // Used for commands like `validate` that operate on cwd.
+//
+// LOOPZERO_API_TIMEOUT is bumped to 120s (vs the CLI default of 30s in
+// cli/src/config/constants.ts:53). Project delete cascades through cancel
+// builds + gitops remove + ArgoCD sync and exceeds 30s on LIVE k3d.
 func runLoopZeroInDir(dir string, args ...string) (stdout, stderr string, exitCode int) {
 	cmd := exec.Command("loopzero", args...)
 	cmd.Dir = dir
 	cmd.Env = append(os.Environ(),
 		"LOOPZERO_API_URL="+apiURL(),
+		"LOOPZERO_API_TIMEOUT=120000",
 	)
 	if token := os.Getenv("LOOPZERO_TOKEN"); token != "" {
 		cmd.Env = append(cmd.Env, "LOOPZERO_TOKEN="+token)

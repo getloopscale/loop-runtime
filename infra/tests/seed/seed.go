@@ -128,6 +128,15 @@ WHERE user_id = 'loopzero-bootstrap' AND tenant_id <> '%s';
 -- so historical sessions may have left rows behind. Clean before seed so
 -- ScalingResolver sees pristine state when journeys (re)deploy fixtures.
 DELETE FROM app_scaling_config WHERE tenant_id = '%s';
+
+-- Pin the e2e tenant to the enterprise plan so the suite is not capped
+-- by builds_per_month / projects / seats limits. The plan_limits row for
+-- enterprise is NULL,NULL (unlimited) per migration 000002. Without this
+-- subscriptions row, the tenant defaults to starter (50 builds/month) and
+-- a long session of journey reruns trips PLAN_LIMIT_EXCEEDED.
+INSERT INTO subscriptions (id, tenant_id, plan, status)
+VALUES ('sub-e2e-enterprise', '%s', 'enterprise', 'active')
+ON CONFLICT (tenant_id) DO UPDATE SET plan = 'enterprise', status = 'active', updated_at = now();
 `+`
 INSERT INTO users (id, email, github_id, display_name, username)
 VALUES ('%s', '%s', %d, 'e2e-user', '%s')
@@ -155,6 +164,7 @@ ON CONFLICT (id) DO NOTHING;
 `,
 		TenantID, // strip non-canonical bootstrap memberships
 		TenantID, // strip orphan app_scaling_config rows
+		TenantID, // pin tenant to enterprise plan
 		UserID, Email, GitHubID, Username,
 		TenantID, DisplayName, TenantID, UserID, // slug = TenantID
 		TenantID, UserID, Role,

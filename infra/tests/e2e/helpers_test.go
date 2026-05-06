@@ -488,10 +488,15 @@ func assertAuditEntry(action string, project string) {
 
 // ensureProjectDeleted idempotently deletes a project if it exists.
 // Used for cleanup before/after journey tests.
+//
+// LOOPZERO_API_TIMEOUT bumped to 120s (vs CLI default 30s) — project delete
+// cascades through cancel builds + gitops remove + ArgoCD sync and exceeds
+// 30s on LIVE k3d (observed flakes in journey 73/75 run, 2026-05-06).
 func ensureProjectDeleted(project string) {
 	cmd := exec.Command("loopzero", "project", "delete", project, "--yes", "--json")
 	cmd.Env = append(os.Environ(),
 		"LOOPZERO_API_URL="+apiURL(),
+		"LOOPZERO_API_TIMEOUT=120000",
 		"LOOPZERO_TOKEN="+resolveToken(),
 	)
 	// Ignore errors — project may not exist.
