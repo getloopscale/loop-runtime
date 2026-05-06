@@ -20,3 +20,14 @@ alertmanager:
 serverFiles:
   alerting_rules.yml: {}
   recording_rules.yml: {}
+
+# velero-backup-dr-plan v1.0 / T3.2 — Scrape Velero metrics so
+# prometheusrule-velero.yaml alerts have a data source. Velero exposes
+# /metrics on :8085 (in-cluster Service `velero.velero-system.svc`).
+extraScrapeConfigs: |
+  - job_name: velero
+    static_configs:
+      - targets:
+          - velero.velero-system.svc:8085
+    metrics_path: /metrics
+    scrape_interval: 30s

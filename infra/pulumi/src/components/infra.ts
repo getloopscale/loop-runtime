@@ -47,6 +47,12 @@ export interface InfraOutputs {
   readonly staticBucketName: pulumi.Output<string>;
   readonly staticBucketEndpoint: pulumi.Output<string>;
   readonly staticCdnEndpoint: pulumi.Output<string>;
+  /**
+   * Bucket Velero stores K8s resource backups in. velero-backup-dr-plan T0.1.
+   * Versioned + protected in prod. Same LOOPZERO_SPACES_KEY/SECRET as other
+   * buckets (DO Spaces uses global API keys per account).
+   */
+  readonly veleroBackupsBucketName: pulumi.Output<string>;
   // Provider-agnostic storage endpoints (eliminates hardcoded digitaloceanspaces.com).
   readonly spacesEndpoint: pulumi.Output<string>;
   readonly s3Endpoint: pulumi.Output<string>;
@@ -248,6 +254,23 @@ export function createInfra(config: PlatformStackConfig, orphans?: import("../co
     tags,
   });
 
+  // Velero backups bucket — Velero server stores K8s resource backups here
+  // (CRDs, ArgoCD state, Gitea metadata, Secrets, full snapshots).
+  // velero-backup-dr-plan v1.0 T0.1: versioning=true protects against
+  // accidental delete of backup objects. protect=true in prod prevents
+  // `pulumi destroy` from wiping the backup bucket itself. forceDestroy=
+  // false in prod so a non-empty backup bucket cannot be dropped without
+  // explicit pulumi state surgery. (isProd is declared above near the
+  // mgmt cluster — reuse it.)
+  const veleroBackupsBucket = factory.createObjectStorage({
+    name: bucketName({ project: config.project, env: config.environment, region: config.region, suffix: "velero-backups" }),
+    region: config.region,
+    versioning: true,
+    tags,
+    protect: isProd,
+    forceDestroy: !isProd,
+  });
+
   // Enable CDN on static assets bucket for edge caching.
   // CF Worker uses the direct endpoint; CDN is an additional optimization layer.
   const staticBucketName = bucketName({ project: config.project, env: config.environment, region: config.region, suffix: "static-assets" });
@@ -329,6 +352,7 @@ export function createInfra(config: PlatformStackConfig, orphans?: import("../co
     staticBucketName: staticBucket.bucketName,
     staticBucketEndpoint: staticBucket.endpoint,
     staticCdnEndpoint: staticCdn.cdnEndpoint,
+    veleroBackupsBucketName: veleroBackupsBucket.bucketName,
     spacesEndpoint: storageEndpoints.endpoint,
     s3Endpoint: storageEndpoints.s3Endpoint,
     containerImagesBucketName,

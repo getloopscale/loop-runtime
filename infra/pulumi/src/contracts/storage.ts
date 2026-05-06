@@ -9,6 +9,19 @@ export interface ObjectStorageSpec {
   readonly region: pulumi.Input<string>;
   readonly versioning?: boolean;
   readonly tags: BaseLabels;
+  /**
+   * When true, mark the bucket as protected at the Pulumi resource level
+   * so accidental `pulumi destroy` does not delete it. Used for backup
+   * buckets in production where loss is unrecoverable. Default: false.
+   */
+  readonly protect?: boolean;
+  /**
+   * When false, refuse to delete the bucket if it still has objects.
+   * Defaults to true (legacy behavior — empty + delete). Set false on
+   * backup buckets in production to add a second guard against accidental
+   * destroy of non-empty backup data.
+   */
+  readonly forceDestroy?: boolean;
 }
 
 export interface ObjectStorageOutput {

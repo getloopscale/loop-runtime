@@ -65,3 +65,10 @@ buckets:
     policy: none
   - name: loopzero-static-assets
     policy: none
+  # velero-backup-dr-plan v1.0 / EC-4 fix — Velero in standalone uses
+  # this bucket as BackupStorageLocation. Without it pre-created, Velero
+  # reports BSL status=Unavailable and no backups run. Versioning is
+  # disabled (MinIO Helm chart doesn't support it via this CRD path; the
+  # plan's protection model in standalone is "infra is ephemeral").
+  - name: velero-backups
+    policy: none

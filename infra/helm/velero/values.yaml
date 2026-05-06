@@ -1,0 +1,117 @@
+# velero-backup-dr-plan v1.0 / T1.1 — Velero hardened values.
+#
+# Pattern follows infra/helm/chaos-mesh/values.yaml (PSA restricted, resource
+# limits, hardened RBAC). Schedules live in values-schedules.yaml (T2.1).
+#
+# Helmfile injects bucket/region/s3Url at install time via `set:` (T1.2).
+
+velero:
+  # Plugin: velero-plugin-for-aws is the canonical S3-compatible plugin.
+  # Works against DO Spaces, MinIO, and AWS S3 with the same config — only
+  # the s3Url and credentials differ per environment.
+  initContainers:
+    - name: velero-plugin-for-aws
+      image: velero/velero-plugin-for-aws:v1.10.1
+      imagePullPolicy: IfNotPresent
+      volumeMounts:
+        - mountPath: /target
+          name: plugins
+
+  # Credentials Secret (key=cloud) is created by generate-secrets.sh (T1.3)
+  # in the AWS credentials INI format Velero expects.
+  credentials:
+    useSecret: true
+    existingSecret: velero-s3-credentials
+
+  configuration:
+    # BackupStorageLocation — provider must be "aws" for both DO Spaces and
+    # MinIO since both are S3-compatible. The actual bucket/region/s3Url
+    # are templated by the Helmfile env values (T0.2).
+    backupStorageLocation:
+      - name: default
+        provider: aws
+        bucket: REPLACE-AT-INSTALL-TIME
+        default: true
+        config:
+          region: REPLACE-AT-INSTALL-TIME
+          s3Url: REPLACE-AT-INSTALL-TIME
+          # Required for MinIO and DO Spaces; AWS S3 ignores this.
+          s3ForcePathStyle: "true"
+          # Disable checksumming on uploads (DO Spaces returns 400 on
+          # x-amz-content-sha256 mismatch with chunked uploads — Velero
+          # 1.14+ handles this with this flag).
+          publicUrl: ""
+    # No VolumeSnapshotLocation — V1 does not back up PV data (D4).
+    volumeSnapshotLocation: []
+    # Backup sync interval — pull from BSL every 1m so manually-uploaded
+    # backups also appear (mostly for DR drill scenarios).
+    backupSyncPeriod: 1m
+    # Default TTL when a Backup is created without explicit TTL.
+    defaultBackupTTL: 720h
+
+  # ADR D4: V1 does NOT back up PV data via restic/kopia. The node-agent
+  # DaemonSet is therefore disabled to save resources and complexity.
+  deployNodeAgent: false
+
+  # Server-side resource limits — Velero is lightweight when not running
+  # backups; spikes during scheduled backups are bursty but short.
+  resources:
+    requests:
+      cpu: 100m
+      memory: 128Mi
+    limits:
+      cpu: 500m
+      memory: 512Mi
+
+  # PSA restricted compliance — same envelope as chaos-mesh wrapper.
+  # The Velero binary runs as a non-root user inside the official image.
+  podSecurityContext:
+    runAsNonRoot: true
+    runAsUser: 65532
+    seccompProfile:
+      type: RuntimeDefault
+  containerSecurityContext:
+    allowPrivilegeEscalation: false
+    capabilities:
+      drop: ["ALL"]
+    readOnlyRootFilesystem: true
+    runAsNonRoot: true
+
+  # Metrics — Velero exposes /metrics on :8085 by default. Phase 3 adds
+  # the scrape job + PrometheusRule. We don't enable the chart's
+  # ServiceMonitor here (the cluster may not have the Prometheus Operator
+  # CRD installed; the additionalScrapeConfig in monitoring values is
+  # the canonical wiring point).
+  metrics:
+    enabled: true
+    scrapeInterval: 30s
+    serviceMonitor:
+      enabled: false
+
+  # Schedules are defined in values-schedules.yaml (T2.1). Empty here
+  # so the base chart can be installed without schedules during bootstrap;
+  # the overlay turns them on.
+  schedules: {}
+
+  # Disable the upgrade CRDs pre-install hook. The chart's template
+  # already creates Velero CRDs declaratively; the hook adds an extra
+  # Job that pulls a bitnami/kubectl image, which Bitnami pruned from
+  # Docker Hub in 2025 (causes ImagePullBackOff in fresh installs).
+  # CRDs are still managed via the chart resources — only the
+  # imperative upgrade Job is disabled.
+  upgradeCRDs: false
+
+  # CRD installation — install via the chart's template (default true).
+  # Keeps CRD lifecycle aligned with the Helm release.
+
+  # Cleanup CRDs on uninstall (false in prod to preserve backup history).
+  cleanUpCRDs: false
+
+  # Bitnami pruned `bitnami/kubectl` image tags from Docker Hub in 2025
+  # (only the latest few stay). Pin a stable, widely-available kubectl
+  # image so the CRD upgrade hook does not ImagePullBackOff. Falls back
+  # to upstream rancher/kubectl which mirrors all minor releases.
+  kubectl:
+    image:
+      repository: rancher/kubectl
+      tag: v1.32.0

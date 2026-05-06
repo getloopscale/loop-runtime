@@ -105,7 +105,25 @@ ON CONFLICT (id) DO NOTHING;
 " >/dev/null
 log "tenant ensured (slug=$SLUG owner=$USER_ID)"
 
-# 5) Insert membership.
+# 5) Strip pre-existing memberships of this user OUTSIDE the canonical
+#    tenant before inserting/updating the canonical row.
+#
+# F-03 from /dogfood full report (2026-05-06): journey/dogfood runs
+# accumulate memberships in tenants like e2e-tenant. The Hydra-issued
+# JWT carries only `sub=$USER_ID` and the auth middleware returns
+# TENANT_REQUIRED when the user belongs to >1 tenant. This step keeps
+# the bootstrap user single-tenant locally so loopzero whoami / loopzero deploy
+# resolve cleanly without manual DB intervention between sessions.
+#
+# Pattern parallels infra/tests/seed/seed.go SeedDatabase, which already
+# strips bootstrap memberships ahead of its INSERTs.
+run_psql -c "
+DELETE FROM tenant_members
+WHERE user_id = '$USER_ID' AND tenant_id <> '$TENANT_ID';
+" >/dev/null
+log "stripped non-canonical memberships of $USER_ID"
+
+# 6) Insert membership.
 run_psql -c "
 INSERT INTO tenant_members (tenant_id, user_id, role)
 VALUES ('$TENANT_ID', '$USER_ID', '$ROLE')

@@ -265,6 +265,31 @@ else
     --from-literal=secretkey="$MINIO_SECRET"
 fi
 
+# 3b) Velero S3 credentials — IDEMPOTENT.
+# velero-backup-dr-plan v1.0 / T1.3 + EC-3 fix.
+#
+# Velero expects an AWS credentials INI file under key "cloud" in the
+# Secret. Same LOOPZERO_SPACES_KEY/SECRET (or MinIO root creds in standalone)
+# that drive minio-credentials — DO Spaces uses global API keys so we
+# can't isolate IAM per bucket (documented as EC-6 risk in the plan).
+#
+# ensure_namespace velero-system runs BEFORE the Helmfile installs the
+# velero release (which would create the namespace via createNamespace).
+# Without this, the first `kubectl apply` on a fresh cluster fails with
+# "namespaces not found" because generate-secrets runs before helmfile
+# sync. Idempotent re-runs work because the namespace will already exist.
+ensure_namespace velero-system
+if [[ -n "${LOOPZERO_SPACES_KEY:-}" ]]; then
+  VELERO_AK="${LOOPZERO_SPACES_KEY}"
+  VELERO_SK="${LOOPZERO_SPACES_SECRET:-}"
+else
+  VELERO_AK="${MINIO_ROOT_USER:-minioadmin}"
+  VELERO_SK="${MINIO_ROOT_PASSWORD:-$(get_or_generate minio-credentials loopzero-system secretkey)}"
+fi
+VELERO_CLOUD_INI="$(printf '[default]\naws_access_key_id=%s\naws_secret_access_key=%s\n' "$VELERO_AK" "$VELERO_SK")"
+apply_secret velero-s3-credentials velero-system \
+  --from-literal=cloud="$VELERO_CLOUD_INI"
+
 # 4) Harbor admin password — IDEMPOTENT.
 HARBOR_PWD="${LOOPZERO_HARBOR_ADMIN_PASSWORD:-$(get_or_generate harbor-admin loopzero-system password)}"
 apply_secret harbor-admin loopzero-system \

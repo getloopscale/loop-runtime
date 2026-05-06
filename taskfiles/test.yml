@@ -453,6 +453,10 @@ tasks:
       - helm template smoke-test infra/helm/smoke-test/ | kubeconform --strict --summary
       - helm template cluster-issuer infra/helm/cluster-issuer/ | kubeconform --strict --skip ClusterIssuer --summary
       - helm template admission-policies infra/helm/admission-policies/ | kubeconform --strict --skip ClusterImagePolicy,ValidatingAdmissionPolicy,ValidatingAdmissionPolicyBinding,PrometheusRule --summary
+      # velero-backup-dr-plan v1.0 / Validate — wrapper chart + schedules.
+      # Skip Velero CRD kinds (BackupStorageLocation, Schedule, etc.) which
+      # are not in default kubeconform schemas.
+      - helm template test infra/helm/velero/ -f infra/helm/velero/values-schedules.yaml --set velero.configuration.backupStorageLocation[0].bucket=test --set velero.configuration.backupStorageLocation[0].config.region=sfo3 --set velero.configuration.backupStorageLocation[0].config.s3Url=https://sfo3.digitaloceanspaces.com | kubeconform --strict --skip BackupStorageLocation,VolumeSnapshotLocation,Backup,Restore,Schedule,DownloadRequest,DeleteBackupRequest,PodVolumeBackup,PodVolumeRestore,BackupRepository,ServerStatusRequest --summary
       # Monitoring manifests (ServiceMonitor, PrometheusRule are CRD kinds — skip those)
       - kubeconform --strict --skip ServiceMonitor,PrometheusRule,Probe infra/helm/monitoring/manifests/
       # infra/helm/argo-workflows/templates/ contains Go template syntax ({{ }}) — requires helm template to validate

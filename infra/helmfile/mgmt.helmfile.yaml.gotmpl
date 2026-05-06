@@ -72,6 +72,10 @@ repositories:
     url: https://charts.bitnami.com/bitnami
   - name: chaos-mesh
     url: https://charts.chaos-mesh.org
+  # velero-backup-dr-plan v1.0 / T1.2 — Velero upstream chart for K8s
+  # resource backups (BSL on DO Spaces in cloud, MinIO in standalone).
+  - name: vmware-tanzu
+    url: https://vmware-tanzu.github.io/helm-charts
 
 # ---------------------------------------------------------------------------
 # Pre-sync secret generation (called by the CLI orchestrator BEFORE this
@@ -225,6 +229,33 @@ releases:
 {{- if or (eq .Environment.Name "dev") (eq .Environment.Name "prod") }}
       - ../helm/minio/values-distributed.yaml
 {{- end }}
+
+  # velero-backup-dr-plan v1.0 / T1.2 — Velero server (Wave -1, infra
+  # backup component). Bucket/region/s3Url come from environment values
+  # (T0.2). MinIO bucket pre-created in standalone (EC-4 in minio values).
+  # Schedules overlay activated via values-schedules.yaml (T2.1).
+  - name: velero
+    namespace: velero-system
+    chart: ../helm/velero
+    needs:
+      - cert-manager/cert-manager
+{{- if eq .Environment.Name "standalone" }}
+      # Standalone: BSL targets in-cluster MinIO. Wait for MinIO up first.
+      - loopzero-system/minio
+{{- end }}
+{{- if eq .Environment.Name "standalone-multi" }}
+      - loopzero-system/minio
+{{- end }}
+    values:
+      - ../helm/velero/values.yaml
+      - ../helm/velero/values-schedules.yaml
+    set:
+      - name: velero.configuration.backupStorageLocation[0].bucket
+        value: {{ .Values.velero.bucket | quote }}
+      - name: velero.configuration.backupStorageLocation[0].config.region
+        value: {{ .Values.velero.region | quote }}
+      - name: velero.configuration.backupStorageLocation[0].config.s3Url
+        value: {{ .Values.velero.s3Url | quote }}
 
   # Wave 0: Platform services
   - name: argocd

@@ -72,3 +72,11 @@ runtime2CellId: cell-2
 # in loopzero-api so it consumes ClusterCredential CRs and routes per-tenant
 # to cell-1 or cell-2. Audit T0.1 Gap 4 (was: silently single-cell).
 dynamicRouter: true
+
+# velero-backup-dr-plan v1.0 / T0.2 — Velero BSL config. Bucket name comes
+# from Pulumi L1 (InfraOutputs.veleroBackupsBucketName). Region matches the
+# cloud region. s3Url targets the regional Spaces endpoint.
+velero:
+  bucket: loopzero-infra-sfo3-velero-backups
+  region: sfo3
+  s3Url: https://sfo3.digitaloceanspaces.com
