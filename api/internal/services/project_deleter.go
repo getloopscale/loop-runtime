@@ -31,6 +31,7 @@ type ProjectDeleterDeps struct {
 	EnvTargetStore    db.EnvironmentTargetStore
 	ReleaseStore      db.ReleaseStore // nil-safe: when nil, skips release cascade-cancel (legacy callers)
 	ProjectStore      ProjectDeleteProjectStore
+	ScalingStore      db.ScalingStore // nil-safe: when nil, skips app_scaling_config cascade
 	Locker            EnvironmentLocker
 	GitOps            GitOpsPusher
 	WorkflowCanceller WorkflowCanceller // nil-safe: skips workflow cancel if not set
@@ -49,6 +50,7 @@ type ProjectDeleter struct {
 	envTargetStore    db.EnvironmentTargetStore
 	releaseStore      db.ReleaseStore
 	projectStore      ProjectDeleteProjectStore
+	scalingStore      db.ScalingStore
 	locker            EnvironmentLocker
 	gitops            GitOpsPusher
 	workflowCanceller WorkflowCanceller
@@ -62,6 +64,7 @@ func NewProjectDeleter(deps ProjectDeleterDeps) *ProjectDeleter {
 		envTargetStore:    deps.EnvTargetStore,
 		releaseStore:      deps.ReleaseStore,
 		projectStore:      deps.ProjectStore,
+		scalingStore:      deps.ScalingStore,
 		locker:            deps.Locker,
 		gitops:            deps.GitOps,
 		workflowCanceller: deps.WorkflowCanceller,
@@ -157,6 +160,19 @@ func (d *ProjectDeleter) Delete(ctx context.Context, req routes.ProjectDeleteInp
 					slog.Info("argocd sync triggered after fallback gitops remove",
 						"app", argoAppName, "project", req.ProjectName)
 				}
+			}
+		}
+
+		// Cascade: remove all app_scaling_config rows for this project so a
+		// future project of the same name does not inherit replicas/HPA state
+		// from its predecessor (which would surface as REPLICAS_EXCEED_PLAN
+		// on a clean redeploy). nil-safe — legacy callers without ScalingStore
+		// keep their existing behavior.
+		if d.scalingStore != nil {
+			scalingProjectID := projectNameForQueries
+			if err := d.scalingStore.DeleteByProject(ctx, nil, req.TenantID, scalingProjectID); err != nil {
+				slog.Warn("failed to delete scaling configs (non-fatal, may leave orphan rows)",
+					"project_id", scalingProjectID, "error", err)
 			}
 		}
 

@@ -11,7 +11,6 @@ package e2e
 
 import (
 	"os"
-	"os/exec"
 
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
@@ -87,11 +86,12 @@ var _ = Describe("Journey 05: Promote", Ordered, Label("journey"), func() {
 		Expect(exitCode).To(Equal(0),
 			"loopzero promote should exit 0\nstdout: %s\nstderr: %s", stdout, stderr)
 
-		// Verify promote response has expected fields.
-		Expect(stdout).To(SatisfyAny(
-			ContainSubstring("active_release"),
-			ContainSubstring("reactivated_release"),
-		), "promote response should reference the activated release")
+		// Verify promote response has expected fields per
+		// api/internal/routes/promote.go:64 PromotionResponse.NewRelease.
+		// (rollback uses "reactivated_release" and status uses
+		// "active_release" — distinct contracts, do not conflate.)
+		Expect(stdout).To(ContainSubstring("new_release"),
+			"promote response should reference new_release")
 
 		assertNoForbiddenTermsInAll(map[string]string{
 			"promote stdout": stdout,
@@ -117,22 +117,13 @@ var _ = Describe("Journey 05: Promote", Ordered, Label("journey"), func() {
 	It("cleanup: delete + Prova de Morte", func() {
 		ensureProjectDeleted(project)
 
-		// Wait for both environments to clean up.
+		// Project delete removes labeled resources from EVERY environment
+		// it lived in (production + staging here). Tenant-level namespaces
+		// (loopzero-{tenant}-{env}) are shared across projects and survive a
+		// project delete — only the Tenant CR teardown removes them. So
+		// Prova de Morte asserts "no resources for this project" per env,
+		// NOT "namespace gone".
 		proveDead(seed.TenantID, project, "production")
-
-		// Staging cleanup may take longer — use Eventually.
-		Eventually(func() bool {
-			cmd := kubectlWorkload("get", "namespace",
-				"loopzero-"+seed.TenantID+"-staging",
-				"--no-headers", "-o", "name")
-			return cmd.Run() != nil // true when namespace is gone
-		}, cleanupTimeout, cleanupPollInterval).Should(BeTrue(),
-			"staging namespace should be deleted")
+		proveDead(seed.TenantID, project, "staging")
 	})
 })
-
-// kubectlWorkload creates a kubectl command targeting the workload cluster.
-func kubectlWorkload(args ...string) *exec.Cmd {
-	allArgs := append([]string{"--context", workloadKubeContext}, args...)
-	return exec.Command("kubectl", allArgs...)
-}

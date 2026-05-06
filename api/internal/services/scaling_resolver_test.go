@@ -40,6 +40,10 @@ func (f *fakeScalingStore) Delete(ctx context.Context, tx db.DBTX, tenantID, pro
 	return nil
 }
 
+func (f *fakeScalingStore) DeleteByProject(ctx context.Context, tx db.DBTX, tenantID, projectID string) error {
+	return nil
+}
+
 func (f *fakeScalingStore) CountByTenant(ctx context.Context, tenantID string) (int, error) {
 	return 0, nil
 }

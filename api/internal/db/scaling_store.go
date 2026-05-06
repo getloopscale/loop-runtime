@@ -108,6 +108,12 @@ type ScalingStore interface {
 	// Delete removes a scaling config row. Idempotent — returns nil if absent.
 	Delete(ctx context.Context, tx DBTX, tenantID, projectID, environment, appName string) error
 
+	// DeleteByProject removes ALL scaling config rows for the given project.
+	// Used by ProjectDeleter to cascade so a future project of the same name
+	// does not inherit replicas / HPA state from its predecessor (which would
+	// surface as REPLICAS_EXCEED_PLAN on a clean redeploy). Idempotent.
+	DeleteByProject(ctx context.Context, tx DBTX, tenantID, projectID string) error
+
 	// CountByTenant returns total scaling rows for a tenant. Used for plan-cap
 	// enforcement at API layer (e.g., free-tier limit).
 	CountByTenant(ctx context.Context, tenantID string) (int, error)
@@ -235,6 +241,17 @@ func (s *PostgresScalingStore) Delete(ctx context.Context, tx DBTX, tenantID, pr
 	_, err := tx.Exec(ctx, q, tenantID, projectID, environment, appName)
 	if err != nil {
 		return fmt.Errorf("scaling_store: Delete: %w", err)
+	}
+	return nil
+}
+
+// DeleteByProject implements ScalingStore. Cascade for project deletion:
+// removes every scaling row tied to (tenant, project) regardless of
+// environment / app. Idempotent — returns nil if no rows match.
+func (s *PostgresScalingStore) DeleteByProject(ctx context.Context, tx DBTX, tenantID, projectID string) error {
+	const q = `DELETE FROM app_scaling_config WHERE tenant_id = $1 AND project_id = $2`
+	if _, err := tx.Exec(ctx, q, tenantID, projectID); err != nil {
+		return fmt.Errorf("scaling_store: DeleteByProject: %w", err)
 	}
 	return nil
 }

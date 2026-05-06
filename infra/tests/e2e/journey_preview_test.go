@@ -22,8 +22,6 @@ import (
 
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
-
-	"github.com/loopzero/loopzero/infra/tests/seed"
 )
 
 var _ = Describe("Journey 09: Preview", Ordered, Label("journey"), func() {
@@ -79,7 +77,7 @@ var _ = Describe("Journey 09: Preview", Ordered, Label("journey"), func() {
 		req, err := http.NewRequest("POST", url, strings.NewReader(body))
 		Expect(err).NotTo(HaveOccurred())
 
-		req.Header.Set("Authorization", "Bearer "+seed.AuthToken)
+		req.Header.Set("Authorization", "Bearer "+resolveToken())
 		req.Header.Set("Content-Type", "application/json")
 		req.Header.Set("Idempotency-Key", fmt.Sprintf("ginkgo-preview-%s", uniqueSuffix()))
 

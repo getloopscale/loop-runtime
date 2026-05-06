@@ -8,6 +8,7 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"io"
 	"log/slog"
 	"net/http"
 	"net/http/httptest"
@@ -659,6 +660,148 @@ func TestAuditLog_LogsMutationWithContext(t *testing.T) {
 
 	if capturedAction == "" {
 		t.Error("audit writer should be called for POST requests with tenant context")
+	}
+}
+
+// CHG-2026-05-06-AUDIT-RESOURCE-ID: POST /api/v1/builds carries the
+// project identifier in the request body (not the URL path). The audit
+// middleware must snoop the body and populate resource_id with project_id
+// so audit forensics can join build entries to projects.
+func TestAuditLog_EnrichResourceID_BuildSubmitted(t *testing.T) {
+	logger := slog.New(slog.NewTextHandler(&bytes.Buffer{}, nil))
+	var capturedResourceID, capturedAction, capturedResourceType string
+	var handlerSawBody string
+	writer := AuditWriter(func(_, action, _, resourceType, resourceID, _ string, _ map[string]any) {
+		capturedAction = action
+		capturedResourceType = resourceType
+		capturedResourceID = resourceID
+	})
+
+	body := `{"project_id":"my-monorepo","environment":"production","commit_sha":"abc123"}`
+	handler := AuditLog(logger, writer)(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		// Verify the body was restored — handlers MUST see the same bytes
+		// the client sent.
+		buf, _ := io.ReadAll(r.Body)
+		handlerSawBody = string(buf)
+		w.WriteHeader(http.StatusAccepted)
+	}))
+
+	req := httptest.NewRequest(http.MethodPost, "/api/v1/builds", strings.NewReader(body))
+	req.Header.Set("Content-Type", "application/json")
+	req.ContentLength = int64(len(body))
+	ctx := context.WithValue(req.Context(), userContextKey, &UserContext{
+		UserID: "u-1", TenantID: "tn-1", Role: "owner",
+	})
+	rec := httptest.NewRecorder()
+	handler.ServeHTTP(rec, req.WithContext(ctx))
+
+	if capturedAction != "build.submitted" {
+		t.Errorf("action = %q, want %q", capturedAction, "build.submitted")
+	}
+	if capturedResourceType != "build" {
+		t.Errorf("resource_type = %q, want %q", capturedResourceType, "build")
+	}
+	if capturedResourceID != "my-monorepo" {
+		t.Errorf("resource_id = %q, want %q (project_id from body)",
+			capturedResourceID, "my-monorepo")
+	}
+	if handlerSawBody != body {
+		t.Errorf("handler saw mutated body\n got: %q\nwant: %q", handlerSawBody, body)
+	}
+}
+
+// POST /api/v1/secrets carries project as ?project= query — middleware
+// must consult both query and body to populate resource_id.
+func TestAuditLog_EnrichResourceID_SecretSet_Query(t *testing.T) {
+	logger := slog.New(slog.NewTextHandler(&bytes.Buffer{}, nil))
+	var capturedResourceID, capturedAction string
+	writer := AuditWriter(func(_, action, _, _, resourceID, _ string, _ map[string]any) {
+		capturedAction = action
+		capturedResourceID = resourceID
+	})
+
+	body := `{"name":"DB_URL","value":"redacted","environment":"production","app":"api"}`
+	handler := AuditLog(logger, writer)(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.WriteHeader(http.StatusOK)
+	}))
+
+	req := httptest.NewRequest(http.MethodPost, "/api/v1/secrets?project=my-app", strings.NewReader(body))
+	req.Header.Set("Content-Type", "application/json")
+	req.ContentLength = int64(len(body))
+	ctx := context.WithValue(req.Context(), userContextKey, &UserContext{
+		UserID: "u-1", TenantID: "tn-1", Role: "owner",
+	})
+	rec := httptest.NewRecorder()
+	handler.ServeHTTP(rec, req.WithContext(ctx))
+
+	if capturedAction != "secret.set" {
+		t.Errorf("action = %q, want secret.set", capturedAction)
+	}
+	if capturedResourceID != "my-app" {
+		t.Errorf("resource_id = %q, want my-app (project from query)",
+			capturedResourceID)
+	}
+}
+
+// POST /api/v1/domains body uses "project" key (not "project_id").
+func TestAuditLog_EnrichResourceID_DomainAdded(t *testing.T) {
+	logger := slog.New(slog.NewTextHandler(&bytes.Buffer{}, nil))
+	var capturedResourceID string
+	writer := AuditWriter(func(_, _, _, _, resourceID, _ string, _ map[string]any) {
+		capturedResourceID = resourceID
+	})
+
+	body := `{"domain":"example.com","project":"web","app":"frontend","environment":"production"}`
+	handler := AuditLog(logger, writer)(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.WriteHeader(http.StatusOK)
+	}))
+
+	req := httptest.NewRequest(http.MethodPost, "/api/v1/domains", strings.NewReader(body))
+	req.Header.Set("Content-Type", "application/json")
+	req.ContentLength = int64(len(body))
+	ctx := context.WithValue(req.Context(), userContextKey, &UserContext{
+		UserID: "u-1", TenantID: "tn-1", Role: "owner",
+	})
+	rec := httptest.NewRecorder()
+	handler.ServeHTTP(rec, req.WithContext(ctx))
+
+	if capturedResourceID != "web" {
+		t.Errorf("resource_id = %q, want web (project from body)", capturedResourceID)
+	}
+}
+
+// Malformed JSON body must not crash the middleware nor corrupt the
+// downstream handler — resource_id stays "" and the handler still sees
+// the original (broken) bytes for its own error reporting.
+func TestAuditLog_EnrichResourceID_MalformedBody(t *testing.T) {
+	logger := slog.New(slog.NewTextHandler(&bytes.Buffer{}, nil))
+	var capturedResourceID string
+	writer := AuditWriter(func(_, _, _, _, resourceID, _ string, _ map[string]any) {
+		capturedResourceID = resourceID
+	})
+
+	body := `{not valid json`
+	var handlerSaw string
+	handler := AuditLog(logger, writer)(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		buf, _ := io.ReadAll(r.Body)
+		handlerSaw = string(buf)
+		w.WriteHeader(http.StatusBadRequest)
+	}))
+
+	req := httptest.NewRequest(http.MethodPost, "/api/v1/builds", strings.NewReader(body))
+	req.Header.Set("Content-Type", "application/json")
+	req.ContentLength = int64(len(body))
+	ctx := context.WithValue(req.Context(), userContextKey, &UserContext{
+		UserID: "u-1", TenantID: "tn-1", Role: "owner",
+	})
+	rec := httptest.NewRecorder()
+	handler.ServeHTTP(rec, req.WithContext(ctx))
+
+	if capturedResourceID != "" {
+		t.Errorf("resource_id = %q, want empty for malformed body", capturedResourceID)
+	}
+	if handlerSaw != body {
+		t.Errorf("handler saw %q, want %q (body restoration)", handlerSaw, body)
 	}
 }
 
