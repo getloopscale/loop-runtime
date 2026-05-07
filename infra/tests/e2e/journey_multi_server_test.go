@@ -68,14 +68,19 @@ var _ = Describe("Journey 02: Multi-Server", Ordered, Label("journey"), func() {
 		Expect(buildID).NotTo(BeEmpty())
 	})
 
-	It("deployment names are project-scoped", func() {
+	It("workload names are project-scoped", func() {
+		// Workload primitive is Deployment (legacy) OR Rollout
+		// (argo-rollouts-progressive-delivery-plan T1.3, default-on per
+		// LOOPZERO_PROGRESSIVE_DELIVERY=true). Query both kinds via comma-list
+		// so this spec is forward-compatible regardless of which renderer
+		// path generated the manifests.
 		cmd := exec.Command("kubectl", "--context", workloadKubeContext,
-			"-n", ns, "get", "deploy",
+			"-n", ns, "get", "deployments.apps,rollouts.argoproj.io",
 			"-l", "loopzero.io/project="+project,
 			"--no-headers", "-o", "custom-columns=NAME:.metadata.name")
 		output, err := cmd.CombinedOutput()
 		Expect(err).NotTo(HaveOccurred(),
-			"kubectl get deploy failed: %s", string(output))
+			"kubectl get deployments,rollouts failed: %s", string(output))
 
 		names := strings.Fields(strings.TrimSpace(string(output)))
 		Expect(names).To(ContainElement("multi-server-api"))

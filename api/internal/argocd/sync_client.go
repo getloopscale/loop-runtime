@@ -396,7 +396,15 @@ func (c *SyncClient) GetAppStatus(ctx context.Context, appName string, deployedA
 
 	matchedCount := 0
 	for _, res := range app.Status.Resources {
-		if res.Kind != "Deployment" {
+		// Workload primitive is either Deployment (legacy) or Rollout
+		// (progressive delivery — argo-rollouts-progressive-delivery-plan T1.3).
+		// Both share the resource name `<project>-<app>` per resourceName().
+		// Without this, releases backed by Rollouts stay PENDING forever
+		// because matchedCount never reaches len(deployedApps), causing
+		// every promote/rollback test (and any first-deploy where convergence
+		// is the activator) to time out at 3min. Discovered live during
+		// post-canary-plan dogfood gate run (J05 + J06 regression).
+		if res.Kind != "Deployment" && res.Kind != "Rollout" {
 			continue
 		}
 		if !appSet[res.Name] {
@@ -408,8 +416,9 @@ func (c *SyncClient) GetAppStatus(ctx context.Context, appName string, deployedA
 		}
 	}
 
-	// If we found all Deployments and they're all healthy, consider it healthy.
-	// If no matching Deployments found yet (still rolling out), not healthy.
+	// If we found all workload primitives (Deployment OR Rollout) and they're
+	// all healthy, consider it healthy. If no matching primitives found yet
+	// (still rolling out), not healthy.
 	return isSynced, matchedCount >= len(deployedApps), nil
 }
 

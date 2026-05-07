@@ -250,8 +250,17 @@ func proveDead(tenant, project, env string) {
 		}
 
 		// Namespace exists — check for remaining labeled resources.
+		// Include both Deployment (legacy) and Rollout (progressive
+		// delivery, default-on per argo-rollouts plan) so a stuck
+		// Rollout/TraefikService doesn't yield a false-positive "cleaned".
 		label := fmt.Sprintf("loopzero.io/project=%s", project)
-		for _, resource := range []string{"deployment", "service", "ingressroute.traefik.io"} {
+		for _, resource := range []string{
+			"deployment",
+			"rollout.argoproj.io",
+			"service",
+			"ingressroute.traefik.io",
+			"traefikservice.traefik.io",
+		} {
 			checkRes := exec.Command("kubectl", "--context", ctx,
 				"-n", ns, "get", resource, "-l", label,
 				"--no-headers", "--ignore-not-found", "-o", "name")

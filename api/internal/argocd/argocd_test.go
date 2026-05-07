@@ -207,6 +207,68 @@ func TestGetAppStatus_PerResourceHealth(t *testing.T) {
 	}
 }
 
+// TestGetAppStatus_RolloutCounted_AsWorkloadPrimitive locks in the F-19
+// fix: per-resource health must accept BOTH Deployment (legacy) AND
+// Rollout (progressive delivery, default-on per
+// argo-rollouts-progressive-delivery-plan T1.3). Without this, releases
+// backed by Rollouts stay PENDING forever — observed during the post-
+// canary-plan dogfood gate run as J05/J06 timeout failures.
+func TestGetAppStatus_RolloutCounted_AsWorkloadPrimitive(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		_ = json.NewEncoder(w).Encode(map[string]any{
+			"status": map[string]any{
+				"sync":   map[string]any{"status": "Synced"},
+				"health": map[string]any{"status": "Healthy"},
+				"resources": []map[string]any{
+					{"kind": "Rollout", "name": "myproj-api", "health": map[string]any{"status": "Healthy"}},
+					{"kind": "Service", "name": "myproj-api-stable"},
+					{"kind": "TraefikService", "name": "myproj-api"},
+				},
+			},
+		})
+	}))
+	defer srv.Close()
+
+	client := newHTTPTestSyncClient(srv.URL)
+	synced, healthy, err := client.GetAppStatus(context.Background(), "my-app", []string{"myproj-api"})
+	if err != nil {
+		t.Fatalf("expected no error, got %v", err)
+	}
+	if !synced {
+		t.Error("expected synced=true")
+	}
+	if !healthy {
+		t.Error("Rollout myproj-api is Healthy → release should be considered healthy=true")
+	}
+}
+
+// TestGetAppStatus_RolloutDegraded_BlocksHealthy verifies a Rollout in
+// Degraded state correctly blocks release activation (mirror of the
+// Deployment Progressing case in TestGetAppStatus_PerResourceHealth).
+func TestGetAppStatus_RolloutDegraded_BlocksHealthy(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		_ = json.NewEncoder(w).Encode(map[string]any{
+			"status": map[string]any{
+				"sync":   map[string]any{"status": "Synced"},
+				"health": map[string]any{"status": "Degraded"},
+				"resources": []map[string]any{
+					{"kind": "Rollout", "name": "bad-app-api", "health": map[string]any{"status": "Degraded"}},
+				},
+			},
+		})
+	}))
+	defer srv.Close()
+
+	client := newHTTPTestSyncClient(srv.URL)
+	_, healthy, err := client.GetAppStatus(context.Background(), "my-app", []string{"bad-app-api"})
+	if err != nil {
+		t.Fatalf("expected no error, got %v", err)
+	}
+	if healthy {
+		t.Error("Rollout bad-app-api is Degraded → release must NOT be considered healthy")
+	}
+}
+
 func TestTerminateOperation_404IsIdempotent(t *testing.T) {
 	// Arrange: 404 means no operation running
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
