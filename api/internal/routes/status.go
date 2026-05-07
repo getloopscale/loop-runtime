@@ -107,6 +107,20 @@ type scalingStatusResponse struct {
 	ScaledToZero bool `json:"scaled_to_zero"`
 }
 
+// rolloutStatusResponse describes the canary rollout state for the active
+// release (argo-rollouts-progressive-delivery-plan T4.3). Present only when
+// progressive delivery is enabled and the release has rollout data.
+//
+// Phase values: "Healthy" | "Progressing" | "Paused" | "Degraded" | "Aborted".
+// AnalysisStatus values: "running" | "successful" | "failed" | "inconclusive".
+type rolloutStatusResponse struct {
+	Phase          string `json:"phase"`
+	CurrentStep    int    `json:"current_step,omitempty"`
+	TotalSteps     int    `json:"total_steps,omitempty"`
+	CanaryWeight   int    `json:"canary_weight,omitempty"`
+	AnalysisStatus string `json:"analysis_status,omitempty"`
+}
+
 // statusResponse is the JSON response for GET /api/v1/projects/{name}/status.
 type statusResponse struct {
 	Project       string                 `json:"project"`
@@ -116,6 +130,13 @@ type statusResponse struct {
 	SyncStatus    string                 `json:"sync_status"`
 	URL           string                 `json:"url"`
 	Scaling       *scalingStatusResponse `json:"scaling,omitempty"`
+	// Rollout is the progressive-delivery state for the active release.
+	// Optional/null when:
+	//   - release used legacy Deployment manifests (D8 fallback path), OR
+	//   - rollout state couldn't be queried (degraded mode), OR
+	//   - the release predates progressive delivery rollout (legacy data).
+	// argo-rollouts-progressive-delivery-plan T4.3.
+	Rollout *rolloutStatusResponse `json:"rollout,omitempty"`
 }
 
 // Get handles GET /api/v1/projects/{name}/status?env={env}.

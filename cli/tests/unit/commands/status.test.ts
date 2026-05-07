@@ -562,4 +562,98 @@ describe('StatusCommand', () => {
       expect(output).not.toContain('HTTPScaledObject');
     });
   });
+
+  // argo-rollouts-progressive-delivery-plan T4.3 — rollout state display.
+  describe('progressive deploy display (rollout)', () => {
+    it('shows progressive deploy line with weight + step + analysis', async () => {
+      const deps = createMockDeps({
+        getStatus: jest.fn().mockResolvedValue({
+          environment: 'production',
+          last_build: { id: 'b-1', status: 'SUCCEEDED', finished_at: '2026-04-25T10:00:00Z' },
+          active_release: { id: 'rel-1', status: 'ACTIVE', created_at: '2026-04-25T10:00:00Z' },
+          rollout: {
+            phase: 'Progressing',
+            current_step: 3,
+            total_steps: 5,
+            canary_weight: 50,
+            analysis_status: 'running',
+          },
+        }),
+      });
+      const cmd = new StatusCommand(deps);
+      const exitCode = await cmd.execute({});
+      expect(exitCode).toBe(0);
+      const output = (deps.writeTo as jest.Mock).mock.calls.map((c: string[]) => c[0]).join('\n');
+      expect(output).toContain('Progressive deploy');
+      expect(output).toContain('50%');
+      expect(output).toContain('step 3/5');
+      expect(output).toContain('running');
+      // Rule 3: never expose internal terms
+      expect(output.toLowerCase()).not.toContain('rollout');
+      expect(output.toLowerCase()).not.toContain('argo');
+      expect(output.toLowerCase()).not.toContain('traefikservice');
+    });
+
+    it('shows complete (100%) when phase is Healthy', async () => {
+      const deps = createMockDeps({
+        getStatus: jest.fn().mockResolvedValue({
+          environment: 'production',
+          last_build: { id: 'b-1', status: 'SUCCEEDED', finished_at: '2026-04-25T10:00:00Z' },
+          rollout: { phase: 'Healthy', canary_weight: 100, current_step: 5, total_steps: 5 },
+        }),
+      });
+      const cmd = new StatusCommand(deps);
+      await cmd.execute({});
+      const output = (deps.writeTo as jest.Mock).mock.calls.map((c: string[]) => c[0]).join('\n');
+      expect(output).toContain('Progressive deploy: complete (100%)');
+    });
+
+    it('shows aborted state when phase is Aborted', async () => {
+      const deps = createMockDeps({
+        getStatus: jest.fn().mockResolvedValue({
+          environment: 'production',
+          last_build: { id: 'b-1', status: 'SUCCEEDED', finished_at: '2026-04-25T10:00:00Z' },
+          rollout: { phase: 'Aborted', canary_weight: 20 },
+        }),
+      });
+      const cmd = new StatusCommand(deps);
+      await cmd.execute({});
+      const output = (deps.writeTo as jest.Mock).mock.calls.map((c: string[]) => c[0]).join('\n');
+      expect(output).toContain('Progressive deploy:');
+      expect(output).toContain('aborted at 20%');
+    });
+
+    it('omits progressive deploy line when rollout is null/absent (legacy)', async () => {
+      const deps = createMockDeps({
+        getStatus: jest.fn().mockResolvedValue({
+          environment: 'production',
+          last_build: { id: 'b-1', status: 'SUCCEEDED', finished_at: '2026-04-25T10:00:00Z' },
+        }),
+      });
+      const cmd = new StatusCommand(deps);
+      await cmd.execute({});
+      const output = (deps.writeTo as jest.Mock).mock.calls.map((c: string[]) => c[0]).join('\n');
+      expect(output).not.toContain('Progressive deploy');
+    });
+
+    it('includes rollout in --json output (non-breaking new field)', async () => {
+      const deps = createMockDeps({
+        getStatus: jest.fn().mockResolvedValue({
+          environment: 'production',
+          rollout: {
+            phase: 'Progressing',
+            current_step: 1,
+            total_steps: 2,
+            canary_weight: 50,
+          },
+        }),
+      });
+      const cmd = new StatusCommand(deps);
+      await cmd.execute({ json: true });
+      const parsed = JSON.parse((deps.writeTo as jest.Mock).mock.calls[0][0]);
+      expect(parsed.rollout).toBeDefined();
+      expect(parsed.rollout.phase).toBe('Progressing');
+      expect(parsed.rollout.canary_weight).toBe(50);
+    });
+  });
 });

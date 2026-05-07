@@ -35,6 +35,17 @@ interface StatusApiResponse {
     max: number;
     scaled_to_zero: boolean;
   };
+  // argo-rollouts-progressive-delivery-plan T4.3 — Canary rollout state.
+  // Present when the env has progressive delivery enabled and the most
+  // recent release is mid-canary or recently completed. Optional/null
+  // for legacy Deployment-based deploys.
+  rollout?: {
+    phase: string;             // "Healthy" | "Progressing" | "Paused" | "Degraded" | "Aborted"
+    current_step?: number;
+    total_steps?: number;
+    canary_weight?: number;    // current traffic percent on canary (0-100)
+    analysis_status?: string;  // "running" | "successful" | "failed" | "inconclusive"
+  } | null;
 }
 
 export interface StatusDeps {
@@ -125,11 +136,44 @@ export class StatusCommand {
       this.deps.writeTo(`Sync:         ${status.sync_status}`);
     }
 
+    // argo-rollouts-progressive-delivery-plan T4.3 — Canary rollout state.
+    // Product language only (Rule 3): never expose 'Rollout' / 'Argo' /
+    // 'TraefikService'. Always render as 'Progressive deploy'.
+    if (status.rollout) {
+      this.deps.writeTo(`Progressive deploy: ${StatusCommand.formatRolloutLine(status.rollout)}`);
+    }
+
     if (status.url) {
       this.deps.writeTo(`URL:          ${status.url}`);
     }
 
     return 0;
+  }
+
+  // formatRolloutLine renders the rollout state for human output.
+  // Examples:
+  //   "complete (100%)"
+  //   "50% (step 3/5) — analyzing"
+  //   "20% (step 1/5) — paused"
+  //   "aborted at 20%"
+  static formatRolloutLine(r: NonNullable<StatusApiResponse['rollout']>): string {
+    const phase = (r.phase ?? '').toLowerCase();
+    const weight = r.canary_weight ?? 0;
+    if (phase === 'healthy') {
+      return 'complete (100%)';
+    }
+    if (phase === 'aborted' || phase === 'degraded') {
+      return `${phase} at ${weight}%`;
+    }
+    const stepLabel = (r.current_step && r.total_steps)
+      ? ` (step ${r.current_step}/${r.total_steps})`
+      : '';
+    const analysis = r.analysis_status ? ` — ${r.analysis_status}` : '';
+    const phaseSuffix = phase ? ` (${phase})` : '';
+    if (analysis) {
+      return `${weight}%${stepLabel}${analysis}`;
+    }
+    return `${weight}%${stepLabel}${phaseSuffix}`;
   }
 
   private static readonly SYNC_STATUS_MAP: Record<string, string> = {
