@@ -174,10 +174,11 @@ func setupDomains(
 		stores.DomainStore, stores.ReleaseStore, stores.BuildStore,
 		workflows.GitOpsPusher, stores.Locker, logger,
 		services.DomainProvisionerConfig{
-			Interval:      30 * time.Second,
-			BaseDomain:    cfg.BaseDomain,
-			RegistryURL:   cfg.RegistryURL,
-			ClusterIssuer: cfg.ClusterIssuer, // B14 (MEET-2026-04-23-058)
+			Interval:          30 * time.Second,
+			BaseDomain:        cfg.BaseDomain,
+			RegistryURL:       cfg.RegistryURL,
+			ClusterIssuer:     cfg.ClusterIssuer,     // B14 (MEET-2026-04-23-058)
+			PrometheusAddress: cfg.PrometheusAddress, // argo-rollouts-progressive-delivery-plan T1.2 (D6)
 		},
 	)
 	if cfg.CFZoneManagement && cfZoneClient != nil {
@@ -232,7 +233,8 @@ func createCoreLoops(
 			Interval:           cfg.ReconcileInterval,
 			RegistryURL:        cfg.RegistryURL,
 			BaseDomain:         cfg.BaseDomain,
-			ClusterIssuer:      cfg.ClusterIssuer, // B14 (MEET-2026-04-23-058)
+			ClusterIssuer:      cfg.ClusterIssuer,     // B14 (MEET-2026-04-23-058)
+			PrometheusAddress:  cfg.PrometheusAddress, // argo-rollouts-progressive-delivery-plan T1.2 (D6)
 			MaxBuildsPerTenant: cfg.MaxBuildsPerTenant,
 		},
 	)

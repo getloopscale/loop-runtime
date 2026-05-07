@@ -73,6 +73,15 @@ type Config struct {
 	// Set via LOOPZERO_CLUSTER_ISSUER env var. Empty = Validate() fatal at startup.
 	ClusterIssuer        string
 
+	// argo-rollouts-progressive-delivery-plan T1.2 (D6) — Prometheus URL for
+	// canary AnalysisTemplate queries. Must be reachable from workload
+	// cluster pods. For k3d local dev: "http://172.18.0.X:30090" (mgmt
+	// NodePort). For prod: "http://prometheus.monitoring.svc.cluster.local:9090"
+	// when prometheus is in the workload cluster, OR a reachable URL via
+	// CF Tunnel/service mesh. Empty disables Prometheus-driven analysis
+	// (canary still runs setWeight+pause but skips analysis steps).
+	PrometheusAddress string
+
 	// Credentials (read from env vars or K8s secrets)
 	GiteaToken         string
 	ArgocdToken        string
@@ -282,6 +291,7 @@ func Load() Config {
 		WorkloadIngressURL:   os.Getenv("WORKLOAD_INGRESS_URL"),
 		BaseDomain:           envOr("BASE_DOMAIN", "loopzero.local"),
 		ClusterIssuer:        os.Getenv("LOOPZERO_CLUSTER_ISSUER"),
+		PrometheusAddress:    os.Getenv("LOOPZERO_PROMETHEUS_ADDRESS"),
 
 		// Credentials
 		GiteaToken:         os.Getenv("GITEA_TOKEN"),

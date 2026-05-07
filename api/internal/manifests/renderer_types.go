@@ -365,3 +365,146 @@ type kedaHTTPReplicas struct {
 	Min int `json:"min"`
 	Max int `json:"max"`
 }
+
+// --- Argo Rollouts types (progressive delivery) ---
+//
+// argo-rollouts-progressive-delivery-plan T1.1.
+// Replaces k8sDeployment as the workload primitive when ProgressiveDelivery=true.
+// API version argoproj.io/v1alpha1.
+
+// k8sRollout is the Argo Rollouts Rollout CRD root.
+type k8sRollout struct {
+	APIVersion string         `json:"apiVersion"`
+	Kind       string         `json:"kind"`
+	Metadata   k8sMetadata    `json:"metadata"`
+	Spec       k8sRolloutSpec `json:"spec"`
+}
+
+type k8sRolloutSpec struct {
+	Replicas             int                `json:"replicas"`
+	RevisionHistoryLimit int                `json:"revisionHistoryLimit,omitempty"`
+	Selector             k8sLabelSelector   `json:"selector"`
+	Template             k8sPodTemplateSpec `json:"template"`
+	Strategy             k8sRolloutStrategy `json:"strategy"`
+}
+
+type k8sRolloutStrategy struct {
+	Canary *k8sCanaryStrategy `json:"canary,omitempty"`
+}
+
+type k8sCanaryStrategy struct {
+	CanaryService  string             `json:"canaryService,omitempty"`
+	StableService  string             `json:"stableService,omitempty"`
+	TrafficRouting *k8sTrafficRouting `json:"trafficRouting,omitempty"`
+	Steps          []k8sCanaryStep    `json:"steps"`
+	MaxUnavailable int                `json:"maxUnavailable,omitempty"`
+	MaxSurge       string             `json:"maxSurge,omitempty"`
+}
+
+type k8sTrafficRouting struct {
+	Traefik *k8sTraefikRouting `json:"traefik,omitempty"`
+}
+
+type k8sTraefikRouting struct {
+	WeightedTraefikServiceName string `json:"weightedTraefikServiceName"`
+}
+
+// k8sCanaryStep is one of the discriminated-union steps Argo Rollouts
+// executes in order. Exactly one of {SetWeight, Pause, Analysis} should
+// be set per step. We use pointers so omitempty works correctly.
+type k8sCanaryStep struct {
+	SetWeight *int             `json:"setWeight,omitempty"`
+	Pause     *k8sCanaryPause  `json:"pause,omitempty"`
+	Analysis  *k8sStepAnalysis `json:"analysis,omitempty"`
+}
+
+type k8sCanaryPause struct {
+	Duration string `json:"duration,omitempty"`
+}
+
+type k8sStepAnalysis struct {
+	Templates []k8sAnalysisTemplateRef `json:"templates"`
+	Args      []k8sAnalysisArg         `json:"args,omitempty"`
+}
+
+type k8sAnalysisTemplateRef struct {
+	TemplateName string `json:"templateName"`
+}
+
+type k8sAnalysisArg struct {
+	Name  string `json:"name"`
+	Value string `json:"value,omitempty"`
+}
+
+// --- Traefik TraefikService types (weighted routing) ---
+//
+// argo-rollouts-progressive-delivery-plan T1.1 (D5).
+// CRD provided by Traefik Proxy. Argo Rollouts modifies
+// /spec/weighted/services[*].weight at runtime during canary steps.
+
+type traefikWeightedService struct {
+	APIVersion string                     `json:"apiVersion"`
+	Kind       string                     `json:"kind"`
+	Metadata   k8sMetadata                `json:"metadata"`
+	Spec       traefikWeightedServiceSpec `json:"spec"`
+}
+
+type traefikWeightedServiceSpec struct {
+	Weighted traefikWeightedConfig `json:"weighted"`
+}
+
+type traefikWeightedConfig struct {
+	Services []traefikServiceWeight `json:"services"`
+}
+
+type traefikServiceWeight struct {
+	Name   string `json:"name"`
+	Port   int    `json:"port"`
+	Weight int    `json:"weight"`
+}
+
+// --- AnalysisTemplate types (Prometheus-driven canary validation) ---
+//
+// argo-rollouts-progressive-delivery-plan T1.1 (D3, D6).
+// AnalysisTemplate is per-namespace (D3). EC-3: NaN inconclusive
+// for first deploy. EC-7: consecutiveErrorLimit handles Prometheus
+// outage. EC-14: query targets canary service name pattern.
+
+type analysisTemplate struct {
+	APIVersion string               `json:"apiVersion"`
+	Kind       string               `json:"kind"`
+	Metadata   k8sMetadata          `json:"metadata"`
+	Spec       analysisTemplateSpec `json:"spec"`
+}
+
+type analysisTemplateSpec struct {
+	Args    []analysisTemplateArg    `json:"args,omitempty"`
+	Metrics []analysisTemplateMetric `json:"metrics"`
+}
+
+type analysisTemplateArg struct {
+	Name  string `json:"name"`
+	Value string `json:"value,omitempty"`
+}
+
+type analysisTemplateMetric struct {
+	Name                  string                       `json:"name"`
+	Interval              string                       `json:"interval,omitempty"`
+	InitialDelay          string                       `json:"initialDelay,omitempty"`
+	Count                 int                          `json:"count,omitempty"`
+	SuccessCondition      string                       `json:"successCondition,omitempty"`
+	FailureCondition      string                       `json:"failureCondition,omitempty"`
+	Inconclusive          string                       `json:"inconclusive,omitempty"` // EC-3
+	FailureLimit          int                          `json:"failureLimit,omitempty"`
+	ConsecutiveErrorLimit int                          `json:"consecutiveErrorLimit,omitempty"` // EC-7
+	Provider              analysisTemplateProvider     `json:"provider"`
+}
+
+type analysisTemplateProvider struct {
+	Prometheus *analysisPrometheus `json:"prometheus,omitempty"`
+}
+
+type analysisPrometheus struct {
+	Address string `json:"address"`
+	Query   string `json:"query"`
+}

@@ -141,6 +141,9 @@ func (r *BuildReconcileLoop) retryReleaseActivation(ctx context.Context, build *
 		BaseDomain:        r.cfg.BaseDomain,
 		ClusterIssuerName: r.cfg.ClusterIssuer, // B14
 		Apps:              manifestApps,
+		// argo-rollouts-progressive-delivery-plan T1.2.
+		PrometheusAddress:   r.cfg.PrometheusAddress,
+		ProgressiveDelivery: manifests.ProgressiveDeliveryEnabled(),
 	})
 
 	result := BuildCallbackRequest{

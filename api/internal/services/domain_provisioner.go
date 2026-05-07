@@ -68,16 +68,18 @@ type DomainProvisioner struct {
 	baseDomain     string
 	registryURL    string
 	clusterIssuer  string // B14 (MEET-2026-04-23-058): required for manifest rendering
+	prometheusAddr string // argo-rollouts-progressive-delivery-plan T1.2 (D6)
 	interval       time.Duration
 	cfZone         CFZoneStatusChecker // nil = v1 only, non-nil = v2 CF Zone polling
 }
 
 // DomainProvisionerConfig holds configuration for the domain provisioner.
 type DomainProvisionerConfig struct {
-	Interval      time.Duration
-	BaseDomain    string
-	RegistryURL   string
-	ClusterIssuer string // B14: ClusterIssuer for Certificate CRs
+	Interval          time.Duration
+	BaseDomain        string
+	RegistryURL       string
+	ClusterIssuer     string // B14: ClusterIssuer for Certificate CRs
+	PrometheusAddress string // argo-rollouts-progressive-delivery-plan T1.2 (D6)
 }
 
 // DefaultDomainProvisionerConfig returns sensible defaults.
@@ -108,10 +110,11 @@ func NewDomainProvisioner(
 		gitops:        gitops,
 		locker:        locker,
 		logger:        logger,
-		baseDomain:    cfg.BaseDomain,
-		registryURL:   cfg.RegistryURL,
-		clusterIssuer: cfg.ClusterIssuer, // B14
-		interval:      interval,
+		baseDomain:     cfg.BaseDomain,
+		registryURL:    cfg.RegistryURL,
+		clusterIssuer:  cfg.ClusterIssuer, // B14
+		prometheusAddr: cfg.PrometheusAddress, // argo-rollouts-progressive-delivery-plan T1.2
+		interval:       interval,
 	}
 }
 
@@ -347,6 +350,9 @@ func (p *DomainProvisioner) provisionDomain(ctx context.Context, d routes.Custom
 			BaseDomain:        p.baseDomain,
 			ClusterIssuerName: p.clusterIssuer, // B14
 			Apps:              manifestApps,
+			// argo-rollouts-progressive-delivery-plan T1.2.
+			PrometheusAddress:   p.prometheusAddr,
+			ProgressiveDelivery: manifests.ProgressiveDeliveryEnabled(),
 		})
 
 		pushOpts = GitOpsPushOpts{
@@ -485,6 +491,9 @@ func (p *DomainProvisioner) removeDomain(ctx context.Context, d routes.CustomDom
 			BaseDomain:        p.baseDomain,
 			ClusterIssuerName: p.clusterIssuer, // B14
 			Apps:              manifestApps,
+			// argo-rollouts-progressive-delivery-plan T1.2.
+			PrometheusAddress:   p.prometheusAddr,
+			ProgressiveDelivery: manifests.ProgressiveDeliveryEnabled(),
 		})
 
 		pushOpts = GitOpsPushOpts{

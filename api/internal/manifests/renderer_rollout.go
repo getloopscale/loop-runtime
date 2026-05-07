@@ -1,0 +1,414 @@
+// SPDX-License-Identifier: Apache-2.0
+// Copyright 2025-2026 The LoopZero Authors
+
+// Package manifests — Argo Rollouts (canary progressive delivery).
+//
+// argo-rollouts-progressive-delivery-plan T1.3.
+//
+// This file implements the Rollout-based progressive delivery rendering:
+//   - buildRollout: replaces buildDeployment when ProgressiveDelivery=true
+//   - buildStableService / buildCanaryService: 2 Services for traffic split
+//   - buildTraefikService: weighted routing CRD
+//   - buildAnalysisTemplate: Prometheus-driven canary validation
+//   - canaryStepsForPlan: per-plan canary strategy (D2)
+//   - buildAppContainer / buildAppPodSpec: shared with buildDeployment
+//
+// The renderServerApp / renderWorkerApp / renderFrontendApp paths in
+// renderer_helpers.go select between Deployment (legacy) and Rollout
+// (progressive) based on ri.ProgressiveDelivery.
+
+package manifests
+
+import (
+	"fmt"
+	"sort"
+)
+
+// buildRollout creates an Argo Rollouts Rollout resource for an app.
+// Replaces buildDeployment when ProgressiveDelivery=true (D8).
+//
+// Workers (no traffic) get a Rollout with simple pause-only steps.
+// Server/frontend apps get full canary with TraefikService weighted
+// routing + Prometheus AnalysisTemplate when configured.
+func buildRollout(ri RenderInput, app AppManifestInput, port int) k8sRollout {
+	ns := namespace(ri.TenantID, ri.Environment)
+	labels := commonLabels(ri, app)
+	resName := resourceName(ri.ProjectID, app.Name)
+	selectorLabels := map[string]string{
+		"app":             resName,
+		"loopzero.io/tenant":  ri.TenantID,
+		"loopzero.io/project": ri.ProjectID,
+	}
+
+	container := buildAppContainer(ri, app, port)
+	podSpec := buildAppPodSpec(container)
+	replicas := replicasForApp(app)
+
+	// EC-5 fix: when progressive delivery + scale-to-zero, Rollout starts
+	// with replicas: 1 (not 0) so the canary step has pods to execute. KEDA
+	// scales DOWN after rollout completes via transfer-hpa-ownership.
+	if replicas == 0 {
+		replicas = 1
+	}
+
+	// Worker apps: simple pause-only steps (no traffic to weight).
+	// Server/frontend: full canary with TraefikService + AnalysisTemplate.
+	var canary *k8sCanaryStrategy
+	if app.Type == "worker" {
+		canary = &k8sCanaryStrategy{
+			Steps: workerCanarySteps(),
+		}
+	} else {
+		canary = &k8sCanaryStrategy{
+			StableService: resName + "-stable",
+			CanaryService: resName + "-canary",
+			TrafficRouting: &k8sTrafficRouting{
+				Traefik: &k8sTraefikRouting{
+					WeightedTraefikServiceName: resName,
+				},
+			},
+			Steps: canaryStepsForPlan(ri.Plan, ri.PrometheusAddress != ""),
+		}
+	}
+
+	return k8sRollout{
+		APIVersion: "argoproj.io/v1alpha1",
+		Kind:       "Rollout",
+		Metadata: k8sMetadata{
+			Name:      resName,
+			Namespace: ns,
+			Labels:    labels,
+			Annotations: map[string]string{
+				"loopzero.io/build-id":   ri.BuildID,
+				"loopzero.io/release-id": ri.ReleaseID,
+				// EC-4 Migration Strategy: sync-wave -1 ensures Rollout creates
+				// before legacy Deployment is pruned (when feature flag flips).
+				"argocd.argoproj.io/sync-wave": "-1",
+			},
+		},
+		Spec: k8sRolloutSpec{
+			Replicas:             replicas,
+			RevisionHistoryLimit: 5,
+			Selector:             k8sLabelSelector{MatchLabels: selectorLabels},
+			Template: k8sPodTemplateSpec{
+				Metadata: k8sPodMeta{Labels: labels},
+				Spec:     podSpec,
+			},
+			Strategy: k8sRolloutStrategy{Canary: canary},
+		},
+	}
+}
+
+// canaryStepsForPlan returns the canary step sequence for a tenant plan (D2).
+// withAnalysis indicates whether Prometheus is configured; when false, the
+// Analysis steps are replaced with extra Pause steps (still validates via
+// pod health but skips Prometheus probe).
+//
+// Empty plan defaults to "starter" (most conservative — single 50/100 split).
+func canaryStepsForPlan(plan string, withAnalysis bool) []k8sCanaryStep {
+	switch plan {
+	case "pro":
+		steps := []k8sCanaryStep{
+			intStep(20),
+			pauseStep("30s"),
+		}
+		steps = append(steps, analysisOrPause(withAnalysis, "60s")...)
+		steps = append(steps, intStep(50), pauseStep("30s"))
+		return steps
+	case "team", "enterprise":
+		steps := []k8sCanaryStep{
+			intStep(10),
+			pauseStep("30s"),
+		}
+		steps = append(steps, analysisOrPause(withAnalysis, "60s")...)
+		steps = append(steps, intStep(30), pauseStep("30s"))
+		steps = append(steps, intStep(60), pauseStep("30s"))
+		return steps
+	default: // "starter" or empty
+		return []k8sCanaryStep{
+			intStep(50),
+			pauseStep("60s"),
+		}
+	}
+}
+
+// workerCanarySteps returns simple steps for worker apps (no traffic split).
+// Argo Rollouts still validates pod health between steps.
+func workerCanarySteps() []k8sCanaryStep {
+	return []k8sCanaryStep{
+		pauseStep("30s"),
+	}
+}
+
+func intStep(weight int) k8sCanaryStep {
+	w := weight
+	return k8sCanaryStep{SetWeight: &w}
+}
+
+func pauseStep(duration string) k8sCanaryStep {
+	return k8sCanaryStep{Pause: &k8sCanaryPause{Duration: duration}}
+}
+
+func analysisOrPause(withAnalysis bool, fallbackPause string) []k8sCanaryStep {
+	if withAnalysis {
+		return []k8sCanaryStep{
+			{Analysis: &k8sStepAnalysis{
+				Templates: []k8sAnalysisTemplateRef{
+					{TemplateName: canaryAnalysisTemplateName},
+				},
+				Args: []k8sAnalysisArg{},
+			}},
+		}
+	}
+	return []k8sCanaryStep{pauseStep(fallbackPause)}
+}
+
+// canaryAnalysisTemplateName is the AnalysisTemplate name referenced by
+// Rollout canary steps. Per D3, the template is per-namespace, so this
+// name is constant within each tenant env namespace.
+const canaryAnalysisTemplateName = "loopzero-canary-analysis"
+
+// buildStableService creates the stable Service for canary traffic split.
+// Argo Rollouts manages spec.selector.rollouts-pod-template-hash to mark
+// pods as stable. Initial selector matches all rollout pods; the controller
+// injects the hash to scope it to the stable revision.
+func buildStableService(ri RenderInput, app AppManifestInput, port int) k8sService {
+	resName := resourceName(ri.ProjectID, app.Name)
+	return buildRolloutService(ri, app, resName+"-stable", port)
+}
+
+// buildCanaryService creates the canary Service for canary traffic split.
+// Same selector as stable; Argo Rollouts injects hash to scope to canary
+// revision pods.
+func buildCanaryService(ri RenderInput, app AppManifestInput, port int) k8sService {
+	resName := resourceName(ri.ProjectID, app.Name)
+	return buildRolloutService(ri, app, resName+"-canary", port)
+}
+
+func buildRolloutService(ri RenderInput, app AppManifestInput, svcName string, port int) k8sService {
+	ns := namespace(ri.TenantID, ri.Environment)
+	labels := commonLabels(ri, app)
+	resName := resourceName(ri.ProjectID, app.Name)
+	selectorLabels := map[string]string{
+		"app":             resName,
+		"loopzero.io/tenant":  ri.TenantID,
+		"loopzero.io/project": ri.ProjectID,
+	}
+	if port == 0 {
+		port = 3000
+	}
+	return k8sService{
+		APIVersion: "v1",
+		Kind:       "Service",
+		Metadata: k8sMetadata{
+			Name:      svcName,
+			Namespace: ns,
+			Labels:    labels,
+		},
+		Spec: k8sServiceSpec{
+			Selector: selectorLabels,
+			Ports: []k8sServicePort{
+				{Port: port, TargetPort: port, Protocol: "TCP"},
+			},
+		},
+	}
+}
+
+// buildTraefikService creates the TraefikService weighted routing CRD.
+// Argo Rollouts modifies /spec/weighted/services/[*].weight at runtime
+// during canary steps. ArgoCD must ignore those fields (T2.1).
+//
+// Initial state: stable=100, canary=0 (no traffic to canary until rollout
+// progresses).
+func buildTraefikService(ri RenderInput, app AppManifestInput, port int) traefikWeightedService {
+	ns := namespace(ri.TenantID, ri.Environment)
+	labels := commonLabels(ri, app)
+	resName := resourceName(ri.ProjectID, app.Name)
+	if port == 0 {
+		port = 3000
+	}
+	return traefikWeightedService{
+		APIVersion: "traefik.io/v1alpha1",
+		Kind:       "TraefikService",
+		Metadata: k8sMetadata{
+			Name:      resName,
+			Namespace: ns,
+			Labels:    labels,
+		},
+		Spec: traefikWeightedServiceSpec{
+			Weighted: traefikWeightedConfig{
+				Services: []traefikServiceWeight{
+					{Name: resName + "-stable", Port: port, Weight: 100},
+					{Name: resName + "-canary", Port: port, Weight: 0},
+				},
+			},
+		},
+	}
+}
+
+// buildAnalysisTemplate creates the per-namespace AnalysisTemplate (D3).
+// Queries Traefik service request rate on the canary service, comparing
+// successful responses (non-5xx) against total. EC-3 fix: NaN inconclusive
+// auto-promotes first deploy. EC-7 fix: consecutiveErrorLimit handles
+// Prometheus outages gracefully. EC-14 fix: query targets canary svc name.
+//
+// Returns the template OR a zero-valued struct if PrometheusAddress is
+// empty (caller checks before emitting). The renderer skips emission of
+// the template doc in that case.
+func buildAnalysisTemplate(ri RenderInput, app AppManifestInput) analysisTemplate {
+	ns := namespace(ri.TenantID, ri.Environment)
+	labels := commonLabels(ri, app)
+	resName := resourceName(ri.ProjectID, app.Name)
+	canarySvcPattern := fmt.Sprintf("%s-%s-canary.*", ns, resName)
+	return analysisTemplate{
+		APIVersion: "argoproj.io/v1alpha1",
+		Kind:       "AnalysisTemplate",
+		Metadata: k8sMetadata{
+			Name:      canaryAnalysisTemplateName,
+			Namespace: ns,
+			Labels:    labels,
+		},
+		Spec: analysisTemplateSpec{
+			Metrics: []analysisTemplateMetric{
+				{
+					Name:                  "success-rate",
+					Interval:              "30s",
+					InitialDelay:          "30s",
+					Count:                 3,
+					SuccessCondition:      "result[0] >= 0.95",
+					FailureCondition:      "result[0] < 0.90",
+					Inconclusive:          "isNaN(result[0])", // EC-3
+					FailureLimit:          3,
+					ConsecutiveErrorLimit: 4, // EC-7
+					Provider: analysisTemplateProvider{
+						Prometheus: &analysisPrometheus{
+							Address: ri.PrometheusAddress,
+							Query: fmt.Sprintf(
+								`sum(rate(traefik_service_requests_total{service=~"%s",code!~"5.."}[2m])) / sum(rate(traefik_service_requests_total{service=~"%s"}[2m]))`,
+								canarySvcPattern, canarySvcPattern,
+							),
+						},
+					},
+				},
+			},
+		},
+	}
+}
+
+// --- Shared pod template helpers (extracted for DRY between Deployment and Rollout) ---
+
+// buildAppContainer constructs the container spec from app config.
+// Shared between buildDeployment (legacy) and buildRollout (progressive).
+func buildAppContainer(ri RenderInput, app AppManifestInput, port int) k8sContainer {
+	falseVal := false
+	trueVal := true
+
+	container := k8sContainer{
+		Name:  app.Name,
+		Image: app.ImageRef,
+		Resources: k8sResources{
+			Requests: k8sResourceList{CPU: ri.cpuRequest(), Memory: ri.memoryRequest()},
+			Limits:   k8sResourceList{CPU: ri.cpuLimit(), Memory: ri.memoryLimit()},
+		},
+		SecurityContext: &k8sContainerSecurityContext{
+			AllowPrivilegeEscalation: &falseVal,
+			ReadOnlyRootFilesystem:   &trueVal,
+			Capabilities:             &k8sCapabilities{Drop: []string{"ALL"}},
+		},
+		VolumeMounts: []k8sVolumeMount{
+			{Name: "tmp", MountPath: "/tmp"},
+		},
+	}
+
+	if port > 0 {
+		container.Ports = []k8sContainerPort{
+			{ContainerPort: port, Protocol: "TCP"},
+		}
+		container.Env = append(container.Env, k8sEnvVar{
+			Name: "PORT", Value: fmt.Sprintf("%d", port),
+		})
+		container.StartupProbe = &k8sProbe{
+			HTTPGet:          k8sHTTPGet{Path: "/health", Port: port},
+			PeriodSeconds:    5,
+			TimeoutSeconds:   3,
+			FailureThreshold: 30,
+		}
+		container.ReadinessProbe = &k8sProbe{
+			HTTPGet:          k8sHTTPGet{Path: "/health", Port: port},
+			PeriodSeconds:    10,
+			TimeoutSeconds:   3,
+			SuccessThreshold: 1,
+			FailureThreshold: 3,
+		}
+		container.LivenessProbe = &k8sProbe{
+			HTTPGet:          k8sHTTPGet{Path: "/health", Port: port},
+			PeriodSeconds:    15,
+			TimeoutSeconds:   3,
+			SuccessThreshold: 1,
+			FailureThreshold: 5,
+		}
+	}
+
+	if len(app.Env) > 0 {
+		keys := make([]string, 0, len(app.Env))
+		for k := range app.Env {
+			keys = append(keys, k)
+		}
+		sort.Strings(keys)
+		for _, k := range keys {
+			container.Env = append(container.Env, k8sEnvVar{Name: k, Value: app.Env[k]})
+		}
+	}
+
+	if len(app.Secrets) > 0 {
+		secretRefName := fmt.Sprintf("user-secrets-%s-%s-%s-%s",
+			ri.TenantID, ri.ProjectID, ri.Environment, app.Name)
+		container.EnvFrom = []k8sEnvFromSource{
+			{SecretRef: k8sSecretRef{Name: secretRefName}},
+		}
+	}
+
+	return container
+}
+
+// buildAppPodSpec constructs the pod spec wrapping a container.
+// Shared between buildDeployment (legacy) and buildRollout (progressive).
+func buildAppPodSpec(container k8sContainer) k8sPodSpec {
+	falseVal := false
+	trueVal := true
+	return k8sPodSpec{
+		ServiceAccountName:           "loopzero-app",
+		AutomountServiceAccountToken: &falseVal,
+		SecurityContext: &k8sPodSecurityContext{
+			RunAsNonRoot:   &trueVal,
+			RunAsUser:      int64Ptr(1000),
+			RunAsGroup:     int64Ptr(1000),
+			FSGroup:        int64Ptr(1000),
+			SeccompProfile: &k8sSeccompProfile{Type: "RuntimeDefault"},
+		},
+		Volumes: []k8sVolume{
+			{Name: "tmp", EmptyDir: &k8sEmptyDir{}},
+		},
+		Containers:                    []k8sContainer{container},
+		TerminationGracePeriodSeconds: 30,
+	}
+}
+
+// replicasForApp computes the desired replica count, shared with buildDeployment.
+func replicasForApp(app AppManifestInput) int {
+	replicas := 1
+	if app.Autoscaling != nil {
+		if isScaleToZero(app.Autoscaling) {
+			return 0
+		}
+		minR := app.Autoscaling.MinReplicas
+		if minR < 1 {
+			minR = 1
+		}
+		return minR
+	}
+	if app.Replicas > 0 {
+		return app.Replicas
+	}
+	return replicas
+}

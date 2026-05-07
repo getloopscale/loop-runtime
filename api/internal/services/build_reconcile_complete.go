@@ -100,6 +100,13 @@ func (r *BuildReconcileLoop) onWorkflowSucceeded(ctx context.Context, build *db.
 		BaseDomain:        r.cfg.BaseDomain,
 		ClusterIssuerName: r.cfg.ClusterIssuer, // B14
 		Apps:              manifestApps,
+		// argo-rollouts-progressive-delivery-plan T1.2 — Progressive delivery wiring.
+		// Plan defaults to "starter" inside the renderer when empty (V1: tenant
+		// plan lookup is YAGNI — fixed conservative steps work for all tiers
+		// until real plan-aware behavior is needed). PrometheusAddress and
+		// ProgressiveDelivery come from Config.
+		PrometheusAddress:   r.cfg.PrometheusAddress,
+		ProgressiveDelivery: manifests.ProgressiveDeliveryEnabled(),
 	})
 
 	// Ensure LoopZeroApplication CRs exist on mgmt cluster (non-fatal).

@@ -89,6 +89,39 @@ type RenderInput struct {
 	DefaultMemoryRequest string // Default: "128Mi"
 	DefaultCPULimit      string // Default: "500m"
 	DefaultMemoryLimit   string // Default: "512Mi"
+
+	// argo-rollouts-progressive-delivery-plan T1.2 — Progressive delivery fields.
+	//
+	// Plan is the tenant subscription plan ("starter", "pro", "team",
+	// "enterprise") used to select canary strategy steps (D2). Empty
+	// defaults to "starter" (most conservative).
+	Plan string
+
+	// PrometheusAddress is the Prometheus URL the AnalysisTemplate queries
+	// (D6). Must be reachable from the workload cluster — for k3d local
+	// dev this is typically "http://172.18.0.X:30090" (mgmt cluster
+	// NodePort). Empty disables Prometheus-driven canary analysis (steps
+	// without analysis still run pause/setWeight).
+	PrometheusAddress string
+
+	// ProgressiveDelivery controls whether to emit Rollout (canary) or
+	// legacy Deployment manifests (D8). Default: true. Set false via env
+	// flag LOOPZERO_PROGRESSIVE_DELIVERY=false to revert to legacy Deployment
+	// during incident rollback. Callers must populate from
+	// ProgressiveDeliveryEnabled() helper.
+	ProgressiveDelivery bool
+}
+
+// ProgressiveDeliveryEnabled reports whether Rollout manifests should be
+// emitted. Reads env LOOPZERO_PROGRESSIVE_DELIVERY (D8). Default: true.
+// Returns false only when the env var is explicitly "false" or "0"
+// (case-insensitive).
+func ProgressiveDeliveryEnabled() bool {
+	v := strings.ToLower(strings.TrimSpace(os.Getenv("LOOPZERO_PROGRESSIVE_DELIVERY")))
+	if v == "false" || v == "0" {
+		return false
+	}
+	return true
 }
 
 // Render generates Kubernetes manifests (Deployment, Service, IngressRoute) for all apps.

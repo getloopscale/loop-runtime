@@ -137,7 +137,8 @@ func setupServices(cfg config.Config, dbAdapter *db.PgxAdapter, logger *slog.Log
 			Interval:           cfg.ReconcileInterval,
 			RegistryURL:        cfg.RegistryURL,
 			BaseDomain:         cfg.BaseDomain,
-			ClusterIssuer:      cfg.ClusterIssuer, // B14 (MEET-2026-04-23-058)
+			ClusterIssuer:      cfg.ClusterIssuer,     // B14 (MEET-2026-04-23-058)
+			PrometheusAddress:  cfg.PrometheusAddress, // argo-rollouts-progressive-delivery-plan T1.2 (D6)
 			MaxConcurrent:      cfg.MaxConcurrentBuildsPerCell,
 			MaxBuildsPerTenant: cfg.MaxBuildsPerTenant,
 			CellID:             cellID(cfg),
