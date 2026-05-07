@@ -26,10 +26,17 @@ argo-rollouts:
         memory: 256Mi
 
     # Traffic router plugins — D1+D5 of plan: use TraefikService for
-    # weighted routing between stable and canary services. Argo Rollouts
-    # has native Traefik integration via this plugin.
-    trafficRouterPlugins:
-      traefik: {}
+    # weighted routing between stable and canary services. The Traefik
+    # traffic router is BUILT-IN to Argo Rollouts 1.7+ core; it does NOT
+    # need to be registered here. trafficRouterPlugins is for EXTERNAL
+    # plugins (name+location pairs). Native Traefik integration activates
+    # automatically when a Rollout uses
+    # spec.strategy.canary.trafficRouting.traefik.
+    #
+    # F-13 (2026-05-07): an earlier iteration set this to {traefik: {}}
+    # which broke pod boot with 'cannot unmarshal object into []PluginItem'
+    # because the schema is a list, not a map.
+    trafficRouterPlugins: []
 
     # Hardened pod security (PSA restricted compliance).
     podSecurityContext:
