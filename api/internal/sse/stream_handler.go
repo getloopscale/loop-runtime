@@ -41,12 +41,17 @@ type BuildStoreReader interface {
 // These are events after which no more meaningful events will arrive.
 // - deploy.completed / deploy.sync_failed / deploy.git_push_failed: Phase 2 finished
 // - build.failed / build.cancelled: no deploy will follow
+// - rollout.aborted: argo-rollouts-progressive-delivery-plan T4.1 — canary
+//   analysis failed and Argo Rollouts auto-aborted. Replaces deploy.completed
+//   in the abort path. Note: rollout.step is NON-terminal — stream stays open
+//   while canary progresses through pause/setWeight steps.
 var streamTerminalEvents = map[string]bool{
 	"deploy.completed":       true,
 	"deploy.sync_failed":     true,
 	"deploy.git_push_failed": true,
 	"build.failed":           true,
 	"build.cancelled":        true,
+	"rollout.aborted":        true,
 }
 
 // isStreamTerminalEvent returns true if the event type signals the stream should close.
