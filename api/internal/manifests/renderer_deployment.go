@@ -182,6 +182,14 @@ func buildHPA(ri RenderInput, app AppManifestInput) k8sHPA {
 	}
 
 	resName := resourceName(ri.ProjectID, app.Name)
+	// argo-rollouts-progressive-delivery-plan T3.1 — Target Rollout when
+	// progressive delivery is enabled, Deployment otherwise (D8 fallback).
+	scaleAPIVersion := "apps/v1"
+	scaleKind := "Deployment"
+	if ri.ProgressiveDelivery {
+		scaleAPIVersion = "argoproj.io/v1alpha1"
+		scaleKind = "Rollout"
+	}
 	return k8sHPA{
 		APIVersion: "autoscaling/v2",
 		Kind:       "HorizontalPodAutoscaler",
@@ -192,8 +200,8 @@ func buildHPA(ri RenderInput, app AppManifestInput) k8sHPA {
 		},
 		Spec: k8sHPASpec{
 			ScaleTargetRef: k8sScaleTargetRef{
-				APIVersion: "apps/v1",
-				Kind:       "Deployment",
+				APIVersion: scaleAPIVersion,
+				Kind:       scaleKind,
 				Name:       resName,
 			},
 			MinReplicas: minR,
@@ -233,16 +241,38 @@ func buildScaledObject(ri RenderInput, app AppManifestInput) kedaScaledObject {
 	}
 
 	resName := resourceName(ri.ProjectID, app.Name)
+
+	// argo-rollouts-progressive-delivery-plan T3.1 — KEDA ScaledObject must
+	// reference Rollout (kind+apiVersion) when progressive delivery is on.
+	// Without explicit kind, KEDA defaults to Deployment which doesn't exist
+	// in the progressive-delivery rendering.
+	scaleTarget := kedaScaleTargetRef{Name: resName}
+	if ri.ProgressiveDelivery {
+		scaleTarget.Kind = "Rollout"
+		scaleTarget.APIVersion = "argoproj.io/v1alpha1"
+	}
+
+	// EC-5 fix: when progressive delivery is on, ScaledObject takes ownership
+	// of HPA scaling AFTER the Rollout finishes its canary steps. The
+	// transfer-hpa-ownership annotation lets KEDA assume the HPA that Argo
+	// Rollouts creates internally for the Rollout, instead of generating a
+	// new conflicting HPA.
+	annotations := map[string]string{}
+	if ri.ProgressiveDelivery {
+		annotations["scaledobject.keda.sh/transfer-hpa-ownership"] = "true"
+	}
+
 	return kedaScaledObject{
 		APIVersion: "keda.sh/v1alpha1",
 		Kind:       "ScaledObject",
 		Metadata: k8sMetadata{
-			Name:      resName + "-scaledobject",
-			Namespace: namespace(ri.TenantID, ri.Environment),
-			Labels:    commonLabels(ri, app),
+			Name:        resName + "-scaledobject",
+			Namespace:   namespace(ri.TenantID, ri.Environment),
+			Labels:      commonLabels(ri, app),
+			Annotations: annotations,
 		},
 		Spec: kedaScaledObjectSpec{
-			ScaleTargetRef:  kedaScaleTargetRef{Name: resName},
+			ScaleTargetRef:  scaleTarget,
 			MinReplicaCount: 0,
 			MaxReplicaCount: maxR,
 			CooldownPeriod:  cooldown,
@@ -284,6 +314,15 @@ func buildHTTPScaledObject(ri RenderInput, app AppManifestInput) kedaHTTPScaledO
 	}
 
 	resName := resourceName(ri.ProjectID, app.Name)
+	// argo-rollouts-progressive-delivery-plan T3.1 / EC-1 — when progressive
+	// delivery is enabled, the canonical app Service no longer exists (replaced
+	// by -stable / -canary). HTTPScaledObject must point its Service field at
+	// the -stable Service so the interceptor proxies to running pods. The
+	// Name (Rollout target) stays the same.
+	serviceName := resName
+	if ri.ProgressiveDelivery {
+		serviceName = resName + "-stable"
+	}
 	return kedaHTTPScaledObject{
 		APIVersion: "http.keda.sh/v1alpha1",
 		Kind:       "HTTPScaledObject",
@@ -297,7 +336,7 @@ func buildHTTPScaledObject(ri RenderInput, app AppManifestInput) kedaHTTPScaledO
 			TargetPendingRequests: 100,
 			ScaleTargetRef: kedaHTTPScaleTargetRef{
 				Name:    resName,
-				Service: resName,
+				Service: serviceName,
 				Port:    port,
 			},
 			Replicas:        &kedaHTTPReplicas{Min: 0, Max: maxR},

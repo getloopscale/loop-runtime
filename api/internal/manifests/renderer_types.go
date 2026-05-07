@@ -336,6 +336,10 @@ type kedaScaledObjectSpec struct {
 type kedaScaleTargetRef struct {
 	Name string `json:"name"`
 	Kind string `json:"kind,omitempty"`
+	// APIVersion is the apiVersion of the scale target (kind+apiVersion
+	// pair must match the actual CR). Required by KEDA when targeting
+	// non-Deployment kinds (Rollout requires apiVersion: argoproj.io/v1alpha1).
+	APIVersion string `json:"apiVersion,omitempty"`
 }
 
 type kedaTrigger struct {

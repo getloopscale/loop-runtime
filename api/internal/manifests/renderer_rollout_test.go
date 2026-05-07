@@ -330,6 +330,118 @@ func TestProgressiveDeliveryEnabled_DefaultTrue(t *testing.T) {
 	}
 }
 
+// argo-rollouts-progressive-delivery-plan T3.1 — KEDA + HPA target Rollout
+
+func TestBuildHPA_TargetsRollout_Progressive(t *testing.T) {
+	input := rolloutBaseInput()
+	app := AppManifestInput{
+		Name:        "api",
+		Type:        "server",
+		Port:        3000,
+		ImageRef:    "k3d-loopzero-registry:5000/acme/webapp/api@sha256:abc",
+		Autoscaling: &AutoscalingConfig{MinReplicas: 1, MaxReplicas: 5, TargetCPU: 70},
+	}
+	hpa := buildHPA(input, app)
+	if hpa.Spec.ScaleTargetRef.Kind != "Rollout" {
+		t.Errorf("HPA Kind = %q, want Rollout when ProgressiveDelivery=true", hpa.Spec.ScaleTargetRef.Kind)
+	}
+	if hpa.Spec.ScaleTargetRef.APIVersion != "argoproj.io/v1alpha1" {
+		t.Errorf("HPA APIVersion = %q, want argoproj.io/v1alpha1", hpa.Spec.ScaleTargetRef.APIVersion)
+	}
+}
+
+func TestBuildHPA_TargetsDeployment_Legacy(t *testing.T) {
+	input := rolloutBaseInput()
+	input.ProgressiveDelivery = false
+	app := AppManifestInput{
+		Name:        "api",
+		Type:        "server",
+		Port:        3000,
+		ImageRef:    "k3d-loopzero-registry:5000/acme/webapp/api@sha256:abc",
+		Autoscaling: &AutoscalingConfig{MinReplicas: 1, MaxReplicas: 5, TargetCPU: 70},
+	}
+	hpa := buildHPA(input, app)
+	if hpa.Spec.ScaleTargetRef.Kind != "Deployment" {
+		t.Errorf("HPA Kind = %q, want Deployment when ProgressiveDelivery=false", hpa.Spec.ScaleTargetRef.Kind)
+	}
+}
+
+func TestBuildScaledObject_TargetsRollout_Progressive(t *testing.T) {
+	input := rolloutBaseInput()
+	app := AppManifestInput{
+		Name:        "api",
+		Type:        "server",
+		Port:        3000,
+		ImageRef:    "k3d-loopzero-registry:5000/acme/webapp/api@sha256:abc",
+		Autoscaling: &AutoscalingConfig{MinReplicas: 0, MaxReplicas: 5, TargetCPU: 70},
+	}
+	so := buildScaledObject(input, app)
+	if so.Spec.ScaleTargetRef.Kind != "Rollout" {
+		t.Errorf("ScaledObject Kind = %q, want Rollout", so.Spec.ScaleTargetRef.Kind)
+	}
+	if so.Spec.ScaleTargetRef.APIVersion != "argoproj.io/v1alpha1" {
+		t.Errorf("ScaledObject APIVersion = %q, want argoproj.io/v1alpha1", so.Spec.ScaleTargetRef.APIVersion)
+	}
+	// EC-5: transfer-hpa-ownership annotation
+	if so.Metadata.Annotations["scaledobject.keda.sh/transfer-hpa-ownership"] != "true" {
+		t.Errorf("EC-5: ScaledObject should have transfer-hpa-ownership annotation when progressive delivery on")
+	}
+}
+
+func TestBuildScaledObject_LegacyDeployment(t *testing.T) {
+	input := rolloutBaseInput()
+	input.ProgressiveDelivery = false
+	app := AppManifestInput{
+		Name:        "api",
+		Type:        "server",
+		Port:        3000,
+		ImageRef:    "k3d-loopzero-registry:5000/acme/webapp/api@sha256:abc",
+		Autoscaling: &AutoscalingConfig{MinReplicas: 0, MaxReplicas: 5, TargetCPU: 70},
+	}
+	so := buildScaledObject(input, app)
+	// Legacy: Kind defaults to empty (KEDA infers Deployment)
+	if so.Spec.ScaleTargetRef.Kind != "" {
+		t.Errorf("Legacy ScaledObject Kind should be empty (KEDA defaults Deployment), got %q", so.Spec.ScaleTargetRef.Kind)
+	}
+	if _, hasAnnotation := so.Metadata.Annotations["scaledobject.keda.sh/transfer-hpa-ownership"]; hasAnnotation {
+		t.Errorf("Legacy ScaledObject should NOT have transfer-hpa-ownership annotation")
+	}
+}
+
+func TestBuildHTTPScaledObject_PointsToStableService_Progressive(t *testing.T) {
+	input := rolloutBaseInput()
+	app := AppManifestInput{
+		Name:        "api",
+		Type:        "server",
+		Port:        3000,
+		ImageRef:    "k3d-loopzero-registry:5000/acme/webapp/api@sha256:abc",
+		Autoscaling: &AutoscalingConfig{MinReplicas: 0, MaxReplicas: 3},
+	}
+	httpSO := buildHTTPScaledObject(input, app)
+	expected := resourceName(input.ProjectID, app.Name) + "-stable"
+	if httpSO.Spec.ScaleTargetRef.Service != expected {
+		t.Errorf("HTTPScaledObject Service = %q, want %q (-stable suffix when progressive delivery on)",
+			httpSO.Spec.ScaleTargetRef.Service, expected)
+	}
+}
+
+func TestBuildHTTPScaledObject_PointsToServiceLegacy(t *testing.T) {
+	input := rolloutBaseInput()
+	input.ProgressiveDelivery = false
+	app := AppManifestInput{
+		Name:        "api",
+		Type:        "server",
+		Port:        3000,
+		ImageRef:    "k3d-loopzero-registry:5000/acme/webapp/api@sha256:abc",
+		Autoscaling: &AutoscalingConfig{MinReplicas: 0, MaxReplicas: 3},
+	}
+	httpSO := buildHTTPScaledObject(input, app)
+	expected := resourceName(input.ProjectID, app.Name)
+	if httpSO.Spec.ScaleTargetRef.Service != expected {
+		t.Errorf("Legacy HTTPScaledObject Service = %q, want %q", httpSO.Spec.ScaleTargetRef.Service, expected)
+	}
+}
+
 func TestProgressiveDeliveryEnabled_FalseFlag(t *testing.T) {
 	t.Setenv("LOOPZERO_PROGRESSIVE_DELIVERY", "false")
 	if ProgressiveDeliveryEnabled() {
