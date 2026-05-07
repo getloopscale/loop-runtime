@@ -65,7 +65,14 @@ func (r *TenantReconciler) reconcileArgoCDApp(ctx context.Context, tenant *loopz
 		TenantID:              tenant.Name,
 		SourceRepos:           []string{repoURL},
 		DestinationNamespaces: destNamespaces,
-		DestinationServer:     r.WorkloadClusterURL, // SEC-007: explicit server instead of wildcard
+		DestinationServer:     r.WorkloadClusterURL, // SEC-007: explicit server (used as fallback when CellID empty)
+		// F-08 fix part 3 (2026-05-07 cleanroom dogfood): pass CellID so
+		// EnsureAppProject can use name-based destinations matching what
+		// EnsureApplication already writes (ApplicationSpec.CellID below).
+		// Without this, AppProject.destinations had server: URL while
+		// Application.destination had name: cellID — ArgoCD validation
+		// rejected the App with InvalidSpecError on every sync.
+		CellID: tenant.Spec.CellID,
 	}
 	if err := r.ArgoCDProvisioner.EnsureAppProject(ctx, projSpec); err != nil {
 		return fmt.Errorf("argocd appproject %s: %w", tenant.Name, err)
