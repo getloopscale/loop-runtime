@@ -171,16 +171,23 @@ tasks:
   k3d:bootstrap-workload:
     desc: |
       Bootstrap the workload (k3d-loopzero-workload) cluster with cert-manager +
-      traefik + external-secrets via helmfile. Idempotent — `helmfile sync`
-      no-ops if releases match desired state. Required after fresh
-      `k3d cluster create loopzero-workload` (the runtime helmfile usually only
-      runs in production cells).
+      traefik + external-secrets + argo-rollouts via helmfile. Idempotent —
+      `helmfile sync` no-ops if releases match desired state. Required after
+      fresh `k3d cluster create loopzero-workload` (the runtime helmfile usually
+      only runs in production cells).
       Discovered LIVE 2026-04-30: ArgoCD app sync to runtime fails with
       "Certificate CRD not found" until this is run.
+
+      F-21 fix (2026-05-07, argo-rollouts-progressive-delivery-plan T0.2):
+      argo-rollouts MUST be in this list. Without it, fresh cleanroom
+      bootstrap leaves the workload cluster without the Rollouts CRD, so
+      every `loopzero deploy` (default-on progressive delivery) fails to
+      apply the Rollout manifest and the journey suite cannot run.
     cmds:
       - helmfile -f infra/helmfile/runtime.helmfile.yaml.gotmpl -e standalone-multi --kube-context k3d-loopzero-workload --selector name=cert-manager sync
       - helmfile -f infra/helmfile/runtime.helmfile.yaml.gotmpl -e standalone-multi --kube-context k3d-loopzero-workload --selector name=traefik sync
       - helmfile -f infra/helmfile/runtime.helmfile.yaml.gotmpl -e standalone-multi --kube-context k3d-loopzero-workload --selector name=external-secrets sync
+      - helmfile -f infra/helmfile/runtime.helmfile.yaml.gotmpl -e standalone-multi --kube-context k3d-loopzero-workload --selector name=argo-rollouts sync
 
   k3d:heal:
     desc: |
