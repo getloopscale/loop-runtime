@@ -363,7 +363,15 @@ func (b *WorkflowBuilder) buildMainDAG(spec services.WorkflowSpec, groups []lang
 		// CODE-008 fix: generate-dockerfile now depends on security-scan AND build-apps.
 		// Previously, scan had no downstream deps — builds with critical vulnerabilities
 		// still produced container images. Now scan is a true gate.
-		dockerfileName := "generate-dockerfile" + suffix
+		//
+		// build-mode-dispatch-and-dockerfile-security-plan T1.6 (2026-05-07):
+		// the dockerfile-step task name comes from the Strategy's emitted
+		// container — "generate-dockerfile" for language strategies (loopzero-packs),
+		// "dockerfile-lint" for UserDockerfileStrategy. Hardcoding "generate-
+		// dockerfile" broke build:dockerfile workflows ("invalid spec: template
+		// name 'generate-dockerfile' undefined").
+		dockerfileTemplateName := dockerfileStepTemplateName(g.Strategy)
+		dockerfileName := dockerfileTemplateName + suffix
 		tasks = append(tasks, inlineTask(dockerfileName, dockerfileName, []string{buildName, scanName}))
 	}
 
@@ -374,13 +382,24 @@ func (b *WorkflowBuilder) buildMainDAG(spec services.WorkflowSpec, groups []lang
 	// after build-image. Mirror is best-effort (continueOn.failed=true).
 	if spec.Plan != nil && len(spec.Plan.Apps) > 0 {
 		for _, appPlan := range spec.Plan.Apps {
-			suffix := suffixForStrategy(groups, appPlan.LanguageStrategy)
+			// build-mode-dispatch-and-dockerfile-security-plan T1.5: route by
+			// the per-app Strategy (build:dockerfile → UserDockerfileStrategy)
+			// so suffix and dockerfile-step name match the actual emitted
+			// templates.
+			app := services.AppSpec{
+				Name: appPlan.AppName, Type: appPlan.AppType, Port: appPlan.Port,
+				Path: appPlan.AppPath, Framework: appPlan.LanguageStrategy,
+				Build: appPlan.Build,
+			}
+			strategy := ResolveStrategyForApp(app)
+			suffix := suffixForStrategy(groups, strategy.Name())
+			dfTaskName := dockerfileStepTemplateName(strategy) + suffix
 			if appPlan.DeliveryModel == "static" {
 				taskName := fmt.Sprintf("deliver-artifact-%s", appPlan.AppName)
 				tasks = append(tasks, inlineTask(taskName, taskName, []string{"build-apps" + suffix}))
 			} else {
 				buildTaskName := fmt.Sprintf("build-image-%s", appPlan.AppName)
-				tasks = append(tasks, inlineTask(buildTaskName, buildTaskName, []string{"generate-dockerfile" + suffix}))
+				tasks = append(tasks, inlineTask(buildTaskName, buildTaskName, []string{dfTaskName}))
 				signTaskName := fmt.Sprintf("sign-image-%s", appPlan.AppName)
 				tasks = append(tasks, inlineTask(signTaskName, signTaskName, []string{buildTaskName}))
 				// Sprint 6 / T1.1: SBOM scan after sign. continueOn.failed so
@@ -401,9 +420,11 @@ func (b *WorkflowBuilder) buildMainDAG(spec services.WorkflowSpec, groups []lang
 		}
 	} else {
 		for _, app := range spec.Apps {
-			suffix := suffixForStrategy(groups, ResolveStrategy(app.Framework).Name())
+			strategy := ResolveStrategyForApp(app)
+			suffix := suffixForStrategy(groups, strategy.Name())
+			dfTaskName := dockerfileStepTemplateName(strategy) + suffix
 			buildTaskName := fmt.Sprintf("build-image-%s", app.Name)
-			tasks = append(tasks, inlineTask(buildTaskName, buildTaskName, []string{"generate-dockerfile" + suffix}))
+			tasks = append(tasks, inlineTask(buildTaskName, buildTaskName, []string{dfTaskName}))
 			signTaskName := fmt.Sprintf("sign-image-%s", app.Name)
 			tasks = append(tasks, inlineTask(signTaskName, signTaskName, []string{buildTaskName}))
 			// Sprint 6 / T1.1: SBOM scan after sign. continueOn.failed so

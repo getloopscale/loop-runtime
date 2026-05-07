@@ -1,0 +1,23 @@
+version: 1
+project: malicious-dockerfile
+
+# build-mode-dispatch-and-dockerfile-security-plan T4.4 fixture.
+#
+# This fixture intentionally contains a Dockerfile that violates LoopZero's
+# hard rejection rules (FROM_REGISTRY_NOT_ALLOWED). The journey spec
+# T4.4 deploys this fixture and asserts the build FAILS at the
+# `dockerfile-lint` workflow step BEFORE BuildKit is invoked.
+#
+# Expected behavior:
+#   - Workflow `dockerfile-lint` step exits 1 with FROM_REGISTRY_NOT_ALLOWED
+#   - Subsequent build-image / sbom / cosign steps are Omitted
+#   - API marks build status FAILED
+#   - CLI exit code = 2 (build failure)
+
+apps:
+  api:
+    path: .
+    framework: custom
+    type: server
+    build: dockerfile
+    port: 3000

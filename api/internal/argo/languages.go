@@ -448,6 +448,22 @@ func loopzeroPacks() string {
 	return imageLoopZeroPacks
 }
 
+// dockerfileStepTemplateName returns the template name a strategy's
+// DockerfileStep emits — used by buildMainDAG to wire dependencies
+// correctly. Avoids hardcoding "generate-dockerfile" in the orchestrator.
+//
+// build-mode-dispatch-and-dockerfile-security-plan T1.6 (2026-05-07).
+func dockerfileStepTemplateName(s LanguageStrategy) string {
+	// Probe with a single dummy app so we capture the actual container name.
+	// All strategies must return a container with a stable Name across calls.
+	c := s.DockerfileStep([]services.AppSpec{{Name: "probe", Path: "."}}, 1)
+	if c == nil || c.Name == "" {
+		// Fallback to legacy default.
+		return "generate-dockerfile"
+	}
+	return c.Name
+}
+
 // ---------------------------------------------------------------------------
 // Helper: forge container builder
 // ---------------------------------------------------------------------------
