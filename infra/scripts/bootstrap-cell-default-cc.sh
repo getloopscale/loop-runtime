@@ -102,7 +102,14 @@ metadata:
     app.kubernetes.io/managed-by: bootstrap-cell-default-cc
 spec:
   cellID: cell-default
-  clusterName: workload
+  # F-08 fix (2026-05-07): clusterName MUST equal cellID so the ArgoCD
+  # cluster Secret registers as `name=cell-default` and matches what
+  # the operator writes into ArgoCD App.spec.destination.name. Previously
+  # clusterName=workload + operator using `server: <URL>` for cell-default
+  # caused URL mismatch (operator env DNS hostname vs Secret IP), making
+  # ArgoCD return InvalidSpecError on every sync. Aligning both sides on
+  # logical name removes the URL-mismatch bug class entirely.
+  clusterName: cell-default
   apiServer: https://${WORKLOAD_IP}:6443
   scope:
     argocd: true

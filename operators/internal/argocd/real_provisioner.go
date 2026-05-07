@@ -69,7 +69,15 @@ func (p *RealProvisioner) EnsureAppProject(ctx context.Context, spec AppProjectS
 	// preventing cross-tenant deployment via ArgoCD.
 	// SEC-007: Use explicit destination server instead of wildcard to prevent
 	// cross-cluster deployment when multiple clusters are registered in ArgoCD.
-	useName := spec.CellID != "" && spec.CellID != "cell-default"
+	//
+	// F-08 fix (2026-05-07 cleanroom dogfood): the previous cell-default
+	// sentinel exclusion forced `server: <URL>` resolution, which broke
+	// when the operator's WORKLOAD_CLUSTER_URL env (DNS hostname) didn't
+	// match the cluster Secret's `data.server` (IP). Now ALL non-empty
+	// cellIDs use name-based lookup. ClusterCredential.spec.clusterName
+	// is required to equal cellID for cell-default deploys (enforced
+	// canonically by infra/scripts/bootstrap-cell-default-cc.sh).
+	useName := spec.CellID != ""
 	destServer := spec.DestinationServer
 	if destServer == "" {
 		destServer = "*"
@@ -357,7 +365,10 @@ func buildDestination(spec ApplicationSpec) map[string]interface{} {
 	dest := map[string]interface{}{
 		"namespace": spec.DestinationNS,
 	}
-	if spec.CellID != "" && spec.CellID != "cell-default" {
+	// F-08 fix (2026-05-07): cell-default is no longer a sentinel.
+	// All non-empty cellIDs use name-based lookup. See EnsureAppProject
+	// for full rationale.
+	if spec.CellID != "" {
 		dest["name"] = spec.CellID
 	} else {
 		dest["server"] = spec.DestinationURL
