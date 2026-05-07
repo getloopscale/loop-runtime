@@ -241,7 +241,21 @@ echo "Setting up runtime cluster kubeconfig..."
 
 RUNTIME_CERT=$(kubectl --context "$WORKLOAD_CTX" config view --minify --raw -o jsonpath='{.users[0].user.client-certificate-data}')
 RUNTIME_KEY=$(kubectl --context "$WORKLOAD_CTX" config view --minify --raw -o jsonpath='{.users[0].user.client-key-data}')
-RUNTIME_SERVER="https://k3d-loopzero-workload-server-0:6443"
+# F-10 fix (2026-05-07 cleanroom dogfood): use docker-network IP, not DNS hostname.
+# loopzero-api pod runs inside k3d-loopzero-mgmt cluster and cannot resolve k3d container
+# DNS names from inside cluster pods (B27: docker DNS only works between containers
+# directly on the docker bridge, not from pod network). With DNS-based runtime
+# kubeconfig, SecretK8sManager.runtimeDynamic could not reach the workload cluster,
+# silently failing to create ExternalSecret CRs. Result: pod envFrom referenced a
+# Secret that ESO never produced (because no ExternalSecret), pod hit
+# CreateContainerConfigError, Journey 03 Secrets HTTP probe timed out.
+RUNTIME_IP=$(docker inspect k3d-loopzero-workload-server-0 --format '{{(index .NetworkSettings.Networks "k3d-loopzero").IPAddress}}' 2>/dev/null)
+if [ -z "$RUNTIME_IP" ]; then
+  echo "ERROR: Cannot resolve k3d-loopzero-workload-server-0 docker IP — falling back to DNS hostname"
+  RUNTIME_SERVER="https://k3d-loopzero-workload-server-0:6443"
+else
+  RUNTIME_SERVER="https://${RUNTIME_IP}:6443"
+fi
 
 cat > /tmp/runtime-kubeconfig.yaml <<KUBECONFIG
 apiVersion: v1
