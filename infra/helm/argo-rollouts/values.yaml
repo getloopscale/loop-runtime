@@ -14,6 +14,17 @@ argo-rollouts:
     # Replicas: 1 is enough for local dev; production tunes via separate values.
     replicas: 1
 
+    # F-16 (2026-05-07): Argo Rollouts 1.7.2 defaults the Traefik traffic
+    # router queries to the LEGACY traefik.containo.us API group despite
+    # docs/features/traffic-management/traefik.md claiming v3/traefik.io
+    # is the default (the docs describe the LATEST master, not 1.7.x).
+    # LoopZero runs Traefik v3 which only serves traefik.io. Without these
+    # flags the controller fails with 'the server could not find the
+    # requested resource' on TrafficRouting reconcile.
+    extraArgs:
+      - --traefik-api-group=traefik.io
+      - --traefik-api-version=v1alpha1
+
     # Resource limits — controller is lightweight unless many concurrent
     # rollouts. With ~50 tenants × 5 apps = 250 rollouts max, 250m CPU
     # / 256Mi memory is plenty.
