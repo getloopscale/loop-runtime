@@ -27,22 +27,16 @@ argo-rollouts:
 
     # Traffic router plugins — D1+D5 of plan.
     #
-    # F-16 (2026-05-07): Argo Rollouts 1.7.2 native Traefik integration
-    # queries the LEGACY 'traefik.containo.us' API group. LoopZero runs
-    # Traefik v3.0.2 which only serves 'traefik.io/v1alpha1'. The native
-    # integration fails with 'the server could not find the requested
-    # resource' on TrafficRouting reconcile.
+    # F-16 reverted (2026-05-07): Argo Rollouts 1.7+ has NATIVE Traefik
+    # integration that supports the modern traefik.io API group BY
+    # DEFAULT (per official docs/features/traffic-management/traefik.md).
+    # Traefik v3 works out of the box; only Traefik v2 (legacy
+    # traefik.containo.us) requires explicit controller flags.
+    # No external plugin needed for our deployment (Traefik v3).
     #
-    # Fix: register the EXTERNAL plugin
-    # argoproj-labs/rollouts-plugin-trafficrouter-traefik which supports
-    # the 'traefik.io' API group. The plugin is invoked via the SAME
-    # Rollout CR field (spec.strategy.canary.trafficRouting.traefik) so
-    # the manifests we render don't need to change. Plugin binary is
-    # downloaded by the controller at startup.
-    trafficRouterPlugins:
-      - name: argoproj-labs/sample-traefik-plugin
-        location: https://github.com/argoproj-labs/rollouts-plugin-trafficrouter-traefik/releases/download/v0.4.0/rollouts-plugin-trafficrouter-traefik-linux-amd64
-        sha256: 9bd91fcb4c6b3540d80e32a86cd11d5d7be1e2bc7a55b1404eb87a07d6f49fa9
+    # trafficRouterPlugins is reserved for OTHER external plugins in
+    # the future (custom router implementations, third-party services).
+    trafficRouterPlugins: []
 
     # Hardened pod security (PSA restricted compliance).
     podSecurityContext:

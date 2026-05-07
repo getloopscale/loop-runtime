@@ -63,13 +63,12 @@ func buildRollout(ri RenderInput, app AppManifestInput, port int) k8sRollout {
 			StableService: resName + "-stable",
 			CanaryService: resName + "-canary",
 			TrafficRouting: &k8sTrafficRouting{
-				// F-16 (2026-05-07): use external argoproj-labs traefik plugin
-				// (supports traefik.io API group / Traefik v3) instead of
-				// Argo Rollouts native Traefik (legacy traefik.containo.us).
-				Plugins: map[string]k8sTraefikRouting{
-					"argoproj-labs/sample-traefik-plugin": {
-						WeightedTraefikServiceName: resName,
-					},
+				// F-16 reverted (2026-05-07): use native Argo Rollouts
+				// Traefik integration. Per docs/features/traffic-management/traefik.md
+				// Traefik v3 (traefik.io API group) is the DEFAULT in
+				// Argo Rollouts 1.7+ — no external plugin needed.
+				Traefik: &k8sTraefikRouting{
+					WeightedTraefikServiceName: resName,
 				},
 			},
 			Steps: canaryStepsForPlan(ri.Plan, ri.PrometheusAddress != ""),
