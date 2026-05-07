@@ -411,7 +411,14 @@ type k8sCanaryStrategy struct {
 }
 
 type k8sTrafficRouting struct {
-	Traefik *k8sTraefikRouting `json:"traefik,omitempty"`
+	// Plugins is the modern Argo Rollouts trafficRouting field for
+	// external plugin-based routers. Key is the plugin name (matches
+	// the trafficRouterPlugins entry in the controller config).
+	// argo-rollouts-progressive-delivery-plan F-16 (2026-05-07): use
+	// argoproj-labs/sample-traefik-plugin which supports Traefik v3
+	// (traefik.io/v1alpha1 group) — native Argo Rollouts uses legacy
+	// traefik.containo.us which Traefik v3 does not serve.
+	Plugins map[string]k8sTraefikRouting `json:"plugins,omitempty"`
 }
 
 type k8sTraefikRouting struct {

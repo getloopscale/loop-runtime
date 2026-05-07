@@ -25,18 +25,24 @@ argo-rollouts:
         cpu: 250m
         memory: 256Mi
 
-    # Traffic router plugins — D1+D5 of plan: use TraefikService for
-    # weighted routing between stable and canary services. The Traefik
-    # traffic router is BUILT-IN to Argo Rollouts 1.7+ core; it does NOT
-    # need to be registered here. trafficRouterPlugins is for EXTERNAL
-    # plugins (name+location pairs). Native Traefik integration activates
-    # automatically when a Rollout uses
-    # spec.strategy.canary.trafficRouting.traefik.
+    # Traffic router plugins — D1+D5 of plan.
     #
-    # F-13 (2026-05-07): an earlier iteration set this to {traefik: {}}
-    # which broke pod boot with 'cannot unmarshal object into []PluginItem'
-    # because the schema is a list, not a map.
-    trafficRouterPlugins: []
+    # F-16 (2026-05-07): Argo Rollouts 1.7.2 native Traefik integration
+    # queries the LEGACY 'traefik.containo.us' API group. LoopZero runs
+    # Traefik v3.0.2 which only serves 'traefik.io/v1alpha1'. The native
+    # integration fails with 'the server could not find the requested
+    # resource' on TrafficRouting reconcile.
+    #
+    # Fix: register the EXTERNAL plugin
+    # argoproj-labs/rollouts-plugin-trafficrouter-traefik which supports
+    # the 'traefik.io' API group. The plugin is invoked via the SAME
+    # Rollout CR field (spec.strategy.canary.trafficRouting.traefik) so
+    # the manifests we render don't need to change. Plugin binary is
+    # downloaded by the controller at startup.
+    trafficRouterPlugins:
+      - name: argoproj-labs/sample-traefik-plugin
+        location: https://github.com/argoproj-labs/rollouts-plugin-trafficrouter-traefik/releases/download/v0.4.0/rollouts-plugin-trafficrouter-traefik-linux-amd64
+        sha256: 9bd91fcb4c6b3540d80e32a86cd11d5d7be1e2bc7a55b1404eb87a07d6f49fa9
 
     # Hardened pod security (PSA restricted compliance).
     podSecurityContext:
