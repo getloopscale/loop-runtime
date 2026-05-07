@@ -48,9 +48,17 @@ const veleroNamespace = "velero-system"
 // veleroInstalled reports whether the Velero release is present on the
 // management cluster. Used to skip the entire Describe when running on
 // minimal bootstraps that do not deploy Velero.
+//
+// F-07 fix (2026-05-07 cleanroom dogfood): namespace existence alone is
+// not a reliable signal — cleanroom setup creates velero-system as part
+// of helmfile orchestration even when Velero itself is not deployed
+// (Velero ships separately via `helmfile sync -l name=velero`, not part
+// of bare task setup). Check for the actual Velero CRD registration.
+// When Velero is genuinely installed, backups.velero.io CRD is present.
+// When only the namespace is provisioned without Velero, CRD is absent.
 func veleroInstalled() bool {
 	cmd := exec.Command("kubectl", "--context", mgmtKubeContext,
-		"get", "namespace", veleroNamespace, "--no-headers", "-o", "name")
+		"get", "crd", "backups.velero.io", "--no-headers", "-o", "name")
 	return cmd.Run() == nil
 }
 
