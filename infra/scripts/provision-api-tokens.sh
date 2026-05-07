@@ -281,6 +281,29 @@ KUBECONFIG
 kubectl --context "$MGMT_CTX" -n "$NAMESPACE" create configmap loopzero-runtime-kubeconfig \
   --from-file=config=/tmp/runtime-kubeconfig.yaml \
   --dry-run=client -o yaml | kubectl --context "$MGMT_CTX" apply -f -
+
+# F-11 fix (2026-05-07 cleanroom dogfood): loopzero-cluster-kubeconfigs Secret
+# is mounted by loopzero-api Deployment at /etc/loopzero/runtime/kubeconfig (per
+# infra/tilt/api-deployment.yaml + helm/loopzero-api). generate-secrets.sh
+# creates this Secret with a synthetic in-cluster kubeconfig that points
+# all 3 cluster keys (mgmt/build/runtime.kubeconfig) at kubernetes.default.svc
+# (the SAME mgmt cluster). That assumption is wrong for k3d multi-cluster
+# setups where workload is a separate cluster. Symptom: loopzero-api creates
+# ExternalSecret CRs in mgmt instead of workload, hits forbidden RBAC,
+# and silently fails — Journey 03 Secrets pod hits CreateContainerConfigError.
+#
+# Fix: overwrite the runtime.kubeconfig key in loopzero-cluster-kubeconfigs
+# Secret with the REAL workload kubeconfig (IP-based, admin certs)
+# AFTER generate-secrets.sh has run. Idempotent kubectl apply.
+echo "Patching loopzero-cluster-kubeconfigs runtime.kubeconfig with real workload kubeconfig..."
+kubectl --context "$MGMT_CTX" -n "$NAMESPACE" get secret loopzero-cluster-kubeconfigs >/dev/null 2>&1 && {
+  RUNTIME_KC_B64=$(base64 -w0 /tmp/runtime-kubeconfig.yaml)
+  kubectl --context "$MGMT_CTX" -n "$NAMESPACE" patch secret loopzero-cluster-kubeconfigs \
+    --type='json' \
+    -p="[{\"op\":\"replace\",\"path\":\"/data/runtime.kubeconfig\",\"value\":\"${RUNTIME_KC_B64}\"}]" 2>&1 | tail -1
+  echo "loopzero-cluster-kubeconfigs runtime.kubeconfig: patched with real workload IP"
+} || echo "loopzero-cluster-kubeconfigs Secret not present yet — generate-secrets.sh will create later"
+
 rm -f /tmp/runtime-kubeconfig.yaml
 echo "Runtime cluster kubeconfig: created (admin certs, insecure TLS)"
 
