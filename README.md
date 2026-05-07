@@ -43,11 +43,13 @@ No Kubernetes knowledge required. No Helm. No Dockerfile required. Just push.
 
 ## Project Status
 
-> **Phase: Pre-release.** Production infrastructure running on DigitalOcean (4 DOKS clusters, managed PG, CF Tunnel). Core deploy flow E2E validated. **Multi-cell ACTIVATED + LIVE-validated** (cell-default + cell-1 + cell-2). **Local cleanroom dogfood 12/12 GREEN end-to-end** (2026-05-05). Not yet open to external users.
+> **Phase: Pre-release.** Production infrastructure running on DigitalOcean (4 DOKS clusters, managed PG, CF Tunnel). Core deploy flow E2E validated. **Multi-cell ACTIVATED + LIVE-validated** (cell-default + cell-1 + cell-2). **Argo Rollouts progressive delivery shipped** (2026-05-07): every `loopzero deploy` now produces a canary Rollout (per-plan steps + Traefik weighted routing + auto-abort on bad readiness, default-on under `LOOPZERO_PROGRESSIVE_DELIVERY=true`). **Local cleanroom dogfood 12/12 GREEN end-to-end** (2026-05-05). **Cleanroom Dogfood Gate post-canary: 71/72 PASS (98.6%) in 42m49s on fresh infra** (1 unrelated ESO timing fail); warm-infra journey suite **80/80 PASS in 41m41s**. Not yet open to external users.
 >
 > **Maturity: 3.9/5** -- strong technical foundation, commercially unvalidated. (was 3.6 pre-cell-2; +0.3 from cell-2-activation-plan + fix-all-platform-issues-plan, 2026-05-03.) See [full assessment](docs/maturity-assessment.md).
 >
 > **Local validation gate**: `bash infra/scripts/dogfood-cleanroom-loop.sh` destroys all 4 k3d clusters and re-runs `task setup` + `task k3d:heal` + tilt + 11 dogfood journeys + preflight, all PASS in ~33min without manual intervention. 39 systemic bugs (B1-B39) caught and canonically fixed across 29 iterations. Tag: `dogfood-cleanroom-converged-20260505`. Plan: [`docs/plans/real-paas-cleanroom-dogfood-loop-plan.md`](docs/plans/real-paas-cleanroom-dogfood-loop-plan.md). Final report: [`docs/reports/dogfood-cleanroom-20260505-progress.md`](docs/reports/dogfood-cleanroom-20260505-progress.md). Learnings: [`docs/learnings/cleanroom-iter28-29-learnings-20260505.md`](docs/learnings/cleanroom-iter28-29-learnings-20260505.md).
+>
+> **Progressive delivery validation**: 6 fixes converged during cleanroom validation (F-17 dedicated fixture, F-18 `progressDeadlineSeconds=300`, F-19 S1 `sync_client.go` accepts `Kind="Rollout"`, F-20 S2 e2e scaffolding + proveDead extends to Rollout/TraefikService, F-21 `task k3d:bootstrap-workload` includes argo-rollouts, F-22 S1 `loopzero-ctrl-runtime-rbac-admin` ClusterRole grants `argoproj.io`). Plan: [`docs/plans/argo-rollouts-progressive-delivery-plan.md`](docs/plans/argo-rollouts-progressive-delivery-plan.md).
 >
 > **Path to 4.0**: (a) first CI Sunday cron GREEN producing real `cell2-soaks.yml` 1h+24h workflow run evidence + (b) 1 prod customer day-trial with no incidents (Sprint 9 prod canary stage 4). Local 7-day GREEN streak NOT a gate (tautological in static dev env without diurnal traffic; CI cron + real prod usage are the legitimate signals — D7 reformulated 2026-05-03).
 
@@ -57,12 +59,13 @@ No Kubernetes knowledge required. No Helm. No Dockerfile required. Just push.
 |------------|----------|
 | `loopzero login` / `logout` / `whoami` | Device Code Flow + Ory Hydra OIDC |
 | `loopzero init` (monorepo detection) | Turbo/Nx/Lerna/pnpm + 30 frameworks |
-| `loopzero deploy` (full pipeline) | CLI -> upload -> BuildKit -> cosign sign -> ArgoCD sync -> live URL (~4min) |
+| `loopzero deploy` (full pipeline) | CLI -> upload -> BuildKit -> cosign sign -> ArgoCD sync -> Argo Rollouts canary -> live URL (~4min) |
+| `loopzero deploy` (progressive delivery) | **Default-on** under `LOOPZERO_PROGRESSIVE_DELIVERY=true`. Per-plan canary: Starter (50%/100%), Pro (20%/Analysis/50%/100%), Team & Enterprise (10%/Analysis/30%/60%/100%). TraefikService weighted routing between `<app>-stable` and `<app>-canary` Services. AnalysisTemplate hooks Prometheus success-rate when configured (pro+ tiers). Auto-abort on Degraded/Aborted via `progressDeadlineSeconds=300` + `rollout.aborted` SSE (CLI exit 3). 80/80 GREEN warm dogfood, 71/72 GREEN fresh cleanroom. |
 | `loopzero deploy` (static frontends) | S3 upload + CF Worker KV routing + DO Spaces CDN |
 | `loopzero rollback` | Instant revert to previous release (~3s) |
 | `loopzero promote --from staging --to production` | Cross-environment promotion (HTTP 202, no rebuild) |
 | `loopzero logs` | Loki cross-cluster streaming |
-| `loopzero status` | Project status with active release, URL, scaling info |
+| `loopzero status` | Project status with active release, URL, scaling info, **progressive deploy phase** (canary step + setWeight%) |
 | `loopzero secret set/list/delete` | ESO sync <30s, values never exposed in CLI output |
 | `loopzero cancel` | Cancel running/queued builds |
 | `loopzero project create/list/inspect/delete` | Full CRUD with clean resource removal |
@@ -78,7 +81,7 @@ No Kubernetes knowledge required. No Helm. No Dockerfile required. Just push.
 | Concurrent deploy protection | `pg_advisory_xact_lock` -> exactly one 202, others get 409 |
 | Idempotency | Retry-safe via `Idempotency-Key` header |
 | Image signing (cosign) | Every container image signed post-build |
-| Scale-to-zero (KEDA) | Manifest generation + Helm charts + Pulumi bootstrap (cluster KEDA pending) |
+| Scale-to-zero (KEDA) | Manifest generation + Helm charts + Pulumi bootstrap (cluster KEDA pending). KEDA HPA targets `Kind=Rollout` post-canary plan (T3.1) with `transfer-hpa-ownership` annotation so Argo Rollouts owns replica scaling during canary, KEDA after promotion. |
 | Cell architecture (3 cells LIVE) | PlacementEngine, DynamicRouter (`loopzero_cell_discovery_count=3`), cell-scoped queries, leader fencing, build admission gate, PG work queue, capacity tests. **Cell-2 ACTIVATED 2026-05-03**: tenant pin via `loopzero admin tenants pin --cell cell-2` → CR MergePatch + ArgoCD destination flip → workload Pod Running on loopzero-runtime-2. 12/12 ADR gates LIVE GREEN persistente. Rollback SLO P50=648ms / P95=705ms (<<300s budget). EnvironmentReconciler cell-aware via `CellAwareRuntimeClientFactory` covers monolithic + split-binary builds. Heal H14+H15 codify cell-2 ClusterCredential refresh+bootstrap + ArgoCD bearer token sync. Production stages 4-5 (1 customer 7-day → 10/50/100%) pending Sprint 9 readiness review. |
 | SecurityContext (non-root pods) | `runAsNonRoot`, `drop: ALL`, `readOnlyRootFilesystem` |
 | PodSecurity Admission | `restricted` profile on all tenant namespaces |
@@ -114,14 +117,15 @@ No Kubernetes knowledge required. No Helm. No Dockerfile required. Just push.
 
 | Component | Count | Status |
 |-----------|------:|--------|
-| CLI (Jest) | 1,210+ | Passing |
-| API + Shared libs (Go) | 41 packages | Passing (multi-cell: placement determinism with -race + admin_pin_cell C11 authz + migration_007/008 invariants + reaper observability) |
+| CLI (Jest) | 1,213+ | Passing (added `deploy.ts` rollout.step / rollout.aborted handlers + `status.ts` formatRolloutLine + 8 canary-progress unit tests). 1 pre-existing `getPlatformStatus-charts.test.ts` failure unrelated to canary plan (CHG-2026-04-30-INFRA-PARITY chart-name drift). |
+| API + Shared libs (Go) | 41 packages | Passing (multi-cell: placement determinism with -race + admin_pin_cell C11 authz + migration_007/008 invariants + reaper observability + canary: `TestBuildRollout_*` × 7 + `TestBuildRollout_ProgressDeadlineSeconds` × 4 plan tiers + `TestBuildHPA_TargetsRollout_Progressive` + `TestBuildScaledObject_TargetsRollout_Progressive` + `TestGetAppStatus_RolloutCounted_AsWorkloadPrimitive` + `TestGetAppStatus_RolloutDegraded_BlocksHealthy`) |
 | Operators (Ginkgo + envtest) | 200+ specs | Passing (+ application reaper 10 fake-client tests + cell-aware factory 7 tests, no envtest dependency) |
 | Pulumi (vitest) | 310+ specs | Passing (heal-script H14 24 invariants + migrations-forward-only 11 invariants) |
 | State machines | 10 application + 9 release + 7 build | Passing (`ApplicationCleaned` terminal state via `ApplicationOrphaned` event added 2026-05-03) |
 | CI pipeline | 29 workflows | Green (incl. `cell2-soaks.yml` weekly Sunday 02:00 UTC + `platform-health-7day-watch.yml` hourly) |
 | Regression matrix | 166 entries | 0 critical miss, audit GREEN |
 | Cleanroom dogfood (E2E) | preflight + 11 journeys | **12/12 GREEN** end-to-end on fresh `k3d` destroy/setup cycle (2026-05-05, tag `dogfood-cleanroom-converged-20260505`). Validates: solo deploy, multi-server (api+worker), secrets via ESO, scale persistence, promote staging→production, rollback v2→v1 with state machine, custom domain register/list/status/remove, GitHub connect/disconnect, preview list/inspect/delete, failure modes (auth/cap/build), admin (evict dry-run + service-auth gating). Total: ~33min. Rule 3 audit: 0 internal-term matches in CLI output. |
+| Ginkgo journey suite (Argo Rollouts) | 80 specs (label `journey`) | **80/80 GREEN warm-infra in 41m41s** + **71/72 GREEN fresh-cleanroom in 42m49s** post F-22 (2026-05-07). Includes T5.1 happy-path canary (Rollout + canary strategy + TraefikService weights + Healthy phase), T5.2 auto-abort on bad `/health` (readiness probe drives Degraded within `progressDeadlineSeconds=300`), all promote/rollback flows over Rollouts, multi-server with Rollout naming. |
 
 ---
 
@@ -145,6 +149,7 @@ LoopZero gives you Vercel-quality DX for everything Vercel can't deploy.
 | Preview environments per PR | Yes | Yes (Sprint 5 fully shipped — PR open/synchronize/close webhooks → preview lifecycle, 12 E2E specs pass live) |
 | Scale-to-zero | Yes | Yes (KEDA, pending cluster setup) |
 | Image signing | -- | Yes (cosign) |
+| Progressive delivery (canary) | -- | Yes (Argo Rollouts: per-plan steps, Traefik weighted routing, auto-abort) |
 | CLI-first | Yes | Yes |
 
 ---
@@ -363,6 +368,7 @@ loopzero deploy (or git push)
 | Auth | Ory Kratos (identity) + Ory Hydra (OAuth2/OIDC) |
 | Build engine | Argo Workflows + BuildKit (rootless) |
 | GitOps | ArgoCD (manual sync) + Gitea |
+| Progressive delivery | Argo Rollouts 1.7.2 (per-plan canary steps, TraefikService weighted routing on `traefik.io/v1alpha1`, AnalysisTemplate, `progressDeadlineSeconds=300` for abort detection) |
 | Database | PostgreSQL 16 (CloudNativePG in self-hosted, managed DO in cloud) |
 | Autoscaling | KEDA + HTTP Add-on (scale-to-zero) + HPA (min >= 1) |
 | Secrets | External Secrets Operator |
