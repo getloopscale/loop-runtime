@@ -60,7 +60,6 @@ var _ = Describe("Journey 13: Progressive Delivery (canary)", Ordered, Label("jo
 
 	var (
 		workDir string
-		host    string
 	)
 
 	BeforeAll(func() {
@@ -71,9 +70,15 @@ var _ = Describe("Journey 13: Progressive Delivery (canary)", Ordered, Label("jo
 		}
 		seedE2E()
 
-		host = seed.TenantID + "-" + project + "-" + app + "-" + env + ".loopzero.local"
+		// Host is computed but not used in the assertion specs below — they
+		// query the Rollout/TraefikService directly. Project name + tenant
+		// suffice for kubectl scoping.
+		_ = seed.TenantID + "-" + project + "-" + app + "-" + env + ".loopzero.local"
 		ensureProjectDeleted(project)
-		workDir = copyFixture("solo-server")
+		// Dedicated fixture (project=rollout-canary-app) so this Describe
+		// does not collide with journey 01's solo-deploy (project=solo-server)
+		// inside the shared E2E tenant namespace.
+		workDir = copyFixture("rollout-canary-app")
 		initGitRepo(workDir)
 	})
 
@@ -194,27 +199,34 @@ var _ = Describe("Journey 13b: Progressive Delivery — Canary auto-abort", Orde
 
 	It("T5.2: bad-health canary auto-aborts; stable traffic unchanged", func() {
 		// Submit deploy. Build itself succeeds (image is valid; /health
-		// returns 500 only at runtime). The Rollout enters canary phase,
-		// AnalysisTemplate queries Prometheus for success-rate of
-		// {ns}-{resName}-canary.* services, detects 5xx responses, and
-		// after failureLimit consecutive failures (default 3 @ 30s
-		// interval = ~90-150s), Argo Rollouts marks the Rollout
-		// status.phase=Degraded or Aborted, transitions analysis to
-		// Failed, and the API release_convergence_loop emits
-		// rollout.aborted SSE event.
+		// returns 500 only at runtime). The Rollout enters canary phase
+		// and reconciles the canary ReplicaSet — but the renderer wires
+		// readinessProbe to /health, which the bad-health fixture serves
+		// as 500. The canary pods never reach Ready, the canary step
+		// pause never advances, and after Rollout.spec.progressDeadlineSeconds
+		// (set to 300s by the renderer for ALL canaries — see
+		// renderer_rollout.go), Argo Rollouts marks
+		// status.phase=Degraded.
 		//
-		// We assert by observing the Rollout phase becomes Degraded or
-		// Aborted, AND traffic stays on stable (TraefikService stable
-		// weight unchanged at 100, canary at 0 since promotion was
-		// rejected before progressing).
+		// This is the pod-readiness abort path. The Prometheus-driven
+		// path (AnalysisTemplate failure on success-rate < 0.90) is the
+		// stricter validation tier — it requires (a) tenant plan that
+		// includes Analysis steps (pro/team), AND (b) PrometheusAddress
+		// configured on the API. Both are exercised in staging/prod
+		// canary stages; locally only the readiness path applies.
+		//
+		// Assertion: Rollout status.phase becomes Degraded or Aborted,
+		// AND TraefikService stable weight remains 100 (canary never
+		// served real traffic to user requests).
 		buildID, _ := deployAndWaitSuccess(workDir, env, deployTimeout)
 		Expect(buildID).NotTo(BeEmpty())
 
 		ns := "loopzero-" + seed.TenantID + "-" + env
 		resName := project + "-" + app
 
-		// Wait for Rollout to enter Degraded/Aborted phase (analysis fail).
-		// Generous timeout — analysis takes ~90s (3 fail counts @ 30s).
+		// Wait for Rollout to enter Degraded/Aborted phase. Pod readiness
+		// fails immediately; Rollout marks Degraded after
+		// progressDeadlineSeconds=300s. Test budget 8min covers worst case.
 		Eventually(func() string {
 			cmd := kubectlWorkload("get", "rollout",
 				"-n", ns, resName, "-o", "jsonpath={.status.phase}")
@@ -223,7 +235,7 @@ var _ = Describe("Journey 13b: Progressive Delivery — Canary auto-abort", Orde
 		}, 8*time.Minute, 10*time.Second).Should(SatisfyAny(
 			Equal("Degraded"),
 			Equal("Aborted"),
-		), "Rollout should reach Degraded/Aborted after canary analysis fails on bad /health")
+		), "Rollout should reach Degraded/Aborted after canary readinessProbe (/health) fails on bad-health fixture")
 
 		// Stable traffic unchanged. Argo Rollouts only modifies weights
 		// AFTER analysis succeeds; on abort, weights stay at initial

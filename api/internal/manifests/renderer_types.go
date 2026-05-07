@@ -390,11 +390,12 @@ type k8sRollout struct {
 }
 
 type k8sRolloutSpec struct {
-	Replicas             int                `json:"replicas"`
-	RevisionHistoryLimit int                `json:"revisionHistoryLimit,omitempty"`
-	Selector             k8sLabelSelector   `json:"selector"`
-	Template             k8sPodTemplateSpec `json:"template"`
-	Strategy             k8sRolloutStrategy `json:"strategy"`
+	Replicas                int                `json:"replicas"`
+	RevisionHistoryLimit    int                `json:"revisionHistoryLimit,omitempty"`
+	Selector                k8sLabelSelector   `json:"selector"`
+	Template                k8sPodTemplateSpec `json:"template"`
+	Strategy                k8sRolloutStrategy `json:"strategy"`
+	ProgressDeadlineSeconds int                `json:"progressDeadlineSeconds,omitempty"`
 }
 
 type k8sRolloutStrategy struct {

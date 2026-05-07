@@ -53,6 +53,31 @@ func TestBuildRollout_StarterPlan(t *testing.T) {
 	}
 }
 
+// TestBuildRollout_ProgressDeadlineSeconds verifies that EVERY canary
+// Rollout — regardless of plan or fixture — declares a 5min deadline so
+// readinessProbe-driven aborts (e.g., bad-health canary in T5.2) are
+// detected within E2E test budgets and ops SLOs. Default 600s would
+// blow through the 8min spec timeout and cause flakes.
+func TestBuildRollout_ProgressDeadlineSeconds(t *testing.T) {
+	cases := []struct{ name, plan string }{
+		{"starter", "starter"},
+		{"pro", "pro"},
+		{"team", "team"},
+		{"enterprise", "enterprise"},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			input := rolloutBaseInput()
+			input.Plan = tc.plan
+			rollout := buildRollout(input, input.Apps[0], 3000)
+			if rollout.Spec.ProgressDeadlineSeconds != 300 {
+				t.Errorf("%s plan progressDeadlineSeconds = %d, want 300",
+					tc.plan, rollout.Spec.ProgressDeadlineSeconds)
+			}
+		})
+	}
+}
+
 func TestBuildRollout_ProPlanWithAnalysis(t *testing.T) {
 	input := rolloutBaseInput()
 	input.Plan = "pro"

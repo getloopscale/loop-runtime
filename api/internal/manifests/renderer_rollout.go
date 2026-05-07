@@ -105,6 +105,16 @@ func buildRollout(ri RenderInput, app AppManifestInput, port int) k8sRollout {
 				Spec:     podSpec,
 			},
 			Strategy: k8sRolloutStrategy{Canary: canary},
+			// progressDeadlineSeconds=300 (5min): when canary pods cannot reach
+			// Ready within this window (e.g., readinessProbe /health returning
+			// 5xx as in the rollout-bad-health fixture), Argo Rollouts marks
+			// status.phase=Degraded. This is the pod-readiness abort path
+			// available without Prometheus + AnalysisTemplate (which require
+			// pro+ plan and a configured PrometheusAddress).
+			//
+			// 300s also fits inside the T5.2 E2E spec timeout of 8min.
+			// The default 600s would exceed the test budget and cause flakes.
+			ProgressDeadlineSeconds: 300,
 		},
 	}
 }

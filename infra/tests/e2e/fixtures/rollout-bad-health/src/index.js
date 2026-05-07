@@ -1,14 +1,17 @@
 // argo-rollouts-progressive-delivery-plan T5.2 fixture.
 //
 // This app deliberately fails / and /health with 500 so that:
-//   - kubelet readinessProbe (path /readiness) keeps the pod Ready,
-//   - Traefik traffic to / and /health returns 500 → success-rate < 0.90
-//   - Argo Rollouts AnalysisTemplate detects degraded canary and auto-aborts.
+//   - the renderer wires Rollout pod readinessProbe to /health, so canary
+//     pods never reach Ready → Argo Rollouts marks the Rollout phase
+//     Degraded after spec.progressDeadlineSeconds (set to 300s by the
+//     renderer for ALL canaries), AND
+//   - if a Prometheus AnalysisTemplate is wired (pro/team plan +
+//     PrometheusAddress configured), success-rate on the canary Service
+//     drops below the analysis threshold and triggers an explicit abort.
 //
-// Isolated cause: pod IS healthy from kubelet's perspective (readinessProbe
-// hits /readiness which always returns 200). Only application traffic
-// fails. This validates the success-rate query path specifically — not
-// the kubelet pod-failure path.
+// Locally (starter plan, no Prometheus) the Degraded transition comes
+// via the readiness path. /readiness still returns 200 to keep kubelet
+// from killing the pod; the renderer just doesn't probe it.
 
 const express = require("express");
 const app = express();
