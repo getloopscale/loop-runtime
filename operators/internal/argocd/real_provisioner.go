@@ -213,6 +213,51 @@ func buildApplicationObject(spec ApplicationSpec) *unstructured.Unstructured {
 						"PruneLast=true",
 					},
 				},
+				// argo-rollouts-progressive-delivery-plan T2.1 — ArgoCD must
+				// ignore fields modified at runtime by Argo Rollouts and the
+				// scaler (HPA/KEDA), otherwise every reconcile would show
+				// drift and OutOfSync state, blocking notifications and
+				// potentially overwriting canary progress on auto-sync.
+				"ignoreDifferences": []interface{}{
+					// Rollout replicas — KEDA/HPA modifies at runtime.
+					map[string]interface{}{
+						"group": "argoproj.io",
+						"kind":  "Rollout",
+						"jsonPointers": []interface{}{
+							"/spec/replicas",
+						},
+					},
+					// Legacy Deployment replicas (D8 fallback path).
+					map[string]interface{}{
+						"group": "apps",
+						"kind":  "Deployment",
+						"jsonPointers": []interface{}{
+							"/spec/replicas",
+						},
+					},
+					// TraefikService weights — Argo Rollouts shifts at runtime
+					// during canary steps. Both indices listed because the
+					// renderer always emits stable+canary in fixed order.
+					map[string]interface{}{
+						"group": "traefik.io",
+						"kind":  "TraefikService",
+						"jsonPointers": []interface{}{
+							"/spec/weighted/services/0/weight",
+							"/spec/weighted/services/1/weight",
+						},
+					},
+					// EC-13: Service selectors — Argo Rollouts injects
+					// rollouts-pod-template-hash to scope selectors to
+					// stable/canary revision. The renderer doesn't emit this
+					// field; Rollouts adds it at runtime.
+					map[string]interface{}{
+						"group": "",
+						"kind":  "Service",
+						"jsonPointers": []interface{}{
+							"/spec/selector/rollouts-pod-template-hash",
+						},
+					},
+				},
 			},
 		},
 	}
