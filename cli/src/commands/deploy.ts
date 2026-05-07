@@ -571,6 +571,62 @@ export class DeployCommand {
       return true;
     }
 
+    // argo-rollouts-progressive-delivery-plan T4.2 — Canary progress events.
+    //
+    // rollout.step is a progress event (NON-terminal). Stream stays open;
+    // CLI shows current canary weight/step. The renderer uses product
+    // language only (Rule 3): "Canary deployment" / "Progressive deploy" —
+    // never "Rollout", "Argo Rollouts", "TraefikService".
+    if (event.type === 'rollout.step') {
+      const data = event.data as Record<string, unknown>;
+      const weight = typeof data.weight === 'number' ? data.weight : 0;
+      const step = typeof data.step === 'number' ? data.step : 0;
+      const totalSteps = typeof data.total_steps === 'number' ? data.total_steps : 0;
+      const status = typeof data.status === 'string' ? data.status : 'progressing';
+      // JSON mode: stream a progress event line per Rule 5.
+      if (opts.json) {
+        this.deps.writeTo(JSON.stringify({
+          event: 'canary.progress',
+          weight,
+          step,
+          total_steps: totalSteps,
+          status,
+        }));
+      } else {
+        // Human mode: spinner-friendly progress line.
+        const stepLabel = totalSteps > 0 ? `step ${step}/${totalSteps}` : `step ${step}`;
+        this.deps.writeTo(`Canary deployment: ${weight}% (${stepLabel}) — ${status}`);
+      }
+      return false; // non-terminal: keep stream open.
+    }
+
+    // rollout.aborted is TERMINAL: canary was auto-aborted (analysis failed,
+    // pod unhealthy, or user-aborted). CLI exits with code 3 (deploy failure).
+    if (event.type === 'rollout.aborted') {
+      const data = event.data as Record<string, unknown>;
+      const reason = typeof data.reason === 'string' ? data.reason : 'unknown';
+      const message = typeof data.message === 'string' ? data.message : '';
+      const weight = typeof data.weight === 'number' ? data.weight : 0;
+      const userMessage = message
+        ? `Canary deployment aborted at ${weight}%: ${message}`
+        : `Canary deployment aborted at ${weight}% (reason: ${reason})`;
+      if (opts.json) {
+        this.deps.writeTo(JSON.stringify({
+          code: 'CANARY_ABORTED',
+          error: userMessage,
+          reason,
+          weight,
+          exit_code: 3,
+          build_id: buildResult.build_id,
+        }));
+      } else {
+        this.deps.writeError(userMessage);
+        this.deps.writeError(`Run: loopzero logs --build ${buildResult.build_id}`);
+      }
+      finish(3);
+      return true;
+    }
+
     if (event.type === 'stream.error') {
       const data = event.data as Record<string, unknown>;
       const reason = String(data.error ?? 'Stream connection failed');
