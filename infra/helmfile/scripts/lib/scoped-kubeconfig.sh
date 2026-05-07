@@ -67,6 +67,15 @@ rules:
     resources: ["*"]
     verbs: ["create", "update", "patch", "delete"]
   # Framework CRDs the tenant manifests depend on.
+  # F-22 (argo-rollouts-progressive-delivery-plan, 2026-05-07): added
+  # argoproj.io for Rollouts/AnalysisRuns/AnalysisTemplates/Experiments.
+  # Without this, tenant manifests render Rollout CRs but ArgoCD cannot
+  # apply them — the App stays OutOfSync with health=Missing forever and
+  # the workload pods never start (404 from Traefik). Discovered LIVE
+  # during fresh-cleanroom Ginkgo journey run when 5/7 specs failed at
+  # HTTP 200 because no pods came up; ArgoCD log: 'rollouts.argoproj.io
+  # is forbidden: User "loopzero-ctrl-runtime" cannot create resource
+  # "rollouts" in API group "argoproj.io"'.
   - apiGroups:
       - traefik.io
       - traefik.containo.us
@@ -75,6 +84,7 @@ rules:
       - keda.sh
       - external-secrets.io
       - monitoring.coreos.com
+      - argoproj.io
     resources: ["*"]
     verbs: ["create", "update", "patch", "delete"]
   # RBAC for tenant ServiceAccounts.
