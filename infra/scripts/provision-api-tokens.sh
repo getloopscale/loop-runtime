@@ -138,13 +138,22 @@ config = {'tlsClientConfig': {'insecure': True, 'certData': '${WORKLOAD_CERT}', 
 print(json.dumps(config))
 ")
 
-  kubectl --context "$MGMT_CTX" -n argocd create secret generic cluster-workload \
-    --from-literal=name=workload \
+  # F-08 fix (2026-05-07): name=cell-default + Secret cluster-cell-default
+  # match what bootstrap-cell-default-cc.sh writes into ClusterCredential.spec.clusterName
+  # and what the operator (real_provisioner.go) writes into App.spec.destination.name.
+  # Previously name=workload mismatched the operator output, causing
+  # InvalidSpecError on every ArgoCD sync. Aligning all three layers
+  # (provision-api-tokens, bootstrap-cell-default-cc, operator) on
+  # logical name 'cell-default' eliminates the URL-mismatch bug class.
+  kubectl --context "$MGMT_CTX" -n argocd create secret generic cluster-cell-default \
+    --from-literal=name=cell-default \
     --from-literal=server="${WORKLOAD_SERVER}" \
     --from-literal=config="${CLUSTER_CONFIG}" \
     --dry-run=client -o yaml | kubectl --context "$MGMT_CTX" -n argocd apply -f -
-  kubectl --context "$MGMT_CTX" -n argocd label secret cluster-workload argocd.argoproj.io/secret-type=cluster --overwrite 2>/dev/null
-  echo "ArgoCD cluster-workload: registered (insecure TLS, Docker hostname)"
+  kubectl --context "$MGMT_CTX" -n argocd label secret cluster-cell-default argocd.argoproj.io/secret-type=cluster --overwrite 2>/dev/null
+  # Cleanup: delete legacy cluster-workload Secret if present (idempotent).
+  kubectl --context "$MGMT_CTX" -n argocd delete secret cluster-workload --ignore-not-found 2>/dev/null
+  echo "ArgoCD cluster-cell-default: registered (insecure TLS, Docker hostname)"
 fi
 
 # ---------------------------------------------------------------------------

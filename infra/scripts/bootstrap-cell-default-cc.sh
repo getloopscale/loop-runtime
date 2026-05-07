@@ -103,9 +103,9 @@ metadata:
 spec:
   cellID: cell-default
   # F-08 fix (2026-05-07): clusterName MUST equal cellID so the ArgoCD
-  # cluster Secret registers as `name=cell-default` and matches what
-  # the operator writes into ArgoCD App.spec.destination.name. Previously
-  # clusterName=workload + operator using `server: <URL>` for cell-default
+  # cluster Secret registers as name=cell-default and matches what the
+  # operator writes into ArgoCD App.spec.destination.name. Previously
+  # clusterName=workload + operator using server URL for cell-default
   # caused URL mismatch (operator env DNS hostname vs Secret IP), making
   # ArgoCD return InvalidSpecError on every sync. Aligning both sides on
   # logical name removes the URL-mismatch bug class entirely.
