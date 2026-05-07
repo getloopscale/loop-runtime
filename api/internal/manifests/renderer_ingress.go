@@ -65,16 +65,26 @@ func buildIngressResources(ri RenderInput, app AppManifestInput, port int) []str
 		},
 	}
 
-	// When scale-to-zero is enabled, route traffic through the KEDA HTTP Add-on
-	// interceptor proxy. The interceptor holds requests while scaling from 0→1,
-	// then proxies to the real app service once the pod is ready.
-	// When scale-to-zero is NOT enabled, route directly to the app service.
+	// Routing target priority:
+	//   1. KEDA interceptor when scale-to-zero is enabled (cold-start handling).
+	//   2. TraefikService (weighted) when progressive delivery is enabled —
+	//      argo-rollouts-progressive-delivery-plan T1.4 / EC-2: route to
+	//      weighted TraefikService so Argo Rollouts can shift traffic between
+	//      stable and canary services during canary steps.
+	//   3. Direct to Service for legacy / standard apps.
 	serviceTarget := traefikRouteService{Name: resName, Port: port}
 	if isScaleToZero(app.Autoscaling) {
 		serviceTarget = traefikRouteService{
 			Name:      "keda-add-ons-http-interceptor-proxy",
 			Namespace: "keda",
 			Port:      8080,
+		}
+	} else if ri.ProgressiveDelivery {
+		// EC-2 fix: Kind=TraefikService routes to the weighted CRD; the
+		// TraefikService itself defines port/services internally.
+		serviceTarget = traefikRouteService{
+			Name: resName,
+			Kind: "TraefikService",
 		}
 	}
 
@@ -133,14 +143,22 @@ func buildIngressResources(ri RenderInput, app AppManifestInput, port int) []str
 			docs = append(docs, marshalResource(cdCert))
 		}
 
-		// IngressRoute always needed — Traefik must match Host() for routing
-		// Custom domain IngressRoute also routes through interceptor for scale-to-zero
+		// IngressRoute always needed — Traefik must match Host() for routing.
+		// Same target priority as primary route: scale-to-zero interceptor >
+		// TraefikService (progressive delivery) > direct Service. EC-9 fix:
+		// custom domains MUST also point at TraefikService when progressive
+		// delivery is enabled, otherwise canary traffic split is bypassed.
 		cdServiceTarget := traefikRouteService{Name: resName, Port: port}
 		if isScaleToZero(app.Autoscaling) {
 			cdServiceTarget = traefikRouteService{
 				Name:      "keda-add-ons-http-interceptor-proxy",
 				Namespace: "keda",
 				Port:      8080,
+			}
+		} else if ri.ProgressiveDelivery {
+			cdServiceTarget = traefikRouteService{
+				Name: resName,
+				Kind: "TraefikService",
 			}
 		}
 

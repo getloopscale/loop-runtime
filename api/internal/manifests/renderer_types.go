@@ -214,8 +214,13 @@ type traefikRoute struct {
 type traefikRouteService struct {
 	Name      string `json:"name"`
 	Namespace string `json:"namespace,omitempty"` // cross-namespace reference
-	Port      int    `json:"port"`
-	Scheme    string `json:"scheme,omitempty"`
+	// Kind is the resource kind of the target. Default (empty) treats the
+	// reference as a Kubernetes Service. Set to "TraefikService" when the
+	// route should target a weighted TraefikService for canary traffic
+	// splitting (argo-rollouts-progressive-delivery-plan T1.4 / EC-2).
+	Kind   string `json:"kind,omitempty"`
+	Port   int    `json:"port,omitempty"`
+	Scheme string `json:"scheme,omitempty"`
 }
 
 // traefikTLS configures TLS on IngressRoute.
