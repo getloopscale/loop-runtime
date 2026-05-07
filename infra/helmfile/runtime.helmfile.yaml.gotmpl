@@ -50,6 +50,11 @@ repositories:
     url: https://grafana.github.io/helm-charts
   - name: metrics-server
     url: https://kubernetes-sigs.github.io/metrics-server/
+  # argo-rollouts-progressive-delivery-plan T0.2 — Argo Rollouts
+  # controller manages canary Rollouts on workload clusters. Repo
+  # already used by mgmt helmfile for Argo Workflows.
+  - name: argo
+    url: https://argoproj.github.io/argo-helm
 
 # Pre-sync setup (called by the CLI orchestrator BEFORE this helmfile runs):
 #   bash infra/helmfile/scripts/generate-runtime-secrets.sh <env> <cluster-id>
@@ -124,6 +129,18 @@ releases:
       - keda/keda
     values:
       - ../helm/keda-http-addon/values.yaml
+
+  # argo-rollouts-progressive-delivery-plan T0.2 — Progressive delivery
+  # controller. Manages Rollout/AnalysisRun/AnalysisTemplate/Experiment
+  # CRDs and orchestrates canary traffic via Traefik plugin (D5).
+  # needs: cert-manager (Rollouts admission webhook needs TLS certs).
+  - name: argo-rollouts
+    namespace: argo-rollouts
+    chart: ../helm/argo-rollouts
+    needs:
+      - cert-manager/cert-manager
+    values:
+      - ../helm/argo-rollouts/values.yaml
 
   - name: policy-controller
     namespace: cosign-system

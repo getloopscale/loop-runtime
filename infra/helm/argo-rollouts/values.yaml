@@ -1,0 +1,73 @@
+# SPDX-License-Identifier: Apache-2.0
+# Argo Rollouts hardened values per
+# docs/plans/argo-rollouts-progressive-delivery-plan.md T0.1.
+#
+# Hardening:
+#   - Dashboard DISABLED (attack surface — same policy as Chaos Mesh)
+#   - PSA restricted (runAsNonRoot, drop ALL caps, seccomp RuntimeDefault)
+#   - Resource limits set to be conservative (controller is lightweight)
+#   - Traefik traffic router plugin enabled (D1+D5 of plan)
+
+argo-rollouts:
+  # Controller deployment — manages Rollout/AnalysisRun/Experiment lifecycle.
+  controller:
+    # Replicas: 1 is enough for local dev; production tunes via separate values.
+    replicas: 1
+
+    # Resource limits — controller is lightweight unless many concurrent
+    # rollouts. With ~50 tenants × 5 apps = 250 rollouts max, 250m CPU
+    # / 256Mi memory is plenty.
+    resources:
+      requests:
+        cpu: 25m
+        memory: 64Mi
+      limits:
+        cpu: 250m
+        memory: 256Mi
+
+    # Traffic router plugins — D1+D5 of plan: use TraefikService for
+    # weighted routing between stable and canary services. Argo Rollouts
+    # has native Traefik integration via this plugin.
+    trafficRouterPlugins:
+      traefik: {}
+
+    # Hardened pod security (PSA restricted compliance).
+    podSecurityContext:
+      runAsNonRoot: true
+      runAsUser: 999
+      seccompProfile:
+        type: RuntimeDefault
+
+    securityContext:
+      allowPrivilegeEscalation: false
+      capabilities:
+        drop: ["ALL"]
+      readOnlyRootFilesystem: true
+
+  # Dashboard DISABLED (same policy as Chaos Mesh: attack surface
+  # not justified for LoopZero's deployment model). All status/info accessed
+  # via kubectl + loopzero CLI, never via dashboard.
+  dashboard:
+    enabled: false
+
+  # InstallCRDs — chart manages its own CRDs. Workload cluster has them.
+  installCRDs: true
+
+  # CRDs in chart (cleaner than separate CRDs install).
+  crds:
+    install: true
+
+  # Notifications — disabled. LoopZero SSE pipeline emits canary events
+  # (rollout.step / rollout.aborted) via API, not Argo notifications.
+  notifications:
+    enabled: false
+
+  # ServiceMonitor for Prometheus scraping the controller metrics.
+  # The plan uses Prometheus for canary AnalysisTemplate; controller
+  # metrics enable observability of rollout outcomes.
+  controllerMetrics:
+    enabled: true
+    serviceMonitor:
+      enabled: false  # ServiceMonitor created separately in monitoring layer
+
+  # Keep image pinned via chart version. No imageOverride.

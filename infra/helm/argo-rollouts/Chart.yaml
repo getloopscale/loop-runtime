@@ -1,0 +1,26 @@
+# SPDX-License-Identifier: Apache-2.0
+# Argo Rollouts wrapper for LoopZero platform progressive delivery.
+# Pinned to 2.38.1 (Argo Rollouts 1.7.x) per
+# docs/plans/argo-rollouts-progressive-delivery-plan.md T0.1.
+#
+# Deployed to ALL workload clusters via infra/helmfile/runtime.helmfile.yaml.gotmpl
+# (Wave 0, alongside KEDA — both are workload controllers).
+#
+# Provides CRDs:
+#   - rollouts.argoproj.io/v1alpha1
+#   - analysistemplates.argoproj.io/v1alpha1
+#   - analysisruns.argoproj.io/v1alpha1
+#   - experiments.argoproj.io/v1alpha1
+#   - clusteranalysistemplates.argoproj.io/v1alpha1
+
+apiVersion: v2
+name: loopzero-argo-rollouts
+description: Argo Rollouts wrapper for LoopZero platform progressive delivery (canary)
+type: application
+version: 0.1.0
+appVersion: "1.7.2"
+
+dependencies:
+  - name: argo-rollouts
+    version: 2.38.1
+    repository: https://argoproj.github.io/argo-helm
