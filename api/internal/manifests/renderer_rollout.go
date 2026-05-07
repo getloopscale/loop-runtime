@@ -81,9 +81,15 @@ func buildRollout(ri RenderInput, app AppManifestInput, port int) k8sRollout {
 			Annotations: map[string]string{
 				"loopzero.io/build-id":   ri.BuildID,
 				"loopzero.io/release-id": ri.ReleaseID,
-				// EC-4 Migration Strategy: sync-wave -1 ensures Rollout creates
-				// before legacy Deployment is pruned (when feature flag flips).
-				"argocd.argoproj.io/sync-wave": "-1",
+				// F-15 (2026-05-07 dogfood gate): sync-wave -1 was originally
+				// added per EC-4 migration to make Rollout creation precede
+				// legacy Deployment prune. In practice it broke fresh installs:
+				// ArgoCD applied Rollout (wave -1) BEFORE Services (default
+				// wave 0), Rollout immediately went Degraded (InvalidSpec —
+				// stableService not found), and ArgoCD halted before applying
+				// the Services. Wave-0-default keeps all resources in one
+				// transaction; the Rollout's stableService validation finds
+				// the Services after the apply completes.
 			},
 		},
 		Spec: k8sRolloutSpec{
