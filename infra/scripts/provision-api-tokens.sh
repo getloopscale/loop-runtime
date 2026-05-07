@@ -109,14 +109,21 @@ if kubectl --context "$MGMT_CTX" get namespace argocd >/dev/null 2>&1 && [ -n "$
   echo "Setting up ArgoCD repo credentials..."
   # Use repo-creds (credential template) — matches ALL repos under this URL prefix.
   # This is more robust than per-repo secrets because tenant repos are created dynamically.
+  #
+  # F-09 fix (2026-05-07 cleanroom dogfood): URL MUST end with trailing slash.
+  # Without it, ArgoCD's repo-creds prefix matching becomes non-deterministic —
+  # GenerateManifest intermittently returns "authentication required" even
+  # though git ls-remote with the same creds works. Trailing slash makes the
+  # URL prefix unambiguous (any repo path that follows is clearly a sub-path),
+  # and ArgoCD's internal URL normalizer reliably picks up the creds.
   kubectl --context "$MGMT_CTX" -n argocd create secret generic argocd-creds-gitea \
     --from-literal=type=git \
-    --from-literal=url="http://gitea-http.${NAMESPACE}.svc.cluster.local:3000" \
+    --from-literal=url="http://gitea-http.${NAMESPACE}.svc.cluster.local:3000/" \
     --from-literal=username="${GITEA_USER}" \
     --from-literal=password="${GITEA_TOKEN}" \
     --dry-run=client -o yaml | kubectl --context "$MGMT_CTX" -n argocd apply -f -
   kubectl --context "$MGMT_CTX" -n argocd label secret argocd-creds-gitea argocd.argoproj.io/secret-type=repo-creds --overwrite 2>/dev/null
-  echo "ArgoCD repo credentials: configured (credential template)"
+  echo "ArgoCD repo credentials: configured (credential template, trailing-slash URL)"
 fi
 
 # ---------------------------------------------------------------------------
