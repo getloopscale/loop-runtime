@@ -113,23 +113,35 @@ func groupApps[T any](items []T, extract func(T) (string, services.AppSpec)) []l
 // Build generates a complete Workflow CR using forge types for the given spec.
 // The returned *forge.Workflow can be serialized via ToDict() for the K8s dynamic client.
 func (b *WorkflowBuilder) Build(spec services.WorkflowSpec) (*forge.Workflow, error) {
+	// build-mode-dispatch-and-dockerfile-security-plan T1.5 (2026-05-07):
+	// group apps by ResolveStrategyForApp so `build: dockerfile` apps land in
+	// their own UserDockerfileStrategy group. Without this, mixed monorepos
+	// (1 node app + 1 app with user Dockerfile) would falsely group under
+	// node and run loopzero-packs on an app that should be lint-only.
 	var groups []languageGroup
 	if spec.Plan != nil && len(spec.Plan.Apps) > 0 {
 		groups = groupApps(spec.Plan.Apps, func(p services.AppBuildPlan) (string, services.AppSpec) {
-			return p.LanguageStrategy, services.AppSpec{
+			app := services.AppSpec{
 				Name: p.AppName, Type: p.AppType, Port: p.Port,
 				Path: p.AppPath, Framework: p.LanguageStrategy,
 				Build: p.Build, Secrets: p.Secrets,
 			}
+			return ResolveStrategyForApp(app).Name(), app
 		})
 	} else {
 		groups = groupApps(spec.Apps, func(app services.AppSpec) (string, services.AppSpec) {
-			return ResolveStrategy(app.Framework).Name(), app
+			return ResolveStrategyForApp(app).Name(), app
 		})
 	}
 
 	// REVIEW-AP-3: Generate per-language inline templates for mixed-language support.
 	// Each language group gets its own validate/install/build/scan/dockerfile steps.
+	//
+	// build-mode-dispatch-and-dockerfile-security-plan T1.6 (2026-05-07):
+	// `g.Strategy.DockerfileStep(...)` dispatches per-strategy — language
+	// groups invoke loopzero-packs auto-generation, UserDockerfileStrategy invokes
+	// loopzero-dockerfile-lint. NO conditional `if app.Build == "dockerfile"` in
+	// this orchestrator — Strategy pattern is the dispatch axis.
 	var inlineTemplates []forge.Templatable
 	for _, g := range groups {
 		inlineTemplates = append(inlineTemplates,
@@ -137,10 +149,7 @@ func (b *WorkflowBuilder) Build(spec services.WorkflowSpec) (*forge.Workflow, er
 			withSuffix(g.Strategy.InstallStep(g.Apps), g.Suffix),
 			withSuffix(g.Strategy.BuildStep(g.Apps), g.Suffix),
 			withSuffix(g.Strategy.ScanStep(), g.Suffix),
-			// MEET-2026-03-29-017: Universal Dockerfile generation via loopzero-packs.
-			// Replaces per-language DockerfileStep() with a single container that
-			// analyzes source code and generates optimized Dockerfiles for any language.
-			withSuffix(loopzeroPacksDockerfileStep(g.Apps, len(spec.Apps)), g.Suffix),
+			withSuffix(g.Strategy.DockerfileStep(g.Apps, len(spec.Apps)), g.Suffix),
 		)
 	}
 	// Per-app delivery templates: BuildKit for containers, S3 upload for static.

@@ -30,10 +30,23 @@ const (
 
 	// loopzero-packs-runner generates optimized Dockerfiles by analyzing source code.
 	// Replaces hardcoded bash Dockerfile templates (MEET-2026-03-29-017).
-	// Built from: infra/images/packs-runner/Dockerfile — CI builds via build-images.yml.
-	// COMP-004 fix: pinned to v0.1.0 (was :latest — non-deterministic builds).
-	// Local dev: override via LOOPZERO_PACKS_IMAGE env or use k3d-loopzero-registry:5000/loopzero-packs-runner:latest
-	imageLoopZeroPacks = "registry.digitalocean.com/loopzero-system/loopzero-packs-runner:v0.2.0"
+	// Built from: loopzero-packs repo — CI builds via build-runner.yml.
+	// build-mode-dispatch-and-dockerfile-security-plan T3.1 (2026-05-07):
+	// pinned to v0.4.0 — first version with lenient user-Dockerfile contract
+	// canonically documented. v0.2.0/v0.3.x had implicit-strict regression
+	// that errored on user-supplied Dockerfile.
+	// Local dev: override via LOOPZERO_PACKS_IMAGE env or use k3d-loopzero-registry:5000/loopzero-packs-runner:v0.4.0
+	imageLoopZeroPacks = "registry.digitalocean.com/loopzero-system/loopzero-packs-runner:v0.4.0"
+
+	// loopzero-dockerfile-lint: static analyzer for user-supplied Dockerfiles.
+	// build-mode-dispatch-and-dockerfile-security-plan Phase 2 (2026-05-07).
+	// Runs as a step in user-Dockerfile builds BEFORE BuildKit. Hard rejection
+	// rules (FROM allow-list, RUN flag prohibitions, bind mount escape, reserved
+	// env keys, seccomp/apparmor unconfined) cause build to Fail. Soft warnings
+	// captured by Loki for audit.
+	// Built from: tools/loopzero-dockerfile-lint/Dockerfile — CI builds via build-images.yml.
+	// Local dev: override via LOOPZERO_DOCKERFILE_LINT_IMAGE env.
+	imageDockerfileLint = "registry.digitalocean.com/loopzero-system/loopzero-dockerfile-lint:v0.1.0"
 )
 
 // ---------------------------------------------------------------------------

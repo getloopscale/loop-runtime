@@ -31,6 +31,19 @@ type LanguageStrategy interface {
 	BuildStep(apps []services.AppSpec) *forge.Container
 	// ScanStep returns a template that runs security scanning.
 	ScanStep() *forge.Container
+	// DockerfileStep returns a template that produces / validates the Dockerfile
+	// before BuildKit consumes it. For language strategies (Node, Go, Python,
+	// etc.) this returns the loopzero-packs auto-generation container. For
+	// UserDockerfileStrategy it returns the dockerfile-lint container.
+	// totalApps is the count across ALL groups for output path naming
+	// (matches dockerfilePathForApp / BuildKit consumer).
+	//
+	// build-mode-dispatch-and-dockerfile-security-plan T1.1 (2026-05-07):
+	// restored as interface method; was removed in MEET-2026-03-29-017 when
+	// loopzero-packs went universal. The universal stance ignored the orthogonal
+	// `build: dockerfile` axis. This restoration re-applies symmetry: each
+	// strategy decides what runs in this phase.
+	DockerfileStep(apps []services.AppSpec, totalApps int) *forge.Container
 	// CacheKey returns the cache key suffix for this language (e.g., "node-modules").
 	CacheKey() string
 	// CacheDirs returns directories to cache (e.g., ["node_modules"]).
@@ -41,6 +54,11 @@ type LanguageStrategy interface {
 
 // ResolveStrategy returns the appropriate LanguageStrategy for a framework string.
 // Framework values come from loopzero.yaml's app.framework field.
+//
+// NOTE: build-mode-dispatch-and-dockerfile-security-plan T1.4 (2026-05-07) —
+// callers should prefer ResolveStrategyForApp(AppSpec) to honor the orthogonal
+// `build: dockerfile` axis. This function remains for the case where only a
+// framework name is available (e.g., language-grouping by string key).
 func ResolveStrategy(framework string) LanguageStrategy {
 	switch framework {
 	case "nextjs", "vite", "remix", "nestjs", "express", "node":
@@ -59,6 +77,8 @@ func ResolveStrategy(framework string) LanguageStrategy {
 		return &RustStrategy{}
 	case "custom":
 		return &CustomStrategy{}
+	case "user-dockerfile":
+		return &UserDockerfileStrategy{}
 	default:
 		// Empty framework defaults to Node.js for backwards compatibility.
 		if framework == "" {
@@ -68,6 +88,24 @@ func ResolveStrategy(framework string) LanguageStrategy {
 			"framework", framework)
 		return &CustomStrategy{}
 	}
+}
+
+// ResolveStrategyForApp returns the LanguageStrategy for an AppSpec, honoring
+// the orthogonal `build: dockerfile` axis: when the user opts into supplying
+// their own Dockerfile, dispatch to UserDockerfileStrategy regardless of the
+// declared framework.
+//
+// build-mode-dispatch-and-dockerfile-security-plan T1.4 (2026-05-07) — closes
+// the architectural hole where MEET-2026-03-29-017 universalized loopzero-packs
+// invocation, ignoring `build: dockerfile`. The strategy resolver is the
+// idiomatic dispatch layer; pushing this decision into the orchestrator with
+// an `if app.Build == "dockerfile"` would leak strategy semantics out of the
+// pattern.
+func ResolveStrategyForApp(app services.AppSpec) LanguageStrategy {
+	if app.Build == "dockerfile" {
+		return &UserDockerfileStrategy{}
+	}
+	return ResolveStrategy(app.Framework)
 }
 
 // ---------------------------------------------------------------------------
@@ -101,8 +139,9 @@ func (s *NodeStrategy) ScanStep() *forge.Container {
 	return buildContainer("security-scan", imageNode, resourcesSmall(), scriptScanNode())
 }
 
-// DockerfileStep removed (MEET-2026-03-29-017) — replaced by universal
-// loopzeroPacksDockerfileStep() using loopzero-packs-runner container image.
+func (s *NodeStrategy) DockerfileStep(apps []services.AppSpec, totalApps int) *forge.Container {
+	return loopzeroPacksDockerfileStep(apps, totalApps)
+}
 
 // ---------------------------------------------------------------------------
 // GoStrategy — Go ecosystem
@@ -139,7 +178,9 @@ func (s *GoStrategy) ScanStep() *forge.Container {
 	return buildContainer("security-scan", imageGolang, resourcesSmall(), scriptScanGo())
 }
 
-// DockerfileStep removed — uses universal loopzeroPacksDockerfileStep().
+func (s *GoStrategy) DockerfileStep(apps []services.AppSpec, totalApps int) *forge.Container {
+	return loopzeroPacksDockerfileStep(apps, totalApps)
+}
 
 // ---------------------------------------------------------------------------
 // PythonStrategy — Python ecosystem
@@ -176,7 +217,9 @@ func (s *PythonStrategy) ScanStep() *forge.Container {
 	return buildContainer("security-scan", imagePython, resourcesSmall(), scriptScanPython())
 }
 
-// DockerfileStep removed — uses universal loopzeroPacksDockerfileStep().
+func (s *PythonStrategy) DockerfileStep(apps []services.AppSpec, totalApps int) *forge.Container {
+	return loopzeroPacksDockerfileStep(apps, totalApps)
+}
 
 // ---------------------------------------------------------------------------
 // RubyStrategy — Ruby ecosystem (Bundler)
@@ -202,6 +245,9 @@ cd /workspace
 gem install bundler-audit 2>/dev/null && bundle-audit check 2>/dev/null || echo "bundle-audit not available or scan failed — skipping"
 `)
 }
+func (s *RubyStrategy) DockerfileStep(apps []services.AppSpec, totalApps int) *forge.Container {
+	return loopzeroPacksDockerfileStep(apps, totalApps)
+}
 
 // ---------------------------------------------------------------------------
 // JavaStrategy — Java ecosystem (Maven/Gradle)
@@ -224,6 +270,9 @@ func (s *JavaStrategy) BuildStep(_ []services.AppSpec) *forge.Container {
 func (s *JavaStrategy) ScanStep() *forge.Container {
 	return buildContainer("security-scan", imageAlpine, resourcesTiny(), noopScript("Java security scan — skipped (use Dockerfile-based scan)"))
 }
+func (s *JavaStrategy) DockerfileStep(apps []services.AppSpec, totalApps int) *forge.Container {
+	return loopzeroPacksDockerfileStep(apps, totalApps)
+}
 
 // ---------------------------------------------------------------------------
 // PHPStrategy — PHP ecosystem (Composer)
@@ -245,6 +294,9 @@ func (s *PHPStrategy) BuildStep(_ []services.AppSpec) *forge.Container {
 }
 func (s *PHPStrategy) ScanStep() *forge.Container {
 	return buildContainer("security-scan", imageAlpine, resourcesTiny(), noopScript("PHP security scan — skipped"))
+}
+func (s *PHPStrategy) DockerfileStep(apps []services.AppSpec, totalApps int) *forge.Container {
+	return loopzeroPacksDockerfileStep(apps, totalApps)
 }
 
 // ---------------------------------------------------------------------------
@@ -270,6 +322,9 @@ func (s *RustStrategy) ScanStep() *forge.Container {
 cd /workspace
 cargo audit 2>/dev/null || echo "cargo-audit not available — skipping"
 `)
+}
+func (s *RustStrategy) DockerfileStep(apps []services.AppSpec, totalApps int) *forge.Container {
+	return loopzeroPacksDockerfileStep(apps, totalApps)
 }
 
 // ---------------------------------------------------------------------------
@@ -301,9 +356,55 @@ func (s *CustomStrategy) ScanStep() *forge.Container {
 	return buildContainer("security-scan", imageAlpine, resourcesTiny(), noopScript("No security scan for custom framework"))
 }
 
-// CustomStrategy still validates Dockerfile exists (no loopzero-packs needed).
-// The DockerfileStep is only called from the universal step which skips
-// generation when a user-provided Dockerfile exists.
+// DockerfileStep — CustomStrategy means user manages everything in their
+// Dockerfile (framework: custom). loopzero-packs lenient path will copy the
+// user-provided Dockerfile to the canonical output path. Defense in depth.
+func (s *CustomStrategy) DockerfileStep(apps []services.AppSpec, totalApps int) *forge.Container {
+	return loopzeroPacksDockerfileStep(apps, totalApps)
+}
+
+// ---------------------------------------------------------------------------
+// UserDockerfileStrategy — user opted into `build: dockerfile` in loopzero.yaml
+// ---------------------------------------------------------------------------
+//
+// build-mode-dispatch-and-dockerfile-security-plan T1.3 (2026-05-07):
+// distinct from CustomStrategy, which means `framework: custom` (user
+// declared no language). UserDockerfileStrategy means "I'm bringing my own
+// Dockerfile" — independent of language framework. LoopZero skips loopzero-packs
+// invocation entirely (saves ~30s per app) and runs loopzero-dockerfile-lint
+// against the user-supplied Dockerfile to enforce hard rejection rules
+// (FROM allow-list, RUN flag prohibitions, bind mount escape, reserved
+// env keys, seccomp/apparmor unconfined). Soft warnings audit-logged.
+
+type UserDockerfileStrategy struct{}
+
+func (s *UserDockerfileStrategy) Name() string                   { return "user-dockerfile" }
+func (s *UserDockerfileStrategy) CacheKey() string               { return "" }
+func (s *UserDockerfileStrategy) CacheDirs() []string            { return nil }
+
+func (s *UserDockerfileStrategy) ValidateStep(_ []services.AppSpec) *forge.Container {
+	return buildContainer("validate-workspace", imageAlpine, resourcesTiny(),
+		noopScript("user-dockerfile build mode — workspace validation skipped (user-managed Dockerfile)"))
+}
+
+func (s *UserDockerfileStrategy) InstallStep(_ []services.AppSpec) *forge.Container {
+	return buildContainer("install-deps", imageAlpine, resourcesTiny(),
+		noopScript("user-dockerfile build mode — dependencies installed inside Dockerfile"))
+}
+
+func (s *UserDockerfileStrategy) BuildStep(_ []services.AppSpec) *forge.Container {
+	return buildContainer("build-apps", imageAlpine, resourcesTiny(),
+		noopScript("user-dockerfile build mode — build happens inside Dockerfile"))
+}
+
+func (s *UserDockerfileStrategy) ScanStep() *forge.Container {
+	return buildContainer("security-scan", imageAlpine, resourcesTiny(),
+		noopScript("user-dockerfile build mode — security scan deferred to dockerfile-lint + post-build SBOM"))
+}
+
+func (s *UserDockerfileStrategy) DockerfileStep(apps []services.AppSpec, _ int) *forge.Container {
+	return dockerfileLintStep(apps)
+}
 
 // ---------------------------------------------------------------------------
 // Universal Dockerfile generation via loopzero-packs (MEET-2026-03-29-017)

@@ -143,8 +143,15 @@ spec:
             # all four image overrides set in YAML so Argo Workflow generated
             # by API references the local k3d-loopzero-registry, not DOCR (which
             # fails 401 in cleanroom because no DOCR creds).
+            #
+            # build-mode-dispatch-and-dockerfile-security-plan T3.2 (2026-05-07):
+            # LOOPZERO_PACKS_IMAGE pinned to v0.4.0 (canonical lenient contract).
+            # LOOPZERO_DOCKERFILE_LINT_IMAGE added for the new dockerfile-lint
+            # workflow step (fires only for apps with `build: dockerfile`).
             - name: LOOPZERO_PACKS_IMAGE
-              value: "k3d-loopzero-registry:5000/loopzero-packs-runner:latest"
+              value: "k3d-loopzero-registry:5000/loopzero-packs-runner:v0.4.0"
+            - name: LOOPZERO_DOCKERFILE_LINT_IMAGE
+              value: "k3d-loopzero-registry:5000/loopzero-dockerfile-lint:v0.1.0"
             - name: LOOPZERO_CLONE_IMAGE
               value: "k3d-loopzero-registry:5000/loopzero-clone-runner:latest"
             - name: LOOPZERO_SYFT_IMAGE
