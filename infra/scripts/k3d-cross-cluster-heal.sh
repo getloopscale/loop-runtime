@@ -931,4 +931,25 @@ if [[ -x "$SCRIPT_DIR/run-migrations.sh" ]]; then
   fi
 fi
 
-log "DONE — cross-cluster connectivity healed (H1-H17 codified)"
+# ---------------------------------------------------------------------------
+# H18: dogfood-2026-05-08-fixes follow-up (2026-05-08).
+# Remove duplicate ArgoCD Gitea credentials. provision-api-tokens.sh creates
+# `argocd-creds-gitea` (canonical, repo-creds label, current token), but a
+# pre-existing Helm chart leaves behind `gitea-credentials-template` with a
+# stale token at the SAME url prefix. ArgoCD logs:
+#   "Found multiple credentials for repoURL: ...e2e-tenant-gitops"
+# and intermittently picks the stale one → "authentication required" 401.
+# Idempotent: no-op if the duplicate Secret is already gone.
+# ---------------------------------------------------------------------------
+log "H18: removing duplicate stale Gitea credentials in ArgoCD namespace"
+if kubectl --context "$MGMT_CTX" -n argocd get secret gitea-credentials-template >/dev/null 2>&1; then
+  kubectl --context "$MGMT_CTX" -n argocd delete secret gitea-credentials-template >/dev/null 2>&1
+  log "  gitea-credentials-template: removed (duplicate of argocd-creds-gitea)"
+  # Force argocd-repo-server to drop cached creds.
+  kubectl --context "$MGMT_CTX" -n argocd rollout restart deploy/argocd-repo-server >/dev/null 2>&1
+  log "  argocd-repo-server: restarted to invalidate cred cache"
+else
+  log "  gitea-credentials-template not present — skip"
+fi
+
+log "DONE — cross-cluster connectivity healed (H1-H18 codified)"
