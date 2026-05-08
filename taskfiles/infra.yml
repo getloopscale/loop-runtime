@@ -704,10 +704,35 @@ tasks:
         docker push localhost:5000/loopzero-clone-runner:latest
         echo "  Pushed: localhost:5000/loopzero-clone-runner:latest"
       - |
-        echo "=== Building loopzero-packs-runner ==="
-        docker build -t localhost:5000/loopzero-packs-runner:latest infra/images/packs-runner/
-        docker push localhost:5000/loopzero-packs-runner:latest
-        echo "  Pushed: localhost:5000/loopzero-packs-runner:latest"
+        echo "=== Building loopzero-packs-runner (canonical, lenient v0.4.0) ==="
+        # build-mode-dispatch-and-dockerfile-security-plan T3.3 fix (2026-05-08):
+        # Use the canonical build-and-push script which:
+        #   - Builds from /home/paulo/loopzero-packs/Dockerfile.generate (lenient
+        #     contract canonical — copies user Dockerfile verbatim, exits 0)
+        #   - Tags as :v0.4.0 AND :latest (matches API env LOOPZERO_PACKS_IMAGE)
+        #   - Idempotent + verifies registry has the tag post-push
+        # The previous local stub (infra/images/packs-runner/) cloned the
+        # remote main branch which historically pinned to the strict-mode
+        # version, breaking every `build: dockerfile` deploy.
+        if [ -d /home/paulo/loopzero-packs ]; then
+          bash infra/scripts/build-and-push-loopzero-packs.sh
+        else
+          echo "  /home/paulo/loopzero-packs not present — fallback to legacy stub"
+          docker build -t localhost:5000/loopzero-packs-runner:latest infra/images/packs-runner/
+          docker push localhost:5000/loopzero-packs-runner:latest
+          echo "  Pushed: localhost:5000/loopzero-packs-runner:latest (legacy)"
+        fi
+      - |
+        echo "=== Building loopzero-dockerfile-lint (build-mode-dispatch security barrier) ==="
+        # build-mode-dispatch-and-dockerfile-security-plan T3.3 fix (2026-05-08):
+        # The dockerfile-lint binary enforces hard rejection rules
+        # (FROM allow-list, --privileged/--security=insecure RUN flags,
+        # bind-mount escape, reserved env keys, seccomp/apparmor unconfined)
+        # on user-supplied Dockerfiles BEFORE BuildKit consumes them.
+        # API env LOOPZERO_DOCKERFILE_LINT_IMAGE points to :v0.1.0; without
+        # this image present, every `build: dockerfile` deploy fails at
+        # workflow image-pull. Idempotent.
+        bash infra/scripts/build-and-push-dockerfile-lint.sh
       - |
         echo "=== Building loopzero-syft-scanner (Sprint 6 / T0.2) ==="
         docker build -t localhost:5000/loopzero-syft-scanner:latest infra/images/syft-scanner/
