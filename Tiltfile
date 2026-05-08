@@ -86,6 +86,12 @@ k8s_resource(
 # ---------------------------------------------------------------------------
 # Database migrations — run before API starts
 # ---------------------------------------------------------------------------
+# Schema bootstrap: still uses psql loop because loopzero-api pod (canonical
+# golang-migrate path) is not up yet at this stage. golang-migrate is
+# applied AFTER the API is up via `task k3d:heal` H17 (which calls
+# infra/scripts/run-migrations.sh) — that backfills schema_migrations
+# with the highest version, registering the schema as fully applied.
+# See dogfood-2026-05-08-fixes T1.2/T1.3 (ADR D1).
 local_resource(
     "db-migrate",
     cmd="""
@@ -96,6 +102,18 @@ local_resource(
         for f in api/internal/db/migrations/*.up.sql; do
             PGPASSWORD=loopzero-dev-password psql -h localhost -p 15432 -U loopzero -d loopzero -f "$f"
         done
+        # Pre-create schema_migrations so subsequent golang-migrate `up`
+        # detects the existing schema correctly (otherwise migrate would
+        # try to re-apply 1..10 from scratch).
+        PGPASSWORD=loopzero-dev-password psql -h localhost -p 15432 -U loopzero -d loopzero -v ON_ERROR_STOP=1 -c "
+            CREATE TABLE IF NOT EXISTS schema_migrations (
+                version BIGINT NOT NULL PRIMARY KEY,
+                dirty BOOLEAN NOT NULL
+            );
+            INSERT INTO schema_migrations (version, dirty)
+            SELECT MAX(v.version), false FROM (VALUES (1),(2),(4),(5),(6),(7),(8),(9),(10)) AS v(version)
+            ON CONFLICT (version) DO UPDATE SET dirty = false;
+        "
     """,
     resource_deps=["postgresql"],
     deps=["api/internal/db/migrations"],

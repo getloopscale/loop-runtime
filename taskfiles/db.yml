@@ -102,16 +102,15 @@ tasks:
       - task: db:reset
       - task: dev:seed
   db:migrate:
-    desc: Run database migrations against PostgreSQL
+    desc: Run database migrations against PostgreSQL via golang-migrate canonical
+    # F-1 (dogfood-2026-05-08-fixes T1.2/T1.3, ADR D1):
+    # Replaces the previous `for f in *.up.sql; do psql < $f` loop that
+    # lacked version tracking and silently re-applied migrations every run.
+    # Calls infra/scripts/run-migrations.sh which uses the `migrate` binary
+    # already inside the loopzero-api image (api/Dockerfile copies migrations
+    # to /migrations and installs migrate to /usr/local/bin/migrate).
     cmds:
-      - |
-        # Apply migrations via kubectl exec — no port-forward needed, no orphan processes
-        POD=$(kubectl --context "{{.MGMT_CONTEXT}}" -n loopzero-system get pod -l app.kubernetes.io/name=postgresql -o jsonpath='{.items[0].metadata.name}')
-        for f in $(ls api/internal/db/migrations/*.up.sql | sort); do
-          echo "Applying $f..."
-          kubectl --context "{{.MGMT_CONTEXT}}" -n loopzero-system exec -i "$POD" -- \
-            env PGPASSWORD="{{.PG_PASS}}" psql -U "{{.PG_USER}}" -d "{{.PG_DB}}" < "$f"
-        done
+      - MGMT_CONTEXT={{.MGMT_CONTEXT}} PG_USER={{.PG_USER}} PG_PASS={{.PG_PASS}} PG_DB={{.PG_DB}} bash infra/scripts/run-migrations.sh
 
   # ---------------------------------------------------------------------------
   # S1: Development seed data

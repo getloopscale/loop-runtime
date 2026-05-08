@@ -904,4 +904,31 @@ if [[ -x "$SCRIPT_DIR/build-and-push-dockerfile-lint.sh" ]]; then
   fi
 fi
 
-log "DONE — cross-cluster connectivity healed (H1-H16 codified)"
+# ---------------------------------------------------------------------------
+# H17: dogfood-2026-05-08-fixes T1.3 (2026-05-08).
+# Backfill schema_migrations on existing local DBs that pre-date golang-migrate
+# adoption. Pre-T1.2 the legacy `task db:migrate` ran psql in a loop and never
+# created schema_migrations. Pre-flight check `SELECT FROM schema_migrations`
+# fails on cleanroom rerun without this heal.
+#
+# Logic (delegated to infra/scripts/run-migrations.sh):
+#   - if schema_migrations absent AND tenants present:
+#       migrate force <HIGHEST> → register existing schema as fully applied
+#   - migrate up → apply any genuinely new migrations
+# Idempotent: re-runs are no-ops when schema_migrations is current.
+# ---------------------------------------------------------------------------
+if [[ -x "$SCRIPT_DIR/run-migrations.sh" ]]; then
+  log "H17: ensuring schema_migrations table is populated"
+  # Probe loopzero-api pod readiness before attempting kubectl exec.
+  if kubectl --context "$MGMT_CTX" -n loopzero-system get pod -l app=loopzero-api --no-headers 2>/dev/null | grep -q Running; then
+    if MGMT_CONTEXT="$MGMT_CTX" bash "$SCRIPT_DIR/run-migrations.sh" >/dev/null 2>&1; then
+      log "  schema_migrations: backfilled / current"
+    else
+      warn "  run-migrations.sh failed — DB migrations may need manual attention"
+    fi
+  else
+    log "  loopzero-api pod not Running yet — skip H17 (will heal on next pass)"
+  fi
+fi
+
+log "DONE — cross-cluster connectivity healed (H1-H17 codified)"
