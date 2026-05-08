@@ -40,6 +40,64 @@ log() { echo "[run-migrations] $*"; }
 # replicas (Recreate strategy means single pod at a time).
 LOOPZERO_API_POD="$(kubectl --context "$MGMT_CONTEXT" -n "$NAMESPACE" get pod -l app=loopzero-api -o jsonpath='{.items[0].metadata.name}' 2>/dev/null || true)"
 if [[ -z "${LOOPZERO_API_POD}" ]]; then
+  # `task setup` calls `task db:migrate` BEFORE `tilt up` so loopzero-api pod
+  # may not exist yet (only Helm bootstrap charts are installed by setup).
+  # Tilt's local_resource db-migrate handles schema bootstrap via psql loop
+  # + seeds schema_migrations to the highest version. This script (the
+  # canonical golang-migrate path) takes over post-tilt via `task k3d:heal`
+  # H17 + subsequent `task db:migrate` calls.
+  if [[ "${LOOPZERO_MIGRATIONS_REQUIRE_API:-true}" == "false" ]]; then
+    log "INFO: loopzero-api pod not found; skipping golang-migrate (pre-tilt setup)."
+    log "      Tilt's db-migrate local_resource will bootstrap schema via psql"
+    log "      and seed schema_migrations. Run 'task k3d:heal' after 'tilt up'"
+    log "      to canonicalize via golang-migrate."
+    exit 0
+  fi
+  # Auto-detect: if postgresql is up but loopzero-api is not, fall back to the
+  # legacy psql-loop schema bootstrap. `task setup` calls this BEFORE
+  # `tilt up`, and the rest of bootstrap (e.g., bootstrap:standalone seed
+  # of users) requires the tables to exist. We can't use golang-migrate
+  # without loopzero-api pod (image has the migrate binary) but we CAN apply
+  # the same SQL files via `psql` directly to postgresql-0 — exactly what
+  # `task db:migrate` did before the T1.2 refactor.
+  PG_POD_BOOT="$(kubectl --context "$MGMT_CONTEXT" -n "$NAMESPACE" get pod -l app.kubernetes.io/name=postgresql -o jsonpath='{.items[0].metadata.name}' 2>/dev/null || true)"
+  if [[ -n "$PG_POD_BOOT" ]]; then
+    log "INFO: loopzero-api pod absent — running psql-loop fallback (pre-tilt setup)."
+    log "      schema_migrations table will be seeded with the highest version"
+    log "      so a later golang-migrate up call (via task k3d:heal H17 or"
+    log "      task db:migrate post-tilt) is a no-op."
+    MIGRATIONS_DIR="$(cd "$(dirname "$0")/.." && pwd)/../api/internal/db/migrations"
+    if [[ ! -d "$MIGRATIONS_DIR" ]]; then
+      MIGRATIONS_DIR="$(pwd)/api/internal/db/migrations"
+    fi
+    if [[ ! -d "$MIGRATIONS_DIR" ]]; then
+      log "ERROR: migrations directory not found at $MIGRATIONS_DIR"
+      exit 1
+    fi
+    HIGHEST_FILE_VERSION=0
+    for f in "$MIGRATIONS_DIR"/*.up.sql; do
+      [[ -f "$f" ]] || continue
+      log "  applying $(basename "$f")..."
+      kubectl --context "$MGMT_CONTEXT" -n "$NAMESPACE" exec -i "$PG_POD_BOOT" -c postgresql -- \
+        env PGPASSWORD="$PG_PASS" psql -U "$PG_USER" -d "$PG_DB" < "$f" >/dev/null 2>&1 || \
+        log "    (psql exit non-zero — IF NOT EXISTS guards usually mean ok; continuing)"
+      v=$(basename "$f" | grep -oE '^[0-9]+' | sed 's/^0*//')
+      [[ -z "$v" ]] && v=0
+      (( v > HIGHEST_FILE_VERSION )) && HIGHEST_FILE_VERSION=$v
+    done
+    log "  highest version applied: $HIGHEST_FILE_VERSION"
+    # Seed schema_migrations so a later golang-migrate run sees DB current.
+    kubectl --context "$MGMT_CONTEXT" -n "$NAMESPACE" exec "$PG_POD_BOOT" -c postgresql -- \
+      env PGPASSWORD="$PG_PASS" psql -U "$PG_USER" -d "$PG_DB" -v ON_ERROR_STOP=1 -c "
+        CREATE TABLE IF NOT EXISTS schema_migrations (
+            version BIGINT NOT NULL PRIMARY KEY,
+            dirty BOOLEAN NOT NULL
+        );
+        INSERT INTO schema_migrations (version, dirty) VALUES ($HIGHEST_FILE_VERSION, false)
+        ON CONFLICT (version) DO UPDATE SET dirty = false;
+      " >/dev/null 2>&1 && log "  schema_migrations seeded version=$HIGHEST_FILE_VERSION"
+    exit 0
+  fi
   log "ERROR: loopzero-api pod not found in $MGMT_CONTEXT/$NAMESPACE"
   log "       (label selector app=loopzero-api). Is tilt up + cluster healthy?"
   exit 1
