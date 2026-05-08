@@ -45,6 +45,13 @@ const (
 	// ProjectID is the E2E test project identifier.
 	ProjectID = "proj-e2e-project"
 	// AuthToken is the fixed auth token for E2E tests.
+	//
+	// DEPRECATED for HTTP API tests since dogfood-2026-05-08-fixes T0.2:
+	// `e2e-token-dev` is only valid in dev-mode API stub; against real
+	// Hydra-minted JWT API it returns 401. Use `resolveToken()` from
+	// helpers_test.go which prioritizes process env LOOPZERO_TOKEN, then
+	// ~/.loopzero/local-dogfood-token.txt, and falls back to AuthToken last.
+	// AuthToken kept here as that final fallback only.
 	AuthToken = "e2e-token-dev"
 	// Username is the unique handle for the E2E user (users.username NOT NULL).
 	Username = "e2e-user"

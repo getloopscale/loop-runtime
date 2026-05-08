@@ -49,7 +49,7 @@ var _ = Describe("CLI: loopzero build list", Ordered, func() {
 		defer os.RemoveAll(fixtureDir)
 
 		oldToken := os.Getenv("LOOPZERO_TOKEN")
-		os.Setenv("LOOPZERO_TOKEN", seed.AuthToken)
+		os.Setenv("LOOPZERO_TOKEN", resolveToken())
 		defer os.Setenv("LOOPZERO_TOKEN", oldToken)
 
 		stdout, stderr, exitCode := runLoopZeroInDir(fixtureDir, "build", "list", "--json")
@@ -94,7 +94,7 @@ var _ = Describe("CLI: loopzero build list", Ordered, func() {
 		}
 
 		oldToken := os.Getenv("LOOPZERO_TOKEN")
-		os.Setenv("LOOPZERO_TOKEN", seed.AuthToken)
+		os.Setenv("LOOPZERO_TOKEN", resolveToken())
 		defer os.Setenv("LOOPZERO_TOKEN", oldToken)
 
 		tmpDir, err := os.MkdirTemp("", "loopzero-e2e-buildlist-")
@@ -158,7 +158,7 @@ var _ = Describe("CLI: loopzero build list", Ordered, func() {
 			defer os.RemoveAll(fixtureDir)
 
 			oldToken := os.Getenv("LOOPZERO_TOKEN")
-			os.Setenv("LOOPZERO_TOKEN", seed.AuthToken)
+			os.Setenv("LOOPZERO_TOKEN", resolveToken())
 			defer os.Setenv("LOOPZERO_TOKEN", oldToken)
 
 			stdout, stderr, _ := runLoopZeroInDir(fixtureDir, "build", "list")

@@ -47,17 +47,10 @@ func (s *PostgresBuildGCStore) DeleteOldBuilds(ctx context.Context, maxAge time.
 	return result.RowsAffected, nil
 }
 
-// DeleteOldEvents removes SSE events older than maxAge.
-func (s *PostgresBuildGCStore) DeleteOldEvents(ctx context.Context, maxAge time.Duration) (int64, error) {
-	cutoff := time.Now().UTC().Add(-maxAge)
-	result, err := s.DB.Exec(ctx, `
-		DELETE FROM build_events WHERE created_at < $1
-	`, cutoff)
-	if err != nil {
-		return 0, fmt.Errorf("build gc: delete old events: %w", err)
-	}
-	return result.RowsAffected, nil
-}
+// (DeleteOldEvents removed in dogfood-2026-05-08-fixes T1.1 / ADR D2:
+//  the `build_events` table never existed in any migration. The GC
+//  scheduler logged `ERROR: relation "build_events" does not exist`
+//  every tick. SSE retention is handled by the sse_events path.)
 
 // DeleteOldWebhookDeliveries removes webhook delivery dedup records older than maxAge.
 func (s *PostgresBuildGCStore) DeleteOldWebhookDeliveries(ctx context.Context, maxAge time.Duration) (int64, error) {

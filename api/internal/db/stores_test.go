@@ -1929,18 +1929,9 @@ func TestBuildGCStore_DeleteOldBuilds_Success(t *testing.T) {
 	}
 }
 
-func TestBuildGCStore_DeleteOldEvents_Success(t *testing.T) {
-	fake := &fakeDBTX{execResult: ExecResult{RowsAffected: 100}}
-	store := &PostgresBuildGCStore{DB: fake}
-
-	count, err := store.DeleteOldEvents(context.Background(), 7*24*time.Hour)
-	if err != nil {
-		t.Fatalf("unexpected error: %v", err)
-	}
-	if count != 100 {
-		t.Errorf("expected 100, got: %d", count)
-	}
-}
+// (TestBuildGCStore_DeleteOldEvents_Success removed in
+//  dogfood-2026-05-08-fixes T1.1 / ADR D2: the production method was
+//  deleted along with the inexistent `build_events` table reference.)
 
 func TestBuildGCStore_DeleteOldWebhookDeliveries_Success(t *testing.T) {
 	fake := &fakeDBTX{execResult: ExecResult{RowsAffected: 50}}

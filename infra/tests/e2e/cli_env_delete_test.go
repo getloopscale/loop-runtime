@@ -80,7 +80,7 @@ var _ = Describe("CLI: loopzero env delete", Ordered, func() {
 		Expect(err).NotTo(HaveOccurred())
 
 		oldToken := os.Getenv("LOOPZERO_TOKEN")
-		os.Setenv("LOOPZERO_TOKEN", seed.AuthToken)
+		os.Setenv("LOOPZERO_TOKEN", resolveToken())
 		defer os.Setenv("LOOPZERO_TOKEN", oldToken)
 
 		envName := "e2e-del-" + strings.ToLower(uniqueSuffix())

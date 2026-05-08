@@ -20,8 +20,6 @@ import (
 
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
-
-	"github.com/loopzero/loopzero/infra/tests/seed"
 )
 
 var _ = Describe("Edge: Concurrency + Idempotency", Label("edge-case"), func() {
@@ -134,7 +132,7 @@ func deployWithIdempotencyKey(dir, env, key string) idempotencyResponse {
 	req, err := http.NewRequest("POST", url, strings.NewReader(body))
 	Expect(err).NotTo(HaveOccurred())
 
-	req.Header.Set("Authorization", "Bearer "+seed.AuthToken)
+	req.Header.Set("Authorization", "Bearer "+resolveToken())
 	req.Header.Set("Content-Type", "application/json")
 	req.Header.Set("Idempotency-Key", key)
 

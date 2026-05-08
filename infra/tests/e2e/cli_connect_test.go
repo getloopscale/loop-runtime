@@ -188,7 +188,7 @@ var _ = Describe("CLI: loopzero disconnect", Ordered, func() {
 		defer os.RemoveAll(fixtureDir)
 
 		oldToken := os.Getenv("LOOPZERO_TOKEN")
-		os.Setenv("LOOPZERO_TOKEN", seed.AuthToken)
+		os.Setenv("LOOPZERO_TOKEN", resolveToken())
 		defer os.Setenv("LOOPZERO_TOKEN", oldToken)
 
 		stdout, stderr, exitCode := runLoopZeroInDir(fixtureDir, "disconnect", "--json")

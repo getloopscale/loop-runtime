@@ -53,7 +53,7 @@ var _ = Describe("CLI: loopzero secret list", Ordered, func() {
 		defer os.RemoveAll(fixtureDir)
 
 		oldToken := os.Getenv("LOOPZERO_TOKEN")
-		os.Setenv("LOOPZERO_TOKEN", seed.AuthToken)
+		os.Setenv("LOOPZERO_TOKEN", resolveToken())
 		defer os.Setenv("LOOPZERO_TOKEN", oldToken)
 
 		stdout, stderr, exitCode := runLoopZeroInDir(fixtureDir,
@@ -119,7 +119,7 @@ var _ = Describe("CLI: loopzero secret list", Ordered, func() {
 			Skip("seed/api not available")
 		}
 		oldToken := os.Getenv("LOOPZERO_TOKEN")
-		os.Setenv("LOOPZERO_TOKEN", seed.AuthToken)
+		os.Setenv("LOOPZERO_TOKEN", resolveToken())
 		defer os.Setenv("LOOPZERO_TOKEN", oldToken)
 
 		tmpDir, err := os.MkdirTemp("", "loopzero-e2e-secretlist-")
@@ -153,7 +153,7 @@ var _ = Describe("CLI: loopzero secret list", Ordered, func() {
 		defer os.RemoveAll(fixtureDir)
 
 		oldToken := os.Getenv("LOOPZERO_TOKEN")
-		os.Setenv("LOOPZERO_TOKEN", seed.AuthToken)
+		os.Setenv("LOOPZERO_TOKEN", resolveToken())
 		defer os.Setenv("LOOPZERO_TOKEN", oldToken)
 
 		secretName := "E2E_LEAK_CHECK_" + strings.ToUpper(uniqueSuffix())

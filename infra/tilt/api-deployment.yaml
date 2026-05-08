@@ -90,6 +90,16 @@ spec:
               value: "dev-callback-secret"
             - name: LOG_LEVEL
               value: "debug"
+            # F-7 (dogfood-2026-05-08-fixes T0.1, ADR D7): OTel collector
+            # is not installed in local k3d (no Tempo Helm release). When
+            # LOOPZERO_TRACING_ENABLED is unset/true, tracing.go retries OTLP
+            # gRPC export to localhost:4317 every 5s and floods logs with
+            # `traces export: rpc error: code = Unavailable`. Disable by
+            # default in local; operator can override via
+            # `export LOOPZERO_TRACING_ENABLED=true && tilt up` once Tempo is
+            # running. Production charts (charts/loopzero-api) are unchanged.
+            - name: LOOPZERO_TRACING_ENABLED
+              value: "false"
             - name: LOOPZERO_DISABLE_LEGACY_LOOPS
               value: "false"
             - name: MINIO_ENDPOINT

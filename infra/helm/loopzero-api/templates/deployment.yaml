@@ -86,6 +86,12 @@ spec:
             - name: {{ $k | quote }}
               value: {{ $v | quote }}
             {{- end }}
+            # F-7 (dogfood-2026-05-08-fixes T0.1, ADR D7) — gate OTel
+            # tracing on .Values.tracing.enabled. Default false in this
+            # bootstrap chart (local k3d has no Tempo); operators set
+            # `tracing.enabled: true` via overlay when Tempo is reachable.
+            - name: LOOPZERO_TRACING_ENABLED
+              value: {{ .Values.tracing.enabled | default false | quote }}
             # B78 (end-to-end-deploy-validation-plan iter 11) — loopzero-api
             # needs GITEA_TOKEN to create + push to tenant gitops repos.
             # Mapped from `gitea-admin.token` Secret (same source as

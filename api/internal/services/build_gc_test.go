@@ -15,10 +15,8 @@ import (
 
 type fakeBuildGCStore struct {
 	deletedBuilds   int64
-	deletedEvents   int64
 	deletedWebhooks int64
 	buildsErr       error
-	eventsErr       error
 	webhooksErr     error
 	calledMaxAge    time.Duration
 	calledRetain    int
@@ -29,9 +27,6 @@ func (f *fakeBuildGCStore) DeleteOldBuilds(_ context.Context, maxAge time.Durati
 	f.calledRetain = retain
 	return f.deletedBuilds, f.buildsErr
 }
-func (f *fakeBuildGCStore) DeleteOldEvents(_ context.Context, _ time.Duration) (int64, error) {
-	return f.deletedEvents, f.eventsErr
-}
 func (f *fakeBuildGCStore) DeleteOldWebhookDeliveries(_ context.Context, _ time.Duration) (int64, error) {
 	return f.deletedWebhooks, f.webhooksErr
 }
@@ -40,7 +35,7 @@ func (f *fakeBuildGCStore) DeleteOldWebhookDeliveries(_ context.Context, _ time.
 
 func TestBuildGC_Collect_DeletesOldBuilds(t *testing.T) {
 	// Arrange
-	store := &fakeBuildGCStore{deletedBuilds: 5, deletedEvents: 3, deletedWebhooks: 2}
+	store := &fakeBuildGCStore{deletedBuilds: 5, deletedWebhooks: 2}
 	gc := NewBuildGC(store, slog.Default(), time.Hour, 30*24*time.Hour, 10)
 
 	// Act
@@ -56,24 +51,10 @@ func TestBuildGC_Collect_DeletesOldBuilds(t *testing.T) {
 }
 
 func TestBuildGC_Collect_ContinuesOnBuildError(t *testing.T) {
-	// Arrange: builds fail but events and webhooks should still be attempted
+	// Arrange: builds fail but webhooks should still be attempted
 	store := &fakeBuildGCStore{
 		buildsErr:       fmt.Errorf("db connection lost"),
-		deletedEvents:   10,
 		deletedWebhooks: 5,
-	}
-	gc := NewBuildGC(store, slog.Default(), time.Hour, 30*24*time.Hour, 10)
-
-	// Act: should not panic
-	gc.collect(context.Background())
-}
-
-func TestBuildGC_Collect_ContinuesOnEventsError(t *testing.T) {
-	// Arrange
-	store := &fakeBuildGCStore{
-		deletedBuilds: 5,
-		eventsErr:     fmt.Errorf("timeout"),
-		deletedWebhooks: 2,
 	}
 	gc := NewBuildGC(store, slog.Default(), time.Hour, 30*24*time.Hour, 10)
 

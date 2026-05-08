@@ -51,7 +51,7 @@ var _ = Describe("CLI: loopzero secret set", Ordered, func() {
 		defer os.RemoveAll(fixtureDir)
 
 		oldToken := os.Getenv("LOOPZERO_TOKEN")
-		os.Setenv("LOOPZERO_TOKEN", seed.AuthToken)
+		os.Setenv("LOOPZERO_TOKEN", resolveToken())
 		defer os.Setenv("LOOPZERO_TOKEN", oldToken)
 
 		secretName := "E2E_SET_TEST_" + strings.ToUpper(uniqueSuffix())

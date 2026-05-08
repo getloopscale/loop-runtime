@@ -65,6 +65,14 @@ env:
   LOOPZERO_API_PORT: "8080"
   LOOPZERO_LOG_LEVEL: "info"
   LOOPZERO_CLUSTER_ISSUER: "letsencrypt-prod"
+
+# F-7 (dogfood-2026-05-08-fixes T0.1, ADR D7) — bootstrap chart toggle for
+# OTel exporter. Default false because local k3d does not install Tempo;
+# without this flag the API spam-logs `traces export: rpc error` every 5s.
+# templates/deployment.yaml gates `LOOPZERO_TRACING_ENABLED` env on this toggle.
+# Production stack (charts/loopzero-api) is unchanged.
+tracing:
+  enabled: false
   # CHG-2026-04-30-INFRA-NORMALIZE / Phase 5 T5.4 — DynamicRouter
   # default. Standalone profiles override to "false" (single-cell).
   # Cloud profiles (dev/prod) override to "true" via overlay (sets

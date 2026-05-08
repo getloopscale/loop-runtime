@@ -50,7 +50,7 @@ var _ = Describe("CLI: loopzero domain status", Ordered, func() {
 		Expect(err).NotTo(HaveOccurred())
 
 		oldToken := os.Getenv("LOOPZERO_TOKEN")
-		os.Setenv("LOOPZERO_TOKEN", seed.AuthToken)
+		os.Setenv("LOOPZERO_TOKEN", resolveToken())
 		defer os.Setenv("LOOPZERO_TOKEN", oldToken)
 
 		stdout, stderr, exitCode := runLoopZero("domain", "status",
@@ -117,7 +117,7 @@ var _ = Describe("CLI: loopzero domain status", Ordered, func() {
 		err := seed.Run(seed.Config{})
 		if err == nil && apiHealthy() {
 			oldToken := os.Getenv("LOOPZERO_TOKEN")
-			os.Setenv("LOOPZERO_TOKEN", seed.AuthToken)
+			os.Setenv("LOOPZERO_TOKEN", resolveToken())
 			defer os.Setenv("LOOPZERO_TOKEN", oldToken)
 
 			stdout, stderr, _ := runLoopZero("domain", "status",

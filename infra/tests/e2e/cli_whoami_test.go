@@ -42,7 +42,7 @@ var _ = Describe("CLI: loopzero whoami", Ordered, func() {
 
 		// Inject token from seed for this test only.
 		oldToken := os.Getenv("LOOPZERO_TOKEN")
-		os.Setenv("LOOPZERO_TOKEN", seed.AuthToken)
+		os.Setenv("LOOPZERO_TOKEN", resolveToken())
 		defer os.Setenv("LOOPZERO_TOKEN", oldToken)
 
 		stdout, stderr, exitCode := runLoopZero("whoami", "--json")
@@ -102,7 +102,7 @@ var _ = Describe("CLI: loopzero whoami", Ordered, func() {
 		err := seed.Run(seed.Config{})
 		if err == nil && apiHealthy() {
 			oldToken := os.Getenv("LOOPZERO_TOKEN")
-			os.Setenv("LOOPZERO_TOKEN", seed.AuthToken)
+			os.Setenv("LOOPZERO_TOKEN", resolveToken())
 			stdout, stderr, _ := runLoopZero("whoami")
 			expectNoInternalTerms(stdout, "whoami human (authenticated) stdout")
 			expectNoInternalTerms(stderr, "whoami human (authenticated) stderr")

@@ -55,7 +55,7 @@ var _ = Describe("CLI: loopzero status", Ordered, func() {
 		defer os.RemoveAll(fixtureDir)
 
 		oldToken := os.Getenv("LOOPZERO_TOKEN")
-		os.Setenv("LOOPZERO_TOKEN", seed.AuthToken)
+		os.Setenv("LOOPZERO_TOKEN", resolveToken())
 		defer os.Setenv("LOOPZERO_TOKEN", oldToken)
 
 		stdout, stderr, exitCode := runLoopZeroInDir(fixtureDir, "status", "--json")
@@ -163,7 +163,7 @@ var _ = Describe("CLI: loopzero status", Ordered, func() {
 		// Authenticated path — sync_status display must not leak.
 		err := seed.Run(seed.Config{})
 		if err == nil && apiHealthy() {
-			os.Setenv("LOOPZERO_TOKEN", seed.AuthToken)
+			os.Setenv("LOOPZERO_TOKEN", resolveToken())
 
 			for _, args := range [][]string{
 				{"status"},

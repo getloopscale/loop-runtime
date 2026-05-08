@@ -49,7 +49,7 @@ var _ = Describe("CLI: loopzero build inspect", Ordered, func() {
 		Expect(err).NotTo(HaveOccurred())
 
 		oldToken := os.Getenv("LOOPZERO_TOKEN")
-		os.Setenv("LOOPZERO_TOKEN", seed.AuthToken)
+		os.Setenv("LOOPZERO_TOKEN", resolveToken())
 		defer os.Setenv("LOOPZERO_TOKEN", oldToken)
 
 		stdout, stderr, exitCode := runLoopZero("build", "inspect",
@@ -107,7 +107,7 @@ var _ = Describe("CLI: loopzero build inspect", Ordered, func() {
 		Expect(err).NotTo(HaveOccurred())
 
 		oldToken := os.Getenv("LOOPZERO_TOKEN")
-		os.Setenv("LOOPZERO_TOKEN", seed.AuthToken)
+		os.Setenv("LOOPZERO_TOKEN", resolveToken())
 		defer os.Setenv("LOOPZERO_TOKEN", oldToken)
 
 		// Need any existing build. Fetch via build list first.
@@ -167,7 +167,7 @@ var _ = Describe("CLI: loopzero build inspect", Ordered, func() {
 		err := seed.Run(seed.Config{})
 		if err == nil && apiHealthy() {
 			oldToken := os.Getenv("LOOPZERO_TOKEN")
-			os.Setenv("LOOPZERO_TOKEN", seed.AuthToken)
+			os.Setenv("LOOPZERO_TOKEN", resolveToken())
 			defer os.Setenv("LOOPZERO_TOKEN", oldToken)
 
 			for _, args := range [][]string{

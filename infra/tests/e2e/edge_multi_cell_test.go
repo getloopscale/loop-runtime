@@ -57,7 +57,7 @@ func tenantCellID(tenant string) string {
 	if err != nil {
 		return ""
 	}
-	req.Header.Set("Authorization", "Bearer "+seed.AuthToken)
+	req.Header.Set("Authorization", "Bearer "+resolveToken())
 
 	resp, err := client.Do(req)
 	if err != nil {

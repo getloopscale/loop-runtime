@@ -26,6 +26,7 @@
 | LP-006 | ArgoCD repo creds | http://gitea-http... (mgmt-internal HTTP URL) | Gitea via CF Tunnel (HTTPS public-facing) | Local: same-cluster routing | wire-clusters.sh handles both; closure not needed | infra-engineer | n/a | WONTFIX |
 | LP-007 | Loki log streaming | Single mgmt cluster Loki collects all 3 clusters via Promtail with cross-cluster forward | Production has cross-cluster Loki streaming (DO Spaces backend) — partial | Cross-cluster Loki streaming infra gap (CLAUDE.md "Known issues") | Infra investment Sprint 10+ | observability-guardian | 2026-Q4 | OPEN |
 | LP-008 | KEDA HTTP scale-to-zero | HTTP add-on installed; HTTPScaledObject CRs work | Same — both have KEDA HTTP add-on 0.8.0 | n/a — closed parity | n/a | n/a | n/a | CLOSED |
+| LP-009 | OTel tracing exporter | `LOOPZERO_TRACING_ENABLED=false` por default em Tilt + bootstrap chart `infra/helm/loopzero-api` | `LOOPZERO_TRACING_ENABLED=true` em prod (charts/loopzero-api unchanged); Tempo collector instalado via Pulumi | Tempo NÃO é deployed em local k3d → exporter retry every 5s spammed logs (F-7) | (a) operator override `export LOOPZERO_TRACING_ENABLED=true && tilt up` para testes locais com Tempo running, OR (b) Helmfile L2 install Tempo locally | observability-guardian | 2026-Q3 | OPEN |
 
 ## Marker convention
 

@@ -46,7 +46,7 @@ var _ = Describe("CLI: loopzero env inspect", Ordered, func() {
 		Expect(err).NotTo(HaveOccurred())
 
 		oldToken := os.Getenv("LOOPZERO_TOKEN")
-		os.Setenv("LOOPZERO_TOKEN", seed.AuthToken)
+		os.Setenv("LOOPZERO_TOKEN", resolveToken())
 		defer os.Setenv("LOOPZERO_TOKEN", oldToken)
 
 		// Try the canonical "production" env that is created during seed.
@@ -86,7 +86,7 @@ var _ = Describe("CLI: loopzero env inspect", Ordered, func() {
 		Expect(err).NotTo(HaveOccurred())
 
 		oldToken := os.Getenv("LOOPZERO_TOKEN")
-		os.Setenv("LOOPZERO_TOKEN", seed.AuthToken)
+		os.Setenv("LOOPZERO_TOKEN", resolveToken())
 		defer os.Setenv("LOOPZERO_TOKEN", oldToken)
 
 		stdout, stderr, exitCode := runLoopZero("env", "inspect",

@@ -42,7 +42,7 @@ var _ = Describe("CLI: loopzero env list", Ordered, func() {
 		Expect(err).NotTo(HaveOccurred(), "seed failed")
 
 		oldToken := os.Getenv("LOOPZERO_TOKEN")
-		os.Setenv("LOOPZERO_TOKEN", seed.AuthToken)
+		os.Setenv("LOOPZERO_TOKEN", resolveToken())
 		defer os.Setenv("LOOPZERO_TOKEN", oldToken)
 
 		stdout, stderr, exitCode := runLoopZero("env", "list", "--json")
@@ -111,7 +111,7 @@ var _ = Describe("CLI: loopzero env list", Ordered, func() {
 		err := seed.Run(seed.Config{})
 		if err == nil && apiHealthy() {
 			oldToken := os.Getenv("LOOPZERO_TOKEN")
-			os.Setenv("LOOPZERO_TOKEN", seed.AuthToken)
+			os.Setenv("LOOPZERO_TOKEN", resolveToken())
 			defer os.Setenv("LOOPZERO_TOKEN", oldToken)
 
 			stdout, stderr, _ := runLoopZero("env", "list")

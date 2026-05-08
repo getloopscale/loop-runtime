@@ -43,7 +43,7 @@ var _ = Describe("CLI: loopzero project inspect", Ordered, func() {
 		Expect(err).NotTo(HaveOccurred(), "seed failed")
 
 		oldToken := os.Getenv("LOOPZERO_TOKEN")
-		os.Setenv("LOOPZERO_TOKEN", seed.AuthToken)
+		os.Setenv("LOOPZERO_TOKEN", resolveToken())
 		defer os.Setenv("LOOPZERO_TOKEN", oldToken)
 
 		// seed.ProjectName / seed.SeededProjectName is exposed by the seed
@@ -98,7 +98,7 @@ var _ = Describe("CLI: loopzero project inspect", Ordered, func() {
 			Skip("seed/api not available — missing-arg cannot be reached cleanly")
 		}
 		oldToken := os.Getenv("LOOPZERO_TOKEN")
-		os.Setenv("LOOPZERO_TOKEN", seed.AuthToken)
+		os.Setenv("LOOPZERO_TOKEN", resolveToken())
 		defer os.Setenv("LOOPZERO_TOKEN", oldToken)
 
 		stdout, stderr, exitCode := runLoopZero("project", "inspect", "", "--json")
@@ -126,7 +126,7 @@ var _ = Describe("CLI: loopzero project inspect", Ordered, func() {
 		Expect(err).NotTo(HaveOccurred())
 
 		oldToken := os.Getenv("LOOPZERO_TOKEN")
-		os.Setenv("LOOPZERO_TOKEN", seed.AuthToken)
+		os.Setenv("LOOPZERO_TOKEN", resolveToken())
 		defer os.Setenv("LOOPZERO_TOKEN", oldToken)
 
 		stdout, stderr, exitCode := runLoopZero("project", "inspect",

@@ -10,11 +10,15 @@ import (
 )
 
 // BuildGCStore abstracts the database operations needed for garbage collection.
+//
+// Note: `DeleteOldEvents` (formerly the second method) was removed in
+// dogfood-2026-05-08-fixes T1.1 / ADR D2 because it referenced a
+// non-existent table `build_events`. The GC scheduler logged ERROR every
+// hour. SSE event retention is handled by sse_events table TTL elsewhere;
+// webhook delivery dedup uses github_webhook_deliveries (covered below).
 type BuildGCStore interface {
 	// DeleteOldBuilds removes builds older than maxAge, keeping at least retainPerProject.
 	DeleteOldBuilds(ctx context.Context, maxAge time.Duration, retainPerProject int) (int64, error)
-	// DeleteOldEvents removes SSE events older than maxAge.
-	DeleteOldEvents(ctx context.Context, maxAge time.Duration) (int64, error)
 	// DeleteOldWebhookDeliveries removes webhook delivery records older than maxAge.
 	DeleteOldWebhookDeliveries(ctx context.Context, maxAge time.Duration) (int64, error)
 }
@@ -81,14 +85,8 @@ func (gc *BuildGC) collect(ctx context.Context) {
 		gc.logger.Info("build GC: cleaned old builds", "deleted", deleted)
 	}
 
-	// Clean old events (14 days — shorter retention for heavy data)
-	eventMaxAge := 14 * 24 * time.Hour
-	eventsDeleted, err := gc.store.DeleteOldEvents(ctx, eventMaxAge)
-	if err != nil {
-		gc.logger.Error("build GC: delete old events failed", "error", err)
-	} else if eventsDeleted > 0 {
-		gc.logger.Info("build GC: cleaned old events", "deleted", eventsDeleted)
-	}
+	// (Old `build_events` cleanup removed in dogfood-2026-05-08-fixes T1.1:
+	//  the table never existed; cleanup spammed ERROR every tick.)
 
 	// Clean old webhook deliveries (7 days — dedup window)
 	webhookMaxAge := 7 * 24 * time.Hour
