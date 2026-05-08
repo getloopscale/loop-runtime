@@ -96,6 +96,15 @@ spec:
           env:
             - name: BASE_DOMAIN
               value: "loopzero.local"
+            # dogfood-2026-05-08-fixes T4.2 (F-6, ADR D6 + EC-5):
+            # ApplicationController fast-path Healthy needs a workload-cluster
+            # client (cell-aware via CellAwareRuntimeClientFactory). Mount the
+            # runtime kubeconfig from loopzero-cluster-kubeconfigs Secret (same
+            # mount as tenant-operator + loopzero-api). Without RUNTIME_KUBECONFIG
+            # the controller falls back to legacy mode (Application phase
+            # only converges via ExposedRoute Reachable).
+            - name: RUNTIME_KUBECONFIG
+              value: "/etc/loopzero/runtime/kubeconfig"
           ports:
             - containerPort: 8081
               name: health
@@ -125,6 +134,10 @@ spec:
           volumeMounts:
             - name: tmp
               mountPath: /tmp
+            # dogfood-2026-05-08-fixes T4.2: mount runtime kubeconfig
+            - name: runtime-kubeconfig
+              mountPath: /etc/loopzero/runtime
+              readOnly: true
           securityContext:
             runAsNonRoot: true
             allowPrivilegeEscalation: false
@@ -137,3 +150,10 @@ spec:
       volumes:
         - name: tmp
           emptyDir: {}
+        - name: runtime-kubeconfig
+          secret:
+            secretName: loopzero-cluster-kubeconfigs
+            items:
+              - key: runtime.kubeconfig
+                path: kubeconfig
+            optional: true

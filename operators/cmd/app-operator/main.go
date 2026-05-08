@@ -93,7 +93,27 @@ func main() {
 		os.Exit(1)
 	}
 
-	if err := app.SetupApplicationController(mgr, baseDomain); err != nil {
+	// dogfood-2026-05-08-fixes T4.2 (F-6, ADR D6 + EC-5 multi-cell awareness).
+	// Wire the cell-aware runtime client factory so ApplicationController can
+	// fast-path EndpointsReady=true on workload Pod Ready, regardless of
+	// ExposedRoute Reachable. RUNTIME_KUBECONFIG is the legacy/single-cell
+	// fallback used for tenants pinned to cell-default.
+	var appFactory shared.RuntimeClientFactory
+	runtimeKubeconfig := os.Getenv("RUNTIME_KUBECONFIG")
+	if runtimeKubeconfig != "" {
+		runtimeClient, err := shared.CreateClusterClient(setupLog, runtimeKubeconfig, scheme, "runtime")
+		if err != nil {
+			setupLog.Error(err, "failed to create runtime cluster client — fast-path Healthy disabled")
+		} else {
+			appFactory = shared.NewCellAwareRuntimeClientFactory(
+				mgr.GetClient(), runtimeClient, "loopzero-system")
+			setupLog.Info("ApplicationController: cell-aware fast-path Healthy enabled")
+		}
+	} else {
+		setupLog.Info("RUNTIME_KUBECONFIG not set — Application fast-path Healthy disabled (legacy mode)")
+	}
+
+	if err := app.SetupApplicationControllerWithFactory(mgr, baseDomain, appFactory); err != nil {
 		setupLog.Error(err, "unable to setup ApplicationController")
 		os.Exit(1)
 	}

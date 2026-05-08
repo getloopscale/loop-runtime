@@ -8,6 +8,7 @@ import (
 	"fmt"
 	"time"
 
+	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
@@ -25,6 +26,12 @@ import (
 
 const applicationFinalizer = constants.FinalizerApplication
 
+// workloadReadyTimeout bounds cross-cluster pod-list calls during the
+// fast-path Healthy check (T4.2). 5s matches the convention used by other
+// cell-aware reads (e.g., placement.DynamicRouter) — long enough for normal
+// rest API roundtrips, short enough to avoid blocking the reconcile loop.
+const workloadReadyTimeout = 5 * time.Second
+
 // ApplicationReconciler reconciles a LoopZeroApplication object.
 // It manages hostname assignment, ExposedRoute creation, and phase tracking.
 //
@@ -34,10 +41,17 @@ const applicationFinalizer = constants.FinalizerApplication
 // +kubebuilder:rbac:groups=loopzero.io,resources=loopzeroapplications/status,verbs=get;update;patch
 // +kubebuilder:rbac:groups=loopzero.io,resources=loopzeroapplications/finalizers,verbs=update
 // +kubebuilder:rbac:groups=loopzero.io,resources=exposedroutes,verbs=get;list;watch;create;update;patch;delete
+// +kubebuilder:rbac:groups=loopzero.io,resources=tenants,verbs=get;list;watch
 type ApplicationReconciler struct {
 	client.Client
 	Scheme     *runtime.Scheme
 	BaseDomain string
+
+	// RuntimeFactory resolves a workload-cluster client per tenant cell_id
+	// (dogfood-2026-05-08-fixes T4.2 / ADR D6). nil = single-cell legacy mode:
+	// fast-path Healthy is disabled and Application.phase only converges via
+	// ExposedRoute Reachable. Wiring is in app-operator/main.go.
+	RuntimeFactory shared.RuntimeClientFactory
 }
 
 // applicationDetailTypes per ADR-0025 D3.
@@ -115,6 +129,13 @@ func (r *ApplicationReconciler) Reconcile(ctx context.Context, req ctrl.Request)
 		return ctrl.Result{}, err
 	}
 
+	// dogfood-2026-05-08-fixes T4.2 (F-6, ADR D6): fast-path Healthy.
+	// Mark EndpointsReady=true the moment the workload Pod is Ready in
+	// the tenant's cell, independent of ExposedRoute Reachable. Local k3d
+	// has no public DNS for *.loopzero.local so ExposedRoute may stay Pending
+	// forever; production may take 60+s for DNS+cert+Traefik propagation.
+	// EndpointsReady=true unblocks phase=Serving.
+	r.reconcileWorkloadStatus(ctx, &app)
 	r.reconcileRouteStatus(ctx, &app)
 	r.reconcileHealthCondition(&app)
 
@@ -325,15 +346,103 @@ func (r *ApplicationReconciler) computePhase(app *loopzerov1.LoopZeroApplication
 	return loopzerov1.ApplicationPhaseProgressing
 }
 
+// reconcileWorkloadStatus sets app.Status.EndpointsReady=true if the workload
+// Pod is Ready in the tenant's cell. Cell resolution: read Tenant CR by
+// app.Spec.TenantRef → tenant.Spec.CellID → RuntimeFactory.For(cellID).
+//
+// dogfood-2026-05-08-fixes T4.2 (F-6, ADR D6 + EC-5 multi-cell awareness +
+// EC-9 graceful degrade on workload-cluster unreachable).
+//
+// Behavior:
+//   - RuntimeFactory == nil: single-cell legacy mode → no-op (current path).
+//   - Tenant CR not found: log + return (route-status path will set
+//     EndpointsReady eventually).
+//   - Workload client error (timeout, RBAC, cluster down): log + return.
+//     RequeueAfter is implicit (controller-runtime resync cycle).
+//   - Pod list returns 0 matches: leave EndpointsReady at current value.
+//   - Pod list returns ≥1 with PodReady=True: set EndpointsReady=true.
+func (r *ApplicationReconciler) reconcileWorkloadStatus(ctx context.Context, app *loopzerov1.LoopZeroApplication) {
+	if r.RuntimeFactory == nil {
+		return
+	}
+	logger := log.FromContext(ctx)
+
+	// Resolve tenant cellID via Tenant CR (mgmt cluster).
+	var tenant loopzerov1.Tenant
+	tenantKey := client.ObjectKey{Name: app.Spec.TenantRef, Namespace: app.Namespace}
+	if err := r.Get(ctx, tenantKey, &tenant); err != nil {
+		// NotFound is normal during early reconcile or post-tenant-delete.
+		// Other errors are transient — controller resync will retry.
+		if !errors.IsNotFound(err) {
+			logger.V(1).Info("workload-status: failed to read Tenant CR",
+				"tenant", app.Spec.TenantRef, "error", err)
+		}
+		return
+	}
+
+	cellCtx, cancel := context.WithTimeout(ctx, workloadReadyTimeout)
+	defer cancel()
+	workloadClient, err := r.RuntimeFactory.For(cellCtx, tenant.Spec.CellID)
+	if err != nil {
+		logger.V(1).Info("workload-status: factory.For failed (graceful degrade)",
+			"cell_id", tenant.Spec.CellID, "error", err)
+		return
+	}
+
+	// Compute workload namespace via canonical naming helper. The Tenant CR
+	// resource name (typically slug) is what naming.EnvironmentNamespace expects.
+	ns, err := naming.EnvironmentNamespace(tenant.Name, app.Spec.Environment)
+	if err != nil {
+		logger.V(1).Info("workload-status: namespace compute failed",
+			"tenant", tenant.Name, "env", app.Spec.Environment, "error", err)
+		return
+	}
+
+	// List Pods labeled with the canonical instance label. The renderer (api/
+	// internal/manifests/renderer_*.go) sets `app.kubernetes.io/instance` to
+	// the LoopZeroApplication name, providing a stable selector across Deployment +
+	// Rollout primitives.
+	var pods corev1.PodList
+	if err := workloadClient.List(cellCtx, &pods,
+		client.InNamespace(ns),
+		client.MatchingLabels{"app.kubernetes.io/instance": app.Name},
+	); err != nil {
+		logger.V(1).Info("workload-status: pod list failed (graceful degrade)",
+			"namespace", ns, "cell_id", tenant.Spec.CellID, "error", err)
+		return
+	}
+
+	for i := range pods.Items {
+		for _, c := range pods.Items[i].Status.Conditions {
+			if c.Type == corev1.PodReady && c.Status == corev1.ConditionTrue {
+				app.Status.EndpointsReady = true
+				return
+			}
+		}
+	}
+}
+
 // SetupApplicationController registers the ApplicationController with the manager.
+//
+// Single-cell mode (factory nil): fast-path Healthy disabled. Application.phase
+// converges only via ExposedRoute Reachable. Backward-compatible.
 func SetupApplicationController(mgr ctrl.Manager, baseDomain string) error {
+	return SetupApplicationControllerWithFactory(mgr, baseDomain, nil)
+}
+
+// SetupApplicationControllerWithFactory is the cell-aware entrypoint
+// (dogfood-2026-05-08-fixes T4.2). Passing a CellAwareRuntimeClientFactory
+// enables the workload-Pod-Ready fast-path so app.Status.Phase converges
+// to Serving as soon as the Pod is Ready, regardless of ExposedRoute state.
+func SetupApplicationControllerWithFactory(mgr ctrl.Manager, baseDomain string, factory shared.RuntimeClientFactory) error {
 	return ctrl.NewControllerManagedBy(mgr).
 		For(&loopzerov1.LoopZeroApplication{}, shared.ForOption()).
 		Owns(&loopzerov1.ExposedRoute{}).
 		Named("application").
 		Complete(&ApplicationReconciler{
-			Client:     mgr.GetClient(),
-			Scheme:     mgr.GetScheme(),
-			BaseDomain: baseDomain,
+			Client:         mgr.GetClient(),
+			Scheme:         mgr.GetScheme(),
+			BaseDomain:     baseDomain,
+			RuntimeFactory: factory,
 		})
 }
