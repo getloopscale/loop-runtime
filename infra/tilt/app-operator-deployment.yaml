@@ -23,6 +23,19 @@ rules:
     resources: ["loopzeroapplications/finalizers", "exposedroutes/finalizers"]
     verbs: ["update"]
 
+  # --- Tenant CR: read-only for fast-path Healthy resolution
+  # (dogfood-2026-05-08-fixes T4.2 — ApplicationReconciler reads tenant.Spec.CellID)
+  - apiGroups: ["loopzero.io"]
+    resources: ["tenants"]
+    verbs: ["get", "list", "watch"]
+
+  # --- ClusterCredential CR: read-only for cell-aware runtime client factory
+  # (dogfood-2026-05-08-fixes T4.2 — CellAwareRuntimeClientFactory.For
+  # lists ClusterCredentials by spec.cellID)
+  - apiGroups: ["loopzero.io"]
+    resources: ["clustercredentials"]
+    verbs: ["get", "list", "watch"]
+
   # --- Secrets: read-only for app config references ---
   - apiGroups: [""]
     resources: ["secrets"]

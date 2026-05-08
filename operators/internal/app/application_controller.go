@@ -398,14 +398,23 @@ func (r *ApplicationReconciler) reconcileWorkloadStatus(ctx context.Context, app
 		return
 	}
 
-	// List Pods labeled with the canonical instance label. The renderer (api/
-	// internal/manifests/renderer_*.go) sets `app.kubernetes.io/instance` to
-	// the LoopZeroApplication name, providing a stable selector across Deployment +
-	// Rollout primitives.
+	// List Pods using the renderer's canonical labels:
+	//   loopzero.io/project       = app.Spec.Project
+	//   loopzero.io/app-name      = app.Spec.ServiceName
+	//   loopzero.io/environment   = app.Spec.Environment
+	//
+	// (loopzero.io/tenant is implicit via namespace filtering; namespace itself
+	// is loopzero-{tenantRef}-{environment}.)
+	//
+	// Source of truth for these labels: api/internal/manifests/renderer_*.go.
 	var pods corev1.PodList
 	if err := workloadClient.List(cellCtx, &pods,
 		client.InNamespace(ns),
-		client.MatchingLabels{"app.kubernetes.io/instance": app.Name},
+		client.MatchingLabels{
+			"loopzero.io/project":     app.Spec.Project,
+			"loopzero.io/app-name":    app.Spec.ServiceName,
+			"loopzero.io/environment": app.Spec.Environment,
+		},
 	); err != nil {
 		logger.V(1).Info("workload-status: pod list failed (graceful degrade)",
 			"namespace", ns, "cell_id", tenant.Spec.CellID, "error", err)
