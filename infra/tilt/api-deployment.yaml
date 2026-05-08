@@ -133,8 +133,16 @@ spec:
             # written by infra/scripts/k3d-cross-cluster-heal.sh.
             - name: RUNTIME_KUBECONFIG
               value: "/etc/loopzero/runtime/kubeconfig"
+            # B34 fix: the mounted kubeconfig (loopzero-cluster-kubeconfigs Secret /
+            # runtime.kubeconfig key) ships with a single context named
+            # "in-cluster". RUNTIME_KUBE_CONTEXT must match — was "runtime"
+            # which doesn't exist in the kubeconfig, causing
+            # `NewSecretK8sManager` to fail at boot and the secret K8s sync to
+            # be silently disabled (loopzero secret set persisted to PG but never
+            # created the ExternalSecret CR, so pods with `optional: false`
+            # envFrom remained CreateContainerConfigError).
             - name: RUNTIME_KUBE_CONTEXT
-              value: "runtime"
+              value: "in-cluster"
             - name: REGISTRY_URL
               value: "k3d-loopzero-registry:5000"
             - name: REGISTRY_INSECURE
