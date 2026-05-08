@@ -942,14 +942,32 @@ fi
 # Idempotent: no-op if the duplicate Secret is already gone.
 # ---------------------------------------------------------------------------
 log "H18: removing duplicate stale Gitea credentials in ArgoCD namespace"
+H18_REMOVED=false
 if kubectl --context "$MGMT_CTX" -n argocd get secret gitea-credentials-template >/dev/null 2>&1; then
   kubectl --context "$MGMT_CTX" -n argocd delete secret gitea-credentials-template >/dev/null 2>&1
   log "  gitea-credentials-template: removed (duplicate of argocd-creds-gitea)"
+  H18_REMOVED=true
+else
+  log "  gitea-credentials-template not present — skip"
+fi
+# argocd-sync-cleanroom-resilience-plan T1.2 (ADR D2 + F-02 of dogfood
+# 2026-05-08): the ArgoCD Helm chart auto-creates `argocd-repo-gitea-internal`
+# (label argocd.argoproj.io/secret-type=repository, only `type=git` + `url`
+# fields, NO password). It coexists with `argocd-creds-gitea` (canonical
+# repo-creds with password) for the SAME url prefix, causing
+# "Found multiple credentials for repoURL" warnings + non-deterministic
+# auth failures. Delete it idempotently.
+if kubectl --context "$MGMT_CTX" -n argocd get secret argocd-repo-gitea-internal >/dev/null 2>&1; then
+  kubectl --context "$MGMT_CTX" -n argocd delete secret argocd-repo-gitea-internal >/dev/null 2>&1
+  log "  argocd-repo-gitea-internal: removed (incomplete stub conflicting with argocd-creds-gitea)"
+  H18_REMOVED=true
+else
+  log "  argocd-repo-gitea-internal not present — skip"
+fi
+if [[ "$H18_REMOVED" == "true" ]]; then
   # Force argocd-repo-server to drop cached creds.
   kubectl --context "$MGMT_CTX" -n argocd rollout restart deploy/argocd-repo-server >/dev/null 2>&1
   log "  argocd-repo-server: restarted to invalidate cred cache"
-else
-  log "  gitea-credentials-template not present — skip"
 fi
 
 log "DONE — cross-cluster connectivity healed (H1-H18 codified)"

@@ -52,6 +52,15 @@ controller:
       value: "300s"
     - name: ARGOCD_CONTROLLER_WORKQUEUE_BACKOFF_FACTOR
       value: "2"
+    # F-01 fix (argocd-sync-cleanroom-resilience-plan T1.1, ADR D1):
+    # Default repo-server timeout is 60s (60_000_000_000 ns); the auto-set
+    # `--repo-server-timeout-seconds` flag in 15s default observed in our
+    # chart caused `application refresh deadline exceeded` under cleanroom
+    # cold-cache load. Explicitly set to 60s via env var so the application-
+    # controller respects the longer deadline when calling repo-server for
+    # ManifestGeneration/Refresh. Operator can override per-stack if needed.
+    - name: ARGOCD_APPLICATION_CONTROLLER_REPO_SERVER_TIMEOUT_SECONDS
+      value: "60"
   containerSecurityContext:
     runAsNonRoot: true
   readinessProbe:
