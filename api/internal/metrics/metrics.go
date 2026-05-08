@@ -604,4 +604,27 @@ var (
 		Name: "loopzero_retry_amplification_total",
 		Help: "Total retry attempts by operation type.",
 	}, []string{"operation"})
+
+	// SecretExternalSecretTotal counts ExternalSecret CR create/update calls
+	// from SecretK8sManager (workload-cluster path).
+	//
+	// dogfood-2026-05-08-fixes T2.3 (F-2 instrumentation, ADR D3).
+	//
+	// Cardinality: ONLY label is `result` ∈ {success, fail, skip} — 3 series
+	// total. NO tenant label (would be unbounded with N tenants); per EC-3
+	// of the edge-case review.
+	//
+	// Use:
+	//   - "success" — ExternalSecret CR created or updated successfully
+	//   - "fail" — runtime client returned error (RBAC, network, etc.)
+	//   - "skip" — manager nil at boot (RUNTIME_KUBECONFIG missing) so the
+	//     entire path was bypassed. THIS IS THE INVISIBLE-FAILURE SIGNAL
+	//     that F-2 was originally caused by.
+	//
+	// Alert opportunity: rate(loopzero_secret_externalsecret_total{result="skip"}[5m]) > 0
+	// indicates the API silently no-ops `loopzero secret set` calls.
+	SecretExternalSecretTotal = promauto.NewCounterVec(prometheus.CounterOpts{
+		Name: "loopzero_secret_externalsecret_total",
+		Help: "ExternalSecret CR create/update outcomes from loopzero-api workload sync path.",
+	}, []string{"result"})
 )

@@ -14,6 +14,7 @@ import (
 	"github.com/go-chi/chi/v5"
 
 	"github.com/loopzero/loopzero/api/internal/domain"
+	"github.com/loopzero/loopzero/api/internal/metrics"
 	"github.com/loopzero/loopzero/api/internal/middleware"
 	loopzeroerrors "github.com/loopzero/loopzero/pkg/errors"
 )
@@ -167,12 +168,23 @@ func (h *SecretHandler) Set(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 
-	// Create K8s Secret on mgmt + ExternalSecret CR on workload for ESO sync
+	// Create K8s Secret on mgmt + ExternalSecret CR on workload for ESO sync.
+	// dogfood-2026-05-08-fixes T2.3 (F-2): emit "skip" metric when k8sSync is
+	// nil — that path was the silent-failure cause, formerly invisible. Now
+	// `rate(loopzero_secret_externalsecret_total{result="skip"}[5m]) > 0` alerts
+	// that the API is silently no-opping `loopzero secret set`.
 	if h.k8sSync != nil {
 		if syncErr := h.k8sSync.CreateSecret(ctx, uc.TenantID, project, req.Environment, req.App, req.Name, req.Value); syncErr != nil {
 			// Log but don't fail — PG is source of truth, K8s sync is eventual
 			slog.Error("failed to sync secret to K8s", "name", req.Name, "error", syncErr)
 		}
+	} else {
+		metrics.SecretExternalSecretTotal.WithLabelValues("skip").Inc()
+		slog.Warn("ExternalSecret sync skipped — k8sSync nil at boot",
+			"tenant", uc.TenantID,
+			"app", req.App,
+			"environment", req.Environment,
+			"secret_name", req.Name)
 	}
 
 	writeJSON(w, http.StatusOK, secretSetResponse{

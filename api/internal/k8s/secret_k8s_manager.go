@@ -3,6 +3,7 @@ package k8s
 import (
 	"context"
 	"fmt"
+	"log/slog"
 	"strings"
 
 	corev1 "k8s.io/api/core/v1"
@@ -14,6 +15,8 @@ import (
 	"k8s.io/client-go/kubernetes"
 	"k8s.io/client-go/rest"
 	"k8s.io/client-go/tools/clientcmd"
+
+	"github.com/loopzero/loopzero/api/internal/metrics"
 )
 
 // SecretK8sManager creates K8s Secrets on mgmt cluster and ExternalSecret CRs
@@ -181,9 +184,29 @@ func (m *SecretK8sManager) CreateSecret(ctx context.Context, tenantID, projectID
 		_, err = m.runtimeDynamic.Resource(externalSecretGVR).Namespace(targetNamespace).Update(ctx, externalSecret, metav1.UpdateOptions{})
 	}
 	if err != nil {
+		// dogfood-2026-05-08-fixes T2.3: emit fail metric so silent skip
+		// can be observed via Prometheus. Secret VALUE is NEVER logged.
+		metrics.SecretExternalSecretTotal.WithLabelValues("fail").Inc()
+		slog.Error("ExternalSecret create/update failed",
+			"namespace", targetNamespace,
+			"name", esName,
+			"tenant", tenantID,
+			"app", app,
+			"secret_name", name,
+			"error", err)
 		return fmt.Errorf("create external secret on runtime: %w", err)
 	}
 
+	// dogfood-2026-05-08-fixes T2.3: emit success metric + structured log.
+	// Secret VALUE NEVER appears in metric label or log field — only the
+	// secret NAME (e.g. "API_KEY") is logged for traceability.
+	metrics.SecretExternalSecretTotal.WithLabelValues("success").Inc()
+	slog.Info("ExternalSecret created",
+		"namespace", targetNamespace,
+		"name", esName,
+		"tenant", tenantID,
+		"app", app,
+		"secret_name", name)
 	return nil
 }
 

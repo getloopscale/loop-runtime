@@ -20,14 +20,14 @@
 package e2e
 
 import (
-	"encoding/json"
+	"context"
 	"fmt"
-	"net/http"
 	"os"
 	"os/exec"
 	"strings"
 	"time"
 
+	"github.com/jackc/pgx/v5"
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
 
@@ -48,31 +48,36 @@ func cell2Available() bool {
 }
 
 // tenantCellID returns the cell_id assigned to the given tenant by querying
-// the admin tenants endpoint. Returns empty string on any error so callers
-// can fail fast with a clear assertion.
+// the database directly via LOOPZERO_E2E_DATABASE_URL.
+//
+// Why DB and not the admin HTTP API: there is no `GET /api/v1/admin/tenants/{id}`
+// endpoint (only POST .../pin and POST .../evict exist). The previous version
+// of this helper hit a non-existent path and silently returned "", causing
+// the multi-cell spec to fail with "must have a cell_id" even though
+// tenants.cell_id was correctly populated. See dogfood-2026-05-08-fixes T3.3
+// (NEW, derived from F-4 root-cause investigation).
+//
+// Returns empty string on any error so callers can fail fast with a clear
+// assertion.
 func tenantCellID(tenant string) string {
-	url := fmt.Sprintf("%s/api/v1/admin/tenants/%s", apiURL(), tenant)
-	client := &http.Client{Timeout: 5 * time.Second}
-	req, err := http.NewRequest("GET", url, nil)
+	dsn := os.Getenv("LOOPZERO_E2E_DATABASE_URL")
+	if dsn == "" {
+		return ""
+	}
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+	conn, err := pgx.Connect(ctx, dsn)
 	if err != nil {
 		return ""
 	}
-	req.Header.Set("Authorization", "Bearer "+resolveToken())
+	defer conn.Close(ctx)
 
-	resp, err := client.Do(req)
+	var cellID string
+	err = conn.QueryRow(ctx, `SELECT cell_id FROM tenants WHERE id = $1`, tenant).Scan(&cellID)
 	if err != nil {
 		return ""
 	}
-	defer resp.Body.Close()
-
-	var result map[string]interface{}
-	if err := json.NewDecoder(resp.Body).Decode(&result); err != nil {
-		return ""
-	}
-	if cellID, ok := result["cell_id"].(string); ok {
-		return cellID
-	}
-	return ""
+	return cellID
 }
 
 // cellKubeContext maps a cell_id to its local k3d kubectl context.
