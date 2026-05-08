@@ -257,6 +257,16 @@ else
   RUNTIME_SERVER="https://${RUNTIME_IP}:6443"
 fi
 
+# dogfood-2026-05-08-fixes T2.2 (F-2 root cause):
+# Context name MUST be "in-cluster" to match RUNTIME_KUBE_CONTEXT in
+# infra/tilt/api-deployment.yaml + infra/helm/loopzero-api Deployment env.
+# B34 fix doc says the kubeconfig "ships with a single context named
+# in-cluster", but F-11 (2026-05-07) regenerated it with name=runtime —
+# silent drift that broke `loopzero secret set` (SecretK8sManager construct
+# fails with `context "in-cluster" does not exist` → manager nil → ESO
+# sync skipped → pod CreateContainerConfigError).
+# Aligning the context name with mgmt + build (also in-cluster) restores
+# consistency.
 cat > /tmp/runtime-kubeconfig.yaml <<KUBECONFIG
 apiVersion: v1
 kind: Config
@@ -264,15 +274,15 @@ clusters:
 - cluster:
     server: ${RUNTIME_SERVER}
     insecure-skip-tls-verify: true
-  name: runtime
+  name: in-cluster
 contexts:
 - context:
-    cluster: runtime
-    user: runtime-admin
-  name: runtime
-current-context: runtime
+    cluster: in-cluster
+    user: in-cluster-admin
+  name: in-cluster
+current-context: in-cluster
 users:
-- name: runtime-admin
+- name: in-cluster-admin
   user:
     client-certificate-data: ${RUNTIME_CERT}
     client-key-data: ${RUNTIME_KEY}
