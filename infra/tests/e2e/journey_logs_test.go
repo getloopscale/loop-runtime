@@ -54,9 +54,9 @@ var _ = Describe("Journey: Logs", Ordered, Label("journey"), func() {
 		Expect(buildID).NotTo(BeEmpty())
 	})
 
-	It("loopzero logs --build-id returns exit 0 with body", func() {
+	It("loopzero logs --build returns exit 0 with body", func() {
 		stdout, stderr, exitCode := runLoopZeroInDir(workDir, "logs",
-			"--build-id", buildID, "--json")
+			"--build", buildID, "--json")
 
 		Expect(exitCode).To(Equal(0),
 			"loopzero logs --build-id should exit 0\nstdout: %s\nstderr: %s", stdout, stderr)
@@ -77,7 +77,7 @@ var _ = Describe("Journey: Logs", Ordered, Label("journey"), func() {
 
 	It("loopzero logs --json schema is stable", func() {
 		stdout, _, exitCode := runLoopZeroInDir(workDir, "logs",
-			"--build-id", buildID, "--json")
+			"--build", buildID, "--json")
 		if exitCode != 0 {
 			Skip("logs returned non-zero — schema check requires success path")
 		}
