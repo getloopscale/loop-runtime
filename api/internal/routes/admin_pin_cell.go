@@ -24,10 +24,13 @@ import (
 	"context"
 	"crypto/subtle"
 	"encoding/json"
+	"errors"
 	"net/http"
 	"os"
 	"regexp"
 	"strings"
+
+	"github.com/loopzero/loopzero/api/internal/services"
 )
 
 // AdminPinCellInput is the body for POST /api/v1/admin/tenants/pin.
@@ -116,32 +119,25 @@ func AdminPinCellHandler(pinner CellPinner) http.HandlerFunc {
 		previous, err := pinner.Pin(r.Context(), in.TenantID, in.CellID)
 		if err != nil {
 			// T6.1 of deep-review-remediation-plan (find_code_001 / CODE-001 HIGH).
-			// NOTE: errors.Is against services sentinels REQUIRES first
-			// resolving the routes↔services import cycle (find_arch_001 / T1.3).
-			// Until T1.3 lands, we keep the substring match but add a TODO
-			// pointer here so cleanup is mechanical post-T1.3.
-			//
-			// TODO(T1.3+T6.1): replace strings.Contains with errors.Is once
-			// types in routes/ migrate to api/internal/domain/, breaking the
-			// import cycle that currently blocks `import services`.
-			msg := err.Error()
+			// errors.Is against services sentinels — became safe to import
+			// services/ after T1.3 closed the routes/→domain/ cycle (find_arch_001).
 			status := http.StatusInternalServerError
 			code := "internal"
 			switch {
-			case strings.Contains(msg, "tenant not found"):
+			case errors.Is(err, services.ErrTenantNotFound):
 				status = http.StatusNotFound
 				code = "tenant_not_found"
-			case strings.Contains(msg, "cell not found"):
+			case errors.Is(err, services.ErrCellNotFound):
 				status = http.StatusNotFound
 				code = "cell_not_found"
-			case strings.Contains(msg, "not pinnable"):
+			case errors.Is(err, services.ErrCellNotPinnable):
 				status = http.StatusConflict
 				code = "cell_not_pinnable"
-			case strings.Contains(msg, "at capacity"):
+			case errors.Is(err, services.ErrCellAtCapacity):
 				status = http.StatusConflict
 				code = "cell_at_capacity"
 			}
-			http.Error(w, `{"code":"`+code+`","message":"`+msg+`"}`, status)
+			http.Error(w, `{"code":"`+code+`","message":"`+err.Error()+`"}`, status)
 			return
 		}
 

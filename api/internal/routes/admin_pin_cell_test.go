@@ -10,10 +10,13 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"fmt"
 	"net/http"
 	"net/http/httptest"
 	"os"
 	"testing"
+
+	"github.com/loopzero/loopzero/api/internal/services"
 )
 
 // osReadFileC11 — local alias avoiding clash with any other test helper named
@@ -160,7 +163,9 @@ func TestAdminPinCell_NoChange_Updated_False(t *testing.T) {
 func TestAdminPinCell_TenantNotFound_Returns404(t *testing.T) {
 	env := map[string]string{"LOOPZERO_ADMIN_API": "true", "LOOPZERO_ADMIN_SERVICE_AUTH_SECRET": "secret"}
 	headers := map[string]string{"X-Service-Auth": "secret"}
-	pinner := &fakePinner{err: errString("tenant not found: tn-x")}
+	// T6.1 migration: pinner now returns the sentinel directly so the
+	// handler's errors.Is mapping fires (was string-match before).
+	pinner := &fakePinner{err: services.ErrTenantNotFound}
 	rec := doPin(t, AdminPinCellInput{TenantID: "tn-x", CellID: "cell-2"}, pinner, env, headers)
 	if rec.Code != http.StatusNotFound {
 		t.Errorf("expected 404, got %d", rec.Code)
@@ -170,7 +175,7 @@ func TestAdminPinCell_TenantNotFound_Returns404(t *testing.T) {
 func TestAdminPinCell_CellNotPinnable_Returns409(t *testing.T) {
 	env := map[string]string{"LOOPZERO_ADMIN_API": "true", "LOOPZERO_ADMIN_SERVICE_AUTH_SECRET": "secret"}
 	headers := map[string]string{"X-Service-Auth": "secret"}
-	pinner := &fakePinner{err: errString("cell not pinnable: status=draining")}
+	pinner := &fakePinner{err: services.ErrCellNotPinnable}
 	rec := doPin(t, AdminPinCellInput{TenantID: "tn-x", CellID: "cell-2"}, pinner, env, headers)
 	if rec.Code != http.StatusConflict {
 		t.Errorf("expected 409, got %d", rec.Code)
@@ -180,18 +185,12 @@ func TestAdminPinCell_CellNotPinnable_Returns409(t *testing.T) {
 func TestAdminPinCell_CellAtCapacity_Returns409(t *testing.T) {
 	env := map[string]string{"LOOPZERO_ADMIN_API": "true", "LOOPZERO_ADMIN_SERVICE_AUTH_SECRET": "secret"}
 	headers := map[string]string{"X-Service-Auth": "secret"}
-	pinner := &fakePinner{err: errString("cell at capacity: 500/500")}
+	pinner := &fakePinner{err: services.ErrCellAtCapacity}
 	rec := doPin(t, AdminPinCellInput{TenantID: "tn-x", CellID: "cell-2"}, pinner, env, headers)
 	if rec.Code != http.StatusConflict {
 		t.Errorf("expected 409, got %d", rec.Code)
 	}
 }
-
-// errString is a tiny helper because we don't want to depend on a
-// project-internal errors package for these tests.
-type errString string
-
-func (e errString) Error() string { return string(e) }
 
 // ---------------------------------------------------------------------------
 // cell-2-activation-plan T1.4 / ADR C11 — authz on --cell flag in 3 paths.
@@ -301,4 +300,66 @@ func containsToken(haystack, needle string) bool {
 		}
 	}
 	return false
+}
+
+// TestAdminPinCell_ErrorMappingViaErrorsIs is the T6.1 DoD test
+// (find_code_001 / CODE-001 HIGH of deep-review-remediation-plan).
+//
+// Asserts that the handler maps wrapped sentinel errors to the correct HTTP
+// status via errors.Is — NOT via err.Error() string matching. This covers
+// the regression risk where a sentinel gets wrapped by fmt.Errorf("...: %w", e)
+// in a downstream caller; the substring-match version would silently fall
+// through to 500 because "tenant not found" is no longer a substring of
+// "pin failed: tenant not found".
+//
+// We construct fmt.Errorf("...: %w", services.ErrXxx) wrappers and verify
+// each maps to the documented status code.
+func TestAdminPinCell_ErrorMappingViaErrorsIs(t *testing.T) {
+	cases := []struct {
+		name       string
+		err        error
+		wantStatus int
+		wantCode   string
+	}{
+		{
+			name:       "wrapped ErrTenantNotFound returns 404",
+			err:        fmt.Errorf("pin failed: %w", services.ErrTenantNotFound),
+			wantStatus: http.StatusNotFound,
+			wantCode:   "tenant_not_found",
+		},
+		{
+			name:       "wrapped ErrCellNotFound returns 404",
+			err:        fmt.Errorf("pin failed: %w", services.ErrCellNotFound),
+			wantStatus: http.StatusNotFound,
+			wantCode:   "cell_not_found",
+		},
+		{
+			name:       "wrapped ErrCellNotPinnable returns 409",
+			err:        fmt.Errorf("pin failed: %w", services.ErrCellNotPinnable),
+			wantStatus: http.StatusConflict,
+			wantCode:   "cell_not_pinnable",
+		},
+		{
+			name:       "wrapped ErrCellAtCapacity returns 409",
+			err:        fmt.Errorf("pin failed: %w", services.ErrCellAtCapacity),
+			wantStatus: http.StatusConflict,
+			wantCode:   "cell_at_capacity",
+		},
+	}
+
+	env := map[string]string{"LOOPZERO_ADMIN_API": "true", "LOOPZERO_ADMIN_SERVICE_AUTH_SECRET": "secret"}
+	headers := map[string]string{"X-Service-Auth": "secret"}
+
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			rec := doPin(t, AdminPinCellInput{TenantID: "tn-x", CellID: "cell-2"},
+				&fakePinner{err: tc.err}, env, headers)
+			if rec.Code != tc.wantStatus {
+				t.Fatalf("status: want %d got %d body=%s", tc.wantStatus, rec.Code, rec.Body.String())
+			}
+			if !contains(rec.Body.String(), `"code":"`+tc.wantCode+`"`) {
+				t.Errorf("body missing code=%q: %s", tc.wantCode, rec.Body.String())
+			}
+		})
+	}
 }
