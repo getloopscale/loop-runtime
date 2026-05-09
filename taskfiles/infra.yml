@@ -700,9 +700,15 @@ tasks:
     cmds:
       - |
         echo "=== Building loopzero-clone-runner ==="
+        # T8.3 of deep-review-remediation-plan (closes find_infra_005 MEDIUM)
+        # pinned Tilt env vars to :v0.1.0; the build script must publish BOTH
+        # :latest AND :v0.1.0 so api/internal/argo/cosign.go loopzeroCosignImage()
+        # / loopzeroSyftImage() / loopzeroCloneImage() can resolve via LOOPZERO_*_IMAGE.
         docker build -t localhost:5000/loopzero-clone-runner:latest infra/images/clone-runner/
+        docker tag  localhost:5000/loopzero-clone-runner:latest localhost:5000/loopzero-clone-runner:v0.1.0
         docker push localhost:5000/loopzero-clone-runner:latest
-        echo "  Pushed: localhost:5000/loopzero-clone-runner:latest"
+        docker push localhost:5000/loopzero-clone-runner:v0.1.0
+        echo "  Pushed: localhost:5000/loopzero-clone-runner:{latest,v0.1.0}"
       - |
         echo "=== Building loopzero-packs-runner (canonical, lenient v0.4.0) ==="
         # build-mode-dispatch-and-dockerfile-security-plan T3.3 fix (2026-05-08):
@@ -735,18 +741,22 @@ tasks:
         bash infra/scripts/build-and-push-dockerfile-lint.sh
       - |
         echo "=== Building loopzero-syft-scanner (Sprint 6 / T0.2) ==="
+        # T8.3 + NEW-11 (2026-04-30): publish both :latest and :v0.1.0.
         docker build -t localhost:5000/loopzero-syft-scanner:latest infra/images/syft-scanner/
+        docker tag  localhost:5000/loopzero-syft-scanner:latest localhost:5000/loopzero-syft-scanner:v0.1.0
         docker push localhost:5000/loopzero-syft-scanner:latest
-        echo "  Pushed: localhost:5000/loopzero-syft-scanner:latest"
+        docker push localhost:5000/loopzero-syft-scanner:v0.1.0
+        echo "  Pushed: localhost:5000/loopzero-syft-scanner:{latest,v0.1.0}"
       - |
         echo "=== Building loopzero-cosign-signer (Sprint 6 supply-chain) ==="
-        # 2026-04-30 NEW-12 fix: cosign-signer was excluded from this list,
-        # so dogfood E2E sign-image step always 401-ed against DOCR. With
-        # the LOOPZERO_COSIGN_IMAGE env override now wired (NEW-11), local
-        # builds can short-circuit to this image.
+        # T8.3 + NEW-11/NEW-12 (2026-04-30): cosign-signer was excluded from
+        # this list pre-NEW-12; pre-T8.3 only :latest was pushed. Tilt env
+        # LOOPZERO_COSIGN_IMAGE points to :v0.1.0 — must publish both tags.
         docker build -t localhost:5000/loopzero-cosign-signer:latest infra/images/cosign-signer/
+        docker tag  localhost:5000/loopzero-cosign-signer:latest localhost:5000/loopzero-cosign-signer:v0.1.0
         docker push localhost:5000/loopzero-cosign-signer:latest
-        echo "  Pushed: localhost:5000/loopzero-cosign-signer:latest"
+        docker push localhost:5000/loopzero-cosign-signer:v0.1.0
+        echo "  Pushed: localhost:5000/loopzero-cosign-signer:{latest,v0.1.0}"
 
   # ---------------------------------------------------------------------------
   # S0.14: Composite tasks
