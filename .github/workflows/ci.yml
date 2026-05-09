@@ -568,6 +568,9 @@ jobs:
       - name: AGPL isolation lint (T9.1 deep-review-remediation, ADR-0048)
         run: bash infra/scripts/check_agpl_isolation.sh
 
+      - name: Alert runbook coverage lint (T5.8 deep-review-remediation)
+        run: bash infra/scripts/check_alert_runbooks.sh
+
   # ─────────────────────────────────────────────
   # GATE — all checks must pass
   # ─────────────────────────────────────────────
