@@ -753,10 +753,12 @@ key := groupIPv6By64(realIP)
 
 ## Phase 6: Code Contracts (5 findings)
 
-### T6.1 — admin_pin_cell errors.Is fix (CODE-001 / find_code_001 HIGH)
+### T6.1 — admin_pin_cell errors.Is fix (CODE-001 / find_code_001 HIGH) ✅ DONE 2026-05-09
 **Files:** `api/internal/routes/admin_pin_cell.go` lines 117-137: replace `strings.Contains(err.Error(), ...)` with `errors.Is(err, services.ErrTenantNotFound)`. Export sentinel errors from services package.
 **TDD:** `TestAdminPinCell_ErrorMappingViaErrorsIs()` — wrapped sentinel returns 404, not 500.
 **DoD:** No `strings.Contains(err.Error(), ...)` for error type discrimination codebase-wide.
+
+**Status (commit 6e54d66d):** T1.3 closed the routes↔services import cycle so `errors.Is(err, services.ErrXxx)` is now safe in `routes/admin_pin_cell.go`. Replaced 4 string-match cases with sentinel matches. New `TestAdminPinCell_ErrorMappingViaErrorsIs` proves the handler maps `fmt.Errorf("pin failed: %w", services.ErrTenantNotFound)` to 404 (the wrapped-sentinel regression that string-match would miss). 3 pre-existing tests migrated from `errString` helper to actual sentinels. Honest scope note: 9 other call sites in the codebase still use `strings.Contains(err.Error(), ...)`; some legitimate (DNS errors lack stable sentinels), others out-of-scope for this task. Tracked for follow-up.
 
 ### T6.2 — RenderInput.Plan plumbing (CODE-006 / find_code_006 MEDIUM, paired with threat 3)
 **Files:** `api/internal/services/build_reconcile_retry.go`: populate `manifests.RenderInput{Plan: tenant.Plan}` from tenant subscription record.

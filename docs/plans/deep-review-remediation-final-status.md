@@ -31,12 +31,12 @@ finding has been classified:
 | Phase | Tasks | Status | Notes |
 |-------|-------|--------|-------|
 | 0 (CRITICAL) | T0.1, T0.2, T0.3, T0.4, T0.5 | 5/5 ✓ | All 4 launch-blockers resolved structurally |
-| 1 (multi-cell) | T1.1, T1.2, T1.4, T1.5, T1.6, T1.7 | 6/7 ✓ | T1.3 (routes/→domain/ refactor) deferred via ADR + interim local interfaces |
+| 1 (multi-cell) | T1.1, T1.2, T1.3, T1.4, T1.5, T1.6, T1.7 | 7/7 ✓ | T1.3 shipped 2026-05-09 (commits 6b65554c+f425c409+aa15d9e1+2e8fb28b+6e54d66d) |
 | 2 (security) | T2.1-T2.7 | 6/7 ✓ | T2.4 (pre-auth IPRateLimiter) deferred — needs trusted-proxy CIDR config (EC-3) |
 | 3 (test) | T3.1, T3.3, T3.4 | 4/4 ✓ | All landed |
 | 4 (supply chain) | T4.1, T4.3-T4.8 | 8/8 ✓ | All landed (T4.2 + T4.7 governed via ADR) |
 | 5 (observability) | T5.1-T5.10 | 9/10 ✓ | T5.4 (rollout SSE catalog doc) closed implicit via T0.3 |
-| 6 (code) | T6.2, T6.4-T6.8 | 7/8 ✓ | T6.1 + T6.3 deferred to T1.3 (cycle blocker) |
+| 6 (code) | T6.1-T6.8 | 8/8 ✓ | T1.3 closed the cycle 2026-05-09; T6.1 + T6.3 unblocked and shipped |
 | 7 (data) | T7.1-T7.4 | 4/4 ✓ | T7.3 + T7.4 governed via ADR + index migration |
 | 8 (infra) | T8.1-T8.4 | 5/6 ✓ | T8.5 (NetworkPolicy egress) ships inventory only — full default-deny rollout requires staging soak |
 | 9 (deps) | T9.1, T9.4 | 2/4 ✓ | T9.2 false positive cleared; T9.3 deferred KISS+YAGNI |
@@ -82,10 +82,9 @@ All 4 CRITICAL findings have:
 These are committed-as-deferred via ADR or partial completion. None block
 the Deep Review remediation; they represent the next layer of work.
 
-1. **T1.3 — `routes/` → `domain/` migration** (find_arch_001 + find_arch_004
-   + find_dep_routes_type_hub). Requires 2-day merge freeze per EC-14.
-   Workarounds in place: 3 local interfaces (BillingPool, isParameterizedCondition,
-   admin_pin_cell TODO).
+1. ~~**T1.3 — `routes/` → `domain/` migration**~~ ✅ DONE 2026-05-09. find_arch_001, find_arch_004,
+   find_dep_routes_type_hub, find_code_001 all closed. TestImportGraph_RoutesIsLeaf is the regression guard.
+   Workaround interfaces (BillingPool, isParameterizedCondition, admin_pin_cell TODO) all replaced.
 
 2. **T1.4 production rollout** — Helm chart shipped with mount disabled
    default; production cells flip `runtimeKubeconfigMount.enabled=true`
