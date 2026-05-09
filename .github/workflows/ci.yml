@@ -562,6 +562,9 @@ jobs:
       - name: Orphan PrometheusRule alerts lint (T5.10 deep-review-remediation)
         run: bash infra/scripts/check_orphan_alerts.sh
 
+      - name: Migration regression-test coverage (T3.4 deep-review-remediation)
+        run: bash infra/scripts/migration_test_coverage.sh
+
   # ─────────────────────────────────────────────
   # GATE — all checks must pass
   # ─────────────────────────────────────────────
