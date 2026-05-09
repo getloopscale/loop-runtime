@@ -7,6 +7,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"regexp"
 	"strings"
 	"time"
 
@@ -74,6 +75,17 @@ func (s *PostgresDomainStore) ListByTenant(ctx context.Context, tenantID string,
 		argIdx++
 	}
 
+	// T2.6 of deep-review-remediation-plan (closes find_sec_005 / SEC-005 MEDIUM):
+	// every condition above MUST be `<column> = $N` form. assertParameterized
+	// is a runtime guard against future contributors injecting raw values.
+	// All values currently flow through `args ...any`; an inadvertent
+	// fmt.Sprintf with a user value into the condition string would fail this
+	// assertion at build time of every list call.
+	for _, c := range conditions {
+		if !isParameterizedCondition(c) {
+			panic(fmt.Sprintf("domain store: non-parameterized WHERE condition rejected: %q. Use \"col = $N\" form, never embed values via fmt.Sprintf.", c))
+		}
+	}
 	where := strings.Join(conditions, " AND ")
 
 	// Count total
@@ -280,3 +292,25 @@ func scanDomain(rows Rows) (*domain.CustomDomain, error) {
 	}
 	return &d, nil
 }
+
+// isParameterizedCondition validates that a SQL WHERE condition follows the
+// `<column> = $N` pattern (where N is one or more digits). Rejects any
+// condition that contains a literal value or fmt.Sprintf-style interpolation
+// outside the placeholder slot. T2.6 of deep-review-remediation-plan.
+//
+// Accepts (sample):
+//   "tenant_id = $1"
+//   "app_name = $42"
+//   "environment_id = $7"
+//
+// Rejects:
+//   "tenant_id = 'literal'"        (raw value)
+//   "tenant_id = 'foo' OR 1=1"     (injection attempt)
+//   "tenant_id = $1 OR 1=1"        (extra clauses)
+//
+// Tightly anchored: ^[a-z_][a-z0-9_]* = \$[0-9]+$
+func isParameterizedCondition(c string) bool {
+	return paramConditionRegex.MatchString(c)
+}
+
+var paramConditionRegex = regexp.MustCompile(`^[a-z_][a-z0-9_]* = \$[0-9]+$`)

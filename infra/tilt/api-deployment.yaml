@@ -177,12 +177,19 @@ spec:
               value: "k3d-loopzero-registry:5000/loopzero-packs-runner:v0.4.0"
             - name: LOOPZERO_DOCKERFILE_LINT_IMAGE
               value: "k3d-loopzero-registry:5000/loopzero-dockerfile-lint:v0.1.0"
+            # T8.3 of deep-review-remediation-plan (closes find_infra_005 MEDIUM):
+            # pinned to specific tags matching production. Pipeline-step images
+            # (clone-runner, syft-scanner, cosign-signer) are batch jobs that
+            # change rarely — pinning prevents Tilt from accidentally pulling
+            # an :latest mutated by a developer's local rebuild. Tilt's
+            # live_update for loopzero-api/operators is unaffected (those keep
+            # floating tags by design — see docs/runbooks/tilt-image-strategy.md).
             - name: LOOPZERO_CLONE_IMAGE
-              value: "k3d-loopzero-registry:5000/loopzero-clone-runner:latest"
+              value: "k3d-loopzero-registry:5000/loopzero-clone-runner:v0.1.0"
             - name: LOOPZERO_SYFT_IMAGE
-              value: "k3d-loopzero-registry:5000/loopzero-syft-scanner:latest"
+              value: "k3d-loopzero-registry:5000/loopzero-syft-scanner:v0.1.0"
             - name: LOOPZERO_COSIGN_IMAGE
-              value: "k3d-loopzero-registry:5000/loopzero-cosign-signer:latest"
+              value: "k3d-loopzero-registry:5000/loopzero-cosign-signer:v0.1.0"
             # B14 fix (real-paas-cleanroom-dogfood-loop iter 22, 2026-05-05):
             # service-auth secret for /api/v1/admin/* routes. Cleanroom-only
             # placeholder; production sets via Pulumi mgmt-api.ts (random Output).
