@@ -6,7 +6,10 @@
 //
 // Conditions applied:
 //   - C5: export timeout 1s, retry disabled, bounded queue 2048
-//   - C7: feature flag LOOPZERO_TRACING_ENABLED (default true dev, false prod)
+//   - C7: feature flag LOOPZERO_TRACING_ENABLED — default TRUE everywhere
+//     (dev + prod). Local Tilt YAML + bootstrap chart explicitly set
+//     false; production default-tracing-enabled is gated downstream by
+//     the OTel collector / Tempo (find_obs_007 alignment).
 //   - C2: trace-id is separate from correlation-id (no format change)
 package tracing
 
@@ -113,11 +116,20 @@ func Init(ctx context.Context, serviceName string) (shutdown func(context.Contex
 }
 
 // isEnabled checks the LOOPZERO_TRACING_ENABLED feature flag (C7).
-// Default: "true" unless explicitly set to "false".
+//
+// Default: "true" unless explicitly set to "false" or "0".
+//
+// T-OBS-007 of deep-review-remediation-plan: previously the package header
+// comment said "default true dev, false prod" but production gets the
+// SAME default-true behavior as dev — production has to explicitly set
+// LOOPZERO_TRACING_ENABLED=false to disable. Per dogfood-2026-05-08-fixes
+// T0.1, the local Tilt YAML + bootstrap chart explicitly set false; the
+// PRODUCTION default remains tracing-enabled (the OTel collector
+// downstream gates whether spans actually flow).
 func isEnabled() bool {
 	v := os.Getenv("LOOPZERO_TRACING_ENABLED")
 	if v == "" {
-		return true // Default enabled — prod sets false via env
+		return true // Default enabled in BOTH dev and prod — local Tilt + bootstrap chart explicitly disable.
 	}
 	return !strings.EqualFold(v, "false") && v != "0"
 }
