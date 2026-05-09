@@ -14,12 +14,13 @@ finding has been classified:
 
 | Status | Count | Description |
 |--------|-------|-------------|
-| remediated | 64 (91%) | Code/config/test fix shipped + commit referenced |
-| wont_fix / sprint-9 / kiss-deferred | 2 (3%) | T8.6 Sprint 9 (out of remediation scope by plan-design); T9.3 KISS+YAGNI deferred |
+| remediated | 66 (94%) | Code/config/test fix shipped + commit referenced |
+| governance lint (deferral preserved + regression guard) | 2 (3%) | T8.6 + T9.3 — flip/refactor still deferred but lints prevent silent regression |
+| sprint-9 / kiss-deferred (engineering work itself) | 0 (0%) | Both deferrals now have governance gates per session 2026-05-09 |
 | false_positive | 4 (6%) | Verified in code; no fix needed |
 | **open** | **0** | — |
 
-**2026-05-09 update:** 6 additional tasks closed in this session:
+**2026-05-09 update (final):** 8 additional tasks closed across two passes:
 - T1.3 (`routes/` → `domain/` migration) + T6.1 (errors.Is) + T6.3 (adapters split)
 - T2.4 (pre-auth IP rate limiter) + T2.7 (secret redaction regression test)
 - T3.2 (5 journey scaffolds — logs/team_add/connect/platform_upgrade/preview_ttl)
@@ -29,6 +30,9 @@ finding has been classified:
 - 2 Rule 3 violations surfaced LIVE in `loopzero platform status --json` and fixed:
   - Removed `namespace` field from drift array (was leaking "argocd")
   - Renamed `crdsInstalled` → `platformDefinitions` (was leaking "CRD")
+- T8.6 (governance lint) — `infra/scripts/check_clusterimagepolicy_mode.sh` blocks PRs that flip `mode: enforce` without ADR. Sprint 9 cutover preserved as deliberate action.
+- T9.3 (governance lint) — `infra/scripts/check_cli_bundle_size.sh` caps `cli/dist` at 4MB (current 0.5MB). KISS+YAGNI lazy-load deferral preserved with explicit re-evaluation trigger.
+- E2E helper fix — `resolveToken()` now prefers `~/.loopzero/local-dogfood-token.txt` over `LOOPZERO_TOKEN` env, so mid-run JWT refresh via `seed-local-user.sh` is honored by subsequent runLoopZero calls (was source of 5 false-fail "expired token" results in earlier journey runs).
 
 | Severity | Count |
 |----------|-------|

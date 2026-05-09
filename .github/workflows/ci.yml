@@ -571,6 +571,16 @@ jobs:
       - name: Alert runbook coverage lint (T5.8 deep-review-remediation)
         run: bash infra/scripts/check_alert_runbooks.sh
 
+      - name: ClusterImagePolicy mode flip governance lint (T8.6 deep-review-remediation)
+        run: bash infra/scripts/check_clusterimagepolicy_mode.sh
+
+      - name: CLI bundle size guard (T9.3 deep-review-remediation)
+        run: |
+          if [ ! -d cli/dist ]; then
+            (cd cli && npm install --silent && npm run build)
+          fi
+          bash infra/scripts/check_cli_bundle_size.sh
+
       - name: Base image digest pinning lint (T4.6 deep-review-remediation)
         run: bash infra/scripts/check_base_image_digest_pin.sh
 
