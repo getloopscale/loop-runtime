@@ -14,7 +14,7 @@ func TestValidateAdminAPIKey_CurrentKey(t *testing.T) {
 	AdminAPIKeyPrevious = ""
 	defer func() { AdminAPIKey = ""; AdminAPIKeyPrevious = "" }()
 
-	if !validateAdminAPIKey("test-admin-key-current") {
+	if !ValidateAdminAPIKey("test-admin-key-current") {
 		t.Error("should accept current key")
 	}
 }
@@ -24,7 +24,7 @@ func TestValidateAdminAPIKey_PreviousKey(t *testing.T) {
 	AdminAPIKeyPrevious = "test-admin-key-previous"
 	defer func() { AdminAPIKey = ""; AdminAPIKeyPrevious = "" }()
 
-	if !validateAdminAPIKey("test-admin-key-previous") {
+	if !ValidateAdminAPIKey("test-admin-key-previous") {
 		t.Error("should accept previous key during rotation")
 	}
 }
@@ -34,7 +34,7 @@ func TestValidateAdminAPIKey_InvalidKey(t *testing.T) {
 	AdminAPIKeyPrevious = "test-admin-key-previous"
 	defer func() { AdminAPIKey = ""; AdminAPIKeyPrevious = "" }()
 
-	if validateAdminAPIKey("wrong-key") {
+	if ValidateAdminAPIKey("wrong-key") {
 		t.Error("should reject invalid key")
 	}
 }
@@ -43,7 +43,7 @@ func TestValidateAdminAPIKey_EmptyConfig(t *testing.T) {
 	AdminAPIKey = ""
 	AdminAPIKeyPrevious = ""
 
-	if validateAdminAPIKey("any-key") {
+	if ValidateAdminAPIKey("any-key") {
 		t.Error("should reject when admin key is not configured")
 	}
 }

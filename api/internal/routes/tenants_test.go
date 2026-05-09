@@ -240,3 +240,47 @@ func TestTenants_Restore_CrossTenantDenied(t *testing.T) {
 		t.Fatalf("want 403, got %d body=%s", w.Code, w.Body.String())
 	}
 }
+
+// T0.2 of deep-review-remediation-plan (closes find_sec_001 CRITICAL).
+// Attacker scenario: authenticated member of tenantA sends DELETE for tenantB
+// with a garbage X-Admin-Key header. Pre-fix: handler treated header presence
+// as admin grant → cross-tenant DELETE succeeded. Post-fix: ValidateAdminAPIKey
+// checks the key value against AdminAPIKey via constant-time compare.
+func TestTenants_Delete_RejectsUnvalidatedAdminKey(t *testing.T) {
+	store := &fakeTenantDeletionStore{}
+	h := NewTenantHandler(store, slog.Default())
+
+	// AdminAPIKey is unset in test context (default ""). ValidateAdminAPIKey
+	// MUST return false for any input, including the attacker's garbage value.
+	req := httptest.NewRequest(http.MethodDelete, "/api/v1/tenants/tn-victim-tenant", nil)
+	req = withAuth(req, defaultUserContext()) // authenticated as tn-test-123 (different tenant)
+	req = withChiParam(req, "id", "tn-victim-tenant")
+	req.Header.Set("X-Admin-Key", "garbage-attacker-payload")
+	w := httptest.NewRecorder()
+
+	h.Delete(w, req)
+
+	if w.Code != http.StatusForbidden {
+		t.Fatalf("attacker scenario: garbage X-Admin-Key MUST be rejected (403), got %d body=%s", w.Code, w.Body.String())
+	}
+}
+
+// T0.2 of deep-review-remediation-plan — same attacker scenario for Restore.
+func TestTenants_Restore_RejectsUnvalidatedAdminKey(t *testing.T) {
+	store := &fakeTenantDeletionStore{
+		record: &DeletionRecord{TenantID: "tn-victim-tenant", RequestedAt: time.Now()},
+	}
+	h := NewTenantHandler(store, slog.Default())
+
+	req := httptest.NewRequest(http.MethodPost, "/api/v1/tenants/tn-victim-tenant/restore", nil)
+	req = withAuth(req, defaultUserContext())
+	req = withChiParam(req, "id", "tn-victim-tenant")
+	req.Header.Set("X-Admin-Key", "garbage-attacker-payload")
+	w := httptest.NewRecorder()
+
+	h.Restore(w, req)
+
+	if w.Code != http.StatusForbidden {
+		t.Fatalf("attacker scenario: garbage X-Admin-Key MUST be rejected (403), got %d body=%s", w.Code, w.Body.String())
+	}
+}

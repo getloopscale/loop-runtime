@@ -6,6 +6,7 @@ package middleware
 import (
 	"context"
 	"crypto/sha256"
+	"crypto/subtle"
 	"encoding/hex"
 	"encoding/json"
 	"errors"
@@ -110,32 +111,41 @@ var AdminAPIKeyPrevious string
 
 // validateServiceAuth checks the X-Service-Auth header against current and previous secrets.
 // S1.2: Dual-key rotation — accepts current OR previous during rotation window.
+//
+// T2.2 of deep-review-remediation-plan (closes find_sec_002 HIGH): uses
+// subtle.ConstantTimeCompare to prevent timing-oracle byte-by-byte brute-force.
+// Empty AdminAPIKey/ServiceAuthSecret returns false BEFORE constant-time compare
+// so attacker cannot probe for "service has no key configured".
 func validateServiceAuth(provided string) bool {
 	if ServiceAuthSecret == "" {
 		return false
 	}
-	if provided == ServiceAuthSecret {
-		return true
-	}
-	if ServiceAuthSecretPrevious != "" && provided == ServiceAuthSecretPrevious {
-		return true
-	}
-	return false
+	current := subtle.ConstantTimeCompare([]byte(provided), []byte(ServiceAuthSecret)) == 1
+	prev := ServiceAuthSecretPrevious != "" &&
+		subtle.ConstantTimeCompare([]byte(provided), []byte(ServiceAuthSecretPrevious)) == 1
+	return current || prev
 }
 
-// validateAdminAPIKey checks the provided key against current and previous admin API keys.
+// ValidateAdminAPIKey checks the provided key against current and previous admin API keys.
 // MEET-052: Dual-key rotation for zero-downtime key rotation.
-func validateAdminAPIKey(provided string) bool {
+//
+// T0.2 of deep-review-remediation-plan (closes find_sec_001 CRITICAL): exported
+// (was validateAdminAPIKey) so handlers serving dual-mode self-service + admin
+// (e.g., tenants.Delete) can validate the X-Admin-Key value instead of just
+// checking presence. Bypass attack: previous code used header-presence check
+// (`r.Header.Get("X-Admin-Key") != ""`) which any authenticated user could
+// trivially spoof.
+//
+// T2.2 (closes find_sec_002 HIGH): uses subtle.ConstantTimeCompare to prevent
+// timing-oracle byte-by-byte brute-force attack against AdminAPIKey.
+func ValidateAdminAPIKey(provided string) bool {
 	if AdminAPIKey == "" {
 		return false
 	}
-	if provided == AdminAPIKey {
-		return true
-	}
-	if AdminAPIKeyPrevious != "" && provided == AdminAPIKeyPrevious {
-		return true
-	}
-	return false
+	current := subtle.ConstantTimeCompare([]byte(provided), []byte(AdminAPIKey)) == 1
+	prev := AdminAPIKeyPrevious != "" &&
+		subtle.ConstantTimeCompare([]byte(provided), []byte(AdminAPIKeyPrevious)) == 1
+	return current || prev
 }
 
 // RequireAdmin is a middleware that requires a valid admin API key in the
@@ -148,7 +158,7 @@ func RequireAdmin(next http.Handler) http.Handler {
 			writeError(w, http.StatusForbidden, "FORBIDDEN", "Admin API key required. Set X-Admin-Key header.")
 			return
 		}
-		if !validateAdminAPIKey(key) {
+		if !ValidateAdminAPIKey(key) {
 			writeError(w, http.StatusForbidden, "FORBIDDEN", "Invalid admin API key")
 			return
 		}

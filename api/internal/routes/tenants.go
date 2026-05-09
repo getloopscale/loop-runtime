@@ -67,7 +67,11 @@ func (h *TenantHandler) Delete(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// MEET-052 IDOR protection: non-admin callers can only delete their own tenant.
-	isAdmin := r.Header.Get("X-Admin-Key") != ""
+	// T0.2 of deep-review-remediation-plan (closes find_sec_001 CRITICAL):
+	// previously used `r.Header.Get("X-Admin-Key") != ""` which checked only
+	// header presence — any authenticated user could spoof. Now validates the
+	// key value against AdminAPIKey via constant-time compare.
+	isAdmin := middleware.ValidateAdminAPIKey(r.Header.Get("X-Admin-Key"))
 	if !isAdmin && uc.TenantID != tenantID {
 		writeLoopZeroError(w, loopzeroerrors.ErrForbidden)
 		return
@@ -151,7 +155,9 @@ func (h *TenantHandler) Restore(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// IDOR protection
-	isAdmin := r.Header.Get("X-Admin-Key") != ""
+	// T0.2 of deep-review-remediation-plan (closes find_sec_001 CRITICAL):
+	// validates key value, not header presence.
+	isAdmin := middleware.ValidateAdminAPIKey(r.Header.Get("X-Admin-Key"))
 	if !isAdmin && uc.TenantID != tenantID {
 		writeLoopZeroError(w, loopzeroerrors.ErrForbidden)
 		return
