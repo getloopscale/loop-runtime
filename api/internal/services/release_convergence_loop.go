@@ -8,6 +8,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"log/slog"
+	"strings"
 	"sync"
 	"time"
 
@@ -369,8 +370,77 @@ func (r *ReleaseConvergenceLoop) failRelease(ctx context.Context, release *db.Re
 		r.logger.Error("failed to emit deploy.sync_failed event", "release_id", release.ID, "error", err)
 	}
 
+	// T0.3 of deep-review-remediation-plan (closes find_flow_001 CRITICAL).
+	// Per CLAUDE.md, Argo Rollouts is the default workload primitive when
+	// LOOPZERO_PROGRESSIVE_DELIVERY=true (the default). For Rollout-backed
+	// releases, the canonical terminal SSE event is rollout.aborted (not
+	// deploy.sync_failed). The CLI deploy command handles both as terminal
+	// (cli/src/commands/deploy.ts:603), so emitting both is safe — but the
+	// canary-specific event surfaces reason + weight + step for Pro/Team
+	// canary visibility.
+	if isRolloutBackedRelease(release) {
+		abortReason := classifyAbortReason(reason)
+		abortedEv := RolloutAbortedEvent{
+			Reason:  abortReason,
+			Message: reason,
+		}
+		if emitErr := EmitRolloutAborted(ctx, r.logger, r.eventStore, release.BuildID, abortedEv); emitErr != nil {
+			// Logged inside EmitRolloutAborted; intentionally not failing
+			// the failRelease path because deploy.sync_failed was already
+			// emitted above as backwards-compat terminal.
+			r.logger.Warn("failed to emit rollout.aborted (deploy.sync_failed already emitted)",
+				"release_id", release.ID, "error", emitErr)
+		}
+	}
+
 	// MEET-2026-03-31-024: Clean up syncRetriggers entry to prevent memory leak.
 	r.syncRetriggers.Delete(release.ID)
+}
+
+// isRolloutBackedRelease — true if the release was rendered with progressive
+// delivery (Argo Rollouts), as opposed to a static-only release. Heuristic:
+// any app in the release whose Rendering is not "static" is assumed Rollout-backed
+// when LOOPZERO_PROGRESSIVE_DELIVERY is enabled (default per CLAUDE.md).
+//
+// Per ADR T0.3: emitting an extra rollout.aborted on edge cases (e.g.,
+// progressive delivery disabled but app non-static) is benign — CLI treats
+// either terminal event as exit 3.
+func isRolloutBackedRelease(release *db.Release) bool {
+	if release == nil || release.Apps == nil {
+		return false
+	}
+	var apps []db.BuildAppSpec
+	if err := json.Unmarshal(release.Apps, &apps); err != nil {
+		// On parse failure, assume Rollout-backed so the canary event still
+		// fires. Failing closed here keeps T0.3 closed even if Apps JSON is
+		// malformed (which would be a separate bug).
+		return true
+	}
+	for _, app := range apps {
+		if app.Rendering != "static" {
+			return true
+		}
+	}
+	return false
+}
+
+// classifyAbortReason — maps a free-text reason from the convergence loop to
+// the documented rollout.aborted reason enum (analysis-failed | pod-unhealthy |
+// user-aborted | progress-deadline-exceeded). Best-effort; default is
+// pod-unhealthy because the convergence loop's primary failure path is
+// "release did not become healthy within sync timeout".
+func classifyAbortReason(reason string) string {
+	r := strings.ToLower(reason)
+	switch {
+	case strings.Contains(r, "analysis"):
+		return "analysis-failed"
+	case strings.Contains(r, "deadline") || strings.Contains(r, "progress"):
+		return "progress-deadline-exceeded"
+	case strings.Contains(r, "user") || strings.Contains(r, "cancel") || strings.Contains(r, "abort"):
+		return "user-aborted"
+	default:
+		return "pod-unhealthy"
+	}
 }
 
 // maxSyncRetriggers bounds the number of times the convergence loop will
