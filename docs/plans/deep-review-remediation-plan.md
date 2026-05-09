@@ -95,7 +95,7 @@ Phase 0 (CRITICAL launch blockers)  ──▶  /dogfood full Phase-0
 
 **Objective:** Eliminate the 4 CRITICAL findings + the broken-canary safety-net test that masked find_data_001 from CI.
 
-### T0.1 — Migration 000011: releases.status CHECK canonicalization
+### T0.1 — Migration 000011: releases.status CHECK canonicalization ✅ DONE
 
 #### Objective
 Restore `DRIFT_ALERT` + `ROLLBACK_FAILED`, drop phantom `BUILDING` + `FAILED`, align with `pkg/statemachine/release.go` State constants.
@@ -182,7 +182,7 @@ VERIFY:  cd api && go test ./tests/integration/ -run TestCheckConstraint -v
 
 ---
 
-### T0.2 — Wire X-Admin-Key validation through middleware on tenant DELETE/Restore
+### T0.2 — Wire X-Admin-Key validation through middleware on tenant DELETE/Restore ✅ DONE
 
 #### Objective
 Eliminate the cross-tenant DELETE bypass (find_sec_001 — CRITICAL). Any authenticated user setting `X-Admin-Key: anything` currently grants admin privilege without value verification.
@@ -266,7 +266,7 @@ VERIFY:  cd api && go test ./internal/routes/ -run TestTenantDelete -v
 
 ---
 
-### T0.3 — Wire EmitRolloutAborted to canary abort detection (canary SSE contract revival)
+### T0.3 — Wire EmitRolloutAborted to canary abort detection (canary SSE contract revival) ✅ DONE
 
 #### Objective
 Restore the canary auto-abort SSE contract that is currently dead code (find_flow_001 CRITICAL). `EmitRolloutAborted` is defined, unit-tested, and registered as terminal SSE event type, but has zero production callers.
@@ -367,7 +367,7 @@ VERIFY:  cd api && go test ./internal/services/ -run TestConvergence.*Aborted -v
 
 ---
 
-### T0.4 — Fix DB hardening test wrong constraint name (broken canary)
+### T0.4 — Fix DB hardening test wrong constraint name (broken canary) ✅ DONE
 
 #### Objective
 Fix the meta-bug: the test that should have caught find_data_001 was checking constraint name `chk_releases_status` (does not exist) instead of actual `releases_status_check` (find_test_001 HIGH, but blocking T0.1 effectiveness).
@@ -420,7 +420,7 @@ VERIFY:  cd api && go test ./tests/integration/ -run TestReleaseStatusCheck -v
 
 ---
 
-### T0.5 — CI invariant test: `pg_constraint` MUST equal state machine constants
+### T0.5 — CI invariant test: `pg_constraint` MUST equal state machine constants ✅ DONE
 
 #### Objective
 Permanent regression prevention. Add a CI test that for EVERY state-bearing table reads `pg_constraint.consrc` and asserts exact equality with the corresponding `pkg/statemachine/*.go` State constants. Implements ADR D2.
@@ -514,7 +514,7 @@ If FAIL: fix S0/S1, re-run cleanroom + dogfood.
 
 **Objective:** Close H-04 PARTIAL by making cell-aware factory unconditional + adding multi-cell envtest infrastructure (per ADR D3).
 
-### T1.1 — PreviewController cell-aware (find_arch_002)
+### T1.1 — PreviewController cell-aware (find_arch_002) ✅ DONE
 **Files:** `operators/api/v1/preview_types.go` (add `CellID` to spec), `operators/internal/preview/preview_controller.go` (add `RuntimeFactory shared.RuntimeClientFactory`, replace static client), `operators/cmd/preview-operator/main.go` (wire factory).
 **Pattern:** Mirror `EnvironmentReconciler` cell-2-activation-plan iter 4 fix.
 **TDD:**
@@ -522,7 +522,7 @@ If FAIL: fix S0/S1, re-run cleanroom + dogfood.
 - `TestPreviewReconciler_OnLegacyCRWithoutCellID_ReadsCellFromTenant()` — (EC-7) PreviewEnvironment CR with `spec.cellID=""` (created before this task) MUST fallback to `tenant.spec.cellID`, NOT cell-default.
 **DoD:** Preview Ginkgo journey on cell-2 tenant: pod on cell-2, NotFound on cell-default. Legacy CR migration covered.
 
-### T1.2 — Multi-cell envtest infrastructure (find_arch_003)
+### T1.2 — Multi-cell envtest infrastructure (find_arch_003) ✅ DONE
 **Files:** `operators/internal/operatortest/envtest_suite.go` (add `WithCellAwareFactory()` setup option that wires fake `ClusterCredential` CR), `operators/internal/{tenant,app,preview,environment}/{controller}_test.go` (use cell-aware setup).
 **TDD:** `TestEnvtest_CellAwareFactoryActuallyExercised()` — assert factory.Resolve called with non-default CellID at least once across suite.
 **DoD:** All 200+ envtest specs run with cell-aware factory wired (factory != nil); add coverage report to CI.
@@ -543,7 +543,7 @@ If FAIL: fix S0/S1, re-run cleanroom + dogfood.
 
 > **DOCUMENT (EC-14):** This refactor touches 9 packages. To avoid merge conflicts during the review window, **freeze feature merges to `api/internal/{services,db,k8s,loki,github}/` for ~2 days** while T1.3 is in review. Coordinate via #engineering Slack channel + GitHub draft PR + an issue tagged `merge-freeze`.
 
-### T1.4 — app-operator cell-aware unconditional (find_arch_007 + ADR D3)
+### T1.4 — app-operator cell-aware unconditional (find_arch_007 + ADR D3) ✅ DONE
 
 > **EC-4 fix:** removing the `if runtimeKubeconfig != ""` guard mid-rollout will CrashLoopBackOff existing operator pods if their Helm chart does not yet mount the kubeconfig Secret. Split into ordered sub-tasks. T1.4b applies ONLY after T1.4a is in all production cells.
 
@@ -562,12 +562,12 @@ If FAIL: fix S0/S1, re-run cleanroom + dogfood.
 **Files:** Manual k8s ops on staging cell-1: `kubectl rollout restart deploy/loopzero-app-operator -n loopzero-system`; verify pod boots cleanly; verify ApplicationController fast-path Healthy still works for in-flight reconciles.
 **DoD:** Documented runbook entry confirming clean restart + reconcile continuation.
 
-### T1.5 — CellPinner DB↔CR divergence alert (find_arch_005)
+### T1.5 — CellPinner DB↔CR divergence alert (find_arch_005) ✅ DONE
 **Files:** `api/internal/metrics/metrics.go` (new `loopzero_cell_pinner_cr_patch_fail_total`), `api/internal/services/cell_pinner.go` (line 126-129: increment counter on patch fail), `infra/helm/monitoring/templates/prometheusrule-cell-pinner.yaml` (NEW alert).
 **TDD:** `TestCellPinner_CRPatchFail_IncrementsMetric()`.
 **DoD:** Alert wired; counter visible in Grafana.
 
-### T1.6 — Billing route wiring (find_billing_route_not_wired HIGH)
+### T1.6 — Billing route wiring (find_billing_route_not_wired HIGH) ✅ DONE
 **Files:** `api/internal/routes/billing.go` (NEW handler: `GET /api/v1/billing` returns plan info, `POST /api/v1/billing/portal` returns Stripe Customer Portal URL), `api/internal/server/router.go` (wire routes), `cli/src/commands/billing.ts` (verify CLI consumes the new endpoints), `api/internal/db/subscription_store.go` (read `subscriptions.stripe_customer_id`).
 **TDD:**
 - `TestBillingRoute_GetReturnsPlanInfo()` — happy path.
@@ -576,7 +576,7 @@ If FAIL: fix S0/S1, re-run cleanroom + dogfood.
 - CLI Jest test.
 **DoD:** `loopzero billing portal` opens browser to valid Stripe Customer Portal URL for paid tenants; emits actionable error for free tenants.
 
-### T1.7 — Workqueue silent DB error fix (find_workqueue_silent_db_errors HIGH)
+### T1.7 — Workqueue silent DB error fix (find_workqueue_silent_db_errors HIGH) ✅ DONE
 **Files:** `api/internal/workqueue/consumer.go` lines 87, 89: replace `_ =` with explicit `if err := ...; err != nil { logger.Error(...); metrics.WorkqueueTerminalWriteFailTotal.Inc() }`.
 **TDD:** `TestConsumer_FailWriteError_LogsAndMeters()`.
 **DoD:** Counter `loopzero_workqueue_terminal_write_fail_total{terminal=fail|complete}` emitted; alert wired.
@@ -585,25 +585,27 @@ If FAIL: fix S0/S1, re-run cleanroom + dogfood.
 
 ## Phase 2: Security Hardening (8 findings: 1 HIGH + 4 MEDIUM + 1 LOW + 2 pre-investigated)
 
-### T2.1 — VAP system:masters exemption (find_sec_h05_vap_dual_chart_drift HIGH)
+### T2.1 — VAP system:masters exemption (find_sec_h05_vap_dual_chart_drift HIGH) ✅ DONE
 **Files:** `infra/helm/admission-policies/templates/vap-protect-platform-networkpolicies.yaml` matchConditions: add `&& !('system:masters' in request.userInfo.groups)`.
 **TDD:** `infra/tests/admission/vap_namespace_deletion_test.sh` — cluster-admin deletes namespace with NetworkPolicy → no deadlock.
 **DoD:** Bootstrap chart matches published chart byte-for-byte in matchConditions.
 
-### T2.2 — Timing attack fix on validateServiceAuth + validateAdminAPIKey (find_sec_002 HIGH)
+### T2.2 — Timing attack fix on validateServiceAuth + validateAdminAPIKey (find_sec_002 HIGH) ✅ DONE
 **Files:** `api/internal/middleware/auth.go` lines 117, 120, 132, 135: replace `==` with `subtle.ConstantTimeCompare`.
 **TDD:** `TestValidateServiceAuth_ConstantTime()` — measure timing variance over 1000 iterations; assert std-dev < 100ns.
 **DoD:** All 4 sites use subtle.ConstantTimeCompare; timing test passes.
 
-### T2.3 — Dockerfile FROM allow-list tighten (find_sec_003 HIGH)
+### T2.3 — Dockerfile FROM allow-list tighten (find_sec_003 HIGH) ✅ DONE
 **Files:** `tools/loopzero-dockerfile-lint/main.go` line 67: remove `"docker.io/"`, keep only `"docker.io/library/"`.
 **TDD:**
 - `TestDockerfileLint_RejectsArbitraryDockerHubImage()` — `FROM docker.io/attacker/malware:latest` → reject.
 - `TestDockerfileLint_AllowsScratchAndStageNames()` — (EC-9) `FROM scratch` allowed; `FROM alpine AS builder` then `FROM builder` allowed (stage reference, not registry); `FROM $BASE` with `BASE=evil.com/x` rejected; `FROM ${VAR:-docker.io/library/alpine}` with safe default allowed.
 **DoD:** Fixture test for all 4 patterns above (allow + reject cases).
 
-### T2.4 — Pre-auth IP rate limit (find_sec_ratelimit_post_auth_only MEDIUM, ADR D4)
+### T2.4 — Pre-auth IP rate limit (find_sec_ratelimit_post_auth_only MEDIUM, ADR D4) 🟡 POST-LAUNCH SECURITY PASS
 **Files:** `api/internal/middleware/iprate.go` (NEW IPRateLimiter, 120/min per IP), `api/internal/server/router.go` (wire BEFORE auth at top of router), `api/internal/config/proxy.go` (NEW: TrustedProxyCIDRs from `LOOPZERO_TRUSTED_PROXY_CIDRS` env, default = Cloudflare egress ranges).
+
+**Status:** Documented as post-launch security pass per `final-status.md`. EC-3 (trusted-proxy CIDR bypass) + EC-13 (IPv6 /64 grouping) require config files we do not yet have. Cloudflare Tunnel + edge auth provide partial coverage. Not blocking deep-review-remediation closure.
 
 > **EC-3 fix:** trusting `X-Forwarded-For` blindly = trivial bypass with attacker-set header. Must check the header ONLY when the request comes from a trusted proxy.
 
@@ -627,41 +629,49 @@ key := groupIPv6By64(realIP)
 
 **DoD:** Burst 200 requests/min from single IP → 80 succeed + 120 receive 429 + Retry-After. CF Tunnel egress IPs configured via env var `LOOPZERO_TRUSTED_PROXY_CIDRS=173.245.48.0/20,103.21.244.0/22,...`. Documented in CLAUDE.md known config drift class.
 
-### T2.5 — Build env reserved-prefix block (find_sec_004 MEDIUM)
+### T2.5 — Build env reserved-prefix block (find_sec_004 MEDIUM) ✅ DONE
 **Files:** `api/internal/services/build_plan.go` line 87: add prefix block matching `loopzero-dockerfile-lint reservedEnvKeyPrefixes`.
 **TDD:** `TestBuildPlan_RejectsReservedEnvKeys()` — reject `LOOPZERO_*`, `KUBERNETES_*`, `AWS_*`, `DO_*`.
 **DoD:** Lint + service-level enforcement aligned.
 
-### T2.6 — SQL dynamic WHERE structural guard (find_sec_005 MEDIUM)
+**Status:** `isReservedEnvKey` shipped at `services/build_plan.go:35`; `services/build_plan_reserved_env_test.go` has 5 prefix-coverage cases (LOOPZERO_/KUBERNETES_/AWS_/DO_/GOOGLE_).
+
+### T2.6 — SQL dynamic WHERE structural guard (find_sec_005 MEDIUM) ✅ DONE
 **Files:** `api/internal/db/domain_store.go` lines 77, 81: extract WHERE construction to `safeWhereBuilder` that asserts each condition is `$N`-parameterized.
 **TDD:** `TestSafeWhereBuilder_RejectsRawStringInjection()`.
 **DoD:** Domain store cannot accept non-parameterized condition.
 
-### T2.7 — Secret value log scrubbing (find_sec_006 LOW)
+**Status:** `isParameterizedCondition` shipped at `db/domain_store.go:312`; `db/domain_store_param_guard_test.go` covers accept-only-parameterized vs reject-raw-string cases.
+
+### T2.7 — Secret value log scrubbing (find_sec_006 LOW) ✅ DONE 2026-05-09
 **Files:** `api/internal/k8s/secret_k8s_manager.go` line 177: ensure value never appears in error path log; add explicit redaction.
 **TDD:** `TestCreateSecret_OnError_DoesNotLogValue()`.
 **DoD:** Test asserts log buffer contains `[REDACTED]` instead of value.
+
+**Status (commit 709750a6):** Source-side scrubbing landed in dogfood-2026-05-08-fixes T2.3 (slog.Error at secret_k8s_manager.go:190 explicitly excludes `value` field). New `TestCreateSecret_OnError_DoesNotLogValue` (`api/internal/k8s/secret_k8s_manager_test.go`) is the regression guard — covers BOTH failure paths (mgmt-create + runtime-ExternalSecret-create) and is RED-proven by injecting `"INJECTED_LEAK_DEBUG", value` into the slog call.
 
 ---
 
 ## Phase 3: Test Safety Net (4 findings)
 
-### T3.1 — Migration 000010 regression test (find_test_002 HIGH)
+### T3.1 — Migration 000010 regression test (find_test_002 HIGH) ✅ DONE
 **Files:** `api/internal/db/migrations/000010_release_rollback_states_test.go` (NEW unit test parallel to 000008/000009 patterns).
 **TDD:** Asserts CHECK contains ROLLING_BACK + ROLLED_BACK.
 **DoD:** Test exists for every migration via lint rule.
 
-### T3.2 — 6 CLI E2E happy-path gaps (find_test_003 MEDIUM)
+### T3.2 — 6 CLI E2E happy-path gaps (find_test_003 MEDIUM) 🟡 PARTIAL — 1 of 6 exists
 **Files:** `infra/tests/e2e/journey_{rollback,logs,platform_upgrade,connect,team_add,preview_ttl}_test.go` — remove `Skip()` calls; implement happy paths.
 **TDD:** Each journey passes against cleanroom.
 **DoD:** Zero `Skip()` in journey test files except documented `pragma: legitimately-skipped`.
 
-### T3.3 — Lock acquisition 5s timeout test (find_test_004 MEDIUM)
+**Status:** `journey_rollback_test.go` exists and runs in the journey suite. The 5 remaining (logs/platform_upgrade/connect/team_add/preview_ttl) need new test scaffolding + LIVE infra to validate. Tracked for journey-coverage iteration; not blocking deep-review-remediation closure since 11 journeys already cover the deploy critical path end-to-end.
+
+### T3.3 — Lock acquisition 5s timeout test (find_test_004 MEDIUM) ✅ DONE
 **Files:** `api/internal/lock/environment_lock_timeout_test.go` (NEW) — concurrent goroutine holds lock; competitor must fail in 5s ± 200ms.
 **TDD:** `TestEnvironmentLock_TimesOutIn5Seconds()`.
 **DoD:** Test enforces both upper and lower bound on timeout.
 
-### T3.4 — Lint rule: every migration has regression test
+### T3.4 — Lint rule: every migration has regression test ✅ DONE
 **Files:** `infra/scripts/migration_test_coverage.sh` (NEW) + `.github/workflows/integration-tests.yml` (call lint pre-merge).
 **TDD:** Lint script exits non-zero if any `*.up.sql` lacks corresponding `_test.go`.
 **DoD:** Pre-merge gate.
@@ -670,38 +680,40 @@ key := groupIPv6By64(realIP)
 
 ## Phase 4: Supply Chain Hardening (8 findings: 2 HIGH + 5 MEDIUM)
 
-### T4.1 — GitHub Actions SHA pinning (find_cicd_001 HIGH)
+### T4.1 — GitHub Actions SHA pinning (find_cicd_001 HIGH) ✅ DONE
 **Files:** 9 `.github/workflows/*.yml` files: replace `@v3`/`@v7`/`@v2.6.1` with SHA pins. Add `pinact` to dev dependencies.
 **TDD:** `infra/scripts/check_actions_sha_pinned.sh` (NEW) — exit non-zero if any tag-only ref.
 **DoD:** Renovate config updated with `pinDigests: true` for actions.
 
-### T4.2 — Mutable env tags fix (find_cicd_003 HIGH)
+### T4.2 — Mutable env tags fix (find_cicd_003 HIGH) 🟡 ADR-0049 GOVERNANCE — ENG WORK SCHEDULED
 **Files:** `.github/workflows/build-images.yml`: replace `:dev`/`:prod` push with SHA-based + immutable promotion. `infra-restart.yml`: update by SHA, not namespace pattern.
 **TDD:** `TestImageTag_ImmutableAcrossEnvironments()` — staging SHA = prod SHA after promotion.
 **DoD:** Mutable tag pushes eliminated.
 
-### T4.3 — packs-runner digest pin (find_infra_002 HIGH)
+**Status:** ADR-0049 (Immutable artifact promotion strategy) ACCEPTED — documents the two-tier tag policy with `:sha` canonical for production deploys. Engineering work scheduled to refactor `infra-restart.yml` (replace namespace-pattern with `kubectl set image deploy/X $IMAGE:$SHA`). The ADR is governance-shipped and lints catch new debt; the code refactor is tracked separately.
+
+### T4.3 — packs-runner digest pin (find_infra_002 HIGH) ✅ DONE
 **Files:** `infra/images/packs-runner/Dockerfile`: replace `git clone HEAD` with explicit commit SHA + checksum verification.
 **TDD:** `TestPacksRunner_BuildIsReproducible()` — same SHA twice → same image digest.
 **DoD:** Image digest pinned in `workflow_builder.go` (also closes find_dep_loopzero_forge_bus_factor partial).
 
-### T4.4 — Floating golang version (find_infra_003 MEDIUM)
+### T4.4 — Floating golang version (find_infra_003 MEDIUM) ✅ DONE
 **Files:** `tools/loopzero-dockerfile-lint/Dockerfile` + `infra/images/packs-runner/Dockerfile`: pin to `golang:1.25.9-alpine3.22`.
 **DoD:** All Dockerfiles use same Go base.
 
-### T4.5 — Polaris pin + checksum (find_cicd_005 MEDIUM)
+### T4.5 — Polaris pin + checksum (find_cicd_005 MEDIUM) ✅ DONE
 **Files:** `.github/workflows/helm-charts.yml` line 83: download specific Polaris release with SHA256 checksum.
 **DoD:** Pinned URL + verified checksum.
 
-### T4.6 — Base image digest pinning (find_cicd_002 MEDIUM)
+### T4.6 — Base image digest pinning (find_cicd_002 MEDIUM) ✅ DONE
 **Files:** All 4 Dockerfiles: replace `golang:1.25.9-alpine3.22` with `@sha256:...`. Add Renovate config for digest updates.
 **DoD:** Reproducible builds via `SOURCE_DATE_EPOCH` + digest pinning.
 
-### T4.7 — loopzero-forge mirror (find_dep_loopzero_forge_bus_factor MEDIUM)
+### T4.7 — loopzero-forge mirror (find_dep_loopzero_forge_bus_factor MEDIUM) ✅ DONE
 **Files:** Mirror `getloopscale/loopzero-forge` to `loopzero/loopzero-forge` org with branch protection.
 **DoD:** ADR documenting trust boundary.
 
-### T4.8 — Integration tests required PR gate (find_cicd_004 MEDIUM)
+### T4.8 — Integration tests required PR gate (find_cicd_004 MEDIUM) ✅ DONE
 **Files:** `.github/workflows/integration-tests.yml`: trigger on `pull_request`; mark as required check on develop + main.
 **DoD:** PRs cannot merge with failing integration tests.
 
@@ -709,43 +721,43 @@ key := groupIPv6By64(realIP)
 
 ## Phase 5: Observability Dark Metrics (8 findings, all from observability_review.md)
 
-### T5.1 — Cell fallback metric + alert (find_cell_fallback_no_metric MEDIUM)
+### T5.1 — Cell fallback metric + alert (find_cell_fallback_no_metric MEDIUM) ✅ DONE
 **Files:** `api/internal/metrics/metrics.go` (new `CellFallbackTotal{reason}`), `api/internal/services/build_reconcile_dispatch.go` lines 37-39 (increment), `infra/helm/monitoring/templates/prometheusrule-multi-cell.yaml` (alert when rate > 0.01).
 **TDD:** `TestBuildReconcileDispatch_FactoryNil_IncrementsFallbackMetric()`.
 **DoD:** Alert wired + runbook.
 
-### T5.2 — Secret skip alert (find_secret_skip_no_alert + find_obs_006 HIGH)
+### T5.2 — Secret skip alert (find_secret_skip_no_alert + find_obs_006 HIGH) ✅ DONE
 **Files:** `infra/helm/monitoring/templates/prometheusrule-secret-eso.yaml` (NEW alert).
 **DoD:** Alert when `rate(loopzero_secret_externalsecret_total{result="skip"}[5m]) > 0`.
 
-### T5.3 — Workqueue terminal write fail metric + alert (paired with T1.7).
+### T5.3 — Workqueue terminal write fail metric + alert (paired with T1.7). ✅ DONE
 **DoD:** Counter + alert end-to-end.
 
-### T5.4 — Rollout SSE spec doc (find_rollout_sse_undocumented MEDIUM, paired with T0.3).
+### T5.4 — Rollout SSE spec doc (find_rollout_sse_undocumented MEDIUM, paired with T0.3). ✅ DONE
 **DoD:** docs/cli-reference.md SSE catalog updated.
 
-### T5.5 — Supply chain metrics alerts (find_obs_001 HIGH)
+### T5.5 — Supply chain metrics alerts (find_obs_001 HIGH) ✅ DONE
 **Files:** `infra/helm/monitoring/templates/prometheusrule-supply-chain.yaml` (NEW alerts for `loopzero_release_signed_total{signed="false"}`, `loopzero_sbom_generated_total`).
 **DoD:** 3 alerts wired with runbook URLs.
 
-### T5.6 — Correlation ID propagation 5/32 → 32/32 (find_obs_002 HIGH)
+### T5.6 — Correlation ID propagation 5/32 → 32/32 (find_obs_002 HIGH) ✅ DONE
 **Files:** `api/internal/middleware/correlation.go` (audit), all 27 missing route files: read X-Correlation-ID + propagate to slog + downstream HTTP calls.
 **TDD:** `TestCorrelationID_PropagatesEndToEnd()` — assert ID flows CLI→API→operator→workload via slog matching.
 **DoD:** 32/32 routes propagate; alert if propagation rate < 95%.
 
-### T5.7 — Operator L4 metrics 10/14 alerts (find_obs_004 MEDIUM)
+### T5.7 — Operator L4 metrics 10/14 alerts (find_obs_004 MEDIUM) ✅ DONE
 **Files:** `infra/helm/monitoring/templates/prometheusrule-operators-l4.yaml` (10 NEW alerts including `loopzero_tenant_deletion_stuck_total`, `loopzero_misplaced_tenant_total`).
 **DoD:** Coverage report shows ≥90% L4 metric → alert mapping.
 
-### T5.8 — Runbook coverage 34→99 (find_obs_005 MEDIUM)
+### T5.8 — Runbook coverage 34→99 (find_obs_005 MEDIUM) ✅ DONE
 **Files:** Audit 99 alerts; ensure each has `runbook_url` annotation pointing to `docs/runbooks/{alert-name}.md`. Migrate non-standard `runbook:` annotations to `runbook_url:`.
 **DoD:** Alertmanager auto-link works for all alerts.
 
-### T5.9 — Alertmanager PagerDuty integration (find_obs_008 MEDIUM)
+### T5.9 — Alertmanager PagerDuty integration (find_obs_008 MEDIUM) ✅ DONE
 **Files:** `infra/helm/monitoring/templates/alertmanager-config.yaml`: add PagerDuty receiver for `severity=critical` alerts.
 **DoD:** LoopZeroPostgresDown at 3 AM → Slack + PagerDuty escalation.
 
-### T5.10 — `vector(0) > 1` dead alerts cleanup (find_obs_003 MEDIUM)
+### T5.10 — `vector(0) > 1` dead alerts cleanup (find_obs_003 MEDIUM) ✅ DONE
 **Files:** Audit 11 neutered alerts; fix metric name typos (e.g., LoopZeroDBPoolAcquireLatency); remove permanently-neutered ones with ADR justification.
 **DoD:** Zero `vector(0) > 1` patterns in production PrometheusRule files.
 
@@ -760,7 +772,7 @@ key := groupIPv6By64(realIP)
 
 **Status (commit 6e54d66d):** T1.3 closed the routes↔services import cycle so `errors.Is(err, services.ErrXxx)` is now safe in `routes/admin_pin_cell.go`. Replaced 4 string-match cases with sentinel matches. New `TestAdminPinCell_ErrorMappingViaErrorsIs` proves the handler maps `fmt.Errorf("pin failed: %w", services.ErrTenantNotFound)` to 404 (the wrapped-sentinel regression that string-match would miss). 3 pre-existing tests migrated from `errString` helper to actual sentinels. Honest scope note: 9 other call sites in the codebase still use `strings.Contains(err.Error(), ...)`; some legitimate (DNS errors lack stable sentinels), others out-of-scope for this task. Tracked for follow-up.
 
-### T6.2 — RenderInput.Plan plumbing (CODE-006 / find_code_006 MEDIUM, paired with threat 3)
+### T6.2 — RenderInput.Plan plumbing (CODE-006 / find_code_006 MEDIUM, paired with threat 3) ✅ DONE
 **Files:** `api/internal/services/build_reconcile_retry.go`: populate `manifests.RenderInput{Plan: tenant.Plan}` from tenant subscription record.
 **TDD:** `TestRenderInput_ProTenantGetsProCanaryStep()` — Pro tenant deploy → 20/Analysis/50/100 not 50/100.
 **DoD:** Plan field populated; threat 3 closed.
@@ -779,24 +791,24 @@ key := groupIPv6By64(realIP)
 
 All <200 LOC ✓. Behavior unchanged (`./internal/adapters` tests green); every type/method/interface kept its exact signature and call site.
 
-### T6.4 — Fire-and-forget context (find_code_004 MEDIUM)
+### T6.4 — Fire-and-forget context (find_code_004 MEDIUM) ✅ DONE
 **Files:** `api/internal/services/build_reconcile_retry.go:229`, `release_activator.go:201`: replace `context.Background()` with derived context from incoming request.
 **TDD:** `TestCallback_ContextPropagatesTraceID()`.
 **DoD:** OTel trace IDs flow through callbacks.
 
-### T6.5 — Attestation save error log (CODE-005 / find_code_005 MEDIUM)
+### T6.5 — Attestation save error log (CODE-005 / find_code_005 MEDIUM) ✅ DONE
 **Files:** `api/internal/services/container_delivery.go:303-309`: remove `_ = saveErr`; log with structured error + emit metric.
 **DoD:** Error visible in logs + metric.
 
-### T6.6 — Stale ARCH-006 comment + sync_callback context (CODE-007 / find_code_007 LOW)
+### T6.6 — Stale ARCH-006 comment + sync_callback context (CODE-007 / find_code_007 LOW) ✅ DONE
 **Files:** `api/internal/services/sync_callback_activator.go:69`: update comment + propagate trace.
 **DoD:** Comment matches reality.
 
-### T6.7 — CustomStrategy.DockerfileStep no-op (find_arch_006 LOW)
+### T6.7 — CustomStrategy.DockerfileStep no-op (find_arch_006 LOW) ✅ DONE
 **Files:** `api/internal/argo/languages.go:362-364`: clarify intent — return no-op or document loopzero-packs lenient behavior.
 **DoD:** Comment matches behavior.
 
-### T6.8 — cell_service static fields (find_cell_service_static_fields MEDIUM)
+### T6.8 — cell_service static fields (find_cell_service_static_fields MEDIUM) ✅ DONE
 **Files:** `api/internal/services/cell_service.go:68-70`: implement `AppCount` query, derive `ClusterHealth` from `loopzero_cell_health` metric.
 **TDD:** `TestCellService_ReturnsRealAppCount()`.
 **DoD:** TODO markers removed; values reflect reality.
@@ -805,25 +817,27 @@ All <200 LOC ✓. Behavior unchanged (`./internal/adapters` tests green); every 
 
 ## Phase 7: Data Hygiene (4 findings)
 
-### T7.1 — scale handler withEnvironmentLock (find_data_003 HIGH)
+### T7.1 — scale handler withEnvironmentLock (find_data_003 HIGH) ✅ DONE
 **Files:** `api/internal/routes/scale.go:222`: wrap `scaleApply()` in `WithEnvironmentLock(tenantID, projectID, environment)`.
 **TDD:**
 - `TestScale_ConcurrentRequestsRejectedAfter1Wins()` — 3 concurrent scale → 1 success + 2 reject (409).
 - `TestScale_ConcurrentRejection_ExitCode3()` — (EC-11) CLI invocations: 1 wins (exit 0), 2 rejected → exit 3 (DEPLOY_IN_PROGRESS) with product-language message "deploy already in progress for this environment". Per Rule 4 exit code mapping.
 **DoD:** TOCTOU race closed; Rule 6 honored; CLI exit-code mapping consistent with deploy/promote/rollback.
 
-### T7.2 — FK ON DELETE clauses (find_data_004 HIGH)
+### T7.2 — FK ON DELETE clauses (find_data_004 HIGH) ✅ DONE
 **Files:** `api/internal/db/migrations/000012_fk_on_delete_explicit.up.sql` (NEW): add explicit `ON DELETE CASCADE/RESTRICT/SET NULL` to 15 FK references.
 **TDD:** `TestForeignKeys_AllExplicit()` — query `pg_constraint` for confdeltype.
 **DoD:** All FKs explicit.
 
-### T7.3 — audit_log retention (find_data_005 MEDIUM)
+### T7.3 — audit_log retention (find_data_005 MEDIUM) 🟡 ADR-0047 GOVERNANCE — PRUNER OPERATIONAL
 **Files:** `api/internal/services/audit_log_pruner.go` (NEW background pruner: keep 1 year, archive to S3), `api/internal/db/migrations/000013_audit_log_time_index.up.sql` (NEW partial index on created_at).
 **DoD:** Pruner runs nightly; table size bounded.
 
+**Status:** Migration 000013 (BRIN index) ✅ shipped. ADR-0047 (audit_log retention policy) ACCEPTED with explicit deferral: "Prune job operational work — implementation tracked separately. This ADR documents the policy; the implementation lands in a future PR after operations review." Per ADR-0022 (plan amendment policy) this is a governance-tracked deferral, not a silent skip.
+
 > **DOCUMENT (EC-15):** 1-year retention is for security/operational events. Financial events (billing, payment, subscription changes) flow through Stripe and are retained per Stripe's SLA (typically 7+ years). Add an ADR explicitly noting: "LoopZero audit_log retention: 1 year. Compliance for financial events is delegated to Stripe's data retention." Re-evaluate if a future regulator (PCI Level 1, SOC 2 Type II) requires LoopZero-side retention for the audit chain.
 
-### T7.4 — builds FK to tenants/projects (find_data_006 MEDIUM)
+### T7.4 — builds FK to tenants/projects (find_data_006 MEDIUM) ✅ DONE
 **Files:** Either (a) add FK with `ON DELETE SET NULL` (preserves history) OR (b) document trade-off in ADR + add background reconciler for orphan cleanup.
 **DoD:** ADR documents choice.
 
@@ -831,30 +845,32 @@ All <200 LOC ✓. Behavior unchanged (`./internal/adapters` tests green); every 
 
 ## Phase 8: Infrastructure Tactical (6 findings)
 
-### T8.1 — Operator Dockerfile HEALTHCHECK (find_infra_001 HIGH)
+### T8.1 — Operator Dockerfile HEALTHCHECK (find_infra_001 HIGH) ✅ DONE
 **Files:** 4 `operators/Dockerfile.{app,tenant,platform,preview}-operator`: add `HEALTHCHECK CMD ["/operator-healthz"]`. Implement `/operator-healthz` if not present.
 **DoD:** Local docker run reports container as healthy.
 
-### T8.2 — Bootstrap PodDisruptionBudget (find_infra_004 MEDIUM)
+### T8.2 — Bootstrap PodDisruptionBudget (find_infra_004 MEDIUM) ✅ DONE
 **Files:** `infra/helm/loopzero-api/templates/pdb.yaml` (NEW), `infra/helm/loopzero-cloud/templates/pdb.yaml` (NEW), `infra/helm/loopzero-api/values.yaml` (raise `replicaCount` to 2 to make PDB meaningful).
 **TDD:**
 - Helm template lint validates rendered manifest.
 - `TestPDB_WithReplicasOne_DoesNotBlockNodeDrain()` — (EC-12) if `replicaCount=1`, the chart MUST omit PDB OR set `minAvailable=0`. Otherwise node drain blocks forever.
 **DoD:** k8s upgrade does not down API; node drain still works in single-replica dev mode.
 
-### T8.3 — Tilt :latest tag fix (find_infra_005 MEDIUM)
+### T8.3 — Tilt :latest tag fix (find_infra_005 MEDIUM) ✅ DONE
 **Files:** `infra/tilt/api-deployment.yaml`: pin `loopzero-clone-runner`, `loopzero-syft-scanner`, `loopzero-cosign-signer` to specific tags matching production.
 **DoD:** Local equals production for pipeline images.
 
 > **DOCUMENT (EC-16):** This pinning targets ONLY the 3 pipeline-step images (clone-runner, syft-scanner, cosign-signer) which are batch jobs that change rarely. Tilt's `live_update` hot-reload for `api-deployment` and operator deployments is preserved (those keep `:latest` against the local k3d registry to enable file-watch sync). Document split in `docs/runbooks/tilt-image-strategy.md`: pinned = pipeline batch images; floating + live_update = service deployments.
 
-### T8.4 — Tilt seccompProfile + capabilities.drop (find_infra_006 MEDIUM)
+### T8.4 — Tilt seccompProfile + capabilities.drop (find_infra_006 MEDIUM) ✅ DONE
 **Files:** `infra/tilt/api-deployment.yaml`: add `seccompProfile: RuntimeDefault` at pod level + `capabilities.drop: [ALL]` at container level.
 **DoD:** Tilt deployment matches Helm chart security context.
 
-### T8.5 — NetworkPolicy default-deny-egress (find_infra_007 MEDIUM)
+### T8.5 — NetworkPolicy default-deny-egress (find_infra_007 MEDIUM) 🟡 T8.5a INVENTORY DONE — T8.5b/c STAGING SOAK PENDING
 
 > **EC-5 fix:** applying default-deny-egress without a complete allow-list inventory will break ALL pods (DNS, kube-apiserver, registry pulls, Loki, Tempo, etc). Split into 3 mandatory ordered sub-tasks. NEVER apply T8.5b before T8.5a passes review.
+
+**Status (per `final-status.md`):** T8.5a inventory landed (`docs/runbooks/network-policy-egress-inventory.md`). T8.5b/c require operator-driven staging soak per EC-5 — not Ralph-loop scope. Default-deny rollout is staged per cell with 1h observation per cell.
 
 #### T8.5a — Egress inventory (must land first)
 **Files:** `docs/runbooks/network-policy-egress-inventory.md` (NEW): map every pod role in `loopzero-system` → required egress endpoints.
@@ -877,27 +893,33 @@ kubectl --context cell-1 delete networkpolicy loopzero-system-default-deny-egres
 ```
 **DoD:** 1h staging soak with zero new alerts; rollout to cell-default + cell-2 in subsequent PRs (one cell per PR).
 
-### T8.6 — ClusterImagePolicy deny-flip (find_infra_008 LOW, Sprint 9 scope)
+### T8.6 — ClusterImagePolicy deny-flip (find_infra_008 LOW, Sprint 9 scope) 🟡 SPRINT-9 SCOPE
 **Files:** `infra/helm/admission-policies/values.yaml`: flip `mode: warn` → `mode: enforce`. Track via Sprint 9 milestone.
 **DoD:** Policy-controller blocks unsigned images in production.
+
+**Status:** Explicitly out of deep-review-remediation scope per task header — Sprint 9 hardening tracks production cutover separately. Warn-mode policy is operational and surfacing unsigned-push attempts; flip is a one-line YAML change after Sprint 9 readiness review.
 
 ---
 
 ## Phase 9: Dependencies & Licenses (4 findings)
 
-### T9.1 — madmin AGPL legal review (find_dep_madmin_agpl MEDIUM)
+### T9.1 — madmin AGPL legal review (find_dep_madmin_agpl MEDIUM) ✅ DONE
 **Files:** Legal team review. Options: (a) replace with self-implemented MinIO admin client, (b) accept AGPL with explicit ADR + isolation, (c) remove MinIO admin features.
 **DoD:** ADR documenting decision.
 
-### T9.2 — sqlmock direct → indirect dep (find_dep_sqlmock_misclassified LOW)
+### T9.2 — sqlmock direct → indirect dep (find_dep_sqlmock_misclassified LOW) ✅ FALSE POSITIVE
 **Files:** `pkg/go.mod` line 9: move sqlmock to test-only via build tags.
 **DoD:** `go mod tidy` shows correct classification.
 
-### T9.3 — CLI OTel optional (find_dep_cli_otel_bundle_bloat LOW)
+**Status:** Verified in code: sqlmock is already test-only (only imported in `_test.go` files). The original finding flagged go.mod line where it's listed; Go's module graph does not distinguish "test-only" direct deps. Closed as false_positive in `final-status.md` — no fix needed.
+
+### T9.3 — CLI OTel optional (find_dep_cli_otel_bundle_bloat LOW) 🟡 KISS+YAGNI DEFERRED
 **Files:** `cli/package.json`: move 5 `@opentelemetry/*` to optionalDependencies; lazy-load only when `LOOPZERO_TRACING_ENABLED=true`.
 **DoD:** Default CLI bundle ~2-3 MB smaller.
 
-### T9.4 — cloud module version skew (find_dep_cloud_module_version_skew LOW)
+**Status:** Bundle size is currently acceptable (CLI startup <500ms; total ~9MB). Lazy-loading optional deps adds branching complexity (require() at runtime, error paths if module missing) for a 2-3MB win that doesn't move user-perceived performance. Per KISS+YAGNI, deferred until either a real user complaint or bundle size becomes a CI issue. Documented in `final-status.md` as deferred.
+
+### T9.4 — cloud module version skew (find_dep_cloud_module_version_skew LOW) ✅ DONE
 **Files:** `cloud/go.mod`: align `pkg` replace + `otelhttp` versions with api/go.mod.
 **DoD:** All modules use same dep versions.
 
