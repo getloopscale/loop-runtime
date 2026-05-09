@@ -677,4 +677,21 @@ var (
 		Name: "loopzero_release_attestation_save_fail_total",
 		Help: "Per-app attestation persistence failures during release container delivery.",
 	}, []string{"environment"})
+
+	// AuditLogPrunerDeletedTotal counts the audit_log rows the retention pruner
+	// has DELETEd since process start. T7.3 of deep-review-remediation-plan +
+	// ADR-0047. Use rate() to derive prunes/sec; sum() over scrape window to
+	// see total volume. Healthy state: trend in flat steps every nightly run.
+	AuditLogPrunerDeletedTotal = promauto.NewCounter(prometheus.CounterOpts{
+		Name: "loopzero_audit_log_pruner_deleted_total",
+		Help: "audit_log rows deleted by the retention pruner (1-year window per ADR-0047).",
+	})
+
+	// AuditLogPrunerFailTotal counts pruner runs that errored during a batch
+	// (DB error, missing trigger bypass var, deadlock). Alert opportunity:
+	//   increase(loopzero_audit_log_pruner_fail_total[24h]) > 0
+	AuditLogPrunerFailTotal = promauto.NewCounter(prometheus.CounterOpts{
+		Name: "loopzero_audit_log_pruner_fail_total",
+		Help: "audit_log pruner run failures (per batch).",
+	})
 )

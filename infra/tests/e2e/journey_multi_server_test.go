@@ -13,6 +13,7 @@ import (
 	"os"
 	"os/exec"
 	"strings"
+	"time"
 
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
@@ -74,17 +75,30 @@ var _ = Describe("Journey 02: Multi-Server", Ordered, Label("journey"), func() {
 		// LOOPZERO_PROGRESSIVE_DELIVERY=true). Query both kinds via comma-list
 		// so this spec is forward-compatible regardless of which renderer
 		// path generated the manifests.
-		cmd := exec.Command("kubectl", "--context", workloadKubeContext,
-			"-n", ns, "get", "deployments.apps,rollouts.argoproj.io",
-			"-l", "loopzero.io/project="+project,
-			"--no-headers", "-o", "custom-columns=NAME:.metadata.name")
-		output, err := cmd.CombinedOutput()
-		Expect(err).NotTo(HaveOccurred(),
-			"kubectl get deployments,rollouts failed: %s", string(output))
-
-		names := strings.Fields(strings.TrimSpace(string(output)))
-		Expect(names).To(ContainElement("multi-server-api"))
-		Expect(names).To(ContainElement("multi-server-worker"))
+		//
+		// 2026-05-09 cleanroom dogfood: this assertion intermittently
+		// failed because `loopzero deploy` SSE emits `deploy.completed` on
+		// Application Healthy, which fires marginally before the Rollout
+		// resource is created (Application sync creates Rollout async).
+		// Eventually-poll for up to 90s — workload primitive should
+		// converge well within that window in cleanroom-cold-start.
+		Eventually(func() []string {
+			cmd := exec.Command("kubectl", "--context", workloadKubeContext,
+				"-n", ns, "get", "deployments.apps,rollouts.argoproj.io",
+				"-l", "loopzero.io/project="+project,
+				"--no-headers", "-o", "custom-columns=NAME:.metadata.name")
+			output, err := cmd.CombinedOutput()
+			if err != nil {
+				return nil
+			}
+			return strings.Fields(strings.TrimSpace(string(output)))
+		}, 90*time.Second, 3*time.Second).Should(
+			And(
+				ContainElement("multi-server-api"),
+				ContainElement("multi-server-worker"),
+			),
+			"workload primitives should converge after Application sync",
+		)
 	})
 
 	It("API responds HTTP 200", func() {
