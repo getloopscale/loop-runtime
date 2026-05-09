@@ -565,6 +565,9 @@ jobs:
       - name: Migration regression-test coverage (T3.4 deep-review-remediation)
         run: bash infra/scripts/migration_test_coverage.sh
 
+      - name: AGPL isolation lint (T9.1 deep-review-remediation, ADR-0048)
+        run: bash infra/scripts/check_agpl_isolation.sh
+
   # ─────────────────────────────────────────────
   # GATE — all checks must pass
   # ─────────────────────────────────────────────
