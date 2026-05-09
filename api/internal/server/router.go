@@ -302,6 +302,14 @@ func registerProtectedRoutes(
 		r.With(append(rateLimitMiddlewares, middleware.RequireAdmin)...).Post("/api/v1/tenants/bulk-delete", tenantHandler.Delete)
 	}
 
+	// Billing routes — T1.6 of deep-review-remediation-plan (closes
+	// find_billing_route_not_wired HIGH). CLI commands loopzero billing and
+	// loopzero billing portal hit silent 404 pre-T1.6.
+	if cfg.BillingHandler != nil {
+		r.Get("/api/v1/billing", cfg.BillingHandler.Get)
+		r.With(rateLimitMiddlewares...).Post("/api/v1/billing/portal", cfg.BillingHandler.Portal)
+	}
+
 	// Environment routes
 	if cfg.EnvironmentHandler != nil {
 		r.Get("/api/v1/environments", cfg.EnvironmentHandler.List)

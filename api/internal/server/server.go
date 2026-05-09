@@ -87,6 +87,11 @@ type Config struct {
 	AuditWriter             middleware.AuditWriter
 	AuditHandler            *routes.AuditHandler
 	TenantDeletionStore     routes.TenantDeletionStore
+	// BillingHandler — T1.6 of deep-review-remediation-plan (closes
+	// find_billing_route_not_wired HIGH). Wires GET /api/v1/billing and
+	// POST /api/v1/billing/portal. Nil-safe: when nil, the routes are
+	// skipped and CLI returns its own error rather than 404.
+	BillingHandler *routes.BillingHandler
 	AdminEvictor            routes.TenantEvictor
 	AdminPinner             routes.CellPinner // CHG-2026-04-30-DELETE-SINGLE-CELL
 	PlanLimiter             *enforcement.PlanLimiter
