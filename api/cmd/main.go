@@ -178,10 +178,22 @@ func main() {
 	rateLimiter := middleware.NewRateLimiter(60, 1*time.Minute)
 	defer rateLimiter.Stop()
 
+	// T2.4 of deep-review-remediation-plan + ADR D4 — pre-auth IP rate limit.
+	// Trusted-proxy CIDRs from env (Cloudflare egress in production; empty
+	// in dev so X-Forwarded-For is never honored). Limit defaults to
+	// 120/min/IP — enough headroom for legitimate batch CLIs, stings on
+	// brute-force.
+	ipRateLimiter := middleware.NewIPRateLimiter(middleware.IPRateLimitConfig{
+		Limit:             120,
+		Window:            1 * time.Minute,
+		TrustedProxyCIDRs: middleware.ParseTrustedProxyCIDRs(os.Getenv("LOOPZERO_TRUSTED_PROXY_CIDRS")),
+	})
+
 	srvCfg := buildServerConfig(cfg, dbAdapter, dbDeps, stores, orchDeps, ghDeps,
 		k8sDeps, cellRouter, cellStore, domainHandler, buildHandler,
 		healthServices, authDeps.TokenValidator, rateLimiter,
 		shutdownCtx, shutdownCancel, logger)
+	srvCfg.IPRateLimit = ipRateLimiter
 
 	if err := server.Run(srvCfg); err != nil {
 		logger.Error("server failed", "error", err)

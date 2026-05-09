@@ -20,6 +20,15 @@ import (
 func NewRouter(cfg Config) *chi.Mux {
 	r := chi.NewRouter()
 
+	// Pre-auth IP rate limit (T2.4 of deep-review-remediation-plan, ADR D4).
+	// Mounted FIRST so brute-force attempts on /api/v1/auth/* — or any other
+	// route — are rejected at the edge without consuming downstream resources.
+	// Trusted proxy CIDRs from env so production CF Tunnel can be honored
+	// while dev k3d defaults to "trust nobody".
+	if cfg.IPRateLimit != nil {
+		r.Use(cfg.IPRateLimit.Middleware)
+	}
+
 	// Security headers — before CORS so they are always present.
 	r.Use(middleware.SecurityHeaders)
 

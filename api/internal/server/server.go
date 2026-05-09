@@ -56,6 +56,10 @@ type Config struct {
 	BuildSBOMHandler *routes.BuildSBOMHandler
 	ArgoCallbackHandler *routes.ArgoCallbackHandler
 	RateLimiter        *middleware.RateLimiter
+	// IPRateLimit is the optional pre-auth IP-based rate limiter (T2.4).
+	// When non-nil, mounted as the FIRST middleware so brute-force attempts
+	// on /api/v1/auth/* are dropped at the edge.
+	IPRateLimit        *middleware.IPRateLimiter
 	// HTTP server timeouts (configurable via env vars)
 	ReadHeaderTimeout  time.Duration
 	ReadTimeout        time.Duration
