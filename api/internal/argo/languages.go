@@ -357,8 +357,17 @@ func (s *CustomStrategy) ScanStep() *forge.Container {
 }
 
 // DockerfileStep — CustomStrategy means user manages everything in their
-// Dockerfile (framework: custom). loopzero-packs lenient path will copy the
-// user-provided Dockerfile to the canonical output path. Defense in depth.
+// Dockerfile (framework: custom). loopzero-packs v0.4.0 (lenient canonical
+// contract) will copy the user-provided Dockerfile to the canonical output
+// path verbatim. The result is a no-op from the user's perspective: their
+// Dockerfile is what BuildKit consumes.
+//
+// T6.7 of deep-review-remediation-plan (closes find_arch_006 LOW). Previous
+// comment claimed "Defense in depth" without explaining what was being
+// defended; in reality loopzero-packs v0.4.0 is invariant under user Dockerfile
+// (no rewriting). Distinct from UserDockerfileStrategy below: that variant
+// runs loopzero-dockerfile-lint with hard rejection rules; CustomStrategy keeps
+// the legacy behavior (no lint) for opt-out users on `framework: custom`.
 func (s *CustomStrategy) DockerfileStep(apps []services.AppSpec, totalApps int) *forge.Container {
 	return loopzeroPacksDockerfileStep(apps, totalApps)
 }

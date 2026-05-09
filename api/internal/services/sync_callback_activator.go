@@ -62,10 +62,18 @@ type PendingReleaseByTenantEnvFinder interface {
 // The appName is in format "{tenantID}-{environment}" (e.g., "tn-loopzero-production").
 // It finds all PENDING releases matching that tenant+environment and activates them.
 func (a *SyncCallbackActivator) OnSyncCompleted(appName, revision string) error {
-	// ARCH-006 fix: Use a timeout context derived from the server shutdown context
-	// would be ideal, but since this is called from an HTTP handler that already
-	// has a request context with timeout (argocd_callback.go), we use a bounded
-	// background context as fallback.
+	// T6.6 of deep-review-remediation-plan (closes find_code_007 / CODE-007 LOW):
+	// the original "ARCH-006 fix" comment referenced an ARCH-006 ID that does
+	// not exist in the architecture review (current ARCH-006 is the unrelated
+	// CustomStrategy.DockerfileStep finding). The intent is real: callback
+	// activation must NOT be cancelled by the inbound HTTP request context
+	// (which is short-lived and may close before activation finishes,
+	// orphaning the release in PENDING). A bounded 30s context.Background()
+	// is the simplest correct choice.
+	//
+	// TODO(T6.4 + T1.3): once OTel trace propagation is wired through the
+	// ArgoCD callback handler, replace context.Background() with a context
+	// derived from the inbound trace so spans correlate end-to-end.
 	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 	defer cancel()
 

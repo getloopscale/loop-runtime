@@ -74,10 +74,17 @@ spec:
         loopzero.io/component: control-plane
     spec:
       serviceAccountName: loopzero-api
+      # T8.4 of deep-review-remediation-plan (closes find_infra_006 MEDIUM):
+      # Tilt deployment now matches Helm chart security posture by setting
+      # seccompProfile: RuntimeDefault at pod level (was missing — Tilt had
+      # weaker PSA than the published chart). Enforces "Local equals
+      # production" per CLAUDE.md Rule 10.
       securityContext:
         runAsNonRoot: true
         runAsUser: 1000
         fsGroup: 1000
+        seccompProfile:
+          type: RuntimeDefault
       containers:
         - name: api
           image: loopzero-api
@@ -234,10 +241,16 @@ spec:
               readOnly: true
             - name: tmp
               mountPath: /tmp
+          # T8.4 of deep-review-remediation-plan (closes find_infra_006 MEDIUM):
+          # capabilities.drop: [ALL] added to match published Helm chart.
           securityContext:
             runAsNonRoot: true
             allowPrivilegeEscalation: false
             readOnlyRootFilesystem: true
+            capabilities:
+              drop: [ALL]
+            seccompProfile:
+              type: RuntimeDefault
       volumes:
         - name: tmp
           emptyDir:

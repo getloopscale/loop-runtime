@@ -152,19 +152,34 @@ func setupOrchestrator(
 	// The closure adapts routes.ScaleConfigInput ↔ db.ScalingConfig (avoids circular import).
 	// scalingStore declared above (before BuildOrchestrator) — single instance
 	// shared by scaleApply (write path) and ScalingResolver (read path).
+	// T7.1 of deep-review-remediation-plan (closes find_data_003 HIGH).
+	// CLAUDE.md Rule 6 requires every (tenant, project, environment) mutation
+	// to acquire withEnvironmentLock. Previously, scaleApply called
+	// scalingStore.Upsert(dbAdapter, ...) directly, bypassing the lock.
+	// Two concurrent `loopzero scale` calls on the same env could TOCTOU-race the
+	// read-current/write-new sequence inside Upsert. Now wrapped in WithLock
+	// so concurrent attempts serialize via pg_advisory_xact_lock.
 	scaleApply := func(ctx context.Context, in routes.ScaleConfigInput) (bool, error) {
-		c := &db.ScalingConfig{
-			TenantID:     in.TenantID,
-			ProjectID:    in.ProjectID,
-			Environment:  in.Environment,
-			AppName:      in.AppName,
-			MinReplicas:  in.MinReplicas,
-			MaxReplicas:  in.MaxReplicas,
-			TargetCPUPct: in.TargetCPUPct,
-			ScaleToZero:  in.ScaleToZero,
-			UpdatedBy:    in.UpdatedBy,
-		}
-		_, changed, err := scalingStore.Upsert(ctx, dbAdapter, c)
+		var changed bool
+		err := stores.Locker.WithLock(ctx, in.TenantID, in.ProjectID, in.Environment, func(tx db.DBTX) error {
+			c := &db.ScalingConfig{
+				TenantID:     in.TenantID,
+				ProjectID:    in.ProjectID,
+				Environment:  in.Environment,
+				AppName:      in.AppName,
+				MinReplicas:  in.MinReplicas,
+				MaxReplicas:  in.MaxReplicas,
+				TargetCPUPct: in.TargetCPUPct,
+				ScaleToZero:  in.ScaleToZero,
+				UpdatedBy:    in.UpdatedBy,
+			}
+			_, ch, upErr := scalingStore.Upsert(ctx, tx, c)
+			if upErr != nil {
+				return upErr
+			}
+			changed = ch
+			return nil
+		})
 		return changed, err
 	}
 	scaleHandler := routes.NewScaleHandler(projectStore, scaleApply, cfg.KEDAEnabled)
