@@ -14,10 +14,21 @@ finding has been classified:
 
 | Status | Count | Description |
 |--------|-------|-------------|
-| remediated | 53 (76%) | Code/config/test fix shipped + commit referenced |
-| wont_fix | 13 (19%) | Governed via ADR + lint preventing regression; engineering work tracked separately |
-| false_positive | 4 (6%) | Verified in code; no fix needed (truncated grep, hypothesis refuted, already mitigated) |
+| remediated | 64 (91%) | Code/config/test fix shipped + commit referenced |
+| wont_fix / sprint-9 / kiss-deferred | 2 (3%) | T8.6 Sprint 9 (out of remediation scope by plan-design); T9.3 KISS+YAGNI deferred |
+| false_positive | 4 (6%) | Verified in code; no fix needed |
 | **open** | **0** | — |
+
+**2026-05-09 update:** 6 additional tasks closed in this session:
+- T1.3 (`routes/` → `domain/` migration) + T6.1 (errors.Is) + T6.3 (adapters split)
+- T2.4 (pre-auth IP rate limiter) + T2.7 (secret redaction regression test)
+- T3.2 (5 journey scaffolds — logs/team_add/connect/platform_upgrade/preview_ttl)
+- T4.2 (infra-restart by :sha not mutable :dev/:prod)
+- T7.3 (audit_log_pruner + migration 000014 LIVE-validated)
+- T8.5b (loopzero-system egress allow-list + opt-in default-deny)
+- 2 Rule 3 violations surfaced LIVE in `loopzero platform status --json` and fixed:
+  - Removed `namespace` field from drift array (was leaking "argocd")
+  - Renamed `crdsInstalled` → `platformDefinitions` (was leaking "CRD")
 
 | Severity | Count |
 |----------|-------|

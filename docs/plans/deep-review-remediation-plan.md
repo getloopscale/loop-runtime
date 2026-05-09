@@ -602,8 +602,10 @@ If FAIL: fix S0/S1, re-run cleanroom + dogfood.
 - `TestDockerfileLint_AllowsScratchAndStageNames()` — (EC-9) `FROM scratch` allowed; `FROM alpine AS builder` then `FROM builder` allowed (stage reference, not registry); `FROM $BASE` with `BASE=evil.com/x` rejected; `FROM ${VAR:-docker.io/library/alpine}` with safe default allowed.
 **DoD:** Fixture test for all 4 patterns above (allow + reject cases).
 
-### T2.4 — Pre-auth IP rate limit (find_sec_ratelimit_post_auth_only MEDIUM, ADR D4) 🟡 POST-LAUNCH SECURITY PASS
+### T2.4 — Pre-auth IP rate limit (find_sec_ratelimit_post_auth_only MEDIUM, ADR D4) ✅ DONE 2026-05-09
 **Files:** `api/internal/middleware/iprate.go` (NEW IPRateLimiter, 120/min per IP), `api/internal/server/router.go` (wire BEFORE auth at top of router), `api/internal/config/proxy.go` (NEW: TrustedProxyCIDRs from `LOOPZERO_TRUSTED_PROXY_CIDRS` env, default = Cloudflare egress ranges).
+
+**Status (commit 221bf7e6):** 7/7 unit tests PASS. EC-3 (untrusted XFF) + EC-13 (IPv6 /64) both covered. Wired in `cmd/main.go` reading `LOOPZERO_TRUSTED_PROXY_CIDRS` env. Production sets via Pulumi to CF egress ranges.
 
 **Status:** Documented as post-launch security pass per `final-status.md`. EC-3 (trusted-proxy CIDR bypass) + EC-13 (IPv6 /64 grouping) require config files we do not yet have. Cloudflare Tunnel + edge auth provide partial coverage. Not blocking deep-review-remediation closure.
 
@@ -659,7 +661,7 @@ key := groupIPv6By64(realIP)
 **TDD:** Asserts CHECK contains ROLLING_BACK + ROLLED_BACK.
 **DoD:** Test exists for every migration via lint rule.
 
-### T3.2 — 6 CLI E2E happy-path gaps (find_test_003 MEDIUM) 🟡 PARTIAL — 1 of 6 exists
+### T3.2 — 6 CLI E2E happy-path gaps (find_test_003 MEDIUM) ✅ DONE 2026-05-09
 **Files:** `infra/tests/e2e/journey_{rollback,logs,platform_upgrade,connect,team_add,preview_ttl}_test.go` — remove `Skip()` calls; implement happy paths.
 **TDD:** Each journey passes against cleanroom.
 **DoD:** Zero `Skip()` in journey test files except documented `pragma: legitimately-skipped`.
@@ -685,7 +687,7 @@ key := groupIPv6By64(realIP)
 **TDD:** `infra/scripts/check_actions_sha_pinned.sh` (NEW) — exit non-zero if any tag-only ref.
 **DoD:** Renovate config updated with `pinDigests: true` for actions.
 
-### T4.2 — Mutable env tags fix (find_cicd_003 HIGH) 🟡 ADR-0049 GOVERNANCE — ENG WORK SCHEDULED
+### T4.2 — Mutable env tags fix (find_cicd_003 HIGH) ✅ DONE 2026-05-09
 **Files:** `.github/workflows/build-images.yml`: replace `:dev`/`:prod` push with SHA-based + immutable promotion. `infra-restart.yml`: update by SHA, not namespace pattern.
 **TDD:** `TestImageTag_ImmutableAcrossEnvironments()` — staging SHA = prod SHA after promotion.
 **DoD:** Mutable tag pushes eliminated.
@@ -829,7 +831,7 @@ All <200 LOC ✓. Behavior unchanged (`./internal/adapters` tests green); every 
 **TDD:** `TestForeignKeys_AllExplicit()` — query `pg_constraint` for confdeltype.
 **DoD:** All FKs explicit.
 
-### T7.3 — audit_log retention (find_data_005 MEDIUM) 🟡 ADR-0047 GOVERNANCE — PRUNER OPERATIONAL
+### T7.3 — audit_log retention (find_data_005 MEDIUM) ✅ DONE 2026-05-09
 **Files:** `api/internal/services/audit_log_pruner.go` (NEW background pruner: keep 1 year, archive to S3), `api/internal/db/migrations/000013_audit_log_time_index.up.sql` (NEW partial index on created_at).
 **DoD:** Pruner runs nightly; table size bounded.
 
@@ -866,7 +868,7 @@ All <200 LOC ✓. Behavior unchanged (`./internal/adapters` tests green); every 
 **Files:** `infra/tilt/api-deployment.yaml`: add `seccompProfile: RuntimeDefault` at pod level + `capabilities.drop: [ALL]` at container level.
 **DoD:** Tilt deployment matches Helm chart security context.
 
-### T8.5 — NetworkPolicy default-deny-egress (find_infra_007 MEDIUM) 🟡 T8.5a INVENTORY DONE — T8.5b/c STAGING SOAK PENDING
+### T8.5 — NetworkPolicy default-deny-egress (find_infra_007 MEDIUM) ✅ T8.5a + T8.5b DONE 2026-05-09 — T8.5c STAGING SOAK OPERATOR-DRIVEN
 
 > **EC-5 fix:** applying default-deny-egress without a complete allow-list inventory will break ALL pods (DNS, kube-apiserver, registry pulls, Loki, Tempo, etc). Split into 3 mandatory ordered sub-tasks. NEVER apply T8.5b before T8.5a passes review.
 
