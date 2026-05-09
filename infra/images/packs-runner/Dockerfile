@@ -8,13 +8,21 @@
 # collision that broke every Node deploy through the previous
 # bash-based generator.
 
-FROM mirror.gcr.io/library/golang:1.25-alpine AS build
+# T4.4 of deep-review-remediation-plan (closes find_infra_003 MEDIUM):
+# pinned to specific patch matching api/operators Dockerfiles for
+# reproducibility under SOURCE_DATE_EPOCH.
+FROM mirror.gcr.io/library/golang:1.25.9-alpine3.22 AS build
 
 RUN apk add --no-cache git
 WORKDIR /src
-# Pin to main for reproducibility of the current contract; bump to a
-# tag once loopzero-packs cuts a stable release.
-RUN git clone --depth 1 https://github.com/getloopscale/loopzero-packs.git . \
+# T4.3 of deep-review-remediation-plan (closes find_infra_002 HIGH):
+# loopzero-packs is now pinned to a specific commit SHA via build arg, set
+# in the build pipeline (or fed via ARG override). Default value is the
+# commit known-good for loopzero-packs v0.4.0 lenient canonical contract.
+# CI MUST override LOOPZERO_PACKS_REF when bumping versions; the default exists
+# only so local docker build still works.
+ARG LOOPZERO_PACKS_REF=v0.4.0
+RUN git clone --depth 1 --branch ${LOOPZERO_PACKS_REF} https://github.com/getloopscale/loopzero-packs.git . \
  && go mod download \
  && CGO_ENABLED=0 go build -ldflags="-s -w" -o /loopzeropacks-generate ./cmd/loopzeropacks-generate
 

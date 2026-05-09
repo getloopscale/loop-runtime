@@ -5,7 +5,11 @@
 # Validates user Dockerfiles against hard rejection rules (security) and
 # emits warnings for soft issues. Exit 0 = pass, 1 = reject, 2 = usage error.
 
-FROM golang:1.25-alpine AS build
+# T4.4 of deep-review-remediation-plan (closes find_infra_003 MEDIUM):
+# pinned to specific patch matching api/operators/cloud Dockerfiles. Floating
+# 1.25-alpine resolved to whatever latest patch GHCR served on each build,
+# breaking SOURCE_DATE_EPOCH reproducibility.
+FROM golang:1.25.9-alpine3.22 AS build
 
 WORKDIR /src
 COPY go.mod ./
@@ -14,8 +18,8 @@ COPY main.go ./
 ENV GOWORK=off
 RUN CGO_ENABLED=0 go build -trimpath -ldflags="-s -w" -o /loopzero-dockerfile-lint .
 
-# Minimal runtime
-FROM alpine:3.20
+# Minimal runtime — aligned to fleet's alpine pin (was 3.20, fleet uses 3.22).
+FROM alpine:3.22
 
 LABEL org.opencontainers.image.source="https://github.com/getloopscale/loopzero"
 LABEL org.opencontainers.image.title="loopzero-dockerfile-lint"

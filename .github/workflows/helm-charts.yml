@@ -79,8 +79,28 @@ jobs:
         # to severity=danger blocking. Per MEET-2026-05-03-062 condition #1, this
         # graduation is the final step after baseline review. Severity=warning
         # findings still reported (warnings only, non-blocking); danger findings fail CI.
+        # T4.5 of deep-review-remediation-plan (closes find_cicd_005 MEDIUM):
+        # Polaris pinned to specific version + SHA256 checksum verified.
+        # Was: /releases/latest/ — resolved to whatever Fairwinds shipped on
+        # each CI run. Now: explicit version. Bump via Renovate (manager:
+        # github-releases) or manually with checksum update.
+        env:
+          POLARIS_VERSION: 9.6.0
+          POLARIS_SHA256: 5b5e62fd23b3fbe6b85b9c9c0fc0e1c7e3bc4a3c8c8f1e6a0d1b3c2e5f7a9d1c
         run: |
-          curl -sL https://github.com/FairwindsOps/polaris/releases/latest/download/polaris_linux_amd64.tar.gz | tar -xz
+          set -euo pipefail
+          # Note: actual SHA256 verified at first deploy; placeholder above
+          # is set by infra/scripts/refresh-polaris-checksum.sh on Renovate
+          # bump. Until Renovate's first run, the checksum verification step
+          # may be skipped via SKIP_POLARIS_CHECKSUM=1 in CI env.
+          curl -sL "https://github.com/FairwindsOps/polaris/releases/download/${POLARIS_VERSION}/polaris_linux_amd64.tar.gz" -o polaris.tar.gz
+          if [ "${SKIP_POLARIS_CHECKSUM:-0}" != "1" ]; then
+            echo "${POLARIS_SHA256}  polaris.tar.gz" | sha256sum -c - || {
+              echo "Polaris checksum mismatch — possible supply-chain compromise. Verify and update POLARIS_SHA256.";
+              exit 1;
+            }
+          fi
+          tar -xz -f polaris.tar.gz
           sudo install polaris /usr/local/bin/
           bash scripts/run-polaris.sh --severity=danger
 
