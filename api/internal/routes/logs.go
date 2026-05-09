@@ -10,28 +10,23 @@ import (
 
 	"github.com/go-chi/chi/v5"
 
+	"github.com/loopzero/loopzero/api/internal/domain"
 	"github.com/loopzero/loopzero/api/internal/middleware"
 	loopzeroerrors "github.com/loopzero/loopzero/pkg/errors"
 )
 
-// LogEntry represents a single log line from a build.
-type LogEntry struct {
-	Step      string `json:"step"`
-	Stream    string `json:"stream"`
-	Content   string `json:"content"`
-	Timestamp string `json:"timestamp"`
-}
+// T1.3 of deep-review-remediation-plan (closes find_arch_001 + find_dep_routes_type_hub partial):
+// canonical types live in domain/. routes/ re-exports as type aliases for
+// back-compat with handler-adjacent code in this package.
+type (
+	LogEntry         = domain.LogEntry
+	LogQueryOpts     = domain.LogQueryOpts
+	LogQuerier       = domain.LogQuerier
+	StreamLogQuerier = domain.StreamLogQuerier
+)
 
-// LogQueryOpts controls log retrieval.
-type LogQueryOpts struct {
-	Limit int
-	Step  string
-}
-
-// LogQuerier abstracts log retrieval from Loki (DIP).
-type LogQuerier interface {
-	QueryBuildLogs(ctx context.Context, buildID string, opts LogQueryOpts) ([]LogEntry, error)
-}
+// _ keeps the context import used (the type aliases above don't reference it).
+var _ context.Context = nil
 
 // LogBuild is the minimal build info needed by the logs handler.
 type LogBuild struct {

@@ -19,12 +19,10 @@ import (
 	"github.com/loopzero/loopzero/pkg/statemachine"
 )
 
-// StreamLogQuerier abstracts incremental log retrieval from Loki (DIP).
-// Unlike LogQuerier which fetches a batch, this supports streaming by
-// querying logs since a given nanosecond timestamp.
-type StreamLogQuerier interface {
-	QueryBuildLogsSince(ctx context.Context, buildID string, sinceNano int64, limit int) ([]LogEntry, error)
-}
+// StreamLogQuerier — alias to domain.StreamLogQuerier (T1.3 of
+// deep-review-remediation-plan). The type is canonically defined in
+// domain/logs.go; the alias was promoted to the same routes/logs.go file
+// to keep existing handler call sites working without churn.
 
 // LogStreamHandlerOpts configures the log streaming handler.
 type LogStreamHandlerOpts struct {

@@ -19,7 +19,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/loopzero/loopzero/api/internal/routes"
+	"github.com/loopzero/loopzero/api/internal/domain"
 )
 
 // Client queries Grafana Loki for build logs via the HTTP API.
@@ -40,8 +40,8 @@ func NewClient(baseURL string, httpClient *http.Client, logger *slog.Logger) *Cl
 }
 
 // QueryBuildLogs queries Loki for logs of a specific build workflow.
-// Implements routes.LogQuerier.
-func (c *Client) QueryBuildLogs(ctx context.Context, buildID string, opts routes.LogQueryOpts) ([]routes.LogEntry, error) {
+// Implements domain.LogQuerier.
+func (c *Client) QueryBuildLogs(ctx context.Context, buildID string, opts domain.LogQueryOpts) ([]domain.LogEntry, error) {
 	// SEC-005 fix: Validate buildID and step to prevent LogQL injection.
 	// Only allow alphanumeric, hyphens, and underscores.
 	if !isValidLogParam(buildID) {
@@ -118,8 +118,8 @@ type lokiStream struct {
 }
 
 // parseLokiStreams converts Loki stream results into LogEntry slices.
-func parseLokiStreams(resp lokiQueryResponse) []routes.LogEntry {
-	var entries []routes.LogEntry
+func parseLokiStreams(resp lokiQueryResponse) []domain.LogEntry {
+	var entries []domain.LogEntry
 
 	for _, stream := range resp.Data.Result {
 		step := stream.Stream["step"]
@@ -137,7 +137,7 @@ func parseLokiStreams(resp lokiQueryResponse) []routes.LogEntry {
 
 			ts := parseNanosecondTimestamp(nsTimestamp)
 
-			entries = append(entries, routes.LogEntry{
+			entries = append(entries, domain.LogEntry{
 				Step:      step,
 				Stream:    streamType,
 				Content:   content,
@@ -165,12 +165,12 @@ func isValidLogParam(s string) bool {
 
 // QueryBuildLogsSince queries Loki for logs newer than sinceNano (nanosecond timestamp).
 // Used by the log streaming handler for incremental polling.
-// Implements routes.StreamLogQuerier.
+// Implements domain.StreamLogQuerier.
 //
 // The queryKey can be:
 //   - A build ID (e.g., "bld-abc123") for build logs
 //   - A runtime key "runtime:{tenant}:{env}:{project}" for runtime logs
-func (c *Client) QueryBuildLogsSince(ctx context.Context, queryKey string, sinceNano int64, limit int) ([]routes.LogEntry, error) {
+func (c *Client) QueryBuildLogsSince(ctx context.Context, queryKey string, sinceNano int64, limit int) ([]domain.LogEntry, error) {
 	var query string
 
 	// Parse runtime key format: "runtime:{tenant}:{env}:{project}"
