@@ -571,6 +571,9 @@ jobs:
       - name: Alert runbook coverage lint (T5.8 deep-review-remediation)
         run: bash infra/scripts/check_alert_runbooks.sh
 
+      - name: Base image digest pinning lint (T4.6 deep-review-remediation)
+        run: bash infra/scripts/check_base_image_digest_pin.sh
+
   # ─────────────────────────────────────────────
   # GATE — all checks must pass
   # ─────────────────────────────────────────────

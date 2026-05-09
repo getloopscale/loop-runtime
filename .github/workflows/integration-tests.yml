@@ -1,8 +1,27 @@
 # Integration Tests — requires PostgreSQL, runs separately from CI.
-# Triggered manually or on schedule. Not blocking for PRs.
+# T4.8 of deep-review-remediation-plan (closes find_cicd_004 MEDIUM):
+# promoted to required PR gate. PRs touching api/ or pkg/ now run the
+# integration suite (which includes T0.1 + T7.2 + T2.6 + T3.3 invariants
+# against a real PostgreSQL container) before merge.
+#
+# Pre-T4.8 the workflow ran only on workflow_dispatch + nightly cron. A
+# PR breaking advisory-lock, idempotency replay, or DB CHECK constraint
+# invariants could merge during business hours undetected.
 name: Integration Tests
 
 on:
+  pull_request:
+    branches: [main, develop, homolog]
+    paths:
+      - 'api/**'
+      - 'pkg/**'
+      - '.github/workflows/integration-tests.yml'
+  push:
+    branches: [main, develop, homolog]
+    paths:
+      - 'api/**'
+      - 'pkg/**'
+      - '.github/workflows/integration-tests.yml'
   workflow_dispatch:
     inputs:
       component:
