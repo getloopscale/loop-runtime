@@ -763,9 +763,19 @@ key := groupIPv6By64(realIP)
 **TDD:** `TestRenderInput_ProTenantGetsProCanaryStep()` — Pro tenant deploy → 20/Analysis/50/100 not 50/100.
 **DoD:** Plan field populated; threat 3 closed.
 
-### T6.3 — adapters.go split (find_arch_004 MEDIUM, deferred until T1.3 complete)
+### T6.3 — adapters.go split (find_arch_004 MEDIUM, deferred until T1.3 complete) ✅ DONE 2026-05-09
 **Files:** Split `api/internal/adapters/adapters.go` (449 lines) into `pgx_adapter.go`, `build_adapter.go`, `release_adapter.go`, `tenant_adapter.go`.
 **DoD:** Each file <200 LOC; SRP per file.
+
+**Status (commit 2e8fb28b):** Plan called for 4 files; the build family naturally split into 5 (BuildOrchestratorAdapter route↔service translation vs the four `db.BuildStore` reshape adapters) so each file owns one translation responsibility. Production files after split:
+- `pgx_adapter.go` (85 LOC) — pgx.Tx↔db.DBTX bridges + PoolEnvironmentLocker
+- `build_adapter.go` (150 LOC) — BuildOrchestratorAdapter
+- `build_store_adapter.go` (130 LOC) — Reader/Log/Status/List for db.BuildStore
+- `release_adapter.go` (33 LOC) — StatusReleaseStoreAdapter
+- `tenant_adapter.go` (57 LOC) — TenantDBDeleterAdapter, TenantK8sEvictorAdapter
+- `adapters.go` (25 LOC) — package doc referencing the split
+
+All <200 LOC ✓. Behavior unchanged (`./internal/adapters` tests green); every type/method/interface kept its exact signature and call site.
 
 ### T6.4 — Fire-and-forget context (find_code_004 MEDIUM)
 **Files:** `api/internal/services/build_reconcile_retry.go:229`, `release_activator.go:201`: replace `context.Background()` with derived context from incoming request.
