@@ -27,6 +27,8 @@ import (
 	"k8s.io/apimachinery/pkg/runtime/schema"
 	"k8s.io/apimachinery/pkg/types"
 	"k8s.io/client-go/dynamic"
+
+	"github.com/loopzero/loopzero/api/internal/metrics"
 )
 
 // tenantGVR is the GroupVersionResource for the Tenant CR. Hardcoded
@@ -124,6 +126,11 @@ func (p *CellPinner) Pin(ctx context.Context, tenantID, cellID string) (string, 
 	}
 	if p.mgmtKube != nil {
 		if patchErr := p.patchTenantCR(ctx, tenantID, cellID); patchErr != nil {
+			// T1.5 of deep-review-remediation-plan (closes find_arch_005 MEDIUM):
+			// emit a metric so operators can alert on the DB↔CR divergence window
+			// instead of relying solely on slog.Warn (which Loki may not surface
+			// quickly).
+			metrics.CellPinnerCRPatchFailTotal.Inc()
 			slog.Warn("cell pinner: DB updated but Tenant CR patch failed — operator will continue using previous cellID until the CR is patched manually",
 				"tenant", tenantID, "new_cell", cellID, "error", patchErr,
 				"manual_fix", fmt.Sprintf("kubectl -n %s patch tenant %s --type=merge -p '{\"spec\":{\"cellID\":%q}}'", p.mgmtNS, tenantID, cellID))

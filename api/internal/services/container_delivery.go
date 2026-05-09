@@ -298,14 +298,23 @@ func (c *ContainerDeliveryActivator) phaseACreateRelease(ctx context.Context, bu
 				).Inc()
 			}
 			if len(atts) > 0 {
-				// Best-effort: a per-app store error must NOT block the
-				// release. Log via metric and proceed.
+				// T6.5 of deep-review-remediation-plan (closes find_code_005 / CODE-005 MEDIUM).
+				// Previously: `_ = saveErr` silently discarded the error and
+				// the misleading comment claimed "Capture as observability"
+				// while no metric or log was actually emitted. Now: explicit
+				// structured log + dedicated metric so operators can detect
+				// attestation persistence regressions without manually scanning
+				// build_events.
 				if saveErr := c.appAttestationStore.SaveAppAttestations(
 					ctx, release.ID, build.TenantID, atts,
 				); saveErr != nil {
-					// Capture as observability — wraps build errors are
-					// already logged elsewhere; here we just continue.
-					_ = saveErr
+					metrics.ReleaseAppAttestationSaveFailTotal.WithLabelValues(build.Environment).Inc()
+					slog.Warn("attestation persist failed (non-blocking) — release proceeds without per-app attestation rows",
+						"release_id", release.ID,
+						"tenant_id", build.TenantID,
+						"environment", build.Environment,
+						"attestation_count", len(atts),
+						"error", saveErr)
 				}
 			}
 			// Sprint 6 / T3.2: SBOM generation counter. One increment

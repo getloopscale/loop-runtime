@@ -7,6 +7,8 @@ import (
 	"context"
 	"log/slog"
 	"time"
+
+	"github.com/loopzero/loopzero/api/internal/metrics"
 )
 
 // Handler processes a single work item. Return nil on success, error on failure.
@@ -79,14 +81,34 @@ func (c *Consumer) poll(ctx context.Context) {
 	}
 
 	for _, item := range items {
-		if err := c.handler(ctx, item); err != nil {
+		// T1.7 of deep-review-remediation-plan (closes find_workqueue_silent_db_errors HIGH).
+		// Previously: `_ = c.queue.Fail(...)` and `_ = c.queue.Complete(...)`
+		// silently discarded DB errors. If the terminal-state write failed:
+		//   - Complete fail → item stays InFlight → re-dequeued → duplicate
+		//                     handler invocation (e.g., duplicate Argo Workflow
+		//                     submissions)
+		//   - Fail fail     → orphan rows accumulate unbounded
+		// Now: error is logged + metric incremented. Operator can alert on
+		// `loopzero_workqueue_terminal_write_fail_total` rate > 0.
+		if handlerErr := c.handler(ctx, item); handlerErr != nil {
 			c.logger.Warn("work item failed",
 				"item_id", item.ID,
 				"attempts", item.Attempts,
-				"error", err)
-			_ = c.queue.Fail(ctx, item.ID, err.Error())
+				"error", handlerErr)
+			if failErr := c.queue.Fail(ctx, item.ID, handlerErr.Error()); failErr != nil {
+				c.logger.Error("queue.Fail terminal write failed — item may be re-dequeued and produce orphan row",
+					"item_id", item.ID,
+					"handler_error", handlerErr,
+					"db_error", failErr)
+				metrics.WorkqueueTerminalWriteFailTotal.WithLabelValues("fail").Inc()
+			}
 		} else {
-			_ = c.queue.Complete(ctx, item.ID)
+			if completeErr := c.queue.Complete(ctx, item.ID); completeErr != nil {
+				c.logger.Error("queue.Complete terminal write failed — handler succeeded but item may be re-dequeued causing duplicate side-effects",
+					"item_id", item.ID,
+					"db_error", completeErr)
+				metrics.WorkqueueTerminalWriteFailTotal.WithLabelValues("complete").Inc()
+			}
 		}
 	}
 }

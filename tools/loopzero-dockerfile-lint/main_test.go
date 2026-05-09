@@ -52,10 +52,25 @@ func TestAccepts_DockerHubLibrary(t *testing.T) {
 	}
 }
 
-func TestAccepts_DockerIoOrgImage(t *testing.T) {
+// T2.3 of deep-review-remediation-plan (closes find_sec_003 HIGH).
+// `docker.io/<org>/*` (e.g., `docker.io/bitnami/redis:7`, `docker.io/attacker/malware`)
+// is INTENTIONALLY rejected by default. Only `docker.io/library/` (Docker
+// Official Images) is in the default allow-list. Non-library Docker Hub
+// images require explicit opt-in via LOOPZERO_DOCKERFILE_ALLOWED_REGISTRIES.
+func TestRejects_DockerIoOrgImage_BareName(t *testing.T) {
 	res := runLint(t, "FROM bitnami/redis:7\nCMD echo hi\n")
-	if res.rejects > 0 {
-		t.Fatalf("docker.io/<org>/* must be allowed, got rejections: %+v", res.findings)
+	if res.rejects == 0 {
+		t.Fatalf("docker.io/<org>/* (bare name without library/) MUST be rejected, got accepted: %+v", res.findings)
+	}
+}
+
+func TestRejects_DockerIoExplicitAttackerImage(t *testing.T) {
+	// The attacker scenario from find_sec_003: an explicit docker.io reference
+	// to a non-library namespace — previously allowed by the broad docker.io/
+	// prefix, now correctly rejected.
+	res := runLint(t, "FROM docker.io/attacker/malware:latest\nCMD echo hi\n")
+	if res.rejects == 0 {
+		t.Fatalf("docker.io/attacker/malware MUST be rejected (find_sec_003 attacker scenario), got accepted: %+v", res.findings)
 	}
 }
 

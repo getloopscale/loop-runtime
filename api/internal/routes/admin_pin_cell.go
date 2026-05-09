@@ -115,9 +115,15 @@ func AdminPinCellHandler(pinner CellPinner) http.HandlerFunc {
 
 		previous, err := pinner.Pin(r.Context(), in.TenantID, in.CellID)
 		if err != nil {
-			// Errors are typed inside the pinner. The handler maps to
-			// 4xx vs 5xx based on substring match; the pinner contract
-			// guarantees these prefixes for actionable diagnostics.
+			// T6.1 of deep-review-remediation-plan (find_code_001 / CODE-001 HIGH).
+			// NOTE: errors.Is against services sentinels REQUIRES first
+			// resolving the routes↔services import cycle (find_arch_001 / T1.3).
+			// Until T1.3 lands, we keep the substring match but add a TODO
+			// pointer here so cleanup is mechanical post-T1.3.
+			//
+			// TODO(T1.3+T6.1): replace strings.Contains with errors.Is once
+			// types in routes/ migrate to api/internal/domain/, breaking the
+			// import cycle that currently blocks `import services`.
 			msg := err.Error()
 			status := http.StatusInternalServerError
 			code := "internal"

@@ -61,9 +61,15 @@ type Finding struct {
 // To extend: tenant declares `build.allowed_registries: [...]` in loopzero.yaml.
 // (NOT IMPLEMENTED IN THIS LINTER YET — opt-in extension via env var
 // LOOPZERO_DOCKERFILE_ALLOWED_REGISTRIES, comma-separated, parsed by main()).
+// T2.3 of deep-review-remediation-plan (closes find_sec_003 HIGH):
+// `docker.io/` was REMOVED from the default allow-list. The bare "docker.io/"
+// prefix matched ANY Docker Hub image including arbitrary user-published
+// content (`docker.io/attacker/malware:latest`). Only `docker.io/library/`
+// — Docker Official Images, curated and security-vetted by Docker — remains
+// in the default set. Tenants who need a non-official image can opt in via
+// `LOOPZERO_DOCKERFILE_ALLOWED_REGISTRIES` env var (comma-separated prefixes).
 var defaultAllowedRegistryPrefixes = []string{
 	"docker.io/library/",
-	"docker.io/",
 	"ghcr.io/",
 	"registry.digitalocean.com/",
 	"k3d-loopzero-registry:5000/",

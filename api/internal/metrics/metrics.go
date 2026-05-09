@@ -627,4 +627,54 @@ var (
 		Name: "loopzero_secret_externalsecret_total",
 		Help: "ExternalSecret CR create/update outcomes from loopzero-api workload sync path.",
 	}, []string{"result"})
+
+	// WorkqueueTerminalWriteFailTotal counts cases where the workqueue
+	// consumer's terminal-state write (Complete or Fail) FAILED — the
+	// underlying DB INSERT/UPDATE returned error. Without this metric,
+	// such failures are silent: handler.Complete fails → item stays
+	// InFlight → re-dequeued → handler runs twice → duplicate side-effects.
+	//
+	// T1.7 of deep-review-remediation-plan (closes find_workqueue_silent_db_errors HIGH).
+	//
+	// Label `terminal` ∈ {complete, fail} indicates which path failed:
+	//   - "complete" — successful handler followed by FAILED Complete write
+	//                  (most dangerous: leads to duplicate handler invocation)
+	//   - "fail"     — failed handler followed by FAILED Fail write
+	//                  (orphan rows accumulate in workqueue table)
+	//
+	// Alert opportunity: sum(rate(loopzero_workqueue_terminal_write_fail_total[5m])) > 0
+	// indicates the queue is in an at-least-once-becomes-at-most-once degenerate
+	// state and operators should investigate immediately.
+	WorkqueueTerminalWriteFailTotal = promauto.NewCounterVec(prometheus.CounterOpts{
+		Name: "loopzero_workqueue_terminal_write_fail_total",
+		Help: "Workqueue consumer terminal-state DB write failures (Complete/Fail).",
+	}, []string{"terminal"})
+
+	// CellPinnerCRPatchFailTotal counts CellPinner.Pin operations where the
+	// PostgreSQL UPDATE on tenants.cell_id succeeded but the subsequent
+	// Tenant CR MergePatch FAILED. Result: DB and CR diverged. The operator
+	// reads tenant.Spec.CellID from the CR (not the DB) for new
+	// EnvironmentReconciler operations, so until the CR is patched manually
+	// the tenant's new environments land on the OLD cell.
+	//
+	// T1.5 of deep-review-remediation-plan (closes find_arch_005 MEDIUM).
+	//
+	// Alert opportunity: any non-zero rate over 5min indicates divergence.
+	CellPinnerCRPatchFailTotal = promauto.NewCounter(prometheus.CounterOpts{
+		Name: "loopzero_cell_pinner_cr_patch_fail_total",
+		Help: "CellPinner DB-updated-but-CR-patch-failed events (DB↔CR divergence window).",
+	})
+
+	// ReleaseAppAttestationSaveFailTotal counts failures to persist per-app
+	// attestation rows during ContainerDelivery.handle. The release proceeds
+	// (best-effort), but the cosign + SBOM provenance is missing from the DB
+	// for the affected release. Operators need this signal to detect a
+	// regression in the attestation pipeline; previously the error was
+	// discarded by `_ = saveErr` (find_code_005 / CODE-005 MEDIUM).
+	//
+	// T6.5 of deep-review-remediation-plan.
+	ReleaseAppAttestationSaveFailTotal = promauto.NewCounterVec(prometheus.CounterOpts{
+		Name: "loopzero_release_attestation_save_fail_total",
+		Help: "Per-app attestation persistence failures during release container delivery.",
+	}, []string{"environment"})
 )
