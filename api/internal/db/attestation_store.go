@@ -9,11 +9,11 @@ import (
 	"fmt"
 	"time"
 
-	"github.com/loopzero/loopzero/api/internal/routes"
+	"github.com/loopzero/loopzero/api/internal/domain"
 	loopzeroerrors "github.com/loopzero/loopzero/pkg/errors"
 )
 
-// PostgresAttestationStore implements routes.AttestationStore by reading
+// PostgresAttestationStore implements domain.AttestationStore by reading
 // the latest release for a build from the `releases` table and mapping
 // the supply-chain columns (image_digest, image_signature, image_signed_at)
 // to AttestationInfo.
@@ -45,7 +45,7 @@ func NewPostgresAttestationStore(db DBTX) *PostgresAttestationStore {
 // build (e.g., build still RUNNING, or workflow Failed before Phase A).
 func (s *PostgresAttestationStore) GetBuildAttestation(
 	ctx context.Context, buildID string,
-) (*routes.AttestationInfo, error) {
+) (*domain.AttestationInfo, error) {
 	if buildID == "" {
 		return nil, loopzeroerrors.ErrBuildNotFound
 	}
@@ -70,7 +70,7 @@ func (s *PostgresAttestationStore) GetBuildAttestation(
 		return nil, fmt.Errorf("attestation store: query failed: %w", err)
 	}
 
-	info := &routes.AttestationInfo{
+	info := &domain.AttestationInfo{
 		BuildID: buildID,
 		Signed:  signedAt != nil,
 	}
@@ -92,7 +92,7 @@ func (s *PostgresAttestationStore) GetBuildAttestation(
 // avoid existence leaks per ADR-0014 trust model.
 func (s *PostgresAttestationStore) GetBuildAttestationForTenant(
 	ctx context.Context, tenantID, buildID string,
-) (*routes.AttestationInfo, error) {
+) (*domain.AttestationInfo, error) {
 	if buildID == "" || tenantID == "" {
 		return nil, loopzeroerrors.ErrBuildNotFound
 	}
@@ -117,7 +117,7 @@ func (s *PostgresAttestationStore) GetBuildAttestationForTenant(
 		return nil, fmt.Errorf("attestation store: query failed: %w", err)
 	}
 
-	info := &routes.AttestationInfo{
+	info := &domain.AttestationInfo{
 		BuildID: buildID,
 		Signed:  signedAt != nil,
 	}

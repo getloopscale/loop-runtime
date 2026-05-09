@@ -10,7 +10,7 @@ import (
 	"time"
 
 	"github.com/loopzero/loopzero/api/internal/db"
-	"github.com/loopzero/loopzero/api/internal/routes"
+	"github.com/loopzero/loopzero/api/internal/domain"
 )
 
 // WorkflowCanceller cancels Argo Workflows by ID.
@@ -39,7 +39,8 @@ type ProjectDeleterDeps struct {
 }
 
 // ProjectDeleteProjectStore defines the project store operations needed by ProjectDeleter.
-// Separate from routes.ProjectStore to avoid circular dependency.
+// Narrow store interface — separate from the broader project store consumed by
+// the routes layer (ISP).
 type ProjectDeleteProjectStore interface {
 	DeleteProject(ctx context.Context, tenantID, projectID string) error
 }
@@ -85,8 +86,8 @@ func NewProjectDeleter(deps ProjectDeleterDeps) *ProjectDeleter {
 //  1. ListByProject -> get all envs
 //  2. For each env: single-env flow
 //  3. If all envs removed: delete project from projects table
-func (d *ProjectDeleter) Delete(ctx context.Context, req routes.ProjectDeleteInput) (*routes.ProjectDeleteOutput, error) {
-	result := &routes.ProjectDeleteOutput{
+func (d *ProjectDeleter) Delete(ctx context.Context, req domain.ProjectDeleteInput) (*domain.ProjectDeleteOutput, error) {
+	result := &domain.ProjectDeleteOutput{
 		ProjectName:         req.ProjectName,
 		DeletedEnvironments: []string{},
 	}
@@ -188,7 +189,7 @@ func (d *ProjectDeleter) Delete(ctx context.Context, req routes.ProjectDeleteInp
 
 // deleteEnvironment deletes a single environment for a project.
 // Returns the number of cancelled builds.
-func (d *ProjectDeleter) deleteEnvironment(ctx context.Context, req routes.ProjectDeleteInput, env string) (int, error) {
+func (d *ProjectDeleter) deleteEnvironment(ctx context.Context, req domain.ProjectDeleteInput, env string) (int, error) {
 	var cancelledBuilds int
 	var workflowIDs []string
 

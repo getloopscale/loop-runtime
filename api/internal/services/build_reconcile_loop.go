@@ -12,7 +12,7 @@ import (
 	"time"
 
 	"github.com/loopzero/loopzero/api/internal/db"
-	"github.com/loopzero/loopzero/api/internal/routes"
+	"github.com/loopzero/loopzero/api/internal/domain"
 )
 
 // BuildCompletionHandler abstracts the methods that BuildReconcileLoop calls on
@@ -94,7 +94,7 @@ type CellLister interface {
 // CustomDomainQuerier queries active custom domains for manifest rendering.
 // MEET-2026-04-06-034 Block 0: both deploy and domain provisioner must include custom domains.
 type CustomDomainQuerier interface {
-	ListActiveByApp(ctx context.Context, tenantID, project, app, env string) ([]routes.CustomDomain, error)
+	ListActiveByApp(ctx context.Context, tenantID, project, app, env string) ([]domain.CustomDomain, error)
 }
 
 // ApplicationCREnsurer creates LoopZeroApplication CRs on the mgmt cluster.

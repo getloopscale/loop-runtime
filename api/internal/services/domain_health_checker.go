@@ -12,7 +12,7 @@ import (
 	"time"
 
 	"github.com/loopzero/loopzero/api/internal/metrics"
-	"github.com/loopzero/loopzero/api/internal/routes"
+	"github.com/loopzero/loopzero/api/internal/domain"
 )
 
 // DomainHealthStore abstracts persistence needed by the health checker.
@@ -20,11 +20,11 @@ type DomainHealthStore interface {
 	// FindPendingForAutoVerify returns pending_verification domains owned by
 	// tenants belonging to the given cell (roadmap 03). Pass "cell-default"
 	// or "" for single-cell / backward-compatible behavior.
-	FindPendingForAutoVerify(ctx context.Context, cellID string) ([]routes.CustomDomain, error)
-	FindActiveForCNAMECheck(ctx context.Context, staleAfter time.Time) ([]routes.CustomDomain, error)
-	FindStalePending(ctx context.Context, maxAge time.Duration) ([]routes.CustomDomain, error)
-	FindStaleProvisioning(ctx context.Context, maxAge time.Duration) ([]routes.CustomDomain, error)
-	FindActiveWithTLSExpiry(ctx context.Context, withinDays int) ([]routes.CustomDomain, error)
+	FindPendingForAutoVerify(ctx context.Context, cellID string) ([]domain.CustomDomain, error)
+	FindActiveForCNAMECheck(ctx context.Context, staleAfter time.Time) ([]domain.CustomDomain, error)
+	FindStalePending(ctx context.Context, maxAge time.Duration) ([]domain.CustomDomain, error)
+	FindStaleProvisioning(ctx context.Context, maxAge time.Duration) ([]domain.CustomDomain, error)
+	FindActiveWithTLSExpiry(ctx context.Context, withinDays int) ([]domain.CustomDomain, error)
 	UpdateVerified(ctx context.Context, domain string, verifiedAt time.Time) error
 	UpdateCNAMECheck(ctx context.Context, domain string, checkTime time.Time, consecutiveFailures int) error
 	UpdateFailure(ctx context.Context, domain, status, reason string) error

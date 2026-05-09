@@ -12,7 +12,6 @@ import (
 
 	"github.com/loopzero/loopzero/api/internal/db"
 	"github.com/loopzero/loopzero/api/internal/domain"
-	"github.com/loopzero/loopzero/api/internal/routes"
 	loopzeroerrors "github.com/loopzero/loopzero/pkg/errors"
 )
 
@@ -67,7 +66,7 @@ type PreviewServiceDeps struct {
 	Logger         *slog.Logger
 }
 
-// PreviewService implements routes.PreviewService and, additionally,
+// PreviewService implements domain.PreviewService and, additionally,
 // provides webhook-driven hooks for the GitHub PR flow (T3.1).
 type PreviewService struct {
 	deps PreviewServiceDeps
@@ -88,7 +87,7 @@ func NewPreviewService(deps PreviewServiceDeps) (*PreviewService, error) {
 	return &PreviewService{deps: deps}, nil
 }
 
-// CreatePreview implements routes.PreviewService.CreatePreview.
+// CreatePreview implements domain.PreviewService.CreatePreview.
 //
 // Steps (per ADR D3 / D4):
 //   1. Validate request fields.
@@ -103,7 +102,7 @@ func NewPreviewService(deps PreviewServiceDeps) (*PreviewService, error) {
 // preview row is the source of truth for the API and the controller will
 // retry on its own. This is the same resilience principle as the deploy
 // flow (ARCH-002 fix in build_orchestrator).
-func (s *PreviewService) CreatePreview(ctx context.Context, req routes.CreatePreviewRequest) (*domain.Preview, error) {
+func (s *PreviewService) CreatePreview(ctx context.Context, req domain.CreatePreviewRequest) (*domain.Preview, error) {
 	if err := s.validate(req); err != nil {
 		return nil, err
 	}
@@ -237,7 +236,7 @@ func (s *PreviewService) OnBuildCompleted(ctx context.Context, previewID, buildI
 // validate enforces the same invariants the HTTP handler enforces.
 // Re-checked here so non-HTTP entry points (webhook, internal callers) are
 // also safe.
-func (s *PreviewService) validate(req routes.CreatePreviewRequest) error {
+func (s *PreviewService) validate(req domain.CreatePreviewRequest) error {
 	if strings.TrimSpace(req.TenantID()) == "" {
 		return loopzeroerrors.ErrMissingField.Wrap("tenant_id is required")
 	}
@@ -280,4 +279,4 @@ func isPreviewNotFound(err error) bool {
 
 // Compile-time assertion: PreviewService satisfies the route handler's
 // PreviewService interface.
-var _ routes.PreviewService = (*PreviewService)(nil)
+var _ domain.PreviewService = (*PreviewService)(nil)
