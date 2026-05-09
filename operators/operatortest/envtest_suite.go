@@ -7,6 +7,7 @@ import (
 	"context"
 	"os"
 	"path/filepath"
+	"sync"
 	"time"
 
 	"k8s.io/apimachinery/pkg/runtime"
@@ -55,6 +56,59 @@ type EnvtestHandle struct {
 	FakeMinIO   *FakeMinIOProvisioner
 	BuildClient client.Client
 	RuntimeCli  client.Client
+
+	// CellAwareFactory is non-nil when EnableCellAwareFactory was set in
+	// the EnvtestConfig. Tests assert against this to verify cell-aware
+	// code paths actually executed (T1.2 of deep-review-remediation-plan).
+	CellAwareFactory *FakeRuntimeClientFactory
+}
+
+// FakeRuntimeClientFactory implements shared.RuntimeClientFactory for
+// envtest suites. T1.2 of deep-review-remediation-plan (closes
+// find_arch_003 HIGH): every For(cellID) call is recorded so tests can
+// assert "factory was actually exercised" rather than passing factory=nil
+// like pre-T1.2 envtest did.
+//
+// All cellIDs route to the SAME runtimeClient (the envtest cluster) since
+// envtest doesn't actually have multi-cluster semantics — but the
+// invocation pattern matches production cell-aware code paths exactly.
+type FakeRuntimeClientFactory struct {
+	mu     sync.Mutex
+	target client.Client
+	calls  []string
+}
+
+// NewFakeRuntimeClientFactory builds a tracking factory routing all
+// cellIDs to target.
+func NewFakeRuntimeClientFactory(target client.Client) *FakeRuntimeClientFactory {
+	return &FakeRuntimeClientFactory{target: target}
+}
+
+// For implements shared.RuntimeClientFactory. Records the cellID and
+// returns the wrapped target client.
+func (f *FakeRuntimeClientFactory) For(_ context.Context, cellID string) (client.Client, error) {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	f.calls = append(f.calls, cellID)
+	return f.target, nil
+}
+
+// Calls returns a defensive copy of the recorded cellID call list. Used
+// by tests to assert the factory was exercised with expected cell IDs.
+func (f *FakeRuntimeClientFactory) Calls() []string {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	out := make([]string, len(f.calls))
+	copy(out, f.calls)
+	return out
+}
+
+// Reset clears recorded calls. Tests use this between sub-tests to
+// isolate assertions.
+func (f *FakeRuntimeClientFactory) Reset() {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	f.calls = nil
 }
 
 // EnvtestConfig configures which controllers a test suite needs.
@@ -84,6 +138,18 @@ type EnvtestConfig struct {
 	// BaseDomain is used by Application and Preview controllers for hostname
 	// assignment. Defaults to "dev.loopzero.example" if empty.
 	BaseDomain string
+
+	// EnableCellAwareFactory wires a tracking fakeRuntimeClientFactory
+	// instead of nil for controller setups that accept a factory. T1.2 of
+	// deep-review-remediation-plan (closes find_arch_003 HIGH): pre-T1.2
+	// envtest suites passed factory=nil to every controller, so the
+	// CellAwareRuntimeClientFactory code paths had ZERO automated test
+	// coverage.
+	//
+	// When true, the factory routes For(cellID) calls to the existing
+	// runtimeClient and records each call in h.CellAwareFactoryCalls so
+	// tests can assert "factory was actually exercised".
+	EnableCellAwareFactory bool
 }
 
 // StartEnvtest brings up envtest, starts the manager with the configured
@@ -191,6 +257,15 @@ func StartEnvtest(t TestT, cfg EnvtestConfig) *EnvtestHandle {
 		FakeMinIO:   NewFakeMinIOProvisioner(),
 		BuildClient: buildClient,
 		RuntimeCli:  runtimeClient,
+	}
+
+	// T1.2 of deep-review-remediation-plan (closes find_arch_003 HIGH):
+	// when EnableCellAwareFactory is true, build a tracking factory
+	// routing all cellIDs to runtimeClient. Tests assert via
+	// h.CellAwareFactory.Calls() that cell-aware code paths actually
+	// executed.
+	if cfg.EnableCellAwareFactory {
+		h.CellAwareFactory = NewFakeRuntimeClientFactory(runtimeClient)
 	}
 
 	baseDomain := cfg.BaseDomain
