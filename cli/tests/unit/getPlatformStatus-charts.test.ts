@@ -45,11 +45,13 @@ describe('getPlatformStatus — chart inventory pinning', () => {
     }
   });
 
-  it('LOOPZERO_COMPONENTS contains the four real LoopZero charts', () => {
+  // Post-operator-split (CHG-2026-04-30-INFRA-PARITY T1.5): the legacy
+  // loopzero-controller + tenant-controller charts were DELETED. Operators now
+  // ship via charts/loopzero-{tenant,app,preview,platform}-operator (OCI). The
+  // bootstrap-only charts in infra/helm/ are loopzero-api + loopzero-cloud.
+  it('LOOPZERO_COMPONENTS contains the bootstrap charts in infra/helm/', () => {
     expect(LOOPZERO_COMPONENTS).toEqual([
       'loopzero-api',
-      'loopzero-controller',
-      'tenant-controller',
       'loopzero-cloud',
     ]);
   });

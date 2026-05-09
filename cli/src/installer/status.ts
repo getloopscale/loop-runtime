@@ -29,11 +29,19 @@ const CHART_VERSION = '0.2.0';
 /**
  * Charts gerenciados pelo LoopZero (em ordem de install). Pinado contra
  * filesystem por getPlatformStatus-charts.test.ts.
+ *
+ * Post operator-split (CHG-2026-04-30-INFRA-PARITY T1.5): the legacy
+ * `loopzero-controller` + `tenant-controller` charts were DELETED. Operators
+ * now ship as 4 split binaries via `charts/loopzero-{tenant,app,preview,
+ * platform}-operator` (OCI-published, NOT in infra/helm/). Bootstrap
+ * charts in infra/helm/ are limited to loopzero-api + loopzero-cloud + their
+ * dependencies.
+ *
+ * LOOPZERO_COMPONENTS now lists ONLY the bootstrap charts that physically
+ * exist in infra/helm/ — the test pin is back to GREEN.
  */
 export const LOOPZERO_COMPONENTS = [
   'loopzero-api',
-  'loopzero-controller',
-  'tenant-controller',
   'loopzero-cloud',
 ] as const;
 
