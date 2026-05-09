@@ -105,20 +105,45 @@ func main() {
 	// dogfood-2026-05-08-fixes T4.2 (F-6, ADR D6 + EC-5 multi-cell awareness).
 	// Wire the cell-aware runtime client factory so ApplicationController can
 	// fast-path EndpointsReady=true on workload Pod Ready, regardless of
-	// ExposedRoute Reachable. RUNTIME_KUBECONFIG is the legacy/single-cell
-	// fallback used for tenants pinned to cell-default.
+	// ExposedRoute Reachable.
+	//
+	// T1.4 of deep-review-remediation-plan (closes find_arch_007 MEDIUM partial,
+	// per ADR D3 of the plan): RUNTIME_KUBECONFIG should be MANDATORY in
+	// production, but EC-4 of the edge-case review warned that flipping the
+	// guard mid-rollout (when the Helm chart hasn't yet mounted the Secret)
+	// CrashLoopBackOffs every operator pod. Compromise:
+	//
+	//   - Set LOOPZERO_REQUIRE_RUNTIME_KUBECONFIG=true to opt into fail-fast mode
+	//     (post-T1.4a Helm chart deploy). Operator exits with non-zero if
+	//     RUNTIME_KUBECONFIG is missing OR factory creation fails.
+	//   - Leave LOOPZERO_REQUIRE_RUNTIME_KUBECONFIG unset (default) for graceful
+	//     fallback (legacy path; warning emitted; no fast-path Healthy).
+	//
+	// Production cells flip the env var to true ONCE T1.4a Helm mount is
+	// observed via task doctor. Pre-flip, the warning + loopzero_app_operator_
+	// cell_factory_disabled_total counter (T1.5/find_arch_007 wired) provides
+	// observability of the degraded mode.
 	var appFactory shared.RuntimeClientFactory
+	requireKubeconfig := os.Getenv("LOOPZERO_REQUIRE_RUNTIME_KUBECONFIG") == "true"
 	runtimeKubeconfig := os.Getenv("RUNTIME_KUBECONFIG")
 	if runtimeKubeconfig != "" {
 		runtimeClient, err := shared.CreateClusterClient(setupLog, runtimeKubeconfig, scheme, "runtime")
 		if err != nil {
-			setupLog.Error(err, "failed to create runtime cluster client — fast-path Healthy disabled")
+			if requireKubeconfig {
+				setupLog.Error(err, "failed to create runtime cluster client AND LOOPZERO_REQUIRE_RUNTIME_KUBECONFIG=true — refusing to start")
+				os.Exit(1)
+			}
+			setupLog.Error(err, "failed to create runtime cluster client — fast-path Healthy disabled (degraded)")
 		} else {
 			appFactory = shared.NewCellAwareRuntimeClientFactory(
 				mgr.GetClient(), runtimeClient, "loopzero-system")
 			setupLog.Info("ApplicationController: cell-aware fast-path Healthy enabled")
 		}
 	} else {
+		if requireKubeconfig {
+			setupLog.Error(nil, "RUNTIME_KUBECONFIG required (LOOPZERO_REQUIRE_RUNTIME_KUBECONFIG=true) but not set — refusing to start")
+			os.Exit(1)
+		}
 		setupLog.Info("RUNTIME_KUBECONFIG not set — Application fast-path Healthy disabled (legacy mode)")
 	}
 

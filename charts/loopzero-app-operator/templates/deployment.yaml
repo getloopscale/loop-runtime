@@ -64,6 +64,25 @@ spec:
           envFrom:
             - configMapRef:
                 name: {{ include "loopzero-common.fullname" . }}
+          {{- if .Values.runtimeKubeconfigMount.enabled }}
+          # T1.4a of deep-review-remediation-plan (closes find_arch_002 / find_arch_007 partial):
+          # mount the cell-aware Secret + set RUNTIME_KUBECONFIG env so the
+          # operator binary can resolve per-cell runtime clients via
+          # CellAwareRuntimeClientFactory.
+          #
+          # When .Values.runtimeKubeconfigMount.requireRunning is true (set
+          # post-rollout), the operator main flips LOOPZERO_REQUIRE_RUNTIME_KUBECONFIG
+          # which fail-fasts on missing/broken kubeconfig (per ADR D3).
+          env:
+            - name: RUNTIME_KUBECONFIG
+              value: {{ .Values.runtimeKubeconfigMount.path | default "/etc/loopzero/runtime/kubeconfig" }}
+            - name: RUNTIME_KUBE_CONTEXT
+              value: {{ .Values.runtimeKubeconfigMount.context | default "in-cluster" }}
+            {{- if .Values.runtimeKubeconfigMount.requireRunning }}
+            - name: LOOPZERO_REQUIRE_RUNTIME_KUBECONFIG
+              value: "true"
+            {{- end }}
+          {{- end }}
           {{- include "loopzero-common.startupProbe" . | nindent 10 }}
           {{- with .Values.livenessProbe }}
           livenessProbe:
@@ -78,7 +97,20 @@ spec:
           volumeMounts:
             - name: tmp
               mountPath: /tmp
+            {{- if .Values.runtimeKubeconfigMount.enabled }}
+            - name: runtime-kubeconfig
+              mountPath: {{ .Values.runtimeKubeconfigMount.dir | default "/etc/loopzero/runtime" }}
+              readOnly: true
+            {{- end }}
       volumes:
         - name: tmp
           emptyDir:
             sizeLimit: 64Mi
+        {{- if .Values.runtimeKubeconfigMount.enabled }}
+        - name: runtime-kubeconfig
+          secret:
+            secretName: {{ .Values.runtimeKubeconfigMount.secretName | default "loopzero-cluster-kubeconfigs" }}
+            items:
+              - key: {{ .Values.runtimeKubeconfigMount.secretKey | default "runtime.kubeconfig" }}
+                path: kubeconfig
+        {{- end }}
