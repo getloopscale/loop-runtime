@@ -38,6 +38,7 @@ import (
 	"github.com/loopzero/loopzero/operators/internal/shared"
 	"github.com/loopzero/loopzero/operators/internal/tracing"
 	cb "github.com/loopzero/loopzero/pkg/circuitbreaker"
+	"github.com/loopzero/loopzero/pkg/healthcheck"
 	"github.com/loopzero/loopzero/pkg/logging"
 
 	_ "github.com/loopzero/loopzero/operators/internal/metrics"
@@ -62,6 +63,11 @@ func cbStateLoggerFunc() func(string, cb.State, cb.State) {
 }
 
 func main() {
+	// T8.1 of deep-review-remediation-plan (closes find_infra_001 HIGH).
+	if healthcheck.MaybeRunAndExit("http://127.0.0.1:8081/healthz") {
+		return
+	}
+
 	var metricsAddr string
 	var healthProbeAddr string
 	var enableLeaderElection bool

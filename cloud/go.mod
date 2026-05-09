@@ -1,13 +1,14 @@
 module github.com/loopzero/loopzero/cloud
 
 go 1.25.0
+
 toolchain go1.25.9
 
 require (
 	github.com/go-chi/chi/v5 v5.2.5
 	github.com/prometheus/client_golang v1.23.2
-	github.com/loopzero/loopzero/pkg v0.0.0-00010101000000-000000000000
-	go.opentelemetry.io/contrib/instrumentation/net/http/otelhttp v0.68.0
+	github.com/loopzero/loopzero/pkg v0.0.0
+	go.opentelemetry.io/contrib/instrumentation/net/http/otelhttp v0.67.0
 	go.opentelemetry.io/otel v1.43.0
 	go.opentelemetry.io/otel/exporters/otlp/otlptrace/otlptracegrpc v1.43.0
 	go.opentelemetry.io/otel/sdk v1.43.0

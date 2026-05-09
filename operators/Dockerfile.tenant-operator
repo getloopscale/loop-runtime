@@ -25,5 +25,9 @@ LABEL org.opencontainers.image.description="LoopZero PaaS Tenant+Environment ope
 COPY --from=builder /loopzero-tenant-operator /usr/local/bin/loopzero-tenant-operator
 EXPOSE 8080 8081
 
+# T8.1 of deep-review-remediation-plan (closes find_infra_001 HIGH).
+HEALTHCHECK --interval=30s --timeout=5s --start-period=10s --retries=3 \
+  CMD ["/usr/local/bin/loopzero-tenant-operator", "--healthcheck-probe"]
+
 ENTRYPOINT ["loopzero-tenant-operator"]
 CMD ["--leader-elect=true"]

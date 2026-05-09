@@ -25,5 +25,13 @@ LABEL org.opencontainers.image.description="LoopZero PaaS Application+Exposure o
 COPY --from=builder /loopzero-app-operator /usr/local/bin/loopzero-app-operator
 EXPOSE 8080 8081
 
+# T8.1 of deep-review-remediation-plan (closes find_infra_001 HIGH).
+# Distroless static has no shell — HEALTHCHECK invokes the operator binary
+# itself with --healthcheck-probe (impl in pkg/healthcheck/probe.go).
+# K8s uses its own liveness/readiness probes against /healthz; this directive
+# is for `docker run` (local dev) and image scanners that respect HEALTHCHECK.
+HEALTHCHECK --interval=30s --timeout=5s --start-period=10s --retries=3 \
+  CMD ["/usr/local/bin/loopzero-app-operator", "--healthcheck-probe"]
+
 ENTRYPOINT ["loopzero-app-operator"]
 CMD ["--leader-elect=true"]
