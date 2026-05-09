@@ -8,6 +8,26 @@
 #   push to main    → build + push with :prod tag + :sha tag
 #   workflow_dispatch → manual build for any component
 #
+# T4.2 of deep-review-remediation-plan (closes find_cicd_003 HIGH):
+# the env-level tags (:dev, :staging, :prod) are MUTABLE by design — each
+# push produces a new image at the same tag. This is the convenience layer
+# for `kubectl set image` and ArgoCD ImageUpdater.
+#
+# The IMMUTABLE artifact is the :sha tag (7-char git SHA short hash) which
+# is ALSO pushed in every build (line ~187 / -t :${TAG} -t :${SHA}). For
+# auditable artifact promotion (e.g., "this exact bytes ran in staging
+# AND production"), consumers MUST reference the :sha tag, not the env tag.
+#
+# Production deployment policy (per ADR-0049 referenced below):
+#   * Pre-prod (develop, homolog): env tag is acceptable — Tilt + dev loop
+#     prefer convenience over immutability.
+#   * Production (main): infra-restart.yml MUST use kubectl set image with
+#     the :sha tag, NOT kubectl rollout restart against :prod. The
+#     mutable :prod tag exists for emergency manual rollback only.
+#
+# See ADR-0049 (immutable artifact promotion strategy) for the full
+# rationale + alternatives rejected.
+#
 # DOKS clusters pull from DOCR automatically when integrated
 # via `doctl kubernetes cluster registry add` (done in infra-deploy post-step).
 #
