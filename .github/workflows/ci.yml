@@ -559,6 +559,9 @@ jobs:
       - name: GitHub Actions SHA pinning lint (T4.1 deep-review-remediation)
         run: bash infra/scripts/check_actions_sha_pinned.sh
 
+      - name: Orphan PrometheusRule alerts lint (T5.10 deep-review-remediation)
+        run: bash infra/scripts/check_orphan_alerts.sh
+
   # ─────────────────────────────────────────────
   # GATE — all checks must pass
   # ─────────────────────────────────────────────
