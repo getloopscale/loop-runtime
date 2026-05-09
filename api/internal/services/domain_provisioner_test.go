@@ -11,7 +11,7 @@ import (
 	"time"
 
 	"github.com/loopzero/loopzero/api/internal/db"
-	"github.com/loopzero/loopzero/api/internal/routes"
+	"github.com/loopzero/loopzero/api/internal/domain"
 )
 
 // validImageDigest is a 64-hex sha256 string used in DomainProvisioner
@@ -26,16 +26,16 @@ func strPtr(s string) *string { return &s }
 // --- Test doubles for DomainProvisioner ---
 
 type fakeDomainProvisionerStore struct {
-	verifiedDomains   []routes.CustomDomain
-	removingDomains   []routes.CustomDomain
-	pendingNSDomains  []routes.CustomDomain
-	nsActiveDomains   []routes.CustomDomain
+	verifiedDomains   []domain.CustomDomain
+	removingDomains   []domain.CustomDomain
+	pendingNSDomains  []domain.CustomDomain
+	nsActiveDomains   []domain.CustomDomain
 	transitionedPairs []struct{ Domain, From, To string }
 	updatedStatuses   map[string]string
 	updatedFailures   map[string]string
 	deletedDomains    []string
 	cfZoneStatuses    map[string]string
-	activeByApp       map[string][]routes.CustomDomain
+	activeByApp       map[string][]domain.CustomDomain
 }
 
 func newFakeDomainProvisionerStore() *fakeDomainProvisionerStore {
@@ -43,17 +43,17 @@ func newFakeDomainProvisionerStore() *fakeDomainProvisionerStore {
 		updatedStatuses: make(map[string]string),
 		updatedFailures: make(map[string]string),
 		cfZoneStatuses:  make(map[string]string),
-		activeByApp:     make(map[string][]routes.CustomDomain),
+		activeByApp:     make(map[string][]domain.CustomDomain),
 	}
 }
 
-func (f *fakeDomainProvisionerStore) FindAndClaimVerified(_ context.Context) ([]routes.CustomDomain, error) {
+func (f *fakeDomainProvisionerStore) FindAndClaimVerified(_ context.Context) ([]domain.CustomDomain, error) {
 	return f.verifiedDomains, nil
 }
-func (f *fakeDomainProvisionerStore) FindRemoving(_ context.Context) ([]routes.CustomDomain, error) {
+func (f *fakeDomainProvisionerStore) FindRemoving(_ context.Context) ([]domain.CustomDomain, error) {
 	return f.removingDomains, nil
 }
-func (f *fakeDomainProvisionerStore) ListActiveByApp(_ context.Context, tenant, project, app, env string) ([]routes.CustomDomain, error) {
+func (f *fakeDomainProvisionerStore) ListActiveByApp(_ context.Context, tenant, project, app, env string) ([]domain.CustomDomain, error) {
 	key := tenant + "-" + project + "-" + app + "-" + env
 	return f.activeByApp[key], nil
 }
@@ -77,10 +77,10 @@ func (f *fakeDomainProvisionerStore) Delete(_ context.Context, domain string) er
 	f.deletedDomains = append(f.deletedDomains, domain)
 	return nil
 }
-func (f *fakeDomainProvisionerStore) FindPendingNS(_ context.Context) ([]routes.CustomDomain, error) {
+func (f *fakeDomainProvisionerStore) FindPendingNS(_ context.Context) ([]domain.CustomDomain, error) {
 	return f.pendingNSDomains, nil
 }
-func (f *fakeDomainProvisionerStore) FindNSActive(_ context.Context) ([]routes.CustomDomain, error) {
+func (f *fakeDomainProvisionerStore) FindNSActive(_ context.Context) ([]domain.CustomDomain, error) {
 	return f.nsActiveDomains, nil
 }
 
@@ -147,7 +147,7 @@ func (f *fakeCFZoneChecker) DeleteZone(_ context.Context, _ string) error {
 func TestDomainProvisioner_ProcessOnce_ProvisionVerifiedDomain(t *testing.T) {
 	// Arrange
 	store := newFakeDomainProvisionerStore()
-	store.verifiedDomains = []routes.CustomDomain{
+	store.verifiedDomains = []domain.CustomDomain{
 		{
 			ID: "dom-1", Domain: "example.com", TenantID: "tn-1",
 			ProjectName: "my-app", AppName: "api", Environment: "production",
@@ -207,7 +207,7 @@ func TestDomainProvisioner_ProcessOnce_ProvisionVerifiedDomain(t *testing.T) {
 func TestDomainProvisioner_ProcessOnce_NoActiveRelease_Skips(t *testing.T) {
 	// Arrange
 	store := newFakeDomainProvisionerStore()
-	store.verifiedDomains = []routes.CustomDomain{
+	store.verifiedDomains = []domain.CustomDomain{
 		{
 			ID: "dom-2", Domain: "no-release.com", TenantID: "tn-2",
 			ProjectName: "app", AppName: "web", Environment: "staging",
@@ -235,7 +235,7 @@ func TestDomainProvisioner_ProcessOnce_NoActiveRelease_Skips(t *testing.T) {
 func TestDomainProvisioner_ProcessOnce_GitOpsFails_StaysInProvisioning(t *testing.T) {
 	// Arrange
 	store := newFakeDomainProvisionerStore()
-	store.verifiedDomains = []routes.CustomDomain{
+	store.verifiedDomains = []domain.CustomDomain{
 		{
 			ID: "dom-3", Domain: "fail.com", TenantID: "tn-1",
 			ProjectName: "my-app", AppName: "api", Environment: "production",
@@ -278,7 +278,7 @@ func TestDomainProvisioner_ProcessOnce_GitOpsFails_StaysInProvisioning(t *testin
 func TestDomainProvisioner_ProcessOnce_RemovesDomain(t *testing.T) {
 	// Arrange
 	store := newFakeDomainProvisionerStore()
-	store.removingDomains = []routes.CustomDomain{
+	store.removingDomains = []domain.CustomDomain{
 		{
 			ID: "dom-4", Domain: "old.com", TenantID: "tn-1",
 			ProjectName: "my-app", AppName: "api", Environment: "production",
@@ -322,7 +322,7 @@ func TestDomainProvisioner_ProcessOnce_RemovesDomain(t *testing.T) {
 func TestDomainProvisioner_ProcessOnce_RemoveNoRelease_DeletesDirectly(t *testing.T) {
 	// Arrange
 	store := newFakeDomainProvisionerStore()
-	store.removingDomains = []routes.CustomDomain{
+	store.removingDomains = []domain.CustomDomain{
 		{
 			ID: "dom-5", Domain: "orphan.com", TenantID: "tn-2",
 			ProjectName: "gone", AppName: "web", Environment: "staging",
@@ -355,7 +355,7 @@ func TestDomainProvisioner_PendingNS_ZoneActive_TransitionsToNSActive(t *testing
 	// Arrange
 	zoneID := "zone-123"
 	store := newFakeDomainProvisionerStore()
-	store.pendingNSDomains = []routes.CustomDomain{
+	store.pendingNSDomains = []domain.CustomDomain{
 		{
 			ID: "dom-6", Domain: "cf-managed.com", TenantID: "tn-1",
 			ProjectName: "app", AppName: "api", Environment: "production",
@@ -396,7 +396,7 @@ func TestDomainProvisioner_PendingNS_Timeout_FailsDomain(t *testing.T) {
 	// Arrange
 	zoneID := "zone-456"
 	store := newFakeDomainProvisionerStore()
-	store.pendingNSDomains = []routes.CustomDomain{
+	store.pendingNSDomains = []domain.CustomDomain{
 		{
 			ID: "dom-7", Domain: "slow.com", TenantID: "tn-1",
 			ProjectName: "app", AppName: "api", Environment: "production",
@@ -427,7 +427,7 @@ func TestDomainProvisioner_PendingNS_Timeout_FailsDomain(t *testing.T) {
 func TestDomainProvisioner_NoCFZone_SkipsPendingNS(t *testing.T) {
 	// Arrange: no cfZone set (v1 mode)
 	store := newFakeDomainProvisionerStore()
-	store.pendingNSDomains = []routes.CustomDomain{
+	store.pendingNSDomains = []domain.CustomDomain{
 		{ID: "dom-8", Domain: "should-skip.com"},
 	}
 
@@ -452,7 +452,7 @@ func TestDomainProvisioner_RemoveCFManaged_DeletesZone(t *testing.T) {
 	// Arrange
 	zoneID := "zone-del"
 	store := newFakeDomainProvisionerStore()
-	store.removingDomains = []routes.CustomDomain{
+	store.removingDomains = []domain.CustomDomain{
 		{
 			ID: "dom-9", Domain: "cf-remove.com", TenantID: "tn-1",
 			ProjectName: "app", AppName: "api", Environment: "production",

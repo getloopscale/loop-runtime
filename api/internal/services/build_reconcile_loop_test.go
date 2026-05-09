@@ -15,7 +15,7 @@ import (
 	"time"
 
 	"github.com/loopzero/loopzero/api/internal/db"
-	"github.com/loopzero/loopzero/api/internal/routes"
+	"github.com/loopzero/loopzero/api/internal/domain"
 	"github.com/loopzero/loopzero/pkg/statemachine"
 )
 
@@ -235,7 +235,7 @@ func (f *fakeLockerRL) WithLock(_ context.Context, _, _, _ string, fn func(tx db
 // fakeDomainQuerier implements CustomDomainQuerier.
 type fakeDomainQuerier struct{}
 
-func (f *fakeDomainQuerier) ListActiveByApp(_ context.Context, _, _, _, _ string) ([]routes.CustomDomain, error) {
+func (f *fakeDomainQuerier) ListActiveByApp(_ context.Context, _, _, _, _ string) ([]domain.CustomDomain, error) {
 	return nil, nil
 }
 

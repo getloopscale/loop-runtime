@@ -9,17 +9,17 @@ import (
 	"testing"
 	"time"
 
-	"github.com/loopzero/loopzero/api/internal/routes"
+	"github.com/loopzero/loopzero/api/internal/domain"
 )
 
 // --- Test doubles for DomainHealthChecker ---
 
 type fakeDomainHealthStore struct {
-	pendingDomains     []routes.CustomDomain
-	activeDomains      []routes.CustomDomain
-	stalePending       []routes.CustomDomain
-	staleProvisioning  []routes.CustomDomain
-	tlsExpiring        []routes.CustomDomain
+	pendingDomains     []domain.CustomDomain
+	activeDomains      []domain.CustomDomain
+	stalePending       []domain.CustomDomain
+	staleProvisioning  []domain.CustomDomain
+	tlsExpiring        []domain.CustomDomain
 	verifiedDomains    []string
 	cnameChecked       map[string]int // domain → consecutive failures
 	failedDomains      map[string]string
@@ -35,19 +35,19 @@ func newFakeDomainHealthStore() *fakeDomainHealthStore {
 	}
 }
 
-func (f *fakeDomainHealthStore) FindPendingForAutoVerify(_ context.Context, _ string) ([]routes.CustomDomain, error) {
+func (f *fakeDomainHealthStore) FindPendingForAutoVerify(_ context.Context, _ string) ([]domain.CustomDomain, error) {
 	return f.pendingDomains, nil
 }
-func (f *fakeDomainHealthStore) FindActiveForCNAMECheck(_ context.Context, _ time.Time) ([]routes.CustomDomain, error) {
+func (f *fakeDomainHealthStore) FindActiveForCNAMECheck(_ context.Context, _ time.Time) ([]domain.CustomDomain, error) {
 	return f.activeDomains, nil
 }
-func (f *fakeDomainHealthStore) FindStalePending(_ context.Context, _ time.Duration) ([]routes.CustomDomain, error) {
+func (f *fakeDomainHealthStore) FindStalePending(_ context.Context, _ time.Duration) ([]domain.CustomDomain, error) {
 	return f.stalePending, nil
 }
-func (f *fakeDomainHealthStore) FindStaleProvisioning(_ context.Context, _ time.Duration) ([]routes.CustomDomain, error) {
+func (f *fakeDomainHealthStore) FindStaleProvisioning(_ context.Context, _ time.Duration) ([]domain.CustomDomain, error) {
 	return f.staleProvisioning, nil
 }
-func (f *fakeDomainHealthStore) FindActiveWithTLSExpiry(_ context.Context, _ int) ([]routes.CustomDomain, error) {
+func (f *fakeDomainHealthStore) FindActiveWithTLSExpiry(_ context.Context, _ int) ([]domain.CustomDomain, error) {
 	return f.tlsExpiring, nil
 }
 func (f *fakeDomainHealthStore) UpdateVerified(_ context.Context, domain string, _ time.Time) error {
@@ -76,7 +76,7 @@ func (f *fakeDomainHealthStore) Delete(_ context.Context, domain string) error {
 func TestDomainHealthChecker_CleanupStalePending(t *testing.T) {
 	// Arrange
 	store := newFakeDomainHealthStore()
-	store.stalePending = []routes.CustomDomain{
+	store.stalePending = []domain.CustomDomain{
 		{Domain: "stale.com", TenantID: "tn-1"},
 		{Domain: "old.com", TenantID: "tn-1"},
 	}
@@ -101,7 +101,7 @@ func TestDomainHealthChecker_CleanupStalePending(t *testing.T) {
 func TestDomainHealthChecker_ProvisioningTimeout(t *testing.T) {
 	// Arrange
 	store := newFakeDomainHealthStore()
-	store.staleProvisioning = []routes.CustomDomain{
+	store.staleProvisioning = []domain.CustomDomain{
 		{Domain: "stuck.com", TenantID: "tn-1"},
 	}
 
@@ -122,7 +122,7 @@ func TestDomainHealthChecker_TLSExpiry_TracksMetrics(t *testing.T) {
 	// Arrange
 	expiry := time.Now().Add(5 * 24 * time.Hour)
 	store := newFakeDomainHealthStore()
-	store.tlsExpiring = []routes.CustomDomain{
+	store.tlsExpiring = []domain.CustomDomain{
 		{Domain: "expiring.com", TenantID: "tn-1", TLSExpiresAt: &expiry},
 	}
 
@@ -138,7 +138,7 @@ func TestDomainHealthChecker_TLSExpiry_TracksMetrics(t *testing.T) {
 func TestDomainHealthChecker_SkipsCNAMECheckWithoutTarget(t *testing.T) {
 	// Arrange: no CNAMETarget configured (local dev)
 	store := newFakeDomainHealthStore()
-	store.activeDomains = []routes.CustomDomain{
+	store.activeDomains = []domain.CustomDomain{
 		{Domain: "local.com", TenantID: "tn-1"},
 	}
 
@@ -160,7 +160,7 @@ func TestDomainHealthChecker_SkipsCFManagedDomains(t *testing.T) {
 	// Arrange
 	zoneID := "zone-123"
 	store := newFakeDomainHealthStore()
-	store.activeDomains = []routes.CustomDomain{
+	store.activeDomains = []domain.CustomDomain{
 		{Domain: "cf.com", TenantID: "tn-1", CFZoneID: &zoneID},
 	}
 
@@ -194,7 +194,7 @@ func TestDomainHealthChecker_DefaultConfig(t *testing.T) {
 func TestDomainHealthChecker_ContextCancelled_StopsProcessing(t *testing.T) {
 	// Arrange
 	store := newFakeDomainHealthStore()
-	store.stalePending = []routes.CustomDomain{
+	store.stalePending = []domain.CustomDomain{
 		{Domain: "a.com"}, {Domain: "b.com"}, {Domain: "c.com"},
 	}
 
