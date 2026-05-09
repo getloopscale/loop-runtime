@@ -608,7 +608,7 @@ export async function platformStatus(
     writeTo(JSON.stringify({
       phase: status.phase,
       version: status.version,
-      crdsInstalled: status.crdsInstalled,
+      platformDefinitions: status.platformDefinitions,
       components: status.components,
       endpoints: status.endpoints,
       sync: {
@@ -621,7 +621,7 @@ export async function platformStatus(
     writeTo('');
     writeTo(`  Phase: ${status.phase}`);
     if (status.version) writeTo(`  Version: ${status.version}`);
-    writeTo(`  Platform definitions: ${status.crdsInstalled}`);
+    writeTo(`  Platform definitions: ${status.platformDefinitions}`);
     writeTo('');
     writeTo('  Components:');
     for (const c of status.components) {

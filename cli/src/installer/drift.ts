@@ -11,7 +11,11 @@ import { execSync } from 'child_process';
 
 export interface AppDrift {
   name: string;
-  namespace: string;
+  // T3.2 of deep-review-remediation-plan + Rule 3 of CLAUDE.md:
+  // `namespace` is intentionally absent from the user-facing JSON shape.
+  // The sync-engine namespace (e.g., "argocd") is an internal control-plane
+  // detail forbidden in CLI output. Drift troubleshooting uses `name` +
+  // `sync` + `health` which are stable product-language fields.
   sync: string;
   health: string;
 }
@@ -59,11 +63,10 @@ export function detectDrift(): DriftReport {
     const sync = it.status?.sync?.status ?? 'Unknown';
     const health = it.status?.health?.status ?? 'Unknown';
     const name = it.metadata?.name ?? '?';
-    const namespace = it.metadata?.namespace ?? '?';
     if (sync === 'Synced') {
       synced++;
     } else {
-      drift.push({ name, namespace, sync, health });
+      drift.push({ name, sync, health });
     }
   }
 

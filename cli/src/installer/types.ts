@@ -108,7 +108,7 @@ export interface PlatformStatus {
   phase: 'NotInstalled' | 'Installing' | 'Ready' | 'Degraded' | 'Failed';
   version?: string;
   components: ComponentStatus[];
-  crdsInstalled: number;
+  platformDefinitions: number;
   endpoints: {
     api?: string;
     dashboard?: string;

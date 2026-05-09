@@ -72,9 +72,9 @@ export function getPlatformStatus(): PlatformStatus {
     }
   }
 
-  let crdsInstalled = 0;
+  let platformDefinitions = 0;
   try {
-    crdsInstalled = parseInt(
+    platformDefinitions = parseInt(
       execSync('kubectl get crd -o name 2>/dev/null | grep loopzero.io | wc -l', { encoding: 'utf-8' }).trim(),
       10,
     );
@@ -106,7 +106,7 @@ export function getPlatformStatus(): PlatformStatus {
     phase,
     version: CHART_VERSION,
     components,
-    crdsInstalled,
+    platformDefinitions,
     endpoints: {
       api: installed ? `https://api.${process.env.LOOPZERO_DOMAIN || 'localhost'}` : undefined,
       dashboard: installed ? `https://cloud.${process.env.LOOPZERO_DOMAIN || 'localhost'}` : undefined,
