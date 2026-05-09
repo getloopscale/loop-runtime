@@ -21,6 +21,7 @@ import (
 	"errors"
 	"fmt"
 	"log/slog"
+	"time"
 
 	"github.com/jackc/pgx/v5"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -125,18 +126,45 @@ func (p *CellPinner) Pin(ctx context.Context, tenantID, cellID string) (string, 
 		return "", err
 	}
 	if p.mgmtKube != nil {
-		if patchErr := p.patchTenantCR(ctx, tenantID, cellID); patchErr != nil {
-			// T1.5 of deep-review-remediation-plan (closes find_arch_005 MEDIUM):
-			// emit a metric so operators can alert on the DB↔CR divergence window
-			// instead of relying solely on slog.Warn (which Loki may not surface
-			// quickly).
+		// T1.5 + T1.5b of deep-review-remediation-plan (closes find_arch_005
+		// MEDIUM): retry transient CR patch failures (3 attempts with
+		// exponential backoff: 100ms, 400ms, 1.6s). Most kube-patch failures
+		// are transient (apiserver elections, network blips) — retry covers
+		// these without operator intervention. Persistent failures still
+		// surface via metric + slog.Warn.
+		var patchErr error
+		for attempt := 0; attempt < 3; attempt++ {
+			if attempt > 0 {
+				select {
+				case <-ctx.Done():
+					patchErr = ctx.Err()
+					break
+				case <-time.After(time.Duration(100*intPow(4, attempt)) * time.Millisecond):
+				}
+			}
+			patchErr = p.patchTenantCR(ctx, tenantID, cellID)
+			if patchErr == nil {
+				break
+			}
+		}
+		if patchErr != nil {
 			metrics.CellPinnerCRPatchFailTotal.Inc()
-			slog.Warn("cell pinner: DB updated but Tenant CR patch failed — operator will continue using previous cellID until the CR is patched manually",
+			slog.Warn("cell pinner: DB updated but Tenant CR patch failed after 3 retries — operator will continue using previous cellID until the CR is patched manually",
 				"tenant", tenantID, "new_cell", cellID, "error", patchErr,
 				"manual_fix", fmt.Sprintf("kubectl -n %s patch tenant %s --type=merge -p '{\"spec\":{\"cellID\":%q}}'", p.mgmtNS, tenantID, cellID))
 		}
 	}
 	return prev, nil
+}
+
+// intPow computes base^exp for non-negative integers. KISS — only used by
+// the retry backoff above. Using math.Pow would force float64 conversion.
+func intPow(base, exp int) int {
+	r := 1
+	for i := 0; i < exp; i++ {
+		r *= base
+	}
+	return r
 }
 
 // patchTenantCR applies a strategic-merge patch to spec.cellID on the
