@@ -226,8 +226,16 @@ func (r *BuildReconcileLoop) failBuild(ctx context.Context, build *db.Build, rea
 		"build_id", build.ID, "reason", reason)
 
 	if onBuildFailed != nil {
+		// T6.4 of deep-review-remediation-plan (closes find_code_004 / CODE-004 MEDIUM).
+		// Use context.WithoutCancel(ctx) instead of context.Background():
+		// preserves request-scoped values (correlation ID, OTel trace span)
+		// across the goroutine boundary, but does NOT propagate cancellation
+		// from the inbound request (the callback must survive request close).
+		// Then add a 30s timeout cap. Pre-fix: trace context lost, OTel span
+		// for the callback was orphaned.
+		parentCtx := context.WithoutCancel(ctx)
 		go func() {
-			cbCtx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+			cbCtx, cancel := context.WithTimeout(parentCtx, 30*time.Second)
 			defer cancel()
 			onBuildFailed(cbCtx, build.TenantID, build.ProjectID, build.CommitSHA, build.ID)
 		}()

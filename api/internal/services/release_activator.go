@@ -197,9 +197,13 @@ func ActivateReleaseKernel(
 	}
 
 	// Step 7: Notify external systems (GitHub commit status, etc.)
+	// T6.4 of deep-review-remediation-plan (closes find_code_004 / CODE-004 MEDIUM).
+	// context.WithoutCancel preserves trace + correlation ID values but
+	// detaches cancellation so the callback survives request close.
 	if onReleaseActivated != nil {
+		parentCtx := context.WithoutCancel(ctx)
 		go func() {
-			cbCtx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+			cbCtx, cancel := context.WithTimeout(parentCtx, 30*time.Second)
 			defer cancel()
 			onReleaseActivated(cbCtx, release.TenantID, release.ProjectID, release.BuildID, release.Environment)
 		}()
