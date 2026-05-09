@@ -527,10 +527,19 @@ If FAIL: fix S0/S1, re-run cleanroom + dogfood.
 **TDD:** `TestEnvtest_CellAwareFactoryActuallyExercised()` — assert factory.Resolve called with non-default CellID at least once across suite.
 **DoD:** All 200+ envtest specs run with cell-aware factory wired (factory != nil); add coverage report to CI.
 
-### T1.3 — `routes/` type hub migration to `domain/` (find_arch_001 + find_dep_routes_type_hub)
+### T1.3 — `routes/` type hub migration to `domain/` (find_arch_001 + find_dep_routes_type_hub) ✅ DONE 2026-05-09
 **Files:** Move `AttestationInfo`, `BuildOrchestratorService`, `PreviewService`, `CreatePreviewRequest`, ~11 other types from `api/internal/routes/*.go` to `api/internal/domain/*.go`. Remove type aliases. Refactor 9 importers in services/db/k8s/loki/github.
 **TDD:** `TestImportGraph_RoutesIsLeaf()` — go vet check that no package outside routes/ imports types from routes/.
 **DoD:** `go vet ./...` passes; `go list -f '{{.Imports}}' ./api/internal/services/...` shows zero `routes` imports.
+
+**Status (commits 6b65554c + f425c409 + aa15d9e1):**
+- Migrated to `domain/`: LogEntry, LogQueryOpts, LogQuerier, StreamLogQuerier (`logs.go`); EnvironmentEntry, EnvironmentDetail, EnvProjectInfo, TenantCRSpec, TenantCRManager (`environments.go`); AttestationInfo, AttestationStore (`attestation.go`); CreatePreviewRequest + PreviewService interface + TenantID/SetTenantID methods (`preview_request.go`).
+- `routes/*.go` keeps `type X = domain.X` aliases for callsite-zero-churn.
+- `routes/preview.go` Create handler uses `body.SetTenantID(tenantID)` instead of cross-package private field assignment.
+- 6 production importers migrated: services/build_reconcile_loop.go, services/domain_health_checker.go, services/domain_provisioner.go, services/preview_service.go, services/project_deleter.go, github/preview_deploy.go (db/attestation_store.go, k8s/tenant_cr_manager.go, loki/client.go done in commit 6b65554c).
+- Test files keep `routes` imports — alias is structurally transparent so they continue to compile against the migrated types.
+- DoD validated: `go list -f '{{.Imports}}' ./internal/services/... ./internal/db/... ./internal/k8s/... ./internal/loki/... ./internal/github/...` shows ZERO `internal/routes` imports in production code.
+- `TestImportGraph_RoutesIsLeaf` (api/tests/unit/import_graph_test.go) RED-GREEN proven: drop a fake `_ "internal/routes"` import into services/ → test fails with clear DIP-violation message; remove it → test passes.
 
 > **DOCUMENT (EC-14):** This refactor touches 9 packages. To avoid merge conflicts during the review window, **freeze feature merges to `api/internal/{services,db,k8s,loki,github}/` for ~2 days** while T1.3 is in review. Coordinate via #engineering Slack channel + GitHub draft PR + an issue tagged `merge-freeze`.
 
