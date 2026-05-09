@@ -176,6 +176,8 @@ jobs:
           version: v3.14.4
 
       - name: Set up chart-testing
+        # pragma: allow-tag-pin
+        # TODO(T4.1 deep-review-remediation): Renovate Bot resolves to @<sha40> on first run.
         uses: helm/chart-testing-action@v2.6.1
 
       - name: ct lint
@@ -204,12 +206,16 @@ jobs:
 
       - name: Create Kind cluster K8s ${{ matrix.k8s-version }}
         # CONDITION-2: cache Kind images to keep CI ≤ 20min.
+        # pragma: allow-tag-pin
+        # TODO(T4.1 deep-review-remediation): Renovate Bot resolves to @<sha40> on first run.
         uses: helm/kind-action@v1.10.0
         with:
           cluster_name: chart-testing-${{ matrix.k8s-version }}
           node_image: kindest/node:${{ matrix.k8s-version }}
 
       - name: Set up chart-testing
+        # pragma: allow-tag-pin
+        # TODO(T4.1 deep-review-remediation): Renovate Bot resolves to @<sha40> on first run.
         uses: helm/chart-testing-action@v2.6.1
 
       - name: ct install (changed charts)
