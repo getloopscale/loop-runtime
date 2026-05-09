@@ -17,7 +17,8 @@ The deep-review-remediation plan engineering closure was validated end-to-end ag
 | Phase 3 — `tilt up` | ✅ PASS | API + 4 split operators + migrations boot clean |
 | Phase 4 — `task doctor` | ✅ PASS=38, FAIL=0 | All preflight gates green |
 | Phase 5 — Ginkgo `--label-filter=smoke` | ✅ 6/6 PASS in 2m40s | Solo Deploy + audit + delete |
-| Phase 6 — Ginkgo `--label-filter=journey` | 🟡 77/78 PASS in 44m9s (98.7%) | Single timing-related fail |
+| Phase 6 — Ginkgo `--label-filter=journey` | 🟡 77/78 PASS in 44m9s (98.7%) | Single timing-related fail (Journey 02 multi-server cold-start race) — fixed in commit `39d49f6c` (Eventually-poll for 90s) |
+| Phase 7 — Final journey suite (post-T2.4/T2.7/T3.2/T4.2/T7.3/T8.5b) | 🟡 93/95 PASS in 52m10s (97.9%) | Two fails: (1) `journey_logs --build-id` typo I introduced — fixed in commit `3c446801`; isolated re-run 3/3 PASS in 2m56s. (2) Journey 10 F3 broken-Dockerfile timed out at 10min in cumulative-load run — re-run in isolation 4/4 PASS in 3m56s. Both are non-regression operational artifacts. |
 
 **Fresh JUnit XML:** `/tmp/dogfood-journey-rerun-1778333752.xml`
 **Started:** 2026-05-09T13:35Z
