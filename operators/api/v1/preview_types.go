@@ -48,6 +48,20 @@ type PreviewEnvironmentSpec struct {
 	// +kubebuilder:validation:MinLength=1
 	ProjectID string `json:"projectId"`
 
+	// CellID is the multi-cell routing target for this preview environment.
+	// T1.1 of deep-review-remediation-plan (closes find_arch_002 HIGH):
+	// previously absent, causing PreviewController to route ALL preview
+	// workloads to the static RUNTIME_KUBECONFIG cell, ignoring the
+	// tenant's pinned cell. Cell-2 tenants' previews silently landed on
+	// cell-default — multi-cell isolation breach.
+	//
+	// When CellID is empty (legacy CRs created pre-T1.1), the controller
+	// falls back to tenant.Spec.CellID via tenant lookup. Going forward,
+	// the API submitting the CR sets CellID at creation time.
+	//
+	// +kubebuilder:validation:Optional
+	CellID string `json:"cellId,omitempty"`
+
 	// PRNumber is the pull request number that triggered this preview.
 	// +kubebuilder:validation:Minimum=1
 	PRNumber int `json:"prNumber"`

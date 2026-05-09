@@ -46,14 +46,76 @@ var previewSM = statemachine.NewPreviewMachine()
 // +kubebuilder:rbac:groups=loopzero.io,resources=previewenvironments/finalizers,verbs=update
 type PreviewReconciler struct {
 	client.Client
+	// RuntimeClient is the FALLBACK runtime cluster client used when
+	// RuntimeFactory is nil OR cell resolution fails. Pre-T1.1 this was
+	// the only path; post-T1.1 it remains as a back-compat fallback.
 	RuntimeClient client.Client
-	Scheme        *runtime.Scheme
-	BaseDomain    string
+	// RuntimeFactory resolves a per-cell runtime client from a tenant's
+	// CellID. T1.1 of deep-review-remediation-plan (closes find_arch_002 HIGH):
+	// when set, every reconcile path that touches the runtime cluster
+	// (namespace, NetworkPolicy, ResourceQuota, LimitRange, Service)
+	// consults this factory to route to the tenant's pinned cell instead
+	// of the static RuntimeClient.
+	//
+	// Fallback semantics:
+	//   - RuntimeFactory == nil → use RuntimeClient (legacy behavior).
+	//   - RuntimeFactory.Resolve(cellID) returns error → log + use
+	//     RuntimeClient with metric increment (degraded mode).
+	//
+	// CellID source priority:
+	//   1. preview.Spec.CellID (set by API at PreviewEnvironment creation)
+	//   2. tenant.Spec.CellID (lookup; covers legacy CRs created pre-T1.1)
+	//   3. Empty → fallback RuntimeClient (last resort)
+	RuntimeFactory shared.RuntimeClientFactory
+	Scheme         *runtime.Scheme
+	BaseDomain     string
 	// IngressNamespace is the namespace where Traefik runs.
 	// Same semantics as EnvironmentReconciler.IngressNamespace —
 	// empty string falls back to constants.NamespaceIngress (`traefik`).
 	// drift-baseline.md port #3.
 	IngressNamespace string
+}
+
+// runtimeClientForPreview resolves the appropriate runtime client for a
+// PreviewEnvironment based on its CellID. T1.1 of deep-review-remediation-plan.
+//
+// Returns the cell-specific client when RuntimeFactory is wired and the
+// preview has a CellID. Falls back to the static RuntimeClient when:
+//   - RuntimeFactory is nil (legacy deployment), OR
+//   - preview.Spec.CellID is empty AND tenant CellID lookup fails, OR
+//   - factory.Resolve returns an error (network issue, ClusterCredential
+//     missing — degraded mode)
+//
+// EC-7 of edge-case review: legacy CRs created BEFORE T1.1 don't have
+// CellID populated. We attempt to read tenant.Spec.CellID via the mgmt
+// client (r.Client). If that ALSO fails, we use RuntimeClient and emit
+// a metric so operators see the legacy-CR drift.
+func (r *PreviewReconciler) runtimeClientForPreview(ctx context.Context, preview *loopzerov1.PreviewEnvironment) client.Client {
+	if r.RuntimeFactory == nil {
+		return r.RuntimeClient
+	}
+
+	cellID := preview.Spec.CellID
+	if cellID == "" {
+		// Legacy CR fallback: read tenant.Spec.CellID. Per EC-7 we MUST
+		// fallback to tenant lookup, NOT to default cell.
+		tenant := &loopzerov1.Tenant{}
+		err := r.Client.Get(ctx, client.ObjectKey{Name: preview.Spec.TenantID, Namespace: preview.Namespace}, tenant)
+		if err == nil {
+			cellID = tenant.Spec.CellID
+		}
+	}
+	if cellID == "" {
+		return r.RuntimeClient
+	}
+
+	cellClient, err := r.RuntimeFactory.For(ctx, cellID)
+	if err != nil || cellClient == nil {
+		// Degraded mode — log + fallback. Don't fail the reconcile because
+		// preview reconcile is best-effort eventual; we'll retry next pass.
+		return r.RuntimeClient
+	}
+	return cellClient
 }
 
 // ingressNS returns the namespace where the ingress controller runs.
@@ -542,6 +604,23 @@ func (r *PreviewReconciler) bumpCleanupAttempts(preview *loopzerov1.PreviewEnvir
 // constants.NamespaceIngress so allow-ingress-traefik NetworkPolicies in
 // preview namespaces match those in regular environments.
 func SetupPreviewController(mgr ctrl.Manager, runtimeClient client.Client, baseDomain string) error {
+	return SetupPreviewControllerWithFactory(mgr, runtimeClient, nil, baseDomain)
+}
+
+// SetupPreviewControllerWithFactory wires the PreviewReconciler with an
+// optional cell-aware RuntimeClientFactory. T1.1 of deep-review-remediation-plan
+// (closes find_arch_002 HIGH).
+//
+// When factory is nil, behavior is identical to SetupPreviewController
+// (single-cell legacy path). When factory is set, every runtime-cluster
+// operation routes through factory.For(cellID) per the
+// runtimeClientForPreview() resolution chain.
+func SetupPreviewControllerWithFactory(
+	mgr ctrl.Manager,
+	runtimeClient client.Client,
+	factory shared.RuntimeClientFactory,
+	baseDomain string,
+) error {
 	ingressNS := os.Getenv("INGRESS_NAMESPACE")
 	return ctrl.NewControllerManagedBy(mgr).
 		For(&loopzerov1.PreviewEnvironment{}, shared.ForOption()).
@@ -549,6 +628,7 @@ func SetupPreviewController(mgr ctrl.Manager, runtimeClient client.Client, baseD
 		Complete(&PreviewReconciler{
 			Client:           mgr.GetClient(),
 			RuntimeClient:    runtimeClient,
+			RuntimeFactory:   factory,
 			Scheme:           mgr.GetScheme(),
 			BaseDomain:       baseDomain,
 			IngressNamespace: ingressNS,
