@@ -364,8 +364,19 @@ func (h *EnvtestHandle) ResetFakes() {
 }
 
 // DefaultTimeout is the standard Eventually timeout for split-tree envtest
-// specs. Mirrors the value used by the legacy monolith suite_test.go.
-const DefaultTimeout = 15 * time.Second
+// specs. Increased from 15s to 30s in fire 30 of deep-review-remediation
+// after observing intermittent flakes in TestPlatformControllers (the
+// CredentialsResolved condition reconcile occasionally exceeded the 15s
+// envelope under load — Princípio 7: flaky tests are bugs).
+//
+// Per CLAUDE.md global Princípio 7: "Testes devem ser determinísticos.
+// Se um teste falha intermitentemente (flaky), ele é um bug e deve ser
+// corrigido ou removido imediatamente."
+//
+// Increasing timeout is the conservative fix — doesn't mask logic bugs
+// (a missing reconcile would still timeout at 30s) but absorbs CI/host
+// scheduling jitter that produced the 15s flakes.
+const DefaultTimeout = 30 * time.Second
 
 // DefaultInterval is the standard Eventually polling interval.
 const DefaultInterval = 250 * time.Millisecond
