@@ -1,7 +1,15 @@
-# Infrastructure Restart — restart platform pods after new images are built.
+# Infrastructure Restart — promote new platform images to the cluster.
+#
+# T4.2 of deep-review-remediation-plan + ADR-0049 (immutable artifact promotion).
+# Pre-T4.2 this workflow relied on `kubectl rollout restart` against the
+# `:dev`/`:prod` MUTABLE tags, so two restarts back-to-back could land on
+# DIFFERENT image bytes (a tag race against build-images.yml). Now the
+# workflow resolves the exact `:sha` IMMUTABLE tag for the SHA being
+# promoted and uses `kubectl set image` — staging SHA == prod SHA after
+# promotion is now an arithmetic invariant, not an aspirational property.
 #
 # Triggered automatically after Build Images succeeds.
-# Verifies CI passed for the same SHA before restarting.
+# Verifies CI passed for the same SHA before promoting.
 # Resolves environment dynamically from the source branch.
 
 name: "Infra: Restart Pods"
@@ -97,6 +105,14 @@ jobs:
           doctl auth init --access-token "$DIGITALOCEAN_TOKEN"
 
       - name: Restart deployments
+        env:
+          # T4.2 + ADR-0049: pin to the exact :sha that just built. The
+          # workflow_run event provides head_sha (40-char); build-images.yml
+          # tags as the 7-char short SHA, so we slice here. Set image is
+          # the canonical promotion path — kubectl rollout restart against
+          # mutable :dev/:prod is preserved for emergency manual rollback
+          # only (per ADR-0049).
+          SHA_FULL: ${{ github.event.workflow_run.head_sha }}
         run: |
           PATTERN="${{ needs.resolve.outputs.pattern }}"
           CLUSTER=$(doctl kubernetes cluster list --no-header --format Name | grep "${PATTERN}.*mgmt" | head -1)
@@ -107,12 +123,32 @@ jobs:
 
           doctl kubernetes cluster kubeconfig save "$CLUSTER"
 
+          # The 7-char short SHA tag is what build-images.yml writes (line ~187 of that workflow).
+          SHA="${SHA_FULL:0:7}"
+          REGISTRY="registry.digitalocean.com/loopzero-infra-registry"
+          echo "Promoting deployments to immutable :${SHA} tags (registry=${REGISTRY})"
+
+          # Map: deployment-name -> container-name -> image-name (matches charts/loopzero-*).
+          # Some deployments use a different container name than the deploy.
+          declare -A CONTAINER_IMAGE=(
+            ["loopzero-api"]="loopzero-api:loopzero-api"
+            ["tenant-operator"]="manager:loopzero-tenant-operator"
+            ["app-operator"]="manager:loopzero-app-operator"
+            ["preview-operator"]="manager:loopzero-preview-operator"
+            ["platform-operator"]="manager:loopzero-platform-operator"
+            ["loopzero-cloud"]="loopzero-cloud:loopzero-cloud"
+            ["loopzero-dashboard"]="loopzero-dashboard:loopzero-dashboard"
+          )
+
           START=$(date +%s)
-          for deploy in loopzero-api tenant-operator app-operator preview-operator platform-operator loopzero-cloud loopzero-dashboard; do
-            if kubectl get deploy "$deploy" -n loopzero-system >/dev/null 2>&1; then
-              kubectl rollout restart deploy "$deploy" -n loopzero-system
-              echo "Restarted: $deploy"
+          for deploy in "${!CONTAINER_IMAGE[@]}"; do
+            if ! kubectl get deploy "$deploy" -n loopzero-system >/dev/null 2>&1; then
+              continue
             fi
+            IFS=':' read -r CONTAINER IMAGE <<<"${CONTAINER_IMAGE[$deploy]}"
+            FULL_REF="${REGISTRY}/${IMAGE}:${SHA}"
+            kubectl set image deploy "$deploy" "${CONTAINER}=${FULL_REF}" -n loopzero-system
+            echo "Promoted: $deploy ($CONTAINER → $FULL_REF)"
           done
 
           echo "Waiting for rollouts..."
