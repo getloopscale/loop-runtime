@@ -343,7 +343,7 @@ VERIFY:  cd api && go test ./tests/unit/ -run TestSecret -v
 
 ---
 
-### T1.2 — PreviewService: Add Environment Lock
+### T1.2 — PreviewService: Add Environment Lock ✅ DONE 2026-05-10
 
 #### Files to edit
 ```
@@ -548,7 +548,7 @@ VERIFY:  cd api && go test ./tests/unit/ -run TestAdmin -v
 
 ---
 
-### T2.2 — Bundle SHA256 Digest (per ADR D4)
+### T2.2 — Bundle SHA256 Digest (per ADR D4) ✅ DONE 2026-05-10
 
 #### Files to edit
 ```
@@ -705,7 +705,7 @@ VERIFY:  cd cli && npm test -- --testPathPattern=deploy
 
 ---
 
-### T4.2 — Error Shape: Migrate 4 Route Files to LoopZeroError
+### T4.2 — Error Shape: Migrate 4 Route Files to LoopZeroError ✅ DONE 2026-05-10
 
 #### Files to edit
 ```
@@ -758,28 +758,28 @@ VERIFY:  cd api && go test ./internal/services/ -run TestTick -v
 
 **Objective:** Refatorações menores para qualidade de código.
 
-### T5.1 — App Controller: Remove Deferred Status().Update
+### T5.1 — App Controller: Remove Deferred Status().Update ✅ DONE 2026-05-10
 Remove defer block (lines 91-101), fold `SetReadinessSummaryViaPkg` before explicit Patch.
 
-### T5.2 — Billing.go: Extract to billing_store.go
+### T5.2 — Billing.go: Extract to billing_store.go ✅ DONE 2026-05-10
 Create `api/internal/db/billing_store.go` with `FetchPlan` and `FetchStripeCustomerID`.
 
-### T5.3 — Cell Pinner: Extract TenantCRPatcher Interface
+### T5.3 — Cell Pinner: Extract TenantCRPatcher Interface ✅ DONE 2026-05-10
 Replace `dynamic.Interface` in `cell_pinner.go` with injected `TenantCRPatcher` interface.
 
-### T5.4 — Framework Allowlist: Single Source
+### T5.4 — Framework Allowlist: Single Source ✅ DONE 2026-05-10
 Export `SupportedFrameworks()` from `argo/languages.go`, call from `routes/builds.go`.
 
-### T5.5 — Sync Retrigger: Atomic Increment
+### T5.5 — Sync Retrigger: Atomic Increment ✅ DONE 2026-05-10
 Replace `LoadOrStore`/`Store` with `sync.Map` of `*atomic.Int32`.
 
-### T5.6 — deploy.completed: Add Retry
+### T5.6 — deploy.completed: Add Retry ✅ DONE 2026-05-10
 3-attempt retry with 100ms backoff for `eventStore.Append("deploy.completed")`.
 
-### T5.7 — Move Error Sentinels to pkg/errors
+### T5.7 — Move Error Sentinels to pkg/errors ✅ DONE 2026-05-10
 Move `ErrTenantNotFound` etc from `services/` to `pkg/errors`. Update import in `routes/admin_pin_cell.go`.
 
-### T5.8 — RLS: Separate Internal Role (Deferred to Sprint 9)
+### T5.8 — RLS: Separate Internal Role (Deferred to Sprint 9) 🟡 SPRINT-9 SCOPE BY PLAN DESIGN
 Document as backlog. Requires Pulumi + managed PG role provisioning changes.
 
 ---
