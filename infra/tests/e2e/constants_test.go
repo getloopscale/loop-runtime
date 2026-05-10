@@ -33,7 +33,14 @@ const (
 	probeTimeout = httpProbeTimeout
 
 	// cleanupTimeout is the maximum time to wait for resource cleanup (Prova de Morte).
-	cleanupTimeout = 5 * time.Minute
+	// 2026-05-09: bumped 5min → 10min after pristine cleanroom journey suite
+	// surfaced 5 false-fails ("Prova de Morte: resources still exist"). The
+	// cleanup pipeline (project delete → ArgoCD prune → finalizer drain) is
+	// genuinely slow on cold-start: no warm controller cache, no pre-pulled
+	// images for the prune controllers, ArgoCD repo-server cold deserialize.
+	// 10min absorbs the slowest observed convergence (~7min for full
+	// namespace + rollout + traefikservice prune in pristine cluster).
+	cleanupTimeout = 10 * time.Minute
 
 	// cliCommandTimeout is the maximum time for a non-deploy CLI command.
 	cliCommandTimeout = 30 * time.Second
@@ -51,7 +58,10 @@ const (
 	releasePollInterval = 5 * time.Second
 
 	// releaseActiveTimeout is the maximum time to wait for a release to become ACTIVE.
-	releaseActiveTimeout = 3 * time.Minute
+	// 2026-05-09: bumped 3min → 6min after Journey 06 rollback v1-active assertion
+	// timed out in pristine cleanroom (release was created but convergence loop
+	// hadn't fast-pathed it yet). 6min absorbs cleanroom controller cold-start.
+	releaseActiveTimeout = 6 * time.Minute
 )
 
 // --- Forbidden Internal Terms (Rule 3, CLAUDE.md) ---
