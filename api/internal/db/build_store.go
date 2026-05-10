@@ -43,6 +43,12 @@ type Build struct {
 	DurationSeconds *int            `json:"duration_seconds,omitempty"`
 	WorkflowID      string          `json:"workflow_id,omitempty"`
 	AppsSpec        json.RawMessage `json:"apps_spec,omitempty"` // App specs from submission (name, type, port, secrets)
+	// BundleDigest is the SHA256 hex of the source bundle uploaded by the
+	// CLI. Computed at upload time + verified by the clone-runner workflow
+	// step. T2.2 of deep-review-2026-05-10-remediation-plan
+	// (find_sec_no_bundle_integrity HIGH). Nullable for backward compat
+	// with pre-T2.2 builds.
+	BundleDigest    string          `json:"bundle_digest,omitempty"`
 }
 
 // BuildAppSpec is a single app spec stored at build submission time.
