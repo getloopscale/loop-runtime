@@ -46,7 +46,9 @@ INVARIANTS = [
     # runtime cluster
     ("runtime-cert-manager", "runtime-traefik"),
     ("runtime-cert-manager", "runtime-policy-controller"),
-    ("runtime-policy-controller", "runtime-admission-policies"),
+    # T3.4 of deep-review-2026-05-10-remediation-plan: runtime-admission-policies
+    # removed — Helmfile L2 is the sole owner of admission-policies (was
+    # dual-owned by ArgoCD + Helmfile, causing reconcile thrash).
     ("runtime-keda", "runtime-keda-http-addon"),
     ("runtime-traefik", "runtime-cluster-issuer"),
     # build cluster
