@@ -10,6 +10,7 @@ import (
 	"log/slog"
 	"strings"
 	"sync"
+	"sync/atomic"
 	"time"
 
 	"github.com/loopzero/loopzero/api/internal/db"
@@ -461,13 +462,21 @@ const maxSyncRetriggers = 3
 // sync operation in ArgoCD. With manual sync policy, a failed initial TriggerSync
 // means ArgoCD will never auto-sync from Gitea, leaving the release stuck.
 // MEET-2026-03-31-023 T1-5.
+//
+// T5.5 of deep-review-2026-05-10-remediation-plan (find_arch_sync_retrigger_race MEDIUM):
+// pre-T5.5 the counter pattern was LoadOrStore(0) → read → Store(count+1).
+// Two concurrent reconciliations of the same release could both read 0
+// then both Store(1), losing one increment. Now we use atomic.Int32 via
+// LoadOrStore (returning the SAME pointer for repeat lookups) and
+// `(*atomic.Int32).Add(1)` so concurrent increments are serialized.
 func (r *ReleaseConvergenceLoop) retriggerSyncIfNeeded(ctx context.Context, release *db.Release, argoAppName string) {
-	// Check retrigger count
-	val, _ := r.syncRetriggers.LoadOrStore(release.ID, 0)
-	count := val.(int)
-	if count >= maxSyncRetriggers {
+	// Atomic counter: LoadOrStore returns the existing *atomic.Int32 (or
+	// the freshly-stored one) so subsequent goroutines hit the same cell.
+	loaded, _ := r.syncRetriggers.LoadOrStore(release.ID, new(atomic.Int32))
+	counter := loaded.(*atomic.Int32)
+	if counter.Load() >= int32(maxSyncRetriggers) {
 		r.logger.Warn("release convergence: max sync retriggers reached",
-			"release_id", release.ID, "retriggers", count)
+			"release_id", release.ID, "retriggers", counter.Load())
 		return
 	}
 
@@ -478,9 +487,9 @@ func (r *ReleaseConvergenceLoop) retriggerSyncIfNeeded(ctx context.Context, rele
 		return
 	}
 
-	r.syncRetriggers.Store(release.ID, count+1)
+	attempt := counter.Add(1)
 	r.logger.Info("release convergence: retriggered sync for stalled release",
-		"release_id", release.ID, "app", argoAppName, "attempt", count+1)
+		"release_id", release.ID, "app", argoAppName, "attempt", attempt)
 }
 
 // healthCheckActiveReleases checks ACTIVE releases against ArgoCD health.
