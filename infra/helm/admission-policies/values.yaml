@@ -23,16 +23,17 @@ registries:
 clusterImagePolicy:
   enabled: true
   name: loopzero-images-warn
-  # T8.6 of deep-review-remediation-plan (find_infra_008 LOW, Sprint 9 scope).
+  # T0.5 of deep-review-2026-05-10-remediation-plan (find_infra_008 CRITICAL).
+  # ADR-0050 (2026-05-10): flip default warn → enforce. Production
+  # (prod.yaml) retains `policyMode: warn` until Sprint 9 readiness
+  # review delivers cosign keyless + 7-day dual-signing window.
   #
   # Mode flip is gated by infra/scripts/check_clusterimagepolicy_mode.sh
-  # which fails CI if mode != "warn" without an accompanying ADR document.
-  # The deny-flip itself is Sprint 9 scope per plan body — this gate
-  # ensures no PR silently flips it.
+  # which now recognizes ADR-0050 as the bypass reference.
   #
-  # warn    — log audit, admit (Sprint 6 default)
-  # enforce — reject unsigned images (Sprint 9 cosign keyless cutover)
-  mode: warn
+  # warn    — log audit, admit
+  # enforce — reject unsigned images (current default — local + dev)
+  mode: enforce
   # static action when no signature can be verified yet
   staticAction: pass
   imageGlobs:
