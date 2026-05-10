@@ -87,18 +87,15 @@ func (r *ApplicationReconciler) Reconcile(ctx context.Context, req ctrl.Request)
 		return ctrl.Result{}, err
 	}
 
-	// kstatus universal per ADR-0025 D3 condition #1.
-	defer func() {
-		latest := &loopzerov1.LoopZeroApplication{}
-		if err := r.Get(ctx, req.NamespacedName, latest); err != nil {
-			return
-		}
-		if !latest.DeletionTimestamp.IsZero() {
-			return
-		}
-		conditions.SetReadinessSummaryViaPkg(&latest.Status.Conditions, latest.Generation, applicationDetailTypes)
-		_ = r.Status().Update(ctx, latest)
-	}()
+	// T5.1 of deep-review-2026-05-10-remediation-plan
+	// (find_arch_app_controller_double_write MEDIUM): the deferred
+	// Status().Update was an "always-overwrite at end of reconcile" that
+	// raced with the explicit `Status().Patch` at line ~153 — both wrote
+	// to .status.conditions on the same generation, producing flapping
+	// in the audit log + occasional 409 conflicts.
+	//
+	// kstatus universal per ADR-0025 D3 condition #1 is now folded into
+	// computedStatus BEFORE the explicit Patch (single write per pass).
 
 	if !app.DeletionTimestamp.IsZero() {
 		return r.reconcileDelete(ctx, &app)
@@ -150,6 +147,9 @@ func (r *ApplicationReconciler) Reconcile(ctx context.Context, req ctrl.Request)
 	// MergeFrom captures the clean base; then we mutate status and patch.
 	patch := client.MergeFrom(app.DeepCopy())
 	app.Status = *computedStatus
+	// T5.1: fold kstatus readiness summary BEFORE the explicit Patch so
+	// the deferred Status().Update is no longer needed (single write per pass).
+	conditions.SetReadinessSummaryViaPkg(&app.Status.Conditions, app.Generation, applicationDetailTypes)
 	if err := r.Status().Patch(ctx, &app, patch); err != nil {
 		return ctrl.Result{}, fmt.Errorf("patching application status: %w", err)
 	}

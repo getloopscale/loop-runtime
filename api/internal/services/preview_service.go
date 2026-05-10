@@ -64,6 +64,12 @@ type PreviewServiceDeps struct {
 	BaseDomain     string
 	DefaultTTL     time.Duration
 	Logger         *slog.Logger
+	// Locker is optional — when set, CreatePreview wraps the Store/CR
+	// write path in `pg_advisory_xact_lock(tenant, project, branch)` so a
+	// rapid double-webhook for the same PR cannot race into two preview
+	// rows. T1.2 of deep-review-2026-05-10-remediation-plan
+	// (find_conc_preview_no_lock HIGH).
+	Locker         EnvironmentLocker
 }
 
 // PreviewService implements domain.PreviewService and, additionally,
@@ -138,8 +144,24 @@ func (s *PreviewService) CreatePreview(ctx context.Context, req domain.CreatePre
 	}
 
 	// Step 2: persist. Create() runs UPSERT semantics for repeat PR pushes.
-	if err := s.deps.Store.Create(ctx, nil, rec); err != nil {
-		return nil, fmt.Errorf("preview service: persist failed: %w", err)
+	//
+	// T1.2 of deep-review-2026-05-10-remediation-plan: wrap the persist
+	// in the environment lock when a Locker is wired. Lock key uses the
+	// branch as the env equivalent — concurrent webhooks for different
+	// PRs (different branches) of the same project run in parallel; the
+	// same PR re-firing serializes. Falls back to non-locked path when
+	// Locker is nil (test scope).
+	persist := func(_ db.DBTX) error {
+		return s.deps.Store.Create(ctx, nil, rec)
+	}
+	var persistErr error
+	if s.deps.Locker != nil {
+		persistErr = s.deps.Locker.WithLock(ctx, req.TenantID(), req.ProjectID, req.Branch, persist)
+	} else {
+		persistErr = persist(nil)
+	}
+	if persistErr != nil {
+		return nil, fmt.Errorf("preview service: persist failed: %w", persistErr)
 	}
 
 	// Step 3: ensure CR. Best-effort.

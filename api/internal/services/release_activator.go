@@ -196,8 +196,25 @@ func ActivateReleaseKernel(
 		"duration_seconds": durationSecs,
 		"apps":             appResults,
 	})
-	if _, err := eventStore.Append(ctx, release.BuildID, "deploy.completed", completedData); err != nil {
-		logger.Error("activate release: failed to emit deploy.completed", "release_id", release.ID, "error", err)
+	// T5.6 of deep-review-2026-05-10-remediation-plan (find_event_completed_swallowed MEDIUM):
+	// `deploy.completed` is the event the CLI waits on — a single emit
+	// failure means the CLI hangs until the deploy timeout. 3 attempts
+	// with 100ms backoff covers the typical "transient lock contention"
+	// failure mode without adding meaningful tail latency.
+	for attempt := 1; attempt <= 3; attempt++ {
+		_, err := eventStore.Append(ctx, release.BuildID, "deploy.completed", completedData)
+		if err == nil {
+			break
+		}
+		logger.Error("activate release: failed to emit deploy.completed",
+			"release_id", release.ID, "attempt", attempt, "error", err)
+		if attempt < 3 {
+			select {
+			case <-ctx.Done():
+				return ctx.Err()
+			case <-time.After(100 * time.Millisecond):
+			}
+		}
 	}
 
 	// Step 7: Notify external systems (GitHub commit status, etc.)
