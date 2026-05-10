@@ -36,8 +36,13 @@ type LogBuild struct {
 }
 
 // LogBuildStore abstracts build lookup for the logs handler (DIP).
+//
+// T0.4 of deep-review-2026-05-10-remediation-plan: GetByIDForTenant is the
+// canonical scoping mechanism. GetByID is kept for backward compatibility
+// of intermediate adapters but new HTTP handlers MUST use the scoped form.
 type LogBuildStore interface {
 	GetByID(ctx context.Context, buildID string) (*LogBuild, error)
+	GetByIDForTenant(ctx context.Context, tenantID, buildID string) (*LogBuild, error)
 }
 
 // logsResponse is the JSON response for GET /api/v1/builds/{id}/logs.
@@ -77,12 +82,14 @@ func (h *LogsHandler) Get(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// Verify build exists and enforce tenant isolation
-	build, err := h.builds.GetByID(r.Context(), buildID)
+	build, err := h.builds.GetByIDForTenant(r.Context(), uc.TenantID, buildID)
 	if err != nil {
 		writeLoopZeroError(w, loopzeroerrors.ErrInternalError)
 		return
 	}
-	if build == nil || build.TenantID != uc.TenantID {
+	// T0.4: tenant filter is now at DB level — build==nil means NotFound
+	// OR cross-tenant access (indistinguishable to the caller by design).
+	if build == nil {
 		writeLoopZeroError(w, loopzeroerrors.ErrBuildNotFound)
 		return
 	}

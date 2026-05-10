@@ -62,7 +62,10 @@ serviceMonitor:
   labels: {}
 
 env:
-  LOOPZERO_API_PORT: "8080"
+  # T0.3 of deep-review-2026-05-10-remediation-plan (CRITICAL find_infra_port):
+  # `LOOPZERO_API_PORT` was DEAD — the Go binary never read it. `service.port=3001`
+  # is the canonical port. Setting it to "8080" here was misleading and
+  # surfaced as a finding in the deep review. Removed entirely.
   LOOPZERO_LOG_LEVEL: "info"
   LOOPZERO_CLUSTER_ISSUER: "letsencrypt-prod"
 

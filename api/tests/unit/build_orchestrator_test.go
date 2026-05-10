@@ -63,6 +63,19 @@ func (f *fakeBuildStoreOrch) GetByID(ctx context.Context, id string) (*db.Build,
 	return &copy, nil
 }
 
+// GetByIDForTenant — T0.4 of deep-review-2026-05-10-remediation-plan.
+// Emulates the production SQL filter for the unit-test scope.
+func (f *fakeBuildStoreOrch) GetByIDForTenant(ctx context.Context, tenantID, buildID string) (*db.Build, error) {
+	b, err := f.GetByID(ctx, buildID)
+	if err != nil || b == nil {
+		return b, err
+	}
+	if b.TenantID != tenantID {
+		return nil, nil
+	}
+	return b, nil
+}
+
 func (f *fakeBuildStoreOrch) HasActiveBuild(ctx context.Context, tx db.DBTX, tenantID, projectID, env string) (bool, error) {
 	return f.activeBuild, nil
 }

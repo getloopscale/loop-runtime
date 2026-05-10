@@ -24,6 +24,19 @@ func (f *fakeBuildStoreDeleter) Create(_ context.Context, _ db.DBTX, _ *db.Build
 func (f *fakeBuildStoreDeleter) GetByID(_ context.Context, _ string) (*db.Build, error) {
 	return nil, nil
 }
+
+// GetByIDForTenant — T0.4 of deep-review-2026-05-10-remediation-plan.
+// Emulates the production SQL filter for the unit-test scope.
+func (f *fakeBuildStoreDeleter) GetByIDForTenant(ctx context.Context, tenantID, buildID string) (*db.Build, error) {
+	b, err := f.GetByID(ctx, buildID)
+	if err != nil || b == nil {
+		return b, err
+	}
+	if b.TenantID != tenantID {
+		return nil, nil
+	}
+	return b, nil
+}
 func (f *fakeBuildStoreDeleter) HasActiveBuild(_ context.Context, _ db.DBTX, _, _, _ string) (bool, error) {
 	return false, nil
 }

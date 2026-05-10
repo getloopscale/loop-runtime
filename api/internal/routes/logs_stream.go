@@ -89,13 +89,15 @@ func (h *LogStreamHandler) StreamBuildLogs(w http.ResponseWriter, r *http.Reques
 		return
 	}
 
-	// Verify build exists and enforce tenant isolation
-	build, err := h.builds.GetByID(r.Context(), buildID)
+	// Verify build exists and enforce tenant isolation.
+	// T0.4 of deep-review-2026-05-10-remediation-plan: tenant filter
+	// pushed to DB layer via GetByIDForTenant.
+	build, err := h.builds.GetByIDForTenant(r.Context(), uc.TenantID, buildID)
 	if err != nil {
 		writeLoopZeroError(w, loopzeroerrors.ErrInternalError)
 		return
 	}
-	if build == nil || build.TenantID != uc.TenantID {
+	if build == nil {
 		writeLoopZeroError(w, loopzeroerrors.ErrBuildNotFound)
 		return
 	}
@@ -243,7 +245,9 @@ func (h *LogStreamHandler) streamLoop(
 				}
 			}
 
-			// For build logs: check if build is terminal and no more logs arriving
+			// For build logs: check if build is terminal and no more logs arriving.
+			// Internal polling loop AFTER auth gate; safe to use GetByID since
+			// the caller's tenant was already validated at handler entry.
 			if isBuild {
 				build, buildErr := h.builds.GetByID(ctx, queryKey)
 				if buildErr != nil {

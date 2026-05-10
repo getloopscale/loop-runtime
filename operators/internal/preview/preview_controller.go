@@ -250,7 +250,8 @@ func (r *PreviewReconciler) reconcileCreating(ctx context.Context, preview *loop
 			},
 		},
 	}
-	if _, err := controllerutil.CreateOrUpdate(ctx, r.RuntimeClient, ns, func() error {
+	rtClient := r.runtimeClientForPreview(ctx, preview)
+	if _, err := controllerutil.CreateOrUpdate(ctx, rtClient, ns, func() error {
 		ns.Labels["pod-security.kubernetes.io/enforce"] = "restricted"
 		ns.Labels["pod-security.kubernetes.io/warn"] = "restricted"
 		return nil
@@ -512,12 +513,16 @@ func (r *PreviewReconciler) reconcileDelete(ctx context.Context, preview *loopze
 	}
 
 	// Phase 1 — namespace deletion attempt.
+	// T0.1 of deep-review-2026-05-10-remediation-plan (find_arch_002):
+	// route namespace ops through the cell-aware client so multi-cell
+	// previews land in the correct workload cluster.
+	rtClient := r.runtimeClientForPreview(ctx, preview)
 	ns := &corev1.Namespace{}
-	getErr := r.RuntimeClient.Get(ctx, client.ObjectKey{Name: nsName}, ns)
+	getErr := rtClient.Get(ctx, client.ObjectKey{Name: nsName}, ns)
 	if getErr == nil {
 		// Namespace still exists.
 		if ns.DeletionTimestamp.IsZero() {
-			delErr := r.RuntimeClient.Delete(ctx, ns)
+			delErr := rtClient.Delete(ctx, ns)
 			if delErr != nil && !errors.IsNotFound(delErr) {
 				attempts := r.bumpCleanupAttempts(preview)
 				logger.Error(delErr, "preview cleanup: namespace delete failed",

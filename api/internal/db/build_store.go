@@ -72,7 +72,17 @@ type BuildAppSpec struct {
 //   - build_store_reconcile.go: FindActiveBuilds, CancelActiveBuilds
 type BuildStore interface {
 	Create(ctx context.Context, tx DBTX, build *Build) error
+	// GetByID returns a build by ID with NO tenant filter. Reserved for
+	// internal callers (convergence loops, reaper, domain_provisioner) that
+	// have already authenticated via a different gate.
+	//
+	// HTTP handlers MUST NOT call GetByID — use GetByIDForTenant instead.
+	// T0.4 of deep-review-2026-05-10-remediation-plan (find_sec_idor_buildstore).
 	GetByID(ctx context.Context, id string) (*Build, error)
+	// GetByIDForTenant is the tenant-scoped variant. Returns ErrBuildNotFound
+	// when the build exists but belongs to a different tenant — closing the
+	// IDOR vector that handler-level checks left as a single point of failure.
+	GetByIDForTenant(ctx context.Context, tenantID, id string) (*Build, error)
 	HasActiveBuild(ctx context.Context, tx DBTX, tenantID, projectID, env string) (bool, error)
 	UpdateStatus(ctx context.Context, tx DBTX, id string, event string) (*Build, error)
 	SetErrorMessage(ctx context.Context, tx DBTX, id string, errorMessage string) error
@@ -125,6 +135,9 @@ func (s *PostgresBuildStore) Create(ctx context.Context, tx DBTX, build *Build) 
 
 // GetByID retrieves a build by its ID.
 // Returns ErrBuildNotFound if the build does not exist.
+//
+// HTTP handlers MUST use GetByIDForTenant — see T0.4 of
+// deep-review-2026-05-10-remediation-plan (find_sec_idor_buildstore).
 func (s *PostgresBuildStore) GetByID(ctx context.Context, buildID string) (*Build, error) {
 	return s.scanBuild(s.db.QueryRow(ctx,
 		`SELECT id, tenant_id, project_id, environment, status, COALESCE(commit_sha, ''),
@@ -132,6 +145,19 @@ func (s *PostgresBuildStore) GetByID(ctx context.Context, buildID string) (*Buil
 		        COALESCE(error_message, ''), duration_seconds, COALESCE(workflow_id, '')
 		 FROM builds WHERE id = $1`,
 		buildID,
+	))
+}
+
+// GetByIDForTenant retrieves a build by ID scoped to a tenant.
+// Returns ErrBuildNotFound when the build exists but the tenant_id does
+// not match — closing the IDOR vector at the DB layer (find_sec_idor_buildstore).
+func (s *PostgresBuildStore) GetByIDForTenant(ctx context.Context, tenantID, buildID string) (*Build, error) {
+	return s.scanBuild(s.db.QueryRow(ctx,
+		`SELECT id, tenant_id, project_id, environment, status, COALESCE(commit_sha, ''),
+		        correlation_id, created_by, created_at, started_at, finished_at,
+		        COALESCE(error_message, ''), duration_seconds, COALESCE(workflow_id, '')
+		 FROM builds WHERE id = $1 AND tenant_id = $2`,
+		buildID, tenantID,
 	))
 }
 

@@ -194,7 +194,14 @@ func (r *ReleaseConvergenceLoop) tick(ctx context.Context) {
 					<-r.sem
 					r.active.Delete(release.ID)
 					if r.pgDedup != nil {
-						r.pgDedup.Release(ctx, "releases", release.ID)
+						// T0.2 of deep-review-2026-05-10-remediation-plan
+						// (CRITICAL): use independent context for cleanup so
+						// graceful shutdown (parent ctx cancelled) cannot
+						// orphan the pgDedup claim. 5s is generous for a
+						// single DELETE against PG.
+						cleanupCtx, cleanupCancel := context.WithTimeout(context.Background(), 5*time.Second)
+						defer cleanupCancel()
+						r.pgDedup.Release(cleanupCtx, "releases", release.ID)
 					}
 				}()
 				r.verifyRelease(ctx, &release)

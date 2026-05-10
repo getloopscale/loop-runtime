@@ -119,6 +119,19 @@ func (f *fakeBuildStoreWithError) GetByID(_ context.Context, _ string) (*db.Buil
 	return nil, f.err
 }
 
+// GetByIDForTenant — T0.4 of deep-review-2026-05-10-remediation-plan.
+// Emulates the production SQL filter for the unit-test scope.
+func (f *fakeBuildStoreWithError) GetByIDForTenant(ctx context.Context, tenantID, buildID string) (*db.Build, error) {
+	b, err := f.GetByID(ctx, buildID)
+	if err != nil || b == nil {
+		return b, err
+	}
+	if b.TenantID != tenantID {
+		return nil, nil
+	}
+	return b, nil
+}
+
 // --- LogBuildStoreAdapter error ---
 
 func TestLogBuildStoreAdapter_GetByID_Error(t *testing.T) {

@@ -43,6 +43,26 @@ func (a *LogBuildStoreAdapter) GetByID(ctx context.Context, id string) (*routes.
 	if err != nil {
 		return nil, err
 	}
+	if build == nil {
+		return nil, nil
+	}
+	return &routes.LogBuild{
+		ID:       build.ID,
+		TenantID: build.TenantID,
+		Status:   build.Status,
+	}, nil
+}
+
+// GetByIDForTenant routes to the tenant-scoped DB query — T0.4 of
+// deep-review-2026-05-10-remediation-plan (find_sec_idor_buildstore).
+func (a *LogBuildStoreAdapter) GetByIDForTenant(ctx context.Context, tenantID, id string) (*routes.LogBuild, error) {
+	build, err := a.Store.GetByIDForTenant(ctx, tenantID, id)
+	if err != nil {
+		return nil, err
+	}
+	if build == nil {
+		return nil, nil
+	}
 	return &routes.LogBuild{
 		ID:       build.ID,
 		TenantID: build.TenantID,

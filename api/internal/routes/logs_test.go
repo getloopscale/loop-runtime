@@ -23,6 +23,24 @@ func (f *fakeLogBuildStore) GetByID(_ context.Context, _ string) (*LogBuild, err
 	return f.build, f.err
 }
 
+// GetByIDForTenant — T0.4 of deep-review-2026-05-10-remediation-plan.
+// Emulates the production SQL filter (WHERE id=$1 AND tenant_id=$2):
+// returns nil when the build belongs to a different tenant. Unit tests
+// that set build.TenantID to a different value than the auth context
+// rely on this filter for the cross-tenant 404 path.
+func (f *fakeLogBuildStore) GetByIDForTenant(_ context.Context, tenantID, _ string) (*LogBuild, error) {
+	if f.err != nil {
+		return nil, f.err
+	}
+	if f.build == nil {
+		return nil, nil
+	}
+	if f.build.TenantID != tenantID {
+		return nil, nil
+	}
+	return f.build, nil
+}
+
 // --- Fake LogQuerier ---
 
 type fakeLogQuerier struct {
