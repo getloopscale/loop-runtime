@@ -89,16 +89,24 @@ func (rl *RateLimiter) Allow(key string) bool {
 	return true
 }
 
-// Middleware returns HTTP middleware that rate-limits by tenant ID.
+// Middleware returns HTTP middleware that rate-limits by tenant:user composite key.
 // Unauthenticated requests are keyed as "anonymous".
 // Returns 429 Too Many Requests with a Retry-After header when the limit is exceeded.
+//
+// T2.3 of deep-review-2026-05-10-remediation-plan (find_sec_ratelimit_per_tenant MEDIUM):
+// per-tenant keys let a single noisy user in a Team/Enterprise tenant
+// exhaust the bucket for everyone in the same org. Composite key
+// (tenantID:userID) gives per-user isolation without weakening the
+// tenant-level invariant — the limit per user is still the same, so the
+// aggregate per-tenant cap is N×users (intentional: paid plans buy more
+// burst headroom).
 func (rl *RateLimiter) Middleware() func(http.Handler) http.Handler {
 	return func(next http.Handler) http.Handler {
 		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 			uc := GetUserContext(r.Context())
 			key := "anonymous"
 			if uc != nil {
-				key = uc.TenantID
+				key = uc.TenantID + ":" + uc.UserID
 			}
 			if !rl.Allow(key) {
 				w.Header().Set("Content-Type", "application/json")

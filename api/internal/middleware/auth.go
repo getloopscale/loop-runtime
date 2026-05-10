@@ -11,6 +11,7 @@ import (
 	"encoding/json"
 	"errors"
 	"net/http"
+	"os"
 	"strings"
 	"sync"
 	"sync/atomic"
@@ -146,6 +147,49 @@ func ValidateAdminAPIKey(provided string) bool {
 	prev := AdminAPIKeyPrevious != "" &&
 		subtle.ConstantTimeCompare([]byte(provided), []byte(AdminAPIKeyPrevious)) == 1
 	return current || prev
+}
+
+// RequireAdminService is a middleware that requires a valid service-auth
+// secret in the X-Service-Auth header for ALL /api/v1/admin/* operations.
+//
+// T2.1 of deep-review-2026-05-10-remediation-plan (find_sec_admin_secrets_divergent HIGH):
+// pre-T2.1 admin_pin_cell.go + admin_evict.go each inlined their own
+// subtle.ConstantTimeCompare reading TWO different env vars
+// (LOOPZERO_ADMIN_SERVICE_AUTH_SECRET vs LOOPZERO_SERVICE_AUTH_SECRET). The
+// divergence made the secret impossible to audit/rotate consistently —
+// this middleware enforces a single auth gate.
+//
+// Secret lookup order (first non-empty wins):
+//  1. LOOPZERO_ADMIN_SERVICE_AUTH_SECRET (canonical, per ADR D3)
+//  2. LOOPZERO_SERVICE_AUTH_SECRET (legacy fallback during migration window)
+//
+// Both support dual-key rotation via *_PREVIOUS counterparts.
+//
+// Uses subtle.ConstantTimeCompare for timing-attack resistance.
+func RequireAdminService(next http.Handler) http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		provided := r.Header.Get("X-Service-Auth")
+		if provided == "" {
+			writeError(w, http.StatusForbidden, "FORBIDDEN",
+				"Admin service authentication required. Set X-Service-Auth header.")
+			return
+		}
+		canonical := os.Getenv("LOOPZERO_ADMIN_SERVICE_AUTH_SECRET")
+		legacy := os.Getenv("LOOPZERO_SERVICE_AUTH_SECRET")
+		canonicalPrev := os.Getenv("LOOPZERO_ADMIN_SERVICE_AUTH_SECRET_PREVIOUS")
+		legacyPrev := os.Getenv("LOOPZERO_SERVICE_AUTH_SECRET_PREVIOUS")
+
+		match := func(expected string) bool {
+			return expected != "" &&
+				subtle.ConstantTimeCompare([]byte(provided), []byte(expected)) == 1
+		}
+		if match(canonical) || match(canonicalPrev) || match(legacy) || match(legacyPrev) {
+			next.ServeHTTP(w, r)
+			return
+		}
+		writeError(w, http.StatusForbidden, "FORBIDDEN",
+			"Invalid admin service-auth secret.")
+	})
 }
 
 // RequireAdmin is a middleware that requires a valid admin API key in the
