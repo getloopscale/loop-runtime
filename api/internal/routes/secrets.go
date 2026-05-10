@@ -6,6 +6,7 @@ package routes
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"log/slog"
 	"net/http"
 	"regexp"
@@ -13,6 +14,7 @@ import (
 
 	"github.com/go-chi/chi/v5"
 
+	"github.com/loopzero/loopzero/api/internal/db"
 	"github.com/loopzero/loopzero/api/internal/domain"
 	"github.com/loopzero/loopzero/api/internal/metrics"
 	"github.com/loopzero/loopzero/api/internal/middleware"
@@ -27,16 +29,39 @@ type (
 	AuditLogger    = domain.AuditLogger
 )
 
+// SecretEnvLocker is the narrow interface SecretHandler needs to wrap
+// mutations in `pg_advisory_xact_lock` (T1.1 of deep-review-2026-05-10-
+// remediation-plan). Defined locally per ISP — accepts any locker the
+// services layer exposes, including `services.EnvironmentLocker` and
+// `adapters.PoolEnvironmentLocker`.
+//
+// Nil-safe: when handler.locker is nil, Set/DeleteSecret fall back to
+// the legacy non-locked path. Production wiring must inject the real
+// locker; this fallback keeps unit-test fakes simple.
+type SecretEnvLocker interface {
+	WithLock(ctx context.Context, tenant, project, env string, fn func(tx db.DBTX) error) error
+}
+
 // SecretHandler provides HTTP handlers for secret operations.
 type SecretHandler struct {
 	store   SecretStore
-	k8sSync SecretK8sSync // optional — nil disables K8s sync
-	audit   AuditLogger   // optional — nil disables audit logging
+	k8sSync SecretK8sSync   // optional — nil disables K8s sync
+	audit   AuditLogger     // optional — nil disables audit logging
+	locker  SecretEnvLocker // optional — nil disables environment lock (legacy path)
 }
 
 // NewSecretHandler creates a new SecretHandler.
 func NewSecretHandler(store SecretStore) *SecretHandler {
 	return &SecretHandler{store: store}
+}
+
+// SetEnvironmentLocker wires the env-lock dependency. T1.1 of
+// deep-review-2026-05-10-remediation-plan (find_conc_secrets_no_lock HIGH):
+// secret mutations were not serialized per (tenant, project, env) so
+// concurrent `loopzero secret set` + `loopzero deploy` could write a stale value
+// while the build was already capturing config.
+func (h *SecretHandler) SetEnvironmentLocker(locker SecretEnvLocker) {
+	h.locker = locker
 }
 
 // SetAuditLogger configures audit logging for sensitive operations.
@@ -149,8 +174,30 @@ func (h *SecretHandler) Set(w http.ResponseWriter, r *http.Request) {
 	// Use project name from query or default
 	project := r.URL.Query().Get("project")
 
-	created, err := h.store.Set(ctx, uc.TenantID, project, req.Environment, req.App, req.Name, []byte(req.Value))
+	// T1.1 of deep-review-2026-05-10-remediation-plan: serialize mutations
+	// per (tenant, project, env) so concurrent `loopzero secret set` + a deploy
+	// capturing config cannot race. Falls back to non-locked path when
+	// locker is nil (tests + boot path).
+	var created bool
+	mutate := func(_ db.DBTX) error {
+		var setErr error
+		created, setErr = h.store.Set(ctx, uc.TenantID, project, req.Environment, req.App, req.Name, []byte(req.Value))
+		return setErr
+	}
+	var err error
+	if h.locker != nil {
+		err = h.locker.WithLock(ctx, uc.TenantID, project, req.Environment, mutate)
+	} else {
+		err = mutate(nil)
+	}
 	if err != nil {
+		if errors.Is(err, loopzeroerrors.ErrLockTimeout) {
+			writeJSON(w, http.StatusConflict, map[string]string{
+				"code":    "DEPLOY_IN_PROGRESS",
+				"message": "Another operation is in progress for this environment. Retry shortly.",
+			})
+			return
+		}
 		writeLoopZeroError(w, loopzeroerrors.ErrInternalError)
 		return
 	}
@@ -216,8 +263,27 @@ func (h *SecretHandler) DeleteSecret(w http.ResponseWriter, r *http.Request) {
 	app := r.URL.Query().Get("app")
 	project := r.URL.Query().Get("project")
 
-	deleted, err := h.store.Delete(ctx, uc.TenantID, project, env, app, name)
+	// T1.1 of deep-review-2026-05-10-remediation-plan: same lock as Set.
+	var deleted bool
+	mutate := func(_ db.DBTX) error {
+		var delErr error
+		deleted, delErr = h.store.Delete(ctx, uc.TenantID, project, env, app, name)
+		return delErr
+	}
+	var err error
+	if h.locker != nil {
+		err = h.locker.WithLock(ctx, uc.TenantID, project, env, mutate)
+	} else {
+		err = mutate(nil)
+	}
 	if err != nil {
+		if errors.Is(err, loopzeroerrors.ErrLockTimeout) {
+			writeJSON(w, http.StatusConflict, map[string]string{
+				"code":    "DEPLOY_IN_PROGRESS",
+				"message": "Another operation is in progress for this environment. Retry shortly.",
+			})
+			return
+		}
 		writeLoopZeroError(w, loopzeroerrors.ErrInternalError)
 		return
 	}
