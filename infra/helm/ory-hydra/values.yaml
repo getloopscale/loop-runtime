@@ -67,10 +67,19 @@ hydra:
         - "loopzero-dev-hydra-cookie-secret!!"
 
     # --- TTLs ---
+    # 2026-05-09: bumped access_token + id_token from 1h → 24h for LOCAL k3d
+    # bootstrap dev. Production (Pulumi) overrides with the conservative
+    # 1h TTL — the longer window is OK locally because:
+    #   1. Local Hydra is firewalled to k3d cluster + dev developer.
+    #   2. Cleanroom journey suites legitimately run >1h end-to-end and
+    #      previously hit 7 false-fail "Authentication failed" because
+    #      the JWT seeded at task setup expired mid-run.
+    # If you flip this back to 1h, also re-design the journey suite to
+    # mint+rotate JWT every N specs (more invasive than the bump).
     ttl:
-      access_token: "1h"
+      access_token: "24h"
       refresh_token: "720h"
-      id_token: "1h"
+      id_token: "24h"
       auth_code: "10m"
 
     # --- Strategies ---
