@@ -15,6 +15,7 @@ import (
 
 	"github.com/go-chi/chi/v5"
 
+	"github.com/loopzero/loopzero/api/internal/argo"
 	"github.com/loopzero/loopzero/api/internal/middleware"
 	"github.com/loopzero/loopzero/api/internal/validation"
 	loopzeroerrors "github.com/loopzero/loopzero/pkg/errors"
@@ -422,21 +423,12 @@ func mapBuildError(w http.ResponseWriter, err error) {
 }
 
 // isUnknownFramework returns true if the framework is not in the known list.
-// Mirrors resolveLanguageStrategy() in services/build_plan.go — kept in sync.
-// V5: Server-side validation to reject unknown frameworks before pipeline.
+//
+// T5.4 of deep-review-2026-05-10-remediation-plan (find_arch_framework_dup MEDIUM):
+// the canonical list now lives in `api/internal/argo/languages.go`
+// (`argo.SupportedFrameworks()`). This wrapper exists so the route handler
+// reads from a single source — the previous inline switch could drift
+// silently from the build pipeline's view of supported frameworks.
 func isUnknownFramework(framework string) bool {
-	switch framework {
-	case "nextjs", "next", "vite", "remix", "nestjs", "express", "node",
-		"react", "vue", "svelte", "astro", "angular", "fastify",
-		"gin", "go",
-		"fastapi", "django", "python",
-		"sinatra", "rails", "ruby",
-		"spring", "spring-boot", "java",
-		"laravel", "slim", "php",
-		"axum", "actix", "rocket", "rust",
-		"custom", "unknown", "":
-		return false
-	default:
-		return true
-	}
+	return !argo.IsKnownFramework(framework)
 }

@@ -52,6 +52,41 @@ type LanguageStrategy interface {
 	Name() string
 }
 
+// SupportedFrameworks returns the canonical set of framework string values
+// the build pipeline understands. T5.4 of deep-review-2026-05-10-remediation-plan
+// (find_arch_framework_dup MEDIUM) — single source of truth, replaces the
+// duplicated `isUnknownFramework` switch that previously lived in
+// routes/builds.go and could drift silently.
+//
+// The empty string is implicitly supported (defaults to Node.js — see
+// ResolveStrategy fallback).
+func SupportedFrameworks() map[string]bool {
+	return map[string]bool{
+		"nextjs": true, "next": true, "vite": true, "remix": true,
+		"nestjs": true, "express": true, "node": true,
+		"react": true, "vue": true, "svelte": true, "astro": true,
+		"angular": true, "fastify": true,
+		"gin": true, "go": true,
+		"fastapi": true, "django": true, "python": true,
+		"sinatra": true, "rails": true, "ruby": true,
+		"spring": true, "spring-boot": true, "java": true,
+		"laravel": true, "slim": true, "php": true,
+		"axum": true, "actix": true, "rocket": true, "rust": true,
+		"custom":          true,
+		"user-dockerfile": true,
+		"unknown":         true, // legacy alias accepted by callers
+	}
+}
+
+// IsKnownFramework reports whether a framework string is in the
+// SupportedFrameworks set. Empty string is treated as known (Node.js default).
+func IsKnownFramework(framework string) bool {
+	if framework == "" {
+		return true
+	}
+	return SupportedFrameworks()[framework]
+}
+
 // ResolveStrategy returns the appropriate LanguageStrategy for a framework string.
 // Framework values come from loopzero.yaml's app.framework field.
 //

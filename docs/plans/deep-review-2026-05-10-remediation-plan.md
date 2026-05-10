@@ -76,7 +76,7 @@ Phase 2 (P1 Security) ──────────────┘ (parallel wi
 
 **Objective:** Eliminar os 5 findings critical que tornam a plataforma insegura ou broken.
 
-### T0.1 — Preview Controller: Use Cell-Aware Client
+### T0.1 — Preview Controller: Use Cell-Aware Client ✅ DONE 2026-05-10
 
 #### Objective
 Substituir `r.RuntimeClient` por `r.runtimeClientForPreview(ctx, preview)` em `reconcileDelete` e `reconcileCreating`.
@@ -125,7 +125,7 @@ VERIFY:  cd operators && go test ./internal/preview/ -v
 
 ---
 
-### T0.2 — pgDedup.Release: Use Background Context in Defer
+### T0.2 — pgDedup.Release: Use Background Context in Defer ✅ DONE 2026-05-10
 
 #### Objective
 Garantir que pgDedup cleanup funciona mesmo durante graceful shutdown.
@@ -168,7 +168,7 @@ VERIFY:  cd api && go test ./internal/services/ -run TestPgDedup -v
 
 ---
 
-### T0.3 — Port Conflict: Align LOOPZERO_API_PORT with service.port
+### T0.3 — Port Conflict: Align LOOPZERO_API_PORT with service.port ✅ DONE 2026-05-10
 
 #### Objective
 Eliminar mismatch entre `LOOPZERO_API_PORT=8080` e `service.port=3001`.
@@ -208,7 +208,7 @@ VERIFY:  task validate:manifests
 
 ---
 
-### T0.4 — BuildStore.GetByID: Add Tenant Filter
+### T0.4 — BuildStore.GetByID: Add Tenant Filter ✅ DONE 2026-05-10
 
 #### Objective
 Fechar IDOR gap adicionando `AND tenant_id = $2` ao GetByID.
@@ -259,7 +259,7 @@ VERIFY:  cd api && go test ./internal/db/ -run TestGetByID -v && go test ./tests
 
 ---
 
-### T0.5 — Policy-Controller: Flip to Deny Mode
+### T0.5 — Policy-Controller: Flip to Deny Mode ✅ DONE 2026-05-10
 
 #### Objective
 Fechar supply chain gap mudando ClusterImagePolicy de warn para enforce.
@@ -306,7 +306,7 @@ VERIFY:  task validate:manifests
 
 **Objective:** Restaurar invariant "environment lock on all mutations" e corrigir state machine bugs.
 
-### T1.1 — SecretHandler: Add Environment Lock
+### T1.1 — SecretHandler: Add Environment Lock ✅ DONE 2026-05-10
 
 #### Objective
 Wrappear `Set` e `DeleteSecret` com `WithLock`.
@@ -370,7 +370,7 @@ VERIFY:  cd api && go test ./internal/services/ -run TestCreatePreview -v
 
 ---
 
-### T1.3 — Supersession Error: Return to Roll Back Transaction
+### T1.3 — Supersession Error: Return to Roll Back Transaction ✅ DONE 2026-05-10
 
 #### Files to edit
 ```
@@ -397,7 +397,7 @@ VERIFY:  cd api && go test ./tests/unit/ -run TestActivateReleaseKernel -v
 
 ---
 
-### T1.4 — Preview SM: Use Actual Phase + TryTransition
+### T1.4 — Preview SM: Use Actual Phase + TryTransition ✅ DONE 2026-05-10
 
 #### Files to edit
 ```
@@ -424,7 +424,7 @@ VERIFY:  cd operators && go test ./internal/preview/ -run TestReconcileDelete -v
 
 ---
 
-### T1.5 — Reaper MarkAsCleaned: Re-fetch Before Finalizer
+### T1.5 — Reaper MarkAsCleaned: Re-fetch Before Finalizer ✅ DONE 2026-05-10
 
 #### Files to edit
 ```
@@ -451,7 +451,7 @@ VERIFY:  cd operators && go test ./internal/app/ -run TestMarkAsCleaned -v
 
 ---
 
-### T1.6 — Placement Serializer: Add lock_timeout
+### T1.6 — Placement Serializer: Add lock_timeout ✅ DONE 2026-05-10
 
 #### Files to edit
 ```
@@ -478,7 +478,7 @@ VERIFY:  cd api && go test ./internal/placement/ -run TestPlacement -v
 
 ---
 
-### T1.7 — Callback Activator: Return Error for HTTP 500
+### T1.7 — Callback Activator: Return Error for HTTP 500 ✅ DONE 2026-05-10
 
 #### Files to edit
 ```
@@ -511,7 +511,7 @@ VERIFY:  cd api && go test ./internal/services/ -run TestOnSyncCompleted -v
 
 **Objective:** Fechar gaps de segurança (admin secrets, bundle integrity, rate limiting).
 
-### T2.1 — Admin Secrets: Consolidate (per ADR D3)
+### T2.1 — Admin Secrets: Consolidate (per ADR D3) ✅ DONE 2026-05-10
 
 #### Files to edit
 ```
@@ -582,7 +582,7 @@ VERIFY:  cd api && go test ./internal/routes/ -run TestUpload -v && go test ./in
 
 ---
 
-### T2.3 — Rate Limiter: Per-User Key (per ADR D5)
+### T2.3 — Rate Limiter: Per-User Key (per ADR D5) ✅ DONE 2026-05-10
 
 #### Files to edit
 ```
@@ -611,7 +611,7 @@ VERIFY:  cd api && go test ./internal/middleware/ -run TestRateLimiter -v
 
 **Objective:** Dead alerts, missing index, chart hardening.
 
-### T3.1 — Remove 17 Dead Prometheus Alerts
+### T3.1 — Remove 17 Dead Prometheus Alerts ✅ DONE 2026-05-10
 
 #### Files to edit
 ```
@@ -630,7 +630,7 @@ infra/helm/monitoring/manifests/prometheusrule-registry.yaml
 
 ---
 
-### T3.2 — Add Index on build_apps.build_id
+### T3.2 — Add Index on build_apps.build_id ✅ DONE 2026-05-10
 
 #### Files to edit
 ```
@@ -646,7 +646,7 @@ api/internal/db/migrations/000016_build_apps_index.up.sql — (NEW)
 
 ---
 
-### T3.3 — Bootstrap Charts: Add Startup Probes + Seccomp
+### T3.3 — Bootstrap Charts: Add Startup Probes + Seccomp ✅ DONE 2026-05-10
 
 #### Files to edit
 ```
@@ -664,7 +664,7 @@ infra/helm/loopzero-cloud/templates/deployment.yaml
 
 ---
 
-### T3.4 — Remove ArgoCD Dual-Owner for Admission Policies
+### T3.4 — Remove ArgoCD Dual-Owner for Admission Policies ✅ DONE 2026-05-10
 
 #### Files to edit
 ```
@@ -681,7 +681,7 @@ infra/argocd-bootstrap/apps/runtime-admission-policies.yaml — DELETE
 
 **Objective:** CLI event handler, error shapes, metric placement.
 
-### T4.1 — CLI: Add deploy.delivery_failed Handler
+### T4.1 — CLI: Add deploy.delivery_failed Handler ✅ DONE 2026-05-10
 
 #### Files to edit
 ```
@@ -732,7 +732,7 @@ VERIFY:  cd api && go test ./tests/unit/ -run TestDomain -v
 
 ---
 
-### T4.3 — Metric: Move SetToCurrentTime After Query
+### T4.3 — Metric: Move SetToCurrentTime After Query ✅ DONE 2026-05-10
 
 #### Files to edit
 ```
