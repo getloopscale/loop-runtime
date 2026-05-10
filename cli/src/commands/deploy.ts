@@ -571,6 +571,32 @@ export class DeployCommand {
       return true;
     }
 
+    // T4.1 of deep-review-2026-05-10-remediation-plan (find_cli_missing_event_handler HIGH):
+    // The API emits `deploy.delivery_failed` when manifests are built and
+    // signed but cannot be delivered (Gitea push fail, ArgoCD App create
+    // fail, etc). Pre-T4.1 the CLI ignored the event and hung waiting for
+    // a `deploy.completed` that never came. Now we surface it with exit 3
+    // (deploy failure per Rule 4) and a product-language message.
+    if (event.type === 'deploy.delivery_failed') {
+      const data = event.data as Record<string, unknown>;
+      const reason = String(data.reason ?? 'manifests could not be delivered to the cluster');
+      const userMessage = `Deploy failed: ${reason}. Build artifacts were created but the cluster could not be updated.`;
+      if (opts.json) {
+        this.deps.writeTo(JSON.stringify({
+          code: 'DEPLOY_FAILED',
+          error: userMessage,
+          reason,
+          exit_code: 3,
+          deploy_id: data.deploy_id ?? null,
+          build_id: buildResult.build_id,
+        }));
+      } else {
+        this.deps.writeError(userMessage);
+      }
+      finish(3);
+      return true;
+    }
+
     // argo-rollouts-progressive-delivery-plan T4.2 — Canary progress events.
     //
     // rollout.step is a progress event (NON-terminal). Stream stays open;

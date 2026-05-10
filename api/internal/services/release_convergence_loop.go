@@ -162,15 +162,18 @@ func (r *ReleaseConvergenceLoop) cellID() string {
 }
 
 func (r *ReleaseConvergenceLoop) tick(ctx context.Context) {
-	// MEET-2026-03-31-023 T1-8: Record successful tick timestamp and pending count.
-	metrics.ReconcileLoopLastSuccess.WithLabelValues("release").SetToCurrentTime()
-
+	// T4.3 of deep-review-2026-05-10-remediation-plan (find_obs_metric_premature MEDIUM):
+	// `ReconcileLoopLastSuccess` was being set BEFORE the DB query — so
+	// the "last successful reconcile" gauge updated even when the query
+	// failed seconds later. Now we only set it AFTER the query returns
+	// successfully (real evidence the loop reached the reconcile pass).
 	releases, err := r.releaseStore.FindPendingReleases(ctx, r.cellID())
 	if err != nil {
 		r.logger.Error("release convergence: failed to find pending releases", "error", err)
 		return
 	}
 
+	metrics.ReconcileLoopLastSuccess.WithLabelValues("release").SetToCurrentTime()
 	metrics.ReleasesPending.Set(float64(len(releases)))
 
 	for _, rel := range releases {
