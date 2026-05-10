@@ -11,23 +11,7 @@ spec:
   groups:
     - name: loopzero.registry
       rules:
-        # Canary probe: a lightweight push/pull cycle run by a separate CronJob.
-        # The metric loopzero_registry_canary_success is exposed by the canary probe (not this rule).
-        # T1.2 / VAL-001: registry canary CronJob not deployed yet;
-        # loopzero_registry_canary_success not emitted by any code.
-        - alert: LoopZeroRegistryHealthFailed
-          expr: vector(0) > 1  # ORPHAN: loopzero_registry_canary_success not emitted
-          for: 2m
-          labels:
-            severity: critical
-          annotations:
-            summary: "Harbor registry canary push/pull failed"
-            description: "Registry canary probe has been failing for 2+ minutes. Builds cannot push images and deploys cannot pull."
-            runbook: "Check Harbor core and registry pods. Verify S3 backend connectivity (DO Spaces). Check Harbor nginx ingress. If Harbor is up but canary fails, check robot account credentials."
 
-        # Harbor exposes harbor_core_http_request_duration_seconds via /metrics on the core component.
-        # If Harbor version does not expose per-operation histograms, fall back to:
-        #   histogram_quantile(0.95, rate(harbor_core_http_request_duration_seconds_bucket[5m])) > 5
         - alert: LoopZeroRegistryPushLatencyHigh
           expr: histogram_quantile(0.95, rate(harbor_core_http_request_duration_seconds_bucket{operation="push"}[5m])) > 5
           for: 5m

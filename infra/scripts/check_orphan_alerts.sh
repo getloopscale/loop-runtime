@@ -20,32 +20,13 @@ set -euo pipefail
 REPO_ROOT="$(git rev-parse --show-toplevel 2>/dev/null || echo "$(cd "$(dirname "$0")/../.." && pwd)")"
 RULES_DIR="$REPO_ROOT/infra/helm/monitoring/manifests"
 
-# EXCEPTION_LIST — alert names that are KNOWN orphans (find_obs_003 baseline).
-# Each must have a comment explaining the deferred metric. Once the metric
-# is wired, the alert MUST be re-expressed against the real metric and
-# removed from this list.
+# EXCEPTION_LIST — alert names that are KNOWN orphans.
+#
+# T3.1 of deep-review-2026-05-10-remediation-plan removed all 16 baseline
+# orphan alerts from the manifests. List is now EMPTY: any new
+# `vector(0) > 1` alert is a violation. If a future need legitimately
+# requires a placeholder, add it here WITH a comment + finding ID.
 EXCEPTION_LIST=(
-    # prometheusrule-critical.yaml (4 entries — fallback feature deferred)
-    "LoopZeroGitMirrorExhausted"
-    "LoopZeroFallbackStuck"
-    "LoopZeroBuildEgressStale"
-    "LoopZeroBreakGlassAccess"
-    # prometheusrule-database.yaml (4 entries — needs PG exporter integration)
-    "LoopZeroDBLongTransaction"
-    "LoopZeroDBRLSDenialDetected"
-    "LoopZeroDBErrorRateSpike"
-    "LoopZeroDBPoolExhaustedWithLongTx"
-    # prometheusrule-registry.yaml (1 entry)
-    "LoopZeroRegistryHealthFailed"
-    # prometheusrule-warning.yaml (8 entries — metrics deferred to operator instrumentation)
-    "LoopZeroTenantQuotaNearLimit"
-    "LoopZeroSecretSyncFailed"
-    "LoopZeroTenantPodsStarved"
-    "LoopZeroMirrorSyncStale"
-    "LoopZeroGitDesiredStateDivergence"
-    "LoopZeroBuildStuckRunning"
-    "LoopZeroArgoSyncBacklog"
-    "LoopZeroDBPoolAcquireLatency"
 )
 
 violations=0
@@ -83,7 +64,7 @@ while IFS= read -r line_with_file; do
 done < <(grep -nE 'expr:\s*vector\(0\)\s*>\s*1' "$RULES_DIR"/*.yaml 2>/dev/null || true)
 
 if [ "$violations" -eq 0 ]; then
-    echo "PASS — no new orphan alerts (16 known orphans tracked in EXCEPTION_LIST)."
+    echo "PASS — no orphan alerts (T3.1 of deep-review-2026-05-10 cleared the baseline)."
     exit 0
 fi
 

@@ -75,6 +75,15 @@ spec:
               port: {{ .Values.service.port }}
             initialDelaySeconds: 30
             periodSeconds: 30
+          # T3.3 of deep-review-2026-05-10-remediation-plan: slow boots
+          # (Stripe SDK init, loopzero-engine handshake) get up to 60s before
+          # liveness takes over.
+          startupProbe:
+            httpGet:
+              path: /health
+              port: {{ .Values.service.port }}
+            failureThreshold: 30
+            periodSeconds: 2
           securityContext:
             allowPrivilegeEscalation: false
             readOnlyRootFilesystem: true

@@ -146,6 +146,17 @@ spec:
               port: {{ .Values.service.port }}
             initialDelaySeconds: 5
             periodSeconds: 10
+          # T3.3 of deep-review-2026-05-10-remediation-plan (find_infra_no_startup_probe):
+          # slow boots (DB pool warm-up, advisory-lock-on-startup) should
+          # not get killed by livenessProbe before the binary is ready.
+          # startupProbe gives the pod up to 60s (30 × 2s) before
+          # liveness takes over.
+          startupProbe:
+            httpGet:
+              path: /api/v1/health
+              port: {{ .Values.service.port }}
+            failureThreshold: 30
+            periodSeconds: 2
           securityContext:
             allowPrivilegeEscalation: false
             readOnlyRootFilesystem: true
