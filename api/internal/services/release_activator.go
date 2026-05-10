@@ -163,14 +163,18 @@ func ActivateReleaseKernel(
 	}
 
 	// Step 5: Supersede previous active release (queried in Step 1, before activation).
+	// T1.3 of deep-review-2026-05-10-remediation-plan (find_state_dual_active HIGH):
+	// MUST return the error so the outer transaction rolls back the new
+	// ACTIVE — otherwise we leave two releases ACTIVE in the same env,
+	// which downstream selectors treat as undefined behaviour.
 	if prevRelease != nil && prevRelease.ID != release.ID {
 		if _, supersedeErr := releaseStore.UpdateStatus(ctx, tx, prevRelease.ID, string(statemachine.ReleaseNewActivated)); supersedeErr != nil {
 			logger.Error("activate release: failed to supersede previous",
 				"prev_id", prevRelease.ID, "new_id", release.ID, "error", supersedeErr)
-		} else {
-			logger.Info("activate release: superseded previous",
-				"prev_id", prevRelease.ID, "new_id", release.ID)
+			return fmt.Errorf("activate release: supersede previous %s: %w", prevRelease.ID, supersedeErr)
 		}
+		logger.Info("activate release: superseded previous",
+			"prev_id", prevRelease.ID, "new_id", release.ID)
 	}
 
 	// Step 6: Emit deploy.completed SSE event — CLI waits for this to exit.

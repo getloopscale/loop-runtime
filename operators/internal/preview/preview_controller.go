@@ -532,10 +532,22 @@ func (r *PreviewReconciler) reconcileDelete(ctx context.Context, preview *loopze
 					metav1.ConditionFalse, "DeleteFailed", delErr.Error(), preview.Generation)
 
 				if attempts >= previewMaxCleanupAttempts {
-					// Symbolic SM transition: cleanup failed.
-					preview.Status.Phase = loopzerov1.PreviewPhase(
-						previewSM.Transition(statemachine.PreviewExpiring, statemachine.PreviewCleanupFailed_),
+					// T1.4 of deep-review-2026-05-10-remediation-plan
+					// (find_state_preview_panic HIGH): the reconcileDelete
+					// path runs for previews in EITHER `Expiring` OR
+					// `Deleting` phase. Hardcoding `PreviewExpiring` as the
+					// source panic'd when called from the Deleting branch.
+					// TryTransition + the actual current phase eliminate the panic.
+					nextState, smErr := previewSM.TryTransition(
+						statemachine.State(preview.Status.Phase),
+						statemachine.PreviewCleanupFailed_,
 					)
+					if smErr != nil {
+						logger.Error(smErr, "preview cleanup: invalid SM transition",
+							"phase", preview.Status.Phase)
+					} else {
+						preview.Status.Phase = loopzerov1.PreviewPhase(nextState)
+					}
 					if statusErr := r.Status().Update(ctx, preview); statusErr != nil {
 						logger.Error(statusErr, "preview cleanup: failed to update CleanupFailed status")
 					}

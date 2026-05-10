@@ -110,7 +110,13 @@ func (a *SyncCallbackActivator) OnSyncCompleted(appName, revision string) error 
 		return fmt.Errorf("sync callback: find pending releases: %w", err)
 	}
 
+	// T1.7 of deep-review-2026-05-10-remediation-plan (find_callback_false_success HIGH):
+	// collect per-release activation errors so a partial failure surfaces
+	// as HTTP 500 → ArgoCD retries. Pre-T1.7 the function returned nil
+	// even when 1/N activations failed, causing the release to stay
+	// PENDING with no retry signal.
 	activated := 0
+	var failedReleases []string
 	for _, release := range releases {
 		// MEET-2026-03-31-024 BUG-03 defense-in-depth: if GitCommit is empty,
 		// do NOT activate via callback — let the convergence loop handle it.
@@ -132,6 +138,7 @@ func (a *SyncCallbackActivator) OnSyncCompleted(appName, revision string) error 
 		if err := a.activateRelease(ctx, &release); err != nil {
 			a.logger.Error("sync callback: activation failed",
 				"release_id", release.ID, "error", err)
+			failedReleases = append(failedReleases, release.ID)
 			continue
 		}
 		activated++
@@ -140,6 +147,11 @@ func (a *SyncCallbackActivator) OnSyncCompleted(appName, revision string) error 
 	if activated > 0 {
 		a.logger.Info("sync callback: releases activated",
 			"app", appName, "count", activated, "revision", revision)
+	}
+
+	if len(failedReleases) > 0 {
+		return fmt.Errorf("sync callback: %d release(s) failed to activate: %v (ArgoCD should retry)",
+			len(failedReleases), failedReleases)
 	}
 
 	return nil

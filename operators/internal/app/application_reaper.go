@@ -33,7 +33,6 @@ import (
 
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"sigs.k8s.io/controller-runtime/pkg/client"
-	"sigs.k8s.io/controller-runtime/pkg/controller/controllerutil"
 
 	loopzerov1 "github.com/loopzero/loopzero/operators/api/v1"
 	"github.com/loopzero/loopzero/operators/internal/metrics"
@@ -149,6 +148,14 @@ func MarkAsCleaned(ctx context.Context, c client.Client, app *loopzerov1.LoopZer
 		return fmt.Errorf("MarkAsCleaned: status update: %w", err)
 	}
 
+	// T1.5 of deep-review-2026-05-10-remediation-plan (find_reap_409 HIGH):
+	// re-fetch the object before the finalizer Update. The Status().Update
+	// above bumped ResourceVersion, so the in-memory `app` is now stale.
+	// Without re-fetch the next Update would 409-conflict in K8s.
+	if err := c.Get(ctx, client.ObjectKeyFromObject(app), app); err != nil {
+		return fmt.Errorf("MarkAsCleaned: re-fetch after status update: %w", err)
+	}
+
 	// 2. Remove finalizers so the object can be GC'd. Cleaned CRs intentionally
 	//    don't keep finalizers — the gitops source is the SoT now.
 	if len(app.Finalizers) > 0 {
@@ -157,8 +164,6 @@ func MarkAsCleaned(ctx context.Context, c client.Client, app *loopzerov1.LoopZer
 			return fmt.Errorf("MarkAsCleaned: finalizer removal: %w", err)
 		}
 	}
-	// Defensive: also call RemoveFinalizer for any specific operator finalizer.
-	controllerutil.RemoveFinalizer(app, "loopzero.io/application-cleanup")
 
 	// ADR-0027 D5 / plan T5.2 — emit L4 "Deep Insights" metrics.
 	// Per ADR-0027 capability matrix: this transition IS the Application

@@ -9,6 +9,7 @@ import (
 	"fmt"
 
 	"github.com/jackc/pgx/v5"
+	"github.com/jackc/pgx/v5/pgconn"
 	"github.com/jackc/pgx/v5/pgxpool"
 )
 
@@ -19,6 +20,23 @@ import (
 type txKeyType struct{}
 
 var txKey = txKeyType{}
+
+// ErrPlacementLockTimeout is returned when the advisory lock cannot be
+// acquired within the session-local `lock_timeout` (T1.6 of
+// deep-review-2026-05-10-remediation-plan). Distinguishes "the system is
+// busy with another tenant placement" from "the system is broken" — the
+// caller can retry or surface 503 instead of 500.
+var ErrPlacementLockTimeout = errors.New("placement serializer: lock_timeout exceeded")
+
+// isLockTimeoutErr reports whether err is the PG SQLSTATE 55P03
+// (lock_not_available) — the canonical signal that lock_timeout fired.
+func isLockTimeoutErr(err error) bool {
+	var pgErr *pgconn.PgError
+	if errors.As(err, &pgErr) {
+		return pgErr.Code == "55P03"
+	}
+	return false
+}
 
 // TxFromContext extracts the serializer transaction from the context.
 // Returns nil if no transaction is active (non-serialized path).
@@ -66,7 +84,19 @@ func NewAdvisoryLockSerializer(pool *pgxpool.Pool) Serializer {
 			}
 		}()
 
+		// T1.6 of deep-review-2026-05-10-remediation-plan (find_conc_placement_no_timeout HIGH):
+		// set a session-local lock_timeout so a slow caller cannot block
+		// the placement worker indefinitely. SQLSTATE 55P03 maps to a
+		// typed error so callers can distinguish "system busy" from
+		// "system broken".
+		if _, err := tx.Exec(ctx, "SET LOCAL lock_timeout = '30s'"); err != nil {
+			return fmt.Errorf("placement serializer: set lock_timeout: %w", err)
+		}
+
 		if _, err := tx.Exec(ctx, "SELECT pg_advisory_xact_lock($1)", PlacementLockID); err != nil {
+			if isLockTimeoutErr(err) {
+				return ErrPlacementLockTimeout
+			}
 			return fmt.Errorf("placement serializer: acquire advisory lock: %w", err)
 		}
 
