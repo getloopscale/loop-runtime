@@ -39,11 +39,11 @@ func (h *DomainHandler) Verify(w http.ResponseWriter, r *http.Request) {
 	d, err := h.store.GetByDomainAndTenant(ctx, domainName, uc.TenantID)
 	if err != nil {
 		slog.ErrorContext(ctx, "domain lookup failed", "error", err)
-		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": "internal error"})
+		writeJSON(w, http.StatusInternalServerError, map[string]string{"code": "INTERNAL_ERROR", "message": "internal error"})
 		return
 	}
 	if d == nil {
-		writeJSON(w, http.StatusNotFound, map[string]string{"error": "domain not found"})
+		writeJSON(w, http.StatusNotFound, map[string]string{"code": "INTERNAL_ERROR", "message": "domain not found"})
 		return
 	}
 
@@ -93,7 +93,7 @@ func (h *DomainHandler) Verify(w http.ResponseWriter, r *http.Request) {
 	now := time.Now().UTC()
 	if err := h.store.UpdateVerified(ctx, d.Domain, now); err != nil {
 		slog.ErrorContext(ctx, "domain verify update failed", "error", err)
-		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": "failed to update domain status"})
+		writeJSON(w, http.StatusInternalServerError, map[string]string{"code": "INTERNAL_ERROR", "message": "failed to update domain status"})
 		return
 	}
 

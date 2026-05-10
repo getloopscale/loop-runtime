@@ -31,8 +31,8 @@ func (h *DomainHandler) Delete(w http.ResponseWriter, r *http.Request) {
 	// SEC-002 fix: only owners and admins can manage custom domains
 	if uc.Role != "owner" && uc.Role != "admin" {
 		writeJSON(w, http.StatusForbidden, map[string]string{
-			"error": "Only team owners and admins can manage custom domains.",
-			"code":  "FORBIDDEN",
+			"code":    "FORBIDDEN",
+			"message": "Only team owners and admins can manage custom domains.",
 		})
 		return
 	}
@@ -64,8 +64,8 @@ func (h *DomainHandler) Delete(w http.ResponseWriter, r *http.Request) {
 	if err := h.store.TransitionStatus(ctx, d.Domain, d.Status, "removing"); err != nil {
 		slog.ErrorContext(ctx, "domain transition to removing failed", "error", err)
 		writeJSON(w, http.StatusConflict, map[string]string{
-			"error": "Domain state changed concurrently. Please retry.",
-			"code":  "CONCURRENT_MODIFICATION",
+			"code":    "CONCURRENT_MODIFICATION",
+			"message": "Domain state changed concurrently. Please retry.",
 		})
 		return
 	}
@@ -99,8 +99,8 @@ func (h *DomainHandler) ListDNSRecords(w http.ResponseWriter, r *http.Request) {
 
 	if !d.IsCFManaged() || h.cfZone == nil {
 		writeJSON(w, http.StatusBadRequest, map[string]string{
-			"error": "DNS records management is only available for Cloudflare-managed domains.",
-			"code":  "NOT_CF_MANAGED",
+			"code":    "NOT_CF_MANAGED",
+			"message": "DNS records management is only available for Cloudflare-managed domains.",
 		})
 		return
 	}
@@ -108,7 +108,7 @@ func (h *DomainHandler) ListDNSRecords(w http.ResponseWriter, r *http.Request) {
 	records, err := h.cfZone.ListDNSRecords(ctx, *d.CFZoneID)
 	if err != nil {
 		slog.ErrorContext(ctx, "cf list dns records failed", "domain", domainName, "error", err)
-		writeJSON(w, http.StatusBadGateway, map[string]string{"error": "Failed to fetch DNS records"})
+		writeJSON(w, http.StatusBadGateway, map[string]string{"code": "INTERNAL_ERROR", "message": "Failed to fetch DNS records"})
 		return
 	}
 
@@ -130,7 +130,7 @@ func (h *DomainHandler) AddDNSRecords(w http.ResponseWriter, r *http.Request) {
 	}
 
 	if uc.Role != "owner" && uc.Role != "admin" {
-		writeJSON(w, http.StatusForbidden, map[string]string{"error": "Only team owners and admins can manage DNS records.", "code": "FORBIDDEN"})
+		writeJSON(w, http.StatusForbidden, map[string]string{"code": "FORBIDDEN", "message": "Only team owners and admins can manage DNS records."})
 		return
 	}
 
@@ -143,7 +143,7 @@ func (h *DomainHandler) AddDNSRecords(w http.ResponseWriter, r *http.Request) {
 	}
 
 	if !d.IsCFManaged() || h.cfZone == nil {
-		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "DNS management only available for Cloudflare-managed domains.", "code": "NOT_CF_MANAGED"})
+		writeJSON(w, http.StatusBadRequest, map[string]string{"code": "NOT_CF_MANAGED", "message": "DNS management only available for Cloudflare-managed domains."})
 		return
 	}
 
@@ -151,7 +151,7 @@ func (h *DomainHandler) AddDNSRecords(w http.ResponseWriter, r *http.Request) {
 		Records []CFDNSRecord `json:"records"`
 	}
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "invalid request body"})
+		writeJSON(w, http.StatusBadRequest, map[string]string{"code": "INTERNAL_ERROR", "message": "invalid request body"})
 		return
 	}
 

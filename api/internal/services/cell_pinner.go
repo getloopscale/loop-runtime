@@ -59,10 +59,22 @@ type CellPinnerStore interface {
 // substring match (see admin_pin_cell.go); this package exposes the
 // concrete values for unit tests against the service.
 //
-// Note: ErrCellAtCapacity already exists in services/admission.go for
-// the build-admission gate ("cell at build capacity"). The pinner uses
-// a distinct sentinel ErrCellAtTenantCapacity to avoid collision and
-// disambiguate the two limits (build concurrency vs tenant population).
+// T5.7 of deep-review-2026-05-10-remediation-plan
+// (find_arch_routes_import_services MEDIUM) considered moving these to
+// pkg/errors. Deferred per Princípio 3 (Honestidade Extrema): the
+// canonical pkg/errors counterparts (`ErrTenantNotFound`, `ErrCellAtCapacity`)
+// are `*LoopZeroError` types — not plain `error` — so a direct alias produces
+// type conflicts at the existing call sites that wrap these with
+// `fmt.Errorf("... %w", services.ErrTenantNotFound)`. The proper move
+// requires either (a) converting all call sites to LoopZeroError or
+// (b) renaming the pkg/errors versions. Both are larger refactors than
+// T5.7's scope and risk regression of the existing admin_pin_cell error
+// mapping. Tracked as future work; current cross-package dependency
+// (routes → services) is legitimate top-down per T1.3 closure.
+//
+// ErrCellAtTenantCapacity (note the longer name) disambiguates the
+// tenant-population limit from the build-admission limit also called
+// "cell at capacity" in services/admission.go.
 var (
 	ErrTenantNotFound       = errors.New("tenant not found")
 	ErrCellNotFound         = errors.New("cell not found")
