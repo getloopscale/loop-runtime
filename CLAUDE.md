@@ -12,7 +12,7 @@ The authoritative spec is the code itself + `CHANGELOG.md` + relevant ADRs. If t
 
 **Pricing:** Starter (Free, 1 project), Pro ($29/mo, 3 projects), Team ($79/mo, 10 projects), Enterprise (custom).
 
-**Completed:** deploy happy path (full E2E dogfood validated), **progressive delivery (Argo Rollouts canary)** with TraefikService weighted routing + per-plan steps + AnalysisTemplate hooks + auto-abort on readiness failure (`progressDeadlineSeconds=300`), scaling+HPA targeting Rollout (Starter=2/Pro=5/Team=10), promote staging→prod, rollback, secrets via ESO, custom domains v2 (CF Zone Mgmt, model Vercel), GitHub App auto-deploy (~4min), monorepo validator (30 frameworks), cosign image signing + syft SBOM (CycloneDX), supply-chain admission (policy-controller deny-by-default + warn-mode ClusterImagePolicy + digest enforcement in manifests), plan enforcement, audit log, RSA-only JWT auth, two-host gateway, concurrent deploy rejection (1×202+1×409), JSON contracts (8/8), observability (109 loopzero_* metrics including 8 cell metrics + Grafana + SLO alerts + 7 multi-cell alerts), KEDA scale-to-zero (targets Rollout via `Kind=Rollout` ScaleTargetRef + `transfer-hpa-ownership` annotation), cell architecture (Phase 0+1+1.5 + cells table + admin pin), **cell-2 ACTIVATED + LIVE-validated** (3/3 cells connected; namespace cell-aware reconcile; rollback SLO P50=648ms / P95=705ms <<300s budget; 12 ADR gates persistente), operator multi-binary split (4 binaries), layered bootstrap (Pulumi L1 + Helmfile L2 + ArgoCD L3), `loopzero admin tenants pin/evict`, **application reaper** for orphan CRs (`ApplicationCleaned` terminal state via `ApplicationOrphaned` event), **release reaper observability** (`ReleaseStore.AppendSideEffect` writes reaper context to `release.side_effects`), **release ARCHIVED status** (migration 000008, partial index excludes archived from active queries).
+**Completed:** deploy happy path (full E2E dogfood validated), **progressive delivery (Argo Rollouts canary)** with TraefikService weighted routing + per-plan steps + AnalysisTemplate hooks + auto-abort on readiness failure (`progressDeadlineSeconds=300`), scaling+HPA targeting Rollout (Starter=2/Pro=5/Team=10), promote staging→prod, rollback, secrets via ESO, custom domains v2 (CF Zone Mgmt, model Vercel), GitHub App auto-deploy (~4min), monorepo validator (30 frameworks), cosign image signing + syft SBOM (CycloneDX) + per-build SBOM download (`GET /builds/{id}/sbom`) + attestation endpoint (`GET /builds/{id}/attestation`), supply-chain admission (policy-controller deny-by-default + warn-mode ClusterImagePolicy + digest enforcement in manifests), plan enforcement (4 enforcement middlewares: project/build/env/seat caps, HTTP 402 on exceed), audit log (filterable by action/resource_type/since, paginated), RSA-only JWT auth, two-host gateway, concurrent deploy rejection (1×202+1×409), JSON contracts (8/8), observability (109 loopzero_* metrics including 8 cell metrics + Grafana + SLO alerts + 7 multi-cell alerts), KEDA scale-to-zero (targets Rollout via `Kind=Rollout` ScaleTargetRef + `transfer-hpa-ownership` annotation), cell architecture (Phase 0+1+1.5 + cells table + admin pin), **cell-2 ACTIVATED + LIVE-validated** (3/3 cells connected; namespace cell-aware reconcile; rollback SLO P50=648ms / P95=705ms <<300s budget; 12 ADR gates persistente), operator multi-binary split (4 binaries), layered bootstrap (Pulumi L1 + Helmfile L2 + ArgoCD L3), `loopzero admin tenants pin/evict` + bulk-delete, tenant soft-delete with restore (`DELETE /tenants/{id}` + `POST /tenants/{id}/restore`), **PG circuit breaker** (rejects mutations at pool saturation >90%, HTTP 503), **application reaper** for orphan CRs (`ApplicationCleaned` terminal state via `ApplicationOrphaned` event), **release reaper observability** (`ReleaseStore.AppendSideEffect` writes reaper context to `release.side_effects`), **release ARCHIVED status** (migration 000008, partial index excludes archived from active queries).
 
 **Not built:** SSO/SAML, Loki cross-cluster streaming (infra gap, not code), cosign keyless verification with Fulcio (pending Sprint 9), Sprint 8 Phase 1+3+4+5+6 (require new T3 meeting), production canary stages 4-5 for cell-2 (1 customer 7-day → 10/50/100% — pending Sprint 9 readiness review per ADR D6 of cell-2-activation-plan).
 
@@ -93,8 +93,8 @@ cd infra/pulumi && npx pulumi preview --stack dev # Preview
 | Autoscaling | KEDA 2.16.1 + HTTP Add-on 0.8.0 |
 | IaC | 5 Pulumi projetos: `pulumi/` (L1 DO+CF), `pulumi-infra/` (multi-cluster topology), `pulumi-platform/` (L2 com 32 Helm releases), `pulumi-control-plane/` (STUB — 1 TODO com 9 serviços a extrair), `pulumi-shared/` (contratos); Helmfile L2 (bootstrap); ArgoCD L3 (Day-2 GitOps) |
 | Local clusters | k3d × 4 (mgmt, build, workload, runtime-2) |
-| Dev loop | Tilt + Taskfile (2930 lines across 7 files) |
-| Helm | 16 bootstrap charts próprios + 34 value files (`infra/helm/`) + 13 published charts (`charts/`) |
+| Dev loop | Tilt + Taskfile (2929 lines across 7 files) |
+| Helm | 16 custom bootstrap charts + 49 value files across 34 chart dirs (`infra/helm/`) + 13 published charts (`charts/`) |
 | CI/CD | GitHub Actions (35 workflows) |
 | Migrations | golang-migrate (forward-only `.up.sql`) |
 
@@ -111,7 +111,7 @@ loopzero/
 ├── operators/             ← 8 controllers (Tenant, Environment, Application, Exposure, PlatformBootstrap, GitRepositoryBinding, ClusterCredential, Preview), 10 CRDs (8 wired, 2 unwired: AppSecret + ReconciliationReport)
 ├── infra/
 │   ├── pulumi/            ← IaC (TS), providers: digitalocean/, cloudflare/, aws/(stub)
-│   ├── helm/              ← 16 charts próprios + 34 value files para upstream
+│   ├── helm/              ← 16 custom charts + 49 value files across 34 chart dirs (custom + upstream overrides)
 │   ├── k3d/               ← 4 cluster configs (mgmt, build, workload, runtime-2)
 │   ├── cloudflare/        ← CF Worker source (worker.mjs)
 │   └── tests/             ← e2e/ (Ginkgo), chaos/, unit/, load/
@@ -221,19 +221,21 @@ Defined but unwired (❌): AppSecret (CRD only, no controller — ESO works dire
 
 ### State Machines (11 in `pkg/statemachine/`)
 
-| Machine | Flow | Timeouts |
-|---------|------|----------|
-| Build | QUEUED → RUNNING → RELEASING → SUCCEEDED/FAILED/CANCELLED | QUEUED>5m, RUNNING>30m, RELEASING>10m, CANCELLING>60s |
-| Release | READY → PENDING → ACTIVE → SUPERSEDED/ROLLED_BACK/CANCELLED | READY>5m, PENDING>2m |
-| Tenant | Provisioning → Active → Suspended → Deleting | — |
-| PlatformBootstrap | Pending → ConfiguringGitea → ConfiguringArgoCD → WaitingForAPI → Complete | — |
-| Preview | Creating → Active → Expiring/Deleting → Deleted | TTL-based |
-| Promotion | Validating → Committing → Syncing → Completed | — |
-| Rollback | Validating → Reverting → Syncing → Completed | — |
-| Domain | pending_ns → ns_active → provisioning → active | — |
-| Environment | Creating → Active → Deleting → Deleted | — |
-| Application | Pending → Deploying → Running → Failed/Orphaned/Cleaned | — |
-| ExposedRoute | Pending → Active → Deleting → Deleted | — |
+All states shown below — not just happy path. Terminal states in **bold**. Code is authoritative (`pkg/statemachine/*.go`).
+
+| Machine | All States | Happy Path | Failure/Recovery States | Timeouts |
+|---------|-----------|------------|------------------------|----------|
+| Build | QUEUED, RUNNING, RELEASING, **SUCCEEDED**, **FAILED**, CANCELLING, **CANCELLED** | QUEUED→RUNNING→RELEASING→SUCCEEDED | RUNNING→FAILED, CANCELLING→CANCELLED | QUEUED>5m, RUNNING>30m, RELEASING>10m, CANCELLING>60s |
+| Release | READY, PENDING, ACTIVE, GIT_MIRROR_FAILED, SYNC_FAILED, DRIFT_ALERT, SUPERSEDED, ROLLING_BACK, ROLLED_BACK, ROLLBACK_FAILED, **CANCELLED** | READY→PENDING→ACTIVE→SUPERSEDED | GIT_MIRROR_FAILED→PENDING (retry), SYNC_FAILED→DRIFT_ALERT→ACTIVE (recovery), ACTIVE→ROLLING_BACK→ROLLED_BACK, ROLLBACK_FAILED→ACTIVE (re-attempt) | READY>5m, PENDING>10m, ROLLING_BACK>2m |
+| Tenant | (empty), PROVISIONING, ACTIVE, SUSPENDED, PENDING_DELETION, **DELETING** | PROVISIONING→ACTIVE | ACTIVE→SUSPENDED→ACTIVE (reactivate), ACTIVE→PENDING_DELETION→DELETING (soft delete grace) | — |
+| PlatformBootstrap | (empty), PENDING, CONFIGURING_GITEA, CONFIGURING_ARGOCD, WAITING_FOR_API, **BOOTSTRAP_COMPLETE**, **FAILED** | PENDING→CONFIGURING_GITEA→CONFIGURING_ARGOCD→WAITING_FOR_API→BOOTSTRAP_COMPLETE | Any step→FAILED (retry exhausted) | — |
+| Preview | CREATING, ACTIVE, EXPIRING, **DELETED**, FAILED, DELETING, CLEANUP_FAILED | CREATING→ACTIVE→EXPIRING→DELETED | CREATING→FAILED→DELETING→DELETED, EXPIRING→CLEANUP_FAILED→DELETED | TTL-based |
+| Promotion | VALIDATING, COMMITTING, SYNCING, **COMPLETED**, **REJECTED**, **COMMIT_FAILED**, **SYNC_FAILED** | VALIDATING→COMMITTING→SYNCING→COMPLETED | VALIDATING→REJECTED, COMMITTING→COMMIT_FAILED, SYNCING→SYNC_FAILED | — |
+| Rollback | VALIDATING, REVERTING, SYNCING, **COMPLETED**, **REJECTED**, **BLOCKED**, **REVERT_FAILED**, **SYNC_FAILED** | VALIDATING→REVERTING→SYNCING→COMPLETED | VALIDATING→REJECTED/BLOCKED (NoPreviousRelease), REVERTING→REVERT_FAILED, SYNCING→SYNC_FAILED | — |
+| Domain | PENDING_VERIFICATION, VERIFIED, PENDING_NS, NS_ACTIVE, PROVISIONING, ACTIVE, DEGRADED, FAILED, **REMOVING** | v1: PENDING_VERIFICATION→VERIFIED→PROVISIONING→ACTIVE. v2: PENDING_NS→NS_ACTIVE→PROVISIONING→ACTIVE | PROVISIONING→FAILED→VERIFIED/NS_ACTIVE (retry), ACTIVE→DEGRADED→ACTIVE (recovery), DEGRADED→FAILED | — |
+| Environment | (empty), PENDING, ACTIVE, FAILED, **DELETING** | PENDING→ACTIVE→DELETING | PENDING→FAILED→PENDING (retry) | — |
+| Application | (empty), PROGRESSING, SERVING, REACHABLE, DEGRADED, DOWN, **CLEANED** | PROGRESSING→SERVING→REACHABLE | REACHABLE↔DEGRADED (cyclic), DOWN→PROGRESSING (recovery), any→CLEANED (Orphaned event) | — |
+| ExposedRoute | (empty), PENDING, CERT_ISSUED, REACHABLE, FAILED | PENDING→CERT_ISSUED→REACHABLE | CERT_ISSUED/REACHABLE→FAILED→PENDING (retry). No terminal state (GC via ownerRef). | — |
 
 ### Helm Chart Dual System
 
@@ -295,7 +297,7 @@ Cell drain (`cells.status='draining'`) is operator-driven — `loopzero admin te
 | "ArgoCD `notifiers` not `services`" | argo-cd Helm v7.x: use `notifications.notifiers`, `services` silently ignored |
 | "Single ArgoCD App per tenant" | One App per environment. Any Degraded resource blocks ALL notifications. `gitops.Remove` failure is FATAL. |
 | "Implemented but not documented" | Code is source of truth. Verify before claiming missing. |
-| "Custom domains = CF Zone per domain" | v2: CF Zone Mgmt, NS change by user, no cert-manager Certificate (CF handles TLS). State: `pending_ns → ns_active → provisioning → active`. |
+| "Custom domains = CF Zone per domain" | v2: CF Zone Mgmt, NS change by user, no cert-manager Certificate (CF handles TLS). Full state machine: see § State Machines (Domain row) — includes v1 (TXT verification) backward-compat flow + degraded/failed/removing states. |
 | "CF scan imports conflicting apex" | v2 create flow deletes conflicting A/AAAA/CNAME at apex BEFORE creating routing CNAME |
 | "GitHub tarball ≠ git bundle" | autodeploy.go: tarball → extract → git init/add/commit → bundle → S3 |
 | "Auto-deploy source = commit SHA" | Key `{tenant}/source/{commitSHA}.bundle`. CommitSHA from webhook must match exactly. |
