@@ -1,0 +1,4214 @@
+# Claim Catalog — decay clocks initialized by init-decay-clock.py
+# Updated: 2026-05-11
+meta:
+  generated: 2026-05-11
+  classified: 2026-05-11
+  files_scanned: 312
+  claims_count: 348
+  decay_initialized: 2026-05-11
+
+claims:
+  - id: maturity-assessment-score-39-50-was-38-post-cell-2-activation-01-from-fix-all-pl
+    source: "docs/maturity-assessment.md:6"
+    text: "**Score: 3.9 / 5.0** (was 3.8 post-cell-2-activation; +0.1 from fix-all-platform-issues-plan iter 1-7. **Empirical evidence**: T4.3 LIVE — `loopzero deploy` end-to-end on cell-2: build-b04e0905c112b23d → "
+    type: score
+    dimension: core-deploy
+    polarity: positive
+    extracted_at: 2026-05-11
+    evidence_tier: BROKEN
+    ttl_default_days: 30
+    ttl_days: 30
+    last_validated: 2026-05-03
+    expires: 2026-06-02
+    broken_refs: "commit_missing:b04e0905c1"
+  - id: maturity-assessment-loopzero-has-a-strong-technical-foundation----4-plane-architectu
+    source: "docs/maturity-assessment.md:12"
+    text: "LoopZero has a strong technical foundation -- 4-plane architecture, cell-based scaling, strict state machines, advisory locks, consistent DIP -- all implemented with high code quality. The core deploy flo"
+    type: capability
+    dimension: core-deploy
+    polarity: positive
+    extracted_at: 2026-05-11
+    evidence_tier: UNEVIDENCED
+    ttl_default_days: 30
+    ttl_days: 60
+    last_validated: 2026-05-03
+    expires: 2026-07-02
+  - id: maturity-assessment-scale-multi-tenancy-355-cell-architecture-code-96-complete-c
+    source: "docs/maturity-assessment.md:26"
+    text: "| **Scale / Multi-tenancy** | **3.5/5** | Cell architecture code 96% complete + **cell-2 LIVE-validated 2026-05-02** (cell-2-activation-plan iter 3): 12/12 ADR gates GREEN, real tenant pinned via `the"
+    type: negative
+    dimension: scale-mt
+    polarity: negative
+    extracted_at: 2026-05-11
+    evidence_tier: UNEVIDENCED
+    ttl_default_days: 30
+    ttl_days: 90
+    last_validated: 2026-05-03
+    expires: 2026-08-01
+  - id: maturity-assessment-scale-multi-tenancy-355-cell-architecture-code-96-complete-c
+    source: "docs/maturity-assessment.md:26"
+    text: "| **Scale / Multi-tenancy** | **3.5/5** | Cell architecture code 96% complete + **cell-2 LIVE-validated 2026-05-02** (cell-2-activation-plan iter 3): 12/12 ADR gates GREEN, real tenant pinned via `the"
+    type: negative
+    dimension: scale-mt
+    polarity: negative
+    extracted_at: 2026-05-11
+    evidence_tier: UNEVIDENCED
+    ttl_default_days: 30
+    ttl_days: 90
+    last_validated: 2026-05-03
+    expires: 2026-08-01
+  - id: maturity-assessment-product-completeness-345-sprint-5-preview-environments-all-1
+    source: "docs/maturity-assessment.md:27"
+    text: "| **Product Completeness** | 3.4/5 | Sprint 5 / Preview Environments — **ALL 14 plan tasks complete** with ACs + DoDs validated. 12 lifecycle E2E specs passing against live k3d cluster (PR opened→prev"
+    type: done_status
+    dimension: infra-ops
+    polarity: positive
+    extracted_at: 2026-05-11
+    evidence_tier: UNEVIDENCED
+    ttl_default_days: 30
+    ttl_days: 30
+    last_validated: 2026-05-03
+    expires: 2026-06-02
+  - id: maturity-assessment-5-github-app-auto-deploy-works-end-to-end----this-is-the-exp
+    source: "docs/maturity-assessment.md:48"
+    text: "5. **GitHub App auto-deploy** works end-to-end -- this is the experience that sells"
+    type: capability
+    dimension: core-deploy
+    polarity: positive
+    extracted_at: 2026-05-11
+    evidence_tier: UNEVIDENCED
+    ttl_default_days: 30
+    ttl_days: 30
+    last_validated: 2026-05-03
+    expires: 2026-06-02
+  - id: maturity-assessment-deploy-happy-path-done-e2e-validated-on-do
+    source: "docs/maturity-assessment.md:93"
+    text: "| Deploy happy path | Done | E2E validated on DO |"
+    type: capability
+    dimension: core-deploy
+    polarity: positive
+    extracted_at: 2026-05-11
+    evidence_tier: UNEVIDENCED
+    ttl_default_days: 30
+    ttl_days: 30
+    last_validated: 2026-05-03
+    expires: 2026-06-02
+  - id: maturity-assessment-rollback-done-3s-e2e-validated
+    source: "docs/maturity-assessment.md:94"
+    text: "| Rollback | Done | ~3s, E2E validated |"
+    type: capability
+    dimension: core-deploy
+    polarity: positive
+    extracted_at: 2026-05-11
+    evidence_tier: UNEVIDENCED
+    ttl_default_days: 30
+    ttl_days: 30
+    last_validated: 2026-05-03
+    expires: 2026-06-02
+  - id: maturity-assessment-preview-environments-done-sprint-5-chg-2026-04-26-preview-im
+    source: "docs/maturity-assessment.md:107"
+    text: "| Preview environments | Done | Sprint 5 / CHG-2026-04-26-PREVIEW-IMPL: all 14 plan tasks complete + E2E validated against live k3d (PR opened→preview→synchronize UPSERT→closed soft-delete). DB migrat"
+    type: capability
+    dimension: infra-ops
+    polarity: positive
+    extracted_at: 2026-05-11
+    evidence_tier: UNEVIDENCED
+    ttl_default_days: 30
+    ttl_days: 30
+    last_validated: 2026-05-03
+    expires: 2026-06-02
+  - id: cli-reference-backend-não-implementado-cli-retorna-mensagem-ux-friendly-vi
+    source: "docs/cli-reference.md:17"
+    text: "| ❌ | Backend não implementado (CLI retorna mensagem UX-friendly via AUDIT-27/28) |"
+    type: negative
+    dimension: dx-cli
+    polarity: negative
+    extracted_at: 2026-05-11
+    evidence_tier: UNEVIDENCED
+    ttl_default_days: 30
+    ttl_days: 30
+    last_validated: 2026-04-26
+    expires: 2026-05-26
+  - id: MEET-ASYNC-AMENDMENT-002-e2e-g---cleanroom-dogfood-1212-green-remains-valid-tag-
+    source: "docs/meetings/MEET-ASYNC-AMENDMENT-002-e2e-ginkgo-rewrite-governance.md:95"
+    text: "- Cleanroom dogfood 12/12 GREEN remains valid: tag `dogfood-cleanroom-converged-20260505` covers the bash-journey path; once `task setup && tilt up` is available, the same dogfood loop will be reissue"
+    type: completion
+    dimension: tests-confidence
+    polarity: positive
+    extracted_at: 2026-05-11
+    evidence_tier: BROKEN
+    ttl_default_days: 30
+    ttl_days: 30
+    last_validated: 2026-05-06
+    expires: 2026-06-05
+    broken_refs: "commit_missing:20260505"
+  - id: MEET-ASYNC-AMENDMENT-002-e2e-g-20-multi-cell-routing
+    source: "docs/meetings/MEET-ASYNC-AMENDMENT-002-e2e-ginkgo-rewrite-governance.md:101"
+    text: "| 20 | Multi-cell routing | ❌ | ✅ |"
+    type: negative
+    dimension: scale-mt
+    polarity: negative
+    extracted_at: 2026-05-11
+    evidence_tier: UNEVIDENCED
+    ttl_default_days: 30
+    ttl_days: 60
+    last_validated: 2026-05-06
+    expires: 2026-07-05
+  - id: MEET-2026-05-03-062-4-future-add-oidc-for-digitalocean-do_token-replacement-out-
+    source: "docs/meetings/records/MEET-2026-05-03-062.md:138"
+    text: "4. Future: add OIDC for DigitalOcean (DO_TOKEN replacement) — out of scope for MEET-A; covered in MEET-B (cosign keyless related)."
+    type: negative
+    dimension: security
+    polarity: negative
+    extracted_at: 2026-05-11
+    evidence_tier: UNEVIDENCED
+    ttl_default_days: 30
+    ttl_days: 60
+    last_validated: 2026-05-04
+    expires: 2026-07-03
+  - id: MEET-2026-04-15-049---single-pulumi-stack-for-now-accepted-split-deferred-to-pos
+    source: "docs/meetings/records/MEET-2026-04-15-049.md:38"
+    text: "- Single Pulumi stack for now (accepted: split deferred to post-launch)"
+    type: negative
+    dimension: infra-ops
+    polarity: negative
+    extracted_at: 2026-05-11
+    evidence_tier: UNEVIDENCED
+    ttl_default_days: 30
+    ttl_days: 30
+    last_validated: 2026-04-15
+    expires: 2026-05-15
+  - id: MEET-2026-03-29-019-1-alerts-deferred-to-pre-harbor-phase-loopzeroregistryunreachabl
+    source: "docs/meetings/records/MEET-2026-03-29-019.md:120"
+    text: "1. **Alerts deferred to PRE-HARBOR phase** — `LoopZeroRegistryUnreachable` and `LoopZeroRegistryCredentialStale` alerts are tracked but not blocking this PR. They MUST exist before Harbor goes live in product"
+    type: negative
+    dimension: product-completeness
+    polarity: negative
+    extracted_at: 2026-05-11
+    evidence_tier: UNEVIDENCED
+    ttl_default_days: 30
+    ttl_days: 30
+    last_validated: 2026-03-29
+    expires: 2026-04-28
+  - id: MEET-2026-04-09-042-the-argocd-blast-radius-incident-was-caused-by-certificate-c
+    source: "docs/meetings/records/MEET-2026-04-09-042.md:49"
+    text: "The ArgoCD blast radius incident was caused by Certificate CRs in the gitops tree. CF Zone Management v2 eliminates Certificate CRs from manifests. Per-project Applications deferred to post-100-tenant"
+    type: negative
+    dimension: scale-mt
+    polarity: negative
+    extracted_at: 2026-05-11
+    evidence_tier: UNEVIDENCED
+    ttl_default_days: 30
+    ttl_days: 60
+    last_validated: 2026-04-09
+    expires: 2026-06-08
+  - id: MEET-2026-05-03-066-ASYNC-AMEN-reasoning-without-t23-loopzero-scale-end-to-end-is-ha
+    source: "docs/meetings/records/MEET-2026-05-03-066-ASYNC-AMENDMENT.md:51"
+    text: "**Reasoning:** Without T2.3, `loopzero scale` end-to-end is half-implemented: config persists but nothing actuates. The plan's Phase 6 dogfood gate explicitly requires `loopzero scale works end-to-end for ≥ 1"
+    type: capability
+    dimension: scale-mt
+    polarity: positive
+    extracted_at: 2026-05-11
+    evidence_tier: UNEVIDENCED
+    ttl_default_days: 30
+    ttl_days: 60
+    last_validated: 2026-05-04
+    expires: 2026-07-03
+  - id: MEET-2026-05-03-066-ASYNC-AMEN-loopzero-scale-config-persistence-shipped-plan-t21t22
+    source: "docs/meetings/records/MEET-2026-05-03-066-ASYNC-AMENDMENT.md:76"
+    text: "> `loopzero scale` config persistence shipped (Plan T2.1+T2.2+T2.4); operator actuation pending follow-up plan. In intermediate state, `loopzero scale` writes config but actuation requires `loopzero deploy` to ap"
+    type: done_status
+    dimension: core-deploy
+    polarity: positive
+    extracted_at: 2026-05-11
+    evidence_tier: UNEVIDENCED
+    ttl_default_days: 30
+    ttl_days: 30
+    last_validated: 2026-05-04
+    expires: 2026-06-03
+  - id: MEET-2026-04-15-050---single-pulumi-stack-for-now-accepted-split-deferred-to-pos
+    source: "docs/meetings/records/MEET-2026-04-15-050.md:67"
+    text: "- Single Pulumi stack for now (accepted: split deferred to post-launch)"
+    type: negative
+    dimension: infra-ops
+    polarity: negative
+    extracted_at: 2026-05-11
+    evidence_tier: UNEVIDENCED
+    ttl_default_days: 30
+    ttl_days: 30
+    last_validated: 2026-04-15
+    expires: 2026-05-15
+  - id: MEET-2026-05-03-063-pre-condition-sprint-6-cosign-sbom-policy-controller-shipped
+    source: "docs/meetings/records/MEET-2026-05-03-063.md:7"
+    text: "**Pre-condition:** Sprint 6 cosign + SBOM + policy-controller shipped (CHG-2026-04-26-SPRINT6-IMPL). Current state: key-based signing active in `helm-charts.yml:259` AND in `api/internal/argo/cosign.g"
+    type: done_status
+    dimension: infra-ops
+    polarity: positive
+    extracted_at: 2026-05-11
+    evidence_tier: PARTIAL_CONFIDENCE
+    ttl_default_days: 30
+    ttl_days: 30
+    last_validated: 2026-05-04
+    expires: 2026-06-03
+    evidence_t3: "ci:helm-charts.yml"
+  - id: MEET-2026-05-03-063-position-approve-condition-track-2-must-include-either-a-a-p
+    source: "docs/meetings/records/MEET-2026-05-03-063.md:62"
+    text: "**Position.** APPROVE. **Condition:** Track-2 must include either (a) a private Fulcio deployment OR (b) a documented decision to defer Track-2 to Sprint 9+ if private Fulcio is out of scope. Track-1 "
+    type: negative
+    dimension: core-deploy
+    polarity: negative
+    extracted_at: 2026-05-11
+    evidence_tier: UNEVIDENCED
+    ttl_default_days: 30
+    ttl_days: 90
+    last_validated: 2026-05-04
+    expires: 2026-08-02
+  - id: MEET-2026-05-03-063-position-approve-conditions-a-admission-webhook-timeout-conf
+    source: "docs/meetings/records/MEET-2026-05-03-063.md:72"
+    text: "**Position.** APPROVE. **Conditions:** (a) admission webhook timeout configured ≤ 3s; (b) policy in `warn` for ≥ 7 days before flip; (c) `cosign verify` failure rate metric exposed and on Grafana befo"
+    type: negative
+    dimension: security
+    polarity: negative
+    extracted_at: 2026-05-11
+    evidence_tier: UNEVIDENCED
+    ttl_default_days: 30
+    ttl_days: 60
+    last_validated: 2026-05-04
+    expires: 2026-07-03
+  - id: MEET-2026-05-03-063-1-two-track-explicit-split-t41-splits-into-t41a-gha-in-scope
+    source: "docs/meetings/records/MEET-2026-05-03-063.md:115"
+    text: "1. **Two-track explicit split.** T4.1 splits into T4.1a (GHA, in-scope) and T4.1b (in-cluster, deferred to Sprint 9+ unless private Fulcio is delivered earlier)."
+    type: negative
+    dimension: infra-ops
+    polarity: negative
+    extracted_at: 2026-05-11
+    evidence_tier: UNEVIDENCED
+    ttl_default_days: 30
+    ttl_days: 90
+    last_validated: 2026-05-04
+    expires: 2026-08-02
+  - id: MEET-2026-04-09-044---github-app-auto-deploy-e2e-validated-happy-path-only
+    source: "docs/meetings/records/MEET-2026-04-09-044.md:21"
+    text: "- GitHub App auto-deploy E2E validated (happy path only)"
+    type: capability
+    dimension: core-deploy
+    polarity: positive
+    extracted_at: 2026-05-11
+    evidence_tier: UNEVIDENCED
+    ttl_default_days: 30
+    ttl_days: 30
+    last_validated: 2026-04-09
+    expires: 2026-05-09
+  - id: MEET-2026-04-09-044---per-project-argocd-applications-as-near-term-deferred-to-p
+    source: "docs/meetings/records/MEET-2026-04-09-044.md:129"
+    text: "- Per-project ArgoCD Applications as near-term: deferred to P2/P3 — architectural cost not justified before 100 tenants"
+    type: negative
+    dimension: scale-mt
+    polarity: negative
+    extracted_at: 2026-05-11
+    evidence_tier: UNEVIDENCED
+    ttl_default_days: 30
+    ttl_days: 60
+    last_validated: 2026-04-09
+    expires: 2026-06-08
+  - id: MEET-2026-04-04-030-problem-the-loopzero-platform-is-at-approximately-85-production-
+    source: "docs/meetings/records/MEET-2026-04-04-030.md:14"
+    text: "**Problem:** The LoopZero platform is at approximately 85% production readiness. Today's session (MEET-028, MEET-029) resolved content hash security and ArgoCD SYNC_FAILED root causes. The remaining ~15% "
+    type: capability
+    dimension: security
+    polarity: positive
+    extracted_at: 2026-05-11
+    evidence_tier: UNEVIDENCED
+    ttl_default_days: 30
+    ttl_days: 60
+    last_validated: 2026-04-04
+    expires: 2026-06-03
+  - id: MEET-2026-04-04-030-decision-required-what-is-the-minimum-viable-set-of-changes-
+    source: "docs/meetings/records/MEET-2026-04-04-030.md:16"
+    text: "**Decision Required:** What is the minimum viable set of changes, in what order, with what Definition of Done, before we declare production-ready? What risks do we accept, and what blocks launch?"
+    type: capability
+    dimension: product-completeness
+    polarity: positive
+    extracted_at: 2026-05-11
+    evidence_tier: UNEVIDENCED
+    ttl_default_days: 30
+    ttl_days: 30
+    last_validated: 2026-04-04
+    expires: 2026-05-04
+  - id: MEET-2026-04-04-030---sre-conditional-veto-on-declaring-production-ready-without
+    source: "docs/meetings/records/MEET-2026-04-04-030.md:82"
+    text: "- **SRE CONDITIONAL VETO on declaring production-ready without Sprint 7 tasks 7.1 + 7.2.** RunAsRoot and no PSA enforcement means any container escape gives full node access. This is unacceptable even"
+    type: capability
+    dimension: product-completeness
+    polarity: positive
+    extracted_at: 2026-05-11
+    evidence_tier: UNEVIDENCED
+    ttl_default_days: 30
+    ttl_days: 30
+    last_validated: 2026-04-04
+    expires: 2026-05-04
+  - id: MEET-2026-04-04-030-resolution-security-veto-is-absolute-per-governance-rules-ta
+    source: "docs/meetings/records/MEET-2026-04-04-030.md:223"
+    text: "**Resolution:** Security veto is ABSOLUTE per governance rules. Tasks 7.1, 7.2, 7.3, and 7.4 are MANDATORY before production declaration. Tasks 7.5, 7.6, 7.7 are deferred to post-launch hardening with"
+    type: negative
+    dimension: security
+    polarity: negative
+    extracted_at: 2026-05-11
+    evidence_tier: UNEVIDENCED
+    ttl_default_days: 30
+    ttl_days: 60
+    last_validated: 2026-04-04
+    expires: 2026-06-03
+  - id: MEET-2026-04-04-030-total-to-production-ready-10-14h
+    source: "docs/meetings/records/MEET-2026-04-04-030.md:437"
+    text: "| **Total to production-ready** | **10-14h** | — |"
+    type: capability
+    dimension: product-completeness
+    polarity: positive
+    extracted_at: 2026-05-11
+    evidence_tier: UNEVIDENCED
+    ttl_default_days: 30
+    ttl_days: 30
+    last_validated: 2026-04-04
+    expires: 2026-05-04
+  - id: MEET-2026-04-27-060---sprint-5-chg-2026-04-26-preview-impl-and-sprint-6-chg-2026
+    source: "docs/meetings/records/MEET-2026-04-27-060.md:39"
+    text: "- Sprint 5 (CHG-2026-04-26-PREVIEW-IMPL) and Sprint 6 (CHG-2026-04-26-SPRINT6-IMPL) shipped; governance hook still scoped to those CHGs."
+    type: done_status
+    dimension: product-completeness
+    polarity: positive
+    extracted_at: 2026-05-11
+    evidence_tier: UNEVIDENCED
+    ttl_default_days: 30
+    ttl_days: 30
+    last_validated: 2026-04-27
+    expires: 2026-05-27
+  - id: MEET-2026-04-27-060-conditions-add-t-10c-sub-task-implement-lookupexistingregist
+    source: "docs/meetings/records/MEET-2026-04-27-060.md:77"
+    text: "**Conditions.** Add T-1.0c sub-task: implement `lookupExistingRegistry(name)` in `core/adopt-or-create.ts` mirroring the VPC pattern; `infra.ts:282` consumes the import ID. Renaming the live DOCR is o"
+    type: negative
+    dimension: infra-ops
+    polarity: negative
+    extracted_at: 2026-05-11
+    evidence_tier: UNEVIDENCED
+    ttl_default_days: 30
+    ttl_days: 30
+    last_validated: 2026-04-27
+    expires: 2026-05-27
+  - id: MEET-2026-04-27-060-dx-engineer-approve-option-b-no-veto-task-bootstrapdev-defer
+    source: "docs/meetings/records/MEET-2026-04-27-060.md:392"
+    text: "| DX Engineer | APPROVE (Option B) | No veto; `task bootstrap:dev` deferred to backlog |"
+    type: negative
+    dimension: dx-cli
+    polarity: negative
+    extracted_at: 2026-05-11
+    evidence_tier: UNEVIDENCED
+    ttl_default_days: 30
+    ttl_days: 30
+    last_validated: 2026-04-27
+    expires: 2026-05-27
+  - id: MEET-2026-04-21-055-a2-applicationset-enforcement-defer-to-phase-4-dual-ownershi
+    source: "docs/meetings/records/MEET-2026-04-21-055.md:41"
+    text: "| **A2: ApplicationSet Enforcement** | DEFER to Phase 4 | Dual ownership with TenantController. ConfigMap race condition. Code not production-ready. | 5/5 |"
+    type: capability
+    dimension: scale-mt
+    polarity: positive
+    extracted_at: 2026-05-11
+    evidence_tier: UNEVIDENCED
+    ttl_default_days: 30
+    ttl_days: 60
+    last_validated: 2026-04-21
+    expires: 2026-06-20
+  - id: MEET-2026-04-21-055---task-loadtestrun-levell1-works-end-to-end
+    source: "docs/meetings/records/MEET-2026-04-21-055.md:120"
+    text: "- [ ] `task loadtest:run LEVEL=l1` works end-to-end"
+    type: capability
+    dimension: tests-confidence
+    polarity: positive
+    extracted_at: 2026-05-11
+    evidence_tier: UNEVIDENCED
+    ttl_default_days: 30
+    ttl_days: 30
+    last_validated: 2026-04-21
+    expires: 2026-05-21
+  - id: MEET-2026-04-06-038-recommendation-6-phases-db-first-free-tier-db-only-no-stripe
+    source: "docs/meetings/records/MEET-2026-04-06-038.md:61"
+    text: "**Recommendation:** 6 phases, DB-first. Free tier = DB-only, no Stripe subscription. Stripe customer creation deferred to first paid action (lazy creation)."
+    type: negative
+    dimension: product-completeness
+    polarity: negative
+    extracted_at: 2026-05-11
+    evidence_tier: UNEVIDENCED
+    ttl_default_days: 30
+    ttl_days: 30
+    last_validated: 2026-04-08
+    expires: 2026-05-08
+  - id: MEET-2026-04-01-027---scale-na-single-tenant-dev-pipeline
+    source: "docs/meetings/records/MEET-2026-04-01-027.md:109"
+    text: "- Scale: N/A (single-tenant dev pipeline)."
+    type: negative
+    dimension: scale-mt
+    polarity: negative
+    extracted_at: 2026-05-11
+    evidence_tier: UNEVIDENCED
+    ttl_default_days: 30
+    ttl_days: 60
+    last_validated: 2026-04-04
+    expires: 2026-06-03
+  - id: MEET-2026-04-17-051-migration-explicitly-out-of-scope-new-tenants-cell-2-capacit
+    source: "docs/meetings/records/MEET-2026-04-17-051.md:212"
+    text: "| **Migration** | Explicitly out of scope. New tenants → cell-2 (capacity-aware). Existing 100 stay on `cell-default`. Migration = Phase 3. | All |"
+    type: negative
+    dimension: scale-mt
+    polarity: negative
+    extracted_at: 2026-05-11
+    evidence_tier: UNEVIDENCED
+    ttl_default_days: 30
+    ttl_days: 60
+    last_validated: 2026-04-17
+    expires: 2026-06-16
+  - id: MEET-2026-04-17-052-4-bulk-evict-authnauthz-loopzero_admin_api_key-with-dual-key-rot
+    source: "docs/meetings/records/MEET-2026-04-17-052.md:248"
+    text: "| 4 | Bulk evict authn/authz | `LOOPZERO_ADMIN_API_KEY` with dual-key rotation | No current RBAC role covers cross-tenant operations. API key is simplest secure mechanism for pre-release. |"
+    type: negative
+    dimension: security
+    polarity: negative
+    extracted_at: 2026-05-11
+    evidence_tier: UNEVIDENCED
+    ttl_default_days: 30
+    ttl_days: 60
+    last_validated: 2026-04-17
+    expires: 2026-06-16
+  - id: MEET-2026-03-30-022-resolution-consensus-with-nuance-phase-42-scope-a-install-ky
+    source: "docs/meetings/records/MEET-2026-03-30-022.md:247"
+    text: "**Resolution:** Consensus with nuance. Phase 4.2 scope: (a) Install Kyverno on workload cluster (required for verifyImages — this is why Kyverno was deferred from Phase 2). (b) Add cosign signing to G"
+    type: negative
+    dimension: infra-ops
+    polarity: negative
+    extracted_at: 2026-05-11
+    evidence_tier: UNEVIDENCED
+    ttl_default_days: 30
+    ttl_days: 30
+    last_validated: 2026-03-30
+    expires: 2026-04-29
+  - id: MEET-2026-04-22-056-mutation-testing-is-deferred-to-phase-3-the-immediate-priori
+    source: "docs/meetings/records/MEET-2026-04-22-056.md:60"
+    text: "**Mutation testing is DEFERRED to Phase 3.** The immediate priority is filling the catastrophic test gaps in the deploy pipeline core."
+    type: negative
+    dimension: core-deploy
+    polarity: negative
+    extracted_at: 2026-05-11
+    evidence_tier: UNEVIDENCED
+    ttl_default_days: 30
+    ttl_days: 30
+    last_validated: 2026-04-22
+    expires: 2026-05-22
+  - id: MEET-2026-04-23-058-impact-if-ignored-if-pulumi-is-deferred-to-a-later-pr-prod-i
+    source: "docs/meetings/records/MEET-2026-04-23-058.md:118"
+    text: "**Impact if ignored.** If Pulumi is deferred to a later PR, prod is guaranteed to break on next deploy of API. This is not a loopzeroretical risk — it is the direct mechanical consequence of Validate() fa"
+    type: negative
+    dimension: core-deploy
+    polarity: negative
+    extracted_at: 2026-05-11
+    evidence_tier: UNEVIDENCED
+    ttl_default_days: 30
+    ttl_days: 30
+    last_validated: 2026-04-23
+    expires: 2026-05-23
+  - id: MEET-2026-04-23-058---option-b-option-b-but-pulumi-deferred-to-a-follow-up-pr-re
+    source: "docs/meetings/records/MEET-2026-04-23-058.md:247"
+    text: "- **Option B' (Option B but Pulumi deferred to a follow-up PR).** Rejected by all five reviewers: guarantees prod outage on first API image roll. Non-atomic."
+    type: negative
+    dimension: infra-ops
+    polarity: negative
+    extracted_at: 2026-05-11
+    evidence_tier: UNEVIDENCED
+    ttl_default_days: 30
+    ttl_days: 30
+    last_validated: 2026-04-23
+    expires: 2026-05-23
+  - id: MEET-2026-04-27-061-pre-condition-chg-001-closed-2026-04-27-1340-validation-matr
+    source: "docs/meetings/records/MEET-2026-04-27-061.md:7"
+    text: "**Pre-condition:** CHG-001 CLOSED 2026-04-27 13:40 — validation matrix 14/14 GREEN (`/home/paulo/.loopzero/artifacts/validation-20260427-134037.log`); 4 DOKS Running; PG `loopzero-infra-dev-sfo3-db` SELECT 1 "
+    type: completion
+    dimension: infra-ops
+    polarity: positive
+    extracted_at: 2026-05-11
+    evidence_tier: BROKEN
+    ttl_default_days: 30
+    ttl_days: 30
+    last_validated: 2026-04-27
+    expires: 2026-05-27
+    broken_refs: "commit_missing:20260427"
+  - id: MEET-2026-04-27-061---sprint-6-supply-chain-shipped-2026-04-26-cosign-sbom-polic
+    source: "docs/meetings/records/MEET-2026-04-27-061.md:52"
+    text: "- Sprint 6 / supply chain shipped 2026-04-26 (cosign + SBOM + policy-controller Audit). Deny-mode flip pending 2-week observation — overlaps CHG-002 timeline."
+    type: done_status
+    dimension: security
+    polarity: positive
+    extracted_at: 2026-05-11
+    evidence_tier: UNEVIDENCED
+    ttl_default_days: 30
+    ttl_days: 60
+    last_validated: 2026-04-27
+    expires: 2026-06-26
+  - id: MEET-2026-04-27-061---sprint-5-preview-envs-shipped-2026-04-26
+    source: "docs/meetings/records/MEET-2026-04-27-061.md:53"
+    text: "- Sprint 5 / preview envs shipped 2026-04-26."
+    type: done_status
+    dimension: product-completeness
+    polarity: positive
+    extracted_at: 2026-05-11
+    evidence_tier: UNEVIDENCED
+    ttl_default_days: 30
+    ttl_days: 30
+    last_validated: 2026-04-27
+    expires: 2026-05-27
+  - id: MEET-2026-04-27-061---cell-2-routing-remains-explicitly-out-of-scope-for-chg-002
+    source: "docs/meetings/records/MEET-2026-04-27-061.md:139"
+    text: "- Cell-2 routing remains explicitly OUT OF SCOPE for CHG-002 (per ADR-0010 §Phase 2b). `runtimeCluster2` is provisioned but no `ClusterCredential` CR points at it. Phase 2b is Sprint 9."
+    type: negative
+    dimension: infra-ops
+    polarity: negative
+    extracted_at: 2026-05-11
+    evidence_tier: UNEVIDENCED
+    ttl_default_days: 30
+    ttl_days: 90
+    last_validated: 2026-04-27
+    expires: 2026-07-26
+  - id: MEET-2026-05-03-064-assessment-schema-validation-is-a-formal-correctness-gate-he
+    source: "docs/meetings/records/MEET-2026-05-03-064.md:54"
+    text: "**Assessment.** Schema validation is a formal correctness gate. helm-unittest is a unit test layer that's currently absent. Without these, we have no proof that templates render as intended for the se"
+    type: done_status
+    dimension: infra-ops
+    polarity: positive
+    extracted_at: 2026-05-11
+    evidence_tier: UNEVIDENCED
+    ttl_default_days: 30
+    ttl_days: 30
+    last_validated: 2026-05-04
+    expires: 2026-06-03
+  - id: MEET-2026-04-05-032---login-flow-works-end-to-end-dashboard---authenticate---das
+    source: "docs/meetings/records/MEET-2026-04-05-032.md:200"
+    text: "- [ ] Login flow works end-to-end: dashboard -> authenticate -> dashboard (token received)"
+    type: capability
+    dimension: security
+    polarity: positive
+    extracted_at: 2026-05-11
+    evidence_tier: UNEVIDENCED
+    ttl_default_days: 30
+    ttl_days: 60
+    last_validated: 2026-04-05
+    expires: 2026-06-04
+  - id: MEET-2026-04-23-059---if-we-ever-support-scale-out-of-band-the-loopzero-scale-cli-ex
+    source: "docs/meetings/records/MEET-2026-04-23-059.md:83"
+    text: "- If we ever support `scale` out-of-band (the `loopzero scale` CLI exists at `cli/src/commands/scale.ts`), we must decide whether runtime-set replicas override loopzero.yaml on next deploy. The existing `scal"
+    type: negative
+    dimension: core-deploy
+    polarity: negative
+    extracted_at: 2026-05-11
+    evidence_tier: UNEVIDENCED
+    ttl_default_days: 30
+    ttl_days: 30
+    last_validated: 2026-04-23
+    expires: 2026-05-23
+  - id: MEET-2026-04-23-059-3-scale-command-out-of-band-mutation-clisrccommandsscalets-t
+    source: "docs/meetings/records/MEET-2026-04-23-059.md:238"
+    text: "3. **`scale` command out-of-band mutation** (`cli/src/commands/scale.ts`). The existing `loopzero scale` command updates replicas imperatively. It is NOT covered by this meeting. Future deploys from loopzero."
+    type: negative
+    dimension: core-deploy
+    polarity: negative
+    extracted_at: 2026-05-11
+    evidence_tier: UNEVIDENCED
+    ttl_default_days: 30
+    ttl_days: 30
+    last_validated: 2026-04-23
+    expires: 2026-05-23
+  - id: MEET-2026-04-23-059-loopzero-scale-command-diverges-from-loopzeroyaml-out-of-scope-follo
+    source: "docs/meetings/records/MEET-2026-04-23-059.md:278"
+    text: "| `loopzero scale` command diverges from loopzero.yaml | Out of scope; follow-up ticket. | tracked as follow-up |"
+    type: negative
+    dimension: scale-mt
+    polarity: negative
+    extracted_at: 2026-05-11
+    evidence_tier: UNEVIDENCED
+    ttl_default_days: 30
+    ttl_days: 60
+    last_validated: 2026-04-23
+    expires: 2026-06-22
+  - id: MEET-2026-04-23-059-5-task-teste2e-integration-fixture-with-replicas-2-gitops-re
+    source: "docs/meetings/records/MEET-2026-04-23-059.md:338"
+    text: "5. `task test:e2e` integration: fixture with `replicas: 2` → gitops repo contains `Deployment.spec.replicas: 2`. (May be deferred to manual E2E if CI E2E not yet enabled, but must be executed manually"
+    type: negative
+    dimension: core-deploy
+    polarity: negative
+    extracted_at: 2026-05-11
+    evidence_tier: UNEVIDENCED
+    ttl_default_days: 30
+    ttl_days: 30
+    last_validated: 2026-04-23
+    expires: 2026-05-23
+  - id: ADR-0018-tenant-namespace-sot-companion-infrascriptsmigrate-tenant-namespacesh-t
+    source: "docs/meetings/adr/ADR-0018-tenant-namespace-sot.md:8"
+    text: "> **Companion:** `infra/scripts/migrate-tenant-namespace.sh` (T1 data cleanup, already shipped)"
+    type: done_status
+    dimension: infra-ops
+    polarity: positive
+    extracted_at: 2026-05-11
+    evidence_tier: UNEVIDENCED
+    ttl_default_days: 30
+    ttl_days: 30
+    last_validated: 2026-05-01
+    expires: 2026-05-31
+  - id: ADR-0018-tenant-namespace-sot-follow-up-adr-0019-rbac-tightening-deferred-to-spr
+    source: "docs/meetings/adr/ADR-0018-tenant-namespace-sot.md:11"
+    text: "> **Follow-up:** ADR-0019 (RBAC tightening, deferred to Sprint 9)"
+    type: negative
+    dimension: security
+    polarity: negative
+    extracted_at: 2026-05-11
+    evidence_tier: UNEVIDENCED
+    ttl_default_days: 30
+    ttl_days: 90
+    last_validated: 2026-05-01
+    expires: 2026-07-30
+  - id: ADR-0018-tenant-namespace-sot-1-t33-done-migrate-tenant-namespacesh-shipped-em-i
+    source: "docs/meetings/adr/ADR-0018-tenant-namespace-sot.md:168"
+    text: "1. **T3.3 (DONE):** `migrate-tenant-namespace.sh` shipped em iter 3."
+    type: done_status
+    dimension: scale-mt
+    polarity: positive
+    extracted_at: 2026-05-11
+    evidence_tier: UNEVIDENCED
+    ttl_default_days: 30
+    ttl_days: 60
+    last_validated: 2026-05-01
+    expires: 2026-06-30
+  - id: 0026-rbac-from-markers-markers-are-local-only-by-design-cross-cluster-rbac-has-f
+    source: "docs/meetings/adr/0026-rbac-from-markers.md:85"
+    text: "Markers are local-only by design. Cross-cluster RBAC has fundamentally different ownership (runtime cluster admins vs operator developers) and lifecycle (manually maintained, audited separately). Trea"
+    type: negative
+    dimension: infra-ops
+    polarity: negative
+    extracted_at: 2026-05-11
+    evidence_tier: UNEVIDENCED
+    ttl_default_days: 30
+    ttl_days: 30
+    last_validated: 2026-05-04
+    expires: 2026-06-03
+  - id: 0040-sbom-attestation-parity-c-sprint-6-chg-2026-04-26-sprint6-impl-shipped-cosi
+    source: "docs/meetings/adr/0040-sbom-attestation-parity-charts.md:9"
+    text: "Sprint 6 (CHG-2026-04-26-SPRINT6-IMPL) shipped cosign image signing + syft SBOM (CycloneDX) + policy-controller deny-by-default. Container images in LoopZero's pipeline carry:"
+    type: done_status
+    dimension: dx-cli
+    polarity: positive
+    extracted_at: 2026-05-11
+    evidence_tier: UNEVIDENCED
+    ttl_default_days: 30
+    ttl_days: 30
+    last_validated: 2026-05-05
+    expires: 2026-06-04
+  - id: 0040-sbom-attestation-parity-c---no-sbom
+    source: "docs/meetings/adr/0040-sbom-attestation-parity-charts.md:16"
+    text: "- ❌ NO SBOM"
+    type: negative
+    dimension: security
+    polarity: negative
+    extracted_at: 2026-05-11
+    evidence_tier: UNEVIDENCED
+    ttl_default_days: 30
+    ttl_days: 60
+    last_validated: 2026-05-05
+    expires: 2026-07-04
+  - id: 0040-sbom-attestation-parity-c---no-attestation
+    source: "docs/meetings/adr/0040-sbom-attestation-parity-charts.md:17"
+    text: "- ❌ NO attestation"
+    type: negative
+    dimension: tests-confidence
+    polarity: negative
+    extracted_at: 2026-05-11
+    evidence_tier: UNEVIDENCED
+    ttl_default_days: 30
+    ttl_days: 30
+    last_validated: 2026-05-05
+    expires: 2026-06-04
+  - id: MEET-INFRA-NORMALIZE-T3-multi--out-of-scope-operator-topology-cutover-d1-separat
+    source: "docs/meetings/adr/MEET-INFRA-NORMALIZE-T3-multi-cell.md:8"
+    text: "**Out of scope:** Operator topology cutover (D1, separate decision), Pulumi consolidation (D2, separate decision), CLI cluster-real tests (D4, separate decision), runtime-2 *capacity* sizing (already "
+    type: done_status
+    dimension: dx-cli
+    polarity: positive
+    extracted_at: 2026-05-11
+    evidence_tier: UNEVIDENCED
+    ttl_default_days: 30
+    ttl_days: 30
+    last_validated: 2026-05-01
+    expires: 2026-05-31
+  - id: MEET-INFRA-NORMALIZE-T3-multi--out-of-scope-operator-topology-cutover-d1-separat
+    source: "docs/meetings/adr/MEET-INFRA-NORMALIZE-T3-multi-cell.md:8"
+    text: "**Out of scope:** Operator topology cutover (D1, separate decision), Pulumi consolidation (D2, separate decision), CLI cluster-real tests (D4, separate decision), runtime-2 *capacity* sizing (already "
+    type: negative
+    dimension: dx-cli
+    polarity: negative
+    extracted_at: 2026-05-11
+    evidence_tier: UNEVIDENCED
+    ttl_default_days: 30
+    ttl_days: 30
+    last_validated: 2026-05-01
+    expires: 2026-05-31
+  - id: 0010-phase2-rescope---migration-explicitly-out-of-scope-for-phase-2-new-tenants-
+    source: "docs/meetings/adr/0010-phase2-rescope.md:78"
+    text: "- **Migration:** explicitly out of scope for Phase 2. New tenants → cell-2 via capacity-aware sticky. Existing 100 tenants stay on `cell-default`. Migration mechanism = Phase 3."
+    type: negative
+    dimension: scale-mt
+    polarity: negative
+    extracted_at: 2026-05-11
+    evidence_tier: UNEVIDENCED
+    ttl_default_days: 30
+    ttl_days: 60
+    last_validated: 2026-04-17
+    expires: 2026-06-16
+  - id: 0010-phase2-rescope-migration-tenant-rebalancing-across-cells-is-deferred-to-pha
+    source: "docs/meetings/adr/0010-phase2-rescope.md:86"
+    text: "Migration (tenant rebalancing across cells) is deferred to Phase 3 with an explicit state machine: `ACTIVE(cell-A) → PREPARING(cell-B) → DUAL → DRAINING(cell-A) → ACTIVE(cell-B)`. Finalizers prevent p"
+    type: negative
+    dimension: scale-mt
+    polarity: negative
+    extracted_at: 2026-05-11
+    evidence_tier: UNEVIDENCED
+    ttl_default_days: 30
+    ttl_days: 60
+    last_validated: 2026-04-17
+    expires: 2026-06-16
+  - id: 0010-phase2-rescope-rejected-by-sre-and-production-design-a-production-ready-cla
+    source: "docs/meetings/adr/0010-phase2-rescope.md:131"
+    text: "Rejected by SRE and Production Design. A \"production-ready\" claim with no failure-injection evidence is not production-ready. The chaos video (cell-2 down, cell-1 apps serve 200 for 10 min) IS the del"
+    type: capability
+    dimension: scale-mt
+    polarity: positive
+    extracted_at: 2026-05-11
+    evidence_tier: UNEVIDENCED
+    ttl_default_days: 30
+    ttl_days: 60
+    last_validated: 2026-04-17
+    expires: 2026-06-16
+  - id: 0010-phase2-rescope-rejected-by-sre-and-production-design-a-production-ready-cla
+    source: "docs/meetings/adr/0010-phase2-rescope.md:131"
+    text: "Rejected by SRE and Production Design. A \"production-ready\" claim with no failure-injection evidence is not production-ready. The chaos video (cell-2 down, cell-1 apps serve 200 for 10 min) IS the del"
+    type: capability
+    dimension: scale-mt
+    polarity: positive
+    extracted_at: 2026-05-11
+    evidence_tier: UNEVIDENCED
+    ttl_default_days: 30
+    ttl_days: 60
+    last_validated: 2026-04-17
+    expires: 2026-06-16
+  - id: 0013-local-install-must-be-pro---loopzero-deploy-works-end-to-end-in-profileminimal-
+    source: "docs/meetings/adr/0013-local-install-must-be-production-realistic.md:84"
+    text: "- **`loopzero deploy` works end-to-end** in `profile=minimal` without manual"
+    type: capability
+    dimension: core-deploy
+    polarity: positive
+    extracted_at: 2026-05-11
+    evidence_tier: UNEVIDENCED
+    ttl_default_days: 30
+    ttl_days: 30
+    last_validated: 2026-04-24
+    expires: 2026-05-24
+  - id: 0013-local-install-must-be-pro-platform-is-installable-and-a-deploy-works-end-to
+    source: "docs/meetings/adr/0013-local-install-must-be-production-realistic.md:144"
+    text: "platform is installable and a deploy works end-to-end."
+    type: capability
+    dimension: core-deploy
+    polarity: positive
+    extracted_at: 2026-05-11
+    evidence_tier: UNEVIDENCED
+    ttl_default_days: 30
+    ttl_days: 30
+    last_validated: 2026-04-24
+    expires: 2026-05-24
+  - id: ADR-0021-infra-normalize-decis---production-design-cutover-must-be-atomic-no-30s
+    source: "docs/meetings/adr/ADR-0021-infra-normalize-decisions.md:38"
+    text: "- Production-design: cutover must be atomic (no ≥30s reconciler gap) — requires explicit migration script (C1) not yet shipped."
+    type: done_status
+    dimension: product-completeness
+    polarity: positive
+    extracted_at: 2026-05-11
+    evidence_tier: UNEVIDENCED
+    ttl_default_days: 30
+    ttl_days: 60
+    last_validated: 2026-05-01
+    expires: 2026-06-30
+  - id: ADR-0021-infra-normalize-decis---distributed-systems-cell-unavailable-returns-50
+    source: "docs/meetings/adr/ADR-0021-infra-normalize-decisions.md:65"
+    text: "- Distributed-systems: cell-unavailable returns 503 not 500; routing determinism invariant + test (shipped via T5.4 metrics)."
+    type: done_status
+    dimension: scale-mt
+    polarity: positive
+    extracted_at: 2026-05-11
+    evidence_tier: UNEVIDENCED
+    ttl_default_days: 30
+    ttl_days: 60
+    last_validated: 2026-05-01
+    expires: 2026-06-30
+  - id: ADR-0021-infra-normalize-decis-consequences-t54-observability-t55-admin-pin-t53b
+    source: "docs/meetings/adr/ADR-0021-infra-normalize-decisions.md:69"
+    text: "**Consequences.** T5.4 (observability) + T5.5 (admin pin) + T5.3b (CC bootstrap) + cells migration shipped offline. T5.6/T5.7 cloud-pendentes."
+    type: done_status
+    dimension: scale-mt
+    polarity: positive
+    extracted_at: 2026-05-11
+    evidence_tier: UNEVIDENCED
+    ttl_default_days: 30
+    ttl_days: 60
+    last_validated: 2026-05-01
+    expires: 2026-06-30
+  - id: ADR-0021-infra-normalize-decis-implementation-t54-shipped-4-metrics-7-alerts-run
+    source: "docs/meetings/adr/ADR-0021-infra-normalize-decisions.md:95"
+    text: "**Implementation.** T5.4 shipped 4 metrics + 7 alerts + runbook (`docs/runbooks/multi-cell-alerts.md`) BEFORE any cell-2 traffic flips."
+    type: done_status
+    dimension: scale-mt
+    polarity: positive
+    extracted_at: 2026-05-11
+    evidence_tier: PARTIAL_CONFIDENCE
+    ttl_default_days: 30
+    ttl_days: 60
+    last_validated: 2026-05-01
+    expires: 2026-06-30
+    evidence_t2: "live:docs/runbooks/multi-cell-alerts.md"
+  - id: ADR-0021-infra-normalize-decis---multi-cell-observability-admin-pinning-shipped-
+    source: "docs/meetings/adr/ADR-0021-infra-normalize-decisions.md:130"
+    text: "- Multi-cell observability + admin pinning shipped BEFORE any cell-2 traffic."
+    type: done_status
+    dimension: scale-mt
+    polarity: positive
+    extracted_at: 2026-05-11
+    evidence_tier: UNEVIDENCED
+    ttl_default_days: 30
+    ttl_days: 60
+    last_validated: 2026-05-01
+    expires: 2026-06-30
+  - id: ADR-0020-infra-parity-decision-rationale-without-this-constraint-customers-self-
+    source: "docs/meetings/adr/ADR-0020-infra-parity-decisions.md:64"
+    text: "**Rationale:** Without this constraint, customers self-hosting LoopZero build an emergent \"third platform\" that nobody tests against LoopZero Cloud. Bug fixes shipped on Cloud silently miss self-hosting and v"
+    type: done_status
+    dimension: product-completeness
+    polarity: positive
+    extracted_at: 2026-05-11
+    evidence_tier: UNEVIDENCED
+    ttl_default_days: 30
+    ttl_days: 30
+    last_validated: 2026-05-01
+    expires: 2026-05-31
+  - id: MEET-INFRA-NORMALIZE-T3-operat-out-of-scope-pulumi-consolidation-d2-multi-cell-a
+    source: "docs/meetings/adr/MEET-INFRA-NORMALIZE-T3-operator-split.md:8"
+    text: "**Out of scope:** Pulumi consolidation (D2), multi-cell activation (D3), CLI cluster-real tests (D4)"
+    type: negative
+    dimension: dx-cli
+    polarity: negative
+    extracted_at: 2026-05-11
+    evidence_tier: UNEVIDENCED
+    ttl_default_days: 30
+    ttl_days: 30
+    last_validated: 2026-05-01
+    expires: 2026-05-31
+  - id: MEET-INFRA-NORMALIZE-T3-operat-pr-51-refactorhelms-head-29b4d392-merged-into-fix
+    source: "docs/meetings/adr/MEET-INFRA-NORMALIZE-T3-operator-split.md:20"
+    text: "PR #51 (`refactorhelms`, head `29b4d392`, merged into `fix/parity-on-refactorhelms`) shipped four split operator binaries (`operators/cmd/{tenant,app,preview,platform}-operator/main.go`) and four publ"
+    type: done_status
+    dimension: infra-ops
+    polarity: positive
+    extracted_at: 2026-05-11
+    evidence_tier: PARTIAL_CONFIDENCE
+    ttl_default_days: 30
+    ttl_days: 30
+    last_validated: 2026-05-01
+    expires: 2026-05-31
+    evidence_t1: "commit:29b4d392"
+  - id: MEET-ADR-0018-decision---t33-migration-script-already-shipped-infrascriptsmigrat
+    source: "docs/meetings/adr/MEET-ADR-0018-decision.md:29"
+    text: "- T3.3 migration script already shipped (`infra/scripts/migrate-tenant-namespace.sh`, 229 LOC) — preserves invariant for existing clusters."
+    type: done_status
+    dimension: infra-ops
+    polarity: positive
+    extracted_at: 2026-05-11
+    evidence_tier: UNEVIDENCED
+    ttl_default_days: 30
+    ttl_days: 30
+    last_validated: 2026-05-01
+    expires: 2026-05-31
+  - id: MEET-ADR-0018-decision---c12-rbac-tightening-is-out-of-scope-of-this-decision-de
+    source: "docs/meetings/adr/MEET-ADR-0018-decision.md:172"
+    text: "- C12: RBAC tightening is **out of scope** of this decision — defer to a follow-up ADR-0019. Remove \"RBAC simplification\" from ADR-0018 §Positive consequences to avoid scope creep, or commit to ADR-00"
+    type: negative
+    dimension: security
+    polarity: negative
+    extracted_at: 2026-05-11
+    evidence_tier: UNEVIDENCED
+    ttl_default_days: 30
+    ttl_days: 90
+    last_validated: 2026-05-01
+    expires: 2026-07-30
+  - id: MEET-ADR-0018-decision-production-design-reviewer-out-of-scope-for-t31t32-defer
+    source: "docs/meetings/adr/MEET-ADR-0018-decision.md:263"
+    text: "| production-design-reviewer | Out of scope for T3.1+T3.2. Defer. |"
+    type: negative
+    dimension: product-completeness
+    polarity: negative
+    extracted_at: 2026-05-11
+    evidence_tier: UNEVIDENCED
+    ttl_default_days: 30
+    ttl_days: 30
+    last_validated: 2026-05-01
+    expires: 2026-05-31
+  - id: MEET-ADR-0018-decision-change-validation-planner-out-of-scope-adding-rbac-change
+    source: "docs/meetings/adr/MEET-ADR-0018-decision.md:265"
+    text: "| change-validation-planner | Out of scope. Adding RBAC change here doubles the test surface. |"
+    type: negative
+    dimension: security
+    polarity: negative
+    extracted_at: 2026-05-11
+    evidence_tier: UNEVIDENCED
+    ttl_default_days: 30
+    ttl_days: 60
+    last_validated: 2026-05-01
+    expires: 2026-06-30
+  - id: MEET-ADR-0018-decision-resolution-rbac-tightening-is-deferred-to-adr-0019-sprint
+    source: "docs/meetings/adr/MEET-ADR-0018-decision.md:267"
+    text: "**Resolution:** RBAC tightening is **deferred to ADR-0019** (Sprint 9). ADR-0018 §Positive consequences amended to remove \"RBAC simplificado\" or annotate it as \"follow-up ADR-0019\". (C12.)"
+    type: negative
+    dimension: security
+    polarity: negative
+    extracted_at: 2026-05-11
+    evidence_tier: UNEVIDENCED
+    ttl_default_days: 30
+    ttl_days: 90
+    last_validated: 2026-05-01
+    expires: 2026-07-30
+  - id: MEET-ADR-0018-decision-move-all-crs-to-a-per-tenant-namespace-topology-current-a
+    source: "docs/meetings/adr/MEET-ADR-0018-decision.md:324"
+    text: "| Move all CRs to a per-tenant namespace topology | Current architecture is single-namespace platform CRs. Multi-namespace topology is a larger architectural change requiring a separate ADR. Reject (o"
+    type: negative
+    dimension: scale-mt
+    polarity: negative
+    extracted_at: 2026-05-11
+    evidence_tier: UNEVIDENCED
+    ttl_default_days: 30
+    ttl_days: 90
+    last_validated: 2026-05-01
+    expires: 2026-07-30
+  - id: MEET-INFRA-NORMALIZE-T3-pulumi-out-of-scope-operator-topology-cutover-d1-see-mee
+    source: "docs/meetings/adr/MEET-INFRA-NORMALIZE-T3-pulumi-consolidation.md:8"
+    text: "**Out of scope:** Operator topology cutover (D1 — see MEET-INFRA-NORMALIZE-T3-operator-split.md), multi-cell activation (D3), CLI cluster-real tests (D4)"
+    type: negative
+    dimension: dx-cli
+    polarity: negative
+    extracted_at: 2026-05-11
+    evidence_tier: UNEVIDENCED
+    ttl_default_days: 30
+    ttl_days: 30
+    last_validated: 2026-05-01
+    expires: 2026-05-31
+  - id: MEET-INFRA-NORMALIZE-T3-pulumi-infrapulumi-infra-loopzero-infra-collision-infrascrip
+    source: "docs/meetings/adr/MEET-INFRA-NORMALIZE-T3-pulumi-consolidation.md:25"
+    text: "| `infra/pulumi-infra/` | `loopzero-infra` (**collision**) | `infra/scripts/provision-homolog.sh` only | n/a (cloud-only) | orphan |"
+    type: negative
+    dimension: infra-ops
+    polarity: negative
+    extracted_at: 2026-05-11
+    evidence_tier: UNEVIDENCED
+    ttl_default_days: 30
+    ttl_days: 30
+    last_validated: 2026-05-01
+    expires: 2026-05-31
+  - id: MEET-INFRA-NORMALIZE-T3-pulumi-infrapulumi-shared-na-no-pulumiyaml-single-stack-
+    source: "docs/meetings/adr/MEET-INFRA-NORMALIZE-T3-pulumi-consolidation.md:28"
+    text: "| `infra/pulumi-shared/` | n/a (no `Pulumi.yaml` — single `stack-outputs.ts`) | imported by `pulumi-platform/src/contracts.ts` and `pulumi-control-plane/src/contracts.ts` only | n/a | orphan |"
+    type: negative
+    dimension: infra-ops
+    polarity: negative
+    extracted_at: 2026-05-11
+    evidence_tier: UNEVIDENCED
+    ttl_default_days: 30
+    ttl_days: 30
+    last_validated: 2026-05-01
+    expires: 2026-05-31
+  - id: MEET-INFRA-NORMALIZE-T3-pulumi-infrapulumi-shared-na-no-pulumiyaml-single-stack-
+    source: "docs/meetings/adr/MEET-INFRA-NORMALIZE-T3-pulumi-consolidation.md:28"
+    text: "| `infra/pulumi-shared/` | n/a (no `Pulumi.yaml` — single `stack-outputs.ts`) | imported by `pulumi-platform/src/contracts.ts` and `pulumi-control-plane/src/contracts.ts` only | n/a | orphan |"
+    type: negative
+    dimension: infra-ops
+    polarity: negative
+    extracted_at: 2026-05-11
+    evidence_tier: UNEVIDENCED
+    ttl_default_days: 30
+    ttl_days: 30
+    last_validated: 2026-05-01
+    expires: 2026-05-31
+  - id: MEET-INFRA-NORMALIZE-T3-pulumi-in-all-cases-cloud-resources-doks-pg-spaces-cf-tu
+    source: "docs/meetings/adr/MEET-INFRA-NORMALIZE-T3-pulumi-consolidation.md:408"
+    text: "In ALL cases: **cloud resources** (DOKS, PG, Spaces, CF Tunnel) are NEVER destroyed by this decision's procedure (`pulumi stack rm` removes state pointer, not resources). If a rollback is needed becau"
+    type: negative
+    dimension: core-deploy
+    polarity: negative
+    extracted_at: 2026-05-11
+    evidence_tier: UNEVIDENCED
+    ttl_default_days: 30
+    ttl_days: 30
+    last_validated: 2026-05-01
+    expires: 2026-05-31
+  - id: 0011-replicas-autoscaling-prec-4-task-lint-cli-b15-files-clean-pre-existing-auth
+    source: "docs/meetings/adr/0011-replicas-autoscaling-precedence-and-plan-caps.md:154"
+    text: "4. `task lint` — CLI B15 files clean; pre-existing auth.ts/infra.ts errors out of scope."
+    type: negative
+    dimension: dx-cli
+    polarity: negative
+    extracted_at: 2026-05-11
+    evidence_tier: UNEVIDENCED
+    ttl_default_days: 30
+    ttl_days: 30
+    last_validated: 2026-04-23
+    expires: 2026-05-23
+  - id: 0043-loopzero-api-cloud-dual-chart---chartsloopzero-x-day-2-argocd-distributable-product
+    source: "docs/meetings/adr/0043-loopzero-api-cloud-dual-chart-intentional-drift.md:20"
+    text: "- `charts/loopzero-<X>`: Day-2 ArgoCD-distributable, production-ready. Full RBAC (ClusterRole + ClusterRoleBinding + ServiceAccount), PDB (replicaCount > 1), NetworkPolicy (DNS + extraEgress), ServiceMoni"
+    type: capability
+    dimension: infra-ops
+    polarity: positive
+    extracted_at: 2026-05-11
+    evidence_tier: UNEVIDENCED
+    ttl_default_days: 30
+    ttl_days: 30
+    last_validated: 2026-05-05
+    expires: 2026-06-04
+  - id: 0016-sprint8-phase0-6-three-ch-sprint-8-v32-plan-docsplanssprint8-hardening-chao
+    source: "docs/meetings/adr/0016-sprint8-phase0-6-three-chg-split.md:26"
+    text: "Sprint 8 v3.2 plan (`docs/plans/sprint8-hardening-chaos-plan.md`) covers all of this in 18 tasks across Phase 0 (infra scale-up), Phase 1 (L3 stabilization), Phase 2 (shared-service HA), Phase 3 (L4 v"
+    type: done_status
+    dimension: infra-ops
+    polarity: positive
+    extracted_at: 2026-05-11
+    evidence_tier: UNEVIDENCED
+    ttl_default_days: 30
+    ttl_days: 30
+    last_validated: 2026-04-27
+    expires: 2026-05-27
+  - id: 0016-sprint8-phase0-6-three-ch-cell-2-activation-phase-2b-sprint-9-unchanged-exp
+    source: "docs/meetings/adr/0016-sprint8-phase0-6-three-chg-split.md:83"
+    text: "| Cell-2 activation | Phase 2b (Sprint 9) | Unchanged — explicitly out of scope |"
+    type: negative
+    dimension: scale-mt
+    polarity: negative
+    extracted_at: 2026-05-11
+    evidence_tier: UNEVIDENCED
+    ttl_default_days: 30
+    ttl_days: 90
+    last_validated: 2026-04-27
+    expires: 2026-07-26
+  - id: 0016-sprint8-phase0-6-three-ch-d-10-cell-2-activation-is-out-of-scope-for-chg-00
+    source: "docs/meetings/adr/0016-sprint8-phase0-6-three-chg-split.md:145"
+    text: "### D-10 — Cell-2 activation is OUT OF SCOPE for CHG-002"
+    type: negative
+    dimension: scale-mt
+    polarity: negative
+    extracted_at: 2026-05-11
+    evidence_tier: UNEVIDENCED
+    ttl_default_days: 30
+    ttl_days: 60
+    last_validated: 2026-04-27
+    expires: 2026-06-26
+  - id: argocd-drift-2026-05-02-in-claudemd-layered-bootstrap-shipped-pulumi-l1-only-hel
+    source: "docs/audits/argocd-drift-2026-05-02.md:60"
+    text: "in CLAUDE.md \"Layered bootstrap shipped: Pulumi L1-only + Helmfile L2 + ArgoCD L3"
+    type: done_status
+    dimension: infra-ops
+    polarity: positive
+    extracted_at: 2026-05-11
+    evidence_tier: UNEVIDENCED
+    ttl_default_days: 30
+    ttl_days: 30
+    last_validated: 2026-05-03
+    expires: 2026-06-02
+  - id: argocd-drift-2026-05-02-100-functional-for-tenant-operations-deferred-to-observa
+    source: "docs/audits/argocd-drift-2026-05-02.md:81"
+    text: "100%-functional for tenant operations. Deferred to observability sprint."
+    type: negative
+    dimension: scale-mt
+    polarity: negative
+    extracted_at: 2026-05-11
+    evidence_tier: UNEVIDENCED
+    ttl_default_days: 30
+    ttl_days: 60
+    last_validated: 2026-05-03
+    expires: 2026-07-02
+  - id: multi-cell-source-audit-it-as-if-always-present-migration-shipped-2026-04-30-chg
+    source: "docs/audits/multi-cell-source-audit.md:28"
+    text: "it as if always present. Migration shipped 2026-04-30 (CHG-2026-04-30-INFRA-NORMALIZE)."
+    type: done_status
+    dimension: infra-ops
+    polarity: positive
+    extracted_at: 2026-05-11
+    evidence_tier: UNEVIDENCED
+    ttl_default_days: 30
+    ttl_days: 30
+    last_validated: 2026-05-04
+    expires: 2026-06-03
+  - id: multi-cell-source-audit-referenced-it-as-the-only-path-to-move-tenants-endpoint-
+    source: "docs/audits/multi-cell-source-audit.md:34"
+    text: "referenced it as the only path to move tenants. Endpoint shipped in"
+    type: done_status
+    dimension: scale-mt
+    polarity: positive
+    extracted_at: 2026-05-11
+    evidence_tier: UNEVIDENCED
+    ttl_default_days: 30
+    ttl_days: 60
+    last_validated: 2026-05-04
+    expires: 2026-07-03
+  - id: 2026-04-29-real-e2e-bash-infratestsdogfoodfull-loopsh-retornou-exit-0-com-1212-p
+    source: "docs/dogfood/2026-04-29-real-e2e.md:13"
+    text: "`bash infra/tests/dogfood/full-loop.sh` retornou exit 0 com **12/12 PASS** (preflight + 11 journeys) em 26 minutos. State em `~/.loopzero/dogfood_state.json`. Ordem + duração:"
+    type: completion
+    dimension: infra-ops
+    polarity: positive
+    extracted_at: 2026-05-11
+    evidence_tier: UNEVIDENCED
+    ttl_default_days: 30
+    ttl_days: 30
+    last_validated: 2026-04-30
+    expires: 2026-05-30
+  - id: 2026-04-29-real-e2e---audit-assertions-added-to-all-9-mutating-journeys-j02-j03-
+    source: "docs/dogfood/2026-04-29-real-e2e.md:36"
+    text: "- Audit assertions added to all 9 mutating journeys (J02, J03, J04, J05, J07, J08, J09 strict; J01, J06 already had; J10 inline F3, J11 N/A by design)"
+    type: negative
+    dimension: tests-confidence
+    polarity: negative
+    extracted_at: 2026-05-11
+    evidence_tier: UNEVIDENCED
+    ttl_default_days: 30
+    ttl_days: 30
+    last_validated: 2026-04-30
+    expires: 2026-05-30
+  - id: 2026-04-29-real-e2e-phase-2-full-loopsh-harness-green-state-machine-journeys
+    source: "docs/dogfood/2026-04-29-real-e2e.md:42"
+    text: "| Phase 2 full-loop.sh harness | ✅ GREEN | state machine + journeys/ | — |"
+    type: done_status
+    dimension: tests-confidence
+    polarity: positive
+    extracted_at: 2026-05-11
+    evidence_tier: UNEVIDENCED
+    ttl_default_days: 30
+    ttl_days: 60
+    last_validated: 2026-04-30
+    expires: 2026-06-29
+  - id: 2026-04-29-real-e2e-journey-01-solo-deploy-green-http-200-prova-de-morte-10s-ach
+    source: "docs/dogfood/2026-04-29-real-e2e.md:43"
+    text: "| Journey 01 solo-deploy | ✅ GREEN | HTTP 200 + Prova de Morte 10s | **Achado #17 (S0 prod)** |"
+    type: done_status
+    dimension: core-deploy
+    polarity: positive
+    extracted_at: 2026-05-11
+    evidence_tier: UNEVIDENCED
+    ttl_default_days: 30
+    ttl_days: 30
+    last_validated: 2026-04-30
+    expires: 2026-05-30
+  - id: 2026-04-29-real-e2e-journey-02-multi-server-green-2-apps-serverworker-project-sc
+    source: "docs/dogfood/2026-04-29-real-e2e.md:44"
+    text: "| Journey 02 multi-server | ✅ GREEN | 2 apps (server+worker) project-scoped | Achado #17 validado runtime |"
+    type: done_status
+    dimension: tests-confidence
+    polarity: positive
+    extracted_at: 2026-05-11
+    evidence_tier: UNEVIDENCED
+    ttl_default_days: 30
+    ttl_days: 30
+    last_validated: 2026-04-30
+    expires: 2026-05-30
+  - id: 2026-04-29-real-e2e-journey-03-secrets-lifecycle-green-setlistdelete-rule-9fail-
+    source: "docs/dogfood/2026-04-29-real-e2e.md:45"
+    text: "| Journey 03 secrets lifecycle | ✅ GREEN | set/list/delete + Rule 9/fail-fast | **Achado #19 (S0 prod) ESO CSS bootstrap gap** |"
+    type: done_status
+    dimension: tests-confidence
+    polarity: positive
+    extracted_at: 2026-05-11
+    evidence_tier: UNEVIDENCED
+    ttl_default_days: 30
+    ttl_days: 30
+    last_validated: 2026-04-30
+    expires: 2026-05-30
+  - id: 2026-04-29-real-e2e-journey-04-scale-green-stub-contract-validado-gaps-documenta
+    source: "docs/dogfood/2026-04-29-real-e2e.md:46"
+    text: "| Journey 04 scale | ✅ GREEN | stub contract validado + GAPs documentados | — |"
+    type: done_status
+    dimension: scale-mt
+    polarity: positive
+    extracted_at: 2026-05-11
+    evidence_tier: UNEVIDENCED
+    ttl_default_days: 30
+    ttl_days: 60
+    last_validated: 2026-04-30
+    expires: 2026-06-29
+  - id: 2026-04-29-real-e2e-journey-05-promote-stagingprod-green-strict-2-env-active-ass
+    source: "docs/dogfood/2026-04-29-real-e2e.md:47"
+    text: "| Journey 05 promote staging→prod | ✅ GREEN | strict 2-env ACTIVE assertion | **6 fixes iter 13** (ver abaixo) |"
+    type: done_status
+    dimension: core-deploy
+    polarity: positive
+    extracted_at: 2026-05-11
+    evidence_tier: UNEVIDENCED
+    ttl_default_days: 30
+    ttl_days: 30
+    last_validated: 2026-04-30
+    expires: 2026-05-30
+  - id: 2026-04-29-real-e2e-journey-06-rollback-green-v1v2rollbackv1-audit-entry-achado-
+    source: "docs/dogfood/2026-04-29-real-e2e.md:48"
+    text: "| Journey 06 rollback | ✅ GREEN | v1→v2→rollback→v1 + audit entry | **Achado #20 (S0 prod) sync_client filter** |"
+    type: done_status
+    dimension: core-deploy
+    polarity: positive
+    extracted_at: 2026-05-11
+    evidence_tier: UNEVIDENCED
+    ttl_default_days: 30
+    ttl_days: 30
+    last_validated: 2026-04-30
+    expires: 2026-05-30
+  - id: 2026-04-29-real-e2e-journey-07-custom-domain-green-parcial-registerliststatusrem
+    source: "docs/dogfood/2026-04-29-real-e2e.md:49"
+    text: "| Journey 07 custom domain | ✅ GREEN (parcial) | register/list/status/remove (4/5 verbs) | **Achado #22 (Rule 8 fail-clear)** |"
+    type: done_status
+    dimension: tests-confidence
+    polarity: positive
+    extracted_at: 2026-05-11
+    evidence_tier: UNEVIDENCED
+    ttl_default_days: 30
+    ttl_days: 30
+    last_validated: 2026-04-30
+    expires: 2026-05-30
+  - id: 2026-04-29-real-e2e-journey-08-github-auto-deploy-green-parcial-connectdisconnec
+    source: "docs/dogfood/2026-04-29-real-e2e.md:50"
+    text: "| Journey 08 GitHub auto-deploy | ✅ GREEN (parcial) | connect/disconnect persistência + idempotency | **Achado #23 (idempotency violation)** |"
+    type: done_status
+    dimension: core-deploy
+    polarity: positive
+    extracted_at: 2026-05-11
+    evidence_tier: UNEVIDENCED
+    ttl_default_days: 30
+    ttl_days: 30
+    last_validated: 2026-04-30
+    expires: 2026-05-30
+  - id: 2026-04-29-real-e2e-journey-09-preview-environments-green-parcial-api-direct-lis
+    source: "docs/dogfood/2026-04-29-real-e2e.md:51"
+    text: "| Journey 09 preview environments | ✅ GREEN (parcial) | API direct + list/inspect/delete | — |"
+    type: done_status
+    dimension: product-completeness
+    polarity: positive
+    extracted_at: 2026-05-11
+    evidence_tier: UNEVIDENCED
+    ttl_default_days: 30
+    ttl_days: 30
+    last_validated: 2026-04-30
+    expires: 2026-05-30
+  - id: 2026-04-29-real-e2e-journey-10-failure-modes-12-green-f1f3f5-f2-gap-documentado
+    source: "docs/dogfood/2026-04-29-real-e2e.md:52"
+    text: "| Journey 10 failure modes (§12) | ✅ GREEN | F1/F3/F5; F2 GAP documentado | — |"
+    type: done_status
+    dimension: tests-confidence
+    polarity: positive
+    extracted_at: 2026-05-11
+    evidence_tier: UNEVIDENCED
+    ttl_default_days: 30
+    ttl_days: 30
+    last_validated: 2026-04-30
+    expires: 2026-05-30
+  - id: 2026-04-29-real-e2e-journey-11-admin-operator-only-green-evict-dry-run-auth-gate
+    source: "docs/dogfood/2026-04-29-real-e2e.md:53"
+    text: "| Journey 11 admin operator-only | ✅ GREEN | evict dry-run + auth gate + safety | **Achado #25 (auth middleware)** |"
+    type: done_status
+    dimension: security
+    polarity: positive
+    extracted_at: 2026-05-11
+    evidence_tier: UNEVIDENCED
+    ttl_default_days: 30
+    ttl_days: 60
+    last_validated: 2026-04-30
+    expires: 2026-06-29
+  - id: 2026-04-29-real-e2e-cobertura-total-1111-journeys-green-9-bugs-sistêmicos-shippe
+    source: "docs/dogfood/2026-04-29-real-e2e.md:55"
+    text: "**Cobertura total**: 11/11 journeys GREEN. **9 bugs sistêmicos shipped + validados** vs estado pré-iter 13."
+    type: done_status
+    dimension: tests-confidence
+    polarity: positive
+    extracted_at: 2026-05-11
+    evidence_tier: UNEVIDENCED
+    ttl_default_days: 30
+    ttl_days: 30
+    last_validated: 2026-04-30
+    expires: 2026-05-30
+  - id: 2026-04-29-completo-t03vap-restrict-pass-vap-allowlist-contém-k3d-loopzero-registry5
+    source: "docs/dogfood/2026-04-29-completo.md:24"
+    text: "| T0.3.vap-restrict | ✅ PASS | VAP allowlist contém `k3d-loopzero-registry:5000/` |"
+    type: done_status
+    dimension: infra-ops
+    polarity: positive
+    extracted_at: 2026-05-11
+    evidence_tier: UNEVIDENCED
+    ttl_default_days: 30
+    ttl_days: 30
+    last_validated: 2026-04-29
+    expires: 2026-05-29
+  - id: 2026-04-29-completo-phase-3-journey-01-solo-deploy-green-end-to-end
+    source: "docs/dogfood/2026-04-29-completo.md:134"
+    text: "## Phase 3' — Journey 01 solo-deploy — ✅ GREEN END-TO-END"
+    type: done_status
+    dimension: core-deploy
+    polarity: positive
+    extracted_at: 2026-05-11
+    evidence_tier: UNEVIDENCED
+    ttl_default_days: 30
+    ttl_days: 30
+    last_validated: 2026-04-29
+    expires: 2026-05-29
+  - id: evidence-gaps-report---docsmaturity-assessmentmd6-score-39-50-was-38-post-cell-2
+    source: "docs/governance/evidence-gaps-report.md:20"
+    text: "- `docs/maturity-assessment.md:6` — **Score: 3.9 / 5.0** (was 3.8 post-cell-2-activation; +0.1 from fix-all-platform-issues-plan iter 1-7. **Empirical evide"
+    type: score
+    dimension: scale-mt
+    polarity: positive
+    extracted_at: 2026-05-11
+    evidence_tier: UNEVIDENCED
+    ttl_default_days: 30
+    ttl_days: 60
+    last_validated: 2026-05-11
+    expires: 2026-07-10
+  - id: evidence-gaps-report---readmemd127-cleanroom-dogfood-e2e-preflight-11-journeys-1
+    source: "docs/governance/evidence-gaps-report.md:28"
+    text: "- `README.md:127` — | Cleanroom dogfood (E2E) | preflight + 11 journeys | **12/12 GREEN** end-to-end on fresh `k3d` destroy/setup cycle (202"
+    type: completion
+    dimension: infra-ops
+    polarity: positive
+    extracted_at: 2026-05-11
+    evidence_tier: UNEVIDENCED
+    ttl_default_days: 30
+    ttl_days: 30
+    last_validated: 2026-05-11
+    expires: 2026-06-10
+  - id: evidence-gaps-report---docsmaturity-assessmentmd48-5-github-app-auto-deploy-work
+    source: "docs/governance/evidence-gaps-report.md:33"
+    text: "- `docs/maturity-assessment.md:48` — 5. **GitHub App auto-deploy** works end-to-end -- this is the experience that sells"
+    type: capability
+    dimension: core-deploy
+    polarity: positive
+    extracted_at: 2026-05-11
+    evidence_tier: UNEVIDENCED
+    ttl_default_days: 30
+    ttl_days: 30
+    last_validated: 2026-05-11
+    expires: 2026-06-10
+  - id: evidence-gaps-report---docsmaturity-assessmentmd93-deploy-happy-path-done-e2e-va
+    source: "docs/governance/evidence-gaps-report.md:34"
+    text: "- `docs/maturity-assessment.md:93` — | Deploy happy path | Done | E2E validated on DO |"
+    type: capability
+    dimension: core-deploy
+    polarity: positive
+    extracted_at: 2026-05-11
+    evidence_tier: UNEVIDENCED
+    ttl_default_days: 30
+    ttl_days: 30
+    last_validated: 2026-05-11
+    expires: 2026-06-10
+  - id: evidence-gaps-report---docsmaturity-assessmentmd94-rollback-done-3s-e2e-validate
+    source: "docs/governance/evidence-gaps-report.md:35"
+    text: "- `docs/maturity-assessment.md:94` — | Rollback | Done | ~3s, E2E validated |"
+    type: capability
+    dimension: core-deploy
+    polarity: positive
+    extracted_at: 2026-05-11
+    evidence_tier: UNEVIDENCED
+    ttl_default_days: 30
+    ttl_days: 30
+    last_validated: 2026-05-11
+    expires: 2026-06-10
+  - id: evidence-gaps-report---docsmeetingsrecordsmeet-2026-05-03-066-async-amendmentmd7
+    source: "docs/governance/evidence-gaps-report.md:36"
+    text: "- `docs/meetings/records/MEET-2026-05-03-066-ASYNC-AMENDMENT.md:76` — > `loopzero scale` config persistence shipped (Plan T2.1+T2.2+T2.4); operator actuation pending follow-up plan. In intermedi"
+    type: done_status
+    dimension: scale-mt
+    polarity: positive
+    extracted_at: 2026-05-11
+    evidence_tier: UNEVIDENCED
+    ttl_default_days: 30
+    ttl_days: 60
+    last_validated: 2026-05-11
+    expires: 2026-07-10
+  - id: evidence-gaps-report---docsmeetingsrecordsmeet-2026-04-09-044md21---github-app-a
+    source: "docs/governance/evidence-gaps-report.md:38"
+    text: "- `docs/meetings/records/MEET-2026-04-09-044.md:21` — - GitHub App auto-deploy E2E validated (happy path only)"
+    type: capability
+    dimension: core-deploy
+    polarity: positive
+    extracted_at: 2026-05-11
+    evidence_tier: UNEVIDENCED
+    ttl_default_days: 30
+    ttl_days: 30
+    last_validated: 2026-05-11
+    expires: 2026-06-10
+  - id: evidence-gaps-report---docsmeetingsrecordsmeet-2026-04-22-056md60-mutation-testi
+    source: "docs/governance/evidence-gaps-report.md:39"
+    text: "- `docs/meetings/records/MEET-2026-04-22-056.md:60` — **Mutation testing is DEFERRED to Phase 3.** The immediate priority is filling the catastrophic test gaps in the deploy"
+    type: negative
+    dimension: core-deploy
+    polarity: negative
+    extracted_at: 2026-05-11
+    evidence_tier: UNEVIDENCED
+    ttl_default_days: 30
+    ttl_days: 30
+    last_validated: 2026-05-11
+    expires: 2026-06-10
+  - id: evidence-gaps-report---docsmeetingsrecordsmeet-2026-04-23-058md118-impact-if-ign
+    source: "docs/governance/evidence-gaps-report.md:40"
+    text: "- `docs/meetings/records/MEET-2026-04-23-058.md:118` — **Impact if ignored.** If Pulumi is deferred to a later PR, prod is guaranteed to break on next deploy of API. This is n"
+    type: negative
+    dimension: core-deploy
+    polarity: negative
+    extracted_at: 2026-05-11
+    evidence_tier: UNEVIDENCED
+    ttl_default_days: 30
+    ttl_days: 30
+    last_validated: 2026-05-11
+    expires: 2026-06-10
+  - id: evidence-gaps-report---docsrunbooksaction-sha-pinningmd26-dockersetup-buildx-act
+    source: "docs/governance/evidence-gaps-report.md:47"
+    text: "- `docs/runbooks/action-sha-pinning.md:26` — | `docker/setup-buildx-action` | `b5ca514318bd6ebac0fb2aedd5d36ec1b5c232a2` | n/a |"
+    type: negative
+    dimension: dx-cli
+    polarity: negative
+    extracted_at: 2026-05-11
+    evidence_tier: PARTIAL_CONFIDENCE
+    ttl_default_days: 30
+    ttl_days: 30
+    last_validated: 2026-05-11
+    expires: 2026-06-10
+    evidence_t2: "live:docs/runbooks/action-sha-pinning.md"
+    broken_refs: "commit_missing:b5ca514318"
+  - id: evidence-gaps-report---docscli-referencemd17-backend-não-implementado-cli-retorn
+    source: "docs/governance/evidence-gaps-report.md:51"
+    text: "- `docs/cli-reference.md:17` — | ❌ | Backend não implementado (CLI retorna mensagem UX-friendly via AUDIT-27/28) |"
+    type: negative
+    dimension: dx-cli
+    polarity: negative
+    extracted_at: 2026-05-11
+    evidence_tier: UNEVIDENCED
+    ttl_default_days: 30
+    ttl_days: 30
+    last_validated: 2026-05-11
+    expires: 2026-06-10
+  - id: evidence-gaps-report---docsmeetingsrecordsmeet-2026-04-27-060md392-dx-engineer-a
+    source: "docs/governance/evidence-gaps-report.md:52"
+    text: "- `docs/meetings/records/MEET-2026-04-27-060.md:392` — | DX Engineer | APPROVE (Option B) | No veto; `task bootstrap:dev` deferred to backlog |"
+    type: negative
+    dimension: dx-cli
+    polarity: negative
+    extracted_at: 2026-05-11
+    evidence_tier: UNEVIDENCED
+    ttl_default_days: 30
+    ttl_days: 30
+    last_validated: 2026-05-11
+    expires: 2026-06-10
+  - id: evidence-gaps-report---docsmeetingsadr0040-sbom-attestation-parity-chartsmd9-spr
+    source: "docs/governance/evidence-gaps-report.md:53"
+    text: "- `docs/meetings/adr/0040-sbom-attestation-parity-charts.md:9` — Sprint 6 (CHG-2026-04-26-SPRINT6-IMPL) shipped cosign image signing + syft SBOM (CycloneDX) + policy-controller deny-by-"
+    type: done_status
+    dimension: dx-cli
+    polarity: positive
+    extracted_at: 2026-05-11
+    evidence_tier: UNEVIDENCED
+    ttl_default_days: 30
+    ttl_days: 90
+    last_validated: 2026-05-11
+    expires: 2026-08-09
+  - id: evidence-gaps-report---docsmeetingsadrmeet-infra-normalize-t3-multi-cellmd8-out-
+    source: "docs/governance/evidence-gaps-report.md:54"
+    text: "- `docs/meetings/adr/MEET-INFRA-NORMALIZE-T3-multi-cell.md:8` — **Out of scope:** Operator topology cutover (D1, separate decision), Pulumi consolidation (D2, separate decision), CLI c"
+    type: negative
+    dimension: dx-cli
+    polarity: negative
+    extracted_at: 2026-05-11
+    evidence_tier: UNEVIDENCED
+    ttl_default_days: 30
+    ttl_days: 90
+    last_validated: 2026-05-11
+    expires: 2026-08-09
+  - id: evidence-gaps-report---docsmeetingsadrmeet-infra-normalize-t3-multi-cellmd8-out-
+    source: "docs/governance/evidence-gaps-report.md:55"
+    text: "- `docs/meetings/adr/MEET-INFRA-NORMALIZE-T3-multi-cell.md:8` — **Out of scope:** Operator topology cutover (D1, separate decision), Pulumi consolidation (D2, separate decision), CLI c"
+    type: negative
+    dimension: dx-cli
+    polarity: negative
+    extracted_at: 2026-05-11
+    evidence_tier: UNEVIDENCED
+    ttl_default_days: 30
+    ttl_days: 90
+    last_validated: 2026-05-11
+    expires: 2026-08-09
+  - id: evidence-gaps-report---docsmeetingsadrmeet-infra-normalize-t3-operator-splitmd8-
+    source: "docs/governance/evidence-gaps-report.md:56"
+    text: "- `docs/meetings/adr/MEET-INFRA-NORMALIZE-T3-operator-split.md:8` — **Out of scope:** Pulumi consolidation (D2), multi-cell activation (D3), CLI cluster-real tests (D4)"
+    type: negative
+    dimension: dx-cli
+    polarity: negative
+    extracted_at: 2026-05-11
+    evidence_tier: UNEVIDENCED
+    ttl_default_days: 30
+    ttl_days: 90
+    last_validated: 2026-05-11
+    expires: 2026-08-09
+  - id: evidence-gaps-report---docsmeetingsadrmeet-infra-normalize-t3-pulumi-consolidati
+    source: "docs/governance/evidence-gaps-report.md:57"
+    text: "- `docs/meetings/adr/MEET-INFRA-NORMALIZE-T3-pulumi-consolidation.md:8` — **Out of scope:** Operator topology cutover (D1 — see MEET-INFRA-NORMALIZE-T3-operator-split.md), multi-cell activation"
+    type: negative
+    dimension: infra-ops
+    polarity: negative
+    extracted_at: 2026-05-11
+    evidence_tier: UNEVIDENCED
+    ttl_default_days: 30
+    ttl_days: 90
+    last_validated: 2026-05-11
+    expires: 2026-08-09
+  - id: evidence-gaps-report---docsmeetingsadr0011-replicas-autoscaling-precedence-and-p
+    source: "docs/governance/evidence-gaps-report.md:58"
+    text: "- `docs/meetings/adr/0011-replicas-autoscaling-precedence-and-plan-caps.md:154` — 4. `task lint` — CLI B15 files clean; pre-existing auth.ts/infra.ts errors out of scope."
+    type: negative
+    dimension: dx-cli
+    polarity: negative
+    extracted_at: 2026-05-11
+    evidence_tier: UNEVIDENCED
+    ttl_default_days: 30
+    ttl_days: 90
+    last_validated: 2026-05-11
+    expires: 2026-08-09
+  - id: evidence-gaps-report---docsgovernancepersonasparanoid-sremd67---dxcli-na-directl
+    source: "docs/governance/evidence-gaps-report.md:59"
+    text: "- `docs/governance/personas/paranoid-sre.md:67` — - **DX/CLI:** N/A directly — but penalize \"operator must SSH to fix\" patterns"
+    type: negative
+    dimension: dx-cli
+    polarity: negative
+    extracted_at: 2026-05-11
+    evidence_tier: UNEVIDENCED
+    ttl_default_days: 30
+    ttl_days: 30
+    last_validated: 2026-05-11
+    expires: 2026-06-10
+  - id: evidence-gaps-report---docsarchitectureapplicationdiffdeep-divemd13-cell-awarene
+    source: "docs/governance/evidence-gaps-report.md:60"
+    text: "- `docs/architecture/application/diff/deep-dive.md:13` — | Cell-awareness | n/a (no workload read) | `CellAwareRuntimeClientFactory` resolves correct workload cluster from `tena"
+    type: negative
+    dimension: dx-cli
+    polarity: negative
+    extracted_at: 2026-05-11
+    evidence_tier: UNEVIDENCED
+    ttl_default_days: 30
+    ttl_days: 30
+    last_validated: 2026-05-11
+    expires: 2026-06-10
+  - id: evidence-gaps-report---claudemd176-cleanroom-dogfood-loop-real-paas-test-destroy
+    source: "docs/governance/evidence-gaps-report.md:68"
+    text: "- `CLAUDE.md:176` — | Cleanroom Dogfood Loop | Real PaaS test: destroy infra + setup + 12 journeys end-to-end | ✅ 12/12 GREEN (2026-05-05, t"
+    type: completion
+    dimension: infra-ops
+    polarity: positive
+    extracted_at: 2026-05-11
+    evidence_tier: UNEVIDENCED
+    ttl_default_days: 30
+    ttl_days: 30
+    last_validated: 2026-05-11
+    expires: 2026-06-10
+  - id: evidence-gaps-report---docsmaturity-assessmentmd107-preview-environments-done-sp
+    source: "docs/governance/evidence-gaps-report.md:73"
+    text: "- `docs/maturity-assessment.md:107` — | Preview environments | Done | Sprint 5 / CHG-2026-04-26-PREVIEW-IMPL: all 14 plan tasks complete + E2E validated again"
+    type: capability
+    dimension: product-completeness
+    polarity: positive
+    extracted_at: 2026-05-11
+    evidence_tier: UNEVIDENCED
+    ttl_default_days: 30
+    ttl_days: 30
+    last_validated: 2026-05-11
+    expires: 2026-06-10
+  - id: evidence-gaps-report---docsmeetingsrecordsmeet-2026-04-15-049md38---single-pulum
+    source: "docs/governance/evidence-gaps-report.md:74"
+    text: "- `docs/meetings/records/MEET-2026-04-15-049.md:38` — - Single Pulumi stack for now (accepted: split deferred to post-launch)"
+    type: negative
+    dimension: infra-ops
+    polarity: negative
+    extracted_at: 2026-05-11
+    evidence_tier: UNEVIDENCED
+    ttl_default_days: 30
+    ttl_days: 30
+    last_validated: 2026-05-11
+    expires: 2026-06-10
+  - id: evidence-gaps-report---docsmeetingsrecordsmeet-2026-04-15-050md67---single-pulum
+    source: "docs/governance/evidence-gaps-report.md:75"
+    text: "- `docs/meetings/records/MEET-2026-04-15-050.md:67` — - Single Pulumi stack for now (accepted: split deferred to post-launch)"
+    type: negative
+    dimension: infra-ops
+    polarity: negative
+    extracted_at: 2026-05-11
+    evidence_tier: UNEVIDENCED
+    ttl_default_days: 30
+    ttl_days: 30
+    last_validated: 2026-05-11
+    expires: 2026-06-10
+  - id: evidence-gaps-report---docsmeetingsrecordsmeet-2026-05-03-063md115-1-two-track-e
+    source: "docs/governance/evidence-gaps-report.md:76"
+    text: "- `docs/meetings/records/MEET-2026-05-03-063.md:115` — 1. **Two-track explicit split.** T4.1 splits into T4.1a (GHA, in-scope) and T4.1b (in-cluster, deferred to Sprint 9+ unl"
+    type: negative
+    dimension: infra-ops
+    polarity: negative
+    extracted_at: 2026-05-11
+    evidence_tier: UNEVIDENCED
+    ttl_default_days: 30
+    ttl_days: 90
+    last_validated: 2026-05-11
+    expires: 2026-08-09
+  - id: evidence-gaps-report---docsmeetingsrecordsmeet-2026-04-23-058md247---option-b-op
+    source: "docs/governance/evidence-gaps-report.md:79"
+    text: "- `docs/meetings/records/MEET-2026-04-23-058.md:247` — - **Option B' (Option B but Pulumi deferred to a follow-up PR).** Rejected by all five reviewers: guarantees prod outage"
+    type: negative
+    dimension: infra-ops
+    polarity: negative
+    extracted_at: 2026-05-11
+    evidence_tier: UNEVIDENCED
+    ttl_default_days: 30
+    ttl_days: 30
+    last_validated: 2026-05-11
+    expires: 2026-06-10
+  - id: evidence-gaps-report---docsmeetingsrecordsmeet-2026-04-27-061md139---cell-2-rout
+    source: "docs/governance/evidence-gaps-report.md:80"
+    text: "- `docs/meetings/records/MEET-2026-04-27-061.md:139` — - Cell-2 routing remains explicitly OUT OF SCOPE for CHG-002 (per ADR-0010 §Phase 2b). `runtimeCluster2` is provisioned"
+    type: negative
+    dimension: infra-ops
+    polarity: negative
+    extracted_at: 2026-05-11
+    evidence_tier: UNEVIDENCED
+    ttl_default_days: 30
+    ttl_days: 90
+    last_validated: 2026-05-11
+    expires: 2026-08-09
+  - id: evidence-gaps-report---docsmeetingsrecordsmeet-2026-04-04-030md82---sre-conditio
+    source: "docs/governance/evidence-gaps-report.md:89"
+    text: "- `docs/meetings/records/MEET-2026-04-04-030.md:82` — - **SRE CONDITIONAL VETO on declaring production-ready without Sprint 7 tasks 7.1 + 7.2.** RunAsRoot and no PSA enforcem"
+    type: capability
+    dimension: product-completeness
+    polarity: positive
+    extracted_at: 2026-05-11
+    evidence_tier: UNEVIDENCED
+    ttl_default_days: 30
+    ttl_days: 30
+    last_validated: 2026-05-11
+    expires: 2026-06-10
+  - id: evidence-gaps-report---docsmeetingsrecordsmeet-2026-04-04-030md437-total-to-prod
+    source: "docs/governance/evidence-gaps-report.md:90"
+    text: "- `docs/meetings/records/MEET-2026-04-04-030.md:437` — | **Total to production-ready** | **10-14h** | — |"
+    type: capability
+    dimension: product-completeness
+    polarity: positive
+    extracted_at: 2026-05-11
+    evidence_tier: UNEVIDENCED
+    ttl_default_days: 30
+    ttl_days: 30
+    last_validated: 2026-05-11
+    expires: 2026-06-10
+  - id: evidence-gaps-report---docsmeetingsrecordsmeet-2026-04-27-060md39---sprint-5-chg
+    source: "docs/governance/evidence-gaps-report.md:91"
+    text: "- `docs/meetings/records/MEET-2026-04-27-060.md:39` — - Sprint 5 (CHG-2026-04-26-PREVIEW-IMPL) and Sprint 6 (CHG-2026-04-26-SPRINT6-IMPL) shipped; governance hook still scope"
+    type: done_status
+    dimension: product-completeness
+    polarity: positive
+    extracted_at: 2026-05-11
+    evidence_tier: UNEVIDENCED
+    ttl_default_days: 30
+    ttl_days: 30
+    last_validated: 2026-05-11
+    expires: 2026-06-10
+  - id: evidence-gaps-report---docsmeetingsrecordsmeet-2026-04-27-061md53---sprint-5-pre
+    source: "docs/governance/evidence-gaps-report.md:93"
+    text: "- `docs/meetings/records/MEET-2026-04-27-061.md:53` — - Sprint 5 / preview envs shipped 2026-04-26."
+    type: done_status
+    dimension: product-completeness
+    polarity: positive
+    extracted_at: 2026-05-11
+    evidence_tier: UNEVIDENCED
+    ttl_default_days: 30
+    ttl_days: 30
+    last_validated: 2026-05-11
+    expires: 2026-06-10
+  - id: evidence-gaps-report---docsmeetingsadrmeet-adr-0018-decisionmd263-production-des
+    source: "docs/governance/evidence-gaps-report.md:96"
+    text: "- `docs/meetings/adr/MEET-ADR-0018-decision.md:263` — | production-design-reviewer | Out of scope for T3.1+T3.2. Defer. |"
+    type: negative
+    dimension: product-completeness
+    polarity: negative
+    extracted_at: 2026-05-11
+    evidence_tier: UNEVIDENCED
+    ttl_default_days: 30
+    ttl_days: 90
+    last_validated: 2026-05-11
+    expires: 2026-08-09
+  - id: evidence-gaps-report---docsmeetingsmeet-async-amendment-002-e2e-ginkgo-rewrite-g
+    source: "docs/governance/evidence-gaps-report.md:104"
+    text: "- `docs/meetings/MEET-ASYNC-AMENDMENT-002-e2e-ginkgo-rewrite-governance.md:101` — | 20 | Multi-cell routing | ❌ | ✅ |"
+    type: negative
+    dimension: scale-mt
+    polarity: negative
+    extracted_at: 2026-05-11
+    evidence_tier: UNEVIDENCED
+    ttl_default_days: 30
+    ttl_days: 60
+    last_validated: 2026-05-11
+    expires: 2026-07-10
+  - id: evidence-gaps-report---docsmeetingsrecordsmeet-2026-04-09-044md129---per-project
+    source: "docs/governance/evidence-gaps-report.md:107"
+    text: "- `docs/meetings/records/MEET-2026-04-09-044.md:129` — - Per-project ArgoCD Applications as near-term: deferred to P2/P3 — architectural cost not justified before 100 tenants"
+    type: negative
+    dimension: scale-mt
+    polarity: negative
+    extracted_at: 2026-05-11
+    evidence_tier: UNEVIDENCED
+    ttl_default_days: 30
+    ttl_days: 60
+    last_validated: 2026-05-11
+    expires: 2026-07-10
+  - id: evidence-gaps-report---docsmeetingsrecordsmeet-2026-04-01-027md109---scale-na-si
+    source: "docs/governance/evidence-gaps-report.md:109"
+    text: "- `docs/meetings/records/MEET-2026-04-01-027.md:109` — - Scale: N/A (single-tenant dev pipeline)."
+    type: negative
+    dimension: scale-mt
+    polarity: negative
+    extracted_at: 2026-05-11
+    evidence_tier: UNEVIDENCED
+    ttl_default_days: 30
+    ttl_days: 60
+    last_validated: 2026-05-11
+    expires: 2026-07-10
+  - id: evidence-gaps-report---docsmeetingsrecordsmeet-2026-04-17-051md212-migration-exp
+    source: "docs/governance/evidence-gaps-report.md:110"
+    text: "- `docs/meetings/records/MEET-2026-04-17-051.md:212` — | **Migration** | Explicitly out of scope. New tenants → cell-2 (capacity-aware). Existing 100 stay on `cell-default`. M"
+    type: negative
+    dimension: scale-mt
+    polarity: negative
+    extracted_at: 2026-05-11
+    evidence_tier: UNEVIDENCED
+    ttl_default_days: 30
+    ttl_days: 60
+    last_validated: 2026-05-11
+    expires: 2026-07-10
+  - id: evidence-gaps-report---docsmeetingsrecordsmeet-2026-04-23-059md278-loopzero-scale-co
+    source: "docs/governance/evidence-gaps-report.md:111"
+    text: "- `docs/meetings/records/MEET-2026-04-23-059.md:278` — | `loopzero scale` command diverges from loopzero.yaml | Out of scope; follow-up ticket. | tracked as follow-up |"
+    type: negative
+    dimension: scale-mt
+    polarity: negative
+    extracted_at: 2026-05-11
+    evidence_tier: UNEVIDENCED
+    ttl_default_days: 30
+    ttl_days: 60
+    last_validated: 2026-05-11
+    expires: 2026-07-10
+  - id: evidence-gaps-report---docsrunbooksaction-sha-pinningmd27-sigstorecosign-install
+    source: "docs/governance/evidence-gaps-report.md:117"
+    text: "- `docs/runbooks/action-sha-pinning.md:27` — | `sigstore/cosign-installer` | `cad07c2e89fa2edd6e2d7bab4c1aa38e53f76003` | n/a |"
+    type: negative
+    dimension: security
+    polarity: negative
+    extracted_at: 2026-05-11
+    evidence_tier: PARTIAL_CONFIDENCE
+    ttl_default_days: 30
+    ttl_days: 60
+    last_validated: 2026-05-11
+    expires: 2026-07-10
+    evidence_t2: "live:docs/runbooks/action-sha-pinning.md"
+    broken_refs: "commit_missing:cad07c2e89"
+  - id: evidence-gaps-report---docsmeetingsrecordsmeet-2026-05-03-062md138-4-future-add-
+    source: "docs/governance/evidence-gaps-report.md:121"
+    text: "- `docs/meetings/records/MEET-2026-05-03-062.md:138` — 4. Future: add OIDC for DigitalOcean (DO_TOKEN replacement) — out of scope for MEET-A; covered in MEET-B (cosign keyless"
+    type: negative
+    dimension: security
+    polarity: negative
+    extracted_at: 2026-05-11
+    evidence_tier: UNEVIDENCED
+    ttl_default_days: 30
+    ttl_days: 60
+    last_validated: 2026-05-11
+    expires: 2026-07-10
+  - id: evidence-gaps-report---docsmeetingsrecordsmeet-2026-04-17-052md248-4-bulk-evict-
+    source: "docs/governance/evidence-gaps-report.md:125"
+    text: "- `docs/meetings/records/MEET-2026-04-17-052.md:248` — | 4 | Bulk evict authn/authz | `LOOPZERO_ADMIN_API_KEY` with dual-key rotation | No current RBAC role covers cross-tenant op"
+    type: negative
+    dimension: security
+    polarity: negative
+    extracted_at: 2026-05-11
+    evidence_tier: UNEVIDENCED
+    ttl_default_days: 30
+    ttl_days: 60
+    last_validated: 2026-05-11
+    expires: 2026-07-10
+  - id: evidence-gaps-report---docsmeetingsrecordsmeet-2026-04-27-061md52---sprint-6-sup
+    source: "docs/governance/evidence-gaps-report.md:126"
+    text: "- `docs/meetings/records/MEET-2026-04-27-061.md:52` — - Sprint 6 / supply chain shipped 2026-04-26 (cosign + SBOM + policy-controller Audit). Deny-mode flip pending 2-week ob"
+    type: done_status
+    dimension: security
+    polarity: positive
+    extracted_at: 2026-05-11
+    evidence_tier: UNEVIDENCED
+    ttl_default_days: 30
+    ttl_days: 60
+    last_validated: 2026-05-11
+    expires: 2026-07-10
+  - id: evidence-gaps-report---docsmeetingsrecordsmeet-2026-04-05-032md200---login-flow-
+    source: "docs/governance/evidence-gaps-report.md:127"
+    text: "- `docs/meetings/records/MEET-2026-04-05-032.md:200` — - [ ] Login flow works end-to-end: dashboard -> authenticate -> dashboard (token received)"
+    type: capability
+    dimension: security
+    polarity: positive
+    extracted_at: 2026-05-11
+    evidence_tier: UNEVIDENCED
+    ttl_default_days: 30
+    ttl_days: 60
+    last_validated: 2026-05-11
+    expires: 2026-07-10
+  - id: evidence-gaps-report---docsmeetingsadradr-0018-tenant-namespace-sotmd11-follow-u
+    source: "docs/governance/evidence-gaps-report.md:128"
+    text: "- `docs/meetings/adr/ADR-0018-tenant-namespace-sot.md:11` — > **Follow-up:** ADR-0019 (RBAC tightening, deferred to Sprint 9)"
+    type: negative
+    dimension: security
+    polarity: negative
+    extracted_at: 2026-05-11
+    evidence_tier: UNEVIDENCED
+    ttl_default_days: 30
+    ttl_days: 90
+    last_validated: 2026-05-11
+    expires: 2026-08-09
+  - id: evidence-gaps-report---docsmeetingsadr0040-sbom-attestation-parity-chartsmd16---
+    source: "docs/governance/evidence-gaps-report.md:129"
+    text: "- `docs/meetings/adr/0040-sbom-attestation-parity-charts.md:16` — - ❌ NO SBOM"
+    type: negative
+    dimension: security
+    polarity: negative
+    extracted_at: 2026-05-11
+    evidence_tier: UNEVIDENCED
+    ttl_default_days: 30
+    ttl_days: 90
+    last_validated: 2026-05-11
+    expires: 2026-08-09
+  - id: evidence-gaps-report---docsmeetingsadrmeet-adr-0018-decisionmd172---c12-rbac-tig
+    source: "docs/governance/evidence-gaps-report.md:130"
+    text: "- `docs/meetings/adr/MEET-ADR-0018-decision.md:172` — - C12: RBAC tightening is **out of scope** of this decision — defer to a follow-up ADR-0019. Remove \"RBAC simplification"
+    type: negative
+    dimension: security
+    polarity: negative
+    extracted_at: 2026-05-11
+    evidence_tier: UNEVIDENCED
+    ttl_default_days: 30
+    ttl_days: 90
+    last_validated: 2026-05-11
+    expires: 2026-08-09
+  - id: evidence-gaps-report---docsmeetingsmeet-async-amendment-002-e2e-ginkgo-rewrite-g
+    source: "docs/governance/evidence-gaps-report.md:136"
+    text: "- `docs/meetings/MEET-ASYNC-AMENDMENT-002-e2e-ginkgo-rewrite-governance.md:95` — - Cleanroom dogfood 12/12 GREEN remains valid: tag `dogfood-cleanroom-converged-20260505` covers the bash-journey path;"
+    type: completion
+    dimension: tests-confidence
+    polarity: positive
+    extracted_at: 2026-05-11
+    evidence_tier: BROKEN
+    ttl_default_days: 30
+    ttl_days: 30
+    last_validated: 2026-05-11
+    expires: 2026-06-10
+    broken_refs: "commit_missing:20260505"
+  - id: evidence-gaps-report---docsmeetingsrecordsmeet-2026-04-21-055md120---task-loadte
+    source: "docs/governance/evidence-gaps-report.md:140"
+    text: "- `docs/meetings/records/MEET-2026-04-21-055.md:120` — - [ ] `task loadtest:run LEVEL=l1` works end-to-end"
+    type: capability
+    dimension: tests-confidence
+    polarity: positive
+    extracted_at: 2026-05-11
+    evidence_tier: UNEVIDENCED
+    ttl_default_days: 30
+    ttl_days: 30
+    last_validated: 2026-05-11
+    expires: 2026-06-10
+  - id: evidence-gaps-report---docsmeetingsadr0040-sbom-attestation-parity-chartsmd17---
+    source: "docs/governance/evidence-gaps-report.md:141"
+    text: "- `docs/meetings/adr/0040-sbom-attestation-parity-charts.md:17` — - ❌ NO attestation"
+    type: negative
+    dimension: security
+    polarity: negative
+    extracted_at: 2026-05-11
+    evidence_tier: UNEVIDENCED
+    ttl_default_days: 30
+    ttl_days: 90
+    last_validated: 2026-05-11
+    expires: 2026-08-09
+  - id: evidence-gaps-report---docsdogfood2026-04-29-real-e2emd42-phase-2-full-loopsh-ha
+    source: "docs/governance/evidence-gaps-report.md:143"
+    text: "- `docs/dogfood/2026-04-29-real-e2e.md:42` — | Phase 2 full-loop.sh harness | ✅ GREEN | state machine + journeys/ | — |"
+    type: done_status
+    dimension: tests-confidence
+    polarity: positive
+    extracted_at: 2026-05-11
+    evidence_tier: UNEVIDENCED
+    ttl_default_days: 30
+    ttl_days: 60
+    last_validated: 2026-05-11
+    expires: 2026-07-10
+  - id: evidence-gaps-report---docsdogfood2026-04-29-real-e2emd44-journey-02-multi-serve
+    source: "docs/governance/evidence-gaps-report.md:144"
+    text: "- `docs/dogfood/2026-04-29-real-e2e.md:44` — | Journey 02 multi-server | ✅ GREEN | 2 apps (server+worker) project-scoped | Achado #17 validado runtime |"
+    type: done_status
+    dimension: tests-confidence
+    polarity: positive
+    extracted_at: 2026-05-11
+    evidence_tier: UNEVIDENCED
+    ttl_default_days: 30
+    ttl_days: 30
+    last_validated: 2026-05-11
+    expires: 2026-06-10
+  - id: evidence-gaps-report---docsdogfood2026-04-29-real-e2emd45-journey-03-secrets-lif
+    source: "docs/governance/evidence-gaps-report.md:145"
+    text: "- `docs/dogfood/2026-04-29-real-e2e.md:45` — | Journey 03 secrets lifecycle | ✅ GREEN | set/list/delete + Rule 9/fail-fast | **Achado #19 (S0 prod) ESO CSS bootstrap"
+    type: done_status
+    dimension: tests-confidence
+    polarity: positive
+    extracted_at: 2026-05-11
+    evidence_tier: UNEVIDENCED
+    ttl_default_days: 30
+    ttl_days: 30
+    last_validated: 2026-05-11
+    expires: 2026-06-10
+  - id: evidence-gaps-report---docsdogfood2026-04-29-real-e2emd49-journey-07-custom-doma
+    source: "docs/governance/evidence-gaps-report.md:146"
+    text: "- `docs/dogfood/2026-04-29-real-e2e.md:49` — | Journey 07 custom domain | ✅ GREEN (parcial) | register/list/status/remove (4/5 verbs) | **Achado #22 (Rule 8 fail-cle"
+    type: done_status
+    dimension: tests-confidence
+    polarity: positive
+    extracted_at: 2026-05-11
+    evidence_tier: UNEVIDENCED
+    ttl_default_days: 30
+    ttl_days: 30
+    last_validated: 2026-05-11
+    expires: 2026-06-10
+  - id: evidence-gaps-report---docsdogfood2026-04-29-real-e2emd52-journey-10-failure-mod
+    source: "docs/governance/evidence-gaps-report.md:147"
+    text: "- `docs/dogfood/2026-04-29-real-e2e.md:52` — | Journey 10 failure modes (§12) | ✅ GREEN | F1/F3/F5; F2 GAP documentado | — |"
+    type: done_status
+    dimension: tests-confidence
+    polarity: positive
+    extracted_at: 2026-05-11
+    evidence_tier: UNEVIDENCED
+    ttl_default_days: 30
+    ttl_days: 30
+    last_validated: 2026-05-11
+    expires: 2026-06-10
+  - id: evidence-gaps-report---docsdogfood2026-04-29-real-e2emd55-cobertura-total-1111-j
+    source: "docs/governance/evidence-gaps-report.md:148"
+    text: "- `docs/dogfood/2026-04-29-real-e2e.md:55` — **Cobertura total**: 11/11 journeys GREEN. **9 bugs sistêmicos shipped + validados** vs estado pré-iter 13."
+    type: done_status
+    dimension: tests-confidence
+    polarity: positive
+    extracted_at: 2026-05-11
+    evidence_tier: UNEVIDENCED
+    ttl_default_days: 30
+    ttl_days: 30
+    last_validated: 2026-05-11
+    expires: 2026-06-10
+  - id: evidence-gaps-report---docsgovernancebias-taxonomymd18---2930-em-plan-progress-n
+    source: "docs/governance/evidence-gaps-report.md:149"
+    text: "- `docs/governance/bias-taxonomy.md:18` — - `\"29/30 ✅\"` em plan progress — não distingue task com 3 evidências vs task com checkbox marcado sem testes"
+    type: completion
+    dimension: tests-confidence
+    polarity: positive
+    extracted_at: 2026-05-11
+    evidence_tier: UNEVIDENCED
+    ttl_default_days: 30
+    ttl_days: 30
+    last_validated: 2026-05-11
+    expires: 2026-06-10
+  - id: bias-taxonomy---2930-em-plan-progress-não-distingue-task-com-3-evidências-
+    source: "docs/governance/bias-taxonomy.md:18"
+    text: "- `\"29/30 ✅\"` em plan progress — não distingue task com 3 evidências vs task com checkbox marcado sem testes"
+    type: completion
+    dimension: tests-confidence
+    polarity: positive
+    extracted_at: 2026-05-11
+    evidence_tier: UNEVIDENCED
+    ttl_default_days: 30
+    ttl_days: 30
+    last_validated: 2026-05-11
+    expires: 2026-06-10
+  - id: bias-taxonomy---8383-pass-em-journey-confunde-tests-defined-com-tests-cove
+    source: "docs/governance/bias-taxonomy.md:19"
+    text: "- `\"83/83 PASS\"` em journey — confunde \"tests defined\" com \"tests covering real scenarios\""
+    type: completion
+    dimension: tests-confidence
+    polarity: positive
+    extracted_at: 2026-05-11
+    evidence_tier: UNEVIDENCED
+    ttl_default_days: 30
+    ttl_days: 30
+    last_validated: 2026-05-11
+    expires: 2026-06-10
+  - id: paranoid-sre-scoring-bands-production-ready-strict
+    source: "docs/governance/personas/paranoid-sre.md:27"
+    text: "### Scoring Bands (Production-Ready Strict)"
+    type: capability
+    dimension: product-completeness
+    polarity: positive
+    extracted_at: 2026-05-11
+    evidence_tier: UNEVIDENCED
+    ttl_default_days: 30
+    ttl_days: 30
+    last_validated: 2026-05-11
+    expires: 2026-06-10
+  - id: paranoid-sre-35-production-ready-in-code-but-zero-real-production-stress-
+    source: "docs/governance/personas/paranoid-sre.md:34"
+    text: "| 3.5 | Production-ready in code, but zero real production stress data |"
+    type: capability
+    dimension: product-completeness
+    polarity: positive
+    extracted_at: 2026-05-11
+    evidence_tier: UNEVIDENCED
+    ttl_default_days: 30
+    ttl_days: 30
+    last_validated: 2026-05-11
+    expires: 2026-06-10
+  - id: paranoid-sre---ssosaml-not-built-with-auth-in-production--03-security
+    source: "docs/governance/personas/paranoid-sre.md:59"
+    text: "- SSO/SAML \"not built\" with auth in production → -0.3 Security"
+    type: negative
+    dimension: security
+    polarity: negative
+    extracted_at: 2026-05-11
+    evidence_tier: UNEVIDENCED
+    ttl_default_days: 30
+    ttl_days: 60
+    last_validated: 2026-05-11
+    expires: 2026-07-10
+  - id: paranoid-sre---dxcli-na-directly-but-penalize-operator-must-ssh-to-fix-pa
+    source: "docs/governance/personas/paranoid-sre.md:67"
+    text: "- **DX/CLI:** N/A directly — but penalize \"operator must SSH to fix\" patterns"
+    type: negative
+    dimension: dx-cli
+    polarity: negative
+    extracted_at: 2026-05-11
+    evidence_tier: UNEVIDENCED
+    ttl_default_days: 30
+    ttl_days: 30
+    last_validated: 2026-05-11
+    expires: 2026-06-10
+  - id: paranoid-sre---sprint-8-phase-5-chaos-validation-was-deferred-to-chg-002c
+    source: "docs/governance/personas/paranoid-sre.md:79"
+    text: "- \"Sprint 8 Phase 5 (Chaos validation) was DEFERRED to CHG-002c which is NOT OPEN. Chaos Mesh CRDs installed in 4 clusters but ZERO scenarios executed. Score Scale/Multi-tenancy capped at 3.3 until at"
+    type: negative
+    dimension: infra-ops
+    polarity: negative
+    extracted_at: 2026-05-11
+    evidence_tier: UNEVIDENCED
+    ttl_default_days: 30
+    ttl_days: 60
+    last_validated: 2026-05-11
+    expires: 2026-07-10
+  - id: vercel-dd-engineer---infraoperations-na-directly-not-your-domain-but-penalize-f
+    source: "docs/governance/personas/vercel-dd-engineer.md:57"
+    text: "- **Infra/Operations:** N/A directly (not your domain) — but penalize \"feature works but requires operator escalation\" patterns"
+    type: negative
+    dimension: infra-ops
+    polarity: negative
+    extracted_at: 2026-05-11
+    evidence_tier: UNEVIDENCED
+    ttl_default_days: 30
+    ttl_days: 30
+    last_validated: 2026-05-11
+    expires: 2026-06-10
+  - id: hostile-vc-auditor---shipped-vagueness-demoed-production-validated-user-validat
+    source: "docs/governance/personas/hostile-vc-auditor.md:8"
+    text: "- \"Shipped\" vagueness: demoed ≠ production-validated ≠ user-validated"
+    type: done_status
+    dimension: product-completeness
+    polarity: positive
+    extracted_at: 2026-05-11
+    evidence_tier: UNEVIDENCED
+    ttl_default_days: 30
+    ttl_days: 30
+    last_validated: 2026-05-11
+    expires: 2026-06-10
+  - id: hostile-vc-auditor-1-production-ready-investigate-how-many-paying-customers-sel
+    source: "docs/governance/personas/hostile-vc-auditor.md:40"
+    text: "1. **\"Production-ready\"** — Investigate: how many paying customers? Self-team usage doesn't count."
+    type: capability
+    dimension: product-completeness
+    polarity: positive
+    extracted_at: 2026-05-11
+    evidence_tier: UNEVIDENCED
+    ttl_default_days: 30
+    ttl_days: 30
+    last_validated: 2026-05-11
+    expires: 2026-06-10
+  - id: hostile-vc-auditor-9-sprint-progress-2930-dods-validated-by-reviewer-different-
+    source: "docs/governance/personas/hostile-vc-auditor.md:48"
+    text: "9. **Sprint progress** — \"29/30 ✅\" — DoDs validated by reviewer different from author?"
+    type: completion
+    dimension: security
+    polarity: positive
+    extracted_at: 2026-05-11
+    evidence_tier: UNEVIDENCED
+    ttl_default_days: 30
+    ttl_days: 60
+    last_validated: 2026-05-11
+    expires: 2026-07-10
+  - id: hostile-vc-auditor---shipped-with-0-external-users--05-product-completeness
+    source: "docs/governance/personas/hostile-vc-auditor.md:59"
+    text: "- \"Shipped\" with 0 external users → -0.5 product completeness"
+    type: done_status
+    dimension: product-completeness
+    polarity: positive
+    extracted_at: 2026-05-11
+    evidence_tier: UNEVIDENCED
+    ttl_default_days: 30
+    ttl_days: 30
+    last_validated: 2026-05-11
+    expires: 2026-06-10
+  - id: deep-dive-current-state-docsmaturity-assessmentmd-1-file-250-loc-a-cada-cell-2-a
+    source: "docs/architecture/governance/deep-dive-current-state.md:18"
+    text: "| `docs/maturity-assessment.md` | 1 file | 250 LOC | A cada cell-2-activation / sprint major | ❌ Nenhum |"
+    type: negative
+    dimension: scale-mt
+    polarity: negative
+    extracted_at: 2026-05-11
+    evidence_tier: UNEVIDENCED
+    ttl_default_days: 30
+    ttl_days: 60
+    last_validated: 2026-05-11
+    expires: 2026-07-10
+  - id: deep-dive-phase-convergence-local-k3d-na-stuck-progressing-f-6-fixed-b
+    source: "docs/architecture/application/deep-dive.md:111"
+    text: "| Phase convergence (local k3d) | n/a (stuck Progressing) | F-6 — fixed by T4.2 |"
+    type: negative
+    dimension: infra-ops
+    polarity: negative
+    extracted_at: 2026-05-11
+    evidence_tier: UNEVIDENCED
+    ttl_default_days: 30
+    ttl_days: 30
+    last_validated: 2026-05-08
+    expires: 2026-06-07
+  - id: deep-dive-cell-awareness-na-no-workload-read-cellawareruntimeclientfac
+    source: "docs/architecture/application/diff/deep-dive.md:13"
+    text: "| Cell-awareness | n/a (no workload read) | `CellAwareRuntimeClientFactory` resolves correct workload cluster from `tenant.spec.cellID` (EC-5) |"
+    type: negative
+    dimension: dx-cli
+    polarity: negative
+    extracted_at: 2026-05-11
+    evidence_tier: UNEVIDENCED
+    ttl_default_days: 30
+    ttl_days: 30
+    last_validated: 2026-05-08
+    expires: 2026-06-07
+  - id: deep-dive-workload-cluster-unreachable-na-graceful-degrade-keep-curren
+    source: "docs/architecture/application/diff/deep-dive.md:14"
+    text: "| Workload cluster unreachable | n/a | Graceful degrade — keep current phase + RequeueAfter 30s (EC-9) |"
+    type: negative
+    dimension: infra-ops
+    polarity: negative
+    extracted_at: 2026-05-11
+    evidence_tier: UNEVIDENCED
+    ttl_default_days: 30
+    ttl_days: 30
+    last_validated: 2026-05-08
+    expires: 2026-06-07
+  - id: deep-dive-fk-guard-in-seed-na-fk-violation-possible-pre-insert-ensure-
+    source: "docs/architecture/tenant/diff/deep-dive.md:13"
+    text: "| FK guard in seed | n/a (FK violation possible) | Pre-INSERT: ensure `cell-default` row exists em cells table |"
+    type: negative
+    dimension: scale-mt
+    polarity: negative
+    extracted_at: 2026-05-11
+    evidence_tier: UNEVIDENCED
+    ttl_default_days: 30
+    ttl_days: 60
+    last_validated: 2026-05-08
+    expires: 2026-07-07
+  - id: dogfood-cleanroom-20260505-pro-phases-now-reach-end-to-end-destroy-setup-rbac_pa
+    source: "docs/reports/dogfood-cleanroom-20260505-progress.md:7"
+    text: "**Phases now reach END-TO-END:** destroy → setup → rbac_patch → bootstrap_extras → heal → tilt_ci → post_tilt_env → doctor → preflight (15/15 PASS) → journey-01 (build SUCCEEDS through cosign)"
+    type: completion
+    dimension: security
+    polarity: positive
+    extracted_at: 2026-05-11
+    evidence_tier: UNEVIDENCED
+    ttl_default_days: 30
+    ttl_days: 60
+    last_validated: 2026-05-05
+    expires: 2026-07-04
+  - id: dogfood-cleanroom-20260505-pro-the-plan-succeeded-at-its-mission-convergence-to-
+    source: "docs/reports/dogfood-cleanroom-20260505-progress.md:120"
+    text: "**The plan succeeded at its mission.** Convergence to 12/12 GREEN is not yet achieved and requires a separate fresh Ralph loop session (or a series of focused journey-specific sessions). I cannot hone"
+    type: completion
+    dimension: tests-confidence
+    polarity: positive
+    extracted_at: 2026-05-11
+    evidence_tier: UNEVIDENCED
+    ttl_default_days: 30
+    ttl_days: 30
+    last_validated: 2026-05-05
+    expires: 2026-06-04
+  - id: dogfood-cleanroom-20260505-pro-total-33min-for-all-11-journeys-5s-preflight-1212
+    source: "docs/reports/dogfood-cleanroom-20260505-progress.md:240"
+    text: "**Total: ~33min for all 11 journeys + 5s preflight, 12/12 GREEN.**"
+    type: completion
+    dimension: tests-confidence
+    polarity: positive
+    extracted_at: 2026-05-11
+    evidence_tier: UNEVIDENCED
+    ttl_default_days: 30
+    ttl_days: 30
+    last_validated: 2026-05-05
+    expires: 2026-06-04
+  - id: dogfood-cleanroom-2026-05-09-d-the-deep-review-remediation-plan-engineering-clos
+    source: "docs/reports/dogfood-cleanroom-2026-05-09-deep-review-remediation.md:11"
+    text: "The deep-review-remediation plan engineering closure was validated end-to-end against a **fresh cleanroom k3d environment** (4 clusters destroyed + recreated from scratch). The Ginkgo `journey` suite "
+    type: completion
+    dimension: infra-ops
+    polarity: positive
+    extracted_at: 2026-05-11
+    evidence_tier: UNEVIDENCED
+    ttl_default_days: 30
+    ttl_days: 30
+    last_validated: 2026-05-10
+    expires: 2026-06-09
+  - id: dogfood-cleanroom-2026-05-09-d-phase-1-task-cleanall-pass-4-k3d-clusters-registr
+    source: "docs/reports/dogfood-cleanroom-2026-05-09-deep-review-remediation.md:15"
+    text: "| Phase 1 — `task clean:all` | ✅ PASS | 4 k3d clusters + registry destroyed |"
+    type: done_status
+    dimension: infra-ops
+    polarity: positive
+    extracted_at: 2026-05-11
+    evidence_tier: UNEVIDENCED
+    ttl_default_days: 30
+    ttl_days: 30
+    last_validated: 2026-05-10
+    expires: 2026-06-09
+  - id: dogfood-cleanroom-2026-05-09-d-phase-2-task-setup-pass-all-4-clusters-recreated-
+    source: "docs/reports/dogfood-cleanroom-2026-05-09-deep-review-remediation.md:16"
+    text: "| Phase 2 — `task setup` | ✅ PASS | All 4 clusters recreated, helm dependencies installed, seed-local-user mints JWT |"
+    type: done_status
+    dimension: infra-ops
+    polarity: positive
+    extracted_at: 2026-05-11
+    evidence_tier: UNEVIDENCED
+    ttl_default_days: 30
+    ttl_days: 30
+    last_validated: 2026-05-10
+    expires: 2026-06-09
+  - id: dogfood-cleanroom-2026-05-09-d-phase-5-ginkgo---label-filtersmoke-66-pass-in-2m4
+    source: "docs/reports/dogfood-cleanroom-2026-05-09-deep-review-remediation.md:19"
+    text: "| Phase 5 — Ginkgo `--label-filter=smoke` | ✅ 6/6 PASS in 2m40s | Solo Deploy + audit + delete |"
+    type: completion
+    dimension: core-deploy
+    polarity: positive
+    extracted_at: 2026-05-11
+    evidence_tier: UNEVIDENCED
+    ttl_default_days: 30
+    ttl_days: 30
+    last_validated: 2026-05-10
+    expires: 2026-06-09
+  - id: dogfood-cleanroom-2026-05-09-d-phase-6-ginkgo---label-filterjourney-7778-pass-in
+    source: "docs/reports/dogfood-cleanroom-2026-05-09-deep-review-remediation.md:20"
+    text: "| Phase 6 — Ginkgo `--label-filter=journey` | 🟡 77/78 PASS in 44m9s (98.7%) | Single timing-related fail (Journey 02 multi-server cold-start race) — fixed in commit `39d49f6c` (Eventually-poll for 90s"
+    type: completion
+    dimension: tests-confidence
+    polarity: positive
+    extracted_at: 2026-05-11
+    evidence_tier: PARTIAL_CONFIDENCE
+    ttl_default_days: 30
+    ttl_days: 30
+    last_validated: 2026-05-10
+    expires: 2026-06-09
+    evidence_t1: "commit:39d49f6c"
+  - id: dogfood-cleanroom-2026-05-09-d-phase-7-final-journey-suite-post-t24t27t32t42t73t
+    source: "docs/reports/dogfood-cleanroom-2026-05-09-deep-review-remediation.md:21"
+    text: "| Phase 7 — Final journey suite (post-T2.4/T2.7/T3.2/T4.2/T7.3/T8.5b) | 🟡 93/95 PASS in 52m10s (97.9%) | Two fails: (1) `journey_logs --build-id` typo I introduced — fixed in commit `3c446801`; isolat"
+    type: completion
+    dimension: tests-confidence
+    polarity: positive
+    extracted_at: 2026-05-11
+    evidence_tier: PARTIAL_CONFIDENCE
+    ttl_default_days: 30
+    ttl_days: 30
+    last_validated: 2026-05-10
+    expires: 2026-06-09
+    evidence_t1: "commit:3c446801"
+  - id: dogfood-cleanroom-2026-05-09-d-phase-7-final-journey-suite-post-t24t27t32t42t73t
+    source: "docs/reports/dogfood-cleanroom-2026-05-09-deep-review-remediation.md:21"
+    text: "| Phase 7 — Final journey suite (post-T2.4/T2.7/T3.2/T4.2/T7.3/T8.5b) | 🟡 93/95 PASS in 52m10s (97.9%) | Two fails: (1) `journey_logs --build-id` typo I introduced — fixed in commit `3c446801`; isolat"
+    type: completion
+    dimension: tests-confidence
+    polarity: positive
+    extracted_at: 2026-05-11
+    evidence_tier: PARTIAL_CONFIDENCE
+    ttl_default_days: 30
+    ttl_days: 30
+    last_validated: 2026-05-10
+    expires: 2026-06-09
+    evidence_t1: "commit:3c446801"
+  - id: dogfood-cleanroom-2026-05-09-d-phase-7-final-journey-suite-post-t24t27t32t42t73t
+    source: "docs/reports/dogfood-cleanroom-2026-05-09-deep-review-remediation.md:21"
+    text: "| Phase 7 — Final journey suite (post-T2.4/T2.7/T3.2/T4.2/T7.3/T8.5b) | 🟡 93/95 PASS in 52m10s (97.9%) | Two fails: (1) `journey_logs --build-id` typo I introduced — fixed in commit `3c446801`; isolat"
+    type: completion
+    dimension: tests-confidence
+    polarity: positive
+    extracted_at: 2026-05-11
+    evidence_tier: PARTIAL_CONFIDENCE
+    ttl_default_days: 30
+    ttl_days: 30
+    last_validated: 2026-05-10
+    expires: 2026-06-09
+    evidence_t1: "commit:3c446801"
+  - id: dogfood-cleanroom-2026-05-09-d-phase-8-pristine-cleanroom-journey-full-sequence-
+    source: "docs/reports/dogfood-cleanroom-2026-05-09-deep-review-remediation.md:22"
+    text: "| Phase 8 — Pristine cleanroom journey (full sequence: clean:all → setup → tilt → doctor 38/0 → ginkgo journey) | 🟡 84/91 PASS in 70m08s (92.3%) | Pre-Hydra-TTL fix run was 50/61 with 7 TOKEN_EXPIRED."
+    type: completion
+    dimension: tests-confidence
+    polarity: positive
+    extracted_at: 2026-05-11
+    evidence_tier: UNEVIDENCED
+    ttl_default_days: 30
+    ttl_days: 30
+    last_validated: 2026-05-10
+    expires: 2026-06-09
+  - id: dogfood-cleanroom-2026-05-09-d-phase-8-pristine-cleanroom-journey-full-sequence-
+    source: "docs/reports/dogfood-cleanroom-2026-05-09-deep-review-remediation.md:22"
+    text: "| Phase 8 — Pristine cleanroom journey (full sequence: clean:all → setup → tilt → doctor 38/0 → ginkgo journey) | 🟡 84/91 PASS in 70m08s (92.3%) | Pre-Hydra-TTL fix run was 50/61 with 7 TOKEN_EXPIRED."
+    type: done_status
+    dimension: tests-confidence
+    polarity: positive
+    extracted_at: 2026-05-11
+    evidence_tier: UNEVIDENCED
+    ttl_default_days: 30
+    ttl_days: 30
+    last_validated: 2026-05-10
+    expires: 2026-06-09
+  - id: dogfood-cleanroom-2026-05-09-d-and-pushes-both-tags-cleanroom-smoke-tests-post-f
+    source: "docs/reports/dogfood-cleanroom-2026-05-09-deep-review-remediation.md:50"
+    text: "and pushes both tags. Cleanroom + smoke tests post-fix: 6/6 GREEN in 2m40s"
+    type: completion
+    dimension: tests-confidence
+    polarity: positive
+    extracted_at: 2026-05-11
+    evidence_tier: UNEVIDENCED
+    ttl_default_days: 30
+    ttl_days: 30
+    last_validated: 2026-05-10
+    expires: 2026-06-09
+  - id: dogfood-cleanroom-2026-05-09-d-canary-dogfood-2026-05-07-warm-8080-cleanroom-717
+    source: "docs/reports/dogfood-cleanroom-2026-05-09-deep-review-remediation.md:98"
+    text: "| canary-dogfood | 2026-05-07 | warm 80/80 + cleanroom 71/72 | 6 fixes F-15..F-22 shipped |"
+    type: done_status
+    dimension: core-deploy
+    polarity: positive
+    extracted_at: 2026-05-11
+    evidence_tier: UNEVIDENCED
+    ttl_default_days: 30
+    ttl_days: 30
+    last_validated: 2026-05-10
+    expires: 2026-06-09
+  - id: dogfood-cleanroom-2026-05-09-d-done-engineering-shipped-tests-lints-58-83
+    source: "docs/reports/dogfood-cleanroom-2026-05-09-deep-review-remediation.md:115"
+    text: "| ✅ DONE (engineering shipped + tests + lints) | 58 | 83% |"
+    type: done_status
+    dimension: tests-confidence
+    polarity: positive
+    extracted_at: 2026-05-11
+    evidence_tier: UNEVIDENCED
+    ttl_default_days: 30
+    ttl_days: 30
+    last_validated: 2026-05-10
+    expires: 2026-06-09
+  - id: dogfood-cleanroom-2026-05-09-d-done-engineering-shipped-tests-lints-58-83
+    source: "docs/reports/dogfood-cleanroom-2026-05-09-deep-review-remediation.md:115"
+    text: "| ✅ DONE (engineering shipped + tests + lints) | 58 | 83% |"
+    type: done_status
+    dimension: tests-confidence
+    polarity: positive
+    extracted_at: 2026-05-11
+    evidence_tier: UNEVIDENCED
+    ttl_default_days: 30
+    ttl_days: 30
+    last_validated: 2026-05-10
+    expires: 2026-06-09
+  - id: dogfood-cleanroom-2026-05-09-d---x-dogfood-full-passed-7778-journeys-green-singl
+    source: "docs/reports/dogfood-cleanroom-2026-05-09-deep-review-remediation.md:130"
+    text: "- [x] **`/dogfood full` PASSED** — 77/78 journeys GREEN, single fail = pre-existing cleanroom timing flake unrelated to plan scope; smoke 6/6 GREEN"
+    type: completion
+    dimension: tests-confidence
+    polarity: positive
+    extracted_at: 2026-05-11
+    evidence_tier: UNEVIDENCED
+    ttl_default_days: 30
+    ttl_days: 30
+    last_validated: 2026-05-10
+    expires: 2026-06-09
+  - id: dogfood-cleanroom-2026-05-09-d-3-t42-infra-restartyml-refactor-adr-0049-governan
+    source: "docs/reports/dogfood-cleanroom-2026-05-09-deep-review-remediation.md:169"
+    text: "3. T4.2 infra-restart.yml refactor (ADR-0049 governance shipped)"
+    type: done_status
+    dimension: infra-ops
+    polarity: positive
+    extracted_at: 2026-05-11
+    evidence_tier: PARTIAL_CONFIDENCE
+    ttl_default_days: 30
+    ttl_days: 90
+    last_validated: 2026-05-10
+    expires: 2026-08-08
+    evidence_t3: "ci:infra-restart.yml"
+  - id: scale-b40-baseline-20260505-post-redeploy-k8s-replicas-3-from-db-1-from-loopzeroyaml
+    source: "docs/reports/scale-b40-baseline-20260505.md:51"
+    text: "| Post-redeploy K8s replicas | **3** (from DB) | **1** (from loopzero.yaml) | ❌ **BUG** |"
+    type: negative
+    dimension: core-deploy
+    polarity: negative
+    extracted_at: 2026-05-11
+    evidence_tier: UNEVIDENCED
+    ttl_default_days: 30
+    ttl_days: 30
+    last_validated: 2026-05-05
+    expires: 2026-06-04
+  - id: status-validation-and-doc-cons---foco-shipped-significa-demoed-ou-production-val
+    source: "docs/plans/status-validation-and-doc-consolidation-plan.md:265"
+    text: "- Foco: \"shipped\" significa demoed ou production-validated? quantos REAL users? gap entre pitch e código"
+    type: done_status
+    dimension: product-completeness
+    polarity: positive
+    extracted_at: 2026-05-11
+    evidence_tier: UNEVIDENCED
+    ttl_default_days: 30
+    ttl_days: 30
+    last_validated: 2026-05-11
+    expires: 2026-06-10
+  - id: deep-review-remediation-final--remediated-66-94-codeconfigtest-fix-shipped-commi
+    source: "docs/plans/deep-review-remediation-final-status.md:17"
+    text: "| remediated | 66 (94%) | Code/config/test fix shipped + commit referenced |"
+    type: done_status
+    dimension: tests-confidence
+    polarity: positive
+    extracted_at: 2026-05-11
+    evidence_tier: UNEVIDENCED
+    ttl_default_days: 30
+    ttl_days: 30
+    last_validated: 2026-05-09
+    expires: 2026-06-08
+  - id: deep-review-remediation-final--1-multi-cell-t11-t12-t13-t14-t15-t16-t17-77-t13-s
+    source: "docs/plans/deep-review-remediation-final-status.md:49"
+    text: "| 1 (multi-cell) | T1.1, T1.2, T1.3, T1.4, T1.5, T1.6, T1.7 | 7/7 ✓ | T1.3 shipped 2026-05-09 (commits 6b65554c+f425c409+aa15d9e1+2e8fb28b+6e54d66d) |"
+    type: done_status
+    dimension: scale-mt
+    polarity: positive
+    extracted_at: 2026-05-11
+    evidence_tier: PARTIAL_CONFIDENCE
+    ttl_default_days: 30
+    ttl_days: 60
+    last_validated: 2026-05-09
+    expires: 2026-07-08
+    evidence_t1: "commit:6b65554c"
+  - id: deep-review-remediation-final--2-t14-production-rollout-helm-chart-shipped-with-
+    source: "docs/plans/deep-review-remediation-final-status.md:104"
+    text: "2. **T1.4 production rollout** — Helm chart shipped with mount disabled"
+    type: done_status
+    dimension: core-deploy
+    polarity: positive
+    extracted_at: 2026-05-11
+    evidence_tier: UNEVIDENCED
+    ttl_default_days: 30
+    ttl_days: 30
+    last_validated: 2026-05-09
+    expires: 2026-06-08
+  - id: deep-review-remediation-final--clusters-destroyed-recreated-ginkgo-journey-suite
+    source: "docs/plans/deep-review-remediation-final-status.md:125"
+    text: "clusters destroyed + recreated) + Ginkgo journey suite **77/78 PASS in"
+    type: completion
+    dimension: infra-ops
+    polarity: positive
+    extracted_at: 2026-05-11
+    evidence_tier: UNEVIDENCED
+    ttl_default_days: 30
+    ttl_days: 30
+    last_validated: 2026-05-09
+    expires: 2026-06-08
+  - id: deep-review-remediation-final----remediated-means-engineering-fix-shipped-tests-
+    source: "docs/plans/deep-review-remediation-final-status.md:138"
+    text: "- \"Remediated\" means engineering fix shipped + tests passing in unit/build."
+    type: done_status
+    dimension: tests-confidence
+    polarity: positive
+    extracted_at: 2026-05-11
+    evidence_tier: UNEVIDENCED
+    ttl_default_days: 30
+    ttl_days: 30
+    last_validated: 2026-05-09
+    expires: 2026-06-08
+  - id: deep-review-remediation-final--1-execute-cleanroom-done-2026-05-09-4-clusters-de
+    source: "docs/plans/deep-review-remediation-final-status.md:149"
+    text: "1. ~~Execute `/cleanroom`~~ ✅ DONE 2026-05-09 (4 clusters destroyed + recreated, ~30min)."
+    type: done_status
+    dimension: infra-ops
+    polarity: positive
+    extracted_at: 2026-05-11
+    evidence_tier: UNEVIDENCED
+    ttl_default_days: 30
+    ttl_days: 30
+    last_validated: 2026-05-09
+    expires: 2026-06-08
+  - id: deep-review-remediation-final--2-execute-dogfood-full-against-pristine-cleanroom
+    source: "docs/plans/deep-review-remediation-final-status.md:150"
+    text: "2. ~~Execute `/dogfood full` against pristine cleanroom~~ ✅ DONE 2026-05-09 (smoke 6/6 PASS, journey 77/78 PASS)."
+    type: completion
+    dimension: tests-confidence
+    polarity: positive
+    extracted_at: 2026-05-11
+    evidence_tier: UNEVIDENCED
+    ttl_default_days: 30
+    ttl_days: 30
+    last_validated: 2026-05-09
+    expires: 2026-06-08
+  - id: deep-review-remediation-final--2-execute-dogfood-full-against-pristine-cleanroom
+    source: "docs/plans/deep-review-remediation-final-status.md:150"
+    text: "2. ~~Execute `/dogfood full` against pristine cleanroom~~ ✅ DONE 2026-05-09 (smoke 6/6 PASS, journey 77/78 PASS)."
+    type: completion
+    dimension: tests-confidence
+    polarity: positive
+    extracted_at: 2026-05-11
+    evidence_tier: UNEVIDENCED
+    ttl_default_days: 30
+    ttl_days: 30
+    last_validated: 2026-05-09
+    expires: 2026-06-08
+  - id: deep-review-remediation-final--2-execute-dogfood-full-against-pristine-cleanroom
+    source: "docs/plans/deep-review-remediation-final-status.md:150"
+    text: "2. ~~Execute `/dogfood full` against pristine cleanroom~~ ✅ DONE 2026-05-09 (smoke 6/6 PASS, journey 77/78 PASS)."
+    type: done_status
+    dimension: tests-confidence
+    polarity: positive
+    extracted_at: 2026-05-11
+    evidence_tier: UNEVIDENCED
+    ttl_default_days: 30
+    ttl_days: 30
+    last_validated: 2026-05-09
+    expires: 2026-06-08
+  - id: chaos-mesh-experiments-edge-ca-single-argocd-app-per-tenant-nao-na
+    source: "docs/plans/chaos-mesh-experiments-edge-cases.md:71"
+    text: "| Single ArgoCD App per tenant | Nao | N/A |"
+    type: negative
+    dimension: scale-mt
+    polarity: negative
+    extracted_at: 2026-05-11
+    evidence_tier: UNEVIDENCED
+    ttl_default_days: 30
+    ttl_days: 60
+    last_validated: 2026-05-06
+    expires: 2026-07-05
+  - id: deep-review-2026-05-10-remedia-baseline-maturity-3950-1212-cleanroom-dogfood-gre
+    source: "docs/plans/deep-review-2026-05-10-remediation-plan.md:16"
+    text: "**Baseline:** Maturity 3.9/5.0. 12/12 cleanroom dogfood GREEN. 83/83 journey suite PASS."
+    type: score
+    dimension: tests-confidence
+    polarity: positive
+    extracted_at: 2026-05-11
+    evidence_tier: UNEVIDENCED
+    ttl_default_days: 30
+    ttl_days: 30
+    last_validated: 2026-05-10
+    expires: 2026-06-09
+  - id: deep-review-2026-05-10-remedia-t01-preview-controller-use-cell-aware-client-done
+    source: "docs/plans/deep-review-2026-05-10-remediation-plan.md:79"
+    text: "### T0.1 — Preview Controller: Use Cell-Aware Client ✅ DONE 2026-05-10"
+    type: done_status
+    dimension: dx-cli
+    polarity: positive
+    extracted_at: 2026-05-11
+    evidence_tier: UNEVIDENCED
+    ttl_default_days: 30
+    ttl_days: 30
+    last_validated: 2026-05-10
+    expires: 2026-06-09
+  - id: deep-review-2026-05-10-remedia-t04-buildstoregetbyid-add-tenant-filter-done-2026
+    source: "docs/plans/deep-review-2026-05-10-remediation-plan.md:211"
+    text: "### T0.4 — BuildStore.GetByID: Add Tenant Filter ✅ DONE 2026-05-10"
+    type: done_status
+    dimension: scale-mt
+    polarity: positive
+    extracted_at: 2026-05-11
+    evidence_tier: UNEVIDENCED
+    ttl_default_days: 30
+    ttl_days: 60
+    last_validated: 2026-05-10
+    expires: 2026-07-09
+  - id: deep-review-2026-05-10-remedia-t12-previewservice-add-environment-lock-done-2026
+    source: "docs/plans/deep-review-2026-05-10-remediation-plan.md:346"
+    text: "### T1.2 — PreviewService: Add Environment Lock ✅ DONE 2026-05-10"
+    type: done_status
+    dimension: product-completeness
+    polarity: positive
+    extracted_at: 2026-05-11
+    evidence_tier: UNEVIDENCED
+    ttl_default_days: 30
+    ttl_days: 30
+    last_validated: 2026-05-10
+    expires: 2026-06-09
+  - id: deep-review-2026-05-10-remedia-t14-preview-sm-use-actual-phase-trytransition-don
+    source: "docs/plans/deep-review-2026-05-10-remediation-plan.md:400"
+    text: "### T1.4 — Preview SM: Use Actual Phase + TryTransition ✅ DONE 2026-05-10"
+    type: done_status
+    dimension: product-completeness
+    polarity: positive
+    extracted_at: 2026-05-11
+    evidence_tier: UNEVIDENCED
+    ttl_default_days: 30
+    ttl_days: 30
+    last_validated: 2026-05-10
+    expires: 2026-06-09
+  - id: deep-review-2026-05-10-remedia-t41-cli-add-deploydelivery_failed-handler-done-20
+    source: "docs/plans/deep-review-2026-05-10-remediation-plan.md:684"
+    text: "### T4.1 — CLI: Add deploy.delivery_failed Handler ✅ DONE 2026-05-10"
+    type: done_status
+    dimension: core-deploy
+    polarity: positive
+    extracted_at: 2026-05-11
+    evidence_tier: UNEVIDENCED
+    ttl_default_days: 30
+    ttl_days: 30
+    last_validated: 2026-05-10
+    expires: 2026-06-09
+  - id: deep-review-2026-05-10-remedia-t53-cell-pinner-extract-tenantcrpatcher-interface
+    source: "docs/plans/deep-review-2026-05-10-remediation-plan.md:767"
+    text: "### T5.3 — Cell Pinner: Extract TenantCRPatcher Interface ✅ DONE 2026-05-10"
+    type: done_status
+    dimension: scale-mt
+    polarity: positive
+    extracted_at: 2026-05-11
+    evidence_tier: UNEVIDENCED
+    ttl_default_days: 30
+    ttl_days: 60
+    last_validated: 2026-05-10
+    expires: 2026-07-09
+  - id: deep-review-2026-05-10-remedia-t56-deploycompleted-add-retry-done-2026-05-10
+    source: "docs/plans/deep-review-2026-05-10-remediation-plan.md:776"
+    text: "### T5.6 — deploy.completed: Add Retry ✅ DONE 2026-05-10"
+    type: done_status
+    dimension: core-deploy
+    polarity: positive
+    extracted_at: 2026-05-11
+    evidence_tier: UNEVIDENCED
+    ttl_default_days: 30
+    ttl_days: 30
+    last_validated: 2026-05-10
+    expires: 2026-06-09
+  - id: chaos-mesh-experiments-plan-version-11-edge-case-review-incorporated-ec-1-defer-
+    source: "docs/plans/chaos-mesh-experiments-plan.md:3"
+    text: "> **Version 1.1** (edge case review incorporated: EC-1 defer ordering, EC-2 namespaceSelector matchExpressions, EC-3 auth token) — Operationalize the existing Chaos Mesh infrastructure (9 manifests + "
+    type: score
+    dimension: infra-ops
+    polarity: positive
+    extracted_at: 2026-05-11
+    evidence_tier: UNEVIDENCED
+    ttl_default_days: 30
+    ttl_days: 30
+    last_validated: 2026-05-06
+    expires: 2026-06-05
+  - id: chaos-mesh-experiments-plan-9-never-validated-end-to-end-t31-full-run-against-k3
+    source: "docs/plans/chaos-mesh-experiments-plan.md:616"
+    text: "| 9 | Never validated end-to-end | T3.1 | Full run against k3d, 12/12 GREEN |"
+    type: completion
+    dimension: infra-ops
+    polarity: positive
+    extracted_at: 2026-05-11
+    evidence_tier: UNEVIDENCED
+    ttl_default_days: 30
+    ttl_days: 30
+    last_validated: 2026-05-06
+    expires: 2026-06-05
+  - id: chaos-mesh-experiments-plan---all-tests-passing-loopzero_chaos_test1-go-test-infrate
+    source: "docs/plans/chaos-mesh-experiments-plan.md:625"
+    text: "- [ ] All tests passing (`LOOPZERO_CHAOS_TEST=1 go test ./infra/tests/chaos/ -v` = 12/12 GREEN)"
+    type: completion
+    dimension: infra-ops
+    polarity: positive
+    extracted_at: 2026-05-11
+    evidence_tier: UNEVIDENCED
+    ttl_default_days: 30
+    ttl_days: 30
+    last_validated: 2026-05-06
+    expires: 2026-06-05
+  - id: deep-review-remediation-plan-done-zero-critical-findings-zero-high-findings-on-l
+    source: "docs/plans/deep-review-remediation-plan.md:21"
+    text: "**Done = zero CRITICAL findings + zero HIGH findings on launch-blocking surfaces (deploy, rollback, billing, security, multi-cell) + every Phase 0 acceptance criterion validated LIVE in cleanroom.**"
+    type: capability
+    dimension: core-deploy
+    polarity: positive
+    extracted_at: 2026-05-11
+    evidence_tier: UNEVIDENCED
+    ttl_default_days: 30
+    ttl_days: 30
+    last_validated: 2026-05-09
+    expires: 2026-06-08
+  - id: deep-review-remediation-plan-2-maturity-405-currently-39-gates-ci-sunday-cron-gr
+    source: "docs/plans/deep-review-remediation-plan.md:25"
+    text: "2. Maturity 4.0/5 (currently 3.9; gates: CI Sunday cron GREEN + 1 prod customer day-trial)."
+    type: score
+    dimension: product-completeness
+    polarity: positive
+    extracted_at: 2026-05-11
+    evidence_tier: UNEVIDENCED
+    ttl_default_days: 30
+    ttl_days: 30
+    last_validated: 2026-05-09
+    expires: 2026-06-08
+  - id: deep-review-remediation-plan-t02-wire-x-admin-key-validation-through-middleware-
+    source: "docs/plans/deep-review-remediation-plan.md:185"
+    text: "### T0.2 — Wire X-Admin-Key validation through middleware on tenant DELETE/Restore ✅ DONE"
+    type: done_status
+    dimension: scale-mt
+    polarity: positive
+    extracted_at: 2026-05-11
+    evidence_tier: UNEVIDENCED
+    ttl_default_days: 30
+    ttl_days: 60
+    last_validated: 2026-05-09
+    expires: 2026-07-08
+  - id: deep-review-remediation-plan-t03-wire-emitrolloutaborted-to-canary-abort-detecti
+    source: "docs/plans/deep-review-remediation-plan.md:269"
+    text: "### T0.3 — Wire EmitRolloutAborted to canary abort detection (canary SSE contract revival) ✅ DONE"
+    type: done_status
+    dimension: core-deploy
+    polarity: positive
+    extracted_at: 2026-05-11
+    evidence_tier: UNEVIDENCED
+    ttl_default_days: 30
+    ttl_days: 30
+    last_validated: 2026-05-09
+    expires: 2026-06-08
+  - id: deep-review-remediation-plan-t04-fix-db-hardening-test-wrong-constraint-name-bro
+    source: "docs/plans/deep-review-remediation-plan.md:370"
+    text: "### T0.4 — Fix DB hardening test wrong constraint name (broken canary) ✅ DONE"
+    type: done_status
+    dimension: core-deploy
+    polarity: positive
+    extracted_at: 2026-05-11
+    evidence_tier: UNEVIDENCED
+    ttl_default_days: 30
+    ttl_days: 30
+    last_validated: 2026-05-09
+    expires: 2026-06-08
+  - id: deep-review-remediation-plan-t05-ci-invariant-test-pg_constraint-must-equal-stat
+    source: "docs/plans/deep-review-remediation-plan.md:423"
+    text: "### T0.5 — CI invariant test: `pg_constraint` MUST equal state machine constants ✅ DONE"
+    type: done_status
+    dimension: tests-confidence
+    polarity: positive
+    extracted_at: 2026-05-11
+    evidence_tier: UNEVIDENCED
+    ttl_default_days: 30
+    ttl_days: 60
+    last_validated: 2026-05-09
+    expires: 2026-07-08
+  - id: deep-review-remediation-plan-t11-previewcontroller-cell-aware-find_arch_002-done
+    source: "docs/plans/deep-review-remediation-plan.md:517"
+    text: "### T1.1 — PreviewController cell-aware (find_arch_002) ✅ DONE"
+    type: done_status
+    dimension: scale-mt
+    polarity: positive
+    extracted_at: 2026-05-11
+    evidence_tier: UNEVIDENCED
+    ttl_default_days: 30
+    ttl_days: 60
+    last_validated: 2026-05-09
+    expires: 2026-07-08
+  - id: deep-review-remediation-plan-t12-multi-cell-envtest-infrastructure-find_arch_003
+    source: "docs/plans/deep-review-remediation-plan.md:525"
+    text: "### T1.2 — Multi-cell envtest infrastructure (find_arch_003) ✅ DONE"
+    type: done_status
+    dimension: infra-ops
+    polarity: positive
+    extracted_at: 2026-05-11
+    evidence_tier: UNEVIDENCED
+    ttl_default_days: 30
+    ttl_days: 30
+    last_validated: 2026-05-09
+    expires: 2026-06-08
+  - id: deep-review-remediation-plan-t14-app-operator-cell-aware-unconditional-find_arch
+    source: "docs/plans/deep-review-remediation-plan.md:546"
+    text: "### T1.4 — app-operator cell-aware unconditional (find_arch_007 + ADR D3) ✅ DONE"
+    type: done_status
+    dimension: scale-mt
+    polarity: positive
+    extracted_at: 2026-05-11
+    evidence_tier: UNEVIDENCED
+    ttl_default_days: 30
+    ttl_days: 90
+    last_validated: 2026-05-09
+    expires: 2026-08-07
+  - id: deep-review-remediation-plan-t15-cellpinner-dbcr-divergence-alert-find_arch_005-
+    source: "docs/plans/deep-review-remediation-plan.md:565"
+    text: "### T1.5 — CellPinner DB↔CR divergence alert (find_arch_005) ✅ DONE"
+    type: done_status
+    dimension: scale-mt
+    polarity: positive
+    extracted_at: 2026-05-11
+    evidence_tier: UNEVIDENCED
+    ttl_default_days: 30
+    ttl_days: 60
+    last_validated: 2026-05-09
+    expires: 2026-07-08
+  - id: deep-review-remediation-plan-t22-timing-attack-fix-on-validateserviceauth-valida
+    source: "docs/plans/deep-review-remediation-plan.md:593"
+    text: "### T2.2 — Timing attack fix on validateServiceAuth + validateAdminAPIKey (find_sec_002 HIGH) ✅ DONE"
+    type: done_status
+    dimension: security
+    polarity: positive
+    extracted_at: 2026-05-11
+    evidence_tier: UNEVIDENCED
+    ttl_default_days: 30
+    ttl_days: 60
+    last_validated: 2026-05-09
+    expires: 2026-07-08
+  - id: deep-review-remediation-plan-t24-pre-auth-ip-rate-limit-find_sec_ratelimit_post_
+    source: "docs/plans/deep-review-remediation-plan.md:605"
+    text: "### T2.4 — Pre-auth IP rate limit (find_sec_ratelimit_post_auth_only MEDIUM, ADR D4) ✅ DONE 2026-05-09"
+    type: done_status
+    dimension: security
+    polarity: positive
+    extracted_at: 2026-05-11
+    evidence_tier: UNEVIDENCED
+    ttl_default_days: 30
+    ttl_days: 90
+    last_validated: 2026-05-09
+    expires: 2026-08-07
+  - id: deep-review-remediation-plan-status-isreservedenvkey-shipped-at-servicesbuild_pl
+    source: "docs/plans/deep-review-remediation-plan.md:639"
+    text: "**Status:** `isReservedEnvKey` shipped at `services/build_plan.go:35`; `services/build_plan_reserved_env_test.go` has 5 prefix-coverage cases (LOOPZERO_/KUBERNETES_/AWS_/DO_/GOOGLE_)."
+    type: done_status
+    dimension: tests-confidence
+    polarity: positive
+    extracted_at: 2026-05-11
+    evidence_tier: UNEVIDENCED
+    ttl_default_days: 30
+    ttl_days: 30
+    last_validated: 2026-05-09
+    expires: 2026-06-08
+  - id: deep-review-remediation-plan-status-isparameterizedcondition-shipped-at-dbdomain
+    source: "docs/plans/deep-review-remediation-plan.md:646"
+    text: "**Status:** `isParameterizedCondition` shipped at `db/domain_store.go:312`; `db/domain_store_param_guard_test.go` covers accept-only-parameterized vs reject-raw-string cases."
+    type: done_status
+    dimension: tests-confidence
+    polarity: positive
+    extracted_at: 2026-05-11
+    evidence_tier: UNEVIDENCED
+    ttl_default_days: 30
+    ttl_days: 30
+    last_validated: 2026-05-09
+    expires: 2026-06-08
+  - id: deep-review-remediation-plan-t31-migration-000010-regression-test-find_test_002-
+    source: "docs/plans/deep-review-remediation-plan.md:659"
+    text: "### T3.1 — Migration 000010 regression test (find_test_002 HIGH) ✅ DONE"
+    type: done_status
+    dimension: tests-confidence
+    polarity: positive
+    extracted_at: 2026-05-11
+    evidence_tier: UNEVIDENCED
+    ttl_default_days: 30
+    ttl_days: 30
+    last_validated: 2026-05-09
+    expires: 2026-06-08
+  - id: deep-review-remediation-plan-t32-6-cli-e2e-happy-path-gaps-find_test_003-medium-
+    source: "docs/plans/deep-review-remediation-plan.md:664"
+    text: "### T3.2 — 6 CLI E2E happy-path gaps (find_test_003 MEDIUM) ✅ DONE 2026-05-09"
+    type: done_status
+    dimension: dx-cli
+    polarity: positive
+    extracted_at: 2026-05-11
+    evidence_tier: UNEVIDENCED
+    ttl_default_days: 30
+    ttl_days: 30
+    last_validated: 2026-05-09
+    expires: 2026-06-08
+  - id: deep-review-remediation-plan-t33-lock-acquisition-5s-timeout-test-find_test_004-
+    source: "docs/plans/deep-review-remediation-plan.md:671"
+    text: "### T3.3 — Lock acquisition 5s timeout test (find_test_004 MEDIUM) ✅ DONE"
+    type: done_status
+    dimension: tests-confidence
+    polarity: positive
+    extracted_at: 2026-05-11
+    evidence_tier: UNEVIDENCED
+    ttl_default_days: 30
+    ttl_days: 30
+    last_validated: 2026-05-09
+    expires: 2026-06-08
+  - id: deep-review-remediation-plan-t34-lint-rule-every-migration-has-regression-test-d
+    source: "docs/plans/deep-review-remediation-plan.md:676"
+    text: "### T3.4 — Lint rule: every migration has regression test ✅ DONE"
+    type: done_status
+    dimension: tests-confidence
+    polarity: positive
+    extracted_at: 2026-05-11
+    evidence_tier: UNEVIDENCED
+    ttl_default_days: 30
+    ttl_days: 30
+    last_validated: 2026-05-09
+    expires: 2026-06-08
+  - id: deep-review-remediation-plan-status-adr-0049-immutable-artifact-promotion-strate
+    source: "docs/plans/deep-review-remediation-plan.md:695"
+    text: "**Status:** ADR-0049 (Immutable artifact promotion strategy) ACCEPTED — documents the two-tier tag policy with `:sha` canonical for production deploys. Engineering work scheduled to refactor `infra-re"
+    type: done_status
+    dimension: core-deploy
+    polarity: positive
+    extracted_at: 2026-05-11
+    evidence_tier: UNEVIDENCED
+    ttl_default_days: 30
+    ttl_days: 90
+    last_validated: 2026-05-09
+    expires: 2026-08-07
+  - id: deep-review-remediation-plan-t43-packs-runner-digest-pin-find_infra_002-high-don
+    source: "docs/plans/deep-review-remediation-plan.md:697"
+    text: "### T4.3 — packs-runner digest pin (find_infra_002 HIGH) ✅ DONE"
+    type: done_status
+    dimension: infra-ops
+    polarity: positive
+    extracted_at: 2026-05-11
+    evidence_tier: UNEVIDENCED
+    ttl_default_days: 30
+    ttl_days: 30
+    last_validated: 2026-05-09
+    expires: 2026-06-08
+  - id: deep-review-remediation-plan-t44-floating-golang-version-find_infra_003-medium-d
+    source: "docs/plans/deep-review-remediation-plan.md:702"
+    text: "### T4.4 — Floating golang version (find_infra_003 MEDIUM) ✅ DONE"
+    type: done_status
+    dimension: infra-ops
+    polarity: positive
+    extracted_at: 2026-05-11
+    evidence_tier: UNEVIDENCED
+    ttl_default_days: 30
+    ttl_days: 30
+    last_validated: 2026-05-09
+    expires: 2026-06-08
+  - id: deep-review-remediation-plan-t48-integration-tests-required-pr-gate-find_cicd_00
+    source: "docs/plans/deep-review-remediation-plan.md:718"
+    text: "### T4.8 — Integration tests required PR gate (find_cicd_004 MEDIUM) ✅ DONE"
+    type: done_status
+    dimension: tests-confidence
+    polarity: positive
+    extracted_at: 2026-05-11
+    evidence_tier: UNEVIDENCED
+    ttl_default_days: 30
+    ttl_days: 30
+    last_validated: 2026-05-09
+    expires: 2026-06-08
+  - id: deep-review-remediation-plan-t51-cell-fallback-metric-alert-find_cell_fallback_n
+    source: "docs/plans/deep-review-remediation-plan.md:726"
+    text: "### T5.1 — Cell fallback metric + alert (find_cell_fallback_no_metric MEDIUM) ✅ DONE"
+    type: done_status
+    dimension: scale-mt
+    polarity: positive
+    extracted_at: 2026-05-11
+    evidence_tier: UNEVIDENCED
+    ttl_default_days: 30
+    ttl_days: 60
+    last_validated: 2026-05-09
+    expires: 2026-07-08
+  - id: deep-review-remediation-plan-t54-rollout-sse-spec-doc-find_rollout_sse_undocumen
+    source: "docs/plans/deep-review-remediation-plan.md:738"
+    text: "### T5.4 — Rollout SSE spec doc (find_rollout_sse_undocumented MEDIUM, paired with T0.3). ✅ DONE"
+    type: done_status
+    dimension: core-deploy
+    polarity: positive
+    extracted_at: 2026-05-11
+    evidence_tier: UNEVIDENCED
+    ttl_default_days: 30
+    ttl_days: 30
+    last_validated: 2026-05-09
+    expires: 2026-06-08
+  - id: deep-review-remediation-plan-t58-runbook-coverage-3499-find_obs_005-medium-done
+    source: "docs/plans/deep-review-remediation-plan.md:754"
+    text: "### T5.8 — Runbook coverage 34→99 (find_obs_005 MEDIUM) ✅ DONE"
+    type: done_status
+    dimension: tests-confidence
+    polarity: positive
+    extracted_at: 2026-05-11
+    evidence_tier: UNEVIDENCED
+    ttl_default_days: 30
+    ttl_days: 30
+    last_validated: 2026-05-09
+    expires: 2026-06-08
+  - id: deep-review-remediation-plan-t61-admin_pin_cell-errorsis-fix-code-001-find_code_
+    source: "docs/plans/deep-review-remediation-plan.md:770"
+    text: "### T6.1 — admin_pin_cell errors.Is fix (CODE-001 / find_code_001 HIGH) ✅ DONE 2026-05-09"
+    type: done_status
+    dimension: scale-mt
+    polarity: positive
+    extracted_at: 2026-05-11
+    evidence_tier: UNEVIDENCED
+    ttl_default_days: 30
+    ttl_days: 60
+    last_validated: 2026-05-09
+    expires: 2026-07-08
+  - id: deep-review-remediation-plan-status-commit-6e54d66d-t13-closed-the-routesservice
+    source: "docs/plans/deep-review-remediation-plan.md:775"
+    text: "**Status (commit 6e54d66d):** T1.3 closed the routes↔services import cycle so `errors.Is(err, services.ErrXxx)` is now safe in `routes/admin_pin_cell.go`. Replaced 4 string-match cases with sentinel m"
+    type: negative
+    dimension: scale-mt
+    polarity: negative
+    extracted_at: 2026-05-11
+    evidence_tier: PARTIAL_CONFIDENCE
+    ttl_default_days: 30
+    ttl_days: 60
+    last_validated: 2026-05-09
+    expires: 2026-07-08
+    evidence_t1: "commit:6e54d66d"
+  - id: deep-review-remediation-plan-t65-attestation-save-error-log-code-005-find_code_0
+    source: "docs/plans/deep-review-remediation-plan.md:801"
+    text: "### T6.5 — Attestation save error log (CODE-005 / find_code_005 MEDIUM) ✅ DONE"
+    type: done_status
+    dimension: tests-confidence
+    polarity: positive
+    extracted_at: 2026-05-11
+    evidence_tier: UNEVIDENCED
+    ttl_default_days: 30
+    ttl_days: 30
+    last_validated: 2026-05-09
+    expires: 2026-06-08
+  - id: deep-review-remediation-plan-t68-cell_service-static-fields-find_cell_service_st
+    source: "docs/plans/deep-review-remediation-plan.md:813"
+    text: "### T6.8 — cell_service static fields (find_cell_service_static_fields MEDIUM) ✅ DONE"
+    type: done_status
+    dimension: scale-mt
+    polarity: positive
+    extracted_at: 2026-05-11
+    evidence_tier: UNEVIDENCED
+    ttl_default_days: 30
+    ttl_days: 60
+    last_validated: 2026-05-09
+    expires: 2026-07-08
+  - id: deep-review-remediation-plan-t71-scale-handler-withenvironmentlock-find_data_003
+    source: "docs/plans/deep-review-remediation-plan.md:822"
+    text: "### T7.1 — scale handler withEnvironmentLock (find_data_003 HIGH) ✅ DONE"
+    type: done_status
+    dimension: scale-mt
+    polarity: positive
+    extracted_at: 2026-05-11
+    evidence_tier: UNEVIDENCED
+    ttl_default_days: 30
+    ttl_days: 60
+    last_validated: 2026-05-09
+    expires: 2026-07-08
+  - id: deep-review-remediation-plan-t74-builds-fk-to-tenantsprojects-find_data_006-medi
+    source: "docs/plans/deep-review-remediation-plan.md:842"
+    text: "### T7.4 — builds FK to tenants/projects (find_data_006 MEDIUM) ✅ DONE"
+    type: done_status
+    dimension: scale-mt
+    polarity: positive
+    extracted_at: 2026-05-11
+    evidence_tier: UNEVIDENCED
+    ttl_default_days: 30
+    ttl_days: 60
+    last_validated: 2026-05-09
+    expires: 2026-07-08
+  - id: deep-review-remediation-plan-t81-operator-dockerfile-healthcheck-find_infra_001-
+    source: "docs/plans/deep-review-remediation-plan.md:850"
+    text: "### T8.1 — Operator Dockerfile HEALTHCHECK (find_infra_001 HIGH) ✅ DONE"
+    type: done_status
+    dimension: infra-ops
+    polarity: positive
+    extracted_at: 2026-05-11
+    evidence_tier: UNEVIDENCED
+    ttl_default_days: 30
+    ttl_days: 30
+    last_validated: 2026-05-09
+    expires: 2026-06-08
+  - id: deep-review-remediation-plan-t82-bootstrap-poddisruptionbudget-find_infra_004-me
+    source: "docs/plans/deep-review-remediation-plan.md:854"
+    text: "### T8.2 — Bootstrap PodDisruptionBudget (find_infra_004 MEDIUM) ✅ DONE"
+    type: done_status
+    dimension: infra-ops
+    polarity: positive
+    extracted_at: 2026-05-11
+    evidence_tier: UNEVIDENCED
+    ttl_default_days: 30
+    ttl_days: 30
+    last_validated: 2026-05-09
+    expires: 2026-06-08
+  - id: deep-review-remediation-plan-t83-tilt-latest-tag-fix-find_infra_005-medium-done
+    source: "docs/plans/deep-review-remediation-plan.md:861"
+    text: "### T8.3 — Tilt :latest tag fix (find_infra_005 MEDIUM) ✅ DONE"
+    type: done_status
+    dimension: infra-ops
+    polarity: positive
+    extracted_at: 2026-05-11
+    evidence_tier: UNEVIDENCED
+    ttl_default_days: 30
+    ttl_days: 30
+    last_validated: 2026-05-09
+    expires: 2026-06-08
+  - id: deep-review-remediation-plan-t84-tilt-seccompprofile-capabilitiesdrop-find_infra
+    source: "docs/plans/deep-review-remediation-plan.md:867"
+    text: "### T8.4 — Tilt seccompProfile + capabilities.drop (find_infra_006 MEDIUM) ✅ DONE"
+    type: done_status
+    dimension: infra-ops
+    polarity: positive
+    extracted_at: 2026-05-11
+    evidence_tier: UNEVIDENCED
+    ttl_default_days: 30
+    ttl_days: 30
+    last_validated: 2026-05-09
+    expires: 2026-06-08
+  - id: improvement-roadmap---phase-414243-cosign-keyless-code-change-track-1-gha-policy
+    source: "docs/technical/infra/improvement-roadmap.md:25"
+    text: "- 🟡 **Phase 4.1+4.2+4.3:** Cosign keyless code change (Track-1 GHA) + policy keyless authority deployable. Track-2 (in-cluster Argo) DEFERRED to Sprint 9+ per MEET-B"
+    type: negative
+    dimension: core-deploy
+    polarity: negative
+    extracted_at: 2026-05-11
+    evidence_tier: UNEVIDENCED
+    ttl_default_days: 30
+    ttl_days: 90
+    last_validated: 2026-05-04
+    expires: 2026-08-02
+  - id: improvement-roadmap-1-cosign-keyless-signing-track-1-gha-helm-chartsyml-policy-k
+    source: "docs/technical/infra/improvement-roadmap.md:68"
+    text: "1. 🟡 **Cosign keyless signing** — Track-1 (GHA: helm-charts.yml + policy keyless authority) DELIVERED iter 1 with dual-signing. Track-2 (in-cluster Argo via `cosign.go`) DEFERRED to Sprint 9+ per MEET"
+    type: negative
+    dimension: infra-ops
+    polarity: negative
+    extracted_at: 2026-05-11
+    evidence_tier: PARTIAL_CONFIDENCE
+    ttl_default_days: 30
+    ttl_days: 90
+    last_validated: 2026-05-04
+    expires: 2026-08-02
+    evidence_t3: "ci:helm-charts.yml"
+  - id: improvement-roadmap-4-securitycontext-audit-nos-33-bootstrap-charts-audit-securi
+    source: "docs/technical/infra/improvement-roadmap.md:74"
+    text: "4. ✅ **securityContext audit nos 33 bootstrap charts** — `audit-security-context.sh` GREEN: 11 CONFORMANT + 13 fixes (Phase 3.2) + 2 ADR-of-exception + 9 N/A (no pods). INF-G08 status moves PARTIAL → "
+    type: negative
+    dimension: security
+    polarity: negative
+    extracted_at: 2026-05-11
+    evidence_tier: UNEVIDENCED
+    ttl_default_days: 30
+    ttl_days: 90
+    last_validated: 2026-05-04
+    expires: 2026-08-02
+  - id: sota-gates---sessionauth-regressions-são-detectáveis
+    source: "docs/technical/cloud/sota-gates.md:289"
+    text: "- session/auth regressions são detectáveis;"
+    type: negative
+    dimension: security
+    polarity: negative
+    extracted_at: 2026-05-11
+    evidence_tier: UNEVIDENCED
+    ttl_default_days: 30
+    ttl_days: 60
+    last_validated: 2026-05-11
+    expires: 2026-07-10
+  - id: improvement-roadmap---opção-a-recomendada-manter-dual-deliberadamente-escrever-a
+    source: "docs/technical/charts/improvement-roadmap.md:81"
+    text: "- Opção A (recomendada): manter dual deliberadamente, escrever ADR formalizando \"bootstrap = local-dev minimal, published = production-ready\""
+    type: capability
+    dimension: product-completeness
+    polarity: positive
+    extracted_at: 2026-05-11
+    evidence_tier: UNEVIDENCED
+    ttl_default_days: 30
+    ttl_days: 90
+    last_validated: 2026-05-05
+    expires: 2026-08-03
+  - id: paas-benchmark-commonkubeversion-s-guard-para-apiversion-incompatibility-út
+    source: "docs/technical/charts/paas-benchmark.md:64"
+    text: "| `common.kubeVersion` | ❌ | S | guard para apiVersion incompatibility — útil em Sprint 9 com matrix testing |"
+    type: negative
+    dimension: tests-confidence
+    polarity: negative
+    extracted_at: 2026-05-11
+    evidence_tier: UNEVIDENCED
+    ttl_default_days: 30
+    ttl_days: 90
+    last_validated: 2026-05-05
+    expires: 2026-08-03
+  - id: paas-benchmark-commonsecretsname-xs-existingsecret-toggle-reimplementado-em
+    source: "docs/technical/charts/paas-benchmark.md:65"
+    text: "| `common.secrets.name` | ❌ | XS | `existingSecret` toggle reimplementado em 5 deployments |"
+    type: negative
+    dimension: core-deploy
+    polarity: negative
+    extracted_at: 2026-05-11
+    evidence_tier: UNEVIDENCED
+    ttl_default_days: 30
+    ttl_days: 30
+    last_validated: 2026-05-05
+    expires: 2026-06-04
+  - id: paas-benchmark-commonutilschecksumannotations-xs-sha256sum-de-configmap-sec
+    source: "docs/technical/charts/paas-benchmark.md:67"
+    text: "| `common.utils.checksumAnnotations` | ❌ | XS | `sha256sum` de configmap + secret duplicado em 5 deployments |"
+    type: negative
+    dimension: core-deploy
+    polarity: negative
+    extracted_at: 2026-05-11
+    evidence_tier: UNEVIDENCED
+    ttl_default_days: 30
+    ttl_days: 30
+    last_validated: 2026-05-05
+    expires: 2026-06-04
+  - id: paas-benchmark-1-coexistência-entre-charts-novos-e-legados-loopzero-controller-
+    source: "docs/technical/charts/paas-benchmark.md:257"
+    text: "| 1. Coexistência entre charts novos e legados (loopzero-controller ghost) | ⚠ NOT_MET | n/a (LoopZero-specific) | ✓ #1 |"
+    type: negative
+    dimension: tests-confidence
+    polarity: negative
+    extracted_at: 2026-05-11
+    evidence_tier: UNEVIDENCED
+    ttl_default_days: 30
+    ttl_days: 30
+    last_validated: 2026-05-05
+    expires: 2026-06-04
+  - id: paas-benchmark-3-loopzero-admission-policies-regressão-vs-bootstrap-not_met-na-
+    source: "docs/technical/charts/paas-benchmark.md:259"
+    text: "| 3. loopzero-admission-policies regressão vs bootstrap | ⚠ NOT_MET | n/a (LoopZero-specific) | ✓ #2 |"
+    type: negative
+    dimension: tests-confidence
+    polarity: negative
+    extracted_at: 2026-05-11
+    evidence_tier: UNEVIDENCED
+    ttl_default_days: 30
+    ttl_days: 30
+    last_validated: 2026-05-05
+    expires: 2026-06-04
+  - id: cell-2-canary-template---adr-0021-d9-phase-7-production-rollout-runbook-customer
+    source: "docs/customer-comms/cell-2-canary-template.md:74"
+    text: "- ADR-0021 D9: Phase 7 production rollout runbook + customer comms shipped"
+    type: done_status
+    dimension: core-deploy
+    polarity: positive
+    extracted_at: 2026-05-11
+    evidence_tier: UNEVIDENCED
+    ttl_default_days: 30
+    ttl_days: 90
+    last_validated: 2026-05-04
+    expires: 2026-08-02
+  - id: action-sha-pinning-dockersetup-buildx-action-b5ca514318bd6ebac0fb2aedd5d36ec1b5
+    source: "docs/runbooks/action-sha-pinning.md:26"
+    text: "| `docker/setup-buildx-action` | `b5ca514318bd6ebac0fb2aedd5d36ec1b5c232a2` | n/a |"
+    type: negative
+    dimension: dx-cli
+    polarity: negative
+    extracted_at: 2026-05-11
+    evidence_tier: BROKEN
+    ttl_default_days: 30
+    ttl_days: 30
+    last_validated: 2026-05-04
+    expires: 2026-06-03
+    broken_refs: "commit_missing:b5ca514318"
+  - id: action-sha-pinning-sigstorecosign-installer-cad07c2e89fa2edd6e2d7bab4c1aa38e53f
+    source: "docs/runbooks/action-sha-pinning.md:27"
+    text: "| `sigstore/cosign-installer` | `cad07c2e89fa2edd6e2d7bab4c1aa38e53f76003` | n/a |"
+    type: negative
+    dimension: security
+    polarity: negative
+    extracted_at: 2026-05-11
+    evidence_tier: BROKEN
+    ttl_default_days: 30
+    ttl_days: 60
+    last_validated: 2026-05-04
+    expires: 2026-07-03
+    broken_refs: "commit_missing:cad07c2e89"
+  - id: local-prod-divergence-matrix-lp-004-build-registry-credentials-buildkit-registry
+    source: "docs/runbooks/local-prod-divergence-matrix.md:24"
+    text: "| LP-004 | Build registry credentials | `buildkit-registry-config` Secret apontando para `k3d-loopzero-registry:5000` (HTTP) | DOCR (`registry.digitalocean.com`) com TLS + DO_TOKEN auth | Local k3d regist"
+    type: negative
+    dimension: infra-ops
+    polarity: negative
+    extracted_at: 2026-05-11
+    evidence_tier: UNEVIDENCED
+    ttl_default_days: 30
+    ttl_days: 30
+    last_validated: 2026-05-08
+    expires: 2026-06-07
+  - id: local-prod-divergence-matrix-lp-005-pg-max_connections-50-k3d-default-200-do-man
+    source: "docs/runbooks/local-prod-divergence-matrix.md:25"
+    text: "| LP-005 | PG max_connections | 50 (k3d default) | 200+ (DO managed PG) | k3d resource constraints | Pulumi DO PG config has 200; local intentional baseline | infra-engineer | n/a | WONTFIX |"
+    type: negative
+    dimension: infra-ops
+    polarity: negative
+    extracted_at: 2026-05-11
+    evidence_tier: UNEVIDENCED
+    ttl_default_days: 30
+    ttl_days: 30
+    last_validated: 2026-05-08
+    expires: 2026-06-07
+  - id: local-prod-divergence-matrix-lp-006-argocd-repo-creds-httpgitea-http-mgmt-intern
+    source: "docs/runbooks/local-prod-divergence-matrix.md:26"
+    text: "| LP-006 | ArgoCD repo creds | http://gitea-http... (mgmt-internal HTTP URL) | Gitea via CF Tunnel (HTTPS public-facing) | Local: same-cluster routing | wire-clusters.sh handles both; closure not need"
+    type: negative
+    dimension: infra-ops
+    polarity: negative
+    extracted_at: 2026-05-11
+    evidence_tier: UNEVIDENCED
+    ttl_default_days: 30
+    ttl_days: 30
+    last_validated: 2026-05-08
+    expires: 2026-06-07
+  - id: sprint8-observability-validati---runtime-2-cluster-promtail-daemonset-absent
+    source: "docs/runbooks/sprint8-observability-validation.md:73"
+    text: "- ❌ runtime-2 cluster: Promtail DaemonSet **absent**"
+    type: negative
+    dimension: infra-ops
+    polarity: negative
+    extracted_at: 2026-05-11
+    evidence_tier: UNEVIDENCED
+    ttl_default_days: 30
+    ttl_days: 30
+    last_validated: 2026-04-28
+    expires: 2026-05-28
+  - id: sprint8-observability-validati---mgmt-cluster-promtail-not-in-scope-of-bootstrap
+    source: "docs/runbooks/sprint8-observability-validation.md:74"
+    text: "- ❌ mgmt cluster: Promtail not in scope of bootstrap (architecture gap, not provisioning bug)"
+    type: negative
+    dimension: infra-ops
+    polarity: negative
+    extracted_at: 2026-05-11
+    evidence_tier: UNEVIDENCED
+    ttl_default_days: 30
+    ttl_days: 30
+    last_validated: 2026-04-28
+    expires: 2026-05-28
+  - id: sprint8-observability-validati-decision-needed-should-mgmt-platform-logs-loopzero-ap
+    source: "docs/runbooks/sprint8-observability-validation.md:138"
+    text: "Decision needed: should mgmt platform logs (loopzero-api, controllers) be centrally shipped to Loki on build? Pros: single Grafana view; cons: cross-cluster push adds latency + tenant complexity."
+    type: done_status
+    dimension: infra-ops
+    polarity: positive
+    extracted_at: 2026-05-11
+    evidence_tier: UNEVIDENCED
+    ttl_default_days: 30
+    ttl_days: 30
+    last_validated: 2026-04-28
+    expires: 2026-05-28
+  - id: pulumi-consolidation-per-condition-c12-githubworkflowspulumi-archiveyml-new-defe
+    source: "docs/runbooks/pulumi-consolidation.md:156"
+    text: "Per condition C12, `.github/workflows/pulumi-archive.yml` (NEW, deferred to a follow-up commit because the workflow needs the canonical project + AWS env populated) runs the archive script in `--archi"
+    type: negative
+    dimension: infra-ops
+    polarity: negative
+    extracted_at: 2026-05-11
+    evidence_tier: PARTIAL_CONFIDENCE
+    ttl_default_days: 30
+    ttl_days: 30
+    last_validated: 2026-04-30
+    expires: 2026-05-30
+    evidence_t3: "ci:pulumi-archive.yml"
+  - id: layered-bootstrap-validation-works-end-to-end-without-manual-intervention-includ
+    source: "docs/runbooks/layered-bootstrap-validation.md:6"
+    text: "> works end-to-end without manual intervention, including L3-50 and L3-100 deploy"
+    type: capability
+    dimension: core-deploy
+    polarity: positive
+    extracted_at: 2026-05-11
+    evidence_tier: UNEVIDENCED
+    ttl_default_days: 30
+    ttl_days: 30
+    last_validated: 2026-04-29
+    expires: 2026-05-29
+  - id: operator-cutover-time-box-forward-only-migration-adr-d1-does-not-mean-force-succ
+    source: "docs/runbooks/operator-cutover-time-box.md:91"
+    text: "Forward-only migration (ADR D1) does NOT mean \"force success no matter what\". If 3 iterations on a cluster fail, it's evidence the SHIPPED state of the migration is wrong for that cluster's environmen"
+    type: done_status
+    dimension: infra-ops
+    polarity: positive
+    extracted_at: 2026-05-11
+    evidence_tier: UNEVIDENCED
+    ttl_default_days: 30
+    ttl_days: 90
+    last_validated: 2026-04-30
+    expires: 2026-07-29
+  - id: cosign-keyless-cutover---track-2-deferred-to-sprint-9-in-cluster-argo-workflow-u
+    source: "docs/runbooks/cosign-keyless-cutover.md:9"
+    text: "- **Track-2 (DEFERRED to Sprint 9+):** in-cluster Argo Workflow user-app builds — requires private Fulcio or cluster OIDC infrastructure not currently deployed; see `api/internal/argo/cosign.go:93` fo"
+    type: negative
+    dimension: core-deploy
+    polarity: negative
+    extracted_at: 2026-05-11
+    evidence_tier: UNEVIDENCED
+    ttl_default_days: 30
+    ttl_days: 90
+    last_validated: 2026-05-04
+    expires: 2026-08-02
+  - id: operator-cutover-runbook-2-validation-matrix-green-task-validatematrix-1010-pass
+    source: "docs/runbooks/operator-cutover-runbook.md:19"
+    text: "2. **Validation matrix GREEN.** `task validate:matrix` — 10/10 PASS. If anything fails (especially `rbac-subset` or `helm:lint-split-operators`), ABORT."
+    type: completion
+    dimension: infra-ops
+    polarity: positive
+    extracted_at: 2026-05-11
+    evidence_tier: UNEVIDENCED
+    ttl_default_days: 30
+    ttl_days: 30
+    last_validated: 2026-04-30
+    expires: 2026-05-30
+  - id: charts-sota-dogfood-report-rule-3-clean-zero-internal-terms-in-cli-output-na-out
+    source: "docs/runbooks/charts-sota-dogfood-report.md:122"
+    text: "| Rule 3 clean: zero internal terms in CLI output | N/A | Out of scope — chart-level work, not CLI |"
+    type: negative
+    dimension: dx-cli
+    polarity: negative
+    extracted_at: 2026-05-11
+    evidence_tier: UNEVIDENCED
+    ttl_default_days: 30
+    ttl_days: 30
+    last_validated: 2026-05-05
+    expires: 2026-06-04
+  - id: charts-sota-dogfood-report-rule-3-clean-zero-internal-terms-in-cli-output-na-out
+    source: "docs/runbooks/charts-sota-dogfood-report.md:122"
+    text: "| Rule 3 clean: zero internal terms in CLI output | N/A | Out of scope — chart-level work, not CLI |"
+    type: negative
+    dimension: dx-cli
+    polarity: negative
+    extracted_at: 2026-05-11
+    evidence_tier: UNEVIDENCED
+    ttl_default_days: 30
+    ttl_days: 30
+    last_validated: 2026-05-05
+    expires: 2026-06-04
+  - id: multi-cell-canary-adr-compliant-1h-soak-status-deferred-to-operatorci-schedule
+    source: "docs/runbooks/multi-cell-canary.md:207"
+    text: "**ADR-compliant 1h soak status:** deferred to operator/CI scheduler. Mechanism+contract proven, only diurnal coverage missing. Path to ADR closure: operator runs full 1h soak with SOAK_SECONDS=3600 (d"
+    type: negative
+    dimension: tests-confidence
+    polarity: negative
+    extracted_at: 2026-05-11
+    evidence_tier: UNEVIDENCED
+    ttl_default_days: 30
+    ttl_days: 90
+    last_validated: 2026-05-03
+    expires: 2026-08-01
+  - id: bootstrap-regression-matrix-83-self_hosting-loopzero-cli-requer-ory-login-manual-bro
+    source: "docs/runbooks/bootstrap-regression-matrix.md:108"
+    text: "| 83 | SELF_HOSTING      | loopzero CLI requer Ory login (manual browser flow) — bloqueia CI E2E (B65) | end-to-end iter 5 | TODO Sprint 9: --token flag ou env LOOPZERO_AUTH_TOKEN para bypass OAuth em CI/auto"
+    type: negative
+    dimension: dx-cli
+    polarity: negative
+    extracted_at: 2026-05-11
+    evidence_tier: UNEVIDENCED
+    ttl_default_days: 30
+    ttl_days: 90
+    last_validated: 2026-05-03
+    expires: 2026-08-01
+  - id: bootstrap-regression-matrix-91-self_hosting-source-bundle-não-uploaded-em-minio-
+    source: "docs/runbooks/bootstrap-regression-matrix.md:116"
+    text: "| 91 | SELF_HOSTING      | source bundle não-uploaded em MinIO antes de build submission (B74) | end-to-end iter 9 | CLI `loopzero deploy` faz upload preceding API submission; documented que harness must "
+    type: negative
+    dimension: core-deploy
+    polarity: negative
+    extracted_at: 2026-05-11
+    evidence_tier: UNEVIDENCED
+    ttl_default_days: 30
+    ttl_days: 30
+    last_validated: 2026-05-03
+    expires: 2026-06-02
+  - id: bootstrap-regression-matrix-124-envtest_leak-namespaces-loopzero-test--terminating-e
+    source: "docs/runbooks/bootstrap-regression-matrix.md:149"
+    text: "| 124| ENVTEST_LEAK      | namespaces `loopzero-test-*` Terminating eternamente após envtest cleanup race | infra-parity audit 2026-04-30 | preflight T0.10 + scripts/cleanup-terminating-namespaces.sh idem"
+    type: completion
+    dimension: infra-ops
+    polarity: positive
+    extracted_at: 2026-05-11
+    evidence_tier: UNEVIDENCED
+    ttl_default_days: 30
+    ttl_days: 30
+    last_validated: 2026-05-03
+    expires: 2026-06-02
+  - id: bootstrap-regression-matrix-155-multicell_drift-cell-2-activation-plan-t01t02-au
+    source: "docs/runbooks/bootstrap-regression-matrix.md:176"
+    text: "| 155| MULTICELL_DRIFT | cell-2-activation-plan T0.1+T0.2 audit 2026-05-02: heal-script tinha H12 (cell-1) + H13 (cell-default) mas zero cobertura para cell-2. Após `task k3d:heal`, `loopzero_cell_discove"
+    type: completion
+    dimension: infra-ops
+    polarity: positive
+    extracted_at: 2026-05-11
+    evidence_tier: UNEVIDENCED
+    ttl_default_days: 30
+    ttl_days: 30
+    last_validated: 2026-05-03
+    expires: 2026-06-02
+  - id: bootstrap-regression-matrix-159-multicell_drift-critical-bug-fixed-iter-4-2026-0
+    source: "docs/runbooks/bootstrap-regression-matrix.md:179"
+    text: "| 159| MULTICELL_DRIFT | **CRITICAL BUG fixed iter 4 / 2026-05-02**: EnvironmentReconciler held a single `RuntimeClient` field configured at startup (env `RUNTIME_KUBECONFIG`) pointing to ONE runtime "
+    type: completion
+    dimension: dx-cli
+    polarity: positive
+    extracted_at: 2026-05-11
+    evidence_tier: UNEVIDENCED
+    ttl_default_days: 30
+    ttl_days: 60
+    last_validated: 2026-05-03
+    expires: 2026-07-02
+  - id: multi-cell-alerts---docsauditsmulti-cell-source-auditmd-action-item-a5-cluster
+    source: "docs/runbooks/multi-cell-alerts.md:190"
+    text: "- `docs/audits/multi-cell-source-audit.md` (action item A5: ClusterCredentialStatus metric — shipped)"
+    type: done_status
+    dimension: infra-ops
+    polarity: positive
+    extracted_at: 2026-05-11
+    evidence_tier: UNEVIDENCED
+    ttl_default_days: 30
+    ttl_days: 30
+    last_validated: 2026-04-30
+    expires: 2026-05-30
+  - id: cell-2-activation-sibling-runbooks-multi-cell-canarymd-dev-canary-stages-12-mu
+    source: "docs/runbooks/cell-2-activation.md:7"
+    text: "> Sibling runbooks: `multi-cell-canary.md` (dev canary stages 1+2), `multi-cell-canary-prod.md` (production stages 4+5 — out of scope here per ADR D6), `multi-cell-alerts.md`, `multi-cell-rca-template"
+    type: negative
+    dimension: core-deploy
+    polarity: negative
+    extracted_at: 2026-05-11
+    evidence_tier: UNEVIDENCED
+    ttl_default_days: 30
+    ttl_days: 90
+    last_validated: 2026-05-03
+    expires: 2026-08-01
+  - id: cell-2-activation-c3-stage-5a-tenant-count-dev-na-always-pass-prod-see-multi-c
+    source: "docs/runbooks/cell-2-activation.md:97"
+    text: "| c3 | Stage 5a tenant-count | dev: N/A (always PASS); prod: see `multi-cell-canary-prod.md` |"
+    type: negative
+    dimension: core-deploy
+    polarity: negative
+    extracted_at: 2026-05-11
+    evidence_tier: UNEVIDENCED
+    ttl_default_days: 30
+    ttl_days: 30
+    last_validated: 2026-05-03
+    expires: 2026-06-02
+  - id: cell-2-activation-c8-doks-revocation-dev-na-prod-doctl-kubernetes-cluster-kube
+    source: "docs/runbooks/cell-2-activation.md:102"
+    text: "| c8 | DOKS revocation | dev: N/A; prod: `doctl kubernetes cluster kubeconfig show loopzero-runtime-2` |"
+    type: negative
+    dimension: infra-ops
+    polarity: negative
+    extracted_at: 2026-05-11
+    evidence_tier: UNEVIDENCED
+    ttl_default_days: 30
+    ttl_days: 30
+    last_validated: 2026-05-03
+    expires: 2026-06-02
+  - id: cell-2-activation-3-open-rca-per-multi-cell-rca-templatemd-stage-2-must-not-ru
+    source: "docs/runbooks/cell-2-activation.md:231"
+    text: "3. Open RCA per `multi-cell-rca-template.md`. Stage 2 must NOT run until RCA action items shipped."
+    type: done_status
+    dimension: scale-mt
+    polarity: positive
+    extracted_at: 2026-05-11
+    evidence_tier: UNEVIDENCED
+    ttl_default_days: 30
+    ttl_days: 60
+    last_validated: 2026-05-03
+    expires: 2026-07-02
+  - id: CLAUDE-status-pre-release-starter-pro-tiers-launchable-98-confidenc
+    source: "CLAUDE.md:11"
+    text: "**Status:** Pre-release, Starter + Pro tiers launchable (98% confidence). **Maturity 3.9 / 5.0** (was 3.8; +0.1 from cell-2-activation-plan + fix-all-platform-issues-plan, 2026-05-03). 25/30 E2E tests"
+    type: score
+    dimension: scale-mt
+    polarity: positive
+    extracted_at: 2026-05-11
+    evidence_tier: UNEVIDENCED
+    ttl_default_days: 30
+    ttl_days: 60
+    last_validated: 2026-05-08
+    expires: 2026-07-07
+  - id: CLAUDE-status-pre-release-starter-pro-tiers-launchable-98-confidenc
+    source: "CLAUDE.md:11"
+    text: "**Status:** Pre-release, Starter + Pro tiers launchable (98% confidence). **Maturity 3.9 / 5.0** (was 3.8; +0.1 from cell-2-activation-plan + fix-all-platform-issues-plan, 2026-05-03). 25/30 E2E tests"
+    type: completion
+    dimension: scale-mt
+    polarity: positive
+    extracted_at: 2026-05-11
+    evidence_tier: UNEVIDENCED
+    ttl_default_days: 30
+    ttl_days: 60
+    last_validated: 2026-05-08
+    expires: 2026-07-07
+  - id: CLAUDE-status-pre-release-starter-pro-tiers-launchable-98-confidenc
+    source: "CLAUDE.md:11"
+    text: "**Status:** Pre-release, Starter + Pro tiers launchable (98% confidence). **Maturity 3.9 / 5.0** (was 3.8; +0.1 from cell-2-activation-plan + fix-all-platform-issues-plan, 2026-05-03). 25/30 E2E tests"
+    type: completion
+    dimension: scale-mt
+    polarity: positive
+    extracted_at: 2026-05-11
+    evidence_tier: UNEVIDENCED
+    ttl_default_days: 30
+    ttl_days: 60
+    last_validated: 2026-05-08
+    expires: 2026-07-07
+  - id: CLAUDE-status-pre-release-starter-pro-tiers-launchable-98-confidenc
+    source: "CLAUDE.md:11"
+    text: "**Status:** Pre-release, Starter + Pro tiers launchable (98% confidence). **Maturity 3.9 / 5.0** (was 3.8; +0.1 from cell-2-activation-plan + fix-all-platform-issues-plan, 2026-05-03). 25/30 E2E tests"
+    type: completion
+    dimension: scale-mt
+    polarity: positive
+    extracted_at: 2026-05-11
+    evidence_tier: UNEVIDENCED
+    ttl_default_days: 30
+    ttl_days: 60
+    last_validated: 2026-05-08
+    expires: 2026-07-07
+  - id: CLAUDE-status-pre-release-starter-pro-tiers-launchable-98-confidenc
+    source: "CLAUDE.md:11"
+    text: "**Status:** Pre-release, Starter + Pro tiers launchable (98% confidence). **Maturity 3.9 / 5.0** (was 3.8; +0.1 from cell-2-activation-plan + fix-all-platform-issues-plan, 2026-05-03). 25/30 E2E tests"
+    type: done_status
+    dimension: scale-mt
+    polarity: positive
+    extracted_at: 2026-05-11
+    evidence_tier: UNEVIDENCED
+    ttl_default_days: 30
+    ttl_days: 60
+    last_validated: 2026-05-08
+    expires: 2026-07-07
+  - id: CLAUDE-status-pre-release-starter-pro-tiers-launchable-98-confidenc
+    source: "CLAUDE.md:11"
+    text: "**Status:** Pre-release, Starter + Pro tiers launchable (98% confidence). **Maturity 3.9 / 5.0** (was 3.8; +0.1 from cell-2-activation-plan + fix-all-platform-issues-plan, 2026-05-03). 25/30 E2E tests"
+    type: done_status
+    dimension: scale-mt
+    polarity: positive
+    extracted_at: 2026-05-11
+    evidence_tier: UNEVIDENCED
+    ttl_default_days: 30
+    ttl_days: 60
+    last_validated: 2026-05-08
+    expires: 2026-07-07
+  - id: CLAUDE-status-pre-release-starter-pro-tiers-launchable-98-confidenc
+    source: "CLAUDE.md:11"
+    text: "**Status:** Pre-release, Starter + Pro tiers launchable (98% confidence). **Maturity 3.9 / 5.0** (was 3.8; +0.1 from cell-2-activation-plan + fix-all-platform-issues-plan, 2026-05-03). 25/30 E2E tests"
+    type: done_status
+    dimension: scale-mt
+    polarity: positive
+    extracted_at: 2026-05-11
+    evidence_tier: UNEVIDENCED
+    ttl_default_days: 30
+    ttl_days: 60
+    last_validated: 2026-05-08
+    expires: 2026-07-07
+  - id: CLAUDE-status-pre-release-starter-pro-tiers-launchable-98-confidenc
+    source: "CLAUDE.md:11"
+    text: "**Status:** Pre-release, Starter + Pro tiers launchable (98% confidence). **Maturity 3.9 / 5.0** (was 3.8; +0.1 from cell-2-activation-plan + fix-all-platform-issues-plan, 2026-05-03). 25/30 E2E tests"
+    type: done_status
+    dimension: scale-mt
+    polarity: positive
+    extracted_at: 2026-05-11
+    evidence_tier: UNEVIDENCED
+    ttl_default_days: 30
+    ttl_days: 60
+    last_validated: 2026-05-08
+    expires: 2026-07-07
+  - id: CLAUDE-status-pre-release-starter-pro-tiers-launchable-98-confidenc
+    source: "CLAUDE.md:11"
+    text: "**Status:** Pre-release, Starter + Pro tiers launchable (98% confidence). **Maturity 3.9 / 5.0** (was 3.8; +0.1 from cell-2-activation-plan + fix-all-platform-issues-plan, 2026-05-03). 25/30 E2E tests"
+    type: done_status
+    dimension: scale-mt
+    polarity: positive
+    extracted_at: 2026-05-11
+    evidence_tier: UNEVIDENCED
+    ttl_default_days: 30
+    ttl_days: 60
+    last_validated: 2026-05-08
+    expires: 2026-07-07
+  - id: CLAUDE-status-pre-release-starter-pro-tiers-launchable-98-confidenc
+    source: "CLAUDE.md:11"
+    text: "**Status:** Pre-release, Starter + Pro tiers launchable (98% confidence). **Maturity 3.9 / 5.0** (was 3.8; +0.1 from cell-2-activation-plan + fix-all-platform-issues-plan, 2026-05-03). 25/30 E2E tests"
+    type: done_status
+    dimension: scale-mt
+    polarity: positive
+    extracted_at: 2026-05-11
+    evidence_tier: UNEVIDENCED
+    ttl_default_days: 30
+    ttl_days: 60
+    last_validated: 2026-05-08
+    expires: 2026-07-07
+  - id: CLAUDE-status-pre-release-starter-pro-tiers-launchable-98-confidenc
+    source: "CLAUDE.md:11"
+    text: "**Status:** Pre-release, Starter + Pro tiers launchable (98% confidence). **Maturity 3.9 / 5.0** (was 3.8; +0.1 from cell-2-activation-plan + fix-all-platform-issues-plan, 2026-05-03). 25/30 E2E tests"
+    type: done_status
+    dimension: scale-mt
+    polarity: positive
+    extracted_at: 2026-05-11
+    evidence_tier: UNEVIDENCED
+    ttl_default_days: 30
+    ttl_days: 60
+    last_validated: 2026-05-08
+    expires: 2026-07-07
+  - id: CLAUDE-status-pre-release-starter-pro-tiers-launchable-98-confidenc
+    source: "CLAUDE.md:11"
+    text: "**Status:** Pre-release, Starter + Pro tiers launchable (98% confidence). **Maturity 3.9 / 5.0** (was 3.8; +0.1 from cell-2-activation-plan + fix-all-platform-issues-plan, 2026-05-03). 25/30 E2E tests"
+    type: negative
+    dimension: scale-mt
+    polarity: negative
+    extracted_at: 2026-05-11
+    evidence_tier: UNEVIDENCED
+    ttl_default_days: 30
+    ttl_days: 60
+    last_validated: 2026-05-08
+    expires: 2026-07-07
+  - id: CLAUDE-status-pre-release-starter-pro-tiers-launchable-98-confidenc
+    source: "CLAUDE.md:11"
+    text: "**Status:** Pre-release, Starter + Pro tiers launchable (98% confidence). **Maturity 3.9 / 5.0** (was 3.8; +0.1 from cell-2-activation-plan + fix-all-platform-issues-plan, 2026-05-03). 25/30 E2E tests"
+    type: capability
+    dimension: scale-mt
+    polarity: positive
+    extracted_at: 2026-05-11
+    evidence_tier: UNEVIDENCED
+    ttl_default_days: 30
+    ttl_days: 60
+    last_validated: 2026-05-08
+    expires: 2026-07-07
+  - id: CLAUDE-not-built-ssosaml-loki-cross-cluster-streaming-infra-gap-not
+    source: "CLAUDE.md:17"
+    text: "**Not built:** SSO/SAML, Loki cross-cluster streaming (infra gap, not code), cosign keyless verification with Fulcio (pending Sprint 9), Sprint 8 Phase 1+3+4+5+6 (require new T3 meeting), production c"
+    type: negative
+    dimension: infra-ops
+    polarity: negative
+    extracted_at: 2026-05-11
+    evidence_tier: UNEVIDENCED
+    ttl_default_days: 30
+    ttl_days: 90
+    last_validated: 2026-05-08
+    expires: 2026-08-06
+  - id: CLAUDE-loopzero-scale-fully-functional-e2e-b40-fixed-2026-05-06-tag-sca
+    source: "CLAUDE.md:19"
+    text: "**`loopzero scale` — fully functional E2E** (B40 fixed 2026-05-06, tag `scale-b40-converged-20260506`): chain DB→deploy→K8s closed via `ScalingResolver` (`api/internal/services/scaling_resolver.go`) injec"
+    type: completion
+    dimension: core-deploy
+    polarity: positive
+    extracted_at: 2026-05-11
+    evidence_tier: BROKEN
+    ttl_default_days: 30
+    ttl_days: 30
+    last_validated: 2026-05-08
+    expires: 2026-06-07
+    broken_refs: "commit_missing:20260506"
+  - id: CLAUDE-loopzero-scale-fully-functional-e2e-b40-fixed-2026-05-06-tag-sca
+    source: "CLAUDE.md:19"
+    text: "**`loopzero scale` — fully functional E2E** (B40 fixed 2026-05-06, tag `scale-b40-converged-20260506`): chain DB→deploy→K8s closed via `ScalingResolver` (`api/internal/services/scaling_resolver.go`) injec"
+    type: done_status
+    dimension: core-deploy
+    polarity: positive
+    extracted_at: 2026-05-11
+    evidence_tier: BROKEN
+    ttl_default_days: 30
+    ttl_days: 30
+    last_validated: 2026-05-08
+    expires: 2026-06-07
+    broken_refs: "commit_missing:20260506"
+  - id: CLAUDE-loopzero-scale-fully-functional-e2e-b40-fixed-2026-05-06-tag-sca
+    source: "CLAUDE.md:19"
+    text: "**`loopzero scale` — fully functional E2E** (B40 fixed 2026-05-06, tag `scale-b40-converged-20260506`): chain DB→deploy→K8s closed via `ScalingResolver` (`api/internal/services/scaling_resolver.go`) injec"
+    type: capability
+    dimension: core-deploy
+    polarity: positive
+    extracted_at: 2026-05-11
+    evidence_tier: BROKEN
+    ttl_default_days: 30
+    ttl_days: 30
+    last_validated: 2026-05-08
+    expires: 2026-06-07
+    broken_refs: "commit_missing:20260506"
+  - id: CLAUDE-path-to-maturity-40-currently-39-a-first-ci-sunday-cron-gree
+    source: "CLAUDE.md:21"
+    text: "**Path to maturity 4.0** (currently 3.9): (a) first CI Sunday cron GREEN producing real `cell2-soaks.yml` workflow run evidence, AND (b) 1 prod customer day-trial with no incidents (Sprint 9 prod cana"
+    type: score
+    dimension: scale-mt
+    polarity: positive
+    extracted_at: 2026-05-11
+    evidence_tier: PARTIAL_CONFIDENCE
+    ttl_default_days: 30
+    ttl_days: 90
+    last_validated: 2026-05-08
+    expires: 2026-08-06
+    evidence_t3: "ci:cell2-soaks.yml"
+  - id: CLAUDE-5-preview-environments-all-14-tasks-done-e2e-validated-live-
+    source: "CLAUDE.md:168"
+    text: "| 5 | Preview environments | ✅ ALL 14 tasks done. E2E validated live (12 specs pass against k3d). |"
+    type: capability
+    dimension: infra-ops
+    polarity: positive
+    extracted_at: 2026-05-11
+    evidence_tier: UNEVIDENCED
+    ttl_default_days: 30
+    ttl_days: 30
+    last_validated: 2026-05-08
+    expires: 2026-06-07
+  - id: CLAUDE-6-security-supply-chain-cosign-syft-sbom-policy-controller-i
+    source: "CLAUDE.md:169"
+    text: "| 6 | Security + Supply chain | ✅ cosign + syft SBOM + policy-controller installed (CHG-2026-04-26-SPRINT6-IMPL). policy-controller is **deny-by-default**; warn-mode `loopzero-images-warn` ClusterImagePol"
+    type: done_status
+    dimension: infra-ops
+    polarity: positive
+    extracted_at: 2026-05-11
+    evidence_tier: UNEVIDENCED
+    ttl_default_days: 30
+    ttl_days: 30
+    last_validated: 2026-05-08
+    expires: 2026-06-07
+  - id: CLAUDE-cleanroom-dogfood-loop-real-paas-test-destroy-infra-setup-12
+    source: "CLAUDE.md:176"
+    text: "| Cleanroom Dogfood Loop | Real PaaS test: destroy infra + setup + 12 journeys end-to-end | ✅ 12/12 GREEN (2026-05-05, tag `dogfood-cleanroom-converged-20260505`). 39 bugs B1-B39 fixed canonically. Se"
+    type: completion
+    dimension: infra-ops
+    polarity: positive
+    extracted_at: 2026-05-11
+    evidence_tier: BROKEN
+    ttl_default_days: 30
+    ttl_days: 30
+    last_validated: 2026-05-08
+    expires: 2026-06-07
+    broken_refs: "commit_missing:20260505"
+  - id: CLAUDE-argo-rollouts-progressive-delivery-canary-deploys-per-plan-s
+    source: "CLAUDE.md:177"
+    text: "| Argo Rollouts Progressive Delivery | Canary deploys (per-plan steps + Traefik weighted routing + AnalysisTemplate + KEDA targets Rollout) | ✅ 2026-05-07 — 15 plan tasks (T0.1-T5.2) complete. Warm-in"
+    type: completion
+    dimension: core-deploy
+    polarity: positive
+    extracted_at: 2026-05-11
+    evidence_tier: UNEVIDENCED
+    ttl_default_days: 30
+    ttl_days: 30
+    last_validated: 2026-05-08
+    expires: 2026-06-07
+  - id: CLAUDE-argo-rollouts-progressive-delivery-canary-deploys-per-plan-s
+    source: "CLAUDE.md:177"
+    text: "| Argo Rollouts Progressive Delivery | Canary deploys (per-plan steps + Traefik weighted routing + AnalysisTemplate + KEDA targets Rollout) | ✅ 2026-05-07 — 15 plan tasks (T0.1-T5.2) complete. Warm-in"
+    type: completion
+    dimension: core-deploy
+    polarity: positive
+    extracted_at: 2026-05-11
+    evidence_tier: UNEVIDENCED
+    ttl_default_days: 30
+    ttl_days: 30
+    last_validated: 2026-05-08
+    expires: 2026-06-07
+  - id: CLAUDE-build-mode-dispatch-user-dockerfile-security-strategy-patter
+    source: "CLAUDE.md:178"
+    text: "| Build Mode Dispatch + User Dockerfile Security | Strategy-pattern dispatch for `build: dockerfile` opt-in + dockerfile-lint security barrier | ✅ 2026-05-08 — 4 phases complete (T0-T4). Restored `Lan"
+    type: completion
+    dimension: security
+    polarity: positive
+    extracted_at: 2026-05-11
+    evidence_tier: UNEVIDENCED
+    ttl_default_days: 30
+    ttl_days: 60
+    last_validated: 2026-05-08
+    expires: 2026-07-07
+  - id: CLAUDE-build-mode-dispatch-user-dockerfile-security-strategy-patter
+    source: "CLAUDE.md:178"
+    text: "| Build Mode Dispatch + User Dockerfile Security | Strategy-pattern dispatch for `build: dockerfile` opt-in + dockerfile-lint security barrier | ✅ 2026-05-08 — 4 phases complete (T0-T4). Restored `Lan"
+    type: completion
+    dimension: security
+    polarity: positive
+    extracted_at: 2026-05-11
+    evidence_tier: UNEVIDENCED
+    ttl_default_days: 30
+    ttl_days: 60
+    last_validated: 2026-05-08
+    expires: 2026-07-07
+  - id: CLAUDE-dogfood-2026-05-08-fixes-f-1f-7-closed-golang-migrate-canoni
+    source: "CLAUDE.md:179"
+    text: "| Dogfood 2026-05-08 Fixes | F-1..F-7 closed: golang-migrate canonical, ESO ExternalSecret instrumentation+fix, build_events dead code, Application phase fast-path Healthy, OTel local off, seed cell_i"
+    type: completion
+    dimension: scale-mt
+    polarity: positive
+    extracted_at: 2026-05-11
+    evidence_tier: UNEVIDENCED
+    ttl_default_days: 30
+    ttl_days: 60
+    last_validated: 2026-05-08
+    expires: 2026-07-07
+  - id: CLAUDE-e2e-validation-2026-04-23-2530-pass-83-confidence-deploy-99-
+    source: "CLAUDE.md:182"
+    text: "**E2E Validation (2026-04-23):** 25/30 pass (83%). Confidence: deploy 99%, scaling 95%, promote 95%, rollback 99%, concurrent rejection 99%, JSON contracts 99%, internal terms (Rule 3) 99%. Log stream"
+    type: completion
+    dimension: core-deploy
+    polarity: positive
+    extracted_at: 2026-05-11
+    evidence_tier: UNEVIDENCED
+    ttl_default_days: 30
+    ttl_days: 30
+    last_validated: 2026-05-08
+    expires: 2026-06-07
+  - id: README-phase-pre-release-production-infrastructure-running-on-digit
+    source: "README.md:46"
+    text: "> **Phase: Pre-release.** Production infrastructure running on DigitalOcean (4 DOKS clusters, managed PG, CF Tunnel). Core deploy flow E2E validated. **Multi-cell ACTIVATED + LIVE-validated** (cell-de"
+    type: completion
+    dimension: core-deploy
+    polarity: positive
+    extracted_at: 2026-05-11
+    evidence_tier: UNEVIDENCED
+    ttl_default_days: 30
+    ttl_days: 30
+    last_validated: 2026-05-07
+    expires: 2026-06-06
+  - id: README-phase-pre-release-production-infrastructure-running-on-digit
+    source: "README.md:46"
+    text: "> **Phase: Pre-release.** Production infrastructure running on DigitalOcean (4 DOKS clusters, managed PG, CF Tunnel). Core deploy flow E2E validated. **Multi-cell ACTIVATED + LIVE-validated** (cell-de"
+    type: completion
+    dimension: core-deploy
+    polarity: positive
+    extracted_at: 2026-05-11
+    evidence_tier: UNEVIDENCED
+    ttl_default_days: 30
+    ttl_days: 30
+    last_validated: 2026-05-07
+    expires: 2026-06-06
+  - id: README-phase-pre-release-production-infrastructure-running-on-digit
+    source: "README.md:46"
+    text: "> **Phase: Pre-release.** Production infrastructure running on DigitalOcean (4 DOKS clusters, managed PG, CF Tunnel). Core deploy flow E2E validated. **Multi-cell ACTIVATED + LIVE-validated** (cell-de"
+    type: completion
+    dimension: core-deploy
+    polarity: positive
+    extracted_at: 2026-05-11
+    evidence_tier: UNEVIDENCED
+    ttl_default_days: 30
+    ttl_days: 30
+    last_validated: 2026-05-07
+    expires: 2026-06-06
+  - id: README-phase-pre-release-production-infrastructure-running-on-digit
+    source: "README.md:46"
+    text: "> **Phase: Pre-release.** Production infrastructure running on DigitalOcean (4 DOKS clusters, managed PG, CF Tunnel). Core deploy flow E2E validated. **Multi-cell ACTIVATED + LIVE-validated** (cell-de"
+    type: done_status
+    dimension: core-deploy
+    polarity: positive
+    extracted_at: 2026-05-11
+    evidence_tier: UNEVIDENCED
+    ttl_default_days: 30
+    ttl_days: 30
+    last_validated: 2026-05-07
+    expires: 2026-06-06
+  - id: README-phase-pre-release-production-infrastructure-running-on-digit
+    source: "README.md:46"
+    text: "> **Phase: Pre-release.** Production infrastructure running on DigitalOcean (4 DOKS clusters, managed PG, CF Tunnel). Core deploy flow E2E validated. **Multi-cell ACTIVATED + LIVE-validated** (cell-de"
+    type: capability
+    dimension: core-deploy
+    polarity: positive
+    extracted_at: 2026-05-11
+    evidence_tier: UNEVIDENCED
+    ttl_default_days: 30
+    ttl_days: 30
+    last_validated: 2026-05-07
+    expires: 2026-06-06
+  - id: README-maturity-395----strong-technical-foundation-commercially-unv
+    source: "README.md:48"
+    text: "> **Maturity: 3.9/5** -- strong technical foundation, commercially unvalidated. (was 3.6 pre-cell-2; +0.3 from cell-2-activation-plan + fix-all-platform-issues-plan, 2026-05-03.) See [full assessment]"
+    type: score
+    dimension: scale-mt
+    polarity: positive
+    extracted_at: 2026-05-11
+    evidence_tier: UNEVIDENCED
+    ttl_default_days: 30
+    ttl_days: 60
+    last_validated: 2026-05-07
+    expires: 2026-07-06
+  - id: README-loopzero-deploy-progressive-delivery-default-on-under-loopzero_progr
+    source: "README.md:63"
+    text: "| `loopzero deploy` (progressive delivery) | **Default-on** under `LOOPZERO_PROGRESSIVE_DELIVERY=true`. Per-plan canary: Starter (50%/100%), Pro (20%/Analysis/50%/100%), Team & Enterprise (10%/Analysis/30%/60"
+    type: completion
+    dimension: core-deploy
+    polarity: positive
+    extracted_at: 2026-05-11
+    evidence_tier: UNEVIDENCED
+    ttl_default_days: 30
+    ttl_days: 30
+    last_validated: 2026-05-07
+    expires: 2026-06-06
+  - id: README-loopzero-deploy-progressive-delivery-default-on-under-loopzero_progr
+    source: "README.md:63"
+    text: "| `loopzero deploy` (progressive delivery) | **Default-on** under `LOOPZERO_PROGRESSIVE_DELIVERY=true`. Per-plan canary: Starter (50%/100%), Pro (20%/Analysis/50%/100%), Team & Enterprise (10%/Analysis/30%/60"
+    type: completion
+    dimension: core-deploy
+    polarity: positive
+    extracted_at: 2026-05-11
+    evidence_tier: UNEVIDENCED
+    ttl_default_days: 30
+    ttl_days: 30
+    last_validated: 2026-05-07
+    expires: 2026-06-06
+  - id: README-loopzero-scale-fully-functional-e2e-b40-fixed-2026-05-06-api-per
+    source: "README.md:79"
+    text: "| `loopzero scale` | **Fully functional E2E** (B40 fixed 2026-05-06). API persists to `app_scaling_config` (project NAME), `ScalingResolver` reads it during deploy submit, `enforceScaling` validates plan "
+    type: completion
+    dimension: core-deploy
+    polarity: positive
+    extracted_at: 2026-05-11
+    evidence_tier: UNEVIDENCED
+    ttl_default_days: 30
+    ttl_days: 30
+    last_validated: 2026-05-07
+    expires: 2026-06-06
+  - id: README-preview-environments-high-shipped-2026-04-26-sprint-5-chg-20
+    source: "README.md:97"
+    text: "| ~~Preview environments~~ | ~~High~~ | ✅ Shipped 2026-04-26 (Sprint 5 / CHG-2026-04-26-PREVIEW-IMPL). All 14 plan tasks done, E2E validated against live k3d (12 specs pass: PR opened→preview, synchro"
+    type: done_status
+    dimension: infra-ops
+    polarity: positive
+    extracted_at: 2026-05-11
+    evidence_tier: UNEVIDENCED
+    ttl_default_days: 30
+    ttl_days: 30
+    last_validated: 2026-05-07
+    expires: 2026-06-06
+  - id: README-preview-environments-high-shipped-2026-04-26-sprint-5-chg-20
+    source: "README.md:97"
+    text: "| ~~Preview environments~~ | ~~High~~ | ✅ Shipped 2026-04-26 (Sprint 5 / CHG-2026-04-26-PREVIEW-IMPL). All 14 plan tasks done, E2E validated against live k3d (12 specs pass: PR opened→preview, synchro"
+    type: capability
+    dimension: infra-ops
+    polarity: positive
+    extracted_at: 2026-05-11
+    evidence_tier: UNEVIDENCED
+    ttl_default_days: 30
+    ttl_days: 30
+    last_validated: 2026-05-07
+    expires: 2026-06-06
+  - id: README-cell-2-activation-multi-cell-dev-low-shipped-2026-05-03-cell
+    source: "README.md:98"
+    text: "| ~~Cell-2 activation (multi-cell dev)~~ | ~~Low~~ | ✅ Shipped 2026-05-03 (cell-2-activation-plan + fix-all-platform-issues-plan). 12/12 ADR gates LIVE GREEN persistente. T4.3 LIVE: `loopzero deploy` → Po"
+    type: done_status
+    dimension: core-deploy
+    polarity: positive
+    extracted_at: 2026-05-11
+    evidence_tier: UNEVIDENCED
+    ttl_default_days: 30
+    ttl_days: 90
+    last_validated: 2026-05-07
+    expires: 2026-08-05
+  - id: README-sbom-generation-syft-medium-shipped-sprint-6-per-release-cyc
+    source: "README.md:100"
+    text: "| ~~SBOM generation (syft)~~ | ~~Medium~~ | ✅ Shipped (Sprint 6). Per-release CycloneDX manifest persisted in S3 with presigned URL endpoint. |"
+    type: done_status
+    dimension: dx-cli
+    polarity: positive
+    extracted_at: 2026-05-11
+    evidence_tier: UNEVIDENCED
+    ttl_default_days: 30
+    ttl_days: 30
+    last_validated: 2026-05-07
+    expires: 2026-06-06
+  - id: README-admission-policy-deny-mode-medium-warn-mode-shipped-sprint-6
+    source: "README.md:101"
+    text: "| Admission policy DENY mode | Medium | warn-mode shipped (Sprint 6). Deny-flip pending Sprint 9 with cosign keyless verification + Fulcio. |"
+    type: done_status
+    dimension: security
+    polarity: positive
+    extracted_at: 2026-05-11
+    evidence_tier: UNEVIDENCED
+    ttl_default_days: 30
+    ttl_days: 90
+    last_validated: 2026-05-07
+    expires: 2026-08-05
+  - id: README-loopzero-scale-end-to-end-persistence-medium-shipped-b40-fix-202
+    source: "README.md:102"
+    text: "| ~~`loopzero scale` end-to-end persistence~~ | ~~Medium~~ | ✅ **Shipped (B40 fix, 2026-05-06).** ScalingResolver in build_orchestrator_submit closes the chain. Plan-cap on resolved. Cleanroom 12/12 GREEN"
+    type: completion
+    dimension: scale-mt
+    polarity: positive
+    extracted_at: 2026-05-11
+    evidence_tier: UNEVIDENCED
+    ttl_default_days: 30
+    ttl_days: 60
+    last_validated: 2026-05-07
+    expires: 2026-07-06
+  - id: README-loopzero-scale-end-to-end-persistence-medium-shipped-b40-fix-202
+    source: "README.md:102"
+    text: "| ~~`loopzero scale` end-to-end persistence~~ | ~~Medium~~ | ✅ **Shipped (B40 fix, 2026-05-06).** ScalingResolver in build_orchestrator_submit closes the chain. Plan-cap on resolved. Cleanroom 12/12 GREEN"
+    type: done_status
+    dimension: scale-mt
+    polarity: positive
+    extracted_at: 2026-05-11
+    evidence_tier: UNEVIDENCED
+    ttl_default_days: 30
+    ttl_days: 60
+    last_validated: 2026-05-07
+    expires: 2026-07-06
+  - id: README-cleanroom-dogfood-e2e-preflight-11-journeys-1212-green-end-t
+    source: "README.md:127"
+    text: "| Cleanroom dogfood (E2E) | preflight + 11 journeys | **12/12 GREEN** end-to-end on fresh `k3d` destroy/setup cycle (2026-05-05, tag `dogfood-cleanroom-converged-20260505`). Validates: solo deploy, mu"
+    type: completion
+    dimension: core-deploy
+    polarity: positive
+    extracted_at: 2026-05-11
+    evidence_tier: BROKEN
+    ttl_default_days: 30
+    ttl_days: 30
+    last_validated: 2026-05-07
+    expires: 2026-06-06
+    broken_refs: "commit_missing:20260505"
+  - id: README-ginkgo-journey-suite-argo-rollouts-80-specs-label-journey-80
+    source: "README.md:128"
+    text: "| Ginkgo journey suite (Argo Rollouts) | 80 specs (label `journey`) | **80/80 GREEN warm-infra in 41m41s** + **71/72 GREEN fresh-cleanroom in 42m49s** post F-22 (2026-05-07). Includes T5.1 happy-path "
+    type: completion
+    dimension: core-deploy
+    polarity: positive
+    extracted_at: 2026-05-11
+    evidence_tier: UNEVIDENCED
+    ttl_default_days: 30
+    ttl_days: 30
+    last_validated: 2026-05-07
+    expires: 2026-06-06
+  - id: README-ginkgo-journey-suite-argo-rollouts-80-specs-label-journey-80
+    source: "README.md:128"
+    text: "| Ginkgo journey suite (Argo Rollouts) | 80 specs (label `journey`) | **80/80 GREEN warm-infra in 41m41s** + **71/72 GREEN fresh-cleanroom in 42m49s** post F-22 (2026-05-07). Includes T5.1 happy-path "
+    type: completion
+    dimension: core-deploy
+    polarity: positive
+    extracted_at: 2026-05-11
+    evidence_tier: UNEVIDENCED
+    ttl_default_days: 30
+    ttl_days: 30
+    last_validated: 2026-05-07
+    expires: 2026-06-06
+  - id: README-preview-environments-per-pr-yes-yes-sprint-5-fully-shipped-p
+    source: "README.md:149"
+    text: "| Preview environments per PR | Yes | Yes (Sprint 5 fully shipped — PR open/synchronize/close webhooks → preview lifecycle, 12 E2E specs pass live) |"
+    type: done_status
+    dimension: product-completeness
+    polarity: positive
+    extracted_at: 2026-05-11
+    evidence_tier: UNEVIDENCED
+    ttl_default_days: 30
+    ttl_days: 30
+    last_validated: 2026-05-07
+    expires: 2026-06-06
+  - id: README---item-removido-preview-environments-shipped-no-sprint-5
+    source: "README.md:436"
+    text: "- *(item removido — preview environments shipped no Sprint 5)*"
+    type: done_status
+    dimension: product-completeness
+    polarity: positive
+    extracted_at: 2026-05-11
+    evidence_tier: UNEVIDENCED
+    ttl_default_days: 30
+    ttl_days: 30
+    last_validated: 2026-05-07
+    expires: 2026-06-06
+  - id: README---maturity-assessmentdocsmaturity-assessmentmd----395-self-a
+    source: "README.md:461"
+    text: "- [Maturity Assessment](docs/maturity-assessment.md) -- 3.9/5 self-assessment (post cell-2 activation + cleanroom dogfood 12/12 GREEN) with path to 4.0 and 5.0"
+    type: completion
+    dimension: scale-mt
+    polarity: positive
+    extracted_at: 2026-05-11
+    evidence_tier: UNEVIDENCED
+    ttl_default_days: 30
+    ttl_days: 60
+    last_validated: 2026-05-07
+    expires: 2026-07-06
