@@ -45,11 +45,11 @@ No Kubernetes knowledge required. No Helm. No Dockerfile required. Just push.
 
 > **Phase: Pre-release.** Production infrastructure running on DigitalOcean (4 DOKS clusters, managed PG, CF Tunnel). Core deploy flow E2E validated. **Multi-cell ACTIVATED + LIVE-validated** (cell-default + cell-1 + cell-2). **Argo Rollouts progressive delivery shipped** (2026-05-07): every `loopzero deploy` now produces a canary Rollout (per-plan steps + Traefik weighted routing + auto-abort on bad readiness, default-on under `LOOPZERO_PROGRESSIVE_DELIVERY=true`). **Local cleanroom dogfood 12/12 GREEN end-to-end** (2026-05-05). **Cleanroom Dogfood Gate post-canary: 71/72 PASS (98.6%) in 42m49s on fresh infra** (1 unrelated ESO timing fail); warm-infra journey suite **80/80 PASS in 41m41s**. Not yet open to external users.
 >
-> **Maturity: 3.9/5** -- strong technical foundation, commercially unvalidated. (was 3.6 pre-cell-2; +0.3 from cell-2-activation-plan + fix-all-platform-issues-plan, 2026-05-03.) See [full assessment](docs/maturity-assessment.md).
+> **Maturity: 3.9/5** -- strong technical foundation, commercially unvalidated. (was 3.6 pre-cell-2; +0.3 from cell-2-activation-plan + fix-all-platform-issues-plan, 2026-05-03.)
 >
-> **Local validation gate**: `bash infra/scripts/dogfood-cleanroom-loop.sh` destroys all 4 k3d clusters and re-runs `task setup` + `task k3d:heal` + tilt + 11 dogfood journeys + preflight, all PASS in ~33min without manual intervention. 39 systemic bugs (B1-B39) caught and canonically fixed across 29 iterations. Tag: `dogfood-cleanroom-converged-20260505`. Plan: [`docs/plans/real-paas-cleanroom-dogfood-loop-plan.md`](docs/plans/real-paas-cleanroom-dogfood-loop-plan.md). Final report: [`docs/reports/dogfood-cleanroom-20260505-progress.md`](docs/reports/dogfood-cleanroom-20260505-progress.md). Learnings: [`docs/learnings/cleanroom-iter28-29-learnings-20260505.md`](docs/learnings/cleanroom-iter28-29-learnings-20260505.md).
+> **Local validation gate**: `bash infra/scripts/dogfood-cleanroom-loop.sh` destroys all 4 k3d clusters and re-runs `task setup` + `task k3d:heal` + tilt + 11 dogfood journeys + preflight, all PASS in ~33min without manual intervention. 39 systemic bugs (B1-B39) caught and canonically fixed across 29 iterations. Tag: `dogfood-cleanroom-converged-20260505`.
 >
-> **Progressive delivery validation**: 6 fixes converged during cleanroom validation (F-17 dedicated fixture, F-18 `progressDeadlineSeconds=300`, F-19 S1 `sync_client.go` accepts `Kind="Rollout"`, F-20 S2 e2e scaffolding + proveDead extends to Rollout/TraefikService, F-21 `task k3d:bootstrap-workload` includes argo-rollouts, F-22 S1 `loopzero-ctrl-runtime-rbac-admin` ClusterRole grants `argoproj.io`). Plan: [`docs/plans/argo-rollouts-progressive-delivery-plan.md`](docs/plans/argo-rollouts-progressive-delivery-plan.md).
+> **Progressive delivery validation**: 6 fixes converged during cleanroom validation (F-17 dedicated fixture, F-18 `progressDeadlineSeconds=300`, F-19 S1 `sync_client.go` accepts `Kind="Rollout"`, F-20 S2 e2e scaffolding + proveDead extends to Rollout/TraefikService, F-21 `task k3d:bootstrap-workload` includes argo-rollouts, F-22 S1 `loopzero-ctrl-runtime-rbac-admin` ClusterRole grants `argoproj.io`).
 >
 > **Path to 4.0**: (a) first CI Sunday cron GREEN producing real `cell2-soaks.yml` 1h+24h workflow run evidence + (b) 1 prod customer day-trial with no incidents (Sprint 9 prod canary stage 4). Local 7-day GREEN streak NOT a gate (tautological in static dev env without diurnal traffic; CI cron + real prod usage are the legitimate signals — D7 reformulated 2026-05-03).
 
@@ -457,6 +457,4 @@ See [CONTRIBUTING.md](CONTRIBUTING.md). Every PR starts with a failing test.
 
 ## Links
 
-- [CLI Reference](docs/cli-reference.md) -- authoritative specification (commands, exit codes, JSON schemas, contracts)
-- [Maturity Assessment](docs/maturity-assessment.md) -- 3.9/5 self-assessment (post cell-2 activation + cleanroom dogfood 12/12 GREEN) with path to 4.0 and 5.0
 - [Changelog](CHANGELOG.md)
