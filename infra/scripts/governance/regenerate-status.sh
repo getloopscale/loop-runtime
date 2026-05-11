@@ -1,5 +1,9 @@
 #!/usr/bin/env bash
-# regenerate-status.sh — Update auto-generated sections in docs/STATUS.md.
+# regenerate-status.sh — STALE: docs/STATUS.md was removed in 2026-05-11 governance consolidation.
+# Canonical maturity/status document is now docs/audits/2026-05-11/SUMMARY.md.
+#
+# This script previously updated auto-generated sections in docs/STATUS.md.
+# It is retained for reference but will exit early if the target file does not exist.
 #
 # Per T4.4 of status-validation-and-doc-consolidation-plan.
 #
@@ -32,7 +36,7 @@ while [[ $# -gt 0 ]]; do
             cat <<EOF
 Usage: $(basename "$0") [--check | --dry-run]
 
-Regenerate auto-sections in docs/STATUS.md.
+Regenerate auto-sections in the status file (originally docs/STATUS.md, now removed).
   --check    Exit 1 if regeneration would change the file (drift detect)
   --dry-run  Print the changes without writing
 EOF
@@ -43,8 +47,9 @@ EOF
 done
 
 if [[ ! -f "$STATUS_FILE" ]]; then
-    echo "STATUS.md not found at $STATUS_FILE" >&2
-    exit 1
+    echo "Status file not found at $STATUS_FILE (docs/STATUS.md was removed in 2026-05-11 governance consolidation)" >&2
+    echo "Canonical maturity document is now docs/audits/2026-05-11/SUMMARY.md" >&2
+    exit 0
 fi
 
 # Generate activity-30d section
@@ -178,14 +183,14 @@ if [[ "$MODE" == "check" ]]; then
     replace_block "activity-30d" "$ACTIVITY_TMP" "$STATUS_FILE"
     replace_block "decay-summary" "$DECAY_TMP" "$STATUS_FILE"
     if ! diff -q "$BACKUP" "$STATUS_FILE" > /dev/null; then
-        echo "DRIFT detected — STATUS.md auto-sections need regeneration"
+        echo "DRIFT detected — status file auto-sections need regeneration"
         diff "$BACKUP" "$STATUS_FILE" | head -50 || true
         cp "$BACKUP" "$STATUS_FILE"  # restore
         rm "$BACKUP"
         exit 1
     fi
     rm "$BACKUP"
-    echo "OK — STATUS.md auto-sections current"
+    echo "OK — status file auto-sections current"
     exit 0
 fi
 

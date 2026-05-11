@@ -28,7 +28,7 @@
 **Média ponderada (igual peso):** **3.49 / 4.0**
 
 **Comparação:**
-- `status-validation` plan v1.2 (2026-05-11) LIVE-triangulou: **2.84** (under-claim de -0.65 nesta auditoria)
+- `status-validation` plan v1.2 (2026-05-11, 3-persona adversarial — plan file removed in governance consolidation d18e3b89) LIVE-triangulou: **2.84** (under-claim de -0.65 nesta auditoria)
 - Esta auditoria (modular, code-validated): **3.49**
 
 A discrepância vs 2.84 do `status-validation` reflete que aquele plano usou 3 personas adversariais com weighting diferente (Core 3.0/Infra 2.8/Scale 2.9 + 4 dimensões pending). Esta auditoria é mais granular (12 módulos vs 7 dimensões) e tem cap em 4.0 (não 5.0).
@@ -202,7 +202,7 @@ A discrepância vs 2.84 do `status-validation` reflete que aquele plano usou 3 p
 | "api/internal/ ~25 subpacotes" | 35 subpacotes | ✅ Corrigido no CLAUDE.md |
 | "32 bootstrap charts" | 16 charts + 18 value overlays | ✅ Corrigido no CLAUDE.md |
 | "29 workflows" | 35 workflows | ✅ Corrigido no CLAUDE.md |
-| "43+ loopzero_* metrics" | 109 metrics + 8 cell metrics | ✅ Corrigido no CLAUDE.md |
+| "43+ loopzero_* metrics" | 105 metrics (including 6 cell metrics) | ✅ Corrigido no CLAUDE.md (105, não 109) |
 | "Pulumi L1-only (zero K8s resources)" | 5 projetos Pulumi (1 stub) com 32 Helm releases em platform | ✅ Corrigido no CLAUDE.md |
 | "Maturity 3.9" (docs/STATUS.md, removido) | 3.49 (modular) / 2.84 (status-validation 3-persona) | ✅ docs/STATUS.md removido; CLAUDE.md usa 3.49 |
 
@@ -210,7 +210,7 @@ A discrepância vs 2.84 do `status-validation` reflete que aquele plano usou 3 p
 
 ## 8. Notas de Confiança
 
-- **Confidence cap 92%** (Claude-only, single-model family residual per ADR-0051)
+- **Confidence cap 92%** (Claude-only, single-model family residual per CLAUDE.md Rule 11 (evidence governance))
 - **Code-validated:** todas as claims com `file:line` reference, grep counts via Bash, e Ginkgo/Go test counts diretos
 - **NÃO multi-modelo adversarial** — para isto, consulte `status-validation` plan v1.2 que aplicou 3 personas
 - **Esta auditoria é diagnostic** — não T2/T3. Remediações descobertas devem ser canalizadas via Change Governor.

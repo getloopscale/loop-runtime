@@ -1,7 +1,9 @@
 name: adversarial-spotcheck
 
 # Nightly adversarial spotcheck — picks 1 random dim + 1 random persona;
-# alerts if score delta from STATUS.md > 0.3.
+# alerts if score delta from audit SUMMARY.md > 0.3.
+# NOTE: docs/STATUS.md was removed in 2026-05-11 governance consolidation.
+# Canonical maturity document is now docs/audits/2026-05-11/SUMMARY.md.
 #
 # Per T5.3 of status-validation-and-doc-consolidation-plan.
 
@@ -55,7 +57,7 @@ jobs:
 
           To complete spotcheck:
           1. Invoke ${{ steps.select.outputs.persona }} persona on dimension ${{ steps.select.outputs.dimension }}
-          2. Compare resulting score against docs/STATUS.md §2 same row
+          2. Compare resulting score against docs/audits/2026-05-11/SUMMARY.md
           3. If |delta| > 0.3 → open issue "adversarial drift detected"
           4. Update docs/governance/spotcheck-history.yaml with finding
 

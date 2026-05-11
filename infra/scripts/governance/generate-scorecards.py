@@ -126,7 +126,7 @@ def emit_scorecard(dim_key, dim_title, scoring_dir, p1, p2, p3, triang):
     lines.append(f"- Plan task: T3.4 of `docs/plans/status-validation-and-doc-consolidation-plan.md`")
     lines.append(f"- Triangulation: `{os.path.basename(scoring_dir)}/triangulation.yaml`")
     lines.append(f"- Raw runs: `{os.path.basename(scoring_dir)}/raw-runs.md`")
-    lines.append(f"- Linked from: `docs/STATUS.md` §2 row `{dim_key}`")
+    lines.append(f"- Linked from: `docs/audits/2026-05-11/SUMMARY.md`")
 
     out_path = os.path.join(scoring_dir, f"scorecard-{dim_key.replace('_', '-')}.md")
     with open(out_path, 'w') as f:

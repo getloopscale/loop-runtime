@@ -51,7 +51,7 @@
 
 ## Action Items (if any)
 
-- [ ] Update `docs/STATUS.md` §2 row `{dimension_key}` with reconciled score
+- [ ] Update `docs/audits/2026-05-11/SUMMARY.md` with reconciled score
 - [ ] Update `docs/governance/scoring-{YYYY-MM-DD}/scorecard-{dim}.md` with final
 - [ ] Document open work items if dim has actionable gaps
 
@@ -60,4 +60,4 @@
 - T3.2 output: `docs/governance/scoring-{YYYY-MM-DD}/triangulation.yaml`
 - T3.4 scorecard: `docs/governance/scoring-{YYYY-MM-DD}/scorecard-{dim}.md`
 - Per-persona files: `p1-vercel-dd.yaml`, `p2-hostile-vc.yaml`, `p3-paranoid-sre.yaml`
-- Plan ADR D4 (adversarial personas) + ADR-0051 (canonical contract)
+- Plan ADR D4 (adversarial personas) + CLAUDE.md Rule 11 (evidence governance)

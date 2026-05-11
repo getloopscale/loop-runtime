@@ -39,7 +39,7 @@ var _ = Describe("Journey: Connect", Ordered, Label("journey"), func() {
 			"connect help stderr": stderr,
 		})
 
-		// Help output must mention key sub-options per cli-reference.md.
+		// Help output must mention key sub-options per CLAUDE.md (CLI stability contract).
 		joined := stdout + stderr
 		Expect(strings.ToLower(joined)).To(ContainSubstring("connect"),
 			"--help should mention the command name")
@@ -59,7 +59,7 @@ var _ = Describe("Journey: Connect", Ordered, Label("journey"), func() {
 
 	It("project inspect surfaces repository field", func() {
 		// The project list / inspect endpoint must surface a `repository`
-		// shape (even null) per cli-reference.md so dashboards can render
+		// shape (even null) per CLAUDE.md (CLI stability contract) so dashboards can render
 		// connect status. This validates the API contract surface even
 		// when no GitHub App is installed.
 		stdout, stderr, exitCode := runLoopZero("project", "list", "--json")

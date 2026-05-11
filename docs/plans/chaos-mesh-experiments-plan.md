@@ -549,10 +549,12 @@ VERIFY:  LOOPZERO_CHAOS_TEST=1 go test ./infra/tests/chaos/ -v -count=1
 
 ---
 
-### T3.2 — Regression matrix entries
+### T3.2 — Regression matrix entries (BLOCKED)
+
+> **BLOCKED:** The regression matrix file (`docs/runbooks/bootstrap-regression-matrix.md`) was removed in d18e3b89 governance consolidation (2026-05-11). This task cannot execute until a successor file is created. Deferred to Sprint 9 — the matrix will be recreated as part of the production readiness documentation if the chaos experiments plan is approved post-consolidation.
 
 #### Objective
-Add 12 entries to the bootstrap regression matrix documenting each chaos scenario as a permanent protection.
+Add 12 entries to a regression matrix documenting each chaos scenario as a permanent protection.
 
 #### Evidence
 - Regression matrix (formerly `docs/runbooks/bootstrap-regression-matrix.md`, removed in d18e3b89 consolidation) had 82+ entries but zero for chaos resilience.
@@ -560,7 +562,7 @@ Add 12 entries to the bootstrap regression matrix documenting each chaos scenari
 
 #### Files to edit
 ```
-(new) regression matrix file — add 12 new entries (file to be (re)created post-approval)
+TBD — regression matrix file must be (re)created before this task can proceed
 ```
 
 #### Deep file dependency analysis

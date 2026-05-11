@@ -80,7 +80,7 @@ No Kubernetes knowledge required. No Helm. No Dockerfile required. Just push.
 | SecurityContext (non-root pods) | `runAsNonRoot`, `drop: ALL`, `readOnlyRootFilesystem` |
 | PodSecurity Admission | `restricted` profile on all tenant namespaces |
 | NetworkPolicy | Mandatory deny-all + explicit allow rules |
-| Observability | 109 Prometheus metrics + 21 Grafana dashboards + 7 SLO files (Sloth) |
+| Observability | 105 Prometheus metrics (incl. 6 cell metrics) + 21 Grafana dashboards + 7 SLO files (Sloth) |
 | Auth hardened | UUID tenant IDs, RSA-only JWT, audience validation, secret rotation |
 | JSON contracts | 8/8 commands validated, 0 internal term leaks |
 
@@ -113,7 +113,7 @@ Source of truth: `api/internal/db/migrations/000002_seed_data.up.sql` (plan_limi
 
 | Component | Count | Status |
 |-----------|------:|--------|
-| CLI (Jest) | 1,226+ | Passing (added `deploy.ts` rollout.step / rollout.aborted handlers + `status.ts` formatRolloutLine + 8 canary-progress unit tests). 1 pre-existing `getPlatformStatus-charts.test.ts` failure unrelated to canary plan (CHG-2026-04-30-INFRA-PARITY chart-name drift). |
+| CLI (Jest) | 1,260 | 85 suites — 1,244 passing, 9 failing (4 suites: platform-status-drift, admin-tenants-pin + 2 minor), 7 skipped. |
 | API (35 subpacotes) + Shared libs (pkg/, 10 packages) | 2,283 + 388 test funcs | Passing (multi-cell: placement determinism with -race + admin_pin_cell C11 authz + migration_007/008 invariants + reaper observability + canary: `TestBuildRollout_*` × 7 + `TestBuildRollout_ProgressDeadlineSeconds` × 4 plan tiers + `TestBuildHPA_TargetsRollout_Progressive` + `TestBuildScaledObject_TargetsRollout_Progressive` + `TestGetAppStatus_RolloutCounted_AsWorkloadPrimitive` + `TestGetAppStatus_RolloutDegraded_BlocksHealthy`) |
 | Operators (Ginkgo + envtest) | 200+ specs | Passing (+ application reaper 10 fake-client tests + cell-aware factory 7 tests, no envtest dependency) |
 | Pulumi (vitest) | 310+ specs | Passing (heal-script H14 24 invariants + migrations-forward-only 11 invariants) |
@@ -357,7 +357,7 @@ loopzero deploy (or git push)
 
 | Layer | Technology |
 |-------|-----------|
-| CLI | TypeScript + Commander (36 commands) |
+| CLI | TypeScript + Commander (35 commands) |
 | API | Go 1.25 + chi + pgx (connection pool) |
 | Operators | Go + kubebuilder + controller-runtime (10 CRDs: 8 wired + 2 unwired AppSecret/ReconciliationReport; 4 split binaries: tenant/app/preview/platform) |
 | Shared libs | Go -- errors, errors/http, logging, naming, conditions, statemachine, jwt, enforcement, circuitbreaker |
@@ -424,12 +424,17 @@ cd pkg && go test ./...       # Shared library tests
 
 ---
 
+## Known Issues
+
+- **AppSecret controller not implemented** — ESO works directly for secret sync; no lifecycle automation (rotation/drift-detection). YAGNI until needed.
+- **Local k3d cert-manager** cannot issue for `*.loopzero.local` (no public DNS for ACME challenge). Self-signed CA issuer (`loopzero-local-ca-issuer`) fills local gap; production uses CF-managed TLS.
+- **Local Stage 1 canary HTTP probes** report HTTP 000 in `--smoke` mode (probes informational only, no functional impact).
+
 ## What LoopZero Does Not Solve
 
 - **Database migrations** -- LoopZero deploys code, not schema changes.
 - **Custom domains without nameserver change** -- Users must change nameservers to Cloudflare.
 - **Multi-region** -- Single-region in v1.
-
 - **GPU/AI workloads** -- Not planned.
 
 ---

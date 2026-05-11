@@ -6,7 +6,7 @@
 # Cobre §7 spec: loopzero domain add/list/status/remove.
 #
 # IMPORTANT — local infra gap (documented, not workaround):
-#   Custom domain v2 uses CF Zone Management (cli-reference.md §7).
+#   Custom domain v2 uses CF Zone Management (CLAUDE.md § Custom domains).
 #   standalone-multi has no CF integration, so steps that require real
 #   DNS/zone provisioning (verify → ns_active → provisioning → active)
 #   cannot be exercised locally. This journey validates everything UP TO

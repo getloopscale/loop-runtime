@@ -39,7 +39,7 @@ var _ = Describe("Journey: Platform Upgrade", Ordered, Label("journey"), func() 
 		})
 
 		joined := strings.ToLower(stdout + stderr)
-		// Help must list the sub-commands per cli-reference.md.
+		// Help must list the sub-commands per CLAUDE.md (CLI stability contract).
 		Expect(joined).To(ContainSubstring("status"),
 			"platform --help should list 'status' subcommand")
 	})
@@ -69,7 +69,7 @@ var _ = Describe("Journey: Platform Upgrade", Ordered, Label("journey"), func() 
 	})
 
 	It("loopzero platform install --dry-run does not mutate", func() {
-		// --dry-run is a stable contract per cli-reference.md: it produces
+		// --dry-run is a stable contract per CLAUDE.md (CLI stability contract): it produces
 		// what *would* happen without applying. The journey only asserts
 		// the contract surface (exit code + Rule-3 + JSON shape). Running
 		// the real install is destructive and requires fresh-cluster setup.

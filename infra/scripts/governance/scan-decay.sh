@@ -1,5 +1,7 @@
 #!/usr/bin/env bash
-# scan-decay.sh — Scans evidence files + STATUS.md for expired claims.
+# scan-decay.sh — Scans evidence files for expired claims.
+# NOTE: docs/STATUS.md was removed in 2026-05-11 governance consolidation.
+# Canonical maturity document is now docs/audits/2026-05-11/SUMMARY.md.
 #
 # Per docs/GOVERNANCE.md (§2 Decay Policy) (T0.3 of status-validation-and-doc-consolidation-plan).
 #
@@ -17,7 +19,7 @@
 set -euo pipefail
 
 OUTPUT_FORMAT="markdown"
-SCAN_PATHS_INPUT="docs/evidence docs/STATUS.md"
+SCAN_PATHS_INPUT="docs/evidence docs/audits/2026-05-11/SUMMARY.md"
 
 usage() {
     cat <<EOF

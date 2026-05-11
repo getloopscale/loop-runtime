@@ -51,4 +51,4 @@ _E.g., "P1 scored 4.5, P3 scored 3.4 — gap = chaos coverage. Reconciliation me
 
 - Plan task: T3.4 of `docs/plans/status-validation-and-doc-consolidation-plan.md`
 - Evidence files: `docs/evidence/core-deploy/`
-- Linked from: `docs/STATUS.md` §2 row core-deploy
+- Linked from: `docs/audits/2026-05-11/SUMMARY.md`

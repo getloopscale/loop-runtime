@@ -17,7 +17,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 - Multi-cell routing with round-robin placement, dynamic cell resolution, and admin pin/evict commands (#CHG-multicell)
 - Cell-2 activated and LIVE-validated — 3/3 cells connected, cell-aware reconcile (#CHG-multicell)
 - Distributed tracing end-to-end (CLI → API → operators) with OTel, Tempo, and trace-linked logs (#CHG-observability)
-- 109 `loopzero_*` metrics + 8 cell metrics + Grafana dashboards + SLO alerts + 7 multi-cell alerts (#CHG-observability)
+- 105 `loopzero_*` metrics (including 6 cell metrics) + Grafana dashboards + SLO alerts + 7 multi-cell alerts (#CHG-observability)
 - Operator multi-binary split into 4 binaries: tenant, app, preview, platform (#CHG-operator-split)
 - Layered bootstrap: Pulumi L1 + Helmfile L2 + ArgoCD L3 (#CHG-layered-bootstrap)
 - Application reaper for orphan CRs with `ApplicationCleaned` terminal state (#CHG-reaper)
@@ -32,14 +32,20 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 - ArgoCD repo-server timeout increased from 15s to 60s for bootstrap resilience (#CHG-argocd-resilience)
 
 ### Fixed
-- 39+ bugs discovered and fixed during end-to-end cleanroom dogfood testing (#CHG-dogfood)
+- 39 bugs (B1-B39) discovered and fixed during cleanroom dogfood — includes lock race conditions, state machine gaps, ArgoCD sync failures, ESO timing, CLI output Rule 3 violations (#CHG-dogfood)
 - ArgoCD sync cleanroom resilience — duplicate Gitea credentials + repo-server timeout (#CHG-argocd-resilience)
 - ESO ExternalSecret instrumentation and runtime kubeconfig context drift (#CHG-dogfood-2026-05-08)
 - Application phase fast-path to Healthy, schema_migrations backfill (#CHG-dogfood-2026-05-08)
 - Documentation drift cleanup — reconciled stale pointers after governance consolidation (#doc-cleanup-2026-05-11)
-- Deep review remediation: 19 of 30 tasks — preview multi-cell routing, release activation supersession, reaper 409-conflict, orphan alerts (#deep-review-2026-05-10)
+- Governance consolidation: reduced 41 docs to 4 canonical (CLAUDE.md, CHANGELOG.md, README.md, audits) — 90% reduction (#doc-consolidation-2026-05-11)
+- Modular audit 2026-05-11: 12 module audits with per-module scoring, average 3.49/4.0 (#audit-modular-2026-05-11)
+- CI/CD and Testing audit documentation added (#audit-cicd-2026-05-11)
+- README.md synced with reality: 12 numeric corrections + canonical pricing (#doc-readme-2026-05-11)
+- Deep review remediation (19/30 tasks complete, 11 deferred to Sprint 9): preview multi-cell routing, release activation supersession, reaper 409-conflict, orphan alerts (#deep-review-2026-05-10)
 - Registry config secret oscillation between DOCR and Harbor writers (#CHG-002b)
-- Various state machine fixes: Environment Failed state, Release cancel paths, Domain degraded (#CHG-statemachines)
+- Environment state machine: added Failed terminal state for unrecoverable provisioning errors (#CHG-statemachines)
+- Release state machine: fixed cancel paths from PENDING and READY states (#CHG-statemachines)
+- Domain state machine: added Degraded state for partial CF zone failures (#CHG-statemachines)
 
 ### Removed
 - Legacy operator monolith chart (`infra/helm/tenant-controller`, `infra/helm/loopzero-controller`) — replaced by 4 split binaries (#CHG-operator-split)
@@ -198,17 +204,6 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 - Ory Kratos + Hydra deployed on mgmt cluster
 - Resend SMTP secret in GitHub Actions (`LOOPZERO_RESEND_API_KEY`)
 - OAuth secrets: `LOOPZERO_GITHUB_CLIENT_ID/SECRET`, `LOOPZERO_GOOGLE_CLIENT_ID/SECRET`
-
-### Meetings
-- MEET-028: Content hash security rework
-- MEET-029: ArgoCD SYNC_FAILED definitive fix (7 root causes)
-- MEET-030: Production readiness final push plan
-- MEET-031: Email flows implementation
-- MEET-032: Login redirect loop architecture fix
-- MEET-033: Password hardening + Cloudflare WAF
-- MEET-034: Kratos URL consistency fix
-- MEET-035: SMTP NetworkPolicy (superseded by MEET-036)
-- MEET-036: Resend HTTP API for email delivery
 
 ### Added
 - CLI command `loopzero team list` to list team members with roles (#cmd-team)
@@ -412,7 +407,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 - Remove 3 deprecated `scriptDockerfile*` functions — dead code with `//nolint:unused` (#COMP-005)
 - Remove `cwt-summary.yaml` — ClusterWorkflowTemplate deployed but never called by WorkflowBuilder (#COMP-006)
 
-### Previously Fixed
+### Fixed
 - ArgoCD notifications config moved from `configs:` to root level in Helm values — was being silently ignored by argo-cd chart (#MEET-015-IaC)
 - Pulumi `installArgoCD()` now includes full config: RBAC, accounts, notifications, metrics, security contexts — was deploying with minimal inline values (#MEET-015-IaC)
 - Gitea bootstrap Job uses `deleteBeforeReplace` + `replaceOnChanges` — fixes `pulumi up` failure when TTL garbage-collects completed Job (#MEET-015-IaC)

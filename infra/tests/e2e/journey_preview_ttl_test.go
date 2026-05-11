@@ -4,7 +4,7 @@
 // Journey: Preview TTL (T3.2 of deep-review-remediation-plan)
 //
 // Validates `loopzero preview list` + `loopzero preview inspect` + the TTL field
-// schema per cli-reference.md. Preview environment lifecycle (create →
+// schema per CLAUDE.md (CLI stability contract). Preview environment lifecycle (create →
 // active → expiring → deleted) is exercised by journey_preview_test.go;
 // this journey validates the TTL-specific contract surface that the
 // dashboard consumes.
@@ -41,7 +41,7 @@ var _ = Describe("Journey: Preview TTL", Ordered, Label("journey"), func() {
 	})
 
 	It("loopzero preview list returns JSON shape", func() {
-		// Per cli-reference.md, `loopzero preview list --json` returns:
+		// Per CLAUDE.md (CLI stability contract), `loopzero preview list --json` returns:
 		//   {"previews": [{ "id", "pr_number", "branch", "ttl_seconds", ... }], "count": N}
 		// We assert the contract surface even when the list is empty.
 		stdout, stderr, exitCode := runLoopZero("preview", "list", "--json")

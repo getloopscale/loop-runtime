@@ -5,7 +5,7 @@
 //
 // Validates the `loopzero team add` + `loopzero team list` + `loopzero team remove`
 // CLI commands against the API. Each command is its own JSON contract
-// per cli-reference.md.
+// per CLAUDE.md (CLI stability contract).
 //
 // Flow:
 //   - team list (current state) → exit 0 + JSON
@@ -62,7 +62,7 @@ var _ = Describe("Journey: Team Add", Ordered, Label("journey"), func() {
 		stdout, stderr, exitCode := runLoopZero("team", "add", teammate,
 			"--role", "member", "--json")
 
-		// API contract per cli-reference.md: loopzero team add returns:
+		// API contract per CLAUDE.md (CLI stability contract): loopzero team add returns:
 		//   - exit 0 + member entry on success
 		//   - exit 1 + code=USER_NOT_FOUND when the target has not yet
 		//     logged in (LoopZero cannot add users it doesn't know about).
@@ -77,7 +77,7 @@ var _ = Describe("Journey: Team Add", Ordered, Label("journey"), func() {
 		})
 		if exitCode == 1 {
 			Expect(stdout).To(ContainSubstring(`"USER_NOT_FOUND"`),
-				"exit 1 must surface USER_NOT_FOUND code per cli-reference.md")
+				"exit 1 must surface USER_NOT_FOUND code per CLAUDE.md (CLI stability contract)")
 		}
 	})
 

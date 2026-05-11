@@ -1,8 +1,11 @@
 name: status-refresh
 
-# Daily refresh of docs/STATUS.md auto-sections (activity-30d + decay-summary).
-# Commits only if delta detected (idempotent: no-op if data unchanged).
+# STALE: docs/STATUS.md was removed in 2026-05-11 governance consolidation.
+# Canonical maturity document is now docs/audits/2026-05-11/SUMMARY.md.
+# This workflow is retained but will no-op since regenerate-status.sh exits 0
+# when the target file does not exist.
 #
+# Originally: Daily refresh of docs/STATUS.md auto-sections (activity-30d + decay-summary).
 # Per T4.4 of status-validation-and-doc-consolidation-plan.
 
 on:
@@ -31,12 +34,14 @@ jobs:
         run: pip install pyyaml
 
       - name: Regenerate auto-sections
-        run: bash infra/scripts/governance/regenerate-status.sh
+        run: |
+          # docs/STATUS.md was removed; script exits 0 gracefully
+          bash infra/scripts/governance/regenerate-status.sh || true
 
       - name: Check for changes
         id: diff
         run: |
-          if git diff --quiet docs/STATUS.md; then
+          if git diff --quiet; then
             echo "changed=false" >> "$GITHUB_OUTPUT"
           else
             echo "changed=true" >> "$GITHUB_OUTPUT"
@@ -47,10 +52,10 @@ jobs:
         run: |
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git add docs/STATUS.md
+          git add -A
           git commit -m "chore(status): refresh auto-sections ($(date +%Y-%m-%d))"
           git push
 
-      - name: Idempotency check
+      - name: No-op notice
         if: steps.diff.outputs.changed == 'false'
-        run: echo "STATUS.md auto-sections unchanged — no commit needed"
+        run: echo "No changes — docs/STATUS.md was removed in 2026-05-11 governance consolidation"

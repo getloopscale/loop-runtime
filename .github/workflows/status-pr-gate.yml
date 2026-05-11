@@ -1,6 +1,9 @@
 name: status-pr-gate
 
-# Pre-merge gate: PRs touching docs/STATUS.md MUST also touch docs/evidence/**.
+# Pre-merge gate: PRs touching audit SUMMARY or evidence MUST keep them in sync.
+# NOTE: docs/STATUS.md was removed in 2026-05-11 governance consolidation.
+# Canonical maturity document is now docs/audits/2026-05-11/SUMMARY.md.
+#
 # Override: PR with label "evidence-waiver" bypasses (requires justification in description).
 #
 # Per T6.4 + ADR D6 of status-validation-and-doc-consolidation-plan.
@@ -9,7 +12,7 @@ on:
   pull_request:
     branches: [develop, main]
     paths:
-      - "docs/STATUS.md"
+      - "docs/audits/**/SUMMARY.md"
       - "docs/evidence/**"
 
 permissions:
@@ -45,39 +48,39 @@ jobs:
           echo "All changed:"
           echo "$CHANGED"
 
-          STATUS_TOUCHED=false
+          SUMMARY_TOUCHED=false
           EVIDENCE_TOUCHED=false
-          if echo "$CHANGED" | grep -q "^docs/STATUS.md$"; then
-            STATUS_TOUCHED=true
+          if echo "$CHANGED" | grep -q "^docs/audits/.*/SUMMARY.md$"; then
+            SUMMARY_TOUCHED=true
           fi
           if echo "$CHANGED" | grep -q "^docs/evidence/"; then
             EVIDENCE_TOUCHED=true
           fi
 
-          echo "status_touched=$STATUS_TOUCHED" >> "$GITHUB_OUTPUT"
+          echo "summary_touched=$SUMMARY_TOUCHED" >> "$GITHUB_OUTPUT"
           echo "evidence_touched=$EVIDENCE_TOUCHED" >> "$GITHUB_OUTPUT"
 
       - name: Enforce gate
         run: |
-          STATUS="${{ steps.changes.outputs.status_touched }}"
+          SUMMARY="${{ steps.changes.outputs.summary_touched }}"
           EVIDENCE="${{ steps.changes.outputs.evidence_touched }}"
           WAIVER="${{ steps.labels.outputs.waiver }}"
 
-          echo "STATUS.md touched: $STATUS"
-          echo "Evidence touched:  $EVIDENCE"
-          echo "Waiver label:      $WAIVER"
+          echo "SUMMARY.md touched: $SUMMARY"
+          echo "Evidence touched:   $EVIDENCE"
+          echo "Waiver label:       $WAIVER"
 
-          if [[ "$STATUS" == "true" && "$EVIDENCE" == "false" ]]; then
+          if [[ "$SUMMARY" == "true" && "$EVIDENCE" == "false" ]]; then
             if [[ "$WAIVER" == "true" ]]; then
-              echo "::warning::STATUS.md changed without evidence files, but evidence-waiver label is present."
+              echo "::warning::Audit SUMMARY.md changed without evidence files, but evidence-waiver label is present."
               echo "::warning::Reviewer MUST verify justification in PR description per ADR-0051 §D6."
               exit 0
             fi
             cat <<EOF
-            ::error::PR touches docs/STATUS.md but does NOT update docs/evidence/**
+            ::error::PR touches audit SUMMARY.md but does NOT update docs/evidence/**
 
             Per ADR-0051 §D6 (claim-evidence-decay contract):
-            Any change to score-affecting claims in STATUS.md requires accompanying
+            Any change to score-affecting claims in the audit SUMMARY requires accompanying
             evidence file delta in docs/evidence/{dim}/.
 
             To resolve:

@@ -81,7 +81,7 @@ var _ = Describe("Journey: Logs", Ordered, Label("journey"), func() {
 		if exitCode != 0 {
 			Skip("logs returned non-zero — schema check requires success path")
 		}
-		// Schema invariant per cli-reference.md: top-level JSON object
+		// Schema invariant per CLAUDE.md (CLI stability contract): top-level JSON object
 		// (Rule 5 — --json field names are a stability contract).
 		s := strings.TrimSpace(stdout)
 		Expect(s[0:1]).To(Or(Equal("{"), Equal("[")),

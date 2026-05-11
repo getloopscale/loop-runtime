@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# spotcheck-dimension.sh — Pick 1 random dimension + 1 random persona; flag if delta from STATUS.md > 0.3.
+# spotcheck-dimension.sh — Pick 1 random dimension + 1 random persona; flag if delta from audit SUMMARY.md > 0.3.
 #
 # Per T5.3 of status-validation-and-doc-consolidation-plan.
 #
@@ -9,7 +9,9 @@
 set -euo pipefail
 
 SEED="${SPOTCHECK_SEED:-$(date +%s)}"
-STATUS_FILE="${STATUS_FILE:-docs/STATUS.md}"
+# NOTE: docs/STATUS.md was removed in 2026-05-11 governance consolidation.
+# Canonical maturity/status document is now docs/audits/2026-05-11/SUMMARY.md.
+STATUS_FILE="${STATUS_FILE:-docs/audits/2026-05-11/SUMMARY.md}"
 CATALOG_FILE="${CATALOG_FILE:-docs/governance/claim-catalog.yaml}"
 
 DIMENSIONS=("core-deploy" "dx-cli" "infra-ops" "security" "scale-mt" "product-completeness" "tests-confidence")
@@ -38,6 +40,6 @@ cat <<JSON
   "dimension": "$SELECTED_DIM",
   "persona": "$SELECTED_PERSONA",
   "selection_method": "seeded_uniform",
-  "next_step": "Invoke persona agent with this dimension; compare against STATUS.md; alert if delta > 0.3"
+  "next_step": "Invoke persona agent with this dimension; compare against docs/audits/2026-05-11/SUMMARY.md; alert if delta > 0.3"
 }
 JSON

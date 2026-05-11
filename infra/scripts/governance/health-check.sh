@@ -63,9 +63,11 @@ for f in infra/scripts/governance/*.py; do
     check "syntax $(basename "$f")" python3 -c "import ast; ast.parse(open('$f').read())"
 done
 
-echo "2. The 4 canonical docs exist"
+echo "2. The canonical docs exist"
+# NOTE: docs/STATUS.md was removed in 2026-05-11 governance consolidation.
+# Canonical maturity document is now docs/audits/2026-05-11/SUMMARY.md.
 for doc in \
-    "docs/STATUS.md" \
+    "docs/audits/2026-05-11/SUMMARY.md" \
     "docs/GOVERNANCE.md" \
     "docs/architecture/governance/README.md" \
     "docs/meetings/adr/0051-claim-evidence-decay-contract.md"
@@ -178,7 +180,7 @@ check "task decay:scan:catalog wired" grep -q "decay:scan:catalog" taskfiles/tes
 echo ""
 echo "12. CLAUDE.md Rule 11 + redirects present"
 check "CLAUDE.md Rule 11 exists" grep -q "11\. \*\*Claims need evidence\*\*" CLAUDE.md
-check "CLAUDE.md status redirect" grep -q "docs/STATUS.md" CLAUDE.md
+check "CLAUDE.md references audit SUMMARY" grep -q "docs/audits/2026-05-11/SUMMARY.md" CLAUDE.md
 check "maturity-assessment.md is redirect" grep -q "This file is now a redirect" docs/maturity-assessment.md
 
 echo ""
