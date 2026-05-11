@@ -1,0 +1,60 @@
+persona: p1_vercel_dd
+ran_at: 2026-05-11T14:10:00Z
+model: claude-opus-4-7
+temperature: 0.7
+seed: 42
+
+scores:
+  core_deploy_flow:
+    score: 3.0
+    justification:
+      - "Headline claim 'Score 3.9/5.0' at `docs/maturity-assessment.md:6` is BROKEN per `evidence-gaps-report.md` line 20 (commit_missing:b04e0905c1) — the literal evidence cited for the deploy maturity score points at a commit nobody can resolve. Vercel-tier DD would auto-reject the entire scorecard at this line; we don't ship URLs that 404."
+      - "`loopzero scale` claim — 'fully functional E2E (B40 fixed 2026-05-06, tag scale-b40-converged-20260506)' in CLAUDE.md:19 — listed BROKEN three times in `evidence-gaps-report.md` (commit_missing:20260506). When the user runs `loopzero scale --replicas 3` and discovers it half-works, the 'WORKS in CHANGELOG' lie kills the trial. Vercel pins every CLI claim to a `vercel scale --json` golden snapshot in CI."
+      - "Per `divergence-report-2026-05-11.md` row 'Phase 2+3 expected gaps', the LIVE Dogfood Gate (cleanroom destroy + setup + 12 journeys) has never been run in this validation cycle — operator-deferred. For DEPLOY this is fatal: claim 'cleanroom 12/12 GREEN' at `README.md:127` is BROKEN per gaps-report, meaning the headline 'first deploy works' proof is currently unverifiable. Tier 1 = green pipeline button you can point at; we have a tag from 6 days ago and no replay."
+
+  dx_cli:
+    score: 2.5
+    justification:
+      - "`docs/cli-reference.md:17` is UNEVIDENCED and contains an INTERNAL TERM in user-facing copy: 'Backend não implementado (CLI retorna mensagem UX-friendly via AUDIT-27/28)' — AUDIT-27/28 is internal bug taxonomy that has zero meaning to a customer reading the spec. AUTO -0.5 per scoring rules (internal terms leak)."
+      - "27 dx-cli gaps in `evidence-gaps-report.md` §dx-cli — 26 UNEVIDENCED, 1 BROKEN (`action-sha-pinning.md:26` commit_missing:b5ca514318). When 100% of CLI claims are unverified except one POC fixture (`2026-05-11-validate-evidence-script.md`), I cannot distinguish 'works' from 'tested by author once'. Vercel CI snapshots every `--json` shape per command per PR."
+      - "Per `deep-dive-current-state.md` §'6 Bias Patterns Observed' #6 'Implemented but Not Wired' — CLAUDE.md self-admits AppSecret CRD defined without controller and pre-B40 ScalingResolver existed but wasn't invoked. These are the exact 'demo works / production silently doesn't' traps Vercel DD penalizes — and they're acknowledged in the codebase's own known-issues table."
+
+  infra_ops:
+    score: 3.0
+    justification:
+      - "68 infra-ops gaps, 66 UNEVIDENCED + 2 BROKEN (MEET-2026-04-27-061 and CLAUDE.md:176 cleanroom claim, both commit_missing per `evidence-gaps-report.md`). The cleanroom 12/12 success is the load-bearing proof for ops maturity — and its commit ref is broken. Not my domain (per persona scope) but it cascades: if ops can't show a fresh green run, my customer's first deploy is gambling."
+      - "`divergence-report-2026-05-11.md` Category B explicitly states Dogfood Gate 'requires cleanroom (operator-only)' — i.e., the very test that would prove ops works hasn't run in this validation cycle. Tier 1 PaaS runs continuous cleanroom rebuilds in CI on schedule; here it's a manual operator gesture documented as TODO."
+      - "`docs/architecture/governance/deep-dive-current-state.md` line 29 — 'Zero arquivos têm TTL declarado' across 297 .md surface — meaning ops claims have no expiration policy. Yesterday's 'Sprint 6 shipped' could be stale folklore; the system has no way to know. Vercel uses 7-day on-call rotation rotating-eyes plus auto-archive on doc TTL expiry."
+
+  security:
+    score: 3.0
+    justification:
+      - "32 security gaps, 31 UNEVIDENCED + 1 BROKEN (`action-sha-pinning.md:27` cosign-installer commit_missing:cad07c2e89 per `evidence-gaps-report.md`). A broken commit ref ON THE COSIGN PINNING RUNBOOK is the worst possible failure mode — it makes the supply-chain story unverifiable. Tier 1 SLSA pins are CI-asserted, not markdown-asserted."
+      - "Per `evidence-gaps-report.md` §security row 4 (MEET-2026-04-04-030:223), 'Security veto is ABSOLUTE per governance rules. Tasks 7.1, 7.2, 7.3, and 7.4 are MANDATORY before production' — UNEVIDENCED. So we have an explicit Security-veto gate with no current evidence file proving it cleared. From a customer DD standpoint: production-ready claims with unproven security gates = bounce."
+      - "`MEET-2026-04-27-061.md:52` (UNEVIDENCED in gaps-report §security) — 'Sprint 6 / supply chain shipped 2026-04-26 (cosign + SBOM + policy-controller Audit). Deny-mode flip pending'. This is exactly the 'demo-mode security' Vercel DD calls out: the policy is AUDIT-only, not enforcing. Customer who reads only the 'shipped' bullet gets misled."
+
+  scale_multitenancy:
+    score: 3.0
+    justification:
+      - "`docs/maturity-assessment.md:26` Scale/MT 3.5/5 claim is UNEVIDENCED twice in `evidence-gaps-report.md` §scale-mt (duplicate entries — itself a counting-bias red flag). 64 scale-mt gaps total, 100% UNEVIDENCED. Cell architecture might work; the docs don't prove it."
+      - "`MEET-ASYNC-AMENDMENT-002-e2e-ginkgo-rewrite-governance.md:101` per gaps-report — '| 20 | Multi-cell routing | ❌ | ✅ |' — a table cell flips ❌→✅ with no evidence ref. A customer can't validate 'we route across cells' from this primary source. Vercel multi-region routing has CI-asserted geo-probes per region per PR."
+      - "Per `deep-dive-current-state.md` §'Aggregation Bias' — the 3.79 raw average rounded up to 3.9 in `maturity-assessment.md:26` hides that Product Completeness (3.4) and Scale/MT (3.5) sit far below the 4.5 Core Deploy headline. A DD reader sees '3.9' and skips the dimension table; that's exactly the bias the catalog is meant to expose, and currently the doc remains the loudest signal."
+
+  product_completeness:
+    score: 1.5
+    justification:
+      - "AUTO -1.0 per scoring rules: ZERO external users. `deep-dive-current-state.md` §'Self-Attestation Bias' confirms this is pre-release self-scoring with no external review. `evidence-gaps-report.md` §product-completeness shows 29 gaps, 100% UNEVIDENCED. Until customer #1 deploys, 'production-ready' is theatre."
+      - "29 product-completeness gaps include `MEET-2026-04-04-030.md:14` 'approximately 85% production readiness' (UNEVIDENCED) AND `MEET-2026-04-04-030.md:437` '10-14h to production-ready' (UNEVIDENCED). The platform has been '10-14h away' for 37 days. Vercel Pro tier launched with 50 paying customers in week 1; here we have 0/N."
+      - "`evidence-gaps-report.md` cleanroom rows: README.md:127 BROKEN + CLAUDE.md:176 BROKEN. The dogfood loop IS the product-completeness proof for a pre-release PaaS, and both citations point at missing commits. A customer's first 5 minutes hit `loopzero init → deploy` — and that path's only proof artifact is broken."
+
+  tests_confidence:
+    score: 2.0
+    justification:
+      - "0/348 EVIDENCED, 92.5% UNEVIDENCED, 11 BROKEN per `evidence-gaps-report.md` headline distribution. Of 48 tests-confidence claims, only ONE evidence file exists (`docs/evidence/tests-confidence/2026-05-11-validate-evidence-script.md`) and even that has T3 = 'pending first scheduled Sunday run' — a placeholder. The validation system itself has not yet validated anything in CI."
+      - "Per `deep-dive-current-state.md` §'Event 2: Maturity Score Drift +0.4 in 30 min' — same agent, same session moved the score from 4.1-4.3 down to 3.7-3.8 under challenge. This is the test-confidence equivalent of flaky tests: results depend on who's asking. Tier 1 means reproducible numbers across blind runs; we just demonstrated empirically that doesn't hold."
+      - "`code-audit-2026-05-11.md` admits 6 of 9 audit techniques deferred (mutation testing, coverage measurement, SCA, secrets scan, cyclomatic per-fn, integration test quality). The lightweight audit that DID run only covers governance scripts (2324 LOC) — not the 41 Go packages + 1210 CLI tests + 200 envtest specs that the README brags about. We're scoring confidence on confidence-scoring tooling, not on the product."
+
+overall_concerns:
+  - "11 BROKEN evidence refs in headline claims (maturity score, cleanroom 12/12, loopzero scale E2E, cosign pinning) — these are the FOUR proofs a Vercel-tier customer DD would open first, and all four 404. The remediation queue in evidence-gaps-report.md should treat BROKEN refs as P0 blockers; UNEVIDENCED is fixable, BROKEN is actively misleading."
+  - "Zero external user signal compounds with documented +0.4 maturity drift in same agent session (deep-dive §Event 2). Self-attestation by 1M-context agent fails empirically; introducing the 3-persona triangulation pipeline (this scorecard) is the right material defense — but the pipeline itself has 1 proof-of-concept evidence file. Until LIVE dogfood replays under new governance prove a stable score across personas + reviews, the platform is 'demo-tier convincing, DD-tier exposed'."
+  - "Internal terms (AUDIT-27/28 in cli-reference.md:17, ArgoCD/Gitea/CRD acknowledged via CLAUDE.md Rule 3 enforcement) keep leaking into customer-facing surfaces. Bias #6 'Implemented but Not Wired' is self-admitted in CLAUDE.md's own Systemic Patterns table — that auto-awareness without material defense is the exact pattern that ships AppSecret CRDs without controllers. A customer hitting `loopzero secrets rotate` discovers it isn't wired AFTER paying for Pro."

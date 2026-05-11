@@ -14,14 +14,16 @@
 
 | Field | Value |
 |-------|-------|
-| **Score** | _Pending Phase 3 adversarial run_ (placeholder: 3.7-3.9 honest range per 2026-05-11 session) |
-| **Confidence cap** | 95-97% (ADR D1) |
-| **Last validated** | _pending_ |
-| **Expires** | _pending — 30d TTL operational_ |
-| **Methodology** | 3 adversarial personas (Vercel DD / Hostile VC / Paranoid SRE) blind-score 7 dimensions; median + std-dev triangulation per `docs/governance/personas/README.md` |
-| **Open gates for 4.0+** | (a) first CI Sunday cron GREEN producing real `cell2-soaks.yml` evidence; (b) 1 prod customer day-trial with no incidents |
+| **Score (median of 7 dims, post-T3.1 LIVE)** | **2.84 / 5.0** (3 convergent + 4 flagged pending T3.3 reconciliation) |
+| **Confidence cap** | 90-95% (ADR D1 fallback mode — Claude-only family; 95-97% needs cross-vendor codex) |
+| **Last validated** | 2026-05-11 (Phase 3 LIVE adversarial run) |
+| **Expires** | 2026-06-10 (30d TTL operational) |
+| **Methodology** | 3 adversarial personas (P1 Vercel DD opus / P2 Hostile VC sonnet / P3 Paranoid SRE haiku) blind-score 7 dimensions; median + std-dev triangulation per `docs/governance/scoring-2026-05-11/` |
+| **Open gates for 4.0+** | (a) first CI Sunday cron GREEN producing real `cell2-soaks.yml` evidence; (b) 1 prod customer day-trial with no incidents; (c) T3.3 reconciliation of 4 flagged dims; (d) Dogfood Gate (cleanroom) |
 
-**Reading this number:** the overall score is *informative*, not canonical. Per-dimension scores below are the actual contract. See §2.
+**Reading this number:** the overall score is *informative* (median of medians), not canonical. Per-dimension scores below are the actual contract. See §2.
+
+**Material delta from prior documentation:** `docs/maturity-history/2026-05-03-snapshot.md` claimed 3.9/5.0; LIVE triangulation (3 adversarial personas blind, independence-verified) converged at **2.84** — **1.06-point overclaim revealed**. This is the empirical evidence the plan was designed to produce.
 
 ---
 
@@ -29,17 +31,23 @@
 
 Each dimension: score 0-5, TTL, evidence-file-count, scorecard link. Final scores populated by Phase 3 (T3.4 scorecards) — currently showing pre-Phase-3 placeholders from 2026-05-03 baseline + 2026-05-11 conversation deltas.
 
-| # | Dimension | Score (pending Phase 3) | TTL | Evidence files | Scorecard | Open concerns |
-|---|-----------|------------------------:|----:|---------------:|-----------|---------------|
-| 1 | Core Deploy Flow | 4.5 | 30d | _0 (pending T4.5)_ | _pending T3.4_ | Sprint 9 progressive delivery prod canary stages 4-5 |
-| 2 | DX / CLI | 4.2 | 30d | _0_ | _pending_ | Onboarding < 10min (Sprint 9) |
-| 3 | Infrastructure / Operations | 3.8 | 60d | _0_ | _pending_ | L3/L4 not run (CHG-002b/c deferred) |
-| 4 | Security | 3.7 | 60d | _0_ | _pending_ | cosign keyless Fulcio pending; AppSecret unwired |
-| 5 | Scale / Multi-tenancy | 3.3 | 60d | _0_ | _pending_ | Zero chaos under load; cell-2 has 1 tenant only |
-| 6 | Product Completeness | 2.9 | 30d | _0_ | _pending_ | **Zero external users have ever deployed** |
-| 7 | Tests / Confidence | 3.4 | 30d | _0_ | _pending_ | 10 failing tests in api/internal/k8s; platform.ts zero tests |
+| # | Dimension | LIVE Score | Std-dev | TTL | Scorecard | Status |
+|---|-----------|-----------:|--------:|----:|-----------|--------|
+| 1 | Core Deploy Flow | **3.0** | 0.289 | 30d | [scorecard-core-deploy-flow.md](governance/scoring-2026-05-11/scorecard-core-deploy-flow.md) | ✅ CONVERGENT |
+| 2 | DX / CLI | _3.1_ | **0.651** | 30d | [scorecard-dx-cli.md](governance/scoring-2026-05-11/scorecard-dx-cli.md) | 🔴 FLAGGED — [reconciliation pending](governance/scoring-2026-05-11/reconciliation-dx-cli.md) |
+| 3 | Infrastructure / Operations | **2.8** | 0.115 | 60d | [scorecard-infra-ops.md](governance/scoring-2026-05-11/scorecard-infra-ops.md) | ✅ CONVERGENT |
+| 4 | Security | _3.0_ | **0.361** | 60d | [scorecard-security.md](governance/scoring-2026-05-11/scorecard-security.md) | 🔴 FLAGGED — [reconciliation pending](governance/scoring-2026-05-11/reconciliation-security.md) |
+| 5 | Scale / Multi-tenancy | **2.9** | 0.208 | 60d | [scorecard-scale-multitenancy.md](governance/scoring-2026-05-11/scorecard-scale-multitenancy.md) | ✅ CONVERGENT |
+| 6 | Product Completeness | _2.2_ | **0.802** | 30d | [scorecard-product-completeness.md](governance/scoring-2026-05-11/scorecard-product-completeness.md) | 🔴 FLAGGED — [reconciliation pending](governance/scoring-2026-05-11/reconciliation-product-completeness.md) |
+| 7 | Tests / Confidence | _2.9_ | **0.551** | 30d | [scorecard-tests-confidence.md](governance/scoring-2026-05-11/scorecard-tests-confidence.md) | 🔴 FLAGGED — [reconciliation pending](governance/scoring-2026-05-11/reconciliation-tests-confidence.md) |
 
-**Arithmetic mean:** 3.69 (informative, not canonical — see ADR D2). Honest range pre-Phase-3: **3.7-3.9**.
+**Median of medians (pre-reconciliation):** **2.84** — 3 convergent (median final) + 4 flagged (pending T3.3 arbiter input).
+
+**Score interpretation:**
+- **Bold** = CONVERGENT (std-dev ≤ 0.3; final)
+- _Italic_ = FLAGGED median (std-dev > 0.3; needs reconciliation meeting per ADR D4)
+
+**Per-persona detail (T3.1 LIVE):** `docs/governance/scoring-2026-05-11/{p1-vercel-dd,p2-hostile-vc,p3-paranoid-sre}.yaml`
 
 ---
 
@@ -144,15 +152,18 @@ Per dimension → links to `docs/evidence/{dim}/`. Each evidence file follows sc
 
 ## 7. Adversarial Validation Log
 
-History of Phase 3 triangulated scorings. Each entry: date + 3 personas + median std-devs + flagged dims + reconciled scores.
+History of Phase 3 triangulated scorings.
 
-| Date | P1 (model) | P2 (model) | P3 (model) | Max std-dev | Flagged dims | Reconciled scores file |
-|------|------------|------------|------------|-------------|--------------|------------------------|
-| _pending T3.1_ | _Vercel DD_ | _Hostile VC_ | _Paranoid SRE_ | _-_ | _-_ | `scoring-YYYY-MM-DD/reconciled.yaml` |
+| Date | P1 model | P2 model | P3 model | Max std-dev | Flagged | Median | Scoring directory |
+|------|----------|----------|----------|------------:|--------:|-------:|--------------------|
+| 2026-05-11 | opus | sonnet | haiku | 0.802 (Product Completeness) | 4/7 | **2.84** | [scoring-2026-05-11/](governance/scoring-2026-05-11/) |
 
-**Next scheduled:** When Phase 3 of `status-validation-and-doc-consolidation-plan` runs (manual trigger or `/start-loop`).
+**Convergent dims (final):** Core Deploy 3.0, Infra/Ops 2.8, Scale/MT 2.9
+**Flagged dims (median pre-reconciliation):** DX/CLI 3.1, Security 3.0, Product Completeness 2.2, Tests/Confidence 2.9
 
-**Nightly spotcheck:** `.github/workflows/adversarial-spotcheck.yml` (Phase 5 T5.3, pending).
+**Material finding:** Documented baseline 3.9 vs adversarial median 2.84 = **1.06-point overclaim** revealed. See `docs/governance/scoring-2026-05-11/raw-runs.md`.
+
+**Next scheduled:** Nightly spotcheck via `.github/workflows/adversarial-spotcheck.yml`. Full re-triangulation when TTL expires (2026-06-10 for operational dims).
 
 ---
 

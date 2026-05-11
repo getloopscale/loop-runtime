@@ -1,0 +1,63 @@
+persona: p3_paranoid_sre
+ran_at: 2026-05-11T14:30:00Z
+model: claude-haiku-4-5
+temperature: 0.5
+seed: 99
+
+scores:
+  core_deploy_flow:
+    score: 3.5
+    justification:
+      - "Deploy happy path works end-to-end on DigitalOcean (E2E validated). BUT zero failure-mode chaos coverage: Sprint 8 Phase 5 (Chaos validation) was DEFERRED to unscheduled CHG-002c. Chaos Mesh CRDs installed across 4 clusters (2026-04-28) but zero of 9 documented chaos scenarios (E1-E9) have ever executed against live infra. Without pod-kill-under-deploy (E6) or lock-contention-failure (E2) drills, the '3-second rollback' claim is untested in adversarial conditions. Production stage 1 soak (120 probes/1h) is fixture data, not real traffic."
+      - "Build-to-ArgoCD pipeline has documented single-failure recovery: ArgoCD repo-server timeout overrun (F-01/2026-05-08) and Gitea credentials collision (F-02/2026-05-08) were both post-incident fixes, not pre-incident predictions. Neither scenario appears in a runbook's known-failure section. Recovery was empirical (discovered via cleanroom), not engineered. Runbooks exist (docs/runbooks/) but none link to the actual failure mode + detection SLO + escalation path."
+      - "Concurrent deploy rejection (1×202+1×409) works in tests but relies on pg_advisory_xact_lock within withEnvironmentLock. Lock timeout is 5 seconds — untested under contention >100 QPS. No load test (task loadtest:run LEVEL=l1) shows lock behavior under sustained parallelism. What happens at >1000 concurrent deploy attempts? Unknown."
+
+  dx_cli:
+    score: 3.8
+    justification:
+      - "Exit codes (0/1/2/3/4/5) are documented and tested. No internal terms found in CLI output spot-check (Rule 3 compliance). --json output shape is a stability contract but no mutation testing validates compatibility across CLI versions. If a field is accidentally renamed in a patch release, how would we know before 50 customers report broken CI scripts?"
+      - "CLI commands exist for happy path (deploy, promote, rollback, scale, logs, status, cancel). No documented failure-recovery for 'loopzero deploy' when build cluster is unreachable (HTTP 503 for 30s — what's the behavior?). CLI code suggests STUB patterns (comment: 'TODO lock') for some mutations, meaning error handling may be incomplete. Need failure-mode tests for every CLI command's error paths."
+      - "360+ tests in cli/ (jest) are passing locally. No integration tests verify CLI against real API instance under intentional failures (e.g., API database connection pool exhausted, no runners available, quota exceeded). CLI is tested in isolation from reality."
+
+  infra_ops:
+    score: 2.8
+    justification:
+      - "DigitalOcean infrastructure (3 DOKS clusters, managed PG 16, managed Redis) has zero backup-restore drill in last 30 days. Backup exists (DO Spaces retention) but 'actually restored' is out of scope per incident response training (FMEA not done). What's the RTO if primary PG fails? Is it tested? Unknown. No incident postmortem ever mentions 'we restored from backup' — that's the proof it's been drilled. Until it's drilled, it doesn't exist operationally."
+      - "CF Tunnel maintains zero public IPs but has single point of failure: Tunnel token. If the token rotates unexpectedly or CF edge goes down, recovery procedure (docs/runbooks/) exists but has never been executed in an incident. No runbook links to SLO (e.g., 'Tunnel down = page on-call within 2min'). Without alert→runbook→execution chain, it's documentation theater."
+      - "task k3d:heal encodes 15 self-healing recoveries (H1-H15) as operator-driven scripts. None has automated alert trigger. When H14 (cell-2 ClusterCredential refresh) fails in production, who runs the script? When? What's the SLO? The artifact (heal script) exists; the operational ownership doesn't. Until there's a Prometheus rule that fires 'CELL_CREDENTIAL_STALE' → page → runbook says 'run H14' → script is triggered automatically, it's not production-hardened."
+
+  security:
+    score: 3.2
+    justification:
+      - "Supply chain (Sprint 6 shipped): cosign image signing + syft SBOM + policy-controller in deny-by-default. But policy-controller runs in 'warn' mode as of 2026-05-08 (not enforce). Deny-flip is Sprint 9 deferred. In 'warn' mode, a malicious image can be deployed; warn-mode creates false confidence. Deny-mode validates have never run under real load. What if policy-controller itself fails (OOMKilled)? Fallback mode is undefined. Infra has not been stress-tested for supply-chain resilience."
+      - "Secrets managed via External Secrets Operator (ESO) consuming Cloudflare KV. ESO CRD is wired but AppSecret CRD (LoopZero's own abstraction) is defined but unwired — no controller. This means the codebase has an orphan CRD that users could loopzeroretically claim but nobody maintains. Schizophrenic secret story: some via ESO, some via CRD (stub), some missing entirely. Multi-year code smell."
+      - "Cosign keys are key-based, not keyless (Fulcio pending Sprint 9). Key rotation procedure exists in docs/runbooks/ but no incident has ever triggered key rotation. Operator training (SRE on-call rotation) doesn't link 'what happens if cosign key is compromised' to the runbook. Rotation is untested."
+
+  scale_multitenancy:
+    score: 2.9
+    justification:
+      - "Multi-cell topology deployed: 3/3 cells connected (cell-default + cell-1 + cell-2, last activated 2026-05-02). But 'cell-2 LIVE-validated' means: 1 tenant pinned, 1 deploy observed, 120 HTTP probes over 1 hour (T4.3 E2E journey), isolation confirmed (pod running on correct cell), namespace isolation verified (cell-1 NotFound from cell-2 runtime). That's not production validation. That's controlled fixture. Production stages 4-5 (1 customer 7-day soak, then 10/50/100% canary) are Sprint 9 scope — explicitly deferred. Real multi-tenancy under sustained load has never been demonstrated."
+      - "Zero load test executed for multi-cell failover: if cell-1's control plane fails, tenants on cell-1 are stuck. No chaos scenario tests 'kill all API servers on cell-1 cluster' + 'verify tenants failover to cell-2 or degrade gracefully'. What's the blast radius? How many tenants? How long is outage? Unknowns. Chaos-mesh-experiments plan has E8+E9 (multi-cell failover) but they're Phase 1 tasks in a deferred plan."
+      - "KEDA autoscaling targets Rollout Kind via ScaleTargetRef. Default to Rollout when LOOPZERO_PROGRESSIVE_DELIVERY=true. But scale-to-zero test coverage is thin: did it actually work when Pod count hit zero and had to scale back up? Or was it lucky that load generator didn't starve capacity? 'Tested locally in k3d' is not 'tested under 1000 concurrent user load'."
+
+  product_completeness:
+    score: 3.1
+    justification:
+      - "Core features shipped: deploy, promote, rollback, cancel, logs, status, scale, preview envs, secrets, custom domains, GitHub auto-deploy. 25/30 E2E tests pass. But 'shipped' means 'code exists', not 'customer can use without discovering a crash on day 2'. Zero production customers have used these features. Demo on internal dogfood infra ≠ customer production. FAANG ships with 0.1% error budget; LoopZero has no error budget because there's no paying customer to measure against."
+      - "Incident response plan for customer-impacting outage has never been drilled. What's the page-on-call threshold? Is there a war room rotation? Does the on-call SRE have kubectl access to customer cells (cell-2+)? Does the SRE have ability to trigger manual sync or revert a deployment without 30-minute approval cycle? Runbooks say 'contact support' — but support itself is not built (Stripe customer creation deferred, SRE roles not staffed). Without operational readiness, 'shipped product' is a liability."
+      - "Cancelable deployments (cancel) were validated in journey (E2E PASS) but cancel under in-flight image build + security policy validation + ArgoCD sync-in-progress has never been chaos-tested. Cancel is a state machine: if it fails mid-state, can it resume? Or does the deployment hang forever? The journey tests happy path; the failure paths are code-only."
+
+  tests_confidence:
+    score: 3.0
+    justification:
+      - "340 known-failing/skip tests across repo (grep of skip/xfail/Ignore pattern yields 340 hits). CLAUDE.md 'Known issues' section lists AppSecret unwired, local k3d letsencrypt issue, HTTP 000 probes. But 10+ tests in api/internal/k8s are explicitly failing — no incident link, no issue ticket. Tests.Confidence -0.4 per paranoid-SRE rules. That's 70 basis points of trust deficit right there."
+      - "Zero mutation testing executed. Coverage metrics exist (some files report 60-80%) but coverage ≠ resilience. A test can achieve 100% coverage and still miss the failure case that happens 1 in 10k times in production. No mutation testing framework (go-mutator, stryker equivalent) has ever shown 'what % of production bugs would mutation testing have caught?' Until that's measured, confidence is aspirational."
+      - "Chaos tests exist (9 manifests in infra/tests/chaos/, chaos_test.go with 387 LOC) but none have ever successfully executed end-to-end on live infrastructure. chaos_test.go references 'FIXME: IOChaos fails on k3d without fuse kernel support' — meaning the tests were written, discovered not to work, then abandoned. Tests that don't run are negative confidence signals. Fix or delete."
+
+  overall_concerns:
+    - "Paranoid SRE BLOCKER: No production customer has ever used LoopZero. All validation is internal fixture (k3d cleanroom, DigitalOcean staging infra). Feature-flag rollout tested locally shows race condition in prod — that's the historical lesson. Until LoopZero serves 1 paying customer for 30 days without incident, every score is loopzeroretical. Score any dimension 4.0+ only if you've survived real customer load."
+    - "Chaos coverage is laughably thin. Phase 5 of Sprint 8 (9 experiments, 2 PRs to merge) was deferred to CHG-002c which is closed with tasks moved to 'Phase X' (undefined). Chaos Mesh is installed but unused. Before claiming 'production-ready', execute 3 of the 9 chaos scenarios on a mirror of production infra. If > 1 fails, you're not ready. Current status: 0/9 executed. Score: 2.9 max for any dimension requiring resilience (Scale, Ops, Tests)."
+    - "Runbook graveyard: docs/runbooks/ exists (47 files) but none have been executed in a real incident since 2026-04-27 (Sprint 8 incidents were post-hoc, not runbook-driven). Runbooks are operational corpses — they look good on paper until on-call tries to follow them at 3 AM with P1 customer screaming. Recommend: weekly runbook rehearsal (pick 1 random runbook, execute it in staging, document time-to-follow). Until that's happening, runbooks don't count toward confidence."
+    - "AppSecret CRD defined but controller unwired (YAGNI deferred). Orphan CRDs are technical debt that masquerades as future-proofing. Either wire it (add controller) or delete the CRD. Having both 'defined' and 'not implemented' creates maintenance burden AND user confusion ('can I use this or not?'). Tests/Confidence -0.2 for orphan code in production CRD list."
+
+ran_at_iso: 2026-05-11T14:30:00Z
