@@ -174,6 +174,15 @@ check "CLAUDE.md status redirect" grep -q "docs/STATUS.md" CLAUDE.md
 check "maturity-assessment.md is redirect" grep -q "This file is now a redirect" docs/maturity-assessment.md
 
 echo ""
+echo "13. Markdownlint clean (governance docs)"
+check ".markdownlint.json exists" test -f docs/governance/.markdownlint.json
+if command -v npx >/dev/null 2>&1; then
+    check "markdownlint zero errors" npx -y markdownlint-cli2 "docs/governance/**/*.md"
+else
+    echo "  (npx not available — skipping markdownlint)"
+fi
+
+echo ""
 echo "═══════════════════════════════════════════════════════════"
 TOTAL=$((PASS + FAIL))
 echo "  Result: $PASS / $TOTAL checks PASS"
