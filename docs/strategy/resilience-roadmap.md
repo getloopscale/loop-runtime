@@ -1,8 +1,8 @@
 # Resilience Roadmap — Path to Maturity 4.0
 
-**Date:** 2026-05-06
+**Date:** 2026-05-06 (updated 2026-05-11)
 **Author:** Engineering team
-**Status:** PROPOSED (requires T2/T3 meeting approval per pre-release governance)
+**Status:** IN PROGRESS — P0 experiments created, P1 schedules configured, P2 DONE, P3 pending
 **Objective:** Close all resilience gaps blocking maturity 4.0
 
 ---
@@ -11,24 +11,24 @@
 
 LoopZero is at maturity **3.49/4.0** (modular audit baseline 2026-05-11, `docs/audits/2026-05-11/SUMMARY.md`). The path to higher maturity requires:
 
-- Full chaos engineering suite
+- Full chaos engineering suite (validated, not just installed)
 - 50+ real tenants
 - Published SLA
-- Validated incident runbooks
+- Validated incident runbooks (DR drill completed)
 - 99.9% uptime measured over 30 days
 
-This roadmap addresses the **technical resilience gaps** through 4 targeted integrations from the CNCF Landscape. Each integration closes a specific gap that cannot be solved by existing tooling.
+This roadmap addresses the **technical resilience gaps** through 4 targeted integrations from the CNCF Landscape.
 
 ---
 
 ## Integrations Summary
 
-| # | Project | CNCF Status | Priority | Gap Closed | Tier |
-|---|---------|-------------|----------|------------|------|
-| 1 | Chaos Mesh | Incubating | **P0** | Chaos engineering suite | T1 (CRDs already installed) |
-| 2 | Velero | CNCF project | **P1** | Backup/DR for K8s resources | T2 |
-| 3 | Argo Rollouts | CNCF (Argo) | **P2** | Progressive delivery (canary) | T2 |
-| 4 | Kuberhealthy | Sandbox | **P3** | Synthetic health probes for SLA | T2 |
+| # | Project | CNCF Status | Priority | Gap Closed | Status |
+|---|---------|-------------|----------|------------|--------|
+| 1 | Chaos Mesh | Incubating | **P0** | Chaos engineering suite | 🟡 Experiments created, CI + LIVE validation pending |
+| 2 | Velero | CNCF project | **P1** | Backup/DR for K8s resources | 🟡 Schedules configured, restore validation + DR drill pending |
+| 3 | Argo Rollouts | CNCF (Argo) | **P2** | Progressive delivery (canary) | ✅ DONE (2026-05-07) |
+| 4 | Kuberhealthy | Sandbox | **P3** | Synthetic health probes for SLA | ❌ Not started |
 
 ---
 
@@ -38,44 +38,41 @@ This roadmap addresses the **technical resilience gaps** through 4 targeted inte
 
 Validate that LoopZero self-heals under real failure conditions. Prove resilience with evidence, not assumptions.
 
-### Current State
+### Current State (updated 2026-05-11)
 
-- Chaos Mesh **2.7.0 CRDs already registered** in all 4 clusters (Sprint 8 T0.3, `infra/helm/chaos-mesh/`).
-- Zero `PodChaos`, `NetworkChaos`, or `IOChaos` experiments ever created.
-- The gap is **usage**, not installation.
+- Chaos Mesh **2.7.0 CRDs registered** in all 4 clusters (Sprint 8 T0.3, `infra/helm/chaos-mesh/`).
+- **9 experiment manifests created** in `infra/tests/chaos/manifests/`:
+  - `pod-kill-controller.yaml` — kill controller pod, verify API + builds survive
+  - `pod-kill-api-leader.yaml` — kill API leader, verify failover <90s
+  - `pg-network-latency.yaml` — inject 500ms PG latency, verify timeouts <30s
+  - `argocd-crash.yaml` — kill argocd-server, verify other cells unaffected
+  - `build-cluster-network-partition.yaml` — isolate build cluster, verify graceful queuing
+  - `gitea-outage.yaml` — drop Gitea traffic, verify fail-fast with clear error
+  - `pg-connection-storm.yaml` — StressChaos on PG pool, verify circuit breaker fires
+  - `node-unschedulable.yaml` — cordon build node, verify workflow reschedule
+  - `simultaneous-api-controller-crash.yaml` — dual crash, verify system recovery
+- **Ginkgo test runner** exists: `infra/tests/chaos/chaos_test.go`
+- **Missing:** CI workflow `chaos-suite.yml` (weekly, like `cell2-soaks.yml`)
+- **Missing:** LIVE execution evidence — experiments never ran against real system
 
-### What This Enables
+### Remaining Work
 
-| Without chaos experiments | With chaos experiments |
-|---|---|
-| "We believe the system self-heals" | "We proved it with evidence under N failure scenarios" |
-| Untested advisory lock release on crash | Validated: API pod killed mid-deploy → lock released → next deploy succeeds |
-| Assumed cell isolation | Validated: network partition mgmt↔workload → cell-2 unaffected |
-| LoopZeroretical circuit breaker | Validated: PG slow → circuit opens → requests fail-fast → PG recovers → circuit closes |
-
-### Experiments to Create
-
-| # | Experiment | Type | Target | Validates |
-|---|-----------|------|--------|-----------|
-| E1 | API pod kill during active deploy | `PodChaos` (pod-kill) | `loopzero-api` pod in mgmt | Advisory lock release + Argo Workflow completion |
-| E2 | Network partition mgmt ↔ workload | `NetworkChaos` (partition) | mgmt ↔ workload clusters | Cell isolation + DynamicRouter fallback |
-| E3 | ArgoCD pod kill during sync | `PodChaos` (pod-kill) | `argocd-application-controller` | Sync retry + idempotent reconcile |
-| E4 | PostgreSQL latency injection | `NetworkChaos` (delay) | PG service | Circuit breaker activation + recovery |
-| E5 | Gitea unreachable | `NetworkChaos` (partition) | Gitea service | GitOps push retry + error propagation to CLI |
-| E6 | Random pod kill (steady-state) | `PodChaos` (pod-kill, scheduled) | All tenant namespaces | General self-healing + KEDA re-scaling |
-| E7 | Build cluster disk pressure | `IOChaos` (latency) | BuildKit pod | Build timeout + cleanup + re-queue |
-| E8 | Operator leader election failover | `PodChaos` (pod-kill) | Operator leader pod | Leader re-election + reconcile resume |
+| Task | Status | Description |
+|------|--------|-------------|
+| Create `chaos-suite.yml` CI workflow | ❌ Pending | Weekly scheduled run in GitHub Actions |
+| Execute experiments LIVE (at least 1 round) | ❌ Pending | Apply manifests, observe, record evidence |
+| Validate steady-state SLO assertions | ❌ Pending | Prometheus alerts fire correctly during faults |
+| Document results in evidence format | ❌ Pending | JUnit XML + Prometheus screenshots |
 
 ### Success Criteria
 
-- All 8 experiments documented as `ChaosExperiment` CRDs in `infra/tests/chaos/manifests/`.
-- Each experiment has a matching Ginkgo E2E test in `infra/tests/chaos/` that asserts recovery.
-- CI workflow `chaos-suite.yml` runs weekly (like `cell2-soaks.yml`).
-- Regression matrix updated with chaos entries.
+- All 9 experiments executed LIVE at least once with documented results.
+- `chaos-suite.yml` runs weekly in CI.
+- Steady-state SLO assertions pass (API health, build success rate, cell isolation).
 
-### Estimated Effort
+### Estimated Remaining Effort
 
-Medium — no new tooling to install. Pure experiment design + test writing.
+Low — experiments exist. Effort is execution + CI wiring, not design.
 
 ---
 
@@ -85,23 +82,31 @@ Medium — no new tooling to install. Pure experiment design + test writing.
 
 Guarantee that a catastrophic cluster failure does not result in permanent data loss. Enable validated restore runbooks for SLA compliance.
 
-### Current State
+### Current State (updated 2026-05-11)
 
 - **PostgreSQL:** DO Managed PG has automatic daily backups + PITR. ✅ Covered.
-- **Velero Helm chart:** `infra/helm/velero/` exists with Chart.yaml, values.yaml, values-schedules.yaml. ✅ Chart created.
+- **Velero Helm chart:** `infra/helm/velero/` exists (Chart.yaml, values.yaml, values-schedules.yaml). ✅ Created.
+- **5 backup schedules configured** in `values-schedules.yaml`:
+  - `loopzero-crds-backup` — 10 CRDs across all namespaces, every 6h, 30d retention
+  - `loopzero-argocd-backup` — argocd namespace, every 6h, 30d retention
+  - `loopzero-gitea-backup` — gitea metadata (no PVC data, repos re-pushable), daily, 14d retention
+  - `loopzero-secrets-backup` — loopzero-system secrets, every 6h, 30d retention
+  - `loopzero-full-backup` — all namespaces (excl kube-*), weekly Sunday 03:00 UTC, 7d retention
 - **CI workflow:** `velero-backup-check.yml` deployed. ✅ Monitoring in place.
-- **Kubernetes resources (CRDs, Secrets, ConfigMaps):** Backup scheduling and operational validation **pending**.
-- **Gitea repositories:** Stored on PVCs. Velero PVC backup integration **pending**.
-- **ArgoCD state:** Apps, AppProjects, Secrets stored in K8s. Velero coverage **pending**.
+- **Missing:** Restore validation — never tested a real restore.
+- **Missing:** DR drill — never destroyed + restored from Velero backup.
+- **Missing:** DO Spaces bucket `loopzero-velero-backups` provisioned via Pulumi.
 
-### What This Enables
+### Remaining Work
 
-| Without Velero | With Velero |
-|---|---|
-| etcd corruption = total loss of K8s state | Scheduled restore from last backup |
-| No DR runbook possible | Tested, documented restore procedure |
-| SLA of 99.9% unpublishable (no recovery plan) | Recovery time < 30min documented and validated |
-| Gitea PVC failure = repository loss | Gitea data backed up to DO Spaces |
+| Task | Status | Description |
+|------|--------|-------------|
+| Provision DO Spaces bucket via Pulumi L1 | ❌ Pending | `loopzero-velero-backups` + IAM credentials |
+| Deploy Velero to production clusters | ❌ Pending | Helm install with DO Spaces backend |
+| Execute first backup round | ❌ Pending | Verify all 5 schedules produce successful backups |
+| Restore validation | ❌ Pending | Restore CRDs + ArgoCD state to clean namespace |
+| DR drill | ❌ Pending | Destroy mgmt cluster → restore from Velero → validate |
+| Prometheus metrics + alert | ❌ Pending | `VeleroBackupStale` alert if last backup >12h |
 
 ### Architecture
 
@@ -118,172 +123,24 @@ Guarantee that a catastrophic cluster failure does not result in permanent data 
                    s3://loopzero-velero-backups/
 ```
 
-### Backup Scopes
+### Success Criteria
 
-| Scope | What is backed up | Schedule | Retention |
-|-------|-------------------|----------|-----------|
-| **CRDs** | Tenant, Environment, LoopZeroApplication, ExposedRoute, PreviewEnvironment, ClusterCredential, PlatformBootstrap, GitRepositoryBinding | Every 6h | 30 days |
-| **ArgoCD** | `argocd` namespace (Apps, AppProjects, repo Secrets) | Every 6h | 30 days |
-| **Gitea** | `gitea` namespace (PVCs + StatefulSet) | Daily | 14 days |
-| **Secrets** | `loopzero-system` namespace (cluster kubeconfigs, signing keys) | Every 6h | 30 days |
-| **Full cluster** | All namespaces snapshot | Weekly | 7 days |
+- All 5 schedules producing successful backups for 7+ days.
+- At least 1 restore validation completed with documented results.
+- Quarterly DR drill established (first drill completes successfully).
+- `VeleroBackupStale` alert configured and tested.
 
-### Deliverables
+### Estimated Remaining Effort
 
-1. Helm chart `infra/helm/velero/` with DO Spaces (S3) backend configuration.
-2. `Schedule` CRDs for each backup scope.
-3. New runbook with step-by-step restore procedure (to be created post-approval).
-4. Quarterly DR drill: destroy mgmt cluster → restore from Velero → validate all CRDs restored → `loopzero deploy` works.
-5. Prometheus metrics: `velero_backup_success_total`, `velero_backup_last_successful_timestamp`.
-6. Alert: `VeleroBackupStale` if last successful backup > 12h.
-
-### Dependencies
-
-- DO Spaces bucket `loopzero-velero-backups` (Pulumi L1).
-- IAM credentials scoped to S3 read/write (DO Spaces key).
-
-### Estimated Effort
-
-Medium — install + configure + write runbook + validate restore.
+Medium — provisioning + deploy + restore validation + DR drill documentation.
 
 ---
 
 ## P2 — Argo Rollouts (Progressive Delivery) — ✅ DONE (2026-05-07)
 
-> **Completed 2026-05-07.** Argo Rollouts 1.7.2 fully implemented and validated: 80/80 GREEN warm-infra journey (41m41s), 71/72 GREEN fresh-cleanroom journey (42m49s, 1 unrelated ESO timing fail). Canary deploys with TraefikService weighted routing, per-plan steps, AnalysisTemplate hooks, auto-abort on readiness failure (`progressDeadlineSeconds=300`), KEDA targets Rollout. 15 plan tasks (T0.1-T5.2) complete. 6 fixes shipped (F-16 through F-22). See Sprint Plan "Argo Rollouts Progressive Delivery" in CLAUDE.md for full details.
+Completed. Full details in CLAUDE.md § Sprint Plan "Argo Rollouts Progressive Delivery".
 
-### Objective (COMPLETED)
-
-Eliminate "deploy and pray" by replacing all-at-once deployments with automated canary analysis. A bad deploy should never affect 100% of traffic.
-
-### Current State (as of completion)
-
-- Argo Rollouts 1.7.2 deployed on workload clusters (`infra/helm/argo-rollouts/`).
-- Manifest renderer generates `Rollout` + `TraefikService` + 2 Services + `AnalysisTemplate` per environment.
-- Per-plan canary steps implemented (Starter 2-step, Pro 3-step, Team 4-step).
-- KEDA `ScaledObject` targets `Rollout` via `Kind=Rollout` ScaleTargetRef.
-- SSE `rollout.step` events stream during canary; `rollout.aborted` (exit 3) on Degraded/Aborted.
-
-### What This Enables
-
-| Without Argo Rollouts | With Argo Rollouts |
-|---|---|
-| Deploy → 100% pods replaced at once | Deploy → 20% canary → analysis → 50% → 100% |
-| Bad deploy = full outage until rollback | Bad deploy = auto-rollback, 80% never affected |
-| Rollback is reactive (detect → act) | Rollback is proactive (metrics trigger abort) |
-| No deployment confidence metric | `AnalysisTemplate` provides measurable success rate |
-
-### Architecture Change
-
-```
-BEFORE:
-  loopzero deploy → API → Argo Workflow → build → Gitea push
-    → ArgoCD sync → Deployment (all pods) → done
-
-AFTER:
-  loopzero deploy → API → Argo Workflow → build → Gitea push
-    → ArgoCD sync → Rollout (canary 20%)
-      → AnalysisTemplate queries Prometheus
-        → success_rate >= 95%? → promote to 50% → 100%
-        → success_rate < 95%? → auto-abort → rollback
-```
-
-### Manifest Changes
-
-The manifest renderer (`api/internal/manifests/`) changes from generating `Deployment` to generating `Rollout`:
-
-| Resource | Before | After |
-|----------|--------|-------|
-| Workload | `apps/v1 Deployment` | `argoproj.io/v1alpha1 Rollout` |
-| Services | 1 (`my-app`) | 2 (`my-app-stable`, `my-app-canary`) |
-| Traffic | Direct to Service | `TraefikService` weighted (Argo Rollouts controls weight) |
-| Analysis | None | `AnalysisTemplate` with Prometheus queries |
-
-### Canary Strategy by Plan
-
-| Plan | Replicas Cap | Canary Strategy | Rationale |
-|------|:---:|---|---|
-| Starter | 2 | `setWeight: 50` → pause 60s → `setWeight: 100` | 2 replicas: canary = 1 pod. Single step. |
-| Pro | 5 | `setWeight: 20` → pause 30s → `setWeight: 50` → pause 30s → `setWeight: 100` | 3 steps with analysis. |
-| Team | 10 | `setWeight: 10` → pause 30s → `setWeight: 30` → pause 30s → `setWeight: 60` → pause 30s → `setWeight: 100` | 4 steps with full analysis. |
-| Enterprise | Unlimited | Configurable via `loopzero.yaml` `canary.steps` | Custom strategy per customer. |
-
-### Analysis Templates
-
-```yaml
-# Baseline: HTTP success rate > 95% during canary window
-apiVersion: argoproj.io/v1alpha1
-kind: AnalysisTemplate
-metadata:
-  name: loopzero-success-rate
-spec:
-  metrics:
-    - name: success-rate
-      interval: 30s
-      successCondition: result[0] >= 0.95
-      failureLimit: 3
-      provider:
-        prometheus:
-          address: http://prometheus.monitoring:9090
-          query: |
-            sum(rate(traefik_service_requests_total{
-              service=~"{{args.service}}.*",
-              code!~"5.."
-            }[2m])) /
-            sum(rate(traefik_service_requests_total{
-              service=~"{{args.service}}.*"
-            }[2m]))
-    - name: latency-p99
-      interval: 30s
-      successCondition: result[0] <= 2000
-      failureLimit: 3
-      provider:
-        prometheus:
-          address: http://prometheus.monitoring:9090
-          query: |
-            histogram_quantile(0.99,
-              sum(rate(traefik_service_request_duration_seconds_bucket{
-                service=~"{{args.service}}.*"
-              }[2m])) by (le)
-            ) * 1000
-```
-
-### Components to Build/Change
-
-| Component | Change | Scope |
-|-----------|--------|-------|
-| `infra/helm/argo-rollouts/` | New bootstrap chart for workload clusters | New chart |
-| `api/internal/manifests/` | Generate `Rollout` + `TraefikService` + 2 Services | Modify |
-| `api/internal/manifests/` | Generate `AnalysisTemplate` per environment | New |
-| `cli/src/commands/status.ts` | Show canary progress (% weight, analysis status) | Modify |
-| `cli/src/commands/deploy.ts` | SSE events for canary steps (promote/abort) | Modify |
-| ArgoCD config | Register `argoproj.io` CRDs for health assessment | Config |
-| KEDA `ScaledObject` | Target `Rollout` instead of `Deployment` | Modify |
-
-### Risk: ArgoCD Sync Conflict
-
-Argo Rollouts modifies `TraefikService.spec.weighted.services[].weight` at runtime. ArgoCD detects this as drift and tries to reset it.
-
-**Mitigation:** ArgoCD must be configured to ignore the `weight` field:
-
-```yaml
-# In ArgoCD Application
-spec:
-  ignoreDifferences:
-    - group: traefik.io
-      kind: TraefikService
-      jsonPointers:
-        - /spec/weighted/services/0/weight
-        - /spec/weighted/services/1/weight
-```
-
-### Governance
-
-This is a **T2 change** (impacts manifests, deploy pipeline, ArgoCD sync flow, CLI output). Requires meeting approval before implementation.
-
-### Estimated Effort
-
-High — manifest generation rewrite + Traefik integration + analysis templates + CLI updates + E2E tests.
+**Summary:** Argo Rollouts 1.7.2 with TraefikService weighted routing, per-plan canary steps (Starter 2-step, Pro 3-step, Team 4-step), AnalysisTemplate hooks, auto-abort on readiness failure (`progressDeadlineSeconds=300`), KEDA targets Rollout. 80/80 GREEN warm-infra, 71/72 GREEN fresh-cleanroom. 15 tasks (T0.1-T5.2), 6 fixes (F-16 through F-22).
 
 ---
 
@@ -295,7 +152,6 @@ Provide continuous, automated proof that the platform WORKS — not just that po
 
 ### Current State
 
-- Health checks are limited to pod-level liveness/readiness probes.
 - No synthetic tests that exercise real user flows continuously.
 - SLA claim of 99.9% has no measurement infrastructure.
 - `loopzero_*` Prometheus metrics track internal state but not user-visible functionality.
@@ -307,7 +163,6 @@ Provide continuous, automated proof that the platform WORKS — not just that po
 | "Pods are running" = "platform is healthy" | "Synthetic deploy succeeded at 14:32" = "platform is healthy" |
 | SLA based on pod uptime (misleading) | SLA based on actual user-flow success rate |
 | Failures detected when users report them | Failures detected in < 5 minutes by synthetic probes |
-| No canary-in-the-coal-mine for degradation | Early warning: synthetic deploy slowing = something degrading |
 
 ### Synthetic Checks to Create
 
@@ -342,13 +197,10 @@ With Kuberhealthy metrics feeding Prometheus, SLA becomes measurable:
 
 1. Helm chart `infra/helm/kuberhealthy/` for mgmt cluster.
 2. Custom check images in `infra/kuberhealthy-checks/` (Go, using Kuberhealthy SDK).
-3. `KuberhealthyCheck` CRDs for S1-S8 in `infra/helm/kuberhealthy/templates/`.
+3. `KuberhealthyCheck` CRDs for S1-S8.
 4. Prometheus `ServiceMonitor` for Kuberhealthy metrics.
 5. Grafana dashboard `Synthetic Health` with success rates and latency trends.
-6. PrometheusRule alerts:
-   - `LoopZeroSyntheticDeployFailing` — 3 consecutive failures
-   - `LoopZeroSyntheticCellUnreachable` — any cell unreachable > 10 min
-   - `LoopZeroSLABelowTarget` — 30-day SLA < 99.5%
+6. PrometheusRule alerts: `LoopZeroSyntheticDeployFailing`, `LoopZeroSyntheticCellUnreachable`, `LoopZeroSLABelowTarget`.
 
 ### Estimated Effort
 
@@ -356,25 +208,27 @@ Low-Medium — Kuberhealthy is lightweight. Main effort is writing custom check 
 
 ---
 
-## Integration Dependencies
+## Execution Order (Updated)
+
+The original dependency chain assumed P2 would wait for P1. In practice, P2 was completed first (2026-05-07). Updated order:
 
 ```
-P0 Chaos Mesh ─────────────────── (independent, start immediately)
+P2 Argo Rollouts ─────── ✅ DONE (2026-05-07)
+
+P0 Chaos Mesh ─────────── 🟡 Experiments exist, need CI + LIVE execution
+       │                       (independent, start immediately)
        │
-       │  validates resilience assumptions BEFORE adding new components
-       ▼
-P1 Velero ─────────────────────── (independent, can parallel with P0)
+P1 Velero ─────────────── 🟡 Schedules exist, need deploy + restore validation
+       │                       (independent, can parallel with P0)
        │
-       │  backup must exist BEFORE progressive delivery changes manifest structure
+       │  backup + chaos both validated BEFORE synthetic probes
        ▼
-P2 Argo Rollouts ──────────────── (depends on P1 backup being in place)
-       │
-       │  canary deploys generate metrics that synthetic checks validate
-       ▼
-P3 Kuberhealthy ───────────────── (depends on P2 for deploy-synthetic accuracy)
+P3 Kuberhealthy ────────── ❌ Depends on P0+P1 (chaos validates resilience,
+                                backup validates recovery — both needed for
+                                synthetic probes to be meaningful)
 ```
 
-**P0 and P1 can run in parallel.** P2 should wait for P1 (need backup before major manifest changes). P3 should wait for P2 (synthetic deploy check needs to test canary flow).
+**P0 and P1 can run in parallel.** P3 should wait for both P0+P1 (synthetic probes are only meaningful if the system has proven resilience and recovery).
 
 ---
 
@@ -382,38 +236,37 @@ P3 Kuberhealthy ───────────────── (depends on 
 
 | Project | Why Rejected |
 |---------|-------------|
-| **Keptn** | Overlaps with Prometheus + ArgoCD + Argo Rollouts. 3 extra operators for already-covered features. Last release March 2025 (stale). Violates KISS/YAGNI. |
-| **Flagger** | Flux ecosystem — mixing Flux + Argo creates operational tension. Argo Rollouts is more coherent with our Argo stack (Workflows + CD + Rollouts). |
-| **Kubernetes Autoscaler** | Cluster Autoscaler already managed by DOKS. VPA conflicts with KEDA. Not a resilience gap. |
-| **Longhorn / Rook / Ceph** | DO managed volumes sufficient. Distributed storage adds complexity without resilience value at our scale. |
-| **CloudNativePG** | Using DO Managed PG (automated failover included). Only relevant if self-hosted. |
+| **Keptn** | Overlaps with Prometheus + ArgoCD + Argo Rollouts. Last release March 2025 (stale). Violates KISS/YAGNI. |
+| **Flagger** | Flux ecosystem — mixing Flux + Argo creates operational tension. Argo Rollouts is more coherent with our Argo stack. |
 | **Istio / Linkerd** | Service mesh overhead unjustifiable. Traefik + NetworkPolicy already provide traffic isolation. |
 | **Gremlin** | Paid SaaS. Chaos Mesh (already installed) provides the same capabilities, open source. |
-| **Kyverno / OPA** | Nice-to-have policy governance, but not a maturity 5.0 blocker. policy-controller + PSA restricted already cover essentials. |
+| **Kyverno / OPA** | Nice-to-have policy governance. policy-controller + PSA restricted already cover essentials. |
+| **CloudNativePG** | Using DO Managed PG (automated failover included). Only relevant if self-hosted. |
+| **Longhorn / Rook / Ceph** | DO managed volumes sufficient. Distributed storage adds complexity without resilience value at our scale. |
 
 ---
 
 ## Maturity Impact Projection
 
-| Current | After P0+P1 | After P2 | After P3 | With 50+ tenants |
-|:---:|:---:|:---:|:---:|:---:|
-| 3.49/4.0 | +P0+P1 (~+0.10) | +P2 (~+0.15) | +P3 (~+0.10) | +business (~+0.15) |
+Starting baseline: **3.49/4.0** (modular audit 2026-05-11).
 
-> Note: numerical impact projections (+0.X each) are directional only. Pre-audit-modular roadmap used legacy 5.0 cap; current baseline uses 4.0 cap per modular audit methodology.
+| Integration | Maturity increment (est.) | Gate it closes |
+|-------------|:---:|---|
+| **P0** Chaos Mesh (LIVE validated) | +0.05 | "Full chaos engineering suite" |
+| **P1** Velero (restore validated + DR drill) | +0.05 | "Validated incident runbooks" |
+| **P2** Argo Rollouts ✅ | (already counted in 3.49) | "Progressive delivery" |
+| **P3** Kuberhealthy (synthetic probes) | +0.05 | "99.9% uptime measured", "Published SLA" |
+| **Business** (50+ tenants, 30-day uptime) | +0.36 | "Real production validation" |
 
-- **P0 (Chaos Mesh experiments):** +0.15 — closes "full chaos engineering suite" requirement.
-- **P1 (Velero):** +0.15 — closes "validated incident runbooks" requirement. Enables DR drill.
-- **P2 (Argo Rollouts):** +0.3 — closes "deploy resilience at scale". Prerequisite for 50+ tenants without risk.
-- **P3 (Kuberhealthy):** +0.2 — closes "published SLA" and "99.9% uptime measured" requirements.
-- **50+ real tenants:** +0.3 — business validation, not technical. Requires all of the above.
+> Note: Maturity is capped at 4.0 per modular audit methodology. The largest remaining gap is **business validation** (real tenants + real uptime), not technical tooling. P0+P1+P3 together contribute ~+0.15; the remaining +0.36 requires production usage.
 
 ---
 
 ## References
 
-- `docs/audits/2026-05-11/SUMMARY.md` — current modular audit baseline (12 módulos, cap 4.0)
-- `infra/helm/chaos-mesh/` — existing Chaos Mesh installation (Sprint 8 T0.3)
-- CNCF Landscape (`landscape.yml`) — source of project evaluation
-- Argo Rollouts Traefik integration docs — `TraefikService` weighted routing
-- Velero documentation — backup schedules and S3 backend
-- Kuberhealthy SDK — custom check authoring
+- `docs/audits/2026-05-11/SUMMARY.md` — current modular audit baseline (12 modules, cap 4.0)
+- `infra/helm/chaos-mesh/` — Chaos Mesh installation (Sprint 8 T0.3)
+- `infra/tests/chaos/manifests/` — 9 chaos experiment YAMLs + Ginkgo runner
+- `infra/helm/velero/` — Velero chart + 5 backup schedules
+- `.github/workflows/velero-backup-check.yml` — Velero CI monitoring
+- CLAUDE.md § Sprint Plan "Argo Rollouts Progressive Delivery" — P2 completion details
