@@ -944,5 +944,15 @@ tasks:
     cmds:
       - bash infra/scripts/governance/bias-check.sh --all docs/plans/
 
+  cross-validate:plans:
+    desc: Cross-validate plans against filesystem (files-to-edit vs reality)
+    cmds:
+      - python3 infra/scripts/governance/cross-validate-plan.py docs/plans/
+
+  decay:scan:catalog:
+    desc: Decay scan of claim-catalog.yaml (T1.4) — distinct from evidence-file scan
+    cmds:
+      - python3 infra/scripts/governance/scan-catalog-decay.py --catalog docs/governance/claim-catalog.yaml --output docs/governance/stale-claims-$(date +%Y-%m-%d).md
+
   # ---------------------------------------------------------------------------
   # Monitoring
