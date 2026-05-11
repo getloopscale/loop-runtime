@@ -45,7 +45,7 @@ No Kubernetes knowledge required. No Helm. No Dockerfile required. Just push.
 
 > **Phase: Pre-release.** Production infrastructure running on DigitalOcean (4 DOKS clusters, managed PG, CF Tunnel). Core deploy flow E2E validated. **Multi-cell ACTIVATED + LIVE-validated** (cell-default + cell-1 + cell-2). **Argo Rollouts progressive delivery shipped** (2026-05-07): every `loopzero deploy` now produces a canary Rollout (per-plan steps + Traefik weighted routing + auto-abort on bad readiness, default-on under `LOOPZERO_PROGRESSIVE_DELIVERY=true`). **Local cleanroom dogfood 12/12 GREEN end-to-end** (2026-05-05). **Cleanroom Dogfood Gate post-canary: 71/72 PASS (98.6%) in 42m49s on fresh infra** (1 unrelated ESO timing fail); warm-infra journey suite **80/80 PASS in 41m41s**. Not yet open to external users.
 >
-> **Maturity: 3.9/5** -- strong technical foundation, commercially unvalidated. (was 3.6 pre-cell-2; +0.3 from cell-2-activation-plan + fix-all-platform-issues-plan, 2026-05-03.)
+> **Maturity: 3.49/4.0** -- strong technical foundation, commercially unvalidated. Latest modular audit snapshot: `docs/audit/2026-05-11/SUMMARY.md` (12 módulos, code-validated).
 >
 > **Local validation gate**: `bash infra/scripts/dogfood-cleanroom-loop.sh` destroys all 4 k3d clusters and re-runs `task setup` + `task k3d:heal` + tilt + 11 dogfood journeys + preflight, all PASS in ~33min without manual intervention. 39 systemic bugs (B1-B39) caught and canonically fixed across 29 iterations. Tag: `dogfood-cleanroom-converged-20260505`.
 >
@@ -86,7 +86,7 @@ No Kubernetes knowledge required. No Helm. No Dockerfile required. Just push.
 | SecurityContext (non-root pods) | `runAsNonRoot`, `drop: ALL`, `readOnlyRootFilesystem` |
 | PodSecurity Admission | `restricted` profile on all tenant namespaces |
 | NetworkPolicy | Mandatory deny-all + explicit allow rules |
-| Observability | 43 Prometheus metrics + Grafana dashboards + 4 SLO alert rules |
+| Observability | 109 Prometheus metrics + 21 Grafana dashboards + 7 SLO files (Sloth) |
 | Auth hardened | UUID tenant IDs, RSA-only JWT, audience validation, secret rotation |
 | JSON contracts | 8/8 commands validated, 0 internal term leaks |
 
@@ -106,23 +106,25 @@ No Kubernetes knowledge required. No Helm. No Dockerfile required. Just push.
 
 ### Pricing Tiers
 
-| Tier | Price | Projects | Builds/mo | Max Replicas |
-|------|-------|----------|-----------|-------------|
-| Starter | Free | 1 | 50 | 1 |
-| Pro | $29/mo | 2 | 300 | 4 |
-| Team | $79/mo | 5 | 600 | 10 |
-| Enterprise | Custom | Unlimited | Unlimited | Unlimited |
+Source of truth: `api/internal/db/migrations/000002_seed_data.up.sql` (plan_limits seed).
+
+| Tier | Price | Projects | Builds/mo | Seats | Max Replicas/Service |
+|------|-------|----------|-----------|-------|---------------------|
+| Starter | Free | 1 | 50 | 3 | 2 |
+| Pro | $29/mo | 3 | 500 | 10 | 5 |
+| Team | $79/mo | 10 (soft 15) | 5000 soft | 25 | 10 |
+| Enterprise | Custom | Unlimited | Unlimited | Unlimited | Unlimited |
 
 ### Test Suite
 
 | Component | Count | Status |
 |-----------|------:|--------|
-| CLI (Jest) | 1,213+ | Passing (added `deploy.ts` rollout.step / rollout.aborted handlers + `status.ts` formatRolloutLine + 8 canary-progress unit tests). 1 pre-existing `getPlatformStatus-charts.test.ts` failure unrelated to canary plan (CHG-2026-04-30-INFRA-PARITY chart-name drift). |
-| API + Shared libs (Go) | 41 packages | Passing (multi-cell: placement determinism with -race + admin_pin_cell C11 authz + migration_007/008 invariants + reaper observability + canary: `TestBuildRollout_*` × 7 + `TestBuildRollout_ProgressDeadlineSeconds` × 4 plan tiers + `TestBuildHPA_TargetsRollout_Progressive` + `TestBuildScaledObject_TargetsRollout_Progressive` + `TestGetAppStatus_RolloutCounted_AsWorkloadPrimitive` + `TestGetAppStatus_RolloutDegraded_BlocksHealthy`) |
+| CLI (Jest) | 1,226+ | Passing (added `deploy.ts` rollout.step / rollout.aborted handlers + `status.ts` formatRolloutLine + 8 canary-progress unit tests). 1 pre-existing `getPlatformStatus-charts.test.ts` failure unrelated to canary plan (CHG-2026-04-30-INFRA-PARITY chart-name drift). |
+| API (35 subpacotes) + Shared libs (pkg/, 10 packages) | 2,283 + 388 test funcs | Passing (multi-cell: placement determinism with -race + admin_pin_cell C11 authz + migration_007/008 invariants + reaper observability + canary: `TestBuildRollout_*` × 7 + `TestBuildRollout_ProgressDeadlineSeconds` × 4 plan tiers + `TestBuildHPA_TargetsRollout_Progressive` + `TestBuildScaledObject_TargetsRollout_Progressive` + `TestGetAppStatus_RolloutCounted_AsWorkloadPrimitive` + `TestGetAppStatus_RolloutDegraded_BlocksHealthy`) |
 | Operators (Ginkgo + envtest) | 200+ specs | Passing (+ application reaper 10 fake-client tests + cell-aware factory 7 tests, no envtest dependency) |
 | Pulumi (vitest) | 310+ specs | Passing (heal-script H14 24 invariants + migrations-forward-only 11 invariants) |
 | State machines | 10 application + 9 release + 7 build | Passing (`ApplicationCleaned` terminal state via `ApplicationOrphaned` event added 2026-05-03) |
-| CI pipeline | 29 workflows | Green (incl. `cell2-soaks.yml` weekly Sunday 02:00 UTC + `platform-health-7day-watch.yml` hourly) |
+| CI pipeline | 35 workflows | Green (incl. `cell2-soaks.yml` weekly Sunday 02:00 UTC + `platform-health-7day-watch.yml` hourly) |
 | Regression matrix | 166 entries | 0 critical miss, audit GREEN |
 | Cleanroom dogfood (E2E) | preflight + 11 journeys | **12/12 GREEN** end-to-end on fresh `k3d` destroy/setup cycle (2026-05-05, tag `dogfood-cleanroom-converged-20260505`). Validates: solo deploy, multi-server (api+worker), secrets via ESO, scale persistence, promote staging→production, rollback v2→v1 with state machine, custom domain register/list/status/remove, GitHub connect/disconnect, preview list/inspect/delete, failure modes (auth/cap/build), admin (evict dry-run + service-auth gating). Total: ~33min. Rule 3 audit: 0 internal-term matches in CLI output. |
 | Ginkgo journey suite (Argo Rollouts) | 80 specs (label `journey`) | **80/80 GREEN warm-infra in 41m41s** + **71/72 GREEN fresh-cleanroom in 42m49s** post F-22 (2026-05-07). Includes T5.1 happy-path canary (Rollout + canary strategy + TraefikService weights + Healthy phase), T5.2 auto-abort on bad `/health` (readiness probe drives Degraded within `progressDeadlineSeconds=300`), all promote/rollback flows over Rollouts, multi-server with Rollout naming. |
@@ -363,7 +365,7 @@ loopzero deploy (or git push)
 |-------|-----------|
 | CLI | TypeScript + Commander (36 commands) |
 | API | Go 1.25 + chi + pgx (connection pool) |
-| Operators | Go + kubebuilder + controller-runtime (10 CRDs, 8 controllers) |
+| Operators | Go + kubebuilder + controller-runtime (10 CRDs: 8 wired + 2 unwired AppSecret/ReconciliationReport; 4 split binaries: tenant/app/preview/platform) |
 | Shared libs | Go -- errors, errors/http, logging, naming, conditions, statemachine, jwt, enforcement, circuitbreaker |
 | Auth | Ory Kratos (identity) + Ory Hydra (OAuth2/OIDC) |
 | Build engine | Argo Workflows + BuildKit (rootless) |
@@ -375,9 +377,9 @@ loopzero deploy (or git push)
 | Edge | Cloudflare Tunnel + Worker + KV + Zone Management |
 | Static assets | DigitalOcean Spaces + CDN |
 | Monitoring | Prometheus + Grafana + Loki + Tempo + OpenTelemetry |
-| IaC | Pulumi (TypeScript) -- DigitalOcean + Cloudflare |
-| CI/CD | GitHub Actions (29 workflows) |
-| Helm charts | 32 bootstrap (`infra/helm/`) + 13 published (`charts/`) |
+| IaC | 5 Pulumi projetos (TS): `pulumi/` (L1 DO+CF), `pulumi-infra/` (multi-cluster topology), `pulumi-platform/` (L2 com 32 Helm releases), `pulumi-control-plane/` (STUB com 16 TODOs), `pulumi-shared/` (contratos) |
+| CI/CD | GitHub Actions (35 workflows) |
+| Helm charts | 16 bootstrap próprios + 18 value overlays para upstream (`infra/helm/`) + 13 published (`charts/`) |
 
 ### Production Infrastructure (DigitalOcean)
 
@@ -420,7 +422,7 @@ task doctor      # Verify everything is healthy
 
 ```bash
 task test                     # All tests
-cd cli && npm test            # CLI tests (Jest, 1210+ tests)
+cd cli && npm test            # CLI tests (Jest, 1226+ tests)
 cd api && go test ./...       # API tests
 cd operators && go test ./... # Operator tests (Ginkgo + envtest)
 cd pkg && go test ./...       # Shared library tests
