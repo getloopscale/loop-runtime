@@ -1,0 +1,53 @@
+@startuml C4-Container-Governance-AS-IS
+!include https://raw.githubusercontent.com/plantuml-stdlib/C4-PlantUML/release/2-decorations/C4_Container.puml
+
+title Documentation Governance — Container View (AS-IS, 2026-05-11)
+
+Person(reader, "Reader (dev / customer / investor / Claude session)")
+
+System_Boundary(governance, "Documentation Governance System") {
+
+  Container(claude_md, "CLAUDE.md", "Markdown ~700 LOC", "Project rules + ~6000-char status narrative")
+  Container(maturity_md, "docs/maturity-assessment.md", "Markdown 250 LOC", "Score 3.9/5.0 (2026-05-03)")
+
+  ContainerDb(plans_dir, "docs/plans/ (7 plans)", "Markdown files", "Per-effort plans + checkboxes")
+  ContainerDb(meetings_records, "docs/meetings/records/ (68)", "Markdown files", "Meeting transcripts")
+  ContainerDb(meetings_adr, "docs/meetings/adr/ (57)", "Markdown files", "Architectural Decision Records")
+  ContainerDb(runbooks, "docs/runbooks/ (47)", "Markdown files", "Operational procedures + validation logs")
+  ContainerDb(learnings, "docs/learnings/ (1)", "Markdown files", "Cross-session lessons (underused)")
+  ContainerDb(reports, "docs/reports/ (3)", "Markdown files", "Audit reports")
+  ContainerDb(architecture, "docs/architecture/", "PlantUML + Markdown", "C4 diagrams + deep dives per domain (6 domains, no governance)")
+
+  Container(memory_md, "MEMORY.md", "Markdown", "Cross-session memory (36 entries)")
+  Container(memory_files, "memory/*.md (10)", "Markdown files", "Individual memory entries")
+}
+
+System_Ext(git, "Git", "Source of truth for ALL files; provides authorship + timestamps")
+System_Ext(gh_actions, "GitHub Actions", "CI runs that could produce evidence (cell2-soaks, validations) but no decay scanner today")
+
+Rel(reader, claude_md, "Reads on every Claude session start", "implicit context-load")
+Rel(reader, maturity_md, "Reads for score", "Manual look-up")
+Rel(reader, plans_dir, "Reads active plans", "Manual navigation")
+Rel(reader, memory_md, "Loads index in Claude session", "implicit")
+
+Rel(claude_md, maturity_md, "DUPLICATES STATUS NARRATIVE", "Drift")
+Rel(plans_dir, runbooks, "References for procedures")
+Rel(meetings_adr, plans_dir, "ADRs cited by plans")
+Rel(meetings_records, meetings_adr, "Records produce ADRs")
+Rel(memory_md, memory_files, "MEMORY.md is index")
+
+Rel(git, claude_md, "Versions")
+Rel(git, plans_dir, "Versions")
+Rel(gh_actions, runbooks, "Could push validation logs (manual today)")
+
+note right of governance
+  **DRIFT POINTS:**
+  - claude_md ↔ maturity_md (duplication)
+  - plans_dir ↔ runbooks (loose coupling)
+  - No central STATUS.md
+  - No docs/evidence/ directory
+  - No decay tracking → claims age silently
+  - No CI integration (decay scan absent)
+end note
+
+@enduml

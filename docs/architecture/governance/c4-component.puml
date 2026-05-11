@@ -1,0 +1,54 @@
+@startuml C4-Component-Governance-AS-IS
+!include https://raw.githubusercontent.com/plantuml-stdlib/C4-PlantUML/release/2-decorations/C4_Component.puml
+
+title Documentation Governance — Component View (AS-IS, 2026-05-11)
+
+Container_Boundary(claim_lifecycle, "Claim Lifecycle (AS-IS)") {
+
+  Component(claim_authored, "Claim Authored", "Free-form Markdown", "Author writes 'X is shipped ✅'")
+  Component(claim_published, "Claim Published", "Committed to docs/", "git commit; published immediately")
+  Component(claim_read, "Claim Read", "Reader sees claim", "Trust by default; no verification surface")
+
+  note right of claim_authored
+    No schema, no template,
+    no required fields.
+    Author chooses how to phrase.
+  end note
+
+  note right of claim_published
+    No PR gate.
+    No reviewer requirement.
+    Author == publisher.
+  end note
+
+  note right of claim_read
+    No way to verify.
+    No TTL visible.
+    No evidence files to cross-check.
+  end note
+}
+
+Container_Boundary(missing_components, "Components MISSING (will exist in Mode 3 PROPOSED)") {
+  Component(evidence_files, "<color:red>Evidence Files</color>", "ABSENT", "Would link claim → 3 sources (T1/T2/T3)")
+  Component(evidence_validator, "<color:red>Validator</color>", "ABSENT", "Would enforce 3-source schema")
+  Component(adversarial_review, "<color:red>Adversarial Review</color>", "ABSENT", "Would triangulate score via 3 personas")
+  Component(decay_scanner, "<color:red>Decay Scanner</color>", "ABSENT", "Would detect stale claims")
+  Component(decay_ci, "<color:red>Decay CI Workflow</color>", "ABSENT", "Would alert weekly on expired claims")
+  Component(premerge_gate, "<color:red>Pre-Merge Gate</color>", "ABSENT", "Would block STATUS.md edits without evidence")
+  Component(bias_checker, "<color:red>Bias Self-Check</color>", "ABSENT", "Would flag 6 bias patterns")
+  Component(status_md, "<color:red>STATUS.md (canonical)</color>", "ABSENT", "Would be single source of truth")
+}
+
+Rel(claim_authored, claim_published, "git commit", "no validation")
+Rel(claim_published, claim_read, "merge → readable", "no decay")
+
+Rel(claim_authored, evidence_files, "<color:red>WOULD require</color>", "blocked")
+Rel(claim_published, evidence_validator, "<color:red>WOULD validate</color>", "blocked")
+Rel(claim_read, decay_scanner, "<color:red>WOULD revalidate</color>", "blocked")
+
+note bottom of missing_components
+  **Phase 0-6 of the plan introduces ALL these components.**
+  Result: claim lifecycle gains 8 validation layers between author and reader.
+end note
+
+@enduml

@@ -1,0 +1,43 @@
+@startuml C4-Context-Governance-AS-IS
+!include https://raw.githubusercontent.com/plantuml-stdlib/C4-PlantUML/release/2-decorations/C4_Context.puml
+
+title Documentation Governance — System Context (AS-IS, 2026-05-11)
+
+Person(dev_cli, "CLI Developer", "Owns cli/. Reads docs to understand spec + recent changes.")
+Person(dev_api, "API Developer", "Owns api/. Reads docs to understand state machines + auth flows.")
+Person(dev_op, "Operator Developer", "Owns operators/. Reads docs to understand CRDs + reconciles.")
+Person(customer, "LoopZero Customer", "Reads docs to learn product + onboarding.")
+Person(investor, "Investor / DD Auditor", "Reads STATUS-equivalent claims to evaluate maturity.")
+Person(future_claude, "Future Claude Session", "Reads CLAUDE.md to inherit project context.")
+
+System_Boundary(loopzero_docs, "LoopZero Documentation System") {
+  System(claude_md, "CLAUDE.md", "Project-level rules + status narrative (~6000 chars status block)")
+  System(maturity, "maturity-assessment.md", "Score 3.9/5.0 (2026-05-03 baseline, stale)")
+  System(plans, "docs/plans/ (7 active)", "Per-effort plans with checkboxes + DoDs")
+  System(meetings, "docs/meetings/ (57 ADRs, 68 records)", "Architectural decisions + meeting outputs")
+  System(runbooks, "docs/runbooks/ (47)", "Operational procedures + post-CHG validation logs")
+  System(memory, "MEMORY.md (36 entries)", "Cross-session facts + feedback memories")
+}
+
+Rel(dev_cli, claude_md, "Loads on session start")
+Rel(dev_api, claude_md, "Loads on session start")
+Rel(dev_op, claude_md, "Loads on session start")
+Rel(customer, claude_md, "Reads README (not CLAUDE.md)")
+Rel(investor, maturity, "Asks for score; doc is stale")
+Rel(future_claude, claude_md, "Loads + memory.md")
+
+Rel(claude_md, maturity, "DUPLICATES status narrative (drift risk)")
+Rel(plans, runbooks, "Plans cite runbooks for procedures")
+Rel(meetings, plans, "Meetings produce ADRs that plans reference")
+
+note right of loopzero_docs
+  **AS-IS pain points:**
+  1. 5+ surfaces carrying status → drift inevitable
+  2. CLAUDE.md duplicates maturity-assessment.md content
+  3. Zero TTL → claims become folklore
+  4. Zero evidence files → claims unverifiable
+  5. Self-attestation: same authors write + score
+  6. 87 files reference "score/maturity/GREEN/DONE/✅"
+end note
+
+@enduml

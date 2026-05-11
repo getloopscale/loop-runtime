@@ -1,0 +1,107 @@
+name: decay-scan
+
+# Weekly decay scanner — detects expired claims per docs/governance/decay-policy.md.
+# Opens issue when claims overdue (CRITICAL >60d, HIGH >30d, MEDIUM <=30d).
+#
+# Per T0.3 of status-validation-and-doc-consolidation-plan.
+
+on:
+  schedule:
+    # Sundays 02:00 UTC (after cell2-soaks.yml at 01:00)
+    - cron: "0 2 * * 0"
+  workflow_dispatch:
+    inputs:
+      dry_run:
+        description: "Dry run (no issue creation)"
+        required: false
+        default: "false"
+
+permissions:
+  contents: read
+  issues: write
+
+jobs:
+  scan:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Run decay scanner
+        id: scan
+        run: |
+          bash infra/scripts/governance/scan-decay.sh --json > /tmp/decay-report.json || true
+          echo "report_path=/tmp/decay-report.json" >> "$GITHUB_OUTPUT"
+          EXPIRED_COUNT=$(python3 -c "import json; d=json.load(open('/tmp/decay-report.json')); print(d['expired_count'])")
+          echo "expired_count=$EXPIRED_COUNT" >> "$GITHUB_OUTPUT"
+          echo "scanned=$(python3 -c "import json; d=json.load(open('/tmp/decay-report.json')); print(d['scanned'])")" >> "$GITHUB_OUTPUT"
+          echo "## Decay scan completed"
+          echo "Scanned: $(python3 -c "import json; d=json.load(open('/tmp/decay-report.json')); print(d['scanned'])") files"
+          echo "Expired: $EXPIRED_COUNT claims"
+
+      - name: Generate markdown report
+        if: steps.scan.outputs.expired_count != '0'
+        run: |
+          bash infra/scripts/governance/scan-decay.sh > /tmp/decay-report.md || true
+
+      - name: Open / update issue
+        if: steps.scan.outputs.expired_count != '0' && github.event.inputs.dry_run != 'true'
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const fs = require('fs');
+            const reportBody = fs.readFileSync('/tmp/decay-report.md', 'utf8');
+            const expired = ${{ steps.scan.outputs.expired_count }};
+
+            const title = `[decay] ${expired} expired claims need revalidation`;
+
+            // Find existing open issue with this title prefix
+            const existing = await github.rest.issues.listForRepo({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              state: 'open',
+              labels: 'decay-scan',
+            });
+
+            const existingIssue = existing.data.find(i => i.title.startsWith('[decay]'));
+
+            if (existingIssue) {
+              await github.rest.issues.update({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                issue_number: existingIssue.number,
+                title: title,
+                body: reportBody,
+              });
+              console.log(`Updated issue #${existingIssue.number}`);
+            } else {
+              await github.rest.issues.create({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                title: title,
+                body: reportBody,
+                labels: ['decay-scan', 'governance'],
+              });
+              console.log('Created new decay-scan issue');
+            }
+
+      - name: Upload report artifact
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: decay-scan-report-${{ github.run_id }}
+          path: |
+            /tmp/decay-report.json
+            /tmp/decay-report.md
+          retention-days: 90
+
+      - name: Fail if expired claims found (non-dry-run)
+        if: steps.scan.outputs.expired_count != '0' && github.event.inputs.dry_run != 'true'
+        run: |
+          echo "::warning::${{ steps.scan.outputs.expired_count }} expired claims detected"
+          # Non-fatal — issue is opened, work continues

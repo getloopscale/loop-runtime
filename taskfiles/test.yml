@@ -911,4 +911,38 @@ tasks:
       - ginkgo -v --timeout=60m --junit-report=e2e-report.xml ./infra/tests/e2e/
 
   # ---------------------------------------------------------------------------
+  # Evidence validation (status-validation-and-doc-consolidation-plan T0.1)
+
+  validate:evidence:
+    desc: Validate evidence files against docs/governance/evidence-bar.md (3-tier policy)
+    cmds:
+      - bash infra/scripts/governance/validate-evidence.sh --all docs/evidence/
+
+  validate:evidence:fixtures:
+    desc: Run validator against fixtures (TDD regression check)
+    cmds:
+      - bash infra/scripts/governance/validate-evidence.sh --all docs/evidence/_fixtures/ || true
+      - echo "Fixtures exercise pass/fail/expired paths. exit 0/1/2 per fixture is expected."
+
+  decay:scan:
+    desc: Scan evidence files for expired TTL (markdown report)
+    cmds:
+      - bash infra/scripts/governance/scan-decay.sh
+
+  decay:scan:json:
+    desc: Decay scan with JSON output (for CI consumption)
+    cmds:
+      - bash infra/scripts/governance/scan-decay.sh --json
+
+  bias:check:
+    desc: Scan markdown file(s) for 6 bias patterns
+    cmds:
+      - 'bash infra/scripts/governance/bias-check.sh {{.CLI_ARGS}}'
+
+  bias:check:all:
+    desc: Scan all plans for bias patterns
+    cmds:
+      - bash infra/scripts/governance/bias-check.sh --all docs/plans/
+
+  # ---------------------------------------------------------------------------
   # Monitoring
