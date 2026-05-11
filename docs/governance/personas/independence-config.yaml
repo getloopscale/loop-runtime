@@ -1,0 +1,69 @@
+# Independence Configuration — Adversarial Personas
+#
+# Per ADR D1 + T3.0 of status-validation-and-doc-consolidation-plan v1.2.
+# Used by T3.1 (Run 3 Personas Independently) via verify-independence.sh.
+#
+# Independence requirement: ≥2 of 3 dimensions varied (model, temperature, seed).
+# Logs which dimensions actually varied in raw-runs.md provenance file.
+
+personas:
+  p1_vercel_dd:
+    description: Vercel DD Engineer — DX bias
+    persona_file: docs/governance/personas/vercel-dd-engineer.md
+    # Primary configuration
+    subagent_type: general-purpose
+    model: claude-opus-4-7
+    temperature: 0.7
+    seed: 42
+    # Fallback if primary unavailable
+    fallback:
+      model: claude-sonnet-4-6
+      temperature: 0.65
+
+  p2_hostile_vc:
+    description: Hostile VC Auditor — overclaim detection
+    persona_file: docs/governance/personas/hostile-vc-auditor.md
+    # CROSS-VENDOR (recommended) for maximum independence
+    # If codex unavailable, falls back to Claude family
+    subagent_type: codex:codex-rescue
+    model: gpt-5-4
+    temperature: 0.3
+    seed: 137
+    fallback:
+      subagent_type: general-purpose
+      model: claude-sonnet-4-6
+      temperature: 0.3
+
+  p3_paranoid_sre:
+    description: Paranoid SRE — production-readiness
+    persona_file: docs/governance/personas/paranoid-sre.md
+    subagent_type: general-purpose
+    model: claude-haiku-4-5
+    temperature: 0.5
+    seed: 99
+    fallback:
+      model: claude-sonnet-4-6
+      temperature: 0.45
+
+# Independence validation:
+# verify-independence.sh checks that ≥2 of 3 dimensions are varied:
+#   - models: how many distinct model identifiers
+#   - temperatures: how many distinct temperature values
+#   - seeds: how many distinct seed values
+# If primary config has codex unavailable, automatic fallback log captures degradation.
+
+validation:
+  min_dimensions_varied: 2
+  expected:
+    models: 3   # opus / gpt / haiku — 3 distinct (cross-vendor)
+    temperatures: 3  # 0.7 / 0.3 / 0.5 — 3 distinct
+    seeds: 3   # 42 / 137 / 99 — 3 distinct
+
+# If using full Claude family (codex fallback):
+validation_fallback:
+  min_dimensions_varied: 2
+  expected:
+    models: 3  # opus / sonnet / haiku — still 3 distinct (intra-family)
+    temperatures: 3
+    seeds: 3
+  warning: "Cross-vendor (codex) unavailable — using Claude-only family. Cap confidence to 90-95% (not 95-97% — correlation higher)."
