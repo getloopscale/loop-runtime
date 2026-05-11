@@ -116,6 +116,7 @@ secrets.yml
 junit*.xml
 test-results/
 .test-reports/
+.test-reports-cleanroom/
 __snapshots__/
 
 # --------------------------------------------
