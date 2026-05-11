@@ -122,7 +122,7 @@ jobs:
 
       - name: Run knip (warn-mode)
         # Warn-mode: continue-on-error until baseline = 0. Baseline documented
-        # in `docs/runbooks/knip-baseline.md`. Flip to fail-on-finding when
+        # Flip to fail-on-finding when
         # all current findings either deleted or moved to ignore with reason.
         continue-on-error: true
         working-directory: cli

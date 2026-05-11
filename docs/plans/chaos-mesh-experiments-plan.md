@@ -1,6 +1,6 @@
 # Plan: Chaos Mesh Experiments — Prove Resilience with Evidence
 
-> **Version 1.1** (edge case review incorporated: EC-1 defer ordering, EC-2 namespaceSelector matchExpressions, EC-3 auth token) — Operationalize the existing Chaos Mesh infrastructure (9 manifests + Ginkgo framework in `infra/tests/chaos/`) by closing 6 gaps: 3 missing experiments, dedicated CI workflow, Prometheus SLO rules, and Helmfile bootstrap integration. The outcome is a weekly automated chaos suite that proves LoopZero self-heals under 12 failure scenarios, producing regression matrix entries and SLO evidence for the path to maturity 4.0.
+> **Version 1.1** (edge case review completed — see `chaos-mesh-experiments-edge-cases.md`; 3 MUST FIX items EC-1/EC-2/EC-3 folded into tasks T1.1/T1.2/T1.4 respectively) — Operationalize the existing Chaos Mesh infrastructure (9 manifests + Ginkgo framework in `infra/tests/chaos/`) by closing 6 gaps: 3 missing experiments, dedicated CI workflow, Prometheus SLO rules, and Helmfile bootstrap integration. The outcome is a weekly automated chaos suite that proves LoopZero self-heals under 12 failure scenarios, producing regression matrix entries and SLO evidence for the path to maturity 4.0.
 
 ## Context
 
@@ -551,13 +551,13 @@ VERIFY:  LOOPZERO_CHAOS_TEST=1 go test ./infra/tests/chaos/ -v -count=1
 
 ### T3.2 — Regression matrix entries (BLOCKED)
 
-> **BLOCKED:** The regression matrix file (`docs/runbooks/bootstrap-regression-matrix.md`) was removed in d18e3b89 governance consolidation (2026-05-11). This task cannot execute until a successor file is created. Deferred to Sprint 9 — the matrix will be recreated as part of the production readiness documentation if the chaos experiments plan is approved post-consolidation.
+> **BLOCKED:** The regression matrix file was removed in d18e3b89 governance consolidation (2026-05-11). This task cannot execute until a successor file is created. Deferred to Sprint 9 — the matrix will be recreated as part of the production readiness documentation if the chaos experiments plan is approved post-consolidation.
 
 #### Objective
 Add 12 entries to a regression matrix documenting each chaos scenario as a permanent protection.
 
 #### Evidence
-- Regression matrix (formerly `docs/runbooks/bootstrap-regression-matrix.md`, removed in d18e3b89 consolidation) had 82+ entries but zero for chaos resilience.
+- Regression matrix (removed in d18e3b89 consolidation) had 82+ entries but zero for chaos resilience.
 - Each chaos experiment proves a specific resilience invariant that must not regress.
 
 #### Files to edit

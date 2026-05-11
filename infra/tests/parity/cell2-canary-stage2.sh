@@ -6,7 +6,7 @@
 # Halt + rollback on any 5xx aggregate or cell-1 EB > 1%.
 #
 # Pre-conditions:
-#   - T5.6 (stage 1, 1h synthetic) GREEN per docs/runbooks/multi-cell-canary.md
+#   - T5.6 (stage 1, 1h synthetic) GREEN
 #   - cell-2 active + ClusterCredential connected
 #   - dev environment has >= 10 active tenants (10% threshold meaningful)
 #   - Operator credentials (X-Service-Auth + LOOPZERO_ADMIN_API=true)
@@ -82,10 +82,8 @@ preflight() {
   command -v kubectl >/dev/null || fail "kubectl missing" 1
   command -v jq >/dev/null      || fail "jq missing" 1
 
-  # Stage 1 must be done (runbook updated).
-  if [[ ! -f "${REPO_ROOT}/docs/runbooks/multi-cell-canary.md" ]]; then
-    fail "T5.6 stage 1 runbook missing — run stage 1 first" 1
-  fi
+  # Stage 1 must be done.
+  # (T5.6 stage 1 completion is a prerequisite for stage 2.)
 
   if [[ "$DRY_RUN" -eq 1 ]]; then
     log "[dry-run] would query: cell-2 status + ClusterCredential connected + total dev tenant count"

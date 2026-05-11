@@ -56,7 +56,7 @@
 **Soak workflow patterns:**
 - Auto-issue creation em failure (`priority/critical`, `area/multi-cell` labels)
 - Preflight dry-run em cada soak (kubeconfig connectivity, prerequisites)
-- Runbook closure em sucesso (e.g., `cell2-soaks.yml:112-127` appende evidência a `docs/runbooks/multi-cell-canary.md`)
+- Evidence closure em sucesso (e.g., `cell2-soaks.yml:112-127` appende evidência ao run log)
 
 **CI gate aggregation** (`ci.yml`):
 - `ci-gate` job = aggregate de lint-go + lint-cli + tidy-go + test-pkg/api/operators/infra/cli/pulumi + validate-manifests + lint-charts + migration-safety + security

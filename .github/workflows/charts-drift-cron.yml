@@ -58,7 +58,7 @@ jobs:
               JSON.stringify(drift, null, 2),
               '```',
               '',
-              'See [docs/runbooks/charts-drift-audit.md](https://github.com/${{ github.repository }}/blob/develop/docs/runbooks/charts-drift-audit.md) to classify (intentional ADR or regression fix).',
+              'Classify each drift as intentional (with ADR) or regression fix.',
               '',
               '_Run: ${{ github.run_id }}_'
             ].join('\n');

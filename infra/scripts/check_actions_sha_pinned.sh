@@ -16,7 +16,7 @@
 #   - `uses: owner/repo@v1` / `@v2.6.1` / `@main` / `@latest`
 #
 # Exception list: actions explicitly tracked as floating-pin under
-# INF-G18 (see docs/runbooks/action-sha-pinning.md). These appear in
+# INF-G18 (action SHA pinning policy). These appear in
 # `EXCEPTION_PATTERNS` below and SHOULD be reviewed quarterly.
 #
 # Exit 0: all non-local actions are SHA-pinned (or in exception list).

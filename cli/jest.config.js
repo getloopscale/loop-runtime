@@ -9,8 +9,7 @@
 //   - **Phase 1 (this commit):** maxWorkers=2 reduces contention from 4-CPU default
 //     to 2 workers — empirical baseline cut flake from ~3% to <0.5% in similar repos.
 //   - **Phase 2 (next iter):** root-cause fix per-test (port=0 dynamic allocation,
-//     mkdtemp tmpdir per test, env snapshot+restore). Tracked in
-//     docs/runbooks/test-isolation-guide.md.
+//     mkdtemp tmpdir per test, env snapshot+restore).
 //   - **Phase 3:** restore maxWorkers=default after Phase 2 lands.
 //
 // Trade-off: 2 workers ~= 2x runtime vs 4-worker default, but still 2x faster than
@@ -23,6 +22,6 @@ module.exports = {
   moduleFileExtensions: ['ts', 'js', 'json'],
   // Plan T1.1 Phase 1: limit workers to reduce parallel contention until per-test isolation
   // pattern (mock-api-server port=0, mkdtemp, env restore) is rolled out across all flaky
-  // integration tests. See `docs/runbooks/test-isolation-guide.md` for migration plan.
+  // integration tests.
   maxWorkers: 2,
 };

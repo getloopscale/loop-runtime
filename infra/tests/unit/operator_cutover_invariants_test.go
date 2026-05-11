@@ -89,27 +89,7 @@ func TestT02_RollbackScriptExists(t *testing.T) {
 
 // T-03 — runbook exists with all required sections.
 func TestT03_CutoverRunbookExists(t *testing.T) {
-	path := filepath.Join(repoRoot(), "docs", "runbooks", "operator-cutover-runbook.md")
-	data, err := os.ReadFile(path)
-	if err != nil {
-		t.Fatalf("runbook missing: %v", err)
-	}
-	text := string(data)
-
-	for _, section := range []string{
-		"Pre-flight",
-		"Step 1",
-		"Step 2",
-		"Step 3",
-		"Step 4",
-		"Step 5",
-		"Step 6",
-		"Cleanup",
-	} {
-		if !strings.Contains(text, section) {
-			t.Errorf("runbook missing section: %s", section)
-		}
-	}
+	t.Skip("runbook files removed — docs/runbooks/ deleted in governance consolidation 2026-05-11")
 }
 
 // T-04 — invariants doc exists with I-1..I-8.
@@ -255,7 +235,6 @@ func TestT11_CellsMigrationPresent(t *testing.T) {
 func TestT12_MultiCellObservabilityShipped(t *testing.T) {
 	for _, p := range []string{
 		"infra/helm/monitoring/manifests/prometheusrule-multi-cell.yaml",
-		"docs/runbooks/multi-cell-alerts.md",
 	} {
 		full := filepath.Join(repoRoot(), p)
 		if _, err := os.Stat(full); err != nil {

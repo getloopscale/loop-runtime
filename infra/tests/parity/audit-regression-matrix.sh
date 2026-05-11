@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # CHG-2026-04-30-INFRA-PARITY / T9.1 followup — regression matrix integrity audit.
 #
-# A matriz `docs/runbooks/bootstrap-regression-matrix.md` reivindica para cada
+# A matriz de regressão reivindica para cada
 # entry um "Verification" artifact (test name, runbook section, ou live verify
 # command). Se um test foi renomeado, deletado, ou nunca existiu, a matriz
 # vira mentira — silent regression de proteção.
@@ -30,7 +30,7 @@ set -uo pipefail
 REPO_ROOT="$(cd "$(dirname "$0")/../../.." && pwd)"
 # MATRIX path is overridable via env var so the golden test (audit-golden-test.sh)
 # can point at a fabricated matrix without touching the real one.
-MATRIX="${MATRIX:-${REPO_ROOT}/docs/runbooks/bootstrap-regression-matrix.md}"
+MATRIX="${MATRIX:-${REPO_ROOT}/docs/plans/bootstrap-regression-matrix.md}"
 STRICT=0
 
 for arg in "$@"; do

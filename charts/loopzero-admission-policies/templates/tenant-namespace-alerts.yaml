@@ -43,5 +43,4 @@ spec:
               misconfiguration.
               Action: run `task migrate:tenants -- --apply` to reconcile, OR investigate
               who created the misplaced CR via audit log.
-            runbook_url: "https://docs/runbooks/adr-0018-rollout.md#post-rollout-monitoring-7-day-window"
 {{- end }}

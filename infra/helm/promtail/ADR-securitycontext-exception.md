@@ -62,6 +62,5 @@ Revisit this exception when ANY of:
 
 - INF-G08: Secure Defaults gate.
 - ADR D7 of `docs/plans/infra-sota-hardening-plan.md`.
-- `docs/runbooks/security-context-audit-2026.md` matrix.
 - Promtail upstream: https://grafana.com/docs/loki/latest/clients/promtail/
 - Kubernetes hostPath docs: https://kubernetes.io/docs/concepts/storage/volumes/#hostpath

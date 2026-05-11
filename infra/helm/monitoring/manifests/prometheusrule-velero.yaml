@@ -32,7 +32,6 @@ spec:
           annotations:
             summary: "Velero backup '{{ $labels.schedule }}' is stale (>12h)"
             description: "Last successful run of schedule {{ $labels.schedule }} is older than 12 hours. RPO exceeded — risk of data loss in case of cluster failure."
-            runbook: "https://github.com/loopzero/loopzero/blob/main/docs/runbooks/disaster-recovery-restore.md"
 
         - alert: LoopZeroVeleroBackupFailing
           expr: increase(velero_backup_failure_total{schedule=~"loopzero-.*"}[6h]) > 0
@@ -42,7 +41,6 @@ spec:
           annotations:
             summary: "Velero backup '{{ $labels.schedule }}' is failing"
             description: "Schedule {{ $labels.schedule }} produced one or more failed backups in the last 6 hours."
-            runbook: "https://github.com/loopzero/loopzero/blob/main/docs/runbooks/disaster-recovery-restore.md"
 
         - alert: LoopZeroVeleroServerDown
           expr: up{job="velero"} == 0
@@ -52,7 +50,6 @@ spec:
           annotations:
             summary: "Velero server is down"
             description: "Velero deployment has been unreachable for >2 minutes. No backups will run while the server is down."
-            runbook: "https://github.com/loopzero/loopzero/blob/main/docs/runbooks/disaster-recovery-restore.md"
 
         - alert: LoopZeroVeleroBackupPartial
           expr: velero_backup_partial_failure_total{schedule=~"loopzero-.*"} > 0
@@ -62,4 +59,3 @@ spec:
           annotations:
             summary: "Velero backup '{{ $labels.schedule }}' completed with partial failures"
             description: "Schedule {{ $labels.schedule }} finished but some items were skipped. Inspect `velero backup describe` to identify missed resources."
-            runbook: "https://github.com/loopzero/loopzero/blob/main/docs/runbooks/disaster-recovery-restore.md"

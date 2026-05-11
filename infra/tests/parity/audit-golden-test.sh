@@ -65,7 +65,7 @@ output="$(cat "$out_file")"
 if ! grep -q "broken-matrix.md\|${GHOST_TOKEN}" <<<"$output"; then
   echo "[golden] audit does not honor MATRIX env override — re-running via path swap"
   # Save real matrix, swap fabricated in, run, restore. Atomic.
-  REAL="${REPO_ROOT}/docs/runbooks/bootstrap-regression-matrix.md"
+  REAL="${REPO_ROOT}/docs/plans/bootstrap-regression-matrix.md"
   BACKUP="$TMPDIR/real-matrix.bak"
   cp "$REAL" "$BACKUP"
   cp "$TMPDIR/broken-matrix.md" "$REAL"

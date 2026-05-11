@@ -158,12 +158,12 @@ audit_pair() {
   if [[ "$intentional" == "true" ]]; then
     human_body+="  STATUS: intentional (approved by $adr)"
   else
-    human_body+="  STATUS: needs ADR or fix — see docs/runbooks/charts-drift-audit.md"
+    human_body+="  STATUS: needs ADR or fix"
   fi
   emit_human "$pair_key" "$human_body" "$intentional"
 
   if [[ "$intentional" == "false" ]]; then
-    emit_annotation "$pair_key" "templates differ; $published_count vs $bootstrap_count. See docs/runbooks/charts-drift-audit.md" "warning"
+    emit_annotation "$pair_key" "templates differ; $published_count vs $bootstrap_count" "warning"
   fi
 }
 
@@ -205,7 +205,7 @@ case "$OUTPUT_FORMAT" in
       echo -e "$DRIFT_HUMAN"
       if [[ "$EXIT_CODE" != "0" ]]; then
         echo
-        echo "❌ Drifts without approving ADR detected. See docs/runbooks/charts-drift-audit.md to classify."
+        echo "❌ Drifts without approving ADR detected. Classify each drift as intentional (ADR) or regression fix."
       else
         echo
         echo "✓ All drifts have approving ADRs (intentional)."

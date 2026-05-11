@@ -165,7 +165,6 @@ spec:
           annotations:
             summary: "Service auth secret approaching 90-day rotation deadline"
             description: "Service auth secret has been in use for {{ "{{" }} $value | humanizeDuration {{ "}}" }}. Rotate within 10 days."
-            runbook: "docs/runbooks/service-auth-rotation.md"
 
         - alert: LoopZeroBuildStuckRunning
           expr: (time() - loopzero_build_started_timestamp) > 2100 and loopzero_build_status == 1

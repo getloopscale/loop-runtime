@@ -218,8 +218,7 @@ echo "Image signed successfully"
 // (the default), which routes through cosignSignTemplateKeyBased above.
 //
 // The CODE is delivered (Plan P4.1 closure); runtime activation tracks
-// Sprint 9 readiness review per ADR-of-deferral in
-// docs/runbooks/cosign-keyless-cutover.md "Track-2 deferred work" section.
+// Sprint 9 readiness review.
 func cosignSignTemplateKeyless(p CosignSignParams) *forge.Container {
 	metadataFile := fmt.Sprintf("%s/metadata-%s.json", workspaceMountPath, p.AppName)
 

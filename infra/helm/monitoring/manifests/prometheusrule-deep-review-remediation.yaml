@@ -6,7 +6,6 @@
 # observability_review.md, find_obs_001 + find_obs_004 + find_secret_skip_no_alert
 # + find_cell_fallback_no_metric + find_workqueue_silent_db_errors).
 #
-# Each alert references a runbook by alertname under docs/runbooks/.
 apiVersion: monitoring.coreos.com/v1
 kind: PrometheusRule
 metadata:
@@ -36,7 +35,6 @@ spec:
               build pipeline or a path bypassed signing. Investigate before
               policy-controller deny-flip (Sprint 9) or these images will
               break deploys.
-            runbook_url: docs/runbooks/loopzero-unsigned-release-pushed.md
 
         - alert: LoopZeroSBOMGenerationStalled
           expr: |
@@ -52,7 +50,6 @@ spec:
               Active releases are happening but loopzero_sbom_generated_total
               has not incremented — syft step is silently broken in the
               build pipeline. Provenance for these releases is missing.
-            runbook_url: docs/runbooks/loopzero-sbom-generation-stalled.md
 
         - alert: LoopZeroAttestationSaveFailing
           expr: |
@@ -68,7 +65,6 @@ spec:
               The release proceeded (best-effort) but attestation rows
               failed to land in DB. Visibility regression — investigate
               attestation_store before pre-launch security review.
-            runbook_url: docs/runbooks/loopzero-attestation-save-failing.md
 
     # === T5.1 — Multi-cell fallback (closes find_cell_fallback_no_metric MEDIUM)
     # Alert + metric pending wire-up of loopzero_cell_fallback_total in T5.1
@@ -94,7 +90,6 @@ spec:
               missing or context name drift — see B34). API returns 200 OK
               but writes nothing to the workload cluster — silent data
               loss for tenants.
-            runbook_url: docs/runbooks/loopzero-secret-eso-skip.md
 
         - alert: LoopZeroSecretESOSyncFailing
           expr: |
@@ -109,7 +104,6 @@ spec:
               loopzero_secret_externalsecret_total{result="fail"} rate > 0.05/s
               over 5m — investigate runtime client RBAC or workload-cluster
               connectivity.
-            runbook_url: docs/runbooks/loopzero-secret-eso-fail.md
 
     # === T5.3 — Workqueue terminal-write fail (closes find_workqueue_silent_db_errors HIGH) ===
     - name: loopzero.workqueue
@@ -131,7 +125,6 @@ spec:
               producing duplicate side-effects (e.g., duplicate Argo
               Workflow submissions). If terminal=fail: orphan workqueue
               rows accumulate.
-            runbook_url: docs/runbooks/loopzero-workqueue-terminal-write.md
 
     # === T1.5 — CellPinner CR-patch divergence (closes find_arch_005 MEDIUM) ===
     - name: loopzero.cell-pinner
@@ -151,7 +144,6 @@ spec:
               MergePatch FAILED. The operator reads tenant.Spec.CellID from
               the CR, so until the CR is patched manually new
               EnvironmentReconciler operations land on the OLD cell.
-            runbook_url: docs/runbooks/loopzero-cell-pinner-cr-diverged.md
 
     # === T5.7 (subset) — Operator L4 metrics not yet aliased (closes find_obs_004 partial) ===
     - name: loopzero.operator-l4
@@ -170,7 +162,6 @@ spec:
               lifecycle reached a state where automatic deletion cannot
               proceed (likely finalizer holding, or hard cleanup pending
               admin force).
-            runbook_url: docs/runbooks/loopzero-tenant-deletion-stuck.md
 
         - alert: LoopZeroMisplacedTenant
           expr: |
@@ -186,4 +177,3 @@ spec:
               workload is running on a cluster whose cellID does NOT match
               tenants.cell_id. This is a multi-cell isolation breach. Run
               `loopzero admin tenants pin` to reconcile or escalate.
-            runbook_url: docs/runbooks/loopzero-misplaced-tenant.md

@@ -3,7 +3,6 @@ T8.5b of deep-review-remediation-plan (find_infra_007 MEDIUM).
 
 Per-component egress allow rules + optional default-deny-egress for
 loopzero-system. Source of truth for the endpoint list:
-  docs/runbooks/network-policy-egress-inventory.md (T8.5a).
 
 Apply order (EC-5):
   1. loopzeroSystemAllowEgress=true — additive, safe to roll out NOW.
@@ -33,7 +32,6 @@ metadata:
   annotations:
     plan.loopzero.io/ref: "T8.5b of deep-review-remediation-plan"
     finding: "find_infra_007"
-    runbook: "docs/runbooks/network-policy-egress-inventory.md"
 spec:
   podSelector: {}
   policyTypes:
@@ -120,7 +118,6 @@ metadata:
   annotations:
     plan.loopzero.io/ref: "T8.5b/c of deep-review-remediation-plan"
     finding: "find_infra_007"
-    runbook: "docs/runbooks/network-policy-egress-inventory.md"
     rollback: "set defaultDenyEgress=false in values.yaml and helm upgrade"
 spec:
   podSelector: {}

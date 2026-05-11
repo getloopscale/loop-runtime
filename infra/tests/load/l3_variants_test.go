@@ -244,21 +244,7 @@ func TestRealDeploy_L3NoisyNeighbor(t *testing.T) {
 // TestL3CoverageMatrixHasAllBugColumns verifies the regression matrix covers
 // every bug exercised in the L3 variants.
 func TestL3CoverageMatrixHasAllBugColumns(t *testing.T) {
-	matrixPath := "../../../docs/runbooks/bootstrap-regression-matrix.md"
-	data, err := os.ReadFile(matrixPath)
-	if err != nil {
-		t.Skipf("matrix not generated yet: %v", err)
-	}
-	content := string(data)
-
-	if !strContains(content, "Exercitado por L3?") {
-		t.Errorf("matrix missing 'Exercitado por L3?' column header")
-	}
-	for _, label := range []string{"L3Churn", "B11", "B17"} {
-		if !strContains(content, label) {
-			t.Errorf("matrix missing reference to %s", label)
-		}
-	}
+	t.Skip("runbook files removed — docs/runbooks/ deleted in governance consolidation 2026-05-11")
 }
 
 func strContains(s, sub string) bool {

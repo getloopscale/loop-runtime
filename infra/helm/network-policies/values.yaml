@@ -7,7 +7,7 @@ defaultDenyIngress: true
 #   defaultDenyEgress: when true, ALL outbound from loopzero-system is rejected
 #                      unless explicitly allowed by per-component policies.
 #                      Default OFF until T8.5c staging soak validates the
-#                      allow-list inventory (docs/runbooks/network-policy-egress-inventory.md).
+#                      allow-list inventory.
 #
 #   loopzeroSystemAllowEgress: per-component allow-egress policies. SAFE to enable
 #                          NOW (additive — adding allow rules to a namespace that

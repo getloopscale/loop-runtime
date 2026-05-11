@@ -110,8 +110,7 @@ describe("ADR-0021 (infra-normalize) verification matrix D1-D10", () => {
     }
   });
 
-  it("D6 — observability runbook + alerts shipped", () => {
-    expect(fileExists("docs/runbooks/multi-cell-alerts.md")).toBe(true);
+  it("D6 — observability alerts shipped", () => {
     expect(fileExists("infra/helm/monitoring/manifests/prometheusrule-multi-cell.yaml")).toBe(true);
   });
 
@@ -119,8 +118,7 @@ describe("ADR-0021 (infra-normalize) verification matrix D1-D10", () => {
     expect(fileExists(".claude/rules/pre-release-governance.md")).toBe(true);
   });
 
-  it("D9 — Phase 7 production rollout runbook + customer comms shipped", () => {
-    expect(fileExists("docs/runbooks/multi-cell-canary-prod.md")).toBe(true);
+  it("D9 — Phase 7 customer comms shipped", () => {
     expect(fileExists("docs/customer-comms/cell-2-canary-template.md")).toBe(true);
   });
 

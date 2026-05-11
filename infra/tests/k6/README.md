@@ -179,7 +179,7 @@ PrometheusRule `k6-soak-alerts` fires:
 - `LoopZeroAPIMemoryLeak` — RSS growing 2+ hours during soak (critical)
 - `LoopZeroAPIFDExhaustion` — FDs growing 2+ hours during soak (critical)
 
-Runbook: `docs/runbooks/soak-test-failure.md`
+Investigate: check k6 Job logs and API memory/FD metrics in Grafana.
 
 ## Chaos + Load
 
@@ -269,4 +269,3 @@ k6/
 - [Coordinated Omission](https://redhatperf.github.io/post/coordinated-omission/) — Why open model matters
 - [SOTA Research](../../docs/technical/load-testing-sota.md) — Full competitive analysis
 - [Plan](../../docs/plans/load-testing-professional-plan.md) — Implementation plan
-- [Soak Runbook](../../docs/runbooks/soak-test-failure.md) — When soak fails

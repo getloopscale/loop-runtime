@@ -132,7 +132,7 @@ func setupCellRouter(
 	if len(cells) == 0 {
 		logger.Error("cell router: 0 ClusterCredentials discovered — fatal, no fallback by design",
 			"hint", "create at least one ClusterCredential CR with status.connected=true in loopzero-system",
-			"docs", "docs/runbooks/multi-cell-canary-prod.md#pre-conditions")
+			"hint_docs", "create at least one ClusterCredential CR with status.connected=true")
 		os.Exit(1)
 	}
 	bgWg.Add(1)

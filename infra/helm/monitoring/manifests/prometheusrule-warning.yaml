@@ -125,7 +125,6 @@ spec:
           annotations:
             summary: "Service auth secret approaching 90-day rotation deadline"
             description: "Service auth secret has been in use for {{ $value | humanizeDuration }}. Rotate within 10 days."
-            runbook: "docs/runbooks/service-auth-rotation.md"
 
         - alert: LoopZeroArgoCDHealthStuck
           expr: argocd_app_info{health_status="Progressing"} == 1

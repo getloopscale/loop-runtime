@@ -46,7 +46,6 @@ spec:
                   PulumiStacksTotalZero — investigate together);
               (c) AWS S3 access for the archive bucket is broken
                   (check archive runbook).
-            runbook_url: "https://github.com/getloopscale/loopzero/blob/develop/docs/runbooks/pulumi-consolidation.md#archive-staleness"
 
         - alert: PulumiOrphanStackDetected
           # Per condition C20 + C25: any stack outside the canonical
@@ -78,4 +77,3 @@ spec:
               Compare against canonical names. Remove or document
               the new stack per C26 (paralelas-style re-introduction
               process).
-            runbook_url: "https://github.com/getloopscale/loopzero/blob/develop/docs/runbooks/pulumi-consolidation.md#orphan-stack-detected"

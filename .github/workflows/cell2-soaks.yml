@@ -77,7 +77,7 @@ jobs:
               owner: context.repo.owner,
               repo: context.repo.repo,
               title: `[CRITICAL] cell-2 Stage 1 ADR soak FAILED — run ${context.runId}`,
-              body: `Stage 1 (1h synthetic) canary failed in run ${context.runId}.\n\nLogs: ${context.serverUrl}/${context.repo.owner}/${context.repo.repo}/actions/runs/${context.runId}\n\nTriage:\n- Verify ClusterCredential cell-2 connected\n- Verify loopzero_cell_discovery_count >= 2\n- Open RCA per docs/runbooks/multi-cell-rca-template.md\n- See cell2-activation-plan T1.2 + multi-cell-canary.md halt criteria.`,
+              body: `Stage 1 (1h synthetic) canary failed in run ${context.runId}.\n\nLogs: ${context.serverUrl}/${context.repo.owner}/${context.repo.repo}/actions/runs/${context.runId}\n\nTriage:\n- Verify ClusterCredential cell-2 connected\n- Verify loopzero_cell_discovery_count >= 2\n- See cell2-activation-plan T1.2 halt criteria.`,
               labels: ['priority/critical', 'area/multi-cell', 'cell-2-canary']
             });
 
@@ -124,7 +124,7 @@ jobs:
             echo "Sample: 10% of cell-1 dev tenants."
             echo "Result: GREEN — script exit 0."
             echo "Run logs: ${REPO_URL}/actions/runs/${RUN_ID}"
-          } >> docs/runbooks/multi-cell-canary.md
+          } >> /tmp/cell2-stage2-closure.log
       - name: Open issue on failure
         if: failure()
         uses: actions/github-script@60a0d83039c74a4aee543508d2ffcb1c3799cdea # v7.0.1
@@ -134,6 +134,6 @@ jobs:
               owner: context.repo.owner,
               repo: context.repo.repo,
               title: `[CRITICAL] cell-2 Stage 2 ADR 24h soak FAILED — run ${context.runId}`,
-              body: `Stage 2 (24h, 10% dev tenants) canary failed in run ${context.runId}.\n\nLogs: ${context.serverUrl}/${context.repo.owner}/${context.repo.repo}/actions/runs/${context.runId}\n\nTriage:\n- Open RCA per docs/runbooks/multi-cell-rca-template.md\n- HALT remaining stages; production canary BLOCKED until RCA action items shipped.`,
+              body: `Stage 2 (24h, 10% dev tenants) canary failed in run ${context.runId}.\n\nLogs: ${context.serverUrl}/${context.repo.owner}/${context.repo.repo}/actions/runs/${context.runId}\n\nTriage:\n- HALT remaining stages; production canary BLOCKED until RCA action items shipped.`,
               labels: ['priority/critical', 'area/multi-cell', 'cell-2-canary']
             });

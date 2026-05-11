@@ -172,7 +172,7 @@ func (cb *CircuitBreakerSyncClient) recordResult(err error) {
 	if err != nil && errors.Is(err, loopzeroerrors.ErrDeployServiceAuthFailed) {
 		metrics.ArgoCDAuthFailures.Inc()
 		cb.logger.Error("argocd auth failure — not counted toward circuit breaker",
-			"suggestion", "check ARGOCD_TOKEN or see docs/runbooks/argocd-token-regeneration.md")
+			"suggestion", "check ARGOCD_TOKEN validity and regenerate if expired")
 		return
 	}
 	// MEET-2026-03-29-019: 409 "operation in progress" is NOT a transient failure —

@@ -75,7 +75,7 @@ if violations == 0:
     print('PASS — every alert has a runbook (or is in EXCEPTION_LIST).')
     sys.exit(0)
 print(f'\nFAIL — {violations} alert(s) without runbook annotation.')
-print('To fix: add `runbook_url: docs/runbooks/<alert-slug>.md` to the alert annotations.')
+print('To fix: add a `runbook_url:` annotation to the alert with a link to the relevant documentation.')
 print('Or add the alert name to EXCEPTION_LIST in this script (with explanation).')
 sys.exit(1)
 PY

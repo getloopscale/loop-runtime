@@ -100,7 +100,7 @@ def classify_claim(claim, text=None):
         ref_path = m.group(1)
         if not ref_path.endswith('.md'):
             continue
-        if 'evidence/' in ref_path or 'runbooks/' in ref_path or 'reports/' in ref_path:
+        if 'evidence/' in ref_path or 'reports/' in ref_path:
             if file_exists(ref_path):
                 evidence_refs['T2'] = f"live:{ref_path}"
                 break

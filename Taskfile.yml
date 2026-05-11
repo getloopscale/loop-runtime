@@ -17,7 +17,6 @@ dotenv:
 # Each include's tasks are merged into the root namespace by Task v3 (no namespace prefix
 # unless the included file uses prefixes itself like `parity:foo:`).
 # `_legacy` namespace is reserved during transition; remove when domain stubs are populated.
-# See: docs/runbooks/taskfile-migration.md
 includes:
   testfile:
     taskfile: ./taskfiles/test.yml

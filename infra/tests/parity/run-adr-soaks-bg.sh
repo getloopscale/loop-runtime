@@ -121,7 +121,7 @@ S1_DURATION_S=$((STAGE1_SOAK_SECONDS))
 echo "[adr-soaks-bg] $(date -u +%FT%TZ): Stage 1 finished — exit=$S1_EXIT" | tee -a "$LOG_DIR/runner.log"
 
 # Append Stage 1 closure to multi-cell-canary.md
-RUNBOOK="${REPO_ROOT}/docs/runbooks/multi-cell-canary.md"
+# Log stage 1 closure to runner log (runbook files removed in governance consolidation 2026-05-11).
 {
   printf '\n## T5.6 stage 1 closure (background runner %s)\n\n' "$(date -u +%FT%TZ)"
   printf '**Mode:** %s — wall-clock %ss.\n' "$([[ $SMOKE -eq 1 ]] && echo 'ADR-duration with --smoke flag (HTTP probes informational due to local cert-manager letsencrypt limitation)' || echo 'ADR-compliant full HTTPS probe')" "$STAGE1_SOAK_SECONDS"
@@ -129,7 +129,7 @@ RUNBOOK="${REPO_ROOT}/docs/runbooks/multi-cell-canary.md"
   printf '**Result:** exit %s — %s\n\n' "$S1_EXIT" "$([[ $S1_EXIT -eq 0 ]] && echo 'GREEN' || echo 'HALT (see logs)')"
   printf '**Logs:** %s/stage1.log\n\n' "$LOG_DIR"
   printf '**fix-all-platform-issues-plan T5.3 evidence:** runner PID %s, started by background detach.\n' "$$"
-} >> "$RUNBOOK"
+} >> "$LOG_DIR/runner.log"
 
 if [[ "$S1_EXIT" -ne 0 ]]; then
   echo "[adr-soaks-bg] $(date -u +%FT%TZ): Stage 1 FAILED — skipping Stage 2" | tee -a "$LOG_DIR/runner.log"
@@ -181,14 +181,14 @@ S2_EXIT=$?
 
 echo "[adr-soaks-bg] $(date -u +%FT%TZ): Stage 2 finished — exit=$S2_EXIT" | tee -a "$LOG_DIR/runner.log"
 
-# Append Stage 2 closure
+# Log Stage 2 closure to runner log (runbook files removed in governance consolidation 2026-05-11).
 {
   printf '\n## T5.7 stage 2 closure (background runner %s)\n\n' "$(date -u +%FT%TZ)"
   printf '**Mode:** ADR-compliant 24h soak via run-adr-soaks-bg.sh local background runner.\n'
   printf '**Sample:** %s%% of cell-1 dev tenants.\n' "$STAGE2_PERCENT"
   printf '**Result:** exit %s — %s\n\n' "$S2_EXIT" "$([[ $S2_EXIT -eq 0 ]] && echo 'GREEN' || echo 'HALT (see logs)')"
   printf '**Logs:** %s/stage2.log\n\n' "$LOG_DIR"
-} >> "$RUNBOOK"
+} >> "$LOG_DIR/runner.log"
 
 kill $HB_PID 2>/dev/null || true
 echo "[adr-soaks-bg] $(date -u +%FT%TZ): runner complete — Stage1=$S1_EXIT Stage2=$S2_EXIT" | tee -a "$LOG_DIR/runner.log"

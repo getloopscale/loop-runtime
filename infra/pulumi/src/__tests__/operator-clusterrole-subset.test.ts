@@ -17,7 +17,7 @@
 // Allowlist: Phase -1 T-1.1 governance reviewed and CONDITIONALLY
 // APPROVED 4 privilege expansions in split charts (per
 // MEET-INFRA-NORMALIZE-T3-operator-split.md condition C10 + runbook
-// docs/runbooks/operator-split-rbac-audit.md). These are tracked here
+// the operator-split RBAC audit). These are tracked here
 // in code so any FUTURE expansion is automatically caught and forced
 // through governance review.
 //
@@ -105,8 +105,7 @@ function covers(granted: Array<[string, string, string]>, wanted: [string, strin
 //
 // Citation: MEET-INFRA-NORMALIZE-T3-operator-split.md → "PARTIAL VETO
 // lifted CONDITIONAL on C10 (RBAC reconciliation per widening — code
-// reference or removal — committed as docs/runbooks/operator-split-rbac-
-// audit.md)".
+// reference or removal — committed as operator-split RBAC audit)".
 const APPROVED_EXPANSIONS: Array<[string, string, string]> = [
   // C10 #1: priorityclasses — split operators apply tenant QoS classes.
   ["scheduling.k8s.io", "priorityclasses", "get"],

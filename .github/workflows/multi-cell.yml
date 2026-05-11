@@ -41,7 +41,6 @@ on:
       - 'infra/pulumi/src/index.ts'
       - 'cli/src/register/infra.ts'
       - 'cli/tests/integration/admin-tenants-pin.test.ts'
-      - 'docs/runbooks/multi-cell-alerts.md'
       - 'docs/decisions/MEET-INFRA-NORMALIZE-T3-multi-cell.md'
       - '.github/workflows/multi-cell.yml'
   push:

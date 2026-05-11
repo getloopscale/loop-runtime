@@ -21,7 +21,7 @@
 # Per condition C19: state-only rollback SLO ≤ 15 min wall-clock.
 # This script does NOT auto-rollback — caller invokes
 # `pulumi stack import` from the archive to recover. See
-# docs/runbooks/pulumi-state-restore.md.
+# `pulumi stack import` from the archive to recover.
 #
 # Usage:
 #   bash infra/scripts/pulumi-orphan-rm.sh

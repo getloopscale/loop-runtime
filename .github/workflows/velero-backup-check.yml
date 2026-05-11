@@ -143,7 +143,7 @@ jobs:
               "Daily freshness probe failed. See the workflow run for details.",
               "",
               `- Run: ${process.env.GITHUB_SERVER_URL}/${process.env.GITHUB_REPOSITORY}/actions/runs/${process.env.GITHUB_RUN_ID}`,
-              "- Runbook: docs/runbooks/disaster-recovery-restore.md",
+              "- Investigate: check Velero BSL status and schedule freshness within RPO window.",
               "",
               "Investigate within RPO window — production is at risk if backups are stuck."
             ].join("\n");

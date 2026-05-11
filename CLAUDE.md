@@ -8,7 +8,7 @@ LoopZero is a **CLI-first Kubernetes PaaS** for monorepo deployments. Vercel-qua
 
 The authoritative spec is the code itself + `CHANGELOG.md` + relevant ADRs. If this file and the codebase conflict, the codebase wins.
 
-**Status:** Pre-release. Latest snapshot: `docs/audits/2026-05-11/SUMMARY.md` (modular audit, 12 módulos, média 3.49/4.0). H1-H7 hardenings complete; Sprint 9 (Polish + Launch) pending gates: (a) first CI Sunday cron GREEN producing real `cell2-soaks.yml` workflow run evidence; (b) 1 prod customer day-trial with no incidents.
+**Status:** Pre-release. Latest snapshot: `docs/audits/2026-05-11/SUMMARY.md` (modular audit, 12 módulos, média 3.49/4.0). H1-H7 hardening themes complete (runtime, TLS, PG HA, observability, pipeline, ops, workload security); Sprint 9 (Polish + Launch) pending gates: (a) first CI Sunday cron GREEN producing real `cell2-soaks.yml` workflow run evidence; (b) 1 prod customer day-trial with no incidents. Note: H12-H18 in the self-healing section below are cleanroom heal entries (not hardening sprints).
 
 **Pricing:** Starter (Free, 1 project), Pro ($29/mo, 3 projects), Team ($79/mo, 10 projects), Enterprise (custom).
 
@@ -38,7 +38,7 @@ task test:e2e            # E2E (Ginkgo)
 task lint                # golangci-lint + ESLint
 task validate:manifests  # kubeconform --strict
 
-cd cli && npm test       # CLI (Jest, 1,260 test cases — 85 suites)
+cd cli && npm test       # CLI (Jest, 1,260 test cases — 88 suites)
 cd api && go test ./...  # API (41 packages)
 cd operators && go test ./...  # Operators (Ginkgo + envtest)
 cd pkg && go test ./...  # Shared libs
@@ -66,7 +66,7 @@ cd infra/pulumi && npx pulumi preview --stack dev # Preview
 8. **State machines are strict** — Use state machine functions, never direct status updates. Invalid transitions panic (programming error).
 9. **CLI is the primary interface** — Every feature lives in CLI before dashboard. Dashboard-only features are product bugs.
 10. **Local equals production** — Same Helm charts, same operators, same build pipeline. No Docker Compose shortcuts. No "dev mode" with different behavior.
-11. **Claims need evidence** — Any claim affecting maturity score requires **3 evidence sources** (T1 commit+test, T2 LIVE log, T3 CI run). Confidence cap **90-95%** (single-model family correlation residual; originally ratified as ADR-0051 in the governance suite removed 2026-05-11, but the cap remains binding). TTL applies: 30d operational / 60d arch / 90d strategic. Latest baseline: `docs/audits/2026-05-11/SUMMARY.md` (12 module audits + this aggregate). The previous `docs/evidence/{dim}/` per-claim tree was consolidated into the audits folder during the same cleanup.
+11. **Claims need evidence** — Any claim affecting maturity score requires **3 evidence sources** (T1 commit+test, T2 LIVE log, T3 CI run). Maturity-claim confidence cap **90-95%** (single-model family correlation residual; originally ratified as ADR-0051 in the governance suite removed 2026-05-11, but the cap remains binding). Note: this cap applies to maturity claims only — the 95%+ implementation confidence rule (`.claude/rules/workflow.md`) is a separate, stricter gate for all code changes. TTL applies: 30d operational / 60d arch / 90d strategic. Latest baseline: `docs/audits/2026-05-11/SUMMARY.md` (12 module audits + this aggregate). The previous `docs/evidence/{dim}/` per-claim tree was consolidated into the audits folder during the same cleanup.
 
 ---
 
@@ -104,11 +104,11 @@ cd infra/pulumi && npx pulumi preview --stack dev # Preview
 
 ```
 loopzero/
-├── docs/                  ← audits/, plans/, strategy/, runbooks/ (pending Sprint 9), meetings/ (agent-managed), architecture/ (skill-managed). Removed in 2026-05-11: cli-reference.md, STATUS.md, evidence/. Spec is the code itself.
+├── docs/                  ← audits/, plans/, strategy/. Removed in 2026-05-11: cli-reference.md, STATUS.md, evidence/, architecture/ (empty placeholder), meetings/ (empty placeholder), runbooks/ (empty placeholder). Spec is the code itself.
 ├── pkg/                   ← shared Go: statemachine, errors, errors/http, jwt, naming, conditions, id, logging, enforcement, circuitbreaker, healthcheck
-├── cli/                   ← @loopzero/cli — TS + Commander, 52 commands, 1,260 test cases (85 suites)
+├── cli/                   ← @loopzero/cli — TS + Commander, 65 commands, 1,260 test cases (88 suites)
 ├── api/internal/          ← 35 subpacotes: adapters, admission, archive, argo, argocd, cellmgr, cfkv, cfzone, config, correlation, db, domain, gitclient, github, gitops, health, k8s, leader, lock, loki, manifests, metrics, middleware, placement, processing, routes, s3, server, services, shellgen, source, sse, tracing, validation, workqueue
-├── operators/             ← 8 controllers (Tenant, Environment, Application, Exposure, PlatformBootstrap, GitRepositoryBinding, ClusterCredential, Preview), 10 CRDs
+├── operators/             ← 8 controllers (Tenant, Environment, Application, Exposure, PlatformBootstrap, GitRepositoryBinding, ClusterCredential, Preview), 10 CRDs (8 wired, 2 unwired: AppSecret + ReconciliationReport)
 ├── infra/
 │   ├── pulumi/            ← IaC (TS), providers: digitalocean/, cloudflare/, aws/(stub)
 │   ├── helm/              ← 16 charts próprios + 34 value files para upstream
@@ -172,10 +172,10 @@ Skills/slash commands (subset): `/sprint`, `/implement`, `/test`, `/review`, `/d
 | 6 | Security + Supply chain | ✅ cosign + syft SBOM + policy-controller installed (CHG-2026-04-26-SPRINT6-IMPL). policy-controller is **deny-by-default**; warn-mode `loopzero-images-warn` ClusterImagePolicy is required (B16). As of CHG-2026-04-28-LAYERED-BOOTSTRAP T0.1 the policy is shipped as a Helm chart in `infra/helm/admission-policies/` (templates/cluster-image-policy.yaml). Deny-flip + cosign keyless verification pending Sprint 9 with Fulcio. |
 | 7 | Observability | ✅ (H4) |
 | 8 | Hardening + Chaos | 🟡 Phase -1 + Phase 0 + Phase 2 GREEN (CHG-001 + CHG-002a, MEET-060 + MEET-061, ADR-0015 + ADR-0016). Phase 1+3+4+5+6 → CHG-002b/c new meeting required |
-| 9 | Polish + Launch | ❌ |
+| 9 | Polish + Launch | 🟡 Gates pending: (a) first CI Sunday cron GREEN, (b) 1 prod customer day-trial. Preparatory work (dogfood fixes, progressive delivery, build mode dispatch) complete in prior sprints. |
 | 10 | Static Frontend Delivery | ✅ |
 | 11 | Auth + Billing | ✅ |
-| H1-H7 | Hardening (runtime, TLS, PG HA, observability, pipeline, ops, workload security) | ✅ all complete |
+| H1-H7 | Hardening themes (runtime, TLS, PG HA, observability, pipeline, ops, workload security). Note: H12-H18 referenced in Multi-Cell section are cleanroom heal entries, not hardening sprints. | ✅ all 7 themes complete |
 | Cleanroom Dogfood Loop | Real PaaS test: destroy infra + setup + 12 journeys end-to-end | ✅ 12/12 GREEN (2026-05-05, tag `dogfood-cleanroom-converged-20260505`). 39 bugs B1-B39 fixed canonically. |
 | Argo Rollouts Progressive Delivery | Canary deploys (per-plan steps + Traefik weighted routing + AnalysisTemplate + KEDA targets Rollout) | ✅ 2026-05-07 — 15 plan tasks (T0.1-T5.2) complete. Warm-infra journey **80/80 GREEN in 41m41s**, fresh-cleanroom journey **71/72 GREEN in 42m49s** (1 unrelated ESO timing fail). 6 fixes: F-17 (fixture), F-18 (progressDeadlineSeconds=300), F-19 (S1 sync_client.go accepts Rollout), F-20 (S2 e2e scaffolding), F-21 (Taskfile bootstrap selector includes argo-rollouts), F-22 (S1 ClusterRole + argoproj.io RBAC). |
 | Build Mode Dispatch + User Dockerfile Security | Strategy-pattern dispatch for `build: dockerfile` opt-in + dockerfile-lint security barrier | ✅ 2026-05-08 — 4 phases complete (T0-T4). Restored `LanguageStrategy.DockerfileStep` (was removed in MEET-2026-03-29-017); new `UserDockerfileStrategy` distinct from `CustomStrategy`; `ResolveStrategyForApp(AppSpec)` dispatches `build: dockerfile` apps to UserDockerfileStrategy. New `loopzero-dockerfile-lint` binary (Go, `tools/loopzero-dockerfile-lint/`) enforces hard rejection rules: FROM allow-list (docker.io/library/*, ghcr.io/*, DOCR, k3d-loopzero-registry, public.ecr.aws/, gcr.io/, mcr.microsoft.com/, quay.io/, opt-in via LOOPZERO_DOCKERFILE_ALLOWED_REGISTRIES), --privileged/--security=insecure RUN flags, absolute/escaping bind mounts, reserved env keys (LOOPZERO_*/KUBERNETES_*/AWS_*/DO_*), seccomp/apparmor unconfined. Soft warnings: USER root in final stage, ADD remote URL, apt without --no-install-recommends, HEALTHCHECK without CMD. loopzero-packs v0.4.0 canonical lenient contract published. loopzero-api uses `dockerfileStepTemplateName(strategy)` to wire DAG correctly (no hardcoded "generate-dockerfile"). LIVE: 25/25 lint unit tests + 17 strategy/dispatch tests + e2e `journey_user_dockerfile_test.go` 3/3 GREEN (T4.3 happy + T4.4 rejection). Full journey suite 74/75 PASS in 45m45s (1 J03 ESO timing flake unrelated). |
@@ -213,7 +213,7 @@ loopzero deploy → CLI validates → upload bundle → API locks env → submit
   (static apps: build → upload S3 → write CF KV → CF Worker serves from DO Spaces)
 ```
 
-### CRDs (10 total)
+### CRDs (10 total: 8 wired, 2 unwired)
 
 Wired (✅): Tenant, Environment, LoopZeroApplication, ExposedRoute, PlatformBootstrap, GitRepositoryBinding, ClusterCredential.
 Wired (✅): PreviewEnvironment — namespace + NetworkPolicy (deny-all/allow-ingress/allow-egress) + ResourceQuota + LimitRange + TTL + condition-wait flow (BuildSubmitted→BuildCompleted→WorkloadHealthy with grace period) + Failed transition + cleanup retry/CLEANUP_FAILED + finalizer + canonical naming via `naming.PreviewNamespace`. 12 envtest specs covering full lifecycle. E2E live validated against k3d.

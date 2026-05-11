@@ -1,7 +1,6 @@
 # SPDX-License-Identifier: Apache-2.0
 # Sprint 8 v3.2 / CHG-002a / T2.3 — MinIO distributed mode (4 drives EC:2).
 # Used during Phase D cutover from standalone (`values.yaml`) to distributed.
-# See `docs/runbooks/minio-distributed-migration.md` for the full procedure.
 #
 # Differences vs values.yaml (standalone):
 # - mode: distributed (was: standalone)

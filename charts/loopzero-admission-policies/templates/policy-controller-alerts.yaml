@@ -37,7 +37,6 @@ spec:
           annotations:
             summary: "policy-controller webhook p99 latency > 500ms"
             description: "Sigstore policy-controller webhook p99 has been above 500ms for 10 minutes — pod admission is being delayed."
-            runbook_url: "https://github.com/loopzero/loopzero/blob/main/docs/runbooks/alerts/loopzero-policy-controller-latency.md"
 
         - alert: LoopZeroPolicyControllerWebhookLatencyCritical
           expr: |
@@ -51,7 +50,6 @@ spec:
           annotations:
             summary: "policy-controller webhook p99 latency > 1s"
             description: "Sigstore policy-controller webhook p99 has been above 1s for 5 minutes — admission is severely degraded. New pods cannot start in tenant namespaces until latency recovers."
-            runbook_url: "https://github.com/loopzero/loopzero/blob/main/docs/runbooks/alerts/loopzero-policy-controller-latency.md"
 
         # ─────────────────────────────────────────────────────────────────
         # Verification failures — supply chain integrity
@@ -68,7 +66,6 @@ spec:
           annotations:
             summary: "policy-controller observed signature verification failures"
             description: {{ printf "{{ $value }} verification failure(s) in the last 15m. In Audit mode these are admitted; review the audit log before flipping to Deny." | quote }}
-            runbook_url: "https://github.com/loopzero/loopzero/blob/main/docs/runbooks/alerts/loopzero-policy-controller-verification-failed.md"
 
         # When in Deny mode (post-audit), even a single sustained failure
         # blocks deploys. Different threshold/severity for that case.
@@ -86,7 +83,6 @@ spec:
           annotations:
             summary: "policy-controller verification failure rate > 5%"
             description: "More than 5% of admission decisions failed verification in the last 5m. Possible regression in the build pipeline (un-signed images) or rotated key drift."
-            runbook_url: "https://github.com/loopzero/loopzero/blob/main/docs/runbooks/alerts/loopzero-policy-controller-verification-failed.md"
 
         # ─────────────────────────────────────────────────────────────────
         # Controller availability
@@ -101,5 +97,4 @@ spec:
           annotations:
             summary: "policy-controller is unreachable"
             description: "Sigstore policy-controller has been unreachable for 5 minutes. In Audit mode (D4) admissions still succeed but lose verification visibility; in Deny mode admissions FAIL CLOSED for tenant namespaces."
-            runbook_url: "https://github.com/loopzero/loopzero/blob/main/docs/runbooks/alerts/loopzero-policy-controller-down.md"
 {{- end }}

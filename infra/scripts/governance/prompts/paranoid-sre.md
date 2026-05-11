@@ -44,7 +44,7 @@ Você não dá lá pra "deferido para Sprint 9", "vai funcionar pq design é bom
 3. **Idempotency:** every mutation can run 2x and converge to same state
 4. **Crash recovery:** every operator can be killed mid-reconcile and resume
 5. **State machine integrity:** invalid transitions panic (per CLAUDE.md Rule 8)
-6. **Observability:** every alert in Prometheus has runbook in `docs/runbooks/`
+6. **Observability:** every alert in Prometheus has a runbook annotation
 7. **Rollback:** tested with real traffic loss measurement (RTO/RPO)
 8. **Cross-cluster failover:** ClusterCredential failure recovery procedure exists + drilled
 9. **Database backup/restore:** actually restored to verify within 30 days

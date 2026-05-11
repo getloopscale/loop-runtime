@@ -277,7 +277,7 @@ done
 total_dur=$(( $(date +%s) - sync_start ))
 log "DONE — cutover succeeded in ${total_dur}s (sync=${sync_dur}s, ready=${ready_dur}s, verified=${verified}/4)"
 log "log file: $LOG_FILE"
-log "next steps: monitor for soak period per docs/runbooks/operator-cutover-runbook.md Step 5"
+log "next steps: monitor soak period for regressions"
 
 # Disable rollback trap (success path).
 PRE_FLIGHT_PASSED=0

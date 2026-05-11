@@ -50,7 +50,6 @@ spec:
               cleanup) until 30 consecutive days silent. Investigate via:
                 kubectl --context <ctx> -n loopzero-system describe deploy {{ $labels.deployment }}
                 kubectl --context <ctx> -n loopzero-system logs deploy/{{ $labels.deployment }} --previous
-            runbook_url: "https://github.com/getloopscale/loopzero/blob/develop/docs/runbooks/operator-cutover-runbook.md#step-5-soak-per-environment"
 
         # Reconcile latency degradation post-cutover (paired with the
         # OperatorReconcileSlowdown alert from T2.1 that has the same
@@ -81,7 +80,6 @@ spec:
               (b) reconcile loop has a regression introduced by the
                   split — investigate logs.
               If sustained > 30min: ESCALATE; consider rollback.
-            runbook_url: "https://github.com/getloopscale/loopzero/blob/develop/docs/runbooks/operator-cutover-runbook.md#step-5-soak-per-environment"
 
         # ZeroReadyWindow watcher (condition C6 — partial implementation
         # via this metric). During cutover, there must NEVER be 0 Ready
@@ -113,4 +111,3 @@ spec:
               `bash infra/scripts/operator-cutover-rollback.sh <ctx>`.
               If outside cutover: investigate as a routine OOM /
               CrashLoop; same severity but different urgency.
-            runbook_url: "https://github.com/getloopscale/loopzero/blob/develop/docs/runbooks/operator-cutover-runbook.md#step-3-wait-for-new-replicas-to-reach-ready"
