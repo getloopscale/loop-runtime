@@ -9,7 +9,7 @@
 
 ## Context
 
-LoopZero is at maturity **3.9/5.0**. The path to 5.0 requires (from `docs/maturity-assessment.md`):
+LoopZero is at maturity **3.49/4.0** (modular audit baseline 2026-05-11, `docs/audit/2026-05-11/SUMMARY.md`). The path to higher maturity requires:
 
 - Full chaos engineering suite
 - 50+ real tenants
@@ -130,7 +130,7 @@ Guarantee that a catastrophic cluster failure does not result in permanent data 
 
 1. Helm chart `infra/helm/velero/` with DO Spaces (S3) backend configuration.
 2. `Schedule` CRDs for each backup scope.
-3. Runbook `docs/runbooks/disaster-recovery-restore.md` with step-by-step restore procedure.
+3. New runbook with step-by-step restore procedure (to be created post-approval).
 4. Quarterly DR drill: destroy mgmt cluster → restore from Velero → validate all CRDs restored → `loopzero deploy` works.
 5. Prometheus metrics: `velero_backup_success_total`, `velero_backup_last_successful_timestamp`.
 6. Alert: `VeleroBackupStale` if last successful backup > 12h.
@@ -391,7 +391,9 @@ P3 Kuberhealthy ───────────────── (depends on 
 
 | Current | After P0+P1 | After P2 | After P3 | With 50+ tenants |
 |:---:|:---:|:---:|:---:|:---:|
-| 3.9 | 4.2 | 4.5 | 4.7 | **5.0** |
+| 3.49/4.0 | +P0+P1 (~+0.10) | +P2 (~+0.15) | +P3 (~+0.10) | +business (~+0.15) |
+
+> Note: numerical impact projections (+0.X each) are directional only. Pre-audit-modular roadmap used legacy 5.0 cap; current baseline uses 4.0 cap per modular audit methodology.
 
 - **P0 (Chaos Mesh experiments):** +0.15 — closes "full chaos engineering suite" requirement.
 - **P1 (Velero):** +0.15 — closes "validated incident runbooks" requirement. Enables DR drill.
@@ -403,9 +405,8 @@ P3 Kuberhealthy ───────────────── (depends on 
 
 ## References
 
-- `docs/maturity-assessment.md` — current assessment and path to 5.0
+- `docs/audit/2026-05-11/SUMMARY.md` — current modular audit baseline (12 módulos, cap 4.0)
 - `infra/helm/chaos-mesh/` — existing Chaos Mesh installation (Sprint 8 T0.3)
-- `docs/meetings/adr/0011-replicas-autoscaling-precedence-and-plan-caps.md` — scaling plan caps (relevant for Argo Rollouts canary strategy)
 - CNCF Landscape (`landscape.yml`) — source of project evaluation
 - Argo Rollouts Traefik integration docs — `TraefikService` weighted routing
 - Velero documentation — backup schedules and S3 backend

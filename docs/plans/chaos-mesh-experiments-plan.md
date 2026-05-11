@@ -1,6 +1,6 @@
 # Plan: Chaos Mesh Experiments — Prove Resilience with Evidence
 
-> **Version 1.1** (edge case review incorporated: EC-1 defer ordering, EC-2 namespaceSelector matchExpressions, EC-3 auth token) — Operationalize the existing Chaos Mesh infrastructure (9 manifests + Ginkgo framework in `infra/tests/chaos/`) by closing 6 gaps: 3 missing experiments, dedicated CI workflow, Prometheus SLO rules, and Helmfile bootstrap integration. The outcome is a weekly automated chaos suite that proves LoopZero self-heals under 12 failure scenarios, producing regression matrix entries and SLO evidence for the maturity 5.0 path.
+> **Version 1.1** (edge case review incorporated: EC-1 defer ordering, EC-2 namespaceSelector matchExpressions, EC-3 auth token) — Operationalize the existing Chaos Mesh infrastructure (9 manifests + Ginkgo framework in `infra/tests/chaos/`) by closing 6 gaps: 3 missing experiments, dedicated CI workflow, Prometheus SLO rules, and Helmfile bootstrap integration. The outcome is a weekly automated chaos suite that proves LoopZero self-heals under 12 failure scenarios, producing regression matrix entries and SLO evidence for the path to maturity 4.0.
 
 ## Context
 
@@ -19,12 +19,11 @@ Chaos Mesh 2.7.0 CRDs are registered in all 4 clusters (Sprint 8 T0.3, `infra/he
 3. **PrometheusRule CRDs** — SLO queries exist as annotations but are not actualized as firing alerts
 4. **Scenario 9 is a stub** — `chaos_test.go` Context "Cell network partition" only calls `checkAPIHealth()` without applying any NetworkChaos CRD
 5. **Helmfile release** — `chaos-mesh` installed manually/out-of-band, not in bootstrap flow
-6. **Regression matrix entries** — zero chaos entries in `docs/runbooks/bootstrap-regression-matrix.md`
+6. **Regression matrix entries** — zero chaos entries documented as permanent protections (regression matrix to be (re)created if scope is approved post-d18e3b89 consolidation)
 7. **Never validated** — no evidence that any experiment has been applied against a running cluster
 
 **Evidence motivating this work:**
-- `docs/maturity-assessment.md` line 67: "Full chaos engineering suite" listed as path to 5.0
-- `docs/strategy/resilience-roadmap.md`: P0 priority, estimated medium effort
+- `docs/strategy/resilience-roadmap.md`: P0 priority, estimated medium effort — full chaos engineering suite listed as path to higher maturity
 - Sprint 8 T0.3 installed CRDs but no Phase 5 (chaos validation gate) ever ran
 - Zero entries in regression matrix for chaos resilience scenarios
 
@@ -64,7 +63,7 @@ Specific goals:
 
 ### D5 — Weekly cron, not continuous chaos (GameDay approach)
 **Decision:** Chaos suite runs weekly (Sunday 03:00 UTC), not continuously.
-**Rationale:** Continuous chaos (kill random pods every N minutes) is a maturity 5.0+ practice. At 3.9, we need to validate known failure modes systematically before enabling random disruption. Weekly gives deterministic evidence for SLA auditing.
+**Rationale:** Continuous chaos (kill random pods every N minutes) is a high-maturity practice. At current baseline (3.49/4.0 per modular audit 2026-05-11), we need to validate known failure modes systematically before enabling random disruption. Weekly gives deterministic evidence for SLA auditing.
 **Consequences:** `chaos-suite.yml` uses `schedule: cron: '0 3 * * 0'` matching `cell2-soaks.yml` pattern.
 
 ### D6 — Steady-state pod kill for tenant namespaces is bounded
@@ -556,12 +555,12 @@ VERIFY:  LOOPZERO_CHAOS_TEST=1 go test ./infra/tests/chaos/ -v -count=1
 Add 12 entries to the bootstrap regression matrix documenting each chaos scenario as a permanent protection.
 
 #### Evidence
-- `docs/runbooks/bootstrap-regression-matrix.md` has 82+ entries but zero for chaos resilience.
+- Regression matrix (formerly `docs/runbooks/bootstrap-regression-matrix.md`, removed in d18e3b89 consolidation) had 82+ entries but zero for chaos resilience.
 - Each chaos experiment proves a specific resilience invariant that must not regress.
 
 #### Files to edit
 ```
-docs/runbooks/bootstrap-regression-matrix.md — add 12 new entries
+(new) regression matrix file — add 12 new entries (file to be (re)created post-approval)
 ```
 
 #### Deep file dependency analysis
@@ -586,7 +585,7 @@ New category: `CHAOS_RESILIENCE`.
 RED:     TestRegressionMatrixHasChaosEntries — read matrix, assert 12 entries with category CHAOS_RESILIENCE (fails: no entries exist)
 GREEN:   Add the 12 entries
 REFACTOR: None expected
-VERIFY:  grep -c "CHAOS_RESILIENCE" docs/runbooks/bootstrap-regression-matrix.md  # should return 12
+VERIFY:  grep -c "CHAOS_RESILIENCE" <new-matrix-file>  # should return 12 (matrix file path TBD post-approval)
 ```
 
 #### Acceptance Criteria
@@ -615,7 +614,7 @@ VERIFY:  grep -c "CHAOS_RESILIENCE" docs/runbooks/bootstrap-regression-matrix.md
 | 8 | No dedicated CI workflow | T2.1 | chaos-suite.yml weekly cron |
 | 9 | Never validated end-to-end | T3.1 | Full run against k3d, 12/12 GREEN |
 | 10 | Zero regression matrix entries | T3.2 | 12 CHAOS_RESILIENCE entries |
-| 11 | Maturity 5.0 "full chaos suite" requirement | All | 12 scenarios validated weekly |
+| 11 | Path-to-4.0 "full chaos suite" requirement | All | 12 scenarios validated weekly |
 
 **Coverage: 11/11 gaps covered (100%)**
 
