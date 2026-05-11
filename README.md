@@ -98,16 +98,150 @@ No Kubernetes knowledge required. No Helm. No Dockerfile required. Just push.
 | Polish + onboarding (< 10 min) | High | Sprint 9 -- not started. |
 | SSO/SAML | Low | Phase 3. |
 
-### Pricing Tiers
+### Plans
 
-Source of truth: `api/internal/db/migrations/000002_seed_data.up.sql` (plan_limits seed).
+<table>
+<tr>
+<th width="25%">Starter</th>
+<th width="25%">Pro</th>
+<th width="25%">Team</th>
+<th width="25%">Enterprise</th>
+</tr>
+<tr>
+<td><h3>Free</h3><em>For side projects and learning</em></td>
+<td><h3>$29/mo</h3><em>For professional developers</em></td>
+<td><h3>$99/mo</h3><em>For growing teams</em></td>
+<td><h3>Custom</h3><em>For organizations at scale</em></td>
+</tr>
+<tr><td colspan="4"><strong>Deploy & Operate</strong></td></tr>
+<tr>
+<td>3 projects</td>
+<td>10 projects</td>
+<td>Unlimited projects</td>
+<td>Unlimited projects</td>
+</tr>
+<tr>
+<td>1 environment</td>
+<td>3 environments</td>
+<td>Unlimited environments</td>
+<td>Unlimited environments</td>
+</tr>
+<tr>
+<td>50 builds/mo</td>
+<td>500 builds/mo</td>
+<td>5,000 builds/mo</td>
+<td>Unlimited</td>
+</tr>
+<tr>
+<td>2 replicas/service</td>
+<td>5 replicas/service</td>
+<td>10 replicas/service</td>
+<td>Unlimited</td>
+</tr>
+<tr>
+<td>3 team members</td>
+<td>10 team members</td>
+<td>25 team members</td>
+<td>Unlimited</td>
+</tr>
+<tr><td colspan="4"><strong>Deployment Safety</strong></td></tr>
+<tr>
+<td>Zero-downtime deploys</td>
+<td>Zero-downtime deploys</td>
+<td>Zero-downtime deploys</td>
+<td>Zero-downtime deploys</td>
+</tr>
+<tr>
+<td>Instant rollback</td>
+<td>Instant rollback</td>
+<td>Instant rollback</td>
+<td>Instant rollback</td>
+</tr>
+<tr>
+<td>Canary deploys (automatic)</td>
+<td>Canary deploys (visible steps)</td>
+<td>Canary deploys (configurable)</td>
+<td>Canary deploys (full control + analysis hooks)</td>
+</tr>
+<tr>
+<td>—</td>
+<td>Preview environments (per PR)</td>
+<td>Preview environments (per PR)</td>
+<td>Preview environments (per PR)</td>
+</tr>
+<tr>
+<td>—</td>
+<td>Custom domains (TLS, WAF)</td>
+<td>Custom domains (TLS, WAF)</td>
+<td>Custom domains (TLS, WAF)</td>
+</tr>
+<tr>
+<td>—</td>
+<td>Cross-environment promote</td>
+<td>Cross-environment promote</td>
+<td>Cross-environment promote</td>
+</tr>
+<tr><td colspan="4"><strong>Security & Compliance</strong></td></tr>
+<tr>
+<td>Signed container images</td>
+<td>Signed container images</td>
+<td>Signed container images</td>
+<td>Signed container images</td>
+</tr>
+<tr>
+<td>—</td>
+<td>—</td>
+<td>SBOM per build (CycloneDX)</td>
+<td>SBOM per build (CycloneDX)</td>
+</tr>
+<tr>
+<td>—</td>
+<td>—</td>
+<td>Build attestation</td>
+<td>Build attestation</td>
+</tr>
+<tr>
+<td>—</td>
+<td>Audit log (basic)</td>
+<td>Audit log (full filters + export)</td>
+<td>Audit log (full filters + export)</td>
+</tr>
+<tr>
+<td>—</td>
+<td>—</td>
+<td>—</td>
+<td>SSO/SAML</td>
+</tr>
+<tr><td colspan="4"><strong>Infrastructure</strong></td></tr>
+<tr>
+<td>Managed (shared cell)</td>
+<td>Managed (shared cell)</td>
+<td>Managed (shared cell)</td>
+<td>Dedicated cells (multi-cluster isolation)</td>
+</tr>
+<tr>
+<td>—</td>
+<td>—</td>
+<td>—</td>
+<td>Self-hosted option (your Kubernetes)</td>
+</tr>
+<tr>
+<td>—</td>
+<td>—</td>
+<td>—</td>
+<td>SLA (99.9%+ uptime)</td>
+</tr>
+<tr>
+<td>—</td>
+<td>—</td>
+<td>—</td>
+<td>Dedicated support</td>
+</tr>
+</table>
 
-| Tier | Price | Projects | Builds/mo | Seats | Max Replicas/Service |
-|------|-------|----------|-----------|-------|---------------------|
-| Starter | Free | 1 | 50 | 3 | 2 |
-| Pro | $29/mo | 3 | 500 | 10 | 5 |
-| Team | $79/mo | 10 (soft 15) | 5000 soft | 25 | 10 |
-| Enterprise | Custom | Unlimited | Unlimited | Unlimited | Unlimited |
+Every plan includes: GitHub auto-deploy on push, monorepo support (30+ frameworks), encrypted secrets, `--json` output for CI/CD, and the same CLI experience.
+
+> **Implementation note:** Plan limits enforced by `api/internal/db/migrations/000002_seed_data.up.sql` (plan_limits seed) + 4 enforcement middlewares (HTTP 402 on exceed).
 
 ### Test Suite
 
