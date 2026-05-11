@@ -1,0 +1,56 @@
+name: status-refresh
+
+# Daily refresh of docs/STATUS.md auto-sections (activity-30d + decay-summary).
+# Commits only if delta detected (idempotent: no-op if data unchanged).
+#
+# Per T4.4 of status-validation-and-doc-consolidation-plan.
+
+on:
+  schedule:
+    - cron: "0 6 * * *"  # 06:00 UTC daily
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  refresh:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 100  # for git log --since=30.days
+
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Install PyYAML
+        run: pip install pyyaml
+
+      - name: Regenerate auto-sections
+        run: bash infra/scripts/governance/regenerate-status.sh
+
+      - name: Check for changes
+        id: diff
+        run: |
+          if git diff --quiet docs/STATUS.md; then
+            echo "changed=false" >> "$GITHUB_OUTPUT"
+          else
+            echo "changed=true" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Commit and push if changed
+        if: steps.diff.outputs.changed == 'true'
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add docs/STATUS.md
+          git commit -m "chore(status): refresh auto-sections ($(date +%Y-%m-%d))"
+          git push
+
+      - name: Idempotency check
+        if: steps.diff.outputs.changed == 'false'
+        run: echo "STATUS.md auto-sections unchanged — no commit needed"
