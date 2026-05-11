@@ -17,7 +17,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 - Multi-cell routing with round-robin placement, dynamic cell resolution, and admin pin/evict commands (#CHG-multicell)
 - Cell-2 activated and LIVE-validated — 3/3 cells connected, cell-aware reconcile (#CHG-multicell)
 - Distributed tracing end-to-end (CLI → API → operators) with OTel, Tempo, and trace-linked logs (#CHG-observability)
-- 105 `loopzero_*` metrics (including 6 cell metrics) + Grafana dashboards + SLO alerts + 7 multi-cell alerts (#CHG-observability)
+- 99 `loopzero_*` metrics (including 6 cell metrics) + Grafana dashboards + SLO alerts + 7 multi-cell alerts (#CHG-observability)
 - Operator multi-binary split into 4 binaries: tenant, app, preview, platform (#CHG-operator-split)
 - Layered bootstrap: Pulumi L1 + Helmfile L2 + ArgoCD L3 (#CHG-layered-bootstrap)
 - Application reaper for orphan CRs with `ApplicationCleaned` terminal state (#CHG-reaper)
