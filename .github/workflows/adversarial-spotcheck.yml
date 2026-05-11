@@ -1,0 +1,89 @@
+name: adversarial-spotcheck
+
+# Nightly adversarial spotcheck — picks 1 random dim + 1 random persona;
+# alerts if score delta from STATUS.md > 0.3.
+#
+# Per T5.3 of status-validation-and-doc-consolidation-plan.
+
+on:
+  schedule:
+    - cron: "0 4 * * *"  # 04:00 UTC daily (after status-refresh 06:00 prev cycle)
+  workflow_dispatch:
+    inputs:
+      seed:
+        description: "Override seed (for reproducibility / debug)"
+        required: false
+        default: ""
+
+permissions:
+  contents: read
+  issues: write
+
+jobs:
+  spotcheck:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Select dimension + persona (seeded)
+        id: select
+        run: |
+          SEED="${{ github.event.inputs.seed }}"
+          if [[ -z "$SEED" ]]; then
+            SEED="$(date +%s)"
+          fi
+          export SPOTCHECK_SEED="$SEED"
+          bash infra/scripts/governance/spotcheck-dimension.sh > /tmp/spotcheck.txt
+          DIM=$(grep "^selected_dimension:" /tmp/spotcheck.txt | awk '{print $2}')
+          PERSONA=$(grep "^selected_persona:" /tmp/spotcheck.txt | awk '{print $2}')
+          echo "dimension=$DIM" >> "$GITHUB_OUTPUT"
+          echo "persona=$PERSONA" >> "$GITHUB_OUTPUT"
+          echo "seed=$SEED" >> "$GITHUB_OUTPUT"
+          cat /tmp/spotcheck.txt
+
+      - name: Note for operator
+        run: |
+          cat <<EOF
+          # Spotcheck Plan
+
+          Dimension: ${{ steps.select.outputs.dimension }}
+          Persona: ${{ steps.select.outputs.persona }}
+          Seed: ${{ steps.select.outputs.seed }}
+
+          ## Next step (requires Claude agent invocation — not yet automated in CI)
+
+          To complete spotcheck:
+          1. Invoke ${{ steps.select.outputs.persona }} persona on dimension ${{ steps.select.outputs.dimension }}
+          2. Compare resulting score against docs/STATUS.md §2 same row
+          3. If |delta| > 0.3 → open issue "adversarial drift detected"
+          4. Update docs/governance/spotcheck-history.yaml with finding
+
+          For now this workflow emits the selection. Full adversarial invocation
+          requires (a) Claude API key in CI OR (b) manual operator follow-up.
+          EOF
+
+      - name: Append to spotcheck history (selection-only)
+        run: |
+          mkdir -p docs/governance/spotcheck-history
+          DATE=$(date +%Y-%m-%d)
+          HIST_FILE="docs/governance/spotcheck-history/${DATE}.yaml"
+          cat > "$HIST_FILE" <<EOF
+          date: ${DATE}
+          seed: ${{ steps.select.outputs.seed }}
+          dimension: ${{ steps.select.outputs.dimension }}
+          persona: ${{ steps.select.outputs.persona }}
+          status: selection_only
+          run_id: ${{ github.run_id }}
+          note: |
+            Selection completed. Adversarial scoring run pending operator follow-up.
+            See workflow log for next-step instructions.
+          EOF
+          echo "Wrote $HIST_FILE"
+
+      - name: Upload selection
+        uses: actions/upload-artifact@v4
+        with:
+          name: spotcheck-selection-${{ github.run_id }}
+          path: /tmp/spotcheck.txt
+          retention-days: 30

@@ -100,6 +100,15 @@ jobs:
             /tmp/decay-report.md
           retention-days: 90
 
+      - name: Notify on alert (Slack)
+        if: steps.scan.outputs.expired_count != '0' && github.event.inputs.dry_run != 'true'
+        uses: ./.github/actions/governance-notify
+        with:
+          title: "[decay] ${{ steps.scan.outputs.expired_count }} expired claims"
+          body: "Decay scan found ${{ steps.scan.outputs.expired_count }} expired claims in ${{ steps.scan.outputs.scanned }} files. See workflow run + GitHub issue."
+          workflow_url: "${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}"
+          webhook_url: "${{ secrets.SLACK_WEBHOOK_URL }}"
+
       - name: Fail if expired claims found (non-dry-run)
         if: steps.scan.outputs.expired_count != '0' && github.event.inputs.dry_run != 'true'
         run: |

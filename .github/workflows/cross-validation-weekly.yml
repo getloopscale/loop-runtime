@@ -1,0 +1,105 @@
+name: cross-validation-weekly
+
+# Weekly cross-validation against open plans (CRITICO/GRAVE detection).
+# Per T5.1 of status-validation-and-doc-consolidation-plan.
+
+on:
+  schedule:
+    - cron: "0 3 * * 0"  # Sundays 03:00 UTC (after decay-scan 02:00)
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  issues: write
+
+jobs:
+  cross-validate:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: List open plans
+        id: plans
+        run: |
+          # Find plans with checkboxes that may need validation
+          PLANS=$(find docs/plans -name "*-plan.md" -type f | grep -v "edge-cases" | tr '\n' ' ')
+          echo "Found plans: $PLANS"
+          echo "plans=$PLANS" >> "$GITHUB_OUTPUT"
+          echo "count=$(echo $PLANS | wc -w)" >> "$GITHUB_OUTPUT"
+
+      - name: Cross-validate each plan (lightweight contract check)
+        id: validate
+        run: |
+          FINDINGS=0
+          REPORT="/tmp/cv-report.md"
+          echo "# Cross-Validation Weekly Report — $(date +%Y-%m-%d)" > "$REPORT"
+          echo "" >> "$REPORT"
+          echo "**Plans scanned:** ${{ steps.plans.outputs.count }}" >> "$REPORT"
+          echo "" >> "$REPORT"
+
+          for plan in ${{ steps.plans.outputs.plans }}; do
+            echo "## $(basename "$plan" .md)" >> "$REPORT"
+            echo "" >> "$REPORT"
+
+            # Heuristic checks (full /cross-validation skill invocation requires Claude — this is a CI lightweight pass)
+            # 1. Check tasks marked [x] have evidence
+            COMPLETED=$(grep -c "^- \[x\]" "$plan" 2>/dev/null || echo 0)
+            EVIDENCE_REFS=$(grep -c "docs/evidence/" "$plan" 2>/dev/null || echo 0)
+
+            if [[ "$COMPLETED" -gt 5 && "$EVIDENCE_REFS" -eq 0 ]]; then
+              echo "- ⚠️ **GRAVE**: $COMPLETED completed tasks; 0 evidence file references" >> "$REPORT"
+              FINDINGS=$((FINDINGS + 1))
+            fi
+
+            # 2. Check Dogfood Gate section exists
+            if ! grep -q "Dogfood Gate" "$plan"; then
+              echo "- ⚠️ **GRAVE**: Missing Dogfood Gate section" >> "$REPORT"
+              FINDINGS=$((FINDINGS + 1))
+            fi
+
+            # 3. Check edge-cases doc exists alongside
+            EDGES="$(dirname "$plan")/$(basename "$plan" -plan.md)-edge-cases.md"
+            if [[ ! -f "$EDGES" ]]; then
+              echo "- ℹ️ INFO: No companion edge-cases.md file" >> "$REPORT"
+            fi
+
+            echo "" >> "$REPORT"
+          done
+
+          echo "" >> "$REPORT"
+          echo "**Total findings:** $FINDINGS" >> "$REPORT"
+          echo "findings=$FINDINGS" >> "$GITHUB_OUTPUT"
+
+          cat "$REPORT"
+
+      - name: Upload report
+        uses: actions/upload-artifact@v4
+        with:
+          name: cv-weekly-report-${{ github.run_id }}
+          path: /tmp/cv-report.md
+          retention-days: 90
+
+      - name: Open issue on findings
+        if: steps.validate.outputs.findings != '0'
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const fs = require('fs');
+            const body = fs.readFileSync('/tmp/cv-report.md', 'utf8');
+            await github.rest.issues.create({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              title: `[cross-validation] ${{ steps.validate.outputs.findings }} findings in weekly scan`,
+              body,
+              labels: ['governance', 'cross-validation'],
+            });
+
+      - name: Notify on findings (Slack)
+        if: steps.validate.outputs.findings != '0'
+        uses: ./.github/actions/governance-notify
+        with:
+          title: "[cross-validation] ${{ steps.validate.outputs.findings }} findings in ${{ steps.plans.outputs.count }} plans"
+          body: "Weekly cross-validation found ${{ steps.validate.outputs.findings }} GRAVE+ findings. See GitHub issue for detail."
+          workflow_url: "${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}"
+          webhook_url: "${{ secrets.SLACK_WEBHOOK_URL }}"

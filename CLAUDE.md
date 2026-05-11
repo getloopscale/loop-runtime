@@ -66,6 +66,7 @@ cd infra/pulumi && npx pulumi preview --stack dev # Preview
 8. **State machines are strict** — Use state machine functions, never direct status updates. Invalid transitions panic (programming error).
 9. **CLI is the primary interface** — Every feature lives in CLI before dashboard. Dashboard-only features are product bugs.
 10. **Local equals production** — Same Helm charts, same operators, same build pipeline. No Docker Compose shortcuts. No "dev mode" with different behavior.
+11. **Claims need evidence** — Any claim affecting maturity score in `docs/STATUS.md` requires **3 evidence sources** (T1 commit+test, T2 LIVE log, T3 CI run) per `docs/governance/evidence-bar.md`. Confidence cap **95-97%** (not 99% — same-model-family correlation residual). PR touching score-affecting STATUS.md MUST also update `docs/evidence/{dim}/`. TTL applies: 30d operational / 60d arch / 90d strategic. Pre-merge gate enforces. Per ADR-0051.
 
 ---
 

@@ -1,0 +1,114 @@
+name: status-pr-gate
+
+# Pre-merge gate: PRs touching docs/STATUS.md MUST also touch docs/evidence/**.
+# Override: PR with label "evidence-waiver" bypasses (requires justification in description).
+#
+# Per T6.4 + ADR D6 of status-validation-and-doc-consolidation-plan.
+
+on:
+  pull_request:
+    branches: [develop, main]
+    paths:
+      - "docs/STATUS.md"
+      - "docs/evidence/**"
+
+permissions:
+  contents: read
+  pull-requests: read
+
+jobs:
+  enforce-evidence:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Check PR labels for waiver
+        id: labels
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const labels = context.payload.pull_request.labels.map(l => l.name);
+            const hasWaiver = labels.includes('evidence-waiver');
+            core.setOutput('waiver', hasWaiver ? 'true' : 'false');
+            console.log('Labels:', labels);
+            console.log('Waiver active:', hasWaiver);
+
+      - name: Determine changed files
+        id: changes
+        run: |
+          BASE_SHA="${{ github.event.pull_request.base.sha }}"
+          HEAD_SHA="${{ github.event.pull_request.head.sha }}"
+          CHANGED=$(git diff --name-only "$BASE_SHA" "$HEAD_SHA")
+          echo "All changed:"
+          echo "$CHANGED"
+
+          STATUS_TOUCHED=false
+          EVIDENCE_TOUCHED=false
+          if echo "$CHANGED" | grep -q "^docs/STATUS.md$"; then
+            STATUS_TOUCHED=true
+          fi
+          if echo "$CHANGED" | grep -q "^docs/evidence/"; then
+            EVIDENCE_TOUCHED=true
+          fi
+
+          echo "status_touched=$STATUS_TOUCHED" >> "$GITHUB_OUTPUT"
+          echo "evidence_touched=$EVIDENCE_TOUCHED" >> "$GITHUB_OUTPUT"
+
+      - name: Enforce gate
+        run: |
+          STATUS="${{ steps.changes.outputs.status_touched }}"
+          EVIDENCE="${{ steps.changes.outputs.evidence_touched }}"
+          WAIVER="${{ steps.labels.outputs.waiver }}"
+
+          echo "STATUS.md touched: $STATUS"
+          echo "Evidence touched:  $EVIDENCE"
+          echo "Waiver label:      $WAIVER"
+
+          if [[ "$STATUS" == "true" && "$EVIDENCE" == "false" ]]; then
+            if [[ "$WAIVER" == "true" ]]; then
+              echo "::warning::STATUS.md changed without evidence files, but evidence-waiver label is present."
+              echo "::warning::Reviewer MUST verify justification in PR description per ADR-0051 §D6."
+              exit 0
+            fi
+            cat <<EOF
+            ::error::PR touches docs/STATUS.md but does NOT update docs/evidence/**
+
+            Per ADR-0051 §D6 (claim-evidence-decay contract):
+            Any change to score-affecting claims in STATUS.md requires accompanying
+            evidence file delta in docs/evidence/{dim}/.
+
+            To resolve:
+            1. Add/update relevant evidence file(s) in docs/evidence/{dim}/
+            2. Run 'task validate:evidence' locally to verify
+            3. OR add label 'evidence-waiver' with justification in PR description
+            EOF
+            exit 1
+          fi
+
+          echo "Gate PASS"
+
+      - name: Run evidence validator on changed files
+        if: steps.changes.outputs.evidence_touched == 'true'
+        run: |
+          BASE_SHA="${{ github.event.pull_request.base.sha }}"
+          HEAD_SHA="${{ github.event.pull_request.head.sha }}"
+          CHANGED_EVIDENCE=$(git diff --name-only --diff-filter=AM "$BASE_SHA" "$HEAD_SHA" | grep "^docs/evidence/" | grep "\.md$" || true)
+          if [[ -z "$CHANGED_EVIDENCE" ]]; then
+            echo "No new/modified evidence files (only deletions or renames). Skipping validator."
+            exit 0
+          fi
+          for f in $CHANGED_EVIDENCE; do
+            # Skip _fixtures, _TEMPLATE
+            if [[ "$f" =~ _fixtures/ || "$f" =~ _TEMPLATE\.md ]]; then
+              continue
+            fi
+            echo "Validating $f"
+            bash infra/scripts/governance/validate-evidence.sh "$f" || {
+              echo "::error file=$f::Evidence validation failed for $f"
+              exit 1
+            }
+          done
+          echo "All evidence files valid."

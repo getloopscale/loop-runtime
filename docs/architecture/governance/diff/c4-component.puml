@@ -1,0 +1,54 @@
+@startuml C4-Component-Governance-PROPOSED
+!include https://raw.githubusercontent.com/plantuml-stdlib/C4-PlantUML/release/2-decorations/C4_Component.puml
+
+' <!-- PROPOSED STATE -->
+title Documentation Governance — Component View (PROPOSED, claim lifecycle)
+
+Container_Boundary(claim_lifecycle, "Claim Lifecycle (PROPOSED — 8 validation layers)") {
+
+  Component(claim_authored, "Claim Authored", "By dev/agent", "Free-form text in commit or PR")
+  Component(extract, "extract-claims.py", "Phase 1 T1.1", "Regex + 3 EC-3 exclusions → claim-catalog.yaml")
+  Component(classify, "classify-evidence.py", "Phase 1 T1.2", "T1/T2/T3/UNEVIDENCED/BROKEN labels")
+  Component(decay_init, "init-decay-clock.py", "Phase 1 T1.3", "git log --follow per EC-4 → TTL clocks")
+
+  Component(validate, "validate-evidence.sh", "Phase 0 T0.1", "3-tier validator; exit 0/1/2")
+  Component(bias_check, "bias-check.sh", "Phase 0 T0.4", "6 pattern detector")
+  Component(triangulate, "triangulate-scores.py", "Phase 0 T0.2", "Median + std-dev of 3 persona outputs")
+
+  Component(adversarial, "3 Personas (Vercel DD / VC / SRE)", "Phase 3 T3.1", "Blind score 7 dims; independence-verified")
+
+  Component(status_md, "docs/STATUS.md", "Hub", "Canonical source — 7 sections")
+  Component(evidence_files, "docs/evidence/**", "Files", "Per-dim per-claim 3-source ev")
+
+  Component(pre_merge_gate, "status-pr-gate.yml", "Phase 6 T6.4", "Blocks STATUS.md edits w/o evidence delta")
+  Component(decay_scan_ci, "decay-scan.yml", "Phase 0 T0.3", "Weekly Sun 02:00 UTC")
+  Component(cv_ci, "cross-validation-weekly.yml", "Phase 5 T5.1", "Weekly Sun 03:00 UTC")
+  Component(spotcheck_ci, "adversarial-spotcheck.yml", "Phase 5 T5.3", "Nightly random dim+persona")
+  Component(refresh_ci, "status-refresh.yml", "Phase 5 T4.4", "Daily 06:00 UTC auto-gen sections")
+}
+
+Rel(claim_authored, extract, "1. extract")
+Rel(extract, classify, "2. classify")
+Rel(classify, decay_init, "3. assign TTL")
+Rel(decay_init, validate, "4. validate evidence refs")
+Rel(validate, evidence_files, "5. file created in dim dir")
+
+Rel(adversarial, triangulate, "6. score via triangulation")
+Rel(triangulate, status_md, "7. update §2 dim row")
+
+Rel(evidence_files, status_md, "8. linked from §6")
+Rel(pre_merge_gate, status_md, "9. blocks merge w/o evidence")
+Rel(pre_merge_gate, evidence_files, "9b. validates new evidence")
+
+Rel(decay_scan_ci, evidence_files, "Continuous: detect expired")
+Rel(cv_ci, status_md, "Continuous: cross-validate")
+Rel(spotcheck_ci, adversarial, "Continuous: nightly spot")
+Rel(refresh_ci, status_md, "Continuous: auto-sections")
+
+note bottom of claim_lifecycle
+  **8 validation layers** between author and reader (vs AS-IS: 0).
+  Each layer is materially auditable (script, file, workflow).
+  Authoring still free-form — defenses material, not procedural.
+end note
+
+@enduml

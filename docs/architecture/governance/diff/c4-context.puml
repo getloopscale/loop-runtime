@@ -1,0 +1,57 @@
+@startuml C4-Context-Governance-PROPOSED
+!include https://raw.githubusercontent.com/plantuml-stdlib/C4-PlantUML/release/2-decorations/C4_Context.puml
+
+' <!-- PROPOSED STATE -->
+' Mode 3 per /architecture-docs skill. Promotion to docs/architecture/governance/ pending /dogfood full PASS.
+
+title Documentation Governance — System Context (PROPOSED, post-Phase-6)
+
+Person(dev_cli, "CLI Developer")
+Person(dev_api, "API Developer")
+Person(dev_op, "Operator Developer")
+Person(customer, "LoopZero Customer")
+Person(investor, "Investor / DD Auditor")
+Person(future_claude, "Future Claude Session")
+
+System_Boundary(loopzero_docs, "LoopZero Documentation System (PROPOSED)") {
+  System(status_md, "docs/STATUS.md", "CANONICAL HUB — single source of truth")
+  System(evidence_dir, "docs/evidence/**", "Per-dim evidence files (3 sources per claim)")
+  System(claude_md_redirect, "CLAUDE.md (redirect)", "~470 chars, links to STATUS.md")
+  System(maturity_redirect, "maturity-assessment.md (redirect)", "Pointer to STATUS.md + history")
+  System(history, "docs/maturity-history/", "Dated snapshots (read-only)")
+  System(plans, "docs/plans/", "Per-effort plans (unchanged)")
+  System(meetings, "docs/meetings/", "ADRs incl. ADR-0051 + records")
+  System(governance_dir, "docs/governance/", "Evidence-bar + decay-policy + bias-taxonomy + personas")
+  System(arch_governance, "docs/architecture/governance/", "C4 + Excalidraw concept diagrams")
+}
+
+System_Ext(ci_workflows, "GitHub Actions (4 new)", "decay-scan / status-refresh / cross-validation-weekly / adversarial-spotcheck / status-pr-gate")
+System_Ext(validators, "infra/scripts/governance/", "8 scripts: validate / scan-decay / bias-check / triangulate / extract / classify / decay-init / regenerate-status")
+
+Rel(dev_cli, status_md, "Reads for current status")
+Rel(dev_api, status_md, "Reads for current status")
+Rel(dev_op, status_md, "Reads for current status")
+Rel(customer, status_md, "Reads via README link")
+Rel(investor, status_md, "Reads + verifies 3 sources per claim")
+Rel(future_claude, claude_md_redirect, "Loads short redirect")
+Rel(claude_md_redirect, status_md, "Points to")
+Rel(maturity_redirect, status_md, "Points to")
+Rel(maturity_redirect, history, "References dated snapshots")
+
+Rel(status_md, evidence_dir, "Cites per claim")
+Rel(evidence_dir, validators, "Validated by `task validate:evidence`")
+Rel(ci_workflows, status_md, "Auto-refresh + decay alerts")
+Rel(ci_workflows, evidence_dir, "Pre-merge gate validates")
+
+note right of loopzero_docs
+  **PROPOSED state defenses:**
+  1. SINGLE source of truth (STATUS.md)
+  2. 3-tier evidence per claim (T1/T2/T3)
+  3. TTL on every claim (30/60/90)
+  4. Pre-merge gate blocks STATUS.md edits w/o evidence
+  5. 4 CI workflows for continuous validation
+  6. 3 adversarial personas score blind w/ independence-verified
+  7. Confidence cap 95-97% (honest mathematical ceiling)
+end note
+
+@enduml
