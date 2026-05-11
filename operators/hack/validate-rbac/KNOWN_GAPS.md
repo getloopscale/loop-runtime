@@ -1,7 +1,8 @@
 # validate-rbac — Known Blind Spots
 
-Per ADR-0026 D4 condition #5 (security-engineer): the static AST
-analyzer has documented gaps where it CANNOT detect RBAC violations.
+The static AST analyzer (originally scoped by ADR-0026, removed in
+2026-05-11 governance consolidation) has documented gaps where it
+CANNOT detect RBAC violations.
 Each gap has a corresponding negative test fixture (planned) so
 regressions in the analyzer's coverage become visible.
 

@@ -2,7 +2,7 @@
 
 Centralized observability stack for the LoopZero platform. All system components — API, operators, ArgoCD, Argo Workflows, Gitea, MinIO, Traefik, PostgreSQL — are scraped by a single Prometheus instance and visualized through Grafana dashboards with alerting rules.
 
-**Spec reference:** `docs/technical.md` §15
+**Reference:** Observability audit at `docs/audits/2026-05-11/08-observability.md`. The code itself is the spec.
 
 ---
 
@@ -107,7 +107,7 @@ Six Grafana dashboards organized in a hub-and-spoke navigation pattern. All dash
 
 ## Alerting Rules
 
-23 alerting rules defined in two PrometheusRule resources, aligned with spec §15.5. Every rule has a `runbook` annotation with diagnosis steps.
+23 alerting rules defined in two PrometheusRule resources. Every rule has a `runbook` annotation with diagnosis steps.
 
 ### Critical (11 rules) — `prometheusrule-critical.yaml`
 
@@ -278,13 +278,13 @@ Shows three sections: Prometheus targets (with last scrape time), active alerts,
 
 ---
 
-## Spec Compliance
+## Observability Coverage
 
-| Spec Section | Requirement | Status |
-|-------------|-------------|--------|
-| §15.1 | Three pillars (metrics, traces, logs) correlated | Metrics ✅, Traces infra ready, Logs pending |
-| §15.2 | Key metrics emitting | API metrics ✅, Build/Deploy/Drift metrics emit when features active |
-| §15.3 | Correlation ID end-to-end | Infrastructure exists, not yet validated E2E |
-| §15.4 | SLOs defined | Dashboard panels reflect SLO targets |
-| §15.5 | 25 alerting rules | 23 rules implemented (2 covered by equivalents) |
-| §15.6 | 5 dashboards | 6 dashboards (5 required + Home) |
+| Area | Requirement | Status |
+|------|-------------|--------|
+| Three pillars | Metrics, traces, logs correlated | Metrics ✅, Traces infra ready, Logs pending |
+| Key metrics | 109 loopzero_* metrics emitting | API metrics ✅, Build/Deploy/Drift metrics emit when features active |
+| Correlation ID | End-to-end request tracing | Infrastructure exists, not yet validated E2E |
+| SLOs | Dashboard panels reflect SLO targets | ✅ |
+| Alerting rules | 23 rules (11 critical + 12 warning) | ✅ |
+| Dashboards | 6 dashboards (Home + 5 domain-specific) | ✅ |

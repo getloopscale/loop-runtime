@@ -12,7 +12,7 @@ The authoritative spec is the code itself + `CHANGELOG.md` + relevant ADRs. If t
 
 **Pricing:** Starter (Free, 1 project), Pro ($29/mo, 3 projects), Team ($79/mo, 10 projects), Enterprise (custom).
 
-**Completed:** deploy happy path (full E2E dogfood validated), **progressive delivery (Argo Rollouts canary)** with TraefikService weighted routing + per-plan steps + AnalysisTemplate hooks + auto-abort on readiness failure (`progressDeadlineSeconds=300`), scaling+HPA targeting Rollout (Starter=2/Pro=5/Team=10), promote staging→prod, rollback, secrets via ESO, custom domains v2 (CF Zone Mgmt, model Vercel), GitHub App auto-deploy (~4min), monorepo validator (30 frameworks), cosign image signing + syft SBOM (CycloneDX), supply-chain admission (policy-controller deny-by-default + warn-mode ClusterImagePolicy + digest enforcement in manifests), plan enforcement, audit log, RSA-only JWT auth, two-host gateway, concurrent deploy rejection (1×202+1×409), JSON contracts (8/8), observability (99 loopzero_* metrics including 6 cell metrics + Grafana + SLO alerts + 7 multi-cell alerts), KEDA scale-to-zero (targets Rollout via `Kind=Rollout` ScaleTargetRef + `transfer-hpa-ownership` annotation), cell architecture (Phase 0+1+1.5 + cells table + admin pin), **cell-2 ACTIVATED + LIVE-validated** (3/3 cells connected; namespace cell-aware reconcile; rollback SLO P50=648ms / P95=705ms <<300s budget; 12 ADR gates persistente), operator multi-binary split (4 binaries), layered bootstrap (Pulumi L1 + Helmfile L2 + ArgoCD L3), `loopzero admin tenants pin/evict`, **application reaper** for orphan CRs (`ApplicationCleaned` terminal state via `ApplicationOrphaned` event), **release reaper observability** (`ReleaseStore.AppendSideEffect` writes reaper context to `release.side_effects`), **release ARCHIVED status** (migration 000008, partial index excludes archived from active queries).
+**Completed:** deploy happy path (full E2E dogfood validated), **progressive delivery (Argo Rollouts canary)** with TraefikService weighted routing + per-plan steps + AnalysisTemplate hooks + auto-abort on readiness failure (`progressDeadlineSeconds=300`), scaling+HPA targeting Rollout (Starter=2/Pro=5/Team=10), promote staging→prod, rollback, secrets via ESO, custom domains v2 (CF Zone Mgmt, model Vercel), GitHub App auto-deploy (~4min), monorepo validator (30 frameworks), cosign image signing + syft SBOM (CycloneDX), supply-chain admission (policy-controller deny-by-default + warn-mode ClusterImagePolicy + digest enforcement in manifests), plan enforcement, audit log, RSA-only JWT auth, two-host gateway, concurrent deploy rejection (1×202+1×409), JSON contracts (8/8), observability (109 loopzero_* metrics including 8 cell metrics + Grafana + SLO alerts + 7 multi-cell alerts), KEDA scale-to-zero (targets Rollout via `Kind=Rollout` ScaleTargetRef + `transfer-hpa-ownership` annotation), cell architecture (Phase 0+1+1.5 + cells table + admin pin), **cell-2 ACTIVATED + LIVE-validated** (3/3 cells connected; namespace cell-aware reconcile; rollback SLO P50=648ms / P95=705ms <<300s budget; 12 ADR gates persistente), operator multi-binary split (4 binaries), layered bootstrap (Pulumi L1 + Helmfile L2 + ArgoCD L3), `loopzero admin tenants pin/evict`, **application reaper** for orphan CRs (`ApplicationCleaned` terminal state via `ApplicationOrphaned` event), **release reaper observability** (`ReleaseStore.AppendSideEffect` writes reaper context to `release.side_effects`), **release ARCHIVED status** (migration 000008, partial index excludes archived from active queries).
 
 **Not built:** SSO/SAML, Loki cross-cluster streaming (infra gap, not code), cosign keyless verification with Fulcio (pending Sprint 9), Sprint 8 Phase 1+3+4+5+6 (require new T3 meeting), production canary stages 4-5 for cell-2 (1 customer 7-day → 10/50/100% — pending Sprint 9 readiness review per ADR D6 of cell-2-activation-plan).
 
@@ -91,10 +91,10 @@ cd infra/pulumi && npx pulumi preview --stack dev # Preview
 | Auth | Ory Kratos + Ory Hydra + Redis |
 | Edge | Cloudflare Tunnel + Worker + KV |
 | Autoscaling | KEDA 2.16.1 + HTTP Add-on 0.8.0 |
-| IaC | 5 Pulumi projetos: `pulumi/` (L1 DO+CF), `pulumi-infra/` (multi-cluster topology), `pulumi-platform/` (L2 com 32 Helm releases), `pulumi-control-plane/` (STUB com 16 TODOs), `pulumi-shared/` (contratos); Helmfile L2 (bootstrap); ArgoCD L3 (Day-2 GitOps) |
+| IaC | 5 Pulumi projetos: `pulumi/` (L1 DO+CF), `pulumi-infra/` (multi-cluster topology), `pulumi-platform/` (L2 com 32 Helm releases), `pulumi-control-plane/` (STUB — 1 TODO com 9 serviços a extrair), `pulumi-shared/` (contratos); Helmfile L2 (bootstrap); ArgoCD L3 (Day-2 GitOps) |
 | Local clusters | k3d × 4 (mgmt, build, workload, runtime-2) |
 | Dev loop | Tilt + Taskfile (2930 lines across 7 files) |
-| Helm | 16 bootstrap charts próprios + 18 value overlays (`infra/helm/`) + 13 published charts (`charts/`) |
+| Helm | 16 bootstrap charts próprios + 34 value files (`infra/helm/`) + 13 published charts (`charts/`) |
 | CI/CD | GitHub Actions (35 workflows) |
 | Migrations | golang-migrate (forward-only `.up.sql`) |
 
@@ -104,14 +104,14 @@ cd infra/pulumi && npx pulumi preview --stack dev # Preview
 
 ```
 loopzero/
-├── docs/                  ← audits/, plans/, strategy/ (cli-reference.md + STATUS.md + evidence/ + architecture/ + meetings/ removed in 2026-05-11 governance consolidation; spec is the code itself)
+├── docs/                  ← audits/, plans/, strategy/, runbooks/ (pending Sprint 9), meetings/ (agent-managed), architecture/ (skill-managed). Removed in 2026-05-11: cli-reference.md, STATUS.md, evidence/. Spec is the code itself.
 ├── pkg/                   ← shared Go: statemachine, errors, errors/http, jwt, naming, conditions, id, logging, enforcement, circuitbreaker, healthcheck
-├── cli/                   ← @loopzero/cli — TS + Commander, 35 commands, 1,260 test cases (85 suites)
+├── cli/                   ← @loopzero/cli — TS + Commander, 52 commands, 1,260 test cases (85 suites)
 ├── api/internal/          ← 35 subpacotes: adapters, admission, archive, argo, argocd, cellmgr, cfkv, cfzone, config, correlation, db, domain, gitclient, github, gitops, health, k8s, leader, lock, loki, manifests, metrics, middleware, placement, processing, routes, s3, server, services, shellgen, source, sse, tracing, validation, workqueue
 ├── operators/             ← 8 controllers (Tenant, Environment, Application, Exposure, PlatformBootstrap, GitRepositoryBinding, ClusterCredential, Preview), 10 CRDs
 ├── infra/
 │   ├── pulumi/            ← IaC (TS), providers: digitalocean/, cloudflare/, aws/(stub)
-│   ├── helm/              ← 16 charts próprios + 18 value overlays para upstream
+│   ├── helm/              ← 16 charts próprios + 34 value files para upstream
 │   ├── k3d/               ← 4 cluster configs (mgmt, build, workload, runtime-2)
 │   ├── cloudflare/        ← CF Worker source (worker.mjs)
 │   └── tests/             ← e2e/ (Ginkgo), chaos/, unit/, load/
@@ -134,6 +134,8 @@ Claude operates as a team of specialists. Sequence work across agents for multi-
 - **agent:test** — writes specs before implementation. Critical tests that MUST exist: concurrent deploys (1×202+1×409), idempotency replay, lock release on crash, invalid transition panic, exit codes, JSON shape, no internal terms.
 - **agent:pipeline-reviewer (Helena Duarte)** — Argo Workflows / CI/CD. Reviews: determinism (same commit = same artifact), build/release separation, scale (100 concurrent), observability, recovery (idempotent retries).
 - **Meeting Review Board** — 9 Staff/Principal review agents + orchestrator for critical decisions. Never write code. Security/SRE have absolute veto. Min 3 agents per meeting.
+
+Behavioral and governance rules for all agents: see `.claude/rules/` (workflow, TDD, CLI output, design principles, pre-release governance, LoopZero design).
 
 Skills/slash commands (subset): `/sprint`, `/implement`, `/test`, `/review`, `/design-check`, `/failure-check`, `/schema-check`, `/state-machine`, `/dogfood`, `/sre-guardian`, `/pipeline-review`, `/meeting`, `/start-loop`, `/cancel-loop`. Full list injected by harness.
 
