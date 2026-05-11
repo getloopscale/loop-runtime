@@ -27,12 +27,14 @@
 
 **Média ponderada (igual peso):** **3.49 / 4.0**
 
-**Comparação:**
-- `docs/STATUS.md` documenta: **3.9** (overclaim de **+0.41**)
+**Comparação histórica:**
+- `docs/STATUS.md` (deletado em 2026-05-11 governance cleanup `fc1793dd`) documentava: **3.9** (overclaim de **+0.41**)
 - `status-validation` plan v1.2 (2026-05-11) LIVE-triangulou: **2.84** (under-claim de -0.65 nesta auditoria)
-- Esta auditoria (modular, code-validated): **3.49**
+- Esta auditoria (modular, code-validated): **3.49** ← **canonical maturity score** pós-cleanup
 
 A discrepância vs 2.84 do `status-validation` reflete que aquele plano usou 3 personas adversariais com weighting diferente (Core 3.0/Infra 2.8/Scale 2.9 + 4 dimensões pending). Esta auditoria é mais granular (12 módulos vs 7 dimensões) e tem cap em 4.0 (não 5.0).
+
+> **Nota pós-cleanup 2026-05-11.** Os commits `d18e3b89` (consolidate to 4 canonical docs) + `fc1793dd` (subsequent deletion, 383 files / 70055 deletions) removeram `docs/STATUS.md`, `docs/maturity-assessment.md`, `docs/cli-reference.md`, `docs/architecture/**`, `docs/meetings/**`, `docs/adr/**`, `docs/governance/**`, e os evidence files em `docs/evidence/**`. Este SUMMARY.md + os 12 módulos em `docs/audit/2026-05-11/` permanecem como o snapshot canonical. As recomendações §6 que pediam "atualizar `docs/STATUS.md`" devem agora atualizar este SUMMARY.md ou um sucessor único; **não recriar STATUS.md** sem decisão de governance.
 
 ---
 
@@ -223,8 +225,8 @@ A discrepância vs 2.84 do `status-validation` reflete que aquele plano usou 3 p
 
 1. **Operador humano:** revisar este SUMMARY + 12 docs de módulo (~15 min cada)
 2. **Decidir prioridade:** itens 1-2 (gates 4.0 operacionais) ou itens 5-9 (arquitetural T2/T3 via Change Governor)
-3. **Atualizar CLAUDE.md** para refletir realidade numérica (item 16)
-4. **Atualizar `docs/STATUS.md`** com este diagnostic (canonical per ADR D2 status-validation)
+3. **Atualizar CLAUDE.md** para refletir realidade numérica (item 16) — parcialmente feito em 2026-05-11 (refs órfãs + CLI test count)
+4. ~~Atualizar `docs/STATUS.md` com este diagnostic~~ — **SUPERSEDED**: `docs/STATUS.md` foi removido em `fc1793dd` (2026-05-11). Este SUMMARY.md passou a ser o snapshot canonical; recriar STATUS.md requer decisão T2/T3 de governance.
 
 ---
 
