@@ -2,8 +2,8 @@
 
 Data: 2026-05-06
 Plano: docs/plans/chaos-mesh-experiments-plan.md
-Tasks analisadas: 8 (T0.1, T0.2, T1.1, T1.2, T1.3, T1.4, T2.1, T3.1, T3.2)
-Edge cases encontrados: 9 (MUST FIX: 3, SHOULD TEST: 4, DOCUMENT: 2)
+Tasks analisadas: 10 (T0.1, T0.2, T0.3, T1.1, T1.2, T1.3, T1.4, T2.1, T3.1, T3.2)
+Edge cases encontrados: 9 (MUST FIX: 5, SHOULD TEST: 2, DOCUMENT: 2)
 
 ## MUST FIX
 
@@ -28,6 +28,20 @@ Edge cases encontrados: 9 (MUST FIX: 3, SHOULD TEST: 4, DOCUMENT: 2)
 - **Impacto:** Teste falha com auth error, nao com chaos recovery. False negative.
 - **Fix sugerido:** Adicionar `resolveToken()` helper ao chaos_test.go (copiar minimal version, ~10 linhas) ou ler `LOOPZERO_TOKEN` env var diretamente. O CI workflow (T2.1) deve exportar `LOOPZERO_TOKEN` como secret.
 
+### EC-6: pg-network-latency.yaml usa $PG_PRIVATE_HOST que nao e substituido
+- **Task afetada:** T0.3 (novo — fix de manifests existentes), T3.1 (validacao)
+- **Familia:** Input / State
+- **Cenario:** `pg-network-latency.yaml` linha 56 tem `externalTargets: ["${PG_PRIVATE_HOST}"]`. Isso requer `envsubst` antes de `kubectl apply`. O `applyChaos()` helper faz `kubectl apply -f <path>` direto — sem envsubst. O manifest e aplicado com string literal `${PG_PRIVATE_HOST}`, Chaos Mesh nao resolve a variavel, e o NetworkChaos nao target nada. **O cenario 4 (PG network latency) passa trivialmente porque o fault nunca e injetado.**
+- **Impacto:** Cenario 4 e um false positive — teste "passa" mas nenhuma falha foi injetada. Invalida a evidencia de resiliencia.
+- **Fix sugerido:** Trocar `externalTargets: ["${PG_PRIVATE_HOST}"]` por `labelSelectors: {"app": "postgresql"}` no namespace correto. Elimina dependencia de envsubst e funciona em qualquer ambiente (k3d ou DOKS).
+
+### EC-7: Simultaneous API+controller crash — manifest usa label diferente do teste
+- **Task afetada:** T0.3 (novo — fix de manifests existentes), T3.1 (validacao)
+- **Familia:** State / Consistency
+- **Cenario:** `simultaneous-api-controller-crash.yaml` usa selector `labelSelectors: "loopzero.io/component": "control-plane"`. Porem, o cenario 8 no teste Go (`chaos_test.go:343-346`) NAO usa o manifest — faz `kubectl delete pod -l app=loopzero-api` e `-l app.kubernetes.io/component=loopzero-operator` diretamente. Ha uma inconsistencia entre o manifest (labels `loopzero.io/component`) e o teste (labels `app`/`app.kubernetes.io/component`). O manifest pode nunca ser usado por nenhum teste. Adicionalmente, com o operator multi-binary split (ADR-0023), se nenhum pod tiver `loopzero.io/component: control-plane`, o PodChaos nao mata nada.
+- **Impacto:** Manifest orphan — existe mas nenhum teste o consome via `applyChaos()`. Se alguem corrigir o teste para usar o manifest, os labels podem nao selecionar pods.
+- **Fix sugerido:** (a) Reescrever cenario 8 para usar `applyChaos("simultaneous-api-controller-crash.yaml")` em vez de `kubectl delete` direto, e (b) atualizar o manifest para usar os labels corretos (`app=loopzero-api` + `app.kubernetes.io/component=loopzero-operator`), ou (c) deletar o manifest orphan se o teste direto com `kubectl delete` for a abordagem correta.
+
 ## SHOULD TEST
 
 ### EC-4: Chaos Mesh daemon nao instalado no build cluster
@@ -36,19 +50,9 @@ Edge cases encontrados: 9 (MUST FIX: 3, SHOULD TEST: 4, DOCUMENT: 2)
 - **Teste sugerido:** `test_iochaos_skips_when_daemon_missing` — antes de `applyChaos()`, executar `kubectl -n chaos-mesh get ds chaos-daemon --context $BUILD_CONTEXT` e Skip se NotFound. Adicionar como pre-check no cenario 11.
 
 ### EC-5: checkMetricExists pode falhar por timing
-- **Task afetada:** T0.2 + varias
+- **Task afetada:** T0.3 + varias
 - **Cenario:** `checkMetricExists()` faz `wget /metrics` no pod. Se o pod acabou de reiniciar (pos-chaos), o metrics endpoint pode nao ter emitido o metric ainda (contadores comecam do zero). O teste falha com "metric X not found" quando na verdade o sistema esta saudavel.
 - **Teste sugerido:** `test_metric_check_with_retry` — `checkMetricExists()` deveria ter retry com 3 tentativas e 5s entre cada, nao single-shot. Verificar se os 9 testes existentes sofrem desse timing issue.
-
-### EC-6: pg-network-latency.yaml usa $PG_PRIVATE_HOST que nao e substituido
-- **Task afetada:** T3.1 (validacao dos 9 existentes)
-- **Cenario:** `pg-network-latency.yaml` linha 56 tem `externalTargets: ["${PG_PRIVATE_HOST}"]`. Isso requer `envsubst` antes de `kubectl apply`. O `applyChaos()` helper faz `kubectl apply -f <path>` direto — sem envsubst. O manifest e aplicado com string literal `${PG_PRIVATE_HOST}`, Chaos Mesh nao resolve a variavel, e o NetworkChaos nao target nada.
-- **Teste sugerido:** `test_pg_latency_manifest_resolved` — verificar que todos os manifests com variaveis de ambiente sao processados por `envsubst` antes de apply. Ou: trocar `${PG_PRIVATE_HOST}` por label selector (ex: `labelSelectors: {"app": "postgresql"}`) que funciona sem envsubst.
-
-### EC-7: Simultaneous API+controller crash usa label `loopzero.io/component: control-plane` que pode nao existir
-- **Task afetada:** T3.1 (validacao dos 9 existentes)
-- **Cenario:** `simultaneous-api-controller-crash.yaml` usa selector `labelSelectors: "loopzero.io/component": "control-plane"`. Com o operator multi-binary split (ADR-0023), os 4 operators tem labels diferentes (`app.kubernetes.io/name: loopzero-tenant-operator`, etc.). Se nenhum pod tem `loopzero.io/component: control-plane`, o PodChaos nao mata nada e o teste passa trivialmente.
-- **Teste sugerido:** `test_simultaneous_crash_selects_pods` — antes de aplicar chaos, verificar que `kubectl get pods -l loopzero.io/component=control-plane -n loopzero-system` retorna >= 2 pods. Se 0, o manifest precisa ser atualizado para o novo label scheme.
 
 ## DOCUMENT
 
@@ -64,7 +68,7 @@ Edge cases encontrados: 9 (MUST FIX: 3, SHOULD TEST: 4, DOCUMENT: 2)
 
 | Padrao | Encontrado? | Onde |
 |--------|-------------|------|
-| Implemented but not wired | **SIM** | EC-6: `${PG_PRIVATE_HOST}` nunca e substituido; EC-7: label `control-plane` pode nao existir pos-split. Exatamente o padrao "manifest exists but never ran" |
+| Implemented but not wired | **SIM** | EC-6: `${PG_PRIVATE_HOST}` nunca e substituido (false positive no cenario 4); EC-7: manifest orphan — nenhum teste consome via `applyChaos()` + label pode nao selecionar pods pos-split. Exatamente o padrao "manifest exists but never ran" |
 | Correct code in wrong place | Nao | N/A |
 | Project name vs ID | Nao | Chaos tests nao usam project IDs |
 | ArgoCD notifiers not services | Nao | N/A |
@@ -76,12 +80,13 @@ Edge cases encontrados: 9 (MUST FIX: 3, SHOULD TEST: 4, DOCUMENT: 2)
 |------|-------------------|----------|-------------|----------|
 | T0.1 | 0 | 0 | 0 | 0 |
 | T0.2 | 1 | 0 | 1 (EC-5) | 0 |
+| T0.3 | 2 | 2 (EC-6, EC-7) | 0 | 0 |
 | T1.1 | 1 | 1 (EC-1) | 0 | 0 |
 | T1.2 | 1 | 1 (EC-2) | 0 | 0 |
 | T1.3 | 2 | 0 | 1 (EC-4) | 1 (EC-9) |
 | T1.4 | 1 | 1 (EC-3) | 0 | 0 |
 | T2.1 | 1 | 0 | 0 | 1 (EC-8) |
-| T3.1 | 2 | 0 | 2 (EC-6, EC-7) | 0 |
+| T3.1 | 0 | 0 | 0 | 0 |
 | T3.2 | 0 | 0 | 0 | 0 |
 
-**Veredicto:** PLANO PRECISA DE AJUSTE — 3 MUST FIX devem ser incorporados como sub-tasks antes de implementar.
+**Veredicto:** PLANO PRECISA DE AJUSTE — 5 MUST FIX devem ser incorporados como sub-tasks antes de implementar. EC-6 e EC-7 promovidos de SHOULD TEST para MUST FIX (v1.2, revisão 2026-05-11): ambos causam false positives em testes existentes (padrão "implemented but not wired").

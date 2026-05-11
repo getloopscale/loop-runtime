@@ -1,6 +1,6 @@
 # Plan: Chaos Mesh Experiments — Prove Resilience with Evidence
 
-> **Version 1.1** (edge case review completed — see `chaos-mesh-experiments-edge-cases.md`; 3 MUST FIX items EC-1/EC-2/EC-3 folded into tasks T1.1/T1.2/T1.4 respectively) — Operationalize the existing Chaos Mesh infrastructure (9 manifests + Ginkgo framework in `infra/tests/chaos/`) by closing 6 gaps: 3 missing experiments, dedicated CI workflow, Prometheus SLO rules, and Helmfile bootstrap integration. The outcome is a weekly automated chaos suite that proves LoopZero self-heals under 12 failure scenarios, producing regression matrix entries and SLO evidence for the path to maturity 4.0.
+> **Version 1.2** (review 2026-05-11 — 9 corrections applied: EC-6/EC-7 promoted to MUST FIX, new T0.3 for existing manifest bugs, governance section added, T1.1 local-only documented, scenario count clarified, T3.2 status updated, coverage matrix corrected, scenario 8 inconsistency flagged; see `chaos-mesh-experiments-edge-cases.md` for 5 MUST FIX items EC-1/EC-2/EC-3/EC-6/EC-7 folded into tasks T1.1/T1.2/T1.4/T0.3 respectively) — Operationalize the existing Chaos Mesh infrastructure (9 manifests + Ginkgo framework in `infra/tests/chaos/`) by closing 7 gaps: existing manifest bugs, 3 missing experiments, dedicated CI workflow, Prometheus SLO rules, and Helmfile bootstrap integration. The outcome is a weekly automated chaos suite that proves LoopZero self-heals under 12 failure scenarios, producing SLO evidence for the path to maturity 4.0.
 
 ## Context
 
@@ -17,10 +17,11 @@ Chaos Mesh 2.7.0 CRDs are registered in all 4 clusters (Sprint 8 T0.3, `infra/he
 1. **3 experiments not covered:** cell isolation cross-cluster partition (E2 from roadmap), random steady-state pod kill in tenant namespaces (E6), IOChaos disk pressure on BuildKit (E7)
 2. **Dedicated CI workflow** — chaos only runs mid-soak in other workflows, not as standalone weekly gate
 3. **PrometheusRule CRDs** — SLO queries exist as annotations but are not actualized as firing alerts
-4. **Scenario 9 is a stub** — `chaos_test.go` Context "Cell network partition" only calls `checkAPIHealth()` without applying any NetworkChaos CRD
+4. **Scenario 9 is a no-op** — `chaos_test.go` Context "Cell network partition" checks health without injecting any fault, so it always passes trivially (no NetworkChaos CRD applied)
 5. **Helmfile release** — `chaos-mesh` installed manually/out-of-band, not in bootstrap flow
 6. **Regression matrix entries** — zero chaos entries documented as permanent protections (regression matrix to be (re)created if scope is approved post-d18e3b89 consolidation)
-7. **Never validated** — no evidence that any experiment has been applied against a running cluster
+7. **Existing manifest bugs** — `pg-network-latency.yaml` uses `${PG_PRIVATE_HOST}` literal (never substituted, fault never injected — EC-6); `simultaneous-api-controller-crash.yaml` is an orphan manifest not consumed by any test via `applyChaos()` (EC-7); `checkMetricExists()` helper is single-shot with no retry (EC-5)
+8. **Never validated** — no evidence that any experiment has been applied against a running cluster
 
 **Evidence motivating this work:**
 - `docs/strategy/resilience-roadmap.md`: P0 priority, estimated medium effort — full chaos engineering suite listed as path to higher maturity
@@ -29,15 +30,15 @@ Chaos Mesh 2.7.0 CRDs are registered in all 4 clusters (Sprint 8 T0.3, `infra/he
 
 ## Objective
 
-**Done =** `LOOPZERO_CHAOS_TEST=1 go test ./infra/tests/chaos/ -v` passes all 12 scenarios against live k3d clusters, weekly CI workflow `chaos-suite.yml` runs with zero failures, and 12 regression matrix entries document each chaos scenario with permanent protection.
+**Done =** `LOOPZERO_CHAOS_TEST=1 go test ./infra/tests/chaos/ -v` passes all 12 Contexts (each Context = one failure scenario) against live k3d clusters, weekly CI workflow `chaos-suite.yml` runs with zero failures, and SLO evidence documented. Note: some Contexts contain multiple `It()` blocks — the count is by failure scenario (Context), not by individual assertion (It).
 
 Specific goals:
-1. All 12 chaos experiments validated against k3d (9 existing + 3 new)
-2. Scenario 9 (cell partition) completed with real NetworkChaos CRD
-3. CI workflow `chaos-suite.yml` on weekly cron (Sunday, like `cell2-soaks.yml`)
-4. PrometheusRule `prometheusrule-chaos.yaml` with SLO alerts for chaos windows
-5. Helmfile release for chaos-mesh in build/workload clusters
-6. 12 regression matrix entries added
+1. Existing manifest bugs fixed before validation (EC-6 `${PG_PRIVATE_HOST}`, EC-7 orphan manifest, EC-5 retry)
+2. All 12 chaos experiments validated against k3d (9 existing + 3 new)
+3. Scenario 9 (cell partition) completed with real fault injection (k3d cluster stop/start per ADR D3)
+4. CI workflow `chaos-suite.yml` on weekly cron (Sunday, like `cell2-soaks.yml`)
+5. PrometheusRule `prometheusrule-chaos.yaml` with SLO alerts for chaos windows
+6. Helmfile release for chaos-mesh in build/workload clusters
 
 ## ADRs
 
@@ -71,22 +72,34 @@ Specific goals:
 **Rationale:** Killing 100% of tenant pods would test KEDA re-scaling but would take too long to recover in k3d (limited resources). 30% tests self-healing without overwhelming the cluster.
 **Consequences:** Requires at least 1 deployed tenant workload in a `loopzero-tn-*` namespace during the chaos suite. The CI workflow must seed a test tenant + deploy before running E6.
 
+## Governance
+
+Per `.claude/rules/pre-release-governance.md`, the following tasks are **automatic T2 triggers** and require a CHG record + technical meeting before implementation:
+
+| Task | T2 Trigger | Reason |
+|------|-----------|--------|
+| T0.1 | Helm chart modifications | Helmfile release addition |
+| T0.2 | Pipeline/CI changes (alerting) | New PrometheusRule CRD |
+| T2.1 | Pipeline/CI changes | New GitHub Actions workflow |
+
+**Required:** Create `CHG-NNNN-CHAOS-OPERATIONALIZE` and convene meeting with at minimum: infra-engineer, sre-engineer, change-validation-planner. Tasks T0.3, T1.x, T3.x are T1 (local implementation) and can proceed with standard TDD workflow.
+
 ## Dependency Graph
 
 ```
-Phase 0 (Helmfile + Prometheus) ──▶ Phase 1 (New experiments) ──▶ Phase 2 (CI workflow)
-                                         │
-                                         ▼
-                                   Phase 3 (Validation + matrix)
+Phase 0 (Helmfile + Prometheus + Manifest Fixes) ──▶ Phase 1 (New experiments) ──▶ Phase 2 (CI workflow)
+                                                           │
+                                                           ▼
+                                                     Phase 3 (Validation)
 ```
 
-Phase 0 is prerequisite (bootstrap integration + alerting). Phase 1 adds 3 new experiments + fixes scenario 9. Phase 2 creates the CI workflow. Phase 3 validates everything end-to-end and writes regression entries.
+Phase 0 is prerequisite (bootstrap integration + alerting + fixing existing manifest bugs). Phase 1 adds 3 new experiments + replaces scenario 9 no-op. Phase 2 creates the CI workflow. Phase 3 validates everything end-to-end.
 
 ---
 
-## Phase 0: Bootstrap Integration + Prometheus SLO Rules
+## Phase 0: Bootstrap Integration + Prometheus SLO Rules + Existing Manifest Fixes
 
-**Objective:** Make chaos-mesh part of the Helmfile bootstrap and add PrometheusRule CRDs for chaos SLO validation.
+**Objective:** Make chaos-mesh part of the Helmfile bootstrap, add PrometheusRule CRDs for chaos SLO validation, and fix bugs in existing manifests/helpers that cause false positives.
 
 ### T0.1 — Helmfile release for chaos-mesh
 
@@ -195,28 +208,83 @@ VERIFY:  promtool check rules infra/helm/monitoring/manifests/prometheusrule-cha
 
 ---
 
+### T0.3 — Fix existing manifest bugs and helpers (EC-5, EC-6, EC-7)
+
+#### Objective
+Fix 3 bugs in existing chaos infrastructure that cause false positives: `${PG_PRIVATE_HOST}` unsubstituted variable (EC-6), orphan manifest with inconsistent labels (EC-7), and single-shot metric check (EC-5). These must be fixed BEFORE validation (T3.1) — otherwise validation "passes" tests that never inject faults.
+
+#### Evidence
+- `pg-network-latency.yaml:56`: `externalTargets: ["${PG_PRIVATE_HOST}"]` — literal string, never resolved. `applyChaos()` does `kubectl apply -f` without `envsubst`. Scenario 4 passes trivially.
+- `simultaneous-api-controller-crash.yaml:35`: uses `"loopzero.io/component": "control-plane"` label. Test scenario 8 (`chaos_test.go:343-346`) uses `kubectl delete -l app=loopzero-api` and `-l app.kubernetes.io/component=loopzero-operator` directly — never calls `applyChaos()` with this manifest.
+- `checkMetricExists()` (`chaos_test.go:98-105`): single `wget /metrics` attempt. Post-restart, counters start from zero — false negative on timing.
+
+#### Files to edit
+```
+infra/tests/chaos/manifests/pg-network-latency.yaml — replace ${PG_PRIVATE_HOST} with label selector
+infra/tests/chaos/manifests/simultaneous-api-controller-crash.yaml — update labels to match actual pod labels OR delete if orphan
+infra/tests/chaos/chaos_test.go — add retry logic to checkMetricExists(); reconcile scenario 8 to use applyChaos() or document why it doesn't
+```
+
+#### Deep file dependency analysis
+- `pg-network-latency.yaml`: Consumed by scenario 4 via `applyChaos("pg-network-latency.yaml")`. Changing `externalTargets` to `labelSelectors` is a breaking change to the manifest but fixes the actual fault injection. No other consumers.
+- `simultaneous-api-controller-crash.yaml`: NOT consumed by any test (scenario 8 uses `kubectl delete` directly). Options: (a) rewrite scenario 8 to use `applyChaos()`, (b) delete the orphan manifest, (c) keep as documentation-only. Option (a) is cleanest.
+- `checkMetricExists()`: Used by scenario 3 (`checkMetricExists("loopzero_pg_circuit_breaker_tripped_total")`). Adding retry affects all callers — only scenario 3 today.
+
+#### Tasks
+1. **EC-6 fix:** Replace `externalTargets: ["${PG_PRIVATE_HOST}"]` with `selector.labelSelectors: {"app": "postgresql"}` + `selector.namespaces: ["loopzero-system"]` in `pg-network-latency.yaml`. Remove the `externalTargets` field entirely.
+2. **EC-7 fix:** Rewrite scenario 8 to use `applyChaos("simultaneous-api-controller-crash.yaml")` instead of direct `kubectl delete`. Update manifest labels to match actual pod labels: `app=loopzero-api` for API pods, `app.kubernetes.io/component=loopzero-operator` for controller pods. Use Chaos Mesh `mode: all` to kill all matching pods simultaneously.
+3. **EC-5 fix:** Add retry loop to `checkMetricExists()` — 3 attempts with 5s sleep between each. Only fail after all 3 attempts.
+4. **Pre-assertion for scenario 4:** Before applying chaos, verify that `kubectl get pods -l app=postgresql -n loopzero-system` returns >= 1 pod. Fail with clear message if PG pod not found.
+
+#### TDD
+```
+RED:     TestChaos_PGNetworkLatency — apply pg-network-latency.yaml with label selector → verify NetworkChaos targets PG pods (fails: old manifest uses ${PG_PRIVATE_HOST})
+RED:     TestChaos_SimultaneousCrash — applyChaos("simultaneous-api-controller-crash.yaml") kills both API+controller (fails: manifest labels don't match)
+GREEN:   Fix both manifests
+REFACTOR: Extract retry pattern into checkMetricExistsWithRetry()
+VERIFY:  LOOPZERO_CHAOS_TEST=1 go test ./infra/tests/chaos/ -run "PG network|Simultaneous" -v
+```
+
+#### Acceptance Criteria
+- [ ] `pg-network-latency.yaml` uses `labelSelectors` not `externalTargets` — no unresolved variables
+- [ ] Scenario 4 actually injects PG latency (verified by observing increased response times during chaos window)
+- [ ] Scenario 8 uses `applyChaos()` with the manifest (no direct `kubectl delete`)
+- [ ] `simultaneous-api-controller-crash.yaml` labels match actual pod labels
+- [ ] `checkMetricExists()` retries 3× with 5s delay
+- [ ] All 9 existing scenarios still pass after fixes
+
+#### DoD
+- [ ] EC-6 fixed: `pg-network-latency.yaml` uses label selectors
+- [ ] EC-7 fixed: scenario 8 reconciled with its manifest
+- [ ] EC-5 fixed: `checkMetricExists()` has retry logic
+- [ ] No regressions in existing 9 scenarios
+
+---
+
 ## Phase 1: Complete Missing Experiments + Fix Scenario 9
 
-**Objective:** Add 3 new chaos experiments and complete the stub scenario 9, bringing total coverage to 12 scenarios.
+**Objective:** Add 3 new chaos experiments and replace the no-op scenario 9 with real fault injection, bringing total coverage to 12 scenarios.
 
 ### T1.1 — Cell isolation experiment (cross-cluster partition)
 
 #### Objective
 Validate that stopping the workload cluster does not affect the mgmt API or other cells. This proves DynamicRouter stale-data protection (MEET-053 A-03).
 
+**Local-only constraint:** This test uses `k3d cluster stop/start` which only works in local k3d environments. The CI workflow (T2.1) runs against DOKS where `k3d` is not available. The CI workflow MUST `Skip` this scenario when `k3d` is not on `$PATH`, or implement an alternative path for DOKS (e.g., cordoning all nodes in the workload cluster).
+
 #### Evidence
-- `chaos_test.go` scenario 9 (line 377-387) is a stub — only calls `checkAPIHealth()` without applying any fault.
+- `chaos_test.go` scenario 9 (line 377-387) is a no-op — checks health without injecting any fault, so it always passes trivially (no NetworkChaos CRD applied, no cluster stop).
 - DynamicRouter (`api/internal/placement/dynamic_router.go`) has stale-data protection: if refresh returns 0 cells, it refuses to clear the cell map.
 - k3d allows `k3d cluster stop/start` for individual clusters.
 
 #### Files to edit
 ```
-infra/tests/chaos/chaos_test.go — replace stub scenario 9 with full cross-cluster test
+infra/tests/chaos/chaos_test.go — replace no-op scenario 9 with full cross-cluster test
 infra/tests/chaos/manifests/cell-isolation-partition.yaml — (NEW) documentation manifest (no CRD, per ADR D3)
 ```
 
 #### Deep file dependency analysis
-- `chaos_test.go`: Adding a new test context replaces the existing stub at line 377-387. No downstream dependency. Uses existing `kubectl` and `kubectlContext` helpers.
+- `chaos_test.go`: Adding a new test context replaces the existing no-op at line 377-387. No downstream dependency. Uses existing `kubectl` and `kubectlContext` helpers.
 - New manifest is documentation-only (the test uses `k3d cluster stop/start` directly per ADR D3). Follows the annotation convention for consistency.
 
 #### Deep Dives
@@ -225,7 +293,7 @@ infra/tests/chaos/manifests/cell-isolation-partition.yaml — (NEW) documentatio
 - Edge case: after restart, ClusterCredential refresh takes up to 60s (poll interval). Test timeout should be 180s.
 
 #### Tasks
-1. Replace stub scenario 9 with full implementation
+1. Replace no-op scenario 9 with full implementation
 2. Add helper `k3dClusterStop(name)` and `k3dClusterStart(name)` with `exec.Command`
 3. Add helper `checkCellDiscoveryCount(expected int)` that queries Prometheus or metrics endpoint
 4. Create documentation manifest `cell-isolation-partition.yaml` with hypothesis annotation
@@ -234,7 +302,7 @@ infra/tests/chaos/manifests/cell-isolation-partition.yaml — (NEW) documentatio
 
 #### TDD
 ```
-RED:     TestChaos_CellIsolation — stop workload cluster → API healthy → restart → cell recovers (fails: stub has no fault injection)
+RED:     TestChaos_CellIsolation — stop workload cluster → API healthy → restart → cell recovers (fails: current no-op has no fault injection)
 GREEN:   Implement full k3d stop/start flow with health assertions
 REFACTOR: Extract k3d helpers into shared function
 VERIFY:  LOOPZERO_CHAOS_TEST=1 go test ./infra/tests/chaos/ -run "Cell network partition" -v
@@ -246,11 +314,13 @@ VERIFY:  LOOPZERO_CHAOS_TEST=1 go test ./infra/tests/chaos/ -run "Cell network p
 - [ ] Workload cluster recovers after restart within 180s
 - [ ] Test has defer for cluster restart registered BEFORE stop call (EC-1)
 - [ ] BeforeAll guard restores stopped cluster from prior failures
+- [ ] Test Skips with clear message when `k3d` is not on `$PATH` (CI/DOKS compatibility)
 
 #### DoD
-- [ ] Scenario 9 replaced with full implementation
+- [ ] Scenario 9 no-op replaced with full fault injection implementation
 - [ ] Test passes against k3d
 - [ ] k3d cluster always restored (defer registered before stop)
+- [ ] Skip guard for non-k3d environments
 
 ---
 
@@ -396,6 +466,7 @@ infra/tests/chaos/chaos_test.go — add scenario 12: deploy during chaos
 
 #### Deep Dives
 - Flow: (1) apply pod-kill chaos, (2) immediately start deploy (via API call, not CLI — to avoid CLI timeout complexity), (3) wait for build terminal state, (4) if SUCCEEDED: pass. If FAILED with typed error: pass (clean failure). If hung/no response: fail.
+- **Contract drift risk:** Using HTTP POST directly (not CLI) may diverge from the real deploy contract over time (e.g., required headers, `project_id` as name not UUID — see CLAUDE.md "Project name vs project ID"). Mitigation: use the same field names and headers as the CLI. If contract changes, this test must be updated. Alternative considered: `exec.Command("loopzero", "deploy", ...)` — more realistic but adds CLI timeout complexity; current choice is pragmatic.
 - The advisory lock is transaction-scoped (`pg_advisory_xact_lock`). When the API pod dies, the PG connection drops, the transaction rolls back, and the lock is released. The replacement pod's next deploy attempt should acquire the lock successfully.
 - Timeout: 5 minutes (deploy timeout in E2E constants).
 - Edge case: pod kill happens before deploy reaches PG → deploy is retried by CLI. Pod kill happens during PG transaction → lock released, deploy fails, next attempt succeeds.
@@ -551,7 +622,7 @@ VERIFY:  LOOPZERO_CHAOS_TEST=1 go test ./infra/tests/chaos/ -v -count=1
 
 ### T3.2 — Regression matrix entries (BLOCKED)
 
-> **BLOCKED:** The regression matrix file was removed in d18e3b89 governance consolidation (2026-05-11). This task cannot execute until a successor file is created. Deferred to Sprint 9 — the matrix will be recreated as part of the production readiness documentation if the chaos experiments plan is approved post-consolidation.
+> **BLOCKED (confirmed 2026-05-11):** The regression matrix file (`docs/plans/bootstrap-regression-matrix.md`) was removed in d18e3b89 governance consolidation. The audit script `infra/tests/parity/audit-regression-matrix.sh` still references it at line 33 (`MATRIX="${MATRIX:-${REPO_ROOT}/docs/plans/bootstrap-regression-matrix.md}"`), but the file does not exist. No successor file has been created. This task cannot execute until a regression matrix is (re)created. Deferred to Sprint 9 — the matrix will be recreated as part of production readiness documentation if approved post-consolidation.
 
 #### Objective
 Add 12 entries to a regression matrix documenting each chaos scenario as a permanent protection.
@@ -604,33 +675,35 @@ VERIFY:  grep -c "CHAOS_RESILIENCE" <new-matrix-file>  # should return 12 (matri
 
 ## Coverage Matrix
 
-| # | Gap / Requirement | Task(s) | Resolution |
-|---|---|---|---|
-| 1 | Helmfile release not defined (manual install) | T0.1 | Helmfile release with environment condition |
-| 2 | SLO queries in annotations, not PrometheusRule | T0.2 | PrometheusRule CRD with 12 rule groups |
-| 3 | Cell isolation (E2) not tested | T1.1 | k3d cluster stop/start test (ADR D3) |
-| 4 | Random steady-state pod kill (E6) missing | T1.2 | PodChaos fixed-percent 30% in tenant namespaces |
-| 5 | IOChaos disk pressure (E7) missing | T1.3 | IOChaos on /var/lib/buildkit with 500ms delay |
-| 6 | Scenario 9 is stub (no fault injection) | T1.1 | Full implementation replaces stub |
-| 7 | Deploy-under-chaos never tested | T1.4 | Real deploy during pod-kill + lock release validation |
-| 8 | No dedicated CI workflow | T2.1 | chaos-suite.yml weekly cron |
-| 9 | Never validated end-to-end | T3.1 | Full run against k3d, 12/12 GREEN |
-| 10 | Zero regression matrix entries | T3.2 | 12 CHAOS_RESILIENCE entries |
-| 11 | Path-to-4.0 "full chaos suite" requirement | All | 12 scenarios validated weekly |
+| # | Gap / Requirement | Task(s) | Resolution | Status |
+|---|---|---|---|---|
+| 1 | Helmfile release not defined (manual install) | T0.1 | Helmfile release with environment condition | Ready |
+| 2 | SLO queries in annotations, not PrometheusRule | T0.2 | PrometheusRule CRD with 12 rule groups | Ready |
+| 3 | Existing manifest bugs (EC-5/EC-6/EC-7) | T0.3 | Fix `${PG_PRIVATE_HOST}`, orphan manifest, `checkMetricExists` retry | Ready |
+| 4 | Cell isolation (E2) not tested | T1.1 | k3d cluster stop/start test (ADR D3), local-only with CI Skip | Ready |
+| 5 | Random steady-state pod kill (E6) missing | T1.2 | PodChaos fixed-percent 30% in tenant namespaces | Ready |
+| 6 | IOChaos disk pressure (E7) missing | T1.3 | IOChaos on /var/lib/buildkit with 500ms delay | Ready |
+| 7 | Scenario 9 is no-op (no fault injection) | T1.1 | Full implementation replaces no-op | Ready |
+| 8 | Deploy-under-chaos never tested | T1.4 | Real deploy during pod-kill + lock release validation | Ready |
+| 9 | No dedicated CI workflow | T2.1 | chaos-suite.yml weekly cron | Ready (T2 — needs CHG) |
+| 10 | Never validated end-to-end | T3.1 | Full run against k3d, 12/12 GREEN | Ready |
+| 11 | Zero regression matrix entries | T3.2 | 12 CHAOS_RESILIENCE entries | **BLOCKED** (file removed) |
+| 12 | Path-to-4.0 "full chaos suite" requirement | All | 12 scenarios validated weekly | Composite |
 
-**Coverage: 11/11 gaps covered (100%)**
+**Coverage: 11/12 gaps actionable (91.7%) — T3.2 BLOCKED pending regression matrix (re)creation**
 
 ## Global Definition of Done
 
-- [ ] All phases completed
-- [ ] All tests passing (`LOOPZERO_CHAOS_TEST=1 go test ./infra/tests/chaos/ -v` = 12/12 GREEN)
+- [ ] All phases completed (Phase 0-3, noting T3.2 BLOCKED)
+- [ ] Existing manifest bugs fixed (T0.3: EC-5/EC-6/EC-7) — verified by running 9 existing scenarios with real fault injection
+- [ ] All tests passing (`LOOPZERO_CHAOS_TEST=1 go test ./infra/tests/chaos/ -v` = 12 Contexts GREEN)
 - [ ] Zero lint warnings (`golangci-lint run ./infra/tests/chaos/...`)
 - [ ] `task validate:manifests` passes (new YAML files valid)
 - [ ] `promtool check rules` passes on chaos PrometheusRule
 - [ ] Helmfile `diff` shows chaos-mesh release for dev, not for prod
 - [ ] **`/cross-validation chaos-mesh-experiments` PASSED** — zero CRITICO, zero GRAVE
 - [ ] CI workflow `chaos-suite.yml` triggers successfully (manual dispatch)
-- [ ] 12 regression matrix entries added
+- [ ] ~~12 regression matrix entries added~~ **BLOCKED** — deferred to Sprint 9 (regression matrix file removed in d18e3b89)
 - [ ] **`/dogfood full` PASSED**
 
 ---
