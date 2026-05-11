@@ -117,7 +117,7 @@ def emit_scorecard(dim_key, dim_title, scoring_dir, p1, p2, p3, triang):
     lines.append("## TTL")
     lines.append("")
     lines.append(f"- **Last validated:** {today.isoformat()} (T3.1 LIVE adversarial run)")
-    lines.append(f"- **Expires:** {expires} ({ttl}d TTL per `docs/governance/decay-policy.md`)")
+    lines.append(f"- **Expires:** {expires} ({ttl}d TTL per `docs/GOVERNANCE.md (§2 Decay Policy)`)")
     lines.append(f"- **Revalidation:** rerun T3.1 with new dated `scoring-YYYY-MM-DD/`")
     lines.append("")
 

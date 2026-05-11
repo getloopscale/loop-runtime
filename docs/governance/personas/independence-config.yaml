@@ -9,7 +9,7 @@
 personas:
   p1_vercel_dd:
     description: Vercel DD Engineer — DX bias
-    persona_file: docs/governance/personas/vercel-dd-engineer.md
+    persona_file: infra/scripts/governance/prompts/vercel-dd-engineer.md
     # Primary configuration
     subagent_type: general-purpose
     model: claude-opus-4-7
@@ -22,7 +22,7 @@ personas:
 
   p2_hostile_vc:
     description: Hostile VC Auditor — overclaim detection
-    persona_file: docs/governance/personas/hostile-vc-auditor.md
+    persona_file: infra/scripts/governance/prompts/hostile-vc-auditor.md
     # CROSS-VENDOR (recommended) for maximum independence
     # If codex unavailable, falls back to Claude family
     subagent_type: codex:codex-rescue
@@ -36,7 +36,7 @@ personas:
 
   p3_paranoid_sre:
     description: Paranoid SRE — production-readiness
-    persona_file: docs/governance/personas/paranoid-sre.md
+    persona_file: infra/scripts/governance/prompts/paranoid-sre.md
     subagent_type: general-purpose
     model: claude-haiku-4-5
     temperature: 0.5

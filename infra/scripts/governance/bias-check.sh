@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # bias-check.sh — Scans markdown files for 6 known bias patterns.
 #
-# Per docs/governance/bias-taxonomy.md (T0.4 of status-validation-and-doc-consolidation-plan).
+# Per docs/GOVERNANCE.md (§3 Bias Taxonomy) (T0.4 of status-validation-and-doc-consolidation-plan).
 #
 # Detects: counting, aggregation, recency, self-attestation, documentation-lag, implemented-not-wired
 #
@@ -26,7 +26,7 @@ usage() {
 Usage: $(basename "$0") [--threshold warn|fail] <file.md>
        $(basename "$0") --all <directory>
 
-Scans markdown for 6 bias patterns from docs/governance/bias-taxonomy.md.
+Scans markdown for 6 bias patterns from docs/GOVERNANCE.md (§3 Bias Taxonomy).
 
 Exit codes:
   0 = no FAIL findings (severity <2)

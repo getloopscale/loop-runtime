@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # scan-decay.sh — Scans evidence files + STATUS.md for expired claims.
 #
-# Per docs/governance/decay-policy.md (T0.3 of status-validation-and-doc-consolidation-plan).
+# Per docs/GOVERNANCE.md (§2 Decay Policy) (T0.3 of status-validation-and-doc-consolidation-plan).
 #
 # Output: Markdown report grouped by severity (CRITICAL >60d, HIGH >30d, MEDIUM ≤30d overdue).
 #

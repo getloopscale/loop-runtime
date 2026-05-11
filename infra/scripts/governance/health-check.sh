@@ -63,36 +63,45 @@ for f in infra/scripts/governance/*.py; do
     check "syntax $(basename "$f")" python3 -c "import ast; ast.parse(open('$f').read())"
 done
 
-echo ""
-echo "2. Governance policy docs exist"
+echo "2. The 4 canonical docs exist"
 for doc in \
-    "docs/governance/evidence-bar.md" \
-    "docs/governance/decay-policy.md" \
-    "docs/governance/bias-taxonomy.md" \
-    "docs/governance/personas/README.md" \
-    "docs/governance/personas/vercel-dd-engineer.md" \
-    "docs/governance/personas/hostile-vc-auditor.md" \
-    "docs/governance/personas/paranoid-sre.md" \
-    "docs/governance/personas/independence-config.yaml" \
-    "docs/governance/claim-catalog.yaml" \
-    "docs/governance/evidence-gaps-report.md" \
-    "docs/governance/divergence-report-2026-05-11.md" \
-    "docs/governance/code-audit-2026-05-11.md" \
     "docs/STATUS.md" \
-    "docs/maturity-history/2026-05-03-snapshot.md" \
+    "docs/GOVERNANCE.md" \
+    "docs/architecture/governance/README.md" \
     "docs/meetings/adr/0051-claim-evidence-decay-contract.md"
 do
-    check "exists $doc" test -f "$doc"
+    check "canonical $doc" test -f "$doc"
 done
 
 echo ""
-echo "3. Architecture diagrams exist"
+echo "2b. Data artifacts (YAML + history)"
+for f in \
+    "docs/governance/claim-catalog.yaml" \
+    "docs/governance/personas/independence-config.yaml" \
+    "docs/governance/.markdownlint.json" \
+    "docs/maturity-history/2026-05-03-snapshot.md" \
+    "docs/maturity-assessment.md"
+do
+    check "data $f" test -f "$f"
+done
+
+echo ""
+echo "2c. Persona prompts + scoring templates (in infra/scripts/governance/)"
+for f in \
+    "infra/scripts/governance/prompts/vercel-dd-engineer.md" \
+    "infra/scripts/governance/prompts/hostile-vc-auditor.md" \
+    "infra/scripts/governance/prompts/paranoid-sre.md" \
+    "infra/scripts/governance/templates/reconciliation-meeting.template.md"
+do
+    check "asset $f" test -f "$f"
+done
+
+echo ""
+echo "3. Architecture diagrams exist (PlantUML + Excalidraw, AS-IS + Mode 3)"
 for diag in \
-    "docs/architecture/governance/README.md" \
     "docs/architecture/governance/c4-context.puml" \
     "docs/architecture/governance/c4-container.puml" \
     "docs/architecture/governance/c4-component.puml" \
-    "docs/architecture/governance/deep-dive-current-state.md" \
     "docs/architecture/governance/concept-bias-taxonomy.excalidraw" \
     "docs/architecture/governance/concept-decay-lifecycle.excalidraw" \
     "docs/architecture/governance/concept-evidence-triangulation-pipeline.excalidraw" \
@@ -100,10 +109,9 @@ for diag in \
     "docs/architecture/governance/concept-independence-matrix.excalidraw" \
     "docs/architecture/governance/diff/c4-context.puml" \
     "docs/architecture/governance/diff/c4-container.puml" \
-    "docs/architecture/governance/diff/c4-component.puml" \
-    "docs/architecture/governance/diff/deep-dive-proposed-state.md"
+    "docs/architecture/governance/diff/c4-component.puml"
 do
-    check "exists $(basename "$diag")" test -f "$diag"
+    check "diagram $(basename "$diag")" test -f "$diag"
 done
 
 echo ""

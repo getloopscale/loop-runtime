@@ -73,4 +73,4 @@ shellcheck infra/scripts/governance/validate-evidence.sh
 
 - Plan: `docs/plans/status-validation-and-doc-consolidation-plan.md` v1.2 T0.1
 - ADR D1: confidence cap 95-97%, 3-source requirement
-- Related runbooks: `docs/governance/evidence-bar.md`
+- Related runbooks: `docs/GOVERNANCE.md (§1 Evidence Bar)`

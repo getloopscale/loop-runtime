@@ -1,6 +1,6 @@
 # Evidence Files
 
-**Purpose:** This directory holds the canonical evidence per claim referenced in `docs/STATUS.md`. Each evidence file is the human-readable proof of one maturity claim, structured per `docs/governance/evidence-bar.md`.
+**Purpose:** This directory holds the canonical evidence per claim referenced in `docs/STATUS.md`. Each evidence file is the human-readable proof of one maturity claim, structured per `docs/GOVERNANCE.md (§1 Evidence Bar)`.
 
 ## Directory Layout
 
@@ -79,8 +79,8 @@ Each file MUST pass `infra/scripts/governance/validate-evidence.sh <file>`. CI g
 
 ## Cross-References
 
-- `docs/governance/evidence-bar.md` — full policy + tier definitions
-- `docs/governance/decay-policy.md` — TTL rules
+- `docs/GOVERNANCE.md (§1 Evidence Bar)` — full policy + tier definitions
+- `docs/GOVERNANCE.md (§2 Decay Policy)` — TTL rules
 - `docs/STATUS.md` — claims that consume these evidence files
 - `infra/scripts/governance/validate-evidence.sh` — validator
 

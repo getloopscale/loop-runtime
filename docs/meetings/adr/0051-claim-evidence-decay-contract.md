@@ -47,7 +47,7 @@ Adopt a formal **Claim-Evidence-Decay Contract** for all maturity-affecting stat
 - Convergence: median per dim; std-dev > 0.3 triggers reconciliation meeting.
 
 ### D5 — Evidence Files In Repo
-- `docs/evidence/{dimension}/{claim-slug}.md` per schema in `docs/governance/evidence-bar.md`.
+- `docs/evidence/{dimension}/{claim-slug}.md` per schema in `docs/GOVERNANCE.md (§1 Evidence Bar)`.
 - Logs >1MB stored in `${HOME}/.loopzero/artifacts/` with SHA256 checksum in frontmatter.
 
 ### D6 — Pre-Merge Gate
@@ -55,7 +55,7 @@ Adopt a formal **Claim-Evidence-Decay Contract** for all maturity-affecting stat
 - Override label `evidence-waiver` requires PR description justification + approver different from author.
 
 ### D7 — Bias Taxonomy as Active Defense
-- 6 patterns formalized in `docs/governance/bias-taxonomy.md`.
+- 6 patterns formalized in `docs/GOVERNANCE.md (§3 Bias Taxonomy)`.
 - `bias-check.sh` runs on every plan creation (via `to-plan` skill integration).
 - FP rate target <20% (current ~30% calibrated against 4 existing plans; meta-discussion plans are expected FP source).
 
@@ -89,7 +89,7 @@ CI runs detect drift after merge. Pre-merge gate prevents drift from landing. Th
 |-------------|------------------|
 | Manual quarterly audits (no automation) | Doesn't scale; audits become folklore; lag bias persists |
 | External audit firm (~$50k/year) | Cost prohibitive for pre-release; gap-of-context with internal team |
-| Single canonical source without evidence requirement | Drift returns within weeks (per Event 2 in `docs/architecture/governance/deep-dive-current-state.md`) |
+| Single canonical source without evidence requirement | Drift returns within weeks (per Event 2 in `docs/architecture/governance/README.md (§1 AS-IS)`) |
 | 99% confidence claim | Mathematically dishonest without cross-vendor (codex/GPT) mandatory; rejected per EC-1 MUST FIX in edge-case review |
 
 ## Consequences
@@ -135,9 +135,9 @@ Per `docs/plans/status-validation-and-doc-consolidation-plan.md` v1.2:
 - Plan: `docs/plans/status-validation-and-doc-consolidation-plan.md` v1.2
 - Plan ADRs D1-D8 (consolidated above)
 - Edge cases: `docs/plans/status-validation-and-doc-consolidation-edge-cases.md`
-- AS-IS architecture: `docs/architecture/governance/deep-dive-current-state.md`
+- AS-IS architecture: `docs/architecture/governance/README.md (§1 AS-IS)`
 - Material evidence file (proof-of-concept): `docs/evidence/tests-confidence/2026-05-11-validate-evidence-script.md`
-- Bias taxonomy: `docs/governance/bias-taxonomy.md`
-- Evidence bar: `docs/governance/evidence-bar.md`
-- Decay policy: `docs/governance/decay-policy.md`
-- Personas README: `docs/governance/personas/README.md`
+- Bias taxonomy: `docs/GOVERNANCE.md (§3 Bias Taxonomy)`
+- Evidence bar: `docs/GOVERNANCE.md (§1 Evidence Bar)`
+- Decay policy: `docs/GOVERNANCE.md (§2 Decay Policy)`
+- Personas README: `docs/GOVERNANCE.md (§4 Adversarial Personas)`

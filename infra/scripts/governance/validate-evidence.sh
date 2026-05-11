@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # validate-evidence.sh — Validates an evidence file against the 3-tier policy.
 #
-# Per docs/governance/evidence-bar.md (T0.1 of status-validation-and-doc-consolidation-plan).
+# Per docs/GOVERNANCE.md (§1 Evidence Bar) (T0.1 of status-validation-and-doc-consolidation-plan).
 #
 # Exit codes:
 #   0 — valid (EVIDENCED or PARTIAL_CONFIDENCE)
@@ -23,7 +23,7 @@ usage() {
 Usage: $SCRIPT_NAME <evidence-file.md>
        $SCRIPT_NAME --all <directory>
 
-Validates evidence file(s) against docs/governance/evidence-bar.md.
+Validates evidence file(s) against docs/GOVERNANCE.md (§1 Evidence Bar).
 
 Exit codes:
   0 = valid (EVIDENCED | PARTIAL_CONFIDENCE)

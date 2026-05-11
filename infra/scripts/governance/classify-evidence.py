@@ -4,7 +4,7 @@ classify-evidence.py — Classify each claim in catalog as T1/T2/T3/UNEVIDENCED/
 
 Per T1.2 of status-validation-and-doc-consolidation-plan v1.2.
 
-Classification heuristics (per docs/governance/evidence-bar.md):
+Classification heuristics (per docs/GOVERNANCE.md (§1 Evidence Bar)):
   T1 — Code+Test: claim mentions Go/TS test file that exists + not t.Skip()
   T2 — LIVE Run: claim mentions archived log path that exists
   T3 — CI Run: claim mentions workflow file that exists

@@ -39,7 +39,7 @@ Cross-reference with `docs/evidence/security/`.
 ## TTL
 
 - **Last validated:** 2026-05-11 (T3.1 LIVE adversarial run)
-- **Expires:** 2026-07-10 (60d TTL per `docs/governance/decay-policy.md`)
+- **Expires:** 2026-07-10 (60d TTL per `docs/GOVERNANCE.md (§2 Decay Policy)`)
 - **Revalidation:** rerun T3.1 with new dated `scoring-YYYY-MM-DD/`
 
 ## Cross-References

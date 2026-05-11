@@ -1590,7 +1590,7 @@ claims:
     expires: 2026-08-09
   - id: evidence-gaps-report---docsgovernancepersonasparanoid-sremd67---dxcli-na-directl
     source: "docs/governance/evidence-gaps-report.md:59"
-    text: "- `docs/governance/personas/paranoid-sre.md:67` — - **DX/CLI:** N/A directly — but penalize \"operator must SSH to fix\" patterns"
+    text: "- `infra/scripts/governance/prompts/paranoid-sre.md:67` — - **DX/CLI:** N/A directly — but penalize \"operator must SSH to fix\" patterns"
     type: negative
     dimension: dx-cli
     polarity: negative
@@ -2025,7 +2025,7 @@ claims:
     expires: 2026-06-10
   - id: evidence-gaps-report---docsgovernancebias-taxonomymd18---2930-em-plan-progress-n
     source: "docs/governance/evidence-gaps-report.md:149"
-    text: "- `docs/governance/bias-taxonomy.md:18` — - `\"29/30 ✅\"` em plan progress — não distingue task com 3 evidências vs task com checkbox marcado sem testes"
+    text: "- `docs/GOVERNANCE.md (§3 Bias Taxonomy):18` — - `\"29/30 ✅\"` em plan progress — não distingue task com 3 evidências vs task com checkbox marcado sem testes"
     type: completion
     dimension: tests-confidence
     polarity: positive
@@ -2036,7 +2036,7 @@ claims:
     last_validated: 2026-05-11
     expires: 2026-06-10
   - id: bias-taxonomy---2930-em-plan-progress-não-distingue-task-com-3-evidências-
-    source: "docs/governance/bias-taxonomy.md:18"
+    source: "docs/GOVERNANCE.md (§3 Bias Taxonomy):18"
     text: "- `\"29/30 ✅\"` em plan progress — não distingue task com 3 evidências vs task com checkbox marcado sem testes"
     type: completion
     dimension: tests-confidence
@@ -2048,7 +2048,7 @@ claims:
     last_validated: 2026-05-11
     expires: 2026-06-10
   - id: bias-taxonomy---8383-pass-em-journey-confunde-tests-defined-com-tests-cove
-    source: "docs/governance/bias-taxonomy.md:19"
+    source: "docs/GOVERNANCE.md (§3 Bias Taxonomy):19"
     text: "- `\"83/83 PASS\"` em journey — confunde \"tests defined\" com \"tests covering real scenarios\""
     type: completion
     dimension: tests-confidence
@@ -2060,7 +2060,7 @@ claims:
     last_validated: 2026-05-11
     expires: 2026-06-10
   - id: paranoid-sre-scoring-bands-production-ready-strict
-    source: "docs/governance/personas/paranoid-sre.md:27"
+    source: "infra/scripts/governance/prompts/paranoid-sre.md:27"
     text: "### Scoring Bands (Production-Ready Strict)"
     type: capability
     dimension: product-completeness
@@ -2072,7 +2072,7 @@ claims:
     last_validated: 2026-05-11
     expires: 2026-06-10
   - id: paranoid-sre-35-production-ready-in-code-but-zero-real-production-stress-
-    source: "docs/governance/personas/paranoid-sre.md:34"
+    source: "infra/scripts/governance/prompts/paranoid-sre.md:34"
     text: "| 3.5 | Production-ready in code, but zero real production stress data |"
     type: capability
     dimension: product-completeness
@@ -2084,7 +2084,7 @@ claims:
     last_validated: 2026-05-11
     expires: 2026-06-10
   - id: paranoid-sre---ssosaml-not-built-with-auth-in-production--03-security
-    source: "docs/governance/personas/paranoid-sre.md:59"
+    source: "infra/scripts/governance/prompts/paranoid-sre.md:59"
     text: "- SSO/SAML \"not built\" with auth in production → -0.3 Security"
     type: negative
     dimension: security
@@ -2096,7 +2096,7 @@ claims:
     last_validated: 2026-05-11
     expires: 2026-07-10
   - id: paranoid-sre---dxcli-na-directly-but-penalize-operator-must-ssh-to-fix-pa
-    source: "docs/governance/personas/paranoid-sre.md:67"
+    source: "infra/scripts/governance/prompts/paranoid-sre.md:67"
     text: "- **DX/CLI:** N/A directly — but penalize \"operator must SSH to fix\" patterns"
     type: negative
     dimension: dx-cli
@@ -2108,7 +2108,7 @@ claims:
     last_validated: 2026-05-11
     expires: 2026-06-10
   - id: paranoid-sre---sprint-8-phase-5-chaos-validation-was-deferred-to-chg-002c
-    source: "docs/governance/personas/paranoid-sre.md:79"
+    source: "infra/scripts/governance/prompts/paranoid-sre.md:79"
     text: "- \"Sprint 8 Phase 5 (Chaos validation) was DEFERRED to CHG-002c which is NOT OPEN. Chaos Mesh CRDs installed in 4 clusters but ZERO scenarios executed. Score Scale/Multi-tenancy capped at 3.3 until at"
     type: negative
     dimension: infra-ops
@@ -2120,7 +2120,7 @@ claims:
     last_validated: 2026-05-11
     expires: 2026-07-10
   - id: vercel-dd-engineer---infraoperations-na-directly-not-your-domain-but-penalize-f
-    source: "docs/governance/personas/vercel-dd-engineer.md:57"
+    source: "infra/scripts/governance/prompts/vercel-dd-engineer.md:57"
     text: "- **Infra/Operations:** N/A directly (not your domain) — but penalize \"feature works but requires operator escalation\" patterns"
     type: negative
     dimension: infra-ops
@@ -2132,7 +2132,7 @@ claims:
     last_validated: 2026-05-11
     expires: 2026-06-10
   - id: hostile-vc-auditor---shipped-vagueness-demoed-production-validated-user-validat
-    source: "docs/governance/personas/hostile-vc-auditor.md:8"
+    source: "infra/scripts/governance/prompts/hostile-vc-auditor.md:8"
     text: "- \"Shipped\" vagueness: demoed ≠ production-validated ≠ user-validated"
     type: done_status
     dimension: product-completeness
@@ -2144,7 +2144,7 @@ claims:
     last_validated: 2026-05-11
     expires: 2026-06-10
   - id: hostile-vc-auditor-1-production-ready-investigate-how-many-paying-customers-sel
-    source: "docs/governance/personas/hostile-vc-auditor.md:40"
+    source: "infra/scripts/governance/prompts/hostile-vc-auditor.md:40"
     text: "1. **\"Production-ready\"** — Investigate: how many paying customers? Self-team usage doesn't count."
     type: capability
     dimension: product-completeness
@@ -2156,7 +2156,7 @@ claims:
     last_validated: 2026-05-11
     expires: 2026-06-10
   - id: hostile-vc-auditor-9-sprint-progress-2930-dods-validated-by-reviewer-different-
-    source: "docs/governance/personas/hostile-vc-auditor.md:48"
+    source: "infra/scripts/governance/prompts/hostile-vc-auditor.md:48"
     text: "9. **Sprint progress** — \"29/30 ✅\" — DoDs validated by reviewer different from author?"
     type: completion
     dimension: security
@@ -2168,7 +2168,7 @@ claims:
     last_validated: 2026-05-11
     expires: 2026-07-10
   - id: hostile-vc-auditor---shipped-with-0-external-users--05-product-completeness
-    source: "docs/governance/personas/hostile-vc-auditor.md:59"
+    source: "infra/scripts/governance/prompts/hostile-vc-auditor.md:59"
     text: "- \"Shipped\" with 0 external users → -0.5 product completeness"
     type: done_status
     dimension: product-completeness
@@ -2180,7 +2180,7 @@ claims:
     last_validated: 2026-05-11
     expires: 2026-06-10
   - id: deep-dive-current-state-docsmaturity-assessmentmd-1-file-250-loc-a-cada-cell-2-a
-    source: "docs/architecture/governance/deep-dive-current-state.md:18"
+    source: "docs/architecture/governance/README.md (§1 AS-IS):18"
     text: "| `docs/maturity-assessment.md` | 1 file | 250 LOC | A cada cell-2-activation / sprint major | ❌ Nenhum |"
     type: negative
     dimension: scale-mt

@@ -8,7 +8,7 @@ LoopZero is a **CLI-first Kubernetes PaaS** for monorepo deployments. Vercel-qua
 
 The authoritative specification is **`docs/cli-reference.md`**. If this file and the system design conflict, the system design wins.
 
-**Status:** See **[`docs/STATUS.md`](docs/STATUS.md)** — canonical source. Per ADR D2 of `status-validation-and-doc-consolidation-plan` v1.2 (2026-05-11 T4.3), this line no longer duplicates status narrative. Use `task decay:scan` for live data; `docs/governance/evidence-bar.md` for methodology. Pre-release; H1-H7 hardenings complete; Sprint 9 (Polish + Launch) pending gates: (a) first CI Sunday cron GREEN; (b) 1 prod customer day-trial.
+**Status:** See **[`docs/STATUS.md`](docs/STATUS.md)** — canonical source. Per ADR D2 of `status-validation-and-doc-consolidation-plan` v1.2 (2026-05-11 T4.3), this line no longer duplicates status narrative. Use `task decay:scan` for live data; `docs/GOVERNANCE.md (§1 Evidence Bar)` for methodology. Pre-release; H1-H7 hardenings complete; Sprint 9 (Polish + Launch) pending gates: (a) first CI Sunday cron GREEN; (b) 1 prod customer day-trial.
 
 **Pricing:** Starter (Free, 1 project), Pro ($29/mo, 3 projects), Team ($79/mo, 10 projects), Enterprise (custom).
 
@@ -66,7 +66,7 @@ cd infra/pulumi && npx pulumi preview --stack dev # Preview
 8. **State machines are strict** — Use state machine functions, never direct status updates. Invalid transitions panic (programming error).
 9. **CLI is the primary interface** — Every feature lives in CLI before dashboard. Dashboard-only features are product bugs.
 10. **Local equals production** — Same Helm charts, same operators, same build pipeline. No Docker Compose shortcuts. No "dev mode" with different behavior.
-11. **Claims need evidence** — Any claim affecting maturity score in `docs/STATUS.md` requires **3 evidence sources** (T1 commit+test, T2 LIVE log, T3 CI run) per `docs/governance/evidence-bar.md`. Confidence cap **95-97%** (not 99% — same-model-family correlation residual). PR touching score-affecting STATUS.md MUST also update `docs/evidence/{dim}/`. TTL applies: 30d operational / 60d arch / 90d strategic. Pre-merge gate enforces. Per ADR-0051.
+11. **Claims need evidence** — Any claim affecting maturity score in `docs/STATUS.md` requires **3 evidence sources** (T1 commit+test, T2 LIVE log, T3 CI run) per `docs/GOVERNANCE.md (§1 Evidence Bar)`. Confidence cap **95-97%** (not 99% — same-model-family correlation residual). PR touching score-affecting STATUS.md MUST also update `docs/evidence/{dim}/`. TTL applies: 30d operational / 60d arch / 90d strategic. Pre-merge gate enforces. Per ADR-0051.
 
 ---
 

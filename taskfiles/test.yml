@@ -914,7 +914,7 @@ tasks:
   # Evidence validation (status-validation-and-doc-consolidation-plan T0.1)
 
   validate:evidence:
-    desc: Validate evidence files against docs/governance/evidence-bar.md (3-tier policy)
+    desc: Validate evidence files against docs/GOVERNANCE.md (§1 Evidence Bar) (3-tier policy)
     cmds:
       - bash infra/scripts/governance/validate-evidence.sh --all docs/evidence/
 

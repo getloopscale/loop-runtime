@@ -4,7 +4,7 @@ triangulate-scores.py — Compute convergence metrics from 3 persona score YAML 
 
 Per T3.2 of status-validation-and-doc-consolidation-plan.
 
-Input: 3 yaml files (p1/p2/p3) per schema in docs/governance/personas/README.md
+Input: 3 yaml files (p1/p2/p3) per schema in docs/GOVERNANCE.md (§4 Adversarial Personas)
 Output: triangulation.yaml with median + std-dev + flag per dimension
 
 Usage:

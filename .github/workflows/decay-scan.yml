@@ -1,6 +1,6 @@
 name: decay-scan
 
-# Weekly decay scanner — detects expired claims per docs/governance/decay-policy.md.
+# Weekly decay scanner — detects expired claims per docs/GOVERNANCE.md (§2 Decay Policy).
 # Opens issue when claims overdue (CRITICAL >60d, HIGH >30d, MEDIUM <=30d).
 #
 # Per T0.3 of status-validation-and-doc-consolidation-plan.

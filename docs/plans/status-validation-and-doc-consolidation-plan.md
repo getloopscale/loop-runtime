@@ -164,13 +164,13 @@ Conversa 2026-05-11 expôs que claims tipo "X is implemented" não distinguem en
 
 #### Files to edit
 ```
-docs/governance/evidence-bar.md — (NEW) política formal de 3-tier
+docs/GOVERNANCE.md (§1 Evidence Bar) — (NEW) política formal de 3-tier
 scripts/validate-evidence.sh — (NEW) validator que classifica claims em arquivo
 docs/evidence/README.md — (NEW) convenção de naming + estrutura
 ```
 
 #### Deep file dependency analysis
-- `docs/governance/evidence-bar.md` é referenciado por todas fases subsequentes; mudanças aqui invalidam scoring
+- `docs/GOVERNANCE.md (§1 Evidence Bar)` é referenciado por todas fases subsequentes; mudanças aqui invalidam scoring
 - `scripts/validate-evidence.sh` consumido por CI (Phase 5) e por dev local antes de commit
 - `docs/evidence/README.md` define convenção que Phase 1 popular
 
@@ -199,7 +199,7 @@ docs/evidence/README.md — (NEW) convenção de naming + estrutura
 - **Edge case:** Claim com 2 fontes — vai para *"partial confidence"* (60-90%), não entra no score oficial mas é citável com asterisco.
 
 #### Tasks
-1. Redigir `docs/governance/evidence-bar.md` com 3-tier + schema
+1. Redigir `docs/GOVERNANCE.md (§1 Evidence Bar)` com 3-tier + schema
 2. Implementar `scripts/validate-evidence.sh` em Bash (parsing YAML frontmatter via `yq`)
 3. Criar `docs/evidence/` directory + README convention
 4. Adicionar `task validate:evidence` no Taskfile.yml
@@ -244,10 +244,10 @@ Self-attestation bias documentado empiricamente na sessão 2026-05-11. Defesa = 
 
 #### Files to edit
 ```
-docs/governance/personas/vercel-dd-engineer.md — (NEW) persona P1
-docs/governance/personas/hostile-vc-auditor.md — (NEW) persona P2
-docs/governance/personas/paranoid-sre.md — (NEW) persona P3
-docs/governance/personas/README.md — (NEW) como invocar
+infra/scripts/governance/prompts/vercel-dd-engineer.md — (NEW) persona P1
+infra/scripts/governance/prompts/hostile-vc-auditor.md — (NEW) persona P2
+infra/scripts/governance/prompts/paranoid-sre.md — (NEW) persona P3
+docs/GOVERNANCE.md (§4 Adversarial Personas) — (NEW) como invocar
 ```
 
 #### Deep file dependency analysis
@@ -313,7 +313,7 @@ Formalizar política de TTL (30/60/90 dias por tipo) e implementar detector que 
 
 #### Files to edit
 ```
-docs/governance/decay-policy.md — (NEW) política 30/60/90
+docs/GOVERNANCE.md (§2 Decay Policy) — (NEW) política 30/60/90
 scripts/scan-decay.sh — (NEW) scanner que lista claims expiradas
 .github/workflows/decay-scan.yml — (NEW) CI semanal
 ```
@@ -381,7 +381,7 @@ Sessão 2026-05-11 expôs 6 padrões de viés. Sem detection automatizada, aware
 
 #### Files to edit
 ```
-docs/governance/bias-taxonomy.md — (NEW) 6 viéses formalizados
+docs/GOVERNANCE.md (§3 Bias Taxonomy) — (NEW) 6 viéses formalizados
 scripts/bias-check.sh — (NEW) regex/heurística detector
 .claude/skills/to-plan/SKILL.md — (EDIT) integrar bias-check na step de plan creation
 ```
@@ -450,7 +450,7 @@ docs/architecture/governance/README.md — (NEW) C4 overview
 docs/architecture/governance/c4-context.puml — (NEW) System Context
 docs/architecture/governance/c4-container.puml — (NEW) Container view (docs surfaces)
 docs/architecture/governance/c4-component.puml — (NEW) Components (claims, evidence, decay)
-docs/architecture/governance/deep-dive-current-state.md — (NEW) AS-IS analysis
+docs/architecture/governance/README.md (§1 AS-IS) — (NEW) AS-IS analysis
 ```
 
 #### Deep file dependency analysis
@@ -1067,19 +1067,19 @@ scripts/verify-independence.sh — (NEW) script que confirma config antes de T3.
       model: opus  # ou claude-opus-4-7
       temperature: 0.7
       seed: 42
-      persona_file: docs/governance/personas/vercel-dd-engineer.md
+      persona_file: infra/scripts/governance/prompts/vercel-dd-engineer.md
     p2_hostile_vc:
       subagent_type: codex:codex-rescue  # cross-vendor (GPT) via Codex
       model: gpt-5-4
       temperature: 0.3
       seed: 137
-      persona_file: docs/governance/personas/hostile-vc-auditor.md
+      persona_file: infra/scripts/governance/prompts/hostile-vc-auditor.md
     p3_paranoid_sre:
       subagent_type: general-purpose
       model: sonnet  # ou claude-sonnet-4-6
       temperature: 0.5
       seed: 99
-      persona_file: docs/governance/personas/paranoid-sre.md
+      persona_file: infra/scripts/governance/prompts/paranoid-sre.md
   ```
 - **Verification protocol:** `verify-independence.sh` confirma (a) ≥2 modelos diferentes OU (b) ≥3 temperatures distintas OU (c) codex-rescue para 1 das 3. Pelo menos 2 das 3 dimensões variadas.
 - **Edge case:** Codex-rescue não está acessível em CI runner. Mitigação: fall-back para 3 modelos Claude (opus/sonnet/haiku) + temperatures distintos. Documentar trade-off no log de provenance.
@@ -1129,7 +1129,7 @@ EC-1 do edge-case review é o gap conceitual mais sutil do plano. Reviewers exte
 #### Files to edit
 ```
 docs/architecture/governance/concept-independence-matrix.excalidraw — (NEW)
-docs/governance/personas/README.md — (EDIT from T0.2) link
+docs/GOVERNANCE.md (§4 Adversarial Personas) — (EDIT from T0.2) link
 docs/governance/independence-verification.md — (EDIT from T3.0) link
 ```
 
@@ -1816,7 +1816,7 @@ ADR D2 estabelece single source of truth, mas em prose. Diagrama mostra hub-and-
 ```
 docs/architecture/governance/concept-status-md-information-architecture.excalidraw — (NEW)
 docs/STATUS.md — (EDIT) link no footer "How this works"
-docs/governance/personas/README.md — (EDIT) link
+docs/GOVERNANCE.md (§4 Adversarial Personas) — (EDIT) link
 ```
 
 #### Deep file dependency analysis
@@ -2243,7 +2243,7 @@ Skill `to-plan` mandates Mode 3 post-plan.
 docs/architecture/governance/diff/c4-context.puml — (NEW)
 docs/architecture/governance/diff/c4-container.puml — (NEW)
 docs/architecture/governance/diff/c4-component.puml — (NEW)
-docs/architecture/governance/diff/deep-dive-proposed-state.md — (NEW)
+docs/architecture/governance/README.md (§2 PROPOSED) — (NEW)
 ```
 
 #### Tasks

@@ -20,10 +20,10 @@
 Maturity scoring uses 3 adversarial personas (Vercel DD / Hostile VC / Paranoid SRE) blind-scoring 7 dimensions, with median + std-dev triangulation. Confidence cap **95-97%** per ADR D1 (correlation residual from same-model-family agents; not 99%).
 
 See:
-- `docs/governance/evidence-bar.md` — 3-tier evidence schema (T1 code+test, T2 LIVE log, T3 CI run)
-- `docs/governance/personas/README.md` — adversarial persona invocation
-- `docs/governance/decay-policy.md` — 30/60/90 day TTL policy
-- `docs/governance/bias-taxonomy.md` — 6 bias patterns + counter-defenses
+- `docs/GOVERNANCE.md (§1 Evidence Bar)` — 3-tier evidence schema (T1 code+test, T2 LIVE log, T3 CI run)
+- `docs/GOVERNANCE.md (§4 Adversarial Personas)` — adversarial persona invocation
+- `docs/GOVERNANCE.md (§2 Decay Policy)` — 30/60/90 day TTL policy
+- `docs/GOVERNANCE.md (§3 Bias Taxonomy)` — 6 bias patterns + counter-defenses
 
 ## Dated history
 
@@ -37,6 +37,6 @@ New snapshots are NOT written to `maturity-assessment.md` — they go to `docs/m
 
 ## Why this redirect exists
 
-The 2026-05-11 plan (`docs/plans/status-validation-and-doc-consolidation-plan.md`) identified that scattered status surfaces caused drift inevitable. Material evidence: the same Claude session viesou +0.4 maturity points in <30 minutes (documented in `docs/architecture/governance/deep-dive-current-state.md`).
+The 2026-05-11 plan (`docs/plans/status-validation-and-doc-consolidation-plan.md`) identified that scattered status surfaces caused drift inevitable. Material evidence: the same Claude session viesou +0.4 maturity points in <30 minutes (documented in `docs/architecture/governance/README.md (§1 AS-IS)`).
 
 The fix: single source of truth (`docs/STATUS.md`) with material defenses (TTL, evidence files, validators, adversarial review, pre-merge gate, CI workflows). This file becomes a redirect to preserve incoming links while the canonical surface lives elsewhere.

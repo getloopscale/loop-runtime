@@ -24,7 +24,7 @@ scores:
     justification:
       - "68 infra-ops gaps, 66 UNEVIDENCED + 2 BROKEN (MEET-2026-04-27-061 and CLAUDE.md:176 cleanroom claim, both commit_missing per `evidence-gaps-report.md`). The cleanroom 12/12 success is the load-bearing proof for ops maturity — and its commit ref is broken. Not my domain (per persona scope) but it cascades: if ops can't show a fresh green run, my customer's first deploy is gambling."
       - "`divergence-report-2026-05-11.md` Category B explicitly states Dogfood Gate 'requires cleanroom (operator-only)' — i.e., the very test that would prove ops works hasn't run in this validation cycle. Tier 1 PaaS runs continuous cleanroom rebuilds in CI on schedule; here it's a manual operator gesture documented as TODO."
-      - "`docs/architecture/governance/deep-dive-current-state.md` line 29 — 'Zero arquivos têm TTL declarado' across 297 .md surface — meaning ops claims have no expiration policy. Yesterday's 'Sprint 6 shipped' could be stale folklore; the system has no way to know. Vercel uses 7-day on-call rotation rotating-eyes plus auto-archive on doc TTL expiry."
+      - "`docs/architecture/governance/README.md (§1 AS-IS)` line 29 — 'Zero arquivos têm TTL declarado' across 297 .md surface — meaning ops claims have no expiration policy. Yesterday's 'Sprint 6 shipped' could be stale folklore; the system has no way to know. Vercel uses 7-day on-call rotation rotating-eyes plus auto-archive on doc TTL expiry."
 
   security:
     score: 3.0

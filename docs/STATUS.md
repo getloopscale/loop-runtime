@@ -6,7 +6,7 @@
 >
 > **Visual reference:** `docs/architecture/governance/concept-evidence-triangulation-pipeline.excalidraw`
 >
-> **How scores are computed:** see `docs/governance/personas/README.md` (3 adversarial personas + triangulation + std-dev gate) and `docs/governance/evidence-bar.md` (3-tier evidence requirement). Confidence cap: **95-97%** per ADR D1 (correlation residual; not 99%).
+> **How scores are computed:** see `docs/GOVERNANCE.md (§4 Adversarial Personas)` (3 adversarial personas + triangulation + std-dev gate) and `docs/GOVERNANCE.md (§1 Evidence Bar)` (3-tier evidence requirement). Confidence cap: **95-97%** per ADR D1 (correlation residual; not 99%).
 
 ---
 
@@ -130,7 +130,7 @@ Run `task decay:scan` for full report by severity.
 
 ## 6. Evidence Index
 
-Per dimension → links to `docs/evidence/{dim}/`. Each evidence file follows schema in `docs/governance/evidence-bar.md`.
+Per dimension → links to `docs/evidence/{dim}/`. Each evidence file follows schema in `docs/GOVERNANCE.md (§1 Evidence Bar)`.
 
 | Dimension | Evidence Directory | File Count | Pass Rate (≥3 sources) |
 |-----------|---------------------|-----------:|------------------------:|
@@ -204,10 +204,10 @@ History of Phase 3 triangulated scorings.
 - **Visual pipeline:** `docs/architecture/governance/concept-evidence-triangulation-pipeline.excalidraw`
 - **Visual bias:** `docs/architecture/governance/concept-bias-taxonomy.excalidraw`
 - **Visual decay:** `docs/architecture/governance/concept-decay-lifecycle.excalidraw`
-- **Evidence policy:** `docs/governance/evidence-bar.md`
-- **Decay policy:** `docs/governance/decay-policy.md`
-- **Bias taxonomy:** `docs/governance/bias-taxonomy.md`
-- **Adversarial personas:** `docs/governance/personas/README.md`
+- **Evidence policy:** `docs/GOVERNANCE.md (§1 Evidence Bar)`
+- **Decay policy:** `docs/GOVERNANCE.md (§2 Decay Policy)`
+- **Bias taxonomy:** `docs/GOVERNANCE.md (§3 Bias Taxonomy)`
+- **Adversarial personas:** `docs/GOVERNANCE.md (§4 Adversarial Personas)`
 - **Claim catalog:** `docs/governance/claim-catalog.yaml` (348 claims, Phase 1 baseline)
 
 ---

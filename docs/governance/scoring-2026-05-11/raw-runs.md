@@ -62,7 +62,7 @@ Confidence: 90-95% (fallback mode). Cross-vendor codex run would tighten to 95-9
 
 Per ADR D4: 4 flagged dims require reconciliation meeting. Operator invokes:
 1. `/meeting` orchestrator per flagged dim, OR
-2. Manual arbiter analysis using `docs/governance/scoring-templates/reconciliation-meeting.template.md`
+2. Manual arbiter analysis using `infra/scripts/governance/templates/reconciliation-meeting.template.md`
 
 Until T3.3 completes, flagged dims show `final_score: null` in triangulation.yaml.
 
