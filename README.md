@@ -15,7 +15,7 @@
 
 ---
 
-Three commands to start. Then just `git push`.
+Four commands to start. Then just `git push`.
 
 ```bash
 loopzero login
@@ -43,15 +43,9 @@ No Kubernetes knowledge required. No Helm. No Dockerfile required. Just push.
 
 ## Project Status
 
-> **Phase: Pre-release.** Production infrastructure running on DigitalOcean (4 DOKS clusters, managed PG, CF Tunnel). Core deploy flow E2E validated. **Multi-cell ACTIVATED + LIVE-validated** (cell-default + cell-1 + cell-2). **Argo Rollouts progressive delivery shipped** (2026-05-07): every `loopzero deploy` now produces a canary Rollout (per-plan steps + Traefik weighted routing + auto-abort on bad readiness, default-on under `LOOPZERO_PROGRESSIVE_DELIVERY=true`). **Local cleanroom dogfood 12/12 GREEN end-to-end** (2026-05-05). **Cleanroom Dogfood Gate post-canary: 71/72 PASS (98.6%) in 42m49s on fresh infra** (1 unrelated ESO timing fail); warm-infra journey suite **80/80 PASS in 41m41s**. Not yet open to external users.
+> **Phase: Pre-release.** Production infrastructure running on DigitalOcean (3 DOKS clusters, managed PostgreSQL, Cloudflare Tunnel). Core deploy flow E2E validated. Multi-cell architecture live (3 cells). Progressive delivery (canary deploys) shipped. Not yet open to external users.
 >
-> **Maturity: 3.49/4.0** -- strong technical foundation, commercially unvalidated. Latest modular audit snapshot: `docs/audit/2026-05-11/SUMMARY.md` (12 módulos, code-validated).
->
-> **Local validation gate**: `bash infra/scripts/dogfood-cleanroom-loop.sh` destroys all 4 k3d clusters and re-runs `task setup` + `task k3d:heal` + tilt + 11 dogfood journeys + preflight, all PASS in ~33min without manual intervention. 39 systemic bugs (B1-B39) caught and canonically fixed across 29 iterations. Tag: `dogfood-cleanroom-converged-20260505`.
->
-> **Progressive delivery validation**: 6 fixes converged during cleanroom validation (F-17 dedicated fixture, F-18 `progressDeadlineSeconds=300`, F-19 S1 `sync_client.go` accepts `Kind="Rollout"`, F-20 S2 e2e scaffolding + proveDead extends to Rollout/TraefikService, F-21 `task k3d:bootstrap-workload` includes argo-rollouts, F-22 S1 `loopzero-ctrl-runtime-rbac-admin` ClusterRole grants `argoproj.io`).
->
-> **Path to 4.0**: (a) first CI Sunday cron GREEN producing real `cell2-soaks.yml` 1h+24h workflow run evidence + (b) 1 prod customer day-trial with no incidents (Sprint 9 prod canary stage 4). Local 7-day GREEN streak NOT a gate (tautological in static dev env without diurnal traffic; CI cron + real prod usage are the legitimate signals — D7 reformulated 2026-05-03).
+> **Maturity: 3.49/4.0** -- strong technical foundation, commercially unvalidated. Path to 4.0: CI soak tests GREEN + first production customer day-trial with no incidents.
 
 ### What Works (E2E Validated on DigitalOcean)
 
@@ -64,7 +58,7 @@ No Kubernetes knowledge required. No Helm. No Dockerfile required. Just push.
 | `loopzero deploy` (static frontends) | S3 upload + CF Worker KV routing + DO Spaces CDN |
 | `loopzero rollback` | Instant revert to previous release (~3s) |
 | `loopzero promote --from staging --to production` | Cross-environment promotion (HTTP 202, no rebuild) |
-| `loopzero logs` | Loki cross-cluster streaming |
+| `loopzero logs` | Local log streaming works; cross-cluster streaming not yet built (Loki infra gap) |
 | `loopzero status` | Project status with active release, URL, scaling info, **progressive deploy phase** (canary step + setWeight%) |
 | `loopzero secret set/list/delete` | ESO sync <30s, values never exposed in CLI output |
 | `loopzero cancel` | Cancel running/queued builds |
@@ -76,9 +70,9 @@ No Kubernetes knowledge required. No Helm. No Dockerfile required. Just push.
 | `loopzero connect` / `disconnect` | GitHub App auto-deploy on push (~4min E2E) |
 | `loopzero audit` | Audit log with action/timestamp filters |
 | `loopzero validate` | Local loopzero.yaml validation |
-| `loopzero scale` | **Fully functional E2E** (B40 fixed 2026-05-06). API persists to `app_scaling_config` (project NAME), `ScalingResolver` reads it during deploy submit, `enforceScaling` validates plan caps on resolved config (closes MEET-2026-04-23-059 Constraint 6 hole), renderer emits `Deployment.spec.replicas` matching DB. Validated via journey-04 with kubectl assertion + cleanroom 12/12 GREEN. Tag: `scale-b40-converged-20260506`. |
+| `loopzero scale` | Fully functional E2E — API persists scaling config, deploy enforces per-plan replica caps, validated end-to-end |
 | Plan enforcement (Starter/Pro/Team) | Limits on projects/builds/environments/members/replicas |
-| Concurrent deploy protection | `pg_advisory_xact_lock` -> exactly one 202, others get 409 |
+| Concurrent deploy protection | Exactly one deploy per environment — first gets 202, others get 409 |
 | Idempotency | Retry-safe via `Idempotency-Key` header |
 | Image signing (cosign) | Every container image signed post-build |
 | Scale-to-zero (KEDA) | Manifest generation + Helm charts + Pulumi bootstrap (cluster KEDA pending). KEDA HPA targets `Kind=Rollout` post-canary plan (T3.1) with `transfer-hpa-ownership` annotation so Argo Rollouts owns replica scaling during canary, KEDA after promotion. |
@@ -99,7 +93,7 @@ No Kubernetes knowledge required. No Helm. No Dockerfile required. Just push.
 | Cell-2 production canary (stages 4-5) | Medium | Stage 4: 1 customer 7-day. Stage 5: 10/50/100% with 7-day holds. Pending Sprint 9 readiness review per ADR D6. CI cron `cell2-soaks.yml` armed for ADR-compliant 1h+24h Sunday runs. |
 | ~~SBOM generation (syft)~~ | ~~Medium~~ | ✅ Shipped (Sprint 6). Per-release CycloneDX manifest persisted in S3 with presigned URL endpoint. |
 | Admission policy DENY mode | Medium | warn-mode shipped (Sprint 6). Deny-flip pending Sprint 9 with cosign keyless verification + Fulcio. |
-| ~~`loopzero scale` end-to-end persistence~~ | ~~Medium~~ | ✅ **Shipped (B40 fix, 2026-05-06).** ScalingResolver in build_orchestrator_submit closes the chain. Plan-cap on resolved. Cleanroom 12/12 GREEN. Tag `scale-b40-converged-20260506`. |
+| ~~`loopzero scale` end-to-end persistence~~ | ~~Medium~~ | ✅ Shipped — scaling config persisted and enforced end-to-end |
 | Chaos engineering suite | Medium | Sprint 8 -- not started. |
 | Polish + onboarding (< 10 min) | High | Sprint 9 -- not started. |
 | SSO/SAML | Low | Phase 3. |
@@ -126,8 +120,8 @@ Source of truth: `api/internal/db/migrations/000002_seed_data.up.sql` (plan_limi
 | State machines | 10 application + 9 release + 7 build | Passing (`ApplicationCleaned` terminal state via `ApplicationOrphaned` event added 2026-05-03) |
 | CI pipeline | 35 workflows | Green (incl. `cell2-soaks.yml` weekly Sunday 02:00 UTC + `platform-health-7day-watch.yml` hourly) |
 | Regression matrix | 166 entries | 0 critical miss, audit GREEN |
-| Cleanroom dogfood (E2E) | preflight + 11 journeys | **12/12 GREEN** end-to-end on fresh `k3d` destroy/setup cycle (2026-05-05, tag `dogfood-cleanroom-converged-20260505`). Validates: solo deploy, multi-server (api+worker), secrets via ESO, scale persistence, promote staging→production, rollback v2→v1 with state machine, custom domain register/list/status/remove, GitHub connect/disconnect, preview list/inspect/delete, failure modes (auth/cap/build), admin (evict dry-run + service-auth gating). Total: ~33min. Rule 3 audit: 0 internal-term matches in CLI output. |
-| Ginkgo journey suite (Argo Rollouts) | 80 specs (label `journey`) | **80/80 GREEN warm-infra in 41m41s** + **71/72 GREEN fresh-cleanroom in 42m49s** post F-22 (2026-05-07). Includes T5.1 happy-path canary (Rollout + canary strategy + TraefikService weights + Healthy phase), T5.2 auto-abort on bad `/health` (readiness probe drives Degraded within `progressDeadlineSeconds=300`), all promote/rollback flows over Rollouts, multi-server with Rollout naming. |
+| Cleanroom dogfood (E2E) | preflight + 11 journeys | **12/12 GREEN** — fresh destroy/setup cycle validates all commands end-to-end (~33min) |
+| Ginkgo journey suite (Argo Rollouts) | 80 specs | **80/80 GREEN** — canary happy path, auto-abort on failure, promote/rollback over Rollouts, multi-server naming |
 
 ---
 
@@ -240,7 +234,7 @@ Run LoopZero on your own Kubernetes cluster.
 loopzero platform install -f customer-values.yaml
 ```
 
-10-step automated installer: validates cluster, installs all dependencies (CloudNativePG, Gitea, ArgoCD, Argo Workflows, Ory Kratos/Hydra, MinIO, cert-manager, Traefik), bootstraps credentials, runs migrations, and verifies health.
+10-step automated installer: validates cluster, installs all dependencies (PostgreSQL, Gitea, ArgoCD, Argo Workflows, Ory Kratos/Hydra, MinIO, cert-manager, Traefik), bootstraps credentials, runs migrations, and verifies health.
 
 ### Management
 
@@ -370,8 +364,8 @@ loopzero deploy (or git push)
 | Auth | Ory Kratos (identity) + Ory Hydra (OAuth2/OIDC) |
 | Build engine | Argo Workflows + BuildKit (rootless) |
 | GitOps | ArgoCD (manual sync) + Gitea |
-| Progressive delivery | Argo Rollouts 1.7.2 (per-plan canary steps, TraefikService weighted routing on `traefik.io/v1alpha1`, AnalysisTemplate, `progressDeadlineSeconds=300` for abort detection) |
-| Database | PostgreSQL 16 (CloudNativePG in self-hosted, managed DO in cloud) |
+| Progressive delivery | Argo Rollouts 1.7.2 (per-plan canary steps, Traefik weighted routing, auto-abort on failure) |
+| Database | PostgreSQL 16 (Helm chart in self-hosted, managed DO in cloud) |
 | Autoscaling | KEDA + HTTP Add-on (scale-to-zero) + HPA (min >= 1) |
 | Secrets | External Secrets Operator |
 | Edge | Cloudflare Tunnel + Worker + KV + Zone Management |
@@ -385,7 +379,7 @@ loopzero deploy (or git push)
 
 | Resource | Configuration |
 |----------|---------------|
-| 4 DOKS clusters | v1.32, 2 nodes each, SFO3 (mgmt, build, runtime, runtime-2) |
+| 3 DOKS clusters | v1.32, 2 nodes each, SFO3 (mgmt, build, runtime) |
 | PostgreSQL | v16, managed |
 | Container Registry | DigitalOcean (Professional) |
 | Edge proxy | Cloudflare Tunnel (zero public IPs, WAF/DDoS) |
@@ -435,7 +429,7 @@ cd pkg && go test ./...       # Shared library tests
 - **Database migrations** -- LoopZero deploys code, not schema changes.
 - **Custom domains without nameserver change** -- Users must change nameservers to Cloudflare.
 - **Multi-region** -- Single-region in v1.
-- *(item removido — preview environments shipped no Sprint 5)*
+
 - **GPU/AI workloads** -- Not planned.
 
 ---
@@ -451,11 +445,11 @@ cd pkg && go test ./...       # Shared library tests
 
 ## License
 
-[Apache License 2.0](LICENSE)
+Apache License 2.0
 
 ## Contributing
 
-See [CONTRIBUTING.md](CONTRIBUTING.md). Every PR starts with a failing test.
+Every PR starts with a failing test. See the [development commands](CLAUDE.md#development-commands) for setup instructions.
 
 ## Links
 

@@ -1,7 +1,7 @@
 # Module 03 — Operators (`operators/`)
 
 **Audit Date:** 2026-05-11
-**Auditor:** Claude Opus 4.7 (1M context), code-validated
+**Auditor:** Claude Opus 4.6 (1M context), code-validated
 **Confidence:** 88% (Claude-only, alguma incerteza sobre Phase 6 SOTA Dogfood Gate items)
 **Maturity:** **3.3 / 4.0**
 

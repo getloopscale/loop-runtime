@@ -1,7 +1,7 @@
 # Module 12 — CI/CD and Testing (`.github/workflows/` + `infra/tests/`)
 
 **Audit Date:** 2026-05-11
-**Auditor:** Claude Opus 4.7 (1M context), code-validated
+**Auditor:** Claude Opus 4.6 (1M context), code-validated
 **Confidence:** 90%
 **Maturity:** **3.5 / 4.0**
 

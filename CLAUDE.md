@@ -8,7 +8,7 @@ LoopZero is a **CLI-first Kubernetes PaaS** for monorepo deployments. Vercel-qua
 
 The authoritative spec is the code itself + `CHANGELOG.md` + relevant ADRs. If this file and the codebase conflict, the codebase wins.
 
-**Status:** Pre-release. Latest snapshot: `docs/audit/2026-05-11/SUMMARY.md` (modular audit, 12 módulos, média 3.49/4.0). H1-H7 hardenings complete; Sprint 9 (Polish + Launch) pending gates: (a) first CI Sunday cron GREEN producing real `cell2-soaks.yml` workflow run evidence; (b) 1 prod customer day-trial with no incidents.
+**Status:** Pre-release. Latest snapshot: `docs/audits/2026-05-11/SUMMARY.md` (modular audit, 12 módulos, média 3.49/4.0). H1-H7 hardenings complete; Sprint 9 (Polish + Launch) pending gates: (a) first CI Sunday cron GREEN producing real `cell2-soaks.yml` workflow run evidence; (b) 1 prod customer day-trial with no incidents.
 
 **Pricing:** Starter (Free, 1 project), Pro ($29/mo, 3 projects), Team ($79/mo, 10 projects), Enterprise (custom).
 
@@ -66,7 +66,7 @@ cd infra/pulumi && npx pulumi preview --stack dev # Preview
 8. **State machines are strict** — Use state machine functions, never direct status updates. Invalid transitions panic (programming error).
 9. **CLI is the primary interface** — Every feature lives in CLI before dashboard. Dashboard-only features are product bugs.
 10. **Local equals production** — Same Helm charts, same operators, same build pipeline. No Docker Compose shortcuts. No "dev mode" with different behavior.
-11. **Claims need evidence** — Any claim affecting maturity score requires **3 evidence sources** (T1 commit+test, T2 LIVE log, T3 CI run). Confidence cap **90-95%** (single-model family correlation residual; originally ratified as ADR-0051 in the governance suite removed 2026-05-11, but the cap remains binding). TTL applies: 30d operational / 60d arch / 90d strategic. Latest baseline: `docs/audit/2026-05-11/SUMMARY.md` (12 module audits + this aggregate). The previous `docs/evidence/{dim}/` per-claim tree was consolidated into the audit folder during the same cleanup.
+11. **Claims need evidence** — Any claim affecting maturity score requires **3 evidence sources** (T1 commit+test, T2 LIVE log, T3 CI run). Confidence cap **90-95%** (single-model family correlation residual; originally ratified as ADR-0051 in the governance suite removed 2026-05-11, but the cap remains binding). TTL applies: 30d operational / 60d arch / 90d strategic. Latest baseline: `docs/audits/2026-05-11/SUMMARY.md` (12 module audits + this aggregate). The previous `docs/evidence/{dim}/` per-claim tree was consolidated into the audits folder during the same cleanup.
 
 ---
 
@@ -93,7 +93,7 @@ cd infra/pulumi && npx pulumi preview --stack dev # Preview
 | Autoscaling | KEDA 2.16.1 + HTTP Add-on 0.8.0 |
 | IaC | 5 Pulumi projetos: `pulumi/` (L1 DO+CF), `pulumi-infra/` (multi-cluster topology), `pulumi-platform/` (L2 com 32 Helm releases), `pulumi-control-plane/` (STUB com 16 TODOs), `pulumi-shared/` (contratos); Helmfile L2 (bootstrap); ArgoCD L3 (Day-2 GitOps) |
 | Local clusters | k3d × 4 (mgmt, build, workload, runtime-2) |
-| Dev loop | Tilt + Taskfile (2826 lines across 7 files) |
+| Dev loop | Tilt + Taskfile (2930 lines across 7 files) |
 | Helm | 16 bootstrap charts próprios + 18 value overlays (`infra/helm/`) + 13 published charts (`charts/`) |
 | CI/CD | GitHub Actions (35 workflows) |
 | Migrations | golang-migrate (forward-only `.up.sql`) |
@@ -104,9 +104,9 @@ cd infra/pulumi && npx pulumi preview --stack dev # Preview
 
 ```
 loopzero/
-├── docs/                  ← audit/, evidence/, plans/, strategy/ (cli-reference.md + STATUS.md + architecture/ + meetings/ removed in 2026-05-11 governance consolidation; spec is the code itself)
+├── docs/                  ← audits/, plans/, strategy/ (cli-reference.md + STATUS.md + evidence/ + architecture/ + meetings/ removed in 2026-05-11 governance consolidation; spec is the code itself)
 ├── pkg/                   ← shared Go: statemachine, errors, errors/http, jwt, naming, conditions, id, logging, enforcement, circuitbreaker
-├── cli/                   ← @loopzero/cli — TS + Commander, 36 commands, 1,226+ test cases (audit M01)
+├── cli/                   ← @loopzero/cli — TS + Commander, 35 commands, 1,226+ test cases (audit M01)
 ├── api/internal/          ← 35 subpacotes: adapters, admission, archive, argo, argocd, cellmgr, cfkv, cfzone, config, correlation, db, domain, gitclient, github, gitops, health, k8s, leader, lock, loki, manifests, metrics, middleware, placement, processing, routes, s3, server, services, shellgen, source, sse, tracing, validation, workqueue
 ├── operators/             ← 8 controllers (Tenant, Environment, Application, Exposure, PlatformBootstrap, GitRepositoryBinding, ClusterCredential, Preview), 10 CRDs
 ├── infra/
@@ -182,7 +182,7 @@ Skills/slash commands (subset): `/sprint`, `/implement`, `/test`, `/review`, `/d
 
 **E2E Validation (2026-04-23):** 25/30 pass (83%). Confidence: deploy 99%, scaling 95%, promote 95%, rollback 99%, concurrent rejection 99%, JSON contracts 99%, internal terms (Rule 3) 99%. Log streaming 60% (infra gap, not code).
 
-**Maturity:** Latest snapshot 3.49/4.0 (modular audit 12 módulos, 2026-05-11). Path to 4.0: (a) first CI Sunday cron GREEN, (b) 1 prod customer day-trial. Snapshot completo: `docs/audit/2026-05-11/SUMMARY.md`.
+**Maturity:** Latest snapshot 3.49/4.0 (modular audit 12 módulos, 2026-05-11). Path to 4.0: (a) first CI Sunday cron GREEN, (b) 1 prod customer day-trial. Snapshot completo: `docs/audits/2026-05-11/SUMMARY.md`.
 
 ---
 

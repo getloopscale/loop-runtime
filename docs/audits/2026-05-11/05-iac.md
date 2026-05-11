@@ -1,7 +1,7 @@
 # Module 05 — Infrastructure as Code (`infra/pulumi*`, `infra/cloudflare/`)
 
 **Audit Date:** 2026-05-11
-**Auditor:** Claude Opus 4.7 (1M context), code-validated
+**Auditor:** Claude Opus 4.6 (1M context), code-validated
 **Confidence:** 88% (Claude-only, IaC drift detection mais difícil sem `pulumi preview` LIVE)
 **Maturity:** **3.0 / 4.0**
 

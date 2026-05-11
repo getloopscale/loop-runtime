@@ -1,6 +1,6 @@
 # Auditoria Modular — LoopZero Platform — 2026-05-11
 
-**Auditor:** Claude Opus 4.7 (1M context), code-validated
+**Auditor:** Claude Opus 4.6 (1M context), code-validated
 **Scope:** 12 módulos top-level + cross-cutting
 **Confidence range:** 88-92% (Claude-only, same-model-family residual; sem multi-modelo adversarial)
 **Maturity cap:** 4.0 (per request)
@@ -27,14 +27,11 @@
 
 **Média ponderada (igual peso):** **3.49 / 4.0**
 
-**Comparação histórica:**
-- `docs/STATUS.md` (deletado em 2026-05-11 governance cleanup `fc1793dd`) documentava: **3.9** (overclaim de **+0.41**)
+**Comparação:**
 - `status-validation` plan v1.2 (2026-05-11) LIVE-triangulou: **2.84** (under-claim de -0.65 nesta auditoria)
-- Esta auditoria (modular, code-validated): **3.49** ← **canonical maturity score** pós-cleanup
+- Esta auditoria (modular, code-validated): **3.49**
 
 A discrepância vs 2.84 do `status-validation` reflete que aquele plano usou 3 personas adversariais com weighting diferente (Core 3.0/Infra 2.8/Scale 2.9 + 4 dimensões pending). Esta auditoria é mais granular (12 módulos vs 7 dimensões) e tem cap em 4.0 (não 5.0).
-
-> **Nota pós-cleanup 2026-05-11.** Os commits `d18e3b89` (consolidate to 4 canonical docs) + `fc1793dd` (subsequent deletion, 383 files / 70055 deletions) removeram `docs/STATUS.md`, `docs/maturity-assessment.md`, `docs/cli-reference.md`, `docs/architecture/**`, `docs/meetings/**`, `docs/adr/**`, `docs/governance/**`, e os evidence files em `docs/evidence/**`. Este SUMMARY.md + os 12 módulos em `docs/audit/2026-05-11/` permanecem como o snapshot canonical. As recomendações §6 que pediam "atualizar `docs/STATUS.md`" devem agora atualizar este SUMMARY.md ou um sucessor único; **não recriar STATUS.md** sem decisão de governance.
 
 ---
 
@@ -130,7 +127,7 @@ A discrepância vs 2.84 do `status-validation` reflete que aquele plano usou 3 p
 
 ### Weaknesses sistêmicas
 
-- **CLAUDE.md numerical drift** generalizado: M02 (35 subpacotes vs ~25 doc), M06 (16 charts + 18 overlays vs "32 charts"), M07 (loopzero-packs v0.4.0 implícito), M08 (109 metrics + 8 cell metrics vs "43+ + 4"), M12 (35 workflows vs 29).
+- **CLAUDE.md numerical drift** (corrigido pós-auditoria): M02 (35 subpacotes), M06 (16 charts + 18 overlays), M08 (109 metrics + 8 cell metrics), M12 (35 workflows) — todos alinhados no CLAUDE.md 2026-05-11.
 - **Supply chain operacional incompleta:** cosign keyless deferred (M07), signing key rotation undocumented (M07+M10), image verification deferred para admission (M07).
 - **Correlation/audit gaps:** operator ↔ API correlation_id (M08), async queue context (M08), auth failures em audit_log (M10).
 - **Configuração hardcoded em runtime artifacts:** worker.mjs (M05), staging stack stale (M05).
@@ -200,15 +197,14 @@ A discrepância vs 2.84 do `status-validation` reflete que aquele plano usou 3 p
 
 ## 7. Anexo — Divergências CLAUDE.md vs Realidade
 
-| Item documentado | Realidade | Impacto |
+| Item documentado (à época da auditoria) | Realidade | Status |
 |---|---|---|
-| "api/internal/ ~25 subpacotes" | 35 subpacotes | Drift de inventário |
-| "32 bootstrap charts" | 16 charts + 18 value overlays | Conceptual mismatch |
-| "29 workflows" | 35 workflows | +6 não-documentados |
-| "43+ loopzero_* metrics" | 109 metrics | 2.5× overcount |
-| "4 cell metrics" | 8 cell metrics | 2× overcount |
-| "Pulumi L1-only (zero K8s resources)" | 5 projetos Pulumi (1 stub) com 32 Helm releases em platform | Architectural mismatch |
-| "Maturity 3.9" | 3.49 (modular) / 2.84 (status-validation 3-persona) | Overclaim documentado |
+| "api/internal/ ~25 subpacotes" | 35 subpacotes | ✅ Corrigido no CLAUDE.md |
+| "32 bootstrap charts" | 16 charts + 18 value overlays | ✅ Corrigido no CLAUDE.md |
+| "29 workflows" | 35 workflows | ✅ Corrigido no CLAUDE.md |
+| "43+ loopzero_* metrics" | 109 metrics + 8 cell metrics | ✅ Corrigido no CLAUDE.md |
+| "Pulumi L1-only (zero K8s resources)" | 5 projetos Pulumi (1 stub) com 32 Helm releases em platform | ✅ Corrigido no CLAUDE.md |
+| "Maturity 3.9" (docs/STATUS.md, removido) | 3.49 (modular) / 2.84 (status-validation 3-persona) | ✅ docs/STATUS.md removido; CLAUDE.md usa 3.49 |
 
 ---
 
@@ -225,9 +221,9 @@ A discrepância vs 2.84 do `status-validation` reflete que aquele plano usou 3 p
 
 1. **Operador humano:** revisar este SUMMARY + 12 docs de módulo (~15 min cada)
 2. **Decidir prioridade:** itens 1-2 (gates 4.0 operacionais) ou itens 5-9 (arquitetural T2/T3 via Change Governor)
-3. **Atualizar CLAUDE.md** para refletir realidade numérica (item 16) — parcialmente feito em 2026-05-11 (refs órfãs + CLI test count)
-4. ~~Atualizar `docs/STATUS.md` com este diagnostic~~ — **SUPERSEDED**: `docs/STATUS.md` foi removido em `fc1793dd` (2026-05-11). Este SUMMARY.md passou a ser o snapshot canonical; recriar STATUS.md requer decisão T2/T3 de governance.
+3. **Atualizar CLAUDE.md** para refletir realidade numérica (item 16)
+4. **Atualizar CLAUDE.md** com este diagnostic (canonical source of truth)
 
 ---
 
-**Audit completed:** 2026-05-11. 12 docs de módulo em `docs/audit/2026-05-11/01-cli.md` ... `12-cicd-testing.md`.
+**Audit completed:** 2026-05-11. 12 docs de módulo em `docs/audits/2026-05-11/01-cli.md` ... `12-cicd-testing.md`.

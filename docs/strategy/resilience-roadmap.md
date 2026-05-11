@@ -1,15 +1,15 @@
-# Resilience Roadmap — Path to Maturity 5.0
+# Resilience Roadmap — Path to Maturity 4.0
 
 **Date:** 2026-05-06
 **Author:** Engineering team
 **Status:** PROPOSED (requires T2/T3 meeting approval per pre-release governance)
-**Objective:** Close all resilience gaps blocking maturity 5.0
+**Objective:** Close all resilience gaps blocking maturity 4.0
 
 ---
 
 ## Context
 
-LoopZero is at maturity **3.49/4.0** (modular audit baseline 2026-05-11, `docs/audit/2026-05-11/SUMMARY.md`). The path to higher maturity requires:
+LoopZero is at maturity **3.49/4.0** (modular audit baseline 2026-05-11, `docs/audits/2026-05-11/SUMMARY.md`). The path to higher maturity requires:
 
 - Full chaos engineering suite
 - 50+ real tenants
@@ -68,7 +68,7 @@ Validate that LoopZero self-heals under real failure conditions. Prove resilienc
 
 ### Success Criteria
 
-- All 8 experiments documented as `ChaosExperiment` CRDs in `infra/chaos/experiments/`.
+- All 8 experiments documented as `ChaosExperiment` CRDs in `infra/tests/chaos/manifests/`.
 - Each experiment has a matching Ginkgo E2E test in `infra/tests/chaos/` that asserts recovery.
 - CI workflow `chaos-suite.yml` runs weekly (like `cell2-soaks.yml`).
 - Regression matrix updated with chaos entries.
@@ -88,9 +88,11 @@ Guarantee that a catastrophic cluster failure does not result in permanent data 
 ### Current State
 
 - **PostgreSQL:** DO Managed PG has automatic daily backups + PITR. ✅ Covered.
-- **Kubernetes resources (CRDs, Secrets, ConfigMaps):** **Zero backup.** If mgmt cluster etcd corrupts, all Tenant/Application/Environment CRs are lost permanently.
-- **Gitea repositories:** Stored on PVCs. No backup beyond what the PVC provider offers.
-- **ArgoCD state:** Apps, AppProjects, Secrets stored in K8s. No backup.
+- **Velero Helm chart:** `infra/helm/velero/` exists with Chart.yaml, values.yaml, values-schedules.yaml. ✅ Chart created.
+- **CI workflow:** `velero-backup-check.yml` deployed. ✅ Monitoring in place.
+- **Kubernetes resources (CRDs, Secrets, ConfigMaps):** Backup scheduling and operational validation **pending**.
+- **Gitea repositories:** Stored on PVCs. Velero PVC backup integration **pending**.
+- **ArgoCD state:** Apps, AppProjects, Secrets stored in K8s. Velero coverage **pending**.
 
 ### What This Enables
 
@@ -146,17 +148,21 @@ Medium — install + configure + write runbook + validate restore.
 
 ---
 
-## P2 — Argo Rollouts (Progressive Delivery)
+## P2 — Argo Rollouts (Progressive Delivery) — ✅ DONE (2026-05-07)
 
-### Objective
+> **Completed 2026-05-07.** Argo Rollouts 1.7.2 fully implemented and validated: 80/80 GREEN warm-infra journey (41m41s), 71/72 GREEN fresh-cleanroom journey (42m49s, 1 unrelated ESO timing fail). Canary deploys with TraefikService weighted routing, per-plan steps, AnalysisTemplate hooks, auto-abort on readiness failure (`progressDeadlineSeconds=300`), KEDA targets Rollout. 15 plan tasks (T0.1-T5.2) complete. 6 fixes shipped (F-16 through F-22). See Sprint Plan "Argo Rollouts Progressive Delivery" in CLAUDE.md for full details.
+
+### Objective (COMPLETED)
 
 Eliminate "deploy and pray" by replacing all-at-once deployments with automated canary analysis. A bad deploy should never affect 100% of traffic.
 
-### Current State
+### Current State (as of completion)
 
-- ArgoCD syncs `Deployment` manifests — all pods replaced simultaneously.
-- Rollback is fast (~3s) but **reactive** — requires detection (human or alert) before triggering.
-- Zero traffic-splitting capability for gradual rollout.
+- Argo Rollouts 1.7.2 deployed on workload clusters (`infra/helm/argo-rollouts/`).
+- Manifest renderer generates `Rollout` + `TraefikService` + 2 Services + `AnalysisTemplate` per environment.
+- Per-plan canary steps implemented (Starter 2-step, Pro 3-step, Team 4-step).
+- KEDA `ScaledObject` targets `Rollout` via `Kind=Rollout` ScaleTargetRef.
+- SSE `rollout.step` events stream during canary; `rollout.aborted` (exit 3) on Degraded/Aborted.
 
 ### What This Enables
 
@@ -405,7 +411,7 @@ P3 Kuberhealthy ───────────────── (depends on 
 
 ## References
 
-- `docs/audit/2026-05-11/SUMMARY.md` — current modular audit baseline (12 módulos, cap 4.0)
+- `docs/audits/2026-05-11/SUMMARY.md` — current modular audit baseline (12 módulos, cap 4.0)
 - `infra/helm/chaos-mesh/` — existing Chaos Mesh installation (Sprint 8 T0.3)
 - CNCF Landscape (`landscape.yml`) — source of project evaluation
 - Argo Rollouts Traefik integration docs — `TraefikService` weighted routing

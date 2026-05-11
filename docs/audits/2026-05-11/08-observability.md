@@ -1,7 +1,7 @@
 # Module 08 — Observability (Prometheus + Grafana + OTel + Tempo + Loki + Promtail)
 
 **Audit Date:** 2026-05-11
-**Auditor:** Claude Opus 4.7 (1M context), code-validated
+**Auditor:** Claude Opus 4.6 (1M context), code-validated
 **Confidence:** 90% (Claude-only)
 **Maturity:** **3.5 / 4.0**
 

@@ -1,7 +1,7 @@
 # Module 10 — Auth & Billing (Kratos + Hydra + Redis + Stripe + JWT)
 
 **Audit Date:** 2026-05-11
-**Auditor:** Claude Opus 4.7 (1M context), code-validated
+**Auditor:** Claude Opus 4.6 (1M context), code-validated
 **Confidence:** 88%
 **Maturity:** **3.5 / 4.0**
 

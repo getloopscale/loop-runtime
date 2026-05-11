@@ -1,7 +1,7 @@
 # Module 11 — State Machines (`pkg/statemachine/`)
 
 **Audit Date:** 2026-05-11
-**Auditor:** Claude Opus 4.7 (1M context), code-validated
+**Auditor:** Claude Opus 4.6 (1M context), code-validated
 **Confidence:** 92%
 **Maturity:** **3.8 / 4.0**
 

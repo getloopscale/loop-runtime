@@ -374,7 +374,7 @@ Determinístico, sem race conditions.
 
 ### 4.2 State Machines — Transições Estritas
 
-O LoopZero possui 9 state machines em `pkg/statemachine/`. Transições inválidas causam **panic**
+O LoopZero possui 11 state machines em `pkg/statemachine/` (Build, Release, Tenant, PlatformBootstrap, Preview, Promotion, Rollback, Domain, Environment, Application, ExposedRoute). Transições inválidas causam **panic**
 (programming error, não runtime error). Isso garante que o sistema nunca entra em estado
 inconsistente por bug de lógica.
 

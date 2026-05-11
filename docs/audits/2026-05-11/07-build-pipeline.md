@@ -1,7 +1,7 @@
 # Module 07 — Build Pipeline (Argo Workflows + BuildKit + cosign + syft + dockerfile-lint)
 
 **Audit Date:** 2026-05-11
-**Auditor:** Claude Opus 4.7 (1M context), code-validated
+**Auditor:** Claude Opus 4.6 (1M context), code-validated
 **Confidence:** 88% (Claude-only, alguma incerteza sobre adequação operacional do key rotation)
 **Maturity:** **3.3 / 4.0**
 

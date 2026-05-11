@@ -102,7 +102,7 @@ Add a Helmfile release so chaos-mesh is installed as part of `helmfile sync` on 
 ```
 infra/helmfile/mgmt.helmfile.yaml.gotmpl — add chaos-mesh release block
 infra/helmfile/build.helmfile.yaml.gotmpl — add chaos-mesh release block (if exists, else mgmt only)
-infra/helmfile/workload.helmfile.yaml.gotmpl — add chaos-mesh release block (if exists, else mgmt only)
+infra/helmfile/runtime.helmfile.yaml.gotmpl — add chaos-mesh release block (if exists, else mgmt only)
 ```
 
 #### Deep file dependency analysis

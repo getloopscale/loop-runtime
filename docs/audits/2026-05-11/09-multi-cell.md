@@ -1,7 +1,7 @@
 # Module 09 — Multi-Cell Routing (placement + cellmgr + cell_pinner + cell_store)
 
 **Audit Date:** 2026-05-11
-**Auditor:** Claude Opus 4.7 (1M context), code-validated
+**Auditor:** Claude Opus 4.6 (1M context), code-validated
 **Confidence:** 92%
 **Maturity:** **3.7 / 4.0**
 
