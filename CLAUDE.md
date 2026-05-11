@@ -8,17 +8,17 @@ LoopZero is a **CLI-first Kubernetes PaaS** for monorepo deployments. Vercel-qua
 
 The authoritative specification is **`docs/cli-reference.md`**. If this file and the system design conflict, the system design wins.
 
-**Status:** See **[`docs/STATUS.md`](docs/STATUS.md)** — canonical source. Per ADR D2 of `status-validation-and-doc-consolidation-plan` v1.2 (2026-05-11 T4.3), this line no longer duplicates status narrative. Use `task decay:scan` for live data; `docs/GOVERNANCE.md (§1 Evidence Bar)` for methodology. Pre-release; H1-H7 hardenings complete; Sprint 9 (Polish + Launch) pending gates: (a) first CI Sunday cron GREEN; (b) 1 prod customer day-trial.
+**Status:** Pre-release. Latest snapshot: `docs/audit/2026-05-11/SUMMARY.md` (modular audit, 12 módulos, média 3.49/4.0). H1-H7 hardenings complete; Sprint 9 (Polish + Launch) pending gates: (a) first CI Sunday cron GREEN producing real `cell2-soaks.yml` workflow run evidence; (b) 1 prod customer day-trial with no incidents.
 
 **Pricing:** Starter (Free, 1 project), Pro ($29/mo, 3 projects), Team ($79/mo, 10 projects), Enterprise (custom).
 
-**Completed:** deploy happy path (full E2E dogfood validated), **progressive delivery (Argo Rollouts canary)** with TraefikService weighted routing + per-plan steps + AnalysisTemplate hooks + auto-abort on readiness failure (`progressDeadlineSeconds=300`), scaling+HPA targeting Rollout (Starter=2/Pro=5/Team=10), promote staging→prod, rollback, secrets via ESO, custom domains v2 (CF Zone Mgmt, model Vercel), GitHub App auto-deploy (~4min), monorepo validator (30 frameworks), cosign image signing + syft SBOM (CycloneDX), supply-chain admission (policy-controller deny-by-default + warn-mode ClusterImagePolicy + digest enforcement in manifests), plan enforcement, audit log, RSA-only JWT auth, two-host gateway, concurrent deploy rejection (1×202+1×409), JSON contracts (8/8), observability (43+ loopzero_* metrics + 4 cell metrics + Grafana + SLO alerts + 7 multi-cell alerts), KEDA scale-to-zero (targets Rollout via `Kind=Rollout` ScaleTargetRef + `transfer-hpa-ownership` annotation), cell architecture (Phase 0+1+1.5 + cells table + admin pin), **cell-2 ACTIVATED + LIVE-validated** (3/3 cells connected; namespace cell-aware reconcile; rollback SLO P50=648ms / P95=705ms <<300s budget; 12 ADR gates persistente), operator multi-binary split (4 binaries), layered bootstrap (Pulumi L1 + Helmfile L2 + ArgoCD L3), `loopzero admin tenants pin/evict`, **application reaper** for orphan CRs (`ApplicationCleaned` terminal state via `ApplicationOrphaned` event), **release reaper observability** (`ReleaseStore.AppendSideEffect` writes reaper context to `release.side_effects`), **release ARCHIVED status** (migration 000008, partial index excludes archived from active queries).
+**Completed:** deploy happy path (full E2E dogfood validated), **progressive delivery (Argo Rollouts canary)** with TraefikService weighted routing + per-plan steps + AnalysisTemplate hooks + auto-abort on readiness failure (`progressDeadlineSeconds=300`), scaling+HPA targeting Rollout (Starter=2/Pro=5/Team=10), promote staging→prod, rollback, secrets via ESO, custom domains v2 (CF Zone Mgmt, model Vercel), GitHub App auto-deploy (~4min), monorepo validator (30 frameworks), cosign image signing + syft SBOM (CycloneDX), supply-chain admission (policy-controller deny-by-default + warn-mode ClusterImagePolicy + digest enforcement in manifests), plan enforcement, audit log, RSA-only JWT auth, two-host gateway, concurrent deploy rejection (1×202+1×409), JSON contracts (8/8), observability (109 loopzero_* metrics + 8 cell metrics + Grafana + SLO alerts + 7 multi-cell alerts), KEDA scale-to-zero (targets Rollout via `Kind=Rollout` ScaleTargetRef + `transfer-hpa-ownership` annotation), cell architecture (Phase 0+1+1.5 + cells table + admin pin), **cell-2 ACTIVATED + LIVE-validated** (3/3 cells connected; namespace cell-aware reconcile; rollback SLO P50=648ms / P95=705ms <<300s budget; 12 ADR gates persistente), operator multi-binary split (4 binaries), layered bootstrap (Pulumi L1 + Helmfile L2 + ArgoCD L3), `loopzero admin tenants pin/evict`, **application reaper** for orphan CRs (`ApplicationCleaned` terminal state via `ApplicationOrphaned` event), **release reaper observability** (`ReleaseStore.AppendSideEffect` writes reaper context to `release.side_effects`), **release ARCHIVED status** (migration 000008, partial index excludes archived from active queries).
 
 **Not built:** SSO/SAML, Loki cross-cluster streaming (infra gap, not code), cosign keyless verification with Fulcio (pending Sprint 9), Sprint 8 Phase 1+3+4+5+6 (require new T3 meeting), production canary stages 4-5 for cell-2 (1 customer 7-day → 10/50/100% — pending Sprint 9 readiness review per ADR D6 of cell-2-activation-plan).
 
 **`loopzero scale` — fully functional E2E** (B40 fixed 2026-05-06, tag `scale-b40-converged-20260506`): chain DB→deploy→K8s closed via `ScalingResolver` (`api/internal/services/scaling_resolver.go`) injected into `BuildOrchestratorDeps.ScalingResolver`. Submit calls `Resolve` BEFORE `enforceScaling` so plan-cap operates on the resolved config (closes MEET-2026-04-23-059 Constraint 6). Scale handler persists with project NAME (not UUID) per CLAUDE.md "Project name vs project ID" convention. Validated LIVE via journey-04 hardening with `kubectl get deploy -o jsonpath='{.spec.replicas}'` assertion + Plan-cap probe (`REPLICAS_EXCEED_PLAN` rejection). Cleanroom dogfood 12/12 GREEN end-to-end (52min) with B40 fix shipped. See `docs/plans/loopzero-scale-end-to-end-plan.md`.
 
-**Path to maturity 4.0** (currently 3.9): (a) first CI Sunday cron GREEN producing real `cell2-soaks.yml` workflow run evidence, AND (b) 1 prod customer day-trial with no incidents (Sprint 9 prod canary). Local 7-day GREEN streak DROPPED as a gate (D7 reformulated 2026-05-03 — tautological in static dev env without diurnal traffic; CI cron + real prod usage are the legitimate signals).
+**Path to maturity 4.0** (currently 3.49 per modular audit baseline 2026-05-11): (a) first CI Sunday cron GREEN producing real `cell2-soaks.yml` workflow run evidence, AND (b) 1 prod customer day-trial with no incidents (Sprint 9 prod canary). Local 7-day GREEN streak DROPPED as a gate (D7 reformulated 2026-05-03 — tautological in static dev env without diurnal traffic; CI cron + real prod usage are the legitimate signals).
 
 **Known issues:** AppSecret controller not implemented (ESO works directly, no lifecycle automation — YAGNI until rotation/drift-detection needed); local k3d cert-manager letsencrypt-prod cannot issue for `*.loopzero.local` (no public DNS for ACME challenge) — self-signed CA issuer (`loopzero-local-ca-issuer`) fills local gap, production uses CF-managed TLS so no impact, local Stage 1 canary HTTP probes report HTTP 000 in `--smoke` mode (probes informational only).
 
@@ -66,7 +66,7 @@ cd infra/pulumi && npx pulumi preview --stack dev # Preview
 8. **State machines are strict** — Use state machine functions, never direct status updates. Invalid transitions panic (programming error).
 9. **CLI is the primary interface** — Every feature lives in CLI before dashboard. Dashboard-only features are product bugs.
 10. **Local equals production** — Same Helm charts, same operators, same build pipeline. No Docker Compose shortcuts. No "dev mode" with different behavior.
-11. **Claims need evidence** — Any claim affecting maturity score in `docs/STATUS.md` requires **3 evidence sources** (T1 commit+test, T2 LIVE log, T3 CI run) per `docs/GOVERNANCE.md (§1 Evidence Bar)`. Confidence cap **95-97%** (not 99% — same-model-family correlation residual). PR touching score-affecting STATUS.md MUST also update `docs/evidence/{dim}/`. TTL applies: 30d operational / 60d arch / 90d strategic. Pre-merge gate enforces. Per ADR-0051.
+11. **Claims need evidence** — Any claim affecting maturity score requires **3 evidence sources** (T1 commit+test, T2 LIVE log, T3 CI run). Confidence cap **90-95%** (single-model family correlation residual per ADR-0051). PR touching score-affecting claims MUST also update `docs/evidence/{dim}/`. TTL applies: 30d operational / 60d arch / 90d strategic. Latest baseline: `docs/audit/YYYY-MM-DD/SUMMARY.md`.
 
 ---
 
@@ -91,11 +91,11 @@ cd infra/pulumi && npx pulumi preview --stack dev # Preview
 | Auth | Ory Kratos + Ory Hydra + Redis |
 | Edge | Cloudflare Tunnel + Worker + KV |
 | Autoscaling | KEDA 2.16.1 + HTTP Add-on 0.8.0 |
-| IaC | Pulumi (TS) — L1-only (DO + CF providers, zero K8s resources); Helmfile L2 (bootstrap); ArgoCD L3 (Day-2 GitOps) |
+| IaC | 5 Pulumi projetos: `pulumi/` (L1 DO+CF), `pulumi-infra/` (multi-cluster topology), `pulumi-platform/` (L2 com 32 Helm releases), `pulumi-control-plane/` (STUB com 16 TODOs), `pulumi-shared/` (contratos); Helmfile L2 (bootstrap); ArgoCD L3 (Day-2 GitOps) |
 | Local clusters | k3d × 4 (mgmt, build, workload, runtime-2) |
 | Dev loop | Tilt + Taskfile (2826 lines across 7 files) |
-| Helm | 32 bootstrap charts (`infra/helm/`) + 13 published charts (`charts/`) |
-| CI/CD | GitHub Actions (29 workflows) |
+| Helm | 16 bootstrap charts próprios + 18 value overlays (`infra/helm/`) + 13 published charts (`charts/`) |
+| CI/CD | GitHub Actions (35 workflows) |
 | Migrations | golang-migrate (forward-only `.up.sql`) |
 
 ---
@@ -104,18 +104,18 @@ cd infra/pulumi && npx pulumi preview --stack dev # Preview
 
 ```
 loopzero/
-├── docs/                  ← cli-reference.md (spec), maturity-assessment.md, meetings/, runbooks/, strategy/
+├── docs/                  ← cli-reference.md (spec), audit/, evidence/, plans/, strategy/
 ├── pkg/                   ← shared Go: statemachine, errors, errors/http, jwt, naming, conditions, id, logging, enforcement, circuitbreaker
 ├── cli/                   ← @loopzero/cli — TS + Commander, 36 commands, 1210+ tests
-├── api/internal/          ← routes (31 files), services (40), db, middleware (13 files / 20 handlers), lock, sse, argo, argocd, cfkv, cfzone, github, gitops, source, s3, k8s, manifests, validation, metrics, health, config, placement
+├── api/internal/          ← 35 subpacotes: adapters, admission, archive, argo, argocd, cellmgr, cfkv, cfzone, config, correlation, db, domain, gitclient, github, gitops, health, k8s, leader, lock, loki, manifests, metrics, middleware, placement, processing, routes, s3, server, services, shellgen, source, sse, tracing, validation, workqueue
 ├── operators/             ← 8 controllers (Tenant, Environment, Application, Exposure, PlatformBootstrap, GitRepositoryBinding, ClusterCredential, Preview), 10 CRDs
 ├── infra/
 │   ├── pulumi/            ← IaC (TS), providers: digitalocean/, cloudflare/, aws/(stub)
-│   ├── helm/              ← 32 charts pinned
+│   ├── helm/              ← 16 charts próprios + 18 value overlays para upstream
 │   ├── k3d/               ← 4 cluster configs (mgmt, build, workload, runtime-2)
 │   ├── cloudflare/        ← CF Worker source (worker.mjs)
 │   └── tests/             ← e2e/ (Ginkgo), chaos/, unit/, load/
-└── .github/workflows/     ← 29 workflows: ci, build-images, infra-*, release, load-test, helm-charts, cell2-soaks, operator-split-soak, pkg-soak, chaos-suite, multi-cell, cli-commands
+└── .github/workflows/     ← 35 workflows: ci, build-images, infra-*, release, load-test, load-test-pr, helm-charts, cell2-soaks, operator-split-soak, pkg-soak, multi-cell, cli-commands, cross-validation-weekly, adversarial-spotcheck, platform-health-7day-watch, status-pr-gate, status-refresh, decay-scan, charts-drift-cron, velero-backup-check, pulumi-*, integration-tests, parity-validation, reusable-*
 ```
 
 Use `Glob` / `git ls-files` for current details.
@@ -182,7 +182,7 @@ Skills/slash commands (subset): `/sprint`, `/implement`, `/test`, `/review`, `/d
 
 **E2E Validation (2026-04-23):** 25/30 pass (83%). Confidence: deploy 99%, scaling 95%, promote 95%, rollback 99%, concurrent rejection 99%, JSON contracts 99%, internal terms (Rule 3) 99%. Log streaming 60% (infra gap, not code).
 
-**Maturity:** 3.9/5 (see line 11 for current assessment). Path to 4.0: (a) first CI Sunday cron GREEN, (b) 1 prod customer day-trial. Full: `docs/maturity-assessment.md`.
+**Maturity:** Latest snapshot 3.49/4.0 (modular audit 12 módulos, 2026-05-11). Path to 4.0: (a) first CI Sunday cron GREEN, (b) 1 prod customer day-trial. Snapshot completo: `docs/audit/2026-05-11/SUMMARY.md`.
 
 ---
 
