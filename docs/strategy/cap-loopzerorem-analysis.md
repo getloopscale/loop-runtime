@@ -5,7 +5,7 @@
 >
 > **Audiência:** engenheiros da plataforma, SREs, arquitetos avaliando o sistema.
 >
-> **Última atualização:** 2026-04-28
+> **Última atualização:** 2026-05-11
 
 ---
 
@@ -151,9 +151,9 @@ promote, scaling) passam por advisory locks transacionais no PG.
 | Isolation level | `READ COMMITTED` (explícito) |
 | Lock mechanism | `pg_advisory_xact_lock` (transaction-scoped) |
 | Lock timeout | 5 segundos |
-| Replicação | Síncrona (1 réplica) |
+| Replicação | Síncrona (2 réplicas, 1 síncrona) |
 | Backup | Diário às 02:00 UTC, retenção 7 dias |
-| Connection pool | 25 conexões max, circuit breaker em 80% |
+| Connection pool | 25 conexões max, circuit breaker em 90% |
 
 **Comportamento durante partição (API ↔ PG):**
 - Todas as mutations falham com 503
@@ -201,7 +201,7 @@ loop retenta automaticamente.
 | Propriedade | Valor |
 |-------------|-------|
 | Sync policy | Manual (API-triggered) |
-| Sync timeout | 30 segundos por request |
+| Sync timeout | 30 segundos por HTTP request (180s WaitForSync total) |
 | Retry | Exponential backoff (1s, 2s, 4s) |
 | Stuck operation | TerminateOperation antes de re-sync |
 | Convergence | Polling 10s + callback webhook |
@@ -210,7 +210,7 @@ loop retenta automaticamente.
 **Comportamento durante partição (API ↔ ArgoCD):**
 - Releases ficam em PENDING (não em FAILED)
 - Workloads **continuam rodando** na versão anterior
-- Circuit breaker abre após 5 falhas → novas tentativas bloqueadas por 120s
+- Circuit breaker abre após 3 falhas → novas tentativas bloqueadas por 30s
 - Auth failures (401/403) **não** contam como falha no circuit breaker
 - 409 "operation in progress" **não** conta como falha (stuck sync, não platform down)
 - Convergence loop retenta a cada 10s até sucesso ou timeout de 10min
@@ -318,7 +318,7 @@ Valkey serve como cache e session store para Gitea.
 |-------------|-------|
 | Topologia | Pod único (não HA) |
 | Pool size | 100 conexões |
-| Idle timeout | 180 segundos |
+| Idle timeout | 180 segundos (dev) / 120 segundos (HA) |
 | Persistência | 1Gi PVC |
 
 **Comportamento durante partição (Gitea ↔ Valkey):**
@@ -414,7 +414,7 @@ A idempotência é garantida em cada camada:
 | **API** | `Idempotency-Key` header + SHA256 do body, tenant-scoped, TTL 24h |
 | **Gitea** | Push idempotente — "nothing to commit" retorna HEAD SHA |
 | **Operators** | `controllerutil.CreateOrUpdate` — cria se não existe, atualiza se diferente |
-| **State Machine** | Transição para o mesmo estado é no-op (não panic) |
+| **State Machine** | Transições estritamente definidas; transição inválida causa panic (programming error) |
 
 **Fluxo de idempotência na API:**
 
@@ -469,8 +469,8 @@ O LoopZero implementa três circuit breakers calibrados por tipo de falha:
 │  ┌─────────────────┐  ┌─────────────────┐  ┌─────────────┐ │
 │  │ Argo Workflows  │  │    ArgoCD       │  │  PG Pool    │ │
 │  │                 │  │                 │  │             │ │
-│  │ Threshold: 5    │  │ Threshold: 5    │  │ Threshold:  │ │
-│  │ Retry: 120s     │  │ Retry: 120s     │  │ 80% pool    │ │
+│  │ Threshold: 3    │  │ Threshold: 3    │  │ Threshold:  │ │
+│  │ Retry: 30s      │  │ Retry: 30s      │  │ 90% pool    │ │
 │  │                 │  │                 │  │             │ │
 │  │ Escopo:         │  │ Escopo:         │  │ Escopo:     │ │
 │  │ Submit only     │  │ Sync only       │  │ Mutations   │ │
@@ -478,7 +478,7 @@ O LoopZero implementa três circuit breakers calibrados por tipo de falha:
 │  └─────────────────┘  └─────────────────┘  └─────────────┘ │
 │                                                              │
 │  Estados: CLOSED ──► OPEN ──► HALF_OPEN ──► CLOSED          │
-│                 5 falhas    120s espera    1 sucesso          │
+│                 3 falhas    30s espera     1 sucesso          │
 └─────────────────────────────────────────────────────────────┘
 ```
 
@@ -496,7 +496,7 @@ O LoopZero implementa três circuit breakers calibrados por tipo de falha:
 
 - **Estado por réplica (in-memory), não compartilhado.** Cada réplica da API detecta falha
   independentemente. Aceitável porque cada réplica faz suas próprias chamadas e detecta failure
-  em ~15s (5 falhas × ~3s). CB state não sobrevive restart, mas isso é correto — starts CLOSED,
+  em ~9s (3 falhas × ~3s). CB state não sobrevive restart, mas isso é correto — starts CLOSED,
   detecta falha naturalmente.
 
 ### 5.2 Deploy em 5 Fases com Lock Mínimo
@@ -583,7 +583,7 @@ sync healthy, mas está rodando uma versão diferente da esperada.
 | Novos builds | Circuit breaker abre → 503 `PLATFORM_DEGRADED` |
 | Builds em andamento | Ficam em RUNNING até timeout (30 min) → FAILED |
 | Deploys existentes | **Sem impacto** — workloads já estão no runtime |
-| Recovery | Circuit breaker testa half-open após 120s |
+| Recovery | Circuit breaker testa half-open após 30s |
 
 ### 6.2 Partição mgmt ↔ runtime
 
@@ -754,9 +754,9 @@ Essa é a combinação correta para um PaaS: **deploy errado é pior que deploy 
 | Health check | `api/internal/routes/health.go` |
 | SSE streaming | `api/internal/sse/stream_handler.go` |
 | Idempotency | `api/internal/middleware/idempotency.go` |
-| ClusterCredential | `operators/internal/controller/clustercredential_controller.go` |
+| ClusterCredential | `operators/internal/platform/clustercredential_controller.go` |
 | CF Tunnel | `infra/pulumi/src/providers/cloudflare/tunnel.ts` |
-| ESO | `infra/pulumi/src/components/runtime-eso.ts` |
+| ESO | `infra/helm/external-secrets/values.yaml` |
 | Timeouts | `operators/internal/constants/timeouts.go` |
 
 ### ADRs relacionados
