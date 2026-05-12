@@ -336,9 +336,12 @@ func SetupEnvironmentController(mgr ctrl.Manager, runtimeClient client.Client) e
 // SetupApplicationController registers the ApplicationController with the given manager.
 // baseDomain is the base domain for hostname assignment (e.g., "dev.loopzero.example").
 //
-// ADR-0023 D1: delegates to internal/app.
+// ADR-0023 D1: delegates to internal/app. Calls the canonical WithFactory
+// entry point with factory=nil (single-cell envtest mode), eliminating the
+// backward-compat wrapper that registration_test.go flagged as
+// "implemented but not wired" in app-operator main.go.
 func SetupApplicationController(mgr ctrl.Manager, baseDomain string) error {
-	return app.SetupApplicationController(mgr, baseDomain)
+	return app.SetupApplicationControllerWithFactory(mgr, baseDomain, nil)
 }
 
 // SetupExposureController registers the ExposureController with the given manager.

@@ -161,6 +161,7 @@ func parseReconciledTypes(t *testing.T, mainPath string, binName string) []strin
 		"SetupEnvironmentController":          "Environment",
 		"SetupEnvironmentControllerWithFactory": "Environment",
 		"SetupApplicationController":          "LoopZeroApplication",
+		"SetupApplicationControllerWithFactory": "LoopZeroApplication",
 		"SetupExposureController":             "ExposedRoute",
 		"SetupPreviewController":              "PreviewEnvironment",
 		"SetupPlatformBootstrapController":    "PlatformBootstrap",

@@ -431,14 +431,6 @@ func (r *ApplicationReconciler) reconcileWorkloadStatus(ctx context.Context, app
 	}
 }
 
-// SetupApplicationController registers the ApplicationController with the manager.
-//
-// Single-cell mode (factory nil): fast-path Healthy disabled. Application.phase
-// converges only via ExposedRoute Reachable. Backward-compatible.
-func SetupApplicationController(mgr ctrl.Manager, baseDomain string) error {
-	return SetupApplicationControllerWithFactory(mgr, baseDomain, nil)
-}
-
 // SetupApplicationControllerWithFactory is the cell-aware entrypoint
 // (dogfood-2026-05-08-fixes T4.2). Passing a CellAwareRuntimeClientFactory
 // enables the workload-Pod-Ready fast-path so app.Status.Phase converges

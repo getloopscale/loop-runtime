@@ -629,10 +629,10 @@ func (r *PreviewReconciler) bumpCleanupAttempts(preview *loopzerov1.PreviewEnvir
 // constants.NamespaceIngress so allow-ingress-traefik NetworkPolicies in
 // preview namespaces match those in regular environments.
 func SetupPreviewController(mgr ctrl.Manager, runtimeClient client.Client, baseDomain string) error {
-	return SetupPreviewControllerWithFactory(mgr, runtimeClient, nil, baseDomain)
+	return setupPreviewControllerWithFactory(mgr, runtimeClient, nil, baseDomain)
 }
 
-// SetupPreviewControllerWithFactory wires the PreviewReconciler with an
+// setupPreviewControllerWithFactory wires the PreviewReconciler with an
 // optional cell-aware RuntimeClientFactory. T1.1 of deep-review-remediation-plan
 // (closes find_arch_002 HIGH).
 //
@@ -640,7 +640,13 @@ func SetupPreviewController(mgr ctrl.Manager, runtimeClient client.Client, baseD
 // (single-cell legacy path). When factory is set, every runtime-cluster
 // operation routes through factory.For(cellID) per the
 // runtimeClientForPreview() resolution chain.
-func SetupPreviewControllerWithFactory(
+//
+// Audit gap (registration_test.go COMP-001 family, audit §6.F.1b
+// hygiene): made unexported because nothing outside this package calls
+// it directly — all callers route through SetupPreviewController(which
+// is the canonical exported entry point). Re-export when a real
+// cell-aware caller emerges.
+func setupPreviewControllerWithFactory(
 	mgr ctrl.Manager,
 	runtimeClient client.Client,
 	factory shared.RuntimeClientFactory,
