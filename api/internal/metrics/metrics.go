@@ -445,10 +445,16 @@ var (
 		Buckets: []float64{10, 30, 60, 120, 300, 600},
 	}, []string{"result"})
 
+	// Cardinality cap (audit gap M08 #19): the `tenant` label was removed
+	// to bound series count at N (domains) instead of N×M (domains×tenants).
+	// Tenant attribution remains forensically recoverable by joining on
+	// `loopzero_custom_domains_total{tenant=...}` or querying audit_log by
+	// domain. Operators that previously consumed `tenant` in alert
+	// descriptions are migrated below to reference the audit trail.
 	DomainTLSExpiryDays = promauto.NewGaugeVec(prometheus.GaugeOpts{
 		Name: "loopzero_domain_tls_expiry_days",
 		Help: "Days until TLS certificate expires for a custom domain.",
-	}, []string{"domain", "tenant"})
+	}, []string{"domain"})
 
 	DomainVerificationFailures = promauto.NewCounterVec(prometheus.CounterOpts{
 		Name: "loopzero_domain_verification_failures_total",

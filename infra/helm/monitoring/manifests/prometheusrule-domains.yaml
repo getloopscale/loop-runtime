@@ -18,7 +18,7 @@ spec:
             severity: warning
           annotations:
             summary: "Custom domain TLS certificate expiring soon"
-            description: "TLS certificate for {{ $labels.domain }} (tenant {{ $labels.tenant }}) expires in {{ $value }} days."
+            description: "TLS certificate for {{ $labels.domain }} expires in {{ $value }} days. Tenant attribution: query audit_log by domain or join loopzero_custom_domains_total{tenant=...}. (Label `tenant` removed for cardinality cap — audit gap M08 #19.)"
             runbook: "cert-manager should auto-renew. If not, check cert-manager logs and Certificate CR status. The domain CNAME must still resolve for HTTP-01 challenge."
 
         - alert: LoopZeroDomainVerificationStale

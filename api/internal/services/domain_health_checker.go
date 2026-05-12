@@ -306,7 +306,7 @@ func (h *DomainHealthChecker) checkTLSExpiry(ctx context.Context) {
 			continue
 		}
 		daysUntilExpiry := d.TLSExpiresAt.Sub(now).Hours() / 24
-		metrics.DomainTLSExpiryDays.WithLabelValues(d.Domain, d.TenantID).Set(daysUntilExpiry)
+		metrics.DomainTLSExpiryDays.WithLabelValues(d.Domain).Set(daysUntilExpiry)
 
 		if daysUntilExpiry < 7 {
 			h.logger.Warn("domain health: TLS certificate expiring soon",
