@@ -133,6 +133,17 @@ func (o *BuildOrchestrator) OnBuildCompleted(ctx context.Context, buildID string
 		return fmt.Errorf("on build completed: re-fetch after phase 1: %w", err)
 	}
 
+	// T1.2 mitigation #3 of MEET-2026-05-12: emit per-sign cosign audit
+	// for each app whose callback reported a digest + signature. Fires
+	// AFTER the build is durably SUCCEEDED but BEFORE release activation
+	// so the supply-chain trail is intact even if activation later fails.
+	// Nil-safe + fail-open inside the helper.
+	emitCosignSignAudits(ctx, o.auditLogger, &buildAuditContext{
+		BuildID:   build.ID,
+		TenantID:  build.TenantID,
+		CreatedBy: build.CreatedBy,
+	}, result.Apps, build.CorrelationID)
+
 	// If build was cancelled concurrently during Phase 1, skip activation
 	if statemachine.IsBuildTerminal(statemachine.State(build.Status)) {
 		return nil

@@ -10,6 +10,7 @@ import (
 	"time"
 
 	"github.com/loopzero/loopzero/api/internal/db"
+	"github.com/loopzero/loopzero/api/internal/domain"
 )
 
 // WorkflowStatus represents the external state of a build workflow.
@@ -231,6 +232,11 @@ type BuildOrchestratorDeps struct {
 	// container delivery activator persists per-app signature + SBOM
 	// metadata to release_app_attestations.
 	AppAttestationStore db.AppAttestationStore
+	// AuditLogger persists supply-chain audit events. When non-nil and
+	// the build callback reports SUCCEEDED, the orchestrator emits one
+	// `image.signed` audit entry per app with a cosign signature
+	// (T1.2 mitigation #3 of MEET-2026-05-12). Nil-safe.
+	AuditLogger domain.AuditLogger
 }
 
 // BuildOrchestrator orchestrates the entire deploy flow:
@@ -264,6 +270,7 @@ type BuildOrchestrator struct {
 	planCap           PlanCapChecker  // B15: nil = enforcement disabled
 	kedaEnabled       bool            // gates scale-to-zero (min=0)
 	scalingResolver   ScalingResolver // B40: nil = yaml-only (backward-compat)
+	auditLogger       domain.AuditLogger // T1.2 mitigation #3: per-sign cosign audit
 }
 
 // defaultArgocdSyncTimeout is used when no timeout is configured.
@@ -316,6 +323,7 @@ func NewBuildOrchestrator(deps BuildOrchestratorDeps) *BuildOrchestrator {
 		planCap:           deps.PlanCap, // B15: optional plan-cap enforcement
 		kedaEnabled:       deps.KEDAEnabled,
 		scalingResolver:   deps.ScalingResolver, // B40: nil-safe (resolveScaling handles)
+		auditLogger:       deps.AuditLogger,     // T1.2 mitigation #3: nil = no-op
 	}
 }
 

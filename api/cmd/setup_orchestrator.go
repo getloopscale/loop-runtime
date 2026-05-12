@@ -92,6 +92,9 @@ func setupOrchestrator(
 		ScalingResolver:   scalingResolver, // B40
 		// Sprint 6 / T3.1: per-app attestation persistence (signature + SBOM).
 		AppAttestationStore: db.NewPostgresAppAttestationStore(dbAdapter),
+		// T1.2 mitigation #3 of MEET-2026-05-12: per-sign cosign audit
+		// log. AuditLogger reuses WriteAuditLog as the canonical SQL.
+		AuditLogger: &db.AuditLogger{DB: dbAdapter},
 	})
 
 	buildOrchestrator := &adapters.BuildOrchestratorAdapter{

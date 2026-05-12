@@ -20,6 +20,34 @@ type AuditEntry struct {
 	Metadata      map[string]any
 }
 
+// AuditLogger is an adapter wrapping WriteAuditLog so callers can depend
+// on the domain.AuditLogger interface (DIP). Used by services that need
+// to emit audit entries (T1.2 cosign sign audit, secrets handler, etc).
+type AuditLogger struct {
+	DB ExecQueryExecutor
+}
+
+// LogAudit implements domain.AuditLogger.
+//
+// Single-source-of-truth wrapper — delegates to WriteAuditLog so the SQL
+// remains in one place. Callers in `services/` and `routes/` use this
+// adapter instead of importing WriteAuditLog directly, keeping the
+// dependency direction clean (services → domain.AuditLogger ← adapter).
+func (a *AuditLogger) LogAudit(ctx context.Context, tenantID, action, actor, resourceType, resourceID, correlationID string, metadata map[string]any) error {
+	if a == nil || a.DB == nil {
+		return nil // nil-safe: silent no-op
+	}
+	return WriteAuditLog(ctx, a.DB, AuditEntry{
+		TenantID:      tenantID,
+		Action:        action,
+		Actor:         actor,
+		ResourceType:  resourceType,
+		ResourceID:    resourceID,
+		CorrelationID: correlationID,
+		Metadata:      metadata,
+	})
+}
+
 // WriteAuditLog inserts an audit entry into the audit_log table.
 // This is the application-level audit trail (MEET-2026-03-31-024 A.13).
 // Database-level triggers provide defense-in-depth (migration 000009).
