@@ -35,6 +35,7 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/client"
 
 	loopzerov1 "github.com/loopzero/loopzero/operators/api/v1"
+	"github.com/loopzero/loopzero/operators/internal/conditions"
 	"github.com/loopzero/loopzero/operators/internal/metrics"
 )
 
@@ -134,16 +135,21 @@ func MarkAsCleaned(ctx context.Context, c client.Client, app *loopzerov1.LoopZer
 	}
 
 	// 2. Update phase + condition via status sub-resource.
+	// Audit gap M03 #15 fix: use the canonical conditions.SetCondition
+	// helper instead of the local appendOrReplaceCondition (deleted). The
+	// canonical helper preserves LastTransitionTime when status is unchanged
+	// across reconciles, which matters for kstatus correctness — the legacy
+	// local helper always overwrote the whole Condition, losing transition
+	// history every time the reaper re-ran.
 	app.Status.Phase = loopzerov1.ApplicationPhase(next)
-	cond := metav1.Condition{
-		Type:               "Cleaned",
-		Status:             metav1.ConditionTrue,
-		LastTransitionTime: metav1.Now(),
-		Reason:             "OrphanedByGitOpsRemoval",
-		Message:            reason,
-		ObservedGeneration: app.Generation,
-	}
-	app.Status.Conditions = appendOrReplaceCondition(app.Status.Conditions, cond)
+	conditions.SetCondition(
+		&app.Status.Conditions,
+		"Cleaned",
+		metav1.ConditionTrue,
+		"OrphanedByGitOpsRemoval",
+		reason,
+		app.Generation,
+	)
 	if err := c.Status().Update(ctx, app); err != nil {
 		return fmt.Errorf("MarkAsCleaned: status update: %w", err)
 	}
@@ -175,12 +181,7 @@ func MarkAsCleaned(ctx context.Context, c client.Client, app *loopzerov1.LoopZer
 	return nil
 }
 
-func appendOrReplaceCondition(conditions []metav1.Condition, newCond metav1.Condition) []metav1.Condition {
-	for i, c := range conditions {
-		if c.Type == newCond.Type {
-			conditions[i] = newCond
-			return conditions
-		}
-	}
-	return append(conditions, newCond)
-}
+// appendOrReplaceCondition was removed in favor of the canonical helper
+// `operators/internal/conditions.SetCondition` (audit gap M03 #15). The
+// legacy local helper duplicated logic, always overwrote LastTransitionTime,
+// and prevented kstatus from reasoning about transition stability.
