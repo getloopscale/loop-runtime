@@ -143,26 +143,31 @@ func (h *WebhookHandler) handleCheckoutCompleted(event StripeEvent) error {
 		return nil // Not a subscription checkout
 	}
 
-	// §1.3: Derive plan from the subscription's price ID via Stripe API metadata.
-	// For checkout.session.completed, the subscription.updated webhook will follow
-	// with the full subscription object including price. We set the plan from
-	// metadata if available, otherwise default to "pro" and let subscription.updated correct it.
-	plan := "pro" // Safe default — subscription.updated will refine this
-
+	// Audit gap M10 #24 fix: do NOT set `plan` here. The checkout.session.completed
+	// event payload does not carry the price_id; the previous implementation
+	// defaulted to "pro" "until subscription.updated arrives", which is fail-OPEN:
+	// if subscription.updated is delayed, lost, or never arrives (network
+	// partition, attacker-induced race, Stripe outage), the tenant ends up at
+	// Pro tier without having paid for it. Plan tier MUST only be derived from
+	// a confirmed price_id in subscription.updated.
+	//
+	// We link the subscription ID + flip status=active (so /api/v1/billing
+	// surfaces that the customer is mid-flow) but leave `plan` at its prior
+	// value (typically `starter` from initial provisioning). subscription.updated
+	// is the authoritative path that maps price_id → plan tier.
 	_, err := h.db.Exec(
 		`UPDATE subscriptions
-		 SET stripe_subscription_id = $1, plan = $2, status = 'active', updated_at = now()
-		 WHERE stripe_customer_id = $3`,
-		session.Subscription, plan, session.Customer,
+		 SET stripe_subscription_id = $1, status = 'active', updated_at = now()
+		 WHERE stripe_customer_id = $2`,
+		session.Subscription, session.Customer,
 	)
 	if err != nil {
 		return fmt.Errorf("link subscription: %w", err)
 	}
 
-	h.logger.Info("checkout completed — subscription linked",
+	h.logger.Info("checkout completed — subscription linked (plan pending subscription.updated)",
 		"customer", session.Customer,
 		"subscription", session.Subscription,
-		"plan", plan,
 	)
 	return nil
 }
