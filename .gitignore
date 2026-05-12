@@ -141,3 +141,6 @@ referencias/
 builds/
 .actrc
 .act-secrets
+
+*.pyc
+__pycache__/
