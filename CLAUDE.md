@@ -122,6 +122,60 @@ Use `Glob` / `git ls-files` for current details.
 
 ---
 
+## Knowledge Base (`.claude/knowledge-base/`)
+
+Persistent wiki that stores **WHY** — decisions, trade-offs, rationale, and architectural patterns that cannot be derived by reading code alone. The code answers "what does it do?"; the knowledge-base answers "why was it built this way?".
+
+### Structure
+
+```
+knowledge-base/
+├── schema.md              ← Contract: page types, frontmatter, operations
+├── index.md               ← Catalog of all pages (read first)
+├── log.md                 ← Chronological record (append-only)
+├── overview.md            ← Current project state summary
+├── architecture/          ← C4 diagrams (Four Planes)
+├── concepts/              ← SOTA research by domain (15 domains)
+│   ├── multi-cell/        ← Placement, routing, DynamicRouter
+│   ├── progressive-delivery/ ← Canary, Argo Rollouts, TraefikService
+│   ├── state-machines/    ← 11 machines, framework design
+│   └── ... (12 more)
+├── audits/                ← Modular audits by date
+├── decisions/             ← Formal ADRs
+├── plans/                 ← Implementation plans
+├── strategy/              ← Strategic analyses (CAP, pricing, resilience)
+├── reviews/               ← Dogfood and cross-validation results
+└── meetings/              ← Technical meeting records
+```
+
+### When to Consult
+
+- **Before implementing**: read relevant `concepts/` page to understand prior decisions and rejected alternatives
+- **Before changing state machines, multi-cell, or progressive delivery**: these have SOTA research pages with documented trade-offs
+- **When asked "why?"**: check `decisions/` for ADRs and `concepts/` for rationale
+
+### When to Update
+
+- **After completing a task** that changes architecture (not cosmetics) — triggered by `[DOC-DRIFT]` hook warnings
+- **Max 3 pages per task** (anti-thrashing rule)
+- **Never auto-generate** as side effect of coding — doc updates are explicit, conscious decisions
+- Full rules: `.claude/rules/auto-docs.md`
+
+### Page Types
+
+| Type | Purpose | Example |
+|------|---------|---------|
+| Entity | Named component/service/chart | DynamicRouter, LoopZeroApplication CRD |
+| Concept | Pattern or technique | Placement Once Route Many |
+| Comparison | A vs B | Deployment vs Rollout |
+| Decision | Formal ADR | T3-6 State Machines |
+| Synthesis | Cross-source analysis | CAP LoopZerorem Analysis |
+| Audit | Modular audit result | 01-cli.md (3.5/4.0) |
+
+Every page requires YAML frontmatter (`type`, `created_at`, `updated_at`, `updated_by`). Evidence must be classified: `[MEASURED]`, `[REPORTED]`, or `[ESTIMATED]`. Full schema: `.claude/knowledge-base/schema.md`.
+
+---
+
 ## Agents
 
 Claude operates as a team of specialists. Sequence work across agents for multi-component tasks.
