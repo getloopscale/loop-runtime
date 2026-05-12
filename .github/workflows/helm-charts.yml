@@ -314,39 +314,40 @@ jobs:
             fi
           done
 
-      - name: helm diff against base branch (advisory — by design)
-        # CONDITION: HELM_DIFF_THREE_WAY_MERGE + HELM_DIFF_NORMALIZE_MANIFESTS evita falsos positivos.
+      - name: helm diff structural-risk check (audit M06 #21 / §6.E.6b)
+        # GRADUATED to blocking 2026-05-12 via the structural-risk wrapper.
+        # The legacy advisory helm-diff annotated on EVERY chart change —
+        # which is the point of every chart-changing PR. The new wrapper
+        # parses the base vs PR rendering and fails CI ONLY on 3 categories
+        # of risk that need explicit operator approval:
         #
-        # Audit §6.E.6: this gate STAYS advisory, unlike the 3 sibling
-        # gates graduated 2026-05-12. The semantics are annotation-only
-        # by design — every PR that touches charts/ produces a diff (that
-        # IS the point of the PR). Graduating to blocking would fail every
-        # chart-changing PR. To make it blocking, the script must first
-        # be rewritten to fail only on a structural risk (destructive
-        # delete, namespace change, security context downgrade) — that
-        # is carved out as §6.E.6b in the active execution plan.
+        #   STRUCT-1  Removal of NetworkPolicy / RoleBinding /
+        #             ClusterRoleBinding / SecurityContextConstraints /
+        #             PodSecurityPolicy
+        #   STRUCT-2  Change of `namespace:` on any resource (bypasses RBAC)
+        #   STRUCT-3  Security-context downgrade (runAsNonRoot false,
+        #             readOnlyRootFilesystem false, allowPrivilegeEscalation
+        #             true, privileged true)
+        #
+        # Non-structural diffs (image tags, replicas, env vars, label edits)
+        # print to stdout but DO NOT block — operator reviews in the PR.
+        # Script: infra/scripts/helm-diff-structural.sh (10 unit tests in
+        # infra/tests/helm-diff-structural_test.sh, all GREEN).
         env:
           HELM_DIFF_THREE_WAY_MERGE: "true"
           HELM_DIFF_NORMALIZE_MANIFESTS: "true"
-        continue-on-error: true
         run: |
-          # Render each chart from PR branch and from base branch, diff via helm-diff.
-          # Advisory: emits annotation; doesn't block.
+          set -e
           for chart in charts/loopzero-platform charts/loopzero-api; do
             name=$(basename "$chart")
-            echo "::group::helm diff for $name"
+            echo "::group::helm diff structural-risk for $name"
             helm template "$name" "$chart" > /tmp/${name}-pr.yaml 2>/dev/null
             git stash --include-untracked
             git checkout "${{ github.event.pull_request.base.sha }}" -- "$chart" 2>/dev/null || true
             helm template "$name" "$chart" > /tmp/${name}-base.yaml 2>/dev/null || echo "" > /tmp/${name}-base.yaml
             git checkout HEAD -- "$chart" 2>/dev/null || true
             git stash pop 2>/dev/null || true
-            if ! diff -u /tmp/${name}-base.yaml /tmp/${name}-pr.yaml > /tmp/${name}-diff.txt; then
-              echo "::warning::helm-diff for $name detected changes (advisory) — review manifest."
-              head -50 /tmp/${name}-diff.txt
-            else
-              echo "No diff for $name."
-            fi
+            bash infra/scripts/helm-diff-structural.sh "$name" /tmp/${name}-base.yaml /tmp/${name}-pr.yaml
             echo "::endgroup::"
           done
 
