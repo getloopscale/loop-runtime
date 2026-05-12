@@ -170,6 +170,7 @@ func RequireAdminService(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		provided := r.Header.Get("X-Service-Auth")
 		if provided == "" {
+			emitAuthFailure(r, AuthFailureServiceMismatch, "missing X-Service-Auth header on admin endpoint", nil)
 			writeError(w, http.StatusForbidden, "FORBIDDEN",
 				"Admin service authentication required. Set X-Service-Auth header.")
 			return
@@ -187,6 +188,7 @@ func RequireAdminService(next http.Handler) http.Handler {
 			next.ServeHTTP(w, r)
 			return
 		}
+		emitAuthFailure(r, AuthFailureServiceMismatch, "invalid X-Service-Auth secret on admin endpoint", nil)
 		writeError(w, http.StatusForbidden, "FORBIDDEN",
 			"Invalid admin service-auth secret.")
 	})
@@ -199,10 +201,12 @@ func RequireAdmin(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		key := r.Header.Get("X-Admin-Key")
 		if key == "" {
+			emitAuthFailure(r, AuthFailureAdminMismatch, "missing X-Admin-Key header", nil)
 			writeError(w, http.StatusForbidden, "FORBIDDEN", "Admin API key required. Set X-Admin-Key header.")
 			return
 		}
 		if !ValidateAdminAPIKey(key) {
+			emitAuthFailure(r, AuthFailureAdminMismatch, "invalid X-Admin-Key", nil)
 			writeError(w, http.StatusForbidden, "FORBIDDEN", "Invalid admin API key")
 			return
 		}
@@ -241,6 +245,9 @@ func AuthWithTTL(validator TokenValidator, store MembershipStore, cacheTTL time.
 							}
 						}
 						if role == "" {
+							emitAuthFailure(r, AuthFailureTenantNotFound,
+								"service-auth user not a member of requested tenant",
+								map[string]any{"requested_tenant": tenantID, "user_id": userID})
 							writeError(w, http.StatusForbidden, "TENANT_NOT_FOUND", "You are not a member of the requested team")
 							return
 						}
@@ -255,6 +262,7 @@ func AuthWithTTL(validator TokenValidator, store MembershipStore, cacheTTL time.
 					}
 				}
 				// Invalid service auth — reject immediately, do not fall through
+				emitAuthFailure(r, AuthFailureServiceMismatch, "invalid X-Service-Auth on Bearer endpoint", nil)
 				writeError(w, http.StatusUnauthorized, "UNAUTHORIZED", "Invalid service authentication")
 				return
 			}
@@ -262,6 +270,7 @@ func AuthWithTTL(validator TokenValidator, store MembershipStore, cacheTTL time.
 			// Extract token
 			authHeader := r.Header.Get("Authorization")
 			if authHeader == "" || !strings.HasPrefix(authHeader, "Bearer ") {
+				emitAuthFailure(r, AuthFailureTokenInvalid, "missing or malformed Authorization header", nil)
 				writeError(w, http.StatusUnauthorized, "UNAUTHORIZED", "Missing or invalid Authorization header. Use: Authorization: Bearer <token>")
 				return
 			}
@@ -280,8 +289,14 @@ func AuthWithTTL(validator TokenValidator, store MembershipStore, cacheTTL time.
 				span.SetStatus(codes.Error, err.Error())
 				span.End()
 				if errors.Is(err, ErrInvalidToken) {
+					// Emit audit: token rejected by validator. Reason includes the
+					// validator's error string (sanitized — pkg/jwt returns
+					// structured "expired" vs "invalid signature" etc).
+					emitAuthFailure(r, AuthFailureTokenInvalid, err.Error(), nil)
 					writeError(w, http.StatusUnauthorized, "UNAUTHORIZED", "Invalid or expired token")
 				} else {
+					// Transient infra failure (JWKS down etc) — NOT a security
+					// signal. Skip audit emission to avoid alert fatigue.
 					writeError(w, http.StatusServiceUnavailable, "AUTH_SERVICE_UNAVAILABLE", "Authentication service is temporarily unavailable")
 				}
 				return
@@ -303,6 +318,9 @@ func AuthWithTTL(validator TokenValidator, store MembershipStore, cacheTTL time.
 
 			switch len(memberships) {
 			case 0:
+				emitAuthFailure(r, AuthFailureTenantNotFound,
+					"authenticated user has zero tenant memberships",
+					map[string]any{"user_id": result.UserID})
 				writeError(w, http.StatusForbidden, "NO_TENANT", "No team associated with this account")
 				return
 			case 1:
@@ -324,6 +342,9 @@ func AuthWithTTL(validator TokenValidator, store MembershipStore, cacheTTL time.
 					}
 				}
 				if !found {
+					emitAuthFailure(r, AuthFailureTenantNotFound,
+						"Bearer user not a member of X-LoopZero-Tenant",
+						map[string]any{"requested_tenant": requestedTenant, "user_id": result.UserID})
 					writeError(w, http.StatusForbidden, "TENANT_NOT_FOUND", "You are not a member of the requested team")
 					return
 				}

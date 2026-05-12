@@ -121,6 +121,11 @@ func main() {
 	secretAgeCollector.Start(context.Background())
 	defer secretAgeCollector.Stop()
 
+	// T1.3 (Wave 1 Phase A.4): wire auth failure auditor to persist
+	// auth rejections to audit_log. Must run AFTER setupDatabase so the
+	// writer has a real DB; nil-safe when dbAdapter is unavailable.
+	WireAuthFailureAuditor(dbAdapter, logger)
+
 	var stores *StoreDeps
 	var workflows *WorkflowDeps
 	var orchDeps *OrchestratorDeps
