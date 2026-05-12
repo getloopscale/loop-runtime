@@ -1,0 +1,46 @@
+---
+# T1.16 — Mutable Production Image Tag Enforcement
+# Rejects PRs that introduce :prod or :latest image tags in production
+# manifests, per ADR-0020 D1 + MEET-2026-05-12 plan T1.16.
+#
+# Production manifests MUST reference immutable :sha7 tags so Git is the
+# canonical source of truth for workload identity (INV-1).
+
+name: Prod Image Tag Check (T1.16)
+
+on:
+  pull_request:
+    branches:
+      - main
+      - develop
+    paths:
+      - 'charts/**/*.yaml'
+      - 'charts/**/*.yml'
+      - 'infra/helm/**/*.yaml'
+      - 'infra/helm/**/*.yml'
+      - 'infra/helmfile/**/*.yaml'
+      - 'infra/helmfile/**/*.yml'
+      - 'infra/scripts/check-prod-image-tags.sh'
+      - '.github/workflows/prod-image-tag-check.yml'
+
+permissions:
+  contents: read
+  pull-requests: read
+
+jobs:
+  check-prod-image-tags:
+    name: Reject mutable :prod / :latest tags in prod manifests
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout PR head
+        uses: actions/checkout@v4
+
+      - name: Run prod image tag enforcement
+        run: |
+          chmod +x infra/scripts/check-prod-image-tags.sh
+          ./infra/scripts/check-prod-image-tags.sh
+
+      - name: Annotate violation
+        if: failure()
+        run: |
+          echo "::error title=Mutable Prod Image Tag::Production manifest references :prod or :latest tag. Per ADR-0020 D1, production deploys MUST use immutable :sha7 tags. See workflow log for affected files. To override an intentional case, add '# loopzero:mutable-tag-allowed' comment + reference an ADR."

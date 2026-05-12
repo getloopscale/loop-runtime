@@ -86,7 +86,7 @@ def gen_record(scoring_dir, dim_key, dim_data, personas):
     lines.append("")
     lines.append("## Action Items")
     lines.append("")
-    lines.append(f"- [ ] Update `docs/audits/2026-05-11/SUMMARY.md` with reconciled score")
+    lines.append(f"- [ ] Update `.claude/knowledge-base/audits/2026-05-11/SUMMARY.md` with reconciled score")
     lines.append(f"- [ ] Update `docs/governance/scoring-2026-05-11/scorecard-{safe_dim}.md` with final")
     lines.append("- [ ] Document open work items if dim has actionable gaps")
     lines.append("")

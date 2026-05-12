@@ -35,9 +35,21 @@ registries:
 loki:
   maxGlobalStreamsPerUser: 200000
 
-# Policy mode — `enforce` once Sprint 9 cosign keyless lands. Until then,
-# prod uses warn-mode + manual review of audit log.
-policyMode: warn
+# Policy mode — `enforce` per MEET-2026-05-12 T1.12 (post-Wave 1 deliverable).
+# Operator action required: run pre-flight via `infra/scripts/check-prod-vap-readiness.sh`
+# before flipping this value to `enforce`. The pre-flight verifies:
+#   1. All running prod pods have valid cosign signatures (no unsigned images)
+#   2. No `kubectl set image` cron exists in any prod workflow
+#   3. ArgoCD apps are all Synced (no pending image updates that would fail VAP)
+# After flip: monitor `loopzero_admission_denied_total` for 24h before declaring
+# T1.12 complete. Rollback path: `policyMode: warn` + helmfile sync.
+#
+# noRuntimeImageMutations VAP-specific config: failurePolicy and action
+# tracked separately because the VAP needs both elevated to fully enforce.
+policyMode: warn  # OPERATOR ACTION: flip to "enforce" per T1.12 pre-flight checklist
+noRuntimeImageMutations: true  # VAP active in prod (was implicit; now explicit)
+noRuntimeImageMutationsAction: Warn  # OPERATOR ACTION: flip to "Deny" per T1.12 + EC-NEW-4
+noRuntimeImageMutationsFailurePolicy: Ignore  # OPERATOR ACTION: flip to "Fail" per T1.12 + EC-NEW-4
 
 # In-cluster Postgres — DISABLED for LoopZero Cloud prod (uses DO Managed HA PG cluster).
 inClusterPostgres: false

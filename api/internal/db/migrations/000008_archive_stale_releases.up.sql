@@ -2,7 +2,7 @@
 --
 -- fix-all-platform-issues-plan T2.3 / ADR D5 (release pipeline diagnostics).
 --
--- State at audit time (docs/audits/failed-releases-2026-05-02.md):
+-- State at audit time (2026-05-02):
 --   * 70 CANCELLED releases (operator-cancelled during dev iterations)
 --   * 8 GIT_MIRROR_FAILED (specific to repotest project, 2026-04-29 06:xx)
 --   * 3 SYNC_FAILED (across multiple projects, same date)

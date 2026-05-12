@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # regenerate-status.sh — STALE: docs/STATUS.md was removed in 2026-05-11 governance consolidation.
-# Canonical maturity/status document is now docs/audits/2026-05-11/SUMMARY.md.
+# Canonical maturity/status document is now .claude/knowledge-base/audits/2026-05-11/SUMMARY.md.
 #
 # This script previously updated auto-generated sections in docs/STATUS.md.
 # It is retained for reference but will exit early if the target file does not exist.
@@ -48,7 +48,7 @@ done
 
 if [[ ! -f "$STATUS_FILE" ]]; then
     echo "Status file not found at $STATUS_FILE (docs/STATUS.md was removed in 2026-05-11 governance consolidation)" >&2
-    echo "Canonical maturity document is now docs/audits/2026-05-11/SUMMARY.md" >&2
+    echo "Canonical maturity document is now .claude/knowledge-base/audits/2026-05-11/SUMMARY.md" >&2
     exit 0
 fi
 

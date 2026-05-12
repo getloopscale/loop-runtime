@@ -2,7 +2,7 @@
 
 Centralized observability stack for the LoopZero platform. All system components — API, operators, ArgoCD, Argo Workflows, Gitea, MinIO, Traefik, PostgreSQL — are scraped by a single Prometheus instance and visualized through Grafana dashboards with alerting rules.
 
-**Reference:** Observability audit at `docs/audits/2026-05-11/08-observability.md`. The code itself is the spec.
+**Reference:** Observability audit at `.claude/knowledge-base/audits/2026-05-11/08-observability.md`. The code itself is the spec.
 
 ---
 

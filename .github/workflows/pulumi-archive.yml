@@ -25,7 +25,12 @@ name: pulumi-archive
 
 on:
   schedule:
-    # Quarterly: 1st day of Jan/Apr/Jul/Oct at 06:00 UTC.
+    # DAILY at 04:00 UTC — bumped from quarterly per MEET-2026-05-12 T1.7
+    # (SRE veto: 90-day RPO unacceptable for v1.0). Original quarterly
+    # schedule retained as informational comment below.
+    - cron: '0 4 * * *'
+
+    # ORIGINAL Quarterly: 1st day of Jan/Apr/Jul/Oct at 06:00 UTC.
     # Cron syntax doesn't natively support "every 3 months"; equivalent
     # is the per-month days. We pick the 1st-of-quarter to align with
     # quarterly snapshot reviews + budget retros.
@@ -132,7 +137,7 @@ jobs:
           # the human operator running the workflow_dispatch is
           # responsible for pasting the audit entry.
           cat <<EOF
-          # Audit-log candidate entry (paste into docs/audits/pulumi-consolidation-log.md):
+          # Audit-log candidate entry (paste into .claude/knowledge-base/audits/pulumi-consolidation-log.md):
 
           ## $(date -u +%Y-%m-%d) — Quarterly archive run via .github/workflows/pulumi-archive.yml
 

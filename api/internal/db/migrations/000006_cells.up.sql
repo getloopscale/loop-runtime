@@ -4,7 +4,7 @@
 -- schema_migrations.version >= 5. See CHANGELOG entry [Unreleased] for fix
 -- discovered LIVE 2026-04-30 during multi-cell validation.)
 --
--- Design context (per docs/audits/multi-cell-source-audit.md):
+-- Design context:
 --   • ClusterCredential CRDs (K8s) are SoT for cell *connectivity*
 --     (kubeconfig location, status.connected, scope to ArgoCD/operators).
 --     Read by K8sCellStore.LoadCells() at api/internal/placement/k8s_cell_store.go

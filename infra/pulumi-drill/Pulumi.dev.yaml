@@ -1,0 +1,13 @@
+config:
+  loopzero-drill:domain:
+    value: loopzero-drill.example
+  loopzero-drill:doProject:
+    value: loopzero-drill
+  loopzero-drill:region:
+    value: sfo3  # Same region as prod for realistic latency comparison
+  loopzero-drill:cellName:
+    value: cell-drill
+  loopzero-drill:nodeCount:
+    value: "2"  # Match prod node count for realistic drill
+  loopzero-drill:k8sVersion:
+    value: "1.32.13"  # Match prod K8s version

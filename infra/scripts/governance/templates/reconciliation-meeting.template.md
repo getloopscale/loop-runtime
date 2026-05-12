@@ -51,7 +51,7 @@
 
 ## Action Items (if any)
 
-- [ ] Update `docs/audits/2026-05-11/SUMMARY.md` with reconciled score
+- [ ] Update `.claude/knowledge-base/audits/2026-05-11/SUMMARY.md` with reconciled score
 - [ ] Update `docs/governance/scoring-{YYYY-MM-DD}/scorecard-{dim}.md` with final
 - [ ] Document open work items if dim has actionable gaps
 

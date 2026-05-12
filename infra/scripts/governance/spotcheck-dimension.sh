@@ -10,8 +10,8 @@ set -euo pipefail
 
 SEED="${SPOTCHECK_SEED:-$(date +%s)}"
 # NOTE: docs/STATUS.md was removed in 2026-05-11 governance consolidation.
-# Canonical maturity/status document is now docs/audits/2026-05-11/SUMMARY.md.
-STATUS_FILE="${STATUS_FILE:-docs/audits/2026-05-11/SUMMARY.md}"
+# Canonical maturity/status document is now .claude/knowledge-base/audits/2026-05-11/SUMMARY.md.
+STATUS_FILE="${STATUS_FILE:-.claude/knowledge-base/audits/2026-05-11/SUMMARY.md}"
 CATALOG_FILE="${CATALOG_FILE:-docs/governance/claim-catalog.yaml}"
 
 DIMENSIONS=("core-deploy" "dx-cli" "infra-ops" "security" "scale-mt" "product-completeness" "tests-confidence")
@@ -40,6 +40,6 @@ cat <<JSON
   "dimension": "$SELECTED_DIM",
   "persona": "$SELECTED_PERSONA",
   "selection_method": "seeded_uniform",
-  "next_step": "Invoke persona agent with this dimension; compare against docs/audits/2026-05-11/SUMMARY.md; alert if delta > 0.3"
+  "next_step": "Invoke persona agent with this dimension; compare against .claude/knowledge-base/audits/2026-05-11/SUMMARY.md; alert if delta > 0.3"
 }
 JSON

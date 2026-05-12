@@ -7,6 +7,19 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+### Governance
+- **MEET-2026-05-12 Launch Readiness T2 ratified** — 9-specialist meeting (principal-architect, platform-security-engineer, sre-engineer, dx-engineer, gitops-engineer, production-design-reviewer, change-validation-planner, security-blast-radius-reviewer, decision-record-moderator). Verdict: APPROVED_WITH_CONDITIONS. Final 5-tuple A/A/A/B/A. ADR: `.claude/knowledge-base/decisions/2026-05-12-launch-readiness.md`. Meeting record: `.claude/knowledge-base/meetings/MEET-2026-05-12-launch-readiness.md`. 16 Wave 1 mandatory tasks (W1.1-W1.16) committed with owners + deadlines. Phased rollout gates G1-G6 + Public GA gates PG1-PG5 defined. (#MEET-2026-05-12)
+- Launch model: 3-stage rollout (Beta closed → Limited GA → Public GA) ratified — Public GA direct vetoed by SRE (absolute) (#MEET-2026-05-12 D1)
+- Pricing scope at GA: Starter + Pro public; Team Early Access (manual provisioning); Enterprise "Contact Us" only (no public pricing) — DX conditional veto on Enterprise public launch sustained until SSO/SAML ships (#MEET-2026-05-12 D4)
+- Pulumi SoT formally documented as bipartite: L1 Pulumi (cloud primitives) + L2 Helmfile (32 platform Helm releases) + L3 ArgoCD (tenant workloads) — `pulumi-control-plane/src/index.ts` STUB will be deleted or converted to ADR-pointing documentation (W1.8) (#MEET-2026-05-12 D3)
+- Cosign supply-chain hardening (#MEET-2026-05-12 D2): Keyed v1.0 ships with 5 mandatory mitigations (HSM/sealed-secret storage, 90-day rotation runbook with staging dry-run, per-sign audit log, deny-mode admission, Keyless v1.1 ADR with 90-day cutover commitment); Keyless (Fulcio+Rekor) deferred to v1.1
+
+### Fixed
+- Governance audit trail — ADR-0020 (infra-parity D1-D7) and ADR-0021 (infra-normalize D1-D10) restoration scheduled in W1.1 of MEET-2026-05-12 after they were silently deleted in commit `fc1793dd` (2026-05-11) under "Delete meeting minutes for iterations 005-008" commit message. 7 failing tests in `infra/pulumi/src/__tests__/adr-verification-matrices.test.ts` correctly fired as canary detecting the silent governance violation. (#MEET-2026-05-12 D5)
+- CI stability hook to be added (W1.14): fail merge if any `.claude/knowledge-base/decisions/*.md` deleted without `superseded_by:` in sibling — prevents recurrence of silent ADR deletion
+- Documentation drift sweep — 49 files updated, 58 references migrated from `docs/audits/2026-05-11/` to `.claude/knowledge-base/audits/2026-05-11/` (canonical post-2026-05-11 governance consolidation). Includes CLAUDE.md, 4 `.claude/rules/*`, 12 `.claude/agents/*`, 3 `.claude/skills/*`, 6 `.github/workflows/*`, 14 `infra/scripts/governance/*`, 3 knowledge-base self-references; `D2 — T3.x archive scripts` test row in `adr-verification-matrices.test.ts` repaired by removing orphan path assertion
+- Zombie ralph-loop state files deleted: `infra/pulumi/.claude/ralph-loop.local.md` (iteration 3, prompt referenced deleted `fix-all-platform-issues-plan.md`) and `infra/tests/.claude/ralph-loop.local.md` (iteration 2, duplicate `docs/plans/docs/plans/` path)
+
 ### Added
 - Progressive delivery with canary deployments via Argo Rollouts — per-plan rollout steps with Traefik-based traffic splitting (#CHG-rollouts)
 - User Dockerfile support (`build: dockerfile` in loopzero.yaml) with security linting and registry allow-list enforcement (#CHG-dockerfile)

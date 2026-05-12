@@ -1,0 +1,53 @@
+---
+# T1.14 — Decisions Stability Check
+# Prevents silent deletion of ratified ADRs and MEET DRs without a superseding
+# record, per Plan Amendment Policy (`.claude/rules/pre-release-governance.md`).
+#
+# Lesson source: MEET-2026-05-12 D5 — commit fc1793dd silently deleted ADR-0020
+# + ADR-0021 + 3 MEET DRs under an unrelated commit message. This workflow
+# enforces the policy mechanically so the pattern cannot recur.
+
+name: Decisions Stability Check (T1.14)
+
+on:
+  pull_request:
+    branches:
+      - main
+      - develop
+    paths:
+      - '.claude/knowledge-base/decisions/**'
+      - '.claude/knowledge-base/meetings/**'
+      - '.github/workflows/decisions-stability-check.yml'
+      - 'infra/scripts/check-decisions-deletion.sh'
+
+permissions:
+  contents: read
+  pull-requests: read
+
+jobs:
+  check-decisions-stability:
+    name: Validate ADR/MEET deletion has superseder
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout PR head with full history
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Ensure base ref available
+        run: |
+          git fetch --no-tags --depth=1 origin "${{ github.base_ref }}"
+          echo "Base ref: ${{ github.base_ref }}"
+          echo "PR head: ${{ github.event.pull_request.head.sha }}"
+
+      - name: Run decisions deletion guard
+        run: |
+          chmod +x infra/scripts/check-decisions-deletion.sh
+          ./infra/scripts/check-decisions-deletion.sh \
+            "origin/${{ github.base_ref }}" \
+            "${{ github.event.pull_request.head.sha }}"
+
+      - name: Annotate violation
+        if: failure()
+        run: |
+          echo "::error title=Decisions Stability Violation::A ratified ADR or MEET DR was deleted without a superseder. See workflow log for details. Per Plan Amendment Policy, deletion requires either a superseding file with 'superseded_by:' frontmatter OR explicit MEET ratification."
