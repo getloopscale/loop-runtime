@@ -478,3 +478,96 @@ func decodeError(t *testing.T, w *httptest.ResponseRecorder) (code, message stri
 // Reference decodeError so it doesn't trip "unused" if no test currently
 // calls it. Future EC-NEW-8 / idempotency expansion will exercise it.
 var _ = decodeError
+
+// =============================================================================
+// SCALE — adversarial: tenant B scales tenant A's project (audit M10 F2 §6.E.4)
+// =============================================================================
+
+// rlsScaleProjectStore models PostgresProjectStore behavior where queries
+// SCOPE by tenant_id. Tenant B looking up tenant A's project returns NIL.
+type rlsScaleProjectStore struct {
+	owningTenant string
+	project      *ProjectResult
+}
+
+func (s *rlsScaleProjectStore) GetByName(_ context.Context, callerTenant, name string) (*ProjectResult, error) {
+	if callerTenant != s.owningTenant {
+		return nil, nil // RLS-scoped: invisible to other tenants
+	}
+	if s.project != nil && s.project.Name == name {
+		return s.project, nil
+	}
+	return nil, nil
+}
+
+// TestCrossTenant_Scale_RLS_ReturnsNotFound is the RLS-faithful version. Tenant B
+// tries to scale a project owned by tenant A; the store models tenant scoping
+// and returns nil; the handler returns 404. The apply closure is a tripwire.
+func TestCrossTenant_Scale_RLS_ReturnsNotFound(t *testing.T) {
+	store := &rlsScaleProjectStore{
+		owningTenant: xtTenantA,
+		project:      &ProjectResult{ID: "p1", Name: "tenant-a-api", TeamID: xtTenantA},
+	}
+	apply := func(_ context.Context, _ ScaleConfigInput) (bool, error) {
+		t.Fatal("apply must NOT be called on cross-tenant rejection")
+		return false, nil
+	}
+	h := NewScaleHandler(store, apply, true)
+
+	body := `{"environment":"production","app":"api","replicas":3}`
+	req := httptest.NewRequest(http.MethodPost, "/api/v1/projects/tenant-a-api/scale", bytes.NewBufferString(body))
+	req = withChiParam(req, "name", "tenant-a-api")
+	req = withAuth(req, tenantBContext())
+	w := httptest.NewRecorder()
+	h.Scale(w, req)
+
+	if w.Code != http.StatusNotFound {
+		t.Fatalf("want 404 (project hidden across tenants), got %d body=%s", w.Code, w.Body.String())
+	}
+	// Response must not leak tenant A identity or the project shape.
+	if bytes.Contains(w.Body.Bytes(), []byte(xtTenantA)) {
+		t.Errorf("response leaks tenant A id: %s", w.Body.String())
+	}
+}
+
+// Sanity: same handler MUST 200 OK for the owning tenant. Tightens the
+// negative test above by proving the path works for the legitimate caller.
+func TestCrossTenant_Scale_RLS_AllowsOwningTenant(t *testing.T) {
+	store := &rlsScaleProjectStore{
+		owningTenant: xtTenantA,
+		project:      &ProjectResult{ID: "p1", Name: "tenant-a-api", TeamID: xtTenantA},
+	}
+	applyCalled := false
+	apply := func(_ context.Context, cfg ScaleConfigInput) (bool, error) {
+		applyCalled = true
+		if cfg.TenantID != xtTenantA {
+			t.Errorf("apply called with wrong tenant: %s want %s", cfg.TenantID, xtTenantA)
+		}
+		return true, nil
+	}
+	h := NewScaleHandler(store, apply, true)
+
+	body := `{"environment":"production","app":"api","replicas":3}`
+	req := httptest.NewRequest(http.MethodPost, "/api/v1/projects/tenant-a-api/scale", bytes.NewBufferString(body))
+	req = withChiParam(req, "name", "tenant-a-api")
+	req = withAuth(req, tenantAContext())
+	w := httptest.NewRecorder()
+	h.Scale(w, req)
+
+	if w.Code != http.StatusOK {
+		t.Fatalf("want 200 for owning tenant, got %d body=%s", w.Code, w.Body.String())
+	}
+	if !applyCalled {
+		t.Error("apply must be called for owning-tenant scale request")
+	}
+}
+
+// tenantAContext mirrors tenantBContext but for tenant A — used by sanity tests
+// that verify the legitimate (same-tenant) flow works after the negative
+// adversarial tests reject the cross-tenant attempt.
+func tenantAContext() *middleware.UserContext {
+	return &middleware.UserContext{
+		TenantID: xtTenantA,
+		UserID:   "user-a",
+	}
+}
