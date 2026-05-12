@@ -369,6 +369,14 @@ releases:
 {{- if eq (.Values | get "clusterRole" "dev") "standalone" }}
       - ../helm/loopzero-api/values-standalone-multi.yaml
 {{- end }}
+    set:
+      # Finding 2026-05-12 — wire env-file `replicas.api` to chart
+      # `replicaCount`. Before this, the env-file value was orphan config:
+      # defined in prod.yaml (=3) + standalone-multi.yaml (=1) but never
+      # consumed, leaving loopzero-api at hardcoded 1 replica even in prod.
+      # See concepts/operations/finding-2026-05-12-loopzero-api-replica-orphan.md
+      - name: replicaCount
+        value: "{{ .Values | get "replicas" (dict) | get "api" 1 }}"
 
   # ADR-0023 / plan v1.1 T1.5 — 4 split operator charts replace the
   # deleted monolith chart `infra/helm/tenant-controller` and the

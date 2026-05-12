@@ -19,6 +19,19 @@ clusterRole: standalone
 clusterTopology: multi-cluster
 
 replicas:
+  # Finding 2026-05-12 surfaced TWO issues at iter 12:
+  #   (a) replicas.api was orphan config (now wired via helmfile set: block)
+  #   (b) Deeper: loopzero-api Deployment uses strategy.type: Recreate +
+  #       leader election lock with 12-attempt limit. 2 replicas
+  #       cause 2nd replica to crashloop while leader is held by 1st
+  #       (passive standby not supported architecturally).
+  # See concepts/operations/finding-2026-05-12-loopzero-api-replica-orphan.md
+  # for full analysis. Multi-replica requires T2 amendment:
+  #   - strategy: RollingUpdate (maxSurge=1, maxUnavailable=0)
+  #   - leader election tolerates passive standby (no liveness fail)
+  # Keep api=1 until that work lands; the chaos test scenario 1
+  # 120s recovery budget is the load-bearing assumption that needs
+  # this architecture work too.
   api: 1
   controller: 1
   argocd: 1
