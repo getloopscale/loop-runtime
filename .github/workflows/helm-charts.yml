@@ -106,16 +106,21 @@ jobs:
 
       - name: Audit drift between charts/ and infra/helm/ (CH-G16)
         # ADR-0041 + charts-sota-implementation-plan T1.3.
-        # Advisory mode (continue-on-error) por 30 dias para classificação.
-        # Graduates to blocking pre-GA per CONDITION-3 (platform-security-engineer).
-        continue-on-error: true
+        # GRADUATED to blocking 2026-05-12 per audit M06 #21 / §6.E.6:
+        # local baseline run confirms `audit-helm-drift.sh` exits 0 with
+        # "All drifts have approving ADRs (intentional)". A future PR that
+        # introduces drift without an ADR will fail CI loudly instead of
+        # quietly annotating. To re-introduce advisory mode (e.g., during
+        # an in-progress refactor), restore `continue-on-error: true`.
         run: |
           bash infra/scripts/audit-helm-drift.sh github-annotations
 
       - name: Conftest policies (T7.3 — charts-sota Phase 7)
         # Validates Rego policies in policies/charts/: security_context, service_monitor_port,
-        # priority_class. Advisory initially; promote to blocking after baseline review.
-        continue-on-error: true
+        # priority_class. GRADUATED to blocking 2026-05-12 per audit M06 #21 /
+        # §6.E.6: local baseline run produced 1992 tests / 0 failures /
+        # 0 warnings across all loopzero-* charts. A future PR that violates
+        # any policy will now fail CI instead of advisory-annotating.
         run: |
           curl -sL https://github.com/open-policy-agent/conftest/releases/download/v0.55.0/conftest_0.55.0_Linux_x86_64.tar.gz | tar -xz
           sudo install conftest /usr/local/bin/
@@ -267,10 +272,13 @@ jobs:
             fi
           done
 
-      - name: chartsnap on loopzero-platform umbrella (advisory)
-        # Advisory mode initially — first GREEN run produces baseline.
-        # After baseline reviewed + committed, gate becomes blocking.
-        continue-on-error: true
+      - name: chartsnap on loopzero-platform umbrella
+        # GRADUATED to blocking 2026-05-12 per audit M06 #21 / §6.E.6:
+        # local baseline run produced "All snapshots matched" against
+        # the committed `charts/loopzero-platform/__snapshots__/default.snap`.
+        # A future PR that changes templated output without regenerating
+        # the snapshot will fail CI. Snapshot regeneration command:
+        #   `helm chartsnap -c charts/loopzero-platform -u`
         run: |
           if [ ! -d "charts/loopzero-platform/__snapshot__" ]; then
             echo "::warning::chartsnap baseline not yet created. First run will populate __snapshot__/."
@@ -306,8 +314,17 @@ jobs:
             fi
           done
 
-      - name: helm diff against base branch (advisory)
+      - name: helm diff against base branch (advisory — by design)
         # CONDITION: HELM_DIFF_THREE_WAY_MERGE + HELM_DIFF_NORMALIZE_MANIFESTS evita falsos positivos.
+        #
+        # Audit §6.E.6: this gate STAYS advisory, unlike the 3 sibling
+        # gates graduated 2026-05-12. The semantics are annotation-only
+        # by design — every PR that touches charts/ produces a diff (that
+        # IS the point of the PR). Graduating to blocking would fail every
+        # chart-changing PR. To make it blocking, the script must first
+        # be rewritten to fail only on a structural risk (destructive
+        # delete, namespace change, security context downgrade) — that
+        # is carved out as §6.E.6b in the active execution plan.
         env:
           HELM_DIFF_THREE_WAY_MERGE: "true"
           HELM_DIFF_NORMALIZE_MANIFESTS: "true"
