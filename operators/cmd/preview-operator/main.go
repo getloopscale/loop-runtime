@@ -19,14 +19,12 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/log/zap"
 	metricsserver "sigs.k8s.io/controller-runtime/pkg/metrics/server"
 
-	"go.opentelemetry.io/otel/trace"
 
 	loopzerov1 "github.com/loopzero/loopzero/operators/api/v1"
 	"github.com/loopzero/loopzero/operators/internal/preview"
 	"github.com/loopzero/loopzero/operators/internal/shared"
 	"github.com/loopzero/loopzero/operators/internal/tracing"
 	"github.com/loopzero/loopzero/pkg/healthcheck"
-	"github.com/loopzero/loopzero/pkg/logging"
 
 	_ "github.com/loopzero/loopzero/operators/internal/metrics"
 )
@@ -68,13 +66,10 @@ func main() {
 	}
 	defer func() { _ = tracingShutdown(context.Background()) }()
 
-	logging.RegisterTraceExtractor(func(ctx context.Context) (string, string) {
-		sc := trace.SpanContextFromContext(ctx)
-		if !sc.IsValid() {
-			return "", ""
-		}
-		return sc.TraceID().String(), sc.SpanID().String()
-	})
+	// Audit gap M04 #23 (§6.F.1b): RegisterTraceExtractor + the package-level
+	// FromContext consumer were removed; this call was write-only into a
+	// registry no one read. ContextLogger via NewContextLogger is the
+	// replacement per ADR-0034 if trace_id-in-slog is needed.
 
 	if shared.PprofEnabled() {
 		shared.StartPprofServer()

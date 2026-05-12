@@ -18,14 +18,12 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/log/zap"
 	metricsserver "sigs.k8s.io/controller-runtime/pkg/metrics/server"
 
-	"go.opentelemetry.io/otel/trace"
 
 	loopzerov1 "github.com/loopzero/loopzero/operators/api/v1"
 	"github.com/loopzero/loopzero/operators/internal/app"
 	"github.com/loopzero/loopzero/operators/internal/shared"
 	"github.com/loopzero/loopzero/operators/internal/tracing"
 	"github.com/loopzero/loopzero/pkg/healthcheck"
-	"github.com/loopzero/loopzero/pkg/logging"
 
 	_ "github.com/loopzero/loopzero/operators/internal/metrics"
 )
@@ -70,13 +68,12 @@ func main() {
 	}
 	defer func() { _ = tracingShutdown(context.Background()) }()
 
-	logging.RegisterTraceExtractor(func(ctx context.Context) (string, string) {
-		sc := trace.SpanContextFromContext(ctx)
-		if !sc.IsValid() {
-			return "", ""
-		}
-		return sc.TraceID().String(), sc.SpanID().String()
-	})
+	// Audit gap M04 #23 (§6.F.1b): RegisterTraceExtractor + the package-level
+	// FromContext consumer were removed in commits d98c20e9 + this commit.
+	// Trace IDs are still attached to OTel spans via `tracing.Init` above;
+	// to also inject trace_id into slog logs, construct a logging.ContextLogger
+	// via NewContextLogger(baseLogger, spanExtractorFn) and call FromContext
+	// at each reconcile boundary.
 
 	if shared.PprofEnabled() {
 		shared.StartPprofServer()

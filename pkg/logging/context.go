@@ -6,7 +6,6 @@ package logging
 import (
 	"context"
 	"log/slog"
-	"sync"
 )
 
 // TraceExtractor extracts trace_id and span_id from a context.
@@ -71,27 +70,13 @@ func (c *ContextLogger) FromContext(ctx context.Context) *slog.Logger {
 	return c.base.With(attrs...)
 }
 
-// --- Legacy global API (deprecated, retained for 1-release window per CONDITION-1) ---
-
-var (
-	globalExtractor TraceExtractor
-	extractorMu     sync.RWMutex
-)
-
-// RegisterTraceExtractor sets the global trace extractor.
-//
-// Deprecated: prefer NewContextLogger for explicit injection (per
-// ADR-0034). The global registry will be removed in the next major
-// release. Existing callers should migrate by:
-//
-//  1. In main.go, replace the RegisterTraceExtractor call with
-//     `cl := logging.NewContextLogger(baseLogger, extractorFn)`.
-//  2. Pass `cl` to handlers via your usual DI mechanism.
-//  3. Replace `logging.FromContext(ctx, logger)` calls with
-//     `cl.FromContext(ctx)`.
-func RegisterTraceExtractor(fn TraceExtractor) {
-	extractorMu.Lock()
-	defer extractorMu.Unlock()
-	globalExtractor = fn
-}
-
+// Audit gap M04 #23 closure (active-execution-plan §6.F.1b): the legacy
+// `RegisterTraceExtractor` + `globalExtractor` + `extractorMu` were removed.
+// They became dead code when the package-level `FromContext` helper
+// (their only consumer) was deleted in §6.F.1 (commit d98c20e9). The
+// 4 operator main.go binaries that used to call `RegisterTraceExtractor`
+// were write-only into a registry no one read — registration produced
+// no observable behavior. Operators that want trace_id enrichment in
+// their slog logs should construct a `ContextLogger` via
+// `NewContextLogger(baseLogger, extractorFn)` and call its FromContext
+// per-reconcile boundary (ADR-0034 explicit DI).
