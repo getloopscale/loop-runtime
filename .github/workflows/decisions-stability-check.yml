@@ -1,13 +1,20 @@
 ---
-# T1.14 — Decisions Stability Check
-# Prevents silent deletion of ratified ADRs and MEET DRs without a superseding
-# record, per Plan Amendment Policy (`.claude/rules/pre-release-governance.md`).
+# T1.14 — Decisions + Operations Stability Check
+# Prevents silent deletion of ratified ADRs, MEET DRs, and operational
+# runbooks/inventories without a superseding record, per Plan Amendment
+# Policy (`.claude/rules/pre-release-governance.md`).
 #
-# Lesson source: MEET-2026-05-12 D5 — commit fc1793dd silently deleted ADR-0020
-# + ADR-0021 + 3 MEET DRs under an unrelated commit message. This workflow
-# enforces the policy mechanically so the pattern cannot recur.
+# Lesson source 1: MEET-2026-05-12 D5 — commit fc1793dd silently deleted
+# ADR-0020 + ADR-0021 + 3 MEET DRs under an unrelated commit message.
+#
+# Lesson source 2: Same commit fc1793dd ALSO swept the T8.5a egress
+# inventory runbook (docs/runbooks/network-policy-egress-inventory.md),
+# breaking TestNetworkPolicy_DocumentsT85b silently. Restored via
+# MEET-ASYNC-AMENDMENT-2026-05-12-001 + commit a6e8b895. Path glob
+# extended to cover operations/*-runbook.md + *-inventory.md to prevent
+# recurrence on the next cleanup pass.
 
-name: Decisions Stability Check (T1.14)
+name: Decisions + Operations Stability Check (T1.14)
 
 on:
   pull_request:
@@ -17,8 +24,10 @@ on:
     paths:
       - '.claude/knowledge-base/decisions/**'
       - '.claude/knowledge-base/meetings/**'
+      - '.claude/knowledge-base/concepts/operations/**'
       - '.github/workflows/decisions-stability-check.yml'
       - 'infra/scripts/check-decisions-deletion.sh'
+      - 'infra/scripts/check-decisions-deletion_test.sh'
 
 permissions:
   contents: read
@@ -50,4 +59,4 @@ jobs:
       - name: Annotate violation
         if: failure()
         run: |
-          echo "::error title=Decisions Stability Violation::A ratified ADR or MEET DR was deleted without a superseder. See workflow log for details. Per Plan Amendment Policy, deletion requires either a superseding file with 'superseded_by:' frontmatter OR explicit MEET ratification."
+          echo "::error title=Stability Violation::A ratified ADR, MEET DR, or operations runbook/inventory was deleted without a superseder. See workflow log for details. Per Plan Amendment Policy, deletion requires either a superseding file with 'superseded_by:' frontmatter OR explicit MEET ratification."

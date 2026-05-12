@@ -1,18 +1,29 @@
 #!/usr/bin/env bash
-# T1.14 — Decisions Deletion Guard
-# Fail CI if any .claude/knowledge-base/decisions/*.md OR meetings/*.md is
-# deleted in a PR without a sibling file containing `superseded_by:` reference
-# pointing to the deleted decision/meeting.
+# T1.14 — Decisions + Operations Deletion Guard
+# Fail CI if any of the following protected artifacts is deleted in a PR
+# without a sibling file containing `superseded_by:` reference pointing to
+# the deleted file:
 #
-# Lesson source: MEET-2026-05-12 D5 — commit fc1793dd silently deleted ADR-0020
-# and ADR-0021 with an unrelated commit message ("Delete meeting minutes for
-# iterations 005-008"), violating Plan Amendment Policy. T1.14 prevents
-# recurrence by enforcing the policy mechanically.
+#   - .claude/knowledge-base/decisions/*.md     (ADRs)
+#   - .claude/knowledge-base/meetings/*.md      (MEET DRs)
+#   - .claude/knowledge-base/concepts/operations/*-runbook.md  (runbooks)
+#   - .claude/knowledge-base/concepts/operations/*-inventory.md (inventories)
+#
+# Lesson source 1 (decisions/meetings): MEET-2026-05-12 D5 — commit fc1793dd
+# silently deleted ADR-0020 and ADR-0021 with an unrelated commit message
+# ("Delete meeting minutes for iterations 005-008"), violating Plan Amendment
+# Policy. T1.14 prevents recurrence by enforcing the policy mechanically.
+#
+# Lesson source 2 (runbooks/inventories): same commit fc1793dd ALSO swept
+# docs/runbooks/network-policy-egress-inventory.md (T8.5a runbook), breaking
+# api/tests/unit/network_policy_egress_test.go::TestNetworkPolicy_DocumentsT85b
+# silently. The runbook was restored 2026-05-12 in commit a6e8b895 via
+# MEET-ASYNC-AMENDMENT-2026-05-12-001. Glob extended to prevent recurrence.
 #
 # Per .claude/rules/pre-release-governance.md § Plan Amendment Policy:
-#   Deletion of formally ratified ADRs/MEETs requires either:
-#   (a) A superseding ADR with `superseded_by: <deleted-file-name>` frontmatter
-#   (b) Explicit MEET ratification of the deletion
+#   Deletion of formally ratified ADRs/MEETs/runbooks requires either:
+#   (a) A superseding file with `superseded_by: <deleted-file-name>` frontmatter
+#   (b) Explicit MEET ratification of the deletion (commit tag [SUPERSEDER-EXEMPT])
 #
 # Usage:
 #   ./check-decisions-deletion.sh BASE_REF HEAD_REF
@@ -34,21 +45,39 @@ if [[ -z "${BASE_REF}" || -z "${HEAD_REF}" ]]; then
   exit 2
 fi
 
-PROTECTED_DIRS=(
-  ".claude/knowledge-base/decisions"
-  ".claude/knowledge-base/meetings"
+# Each entry is "dir|glob". The glob narrows which files inside dir are
+# protected — decisions/meetings protect ALL *.md, operations protects
+# only *-runbook.md and *-inventory.md (not arbitrary notes).
+PROTECTED_PATHS=(
+  ".claude/knowledge-base/decisions|*.md"
+  ".claude/knowledge-base/meetings|*.md"
+  ".claude/knowledge-base/concepts/operations|*-runbook.md"
+  ".claude/knowledge-base/concepts/operations|*-inventory.md"
 )
 
-# Find all .md files deleted in protected dirs between BASE and HEAD
+# Find all matching files deleted between BASE and HEAD.
+#
+# Implementation note: `git diff` and `git ls-tree` differ in pathspec
+# magic support — `:(glob)` works on diff but not ls-tree. To stay
+# portable across git versions, we list files at the directory level
+# and filter the glob in shell via a `case` statement.
 DELETED_FILES=()
-for dir in "${PROTECTED_DIRS[@]}"; do
+for entry in "${PROTECTED_PATHS[@]}"; do
+  dir="${entry%%|*}"
+  glob="${entry##*|}"
   while IFS= read -r line; do
-    [[ -n "$line" ]] && DELETED_FILES+=("$line")
-  done < <(git diff --name-only --diff-filter=D "${BASE_REF}...${HEAD_REF}" -- "${dir}/*.md" 2>/dev/null || true)
+    [[ -z "$line" ]] && continue
+    # Filter: only keep files whose basename matches the glob.
+    base="$(basename "$line")"
+    # shellcheck disable=SC2254 # glob is intentionally a pattern
+    case "$base" in
+      $glob) DELETED_FILES+=("$line") ;;
+    esac
+  done < <(git diff --name-only --diff-filter=D "${BASE_REF}...${HEAD_REF}" -- "${dir}/" 2>/dev/null || true)
 done
 
 if [[ ${#DELETED_FILES[@]} -eq 0 ]]; then
-  echo "✓ No protected decisions/meetings deleted in PR diff. Stability hook clean."
+  echo "✓ No protected decisions/meetings/runbooks deleted in PR diff. Stability hook clean."
   exit 0
 fi
 
@@ -62,16 +91,24 @@ for deleted in "${DELETED_FILES[@]}"; do
   basename=$(basename "$deleted")
   dir=$(dirname "$deleted")
 
-  # Check all files in same directory at HEAD for superseded_by reference
+  # Check all .md files in same directory at HEAD for superseded_by reference.
+  #
+  # NOTE: `git ls-tree` does NOT support `:(glob)` pathspec magic in git
+  # <= 2.43 (the version on ubuntu-latest CI runners). Pass the directory
+  # as plain pathspec and filter `.md` via shell — works across versions.
   superseder_found=false
   while IFS= read -r candidate; do
     [[ -z "$candidate" ]] && continue
+    case "$candidate" in
+      *.md) ;;
+      *) continue ;;
+    esac
     if git show "${HEAD_REF}:${candidate}" 2>/dev/null | grep -E "^superseded_by:.*${basename}|^\s+- ${basename}" >/dev/null; then
       echo "✓ Deletion of '${deleted}' is properly superseded by '${candidate}'"
       superseder_found=true
       break
     fi
-  done < <(git ls-tree -r "${HEAD_REF}" --name-only -- "${dir}/*.md" 2>/dev/null || true)
+  done < <(git ls-tree -r "${HEAD_REF}" --name-only -- "${dir}/" 2>/dev/null || true)
 
   if ! $superseder_found; then
     VIOLATIONS+=("$deleted")
