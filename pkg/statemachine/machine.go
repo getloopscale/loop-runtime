@@ -175,3 +175,85 @@ func (m *Machine) ValidEvents(state State) []Event {
 	}
 	return result
 }
+
+// Audit gap M11 #25 (active-execution-plan §6.F.2): State and Event are
+// declared as `type X string` aliases. A literal cast like `State("typo")`
+// compiles silently — the type system alone cannot reject unknown values.
+//
+// Migrating to typed enums (e.g., `type State int` + `stringer`) is
+// REJECTED for this audit gap because it would break:
+//   - DB persistence (schema CHECK constraints compare string values)
+//   - JSON marshaling of CR status / API responses
+//   - K8s status field conversions across the operator surface
+//
+// Pragmatic mitigation: validate at trust boundaries (DB reads, JSON
+// unmarshaling, manual status edits) via the helpers below. Callers
+// that adopt MustParseState / MustParseEvent get fail-fast detection
+// of unknown values with a clear panic message, instead of the silent
+// drift that a raw `State(stringFromDB)` cast permits — followed by a
+// confusing "invalid transition" panic many lines later.
+//
+// IsKnownState / IsKnownEvent are the non-panicking equivalents for
+// callers that want to validate before deciding how to react (e.g.,
+// preserve the old state and emit a metric instead of crashing).
+
+// IsKnownState reports whether s is a state used in any transition
+// (source, destination) or declared terminal. Useful for validating
+// values read from external sources (DB rows, K8s CR status fields,
+// JSON request bodies) before treating them as a valid State.
+func (m *Machine) IsKnownState(s State) bool {
+	if m.terminal[s] {
+		return true
+	}
+	if _, ok := m.transitions[s]; ok {
+		return true
+	}
+	// Also check destination states (states reachable only via transition).
+	for _, eventMap := range m.transitions {
+		for _, to := range eventMap {
+			if to == s {
+				return true
+			}
+		}
+	}
+	return false
+}
+
+// IsKnownEvent reports whether e is an event used in any transition
+// for this machine. Mirror of IsKnownState for the event side.
+func (m *Machine) IsKnownEvent(e Event) bool {
+	for _, eventMap := range m.transitions {
+		if _, ok := eventMap[e]; ok {
+			return true
+		}
+	}
+	return false
+}
+
+// MustParseState wraps a raw string into a State after asserting it is
+// known to this machine. Panics with a descriptive message if not —
+// matching the rest of the package's "invalid is a programming error"
+// posture. Use at trust boundaries instead of raw `State(s)` casts.
+func (m *Machine) MustParseState(s string) State {
+	state := State(s)
+	if !m.IsKnownState(state) {
+		panic(fmt.Sprintf(
+			"statemachine %s: MustParseState rejected unknown state %q (audit M11 #25 — see pkg/statemachine.IsKnownState for non-panicking variant)",
+			m.name, s,
+		))
+	}
+	return state
+}
+
+// MustParseEvent wraps a raw string into an Event after asserting it
+// is known to this machine. Mirror of MustParseState.
+func (m *Machine) MustParseEvent(e string) Event {
+	event := Event(e)
+	if !m.IsKnownEvent(event) {
+		panic(fmt.Sprintf(
+			"statemachine %s: MustParseEvent rejected unknown event %q (audit M11 #25 — see pkg/statemachine.IsKnownEvent for non-panicking variant)",
+			m.name, e,
+		))
+	}
+	return event
+}
