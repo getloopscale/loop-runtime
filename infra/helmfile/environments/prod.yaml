@@ -35,21 +35,32 @@ registries:
 loki:
   maxGlobalStreamsPerUser: 200000
 
-# Policy mode — `enforce` per MEET-2026-05-12 T1.12 (post-Wave 1 deliverable).
-# Operator action required: run pre-flight via `infra/scripts/check-prod-vap-readiness.sh`
-# before flipping this value to `enforce`. The pre-flight verifies:
-#   1. All running prod pods have valid cosign signatures (no unsigned images)
-#   2. No `kubectl set image` cron exists in any prod workflow
-#   3. ArgoCD apps are all Synced (no pending image updates that would fail VAP)
-# After flip: monitor `loopzero_admission_denied_total` for 24h before declaring
-# T1.12 complete. Rollback path: `policyMode: warn` + helmfile sync.
+# Policy mode — `enforce` per MEET-2026-05-12 D2 mitigation #4 (T1.2 #4)
+# and T1.12 pre-flight protocol. Engineering side authorized by
+# MEET-ASYNC-AMENDMENT-2026-05-12-002 (sponsor ratified 2026-05-12).
 #
-# noRuntimeImageMutations VAP-specific config: failurePolicy and action
-# tracked separately because the VAP needs both elevated to fully enforce.
-policyMode: warn  # OPERATOR ACTION: flip to "enforce" per T1.12 pre-flight checklist
+# OPERATIONAL GATE before `helmfile -e prod sync` applies these values:
+#   1. Run pre-flight: KUBECONFIG=~/.kube/prod \
+#        infra/scripts/check-prod-vap-readiness.sh
+#      Must return exit 0 (all 4 checks PASS):
+#        - All prod pods have valid cosign signatures
+#        - No `kubectl set image` cron exists in any prod workflow
+#        - ArgoCD apps all Synced
+#        - Zero VAP Warn events in last 7 days
+#   2. Maintenance window scheduled (prefer low-traffic period)
+#   3. Watch terminal ready: kubectl get events -A \
+#        --field-selector=reason=ValidationFailure --watch
+#
+# Runbook: .claude/knowledge-base/concepts/operations/admission-deny-mode-cutover.md
+#
+# Rollback path (recovery < 2 min): revert this commit + helmfile sync.
+#
+# Post-flip: monitor `loopzero_admission_denied_total` for 24h. Zero unexpected
+# denials = mitigation #4 closed; Platform-Security D2 veto fully lifted.
+policyMode: enforce  # MEET-ASYNC-AMENDMENT-2026-05-12-002 ratified
 noRuntimeImageMutations: true  # VAP active in prod (was implicit; now explicit)
-noRuntimeImageMutationsAction: Warn  # OPERATOR ACTION: flip to "Deny" per T1.12 + EC-NEW-4
-noRuntimeImageMutationsFailurePolicy: Ignore  # OPERATOR ACTION: flip to "Fail" per T1.12 + EC-NEW-4
+noRuntimeImageMutationsAction: Deny  # MEET-ASYNC-AMENDMENT-2026-05-12-002 ratified
+noRuntimeImageMutationsFailurePolicy: Fail  # MEET-ASYNC-AMENDMENT-2026-05-12-002 ratified
 
 # In-cluster Postgres — DISABLED for LoopZero Cloud prod (uses DO Managed HA PG cluster).
 inClusterPostgres: false

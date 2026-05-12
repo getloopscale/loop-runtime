@@ -21,7 +21,11 @@ set -euo pipefail
 
 REPO_ROOT="$(git rev-parse --show-toplevel 2>/dev/null || echo "$(cd "$(dirname "$0")/../.." && pwd)")"
 VALUES_FILE="$REPO_ROOT/infra/helm/admission-policies/values.yaml"
-ADR_DIR="$REPO_ROOT/docs/meetings/adr"
+# Canonical ADR location post-2026-05-11 docs cleanup: knowledge-base.
+ADR_DIR="$REPO_ROOT/.claude/knowledge-base/decisions"
+MEETING_DIR="$REPO_ROOT/.claude/knowledge-base/meetings"
+# Legacy fallback during transition (will be removed once all gates migrate).
+LEGACY_ADR_DIR="$REPO_ROOT/docs/meetings/adr"
 
 if [ ! -f "$VALUES_FILE" ]; then
     echo "PASS — admission-policies/values.yaml not found (chart not present in this snapshot)."
@@ -50,28 +54,46 @@ if [ "$mode" = "warn" ]; then
 fi
 
 if [ "$mode" = "enforce" ]; then
-    # Look for an ADR referencing the cutover.
-    if [ -d "$ADR_DIR" ] && grep -lqr "T8.6\|find_infra_008\|clusterimagepolicy.*enforce\|deny-flip" "$ADR_DIR"/*.md 2>/dev/null; then
-        echo "PASS — clusterImagePolicy.mode is 'enforce' with ADR sign-off."
+    # Look for an ADR OR async-amendment record referencing the cutover.
+    # Patterns: legacy T8.6/find_infra_008 (ADR-0050), MEET-2026-05-12 D2
+    # mitigation #4, or any MEET-ASYNC-AMENDMENT referencing T1.2 #4.
+    if [ -d "$ADR_DIR" ] && grep -lqr "T8.6\|find_infra_008\|clusterimagepolicy.*enforce\|deny-flip\|deny-mode\|T1.2.*#4\|mitigation #4" "$ADR_DIR"/*.md 2>/dev/null; then
+        echo "PASS — clusterImagePolicy.mode is 'enforce' with ADR sign-off (knowledge-base/decisions)."
+        exit 0
+    fi
+    if [ -d "$MEETING_DIR" ] && grep -lqr "deny-mode\|policyMode.*enforce\|T1.2.*#4\|mitigation #4" "$MEETING_DIR"/*.md 2>/dev/null; then
+        echo "PASS — clusterImagePolicy.mode is 'enforce' with MEET sign-off (knowledge-base/meetings)."
+        exit 0
+    fi
+    if [ -d "$LEGACY_ADR_DIR" ] && grep -lqr "T8.6\|find_infra_008" "$LEGACY_ADR_DIR"/*.md 2>/dev/null; then
+        echo "PASS — clusterImagePolicy.mode is 'enforce' with legacy ADR sign-off (docs/meetings/adr/)."
+        echo "       Recommend migrating to .claude/knowledge-base/decisions/ per 2026-05-11 doc cleanup."
         exit 0
     fi
     cat <<EOF >&2
-FAIL — T8.6 governance violation
-================================
+FAIL — clusterImagePolicy.mode governance violation
+====================================================
 
-clusterImagePolicy.mode is set to 'enforce' but no ADR references the
-find_infra_008 cutover. The deny-flip is a production-impacting change
+clusterImagePolicy.mode is set to 'enforce' but no ADR or MEET record
+references the cutover. The deny-flip is a production-impacting change
 (unsigned images get REJECTED at admission) and MUST land with:
 
-  1. ADR in docs/meetings/adr/ referencing T8.6 / find_infra_008 / Sprint 9.
-  2. Rollback runbook documenting the revert procedure.
-  3. Coordinated dual-signing window (warn + enforce side-by-side ≥ 7 days).
+  1. ADR in .claude/knowledge-base/decisions/ referencing:
+       - T8.6 / find_infra_008 (legacy keyword), OR
+       - "deny-mode" / "policyMode enforce", OR
+       - "T1.2 #4" / "mitigation #4" (MEET-2026-05-12 D2)
+  2. OR a MEET-ASYNC-AMENDMENT record in
+     .claude/knowledge-base/meetings/ with the same keywords.
+  3. Rollback runbook documenting the revert procedure.
+  4. Coordinated dual-signing window (warn + enforce side-by-side ≥ 7 days)
+     OR explicit MEET sponsor authorization waiving the window.
 
 Either:
-  - Revert mode to 'warn' until Sprint 9 readiness review approves cutover.
-  - Add the ADR to docs/meetings/adr/ with the references above.
+  - Revert mode to 'warn' until governance sign-off lands.
+  - Add the ADR / MEET record with the references above.
 
-See: docs/plans/deep-review-remediation-plan.md (T8.6 + ADR-0049).
+See: MEET-2026-05-12 D2 mitigation #4 and
+     concepts/operations/admission-deny-mode-cutover.md (runbook).
 EOF
     exit 1
 fi
