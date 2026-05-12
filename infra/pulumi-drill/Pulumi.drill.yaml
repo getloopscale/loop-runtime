@@ -5,6 +5,6 @@ config:
   loopzero-drill:region: sfo3
   loopzero-drill:cellName: cell-drill
   loopzero-drill:nodeCount: "2"
-  loopzero-drill:k8sVersion: 1.32.13
+  loopzero-drill:k8sVersion: 1.33.9-do.6
   loopzero-drill:cfAccountId:
-    secure: v1:EEVY5abPqScMgLdd:LKR/MighukAFopY2QhYMW1wC2It4G/PZabyq
+    secure: v1:OX3Yr/J8t9G06xUf:H7mS42qEH5IQamBRkyQjilMIl5pGXAMW+2EzxrPLcTAfivVEf+aQuJB3BZoEaO4k
