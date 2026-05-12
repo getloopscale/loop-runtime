@@ -93,11 +93,11 @@ cd infra/pulumi && npx pulumi preview --stack dev # Preview
 | Auth | Ory Kratos + Ory Hydra + Redis |
 | Edge | Cloudflare Tunnel + Worker + KV |
 | Autoscaling | KEDA 2.16.1 + HTTP Add-on 0.8.0 |
-| IaC | **Bipartite SoT formalizado per MEET-2026-05-12 D3.** **L1 (Pulumi):** 5 projetos — `pulumi/` (DO+CF cloud primitives), `pulumi-infra/` (multi-cluster topology), `pulumi-platform/` (bootstrap 32 Helm releases), `pulumi-control-plane/` (STUB com 16 TODOs — W1.8 deleta ou converte em ADR pointer), `pulumi-shared/` (contracts/interfaces). **L2 (Helmfile):** orchestrator de 32 Helm releases (loopzero-api, loopzero-cloud, Kratos, Hydra, ArgoCD, Gitea, MinIO, etc.) — **L2 é o SoT real desses workloads**, não Pulumi. **L3 (ArgoCD):** Day-2 GitOps para tenant workloads from Gitea. **Decision tree para on-call:** is it a cloud resource? → L1 Pulumi. Is it a K8s platform workload? → L2 Helmfile. Is it a tenant app? → L3 ArgoCD. |
+| IaC | **Bipartite SoT formalizado per MEET-2026-05-12 D3.** **L1 (Pulumi):** 6 projetos — `pulumi/` (DO+CF cloud primitives), `pulumi-infra/` (multi-cluster topology), `pulumi-platform/` (bootstrap 32 Helm releases), `pulumi-control-plane/` (STUB com 16 TODOs — W1.8 deleta ou converte em ADR pointer), `pulumi-drill/` (DR drill stack — separate state bucket `loopzero-drill-pulumi-state`, used for chaos+maturity validation per active-execution-plan §2.2 lifecycle; LIVE-validated + destroyed iter 23-24), `pulumi-shared/` (contracts/interfaces). **L2 (Helmfile):** orchestrator de 32 Helm releases (loopzero-api, loopzero-cloud, Kratos, Hydra, ArgoCD, Gitea, MinIO, etc.) — **L2 é o SoT real desses workloads**, não Pulumi. **L3 (ArgoCD):** Day-2 GitOps para tenant workloads from Gitea. **Decision tree para on-call:** is it a cloud resource? → L1 Pulumi. Is it a K8s platform workload? → L2 Helmfile. Is it a tenant app? → L3 ArgoCD. |
 | Local clusters | k3d × 4 (mgmt, build, workload, runtime-2) |
 | Dev loop | Tilt + Taskfile (2929 lines across 7 files) |
 | Helm | 16 custom bootstrap charts + 49 value files across 34 chart dirs (`infra/helm/`) + 13 published charts (`charts/`) |
-| CI/CD | GitHub Actions (35 workflows) |
+| CI/CD | GitHub Actions (40 workflows) |
 | Migrations | golang-migrate (forward-only `.up.sql`) |
 
 ---
@@ -117,7 +117,7 @@ loopzero/
 │   ├── k3d/               ← 4 cluster configs (mgmt, build, workload, runtime-2)
 │   ├── cloudflare/        ← CF Worker source (worker.mjs)
 │   └── tests/             ← e2e/ (Ginkgo), chaos/, unit/, load/
-└── .github/workflows/     ← 35 workflows: ci, build-images, infra-*, release, load-test, load-test-pr, helm-charts, cell2-soaks, operator-split-soak, pkg-soak, multi-cell, cli-commands, cross-validation-weekly, adversarial-spotcheck, platform-health-7day-watch, status-pr-gate, status-refresh, decay-scan, charts-drift-cron, velero-backup-check, pulumi-*, integration-tests, parity-validation, reusable-*
+└── .github/workflows/     ← 40 workflows: ci, build-images, infra-*, release, load-test, load-test-pr, helm-charts, cell2-soaks, chaos-suite, cosign-rotation-drill, decisions-stability-check, operator-split-soak, pkg-soak, multi-cell, cli-commands, cross-validation-weekly, adversarial-spotcheck, platform-health-7day-watch, prod-image-tag-check, pulumi-reconstruction-drill, status-pr-gate, status-refresh, decay-scan, charts-drift-cron, velero-backup-check, pulumi-*, integration-tests, parity-validation, reusable-*
 ```
 
 Use `Glob` / `git ls-files` for current details.
