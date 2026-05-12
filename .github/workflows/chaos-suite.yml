@@ -1,0 +1,135 @@
+---
+# Chaos Mesh weekly resilience suite (§3.C.1 of active-execution-plan).
+#
+# Per ADR D5 (preserved from chaos-mesh-experiments-plan, now superseded):
+# weekly cron is the GameDay approach. Validates 12 failure scenarios
+# (9 existing + 3 new from §3.B) against k3d clusters with SLO evidence
+# capture. Auto-creates issue on failure (per cell2-soaks.yml pattern).
+#
+# The suite is gated by LOOPZERO_CHAOS_TEST=1 and runs only after
+# `task setup` brings up the 4 k3d clusters + chaos-mesh release is
+# active (helmfile env override `installChaosMesh: true`).
+
+name: Chaos Suite (weekly resilience)
+
+on:
+  schedule:
+    # Sunday 03:00 UTC — 1h offset from cell2-soaks (02:00 UTC) so the
+    # two workflows don't compete for runner resources OR for cluster
+    # state. Both are weekly resilience signals.
+    - cron: '0 3 * * 0'
+  workflow_dispatch:
+    inputs:
+      scenarios:
+        description: 'Which scenarios (regex passed to go test -run)'
+        type: string
+        required: false
+        default: ''
+
+concurrency:
+  group: chaos-suite-${{ github.ref }}
+  cancel-in-progress: false  # never cancel a running chaos run
+
+permissions:
+  contents: read
+  issues: write  # auto-issue on failure (cell2-soaks pattern)
+
+jobs:
+  chaos:
+    name: Chaos Mesh validation (12 scenarios)
+    runs-on: ubuntu-latest
+    timeout-minutes: 90  # 30min setup + 30min chaos + 30min buffer
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+
+      - name: Setup Go
+        uses: actions/setup-go@0aaccfd150d50ccaeb58ebd88d36e91967a5f35b # v5.4.0
+        with:
+          go-version: '1.25'
+          cache: true
+
+      - name: Install k3d + helm + helmfile
+        run: |
+          curl -s https://raw.githubusercontent.com/k3d-io/k3d/main/install.sh | bash
+          curl -fsSL https://raw.githubusercontent.com/helm/helm/main/scripts/get-helm-3 | bash
+          curl -fsSL https://github.com/helmfile/helmfile/releases/download/v1.0.0/helmfile_1.0.0_linux_amd64.tar.gz \
+            | tar -xz -C /tmp && sudo mv /tmp/helmfile /usr/local/bin/
+          k3d version
+          helm version
+          helmfile --version
+
+      - name: Bootstrap k3d clusters
+        run: task setup
+        env:
+          LOOPZERO_INSTALL_CHAOS_MESH: 'true'
+
+      - name: Verify chaos-mesh ready
+        run: |
+          kubectl --context k3d-loopzero-mgmt -n chaos-mesh wait \
+            --for=condition=ready pod \
+            -l app.kubernetes.io/component=controller-manager \
+            --timeout=300s
+
+      - name: Mark chaos window active (Prometheus inhibit)
+        run: |
+          kubectl --context k3d-loopzero-mgmt -n loopzero-system create configmap \
+            loopzero-chaos-window \
+            --from-literal=marker=active \
+            --dry-run=client -o yaml | \
+          kubectl --context k3d-loopzero-mgmt apply -f -
+          kubectl --context k3d-loopzero-mgmt -n loopzero-system annotate configmap \
+            loopzero-chaos-window loopzero.io/chaos-window=active --overwrite
+
+      - name: Run chaos suite
+        run: |
+          cd infra/tests
+          LOOPZERO_CHAOS_TEST=1 go test -v -timeout 30m ./chaos/... \
+            ${{ inputs.scenarios != '' && format('-run {0}', inputs.scenarios) || '' }}
+        env:
+          KUBECONFIG: /home/runner/.kube/config
+
+      - name: Clear chaos window
+        if: always()
+        run: |
+          kubectl --context k3d-loopzero-mgmt -n loopzero-system annotate configmap \
+            loopzero-chaos-window loopzero.io/chaos-window- --overwrite || true
+
+      - name: Capture SLO evidence
+        if: always()
+        run: |
+          mkdir -p artifacts/
+          kubectl --context k3d-loopzero-mgmt -n loopzero-system logs \
+            -l app=loopzero-api --since=1h --tail=2000 > artifacts/loopzero-api.log || true
+          kubectl --context k3d-loopzero-mgmt get events -A \
+            --sort-by='.lastTimestamp' > artifacts/events.txt || true
+
+      - name: Upload artifacts
+        if: always()
+        uses: actions/upload-artifact@65c4c4a1ddee5b72f698fdd19549f0f0fb45cf08 # v4.6.0
+        with:
+          name: chaos-suite-${{ github.run_id }}
+          path: artifacts/
+          retention-days: 30
+
+      - name: Auto-issue on failure
+        if: failure()
+        uses: actions/github-script@60a0d83039c74a4aee543508d2ffcb1c3799cdea # v7.0.1
+        with:
+          script: |
+            const title = `Chaos Suite failure — ${context.runId} (${new Date().toISOString().slice(0,10)})`;
+            const body = [
+              `Weekly chaos suite failed.`,
+              ``,
+              `**Run:** ${context.serverUrl}/${context.repo.owner}/${context.repo.repo}/actions/runs/${context.runId}`,
+              `**Artifacts:** uploaded as \`chaos-suite-${context.runId}\` (30d retention)`,
+              ``,
+              `Inspect artifacts for loopzero-api logs + cluster events.`,
+              `Manual repro: \`task setup && LOOPZERO_CHAOS_TEST=1 go test ./infra/tests/chaos/...\``,
+            ].join('\n');
+            await github.rest.issues.create({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              title: title,
+              body: body,
+              labels: ['chaos', 'resilience', 'auto-issue'],
+            });
