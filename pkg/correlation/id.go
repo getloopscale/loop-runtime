@@ -1,6 +1,15 @@
 // SPDX-License-Identifier: Apache-2.0
 // Copyright 2025-2026 The LoopZero Authors
 
+// Package correlation provides correlation ID context-key utilities shared
+// across api/ and operators/.
+//
+// Audit gap M08 #10 / §6.C.1b (active-execution-plan): originally lived under
+// `api/internal/correlation`, but the operator-side annotation consumption
+// (ApplicationReconciler reading `loopzero.io/correlation-id` and propagating
+// into ctx for downstream audit_log writes) needed the same context-key.
+// Moved to pkg/ so both binaries import a single source of truth — no
+// duplicated helper, no risk of ctxKey types diverging silently.
 package correlation
 
 import (

@@ -21,6 +21,7 @@ import (
 	"github.com/loopzero/loopzero/operators/internal/conditions"
 	"github.com/loopzero/loopzero/operators/internal/constants"
 	"github.com/loopzero/loopzero/operators/internal/shared"
+	"github.com/loopzero/loopzero/pkg/correlation"
 	"github.com/loopzero/loopzero/pkg/naming"
 )
 
@@ -86,6 +87,16 @@ func (r *ApplicationReconciler) Reconcile(ctx context.Context, req ctrl.Request)
 		}
 		return ctrl.Result{}, err
 	}
+
+	// Audit gap M08 #10 / §6.C.1b: when the CR carries the
+	// `loopzero.io/correlation-id` annotation (set by the API during
+	// `EnsureLoopZeroApplication` for HTTP-driven flows), inject it into the
+	// reconcile context so downstream audit_log writes + structured logs
+	// trace back to the originating HTTP request. Background reconciles
+	// (re-queue, watch event from non-API source) leave the annotation
+	// empty and the ctx unchanged — `correlation.WithID` is a no-op on
+	// empty string.
+	ctx = correlation.WithID(ctx, app.GetAnnotations()["loopzero.io/correlation-id"])
 
 	// T5.1 of deep-review-2026-05-10-remediation-plan
 	// (find_arch_app_controller_double_write MEDIUM): the deferred

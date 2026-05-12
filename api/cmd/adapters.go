@@ -10,7 +10,7 @@ import (
 	"github.com/loopzero/loopzero/api/internal/adapters"
 	"github.com/loopzero/loopzero/api/internal/admission"
 	"github.com/loopzero/loopzero/api/internal/config"
-	"github.com/loopzero/loopzero/api/internal/correlation"
+	"github.com/loopzero/loopzero/pkg/correlation"
 	"github.com/loopzero/loopzero/api/internal/db"
 	"github.com/loopzero/loopzero/api/internal/k8s"
 	"github.com/loopzero/loopzero/api/internal/routes"
