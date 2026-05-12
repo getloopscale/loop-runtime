@@ -45,7 +45,8 @@ const k8sVersion = config.require("k8sVersion");
 const drillZone = new cloudflare.Zone(
   "drill-zone",
   {
-    name: domain,
+    // @pulumi/cloudflare v5 renamed `name` -> `zone`. Finding 2026-05-12 iter 13.
+    zone: domain,
     accountId: config.requireSecret("cfAccountId"),
     type: "full",
   },
