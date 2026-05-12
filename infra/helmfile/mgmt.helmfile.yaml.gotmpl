@@ -445,6 +445,20 @@ releases:
       - ../helm/loopzero-cloud/values-standalone-multi.yaml
 {{- end }}
 
+  # Wave 90: Chaos engineering (active-execution-plan §3.A.4, iter 2)
+  # Sprint 8 T0.3 installed CRDs via separate path; this release wires the
+  # controller via the `loopzero-chaos-mesh` wrapper chart (infra/helm/chaos-mesh)
+  # so all clusters bootstrap the controller consistently. Opt-in: only
+  # installs when `installChaosMesh: true` in environment values. Default
+  # false so prod + dev don't carry the controller unnecessarily; chaos
+  # validation env opts in explicitly.
+  - name: chaos-mesh
+    namespace: chaos-mesh
+    chart: ../helm/chaos-mesh
+    installed: {{ .Values | get "installChaosMesh" false }}
+    values:
+      - ../helm/chaos-mesh/values.yaml
+
   # Wave 99: Validation
   - name: smoke-test
     namespace: loopzero-system

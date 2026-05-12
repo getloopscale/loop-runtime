@@ -95,13 +95,40 @@ func checkAPIHealth() error {
 }
 
 // checkMetricExists verifies a Prometheus metric is registered.
+//
+// EC-5 fix (active-execution-plan §3.A.3): the original single-shot wget
+// flakes during chaos windows where the API pod is mid-restart. Retries
+// up to 3 attempts with 2s backoff so a transient miss doesn't fail the
+// whole Context. After 3 attempts, the assertion fails loud — a missing
+// metric over 6s+ is a real bug.
 func checkMetricExists(metricName string) {
-	out, err := kubectl("exec", "-n", "loopzero-system",
-		"deploy/loopzero-api", "--",
-		"wget", "-qO-", "-T", "5", "http://localhost:8080/metrics")
-	Expect(err).NotTo(HaveOccurred(), "failed to fetch metrics")
-	Expect(out).To(ContainSubstring(metricName),
-		"metric %s not found in /metrics output", metricName)
+	const maxAttempts = 3
+	const backoff = 2 * time.Second
+
+	var lastOut string
+	var lastErr error
+
+	for attempt := 1; attempt <= maxAttempts; attempt++ {
+		out, err := kubectl("exec", "-n", "loopzero-system",
+			"deploy/loopzero-api", "--",
+			"wget", "-qO-", "-T", "5", "http://localhost:8080/metrics")
+		if err == nil && strings.Contains(out, metricName) {
+			return // success
+		}
+		lastOut = out
+		lastErr = err
+		if attempt < maxAttempts {
+			GinkgoWriter.Printf("  checkMetricExists(%s) attempt %d/%d transient miss; retrying in %s\n",
+				metricName, attempt, maxAttempts, backoff)
+			time.Sleep(backoff)
+		}
+	}
+
+	Expect(lastErr).NotTo(HaveOccurred(),
+		"failed to fetch metrics after %d attempts: %s", maxAttempts, lastOut)
+	Expect(lastOut).To(ContainSubstring(metricName),
+		"metric %s not found in /metrics output after %d attempts",
+		metricName, maxAttempts)
 }
 
 var _ = Describe("Chaos Engineering", func() {

@@ -50,8 +50,13 @@ spec:
       labelSelectors:
         "app": "loopzero-api"
   direction: to
+  # EC-6 fix (active-execution-plan §3.A.1, iter 2): the previous
+  # `${PG_PRIVATE_HOST}` literal was never substituted (applyChaos uses
+  # plain `kubectl apply`, no envsubst). Result: NetworkChaos targeted
+  # the literal string, fault never injected, scenario silently no-op'd.
+  # Chaos suite per ADR D5 runs against LOCAL k3d weekly, where PG is
+  # the in-cluster Service DNS. For production-equivalent chaos, deploy
+  # a parameterized override (future work — Section 3.B follow-up).
   externalTargets:
-    # DO Managed PG private endpoint. Replace with actual hostname
-    # at apply time via envsubst.
-    - "${PG_PRIVATE_HOST}"
+    - "postgresql.loopzero-system.svc.cluster.local"
   duration: "180s"
