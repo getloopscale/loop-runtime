@@ -31,6 +31,15 @@ environments:
     # 1 host (mgmt + build + workload). Used for local E2E validation.
     values:
       - environments/standalone-multi.yaml
+  drill:
+    # MEET-ASYNC-AMENDMENT-2026-05-12-003 + active-execution-plan §2.2 —
+    # pre-prod chaos + maturity validation on DOKS cluster provisioned by
+    # infra/pulumi-drill/ stack. Bootstrap order:
+    #   1. cd infra/pulumi-drill && pulumi up
+    #   2. Configure kubeconfig from stack output
+    #   3. helmfile -f mgmt.helmfile.yaml.gotmpl -e drill sync
+    values:
+      - environments/drill.yaml
 
 ---
 helmDefaults:
