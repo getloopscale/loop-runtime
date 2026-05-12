@@ -4,6 +4,10 @@ T8.5b of deep-review-remediation-plan (find_infra_007 MEDIUM).
 Per-component egress allow rules + optional default-deny-egress for
 loopzero-system. Source of truth for the endpoint list:
 
+  .claude/knowledge-base/concepts/operations/network-policy-egress-inventory.md
+  (T8.5a runbook — restored 2026-05-12 from commit 547a132d; previously
+   silently swept away by docs/ cleanup in commit fc1793dd.)
+
 Apply order (EC-5):
   1. loopzeroSystemAllowEgress=true — additive, safe to roll out NOW.
   2. defaultDenyEgress=true — flip per cell after T8.5c staging soak.
