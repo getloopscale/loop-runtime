@@ -4,109 +4,18 @@
 package logging
 
 import (
-	"bytes"
 	"context"
-	"encoding/json"
 	"io"
 	"log/slog"
 	"testing"
 )
 
-func TestFromContext_WithExtractor(t *testing.T) {
-	// Register a mock extractor
-	RegisterTraceExtractor(func(_ context.Context) (string, string) {
-		return "abc123trace", "def456span"
-	})
-	defer RegisterTraceExtractor(nil) // cleanup
-
-	var buf bytes.Buffer
-	logger := NewLogger("test", &buf)
-	logger = FromContext(context.Background(), logger)
-	logger.Info("traced log")
-
-	var parsed map[string]interface{}
-	if err := json.Unmarshal(buf.Bytes(), &parsed); err != nil {
-		t.Fatalf("JSON parse error: %v", err)
-	}
-
-	if parsed["trace_id"] != "abc123trace" {
-		t.Errorf("expected trace_id 'abc123trace', got %v", parsed["trace_id"])
-	}
-	if parsed["span_id"] != "def456span" {
-		t.Errorf("expected span_id 'def456span', got %v", parsed["span_id"])
-	}
-}
-
-func TestFromContext_WithoutExtractor(t *testing.T) {
-	RegisterTraceExtractor(nil) // ensure no extractor
-
-	var buf bytes.Buffer
-	logger := NewLogger("test", &buf)
-	logger = FromContext(context.Background(), logger)
-	logger.Info("no trace")
-
-	var parsed map[string]interface{}
-	if err := json.Unmarshal(buf.Bytes(), &parsed); err != nil {
-		t.Fatalf("JSON parse error: %v", err)
-	}
-
-	if _, ok := parsed["trace_id"]; ok {
-		t.Error("expected no trace_id without extractor")
-	}
-}
-
-func TestFromContext_ZeroTraceID(t *testing.T) {
-	RegisterTraceExtractor(func(_ context.Context) (string, string) {
-		return "00000000000000000000000000000000", "0000000000000000"
-	})
-	defer RegisterTraceExtractor(nil)
-
-	var buf bytes.Buffer
-	logger := NewLogger("test", &buf)
-	logger = FromContext(context.Background(), logger)
-	logger.Info("zero trace")
-
-	var parsed map[string]interface{}
-	if err := json.Unmarshal(buf.Bytes(), &parsed); err != nil {
-		t.Fatalf("JSON parse error: %v", err)
-	}
-
-	if _, ok := parsed["trace_id"]; ok {
-		t.Error("expected no trace_id for zero trace ID")
-	}
-}
-
-func TestFromContext_NilLogger(t *testing.T) {
-	result := FromContext(context.Background(), nil)
-	if result != nil {
-		t.Error("expected nil for nil logger")
-	}
-}
-
-func TestFromContext_WithCorrelationID(t *testing.T) {
-	RegisterTraceExtractor(func(_ context.Context) (string, string) {
-		return "trace123", "span456"
-	})
-	defer RegisterTraceExtractor(nil)
-
-	var buf bytes.Buffer
-	logger := NewLogger("test", &buf)
-	logger = WithCorrelationID(logger, "corr-789")
-	logger = FromContext(context.Background(), logger)
-	logger.Info("full context")
-
-	var parsed map[string]interface{}
-	if err := json.Unmarshal(buf.Bytes(), &parsed); err != nil {
-		t.Fatalf("JSON parse error: %v", err)
-	}
-
-	if parsed["correlation_id"] != "corr-789" {
-		t.Errorf("expected correlation_id 'corr-789', got %v", parsed["correlation_id"])
-	}
-	if parsed["trace_id"] != "trace123" {
-		t.Errorf("expected trace_id 'trace123', got %v", parsed["trace_id"])
-	}
-}
+// Audit gap M04 #23 (active-execution-plan §6.F.1): the deprecated
+// package-level FromContext helper was removed along with its 5 dedicated
+// tests. The canonical replacement is (*ContextLogger).FromContext via
+// dependency injection (ADR-0034), exercised by the tests below.
+// RegisterTraceExtractor is still used by 4 main.go binaries and is
+// retained until a cross-binary DI refactor lands.
 
 // ---------------------------------------------------------------------------
 // T2.5 — ContextLogger explicit DI per ADR-0034.
@@ -171,20 +80,7 @@ func TestContextLogger_TwoInstancesIsolated(t *testing.T) {
 	}
 }
 
-func TestContextLogger_LegacyGlobalAPIStillWorks(t *testing.T) {
-	// Backward-compat regression guard: the deprecated global registry
-	// must keep working until the next major release.
-	RegisterTraceExtractor(func(ctx context.Context) (string, string) {
-		return "legacy-trace", "legacy-span"
-	})
-	defer RegisterTraceExtractor(nil) // reset for other tests
-
-	base := slog.New(slog.NewTextHandler(io.Discard, nil))
-	got := FromContext(context.Background(), base)
-	if got == nil {
-		t.Fatal("legacy FromContext should return a logger")
-	}
-	if got == base {
-		t.Error("legacy FromContext should enrich the logger when extractor is registered")
-	}
-}
+// TestContextLogger_LegacyGlobalAPIStillWorks was deleted along with the
+// FromContext deprecated package-level helper (audit gap M04 #23 closure).
+// The new canonical API is (*ContextLogger).FromContext, covered by the
+// TestContextLogger_FromContext_* family above.

@@ -7,6 +7,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+### Removed
+- Deprecated free functions removed from shared libraries — `pkg/logging.FromContext` and `pkg/naming.Labels` had zero call-sites and are deleted along with 8 dedicated tests (`TestFromContext_*` family + `TestLabels_*` family + `TestStandardLabels_AsMap_is_compatible_with_legacy_Labels`). Replacement APIs are `(*ContextLogger).FromContext` (per ADR-0034, dependency injection) and `StandardLabels{...}.AsMap()` (compile-time-safe typed labels). Build verified clean across api/, operators/, cloud/. `pkg/logging.RegisterTraceExtractor` is retained (4 active callers in operators/cmd main.go); a focused cross-binary DI refactor lands separately (active-execution-plan §6.F.1b). Audit gap M04 #23 partially closed. (#audit-2026-05-11 §6.F.1)
+
 ### Security
 - Stripe checkout fail-OPEN privilege escalation eliminated — `cloud/internal/billing/webhook.go::handleCheckoutCompleted` previously hard-coded `plan := "pro"` and included `plan = $N` in the UPDATE statement, with comment "Safe default — subscription.updated will refine this". If `customer.subscription.updated` was delayed, lost, or never arrived (network partition, Stripe outage, adversarial timing race between events), the tenant ended up at the Pro tier without having paid for it. Fix: removed `plan = $N` from the UPDATE; only `stripe_subscription_id` and `status='active'` are written. `plan` remains at its prior value (typically `starter` from initial provisioning); `customer.subscription.updated` is now the single authoritative path that maps `price_id → plan` tier. Added 3 regression tests in new `webhook_test.go`. Audit gap M10 #24 closed. (#audit-2026-05-11 §6.C.10)
 

@@ -415,38 +415,15 @@ func TestCertSecretName_empty_hostname_returns_error(t *testing.T) {
 }
 
 // ---------------------------------------------------------------------------
-// Labels
+// Labels (deprecated free function) — REMOVED per audit gap M04 #23.
+//
+// The legacy `Labels(tenant, project, env)` free function is gone; the
+// canonical API is `StandardLabels{...}.AsMap()`. Its dedicated tests
+// (TestLabels_contains_required_keys + TestLabels_empty_values_are_allowed
+// + TestStandardLabels_AsMap_is_compatible_with_legacy_Labels) were deleted
+// with the function. The required-keys invariant is now exercised by
+// TestStandardLabels_AsMap_returns_canonical_shape below.
 // ---------------------------------------------------------------------------
-
-func TestLabels_contains_required_keys(t *testing.T) {
-	labels := Labels("acme", "backend", "production")
-	expected := map[string]string{
-		"loopzero.io/tenant":      "acme",
-		"loopzero.io/project":     "backend",
-		"loopzero.io/environment": "production",
-		"loopzero.io/managed-by":  "loopzero",
-	}
-	for k, v := range expected {
-		got, ok := labels[k]
-		if !ok {
-			t.Errorf("missing label %q", k)
-			continue
-		}
-		if got != v {
-			t.Errorf("label %q = %q, want %q", k, got, v)
-		}
-	}
-}
-
-func TestLabels_empty_values_are_allowed(t *testing.T) {
-	labels := Labels("acme", "", "")
-	if labels["loopzero.io/tenant"] != "acme" {
-		t.Errorf("tenant label should be set")
-	}
-	if labels["loopzero.io/project"] != "" {
-		t.Errorf("project label should be empty")
-	}
-}
 
 // ---------------------------------------------------------------------------
 // StandardLabels (T1.5 — typed labels per gate PKG-G02)
@@ -501,20 +478,8 @@ func TestStandardLabels_AsMap_independent_from_struct(t *testing.T) {
 	}
 }
 
-func TestStandardLabels_AsMap_is_compatible_with_legacy_Labels(t *testing.T) {
-	// Backward-compat invariant: same shape, same values.
-	sl := StandardLabels{Tenant: "acme", Project: "backend", Environment: "production"}
-	got := sl.AsMap()
-	legacy := Labels("acme", "backend", "production")
-	if len(got) != len(legacy) {
-		t.Fatalf("shape mismatch: AsMap() has %d keys, Labels() has %d", len(got), len(legacy))
-	}
-	for k, v := range legacy {
-		if got[k] != v {
-			t.Errorf("compat drift: AsMap()[%q] = %q, Labels()[%q] = %q", k, got[k], k, v)
-		}
-	}
-}
+// TestStandardLabels_AsMap_is_compatible_with_legacy_Labels was deleted
+// with the deprecated Labels() function (audit gap M04 #23 closure).
 
 // ---------------------------------------------------------------------------
 // GitRepoBindingName

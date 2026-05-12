@@ -282,16 +282,6 @@ func (l StandardLabels) AsMap() map[string]string {
 	}
 }
 
-// Labels returns the standard LoopZero labels for a Kubernetes resource.
-// All labels use the "loopzero.io/" prefix.
-//
-// Deprecated: prefer StandardLabels{...}.AsMap() — provides compile-time
-// safety against typos and reuses the typed constants. Backward-compat
-// kept until next major release.
-func Labels(tenant, project, env string) map[string]string {
-	return StandardLabels{Tenant: tenant, Project: project, Environment: env}.AsMap()
-}
-
 // ImageTag returns the container image reference for a built app.
 // Format: "{registry}/{tenant}/{project}-{app}:{commitSHA}"
 //

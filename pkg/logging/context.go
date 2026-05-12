@@ -95,29 +95,3 @@ func RegisterTraceExtractor(fn TraceExtractor) {
 	globalExtractor = fn
 }
 
-// FromContext returns a child logger enriched with trace context from ctx.
-//
-// Deprecated: prefer (*ContextLogger).FromContext via dependency
-// injection (per ADR-0034). This package-level helper consults the
-// global registry which races across goroutines that swap the
-// extractor at runtime.
-func FromContext(ctx context.Context, logger *slog.Logger) *slog.Logger {
-	if logger == nil {
-		return nil
-	}
-	extractorMu.RLock()
-	fn := globalExtractor
-	extractorMu.RUnlock()
-	if fn == nil {
-		return logger
-	}
-	traceID, spanID := fn(ctx)
-	if traceID == "" || traceID == "00000000000000000000000000000000" {
-		return logger
-	}
-	attrs := []any{"trace_id", traceID}
-	if spanID != "" && spanID != "0000000000000000" {
-		attrs = append(attrs, "span_id", spanID)
-	}
-	return logger.With(attrs...)
-}
