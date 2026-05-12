@@ -7,6 +7,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+### Changed
+- ExposedRoute state machine declares its terminal set explicitly — `pkg/statemachine/exposedroute.go::NewExposedRouteMachine` now sets `Terminal: []State{}` instead of relying on the omitted-field nil slice. A 6-line comment documents the design intent: ExposedRoute is intentionally non-terminal because the CR is garbage-collected via ownerRef when its parent LoopZeroApplication is deleted; there is no symbolic "Cleaned" state. Distinguishes "no terminal by design" from "Terminal field forgotten" during code review and parity checks. State machine test suite GREEN. Audit gap M11 #26 closed. (#audit-2026-05-11 §6.F.3)
+- Knowledge-base index.md enumerates the 4 rotation runbooks — previously only the genre-level link to `concepts/auth-billing/` and `concepts/supply-chain/` existed, leaving the runbooks (admin-key-rotation, service-auth-issuer-key-rotation, session-token-rotation, cosign-key-rotation) invisible to anyone scanning the index. Sub-bullets added with one-line descriptions and references to the audit gaps they close. Visibility-only change; no runbook content modified. Audit gaps M10 G5 + M07 #15 now fully reachable from the index. (#audit-2026-05-11 §6.D.1 §6.D.2)
+
 ### Removed
 - Deprecated free functions removed from shared libraries — `pkg/logging.FromContext` and `pkg/naming.Labels` had zero call-sites and are deleted along with 8 dedicated tests (`TestFromContext_*` family + `TestLabels_*` family + `TestStandardLabels_AsMap_is_compatible_with_legacy_Labels`). Replacement APIs are `(*ContextLogger).FromContext` (per ADR-0034, dependency injection) and `StandardLabels{...}.AsMap()` (compile-time-safe typed labels). Build verified clean across api/, operators/, cloud/. `pkg/logging.RegisterTraceExtractor` is retained (4 active callers in operators/cmd main.go); a focused cross-binary DI refactor lands separately (active-execution-plan §6.F.1b). Audit gap M04 #23 partially closed. (#audit-2026-05-11 §6.F.1)
 

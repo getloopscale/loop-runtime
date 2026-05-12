@@ -58,6 +58,14 @@ func NewExposedRouteMachine() *Machine {
 			// Failed → Pending (retry on next reconcile)
 			{From: ExposedRouteFailed, Event: ExposedRouteRetry, To: ExposedRoutePending},
 		},
-		// No terminal state — ExposedRoute is GC'd via ownerRef when parent dies.
+		// Audit gap M11 #26 fix: explicit empty Terminal set (instead of
+		// omitting the field). ExposedRoute is intentionally non-terminal —
+		// the CR is garbage-collected via ownerRef when its parent
+		// LoopZeroApplication is deleted, so the lifecycle has no symbolic
+		// "Cleaned" state. An explicit `[]State{}` makes the design intent
+		// visible to readers and to anyone running parity checks against
+		// the operator status reconcile, distinguishing "no terminal by
+		// design" from "Terminal field forgotten".
+		Terminal: []State{},
 	})
 }
