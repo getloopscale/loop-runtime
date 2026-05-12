@@ -49,13 +49,31 @@ type ScaleHandler struct {
 
 // NewScaleHandler creates a new ScaleHandler.
 //
-// Plan T2.2: `apply` parameter may be nil during transition (stub-202 fallback).
-// Production callers MUST pass a real ScaleApplyFunc for persistence.
+// `apply` MAY be nil for unit tests that exercise validation paths
+// without exercising persistence. Production wiring (api/cmd/setup_orchestrator.go)
+// MUST pass a non-nil ScaleApplyFunc — call `EnsureProductionWired` at
+// boot to assert this loudly (audit gap M02 #14 fix).
 func NewScaleHandler(projects ScaleProjectStore, apply ScaleApplyFunc, kedaEnabled bool) *ScaleHandler {
 	return &ScaleHandler{
 		projects:    projects,
 		apply:       apply,
 		kedaEnabled: kedaEnabled,
+	}
+}
+
+// EnsureProductionWired panics if the handler was constructed without a
+// non-nil ScaleApplyFunc. Call this from production boot (after wiring
+// everything) so a regression that drops the apply closure crashes the
+// process loudly at startup instead of silently degrading prod scaling
+// to a stub-202 no-op. Tests intentionally pass nil and must not call
+// this method.
+//
+// Audit gap M02 #14: previous code path could regress to stub silently
+// if a refactor dropped the apply closure. This guard makes such a
+// regression a fail-fast boot panic with a clear message.
+func (h *ScaleHandler) EnsureProductionWired() {
+	if h.apply == nil {
+		panic("ScaleHandler.apply is nil — production must wire a ScaleApplyFunc; scaling would silently no-op (audit M02 #14)")
 	}
 }
 
@@ -87,12 +105,18 @@ type scaleAutoscaling struct {
 
 // Scale handles POST /api/v1/projects/{name}/scale.
 //
-// STUB (pre-release): validates the scaling config and returns 202 Accepted with
-// status "acknowledged". Config is NOT persisted to DB — the user must also set
-// autoscaling in loopzero.yaml, and the config takes effect on the next `loopzero deploy`.
+// Audit gap M02 #14 closure (active-execution-plan §6.C.3): the comment
+// that previously described this handler as a "STUB" was outdated —
+// since plan T2.2 + B40 (commit `scale-b40-converged-20260506`), the
+// handler persists scaling config via the `apply` closure injected by
+// `api/cmd/setup_orchestrator.go::buildServerConfig`. The closure
+// wraps `db.PostgresScalingStore.Upsert` inside a withEnvironmentLock
+// transaction (Rule 6 satisfied).
 //
-// When DB persistence lands (environment_targets or scaling_config table), this
-// handler MUST acquire withEnvironmentLock (Rule 6) before writing.
+// The `apply == nil` fallback at the end exists ONLY for unit tests in
+// `scale_test.go` that exercise validation paths and don't need real
+// persistence. Production must wire a non-nil `apply` — see the
+// `EnsureProductionWired` panic on misconfiguration below.
 func (h *ScaleHandler) Scale(w http.ResponseWriter, r *http.Request) {
 	uc := middleware.GetUserContext(r.Context())
 	if uc == nil {

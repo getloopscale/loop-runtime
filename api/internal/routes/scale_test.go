@@ -9,6 +9,7 @@ import (
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
+	"strings"
 	"testing"
 )
 
@@ -301,4 +302,45 @@ func TestScale_RealPersistence_NoChange(t *testing.T) {
 	if resp.Status != "no_change" {
 		t.Errorf("want status=no_change, got %q", resp.Status)
 	}
+}
+
+// Audit gap M02 #14: production boot must panic if scaleHandler is
+// constructed without a real ScaleApplyFunc. Tests intentionally pass
+// nil and must NEVER call EnsureProductionWired — this test asserts
+// the guard works.
+func TestScaleHandler_EnsureProductionWired_PanicsOnNilApply(t *testing.T) {
+	projects := &fakeScaleProjectStore{}
+	h := NewScaleHandler(projects, nil, false)
+
+	defer func() {
+		r := recover()
+		if r == nil {
+			t.Fatal("EnsureProductionWired must panic on nil apply; got no panic")
+		}
+		msg, ok := r.(string)
+		if !ok {
+			t.Fatalf("panic payload not string: %T = %v", r, r)
+		}
+		// Specific substring so log search can correlate.
+		if !strings.Contains(msg, "audit M02 #14") {
+			t.Errorf("panic message missing audit ref; got %q", msg)
+		}
+	}()
+
+	h.EnsureProductionWired()
+}
+
+// Inverse: a handler wired with a real apply MUST NOT panic.
+func TestScaleHandler_EnsureProductionWired_NoPanicOnRealApply(t *testing.T) {
+	projects := &fakeScaleProjectStore{}
+	apply := func(_ context.Context, _ ScaleConfigInput) (bool, error) { return false, nil }
+	h := NewScaleHandler(projects, apply, false)
+
+	defer func() {
+		if r := recover(); r != nil {
+			t.Fatalf("EnsureProductionWired must NOT panic with real apply; got panic=%v", r)
+		}
+	}()
+
+	h.EnsureProductionWired()
 }
