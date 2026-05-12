@@ -8,7 +8,6 @@ import (
 	"crypto/tls"
 	"encoding/base64"
 	"encoding/json"
-	"errors"
 	"fmt"
 	"log/slog"
 	"net/http"
@@ -17,6 +16,7 @@ import (
 	"sync/atomic"
 	"time"
 
+	loopzeroerrors "github.com/loopzero/loopzero/pkg/errors"
 	corev1 "k8s.io/api/core/v1"
 	k8serrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -121,11 +121,12 @@ type KubeMintingConfig struct {
 // caller must invoke Start(ctx) to begin the polling loop. If the token in
 // the Secret is invalid (expired or empty), Start will mint immediately.
 func NewKubeMintingTokenProvider(cfg KubeMintingConfig) (*KubeMintingTokenProvider, error) {
+	// Audit gap M02 #13 fix: typed LoopZeroError for constructor validation.
 	if cfg.ArgoCDBaseURL == "" {
-		return nil, errors.New("argocd: ArgoCDBaseURL required")
+		return nil, loopzeroerrors.ErrMissingField.Wrap("argocd: ArgoCDBaseURL required")
 	}
 	if cfg.KubeClient == nil {
-		return nil, errors.New("argocd: KubeClient required")
+		return nil, loopzeroerrors.ErrMissingField.Wrap("argocd: KubeClient required")
 	}
 	if cfg.AccountName == "" {
 		cfg.AccountName = "loopzero-api"
@@ -303,7 +304,9 @@ func (p *KubeMintingTokenProvider) mintAndPersist(ctx context.Context, trigger s
 	}
 	if newToken == "" {
 		metrics.ArgoCDTokenRefreshesTotal.WithLabelValues(trigger, "error").Inc()
-		return errors.New("argocd minted empty token")
+		// Audit gap M02 #13 fix: typed LoopZeroError so this surfaces with a
+		// stable code in token-refresh failure metrics + audit logs.
+		return loopzeroerrors.ErrInternalError.Wrap("argocd minted empty token")
 	}
 
 	if err := p.writeSecretToken(ctx, newToken); err != nil {

@@ -46,6 +46,7 @@ import (
 	"time"
 
 	"github.com/loopzero/loopzero/api/internal/db"
+	loopzeroerrors "github.com/loopzero/loopzero/pkg/errors"
 )
 
 // ErrFenced is returned by Heartbeat or Validate when the lease has been
@@ -168,7 +169,9 @@ RETURNING generation_id, acquired_at
 // the caller MUST exit.
 func (a *Acquirer) Heartbeat(ctx context.Context, lease *Lease) error {
 	if lease == nil {
-		return errors.New("leader heartbeat: nil lease")
+		// Audit gap M02 #13 fix: typed LoopZeroError — `nil lease` is a programming
+		// error in the heartbeat goroutine wiring, not a runtime business condition.
+		return loopzeroerrors.ErrInternalError.Wrap("leader heartbeat: nil lease")
 	}
 	const query = `
 UPDATE leader_generations
@@ -193,7 +196,8 @@ UPDATE leader_generations
 // fast before issuing a larger write.
 func (a *Acquirer) Validate(ctx context.Context, lease *Lease) error {
 	if lease == nil {
-		return errors.New("leader validate: nil lease")
+		// Audit gap M02 #13 fix: typed LoopZeroError — `nil lease` is programming.
+		return loopzeroerrors.ErrInternalError.Wrap("leader validate: nil lease")
 	}
 	const query = `
 SELECT generation_id, holder
