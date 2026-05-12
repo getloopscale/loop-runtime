@@ -8,6 +8,7 @@ import (
 	"log/slog"
 	"os"
 
+	"github.com/jackc/pgx/v5"
 	"k8s.io/client-go/dynamic"
 	"k8s.io/client-go/rest"
 
@@ -155,6 +156,18 @@ func buildServerConfig(
 
 	if dbAdapter != nil {
 		sc.IdempotencyStore = &db.PostgresIdempotencyStore{DB: dbAdapter}
+		// T1.6 of deep-review-remediation: wire BillingHandler so
+		// GET /api/v1/billing returns plan + usage instead of 404.
+		// T1.9 production: also wire the cost cap CostStore so the
+		// /api/v1/billing response includes the 3 metrics (egress,
+		// docr_pulls, build_minutes) with their current values + caps.
+		// pre-migration-000017 the costSource returns no rows and
+		// usage map stays empty (graceful degradation).
+		billingHandler := routes.NewBillingHandler(billingPoolAdapter{pool: dbAdapter.Pool})
+		if dbDeps != nil && dbDeps.StdDB != nil {
+			billingHandler.WithCostSource(db.NewSQLCostStore(dbDeps.StdDB))
+		}
+		sc.BillingHandler = billingHandler
 		// AUDIT-10: single PostgresTeamStore instance serves both team admin
 		// endpoints and /whoami username lookup.
 		teamStore := &db.PostgresTeamStore{DB: dbAdapter}
@@ -289,4 +302,19 @@ func buildMgmtDynamicClient(logger *slog.Logger) dynamic.Interface {
 		return nil
 	}
 	return dyn
+}
+
+// billingPoolAdapter bridges *pgxpool.Pool to routes.BillingPool. The
+// routes package defines its own narrow Row/Pool interfaces to avoid
+// the routes ↔ db import cycle (find_arch_001). pgx.Row satisfies the
+// routes.BillingRow contract (single Scan method) — this adapter just
+// re-types the QueryRow signature.
+type billingPoolAdapter struct {
+	pool interface {
+		QueryRow(ctx context.Context, sql string, args ...any) pgx.Row
+	}
+}
+
+func (a billingPoolAdapter) QueryRow(ctx context.Context, sql string, args ...any) routes.BillingRow {
+	return a.pool.QueryRow(ctx, sql, args...)
 }

@@ -21,11 +21,13 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"log/slog"
 	"net/http"
 
 	"github.com/jackc/pgx/v5"
 
 	"github.com/loopzero/loopzero/api/internal/middleware"
+	"github.com/loopzero/loopzero/pkg/enforcement"
 	loopzeroerrors "github.com/loopzero/loopzero/pkg/errors"
 )
 
@@ -44,13 +46,24 @@ type BillingPool interface {
 
 // BillingHandler responds to GET /api/v1/billing + POST /api/v1/billing/portal.
 type BillingHandler struct {
-	pool BillingPool
+	pool       BillingPool
+	costSource enforcement.CostStore // optional — T1.9 cost cap usage display
+	logger     *slog.Logger
 }
 
 // NewBillingHandler constructs a billing handler that reads plan + usage
 // from the subscriptions + usage_records tables.
 func NewBillingHandler(pool BillingPool) *BillingHandler {
-	return &BillingHandler{pool: pool}
+	return &BillingHandler{pool: pool, logger: slog.Default()}
+}
+
+// WithCostSource wires the cost cap counter source so GET /api/v1/billing
+// returns the 3 T1.9 metrics (egress_bytes, docr_pulls, build_minutes)
+// alongside their per-plan caps. Nil-safe — when not set, the usage map
+// stays empty and CLI displays "no usage data".
+func (h *BillingHandler) WithCostSource(src enforcement.CostStore) *BillingHandler {
+	h.costSource = src
+	return h
 }
 
 // BillingResponse is the JSON shape returned by GET /api/v1/billing.
@@ -62,10 +75,20 @@ type BillingResponse struct {
 }
 
 // BillingUsageEntry pairs a metric's used count with its plan limit.
+//
+// CLI Rule 5 stability contract: field names are permanent. New fields
+// can be added (e.g., `period` once usage is per-period from cost_counters)
+// but `used` + `limit` are forever int. The CLI's billing.ts treats
+// `limit >= 999999` as "unlimited" — keep that sentinel for back-compat
+// when the metric is Enterprise/unbounded.
 type BillingUsageEntry struct {
 	Used  int `json:"used"`
 	Limit int `json:"limit"`
 }
+
+// unlimitedDisplay is the CLI's sentinel for unbounded caps (see billing.ts).
+// Picked at int range that fits int64 caps too — 100 GB egress fits in int.
+const unlimitedDisplay = 999999
 
 // PortalResponse is the JSON shape returned by POST /api/v1/billing/portal.
 type PortalResponse struct {
@@ -98,15 +121,60 @@ func (h *BillingHandler) Get(w http.ResponseWriter, r *http.Request) {
 	resp := BillingResponse{
 		Plan:  plan,
 		Team:  uc.TenantID,
-		Usage: map[string]BillingUsageEntry{
-			// Sprint 11 will populate real usage from usage_records.
-			// For now we report an empty map so the CLI prints
-			// "no usage data" rather than failing.
-		},
+		Usage: h.buildUsage(r.Context(), uc.TenantID, plan),
 	}
 
 	w.Header().Set("Content-Type", "application/json")
 	_ = json.NewEncoder(w).Encode(resp)
+}
+
+// buildUsage populates the 3 T1.9 cost cap metrics when costSource is wired.
+// Returns empty map (preserving pre-T1.9 behavior) when costSource is nil
+// or when every read fails — CLI shows "no usage data" gracefully.
+//
+// `used` is the current period counter value clamped to int range. `limit`
+// is the per-plan cap (or `unlimitedDisplay` sentinel for Enterprise/unset).
+// CostStore read errors are logged and the metric is skipped — fail-open
+// matches the enforcement middleware posture (degraded aggregator must not
+// break the billing display).
+func (h *BillingHandler) buildUsage(ctx context.Context, tenantID, plan string) map[string]BillingUsageEntry {
+	usage := make(map[string]BillingUsageEntry)
+	if h.costSource == nil {
+		return usage
+	}
+
+	planTyped := enforcement.Plan(plan)
+	for _, metric := range []enforcement.CostMetric{
+		enforcement.MetricEgressBytes,
+		enforcement.MetricDOCRPulls,
+		enforcement.MetricBuildMinutes,
+	} {
+		counter, found, err := h.costSource.GetCounter(ctx, tenantID, metric)
+		if err != nil {
+			h.logger.Warn("billing: cost counter read failed; skipping metric",
+				"tenant", tenantID,
+				"metric", string(metric),
+				"error", err)
+			continue
+		}
+
+		cap := enforcement.CapFor(planTyped, metric)
+		limit := int(cap)
+		if cap == enforcement.Unlimited {
+			limit = unlimitedDisplay
+		}
+		used := 0
+		if found {
+			// Clamp to int — usage at 10 TB egress fits comfortably (10^13).
+			if counter.Value > int64(int(^uint(0)>>1)) {
+				used = int(^uint(0) >> 1) // MaxInt
+			} else {
+				used = int(counter.Value)
+			}
+		}
+		usage[string(metric)] = BillingUsageEntry{Used: used, Limit: limit}
+	}
+	return usage
 }
 
 // Portal handles POST /api/v1/billing/portal — returns a Stripe Customer
