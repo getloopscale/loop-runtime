@@ -6,6 +6,7 @@ package tenant
 import (
 	"context"
 	"fmt"
+	"strings"
 
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"sigs.k8s.io/controller-runtime/pkg/log"
@@ -18,10 +19,53 @@ import (
 	"github.com/loopzero/loopzero/pkg/naming"
 )
 
+// assertRepoNameOwnedByTenant enforces that Spec.GitOps.RepoName carries
+// the tenant name as a delimited component — either as a prefix
+// (`<tenantName>-...`), as a hyphen-delimited middle segment
+// (`...-<tenantName>-...`), or as a hyphen-prefixed suffix
+// (`...-<tenantName>`). The delimiter requirement prevents adversarial
+// substring collisions like a Tenant `tn-victim` pretending to own a
+// repo named `tn-acme-gitops` (no `-tn-victim-`/`-tn-victim`/`tn-victim-`
+// occurrence anywhere in the name → rejected).
+//
+// Audit gap M10 F2 / §6.E.4c: the canonical production pattern is
+// `tn-acme-gitops` (api/internal/k8s/tenant_cr_manager.go:308 emits
+// `{tenantID}-gitops`). The operator-test fixtures historically use
+// `loopzero-tenant-<tenantName>`. Both shapes are accepted because both
+// embed the tenant name as a delimited component. A reference that
+// does NOT contain the tenant name as a component (typo or attack)
+// is rejected before the provisioner is given the foreign name.
+func assertRepoNameOwnedByTenant(tenantName, repoName string) error {
+	if tenantName == "" {
+		return fmt.Errorf("tenant-ownership invariant: empty tenantName (audit M10 F2 §6.E.4c)")
+	}
+	prefix := tenantName + "-"
+	middle := "-" + tenantName + "-"
+	suffix := "-" + tenantName
+	if !strings.HasPrefix(repoName, prefix) &&
+		!strings.Contains(repoName, middle) &&
+		!strings.HasSuffix(repoName, suffix) {
+		return fmt.Errorf(
+			"tenant-ownership invariant: Spec.GitOps.RepoName %q must contain %q as a hyphen-delimited component (audit M10 F2 §6.E.4c)",
+			repoName, tenantName,
+		)
+	}
+	return nil
+}
+
 // reconcileGitRepo ensures the GitOps repository exists via the GitRepoProvisioner.
 func (r *TenantReconciler) reconcileGitRepo(ctx context.Context, tenant *loopzerov1.Tenant) error {
 	ctx, span := shared.StartChildSpan(ctx, "tenant.gitops.ensure")
 	defer span.End()
+
+	// Audit gap M10 F2 / §6.E.4c — refuse to act on a RepoName that does
+	// not belong to this tenant. The provisioner is given the raw string
+	// from Spec.GitOps.RepoName, so a malformed or adversarial value
+	// would otherwise cause cross-tenant repo creation/conflict.
+	if err := assertRepoNameOwnedByTenant(tenant.Name, tenant.Spec.GitOps.RepoName); err != nil {
+		shared.RecordError(span, err)
+		return err
+	}
 
 	repoURL, err := r.GitProvisioner.EnsureRepo(ctx, tenant.Spec.GitOps.RepoName, tenant.Spec.GitOps.Branch)
 	if err != nil {

@@ -164,6 +164,14 @@ func (r *TenantReconciler) reconcileDelete(ctx context.Context, tenant *loopzero
 	}
 
 	if err := timedCleanupStep("gitea", func() error {
+		// Audit gap M10 F2 / §6.E.4c — same tenant-ownership invariant
+		// as reconcileGitRepo. Refusing to archive a foreign repo prevents
+		// a tenant-delete operation from silently archiving another
+		// tenant's repository when Spec.GitOps.RepoName is malformed
+		// or adversarially set.
+		if err := assertRepoNameOwnedByTenant(tenant.Name, tenant.Spec.GitOps.RepoName); err != nil {
+			return err
+		}
 		return r.GitProvisioner.ArchiveRepo(ctx, tenant.Spec.GitOps.RepoName)
 	}); err != nil {
 		cleanupErrors = append(cleanupErrors, fmt.Sprintf("gitea-archive: %v", err))
