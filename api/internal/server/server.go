@@ -99,6 +99,12 @@ type Config struct {
 	AdminEvictor            routes.TenantEvictor
 	AdminPinner             routes.CellPinner // CHG-2026-04-30-DELETE-SINGLE-CELL
 	PlanLimiter             *enforcement.PlanLimiter
+	// CostEnforcer gates quantity-style metrics (egress bytes, registry pulls,
+	// build minutes) against per-plan caps from cost_counters (migration 000017).
+	// Distinct from PlanLimiter which gates rate-style limits (builds/month,
+	// concurrent deploys). Nil-safe — when unset, the middleware pass-through.
+	// Wired by api/cmd/setup_server.go::setupCostEnforcer (T1.9 production wiring).
+	CostEnforcer *middleware.CostEnforcer
 	UpgradeURL              string
 	PGPoolStatsFunc              func() (inUse int32, total int32)
 	PGCircuitBreakerThresholdPct int

@@ -18,6 +18,7 @@ import (
 	"github.com/loopzero/loopzero/api/internal/routes"
 	"github.com/loopzero/loopzero/api/internal/server"
 	"github.com/loopzero/loopzero/api/internal/services"
+	"github.com/loopzero/loopzero/pkg/enforcement"
 )
 
 // setupHealthServices creates deep health checkers for critical dependencies.
@@ -104,6 +105,24 @@ func buildServerConfig(
 		sc.ProjectStore = dbDeps.ProjectStore
 		sc.DB = dbDeps.DBHealth
 		sc.PlanLimiter = dbDeps.PlanLimiter
+	}
+
+	// T1.9 production wiring: CostEnforcer for HTTP 402 on cost cap exceeded.
+	// Built only when both DB pool and a working PlanLimiter are available —
+	// otherwise CostEnforcer is nil and the route middleware is pass-through.
+	// Migration 000017 must be applied for the CostStore reads to succeed;
+	// pre-migration the store returns sql.ErrNoRows and the CapChecker
+	// fails-open (no usage counted = allow).
+	if dbDeps != nil && dbDeps.StdDB != nil && dbDeps.PlanLimiter != nil {
+		costStore := db.NewSQLCostStore(dbDeps.StdDB)
+		costChecker := enforcement.NewCapChecker(costStore)
+		// Reuse the same SQL `subscriptions.plan` lookup PlanLimiter uses,
+		// via a fresh NewSQLLimitsStore. PlanLimiter does not expose its
+		// internal store, so we construct one with the same DB handle —
+		// the query is centralized in enforcement.sqlLimitsStore so this
+		// is single-source-of-truth.
+		planReader := db.NewPlanReader(enforcement.NewSQLLimitsStore(dbDeps.StdDB))
+		sc.CostEnforcer = middleware.NewCostEnforcer(costChecker, planReader, logger)
 	}
 
 	if stores != nil {

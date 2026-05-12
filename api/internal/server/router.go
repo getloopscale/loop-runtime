@@ -16,6 +16,11 @@ import (
 	"github.com/loopzero/loopzero/pkg/enforcement"
 )
 
+// enforcementMetricBuildMinutes is the canonical metric label for the cost
+// cap gating the POST /api/v1/builds route. Distinct from PlanLimiter's
+// "builds_per_month" — see Wave 1 T1.9 for the SRP rationale.
+const enforcementMetricBuildMinutes = enforcement.MetricBuildMinutes
+
 // NewRouter creates a chi router with middleware and routes.
 func NewRouter(cfg Config) *chi.Mux {
 	r := chi.NewRouter()
@@ -163,6 +168,12 @@ func NewRouter(cfg Config) *chi.Mux {
 				CountFn: enforcement.CountBuildsThisMonth(cfg.PlanLimiter),
 			}, tenantFromCtx, upgradeURL)
 
+			// T1.9 (Wave 1): cost cap gates the build route on build_minutes.
+			// Nil-safe: when CostEnforcer is unset (boot before wire, or
+			// missing cost_counters table), Middleware is pass-through.
+			// Distinct from buildEnforcement (rate-style builds/month).
+			buildCostGate := cfg.CostEnforcer.Middleware(enforcementMetricBuildMinutes)
+
 			envEnforcement := enforcement.Middleware(cfg.PlanLimiter, enforcement.OperationCheck{
 				Metric:  "environments",
 				CountFn: enforcement.CountRows(cfg.PlanLimiter, "SELECT COUNT(*) FROM environment_targets WHERE tenant_id = $1"),
@@ -174,7 +185,7 @@ func NewRouter(cfg Config) *chi.Mux {
 			}, tenantFromCtx, upgradeURL)
 
 			registerProtectedRoutes(r, cfg, rateLimitMiddlewares, idempotentMiddlewares,
-				projectEnforcement, buildEnforcement, envEnforcement, seatEnforcement)
+				projectEnforcement, buildEnforcement, envEnforcement, seatEnforcement, buildCostGate)
 		})
 	}
 
@@ -191,6 +202,7 @@ func registerProtectedRoutes(
 	rateLimitMiddlewares []func(http.Handler) http.Handler,
 	idempotentMiddlewares []func(http.Handler) http.Handler,
 	projectEnforcement, buildEnforcement, envEnforcement, seatEnforcement func(http.Handler) http.Handler,
+	buildCostGate func(http.Handler) http.Handler,
 ) {
 	// Source upload — auth + rate limiting, no idempotency.
 	if cfg.SourceStore != nil {
@@ -254,7 +266,11 @@ func registerProtectedRoutes(
 	// Build routes — use the single BuildHandler from Config (C-08).
 	if cfg.BuildHandler != nil {
 		r.Get("/api/v1/builds/{id}", cfg.BuildHandler.Get)
-		r.With(append(idempotentMiddlewares, buildEnforcement)...).Post("/api/v1/builds", cfg.BuildHandler.Create)
+		// Wave 1 T1.9: chain is rate-limit → idempotency → rate cap (buildEnforcement)
+		// → cost cap (buildCostGate) → handler. Both enforcement layers can
+		// short-circuit with HTTP 402 — rate cap surfaces "builds/month exceeded",
+		// cost cap surfaces "build minutes exceeded" with different upgrade copy.
+		r.With(append(idempotentMiddlewares, buildEnforcement, buildCostGate)...).Post("/api/v1/builds", cfg.BuildHandler.Create)
 		r.With(rateLimitMiddlewares...).Post("/api/v1/builds/{id}/cancel", cfg.BuildHandler.Cancel)
 	}
 
