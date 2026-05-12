@@ -212,6 +212,20 @@ func (r *ApplicationReconciler) reconcileExposedRoute(ctx context.Context, app *
 			Port: app.Spec.ServicePort,
 		}
 		route.Spec.TLS = loopzerov1.TLSConfig{Enabled: true}
+		// Audit gap M10 F2 / §6.E.4b: propagate tenant scope from parent
+		// LoopZeroApplication into child labels. Without this, Loki/Prometheus
+		// queries that filter by `loopzero.io/tenant` on ExposedRoute resources
+		// silently return empty results, OPA webhooks scoped per tenant
+		// have no signal to gate on, and operator self-audit traces cannot
+		// correlate child events back to the originating tenant. Re-applied
+		// on every reconcile via CreateOrUpdate so a manual edit that
+		// strips the labels converges back to the parent's tenant scope.
+		if route.Labels == nil {
+			route.Labels = map[string]string{}
+		}
+		route.Labels["loopzero.io/tenant"] = app.Spec.TenantRef
+		route.Labels["loopzero.io/project"] = app.Spec.Project
+		route.Labels["loopzero.io/environment"] = app.Spec.Environment
 		return controllerutil.SetControllerReference(app, route, r.Scheme)
 	})
 	if err != nil {
