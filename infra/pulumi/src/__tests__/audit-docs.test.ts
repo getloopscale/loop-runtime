@@ -17,7 +17,10 @@ import { resolve } from "node:path";
 import { describe, expect, it } from "vitest";
 
 const REPO_ROOT = resolve(__dirname, "..", "..", "..", "..");
-const AUDIT_DIR = resolve(REPO_ROOT, "docs", "audits");
+// Canonical location post-2026-05-11 docs/ cleanup (commit fc1793dd):
+// audit reference docs were migrated to knowledge-base/concepts/operations/.
+// Restored from git history per active-execution-plan §3.F (iter 7, 2026-05-12).
+const AUDIT_DIR = resolve(REPO_ROOT, ".claude", "knowledge-base", "concepts", "operations");
 
 function readDoc(name: string): string {
   const p = resolve(AUDIT_DIR, name);
