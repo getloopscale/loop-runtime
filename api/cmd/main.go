@@ -166,14 +166,28 @@ func main() {
 		dh, domainProvisioner, domainHealthChecker, cfZoneClient := setupDomains(stores, workflows, cfg, logger)
 		domainHandler = dh
 
-		leaderResult := setupLeaderElection(dbAdapter.Pool, shutdownCtx, logger)
-		defer leaderResult.LeaderConn.Release()
+		// MEET-ASYNC-AMENDMENT-2026-05-12-003 Option A (RATIFIED 2026-05-12):
+		// run leader election in a goroutine so HTTP server starts immediately.
+		// Passive standby pods serve /healthz (probes pass) while waiting for
+		// the lock; only the leader runs background reconcile loops.
+		// Pre-fix: synchronous setupLeaderElection blocked main() up to 60s,
+		// causing 2nd replica liveness/startup probe failure -> crashloop.
+		bgWg.Add(1)
+		go func() {
+			defer bgWg.Done()
+			leaderResult := setupLeaderElection(dbAdapter.Pool, shutdownCtx, logger)
+			defer leaderResult.LeaderConn.Release()
 
-		if leaderResult.IsLeader {
-			startLeaderLoops(shutdownCtx, &bgWg, leaderResult.LeaderConn,
-				dbAdapter, stores, workflows, orchDeps, k8sDeps, cellRouter,
-				domainProvisioner, domainHealthChecker, cfZoneClient, cfg, logger)
-		}
+			if leaderResult.IsLeader {
+				startLeaderLoops(shutdownCtx, &bgWg, leaderResult.LeaderConn,
+					dbAdapter, stores, workflows, orchDeps, k8sDeps, cellRouter,
+					domainProvisioner, domainHealthChecker, cfZoneClient, cfg, logger)
+			}
+			// Non-leader: setupLeaderElection already started the
+			// startNonLeaderReelection goroutine which polls every 60s.
+			// When the active leader exits, this pod restarts (os.Exit(0))
+			// and becomes leader on next boot.
+		}()
 	}
 	defer waitForBackgroundGoroutines(&bgWg, logger)
 

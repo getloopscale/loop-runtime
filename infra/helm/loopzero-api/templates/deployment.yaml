@@ -8,6 +8,20 @@ metadata:
     loopzero.io/component: loopzero-api
 spec:
   replicas: {{ .Values.replicaCount }}
+  # MEET-ASYNC-AMENDMENT-2026-05-12-003 Option A (RATIFIED 2026-05-12):
+  # RollingUpdate when replicaCount >= 2 (multi-replica HA); Recreate when
+  # single-replica (preserves legacy single-instance semantics for dev).
+  # RollingUpdate + maxUnavailable=0 ensures zero-downtime deploys.
+  {{- if gt (int .Values.replicaCount) 1 }}
+  strategy:
+    type: RollingUpdate
+    rollingUpdate:
+      maxSurge: 1
+      maxUnavailable: 0
+  {{- else }}
+  strategy:
+    type: Recreate
+  {{- end }}
   selector:
     matchLabels:
       app: loopzero-api
