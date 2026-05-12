@@ -10,6 +10,7 @@ import (
 	"github.com/loopzero/loopzero/api/internal/adapters"
 	"github.com/loopzero/loopzero/api/internal/admission"
 	"github.com/loopzero/loopzero/api/internal/config"
+	"github.com/loopzero/loopzero/api/internal/correlation"
 	"github.com/loopzero/loopzero/api/internal/db"
 	"github.com/loopzero/loopzero/api/internal/k8s"
 	"github.com/loopzero/loopzero/api/internal/routes"
@@ -43,13 +44,17 @@ type appCRAdapter struct {
 }
 
 func (a *appCRAdapter) EnsureLoopZeroApplication(ctx context.Context, input services.ApplicationCRInput) error {
+	// Audit gap M08 #10 / §6.C.1: propagate the originating correlation_id
+	// from ctx into the CR annotation so the operator reconcile can attach
+	// it back into audit_log rows + structured logs.
 	return a.mgr.EnsureLoopZeroApplication(ctx, k8s.LoopZeroApplicationInput{
-		TenantID:    input.TenantID,
-		Project:     input.Project,
-		Environment: input.Environment,
-		AppName:     input.AppName,
-		ServiceName: input.ServiceName,
-		ServicePort: input.ServicePort,
+		TenantID:      input.TenantID,
+		Project:       input.Project,
+		Environment:   input.Environment,
+		AppName:       input.AppName,
+		ServiceName:   input.ServiceName,
+		ServicePort:   input.ServicePort,
+		CorrelationID: correlation.IDFromContext(ctx),
 	})
 }
 
