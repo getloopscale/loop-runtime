@@ -1,15 +1,18 @@
-# Promtail — log shipper for build cluster
+# Promtail — log shipper for build + runtime clusters.
 # Chart: grafana/promtail
-# Purpose: DaemonSet on build cluster that ships Argo Workflows pod logs to Loki
+# Purpose: DaemonSet that ships pod logs to the mgmt-cluster Loki.
 #
-# Cross-cluster networking:
-# - Local (k3d): uses mgmt server NodePort (patched by update-cross-cluster-ips.sh)
-# - Production (DO): clusters in same VPC, use internal LB IP of Loki
-# LOCAL ONLY (LP-007): cross-cluster Loki streaming local usa NodePort hardcoded;
-# production Sprint 10+ migra para DO Spaces backend per CLAUDE.md "Known issues".
+# Audit gap M08 #18 / §6.C.4b — the push URL is now helmfile-injected per
+# environment instead of hardcoded. Falls back to the k3d-local default
+# when `loki.pushUrl` is absent so the standalone harness keeps working:
+#   - dev / standalone (k3d): http://172.18.0.3:30094/loki/api/v1/push
+#   - drill (DOKS):           per drill.yaml env value
+#   - prod (DOKS):            per prod.yaml env value (DOKS internal LB)
+# Helmfile templating expands the `.Environment.Values.loki.pushUrl` lookup
+# at sync time; the chart sees a fully-resolved literal.
 config:
   clients:
-    - url: http://172.18.0.3:30094/loki/api/v1/push
+    - url: {{ .Environment.Values | getOrNil "loki.pushUrl" | default "http://172.18.0.3:30094/loki/api/v1/push" }}
       batchwait: 5s
       batchsize: 1048576
       backoff_config:

@@ -63,6 +63,8 @@ registries:
 
 loki:
   maxGlobalStreamsPerUser: 50000  # smaller than prod (less tenant traffic)
+  # Audit M08 #18 / §6.C.4b — promtail cross-cluster push target (env-specific).
+  pushUrl: http://loki-internal.drill.loopzero-drill.example:3100/loki/api/v1/push
 
 # Policy mode: enforce — validates D2 mitigation #4 against fresh prod-like
 # stack BEFORE real prod gets it. If chaos+maturity in drill shows enforce
