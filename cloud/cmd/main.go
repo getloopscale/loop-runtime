@@ -309,6 +309,36 @@ func main() {
 		go metering.StartScheduler(schedulerCtx, reporter, reconciler, logger)
 	}
 
+	// T1.9 production deployment: start cost aggregator if Prometheus
+	// is configured. Opt-in via LOOPZERO_PROMETHEUS_URL — when unset, the
+	// aggregator stays disabled and cost_counters remain empty (the API
+	// middleware fails-open). Interval defaults to 5 min, overridable
+	// via LOOPZERO_COST_AGGREGATOR_INTERVAL.
+	if db != nil {
+		if promURL := strings.TrimSpace(os.Getenv("LOOPZERO_PROMETHEUS_URL")); promURL != "" {
+			prom, perr := billing.NewHTTPPromQuerier(promURL, logger)
+			if perr != nil {
+				logger.Error("cost aggregator: prometheus client init failed; aggregator disabled",
+					"error", perr,
+					"prometheus_url", promURL)
+			} else {
+				interval := 5 * time.Minute
+				if iv := os.Getenv("LOOPZERO_COST_AGGREGATOR_INTERVAL"); iv != "" {
+					if parsed, perr := time.ParseDuration(iv); perr == nil && parsed > 0 {
+						interval = parsed
+					}
+				}
+				aggregator := billing.NewCostAggregator(db, prom, logger)
+				go aggregator.Run(schedulerCtx, interval)
+				logger.Info("cost aggregator started",
+					"prometheus_url", promURL,
+					"interval", interval.String())
+			}
+		} else {
+			logger.Info("cost aggregator disabled (LOOPZERO_PROMETHEUS_URL not set)")
+		}
+	}
+
 	// Start server
 	srv := &http.Server{
 		Addr:         cfg.ListenAddr,
