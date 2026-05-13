@@ -306,16 +306,7 @@ var _ = Describe("Golden: Tenant Isolation", Ordered, func() {
 		const tenantName = "golden-idempotent"
 
 		BeforeAll(func() {
-			tenant := newGoldenTenant(tenantName, loopzerov1.PlanStarter, []string{"production", "staging"})
-			Expect(k8sClient.Create(ctx, tenant)).To(Succeed())
-
-			Eventually(func(g Gomega) {
-				var t loopzerov1.Tenant
-				g.Expect(k8sClient.Get(ctx, types.NamespacedName{
-					Name: tenantName, Namespace: "default",
-				}, &t)).To(Succeed())
-				g.Expect(t.Status.Phase).To(Equal(loopzerov1.TenantPhaseActive))
-			}, timeout, interval).Should(Succeed())
+			createGoldenTenantAndWaitActive(tenantName, loopzerov1.PlanStarter, []string{"production", "staging"})
 		})
 
 		It("should not duplicate namespaces after a spec update triggers re-reconcile", func() {
@@ -328,13 +319,9 @@ var _ = Describe("Golden: Tenant Isolation", Ordered, func() {
 			Expect(k8sClient.Update(ctx, &t)).To(Succeed())
 
 			// Wait for the update to propagate.
-			Eventually(func(g Gomega) {
-				var updated loopzerov1.Tenant
-				g.Expect(k8sClient.Get(ctx, types.NamespacedName{
-					Name: tenantName, Namespace: "default",
-				}, &updated)).To(Succeed())
+			withTenant(tenantName, func(g Gomega, updated *loopzerov1.Tenant) {
 				g.Expect(updated.Spec.DisplayName).To(Equal("Golden Idempotency Verified"))
-			}, timeout, interval).Should(Succeed())
+			})
 
 			// Exactly 3 namespaces: production + staging + build.
 			Eventually(func(g Gomega) {

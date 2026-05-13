@@ -98,42 +98,38 @@ func TestBuildDockerConfigJSON_SpecialChars(t *testing.T) {
 	}
 }
 
-func TestEnsureHarborProject_NilClient(t *testing.T) {
-	// When HarborClient is nil, ensureHarborProject should be a no-op (return nil).
-	r := &TenantReconciler{HarborClient: nil}
-	tenant := &loopzerov1.Tenant{}
-	tenant.Name = "test-tenant"
-	if err := r.ensureHarborProject(context.TODO(), tenant); err != nil {
-		t.Errorf("expected nil error for nil HarborClient, got: %v", err)
+// TestHarborOperations_NilClient_AreNoOps verifies that every Harbor-touching
+// method on TenantReconciler short-circuits to nil error when HarborClient
+// is nil. Phase 3 helper: was 4 near-clone test functions each setting up
+// the same r=TenantReconciler{HarborClient: nil} + tenant and asserting
+// no error. The TestSecretExists_NilClient_NoOp case in the original code
+// actually exercised the same ensureHarborRobotAccounts path, so it's
+// represented here as a comment rather than a duplicate entry.
+func TestHarborOperations_NilClient_AreNoOps(t *testing.T) {
+	type harborCall func(r *TenantReconciler, tenant *loopzerov1.Tenant) error
+	cases := []struct {
+		name string
+		call harborCall
+	}{
+		{"ensureHarborProject", func(r *TenantReconciler, tenant *loopzerov1.Tenant) error {
+			return r.ensureHarborProject(context.TODO(), tenant)
+		}},
+		{"ensureHarborRobotAccounts", func(r *TenantReconciler, tenant *loopzerov1.Tenant) error {
+			return r.ensureHarborRobotAccounts(context.TODO(), tenant)
+		}},
+		{"deleteHarborProject", func(r *TenantReconciler, tenant *loopzerov1.Tenant) error {
+			return r.deleteHarborProject(context.TODO(), tenant)
+		}},
 	}
-}
-
-func TestEnsureHarborRobotAccounts_NilClient(t *testing.T) {
-	r := &TenantReconciler{HarborClient: nil}
-	tenant := &loopzerov1.Tenant{}
-	tenant.Name = "test-tenant"
-	if err := r.ensureHarborRobotAccounts(context.TODO(), tenant); err != nil {
-		t.Errorf("expected nil error for nil HarborClient, got: %v", err)
-	}
-}
-
-func TestSecretExists_NilClient_NoOp(t *testing.T) {
-	// When HarborClient is nil, ensureHarborRobotAccounts is a no-op.
-	// secretExists should never be called. This test verifies the nil guard.
-	r := &TenantReconciler{HarborClient: nil}
-	tenant := &loopzerov1.Tenant{}
-	tenant.Name = "test-tenant"
-	if err := r.ensureHarborRobotAccounts(context.TODO(), tenant); err != nil {
-		t.Errorf("expected nil error for nil HarborClient, got: %v", err)
-	}
-}
-
-func TestDeleteHarborProject_NilClient(t *testing.T) {
-	r := &TenantReconciler{HarborClient: nil}
-	tenant := &loopzerov1.Tenant{}
-	tenant.Name = "test-tenant"
-	if err := r.deleteHarborProject(context.TODO(), tenant); err != nil {
-		t.Errorf("expected nil error for nil HarborClient, got: %v", err)
+	for _, c := range cases {
+		t.Run(c.name, func(t *testing.T) {
+			r := &TenantReconciler{HarborClient: nil}
+			tenant := &loopzerov1.Tenant{}
+			tenant.Name = "test-tenant"
+			if err := c.call(r, tenant); err != nil {
+				t.Errorf("expected nil error for nil HarborClient, got: %v", err)
+			}
+		})
 	}
 }
 

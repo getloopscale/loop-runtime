@@ -135,6 +135,22 @@ func createTenantAndWaitActive(tenantName string, plan loopzerov1.PlanTier, envs
 	}, timeout, interval).Should(Succeed())
 }
 
+// createGoldenTenantAndWaitActive creates a Tenant via newGoldenTenant and
+// waits for its Status.Phase to be Active (full reconcile complete). Phase 3
+// sibling helper to createGoldenTenantAndWaitPhaseSet (which uses non-empty)
+// and createTenantAndWaitActive (which uses newTenant, not newGoldenTenant).
+func createGoldenTenantAndWaitActive(tenantName string, plan loopzerov1.PlanTier, envs []string) {
+	tenant := newGoldenTenant(tenantName, plan, envs)
+	Expect(k8sClient.Create(ctx, tenant)).To(Succeed())
+	Eventually(func(g Gomega) {
+		var t loopzerov1.Tenant
+		g.Expect(k8sClient.Get(ctx, types.NamespacedName{
+			Name: tenantName, Namespace: "default",
+		}, &t)).To(Succeed())
+		g.Expect(t.Status.Phase).To(Equal(loopzerov1.TenantPhaseActive))
+	}, timeout, interval).Should(Succeed())
+}
+
 // createGoldenTenantAndWaitPhaseSet creates a Tenant via newGoldenTenant and
 // waits for its Status.Phase to be set (non-empty, meaning reconciler has
 // run at least once). Phase 3 sibling helper to createTenantAndWaitActive
