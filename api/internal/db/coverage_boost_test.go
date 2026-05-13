@@ -6,6 +6,7 @@ package db
 import (
 	"context"
 	"errors"
+	"fmt"
 	"strings"
 	"testing"
 	"time"
@@ -112,27 +113,66 @@ func TestTenantDeletionStore_CancelDeletion_Error(t *testing.T) {
 	}
 }
 
-func TestTenantDeletionStore_GetPendingDeletion_NotFound(t *testing.T) {
-	fake := &fakeDBTX{}
-	store := &PostgresTenantDeletionStore{DB: fake}
-
-	record, err := store.GetPendingDeletion(context.Background(), "tn-nonexistent")
-	if err != nil {
-		t.Fatalf("unexpected error: %v", err)
+// TestStores_Getters_NotFoundAndQueryError consolidates the canonical
+// {NotFound returns nil+nil, QueryError returns err} pair for read-side
+// Getter methods on PostgresTenantDeletionStore and PostgresRepositoryStore.
+// Phase 3 helper: was 6 near-clone test functions (3 stores × 2 cases).
+func TestStores_Getters_NotFoundAndQueryError(t *testing.T) {
+	type getterCall func(fake *fakeDBTX) (interface{}, error)
+	cases := []struct {
+		name string
+		call getterCall
+	}{
+		{
+			name: "TenantDeletionStore_GetPendingDeletion",
+			call: func(fake *fakeDBTX) (interface{}, error) {
+				return (&PostgresTenantDeletionStore{DB: fake}).GetPendingDeletion(context.Background(), "tn-test")
+			},
+		},
+		{
+			name: "RepositoryStore_GetInstallation",
+			call: func(fake *fakeDBTX) (interface{}, error) {
+				return (&PostgresRepositoryStore{DB: fake}).GetInstallation(context.Background(), 12345)
+			},
+		},
+		{
+			name: "RepositoryStore_GetByRepo",
+			call: func(fake *fakeDBTX) (interface{}, error) {
+				return (&PostgresRepositoryStore{DB: fake}).GetByRepo(context.Background(), "octocat/myapp")
+			},
+		},
 	}
-	if record != nil {
-		t.Error("expected nil record for nonexistent tenant")
+	for _, c := range cases {
+		t.Run(c.name+"_NotFound", func(t *testing.T) {
+			result, err := c.call(&fakeDBTX{})
+			if err != nil {
+				t.Fatalf("unexpected error: %v", err)
+			}
+			// Reflect-free nil check: typed-nil interface holds a non-nil
+			// runtime value, so we need to check the underlying concrete value.
+			// Each store returns a *Pointer; nil pointer wrapped in interface
+			// is what we expect for the "not found" case.
+			if !isNilPointer(result) {
+				t.Errorf("expected nil for not-found case, got: %+v", result)
+			}
+		})
+		t.Run(c.name+"_QueryError", func(t *testing.T) {
+			_, err := c.call(&fakeDBTX{queryErr: errors.New("db down")})
+			if err == nil {
+				t.Fatal("expected error from QueryError fake")
+			}
+		})
 	}
 }
 
-func TestTenantDeletionStore_GetPendingDeletion_QueryError(t *testing.T) {
-	fake := &fakeDBTX{queryErr: errors.New("db down")}
-	store := &PostgresTenantDeletionStore{DB: fake}
-
-	_, err := store.GetPendingDeletion(context.Background(), "tn-test")
-	if err == nil {
-		t.Fatal("expected error")
+// isNilPointer returns true if the interface holds a typed nil pointer.
+// Workaround for Go interface { *T }-equals-nil gotcha: comparing an
+// interface containing a nil *T to literal nil returns false.
+func isNilPointer(v interface{}) bool {
+	if v == nil {
+		return true
 	}
+	return fmt.Sprintf("%v", v) == "<nil>"
 }
 
 func TestTenantDeletionStore_RequestDeletion_ExecError(t *testing.T) {
@@ -222,28 +262,7 @@ func TestRepositoryStore_SaveInstallation_Error(t *testing.T) {
 	}
 }
 
-func TestRepositoryStore_GetInstallation_NotFound(t *testing.T) {
-	fake := &fakeDBTX{}
-	store := &PostgresRepositoryStore{DB: fake}
-
-	inst, err := store.GetInstallation(context.Background(), 99999)
-	if err != nil {
-		t.Fatalf("unexpected error: %v", err)
-	}
-	if inst != nil {
-		t.Error("expected nil for nonexistent installation")
-	}
-}
-
-func TestRepositoryStore_GetInstallation_QueryError(t *testing.T) {
-	fake := &fakeDBTX{queryErr: errors.New("db down")}
-	store := &PostgresRepositoryStore{DB: fake}
-
-	_, err := store.GetInstallation(context.Background(), 12345)
-	if err == nil {
-		t.Fatal("expected error")
-	}
-}
+// GetInstallation NotFound/QueryError consolidated into TestStores_Getters_NotFoundAndQueryError.
 
 func TestRepositoryStore_DeleteInstallation_Success(t *testing.T) {
 	fake := &fakeDBTX{}
@@ -345,28 +364,7 @@ func TestRepositoryStore_UnlinkRepository_Error(t *testing.T) {
 	}
 }
 
-func TestRepositoryStore_GetByRepo_NotFound(t *testing.T) {
-	fake := &fakeDBTX{}
-	store := &PostgresRepositoryStore{DB: fake}
-
-	repo, err := store.GetByRepo(context.Background(), "octocat/nonexistent")
-	if err != nil {
-		t.Fatalf("unexpected error: %v", err)
-	}
-	if repo != nil {
-		t.Error("expected nil for nonexistent repo")
-	}
-}
-
-func TestRepositoryStore_GetByRepo_QueryError(t *testing.T) {
-	fake := &fakeDBTX{queryErr: errors.New("db down")}
-	store := &PostgresRepositoryStore{DB: fake}
-
-	_, err := store.GetByRepo(context.Background(), "octocat/myapp")
-	if err == nil {
-		t.Fatal("expected error")
-	}
-}
+// GetByRepo NotFound/QueryError consolidated into TestStores_Getters_NotFoundAndQueryError.
 
 func TestRepositoryStore_GetByProject_NotFound(t *testing.T) {
 	fake := &fakeDBTX{}
