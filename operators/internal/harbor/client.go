@@ -60,25 +60,15 @@ type RobotCredentials struct {
 //
 // T4.2 / CODE-003: uses the shared httpclient package so Harbor inherits
 // the secure-by-default TLS configuration controlled by
-// OPERATOR_INSECURE_SKIP_TLS (T2.5 / SEC-001). Use NewClientWithHTTP for
-// custom transport requirements.
+// OPERATOR_INSECURE_SKIP_TLS (T2.5 / SEC-001).
+// Quality-Gate Phase 2: NewClientWithHTTP variant removed (no callers).
+// Restore alongside a real custom-transport use case if needed.
 func NewClient(baseURL, username, password string) *Client {
 	return &Client{
 		baseURL:    strings.TrimRight(baseURL, "/"),
 		username:   username,
 		password:   password,
 		httpClient: httpclient.NewWithTimeout(30 * time.Second),
-	}
-}
-
-// NewClientWithHTTP creates a Harbor API client using a custom http.Client.
-// This allows the caller to configure TLS, timeouts, and transport as needed.
-func NewClientWithHTTP(baseURL, username, password string, httpClient *http.Client) *Client {
-	return &Client{
-		baseURL:    strings.TrimRight(baseURL, "/"),
-		username:   username,
-		password:   password,
-		httpClient: httpClient,
 	}
 }
 

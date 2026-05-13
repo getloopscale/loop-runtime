@@ -324,14 +324,8 @@ func SetupClusterCredentialController(mgr ctrl.Manager) error {
 	return platform.SetupClusterCredentialController(mgr, constants.DefaultArgoCDNamespace)
 }
 
-// SetupEnvironmentController registers the EnvironmentController with the given manager.
-// runtimeClient targets the runtime cluster; in envtest, pass mgr.GetClient().
-// Calls the cell-aware variant with factory=nil for legacy single-cell behavior.
-//
-// ADR-0023 D1: delegates to internal/tenant.
-func SetupEnvironmentController(mgr ctrl.Manager, runtimeClient client.Client) error {
-	return tenant.SetupEnvironmentControllerWithFactory(mgr, runtimeClient, nil)
-}
+// Quality-Gate Phase 2: SetupEnvironmentController wrapper removed —
+// envtest_suite.go calls SetupEnvironmentControllerWithFactory directly.
 
 // SetupApplicationController registers the ApplicationController with the given manager.
 // baseDomain is the base domain for hostname assignment (e.g., "dev.loopzero.example").

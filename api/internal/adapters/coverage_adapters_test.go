@@ -42,23 +42,13 @@ func TestPgxRowsAdapter_Delegates(t *testing.T) {
 // =============================================================================
 
 // fakeSubmitOrchestrator captures SubmitBuild calls for testing app normalization.
+// Quality-Gate Phase 2: methods removed; test exercises BuildOrchestratorAdapter
+// via the real orchestrator path (line below), so the fake's interface methods
+// were never invoked and tripped deadcode.
 type fakeSubmitOrchestrator struct {
 	captured *services.SubmitBuildRequest
 	resp     *services.SubmitBuildResponse
 	err      error
-}
-
-func (f *fakeSubmitOrchestrator) SubmitBuild(_ context.Context, req services.SubmitBuildRequest) (*services.SubmitBuildResponse, error) {
-	f.captured = &req
-	return f.resp, f.err
-}
-
-func (f *fakeSubmitOrchestrator) OnBuildCompleted(_ context.Context, _ string, _ services.BuildCallbackRequest) error {
-	return nil
-}
-
-func (f *fakeSubmitOrchestrator) CancelBuild(_ context.Context, _ string) error {
-	return nil
 }
 
 func TestBuildOrchestratorAdapter_SubmitBuild_DefaultAppType(t *testing.T) {

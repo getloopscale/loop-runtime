@@ -103,15 +103,8 @@ func (b *ScriptBuilder) IfFileNotExists(path string) *CondBuilder {
 	}
 }
 
-// IfDirExists starts a conditional block: if [ -d 'path' ]; then
-func (b *ScriptBuilder) IfDirExists(path string) *CondBuilder {
-	return &CondBuilder{
-		parent: b,
-		body: &ScriptBuilder{
-			lines: []string{"if [ -d " + ShellQuote(path) + " ]; then"},
-		},
-	}
-}
+// Quality-Gate Phase 2: IfDirExists removed — no callers; sibling
+// IfFileExists is used. Restore alongside a real caller when needed.
 
 // Then adds lines to the conditional body and returns a builder for chaining.
 func (c *CondBuilder) Then(fn func(b *ScriptBuilder)) *CondBuilder {

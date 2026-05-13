@@ -290,6 +290,12 @@ func createCoreLoops(
 	buildGC := services.NewBuildGC(
 		&db.PostgresBuildGCStore{DB: dbAdapter}, logger, 1*time.Hour, 30*24*time.Hour, 10,
 	)
+	// Quality-Gate Phase 2: wire AuditLogPruner — ADR-0047 audit_log retention
+	// (1 year default). Was implemented but never wired, leaving audit_log to
+	// grow unbounded. PruneOnce runs nightly at 02:00 local via Start().
+	auditLogPruner := services.NewAuditLogPruner(dbAdapter.Pool, services.AuditLogPrunerOpts{
+		Logger: logger,
+	})
 
 	loops := []bgLoop{
 		{"build-reconcile", reconcileLoop.Start},
@@ -302,6 +308,7 @@ func createCoreLoops(
 		{"domain-provisioner", domainProvisioner.Start},
 		{"domain-health-checker", domainHealthChecker.Start},
 		{"build-gc", buildGC.Start},
+		{"audit-log-pruner", auditLogPruner.Start},
 	}
 
 	// OrphanDetector (conditional on CellLister + OrphanedTenantQuerier)

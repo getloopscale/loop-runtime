@@ -118,11 +118,8 @@ func NewReleaseConvergenceLoop(
 	}
 }
 
-// WithPGClaims attaches PG-backed dedup to the convergence loop.
-// Same pattern as BuildReconcileLoop.WithPGClaims.
-func (r *ReleaseConvergenceLoop) WithPGClaims(dedup *PGClaimDedup) {
-	r.pgDedup = dedup
-}
+// Quality-Gate Phase 2: WithPGClaims removed — fluent setter was never
+// invoked; PG dedup is wired via constructor when needed.
 
 // Start runs the convergence loop until context is cancelled.
 func (r *ReleaseConvergenceLoop) Start(ctx context.Context) {

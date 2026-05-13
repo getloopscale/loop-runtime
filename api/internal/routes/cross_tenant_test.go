@@ -39,7 +39,6 @@ package routes
 import (
 	"bytes"
 	"context"
-	"encoding/json"
 	"log/slog"
 	"net/http"
 	"net/http/httptest"
@@ -453,28 +452,4 @@ func TestCrossTenant_Admin_PassThrough_Allowed(t *testing.T) {
 	t.Log("Admin pass-through covered by admin_pin_cell_test.go + admin_evict_test.go (positive case)")
 }
 
-// =============================================================================
-// Helper: decode JSON error response for assertions
-// =============================================================================
-
-// decodeError reads a JSON {code, message} envelope from a response recorder.
-// Used by adversarial tests that need to inspect the error code without
-// breaking on minor field-name drift.
-func decodeError(t *testing.T, w *httptest.ResponseRecorder) (code, message string) {
-	t.Helper()
-	var body map[string]any
-	if err := json.NewDecoder(w.Body).Decode(&body); err != nil {
-		t.Fatalf("decode error body: %v", err)
-	}
-	if c, ok := body["code"].(string); ok {
-		code = c
-	}
-	if m, ok := body["message"].(string); ok {
-		message = m
-	}
-	return code, message
-}
-
-// Reference decodeError so it doesn't trip "unused" if no test currently
-// calls it. Future EC-NEW-8 / idempotency expansion will exercise it.
-var _ = decodeError
+// Quality-Gate Phase 2: decodeError helper removed (no callers; YAGNI).

@@ -248,6 +248,11 @@ func setupBuildHandler(
 	}
 	breaker := admission.NewPGPoolBreaker(dbAdapter.Pool, admission.DefaultBreakerConfig(cfg.DBMaxConns), logger)
 	breaker.Start(shutdownCtx)
+	// Quality-Gate Phase 2: ensure breaker cleanup on shutdown.
+	go func() {
+		<-shutdownCtx.Done()
+		breaker.Stop()
+	}()
 	if cfg.AdmissionControl {
 		logger.Info("pg pool circuit breaker enabled",
 			"high_water", 0.90, "low_water", 0.75, "max_conns", cfg.DBMaxConns)

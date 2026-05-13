@@ -15,28 +15,11 @@ import (
 	"github.com/loopzero/loopzero/api/internal/placement"
 
 	"k8s.io/client-go/kubernetes"
-	"k8s.io/client-go/tools/clientcmd"
 )
 
 // ClientFactory creates a kubernetes.Interface from a kubeconfig path and context name.
-// Production code uses DefaultClientFactory; tests inject a fake.
+// Tests inject a fake; production wires NewK8sClientFromKubeconfig via setup_kube.go.
 type ClientFactory func(kubeconfig, kubecontext string) (kubernetes.Interface, error)
-
-// DefaultClientFactory builds a real Kubernetes client from a kubeconfig file path
-// and context name using client-go's deferred loading config.
-func DefaultClientFactory(kubeconfig, kubecontext string) (kubernetes.Interface, error) {
-	loadRules := &clientcmd.ClientConfigLoadingRules{ExplicitPath: kubeconfig}
-	overrides := &clientcmd.ConfigOverrides{CurrentContext: kubecontext}
-	restConfig, err := clientcmd.NewNonInteractiveDeferredLoadingClientConfig(loadRules, overrides).ClientConfig()
-	if err != nil {
-		return nil, fmt.Errorf("cellmgr: build rest config for kubeconfig=%q context=%q: %w", kubeconfig, kubecontext, err)
-	}
-	client, err := kubernetes.NewForConfig(restConfig)
-	if err != nil {
-		return nil, fmt.Errorf("cellmgr: create kubernetes client: %w", err)
-	}
-	return client, nil
-}
 
 // ClientManager manages Kubernetes clients per Cell.
 // It lazily initializes clients on first access and caches them.

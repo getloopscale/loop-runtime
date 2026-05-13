@@ -89,17 +89,7 @@ var _ = AfterSuite(func() {
 	Expect(testEnv.Stop()).To(Succeed())
 })
 
-// --- Shared test helpers ---
-
-// findCondition returns the condition with the given type, or nil.
-func findCondition(conds []metav1.Condition, conditionType string) *metav1.Condition {
-	for i, c := range conds {
-		if c.Type == conditionType {
-			return &conds[i]
-		}
-	}
-	return nil
-}
+// Quality-Gate Phase 2: findCondition helper removed (no callers).
 
 // silence unused-import warnings for the time package — referenced by
 // envtest specs that use Eventually with explicit durations.

@@ -295,10 +295,10 @@ tasks:
         fi
       - |
         echo "=== Go API ==="
-        cd api && deadcode ./cmd/... 2>&1 | grep "^internal/" || echo "(none)"
+        cd api && deadcode -test ./... 2>&1 | grep "^internal/" || echo "(none)"
       - |
         echo "=== Go Operators ==="
-        cd operators && deadcode ./cmd/main.go ./cmd/tenant-operator/ ./cmd/app-operator/ ./cmd/preview-operator/ ./cmd/platform-operator/ 2>&1 | grep "^internal/" || echo "(none)"
+        cd operators && deadcode -test ./... 2>&1 | grep "^internal/" || echo "(none)"
       - |
         echo "=== TypeScript CLI ==="
         cd cli && npx knip --production --no-exit-code 2>&1 || echo "(knip not installed — run: cd cli && npm i -D knip)"
@@ -311,12 +311,20 @@ tasks:
           go install golang.org/x/tools/cmd/deadcode@latest
         fi
       - |
-        API_DEAD=$(cd api && deadcode ./cmd/... 2>&1 | grep "^internal/" | wc -l)
-        OPS_DEAD=$(cd operators && deadcode ./cmd/main.go ./cmd/tenant-operator/ ./cmd/app-operator/ ./cmd/preview-operator/ ./cmd/platform-operator/ 2>&1 | grep "^internal/" | wc -l)
+        # Quality-Gate Phase 2: -test ./... includes test entry points so
+        # "exported for testing" helpers (e.g. ReapOnce, table-driven fixtures)
+        # are not flagged as dead. Was ./cmd/... — that scan dropped 72
+        # false positives from the 100-finding baseline.
+        API_DEAD=$(cd api && deadcode -test ./... 2>&1 | grep "^internal/" | wc -l)
+        OPS_DEAD=$(cd operators && deadcode -test ./... 2>&1 | grep "^internal/" | wc -l)
         TOTAL=$((API_DEAD + OPS_DEAD))
         echo "Dead code: API=$API_DEAD Operators=$OPS_DEAD Total=$TOTAL"
-        # Baseline after initial cleanup — adjust as dead code is removed
-        BASELINE=85
+        # Quality-Gate Phase 2 baseline=0 per user "aggressive everywhere"
+        # override (2026-05-13). With -test ./... the false-positive
+        # "exported for testing" pattern is no longer counted, so 0 is
+        # achievable. Any new dead function is a real bug or needs explicit
+        # //deadcode:ignore justification.
+        BASELINE=0
         if [ "$TOTAL" -gt "$BASELINE" ]; then
           echo "FAIL: Dead code count ($TOTAL) exceeds baseline ($BASELINE)"
           echo "New dead code was introduced. Run 'task dead-code' to see details."

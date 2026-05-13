@@ -16,13 +16,11 @@ import (
 
 // --- RollbackServiceAdapter tests ---
 
+// Quality-Gate Phase 2: Rollback method removed; test exercises the type
+// translation inline (RollbackOrchestrator is concrete, not interface).
 type fakeRollbackOrchestrator struct {
 	result *services.RollbackResult
 	err    error
-}
-
-func (f *fakeRollbackOrchestrator) Rollback(_ context.Context, _ services.RollbackRequest) (*services.RollbackResult, error) {
-	return f.result, f.err
 }
 
 func TestRollbackServiceAdapter_Rollback_Success(t *testing.T) {
