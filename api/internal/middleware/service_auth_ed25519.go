@@ -1,0 +1,148 @@
+// SPDX-License-Identifier: Apache-2.0
+// Copyright 2025-2026 The LoopZero Authors
+
+package middleware
+
+import (
+	"crypto/ed25519"
+	"net/http"
+	"strconv"
+	"time"
+
+	"github.com/prometheus/client_golang/prometheus"
+	"github.com/prometheus/client_golang/prometheus/promauto"
+
+	"github.com/loopzero/loopzero/pkg/serviceauth"
+)
+
+// ServiceAuthEd25519PublicKeys is the trust set for Ed25519 signature
+// verification on the service-auth path. Configured at startup from a
+// K8s ConfigMap (current + previous public keys during rotation
+// windows). Per RFC dual-key rotation, both keys validate during the
+// 7-day overlap; previous is dropped after rotation completes.
+//
+// Per RFC Q5 (fail-closed): if this slice is empty, EVERY signed
+// request fails — there is no silent fall-through to the legacy
+// single-control path. The Phase 1 flag below controls whether
+// UNSIGNED requests are accepted.
+var ServiceAuthEd25519PublicKeys []ed25519.PublicKey
+
+// ServiceAuthRequireSignature controls the Phase 1 → Phase 2 cutover.
+//
+//   - false (Phase 1, default): accept-both. Unsigned requests proceed
+//     through the legacy shared-secret check; signed requests get the
+//     extra Ed25519 verification on top.
+//   - true (Phase 2 + 3): require-signed. Unsigned requests are
+//     rejected with 401 + audit_log row `auth.service.signature_missing`.
+//
+// The flag is set from env var LOOPZERO_SERVICE_AUTH_REQUIRE_SIGNATURE
+// (matching the operator runbook in the new ADR). 7-day soak at 100%
+// coverage (per Q3 decision) is the prerequisite for flipping to true.
+var ServiceAuthRequireSignature bool
+
+// ServiceAuthNonceStore is the replay-protection nonce dedupe store.
+// Default is an in-memory store (suitable for tests + single-replica
+// dev). Production must inject a Redis-backed store per RFC Q2 —
+// without shared state across API replicas, a replay against a
+// different replica slips past the local-only cache.
+//
+// Initialized in init() so tests that don't explicitly set it have a
+// working fallback. Operators wire the production Redis store during
+// app bootstrap.
+var ServiceAuthNonceStore serviceauth.NonceStore
+
+// ServiceAuthReplayWindow is the timestamp-tolerance window for replay
+// protection. Default 60s per RFC § Replay protection. Configurable
+// via LOOPZERO_SERVICE_AUTH_REPLAY_WINDOW_SECONDS for operators who need
+// to tune for clock-skew issues observed in the field.
+var ServiceAuthReplayWindow = serviceauth.NewReplayWindow(60 * time.Second)
+
+func init() {
+	ServiceAuthNonceStore = serviceauth.NewInMemoryNonceStore(5 * time.Minute)
+}
+
+// serviceAuthSignaturePresent counts how often each request carried the
+// X-LoopZero-Signature header — drives the Phase 1 → Phase 2 cutover gate
+// (operator waits for 100% present over 7 consecutive days per Q3).
+var serviceAuthSignaturePresent = promauto.NewCounterVec(prometheus.CounterOpts{
+	Name: "loopzero_service_auth_signature_present_total",
+	Help: "Service-auth requests broken down by whether X-LoopZero-Signature was present. Drives Phase 1 → Phase 2 cutover gate (7-day soak at 100% present rate per ADR 2026-05-13-service-auth-ed25519-adoption Q3).",
+}, []string{"outcome"}) // outcome = present | absent
+
+// serviceAuthSignatureRejected counts signed-request rejections by
+// reason, so an operator can distinguish replay attacks (timestamp +
+// nonce) from forgeries (invalid sig) in the dashboards.
+var serviceAuthSignatureRejected = promauto.NewCounterVec(prometheus.CounterOpts{
+	Name: "loopzero_service_auth_signature_rejected_total",
+	Help: "Service-auth signed-request rejections by reason: invalid_signature, replay_window, replay_nonce, no_trusted_keys, malformed_input.",
+}, []string{"reason"})
+
+// signatureRejectReason classifies a rejection so the audit log and
+// the Prometheus counter agree on terminology. Single source of truth
+// for the strings the dashboards depend on.
+type signatureRejectReason string
+
+const (
+	rejectInvalidSig     signatureRejectReason = "invalid_signature"
+	rejectStaleTimestamp signatureRejectReason = "replay_window"
+	rejectReplayNonce    signatureRejectReason = "replay_nonce"
+	rejectNoTrustedKeys  signatureRejectReason = "no_trusted_keys"
+	rejectMalformedInput signatureRejectReason = "malformed_input"
+)
+
+// verifyServiceAuthSignature evaluates the three signature headers
+// (X-LoopZero-Signature, X-LoopZero-Timestamp, X-LoopZero-Nonce) against the
+// canonical payload built from the request. Returns ok=true iff every
+// gate passes (signature valid + timestamp within window + nonce
+// claimed). Returns ok=false with the rejection reason on any gate
+// failure.
+//
+// The presence-vs-absence decision is made by the CALLER (auth middleware)
+// — this function only runs when all three signature headers are present.
+func verifyServiceAuthSignature(r *http.Request, userID, tenantID string) (ok bool, reason signatureRejectReason) {
+	sig := r.Header.Get("X-LoopZero-Signature")
+	tsStr := r.Header.Get("X-LoopZero-Timestamp")
+	nonce := r.Header.Get("X-LoopZero-Nonce")
+
+	tsInt, err := strconv.ParseInt(tsStr, 10, 64)
+	if err != nil {
+		return false, rejectMalformedInput
+	}
+	asserted := time.Unix(tsInt, 0)
+	if err := ServiceAuthReplayWindow.Validate(asserted, time.Now()); err != nil {
+		return false, rejectStaleTimestamp
+	}
+
+	// Verify the signature BEFORE claiming the nonce. Otherwise a
+	// flood of forged signatures would fill the nonce cache and act
+	// as a DoS vector (each forged request burns a (user, nonce) slot
+	// for the full TTL).
+	in := serviceauth.PayloadInput{
+		UserID: userID, TenantID: tenantID, Timestamp: tsInt,
+		Nonce: nonce, Method: r.Method, Path: r.URL.Path,
+	}
+	if err := serviceauth.Verify(ServiceAuthEd25519PublicKeys, sig, in); err != nil {
+		if err == serviceauth.ErrNoTrustedKeys {
+			return false, rejectNoTrustedKeys
+		}
+		return false, rejectInvalidSig
+	}
+
+	// Claim the nonce only after the signature is proven valid.
+	// Per-user scope means a flood of forged-sig requests cannot
+	// exhaust another user's nonce namespace.
+	if err := ServiceAuthNonceStore.Claim(r.Context(), userID, nonce); err != nil {
+		return false, rejectReplayNonce
+	}
+	return true, ""
+}
+
+// hasServiceAuthSignatureHeaders returns true iff all three signature
+// headers are present. Used to distinguish "client signed but the sig
+// is invalid" (a strong attack signal) from "client did not sign at
+// all" (Phase 1 default).
+func hasServiceAuthSignatureHeaders(r *http.Request) bool {
+	return r.Header.Get("X-LoopZero-Signature") != "" &&
+		r.Header.Get("X-LoopZero-Timestamp") != "" &&
+		r.Header.Get("X-LoopZero-Nonce") != ""
+}

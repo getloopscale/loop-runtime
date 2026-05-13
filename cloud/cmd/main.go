@@ -239,6 +239,30 @@ func main() {
 	// Dashboard has HMAC tokens, so cloud authenticates to engine via X-Service-Auth.
 	engineURL := cfg.EngineAPIURL
 	serviceSecret := string(cfg.ServiceAuthSecret)
+
+	// Dual-control Ed25519 signer (ADR 2026-05-13). The cloud proxy
+	// signs the canonical payload (user, tenant, ts, nonce, method+path)
+	// in addition to sending the shared secret. Phase 1: signer is
+	// optional — if LOOPZERO_SERVICE_AUTH_ED25519_PRIVATE_KEY is empty, the
+	// proxy degrades gracefully to single-control. The engine middleware
+	// counts present-vs-absent and the operator flips to Phase 2 when
+	// the 7-day coverage soak hits 100% (RFC Q3).
+	var serviceSigner *auth.ServiceSigner
+	if ed25519Key := os.Getenv("LOOPZERO_SERVICE_AUTH_ED25519_PRIVATE_KEY"); ed25519Key != "" {
+		serviceSigner, err = auth.NewServiceSignerFromBase64(ed25519Key)
+		if err != nil {
+			// Per RFC Q5 fail-closed: a misconfigured key MUST NOT silently
+			// degrade to single-control. Crash at startup so the readiness
+			// probe stops the rollout instead of accepting traffic without
+			// the dual-control gate.
+			logger.Error("service-auth Ed25519 signer init failed", "error", err)
+			os.Exit(1)
+		}
+		logger.Info("service-auth Ed25519 dual-control signer enabled")
+	} else {
+		logger.Warn("service-auth Ed25519 private key not configured — Phase 1 single-control only; set LOOPZERO_SERVICE_AUTH_ED25519_PRIVATE_KEY to enable dual-control")
+	}
+
 	engineClient := &http.Client{
 		Timeout:   30 * time.Second,
 		Transport: otelhttp.NewTransport(http.DefaultTransport),
@@ -279,6 +303,21 @@ func main() {
 				proxyReq.Header.Set("X-LoopZero-Tenant", user.TenantID)
 				proxyReq.Header.Set("X-LoopZero-Email", user.Email)
 				// X-LoopZero-Role intentionally NOT sent — engine resolves from DB (S2.3)
+
+				// Dual-control Ed25519 (ADR 2026-05-13). Attach AFTER identity
+				// headers are set — Attach hashes user+tenant+method+path into
+				// the canonical payload. A signing failure (missing identity,
+				// nonce-rng exhaustion) returns 502 to dashboard caller rather
+				// than silently proceeding without the signature.
+				if serviceSigner != nil {
+					if sErr := serviceSigner.Attach(proxyReq); sErr != nil {
+						logger.Warn("service-auth signature attach failed", "error", sErr, "path", targetPath)
+						w.Header().Set("Content-Type", "application/json")
+						w.WriteHeader(http.StatusBadGateway)
+						json.NewEncoder(w).Encode(map[string]string{"code": "SERVICE_AUTH_SIGN_FAILED", "message": "Service authentication failure. Try again."})
+						return
+					}
+				}
 			}
 
 			resp, err := engineClient.Do(proxyReq)
