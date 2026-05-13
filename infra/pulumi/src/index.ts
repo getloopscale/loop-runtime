@@ -187,3 +187,19 @@ export const serviceAuthEd25519GenerationMarker = serviceAuthEd25519
 export const serviceAuthEd25519ManifestsYaml = serviceAuthEd25519
   ? serviceAuthEd25519.manifests
   : undefined;
+
+// Cross-cluster Loki push URL (audit M08 #18 / §6.C.4b step 6).
+// Re-export of `config.lokiPushUrl` as a stable Pulumi stack output so
+// Helmfile L2 can consume the canonical URL via `pulumi stack output
+// lokiPushUrl` (zero drift between Pulumi state and helmfile env files).
+//
+// The per-environment yaml files at `infra/helmfile/environments/<env>.yaml`
+// still carry a `loki.pushUrl` field as a deploy-time fallback when
+// Pulumi state is unreachable (helmfile sync against unhealthy Pulumi
+// shouldn't no-op silently). The Pulumi output is the SoT in steady
+// state; the env-file value is the operator escape hatch.
+//
+// Undefined when the operator has not run
+// `pulumi config set lokiPushUrl http://<host>:<port>/loki/api/v1/push`
+// — caller is expected to fall through to the env-file value.
+export const lokiPushUrl: string | undefined = config.lokiPushUrl;

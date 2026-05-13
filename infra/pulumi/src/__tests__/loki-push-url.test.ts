@@ -102,6 +102,32 @@ describe('Loki cross-cluster push URL wiring (audit M08 #18 / §6.C.4b)', () => 
     });
   });
 
+  describe('Pulumi stack output (§6.C.4b step 6 — drift avoidance)', () => {
+    const INDEX_TS = path.join(REPO_ROOT, 'infra/pulumi/src/index.ts');
+
+    it('exports lokiPushUrl as a Pulumi stack output', () => {
+      // The helmfile env files are the deploy-time fallback, but the
+      // Pulumi state is the canonical SoT. This output makes the value
+      // queryable via `pulumi stack output lokiPushUrl` so a future
+      // helmfile pre-sync hook can consume it without grepping env yamls.
+      const src = fs.readFileSync(INDEX_TS, 'utf-8');
+      expect(src).toContain('export const lokiPushUrl');
+      // The export type MUST be string | undefined — operators may have
+      // not run `pulumi config set lokiPushUrl` on every stack, and
+      // throwing here would block `pulumi up` against pre-§6.C.4b stacks.
+      expect(src).toContain('string | undefined');
+    });
+
+    it('export reads from config (not a hardcoded literal)', () => {
+      // Drift trap: if a future contributor accidentally hardcodes the
+      // URL into the export, prod would always see that value regardless
+      // of `pulumi config set`. The contract is "re-export of config".
+      const src = fs.readFileSync(INDEX_TS, 'utf-8');
+      // Must reference config.lokiPushUrl somewhere on the export line.
+      expect(src).toMatch(/=\s*config\.lokiPushUrl/);
+    });
+  });
+
   describe('cross-VPC silent-loss invariant', () => {
     it('NO production-tier environment carries the k3d NodePort IP', () => {
       // Inverse of the per-env tests: parse every environment file and

@@ -39,6 +39,9 @@ includes:
   securityfile:
     taskfile: ./taskfiles/security.yml
     flatten: true
+  observabilityfile:
+    taskfile: ./taskfiles/observability.yml
+    flatten: true
 
 vars:
   MGMT_CONTEXT: k3d-loopzero-mgmt

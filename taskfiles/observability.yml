@@ -1,0 +1,64 @@
+version: "3"
+
+# Observability domain tasks — Loki cross-cluster, Prometheus,
+# Grafana, Tempo. Loaded from root Taskfile.yml via `includes:`.
+
+tasks:
+
+  loki-cross-cluster:verify-env-files:
+    desc: |
+      Run the vitest invariants on per-env loki.pushUrl declarations
+      (audit M08 #18 / §6.C.4b). Confirms no production-tier env file
+      carries the k3d-local IP 172.18.0.3, every env declares a non-
+      empty pushUrl, and the promtail template reads .Environment.Values.
+    dir: infra/pulumi
+    cmds:
+      - npx vitest run src/__tests__/loki-push-url.test.ts
+
+  loki-cross-cluster:show-pushUrl:
+    desc: |
+      Dump the canonical Loki push URL from Pulumi stack output (§6.C.4b
+      step 6). When the output is empty, fall back to the helmfile env
+      file. Useful for operator sanity ahead of `helmfile apply`.
+
+      Variable:
+        STACK — pulumi stack name (default: dev)
+    vars:
+      STACK: '{{.STACK | default "dev"}}'
+    dir: infra/pulumi
+    cmds:
+      - |
+        URL=$(pulumi --stack {{.STACK}} stack output lokiPushUrl 2>/dev/null || true)
+        if [ -n "$URL" ]; then
+          echo "Pulumi stack {{.STACK}} -> $URL"
+        else
+          echo "Pulumi stack {{.STACK}} has no lokiPushUrl output."
+          echo "Falling back to helmfile env file:"
+          grep -A2 "^loki:" ../helmfile/environments/{{.STACK}}.yaml | sed 's/^/  /'
+        fi
+
+  loki-cross-cluster:smoke-query:
+    desc: |
+      LIVE drill smoke step (§6.C.4b step 7) — port-forward mgmt Loki
+      and run a LogQL query for build-cluster logs in the last 5min.
+      A non-zero row count confirms cross-cluster wiring is alive.
+
+      Pre-requisite: kubectl --context drill-mgmt is reachable AND a
+      build has executed on the drill build cluster within the
+      query window. See loki-cross-cluster-drill-smoke-runbook.md.
+
+      Variables:
+        CONTEXT — kubectl context for mgmt cluster (default: drill-mgmt)
+        LOKI_NS — Loki namespace (default: loopzero-observability)
+    vars:
+      CONTEXT: '{{.CONTEXT | default "drill-mgmt"}}'
+      LOKI_NS: '{{.LOKI_NS | default "loopzero-observability"}}'
+    cmds:
+      - |
+        kubectl --context {{.CONTEXT}} port-forward -n {{.LOKI_NS}} svc/loki 3100:3100 &
+        PF=$!
+        sleep 3
+        echo "Querying mgmt Loki for build cluster logs in the last 5min..."
+        logcli --addr http://localhost:3100 query --since 5m --limit 20 '{namespace="argo"}' || true
+        kill $PF 2>/dev/null || true
+        wait $PF 2>/dev/null || true
