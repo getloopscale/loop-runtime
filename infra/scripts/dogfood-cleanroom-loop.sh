@@ -220,10 +220,14 @@ phase_dogfood() {
   if [[ -z "$GOBIN_DIR" ]]; then
     GOBIN_DIR="$(go env GOPATH 2>/dev/null || echo "$HOME/go")/bin"
   fi
-  # Final PATH for ginkgo subshell: directory of `go` + GOBIN + system defaults.
+  # Final PATH for ginkgo subshell: go dir + GOBIN prepended to the parent
+  # shell's PATH. Inheriting from $PATH preserves operator-specific dirs like
+  # ~/.local/bin (which on this host holds `psql`, required by e2e seed.Run
+  # in BeforeSuite). Earlier attempts that rebuilt PATH from `/usr/local/bin
+  # + /usr/bin + ...` dropped ~/.local/bin and made psql invisible.
   local GO_DIR GINKGO_PATH
   GO_DIR="$(dirname "$GO_BIN_PATH")"
-  GINKGO_PATH="${GO_DIR}:${GOBIN_DIR}:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin"
+  GINKGO_PATH="${GO_DIR}:${GOBIN_DIR}:${PATH}"
   export PATH="$GINKGO_PATH"
   if ! command -v ginkgo >/dev/null 2>&1; then
     log "ginkgo CLI not found — bootstrapping via 'go install github.com/onsi/ginkgo/v2/ginkgo@latest'"
