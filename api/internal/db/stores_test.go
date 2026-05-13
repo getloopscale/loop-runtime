@@ -1119,49 +1119,48 @@ func TestDomainStore_Create_UniqueViolation(t *testing.T) {
 	}
 }
 
-func TestDomainStore_UpdateStatus_Success(t *testing.T) {
-	fake := &fakeDBTX{execResult: ExecResult{RowsAffected: 1}}
-	store := &PostgresDomainStore{DB: fake}
-
-	err := store.UpdateStatus(context.Background(), "example.com", "active")
-	if err != nil {
-		t.Fatalf("unexpected error: %v", err)
+// TestDomainStore_StatusMutators exercises UpdateStatus + TransitionStatus
+// with their canonical {Success, RowsAffected=0 error} pair. Phase 3 helper:
+// was 4 near-clone test functions. The "0 rows affected" error message
+// differs ("domain not found" vs "transition failed") so the table includes
+// an errSubstring assertion.
+func TestDomainStore_StatusMutators(t *testing.T) {
+	type mutatorCall func(s *PostgresDomainStore) error
+	cases := []struct {
+		name         string
+		call         mutatorCall
+		errSubstring string // expected substring in "0 rows affected" error path
+	}{
+		{
+			name:         "UpdateStatus",
+			call:         func(s *PostgresDomainStore) error { return s.UpdateStatus(context.Background(), "example.com", "active") },
+			errSubstring: "domain not found",
+		},
+		{
+			name:         "TransitionStatus",
+			call:         func(s *PostgresDomainStore) error { return s.TransitionStatus(context.Background(), "example.com", "verified", "provisioning") },
+			errSubstring: "transition failed",
+		},
 	}
-}
-
-func TestDomainStore_UpdateStatus_NotFound(t *testing.T) {
-	fake := &fakeDBTX{execResult: ExecResult{RowsAffected: 0}}
-	store := &PostgresDomainStore{DB: fake}
-
-	err := store.UpdateStatus(context.Background(), "nonexistent.com", "active")
-	if err == nil {
-		t.Fatal("expected error for not found")
-	}
-	if !strings.Contains(err.Error(), "domain not found") {
-		t.Errorf("expected 'domain not found', got: %v", err)
-	}
-}
-
-func TestDomainStore_TransitionStatus_Success(t *testing.T) {
-	fake := &fakeDBTX{execResult: ExecResult{RowsAffected: 1}}
-	store := &PostgresDomainStore{DB: fake}
-
-	err := store.TransitionStatus(context.Background(), "example.com", "verified", "provisioning")
-	if err != nil {
-		t.Fatalf("unexpected error: %v", err)
-	}
-}
-
-func TestDomainStore_TransitionStatus_StaleTransition(t *testing.T) {
-	fake := &fakeDBTX{execResult: ExecResult{RowsAffected: 0}}
-	store := &PostgresDomainStore{DB: fake}
-
-	err := store.TransitionStatus(context.Background(), "example.com", "verified", "provisioning")
-	if err == nil {
-		t.Fatal("expected error")
-	}
-	if !strings.Contains(err.Error(), "transition failed") {
-		t.Errorf("expected 'transition failed', got: %v", err)
+	for _, c := range cases {
+		t.Run(c.name+"_Success", func(t *testing.T) {
+			fake := &fakeDBTX{execResult: ExecResult{RowsAffected: 1}}
+			store := &PostgresDomainStore{DB: fake}
+			if err := c.call(store); err != nil {
+				t.Fatalf("unexpected error: %v", err)
+			}
+		})
+		t.Run(c.name+"_NotFoundOrStale", func(t *testing.T) {
+			fake := &fakeDBTX{execResult: ExecResult{RowsAffected: 0}}
+			store := &PostgresDomainStore{DB: fake}
+			err := c.call(store)
+			if err == nil {
+				t.Fatal("expected error")
+			}
+			if !strings.Contains(err.Error(), c.errSubstring) {
+				t.Errorf("expected %q, got: %v", c.errSubstring, err)
+			}
+		})
 	}
 }
 
@@ -1682,33 +1681,50 @@ func TestMembershipStore_GetMemberships_QueryError(t *testing.T) {
 // Environment Target Store tests
 // =============================================================================
 
-func TestEnvironmentTargetStore_SetDesired_Success(t *testing.T) {
-	fake := &fakeDBTX{execResult: ExecResult{RowsAffected: 1}}
-	store := NewPostgresEnvironmentTargetStore(fake, fake)
-
-	err := store.SetDesired(context.Background(), fake, "t1", "p1", "prod", "rel-1", "user1", "corr-1")
-	if err != nil {
-		t.Fatalf("unexpected error: %v", err)
+// TestEnvironmentTargetStore_Mutators exercises every single-row mutation
+// method on EnvironmentTargetStore (SetDesired, SetActive, DeleteTarget)
+// with the canonical {Success, NilTxUsesFallback} pair. Phase 3 helper:
+// was 6 near-clone test functions across stores_test.go and stores_extra_test.go.
+func TestEnvironmentTargetStore_Mutators(t *testing.T) {
+	type mutatorCall func(s EnvironmentTargetStore, tx DBTX) error
+	cases := []struct {
+		name string
+		call mutatorCall // canonical happy path; reused for nil-tx variant
+	}{
+		{
+			name: "SetDesired",
+			call: func(s EnvironmentTargetStore, tx DBTX) error {
+				return s.SetDesired(context.Background(), tx, "t1", "p1", "prod", "rel-1", "user1", "corr-1")
+			},
+		},
+		{
+			name: "SetActive",
+			call: func(s EnvironmentTargetStore, tx DBTX) error {
+				return s.SetActive(context.Background(), tx, "t1", "p1", "prod", "rel-1")
+			},
+		},
+		{
+			name: "DeleteTarget",
+			call: func(s EnvironmentTargetStore, tx DBTX) error {
+				return s.DeleteTarget(context.Background(), tx, "t1", "p1", "prod")
+			},
+		},
 	}
-}
-
-func TestEnvironmentTargetStore_SetDesired_NilTxUsesFallback(t *testing.T) {
-	fake := &fakeDBTX{execResult: ExecResult{RowsAffected: 1}}
-	store := NewPostgresEnvironmentTargetStore(fake, fake)
-
-	err := store.SetDesired(context.Background(), nil, "t1", "p1", "prod", "rel-1", "user1", "corr-1")
-	if err != nil {
-		t.Fatalf("unexpected error: %v", err)
-	}
-}
-
-func TestEnvironmentTargetStore_SetActive_Success(t *testing.T) {
-	fake := &fakeDBTX{execResult: ExecResult{RowsAffected: 1}}
-	store := NewPostgresEnvironmentTargetStore(fake, fake)
-
-	err := store.SetActive(context.Background(), fake, "t1", "p1", "prod", "rel-1")
-	if err != nil {
-		t.Fatalf("unexpected error: %v", err)
+	for _, c := range cases {
+		t.Run(c.name+"_Success", func(t *testing.T) {
+			fake := &fakeDBTX{execResult: ExecResult{RowsAffected: 1}}
+			store := NewPostgresEnvironmentTargetStore(fake, fake)
+			if err := c.call(store, fake); err != nil {
+				t.Fatalf("unexpected error: %v", err)
+			}
+		})
+		t.Run(c.name+"_NilTxUsesFallback", func(t *testing.T) {
+			fake := &fakeDBTX{execResult: ExecResult{RowsAffected: 1}}
+			store := NewPostgresEnvironmentTargetStore(fake, fake)
+			if err := c.call(store, nil); err != nil {
+				t.Fatalf("unexpected error: %v", err)
+			}
+		})
 	}
 }
 
@@ -1741,25 +1757,9 @@ func TestEnvironmentTargetStore_ListByProject_EmptyReturnsEmptySlice(t *testing.
 	}
 }
 
-func TestEnvironmentTargetStore_DeleteTarget_Success(t *testing.T) {
-	fake := &fakeDBTX{execResult: ExecResult{RowsAffected: 1}}
-	store := NewPostgresEnvironmentTargetStore(fake, fake)
-
-	err := store.DeleteTarget(context.Background(), fake, "t1", "p1", "prod")
-	if err != nil {
-		t.Fatalf("unexpected error: %v", err)
-	}
-}
-
-func TestEnvironmentTargetStore_DeleteTarget_NilTxUsesFallback(t *testing.T) {
-	fake := &fakeDBTX{execResult: ExecResult{RowsAffected: 1}}
-	store := NewPostgresEnvironmentTargetStore(fake, fake)
-
-	err := store.DeleteTarget(context.Background(), nil, "t1", "p1", "prod")
-	if err != nil {
-		t.Fatalf("unexpected error: %v", err)
-	}
-}
+// SetDesired_NilTxUsesFallback / SetActive_Success / DeleteTarget_{Success,
+// NilTxUsesFallback} consolidated into TestEnvironmentTargetStore_Mutators
+// above (Phase 3 v12 refactor).
 
 // =============================================================================
 // Idempotency Store tests

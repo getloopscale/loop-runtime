@@ -279,15 +279,7 @@ func TestBuildStore_CancelActiveBuilds_QueryError(t *testing.T) {
 // Environment Target Store additional tests
 // =============================================================================
 
-func TestEnvironmentTargetStore_SetActive_NilTxUsesFallback(t *testing.T) {
-	fake := &fakeDBTX{execResult: ExecResult{RowsAffected: 1}}
-	store := NewPostgresEnvironmentTargetStore(fake, fake)
-
-	err := store.SetActive(context.Background(), nil, "t1", "p1", "prod", "rel-1")
-	if err != nil {
-		t.Fatalf("unexpected error: %v", err)
-	}
-}
+// Refactored into TestEnvironmentTargetStore_Mutators in stores_test.go.
 
 func TestEnvironmentTargetStore_SetDesired_ExecError(t *testing.T) {
 	fake := &fakeDBTX{execErr: fmt.Errorf("pg down")}
