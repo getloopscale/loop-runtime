@@ -58,13 +58,26 @@ tasks:
 
         echo ""
         echo "=== System Limits ==="
+        # Threshold raised to 1024 per Finding 2026-05-13 (k3d agent timeout):
+        # 4 k3d clusters (mgmt + build + workload + runtime-2) consume ~5-10
+        # inotify instances each via embedded containerd CRI plugin; legacy
+        # threshold 512 + the kernel default 128 both insufficient.
         INOTIFY_INSTANCES=$(cat /proc/sys/fs/inotify/max_user_instances 2>/dev/null || echo 0)
-        if [ "$INOTIFY_INSTANCES" -ge 512 ]; then
-          echo "  [PASS] inotify max_user_instances: $INOTIFY_INSTANCES (>= 512)"
+        INOTIFY_WATCHES=$(cat /proc/sys/fs/inotify/max_user_watches 2>/dev/null || echo 0)
+        if [ "$INOTIFY_INSTANCES" -ge 1024 ]; then
+          echo "  [PASS] inotify max_user_instances: $INOTIFY_INSTANCES (>= 1024)"
           PASS=$((PASS+1))
         else
-          echo "  [FAIL] inotify max_user_instances: $INOTIFY_INSTANCES (need >= 512 for 3 k3d clusters)"
-          echo "         Fix: sudo sysctl fs.inotify.max_user_instances=512"
+          echo "  [FAIL] inotify max_user_instances: $INOTIFY_INSTANCES (need >= 1024 for 4 k3d clusters)"
+          echo "         Fix once: sudo bash infra/scripts/setup-host-inotify-limits.sh"
+          FAIL=$((FAIL+1))
+        fi
+        if [ "$INOTIFY_WATCHES" -ge 524288 ]; then
+          echo "  [PASS] inotify max_user_watches: $INOTIFY_WATCHES (>= 524288)"
+          PASS=$((PASS+1))
+        else
+          echo "  [FAIL] inotify max_user_watches: $INOTIFY_WATCHES (need >= 524288 for 4 k3d clusters)"
+          echo "         Fix once: sudo bash infra/scripts/setup-host-inotify-limits.sh"
           FAIL=$((FAIL+1))
         fi
 

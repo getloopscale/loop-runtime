@@ -46,8 +46,31 @@ tasks:
     # registration window. Fix (Rule 6 — zero workaround):
     #   1. After each create, wait for kubectl `nodes Ready` BEFORE the next
     #      cluster create begins. Deterministic gate, not a timeout bump.
-    #   2. Keep create commands idempotent via `cluster list | grep -q`.
+    #   2. Pre-flight kernel inotify limits — 4 k3d clusters require ≥1024
+    #      max_user_instances; default 128 produces silent "Unimplemented
+    #      runtime.v1.RuntimeService" inside the agent's containerd.
+    #   3. Keep create commands idempotent via `cluster list | grep -q`.
     cmds:
+      # Pre-flight inotify gate — fail loud BEFORE the first cluster create
+      # so the operator gets a single clear remediation step instead of a
+      # cryptic agent-timeout 120s into the run.
+      - |
+        REQUIRED_INSTANCES=1024
+        REQUIRED_WATCHES=524288
+        ACTUAL_INSTANCES=$(cat /proc/sys/fs/inotify/max_user_instances 2>/dev/null || echo 0)
+        ACTUAL_WATCHES=$(cat /proc/sys/fs/inotify/max_user_watches 2>/dev/null || echo 0)
+        if [ "$ACTUAL_INSTANCES" -lt "$REQUIRED_INSTANCES" ] || [ "$ACTUAL_WATCHES" -lt "$REQUIRED_WATCHES" ]; then
+          echo "ERROR: kernel inotify limits insufficient for 4 k3d clusters." >&2
+          echo "  fs.inotify.max_user_instances = $ACTUAL_INSTANCES  (need >= $REQUIRED_INSTANCES)" >&2
+          echo "  fs.inotify.max_user_watches   = $ACTUAL_WATCHES  (need >= $REQUIRED_WATCHES)" >&2
+          echo "" >&2
+          echo "Fix once (persists across reboots):" >&2
+          echo "  sudo bash infra/scripts/setup-host-inotify-limits.sh" >&2
+          echo "" >&2
+          echo "Rationale: .claude/knowledge-base/concepts/operations/finding-2026-05-13-k3d-agent-timeout.md" >&2
+          exit 1
+        fi
+        echo "  [PASS] inotify limits OK (instances=$ACTUAL_INSTANCES, watches=$ACTUAL_WATCHES)"
       - k3d cluster list -o json | grep -q '"name":"loopzero-mgmt"' || k3d cluster create --config infra/k3d/mgmt-cluster.yaml
       - kubectl --context {{.MGMT_CONTEXT}} wait --for=condition=Ready node --all --timeout=120s
       - k3d cluster list -o json | grep -q '"name":"loopzero-build"' || k3d cluster create --config infra/k3d/build-cluster.yaml
