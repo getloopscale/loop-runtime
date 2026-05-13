@@ -93,3 +93,21 @@ tracing:
   # Now reads from this env var via cfg.GiteaOrg; in standalone-multi the
   # org is "loopzero-platform" (created by bootstrap scripts).
   GITEA_ORG: "loopzero-platform"
+
+# Service-auth Ed25519 dual-control (ADR 2026-05-13). The deployment
+# template injects 4 env vars from this block:
+#   LOOPZERO_SERVICE_AUTH_ED25519_PUBLIC_CURRENT     (secretKeyRef, optional)
+#   LOOPZERO_SERVICE_AUTH_ED25519_PUBLIC_PREVIOUS    (secretKeyRef, optional)
+#   LOOPZERO_SERVICE_AUTH_REQUIRE_SIGNATURE          (this block, Phase 2)
+#   LOOPZERO_SERVICE_AUTH_NONCE_REDIS_ADDR           (this block, multi-replica)
+serviceAuthEd25519:
+  # Phase 1 → Phase 2 flip. Default false (accept-both). Operator
+  # sets `true` only after the 7-day soak at 100% present rate
+  # confirms full adoption — see service-auth-ed25519-rollout-runbook.md.
+  requireSignature: false
+  # Redis address for shared nonce store. Empty = in-memory fallback
+  # (single-replica / dev only). For multi-replica deployments, point
+  # at a reachable Redis. The existing gitea Redis at
+  # `redis.loopzero-system:6379` (Bitnami chart, no auth) works as long
+  # as a service-auth-isolated DB index is used.
+  nonceRedisAddr: ""

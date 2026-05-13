@@ -139,6 +139,42 @@ spec:
                   name: loopzero-api-tokens
                   key: argocd-token
                   optional: true
+            # Ed25519 dual-control public keys (ADR 2026-05-13-service-auth-
+            # ed25519-adoption). Materialized by ESO from the Pulumi
+            # ServiceAuthEd25519 component into Secret
+            # `loopzero-service-auth-ed25519-pub` with keys `current` +
+            # `previous`. Phase 1 default: env vars empty → trust set
+            # empty → unsigned requests proceed via legacy path.
+            - name: LOOPZERO_SERVICE_AUTH_ED25519_PUBLIC_CURRENT
+              valueFrom:
+                secretKeyRef:
+                  name: loopzero-service-auth-ed25519-pub
+                  key: current
+                  optional: true
+            - name: LOOPZERO_SERVICE_AUTH_ED25519_PUBLIC_PREVIOUS
+              valueFrom:
+                secretKeyRef:
+                  name: loopzero-service-auth-ed25519-pub
+                  key: previous
+                  optional: true
+            # Phase 1 → Phase 2 cutover toggle (ADR Q3). Default false
+            # (accept-both). Operator sets to "true" only after 7-day
+            # soak at 100% present rate confirms full adoption.
+            - name: LOOPZERO_SERVICE_AUTH_REQUIRE_SIGNATURE
+              value: {{ .Values.serviceAuthEd25519.requireSignature | default false | quote }}
+            # Replay-protection nonce store address (ADR Q2). Default
+            # points at the existing Bitnami Redis at
+            # `redis.loopzero-system:6379` (gitea Redis, no auth, DB 0
+            # default). Empty value forces in-memory fallback (single-
+            # replica / dev only; multi-replica needs the shared store).
+            - name: LOOPZERO_SERVICE_AUTH_NONCE_REDIS_ADDR
+              value: {{ .Values.serviceAuthEd25519.nonceRedisAddr | default "" | quote }}
+            - name: LOOPZERO_SERVICE_AUTH_NONCE_REDIS_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: loopzero-service-auth-redis
+                  key: password
+                  optional: true
           envFrom:
             - configMapRef:
                 name: {{ .Values.wiringConfigMap | quote }}

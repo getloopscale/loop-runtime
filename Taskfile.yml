@@ -36,6 +36,9 @@ includes:
   k3dfile:
     taskfile: ./taskfiles/k3d.yml
     flatten: true
+  securityfile:
+    taskfile: ./taskfiles/security.yml
+    flatten: true
 
 vars:
   MGMT_CONTEXT: k3d-loopzero-mgmt
