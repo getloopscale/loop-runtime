@@ -77,6 +77,48 @@ func cleanupTenantEnvCRs(tenantName string) {
 	}
 }
 
+// expectTenantCondition fetches the Tenant CR and asserts a specific
+// condition type appears with the given status. Phase 3 sibling helper to
+// expectEnvCondition — eliminates 4+ inline copies in tenant_controller_test
+// (Build/Quota/PriorityClass/GitRepo/ArgoCD ready assertions).
+func expectTenantCondition(tenantName, condType string, want metav1.ConditionStatus) {
+	Eventually(func(g Gomega) {
+		var t loopzerov1.Tenant
+		g.Expect(k8sClient.Get(ctx, types.NamespacedName{
+			Name: tenantName, Namespace: "default",
+		}, &t)).To(Succeed())
+		found := false
+		for _, c := range t.Status.Conditions {
+			if c.Type == condType {
+				found = true
+				g.Expect(c.Status).To(Equal(want))
+			}
+		}
+		g.Expect(found).To(BeTrue(), condType+" condition should exist on Tenant CR")
+	}, timeout, interval).Should(Succeed())
+}
+
+// expectEnvCondition fetches the Environment CR identified by envCRName in
+// the default namespace and asserts a specific condition type appears with
+// the given status. Phase 3 helper: collapses ~9 inline Eventually+Get+
+// iterate copies across tenant_controller_test + environment_controller_test.
+func expectEnvCondition(envCRName, condType string, want metav1.ConditionStatus) {
+	Eventually(func(g Gomega) {
+		var envCR loopzerov1.Environment
+		g.Expect(k8sClient.Get(ctx, types.NamespacedName{
+			Name: envCRName, Namespace: "default",
+		}, &envCR)).To(Succeed())
+		found := false
+		for _, c := range envCR.Status.Conditions {
+			if c.Type == condType {
+				found = true
+				g.Expect(c.Status).To(Equal(want))
+			}
+		}
+		g.Expect(found).To(BeTrue(), condType+" condition should exist on Environment CR")
+	}, timeout, interval).Should(Succeed())
+}
+
 // createTenantAndWaitActive creates a Tenant CR and waits for its phase to
 // become Active. Phase 3 helper — eliminates the ~10-line BeforeAll block
 // duplicated across PriorityClass / RBAC / NetworkPolicy / ResourceQuota
@@ -444,21 +486,7 @@ var _ = Describe("TenantController — RBAC", Ordered, func() {
 
 	Context("RBACReady condition (on Environment CR)", func() {
 		It("should set RBACReady on Environment CR (not on Tenant)", func() {
-			envCRName := tenantName + "-production"
-			Eventually(func(g Gomega) {
-				var envCR loopzerov1.Environment
-				g.Expect(k8sClient.Get(ctx, types.NamespacedName{
-					Name: envCRName, Namespace: "default",
-				}, &envCR)).To(Succeed())
-				found := false
-				for _, c := range envCR.Status.Conditions {
-					if c.Type == conditions.TypeEnvRBACReady {
-						found = true
-						g.Expect(c.Status).To(Equal(metav1.ConditionTrue))
-					}
-				}
-				g.Expect(found).To(BeTrue(), "RBACReady condition should exist on Environment CR")
-			}, timeout, interval).Should(Succeed())
+			expectEnvCondition(tenantName+"-production", conditions.TypeEnvRBACReady, metav1.ConditionTrue)
 		})
 	})
 
@@ -590,21 +618,7 @@ var _ = Describe("TenantController — NetworkPolicy", Ordered, func() {
 
 	Context("NetworkPolicyReady condition (on Environment CR)", func() {
 		It("should set NetworkPolicyReady on Environment CR (not on Tenant)", func() {
-			envCRName := tenantName + "-production"
-			Eventually(func(g Gomega) {
-				var envCR loopzerov1.Environment
-				g.Expect(k8sClient.Get(ctx, types.NamespacedName{
-					Name: envCRName, Namespace: "default",
-				}, &envCR)).To(Succeed())
-				found := false
-				for _, c := range envCR.Status.Conditions {
-					if c.Type == conditions.TypeEnvNetworkPolicyReady {
-						found = true
-						g.Expect(c.Status).To(Equal(metav1.ConditionTrue))
-					}
-				}
-				g.Expect(found).To(BeTrue(), "NetworkPolicyReady condition should exist on Environment CR")
-			}, timeout, interval).Should(Succeed())
+			expectEnvCondition(tenantName+"-production", conditions.TypeEnvNetworkPolicyReady, metav1.ConditionTrue)
 		})
 	})
 
@@ -684,66 +698,22 @@ var _ = Describe("TenantController — Build Namespace + QuotaEnforced", Ordered
 
 	Context("conditions", func() {
 		It("should set BuildNamespaceReady to True", func() {
-			Eventually(func(g Gomega) {
-				var t loopzerov1.Tenant
-				g.Expect(k8sClient.Get(ctx, types.NamespacedName{
-					Name: tenantName, Namespace: "default",
-				}, &t)).To(Succeed())
-				found := false
-				for _, c := range t.Status.Conditions {
-					if c.Type == conditions.TypeBuildNamespaceReady {
-						found = true
-						g.Expect(c.Status).To(Equal(metav1.ConditionTrue))
-					}
-				}
-				g.Expect(found).To(BeTrue(), "BuildNamespaceReady condition should exist")
-			}, timeout, interval).Should(Succeed())
+			expectTenantCondition(tenantName, conditions.TypeBuildNamespaceReady, metav1.ConditionTrue)
 		})
 
 		It("should set QuotaEnforced to True", func() {
-			Eventually(func(g Gomega) {
-				var t loopzerov1.Tenant
-				g.Expect(k8sClient.Get(ctx, types.NamespacedName{
-					Name: tenantName, Namespace: "default",
-				}, &t)).To(Succeed())
-				found := false
-				for _, c := range t.Status.Conditions {
-					if c.Type == conditions.TypeQuotaEnforced {
-						found = true
-						g.Expect(c.Status).To(Equal(metav1.ConditionTrue))
-					}
-				}
-				g.Expect(found).To(BeTrue(), "QuotaEnforced condition should exist")
-			}, timeout, interval).Should(Succeed())
+			expectTenantCondition(tenantName, conditions.TypeQuotaEnforced, metav1.ConditionTrue)
 		})
 	})
 
 	Context("PriorityClassReady condition", func() {
 		It("should set PriorityClassReady to True", func() {
-			Eventually(func(g Gomega) {
-				var t loopzerov1.Tenant
-				g.Expect(k8sClient.Get(ctx, types.NamespacedName{
-					Name: tenantName, Namespace: "default",
-				}, &t)).To(Succeed())
-				found := false
-				for _, c := range t.Status.Conditions {
-					if c.Type == conditions.TypePriorityClassReady {
-						found = true
-						g.Expect(c.Status).To(Equal(metav1.ConditionTrue))
-					}
-				}
-				g.Expect(found).To(BeTrue(), "PriorityClassReady condition should exist")
-			}, timeout, interval).Should(Succeed())
+			expectTenantCondition(tenantName, conditions.TypePriorityClassReady, metav1.ConditionTrue)
 		})
 	})
 
 	AfterAll(func() {
-		for _, nsName := range []string{"build-" + tenantName, "loopzero-" + tenantName + "-production"} {
-			ns := &corev1.Namespace{}
-			if err := k8sClient.Get(ctx, types.NamespacedName{Name: nsName}, ns); err == nil {
-				_ = k8sClient.Delete(ctx, ns)
-			}
-		}
+		deleteTenantNamespaces(tenantName)
 		deleteTenantWithFinalizer(tenantName)
 	})
 }) // end Build Namespace + QuotaEnforced
@@ -768,20 +738,7 @@ var _ = Describe("TenantController — PriorityClass", Ordered, func() {
 		})
 
 		It("should set PriorityClassReady condition to True", func() {
-			Eventually(func(g Gomega) {
-				var t loopzerov1.Tenant
-				g.Expect(k8sClient.Get(ctx, types.NamespacedName{
-					Name: tenantName, Namespace: "default",
-				}, &t)).To(Succeed())
-				found := false
-				for _, c := range t.Status.Conditions {
-					if c.Type == conditions.TypePriorityClassReady {
-						found = true
-						g.Expect(c.Status).To(Equal(metav1.ConditionTrue))
-					}
-				}
-				g.Expect(found).To(BeTrue(), "PriorityClassReady condition should exist")
-			}, timeout, interval).Should(Succeed())
+			expectTenantCondition(tenantName, conditions.TypePriorityClassReady, metav1.ConditionTrue)
 		})
 
 		It("should be idempotent — second reconciliation does not fail", func() {
@@ -1000,20 +957,7 @@ var _ = Describe("TenantController — Gitea Repo Provisioning", Ordered, func()
 
 	Context("GitRepoReady condition", func() {
 		It("should set GitRepoReady to True", func() {
-			Eventually(func(g Gomega) {
-				var t loopzerov1.Tenant
-				g.Expect(k8sClient.Get(ctx, types.NamespacedName{
-					Name: tenantName, Namespace: "default",
-				}, &t)).To(Succeed())
-				found := false
-				for _, c := range t.Status.Conditions {
-					if c.Type == conditions.TypeGitRepoReady {
-						found = true
-						g.Expect(c.Status).To(Equal(metav1.ConditionTrue))
-					}
-				}
-				g.Expect(found).To(BeTrue(), "GitRepoReady condition should exist")
-			}, timeout, interval).Should(Succeed())
+			expectTenantCondition(tenantName, conditions.TypeGitRepoReady, metav1.ConditionTrue)
 		})
 	})
 
@@ -1541,20 +1485,7 @@ var _ = Describe("TenantController — ArgoCD Application Provisioning", Ordered
 
 	Context("ArgoCDAppReady condition", func() {
 		It("should set ArgoCDAppReady condition to True", func() {
-			Eventually(func(g Gomega) {
-				var t loopzerov1.Tenant
-				g.Expect(k8sClient.Get(ctx, types.NamespacedName{
-					Name: tenantName, Namespace: "default",
-				}, &t)).To(Succeed())
-				found := false
-				for _, c := range t.Status.Conditions {
-					if c.Type == conditions.TypeArgoCDAppReady {
-						found = true
-						g.Expect(c.Status).To(Equal(metav1.ConditionTrue))
-					}
-				}
-				g.Expect(found).To(BeTrue(), "ArgoCDAppReady condition should exist")
-			}, timeout, interval).Should(Succeed())
+			expectTenantCondition(tenantName, conditions.TypeArgoCDAppReady, metav1.ConditionTrue)
 		})
 	})
 
