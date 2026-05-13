@@ -516,6 +516,22 @@ tasks:
         echo "Deleting k3d clusters and registry..."
       - task: clusters:delete
       - k3d registry delete loopzero-registry 2>/dev/null || true
+      # Finding 2026-05-13 (k3d agent timeout): clean:all preserved orphan
+      # docker volumes labeled app=k3d AND the shared k3d-loopzero network.
+      # Accumulation across cleanroom loops produced 132GB reclaimable
+      # volumes + lingering network state, contributing to IO contention
+      # during subsequent `clusters:create`. Rule 0 (local fidedigno) +
+      # Rule 6 (zero workaround): prune systematically here, never via
+      # ad-hoc kubectl/docker invocations.
+      - |
+        echo "Pruning orphan k3d volumes (label=app=k3d)..."
+        ORPHANS=$(docker volume ls -q --filter "label=app=k3d" 2>/dev/null || true)
+        if [ -n "$ORPHANS" ]; then
+          echo "$ORPHANS" | xargs -r docker volume rm -f 2>/dev/null || true
+        fi
+      - |
+        echo "Removing shared docker network k3d-loopzero (if empty)..."
+        docker network rm k3d-loopzero 2>/dev/null || true
       - echo "Full teardown complete. Run 'task setup' to start fresh."
 
   # ===========================================================================

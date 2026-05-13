@@ -39,13 +39,25 @@ tasks:
 
   clusters:create:
     desc: Create all 4 k3d clusters (mgmt, build, workload, runtime-2)
+    # Finding 2026-05-13 (k3d agent timeout): naive sequential create allowed
+    # the next cluster to begin while the previous k3s server was still
+    # provisioning addons (CoreDNS, metrics-server, local-path-provisioner).
+    # Under cumulative IO load the subsequent agent could miss the 120s
+    # registration window. Fix (Rule 6 — zero workaround):
+    #   1. After each create, wait for kubectl `nodes Ready` BEFORE the next
+    #      cluster create begins. Deterministic gate, not a timeout bump.
+    #   2. Keep create commands idempotent via `cluster list | grep -q`.
     cmds:
       - k3d cluster list -o json | grep -q '"name":"loopzero-mgmt"' || k3d cluster create --config infra/k3d/mgmt-cluster.yaml
+      - kubectl --context {{.MGMT_CONTEXT}} wait --for=condition=Ready node --all --timeout=120s
       - k3d cluster list -o json | grep -q '"name":"loopzero-build"' || k3d cluster create --config infra/k3d/build-cluster.yaml
+      - kubectl --context {{.BUILD_CONTEXT}} wait --for=condition=Ready node --all --timeout=120s
       - k3d cluster list -o json | grep -q '"name":"loopzero-workload"' || k3d cluster create --config infra/k3d/workload-cluster.yaml
+      - kubectl --context {{.WORKLOAD_CONTEXT}} wait --for=condition=Ready node --all --timeout=120s
       # cell-2-activation-plan T0.1: loopzero-runtime-2 maps to cells.cell_id='cell-2'.
       # Idempotent: skips if already exists (per memory feedback_no_tribal_knowledge.md).
       - k3d cluster list -o json | grep -q '"name":"loopzero-runtime-2"' || k3d cluster create --config infra/k3d/runtime-2-cluster.yaml
+      - kubectl --context {{.RUNTIME2_CONTEXT}} wait --for=condition=Ready node --all --timeout=120s
       - task: clusters:verify
 
   clusters:verify:
