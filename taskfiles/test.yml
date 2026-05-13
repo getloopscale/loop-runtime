@@ -372,7 +372,7 @@ tasks:
         OPS_DUPL=$(cd operators && dupl -threshold 50 -plumbing . 2>&1 | grep -v "zz_generated" | wc -l)
         PKG_DUPL=$(cd pkg && dupl -threshold 50 -plumbing . 2>&1 | grep -v "zz_generated" | wc -l)
         TOTAL=$((API_DUPL + OPS_DUPL + PKG_DUPL))
-        BASELINE=899  # api=606 + operators=237 + pkg=56 (Phase 3 v30 — markDisconnected production helper, sub-900 milestone)
+        BASELINE=893  # api=606 + operators=231 + pkg=56 (Phase 3 v31 — failPreviewCondition production helper)
         echo "Dupl Go: api=$API_DUPL operators=$OPS_DUPL pkg=$PKG_DUPL Total=$TOTAL Baseline=$BASELINE"
         if [ "$TOTAL" -gt "$BASELINE" ]; then
           echo "FAIL: Dupl count ($TOTAL) exceeds baseline ($BASELINE)"

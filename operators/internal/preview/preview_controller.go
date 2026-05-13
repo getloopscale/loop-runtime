@@ -229,16 +229,31 @@ func (r *PreviewReconciler) previewNamespaceName(preview *loopzerov1.PreviewEnvi
 	)
 }
 
+// failPreviewCondition is the canonical "set status condition False +
+// update + log status-update failure" pattern used throughout
+// reconcileCreating. Phase 3 helper: collapses 4 inline 7-line copies
+// across NamespaceReady/NetworkPolicyReady/ResourceQuotaReady error paths.
+// Returns the err untouched so the caller decides the controller-runtime
+// result envelope (some paths want Requeue, others want no-requeue).
+func (r *PreviewReconciler) failPreviewCondition(ctx context.Context, preview *loopzerov1.PreviewEnvironment, condType, reason, msg, statusLogContext string) {
+	logger := log.FromContext(ctx)
+	conditions.SetCondition(&preview.Status.Conditions, condType,
+		metav1.ConditionFalse, reason, msg, preview.Generation)
+	if statusErr := r.Status().Update(ctx, preview); statusErr != nil {
+		if statusLogContext == "" {
+			logger.Error(statusErr, "failed to update preview status")
+		} else {
+			logger.Error(statusErr, "failed to update preview status ("+statusLogContext+")")
+		}
+	}
+}
+
 // reconcileCreating provisions the preview namespace and route.
 func (r *PreviewReconciler) reconcileCreating(ctx context.Context, preview *loopzerov1.PreviewEnvironment) (ctrl.Result, error) {
 	logger := log.FromContext(ctx)
 	nsName, err := r.previewNamespaceName(preview)
 	if err != nil {
-		conditions.SetCondition(&preview.Status.Conditions, conditions.TypePreviewNamespaceReady,
-			metav1.ConditionFalse, "InvalidNaming", err.Error(), preview.Generation)
-		if statusErr := r.Status().Update(ctx, preview); statusErr != nil {
-			logger.Error(statusErr, "failed to update preview status")
-		}
+		r.failPreviewCondition(ctx, preview, conditions.TypePreviewNamespaceReady, "InvalidNaming", err.Error(), "")
 		// Naming is input validation — requeue is pointless without a Spec
 		// change, but we surface the condition and let the user fix the CR.
 		return ctrl.Result{}, nil
@@ -261,11 +276,7 @@ func (r *PreviewReconciler) reconcileCreating(ctx context.Context, preview *loop
 		ns.Labels["pod-security.kubernetes.io/warn"] = "restricted"
 		return nil
 	}); err != nil {
-		conditions.SetCondition(&preview.Status.Conditions, conditions.TypePreviewNamespaceReady,
-			metav1.ConditionFalse, "CreateFailed", err.Error(), preview.Generation)
-		if statusErr := r.Status().Update(ctx, preview); statusErr != nil {
-			logger.Error(statusErr, "failed to update preview status")
-		}
+		r.failPreviewCondition(ctx, preview, conditions.TypePreviewNamespaceReady, "CreateFailed", err.Error(), "")
 		return ctrl.Result{}, err
 	}
 
@@ -275,22 +286,14 @@ func (r *PreviewReconciler) reconcileCreating(ctx context.Context, preview *loop
 	// Sprint 5 / T1.2 — namespace hardening (NetworkPolicy + ResourceQuota +
 	// LimitRange). Each is its own condition for finer-grained observability.
 	if npErr := r.reconcilePreviewNetworkPolicies(ctx, nsName); npErr != nil {
-		conditions.SetCondition(&preview.Status.Conditions, conditions.TypePreviewNetworkPolicyReady,
-			metav1.ConditionFalse, "ApplyFailed", npErr.Error(), preview.Generation)
-		if statusErr := r.Status().Update(ctx, preview); statusErr != nil {
-			logger.Error(statusErr, "failed to update preview status (NP failure)")
-		}
+		r.failPreviewCondition(ctx, preview, conditions.TypePreviewNetworkPolicyReady, "ApplyFailed", npErr.Error(), "NP failure")
 		return ctrl.Result{}, npErr
 	}
 	conditions.SetCondition(&preview.Status.Conditions, conditions.TypePreviewNetworkPolicyReady,
 		metav1.ConditionTrue, "Ready", "Preview network policies applied (deny-all + allow-ingress + allow-egress)", preview.Generation)
 
 	if quotaErr := r.reconcilePreviewQuota(ctx, nsName); quotaErr != nil {
-		conditions.SetCondition(&preview.Status.Conditions, conditions.TypePreviewResourceQuotaReady,
-			metav1.ConditionFalse, "ApplyFailed", quotaErr.Error(), preview.Generation)
-		if statusErr := r.Status().Update(ctx, preview); statusErr != nil {
-			logger.Error(statusErr, "failed to update preview status (quota failure)")
-		}
+		r.failPreviewCondition(ctx, preview, conditions.TypePreviewResourceQuotaReady, "ApplyFailed", quotaErr.Error(), "quota failure")
 		return ctrl.Result{}, quotaErr
 	}
 	conditions.SetCondition(&preview.Status.Conditions, conditions.TypePreviewResourceQuotaReady,
