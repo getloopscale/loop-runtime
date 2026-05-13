@@ -84,13 +84,7 @@ var _ = Describe("Golden: Resource Quotas", Ordered, func() {
 		})
 
 		It("should create a ResourceQuota named build-quota in the build namespace", func() {
-			buildNs := "build-" + tenantName
-			Eventually(func(g Gomega) {
-				var quota corev1.ResourceQuota
-				g.Expect(k8sClient.Get(ctx, types.NamespacedName{
-					Name: "build-quota", Namespace: buildNs,
-				}, &quota)).To(Succeed())
-			}, timeout, interval).Should(Succeed())
+			expectResourceQuotaExists("build-quota", "build-"+tenantName)
 		})
 
 		It("should set requests.cpu=4 in build-quota", func() {
@@ -165,13 +159,7 @@ var _ = Describe("Golden: Resource Quotas", Ordered, func() {
 		})
 
 		It("should create a ResourceQuota named tenant-quota in the runtime namespace", func() {
-			ns := fmt.Sprintf("loopzero-%s-production", tenantName)
-			Eventually(func(g Gomega) {
-				var quota corev1.ResourceQuota
-				g.Expect(k8sClient.Get(ctx, types.NamespacedName{
-					Name: "tenant-quota", Namespace: ns,
-				}, &quota)).To(Succeed())
-			}, timeout, interval).Should(Succeed())
+			expectResourceQuotaExists("tenant-quota", fmt.Sprintf("loopzero-%s-production", tenantName))
 		})
 
 		It("should reflect spec.limits.maxCPU in requests.cpu of tenant-quota", func() {
@@ -254,13 +242,7 @@ var _ = Describe("Golden: Resource Quotas", Ordered, func() {
 			Expect(k8sClient.Create(ctx, tenant)).To(Succeed())
 
 			// Wait for quota to exist before deleting it.
-			ns := fmt.Sprintf("loopzero-%s-production", tenantName)
-			Eventually(func(g Gomega) {
-				var quota corev1.ResourceQuota
-				g.Expect(k8sClient.Get(ctx, types.NamespacedName{
-					Name: "tenant-quota", Namespace: ns,
-				}, &quota)).To(Succeed())
-			}, timeout, interval).Should(Succeed())
+			expectResourceQuotaExists("tenant-quota", fmt.Sprintf("loopzero-%s-production", tenantName))
 		})
 
 		It("should recreate tenant-quota after it is manually deleted", func() {

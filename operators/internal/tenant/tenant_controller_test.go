@@ -304,6 +304,17 @@ func expectPriorityClass(name string, value int32, policy corev1.PreemptionPolic
 	}, timeout, interval).Should(Succeed())
 }
 
+// expectResourceQuotaExists waits for a ResourceQuota by name+namespace to
+// exist. Phase 3 sibling helper to expectNetworkPolicyExists.
+func expectResourceQuotaExists(name, namespace string) {
+	Eventually(func(g Gomega) {
+		var quota corev1.ResourceQuota
+		g.Expect(k8sClient.Get(ctx, types.NamespacedName{
+			Name: name, Namespace: namespace,
+		}, &quota)).To(Succeed())
+	}, timeout, interval).Should(Succeed())
+}
+
 // expectNetworkPolicyExists waits for a NetworkPolicy by name+namespace to
 // exist. Phase 3 helper: eliminates 3 inline 6-line existence checks in
 // network_policies_test.go.
