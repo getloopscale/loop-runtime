@@ -253,6 +253,8 @@ export function registerDeployCommands(deps: CommandDeps): void {
     .option('--tail <n>', 'Show last N lines', parseInt)
     .option('--step <name>', 'Filter by build step')
     .option('--env <name>', 'Target environment', 'production')
+    .option('--app <name>', 'Filter runtime logs to a single app (use with --runtime). Defaults to all apps in the project namespace.')
+    .option('--runtime', 'Stream runtime logs from the workload namespace instead of build logs')
     .option('-f, --follow', 'Stream logs in real-time')
     .action(async (cmdOpts) => {
       const globalOpts = getGlobalOpts();
@@ -302,15 +304,50 @@ export function registerDeployCommands(deps: CommandDeps): void {
           client.connect().catch(onError);
           return { close: () => client.close() };
         },
+        // Beta Logs Gate Criterion 3 — runtime SSE stream with --app filter.
+        streamRuntimeLogs: (project, env, app, onLine, onError, onClose) => {
+          const token = configStore.getToken();
+          const params = new URLSearchParams();
+          params.set('env', env);
+          if (app) params.set('app', app);
+          const streamUrl = `${apiUrl}/api/v1/projects/${encodeURIComponent(project)}/logs/stream?${params.toString()}`;
+          const client = new SSEClient({
+            url: streamUrl,
+            headers: token ? { Authorization: `Bearer ${token}` } : {},
+            onEvent: (event) => {
+              if (event.event === 'log' && event.data) {
+                onLine({
+                  timestamp: (event.data.timestamp as string) ?? '',
+                  line: (event.data.line as string) ?? '',
+                  step: (event.data.step as string) ?? undefined,
+                });
+              } else if (event.event === 'stream.done' || event.event === 'stream.timeout') {
+                client.close();
+              }
+            },
+            onError,
+            onClose,
+          });
+          return { close: () => client.close() };
+        },
         writeTo,
         writeError,
       });
 
-      // Follow mode has no timeout (streams until build completes or user hits Ctrl+C)
-      const timeout = cmdOpts.follow ? 30 * 60 * 1000 : API_REQUEST_TIMEOUT_MS + 10_000;
+      // Follow mode (build OR runtime) has no timeout
+      const timeout = (cmdOpts.follow || cmdOpts.runtime) ? 30 * 60 * 1000 : API_REQUEST_TIMEOUT_MS + 10_000;
 
       const exitCode = await withTimeout(
-        logsCmd.execute({ build: cmdOpts.build, tail: cmdOpts.tail, step: cmdOpts.step, env: cmdOpts.env, json: globalOpts.json, follow: cmdOpts.follow }),
+        logsCmd.execute({
+          build: cmdOpts.build,
+          tail: cmdOpts.tail,
+          step: cmdOpts.step,
+          env: cmdOpts.env,
+          json: globalOpts.json,
+          follow: cmdOpts.follow,
+          runtime: cmdOpts.runtime,
+          app: cmdOpts.app,
+        }),
         timeout,
         'Logs request timed out. Check your connection and try again.',
       ).catch((err: Error) => {

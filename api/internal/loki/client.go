@@ -163,6 +163,45 @@ func isValidLogParam(s string) bool {
 	return len(s) <= 128 && logParamRegex.MatchString(s)
 }
 
+// buildRuntimeLogQL parses a runtime queryKey and constructs the LogQL
+// selector. Extracted from QueryBuildLogsSince so the LogQL shape is
+// testable without an HTTP round-trip to Loki.
+//
+// Accepts BOTH the legacy 4-segment form (runtime:tenant:env:project)
+// and the 5-segment form (runtime:tenant:env:project:app) added 2026-
+// 05-13 for Beta Logs Gate per-app filtering.
+//
+// Empty {app} segment in the 5-segment form is treated as "no filter"
+// (functionally identical to the 4-segment form). This keeps the
+// HTTP handler from having to branch on empty values.
+func buildRuntimeLogQL(queryKey string) (string, error) {
+	parts := strings.SplitN(queryKey, ":", 5)
+	if len(parts) < 4 {
+		return "", fmt.Errorf("loki: invalid runtime query key: %q", queryKey)
+	}
+	tenant, env, project := parts[1], parts[2], parts[3]
+	var app string
+	if len(parts) == 5 {
+		app = parts[4]
+	}
+	if !isValidLogParam(tenant) || !isValidLogParam(env) || !isValidLogParam(project) {
+		return "", fmt.Errorf("loki: invalid runtime query parameters")
+	}
+	// project is currently unused in the LogQL — LoopZero's tenant
+	// namespace convention is `loopzero-{tenant}-{env}` (no per-project
+	// namespace). Project is part of the queryKey for forward-compat
+	// (we may eventually scope per-project, e.g. via a label).
+	_ = project
+	namespace := fmt.Sprintf("loopzero-%s-%s", tenant, env)
+	if app != "" {
+		if !isValidLogParam(app) {
+			return "", fmt.Errorf("loki: invalid app filter parameter")
+		}
+		return fmt.Sprintf(`{namespace="%s", app="%s", container=~".+"}`, namespace, app), nil
+	}
+	return fmt.Sprintf(`{namespace="%s", container=~".+"}`, namespace), nil
+}
+
 // QueryBuildLogsSince queries Loki for logs newer than sinceNano (nanosecond timestamp).
 // Used by the log streaming handler for incremental polling.
 // Implements domain.StreamLogQuerier.
@@ -170,22 +209,23 @@ func isValidLogParam(s string) bool {
 // The queryKey can be:
 //   - A build ID (e.g., "bld-abc123") for build logs
 //   - A runtime key "runtime:{tenant}:{env}:{project}" for runtime logs
+//     (legacy 4-segment form — kept for backward compatibility)
+//   - A runtime key "runtime:{tenant}:{env}:{project}:{app}" with an
+//     optional 5th segment (Beta Logs Gate Criterion 3) — when {app}
+//     is non-empty the LogQL selector includes `app="<value>"`.
 func (c *Client) QueryBuildLogsSince(ctx context.Context, queryKey string, sinceNano int64, limit int) ([]domain.LogEntry, error) {
 	var query string
 
-	// Parse runtime key format: "runtime:{tenant}:{env}:{project}"
+	// Parse runtime key format: "runtime:{tenant}:{env}:{project}" or
+	// "runtime:{tenant}:{env}:{project}:{app}" (5-segment form added
+	// 2026-05-13 for per-app filtering).
 	if strings.HasPrefix(queryKey, "runtime:") {
-		parts := strings.SplitN(queryKey, ":", 4)
-		if len(parts) != 4 {
-			return nil, fmt.Errorf("loki: invalid runtime query key: %q", queryKey)
+		var qerr error
+		query, qerr = buildRuntimeLogQL(queryKey)
+		if qerr != nil {
+			return nil, qerr
 		}
-		tenant, env, project := parts[1], parts[2], parts[3]
-		if !isValidLogParam(tenant) || !isValidLogParam(env) || !isValidLogParam(project) {
-			return nil, fmt.Errorf("loki: invalid runtime query parameters")
-		}
-		// Runtime logs: query by namespace (LoopZero naming convention)
-		namespace := fmt.Sprintf("loopzero-%s-%s", tenant, env)
-		query = fmt.Sprintf(`{namespace="%s", container=~".+"}`, namespace)
+		_ = query // silence unused-variable warning if removed later
 	} else {
 		// Build logs: query by workflow name containing buildID
 		if !isValidLogParam(queryKey) {
