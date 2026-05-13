@@ -255,6 +255,7 @@ export function registerDeployCommands(deps: CommandDeps): void {
     .option('--env <name>', 'Target environment', 'production')
     .option('--app <name>', 'Filter runtime logs to a single app (use with --runtime). Defaults to all apps in the project namespace.')
     .option('--runtime', 'Stream runtime logs from the workload namespace instead of build logs')
+    .option('--since <duration>', 'Restrict to entries newer than NOW - <duration>. Accepts "24h", "7d", "30m", or raw seconds. Default: 7d.')
     .option('-f, --follow', 'Stream logs in real-time')
     .action(async (cmdOpts) => {
       const globalOpts = getGlobalOpts();
@@ -266,10 +267,11 @@ export function registerDeployCommands(deps: CommandDeps): void {
           const gitRoot = getGitRoot() ?? process.cwd();
           return findLoopZeroYaml(process.cwd(), gitRoot);
         },
-        getLogs: async (buildID: string, opts: { tail?: number; step?: string }) => {
+        getLogs: async (buildID: string, opts: { tail?: number; step?: string; since?: string }) => {
           const params = new URLSearchParams();
           if (opts.tail) params.set('tail', String(opts.tail));
           if (opts.step) params.set('step', opts.step);
+          if (opts.since) params.set('since', opts.since);
           const query = params.toString();
           const path = `/api/v1/builds/${encodeURIComponent(buildID)}/logs${query ? `?${query}` : ''}`;
           return apiClient.get(path);
@@ -347,6 +349,7 @@ export function registerDeployCommands(deps: CommandDeps): void {
           follow: cmdOpts.follow,
           runtime: cmdOpts.runtime,
           app: cmdOpts.app,
+          since: cmdOpts.since,
         }),
         timeout,
         'Logs request timed out. Check your connection and try again.',

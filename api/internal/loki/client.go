@@ -64,12 +64,25 @@ func (c *Client) QueryBuildLogs(ctx context.Context, buildID string, opts domain
 		limit = opts.Limit
 	}
 
+	// Time window for the Loki query_range call.
+	//   - Default: last 7 days (matches the chart's default retention,
+	//     and the operator's mental model "show me recent build logs").
+	//   - Beta Logs Gate Criterion 7: opts.SinceSeconds > 0 overrides
+	//     so `loopzero logs --since 30d` works for older builds (subject
+	//     to the cluster's actual Loki retention).
+	var startNano int64
+	if opts.SinceSeconds > 0 {
+		startNano = time.Now().Add(-time.Duration(opts.SinceSeconds) * time.Second).UnixNano()
+	} else {
+		startNano = time.Now().Add(-7 * 24 * time.Hour).UnixNano()
+	}
+
 	// Query Loki API: GET /loki/api/v1/query_range
 	params := url.Values{
 		"query":     {query},
 		"limit":     {strconv.Itoa(limit)},
 		"direction": {"forward"},
-		"start":     {strconv.FormatInt(time.Now().Add(-7*24*time.Hour).UnixNano(), 10)},
+		"start":     {strconv.FormatInt(startNano, 10)},
 		"end":       {strconv.FormatInt(time.Now().UnixNano(), 10)},
 	}
 

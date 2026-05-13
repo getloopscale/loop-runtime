@@ -6,7 +6,10 @@ package routes
 import (
 	"context"
 	"net/http"
+	"regexp"
 	"strconv"
+	"strings"
+	"time"
 
 	"github.com/go-chi/chi/v5"
 
@@ -14,6 +17,51 @@ import (
 	"github.com/loopzero/loopzero/api/internal/middleware"
 	loopzeroerrors "github.com/loopzero/loopzero/pkg/errors"
 )
+
+// parseSinceParam converts a `?since=<value>` query parameter into a
+// number of seconds. Accepts:
+//   - Pure integer ("3600") — interpreted as seconds.
+//   - Go duration ("24h", "30m", "45s") — parsed via time.ParseDuration.
+//   - Day shorthand ("7d", "30d") — normalized to 24h*N internally.
+//
+// Returns 0 on parse failure OR negative duration (caller treats 0 as
+// "no override" and falls back to the default 7-day window).
+//
+// Beta Logs Gate Criterion 7 — the runbook documents this contract so
+// operators can write `loopzero logs --since 7d` without learning Go's
+// idiosyncratic duration syntax (which lacks "d").
+var daySuffixRegex = regexp.MustCompile(`^(\d+)d$`)
+
+func parseSinceParam(raw string) int64 {
+	raw = strings.TrimSpace(raw)
+	if raw == "" {
+		return 0
+	}
+	// Pure integer → seconds
+	if secs, err := strconv.ParseInt(raw, 10, 64); err == nil {
+		if secs <= 0 {
+			return 0
+		}
+		return secs
+	}
+	// Day shorthand: "Nd" → "N*24h"
+	if m := daySuffixRegex.FindStringSubmatch(raw); m != nil {
+		if days, err := strconv.ParseInt(m[1], 10, 64); err == nil {
+			if days <= 0 {
+				return 0
+			}
+			return days * 86400
+		}
+	}
+	// Go duration syntax
+	if d, err := time.ParseDuration(raw); err == nil {
+		if d <= 0 {
+			return 0
+		}
+		return int64(d.Seconds())
+	}
+	return 0
+}
 
 // T1.3 of deep-review-remediation-plan (closes find_arch_001 + find_dep_routes_type_hub partial):
 // canonical types live in domain/. routes/ re-exports as type aliases for
@@ -103,6 +151,17 @@ func (h *LogsHandler) Get(w http.ResponseWriter, r *http.Request) {
 	}
 	if step := r.URL.Query().Get("step"); step != "" {
 		opts.Step = step
+	}
+	// Beta Logs Gate Criterion 7 — `since` query param. Accepts both
+	// raw seconds ("3600") and Go duration syntax ("24h", "7d" via "168h").
+	// "d" is normalized to "24h" before time.ParseDuration so the
+	// operator runbook can document "--since 7d" without users having
+	// to know Go's `time.ParseDuration` quirks (Go doesn't natively
+	// support "d" — minutes/hours only).
+	if sinceStr := r.URL.Query().Get("since"); sinceStr != "" {
+		if secs := parseSinceParam(sinceStr); secs > 0 {
+			opts.SinceSeconds = secs
+		}
 	}
 
 	// Query logs from Loki

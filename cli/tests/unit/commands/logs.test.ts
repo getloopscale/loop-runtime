@@ -576,4 +576,40 @@ describe('LogsCommand', () => {
       expect(errs).toContain('Runtime stream error');
     });
   });
+
+  // Beta Logs Gate Criterion 7 — --since flag propagation.
+  // The CLI forwards the raw string to the API; the API does the
+  // normalization. Test ensures the wire is correct.
+  describe('--since flag', () => {
+    it('forwards --since to getLogs as a string value', async () => {
+      let captured: { tail?: number; step?: string; since?: string } | null = null;
+      const deps = createMockDeps({
+        getLogs: jest.fn(async (_buildID, opts) => {
+          captured = opts;
+          return {
+            build_id: 'b-1', status: 'SUCCEEDED', entries: [], total_lines: 0,
+          };
+        }),
+      });
+      const cmd = new LogsCommand(deps);
+      await cmd.execute({ build: 'b-1', since: '7d' });
+      expect(captured).not.toBeNull();
+      expect(captured!.since).toBe('7d');
+    });
+
+    it('does not forward --since when omitted', async () => {
+      let captured: { tail?: number; step?: string; since?: string } | null = null;
+      const deps = createMockDeps({
+        getLogs: jest.fn(async (_buildID, opts) => {
+          captured = opts;
+          return {
+            build_id: 'b-1', status: 'SUCCEEDED', entries: [], total_lines: 0,
+          };
+        }),
+      });
+      const cmd = new LogsCommand(deps);
+      await cmd.execute({ build: 'b-1' });
+      expect(captured!.since).toBeUndefined();
+    });
+  });
 });

@@ -55,7 +55,7 @@ export type StreamRuntimeLogsFn = (
 export interface LogsDeps {
   getToken: () => string | null;
   findLoopZeroYaml: () => LoopZeroYamlResult | null;
-  getLogs: (buildID: string, opts: { tail?: number; step?: string }) => Promise<LogsApiResponse>;
+  getLogs: (buildID: string, opts: { tail?: number; step?: string; since?: string }) => Promise<LogsApiResponse>;
   getProjectStatus?: (project: string, env: string) => Promise<StatusResponse>;
   /** SSE streaming function for --follow mode. Optional: if absent, --follow is unsupported. */
   streamLogs?: StreamLogsFn;
@@ -89,6 +89,13 @@ export interface LogsOptions {
    * when runtime is true.
    */
   app?: string;
+  /**
+   * Beta Logs Gate Criterion 7 — restrict to entries newer than
+   * NOW - <duration>. Accepts "24h", "7d", "30m", or raw seconds.
+   * Default (when omitted): server uses 7d window. The API
+   * normalizes "d" shorthand and Go duration syntax.
+   */
+  since?: string;
 }
 
 export class LogsCommand {
@@ -145,6 +152,7 @@ export class LogsCommand {
       response = await this.deps.getLogs(opts.build!, {
         tail: opts.tail,
         step: opts.step,
+        since: opts.since,
       });
     } catch (err) {
       return this.handleError(opts, err);
