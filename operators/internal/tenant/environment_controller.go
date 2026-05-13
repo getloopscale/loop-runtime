@@ -131,19 +131,12 @@ func (r *EnvironmentReconciler) Reconcile(ctx context.Context, req ctrl.Request)
 	}
 
 	// kstatus universal per ADR-0025 D3 condition #1.
-	defer func() {
-		latest := &loopzerov1.Environment{}
-		if err := r.Get(ctx, req.NamespacedName, latest); err != nil {
-			return
-		}
-		if !latest.DeletionTimestamp.IsZero() {
-			return
-		}
-		// Per pkg-sota-faang-grade-plan v1.2 T2.2 closure: delegate to
-		// pkg/conditions via adapter (same algorithm, shared core).
-		conditions.SetReadinessSummaryViaPkg(&latest.Status.Conditions, latest.Generation, environmentDetailTypes)
-		_ = r.Status().Update(ctx, latest)
-	}()
+	// Per pkg-sota-faang-grade-plan v1.2 T2.2 closure: delegates to
+	// pkg/conditions via adapter (same algorithm, shared core).
+	defer shared.DeferReadinessSummary(ctx, r.Client, req.NamespacedName,
+		func() *loopzerov1.Environment { return &loopzerov1.Environment{} },
+		func(x *loopzerov1.Environment) *[]metav1.Condition { return &x.Status.Conditions },
+		environmentDetailTypes)()
 
 	// Handle deletion with verify-then-remove finalizer pattern
 	if !env.DeletionTimestamp.IsZero() {

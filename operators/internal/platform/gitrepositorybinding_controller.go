@@ -77,17 +77,10 @@ func (r *GitRepositoryBindingReconciler) Reconcile(ctx context.Context, req ctrl
 	}
 
 	// kstatus universal per ADR-0025 D3 condition #1.
-	defer func() {
-		latest := &loopzerov1.GitRepositoryBinding{}
-		if err := r.Get(ctx, req.NamespacedName, latest); err != nil {
-			return
-		}
-		if !latest.DeletionTimestamp.IsZero() {
-			return
-		}
-		conditions.SetReadinessSummaryViaPkg(&latest.Status.Conditions, latest.Generation, gitRepositoryBindingDetailTypes)
-		_ = r.Status().Update(ctx, latest)
-	}()
+	defer shared.DeferReadinessSummary(ctx, r.Client, req.NamespacedName,
+		func() *loopzerov1.GitRepositoryBinding { return &loopzerov1.GitRepositoryBinding{} },
+		func(x *loopzerov1.GitRepositoryBinding) *[]metav1.Condition { return &x.Status.Conditions },
+		gitRepositoryBindingDetailTypes)()
 
 	// Handle deletion with finalizer pattern.
 	if !binding.DeletionTimestamp.IsZero() {

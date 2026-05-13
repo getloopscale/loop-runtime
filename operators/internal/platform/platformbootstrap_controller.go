@@ -91,17 +91,10 @@ func (r *PlatformBootstrapReconciler) Reconcile(ctx context.Context, req ctrl.Re
 	}
 
 	// kstatus universal per ADR-0025 D3 condition #1.
-	defer func() {
-		latest := &loopzerov1.PlatformBootstrap{}
-		if err := r.Get(ctx, req.NamespacedName, latest); err != nil {
-			return
-		}
-		if !latest.DeletionTimestamp.IsZero() {
-			return
-		}
-		conditions.SetReadinessSummaryViaPkg(&latest.Status.Conditions, latest.Generation, platformBootstrapDetailTypes)
-		_ = r.Status().Update(ctx, latest)
-	}()
+	defer shared.DeferReadinessSummary(ctx, r.Client, req.NamespacedName,
+		func() *loopzerov1.PlatformBootstrap { return &loopzerov1.PlatformBootstrap{} },
+		func(x *loopzerov1.PlatformBootstrap) *[]metav1.Condition { return &x.Status.Conditions },
+		platformBootstrapDetailTypes)()
 
 	// Handle deletion -- clean up platform-tokens secret if present.
 	if !pb.DeletionTimestamp.IsZero() {

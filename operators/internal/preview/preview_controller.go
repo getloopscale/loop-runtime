@@ -166,17 +166,10 @@ func (r *PreviewReconciler) Reconcile(ctx context.Context, req ctrl.Request) (re
 	}
 
 	// kstatus universal per ADR-0025 D3 condition #1.
-	defer func() {
-		latest := &loopzerov1.PreviewEnvironment{}
-		if err := r.Get(ctx, req.NamespacedName, latest); err != nil {
-			return
-		}
-		if !latest.DeletionTimestamp.IsZero() {
-			return
-		}
-		conditions.SetReadinessSummaryViaPkg(&latest.Status.Conditions, latest.Generation, previewDetailTypes)
-		_ = r.Status().Update(ctx, latest)
-	}()
+	defer shared.DeferReadinessSummary(ctx, r.Client, req.NamespacedName,
+		func() *loopzerov1.PreviewEnvironment { return &loopzerov1.PreviewEnvironment{} },
+		func(x *loopzerov1.PreviewEnvironment) *[]metav1.Condition { return &x.Status.Conditions },
+		previewDetailTypes)()
 
 	// Handle deletion
 	if !preview.DeletionTimestamp.IsZero() {

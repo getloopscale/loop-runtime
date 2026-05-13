@@ -79,20 +79,10 @@ func (r *ClusterCredentialReconciler) Reconcile(ctx context.Context, req ctrl.Re
 	// mutation per ADR-0025. Defer ensures it runs even on early return
 	// or panic from internal helpers (resolveKubeconfig, checkConnectivity)
 	// that have their own Status().Update sites.
-	defer func() {
-		// Re-fetch to capture latest condition state after early-return
-		// Status updates from helpers. NotFound / DeletionTimestamp paths
-		// already returned before this defer fires for the success path.
-		latest := &loopzerov1.ClusterCredential{}
-		if err := r.Get(ctx, req.NamespacedName, latest); err != nil {
-			return
-		}
-		if !latest.DeletionTimestamp.IsZero() {
-			return
-		}
-		conditions.SetReadinessSummaryViaPkg(&latest.Status.Conditions, latest.Generation, clusterCredentialDetailTypes)
-		_ = r.Status().Update(ctx, latest)
-	}()
+	defer shared.DeferReadinessSummary(ctx, r.Client, req.NamespacedName,
+		func() *loopzerov1.ClusterCredential { return &loopzerov1.ClusterCredential{} },
+		func(x *loopzerov1.ClusterCredential) *[]metav1.Condition { return &x.Status.Conditions },
+		clusterCredentialDetailTypes)()
 
 	if !cr.DeletionTimestamp.IsZero() {
 		return r.reconcileDelete(ctx, &cr)
