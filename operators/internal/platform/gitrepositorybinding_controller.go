@@ -183,20 +183,16 @@ func (r *GitRepositoryBindingReconciler) resolveCredential(ctx context.Context, 
 
 	tokenBytes, ok := secret.Data[ref.Key]
 	if !ok {
-		conditions.SetCondition(&binding.Status.Conditions, conditions.TypeCredentialsResolved,
-			metav1.ConditionFalse, conditions.ReasonFailed,
+		return failCredentialsResolved(binding, gen,
 			fmt.Sprintf("Secret %s/%s does not contain key %q", ref.Namespace, ref.Name, ref.Key),
-			gen)
-		return "", fmt.Errorf("secret %s/%s missing key %q", ref.Namespace, ref.Name, ref.Key)
+			fmt.Errorf("secret %s/%s missing key %q", ref.Namespace, ref.Name, ref.Key))
 	}
 
 	token := string(tokenBytes)
 	if token == "" {
-		conditions.SetCondition(&binding.Status.Conditions, conditions.TypeCredentialsResolved,
-			metav1.ConditionFalse, conditions.ReasonFailed,
+		return failCredentialsResolved(binding, gen,
 			fmt.Sprintf("Secret %s/%s key %q is empty", ref.Namespace, ref.Name, ref.Key),
-			gen)
-		return "", fmt.Errorf("secret %s/%s key %q is empty", ref.Namespace, ref.Name, ref.Key)
+			fmt.Errorf("secret %s/%s key %q is empty", ref.Namespace, ref.Name, ref.Key))
 	}
 
 	conditions.SetCondition(&binding.Status.Conditions, conditions.TypeCredentialsResolved,
@@ -205,6 +201,17 @@ func (r *GitRepositoryBindingReconciler) resolveCredential(ctx context.Context, 
 		gen)
 
 	return token, nil
+}
+
+// failCredentialsResolved is the canonical "secret-data malformed" failure
+// handler for resolveCredential. Sets the CredentialsResolved condition
+// False with ReasonFailed + msg + gen, and returns the (zero-token, err)
+// tuple expected by the caller. Phase 3 helper: collapses 2 inline 7-line
+// copies (missing key + empty value) in gitrepositorybinding_controller.go.
+func failCredentialsResolved(binding *loopzerov1.GitRepositoryBinding, gen int64, msg string, err error) (string, error) {
+	conditions.SetCondition(&binding.Status.Conditions, conditions.TypeCredentialsResolved,
+		metav1.ConditionFalse, conditions.ReasonFailed, msg, gen)
+	return "", err
 }
 
 // computeCredentialHash returns the full sha256 hex hash of the token.
