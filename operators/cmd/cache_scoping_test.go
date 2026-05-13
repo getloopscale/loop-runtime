@@ -157,15 +157,15 @@ func parseReconciledTypes(t *testing.T, mainPath string, binName string) []strin
 	// Map Setup<X>Controller → reconciled CRD type name.
 	// Matches the canonical naming convention; allows quick audit in PR.
 	reconcileMap := map[string]string{
-		"SetupTenantController":               "Tenant",
-		"SetupEnvironmentController":          "Environment",
+		"SetupTenantController":                 "Tenant",
 		"SetupEnvironmentControllerWithFactory": "Environment",
-		"SetupApplicationController":          "LoopZeroApplication",
-		"SetupExposureController":             "ExposedRoute",
-		"SetupPreviewController":              "PreviewEnvironment",
-		"SetupPlatformBootstrapController":    "PlatformBootstrap",
-		"SetupGitRepositoryBindingController": "GitRepositoryBinding",
-		"SetupClusterCredentialController":    "ClusterCredential",
+		"SetupApplicationController":            "LoopZeroApplication",
+		"SetupApplicationControllerWithFactory": "LoopZeroApplication",
+		"SetupExposureController":               "ExposedRoute",
+		"SetupPreviewController":                "PreviewEnvironment",
+		"SetupPlatformBootstrapController":      "PlatformBootstrap",
+		"SetupGitRepositoryBindingController":   "GitRepositoryBinding",
+		"SetupClusterCredentialController":      "ClusterCredential",
 	}
 
 	var found []string

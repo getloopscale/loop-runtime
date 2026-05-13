@@ -332,6 +332,156 @@ tasks:
         fi
         echo "PASS: Dead code count ($TOTAL) is within baseline ($BASELINE)"
 
+  dupl:
+    desc: Detect duplicate code in Go (report only)
+    cmds:
+      - |
+        if ! command -v dupl >/dev/null 2>&1; then
+          echo "Installing dupl..."
+          go install github.com/mibk/dupl@latest
+        fi
+      - |
+        echo "=== Go API ==="
+        cd api && dupl -threshold 50 -plumbing . 2>&1 | wc -l
+      - |
+        echo "=== Go Operators ==="
+        cd operators && dupl -threshold 50 -plumbing . 2>&1 | wc -l
+      - |
+        echo "=== Go pkg ==="
+        cd pkg && dupl -threshold 50 -plumbing . 2>&1 | wc -l
+
+  dupl:strict:
+    desc: Duplicate-code check that fails on increases (CI gate)
+    cmds:
+      - |
+        if ! command -v dupl >/dev/null 2>&1; then
+          go install github.com/mibk/dupl@latest
+        fi
+      - |
+        # Quality-Gate Phase 3 — dupl baseline tracker.
+        # User chose aggressive threshold=50 ("all-aggressive" override on
+        # 2026-05-13). Reaching 0 requires multi-session test-table refactor
+        # work (~650 dup entries, mostly table-driven test fixtures). Until
+        # then, gate locks the current count and prevents regression.
+        # Decrement these as PRs eliminate duplications.
+        API_DUPL=$(cd api && dupl -threshold 50 -plumbing . 2>&1 | wc -l)
+        OPS_DUPL=$(cd operators && dupl -threshold 50 -plumbing . 2>&1 | wc -l)
+        PKG_DUPL=$(cd pkg && dupl -threshold 50 -plumbing . 2>&1 | wc -l)
+        TOTAL=$((API_DUPL + OPS_DUPL + PKG_DUPL))
+        BASELINE=1203  # api=645 + operators=462 + pkg=96 (Phase 3 baseline)
+        echo "Dupl Go: api=$API_DUPL operators=$OPS_DUPL pkg=$PKG_DUPL Total=$TOTAL Baseline=$BASELINE"
+        if [ "$TOTAL" -gt "$BASELINE" ]; then
+          echo "FAIL: Dupl count ($TOTAL) exceeds baseline ($BASELINE)"
+          echo "New code duplication introduced. Run 'task dupl' for details."
+          exit 1
+        fi
+        echo "PASS: Dupl count ($TOTAL) within baseline ($BASELINE)"
+
+  jscpd:
+    desc: Detect duplicate code in TypeScript CLI (report only)
+    cmds:
+      - |
+        cd cli && npx --no-install jscpd src --min-tokens 50 --silent 2>&1 \
+          | grep -E "Found|exact clones" || echo "(no jscpd output)"
+
+  jscpd:strict:
+    desc: TypeScript duplicate-code check that fails on increases (CI gate)
+    cmds:
+      - |
+        # Quality-Gate Phase 3 — jscpd baseline tracker (CLI TS).
+        # Same rationale as dupl:strict — aggressive threshold + baseline-
+        # tracking until incremental refactors eliminate clones.
+        CLI_CLONES=$(cd cli && npx --no-install jscpd src --min-tokens 50 --silent 2>&1 \
+          | sed 's/\x1b\[[0-9;]*m//g' \
+          | grep -oP 'Found \K[0-9]+' || echo 0)
+        BASELINE=112  # Phase 3 baseline
+        echo "jscpd CLI: clones=$CLI_CLONES Baseline=$BASELINE"
+        if [ "$CLI_CLONES" -gt "$BASELINE" ]; then
+          echo "FAIL: Clone count ($CLI_CLONES) exceeds baseline ($BASELINE)"
+          echo "New code duplication introduced in cli/. Run 'task jscpd' for details."
+          exit 1
+        fi
+        echo "PASS: Clone count ($CLI_CLONES) within baseline ($BASELINE)"
+
+  vuln-scan:
+    desc: Vulnerability scan — govulncheck (Go) + npm audit (CLI)
+    cmds:
+      - |
+        if ! command -v govulncheck >/dev/null 2>&1; then
+          go install golang.org/x/vuln/cmd/govulncheck@latest
+        fi
+      - |
+        echo "=== Go vulnerabilities (api) ==="
+        cd api && govulncheck ./... 2>&1 | tail -5
+      - |
+        echo "=== Go vulnerabilities (operators) ==="
+        cd operators && govulncheck ./... 2>&1 | tail -5
+      - |
+        echo "=== Go vulnerabilities (pkg) ==="
+        cd pkg && govulncheck ./... 2>&1 | tail -5
+      - |
+        echo "=== Go vulnerabilities (cloud) ==="
+        cd cloud && govulncheck ./... 2>&1 | tail -5
+      - |
+        echo "=== npm vulnerabilities (cli) ==="
+        cd cli && npm audit --audit-level=moderate 2>&1 | tail -5
+
+  vuln-scan:strict:
+    desc: Vulnerability gate — fails on MEDIUM+ CVE in Go or CLI deps
+    cmds:
+      - |
+        if ! command -v govulncheck >/dev/null 2>&1; then
+          go install golang.org/x/vuln/cmd/govulncheck@latest
+        fi
+      - |
+        # Quality-Gate Phase 3 — fails on ANY vulnerability returned by
+        # govulncheck (Go stdlib + module CVEs) or npm audit at moderate+.
+        # User aggressive override: MEDIUM+CRITICAL block.
+        FAIL=0
+        for mod in api operators pkg cloud; do
+          if ! (cd "$mod" && govulncheck ./... 2>&1 | grep -q "^No vulnerabilities found"); then
+            echo "FAIL: govulncheck found CVE in $mod"
+            (cd "$mod" && govulncheck ./... 2>&1 | grep "^Vulnerability #" | head -5)
+            FAIL=1
+          fi
+        done
+        if ! (cd cli && npm audit --audit-level=moderate 2>&1 | grep -q "found 0 vulnerabilities"); then
+          echo "FAIL: npm audit found vulnerability in cli/"
+          cd cli && npm audit --audit-level=moderate 2>&1 | tail -10
+          FAIL=1
+        fi
+        if [ "$FAIL" -eq 1 ]; then
+          exit 1
+        fi
+        echo "PASS: No vulnerabilities at MEDIUM+ severity"
+
+  lint:strict:
+    desc: golangci-lint gate with baseline tracking (Phase 4)
+    cmds:
+      - |
+        # Quality-Gate Phase 4 — golangci-lint baseline tracker.
+        # Unified .golangci.yml at repo root enables: gosec, errorlint,
+        # bodyclose, rowserrcheck, sqlclosecheck, unconvert, copyloopvar
+        # on top of defaults (errcheck/govet/ineffassign/staticcheck/unused).
+        # Same baseline-decrement pattern as dupl:strict.
+        # Decrement these as PRs eliminate issues.
+        if ! command -v golangci-lint >/dev/null 2>&1; then
+          echo "FAIL: golangci-lint not installed — https://golangci-lint.run/welcome/install/"
+          exit 1
+        fi
+        API_LINT=$(cd api && (golangci-lint run --timeout 5m 2>&1 || true) | grep -E "^[a-z].*:[0-9]+:[0-9]+:" | wc -l)
+        OPS_LINT=$(cd operators && (golangci-lint run --timeout 5m 2>&1 || true) | grep -E "^[a-z].*:[0-9]+:[0-9]+:" | wc -l)
+        PKG_LINT=$(cd pkg && (golangci-lint run --timeout 5m 2>&1 || true) | grep -E "^[a-z].*:[0-9]+:[0-9]+:" | wc -l)
+        TOTAL=$((API_LINT + OPS_LINT + PKG_LINT))
+        BASELINE=200  # api=140 + operators=60 + pkg=0 (Phase 4 baseline)
+        echo "golangci-lint: api=$API_LINT operators=$OPS_LINT pkg=$PKG_LINT Total=$TOTAL Baseline=$BASELINE"
+        if [ "$TOTAL" -gt "$BASELINE" ]; then
+          echo "FAIL: Lint count ($TOTAL) exceeds baseline ($BASELINE)"
+          echo "New lint issue introduced. Run 'golangci-lint run' in each module for details."
+          exit 1
+        fi
+        echo "PASS: Lint count ($TOTAL) within baseline ($BASELINE)"
+
   lint:
     desc: Lint all components
     cmds:

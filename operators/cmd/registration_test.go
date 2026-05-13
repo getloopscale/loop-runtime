@@ -127,16 +127,15 @@ func TestSetupControllersHasNoOrphanCalls(t *testing.T) {
 //
 // T1.3: keys may be qualified per binary (e.g., "tenant:SetupCacheReader") to
 // allow legitimate exceptions per binary. Bare keys apply to all binaries.
+// Quality-Gate Phase 3: SetupEnvironmentController wrapper removed from
+// internal/tenant/environment_controller.go and operatortest/setup.go.
+// SetupApplicationController + SetupPreviewControllerWithFactory remain
+// exported but unwired for future cell-aware migration parity (app + preview
+// operators still call the simpler signature). Documented exception until
+// those binaries are converted to WithFactory direct call.
 var SetupAllowlist = map[string]string{
-	// SetupEnvironmentController is the legacy single-cell wrapper that calls
-	// SetupEnvironmentControllerWithFactory(mgr, runtimeClient, nil). The
-	// tenant-operator binary always wires the cell-aware variant directly
-	// (mandatory per cell-2-activation-plan + fix-all-platform-issues-plan T1.1).
-	// The wrapper is retained as a public API for operatortest and external
-	// E2E tests that don't need cell-awareness; intentionally NOT wired in
-	// any binary's main(). Removing the wrapper would break operatortest's
-	// SetupEnvironmentController(mgr, runtimeClient) signature.
-	"SetupEnvironmentController": "wrapper for WithFactory(nil); operatortest API only, not binary-wired",
+	"SetupApplicationController":            "legacy wrapper retained for future cell-aware migration of app-operator; app-operator/main.go calls SetupApplicationControllerWithFactory directly",
+	"SetupPreviewControllerWithFactory":     "cell-aware variant retained; preview-operator/main.go calls SetupPreviewController (non-factory) — will flip when preview goes cell-aware",
 }
 
 func exportedSetupControllerFuncs(t *testing.T, dir string) []string {

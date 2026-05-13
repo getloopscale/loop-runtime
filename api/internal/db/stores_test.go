@@ -202,69 +202,70 @@ func makeReleaseRowValues(r Release) []any {
 // safeTransition tests
 // =============================================================================
 
-func TestSafeTransition_ValidBuildTransition(t *testing.T) {
-	// Arrange
-	m := statemachine.NewBuildMachine()
-
-	// Act
-	newState, err := safeTransition(m, statemachine.BuildQueued, statemachine.BuildStarted)
-
-	// Assert
-	if err != nil {
-		t.Fatalf("expected no error, got: %v", err)
+// TestSafeTransition exercises both build and release state machines with
+// valid + invalid transition cases. Table-driven per Quality-Gate Phase 3
+// (was 5 near-clone functions).
+func TestSafeTransition(t *testing.T) {
+	type tc struct {
+		name          string
+		makeMachine   func() *statemachine.Machine
+		from          statemachine.State
+		event         statemachine.Event
+		wantState     statemachine.State
+		wantErr       bool
+		wantInvalidTx bool // verify errors.Is(err, ErrInvalidTransition)
 	}
-	if newState != statemachine.BuildRunning {
-		t.Errorf("expected RUNNING, got: %s", newState)
+	cases := []tc{
+		{
+			name:        "build valid: QUEUED + BuildStarted → RUNNING",
+			makeMachine: statemachine.NewBuildMachine,
+			from:        statemachine.BuildQueued, event: statemachine.BuildStarted,
+			wantState: statemachine.BuildRunning,
+		},
+		{
+			name:        "build invalid: from terminal SUCCEEDED returns ErrInvalidTransition",
+			makeMachine: statemachine.NewBuildMachine,
+			from:        statemachine.BuildSucceeded, event: statemachine.BuildStarted,
+			wantErr: true, wantInvalidTx: true,
+		},
+		{
+			name:        "build invalid: BuildReleaseCompleted from QUEUED returns error",
+			makeMachine: statemachine.NewBuildMachine,
+			from:        statemachine.BuildQueued, event: statemachine.BuildReleaseCompleted,
+			wantErr: true,
+		},
+		{
+			name:        "release valid: READY + GitMirrorCompleted → PENDING",
+			makeMachine: statemachine.NewReleaseMachine,
+			from:        statemachine.ReleaseReady, event: statemachine.ReleaseGitMirrorCompleted,
+			wantState: statemachine.ReleasePending,
+		},
+		{
+			name:        "release invalid: GitMirrorCompleted from ACTIVE returns error",
+			makeMachine: statemachine.NewReleaseMachine,
+			from:        statemachine.ReleaseActive, event: statemachine.ReleaseGitMirrorCompleted,
+			wantErr: true,
+		},
 	}
-}
-
-func TestSafeTransition_InvalidTransitionReturnError(t *testing.T) {
-	// Arrange
-	m := statemachine.NewBuildMachine()
-
-	// Act — SUCCEEDED is terminal, no event should work
-	_, err := safeTransition(m, statemachine.BuildSucceeded, statemachine.BuildStarted)
-
-	// Assert
-	if err == nil {
-		t.Fatal("expected error for invalid transition from terminal state")
-	}
-	if !errors.Is(err, loopzeroerrors.ErrInvalidTransition) {
-		t.Errorf("expected ErrInvalidTransition, got: %v", err)
-	}
-}
-
-func TestSafeTransition_InvalidEventFromNonTerminal(t *testing.T) {
-	// Arrange
-	m := statemachine.NewBuildMachine()
-
-	// Act — BuildReleaseCompleted is not valid from QUEUED
-	_, err := safeTransition(m, statemachine.BuildQueued, statemachine.BuildReleaseCompleted)
-
-	// Assert
-	if err == nil {
-		t.Fatal("expected error for invalid event from QUEUED")
-	}
-}
-
-func TestSafeTransition_ValidReleaseTransition(t *testing.T) {
-	m := statemachine.NewReleaseMachine()
-
-	newState, err := safeTransition(m, statemachine.ReleaseReady, statemachine.ReleaseGitMirrorCompleted)
-	if err != nil {
-		t.Fatalf("unexpected error: %v", err)
-	}
-	if newState != statemachine.ReleasePending {
-		t.Errorf("expected PENDING, got: %s", newState)
-	}
-}
-
-func TestSafeTransition_InvalidReleaseTransition(t *testing.T) {
-	m := statemachine.NewReleaseMachine()
-
-	_, err := safeTransition(m, statemachine.ReleaseActive, statemachine.ReleaseGitMirrorCompleted)
-	if err == nil {
-		t.Fatal("expected error for invalid release transition")
+	for _, c := range cases {
+		t.Run(c.name, func(t *testing.T) {
+			gotState, err := safeTransition(c.makeMachine(), c.from, c.event)
+			if c.wantErr {
+				if err == nil {
+					t.Fatalf("expected error, got nil")
+				}
+				if c.wantInvalidTx && !errors.Is(err, loopzeroerrors.ErrInvalidTransition) {
+					t.Errorf("expected ErrInvalidTransition, got: %v", err)
+				}
+				return
+			}
+			if err != nil {
+				t.Fatalf("expected no error, got: %v", err)
+			}
+			if gotState != c.wantState {
+				t.Errorf("expected %s, got: %s", c.wantState, gotState)
+			}
+		})
 	}
 }
 

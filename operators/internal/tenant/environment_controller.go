@@ -301,9 +301,11 @@ func (r *EnvironmentReconciler) reconcileDelete(ctx context.Context, env *loopze
 //
 // fix-all-platform-issues-plan T1.1 — split-binary parity with the
 // monolithic controller from cell-2-activation-plan iter 4.
-func SetupEnvironmentController(mgr ctrl.Manager, runtimeClient client.Client) error {
-	return SetupEnvironmentControllerWithFactory(mgr, runtimeClient, nil)
-}
+//
+// Quality-Gate Phase 3: SetupEnvironmentController legacy wrapper removed
+// — all callers (cmd/* binaries + operatortest envtest_suite) now invoke
+// SetupEnvironmentControllerWithFactory directly with factory=nil for the
+// legacy single-cell path.
 
 // SetupEnvironmentControllerWithFactory is the cell-aware entrypoint.
 func SetupEnvironmentControllerWithFactory(mgr ctrl.Manager, runtimeClient client.Client, factory shared.RuntimeClientFactory) error {
