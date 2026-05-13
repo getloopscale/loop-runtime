@@ -257,10 +257,39 @@ phase_dogfood() {
   # URL so BeforeSuite reaches `/api/v1/health` instead of skipping all 341
   # specs with "Infrastructure not ready: connection refused localhost:3001".
   local API_URL="http://localhost:13001"
-  if ! env PATH="$GINKGO_PATH" LOOPZERO_API_URL="$API_URL" API_URL="$API_URL" bash -c "cd '$REPO_ROOT' && LOOPZERO_E2E=1 ginkgo -v --label-filter=journey --timeout=60m ./infra/tests/e2e/"; then
+  # LOOPZERO_E2E_DATABASE_URL: seed.Run() needs psql to reach the mgmt cluster's
+  # PostgreSQL. PG runs as a NodePort Service (5432:30432) but k3d mgmt-cluster
+  # does not map 30432 to the host — Tilt-managed `kubectl port-forward
+  # svc/postgresql 15432:5432` is the canonical access path. cleanroom phase 6
+  # spawns its own port-forward (idempotent — kills any prior pf on 15432
+  # before starting), waits for the socket, then exports the URL. The pf is
+  # torn down on function exit so it doesn't leak across runs.
+  local PG_PF_PORT=15432
+  pkill -f "kubectl.*port-forward.*loopzero-system.*postgresql.*${PG_PF_PORT}:5432" 2>/dev/null || true
+  sleep 1
+  kubectl --context k3d-loopzero-mgmt port-forward -n loopzero-system svc/postgresql "${PG_PF_PORT}:5432" >/dev/null 2>&1 &
+  local PF_PID=$!
+  # Wait up to 10s for the port-forward socket to accept connections.
+  local i
+  for i in 1 2 3 4 5 6 7 8 9 10; do
+    if (echo >/dev/tcp/127.0.0.1/${PG_PF_PORT}) 2>/dev/null; then
+      break
+    fi
+    sleep 1
+  done
+  if ! (echo >/dev/tcp/127.0.0.1/${PG_PF_PORT}) 2>/dev/null; then
+    log_err "phase_dogfood: PG port-forward never came up on localhost:${PG_PF_PORT}"
+    kill $PF_PID 2>/dev/null || true
+    return 50
+  fi
+  log "PG port-forward up on localhost:${PG_PF_PORT} (PID=$PF_PID)"
+  local PG_URL="postgres://loopzero:loopzero-dev-password@127.0.0.1:${PG_PF_PORT}/loopzero?sslmode=disable"
+  if ! env PATH="$GINKGO_PATH" LOOPZERO_API_URL="$API_URL" API_URL="$API_URL" LOOPZERO_E2E_DATABASE_URL="$PG_URL" bash -c "cd '$REPO_ROOT' && LOOPZERO_E2E=1 ginkgo -v --label-filter=journey --timeout=60m ./infra/tests/e2e/"; then
+    kill $PF_PID 2>/dev/null || true
     log_err "phase_dogfood: ginkgo journey suite reported FAIL"
     return 50
   fi
+  kill $PF_PID 2>/dev/null || true
   # Synthesize STATE_FILE so post_validate (Phase 7) finds the 12/12 PASS
   # signal it expects. Ginkgo's exit code already validates the journeys; the
   # state.json was a legacy artifact of the bash full-loop.sh path. Mapping
