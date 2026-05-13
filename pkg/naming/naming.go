@@ -60,48 +60,48 @@ func ValidateKubernetesName(name string) error {
 	return nil
 }
 
+// composeName builds a Kubernetes resource name using the given format
+// + args, then validates it as RFC 1123. resourceKind is the human-readable
+// kind used in error messages (e.g., "tenant namespace"). All variadic
+// string args must be non-empty — emits a single canonical "argument must
+// not be empty" error if any are. Phase 3 helper: eliminated ~10 inline
+// copies of the "validate inputs → sprintf → validate name → wrap error"
+// scaffold from the 8 *Namespace/*Name composers below.
+func composeName(resourceKind, format string, args ...string) (string, error) {
+	for _, a := range args {
+		if a == "" {
+			return "", fmt.Errorf("%s: argument must not be empty", resourceKind)
+		}
+	}
+	ifaceArgs := make([]interface{}, len(args))
+	for i, a := range args {
+		ifaceArgs[i] = a
+	}
+	name := fmt.Sprintf(format, ifaceArgs...)
+	if err := ValidateKubernetesName(name); err != nil {
+		return "", fmt.Errorf("%s %q: %w", resourceKind, name, err)
+	}
+	return name, nil
+}
+
 // TenantNamespace returns the namespace name for a tenant.
 // tenantName is the K8s CRD resource name (e.g., "tn-loopzero").
 // Format: "loopzero-{tenantName}" — maintains compatibility with deployed resources.
 func TenantNamespace(tenantName string) (string, error) {
-	if tenantName == "" {
-		return "", fmt.Errorf("tenant name must not be empty")
-	}
-	name := fmt.Sprintf("loopzero-%s", tenantName)
-	if err := ValidateKubernetesName(name); err != nil {
-		return "", fmt.Errorf("tenant namespace %q: %w", name, err)
-	}
-	return name, nil
+	return composeName("tenant namespace", "loopzero-%s", tenantName)
 }
 
 // EnvironmentNamespace returns the namespace name for a tenant's environment.
 // tenantName is the K8s CRD resource name (e.g., "tn-loopzero").
 // Format: "loopzero-{tenantName}-{envName}" — maintains compatibility with deployed resources.
 func EnvironmentNamespace(tenantName, envName string) (string, error) {
-	if tenantName == "" {
-		return "", fmt.Errorf("tenant name must not be empty")
-	}
-	if envName == "" {
-		return "", fmt.Errorf("environment name must not be empty")
-	}
-	name := fmt.Sprintf("loopzero-%s-%s", tenantName, envName)
-	if err := ValidateKubernetesName(name); err != nil {
-		return "", fmt.Errorf("environment namespace %q: %w", name, err)
-	}
-	return name, nil
+	return composeName("environment namespace", "loopzero-%s-%s", tenantName, envName)
 }
 
 // BuildNamespace returns the build namespace name for a tenant.
 // Format: "build-{tenantSlug}"
 func BuildNamespace(tenantSlug string) (string, error) {
-	if tenantSlug == "" {
-		return "", fmt.Errorf("tenant slug must not be empty")
-	}
-	name := fmt.Sprintf("build-%s", tenantSlug)
-	if err := ValidateKubernetesName(name); err != nil {
-		return "", fmt.Errorf("build namespace %q: %w", name, err)
-	}
-	return name, nil
+	return composeName("build namespace", "build-%s", tenantSlug)
 }
 
 // PreviewNamespace returns the namespace name for a preview environment.
@@ -126,36 +126,13 @@ func PreviewNamespace(tenantSlug, projectSlug string, prNumber int) (string, err
 // RepoName returns the source code repository name.
 // Format: "{teamSlug}-{projectSlug}"
 func RepoName(teamSlug, projectSlug string) (string, error) {
-	if teamSlug == "" {
-		return "", fmt.Errorf("team slug must not be empty")
-	}
-	if projectSlug == "" {
-		return "", fmt.Errorf("project slug must not be empty")
-	}
-	name := fmt.Sprintf("%s-%s", teamSlug, projectSlug)
-	if err := ValidateKubernetesName(name); err != nil {
-		return "", fmt.Errorf("repo name %q: %w", name, err)
-	}
-	return name, nil
+	return composeName("repo name", "%s-%s", teamSlug, projectSlug)
 }
 
 // GitOpsRepoName returns the GitOps repository name for a specific environment.
 // Format: "{teamSlug}-{projectSlug}-{envName}"
 func GitOpsRepoName(teamSlug, projectSlug, envName string) (string, error) {
-	if teamSlug == "" {
-		return "", fmt.Errorf("team slug must not be empty")
-	}
-	if projectSlug == "" {
-		return "", fmt.Errorf("project slug must not be empty")
-	}
-	if envName == "" {
-		return "", fmt.Errorf("environment name must not be empty")
-	}
-	name := fmt.Sprintf("%s-%s-%s", teamSlug, projectSlug, envName)
-	if err := ValidateKubernetesName(name); err != nil {
-		return "", fmt.Errorf("gitops repo name %q: %w", name, err)
-	}
-	return name, nil
+	return composeName("gitops repo name", "%s-%s-%s", teamSlug, projectSlug, envName)
 }
 
 // Hostname returns the hostname for a service in an environment.
@@ -173,20 +150,7 @@ func Hostname(projectSlug, envName, baseDomain string) (string, error) {
 // ArgoAppName returns the ArgoCD Application resource name.
 // Format: "{teamSlug}-{projectSlug}-{envName}"
 func ArgoAppName(teamSlug, projectSlug, envName string) (string, error) {
-	if teamSlug == "" {
-		return "", fmt.Errorf("team slug must not be empty")
-	}
-	if projectSlug == "" {
-		return "", fmt.Errorf("project slug must not be empty")
-	}
-	if envName == "" {
-		return "", fmt.Errorf("environment name must not be empty")
-	}
-	name := fmt.Sprintf("%s-%s-%s", teamSlug, projectSlug, envName)
-	if err := ValidateKubernetesName(name); err != nil {
-		return "", fmt.Errorf("argo app name %q: %w", name, err)
-	}
-	return name, nil
+	return composeName("argo app name", "%s-%s-%s", teamSlug, projectSlug, envName)
 }
 
 // CertSecretName returns the TLS certificate secret name for a hostname.
@@ -211,30 +175,13 @@ func CertSecretName(hostname string) (string, error) {
 // GitRepoBindingName returns the GitRepositoryBinding CR name for a tenant's environment.
 // Format: "{tenantName}-{envName}"
 func GitRepoBindingName(tenantName, envName string) (string, error) {
-	if tenantName == "" {
-		return "", fmt.Errorf("tenant name must not be empty")
-	}
-	if envName == "" {
-		return "", fmt.Errorf("environment name must not be empty")
-	}
-	name := fmt.Sprintf("%s-%s", tenantName, envName)
-	if err := ValidateKubernetesName(name); err != nil {
-		return "", fmt.Errorf("git repo binding name %q: %w", name, err)
-	}
-	return name, nil
+	return composeName("git repo binding name", "%s-%s", tenantName, envName)
 }
 
 // ArgoRepoSecretName returns the ArgoCD repository Secret name for a tenant.
 // Format: "repo-{tenantName}-gitops"
 func ArgoRepoSecretName(tenantName string) (string, error) {
-	if tenantName == "" {
-		return "", fmt.Errorf("tenant name must not be empty")
-	}
-	name := fmt.Sprintf("repo-%s-gitops", tenantName)
-	if err := ValidateKubernetesName(name); err != nil {
-		return "", fmt.Errorf("argo repo secret name %q: %w", name, err)
-	}
-	return name, nil
+	return composeName("argo repo secret name", "repo-%s-gitops", tenantName)
 }
 
 // Standard label keys for LoopZero Kubernetes resources. All use the
