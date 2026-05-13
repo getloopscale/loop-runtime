@@ -110,30 +110,15 @@ var _ = Describe("Golden: Tenant Isolation", Ordered, func() {
 		})
 
 		It("should set loopzero.io/tenant label on the build namespace", func() {
-			buildNs := "build-" + tenantName
-			Eventually(func(g Gomega) {
-				var ns corev1.Namespace
-				g.Expect(k8sClient.Get(ctx, types.NamespacedName{Name: buildNs}, &ns)).To(Succeed())
-				g.Expect(ns.Labels).To(HaveKeyWithValue("loopzero.io/tenant", tenantName))
-			}, timeout, interval).Should(Succeed())
+			expectNamespaceLabel("build-"+tenantName, "loopzero.io/tenant", tenantName)
 		})
 
 		It("should set loopzero.io/component=build label on the build namespace", func() {
-			buildNs := "build-" + tenantName
-			Eventually(func(g Gomega) {
-				var ns corev1.Namespace
-				g.Expect(k8sClient.Get(ctx, types.NamespacedName{Name: buildNs}, &ns)).To(Succeed())
-				g.Expect(ns.Labels).To(HaveKeyWithValue("loopzero.io/component", "build"))
-			}, timeout, interval).Should(Succeed())
+			expectNamespaceLabel("build-"+tenantName, "loopzero.io/component", "build")
 		})
 
 		It("should set loopzero.io/managed-by=tenant-controller label on the build namespace", func() {
-			buildNs := "build-" + tenantName
-			Eventually(func(g Gomega) {
-				var ns corev1.Namespace
-				g.Expect(k8sClient.Get(ctx, types.NamespacedName{Name: buildNs}, &ns)).To(Succeed())
-				g.Expect(ns.Labels).To(HaveKeyWithValue("loopzero.io/managed-by", "tenant-controller"))
-			}, timeout, interval).Should(Succeed())
+			expectNamespaceLabel("build-"+tenantName, "loopzero.io/managed-by", "tenant-controller")
 		})
 
 		It("should NOT set ownerReference on build namespace (cross-cluster limitation)", func() {
@@ -185,23 +170,13 @@ var _ = Describe("Golden: Tenant Isolation", Ordered, func() {
 
 		It("should set loopzero.io/tenant label on every runtime namespace", func() {
 			for _, env := range []string{"production", "staging"} {
-				nsName := fmt.Sprintf("loopzero-%s-%s", tenantName, env)
-				Eventually(func(g Gomega) {
-					var ns corev1.Namespace
-					g.Expect(k8sClient.Get(ctx, types.NamespacedName{Name: nsName}, &ns)).To(Succeed())
-					g.Expect(ns.Labels).To(HaveKeyWithValue("loopzero.io/tenant", tenantName))
-				}, timeout, interval).Should(Succeed())
+				expectNamespaceLabel(fmt.Sprintf("loopzero-%s-%s", tenantName, env), "loopzero.io/tenant", tenantName)
 			}
 		})
 
 		It("should set loopzero.io/environment label on every runtime namespace", func() {
 			for _, env := range []string{"production", "staging"} {
-				nsName := fmt.Sprintf("loopzero-%s-%s", tenantName, env)
-				Eventually(func(g Gomega) {
-					var ns corev1.Namespace
-					g.Expect(k8sClient.Get(ctx, types.NamespacedName{Name: nsName}, &ns)).To(Succeed())
-					g.Expect(ns.Labels).To(HaveKeyWithValue("loopzero.io/environment", env))
-				}, timeout, interval).Should(Succeed())
+				expectNamespaceLabel(fmt.Sprintf("loopzero-%s-%s", tenantName, env), "loopzero.io/environment", env)
 			}
 		})
 

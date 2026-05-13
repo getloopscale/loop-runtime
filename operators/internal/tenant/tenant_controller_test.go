@@ -135,6 +135,17 @@ func createTenantAndWaitActive(tenantName string, plan loopzerov1.PlanTier, envs
 	}, timeout, interval).Should(Succeed())
 }
 
+// expectNamespaceLabel waits for a Namespace by name and asserts a specific
+// label key=value is present. Phase 3 helper: collapses ~6 inline copies in
+// tenant_isolation_test.go across build + runtime namespace label checks.
+func expectNamespaceLabel(nsName, label, value string) {
+	Eventually(func(g Gomega) {
+		var ns corev1.Namespace
+		g.Expect(k8sClient.Get(ctx, types.NamespacedName{Name: nsName}, &ns)).To(Succeed())
+		g.Expect(ns.Labels).To(HaveKeyWithValue(label, value))
+	}, timeout, interval).Should(Succeed())
+}
+
 // expectDeployerRoleHasResource waits for the canonical "loopzero-deployer"
 // Role in the given namespace and asserts that one of its Rules grants
 // access to a specific resource (e.g., "ingresses", "networkpolicies").
