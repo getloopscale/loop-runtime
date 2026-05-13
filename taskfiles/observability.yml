@@ -37,6 +37,75 @@ tasks:
           grep -A2 "^loki:" ../helmfile/environments/{{.STACK}}.yaml | sed 's/^/  /'
         fi
 
+  phase6:open-gate:
+    desc: |
+      §6.A.4 Phase 6 Dogfood Gate — Phase 1: open the gate window.
+      Creates ConfigMap `loopzero-phase6-gate-window` with annotation
+      `loopzero.io/phase6-window=active` in the target namespace. The
+      PrometheusRule recording rule `loopzero_phase6_gate_window_active`
+      flips to 1 within 30s.
+
+      Variables:
+        CONTEXT — kubectl context (default: drill-mgmt)
+        NAMESPACE — loopzero namespace (default: loopzero-system)
+    vars:
+      CONTEXT: '{{.CONTEXT | default "drill-mgmt"}}'
+      NAMESPACE: '{{.NAMESPACE | default "loopzero-system"}}'
+    cmds:
+      - |
+        kubectl --context {{.CONTEXT}} -n {{.NAMESPACE}} create configmap \
+          loopzero-phase6-gate-window \
+          --from-literal=opened=$(date -u +%Y-%m-%dT%H:%M:%SZ) \
+          --dry-run=client -o yaml | \
+          kubectl --context {{.CONTEXT}} apply -f -
+      - kubectl --context {{.CONTEXT}} annotate cm loopzero-phase6-gate-window -n {{.NAMESPACE}} loopzero.io/phase6-window=active --overwrite
+      - echo "Gate window OPENED. Watch panel 1 of dashboard 'Phase 6 Dogfood Gate'."
+
+  phase6:close-gate:
+    desc: |
+      §6.A.4 Phase 6 Dogfood Gate — Phase 6: close the gate window.
+      Removes the `loopzero.io/phase6-window` annotation. Use BOTH on
+      success AND abort — closing the window is mandatory so the
+      alert evaluation stops scoping.
+
+      Variables:
+        CONTEXT — kubectl context (default: drill-mgmt)
+        NAMESPACE — loopzero namespace (default: loopzero-system)
+    vars:
+      CONTEXT: '{{.CONTEXT | default "drill-mgmt"}}'
+      NAMESPACE: '{{.NAMESPACE | default "loopzero-system"}}'
+    cmds:
+      - kubectl --context {{.CONTEXT}} annotate cm loopzero-phase6-gate-window -n {{.NAMESPACE}} loopzero.io/phase6-window- --overwrite || true
+      - echo "Gate window CLOSED. File sign-off audit per runbook Phase 5."
+
+  phase6:traffic:
+    desc: |
+      §6.A.4 Phase 6 Dogfood Gate — Phase 2: start k6 traffic generator
+      via tmux (so it survives operator disconnect). Defaults to 4h
+      sustained 50 VUs. Override K6_DURATION + K6_VUS for dry-runs.
+
+      Required env vars:
+        API_URL — engine URL (e.g., https://api.drill.loopzero-drill.example)
+        API_TOKEN — bearer JWT
+        TENANT_ID — soak tenant identifier
+    cmds:
+      - tmux kill-session -t phase6-traffic 2>/dev/null || true
+      - tmux new-session -d -s phase6-traffic 'k6 run --duration ${K6_DURATION:-4h} --vus ${K6_VUS:-50} --out experimental-prometheus-rw -e API_URL=$API_URL -e API_TOKEN=$API_TOKEN -e TENANT_ID=${TENANT_ID:-phase6-soak-tenant} infra/tests/phase6-dogfood-gate/traffic.js 2>&1 | tee /tmp/phase6-k6.log'
+      - sleep 30
+      - tail -30 /tmp/phase6-k6.log | grep -E "iterations|http_req|error" || echo "(no k6 output yet — check API_TOKEN + API_URL)"
+
+  phase6:traffic-stop:
+    desc: |
+      §6.A.4 Phase 6 Dogfood Gate — stop the k6 traffic generator
+      tmux session. Use AFTER `phase6:close-gate` so SLO assertions
+      stop being evaluated against a system that's no longer under
+      sustained load.
+    cmds:
+      - tmux send-keys -t phase6-traffic C-c 2>/dev/null || true
+      - sleep 2
+      - tmux kill-session -t phase6-traffic 2>/dev/null || true
+      - echo "k6 traffic stopped."
+
   loki-cross-cluster:smoke-query:
     desc: |
       LIVE drill smoke step (§6.C.4b step 7) — port-forward mgmt Loki

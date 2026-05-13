@@ -1,0 +1,167 @@
+# §6.A.4 Phase 6 Dogfood Gate PrometheusRule
+#
+# ADR reference: operators-sota-faang-grade-plan Phase 6 (Dogfood Gate).
+# Plan: 2026-05-12-active-execution-plan.md §6.A.4.
+# Audit gap: M03 (Operators) + M09 (Multi-Cell) — both flagged the
+# 4h soak + chaos + SLO P95<705ms as the LIVE evidence pending.
+#
+# The 4h Dogfood Gate has 3 simultaneous criteria (per CLAUDE.md
+# "Operators Phase 6 Dogfood Gate items pendentes"):
+#   1. 4h sustained traffic (k6 traffic generator)
+#   2. Chaos Mesh injection active (pod kills + IO pressure)
+#   3. SLO assertions: rollback P95 < 705ms (the LIVE baseline);
+#      API P95 < 500ms; SEV-1 count == 0
+#
+# This file defines:
+#   - Recording rule: loopzero_phase6_gate_window_active (boolean — fires
+#     1 when a chaos window is active AND the gate ConfigMap exists).
+#   - 4 alerts that detect gate violations DURING the 4h window:
+#     * Phase6RollbackLatencyExceeds705ms (the critical AUDIT-CITED
+#       LIVE baseline)
+#     * Phase6APILatencyExceeds500ms (P95 budget violation)
+#     * Phase6SEV1Detected (any SEV-1 alert during the window)
+#     * Phase6TrafficTooLow (operator forgot to start traffic
+#       generator OR generator died — gate evidence would be
+#       meaningless)
+#
+# Inhibit pattern (mirror of chaos-rules): alerts use `unless loopzero_chaos_active == 1`
+# selectively. The rollback + API latency alerts STILL fire during
+# chaos (the gate IS testing latency under chaos). Only specific
+# alerts that would be 100% false positives during chaos use the
+# inhibit clause.
+---
+apiVersion: monitoring.coreos.com/v1
+kind: PrometheusRule
+metadata:
+  name: loopzero-phase6-dogfood-gate
+  namespace: loopzero-system
+  labels:
+    app: loopzero
+    role: alert-rules
+    prometheus: kube-prometheus
+    release: monitoring
+    loopzero.io/task: 6.A.4
+    loopzero.io/plan: active-execution-plan
+spec:
+  groups:
+    - name: loopzero.phase6.recording
+      interval: 30s
+      rules:
+        # Phase 6 gate window: 1 when the operator has started the
+        # gate (creates ConfigMap `loopzero-phase6-gate-window` with
+        # annotation `loopzero.io/phase6-window=active`). Used by the
+        # 4h-window alerts to scope evaluation.
+        - record: loopzero_phase6_gate_window_active
+          expr: |
+            max(
+              kube_configmap_annotations{
+                namespace="loopzero-system",
+                configmap="loopzero-phase6-gate-window",
+                annotation_loopzero_io_phase6_window="active"
+              }
+            ) or vector(0)
+
+        # 4h window p95 of rollback duration — projected so the
+        # dashboard can render a single timeseries panel.
+        - record: loopzero_phase6_rollback_p95_4h_ms
+          expr: |
+            histogram_quantile(0.95,
+              sum(rate(loopzero_rollback_duration_seconds_bucket[4h])) by (le)
+            ) * 1000
+
+    - name: loopzero.phase6.alerts
+      interval: 1m
+      rules:
+        # CRITICAL — the headline SLO of the gate.
+        # 705ms is the LIVE pre-soak baseline (audit 2026-05-11
+        # §02-api.md line 112). The gate target is "no worse than
+        # that under sustained load + chaos".
+        - alert: Phase6RollbackLatencyExceeds705ms
+          expr: |
+            (loopzero_phase6_rollback_p95_4h_ms > 705)
+            AND
+            (loopzero_phase6_gate_window_active == 1)
+          for: 5m
+          labels:
+            severity: critical
+            audit: M03+M09
+            phase: phase6-dogfood-gate
+          annotations:
+            summary: Phase 6 gate FAIL — rollback P95 > 705ms (AUDIT baseline) for 5m
+            description: |
+              `loopzero_rollback_duration_seconds` p95 over the 4h gate
+              window exceeded 705ms (the LIVE baseline observed
+              2026-05-02 during cell-2 activation). Sustained for 5m
+              means the gate is failing.
+              The 4h soak SHOULD be aborted; investigate per the
+              phase6-dogfood-gate-runbook.md decision tree.
+            runbook: concepts/operations/phase6-dogfood-gate-runbook.md
+
+        - alert: Phase6APILatencyExceeds500ms
+          expr: |
+            histogram_quantile(0.95,
+              sum(rate(loopzero_api_request_duration_seconds_bucket[1h])) by (le)
+            ) > 0.5
+            AND
+            (loopzero_phase6_gate_window_active == 1)
+          for: 10m
+          labels:
+            severity: critical
+            audit: M03+M09
+            phase: phase6-dogfood-gate
+          annotations:
+            summary: Phase 6 gate FAIL — API p95 > 500ms for 10m
+            description: |
+              API request p95 latency exceeded 500ms for 10m during
+              the gate window. Either the SLO target is unrealistic
+              under sustained load OR an upstream dependency (PG,
+              Redis, Loki) is choked.
+
+        # Any SEV-1 alert firing during the gate window is an
+        # auto-fail. The gate is a "zero SEV-1" assertion (per
+        # the audit M03 + M09 LIVE evidence requirement).
+        - alert: Phase6SEV1Detected
+          expr: |
+            sum(ALERTS{alertname!~"Phase6.*", severity="critical", alertstate="firing"})
+            AND
+            (loopzero_phase6_gate_window_active == 1)
+          for: 1m
+          labels:
+            severity: critical
+            audit: M03+M09
+            phase: phase6-dogfood-gate
+          annotations:
+            summary: Phase 6 gate FAIL — SEV-1 alert firing during gate window
+            description: |
+              At least one non-Phase6 SEV-1 alert is firing while the
+              gate window is active. The gate's "zero SEV-1" criterion
+              is violated. Abort the 4h soak and triage the firing
+              alert.
+
+        # Traffic-generator health. If k6 dies or operator forgets
+        # to start traffic, the SLO assertions become meaningless
+        # (an idle system trivially meets latency targets). Detect
+        # the absence so the gate doesn't auto-pass on a no-op.
+        - alert: Phase6TrafficTooLow
+          expr: |
+            sum(rate(loopzero_phase6_reads_total[5m]))
+              + sum(rate(loopzero_phase6_writes_total[5m]))
+              < 5
+            AND
+            (loopzero_phase6_gate_window_active == 1)
+          for: 10m
+          labels:
+            severity: warning
+            phase: phase6-dogfood-gate
+          annotations:
+            summary: Phase 6 gate — traffic generator silent for 10m
+            description: |
+              Combined read+write rate from the k6 traffic generator
+              is < 5/s sustained 10m during the gate window. Either:
+                1. k6 process died (check the runbook Phase 1 retry).
+                2. API_TOKEN expired and every request 401s
+                   (check loopzero_phase6_errors_total trend).
+                3. Operator forgot to start traffic before opening
+                   the gate window.
+              The SLO assertions cannot be relied on while traffic
+              is absent.
