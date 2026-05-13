@@ -31,6 +31,21 @@ import (
 	loopzerov1 "github.com/loopzero/loopzero/operators/api/v1"
 )
 
+// expectResourceQuotaField fetches a ResourceQuota by name+namespace and
+// asserts that one of its Spec.Hard map values matches the given string.
+// Phase 3 helper: collapses 9 near-identical It() blocks per quota field
+// (requests.cpu/memory + limits.cpu/memory across build + runtime quotas).
+func expectResourceQuotaField(quotaName, namespace string, key corev1.ResourceName, want string) {
+	Eventually(func(g Gomega) {
+		var quota corev1.ResourceQuota
+		g.Expect(k8sClient.Get(ctx, types.NamespacedName{
+			Name: quotaName, Namespace: namespace,
+		}, &quota)).To(Succeed())
+		val := quota.Spec.Hard[key]
+		g.Expect(val.String()).To(Equal(want))
+	}, timeout, interval).Should(Succeed())
+}
+
 // expectLimitRangeField fetches the tenant-limits LimitRange and asserts
 // that a specific field on the (single) container limit matches the expected
 // value. Phase 3 helper: collapses 4 near-identical It() blocks per limit
@@ -79,69 +94,24 @@ var _ = Describe("Golden: Resource Quotas", Ordered, func() {
 		})
 
 		It("should set requests.cpu=4 in build-quota", func() {
-			buildNs := "build-" + tenantName
-			Eventually(func(g Gomega) {
-				var quota corev1.ResourceQuota
-				g.Expect(k8sClient.Get(ctx, types.NamespacedName{
-					Name: "build-quota", Namespace: buildNs,
-				}, &quota)).To(Succeed())
-				val := quota.Spec.Hard[corev1.ResourceRequestsCPU]
-				g.Expect(val.String()).To(Equal("4"),
-					"build quota requests.cpu must be 4 (platform constant)")
-			}, timeout, interval).Should(Succeed())
+			expectResourceQuotaField("build-quota", "build-"+tenantName, corev1.ResourceRequestsCPU, "4")
 		})
 
 		It("should set requests.memory=8Gi in build-quota", func() {
-			buildNs := "build-" + tenantName
-			Eventually(func(g Gomega) {
-				var quota corev1.ResourceQuota
-				g.Expect(k8sClient.Get(ctx, types.NamespacedName{
-					Name: "build-quota", Namespace: buildNs,
-				}, &quota)).To(Succeed())
-				val := quota.Spec.Hard[corev1.ResourceRequestsMemory]
-				g.Expect(val.String()).To(Equal("8Gi"),
-					"build quota requests.memory must be 8Gi (platform constant)")
-			}, timeout, interval).Should(Succeed())
+			expectResourceQuotaField("build-quota", "build-"+tenantName, corev1.ResourceRequestsMemory, "8Gi")
 		})
 
 		It("should set limits.cpu=8 in build-quota", func() {
-			buildNs := "build-" + tenantName
-			Eventually(func(g Gomega) {
-				var quota corev1.ResourceQuota
-				g.Expect(k8sClient.Get(ctx, types.NamespacedName{
-					Name: "build-quota", Namespace: buildNs,
-				}, &quota)).To(Succeed())
-				val := quota.Spec.Hard[corev1.ResourceLimitsCPU]
-				g.Expect(val.String()).To(Equal("8"),
-					"build quota limits.cpu must be 8 (platform constant)")
-			}, timeout, interval).Should(Succeed())
+			expectResourceQuotaField("build-quota", "build-"+tenantName, corev1.ResourceLimitsCPU, "8")
 		})
 
 		It("should set limits.memory=16Gi in build-quota", func() {
-			buildNs := "build-" + tenantName
-			Eventually(func(g Gomega) {
-				var quota corev1.ResourceQuota
-				g.Expect(k8sClient.Get(ctx, types.NamespacedName{
-					Name: "build-quota", Namespace: buildNs,
-				}, &quota)).To(Succeed())
-				val := quota.Spec.Hard[corev1.ResourceLimitsMemory]
-				g.Expect(val.String()).To(Equal("16Gi"),
-					"build quota limits.memory must be 16Gi (platform constant)")
-			}, timeout, interval).Should(Succeed())
+			expectResourceQuotaField("build-quota", "build-"+tenantName, corev1.ResourceLimitsMemory, "16Gi")
 		})
 
 		It("should set count/workflows.argoproj.io equal to MaxBuildConcurrency when configured", func() {
 			// newGoldenTenant sets MaxBuildConcurrency=2, so the quota must reflect that.
-			buildNs := "build-" + tenantName
-			Eventually(func(g Gomega) {
-				var quota corev1.ResourceQuota
-				g.Expect(k8sClient.Get(ctx, types.NamespacedName{
-					Name: "build-quota", Namespace: buildNs,
-				}, &quota)).To(Succeed())
-				val := quota.Spec.Hard[corev1.ResourceName("count/workflows.argoproj.io")]
-				g.Expect(val.String()).To(Equal("2"),
-					"workflow count limit must match spec.limits.maxBuildConcurrency")
-			}, timeout, interval).Should(Succeed())
+			expectResourceQuotaField("build-quota", "build-"+tenantName, corev1.ResourceName("count/workflows.argoproj.io"), "2")
 		})
 
 		AfterAll(func() {
@@ -205,29 +175,11 @@ var _ = Describe("Golden: Resource Quotas", Ordered, func() {
 		})
 
 		It("should reflect spec.limits.maxCPU in requests.cpu of tenant-quota", func() {
-			ns := fmt.Sprintf("loopzero-%s-production", tenantName)
-			Eventually(func(g Gomega) {
-				var quota corev1.ResourceQuota
-				g.Expect(k8sClient.Get(ctx, types.NamespacedName{
-					Name: "tenant-quota", Namespace: ns,
-				}, &quota)).To(Succeed())
-				val := quota.Spec.Hard[corev1.ResourceRequestsCPU]
-				g.Expect(val.String()).To(Equal("8"),
-					"tenant-quota requests.cpu must match spec.limits.maxCPU")
-			}, timeout, interval).Should(Succeed())
+			expectResourceQuotaField("tenant-quota", fmt.Sprintf("loopzero-%s-production", tenantName), corev1.ResourceRequestsCPU, "8")
 		})
 
 		It("should reflect spec.limits.maxMemory in requests.memory of tenant-quota", func() {
-			ns := fmt.Sprintf("loopzero-%s-production", tenantName)
-			Eventually(func(g Gomega) {
-				var quota corev1.ResourceQuota
-				g.Expect(k8sClient.Get(ctx, types.NamespacedName{
-					Name: "tenant-quota", Namespace: ns,
-				}, &quota)).To(Succeed())
-				val := quota.Spec.Hard[corev1.ResourceRequestsMemory]
-				g.Expect(val.String()).To(Equal("16Gi"),
-					"tenant-quota requests.memory must match spec.limits.maxMemory")
-			}, timeout, interval).Should(Succeed())
+			expectResourceQuotaField("tenant-quota", fmt.Sprintf("loopzero-%s-production", tenantName), corev1.ResourceRequestsMemory, "16Gi")
 		})
 
 		AfterAll(func() {
