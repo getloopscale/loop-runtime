@@ -81,6 +81,12 @@ func setupAuth(logger *slog.Logger) *AuthDeps {
 	loadServiceAuthEd25519Trust(logger)
 	loadServiceAuthRequireSignatureFlag()
 
+	// Replay-protection nonce store (ADR Q2). In-memory by default;
+	// switches to Redis-backed when LOOPZERO_SERVICE_AUTH_NONCE_REDIS_ADDR
+	// is set. Multi-replica API needs Redis for cross-replica replay
+	// protection; single-replica dev/test uses in-memory fallback.
+	setupServiceAuthNonceStore(logger)
+
 	return &AuthDeps{
 		TokenValidator: tokenValidator,
 	}
