@@ -20,6 +20,15 @@ export function registerAuthCommands(deps: CommandDeps): void {
     .description('Authenticate with your account')
     .option('--token <token>', 'Authentication token')
     .option('--team <team>', 'Select team')
+    // 2026-05-13 T2 amendment (finding-2026-05-13-e2e-token-refresh-divergence):
+    // Companion flags to --token for CI / automation flows that already hold
+    // a refresh_token (e.g., dogfood seed script). When both are present,
+    // configStore captures the full {access, refresh, expires_in} bundle so
+    // ensureFreshToken can renew silently on 401 — matching the device-flow
+    // path's behavior. Both flags are optional; omitting them preserves the
+    // legacy --token-only behavior (access-only, no auto-refresh).
+    .option('--refresh-token <token>', 'OAuth2 refresh_token paired with --token (enables auto-refresh)')
+    .option('--expires-in <seconds>', 'Lifetime in seconds of the --token value (informs auto-refresh timing)', (v) => parseInt(v, 10))
     .action(async (cmdOpts) => {
       const globalOpts = getGlobalOpts();
 
@@ -91,6 +100,8 @@ export function registerAuthCommands(deps: CommandDeps): void {
         token: cmdOpts.token,
         team: cmdOpts.team,
         json: globalOpts.json,
+        refreshToken: cmdOpts.refreshToken,
+        expiresIn: cmdOpts.expiresIn,
       });
       process.exitCode = exitCode;
     });
