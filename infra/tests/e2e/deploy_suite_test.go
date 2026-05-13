@@ -20,7 +20,10 @@
 package e2e
 
 import (
+	"fmt"
 	"os"
+	"os/exec"
+	"path/filepath"
 	"testing"
 
 	. "github.com/onsi/ginkgo/v2"
@@ -61,6 +64,47 @@ var _ = SynchronizedBeforeSuite(func() []byte {
 	// Seed E2E data (idempotent).
 	err := seed.Run(seed.Config{})
 	Expect(err).NotTo(HaveOccurred(), "E2E seed failed")
+
+	// T2 amendment 2026-05-13 (finding-2026-05-13-e2e-token-refresh-divergence):
+	// populate per-suite XDG_CONFIG_HOME with a freshly-issued JWT via
+	// `loopzero login --token`. After this, all CLI subprocesses spawned by
+	// runLoopZero* read the token from configStore (matching the production
+	// path) instead of LOOPZERO_TOKEN env injection. The on401 → ensureFreshToken
+	// pipeline now has access to the same configStore the CLI would use in
+	// production (Rule 10 — local equals production).
+	//
+	// XDG_CONFIG_HOME isolation prevents the test from clobbering the
+	// operator's real ~/.loopzero/config.json. The directory is recreated each
+	// run for hermeticity. Set BEFORE the login subprocess starts so the
+	// CLI writes into this isolated location.
+	xdgDir, err := os.MkdirTemp("", "loopzero-e2e-config-")
+	Expect(err).NotTo(HaveOccurred(), "create XDG_CONFIG_HOME tempdir")
+	Expect(os.Setenv("XDG_CONFIG_HOME", xdgDir)).To(Succeed())
+	GinkgoWriter.Printf("XDG_CONFIG_HOME=%s\n", xdgDir)
+
+	token := resolveToken()
+	Expect(token).NotTo(BeEmpty(), "resolveToken returned empty — no dogfood JWT available")
+	loginCmd := exec.Command("loopzero", "login",
+		"--token", token,
+		"--expires-in", "3600",
+		"--json",
+	)
+	loginCmd.Env = append(os.Environ(),
+		"LOOPZERO_API_URL="+apiURL(),
+		"XDG_CONFIG_HOME="+xdgDir,
+	)
+	loginOut, loginErr := loginCmd.CombinedOutput()
+	Expect(loginErr).NotTo(HaveOccurred(),
+		"loopzero login --token failed: %s", string(loginOut))
+	// Sanity: configStore file exists at expected path.
+	cfgPath := filepath.Join(xdgDir, "loopzero", "config.json")
+	if _, statErr := os.Stat(cfgPath); statErr != nil {
+		// Fallback path (non-XDG mode would write to baseDir/.loopzero).
+		cfgPath = filepath.Join(xdgDir, ".loopzero", "config.json")
+	}
+	Expect(cfgPath).To(BeAnExistingFile(),
+		fmt.Sprintf("loopzero login completed but configStore file missing under %s", xdgDir))
+	GinkgoWriter.Printf("loopzero login wrote config to %s\n", cfgPath)
 
 	return nil
 }, func(_ []byte) {

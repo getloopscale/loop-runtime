@@ -387,9 +387,13 @@ func deployAndWaitSuccess(dir, env string, timeout time.Duration) (buildID strin
 	args := []string{"deploy", "--env", env, "--no-wait", "--json"}
 	cmd := exec.Command("loopzero", args...)
 	cmd.Dir = dir
+	// T2 amendment 2026-05-13: auth via configStore (XDG_CONFIG_HOME from
+	// BeforeSuite), NOT LOOPZERO_TOKEN env injection. See finding-2026-05-13-e2e-
+	// token-refresh-divergence.md. Hard-strip parent LOOPZERO_TOKEN so configStore
+	// is the only source (Rule 10 — test↔prod auth path parity).
 	cmd.Env = append(os.Environ(),
 		"LOOPZERO_API_URL="+apiURL(),
-		"LOOPZERO_TOKEN="+resolveToken(),
+		"LOOPZERO_TOKEN=",
 	)
 
 	var stdoutBuf, stderrBuf strings.Builder
@@ -503,10 +507,12 @@ func assertAuditEntry(action string, project string) {
 // 30s on LIVE k3d (observed flakes in journey 73/75 run, 2026-05-06).
 func ensureProjectDeleted(project string) {
 	cmd := exec.Command("loopzero", "project", "delete", project, "--yes", "--json")
+	// T2 amendment 2026-05-13: auth via configStore (XDG_CONFIG_HOME from
+	// BeforeSuite). LOOPZERO_TOKEN= stripped to avoid env override of configStore.
 	cmd.Env = append(os.Environ(),
 		"LOOPZERO_API_URL="+apiURL(),
 		"LOOPZERO_API_TIMEOUT=120000",
-		"LOOPZERO_TOKEN="+resolveToken(),
+		"LOOPZERO_TOKEN=",
 	)
 	// Ignore errors — project may not exist.
 	_ = cmd.Run()
