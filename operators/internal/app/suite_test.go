@@ -115,6 +115,20 @@ func expectAppCondition(appName, condType string, want metav1.ConditionStatus) {
 	}, timeout, interval).Should(Succeed())
 }
 
+// withApp fetches a LoopZeroApplication CR by name (in default namespace) inside
+// an Eventually loop and runs caller-supplied assertions against it. Phase 3
+// helper: collapses ~6 inline 7-line Eventually+Get scaffolds in
+// application_controller_test.go that vary only in the inner field assertion.
+func withApp(appName string, assertions func(g Gomega, app *loopzerov1.LoopZeroApplication)) {
+	Eventually(func(g Gomega) {
+		var app loopzerov1.LoopZeroApplication
+		g.Expect(k8sClient.Get(ctx, types.NamespacedName{
+			Name: appName, Namespace: "default",
+		}, &app)).To(Succeed())
+		assertions(g, &app)
+	}, timeout, interval).Should(Succeed())
+}
+
 func deleteRouteWithFinalizer(routeName string) {
 	route := &loopzerov1.ExposedRoute{}
 	if err := k8sClient.Get(ctx, types.NamespacedName{Name: routeName, Namespace: "default"}, route); err == nil {

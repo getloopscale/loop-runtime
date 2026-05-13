@@ -50,24 +50,16 @@ var _ = Describe("ApplicationController", Ordered, func() {
 		})
 
 		It("should set hostname via naming.Hostname", func() {
-			Eventually(func(g Gomega) {
-				var app loopzerov1.LoopZeroApplication
-				g.Expect(k8sClient.Get(ctx, types.NamespacedName{
-					Name: appName, Namespace: "default",
-				}, &app)).To(Succeed())
-				// naming.Hostname("myapi", "production", "dev.loopzero.example") => "myapi-production.dev.loopzero.example"
+			// naming.Hostname("myapi", "production", "dev.loopzero.example") => "myapi-production.dev.loopzero.example"
+			withApp(appName, func(g Gomega, app *loopzerov1.LoopZeroApplication) {
 				g.Expect(app.Spec.Hostname).To(Equal("myapi-production.dev.loopzero.example"))
-			}, timeout, interval).Should(Succeed())
+			})
 		})
 
 		It("should set status.url", func() {
-			Eventually(func(g Gomega) {
-				var app loopzerov1.LoopZeroApplication
-				g.Expect(k8sClient.Get(ctx, types.NamespacedName{
-					Name: appName, Namespace: "default",
-				}, &app)).To(Succeed())
+			withApp(appName, func(g Gomega, app *loopzerov1.LoopZeroApplication) {
 				g.Expect(app.Status.URL).To(Equal("https://myapi-production.dev.loopzero.example"))
-			}, timeout, interval).Should(Succeed())
+			})
 		})
 
 		It("should create an ExposedRoute CR owned by the Application", func() {
@@ -89,14 +81,10 @@ var _ = Describe("ApplicationController", Ordered, func() {
 		})
 
 		It("should set phase to Progressing initially", func() {
-			Eventually(func(g Gomega) {
-				var app loopzerov1.LoopZeroApplication
-				g.Expect(k8sClient.Get(ctx, types.NamespacedName{
-					Name: appName, Namespace: "default",
-				}, &app)).To(Succeed())
-				// Without actual endpoints, phase stays Progressing
+			// Without actual endpoints, phase stays Progressing
+			withApp(appName, func(g Gomega, app *loopzerov1.LoopZeroApplication) {
 				g.Expect(app.Status.Phase).To(Equal(loopzerov1.ApplicationPhaseProgressing))
-			}, timeout, interval).Should(Succeed())
+			})
 		})
 
 		It("should set ServiceResolved condition to True", func() {
@@ -104,13 +92,9 @@ var _ = Describe("ApplicationController", Ordered, func() {
 		})
 
 		It("should set observedGeneration", func() {
-			Eventually(func(g Gomega) {
-				var app loopzerov1.LoopZeroApplication
-				g.Expect(k8sClient.Get(ctx, types.NamespacedName{
-					Name: appName, Namespace: "default",
-				}, &app)).To(Succeed())
+			withApp(appName, func(g Gomega, app *loopzerov1.LoopZeroApplication) {
 				g.Expect(app.Status.ObservedGeneration).To(Equal(app.Generation))
-			}, timeout, interval).Should(Succeed())
+			})
 		})
 
 		AfterAll(func() {
@@ -142,23 +126,15 @@ var _ = Describe("ApplicationController", Ordered, func() {
 		})
 
 		It("should preserve the existing hostname", func() {
-			Eventually(func(g Gomega) {
-				var app loopzerov1.LoopZeroApplication
-				g.Expect(k8sClient.Get(ctx, types.NamespacedName{
-					Name: appName, Namespace: "default",
-				}, &app)).To(Succeed())
+			withApp(appName, func(g Gomega, app *loopzerov1.LoopZeroApplication) {
 				g.Expect(app.Spec.Hostname).To(Equal(hostname))
-			}, timeout, interval).Should(Succeed())
+			})
 		})
 
 		It("should set URL from the explicit hostname", func() {
-			Eventually(func(g Gomega) {
-				var app loopzerov1.LoopZeroApplication
-				g.Expect(k8sClient.Get(ctx, types.NamespacedName{
-					Name: appName, Namespace: "default",
-				}, &app)).To(Succeed())
+			withApp(appName, func(g Gomega, app *loopzerov1.LoopZeroApplication) {
 				g.Expect(app.Status.URL).To(Equal("https://custom.example.com"))
-			}, timeout, interval).Should(Succeed())
+			})
 		})
 
 		AfterAll(func() {
@@ -187,23 +163,15 @@ var _ = Describe("ApplicationController", Ordered, func() {
 			Expect(k8sClient.Create(ctx, app)).To(Succeed())
 
 			// Wait for initial reconcile
-			Eventually(func(g Gomega) {
-				var app loopzerov1.LoopZeroApplication
-				g.Expect(k8sClient.Get(ctx, types.NamespacedName{
-					Name: appName, Namespace: "default",
-				}, &app)).To(Succeed())
+			withApp(appName, func(g Gomega, app *loopzerov1.LoopZeroApplication) {
 				g.Expect(app.Status.ObservedGeneration).To(Equal(app.Generation))
-			}, timeout, interval).Should(Succeed())
+			})
 		})
 
 		It("should add the app-cleanup finalizer on creation", func() {
-			Eventually(func(g Gomega) {
-				var app loopzerov1.LoopZeroApplication
-				g.Expect(k8sClient.Get(ctx, types.NamespacedName{
-					Name: appName, Namespace: "default",
-				}, &app)).To(Succeed())
+			withApp(appName, func(g Gomega, app *loopzerov1.LoopZeroApplication) {
 				g.Expect(app.Finalizers).To(ContainElement("loopzero.io/app-cleanup"))
-			}, timeout, interval).Should(Succeed())
+			})
 		})
 
 		AfterAll(func() {
