@@ -27,7 +27,6 @@ import (
 	corev1 "k8s.io/api/core/v1"
 	rbacv1 "k8s.io/api/rbac/v1"
 	"k8s.io/apimachinery/pkg/api/errors"
-	"k8s.io/apimachinery/pkg/api/resource"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/types"
 	"sigs.k8s.io/controller-runtime/pkg/client"
@@ -37,36 +36,15 @@ import (
 
 // newGoldenTenant creates a minimal Tenant CR for golden test use.
 // Uses the "golden-" prefix to distinguish from existing test tenants.
+// Quality-Gate Phase 3: delegate to newTenant + apply Golden-specific overrides
+// (was 30-line near-clone of newTenant). Golden vs Test only differ in display
+// name + tighter preview policy (2 envs / 24h instead of 3 envs / 48h).
 func newGoldenTenant(name string, plan loopzerov1.PlanTier, envs []string) *loopzerov1.Tenant {
-	environments := make([]loopzerov1.TenantEnvironmentEntry, len(envs))
-	for i, e := range envs {
-		environments[i] = loopzerov1.TenantEnvironmentEntry{Name: e, Cluster: "workload"}
-	}
-	return &loopzerov1.Tenant{
-		ObjectMeta: metav1.ObjectMeta{
-			Name:      name,
-			Namespace: "default",
-		},
-		Spec: loopzerov1.TenantSpec{
-			DisplayName:  "Golden Test Tenant " + name,
-			Plan:         plan,
-			Environments: environments,
-			GitOps: loopzerov1.GitOpsSpec{
-				RepoName: "loopzero-tenant-" + name,
-				Branch:   "main",
-			},
-			Preview: loopzerov1.PreviewSpec{
-				MaxEnvironments: 2,
-				TTLHours:        24,
-			},
-			Limits: loopzerov1.ResourceLimits{
-				MaxCPU:              resource.MustParse("8"),
-				MaxMemory:           resource.MustParse("16Gi"),
-				MaxStorage:          resource.MustParse("50Gi"),
-				MaxBuildConcurrency: 2,
-			},
-		},
-	}
+	t := newTenant(name, plan, envs)
+	t.Spec.DisplayName = "Golden Test Tenant " + name
+	t.Spec.Preview.MaxEnvironments = 2
+	t.Spec.Preview.TTLHours = 24
+	return t
 }
 
 // cleanupGoldenTenant removes finalizers and deletes the Tenant CR and its namespaces.

@@ -31,6 +31,21 @@ import (
 	loopzerov1 "github.com/loopzero/loopzero/operators/api/v1"
 )
 
+// expectLimitRangeField fetches the tenant-limits LimitRange and asserts
+// that a specific field on the (single) container limit matches the expected
+// value. Phase 3 helper: collapses 4 near-identical It() blocks per limit
+// type into table-driven entries (default-CPU/default-mem/request-CPU/request-mem).
+func expectLimitRangeField(tenantName string, fieldGetter func(corev1.LimitRangeItem) string, want string) {
+	ns := fmt.Sprintf("loopzero-%s-production", tenantName)
+	Eventually(func(g Gomega) {
+		var lr corev1.LimitRange
+		g.Expect(k8sClient.Get(ctx, types.NamespacedName{
+			Name: "tenant-limits", Namespace: ns,
+		}, &lr)).To(Succeed())
+		g.Expect(fieldGetter(lr.Spec.Limits[0])).To(Equal(want))
+	}, timeout, interval).Should(Succeed())
+}
+
 var _ = Describe("Golden: Resource Quotas", Ordered, func() {
 
 	// --- GOLDEN TEST: golden_resource_quotas_build_quota_enforced ---
@@ -263,47 +278,19 @@ var _ = Describe("Golden: Resource Quotas", Ordered, func() {
 		})
 
 		It("should set default CPU limit=500m in tenant-limits", func() {
-			ns := fmt.Sprintf("loopzero-%s-production", tenantName)
-			Eventually(func(g Gomega) {
-				var lr corev1.LimitRange
-				g.Expect(k8sClient.Get(ctx, types.NamespacedName{
-					Name: "tenant-limits", Namespace: ns,
-				}, &lr)).To(Succeed())
-				g.Expect(lr.Spec.Limits[0].Default.Cpu().String()).To(Equal("500m"))
-			}, timeout, interval).Should(Succeed())
+			expectLimitRangeField(tenantName, func(li corev1.LimitRangeItem) string { return li.Default.Cpu().String() }, "500m")
 		})
 
 		It("should set default memory limit=512Mi in tenant-limits", func() {
-			ns := fmt.Sprintf("loopzero-%s-production", tenantName)
-			Eventually(func(g Gomega) {
-				var lr corev1.LimitRange
-				g.Expect(k8sClient.Get(ctx, types.NamespacedName{
-					Name: "tenant-limits", Namespace: ns,
-				}, &lr)).To(Succeed())
-				g.Expect(lr.Spec.Limits[0].Default.Memory().String()).To(Equal("512Mi"))
-			}, timeout, interval).Should(Succeed())
+			expectLimitRangeField(tenantName, func(li corev1.LimitRangeItem) string { return li.Default.Memory().String() }, "512Mi")
 		})
 
 		It("should set default CPU request=100m in tenant-limits", func() {
-			ns := fmt.Sprintf("loopzero-%s-production", tenantName)
-			Eventually(func(g Gomega) {
-				var lr corev1.LimitRange
-				g.Expect(k8sClient.Get(ctx, types.NamespacedName{
-					Name: "tenant-limits", Namespace: ns,
-				}, &lr)).To(Succeed())
-				g.Expect(lr.Spec.Limits[0].DefaultRequest.Cpu().String()).To(Equal("100m"))
-			}, timeout, interval).Should(Succeed())
+			expectLimitRangeField(tenantName, func(li corev1.LimitRangeItem) string { return li.DefaultRequest.Cpu().String() }, "100m")
 		})
 
 		It("should set default memory request=128Mi in tenant-limits", func() {
-			ns := fmt.Sprintf("loopzero-%s-production", tenantName)
-			Eventually(func(g Gomega) {
-				var lr corev1.LimitRange
-				g.Expect(k8sClient.Get(ctx, types.NamespacedName{
-					Name: "tenant-limits", Namespace: ns,
-				}, &lr)).To(Succeed())
-				g.Expect(lr.Spec.Limits[0].DefaultRequest.Memory().String()).To(Equal("128Mi"))
-			}, timeout, interval).Should(Succeed())
+			expectLimitRangeField(tenantName, func(li corev1.LimitRangeItem) string { return li.DefaultRequest.Memory().String() }, "128Mi")
 		})
 
 		AfterAll(func() {
