@@ -299,25 +299,7 @@ func (r *TenantReconciler) ensureBuildExecutorRBAC(ctx context.Context, buildNs 
 		return fmt.Errorf("role: %w", err)
 	}
 
-	binding := &rbacv1.RoleBinding{
-		ObjectMeta: metav1.ObjectMeta{Name: k.RoleBindingArgoExecutor, Namespace: buildNs},
-	}
-	_, err := controllerutil.CreateOrUpdate(ctx, r.BuildClient, binding, func() error {
-		binding.RoleRef = rbacv1.RoleRef{
-			APIGroup: rbacv1.GroupName,
-			Kind:     "Role",
-			Name:     k.RoleArgoExecutor,
-		}
-		binding.Subjects = []rbacv1.Subject{
-			{
-				Kind:      "ServiceAccount",
-				Name:      k.SABuildWorkflow,
-				Namespace: buildNs,
-			},
-		}
-		return nil
-	})
-	if err != nil {
+	if err := applySingleSARoleBinding(ctx, r.BuildClient, buildNs, k.RoleBindingArgoExecutor, k.RoleArgoExecutor, k.SABuildWorkflow); err != nil {
 		return fmt.Errorf("rolebinding: %w", err)
 	}
 	return nil

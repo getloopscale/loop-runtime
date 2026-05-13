@@ -20,6 +20,34 @@ import (
 	"github.com/loopzero/loopzero/operators/internal/constants"
 )
 
+// applySingleSARoleBinding is the canonical RoleBinding-create-or-update
+// pattern that binds a SINGLE ServiceAccount (saName in namespace) to a
+// single Role (roleName) via a RoleBinding (bindingName, namespace).
+// Phase 3 helper: collapses 2 inline 15-line copies across
+// environment_rbac.go (loopzero-deployer binding) and tenant_build.go
+// (argo-workflow-executor binding) in the same package.
+func applySingleSARoleBinding(ctx context.Context, c client.Client, namespace, bindingName, roleName, saName string) error {
+	rb := &rbacv1.RoleBinding{
+		ObjectMeta: metav1.ObjectMeta{Name: bindingName, Namespace: namespace},
+	}
+	_, err := controllerutil.CreateOrUpdate(ctx, c, rb, func() error {
+		rb.RoleRef = rbacv1.RoleRef{
+			APIGroup: rbacv1.GroupName,
+			Kind:     "Role",
+			Name:     roleName,
+		}
+		rb.Subjects = []rbacv1.Subject{
+			{
+				Kind:      "ServiceAccount",
+				Name:      saName,
+				Namespace: namespace,
+			},
+		}
+		return nil
+	})
+	return err
+}
+
 // reconcileRBAC ensures ServiceAccount, Role, and RoleBinding exist in the namespace.
 // fix-all-platform-issues-plan T1.1 — cell-aware via runtimeClientForEnv.
 func (r *EnvironmentReconciler) reconcileRBAC(ctx context.Context, env *loopzerov1.Environment, nsName string) error {
@@ -58,28 +86,8 @@ func (r *EnvironmentReconciler) reconcileRBAC(ctx context.Context, env *loopzero
 		return fmt.Errorf("role %s/%s: %w", nsName, constants.RoleDeployer, err)
 	}
 
-	// RoleBinding
-	rb := &rbacv1.RoleBinding{
-		ObjectMeta: metav1.ObjectMeta{
-			Name:      constants.RoleBindingDeployer,
-			Namespace: nsName,
-		},
-	}
-	if _, err := controllerutil.CreateOrUpdate(ctx, runtimeClient, rb, func() error {
-		rb.RoleRef = rbacv1.RoleRef{
-			APIGroup: rbacv1.GroupName,
-			Kind:     "Role",
-			Name:     constants.RoleDeployer,
-		}
-		rb.Subjects = []rbacv1.Subject{
-			{
-				Kind:      "ServiceAccount",
-				Name:      constants.SADeployer,
-				Namespace: nsName,
-			},
-		}
-		return nil
-	}); err != nil {
+	// RoleBinding — bind loopzero-deployer SA to loopzero-deployer Role.
+	if err := applySingleSARoleBinding(ctx, runtimeClient, nsName, constants.RoleBindingDeployer, constants.RoleDeployer, constants.SADeployer); err != nil {
 		return fmt.Errorf("rolebinding %s/%s: %w", nsName, constants.RoleBindingDeployer, err)
 	}
 
