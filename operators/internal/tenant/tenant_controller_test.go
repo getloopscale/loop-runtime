@@ -152,6 +152,22 @@ func createGoldenTenantAndWaitPhaseSet(tenantName string, plan loopzerov1.PlanTi
 	}, timeout, interval).Should(Succeed())
 }
 
+// expectLimitRangeContainerType waits for a LimitRange and asserts it has
+// exactly one Container-type limit. Phase 3 helper: collapses 4 inline
+// near-clones across tenant_controller_test, environment_controller_test,
+// and resource_quotas_test (3 occurrences) of the canonical
+// Spec.Limits[0].Type == Container check.
+func expectLimitRangeContainerType(lrName, namespace string) {
+	Eventually(func(g Gomega) {
+		var lr corev1.LimitRange
+		g.Expect(k8sClient.Get(ctx, types.NamespacedName{
+			Name: lrName, Namespace: namespace,
+		}, &lr)).To(Succeed())
+		g.Expect(lr.Spec.Limits).To(HaveLen(1))
+		g.Expect(lr.Spec.Limits[0].Type).To(Equal(corev1.LimitTypeContainer))
+	}, timeout, interval).Should(Succeed())
+}
+
 // expectServiceAccountExists waits for a ServiceAccount by name+namespace
 // to exist. Phase 3 sibling helper to expectNetworkPolicyExists.
 func expectServiceAccountExists(saName, namespace string) {

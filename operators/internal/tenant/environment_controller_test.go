@@ -177,14 +177,7 @@ var _ = Describe("EnvironmentController", Ordered, func() {
 		})
 
 		It("should create LimitRange with default container limits", func() {
-			Eventually(func(g Gomega) {
-				var lr corev1.LimitRange
-				g.Expect(k8sClient.Get(ctx, types.NamespacedName{
-					Name: "tenant-limits", Namespace: nsName,
-				}, &lr)).To(Succeed())
-				g.Expect(lr.Spec.Limits).To(HaveLen(1))
-				g.Expect(lr.Spec.Limits[0].Type).To(Equal(corev1.LimitTypeContainer))
-			}, timeout, interval).Should(Succeed())
+			expectLimitRangeContainerType("tenant-limits", nsName)
 		})
 
 		It("should set all conditions to True", func() {

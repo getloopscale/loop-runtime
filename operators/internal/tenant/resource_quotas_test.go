@@ -218,15 +218,7 @@ var _ = Describe("Golden: Resource Quotas", Ordered, func() {
 		})
 
 		It("should set Container type in tenant-limits LimitRange", func() {
-			ns := fmt.Sprintf("loopzero-%s-production", tenantName)
-			Eventually(func(g Gomega) {
-				var lr corev1.LimitRange
-				g.Expect(k8sClient.Get(ctx, types.NamespacedName{
-					Name: "tenant-limits", Namespace: ns,
-				}, &lr)).To(Succeed())
-				g.Expect(lr.Spec.Limits).To(HaveLen(1))
-				g.Expect(lr.Spec.Limits[0].Type).To(Equal(corev1.LimitTypeContainer))
-			}, timeout, interval).Should(Succeed())
+			expectLimitRangeContainerType("tenant-limits", fmt.Sprintf("loopzero-%s-production", tenantName))
 		})
 
 		It("should set default CPU limit=500m in tenant-limits", func() {
@@ -351,16 +343,7 @@ var _ = Describe("Golden: Resource Quotas", Ordered, func() {
 		})
 
 		It("should set Container type in build-limits LimitRange", func() {
-			buildNs := "build-" + tenantName
-			Eventually(func(g Gomega) {
-				var lr corev1.LimitRange
-				g.Expect(k8sClient.Get(ctx, types.NamespacedName{
-					Name: "build-limits", Namespace: buildNs,
-				}, &lr)).To(Succeed())
-				g.Expect(lr.Spec.Limits).To(HaveLen(1))
-				g.Expect(lr.Spec.Limits[0].Type).To(Equal(corev1.LimitTypeContainer),
-					"build LimitRange must apply to containers so Argo Workflow pods get safe defaults")
-			}, timeout, interval).Should(Succeed())
+			expectLimitRangeContainerType("build-limits", "build-"+tenantName)
 		})
 
 		AfterAll(func() {
