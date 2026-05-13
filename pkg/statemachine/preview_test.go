@@ -5,68 +5,71 @@ package statemachine
 
 import "testing"
 
-func TestPreviewMachine_HappyPath(t *testing.T) {
-	m := NewPreviewMachine()
-
-	// CREATING -> ACTIVE -> EXPIRING -> DELETED
-	state := m.Transition(PreviewCreating, PreviewCreationCompleted)
-	assertState(t, state, PreviewActive)
-
-	state = m.Transition(state, PreviewExpirationTriggered)
-	assertState(t, state, PreviewExpiring)
-
-	state = m.Transition(state, PreviewCleanupCompleted)
-	assertState(t, state, PreviewDeleted)
-}
-
-func TestPreviewMachine_ExplicitDelete(t *testing.T) {
-	m := NewPreviewMachine()
-
-	state := m.Transition(PreviewCreating, PreviewCreationCompleted)
-	state = m.Transition(state, PreviewDeletionTriggered)
-	assertState(t, state, PreviewDeleting)
-
-	state = m.Transition(state, PreviewCleanupCompleted)
-	assertState(t, state, PreviewDeleted)
-}
-
-func TestPreviewMachine_CreationFailed(t *testing.T) {
-	m := NewPreviewMachine()
-
-	state := m.Transition(PreviewCreating, PreviewCreationFailed)
-	assertState(t, state, PreviewFailed)
-
-	// Failed previews are cleaned up automatically.
-	state = m.Transition(state, PreviewDeletionTriggered)
-	assertState(t, state, PreviewDeleting)
-
-	state = m.Transition(state, PreviewCleanupCompleted)
-	assertState(t, state, PreviewDeleted)
-}
-
-func TestPreviewMachine_CleanupFailedDuringExpiry(t *testing.T) {
-	m := NewPreviewMachine()
-
-	state := m.Transition(PreviewCreating, PreviewCreationCompleted)
-	state = m.Transition(state, PreviewExpirationTriggered)
-	state = m.Transition(state, PreviewCleanupFailed_)
-	assertState(t, state, PreviewCleanupFailed)
-
-	// Garbage collector catches it.
-	state = m.Transition(state, PreviewGarbageCollected)
-	assertState(t, state, PreviewDeleted)
-}
-
-func TestPreviewMachine_CleanupFailedDuringDelete(t *testing.T) {
-	m := NewPreviewMachine()
-
-	state := m.Transition(PreviewCreating, PreviewCreationCompleted)
-	state = m.Transition(state, PreviewDeletionTriggered)
-	state = m.Transition(state, PreviewCleanupFailed_)
-	assertState(t, state, PreviewCleanupFailed)
-
-	state = m.Transition(state, PreviewGarbageCollected)
-	assertState(t, state, PreviewDeleted)
+// TestPreviewMachine_TransitionSequences exercises every valid PreviewMachine
+// transition chain starting from PreviewCreating. Phase 3 helper: collapses
+// 5 near-clone test functions into one table-driven test.
+func TestPreviewMachine_TransitionSequences(t *testing.T) {
+	type step struct {
+		event    Event
+		expected State
+	}
+	cases := []struct {
+		name  string
+		steps []step // applied in order, starting from PreviewCreating
+	}{
+		{
+			name: "HappyPath_CreatingToDeleted",
+			steps: []step{
+				{PreviewCreationCompleted, PreviewActive},
+				{PreviewExpirationTriggered, PreviewExpiring},
+				{PreviewCleanupCompleted, PreviewDeleted},
+			},
+		},
+		{
+			name: "ExplicitDelete",
+			steps: []step{
+				{PreviewCreationCompleted, PreviewActive},
+				{PreviewDeletionTriggered, PreviewDeleting},
+				{PreviewCleanupCompleted, PreviewDeleted},
+			},
+		},
+		{
+			name: "CreationFailed_AutomaticCleanup",
+			steps: []step{
+				{PreviewCreationFailed, PreviewFailed},
+				{PreviewDeletionTriggered, PreviewDeleting},
+				{PreviewCleanupCompleted, PreviewDeleted},
+			},
+		},
+		{
+			name: "CleanupFailedDuringExpiry_GarbageCollected",
+			steps: []step{
+				{PreviewCreationCompleted, PreviewActive},
+				{PreviewExpirationTriggered, PreviewExpiring},
+				{PreviewCleanupFailed_, PreviewCleanupFailed},
+				{PreviewGarbageCollected, PreviewDeleted},
+			},
+		},
+		{
+			name: "CleanupFailedDuringDelete_GarbageCollected",
+			steps: []step{
+				{PreviewCreationCompleted, PreviewActive},
+				{PreviewDeletionTriggered, PreviewDeleting},
+				{PreviewCleanupFailed_, PreviewCleanupFailed},
+				{PreviewGarbageCollected, PreviewDeleted},
+			},
+		},
+	}
+	for _, c := range cases {
+		t.Run(c.name, func(t *testing.T) {
+			m := NewPreviewMachine()
+			state := PreviewCreating
+			for _, s := range c.steps {
+				state = m.Transition(state, s.event)
+				assertState(t, state, s.expected)
+			}
+		})
+	}
 }
 
 func TestPreviewMachine_TerminalDeletedRejectsAllEvents(t *testing.T) {

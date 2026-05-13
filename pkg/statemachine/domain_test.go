@@ -5,79 +5,75 @@ package statemachine
 
 import "testing"
 
-func TestDomainMachine_HappyPath(t *testing.T) {
-	m := NewDomainMachine()
-
-	state := DomainPendingVerification
-	state = m.Transition(state, DomainVerify)
-	if state != DomainVerified {
-		t.Fatalf("expected verified, got %s", state)
+// TestDomainMachine_TransitionSequences exercises every valid DomainMachine
+// transition chain. Phase 3 helper: collapses 5 near-clone tests (HappyPath,
+// FailureAndRetry, CNAMELost/Recovered, ProvisionTimeout) into a single
+// table-driven test that allows arbitrary starting state. Domain machine
+// is unique among LoopZero state machines because flows begin at multiple
+// states (PendingVerification for v1 flow, PendingNS for v2 CF Zone flow,
+// Provisioning for retry tests, Active for CNAME-lost tests).
+func TestDomainMachine_TransitionSequences(t *testing.T) {
+	type step struct {
+		event    Event
+		expected State
 	}
-	state = m.Transition(state, DomainProvision)
-	if state != DomainProvisioning {
-		t.Fatalf("expected provisioning, got %s", state)
+	cases := []struct {
+		name  string
+		from  State
+		steps []step
+	}{
+		{
+			name: "v1_HappyPath_PendingVerifyToRemoving",
+			from: DomainPendingVerification,
+			steps: []step{
+				{DomainVerify, DomainVerified},
+				{DomainProvision, DomainProvisioning},
+				{DomainActivate, DomainActive},
+				{DomainRemove, DomainRemoving},
+			},
+		},
+		{
+			name: "FailureAndRetry_ProvisioningToVerified",
+			from: DomainProvisioning,
+			steps: []step{
+				{DomainProvisionFail, DomainFailed},
+				{DomainRetry, DomainVerified},
+			},
+		},
+		{
+			name: "CNAMELost_GracePeriodElapsed",
+			from: DomainActive,
+			steps: []step{
+				{DomainDegrade, DomainDegraded},     // CNAME lost, enters grace
+				{DomainCNAMELost, DomainFailed},     // Grace expired
+			},
+		},
+		{
+			name: "CNAMERecovered_DuringGrace",
+			from: DomainActive,
+			steps: []step{
+				{DomainDegrade, DomainDegraded},
+				{DomainCNAMERecovered, DomainActive},
+			},
+		},
+		{
+			name:  "ProvisionTimeout",
+			from:  DomainProvisioning,
+			steps: []step{{DomainProvisionTimeout, DomainFailed}},
+		},
 	}
-	state = m.Transition(state, DomainActivate)
-	if state != DomainActive {
-		t.Fatalf("expected active, got %s", state)
-	}
-	state = m.Transition(state, DomainRemove)
-	if state != DomainRemoving {
-		t.Fatalf("expected removing, got %s", state)
-	}
-}
-
-func TestDomainMachine_FailureAndRetry(t *testing.T) {
-	m := NewDomainMachine()
-
-	state := m.Transition(DomainProvisioning, DomainProvisionFail)
-	if state != DomainFailed {
-		t.Fatalf("expected failed, got %s", state)
-	}
-	state = m.Transition(state, DomainRetry)
-	if state != DomainVerified {
-		t.Fatalf("expected verified after retry, got %s", state)
-	}
-}
-
-func TestDomainMachine_CNAMELost_GracePeriod(t *testing.T) {
-	m := NewDomainMachine()
-
-	// Active → Degrade (CNAME lost, enters grace period)
-	state := m.Transition(DomainActive, DomainDegrade)
-	if state != DomainDegraded {
-		t.Fatalf("expected degraded after CNAME lost, got %s", state)
-	}
-
-	// Grace period expired → Failed
-	state = m.Transition(state, DomainCNAMELost)
-	if state != DomainFailed {
-		t.Fatalf("expected failed after grace period, got %s", state)
-	}
-}
-
-func TestDomainMachine_CNAMERecovered_DuringGrace(t *testing.T) {
-	m := NewDomainMachine()
-
-	// Active → Degraded
-	state := m.Transition(DomainActive, DomainDegrade)
-	if state != DomainDegraded {
-		t.Fatalf("expected degraded, got %s", state)
-	}
-
-	// CNAME recovered → back to Active
-	state = m.Transition(state, DomainCNAMERecovered)
-	if state != DomainActive {
-		t.Fatalf("expected active after recovery, got %s", state)
-	}
-}
-
-func TestDomainMachine_ProvisionTimeout(t *testing.T) {
-	m := NewDomainMachine()
-
-	state := m.Transition(DomainProvisioning, DomainProvisionTimeout)
-	if state != DomainFailed {
-		t.Fatalf("expected failed after timeout, got %s", state)
+	for _, c := range cases {
+		t.Run(c.name, func(t *testing.T) {
+			m := NewDomainMachine()
+			state := c.from
+			for _, s := range c.steps {
+				state = m.Transition(state, s.event)
+				if state != s.expected {
+					t.Fatalf("after event %q from initial %q: expected %s, got %s",
+						s.event, c.from, s.expected, state)
+				}
+			}
+		})
 	}
 }
 

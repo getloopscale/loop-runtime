@@ -5,103 +5,106 @@ package statemachine
 
 import "testing"
 
-func TestReleaseMachine_HappyPath(t *testing.T) {
-	m := NewReleaseMachine()
-
-	// READY -> PENDING -> ACTIVE -> SUPERSEDED
-	state := m.Transition(ReleaseReady, ReleaseGitMirrorCompleted)
-	assertState(t, state, ReleasePending)
-
-	state = m.Transition(state, ReleaseSyncCompleted)
-	assertState(t, state, ReleaseActive)
-
-	state = m.Transition(state, ReleaseNewActivated)
-	assertState(t, state, ReleaseSuperseded)
-}
-
-func TestReleaseMachine_GitMirrorFailedThenRetry(t *testing.T) {
-	m := NewReleaseMachine()
-
-	state := m.Transition(ReleaseReady, ReleaseGitMirrorFailed_)
-	assertState(t, state, ReleaseGitMirrorFailed)
-
-	state = m.Transition(state, ReleaseGitMirrorRetried)
-	assertState(t, state, ReleasePending)
-}
-
-func TestReleaseMachine_GitPushTimeout(t *testing.T) {
-	m := NewReleaseMachine()
-
-	state := m.Transition(ReleaseReady, ReleaseGitPushTimeout)
-	assertState(t, state, ReleaseGitMirrorFailed)
-}
-
-func TestReleaseMachine_SyncFailedThenRetry(t *testing.T) {
-	m := NewReleaseMachine()
-
-	state := m.Transition(ReleaseReady, ReleaseGitMirrorCompleted)
-	state = m.Transition(state, ReleaseSyncFailed_)
-	assertState(t, state, ReleaseSyncFailed)
-
-	state = m.Transition(state, ReleaseSyncRetry)
-	assertState(t, state, ReleasePending)
-}
-
-func TestReleaseMachine_SyncExhaustedToDriftAlert(t *testing.T) {
-	m := NewReleaseMachine()
-
-	state := m.Transition(ReleaseReady, ReleaseGitMirrorCompleted)
-	state = m.Transition(state, ReleaseSyncFailed_)
-	state = m.Transition(state, ReleaseSyncExhausted)
-	assertState(t, state, ReleaseDriftAlert)
-}
-
-func TestReleaseMachine_SyncTimeout(t *testing.T) {
-	m := NewReleaseMachine()
-
-	state := m.Transition(ReleaseReady, ReleaseGitMirrorCompleted)
-	state = m.Transition(state, ReleaseSyncTimeout)
-	assertState(t, state, ReleaseSyncFailed)
-}
-
-func TestReleaseMachine_PendingCancelled(t *testing.T) {
-	m := NewReleaseMachine()
-
-	state := m.Transition(ReleaseReady, ReleaseGitMirrorCompleted)
-	state = m.Transition(state, ReleaseCancelledEvent)
-	assertState(t, state, ReleaseCancelled)
-}
-
-func TestReleaseMachine_RollbackHappyPath(t *testing.T) {
-	m := NewReleaseMachine()
-
-	state := m.Transition(ReleaseReady, ReleaseGitMirrorCompleted)
-	state = m.Transition(state, ReleaseSyncCompleted)
-	state = m.Transition(state, ReleaseRollbackStarted)
-	assertState(t, state, ReleaseRollingBack)
-
-	state = m.Transition(state, ReleaseRollbackCompleted)
-	assertState(t, state, ReleaseRolledBack)
-}
-
-func TestReleaseMachine_RollbackFailed(t *testing.T) {
-	m := NewReleaseMachine()
-
-	state := m.Transition(ReleaseReady, ReleaseGitMirrorCompleted)
-	state = m.Transition(state, ReleaseSyncCompleted)
-	state = m.Transition(state, ReleaseRollbackStarted)
-	state = m.Transition(state, ReleaseRollbackFailed_)
-	assertState(t, state, ReleaseRollbackFailed)
-}
-
-func TestReleaseMachine_RollbackTimeout(t *testing.T) {
-	m := NewReleaseMachine()
-
-	state := m.Transition(ReleaseReady, ReleaseGitMirrorCompleted)
-	state = m.Transition(state, ReleaseSyncCompleted)
-	state = m.Transition(state, ReleaseRollbackStarted)
-	state = m.Transition(state, ReleaseRollbackTimeout)
-	assertState(t, state, ReleaseRollbackFailed)
+// TestReleaseMachine_TransitionSequences exercises every valid ReleaseMachine
+// transition chain starting from ReleaseReady. Phase 3 helper: collapses 10
+// near-clone test functions into one table-driven test (same pattern as
+// TestBuildMachine_TransitionSequences).
+func TestReleaseMachine_TransitionSequences(t *testing.T) {
+	type step struct {
+		event    Event
+		expected State
+	}
+	cases := []struct {
+		name  string
+		steps []step // applied in order, starting from ReleaseReady
+	}{
+		{
+			name: "HappyPath_ReadyToSuperseded",
+			steps: []step{
+				{ReleaseGitMirrorCompleted, ReleasePending},
+				{ReleaseSyncCompleted, ReleaseActive},
+				{ReleaseNewActivated, ReleaseSuperseded},
+			},
+		},
+		{
+			name: "GitMirrorFailedThenRetry",
+			steps: []step{
+				{ReleaseGitMirrorFailed_, ReleaseGitMirrorFailed},
+				{ReleaseGitMirrorRetried, ReleasePending},
+			},
+		},
+		{
+			name:  "GitPushTimeout",
+			steps: []step{{ReleaseGitPushTimeout, ReleaseGitMirrorFailed}},
+		},
+		{
+			name: "SyncFailedThenRetry",
+			steps: []step{
+				{ReleaseGitMirrorCompleted, ReleasePending},
+				{ReleaseSyncFailed_, ReleaseSyncFailed},
+				{ReleaseSyncRetry, ReleasePending},
+			},
+		},
+		{
+			name: "SyncExhaustedToDriftAlert",
+			steps: []step{
+				{ReleaseGitMirrorCompleted, ReleasePending},
+				{ReleaseSyncFailed_, ReleaseSyncFailed},
+				{ReleaseSyncExhausted, ReleaseDriftAlert},
+			},
+		},
+		{
+			name: "SyncTimeout",
+			steps: []step{
+				{ReleaseGitMirrorCompleted, ReleasePending},
+				{ReleaseSyncTimeout, ReleaseSyncFailed},
+			},
+		},
+		{
+			name: "PendingCancelled",
+			steps: []step{
+				{ReleaseGitMirrorCompleted, ReleasePending},
+				{ReleaseCancelledEvent, ReleaseCancelled},
+			},
+		},
+		{
+			name: "RollbackHappyPath",
+			steps: []step{
+				{ReleaseGitMirrorCompleted, ReleasePending},
+				{ReleaseSyncCompleted, ReleaseActive},
+				{ReleaseRollbackStarted, ReleaseRollingBack},
+				{ReleaseRollbackCompleted, ReleaseRolledBack},
+			},
+		},
+		{
+			name: "RollbackFailed",
+			steps: []step{
+				{ReleaseGitMirrorCompleted, ReleasePending},
+				{ReleaseSyncCompleted, ReleaseActive},
+				{ReleaseRollbackStarted, ReleaseRollingBack},
+				{ReleaseRollbackFailed_, ReleaseRollbackFailed},
+			},
+		},
+		{
+			name: "RollbackTimeout",
+			steps: []step{
+				{ReleaseGitMirrorCompleted, ReleasePending},
+				{ReleaseSyncCompleted, ReleaseActive},
+				{ReleaseRollbackStarted, ReleaseRollingBack},
+				{ReleaseRollbackTimeout, ReleaseRollbackFailed},
+			},
+		},
+	}
+	for _, c := range cases {
+		t.Run(c.name, func(t *testing.T) {
+			m := NewReleaseMachine()
+			state := ReleaseReady
+			for _, s := range c.steps {
+				state = m.Transition(state, s.event)
+				assertState(t, state, s.expected)
+			}
+		})
+	}
 }
 
 func TestReleaseMachine_InvalidEventsRejectFromNonActiveStates(t *testing.T) {
