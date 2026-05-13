@@ -129,6 +129,19 @@ func withApp(appName string, assertions func(g Gomega, app *loopzerov1.LoopZeroA
 	}, timeout, interval).Should(Succeed())
 }
 
+// withRoute fetches an ExposedRoute CR by name (in default namespace) inside
+// an Eventually loop and runs caller-supplied assertions against it.
+// Phase 3 callback-style helper, sibling to withApp.
+func withRoute(routeName string, assertions func(g Gomega, route *loopzerov1.ExposedRoute)) {
+	Eventually(func(g Gomega) {
+		var route loopzerov1.ExposedRoute
+		g.Expect(k8sClient.Get(ctx, types.NamespacedName{
+			Name: routeName, Namespace: "default",
+		}, &route)).To(Succeed())
+		assertions(g, &route)
+	}, timeout, interval).Should(Succeed())
+}
+
 func deleteRouteWithFinalizer(routeName string) {
 	route := &loopzerov1.ExposedRoute{}
 	if err := k8sClient.Get(ctx, types.NamespacedName{Name: routeName, Namespace: "default"}, route); err == nil {

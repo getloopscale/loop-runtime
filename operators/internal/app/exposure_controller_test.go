@@ -55,13 +55,9 @@ var _ = Describe("ExposureController", Ordered, func() {
 		})
 
 		It("should add the route-cleanup finalizer on creation", func() {
-			Eventually(func(g Gomega) {
-				var route loopzerov1.ExposedRoute
-				g.Expect(k8sClient.Get(ctx, types.NamespacedName{
-					Name: routeName, Namespace: "default",
-				}, &route)).To(Succeed())
+			withRoute(routeName, func(g Gomega, route *loopzerov1.ExposedRoute) {
 				g.Expect(route.Finalizers).To(ContainElement("loopzero.io/route-cleanup"))
-			}, timeout, interval).Should(Succeed())
+			})
 		})
 
 		AfterAll(func() {
@@ -178,15 +174,11 @@ var _ = Describe("ExposureController", Ordered, func() {
 
 		It("should stay in Pending phase with certificateReady false", func() {
 			// Wait for at least one reconcile to set the phase
-			Eventually(func(g Gomega) {
-				var route loopzerov1.ExposedRoute
-				g.Expect(k8sClient.Get(ctx, types.NamespacedName{
-					Name: routeName, Namespace: "default",
-				}, &route)).To(Succeed())
+			withRoute(routeName, func(g Gomega, route *loopzerov1.ExposedRoute) {
 				g.Expect(route.Status.Phase).To(Equal(loopzerov1.ExposedRoutePhasePending))
-			}, timeout, interval).Should(Succeed())
+			})
 
-			// Then verify it stays Pending
+			// Then verify it stays Pending (use Consistently to assert non-change over 3s)
 			Consistently(func(g Gomega) {
 				var route loopzerov1.ExposedRoute
 				g.Expect(k8sClient.Get(ctx, types.NamespacedName{
@@ -220,13 +212,9 @@ var _ = Describe("ExposureController", Ordered, func() {
 		})
 
 		It("should set certificateReady to true (TLS not required)", func() {
-			Eventually(func(g Gomega) {
-				var route loopzerov1.ExposedRoute
-				g.Expect(k8sClient.Get(ctx, types.NamespacedName{
-					Name: routeName, Namespace: "default",
-				}, &route)).To(Succeed())
+			withRoute(routeName, func(g Gomega, route *loopzerov1.ExposedRoute) {
 				g.Expect(route.Status.CertificateReady).To(BeTrue())
-			}, timeout, interval).Should(Succeed())
+			})
 		})
 
 		AfterAll(func() {
