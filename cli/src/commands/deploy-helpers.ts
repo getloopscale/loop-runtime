@@ -57,14 +57,62 @@ export function validateEnvironment(env: string): string | null {
 
 /**
  * Map internal sync failure reasons to user-facing messages (Rule 3).
+ *
+ * Beta Logs Gate Criterion 4 — error messages must be actionable.
+ * Each entry maps a reason code to: (1) clear description of what
+ * went wrong, (2) a concrete next step the operator can take.
+ *
+ * The reason strings here cover the union of:
+ *   - Original 5 (audit baseline 2026-04-23)
+ *   - Argo Rollouts auto-abort reasons (rollout_events.go: analysis-
+ *     failed, pod-unhealthy, user-aborted)
+ *   - ArgoCD sync error patterns (sync_client.go InvalidSpecError)
+ *   - Policy-controller image rejection
+ *   - cert-manager Certificate states
+ *   - Build pipeline stages (Dockerfile lint, deps, sign, push, SBOM)
+ *   - Plan enforcement rejections
+ *   - ESO secret sync failures
+ *   - Network policy denials
+ *
+ * Adding a reason here is preferred over relying on the fallback,
+ * because the fallback produces lowercase-with-spaces output that
+ * looks like a generic shrug to the operator. Reason keys MUST match
+ * the canonical UPPER_SNAKE form emitted by the API services that
+ * raise deploy.sync_failed events.
  */
 export function mapSyncFailureReason(reason: string, buildId: string): string {
   const knownReasons: Record<string, string> = {
-    'HEALTH_PROBE_FAILED': "Service didn't become healthy in time. Check your app's /health endpoint and logs.",
-    'SYNC_TIMEOUT': 'Deploy timed out waiting for service to start. Check service logs for startup errors.',
-    'IMAGE_PULL_FAILED': 'Could not pull the built image. This is usually a temporary issue — try deploying again.',
-    'RESOURCE_QUOTA_EXCEEDED': 'Deployment exceeds resource limits. Reduce resource requests in your configuration.',
-    'CRASH_LOOP': 'Service keeps crashing on startup. Check your app logs for errors.',
+    // ─── Original 5 (audit baseline 2026-04-23) ──────────────────
+    'HEALTH_PROBE_FAILED': "Service didn't become healthy in time. Check your app's /health endpoint and that it responds 200 within 30s of startup.",
+    'SYNC_TIMEOUT': 'Deploy timed out waiting for service to become available. Check service logs for startup errors or slow init paths.',
+    'IMAGE_PULL_FAILED': 'Could not pull the built image. This is usually a transient registry issue — retry the deploy. If persistent, check registry credentials.',
+    'RESOURCE_QUOTA_EXCEEDED': 'Deployment exceeds your plan resource limits. Reduce CPU/memory requests in `loopzero.yaml` or upgrade your plan.',
+    'CRASH_LOOP': 'Service keeps crashing on startup. Check your app logs for startup errors (uncaught exceptions, missing env vars, port conflicts).',
+
+    // ─── Build pipeline failures ─────────────────────────────────
+    'BUILD_DOCKERFILE_INVALID': 'Your Dockerfile failed validation. LoopZero enforces an allow-list of base images and refuses --privileged/--security=insecure flags. Review the build logs for the specific rejection rule.',
+    'BUILD_DEPENDENCY_FAILED': 'Dependency installation failed during build (npm/pip/go mod). Check your lockfile is committed and that all packages resolve.',
+    'BUILD_SIGN_FAILED': 'Image signing failed. This is usually a transient cosign infrastructure issue — retry the deploy. If persistent, contact support.',
+    'BUILD_PUSH_FAILED': 'Could not push the built image to the registry. Usually transient — retry. If persistent, registry quota may be exhausted.',
+    'BUILD_SBOM_FAILED': 'SBOM generation failed during build. Non-blocking for the deploy itself, but the build is recorded as FAILED. Retry or contact support if persistent.',
+
+    // ─── Sync / deploy failures ──────────────────────────────────
+    'ACTIVATION_FAILED': 'The deploy could not activate the new release. Check that no concurrent deploy is in flight, then retry.',
+    'POLICY_VIOLATION': 'Your image was rejected by the security policy (unsigned, missing SBOM, or unapproved base image). Build logs identify the specific policy.',
+    'INVALID_SPEC': 'The deployment manifest is malformed. This is usually a LoopZero-side issue — please contact support with the build ID.',
+    'INGRESS_NOT_READY': 'Public route could not be provisioned. Check that your custom domain DNS is correctly configured (run `loopzero domains list`).',
+    'TLS_CERT_PENDING': 'TLS certificate is still being issued by Let\'s Encrypt. This usually completes within 5min — wait and check `loopzero status` again.',
+    'NETWORK_POLICY_BLOCKED': 'Network policy denied a required connection during startup. Contact support — this is a platform-side configuration issue.',
+
+    // ─── Progressive delivery (Argo Rollouts) ────────────────────
+    'ANALYSIS_FAILED': 'Canary analysis failed — your new version did not meet the success-rate or latency thresholds. The deploy auto-rolled-back to the previous version.',
+    'POD_UNHEALTHY': 'Canary pods did not reach healthy state within the progress deadline (5min). The deploy auto-rolled-back. Check the canary pod logs.',
+    'USER_ABORTED': 'A user (or automation) aborted the rollout via `loopzero rollback`. The deploy reverted to the previous version.',
+    'ROLLOUT_ABORTED': 'Canary rollout was aborted before completion. Check `loopzero status` for the abort reason.',
+
+    // ─── Resource / quota failures ───────────────────────────────
+    'PLAN_QUOTA_EXCEEDED': 'You\'ve reached your plan\'s resource limit (projects, builds, environments, or seats). Run `loopzero status` to see usage, or upgrade your plan.',
+    'SECRET_SYNC_FAILED': 'A secret your app depends on could not be made available to the running pod. Verify the secret exists via `loopzero secrets list`.',
   };
 
   const message = knownReasons[reason]
