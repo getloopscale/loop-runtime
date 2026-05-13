@@ -284,20 +284,29 @@ phase_dogfood() {
   fi
   log "PG port-forward up on localhost:${PG_PF_PORT} (PID=$PF_PID)"
   local PG_URL="postgres://loopzero:loopzero-dev-password@127.0.0.1:${PG_PF_PORT}/loopzero?sslmode=disable"
-  # Re-mint the dogfood JWT before invoking ginkgo. Memory
-  # `reference_dogfood_2026_05_09.md` ("JWT TTL=1h gotcha"):
-  # the token written in Phase 2 expires ~25-35min after the cleanroom
-  # starts. Ginkgo journey suite runs for ~35min so most journeys hit
-  # `Authentication failed. Run: loopzero login` mid-run. Re-mint here so the
-  # token is fresh AT THE TIME journeys start (helpers_test.go
-  # resolveToken() reads ~/.loopzero/local-dogfood-token.txt on each runLoopZero
-  # call, so a freshly-minted file propagates to every spec).
-  log "re-minting dogfood JWT (memory: reference_dogfood_2026_05_09 — JWT TTL=1h gotcha)"
-  if ! env HYDRA_NAMESPACE=loopzero-system bash "$REPO_ROOT/infra/helmfile/scripts/seed-local-user.sh" >&2; then
-    kill $PF_PID 2>/dev/null || true
-    log_err "phase_dogfood: token re-mint via seed-local-user.sh failed"
-    return 50
-  fi
+  # NOTE on JWT expiry in Phase 6 (do NOT re-add the seed-local-user.sh
+  # re-mint that was reverted on 2026-05-13):
+  #
+  # Some journeys may fail with `Authentication failed. Run: loopzero login`
+  # if the ginkgo suite runs longer than the Hydra session TTL of the
+  # dogfood JWT. This is NOT a production issue — `loopzero login` stores
+  # access_token + refresh_token in the configStore (~/.loopzero/config.json)
+  # and cli/src/api/client.ts wires `onUnauthorized → ensureFreshToken`
+  # so a real user's session refreshes silently on every 401. The user
+  # stays logged in indefinitely.
+  #
+  # The divergence is test-only: helpers_test.go passes the raw JWT via
+  # `LOOPZERO_TOKEN` env var (no configStore, no refresh_token), bypassing
+  # the canonical refresh path. See finding doc
+  # `concepts/operations/finding-2026-05-13-e2e-token-refresh-divergence.md`
+  # for the systematic fix (refactor helpers_test.go to use `loopzero login`
+  # flow). Pending sponsor T2 amendment per Rule 10 "Local equals
+  # production" guidance.
+  #
+  # Re-minting the token here masks the test↔prod divergence (workaround
+  # forbidden by Rule 6). It also doesn't fully work — the Hydra session
+  # TTL is shorter than the Ginkgo run, so journeys late in the suite
+  # still expire mid-call.
   if ! env PATH="$GINKGO_PATH" LOOPZERO_API_URL="$API_URL" API_URL="$API_URL" LOOPZERO_E2E_DATABASE_URL="$PG_URL" bash -c "cd '$REPO_ROOT' && LOOPZERO_E2E=1 ginkgo -v --label-filter=journey --timeout=60m ./infra/tests/e2e/"; then
     kill $PF_PID 2>/dev/null || true
     log_err "phase_dogfood: ginkgo journey suite reported FAIL"
