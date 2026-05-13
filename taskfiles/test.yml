@@ -372,7 +372,7 @@ tasks:
         OPS_DUPL=$(cd operators && dupl -threshold 50 -plumbing . 2>&1 | grep -v "zz_generated" | wc -l)
         PKG_DUPL=$(cd pkg && dupl -threshold 50 -plumbing . 2>&1 | grep -v "zz_generated" | wc -l)
         TOTAL=$((API_DUPL + OPS_DUPL + PKG_DUPL))
-        BASELINE=881  # api=606 + operators=219 + pkg=56 (Phase 3 v36 — ApplyTenantLimitRange cross-package shared helper, 2 sites collapsed: preview + tenant runtime)
+        BASELINE=877  # api=606 + operators=215 + pkg=56 (Phase 3 v37 — ApplyTenantNetworkPolicies cross-package helper: 3 NP functions × 2 sites collapsed to 1 site each)
         echo "Dupl Go: api=$API_DUPL operators=$OPS_DUPL pkg=$PKG_DUPL Total=$TOTAL Baseline=$BASELINE"
         if [ "$TOTAL" -gt "$BASELINE" ]; then
           echo "FAIL: Dupl count ($TOTAL) exceeds baseline ($BASELINE)"
