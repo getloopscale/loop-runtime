@@ -201,9 +201,28 @@ phase_dogfood() {
   # Cleanroom is now Ginkgo-driven; full-loop.sh remains for iterative-state
   # rollback-aware dev cycles (separate use case) but is NOT the cleanroom
   # journey runner.
+  #
+  # Self-bootstrap ginkgo: per CTO mandate Rule 6 (zero workaround), if the
+  # ginkgo CLI is missing we install it idempotently via `go install` rather
+  # than failing the operator with a manual step. Same canonical hint that
+  # `task doctor` emits. `go install` is cached after first run.
+  local GOBIN_DIR
+  GOBIN_DIR="$(go env GOBIN 2>/dev/null || true)"
+  if [[ -z "$GOBIN_DIR" ]]; then
+    GOBIN_DIR="$(go env GOPATH 2>/dev/null || echo "$HOME/go")/bin"
+  fi
+  export PATH="$GOBIN_DIR:$PATH"
   if ! command -v ginkgo >/dev/null 2>&1; then
-    log_err "phase_dogfood: ginkgo CLI not on PATH — install via: go install github.com/onsi/ginkgo/v2/ginkgo@latest"
-    return 50
+    log "ginkgo CLI not found — bootstrapping via 'go install github.com/onsi/ginkgo/v2/ginkgo@latest'"
+    if ! go install github.com/onsi/ginkgo/v2/ginkgo@latest >&2; then
+      log_err "phase_dogfood: go install ginkgo failed"
+      return 50
+    fi
+    if ! command -v ginkgo >/dev/null 2>&1; then
+      log_err "phase_dogfood: ginkgo still not on PATH after install (expected at $GOBIN_DIR)"
+      return 50
+    fi
+    log "ginkgo bootstrapped at $(command -v ginkgo)"
   fi
   if [[ "$DRY_RUN" -eq 1 ]]; then
     log "DRY-RUN: bash -lc 'LOOPZERO_E2E=1 ginkgo -v --label-filter=journey --timeout=60m ./infra/tests/e2e/'"
@@ -215,7 +234,7 @@ phase_dogfood() {
   if [[ -f "$STATE_FILE" ]]; then
     rm -f "$STATE_FILE" 2>/dev/null || true
   fi
-  if ! bash -lc "cd '$REPO_ROOT' && LOOPZERO_E2E=1 ginkgo -v --label-filter=journey --timeout=60m ./infra/tests/e2e/"; then
+  if ! bash -lc "export PATH='$GOBIN_DIR:\$PATH' && cd '$REPO_ROOT' && LOOPZERO_E2E=1 ginkgo -v --label-filter=journey --timeout=60m ./infra/tests/e2e/"; then
     log_err "phase_dogfood: ginkgo journey suite reported FAIL"
     return 50
   fi
