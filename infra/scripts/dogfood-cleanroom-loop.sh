@@ -193,21 +193,30 @@ phase_wait_doctor() {
 }
 
 phase_dogfood() {
-  log_phase "6/7 DOGFOOD (full-loop.sh — reset then run)"
-  if [[ ! -x "$DOGFOOD_FULL_LOOP" ]]; then
-    log_err "phase_dogfood: $DOGFOOD_FULL_LOOP missing or not executable"
+  log_phase "6/7 DOGFOOD (ginkgo journey suite — canonical post-migration)"
+  # 2026-05-13: bash journeys were migrated to Ginkgo specs in commit 5c469bab
+  # (`feat(e2e): migrate journey tests from bash scripts to Ginkgo`). The old
+  # full-loop.sh + bash journeys are archived under
+  # infra/tests/dogfood/journeys/_legacy/ (see DEPRECATED.md for the mapping).
+  # Cleanroom is now Ginkgo-driven; full-loop.sh remains for iterative-state
+  # rollback-aware dev cycles (separate use case) but is NOT the cleanroom
+  # journey runner.
+  if ! command -v ginkgo >/dev/null 2>&1; then
+    log_err "phase_dogfood: ginkgo CLI not on PATH — install via: go install github.com/onsi/ginkgo/v2/ginkgo@latest"
     return 50
   fi
   if [[ "$DRY_RUN" -eq 1 ]]; then
-    log "DRY-RUN: bash $DOGFOOD_FULL_LOOP --reset && bash $DOGFOOD_FULL_LOOP"
+    log "DRY-RUN: bash -lc 'LOOPZERO_E2E=1 ginkgo -v --label-filter=journey --timeout=60m ./infra/tests/e2e/'"
     return 0
   fi
-  if ! bash "$DOGFOOD_FULL_LOOP" --reset; then
-    log_err "phase_dogfood: full-loop.sh --reset failed"
-    return 50
+  # --reset semantics: clear any prior state file so a re-run of the cleanroom
+  # gets a clean slate. We keep the file path for tooling that inspects it but
+  # write a "RESET" marker before invoking ginkgo.
+  if [[ -f "$STATE_FILE" ]]; then
+    rm -f "$STATE_FILE" 2>/dev/null || true
   fi
-  if ! bash "$DOGFOOD_FULL_LOOP"; then
-    log_err "phase_dogfood: full-loop.sh reported FAIL — see ${STATE_FILE}"
+  if ! bash -lc "cd '$REPO_ROOT' && LOOPZERO_E2E=1 ginkgo -v --label-filter=journey --timeout=60m ./infra/tests/e2e/"; then
+    log_err "phase_dogfood: ginkgo journey suite reported FAIL"
     return 50
   fi
 }

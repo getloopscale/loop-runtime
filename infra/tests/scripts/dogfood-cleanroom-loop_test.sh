@@ -98,15 +98,20 @@ test_phase_ordering_setup_heal_tilt() {
   esac
 }
 
-test_dogfood_phase_calls_full_loop_twice() {
-  local body reset_count run_count
+test_dogfood_phase_invokes_ginkgo() {
+  # 2026-05-13: phase_dogfood was migrated from bash full-loop.sh + bash
+  # journeys to Ginkgo journey suite (canonical post-`5c469bab` migration).
+  # Test asserts the new contract:
+  #   1. invokes `ginkgo` with `--label-filter=journey` (the canonical filter)
+  #   2. checks for ginkgo on PATH and fails-loud (return 50) when missing
+  #   3. resets prior state file before run (preserves --reset semantics)
+  local body
   body=$(awk '/^phase_dogfood\(\)/,/^}/' "$SCRIPT")
   [[ -n "$body" ]] || { echo "    phase_dogfood missing" >&2; return 1; }
-  reset_count=$(grep -cE 'bash.*--reset' <<<"$body" || true)
-  run_count=$(grep -E 'bash[[:space:]]+"\$DOGFOOD_FULL_LOOP"' <<<"$body" \
-    | grep -cv -- '--reset' || true)
-  [[ "$reset_count" -ge 1 ]] || { echo "    no --reset call" >&2; return 1; }
-  [[ "$run_count" -ge 1 ]] || { echo "    no no-flag run call" >&2; return 1; }
+  grep -q "ginkgo" <<<"$body" || { echo "    no ginkgo invocation" >&2; return 1; }
+  grep -q "label-filter=journey" <<<"$body" || { echo "    no journey label filter" >&2; return 1; }
+  grep -q "command -v ginkgo" <<<"$body" || { echo "    no ginkgo CLI pre-check" >&2; return 1; }
+  grep -q "rm -f.*STATE_FILE" <<<"$body" || { echo "    no STATE_FILE reset" >&2; return 1; }
   return 0
 }
 
@@ -142,7 +147,7 @@ run_test test_dry_run_does_not_invoke_destroy
 run_test test_exit_code_map_complete
 run_test test_log_file_outside_report_dir
 run_test test_phase_ordering_setup_heal_tilt
-run_test test_dogfood_phase_calls_full_loop_twice
+run_test test_dogfood_phase_invokes_ginkgo
 run_test test_no_inline_workaround_functions
 
 printf '\n%d/%d tests passed\n' "$PASS" "$((PASS + FAIL))"
