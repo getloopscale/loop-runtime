@@ -218,29 +218,15 @@ func (r *ClusterCredentialReconciler) checkConnectivity(ctx context.Context, cr 
 
 	restConfig, err := clientcmd.RESTConfigFromKubeConfig(kubeconfigData)
 	if err != nil {
-		cr.Status.Connected = false
-		conditions.SetCondition(&cr.Status.Conditions, conditions.TypeConnected,
-			metav1.ConditionFalse, "InvalidKubeconfig",
-			fmt.Sprintf("Failed to parse kubeconfig: %v", err),
-			cr.Generation)
-		if statusErr := r.Status().Update(ctx, cr); statusErr != nil {
-			return false, ctrl.Result{}, statusErr
-		}
-		return false, ctrl.Result{RequeueAfter: constants.RequeuePeriodicCheck}, nil
+		return r.markDisconnected(ctx, cr, "InvalidKubeconfig",
+			fmt.Sprintf("Failed to parse kubeconfig: %v", err))
 	}
 
 	restConfig.Timeout = constants.ConnectivityTimeout
 	clientset, err := kubernetes.NewForConfig(restConfig)
 	if err != nil {
-		cr.Status.Connected = false
-		conditions.SetCondition(&cr.Status.Conditions, conditions.TypeConnected,
-			metav1.ConditionFalse, "ClientCreationFailed",
-			fmt.Sprintf("Failed to create Kubernetes client: %v", err),
-			cr.Generation)
-		if statusErr := r.Status().Update(ctx, cr); statusErr != nil {
-			return false, ctrl.Result{}, statusErr
-		}
-		return false, ctrl.Result{RequeueAfter: constants.RequeuePeriodicCheck}, nil
+		return r.markDisconnected(ctx, cr, "ClientCreationFailed",
+			fmt.Sprintf("Failed to create Kubernetes client: %v", err))
 	}
 
 	healthzCtx, healthzCancel := context.WithTimeout(ctx, constants.ConnectivityTimeout)
@@ -275,6 +261,23 @@ func (r *ClusterCredentialReconciler) checkConnectivity(ctx context.Context, cr 
 		cr.Generation)
 
 	return true, ctrl.Result{}, nil
+}
+
+// markDisconnected centralizes the "cluster is unreachable" failure handling
+// in checkConnectivity: sets Status.Connected=false + sets the TypeConnected
+// condition False with the given reason/msg + updates status + returns the
+// canonical (false, RequeueAfter, nil) tuple. Phase 3 helper: collapses
+// 2 inline 11-line copies (kubeconfig-parse + client-create error paths).
+// The third "Unreachable / healthz fail" path is NOT consolidated here
+// because it additionally writes Status.LastCheckedAt.
+func (r *ClusterCredentialReconciler) markDisconnected(ctx context.Context, cr *loopzerov1.ClusterCredential, reason, msg string) (bool, ctrl.Result, error) {
+	cr.Status.Connected = false
+	conditions.SetCondition(&cr.Status.Conditions, conditions.TypeConnected,
+		metav1.ConditionFalse, reason, msg, cr.Generation)
+	if statusErr := r.Status().Update(ctx, cr); statusErr != nil {
+		return false, ctrl.Result{}, statusErr
+	}
+	return false, ctrl.Result{RequeueAfter: constants.RequeuePeriodicCheck}, nil
 }
 
 // argoCDClusterConfig is the JSON structure ArgoCD expects in the cluster secret's "config" field.
