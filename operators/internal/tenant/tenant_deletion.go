@@ -115,26 +115,22 @@ func (r *TenantReconciler) reconcileDelete(ctx context.Context, tenant *loopzero
 	// Phase 2: Clean up tenant-level resources with per-step metrics.
 	var cleanupErrors []string
 
-	if err := timedCleanupStep("harbor", func() error {
+	runCleanup := func(stepName, errPrefix string, fn func() error) {
+		if err := timedCleanupStep(stepName, fn); err != nil {
+			cleanupErrors = append(cleanupErrors, fmt.Sprintf("%s: %v", errPrefix, err))
+			logger.Error(err, "cleanup failure", "step", errPrefix, "tenant", tenant.Name)
+		}
+	}
+
+	runCleanup("harbor", "harbor-cleanup", func() error {
 		return r.deleteHarborProject(ctx, tenant)
-	}); err != nil {
-		cleanupErrors = append(cleanupErrors, fmt.Sprintf("harbor-cleanup: %v", err))
-		logger.Error(err, "cleanup failure", "step", "harbor-cleanup", "tenant", tenant.Name)
-	}
-
-	if err := timedCleanupStep("argocd-apps", func() error {
+	})
+	runCleanup("argocd-apps", "argocd-cleanup", func() error {
 		return r.ArgoCDProvisioner.DeleteApplications(ctx, tenant.Name)
-	}); err != nil {
-		cleanupErrors = append(cleanupErrors, fmt.Sprintf("argocd-cleanup: %v", err))
-		logger.Error(err, "cleanup failure", "step", "argocd-cleanup", "tenant", tenant.Name)
-	}
-
-	if err := timedCleanupStep("argocd-appproject", func() error {
+	})
+	runCleanup("argocd-appproject", "argocd-appproject-cleanup", func() error {
 		return r.ArgoCDProvisioner.DeleteAppProject(ctx, tenant.Name)
-	}); err != nil {
-		cleanupErrors = append(cleanupErrors, fmt.Sprintf("argocd-appproject-cleanup: %v", err))
-		logger.Error(err, "cleanup failure", "step", "argocd-appproject-cleanup", "tenant", tenant.Name)
-	}
+	})
 
 	if err := timedCleanupStep("build-ns", func() error {
 		var buildNsList corev1.NamespaceList
@@ -155,12 +151,9 @@ func (r *TenantReconciler) reconcileDelete(ctx context.Context, tenant *loopzero
 	}
 
 	if r.MinIOProvisioner != nil {
-		if err := timedCleanupStep("minio", func() error {
+		runCleanup("minio", "minio-cleanup", func() error {
 			return r.MinIOProvisioner.DeleteTenantCredentials(ctx, tenant.Name)
-		}); err != nil {
-			cleanupErrors = append(cleanupErrors, fmt.Sprintf("minio-cleanup: %v", err))
-			logger.Error(err, "cleanup failure", "step", "minio-cleanup", "tenant", tenant.Name)
-		}
+		})
 	}
 
 	if err := timedCleanupStep("gitea", func() error {
