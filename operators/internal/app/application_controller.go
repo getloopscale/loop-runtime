@@ -269,27 +269,28 @@ func (r *ApplicationReconciler) reconcileRouteStatus(ctx context.Context, app *l
 
 	app.Status.Reachable = route.Status.Phase == loopzerov1.ExposedRoutePhaseReachable
 
-	if route.Status.CertificateReady {
-		conditions.SetCondition(&app.Status.Conditions, conditions.TypeCertificateIssued,
-			metav1.ConditionTrue, conditions.ReasonReady,
-			"certificate ready", app.Generation)
-	} else {
-		conditions.SetCondition(&app.Status.Conditions, conditions.TypeCertificateIssued,
-			metav1.ConditionFalse, conditions.ReasonWaiting,
-			"waiting for certificate", app.Generation)
-	}
+	setReadyOrWaitingCondition(&app.Status.Conditions, conditions.TypeCertificateIssued,
+		route.Status.CertificateReady, app.Generation,
+		"certificate ready", "waiting for certificate")
 
-	if app.Status.Reachable {
-		conditions.SetCondition(&app.Status.Conditions, conditions.TypeRouteReachable,
-			metav1.ConditionTrue, conditions.ReasonReady,
-			"route is reachable", app.Generation)
-	} else {
-		conditions.SetCondition(&app.Status.Conditions, conditions.TypeRouteReachable,
-			metav1.ConditionFalse, conditions.ReasonWaiting,
-			"waiting for route to become reachable", app.Generation)
-	}
+	setReadyOrWaitingCondition(&app.Status.Conditions, conditions.TypeRouteReachable,
+		app.Status.Reachable, app.Generation,
+		"route is reachable", "waiting for route to become reachable")
 
 	app.Status.Phase = r.computePhase(app)
+}
+
+// setReadyOrWaitingCondition is the canonical if-bool-then-True-else-False
+// status-condition shape used when a downstream resource readiness flag
+// dictates a True/False outcome with stock ReasonReady/ReasonWaiting and a
+// pair of opposite messages. Phase 3 helper: collapses 2 inline 9-line
+// if/else copies in reconcileExposure (CertificateIssued + RouteReachable).
+func setReadyOrWaitingCondition(conds *[]metav1.Condition, condType string, ready bool, gen int64, readyMsg, waitingMsg string) {
+	if ready {
+		conditions.SetCondition(conds, condType, metav1.ConditionTrue, conditions.ReasonReady, readyMsg, gen)
+	} else {
+		conditions.SetCondition(conds, condType, metav1.ConditionFalse, conditions.ReasonWaiting, waitingMsg, gen)
+	}
 }
 
 // reconcileHealthCondition sets the ApplicationHealthy condition based on phase.
