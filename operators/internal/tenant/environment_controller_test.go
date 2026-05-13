@@ -518,21 +518,7 @@ var _ = Describe("EnvironmentController", Ordered, func() {
 		})
 
 		It("should include extra RBAC permissions for enterprise plan", func() {
-			Eventually(func(g Gomega) {
-				var role rbacv1.Role
-				g.Expect(k8sClient.Get(ctx, types.NamespacedName{
-					Name: "loopzero-deployer", Namespace: nsName,
-				}, &role)).To(Succeed())
-				hasIngresses := false
-				for _, rule := range role.Rules {
-					for _, res := range rule.Resources {
-						if res == "ingresses" {
-							hasIngresses = true
-						}
-					}
-				}
-				g.Expect(hasIngresses).To(BeTrue(), "enterprise role should include ingresses")
-			}, timeout, interval).Should(Succeed())
+			expectDeployerRoleHasResource(nsName, "ingresses")
 		})
 
 		AfterAll(func() {

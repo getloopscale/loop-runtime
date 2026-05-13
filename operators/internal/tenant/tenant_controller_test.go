@@ -135,6 +135,30 @@ func createTenantAndWaitActive(tenantName string, plan loopzerov1.PlanTier, envs
 	}, timeout, interval).Should(Succeed())
 }
 
+// expectDeployerRoleHasResource waits for the canonical "loopzero-deployer"
+// Role in the given namespace and asserts that one of its Rules grants
+// access to a specific resource (e.g., "ingresses", "networkpolicies").
+// Phase 3 helper: collapses 3 inline near-clones in tenant_controller_test
+// + environment_controller_test (all checking "enterprise role should
+// include ingresses").
+func expectDeployerRoleHasResource(nsName, resource string) {
+	Eventually(func(g Gomega) {
+		var role rbacv1.Role
+		g.Expect(k8sClient.Get(ctx, types.NamespacedName{
+			Name: "loopzero-deployer", Namespace: nsName,
+		}, &role)).To(Succeed())
+		hasResource := false
+		for _, rule := range role.Rules {
+			for _, res := range rule.Resources {
+				if res == resource {
+					hasResource = true
+				}
+			}
+		}
+		g.Expect(hasResource).To(BeTrue(), "enterprise role should include "+resource)
+	}, timeout, interval).Should(Succeed())
+}
+
 // expectPriorityClass waits for a PriorityClass by name and asserts its
 // value + PreemptionPolicy match the per-plan canonical configuration plus
 // the standard "loopzero.io/managed-by=tenant-controller" label. Phase 3
@@ -549,22 +573,8 @@ var _ = Describe("TenantController — RBAC", Ordered, func() {
 			Expect(k8sClient.Create(ctx, entTenant)).To(Succeed())
 
 			nsName := "loopzero-rbac-ent-production"
-			Eventually(func(g Gomega) {
-				var role rbacv1.Role
-				g.Expect(k8sClient.Get(ctx, types.NamespacedName{
-					Name: "loopzero-deployer", Namespace: nsName,
-				}, &role)).To(Succeed())
-				// Enterprise should have ingresses and networkpolicies
-				hasIngresses := false
-				for _, rule := range role.Rules {
-					for _, res := range rule.Resources {
-						if res == "ingresses" {
-							hasIngresses = true
-						}
-					}
-				}
-				g.Expect(hasIngresses).To(BeTrue(), "enterprise role should include ingresses")
-			}, timeout, interval).Should(Succeed())
+			// Enterprise should have ingresses and networkpolicies
+			expectDeployerRoleHasResource(nsName, "ingresses")
 		})
 	})
 
@@ -1248,21 +1258,7 @@ var _ = Describe("TenantController — Phase Transition + Deletion", Ordered, fu
 			Expect(k8sClient.Update(ctx, &t)).To(Succeed())
 
 			nsName := "loopzero-" + tenantName + "-production"
-			Eventually(func(g Gomega) {
-				var role rbacv1.Role
-				g.Expect(k8sClient.Get(ctx, types.NamespacedName{
-					Name: "loopzero-deployer", Namespace: nsName,
-				}, &role)).To(Succeed())
-				hasIngresses := false
-				for _, rule := range role.Rules {
-					for _, res := range rule.Resources {
-						if res == "ingresses" {
-							hasIngresses = true
-						}
-					}
-				}
-				g.Expect(hasIngresses).To(BeTrue(), "enterprise role should have ingresses")
-			}, timeout, interval).Should(Succeed())
+			expectDeployerRoleHasResource(nsName, "ingresses")
 		})
 	})
 
