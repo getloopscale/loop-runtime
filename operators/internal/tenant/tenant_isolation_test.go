@@ -88,17 +88,7 @@ var _ = Describe("Golden: Tenant Isolation", Ordered, func() {
 		const tenantName = "golden-iso-build"
 
 		BeforeAll(func() {
-			tenant := newGoldenTenant(tenantName, loopzerov1.PlanStarter, []string{"production"})
-			Expect(k8sClient.Create(ctx, tenant)).To(Succeed())
-
-			// Wait for controller to begin reconciling (phase set = at least one cycle done).
-			Eventually(func(g Gomega) {
-				var t loopzerov1.Tenant
-				g.Expect(k8sClient.Get(ctx, types.NamespacedName{
-					Name: tenantName, Namespace: "default",
-				}, &t)).To(Succeed())
-				g.Expect(t.Status.Phase).ToNot(BeEmpty())
-			}, timeout, interval).Should(Succeed())
+			createGoldenTenantAndWaitPhaseSet(tenantName, loopzerov1.PlanStarter, []string{"production"})
 		})
 
 		It("should create build-{tenantName} namespace on the build cluster", func() {
@@ -146,16 +136,7 @@ var _ = Describe("Golden: Tenant Isolation", Ordered, func() {
 		const tenantName = "golden-iso-rt"
 
 		BeforeAll(func() {
-			tenant := newGoldenTenant(tenantName, loopzerov1.PlanStarter, []string{"production", "staging"})
-			Expect(k8sClient.Create(ctx, tenant)).To(Succeed())
-
-			Eventually(func(g Gomega) {
-				var t loopzerov1.Tenant
-				g.Expect(k8sClient.Get(ctx, types.NamespacedName{
-					Name: tenantName, Namespace: "default",
-				}, &t)).To(Succeed())
-				g.Expect(t.Status.Phase).ToNot(BeEmpty())
-			}, timeout, interval).Should(Succeed())
+			createGoldenTenantAndWaitPhaseSet(tenantName, loopzerov1.PlanStarter, []string{"production", "staging"})
 		})
 
 		It("should create loopzero-{tenant}-{env} namespace for each declared environment", func() {
@@ -407,13 +388,7 @@ var _ = Describe("Golden: Tenant Isolation", Ordered, func() {
 		})
 
 		It("should create loopzero-deployer ServiceAccount in the runtime namespace", func() {
-			nsName := fmt.Sprintf("loopzero-%s-production", tenantName)
-			Eventually(func(g Gomega) {
-				var sa corev1.ServiceAccount
-				g.Expect(k8sClient.Get(ctx, types.NamespacedName{
-					Name: "loopzero-deployer", Namespace: nsName,
-				}, &sa)).To(Succeed())
-			}, timeout, interval).Should(Succeed())
+			expectServiceAccountExists("loopzero-deployer", fmt.Sprintf("loopzero-%s-production", tenantName))
 		})
 
 		It("should create loopzero-deployer RoleBinding that binds the SA to a Role", func() {
@@ -444,16 +419,7 @@ var _ = Describe("Golden: Tenant Isolation", Ordered, func() {
 		const tenantName = "golden-env-cr"
 
 		BeforeAll(func() {
-			tenant := newGoldenTenant(tenantName, loopzerov1.PlanStarter, []string{"production", "staging"})
-			Expect(k8sClient.Create(ctx, tenant)).To(Succeed())
-
-			Eventually(func(g Gomega) {
-				var t loopzerov1.Tenant
-				g.Expect(k8sClient.Get(ctx, types.NamespacedName{
-					Name: tenantName, Namespace: "default",
-				}, &t)).To(Succeed())
-				g.Expect(t.Status.Phase).ToNot(BeEmpty())
-			}, timeout, interval).Should(Succeed())
+			createGoldenTenantAndWaitPhaseSet(tenantName, loopzerov1.PlanStarter, []string{"production", "staging"})
 		})
 
 		It("should create an Environment CR for each declared environment", func() {

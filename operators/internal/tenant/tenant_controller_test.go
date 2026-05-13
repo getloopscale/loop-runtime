@@ -135,6 +135,34 @@ func createTenantAndWaitActive(tenantName string, plan loopzerov1.PlanTier, envs
 	}, timeout, interval).Should(Succeed())
 }
 
+// createGoldenTenantAndWaitPhaseSet creates a Tenant via newGoldenTenant and
+// waits for its Status.Phase to be set (non-empty, meaning reconciler has
+// run at least once). Phase 3 sibling helper to createTenantAndWaitActive
+// — most golden tests use phase-set rather than phase-active because they
+// inspect partial-reconcile state.
+func createGoldenTenantAndWaitPhaseSet(tenantName string, plan loopzerov1.PlanTier, envs []string) {
+	tenant := newGoldenTenant(tenantName, plan, envs)
+	Expect(k8sClient.Create(ctx, tenant)).To(Succeed())
+	Eventually(func(g Gomega) {
+		var t loopzerov1.Tenant
+		g.Expect(k8sClient.Get(ctx, types.NamespacedName{
+			Name: tenantName, Namespace: "default",
+		}, &t)).To(Succeed())
+		g.Expect(t.Status.Phase).ToNot(BeEmpty())
+	}, timeout, interval).Should(Succeed())
+}
+
+// expectServiceAccountExists waits for a ServiceAccount by name+namespace
+// to exist. Phase 3 sibling helper to expectNetworkPolicyExists.
+func expectServiceAccountExists(saName, namespace string) {
+	Eventually(func(g Gomega) {
+		var sa corev1.ServiceAccount
+		g.Expect(k8sClient.Get(ctx, types.NamespacedName{
+			Name: saName, Namespace: namespace,
+		}, &sa)).To(Succeed())
+	}, timeout, interval).Should(Succeed())
+}
+
 // expectNamespaceLabel waits for a Namespace by name and asserts a specific
 // label key=value is present. Phase 3 helper: collapses ~6 inline copies in
 // tenant_isolation_test.go across build + runtime namespace label checks.
@@ -521,13 +549,7 @@ var _ = Describe("TenantController — RBAC", Ordered, func() {
 
 	Context("ServiceAccount", func() {
 		It("should create loopzero-deployer ServiceAccount in each namespace", func() {
-			nsName := "loopzero-" + tenantName + "-production"
-			Eventually(func(g Gomega) {
-				var sa corev1.ServiceAccount
-				g.Expect(k8sClient.Get(ctx, types.NamespacedName{
-					Name: "loopzero-deployer", Namespace: nsName,
-				}, &sa)).To(Succeed())
-			}, timeout, interval).Should(Succeed())
+			expectServiceAccountExists("loopzero-deployer", "loopzero-"+tenantName+"-production")
 		})
 	})
 
