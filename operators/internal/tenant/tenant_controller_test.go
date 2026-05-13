@@ -135,6 +135,17 @@ func createTenantAndWaitActive(tenantName string, plan loopzerov1.PlanTier, envs
 	}, timeout, interval).Should(Succeed())
 }
 
+// deleteEnvWithFinalizer clears finalizers on an Environment CR and deletes
+// it. Idempotent. Phase 3 sibling helper to deleteTenantWithFinalizer.
+func deleteEnvWithFinalizer(envCRName string) {
+	env := &loopzerov1.Environment{}
+	if err := k8sClient.Get(ctx, types.NamespacedName{Name: envCRName, Namespace: "default"}, env); err == nil {
+		env.Finalizers = nil
+		_ = k8sClient.Update(ctx, env)
+		_ = k8sClient.Delete(ctx, env)
+	}
+}
+
 // deleteTenantWithFinalizer clears finalizers on a Tenant CR and deletes it.
 // Idempotent (skips if Get returns NotFound). Companion to deleteTenantNamespaces.
 func deleteTenantWithFinalizer(tenantName string) {

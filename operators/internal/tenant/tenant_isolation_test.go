@@ -684,37 +684,11 @@ var _ = Describe("Golden: Tenant Isolation", Ordered, func() {
 		})
 
 		It("should set BuildNamespaceReady condition to True on the Tenant CR", func() {
-			Eventually(func(g Gomega) {
-				var t loopzerov1.Tenant
-				g.Expect(k8sClient.Get(ctx, types.NamespacedName{
-					Name: tenantName, Namespace: "default",
-				}, &t)).To(Succeed())
-				found := false
-				for _, c := range t.Status.Conditions {
-					if c.Type == "BuildNamespaceReady" {
-						found = true
-						g.Expect(c.Status).To(Equal(metav1.ConditionTrue))
-					}
-				}
-				g.Expect(found).To(BeTrue(), "BuildNamespaceReady condition must be set on Tenant")
-			}, timeout, interval).Should(Succeed())
+			expectTenantCondition(tenantName, "BuildNamespaceReady", metav1.ConditionTrue)
 		})
 
 		It("should set QuotaEnforced condition to True on the Tenant CR", func() {
-			Eventually(func(g Gomega) {
-				var t loopzerov1.Tenant
-				g.Expect(k8sClient.Get(ctx, types.NamespacedName{
-					Name: tenantName, Namespace: "default",
-				}, &t)).To(Succeed())
-				found := false
-				for _, c := range t.Status.Conditions {
-					if c.Type == "QuotaEnforced" {
-						found = true
-						g.Expect(c.Status).To(Equal(metav1.ConditionTrue))
-					}
-				}
-				g.Expect(found).To(BeTrue(), "QuotaEnforced condition must be set on Tenant")
-			}, timeout, interval).Should(Succeed())
+			expectTenantCondition(tenantName, "QuotaEnforced", metav1.ConditionTrue)
 		})
 
 		AfterAll(func() {

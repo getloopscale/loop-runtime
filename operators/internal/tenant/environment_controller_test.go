@@ -235,12 +235,7 @@ var _ = Describe("EnvironmentController", Ordered, func() {
 		})
 
 		AfterAll(func() {
-			env := &loopzerov1.Environment{}
-			if err := k8sClient.Get(ctx, types.NamespacedName{Name: envCRName, Namespace: "default"}, env); err == nil {
-				env.Finalizers = nil
-				_ = k8sClient.Update(ctx, env)
-				_ = k8sClient.Delete(ctx, env)
-			}
+			deleteEnvWithFinalizer(envCRName)
 			ns := &corev1.Namespace{}
 			if err := k8sClient.Get(ctx, types.NamespacedName{Name: nsName}, ns); err == nil {
 				_ = k8sClient.Delete(ctx, ns)
@@ -330,12 +325,7 @@ var _ = Describe("EnvironmentController", Ordered, func() {
 		})
 
 		AfterAll(func() {
-			env := &loopzerov1.Environment{}
-			if err := k8sClient.Get(ctx, types.NamespacedName{Name: envCRName, Namespace: "default"}, env); err == nil {
-				env.Finalizers = nil
-				_ = k8sClient.Update(ctx, env)
-				_ = k8sClient.Delete(ctx, env)
-			}
+			deleteEnvWithFinalizer(envCRName)
 			ns := &corev1.Namespace{}
 			if err := k8sClient.Get(ctx, types.NamespacedName{Name: nsName}, ns); err == nil {
 				_ = k8sClient.Delete(ctx, ns)
@@ -442,27 +432,11 @@ var _ = Describe("EnvironmentController", Ordered, func() {
 			Expect(k8sClient.Get(ctx, types.NamespacedName{Name: nsName}, &ns)).To(Succeed())
 
 			// QuotaReady condition should still be True (skip means "nothing to do")
-			var env loopzerov1.Environment
-			Expect(k8sClient.Get(ctx, types.NamespacedName{
-				Name: envCRName, Namespace: "default",
-			}, &env)).To(Succeed())
-			found := false
-			for _, c := range env.Status.Conditions {
-				if c.Type == conditions.TypeEnvQuotaReady {
-					found = true
-					Expect(c.Status).To(Equal(metav1.ConditionTrue))
-				}
-			}
-			Expect(found).To(BeTrue())
+			expectEnvCondition(envCRName, conditions.TypeEnvQuotaReady, metav1.ConditionTrue)
 		})
 
 		AfterAll(func() {
-			env := &loopzerov1.Environment{}
-			if err := k8sClient.Get(ctx, types.NamespacedName{Name: envCRName, Namespace: "default"}, env); err == nil {
-				env.Finalizers = nil
-				_ = k8sClient.Update(ctx, env)
-				_ = k8sClient.Delete(ctx, env)
-			}
+			deleteEnvWithFinalizer(envCRName)
 			ns := &corev1.Namespace{}
 			if err := k8sClient.Get(ctx, types.NamespacedName{Name: nsName}, ns); err == nil {
 				_ = k8sClient.Delete(ctx, ns)
@@ -514,12 +488,7 @@ var _ = Describe("EnvironmentController", Ordered, func() {
 		})
 
 		AfterAll(func() {
-			env := &loopzerov1.Environment{}
-			if err := k8sClient.Get(ctx, types.NamespacedName{Name: envCRName, Namespace: "default"}, env); err == nil {
-				env.Finalizers = nil
-				_ = k8sClient.Update(ctx, env)
-				_ = k8sClient.Delete(ctx, env)
-			}
+			deleteEnvWithFinalizer(envCRName)
 			ns := &corev1.Namespace{}
 			if err := k8sClient.Get(ctx, types.NamespacedName{Name: nsName}, ns); err == nil {
 				_ = k8sClient.Delete(ctx, ns)
@@ -567,12 +536,7 @@ var _ = Describe("EnvironmentController", Ordered, func() {
 		})
 
 		AfterAll(func() {
-			env := &loopzerov1.Environment{}
-			if err := k8sClient.Get(ctx, types.NamespacedName{Name: envCRName, Namespace: "default"}, env); err == nil {
-				env.Finalizers = nil
-				_ = k8sClient.Update(ctx, env)
-				_ = k8sClient.Delete(ctx, env)
-			}
+			deleteEnvWithFinalizer(envCRName)
 			ns := &corev1.Namespace{}
 			if err := k8sClient.Get(ctx, types.NamespacedName{Name: nsName}, ns); err == nil {
 				_ = k8sClient.Delete(ctx, ns)
