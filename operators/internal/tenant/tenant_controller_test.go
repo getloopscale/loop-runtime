@@ -152,6 +152,32 @@ func createGoldenTenantAndWaitPhaseSet(tenantName string, plan loopzerov1.PlanTi
 	}, timeout, interval).Should(Succeed())
 }
 
+// withEnv fetches an Environment CR by name (in default namespace) inside
+// an Eventually loop and runs caller-supplied assertions against it.
+// Phase 3 callback-style helper, sibling to withNetworkPolicy / withApp.
+func withEnv(envCRName string, assertions func(g Gomega, env *loopzerov1.Environment)) {
+	Eventually(func(g Gomega) {
+		var env loopzerov1.Environment
+		g.Expect(k8sClient.Get(ctx, types.NamespacedName{
+			Name: envCRName, Namespace: "default",
+		}, &env)).To(Succeed())
+		assertions(g, &env)
+	}, timeout, interval).Should(Succeed())
+}
+
+// withTenant fetches a Tenant CR by name (in default namespace) inside an
+// Eventually loop and runs caller-supplied assertions against it.
+// Phase 3 callback-style helper, sibling to withEnv / withApp.
+func withTenant(tenantName string, assertions func(g Gomega, t *loopzerov1.Tenant)) {
+	Eventually(func(g Gomega) {
+		var t loopzerov1.Tenant
+		g.Expect(k8sClient.Get(ctx, types.NamespacedName{
+			Name: tenantName, Namespace: "default",
+		}, &t)).To(Succeed())
+		assertions(g, &t)
+	}, timeout, interval).Should(Succeed())
+}
+
 // expectLimitRangeContainerType waits for a LimitRange and asserts it has
 // exactly one Container-type limit. Phase 3 helper: collapses 4 inline
 // near-clones across tenant_controller_test, environment_controller_test,

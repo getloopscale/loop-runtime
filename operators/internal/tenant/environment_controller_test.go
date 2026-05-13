@@ -59,23 +59,15 @@ var _ = Describe("EnvironmentController", Ordered, func() {
 		})
 
 		It("should set Phase to Active", func() {
-			Eventually(func(g Gomega) {
-				var env loopzerov1.Environment
-				g.Expect(k8sClient.Get(ctx, types.NamespacedName{
-					Name: envCRName, Namespace: "default",
-				}, &env)).To(Succeed())
+			withEnv(envCRName, func(g Gomega, env *loopzerov1.Environment) {
 				g.Expect(env.Status.Phase).To(Equal(loopzerov1.EnvironmentPhaseActive))
-			}, timeout, interval).Should(Succeed())
+			})
 		})
 
 		It("should add the environment-cleanup finalizer", func() {
-			Eventually(func(g Gomega) {
-				var env loopzerov1.Environment
-				g.Expect(k8sClient.Get(ctx, types.NamespacedName{
-					Name: envCRName, Namespace: "default",
-				}, &env)).To(Succeed())
+			withEnv(envCRName, func(g Gomega, env *loopzerov1.Environment) {
 				g.Expect(env.Finalizers).To(ContainElement("loopzero.io/environment-cleanup"))
-			}, timeout, interval).Should(Succeed())
+			})
 		})
 
 		It("should create the namespace", func() {
@@ -208,23 +200,15 @@ var _ = Describe("EnvironmentController", Ordered, func() {
 		})
 
 		It("should set status.namespace to the actual namespace name", func() {
-			Eventually(func(g Gomega) {
-				var env loopzerov1.Environment
-				g.Expect(k8sClient.Get(ctx, types.NamespacedName{
-					Name: envCRName, Namespace: "default",
-				}, &env)).To(Succeed())
+			withEnv(envCRName, func(g Gomega, env *loopzerov1.Environment) {
 				g.Expect(env.Status.Namespace).To(Equal(nsName))
-			}, timeout, interval).Should(Succeed())
+			})
 		})
 
 		It("should set observedGeneration", func() {
-			Eventually(func(g Gomega) {
-				var env loopzerov1.Environment
-				g.Expect(k8sClient.Get(ctx, types.NamespacedName{
-					Name: envCRName, Namespace: "default",
-				}, &env)).To(Succeed())
+			withEnv(envCRName, func(g Gomega, env *loopzerov1.Environment) {
 				g.Expect(env.Status.ObservedGeneration).To(Equal(env.Generation))
-			}, timeout, interval).Should(Succeed())
+			})
 		})
 
 		AfterAll(func() {
@@ -292,13 +276,9 @@ var _ = Describe("EnvironmentController", Ordered, func() {
 			}, timeout, interval).Should(Succeed())
 
 			// Wait for reconcile to complete with new generation
-			Eventually(func(g Gomega) {
-				var env loopzerov1.Environment
-				g.Expect(k8sClient.Get(ctx, types.NamespacedName{
-					Name: envCRName, Namespace: "default",
-				}, &env)).To(Succeed())
+			withEnv(envCRName, func(g Gomega, env *loopzerov1.Environment) {
 				g.Expect(env.Status.ObservedGeneration).To(Equal(env.Generation))
-			}, timeout, interval).Should(Succeed())
+			})
 
 			pol2, q2, sa2 := countResources()
 			Expect(pol2).To(Equal(pol1), "policy count should be identical after re-reconcile")
