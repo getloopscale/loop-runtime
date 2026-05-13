@@ -435,182 +435,143 @@ func TestBuildStore_HasActiveBuild_Error(t *testing.T) {
 	}
 }
 
-func TestBuildStore_UpdateStatus_ValidTransition(t *testing.T) {
+// TestBuildStore_UpdateStatus exercises every UpdateStatus state-transition
+// path with a single table-driven test. Phase 3 helper: was 6 near-clone test
+// functions each repeating the same fakeDBTX setup + Arrange-Act-Assert tuple.
+func TestBuildStore_UpdateStatus(t *testing.T) {
 	now := time.Now().UTC()
-	fake := &fakeDBTX{
-		queryRowResult: &fakeRowWithData{
+	buildRow := func(status string) *fakeRowWithData {
+		return &fakeRowWithData{
 			values: makeBuildRowValues(Build{
 				ID: "bld-1", TenantID: "t1", ProjectID: "p1",
-				Environment: "prod", Status: "QUEUED",
+				Environment: "prod", Status: status,
 				CorrelationID: "c1", CreatedBy: "u1", CreatedAt: now,
 			}),
+		}
+	}
+	type tc struct {
+		name        string
+		fake        *fakeDBTX
+		tx          DBTX // pass-through; nil triggers pool fallback
+		event       string
+		wantStatus  string
+		wantErr     error // errors.Is target; nil means no-error
+		wantSQLHint string
+	}
+	cases := []tc{
+		{
+			name:       "ValidTransition (QUEUED + BuildStarted → RUNNING)",
+			fake:       &fakeDBTX{queryRowResult: buildRow("QUEUED"), execResult: ExecResult{RowsAffected: 1}},
+			event:      string(statemachine.BuildStarted),
+			wantStatus: "RUNNING",
 		},
-		execResult: ExecResult{RowsAffected: 1},
-	}
-	store := NewPostgresBuildStore(fake)
-
-	build, err := store.UpdateStatus(context.Background(), fake, "bld-1", string(statemachine.BuildStarted))
-	if err != nil {
-		t.Fatalf("unexpected error: %v", err)
-	}
-	if build.Status != "RUNNING" {
-		t.Errorf("expected RUNNING, got: %s", build.Status)
-	}
-}
-
-func TestBuildStore_UpdateStatus_InvalidTransition(t *testing.T) {
-	now := time.Now().UTC()
-	fake := &fakeDBTX{
-		queryRowResult: &fakeRowWithData{
-			values: makeBuildRowValues(Build{
-				ID: "bld-1", TenantID: "t1", ProjectID: "p1",
-				Environment: "prod", Status: "SUCCEEDED",
-				CorrelationID: "c1", CreatedBy: "u1", CreatedAt: now,
-			}),
+		{
+			name:    "InvalidTransition (from terminal SUCCEEDED returns ErrInvalidTransition)",
+			fake:    &fakeDBTX{queryRowResult: buildRow("SUCCEEDED")},
+			event:   string(statemachine.BuildStarted),
+			wantErr: loopzeroerrors.ErrInvalidTransition,
+		},
+		{
+			name:    "NotFound (empty row returns ErrBuildNotFound)",
+			fake:    &fakeDBTX{},
+			event:   string(statemachine.BuildStarted),
+			wantErr: loopzeroerrors.ErrBuildNotFound,
+		},
+		{
+			name:       "NilTxUsesPool (nil tx falls back to store.db)",
+			fake:       &fakeDBTX{queryRowResult: buildRow("QUEUED"), execResult: ExecResult{RowsAffected: 1}},
+			tx:         nil, // explicit
+			event:      string(statemachine.BuildStarted),
+			wantStatus: "RUNNING",
+		},
+		{
+			name:       "RunningToReleasing (BuildSucceededEvent)",
+			fake:       &fakeDBTX{queryRowResult: buildRow("RUNNING"), execResult: ExecResult{RowsAffected: 1}},
+			event:      string(statemachine.BuildSucceededEvent),
+			wantStatus: "RELEASING",
+		},
+		{
+			name:        "TerminalSetsFinishedAt (BuildReleaseCompleted hits finished_at=NOW())",
+			fake:        &fakeDBTX{queryRowResult: buildRow("RELEASING"), execResult: ExecResult{RowsAffected: 1}},
+			event:       string(statemachine.BuildReleaseCompleted),
+			wantStatus:  "SUCCEEDED",
+			wantSQLHint: "finished_at = NOW()",
 		},
 	}
-	store := NewPostgresBuildStore(fake)
-
-	_, err := store.UpdateStatus(context.Background(), fake, "bld-1", string(statemachine.BuildStarted))
-	if err == nil {
-		t.Fatal("expected error for invalid transition")
-	}
-	if !errors.Is(err, loopzeroerrors.ErrInvalidTransition) {
-		t.Errorf("expected ErrInvalidTransition, got: %v", err)
+	for _, c := range cases {
+		t.Run(c.name, func(t *testing.T) {
+			store := NewPostgresBuildStore(c.fake)
+			tx := DBTX(c.fake)
+			if c.name == "NilTxUsesPool (nil tx falls back to store.db)" {
+				tx = nil
+			}
+			build, err := store.UpdateStatus(context.Background(), tx, "bld-1", c.event)
+			if c.wantErr != nil {
+				if !errors.Is(err, c.wantErr) {
+					t.Errorf("expected %v, got: %v", c.wantErr, err)
+				}
+				return
+			}
+			if err != nil {
+				t.Fatalf("unexpected error: %v", err)
+			}
+			if build.Status != c.wantStatus {
+				t.Errorf("expected %s, got: %s", c.wantStatus, build.Status)
+			}
+			if c.wantSQLHint != "" && !strings.Contains(c.fake.capturedSQL, c.wantSQLHint) {
+				t.Errorf("expected SQL to contain %q, got: %s", c.wantSQLHint, c.fake.capturedSQL)
+			}
+		})
 	}
 }
 
-func TestBuildStore_UpdateStatus_NotFound(t *testing.T) {
-	fake := &fakeDBTX{} // emptyRow
-	store := NewPostgresBuildStore(fake)
-
-	_, err := store.UpdateStatus(context.Background(), fake, "bld-nonexistent", string(statemachine.BuildStarted))
-	if !errors.Is(err, loopzeroerrors.ErrBuildNotFound) {
-		t.Errorf("expected ErrBuildNotFound, got: %v", err)
-	}
-}
-
-func TestBuildStore_UpdateStatus_NilTxUsesPool(t *testing.T) {
-	now := time.Now().UTC()
-	fake := &fakeDBTX{
-		queryRowResult: &fakeRowWithData{
-			values: makeBuildRowValues(Build{
-				ID: "bld-1", TenantID: "t1", ProjectID: "p1",
-				Environment: "prod", Status: "QUEUED",
-				CorrelationID: "c1", CreatedBy: "u1", CreatedAt: now,
-			}),
+// TestBuildStore_Setters_Success_NotFound_NilTx exercises every single-column
+// BuildStore setter (SetErrorMessage, SetWorkflowID) with the canonical
+// Arrange-Act-Assert tuple: row found (success), row missing (ErrBuildNotFound),
+// nil-tx pool fallback. Phase 3 helper: was 5 near-clone test functions.
+func TestBuildStore_Setters_Success_NotFound_NilTx(t *testing.T) {
+	type setterCall func(s BuildStore, tx DBTX) error
+	cases := []struct {
+		name    string
+		call    setterCall
+		callNil setterCall // same call with nil tx; nil to skip nil-tx case
+	}{
+		{
+			name:    "SetErrorMessage",
+			call:    func(s BuildStore, tx DBTX) error { return s.SetErrorMessage(context.Background(), tx, "bld-1", "build timed out") },
+			callNil: func(s BuildStore, _ DBTX) error { return s.SetErrorMessage(context.Background(), nil, "bld-1", "err") },
 		},
-		execResult: ExecResult{RowsAffected: 1},
-	}
-	store := NewPostgresBuildStore(fake)
-
-	// Pass nil tx — should fall back to store.db
-	build, err := store.UpdateStatus(context.Background(), nil, "bld-1", string(statemachine.BuildStarted))
-	if err != nil {
-		t.Fatalf("unexpected error: %v", err)
-	}
-	if build.Status != "RUNNING" {
-		t.Errorf("expected RUNNING, got: %s", build.Status)
-	}
-}
-
-func TestBuildStore_UpdateStatus_RunningToReleasingSetsStartedAt(t *testing.T) {
-	now := time.Now().UTC()
-	fake := &fakeDBTX{
-		queryRowResult: &fakeRowWithData{
-			values: makeBuildRowValues(Build{
-				ID: "bld-1", TenantID: "t1", ProjectID: "p1",
-				Environment: "prod", Status: "RUNNING",
-				CorrelationID: "c1", CreatedBy: "u1", CreatedAt: now,
-			}),
+		{
+			name:    "SetWorkflowID",
+			call:    func(s BuildStore, tx DBTX) error { return s.SetWorkflowID(context.Background(), tx, "bld-1", "wf-abc") },
+			callNil: nil, // SetWorkflowID nil-tx variant not covered by original suite
 		},
-		execResult: ExecResult{RowsAffected: 1},
 	}
-	store := NewPostgresBuildStore(fake)
-
-	build, err := store.UpdateStatus(context.Background(), fake, "bld-1", string(statemachine.BuildSucceededEvent))
-	if err != nil {
-		t.Fatalf("unexpected error: %v", err)
-	}
-	if build.Status != "RELEASING" {
-		t.Errorf("expected RELEASING, got: %s", build.Status)
-	}
-}
-
-func TestBuildStore_UpdateStatus_TerminalSetsFinishedAt(t *testing.T) {
-	now := time.Now().UTC()
-	fake := &fakeDBTX{
-		queryRowResult: &fakeRowWithData{
-			values: makeBuildRowValues(Build{
-				ID: "bld-1", TenantID: "t1", ProjectID: "p1",
-				Environment: "prod", Status: "RELEASING",
-				CorrelationID: "c1", CreatedBy: "u1", CreatedAt: now,
-			}),
-		},
-		execResult: ExecResult{RowsAffected: 1},
-	}
-	store := NewPostgresBuildStore(fake)
-
-	build, err := store.UpdateStatus(context.Background(), fake, "bld-1", string(statemachine.BuildReleaseCompleted))
-	if err != nil {
-		t.Fatalf("unexpected error: %v", err)
-	}
-	if build.Status != "SUCCEEDED" {
-		t.Errorf("expected SUCCEEDED, got: %s", build.Status)
-	}
-	// Verify the SQL uses finished_at = NOW()
-	if !strings.Contains(fake.capturedSQL, "finished_at = NOW()") {
-		t.Errorf("expected SQL to set finished_at, got: %s", fake.capturedSQL)
-	}
-}
-
-func TestBuildStore_SetErrorMessage_Success(t *testing.T) {
-	fake := &fakeDBTX{execResult: ExecResult{RowsAffected: 1}}
-	store := NewPostgresBuildStore(fake)
-
-	err := store.SetErrorMessage(context.Background(), fake, "bld-1", "build timed out")
-	if err != nil {
-		t.Fatalf("unexpected error: %v", err)
-	}
-}
-
-func TestBuildStore_SetErrorMessage_NotFound(t *testing.T) {
-	fake := &fakeDBTX{execResult: ExecResult{RowsAffected: 0}}
-	store := NewPostgresBuildStore(fake)
-
-	err := store.SetErrorMessage(context.Background(), fake, "bld-nonexistent", "err")
-	if !errors.Is(err, loopzeroerrors.ErrBuildNotFound) {
-		t.Errorf("expected ErrBuildNotFound, got: %v", err)
-	}
-}
-
-func TestBuildStore_SetErrorMessage_NilTxUsesPool(t *testing.T) {
-	fake := &fakeDBTX{execResult: ExecResult{RowsAffected: 1}}
-	store := NewPostgresBuildStore(fake)
-
-	err := store.SetErrorMessage(context.Background(), nil, "bld-1", "err")
-	if err != nil {
-		t.Fatalf("unexpected error: %v", err)
-	}
-}
-
-func TestBuildStore_SetWorkflowID_Success(t *testing.T) {
-	fake := &fakeDBTX{execResult: ExecResult{RowsAffected: 1}}
-	store := NewPostgresBuildStore(fake)
-
-	err := store.SetWorkflowID(context.Background(), fake, "bld-1", "wf-abc")
-	if err != nil {
-		t.Fatalf("unexpected error: %v", err)
-	}
-}
-
-func TestBuildStore_SetWorkflowID_NotFound(t *testing.T) {
-	fake := &fakeDBTX{execResult: ExecResult{RowsAffected: 0}}
-	store := NewPostgresBuildStore(fake)
-
-	err := store.SetWorkflowID(context.Background(), fake, "bld-nonexistent", "wf-abc")
-	if !errors.Is(err, loopzeroerrors.ErrBuildNotFound) {
-		t.Errorf("expected ErrBuildNotFound, got: %v", err)
+	for _, c := range cases {
+		t.Run(c.name+"_Success", func(t *testing.T) {
+			fake := &fakeDBTX{execResult: ExecResult{RowsAffected: 1}}
+			store := NewPostgresBuildStore(fake)
+			if err := c.call(store, fake); err != nil {
+				t.Fatalf("unexpected error: %v", err)
+			}
+		})
+		t.Run(c.name+"_NotFound", func(t *testing.T) {
+			fake := &fakeDBTX{execResult: ExecResult{RowsAffected: 0}}
+			store := NewPostgresBuildStore(fake)
+			err := c.call(store, fake)
+			if !errors.Is(err, loopzeroerrors.ErrBuildNotFound) {
+				t.Errorf("expected ErrBuildNotFound, got: %v", err)
+			}
+		})
+		if c.callNil != nil {
+			t.Run(c.name+"_NilTxUsesPool", func(t *testing.T) {
+				fake := &fakeDBTX{execResult: ExecResult{RowsAffected: 1}}
+				store := NewPostgresBuildStore(fake)
+				if err := c.callNil(store, fake); err != nil {
+					t.Fatalf("unexpected error: %v", err)
+				}
+			})
+		}
 	}
 }
 
