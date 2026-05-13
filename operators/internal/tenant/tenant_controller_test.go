@@ -135,6 +135,21 @@ func createTenantAndWaitActive(tenantName string, plan loopzerov1.PlanTier, envs
 	}, timeout, interval).Should(Succeed())
 }
 
+// expectPriorityClass waits for a PriorityClass by name and asserts its
+// value + PreemptionPolicy match the per-plan canonical configuration plus
+// the standard "loopzero.io/managed-by=tenant-controller" label. Phase 3
+// helper: eliminates 3 inline near-clones (starter=100/Never,
+// growth=500/PreemptLowerPriority, enterprise=1000/PreemptLowerPriority).
+func expectPriorityClass(name string, value int32, policy corev1.PreemptionPolicy) {
+	Eventually(func(g Gomega) {
+		var pc schedulingv1.PriorityClass
+		g.Expect(k8sClient.Get(ctx, types.NamespacedName{Name: name}, &pc)).To(Succeed())
+		g.Expect(pc.Value).To(Equal(value))
+		g.Expect(*pc.PreemptionPolicy).To(Equal(policy))
+		g.Expect(pc.Labels).To(HaveKeyWithValue("loopzero.io/managed-by", "tenant-controller"))
+	}, timeout, interval).Should(Succeed())
+}
+
 // expectNetworkPolicyExists waits for a NetworkPolicy by name+namespace to
 // exist. Phase 3 helper: eliminates 3 inline 6-line existence checks in
 // network_policies_test.go.
@@ -765,13 +780,7 @@ var _ = Describe("TenantController — PriorityClass", Ordered, func() {
 		})
 
 		It("should create PriorityClass with value 100 and PreemptionPolicy Never", func() {
-			Eventually(func(g Gomega) {
-				var pc schedulingv1.PriorityClass
-				g.Expect(k8sClient.Get(ctx, types.NamespacedName{Name: "loopzero-tenant-starter"}, &pc)).To(Succeed())
-				g.Expect(pc.Value).To(Equal(int32(100)))
-				g.Expect(*pc.PreemptionPolicy).To(Equal(corev1.PreemptNever))
-				g.Expect(pc.Labels).To(HaveKeyWithValue("loopzero.io/managed-by", "tenant-controller"))
-			}, timeout, interval).Should(Succeed())
+			expectPriorityClass("loopzero-tenant-starter", 100, corev1.PreemptNever)
 		})
 
 		It("should set PriorityClassReady condition to True", func() {
@@ -815,13 +824,7 @@ var _ = Describe("TenantController — PriorityClass", Ordered, func() {
 		})
 
 		It("should create PriorityClass with value 500 and PreemptLowerPriority", func() {
-			Eventually(func(g Gomega) {
-				var pc schedulingv1.PriorityClass
-				g.Expect(k8sClient.Get(ctx, types.NamespacedName{Name: "loopzero-tenant-growth"}, &pc)).To(Succeed())
-				g.Expect(pc.Value).To(Equal(int32(500)))
-				g.Expect(*pc.PreemptionPolicy).To(Equal(corev1.PreemptLowerPriority))
-				g.Expect(pc.Labels).To(HaveKeyWithValue("loopzero.io/managed-by", "tenant-controller"))
-			}, timeout, interval).Should(Succeed())
+			expectPriorityClass("loopzero-tenant-growth", 500, corev1.PreemptLowerPriority)
 		})
 
 		AfterAll(func() {
@@ -838,13 +841,7 @@ var _ = Describe("TenantController — PriorityClass", Ordered, func() {
 		})
 
 		It("should create PriorityClass with value 1000 and PreemptLowerPriority", func() {
-			Eventually(func(g Gomega) {
-				var pc schedulingv1.PriorityClass
-				g.Expect(k8sClient.Get(ctx, types.NamespacedName{Name: "loopzero-tenant-enterprise"}, &pc)).To(Succeed())
-				g.Expect(pc.Value).To(Equal(int32(1000)))
-				g.Expect(*pc.PreemptionPolicy).To(Equal(corev1.PreemptLowerPriority))
-				g.Expect(pc.Labels).To(HaveKeyWithValue("loopzero.io/managed-by", "tenant-controller"))
-			}, timeout, interval).Should(Succeed())
+			expectPriorityClass("loopzero-tenant-enterprise", 1000, corev1.PreemptLowerPriority)
 		})
 
 		AfterAll(func() {
