@@ -913,6 +913,7 @@ fi
 #
 # Logic (delegated to infra/scripts/run-migrations.sh):
 #   - if schema_migrations absent AND tenants present:
+#       # allowlist: migrate force (heal recovery — register existing schema, not prod-pod usage)
 #       migrate force <HIGHEST> → register existing schema as fully applied
 #   - migrate up → apply any genuinely new migrations
 # Idempotent: re-runs are no-ops when schema_migrations is current.
