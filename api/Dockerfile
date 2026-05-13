@@ -1,4 +1,4 @@
-FROM golang:1.25.9-alpine3.22 AS builder
+FROM golang:1.25.10-alpine3.22 AS builder
 WORKDIR /workspace
 
 ENV GOWORK=off
@@ -18,7 +18,7 @@ RUN --mount=type=cache,target=/root/go/pkg/mod \
     && CGO_ENABLED=0 go build -trimpath -ldflags="-s -w" -o /loopzero-controller ./cmd/controller/
 
 # Build migrate from source (same Go toolchain) to avoid CVEs in pre-compiled binary.
-FROM golang:1.25.9-alpine3.22 AS migrate-builder
+FROM golang:1.25.10-alpine3.22 AS migrate-builder
 RUN --mount=type=cache,target=/root/go/pkg/mod \
     --mount=type=cache,target=/root/.cache/go-build \
     CGO_ENABLED=0 go install -tags 'postgres' -trimpath -ldflags="-s -w" \
