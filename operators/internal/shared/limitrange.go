@@ -16,24 +16,30 @@ import (
 	"github.com/loopzero/loopzero/operators/internal/constants"
 )
 
-// ApplyTenantLimitRange creates or updates the canonical tenant-limits
-// LimitRange (Container scope, Default + DefaultRequest CPU/Memory from
-// platform constants) in the given namespace. Phase 3 cross-package helper:
-// previously inlined 17-line CreateOrUpdate block in 2 sites:
-//   - internal/preview/preview_resources.go (preview namespace)
-//   - internal/tenant/environment_quota.go (runtime tenant namespace)
+// LimitRangeContainerDefaults bundles the 4 strings (default + request, CPU +
+// memory) needed to fully describe a Container-scoped LimitRange's
+// Default/DefaultRequest fields. Quantities are parsed via resource.MustParse
+// inside ApplyContainerLimitRange so the caller passes string constants
+// directly (same shape as constants.TenantLimit* / constants.BuildLimit*).
+type LimitRangeContainerDefaults struct {
+	CPU           string // Default container CPU limit
+	Memory        string // Default container memory limit
+	RequestCPU    string // Default container CPU request
+	RequestMemory string // Default container memory request
+}
+
+// ApplyContainerLimitRange creates or updates a Container-scoped LimitRange
+// with the given name, applying the supplied Default + DefaultRequest values.
+// Phase 3 v40: generalized form of ApplyTenantLimitRange that also covers
+// build-namespace LimitRanges (different constants, identical structure).
 //
-// Note: tenant_build.go has a STRUCTURALLY-similar LimitRange block but uses
-// different constants (LimitRangeBuild + BuildLimit*) — that one stays inline
-// because folding into this helper would require either parameterizing every
-// constant (over-abstracted, YAGNI) or losing the build vs runtime distinction.
-//
-// errCtx is the human-readable error context (e.g., "preview limitrange",
-// "limitrange") so each call site preserves its existing error-wrap message.
-func ApplyTenantLimitRange(ctx context.Context, c client.Client, nsName, errCtx string) error {
+// errCtx is the human-readable error context wrap prefix (e.g., "preview
+// limitrange", "limitrange", "build limitrange") so each call site preserves
+// its existing error-wrap message used by audit/log scans.
+func ApplyContainerLimitRange(ctx context.Context, c client.Client, nsName, lrName, errCtx string, d LimitRangeContainerDefaults) error {
 	lr := &corev1.LimitRange{
 		ObjectMeta: metav1.ObjectMeta{
-			Name:      constants.LimitRangeTenant,
+			Name:      lrName,
 			Namespace: nsName,
 		},
 	}
@@ -42,19 +48,36 @@ func ApplyTenantLimitRange(ctx context.Context, c client.Client, nsName, errCtx 
 			{
 				Type: corev1.LimitTypeContainer,
 				Default: corev1.ResourceList{
-					corev1.ResourceCPU:    resource.MustParse(constants.TenantLimitDefaultCPU),
-					corev1.ResourceMemory: resource.MustParse(constants.TenantLimitDefaultMemory),
+					corev1.ResourceCPU:    resource.MustParse(d.CPU),
+					corev1.ResourceMemory: resource.MustParse(d.Memory),
 				},
 				DefaultRequest: corev1.ResourceList{
-					corev1.ResourceCPU:    resource.MustParse(constants.TenantLimitDefaultRequestCPU),
-					corev1.ResourceMemory: resource.MustParse(constants.TenantLimitDefaultRequestMemory),
+					corev1.ResourceCPU:    resource.MustParse(d.RequestCPU),
+					corev1.ResourceMemory: resource.MustParse(d.RequestMemory),
 				},
 			},
 		}
 		return nil
 	})
 	if err != nil {
-		return fmt.Errorf("%s %s/%s: %w", errCtx, nsName, constants.LimitRangeTenant, err)
+		return fmt.Errorf("%s %s/%s: %w", errCtx, nsName, lrName, err)
 	}
 	return nil
+}
+
+// ApplyTenantLimitRange creates or updates the canonical tenant-limits
+// LimitRange in the given namespace, using platform-wide tenant constants.
+// Convenience wrapper over ApplyContainerLimitRange — kept for call-site
+// readability where the tenant default IS the requirement.
+//
+// Used by:
+//   - internal/preview/preview_resources.go (preview namespace)
+//   - internal/tenant/environment_quota.go  (runtime tenant namespace)
+func ApplyTenantLimitRange(ctx context.Context, c client.Client, nsName, errCtx string) error {
+	return ApplyContainerLimitRange(ctx, c, nsName, constants.LimitRangeTenant, errCtx, LimitRangeContainerDefaults{
+		CPU:           constants.TenantLimitDefaultCPU,
+		Memory:        constants.TenantLimitDefaultMemory,
+		RequestCPU:    constants.TenantLimitDefaultRequestCPU,
+		RequestMemory: constants.TenantLimitDefaultRequestMemory,
+	})
 }

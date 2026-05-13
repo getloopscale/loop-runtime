@@ -121,27 +121,17 @@ func (r *TenantReconciler) ensureBuildQuota(ctx context.Context, buildNs string,
 }
 
 // ensureBuildLimitRange creates or updates the LimitRange for default resource requests/limits.
+// Phase 3 v40: delegates to shared.ApplyContainerLimitRange so the build
+// LimitRange shares the canonical creation path with tenant + preview
+// LimitRanges. Only the constants differ (build vs tenant defaults).
 func (r *TenantReconciler) ensureBuildLimitRange(ctx context.Context, buildNs string) error {
-	lr := &corev1.LimitRange{
-		ObjectMeta: metav1.ObjectMeta{Name: k.LimitRangeBuild, Namespace: buildNs},
-	}
-	_, err := controllerutil.CreateOrUpdate(ctx, r.BuildClient, lr, func() error {
-		lr.Spec.Limits = []corev1.LimitRangeItem{
-			{
-				Type: corev1.LimitTypeContainer,
-				Default: corev1.ResourceList{
-					corev1.ResourceCPU:    resource.MustParse(k.BuildLimitDefaultCPU),
-					corev1.ResourceMemory: resource.MustParse(k.BuildLimitDefaultMemory),
-				},
-				DefaultRequest: corev1.ResourceList{
-					corev1.ResourceCPU:    resource.MustParse(k.BuildLimitDefaultRequestCPU),
-					corev1.ResourceMemory: resource.MustParse(k.BuildLimitDefaultRequestMemory),
-				},
-			},
-		}
-		return nil
-	})
-	return err
+	return shared.ApplyContainerLimitRange(ctx, r.BuildClient, buildNs, k.LimitRangeBuild, "build limitrange",
+		shared.LimitRangeContainerDefaults{
+			CPU:           k.BuildLimitDefaultCPU,
+			Memory:        k.BuildLimitDefaultMemory,
+			RequestCPU:    k.BuildLimitDefaultRequestCPU,
+			RequestMemory: k.BuildLimitDefaultRequestMemory,
+		})
 }
 
 // ensureBuildServiceAccount creates or updates the ServiceAccount for Argo Workflow pods.
