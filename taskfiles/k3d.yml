@@ -91,6 +91,19 @@ tasks:
       - kubectl --context {{.WORKLOAD_CONTEXT}} cluster-info
       - kubectl --context {{.RUNTIME2_CONTEXT}} cluster-info
 
+  k3d:regen-scoped:
+    desc: |
+      Regenerate scoped SA kubeconfigs for every ClusterCredential except
+      cell-default (which is bootstrap-managed by bootstrap-cell-default-cc.sh).
+      Plan: 2026-05-13-corrections-txt-definitive-fix-sprint T2.1 (item N).
+
+      Idempotent. Use after node-pool changes that invalidate prior SA tokens.
+      flock-protected (concurrent operators get exit 1 with retry message).
+
+      Pass DRY_RUN=1 to preview without modification.
+    cmds:
+      - bash infra/scripts/regen-all-scoped-kubeconfigs.sh
+
   clusters:delete:
     desc: Delete all k3d clusters
     cmds:
