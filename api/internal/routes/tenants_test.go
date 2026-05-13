@@ -78,62 +78,52 @@ func TestTenants_Delete_HappyPath(t *testing.T) {
 	}
 }
 
-func TestTenants_Delete_Unauthenticated(t *testing.T) {
-	h := NewTenantHandler(&fakeTenantDeletionStore{}, slog.Default())
-
-	req := httptest.NewRequest(http.MethodDelete, "/api/v1/tenants/tn-test-123", nil)
-	req = withChiParam(req, "id", "tn-test-123")
-	w := httptest.NewRecorder()
-
-	h.Delete(w, req)
-
-	if w.Code != http.StatusUnauthorized {
-		t.Fatalf("want 401, got %d body=%s", w.Code, w.Body.String())
+// TestTenants_Delete_AuthorizationMatrix consolidates 4 near-clone tests
+// for TenantHandler.Delete authorization paths. Phase 3 helper: each case
+// previously was a 13-line test function with the same Setup-Act-Assert
+// scaffold differing only in (tenantID, auth context, expected code).
+func TestTenants_Delete_AuthorizationMatrix(t *testing.T) {
+	cases := []struct {
+		name      string
+		tenantID  string
+		setupAuth func(req *http.Request) *http.Request // nil for unauthenticated
+		wantCode  int
+	}{
+		{
+			name: "Unauthenticated", tenantID: "tn-test-123",
+			setupAuth: nil,
+			wantCode:  http.StatusUnauthorized,
+		},
+		{
+			name: "CrossTenantDenied", tenantID: "tn-other-tenant",
+			setupAuth: func(req *http.Request) *http.Request { return withAuth(req, defaultUserContext()) },
+			wantCode:  http.StatusForbidden,
+		},
+		{
+			name: "MemberForbidden", tenantID: "tn-test-123",
+			setupAuth: func(req *http.Request) *http.Request { return withAuth(req, memberUserContext()) },
+			wantCode:  http.StatusForbidden,
+		},
+		{
+			name: "MissingID", tenantID: "",
+			setupAuth: func(req *http.Request) *http.Request { return withAuth(req, defaultUserContext()) },
+			wantCode:  http.StatusBadRequest,
+		},
 	}
-}
-
-func TestTenants_Delete_CrossTenantDenied(t *testing.T) {
-	h := NewTenantHandler(&fakeTenantDeletionStore{}, slog.Default())
-
-	req := httptest.NewRequest(http.MethodDelete, "/api/v1/tenants/tn-other-tenant", nil)
-	req = withAuth(req, defaultUserContext()) // tn-test-123
-	req = withChiParam(req, "id", "tn-other-tenant")
-	w := httptest.NewRecorder()
-
-	h.Delete(w, req)
-
-	if w.Code != http.StatusForbidden {
-		t.Fatalf("want 403, got %d body=%s", w.Code, w.Body.String())
-	}
-}
-
-func TestTenants_Delete_MemberForbidden(t *testing.T) {
-	h := NewTenantHandler(&fakeTenantDeletionStore{}, slog.Default())
-
-	req := httptest.NewRequest(http.MethodDelete, "/api/v1/tenants/tn-test-123", nil)
-	req = withAuth(req, memberUserContext()) // member, not owner
-	req = withChiParam(req, "id", "tn-test-123")
-	w := httptest.NewRecorder()
-
-	h.Delete(w, req)
-
-	if w.Code != http.StatusForbidden {
-		t.Fatalf("want 403, got %d body=%s", w.Code, w.Body.String())
-	}
-}
-
-func TestTenants_Delete_MissingID(t *testing.T) {
-	h := NewTenantHandler(&fakeTenantDeletionStore{}, slog.Default())
-
-	req := httptest.NewRequest(http.MethodDelete, "/api/v1/tenants/", nil)
-	req = withAuth(req, defaultUserContext())
-	req = withChiParam(req, "id", "")
-	w := httptest.NewRecorder()
-
-	h.Delete(w, req)
-
-	if w.Code != http.StatusBadRequest {
-		t.Fatalf("want 400, got %d body=%s", w.Code, w.Body.String())
+	for _, c := range cases {
+		t.Run(c.name, func(t *testing.T) {
+			h := NewTenantHandler(&fakeTenantDeletionStore{}, slog.Default())
+			req := httptest.NewRequest(http.MethodDelete, "/api/v1/tenants/"+c.tenantID, nil)
+			if c.setupAuth != nil {
+				req = c.setupAuth(req)
+			}
+			req = withChiParam(req, "id", c.tenantID)
+			w := httptest.NewRecorder()
+			h.Delete(w, req)
+			if w.Code != c.wantCode {
+				t.Fatalf("want %d, got %d body=%s", c.wantCode, w.Code, w.Body.String())
+			}
+		})
 	}
 }
 
