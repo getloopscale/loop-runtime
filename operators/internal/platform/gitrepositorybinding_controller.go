@@ -87,16 +87,9 @@ func (r *GitRepositoryBindingReconciler) Reconcile(ctx context.Context, req ctrl
 		return r.reconcileDelete(ctx, &binding)
 	}
 
-	// Add finalizer if not present.
-	if !controllerutil.ContainsFinalizer(&binding, repoBindingFinalizer) {
-		controllerutil.AddFinalizer(&binding, repoBindingFinalizer)
-		if err := r.Update(ctx, &binding); err != nil {
-			return ctrl.Result{}, err
-		}
-		// Re-fetch after update to avoid stale resource version.
-		if err := r.Get(ctx, req.NamespacedName, &binding); err != nil {
-			return ctrl.Result{}, err
-		}
+	// Add finalizer if not present. Re-fetches in place to avoid stale resourceVersion.
+	if err := shared.EnsureFinalizer(ctx, r.Client, &binding, repoBindingFinalizer, req.NamespacedName); err != nil {
+		return ctrl.Result{}, err
 	}
 
 	gen := binding.Generation

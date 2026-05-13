@@ -175,14 +175,8 @@ func (r *TenantReconciler) Reconcile(ctx context.Context, req ctrl.Request) (res
 	}
 
 	// Add finalizer if not present
-	if !controllerutil.ContainsFinalizer(&tenant, tenantFinalizer) {
-		controllerutil.AddFinalizer(&tenant, tenantFinalizer)
-		if err := r.Update(ctx, &tenant); err != nil {
-			return ctrl.Result{}, err
-		}
-		if err := r.Get(ctx, req.NamespacedName, &tenant); err != nil {
-			return ctrl.Result{}, err
-		}
+	if err := shared.EnsureFinalizer(ctx, r.Client, &tenant, tenantFinalizer, req.NamespacedName); err != nil {
+		return ctrl.Result{}, err
 	}
 
 	// Set Phase to Provisioning if empty (via state machine)

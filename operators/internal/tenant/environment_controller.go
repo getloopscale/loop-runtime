@@ -144,14 +144,8 @@ func (r *EnvironmentReconciler) Reconcile(ctx context.Context, req ctrl.Request)
 	}
 
 	// Add finalizer if not present
-	if !controllerutil.ContainsFinalizer(&env, environmentFinalizer) {
-		controllerutil.AddFinalizer(&env, environmentFinalizer)
-		if err := r.Update(ctx, &env); err != nil {
-			return ctrl.Result{}, err
-		}
-		if err := r.Get(ctx, req.NamespacedName, &env); err != nil {
-			return ctrl.Result{}, err
-		}
+	if err := shared.EnsureFinalizer(ctx, r.Client, &env, environmentFinalizer, req.NamespacedName); err != nil {
+		return ctrl.Result{}, err
 	}
 
 	// Transition from empty to Pending via state machine (Rule 8).

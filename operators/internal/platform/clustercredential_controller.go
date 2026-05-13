@@ -88,14 +88,8 @@ func (r *ClusterCredentialReconciler) Reconcile(ctx context.Context, req ctrl.Re
 		return r.reconcileDelete(ctx, &cr)
 	}
 
-	if !controllerutil.ContainsFinalizer(&cr, clusterCredentialFinalizer) {
-		controllerutil.AddFinalizer(&cr, clusterCredentialFinalizer)
-		if err := r.Update(ctx, &cr); err != nil {
-			return ctrl.Result{}, err
-		}
-		if err := r.Get(ctx, req.NamespacedName, &cr); err != nil {
-			return ctrl.Result{}, err
-		}
+	if err := shared.EnsureFinalizer(ctx, r.Client, &cr, clusterCredentialFinalizer, req.NamespacedName); err != nil {
+		return ctrl.Result{}, err
 	}
 
 	// Step 1: Resolve kubeconfig from the referenced Secret.

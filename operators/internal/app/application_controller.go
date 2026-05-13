@@ -112,14 +112,8 @@ func (r *ApplicationReconciler) Reconcile(ctx context.Context, req ctrl.Request)
 		return r.reconcileDelete(ctx, &app)
 	}
 
-	if !controllerutil.ContainsFinalizer(&app, applicationFinalizer) {
-		controllerutil.AddFinalizer(&app, applicationFinalizer)
-		if err := r.Update(ctx, &app); err != nil {
-			return ctrl.Result{}, err
-		}
-		if err := r.Get(ctx, req.NamespacedName, &app); err != nil {
-			return ctrl.Result{}, err
-		}
+	if err := shared.EnsureFinalizer(ctx, r.Client, &app, applicationFinalizer, req.NamespacedName); err != nil {
+		return ctrl.Result{}, err
 	}
 
 	if err := r.reconcileHostname(ctx, req, &app); err != nil {

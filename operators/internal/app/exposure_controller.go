@@ -117,14 +117,8 @@ func (r *ExposureReconciler) Reconcile(ctx context.Context, req ctrl.Request) (r
 	}
 
 	// Add finalizer if not present
-	if !controllerutil.ContainsFinalizer(&route, exposureFinalizer) {
-		controllerutil.AddFinalizer(&route, exposureFinalizer)
-		if err := r.Update(ctx, &route); err != nil {
-			return ctrl.Result{}, err
-		}
-		if err := r.Get(ctx, req.NamespacedName, &route); err != nil {
-			return ctrl.Result{}, err
-		}
+	if err := shared.EnsureFinalizer(ctx, r.Client, &route, exposureFinalizer, req.NamespacedName); err != nil {
+		return ctrl.Result{}, err
 	}
 
 	// Initialize phase via state machine (T3.6 / ARCH-002).
