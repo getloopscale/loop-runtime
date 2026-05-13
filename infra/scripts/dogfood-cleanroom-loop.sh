@@ -206,12 +206,25 @@ phase_dogfood() {
   # ginkgo CLI is missing we install it idempotently via `go install` rather
   # than failing the operator with a manual step. Same canonical hint that
   # `task doctor` emits. `go install` is cached after first run.
-  local GOBIN_DIR
+  # Resolve go + GOBIN absolute paths up-front so the ginkgo subshell can
+  # invoke `go` directly (ginkgo compiles the test suite). bash -lc resets
+  # PATH via /etc/profile + ~/.profile and may drop /usr/local/go/bin; using
+  # plain bash -c with an explicit PATH avoids that trap.
+  local GO_BIN_PATH GOBIN_DIR
+  GO_BIN_PATH="$(command -v go 2>/dev/null || true)"
+  if [[ -z "$GO_BIN_PATH" ]]; then
+    log_err "phase_dogfood: go CLI not on PATH — install Go 1.25.10+ (https://go.dev/dl/)"
+    return 50
+  fi
   GOBIN_DIR="$(go env GOBIN 2>/dev/null || true)"
   if [[ -z "$GOBIN_DIR" ]]; then
     GOBIN_DIR="$(go env GOPATH 2>/dev/null || echo "$HOME/go")/bin"
   fi
-  export PATH="$GOBIN_DIR:$PATH"
+  # Final PATH for ginkgo subshell: directory of `go` + GOBIN + system defaults.
+  local GO_DIR GINKGO_PATH
+  GO_DIR="$(dirname "$GO_BIN_PATH")"
+  GINKGO_PATH="${GO_DIR}:${GOBIN_DIR}:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin"
+  export PATH="$GINKGO_PATH"
   if ! command -v ginkgo >/dev/null 2>&1; then
     log "ginkgo CLI not found — bootstrapping via 'go install github.com/onsi/ginkgo/v2/ginkgo@latest'"
     if ! go install github.com/onsi/ginkgo/v2/ginkgo@latest >&2; then
@@ -225,7 +238,7 @@ phase_dogfood() {
     log "ginkgo bootstrapped at $(command -v ginkgo)"
   fi
   if [[ "$DRY_RUN" -eq 1 ]]; then
-    log "DRY-RUN: bash -lc 'LOOPZERO_E2E=1 ginkgo -v --label-filter=journey --timeout=60m ./infra/tests/e2e/'"
+    log "DRY-RUN: PATH='$GINKGO_PATH' bash -c 'cd $REPO_ROOT && LOOPZERO_E2E=1 ginkgo -v --label-filter=journey --timeout=60m ./infra/tests/e2e/'"
     return 0
   fi
   # --reset semantics: clear any prior state file so a re-run of the cleanroom
@@ -234,7 +247,7 @@ phase_dogfood() {
   if [[ -f "$STATE_FILE" ]]; then
     rm -f "$STATE_FILE" 2>/dev/null || true
   fi
-  if ! bash -lc "export PATH='$GOBIN_DIR:\$PATH' && cd '$REPO_ROOT' && LOOPZERO_E2E=1 ginkgo -v --label-filter=journey --timeout=60m ./infra/tests/e2e/"; then
+  if ! env PATH="$GINKGO_PATH" bash -c "cd '$REPO_ROOT' && LOOPZERO_E2E=1 ginkgo -v --label-filter=journey --timeout=60m ./infra/tests/e2e/"; then
     log_err "phase_dogfood: ginkgo journey suite reported FAIL"
     return 50
   fi
