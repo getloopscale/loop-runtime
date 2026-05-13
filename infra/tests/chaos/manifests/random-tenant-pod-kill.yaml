@@ -1,0 +1,54 @@
+# Chaos Experiment: random tenant pod kill (T1.2 of chaos plan / §3.B.2)
+#
+# Per ADR D6 of original chaos-mesh-experiments-plan (superseded by
+# active-execution-plan): kills 30% of pods in any namespace matching
+# `loopzero-tn-*` (tenant namespaces). Validates that:
+#   1. KEDA scale-to-zero correctly re-scales after partial outage
+#   2. Argo Rollouts canary state survives mid-deploy pod kill
+#   3. Tenant SLO isolation (one tenant's outage doesn't affect peers)
+#
+# Mode `fixed-percent` with value `30` = bounded blast radius. 100% kill
+# would overwhelm k3d capacity; 30% gives meaningful chaos without
+# self-DoS. Duration 60s = enough for K8s to observe + react via
+# controller managers.
+#
+# Hypothesis:
+#   - All killed pods restart within 90s of chaos end
+#   - No HTTP 5xx from peer tenants during the 60s window
+#   - Argo Rollouts in canary state do NOT regress to Stable
+---
+apiVersion: chaos-mesh.org/v1alpha1
+kind: PodChaos
+metadata:
+  name: random-tenant-pod-kill
+  namespace: chaos-mesh
+  annotations:
+    loopzero.io/plan: active-execution-plan
+    loopzero.io/section: "3.B.2"
+    loopzero.io/hypothesis: "30% tenant pod kill — peers unaffected, killed pods recover <90s"
+    loopzero.io/dod-test: "TestChaos_RandomTenantPodKill"
+    loopzero.io/slo-query: |
+      # No 5xx from peer tenants during chaos window
+      sum(rate(loopzero_http_requests_total{
+        namespace=~"loopzero-tn-.*",
+        code=~"5.."
+      }[1m])) == 0
+spec:
+  action: pod-kill
+  mode: fixed-percent
+  value: "30"
+  selector:
+    # Match all loopzero-tn-* namespaces. Chaos suite test must pre-seed at
+    # least one tenant workload before applying this experiment so the
+    # 30% selection has a denominator > 0.
+    namespaces:
+      - loopzero-tn-acme
+      - loopzero-tn-e2etest
+    # Optional: further narrow to user app pods (skip system pods).
+    # User apps carry the `loopzero.io/managed-by=loopzero` label per the
+    # workflow_builder Helm template.
+    labelSelectors:
+      "loopzero.io/managed-by": "loopzero"
+  # PodChaos with action=pod-kill is instantaneous — duration governs
+  # the observation window for the chaos controller (no re-kill).
+  duration: "60s"

@@ -1,0 +1,81 @@
+version: "3"
+
+# Security domain tasks — service-auth, cosign, JWT key rotation.
+# Loaded from root Taskfile.yml via `includes:` block.
+#
+# Each task here is documented for the operator runbook
+# (concepts/operations/service-auth-ed25519-rollout-runbook.md +
+#  concepts/supply-chain/cosign-key-rotation.md).
+
+tasks:
+
+  service-auth-ed25519:generate-keypair:
+    desc: |
+      Generate a new Ed25519 keypair for service-auth dual-control (ADR
+      2026-05-13-service-auth-ed25519-adoption). Output is base64-encoded
+      raw bytes (private 64 / public 32) ready for `pulumi config set`.
+
+      Step 1.1 of the rollout runbook. Output goes to stdout as JSON;
+      pulumi-set hints emit to stderr.
+
+      Usage:
+        task service-auth-ed25519:generate-keypair > keypair.json
+        # then jq -r .private_key_b64 keypair.json | pulumi config set --secret ...
+    dir: tools/gen-service-auth-ed25519
+    cmds:
+      - GOWORK=off go run .
+
+  service-auth-ed25519:test-helper:
+    desc: Run the gen-service-auth-ed25519 unit tests (5 tests).
+    dir: tools/gen-service-auth-ed25519
+    cmds:
+      - GOWORK=off go test -count=1 -v
+
+  service-auth-ed25519:test-rotation-ratchet:
+    desc: |
+      Run the rotation deadline ratchet regression suite (10 bash tests).
+      Validates infra/scripts/check-service-auth-rotation.sh ratchet behavior
+      across dormant/within-budget/slip-alert/block/exception states.
+    cmds:
+      - bash infra/tests/check-service-auth-rotation_test.sh
+
+  service-auth-ed25519:check-rotation-deadline:
+    desc: |
+      Run the rotation deadline check NOW (same script the weekly cron
+      runs). Useful for operator dashboards or pre-merge sanity.
+      Exit codes: 0 OK, 1 usage error, 2 blocked.
+    cmds:
+      - bash infra/scripts/check-service-auth-rotation.sh
+
+  service-auth-ed25519:verify-cluster:
+    desc: |
+      Operator step 1.5 of the rollout runbook — verify the API + cloud
+      deployments are correctly consuming the Ed25519 Secrets.
+      Reads logs of loopzero-api + loopzero-cloud and greps for the expected
+      bootstrap messages.
+
+      Variables:
+        NAMESPACE — defaults to loopzero-system
+    vars:
+      NAMESPACE: '{{.NAMESPACE | default "loopzero-system"}}'
+    cmds:
+      - echo "=== ExternalSecret status ==="
+      - kubectl get externalsecret loopzero-service-auth-ed25519 -n {{.NAMESPACE}} -o jsonpath='{.status.conditions[?(@.type=="Ready")].status}' || echo "not present"
+      - kubectl get externalsecret loopzero-service-auth-ed25519-pub -n {{.NAMESPACE}} -o jsonpath='{.status.conditions[?(@.type=="Ready")].status}' || echo "not present"
+      - echo ""
+      - echo "=== loopzero-api Ed25519 bootstrap log ==="
+      - kubectl logs -l app=loopzero-api -n {{.NAMESPACE}} --tail=100 | grep -E "service-auth Ed25519|service-auth nonce store" || echo "no bootstrap lines yet"
+      - echo ""
+      - echo "=== loopzero-cloud Ed25519 bootstrap log ==="
+      - kubectl logs -l app=loopzero-cloud -n {{.NAMESPACE}} --tail=100 | grep -E "service-auth Ed25519" || echo "no bootstrap lines yet"
+
+  service-auth-ed25519:metrics:
+    desc: |
+      Operator step 1.5/1.7 of the rollout runbook — dump the live
+      service-auth counters from the loopzero-api pod's /metrics endpoint.
+      Useful for confirming Phase 1 adoption rate without leaving the
+      terminal.
+    vars:
+      NAMESPACE: '{{.NAMESPACE | default "loopzero-system"}}'
+    cmds:
+      - kubectl exec -n {{.NAMESPACE}} deploy/loopzero-api -- curl -s localhost:9090/metrics 2>/dev/null | grep loopzero_service_auth_signature || echo "counters not yet emitted (no signed traffic seen)"

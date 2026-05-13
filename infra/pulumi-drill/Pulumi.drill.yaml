@@ -1,0 +1,10 @@
+encryptionsalt: v1:rwO+QhqlQiQ=:v1:u0zsfY7XeCS75A1o:gdx5mty+r8Ranl5FYyJPVaiSHC1YZQ==
+config:
+  loopzero-drill:domain: loopzero-drill.example
+  loopzero-drill:doProject: loopzero-drill
+  loopzero-drill:region: sfo3
+  loopzero-drill:cellName: cell-drill
+  loopzero-drill:nodeCount: "2"
+  loopzero-drill:k8sVersion: 1.33.9-do.6
+  loopzero-drill:cfAccountId:
+    secure: v1:OX3Yr/J8t9G06xUf:H7mS42qEH5IQamBRkyQjilMIl5pGXAMW+2EzxrPLcTAfivVEf+aQuJB3BZoEaO4k

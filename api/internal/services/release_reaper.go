@@ -125,14 +125,17 @@ func (r *ReleaseReaper) ReapOnce(ctx context.Context) int {
 }
 
 // releaseReaperReason returns a human-readable reason for a reaper timeout event.
+//
+// Beta Logs Gate Criterion 6 — same pattern as reaperReason in
+// build_reaper.go: WHAT timed out + LIKELY CAUSE + NEXT STEP.
 func releaseReaperReason(event statemachine.Event) string {
 	switch event {
 	case statemachine.ReleaseGitPushTimeout:
-		return "Deploy timed out preparing deployment (5 min limit). Run `loopzero deploy` to retry."
+		return "Release was READY (deployment manifests prepared but not yet pushed) for more than 5 minutes. Likely cause: repository write is slow OR temporary network issue between API and the deployment repo. Next: run `loopzero deploy` to retry — the operation is idempotent."
 	case statemachine.ReleaseSyncTimeout:
-		return "Deploy timed out waiting for service to become healthy (10 min limit). Run `loopzero deploy` to retry."
+		return "Release was PENDING (manifests pushed, waiting for service to become healthy) for more than 10 minutes. Likely cause: your app's /health endpoint is not responding 200 OR the pod is crash-looping. Next: run `loopzero logs --runtime --env <env> --app <name>` for runtime pod context; if health probe is correct, retry with `loopzero deploy`."
 	default:
-		return "Release reaped due to timeout"
+		return "Release reaped due to timeout. Run `loopzero status` and `loopzero logs --build <id>` for context."
 	}
 }
 

@@ -1,0 +1,107 @@
+# Helmfile environment: drill (DR drill + pre-prod chaos+maturity validation)
+#
+# MEET-ASYNC-AMENDMENT-2026-05-12-003 + user direction iter 16:
+# "criar a infra excluisivamente para testar os CHAOS e a MATURIDADE
+# DA PLATFORMA, DEPOIS DESTROY E PUBLISH REAL EM PRODUÇÃO".
+#
+# This environment targets the DOKS cluster provisioned by
+# infra/pulumi-drill/ (separate Pulumi stack, isolated state in
+# DO Spaces bucket `loopzero-drill-pulumi-state`).
+#
+# Lifecycle:
+#   1. infra/pulumi-drill && pulumi up    (~10-15min)
+#   2. Configure kubeconfig from pulumi stack output
+#   3. helmfile -e drill sync             (~20-30min platform bootstrap)
+#   4. Run chaos + maturity validation
+#   5. infra/pulumi-drill && pulumi destroy (cleanup)
+#
+# Differences vs prod.yaml:
+#   - Domain isolated: loopzero-drill.example (separate CF Zone)
+#   - Smaller resource footprint (cost optimization for short-lived window)
+#   - In-cluster Postgres ENABLED (no managed PG attached — drill stack
+#     does NOT provision DB cluster to keep cost low; loopzero-api uses
+#     in-cluster postgresql Helm release)
+#   - chaos-mesh installed by default (the whole point of this env)
+#   - Policy mode: enforce (validates D2 mitigation #4 in pre-prod)
+#   - VAP noRuntimeImageMutations: Deny (full posture validation)
+
+domain: loopzero-drill.example
+dnsZone: loopzero-drill.example
+
+clusterRole: drill
+clusterTopology: multi-cluster
+
+# Match prod replica counts so HA validation surfaces same patterns prod
+# will encounter. api: 2 minimum to exercise MEET-ASYNC-003 Option A
+# (RollingUpdate + passive standby leader election); 3 to be even closer
+# to prod posture.
+replicas:
+  api: 2
+  controller: 1
+  argocd: 1
+  gitea: 1
+  harbor: 1
+
+# Smaller resource limits for cost optimization. DOKS nodes are 2-vCPU
+# 4GB by default per pulumi-drill stack config (nodeCount=2).
+resources:
+  default:
+    requests:
+      cpu: 100m
+      memory: 128Mi
+    limits:
+      cpu: 500m
+      memory: 512Mi
+
+certIssuer:
+  kind: ClusterIssuer
+  name: letsencrypt-prod
+
+registries:
+  docrPrefix: "registry.digitalocean.com/loopzero-drill/"
+  harborPrefix: "harbor.loopzero-drill.example/loopzero-platform/"
+
+loki:
+  maxGlobalStreamsPerUser: 50000  # smaller than prod (less tenant traffic)
+  # Audit M08 #18 / §6.C.4b — promtail cross-cluster push target (env-specific).
+  pushUrl: http://loki-internal.drill.loopzero-drill.example:3100/loki/api/v1/push
+
+# Policy mode: enforce — validates D2 mitigation #4 against fresh prod-like
+# stack BEFORE real prod gets it. If chaos+maturity in drill shows enforce
+# breaks anything, we catch it here (cheap) instead of in prod (expensive).
+policyMode: enforce
+noRuntimeImageMutations: true
+noRuntimeImageMutationsAction: Deny
+noRuntimeImageMutationsFailurePolicy: Fail
+
+# In-cluster Postgres ENABLED for drill: pulumi-drill stack does NOT
+# provision managed PG (cost optimization for short-lived window).
+# loopzero-api connects to in-cluster postgresql Helm release. Drill is
+# intentionally NOT testing managed-PG specifics; chaos focus is on
+# loopzero-api + reconcile loops + admission webhook behavior.
+inClusterPostgres: true
+
+# DOKS default storage class.
+underlyingStorageClass: do-block-storage
+
+# Multi-cell metadata mirrors prod scheme. Single drill cluster acts as
+# cell-drill (per pulumi-drill stack `cellName: cell-drill`).
+runtimeCellId: cell-drill
+
+# DynamicRouter enabled — drill exercises cell discovery + routing
+# semantics. With 1 cell discovered (cell-drill), router selects it
+# deterministically.
+dynamicRouter: true
+
+# Chaos Mesh installed for §3.D LIVE validation against drill cluster
+# (the WHOLE POINT of this env). Once we LIVE-validate chaos here,
+# real prod gets a clean baseline without chaos infrastructure
+# (chaos-mesh is a DR/test tool, not a prod runtime dependency).
+installChaosMesh: true
+
+# Velero backup config — same bucket pattern as prod but pointed at
+# drill-specific bucket (set by pulumi-drill stack output).
+velero:
+  bucket: loopzero-drill-velero-backups
+  region: sfo3
+  s3Url: https://sfo3.digitaloceanspaces.com

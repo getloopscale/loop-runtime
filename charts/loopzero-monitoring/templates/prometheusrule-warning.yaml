@@ -49,15 +49,6 @@ spec:
             description: "StateReconciler is producing errors at an elevated rate."
             runbook: "Check reconciler pod logs. Verify connectivity to ArgoCD and Gitea."
 
-        - alert: LoopZeroSecretSyncFailed
-          expr: increase(loopzero_secret_sync_hash_mismatch_total[15m]) > 3
-          labels:
-            severity: warning
-          annotations:
-            summary: "AppSecretOperator sync failures"
-            description: "3+ secret sync hash mismatches in 15 minutes."
-            runbook: "AppSecretOperator failed to sync secret to workload namespace 3+ times in 15 min. Check operator logs, workload cluster connectivity, and namespace RBAC."
-
         - alert: LoopZeroTenantPodsStarved
           expr: histogram_quantile(0.99, loopzero_tenant_pods_pending_duration_seconds) > 300
           labels:

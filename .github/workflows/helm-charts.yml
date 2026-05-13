@@ -106,16 +106,21 @@ jobs:
 
       - name: Audit drift between charts/ and infra/helm/ (CH-G16)
         # ADR-0041 + charts-sota-implementation-plan T1.3.
-        # Advisory mode (continue-on-error) por 30 dias para classificação.
-        # Graduates to blocking pre-GA per CONDITION-3 (platform-security-engineer).
-        continue-on-error: true
+        # GRADUATED to blocking 2026-05-12 per audit M06 #21 / §6.E.6:
+        # local baseline run confirms `audit-helm-drift.sh` exits 0 with
+        # "All drifts have approving ADRs (intentional)". A future PR that
+        # introduces drift without an ADR will fail CI loudly instead of
+        # quietly annotating. To re-introduce advisory mode (e.g., during
+        # an in-progress refactor), restore `continue-on-error: true`.
         run: |
           bash infra/scripts/audit-helm-drift.sh github-annotations
 
       - name: Conftest policies (T7.3 — charts-sota Phase 7)
         # Validates Rego policies in policies/charts/: security_context, service_monitor_port,
-        # priority_class. Advisory initially; promote to blocking after baseline review.
-        continue-on-error: true
+        # priority_class. GRADUATED to blocking 2026-05-12 per audit M06 #21 /
+        # §6.E.6: local baseline run produced 1992 tests / 0 failures /
+        # 0 warnings across all loopzero-* charts. A future PR that violates
+        # any policy will now fail CI instead of advisory-annotating.
         run: |
           curl -sL https://github.com/open-policy-agent/conftest/releases/download/v0.55.0/conftest_0.55.0_Linux_x86_64.tar.gz | tar -xz
           sudo install conftest /usr/local/bin/
@@ -267,10 +272,13 @@ jobs:
             fi
           done
 
-      - name: chartsnap on loopzero-platform umbrella (advisory)
-        # Advisory mode initially — first GREEN run produces baseline.
-        # After baseline reviewed + committed, gate becomes blocking.
-        continue-on-error: true
+      - name: chartsnap on loopzero-platform umbrella
+        # GRADUATED to blocking 2026-05-12 per audit M06 #21 / §6.E.6:
+        # local baseline run produced "All snapshots matched" against
+        # the committed `charts/loopzero-platform/__snapshots__/default.snap`.
+        # A future PR that changes templated output without regenerating
+        # the snapshot will fail CI. Snapshot regeneration command:
+        #   `helm chartsnap -c charts/loopzero-platform -u`
         run: |
           if [ ! -d "charts/loopzero-platform/__snapshot__" ]; then
             echo "::warning::chartsnap baseline not yet created. First run will populate __snapshot__/."
@@ -306,30 +314,40 @@ jobs:
             fi
           done
 
-      - name: helm diff against base branch (advisory)
-        # CONDITION: HELM_DIFF_THREE_WAY_MERGE + HELM_DIFF_NORMALIZE_MANIFESTS evita falsos positivos.
+      - name: helm diff structural-risk check (audit M06 #21 / §6.E.6b)
+        # GRADUATED to blocking 2026-05-12 via the structural-risk wrapper.
+        # The legacy advisory helm-diff annotated on EVERY chart change —
+        # which is the point of every chart-changing PR. The new wrapper
+        # parses the base vs PR rendering and fails CI ONLY on 3 categories
+        # of risk that need explicit operator approval:
+        #
+        #   STRUCT-1  Removal of NetworkPolicy / RoleBinding /
+        #             ClusterRoleBinding / SecurityContextConstraints /
+        #             PodSecurityPolicy
+        #   STRUCT-2  Change of `namespace:` on any resource (bypasses RBAC)
+        #   STRUCT-3  Security-context downgrade (runAsNonRoot false,
+        #             readOnlyRootFilesystem false, allowPrivilegeEscalation
+        #             true, privileged true)
+        #
+        # Non-structural diffs (image tags, replicas, env vars, label edits)
+        # print to stdout but DO NOT block — operator reviews in the PR.
+        # Script: infra/scripts/helm-diff-structural.sh (10 unit tests in
+        # infra/tests/helm-diff-structural_test.sh, all GREEN).
         env:
           HELM_DIFF_THREE_WAY_MERGE: "true"
           HELM_DIFF_NORMALIZE_MANIFESTS: "true"
-        continue-on-error: true
         run: |
-          # Render each chart from PR branch and from base branch, diff via helm-diff.
-          # Advisory: emits annotation; doesn't block.
+          set -e
           for chart in charts/loopzero-platform charts/loopzero-api; do
             name=$(basename "$chart")
-            echo "::group::helm diff for $name"
+            echo "::group::helm diff structural-risk for $name"
             helm template "$name" "$chart" > /tmp/${name}-pr.yaml 2>/dev/null
             git stash --include-untracked
             git checkout "${{ github.event.pull_request.base.sha }}" -- "$chart" 2>/dev/null || true
             helm template "$name" "$chart" > /tmp/${name}-base.yaml 2>/dev/null || echo "" > /tmp/${name}-base.yaml
             git checkout HEAD -- "$chart" 2>/dev/null || true
             git stash pop 2>/dev/null || true
-            if ! diff -u /tmp/${name}-base.yaml /tmp/${name}-pr.yaml > /tmp/${name}-diff.txt; then
-              echo "::warning::helm-diff for $name detected changes (advisory) — review manifest."
-              head -50 /tmp/${name}-diff.txt
-            else
-              echo "No diff for $name."
-            fi
+            bash infra/scripts/helm-diff-structural.sh "$name" /tmp/${name}-base.yaml /tmp/${name}-pr.yaml
             echo "::endgroup::"
           done
 

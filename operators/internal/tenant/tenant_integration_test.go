@@ -144,12 +144,7 @@ var _ = Describe("TenantController Integration", Ordered, func() {
 					_ = k8sClient.Delete(ctx, ns)
 				}
 			}
-			t := &loopzerov1.Tenant{}
-			if err := k8sClient.Get(ctx, types.NamespacedName{Name: tenantName, Namespace: "default"}, t); err == nil {
-				t.Finalizers = nil
-				_ = k8sClient.Update(ctx, t)
-				_ = k8sClient.Delete(ctx, t)
-			}
+			deleteTenantWithFinalizer(tenantName)
 		})
 	})
 
@@ -189,18 +184,8 @@ var _ = Describe("TenantController Integration", Ordered, func() {
 		AfterAll(func() {
 			fakeGitProvider.SetErr(nil)
 			cleanupTenantEnvCRs(tenantName)
-			for _, nsName := range []string{"loopzero-" + tenantName + "-production", "build-" + tenantName} {
-				ns := &corev1.Namespace{}
-				if err := k8sClient.Get(ctx, types.NamespacedName{Name: nsName}, ns); err == nil {
-					_ = k8sClient.Delete(ctx, ns)
-				}
-			}
-			t := &loopzerov1.Tenant{}
-			if err := k8sClient.Get(ctx, types.NamespacedName{Name: tenantName, Namespace: "default"}, t); err == nil {
-				t.Finalizers = nil
-				_ = k8sClient.Update(ctx, t)
-				_ = k8sClient.Delete(ctx, t)
-			}
+			deleteTenantNamespaces(tenantName)
+			deleteTenantWithFinalizer(tenantName)
 		})
 	})
 
@@ -279,18 +264,8 @@ var _ = Describe("TenantController Integration", Ordered, func() {
 
 		AfterAll(func() {
 			cleanupTenantEnvCRs(tenantName)
-			for _, nsName := range []string{"loopzero-" + tenantName + "-production", "build-" + tenantName} {
-				ns := &corev1.Namespace{}
-				if err := k8sClient.Get(ctx, types.NamespacedName{Name: nsName}, ns); err == nil {
-					_ = k8sClient.Delete(ctx, ns)
-				}
-			}
-			t := &loopzerov1.Tenant{}
-			if err := k8sClient.Get(ctx, types.NamespacedName{Name: tenantName, Namespace: "default"}, t); err == nil {
-				t.Finalizers = nil
-				_ = k8sClient.Update(ctx, t)
-				_ = k8sClient.Delete(ctx, t)
-			}
+			deleteTenantNamespaces(tenantName)
+			deleteTenantWithFinalizer(tenantName)
 		})
 	})
 
@@ -341,18 +316,8 @@ var _ = Describe("TenantController Integration", Ordered, func() {
 
 		AfterAll(func() {
 			cleanupTenantEnvCRs(tenantName)
-			for _, nsName := range []string{"loopzero-" + tenantName + "-production", "build-" + tenantName} {
-				ns := &corev1.Namespace{}
-				if err := k8sClient.Get(ctx, types.NamespacedName{Name: nsName}, ns); err == nil {
-					_ = k8sClient.Delete(ctx, ns)
-				}
-			}
-			t := &loopzerov1.Tenant{}
-			if err := k8sClient.Get(ctx, types.NamespacedName{Name: tenantName, Namespace: "default"}, t); err == nil {
-				t.Finalizers = nil
-				_ = k8sClient.Update(ctx, t)
-				_ = k8sClient.Delete(ctx, t)
-			}
+			deleteTenantNamespaces(tenantName)
+			deleteTenantWithFinalizer(tenantName)
 		})
 	})
 

@@ -198,12 +198,17 @@ func (r *PreviewReconciler) Reconcile(ctx context.Context, req ctrl.Request) (re
 		preview.Status.CreatedAt = &now
 	}
 
-	// Phase dispatch
+	// Phase dispatch. Reuse `start` as the canonical "now" for any
+	// time-dependent logic inside this Reconcile pass (audit gap M03 #16
+	// — preview TTL with multiple time.Now() calls within a single
+	// reconcile was a latent flake source under mock clocks). One reading
+	// per reconcile keeps tests deterministic and aligns with the pattern
+	// already established in evaluateWorkloadGate.
 	switch preview.Status.Phase {
 	case loopzerov1.PreviewPhaseCreating:
 		return r.reconcileCreating(ctx, &preview)
 	case loopzerov1.PreviewPhaseActive:
-		return r.reconcileActive(ctx, &preview)
+		return r.reconcileActive(ctx, &preview, start)
 	case loopzerov1.PreviewPhaseExpiring:
 		return r.reconcileExpiring(ctx, &preview)
 	default:
@@ -429,10 +434,13 @@ func findCondition(conds []metav1.Condition, name string) *metav1.Condition {
 	return nil
 }
 
-// reconcileActive checks TTL and health.
-func (r *PreviewReconciler) reconcileActive(ctx context.Context, preview *loopzerov1.PreviewEnvironment) (ctrl.Result, error) {
+// reconcileActive checks TTL and health. The `now` parameter is the
+// canonical "current time" for this reconcile pass — captured once at
+// Reconcile entry — so TTL comparison is deterministic under mock clocks
+// and consistent with other time-dependent decisions in the same pass.
+func (r *PreviewReconciler) reconcileActive(ctx context.Context, preview *loopzerov1.PreviewEnvironment, now time.Time) (ctrl.Result, error) {
 	// Check TTL — transition Active -> Expiring via state machine.
-	if preview.Spec.ExpiresAt != nil && time.Now().After(preview.Spec.ExpiresAt.Time) {
+	if preview.Spec.ExpiresAt != nil && now.After(preview.Spec.ExpiresAt.Time) {
 		log.FromContext(ctx).Info("preview TTL expired, transitioning to Expiring",
 			"preview", preview.Name,
 			"expiresAt", preview.Spec.ExpiresAt.Time)
@@ -621,10 +629,10 @@ func (r *PreviewReconciler) bumpCleanupAttempts(preview *loopzerov1.PreviewEnvir
 // constants.NamespaceIngress so allow-ingress-traefik NetworkPolicies in
 // preview namespaces match those in regular environments.
 func SetupPreviewController(mgr ctrl.Manager, runtimeClient client.Client, baseDomain string) error {
-	return SetupPreviewControllerWithFactory(mgr, runtimeClient, nil, baseDomain)
+	return setupPreviewControllerWithFactory(mgr, runtimeClient, nil, baseDomain)
 }
 
-// SetupPreviewControllerWithFactory wires the PreviewReconciler with an
+// setupPreviewControllerWithFactory wires the PreviewReconciler with an
 // optional cell-aware RuntimeClientFactory. T1.1 of deep-review-remediation-plan
 // (closes find_arch_002 HIGH).
 //
@@ -632,7 +640,13 @@ func SetupPreviewController(mgr ctrl.Manager, runtimeClient client.Client, baseD
 // (single-cell legacy path). When factory is set, every runtime-cluster
 // operation routes through factory.For(cellID) per the
 // runtimeClientForPreview() resolution chain.
-func SetupPreviewControllerWithFactory(
+//
+// Audit gap (registration_test.go COMP-001 family, audit §6.F.1b
+// hygiene): made unexported because nothing outside this package calls
+// it directly — all callers route through SetupPreviewController(which
+// is the canonical exported entry point). Re-export when a real
+// cell-aware caller emerges.
+func setupPreviewControllerWithFactory(
 	mgr ctrl.Manager,
 	runtimeClient client.Client,
 	factory shared.RuntimeClientFactory,

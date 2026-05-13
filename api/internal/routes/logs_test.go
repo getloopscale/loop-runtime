@@ -44,11 +44,15 @@ func (f *fakeLogBuildStore) GetByIDForTenant(_ context.Context, tenantID, _ stri
 // --- Fake LogQuerier ---
 
 type fakeLogQuerier struct {
-	entries []LogEntry
-	err     error
+	entries  []LogEntry
+	err      error
+	lastOpts LogQueryOpts
 }
 
-func (f *fakeLogQuerier) QueryBuildLogs(_ context.Context, _ string, _ LogQueryOpts) ([]LogEntry, error) {
+func (f *fakeLogQuerier) QueryBuildLogs(_ context.Context, _ string, opts LogQueryOpts) ([]LogEntry, error) {
+	// Beta Logs Gate Criterion 7 — capture the SinceSeconds the
+	// handler propagated so tests can assert it.
+	f.lastOpts = opts
 	return f.entries, f.err
 }
 
@@ -186,5 +190,89 @@ func TestLogs_Get_WithQueryParams(t *testing.T) {
 
 	if w.Code != http.StatusOK {
 		t.Fatalf("want 200, got %d body=%s", w.Code, w.Body.String())
+	}
+}
+
+// Beta Logs Gate Criterion 7 — `?since=` propagates to LogQueryOpts.
+func TestLogs_Get_SinceParamPropagatesToQuerier(t *testing.T) {
+	cases := []struct {
+		name        string
+		queryParam  string
+		wantSeconds int64
+	}{
+		// Day shorthand — most common operator usage
+		{"7d", "7d", 7 * 86400},
+		{"30d", "30d", 30 * 86400},
+		{"1d", "1d", 86400},
+		// Go duration syntax
+		{"24h", "24h", 24 * 3600},
+		{"30m", "30m", 1800},
+		{"45s", "45s", 45},
+		// Pure integer seconds
+		{"raw seconds 3600", "3600", 3600},
+		// Edge: zero / negative → no override (0 = use default)
+		{"zero", "0", 0},
+		{"negative", "-5", 0},
+		// Edge: garbage → no override
+		{"garbage", "potato", 0},
+		// Edge: empty → no override (handler skips entirely)
+		{"empty", "", 0},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			builds := &fakeLogBuildStore{
+				build: &LogBuild{ID: "bld-x", TenantID: "tn-test-123", Status: "SUCCEEDED"},
+			}
+			querier := &fakeLogQuerier{entries: []LogEntry{}}
+			h := NewLogsHandler(builds, querier)
+
+			path := "/api/v1/builds/bld-x/logs"
+			if tc.queryParam != "" {
+				path += "?since=" + tc.queryParam
+			}
+			req := httptest.NewRequest(http.MethodGet, path, nil)
+			req = withAuth(req, defaultUserContext())
+			req = withChiParam(req, "id", "bld-x")
+			w := httptest.NewRecorder()
+
+			h.Get(w, req)
+
+			if w.Code != http.StatusOK {
+				t.Fatalf("want 200, got %d body=%s", w.Code, w.Body.String())
+			}
+			if querier.lastOpts.SinceSeconds != tc.wantSeconds {
+				t.Errorf("since=%q → SinceSeconds want %d, got %d",
+					tc.queryParam, tc.wantSeconds, querier.lastOpts.SinceSeconds)
+			}
+		})
+	}
+}
+
+// TestParseSinceParam — direct unit tests on the pure helper.
+// Duplicates a few of the handler-level cases above intentionally:
+// the helper is exported-by-package so other routes (runtime logs,
+// future SSE filters) can reuse it.
+func TestParseSinceParam(t *testing.T) {
+	cases := []struct {
+		in   string
+		want int64
+	}{
+		{"7d", 7 * 86400},
+		{"24h", 86400},
+		{"3600", 3600},
+		{"30m", 1800},
+		{"", 0},
+		{"0", 0},
+		{"-1", 0},
+		{"abc", 0},
+		{"1d", 86400},
+		{"100d", 100 * 86400},
+	}
+	for _, tc := range cases {
+		t.Run(tc.in, func(t *testing.T) {
+			if got := parseSinceParam(tc.in); got != tc.want {
+				t.Errorf("parseSinceParam(%q) = %d, want %d", tc.in, got, tc.want)
+			}
+		})
 	}
 }

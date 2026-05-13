@@ -49,6 +49,21 @@ spec:
                   key: uri
                   optional: true
             {{- end }}
+            # Ed25519 dual-control PRIVATE key (ADR 2026-05-13). The
+            # cloud proxy is the SOLE binary that holds this key. ESO
+            # materializes it from the Pulumi ServiceAuthEd25519
+            # component into Secret `loopzero-service-auth-ed25519` with
+            # secretKey `private`. Phase 1 default: env empty → cloud
+            # logs a warn and runs in single-control mode (legacy
+            # X-Service-Auth only). Phase 2 requires the key to be
+            # set; mismatched/missing key crashes startup per Q5
+            # fail-closed.
+            - name: LOOPZERO_SERVICE_AUTH_ED25519_PRIVATE_KEY
+              valueFrom:
+                secretKeyRef:
+                  name: loopzero-service-auth-ed25519
+                  key: private
+                  optional: true
           envFrom:
             - configMapRef:
                 name: {{ .Values.wiringConfigMap | quote }}

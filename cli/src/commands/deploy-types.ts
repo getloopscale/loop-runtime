@@ -93,6 +93,22 @@ export interface DeployDeps {
   generateIdempotencyKey: (commitSha: string, project: string, environment: string, apps: string[]) => string;
   /** Check build state as fallback when SSE stream breaks. */
   getBuildStatus?: (buildId: string) => Promise<BuildStatus>;
+  /**
+   * Beta Logs Gate Criterion 4 (UX) — best-effort auto-tail of the
+   * last ~20 log lines when a deploy fails. The CLI invokes this in
+   * the build.failed / deploy.sync_failed / deploy.delivery_failed
+   * SSE branches BEFORE exiting, so the operator sees recent context
+   * inline instead of having to run `loopzero logs --build <id>` as a
+   * second step.
+   *
+   * Implementation MUST swallow errors and return null on failure —
+   * auto-tail is opportunistic; the deploy command still exits with
+   * the canonical reason + hint when the tail is unavailable.
+   *
+   * Optional: when undefined, the deploy command falls back to the
+   * pre-Beta hint-only behavior.
+   */
+  fetchRecentBuildLogs?: (buildId: string) => Promise<import('./logs').LogsApiResponse | null>;
   writeTo: (msg: string) => void;
   writeError: (msg: string) => void;
   isCI: boolean;

@@ -20,6 +20,7 @@ import (
 	"github.com/loopzero/loopzero/api/internal/server"
 	"github.com/loopzero/loopzero/api/internal/services"
 	"github.com/loopzero/loopzero/pkg/enforcement"
+	pkglogging "github.com/loopzero/loopzero/pkg/logging"
 )
 
 // setupHealthServices creates deep health checkers for critical dependencies.
@@ -56,10 +57,18 @@ func buildServerConfig(
 	shutdownCancel context.CancelFunc,
 	logger *slog.Logger,
 ) server.Config {
+	// Beta Logs Gate — ContextLogger wires correlation_id enrichment
+	// into every handler's request-scoped logger. The OTel extractor is
+	// nil here because trace_id enrichment is handled by the OtelHTTP
+	// middleware separately; once an OTel-aware extractor is wired
+	// (operators/cmd pattern), it can be passed in.
+	contextLogger := pkglogging.NewContextLogger(logger, nil)
+
 	sc := server.Config{
 		Port:                         cfg.Port,
 		MetricsPort:                  cfg.MetricsPort,
 		Logger:                       logger,
+		ContextLogger:                contextLogger,
 		HealthServices:               healthServices,
 		TokenValidator:               tokenValidator,
 		TenantCRMgr:                  k8sDeps.TenantCRMgr,

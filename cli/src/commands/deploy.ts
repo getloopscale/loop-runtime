@@ -27,6 +27,7 @@ import {
   exitWithError,
   handleError,
 } from './deploy-helpers';
+import { maybeRenderAutoTail } from './deploy-auto-tail';
 
 // Re-export types so existing consumers (tests, index.ts) keep working
 export type { DeployDeps, DeployOptions } from './deploy-types';
@@ -462,14 +463,22 @@ export class DeployCommand {
         // Reset activity timeout on every received event (A-04)
         resetTimeout();
 
-        const handled = this.handleSSEEvent(event, opts, buildResult, selectedApps, deployStartTime, renderer, finish);
-        if (!handled) {
-          // Render intermediate progress events via DeployRenderer
-          const progressLine = renderer.onEvent({ type: event.type, data: event.data as Record<string, unknown> });
-          if (progressLine) {
-            this.deps.writeTo(progressLine);
-          }
-        }
+        // handleSSEEvent is async because terminal failure branches
+        // may await the best-effort auto-tail (Beta Logs Gate Criterion 4 UX).
+        // Fire-and-forget: SSE callback is sync, so we kick off the
+        // promise and let it resolve in the background. The activity
+        // timeout is reset above so the auto-tail's 5s window doesn't
+        // trigger a false timeout.
+        void this.handleSSEEvent(event, opts, buildResult, selectedApps, deployStartTime, renderer, finish)
+          .then((handled) => {
+            if (!handled) {
+              // Render intermediate progress events via DeployRenderer
+              const progressLine = renderer.onEvent({ type: event.type, data: event.data as Record<string, unknown> });
+              if (progressLine) {
+                this.deps.writeTo(progressLine);
+              }
+            }
+          });
       });
     });
   }
@@ -477,8 +486,11 @@ export class DeployCommand {
   /**
    * Handle a single SSE event. Returns true if the event was a terminal event
    * (deploy.completed, build.failed, etc.), false if it was a progress event.
+   *
+   * Async because failure branches may await the best-effort auto-tail
+   * (Beta Logs Gate Criterion 4 UX) — bounded by AUTO_TAIL_TIMEOUT_MS.
    */
-  private handleSSEEvent(
+  private async handleSSEEvent(
     event: SSEEvent,
     opts: import('./deploy-types').DeployOptions,
     buildResult: import('./deploy-types').SubmitBuildResult,
@@ -486,7 +498,7 @@ export class DeployCommand {
     deployStartTime: number,
     renderer: DeployRenderer,
     finish: (exitCode: number) => void,
-  ): boolean {
+  ): Promise<boolean> {
     if (event.type === 'deploy.completed') {
       const payload = event.data as DeployCompletedPayload;
 
@@ -536,6 +548,15 @@ export class DeployCommand {
       const reason = sanitizeBuildError(rawReason);
       const suggestion = `Run: loopzero logs --build ${buildResult.build_id}`;
       const errorMsg = /^Build\s+(failed|error)/i.test(reason) ? reason : `Build failed: ${reason}`;
+      // Beta Logs Gate Criterion 4 (UX) — best-effort auto-tail.
+      // Non-blocking 5s timeout; if Loki has indexed any output for
+      // this build, the operator sees recent context inline.
+      const tailLines = await maybeRenderAutoTail(
+        this.deps.fetchRecentBuildLogs,
+        buildResult.build_id,
+        this.deps.writeTo,
+        { jsonMode: opts.json },
+      );
       if (opts.json) {
         this.deps.writeTo(JSON.stringify({
           code: 'BUILD_FAILED',
@@ -543,6 +564,7 @@ export class DeployCommand {
           exit_code: 2,
           build_id: buildResult.build_id,
           suggestion,
+          recent_logs: tailLines,
         }));
       } else {
         this.deps.writeError(`${errorMsg}. ${suggestion}`);
@@ -555,6 +577,12 @@ export class DeployCommand {
       const data = event.data as Record<string, unknown>;
       const rawReason = String(data.reason ?? 'sync failed');
       const userMessage = mapSyncFailureReason(rawReason, buildResult.build_id);
+      const tailLines = await maybeRenderAutoTail(
+        this.deps.fetchRecentBuildLogs,
+        buildResult.build_id,
+        this.deps.writeTo,
+        { jsonMode: opts.json },
+      );
       if (opts.json) {
         this.deps.writeTo(JSON.stringify({
           code: 'DEPLOY_FAILED',
@@ -563,6 +591,7 @@ export class DeployCommand {
           exit_code: 3,
           deploy_id: data.deploy_id ?? null,
           build_id: buildResult.build_id,
+          recent_logs: tailLines,
         }));
       } else {
         this.deps.writeError(userMessage);
@@ -581,6 +610,12 @@ export class DeployCommand {
       const data = event.data as Record<string, unknown>;
       const reason = String(data.reason ?? 'manifests could not be delivered to the cluster');
       const userMessage = `Deploy failed: ${reason}. Build artifacts were created but the cluster could not be updated.`;
+      const tailLines = await maybeRenderAutoTail(
+        this.deps.fetchRecentBuildLogs,
+        buildResult.build_id,
+        this.deps.writeTo,
+        { jsonMode: opts.json },
+      );
       if (opts.json) {
         this.deps.writeTo(JSON.stringify({
           code: 'DEPLOY_FAILED',
@@ -589,6 +624,7 @@ export class DeployCommand {
           exit_code: 3,
           deploy_id: data.deploy_id ?? null,
           build_id: buildResult.build_id,
+          recent_logs: tailLines,
         }));
       } else {
         this.deps.writeError(userMessage);

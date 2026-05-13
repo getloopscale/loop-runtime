@@ -5,8 +5,12 @@ package main
 
 import (
 	"context"
+	"crypto/ed25519"
+	"encoding/base64"
+	"fmt"
 	"log/slog"
 	"os"
+	"strings"
 
 	loopzerojwt "github.com/loopzero/loopzero/pkg/jwt"
 
@@ -69,7 +73,101 @@ func setupAuth(logger *slog.Logger) *AuthDeps {
 	middleware.AdminAPIKey = os.Getenv("LOOPZERO_ADMIN_API_KEY")
 	middleware.AdminAPIKeyPrevious = os.Getenv("LOOPZERO_ADMIN_API_KEY_PREVIOUS")
 
+	// Ed25519 dual-control (ADR 2026-05-13-service-auth-ed25519-adoption).
+	// Reads LOOPZERO_SERVICE_AUTH_ED25519_PUBLIC_CURRENT (+ optional ...PREVIOUS
+	// for the 7-day rotation overlap) and populates the middleware trust
+	// set. Per RFC Q5 fail-closed: malformed keys CRASH startup rather
+	// than silently leave the trust set empty.
+	loadServiceAuthEd25519Trust(logger)
+	loadServiceAuthRequireSignatureFlag()
+
+	// Replay-protection nonce store (ADR Q2). In-memory by default;
+	// switches to Redis-backed when LOOPZERO_SERVICE_AUTH_NONCE_REDIS_ADDR
+	// is set. Multi-replica API needs Redis for cross-replica replay
+	// protection; single-replica dev/test uses in-memory fallback.
+	setupServiceAuthNonceStore(logger)
+
 	return &AuthDeps{
 		TokenValidator: tokenValidator,
+	}
+}
+
+// loadServiceAuthEd25519Trust reads the public-key env vars and
+// populates middleware.ServiceAuthEd25519PublicKeys. Panics via
+// logger.Error + os.Exit(1) on parse failure per Q5 fail-closed.
+//
+// Split from the error-returning variant for caller ergonomics: tests
+// drive loadServiceAuthEd25519TrustE() and assert error shape; the
+// production entry-point loadServiceAuthEd25519Trust() converts the
+// error to a fatal log so an invalid key configuration is impossible
+// to miss.
+func loadServiceAuthEd25519Trust(logger *slog.Logger) {
+	if err := loadServiceAuthEd25519TrustE(); err != nil {
+		logger.Error("service-auth Ed25519 trust-set load failed (fail-closed)", "error", err)
+		os.Exit(1)
+	}
+	if n := len(middleware.ServiceAuthEd25519PublicKeys); n > 0 {
+		logger.Info("service-auth Ed25519 dual-control enabled", "trusted_keys", n)
+	} else {
+		logger.Warn("service-auth Ed25519 trust set is empty — dual-control inert; signed requests will fail-closed (set LOOPZERO_SERVICE_AUTH_ED25519_PUBLIC_CURRENT to enable)")
+	}
+}
+
+// loadServiceAuthEd25519TrustE is the error-returning loader. Returns
+// nil and leaves the trust set empty when both env vars are absent
+// (Phase 1 default before operator bootstrap). Returns an error when
+// either env var is present but malformed.
+func loadServiceAuthEd25519TrustE() error {
+	current := os.Getenv("LOOPZERO_SERVICE_AUTH_ED25519_PUBLIC_CURRENT")
+	previous := os.Getenv("LOOPZERO_SERVICE_AUTH_ED25519_PUBLIC_PREVIOUS")
+
+	trust := []ed25519.PublicKey{}
+	if current != "" {
+		pub, err := decodeEd25519PublicKey(current)
+		if err != nil {
+			return fmt.Errorf("LOOPZERO_SERVICE_AUTH_ED25519_PUBLIC_CURRENT: %w", err)
+		}
+		trust = append(trust, pub)
+	}
+	if previous != "" {
+		pub, err := decodeEd25519PublicKey(previous)
+		if err != nil {
+			return fmt.Errorf("LOOPZERO_SERVICE_AUTH_ED25519_PUBLIC_PREVIOUS: %w", err)
+		}
+		trust = append(trust, pub)
+	}
+	middleware.ServiceAuthEd25519PublicKeys = trust
+	return nil
+}
+
+// decodeEd25519PublicKey decodes a base64-encoded raw Ed25519 public
+// key. Returns an error on bad base64 OR wrong key length (the only
+// way an Ed25519 public key has the right shape is if it's exactly
+// ed25519.PublicKeySize bytes).
+func decodeEd25519PublicKey(encoded string) (ed25519.PublicKey, error) {
+	raw, err := base64.StdEncoding.DecodeString(encoded)
+	if err != nil {
+		return nil, fmt.Errorf("not valid base64: %w", err)
+	}
+	if len(raw) != ed25519.PublicKeySize {
+		return nil, fmt.Errorf("wrong key length %d (want %d)", len(raw), ed25519.PublicKeySize)
+	}
+	return ed25519.PublicKey(raw), nil
+}
+
+// loadServiceAuthRequireSignatureFlag reads
+// LOOPZERO_SERVICE_AUTH_REQUIRE_SIGNATURE and flips the middleware Phase 2
+// gate. Accepts "true", "1", "yes" (case-insensitive). Any other value
+// — including empty — keeps the default false (Phase 1 accept-both).
+//
+// Per ADR Q3: the operator flips this only after the 7-day soak at
+// 100% present rate. Setting it true on a stack without a deployed
+// signer would block all cloud→engine traffic.
+func loadServiceAuthRequireSignatureFlag() {
+	switch strings.ToLower(strings.TrimSpace(os.Getenv("LOOPZERO_SERVICE_AUTH_REQUIRE_SIGNATURE"))) {
+	case "true", "1", "yes":
+		middleware.ServiceAuthRequireSignature = true
+	default:
+		middleware.ServiceAuthRequireSignature = false
 	}
 }

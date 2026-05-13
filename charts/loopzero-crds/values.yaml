@@ -13,10 +13,6 @@ crds:
     enabled: true
   platformbootstraps:
     enabled: true
-  reconciliationreports:
-    enabled: true
-  appsecrets:
-    enabled: true
   clustercredentials:
     enabled: true
 

@@ -1,0 +1,178 @@
+# Promtail — log shipper for build + runtime clusters.
+# Chart: grafana/promtail
+# Purpose: DaemonSet that ships pod logs to the mgmt-cluster Loki.
+#
+# Audit gap M08 #18 / §6.C.4b — the push URL is now helmfile-injected per
+# environment instead of hardcoded. Falls back to the k3d-local default
+# when `loki.pushUrl` is absent so the standalone harness keeps working:
+#   - dev / standalone (k3d): http://172.18.0.3:30094/loki/api/v1/push
+#   - drill (DOKS):           per drill.yaml env value
+#   - prod (DOKS):            per prod.yaml env value (DOKS internal LB)
+# Helmfile templating expands the `.Environment.Values.loki.pushUrl` lookup
+# at sync time; the chart sees a fully-resolved literal.
+config:
+  clients:
+    - url: {{ .Environment.Values | getOrNil "loki.pushUrl" | default "http://172.18.0.3:30094/loki/api/v1/push" }}
+      batchwait: 5s
+      batchsize: 1048576
+      backoff_config:
+        max_retries: 20
+        min_period: 500ms
+        max_period: 5m
+
+  snippets:
+    scrapeConfigs: |
+      # ────────────────────────────────────────────────────────────
+      # Job 1 — Argo Workflow pods (build cluster)
+      # ────────────────────────────────────────────────────────────
+      - job_name: argo-workflow-pods
+        kubernetes_sd_configs:
+          - role: pod
+        # CHG-002b 2026-04-27 — drop noisy Argo wait-container chatter so
+        # Loki doesn't ingest "removing directory from watcher" floods.
+        pipeline_stages:
+          - cri: {}
+          - match:
+              selector: '{container="wait"}'
+              stages:
+                - drop:
+                    expression: '.*level=info.*"removing directory from watcher".*'
+                - drop:
+                    expression: '.*EOF.*Reading from journal.*'
+          # Beta Logs Gate — extract correlation_id from JSON log lines
+          # so LogQL `{correlation_id="X"}` works cross-system (CLI → API
+          # → workflow → pod). Tolerant of non-JSON lines (cri stage above
+          # already split off the text payload; if the line isn't JSON,
+          # the json stage is a no-op).
+          - json:
+              expressions:
+                correlation_id: correlation_id
+          - labels:
+              correlation_id:
+        relabel_configs:
+          # Only collect logs from Argo Workflow pods (have workflow label)
+          - source_labels: [__meta_kubernetes_pod_label_workflows_argoproj_io_workflow]
+            action: keep
+            regex: .+
+          # Set __path__ so Promtail knows which log files to tail
+          - source_labels: [__meta_kubernetes_pod_uid, __meta_kubernetes_pod_container_name]
+            target_label: __path__
+            separator: /
+            replacement: /var/log/pods/*$1/$2/*.log
+          # Extract workflow ID as label for LogQL queries
+          - source_labels: [__meta_kubernetes_pod_label_workflows_argoproj_io_workflow]
+            target_label: workflow
+          # Standard K8s metadata
+          - source_labels: [__meta_kubernetes_namespace]
+            target_label: namespace
+          - source_labels: [__meta_kubernetes_pod_container_name]
+            target_label: container
+          # CHG-002b 2026-04-27 — DROPPED `step` and `pod` labels. Each
+          # carried per-execution unique values, multiplying Loki active-
+          # stream count by ~5x. Pod identity remains accessible via
+          # filename in raw log line; step is queryable via LogQL filter
+          # over message content. Trade-off: query "logs of pod X" requires
+          # `|= "$pod_name"` instead of `{pod="X"}`. Acceptable for L3+
+          # since UI never queries by pod alone.
+
+      # ────────────────────────────────────────────────────────────
+      # Job 2 — LoopZero tenant runtime pods (workload cluster) + control
+      # plane pods (loopzero-api, loopzero-cloud, operators) on mgmt.
+      #
+      # Beta Logs Gate finding (2026-05-13): the previous promtail
+      # configuration ONLY scraped pods with the
+      # `workflows.argoproj.io/workflow` label — i.e. Argo Workflow
+      # build pods. Runtime pods in tenant namespaces (the entire
+      # point of `loopzero logs --runtime`) were silently dropped. This
+      # explains the audit's "log streaming 60%" verdict: runtime
+      # log queries against Loki returned empty even when pods were
+      # producing logs.
+      #
+      # The selector here is the OR of two label families:
+      #   - `loopzero.io/managed-by=environment-controller` — set on
+      #     tenant runtime namespaces by the EnvironmentController
+      #     when a tenant environment is provisioned.
+      #   - `loopzero.io/component` set — covers loopzero-api, loopzero-cloud,
+      #     and the 4 split operators (each chart sets this label).
+      # ────────────────────────────────────────────────────────────
+      - job_name: loopzero-pods
+        kubernetes_sd_configs:
+          - role: pod
+        pipeline_stages:
+          - cri: {}
+          - json:
+              expressions:
+                correlation_id: correlation_id
+                level: level
+                msg: msg
+          - labels:
+              correlation_id:
+              level:
+        relabel_configs:
+          # Keep pods that are EITHER a tenant runtime workload OR a
+          # loopzero-* control-plane component. The "regex" form here is
+          # the Prometheus union-of-selectors idiom — both labels are
+          # OR'd via `__tmp_keep` intermediate.
+          - source_labels: [__meta_kubernetes_namespace_label_loopzero_io_managed_by]
+            regex: "environment-controller"
+            action: replace
+            target_label: __tmp_loopzero_tenant
+            replacement: "1"
+          - source_labels: [__meta_kubernetes_pod_label_loopzero_io_component]
+            regex: ".+"
+            action: replace
+            target_label: __tmp_loopzero_component
+            replacement: "1"
+          - source_labels: [__tmp_loopzero_tenant, __tmp_loopzero_component]
+            regex: "(1.*|.*1)"
+            action: keep
+          # __path__ for log file tailing
+          - source_labels: [__meta_kubernetes_pod_uid, __meta_kubernetes_pod_container_name]
+            target_label: __path__
+            separator: /
+            replacement: /var/log/pods/*$1/$2/*.log
+          # Promote namespace + labels to Loki labels for `{namespace=...}` queries
+          - source_labels: [__meta_kubernetes_namespace]
+            target_label: namespace
+          - source_labels: [__meta_kubernetes_pod_container_name]
+            target_label: container
+          - source_labels: [__meta_kubernetes_pod_label_loopzero_io_app]
+            regex: ".+"
+            target_label: app
+          - source_labels: [__meta_kubernetes_pod_label_loopzero_io_tenant]
+            regex: ".+"
+            target_label: loopzero_tenant
+          - source_labels: [__meta_kubernetes_pod_label_loopzero_io_environment]
+            regex: ".+"
+            target_label: loopzero_environment
+          - source_labels: [__meta_kubernetes_pod_label_loopzero_io_component]
+            regex: ".+"
+            target_label: loopzero_component
+
+resources:
+  requests:
+    cpu: 50m
+    memory: 64Mi
+  limits:
+    cpu: 200m
+    memory: 128Mi
+
+# B60 (end-to-end-deploy-validation-plan T1.3) — Promtail's default readiness
+# probe returns 500 when no log files match the scrape filter (filtered to
+# `workflows_argoproj_io_workflow` label only). On a fresh build cluster
+# without active workflows, this causes the DaemonSet to never reach Ready.
+# Use TCP probe instead. Must explicitly null out httpGet (chart default).
+readinessProbe:
+  httpGet: null
+  tcpSocket:
+    port: http-metrics
+  initialDelaySeconds: 10
+  periodSeconds: 10
+  failureThreshold: 5
+livenessProbe:
+  httpGet: null
+  tcpSocket:
+    port: http-metrics
+  initialDelaySeconds: 30
+  periodSeconds: 30
+  failureThreshold: 3

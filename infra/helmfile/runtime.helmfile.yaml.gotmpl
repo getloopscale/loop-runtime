@@ -179,7 +179,7 @@ releases:
     chart: grafana/promtail
     version: 6.16.6
     values:
-      - ../helm/promtail/values.yaml
+      - ../helm/promtail/values.yaml.gotmpl
 
   # ADR D9 — cloudflared Deployment migrated from Pulumi tunnel.ts to Helmfile.
   # Token comes via env var LOOPZERO_CF_TUNNEL_TOKEN (from `pulumi stack output`).

@@ -458,4 +458,158 @@ describe('LogsCommand', () => {
       expect(output).toContain('MISSING_CONFIG');
     });
   });
+
+  // Beta Logs Gate Criterion 3 — runtime mode + per-app filter.
+  // The handler routes to a different SSE endpoint and propagates
+  // --app as a filter so the operator can scope output to a single
+  // service in a multi-app project.
+  describe('--runtime mode (Beta Logs Gate)', () => {
+    it('routes to streamRuntimeLogs and passes through project, env, app', async () => {
+      let capturedProject = '';
+      let capturedEnv = '';
+      let capturedApp = '';
+      const deps = createMockDeps({
+        streamRuntimeLogs: (project, env, app, _onLine, _onError, onClose) => {
+          capturedProject = project;
+          capturedEnv = env;
+          capturedApp = app;
+          setTimeout(() => onClose(), 5);
+          return { close: jest.fn() };
+        },
+      });
+      const cmd = new LogsCommand(deps);
+
+      const exitCode = await cmd.execute({ runtime: true, env: 'staging', app: 'web' });
+
+      expect(exitCode).toBe(0);
+      expect(capturedProject).toBe('my-app');
+      expect(capturedEnv).toBe('staging');
+      expect(capturedApp).toBe('web');
+    });
+
+    it('default env is "production" when --env omitted', async () => {
+      let capturedEnv = '';
+      const deps = createMockDeps({
+        streamRuntimeLogs: (_project, env, _app, _onLine, _onError, onClose) => {
+          capturedEnv = env;
+          setTimeout(() => onClose(), 5);
+          return { close: jest.fn() };
+        },
+      });
+      const cmd = new LogsCommand(deps);
+
+      await cmd.execute({ runtime: true });
+      expect(capturedEnv).toBe('production');
+    });
+
+    it('empty --app passes empty string (means "all apps in namespace")', async () => {
+      let capturedApp = 'sentinel';
+      const deps = createMockDeps({
+        streamRuntimeLogs: (_p, _e, app, _onLine, _onError, onClose) => {
+          capturedApp = app;
+          setTimeout(() => onClose(), 5);
+          return { close: jest.fn() };
+        },
+      });
+      const cmd = new LogsCommand(deps);
+      await cmd.execute({ runtime: true });
+      // Empty string — NOT undefined, NOT sentinel — so the SSE URL
+      // construction can decide whether to add the `app=` query param.
+      expect(capturedApp).toBe('');
+    });
+
+    it('returns STREAM_UNAVAILABLE when streamRuntimeLogs is not wired', async () => {
+      const deps = createMockDeps({ streamRuntimeLogs: undefined });
+      const cmd = new LogsCommand(deps);
+      const exitCode = await cmd.execute({ runtime: true, json: true });
+      expect(exitCode).toBe(1);
+      const output = (deps.writeTo as jest.Mock).mock.calls.map((c: string[]) => c[0]).join('');
+      expect(output).toContain('STREAM_UNAVAILABLE');
+    });
+
+    it('returns MISSING_CONFIG when no loopzero.yaml found', async () => {
+      const deps = createMockDeps({
+        findLoopZeroYaml: jest.fn().mockReturnValue(null),
+        streamRuntimeLogs: jest.fn(),
+      });
+      const cmd = new LogsCommand(deps);
+      const exitCode = await cmd.execute({ runtime: true, json: true });
+      expect(exitCode).toBe(1);
+      const output = (deps.writeTo as jest.Mock).mock.calls.map((c: string[]) => c[0]).join('');
+      expect(output).toContain('MISSING_CONFIG');
+    });
+
+    it('emits each log line via writeTo and returns 0 when stream closes cleanly', async () => {
+      const lines: string[] = [];
+      const deps = createMockDeps({
+        streamRuntimeLogs: (_p, _e, _a, onLine, _onError, onClose) => {
+          setTimeout(() => {
+            onLine({ timestamp: '2026-05-13T10:00:01Z', line: 'app starting' });
+            onLine({ timestamp: '2026-05-13T10:00:02Z', line: 'ready on :3000' });
+            onClose();
+          }, 5);
+          return { close: jest.fn() };
+        },
+        writeTo: jest.fn((msg: string) => lines.push(msg)),
+      });
+      const cmd = new LogsCommand(deps);
+      const exitCode = await cmd.execute({ runtime: true });
+      expect(exitCode).toBe(0);
+      expect(lines.some((l) => l.includes('app starting'))).toBe(true);
+      expect(lines.some((l) => l.includes('ready on :3000'))).toBe(true);
+    });
+
+    it('returns 3 when stream errors before close (matching --follow contract)', async () => {
+      const deps = createMockDeps({
+        streamRuntimeLogs: (_p, _e, _a, _onLine, onError, onClose) => {
+          setTimeout(() => {
+            onError(new Error('SSE connection reset'));
+            onClose();
+          }, 5);
+          return { close: jest.fn() };
+        },
+      });
+      const cmd = new LogsCommand(deps);
+      const exitCode = await cmd.execute({ runtime: true });
+      expect(exitCode).toBe(3);
+      const errs = (deps.writeError as jest.Mock).mock.calls.map((c: string[]) => c[0]).join(' ');
+      expect(errs).toContain('Runtime stream error');
+    });
+  });
+
+  // Beta Logs Gate Criterion 7 — --since flag propagation.
+  // The CLI forwards the raw string to the API; the API does the
+  // normalization. Test ensures the wire is correct.
+  describe('--since flag', () => {
+    it('forwards --since to getLogs as a string value', async () => {
+      let captured: { tail?: number; step?: string; since?: string } | null = null;
+      const deps = createMockDeps({
+        getLogs: jest.fn(async (_buildID, opts) => {
+          captured = opts;
+          return {
+            build_id: 'b-1', status: 'SUCCEEDED', entries: [], total_lines: 0,
+          };
+        }),
+      });
+      const cmd = new LogsCommand(deps);
+      await cmd.execute({ build: 'b-1', since: '7d' });
+      expect(captured).not.toBeNull();
+      expect(captured!.since).toBe('7d');
+    });
+
+    it('does not forward --since when omitted', async () => {
+      let captured: { tail?: number; step?: string; since?: string } | null = null;
+      const deps = createMockDeps({
+        getLogs: jest.fn(async (_buildID, opts) => {
+          captured = opts;
+          return {
+            build_id: 'b-1', status: 'SUCCEEDED', entries: [], total_lines: 0,
+          };
+        }),
+      });
+      const cmd = new LogsCommand(deps);
+      await cmd.execute({ build: 'b-1' });
+      expect(captured!.since).toBeUndefined();
+    });
+  });
 });

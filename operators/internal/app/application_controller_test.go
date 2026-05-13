@@ -402,4 +402,120 @@ var _ = Describe("ApplicationController", Ordered, func() {
 			}
 		})
 	})
+
+	// =============================================================================
+	// Cross-tenant tenant-scope propagation — audit M10 F2 / §6.E.4b
+	// =============================================================================
+	//
+	// Asserts that the child ExposedRoute created by reconcileExposedRoute
+	// carries the parent's tenant/project/environment labels — and that
+	// two parents owned by different tenants produce children with
+	// distinct, NON-cross-contaminated labels. Pre-fix: ExposedRoute had
+	// no tenant label at all, so Loki/Prometheus queries scoped by
+	// `loopzero.io/tenant` silently returned empty.
+	Context("tenant scope propagation to child ExposedRoute (audit §6.E.4b)", func() {
+		const (
+			appA  = "xt-app-a"
+			appB  = "xt-app-b"
+			tnA   = "tn-tenant-a"
+			tnB   = "tn-tenant-b"
+			proj  = "shared-project"
+			envP  = "production"
+			svcN  = "shared-svc"
+		)
+
+		BeforeAll(func() {
+			Expect(k8sClient.Create(ctx, newLoopZeroApplicationCR(appA, tnA, proj, envP, svcN))).To(Succeed())
+			Expect(k8sClient.Create(ctx, newLoopZeroApplicationCR(appB, tnB, proj, envP, svcN))).To(Succeed())
+		})
+
+		It("should label ExposedRoute child with parent's tenant/project/env (tenant A)", func() {
+			Eventually(func(g Gomega) {
+				var route loopzerov1.ExposedRoute
+				g.Expect(k8sClient.Get(ctx, types.NamespacedName{
+					Name: appA + "-route", Namespace: "default",
+				}, &route)).To(Succeed())
+				g.Expect(route.Labels).NotTo(BeNil(), "child must carry labels")
+				g.Expect(route.Labels["loopzero.io/tenant"]).To(Equal(tnA),
+					"child ExposedRoute must carry parent tenant label")
+				g.Expect(route.Labels["loopzero.io/project"]).To(Equal(proj))
+				g.Expect(route.Labels["loopzero.io/environment"]).To(Equal(envP))
+			}, timeout, interval).Should(Succeed())
+		})
+
+		It("should label tenant B's child with tenant B (no cross-contamination)", func() {
+			Eventually(func(g Gomega) {
+				var route loopzerov1.ExposedRoute
+				g.Expect(k8sClient.Get(ctx, types.NamespacedName{
+					Name: appB + "-route", Namespace: "default",
+				}, &route)).To(Succeed())
+				g.Expect(route.Labels["loopzero.io/tenant"]).To(Equal(tnB),
+					"child ExposedRoute for tenant B must NOT carry tenant A's label")
+			}, timeout, interval).Should(Succeed())
+		})
+
+		It("should NEVER have a child of tenant A labeled as tenant B (adversarial)", func() {
+			// Adversarial: list every ExposedRoute and assert that no route
+			// owned by appA has tenant B's label (and vice-versa). This is
+			// the inverse of the per-app positive tests — it catches a
+			// reconcile bug where the controller might apply labels based
+			// on a global variable, env var, or process-wide tenant state.
+			var routes loopzerov1.ExposedRouteList
+			Expect(k8sClient.List(ctx, &routes)).To(Succeed())
+			for _, r := range routes.Items {
+				switch r.Spec.ApplicationRef {
+				case appA:
+					Expect(r.Labels["loopzero.io/tenant"]).To(Equal(tnA))
+				case appB:
+					Expect(r.Labels["loopzero.io/tenant"]).To(Equal(tnB))
+				}
+			}
+		})
+
+		It("re-applies tenant labels if a manual edit strips them", func() {
+			// Simulate an attacker / operator-error that strips the tenant
+			// label off the child. The controller's CreateOrUpdate path
+			// must converge the label back to the parent's tenantRef on
+			// the next reconcile (triggered by any spec touch on parent).
+			var route loopzerov1.ExposedRoute
+			routeKey := types.NamespacedName{Name: appA + "-route", Namespace: "default"}
+			Expect(k8sClient.Get(ctx, routeKey, &route)).To(Succeed())
+
+			// Strip the tenant label and update.
+			delete(route.Labels, "loopzero.io/tenant")
+			Expect(k8sClient.Update(ctx, &route)).To(Succeed())
+
+			// Trigger reconcile by touching the parent (bump replicas).
+			var parent loopzerov1.LoopZeroApplication
+			parentKey := types.NamespacedName{Name: appA, Namespace: "default"}
+			Expect(k8sClient.Get(ctx, parentKey, &parent)).To(Succeed())
+			parent.Spec.Replicas = parent.Spec.Replicas + 1
+			Expect(k8sClient.Update(ctx, &parent)).To(Succeed())
+
+			// Eventually, the controller restores the label.
+			Eventually(func(g Gomega) {
+				var got loopzerov1.ExposedRoute
+				g.Expect(k8sClient.Get(ctx, routeKey, &got)).To(Succeed())
+				g.Expect(got.Labels["loopzero.io/tenant"]).To(Equal(tnA),
+					"controller must converge tenant label back to parent's tenantRef")
+			}, timeout, interval).Should(Succeed())
+		})
+
+		AfterAll(func() {
+			for _, name := range []string{appA, appB} {
+				appObj := &loopzerov1.LoopZeroApplication{}
+				if err := k8sClient.Get(ctx, types.NamespacedName{Name: name, Namespace: "default"}, appObj); err == nil {
+					appObj.Finalizers = nil
+					_ = k8sClient.Update(ctx, appObj)
+					_ = k8sClient.Delete(ctx, appObj)
+				}
+				route := &loopzerov1.ExposedRoute{}
+				if err := k8sClient.Get(ctx, types.NamespacedName{Name: name + "-route", Namespace: "default"}, route); err == nil {
+					route.Finalizers = nil
+					_ = k8sClient.Update(ctx, route)
+					_ = k8sClient.Delete(ctx, route)
+				}
+			}
+		})
+	})
 })

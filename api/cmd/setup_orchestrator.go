@@ -186,6 +186,7 @@ func setupOrchestrator(
 		return changed, err
 	}
 	scaleHandler := routes.NewScaleHandler(projectStore, scaleApply, cfg.KEDAEnabled)
+	scaleHandler.EnsureProductionWired() // audit M02 #14: panic-on-regression guard
 
 	// Build list handler — lists builds for a project with optional env filter
 	buildListHandler := routes.NewBuildListHandler(&adapters.BuildListStoreAdapter{Store: stores.BuildStore})

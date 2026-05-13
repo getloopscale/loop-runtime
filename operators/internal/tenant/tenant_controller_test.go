@@ -77,6 +77,54 @@ func cleanupTenantEnvCRs(tenantName string) {
 	}
 }
 
+// createTenantAndWaitActive creates a Tenant CR and waits for its phase to
+// become Active. Phase 3 helper — eliminates the ~10-line BeforeAll block
+// duplicated across PriorityClass / RBAC / NetworkPolicy / ResourceQuota
+// contexts in tenant_controller_test.go.
+func createTenantAndWaitActive(tenantName string, plan loopzerov1.PlanTier, envs []string) {
+	tenant := newTenant(tenantName, plan, envs)
+	Expect(k8sClient.Create(ctx, tenant)).To(Succeed())
+	Eventually(func(g Gomega) {
+		var t loopzerov1.Tenant
+		g.Expect(k8sClient.Get(ctx, types.NamespacedName{
+			Name: tenantName, Namespace: "default",
+		}, &t)).To(Succeed())
+		g.Expect(t.Status.Phase).To(Equal(loopzerov1.TenantPhaseActive))
+	}, timeout, interval).Should(Succeed())
+}
+
+// deleteTenantWithFinalizer clears finalizers on a Tenant CR and deletes it.
+// Idempotent (skips if Get returns NotFound). Companion to deleteTenantNamespaces.
+func deleteTenantWithFinalizer(tenantName string) {
+	t := &loopzerov1.Tenant{}
+	if err := k8sClient.Get(ctx, types.NamespacedName{Name: tenantName, Namespace: "default"}, t); err == nil {
+		t.Finalizers = nil
+		_ = k8sClient.Update(ctx, t)
+		_ = k8sClient.Delete(ctx, t)
+	}
+}
+
+// deleteTenantNamespaces removes the runtime + build namespaces for a tenant.
+// Idempotent — silently skips namespaces that don't exist. Phase 3 helper:
+// eliminates ~10 inline copies of this loop across tenant_controller_test.go
+// and tenant_integration_test.go (Quality-Gate dupl reduction).
+func deleteTenantNamespaces(tenantName string, environments ...string) {
+	if len(environments) == 0 {
+		environments = []string{"production"}
+	}
+	nsNames := make([]string, 0, len(environments)+1)
+	for _, env := range environments {
+		nsNames = append(nsNames, "loopzero-"+tenantName+"-"+env)
+	}
+	nsNames = append(nsNames, "build-"+tenantName)
+	for _, nsName := range nsNames {
+		ns := &corev1.Namespace{}
+		if err := k8sClient.Get(ctx, types.NamespacedName{Name: nsName}, ns); err == nil {
+			_ = k8sClient.Delete(ctx, ns)
+		}
+	}
+}
+
 var _ = Describe("TenantController", Ordered, func() {
 
 	Context("when a new Tenant CR is created", func() {
@@ -321,18 +369,8 @@ var _ = Describe("TenantController — Namespace Provisioning", Ordered, func() 
 	})
 
 	AfterAll(func() {
-		for _, nsName := range []string{"loopzero-" + tenantName + "-production", "loopzero-" + tenantName + "-staging", "build-" + tenantName} {
-			ns := &corev1.Namespace{}
-			if err := k8sClient.Get(ctx, types.NamespacedName{Name: nsName}, ns); err == nil {
-				_ = k8sClient.Delete(ctx, ns)
-			}
-		}
-		t := &loopzerov1.Tenant{}
-		if err := k8sClient.Get(ctx, types.NamespacedName{Name: tenantName, Namespace: "default"}, t); err == nil {
-			t.Finalizers = nil
-			_ = k8sClient.Update(ctx, t)
-			_ = k8sClient.Delete(ctx, t)
-		}
+		deleteTenantNamespaces(tenantName, "production", "staging")
+		deleteTenantWithFinalizer(tenantName)
 	})
 })
 
@@ -575,12 +613,7 @@ var _ = Describe("TenantController — NetworkPolicy", Ordered, func() {
 		if err := k8sClient.Get(ctx, types.NamespacedName{Name: "loopzero-" + tenantName + "-production"}, ns); err == nil {
 			_ = k8sClient.Delete(ctx, ns)
 		}
-		t := &loopzerov1.Tenant{}
-		if err := k8sClient.Get(ctx, types.NamespacedName{Name: tenantName, Namespace: "default"}, t); err == nil {
-			t.Finalizers = nil
-			_ = k8sClient.Update(ctx, t)
-			_ = k8sClient.Delete(ctx, t)
-		}
+		deleteTenantWithFinalizer(tenantName)
 	})
 })
 
@@ -711,12 +744,7 @@ var _ = Describe("TenantController — Build Namespace + QuotaEnforced", Ordered
 				_ = k8sClient.Delete(ctx, ns)
 			}
 		}
-		t := &loopzerov1.Tenant{}
-		if err := k8sClient.Get(ctx, types.NamespacedName{Name: tenantName, Namespace: "default"}, t); err == nil {
-			t.Finalizers = nil
-			_ = k8sClient.Update(ctx, t)
-			_ = k8sClient.Delete(ctx, t)
-		}
+		deleteTenantWithFinalizer(tenantName)
 	})
 }) // end Build Namespace + QuotaEnforced
 
@@ -726,15 +754,7 @@ var _ = Describe("TenantController — PriorityClass", Ordered, func() {
 		const tenantName = "pc-starter"
 
 		BeforeAll(func() {
-			tenant := newTenant(tenantName, loopzerov1.PlanStarter, []string{"production"})
-			Expect(k8sClient.Create(ctx, tenant)).To(Succeed())
-			Eventually(func(g Gomega) {
-				var t loopzerov1.Tenant
-				g.Expect(k8sClient.Get(ctx, types.NamespacedName{
-					Name: tenantName, Namespace: "default",
-				}, &t)).To(Succeed())
-				g.Expect(t.Status.Phase).To(Equal(loopzerov1.TenantPhaseActive))
-			}, timeout, interval).Should(Succeed())
+			createTenantAndWaitActive(tenantName, loopzerov1.PlanStarter, []string{"production"})
 		})
 
 		It("should create PriorityClass with value 100 and PreemptionPolicy Never", func() {
@@ -788,18 +808,8 @@ var _ = Describe("TenantController — PriorityClass", Ordered, func() {
 		})
 
 		AfterAll(func() {
-			t := &loopzerov1.Tenant{}
-			if err := k8sClient.Get(ctx, types.NamespacedName{Name: tenantName, Namespace: "default"}, t); err == nil {
-				t.Finalizers = nil
-				_ = k8sClient.Update(ctx, t)
-				_ = k8sClient.Delete(ctx, t)
-			}
-			for _, nsName := range []string{"loopzero-" + tenantName + "-production", "build-" + tenantName} {
-				ns := &corev1.Namespace{}
-				if err := k8sClient.Get(ctx, types.NamespacedName{Name: nsName}, ns); err == nil {
-					_ = k8sClient.Delete(ctx, ns)
-				}
-			}
+			deleteTenantWithFinalizer(tenantName)
+			deleteTenantNamespaces(tenantName)
 		})
 	})
 
@@ -807,15 +817,7 @@ var _ = Describe("TenantController — PriorityClass", Ordered, func() {
 		const tenantName = "pc-growth"
 
 		BeforeAll(func() {
-			tenant := newTenant(tenantName, loopzerov1.PlanGrowth, []string{"production"})
-			Expect(k8sClient.Create(ctx, tenant)).To(Succeed())
-			Eventually(func(g Gomega) {
-				var t loopzerov1.Tenant
-				g.Expect(k8sClient.Get(ctx, types.NamespacedName{
-					Name: tenantName, Namespace: "default",
-				}, &t)).To(Succeed())
-				g.Expect(t.Status.Phase).To(Equal(loopzerov1.TenantPhaseActive))
-			}, timeout, interval).Should(Succeed())
+			createTenantAndWaitActive(tenantName, loopzerov1.PlanGrowth, []string{"production"})
 		})
 
 		It("should create PriorityClass with value 500 and PreemptLowerPriority", func() {
@@ -829,18 +831,8 @@ var _ = Describe("TenantController — PriorityClass", Ordered, func() {
 		})
 
 		AfterAll(func() {
-			t := &loopzerov1.Tenant{}
-			if err := k8sClient.Get(ctx, types.NamespacedName{Name: tenantName, Namespace: "default"}, t); err == nil {
-				t.Finalizers = nil
-				_ = k8sClient.Update(ctx, t)
-				_ = k8sClient.Delete(ctx, t)
-			}
-			for _, nsName := range []string{"loopzero-" + tenantName + "-production", "build-" + tenantName} {
-				ns := &corev1.Namespace{}
-				if err := k8sClient.Get(ctx, types.NamespacedName{Name: nsName}, ns); err == nil {
-					_ = k8sClient.Delete(ctx, ns)
-				}
-			}
+			deleteTenantWithFinalizer(tenantName)
+			deleteTenantNamespaces(tenantName)
 		})
 	})
 
@@ -848,15 +840,7 @@ var _ = Describe("TenantController — PriorityClass", Ordered, func() {
 		const tenantName = "pc-enterprise"
 
 		BeforeAll(func() {
-			tenant := newTenant(tenantName, loopzerov1.PlanEnterprise, []string{"production"})
-			Expect(k8sClient.Create(ctx, tenant)).To(Succeed())
-			Eventually(func(g Gomega) {
-				var t loopzerov1.Tenant
-				g.Expect(k8sClient.Get(ctx, types.NamespacedName{
-					Name: tenantName, Namespace: "default",
-				}, &t)).To(Succeed())
-				g.Expect(t.Status.Phase).To(Equal(loopzerov1.TenantPhaseActive))
-			}, timeout, interval).Should(Succeed())
+			createTenantAndWaitActive(tenantName, loopzerov1.PlanEnterprise, []string{"production"})
 		})
 
 		It("should create PriorityClass with value 1000 and PreemptLowerPriority", func() {
@@ -870,18 +854,8 @@ var _ = Describe("TenantController — PriorityClass", Ordered, func() {
 		})
 
 		AfterAll(func() {
-			t := &loopzerov1.Tenant{}
-			if err := k8sClient.Get(ctx, types.NamespacedName{Name: tenantName, Namespace: "default"}, t); err == nil {
-				t.Finalizers = nil
-				_ = k8sClient.Update(ctx, t)
-				_ = k8sClient.Delete(ctx, t)
-			}
-			for _, nsName := range []string{"loopzero-" + tenantName + "-production", "build-" + tenantName} {
-				ns := &corev1.Namespace{}
-				if err := k8sClient.Get(ctx, types.NamespacedName{Name: nsName}, ns); err == nil {
-					_ = k8sClient.Delete(ctx, ns)
-				}
-			}
+			deleteTenantWithFinalizer(tenantName)
+			deleteTenantNamespaces(tenantName)
 		})
 	})
 
@@ -889,15 +863,7 @@ var _ = Describe("TenantController — PriorityClass", Ordered, func() {
 		const tenantName = "pc-upgrade"
 
 		BeforeAll(func() {
-			tenant := newTenant(tenantName, loopzerov1.PlanStarter, []string{"production"})
-			Expect(k8sClient.Create(ctx, tenant)).To(Succeed())
-			Eventually(func(g Gomega) {
-				var t loopzerov1.Tenant
-				g.Expect(k8sClient.Get(ctx, types.NamespacedName{
-					Name: tenantName, Namespace: "default",
-				}, &t)).To(Succeed())
-				g.Expect(t.Status.Phase).To(Equal(loopzerov1.TenantPhaseActive))
-			}, timeout, interval).Should(Succeed())
+			createTenantAndWaitActive(tenantName, loopzerov1.PlanStarter, []string{"production"})
 		})
 
 		It("should create growth PriorityClass after plan upgrade from starter to growth", func() {
@@ -919,18 +885,8 @@ var _ = Describe("TenantController — PriorityClass", Ordered, func() {
 		})
 
 		AfterAll(func() {
-			t := &loopzerov1.Tenant{}
-			if err := k8sClient.Get(ctx, types.NamespacedName{Name: tenantName, Namespace: "default"}, t); err == nil {
-				t.Finalizers = nil
-				_ = k8sClient.Update(ctx, t)
-				_ = k8sClient.Delete(ctx, t)
-			}
-			for _, nsName := range []string{"loopzero-" + tenantName + "-production", "build-" + tenantName} {
-				ns := &corev1.Namespace{}
-				if err := k8sClient.Get(ctx, types.NamespacedName{Name: nsName}, ns); err == nil {
-					_ = k8sClient.Delete(ctx, ns)
-				}
-			}
+			deleteTenantWithFinalizer(tenantName)
+			deleteTenantNamespaces(tenantName)
 		})
 	})
 
@@ -1116,12 +1072,7 @@ var _ = Describe("TenantController — Gitea Repo Provisioning", Ordered, func()
 				_ = k8sClient.Delete(ctx, ns)
 			}
 		}
-		t := &loopzerov1.Tenant{}
-		if err := k8sClient.Get(ctx, types.NamespacedName{Name: tenantName, Namespace: "default"}, t); err == nil {
-			t.Finalizers = nil
-			_ = k8sClient.Update(ctx, t)
-			_ = k8sClient.Delete(ctx, t)
-		}
+		deleteTenantWithFinalizer(tenantName)
 	})
 }) // end Gitea Repo Provisioning
 
@@ -1251,18 +1202,8 @@ var _ = Describe("TenantController — Condition-Gated Reconciliation (Crash Rec
 	})
 
 	AfterAll(func() {
-		for _, nsName := range []string{"loopzero-" + tenantName + "-production", "build-" + tenantName} {
-			ns := &corev1.Namespace{}
-			if err := k8sClient.Get(ctx, types.NamespacedName{Name: nsName}, ns); err == nil {
-				_ = k8sClient.Delete(ctx, ns)
-			}
-		}
-		t := &loopzerov1.Tenant{}
-		if err := k8sClient.Get(ctx, types.NamespacedName{Name: tenantName, Namespace: "default"}, t); err == nil {
-			t.Finalizers = nil
-			_ = k8sClient.Update(ctx, t)
-			_ = k8sClient.Delete(ctx, t)
-		}
+		deleteTenantNamespaces(tenantName)
+		deleteTenantWithFinalizer(tenantName)
 	})
 })
 
@@ -1658,18 +1599,8 @@ var _ = Describe("TenantController — ArgoCD Application Provisioning", Ordered
 	})
 
 	AfterAll(func() {
-		for _, nsName := range []string{"loopzero-" + tenantName + "-production", "loopzero-" + tenantName + "-staging", "build-" + tenantName} {
-			ns := &corev1.Namespace{}
-			if err := k8sClient.Get(ctx, types.NamespacedName{Name: nsName}, ns); err == nil {
-				_ = k8sClient.Delete(ctx, ns)
-			}
-		}
-		t := &loopzerov1.Tenant{}
-		if err := k8sClient.Get(ctx, types.NamespacedName{Name: tenantName, Namespace: "default"}, t); err == nil {
-			t.Finalizers = nil
-			_ = k8sClient.Update(ctx, t)
-			_ = k8sClient.Delete(ctx, t)
-		}
+		deleteTenantNamespaces(tenantName, "production", "staging")
+		deleteTenantWithFinalizer(tenantName)
 	})
 })
 

@@ -31,6 +31,15 @@ environments:
     # 1 host (mgmt + build + workload). Used for local E2E validation.
     values:
       - environments/standalone-multi.yaml
+  drill:
+    # MEET-ASYNC-AMENDMENT-2026-05-12-003 + active-execution-plan §2.2 —
+    # pre-prod chaos + maturity validation on DOKS cluster provisioned by
+    # infra/pulumi-drill/ stack. Bootstrap order:
+    #   1. cd infra/pulumi-drill && pulumi up
+    #   2. Configure kubeconfig from stack output
+    #   3. helmfile -f mgmt.helmfile.yaml.gotmpl -e drill sync
+    values:
+      - environments/drill.yaml
 
 ---
 helmDefaults:
@@ -369,6 +378,14 @@ releases:
 {{- if eq (.Values | get "clusterRole" "dev") "standalone" }}
       - ../helm/loopzero-api/values-standalone-multi.yaml
 {{- end }}
+    set:
+      # Finding 2026-05-12 — wire env-file `replicas.api` to chart
+      # `replicaCount`. Before this, the env-file value was orphan config:
+      # defined in prod.yaml (=3) + standalone-multi.yaml (=1) but never
+      # consumed, leaving loopzero-api at hardcoded 1 replica even in prod.
+      # See concepts/operations/finding-2026-05-12-loopzero-api-replica-orphan.md
+      - name: replicaCount
+        value: "{{ .Values | get "replicas" (dict) | get "api" 1 }}"
 
   # ADR-0023 / plan v1.1 T1.5 — 4 split operator charts replace the
   # deleted monolith chart `infra/helm/tenant-controller` and the
@@ -444,6 +461,20 @@ releases:
 {{- if eq (.Values | get "clusterRole" "dev") "standalone" }}
       - ../helm/loopzero-cloud/values-standalone-multi.yaml
 {{- end }}
+
+  # Wave 90: Chaos engineering (active-execution-plan §3.A.4, iter 2)
+  # Sprint 8 T0.3 installed CRDs via separate path; this release wires the
+  # controller via the `loopzero-chaos-mesh` wrapper chart (infra/helm/chaos-mesh)
+  # so all clusters bootstrap the controller consistently. Opt-in: only
+  # installs when `installChaosMesh: true` in environment values. Default
+  # false so prod + dev don't carry the controller unnecessarily; chaos
+  # validation env opts in explicitly.
+  - name: chaos-mesh
+    namespace: chaos-mesh
+    chart: ../helm/chaos-mesh
+    installed: {{ .Values | get "installChaosMesh" false }}
+    values:
+      - ../helm/chaos-mesh/values.yaml
 
   # Wave 99: Validation
   - name: smoke-test

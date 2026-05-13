@@ -225,12 +225,45 @@ func AuthWithTTL(validator TokenValidator, store MembershipStore, cacheTTL time.
 			// Internal service auth: cloud proxy sends X-Service-Auth + identity headers.
 			// S2.3: Engine resolves role from DB, not from headers. Proxy sends only
 			// identity (user ID, tenant, email). Role is NEVER trusted from headers.
+			//
+			// 2026-05-13 (ADR `decisions/2026-05-13-service-auth-ed25519-adoption.md`):
+			// dual-control via Ed25519 signature is layered on top of the shared
+			// secret. Phase 1 (accept-both): unsigned requests still proceed via
+			// the legacy shared-secret path; signed requests get the additional
+			// signature verification. Phase 2 (require-signed) flips the
+			// ServiceAuthRequireSignature flag and unsigned requests are rejected.
 			if serviceAuth := r.Header.Get("X-Service-Auth"); serviceAuth != "" {
 				if validateServiceAuth(serviceAuth) {
 					userID := r.Header.Get("X-LoopZero-User-ID")
 					tenantID := r.Header.Get("X-LoopZero-Tenant")
 					email := r.Header.Get("X-LoopZero-Email")
 					if userID != "" && tenantID != "" {
+						// Dual-control: Ed25519 signature gate (Phase 1 + Phase 2 logic).
+						sigPresent := hasServiceAuthSignatureHeaders(r)
+						if sigPresent {
+							serviceAuthSignaturePresent.WithLabelValues("present").Inc()
+							ok, reason := verifyServiceAuthSignature(r, userID, tenantID)
+							if !ok {
+								serviceAuthSignatureRejected.WithLabelValues(string(reason)).Inc()
+								emitAuthFailure(r, AuthFailureServiceMismatch,
+									"service-auth signature rejected: "+string(reason),
+									map[string]any{"requested_tenant": tenantID, "user_id": userID, "reject_reason": string(reason)})
+								writeError(w, http.StatusUnauthorized, "UNAUTHORIZED", "Invalid service authentication")
+								return
+							}
+						} else {
+							serviceAuthSignaturePresent.WithLabelValues("absent").Inc()
+							if ServiceAuthRequireSignature {
+								// Phase 2+ — unsigned no longer accepted.
+								emitAuthFailure(r, AuthFailureServiceMismatch,
+									"service-auth signature required (Phase 2)",
+									map[string]any{"requested_tenant": tenantID, "user_id": userID, "reject_reason": "signature_missing"})
+								writeError(w, http.StatusUnauthorized, "UNAUTHORIZED", "Invalid service authentication")
+								return
+							}
+							// Phase 1 — fall through to legacy single-control path.
+						}
+
 						// Resolve role from DB — same authority as Bearer path
 						memberships, mErr := store.GetMemberships(r.Context(), userID)
 						if mErr != nil {

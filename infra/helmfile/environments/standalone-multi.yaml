@@ -19,7 +19,15 @@ clusterRole: standalone
 clusterTopology: multi-cluster
 
 replicas:
-  api: 1
+  # MEET-ASYNC-AMENDMENT-2026-05-12-003 Option A (RATIFIED 2026-05-12)
+  # unblocked multi-replica:
+  #   - main.go now starts HTTP server before leader election
+  #     (passive standby pods serve /healthz while waiting for lock)
+  #   - loopzero-api Deployment uses RollingUpdate when replicaCount>=2
+  # 2 replicas validates chaos scenario 1 (recover within 120s) +
+  # delivers true HA in production. Local k3d resource footprint
+  # acceptable (~256Mi×2 = 512Mi for loopzero-api).
+  api: 2
   controller: 1
   argocd: 1
   gitea: 1
@@ -51,6 +59,8 @@ registries:
 
 loki:
   maxGlobalStreamsPerUser: 50000
+  # Audit M08 #18 / §6.C.4b — promtail cross-cluster push target (env-specific).
+  pushUrl: http://172.18.0.3:30094/loki/api/v1/push
 
 policyMode: warn
 

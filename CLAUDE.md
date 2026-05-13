@@ -20,9 +20,9 @@ The authoritative spec is the code itself + `CHANGELOG.md` + relevant ADRs. If t
 
 **`loopzero scale` — fully functional E2E** (B40 fixed 2026-05-06, tag `scale-b40-converged-20260506`): chain DB→deploy→K8s closed via `ScalingResolver` (`api/internal/services/scaling_resolver.go`) injected into `BuildOrchestratorDeps.ScalingResolver`. Submit calls `Resolve` BEFORE `enforceScaling` so plan-cap operates on the resolved config (closes MEET-2026-04-23-059 Constraint 6). Scale handler persists with project NAME (not UUID) per CLAUDE.md "Project name vs project ID" convention. Validated LIVE via journey-04 hardening with `kubectl get deploy -o jsonpath='{.spec.replicas}'` assertion + Plan-cap probe (`REPLICAS_EXCEED_PLAN` rejection). Cleanroom dogfood 12/12 GREEN end-to-end (52min) with B40 fix shipped.
 
-**Path to maturity 4.0** (currently 3.49 per modular audit baseline 2026-05-11): (a) first CI Sunday cron GREEN producing real `cell2-soaks.yml` workflow run evidence, AND (b) 1 prod customer day-trial with no incidents (Sprint 9 prod canary). Local 7-day GREEN streak DROPPED as a gate (D7 reformulated 2026-05-03 — tautological in static dev env without diurnal traffic; CI cron + real prod usage are the legitimate signals).
+**Path to maturity 4.0** (currently 3.49 per modular audit baseline 2026-05-11): (a) first CI Sunday cron GREEN producing real `cell2-soaks.yml` workflow run evidence, AND (b) 1 prod customer day-trial with no incidents (Sprint 9 prod canary). Local 7-day GREEN streak DROPPED as a gate (D7 reformulated 2026-05-03 — tautological in static dev env without diurnal traffic; CI cron + real prod usage are the legitimate signals). **Audit-grind progress (2026-05-12 to 2026-05-13, full tally in `.claude/knowledge-base/audits/2026-05-12-grind-summary.md` + log.md entries):** 30 of the 27 §6 backlog findings closed inline (some closures addressed multiple sub-items), 4 RFCs/design docs landed for the T2/T3 items, 5 latent bugs captured during code-walks under audit context, 3 operator runbooks/templates/dashboards shipped for Wave 2 onboarding. **Sponsor-direct-approval pattern (2026-05-13):** §6.B.2 + §6.B.3 (orphan CRD deletion, 2 CRDs deleted symmetrically) AND §6.B.5 (service-auth Ed25519 dual-control adoption) both shipped via the new pattern documented in `meetings/MEET-2026-05-13-orphan-crd-deletion.md` + `meetings/MEET-2026-05-13-ed25519-sponsor-approval.md` — sponsor explicit override of the Change Governor meeting after RFC review. Audit gaps M03 #2/#3 + M10 G1 closed (engineering side). Score un-bumped because Rule 11 requires 3 evidence sources (T1 commit+test, T2 LIVE log, T3 CI run) and the customer-trial LIVE evidence is still pending. The two original maturity gates remain the bottleneck.
 
-**Known issues:** AppSecret controller not implemented (ESO works directly, no lifecycle automation — YAGNI until rotation/drift-detection needed); local k3d cert-manager letsencrypt-prod cannot issue for `*.loopzero.local` (no public DNS for ACME challenge) — self-signed CA issuer (`loopzero-local-ca-issuer`) fills local gap, production uses CF-managed TLS so no impact, local Stage 1 canary HTTP probes report HTTP 000 in `--smoke` mode (probes informational only).
+**Known issues:** Local k3d cert-manager letsencrypt-prod cannot issue for `*.loopzero.local` (no public DNS for ACME challenge) — self-signed CA issuer (`loopzero-local-ca-issuer`) fills local gap, production uses CF-managed TLS so no impact, local Stage 1 canary HTTP probes report HTTP 000 in `--smoke` mode (probes informational only). Local chaos-mesh installation in k3d enters CrashLoopBackOff with `informer cache sync timeout` — full chaos suite validation deferred to drill cluster (`pulumi-drill`); local chaos test framework is multi-replica-correct as of commit `99d90dc6` and 3 specs PASS without chaos-mesh dependency. Loki cross-cluster URL was helmfile-hardcoded to k3d local IP (would silently fail cross-VPC in prod); fixed as of `ef7a7c16` — promtail values now `.gotmpl`-templated per environment, prod points at DOKS internal LB explicitly. ADR claim "auto-blocks via W1.14 hook" for cosign keyless cutover was stale (W1.14 only protects ADR deletion); real deadline ratchet shipped as `infra/scripts/check-cosign-cutover-deadline.sh` + weekly cron in `9249e207`.
 
 ---
 
@@ -93,11 +93,11 @@ cd infra/pulumi && npx pulumi preview --stack dev # Preview
 | Auth | Ory Kratos + Ory Hydra + Redis |
 | Edge | Cloudflare Tunnel + Worker + KV |
 | Autoscaling | KEDA 2.16.1 + HTTP Add-on 0.8.0 |
-| IaC | **Bipartite SoT formalizado per MEET-2026-05-12 D3.** **L1 (Pulumi):** 5 projetos — `pulumi/` (DO+CF cloud primitives), `pulumi-infra/` (multi-cluster topology), `pulumi-platform/` (bootstrap 32 Helm releases), `pulumi-control-plane/` (STUB com 16 TODOs — W1.8 deleta ou converte em ADR pointer), `pulumi-shared/` (contracts/interfaces). **L2 (Helmfile):** orchestrator de 32 Helm releases (loopzero-api, loopzero-cloud, Kratos, Hydra, ArgoCD, Gitea, MinIO, etc.) — **L2 é o SoT real desses workloads**, não Pulumi. **L3 (ArgoCD):** Day-2 GitOps para tenant workloads from Gitea. **Decision tree para on-call:** is it a cloud resource? → L1 Pulumi. Is it a K8s platform workload? → L2 Helmfile. Is it a tenant app? → L3 ArgoCD. |
+| IaC | **Bipartite SoT formalizado per MEET-2026-05-12 D3.** **L1 (Pulumi):** 6 projetos — `pulumi/` (DO+CF cloud primitives), `pulumi-infra/` (multi-cluster topology), `pulumi-platform/` (bootstrap 32 Helm releases), `pulumi-control-plane/` (STUB com 16 TODOs — W1.8 deleta ou converte em ADR pointer), `pulumi-drill/` (DR drill stack — separate state bucket `loopzero-drill-pulumi-state`, used for chaos+maturity validation per active-execution-plan §2.2 lifecycle; LIVE-validated + destroyed iter 23-24), `pulumi-shared/` (contracts/interfaces). **L2 (Helmfile):** orchestrator de 32 Helm releases (loopzero-api, loopzero-cloud, Kratos, Hydra, ArgoCD, Gitea, MinIO, etc.) — **L2 é o SoT real desses workloads**, não Pulumi. **L3 (ArgoCD):** Day-2 GitOps para tenant workloads from Gitea. **Decision tree para on-call:** is it a cloud resource? → L1 Pulumi. Is it a K8s platform workload? → L2 Helmfile. Is it a tenant app? → L3 ArgoCD. |
 | Local clusters | k3d × 4 (mgmt, build, workload, runtime-2) |
 | Dev loop | Tilt + Taskfile (2929 lines across 7 files) |
 | Helm | 16 custom bootstrap charts + 49 value files across 34 chart dirs (`infra/helm/`) + 13 published charts (`charts/`) |
-| CI/CD | GitHub Actions (35 workflows) |
+| CI/CD | GitHub Actions (40 workflows) |
 | Migrations | golang-migrate (forward-only `.up.sql`) |
 
 ---
@@ -110,14 +110,14 @@ loopzero/
 ├── pkg/                   ← shared Go: statemachine, errors, errors/http, jwt, naming, conditions, id, logging, enforcement, circuitbreaker, healthcheck
 ├── cli/                   ← @loopzero/cli — TS + Commander, 65 commands, 1,260 test cases (88 suites)
 ├── api/internal/          ← 35 subpacotes: adapters, admission, archive, argo, argocd, cellmgr, cfkv, cfzone, config, correlation, db, domain, gitclient, github, gitops, health, k8s, leader, lock, loki, manifests, metrics, middleware, placement, processing, routes, s3, server, services, shellgen, source, sse, tracing, validation, workqueue
-├── operators/             ← 8 controllers (Tenant, Environment, Application, Exposure, PlatformBootstrap, GitRepositoryBinding, ClusterCredential, Preview), 10 CRDs (8 wired, 2 unwired: AppSecret + ReconciliationReport)
+├── operators/             ← 8 controllers (Tenant, Environment, Application, Exposure, PlatformBootstrap, GitRepositoryBinding, ClusterCredential, Preview), 8 CRDs (all wired). The 2 historical orphan CRDs (AppSecret + ReconciliationReport) deleted 2026-05-13 per ADR `decisions/2026-05-13-orphan-crd-deletion.md`.
 ├── infra/
 │   ├── pulumi/            ← IaC (TS), providers: digitalocean/, cloudflare/, aws/(stub)
 │   ├── helm/              ← 16 custom charts + 49 value files across 34 chart dirs (custom + upstream overrides)
 │   ├── k3d/               ← 4 cluster configs (mgmt, build, workload, runtime-2)
 │   ├── cloudflare/        ← CF Worker source (worker.mjs)
 │   └── tests/             ← e2e/ (Ginkgo), chaos/, unit/, load/
-└── .github/workflows/     ← 35 workflows: ci, build-images, infra-*, release, load-test, load-test-pr, helm-charts, cell2-soaks, operator-split-soak, pkg-soak, multi-cell, cli-commands, cross-validation-weekly, adversarial-spotcheck, platform-health-7day-watch, status-pr-gate, status-refresh, decay-scan, charts-drift-cron, velero-backup-check, pulumi-*, integration-tests, parity-validation, reusable-*
+└── .github/workflows/     ← 40 workflows: ci, build-images, infra-*, release, load-test, load-test-pr, helm-charts, cell2-soaks, chaos-suite, cosign-rotation-drill, decisions-stability-check, operator-split-soak, pkg-soak, multi-cell, cli-commands, cross-validation-weekly, adversarial-spotcheck, platform-health-7day-watch, prod-image-tag-check, pulumi-reconstruction-drill, status-pr-gate, status-refresh, decay-scan, charts-drift-cron, velero-backup-check, pulumi-*, integration-tests, parity-validation, reusable-*
 ```
 
 Use `Glob` / `git ls-files` for current details.
@@ -269,11 +269,12 @@ loopzero deploy → CLI validates → upload bundle → API locks env → submit
   (static apps: build → upload S3 → write CF KV → CF Worker serves from DO Spaces)
 ```
 
-### CRDs (10 total: 8 wired, 2 unwired)
+### CRDs (8 total, all wired)
 
 Wired (✅): Tenant, Environment, LoopZeroApplication, ExposedRoute, PlatformBootstrap, GitRepositoryBinding, ClusterCredential.
 Wired (✅): PreviewEnvironment — namespace + NetworkPolicy (deny-all/allow-ingress/allow-egress) + ResourceQuota + LimitRange + TTL + condition-wait flow (BuildSubmitted→BuildCompleted→WorkloadHealthy with grace period) + Failed transition + cleanup retry/CLEANUP_FAILED + finalizer + canonical naming via `naming.PreviewNamespace`. 12 envtest specs covering full lifecycle. E2E live validated against k3d.
-Defined but unwired (❌): AppSecret (CRD only, no controller — ESO works directly), ReconciliationReport (placeholder).
+
+The 2 historical orphan CRDs (AppSecret + ReconciliationReport) were deleted 2026-05-13 per ADR `decisions/2026-05-13-orphan-crd-deletion.md` — sponsor-approved T2, replacing the 2 PROPOSED RFCs `2026-05-12-appsecret-rfc.md` + `2026-05-12-reconciliationreport-rfc.md`. Both CRDs had been intentionally unregistered in the scheme (no controller, zero production touchpoints); the secret-sync path goes through ESO directly; drift-detection is provided ad-hoc via ArgoCD sync status + manual `kubectl diff` (no production gap surfaced).
 
 ### State Machines (11 in `pkg/statemachine/`)
 

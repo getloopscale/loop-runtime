@@ -128,8 +128,16 @@ func (h *LogStreamHandler) StreamBuildLogs(w http.ResponseWriter, r *http.Reques
 	h.streamLoop(r.Context(), w, flusher, buildID, sinceNano, true)
 }
 
-// StreamRuntimeLogs handles GET /api/v1/projects/{name}/logs/stream?env=<env>.
+// StreamRuntimeLogs handles GET /api/v1/projects/{name}/logs/stream?env=<env>[&app=<app>].
 // Streams runtime logs from the workload namespace via Loki.
+//
+// Query params:
+//   - env (required): environment name (e.g., "production")
+//   - app (optional, Beta Logs Gate Criterion 3): filter to a single
+//     app within the project. When omitted, returns logs from ALL
+//     apps in the namespace (legacy behavior). The app label is
+//     promoted by promtail's loopzero-pods scrape job from the pod's
+//     loopzero.io/app label.
 func (h *LogStreamHandler) StreamRuntimeLogs(w http.ResponseWriter, r *http.Request) {
 	uc := middleware.GetUserContext(r.Context())
 	if uc == nil {
@@ -148,6 +156,12 @@ func (h *LogStreamHandler) StreamRuntimeLogs(w http.ResponseWriter, r *http.Requ
 		writeLoopZeroError(w, loopzeroerrors.ErrMissingField.Wrap("env query parameter is required"))
 		return
 	}
+
+	// Beta Logs Gate Criterion 3: per-app filter. Empty = all apps in
+	// the project namespace (backward compatible). Non-empty value
+	// is passed through to Loki client which adds `app="<value>"`
+	// to the LogQL selector.
+	app := r.URL.Query().Get("app")
 
 	// Check for flusher support
 	flusher, ok := w.(http.Flusher)
@@ -173,8 +187,11 @@ func (h *LogStreamHandler) StreamRuntimeLogs(w http.ResponseWriter, r *http.Requ
 	}
 
 	// For runtime logs, the "buildID" is actually a namespace identifier
-	// that the Loki querier uses: "runtime:{tenant}:{env}:{project}"
-	runtimeKey := fmt.Sprintf("runtime:%s:%s:%s", uc.TenantID, env, projectName)
+	// that the Loki querier uses. App is appended as a 5th colon-
+	// segment when provided so the loki client can split it without
+	// growing the surface for empty-value handling — empty app field
+	// means "no filter" downstream.
+	runtimeKey := fmt.Sprintf("runtime:%s:%s:%s:%s", uc.TenantID, env, projectName, app)
 
 	h.streamLoop(r.Context(), w, flusher, runtimeKey, sinceNano, false)
 }
@@ -208,8 +225,13 @@ func (h *LogStreamHandler) streamLoop(
 			return
 		case <-deadline:
 			h.logger.Info("log stream: max duration reached", "key", queryKey)
+			// Beta Logs Gate Criterion 6 — enrich the timeout reason
+			// with a "why + next" so the operator doesn't think the
+			// stream died unexpectedly. 30 minutes is the platform
+			// cap to prevent forgotten `loopzero logs --follow` sessions
+			// from holding API resources indefinitely.
 			h.writeStreamEvent(w, flusher, "stream.timeout",
-				`{"reason":"Maximum stream duration reached. Reconnect to continue."}`)
+				`{"reason":"Stream open for 30 minutes — platform cap to prevent forgotten sessions from holding resources. Rerun `+"`"+`loopzero logs --build <id> --follow`+"`"+` to resume from the latest position; the stream picks up where this one ended."}`)
 			return
 		case <-pollTicker.C:
 			// Poll Loki for new logs

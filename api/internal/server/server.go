@@ -17,6 +17,7 @@ import (
 	"github.com/loopzero/loopzero/api/internal/source"
 	"github.com/loopzero/loopzero/api/internal/sse"
 	"github.com/loopzero/loopzero/pkg/enforcement"
+	pkglogging "github.com/loopzero/loopzero/pkg/logging"
 )
 
 // Config holds the server configuration.
@@ -24,6 +25,15 @@ type Config struct {
 	Port               string
 	MetricsPort        string
 	Logger             *slog.Logger
+	// ContextLogger is the request-scoped enriched logger factory used by
+	// the RequestLogger middleware. When set, every HTTP handler can call
+	// `pkglogging.LoggerFromContext(r.Context())` and the returned logger
+	// automatically carries `correlation_id` + trace context.
+	//
+	// nil is tolerated — RequestLogger becomes a no-op and handlers
+	// fall back to slog.Default. Production wiring in api/cmd/main.go
+	// SHOULD set this (Beta Logs Gate requirement).
+	ContextLogger      *pkglogging.ContextLogger
 	DB                 routes.DBHealthChecker
 	HealthServices     []routes.ServiceHealthChecker
 	TokenValidator     middleware.TokenValidator

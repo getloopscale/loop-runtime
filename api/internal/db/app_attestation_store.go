@@ -5,7 +5,6 @@ package db
 
 import (
 	"context"
-	"errors"
 	"fmt"
 	"strings"
 	"time"
@@ -98,7 +97,9 @@ func (s *PostgresAppAttestationStore) SaveAppAttestations(
 	ctx context.Context, releaseID, tenantID string, atts []AppAttestation,
 ) error {
 	if releaseID == "" || tenantID == "" {
-		return errors.New("app_attestation_store: release_id and tenant_id are required")
+		// Audit gap M02 #13 fix: typed LoopZeroError so the validation surfaces
+		// with a stable code in audit logs and HTTP error mapping.
+		return loopzeroerrors.ErrMissingField.Wrap("app_attestation_store: release_id and tenant_id are required")
 	}
 	if len(atts) == 0 {
 		return nil
@@ -237,7 +238,8 @@ func (s *PostgresAppAttestationStore) UpdateAppSBOM(
 	ctx context.Context, releaseID, appName, s3Key, format string, componentCount int,
 ) error {
 	if releaseID == "" || appName == "" {
-		return errors.New("app_attestation_store: release_id and app_name are required")
+		// Audit gap M02 #13 fix: typed LoopZeroError for input validation.
+		return loopzeroerrors.ErrMissingField.Wrap("app_attestation_store: release_id and app_name are required")
 	}
 	if format != SBOMFormatCycloneDXJSON && format != SBOMFormatSPDXJSON {
 		return fmt.Errorf("app_attestation_store: invalid sbom_format %q", format)

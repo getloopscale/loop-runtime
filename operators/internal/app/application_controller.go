@@ -21,6 +21,7 @@ import (
 	"github.com/loopzero/loopzero/operators/internal/conditions"
 	"github.com/loopzero/loopzero/operators/internal/constants"
 	"github.com/loopzero/loopzero/operators/internal/shared"
+	"github.com/loopzero/loopzero/pkg/correlation"
 	"github.com/loopzero/loopzero/pkg/naming"
 )
 
@@ -86,6 +87,16 @@ func (r *ApplicationReconciler) Reconcile(ctx context.Context, req ctrl.Request)
 		}
 		return ctrl.Result{}, err
 	}
+
+	// Audit gap M08 #10 / §6.C.1b: when the CR carries the
+	// `loopzero.io/correlation-id` annotation (set by the API during
+	// `EnsureLoopZeroApplication` for HTTP-driven flows), inject it into the
+	// reconcile context so downstream audit_log writes + structured logs
+	// trace back to the originating HTTP request. Background reconciles
+	// (re-queue, watch event from non-API source) leave the annotation
+	// empty and the ctx unchanged — `correlation.WithID` is a no-op on
+	// empty string.
+	ctx = correlation.WithID(ctx, app.GetAnnotations()["loopzero.io/correlation-id"])
 
 	// T5.1 of deep-review-2026-05-10-remediation-plan
 	// (find_arch_app_controller_double_write MEDIUM): the deferred
@@ -201,6 +212,20 @@ func (r *ApplicationReconciler) reconcileExposedRoute(ctx context.Context, app *
 			Port: app.Spec.ServicePort,
 		}
 		route.Spec.TLS = loopzerov1.TLSConfig{Enabled: true}
+		// Audit gap M10 F2 / §6.E.4b: propagate tenant scope from parent
+		// LoopZeroApplication into child labels. Without this, Loki/Prometheus
+		// queries that filter by `loopzero.io/tenant` on ExposedRoute resources
+		// silently return empty results, OPA webhooks scoped per tenant
+		// have no signal to gate on, and operator self-audit traces cannot
+		// correlate child events back to the originating tenant. Re-applied
+		// on every reconcile via CreateOrUpdate so a manual edit that
+		// strips the labels converges back to the parent's tenant scope.
+		if route.Labels == nil {
+			route.Labels = map[string]string{}
+		}
+		route.Labels["loopzero.io/tenant"] = app.Spec.TenantRef
+		route.Labels["loopzero.io/project"] = app.Spec.Project
+		route.Labels["loopzero.io/environment"] = app.Spec.Environment
 		return controllerutil.SetControllerReference(app, route, r.Scheme)
 	})
 	if err != nil {
@@ -429,14 +454,6 @@ func (r *ApplicationReconciler) reconcileWorkloadStatus(ctx context.Context, app
 			}
 		}
 	}
-}
-
-// SetupApplicationController registers the ApplicationController with the manager.
-//
-// Single-cell mode (factory nil): fast-path Healthy disabled. Application.phase
-// converges only via ExposedRoute Reachable. Backward-compatible.
-func SetupApplicationController(mgr ctrl.Manager, baseDomain string) error {
-	return SetupApplicationControllerWithFactory(mgr, baseDomain, nil)
 }
 
 // SetupApplicationControllerWithFactory is the cell-aware entrypoint

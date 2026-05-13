@@ -9,6 +9,7 @@ import (
 	"errors"
 
 	"github.com/loopzero/loopzero/pkg/enforcement"
+	loopzeroerrors "github.com/loopzero/loopzero/pkg/errors"
 )
 
 // T1.9 production wiring (Wave 1 of MEET-2026-05-12).
@@ -44,7 +45,11 @@ func NewSQLCostStore(db *sql.DB) *SQLCostStore {
 // makes this an O(log n) lookup.
 func (s *SQLCostStore) GetCounter(ctx context.Context, tenantID string, metric enforcement.CostMetric) (enforcement.CostCounter, bool, error) {
 	if s == nil || s.db == nil {
-		return enforcement.CostCounter{}, false, errors.New("nil SQLCostStore")
+		// Audit gap M02 #13 fix: typed LoopZeroError instead of generic errors.New.
+		// `nil SQLCostStore` indicates the cost-enforcement middleware was
+		// wired without a backing store — a programming error caught at the
+		// first request rather than at boot.
+		return enforcement.CostCounter{}, false, loopzeroerrors.ErrInternalError.Wrap("nil SQLCostStore")
 	}
 
 	var (
@@ -106,7 +111,8 @@ func NewPlanReader(store enforcement.LimitsStore) *PlanReader {
 // fail-closed — currently it logs + skips enforcement.
 func (p *PlanReader) GetTenantPlan(ctx context.Context, tenantID string) (enforcement.Plan, error) {
 	if p == nil || p.store == nil {
-		return enforcement.PlanStarter, errors.New("nil PlanReader")
+		// Audit gap M02 #13 fix: typed LoopZeroError instead of generic errors.New.
+		return enforcement.PlanStarter, loopzeroerrors.ErrInternalError.Wrap("nil PlanReader")
 	}
 	plan, err := p.store.GetTenantPlan(ctx, tenantID)
 	if err != nil {

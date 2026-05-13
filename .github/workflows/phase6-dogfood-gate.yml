@@ -1,0 +1,246 @@
+---
+# §6.A.4 Phase 6 Dogfood Gate — 4h soak + chaos + SLO workflow
+#
+# Plan: 2026-05-12-active-execution-plan.md §6.A.4
+# Audit: M03 (Operators) + M09 (Multi-Cell) — 4h soak + chaos +
+#        SLO P95<705ms LIVE evidence pending.
+#
+# This workflow orchestrates the gate end-to-end:
+#   1. workflow_dispatch (manual trigger by operator)
+#   2. open the gate window (kubectl annotate)
+#   3. start k6 traffic generator (4h sustained)
+#   4. dispatch chaos-suite.yml workflow
+#   5. wait for 4h (the actual soak)
+#   6. assert SLO via Prometheus query (rollback P95 ≤ 705ms,
+#      API P95 ≤ 500ms, zero non-Phase6 SEV-1)
+#   7. close the gate window
+#   8. file the success/abort audit artifact
+#
+# Operator pre-requisites:
+#   - drill stack provisioned + reachable (see runbook Phase 0)
+#   - Repository secrets:
+#     * LOOPZERO_DRILL_API_TOKEN — bearer JWT for the drill API
+#     * LOOPZERO_DRILL_KUBECONFIG — base64 of `kubectl config` for drill-mgmt
+#     * PROMETHEUS_URL — drill Prometheus endpoint (e.g., https://prometheus.drill.loopzero-drill.example)
+#
+# Cost: ~few-USD cloud spend per run (drill stack must already exist;
+# this workflow doesn't provision it). Wall-clock: 4h + ~10min setup
+# + ~5min sign-off.
+#
+# NOT scheduled — workflow_dispatch only. The gate is a milestone
+# event, not a recurring check.
+
+name: Phase 6 Dogfood Gate (§6.A.4)
+
+on:
+  workflow_dispatch:
+    inputs:
+      api_url:
+        description: 'Drill API URL'
+        required: true
+        default: 'https://api.drill.loopzero-drill.example'
+      duration:
+        description: 'Soak duration (k6 + alert window)'
+        required: true
+        default: '4h'
+      vus:
+        description: 'k6 virtual users (concurrent)'
+        required: true
+        default: '50'
+      tenant_id:
+        description: 'Soak tenant identifier'
+        required: true
+        default: 'phase6-soak-tenant'
+
+permissions:
+  contents: read
+  issues: write  # auto-issue on abort (mirror chaos-suite.yml pattern)
+
+concurrency:
+  group: phase6-dogfood-gate
+  # NEVER cancel a running gate — partial soak evidence is useless
+  cancel-in-progress: false
+
+jobs:
+  gate:
+    name: 4h soak + chaos + SLO assertion
+    runs-on: ubuntu-latest
+    timeout-minutes: 270  # 4h + 30min buffer (setup + assertion + teardown)
+    env:
+      KUBECONFIG: ${{ github.workspace }}/drill-kubeconfig.yml
+      API_URL: ${{ inputs.api_url }}
+      API_TOKEN: ${{ secrets.LOOPZERO_DRILL_API_TOKEN }}
+      TENANT_ID: ${{ inputs.tenant_id }}
+      K6_DURATION: ${{ inputs.duration }}
+      K6_VUS: ${{ inputs.vus }}
+      PROMETHEUS_URL: ${{ secrets.PROMETHEUS_URL }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+
+      - name: Setup kubectl + drill context
+        run: |
+          echo "${{ secrets.LOOPZERO_DRILL_KUBECONFIG }}" | base64 -d > $KUBECONFIG
+          chmod 600 $KUBECONFIG
+          kubectl config use-context drill-mgmt
+          kubectl get nodes  # smoke
+
+      - name: Setup k6
+        run: |
+          curl -sSL https://github.com/grafana/k6/releases/download/v0.49.0/k6-v0.49.0-linux-amd64.tar.gz \
+            | tar -xz --strip-components=1
+          sudo mv k6 /usr/local/bin/
+          k6 version
+
+      - name: Phase 0 — Pre-flight checks
+        run: |
+          set -e
+          # API reachable
+          curl -fsS "$API_URL/api/v1/health"
+          # PrometheusRule deployed
+          kubectl get prometheusrule loopzero-phase6-dogfood-gate -n loopzero-system
+          # Chaos Mesh healthy
+          kubectl get pods -l app.kubernetes.io/instance=chaos-mesh -n chaos-mesh \
+            | grep -q Running || (echo "chaos-mesh not Running" && exit 1)
+          echo "Pre-flight OK"
+
+      - name: Phase 1 — Open gate window
+        run: |
+          kubectl -n loopzero-system create configmap loopzero-phase6-gate-window \
+            --from-literal=opened=$(date -u +%Y-%m-%dT%H:%M:%SZ) \
+            --dry-run=client -o yaml | kubectl apply -f -
+          kubectl annotate cm loopzero-phase6-gate-window -n loopzero-system \
+            loopzero.io/phase6-window=active --overwrite
+          sleep 35
+          echo "Gate window OPEN at $(date -u +%Y-%m-%dT%H:%M:%SZ)"
+
+      - name: Phase 2 — Start k6 traffic (background)
+        run: |
+          nohup k6 run --duration "$K6_DURATION" \
+                       --vus "$K6_VUS" \
+                       -e API_URL="$API_URL" \
+                       -e API_TOKEN="$API_TOKEN" \
+                       -e TENANT_ID="$TENANT_ID" \
+                       infra/tests/phase6-dogfood-gate/traffic.js \
+                       > /tmp/phase6-k6.log 2>&1 &
+          K6_PID=$!
+          echo "K6_PID=$K6_PID" >> $GITHUB_ENV
+          sleep 60
+          # Verify traffic started
+          tail -20 /tmp/phase6-k6.log
+          ps -p $K6_PID || (echo "k6 died at startup" && exit 1)
+
+      - name: Phase 3 — Dispatch chaos-suite workflow
+        run: |
+          gh workflow run chaos-suite.yml \
+            --ref ${{ github.ref_name }} \
+            --field target=drill-mgmt
+          echo "chaos-suite.yml dispatched"
+        env:
+          GH_TOKEN: ${{ github.token }}
+
+      - name: Phase 4 — Soak (wait for ${{ inputs.duration }})
+        run: |
+          # Sleep matching the input duration. Convert to seconds.
+          DURATION="${{ inputs.duration }}"
+          case "$DURATION" in
+            *h) SECS=$(( ${DURATION%h} * 3600 )) ;;
+            *m) SECS=$(( ${DURATION%m} * 60 )) ;;
+            *)  SECS=$DURATION ;;
+          esac
+          echo "Soaking for $SECS seconds..."
+          # Tail k6 every 10min to keep the runner alive + emit progress
+          START=$(date +%s)
+          END=$((START + SECS))
+          while [ $(date +%s) -lt $END ]; do
+            sleep 600
+            ELAPSED=$(( $(date +%s) - START ))
+            echo "Elapsed: $((ELAPSED / 60))min / $((SECS / 60))min"
+            tail -5 /tmp/phase6-k6.log
+          done
+          echo "Soak complete at $(date -u +%Y-%m-%dT%H:%M:%SZ)"
+
+      - name: Phase 5 — SLO assertion via Prometheus
+        id: slo
+        continue-on-error: true
+        run: |
+          set -e
+          assert_threshold() {
+            local NAME="$1" QUERY="$2" THRESHOLD="$3"
+            VALUE=$(curl -sG "$PROMETHEUS_URL/api/v1/query" \
+              --data-urlencode "query=$QUERY" \
+              | jq -r '.data.result[0].value[1] // "0"')
+            if [ -z "$VALUE" ] || [ "$VALUE" = "null" ]; then
+              echo "::warning::SLO $NAME — Prometheus returned no data"
+              return 1
+            fi
+            # bc for float compare
+            BREACH=$(awk -v v="$VALUE" -v t="$THRESHOLD" 'BEGIN { print (v > t) }')
+            if [ "$BREACH" = "1" ]; then
+              echo "::error::SLO FAIL — $NAME: $VALUE > $THRESHOLD"
+              return 1
+            fi
+            echo "SLO OK — $NAME: $VALUE ≤ $THRESHOLD"
+          }
+
+          # 1. Rollback P95 (audit-cited 705ms baseline)
+          assert_threshold "rollback_p95_ms" \
+            'histogram_quantile(0.95, sum(rate(loopzero_rollback_duration_seconds_bucket[4h])) by (le)) * 1000' \
+            705
+
+          # 2. API P95 (1h window, ms)
+          assert_threshold "api_p95_ms" \
+            'histogram_quantile(0.95, sum(rate(loopzero_api_request_duration_seconds_bucket[1h])) by (le)) * 1000' \
+            500
+
+          # 3. Zero non-Phase6 SEV-1 alerts fired
+          SEV1=$(curl -sG "$PROMETHEUS_URL/api/v1/query" \
+            --data-urlencode 'query=count(ALERTS{alertname!~"Phase6.*", severity="critical", alertstate="firing"})' \
+            | jq -r '.data.result[0].value[1] // "0"')
+          if [ "$SEV1" != "0" ]; then
+            echo "::error::SLO FAIL — $SEV1 non-Phase6 SEV-1 alerts firing"
+            exit 1
+          fi
+          echo "SLO OK — zero non-Phase6 SEV-1 firing"
+
+      - name: Phase 6 — Close gate window
+        if: always()
+        run: |
+          kubectl annotate cm loopzero-phase6-gate-window -n loopzero-system \
+            loopzero.io/phase6-window- --overwrite || true
+          if [ -n "$K6_PID" ]; then
+            kill $K6_PID 2>/dev/null || true
+          fi
+          echo "Gate CLOSED at $(date -u +%Y-%m-%dT%H:%M:%SZ)"
+
+      - name: Phase 7 — Open auto-issue on abort
+        if: steps.slo.outcome == 'failure'
+        uses: actions/github-script@d7906e4ad0b1822421a7e6a35d5ca353c962f410 # v6.4.1
+        with:
+          script: |
+            const title = `[phase6-dogfood-gate] FAIL — SLO breached during 4h soak`;
+            const body = `The §6.A.4 Phase 6 Dogfood Gate failed during the 4h soak.
+
+            **Run:** ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+
+            **k6 log:** check the "Phase 4 — Soak" step output.
+            **SLO assertion:** see "Phase 5 — SLO assertion" step output for which threshold breached.
+
+            Next steps per \`concepts/operations/phase6-dogfood-gate-runbook.md\` § Phase 5 (abort variant):
+            1. Diagnose which panel pointed at the failure (see Grafana dashboard \`loopzero-phase6-dogfood-gate\`).
+            2. File the abort audit artifact: \`.claude/knowledge-base/audits/YYYY-MM-DD-phase6-dogfood-gate-aborted.md\`.
+            3. Specify remediation (code, config, OR test-setup change).
+            4. Re-run after remediation lands.`;
+            await github.rest.issues.create({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              title,
+              body,
+              labels: ['phase6', 'dogfood-gate', 'auto-issue', 'slo-breach'],
+            });
+
+      - name: Phase 7 — Fail the job on SLO breach
+        if: steps.slo.outcome == 'failure'
+        run: |
+          echo "::error::Phase 6 Dogfood Gate FAILED — see auto-issue + runbook"
+          exit 1

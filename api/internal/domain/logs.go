@@ -25,6 +25,11 @@ type LogEntry struct {
 type LogQueryOpts struct {
 	Limit int
 	Step  string
+	// SinceSeconds restricts the query to entries newer than now()-SinceSeconds.
+	// Zero or negative means "no time-window restriction" — the Loki client
+	// applies its own default (last 1h). Beta Logs Gate Criterion 7: gives
+	// the operator a "--since 24h|7d|30d" knob on `loopzero logs`.
+	SinceSeconds int64
 }
 
 // LogQuerier abstracts log retrieval from Loki (DIP).
