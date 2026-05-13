@@ -55,39 +55,23 @@ var _ = Describe("Golden: Network Policies", Ordered, func() {
 		})
 
 		It("should create a NetworkPolicy named build-egress-restrict in the build namespace", func() {
-			buildNs := "build-" + tenantName
-			Eventually(func(g Gomega) {
-				var np networkingv1.NetworkPolicy
-				g.Expect(k8sClient.Get(ctx, types.NamespacedName{
-					Name: "build-egress-restrict", Namespace: buildNs,
-				}, &np)).To(Succeed())
-			}, timeout, interval).Should(Succeed())
+			expectNetworkPolicyExists("build-egress-restrict", "build-"+tenantName)
 		})
 
 		It("should set PolicyType=Egress (only) on build-egress-restrict", func() {
-			buildNs := "build-" + tenantName
-			Eventually(func(g Gomega) {
-				var np networkingv1.NetworkPolicy
-				g.Expect(k8sClient.Get(ctx, types.NamespacedName{
-					Name: "build-egress-restrict", Namespace: buildNs,
-				}, &np)).To(Succeed())
+			withNetworkPolicy("build-egress-restrict", "build-"+tenantName, func(g Gomega, np *networkingv1.NetworkPolicy) {
 				g.Expect(np.Spec.PolicyTypes).To(ContainElement(networkingv1.PolicyTypeEgress),
 					"build policy must be Egress-type to restrict outbound from build pods")
 				g.Expect(np.Spec.PolicyTypes).NotTo(ContainElement(networkingv1.PolicyTypeIngress),
 					"build policy must NOT restrict ingress — only egress (source exfiltration risk)")
-			}, timeout, interval).Should(Succeed())
+			})
 		})
 
 		It("should not permit the 0.0.0.0/0 CIDR in any egress rule (no unrestricted internet)", func() {
 			// SECURITY: A malicious Dockerfile could exfiltrate source code via HTTP.
 			// build-egress-restrict must allow only specific endpoints (DNS, MinIO, registry, k8s API).
 			// Any rule with 0.0.0.0/0 would defeat this protection entirely.
-			buildNs := "build-" + tenantName
-			Eventually(func(g Gomega) {
-				var np networkingv1.NetworkPolicy
-				g.Expect(k8sClient.Get(ctx, types.NamespacedName{
-					Name: "build-egress-restrict", Namespace: buildNs,
-				}, &np)).To(Succeed())
+			withNetworkPolicy("build-egress-restrict", "build-"+tenantName, func(g Gomega, np *networkingv1.NetworkPolicy) {
 				for _, egressRule := range np.Spec.Egress {
 					for _, toPeer := range egressRule.To {
 						if toPeer.IPBlock != nil {
@@ -96,21 +80,16 @@ var _ = Describe("Golden: Network Policies", Ordered, func() {
 						}
 					}
 				}
-			}, timeout, interval).Should(Succeed())
+			})
 		})
 
 		It("should apply the policy to all pods in the build namespace (empty podSelector)", func() {
-			buildNs := "build-" + tenantName
-			Eventually(func(g Gomega) {
-				var np networkingv1.NetworkPolicy
-				g.Expect(k8sClient.Get(ctx, types.NamespacedName{
-					Name: "build-egress-restrict", Namespace: buildNs,
-				}, &np)).To(Succeed())
+			withNetworkPolicy("build-egress-restrict", "build-"+tenantName, func(g Gomega, np *networkingv1.NetworkPolicy) {
 				// An empty LabelSelector {} selects all pods in the namespace.
 				g.Expect(np.Spec.PodSelector.MatchLabels).To(BeEmpty(),
 					"build-egress-restrict must apply to all pods (empty podSelector = select all)")
 				g.Expect(np.Spec.PodSelector.MatchExpressions).To(BeEmpty())
-			}, timeout, interval).Should(Succeed())
+			})
 		})
 
 		AfterAll(func() {
@@ -139,41 +118,25 @@ var _ = Describe("Golden: Network Policies", Ordered, func() {
 		})
 
 		It("should create a NetworkPolicy named deny-all in the runtime namespace", func() {
-			ns := fmt.Sprintf("loopzero-%s-production", tenantName)
-			Eventually(func(g Gomega) {
-				var np networkingv1.NetworkPolicy
-				g.Expect(k8sClient.Get(ctx, types.NamespacedName{
-					Name: "deny-all", Namespace: ns,
-				}, &np)).To(Succeed())
-			}, timeout, interval).Should(Succeed())
+			expectNetworkPolicyExists("deny-all", fmt.Sprintf("loopzero-%s-production", tenantName))
 		})
 
 		It("should include both Ingress and Egress in deny-all PolicyTypes", func() {
-			ns := fmt.Sprintf("loopzero-%s-production", tenantName)
-			Eventually(func(g Gomega) {
-				var np networkingv1.NetworkPolicy
-				g.Expect(k8sClient.Get(ctx, types.NamespacedName{
-					Name: "deny-all", Namespace: ns,
-				}, &np)).To(Succeed())
+			withNetworkPolicy("deny-all", fmt.Sprintf("loopzero-%s-production", tenantName), func(g Gomega, np *networkingv1.NetworkPolicy) {
 				g.Expect(np.Spec.PolicyTypes).To(ContainElements(
 					networkingv1.PolicyTypeIngress,
 					networkingv1.PolicyTypeEgress,
 				), "deny-all must block both ingress and egress by default")
-			}, timeout, interval).Should(Succeed())
+			})
 		})
 
 		It("should have no ingress or egress rules in deny-all (empty = block all)", func() {
-			ns := fmt.Sprintf("loopzero-%s-production", tenantName)
-			Eventually(func(g Gomega) {
-				var np networkingv1.NetworkPolicy
-				g.Expect(k8sClient.Get(ctx, types.NamespacedName{
-					Name: "deny-all", Namespace: ns,
-				}, &np)).To(Succeed())
+			withNetworkPolicy("deny-all", fmt.Sprintf("loopzero-%s-production", tenantName), func(g Gomega, np *networkingv1.NetworkPolicy) {
 				g.Expect(np.Spec.Ingress).To(BeEmpty(),
 					"deny-all must have no ingress rules — empty list means block all ingress")
 				g.Expect(np.Spec.Egress).To(BeEmpty(),
 					"deny-all must have no egress rules — empty list means block all egress")
-			}, timeout, interval).Should(Succeed())
+			})
 		})
 
 		AfterAll(func() {
@@ -202,33 +165,15 @@ var _ = Describe("Golden: Network Policies", Ordered, func() {
 		})
 
 		It("should create the deny-all NetworkPolicy in the runtime namespace", func() {
-			ns := fmt.Sprintf("loopzero-%s-production", tenantName)
-			Eventually(func(g Gomega) {
-				var np networkingv1.NetworkPolicy
-				g.Expect(k8sClient.Get(ctx, types.NamespacedName{
-					Name: "deny-all", Namespace: ns,
-				}, &np)).To(Succeed())
-			}, timeout, interval).Should(Succeed())
+			expectNetworkPolicyExists("deny-all", fmt.Sprintf("loopzero-%s-production", tenantName))
 		})
 
 		It("should create the allow-ingress-traefik NetworkPolicy in the runtime namespace", func() {
-			ns := fmt.Sprintf("loopzero-%s-production", tenantName)
-			Eventually(func(g Gomega) {
-				var np networkingv1.NetworkPolicy
-				g.Expect(k8sClient.Get(ctx, types.NamespacedName{
-					Name: "allow-ingress-traefik", Namespace: ns,
-				}, &np)).To(Succeed())
-			}, timeout, interval).Should(Succeed())
+			expectNetworkPolicyExists("allow-ingress-traefik", fmt.Sprintf("loopzero-%s-production", tenantName))
 		})
 
 		It("should create the allow-egress NetworkPolicy in the runtime namespace", func() {
-			ns := fmt.Sprintf("loopzero-%s-production", tenantName)
-			Eventually(func(g Gomega) {
-				var np networkingv1.NetworkPolicy
-				g.Expect(k8sClient.Get(ctx, types.NamespacedName{
-					Name: "allow-egress", Namespace: ns,
-				}, &np)).To(Succeed())
-			}, timeout, interval).Should(Succeed())
+			expectNetworkPolicyExists("allow-egress", fmt.Sprintf("loopzero-%s-production", tenantName))
 		})
 
 		It("should create at least 3 NetworkPolicies in total in the runtime namespace", func() {

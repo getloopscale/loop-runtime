@@ -135,6 +135,32 @@ func createTenantAndWaitActive(tenantName string, plan loopzerov1.PlanTier, envs
 	}, timeout, interval).Should(Succeed())
 }
 
+// expectNetworkPolicyExists waits for a NetworkPolicy by name+namespace to
+// exist. Phase 3 helper: eliminates 3 inline 6-line existence checks in
+// network_policies_test.go.
+func expectNetworkPolicyExists(name, namespace string) {
+	Eventually(func(g Gomega) {
+		var np networkingv1.NetworkPolicy
+		g.Expect(k8sClient.Get(ctx, types.NamespacedName{
+			Name: name, Namespace: namespace,
+		}, &np)).To(Succeed())
+	}, timeout, interval).Should(Succeed())
+}
+
+// withNetworkPolicy fetches a NetworkPolicy inside an Eventually loop and
+// runs caller-supplied assertions against it. Phase 3 helper: eliminates
+// the canonical 7-line Eventually+Get scaffold preceding each varying
+// assertion in network_policies_test.go.
+func withNetworkPolicy(name, namespace string, assertions func(g Gomega, np *networkingv1.NetworkPolicy)) {
+	Eventually(func(g Gomega) {
+		var np networkingv1.NetworkPolicy
+		g.Expect(k8sClient.Get(ctx, types.NamespacedName{
+			Name: name, Namespace: namespace,
+		}, &np)).To(Succeed())
+		assertions(g, &np)
+	}, timeout, interval).Should(Succeed())
+}
+
 // deleteEnvWithFinalizer clears finalizers on an Environment CR and deletes
 // it. Idempotent. Phase 3 sibling helper to deleteTenantWithFinalizer.
 func deleteEnvWithFinalizer(envCRName string) {
