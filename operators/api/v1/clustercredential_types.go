@@ -98,3 +98,15 @@ type ClusterCredentialList struct {
 	metav1.ListMeta `json:"metadata,omitempty"`
 	Items           []ClusterCredential `json:"items"`
 }
+
+// SecretReference identifies a Kubernetes Secret by name and namespace.
+// Originally lived in appsecret_types.go; moved here after the AppSecret CRD
+// deletion (ADR 2026-05-13) because ClusterCredentialSpec.SecretRef is the
+// only remaining consumer.
+type SecretReference struct {
+	// Name is the name of the source Secret.
+	Name string `json:"name"`
+
+	// Namespace is the namespace of the source Secret.
+	Namespace string `json:"namespace"`
+}

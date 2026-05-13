@@ -103,8 +103,6 @@ var expectedLoopZeroCRDs = []string{
 	"gitrepositorybindings.loopzero.io",
 	"clustercredentials.loopzero.io",
 	"previewenvironments.loopzero.io",
-	"appsecrets.loopzero.io",
-	"reconciliationreports.loopzero.io",
 }
 
 var _ = Describe("Journey 12: Velero Backup & DR", Label("journey"), func() {

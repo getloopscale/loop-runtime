@@ -189,12 +189,13 @@ func parseReconciledTypes(t *testing.T, mainPath string, binName string) []strin
 	return found
 }
 
-// TestCacheScopingCongruence_Coverage ensures all 9 known LoopZero reconcileable
+// TestCacheScopingCongruence_Coverage ensures all 8 known LoopZero reconcileable
 // CRDs are wired by AT LEAST ONE binary. Catches "binary forgot to wire X"
 // at the matrix level (T1.3 catches per-binary; this catches inter-binary).
 //
-// AppSecret is excluded — CRD-only, no controller (per CLAUDE.md "Not built").
-// ReconciliationReport is excluded — placeholder per CLAUDE.md.
+// The 2 historical orphan CRDs (AppSecret, ReconciliationReport) were deleted
+// 2026-05-13 per ADR `decisions/2026-05-13-orphan-crd-deletion.md` — no
+// exclusion entry needed any more.
 func TestCacheScopingCongruence_Coverage(t *testing.T) {
 	expected := []string{
 		"Tenant",

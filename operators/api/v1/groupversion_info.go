@@ -4,8 +4,10 @@
 // Package v1 contains API types for the loopzero.io API group version v1.
 //
 // These types define the Custom Resource Definitions (CRDs) used by
-// LoopZero's Kubernetes operators: Tenant, PreviewEnvironment, AppSecret,
-// ClusterCredential, ReconciliationReport, LoopZeroApplication, and ExposedRoute.
+// LoopZero's Kubernetes operators: Tenant, PreviewEnvironment, ClusterCredential,
+// PlatformBootstrap, GitRepositoryBinding, Environment, LoopZeroApplication,
+// and ExposedRoute (8 CRDs, all wired). AppSecret and ReconciliationReport
+// were deleted 2026-05-13 (ADR 2026-05-13-orphan-crd-deletion).
 //
 // +kubebuilder:object:generate=true
 // +groupName=loopzero.io
@@ -32,12 +34,8 @@ func addKnownTypes(scheme *runtime.Scheme) error {
 		&TenantList{},
 		&PreviewEnvironment{},
 		&PreviewEnvironmentList{},
-		// AppSecret: intentionally unregistered — no controller implemented.
-		// Secrets are managed via ESO directly. Re-register when AppSecret controller is built.
 		&ClusterCredential{},
 		&ClusterCredentialList{},
-		// ReconciliationReport: intentionally unregistered — dead code, no controller, no sprint.
-		// Types retained in source for future drift-detection work.
 		&PlatformBootstrap{},
 		&PlatformBootstrapList{},
 		&GitRepositoryBinding{},

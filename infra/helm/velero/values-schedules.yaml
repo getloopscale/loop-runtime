@@ -33,8 +33,6 @@ velero:
           - gitrepositorybindings.loopzero.io
           - clustercredentials.loopzero.io
           - previewenvironments.loopzero.io
-          - appsecrets.loopzero.io
-          - reconciliationreports.loopzero.io
         storageLocation: default
         snapshotVolumes: false
         defaultVolumesToFsBackup: false

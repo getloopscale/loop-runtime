@@ -493,7 +493,7 @@ loopzero deploy (or git push)
 |-------|-----------|
 | CLI | TypeScript + Commander (35 commands) |
 | API | Go 1.25 + chi + pgx (connection pool) |
-| Operators | Go + kubebuilder + controller-runtime (10 CRDs: 8 wired + 2 unwired AppSecret/ReconciliationReport; 4 split binaries: tenant/app/preview/platform) |
+| Operators | Go + kubebuilder + controller-runtime (8 CRDs, all wired; 4 split binaries: tenant/app/preview/platform) |
 | Shared libs | Go -- errors, errors/http, logging, naming, conditions, statemachine, jwt, enforcement, circuitbreaker |
 | Auth | Ory Kratos (identity) + Ory Hydra (OAuth2/OIDC) |
 | Build engine | Argo Workflows + BuildKit (rootless) |
@@ -560,7 +560,6 @@ cd pkg && go test ./...       # Shared library tests
 
 ## Known Issues
 
-- **AppSecret controller not implemented** — ESO works directly for secret sync; no lifecycle automation (rotation/drift-detection). YAGNI until needed.
 - **Local k3d cert-manager** cannot issue for `*.loopzero.local` (no public DNS for ACME challenge). Self-signed CA issuer (`loopzero-local-ca-issuer`) fills local gap; production uses CF-managed TLS.
 - **Local Stage 1 canary HTTP probes** report HTTP 000 in `--smoke` mode (probes informational only, no functional impact).
 
