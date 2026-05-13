@@ -225,8 +225,13 @@ func (h *LogStreamHandler) streamLoop(
 			return
 		case <-deadline:
 			h.logger.Info("log stream: max duration reached", "key", queryKey)
+			// Beta Logs Gate Criterion 6 — enrich the timeout reason
+			// with a "why + next" so the operator doesn't think the
+			// stream died unexpectedly. 30 minutes is the platform
+			// cap to prevent forgotten `loopzero logs --follow` sessions
+			// from holding API resources indefinitely.
 			h.writeStreamEvent(w, flusher, "stream.timeout",
-				`{"reason":"Maximum stream duration reached. Reconnect to continue."}`)
+				`{"reason":"Stream open for 30 minutes — platform cap to prevent forgotten sessions from holding resources. Rerun `+"`"+`loopzero logs --build <id> --follow`+"`"+` to resume from the latest position; the stream picks up where this one ended."}`)
 			return
 		case <-pollTicker.C:
 			// Poll Loki for new logs

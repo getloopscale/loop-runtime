@@ -130,16 +130,25 @@ func (r *BuildReaper) ReapOnce(ctx context.Context) int {
 
 // reaperReason returns a human-readable reason for a reaper timeout event.
 // LEVE-1: Single source of truth for reaper reason strings — eliminates DRY violation.
+//
+// Beta Logs Gate Criterion 6 — when a state-machine timeout fires, the
+// CLI exit message MUST include a likely cause so the operator has a
+// starting point for diagnosis. Each branch returns:
+//   - WHAT timed out (state + budget — drift-detector: matches pkg/statemachine/build.go:66)
+//   - LIKELY CAUSE (top 1-2 hypotheses observed in dogfood)
+//   - NEXT STEP (specific CLI command to run)
 func reaperReason(event statemachine.Event) string {
 	switch event {
 	case statemachine.BuildQueueTimeout:
-		return "Build timed out while waiting in queue (5 min limit)"
+		return "Build was QUEUED for more than 5 minutes. Likely cause: build cluster is at capacity OR a previous build is still using the per-tenant concurrency slot. Next: run `loopzero status` to see pending builds; consider canceling a stuck build with `loopzero cancel`."
 	case statemachine.BuildTimeout:
-		return "Build timed out while running (30 min limit)"
+		return "Build was RUNNING for more than 30 minutes. Likely cause: image build step is slow (large layers, npm install resolving many packages) OR the build container is hung on a network call. Next: run `loopzero logs --build <id>` and check the LAST log line — that's the step where the build stalled."
+	case statemachine.BuildReleaseTimeoutEvent:
+		return "Build was RELEASING (image built, release activation in flight) for more than 10 minutes. Likely cause: deployment sync is slow OR the workload cluster is unhealthy. Next: run `loopzero status` to see if the release became active; if not, retry with `loopzero deploy`."
 	case statemachine.BuildCancelTimeout:
-		return "Build cancellation timed out (60s limit)"
+		return "Cancellation did not complete within 60s. The build pod may need manual cleanup. Next: run `loopzero status` to confirm the build moved to CANCELLED; if still CANCELLING, contact support."
 	default:
-		return "Build reaped due to timeout"
+		return "Build reaped due to timeout. Run `loopzero logs --build <id>` for context."
 	}
 }
 
