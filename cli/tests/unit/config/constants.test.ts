@@ -93,25 +93,6 @@ describe('CLI config/constants', () => {
     });
   });
 
-  describe('isUsingDefaultApiUrl', () => {
-    it('should return true when no URL env vars set', () => {
-      const constants = loadConstants();
-      expect(constants.isUsingDefaultApiUrl()).toBe(true);
-    });
-
-    it('should return false when LOOPZERO_URL is set', () => {
-      process.env.LOOPZERO_URL = 'https://api.loopzero.example';
-      const constants = loadConstants();
-      expect(constants.isUsingDefaultApiUrl()).toBe(false);
-    });
-
-    it('should return false when LOOPZERO_API_URL is set (legacy)', () => {
-      process.env.LOOPZERO_API_URL = 'https://api.loopzero.example';
-      const constants = loadConstants();
-      expect(constants.isUsingDefaultApiUrl()).toBe(false);
-    });
-  });
-
   describe('DEFAULT_API_URL_FALLBACK', () => {
     it('should be localhost:8080', () => {
       const constants = loadConstants();

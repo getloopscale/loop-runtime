@@ -21,16 +21,11 @@ import * as path from 'path';
 jest.mock('child_process', () => ({
   execSync: jest.fn(),
 }));
-jest.mock('../../src/installer/helm', () => ({
-  releaseExists: jest.fn(),
-}));
 
 import { execSync } from 'child_process';
-import { releaseExists } from '../../src/installer/helm';
 import { getPlatformStatus, LOOPZERO_COMPONENTS } from '../../src/installer/status';
 
 const mockExec = execSync as jest.MockedFunction<typeof execSync>;
-const mockRelease = releaseExists as jest.MockedFunction<typeof releaseExists>;
 
 afterEach(() => {
   jest.resetAllMocks();
@@ -59,7 +54,6 @@ describe('getPlatformStatus — chart inventory pinning', () => {
 
 describe('getPlatformStatus — kubectl query template (Achado #34)', () => {
   beforeEach(() => {
-    mockRelease.mockReturnValue(true);
     mockExec.mockReturnValue('1/1' as never);
   });
 
@@ -85,7 +79,6 @@ describe('getPlatformStatus — kubectl query template (Achado #34)', () => {
 
 describe('getPlatformStatus — phase calculation (Achado #35)', () => {
   it('phase=Ready when all components return Running pods (no fake "loopzero" sentinel)', () => {
-    mockRelease.mockReturnValue(false); // No "loopzero" release exists, by design
     mockExec.mockImplementation(((cmd: string) => {
       if (cmd.includes('kubectl get deploy')) return '1/1';
       if (cmd.includes('kubectl get crd')) return '10';
@@ -98,7 +91,6 @@ describe('getPlatformStatus — phase calculation (Achado #35)', () => {
   });
 
   it('phase=Degraded when at least one component is Pending', () => {
-    mockRelease.mockReturnValue(false);
     let i = 0;
     mockExec.mockImplementation(((cmd: string) => {
       if (cmd.includes('kubectl get deploy')) {
@@ -114,7 +106,6 @@ describe('getPlatformStatus — phase calculation (Achado #35)', () => {
   });
 
   it('phase=NotInstalled when zero components are reachable', () => {
-    mockRelease.mockReturnValue(false);
     mockExec.mockImplementation((() => {
       throw new Error('connection refused');
     }) as never);

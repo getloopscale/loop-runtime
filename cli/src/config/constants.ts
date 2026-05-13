@@ -41,14 +41,6 @@ export function getDefaultApiUrl(): string {
   return url;
 }
 
-/**
- * Returns true if no explicit URL was provided,
- * meaning the CLI is using the dev-only localhost fallback.
- */
-export function isUsingDefaultApiUrl(): boolean {
-  return !process.env.LOOPZERO_URL && !process.env.LOOPZERO_API_URL;
-}
-
 /** HTTP request timeout for API calls (ms). Override: LOOPZERO_API_TIMEOUT */
 export const API_REQUEST_TIMEOUT_MS = envInt('LOOPZERO_API_TIMEOUT', 30000);
 
@@ -74,15 +66,6 @@ export function getCloudUrl(): string {
   return getDefaultApiUrl();
 }
 
-// --- OAuth ---
-
-/** Local server port for OAuth callback. Override: LOOPZERO_OAUTH_PORT */
-export const OAUTH_CALLBACK_PORT = envInt('LOOPZERO_OAUTH_PORT', 9876);
-export const OAUTH_CALLBACK_HOST = 'localhost';
-export const OAUTH_CALLBACK_PATH = '/auth';
-export const OAUTH_CALLBACK_URL =
-  `http://${OAUTH_CALLBACK_HOST}:${OAUTH_CALLBACK_PORT}${OAUTH_CALLBACK_PATH}`;
-
 // --- SSE Client ---
 
 /** Delay between SSE reconnect attempts (ms). */
@@ -105,7 +88,3 @@ export const MAX_ENVIRONMENT_NAME_LENGTH = 63;
 /** Maximum source bundle size in bytes (500MB). Fail fast before upload. */
 export const MAX_BUNDLE_SIZE_BYTES = 500 * 1024 * 1024;
 
-// --- Documentation URLs ---
-
-export const DOCS_BASE_URL = 'https://docs.loopzero.example';
-export const DOCS_URL_SECRETS = `${DOCS_BASE_URL}/secrets`;

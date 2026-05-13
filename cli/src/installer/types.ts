@@ -66,32 +66,6 @@ export interface PlatformConfig {
 }
 
 /**
- * Helm release definition for a prerequisite or component.
- */
-export interface HelmRelease {
-  name: string;
-  chart: string;        // chart ref (repo/chart or oci://)
-  version: string;
-  namespace: string;
-  createNamespace?: boolean;
-  values?: Record<string, unknown>;
-  valuesFile?: string;
-  waitReady?: boolean;
-  timeout?: string;
-  order: number;        // Installation order (lower = first)
-}
-
-/**
- * Step result for progress reporting.
- */
-export interface StepResult {
-  name: string;
-  status: 'success' | 'skipped' | 'failed';
-  duration: number;     // milliseconds
-  error?: string;
-}
-
-/**
  * Component status for `loopzero platform status`.
  */
 export interface ComponentStatus {
