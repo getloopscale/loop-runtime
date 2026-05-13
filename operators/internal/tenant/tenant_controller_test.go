@@ -135,6 +135,20 @@ func createTenantAndWaitActive(tenantName string, plan loopzerov1.PlanTier, envs
 	}, timeout, interval).Should(Succeed())
 }
 
+// expectTenantDeleted waits for a Tenant CR to be NotFound (fully deleted
+// by Kubernetes after finalizers cleared). Phase 3 helper: collapses ~3
+// inline 7-line Eventually+Get+IsNotFound copies in tenant_controller_test
+// + tenant_integration_test.
+func expectTenantDeleted(tenantName string) {
+	Eventually(func(g Gomega) {
+		err := k8sClient.Get(ctx, types.NamespacedName{
+			Name: tenantName, Namespace: "default",
+		}, &loopzerov1.Tenant{})
+		g.Expect(err).To(HaveOccurred())
+		g.Expect(errors.IsNotFound(err)).To(BeTrue())
+	}, timeout, interval).Should(Succeed())
+}
+
 // createGoldenTenantAndWaitActive creates a Tenant via newGoldenTenant and
 // waits for its Status.Phase to be Active (full reconcile complete). Phase 3
 // sibling helper to createGoldenTenantAndWaitPhaseSet (which uses non-empty)
@@ -1059,13 +1073,7 @@ var _ = Describe("TenantController — PriorityClass", Ordered, func() {
 			}
 
 			// Wait for tenant to be fully deleted
-			Eventually(func(g Gomega) {
-				err := k8sClient.Get(ctx, types.NamespacedName{
-					Name: tenantName, Namespace: "default",
-				}, &loopzerov1.Tenant{})
-				g.Expect(err).To(HaveOccurred())
-				g.Expect(errors.IsNotFound(err)).To(BeTrue())
-			}, 30*time.Second, interval).Should(Succeed())
+			expectTenantDeleted(tenantName)
 
 			// PriorityClass should still exist
 			var pc schedulingv1.PriorityClass
@@ -1754,14 +1762,7 @@ var _ = Describe("TenantController — ArgoCD Deletion Cleanup", Ordered, func()
 		}
 
 		// Wait for tenant to be fully deleted
-		Eventually(func(g Gomega) {
-			var deleted loopzerov1.Tenant
-			err := k8sClient.Get(ctx, types.NamespacedName{
-				Name: tenantName, Namespace: "default",
-			}, &deleted)
-			g.Expect(err).To(HaveOccurred())
-			g.Expect(errors.IsNotFound(err)).To(BeTrue())
-		}, 30*time.Second, interval).Should(Succeed())
+		expectTenantDeleted(tenantName)
 	})
 
 	It("should have removed applications for the deleted tenant", func() {

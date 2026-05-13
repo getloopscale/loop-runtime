@@ -10,12 +10,9 @@ import (
 	. "github.com/onsi/gomega"
 	corev1 "k8s.io/api/core/v1"
 	networkingv1 "k8s.io/api/networking/v1"
-	rbacv1 "k8s.io/api/rbac/v1"
-	"k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/types"
 	"sigs.k8s.io/controller-runtime/pkg/client"
-	"time"
 
 	loopzerov1 "github.com/loopzero/loopzero/operators/api/v1"
 	"github.com/loopzero/loopzero/operators/internal/conditions"
@@ -296,22 +293,7 @@ var _ = Describe("TenantController Integration", Ordered, func() {
 			}, "10s", "500ms").Should(Succeed())
 
 			// Verify Role now includes secrets
-			nsName := "loopzero-" + tenantName + "-production"
-			Eventually(func(g Gomega) {
-				var role rbacv1.Role
-				g.Expect(k8sClient.Get(ctx, types.NamespacedName{
-					Name: "loopzero-deployer", Namespace: nsName,
-				}, &role)).To(Succeed())
-				hasSecrets := false
-				for _, rule := range role.Rules {
-					for _, res := range rule.Resources {
-						if res == "secrets" {
-							hasSecrets = true
-						}
-					}
-				}
-				g.Expect(hasSecrets).To(BeTrue(), "growth role should include secrets")
-			}, timeout, interval).Should(Succeed())
+			expectDeployerRoleHasResource("loopzero-"+tenantName+"-production", "secrets")
 		})
 
 		AfterAll(func() {
@@ -412,14 +394,7 @@ var _ = Describe("TenantController Integration", Ordered, func() {
 			}
 
 			// Tenant should be fully deleted
-			Eventually(func(g Gomega) {
-				var deleted loopzerov1.Tenant
-				err := k8sClient.Get(ctx, types.NamespacedName{
-					Name: tenantName, Namespace: "default",
-				}, &deleted)
-				g.Expect(err).To(HaveOccurred())
-				g.Expect(errors.IsNotFound(err)).To(BeTrue())
-			}, 30*time.Second, interval).Should(Succeed())
+			expectTenantDeleted(tenantName)
 		})
 	})
 })
