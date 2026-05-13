@@ -45,10 +45,15 @@ func NewRouter(cfg Config) *chi.Mux {
 	// (e.g., PG resize). Must come before auth so 503 is returned without token check.
 	r.Use(middleware.MaintenanceMode)
 
-	// Middleware chain: metrics → otel-tracing → correlation-id → logging → backpressure
+	// Middleware chain: metrics → otel-tracing → correlation-id → request-logger → logging → backpressure
 	r.Use(metrics.HTTPMetrics)
 	r.Use(middleware.OtelHTTP)
 	r.Use(middleware.CorrelationID)
+	// Beta Logs Gate: RequestLogger MUST come after CorrelationID so the
+	// enrichment can read the id from ctx. Every handler's
+	// `pkglogging.LoggerFromContext` now returns a logger bound with
+	// correlation_id (+ trace_id when an extractor is configured).
+	r.Use(middleware.RequestLogger(cfg.ContextLogger))
 	r.Use(middleware.RequestLogging(cfg.Logger))
 
 	// PG backpressure: reject mutations when connection pool is near saturation.

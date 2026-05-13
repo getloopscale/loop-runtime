@@ -4,10 +4,14 @@
 package logging
 
 import (
+	"bytes"
 	"context"
 	"io"
 	"log/slog"
+	"strings"
 	"testing"
+
+	"github.com/loopzero/loopzero/pkg/correlation"
 )
 
 // Audit gap M04 #23 (active-execution-plan §6.F.1): the deprecated
@@ -84,3 +88,105 @@ func TestContextLogger_TwoInstancesIsolated(t *testing.T) {
 // FromContext deprecated package-level helper (audit gap M04 #23 closure).
 // The new canonical API is (*ContextLogger).FromContext, covered by the
 // TestContextLogger_FromContext_* family above.
+
+// ---------------------------------------------------------------------------
+// Beta Logs Gate — correlation_id enrichment.
+// ---------------------------------------------------------------------------
+// Per the Beta-readiness audit, log lines must carry correlation_id so an
+// operator can grep cross-system from CLI → API → workflow → pod via Loki
+// LogQL `{correlation_id="<id>"}` once promtail extracts the JSON label.
+// FromContext is the single composition point — adding correlation here
+// means every call site that already does `logger := cl.FromContext(ctx)`
+// gets the enrichment for free without per-handler changes.
+
+func TestContextLogger_FromContext_EnrichesWithCorrelationID(t *testing.T) {
+	base := slog.New(slog.NewTextHandler(io.Discard, nil))
+	cl := NewContextLogger(base, nil) // no trace extractor; correlation only
+	ctx := contextWithCorrelation(t, "corr-abc-123")
+	got := cl.FromContext(ctx)
+	if got == nil {
+		t.Fatal("FromContext should return non-nil logger when correlation is present")
+	}
+	if got == base {
+		t.Error("FromContext should enrich (return new logger) when correlation_id is set")
+	}
+}
+
+func TestContextLogger_FromContext_EnrichesWithBothTraceAndCorrelation(t *testing.T) {
+	base := slog.New(slog.NewTextHandler(io.Discard, nil))
+	cl := NewContextLogger(base, func(ctx context.Context) (string, string) {
+		return "trace-1", "span-1"
+	})
+	ctx := contextWithCorrelation(t, "corr-1")
+	got := cl.FromContext(ctx)
+	if got == base {
+		t.Error("expected enriched logger when BOTH trace and correlation present")
+	}
+}
+
+func TestContextLogger_FromContext_NoCorrelationReturnsBaseWhenNoTrace(t *testing.T) {
+	base := slog.New(slog.NewTextHandler(io.Discard, nil))
+	cl := NewContextLogger(base, nil)
+	// No correlation set; no trace extractor → base logger unchanged.
+	got := cl.FromContext(context.Background())
+	if got != base {
+		t.Error("when neither trace nor correlation are present, must return base unchanged")
+	}
+}
+
+// TestContextLogger_OutputContainsCorrelationID — end-to-end output
+// invariant. Capture actual JSON the enriched logger emits and confirm
+// it carries the `correlation_id` key with the expected value. Without
+// this, the enrichment could silently break if a future refactor changes
+// the slog attribute key name (promtail relabel depends on the literal
+// "correlation_id" key matching).
+func TestContextLogger_OutputContainsCorrelationID(t *testing.T) {
+	var buf bytes.Buffer
+	base := slog.New(slog.NewJSONHandler(&buf, nil))
+	cl := NewContextLogger(base, nil)
+	ctx := correlation.WithID(context.Background(), "corr-output-probe")
+	cl.FromContext(ctx).Info("probe")
+	if !strings.Contains(buf.String(), `"correlation_id":"corr-output-probe"`) {
+		t.Errorf("expected JSON to contain correlation_id=corr-output-probe, got: %s", buf.String())
+	}
+}
+
+// TestLoggerFromContext_FallsBackToDefault — when no logger is wired
+// via WithLogger (background goroutine, test, recovery path), the
+// fallback to slog.Default() prevents nil-pointer panics.
+func TestLoggerFromContext_FallsBackToDefault(t *testing.T) {
+	got := LoggerFromContext(context.Background())
+	if got == nil {
+		t.Fatal("LoggerFromContext must NEVER return nil")
+	}
+}
+
+// TestWithLogger_RoundTrip — the registered logger comes back out.
+func TestWithLogger_RoundTrip(t *testing.T) {
+	base := slog.New(slog.NewTextHandler(io.Discard, nil))
+	enriched := base.With("k", "v")
+	ctx := WithLogger(context.Background(), enriched)
+	got := LoggerFromContext(ctx)
+	if got != enriched {
+		t.Error("LoggerFromContext should return the logger registered via WithLogger")
+	}
+}
+
+// TestWithLogger_NilIsNoOp — protect against accidentally registering
+// a nil logger (would mean every downstream LoggerFromContext caller
+// panics on first method call). Nil is a no-op; fallback to default.
+func TestWithLogger_NilIsNoOp(t *testing.T) {
+	ctx := WithLogger(context.Background(), nil)
+	got := LoggerFromContext(ctx)
+	if got == nil {
+		t.Fatal("nil logger registration must NOT corrupt LoggerFromContext")
+	}
+}
+
+// contextWithCorrelation builds a context carrying a correlation ID via
+// the canonical pkg/correlation API. pkg/correlation is in the same Go
+// module as pkg/logging so direct import is safe (no cycle).
+func contextWithCorrelation(t *testing.T, id string) context.Context {
+	t.Helper()
+	return correlation.WithID(context.Background(), id)
+}

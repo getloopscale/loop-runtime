@@ -22,6 +22,9 @@ config:
 
   snippets:
     scrapeConfigs: |
+      # ────────────────────────────────────────────────────────────
+      # Job 1 — Argo Workflow pods (build cluster)
+      # ────────────────────────────────────────────────────────────
       - job_name: argo-workflow-pods
         kubernetes_sd_configs:
           - role: pod
@@ -36,6 +39,16 @@ config:
                     expression: '.*level=info.*"removing directory from watcher".*'
                 - drop:
                     expression: '.*EOF.*Reading from journal.*'
+          # Beta Logs Gate — extract correlation_id from JSON log lines
+          # so LogQL `{correlation_id="X"}` works cross-system (CLI → API
+          # → workflow → pod). Tolerant of non-JSON lines (cri stage above
+          # already split off the text payload; if the line isn't JSON,
+          # the json stage is a no-op).
+          - json:
+              expressions:
+                correlation_id: correlation_id
+          - labels:
+              correlation_id:
         relabel_configs:
           # Only collect logs from Argo Workflow pods (have workflow label)
           - source_labels: [__meta_kubernetes_pod_label_workflows_argoproj_io_workflow]
@@ -61,6 +74,80 @@ config:
           # over message content. Trade-off: query "logs of pod X" requires
           # `|= "$pod_name"` instead of `{pod="X"}`. Acceptable for L3+
           # since UI never queries by pod alone.
+
+      # ────────────────────────────────────────────────────────────
+      # Job 2 — LoopZero tenant runtime pods (workload cluster) + control
+      # plane pods (loopzero-api, loopzero-cloud, operators) on mgmt.
+      #
+      # Beta Logs Gate finding (2026-05-13): the previous promtail
+      # configuration ONLY scraped pods with the
+      # `workflows.argoproj.io/workflow` label — i.e. Argo Workflow
+      # build pods. Runtime pods in tenant namespaces (the entire
+      # point of `loopzero logs --runtime`) were silently dropped. This
+      # explains the audit's "log streaming 60%" verdict: runtime
+      # log queries against Loki returned empty even when pods were
+      # producing logs.
+      #
+      # The selector here is the OR of two label families:
+      #   - `loopzero.io/managed-by=environment-controller` — set on
+      #     tenant runtime namespaces by the EnvironmentController
+      #     when a tenant environment is provisioned.
+      #   - `loopzero.io/component` set — covers loopzero-api, loopzero-cloud,
+      #     and the 4 split operators (each chart sets this label).
+      # ────────────────────────────────────────────────────────────
+      - job_name: loopzero-pods
+        kubernetes_sd_configs:
+          - role: pod
+        pipeline_stages:
+          - cri: {}
+          - json:
+              expressions:
+                correlation_id: correlation_id
+                level: level
+                msg: msg
+          - labels:
+              correlation_id:
+              level:
+        relabel_configs:
+          # Keep pods that are EITHER a tenant runtime workload OR a
+          # loopzero-* control-plane component. The "regex" form here is
+          # the Prometheus union-of-selectors idiom — both labels are
+          # OR'd via `__tmp_keep` intermediate.
+          - source_labels: [__meta_kubernetes_namespace_label_loopzero_io_managed_by]
+            regex: "environment-controller"
+            action: replace
+            target_label: __tmp_loopzero_tenant
+            replacement: "1"
+          - source_labels: [__meta_kubernetes_pod_label_loopzero_io_component]
+            regex: ".+"
+            action: replace
+            target_label: __tmp_loopzero_component
+            replacement: "1"
+          - source_labels: [__tmp_loopzero_tenant, __tmp_loopzero_component]
+            regex: "(1.*|.*1)"
+            action: keep
+          # __path__ for log file tailing
+          - source_labels: [__meta_kubernetes_pod_uid, __meta_kubernetes_pod_container_name]
+            target_label: __path__
+            separator: /
+            replacement: /var/log/pods/*$1/$2/*.log
+          # Promote namespace + labels to Loki labels for `{namespace=...}` queries
+          - source_labels: [__meta_kubernetes_namespace]
+            target_label: namespace
+          - source_labels: [__meta_kubernetes_pod_container_name]
+            target_label: container
+          - source_labels: [__meta_kubernetes_pod_label_loopzero_io_app]
+            regex: ".+"
+            target_label: app
+          - source_labels: [__meta_kubernetes_pod_label_loopzero_io_tenant]
+            regex: ".+"
+            target_label: loopzero_tenant
+          - source_labels: [__meta_kubernetes_pod_label_loopzero_io_environment]
+            regex: ".+"
+            target_label: loopzero_environment
+          - source_labels: [__meta_kubernetes_pod_label_loopzero_io_component]
+            regex: ".+"
+            target_label: loopzero_component
 
 resources:
   requests:
