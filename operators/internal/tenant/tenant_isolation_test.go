@@ -379,18 +379,7 @@ var _ = Describe("Golden: Tenant Isolation", Ordered, func() {
 		})
 
 		It("should create loopzero-deployer RoleBinding that binds the SA to a Role", func() {
-			nsName := fmt.Sprintf("loopzero-%s-production", tenantName)
-			Eventually(func(g Gomega) {
-				var rb rbacv1.RoleBinding
-				g.Expect(k8sClient.Get(ctx, types.NamespacedName{
-					Name: "loopzero-deployer", Namespace: nsName,
-				}, &rb)).To(Succeed())
-				g.Expect(rb.RoleRef.Kind).To(Equal("Role"))
-				g.Expect(rb.RoleRef.Name).To(Equal("loopzero-deployer"))
-				g.Expect(rb.Subjects).To(HaveLen(1))
-				g.Expect(rb.Subjects[0].Kind).To(Equal("ServiceAccount"))
-				g.Expect(rb.Subjects[0].Name).To(Equal("loopzero-deployer"))
-			}, timeout, interval).Should(Succeed())
+			expectDeployerRoleBinding(fmt.Sprintf("loopzero-%s-production", tenantName))
 		})
 
 		AfterAll(func() {

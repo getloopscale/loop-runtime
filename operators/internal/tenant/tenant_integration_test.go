@@ -38,7 +38,9 @@ var _ = Describe("TenantController Integration", Ordered, func() {
 			tenant = newTenant(tenantName, loopzerov1.PlanStarter, []string{"production", "staging"})
 			Expect(k8sClient.Create(ctx, tenant)).To(Succeed())
 
-			// Wait for Phase=Active
+			// Wait for Phase=Active — must use outer `tenant` pointer so that
+			// later assertions (lines below + line 97 conditions) see the
+			// fully-reconciled state, not stale data from before Create returned.
 			Eventually(func(g Gomega) {
 				g.Expect(k8sClient.Get(ctx, types.NamespacedName{
 					Name: tenantName, Namespace: "default",
@@ -156,26 +158,18 @@ var _ = Describe("TenantController Integration", Ordered, func() {
 			Expect(k8sClient.Create(ctx, tenant)).To(Succeed())
 
 			// Should stay in Provisioning due to GitRepoReady=False
-			Eventually(func(g Gomega) {
-				var t loopzerov1.Tenant
-				g.Expect(k8sClient.Get(ctx, types.NamespacedName{
-					Name: tenantName, Namespace: "default",
-				}, &t)).To(Succeed())
+			withTenant(tenantName, func(g Gomega, t *loopzerov1.Tenant) {
 				g.Expect(t.Status.Phase).To(Equal(loopzerov1.TenantPhaseProvisioning))
-				g.Expect(conditionStatus(&t, conditions.TypeGitRepoReady)).To(Equal(metav1.ConditionFalse))
-			}, timeout, interval).Should(Succeed())
+				g.Expect(conditionStatus(t, conditions.TypeGitRepoReady)).To(Equal(metav1.ConditionFalse))
+			})
 
 			// Remove error — controller should recover
 			fakeGitProvider.SetErr(nil)
 
-			Eventually(func(g Gomega) {
-				var t loopzerov1.Tenant
-				g.Expect(k8sClient.Get(ctx, types.NamespacedName{
-					Name: tenantName, Namespace: "default",
-				}, &t)).To(Succeed())
+			withTenant(tenantName, func(g Gomega, t *loopzerov1.Tenant) {
 				g.Expect(t.Status.Phase).To(Equal(loopzerov1.TenantPhaseActive))
-				g.Expect(conditionStatus(&t, conditions.TypeGitRepoReady)).To(Equal(metav1.ConditionTrue))
-			}, timeout, interval).Should(Succeed())
+				g.Expect(conditionStatus(t, conditions.TypeGitRepoReady)).To(Equal(metav1.ConditionTrue))
+			})
 		})
 
 		AfterAll(func() {
@@ -194,13 +188,9 @@ var _ = Describe("TenantController Integration", Ordered, func() {
 			Expect(k8sClient.Create(ctx, tenant)).To(Succeed())
 
 			// Wait for Active
-			Eventually(func(g Gomega) {
-				var t loopzerov1.Tenant
-				g.Expect(k8sClient.Get(ctx, types.NamespacedName{
-					Name: tenantName, Namespace: "default",
-				}, &t)).To(Succeed())
+			withTenant(tenantName, func(g Gomega, t *loopzerov1.Tenant) {
 				g.Expect(t.Status.Phase).To(Equal(loopzerov1.TenantPhaseActive))
-			}, timeout, interval).Should(Succeed())
+			})
 
 			// Count resources
 			countResources := func() (int, int, int) {
@@ -274,13 +264,9 @@ var _ = Describe("TenantController Integration", Ordered, func() {
 			Expect(k8sClient.Create(ctx, tenant)).To(Succeed())
 
 			// Wait Active
-			Eventually(func(g Gomega) {
-				var t loopzerov1.Tenant
-				g.Expect(k8sClient.Get(ctx, types.NamespacedName{
-					Name: tenantName, Namespace: "default",
-				}, &t)).To(Succeed())
+			withTenant(tenantName, func(g Gomega, t *loopzerov1.Tenant) {
 				g.Expect(t.Status.Phase).To(Equal(loopzerov1.TenantPhaseActive))
-			}, timeout, interval).Should(Succeed())
+			})
 
 			// Upgrade to growth — retry on conflict (reconciler may update status concurrently)
 			Eventually(func(g Gomega) {

@@ -135,6 +135,25 @@ func createTenantAndWaitActive(tenantName string, plan loopzerov1.PlanTier, envs
 	}, timeout, interval).Should(Succeed())
 }
 
+// expectDeployerRoleBinding waits for the canonical "loopzero-deployer"
+// RoleBinding in the given namespace and asserts its RoleRef + Subjects
+// shape: binds ServiceAccount "loopzero-deployer" to Role "loopzero-deployer".
+// Phase 3 helper: collapses 2 inline 13-line copies across
+// tenant_controller_test + tenant_isolation_test.
+func expectDeployerRoleBinding(nsName string) {
+	Eventually(func(g Gomega) {
+		var rb rbacv1.RoleBinding
+		g.Expect(k8sClient.Get(ctx, types.NamespacedName{
+			Name: "loopzero-deployer", Namespace: nsName,
+		}, &rb)).To(Succeed())
+		g.Expect(rb.RoleRef.Name).To(Equal("loopzero-deployer"))
+		g.Expect(rb.RoleRef.Kind).To(Equal("Role"))
+		g.Expect(rb.Subjects).To(HaveLen(1))
+		g.Expect(rb.Subjects[0].Kind).To(Equal("ServiceAccount"))
+		g.Expect(rb.Subjects[0].Name).To(Equal("loopzero-deployer"))
+	}, timeout, interval).Should(Succeed())
+}
+
 // expectTenantDeleted waits for a Tenant CR to be NotFound (fully deleted
 // by Kubernetes after finalizers cleared). Phase 3 helper: collapses ~3
 // inline 7-line Eventually+Get+IsNotFound copies in tenant_controller_test
@@ -650,18 +669,7 @@ var _ = Describe("TenantController — RBAC", Ordered, func() {
 
 	Context("RoleBinding", func() {
 		It("should bind loopzero-deployer SA to the Role", func() {
-			nsName := "loopzero-" + tenantName + "-production"
-			Eventually(func(g Gomega) {
-				var rb rbacv1.RoleBinding
-				g.Expect(k8sClient.Get(ctx, types.NamespacedName{
-					Name: "loopzero-deployer", Namespace: nsName,
-				}, &rb)).To(Succeed())
-				g.Expect(rb.RoleRef.Name).To(Equal("loopzero-deployer"))
-				g.Expect(rb.RoleRef.Kind).To(Equal("Role"))
-				g.Expect(rb.Subjects).To(HaveLen(1))
-				g.Expect(rb.Subjects[0].Kind).To(Equal("ServiceAccount"))
-				g.Expect(rb.Subjects[0].Name).To(Equal("loopzero-deployer"))
-			}, timeout, interval).Should(Succeed())
+			expectDeployerRoleBinding("loopzero-" + tenantName + "-production")
 		})
 	})
 
