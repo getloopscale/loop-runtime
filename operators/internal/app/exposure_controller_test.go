@@ -65,12 +65,7 @@ var _ = Describe("ExposureController", Ordered, func() {
 		})
 
 		AfterAll(func() {
-			route := &loopzerov1.ExposedRoute{}
-			if err := k8sClient.Get(ctx, types.NamespacedName{Name: routeName, Namespace: "default"}, route); err == nil {
-				route.Finalizers = nil
-				_ = k8sClient.Update(ctx, route)
-				_ = k8sClient.Delete(ctx, route)
-			}
+			deleteRouteWithFinalizer(routeName)
 		})
 	})
 
@@ -156,29 +151,11 @@ var _ = Describe("ExposureController", Ordered, func() {
 		})
 
 		It("should set CertificateIssued condition to True", func() {
-			Eventually(func(g Gomega) {
-				var route loopzerov1.ExposedRoute
-				g.Expect(k8sClient.Get(ctx, types.NamespacedName{
-					Name: routeName, Namespace: "default",
-				}, &route)).To(Succeed())
-				found := false
-				for _, c := range route.Status.Conditions {
-					if c.Type == conditions.TypeCertificateIssued {
-						found = true
-						g.Expect(c.Status).To(Equal(metav1.ConditionTrue))
-					}
-				}
-				g.Expect(found).To(BeTrue(), "CertificateIssued condition should exist")
-			}, timeout, interval).Should(Succeed())
+			expectRouteCondition(routeName, conditions.TypeCertificateIssued, metav1.ConditionTrue)
 		})
 
 		AfterAll(func() {
-			route := &loopzerov1.ExposedRoute{}
-			if err := k8sClient.Get(ctx, types.NamespacedName{Name: routeName, Namespace: "default"}, route); err == nil {
-				route.Finalizers = nil
-				_ = k8sClient.Update(ctx, route)
-				_ = k8sClient.Delete(ctx, route)
-			}
+			deleteRouteWithFinalizer(routeName)
 			secret := &corev1.Secret{}
 			if err := k8sClient.Get(ctx, types.NamespacedName{Name: "cert-test-dev-loopzero-dev-tls", Namespace: "default"}, secret); err == nil {
 				_ = k8sClient.Delete(ctx, secret)
@@ -221,29 +198,11 @@ var _ = Describe("ExposureController", Ordered, func() {
 		})
 
 		It("should set CertificateIssued condition to False", func() {
-			Eventually(func(g Gomega) {
-				var route loopzerov1.ExposedRoute
-				g.Expect(k8sClient.Get(ctx, types.NamespacedName{
-					Name: routeName, Namespace: "default",
-				}, &route)).To(Succeed())
-				found := false
-				for _, c := range route.Status.Conditions {
-					if c.Type == conditions.TypeCertificateIssued {
-						found = true
-						g.Expect(c.Status).To(Equal(metav1.ConditionFalse))
-					}
-				}
-				g.Expect(found).To(BeTrue(), "CertificateIssued condition should exist")
-			}, timeout, interval).Should(Succeed())
+			expectRouteCondition(routeName, conditions.TypeCertificateIssued, metav1.ConditionFalse)
 		})
 
 		AfterAll(func() {
-			route := &loopzerov1.ExposedRoute{}
-			if err := k8sClient.Get(ctx, types.NamespacedName{Name: routeName, Namespace: "default"}, route); err == nil {
-				route.Finalizers = nil
-				_ = k8sClient.Update(ctx, route)
-				_ = k8sClient.Delete(ctx, route)
-			}
+			deleteRouteWithFinalizer(routeName)
 		})
 	})
 
@@ -271,12 +230,7 @@ var _ = Describe("ExposureController", Ordered, func() {
 		})
 
 		AfterAll(func() {
-			route := &loopzerov1.ExposedRoute{}
-			if err := k8sClient.Get(ctx, types.NamespacedName{Name: routeName, Namespace: "default"}, route); err == nil {
-				route.Finalizers = nil
-				_ = k8sClient.Update(ctx, route)
-				_ = k8sClient.Delete(ctx, route)
-			}
+			deleteRouteWithFinalizer(routeName)
 		})
 	})
 
@@ -316,30 +270,12 @@ var _ = Describe("ExposureController", Ordered, func() {
 			})
 
 			It("should set RouteReachable condition to True", func() {
-				Eventually(func(g Gomega) {
-					var route loopzerov1.ExposedRoute
-					g.Expect(k8sClient.Get(ctx, types.NamespacedName{
-						Name: routeName, Namespace: "default",
-					}, &route)).To(Succeed())
-					found := false
-					for _, c := range route.Status.Conditions {
-						if c.Type == conditions.TypeRouteReachable {
-							found = true
-							g.Expect(c.Status).To(Equal(metav1.ConditionTrue))
-						}
-					}
-					g.Expect(found).To(BeTrue(), "RouteReachable condition should exist")
-				}, timeout, interval).Should(Succeed())
+				expectRouteCondition(routeName, conditions.TypeRouteReachable, metav1.ConditionTrue)
 			})
 
 			AfterAll(func() {
 				server.Close()
-				route := &loopzerov1.ExposedRoute{}
-				if err := k8sClient.Get(ctx, types.NamespacedName{Name: routeName, Namespace: "default"}, route); err == nil {
-					route.Finalizers = nil
-					_ = k8sClient.Update(ctx, route)
-					_ = k8sClient.Delete(ctx, route)
-				}
+				deleteRouteWithFinalizer(routeName)
 			})
 		})
 

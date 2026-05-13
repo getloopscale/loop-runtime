@@ -4,7 +4,6 @@
 package app_test
 
 import (
-	"fmt"
 	"time"
 
 	. "github.com/onsi/ginkgo/v2"
@@ -101,21 +100,7 @@ var _ = Describe("ApplicationController", Ordered, func() {
 		})
 
 		It("should set ServiceResolved condition to True", func() {
-			Eventually(func(g Gomega) {
-				var app loopzerov1.LoopZeroApplication
-				g.Expect(k8sClient.Get(ctx, types.NamespacedName{
-					Name: appName, Namespace: "default",
-				}, &app)).To(Succeed())
-				found := false
-				for _, c := range app.Status.Conditions {
-					if c.Type == conditions.TypeServiceResolved {
-						found = true
-						g.Expect(c.Status).To(Equal(metav1.ConditionTrue),
-							fmt.Sprintf("condition %s should be True", conditions.TypeServiceResolved))
-					}
-				}
-				g.Expect(found).To(BeTrue(), "ServiceResolved condition should exist")
-			}, timeout, interval).Should(Succeed())
+			expectAppCondition(appName, conditions.TypeServiceResolved, metav1.ConditionTrue)
 		})
 
 		It("should set observedGeneration", func() {
@@ -129,12 +114,7 @@ var _ = Describe("ApplicationController", Ordered, func() {
 		})
 
 		AfterAll(func() {
-			app := &loopzerov1.LoopZeroApplication{}
-			if err := k8sClient.Get(ctx, types.NamespacedName{Name: appName, Namespace: "default"}, app); err == nil {
-				app.Finalizers = nil
-				_ = k8sClient.Update(ctx, app)
-				_ = k8sClient.Delete(ctx, app)
-			}
+			deleteAppWithFinalizer(appName)
 			// Also clean up the ExposedRoute (which now has a finalizer too)
 			route := &loopzerov1.ExposedRoute{}
 			if err := k8sClient.Get(ctx, types.NamespacedName{Name: appName + "-route", Namespace: "default"}, route); err == nil {
@@ -182,12 +162,7 @@ var _ = Describe("ApplicationController", Ordered, func() {
 		})
 
 		AfterAll(func() {
-			app := &loopzerov1.LoopZeroApplication{}
-			if err := k8sClient.Get(ctx, types.NamespacedName{Name: appName, Namespace: "default"}, app); err == nil {
-				app.Finalizers = nil
-				_ = k8sClient.Update(ctx, app)
-				_ = k8sClient.Delete(ctx, app)
-			}
+			deleteAppWithFinalizer(appName)
 			// Also clean up the ExposedRoute (which now has a finalizer too)
 			route := &loopzerov1.ExposedRoute{}
 			if err := k8sClient.Get(ctx, types.NamespacedName{Name: appName + "-route", Namespace: "default"}, route); err == nil {
@@ -232,12 +207,7 @@ var _ = Describe("ApplicationController", Ordered, func() {
 		})
 
 		AfterAll(func() {
-			app := &loopzerov1.LoopZeroApplication{}
-			if err := k8sClient.Get(ctx, types.NamespacedName{Name: appName, Namespace: "default"}, app); err == nil {
-				app.Finalizers = nil
-				_ = k8sClient.Update(ctx, app)
-				_ = k8sClient.Delete(ctx, app)
-			}
+			deleteAppWithFinalizer(appName)
 		})
 	})
 
@@ -387,12 +357,7 @@ var _ = Describe("ApplicationController", Ordered, func() {
 		})
 
 		AfterAll(func() {
-			app := &loopzerov1.LoopZeroApplication{}
-			if err := k8sClient.Get(ctx, types.NamespacedName{Name: appName, Namespace: "default"}, app); err == nil {
-				app.Finalizers = nil
-				_ = k8sClient.Update(ctx, app)
-				_ = k8sClient.Delete(ctx, app)
-			}
+			deleteAppWithFinalizer(appName)
 			// Also clean up the ExposedRoute (which now has a finalizer too)
 			route := &loopzerov1.ExposedRoute{}
 			if err := k8sClient.Get(ctx, types.NamespacedName{Name: appName + "-route", Namespace: "default"}, route); err == nil {

@@ -9,11 +9,14 @@ import (
 
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
+	"k8s.io/apimachinery/pkg/types"
 	"k8s.io/client-go/rest"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/envtest"
 
+	loopzerov1 "github.com/loopzero/loopzero/operators/api/v1"
 	"github.com/loopzero/loopzero/operators/operatortest"
 )
 
@@ -57,3 +60,66 @@ var _ = AfterSuite(func() {
 })
 
 // Quality-Gate Phase 2: findCondition helper removed (no callers).
+
+// Quality-Gate Phase 3 helpers — sibling pattern to tenant_test package
+// (deleteTenantWithFinalizer / deleteEnvWithFinalizer in tenant_controller_test.go).
+// Each clears finalizers on a CR and deletes it. Idempotent — skip if NotFound.
+
+func deleteAppWithFinalizer(appName string) {
+	app := &loopzerov1.LoopZeroApplication{}
+	if err := k8sClient.Get(ctx, types.NamespacedName{Name: appName, Namespace: "default"}, app); err == nil {
+		app.Finalizers = nil
+		_ = k8sClient.Update(ctx, app)
+		_ = k8sClient.Delete(ctx, app)
+	}
+}
+
+// expectRouteCondition fetches the ExposedRoute CR identified by routeName
+// in the default namespace and asserts a specific condition type appears
+// with the given status. Phase 3 sibling helper to
+// tenant_test.expectEnvCondition / expectTenantCondition.
+func expectRouteCondition(routeName, condType string, want metav1.ConditionStatus) {
+	Eventually(func(g Gomega) {
+		var route loopzerov1.ExposedRoute
+		g.Expect(k8sClient.Get(ctx, types.NamespacedName{
+			Name: routeName, Namespace: "default",
+		}, &route)).To(Succeed())
+		found := false
+		for _, c := range route.Status.Conditions {
+			if c.Type == condType {
+				found = true
+				g.Expect(c.Status).To(Equal(want))
+			}
+		}
+		g.Expect(found).To(BeTrue(), condType+" condition should exist on ExposedRoute CR")
+	}, timeout, interval).Should(Succeed())
+}
+
+// expectAppCondition fetches the LoopZeroApplication CR identified by appName
+// in the default namespace and asserts a specific condition type appears
+// with the given status.
+func expectAppCondition(appName, condType string, want metav1.ConditionStatus) {
+	Eventually(func(g Gomega) {
+		var app loopzerov1.LoopZeroApplication
+		g.Expect(k8sClient.Get(ctx, types.NamespacedName{
+			Name: appName, Namespace: "default",
+		}, &app)).To(Succeed())
+		found := false
+		for _, c := range app.Status.Conditions {
+			if c.Type == condType {
+				found = true
+				g.Expect(c.Status).To(Equal(want))
+			}
+		}
+		g.Expect(found).To(BeTrue(), condType+" condition should exist on LoopZeroApplication CR")
+	}, timeout, interval).Should(Succeed())
+}
+
+func deleteRouteWithFinalizer(routeName string) {
+	route := &loopzerov1.ExposedRoute{}
+	if err := k8sClient.Get(ctx, types.NamespacedName{Name: routeName, Namespace: "default"}, route); err == nil {
+		route.Finalizers = nil
+		_ = k8sClient.Update(ctx, route)
+		_ = k8sClient.Delete(ctx, route)
+	}
+}
