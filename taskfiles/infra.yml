@@ -191,13 +191,19 @@ tasks:
       # Promtail DaemonSet — scrape config filters for Argo Workflow pods ONLY (`workflows_argoproj_io_workflow` label).
       # At setup time, no workflows exist yet, so promtail's `/ready` endpoint returns 500 ("Unable to find any logs to tail").
       # `--wait` would timeout every bootstrap; readiness converges automatically once the first build runs.
+      #
+      # 2026-05-13: Use helmfile (canonical orchestrator) instead of direct `helm upgrade`.
+      # The promtail values file was renamed to `values.yaml.gotmpl` in `ef7a7c16` so the
+      # `loki.pushUrl` is helmfile-injected per environment (audit M08 #18). Direct
+      # `helm upgrade -f values.yaml` would 404 on the missing file; even with the .gotmpl
+      # extension, helm cannot resolve `.Environment.Values` (helmfile-specific syntax).
+      # Helmfile sync with the build helmfile + standalone-multi env produces the same
+      # release Helmfile manages in build clusters, with the correct push URL resolved.
       - >-
-        helm upgrade --install promtail grafana/promtail
+        helmfile -f infra/helmfile/build.helmfile.yaml.gotmpl
+        -e standalone-multi
         --kube-context {{.BUILD_CONTEXT}}
-        --namespace monitoring --create-namespace
-        --version 6.16.6
-        -f infra/helm/promtail/values.yaml
-        --timeout 3m
+        --selector name=promtail sync
 
   dashboards:install:
     desc: Install LoopZero Grafana dashboards and ServiceMonitors
