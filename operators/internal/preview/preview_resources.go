@@ -15,6 +15,7 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/controller/controllerutil"
 
 	"github.com/loopzero/loopzero/operators/internal/constants"
+	"github.com/loopzero/loopzero/operators/internal/shared"
 )
 
 // Sprint 5 / T1.2 — preview namespace hardening.
@@ -208,31 +209,5 @@ func (r *PreviewReconciler) reconcilePreviewQuota(ctx context.Context, nsName st
 		return fmt.Errorf("preview resourcequota %s/%s: %w", nsName, constants.QuotaTenant, err)
 	}
 
-	lr := &corev1.LimitRange{
-		ObjectMeta: metav1.ObjectMeta{
-			Name:      constants.LimitRangeTenant,
-			Namespace: nsName,
-		},
-	}
-	_, err = controllerutil.CreateOrUpdate(ctx, r.RuntimeClient, lr, func() error {
-		lr.Spec.Limits = []corev1.LimitRangeItem{
-			{
-				Type: corev1.LimitTypeContainer,
-				Default: corev1.ResourceList{
-					corev1.ResourceCPU:    resource.MustParse(constants.TenantLimitDefaultCPU),
-					corev1.ResourceMemory: resource.MustParse(constants.TenantLimitDefaultMemory),
-				},
-				DefaultRequest: corev1.ResourceList{
-					corev1.ResourceCPU:    resource.MustParse(constants.TenantLimitDefaultRequestCPU),
-					corev1.ResourceMemory: resource.MustParse(constants.TenantLimitDefaultRequestMemory),
-				},
-			},
-		}
-		return nil
-	})
-	if err != nil {
-		return fmt.Errorf("preview limitrange %s/%s: %w", nsName, constants.LimitRangeTenant, err)
-	}
-
-	return nil
+	return shared.ApplyTenantLimitRange(ctx, r.RuntimeClient, nsName, "preview limitrange")
 }

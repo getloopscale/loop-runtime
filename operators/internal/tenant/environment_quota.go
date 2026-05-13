@@ -98,31 +98,5 @@ func (r *EnvironmentReconciler) reconcileQuota(ctx context.Context, env *loopzer
 	}
 
 	// LimitRange (always created)
-	lr := &corev1.LimitRange{
-		ObjectMeta: metav1.ObjectMeta{
-			Name:      constants.LimitRangeTenant,
-			Namespace: nsName,
-		},
-	}
-	_, err = controllerutil.CreateOrUpdate(ctx, runtimeClient, lr, func() error {
-		lr.Spec.Limits = []corev1.LimitRangeItem{
-			{
-				Type: corev1.LimitTypeContainer,
-				Default: corev1.ResourceList{
-					corev1.ResourceCPU:    resource.MustParse(constants.TenantLimitDefaultCPU),
-					corev1.ResourceMemory: resource.MustParse(constants.TenantLimitDefaultMemory),
-				},
-				DefaultRequest: corev1.ResourceList{
-					corev1.ResourceCPU:    resource.MustParse(constants.TenantLimitDefaultRequestCPU),
-					corev1.ResourceMemory: resource.MustParse(constants.TenantLimitDefaultRequestMemory),
-				},
-			},
-		}
-		return nil
-	})
-	if err != nil {
-		return fmt.Errorf("limitrange %s/%s: %w", nsName, constants.LimitRangeTenant, err)
-	}
-
-	return nil
+	return shared.ApplyTenantLimitRange(ctx, runtimeClient, nsName, "limitrange")
 }
