@@ -135,6 +135,23 @@ export function registerDeployCommands(deps: CommandDeps): void {
           );
           return result;
         },
+        // Beta Logs Gate Criterion 4 (UX) — best-effort auto-tail.
+        // Wired against the same /logs endpoint the CLI `loopzero logs`
+        // command uses. Always tail=20; swallows errors so a Loki
+        // outage doesn't make the deploy hang on cleanup.
+        fetchRecentBuildLogs: async (buildId: string) => {
+          try {
+            const result = await apiClient.get<{
+              build_id: string;
+              status: string;
+              entries: Array<{ step: string; stream: string; content: string; timestamp: string }>;
+              total_lines: number;
+            }>(`/api/v1/builds/${encodeURIComponent(buildId)}/logs?tail=20`);
+            return result;
+          } catch {
+            return null;
+          }
+        },
         generateIdempotencyKey: (commitSha: string, project: string, environment: string, apps: string[]) => {
           const window = Math.floor(Date.now() / 60000);
           const input = [commitSha, project, environment, ...apps.sort(), String(window)].join(':');
