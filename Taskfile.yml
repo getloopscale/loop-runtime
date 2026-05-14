@@ -163,7 +163,12 @@ tasks:
           --namespace cosign-system --create-namespace \
           --set 'registries.additionalPrefixes[0]=k3d-loopzero-registry:5000/' \
           --wait --timeout 2m
-      - bash infra/scripts/bootstrap-cell-default-cc.sh
+      # 2026-05-14 (plan T0.2): provision runtime-2 platform BEFORE the
+      # CC bootstrap so cell-2 has a reachable workload destination.
+      - task: k3d:bootstrap-runtime-2
+      # 2026-05-14 (plan T0.1): bootstrap all three cells atomically
+      # (cell-default + cell-1 + cell-2). Closes CTO Golden Rule #1 gap.
+      - task: k3d:bootstrap-cells
       - HYDRA_NAMESPACE=loopzero-system bash infra/helmfile/scripts/seed-local-user.sh
       - bash infra/scripts/bootstrap-seed-tenant-cr.sh
 
@@ -193,6 +198,42 @@ tasks:
       - helmfile -f infra/helmfile/runtime.helmfile.yaml.gotmpl -e standalone-multi --kube-context k3d-loopzero-workload --selector name=traefik sync
       - helmfile -f infra/helmfile/runtime.helmfile.yaml.gotmpl -e standalone-multi --kube-context k3d-loopzero-workload --selector name=external-secrets sync
       - helmfile -f infra/helmfile/runtime.helmfile.yaml.gotmpl -e standalone-multi --kube-context k3d-loopzero-workload --selector name=argo-rollouts sync
+
+  k3d:bootstrap-runtime-2:
+    desc: |
+      Bootstrap the runtime-2 (k3d-loopzero-runtime-2) cluster with cert-manager
+      + traefik + external-secrets + argo-rollouts via helmfile. Mirrors
+      `k3d:bootstrap-workload` but targets the runtime-2 cluster.
+
+      Plan: 2026-05-14-dogfood-findings-and-multi-cell-coverage T0.2
+      Closes CTO Golden Rule #1 gap (cleanroom must be multi-cell by default).
+
+      EC-1 pre-step: H4 hostAlias must be applied to runtime-2 nodes so
+      helmfile can pull loopzero-packs/cosign/syft images from the local k3d
+      registry. Without this, pods land in ImagePullBackOff. The
+      `task k3d:heal` invocation below also covers runtime-2 (extended
+      2026-05-14).
+
+      Idempotent: helmfile sync no-ops if releases match desired state.
+    cmds:
+      - task: k3d:heal
+      - helmfile -f infra/helmfile/runtime.helmfile.yaml.gotmpl -e standalone-multi --kube-context k3d-loopzero-runtime-2 --selector name=cert-manager sync
+      - helmfile -f infra/helmfile/runtime.helmfile.yaml.gotmpl -e standalone-multi --kube-context k3d-loopzero-runtime-2 --selector name=traefik sync
+      - helmfile -f infra/helmfile/runtime.helmfile.yaml.gotmpl -e standalone-multi --kube-context k3d-loopzero-runtime-2 --selector name=external-secrets sync
+      - helmfile -f infra/helmfile/runtime.helmfile.yaml.gotmpl -e standalone-multi --kube-context k3d-loopzero-runtime-2 --selector name=argo-rollouts sync
+
+  k3d:bootstrap-cells:
+    desc: |
+      Bootstrap the three ClusterCredential CRs (cell-default, cell-1, cell-2)
+      atomically. cell-default + cell-1 map to k3d-loopzero-workload; cell-2 maps
+      to k3d-loopzero-runtime-2 (real multi-cell placement).
+
+      Plan: 2026-05-14-dogfood-findings-and-multi-cell-coverage T0.1.
+      Idempotent. Failures (cluster missing) abort early with clear msg.
+    cmds:
+      - bash infra/scripts/bootstrap-cell-default-cc.sh
+      - bash infra/scripts/bootstrap-cell-1-cc.sh
+      - bash infra/scripts/bootstrap-cell-2-cc.sh
 
   k3d:heal:
     desc: |

@@ -246,6 +246,47 @@ tasks:
         done
 
         echo ""
+        echo "=== Multi-Cell Topology (CTO Golden Rule #1) ==="
+        # 2026-05-14 (plan T0.3): cleanroom must provision 3 cells.
+        # Single-cell setups (CI, low-RAM dev) can downgrade FAIL → WARN via
+        # LOOPZERO_DOCTOR_ALLOW_SINGLE_CELL=1.
+        ALLOW_SINGLE="${LOOPZERO_DOCTOR_ALLOW_SINGLE_CELL:-0}"
+        CELL_COUNT=0
+        for CELL in cell-default cell-1 cell-2; do
+          if kubectl --context {{.MGMT_CONTEXT}} -n loopzero-system get clustercredential "$CELL" >/dev/null 2>&1; then
+            CONNECTED=$(kubectl --context {{.MGMT_CONTEXT}} -n loopzero-system get clustercredential "$CELL" -o jsonpath='{.status.connected}' 2>/dev/null)
+            if [ "$CONNECTED" = "true" ]; then
+              echo "  [PASS] $CELL — ClusterCredential connected"
+              PASS=$((PASS+1))
+              CELL_COUNT=$((CELL_COUNT+1))
+            else
+              echo "  [FAIL] $CELL — ClusterCredential exists but status.connected != true"
+              FAIL=$((FAIL+1))
+            fi
+          else
+            if [ "$ALLOW_SINGLE" = "1" ]; then
+              echo "  [WARN] $CELL — ClusterCredential absent (LOOPZERO_DOCTOR_ALLOW_SINGLE_CELL=1)"
+              WARN=$((WARN+1))
+            else
+              echo "  [FAIL] $CELL — ClusterCredential absent. Run: task k3d:bootstrap-cells"
+              FAIL=$((FAIL+1))
+            fi
+          fi
+        done
+        echo "  Cells: $CELL_COUNT/3 connected"
+        # Verify runtime-2 has loopzero-platform deployed (cell-2 destination).
+        if [ "$CELL_COUNT" -ge 3 ] || [ "$ALLOW_SINGLE" != "1" ]; then
+          if kubectl --context k3d-loopzero-runtime-2 get ns argo-rollouts >/dev/null 2>&1 \
+             && kubectl --context k3d-loopzero-runtime-2 get ns traefik >/dev/null 2>&1; then
+            echo "  [PASS] runtime-2 platform — argo-rollouts + traefik deployed"
+            PASS=$((PASS+1))
+          else
+            echo "  [FAIL] runtime-2 platform — missing argo-rollouts or traefik. Run: task k3d:bootstrap-runtime-2"
+            FAIL=$((FAIL+1))
+          fi
+        fi
+
+        echo ""
         echo "=== Summary ==="
         echo "  PASS: $PASS  |  WARN: $WARN  |  FAIL: $FAIL"
         if [ "$FAIL" -gt 0 ]; then

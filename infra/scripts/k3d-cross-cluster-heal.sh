@@ -210,8 +210,11 @@ if [[ -n "$REG_IP" ]]; then
         2>/dev/null && log "  $container: added $REG_IP $REGISTRY_HOST"
     fi
   }
+  # 2026-05-14 (plan T0.2): runtime-2 nodes added so helmfile sync against
+  # k3d-loopzero-runtime-2 can pull from the shared local registry (EC-1 fix).
   for c in k3d-loopzero-build-server-0 k3d-loopzero-build-agent-0 \
-           k3d-loopzero-workload-server-0 k3d-loopzero-workload-agent-0; do
+           k3d-loopzero-workload-server-0 k3d-loopzero-workload-agent-0 \
+           k3d-loopzero-runtime-2-server-0 k3d-loopzero-runtime-2-agent-0; do
     ensure_host "$c"
   done
 fi
