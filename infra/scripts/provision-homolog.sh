@@ -77,7 +77,8 @@ cmd_setup() {
   log "=== Setting up homolog stacks ==="
   init_stack "$REPO_ROOT/infra/pulumi-infra" "loopzero-infra"
   init_stack "$REPO_ROOT/infra/pulumi-platform" "loopzero-platform"
-  init_stack "$REPO_ROOT/infra/pulumi-control-plane" "loopzero-control-plane"
+  # Plan 2026-05-15 T2.1: pulumi-control-plane DELETED.
+  # Control-plane workloads bootstrap via L2 helmfile (MEET-2026-05-12 D3).
   log "=== All stacks initialized ==="
 }
 
@@ -92,10 +93,7 @@ cmd_preview() {
   pulumi stack select "$STACK"
   pulumi preview --diff
 
-  log "=== Preview: loopzero-control-plane ==="
-  cd "$REPO_ROOT/infra/pulumi-control-plane"
-  pulumi stack select "$STACK"
-  pulumi preview --diff
+  # Plan 2026-05-15 T2.1: pulumi-control-plane preview removed (stack deleted).
 }
 
 cmd_up() {
@@ -115,10 +113,8 @@ cmd_up() {
   pulumi stack select "$STACK"
   pulumi up --yes --skip-preview
 
-  log "=== Deploying loopzero-control-plane (Phase 3) ==="
-  cd "$REPO_ROOT/infra/pulumi-control-plane"
-  pulumi stack select "$STACK"
-  pulumi up --yes --skip-preview
+  # Plan 2026-05-15 T2.1: loopzero-control-plane Phase 3 removed (stack deleted).
+  # Control-plane workloads ship via L2 helmfile (post pulumi-platform).
 
   log "=== Homolog deployment complete ==="
 
@@ -136,10 +132,7 @@ cmd_up() {
 cmd_destroy() {
   log "=== Destroying homolog (reverse order) ==="
 
-  log "  Destroying loopzero-control-plane..."
-  cd "$REPO_ROOT/infra/pulumi-control-plane"
-  pulumi stack select "$STACK"
-  pulumi destroy --yes --skip-preview 2>/dev/null || true
+  # Plan 2026-05-15 T2.1: loopzero-control-plane destroy removed (stack deleted).
 
   log "  Destroying loopzero-platform..."
   cd "$REPO_ROOT/infra/pulumi-platform"

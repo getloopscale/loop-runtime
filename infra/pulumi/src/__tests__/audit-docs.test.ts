@@ -94,10 +94,11 @@ describe("Phase 0 audit doc invariants (T0.1 + T0.2 + T0.3)", () => {
 
     it("inventories filesystem state across paralelas dirs", () => {
       expect(text).toMatch(/^##\s+Filesystem inventory/m);
-      // Must mention all 3 paralelas + canonical.
+      // Plan 2026-05-15 T2.1: pulumi-control-plane DELETED (was 16-TODO stub,
+      // already reduced to 64-LOC empty-program guard by Wave 1 T1.8).
+      // Audit doc must inventory the remaining 2 paralelas + canonical.
       expect(text).toMatch(/pulumi-infra/);
       expect(text).toMatch(/pulumi-platform/);
-      expect(text).toMatch(/pulumi-control-plane/);
       expect(text).toMatch(/^infra\/pulumi\b|`infra\/pulumi`/m);
     });
 

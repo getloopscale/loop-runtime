@@ -71,7 +71,7 @@ if (( DRY_RUN == 0 )); then
 fi
 
 # ─── Step 2: enumerate paralelas dirs ───
-PARALELAS=(infra/pulumi-infra infra/pulumi-platform infra/pulumi-control-plane)
+PARALELAS=(infra/pulumi-infra infra/pulumi-platform)
 TARGETS=()
 for dir in "${PARALELAS[@]}"; do
   if [[ -d "${REPO_ROOT}/${dir}" ]] && [[ -f "${REPO_ROOT}/${dir}/Pulumi.yaml" ]]; then
