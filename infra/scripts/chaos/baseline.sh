@@ -136,15 +136,36 @@ PG_RESTARTS=$(restart_count "$TARGET_CTX" loopzero-system "app.kubernetes.io/nam
 GITEA_RESTARTS=$(restart_count "$TARGET_CTX" loopzero-system "app=gitea")
 
 # ---------------------------------------------------------------------------
-# ArgoCD app health
+# ArgoCD app health (always-zero fallback prevents `grep -c || echo 0`
+# producing "0\n0" — bug discovered in /chaos-test --full first run
+# 2026-05-14: corrupt JSON broke verdict extraction for C04/C06/C10).
 # ---------------------------------------------------------------------------
-ARGOCD_HEALTHY=$(kubectl --context "$TARGET_CTX" get applications -n argocd -o jsonpath='{range .items[*]}{.status.health.status}{"\n"}{end}' 2>/dev/null | grep -c "Healthy" || echo 0)
+count_healthy_argocd_apps() {
+  local out
+  out=$(kubectl --context "$TARGET_CTX" get applications -n argocd -o jsonpath='{range .items[*]}{.status.health.status}{"\n"}{end}' 2>/dev/null) || out=""
+  if [[ -z "$out" ]]; then
+    echo 0
+  else
+    echo "$out" | grep -c "Healthy" || echo 0
+  fi
+}
+ARGOCD_HEALTHY=$(count_healthy_argocd_apps | head -1)
 ARGOCD_TOTAL=$(kubectl --context "$TARGET_CTX" get applications -n argocd --no-headers 2>/dev/null | wc -l)
+ARGOCD_TOTAL="${ARGOCD_TOTAL:-0}"
 
 # ---------------------------------------------------------------------------
 # Workload cluster pods (count Running)
 # ---------------------------------------------------------------------------
-WORKLOAD_RUNNING=$(kubectl --context "$WORKLOAD_CTX" get pods -A --no-headers 2>/dev/null | grep -c "Running" || echo 0)
+count_running_workload_pods() {
+  local out
+  out=$(kubectl --context "$WORKLOAD_CTX" get pods -A --no-headers 2>/dev/null) || out=""
+  if [[ -z "$out" ]]; then
+    echo 0
+  else
+    echo "$out" | grep -c "Running" || echo 0
+  fi
+}
+WORKLOAD_RUNNING=$(count_running_workload_pods | head -1)
 
 # ---------------------------------------------------------------------------
 # Write JSON output

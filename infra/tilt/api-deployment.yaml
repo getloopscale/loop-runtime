@@ -55,13 +55,22 @@ metadata:
   labels:
     app: loopzero-api
 spec:
-  replicas: 1
+  # HA default per /chaos-test C01 fix (2026-05-14): 2 replicas for pod-kill
+  # resilience (chaos C01 PASS with 100% success during pod-kill chaos vs
+  # 75% with replicas=1). Leader election (api/internal/leader/) ensures
+  # only one replica owns the lease; the other serves traffic during
+  # voluntary disruptions. Mirrors infra/helm/loopzero-api/values.yaml
+  # replicaCount=2.
+  replicas: 2
   # B23 fix (real-paas-cleanroom-dogfood-loop iter 22, 2026-05-05): use
   # Recreate strategy because loopzero-api uses leader election. RollingUpdate
   # creates the new pod alongside the old one; the new pod retries
   # `leader lock held by another instance` 12 times then exits → CrashLoop
   # → old pod (without env updates) keeps serving. Recreate kills the old
   # pod first, frees the lease, then the new pod boots cleanly.
+  # NOTE: Recreate causes brief downtime on rollout (both pods killed
+  # before new pods start). Chaos resilience (pod-kill of ONE replica)
+  # is independent — surviving replica serves traffic during chaos.
   strategy:
     type: Recreate
   selector:
