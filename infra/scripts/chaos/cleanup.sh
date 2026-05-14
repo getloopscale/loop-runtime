@@ -71,9 +71,29 @@ cleanup_context() {
   remaining=$(kubectl --context "$ctx" get podchaos,networkchaos,iochaos,stresschaos --all-namespaces 2>/dev/null | grep -cv "^NAMESPACE" || true)
 
   if [[ "$remaining" -gt 0 ]]; then
-    log "  WARN: $remaining chaos resources still present after delete"
-    kubectl --context "$ctx" get podchaos,networkchaos,iochaos,stresschaos -A 2>&1 | head -5 | sed 's/^/    /'
-    die "cleanup failed on $ctx — manual delete required"
+    log "  WARN: $remaining chaos resources still present (likely finalizer-stuck)"
+    log "  applying finalizer-removal + force-delete fallback..."
+
+    # Iterate stuck resources: remove finalizers + force delete
+    for kind in podchaos networkchaos iochaos stresschaos dnschaos httpchaos; do
+      while IFS=$'\t' read -r ns name; do
+        [[ -z "$name" ]] && continue
+        log "    patching $kind/$name in $ns (remove finalizers)"
+        kubectl --context "$ctx" patch "$kind" "$name" -n "$ns" \
+          --type=json -p='[{"op":"remove","path":"/metadata/finalizers"}]' 2>&1 | sed 's/^/      /' || true
+        kubectl --context "$ctx" delete "$kind" "$name" -n "$ns" \
+          --force --grace-period=0 --ignore-not-found=true 2>&1 | sed 's/^/      /' || true
+      done < <(kubectl --context "$ctx" get "$kind" -A --no-headers 2>/dev/null | awk '{print $1"\t"$2}')
+    done
+
+    sleep 3
+    remaining=$(kubectl --context "$ctx" get podchaos,networkchaos,iochaos,stresschaos --all-namespaces 2>/dev/null | grep -cv "^NAMESPACE" || true)
+    if [[ "$remaining" -gt 0 ]]; then
+      log "  ERROR: $remaining chaos resources STILL present after force-delete"
+      kubectl --context "$ctx" get podchaos,networkchaos,iochaos,stresschaos -A 2>&1 | head -10 | sed 's/^/    /'
+      die "cleanup failed on $ctx — manual intervention required"
+    fi
+    log "  finalizer-removal cleanup succeeded ✓"
   fi
 
   log "  cleanup verified on $ctx ✓"
