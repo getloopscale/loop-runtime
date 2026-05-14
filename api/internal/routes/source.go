@@ -13,6 +13,7 @@ import (
 	"os"
 	"path/filepath"
 	"sort"
+	"strings"
 	"time"
 
 	"github.com/loopzero/loopzero/api/internal/middleware"
@@ -189,6 +190,24 @@ func (h *SourceHandler) Upload(w http.ResponseWriter, r *http.Request) {
 	// Push bundle to source store (Gitea) — repo: loopzero-source-{tenant}-{project}
 	result, err := h.store.PushBundle(ctx, uc.TenantID, projectName, tmpFile)
 	if err != nil {
+		// Plan T2.1 (2026-05-14, F-03 fix): when concurrent deploys race on
+		// the same project's source repo, gitea rejects the second push with
+		// "cannot lock ref" / "remote rejected" / "failed to update ref".
+		// This is the SAME root cause as a concurrent deploy already in
+		// progress — emit DEPLOY_IN_PROGRESS so the user sees one consistent
+		// error code instead of SOURCE_UPLOAD_FAILED + DEPLOY_IN_PROGRESS for
+		// the same race. Distinct from real upload failures (network, MinIO
+		// 503, malformed bundle) which keep SOURCE_UPLOAD_FAILED.
+		msg := err.Error()
+		if strings.Contains(msg, "cannot lock ref") ||
+			strings.Contains(msg, "remote rejected") ||
+			strings.Contains(msg, "failed to update ref") ||
+			strings.Contains(msg, "stale info") {
+			slog.Info("source upload race resolved as DEPLOY_IN_PROGRESS",
+				"team_id", uc.TenantID, "project", projectName, "error", msg)
+			writeLoopZeroError(w, loopzeroerrors.ErrDeployInProgress)
+			return
+		}
 		slog.Error("source upload failed", "error", err, "team_id", uc.TenantID)
 		writeLoopZeroError(w, loopzeroerrors.ErrSourceUploadFailed)
 		return
