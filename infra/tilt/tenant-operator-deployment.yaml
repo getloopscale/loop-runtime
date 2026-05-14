@@ -23,6 +23,16 @@ rules:
     resources: ["tenants/finalizers", "environments/finalizers"]
     verbs: ["update"]
 
+  # --- ClusterCredentials: list/watch for cell-aware reconcile ---
+  # Plan 2026-05-15 T1.2 (close-all-gaps Phase 1): tenant-operator needs
+  # to resolve RuntimeFactory.For(cellID) which lists ClusterCredentials
+  # to find the matching cell's kubeconfig Secret. Without this RBAC the
+  # operator logs "clustercredentials.loopzero.io is forbidden" and cell
+  # migration silently stalls — namespace never created in destination cell.
+  - apiGroups: ["loopzero.io"]
+    resources: ["clustercredentials"]
+    verbs: ["get", "list", "watch"]
+
   # --- Namespaces: create/manage tenant namespaces ---
   - apiGroups: [""]
     resources: ["namespaces"]

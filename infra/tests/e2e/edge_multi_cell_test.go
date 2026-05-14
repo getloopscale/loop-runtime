@@ -220,37 +220,21 @@ var _ = Describe("Edge: Multi-Cell Routing", Label("edge-case"), func() {
 	})
 
 	It("deploy lands pod in cell-2 runtime cluster (NOT workload)", func() {
-		// 2026-05-14 LIVE finding (two-layer upstream gap):
+		// 2026-05-15 LIVE finding (close-all-gaps Phase 1 RESOLUTION):
 		//
-		// Layer 1 (resolved): tenant operator updated ArgoCD App
-		// destination.name=cell-2 only after explicit force-reconcile
-		// annotation. pinTenantCell helper now sets this automatically.
+		// The original 2026-05-14 finding described a two-layer gap.
+		// Plan T1.2 LIVE diagnosis revealed the ACTUAL root cause: the
+		// tenant-operator ClusterRole was missing
+		// `clustercredentials.loopzero.io {get,list,watch}` permission.
+		// Without that, RuntimeFactory.For(cellID) couldn't resolve the
+		// kubeconfig Secret for the destination cell, so cell-aware
+		// namespace creation silently failed.
 		//
-		// Layer 2 (BLOCKER — outside this plan's scope): when destination
-		// changes, ArgoCD sync to cell-2 fails because the tenant
-		// namespace (loopzero-<tenant>-<env>) does NOT exist on the cell-2
-		// cluster. ArgoCD reports
-		//   "namespaces \"loopzero-e2e-tenant-production\" not found"
-		// because LoopZero's App template sets syncPolicy.syncOptions
-		// CreateNamespace=false (TenantController is the namespace owner).
-		// For cell MIGRATION, the TenantController would need to create
-		// the namespace + RBAC bindings in the destination cell BEFORE
-		// the ArgoCD App destination change takes effect.
-		//
-		// This is genuine deep work spanning operator multi-cluster
-		// reconcile + cellmgr + dynamic-router — outside the dogfood-
-		// findings plan's scope. Test infrastructure (pin helper, cell2
-		// gate, fresh project_id, force-reconcile, cross-cluster
-		// assertion) is reusable when the next plan addresses it.
-		//
-		// See concepts/operations/finding-2026-05-14-cell-pin-argocd-
-		// app-destination-stale.md (now updated with Layer 2).
-		Skip("Pending follow-up plan: tenant operator must create destination " +
-			"namespace + RBAC in cell-N cluster on Tenant.spec.cellID change. " +
-			"Layer 1 (App destination update) resolved via force-reconcile " +
-			"annotation in pinTenantCell. Layer 2 (cross-cell namespace " +
-			"provisioning) requires multi-cluster reconcile work. See finding-" +
-			"2026-05-14-cell-pin-argocd-app-destination-stale.md.")
+		// Fix: infra/tilt/tenant-operator-deployment.yaml + production
+		// helm chart now grant clustercredentials list. tenant-operator
+		// restart + pin to cell-2 produces loopzero-<tenant>-<env>
+		// namespaces in k3d-loopzero-runtime-2 within ~30s (LIVE-validated
+		// 2026-05-15).
 
 		// Sanity: confirm initial cell (typically cell-default in cleanroom).
 		initialCell := tenantCellID(seed.TenantID)
