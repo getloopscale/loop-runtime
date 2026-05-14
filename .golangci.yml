@@ -35,6 +35,17 @@ linters:
     - sqlclosecheck # sql.Rows/Stmt close
     - unconvert    # unnecessary type conversions
     - copyloopvar  # Go 1.22+ loop-var capture
+    # === Close-all-gaps T6.1 (audit M11) — exhaustive linter EVALUATED + REJECTED ===
+    # Tried adding `exhaustive` to enforce state machine switch coverage.
+    # LIVE result against pkg/statemachine: linter fires on EVERY switch
+    # because the 70+ states across 11 state machines share a single
+    # `type State string` — any switch that filters one machine's states
+    # produces missing-case warnings for the other 10 machines' states.
+    # Fix would require refactoring to per-machine typed states
+    # (BuildState, ReleaseState, ...) — large surface, low value at
+    # 3.8/4.0. M11 gap is documented (machine.go:18-21 comment) and
+    # remains BAIXA severity per audit. Re-add when typed-per-machine
+    # refactor lands.
     # === Disabled, with rationale (re-enable in dedicated PRs) ===
     # - nilerr: LoopZero has intentional fail-open paths in cost_cap.go and
     #   admission middleware. Enabling triggers false positives.
@@ -67,6 +78,9 @@ linters:
 
     misspell:
       locale: US
+
+    # exhaustive: evaluated 2026-05-15 (T6.1) — rejected, see linters
+    # block comment above. Re-add when per-machine typed states ship.
 
   exclusions:
     rules:
