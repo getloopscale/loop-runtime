@@ -21,6 +21,13 @@
 #   UPSTREAM_REPO  — default `getloopscale/loopzero-forge`
 #   ISSUE_TITLE    — default derived from RFC
 #
+# CONCURRENCY ASSUMPTION (per iter-19 sprint audit):
+#   Sponsor-led one-shot filing. NO concurrency guard. If 2 sponsors ran
+#   simultaneously, loopzero-forge would receive 2 duplicate issues (GitHub
+#   does not deduplicate by title). Operator can close the duplicate
+#   manually after the fact. Not guarded because sponsor-coordination is
+#   the documented workflow for T3.1. Use --dry-run first if uncertain.
+#
 # Exit codes:
 #   0 — issue filed OR dry-run printed
 #   1 — usage / prerequisite missing / RFC not found

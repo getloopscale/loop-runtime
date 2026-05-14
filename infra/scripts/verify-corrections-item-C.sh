@@ -17,6 +17,17 @@
 #   TARGET_IP=209.38.205.78 bash infra/scripts/verify-corrections-item-C.sh
 #   DB_ID=<uuid> bash infra/scripts/verify-corrections-item-C.sh  # skip interactive picker
 #
+# CONCURRENCY ASSUMPTION (per iter-19 sprint audit):
+#   This helper is operator-led and assumes single-operator invocation. There
+#   is intentionally NO flock — if 2 operators ran simultaneously, both
+#   SUMMARY_BLOCKs would be written but only the last `mv` survives (silent
+#   loss of first decision). LoopZeroretical race; not guarded because:
+#   (a) operator coordination is the documented workflow (T1.3 in plan).
+#   (b) verify-C is one-shot per close-out, not recurring.
+#   (c) flock complexity would exceed the risk it mitigates.
+#   If 2 operators DO need to coordinate (e.g., handoff mid-decision),
+#   manually serialize the invocations OR use `--dry-run` to preview only.
+#
 # Exit codes (aligned with sibling helper file-corrections-item-I-upstream.sh
 # per iter-18 sprint audit — operator cancellation is NOT a usage error):
 #   0  — verification complete (one of outcomes A/B/C chosen + finding doc updated)
@@ -36,7 +47,7 @@ DRY_RUN_FLAG=0
 while [[ $# -gt 0 ]]; do
   case "$1" in
     --dry-run) DRY_RUN_FLAG=1; shift ;;
-    -h|--help) sed -n '1,30p' "$0"; exit 0 ;;
+    -h|--help) sed -n '1,40p' "$0"; exit 0 ;;
     *) echo "usage: $0 [--dry-run]" >&2; exit 1 ;;
   esac
 done
