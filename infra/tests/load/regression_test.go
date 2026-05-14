@@ -295,18 +295,34 @@ func TestB28GiteaHaConditional(t *testing.T) {
 	}
 }
 
-// TestB29RedisServiceHostname — Bitnami chart creates `<release>-master`.
+// TestB29RedisServiceHostname — Gitea Redis service hostname.
+//
+// History (B29 original, 2026-04-28): Bitnami redis chart was in use
+// and created a `<release>-master` Service, so the canonical hostname
+// was `gitea-redis-master:6379`. The original assertion forbade the
+// `gitea-redis:6379` bareword (which would DNS-no-such-host).
+//
+// Update (2026-05-05, commit bc95ca34 charts-sota plan):
+// `infra/helm/gitea/templates/redis.yaml` now ships a standalone Redis
+// StatefulSet whose Service is named `gitea-redis` (NOT
+// `gitea-redis-master`). The values.yaml self-documents this with a
+// 5-line comment block. The assertions had to invert: forbid
+// `gitea-redis-master:6379`, require `gitea-redis:6379`.
+//
+// This test was caught in 2026-05-15 broad-verification iter 4 — see
+// finding `concepts/operations/finding-2026-05-15-infra-tests-load-
+// regression-obsolete.md` for the sibling Class A invertion bugs.
 func TestB29RedisServiceHostname(t *testing.T) {
 	data, err := os.ReadFile("../../helm/gitea/values.yaml")
 	if err != nil {
 		t.Fatalf("read gitea values.yaml: %v", err)
 	}
 	s := string(data)
-	if strings.Contains(s, "addr=gitea-redis:6379") {
-		t.Errorf("B29 regression: gitea uses 'addr=gitea-redis:6379' (Bitnami chart creates `<release>-master` service)")
+	if strings.Contains(s, "addr=gitea-redis-master:6379") {
+		t.Errorf("B29 regression: gitea uses 'addr=gitea-redis-master:6379' (legacy Bitnami chart; current standalone Redis Service is `gitea-redis`)")
 	}
-	if !strings.Contains(s, "addr=gitea-redis-master:6379") {
-		t.Errorf("B29 regression: gitea must use 'addr=gitea-redis-master:6379'")
+	if !strings.Contains(s, "addr=gitea-redis:6379") {
+		t.Errorf("B29 regression: gitea must use 'addr=gitea-redis:6379' (standalone Redis StatefulSet from `infra/helm/gitea/templates/redis.yaml`)")
 	}
 }
 
