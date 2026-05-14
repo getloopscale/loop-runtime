@@ -345,8 +345,11 @@ export function registerInfraCommands(deps: CommandDeps): void {
       const apiClient = new ApiClient({ baseURL: cloudUrl, token: configStore.getToken() ?? undefined, onUnauthorized: handleUnauthorized });
 
       const cmd = new BillingCommand({
-        getBilling: async () => apiClient.get('/v1/billing'),
-        getPortalURL: async () => apiClient.get('/v1/billing/portal'),
+        getBilling: async () => apiClient.get('/api/v1/billing'),
+        // Plan T1.1: portal is POST per api/internal/server/router.go (Stripe
+        // Customer Portal session creation has side effects). Pre-fix CLI
+        // used GET → 405 → wrapped as BILLING_TIMEOUT.
+        getPortalURL: async () => apiClient.post('/api/v1/billing/portal', {}),
         openBrowser,
         writeTo,
         writeError,
@@ -357,8 +360,24 @@ export function registerInfraCommands(deps: CommandDeps): void {
         API_REQUEST_TIMEOUT_MS + 10_000,
         'Billing portal request timed out. Check your connection and try again.',
       ).catch((err: Error) => {
-        if (globalOpts.json) { writeTo(JSON.stringify({ code: 'BILLING_TIMEOUT', error: err.message, exit_code: 3 })); }
-        else { writeError(err.message); }
+        // Plan T1.1 (2026-05-14): distinguish endpoint-missing /
+        // billing-not-configured (404, 405, 501, NO_STRIPE_CUSTOMER,
+        // "payment method on file") from real timeout. All map to
+        // BILLING_NOT_AVAILABLE exit 1 with an actionable message instead
+        // of the misleading BILLING_TIMEOUT exit 3.
+        const msg = err.message;
+        const isBillingMissing = /\b(404|405|501)\b/.test(msg)
+          || /endpoint does not exist|not implemented|not available/i.test(msg)
+          || /HTTP method is not supported/i.test(msg)
+          || /NO_STRIPE_CUSTOMER|payment method on file/i.test(msg);
+        if (isBillingMissing) {
+          const friendly = 'Billing portal is not available in self-hosted mode. Run `loopzero platform secrets backup` for license info.';
+          if (globalOpts.json) { writeTo(JSON.stringify({ code: 'BILLING_NOT_AVAILABLE', error: friendly, exit_code: 1 })); }
+          else { writeError(friendly); }
+          return 1;
+        }
+        if (globalOpts.json) { writeTo(JSON.stringify({ code: 'BILLING_TIMEOUT', error: msg, exit_code: 3 })); }
+        else { writeError(msg); }
         return 3;
       });
     });
@@ -369,8 +388,11 @@ export function registerInfraCommands(deps: CommandDeps): void {
       const apiClient = new ApiClient({ baseURL: cloudUrl, token: configStore.getToken() ?? undefined, onUnauthorized: handleUnauthorized });
 
       const cmd = new BillingCommand({
-        getBilling: async () => apiClient.get('/v1/billing'),
-        getPortalURL: async () => apiClient.get('/v1/billing/portal'),
+        getBilling: async () => apiClient.get('/api/v1/billing'),
+        // Plan T1.1: portal is POST per api/internal/server/router.go (Stripe
+        // Customer Portal session creation has side effects). Pre-fix CLI
+        // used GET → 405 → wrapped as BILLING_TIMEOUT.
+        getPortalURL: async () => apiClient.post('/api/v1/billing/portal', {}),
         openBrowser,
         writeTo,
         writeError,
@@ -381,8 +403,21 @@ export function registerInfraCommands(deps: CommandDeps): void {
         API_REQUEST_TIMEOUT_MS + 10_000,
         'Billing request timed out. Check your connection and try again.',
       ).catch((err: Error) => {
-        if (globalOpts.json) { writeTo(JSON.stringify({ code: 'BILLING_TIMEOUT', error: err.message, exit_code: 3 })); }
-        else { writeError(err.message); }
+        // Plan T1.1 (2026-05-14): same logic as portal — endpoint-missing
+        // (404/405/501) → BILLING_NOT_AVAILABLE exit 1, not BILLING_TIMEOUT
+        // exit 3.
+        const msg = err.message;
+        const isBillingMissing = /\b(404|405|501)\b/.test(msg)
+          || /endpoint does not exist|not implemented|not available/i.test(msg)
+          || /HTTP method is not supported/i.test(msg);
+        if (isBillingMissing) {
+          const friendly = 'Billing is not available in self-hosted mode. Run `loopzero platform secrets backup` for license info.';
+          if (globalOpts.json) { writeTo(JSON.stringify({ code: 'BILLING_NOT_AVAILABLE', error: friendly, exit_code: 1 })); }
+          else { writeError(friendly); }
+          return 1;
+        }
+        if (globalOpts.json) { writeTo(JSON.stringify({ code: 'BILLING_TIMEOUT', error: msg, exit_code: 3 })); }
+        else { writeError(msg); }
         return 3;
       });
     });
