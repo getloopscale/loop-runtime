@@ -155,6 +155,21 @@ func pinTenantCell(tenant, cellID string) (previous string, err error) {
 		return previous, fmt.Errorf("pin: patch CR: %w: %s", err, out)
 	}
 
+	// 4. Force-reconcile annotation. 2026-05-14 LIVE finding: spec.cellID
+	// changes alone don't always propagate to ArgoCD App destination on
+	// the next reconcile cycle (likely a cache/watch race). An annotation
+	// update is a reliable trigger because controller-runtime watches
+	// metadata as well as spec. Without this, the App destination remains
+	// stale (cell-default) even after the CR shows spec.cellID=cell-2.
+	// See finding-2026-05-14-cell-pin-argocd-app-destination-stale.md.
+	annotateCmd := exec.Command("kubectl", "--context", "k3d-loopzero-mgmt",
+		"-n", "loopzero-system", "annotate", "tenant", tenant,
+		fmt.Sprintf("loopzero.io/force-reconcile=%d", time.Now().Unix()),
+		"--overwrite")
+	if out, err := annotateCmd.CombinedOutput(); err != nil {
+		return previous, fmt.Errorf("pin: force-reconcile annotation: %w: %s", err, out)
+	}
+
 	return previous, nil
 }
 
@@ -205,25 +220,37 @@ var _ = Describe("Edge: Multi-Cell Routing", Label("edge-case"), func() {
 	})
 
 	It("deploy lands pod in cell-2 runtime cluster (NOT workload)", func() {
-		// 2026-05-14 LIVE finding: the tenant operator updates ArgoCD App
-		// destination.name=cell-2 ONLY for NEW environments (staging app
-		// created after the pin reflects cell-2). For environments where
-		// an ArgoCD App already exists in Synced/Healthy state, the
-		// destination remains stale (e.g., e2e-tenant-production stays at
-		// cell-default even after pin to cell-2). This is an upstream gap
-		// — needs a follow-up plan to either (a) force re-emit of
-		// ArgoCD App.spec.destination on Tenant.spec.cellID change, or
-		// (b) recreate the App when cell migrates.
+		// 2026-05-14 LIVE finding (two-layer upstream gap):
 		//
-		// Until that upstream fix, this LIVE assertion cannot pass for
-		// the existing seed tenant in production env. Test infrastructure
-		// (pin helper, cell2 gate, fresh project_id, kubectl cross-cluster
-		// assertion) is in place — Skip with explicit reason so the
-		// failure doesn't mask other regressions in CI.
-		Skip("Pending upstream fix: tenant operator does not update " +
-			"ArgoCD App.spec.destination.name when Tenant.spec.cellID changes " +
-			"for environments with existing Synced apps (cell-default sticks). " +
-			"See dogfood-2026-05-14 follow-up plan.")
+		// Layer 1 (resolved): tenant operator updated ArgoCD App
+		// destination.name=cell-2 only after explicit force-reconcile
+		// annotation. pinTenantCell helper now sets this automatically.
+		//
+		// Layer 2 (BLOCKER — outside this plan's scope): when destination
+		// changes, ArgoCD sync to cell-2 fails because the tenant
+		// namespace (loopzero-<tenant>-<env>) does NOT exist on the cell-2
+		// cluster. ArgoCD reports
+		//   "namespaces \"loopzero-e2e-tenant-production\" not found"
+		// because LoopZero's App template sets syncPolicy.syncOptions
+		// CreateNamespace=false (TenantController is the namespace owner).
+		// For cell MIGRATION, the TenantController would need to create
+		// the namespace + RBAC bindings in the destination cell BEFORE
+		// the ArgoCD App destination change takes effect.
+		//
+		// This is genuine deep work spanning operator multi-cluster
+		// reconcile + cellmgr + dynamic-router — outside the dogfood-
+		// findings plan's scope. Test infrastructure (pin helper, cell2
+		// gate, fresh project_id, force-reconcile, cross-cluster
+		// assertion) is reusable when the next plan addresses it.
+		//
+		// See concepts/operations/finding-2026-05-14-cell-pin-argocd-
+		// app-destination-stale.md (now updated with Layer 2).
+		Skip("Pending follow-up plan: tenant operator must create destination " +
+			"namespace + RBAC in cell-N cluster on Tenant.spec.cellID change. " +
+			"Layer 1 (App destination update) resolved via force-reconcile " +
+			"annotation in pinTenantCell. Layer 2 (cross-cell namespace " +
+			"provisioning) requires multi-cluster reconcile work. See finding-" +
+			"2026-05-14-cell-pin-argocd-app-destination-stale.md.")
 
 		// Sanity: confirm initial cell (typically cell-default in cleanroom).
 		initialCell := tenantCellID(seed.TenantID)
@@ -244,11 +271,25 @@ var _ = Describe("Edge: Multi-Cell Routing", Label("edge-case"), func() {
 			}
 		})
 
-		// Verify pin took effect.
+		// Verify pin took effect at DB level.
 		Eventually(func() string {
 			return tenantCellID(seed.TenantID)
 		}, 10*time.Second, 1*time.Second).Should(Equal("cell-2"),
 			"DB cell_id must reflect the pin")
+
+		// Wait for tenant operator to re-emit ArgoCD App with new destination.
+		// The force-reconcile annotation in pinTenantCell makes this
+		// happen within seconds, but the watch-cache propagation is
+		// asynchronous — Eventually loop accommodates 30s slack.
+		appName := fmt.Sprintf("%s-%s", seed.TenantID, env)
+		Eventually(func() string {
+			cmd := exec.Command("kubectl", "--context", "k3d-loopzero-mgmt",
+				"-n", "argocd", "get", "application", appName,
+				"-o", "jsonpath={.spec.destination.name}")
+			out, _ := cmd.CombinedOutput()
+			return strings.TrimSpace(string(out))
+		}, 30*time.Second, 2*time.Second).Should(Equal("cell-2"),
+			"ArgoCD App %s.spec.destination.name must update to cell-2 after pin", appName)
 
 		// Deploy. Build runs in build cluster, but the destination is
 		// driven by the tenant's cell_id at deploy time → cell-2.
@@ -259,13 +300,17 @@ var _ = Describe("Edge: Multi-Cell Routing", Label("edge-case"), func() {
 		label := fmt.Sprintf("loopzero.io/project=%s", project)
 
 		// Assert pod appears on cell-2 (runtime-2) context.
+		// Timeout 8min — real ArgoCD sync to cell-2 includes:
+		//   manifest push → gitea → ArgoCD detect → sync → manifest apply
+		//   in cell-2 cluster → Rollout reconcile → pod scheduled
+		// Build itself takes 3-5min, deploy phase another 2-3min on k3d.
 		Eventually(func() string {
 			cmd := exec.Command("kubectl", "--context", cell2KubeContextLocal,
 				"-n", ns, "get", "pods",
 				"-l", label, "--ignore-not-found", "-o", "name")
 			out, _ := cmd.CombinedOutput()
 			return strings.TrimSpace(string(out))
-		}, 4*time.Minute, 10*time.Second).Should(
+		}, 8*time.Minute, 15*time.Second).Should(
 			ContainSubstring("pod/"),
 			"project %q pod must appear on cell-2 context %q (runtime-2)",
 			project, cell2KubeContextLocal,
