@@ -1,0 +1,14 @@
+# Coverage-only fixture for go LanguageStrategy.
+# Plan 2026-05-15 T10.1 (close-all-gaps Phase 10): each strategy
+# registered in api/internal/argo/languages.go::ResolveStrategy must
+# have at least one fixture asserting framework: <name>. This file
+# satisfies that coverage requirement; full E2E deploy tests for
+# go stack are deferred to a dedicated journey plan.
+
+project: stack-go
+
+apps:
+  api:
+    type: server
+    framework: go
+    port: 3000
