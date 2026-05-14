@@ -1,0 +1,38 @@
+digraph Domain {
+	rankdir=LR;
+	node [shape=circle, fontsize=10];
+	edge [fontsize=8];
+
+	"active" [shape=circle];
+	"degraded" [shape=circle];
+	"failed" [shape=circle];
+	"ns_active" [shape=circle];
+	"pending_ns" [shape=circle];
+	"pending_verification" [shape=circle];
+	"provisioning" [shape=circle];
+	"removing" [shape=doublecircle];
+	"verified" [shape=circle];
+
+	"active" -> "degraded" [label="DomainDegrade"];
+	"active" -> "removing" [label="DomainRemove"];
+	"degraded" -> "failed" [label="DomainCNAMELost"];
+	"degraded" -> "active" [label="DomainCNAMERecovered"];
+	"degraded" -> "removing" [label="DomainRemove"];
+	"failed" -> "ns_active" [label="DomainNSActivated"];
+	"failed" -> "removing" [label="DomainRemove"];
+	"failed" -> "verified" [label="DomainRetry"];
+	"ns_active" -> "provisioning" [label="DomainProvision"];
+	"ns_active" -> "removing" [label="DomainRemove"];
+	"pending_ns" -> "ns_active" [label="DomainNSActivated"];
+	"pending_ns" -> "failed" [label="DomainNSTimeout"];
+	"pending_ns" -> "removing" [label="DomainRemove"];
+	"pending_verification" -> "removing" [label="DomainRemove"];
+	"pending_verification" -> "verified" [label="DomainVerify"];
+	"provisioning" -> "active" [label="DomainActivate"];
+	"provisioning" -> "degraded" [label="DomainDegrade"];
+	"provisioning" -> "failed" [label="DomainProvisionFail"];
+	"provisioning" -> "failed" [label="DomainProvisionTimeout"];
+	"provisioning" -> "removing" [label="DomainRemove"];
+	"verified" -> "provisioning" [label="DomainProvision"];
+	"verified" -> "removing" [label="DomainRemove"];
+}

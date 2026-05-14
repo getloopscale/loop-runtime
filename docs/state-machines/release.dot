@@ -1,0 +1,51 @@
+digraph Release {
+	rankdir=LR;
+	node [shape=circle, fontsize=10];
+	edge [fontsize=8];
+
+	"ACTIVE" [shape=circle];
+	"CANCELLED" [shape=doublecircle];
+	"DRIFT_ALERT" [shape=circle];
+	"GIT_MIRROR_FAILED" [shape=circle];
+	"PENDING" [shape=circle];
+	"READY" [shape=circle];
+	"ROLLBACK_FAILED" [shape=circle];
+	"ROLLED_BACK" [shape=circle];
+	"ROLLING_BACK" [shape=circle];
+	"SUPERSEDED" [shape=circle];
+	"SYNC_FAILED" [shape=circle];
+
+	"ACTIVE" -> "SUPERSEDED" [label="NewReleaseActivated"];
+	"ACTIVE" -> "CANCELLED" [label="ProjectDeleted"];
+	"ACTIVE" -> "ROLLING_BACK" [label="RollbackStarted"];
+	"DRIFT_ALERT" -> "ACTIVE" [label="ManualResolve"];
+	"DRIFT_ALERT" -> "CANCELLED" [label="ProjectDeleted"];
+	"DRIFT_ALERT" -> "CANCELLED" [label="ReleaseCancelled"];
+	"GIT_MIRROR_FAILED" -> "PENDING" [label="GitMirrorRetried"];
+	"GIT_MIRROR_FAILED" -> "CANCELLED" [label="ProjectDeleted"];
+	"GIT_MIRROR_FAILED" -> "CANCELLED" [label="ReleaseCancelled"];
+	"PENDING" -> "CANCELLED" [label="ProjectDeleted"];
+	"PENDING" -> "CANCELLED" [label="ReleaseCancelled"];
+	"PENDING" -> "ACTIVE" [label="SyncCompleted"];
+	"PENDING" -> "SYNC_FAILED" [label="SyncFailed"];
+	"PENDING" -> "SYNC_FAILED" [label="SyncTimeout"];
+	"READY" -> "PENDING" [label="GitMirrorCompleted"];
+	"READY" -> "GIT_MIRROR_FAILED" [label="GitMirrorFailed"];
+	"READY" -> "GIT_MIRROR_FAILED" [label="GitPushTimeout"];
+	"READY" -> "CANCELLED" [label="ProjectDeleted"];
+	"ROLLBACK_FAILED" -> "ACTIVE" [label="ManualResolve"];
+	"ROLLBACK_FAILED" -> "CANCELLED" [label="ProjectDeleted"];
+	"ROLLBACK_FAILED" -> "CANCELLED" [label="ReleaseCancelled"];
+	"ROLLED_BACK" -> "CANCELLED" [label="ProjectDeleted"];
+	"ROLLED_BACK" -> "ACTIVE" [label="Reactivated"];
+	"ROLLING_BACK" -> "CANCELLED" [label="ProjectDeleted"];
+	"ROLLING_BACK" -> "ROLLED_BACK" [label="RollbackCompleted"];
+	"ROLLING_BACK" -> "ROLLBACK_FAILED" [label="RollbackFailed"];
+	"ROLLING_BACK" -> "ROLLBACK_FAILED" [label="RollbackTimeout"];
+	"SUPERSEDED" -> "CANCELLED" [label="ProjectDeleted"];
+	"SUPERSEDED" -> "ACTIVE" [label="Reactivated"];
+	"SYNC_FAILED" -> "CANCELLED" [label="ProjectDeleted"];
+	"SYNC_FAILED" -> "CANCELLED" [label="ReleaseCancelled"];
+	"SYNC_FAILED" -> "DRIFT_ALERT" [label="SyncExhausted"];
+	"SYNC_FAILED" -> "PENDING" [label="SyncRetry"];
+}

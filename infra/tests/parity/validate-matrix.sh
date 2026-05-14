@@ -15,7 +15,10 @@
 #   2. CLI unit tests             — 1243
 #   3. CLI integration tests      — 72 (excluding cli-e2e gated suite)
 #   4. API tests                  — routes + services + placement + db
-#   5. Pulumi vitest              — 269 (was 96 in plan baseline; iters 16-27 expanded)
+#   5. Pulumi vitest              — 3 workspaces (infra/pulumi 362 +
+#                                     pulumi-drill 12 + pulumi-shared 9 = 383 tests).
+#                                     Aggregate was hiding per-workspace drift
+#                                     pre 2026-05-15 broad-verification.
 #   6. infra/tests Go suite       — capacity + chaos + e2e + load + unit
 #   7. helm lint × 4 split charts
 #   8. matrix-integrity audit
@@ -95,12 +98,25 @@ else
   result 2 "api: go not installed"
 fi
 
-# Gate 5: Pulumi vitest (269+ verified 2026-05-01).
-if (cd "${REPO_ROOT}/infra/pulumi" && npx vitest run --reporter=basic >/dev/null 2>&1); then
-  result 0 "pulumi:vitest"
-else
-  result 1 "pulumi:vitest"
-fi
+# Gate 5: Pulumi vitest — 3 workspaces (post 2026-05-15 broad-verification:
+# detected 23-fail drift in infra/pulumi/ dormant since fc1793dd because
+# only the aggregate exit-code was checked + output silenced. Now each
+# workspace is a separate sub-gate AND tail -5 surfaces failure context).
+# See finding `concepts/operations/finding-2026-05-15-pulumi-vitest-23-fail-drift.md`.
+for ws_label in "infra/pulumi:pulumi-vitest" "infra/pulumi-drill:pulumi-drill-vitest" "infra/pulumi-shared:pulumi-shared-vitest"; do
+  ws_dir="${ws_label%%:*}"
+  ws_name="${ws_label##*:}"
+  ws_out=$(mktemp)
+  if (cd "${REPO_ROOT}/${ws_dir}" && npx vitest run --reporter=basic >"$ws_out" 2>&1); then
+    result 0 "${ws_name}"
+  else
+    result 1 "${ws_name}"
+    # Surface the last 5 lines of vitest output so the operator does not
+    # need to re-run the suite to diagnose. Indented for the matrix log.
+    sed 's/^/      /' "$ws_out" | tail -5
+  fi
+  rm -f "$ws_out"
+done
 
 # Gate 6: infra/tests Go suite (capacity + chaos + e2e + load + unit).
 if command -v go >/dev/null 2>&1; then

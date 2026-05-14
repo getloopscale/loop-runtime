@@ -1,0 +1,19 @@
+digraph ExposedRoute {
+	rankdir=LR;
+	node [shape=circle, fontsize=10];
+	edge [fontsize=8];
+
+	"" [shape=circle];
+	"CertIssued" [shape=circle];
+	"Failed" [shape=circle];
+	"Pending" [shape=circle];
+	"Reachable" [shape=circle];
+
+	"" -> "Pending" [label="Create"];
+	"CertIssued" -> "Failed" [label="ProbeFail"];
+	"CertIssued" -> "Reachable" [label="ProbeOK"];
+	"Failed" -> "Pending" [label="Retry"];
+	"Pending" -> "CertIssued" [label="CertReady"];
+	"Pending" -> "Failed" [label="ProbeFail"];
+	"Reachable" -> "Failed" [label="ProbeFail"];
+}

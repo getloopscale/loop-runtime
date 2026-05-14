@@ -1,0 +1,27 @@
+digraph Tenant {
+	rankdir=LR;
+	node [shape=circle, fontsize=10];
+	edge [fontsize=8];
+
+	"" [shape=circle];
+	"Active" [shape=circle];
+	"Deleting" [shape=doublecircle];
+	"PendingDeletion" [shape=circle];
+	"Provisioning" [shape=circle];
+	"Suspended" [shape=circle];
+
+	"" -> "Provisioning" [label="Create"];
+	"" -> "Deleting" [label="Delete"];
+	"Active" -> "Deleting" [label="Delete"];
+	"Active" -> "PendingDeletion" [label="RequestDeletion"];
+	"Active" -> "Provisioning" [label="SpecChanged"];
+	"Active" -> "Suspended" [label="Suspend"];
+	"PendingDeletion" -> "Deleting" [label="Delete"];
+	"PendingDeletion" -> "Deleting" [label="GraceExpired"];
+	"PendingDeletion" -> "Active" [label="Restore"];
+	"Provisioning" -> "Active" [label="AllConditionsReady"];
+	"Provisioning" -> "Deleting" [label="Delete"];
+	"Suspended" -> "Deleting" [label="Delete"];
+	"Suspended" -> "PendingDeletion" [label="RequestDeletion"];
+	"Suspended" -> "Active" [label="Unsuspend"];
+}
