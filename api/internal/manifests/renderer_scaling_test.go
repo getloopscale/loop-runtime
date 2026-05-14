@@ -63,8 +63,13 @@ func TestRenderDeployment_DefaultReplicas(t *testing.T) {
 
 	dep := parseDeployment(t, Render(input))
 
-	if dep.Spec.Replicas != 1 {
-		t.Errorf("default replicas: got %d, want 1", dep.Spec.Replicas)
+	// Default is 2 (HA) per renderer_deployment.go:104 — chaos C03 fix
+	// 2026-05-14 raised the default from 1 to 2 so pod-kill chaos
+	// produces 50% (not 0%) availability during the kill window. To
+	// opt out set replicas: 1 in loopzero.yaml — see TestRenderDeployment_
+	// CustomReplicas for the explicit-override case.
+	if dep.Spec.Replicas != 2 {
+		t.Errorf("default replicas (HA): got %d, want 2", dep.Spec.Replicas)
 	}
 }
 
