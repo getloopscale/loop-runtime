@@ -44,7 +44,7 @@ describe('platformStatus drift detection (T2.1)', () => {
       phase: 'Ready',
       version: '0.2.0',
       components: [],
-      crdsInstalled: 10,
+      platformDefinitions: 10,
       endpoints: { api: 'https://api.test', dashboard: 'https://app.test' },
     });
   });
@@ -94,7 +94,7 @@ describe('platformStatus drift detection (T2.1)', () => {
       phase: 'Degraded',
       version: '0.2.0',
       components: [],
-      crdsInstalled: 0,
+      platformDefinitions: 0,
       endpoints: {},
     });
     mockExec.mockReturnValue(JSON.stringify({ items: [] }) as never);
