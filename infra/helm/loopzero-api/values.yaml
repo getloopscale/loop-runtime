@@ -1,4 +1,12 @@
-replicaCount: 1
+# HA default per CTO mandate 2026-05-14 + /chaos-test C01 resilience gap.
+# Single-replica caused 25% downtime during pod-kill chaos (chaos-test
+# C01 FAIL — 75% success during chaos < 90% threshold). Multi-replica
+# activates: (a) leader election fail-over (api/internal/leader/),
+# (b) PodDisruptionBudget via templates/pdb.yaml (emits only when
+# replicaCount>=2), (c) RollingUpdate strategy per
+# MEET-ASYNC-AMENDMENT-2026-05-12-003. Resource fit verified: 2 × 100m
+# CPU + 64Mi memory ≪ k3d node capacity.
+replicaCount: 2
 
 image:
   repository: registry.digitalocean.com/loopzero-system/loopzero-api

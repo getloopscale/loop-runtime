@@ -7,7 +7,11 @@ image:
   tag: dev
   pullPolicy: IfNotPresent
 
-replicaCount: 1
+# HA default per CTO mandate 2026-05-14 + /chaos-test C01 resilience gap.
+# Multi-replica activates leader election fail-over + PodDisruptionBudget
+# (via loopzero-common.pdb library — see templates/pdb.yaml). Sustains chaos
+# test C01 hypothesis: "surviving pod never restarts during leader kill".
+replicaCount: 2
 revisionHistoryLimit: 3
 priorityClassName: system-cluster-critical
 
