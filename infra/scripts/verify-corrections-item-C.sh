@@ -208,7 +208,11 @@ fi
 
 # Insert after the closing --- of YAML frontmatter (find the 2nd --- line).
 # We use awk to do an in-place-style insert via temp file (atomic replace).
+# EXIT trap guarantees cleanup on interrupt/failure (mv on success consumes
+# the temp; trap is a no-op in that case). Per iter-17 sprint audit: mktemp
+# without EXIT-trap cleanup is a leak-on-failure pattern.
 TMPDOC=$(mktemp -t finding-C.XXXXXX.md)
+trap 'rm -f "$TMPDOC" 2>/dev/null || true' EXIT
 awk -v block="$SUMMARY_BLOCK" '
   BEGIN { fm_close=0 }
   /^---$/ {
@@ -216,8 +220,8 @@ awk -v block="$SUMMARY_BLOCK" '
     if (fm_close == 1) { print; fm_close = 2; print block; next }
   }
   { print }
-' "$FINDING_DOC" > "$TMPDOC"
-mv "$TMPDOC" "$FINDING_DOC"
+' "$FINDING_DOC" > "$TMPDOC" || die "awk failed; finding doc unchanged"
+mv "$TMPDOC" "$FINDING_DOC" || die "mv failed; finding doc may be in inconsistent state"
 log "Updated finding doc: $FINDING_DOC"
 
 # ---------------------------------------------------------------------------
