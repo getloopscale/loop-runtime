@@ -11,6 +11,10 @@
 #
 # Run: bash infra/tests/check-regen-scoped-kubeconfigs_test.sh
 # SPDX-License-Identifier: Apache-2.0
+#
+# shellcheck disable=SC2329  # test_* functions invoked dynamically via run_test dispatch
+# shellcheck disable=SC2155  # local var=$(...) intentional; mktemp failure surfaced via set -u
+# shellcheck disable=SC2064  # trap RETURN is GLOBAL in bash — double-quote expansion captures literal fixture path at trap-set time so cleanup fires correctly after test function returns.
 
 set -uo pipefail
 
@@ -157,7 +161,7 @@ EOF
   # Second invocation should exit 1 fast (flock contention).
   "$SCRIPT" --fixture "$fixture" >/dev/null 2>&1
   local rc=$?
-  wait $holder_pid 2>/dev/null
+  wait "$holder_pid" 2>/dev/null
   [[ $rc -eq 1 ]]
 }
 

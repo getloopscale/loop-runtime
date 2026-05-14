@@ -8,6 +8,10 @@
 #
 # Run: bash infra/tests/check-no-migrate-force_test.sh
 # SPDX-License-Identifier: Apache-2.0
+#
+# shellcheck disable=SC2329  # test_* functions are invoked dynamically via `declare -F` dispatch
+# shellcheck disable=SC2155  # local var=$(...) is intentional; tempdir creation is allowed to fail loudly via set -u
+# shellcheck disable=SC2064  # trap RETURN is GLOBAL in bash (no set -T) — when test function returns, trap fires in run_test's scope where local $root is out-of-scope. Double-quote expansion at trap-set time captures the literal path so cleanup works correctly.
 
 set -uo pipefail
 

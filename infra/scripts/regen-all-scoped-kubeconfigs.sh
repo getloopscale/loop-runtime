@@ -58,7 +58,7 @@ if ! flock -n -x $LOCK_FD; then
   log "ERROR: another regen is in progress (lock held: $LOCK_FILE). Retry after current operator finishes."
   exit 1
 fi
-trap "rm -f \"$LOCK_FILE\" 2>/dev/null || true" EXIT
+trap 'rm -f "$LOCK_FILE" 2>/dev/null || true' EXIT
 
 log "lock acquired ($LOCK_FILE)"
 
@@ -113,7 +113,7 @@ log "found $n_cells eligible cell(s) for regen (cell-default excluded per EC-1)"
 FAILED=0
 SUCCEEDED=0
 
-while IFS=$'\t' read -r cr_name cell_id cluster_name api_server secret_ns secret_name; do
+while IFS=$'\t' read -r cr_name cell_id cluster_name _api_server secret_ns secret_name; do
   log "→ regen: cellID=$cell_id cr=$cr_name cluster=$cluster_name secret=$secret_ns/$secret_name"
 
   if [[ "$DRY_RUN_FLAG" == "1" ]]; then
@@ -132,8 +132,8 @@ while IFS=$'\t' read -r cr_name cell_id cluster_name api_server secret_ns secret
   # accepts the target's raw kubeconfig as input; in standalone-multi the
   # raw kubeconfig comes from `k3d kubeconfig get <cluster_name>`. In
   # production it comes from the operator's main DOKS kubeconfig.
-  TMP_KC=$(mktemp -t scoped-${cell_id}.XXXXXX.yaml)
-  trap "rm -f $TMP_KC" RETURN
+  TMP_KC=$(mktemp -t "scoped-${cell_id}.XXXXXX.yaml")
+  trap 'rm -f "$TMP_KC"' RETURN
 
   # Resolve raw kubeconfig source (test or live).
   # CR spec.clusterName is the operator-friendly label (e.g., "workload",
@@ -154,8 +154,8 @@ while IFS=$'\t' read -r cr_name cell_id cluster_name api_server secret_ns secret
     continue
   fi
 
-  SCOPED_OUTPUT=$(mktemp -t scoped-out-${cell_id}.XXXXXX.yaml)
-  trap "rm -f $TMP_KC $SCOPED_OUTPUT" RETURN
+  SCOPED_OUTPUT=$(mktemp -t "scoped-out-${cell_id}.XXXXXX.yaml")
+  trap 'rm -f "$TMP_KC" "$SCOPED_OUTPUT"' RETURN
 
   # IMPORTANT (LIVE bug 2026-05-13): pass cluster_name (bare, e.g., "workload"),
   # NOT cell_id ("cell-1") and NOT "loopzero-workload". The lib internally

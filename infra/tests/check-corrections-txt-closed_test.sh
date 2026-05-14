@@ -11,10 +11,13 @@
 #
 # Run: bash infra/tests/check-corrections-txt-closed_test.sh
 # SPDX-License-Identifier: Apache-2.0
+#
+# shellcheck disable=SC2329  # test_* functions invoked dynamically via run_test dispatch
 
 set -uo pipefail
 
 CORRECTIONS_FILE="$(cd "$(dirname "$0")/.." && pwd)/tests/load/CORRECTIONS.txt"
+# shellcheck disable=SC2034  # CUTOFF_DATE referenced via grep regex in white-box assertion (test 4 below)
 CUTOFF_DATE="2026-05-13"
 
 PASS=0
