@@ -68,8 +68,16 @@ assert_eq "window-14d excludes 2026-04-01 run" "1" "$chartsnap_fail"
 OUT_JSON=$("$SCRIPT" --window-days 14 --reference 2026-05-15T00:00:00Z <"$WORK/runs-mixed.json")
 runs_total=$(echo "$OUT_JSON" | grep -oE '"runs_total":[[:space:]]*[0-9]+' | head -1 | awk -F: '{print $2}' | xargs)
 assert_eq "runs_total counts all in window" "3" "$runs_total"
-echo "$OUT_JSON" | grep -q '"window_days":[[:space:]]*14'    && assert_eq "window_days field present" "ok" "ok" || assert_eq "window_days field present" "ok" "missing"
-echo "$OUT_JSON" | grep -q '"reference_utc"'                 && assert_eq "reference_utc field present" "ok" "ok" || assert_eq "reference_utc field present" "ok" "missing"
+if echo "$OUT_JSON" | grep -q '"window_days":[[:space:]]*14'; then
+  assert_eq "window_days field present" "ok" "ok"
+else
+  assert_eq "window_days field present" "ok" "missing"
+fi
+if echo "$OUT_JSON" | grep -q '"reference_utc"'; then
+  assert_eq "reference_utc field present" "ok" "ok"
+else
+  assert_eq "reference_utc field present" "ok" "missing"
+fi
 
 # ---- Case 4: 4 known gates always present, default 0 ----
 cat >"$WORK/runs-empty.json" <<'EOF'
