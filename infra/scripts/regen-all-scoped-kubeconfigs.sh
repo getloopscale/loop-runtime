@@ -58,7 +58,20 @@ if ! flock -n -x $LOCK_FD; then
   log "ERROR: another regen is in progress (lock held: $LOCK_FILE). Retry after current operator finishes."
   exit 1
 fi
-trap 'rm -f "$LOCK_FILE" 2>/dev/null || true' EXIT
+# Cleanup discipline: accumulate ALL mktemp temps in TMP_FILES[] and clean
+# via EXIT trap. Previous design used `trap RETURN` inside the per-cell while
+# loop, but RETURN only fires for function returns — NOT loop iterations or
+# script exit. Result: every invocation leaked 2 temps per cell. Fix landed
+# 2026-05-14 iter-16 (corrections-sprint Ralph loop).
+TMP_FILES=()
+# shellcheck disable=SC2329  # invoked via `trap cleanup_temps EXIT` below
+cleanup_temps() {
+  rm -f "$LOCK_FILE" 2>/dev/null || true
+  if [[ ${#TMP_FILES[@]} -gt 0 ]]; then
+    rm -f "${TMP_FILES[@]}" 2>/dev/null || true
+  fi
+}
+trap cleanup_temps EXIT
 
 log "lock acquired ($LOCK_FILE)"
 
@@ -133,7 +146,7 @@ while IFS=$'\t' read -r cr_name cell_id cluster_name _api_server secret_ns secre
   # raw kubeconfig comes from `k3d kubeconfig get <cluster_name>`. In
   # production it comes from the operator's main DOKS kubeconfig.
   TMP_KC=$(mktemp -t "scoped-${cell_id}.XXXXXX.yaml")
-  trap 'rm -f "$TMP_KC"' RETURN
+  TMP_FILES+=("$TMP_KC")
 
   # Resolve raw kubeconfig source (test or live).
   # CR spec.clusterName is the operator-friendly label (e.g., "workload",
@@ -155,7 +168,7 @@ while IFS=$'\t' read -r cr_name cell_id cluster_name _api_server secret_ns secre
   fi
 
   SCOPED_OUTPUT=$(mktemp -t "scoped-out-${cell_id}.XXXXXX.yaml")
-  trap 'rm -f "$TMP_KC" "$SCOPED_OUTPUT"' RETURN
+  TMP_FILES+=("$SCOPED_OUTPUT")
 
   # IMPORTANT (LIVE bug 2026-05-13): pass cluster_name (bare, e.g., "workload"),
   # NOT cell_id ("cell-1") and NOT "loopzero-workload". The lib internally
