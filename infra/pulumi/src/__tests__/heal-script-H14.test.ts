@@ -134,8 +134,13 @@ describe("k3d-cross-cluster-heal.sh H14 invariants (matrix #155)", () => {
     expect(text).toMatch(/k3d-loopzero-runtime-2-serverlb/);
   });
 
-  it("final log line reports H1-H15 (NOT 9 hacks) — incrementing counter", () => {
-    expect(text).toMatch(/H1-H15 codified/);
+  it("final log line reports H1-H18+ (NOT 9 hacks) — incrementing counter", () => {
+    // Ratchet floor: H1-H18 (H16 added 2026-05-08 dogfood F-21 loopzero-packs
+    // v0.4.0; H17+H18 added per finding `finding-2026-05-15-pulumi-vitest-
+    // 23-fail-drift.md`). H15 was the original ceiling on 2026-04-30.
+    // This regex accepts H18 OR any later floor (H19+) so future
+    // extensions don't require re-pinning.
+    expect(text).toMatch(/H1-H1[89] codified|H1-H[2-9][0-9] codified/);
   });
 
   it("does NOT reference loopzero-workload-2 anywhere (drift guard)", () => {

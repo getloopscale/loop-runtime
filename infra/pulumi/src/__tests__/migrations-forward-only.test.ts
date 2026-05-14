@@ -48,7 +48,14 @@ describe("migration forward-only invariant (T5.3)", () => {
     // enum (see migration 000008_archive_stale_releases for the canonical example).
     // We allow `DROP CONSTRAINT <name>` ONLY when an `ADD CONSTRAINT <name> CHECK`
     // appears in the same file (same logical transaction).
-    const DROP_CONSTRAINT_RE = /\bDROP\s+(?:IF\s+EXISTS\s+)?CONSTRAINT\s+(\w+)\b/i;
+    // PostgreSQL canonical syntax: `DROP CONSTRAINT [IF EXISTS] name`.
+    // Bug fix 2026-05-15: original regex put IF EXISTS BEFORE CONSTRAINT
+    // (`DROP IF EXISTS CONSTRAINT name`) which is invalid PostgreSQL.
+    // Result: `(\w+)` captured the literal `IF` and the whitelist for
+    // CHECK-constraint replacement never matched, producing false
+    // positives on every migration using `IF EXISTS`. See finding
+    // `.claude/knowledge-base/concepts/operations/finding-2026-05-15-pulumi-vitest-23-fail-drift.md`.
+    const DROP_CONSTRAINT_RE = /\bDROP\s+CONSTRAINT\s+(?:IF\s+EXISTS\s+)?(\w+)\b/i;
     const ADD_CHECK_RE = /\bADD\s+CONSTRAINT\s+(\w+)\s+CHECK\b/i;
 
     for (const f of upFiles) {

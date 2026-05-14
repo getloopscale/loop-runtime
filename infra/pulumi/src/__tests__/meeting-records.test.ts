@@ -17,7 +17,10 @@ import { resolve } from "node:path";
 import { describe, expect, it } from "vitest";
 
 const REPO_ROOT = resolve(__dirname, "..", "..", "..", "..");
-const DR_DIR = resolve(REPO_ROOT, "docs", "decisions");
+// 2026-05-11 doc cleanup (fc1793dd) moved governance records from
+// docs/decisions/ to .claude/knowledge-base/meetings/. See finding
+// `.claude/knowledge-base/concepts/operations/finding-2026-05-15-pulumi-vitest-23-fail-drift.md`.
+const DR_DIR = resolve(REPO_ROOT, ".claude", "knowledge-base", "meetings");
 
 const RECORDS = [
   {
@@ -43,7 +46,7 @@ describe("Phase -1 governance decision records (T-1.1 + T-1.2 + T-1.3)", () => {
       const path = resolve(DR_DIR, rec.file);
 
       it("exists at canonical location", () => {
-        expect(existsSync(path), `${rec.file} must exist in docs/decisions/`).toBe(true);
+        expect(existsSync(path), `${rec.file} must exist in .claude/knowledge-base/meetings/`).toBe(true);
       });
 
       const text = existsSync(path) ? readFileSync(path, "utf-8") : "";

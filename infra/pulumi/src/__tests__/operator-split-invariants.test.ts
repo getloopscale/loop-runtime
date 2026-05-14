@@ -65,11 +65,17 @@ describe("operator-split invariants matrix (I-1 through I-8)", () => {
     expect(ids.size).toBe(SPLIT_CHARTS.length);
   });
 
-  it("I-3 RBAC subset covered by operator-clusterrole-subset.test.ts (iter 22)", () => {
-    expect(
-      existsSync(resolve(__dirname, "operator-clusterrole-subset.test.ts")),
-      "I-3 verification test must exist",
-    ).toBe(true);
+  it("I-3 RBAC subset covered by split_operator_clusterrole_grants_test.go (post fc1793dd)", () => {
+    // The legacy `operator-clusterrole-subset.test.ts` compared each split
+    // operator's ClusterRole against the monolith `tenant-controller`
+    // chart — but the monolith chart was DELETED in fc1793dd as part of
+    // operator-split T1.5 (CLAUDE.md confirms: "the legacy monolith chart
+    // `infra/helm/tenant-controller` ... were deleted in T1.5"). The
+    // semantically-equivalent absolute-permissions check (per binary)
+    // now lives in `infra/tests/unit/split_operator_clusterrole_grants_test.go`.
+    // See finding `.claude/knowledge-base/concepts/operations/finding-2026-05-15-pulumi-vitest-23-fail-drift.md`.
+    const goTest = resolve(REPO_ROOT, "infra", "tests", "unit", "split_operator_clusterrole_grants_test.go");
+    expect(existsSync(goTest), "I-3 verification (split_operator_clusterrole_grants_test.go) must exist").toBe(true);
   });
 
   it("I-4 metrics registration covered by Go test", () => {
@@ -113,15 +119,12 @@ describe("operator-split invariants matrix (I-1 through I-8)", () => {
     ).toBe(true);
   });
 
-  it("invariants doc itself remains canonical (no rename drift)", () => {
-    const path = resolve(REPO_ROOT, "docs", "decisions", "operator-split-invariants.md");
-    expect(existsSync(path), "operator-split-invariants.md must exist at canonical location").toBe(true);
-    const text = readFileSync(path, "utf-8");
-    // Every I-N must be present in the doc.
-    for (const n of [1, 2, 3, 4, 5, 6, 7, 8]) {
-      expect(text, `I-${n} section must remain in invariants doc`).toMatch(
-        new RegExp(`^##\\s+I-${n}\\b`, "m"),
-      );
-    }
-  });
+  // The standalone `docs/decisions/operator-split-invariants.md` doc
+  // was deleted in fc1793dd (2026-05-11 doc cleanup); the I-1..I-8
+  // invariants are now verified directly by the 8 individual tests
+  // above (RBAC, replicaCount, ImagePullSecret, leader-election,
+  // metrics, cache scoping, adopt-or-create lifecycle) — the "central
+  // index doc" check was meta-coverage that no longer adds signal once
+  // each invariant has its own pinned test. See finding
+  // `.claude/knowledge-base/concepts/operations/finding-2026-05-15-pulumi-vitest-23-fail-drift.md`.
 });
