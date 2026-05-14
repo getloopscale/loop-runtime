@@ -17,10 +17,12 @@
 #   TARGET_IP=209.38.205.78 bash infra/scripts/verify-corrections-item-C.sh
 #   DB_ID=<uuid> bash infra/scripts/verify-corrections-item-C.sh  # skip interactive picker
 #
-# Exit codes:
+# Exit codes (aligned with sibling helper file-corrections-item-I-upstream.sh
+# per iter-18 sprint audit — operator cancellation is NOT a usage error):
 #   0  — verification complete (one of outcomes A/B/C chosen + finding doc updated)
-#   1  — usage error / doctl not auth / no databases / operator cancelled
+#   1  — usage error / doctl not auth / no databases / invalid input
 #   2  — outcome B chosen but `doctl databases firewalls remove` failed
+#   3  — operator cancelled (explicit non-confirmation of DECOMMISSIONED)
 
 set -uo pipefail
 
@@ -98,7 +100,8 @@ if [[ "$DB_ID" == "DECOMMISSIONED" ]]; then
   if [[ "$DRY_RUN_FLAG" != "1" ]]; then
     read -rp "Confirm DB is decommissioned (no firewall exists)? [y/N]: " confirm
     if [[ "${confirm,,}" != "y" ]]; then
-      die "DECOMMISSIONED not confirmed; aborting"
+      log "DECOMMISSIONED not confirmed; aborting"
+      exit 3  # operator cancelled — not a usage error (per iter-18 alignment)
     fi
   fi
   log "Operator confirmed DB decommissioned — recording Outcome A (RESOLVED) without firewall check."
