@@ -250,6 +250,15 @@ func (b *WorkflowBuilder) Build(spec services.WorkflowSpec) (*forge.Workflow, er
 			labelBuildID:     spec.BuildID,
 			labelLanguage:    primaryLanguage,
 		},
+		Annotations: map[string]string{
+			// Plan 2026-05-15 T8.1 (close-all-gaps audit M08): propagate
+			// the API request's correlation_id onto the Workflow CR so
+			// the build pod logs, Argo controller events, and the API
+			// can be cross-referenced with a single Loki query
+			// `{correlation_id="X"}`. Operator already reads this
+			// annotation in application_controller.go:99.
+			"loopzero.io/correlation-id": spec.CorrelationID,
+		},
 		Templates: templates,
 		// Workspace uses a dynamically provisioned PVC shared across all DAG steps.
 		// Each step in the DAG runs as a separate pod — emptyDir does NOT share across pods.
