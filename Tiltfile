@@ -100,13 +100,32 @@ k8s_resource(
 # infra/scripts/run-migrations.sh) — that backfills schema_migrations
 # with the highest version, registering the schema as fully applied.
 # See dogfood-2026-05-08-fixes T1.2/T1.3 (ADR D1).
+# Plan T3.1 (2026-05-14, F-01 fix): dedicated long-lived port-forward
+# for PostgreSQL. Previously db-migrate wrapped kubectl port-forward in
+# `trap "kill"` which terminated the PF after migrations completed; edge
+# tests (~50min later) found port 15432 dead. By extracting the PF as a
+# Tilt local_resource with `serve_cmd`, it stays up for the entire
+# `tilt up` session and auto-restarts when postgresql-0 restarts.
+local_resource(
+    "pg-port-forward",
+    serve_cmd="kubectl --context k3d-loopzero-mgmt port-forward -n loopzero-system svc/postgresql 15432:5432",
+    resource_deps=["postgresql"],
+    auto_init=True,
+    allow_parallel=True,
+    labels=["loopzero"],
+)
+
+# db-migrate now relies on the long-lived PF (no inline kubectl).
+# T1.2/T1.3 backfill semantics preserved (see ADR D1 of
+# dogfood-2026-05-08-fixes).
 local_resource(
     "db-migrate",
     cmd="""
-        kubectl --context k3d-loopzero-mgmt port-forward -n loopzero-system svc/postgresql 15432:5432 &
-        PF_PID=$!
-        trap "kill $PF_PID 2>/dev/null; wait $PF_PID 2>/dev/null" EXIT
-        sleep 3
+        # Wait for pg-port-forward to be ready (up to 30s).
+        for i in $(seq 1 30); do
+            if nc -z localhost 15432 2>/dev/null; then break; fi
+            sleep 1
+        done
         for f in api/internal/db/migrations/*.up.sql; do
             PGPASSWORD=loopzero-dev-password psql -h localhost -p 15432 -U loopzero -d loopzero -f "$f"
         done
@@ -123,7 +142,7 @@ local_resource(
             ON CONFLICT (version) DO UPDATE SET dirty = false;
         "
     """,
-    resource_deps=["postgresql"],
+    resource_deps=["postgresql", "pg-port-forward"],
     deps=["api/internal/db/migrations"],
 )
 
