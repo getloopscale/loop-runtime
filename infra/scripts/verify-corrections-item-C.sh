@@ -29,6 +29,16 @@ REPO_ROOT="$(cd "$(dirname "$0")/.." && cd .. && pwd)"
 FINDING_DOC="$REPO_ROOT/.claude/knowledge-base/concepts/operations/finding-2026-05-13-item-C-resolution.md"
 AUDIT_DOC="$REPO_ROOT/.claude/knowledge-base/concepts/operations/finding-2026-05-13-corrections-txt-audit.md"
 
+# Parse flags
+DRY_RUN_FLAG=0
+while [[ $# -gt 0 ]]; do
+  case "$1" in
+    --dry-run) DRY_RUN_FLAG=1; shift ;;
+    -h|--help) sed -n '1,30p' "$0"; exit 0 ;;
+    *) echo "usage: $0 [--dry-run]" >&2; exit 1 ;;
+  esac
+done
+
 log() { printf '[verify-C] %s\n' "$*" >&2; }
 die() { log "ERROR: $*"; exit 1; }
 
@@ -53,36 +63,79 @@ log "doctl auth OK ($(doctl account get --format Email --no-header 2>/dev/null |
 # ---------------------------------------------------------------------------
 if [[ -z "${DB_ID:-}" ]]; then
   log "Listing databases..."
-  doctl databases list --format ID,Name,Engine,Status >&2
+  DB_LIST=$(doctl databases list --format ID,Name,Engine,Status 2>&1)
+  echo "$DB_LIST" >&2
   echo "" >&2
+
+  # Count data rows (subtract 1 for header line).
+  DB_ROWS=$(echo "$DB_LIST" | wc -l)
+  if [[ "$DB_ROWS" -le 1 ]]; then
+    log "WARN: auth context shows 0 visible databases."
+    log "Possible reasons:"
+    log "  (a) different DO account/team holds the production DB"
+    log "      → run \`doctl auth init\` to switch context, then re-run this script"
+    log "  (b) production DB was decommissioned"
+    log "      → if confirmed, classify as Outcome A (RESOLVED — firewall no longer exists)"
+    log "      → re-run with DB_ID=<placeholder> or update finding doc manually"
+    log "  (c) account scope limitation (team-shared DB requires explicit context switch)"
+    log "      → \`doctl account ratelimit\` may indicate scope; ask team admin"
+    log ""
+    log "If you want to proceed without a DB (e.g., to record Outcome A for decommissioned DB):"
+    log "  DB_ID=DECOMMISSIONED bash $0"
+    log "(Script will skip firewall check and record Outcome A with note.)"
+    die "no databases visible in current auth context; cannot verify firewall"
+  fi
+
   read -rp "DB ID to check (paste UUID from list above): " DB_ID
   [[ -n "$DB_ID" ]] || die "no DB_ID provided"
+fi
+
+# Special-case: operator confirms DB was decommissioned (no firewall to check).
+DB_DECOMMISSIONED=0
+if [[ "$DB_ID" == "DECOMMISSIONED" ]]; then
+  # Require explicit operator confirmation before recording Outcome A — prevents
+  # accidental write during `bash -x` test invocations.
+  if [[ "$DRY_RUN_FLAG" != "1" ]]; then
+    read -rp "Confirm DB is decommissioned (no firewall exists)? [y/N]: " confirm
+    if [[ "${confirm,,}" != "y" ]]; then
+      die "DECOMMISSIONED not confirmed; aborting"
+    fi
+  fi
+  log "Operator confirmed DB decommissioned — recording Outcome A (RESOLVED) without firewall check."
+  CHOSEN_OUTCOME="A"
+  CLASSIFICATION="RESOLVED"
+  ACTION_TAKEN="none (DB decommissioned; firewall no longer exists)"
+  DB_DECOMMISSIONED=1
 fi
 
 log "Target DB: $DB_ID"
 log "Target IP: $TARGET_IP"
 
 # ---------------------------------------------------------------------------
-# 2. List firewall rules + grep for target IP
+# 2. List firewall rules + grep for target IP (skip if decommissioned)
 # ---------------------------------------------------------------------------
-log "Fetching firewall rules..."
-FIREWALL_OUT=$(doctl databases firewalls list "$DB_ID" --format Type,Value 2>&1) || die "doctl firewalls list failed: $FIREWALL_OUT"
+if [[ "$DB_DECOMMISSIONED" == "0" ]]; then
+  log "Fetching firewall rules..."
+  FIREWALL_OUT=$(doctl databases firewalls list "$DB_ID" --format Type,Value 2>&1) || die "doctl firewalls list failed: $FIREWALL_OUT"
 
-echo "$FIREWALL_OUT" >&2
-echo "" >&2
+  echo "$FIREWALL_OUT" >&2
+  echo "" >&2
 
-if echo "$FIREWALL_OUT" | grep -qF "$TARGET_IP"; then
-  IP_PRESENT=1
-  log "Target IP $TARGET_IP IS present in firewall."
-else
-  IP_PRESENT=0
-  log "Target IP $TARGET_IP NOT present (firewall is already clean)."
+  if echo "$FIREWALL_OUT" | grep -qF "$TARGET_IP"; then
+    IP_PRESENT=1
+    log "Target IP $TARGET_IP IS present in firewall."
+  else
+    IP_PRESENT=0
+    log "Target IP $TARGET_IP NOT present (firewall is already clean)."
+  fi
 fi
 
 # ---------------------------------------------------------------------------
-# 3. Outcome selection
+# 3. Outcome selection (skip if decommissioned — already set above)
 # ---------------------------------------------------------------------------
-if [[ "$IP_PRESENT" == "0" ]]; then
+if [[ "$DB_DECOMMISSIONED" == "1" ]]; then
+  : # outcome already set
+elif [[ "$IP_PRESENT" == "0" ]]; then
   CHOSEN_OUTCOME="A"
   CLASSIFICATION="RESOLVED"
   ACTION_TAKEN="none (verified empty already)"
@@ -122,7 +175,7 @@ TIMESTAMP="$(date -u +%Y-%m-%dT%H:%M:%SZ)"
 log "Chosen outcome: $CHOSEN_OUTCOME ($CLASSIFICATION)"
 
 # ---------------------------------------------------------------------------
-# 4. Inline-update finding doc
+# 4. Inline-update finding doc (skip if --dry-run)
 # ---------------------------------------------------------------------------
 [[ -f "$FINDING_DOC" ]] || die "finding doc not found: $FINDING_DOC"
 
@@ -144,6 +197,13 @@ if [[ "$CHOSEN_OUTCOME" == "C" ]]; then
   SUMMARY_BLOCK="$SUMMARY_BLOCK
 - **Reason to keep:** ${keep_reason:-[operator did not provide]}
 - **Revisit trigger:** ${keep_trigger:-[operator did not provide]}"
+fi
+
+if [[ "$DRY_RUN_FLAG" == "1" ]]; then
+  log "=== DRY RUN: would insert this block into $FINDING_DOC ==="
+  echo "$SUMMARY_BLOCK"
+  log "=== END DRY RUN (no file modified) ==="
+  exit 0
 fi
 
 # Insert after the closing --- of YAML frontmatter (find the 2nd --- line).
