@@ -5,7 +5,9 @@
   "description": "LoopZero DR drill Pulumi project — separate from production (MEET-2026-05-12 D9)",
   "main": "src/index.ts",
   "scripts": {
-    "build": "tsc -b"
+    "build": "tsc -b",
+    "test": "vitest run",
+    "test:watch": "vitest"
   },
   "dependencies": {
     "@pulumi/pulumi": "^3.140.0",
@@ -15,6 +17,7 @@
   },
   "devDependencies": {
     "@types/node": "^20",
-    "typescript": "~5.5.4"
+    "typescript": "~5.5.4",
+    "vitest": "^3.2.4"
   }
 }
