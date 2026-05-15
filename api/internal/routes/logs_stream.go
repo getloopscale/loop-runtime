@@ -278,7 +278,7 @@ func (h *LogStreamHandler) streamLoop(
 					}
 					continue
 				}
-				if build != nil && statemachine.IsBuildTerminal(statemachine.State(build.Status)) {
+				if build != nil && statemachine.IsBuildPhaseTerminal(statemachine.BuildPhase(build.Status)) {
 					if len(entries) == 0 {
 						emptyPollsAfterTerminal++
 					} else {

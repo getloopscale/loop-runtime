@@ -273,7 +273,7 @@ func (h *StreamHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 				return
 			}
 			// If build is terminal and journal is gone, close the stream.
-			if statemachine.IsBuildTerminal(statemachine.State(build.Status)) {
+			if statemachine.IsBuildPhaseTerminal(statemachine.BuildPhase(build.Status)) {
 				return
 			}
 		}
@@ -315,7 +315,7 @@ func (h *StreamHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	// Track when the build first became terminal, for the safety timeout.
 	// If it is already terminal (SUCCEEDED waiting for deploy events), start the clock now.
 	var buildTerminalSince time.Time
-	if statemachine.IsBuildTerminal(statemachine.State(build.Status)) {
+	if statemachine.IsBuildPhaseTerminal(statemachine.BuildPhase(build.Status)) {
 		buildTerminalSince = time.Now()
 	}
 
@@ -366,7 +366,7 @@ func (h *StreamHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 				consecutivePollErrors = 0
 
 				// Track when the build first became terminal (for safety timeout).
-				if statemachine.IsBuildTerminal(statemachine.State(build.Status)) {
+				if statemachine.IsBuildPhaseTerminal(statemachine.BuildPhase(build.Status)) {
 					buildTerminalSince = time.Now()
 					buildIsTerminal = true
 				}

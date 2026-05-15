@@ -137,7 +137,7 @@ func (a *BuildOrchestratorAdapter) IsBuildTerminal(ctx context.Context, buildID 
 	if err != nil {
 		return false, err
 	}
-	return statemachine.IsBuildTerminal(statemachine.State(build.Status)), nil
+	return statemachine.IsBuildPhaseTerminal(statemachine.BuildPhase(build.Status)), nil
 }
 
 // GetBuildTenantID returns the tenant that owns a build (SEC-4: authorization check).
