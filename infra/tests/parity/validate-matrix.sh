@@ -88,12 +88,17 @@ else
 fi
 
 # Gate 4: API tests for the multi-cell-relevant packages.
+# Same surface-on-failure pattern as Gates 5+6 (per finding-2026-05-15-
+# pulumi-vitest-23-fail-drift): aggregate exit code hides per-test signal.
 if command -v go >/dev/null 2>&1; then
-  if (cd "${REPO_ROOT}/api" && go test -short ./internal/routes/... ./internal/services/... ./internal/placement/... ./internal/metrics/... ./tests/unit/... >/dev/null 2>&1); then
+  gate4_out=$(mktemp)
+  if (cd "${REPO_ROOT}/api" && go test -short ./internal/routes/... ./internal/services/... ./internal/placement/... ./internal/metrics/... ./tests/unit/... >"$gate4_out" 2>&1); then
     result 0 "api:multi-cell-relevant-tests"
   else
     result 1 "api:multi-cell-relevant-tests"
+    grep -E "^--- FAIL|^FAIL\b|^ok\s" "$gate4_out" | head -10 | sed 's/^/      /'
   fi
+  rm -f "$gate4_out"
 else
   result 2 "api: go not installed"
 fi
@@ -231,15 +236,19 @@ else
 fi
 
 # Gate 10: operators envtest (only when KUBEBUILDER_ASSETS set).
+# Same surface-on-failure pattern as Gates 4+5+6.
 if [[ -n "${KUBEBUILDER_ASSETS:-}" ]]; then
   if (( QUICK == 1 )); then
     result 2 "operators:envtest (--quick skipped)"
   else
-    if (cd "${REPO_ROOT}/operators" && go test -short -timeout=300s ./... >/dev/null 2>&1); then
+    gate10_out=$(mktemp)
+    if (cd "${REPO_ROOT}/operators" && go test -short -timeout=300s ./... >"$gate10_out" 2>&1); then
       result 0 "operators:envtest"
     else
       result 1 "operators:envtest"
+      grep -E "^--- FAIL|^FAIL\b|^ok\s" "$gate10_out" | head -10 | sed 's/^/      /'
     fi
+    rm -f "$gate10_out"
   fi
 else
   result 2 "operators:envtest (KUBEBUILDER_ASSETS not set)"
