@@ -18,7 +18,19 @@ import (
 
 // buildMachine is the build state machine singleton.
 // Used to validate all status transitions.
-var buildMachine = statemachine.NewBuildMachine()
+//
+// Phase 5 caller migration of ADR `2026-05-15-T6-1-typed-state-machines.md`
+// (iter 37): switched from untyped `NewBuildMachine() *Machine` to the
+// typed wrapper `NewBuildTypedMachine() *BuildMachine`. The local
+// `safeTransition()` helper that previously took `*Machine` is replaced
+// by the wrapper's built-in `SafeTransition()` method which carries
+// the same recover-and-convert-to-error contract.
+//
+// Wire format unchanged: `string(BPhX) == string(BuildX)` for every
+// constant (verified by TestBuildTypedMachine_WireFormatCompatibility),
+// so DB rows persisted under the untyped path read back identically
+// under the typed path. No migration of `builds.status` column needed.
+var buildMachine = statemachine.NewBuildTypedMachine()
 
 // CellDefault is the cell identifier used by single-cell deployments and as
 // the default for any row created without an explicit cell assignment.
@@ -73,7 +85,11 @@ type BuildAppSpec struct {
 // BuildStore defines the interface for build persistence operations.
 //
 // Methods are split across files:
-//   - build_store.go: struct, Create, GetByID, HasActiveBuild, UpdateStatus, Set*, GetBuildApps, scan, safeTransition
+//   - build_store.go: struct, Create, GetByID, HasActiveBuild,
+//     UpdateStatus, Set*, GetBuildApps, scan. (safeTransition local
+//     helper lives at the bottom of this file but is no longer used
+//     by Build code post-iter-37 — kept until release_store.go
+//     migrates to the typed wrapper.)
 //   - build_store_list.go: ListByProject, ListByProjectAndEnv
 //   - build_store_reconcile.go: FindActiveBuilds, CancelActiveBuilds
 type BuildStore interface {
@@ -120,7 +136,7 @@ func (s *PostgresBuildStore) Create(ctx context.Context, tx DBTX, build *Build) 
 	if build.ID == "" {
 		build.ID = id.GenerateBuildID()
 	}
-	build.Status = string(statemachine.BuildQueued)
+	build.Status = string(statemachine.BPhQueued)
 
 	_, err := tx.Exec(ctx,
 		`INSERT INTO builds (id, tenant_id, project_id, environment, status, correlation_id, created_by, commit_sha)
@@ -211,28 +227,32 @@ func (s *PostgresBuildStore) UpdateStatus(ctx context.Context, tx DBTX, buildID 
 		return nil, err
 	}
 
-	// Validate transition via state machine — catch panics and convert to typed error
-	newState, err := safeTransition(buildMachine, statemachine.State(build.Status), statemachine.Event(event))
+	// Validate transition via typed state machine. SafeTransition catches
+	// the underlying Machine.Transition panic on invalid input and returns
+	// statemachine.ErrInvalidTransition (wrapped by NewInvalidTransition
+	// for backward compat with callers that errors.As-check the typed
+	// error type).
+	newPhase, err := buildMachine.SafeTransition(statemachine.BuildPhase(build.Status), statemachine.BuildPhaseEvent(event))
 	if err != nil {
-		return nil, err
+		return nil, loopzeroerrors.NewInvalidTransition(build.Status, event)
 	}
 
 	// Update in DB — set timing fields based on state transition.
 	var query string
 	var args []interface{}
 
-	switch newState {
-	case statemachine.BuildRunning:
+	switch newPhase {
+	case statemachine.BPhRunning:
 		query = `UPDATE builds SET status = $1, started_at = NOW() WHERE id = $2`
-		args = []interface{}{string(newState), buildID}
-	case statemachine.BuildSucceeded, statemachine.BuildFailed, statemachine.BuildCancelled:
+		args = []interface{}{string(newPhase), buildID}
+	case statemachine.BPhSucceeded, statemachine.BPhFailed, statemachine.BPhCancelled:
 		query = `UPDATE builds SET status = $1, finished_at = NOW(),
 			duration_seconds = COALESCE(EXTRACT(EPOCH FROM (NOW() - started_at))::int, 0)
 			WHERE id = $2`
-		args = []interface{}{string(newState), buildID}
+		args = []interface{}{string(newPhase), buildID}
 	default:
 		query = `UPDATE builds SET status = $1 WHERE id = $2`
-		args = []interface{}{string(newState), buildID}
+		args = []interface{}{string(newPhase), buildID}
 	}
 
 	_, err = executor.Exec(ctx, query, args...)
@@ -240,7 +260,7 @@ func (s *PostgresBuildStore) UpdateStatus(ctx context.Context, tx DBTX, buildID 
 		return nil, fmt.Errorf("build store: update status failed: %w", err)
 	}
 
-	build.Status = string(newState)
+	build.Status = string(newPhase)
 	return build, nil
 }
 
