@@ -11,7 +11,6 @@ import {
   spawnLoopZero,
   mkTmpHome,
   cleanupTmpHome,
-  parseLastJsonLine,
 } from './_fixtures/spawn-helper';
 
 const tmpHomes: string[] = [];

@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: Apache-2.0
 // Copyright 2025-2026 The LoopZero Authors
 
-import { describe, it, expect, beforeEach, jest } from '@jest/globals';
+import { describe, it, expect, jest } from '@jest/globals';
 import { DoctorCommand, DoctorDeps } from '../../src/commands/doctor';
 
 function makeDeps(overrides: Partial<DoctorDeps> = {}): DoctorDeps {

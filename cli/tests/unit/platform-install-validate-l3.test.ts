@@ -123,7 +123,7 @@ describe('platformInstall --validate-l3 (T8.1)', () => {
   it('validateL3=true + phase=Ready → spawn go test for L3 smoke', async () => {
     const valuesFile = writeValues();
     const { deps } = makeDeps();
-    mockSpawnSync.mockImplementation(((cmd: string) => ({
+    mockSpawnSync.mockImplementation(((_cmd: string) => ({
       status: 0,
       stdout: 'PASS',
       stderr: '',
@@ -164,7 +164,7 @@ describe('platformInstall --validate-l3 (T8.1)', () => {
   it('--json + validateL3=true emits l3 progress event', async () => {
     const valuesFile = writeValues();
     const { deps, out } = makeDeps();
-    mockSpawnSync.mockImplementation(((cmd: string) => ({
+    mockSpawnSync.mockImplementation(((_cmd: string) => ({
       status: 0,
       stdout: 'PASS',
       stderr: '',

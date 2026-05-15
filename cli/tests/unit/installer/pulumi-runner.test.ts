@@ -15,7 +15,6 @@ import {
 } from '../../../src/installer/pulumi-runner';
 
 import * as path from 'path';
-import * as fs from 'fs';
 
 describe('pulumi-runner', () => {
   describe('resolvePulumiProjectDir', () => {

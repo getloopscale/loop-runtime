@@ -2,7 +2,7 @@
 // Tests the pure decideRestore() function (no I/O beyond filesystem stat,
 // which is mocked).
 
-import { describe, it, expect, beforeEach, afterEach, jest } from '@jest/globals';
+import { describe, it, expect, beforeEach, afterEach } from '@jest/globals';
 import { decideRestore } from '../../src/installer/secret-backups';
 import * as fs from 'fs';
 import * as path from 'path';

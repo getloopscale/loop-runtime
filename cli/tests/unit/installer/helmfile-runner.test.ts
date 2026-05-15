@@ -14,8 +14,6 @@ import {
 } from '../../../src/installer/helmfile-runner';
 
 import * as path from 'path';
-import * as os from 'os';
-import * as fs from 'fs';
 
 describe('helmfile-runner', () => {
   describe('resolveHelmfilePath', () => {
