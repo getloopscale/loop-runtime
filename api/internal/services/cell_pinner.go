@@ -145,12 +145,17 @@ func (p *CellPinner) Pin(ctx context.Context, tenantID, cellID string) (string, 
 		// these without operator intervention. Persistent failures still
 		// surface via metric + slog.Warn.
 		var patchErr error
+	retryLoop:
 		for attempt := 0; attempt < 3; attempt++ {
 			if attempt > 0 {
 				select {
 				case <-ctx.Done():
+					// Bug fix iter 14: `break` inside select exits the select,
+					// not the for loop — so ctx.Err() was ineffectual (next
+					// iter would overwrite). Label-break correctly aborts the
+					// retry loop with the context error preserved.
 					patchErr = ctx.Err()
-					break
+					break retryLoop
 				case <-time.After(time.Duration(100*intPow(4, attempt)) * time.Millisecond):
 				}
 			}

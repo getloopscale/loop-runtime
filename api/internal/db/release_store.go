@@ -50,16 +50,14 @@ type Release struct {
 	ImageSignedAt  *time.Time `json:"image_signed_at,omitempty"`
 }
 
-// releaseSelectColumns is the canonical column list for SELECTs that
-// return a Release. Centralized so adding a column doesn't require
-// editing 9+ scattered query strings (CHG-2026-04-25-ATTESTATION-WIRE).
-const releaseSelectColumns = `id, build_id, tenant_id, project_id, environment, status, correlation_id,
-	        created_by, created_at, COALESCE(git_commit, ''), git_mirror_status,
-	        COALESCE(apps, 'null'::jsonb), COALESCE(artifacts, 'null'::jsonb),
-	        COALESCE(side_effects, 'null'::jsonb),
-	        image_digest, image_signature, image_signed_at`
-
 // ReleaseStore defines the interface for release persistence operations.
+//
+// NOTE: a `releaseSelectColumns` const was introduced in CHG-2026-04-25-
+// ATTESTATION-WIRE (commit 1f093272) intending to centralize the 9+
+// scattered SELECT column lists. The refactor was never completed (zero
+// call sites), so the orphan const was removed 2026-05-15 iter 14. The
+// centralization remains valuable future work — when re-introducing,
+// ensure every SELECT query in this file consumes it.
 type ReleaseStore interface {
 	Create(ctx context.Context, tx DBTX, release *Release) error
 	GetByID(ctx context.Context, id string) (*Release, error)
@@ -284,7 +282,7 @@ func (s *PostgresReleaseStore) CancelAllByEnv(ctx context.Context, tx DBTX, tena
 
 	cancelled := 0
 	for _, r := range pending {
-		newState, err := safeTransition(releaseMachine, statemachine.State(r.status), statemachine.Event(statemachine.ReleaseProjectDeleted))
+		newState, err := safeTransition(releaseMachine, statemachine.State(r.status), statemachine.ReleaseProjectDeleted)
 		if err != nil {
 			// Skip silently — state machine forbids this transition (e.g. an
 			// unknown future state). Better to keep cleaning the rest than abort.

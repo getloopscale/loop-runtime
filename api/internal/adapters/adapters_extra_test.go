@@ -20,7 +20,6 @@ import (
 // translation inline (RollbackOrchestrator is concrete, not interface).
 type fakeRollbackOrchestrator struct {
 	result *services.RollbackResult
-	err    error
 }
 
 func TestRollbackServiceAdapter_Rollback_Success(t *testing.T) {

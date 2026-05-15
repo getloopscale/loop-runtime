@@ -335,7 +335,7 @@ func TestPreviewHandler_Create_RejectsMissingFields(t *testing.T) {
 		{"commit_sha missing", `{"pr_number":1,"branch":"x"}`},
 	}
 	for _, tc := range cases {
-		tc := tc
+		// Go 1.22+: per-iteration loop variable; no shadow needed.
 		t.Run(tc.name, func(t *testing.T) {
 			svc := &fakePreviewService{}
 			h := NewPreviewHandler(&fakePreviewStore{}, svc, nil)

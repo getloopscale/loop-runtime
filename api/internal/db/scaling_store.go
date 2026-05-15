@@ -254,7 +254,7 @@ func (s *PostgresScalingStore) Delete(ctx context.Context, tx DBTX, tenantID, pr
 // own connection pool when tx is nil. A single-row DELETE doesn't
 // need a transaction for correctness.
 func (s *PostgresScalingStore) DeleteByProject(ctx context.Context, tx DBTX, tenantID, projectID string) error {
-	executor := DBTX(tx)
+	executor := tx
 	if executor == nil {
 		executor = s.db
 	}

@@ -217,7 +217,7 @@ func TestPreviewService_CreatePreview_ValidationFailures(t *testing.T) {
 		{"empty commit", func(r *domain.CreatePreviewRequest) { r.CommitSHA = "" }},
 	}
 	for _, tc := range cases {
-		tc := tc
+		// Go 1.22+: per-iteration loop variable; no shadow needed.
 		t.Run(tc.name, func(t *testing.T) {
 			svc, _ := NewPreviewService(PreviewServiceDeps{Store: &previewFakeStore{}})
 			req := newRequest()

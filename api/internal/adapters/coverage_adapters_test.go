@@ -46,9 +46,7 @@ func TestPgxRowsAdapter_Delegates(t *testing.T) {
 // via the real orchestrator path (line below), so the fake's interface methods
 // were never invoked and tripped deadcode.
 type fakeSubmitOrchestrator struct {
-	captured *services.SubmitBuildRequest
-	resp     *services.SubmitBuildResponse
-	err      error
+	resp *services.SubmitBuildResponse
 }
 
 func TestBuildOrchestratorAdapter_SubmitBuild_DefaultAppType(t *testing.T) {

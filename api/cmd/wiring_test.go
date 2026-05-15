@@ -179,40 +179,6 @@ func setupFunctionsInFiles(t *testing.T, pattern string) []string {
 	return found
 }
 
-// functionCallsInMain parses main.go and extracts all function calls made
-// from the main() function and top-level functions it calls.
-func functionCallsInMain(t *testing.T, mainPath string) []string {
-	t.Helper()
-	fset := token.NewFileSet()
-	f, err := parser.ParseFile(fset, mainPath, nil, 0)
-	if err != nil {
-		t.Fatalf("parse %s: %v", mainPath, err)
-	}
-
-	var found []string
-	// Scan ALL functions in main.go, not just main(), because setup functions
-	// may be called from setupBuildHandler() or other orchestration functions.
-	for _, decl := range f.Decls {
-		fn, ok := decl.(*ast.FuncDecl)
-		if !ok {
-			continue
-		}
-		ast.Inspect(fn, func(n ast.Node) bool {
-			call, ok := n.(*ast.CallExpr)
-			if !ok {
-				return true
-			}
-			switch fun := call.Fun.(type) {
-			case *ast.Ident:
-				found = append(found, fun.Name)
-			case *ast.SelectorExpr:
-				found = append(found, fun.Sel.Name)
-			}
-			return true
-		})
-	}
-	return found
-}
 
 func contains(ss []string, s string) bool {
 	for _, v := range ss {

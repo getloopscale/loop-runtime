@@ -37,9 +37,11 @@ type constraintCase struct {
 	table      string
 	constraint string
 	expected   []string // sorted ASCENDING
-	// Some State constants are intentionally not persisted to DB (e.g.,
-	// transient internal-only states). List them here to opt-out.
-	notInCheck []string
+	// Note: the `notInCheck []string` field was declared here for
+	// "intentionally not persisted to DB" opt-outs but never read by
+	// any test case (all current state machines persist every state).
+	// Removed 2026-05-15 iter 14. Re-add when a state machine genuinely
+	// has transient-only states.
 }
 
 // stateConstantsAsSortedStringSlice — extract State constants from a slice
