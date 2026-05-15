@@ -150,11 +150,20 @@ type CellResolver interface {
 type BuildHandler struct {
 	orch         BuildOrchestratorService
 	logger       *slog.Logger
-	admission    AdmissionChecker // nil = disabled, no-op
-	cellResolver CellResolver     // MEET-053: resolves tenant → cell_id per-request
+	admission    AdmissionChecker     // nil = disabled, no-op
+	cellResolver CellResolver         // MEET-053: resolves tenant → cell_id per-request
+	envEnsurer   EnvironmentEnsurer   // Plan T2.2 D5: auto-create env on first deploy --env <novo>
 }
 
 // NewBuildHandler creates a new BuildHandler.
+// EnvironmentEnsurer ensures the requested environment exists (auto-create
+// on first deploy --env <novo>). Plan T2.2 D5. Implementations should be
+// idempotent: existing envs return nil immediately; new envs create the
+// Environment CR + namespace + ArgoCD app and wait for phase=Active.
+type EnvironmentEnsurer interface {
+	EnsureEnvironment(ctx context.Context, tenantID, envName string) error
+}
+
 func NewBuildHandler(orch BuildOrchestratorService, logger *slog.Logger) *BuildHandler {
 	return &BuildHandler{
 		orch:   orch,
@@ -168,6 +177,14 @@ func NewBuildHandler(orch BuildOrchestratorService, logger *slog.Logger) *BuildH
 func (h *BuildHandler) WithAdmission(a AdmissionChecker, resolver CellResolver) *BuildHandler {
 	h.admission = a
 	h.cellResolver = resolver
+	return h
+}
+
+// WithEnvironmentEnsurer wires an EnvironmentEnsurer so the build handler
+// auto-creates missing Environment CRs on first deploy --env <novo>. Plan
+// T2.2 D5. Nil ensurer (default) preserves legacy behavior (env must pre-exist).
+func (h *BuildHandler) WithEnvironmentEnsurer(e EnvironmentEnsurer) *BuildHandler {
+	h.envEnsurer = e
 	return h
 }
 
@@ -225,6 +242,28 @@ func (h *BuildHandler) Create(w http.ResponseWriter, r *http.Request) {
 			400,
 		))
 		return
+	}
+
+	// Plan T2.2 D5 — auto-create environment on first deploy --env <novo>.
+	// Closes F-S1-02 where LoopZeroApplication CR was created but Environment CR
+	// + workload namespace + ArgoCD App+AppProject were not, causing eternal
+	// SYNC_FAILED. When envEnsurer is wired, calling EnsureEnvironment is a
+	// no-op for existing envs and creates+waits for new ones.
+	if h.envEnsurer != nil {
+		if ensureErr := h.envEnsurer.EnsureEnvironment(ctx, uc.TenantID, req.Environment); ensureErr != nil {
+			// Wrap non-LoopZeroError errors so the handler emits a clean response.
+			var te *loopzeroerrors.LoopZeroError
+			if errors.As(ensureErr, &te) {
+				writeLoopZeroError(w, te)
+			} else {
+				writeLoopZeroError(w, loopzeroerrors.NewLoopZeroError(
+					"ENV_PROVISION_FAILED",
+					fmt.Sprintf("Failed to provision environment %q: %s", req.Environment, ensureErr.Error()),
+					500,
+				))
+			}
+			return
+		}
 	}
 
 	// SEC-3 fix: Validate app paths before they reach shell scripts in the build pipeline.
