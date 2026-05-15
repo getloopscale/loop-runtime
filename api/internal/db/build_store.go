@@ -22,9 +22,10 @@ import (
 // Phase 5 caller migration of ADR `2026-05-15-T6-1-typed-state-machines.md`
 // (iter 37): switched from untyped `NewBuildMachine() *Machine` to the
 // typed wrapper `NewBuildTypedMachine() *BuildMachine`. The local
-// `safeTransition()` helper that previously took `*Machine` is replaced
+// `safeTransition()` helper that previously took `*Machine` was replaced
 // by the wrapper's built-in `SafeTransition()` method which carries
-// the same recover-and-convert-to-error contract.
+// the same recover-and-convert-to-error contract. The local helper was
+// deleted iter 38 after release_store.go also migrated.
 //
 // Wire format unchanged: `string(BPhX) == string(BuildX)` for every
 // constant (verified by TestBuildTypedMachine_WireFormatCompatibility),
@@ -86,10 +87,7 @@ type BuildAppSpec struct {
 //
 // Methods are split across files:
 //   - build_store.go: struct, Create, GetByID, HasActiveBuild,
-//     UpdateStatus, Set*, GetBuildApps, scan. (safeTransition local
-//     helper lives at the bottom of this file but is no longer used
-//     by Build code post-iter-37 — kept until release_store.go
-//     migrates to the typed wrapper.)
+//     UpdateStatus, Set*, GetBuildApps, scan
 //   - build_store_list.go: ListByProject, ListByProjectAndEnv
 //   - build_store_reconcile.go: FindActiveBuilds, CancelActiveBuilds
 type BuildStore interface {
@@ -359,14 +357,9 @@ func (s *PostgresBuildStore) scanBuild(row Row) (*Build, error) {
 	return &b, nil
 }
 
-// safeTransition wraps Machine.Transition, catching panics from invalid
-// transitions and converting them to ErrInvalidTransition.
-func safeTransition(m *statemachine.Machine, current statemachine.State, event statemachine.Event) (newState statemachine.State, err error) {
-	defer func() {
-		if r := recover(); r != nil {
-			err = loopzeroerrors.NewInvalidTransition(string(current), string(event))
-		}
-	}()
-	newState = m.Transition(current, event)
-	return newState, nil
-}
+// NOTE: the local `safeTransition()` helper that previously wrapped
+// `*statemachine.Machine.Transition` was deleted iter 38 after both
+// callers (build_store.go iter 37 + release_store.go iter 38) migrated
+// to the typed wrappers' built-in `SafeTransition` methods. Test
+// coverage moved to `pkg/statemachine/safe_transition_test.go` which
+// exercises all 11 typed wrappers' SafeTransition methods uniformly.

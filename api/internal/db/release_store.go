@@ -18,7 +18,20 @@ import (
 
 // releaseMachine is the release state machine singleton.
 // Used to validate all status transitions.
-var releaseMachine = statemachine.NewReleaseMachine()
+//
+// Phase 5 caller migration of ADR `2026-05-15-T6-1-typed-state-machines.md`
+// (iter 38): switched from untyped `NewReleaseMachine() *Machine` to the
+// typed wrapper `NewReleaseTypedMachine() *ReleaseMachine` shipped iter
+// 33. Each `Transition` / `SafeTransition` call now takes typed
+// `ReleasePhase` + `ReleasePhaseEvent` — a cross-machine confusion (e.g.,
+// passing `BPEventStarted` to `releaseMachine.SafeTransition`) becomes a
+// Go compile error instead of a runtime panic.
+//
+// Wire format unchanged: `string(RPhX) == string(ReleaseX)` for every
+// constant (verified by TestReleaseTypedMachine_WireFormatCompatibility),
+// so DB rows persisted under the untyped path read back identically.
+// No migration of `releases.status` column needed.
+var releaseMachine = statemachine.NewReleaseTypedMachine()
 
 // Release represents a release record in the database.
 type Release struct {
@@ -115,7 +128,7 @@ func (s *PostgresReleaseStore) Create(ctx context.Context, tx DBTX, release *Rel
 	if release.ID == "" {
 		release.ID = id.GenerateReleaseID()
 	}
-	release.Status = string(statemachine.ReleaseReady)
+	release.Status = string(statemachine.RPhReady)
 
 	// CHG-2026-04-25-ATTESTATION-WIRE: persist signature columns when
 	// the caller populated them (Phase 5 in container_delivery). nil
@@ -193,22 +206,26 @@ func (s *PostgresReleaseStore) UpdateStatus(ctx context.Context, tx DBTX, releas
 		return nil, err
 	}
 
-	// Validate transition via state machine
-	newState, err := safeTransition(releaseMachine, statemachine.State(release.Status), statemachine.Event(event))
+	// Validate transition via typed state machine. SafeTransition catches
+	// the underlying Machine.Transition panic and returns
+	// statemachine.ErrInvalidTransition — re-wrapped here as a
+	// loopzeroerrors.InvalidTransition for backward compat with callers that
+	// errors.As-check the typed error type.
+	newPhase, err := releaseMachine.SafeTransition(statemachine.ReleasePhase(release.Status), statemachine.ReleasePhaseEvent(event))
 	if err != nil {
-		return nil, err
+		return nil, loopzeroerrors.NewInvalidTransition(release.Status, event)
 	}
 
 	// Update in DB
 	_, err = executor.Exec(ctx,
 		`UPDATE releases SET status = $1 WHERE id = $2`,
-		string(newState), releaseID,
+		string(newPhase), releaseID,
 	)
 	if err != nil {
 		return nil, fmt.Errorf("release store: update status failed: %w", err)
 	}
 
-	release.Status = string(newState)
+	release.Status = string(newPhase)
 	return release, nil
 }
 
@@ -282,7 +299,7 @@ func (s *PostgresReleaseStore) CancelAllByEnv(ctx context.Context, tx DBTX, tena
 
 	cancelled := 0
 	for _, r := range pending {
-		newState, err := safeTransition(releaseMachine, statemachine.State(r.status), statemachine.ReleaseProjectDeleted)
+		newPhase, err := releaseMachine.SafeTransition(statemachine.ReleasePhase(r.status), statemachine.RPEventProjectDeleted)
 		if err != nil {
 			// Skip silently — state machine forbids this transition (e.g. an
 			// unknown future state). Better to keep cleaning the rest than abort.
@@ -290,7 +307,7 @@ func (s *PostgresReleaseStore) CancelAllByEnv(ctx context.Context, tx DBTX, tena
 		}
 		_, err = executor.Exec(ctx,
 			`UPDATE releases SET status = $1 WHERE id = $2`,
-			string(newState), r.id,
+			string(newPhase), r.id,
 		)
 		if err != nil {
 			return cancelled, fmt.Errorf("release store: cancel cascade update %s: %w", r.id, err)

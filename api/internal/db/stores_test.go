@@ -199,75 +199,15 @@ func makeReleaseRowValues(r Release) []any {
 }
 
 // =============================================================================
-// safeTransition tests
+// safeTransition tests (DELETED iter 38)
 // =============================================================================
-
-// TestSafeTransition exercises both build and release state machines with
-// valid + invalid transition cases. Table-driven per Quality-Gate Phase 3
-// (was 5 near-clone functions).
-func TestSafeTransition(t *testing.T) {
-	type tc struct {
-		name          string
-		makeMachine   func() *statemachine.Machine
-		from          statemachine.State
-		event         statemachine.Event
-		wantState     statemachine.State
-		wantErr       bool
-		wantInvalidTx bool // verify errors.Is(err, ErrInvalidTransition)
-	}
-	cases := []tc{
-		{
-			name:        "build valid: QUEUED + BuildStarted → RUNNING",
-			makeMachine: statemachine.NewBuildMachine,
-			from:        statemachine.BuildQueued, event: statemachine.BuildStarted,
-			wantState: statemachine.BuildRunning,
-		},
-		{
-			name:        "build invalid: from terminal SUCCEEDED returns ErrInvalidTransition",
-			makeMachine: statemachine.NewBuildMachine,
-			from:        statemachine.BuildSucceeded, event: statemachine.BuildStarted,
-			wantErr: true, wantInvalidTx: true,
-		},
-		{
-			name:        "build invalid: BuildReleaseCompleted from QUEUED returns error",
-			makeMachine: statemachine.NewBuildMachine,
-			from:        statemachine.BuildQueued, event: statemachine.BuildReleaseCompleted,
-			wantErr: true,
-		},
-		{
-			name:        "release valid: READY + GitMirrorCompleted → PENDING",
-			makeMachine: statemachine.NewReleaseMachine,
-			from:        statemachine.ReleaseReady, event: statemachine.ReleaseGitMirrorCompleted,
-			wantState: statemachine.ReleasePending,
-		},
-		{
-			name:        "release invalid: GitMirrorCompleted from ACTIVE returns error",
-			makeMachine: statemachine.NewReleaseMachine,
-			from:        statemachine.ReleaseActive, event: statemachine.ReleaseGitMirrorCompleted,
-			wantErr: true,
-		},
-	}
-	for _, c := range cases {
-		t.Run(c.name, func(t *testing.T) {
-			gotState, err := safeTransition(c.makeMachine(), c.from, c.event)
-			if c.wantErr {
-				if err == nil {
-					t.Fatalf("expected error, got nil")
-				}
-				if c.wantInvalidTx && !errors.Is(err, loopzeroerrors.ErrInvalidTransition) {
-					t.Errorf("expected ErrInvalidTransition, got: %v", err)
-				}
-				return
-			}
-			if err != nil {
-				t.Fatalf("expected no error, got: %v", err)
-			}
-			if gotState != c.wantState {
-				t.Errorf("expected %s, got: %s", c.wantState, gotState)
-			}
-		})
-	}
-}
+//
+// TestSafeTransition was deleted iter 38 after the local `safeTransition`
+// helper in build_store.go was removed. Coverage moved to
+// `pkg/statemachine/safe_transition_test.go` which exercises every
+// typed wrapper's `SafeTransition` method uniformly (Build + Release +
+// 9 other machines). The previous Build+Release-specific table-driven
+// test is subsumed by the broader per-machine coverage.
 
 // =============================================================================
 // Build Store tests
