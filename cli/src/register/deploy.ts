@@ -228,6 +228,7 @@ export function registerDeployCommands(deps: CommandDeps): void {
     .command('status')
     .description('Show environment status for the current project')
     .option('--env <name>', 'Target environment', 'production')
+    .option('--project <name>', 'Project name (overrides loopzero.yaml lookup; plan T2.3 D6)')
     .action(async (cmdOpts) => {
       const globalOpts = getGlobalOpts();
       const apiClient = new ApiClient({ baseURL: apiUrl, token: configStore.getToken() ?? undefined, onUnauthorized: handleUnauthorized });
@@ -248,7 +249,7 @@ export function registerDeployCommands(deps: CommandDeps): void {
       });
 
       const exitCode = await withTimeout(
-        statusCmd.execute({ env: cmdOpts.env, json: globalOpts.json }),
+        statusCmd.execute({ env: cmdOpts.env, project: cmdOpts.project, json: globalOpts.json }),
         API_REQUEST_TIMEOUT_MS + 10_000,
         'Status request timed out. Check your connection and try again.',
       ).catch((err: Error) => {
@@ -274,6 +275,7 @@ export function registerDeployCommands(deps: CommandDeps): void {
     .option('--runtime', 'Stream runtime logs from the workload namespace instead of build logs')
     .option('--since <duration>', 'Restrict to entries newer than NOW - <duration>. Accepts "24h", "7d", "30m", or raw seconds. Default: 7d.')
     .option('-f, --follow', 'Stream logs in real-time')
+    .option('--project <name>', 'Project name (overrides loopzero.yaml lookup; plan T2.3 D6)')
     .action(async (cmdOpts) => {
       const globalOpts = getGlobalOpts();
       const apiClient = new ApiClient({ baseURL: apiUrl, token: configStore.getToken() ?? undefined, onUnauthorized: handleUnauthorized });
@@ -362,6 +364,7 @@ export function registerDeployCommands(deps: CommandDeps): void {
           tail: cmdOpts.tail,
           step: cmdOpts.step,
           env: cmdOpts.env,
+          project: cmdOpts.project,
           json: globalOpts.json,
           follow: cmdOpts.follow,
           runtime: cmdOpts.runtime,

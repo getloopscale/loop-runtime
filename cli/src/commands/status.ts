@@ -58,6 +58,8 @@ export interface StatusDeps {
 
 export interface StatusOptions {
   env?: string;
+  /** Plan T2.3 D6 — explicit project override; otherwise inferred from loopzero.yaml */
+  project?: string;
   json?: boolean;
 }
 
@@ -76,17 +78,21 @@ export class StatusCommand {
       return this.exitWithError(opts, 'Not authenticated. Run: loopzero login', 4, 'AUTH_REQUIRED');
     }
 
-    // 2. Find loopzero.yaml
-    const yamlResult = this.deps.findLoopZeroYaml();
-    if (!yamlResult) {
-      return this.exitWithError(opts, 'No loopzero.yaml found. Run: loopzero init', 1, 'MISSING_CONFIG');
+    // 2. Resolve project — explicit --project flag wins over loopzero.yaml.
+    // Plan T2.3 D6 — cross-command consistency.
+    let project: string;
+    if (opts.project) {
+      project = opts.project;
+    } else {
+      const yamlResult = this.deps.findLoopZeroYaml();
+      if (!yamlResult) {
+        return this.exitWithError(opts, 'No loopzero.yaml found. Run: loopzero init (or pass --project <name>)', 1, 'MISSING_CONFIG');
+      }
+      if (yamlResult.parseError) {
+        return this.exitWithError(opts, `Invalid loopzero.yaml: ${yamlResult.parseError}`, 1, 'INVALID_CONFIG');
+      }
+      project = yamlResult.content.project;
     }
-
-    if (yamlResult.parseError) {
-      return this.exitWithError(opts, `Invalid loopzero.yaml: ${yamlResult.parseError}`, 1, 'INVALID_CONFIG');
-    }
-
-    const project = yamlResult.content.project;
 
     // 3. Call API
     let status: StatusApiResponse;

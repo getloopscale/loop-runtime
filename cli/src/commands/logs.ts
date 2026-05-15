@@ -74,6 +74,8 @@ export interface LogsOptions {
   tail?: number;
   step?: string;
   env?: string;
+  /** Plan T2.3 D6 — explicit project override; otherwise inferred from loopzero.yaml */
+  project?: string;
   json?: boolean;
   /** Follow mode: stream logs in real-time via SSE. */
   follow?: boolean;
@@ -121,19 +123,24 @@ export class LogsCommand {
 
     // 2. Resolve build ID — explicit --build or infer from last build
     if (!opts.build) {
-      // F-03: Infer from project status when --build not provided
-      const yaml = this.deps.findLoopZeroYaml();
-      if (!yaml?.content?.project) {
-        return this.exitWithError(opts, 'No loopzero.yaml found. Specify --build <id> or run from a project directory.', 1, 'MISSING_CONFIG');
+      // F-03: Infer from project status when --build not provided.
+      // Plan T2.3 D6 — --project flag overrides loopzero.yaml lookup.
+      let projectName: string | undefined = opts.project;
+      if (!projectName) {
+        const yaml = this.deps.findLoopZeroYaml();
+        if (!yaml?.content?.project) {
+          return this.exitWithError(opts, 'No loopzero.yaml found. Specify --build <id>, run from a project directory, or pass --project <name>.', 1, 'MISSING_CONFIG');
+        }
+        projectName = yaml.content.project;
       }
       if (!this.deps.getProjectStatus) {
         return this.exitWithError(opts, 'Build ID is required. Usage: loopzero logs --build <id>', 1, 'MISSING_BUILD_ID');
       }
       try {
         const env = opts.env ?? 'production';
-        const status = await this.deps.getProjectStatus(yaml.content.project, env);
+        const status = await this.deps.getProjectStatus(projectName, env);
         if (!status?.last_build?.id) {
-          return this.exitWithError(opts, `No builds found for project "${yaml.content.project}" in ${env}.`, 1, 'NO_BUILDS');
+          return this.exitWithError(opts, `No builds found for project "${projectName}" in ${env}.`, 1, 'NO_BUILDS');
         }
         opts.build = status.last_build.id;
       } catch {
