@@ -280,7 +280,7 @@ func tarballToGitBundle(ctx context.Context, tarball io.Reader, commitSHA, commi
 	// SEC: Safe extraction with all protections + StripComponents=1
 	// to remove the GitHub "owner-repo-sha/" prefix directory.
 	repoDir := filepath.Join(tmpDir, "repo")
-	if err := os.MkdirAll(repoDir, 0755); err != nil {
+	if err := os.MkdirAll(repoDir, 0o750); err != nil {
 		_ = os.RemoveAll(tmpDir)
 		return "", fmt.Errorf("mkdir repo: %w", err)
 	}

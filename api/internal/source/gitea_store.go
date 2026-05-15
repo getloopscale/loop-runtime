@@ -97,7 +97,7 @@ func (s *GiteaSourceStore) pushGitBundle(ctx context.Context, tenantID, projectI
 	defer func() { _ = os.RemoveAll(tmpDir) }()
 
 	bundlePath := filepath.Join(tmpDir, "source.bundle")
-	if err := os.WriteFile(bundlePath, data, 0644); err != nil {
+	if err := os.WriteFile(bundlePath, data, 0o600); err != nil {
 		return "", fmt.Errorf("gitea source: write bundle: %w", err)
 	}
 
@@ -165,7 +165,7 @@ func (s *GiteaSourceStore) pushTarBundle(ctx context.Context, tenantID, projectI
 	}
 
 	repoDir := filepath.Join(tmpDir, "repo")
-	if err := os.MkdirAll(repoDir, 0755); err != nil {
+	if err := os.MkdirAll(repoDir, 0o750); err != nil {
 		_ = os.RemoveAll(tmpDir)
 		return PushResult{}, fmt.Errorf("gitea source: mkdir repo: %w", err)
 	}
@@ -173,7 +173,7 @@ func (s *GiteaSourceStore) pushTarBundle(ctx context.Context, tenantID, projectI
 	// SEC: Extract tar.gz with strict validation — no symlinks, no path traversal,
 	// no absolute paths, decompressed size limit, file count limit.
 	tarPath := filepath.Join(tmpDir, "source.tar.gz")
-	if err := os.WriteFile(tarPath, data, 0644); err != nil {
+	if err := os.WriteFile(tarPath, data, 0o600); err != nil {
 		_ = os.RemoveAll(tmpDir)
 		return PushResult{}, fmt.Errorf("gitea source: write tar: %w", err)
 	}

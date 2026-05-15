@@ -133,11 +133,11 @@ func (p *GiteaGitOpsPusher) Push(ctx context.Context, opts services.GitOpsPushOp
 	// Write manifests to {environment}/{projectID}/manifests.yaml
 	// BLOCKER-3: environment-first hierarchy so ArgoCD Application path scopes to one environment
 	envPath := filepath.Join(repoDir, opts.Environment, opts.ProjectID)
-	if err := os.MkdirAll(envPath, 0755); err != nil {
+	if err := os.MkdirAll(envPath, 0o750); err != nil {
 		return "", fmt.Errorf("gitops push: create dir: %w", err)
 	}
 	manifestFile := filepath.Join(envPath, "manifests.yaml")
-	if err := os.WriteFile(manifestFile, []byte(opts.Manifests), 0644); err != nil {
+	if err := os.WriteFile(manifestFile, []byte(opts.Manifests), 0o600); err != nil {
 		return "", fmt.Errorf("gitops push: write manifests: %w", err)
 	}
 
@@ -260,10 +260,10 @@ func (p *GiteaGitOpsPusher) Remove(ctx context.Context, opts services.GitOpsRemo
 	// Unknown and can't prune the remaining K8s resources (F-01/F-02/F-03).
 	envDir := filepath.Join(repoDir, opts.Environment)
 	gitkeep := filepath.Join(envDir, ".gitkeep")
-	if err := os.MkdirAll(envDir, 0755); err != nil {
+	if err := os.MkdirAll(envDir, 0o750); err != nil {
 		return "", fmt.Errorf("gitops remove: ensure env dir: %w", err)
 	}
-	if err := os.WriteFile(gitkeep, []byte(""), 0644); err != nil {
+	if err := os.WriteFile(gitkeep, []byte(""), 0o600); err != nil {
 		return "", fmt.Errorf("gitops remove: write .gitkeep: %w", err)
 	}
 	if err := p.git.Run(ctx, repoDir, "add", filepath.Join(opts.Environment, ".gitkeep")); err != nil {

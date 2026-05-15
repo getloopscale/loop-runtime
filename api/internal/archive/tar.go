@@ -118,7 +118,7 @@ func SafeExtractTarGzReader(r io.Reader, targetDir string, opts *ExtractOpts) (i
 
 		switch hdr.Typeflag {
 		case tar.TypeDir:
-			if err := os.MkdirAll(destPath, 0755); err != nil {
+			if err := os.MkdirAll(destPath, 0o750); err != nil {
 				return fileCount, fmt.Errorf("mkdir %s: %w", cleanName, err)
 			}
 		case tar.TypeReg:
@@ -135,7 +135,7 @@ func SafeExtractTarGzReader(r io.Reader, targetDir string, opts *ExtractOpts) (i
 				return fileCount, fmt.Errorf("%w: total size exceeds %d bytes",
 					ErrDecompressionLimit, maxDecompressedSize)
 			}
-			if err := os.MkdirAll(filepath.Dir(destPath), 0755); err != nil {
+			if err := os.MkdirAll(filepath.Dir(destPath), 0o750); err != nil {
 				return fileCount, fmt.Errorf("mkdir parent for %s: %w", cleanName, err)
 			}
 			outFile, err := os.OpenFile(destPath, os.O_CREATE|os.O_WRONLY|os.O_TRUNC, os.FileMode(hdr.Mode)&0755)
