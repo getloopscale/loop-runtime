@@ -134,16 +134,28 @@ func NewRouter(cfg Config) *chi.Mux {
 			// Auth routes
 			// AUDIT-10: pass UsernameLookup so Whoami can resolve display-friendly
 			// username from the users.username column (populated by migration 000037).
-			// Plan T2.5 D8: pass MemberStore so /whoami can list ALL of a
+			// Plan T2.5 D8 lean: pass MemberStore so /whoami can list ALL of a
 			// user's tenant memberships + mark the active team explicitly
-			// (closes F-S2-02 silent team swap).
-			auth := routes.NewAuthHandler(cfg.AuthUserLookup).WithMembershipLookup(cfg.MemberStore)
+			// (closes F-S2-02 silent team swap symptom).
+			// Plan T2.5 D8 full: pass ActiveTeamStore so /whoami reads the
+			// persistent users.active_tenant_id (migration 000018) and
+			// /team/switch can update it. EC-4 self-heal lives in Whoami.
+			auth := routes.NewAuthHandler(cfg.AuthUserLookup).
+				WithMembershipLookup(cfg.MemberStore)
+			if cfg.ActiveTeamStore != nil {
+				auth = auth.WithActiveTeamStore(cfg.ActiveTeamStore)
+			}
 			r.Get("/api/v1/auth/whoami", auth.Whoami)
 
 			// Rate limiting middleware chain — used for all mutation routes.
 			rateLimitMiddlewares := make([]func(http.Handler) http.Handler, 0, 1)
 			if cfg.RateLimiter != nil {
 				rateLimitMiddlewares = append(rateLimitMiddlewares, cfg.RateLimiter.Middleware())
+			}
+
+			// Plan T2.5 D8 full — POST /team/switch with rate limiting.
+			if cfg.ActiveTeamStore != nil {
+				r.With(rateLimitMiddlewares...).Post("/api/v1/auth/team/switch", auth.SwitchTeam)
 			}
 
 			// Idempotent mutation middleware chain — rate limiting + idempotency.

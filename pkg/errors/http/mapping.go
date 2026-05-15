@@ -64,6 +64,8 @@ var statusByCode = map[string]int{
 
 	"UNAUTHORIZED": http.StatusUnauthorized, // 401
 	"FORBIDDEN":    http.StatusForbidden,    // 403
+	"NOT_MEMBER":   http.StatusForbidden,    // 403 (plan T2.5 D8 — team switch)
+	"NOT_AVAILABLE": http.StatusNotImplemented, // 501 (plan T2.5 D8 — feature not configured)
 
 	"PAYLOAD_TOO_LARGE": http.StatusRequestEntityTooLarge, // 413
 

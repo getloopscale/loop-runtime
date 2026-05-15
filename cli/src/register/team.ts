@@ -6,6 +6,7 @@ import { TeamListCommand } from '../commands/team-list';
 import { TeamAddCommand } from '../commands/team-add';
 import { TeamRemoveCommand } from '../commands/team-remove';
 import { TeamRoleCommand } from '../commands/team-role';
+import { TeamSwitchCommand } from '../commands/team-switch';
 import { API_REQUEST_TIMEOUT_MS } from '../config/constants';
 import { CommandDeps } from './types';
 
@@ -133,6 +134,42 @@ export function registerTeamCommands(deps: CommandDeps): void {
       ).catch((err: Error) => {
         if (globalOpts.json) {
           writeTo(JSON.stringify({ code: 'TEAM_ROLE_TIMEOUT', error: err.message, exit_code: 3 }));
+        } else {
+          writeError(err.message);
+        }
+        return 3;
+      });
+    });
+
+  // Plan T2.5 D8 full — loopzero team switch <name>
+  // Sets users.active_tenant_id (migration 000018) via POST /api/v1/auth/team/switch.
+  // Closes F-S2-02 silent team swap: explicit user-driven selection persisted.
+  teamCmd
+    .command('switch <name>')
+    .description('Set the active team for subsequent commands')
+    .action(async (name: string) => {
+      const globalOpts = getGlobalOpts();
+      const apiClient = new ApiClient({ baseURL: apiUrl, token: configStore.getToken() ?? undefined, onUnauthorized: handleUnauthorized });
+
+      const cmd = new TeamSwitchCommand({
+        getToken: () => configStore.getToken(),
+        switchTeam: async (teamName: string) => {
+          return apiClient.post<{ active_team: string; message: string }>(
+            '/api/v1/auth/team/switch',
+            { name: teamName },
+          );
+        },
+        writeTo,
+        writeError,
+      });
+
+      process.exitCode = await withTimeout(
+        cmd.execute(name, { json: globalOpts.json }),
+        API_REQUEST_TIMEOUT_MS + 10_000,
+        'Team switch timed out. Check your connection and try again.',
+      ).catch((err: Error) => {
+        if (globalOpts.json) {
+          writeTo(JSON.stringify({ code: 'TEAM_SWITCH_TIMEOUT', error: err.message, exit_code: 3 }));
         } else {
           writeError(err.message);
         }

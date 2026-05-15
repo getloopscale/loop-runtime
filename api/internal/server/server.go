@@ -94,6 +94,9 @@ type Config struct {
 	// AUDIT-10: narrow store for /whoami username lookup. Nil is legal (handler
 	// omits username field). Implemented by db.PostgresTeamStore.
 	AuthUserLookup          routes.UsernameLookup
+	// Plan T2.5 D8 full: persistent active-team selection. Nil is legal
+	// (handler degrades to JWT middleware heuristic; /team/switch returns 501).
+	ActiveTeamStore         routes.ActiveTeamStore
 	DomainHandler           *routes.DomainHandler
 	GitHubWebhookHandler    http.Handler
 	RepositoryHandler       *routes.RepositoryHandler

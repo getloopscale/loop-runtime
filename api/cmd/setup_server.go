@@ -182,6 +182,9 @@ func buildServerConfig(
 		teamStore := &db.PostgresTeamStore{DB: dbAdapter}
 		sc.TeamHandler = routes.NewTeamHandler(teamStore)
 		sc.AuthUserLookup = teamStore
+		// Plan T2.5 D8 full — persistent active-team selection backed by
+		// users.active_tenant_id column (migration 000018).
+		sc.ActiveTeamStore = db.NewPostgresActiveTeamStore(dbAdapter)
 		sc.AuditHandler = routes.NewAuditHandler(&db.PostgresAuditStore{DB: dbAdapter})
 		sc.AdminEvictor = buildAdminEvictor(cfg, dbAdapter)
 		// CHG-2026-04-30-DELETE-SINGLE-CELL: wire the CellPinner so the
