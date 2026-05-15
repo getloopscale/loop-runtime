@@ -62,10 +62,10 @@ function makeDeps(overrides: Partial<DomainDeps> = {}): DomainDeps {
 }
 
 function getOutput(deps: DomainDeps): string[] {
-  return (deps as any)._output;
+  return (deps as DomainDeps & { _output: string[] })._output;
 }
 function getErrors(deps: DomainDeps): string[] {
-  return (deps as any)._errors;
+  return (deps as DomainDeps & { _errors: string[] })._errors;
 }
 
 // ============================================================

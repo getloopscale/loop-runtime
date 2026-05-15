@@ -533,6 +533,7 @@ describe('validateConfig', () => {
       const config: LoopZeroYaml = {
         project: 'test',
         apps: {
+          // eslint-disable-next-line @typescript-eslint/no-explicit-any
           api: { path: 'api', framework: '' as any, type: 'server', port: 8080 },
         },
       };
@@ -547,6 +548,7 @@ describe('validateConfig', () => {
       const config: LoopZeroYaml = {
         project: 'test',
         apps: {
+          // eslint-disable-next-line @typescript-eslint/no-explicit-any
           api: { path: 'api', type: 'server', port: 8080 } as any,
         },
       };
@@ -596,6 +598,7 @@ describe('validateConfig', () => {
       const config: LoopZeroYaml = {
         project: 'test',
         apps: {
+          // eslint-disable-next-line @typescript-eslint/no-explicit-any
           api: { path: '.', framework: 'express', type: 'server', port: 3000, render: 'static' as any },
         },
       };
@@ -625,6 +628,7 @@ describe('validateConfig', () => {
       const config: LoopZeroYaml = {
         project: 'test',
         apps: {
+          // eslint-disable-next-line @typescript-eslint/no-explicit-any
           api: { path: '', framework: 'express', type: 'server', port: 3000 } as any,
         },
       };
@@ -1082,6 +1086,7 @@ describe('validateConfig', () => {
             framework: 'express',
             type: 'server',
             port: 3000,
+            // eslint-disable-next-line @typescript-eslint/no-explicit-any
             autoscaling: { min: 1, max: 5, targetCPU: 80, bogusField: 42 } as any,
           },
         },
