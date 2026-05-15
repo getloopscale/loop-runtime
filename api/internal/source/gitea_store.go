@@ -97,7 +97,9 @@ func (s *GiteaSourceStore) pushGitBundle(ctx context.Context, tenantID, projectI
 	defer func() { _ = os.RemoveAll(tmpDir) }()
 
 	bundlePath := filepath.Join(tmpDir, "source.bundle")
-	if err := os.WriteFile(bundlePath, data, 0o600); err != nil {
+	// G703 false positive: bundlePath is tmpdir + literal filename "source.bundle",
+	// no user input flows into the path.
+	if err := os.WriteFile(bundlePath, data, 0o600); err != nil { //nolint:gosec // G703 false positive: tmpdir-internal path
 		return "", fmt.Errorf("gitea source: write bundle: %w", err)
 	}
 
@@ -173,7 +175,9 @@ func (s *GiteaSourceStore) pushTarBundle(ctx context.Context, tenantID, projectI
 	// SEC: Extract tar.gz with strict validation — no symlinks, no path traversal,
 	// no absolute paths, decompressed size limit, file count limit.
 	tarPath := filepath.Join(tmpDir, "source.tar.gz")
-	if err := os.WriteFile(tarPath, data, 0o600); err != nil {
+	// G703 false positive: tarPath is tmpdir + literal filename "source.tar.gz",
+	// no user input flows into the path.
+	if err := os.WriteFile(tarPath, data, 0o600); err != nil { //nolint:gosec // G703 false positive: tmpdir-internal path
 		_ = os.RemoveAll(tmpDir)
 		return PushResult{}, fmt.Errorf("gitea source: write tar: %w", err)
 	}
@@ -267,7 +271,10 @@ func computeDirHash(dir string) (string, error) {
 	h := sha256.New()
 	for _, rel := range paths {
 		h.Write([]byte(rel))
-		data, err := os.ReadFile(filepath.Join(dir, rel))
+		// G304 false positive: `rel` came from filepath.Walk(dir) +
+		// filepath.Rel(dir, p), so the resolved path is always within
+		// `dir`. Caller passes a tmpdir, never user input.
+		data, err := os.ReadFile(filepath.Join(dir, rel)) //nolint:gosec // G304 false positive: rel originated from filepath.Walk(dir)
 		if err != nil {
 			return "", err
 		}

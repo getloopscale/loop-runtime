@@ -309,8 +309,12 @@ func (h *LogStreamHandler) writeSSELogEvent(w http.ResponseWriter, flusher http.
 }
 
 // writeStreamEvent writes a control SSE event (non-log).
+//
+// G705 false positive: SSE stream goes to JSON-parsing clients (CLI,
+// dashboard), not an HTML renderer; the `data` string is API-internal
+// event payload, never raw user input. Caller controls.
 func (h *LogStreamHandler) writeStreamEvent(w http.ResponseWriter, flusher http.Flusher, eventType string, data string) {
-	_, _ = fmt.Fprintf(w, "event: %s\ndata: %s\n\n", eventType, data)
+	_, _ = fmt.Fprintf(w, "event: %s\ndata: %s\n\n", eventType, data) //nolint:gosec // G705 false positive: SSE to JSON-parser clients
 	flusher.Flush()
 }
 

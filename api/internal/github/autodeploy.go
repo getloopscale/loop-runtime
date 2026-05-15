@@ -168,7 +168,9 @@ func (d *AutoDeployer) HandlePush(ctx context.Context, repoFullName, branch, com
 
 	// Step 5: Upload git bundle to S3 for build cluster
 	if d.cfg.ObjectStore != nil {
-		bundleFile, err := os.Open(bundlePath)
+		// G304 false positive: bundlePath comes from tarballToGitBundle
+		// which returns a path under os.MkdirTemp — never user-controlled.
+		bundleFile, err := os.Open(bundlePath) //nolint:gosec // G304 false positive: bundlePath is tmpdir-internal
 		if err != nil {
 			return fmt.Errorf("auto-deploy: open bundle: %w", err)
 		}
@@ -265,8 +267,10 @@ func tarballToGitBundle(ctx context.Context, tarball io.Reader, commitSHA, commi
 	}
 
 	// Write tarball to disk for SafeExtractTarGz (needs seekable file).
+	// G304 false positive: tarPath is constructed from os.MkdirTemp +
+	// hardcoded suffix "source.tar.gz" — no user input on the path.
 	tarPath := filepath.Join(tmpDir, "source.tar.gz")
-	tarFile, err := os.Create(tarPath)
+	tarFile, err := os.Create(tarPath) //nolint:gosec // G304 false positive: tmpdir + literal filename
 	if err != nil {
 		_ = os.RemoveAll(tmpDir)
 		return "", fmt.Errorf("create tar file: %w", err)

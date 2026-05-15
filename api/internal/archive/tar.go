@@ -49,7 +49,7 @@ type ExtractOpts struct {
 //
 // Returns the number of files extracted.
 func SafeExtractTarGz(archivePath, targetDir string, opts *ExtractOpts) (int, error) {
-	f, err := os.Open(archivePath)
+	f, err := os.Open(archivePath) //nolint:gosec // G304 expected: archivePath is caller-validated trusted tmp path
 	if err != nil {
 		return 0, fmt.Errorf("open archive: %w", err)
 	}
@@ -138,7 +138,9 @@ func SafeExtractTarGzReader(r io.Reader, targetDir string, opts *ExtractOpts) (i
 			if err := os.MkdirAll(filepath.Dir(destPath), 0o750); err != nil {
 				return fileCount, fmt.Errorf("mkdir parent for %s: %w", cleanName, err)
 			}
-			outFile, err := os.OpenFile(destPath, os.O_CREATE|os.O_WRONLY|os.O_TRUNC, os.FileMode(hdr.Mode)&0755)
+			// G304 false positive: destPath exhaustively validated lines 103-116
+			// (Clean + IsAbs + .. prefix + .. middle + absTarget prefix check).
+			outFile, err := os.OpenFile(destPath, os.O_CREATE|os.O_WRONLY|os.O_TRUNC, os.FileMode(hdr.Mode)&0o755) //nolint:gosec // G304 false positive: destPath validated against tar path traversal
 			if err != nil {
 				return fileCount, fmt.Errorf("create %s: %w", cleanName, err)
 			}
