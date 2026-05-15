@@ -269,8 +269,20 @@ describe('BuildListCommand', () => {
       const exitCode = await cmd.execute();
 
       expect(exitCode).toBe(1);
-      expect(deps.writeError).toHaveBeenCalledWith('No loopzero.yaml found. Run: loopzero init');
+      expect(deps.writeError).toHaveBeenCalledWith('No loopzero.yaml found. Run: loopzero init (or pass --project <name>)');
       expect(deps.listBuilds).not.toHaveBeenCalled();
+    });
+
+    // Plan T2.3 D6 — --project flag overrides loopzero.yaml lookup.
+    it('test_build_list_with_project_flag_filters', async () => {
+      const deps = createMockDeps({ findLoopZeroYaml: jest.fn().mockReturnValue(null) });
+      const cmd = new BuildListCommand(deps);
+
+      const exitCode = await cmd.execute({ project: 'override-project' });
+
+      expect(exitCode).toBe(0);
+      expect(deps.findLoopZeroYaml).not.toHaveBeenCalled(); // --project bypasses yaml lookup
+      expect(deps.listBuilds).toHaveBeenCalledWith('override-project', undefined, undefined);
     });
 
     it('should return exit code 1 when loopzero.yaml has parse error', async () => {

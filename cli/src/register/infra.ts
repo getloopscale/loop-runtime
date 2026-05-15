@@ -29,7 +29,8 @@ export function registerInfraCommands(deps: CommandDeps): void {
     .description('List recent builds')
     .option('--env <name>', 'Filter by environment')
     .option('--limit <n>', 'Max builds to show')
-    .action(async (cmdOpts: { env?: string; limit?: string }) => {
+    .option('--project <name>', 'Project name (overrides loopzero.yaml lookup; plan T2.3 D6)')
+    .action(async (cmdOpts: { env?: string; limit?: string; project?: string }) => {
       const globalOpts = getGlobalOpts();
       const apiClient = new ApiClient({ baseURL: apiUrl, token: configStore.getToken() ?? undefined, onUnauthorized: handleUnauthorized });
 
@@ -53,7 +54,7 @@ export function registerInfraCommands(deps: CommandDeps): void {
 
       const limit = cmdOpts.limit ? parseInt(cmdOpts.limit, 10) : undefined;
       const exitCode = await withTimeout(
-        buildListCmd.execute({ env: cmdOpts.env, limit, json: globalOpts.json }),
+        buildListCmd.execute({ env: cmdOpts.env, limit, project: cmdOpts.project, json: globalOpts.json }),
         API_REQUEST_TIMEOUT_MS + 10_000,
         'Build list request timed out. Check your connection and try again.',
       ).catch((err: Error) => {

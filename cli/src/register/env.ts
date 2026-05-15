@@ -19,14 +19,16 @@ export function registerEnvCommands(deps: CommandDeps): void {
   envCmd
     .command('list')
     .description('List all environments for the current team')
-    .action(async () => {
+    .option('--project <name>', 'Filter environments by project name (plan T2.3 D6)')
+    .action(async (cmdOpts: { project?: string }) => {
       const globalOpts = getGlobalOpts();
       const apiClient = new ApiClient({ baseURL: apiUrl, token: configStore.getToken() ?? undefined, onUnauthorized: handleUnauthorized });
 
       const cmd = new EnvListCommand({
         getToken: () => configStore.getToken(),
         listEnvironments: async () => {
-          return apiClient.get<{ environments: Array<{ name: string; status: string }> }>('/api/v1/environments');
+          const query = cmdOpts.project ? `?project=${encodeURIComponent(cmdOpts.project)}` : '';
+          return apiClient.get<{ environments: Array<{ name: string; status: string }> }>(`/api/v1/environments${query}`);
         },
         writeTo,
         writeError,
