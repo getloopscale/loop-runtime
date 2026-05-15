@@ -9,45 +9,68 @@ import (
 	"testing"
 )
 
-// TestEnvManagerAdapter_HasEnvironment_ExistsWhenGetReturnsNil asserts
-// HasEnvironment maps Get(nil) → (true, nil).
-func TestEnvManagerAdapter_HasEnvironment_ExistsWhenGetReturnsNil(t *testing.T) {
+// TestEnvManagerAdapter_HasEnvironment_ExistsWhenDetailNonNil asserts the
+// TenantCRManager contract: (non-nil detail, nil err) → exists.
+func TestEnvManagerAdapter_HasEnvironment_ExistsWhenDetailNonNil(t *testing.T) {
 	lister, _ := NewEnvManagerAdapter(
 		func(_ context.Context, _, _ string) error { return nil },
-		func(_ context.Context, _, _ string) error { return nil },
+		func(_ context.Context, _, _ string) (any, error) {
+			return struct{ Name string }{"prod"}, nil
+		},
 	)
 	exists, err := lister.HasEnvironment(context.Background(), "tn-1", "prod")
 	if err != nil {
 		t.Fatalf("unexpected err: %v", err)
 	}
 	if !exists {
-		t.Errorf("expected exists=true on Get nil-error, got false")
+		t.Errorf("expected exists=true on non-nil detail, got false")
 	}
 }
 
-// TestEnvManagerAdapter_HasEnvironment_AbsentOnNotFound asserts that Get
-// returning a "not found" error is mapped to (false, nil) — NOT an error.
-func TestEnvManagerAdapter_HasEnvironment_AbsentOnNotFound(t *testing.T) {
+// TestEnvManagerAdapter_HasEnvironment_AbsentOnNilNilSemantic asserts the
+// TenantCRManager contract: (nil detail, nil err) → does NOT exist.
+func TestEnvManagerAdapter_HasEnvironment_AbsentOnNilNilSemantic(t *testing.T) {
 	lister, _ := NewEnvManagerAdapter(
 		func(_ context.Context, _, _ string) error { return nil },
-		func(_ context.Context, _, _ string) error { return errors.New("environment not found") },
+		func(_ context.Context, _, _ string) (any, error) {
+			return nil, nil // env not present per TenantCRManager
+		},
 	)
 	exists, err := lister.HasEnvironment(context.Background(), "tn-1", "preview")
 	if err != nil {
-		t.Fatalf("expected nil err for not-found, got %v", err)
+		t.Fatalf("expected nil err for absent, got %v", err)
 	}
 	if exists {
-		t.Errorf("expected exists=false for not-found, got true")
+		t.Errorf("expected exists=false for (nil, nil) detail, got true")
+	}
+}
+
+// TestEnvManagerAdapter_HasEnvironment_AbsentOnNotFoundError asserts the
+// defensive legacy semantic: error containing "not found" → absent (not error).
+func TestEnvManagerAdapter_HasEnvironment_AbsentOnNotFoundError(t *testing.T) {
+	lister, _ := NewEnvManagerAdapter(
+		func(_ context.Context, _, _ string) error { return nil },
+		func(_ context.Context, _, _ string) (any, error) {
+			return nil, errors.New("environment not found")
+		},
+	)
+	exists, err := lister.HasEnvironment(context.Background(), "tn-1", "preview")
+	if err != nil {
+		t.Fatalf("expected nil err for not-found message, got %v", err)
+	}
+	if exists {
+		t.Errorf("expected exists=false for not-found error, got true")
 	}
 }
 
 // TestEnvManagerAdapter_HasEnvironment_PropagatesOtherErrors asserts that
-// transient/auth errors (not "not found") propagate as Lister errors so the
-// ensurer can act defensively (warn + proceed to create, idempotent).
+// transient/auth errors (not "not found") propagate as Lister errors.
 func TestEnvManagerAdapter_HasEnvironment_PropagatesOtherErrors(t *testing.T) {
 	lister, _ := NewEnvManagerAdapter(
 		func(_ context.Context, _, _ string) error { return nil },
-		func(_ context.Context, _, _ string) error { return errors.New("forbidden") },
+		func(_ context.Context, _, _ string) (any, error) {
+			return nil, errors.New("forbidden")
+		},
 	)
 	exists, err := lister.HasEnvironment(context.Background(), "tn-1", "preview")
 	if err == nil {
@@ -70,7 +93,7 @@ func TestEnvManagerAdapter_AddEnvironment_Delegates(t *testing.T) {
 			}
 			return nil
 		},
-		func(_ context.Context, _, _ string) error { return nil },
+		func(_ context.Context, _, _ string) (any, error) { return nil, nil },
 	)
 	if err := adder.AddEnvironment(context.Background(), "tn-1", "preview"); err != nil {
 		t.Fatalf("unexpected err: %v", err)

@@ -8,35 +8,39 @@ import (
 	"strings"
 )
 
-// envManagerAdapter wraps a thin EnvironmentManager (just the two methods
-// the ensurer needs) to satisfy EnvironmentLister + EnvironmentAdder.
+// envManagerAdapter wraps EnvironmentManager (add + detail-getter) to satisfy
+// EnvironmentLister + EnvironmentAdder. Plan T2.2 D5 plumbing.
 //
-// Existence semantics: GetEnvironmentDetail returns a non-nil error containing
-// "not found" (case-insensitive) when the env doesn't exist for the tenant.
-// Any other error is propagated as a Lister error.
+// Existence semantics aligned with TenantCRManager:
+//   - GetDetail returns (nonNilDetail, nil) → env exists
+//   - GetDetail returns (nil, nil) → env does NOT exist (TenantCRManager pattern)
+//   - GetDetail returns (_, non-nil err containing "not found") → does NOT exist
+//   - GetDetail returns (_, any other err) → propagate as Lister error
 type envManagerAdapter struct {
-	Add func(ctx context.Context, tenantID, envName string) error
-	Get func(ctx context.Context, tenantID, envName string) error // err==nil → exists
+	Add       func(ctx context.Context, tenantID, envName string) error
+	GetDetail func(ctx context.Context, tenantID, envName string) (envDetail any, err error)
 }
 
-// NewEnvManagerAdapter builds an adapter from two function values. Tests can
-// pass any function; production code passes EnvironmentManager method refs.
+// NewEnvManagerAdapter builds an adapter from two function values. The
+// getDetail func returns (nonNilOpaqueDetail, nil) when env exists, or
+// (nil, nil) when absent (matches TenantCRManager.GetEnvironmentDetail
+// contract). Tests can pass any compatible func.
 func NewEnvManagerAdapter(
 	add func(ctx context.Context, tenantID, envName string) error,
-	getExistence func(ctx context.Context, tenantID, envName string) error,
+	getDetail func(ctx context.Context, tenantID, envName string) (any, error),
 ) (EnvironmentLister, EnvironmentAdder) {
-	a := &envManagerAdapter{Add: add, Get: getExistence}
+	a := &envManagerAdapter{Add: add, GetDetail: getDetail}
 	return a, a
 }
 
-// HasEnvironment — true when Get returns nil error.
+// HasEnvironment maps TenantCRManager semantics to (bool, error).
 func (a *envManagerAdapter) HasEnvironment(ctx context.Context, tenantID, envName string) (bool, error) {
-	err := a.Get(ctx, tenantID, envName)
+	detail, err := a.GetDetail(ctx, tenantID, envName)
 	if err == nil {
-		return true, nil
+		// (nil, nil) → absent; (non-nil, nil) → present.
+		return detail != nil, nil
 	}
-	// "not found" sentinel handling — we treat the env as absent rather than
-	// surfacing a transient/unauthorized error.
+	// Defensive: legacy implementations may surface "not found" as error.
 	if isNotFoundError(err) {
 		return false, nil
 	}

@@ -25,6 +25,7 @@ import (
 	"github.com/loopzero/loopzero/api/internal/placement"
 	"github.com/loopzero/loopzero/api/internal/routes"
 	"github.com/loopzero/loopzero/api/internal/server"
+	"github.com/loopzero/loopzero/api/internal/services"
 	"github.com/loopzero/loopzero/api/internal/tracing"
 
 	"k8s.io/klog/v2"
@@ -208,6 +209,32 @@ func main() {
 	defer waitForBackgroundGoroutines(&bgWg, logger)
 
 	buildHandler := setupBuildHandler(dbAdapter, orchDeps, cellStore, cfg, shutdownCtx, logger)
+
+	// Plan T2.2 D5 — wire EnvironmentEnsurer so loopzero deploy --env <novo>
+	// auto-creates the Environment CR + namespace + ArgoCD App on first
+	// use. Closes F-S1-02 (dogfood 2026-05-15). Wiring requires the
+	// TenantCRManager from k8sDeps; both ensurer + BuildHandler are
+	// composed here in main so we keep the dependency tree explicit.
+	if buildHandler != nil && k8sDeps != nil && k8sDeps.TenantCRMgr != nil {
+		lister, adder := services.NewEnvManagerAdapter(
+			k8sDeps.TenantCRMgr.AddEnvironment,
+			func(ctx context.Context, tenantID, envName string) (any, error) {
+				detail, err := k8sDeps.TenantCRMgr.GetEnvironmentDetail(ctx, tenantID, envName)
+				if detail == nil {
+					return nil, err
+				}
+				return detail, err
+			},
+		)
+		ensurer := &services.EnvironmentEnsurer{
+			Lister: lister,
+			Adder:  adder,
+			Logger: logger,
+		}
+		buildHandler = buildHandler.WithEnvironmentEnsurer(ensurer)
+		logger.Info("env ensurer wired — deploy --env <novo> will auto-create environments (T2.2 D5)")
+	}
+
 	healthServices := setupHealthServices(cfg)
 
 	rateLimiter := middleware.NewRateLimiter(60, 1*time.Minute)
