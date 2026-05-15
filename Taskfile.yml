@@ -42,6 +42,9 @@ includes:
   observabilityfile:
     taskfile: ./taskfiles/observability.yml
     flatten: true
+  drill:
+    taskfile: ./taskfiles/drill.yml
+    optional: false
 
 vars:
   MGMT_CONTEXT: k3d-loopzero-mgmt

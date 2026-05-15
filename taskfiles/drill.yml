@@ -1,0 +1,112 @@
+---
+# Taskfile for pulumi-drill cluster operations.
+#
+# Drill cluster = isolated DOKS DR + scale test environment. Separate Pulumi
+# state (`pulumi-drill` stack) + separate credentials (DRILL_DO_TOKEN,
+# DRILL_PULUMI_TOKEN). NEVER provisioned against prod cloud account.
+#
+# Cost: ~$15-30 per session (3-node DOKS + LB + DB). Mandatory teardown
+# after every session.
+#
+# Used by:
+#   - .github/workflows/drill-l2-scale.yml (bi-weekly cron + manual dispatch)
+#   - .github/workflows/pulumi-reconstruction-drill.yml (quarterly DR drill)
+
+version: '3'
+
+tasks:
+  up:
+    desc: "Provision drill cluster (cost: ~$15/day until teardown)"
+    cmds:
+      - |
+        cd infra/pulumi-drill
+        npx pulumi stack select drill --create
+        npx pulumi up --stack drill --yes
+        echo ""
+        echo "Drill cluster provisioned. API endpoint:"
+        npx pulumi stack output apiUrl --stack drill
+        echo ""
+        echo "WARNING: drill stack is ACTIVE (~\$15/day). Run 'task drill:down' when finished."
+    env:
+      PULUMI_ACCESS_TOKEN: '{{.PULUMI_ACCESS_TOKEN}}'
+      DIGITALOCEAN_TOKEN: '{{.DIGITALOCEAN_TOKEN}}'
+
+  down:
+    desc: "Destroy drill cluster (MANDATORY after every session)"
+    cmds:
+      - |
+        cd infra/pulumi-drill
+        npx pulumi destroy --stack drill --yes
+        echo "Drill stack destroyed. Cost stopped."
+    env:
+      PULUMI_ACCESS_TOKEN: '{{.PULUMI_ACCESS_TOKEN}}'
+      DIGITALOCEAN_TOKEN: '{{.DIGITALOCEAN_TOKEN}}'
+
+  status:
+    desc: "Show drill stack status without modifying it"
+    cmds:
+      - cd infra/pulumi-drill && npx pulumi stack --stack drill || echo "Stack not initialized"
+    env:
+      PULUMI_ACCESS_TOKEN: '{{.PULUMI_ACCESS_TOKEN}}'
+
+  l2-scale:
+    desc: "Full L2 scale test cycle: up + 50-concurrent test + down (cost: ~$15-30, ~2h)"
+    cmds:
+      - |
+        set -euo pipefail
+        echo "=== Phase 1: Provision drill cluster ==="
+        task drill:up
+
+        echo ""
+        echo "=== Phase 2: Wait for API health ==="
+        API_URL=$(cd infra/pulumi-drill && npx pulumi stack output apiUrl --stack drill)
+        for i in $(seq 1 60); do
+          if curl -sf -m 5 "$API_URL/api/v1/health" > /dev/null; then
+            echo "API healthy after attempt $i"
+            break
+          fi
+          sleep 10
+        done
+
+        echo ""
+        echo "=== Phase 3: Mint JWT for L2 test ==="
+        if [ ! -x infra/scripts/drill-mint-jwt.sh ]; then
+          echo "ERROR: infra/scripts/drill-mint-jwt.sh missing — implement before running task drill:l2-scale"
+          task drill:down
+          exit 1
+        fi
+        JWT=$(bash infra/scripts/drill-mint-jwt.sh)
+
+        echo ""
+        echo "=== Phase 4: Run L2 scale (50 concurrent) ==="
+        # Pass criteria: success_rate >= 90% + p95 <= 10min
+        LOOPZERO_E2E=1 LOOPZERO_REAL_DEPLOY=1 LOOPZERO_LOAD_LEVEL=l2 \
+        LOOPZERO_L2_CONCURRENCY="{{.L2_CONCURRENCY | default \"50\"}}" \
+        LOOPZERO_API_URL="$API_URL" \
+        LOOPZERO_TOKEN="$JWT" \
+          go test -timeout 120m -v \
+            -run TestL2_1_FiftyConcurrentDeploys \
+            ./infra/tests/load/...
+        L2_EXIT=$?
+
+        echo ""
+        echo "=== Phase 5: Teardown (MANDATORY) ==="
+        task drill:down
+
+        if [ "$L2_EXIT" -ne 0 ]; then
+          echo "L2 scale test FAILED (exit $L2_EXIT)"
+          exit "$L2_EXIT"
+        fi
+        echo "L2 scale test PASSED"
+    env:
+      PULUMI_ACCESS_TOKEN: '{{.PULUMI_ACCESS_TOKEN}}'
+      DIGITALOCEAN_TOKEN: '{{.DIGITALOCEAN_TOKEN}}'
+
+  dr-drill:
+    desc: "Full disaster recovery drill (alias for .github/workflows/pulumi-reconstruction-drill.yml local equivalent)"
+    cmds:
+      - bash infra/scripts/dr-drill.sh "{{.STAGE | default \"all\"}}"
+    env:
+      PULUMI_ACCESS_TOKEN: '{{.PULUMI_ACCESS_TOKEN}}'
+      DIGITALOCEAN_TOKEN: '{{.DIGITALOCEAN_TOKEN}}'
+      CLOUDFLARE_API_TOKEN: '{{.CLOUDFLARE_API_TOKEN}}'
