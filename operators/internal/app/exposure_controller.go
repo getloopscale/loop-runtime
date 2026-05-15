@@ -33,7 +33,15 @@ import (
 // exposedRouteSM is the ExposedRoute lifecycle state machine (T3.6 / ARCH-002).
 // Currently used to enforce valid initial state. Per-transition refactor
 // (each Status.Phase write goes through SM) is a follow-up.
-var exposedRouteSM = statemachine.NewExposedRouteMachine()
+//
+// Phase 1 POC of ADR `2026-05-15-T6-1-typed-state-machines.md`: migrated
+// to the typed wrapper so `exposedRouteSM.Transition(...)` accepts ONLY
+// `ExposedRouteState`/`ExposedRouteEvent` constants. A typo like
+// `BuildQueued` would be a compile error, instead of a runtime panic on
+// the underlying Machine. Wire format (strings persisted to CR status)
+// is byte-for-byte identical to the untyped path — see
+// `TestExposedRouteTypedMachine_WireFormatCompatibility`.
+var exposedRouteSM = statemachine.NewExposedRouteTypedMachine()
 
 const (
 	// exposureFinalizer is the finalizer name for ExposedRoute cleanup.
@@ -124,7 +132,7 @@ func (r *ExposureReconciler) Reconcile(ctx context.Context, req ctrl.Request) (r
 	// Initialize phase via state machine (T3.6 / ARCH-002).
 	if route.Status.Phase == "" {
 		route.Status.Phase = loopzerov1.ExposedRoutePhase(
-			exposedRouteSM.Transition(statemachine.ExposedRouteEmpty, statemachine.ExposedRouteCreate),
+			exposedRouteSM.Transition(statemachine.XRStateEmpty, statemachine.XREventCreate),
 		)
 	}
 
@@ -149,7 +157,7 @@ func (r *ExposureReconciler) Reconcile(ctx context.Context, req ctrl.Request) (r
 		// Failed -> Pending via SM. Otherwise no-op (already Pending).
 		if route.Status.Phase == loopzerov1.ExposedRoutePhaseFailed {
 			route.Status.Phase = loopzerov1.ExposedRoutePhase(
-				exposedRouteSM.Transition(statemachine.ExposedRouteFailed, statemachine.ExposedRouteRetry),
+				exposedRouteSM.Transition(statemachine.XRStateFailed, statemachine.XREventRetry),
 			)
 		}
 		route.Status.ObservedGeneration = route.Generation
@@ -165,7 +173,7 @@ func (r *ExposureReconciler) Reconcile(ctx context.Context, req ctrl.Request) (r
 	// via SM. T3.6 follow-up.
 	if route.Status.Phase == loopzerov1.ExposedRoutePhasePending {
 		route.Status.Phase = loopzerov1.ExposedRoutePhase(
-			exposedRouteSM.Transition(statemachine.ExposedRoutePending, statemachine.ExposedRouteCertReady),
+			exposedRouteSM.Transition(statemachine.XRStatePending, statemachine.XREventCertReady),
 		)
 	}
 
@@ -191,19 +199,19 @@ func (r *ExposureReconciler) Reconcile(ctx context.Context, req ctrl.Request) (r
 		switch route.Status.Phase {
 		case loopzerov1.ExposedRoutePhaseCertIssued:
 			route.Status.Phase = loopzerov1.ExposedRoutePhase(
-				exposedRouteSM.Transition(statemachine.ExposedRouteCertIssued, statemachine.ExposedRouteProbeOK),
+				exposedRouteSM.Transition(statemachine.XRStateCertIssued, statemachine.XREventProbeOK),
 			)
 		case loopzerov1.ExposedRoutePhaseFailed:
 			// Recovery: Failed -> Pending -> CertIssued -> Reachable in one step
 			// (cert is ready by this point of the function). Use Retry then walk forward.
 			route.Status.Phase = loopzerov1.ExposedRoutePhase(
-				exposedRouteSM.Transition(statemachine.ExposedRouteFailed, statemachine.ExposedRouteRetry),
+				exposedRouteSM.Transition(statemachine.XRStateFailed, statemachine.XREventRetry),
 			)
 			route.Status.Phase = loopzerov1.ExposedRoutePhase(
-				exposedRouteSM.Transition(statemachine.ExposedRoutePending, statemachine.ExposedRouteCertReady),
+				exposedRouteSM.Transition(statemachine.XRStatePending, statemachine.XREventCertReady),
 			)
 			route.Status.Phase = loopzerov1.ExposedRoutePhase(
-				exposedRouteSM.Transition(statemachine.ExposedRouteCertIssued, statemachine.ExposedRouteProbeOK),
+				exposedRouteSM.Transition(statemachine.XRStateCertIssued, statemachine.XREventProbeOK),
 			)
 		case loopzerov1.ExposedRoutePhaseReachable:
 			// Already correct — no transition needed. Idempotent on repeat reconcile.
@@ -228,15 +236,15 @@ func (r *ExposureReconciler) Reconcile(ctx context.Context, req ctrl.Request) (r
 			switch route.Status.Phase {
 			case loopzerov1.ExposedRoutePhasePending:
 				route.Status.Phase = loopzerov1.ExposedRoutePhase(
-					exposedRouteSM.Transition(statemachine.ExposedRoutePending, statemachine.ExposedRouteProbeFail),
+					exposedRouteSM.Transition(statemachine.XRStatePending, statemachine.XREventProbeFail),
 				)
 			case loopzerov1.ExposedRoutePhaseCertIssued:
 				route.Status.Phase = loopzerov1.ExposedRoutePhase(
-					exposedRouteSM.Transition(statemachine.ExposedRouteCertIssued, statemachine.ExposedRouteProbeFail),
+					exposedRouteSM.Transition(statemachine.XRStateCertIssued, statemachine.XREventProbeFail),
 				)
 			case loopzerov1.ExposedRoutePhaseReachable:
 				route.Status.Phase = loopzerov1.ExposedRoutePhase(
-					exposedRouteSM.Transition(statemachine.ExposedRouteReachable, statemachine.ExposedRouteProbeFail),
+					exposedRouteSM.Transition(statemachine.XRStateReachable, statemachine.XREventProbeFail),
 				)
 			case loopzerov1.ExposedRoutePhaseFailed:
 				// Already Failed — no transition needed. Idempotent.
