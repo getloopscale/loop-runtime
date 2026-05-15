@@ -259,7 +259,7 @@ func Load() Config {
 
 		// HTTP Clients
 		HTTPClientTimeout:   envDuration("HTTP_CLIENT_TIMEOUT", 10*time.Second),
-		ArgocdClientTimeout: envDuration("ARGOCD_CLIENT_TIMEOUT", 30*time.Second),
+		ArgocdClientTimeout: envDuration("ARGOCD_CLIENT_TIMEOUT", 90*time.Second), // T1.1 D1: bumped 30→90s for concurrent Ginkgo load headroom
 
 		// Kubernetes Contexts
 		MgmtKubeconfig:  envOr("MGMT_KUBECONFIG", defaultKubeconfig),
@@ -313,7 +313,7 @@ func Load() Config {
 
 		// ArgoCD Sync
 		ArgocdPollInterval: envDuration("ARGOCD_POLL_INTERVAL", 10*time.Second),
-		ArgocdSyncTimeout:  envDuration("ARGOCD_SYNC_TIMEOUT", 300*time.Second),
+		ArgocdSyncTimeout: envDuration("ARGOCD_SYNC_TIMEOUT", 300*time.Second),
 		ArgocdInsecure:     os.Getenv("ARGOCD_INSECURE") == "true",
 
 		// SSE

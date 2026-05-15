@@ -34,15 +34,30 @@ type SyncClientConfig struct {
 	Insecure      bool          // Skip TLS verification (for local dev with self-signed certs)
 	CACertPath    string        // SEC-T02b fix: path to CA cert file for TLS verification. When set, Insecure is ignored.
 	HTTPClient    *http.Client  // Optional: shared HTTP client with connection pooling. When nil, a default client is created.
+	// Timeout configures the HTTP client request timeout. Plan T1.1 D1:
+	// previous hardcoded 30s caused dogfood SYNC_FAILED cascades under Ginkgo
+	// concurrent load. Zero value uses 90s default (3x headroom for 50k scale).
+	Timeout time.Duration
 }
+
+// DefaultArgocdClientTimeout is the default HTTP client timeout for ArgoCD
+// API calls when not explicitly configured. 90s gives headroom for hard-refresh
+// operations under concurrent load while still bounding circuit-breaker probes.
+const DefaultArgocdClientTimeout = 90 * time.Second
 
 // SyncClient implements services.SyncClient using the ArgoCD REST API.
 // Token is obtained from TokenProvider on each request, enabling zero-downtime rotation.
 // MEET-2026-03-28-015: replaced static token string with TokenProvider interface.
+//
+// Plan T1.1 D2: SyncClient now uses an internal SyncSerializer to linearize
+// concurrent sync calls to the same App. This eliminates ArgoCD HTTP 400
+// "another operation is already in progress" errors at the source instead of
+// relying on retries that consume circuit-breaker budget.
 type SyncClient struct {
 	baseURL       string
 	tokenProvider TokenProvider
 	client        *http.Client
+	serializer    *SyncSerializer
 }
 
 // NewSyncClient creates a SyncClient for real ArgoCD operations.
@@ -51,7 +66,11 @@ type SyncClient struct {
 func NewSyncClient(cfg SyncClientConfig) *SyncClient {
 	client := cfg.HTTPClient
 	if client == nil {
-		client = &http.Client{Timeout: 30 * time.Second}
+		timeout := cfg.Timeout
+		if timeout == 0 {
+			timeout = DefaultArgocdClientTimeout
+		}
+		client = &http.Client{Timeout: timeout}
 		// SEC-T02b fix: prefer CA bundle over InsecureSkipVerify.
 		// When CACertPath is set, load the CA and verify TLS properly.
 		if cfg.CACertPath != "" {
@@ -89,6 +108,7 @@ func NewSyncClient(cfg SyncClientConfig) *SyncClient {
 		baseURL:       strings.TrimRight(cfg.BaseURL, "/"),
 		tokenProvider: tp,
 		client:        client,
+		serializer:    NewSyncSerializer(),
 	}
 }
 
@@ -136,6 +156,17 @@ func (c *SyncClient) TriggerSync(ctx context.Context, appName string) error {
 			attribute.String("loopzero.argocd.app_name", appName),
 		))
 	defer span.End()
+
+	// Plan T1.1 D2: serialize concurrent sync calls to the same App. This
+	// eliminates ArgoCD HTTP 400 "another operation is already in progress"
+	// at the source. Calls to DIFFERENT apps proceed in parallel.
+	release, err := c.serializer.AcquireApp(ctx, appName)
+	if err != nil {
+		span.RecordError(err)
+		span.SetStatus(codes.Error, "serializer acquire")
+		return err
+	}
+	defer release()
 
 	// MEET-2026-04-22-058 (B12): no removeSkipReconcile call — operator no longer
 	// sets the annotation, so there is nothing to remove.
