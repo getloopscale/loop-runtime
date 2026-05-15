@@ -79,7 +79,7 @@ func (r *PlatformBootstrapReconciler) reconcileArgoCDPhase(ctx context.Context, 
 		// Step 4: Generate apiKey token for loopzero-api account (non-expiring).
 		// MEET-2026-03-28-013: replaced createArgoCDSession (24h session JWT) with
 		// generateArgoCDApiKey (non-expiring apiKey scoped to sync+get via RBAC).
-		apiKeyToken, err := argoClient.GenerateApiKey(ctx, adminPassword)
+		apiKeyToken, err := argoClient.GenerateAPIKey(ctx, adminPassword)
 		if err != nil {
 			return r.requeueWithRetry(ctx, pb, maxRetries, fmt.Sprintf("failed to generate ArgoCD apiKey: %v", err))
 		}
@@ -134,14 +134,14 @@ func (c *argoCDHTTPClient) CheckReachable(ctx context.Context) error {
 	return nil
 }
 
-// GenerateApiKey creates a non-expiring apiKey token for the loopzero-api account.
+// GenerateAPIKey creates a non-expiring apiKey token for the loopzero-api account.
 // MEET-2026-03-28-013: replaces createArgoCDSession which generated 24h session JWTs.
 //
 // Flow:
 //  1. Login as admin to get a temporary session token
 //  2. Use the session token to generate an apiKey for loopzero-api account
 //  3. Return the apiKey JWT (non-expiring, scoped via ArgoCD RBAC)
-func (c *argoCDHTTPClient) GenerateApiKey(ctx context.Context, password string) (string, error) {
+func (c *argoCDHTTPClient) GenerateAPIKey(ctx context.Context, password string) (string, error) {
 	// Step 1: Login as admin (temporary session, only used to generate apiKey)
 	sessionBody, err := json.Marshal(map[string]string{
 		"username": constants.DefaultArgoCDUsername,

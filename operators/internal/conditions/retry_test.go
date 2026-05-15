@@ -177,7 +177,7 @@ func Test_UpdateStatusWithRetry_NotFound(t *testing.T) {
 // Test_UpdateStatusWithRetry_MutateModifiesSpec_IsRejected — guard test
 // per ADR-0024 condition #2 (k8s-controller-engineer review). Mutate that
 // modifies labels (a metadata footgun for Status().Update) MUST be caught
-// and rejected with SpecMutationError before Status().Update runs.
+// and rejected with ErrSpecMutation before Status().Update runs.
 func Test_UpdateStatusWithRetry_MutateModifiesSpec_IsRejected(t *testing.T) {
 	cm := newCM("cm1", "default", nil)
 	cm.Labels = map[string]string{"original": "yes"}
@@ -192,10 +192,10 @@ func Test_UpdateStatusWithRetry_MutateModifiesSpec_IsRejected(t *testing.T) {
 			return nil
 		})
 	if err == nil {
-		t.Fatalf("expected SpecMutationError, got nil")
+		t.Fatalf("expected ErrSpecMutation, got nil")
 	}
-	if !errors.Is(err, SpecMutationError) {
-		t.Errorf("expected errors.Is(err, SpecMutationError), got %v", err)
+	if !errors.Is(err, ErrSpecMutation) {
+		t.Errorf("expected errors.Is(err, ErrSpecMutation), got %v", err)
 	}
 }
 

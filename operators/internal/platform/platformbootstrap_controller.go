@@ -45,8 +45,8 @@ var platformBootstrapSM = statemachine.NewPlatformBootstrapMachine()
 type ArgoCDBootstrapClient interface {
 	// CheckReachable verifies ArgoCD is reachable (GET /api/version).
 	CheckReachable(ctx context.Context) error
-	// GenerateApiKey creates a non-expiring apiKey for the loopzero-api account.
-	GenerateApiKey(ctx context.Context, adminPassword string) (string, error)
+	// GenerateAPIKey creates a non-expiring apiKey for the loopzero-api account.
+	GenerateAPIKey(ctx context.Context, adminPassword string) (string, error)
 }
 
 // PlatformBootstrapReconciler reconciles a PlatformBootstrap object.

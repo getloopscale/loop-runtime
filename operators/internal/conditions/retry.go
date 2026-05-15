@@ -32,13 +32,13 @@ var statusRetryBackoff = wait.Backoff{
 	Cap:      2 * time.Second,
 }
 
-// SpecMutationError is returned by UpdateStatusWithRetry when the mutate
+// ErrSpecMutation is returned by UpdateStatusWithRetry when the mutate
 // function modifies obj.Spec or obj.Annotations/Labels in a way that would
 // be silently dropped by Status().Update (which only persists /status).
 //
 // Per ADR-0024 condition #2 (spec-mutation guard): catch this footgun at
 // runtime instead of letting controllers ship broken status writes.
-var SpecMutationError = errors.New("conditions: mutate function modified non-status fields; Status().Update would silently drop them")
+var ErrSpecMutation = errors.New("conditions: mutate function modified non-status fields; Status().Update would silently drop them")
 
 // SpecSnapshotter exports just enough of an object's identity to detect
 // mutations to non-status fields. Implementations defined by call sites
@@ -66,7 +66,7 @@ type SpecSnapshotter interface {
 //   - If mutate returns an error, it propagates immediately without retry.
 //   - Spec-mutation guard: deep-copy before mutate, post-mutate verify that
 //     ObjectMeta + Spec are unchanged. If they differ, return
-//     SpecMutationError without calling Status().Update.
+//     ErrSpecMutation without calling Status().Update.
 //
 // Type parameter T must satisfy client.Object. The newObj factory returns
 // an empty instance of the concrete type each retry; this avoids the
@@ -129,13 +129,13 @@ func UpdateStatusWithRetry[T client.Object](
 		// orthogonal because Status().Update writes only /status.
 		if obj.GetGeneration() != preMutate.GetGeneration() {
 			return fmt.Errorf("%w: generation changed %d → %d",
-				SpecMutationError, preMutate.GetGeneration(), obj.GetGeneration())
+				ErrSpecMutation, preMutate.GetGeneration(), obj.GetGeneration())
 		}
 		if !mapsEqual(obj.GetAnnotations(), preMutate.GetAnnotations()) {
-			return fmt.Errorf("%w: annotations modified", SpecMutationError)
+			return fmt.Errorf("%w: annotations modified", ErrSpecMutation)
 		}
 		if !mapsEqual(obj.GetLabels(), preMutate.GetLabels()) {
-			return fmt.Errorf("%w: labels modified", SpecMutationError)
+			return fmt.Errorf("%w: labels modified", ErrSpecMutation)
 		}
 
 		return c.Status().Update(ctx, obj)

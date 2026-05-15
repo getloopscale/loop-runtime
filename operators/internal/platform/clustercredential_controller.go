@@ -332,7 +332,16 @@ func (r *ClusterCredentialReconciler) reconcileArgoCDClusterSecret(ctx context.C
 			CAData:   caData,
 		},
 	}
-	configJSON, err := json.Marshal(argoConfig)
+	// G117 expected: ArgoCD's cluster-credential Secret REQUIRES the
+	// bearer token to be serialized into its `data.config` field
+	// (per ArgoCD docs: <https://argo-cd.readthedocs.io/en/stable/operator-manual/declarative-setup/#clusters>).
+	// The marshaled JSON is then written into a K8s Secret (encrypted
+	// at rest via etcd encryption + sealed-secret if configured); it
+	// is NEVER logged or returned over an HTTP response. The G117
+	// heuristic "field named BearerToken is marshaled" is correct in
+	// the abstract but this is exactly the legitimate flow it would
+	// fire on. Suppress with audit context.
+	configJSON, err := json.Marshal(argoConfig) //nolint:gosec // G117 expected: ArgoCD cluster-credential Secret serialization (audit SEC-005)
 	if err != nil {
 		return fmt.Errorf("failed to marshal ArgoCD config: %w", err)
 	}
