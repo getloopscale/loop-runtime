@@ -1,6 +1,12 @@
 // SPDX-License-Identifier: Apache-2.0
 // Copyright 2025-2026 The LoopZero Authors
 
+// Package preview implements the PreviewEnvironment controller
+// (operator binary `loopzero-preview-operator` per ADR-0023). Owns
+// the preview-environment lifecycle: namespace creation +
+// NetworkPolicy + ResourceQuota + LimitRange + TTL expiry +
+// condition-wait + cleanup retry. State machine per CLAUDE.md §
+// State Machines.
 package preview
 
 import (
@@ -100,7 +106,7 @@ func (r *PreviewReconciler) runtimeClientForPreview(ctx context.Context, preview
 		// Legacy CR fallback: read tenant.Spec.CellID. Per EC-7 we MUST
 		// fallback to tenant lookup, NOT to default cell.
 		tenant := &loopzerov1.Tenant{}
-		err := r.Client.Get(ctx, client.ObjectKey{Name: preview.Spec.TenantID, Namespace: preview.Namespace}, tenant)
+		err := r.Get(ctx, client.ObjectKey{Name: preview.Spec.TenantID, Namespace: preview.Namespace}, tenant)
 		if err == nil {
 			cellID = tenant.Spec.CellID
 		}

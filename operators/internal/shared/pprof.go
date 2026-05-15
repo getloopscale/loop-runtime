@@ -8,6 +8,7 @@ import (
 	"net/http"
 	"net/http/pprof"
 	"os"
+	"time"
 )
 
 // PprofEnabled checks LOOPZERO_PPROF_ENABLED. Default: false (safe for production).
@@ -31,8 +32,19 @@ func StartPprofServer() {
 	mux.HandleFunc("/debug/pprof/symbol", pprof.Symbol)
 	mux.HandleFunc("/debug/pprof/trace", pprof.Trace)
 	slog.Info("pprof server starting", "addr", pprofAddr)
+	// G114 mitigation: explicit Server with ReadHeaderTimeout so a
+	// slowloris-style client cannot hold a connection idle in the
+	// header-read phase. WriteTimeout deliberately ZERO because
+	// `/debug/pprof/profile` runs a 30-60s CPU profile by design;
+	// setting a finite WriteTimeout would truncate legitimate
+	// profile collection.
+	srv := &http.Server{
+		Addr:              pprofAddr,
+		Handler:           mux,
+		ReadHeaderTimeout: 10 * time.Second,
+	}
 	go func() {
-		if err := http.ListenAndServe(pprofAddr, mux); err != nil {
+		if err := srv.ListenAndServe(); err != nil {
 			slog.Error("pprof server failed", "error", err)
 		}
 	}()

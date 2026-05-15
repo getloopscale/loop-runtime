@@ -1,6 +1,13 @@
 // SPDX-License-Identifier: Apache-2.0
 // Copyright 2025-2026 The LoopZero Authors
 
+// Package tenant implements the Tenant + Environment controllers
+// (operator binary `loopzero-tenant-operator` per ADR-0023). Owns the
+// per-tenant lifecycle: provisioning, multi-cell placement resolve
+// via cellmgr.RuntimeFactory, GitOps repo creation, credential
+// rotation, deletion (soft + grace + cleanup). Cross-cluster
+// reconciliation routes through ClusterCredential CR lookup by
+// `spec.cellID`.
 package tenant
 
 import (

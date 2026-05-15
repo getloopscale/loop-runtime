@@ -1,6 +1,11 @@
 // SPDX-License-Identifier: Apache-2.0
 // Copyright 2025-2026 The LoopZero Authors
 
+// Package argocd provides the operator-side client wrapper for
+// ArgoCD's REST API plus a circuit-breaker decorator. Used by
+// PlatformBootstrap + Tenant controllers to create/sync/delete
+// AppProjects and Applications without coupling the controllers to
+// raw HTTP error handling.
 package argocd
 
 import "context"

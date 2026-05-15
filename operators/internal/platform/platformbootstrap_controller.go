@@ -1,6 +1,12 @@
 // SPDX-License-Identifier: Apache-2.0
 // Copyright 2025-2026 The LoopZero Authors
 
+// Package platform implements the PlatformBootstrap +
+// GitRepositoryBinding + ClusterCredential controllers (operator
+// binary `loopzero-platform-operator` per ADR-0023). Owns the control-
+// plane reconciliation: bootstraps Gitea + ArgoCD on a fresh
+// cluster, registers per-tenant Git repositories, and manages the
+// multi-cell ClusterCredential CRs that DynamicRouter resolves.
 package platform
 
 import (

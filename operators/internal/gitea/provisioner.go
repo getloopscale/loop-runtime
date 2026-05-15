@@ -1,6 +1,11 @@
 // SPDX-License-Identifier: Apache-2.0
 // Copyright 2025-2026 The LoopZero Authors
 
+// Package gitea provides the operator-side client wrapper for
+// Gitea's REST API plus a circuit-breaker decorator. Used by
+// PlatformBootstrap + Tenant controllers to create/manage the
+// per-tenant Gitea organization, repositories, and access tokens
+// that back the GitOps source-of-truth.
 package gitea
 
 import "context"

@@ -1,6 +1,11 @@
 // SPDX-License-Identifier: Apache-2.0
 // Copyright 2025-2026 The LoopZero Authors
 
+// Package app implements the Application + Exposure controllers
+// (operator binary `loopzero-app-operator` per ADR-0023). Owns
+// reconciliation of LoopZeroApplication + ExposedRoute CRs — the
+// workload-plane resources that materialize a user's deploy onto
+// the runtime cluster.
 package app
 
 import (
