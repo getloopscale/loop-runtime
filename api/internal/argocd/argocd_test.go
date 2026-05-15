@@ -16,13 +16,18 @@ import (
 )
 
 // newHTTPTestSyncClient creates a SyncClient pointing at a test server.
-// The server's transport is used directly, bypassing TLS and OTel wrapping.
+// Uses NewSyncClient so the serializer + every constructor-managed invariant
+// is in place (vs struct-literal bypass that breaks subsequent invariant
+// additions — caught regression iter Ralph 1 commit 088c721d). The httptest
+// server is plain HTTP so cfg.Insecure / CACertPath don't matter.
 func newHTTPTestSyncClient(serverURL string) *SyncClient {
-	return &SyncClient{
-		baseURL:       serverURL,
-		tokenProvider: NewStaticTokenProvider("test-token"),
-		client:        &http.Client{Timeout: 5 * time.Second},
-	}
+	return NewSyncClient(SyncClientConfig{
+		BaseURL: serverURL,
+		Token:   "test-token",
+		Timeout: 5 * time.Second,
+		// HTTPClient deliberately nil — let NewSyncClient build the default
+		// (with serializer + OTel transport wired correctly).
+	})
 }
 
 func TestTriggerSync_HappyPath(t *testing.T) {

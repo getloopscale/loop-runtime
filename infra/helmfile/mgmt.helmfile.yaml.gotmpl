@@ -475,6 +475,12 @@ releases:
     installed: {{ .Values | get "installChaosMesh" false }}
     values:
       - ../helm/chaos-mesh/values.yaml
+{{- /* Plan T3.2 D10 — k3d/k3s containerd socket override.
+       Standalone (k3d) deploys k3s under the hood, which puts containerd at
+       /run/k3s/containerd/. Managed K8s (DOKS, EKS, GKE) use the default. */}}
+{{- if eq (.Values | get "clusterRole" "dev") "standalone" }}
+      - ../helm/chaos-mesh/values-k3d.yaml
+{{- end }}
 
   # Wave 99: Validation
   - name: smoke-test

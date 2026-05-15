@@ -159,19 +159,18 @@ func (c *SyncClient) TriggerSync(ctx context.Context, appName string) error {
 
 	// Plan T1.1 D2: serialize concurrent sync calls to the same App. This
 	// eliminates ArgoCD HTTP 400 "another operation is already in progress"
-	// at the source. Calls to DIFFERENT apps proceed in parallel. Nil
-	// serializer (only seen in legacy test helpers) is a no-op: no
-	// serialization, no error — preserves backward-compat for direct
-	// struct-literal construction.
-	if c.serializer != nil {
-		release, err := c.serializer.AcquireApp(ctx, appName)
-		if err != nil {
-			span.RecordError(err)
-			span.SetStatus(codes.Error, "serializer acquire")
-			return err
-		}
-		defer release()
+	// at the source. Calls to DIFFERENT apps proceed in parallel.
+	//
+	// SyncClient invariant: serializer is non-nil after NewSyncClient. Test
+	// helpers that bypass NewSyncClient (deprecated pattern) MUST be updated
+	// to use the constructor — see argocd_test.go newHTTPTestSyncClient.
+	release, err := c.serializer.AcquireApp(ctx, appName)
+	if err != nil {
+		span.RecordError(err)
+		span.SetStatus(codes.Error, "serializer acquire")
+		return err
 	}
+	defer release()
 
 	// MEET-2026-04-22-058 (B12): no removeSkipReconcile call — operator no longer
 	// sets the annotation, so there is nothing to remove.
