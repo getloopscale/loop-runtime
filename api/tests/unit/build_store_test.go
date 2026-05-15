@@ -234,7 +234,7 @@ func TestBuildStore_Create(t *testing.T) {
 		}
 
 		// Status must be QUEUED
-		if build.Status != string(statemachine.BuildQueued) {
+		if build.Status != string(statemachine.BPhQueued) {
 			t.Errorf("expected status QUEUED, got %q", build.Status)
 		}
 	})
@@ -412,11 +412,11 @@ func TestBuildStore_UpdateStatus(t *testing.T) {
 		})
 
 		store := db.NewPostgresBuildStore(fakeDB)
-		build, err := store.UpdateStatus(context.Background(), fakeDB, "build-22222222", string(statemachine.BuildStarted))
+		build, err := store.UpdateStatus(context.Background(), fakeDB, "build-22222222", string(statemachine.BPEventStarted))
 		if err != nil {
 			t.Fatalf("expected no error, got %v", err)
 		}
-		if build.Status != string(statemachine.BuildRunning) {
+		if build.Status != string(statemachine.BPhRunning) {
 			t.Errorf("expected status RUNNING, got %q", build.Status)
 		}
 	})
@@ -437,7 +437,7 @@ func TestBuildStore_UpdateStatus(t *testing.T) {
 		})
 
 		store := db.NewPostgresBuildStore(fakeDB)
-		_, err := store.UpdateStatus(context.Background(), fakeDB, "build-33333333", string(statemachine.BuildStarted))
+		_, err := store.UpdateStatus(context.Background(), fakeDB, "build-33333333", string(statemachine.BPEventStarted))
 		if err == nil {
 			t.Fatal("expected error for invalid transition, got nil")
 		}
@@ -450,7 +450,7 @@ func TestBuildStore_UpdateStatus(t *testing.T) {
 		fakeDB := newFakeBuildDB()
 		store := db.NewPostgresBuildStore(fakeDB)
 
-		_, err := store.UpdateStatus(context.Background(), fakeDB, "build-nonexist", string(statemachine.BuildStarted))
+		_, err := store.UpdateStatus(context.Background(), fakeDB, "build-nonexist", string(statemachine.BPEventStarted))
 		if err == nil {
 			t.Fatal("expected error, got nil")
 		}

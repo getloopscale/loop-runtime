@@ -37,7 +37,7 @@ const platformBootstrapRequeueDelay = constants.RequeuePlatformBootstrapDelay
 
 // platformBootstrapSM is the PlatformBootstrap lifecycle state machine (spec section 5).
 // Phase transitions go through this machine -- direct assignment is forbidden.
-var platformBootstrapSM = statemachine.NewPlatformBootstrapMachine()
+var platformBootstrapSM = statemachine.NewPlatformBootstrapTypedMachine()
 
 // ArgoCDBootstrapClient abstracts ArgoCD HTTP operations for testability.
 // ARCH-OP-001: Mirrors the Gitea BootstrapClient pattern -- controllers depend
@@ -138,14 +138,14 @@ func (r *PlatformBootstrapReconciler) Reconcile(ctx context.Context, req ctrl.Re
 	}
 
 	// Terminal phases: do not requeue.
-	if platformBootstrapSM.IsTerminal(statemachine.State(pb.Status.Phase)) {
+	if platformBootstrapSM.IsTerminal(statemachine.PlatformBootstrapPhase(pb.Status.Phase)) {
 		return ctrl.Result{}, nil
 	}
 
 	// Initialize phase via state machine if empty.
 	if pb.Status.Phase == "" {
 		pb.Status.Phase = loopzerov1.PlatformBootstrapPhase(
-			platformBootstrapSM.Transition(statemachine.PlatformBootstrapEmpty, statemachine.PlatformBootstrapStart),
+			platformBootstrapSM.Transition(statemachine.PBPhEmpty, statemachine.PBPEventStart),
 		)
 		pb.Status.Message = "Bootstrap initialized"
 		now := metav1.Now()
@@ -159,7 +159,7 @@ func (r *PlatformBootstrapReconciler) Reconcile(ctx context.Context, req ctrl.Re
 	// Transition from Pending to ConfiguringGitea.
 	if pb.Status.Phase == loopzerov1.PlatformBootstrapPhasePending {
 		pb.Status.Phase = loopzerov1.PlatformBootstrapPhase(
-			platformBootstrapSM.Transition(statemachine.PlatformBootstrapPending, statemachine.PlatformBootstrapStart),
+			platformBootstrapSM.Transition(statemachine.PBPhPending, statemachine.PBPEventStart),
 		)
 		pb.Status.Message = "Starting Gitea configuration"
 		pb.Status.RetryCount = 0
@@ -196,7 +196,7 @@ func (r *PlatformBootstrapReconciler) Reconcile(ctx context.Context, req ctrl.Re
 // transitionToFailed transitions the CR to Failed phase via the state machine.
 // Uses TryTransition because pb.Status.Phase comes from CRD status (external source).
 func (r *PlatformBootstrapReconciler) transitionToFailed(ctx context.Context, pb *loopzerov1.PlatformBootstrap, message string) (ctrl.Result, error) {
-	next, err := platformBootstrapSM.TryTransition(statemachine.State(pb.Status.Phase), statemachine.PlatformBootstrapRetryExhaust)
+	next, err := platformBootstrapSM.TryTransition(statemachine.PlatformBootstrapPhase(pb.Status.Phase), statemachine.PBPEventRetryExhaust)
 	if err != nil {
 		return ctrl.Result{}, fmt.Errorf("transition to failed: %w", err)
 	}
@@ -212,8 +212,8 @@ func (r *PlatformBootstrapReconciler) transitionToFailed(ctx context.Context, pb
 
 // transitionToNextPhase transitions the CR to the next phase via the state machine.
 // Uses TryTransition because pb.Status.Phase comes from CRD status (external source).
-func (r *PlatformBootstrapReconciler) transitionToNextPhase(ctx context.Context, pb *loopzerov1.PlatformBootstrap, event statemachine.Event, message string) (ctrl.Result, error) {
-	next, err := platformBootstrapSM.TryTransition(statemachine.State(pb.Status.Phase), event)
+func (r *PlatformBootstrapReconciler) transitionToNextPhase(ctx context.Context, pb *loopzerov1.PlatformBootstrap, event statemachine.PlatformBootstrapPhaseEvent, message string) (ctrl.Result, error) {
+	next, err := platformBootstrapSM.TryTransition(statemachine.PlatformBootstrapPhase(pb.Status.Phase), event)
 	if err != nil {
 		return ctrl.Result{}, fmt.Errorf("transition to next phase: %w", err)
 	}

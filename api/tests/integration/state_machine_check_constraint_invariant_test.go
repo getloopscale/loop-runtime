@@ -96,30 +96,30 @@ func TestStateMachineCheckConstraintInvariant(t *testing.T) {
 	// (terminal added by migration 000008 for archive feature; not in the
 	// state machine because archived rows are read-only metadata).
 	releaseStatesInDB := stateConstantsAsSortedStringSlice([]statemachine.State{
-		statemachine.ReleaseReady,
-		statemachine.ReleasePending,
-		statemachine.ReleaseActive,
-		statemachine.ReleaseGitMirrorFailed,
-		statemachine.ReleaseSyncFailed,
-		statemachine.ReleaseDriftAlert,
-		statemachine.ReleaseSuperseded,
-		statemachine.ReleaseRollingBack,
-		statemachine.ReleaseRolledBack,
-		statemachine.ReleaseRollbackFailed,
-		statemachine.ReleaseCancelled,
+		statemachine.State(statemachine.RPhReady),
+		statemachine.State(statemachine.RPhPending),
+		statemachine.State(statemachine.RPhActive),
+		statemachine.State(statemachine.RPhGitMirrorFailed),
+		statemachine.State(statemachine.RPhSyncFailed),
+		statemachine.State(statemachine.RPhDriftAlert),
+		statemachine.State(statemachine.RPhSuperseded),
+		statemachine.State(statemachine.RPhRollingBack),
+		statemachine.State(statemachine.RPhRolledBack),
+		statemachine.State(statemachine.RPhRollbackFailed),
+		statemachine.State(statemachine.RPhCancelled),
 	}, nil)
 	releaseStatesInDB = append(releaseStatesInDB, "ARCHIVED")
 	sort.Strings(releaseStatesInDB)
 
 	// builds.status — defined in pkg/statemachine/build.go.
 	buildStatesInDB := stateConstantsAsSortedStringSlice([]statemachine.State{
-		statemachine.BuildQueued,
-		statemachine.BuildRunning,
-		statemachine.BuildReleasing,
-		statemachine.BuildSucceeded,
-		statemachine.BuildFailed,
-		statemachine.BuildCancelling,
-		statemachine.BuildCancelled,
+		statemachine.State(statemachine.BPhQueued),
+		statemachine.State(statemachine.BPhRunning),
+		statemachine.State(statemachine.BPhReleasing),
+		statemachine.State(statemachine.BPhSucceeded),
+		statemachine.State(statemachine.BPhFailed),
+		statemachine.State(statemachine.BPhCancelling),
+		statemachine.State(statemachine.BPhCancelled),
 	}, nil)
 
 	cases := []constraintCase{

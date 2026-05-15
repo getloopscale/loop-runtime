@@ -120,7 +120,7 @@ func ActivateReleaseKernel(
 		span.SetStatus(codes.Error, err.Error())
 		return fmt.Errorf("activate release: re-fetch inside lock: %w", err)
 	}
-	if current.Status != string(statemachine.ReleasePending) {
+	if current.Status != string(statemachine.RPhPending) {
 		logger.Info("activate release: already transitioned, skipping",
 			"release_id", release.ID, "current_status", current.Status)
 		return nil
@@ -133,7 +133,7 @@ func ActivateReleaseKernel(
 	}
 
 	// Step 2: Transition PENDING → ACTIVE.
-	if _, err := releaseStore.UpdateStatus(ctx, tx, release.ID, string(statemachine.ReleaseSyncCompleted)); err != nil {
+	if _, err := releaseStore.UpdateStatus(ctx, tx, release.ID, string(statemachine.RPEventSyncCompleted)); err != nil {
 		return fmt.Errorf("activate release: transition to ACTIVE: %w", err)
 	}
 
@@ -168,7 +168,7 @@ func ActivateReleaseKernel(
 	// ACTIVE — otherwise we leave two releases ACTIVE in the same env,
 	// which downstream selectors treat as undefined behaviour.
 	if prevRelease != nil && prevRelease.ID != release.ID {
-		if _, supersedeErr := releaseStore.UpdateStatus(ctx, tx, prevRelease.ID, string(statemachine.ReleaseNewActivated)); supersedeErr != nil {
+		if _, supersedeErr := releaseStore.UpdateStatus(ctx, tx, prevRelease.ID, string(statemachine.RPEventNewActivated)); supersedeErr != nil {
 			logger.Error("activate release: failed to supersede previous",
 				"prev_id", prevRelease.ID, "new_id", release.ID, "error", supersedeErr)
 			return fmt.Errorf("activate release: supersede previous %s: %w", prevRelease.ID, supersedeErr)
@@ -291,7 +291,7 @@ func (o *BuildOrchestrator) RetryRelease(ctx context.Context, releaseID string) 
 		return fmt.Errorf("retry release: get release: %w", err)
 	}
 
-	if release.Status != string(statemachine.ReleaseGitMirrorFailed) {
+	if release.Status != string(statemachine.RPhGitMirrorFailed) {
 		return fmt.Errorf("retry release: release %s is in %s state, not GIT_MIRROR_FAILED — cannot retry", releaseID, release.Status)
 	}
 
@@ -326,7 +326,7 @@ func (o *BuildOrchestrator) RetryRelease(ctx context.Context, releaseID string) 
 
 	// Record success inside lock
 	return o.locker.WithLock(ctx, release.TenantID, release.ProjectID, release.Environment, func(tx db.DBTX) error {
-		if _, err := o.releaseStore.UpdateStatus(ctx, tx, releaseID, string(statemachine.ReleaseGitMirrorRetried)); err != nil {
+		if _, err := o.releaseStore.UpdateStatus(ctx, tx, releaseID, string(statemachine.RPEventGitMirrorRetried)); err != nil {
 			return fmt.Errorf("retry release: transition to PENDING: %w", err)
 		}
 

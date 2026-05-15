@@ -29,7 +29,7 @@ const environmentFinalizer = constants.FinalizerEnvironment
 
 // environmentSM is the Environment lifecycle state machine (spec §5).
 // Phase transitions go through this machine — direct assignment is forbidden (Rule 8).
-var environmentSM = statemachine.NewEnvironmentMachine()
+var environmentSM = statemachine.NewEnvironmentTypedMachine()
 
 // EnvironmentReconciler reconciles an Environment object.
 //
@@ -151,7 +151,7 @@ func (r *EnvironmentReconciler) Reconcile(ctx context.Context, req ctrl.Request)
 	// Transition from empty to Pending via state machine (Rule 8).
 	if env.Status.Phase == "" {
 		env.Status.Phase = loopzerov1.EnvironmentPhase(
-			environmentSM.Transition(statemachine.EnvironmentEmpty, statemachine.EnvironmentCreate),
+			environmentSM.Transition(statemachine.EPhEmpty, statemachine.EPEventCreate),
 		)
 	}
 
@@ -200,7 +200,7 @@ func (r *EnvironmentReconciler) Reconcile(ctx context.Context, req ctrl.Request)
 
 	// All conditions True -> transition to Active via state machine (Rule 8).
 	if env.Status.Phase != loopzerov1.EnvironmentPhaseActive {
-		next, err := environmentSM.TryTransition(statemachine.State(env.Status.Phase), statemachine.EnvironmentProvisioned)
+		next, err := environmentSM.TryTransition(statemachine.EnvironmentPhase(env.Status.Phase), statemachine.EPEventProvisioned)
 		if err != nil {
 			logger.Error(err, "invalid state transition", "phase", env.Status.Phase)
 			return ctrl.Result{}, err
@@ -238,7 +238,7 @@ func (r *EnvironmentReconciler) reconcileDelete(ctx context.Context, env *loopze
 
 	// Transition to Deleting via state machine (Rule 8).
 	if env.Status.Phase != loopzerov1.EnvironmentPhaseDeleting {
-		next, err := environmentSM.TryTransition(statemachine.State(env.Status.Phase), statemachine.EnvironmentDeleteRequested)
+		next, err := environmentSM.TryTransition(statemachine.EnvironmentPhase(env.Status.Phase), statemachine.EPEventDeleteRequested)
 		if err != nil {
 			logger.Error(err, "invalid state transition for delete", "phase", env.Status.Phase)
 			return ctrl.Result{}, err

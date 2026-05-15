@@ -356,7 +356,7 @@ func (r *ReleaseConvergenceLoop) activateRelease(ctx context.Context, release *d
 
 func (r *ReleaseConvergenceLoop) failRelease(ctx context.Context, release *db.Release, reason string) {
 	err := r.locker.WithLock(ctx, release.TenantID, release.ProjectID, release.Environment, func(tx db.DBTX) error {
-		_, err := r.releaseStore.UpdateStatus(ctx, tx, release.ID, string(statemachine.ReleaseSyncFailed_))
+		_, err := r.releaseStore.UpdateStatus(ctx, tx, release.ID, string(statemachine.RPEventSyncFailed))
 		return err
 	})
 

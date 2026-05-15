@@ -123,12 +123,12 @@ func MarkAsCleaned(ctx context.Context, c client.Client, app *loopzerov1.LoopZer
 	// through ApplicationOrphaned event registered in pkg/statemachine/
 	// application.go. Empty/unknown phase from older CRs is normalized
 	// via Empty→Progressing first, so reaper still fires on legacy data.
-	machine := statemachine.NewApplicationMachine()
-	current := statemachine.State(app.Status.Phase)
-	if current == statemachine.ApplicationEmpty {
-		current = statemachine.ApplicationProgressing
+	machine := statemachine.NewApplicationTypedMachine()
+	current := statemachine.ApplicationPhase(app.Status.Phase)
+	if current == statemachine.APhEmpty {
+		current = statemachine.APhProgressing
 	}
-	next, err := machine.TryTransition(current, statemachine.ApplicationOrphaned)
+	next, err := machine.TryTransition(current, statemachine.APEventOrphaned)
 	if err != nil {
 		return fmt.Errorf("MarkAsCleaned: invalid transition %s→Cleaned for %s: %w",
 			current, app.Name, err)

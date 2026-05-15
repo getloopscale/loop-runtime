@@ -42,8 +42,8 @@ func DefaultReleaseReaperConfig() ReleaseReaperConfig {
 // StaleRelease represents a release that has exceeded its timeout.
 type StaleRelease struct {
 	ID          string
-	State       statemachine.State
-	Event       statemachine.Event
+	State       statemachine.ReleasePhase
+	Event       statemachine.ReleasePhaseEvent
 	TenantID    string
 	ProjectID   string
 	Environment string
@@ -128,11 +128,11 @@ func (r *ReleaseReaper) ReapOnce(ctx context.Context) int {
 //
 // Beta Logs Gate Criterion 6 — same pattern as reaperReason in
 // build_reaper.go: WHAT timed out + LIKELY CAUSE + NEXT STEP.
-func releaseReaperReason(event statemachine.Event) string {
+func releaseReaperReason(event statemachine.ReleasePhaseEvent) string {
 	switch event {
-	case statemachine.ReleaseGitPushTimeout:
+	case statemachine.RPEventGitPushTimeout:
 		return "Release was READY (deployment manifests prepared but not yet pushed) for more than 5 minutes. Likely cause: repository write is slow OR temporary network issue between API and the deployment repo. Next: run `loopzero deploy` to retry — the operation is idempotent."
-	case statemachine.ReleaseSyncTimeout:
+	case statemachine.RPEventSyncTimeout:
 		return "Release was PENDING (manifests pushed, waiting for service to become healthy) for more than 10 minutes. Likely cause: your app's /health endpoint is not responding 200 OR the pod is crash-looping. Next: run `loopzero logs --runtime --env <env> --app <name>` for runtime pod context; if health probe is correct, retry with `loopzero deploy`."
 	default:
 		return "Release reaped due to timeout. Run `loopzero status` and `loopzero logs --build <id>` for context."
@@ -159,7 +159,7 @@ func (r *ReleaseReaper) reap(ctx context.Context) int {
 		}
 
 		// Re-check: release may have transitioned since the query
-		if !statemachine.IsReleaseReapable(statemachine.State(release.Status)) {
+		if !statemachine.IsReleasePhaseReapable(statemachine.ReleasePhase(release.Status)) {
 			continue
 		}
 
@@ -171,7 +171,7 @@ func (r *ReleaseReaper) reap(ctx context.Context) int {
 			if err != nil {
 				return err
 			}
-			if !statemachine.IsReleaseReapable(statemachine.State(release.Status)) {
+			if !statemachine.IsReleasePhaseReapable(statemachine.ReleasePhase(release.Status)) {
 				return nil
 			}
 
@@ -211,9 +211,9 @@ func (r *ReleaseReaper) reap(ctx context.Context) int {
 		if r.eventStore != nil {
 			var sseEventType string
 			switch s.Event {
-			case statemachine.ReleaseGitPushTimeout:
+			case statemachine.RPEventGitPushTimeout:
 				sseEventType = "deploy.git_push_failed"
-			case statemachine.ReleaseSyncTimeout:
+			case statemachine.RPEventSyncTimeout:
 				sseEventType = "deploy.sync_failed"
 			default:
 				sseEventType = "deploy.failed"
@@ -292,19 +292,19 @@ func (c *PostgresStaleReleaseChecker) FindStaleReleases(ctx context.Context, cel
 			return nil, fmt.Errorf("scan stale release: %w", err)
 		}
 
-		var event statemachine.Event
-		switch statemachine.State(status) {
-		case statemachine.ReleaseReady:
-			event = statemachine.ReleaseGitPushTimeout
-		case statemachine.ReleasePending:
-			event = statemachine.ReleaseSyncTimeout
+		var event statemachine.ReleasePhaseEvent
+		switch statemachine.ReleasePhase(status) {
+		case statemachine.RPhReady:
+			event = statemachine.RPEventGitPushTimeout
+		case statemachine.RPhPending:
+			event = statemachine.RPEventSyncTimeout
 		default:
 			continue
 		}
 
 		result = append(result, StaleRelease{
 			ID:          id,
-			State:       statemachine.State(status),
+			State:       statemachine.ReleasePhase(status),
 			Event:       event,
 			TenantID:    tenantID,
 			ProjectID:   projectID,

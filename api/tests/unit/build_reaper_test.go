@@ -34,13 +34,13 @@ func TestBuildReaper_ReapsStaleBuild(t *testing.T) {
 			TenantID:    "acme",
 			ProjectID:   "proj1",
 			Environment: "production",
-			Status:      string(statemachine.BuildRunning),
+			Status:      string(statemachine.BPhRunning),
 		},
 	}
 
 	checker := &fakeStaleChecker{
 		builds: []services.StaleBuild{
-			{ID: "build-stale-1", State: statemachine.BuildRunning, Event: statemachine.BuildTimeout},
+			{ID: "build-stale-1", State: statemachine.BPhRunning, Event: statemachine.BPEventTimeout},
 		},
 	}
 
@@ -63,7 +63,7 @@ func TestBuildReaper_ReapsStaleBuild(t *testing.T) {
 	}
 
 	build := buildStore.builds["build-stale-1"]
-	if build.Status != string(statemachine.BuildFailed) {
+	if build.Status != string(statemachine.BPhFailed) {
 		t.Errorf("expected build status FAILED, got %s", build.Status)
 	}
 }
@@ -77,13 +77,13 @@ func TestBuildReaper_SkipsTerminalBuilds(t *testing.T) {
 			TenantID:    "acme",
 			ProjectID:   "proj1",
 			Environment: "production",
-			Status:      string(statemachine.BuildFailed),
+			Status:      string(statemachine.BPhFailed),
 		},
 	}
 
 	checker := &fakeStaleChecker{
 		builds: []services.StaleBuild{
-			{ID: "build-done", State: statemachine.BuildRunning, Event: statemachine.BuildTimeout},
+			{ID: "build-done", State: statemachine.BPhRunning, Event: statemachine.BPEventTimeout},
 		},
 	}
 
@@ -109,13 +109,13 @@ func TestBuildReaper_ReapsQueuedBuild(t *testing.T) {
 			TenantID:    "acme",
 			ProjectID:   "proj1",
 			Environment: "staging",
-			Status:      string(statemachine.BuildQueued),
+			Status:      string(statemachine.BPhQueued),
 		},
 	}
 
 	checker := &fakeStaleChecker{
 		builds: []services.StaleBuild{
-			{ID: "build-queued", State: statemachine.BuildQueued, Event: statemachine.BuildQueueTimeout},
+			{ID: "build-queued", State: statemachine.BPhQueued, Event: statemachine.BPEventQueueTimeout},
 		},
 	}
 
@@ -131,7 +131,7 @@ func TestBuildReaper_ReapsQueuedBuild(t *testing.T) {
 	}
 
 	build := buildStore.builds["build-queued"]
-	if build.Status != string(statemachine.BuildFailed) {
+	if build.Status != string(statemachine.BPhFailed) {
 		t.Errorf("expected build status FAILED, got %s", build.Status)
 	}
 }

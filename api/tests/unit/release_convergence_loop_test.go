@@ -54,7 +54,7 @@ func (f *fakeConvergenceReleaseStore) UpdateStatus(_ context.Context, _ db.DBTX,
 	m := statemachine.NewReleaseMachine()
 	current := f.statuses[id]
 	if current == "" {
-		current = string(statemachine.ReleasePending)
+		current = string(statemachine.RPhPending)
 	}
 	newState, err := safeTransitionRelease(m, statemachine.State(current), statemachine.Event(event))
 	if err != nil {
@@ -74,7 +74,7 @@ func (f *fakeConvergenceReleaseStore) GetByIDTx(_ context.Context, _ db.DBTX, id
 	status := f.statuses[id]
 	f.mu.Unlock()
 	if status == "" {
-		status = string(statemachine.ReleasePending)
+		status = string(statemachine.RPhPending)
 	}
 	for _, r := range f.pending {
 		if r.ID == id {

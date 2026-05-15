@@ -66,7 +66,7 @@ func (r *PlatformBootstrapReconciler) reconcileGiteaPhase(ctx context.Context, p
 			}
 
 			r.setCondition(pb, conditions.TypeGiteaReady, metav1.ConditionTrue, conditions.ReasonReady, "Gitea configured")
-			return r.transitionToNextPhase(ctx, pb, statemachine.PlatformBootstrapGiteaReady, "Gitea configuration complete")
+			return r.transitionToNextPhase(ctx, pb, statemachine.PBPEventGiteaReady, "Gitea configuration complete")
 		}
 		logger.Info("existing Gitea token is invalid, will create new one")
 	}
@@ -93,7 +93,7 @@ func (r *PlatformBootstrapReconciler) reconcileGiteaPhase(ctx context.Context, p
 	}
 
 	r.setCondition(pb, conditions.TypeGiteaReady, metav1.ConditionTrue, conditions.ReasonReady, "Gitea configured")
-	return r.transitionToNextPhase(ctx, pb, statemachine.PlatformBootstrapGiteaReady, "Gitea configuration complete")
+	return r.transitionToNextPhase(ctx, pb, statemachine.PBPEventGiteaReady, "Gitea configuration complete")
 }
 
 // createGiteaToken creates a new admin API token. It first checks if a token

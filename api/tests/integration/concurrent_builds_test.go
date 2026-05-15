@@ -126,8 +126,8 @@ func (a *buildOrchestratorAdapter) IsBuildTerminal(ctx context.Context, buildID 
 	if err != nil {
 		return false, err
 	}
-	switch statemachine.State(build.Status) {
-	case statemachine.BuildSucceeded, statemachine.BuildFailed, statemachine.BuildCancelled:
+	switch statemachine.BuildPhase(build.Status) {
+	case statemachine.BPhSucceeded, statemachine.BPhFailed, statemachine.BPhCancelled:
 		return true, nil
 	}
 	return false, nil
@@ -697,7 +697,7 @@ func TestLockReleasedAfterBuildCompletes(t *testing.T) {
 	_, err = setup.pool.Exec(ctx,
 		`UPDATE builds SET status = $1, finished_at = NOW()
 		 WHERE id = $2`,
-		string(statemachine.BuildSucceeded), buildID,
+		string(statemachine.BPhSucceeded), buildID,
 	)
 	if err != nil {
 		t.Fatalf("failed to transition build to SUCCEEDED: %v", err)
@@ -711,7 +711,7 @@ func TestLockReleasedAfterBuildCompletes(t *testing.T) {
 	if err != nil {
 		t.Fatalf("failed to read build status: %v", err)
 	}
-	if status != string(statemachine.BuildSucceeded) {
+	if status != string(statemachine.BPhSucceeded) {
 		t.Fatalf("expected build status SUCCEEDED, got %s", status)
 	}
 

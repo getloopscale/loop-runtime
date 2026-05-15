@@ -146,7 +146,7 @@ func (o *RollbackOrchestrator) Rollback(ctx context.Context, req RollbackRequest
 		}
 
 		// Transition current release: ACTIVE → ROLLING_BACK
-		_, err = o.deps.Releases.UpdateStatus(ctx, tx, currentRelease.ID, string(statemachine.ReleaseRollbackStarted))
+		_, err = o.deps.Releases.UpdateStatus(ctx, tx, currentRelease.ID, string(statemachine.RPEventRollbackStarted))
 		if err != nil {
 			return fmt.Errorf("rollback: transition to ROLLING_BACK: %w", err)
 		}
@@ -214,19 +214,19 @@ func (o *RollbackOrchestrator) Rollback(ctx context.Context, req RollbackRequest
 		if fetchErr != nil {
 			return fmt.Errorf("rollback: re-fetch current release: %w", fetchErr)
 		}
-		if fresh == nil || fresh.Status != string(statemachine.ReleaseRollingBack) {
+		if fresh == nil || fresh.Status != string(statemachine.RPhRollingBack) {
 			return fmt.Errorf("rollback: release %s is no longer in ROLLING_BACK state (current: %s), aborting",
 				currentRelease.ID, fresh.Status)
 		}
 
 		// Transition current: ROLLING_BACK → ROLLED_BACK
-		_, err := o.deps.Releases.UpdateStatus(ctx, tx, currentRelease.ID, string(statemachine.ReleaseRollbackCompleted))
+		_, err := o.deps.Releases.UpdateStatus(ctx, tx, currentRelease.ID, string(statemachine.RPEventRollbackCompleted))
 		if err != nil {
 			return fmt.Errorf("rollback: transition to ROLLED_BACK: %w", err)
 		}
 
 		// Reactivate target: SUPERSEDED/ROLLED_BACK → ACTIVE
-		_, err = o.deps.Releases.UpdateStatus(ctx, tx, targetRelease.ID, string(statemachine.ReleaseReactivated))
+		_, err = o.deps.Releases.UpdateStatus(ctx, tx, targetRelease.ID, string(statemachine.RPEventReactivated))
 		if err != nil {
 			return fmt.Errorf("rollback: reactivate target release: %w", err)
 		}
@@ -268,7 +268,7 @@ func (o *RollbackOrchestrator) Rollback(ctx context.Context, req RollbackRequest
 // global lock contention. Also log lock/transition errors instead of discarding.
 func (o *RollbackOrchestrator) failRollback(ctx context.Context, tenant, project, env, releaseID string, cause error) error {
 	if err := o.deps.Locker.WithLock(ctx, tenant, project, env, func(tx db.DBTX) error {
-		if _, err := o.deps.Releases.UpdateStatus(ctx, tx, releaseID, string(statemachine.ReleaseRollbackFailed_)); err != nil {
+		if _, err := o.deps.Releases.UpdateStatus(ctx, tx, releaseID, string(statemachine.RPEventRollbackFailed)); err != nil {
 			return fmt.Errorf("failRollback: update status: %w", err)
 		}
 		return nil

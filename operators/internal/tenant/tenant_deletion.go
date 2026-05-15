@@ -37,13 +37,13 @@ func (r *TenantReconciler) reconcileDelete(ctx context.Context, tenant *loopzero
 	}
 
 	logger.Info("tenant is being deleted", "tenant", tenant.Name)
-	currentPhase := statemachine.State(tenant.Status.Phase)
+	currentPhase := statemachine.TenantPhase(tenant.Status.Phase)
 	if currentPhase == "" {
-		currentPhase = statemachine.TenantEmpty
+		currentPhase = statemachine.TPhEmpty
 	}
 	// Only transition if not already Deleting (idempotent)
 	if tenant.Status.Phase != loopzerov1.TenantPhaseDeleting {
-		next, err := tenantSM.TryTransition(currentPhase, statemachine.TenantDelete)
+		next, err := tenantSM.TryTransition(currentPhase, statemachine.TPEventDelete)
 		if err != nil {
 			logger.Error(err, "invalid state transition for delete", "phase", tenant.Status.Phase)
 			return ctrl.Result{}, err

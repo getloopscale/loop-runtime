@@ -41,7 +41,7 @@ const tenantFinalizer = constants.FinalizerTenant
 
 // tenantSM is the Tenant lifecycle state machine (spec §5).
 // Phase transitions go through this machine — direct assignment is forbidden.
-var tenantSM = statemachine.NewTenantMachine()
+var tenantSM = statemachine.NewTenantTypedMachine()
 
 // TenantReconciler reconciles a Tenant object.
 //
@@ -189,7 +189,7 @@ func (r *TenantReconciler) Reconcile(ctx context.Context, req ctrl.Request) (res
 	// Set Phase to Provisioning if empty (via state machine)
 	if tenant.Status.Phase == "" {
 		tenant.Status.Phase = loopzerov1.TenantPhase(
-			tenantSM.Transition(statemachine.TenantEmpty, statemachine.TenantCreate),
+			tenantSM.Transition(statemachine.TPhEmpty, statemachine.TPEventCreate),
 		)
 	}
 
@@ -212,7 +212,7 @@ func (r *TenantReconciler) Reconcile(ctx context.Context, req ctrl.Request) (res
 	// S1.7: Phase transition — Active when all conditions are True (via state machine)
 	if conditions.AllConditionsTrue(tenant.Status.Conditions, r.requiredProvisioningConditions()...) && tenant.Status.Phase == loopzerov1.TenantPhaseProvisioning {
 		tenant.Status.Phase = loopzerov1.TenantPhase(
-			tenantSM.Transition(statemachine.TenantProvisioning, statemachine.TenantAllReady),
+			tenantSM.Transition(statemachine.TPhProvisioning, statemachine.TPEventAllReady),
 		)
 	}
 	tenant.Status.ObservedGeneration = tenant.Generation

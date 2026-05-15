@@ -57,7 +57,7 @@ func (f *fakeReleaseDB) QueryRow(ctx context.Context, sql string, args ...any) d
 		env := args[2].(string)
 		for _, r := range f.releases {
 			if r.TenantID == tenantID && r.ProjectID == projectID &&
-				r.Environment == env && r.Status == string(statemachine.ReleaseActive) {
+				r.Environment == env && r.Status == string(statemachine.RPhActive) {
 				return &fakeReleaseRow{release: r}
 			}
 		}
@@ -134,7 +134,7 @@ func TestReleaseStore_Create(t *testing.T) {
 			t.Error("expected release ID to be generated")
 		}
 
-		if release.Status != string(statemachine.ReleaseReady) {
+		if release.Status != string(statemachine.RPhReady) {
 			t.Errorf("expected status READY, got %q", release.Status)
 		}
 	})
@@ -226,11 +226,11 @@ func TestReleaseStore_UpdateStatus(t *testing.T) {
 		})
 
 		store := db.NewPostgresReleaseStore(fakeDB)
-		release, err := store.UpdateStatus(context.Background(), fakeDB, "rel-22222222", string(statemachine.ReleaseGitMirrorCompleted))
+		release, err := store.UpdateStatus(context.Background(), fakeDB, "rel-22222222", string(statemachine.RPEventGitMirrorCompleted))
 		if err != nil {
 			t.Fatalf("expected no error, got %v", err)
 		}
-		if release.Status != string(statemachine.ReleasePending) {
+		if release.Status != string(statemachine.RPhPending) {
 			t.Errorf("expected status PENDING, got %q", release.Status)
 		}
 	})
@@ -244,7 +244,7 @@ func TestReleaseStore_UpdateStatus(t *testing.T) {
 			TenantID:      "tenant-1",
 			ProjectID:     "proj-abc12345",
 			Environment:   "production",
-			Status:        string(statemachine.ReleaseSuperseded), // terminal
+			Status:        string(statemachine.RPhSuperseded), // terminal
 			CorrelationID: "corr-001",
 			CreatedBy:     "user-1",
 			CreatedAt:     now,
@@ -252,7 +252,7 @@ func TestReleaseStore_UpdateStatus(t *testing.T) {
 		})
 
 		store := db.NewPostgresReleaseStore(fakeDB)
-		_, err := store.UpdateStatus(context.Background(), fakeDB, "rel-33333333", string(statemachine.ReleaseGitMirrorCompleted))
+		_, err := store.UpdateStatus(context.Background(), fakeDB, "rel-33333333", string(statemachine.RPEventGitMirrorCompleted))
 		if err == nil {
 			t.Fatal("expected error for invalid transition, got nil")
 		}
@@ -265,7 +265,7 @@ func TestReleaseStore_UpdateStatus(t *testing.T) {
 		fakeDB := newFakeReleaseDB()
 		store := db.NewPostgresReleaseStore(fakeDB)
 
-		_, err := store.UpdateStatus(context.Background(), fakeDB, "rel-nonexist", string(statemachine.ReleaseGitMirrorCompleted))
+		_, err := store.UpdateStatus(context.Background(), fakeDB, "rel-nonexist", string(statemachine.RPEventGitMirrorCompleted))
 		if err == nil {
 			t.Fatal("expected error, got nil")
 		}
@@ -285,7 +285,7 @@ func TestReleaseStore_GetActiveByEnv(t *testing.T) {
 			TenantID:      "tenant-1",
 			ProjectID:     "proj-abc12345",
 			Environment:   "production",
-			Status:        string(statemachine.ReleaseActive),
+			Status:        string(statemachine.RPhActive),
 			CorrelationID: "corr-001",
 			CreatedBy:     "user-1",
 			CreatedAt:     now,

@@ -44,7 +44,7 @@ func (f *fakeBuildStoreOrch) Create(ctx context.Context, tx db.DBTX, build *db.B
 	if build.ID == "" {
 		build.ID = fmt.Sprintf("build-%08x", time.Now().UnixNano()&0xFFFFFFFF)
 	}
-	build.Status = string(statemachine.BuildQueued)
+	build.Status = string(statemachine.BPhQueued)
 	build.CreatedAt = time.Now().UTC()
 	f.builds[build.ID] = build
 	return nil
@@ -123,7 +123,7 @@ func (f *fakeBuildStoreOrch) ListByProject(ctx context.Context, tenantID, projec
 func (f *fakeBuildStoreOrch) FindActiveBuilds(ctx context.Context, _ string) ([]db.Build, error) {
 	var active []db.Build
 	for _, b := range f.builds {
-		if b.Status == string(statemachine.BuildQueued) || b.Status == string(statemachine.BuildRunning) {
+		if b.Status == string(statemachine.BPhQueued) || b.Status == string(statemachine.BPhRunning) {
 			active = append(active, *b)
 		}
 	}
@@ -147,8 +147,8 @@ func (f *fakeBuildStoreOrch) CancelActiveBuilds(ctx context.Context, tx db.DBTX,
 	var wfIDs []string
 	for _, b := range f.builds {
 		if b.TenantID == tenantID && b.ProjectID == projectID && b.Environment == env {
-			if b.Status == string(statemachine.BuildQueued) || b.Status == string(statemachine.BuildRunning) {
-				b.Status = string(statemachine.BuildCancelled)
+			if b.Status == string(statemachine.BPhQueued) || b.Status == string(statemachine.BPhRunning) {
+				b.Status = string(statemachine.BPhCancelled)
 				count++
 				if b.WorkflowID != "" {
 					wfIDs = append(wfIDs, b.WorkflowID)
@@ -194,7 +194,7 @@ func (f *fakeReleaseStoreOrch) Create(ctx context.Context, tx db.DBTX, release *
 	if release.ID == "" {
 		release.ID = fmt.Sprintf("rel-%08x", time.Now().UnixNano()&0xFFFFFFFF)
 	}
-	release.Status = string(statemachine.ReleaseReady)
+	release.Status = string(statemachine.RPhReady)
 	release.CreatedAt = time.Now().UTC()
 	f.releases[release.ID] = release
 	return nil
@@ -587,7 +587,7 @@ func TestBuildOrchestrator_SubmitBuild_HappyPath(t *testing.T) {
 	if err != nil {
 		t.Fatalf("expected build in store, got error: %v", err)
 	}
-	if build.Status != string(statemachine.BuildRunning) {
+	if build.Status != string(statemachine.BPhRunning) {
 		t.Errorf("expected build status RUNNING, got %q", build.Status)
 	}
 
@@ -695,7 +695,7 @@ func TestBuildOrchestrator_OnBuildCompleted_Success_FullFlow(t *testing.T) {
 
 	// Build should be SUCCEEDED
 	build, _ := fakes.buildStore.GetByID(context.Background(), resp.BuildID)
-	if build.Status != string(statemachine.BuildSucceeded) {
+	if build.Status != string(statemachine.BPhSucceeded) {
 		t.Errorf("expected build status SUCCEEDED, got %q", build.Status)
 	}
 
@@ -712,7 +712,7 @@ func TestBuildOrchestrator_OnBuildCompleted_Success_FullFlow(t *testing.T) {
 	}
 	// MEET-2026-03-28-015: Phase D removed. After Activate(), release is PENDING.
 	// The convergence loop or ArgoCD callback will transition to ACTIVE async.
-	if activeRelease.Status != string(statemachine.ReleasePending) {
+	if activeRelease.Status != string(statemachine.RPhPending) {
 		t.Errorf("expected release status PENDING (async activation), got %q", activeRelease.Status)
 	}
 
@@ -767,7 +767,7 @@ func TestBuildOrchestrator_OnBuildCompleted_BuildFailed(t *testing.T) {
 	}
 
 	build, _ := fakes.buildStore.GetByID(context.Background(), resp.BuildID)
-	if build.Status != string(statemachine.BuildFailed) {
+	if build.Status != string(statemachine.BPhFailed) {
 		t.Errorf("expected build status FAILED, got %q", build.Status)
 	}
 
@@ -872,7 +872,7 @@ func TestBuildOrchestrator_OnBuildCompleted_WorkerSkipsHealthProbe(t *testing.T)
 	if release == nil {
 		t.Fatal("expected release to be created")
 	}
-	if release.Status != string(statemachine.ReleasePending) {
+	if release.Status != string(statemachine.RPhPending) {
 		t.Errorf("expected release status PENDING (async activation via convergence loop), got %q", release.Status)
 	}
 }
@@ -932,7 +932,7 @@ func TestBuildOrchestrator_OnBuildCompleted_CallbackWithBuildInQueued(t *testing
 		TenantID:    "tenant-1",
 		ProjectID:   "proj-abc123",
 		Environment: "production",
-		Status:      string(statemachine.BuildQueued),
+		Status:      string(statemachine.BPhQueued),
 		CommitSHA:   "abc123",
 		CreatedBy:   "user-1",
 		CreatedAt:   time.Now().UTC(),
@@ -954,7 +954,7 @@ func TestBuildOrchestrator_OnBuildCompleted_CallbackWithBuildInQueued(t *testing
 	}
 
 	build, _ := fakes.buildStore.GetByID(context.Background(), buildID)
-	if build.Status != string(statemachine.BuildSucceeded) {
+	if build.Status != string(statemachine.BPhSucceeded) {
 		t.Errorf("expected build status SUCCEEDED after EC-N, got %q", build.Status)
 	}
 }
@@ -1044,7 +1044,7 @@ func TestBuildOrchestrator_OnBuildCompleted_PreviousReleaseSuperseded(t *testing
 		TenantID:    "tenant-1",
 		ProjectID:   "proj-abc123",
 		Environment: "production",
-		Status:      string(statemachine.ReleaseActive),
+		Status:      string(statemachine.RPhActive),
 		CreatedAt:   time.Now().UTC(),
 		GitMirrorStatus: "pending",
 	}
@@ -1155,7 +1155,7 @@ func TestBuildOrchestrator_OnBuildCompleted_SyncFailsAfterBuildSucceeded(t *test
 	// The orchestrator handles it by keeping build in RELEASING or SUCCEEDED depending on flow.
 	build := fakes.buildStore.builds[resp.BuildID]
 	// Build transitions to SUCCEEDED because the activation error is handled gracefully
-	if build.Status != string(statemachine.BuildSucceeded) && build.Status != string(statemachine.BuildReleasing) {
+	if build.Status != string(statemachine.BPhSucceeded) && build.Status != string(statemachine.BPhReleasing) {
 		t.Errorf("expected build status SUCCEEDED or RELEASING, got %q", build.Status)
 	}
 
@@ -1176,7 +1176,7 @@ func TestBuildOrchestrator_OnBuildCompleted_SyncFailsAfterBuildSucceeded(t *test
 	if release == nil {
 		t.Fatal("expected a release to be created even when sync fails")
 	}
-	if release.Status != string(statemachine.ReleaseSyncFailed) {
+	if release.Status != string(statemachine.RPhSyncFailed) {
 		t.Errorf("expected release status SYNC_FAILED, got %q", release.Status)
 	}
 }
@@ -1211,7 +1211,7 @@ func TestBuildOrchestrator_OnBuildCompleted_WaitForSyncFails(t *testing.T) {
 	// so Activate returns nil and build transitions to SUCCEEDED.
 	// The WaitForSync failure configured in the fake is irrelevant now.
 	build := fakes.buildStore.builds[resp.BuildID]
-	if build.Status != string(statemachine.BuildSucceeded) {
+	if build.Status != string(statemachine.BPhSucceeded) {
 		t.Errorf("expected build status SUCCEEDED (Phase D removed, async activation), got %q", build.Status)
 	}
 
@@ -1233,7 +1233,7 @@ func TestBuildOrchestrator_OnBuildCompleted_WaitForSyncFails(t *testing.T) {
 	}
 	// MEET-015: WaitForSync no longer runs inline. Release stays PENDING.
 	// Convergence loop will detect sync failure and transition to SYNC_FAILED.
-	if release.Status != string(statemachine.ReleasePending) {
+	if release.Status != string(statemachine.RPhPending) {
 		t.Errorf("expected release status PENDING (async, convergence loop handles failures), got %q", release.Status)
 	}
 
@@ -1260,7 +1260,7 @@ func TestBuildOrchestrator_CancelBuild_RunningBuild(t *testing.T) {
 		CreatedBy:   "github-lucas",
 	}
 	fakes.buildStore.builds[build.ID] = build
-	build.Status = string(statemachine.BuildRunning)
+	build.Status = string(statemachine.BPhRunning)
 
 	// Act
 	err := orch.CancelBuild(context.Background(), build.ID)
@@ -1272,7 +1272,7 @@ func TestBuildOrchestrator_CancelBuild_RunningBuild(t *testing.T) {
 
 	// Build should be CANCELLED
 	updated := fakes.buildStore.builds[build.ID]
-	if updated.Status != string(statemachine.BuildCancelled) {
+	if updated.Status != string(statemachine.BPhCancelled) {
 		t.Errorf("expected status CANCELLED, got %s", updated.Status)
 	}
 
@@ -1297,7 +1297,7 @@ func TestBuildOrchestrator_CancelBuild_QueuedBuild(t *testing.T) {
 		CreatedBy:   "github-lucas",
 	}
 	fakes.buildStore.builds[build.ID] = build
-	build.Status = string(statemachine.BuildQueued)
+	build.Status = string(statemachine.BPhQueued)
 
 	// Act
 	err := orch.CancelBuild(context.Background(), build.ID)
@@ -1309,17 +1309,17 @@ func TestBuildOrchestrator_CancelBuild_QueuedBuild(t *testing.T) {
 
 	// QUEUED → CANCELLED directly (no CANCELLING intermediate)
 	updated := fakes.buildStore.builds[build.ID]
-	if updated.Status != string(statemachine.BuildCancelled) {
+	if updated.Status != string(statemachine.BPhCancelled) {
 		t.Errorf("expected status CANCELLED, got %s", updated.Status)
 	}
 }
 
 func TestBuildOrchestrator_CancelBuild_AlreadyTerminal(t *testing.T) {
 	// Arrange
-	terminalStates := []statemachine.State{
-		statemachine.BuildSucceeded,
-		statemachine.BuildFailed,
-		statemachine.BuildCancelled,
+	terminalStates := []statemachine.BuildPhase{
+		statemachine.BPhSucceeded,
+		statemachine.BPhFailed,
+		statemachine.BPhCancelled,
 	}
 
 	for _, state := range terminalStates {
@@ -1399,7 +1399,7 @@ func TestStep6_GitOpsPushFailure_ReleaseGitMirrorFailed(t *testing.T) {
 	// Build MUST be RELEASING (Phase 1 transitions to RELEASING, Phase 2 failed but
 	// build stays non-terminal for reconcile loop retry — MEET-2026-03-26-008)
 	build := fakes.buildStore.builds[resp.BuildID]
-	if build.Status != string(statemachine.BuildReleasing) {
+	if build.Status != string(statemachine.BPhReleasing) {
 		t.Errorf("expected build RELEASING, got %q", build.Status)
 	}
 
@@ -1414,7 +1414,7 @@ func TestStep6_GitOpsPushFailure_ReleaseGitMirrorFailed(t *testing.T) {
 	if release == nil {
 		t.Fatal("expected release to be created even when gitops push fails")
 	}
-	if release.Status != string(statemachine.ReleaseGitMirrorFailed) {
+	if release.Status != string(statemachine.RPhGitMirrorFailed) {
 		t.Errorf("expected release GIT_MIRROR_FAILED, got %q", release.Status)
 	}
 
@@ -1595,7 +1595,7 @@ func TestStep6_RetryRelease_WithoutRebuild(t *testing.T) {
 	// Find the release in GIT_MIRROR_FAILED
 	var releaseID string
 	for _, r := range fakes.releaseStore.releases {
-		if r.BuildID == resp.BuildID && r.Status == string(statemachine.ReleaseGitMirrorFailed) {
+		if r.BuildID == resp.BuildID && r.Status == string(statemachine.RPhGitMirrorFailed) {
 			releaseID = r.ID
 			break
 		}
@@ -1625,7 +1625,7 @@ func TestStep6_RetryRelease_WithoutRebuild(t *testing.T) {
 
 	// Release should now be PENDING (GIT_MIRROR_FAILED → PENDING via GitMirrorRetried)
 	release := fakes.releaseStore.releases[releaseID]
-	if release.Status != string(statemachine.ReleasePending) {
+	if release.Status != string(statemachine.RPhPending) {
 		t.Errorf("expected release PENDING after retry, got %q", release.Status)
 	}
 
@@ -1689,7 +1689,7 @@ func TestStep6_RetryRelease_GitPushFailsAgain(t *testing.T) {
 
 	var releaseID string
 	for _, r := range fakes.releaseStore.releases {
-		if r.BuildID == resp.BuildID && r.Status == string(statemachine.ReleaseGitMirrorFailed) {
+		if r.BuildID == resp.BuildID && r.Status == string(statemachine.RPhGitMirrorFailed) {
 			releaseID = r.ID
 			break
 		}
@@ -1708,7 +1708,7 @@ func TestStep6_RetryRelease_GitPushFailsAgain(t *testing.T) {
 
 	// Release should STILL be in GIT_MIRROR_FAILED (not corrupted)
 	release := fakes.releaseStore.releases[releaseID]
-	if release.Status != string(statemachine.ReleaseGitMirrorFailed) {
+	if release.Status != string(statemachine.RPhGitMirrorFailed) {
 		t.Errorf("expected release to stay GIT_MIRROR_FAILED, got %q", release.Status)
 	}
 }
@@ -1746,7 +1746,7 @@ func TestBuildOrchestrator_SubmitBuild_WorkflowSubmitFails_BuildMarkedFailed(t *
 	if build == nil {
 		t.Fatal("expected build to be created in store")
 	}
-	if build.Status != string(statemachine.BuildFailed) {
+	if build.Status != string(statemachine.BPhFailed) {
 		t.Errorf("expected build status FAILED after submit error, got %q", build.Status)
 	}
 }

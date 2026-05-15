@@ -37,7 +37,7 @@ const previewFinalizer = "loopzero.io/preview-cleanup"
 // previewSM is the PreviewEnvironment lifecycle state machine (spec §5.3).
 // T2.1 / COMP-002: phase transitions in this controller are now routed
 // through the state machine instead of direct Status.Phase assignments.
-var previewSM = statemachine.NewPreviewMachine()
+var previewSM = statemachine.NewPreviewTypedMachine()
 
 // PreviewReconciler reconciles PreviewEnvironment CRs.
 // Creates temporary namespaces on the runtime cluster for PR previews.
@@ -331,7 +331,7 @@ func (r *PreviewReconciler) reconcileCreating(ctx context.Context, preview *loop
 	}
 
 	preview.Status.Phase = loopzerov1.PreviewPhase(
-		previewSM.Transition(statemachine.PreviewCreating, statemachine.PreviewCreationCompleted),
+		previewSM.Transition(statemachine.PPhCreating, statemachine.PPEventCreationCompleted),
 	)
 
 	if err := r.Status().Update(ctx, preview); err != nil {
@@ -383,7 +383,7 @@ func (r *PreviewReconciler) evaluateWorkloadGate(preview *loopzerov1.PreviewEnvi
 	if submitted.Status != metav1.ConditionTrue {
 		// API set BuildSubmitted=False — surface as build failure.
 		preview.Status.Phase = loopzerov1.PreviewPhase(
-			previewSM.Transition(statemachine.PreviewCreating, statemachine.PreviewCreationFailed),
+			previewSM.Transition(statemachine.PPhCreating, statemachine.PPEventCreationFailed),
 		)
 		return ctrl.Result{}, true
 	}
@@ -394,7 +394,7 @@ func (r *PreviewReconciler) evaluateWorkloadGate(preview *loopzerov1.PreviewEnvi
 	}
 	if completed.Status != metav1.ConditionTrue {
 		preview.Status.Phase = loopzerov1.PreviewPhase(
-			previewSM.Transition(statemachine.PreviewCreating, statemachine.PreviewCreationFailed),
+			previewSM.Transition(statemachine.PPhCreating, statemachine.PPEventCreationFailed),
 		)
 		return ctrl.Result{}, true
 	}
@@ -447,7 +447,7 @@ func (r *PreviewReconciler) reconcileActive(ctx context.Context, preview *loopze
 			"preview", preview.Name,
 			"expiresAt", preview.Spec.ExpiresAt.Time)
 		preview.Status.Phase = loopzerov1.PreviewPhase(
-			previewSM.Transition(statemachine.PreviewActive, statemachine.PreviewExpirationTriggered),
+			previewSM.Transition(statemachine.PPhActive, statemachine.PPEventExpirationTriggered),
 		)
 		if err := r.Status().Update(ctx, preview); err != nil {
 			return ctrl.Result{}, err
@@ -549,8 +549,8 @@ func (r *PreviewReconciler) reconcileDelete(ctx context.Context, preview *loopze
 					// source panic'd when called from the Deleting branch.
 					// TryTransition + the actual current phase eliminate the panic.
 					nextState, smErr := previewSM.TryTransition(
-						statemachine.State(preview.Status.Phase),
-						statemachine.PreviewCleanupFailed_,
+						statemachine.PreviewPhase(preview.Status.Phase),
+						statemachine.PPEventCleanupFailed,
 					)
 					if smErr != nil {
 						logger.Error(smErr, "preview cleanup: invalid SM transition",

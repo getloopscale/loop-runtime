@@ -14,7 +14,7 @@ import (
 // include: SM state name + budget + likely cause + actionable hint.
 
 func TestReleaseReaperReason_GitPushTimeout(t *testing.T) {
-	reason := releaseReaperReason(statemachine.ReleaseGitPushTimeout)
+	reason := releaseReaperReason(statemachine.RPEventGitPushTimeout)
 	lower := strings.ToLower(reason)
 	if !strings.Contains(lower, "ready") {
 		t.Errorf("expected READY state mention, got %q", reason)
@@ -31,7 +31,7 @@ func TestReleaseReaperReason_GitPushTimeout(t *testing.T) {
 }
 
 func TestReleaseReaperReason_SyncTimeout(t *testing.T) {
-	reason := releaseReaperReason(statemachine.ReleaseSyncTimeout)
+	reason := releaseReaperReason(statemachine.RPEventSyncTimeout)
 	lower := strings.ToLower(reason)
 	if !strings.Contains(lower, "pending") {
 		t.Errorf("expected PENDING state mention, got %q", reason)
@@ -51,7 +51,7 @@ func TestReleaseReaperReason_SyncTimeout(t *testing.T) {
 }
 
 func TestReleaseReaperReason_UnknownEvent(t *testing.T) {
-	reason := releaseReaperReason(statemachine.Event("unknown"))
+	reason := releaseReaperReason(statemachine.ReleasePhaseEvent("unknown"))
 	if !strings.Contains(strings.ToLower(reason), "timeout") {
 		t.Errorf("expected generic timeout fallback, got %q", reason)
 	}

@@ -371,7 +371,7 @@ func (c *ContainerDeliveryActivator) phaseCRecordResult(ctx context.Context, bui
 				"error", pushErr,
 			)
 
-			if _, err := c.releaseStore.UpdateStatus(ctx, tx, release.ID, string(statemachine.ReleaseGitMirrorFailed_)); err != nil {
+			if _, err := c.releaseStore.UpdateStatus(ctx, tx, release.ID, string(statemachine.RPEventGitMirrorFailed)); err != nil {
 				return fmt.Errorf("activate release: transition to GIT_MIRROR_FAILED: %w", err)
 			}
 
@@ -398,7 +398,7 @@ func (c *ContainerDeliveryActivator) phaseCRecordResult(ctx context.Context, bui
 			}
 		}
 
-		if _, err := c.releaseStore.UpdateStatus(ctx, tx, release.ID, string(statemachine.ReleaseGitMirrorCompleted)); err != nil {
+		if _, err := c.releaseStore.UpdateStatus(ctx, tx, release.ID, string(statemachine.RPEventGitMirrorCompleted)); err != nil {
 			return fmt.Errorf("activate release: transition to PENDING: %w", err)
 		}
 
@@ -427,7 +427,7 @@ func (c *ContainerDeliveryActivator) phaseEFinalize(ctx context.Context, build *
 	logger := slog.With("release_id", release.ID, "build_id", build.ID)
 	return c.locker.WithLock(ctx, build.TenantID, build.ProjectID, build.Environment, func(tx db.DBTX) error {
 		if verifyFailed {
-			if _, err := c.releaseStore.UpdateStatus(ctx, tx, release.ID, string(statemachine.ReleaseSyncFailed_)); err != nil {
+			if _, err := c.releaseStore.UpdateStatus(ctx, tx, release.ID, string(statemachine.RPEventSyncFailed)); err != nil {
 				return fmt.Errorf("activate release: transition to SYNC_FAILED: %w", err)
 			}
 
