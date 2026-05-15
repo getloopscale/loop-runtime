@@ -610,7 +610,10 @@ func (r *PreviewReconciler) bumpCleanupAttempts(preview *loopzerov1.PreviewEnvir
 	}
 	current := 0
 	if raw, ok := preview.Annotations[previewCleanupAnnotation]; ok {
-		fmt.Sscanf(raw, "%d", &current)
+		// Best-effort parse: malformed annotation falls back to current=0 and
+		// the counter starts fresh. Scan failure is non-fatal — the annotation
+		// is operator-set hint, not durable state.
+		_, _ = fmt.Sscanf(raw, "%d", &current)
 	}
 	current++
 	preview.Annotations[previewCleanupAnnotation] = fmt.Sprintf("%d", current)

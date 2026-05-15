@@ -10,16 +10,16 @@ package constants
 const (
 	// SecretMinIOCredentials is the per-tenant Secret with S3/MinIO credentials.
 	// CWTs reference this via envFrom in Argo Workflow templates.
-	SecretMinIOCredentials = "loopzero-minio-credentials"
+	SecretMinIOCredentials = "loopzero-minio-credentials" //nolint:gosec // G101 false positive: Secret resource NAME, not credential value
 
 	// SecretBuildKitRegistryConfig is the Docker config.json for BuildKit registry auth.
-	SecretBuildKitRegistryConfig = "buildkit-registry-config"
+	SecretBuildKitRegistryConfig = "buildkit-registry-config" //nolint:gosec // G101 false positive: Secret resource NAME, not credential value
 
 	// SecretPlatformTokens is the platform-wide Secret storing Gitea/ArgoCD tokens.
 	SecretPlatformTokens = "loopzero-platform-tokens"
 
 	// SecretArgoCDInitialAdmin is the default ArgoCD admin password Secret.
-	SecretArgoCDInitialAdmin = "argocd-initial-admin-secret"
+	SecretArgoCDInitialAdmin = "argocd-initial-admin-secret" //nolint:gosec // G101 false positive: Secret resource NAME, not credential value
 )
 
 // --- Secret Data Keys ---
@@ -28,12 +28,12 @@ const (
 const (
 	KeyDockerConfigJSON    = "config.json"
 	KeyGiteaToken          = "GITEA_TOKEN"
-	KeyArgoCDToken         = "ARGOCD_TOKEN"
+	KeyArgoCDToken         = "ARGOCD_TOKEN" //nolint:gosec // G101 false positive: env var KEY name, not credential value
 	KeyKubeconfig          = "kubeconfig"
 	KeyUsername             = "username"
 	KeyPassword             = "password"
 	KeyAWSAccessKeyID      = "AWS_ACCESS_KEY_ID"
-	KeyAWSSecretAccessKey  = "AWS_SECRET_ACCESS_KEY"
+	KeyAWSSecretAccessKey  = "AWS_SECRET_ACCESS_KEY" //nolint:gosec // G101 false positive: env var KEY name, not credential value
 	KeyMinIOEndpoint       = "MINIO_ENDPOINT"
 )
 
@@ -43,7 +43,7 @@ const (
 	// SecretHarborRegistryConfig is the Docker config.json for Harbor registry auth
 	// in build namespaces. Same name as the existing buildkit-registry-config to
 	// maintain compatibility with the build pipeline (CWTs reference this name).
-	SecretHarborRegistryConfig = "buildkit-registry-config"
+	SecretHarborRegistryConfig = "buildkit-registry-config" //nolint:gosec // G101 false positive: Secret resource NAME, not credential value
 
 	// SecretHarborPullCredentials is the imagePullSecret for Harbor in workload namespaces.
 	SecretHarborPullCredentials = "harbor-pull-credentials"

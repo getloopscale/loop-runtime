@@ -77,7 +77,7 @@ var binaryWiringMatrix = []binaryWiringEntry{
 // ADR reference: docs/meetings/adr/0023-split-tree-canonical.md.
 func TestSetupControllersWiresAllControllers(t *testing.T) {
 	for _, bin := range binaryWiringMatrix {
-		bin := bin // capture for sub-test
+		// Go 1.22+: per-iteration loop variable; no shadow needed.
 		t.Run(bin.name, func(t *testing.T) {
 			exported := exportedSetupControllerFuncs(t, bin.pkgDir)
 			wired := wiredSetupControllerCalls(t, bin.mainPath, bin.pkgImport, bin.setupFunc)
@@ -101,7 +101,7 @@ func TestSetupControllersWiresAllControllers(t *testing.T) {
 // Matrix-driven (T1.3): runs as 5 sub-tests.
 func TestSetupControllersHasNoOrphanCalls(t *testing.T) {
 	for _, bin := range binaryWiringMatrix {
-		bin := bin // capture for sub-test
+		// Go 1.22+: per-iteration loop variable; no shadow needed.
 		t.Run(bin.name, func(t *testing.T) {
 			exported := exportedSetupControllerFuncs(t, bin.pkgDir)
 			wired := wiredSetupControllerCalls(t, bin.mainPath, bin.pkgImport, bin.setupFunc)

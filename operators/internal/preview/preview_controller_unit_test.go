@@ -104,7 +104,7 @@ func TestPreviewReconciler_NamespaceName_Canonical(t *testing.T) {
 	}
 
 	for _, tc := range cases {
-		tc := tc
+		// Go 1.22+: per-iteration loop variable; no shadow needed.
 		t.Run(tc.name, func(t *testing.T) {
 			t.Parallel()
 			got, err := r.previewNamespaceName(tc.preview)

@@ -50,13 +50,13 @@ const (
 
 const (
 	// ArgoCDSecretTypeLabel is the label key ArgoCD uses to identify secret types.
-	ArgoCDSecretTypeLabel = "argocd.argoproj.io/secret-type"
+	ArgoCDSecretTypeLabel = "argocd.argoproj.io/secret-type" //nolint:gosec // G101 false positive: label KEY, not credential value
 
 	// ArgoCDSecretTypeRepository marks a secret as a repository credential.
 	ArgoCDSecretTypeRepository = "repository"
 
 	// ArgoCDSecretTypeRepoCreds marks a secret as repo-creds template.
-	ArgoCDSecretTypeRepoCreds = "repo-creds"
+	ArgoCDSecretTypeRepoCreds = "repo-creds" //nolint:gosec // G101 false positive: secret-TYPE marker string, not credential value
 
 	// ArgoCDSecretTypeCluster marks a secret as a cluster credential.
 	ArgoCDSecretTypeCluster = "cluster"
@@ -76,7 +76,7 @@ const (
 
 	// AnnotationTokenExpiresAt stores the RFC3339 expiry timestamp for cached DO registry tokens.
 	// Used to skip the DO API call when the token has more than DORegistryTokenRefreshBuffer remaining.
-	AnnotationTokenExpiresAt = "loopzero.io/token-expires-at"
+	AnnotationTokenExpiresAt = "loopzero.io/token-expires-at" //nolint:gosec // G101 false positive: annotation KEY, not credential value
 
 	// AnnotationHarborTokenExpiresAt stores the RFC3339 expiry timestamp for the
 	// Harbor robot account credentials currently merged into the unified
@@ -85,7 +85,7 @@ const (
 	// — see CHG-002b 2026-04-28 incident on tn-lt-l3r-tn-39 where Harbor
 	// stomped the DOCR expiry with a `2262-11-17` maxint, causing
 	// isRegistryTokenFresh() to falsely believe the DOCR token was still cached.
-	AnnotationHarborTokenExpiresAt = "loopzero.io/harbor-token-expires-at"
+	AnnotationHarborTokenExpiresAt = "loopzero.io/harbor-token-expires-at" //nolint:gosec // G101 false positive: annotation KEY, not credential value
 
 	// AnnotationParentGeneration propagates the parent Tenant's generation to child
 	// Environment CRs. When the Tenant reconciles, it bumps this annotation, which

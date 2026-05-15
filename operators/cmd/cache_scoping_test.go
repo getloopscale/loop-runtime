@@ -30,10 +30,9 @@ import (
 // (HOISTED to Phase 1 per platform-architect C1 + sre veto).
 func TestCacheScopingCongruence_Static(t *testing.T) {
 	type binaryCache struct {
-		name    string
-		main    string
-		scopes  []string // CRD type names found in cache.Options.ByObject
-		watches []string // CRD types found in r.Watches calls (informer-only)
+		name   string
+		main   string
+		scopes []string // CRD type names found in cache.Options.ByObject
 	}
 
 	bins := []binaryCache{

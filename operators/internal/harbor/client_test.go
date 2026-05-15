@@ -207,7 +207,7 @@ func TestEnsureRobotAccount_CreatesNewRobot(t *testing.T) {
 				"name":        "robot$build-acme",
 				"secret":      "robot-secret-token",
 				"creation_time": time.Now().Format(time.RFC3339),
-				"expires_at":   int64(time.Now().Add(24 * time.Hour).Unix()),
+				"expires_at":   time.Now().Add(24 * time.Hour).Unix(),
 			}
 			_ = json.NewEncoder(w).Encode(resp)
 
@@ -326,7 +326,7 @@ func TestEnsureRobotAccount_RecreatesWhenNearExpiry(t *testing.T) {
 				"id":         10,
 				"name":       "robot$build-acme",
 				"secret":     "refreshed-secret",
-				"expires_at": int64(time.Now().Add(24 * time.Hour).Unix()),
+				"expires_at": time.Now().Add(24 * time.Hour).Unix(),
 			}
 			_ = json.NewEncoder(w).Encode(resp)
 
@@ -542,7 +542,7 @@ func TestEnsureRobotAccount_PullOnlyPermissions(t *testing.T) {
 				"id":         1,
 				"name":       "robot$pull-acme",
 				"secret":     "pull-secret",
-				"expires_at": int64(time.Now().Add(24 * time.Hour).Unix()),
+				"expires_at": time.Now().Add(24 * time.Hour).Unix(),
 			})
 
 		default:
