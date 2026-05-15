@@ -1,13 +1,14 @@
 // SPDX-License-Identifier: Apache-2.0
 // Copyright 2025-2026 The LoopZero Authors
 
+package argo
+
 // scripts.go contains all shell script generation functions used by language strategies.
 // Each function returns a shell script string that runs inside a build container.
 //
 // All user-supplied paths (from loopzero.yaml) are escaped via shellgen.ShellQuote
 // to prevent shell injection. Complex shell constructs use Raw() where they
 // don't involve user input.
-package argo
 
 import (
 	"fmt"

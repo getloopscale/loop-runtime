@@ -346,7 +346,7 @@ func (p *KubeMintingTokenProvider) readCredentials(ctx context.Context) (refresh
 		bearerToken: string(sec.Data["argocd-account-token"]),
 	}
 	if creds.bearerToken == "" && (creds.username == "" || creds.password == "") {
-		return refreshCreds{}, fmt.Errorf("Secret %s missing both bearer token and user/password",
+		return refreshCreds{}, fmt.Errorf("secret %s missing both bearer token and user/password",
 			p.cfg.CredsSecretName)
 	}
 	return creds, nil

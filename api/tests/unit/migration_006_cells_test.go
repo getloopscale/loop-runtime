@@ -106,7 +106,7 @@ func TestMigration006CellsSeedRows(t *testing.T) {
 	// canary stage 1 flips it 'active'. This is the safety gate.
 	if !strings.Contains(sql, "'cell-2', 'Cell 2 (runtime-2)',\n                     'maintenance'") {
 		// tolerate single-line variant if formatter changes layout
-		if !(strings.Contains(sql, "cell-2") && strings.Contains(sql, "'maintenance'")) {
+		if !strings.Contains(sql, "cell-2") || !strings.Contains(sql, "'maintenance'") {
 			t.Fatal("expected cell-2 seeded in 'maintenance' status (safety gate)")
 		}
 	}

@@ -56,8 +56,6 @@ type WorkflowSpec struct {
 	Namespace     string // Target namespace for the workflow (e.g., "build-acme")
 }
 
-// AppSpec describes a single app from loopzero.yaml as received from the CLI.
-// This is the raw input -- use NormalizeApp() to resolve into a fully populated AppUnit.
 // AppAutoscalingSpec holds HPA configuration from loopzero.yaml.
 type AppAutoscalingSpec struct {
 	MinReplicas    int `json:"min,omitempty"`
@@ -66,6 +64,8 @@ type AppAutoscalingSpec struct {
 	CooldownPeriod int `json:"cooldown,omitempty"` // Seconds before scale-to-zero (default: 300)
 }
 
+// AppSpec describes a single app from loopzero.yaml as received from the CLI.
+// This is the raw input -- use NormalizeApp() to resolve into a fully populated AppUnit.
 type AppSpec struct {
 	Name        string              `json:"name"`
 	Type        string              `json:"type"`                        // "server", "worker", "frontend"
@@ -182,7 +182,6 @@ type BuildCallbackRequest struct {
 	Manifests string       `json:"manifests,omitempty"` // raw K8s YAML from generate-manifests step
 }
 
-// BuildOrchestratorDeps holds all dependencies for BuildOrchestrator.
 // ProjectEnsurer guarantees a project exists in the projects table.
 // Used by the deploy flow so that deleted-then-redeployed projects
 // reappear in `loopzero project list`.
@@ -201,6 +200,7 @@ type PlanCapChecker interface {
 	CheckReplicasValue(tenantID string, requested int) (allowed bool, plan string, limit int)
 }
 
+// BuildOrchestratorDeps holds all dependencies for BuildOrchestrator.
 type BuildOrchestratorDeps struct {
 	BuildStore     db.BuildStore
 	ReleaseStore   db.ReleaseStore

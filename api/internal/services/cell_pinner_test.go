@@ -91,16 +91,16 @@ func TestCellPinner_SQL_ReferencesAllConditions(t *testing.T) {
 		"capacity_tenants_max",
 		"RETURNING (SELECT prev_cell_id FROM target_tenant)",
 	} {
-		if !strings_Contains(pinTenantToCellSQL, must) {
+		if !stringsContains(pinTenantToCellSQL, must) {
 			t.Errorf("pin SQL missing required clause: %q", must)
 		}
 	}
 }
 
-// strings_Contains is a local helper to avoid colliding with `contains`
+// stringsContains is a local helper to avoid colliding with `contains`
 // already defined elsewhere in the services test suite. Trivial substring
 // matcher (no regex, no allocs beyond Go's string comparison).
-func strings_Contains(haystack, needle string) bool {
+func stringsContains(haystack, needle string) bool {
 	if len(needle) == 0 {
 		return true
 	}

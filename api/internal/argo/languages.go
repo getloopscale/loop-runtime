@@ -189,8 +189,9 @@ func (s *GoStrategy) Name() string { return "go" }
 
 func (s *GoStrategy) CacheKey() string { return "go-modules" }
 
-// CODE-005 fix: containers run as uid 1000 — /root/.cache is inaccessible.
-// Use /workspace/.cache which is writable by the build user.
+// CacheDirs returns writable cache paths for Go module + build caches.
+// CODE-005 fix: containers run as uid 1000 — /root/.cache is inaccessible;
+// /workspace/.cache is writable by the build user.
 func (s *GoStrategy) CacheDirs() []string {
 	return []string{"/go/pkg/mod", "/workspace/.cache/go-build"}
 }
@@ -228,6 +229,7 @@ func (s *PythonStrategy) Name() string { return "python" }
 
 func (s *PythonStrategy) CacheKey() string { return "pip-cache" }
 
+// CacheDirs returns the writable pip cache path under /workspace.
 // CODE-005 fix: containers run as uid 1000 — /root/.cache is inaccessible.
 func (s *PythonStrategy) CacheDirs() []string { return []string{"/workspace/.cache/pip"} }
 

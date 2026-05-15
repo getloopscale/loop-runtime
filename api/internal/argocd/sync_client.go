@@ -332,10 +332,9 @@ type resourceStatus struct {
 	} `json:"health,omitempty"`
 }
 
-// getAppStatus returns the sync and health status of an ArgoCD Application.
+// GetAppStatus returns the sync and health status of an ArgoCD Application.
 // When deployedApps is non-empty, health is checked per-resource for only the
 // Deployments matching those app names — so one degraded app doesn't block others.
-// GetAppStatus returns the sync and health status of an ArgoCD Application.
 // Exported for use by the ReleaseConvergenceLoop (MEET-2026-03-27-012).
 func (c *SyncClient) GetAppStatus(ctx context.Context, appName string, deployedApps []string) (synced bool, healthy bool, err error) {
 	url := fmt.Sprintf("%s/api/v1/applications/%s", c.baseURL, appName)

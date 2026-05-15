@@ -51,8 +51,6 @@ type Build struct {
 	BundleDigest    string          `json:"bundle_digest,omitempty"`
 }
 
-// BuildAppSpec is a single app spec stored at build submission time.
-// Used by the reconcile loop to generate manifests and compute image refs.
 // BuildAppAutoscaling holds HPA configuration persisted with the build.
 type BuildAppAutoscaling struct {
 	MinReplicas int `json:"min,omitempty"`
@@ -60,6 +58,8 @@ type BuildAppAutoscaling struct {
 	TargetCPU   int `json:"target_cpu,omitempty"`
 }
 
+// BuildAppSpec is a single app spec stored at build submission time.
+// Used by the reconcile loop to generate manifests and compute image refs.
 type BuildAppSpec struct {
 	Name        string               `json:"name"`
 	Type        string               `json:"type"`

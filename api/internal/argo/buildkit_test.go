@@ -76,7 +76,7 @@ func TestBuildkitEntrypointScript_WritesDigestAfterSuccessfulBuild(t *testing.T)
 	if scriptIdx == -1 || digestIdx == -1 || exitIdx == -1 {
 		t.Fatalf("script missing required markers: build=%d digest=%d exit=%d", scriptIdx, digestIdx, exitIdx)
 	}
-	if !(scriptIdx < digestIdx && digestIdx < exitIdx) {
+	if scriptIdx >= digestIdx || digestIdx >= exitIdx {
 		t.Errorf("post-build digest hook out of order: must come after `$@` and before `exit $BUILD_EXIT`")
 	}
 

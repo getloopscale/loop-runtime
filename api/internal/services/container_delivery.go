@@ -18,17 +18,17 @@ import (
 	"github.com/loopzero/loopzero/pkg/statemachine"
 )
 
+// GitManifestReader abstracts reading manifests from git history (DIP for rollback).
+type GitManifestReader interface {
+	GetManifestsAtCommit(ctx context.Context, tenantID, projectID, env, commitSHA string) ([]byte, error)
+}
+
 // ContainerDeliveryActivator implements DeliveryActivator for container-based
 // deployments (Kubernetes pods via Gitea + ArgoCD).
 //
 // This is the existing delivery model extracted into the interface pattern
 // (MEET-2026-03-26-009 Fase 0). The 5-phase activation and rollback logic
 // are identical to the pre-refactoring code — zero behavior change.
-// GitManifestReader abstracts reading manifests from git history (DIP for rollback).
-type GitManifestReader interface {
-	GetManifestsAtCommit(ctx context.Context, tenantID, projectID, env, commitSHA string) ([]byte, error)
-}
-
 type ContainerDeliveryActivator struct {
 	releaseStore   db.ReleaseStore
 	envTargetStore db.EnvironmentTargetStore
