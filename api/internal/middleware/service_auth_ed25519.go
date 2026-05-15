@@ -5,6 +5,7 @@ package middleware
 
 import (
 	"crypto/ed25519"
+	"errors"
 	"net/http"
 	"strconv"
 	"time"
@@ -122,7 +123,7 @@ func verifyServiceAuthSignature(r *http.Request, userID, tenantID string) (ok bo
 		Nonce: nonce, Method: r.Method, Path: r.URL.Path,
 	}
 	if err := serviceauth.Verify(ServiceAuthEd25519PublicKeys, sig, in); err != nil {
-		if err == serviceauth.ErrNoTrustedKeys {
+		if errors.Is(err, serviceauth.ErrNoTrustedKeys) {
 			return false, rejectNoTrustedKeys
 		}
 		return false, rejectInvalidSig

@@ -119,7 +119,7 @@ func (s *GiteaSourceStore) pushGitBundle(ctx context.Context, tenantID, projectI
 	// Pull from bundle
 	if err := s.git.Run(ctx, repoDir, "pull", bundlePath, "HEAD"); err != nil {
 		if err2 := s.git.Run(ctx, repoDir, "fetch", bundlePath, "HEAD"); err2 != nil {
-			return "", fmt.Errorf("gitea source: git fetch from bundle: %w (pull error: %v)", err2, err)
+			return "", fmt.Errorf("gitea source: git fetch from bundle: %w (pull error: %w)", err2, err)
 		}
 		if err2 := s.git.Run(ctx, repoDir, "checkout", "FETCH_HEAD"); err2 != nil {
 			return "", fmt.Errorf("gitea source: git checkout FETCH_HEAD: %w", err2)

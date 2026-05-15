@@ -5,6 +5,7 @@ package server
 
 import (
 	"context"
+	"errors"
 	"log/slog"
 	"net/http"
 	"os"
@@ -175,7 +176,7 @@ func Run(cfg Config) error {
 	case sig := <-shutdown:
 		cfg.Logger.Info("shutdown signal received", "signal", sig.String())
 	case err := <-errCh:
-		if err != nil && err != http.ErrServerClosed {
+		if err != nil && !errors.Is(err, http.ErrServerClosed) {
 			return err
 		}
 	}

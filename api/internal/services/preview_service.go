@@ -5,6 +5,7 @@ package services
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"log/slog"
 	"strings"
@@ -296,7 +297,7 @@ func previewEnvName(prNumber int) string {
 // isPreviewNotFound centralizes the typed-error check so callers don't
 // import errors directly.
 func isPreviewNotFound(err error) bool {
-	return err != nil && (err == loopzeroerrors.ErrPreviewNotFound || strings.Contains(err.Error(), "preview environment not found"))
+	return err != nil && (errors.Is(err, loopzeroerrors.ErrPreviewNotFound) || strings.Contains(err.Error(), "preview environment not found"))
 }
 
 // Compile-time assertion: PreviewService satisfies the route handler's

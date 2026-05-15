@@ -6,6 +6,7 @@ package routes
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"log/slog"
@@ -132,7 +133,8 @@ func (h *SourceHandler) Upload(w http.ResponseWriter, r *http.Request) {
 	// Validate loopzero.yaml
 	cfg, appNames, err := source.ValidateLoopZeroYAML(loopzeroYAMLContent)
 	if err != nil {
-		if ve, ok := err.(*source.ValidationError); ok {
+		var ve *source.ValidationError
+		if errors.As(err, &ve) {
 			writeLoopZeroError(w, loopzeroerrors.NewLoopZeroError(
 				"VALIDATION_FAILED",
 				ve.Message,

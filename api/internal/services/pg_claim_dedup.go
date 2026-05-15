@@ -5,6 +5,7 @@ package services
 
 import (
 	"context"
+	"errors"
 
 	"github.com/loopzero/loopzero/api/internal/processing"
 )
@@ -77,5 +78,5 @@ func (d *PGClaimDedup) IsProcessingPG(ctx context.Context, kind processing.Kind,
 		return false
 	}
 	// ErrClaimHeld means another replica has it.
-	return err == processing.ErrClaimHeld
+	return errors.Is(err, processing.ErrClaimHeld)
 }

@@ -452,7 +452,7 @@ func TestConcurrentBuildSubmission(t *testing.T) {
 			defer wg.Done()
 			<-ready // Wait for barrier
 
-			resp, err := doPost(setup.server.URL, "/api/v1/builds", reqBody, nil)
+			resp, err := doPost(setup.server.URL, "/api/v1/builds", reqBody, nil) //nolint:bodyclose // closed via readBody helper below
 			if err != nil {
 				t.Errorf("goroutine %d: request failed: %v", idx, err)
 				return
@@ -540,7 +540,7 @@ func TestIdempotencyReplay(t *testing.T) {
 	}
 
 	// First call
-	resp1, err := doPost(setup.server.URL, "/api/v1/builds", reqBody, headers)
+	resp1, err := doPost(setup.server.URL, "/api/v1/builds", reqBody, headers) //nolint:bodyclose // closed via readBody helper below
 	if err != nil {
 		t.Fatalf("first request failed: %v", err)
 	}
@@ -551,7 +551,7 @@ func TestIdempotencyReplay(t *testing.T) {
 	}
 
 	// Second call with same key + same payload
-	resp2, err := doPost(setup.server.URL, "/api/v1/builds", reqBody, headers)
+	resp2, err := doPost(setup.server.URL, "/api/v1/builds", reqBody, headers) //nolint:bodyclose // closed via readBody helper below
 	if err != nil {
 		t.Fatalf("second request failed: %v", err)
 	}
@@ -620,7 +620,7 @@ func TestIdempotencyMismatch(t *testing.T) {
 	}
 
 	// First call with payload A
-	resp1, err := doPost(setup.server.URL, "/api/v1/builds", payloadA, headers)
+	resp1, err := doPost(setup.server.URL, "/api/v1/builds", payloadA, headers) //nolint:bodyclose // closed via readBody helper below
 	if err != nil {
 		t.Fatalf("first request failed: %v", err)
 	}
@@ -631,7 +631,7 @@ func TestIdempotencyMismatch(t *testing.T) {
 	}
 
 	// Second call with payload B (different payload, same key)
-	resp2, err := doPost(setup.server.URL, "/api/v1/builds", payloadB, headers)
+	resp2, err := doPost(setup.server.URL, "/api/v1/builds", payloadB, headers) //nolint:bodyclose // closed via readBody helper below
 	if err != nil {
 		t.Fatalf("second request failed: %v", err)
 	}
@@ -667,7 +667,7 @@ func TestLockReleasedAfterBuildCompletes(t *testing.T) {
 	}
 
 	// Submit build 1
-	resp1, err := doPost(setup.server.URL, "/api/v1/builds", reqBody, nil)
+	resp1, err := doPost(setup.server.URL, "/api/v1/builds", reqBody, nil) //nolint:bodyclose // closed via readBody helper below
 	if err != nil {
 		t.Fatalf("first build request failed: %v", err)
 	}
@@ -716,7 +716,7 @@ func TestLockReleasedAfterBuildCompletes(t *testing.T) {
 	}
 
 	// Submit build 2: should succeed because build 1 is no longer active
-	resp2, err := doPost(setup.server.URL, "/api/v1/builds", reqBody, nil)
+	resp2, err := doPost(setup.server.URL, "/api/v1/builds", reqBody, nil) //nolint:bodyclose // closed via readBody helper below
 	if err != nil {
 		t.Fatalf("second build request failed: %v", err)
 	}

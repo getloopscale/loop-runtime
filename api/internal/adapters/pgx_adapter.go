@@ -5,6 +5,7 @@ package adapters
 
 import (
 	"context"
+	"errors"
 
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
@@ -58,7 +59,7 @@ type pgxRowAdapter struct {
 func (r *pgxRowAdapter) Scan(dest ...any) error {
 	err := r.row.Scan(dest...)
 	if err != nil {
-		if err == pgx.ErrNoRows {
+		if errors.Is(err, pgx.ErrNoRows) {
 			return db.ErrNoRows
 		}
 		return err
