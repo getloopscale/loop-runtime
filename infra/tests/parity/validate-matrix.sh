@@ -237,6 +237,25 @@ fi
 
 # Gate 10: operators envtest (only when KUBEBUILDER_ASSETS set).
 # Same surface-on-failure pattern as Gates 4+5+6.
+#
+# Auto-detection (iter 27): if KUBEBUILDER_ASSETS is not set, look for
+# the kubebuilder-envtest local cache that `setup-envtest` writes to
+# `~/.local/share/kubebuilder-envtest/k8s/<version>-<os>-<arch>/`.
+# Prefer the highest-version directory found. This eliminates the
+# SKIP-by-default and surfaces envtest failures locally without
+# requiring the operator to remember the export line.
+if [[ -z "${KUBEBUILDER_ASSETS:-}" ]]; then
+  for d in "$HOME/.local/share/kubebuilder-envtest/k8s"/*-linux-amd64 \
+           "$HOME/.cache/kubebuilder-envtest/k8s"/*-linux-amd64 \
+           "$HOME/go/bin/setup-envtest" ; do
+    [[ -d "$d" ]] || continue
+    KUBEBUILDER_ASSETS="$d"
+    break
+  done
+  if [[ -n "$KUBEBUILDER_ASSETS" ]]; then
+    export KUBEBUILDER_ASSETS
+  fi
+fi
 if [[ -n "${KUBEBUILDER_ASSETS:-}" ]]; then
   if (( QUICK == 1 )); then
     result 2 "operators:envtest (--quick skipped)"
@@ -251,7 +270,7 @@ if [[ -n "${KUBEBUILDER_ASSETS:-}" ]]; then
     rm -f "$gate10_out"
   fi
 else
-  result 2 "operators:envtest (KUBEBUILDER_ASSETS not set)"
+  result 2 "operators:envtest (KUBEBUILDER_ASSETS not set + auto-detect missed)"
 fi
 
 # === Live gates STATUS reporting (NOT executed) ===
