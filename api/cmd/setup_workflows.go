@@ -67,11 +67,16 @@ func setupWorkflows(cfg config.Config, httpTransport *http.Transport, logger *sl
 	// When Insecure is true, we need a separate transport for TLS skip.
 	argocdHTTPClient := &http.Client{Timeout: cfg.ArgocdClientTimeout}
 	if cfg.ArgocdInsecure {
+		// G402 expected: `cfg.ArgocdInsecure` is a config flag enabled
+		// ONLY for local k3d (per CLAUDE.md: cert-manager letsencrypt-prod
+		// cannot issue for `*.loopzero.local` since there is no public DNS
+		// for the ACME challenge). Production sets this flag false and
+		// uses CF-managed TLS via the runtime cluster. Audit SEC-101.
 		argocdHTTPClient.Transport = &http.Transport{
 			MaxIdleConns:        100,
 			MaxIdleConnsPerHost: 10,
 			IdleConnTimeout:     90 * time.Second,
-			TLSClientConfig:     &tls.Config{InsecureSkipVerify: true},
+			TLSClientConfig:     &tls.Config{InsecureSkipVerify: true}, //nolint:gosec // G402 expected: local k3d only (cfg.ArgocdInsecure gates)
 		}
 	} else {
 		argocdHTTPClient.Transport = httpTransport

@@ -69,7 +69,17 @@ func main() {
 			mux.HandleFunc("/debug/pprof/symbol", pprof.Symbol)
 			mux.HandleFunc("/debug/pprof/trace", pprof.Trace)
 			slog.Info("pprof server starting", "addr", pprofAddr)
-			if err := http.ListenAndServe(pprofAddr, mux); err != nil {
+			// G114 mitigation: explicit Server with ReadHeaderTimeout
+			// to block slowloris. WriteTimeout deliberately ZERO —
+			// `/debug/pprof/profile` runs 30-60s CPU profiles by
+			// design; finite WriteTimeout would truncate them.
+			// Same pattern as operators/internal/shared/pprof.go iter 11.
+			srv := &http.Server{
+				Addr:              pprofAddr,
+				Handler:           mux,
+				ReadHeaderTimeout: 10 * time.Second,
+			}
+			if err := srv.ListenAndServe(); err != nil {
 				slog.Error("pprof server failed", "error", err)
 			}
 		}()
