@@ -51,24 +51,49 @@ result() {
 
 echo "[parity-preflight] gates:"
 
-# Gate 1+2: shellcheck (if installed) + bash -n
+# Gate 1+2: shellcheck (if installed OR via Docker) + bash -n
+#
+# Per memory `feedback_tool_unavailability_alternative_routes` (Ralph
+# iter 2026-05-15): "Antes de marcar 'tool unavailable' como Ralph-
+# immutable host limitation, enumerar rotas alternativas". Docker
+# `koalaman/shellcheck:stable` is the canonical alternative when the
+# binary is not native; it is pinned + reproducible across machines.
+# Disable via `SHELLCHECK_NO_DOCKER=1` if Docker is unavailable in CI.
+declare -a SHELLCHECK_CMD
+if command -v shellcheck >/dev/null 2>&1; then
+  SHELLCHECK_CMD=(shellcheck)
+  SHELLCHECK_MODE="native"
+elif [[ -z "${SHELLCHECK_NO_DOCKER:-}" ]] && command -v docker >/dev/null 2>&1; then
+  SHELLCHECK_CMD=(docker run --rm -v "${REPO_ROOT}:/mnt" -w /mnt koalaman/shellcheck:stable)
+  SHELLCHECK_MODE="docker"
+else
+  SHELLCHECK_CMD=()
+  SHELLCHECK_MODE="unavailable"
+fi
+
 for script in "${PARITY_DIR}"/*.sh; do
   name="$(basename "$script")"
 
   # Gate 1: shellcheck
-  if command -v shellcheck >/dev/null 2>&1; then
-    if shellcheck "$script" >/dev/null 2>&1; then
-      result 0 "shellcheck:$name"
+  if [[ "$SHELLCHECK_MODE" != "unavailable" ]]; then
+    # Make path relative to REPO_ROOT for the Docker volume mount.
+    if [[ "$SHELLCHECK_MODE" == "docker" ]]; then
+      rel_script="${script#"${REPO_ROOT}/"}"
+    else
+      rel_script="$script"
+    fi
+    if "${SHELLCHECK_CMD[@]}" "$rel_script" >/dev/null 2>&1; then
+      result 0 "shellcheck:$name (${SHELLCHECK_MODE})"
     else
       if (( STRICT )); then
-        shellcheck "$script" 2>&1 | head -5
-        result 1 "shellcheck:$name"
+        "${SHELLCHECK_CMD[@]}" "$rel_script" 2>&1 | head -5
+        result 1 "shellcheck:$name (${SHELLCHECK_MODE})"
       else
         result 2 "shellcheck:$name (warnings, non-strict)"
       fi
     fi
   else
-    result 2 "shellcheck:$name (not installed)"
+    result 2 "shellcheck:$name (not installed + Docker unavailable)"
   fi
 
   # Gate 2: syntax check

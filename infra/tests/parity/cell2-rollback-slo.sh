@@ -39,7 +39,6 @@
 
 set -uo pipefail
 
-REPO_ROOT="$(cd "$(dirname "$0")/../../.." && pwd)"
 DRY_RUN="${DRY_RUN:-0}"
 IT_COUNT="${IT_COUNT:-10}"
 PROBE_TIMEOUT_S="${PROBE_TIMEOUT_S:-600}"   # any iteration > 600s aborts

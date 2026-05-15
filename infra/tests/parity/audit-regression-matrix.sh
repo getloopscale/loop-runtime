@@ -115,7 +115,7 @@ echo "[matrix-audit] (resolves Test* / *_test_* / *.test.ts tokens against repo)
 echo
 
 # Parse table: skip header rows; rows look like `| 12 | CAT | ... | TestX | NÃO | SIM |`.
-while IFS='|' read -r _ id_col cat _ _ _ _ verify_col can_recur_col _; do
+while IFS='|' read -r _ id_col _cat _ _ _ _ verify_col can_recur_col _; do
   id=$(echo "$id_col" | tr -d ' ')
   [[ "$id" =~ ^[0-9]+$ ]] || continue   # not a data row
 

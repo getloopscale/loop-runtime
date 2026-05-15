@@ -65,10 +65,13 @@ success=0
 for i in $(seq 1 "$COUNT"); do
   TN_ID="tn-stage2-bootstrap-${EPOCH}-${i}"
   log "[${i}/${COUNT}] bootstrapping ${TN_ID}"
-  SYNTH_TENANT_ID="$TN_ID" \
-    bash "$DOGFOOD" --only journey-01-solo-deploy >"/tmp/bootstrap-${TN_ID}.log" 2>&1 \
-    && { log "  ${TN_ID} bootstrapped"; success=$((success+1)); } \
-    || log "  ${TN_ID} FAILED — see /tmp/bootstrap-${TN_ID}.log"
+  if SYNTH_TENANT_ID="$TN_ID" bash "$DOGFOOD" --only journey-01-solo-deploy \
+       >"/tmp/bootstrap-${TN_ID}.log" 2>&1; then
+    log "  ${TN_ID} bootstrapped"
+    success=$((success+1))
+  else
+    log "  ${TN_ID} FAILED — see /tmp/bootstrap-${TN_ID}.log"
+  fi
 done
 
 log "summary: ${success}/${COUNT} tenants successfully bootstrapped"
