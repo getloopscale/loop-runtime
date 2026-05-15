@@ -44,14 +44,22 @@ chaos-mesh:
   # These are LOCKED to the daemon-only ServiceAccount, not granted broadly.
   chaosDaemon:
     runtime: containerd
-    socketPath: /run/containerd/containerd.sock
+    # Plan T3.2 D10 + EC-9 — k3s containerd socket lives at /run/k3s/containerd/
+    # (not the standard /run/containerd/). The chart mounts the host's /run as
+    # /host-run inside the daemon container; socketPath is relative to that.
+    # In k3s/k3d deployments use /run/k3s/containerd/containerd.sock.
+    # Production DOKS/EKS use the default /run/containerd/containerd.sock.
+    socketPath: /run/k3s/containerd/containerd.sock
     resources:
       requests:
-        cpu: 25m
-        memory: 64Mi
+        cpu: 50m
+        memory: 128Mi
       limits:
-        cpu: 250m
-        memory: 256Mi
+        cpu: 500m
+        # Plan T3.2 D10 — bumped 256→512Mi. Default insufficient for full
+        # 10-scenario suite (caused F-CHAOS-01 OOM crash loop after ~8 scenarios).
+        memory: 512Mi
+        ephemeral-storage: 1Gi
     # Chaos daemon DOES require privileged context to perform syscall-level
     # chaos (kill, stress, network delay). This is intentional and scoped to
     # this DaemonSet only. Sprint 6 policy-controller includes chaos-mesh
