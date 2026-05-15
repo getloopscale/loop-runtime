@@ -52,7 +52,7 @@ describe('loopzero whoami', () => {
 
     // Diagnose if test fails: dump stdout/stderr.
     if (r.exitCode !== 0) {
-      // eslint-disable-next-line no-console
+       
       console.error('whoami spawn diag:', { exit: r.exitCode, stdout: r.stdout, stderr: r.stderr });
     }
     expect(r.exitCode).toBe(0);

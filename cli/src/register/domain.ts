@@ -3,7 +3,13 @@
 
 import { ApiClient } from '../api/client';
 import { DomainAddCommand, DomainVerifyCommand, DomainStatusCommand, DomainListCommand, DomainRemoveCommand, DomainDNSCommand } from '../commands/domain';
-import type { DomainDeps } from '../commands/domain';
+import type {
+  DomainDeps,
+  DomainCreateResponse,
+  DomainVerifyResponse,
+  DomainStatusResponse,
+  DomainListResponse,
+} from '../commands/domain';
 import { API_REQUEST_TIMEOUT_MS } from '../config/constants';
 import { CommandDeps } from './types';
 
@@ -11,20 +17,24 @@ import { CommandDeps } from './types';
 function makeDomainDeps(apiClient: ApiClient, writeTo: (m: string) => void, writeError: (m: string) => void, getToken: () => string | null): DomainDeps {
   return {
     getToken,
-    createDomain: async (body) => apiClient.post('/api/v1/domains', body, { 'Idempotency-Key': 'domain-' + body.domain + '-' + Date.now() }) as any,
-    verifyDomain: async (d) => apiClient.post(`/api/v1/domains/${encodeURIComponent(d)}/verify`, {}) as any,
-    getDomain: async (d) => apiClient.get(`/api/v1/domains/${encodeURIComponent(d)}`) as any,
+    createDomain: async (body) =>
+      apiClient.post('/api/v1/domains', body, { 'Idempotency-Key': 'domain-' + body.domain + '-' + Date.now() }) as Promise<DomainCreateResponse>,
+    verifyDomain: async (d) =>
+      apiClient.post(`/api/v1/domains/${encodeURIComponent(d)}/verify`, {}) as Promise<DomainVerifyResponse>,
+    getDomain: async (d) =>
+      apiClient.get(`/api/v1/domains/${encodeURIComponent(d)}`) as Promise<DomainStatusResponse>,
     listDomains: async (params) => {
       if (params && (params.project || params.app || params.environment)) {
         const qs = new URLSearchParams();
         if (params.project) qs.set('project', params.project);
         if (params.app) qs.set('app', params.app);
         if (params.environment) qs.set('environment', params.environment);
-        return apiClient.get(`/api/v1/domains?${qs.toString()}`) as any;
+        return apiClient.get(`/api/v1/domains?${qs.toString()}`) as Promise<DomainListResponse>;
       }
-      return apiClient.get('/api/v1/domains') as any;
+      return apiClient.get('/api/v1/domains') as Promise<DomainListResponse>;
     },
-    deleteDomain: async (d) => apiClient.del(`/api/v1/domains/${encodeURIComponent(d)}`) as any,
+    deleteDomain: async (d) =>
+      apiClient.del(`/api/v1/domains/${encodeURIComponent(d)}`) as Promise<{ ok: boolean; domain: string; status: string }>,
     writeTo,
     writeError,
   };

@@ -26,7 +26,7 @@ interface ConnectResponse {
   auto_deploy: boolean;
 }
 
-interface ConnectionInfo {
+export interface ConnectionInfo {
   project: string;
   repo: string;
   branch: string;

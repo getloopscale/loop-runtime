@@ -9,7 +9,7 @@ import { classifyNetworkError } from '../output/error-message';
 
 // --- API Response types ---
 
-interface DomainCreateResponse {
+export interface DomainCreateResponse {
   id: string;
   domain: string;
   project: string;
@@ -29,7 +29,7 @@ interface DomainCreateResponse {
   action_required?: string;
 }
 
-interface DomainVerifyResponse {
+export interface DomainVerifyResponse {
   domain: string;
   status: string;
   verified_at?: string;
@@ -38,7 +38,7 @@ interface DomainVerifyResponse {
   message?: string;
 }
 
-interface DomainStatusResponse {
+export interface DomainStatusResponse {
   id: string;
   domain: string;
   project: string;
@@ -54,7 +54,7 @@ interface DomainStatusResponse {
   verified_at?: string;
 }
 
-interface DomainListResponse {
+export interface DomainListResponse {
   domains: DomainStatusResponse[];
   total: number;
   limit: number;

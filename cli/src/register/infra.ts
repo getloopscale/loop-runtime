@@ -8,7 +8,7 @@ import { BuildInspectCommand } from '../commands/build-inspect';
 import { CancelCommand } from '../commands/cancel';
 import { SecretSetCommand, SecretListCommand, SecretDeleteCommand } from '../commands/secret';
 import { BillingCommand } from '../commands/billing';
-import { ConnectCommand, DisconnectCommand } from '../commands/connect';
+import { ConnectCommand, DisconnectCommand, type ConnectionInfo } from '../commands/connect';
 import { runAdminEvict, AdminEvictInput, AdminEvictResponse } from '../commands/admin-evict';
 import { API_REQUEST_TIMEOUT_MS } from '../config/constants';
 import { getGitRoot } from '../adapters/git';
@@ -296,7 +296,7 @@ export function registerInfraCommands(deps: CommandDeps): void {
         },
         connectRepo: async (project, body) => apiClient.post(`/api/v1/projects/${encodeURIComponent(project)}/connect`, body),
         disconnectRepo: async (project) => apiClient.del(`/api/v1/projects/${encodeURIComponent(project)}/connect`),
-        getConnection: async (project) => apiClient.get<any>(`/api/v1/projects/${encodeURIComponent(project)}/connect`).catch(() => null),
+        getConnection: async (project) => apiClient.get<ConnectionInfo>(`/api/v1/projects/${encodeURIComponent(project)}/connect`).catch(() => null),
         writeTo,
         writeError,
       });
