@@ -105,20 +105,13 @@ func TestCacheScoping_AppOperatorDoesNOTScope_WorkloadCRDs(t *testing.T) {
 }
 
 func TestCacheScoping_MonolithStillScopes(t *testing.T) {
-	// The monolith retains its scoping until T2.5 deletion (sprint 12).
-	// During the migration window, a cutover failure mid-flight could
-	// leave both topologies running briefly; if the monolith somehow
-	// regressed, this test catches it before merge.
-	path := filepath.Join(repoRoot(), "operators", "cmd", "main.go")
-	data, err := os.ReadFile(path)
-	if err != nil {
-		t.Fatalf("monolith main.go missing: %v", err)
-	}
-	text := string(data)
-	if !strings.Contains(text, "platformCRDNamespaces") {
-		t.Error("monolith main.go missing platformCRDNamespaces — ADR-0018 C9 regression")
-	}
-	if !strings.Contains(text, "Cache: cache.Options") {
-		t.Error("monolith main.go missing Cache: cache.Options — ADR-0018 C9 regression")
-	}
+	// The monolith `operators/cmd/main.go` was DELETED in T1.4
+	// (ADR-0023 operator-split, commit 27cfe6cd 2026-05-04). ADR-0018
+	// C9 cache scoping is now enforced individually by each of the 4
+	// split binaries — the per-binary test directly above (in this
+	// file or the sibling registration test) verifies them. Migration
+	// window safety is structurally impossible to regress (no monolith
+	// binary exists). See finding
+	// `concepts/operations/finding-2026-05-15-infra-tests-load-regression-obsolete.md`.
+	t.Skip("monolith binary deleted T1.4 (commit 27cfe6cd) — ADR-0018 C9 covered per-binary")
 }

@@ -56,35 +56,15 @@ func TestT01_AtomicCutoverScriptExists(t *testing.T) {
 
 // T-02 — rollback script exists + uses git-show-from-parent (no destructive ops).
 func TestT02_RollbackScriptExists(t *testing.T) {
-	path := filepath.Join(repoRoot(), "infra", "scripts", "operator-cutover-rollback.sh")
-	data, err := os.ReadFile(path)
-	if err != nil {
-		t.Fatalf("operator-cutover-rollback.sh missing: %v", err)
-	}
-	text := string(data)
-
-	// Must use `git show` (read-only) rather than `git revert` or any
-	// other history-mutating op per workflow.md line 33.
-	if !strings.Contains(text, "git show") {
-		t.Error("rollback must use `git show` to read parent commit")
-	}
-	// Scan only non-comment lines for forbidden git operations.
-	// Comments may legitimately reference the anti-pattern in
-	// explanatory text (e.g., "we do NOT use git checkout because...").
-	for _, line := range strings.Split(text, "\n") {
-		trimmed := strings.TrimSpace(line)
-		if strings.HasPrefix(trimmed, "#") {
-			continue
-		}
-		for _, forbidden := range []string{"git revert", "git reset --hard", "git checkout"} {
-			if strings.Contains(trimmed, forbidden) {
-				t.Errorf("rollback uses forbidden op (non-comment line): %s", forbidden)
-			}
-		}
-	}
-	if !strings.Contains(text, "LOOPZERO_CUTOVER_COMMIT") {
-		t.Error("rollback must read LOOPZERO_CUTOVER_COMMIT for parent SHA")
-	}
+	// `infra/scripts/operator-cutover-rollback.sh` deleted in commit
+	// 27cfe6cd (2026-05-04, ADR-0023 / plan v1.1 T1.5 LOCAL cutover
+	// complete). The 4-binary split is canonical on the LOCAL stack;
+	// production rollout is governed by separate
+	// CHG-NNNN-OPERATOR-SPLIT-PROD per ADR-0023's 4-stage cutover and
+	// would author a new rollback script at cutover time. Re-enable
+	// this test (and update the path constant) when the prod-cutover
+	// PR lands.
+	t.Skip("rollback script removed post LOCAL cutover (commit 27cfe6cd) — re-enable when prod-cutover PR ships")
 }
 
 // T-03 — runbook exists with all required sections.
@@ -94,36 +74,30 @@ func TestT03_CutoverRunbookExists(t *testing.T) {
 
 // T-04 — invariants doc exists with I-1..I-8.
 func TestT04_InvariantsDocExists(t *testing.T) {
-	path := filepath.Join(repoRoot(), "docs", "decisions", "operator-split-invariants.md")
-	data, err := os.ReadFile(path)
-	if err != nil {
-		t.Fatalf("invariants doc missing: %v", err)
-	}
-	text := string(data)
-
-	for i := 1; i <= 8; i++ {
-		// Section headers like "## I-1 — ..."
-		marker := strings.Replace("## I-N — ", "N", string(rune('0'+i)), 1)
-		if !strings.Contains(text, marker) {
-			t.Errorf("invariants doc missing I-%d header", i)
-		}
-	}
+	// `docs/decisions/operator-split-invariants.md` deleted in
+	// fc1793dd (2026-05-11 doc cleanup). I-1..I-8 invariants are now
+	// verified directly by per-invariant tests in
+	// `infra/pulumi/src/__tests__/operator-split-invariants.test.ts`
+	// (8 individual tests, each verifying the verification artifact
+	// directly — Go tests, helm-template checks). The "central index
+	// doc" assertion is meta-coverage that no longer adds signal once
+	// each invariant has its own pinned test. See finding
+	// `.claude/knowledge-base/concepts/operations/finding-2026-05-15-pulumi-vitest-23-fail-drift.md`.
+	t.Skip("invariants doc deleted fc1793dd — I-1..I-8 covered directly by operator-split-invariants.test.ts")
 }
 
 // T-05 — RBAC subset gate wired into ci.yml.
 func TestT05_RbacSubsetWiredInCI(t *testing.T) {
-	path := filepath.Join(repoRoot(), ".github", "workflows", "ci.yml")
-	data, err := os.ReadFile(path)
-	if err != nil {
-		t.Fatalf("ci.yml missing: %v", err)
-	}
-	text := string(data)
-	if !strings.Contains(text, "rbac-subset:") {
-		t.Error("ci.yml missing rbac-subset job")
-	}
-	if !strings.Contains(text, "rbac-subset-check.sh") {
-		t.Error("ci.yml rbac-subset job must invoke rbac-subset-check.sh")
-	}
+	// `rbac-subset-check.sh` deleted in plan v1.1 T1.5 (ADR-0023)
+	// because the comparison baseline (monolith tenant-controller
+	// ClusterRole) was deleted in the same plan. The replacement
+	// strategy is documented in `.github/workflows/ci.yml:175-185`:
+	// kubebuilder:rbac markers + an AST analyzer at
+	// `hack/validate-rbac/` enforcing "every r.Client.X call has a
+	// corresponding marker". That validator is currently aspirational
+	// (path does not exist yet). Re-enable this test pointing at the
+	// new validator once it ships per ADR-0026.
+	t.Skip("rbac-subset gate deleted T1.5 — replacement validator (hack/validate-rbac/) per ADR-0026 not yet shipped")
 }
 
 // T-06 — multi-cell.yml workflow exists for Phase 5 stages.

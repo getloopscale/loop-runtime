@@ -119,12 +119,21 @@ for ws_label in "infra/pulumi:pulumi-vitest" "infra/pulumi-drill:pulumi-drill-vi
 done
 
 # Gate 6: infra/tests Go suite (capacity + chaos + e2e + load + unit).
+# Surface failure context on the gate output (same pattern as Gate 5
+# after the 2026-05-15 iter-3/4 pulumi-vitest fix). Without this the
+# aggregate exit code hid which sub-suite was failing — caught the
+# `infra/tests/load/regression_test.go` ~17 stale tests dormant since
+# fc1793dd. See finding `concepts/operations/finding-2026-05-15-
+# infra-tests-load-regression-obsolete.md`.
 if command -v go >/dev/null 2>&1; then
-  if (cd "${REPO_ROOT}/infra/tests" && go test -short -timeout=120s ./... >/dev/null 2>&1); then
+  gate6_out=$(mktemp)
+  if (cd "${REPO_ROOT}/infra/tests" && go test -short -timeout=120s ./... >"$gate6_out" 2>&1); then
     result 0 "infra:tests-go"
   else
     result 1 "infra:tests-go"
+    grep -E "^--- FAIL|^FAIL\b|^ok\s|^=== RUN" "$gate6_out" | head -10 | sed 's/^/      /'
   fi
+  rm -f "$gate6_out"
 else
   result 2 "infra:tests-go (go missing)"
 fi
