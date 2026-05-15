@@ -441,20 +441,14 @@ jobs:
     if: needs.changes.outputs.go-api == 'true'
     steps:
       - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
-      - name: Reject migrate force
-        run: |
-          matches=$(grep -rnE '(^|[[:space:]`"''])migrate([[:space:]]+-[^[:space:]]+)*[[:space:]]+force([[:space:]]+[0-9]+|$)' \
-              --include='*.sh' --include='*.yml' --include='*.yaml' \
-              --include='*.go' --include='*.ts' \
-              --include='Taskfile.yml' --include='Tiltfile' \
-              --exclude-dir=node_modules --exclude-dir=.git --exclude-dir=docs \
-              --exclude='ci.yml' . || true)
-          offending=$(echo "$matches" | grep -vE '(^|[[:space:]])(#|//)\s*NEVER' | grep -vE '^\s*$' || true)
-          if [ -n "$offending" ]; then
-            echo "::error::migrate force invocation found"
-            echo "$offending"
-            exit 1
-          fi
+      # allowlist: migrate force (step name references the phrase being rejected — this is the gate itself)
+      - name: Reject migrate force (plan T1.2 — CORRECTIONS.txt item B)
+        # Replaced inline grep with canonical script per plan
+        # 2026-05-13-corrections-txt-definitive-fix-sprint-plan T1.2.
+        # New script broadens scope (all extensions), uses explicit
+        # `# allowlist: migrate force` markers (vs prior `NEVER` keyword),
+        # and has hermetic test coverage at infra/tests/check-no-migrate-force_test.sh.
+        run: bash infra/scripts/check-no-migrate-force.sh
       - name: Forward-only migrations
         run: |
           viol=$(grep -rlnE '^\s*(ALTER\s+TABLE\s+\w+\s+)?DROP\s+(TABLE|COLUMN)' \

@@ -9,7 +9,7 @@
 # pinned to specific patch matching api/operators/cloud Dockerfiles. Floating
 # 1.25-alpine resolved to whatever latest patch GHCR served on each build,
 # breaking SOURCE_DATE_EPOCH reproducibility.
-FROM golang:1.25.9-alpine3.22 AS build
+FROM golang:1.25.10-alpine3.22 AS build
 
 WORKDIR /src
 COPY go.mod ./

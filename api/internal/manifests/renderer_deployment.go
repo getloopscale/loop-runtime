@@ -98,8 +98,10 @@ func buildDeployment(ri RenderInput, app AppManifestInput, port int) k8sDeployme
 	//   - If scale-to-zero (KEDA): replicas = 0 (KEDA manages lifecycle)
 	//   - If autoscaling with MinReplicas >= 1: use minReplicas as baseline (HPA manages scaling)
 	//   - If explicit replicas configured, use that
-	//   - Otherwise default to 1
-	replicas := 1
+	//   - Otherwise default to 2 (HA — per /chaos-test C03 fix 2026-05-14;
+	//     single-replica tenant pods fail chaos C03 with 0% availability
+	//     during pod-kill chaos. To opt out set replicas: 1 in loopzero.yaml).
+	replicas := 2
 	if app.Autoscaling != nil {
 		if isScaleToZero(app.Autoscaling) {
 			replicas = 0

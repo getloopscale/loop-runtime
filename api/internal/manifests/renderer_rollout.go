@@ -415,8 +415,16 @@ func buildAppPodSpec(container k8sContainer) k8sPodSpec {
 }
 
 // replicasForApp computes the desired replica count, shared with buildDeployment.
+//
+// HA default per /chaos-test C03 fix (2026-05-14): when no explicit Autoscaling
+// or Replicas configured, default to 2 (was 1). Single-replica tenant pods
+// fail chaos test C03 (random-tenant-pod-kill) with 0% availability during
+// chaos. 2 replicas + tenant PDB sustain chaos via pod-level fail-over.
+//
+// To opt out (cost-sensitive dev/test): set `apps.<name>.replicas: 1` in
+// loopzero.yaml OR set `autoscaling.minReplicas: 1` for HPA-managed apps.
 func replicasForApp(app AppManifestInput) int {
-	replicas := 1
+	replicas := 2 // HA default — overridable via app.Replicas or Autoscaling
 	if app.Autoscaling != nil {
 		if isScaleToZero(app.Autoscaling) {
 			return 0

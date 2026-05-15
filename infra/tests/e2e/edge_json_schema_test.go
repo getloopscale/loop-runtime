@@ -96,13 +96,13 @@ var _ = Describe("Edge: CI Mode", Label("edge-case"), func() {
 
 	It("CI=true produces no ANSI escape codes", func() {
 		cmd := exec.Command("loopzero", "whoami", "--json")
+		// T2 amendment 2026-05-13: auth via configStore (XDG_CONFIG_HOME
+		// from BeforeSuite), not LOOPZERO_TOKEN env injection.
 		cmd.Env = append(os.Environ(),
 			"LOOPZERO_API_URL="+apiURL(),
 			"CI=true",
+			"LOOPZERO_TOKEN=",
 		)
-		if token := os.Getenv("LOOPZERO_TOKEN"); token != "" {
-			cmd.Env = append(cmd.Env, "LOOPZERO_TOKEN="+token)
-		}
 
 		var stdoutBuf, stderrBuf strings.Builder
 		cmd.Stdout = &stdoutBuf

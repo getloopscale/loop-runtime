@@ -27,7 +27,74 @@ describe('LoginCommand', () => {
       const exitCode = await cmd.execute({ token: 'REDACTED_SECRET_064', team: undefined });
 
       expect(deps.validateToken).toHaveBeenCalledWith('REDACTED_SECRET_064');
-      expect(deps.saveToken).toHaveBeenCalledWith('REDACTED_SECRET_064', 'user@example.com', 'acme');
+      expect(deps.saveToken).toHaveBeenCalledWith('REDACTED_SECRET_064', 'user@example.com', 'acme', undefined, undefined);
+      expect(exitCode).toBe(0);
+    });
+
+    // T2 amendment 2026-05-13 (finding-2026-05-13-e2e-token-refresh-divergence):
+    // --refresh-token + --expires-in flags forward the full OAuth2 bundle to
+    // saveToken so the configStore captures refresh_token + expiry. This is
+    // the path used by CI / dogfood scaffolding that mints tokens out-of-band
+    // via Hydra admin API and needs the CLI to be able to auto-refresh on 401.
+    it('should forward --refresh-token and --expires-in to saveToken', async () => {
+      const deps = createMockDeps();
+      const cmd = new LoginCommand(deps);
+
+      const exitCode = await cmd.execute({
+        token: 'access_jwt_abc',
+        team: undefined,
+        refreshToken: 'refresh_jwt_xyz',
+        expiresIn: 1800,
+      });
+
+      expect(deps.validateToken).toHaveBeenCalledWith('access_jwt_abc');
+      expect(deps.saveToken).toHaveBeenCalledWith(
+        'access_jwt_abc',
+        'user@example.com',
+        'acme',
+        'refresh_jwt_xyz',
+        1800,
+      );
+      expect(exitCode).toBe(0);
+    });
+
+    it('should accept --refresh-token alone (no --expires-in)', async () => {
+      const deps = createMockDeps();
+      const cmd = new LoginCommand(deps);
+
+      const exitCode = await cmd.execute({
+        token: 'access_jwt_abc',
+        team: undefined,
+        refreshToken: 'refresh_jwt_xyz',
+      });
+
+      expect(deps.saveToken).toHaveBeenCalledWith(
+        'access_jwt_abc',
+        'user@example.com',
+        'acme',
+        'refresh_jwt_xyz',
+        undefined,
+      );
+      expect(exitCode).toBe(0);
+    });
+
+    it('should accept --expires-in alone (no --refresh-token)', async () => {
+      const deps = createMockDeps();
+      const cmd = new LoginCommand(deps);
+
+      const exitCode = await cmd.execute({
+        token: 'access_jwt_abc',
+        team: undefined,
+        expiresIn: 3600,
+      });
+
+      expect(deps.saveToken).toHaveBeenCalledWith(
+        'access_jwt_abc',
+        'user@example.com',
+        'acme',
+        undefined,
+        3600,
+      );
       expect(exitCode).toBe(0);
     });
 
@@ -120,7 +187,7 @@ describe('LoginCommand', () => {
 
       const exitCode = await cmd.execute({ token: 'ghp_valid', team: undefined });
 
-      expect(deps.saveToken).toHaveBeenCalledWith('ghp_valid', 'user@example.com', 'solo-team');
+      expect(deps.saveToken).toHaveBeenCalledWith('ghp_valid', 'user@example.com', 'solo-team', undefined, undefined);
       expect(exitCode).toBe(0);
     });
 
@@ -136,7 +203,7 @@ describe('LoginCommand', () => {
 
       const exitCode = await cmd.execute({ token: 'ghp_valid', team: 'globex' });
 
-      expect(deps.saveToken).toHaveBeenCalledWith('ghp_valid', 'user@example.com', 'globex');
+      expect(deps.saveToken).toHaveBeenCalledWith('ghp_valid', 'user@example.com', 'globex', undefined, undefined);
       expect(exitCode).toBe(0);
     });
 
@@ -258,7 +325,9 @@ describe('LoginCommand', () => {
       expect(deps.saveToken).toHaveBeenCalledWith(
         'ghp_valid',
         'aquimai@users.noreply.github.com',
-        'acme'
+        'acme',
+        undefined,
+        undefined
       );
     });
 

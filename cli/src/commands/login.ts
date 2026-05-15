@@ -27,6 +27,16 @@ export interface LoginOptions {
   token?: string;
   team?: string;
   json?: boolean;
+  // Companion flags to --token for CI / automation scenarios where the caller
+  // already has a refresh_token in hand (e.g., minted out-of-band via Hydra
+  // admin API for dogfood tests). When both are present, behavior matches the
+  // device-flow path: configStore stores access + refresh + expires_in, and
+  // the existing `onUnauthorized → ensureFreshToken` pipeline can renew the
+  // access_token silently on 401 without re-running `loopzero login`.
+  // Added 2026-05-13 per CTO-mandate T2 amendment (test↔prod auth-refresh
+  // parity, finding-2026-05-13-e2e-token-refresh-divergence.md).
+  refreshToken?: string;
+  expiresIn?: number;
 }
 
 export class LoginCommand {
@@ -77,7 +87,7 @@ export class LoginCommand {
       return this.handleTeamResolutionFailure(opts, result.teams, opts.team);
     }
 
-    this.deps.saveToken(opts.token, result.email, team);
+    this.deps.saveToken(opts.token, result.email, team, opts.refreshToken, opts.expiresIn);
 
     if (opts.json) {
       this.deps.writeTo(

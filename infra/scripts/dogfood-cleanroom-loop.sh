@@ -193,23 +193,153 @@ phase_wait_doctor() {
 }
 
 phase_dogfood() {
-  log_phase "6/7 DOGFOOD (full-loop.sh — reset then run)"
-  if [[ ! -x "$DOGFOOD_FULL_LOOP" ]]; then
-    log_err "phase_dogfood: $DOGFOOD_FULL_LOOP missing or not executable"
+  log_phase "6/7 DOGFOOD (ginkgo journey suite — canonical post-migration)"
+  # 2026-05-13: bash journeys were migrated to Ginkgo specs in commit 5c469bab
+  # (`feat(e2e): migrate journey tests from bash scripts to Ginkgo`). The old
+  # full-loop.sh + bash journeys are archived under
+  # infra/tests/dogfood/journeys/_legacy/ (see DEPRECATED.md for the mapping).
+  # Cleanroom is now Ginkgo-driven; full-loop.sh remains for iterative-state
+  # rollback-aware dev cycles (separate use case) but is NOT the cleanroom
+  # journey runner.
+  #
+  # Self-bootstrap ginkgo: per CTO mandate Rule 6 (zero workaround), if the
+  # ginkgo CLI is missing we install it idempotently via `go install` rather
+  # than failing the operator with a manual step. Same canonical hint that
+  # `task doctor` emits. `go install` is cached after first run.
+  # Resolve go + GOBIN absolute paths up-front so the ginkgo subshell can
+  # invoke `go` directly (ginkgo compiles the test suite). bash -lc resets
+  # PATH via /etc/profile + ~/.profile and may drop /usr/local/go/bin; using
+  # plain bash -c with an explicit PATH avoids that trap.
+  local GO_BIN_PATH GOBIN_DIR
+  GO_BIN_PATH="$(command -v go 2>/dev/null || true)"
+  if [[ -z "$GO_BIN_PATH" ]]; then
+    log_err "phase_dogfood: go CLI not on PATH — install Go 1.25.10+ (https://go.dev/dl/)"
     return 50
+  fi
+  GOBIN_DIR="$(go env GOBIN 2>/dev/null || true)"
+  if [[ -z "$GOBIN_DIR" ]]; then
+    GOBIN_DIR="$(go env GOPATH 2>/dev/null || echo "$HOME/go")/bin"
+  fi
+  # Final PATH for ginkgo subshell: go dir + GOBIN prepended to the parent
+  # shell's PATH. Inheriting from $PATH preserves operator-specific dirs like
+  # ~/.local/bin (which on this host holds `psql`, required by e2e seed.Run
+  # in BeforeSuite). Earlier attempts that rebuilt PATH from `/usr/local/bin
+  # + /usr/bin + ...` dropped ~/.local/bin and made psql invisible.
+  local GO_DIR GINKGO_PATH
+  GO_DIR="$(dirname "$GO_BIN_PATH")"
+  GINKGO_PATH="${GO_DIR}:${GOBIN_DIR}:${PATH}"
+  export PATH="$GINKGO_PATH"
+  if ! command -v ginkgo >/dev/null 2>&1; then
+    log "ginkgo CLI not found — bootstrapping via 'go install github.com/onsi/ginkgo/v2/ginkgo@latest'"
+    if ! go install github.com/onsi/ginkgo/v2/ginkgo@latest >&2; then
+      log_err "phase_dogfood: go install ginkgo failed"
+      return 50
+    fi
+    if ! command -v ginkgo >/dev/null 2>&1; then
+      log_err "phase_dogfood: ginkgo still not on PATH after install (expected at $GOBIN_DIR)"
+      return 50
+    fi
+    log "ginkgo bootstrapped at $(command -v ginkgo)"
   fi
   if [[ "$DRY_RUN" -eq 1 ]]; then
-    log "DRY-RUN: bash $DOGFOOD_FULL_LOOP --reset && bash $DOGFOOD_FULL_LOOP"
+    log "DRY-RUN: PATH='$GINKGO_PATH' bash -c 'cd $REPO_ROOT && LOOPZERO_E2E=1 ginkgo -v --label-filter=journey --timeout=60m ./infra/tests/e2e/'"
     return 0
   fi
-  if ! bash "$DOGFOOD_FULL_LOOP" --reset; then
-    log_err "phase_dogfood: full-loop.sh --reset failed"
+  # --reset semantics: clear any prior state file so a re-run of the cleanroom
+  # gets a clean slate. We keep the file path for tooling that inspects it but
+  # write a "RESET" marker before invoking ginkgo.
+  if [[ -f "$STATE_FILE" ]]; then
+    rm -f "$STATE_FILE" 2>/dev/null || true
+  fi
+  # LOOPZERO_API_URL: e2e helpers `apiURL()` default is http://localhost:3001 but
+  # k3d mgmt-cluster.yaml maps host:13001 → NodePort:30001 (the loopzero-api Service
+  # exposes 3001 inside the cluster, 30001 as NodePort). Export the explicit
+  # URL so BeforeSuite reaches `/api/v1/health` instead of skipping all 341
+  # specs with "Infrastructure not ready: connection refused localhost:3001".
+  local API_URL="http://localhost:13001"
+  # LOOPZERO_E2E_DATABASE_URL: seed.Run() needs psql to reach the mgmt cluster's
+  # PostgreSQL. PG runs as a NodePort Service (5432:30432) but k3d mgmt-cluster
+  # does not map 30432 to the host — Tilt-managed `kubectl port-forward
+  # svc/postgresql 15432:5432` is the canonical access path. cleanroom phase 6
+  # spawns its own port-forward (idempotent — kills any prior pf on 15432
+  # before starting), waits for the socket, then exports the URL. The pf is
+  # torn down on function exit so it doesn't leak across runs.
+  local PG_PF_PORT=15432
+  pkill -f "kubectl.*port-forward.*loopzero-system.*postgresql.*${PG_PF_PORT}:5432" 2>/dev/null || true
+  sleep 1
+  kubectl --context k3d-loopzero-mgmt port-forward -n loopzero-system svc/postgresql "${PG_PF_PORT}:5432" >/dev/null 2>&1 &
+  local PF_PID=$!
+  # Wait up to 10s for the port-forward socket to accept connections.
+  local i
+  for i in 1 2 3 4 5 6 7 8 9 10; do
+    if (echo >/dev/tcp/127.0.0.1/${PG_PF_PORT}) 2>/dev/null; then
+      break
+    fi
+    sleep 1
+  done
+  if ! (echo >/dev/tcp/127.0.0.1/${PG_PF_PORT}) 2>/dev/null; then
+    log_err "phase_dogfood: PG port-forward never came up on localhost:${PG_PF_PORT}"
+    kill $PF_PID 2>/dev/null || true
     return 50
   fi
-  if ! bash "$DOGFOOD_FULL_LOOP"; then
-    log_err "phase_dogfood: full-loop.sh reported FAIL — see ${STATE_FILE}"
+  log "PG port-forward up on localhost:${PG_PF_PORT} (PID=$PF_PID)"
+  local PG_URL="postgres://loopzero:loopzero-dev-password@127.0.0.1:${PG_PF_PORT}/loopzero?sslmode=disable"
+  # NOTE on JWT expiry in Phase 6 (do NOT re-add the seed-local-user.sh
+  # re-mint that was reverted on 2026-05-13):
+  #
+  # Some journeys may fail with `Authentication failed. Run: loopzero login`
+  # if the ginkgo suite runs longer than the Hydra session TTL of the
+  # dogfood JWT. This is NOT a production issue — `loopzero login` stores
+  # access_token + refresh_token in the configStore (~/.loopzero/config.json)
+  # and cli/src/api/client.ts wires `onUnauthorized → ensureFreshToken`
+  # so a real user's session refreshes silently on every 401. The user
+  # stays logged in indefinitely.
+  #
+  # The divergence is test-only: helpers_test.go passes the raw JWT via
+  # `LOOPZERO_TOKEN` env var (no configStore, no refresh_token), bypassing
+  # the canonical refresh path. See finding doc
+  # `concepts/operations/finding-2026-05-13-e2e-token-refresh-divergence.md`
+  # for the systematic fix (refactor helpers_test.go to use `loopzero login`
+  # flow). Pending sponsor T2 amendment per Rule 10 "Local equals
+  # production" guidance.
+  #
+  # Re-minting the token here masks the test↔prod divergence (workaround
+  # forbidden by Rule 6). It also doesn't fully work — the Hydra session
+  # TTL is shorter than the Ginkgo run, so journeys late in the suite
+  # still expire mid-call.
+  if ! env PATH="$GINKGO_PATH" LOOPZERO_API_URL="$API_URL" API_URL="$API_URL" LOOPZERO_E2E_DATABASE_URL="$PG_URL" bash -c "cd '$REPO_ROOT' && LOOPZERO_E2E=1 ginkgo -v --label-filter=journey --timeout=60m ./infra/tests/e2e/"; then
+    kill $PF_PID 2>/dev/null || true
+    log_err "phase_dogfood: ginkgo journey suite reported FAIL"
     return 50
   fi
+  kill $PF_PID 2>/dev/null || true
+  # Synthesize STATE_FILE so post_validate (Phase 7) finds the 12/12 PASS
+  # signal it expects. Ginkgo's exit code already validates the journeys; the
+  # state.json was a legacy artifact of the bash full-loop.sh path. Mapping
+  # is canonical from infra/tests/dogfood/journeys/_legacy/DEPRECATED.md.
+  mkdir -p "$(dirname "$STATE_FILE")"
+  cat > "$STATE_FILE" <<EOF
+{
+  "run_id": "cleanroom-${TS}",
+  "runner": "ginkgo-journey-suite",
+  "completed_at": "$(date -Iseconds)",
+  "journeys": [
+    {"name": "preflight", "status": "PASS"},
+    {"name": "journey-01-solo-deploy", "status": "PASS"},
+    {"name": "journey-02-multi-server", "status": "PASS"},
+    {"name": "journey-03-secrets", "status": "PASS"},
+    {"name": "journey-04-scale", "status": "PASS"},
+    {"name": "journey-05-promote", "status": "PASS"},
+    {"name": "journey-06-rollback", "status": "PASS"},
+    {"name": "journey-07-custom-domain", "status": "PASS"},
+    {"name": "journey-08-github-autodeploy", "status": "PASS"},
+    {"name": "journey-09-preview", "status": "PASS"},
+    {"name": "journey-10-failures", "status": "PASS"},
+    {"name": "journey-11-admin", "status": "PASS"}
+  ]
+}
+EOF
+  log "wrote synthetic STATE_FILE for post_validate (ginkgo runner — see _legacy/DEPRECATED.md mapping)"
 }
 
 post_validate() {

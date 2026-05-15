@@ -28,13 +28,13 @@ import (
 func runLoopZeroInDir(dir string, args ...string) (stdout, stderr string, exitCode int) {
 	cmd := exec.Command("loopzero", args...)
 	cmd.Dir = dir
+	// T2 amendment 2026-05-13: auth via configStore (XDG_CONFIG_HOME from
+	// BeforeSuite), not LOOPZERO_TOKEN env injection.
 	cmd.Env = append(os.Environ(),
 		"LOOPZERO_API_URL="+apiURL(),
 		"LOOPZERO_API_TIMEOUT=120000",
+		"LOOPZERO_TOKEN=",
 	)
-	if token := os.Getenv("LOOPZERO_TOKEN"); token != "" {
-		cmd.Env = append(cmd.Env, "LOOPZERO_TOKEN="+token)
-	}
 
 	var outBuf, errBuf strings.Builder
 	cmd.Stdout = &outBuf

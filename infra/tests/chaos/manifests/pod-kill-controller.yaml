@@ -45,8 +45,11 @@ spec:
       # reconcile + ArgoCD sync + Gitea push). Same crash-recovery
       # semantics — leader_generations preserves the counter; restart
       # re-acquires lease + resumes pending work.
-      "app.kubernetes.io/name": "loopzero-tenant-operator"
-  # Kill every 60s, twice, so we see recovery twice.
-  scheduler:
-    cron: "@every 60s"
-  duration: "120s"
+      # FIX 2026-05-14: label is `app: tenant-operator` (verified LIVE
+      # against pod label set), NOT `app.kubernetes.io/name`.
+      "app": "tenant-operator"
+  # FIX 2026-05-14: chaos-mesh 2.7.0 removed `spec.scheduler` (use
+  # separate Schedule resource for repeated chaos). Single-shot kill;
+  # re-run /chaos-test --scenario C02 multiple times to observe
+  # repeated recovery.
+  duration: "30s"

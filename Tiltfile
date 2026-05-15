@@ -71,13 +71,21 @@ k8s_resource(
 # CRDs — must be applied before the operator starts
 # ---------------------------------------------------------------------------
 k8s_yaml(listdir("operators/config/crd/bases/"))
+# 2026-05-13: appsecrets + reconciliationreports CRDs deleted (orphan CRD cleanup,
+# §6.B.2 + §6.B.3 per decisions/2026-05-13-orphan-crd-deletion.md). Tiltfile drift
+# fixed here — `tilt ci` was failing with "No object identified by the fragment
+# appsecrets.loopzero.io:customresourcedefinition could be found" during cleanroom
+# Phase 4. Now lists only the 8 wired CRDs.
 k8s_resource(
     objects=[
-        "tenants.loopzero.io:customresourcedefinition",
-        "appsecrets.loopzero.io:customresourcedefinition",
         "clustercredentials.loopzero.io:customresourcedefinition",
+        "environments.loopzero.io:customresourcedefinition",
+        "exposedroutes.loopzero.io:customresourcedefinition",
+        "gitrepositorybindings.loopzero.io:customresourcedefinition",
+        "platformbootstraps.loopzero.io:customresourcedefinition",
         "previewenvironments.loopzero.io:customresourcedefinition",
-        "reconciliationreports.loopzero.io:customresourcedefinition",
+        "tenants.loopzero.io:customresourcedefinition",
+        "loopzeroapplications.loopzero.io:customresourcedefinition",
     ],
     new_name="crds",
     resource_deps=[],

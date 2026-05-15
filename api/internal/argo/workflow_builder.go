@@ -277,30 +277,13 @@ func (b *WorkflowBuilder) Build(spec services.WorkflowSpec) (*forge.Workflow, er
 			RunAsUser:  ptr(rootlessUID),
 			RunAsGroup: ptr(rootlessUID),
 		},
-		// Roadmap 01 Correction I — PVC multi-attach fix.
-		//
-		// Problem: the workspace PVC uses DigitalOcean Block Storage which is
-		// ReadWriteOnce (RWO). When Argo Workflows schedules sequential DAG
-		// steps on DIFFERENT nodes, the second step cannot attach the volume
-		// until the first step's pod is fully terminated and the volume is
-		// detached (11–90s on DO). This caused a 10% build failure rate at L1.
-		//
-		// Fix: podAffinity rule that co-locates all pods of the same workflow
-		// on the same node. Argo labels every pod with
-		// `workflows.argoproj.io/workflow: <name>` — the first step picks a
-		// node and all subsequent steps must land on the same topology key
-		// (hostname). This eliminates multi-attach entirely: the volume
-		// simply stays attached to the one node for the workflow's lifetime.
-		//
-		// Trade-off: all build steps of a workflow compete for the same
-		// node's resources. At 2 build nodes × ~4 concurrent builds, this is
-		// acceptable. At L4+ with 50 concurrent builds, the build pool must
-		// be scaled (Correction K: autoscale 2→5 nodes already configured).
-		Affinity: forge.ColocateByLabel(
-			"workflows.argoproj.io/workflow",
-			"{{workflow.name}}",
-			"kubernetes.io/hostname",
-		),
+		// PVC multi-attach is handled upstream as of loopzero-forge v0.4.0
+		// (issue getloopscale/loopzero-forge#11): Workflow.Build() injects the
+		// canonical podAffinity term automatically when
+		// VolumeClaimTemplates is non-empty (as above), so all DAG steps
+		// of the workflow are co-located on the same node and the RWO
+		// workspace PVC stays attached for the workflow's lifetime.
+		// No explicit Affinity is needed here.
 	}
 
 	return wf, nil

@@ -35,16 +35,24 @@ var internalTerms = forbiddenInternalTerms
 var allowedExitCodes = allowedExitCodesMap
 
 // runLoopZero executes `loopzero <args...>` with E2E env vars and captures
-// stdout/stderr/exitCode. The token is injected from LOOPZERO_TOKEN env or empty
-// (callers wanting unauthenticated runs explicitly clear it).
+// stdout/stderr/exitCode.
+//
+// T2 amendment 2026-05-13 (finding-2026-05-13-e2e-token-refresh-divergence):
+// auth comes from the per-suite XDG_CONFIG_HOME populated by BeforeSuite via
+// `loopzero login --token`, NOT from LOOPZERO_TOKEN env injection. The CLI reads the
+// token from configStore (production parity per Rule 10).
+//
+// LOOPZERO_TOKEN env is intentionally NOT forwarded — if it's set in the parent
+// process it would silently override configStore (configStore.getToken()
+// checks env first), defeating the refactor. Callers that need to override
+// the resolved token should write to the test XDG configStore directly.
 func runLoopZero(args ...string) (stdout, stderr string, exitCode int) {
 	cmd := exec.Command("loopzero", args...)
 	cmd.Env = append(os.Environ(),
 		"LOOPZERO_API_URL="+apiURL(),
+		// Hard-strip the parent LOOPZERO_TOKEN so configStore is the only source.
+		"LOOPZERO_TOKEN=",
 	)
-	if token := os.Getenv("LOOPZERO_TOKEN"); token != "" {
-		cmd.Env = append(cmd.Env, "LOOPZERO_TOKEN="+token)
-	}
 
 	var outBuf, errBuf strings.Builder
 	cmd.Stdout = &outBuf
@@ -64,14 +72,14 @@ func runLoopZero(args ...string) (stdout, stderr string, exitCode int) {
 
 // runLoopZeroWithStdin runs `loopzero <args...>` and pipes `stdin` into the process
 // stdin. Used to exercise interactive-prompt paths (e.g., logout confirmation).
+// Auth resolves from configStore (XDG_CONFIG_HOME populated in BeforeSuite),
+// per T2 amendment 2026-05-13. See runLoopZero for rationale.
 func runLoopZeroWithStdin(stdin string, args ...string) (stdout, stderr string, exitCode int) {
 	cmd := exec.Command("loopzero", args...)
 	cmd.Env = append(os.Environ(),
 		"LOOPZERO_API_URL="+apiURL(),
+		"LOOPZERO_TOKEN=",
 	)
-	if token := os.Getenv("LOOPZERO_TOKEN"); token != "" {
-		cmd.Env = append(cmd.Env, "LOOPZERO_TOKEN="+token)
-	}
 	cmd.Stdin = strings.NewReader(stdin)
 
 	var outBuf, errBuf strings.Builder

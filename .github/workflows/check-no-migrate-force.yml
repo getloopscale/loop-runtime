@@ -1,0 +1,49 @@
+# check-no-migrate-force.yml — CORRECTIONS.txt item B enforcement gate.
+# Plan: 2026-05-13-corrections-txt-definitive-fix-sprint-plan.md (T1.2).
+#
+# allowlist: migrate force (this workflow file describes the linter — the
+# mentions below are documentation of the forbidden pattern, not invocations)
+# Runs the canonical linter that fails-loud if `migrate force` appears in
+# production code without an explicit `# allowlist:` marker. Also runs
+# the hermetic 13-test suite to ensure the linter itself is healthy.
+#
+# Mirrors the existing pattern from check-cosign-cutover-deadline.yml
+# (self-tests run before the live check; broken linter cannot exit 0).
+
+name: check-no-migrate-force
+
+on:
+  pull_request:
+    paths:
+      - '**.sh'
+      - '**.yml'
+      - '**.yaml'
+      - '**.go'
+      - '**.ts'
+      - '**.py'
+      - '**.json'
+      - 'Taskfile.yml'
+      - 'Tiltfile'
+      - 'infra/scripts/check-no-migrate-force.sh'
+      - 'infra/tests/check-no-migrate-force_test.sh'
+      - '.github/workflows/check-no-migrate-force.yml'
+  push:
+    branches:
+      - main
+      - develop
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  check-no-migrate-force:
+    runs-on: ubuntu-latest
+    timeout-minutes: 3
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+      - name: Run hermetic test suite (linter self-tests)
+        run: bash infra/tests/check-no-migrate-force_test.sh
+      # allowlist: migrate force (step name describes the linter's failure mode)
+      - name: Run live check (fails if unallowlisted migrate force in repo)
+        run: bash infra/scripts/check-no-migrate-force.sh

@@ -38,17 +38,18 @@ spec:
   mode: fixed-percent
   value: "30"
   selector:
-    # Match all loopzero-tn-* namespaces. Chaos suite test must pre-seed at
-    # least one tenant workload before applying this experiment so the
-    # 30% selection has a denominator > 0.
+    # FIX 2026-05-14: tenant namespaces follow `loopzero-${TENANT_SLUG}-${ENV}`
+    # pattern per CLAUDE.md Multi-Cell section. Previous `loopzero-tn-acme` +
+    # `loopzero-tn-e2etest` didn't match deployed namespaces (e.g.,
+    # `loopzero-tn-e2etest-production`). Enumerate active tenant ns OR add
+    # new ns when seeding tenants for chaos suite.
     namespaces:
-      - loopzero-tn-acme
-      - loopzero-tn-e2etest
-    # Optional: further narrow to user app pods (skip system pods).
-    # User apps carry the `loopzero.io/managed-by=loopzero` label per the
-    # workflow_builder Helm template.
+      - loopzero-tn-e2etest-production
+      - loopzero-e2e-tenant-production
+    # FIX 2026-05-14: label is `app.kubernetes.io/managed-by` (standard
+    # K8s recommended label per labels.go), not `loopzero.io/managed-by`.
     labelSelectors:
-      "loopzero.io/managed-by": "loopzero"
+      "app.kubernetes.io/managed-by": "loopzero"
   # PodChaos with action=pod-kill is instantaneous — duration governs
   # the observation window for the chaos controller (no re-kill).
   duration: "60s"

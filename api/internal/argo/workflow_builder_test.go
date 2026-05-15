@@ -124,23 +124,36 @@ func TestWorkflowBuilder_Build_HasSharedPVCVolume(t *testing.T) {
 	}
 }
 
-// Roadmap 01 Correction I — PVC multi-attach fix.
-// The Affinity must co-locate all workflow pods on the same node,
-// preventing DO Block Storage RWO multi-attach failures.
-func TestWorkflowBuilder_Build_HasPodAffinity(t *testing.T) {
+// PVC multi-attach fix — formerly a per-consumer wrap, now handled
+// upstream as of loopzero-forge v0.4.0 (issue getloopscale/loopzero-forge#11).
+// The builder no longer sets Affinity directly; instead it leaves it
+// nil and relies on Workflow.Build() to inject the canonical
+// podAffinity term automatically because VolumeClaimTemplates is set.
+// We therefore assert on the MATERIALIZED model after Build(), which
+// is what Argo actually receives.
+func TestWorkflowBuilder_Build_DefaultPodAffinityInjectedByForge(t *testing.T) {
 	builder := NewWorkflowBuilder(testInfraParams())
 	wf, err := builder.Build(testSpec())
 	if err != nil {
 		t.Fatalf("Build() error: %v", err)
 	}
 
-	if wf.Affinity == nil {
-		t.Fatal("Affinity must be set (Correction I: podAffinity for PVC co-location)")
+	// Builder leaves Affinity nil — defaulting is the forge package's job.
+	if wf.Affinity != nil {
+		t.Fatalf("WorkflowBuilder must not set Affinity directly; expected nil so forge injects the default, got %+v", wf.Affinity)
 	}
-	if wf.Affinity.PodAffinity == nil {
-		t.Fatal("PodAffinity must be set")
+
+	// Materialize the workflow as forge sends it to Argo. The default
+	// podAffinity must appear on Spec.Affinity because the workflow
+	// declares a VolumeClaimTemplate (workspace PVC).
+	m, err := wf.Build()
+	if err != nil {
+		t.Fatalf("forge Workflow.Build() error: %v", err)
 	}
-	terms := wf.Affinity.PodAffinity.RequiredDuringSchedulingIgnoredDuringExecution
+	if m.Spec.Affinity == nil || m.Spec.Affinity.PodAffinity == nil {
+		t.Fatalf("forge must inject default PodAffinity for VCT-bearing workflows, got Affinity=%+v", m.Spec.Affinity)
+	}
+	terms := m.Spec.Affinity.PodAffinity.RequiredDuringSchedulingIgnoredDuringExecution
 	if len(terms) != 1 {
 		t.Fatalf("expected 1 RequiredDuringScheduling term, got %d", len(terms))
 	}
@@ -149,7 +162,7 @@ func TestWorkflowBuilder_Build_HasPodAffinity(t *testing.T) {
 		t.Errorf("TopologyKey = %q, want kubernetes.io/hostname", term.TopologyKey)
 	}
 	if term.LabelSelector == nil || term.LabelSelector.MatchLabels["workflows.argoproj.io/workflow"] != "{{workflow.name}}" {
-		t.Errorf("LabelSelector not matching expected workflow label")
+		t.Errorf("LabelSelector not matching expected workflow label: %+v", term.LabelSelector)
 	}
 }
 

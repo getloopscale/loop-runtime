@@ -137,9 +137,11 @@ func deployAndExpectBuildTerminal(dir, env, expectedStatus string, timeout time.
 	args := []string{"deploy", "--env", env, "--no-wait", "--json"}
 	cmd := exec.Command("loopzero", args...)
 	cmd.Dir = dir
+	// T2 amendment 2026-05-13: auth via configStore (XDG_CONFIG_HOME from
+	// BeforeSuite), not LOOPZERO_TOKEN env injection.
 	cmd.Env = append(os.Environ(),
 		"LOOPZERO_API_URL="+apiURL(),
-		"LOOPZERO_TOKEN="+resolveToken(),
+		"LOOPZERO_TOKEN=",
 	)
 
 	var stdoutBuf, stderrBuf strings.Builder
