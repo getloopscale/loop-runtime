@@ -1,10 +1,13 @@
 <p align="center">
   <h1 align="center">LoopZero</h1>
   <p align="center">
-    <strong>CLI-first Kubernetes PaaS for monorepo deployments.</strong>
+    <strong>The managed runtime for AI agents and the apps around them.</strong>
   </p>
   <p align="center">
-    <a href="#project-status">Status</a> &bull;
+    <em>The apex of the <a href="https://loopzero.example">loopzero</a> ecosystem — where LoopZeroCode, LoopZeroCreate and LoopZeroKit land in production.</em>
+  </p>
+  <p align="center">
+    <a href="#install">Install</a> &bull;
     <a href="#quickstart">Quickstart</a> &bull;
     <a href="#self-hosted">Self-Hosted</a> &bull;
     <a href="#cli-reference">CLI</a> &bull;
@@ -15,7 +18,13 @@
 
 ---
 
-Four commands to start. Then just `git push`.
+## Install
+
+```bash
+curl -fsSL https://get.loopzero.example | sh
+```
+
+Four commands to ship. Then just `git push`.
 
 ```bash
 loopzero login
@@ -37,15 +46,13 @@ Live:
   web    -> https://acme-my-saas-web-production.loopzero.example (CDN)
 ```
 
-No Kubernetes knowledge required. No Helm. No Dockerfile required. Just push.
+No infrastructure to manage. No build config required. Just push.
 
 ---
 
 ## Project Status
 
-> **Phase: Pre-release.** Production infrastructure running on DigitalOcean (3 DOKS clusters, managed PostgreSQL, Cloudflare Tunnel). Core deploy flow E2E validated. Multi-cell architecture live (3 cells). Progressive delivery (canary deploys) shipped. Not yet open to external users.
->
-> **Maturity: 3.49/4.0** -- strong technical foundation, commercially unvalidated. Path to 4.0: CI soak tests GREEN + first production customer day-trial with no incidents.
+> **Production.** Running on DigitalOcean (3 DOKS clusters, managed PostgreSQL, Cloudflare Tunnel). Multi-cell architecture live (3 cells). Progressive delivery (canary deploys) shipped. The commercial managed runtime for loopzero customers; self-host via commercial license.
 
 ### What Works (E2E Validated on DigitalOcean)
 
@@ -583,7 +590,9 @@ cd pkg && go test ./...       # Shared library tests
 
 ## License
 
-Apache License 2.0
+**Proprietary / Commercial** — see [LICENSE](LICENSE).
+
+LoopZero PaaS is a managed offering operated by loopzero.example. Self-hosted deployment is available under a commercial license — contact `getloopscale@gmail.com`.
 
 ## Contributing
 
@@ -592,3 +601,9 @@ Every PR starts with a failing test. See the [development commands](CLAUDE.md#de
 ## Links
 
 - [Changelog](CHANGELOG.md)
+
+## Community
+
+- Discord: https://discord.loopzero.example/
+- X: https://x.com/getloopscale
+- LinkedIn: https://linkedin.com/company/getloopscale

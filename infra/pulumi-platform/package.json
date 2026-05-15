@@ -8,7 +8,7 @@
     "test": "vitest run",
     "test:watch": "vitest"
   },
-  "license": "Apache-2.0",
+  "license": "UNLICENSED",
   "devDependencies": {
     "@types/js-yaml": "^4.0.9",
     "@types/node": "^22.10.1",
