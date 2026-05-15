@@ -28,6 +28,7 @@ import {
   handleError,
 } from './deploy-helpers';
 import { maybeRenderAutoTail } from './deploy-auto-tail';
+import { EXIT_CODES, buildStateToExitCode } from '../lib/exit-codes';
 
 // Re-export types so existing consumers (tests, index.ts) keep working
 export type { DeployDeps, DeployOptions } from './deploy-types';
@@ -429,17 +430,14 @@ export class DeployCommand {
         resolved = true;
         clearTimeout(activityTimeout);
 
-        // BLOCKER-1: On stream-related failures, verify actual build state
-        if (exitCode === 3 && this.deps.getBuildStatus) {
+        // BLOCKER-1: On stream-related failures, verify actual build state.
+        // Plan T1.2 D3 — use EXIT_CODES + state-mapper instead of literals.
+        if (exitCode === EXIT_CODES.DEPLOY_FAILED && this.deps.getBuildStatus) {
           try {
             const buildStatus = await this.deps.getBuildStatus(buildResult.build_id);
-            if (buildStatus.status === 'SUCCEEDED') {
-              exitCode = 0;
-            } else if (buildStatus.status === 'FAILED') {
-              exitCode = 2;
-              if (!opts.json) {
-                this.deps.writeError(`Build failed: ${buildStatus.error_message ?? 'unknown error'}`);
-              }
+            exitCode = buildStateToExitCode(buildStatus.status);
+            if (exitCode === EXIT_CODES.BUILD_FAILED && !opts.json) {
+              this.deps.writeError(`Build failed: ${buildStatus.error_message ?? 'unknown error'}`);
             }
           } catch {
             // Can't reach API either — keep original exit code
