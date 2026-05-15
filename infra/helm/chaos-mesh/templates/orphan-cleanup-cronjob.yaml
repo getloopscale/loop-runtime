@@ -1,0 +1,107 @@
+{{/*
+  Plan T3.3 D11 — Cleanup orphan chaos resources whose finalizers got stuck
+  after deletion. See infra/scripts/cleanup-orphan-chaos.sh for the script
+  this CronJob inlines.
+
+  Runs every 5min. Resources younger than threshold are left alone (controller
+  may still be processing deletion legitimately). Idempotent.
+*/}}
+{{- if .Values.orphanCleanup.enabled }}
+apiVersion: batch/v1
+kind: CronJob
+metadata:
+  name: chaos-orphan-cleanup
+  namespace: {{ .Release.Namespace }}
+  labels:
+    app.kubernetes.io/name: chaos-orphan-cleanup
+    app.kubernetes.io/managed-by: {{ .Release.Service }}
+spec:
+  schedule: "{{ .Values.orphanCleanup.schedule | default "*/5 * * * *" }}"
+  concurrencyPolicy: Forbid
+  successfulJobsHistoryLimit: 1
+  failedJobsHistoryLimit: 3
+  jobTemplate:
+    spec:
+      template:
+        spec:
+          restartPolicy: OnFailure
+          serviceAccountName: chaos-orphan-cleanup
+          containers:
+          - name: cleanup
+            image: "{{ .Values.orphanCleanup.image | default "bitnami/kubectl:1.32" }}"
+            env:
+            - name: THRESHOLD_MIN
+              value: "{{ .Values.orphanCleanup.thresholdMin | default 5 }}"
+            command: ["/bin/bash", "-c"]
+            args:
+            - |
+              set -euo pipefail
+              now_unix=$(date -u +%s)
+              patched=0
+              inspected=0
+              for kind in podchaos networkchaos iochaos stresschaos; do
+                while IFS=$'\t' read -r ns name dts fcount; do
+                  [ -z "$ns" ] && continue
+                  inspected=$((inspected + 1))
+                  if [ -z "$dts" ] || [ "$dts" = "<no value>" ] || [ "$dts" = "null" ]; then
+                    continue
+                  fi
+                  if [ -z "$fcount" ] || [ "$fcount" = "0" ] || [ "$fcount" = "<no value>" ]; then
+                    continue
+                  fi
+                  if ! dts_unix=$(date -u -d "$dts" +%s 2>/dev/null); then
+                    continue
+                  fi
+                  age_min=$(( (now_unix - dts_unix) / 60 ))
+                  if [ "$age_min" -lt "$THRESHOLD_MIN" ]; then
+                    continue
+                  fi
+                  echo "PATCH $kind/$ns/$name (age=${age_min}min)"
+                  if kubectl patch "$kind" "$name" -n "$ns" \
+                      --type=json -p '[{"op":"remove","path":"/metadata/finalizers"}]' \
+                      >/dev/null 2>&1; then
+                    patched=$((patched + 1))
+                  fi
+                done < <(
+                  kubectl get "$kind" --all-namespaces \
+                    -o jsonpath='{range .items[*]}{.metadata.namespace}{"\t"}{.metadata.name}{"\t"}{.metadata.deletionTimestamp}{"\t"}{.metadata.finalizers}{"\n"}{end}' \
+                    2>/dev/null | awk -F'\t' '{
+                      fcount = 0
+                      if ($4 != "" && $4 != "<no value>") {
+                        n = split($4, arr, ",")
+                        fcount = n
+                      }
+                      print $1 "\t" $2 "\t" $3 "\t" fcount
+                    }'
+                )
+              done
+              echo "summary: inspected=$inspected patched=$patched threshold_min=$THRESHOLD_MIN"
+---
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: chaos-orphan-cleanup
+  namespace: {{ .Release.Namespace }}
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: chaos-orphan-cleanup
+rules:
+- apiGroups: ["chaos-mesh.org"]
+  resources: ["podchaos", "networkchaos", "iochaos", "stresschaos"]
+  verbs: ["get", "list", "patch"]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRoleBinding
+metadata:
+  name: chaos-orphan-cleanup
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: ClusterRole
+  name: chaos-orphan-cleanup
+subjects:
+- kind: ServiceAccount
+  name: chaos-orphan-cleanup
+  namespace: {{ .Release.Namespace }}
+{{- end }}

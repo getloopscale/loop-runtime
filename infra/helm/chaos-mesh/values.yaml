@@ -89,3 +89,12 @@ chaos-mesh:
   prometheus:
     create: false
     serviceMonitor: false
+
+# Plan T3.3 D11 — orphan-chaos cleanup CronJob. Patches finalizer-stuck chaos
+# CRs (deletionTimestamp older than thresholdMin) so they GC properly. See
+# infra/scripts/cleanup-orphan-chaos.sh for the standalone version.
+orphanCleanup:
+  enabled: true
+  schedule: "*/5 * * * *"
+  thresholdMin: 5
+  image: bitnami/kubectl:1.32
