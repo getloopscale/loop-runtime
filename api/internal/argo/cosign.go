@@ -232,7 +232,7 @@ func cosignSignTemplateKeyless(p CosignSignParams) *forge.Container {
 		outDigestPath    = "/tmp/cosign-digest.txt"
 		// Projected SA token path. Build cluster SA must be configured to project
 		// a token suitable for OIDC consumption by Fulcio.
-		oidcTokenPath = "/var/run/secrets/sigstore/token"
+		oidcTokenPath = "/var/run/secrets/sigstore/token" //nolint:gosec // G101 false positive: filesystem PATH, not credential value
 	)
 
 	fulcioURL := p.FulcioURL

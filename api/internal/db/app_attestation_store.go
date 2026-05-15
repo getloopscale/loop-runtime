@@ -1,6 +1,12 @@
 // SPDX-License-Identifier: Apache-2.0
 // Copyright 2025-2026 The LoopZero Authors
 
+// Package db hosts the data-access layer for the API: pgx-based
+// connection pool, repository types per aggregate (tenant, project,
+// build, release, environment, etc.), and the migration runner
+// integration. The pool is shared across services via dependency
+// injection. Migrations are forward-only `.up.sql` per CLAUDE.md
+// Rule + ADR D5.
 package db
 
 import (

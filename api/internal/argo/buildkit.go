@@ -1,6 +1,12 @@
 // SPDX-License-Identifier: Apache-2.0
 // Copyright 2025-2026 The LoopZero Authors
 
+// Package argo builds the Argo Workflow specs that drive every LoopZero
+// build: BuildKit image build, cosign signing, syft SBOM generation,
+// language-strategy dispatch, and supply-chain admission. Built atop
+// the loopzero-forge SDK and the LanguageStrategy interface
+// (`ResolveStrategyForApp`). See CHANGELOG.md "Build Mode Dispatch"
+// + finding-2026-05-08-build-mode-dispatch.
 package argo
 
 import (

@@ -150,10 +150,10 @@ echo "SBOM generated and uploaded successfully"
 		Env: []forge.EnvBuilder{
 			// MinIO (local dev) credentials. In prod, AWS_ACCESS_KEY/SECRET
 			// for DO Spaces are also injected via the same Secret.
-			forge.SecretEnv{Name: "AWS_ACCESS_KEY_ID", SecretName: secretMinIOCreds, SecretKey: "AWS_ACCESS_KEY_ID"},
-			forge.SecretEnv{Name: "AWS_SECRET_ACCESS_KEY", SecretName: secretMinIOCreds, SecretKey: "AWS_SECRET_ACCESS_KEY"},
-			forge.SecretEnv{Name: "AWS_DEFAULT_REGION", SecretName: secretMinIOCreds, SecretKey: "AWS_DEFAULT_REGION"},
-			forge.SecretEnv{Name: "AWS_ENDPOINT_URL", SecretName: secretMinIOCreds, SecretKey: "AWS_ENDPOINT_URL"},
+			forge.SecretEnv{Name: "AWS_ACCESS_KEY_ID", SecretName: secretMinIOCreds, SecretKey: "AWS_ACCESS_KEY_ID"}, //nolint:gosec // G101 false positive: env var KEY name, not credential value
+			forge.SecretEnv{Name: "AWS_SECRET_ACCESS_KEY", SecretName: secretMinIOCreds, SecretKey: "AWS_SECRET_ACCESS_KEY"}, //nolint:gosec // G101 false positive: env var KEY name, not credential value
+			forge.SecretEnv{Name: "AWS_DEFAULT_REGION", SecretName: secretMinIOCreds, SecretKey: "AWS_DEFAULT_REGION"}, //nolint:gosec // G101 false positive: env var KEY name, not credential value
+			forge.SecretEnv{Name: "AWS_ENDPOINT_URL", SecretName: secretMinIOCreds, SecretKey: "AWS_ENDPOINT_URL"}, //nolint:gosec // G101 false positive: env var KEY name, not credential value
 			// Docker config — syft needs this to read from private registries.
 			forge.Env{Name: "DOCKER_CONFIG", Value: buildkitRegistryMount},
 		},

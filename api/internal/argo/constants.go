@@ -78,8 +78,8 @@ const (
 	volumeWorkspace      = "workspace"
 	workspacePVCSize     = "5Gi"
 	workspaceMountPath   = "/workspace"
-	secretRegistryConfig = "buildkit-registry-config"
-	secretMinIOCreds      = "loopzero-minio-credentials"
+	secretRegistryConfig = "buildkit-registry-config" //nolint:gosec // G101 false positive: Secret resource NAME, not credential value
+	secretMinIOCreds      = "loopzero-minio-credentials" //nolint:gosec // G101 false positive: Secret resource NAME, not credential value
 	secretCosignKey       = "cosign-signing-key"
 	cosignKeyMountPath    = "/cosign"
 	s3BucketStaticAssets  = "loopzero-static-assets"

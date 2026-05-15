@@ -31,8 +31,8 @@ import (
 type AuthFailureAction string
 
 const (
-	AuthFailureTokenInvalid    AuthFailureAction = "auth.token_invalid"
-	AuthFailureTokenExpired    AuthFailureAction = "auth.token_expired"
+	AuthFailureTokenInvalid    AuthFailureAction = "auth.token_invalid" //nolint:gosec // G101 false positive: audit action NAME, not credential value
+	AuthFailureTokenExpired    AuthFailureAction = "auth.token_expired" //nolint:gosec // G101 false positive: audit action NAME, not credential value
 	AuthFailureServiceMismatch AuthFailureAction = "auth.service_auth_mismatch"
 	AuthFailureAdminMismatch   AuthFailureAction = "auth.admin_key_mismatch"
 	AuthFailureTenantNotFound  AuthFailureAction = "auth.tenant_not_found"

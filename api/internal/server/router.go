@@ -1,6 +1,12 @@
 // SPDX-License-Identifier: Apache-2.0
 // Copyright 2025-2026 The LoopZero Authors
 
+// Package server assembles the HTTP router (chi) + middleware
+// pipeline + dependency wiring for the API binary. Routes are
+// declared per resource group (tenant, project, build, release,
+// etc.) and dispatched to services in `api/internal/services/`.
+// All mutating routes pass through `withEnvironmentLock` per
+// CLAUDE.md Rule 6.
 package server
 
 import (
