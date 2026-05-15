@@ -298,15 +298,14 @@ func (c *ContainerDeliveryActivator) phaseACreateRelease(ctx context.Context, bu
 				).Inc()
 			}
 			if len(atts) > 0 {
-				// T6.5 of deep-review-remediation-plan (closes find_code_005 / CODE-005 MEDIUM).
-				// Previously: `_ = saveErr` silently discarded the error and
-				// the misleading comment claimed "Capture as observability"
-				// while no metric or log was actually emitted. Now: explicit
-				// structured log + dedicated metric so operators can detect
-				// attestation persistence regressions without manually scanning
-				// build_events.
-				if saveErr := c.appAttestationStore.SaveAppAttestations(
-					ctx, release.ID, build.TenantID, atts,
+				// Plan T2.4 D7 — pass tx so release + attestations commit atomically.
+				// Previously SaveAppAttestations ran on a separate connection and
+				// raced ahead of the release commit, producing FK violation
+				// SQLSTATE 23503 in dogfood logs (F-S2-01). Now both rows live in
+				// the same transaction; if attestation insert fails the release
+				// rollback prevents orphaned rows.
+				if saveErr := c.appAttestationStore.SaveAppAttestationsTx(
+					ctx, tx, release.ID, build.TenantID, atts,
 				); saveErr != nil {
 					metrics.ReleaseAppAttestationSaveFailTotal.WithLabelValues(build.Environment).Inc()
 					slog.Warn("attestation persist failed (non-blocking) — release proceeds without per-app attestation rows",

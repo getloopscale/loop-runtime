@@ -62,6 +62,12 @@ type AppAttestationStore interface {
 	// The unique key (release_id, app_name) makes this idempotent.
 	SaveAppAttestations(ctx context.Context, releaseID, tenantID string, atts []AppAttestation) error
 
+	// SaveAppAttestationsTx — same as SaveAppAttestations but accepts an
+	// explicit DBTX (transaction) so the release row + attestation rows can be
+	// committed atomically. Plan T2.4 D7 — eliminates the FK violation race
+	// where attestation insert raced ahead of release commit (F-S2-01).
+	SaveAppAttestationsTx(ctx context.Context, tx DBTX, releaseID, tenantID string, atts []AppAttestation) error
+
 	// GetBuildAppAttestations returns all per-app attestations for the
 	// most recent release of a build. Empty slice if no release exists yet.
 	// Cross-tenant queries return empty slice (no existence leak).
@@ -102,6 +108,27 @@ func validateDigest(digest string) error {
 func (s *PostgresAppAttestationStore) SaveAppAttestations(
 	ctx context.Context, releaseID, tenantID string, atts []AppAttestation,
 ) error {
+	return s.saveAppAttestationsOn(ctx, s.db, releaseID, tenantID, atts)
+}
+
+// SaveAppAttestationsTx — same logic as SaveAppAttestations but uses an
+// explicit transaction so the caller can atomically commit release + atts.
+// Plan T2.4 D7 — closes F-S2-01 FK violation race.
+func (s *PostgresAppAttestationStore) SaveAppAttestationsTx(
+	ctx context.Context, tx DBTX, releaseID, tenantID string, atts []AppAttestation,
+) error {
+	if tx == nil {
+		return fmt.Errorf("app_attestation_store: SaveAppAttestationsTx requires non-nil tx")
+	}
+	return s.saveAppAttestationsOn(ctx, tx, releaseID, tenantID, atts)
+}
+
+// saveAppAttestationsOn — shared implementation. Same query/validation as
+// the legacy SaveAppAttestations, but parameterized on the DBTX so callers
+// can pass either s.db (auto-commit) or a transaction handle.
+func (s *PostgresAppAttestationStore) saveAppAttestationsOn(
+	ctx context.Context, conn DBTX, releaseID, tenantID string, atts []AppAttestation,
+) error {
 	if releaseID == "" || tenantID == "" {
 		// Audit gap M02 #13 fix: typed LoopZeroError so the validation surfaces
 		// with a stable code in audit logs and HTTP error mapping.
@@ -129,7 +156,7 @@ func (s *PostgresAppAttestationStore) SaveAppAttestations(
 			newID = id.GenerateAppAttestationID()
 		}
 
-		_, err := s.db.Exec(ctx,
+		_, err := conn.Exec(ctx,
 			`INSERT INTO release_app_attestations
 				(id, release_id, tenant_id, app_name,
 				 image_digest, image_signature, signed_at,
