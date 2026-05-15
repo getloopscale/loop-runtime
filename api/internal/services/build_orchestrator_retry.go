@@ -21,7 +21,7 @@ import (
 // RELEASING is explicitly non-terminal. It directly runs activateRelease and
 // transitions to SUCCEEDED on success or leaves in RELEASING for retry.
 func (o *BuildOrchestrator) RetryReleaseActivation(ctx context.Context, build *db.Build, result BuildCallbackRequest) error {
-	if build.Status != string(statemachine.BuildReleasing) {
+	if build.Status != string(statemachine.BPhReleasing) {
 		return fmt.Errorf("retry release activation: build %s is in %s state, expected RELEASING", build.ID, build.Status)
 	}
 
@@ -43,10 +43,10 @@ func (o *BuildOrchestrator) RetryReleaseActivation(ctx context.Context, build *d
 		if err != nil {
 			return fmt.Errorf("retry release activation: re-fetch build: %w", err)
 		}
-		if statemachine.IsBuildTerminal(statemachine.State(current.Status)) {
+		if statemachine.IsBuildPhaseTerminal(statemachine.BuildPhase(current.Status)) {
 			return nil // Already finalized by another pod -- safe to skip
 		}
-		if _, err := o.buildStore.UpdateStatus(ctx, tx, current.ID, string(statemachine.BuildReleaseCompleted)); err != nil {
+		if _, err := o.buildStore.UpdateStatus(ctx, tx, current.ID, string(statemachine.BPEventReleaseCompleted)); err != nil {
 			return fmt.Errorf("retry release activation: transition to SUCCEEDED: %w", err)
 		}
 		return nil

@@ -35,7 +35,7 @@ func (o *BuildOrchestrator) OnBuildCompleted(ctx context.Context, buildID string
 	}
 
 	// Fast path: duplicate callback -- build already terminal -> no-op (no lock needed)
-	if statemachine.IsBuildTerminal(statemachine.State(build.Status)) {
+	if statemachine.IsBuildPhaseTerminal(statemachine.BuildPhase(build.Status)) {
 		return nil
 	}
 
@@ -58,20 +58,20 @@ func (o *BuildOrchestrator) OnBuildCompleted(ctx context.Context, buildID string
 		}
 
 		// Re-check terminal state inside lock (concurrent cancel may have completed)
-		if statemachine.IsBuildTerminal(statemachine.State(build.Status)) {
+		if statemachine.IsBuildPhaseTerminal(statemachine.BuildPhase(build.Status)) {
 			return nil
 		}
 
 		// EC-N race condition guard: build still in QUEUED (Argo finished before SubmitBuild transitioned)
-		if build.Status == string(statemachine.BuildQueued) {
-			if _, err := o.buildStore.UpdateStatus(ctx, tx, buildID, string(statemachine.BuildStarted)); err != nil {
+		if build.Status == string(statemachine.BPhQueued) {
+			if _, err := o.buildStore.UpdateStatus(ctx, tx, buildID, string(statemachine.BPEventStarted)); err != nil {
 				return fmt.Errorf("on build completed: EC-N transition to RUNNING: %w", err)
 			}
 		}
 
 		// Transition to terminal state
 		if result.Status == "failed" {
-			if _, err := o.buildStore.UpdateStatus(ctx, tx, buildID, string(statemachine.BuildFailedEvent)); err != nil {
+			if _, err := o.buildStore.UpdateStatus(ctx, tx, buildID, string(statemachine.BPEventFailed)); err != nil {
 				return fmt.Errorf("on build completed: transition to FAILED: %w", err)
 			}
 
@@ -103,7 +103,7 @@ func (o *BuildOrchestrator) OnBuildCompleted(ctx context.Context, buildID string
 		}
 
 		// Transition to SUCCEEDED
-		if _, err := o.buildStore.UpdateStatus(ctx, tx, buildID, string(statemachine.BuildSucceededEvent)); err != nil {
+		if _, err := o.buildStore.UpdateStatus(ctx, tx, buildID, string(statemachine.BPEventSucceeded)); err != nil {
 			return fmt.Errorf("on build completed: transition to SUCCEEDED: %w", err)
 		}
 
@@ -145,7 +145,7 @@ func (o *BuildOrchestrator) OnBuildCompleted(ctx context.Context, buildID string
 	}, result.Apps, build.CorrelationID)
 
 	// If build was cancelled concurrently during Phase 1, skip activation
-	if statemachine.IsBuildTerminal(statemachine.State(build.Status)) {
+	if statemachine.IsBuildPhaseTerminal(statemachine.BuildPhase(build.Status)) {
 		return nil
 	}
 
@@ -179,10 +179,10 @@ func (o *BuildOrchestrator) OnBuildCompleted(ctx context.Context, buildID string
 		if err != nil {
 			return fmt.Errorf("on build completed: re-fetch for SUCCEEDED transition: %w", err)
 		}
-		if statemachine.IsBuildTerminal(statemachine.State(current.Status)) {
+		if statemachine.IsBuildPhaseTerminal(statemachine.BuildPhase(current.Status)) {
 			return nil // Already finalized (race with reconcile loop) -- safe
 		}
-		if _, err := o.buildStore.UpdateStatus(ctx, tx, buildID, string(statemachine.BuildReleaseCompleted)); err != nil {
+		if _, err := o.buildStore.UpdateStatus(ctx, tx, buildID, string(statemachine.BPEventReleaseCompleted)); err != nil {
 			return fmt.Errorf("on build completed: transition to SUCCEEDED: %w", err)
 		}
 		return nil

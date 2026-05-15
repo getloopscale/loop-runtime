@@ -175,27 +175,27 @@ func (r *BuildReconcileLoop) failBuild(ctx context.Context, build *db.Build, rea
 		if err != nil {
 			return err
 		}
-		if statemachine.IsBuildTerminal(statemachine.State(current.Status)) {
+		if statemachine.IsBuildPhaseTerminal(statemachine.BuildPhase(current.Status)) {
 			return nil // Already finalized
 		}
 
 		// Route to the correct failure event based on current state
-		switch statemachine.State(current.Status) {
-		case statemachine.BuildQueued:
+		switch statemachine.BuildPhase(current.Status) {
+		case statemachine.BPhQueued:
 			// QUEUED → RUNNING first (state machine requires it), then RUNNING → FAILED
-			if _, err := r.buildStore.UpdateStatus(ctx, tx, build.ID, string(statemachine.BuildStarted)); err != nil {
+			if _, err := r.buildStore.UpdateStatus(ctx, tx, build.ID, string(statemachine.BPEventStarted)); err != nil {
 				return fmt.Errorf("transition to RUNNING: %w", err)
 			}
-			if _, err := r.buildStore.UpdateStatus(ctx, tx, build.ID, string(statemachine.BuildFailedEvent)); err != nil {
+			if _, err := r.buildStore.UpdateStatus(ctx, tx, build.ID, string(statemachine.BPEventFailed)); err != nil {
 				return fmt.Errorf("transition to FAILED: %w", err)
 			}
-		case statemachine.BuildRunning:
-			if _, err := r.buildStore.UpdateStatus(ctx, tx, build.ID, string(statemachine.BuildFailedEvent)); err != nil {
+		case statemachine.BPhRunning:
+			if _, err := r.buildStore.UpdateStatus(ctx, tx, build.ID, string(statemachine.BPEventFailed)); err != nil {
 				return fmt.Errorf("transition to FAILED: %w", err)
 			}
-		case statemachine.BuildReleasing:
+		case statemachine.BPhReleasing:
 			// MEET-008: RELEASING → FAILED via release-specific event
-			if _, err := r.buildStore.UpdateStatus(ctx, tx, build.ID, string(statemachine.BuildReleaseFailedEvent)); err != nil {
+			if _, err := r.buildStore.UpdateStatus(ctx, tx, build.ID, string(statemachine.BPEventReleaseFailed)); err != nil {
 				return fmt.Errorf("transition RELEASING to FAILED: %w", err)
 			}
 		default:

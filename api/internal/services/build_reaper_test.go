@@ -166,7 +166,7 @@ func TestBuildReaper_ReapsStaleQueuedBuild(t *testing.T) {
 
 	checker := &fakeStaleChecker{
 		result: []StaleBuild{
-			{ID: "build-1", State: statemachine.BuildQueued, Event: statemachine.BuildQueueTimeout},
+			{ID: "build-1", State: statemachine.BPhQueued, Event: statemachine.BPEventQueueTimeout},
 		},
 	}
 	es := &fakeEventStoreReaper{}
@@ -179,8 +179,8 @@ func TestBuildReaper_ReapsStaleQueuedBuild(t *testing.T) {
 	if reaped != 1 {
 		t.Fatalf("expected 1 reaped, got %d", reaped)
 	}
-	if bs.lastStatus["build-1"] != string(statemachine.BuildQueueTimeout) {
-		t.Errorf("expected status event %s, got %s", statemachine.BuildQueueTimeout, bs.lastStatus["build-1"])
+	if bs.lastStatus["build-1"] != string(statemachine.BPEventQueueTimeout) {
+		t.Errorf("expected status event %s, got %s", statemachine.BPEventQueueTimeout, bs.lastStatus["build-1"])
 	}
 	if bs.lastError["build-1"] == "" {
 		t.Error("expected error message to be set")
@@ -199,7 +199,7 @@ func TestBuildReaper_SkipsTerminalBuilds(t *testing.T) {
 
 	checker := &fakeStaleChecker{
 		result: []StaleBuild{
-			{ID: "build-1", State: statemachine.BuildQueued, Event: statemachine.BuildQueueTimeout},
+			{ID: "build-1", State: statemachine.BPhQueued, Event: statemachine.BPEventQueueTimeout},
 		},
 	}
 
@@ -222,7 +222,7 @@ func TestBuildReaper_SkipsBuildBeingReconciled(t *testing.T) {
 
 	checker := &fakeStaleChecker{
 		result: []StaleBuild{
-			{ID: "build-1", State: statemachine.BuildQueued, Event: statemachine.BuildQueueTimeout},
+			{ID: "build-1", State: statemachine.BPhQueued, Event: statemachine.BPEventQueueTimeout},
 		},
 	}
 
@@ -247,7 +247,7 @@ func TestBuildReaper_SkipsActiveWorkflow(t *testing.T) {
 
 	checker := &fakeStaleChecker{
 		result: []StaleBuild{
-			{ID: "build-1", State: statemachine.BuildRunning, Event: statemachine.BuildTimeout},
+			{ID: "build-1", State: statemachine.BPhRunning, Event: statemachine.BPEventTimeout},
 		},
 	}
 

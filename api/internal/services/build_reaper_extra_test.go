@@ -20,7 +20,7 @@ import (
 // without test churn).
 
 func TestReaperReason_QueueTimeout(t *testing.T) {
-	reason := reaperReason(statemachine.BuildQueueTimeout)
+	reason := reaperReason(statemachine.BPEventQueueTimeout)
 	lower := strings.ToLower(reason)
 	if !strings.Contains(lower, "queued") {
 		t.Errorf("expected QUEUED state mention, got %q", reason)
@@ -37,7 +37,7 @@ func TestReaperReason_QueueTimeout(t *testing.T) {
 }
 
 func TestReaperReason_BuildTimeout(t *testing.T) {
-	reason := reaperReason(statemachine.BuildTimeout)
+	reason := reaperReason(statemachine.BPEventTimeout)
 	lower := strings.ToLower(reason)
 	if !strings.Contains(lower, "running") {
 		t.Errorf("expected RUNNING state mention, got %q", reason)
@@ -58,7 +58,7 @@ func TestReaperReason_ReleasingTimeout(t *testing.T) {
 	// no dedicated reason branch (fell through to "Build reaped due
 	// to timeout"). Now produces an actionable RELEASING-specific
 	// message.
-	reason := reaperReason(statemachine.BuildReleaseTimeoutEvent)
+	reason := reaperReason(statemachine.BPEventReleaseTimeout)
 	lower := strings.ToLower(reason)
 	if !strings.Contains(lower, "releasing") {
 		t.Errorf("expected RELEASING state mention, got %q", reason)
@@ -72,7 +72,7 @@ func TestReaperReason_ReleasingTimeout(t *testing.T) {
 }
 
 func TestReaperReason_CancelTimeout(t *testing.T) {
-	reason := reaperReason(statemachine.BuildCancelTimeout)
+	reason := reaperReason(statemachine.BPEventCancelTimeout)
 	lower := strings.ToLower(reason)
 	if !strings.Contains(lower, "cancellation") {
 		t.Errorf("expected cancellation mention, got %q", reason)
@@ -86,7 +86,7 @@ func TestReaperReason_CancelTimeout(t *testing.T) {
 }
 
 func TestReaperReason_UnknownEvent(t *testing.T) {
-	reason := reaperReason(statemachine.Event("some_unknown_event"))
+	reason := reaperReason(statemachine.BuildPhaseEvent("some_unknown_event"))
 	if !strings.Contains(strings.ToLower(reason), "timeout") {
 		t.Errorf("expected generic timeout reason, got %q", reason)
 	}

@@ -46,8 +46,8 @@ func DefaultBuildReaperConfig() BuildReaperConfig {
 // StaleBuild represents a build that has exceeded its timeout.
 type StaleBuild struct {
 	ID    string
-	State statemachine.State
-	Event statemachine.Event
+	State statemachine.BuildPhase
+	Event statemachine.BuildPhaseEvent
 }
 
 // BuildStaleChecker finds builds that have exceeded their state timeout.
@@ -137,15 +137,15 @@ func (r *BuildReaper) ReapOnce(ctx context.Context) int {
 //   - WHAT timed out (state + budget — drift-detector: matches pkg/statemachine/build.go:66)
 //   - LIKELY CAUSE (top 1-2 hypotheses observed in dogfood)
 //   - NEXT STEP (specific CLI command to run)
-func reaperReason(event statemachine.Event) string {
+func reaperReason(event statemachine.BuildPhaseEvent) string {
 	switch event {
-	case statemachine.BuildQueueTimeout:
+	case statemachine.BPEventQueueTimeout:
 		return "Build was QUEUED for more than 5 minutes. Likely cause: build cluster is at capacity OR a previous build is still using the per-tenant concurrency slot. Next: run `loopzero status` to see pending builds; consider canceling a stuck build with `loopzero cancel`."
-	case statemachine.BuildTimeout:
+	case statemachine.BPEventTimeout:
 		return "Build was RUNNING for more than 30 minutes. Likely cause: image build step is slow (large layers, npm install resolving many packages) OR the build container is hung on a network call. Next: run `loopzero logs --build <id>` and check the LAST log line — that's the step where the build stalled."
-	case statemachine.BuildReleaseTimeoutEvent:
+	case statemachine.BPEventReleaseTimeout:
 		return "Build was RELEASING (image built, release activation in flight) for more than 10 minutes. Likely cause: deployment sync is slow OR the workload cluster is unhealthy. Next: run `loopzero status` to see if the release became active; if not, retry with `loopzero deploy`."
-	case statemachine.BuildCancelTimeout:
+	case statemachine.BPEventCancelTimeout:
 		return "Cancellation did not complete within 60s. The build pod may need manual cleanup. Next: run `loopzero status` to confirm the build moved to CANCELLED; if still CANCELLING, contact support."
 	default:
 		return "Build reaped due to timeout. Run `loopzero logs --build <id>` for context."
@@ -178,7 +178,7 @@ func (r *BuildReaper) reap(ctx context.Context) int {
 		}
 
 		// Re-check: build may have transitioned since the query
-		if statemachine.IsBuildTerminal(statemachine.State(build.Status)) {
+		if statemachine.IsBuildPhaseTerminal(statemachine.BuildPhase(build.Status)) {
 			continue
 		}
 
@@ -207,7 +207,7 @@ func (r *BuildReaper) reap(ctx context.Context) int {
 			if err != nil {
 				return err
 			}
-			if statemachine.IsBuildTerminal(statemachine.State(build.Status)) {
+			if statemachine.IsBuildPhaseTerminal(statemachine.BuildPhase(build.Status)) {
 				return nil
 			}
 
@@ -297,23 +297,23 @@ func (c *PostgresStaleBuildChecker) FindStaleBuilds(ctx context.Context, cellID 
 			return nil, fmt.Errorf("scan stale build: %w", err)
 		}
 
-		var event statemachine.Event
-		switch statemachine.State(status) {
-		case statemachine.BuildQueued:
-			event = statemachine.BuildQueueTimeout
-		case statemachine.BuildRunning:
-			event = statemachine.BuildTimeout
-		case statemachine.BuildReleasing:
-			event = statemachine.BuildReleaseTimeoutEvent
-		case statemachine.BuildCancelling:
-			event = statemachine.BuildCancelTimeout
+		var event statemachine.BuildPhaseEvent
+		switch statemachine.BuildPhase(status) {
+		case statemachine.BPhQueued:
+			event = statemachine.BPEventQueueTimeout
+		case statemachine.BPhRunning:
+			event = statemachine.BPEventTimeout
+		case statemachine.BPhReleasing:
+			event = statemachine.BPEventReleaseTimeout
+		case statemachine.BPhCancelling:
+			event = statemachine.BPEventCancelTimeout
 		default:
 			continue
 		}
 
 		result = append(result, StaleBuild{
 			ID:    id,
-			State: statemachine.State(status),
+			State: statemachine.BuildPhase(status),
 			Event: event,
 		})
 	}

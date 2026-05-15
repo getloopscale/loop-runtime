@@ -199,7 +199,7 @@ func (o *BuildOrchestrator) SubmitBuild(ctx context.Context, req SubmitBuildRequ
 	}
 
 	// Transition QUEUED -> RUNNING
-	if _, err := o.buildStore.UpdateStatus(ctx, nil, buildID, string(statemachine.BuildStarted)); err != nil {
+	if _, err := o.buildStore.UpdateStatus(ctx, nil, buildID, string(statemachine.BPEventStarted)); err != nil {
 		slog.Error("submit build: failed to transition to RUNNING",
 			"build_id", buildID, "error", err)
 		// Non-fatal: reconcile loop handles EC-N (QUEUED build with completed workflow).
@@ -297,7 +297,7 @@ func enforceScaling(apps []AppSpec, checker PlanCapChecker, tenantID string, ked
 // fails. This runs OUTSIDE the advisory lock using the connection pool directly.
 // REVIEW-BLOCKER-1: ensures the environment is immediately unblocked on submit failure.
 func (o *BuildOrchestrator) failQueuedBuild(ctx context.Context, buildID string, reason string) {
-	if _, err := o.buildStore.UpdateStatus(ctx, nil, buildID, string(statemachine.BuildFailedEvent)); err != nil {
+	if _, err := o.buildStore.UpdateStatus(ctx, nil, buildID, string(statemachine.BPEventFailed)); err != nil {
 		slog.Error("submit build: failed to mark QUEUED build as FAILED",
 			"build_id", buildID, "error", err)
 		return

@@ -151,10 +151,10 @@ func (r *BuildReconcileLoop) completeBuild(ctx context.Context, build *db.Build)
 		if err != nil {
 			return err
 		}
-		if statemachine.IsBuildTerminal(statemachine.State(current.Status)) {
+		if statemachine.IsBuildPhaseTerminal(statemachine.BuildPhase(current.Status)) {
 			return nil // Already finalized
 		}
-		if _, err := r.buildStore.UpdateStatus(ctx, tx, build.ID, string(statemachine.BuildReleaseCompleted)); err != nil {
+		if _, err := r.buildStore.UpdateStatus(ctx, tx, build.ID, string(statemachine.BPEventReleaseCompleted)); err != nil {
 			return fmt.Errorf("complete build: transition to SUCCEEDED: %w", err)
 		}
 		return nil
