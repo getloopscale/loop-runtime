@@ -84,7 +84,10 @@ func startNonLeaderReelection(leaderConn *pgxpool.Conn, shutdownCtx context.Cont
 				return
 			case <-ticker.C:
 				var acquired bool
-				reelCtx, reelCancel := context.WithTimeout(context.Background(), 5*time.Second)
+				// Derive from shutdownCtx so shutdown cancels in-flight
+				// pg_try_advisory_lock attempts. Was context.Background()
+				// which leaked the attempt past shutdown signal.
+				reelCtx, reelCancel := context.WithTimeout(shutdownCtx, 5*time.Second)
 				if err := leaderConn.QueryRow(reelCtx,
 					"SELECT pg_try_advisory_lock($1)", leaderLockID).Scan(&acquired); err != nil {
 					reelCancel()

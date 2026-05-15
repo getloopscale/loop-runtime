@@ -93,7 +93,7 @@ func newProvider(t *testing.T, baseURL string, secrets ...*corev1.Secret) *KubeM
 	for _, s := range secrets {
 		objs = append(objs, s)
 	}
-	clientset := fake.NewSimpleClientset(objs...)
+	clientset := fake.NewClientset(objs...)
 	p, err := NewKubeMintingTokenProvider(KubeMintingConfig{
 		ArgoCDBaseURL:             baseURL,
 		AccountName:               "loopzero-api",

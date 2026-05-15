@@ -51,7 +51,7 @@ func TestCreateSecret_OnError_DoesNotLogValue(t *testing.T) {
 		slog.SetDefault(slog.New(slog.NewTextHandler(&logBuf, &slog.HandlerOptions{Level: slog.LevelDebug})))
 		t.Cleanup(func() { slog.SetDefault(prev) })
 
-		mgmtFake := fake.NewSimpleClientset()
+		mgmtFake := fake.NewClientset()
 		mgmtFake.PrependReactor("create", "secrets", func(_ k8stesting.Action) (bool, runtime.Object, error) {
 			return true, nil, errors.New("mgmt cluster Create failed")
 		})
@@ -82,7 +82,7 @@ func TestCreateSecret_OnError_DoesNotLogValue(t *testing.T) {
 		t.Cleanup(func() { slog.SetDefault(prev) })
 
 		// mgmt succeeds (default fake); runtime dynamic fails on create.
-		mgmtFake := fake.NewSimpleClientset()
+		mgmtFake := fake.NewClientset()
 
 		scheme := runtime.NewScheme()
 		dynFake := dynamicfake.NewSimpleDynamicClient(scheme)

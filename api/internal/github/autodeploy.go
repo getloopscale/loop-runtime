@@ -13,6 +13,7 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+	"time"
 
 	"gopkg.in/yaml.v3"
 
@@ -220,7 +221,13 @@ func (d *AutoDeployer) HandlePush(ctx context.Context, repoFullName, branch, com
 	// Step 6: Set commit status to pending
 	if d.cfg.AppClient != nil {
 		go func() {
-			statusCtx := context.Background()
+			// G118 expected: this is a fire-and-forget side-effect that
+			// runs AFTER HandlePush returns. Inheriting the parent ctx
+			// would cancel the commit-status update the moment the HTTP
+			// handler returns, defeating the purpose. Use a separate
+			// timeout so the goroutine doesn't run forever.
+			statusCtx, cancel := context.WithTimeout(context.Background(), 30*time.Second) //nolint:gosec // G118 expected: detached fire-and-forget commit-status update
+			defer cancel()
 			if err := d.cfg.AppClient.SetCommitStatus(statusCtx, installationID, owner, repo, commitSHA, CommitStatus{
 				State:       "pending",
 				Description: "Deploying to production...",

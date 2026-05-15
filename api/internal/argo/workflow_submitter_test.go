@@ -446,7 +446,7 @@ func TestExtractStepOutputs_DefensiveAgainstMissingFields(t *testing.T) {
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
 			got := extractStepOutputs(tc.obj)
-			if got != nil && len(got) != 0 {
+			if len(got) != 0 {
 				t.Errorf("expected nil/empty for %q, got %#v", tc.name, got)
 			}
 		})
