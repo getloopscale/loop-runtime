@@ -61,11 +61,14 @@ func (r *BuildReconcileLoop) retryReleaseActivation(ctx context.Context, build *
 			r.completeBuild(ctx, build)
 			return
 		case "SYNC_FAILED", "GIT_MIRROR_FAILED":
-			// Release permanently failed — fail the build
+			// Release permanently failed — fail the build.
+			// Plan T2.1 D4: propagate reaper_reason (WHAT/CAUSE/NEXT) into build
+			// error_message instead of the legacy technical "Release X failed: Y"
+			// string. CLI surfaces this to user with actionable next-step text.
 			r.logger.Warn("reconcile loop: release in failed state, failing build",
 				"build_id", build.ID, "release_id", existingRelease.ID,
 				"release_status", existingRelease.Status)
-			r.failBuild(ctx, build, fmt.Sprintf("Release %s failed: %s", existingRelease.ID, existingRelease.Status))
+			r.failBuild(ctx, build, FormatBuildFailureReason(existingRelease))
 			return
 		default:
 			// Release in transient state (READY, PENDING) — wait for it to resolve
