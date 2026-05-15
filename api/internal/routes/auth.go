@@ -22,16 +22,35 @@ type UsernameLookup interface {
 	GetUsernameByID(ctx context.Context, userID string) (string, error)
 }
 
+// MembershipLookup is the narrow contract AuthHandler.Whoami needs to surface
+// ALL of a user's tenant memberships, not just the "active" one selected by
+// the middleware (plan T2.5 D8 — closes F-S2-02 silent team swap). Implemented
+// by db.PostgresMembershipStore.GetMemberships. A nil lookup is legal — the
+// handler degrades gracefully to single-team output.
+type MembershipLookup interface {
+	GetMemberships(ctx context.Context, userID string) ([]middleware.TenantMembership, error)
+}
+
 // AuthHandler provides HTTP handlers for authentication-related routes.
 type AuthHandler struct {
-	userLookup UsernameLookup
+	userLookup       UsernameLookup
+	membershipLookup MembershipLookup
 }
 
 // NewAuthHandler creates a new AuthHandler. `userLookup` may be nil — when
 // absent, the response will not carry a `username` field (callers fall back
-// to email/user_id).
+// to email/user_id). `membershipLookup` may also be nil — without it, the
+// response surfaces only the active team (legacy behavior).
 func NewAuthHandler(userLookup UsernameLookup) *AuthHandler {
 	return &AuthHandler{userLookup: userLookup}
+}
+
+// WithMembershipLookup attaches a membership store so /whoami can list ALL
+// of a user's tenant memberships (plan T2.5 D8). Returns the receiver for
+// chaining.
+func (h *AuthHandler) WithMembershipLookup(m MembershipLookup) *AuthHandler {
+	h.membershipLookup = m
+	return h
 }
 
 // Whoami returns the authenticated user's information.
@@ -69,16 +88,42 @@ func (h *AuthHandler) Whoami(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 
-	w.Header().Set("Content-Type", "application/json")
-	w.WriteHeader(http.StatusOK)
-	payload := map[string]string{
-		"user_id": uc.UserID,
-		"email":   email,
-		"team":    uc.TenantID,
-		"role":    uc.Role,
+	// Plan T2.5 D8 — surface ALL memberships + active_team so multi-tenant
+	// users see the silent-swap behavior explicitly (closes F-S2-02).
+	type teamSummary struct {
+		Name   string `json:"name"`
+		Role   string `json:"role"`
+		Active bool   `json:"active"`
+	}
+	payload := map[string]any{
+		"user_id":     uc.UserID,
+		"email":       email,
+		"team":        uc.TenantID, // deprecated alias for active_team — kept one release
+		"role":        uc.Role,
+		"active_team": uc.TenantID,
 	}
 	if username != "" {
 		payload["username"] = username
 	}
+	if h.membershipLookup != nil {
+		memberships, err := h.membershipLookup.GetMemberships(r.Context(), uc.UserID)
+		if err != nil {
+			slog.Warn("whoami: membership lookup failed (non-fatal)",
+				"user_id", uc.UserID, "error", err.Error())
+		} else {
+			teams := make([]teamSummary, 0, len(memberships))
+			for _, m := range memberships {
+				teams = append(teams, teamSummary{
+					Name:   m.TenantID,
+					Role:   m.Role,
+					Active: m.TenantID == uc.TenantID,
+				})
+			}
+			payload["teams"] = teams
+		}
+	}
+
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(http.StatusOK)
 	_ = json.NewEncoder(w).Encode(payload)
 }
