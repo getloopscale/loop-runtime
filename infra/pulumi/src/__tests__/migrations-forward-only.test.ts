@@ -57,6 +57,12 @@ describe("migration forward-only invariant (T5.3)", () => {
     // `.claude/knowledge-base/concepts/operations/finding-2026-05-15-pulumi-vitest-23-fail-drift.md`.
     const DROP_CONSTRAINT_RE = /\bDROP\s+CONSTRAINT\s+(?:IF\s+EXISTS\s+)?(\w+)\b/i;
     const ADD_CHECK_RE = /\bADD\s+CONSTRAINT\s+(\w+)\s+CHECK\b/i;
+    // FK constraint replacement: same name-match invariant as CHECK
+    // pattern. Authorized per ADR `2026-05-15-T2-migration-000012-fk-
+    // whitelist.md` (sponsor-ratified 2026-05-16). Migration 000012
+    // reconstructs 15 FKs with explicit `ON DELETE` semantics — same
+    // logical reference, no data loss.
+    const ADD_FK_RE = /\bADD\s+CONSTRAINT\s+(\w+)\s+FOREIGN\s+KEY\b/i;
 
     for (const f of upFiles) {
       it(f, () => {
@@ -68,12 +74,15 @@ describe("migration forward-only invariant (T5.3)", () => {
             // Skip comment lines (-- prefix or /* ... */ blocks).
             const stripped = line.replace(/--.*$/, "").trim();
             if (stripped.length === 0 || !DROP_RE.test(stripped)) return false;
-            // Whitelist: DROP CONSTRAINT X is OK if same file has ADD CONSTRAINT X CHECK.
+            // Whitelist: DROP CONSTRAINT X is OK if same file has ADD CONSTRAINT X CHECK
+            // OR ADD CONSTRAINT X FOREIGN KEY (constraint reconstruction with same name).
             const dropMatch = stripped.match(DROP_CONSTRAINT_RE);
             if (dropMatch) {
               const cname = dropMatch[1];
               const addCheckRe = new RegExp(`\\bADD\\s+CONSTRAINT\\s+${cname}\\s+CHECK\\b`, "i");
               if (addCheckRe.test(text)) return false; // constraint replacement, not data drop
+              const addFkRe = new RegExp(`\\bADD\\s+CONSTRAINT\\s+${cname}\\s+FOREIGN\\s+KEY\\b`, "i");
+              if (addFkRe.test(text)) return false; // FK reconstruction (ADR 2026-05-15-T2-migration-000012-fk-whitelist)
             }
             return true;
           });
