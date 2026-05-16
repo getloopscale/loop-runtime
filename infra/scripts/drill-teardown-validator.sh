@@ -173,16 +173,52 @@ if [[ -n "$VPC_DRILL" ]]; then
   echo '```' >> "$AUDIT_FILE"
   echo "" >> "$AUDIT_FILE"
 
+  # L2-unlock T3.2 (D4 fix for Finding #5): VPC delete with exponential backoff.
+  # DO async VPC unbinding takes ~60s after DOKS cluster destroy. Single
+  # delete attempt returns 409 "Can not delete with members" during the
+  # unbinding window. Retry with backoff converges on observed behavior:
+  # delays 10s, 30s, 60s, 120s (sum=220s worst case = within 10min budget).
+  # Tests override via VPC_RETRY_DELAYS_OVERRIDE env (space-separated integers).
+  if [[ -n "${VPC_RETRY_DELAYS_OVERRIDE:-}" ]]; then
+    read -ra VPC_RETRY_DELAYS <<< "$VPC_RETRY_DELAYS_OVERRIDE"
+  else
+    VPC_RETRY_DELAYS=(10 30 60 120)
+  fi
+
   while IFS= read -r line; do
     ID=$(echo "$line" | awk '{print $1}')
     NAME=$(echo "$line" | awk '{print $2}')
-    log "  Force-deleting VPC $NAME ($ID)..."
-    if doctl vpcs delete "$ID" --force 2>&1 >/dev/null; then
+    log "  Force-deleting VPC $NAME ($ID) (with retry-backoff per T3.2 D4)..."
+
+    VPC_DELETED=false
+    ATTEMPT=0
+    FIRST_PASS=true
+    for delay in 0 "${VPC_RETRY_DELAYS[@]}"; do
+      if [[ "$FIRST_PASS" == "true" ]]; then
+        FIRST_PASS=false
+      else
+        ATTEMPT=$((ATTEMPT + 1))
+        log "    Retry $ATTEMPT/${#VPC_RETRY_DELAYS[@]} after ${delay}s (DO async VPC unbinding lag)..."
+        if [[ "$delay" -gt 0 ]]; then
+          sleep "$delay"
+        fi
+      fi
+      if doctl vpcs delete "$ID" --force 2>&1 >/dev/null; then
+        VPC_DELETED=true
+        break
+      fi
+    done
+
+    if [[ "$VPC_DELETED" == "true" ]]; then
       RESIDUAL_DELETED=$((RESIDUAL_DELETED + 1))
-      echo "- Force-deleted VPC $NAME ($ID)" >> "$AUDIT_FILE"
+      if [[ "$ATTEMPT" -eq 0 ]]; then
+        echo "- Force-deleted VPC $NAME ($ID)" >> "$AUDIT_FILE"
+      else
+        echo "- Force-deleted VPC $NAME ($ID) on retry $ATTEMPT (T3.2 D4 backoff converged)" >> "$AUDIT_FILE"
+      fi
     else
       RESIDUAL_FAILED=$((RESIDUAL_FAILED + 1))
-      echo "- **FAILED** to delete VPC $NAME ($ID) (may require dep cleanup)" >> "$AUDIT_FILE"
+      echo "- **FAILED** to delete VPC $NAME ($ID) after ${#VPC_RETRY_DELAYS[@]} retries (cumulative wait $((10+30+60+120))s) — may require manual dep cleanup" >> "$AUDIT_FILE"
     fi
   done <<< "$VPC_DRILL"
 fi

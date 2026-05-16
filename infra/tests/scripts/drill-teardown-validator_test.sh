@@ -26,14 +26,18 @@ TESTS_FAILED=0
 
 build_doctl_stub() {
   local tmpdir="$1"
-  local scenario="$2"  # clean | residual | delete-fails
+  local scenario="$2"  # clean | residual | delete-fails | vpc-retry-success | vpc-retry-fail
 
   mkdir -p "$tmpdir/bin"
+
+  # Counter file for VPC retry semantics (incremented per vpcs delete call)
+  echo "0" > "$tmpdir/vpc-call-counter"
 
   cat > "$tmpdir/bin/doctl" <<EOF
 #!/usr/bin/env bash
 # Stub doctl for drill-teardown-validator_test.sh
 SCENARIO="$scenario"
+COUNTER_FILE="$tmpdir/vpc-call-counter"
 
 case "\$*" in
   *"kubernetes cluster list"*)
@@ -41,7 +45,7 @@ case "\$*" in
       # Return one residual drill cluster
       echo "abc-123  loopzero-drill-mgmt-cluster  loopzero-drill"
     fi
-    # else: empty (clean state)
+    # else: empty (clean state) — including vpc-retry scenarios
     exit 0
     ;;
   *"kubernetes cluster delete"*)
@@ -58,10 +62,35 @@ case "\$*" in
     exit 0
     ;;
   *"vpcs list"*)
+    # vpc-retry scenarios surface one residual VPC
+    if [[ "\$SCENARIO" == "vpc-retry-success" || "\$SCENARIO" == "vpc-retry-fail" ]]; then
+      echo "vpc-xyz-789  loopzero-drill-vpc-sfo3  loopzero-drill"
+    fi
     exit 0
     ;;
   *"vpcs delete"*)
-    exit 0
+    # Increment counter per call
+    CALL=\$(cat "\$COUNTER_FILE" 2>/dev/null || echo 0)
+    CALL=\$((CALL + 1))
+    echo "\$CALL" > "\$COUNTER_FILE"
+    case "\$SCENARIO" in
+      vpc-retry-success)
+        # 2 failures, success on 3rd attempt
+        if [[ "\$CALL" -le 2 ]]; then
+          echo "stub: 409 Can not delete with members" >&2
+          exit 1
+        fi
+        exit 0
+        ;;
+      vpc-retry-fail)
+        # All 5 attempts (1 initial + 4 retries) fail
+        echo "stub: 409 Can not delete with members" >&2
+        exit 1
+        ;;
+      *)
+        exit 0
+        ;;
+    esac
     ;;
   *)
     exit 0
@@ -187,6 +216,69 @@ test_audit_trail_emitted() {
   [[ "$audit_count" -eq 1 ]]
 }
 
+# ---- T3.2 VPC retry-backoff tests (L2-unlock plan D4) ----
+
+test_vpc_retry_409_then_success_exits_0() {
+  # TDD spec: fixture stub: 2x 409, 3rd success → validator should report CLEAN
+  # Use VPC_RETRY_DELAYS_OVERRIDE=0 0 0 0 to skip real sleeps (test would be 220s).
+  local tmpdir="$1"
+  build_doctl_stub "$tmpdir" vpc-retry-success
+  set +e
+  DIGITALOCEAN_TOKEN=fake-token \
+    DRILL_TEARDOWN_LOCK_FILE="$tmpdir/lock" \
+    DRILL_AUDIT_DIR="$tmpdir" \
+    VPC_RETRY_DELAYS_OVERRIDE="0 0 0 0" \
+    PATH="$tmpdir/bin:$PATH" \
+    "$SCRIPT" > "$tmpdir/stdout.log" 2> "$tmpdir/stderr.log"
+  local actual=$?
+  set -e
+  [[ "$actual" -eq 0 ]] || {
+    echo "  expected exit 0 (retry converged), got $actual" >&2
+    cat "$tmpdir/stderr.log" >&2
+    return 1
+  }
+  # Audit must show retry-converged note
+  grep -q "on retry" "$tmpdir"/drill-teardown-audit-*.md || {
+    echo "  expected 'on retry' note in audit" >&2
+    return 1
+  }
+  # 3 doctl vpc delete calls (1 initial + 2 retries before success)
+  local call_count
+  call_count=$(cat "$tmpdir/vpc-call-counter")
+  [[ "$call_count" -ge 3 ]] || {
+    echo "  expected at least 3 vpc delete calls, got $call_count" >&2
+    return 1
+  }
+}
+
+test_vpc_retry_all_fail_exits_3() {
+  # TDD spec: 5 attempts all fail (1 initial + 4 retries) → exit 3 PARTIAL
+  local tmpdir="$1"
+  build_doctl_stub "$tmpdir" vpc-retry-fail
+  set +e
+  DIGITALOCEAN_TOKEN=fake-token \
+    DRILL_TEARDOWN_LOCK_FILE="$tmpdir/lock" \
+    DRILL_AUDIT_DIR="$tmpdir" \
+    VPC_RETRY_DELAYS_OVERRIDE="0 0 0 0" \
+    PATH="$tmpdir/bin:$PATH" \
+    "$SCRIPT" > "$tmpdir/stdout.log" 2> "$tmpdir/stderr.log"
+  local actual=$?
+  set -e
+  [[ "$actual" -eq 3 ]] || {
+    echo "  expected exit 3 (PARTIAL after retries exhausted), got $actual" >&2
+    return 1
+  }
+  # All 5 attempts made
+  local call_count
+  call_count=$(cat "$tmpdir/vpc-call-counter")
+  [[ "$call_count" -eq 5 ]] || {
+    echo "  expected exactly 5 vpc delete calls (1+4), got $call_count" >&2
+    return 1
+  }
+  # Audit must note exhausted retries
+  grep -q "after .* retries" "$tmpdir"/drill-teardown-audit-*.md
+}
+
 # ---- Run ----
 
 echo "Running hermetic tests for drill-teardown-validator.sh..."
@@ -197,6 +289,8 @@ run_test "clean_state_exits_0" test_clean_state_exits_0
 run_test "residual_force_deleted_exits_0" test_residual_force_deleted
 run_test "force_delete_fails_exits_3" test_force_delete_fails_exits_3
 run_test "audit_trail_markdown_emitted" test_audit_trail_emitted
+run_test "vpc_retry_409_then_success_exits_0" test_vpc_retry_409_then_success_exits_0
+run_test "vpc_retry_all_fail_exits_3" test_vpc_retry_all_fail_exits_3
 
 echo ""
 echo "Total: $TESTS_RUN | Passed: $TESTS_PASSED | Failed: $TESTS_FAILED"
