@@ -135,8 +135,12 @@ EOF
     echo "  expected exit 3 (collision), got $rc" >&2
     return 1
   }
-  # Pretty-print stderr says "Credentials collision detected"
-  grep -q "Credentials collision" "$tmpdir/stderr.log" || return 1
+  # Pretty-print stderr (iter 8 wording): "CATASTROPHIC: DRILL_*_TOKEN matches prod hash"
+  grep -q "DRILL_\*_TOKEN matches prod hash" "$tmpdir/stderr.log" || {
+    echo "  expected collision wording in stderr" >&2
+    tail -10 "$tmpdir/stderr.log" >&2
+    return 1
+  }
 }
 
 test_leftover_stack_exits_4() {
@@ -206,6 +210,79 @@ test_help_flag_exits_0() {
   grep -q "drill-preflight" "$tmpdir/stdout.log" || return 1
 }
 
+test_no_tokens_skips_check3_no_spurious_collision() {
+  # Iter 8 bug fix: when DIGITALOCEAN_TOKEN missing, isolation script exits 2
+  # ("no token at all"). Old code labeled ANY non-zero as "credentials-collision"
+  # — spurious + misleading. Fix: skip check 3 when check 1 already caught
+  # missing DO token + handle isolation exit 2 distinctly.
+  local tmpdir="$1"
+  build_env_all_pass "$tmpdir"
+  # Make isolation script exit 2 (real behavior with no token)
+  cat > "$tmpdir/infra/scripts/check-drill-credentials-isolation.sh" <<'EOF'
+#!/usr/bin/env bash
+echo "stub: no DO token" >&2
+exit 2
+EOF
+  chmod +x "$tmpdir/infra/scripts/check-drill-credentials-isolation.sh"
+  cd "$tmpdir"
+  set +e
+  # No DIGITALOCEAN_TOKEN
+  PATH="$tmpdir/bin:/usr/bin:/bin" \
+    PULUMI_ACCESS_TOKEN=fake \
+    CLOUDFLARE_API_TOKEN=fake \
+    PULUMI_CONFIG_PASSPHRASE=fake \
+    PULUMI_DRILL_DIR="$tmpdir/infra/pulumi-drill" \
+    env -u DIGITALOCEAN_TOKEN \
+    bash "$SCRIPT" 2>"$tmpdir/stderr.log" >"$tmpdir/stdout.log"
+  local rc=$?
+  set -e
+  # Should exit 1 (creds missing) — NOT 3 (collision)
+  [[ "$rc" -eq 1 ]] || {
+    echo "  expected exit 1 (creds), got $rc" >&2
+    return 1
+  }
+  # Check 3 should show SKIP, NOT "Credentials collision"
+  grep -q "Skipped" "$tmpdir/stderr.log" || {
+    echo "  expected check 3 SKIP wording" >&2
+    return 1
+  }
+  if grep -q "CATASTROPHIC" "$tmpdir/stderr.log"; then
+    echo "  FAIL: spurious 'CATASTROPHIC' collision message with no token set" >&2
+    return 1
+  fi
+}
+
+test_isolation_check_exit_2_no_do_token() {
+  # Iter 8 distinction: isolation exit 2 reported as "no-do-token", not collision
+  local tmpdir="$1"
+  build_env_all_pass "$tmpdir"
+  cat > "$tmpdir/infra/scripts/check-drill-credentials-isolation.sh" <<'EOF'
+#!/usr/bin/env bash
+exit 2
+EOF
+  chmod +x "$tmpdir/infra/scripts/check-drill-credentials-isolation.sh"
+  # All tokens SET (so check 1 passes + check 3 actually runs the isolation script)
+  cd "$tmpdir"
+  set +e
+  PATH="$tmpdir/bin:/usr/bin:/bin" \
+    DIGITALOCEAN_TOKEN=fake \
+    PULUMI_ACCESS_TOKEN=fake \
+    CLOUDFLARE_API_TOKEN=fake \
+    PULUMI_CONFIG_PASSPHRASE=fake \
+    PULUMI_DRILL_DIR="$tmpdir/infra/pulumi-drill" \
+    bash "$SCRIPT" 2>"$tmpdir/stderr.log" >"$tmpdir/stdout.log"
+  local rc=$?
+  set -e
+  [[ "$rc" -eq 3 ]] || {
+    echo "  expected exit 3 (isolation fail), got $rc" >&2
+    return 1
+  }
+  grep -q "No DO token configured" "$tmpdir/stderr.log" || {
+    echo "  expected 'No DO token configured' wording (not collision)" >&2
+    return 1
+  }
+}
+
 run_test() {
   local name="$1"
   TESTS_RUN=$((TESTS_RUN + 1))
@@ -231,6 +308,8 @@ run_test test_leftover_stack_exits_4
 run_test test_unknown_flag_exits_5
 run_test test_json_output_format
 run_test test_help_flag_exits_0
+run_test test_no_tokens_skips_check3_no_spurious_collision
+run_test test_isolation_check_exit_2_no_do_token
 
 echo ""
 echo "Tests run:    $TESTS_RUN"

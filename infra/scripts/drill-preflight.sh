@@ -122,22 +122,48 @@ else
 fi
 
 # --- Check 3: Advisory mode (D7' credentials isolation) ---
+# Isolation script exit codes:
+#   0 = OK (D7' single-token path OR isolated tokens)
+#   1 = CATASTROPHIC collision (DRILL_*_TOKEN matches prod hash)
+#   2 = No DO token at all (neither DRILL_DO_TOKEN nor DIGITALOCEAN_TOKEN)
+# Skip check 3 if check 1 already reported missing credentials (exit 1) —
+# isolation check would just re-report the same missing-token symptom with
+# misleading "collision" interpretation.
 log "Check 3/4: D7' advisory mode (credentials isolation)..."
 ISO_SCRIPT="infra/scripts/check-drill-credentials-isolation.sh"
 if [[ ! -x "$ISO_SCRIPT" ]]; then
   log "  ✗ Isolation script missing: $ISO_SCRIPT"
   record "advisory_mode" "FAIL" "isolation-script-missing"
   [[ "$EXIT_CODE" -eq 0 ]] && EXIT_CODE=3
+elif [[ "${MISSING_TOKENS[*]:-}" == *"DIGITALOCEAN_TOKEN"* ]]; then
+  log "  ⊘ Skipped (DIGITALOCEAN_TOKEN missing — covered by check 1)"
+  record "advisory_mode" "SKIP" "no-do-token-check-1-covered"
 else
-  # Run advisory check (exit 0 in D7' single-token path; non-zero on collision)
-  if bash "$ISO_SCRIPT" >/dev/null 2>&1; then
-    log "  ✓ Advisory mode OK (D7' single-token path; no collision detected)"
-    record "advisory_mode" "PASS" ""
-  else
-    log "  ✗ Credentials collision detected (DRILL_*_TOKEN matches prod hash)"
-    record "advisory_mode" "FAIL" "credentials-collision"
-    [[ "$EXIT_CODE" -eq 0 ]] && EXIT_CODE=3
-  fi
+  set +e
+  bash "$ISO_SCRIPT" >/dev/null 2>&1
+  ISO_RC=$?
+  set -e
+  case "$ISO_RC" in
+    0)
+      log "  ✓ Advisory mode OK (D7' single-token path; no collision detected)"
+      record "advisory_mode" "PASS" ""
+      ;;
+    1)
+      log "  ✗ CATASTROPHIC: DRILL_*_TOKEN matches prod hash (drill teardown could destroy prod)"
+      record "advisory_mode" "FAIL" "credentials-collision"
+      [[ "$EXIT_CODE" -eq 0 ]] && EXIT_CODE=3
+      ;;
+    2)
+      log "  ✗ No DO token configured (DRILL_DO_TOKEN nor DIGITALOCEAN_TOKEN set)"
+      record "advisory_mode" "FAIL" "no-do-token"
+      [[ "$EXIT_CODE" -eq 0 ]] && EXIT_CODE=3
+      ;;
+    *)
+      log "  ✗ Isolation check unknown exit $ISO_RC"
+      record "advisory_mode" "FAIL" "unknown-isolation-exit-$ISO_RC"
+      [[ "$EXIT_CODE" -eq 0 ]] && EXIT_CODE=3
+      ;;
+  esac
 fi
 
 # --- Check 4: No leftover drill stack ---
