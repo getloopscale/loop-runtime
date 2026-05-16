@@ -62,8 +62,15 @@ func requireL2Harness(t *testing.T) *RealDeployHarness {
 			"mask real concurrency bugs.", err)
 	}
 
+	// Plan 2026-05-16 T3.1: prefer LOOPZERO_DRILL_API_URL when running against
+	// drill prod-identical stack (per skill /drill-test). Fallback to
+	// LOOPZERO_API_URL for backward compat with non-drill runs.
+	apiURL := os.Getenv("LOOPZERO_DRILL_API_URL")
+	if apiURL == "" {
+		apiURL = os.Getenv("LOOPZERO_API_URL")
+	}
 	harness, err := NewRealDeployHarness(RealDeployConfig{
-		APIURL:      os.Getenv("LOOPZERO_API_URL"),
+		APIURL:      apiURL,
 		AppDomain:   os.Getenv("LOOPZERO_APP_DOMAIN"),
 		ServiceAuth: os.Getenv("LOOPZERO_SERVICE_AUTH"),
 		FixturePath: envOr("LOOPZERO_FIXTURE_PATH", "../e2e/fixtures/hello-server"),

@@ -6,15 +6,15 @@
 // Usage:
 //
 //	# L0 — Baseline (current 2 tenants, single deploy)
-//	LOOPZERO_LOAD_TEST=1 LOOPZERO_API_URL=https://api.dev.loopzero.example LOOPZERO_AUTH_TOKEN=<token> \
+//	LOOPZERO_LOAD_TEST=1 LOOPZERO_DRILL_API_URL=https://api.loopzero-drill.example LOOPZERO_AUTH_TOKEN=<token> \
 //	  go test ./infra/tests/load/ -v -run TestL0_Baseline -timeout 10m
 //
 //	# L1 — 10 tenants, concurrent deploys
-//	LOOPZERO_LOAD_TEST=1 LOOPZERO_API_URL=https://api.dev.loopzero.example LOOPZERO_AUTH_TOKEN=<token> \
+//	LOOPZERO_LOAD_TEST=1 LOOPZERO_DRILL_API_URL=https://api.loopzero-drill.example LOOPZERO_AUTH_TOKEN=<token> \
 //	  go test ./infra/tests/load/ -v -run TestL1_10Tenants -timeout 30m
 //
 //	# L2 — 50 tenants, sustained load
-//	LOOPZERO_LOAD_TEST=1 LOOPZERO_API_URL=https://api.dev.loopzero.example LOOPZERO_AUTH_TOKEN=<token> \
+//	LOOPZERO_LOAD_TEST=1 LOOPZERO_DRILL_API_URL=https://api.loopzero-drill.example LOOPZERO_AUTH_TOKEN=<token> \
 //	  go test ./infra/tests/load/ -v -run TestL2_50Tenants -timeout 60m
 //
 // This test is SKIPPED unless LOOPZERO_LOAD_TEST=1 is set.
@@ -397,9 +397,18 @@ func requireLoadTestEnv(t *testing.T) (string, *DeploySimulator) {
 	if os.Getenv("LOOPZERO_LOAD_TEST") != "1" {
 		t.Skip("skipping load test: set LOOPZERO_LOAD_TEST=1 to run")
 	}
-	apiURL := os.Getenv("LOOPZERO_API_URL")
+	// Plan 2026-05-16 T3.1: prefer LOOPZERO_DRILL_API_URL when running against
+	// drill prod-identical stack (per skill /drill-test). Fallback to
+	// LOOPZERO_API_URL for backward compat with dev cluster runs.
+	apiURL := os.Getenv("LOOPZERO_DRILL_API_URL")
 	if apiURL == "" {
-		t.Fatal("LOOPZERO_API_URL required")
+		apiURL = os.Getenv("LOOPZERO_API_URL")
+	}
+	if apiURL == "" {
+		t.Fatal("LOOPZERO_DRILL_API_URL or LOOPZERO_API_URL required")
+	}
+	if drillURL := os.Getenv("LOOPZERO_DRILL_API_URL"); drillURL != "" {
+		t.Logf("Running against drill prod-identical stack: %s", drillURL)
 	}
 
 	// Prefer service auth (no GitHub token needed)

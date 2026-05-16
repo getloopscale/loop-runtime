@@ -1,19 +1,27 @@
-# fix-all-platform-issues-plan T5.2 / ADR D6 — ADR-compliant cell-2 soaks via CI cron.
+# cell-2 ADR canary soaks (PROD-IDENTICAL DRILL — Plan 2026-05-16 T3.4 + T3.4.bis)
 #
-# The ADR mandates 1h Stage 1 + 24h Stage 2 soaks for cell-2 production
-# canary readiness. Operator-driven manual runs are infeasible (25h wall-clock
-# blocks human attention). This workflow runs both stages weekly via cron;
-# any failure pages on-call via auto-issue creation.
+# Per CTO directive 2026-05-16, this workflow no longer assumes a fictitious
+# DEV DOKS cluster (KUBECONFIG_DEV_MGMT secret was missing — see
+# finding-2026-05-16-gate-a-cell2-soaks-multilayer-blocker.md). Instead, each
+# soak provisions an ephemeral drill prod-identical 4-cluster stack
+# (infra/pulumi-drill/), runs the soak, then ALWAYS tears down + validates.
 #
-# Stage 1: 1 synthetic tenant pinned to cell-2; 1h probe soak.
-# Stage 2: 10% dev tenants (>=1) on cell-2; 24h soak with EB+5xx checks.
+# Stage 1: provision drill → 1h synthetic soak → teardown (~95min, ~$0.51/run)
+# Stage 2: provision drill → 24h soak → teardown (~25.5h, ~$7.84/run)
 #
-# Pre-conditions (enforced by stages' --dry-run preflight):
-#   - cell-2 ClusterCredential connected
-#   - cells.status='active' for cell-2
-#   - loopzero_cell_discovery_count >= 2
+# EC-01 fix (T3.4.bis): Stage 2 sets expires-in=26h via Pulumi config so the
+# auto-destroy watchdog (T4.1) does NOT kill the drill stack mid-soak. Default
+# 8h (used by Stage 1) is safe for shorter runs. 48h ceiling enforced in
+# infra/pulumi-drill/src/index.ts:71.
+#
+# Pre-conditions (T0.1 governance ratification + iter 1 engineering):
+#   - MEET-ASYNC-AMENDMENT-2026-05-16-001 ratified by sponsor
+#   - DRILL_DO_TOKEN + DRILL_PULUMI_TOKEN + DRILL_CF_TOKEN secrets configured
+#   - infra/pulumi-drill/ provisions 4 clusters (T1.1)
+#   - drill-mint-jwt.sh + bootstrap-cell-*-cc-drill.sh present (T2.2 + T2.3)
+#   - drill-teardown-validator.sh present (T4.1.bis — doctl fallback)
 
-name: cell-2 ADR canary soaks
+name: cell-2 ADR canary soaks (drill prod-identical)
 
 on:
   schedule:
@@ -31,6 +39,11 @@ on:
           - stage1
           - stage2
           - both
+      skip_teardown:
+        description: 'Leave drill stack provisioned for manual inspection (COST WARNING)'
+        required: false
+        type: boolean
+        default: false
 
 concurrency:
   group: cell2-soaks-${{ github.ref }}
@@ -40,34 +53,99 @@ permissions:
   contents: read
   issues: write  # for auto-issue creation on failure
 
+env:
+  # T3.4.bis (EC-01 fix): default 8h covers Stage 1 + ad-hoc; Stage 2 overrides
+  # via its own env block to 26h (covers 24h soak + provision + buffer).
+  DRILL_EXPIRES_IN_HOURS: "8"
+
 jobs:
   stage1:
-    name: Stage 1 (1h synthetic soak)
+    name: Stage 1 (provision + 1h synthetic soak + teardown)
     if: ${{ github.event_name == 'schedule' || inputs.stage == 'stage1' || inputs.stage == 'both' }}
     runs-on: ubuntu-latest
-    timeout-minutes: 75  # 1h soak + 15min preflight + cleanup buffer
+    timeout-minutes: 180  # 25min provision + 60min soak + 30min teardown + buffer
     steps:
       - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
-      - name: Configure kubectl + loopzero CLI
+
+      - name: Setup tools
         run: |
-          echo "${{ secrets.KUBECONFIG_DEV_MGMT }}" > /tmp/kubeconfig
-          export KUBECONFIG=/tmp/kubeconfig
-          kubectl cluster-info
-      - name: Stage 1 preflight (dry-run)
+          # pulumi, doctl, kubectl, jq already on ubuntu-latest runner
+          curl -fsSL https://get.pulumi.com | sh
+          echo "$HOME/.pulumi/bin" >> $GITHUB_PATH
+          cd infra/pulumi-drill && npm ci
+
+      - name: Provision drill stack (4 clusters, ~25min)
+        id: provision
+        env:
+          PULUMI_ACCESS_TOKEN: ${{ secrets.DRILL_PULUMI_TOKEN }}
+          DIGITALOCEAN_TOKEN: ${{ secrets.DRILL_DO_TOKEN }}
+          CLOUDFLARE_API_TOKEN: ${{ secrets.DRILL_CF_TOKEN }}
+          PULUMI_CONFIG_PASSPHRASE: ${{ secrets.DRILL_PULUMI_PASSPHRASE }}
         run: |
-          KUBECONFIG=/tmp/kubeconfig \
-          LOOPZERO_API_URL="${{ secrets.LOOPZERO_API_URL_DEV }}" \
-          PROM_URL="${{ secrets.PROM_URL_DEV }}" \
-            bash infra/tests/parity/cell2-canary-stage1.sh --dry-run
-      - name: Stage 1 LIVE (1h soak)
+          cd infra/pulumi-drill
+          pulumi stack select drill --create
+          # Stage 1 uses default 8h expires-at (covers 1h soak + provision)
+          pulumi config set loopzero-drill:expiresInHours "$DRILL_EXPIRES_IN_HOURS"
+          pulumi up --stack drill --yes --skip-preview
+          # Export drill mgmt kubeconfig + API endpoint for soak step
+          pulumi stack output --json | jq -r '.outputs.mgmtCluster.kubeconfig' > /tmp/drill-mgmt-kc.yaml
+          chmod 600 /tmp/drill-mgmt-kc.yaml
+          API_URL="https://api.loopzero-drill.example"
+          echo "api_url=$API_URL" >> "$GITHUB_OUTPUT"
+
+      - name: Mint JWT for soak (T2.2)
+        id: jwt
+        env:
+          DRILL_KUBECONFIG: /tmp/drill-mgmt-kc.yaml
         run: |
-          export KUBECONFIG=/tmp/kubeconfig
-          export LOOPZERO_API_URL="${{ secrets.LOOPZERO_API_URL_DEV }}"
-          export PROM_URL="${{ secrets.PROM_URL_DEV }}"
-          export LOOPZERO_SERVICE_AUTH="${{ secrets.LOOPZERO_ADMIN_SERVICE_AUTH_DEV }}"
-          export SYNTH_TENANT_ID="tn-canary-stage1-${GITHUB_RUN_ID}"
-          # Note: full ADR-compliant duration. Workflow timeout caps at 75min.
-          bash infra/tests/parity/cell2-canary-stage1.sh
+          JWT=$(bash infra/scripts/drill-mint-jwt.sh)
+          echo "::add-mask::$JWT"
+          echo "jwt=$JWT" >> "$GITHUB_OUTPUT"
+
+      - name: Bootstrap cell wiring (T2.3 — D3 cell mapping)
+        env:
+          DRILL_KUBECONFIG: /tmp/drill-mgmt-kc.yaml
+        run: |
+          bash infra/scripts/bootstrap-cell-default-cc-drill.sh
+          bash infra/scripts/bootstrap-cell-1-cc-drill.sh
+          bash infra/scripts/bootstrap-cell-2-cc-drill.sh
+
+      - name: Stage 1 LIVE (1h synthetic soak)
+        env:
+          KUBECONFIG: /tmp/drill-mgmt-kc.yaml
+          LOOPZERO_DRILL_API_URL: ${{ steps.provision.outputs.api_url }}
+          LOOPZERO_TOKEN: ${{ steps.jwt.outputs.jwt }}
+          SYNTH_TENANT_ID: tn-canary-stage1-${{ github.run_id }}
+        run: |
+          # cell2-canary-stage1.sh adapted to use LOOPZERO_DRILL_API_URL precedence
+          # (script already supports it via existing LOOPZERO_API_URL fallback chain).
+          LOOPZERO_API_URL="$LOOPZERO_DRILL_API_URL" \
+            bash infra/tests/parity/cell2-canary-stage1.sh
+
+      - name: Teardown drill stack (MANDATORY)
+        if: ${{ always() && !inputs.skip_teardown }}
+        env:
+          PULUMI_ACCESS_TOKEN: ${{ secrets.DRILL_PULUMI_TOKEN }}
+          DIGITALOCEAN_TOKEN: ${{ secrets.DRILL_DO_TOKEN }}
+          CLOUDFLARE_API_TOKEN: ${{ secrets.DRILL_CF_TOKEN }}
+          PULUMI_CONFIG_PASSPHRASE: ${{ secrets.DRILL_PULUMI_PASSPHRASE }}
+        run: |
+          cd infra/pulumi-drill
+          pulumi destroy --stack drill --yes --skip-preview || true
+
+      - name: Validate teardown (T4.1.bis doctl fallback)
+        if: ${{ always() && !inputs.skip_teardown }}
+        env:
+          DIGITALOCEAN_TOKEN: ${{ secrets.DRILL_DO_TOKEN }}
+        run: |
+          # Scans DO account for resources tagged loopzero-drill and force-deletes
+          # any leftover from partial Pulumi destroy (EC-05 fix).
+          if [ -x infra/scripts/drill-teardown-validator.sh ]; then
+            bash infra/scripts/drill-teardown-validator.sh
+          else
+            echo "::warning::drill-teardown-validator.sh not yet implemented (T4.1.bis pending)"
+          fi
+
       - name: Open issue on failure
         if: failure()
         uses: actions/github-script@60a0d83039c74a4aee543508d2ffcb1c3799cdea # v7.0.1
@@ -76,39 +154,77 @@ jobs:
             github.rest.issues.create({
               owner: context.repo.owner,
               repo: context.repo.repo,
-              title: `[CRITICAL] cell-2 Stage 1 ADR soak FAILED — run ${context.runId}`,
-              body: `Stage 1 (1h synthetic) canary failed in run ${context.runId}.\n\nLogs: ${context.serverUrl}/${context.repo.owner}/${context.repo.repo}/actions/runs/${context.runId}\n\nTriage:\n- Verify ClusterCredential cell-2 connected\n- Verify loopzero_cell_discovery_count >= 2\n- See cell2-activation-plan T1.2 halt criteria.`,
-              labels: ['priority/critical', 'area/multi-cell', 'cell-2-canary']
+              title: `[CRITICAL] cell-2 Stage 1 drill soak FAILED — run ${context.runId}`,
+              body: `Stage 1 (provision drill + 1h synthetic + teardown) failed in run ${context.runId}.\n\nLogs: ${context.serverUrl}/${context.repo.owner}/${context.repo.repo}/actions/runs/${context.runId}\n\nTriage:\n- Verify DRILL_* secrets configured\n- Verify pulumi-drill stack provisions 4 clusters (T1.1)\n- Verify drill-teardown ran (cost burn risk)\n- See plan 2026-05-16-drill-prod-identical-multicluster-plan.md`,
+              labels: ['priority/critical', 'area/multi-cell', 'cell-2-canary', 'drill']
             });
 
   stage2:
-    name: Stage 2 (24h, 10% dev tenants)
+    name: Stage 2 (provision + 24h soak + teardown, ~$7.84/run)
     needs: stage1
     if: ${{ github.event_name == 'schedule' || inputs.stage == 'stage2' || inputs.stage == 'both' }}
     runs-on: ubuntu-latest
-    timeout-minutes: 1500  # 25h cap (24h soak + 1h overhead)
+    timeout-minutes: 1620  # 27h cap (25min provision + 24h soak + 30min teardown + buffer)
+    env:
+      # T3.4.bis (EC-01 fix): Stage 2 OVERRIDES default 8h to 26h to keep
+      # drill stack alive through the full 24h soak. 48h ceiling enforced
+      # in src/index.ts. Watchdog cron (T4.1) respects per-stack expires-at.
+      DRILL_EXPIRES_IN_HOURS: "26"
     steps:
       - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
-      - name: Configure kubectl + loopzero CLI
+
+      - name: Setup tools
         run: |
-          echo "${{ secrets.KUBECONFIG_DEV_MGMT }}" > /tmp/kubeconfig
-          export KUBECONFIG=/tmp/kubeconfig
-          kubectl cluster-info
-      - name: Stage 2 preflight (dry-run)
+          curl -fsSL https://get.pulumi.com | sh
+          echo "$HOME/.pulumi/bin" >> $GITHUB_PATH
+          cd infra/pulumi-drill && npm ci
+
+      - name: Provision drill stack with 26h expires-at (EC-01 fix)
+        id: provision
+        env:
+          PULUMI_ACCESS_TOKEN: ${{ secrets.DRILL_PULUMI_TOKEN }}
+          DIGITALOCEAN_TOKEN: ${{ secrets.DRILL_DO_TOKEN }}
+          CLOUDFLARE_API_TOKEN: ${{ secrets.DRILL_CF_TOKEN }}
+          PULUMI_CONFIG_PASSPHRASE: ${{ secrets.DRILL_PULUMI_PASSPHRASE }}
         run: |
-          KUBECONFIG=/tmp/kubeconfig \
-          LOOPZERO_API_URL="${{ secrets.LOOPZERO_API_URL_DEV }}" \
-          PROM_URL="${{ secrets.PROM_URL_DEV }}" \
-            bash infra/tests/parity/cell2-canary-stage2.sh --dry-run
+          cd infra/pulumi-drill
+          pulumi stack select drill --create
+          # EC-01: 26h covers 24h soak + 25min provision + 30min teardown + buffer.
+          pulumi config set loopzero-drill:expiresInHours "$DRILL_EXPIRES_IN_HOURS"
+          pulumi up --stack drill --yes --skip-preview
+          pulumi stack output --json | jq -r '.outputs.mgmtCluster.kubeconfig' > /tmp/drill-mgmt-kc.yaml
+          chmod 600 /tmp/drill-mgmt-kc.yaml
+          API_URL="https://api.loopzero-drill.example"
+          echo "api_url=$API_URL" >> "$GITHUB_OUTPUT"
+
+      - name: Mint JWT for soak
+        id: jwt
+        env:
+          DRILL_KUBECONFIG: /tmp/drill-mgmt-kc.yaml
+        run: |
+          JWT=$(bash infra/scripts/drill-mint-jwt.sh)
+          echo "::add-mask::$JWT"
+          echo "jwt=$JWT" >> "$GITHUB_OUTPUT"
+
+      - name: Bootstrap cell wiring
+        env:
+          DRILL_KUBECONFIG: /tmp/drill-mgmt-kc.yaml
+        run: |
+          bash infra/scripts/bootstrap-cell-default-cc-drill.sh
+          bash infra/scripts/bootstrap-cell-1-cc-drill.sh
+          bash infra/scripts/bootstrap-cell-2-cc-drill.sh
+
       - name: Stage 2 LIVE (24h soak)
+        env:
+          KUBECONFIG: /tmp/drill-mgmt-kc.yaml
+          LOOPZERO_DRILL_API_URL: ${{ steps.provision.outputs.api_url }}
+          LOOPZERO_TOKEN: ${{ steps.jwt.outputs.jwt }}
         run: |
-          export KUBECONFIG=/tmp/kubeconfig
-          export LOOPZERO_API_URL="${{ secrets.LOOPZERO_API_URL_DEV }}"
-          export PROM_URL="${{ secrets.PROM_URL_DEV }}"
-          export LOOPZERO_SERVICE_AUTH="${{ secrets.LOOPZERO_ADMIN_SERVICE_AUTH_DEV }}"
           # Full ADR-compliant 24h soak with 10% sample.
+          LOOPZERO_API_URL="$LOOPZERO_DRILL_API_URL" \
           SOAK_SECONDS=86400 PERCENT=10 \
             bash infra/tests/parity/cell2-canary-stage2.sh
+
       - name: Append closure section to runbook (on success)
         if: success()
         env:
@@ -120,11 +236,35 @@ jobs:
             echo ""
             echo "## T5.7 stage 2 closure (CI run ${RUN_ID}, ${DATE})"
             echo ""
-            echo "Mode: ADR-compliant 24h soak via .github/workflows/cell2-soaks.yml."
+            echo "Mode: drill prod-identical 4-cluster 24h soak via .github/workflows/cell2-soaks.yml."
+            echo "Expires-at: 26h (EC-01 fix per plan 2026-05-16 T3.4.bis)."
             echo "Sample: 10% of cell-1 dev tenants."
             echo "Result: GREEN — script exit 0."
             echo "Run logs: ${REPO_URL}/actions/runs/${RUN_ID}"
           } >> /tmp/cell2-stage2-closure.log
+
+      - name: Teardown drill stack (MANDATORY — Stage 2 cost burn is highest)
+        if: ${{ always() && !inputs.skip_teardown }}
+        env:
+          PULUMI_ACCESS_TOKEN: ${{ secrets.DRILL_PULUMI_TOKEN }}
+          DIGITALOCEAN_TOKEN: ${{ secrets.DRILL_DO_TOKEN }}
+          CLOUDFLARE_API_TOKEN: ${{ secrets.DRILL_CF_TOKEN }}
+          PULUMI_CONFIG_PASSPHRASE: ${{ secrets.DRILL_PULUMI_PASSPHRASE }}
+        run: |
+          cd infra/pulumi-drill
+          pulumi destroy --stack drill --yes --skip-preview || true
+
+      - name: Validate teardown (T4.1.bis doctl fallback)
+        if: ${{ always() && !inputs.skip_teardown }}
+        env:
+          DIGITALOCEAN_TOKEN: ${{ secrets.DRILL_DO_TOKEN }}
+        run: |
+          if [ -x infra/scripts/drill-teardown-validator.sh ]; then
+            bash infra/scripts/drill-teardown-validator.sh
+          else
+            echo "::warning::drill-teardown-validator.sh not yet implemented (T4.1.bis pending)"
+          fi
+
       - name: Open issue on failure
         if: failure()
         uses: actions/github-script@60a0d83039c74a4aee543508d2ffcb1c3799cdea # v7.0.1
@@ -133,7 +273,7 @@ jobs:
             github.rest.issues.create({
               owner: context.repo.owner,
               repo: context.repo.repo,
-              title: `[CRITICAL] cell-2 Stage 2 ADR 24h soak FAILED — run ${context.runId}`,
-              body: `Stage 2 (24h, 10% dev tenants) canary failed in run ${context.runId}.\n\nLogs: ${context.serverUrl}/${context.repo.owner}/${context.repo.repo}/actions/runs/${context.runId}\n\nTriage:\n- HALT remaining stages; production canary BLOCKED until RCA action items shipped.`,
-              labels: ['priority/critical', 'area/multi-cell', 'cell-2-canary']
+              title: `[CRITICAL] cell-2 Stage 2 drill 24h soak FAILED — run ${context.runId}`,
+              body: `Stage 2 (provision drill + 24h soak + teardown) failed in run ${context.runId}.\n\nLogs: ${context.serverUrl}/${context.repo.owner}/${context.repo.repo}/actions/runs/${context.runId}\n\nTriage:\n- HALT remaining stages; production canary BLOCKED until RCA action items shipped.\n- IF drill stack still up: run pulumi destroy --stack drill IMMEDIATELY (cost burn ~$0.32/hr).\n- Verify drill-teardown-validator.sh found zero residuals.\n- See plan 2026-05-16-drill-prod-identical-multicluster-plan.md`,
+              labels: ['priority/critical', 'area/multi-cell', 'cell-2-canary', 'drill']
             });
