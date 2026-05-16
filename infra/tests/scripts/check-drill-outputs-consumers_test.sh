@@ -194,6 +194,49 @@ EOF
 echo "Running hermetic tests for check-drill-outputs-consumers.sh..."
 echo ""
 
+test_catches_multiline_jq_cluster_concat() {
+  # Iter 5 discovery: taskfiles/drill.yml had multi-line jq with `" + .mgmtCluster.endpoint`
+  # pattern that escaped the v1 grep (because .outputs. was on a separate line).
+  # New pattern catches the bare jq field concatenation form.
+  local tmpdir="$1"
+  cd "$tmpdir"
+  cp "$SCRIPT" .
+  mkdir -p infra/pulumi-drill scripts
+  cat > scripts/fake-jq-concat.yml <<EOF
+tasks:
+  legacy:
+    cmds:
+      - |
+        npx pulumi stack output --json | jq -r '
+          .outputs |
+          "  mgmt: " + .mgmtCluster.endpoint,
+          "  build: " + .buildCluster.endpoint
+        '
+EOF
+  if SCAN_ROOT="$tmpdir" "$tmpdir/check-drill-outputs-consumers.sh" > /dev/null 2>&1; then
+    return 1  # should FAIL (exit 1) but didn't catch jq concat
+  else
+    return 0  # correctly detected
+  fi
+}
+
+test_catches_multiline_jq_pg_concat() {
+  # `" + .pg.host` jq concat pattern
+  local tmpdir="$1"
+  cd "$tmpdir"
+  cp "$SCRIPT" .
+  mkdir -p infra/pulumi-drill scripts
+  cat > scripts/fake-pg-jq.sh <<EOF
+#!/bin/bash
+PG=\$(npx pulumi stack output --json | jq -r '"  pg: " + .pg.host')
+EOF
+  if SCAN_ROOT="$tmpdir" "$tmpdir/check-drill-outputs-consumers.sh" > /dev/null 2>&1; then
+    return 1
+  else
+    return 0
+  fi
+}
+
 run_test "no_findings_clean_repo" test_no_findings_clean_repo
 run_test "catches_legacy_pulumi_stack_output" test_catches_legacy_pulumi_stack_output
 run_test "catches_legacy_clusterKubeconfig" test_catches_legacy_clusterKubeconfig
@@ -202,6 +245,8 @@ run_test "excludes_self_script" test_excludes_self_script
 run_test "catches_v1_nested_mgmtCluster_kubeconfig" test_catches_v1_nested_mgmtCluster_kubeconfig
 run_test "catches_v1_nested_pg_host" test_catches_v1_nested_pg_host
 run_test "accepts_v2_named_exports" test_accepts_v2_named_exports
+run_test "catches_multiline_jq_cluster_concat" test_catches_multiline_jq_cluster_concat
+run_test "catches_multiline_jq_pg_concat" test_catches_multiline_jq_pg_concat
 
 echo ""
 echo "Total: $TESTS_RUN | Passed: $TESTS_PASSED | Failed: $TESTS_FAILED"

@@ -48,15 +48,12 @@ tasks:
         npx pulumi up --stack drill --yes --skip-preview
         echo ""
         echo "Drill stack provisioned (4 clusters). Expires in ${EXPIRES_IN}h."
-        echo "Per-cluster kubeconfigs:"
-        npx pulumi stack output --json | jq -r '
-          .outputs |
-          "  mgmt:      " + .mgmtCluster.endpoint,
-          "  build:     " + .buildCluster.endpoint,
-          "  runtime:   " + .runtimeCluster.endpoint,
-          "  runtime-2: " + .runtimeCluster2.endpoint,
-          "  pg:        " + .pg.host
-        '
+        echo "Per-cluster endpoints (v2 named exports per L2-unlock T1.2 D1):"
+        echo "  mgmt:      $(npx pulumi stack output --stack drill mgmtClusterEndpoint 2>/dev/null)"
+        echo "  build:     $(npx pulumi stack output --stack drill buildClusterEndpoint 2>/dev/null)"
+        echo "  runtime:   $(npx pulumi stack output --stack drill runtimeClusterEndpoint 2>/dev/null)"
+        echo "  runtime-2: $(npx pulumi stack output --stack drill runtimeCluster2Endpoint 2>/dev/null)"
+        echo "  pg:        $(npx pulumi stack output --stack drill pgHost 2>/dev/null)"
         echo ""
         echo "WARNING: drill stack is ACTIVE (~\$0.32/hr). Run 'task drill:down' when finished."
         echo "Watchdog will auto-destroy at: $(date -u -d "+${EXPIRES_IN} hours" +%Y-%m-%dT%H:%M:%SZ)"
@@ -107,10 +104,37 @@ tasks:
       PULUMI_ACCESS_TOKEN: '{{.PULUMI_ACCESS_TOKEN}}'
       PULUMI_CONFIG_PASSPHRASE: '{{.PULUMI_CONFIG_PASSPHRASE}}'
 
+  preflight:
+    desc: "Operator pre-flight gate (5 exit codes; required before drill:l2-scale)"
+    summary: |
+      Consolidates 4 pre-flight checks into 1 command:
+        1. D7' credentials (4 tokens: DO + Pulumi + CF + passphrase)
+        2. 5 L2-unlock scripts present + executable
+        3. Advisory mode active (no credentials collision)
+        4. No leftover drill stack from previous session
+
+      Exit codes:
+        0 = all PASS, proceed with task drill:l2-scale
+        1 = missing credentials
+        2 = missing scripts
+        3 = isolation/collision detected
+        4 = leftover drill stack (run task drill:down first)
+        5 = argument error
+
+      For machine-readable output: bash infra/scripts/drill-preflight.sh --json
+    cmds:
+      - bash infra/scripts/drill-preflight.sh
+    env:
+      DIGITALOCEAN_TOKEN: '{{.DIGITALOCEAN_TOKEN}}'
+      PULUMI_ACCESS_TOKEN: '{{.PULUMI_ACCESS_TOKEN}}'
+      CLOUDFLARE_API_TOKEN: '{{.CLOUDFLARE_API_TOKEN}}'
+      PULUMI_CONFIG_PASSPHRASE: '{{.PULUMI_CONFIG_PASSPHRASE}}'
+
   l2-scale:
     desc: "Full L2 scale test cycle: up + 50-concurrent test + down (~$0.35/run, ~65min)"
     summary: |
       End-to-end drill L2 test:
+        0. Pre-flight gate (preconditions — drill:preflight automatic)
         1. Provision drill stack (4 clusters, ~25min)
         2. Mint JWT (drill-mint-jwt.sh)
         3. Bootstrap cell wiring (3 cells per D3)
@@ -118,6 +142,9 @@ tasks:
         5. Mandatory teardown + validator
 
       Pass criteria: success >= 90%, p95 <= 10min.
+    preconditions:
+      - sh: bash infra/scripts/drill-preflight.sh
+        msg: "Pre-flight gate failed — see exit code + run 'task drill:preflight' for diagnosis"
     cmds:
       - |
         set -euo pipefail

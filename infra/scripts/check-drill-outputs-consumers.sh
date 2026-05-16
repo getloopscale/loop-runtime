@@ -69,6 +69,15 @@ LEGACY_PATTERNS=(
   '\.outputs\.buckets\.'                                         # v1 .outputs.buckets.builds etc.
   '\.outputs\.zone\.'                                            # v1 .outputs.zone.id etc.
   '\.outputs\.vpc\.'                                             # v1 .outputs.vpc.id etc.
+  # Multi-line jq escape (iter 5 bug discovery in taskfiles/drill.yml):
+  # `.outputs |` followed by bare field access (.mgmtCluster.endpoint) on next line.
+  # We can't reliably detect cross-line patterns with grep, so we catch the bare
+  # field access form `+ \.<cluster>Cluster<digit>?\.endpoint|name|kubeconfig|id`
+  # that appears in jq concatenation context. False-positive risk LOW because
+  # legitimate code uses pulumi stack output mgmtClusterEndpoint (v2 named) not
+  # jq nested access.
+  '"\s*\+\s*\.(mgmt|build|runtime)Cluster2?\.'                  # `" + .mgmtCluster.X` jq concat
+  '"\s*\+\s*\.pg\.(host|port|uri|database)'                     # `" + .pg.host` jq concat
 )
 
 # Directories to exclude from scan (legacy source allowed to retain patterns
