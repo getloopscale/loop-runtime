@@ -1,0 +1,150 @@
+#!/usr/bin/env bash
+# SPDX-License-Identifier: Apache-2.0
+# Copyright 2025-2026 The LoopZero Authors
+#
+# Plan 2026-05-16 T4.3 — Drill cost report helper.
+#
+# Computes drill run cost from provision/teardown timestamps + current DO
+# pricing per Pulumi.drill.yaml sizing. Emits markdown report section
+# consumable by the `/drill-test` skill output template.
+#
+# Usage:
+#   bash infra/scripts/drill-cost-report.sh \
+#     --start 2026-05-16T12:00:00Z \
+#     --end   2026-05-16T13:30:00Z \
+#     [--output /tmp/drill-cost-report.md]
+#
+# Or via Pulumi state (auto-detect):
+#   bash infra/scripts/drill-cost-report.sh --auto
+#
+# Output: markdown to stdout (or --output file), exit 0.
+#
+# Pricing source (DO public, 2026-05-16):
+#   mgmt cluster   (s-4vcpu-8gb-amd × 3 nodes): $0.0714/hr/node × 3 = $0.214/hr
+#   build cluster  (s-2vcpu-4gb × 2 nodes):     $0.0357/hr/node × 2 = $0.071/hr
+#   runtime cluster (s-2vcpu-4gb × 2 nodes):    $0.0357/hr/node × 2 = $0.071/hr
+#   runtime-2 cluster (s-2vcpu-4gb × 2 nodes):  $0.0357/hr/node × 2 = $0.071/hr
+#   managed PG (db-s-2vcpu-4gb):                $0.125/hr
+#   Spaces (3 buckets, $5/mo baseline):         $0.007/hr negligible
+#   ─────────────────────────────────────────────────────────────────
+#   Total stack active:                         $0.552/hr (revised ceiling)
+#
+# Note: revised from $0.32/hr earlier estimate after including all 4
+# clusters + PG ephemeral hourly. $0.552/hr is upper bound; actual may
+# be lower due to DO billing rounding + autoscaling (drill runs at min
+# nodes, doesn't scale up).
+
+set -euo pipefail
+
+# --- Constants (DO pricing 2026-05-16) ---
+RATE_MGMT_HR=0.214       # 3 × s-4vcpu-8gb-amd
+RATE_BUILD_HR=0.071      # 2 × s-2vcpu-4gb
+RATE_RUNTIME_HR=0.071    # 2 × s-2vcpu-4gb
+RATE_RUNTIME2_HR=0.071   # 2 × s-2vcpu-4gb
+RATE_PG_HR=0.125         # db-s-2vcpu-4gb
+RATE_TOTAL_HR=0.552
+
+START_TS=""
+END_TS=""
+OUTPUT=""
+AUTO=0
+
+log() { printf '[drill-cost-report] %s\n' "$*" >&2; }
+
+while [[ $# -gt 0 ]]; do
+  case "$1" in
+    --start) START_TS="$2"; shift 2 ;;
+    --end)   END_TS="$2"; shift 2 ;;
+    --output) OUTPUT="$2"; shift 2 ;;
+    --auto)  AUTO=1; shift ;;
+    --help|-h)
+      echo "Usage: $0 --start <ISO> --end <ISO> [--output file] | --auto"
+      exit 0
+      ;;
+    *) log "Unknown arg: $1"; exit 1 ;;
+  esac
+done
+
+if [[ "$AUTO" -eq 1 ]]; then
+  # Read Pulumi stack output for expires-at + creation timestamps.
+  # Fallback: use mtime of Pulumi.drill.yaml as proxy for start.
+  if command -v npx >/dev/null 2>&1 && [[ -d infra/pulumi-drill ]]; then
+    PULUMI_OUT=$(cd infra/pulumi-drill && npx pulumi stack output --json --stack drill 2>/dev/null || echo '{}')
+    EXPIRES_AT=$(echo "$PULUMI_OUT" | python3 -c 'import sys,json; print(json.load(sys.stdin).get("outputs",{}).get("meta",{}).get("expiresAtIso",""))' 2>/dev/null || true)
+    EXPIRES_IN=$(echo "$PULUMI_OUT" | python3 -c 'import sys,json; print(json.load(sys.stdin).get("outputs",{}).get("meta",{}).get("expiresInHours",0))' 2>/dev/null || echo 0)
+    if [[ -n "$EXPIRES_AT" && "$EXPIRES_IN" -gt 0 ]]; then
+      END_TS="$EXPIRES_AT"
+      # start = end - expiresInHours
+      START_EPOCH=$(($(date -u -d "$EXPIRES_AT" +%s) - EXPIRES_IN * 3600))
+      START_TS=$(date -u -d "@$START_EPOCH" +%Y-%m-%dT%H:%M:%SZ)
+      log "Auto-detected drill window: $START_TS → $END_TS ($EXPIRES_IN h)"
+    else
+      log "ERROR: Pulumi outputs missing expiresAtIso — cannot auto-detect"
+      exit 1
+    fi
+  else
+    log "ERROR: --auto requires npx + infra/pulumi-drill dir"
+    exit 1
+  fi
+fi
+
+if [[ -z "$START_TS" || -z "$END_TS" ]]; then
+  log "ERROR: --start AND --end required (or --auto)"
+  exit 1
+fi
+
+# --- Compute duration ---
+START_EPOCH=$(date -u -d "$START_TS" +%s 2>/dev/null || echo 0)
+END_EPOCH=$(date -u -d "$END_TS" +%s 2>/dev/null || echo 0)
+if [[ "$START_EPOCH" -eq 0 || "$END_EPOCH" -eq 0 ]]; then
+  log "ERROR: invalid ISO timestamp(s) — START=$START_TS END=$END_TS"
+  exit 1
+fi
+if [[ "$END_EPOCH" -le "$START_EPOCH" ]]; then
+  log "ERROR: END_TS must be after START_TS"
+  exit 1
+fi
+
+DURATION_SECONDS=$((END_EPOCH - START_EPOCH))
+DURATION_HOURS=$(python3 -c "print(f'{$DURATION_SECONDS / 3600:.2f}')")
+DURATION_MIN=$((DURATION_SECONDS / 60))
+
+# --- Compute cost ---
+COST_MGMT=$(python3 -c "print(f'{$RATE_MGMT_HR * $DURATION_HOURS:.2f}')")
+COST_BUILD=$(python3 -c "print(f'{$RATE_BUILD_HR * $DURATION_HOURS:.2f}')")
+COST_RUNTIME=$(python3 -c "print(f'{$RATE_RUNTIME_HR * $DURATION_HOURS:.2f}')")
+COST_RUNTIME2=$(python3 -c "print(f'{$RATE_RUNTIME2_HR * $DURATION_HOURS:.2f}')")
+COST_PG=$(python3 -c "print(f'{$RATE_PG_HR * $DURATION_HOURS:.2f}')")
+COST_TOTAL=$(python3 -c "print(f'{$RATE_TOTAL_HR * $DURATION_HOURS:.2f}')")
+
+# --- Emit markdown report ---
+REPORT=$(cat <<EOF
+## Drill Run Cost Report
+
+**Window:** \`$START_TS\` → \`$END_TS\`  ($DURATION_MIN min / $DURATION_HOURS h)
+
+| Resource | Rate (\$/hr) | Cost |
+|---|---|---|
+| mgmt cluster (3 × s-4vcpu-8gb-amd) | \$$RATE_MGMT_HR | \$$COST_MGMT |
+| build cluster (2 × s-2vcpu-4gb) | \$$RATE_BUILD_HR | \$$COST_BUILD |
+| runtime cluster (2 × s-2vcpu-4gb) | \$$RATE_RUNTIME_HR | \$$COST_RUNTIME |
+| runtime-2 cluster (2 × s-2vcpu-4gb) | \$$RATE_RUNTIME2_HR | \$$COST_RUNTIME2 |
+| managed PG (db-s-2vcpu-4gb) | \$$RATE_PG_HR | \$$COST_PG |
+| Spaces (3 buckets, baseline) | ~\$0.007 | included |
+| **Total** | **\$$RATE_TOTAL_HR/hr** | **\$$COST_TOTAL** |
+
+**Pricing source:** DO public catalog, 2026-05-16.
+
+**Notes:**
+- Spaces buckets billed at \$5/mo baseline; ephemeral run cost negligible.
+- Plan 2026-05-16 budget envelope: ~\$2,000-3,000/yr cadence completa
+  (52 weekly × Stage 1+L2 + 52 weekly × Stage 2 + 4 quarterly DR + L3/L4 ad-hoc).
+EOF
+)
+
+if [[ -n "$OUTPUT" ]]; then
+  printf '%s\n' "$REPORT" > "$OUTPUT"
+  log "Report written: $OUTPUT (\$$COST_TOTAL total)"
+else
+  printf '%s\n' "$REPORT"
+fi
