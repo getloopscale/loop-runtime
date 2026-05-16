@@ -87,14 +87,14 @@ RESIDUAL_TOTAL=0
 RESIDUAL_DELETED=0
 RESIDUAL_FAILED=0
 
-declare -a TYPES=(kubernetes-clusters databases spaces vpcs projects)
-declare -A DOCTL_PATHS=(
-  [kubernetes-clusters]="kubernetes cluster"
-  [databases]="databases"
-  [spaces]=""           # Spaces uses different path
-  [vpcs]="vpcs"
-  [projects]="projects"
-)
+# Resource types validated below (kept as comments for documentation;
+# original arrays SC2034-unused per shellcheck — the per-type loops were
+# inlined for clarity during T4.1.bis development).
+# - kubernetes-clusters (doctl kubernetes cluster ...)
+# - databases (doctl databases ...)
+# - spaces (s3-compatible API, not doctl)
+# - vpcs (doctl vpcs ...) — handled with retry-backoff per T3.2 D4
+# - projects (doctl projects ...)
 
 # Kubernetes clusters
 log "  - Listing DOKS clusters..."
@@ -117,7 +117,7 @@ if [[ -n "$DOKS_DRILL" ]]; then
     ID=$(echo "$line" | awk '{print $1}')
     NAME=$(echo "$line" | awk '{print $2}')
     log "  Force-deleting DOKS cluster $NAME ($ID)..."
-    if doctl kubernetes cluster delete "$ID" --force --dangerous 2>&1 >/dev/null; then
+    if doctl kubernetes cluster delete "$ID" --force --dangerous >/dev/null 2>&1; then
       RESIDUAL_DELETED=$((RESIDUAL_DELETED + 1))
       echo "- Force-deleted DOKS $NAME ($ID)" >> "$AUDIT_FILE"
     else
@@ -147,7 +147,7 @@ if [[ -n "$DB_DRILL" ]]; then
     ID=$(echo "$line" | awk '{print $1}')
     NAME=$(echo "$line" | awk '{print $2}')
     log "  Force-deleting managed DB $NAME ($ID)..."
-    if doctl databases delete "$ID" --force 2>&1 >/dev/null; then
+    if doctl databases delete "$ID" --force >/dev/null 2>&1; then
       RESIDUAL_DELETED=$((RESIDUAL_DELETED + 1))
       echo "- Force-deleted managed DB $NAME ($ID)" >> "$AUDIT_FILE"
     else
@@ -203,7 +203,7 @@ if [[ -n "$VPC_DRILL" ]]; then
           sleep "$delay"
         fi
       fi
-      if doctl vpcs delete "$ID" --force 2>&1 >/dev/null; then
+      if doctl vpcs delete "$ID" --force >/dev/null 2>&1; then
         VPC_DELETED=true
         break
       fi
