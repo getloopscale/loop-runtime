@@ -1,0 +1,126 @@
+# drill-hermetic-tests.yml — L2-unlock plan engineering-side regression gate.
+#
+# Plan: 2026-05-16-drill-l2-unlock-plan.md (v1.1 ratified MEET-002).
+#
+# Runs ALL 9 hermetic test suites for the drill engineering surface on every
+# PR touching drill code. Catches regressions to the scripts that operator
+# invokes during Phase 4 LIVE drill re-run.
+#
+# Mirrors the pattern from check-no-migrate-force.yml (CORRECTIONS sprint
+# 2026-05-13) — hermetic test gate runs in <3 minutes, fails loud on any
+# regression, blocks merge.
+#
+# Does NOT execute Phase 4 LIVE (that requires DIGITALOCEAN_TOKEN + cost-
+# affecting cloud provisioning). LIVE drill re-run is operator-action per
+# operator-handoff-2026-05-16-drill-l2-phase4.md.
+
+name: drill-hermetic-tests
+
+on:
+  pull_request:
+    paths:
+      - 'infra/scripts/drill-*.sh'
+      - 'infra/scripts/lib/bootstrap-cell-cc-drill-common.sh'
+      - 'infra/scripts/check-drill-outputs-consumers.sh'
+      - 'infra/scripts/run-migrations.sh'
+      - 'infra/tests/scripts/drill-*_test.sh'
+      - 'infra/tests/scripts/bootstrap-drill-cc_test.sh'
+      - 'infra/tests/scripts/check-drill-outputs-consumers_test.sh'
+      - 'infra/tests/scripts/run-migrations_sslmode_test.sh'
+      - 'infra/pulumi-drill/**'
+      - 'taskfiles/drill.yml'
+      - '.github/workflows/drill-hermetic-tests.yml'
+  push:
+    branches:
+      - main
+      - develop
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  drill-hermetic-tests:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+
+      # Install Docker (already present on ubuntu-latest)
+      # Used for shellcheck via koalaman/shellcheck:stable image
+      - name: Verify Docker available
+        run: docker version
+
+      # === Shellcheck warning+ on all 6 drill scripts ===
+      # Pattern from CORRECTIONS sprint 2026-05-13 (memory: tool-unavailability
+      # alternative routes — Docker fallback when shellcheck binary missing).
+      - name: Shellcheck warning+ on drill scripts
+        run: |
+          docker run --rm -v "$(pwd):/mnt" -w /mnt \
+            koalaman/shellcheck:stable -S warning \
+            infra/scripts/drill-state-reset.sh \
+            infra/scripts/drill-helmfile-bootstrap.sh \
+            infra/scripts/drill-cancel-refresh.sh \
+            infra/scripts/drill-evidence-capture.sh \
+            infra/scripts/drill-teardown-validator.sh \
+            infra/scripts/drill-preflight.sh
+
+      # === 9 hermetic test suites for drill engineering surface ===
+      # Each suite is independently hermetic — runs in seconds with PATH-shadow
+      # stubs. Total runtime <60s for entire suite collection.
+
+      - name: T1.2.bis — drill-state-reset hermetic tests
+        run: bash infra/tests/scripts/drill-state-reset_test.sh
+
+      - name: T1.3 — check-drill-outputs-consumers grep audit tests
+        run: bash infra/tests/scripts/check-drill-outputs-consumers_test.sh
+
+      - name: T1.3 — bootstrap-drill-cc (cell wiring) tests
+        run: bash infra/tests/scripts/bootstrap-drill-cc_test.sh
+
+      - name: T1.3 — check-drill-outputs-consumers LIVE repo scan
+        # Confirms zero legacy consumers in current repo state
+        run: bash infra/scripts/check-drill-outputs-consumers.sh
+
+      - name: T2.1 — drill-helmfile-bootstrap hermetic tests
+        run: bash infra/tests/scripts/drill-helmfile-bootstrap_test.sh
+
+      - name: T2.1.bis — run-migrations PG_SSLMODE tests
+        run: bash infra/tests/scripts/run-migrations_sslmode_test.sh
+
+      - name: T3.1 — drill-cancel-refresh hermetic tests
+        run: bash infra/tests/scripts/drill-cancel-refresh_test.sh
+
+      - name: T3.2 — drill-teardown-validator hermetic tests (incl. VPC retry-backoff)
+        run: bash infra/tests/scripts/drill-teardown-validator_test.sh
+
+      - name: T4.7.bis — drill-evidence-capture hermetic tests
+        run: bash infra/tests/scripts/drill-evidence-capture_test.sh
+
+      - name: Operator pre-flight consolidator tests
+        run: bash infra/tests/scripts/drill-preflight_test.sh
+
+      # === Vitest pulumi-drill structure tests ===
+      - name: Setup Node
+        uses: actions/setup-node@1d0ff469b7ec7b3cb9d8673fde0c81c44821de2a # v4.2.0
+        with:
+          node-version: '20'
+          cache: 'npm'
+          cache-dependency-path: 'infra/pulumi-drill/package-lock.json'
+
+      - name: T1.2 — pulumi-drill outputs schema vitest (D1 named exports)
+        working-directory: infra/pulumi-drill
+        run: |
+          npm ci
+          npm test
+
+      # === Summary ===
+      - name: Drill engineering surface validated
+        run: |
+          echo "✓ shellcheck warning+ EXIT=0 (6 scripts)"
+          echo "✓ 9 hermetic test suites PASS (60+ tests)"
+          echo "✓ vitest pulumi-drill structure PASS (48 tests)"
+          echo "✓ LIVE grep audit returns 0 legacy consumers"
+          echo ""
+          echo "Phase 4 LIVE drill re-run = operator action (NOT validated by this CI)"
+          echo "See: .claude/knowledge-base/concepts/operations/operator-handoff-2026-05-16-drill-l2-phase4.md"
