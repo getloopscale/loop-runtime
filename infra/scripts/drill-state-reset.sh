@@ -168,15 +168,73 @@ if echo "$PRE_OUTPUTS" | grep -q '"outputs"'; then
 fi
 
 if [[ "$LEGACY_DETECTED" == "false" ]]; then
-  log "No legacy state entries detected — current state is already clean (v2 named exports)"
-  {
-    echo "**Result:** ALREADY_CLEAN"
-    echo ""
-    echo "No v0 singular keys + no v1 object-literal aggregation detected."
-    echo "Current state matches v2 named-exports schema. No action needed."
-  } >> "$AUDIT_FILE"
-  log "Audit: $AUDIT_FILE"
-  exit 0
+  # Phase 2 plan T4.1 (D3 + EC-6) — phantom-resource detection extension
+  # State may have v2 schema but resourceCount > 0 from teardown that didn't
+  # `pulumi stack rm`. Verify cloud-empty via doctl before declaring "clean".
+  log "No legacy schema detected — checking for phantom resources (T4.1 D3)..."
+
+  RESOURCE_COUNT=0
+  if pulumi stack ls --json 2>/dev/null > /tmp/.drill-state-reset-stacks.json; then
+    RESOURCE_COUNT=$(python3 -c "
+import sys, json
+try:
+    stacks = json.load(open('/tmp/.drill-state-reset-stacks.json'))
+    for s in stacks:
+        if s.get('name') == 'drill':
+            print(s.get('resourceCount', 0))
+            sys.exit(0)
+    print(0)
+except Exception:
+    print(0)
+" 2>/dev/null || echo 0)
+    rm -f /tmp/.drill-state-reset-stacks.json
+  fi
+
+  if [[ "$RESOURCE_COUNT" -eq 0 ]]; then
+    log "State + cloud truly clean (v2 schema, zero resources)"
+    {
+      echo "**Result:** ALREADY_CLEAN"
+      echo ""
+      echo "No v0/v1 legacy keys + zero phantom resources. No action needed."
+    } >> "$AUDIT_FILE"
+    log "Audit: $AUDIT_FILE"
+    exit 0
+  fi
+
+  # State has resources — verify via doctl whether cloud has them too
+  log "State has $RESOURCE_COUNT resources. Verifying cloud state via doctl..."
+  if ! command -v doctl >/dev/null 2>&1; then
+    # EC-6 safe fallback: NO auto-rm without verified cloud state
+    log "WARN: doctl unavailable — cannot verify cloud state"
+    log "  Cannot classify as phantom vs real. Operator must manually decide."
+    log "  Re-run with --force if you've verified cloud is empty externally."
+    {
+      echo "**Result:** AMBIGUOUS_STATE_DOCTL_UNAVAILABLE"
+      echo ""
+      echo "State has $RESOURCE_COUNT resources but doctl not installed."
+      echo "Operator must verify cloud state manually before --force."
+    } >> "$AUDIT_FILE"
+    exit 2
+  fi
+
+  CLUSTER_COUNT=$(doctl kubernetes cluster list --no-header 2>/dev/null | grep -c loopzero-drill || echo 0)
+  DB_COUNT=$(doctl databases list --no-header 2>/dev/null | grep -c loopzero-drill || echo 0)
+
+  if [[ "$CLUSTER_COUNT" -gt 0 || "$DB_COUNT" -gt 0 ]]; then
+    log "Cloud has REAL resources ($CLUSTER_COUNT clusters + $DB_COUNT DBs)"
+    log "  This is NOT phantom — operator must `task drill:down` first."
+    {
+      echo "**Result:** REAL_RESOURCES_EXIST"
+      echo ""
+      echo "State + cloud both have resources. NOT phantom. Run task drill:down first."
+    } >> "$AUDIT_FILE"
+    exit 2
+  fi
+
+  # State has resources but cloud is empty → PHANTOM. Mark for force-rm.
+  log "Detected phantom resources (state=$RESOURCE_COUNT, cloud=0) — eligible for force-rm"
+  LEGACY_DETECTED=true
+  LEGACY_KEYS="phantom-resources(state=$RESOURCE_COUNT,cloud=0)"
 fi
 
 log "Legacy state entries detected: $LEGACY_KEYS"

@@ -1,0 +1,11 @@
+# Drill environment override for ory-hydra chart.
+# Plan: 2026-05-16-drill-l2-unlock-phase2 T3.2 + T3.0 (EC-3 resolution).
+#
+# Same pattern as values-kratos-drill.yaml.gotmpl — override DSN with
+# per-service env var HYDRA_DSN. See kratos override for full rationale.
+
+hydra:
+  config:
+    # Required env: HYDRA_DSN (set by drill-helmfile-bootstrap.sh).
+    # Format: postgres://hydra:PASSWORD@drill-pg-host:25060/hydra?sslmode=require
+    dsn: {{ requiredEnv "HYDRA_DSN" | quote }}

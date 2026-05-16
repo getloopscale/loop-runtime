@@ -213,6 +213,10 @@ releases:
 {{- end }}
     values:
       - ../helm/gitea/values.yaml
+      # Phase 2 plan T3.3 (EC-3 fix): drill env DB connection override → managed PG
+      {{- if eq .Environment.Name "drill" }}
+      - ../helm/gitea/values-gitea-drill.yaml.gotmpl
+      {{- end }}
       # B28 (CHG-2026-04-28-LAYERED-BOOTSTRAP) — Gitea HA (2 replicas + RWX
       # NFS) is a LoopZero Cloud production posture (CHG-002a). Self-hosting
       # standalone runs single-replica + RWO (no NFS kernel module dep,
@@ -358,6 +362,10 @@ releases:
 {{- end }}
     values:
       - ../helm/ory-kratos/values.yaml
+      # Phase 2 plan T3.1 (EC-3 fix): drill env DSN override → managed PG
+      {{- if eq .Environment.Name "drill" }}
+      - ../helm/ory-kratos/values-kratos-drill.yaml.gotmpl
+      {{- end }}
 
   - name: ory-hydra
     namespace: loopzero-auth
@@ -367,6 +375,10 @@ releases:
       - loopzero-auth/ory-kratos
     values:
       - ../helm/ory-hydra/values.yaml
+      # Phase 2 plan T3.2 (EC-3 fix): drill env DSN override → managed PG
+      {{- if eq .Environment.Name "drill" }}
+      - ../helm/ory-hydra/values-hydra-drill.yaml.gotmpl
+      {{- end }}
 
   # Wave 2: LoopZero platform
   - name: loopzero-api

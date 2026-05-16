@@ -1,0 +1,21 @@
+# Drill environment override for ory-kratos chart.
+# Plan: 2026-05-16-drill-l2-unlock-phase2 T3.1 + T3.0 (EC-3 resolution).
+#
+# Bug #10 (iter 14 LIVE): kratos chart had hardcoded
+# `postgresql.loopzero-system.svc.cluster.local` DSN. Drill uses managed PG
+# per D4 ADR but base values don't template PG_HOST.
+#
+# Fix: override DSN with per-service env var (KRATOS_DSN exported by
+# drill-helmfile-bootstrap.sh from Pulumi output kratosDsn).
+# `required` directive (EC-4 fail-fast) makes helmfile abort if env var
+# missing — avoids silent empty DSN → kratos crashloop.
+#
+# Note: Helm 3 stores releases as Secrets by default (NOT ConfigMaps),
+# so DSN in values is encrypted at rest. T2.1 also creates K8s Secret
+# `ory-kratos-dsn-managed-pg` for audit trail + future tooling reuse.
+
+kratos:
+  config:
+    # Required env: KRATOS_DSN (set by drill-helmfile-bootstrap.sh).
+    # Format: postgres://kratos:PASSWORD@drill-pg-host:25060/kratos?sslmode=require
+    dsn: {{ requiredEnv "KRATOS_DSN" | quote }}

@@ -1,0 +1,21 @@
+# Drill environment override for gitea chart.
+# Plan: 2026-05-16-drill-l2-unlock-phase2 T3.3 + T3.0 (EC-3 resolution).
+#
+# Gitea chart uses 4 separate fields (HOST, NAME, USER, PASSWD) NOT a
+# single DSN — different from kratos/hydra. drill-helmfile-bootstrap.sh
+# parses GITEA_DSN into 5 split env vars (HOST/PORT/USER/PASSWORD/DB)
+# for gitea consumption.
+#
+# `required` directive (EC-4 fail-fast) per kratos/hydra precedent.
+# Drill uses managed PG with sslmode=require (T2.1.bis EC-02).
+
+gitea:
+  config:
+    database:
+      DB_TYPE: postgres
+      # Required env: GITEA_HOST + GITEA_PORT (set by drill-helmfile-bootstrap.sh)
+      HOST: '{{ requiredEnv "GITEA_HOST" }}:{{ requiredEnv "GITEA_PORT" }}'
+      NAME: {{ requiredEnv "GITEA_DB" | quote }}
+      USER: {{ requiredEnv "GITEA_USER" | quote }}
+      PASSWD: {{ requiredEnv "GITEA_PASSWORD" | quote }}
+      SSL_MODE: require
