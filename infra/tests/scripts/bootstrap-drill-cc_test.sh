@@ -33,32 +33,54 @@ build_stubs() {
   echo "$has_runtime" > "$tmpdir/has_runtime"
   echo "$has_runtime2" > "$tmpdir/has_runtime2"
 
-  # Mock npx (pulumi)
+  # Mock npx (pulumi) — v2 FLAT NAMED EXPORTS schema (post L2-unlock T1.2 D1)
+  # New invocation pattern: pulumi stack output --stack drill NAME returns
+  # the raw value (NOT jq-traversed JSON). Each named export accessed individually.
   cat > "$tmpdir/bin/npx" <<EOF
 #!/usr/bin/env bash
-# Stub npx for pulumi stack output --json
-if [[ "\$*" == *"pulumi stack output --json"* ]]; then
-  HR=\$(cat "$tmpdir/has_runtime" 2>/dev/null || echo "true")
-  HR2=\$(cat "$tmpdir/has_runtime2" 2>/dev/null || echo "true")
+# Stub npx for pulumi stack output NAME (v2 named-exports schema)
+HR=\$(cat "$tmpdir/has_runtime" 2>/dev/null || echo "true")
+HR2=\$(cat "$tmpdir/has_runtime2" 2>/dev/null || echo "true")
 
-  OUT='{"outputs":{'
+# Expected invocation: npx pulumi stack output --stack drill NAME [--show-secrets]
+# Extract the key (last non-flag arg or arg before --show-secrets).
+KEY=""
+for arg in "\$@"; do
+  case "\$arg" in
+    npx|pulumi|stack|output|--stack|drill|--show-secrets) ;;
+    *) KEY="\$arg" ;;
+  esac
+done
 
-  if [[ "\$HR" == "true" ]]; then
-    OUT+='"runtimeCluster":{"endpoint":"https://aaa.k8s.ondigitalocean.com","kubeconfig":"apiVersion: v1\\nkind: Config\\nfake-runtime-kubeconfig"}'
-  fi
-
-  if [[ "\$HR" == "true" && "\$HR2" == "true" ]]; then
-    OUT+=','
-  fi
-
-  if [[ "\$HR2" == "true" ]]; then
-    OUT+='"runtimeCluster2":{"endpoint":"https://bbb.k8s.ondigitalocean.com","kubeconfig":"apiVersion: v1\\nkind: Config\\nfake-runtime2-kubeconfig"}'
-  fi
-
-  OUT+='}}'
-  printf '%s' "\$OUT"
-  exit 0
-fi
+case "\$KEY" in
+  runtimeClusterEndpoint)
+    if [[ "\$HR" == "true" ]]; then
+      printf '%s\n' "https://aaa.k8s.ondigitalocean.com"
+    fi
+    ;;
+  runtimeClusterKubeconfig)
+    if [[ "\$HR" == "true" ]]; then
+      printf '%s\n' "apiVersion: v1
+kind: Config
+fake-runtime-kubeconfig"
+    fi
+    ;;
+  runtimeCluster2Endpoint)
+    if [[ "\$HR2" == "true" ]]; then
+      printf '%s\n' "https://bbb.k8s.ondigitalocean.com"
+    fi
+    ;;
+  runtimeCluster2Kubeconfig)
+    if [[ "\$HR2" == "true" ]]; then
+      printf '%s\n' "apiVersion: v1
+kind: Config
+fake-runtime2-kubeconfig"
+    fi
+    ;;
+  *)
+    # Empty stdout for unknown keys (mirrors real pulumi behavior)
+    ;;
+esac
 exit 0
 EOF
   chmod +x "$tmpdir/bin/npx"
@@ -77,27 +99,9 @@ exit 0
 EOF
   chmod +x "$tmpdir/bin/kubectl"
 
-  # Mock jq (use real jq if available, else stub)
-  if ! command -v jq >/dev/null 2>&1; then
-    cat > "$tmpdir/bin/jq" <<EOF
-#!/usr/bin/env bash
-# Minimal jq stub — parses .outputs.X.field paths
-read INPUT
-# Pattern: .outputs.runtimeCluster.endpoint
-QUERY="\$2"
-if [[ "\$QUERY" == *"runtimeCluster.endpoint"* ]]; then
-  printf '%s' "https://aaa.k8s.ondigitalocean.com"
-elif [[ "\$QUERY" == *"runtimeCluster.kubeconfig"* ]]; then
-  printf '%s' "apiVersion: v1\nkind: Config"
-elif [[ "\$QUERY" == *"runtimeCluster2.endpoint"* ]]; then
-  printf '%s' "https://bbb.k8s.ondigitalocean.com"
-elif [[ "\$QUERY" == *"runtimeCluster2.kubeconfig"* ]]; then
-  printf '%s' "apiVersion: v1\nkind: Config2"
-fi
-exit 0
-EOF
-    chmod +x "$tmpdir/bin/jq"
-  fi
+  # Post L2-unlock T1.3: lib reads `pulumi stack output NAME` directly (NOT json+jq)
+  # so jq stub is no longer needed for the normal path. MOCK_PULUMI_JSON path is
+  # not exercised by these tests (would require jq, but tests use npx stub instead).
 }
 
 run_test() {

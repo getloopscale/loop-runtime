@@ -74,19 +74,28 @@ bootstrap_cell_cc_drill() {
     fi
   done
 
-  # 1. Read target cluster details from pulumi-drill stack outputs.
-  log_drill "Reading pulumi-drill outputs for $PULUMI_KEY..."
-  local PULUMI_OUTPUT
-  PULUMI_OUTPUT=$(cd "$PULUMI_DIR" && npx pulumi stack output --json --stack drill 2>/dev/null || echo '{}')
+  # 1. Read target cluster details from pulumi-drill stack outputs (v2 flat schema).
+  # Per L2-unlock plan T1.2 D1: outputs migrated from object-literal aggregation
+  # (.outputs.${PULUMI_KEY}.endpoint) to flat named exports
+  # (pulumi stack output ${PULUMI_KEY}Endpoint). RCA in
+  # `finding-2026-05-16-pulumi-outputs-rca.md`.
+  log_drill "Reading pulumi-drill named exports for $PULUMI_KEY..."
 
   local TARGET_ENDPOINT TARGET_KUBECONFIG
-  TARGET_ENDPOINT=$(printf '%s' "$PULUMI_OUTPUT" | jq -r ".outputs.${PULUMI_KEY}.endpoint // empty")
-  TARGET_KUBECONFIG=$(printf '%s' "$PULUMI_OUTPUT" | jq -r ".outputs.${PULUMI_KEY}.kubeconfig // empty")
+  if [[ -n "${MOCK_PULUMI_JSON:-}" ]]; then
+    # Test path — fixture provides full json blob in flat schema.
+    TARGET_ENDPOINT=$(printf '%s' "$MOCK_PULUMI_JSON" | jq -r ".${PULUMI_KEY}Endpoint // empty")
+    TARGET_KUBECONFIG=$(printf '%s' "$MOCK_PULUMI_JSON" | jq -r ".${PULUMI_KEY}Kubeconfig // empty")
+  else
+    TARGET_ENDPOINT=$(cd "$PULUMI_DIR" && npx pulumi stack output --stack drill "${PULUMI_KEY}Endpoint" 2>/dev/null || true)
+    TARGET_KUBECONFIG=$(cd "$PULUMI_DIR" && npx pulumi stack output --stack drill "${PULUMI_KEY}Kubeconfig" --show-secrets 2>/dev/null || true)
+  fi
 
   if [[ -z "$TARGET_ENDPOINT" || -z "$TARGET_KUBECONFIG" ]]; then
-    log_drill "ERROR: pulumi-drill stack output missing $PULUMI_KEY.endpoint or .kubeconfig"
+    log_drill "ERROR: pulumi-drill stack output missing ${PULUMI_KEY}Endpoint or ${PULUMI_KEY}Kubeconfig"
     log_drill "  hint: run 'pulumi up --stack drill' first"
     log_drill "  hint: or test fixture is missing — provide MOCK_PULUMI_JSON env"
+    log_drill "  hint: schema is FLAT named exports (v2), not nested .outputs.X.field"
     return 1
   fi
 

@@ -127,6 +127,68 @@ test_excludes_self_script() {
   fi
 }
 
+# ---- v1 nested cluster-map detection (L2-unlock plan T1.3 TDD) ----
+
+test_catches_v1_nested_mgmtCluster_kubeconfig() {
+  # TDD spec: fixture with `.outputs.mgmtCluster.kubeconfig` → exit 1
+  local tmpdir="$1"
+  cd "$tmpdir"
+  cp "$SCRIPT" .
+  mkdir -p infra/pulumi-drill .github/workflows
+  cat > .github/workflows/fake-v1.yml <<EOF
+name: fake-v1
+jobs:
+  test:
+    steps:
+      - run: pulumi stack output --json | jq -r '.outputs.mgmtCluster.kubeconfig'
+EOF
+  if SCAN_ROOT="$tmpdir" "$tmpdir/check-drill-outputs-consumers.sh" > /dev/null 2>&1; then
+    return 1  # should FAIL but didn't catch v1
+  else
+    return 0  # correctly detected v1 nested
+  fi
+}
+
+test_catches_v1_nested_pg_host() {
+  # v1 `.outputs.pg.host` → exit 1
+  local tmpdir="$1"
+  cd "$tmpdir"
+  cp "$SCRIPT" .
+  mkdir -p infra/pulumi-drill scripts
+  cat > scripts/fake-pg.sh <<EOF
+#!/bin/bash
+PG_HOST=\$(pulumi stack output --json | jq -r '.outputs.pg.host')
+EOF
+  if SCAN_ROOT="$tmpdir" "$tmpdir/check-drill-outputs-consumers.sh" > /dev/null 2>&1; then
+    return 1
+  else
+    return 0
+  fi
+}
+
+test_accepts_v2_named_exports() {
+  # TDD spec: fixture with `pulumi stack output mgmtClusterKubeconfig` → exit 0
+  local tmpdir="$1"
+  cd "$tmpdir"
+  cp "$SCRIPT" .
+  mkdir -p infra/pulumi-drill .github/workflows
+  cat > .github/workflows/good-v2.yml <<EOF
+name: good-v2
+jobs:
+  test:
+    steps:
+      - run: |
+          KC=\$(pulumi stack output --stack drill mgmtClusterKubeconfig --show-secrets)
+          PG=\$(pulumi stack output --stack drill pgHost)
+          BUCKET=\$(pulumi stack output --stack drill bucketBuilds)
+EOF
+  if SCAN_ROOT="$tmpdir" "$tmpdir/check-drill-outputs-consumers.sh" > /dev/null 2>&1; then
+    return 0
+  else
+    return 1
+  fi
+}
+
 # ---- Run all tests ----
 
 echo "Running hermetic tests for check-drill-outputs-consumers.sh..."
@@ -137,6 +199,9 @@ run_test "catches_legacy_pulumi_stack_output" test_catches_legacy_pulumi_stack_o
 run_test "catches_legacy_clusterKubeconfig" test_catches_legacy_clusterKubeconfig
 run_test "accepts_new_schema" test_accepts_new_schema
 run_test "excludes_self_script" test_excludes_self_script
+run_test "catches_v1_nested_mgmtCluster_kubeconfig" test_catches_v1_nested_mgmtCluster_kubeconfig
+run_test "catches_v1_nested_pg_host" test_catches_v1_nested_pg_host
+run_test "accepts_v2_named_exports" test_accepts_v2_named_exports
 
 echo ""
 echo "Total: $TESTS_RUN | Passed: $TESTS_PASSED | Failed: $TESTS_FAILED"

@@ -90,7 +90,8 @@ jobs:
           pulumi config set loopzero-drill:expiresInHours "$DRILL_EXPIRES_IN_HOURS"
           pulumi up --stack drill --yes --skip-preview
           # Export drill mgmt kubeconfig + API endpoint for soak step
-          pulumi stack output --json | jq -r '.outputs.mgmtCluster.kubeconfig' > /tmp/drill-mgmt-kc.yaml
+          # v2 flat named exports per L2-unlock T1.2 D1
+          pulumi stack output --stack drill mgmtClusterKubeconfig --show-secrets > /tmp/drill-mgmt-kc.yaml
           chmod 600 /tmp/drill-mgmt-kc.yaml
           API_URL="https://api.loopzero-drill.example"
           echo "api_url=$API_URL" >> "$GITHUB_OUTPUT"
@@ -194,7 +195,8 @@ jobs:
           # EC-01: 26h covers 24h soak + 25min provision + 30min teardown + buffer.
           pulumi config set loopzero-drill:expiresInHours "$DRILL_EXPIRES_IN_HOURS"
           pulumi up --stack drill --yes --skip-preview
-          pulumi stack output --json | jq -r '.outputs.mgmtCluster.kubeconfig' > /tmp/drill-mgmt-kc.yaml
+          # v2 flat named exports per L2-unlock T1.2 D1
+          pulumi stack output --stack drill mgmtClusterKubeconfig --show-secrets > /tmp/drill-mgmt-kc.yaml
           chmod 600 /tmp/drill-mgmt-kc.yaml
           API_URL="https://api.loopzero-drill.example"
           echo "api_url=$API_URL" >> "$GITHUB_OUTPUT"

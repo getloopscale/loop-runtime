@@ -32,14 +32,43 @@ else
 fi
 cd "$ROOT"
 
-# Patterns that indicate legacy single-cluster outputs consumption.
+# Patterns that indicate LEGACY drill outputs consumption.
+# Per L2-unlock plan T1.3: must detect BOTH legacy schemas (v0 + v1).
+#
+# Three schema versions exist historically (only v2 is valid going forward):
+#
+#   v0 (single-cluster legacy, pre-iter-1):
+#     pulumi stack output cluster       → singular access (no suffix)
+#     .outputs.cluster                   → JSON cluster access
+#     DRILL_CLUSTER_KUBECONFIG           → env var (no longer used)
+#
+#   v1 (cluster-map post-iter-1, BANNED post-L2-unlock T1.2):
+#     .outputs.mgmtCluster.kubeconfig    → object-literal nested access
+#     .outputs.buildCluster.endpoint     → ditto
+#     .outputs.runtimeCluster.X          → ditto
+#     .outputs.runtimeCluster2.X         → ditto
+#     pulumi stack output outputs        → access the wrapping object (legacy)
+#
+#   v2 (FLAT NAMED EXPORTS — current):
+#     pulumi stack output mgmtClusterKubeconfig   → direct named output access
+#     pulumi stack output buildClusterEndpoint    → ditto
+#     etc. (29 named exports per infra/pulumi-drill/src/index.ts)
+#
 # Each pattern is a regex; matches outside pulumi-drill itself are findings.
 LEGACY_PATTERNS=(
-  'pulumi stack output cluster\b(?!Kubeconfig|Map|Endpoint)'   # `pulumi stack output cluster` (singular, without suffix)
+  # v0 singular legacy
+  'pulumi stack output cluster\b(?!Kubeconfig|Map|Endpoint)'   # bare `cluster` (singular)
   'pulumi stack output clusterKubeconfig'                       # legacy singular kubeconfig
   '\bstack[._]output\.cluster\b'                                # JSON.parse(...).cluster (singular)
-  '\bdrill\.outputs\.cluster\b(?!Map)'                          # outputs.cluster singular access
   '\bDRILL_CLUSTER_KUBECONFIG\b'                                # legacy env var name
+  # v0+v1 .outputs.X access (BANNED — v2 uses direct named exports)
+  '\.outputs\.(mgmt|build|runtime|runtimeCluster2?)Cluster2?\.'  # .outputs.mgmtCluster.kubeconfig etc. (v1)
+  '\.outputs\.cluster\b(?!Map)'                                  # .outputs.cluster (v0 singular)
+  '\.outputs\.bucket\b'                                          # legacy .outputs.bucket (v0 singular)
+  '\.outputs\.pg\.'                                              # v1 .outputs.pg.host etc.
+  '\.outputs\.buckets\.'                                         # v1 .outputs.buckets.builds etc.
+  '\.outputs\.zone\.'                                            # v1 .outputs.zone.id etc.
+  '\.outputs\.vpc\.'                                             # v1 .outputs.vpc.id etc.
 )
 
 # Directories to exclude from scan (legacy source allowed to retain patterns
@@ -101,21 +130,36 @@ done
 
 if [[ $EXIT_CODE -eq 0 ]]; then
   echo ""
-  echo "✓ No legacy drill outputs consumers found. Safe to merge T1.1."
+  echo "✓ No legacy drill outputs consumers found. Safe to merge L2-unlock T1.2/T1.3."
   exit 0
 else
   echo ""
   echo "✗ Found $FINDINGS legacy consumer reference(s)."
   echo ""
   echo "Action required:"
-  echo "  Each match above MUST be updated to use the new cluster map schema:"
-  echo "    OLD:  pulumi stack output cluster"
-  echo "    NEW:  pulumi stack output mgmtCluster   (or buildCluster, runtimeCluster, runtimeCluster2)"
+  echo "  Each match above MUST be updated to use the v2 FLAT NAMED EXPORTS schema."
   echo ""
-  echo "  Per EC-02 (Plan 2026-05-16 T1.1.bis), all consumers must update"
-  echo "  atomically in the same PR as T1.1 to prevent kubeconfig=undefined"
-  echo "  fallback to default kubectl context (which may be prod after a"
-  echo "  prior drill teardown — see finding-2026-05-16-drill-teardown-"
-  echo "  kubeconfig-orphan.md)."
+  echo "  Schema versions:"
+  echo "    v0 (BANNED): pulumi stack output cluster"
+  echo "    v1 (BANNED): .outputs.mgmtCluster.kubeconfig (object-literal nested)"
+  echo "    v2 (CURRENT): pulumi stack output mgmtClusterKubeconfig (flat named)"
+  echo ""
+  echo "  Migration:"
+  echo "    OLD v1: .outputs.mgmtCluster.kubeconfig"
+  echo "    NEW v2: pulumi stack output --stack drill mgmtClusterKubeconfig --show-secrets"
+  echo ""
+  echo "    OLD v1: .outputs.pg.host"
+  echo "    NEW v2: pulumi stack output --stack drill pgHost"
+  echo ""
+  echo "    OLD v1: .outputs.buckets.builds"
+  echo "    NEW v2: pulumi stack output --stack drill bucketBuilds"
+  echo ""
+  echo "  Per L2-unlock plan T1.3 + EC-02 (parent plan T1.1.bis), all consumers"
+  echo "  MUST update atomically with T1.2 schema migration to prevent kubeconfig="
+  echo "  undefined fallback to default kubectl context (which may be prod"
+  echo "  after a prior drill teardown — see finding-2026-05-16-drill-"
+  echo "  teardown-kubeconfig-orphan.md)."
+  echo ""
+  echo "  RCA: .claude/knowledge-base/concepts/operations/finding-2026-05-16-pulumi-outputs-rca.md"
   exit 1
 fi

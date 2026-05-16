@@ -70,8 +70,17 @@ if [[ "$AUTO" -eq 1 ]]; then
   # Fallback: use mtime of Pulumi.drill.yaml as proxy for start.
   if command -v npx >/dev/null 2>&1 && [[ -d infra/pulumi-drill ]]; then
     PULUMI_OUT=$(cd infra/pulumi-drill && npx pulumi stack output --json --stack drill 2>/dev/null || echo '{}')
-    EXPIRES_AT=$(echo "$PULUMI_OUT" | python3 -c 'import sys,json; print(json.load(sys.stdin).get("outputs",{}).get("meta",{}).get("expiresAtIso",""))' 2>/dev/null || true)
-    EXPIRES_IN=$(echo "$PULUMI_OUT" | python3 -c 'import sys,json; print(json.load(sys.stdin).get("outputs",{}).get("meta",{}).get("expiresInHours",0))' 2>/dev/null || echo 0)
+    # v2 flat named exports per L2-unlock T1.2 D1: `meta` is exported directly at top level
+    # (not under .outputs.meta). Object structure within `meta` is unchanged for back-compat
+    # with watchdog cron + this cost report.
+    EXPIRES_AT=$(echo "$PULUMI_OUT" | python3 -c 'import sys,json
+d=json.load(sys.stdin)
+m=d.get("meta",{}) if isinstance(d,dict) else {}
+print(m.get("expiresAtIso",""))' 2>/dev/null || true)
+    EXPIRES_IN=$(echo "$PULUMI_OUT" | python3 -c 'import sys,json
+d=json.load(sys.stdin)
+m=d.get("meta",{}) if isinstance(d,dict) else {}
+print(m.get("expiresInHours",0))' 2>/dev/null || echo 0)
     if [[ -n "$EXPIRES_AT" && "$EXPIRES_IN" -gt 0 ]]; then
       END_TS="$EXPIRES_AT"
       # start = end - expiresInHours

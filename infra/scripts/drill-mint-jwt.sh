@@ -38,7 +38,9 @@ set -euo pipefail
 # --- Input validation ---
 if [[ -z "${DRILL_KUBECONFIG:-}" ]]; then
   echo "ERROR: DRILL_KUBECONFIG env var is required (path to drill mgmt cluster kubeconfig)." >&2
-  echo "  Hint: DRILL_KUBECONFIG=\$(cd infra/pulumi-drill && npx pulumi stack output --json | jq -r '.outputs.mgmtCluster.kubeconfig' > /tmp/drill-mgmt-kc.yaml && echo /tmp/drill-mgmt-kc.yaml)" >&2
+  echo "  Hint (v2 flat named exports per L2-unlock T1.2 D1):" >&2
+  echo "    cd infra/pulumi-drill && npx pulumi stack output --stack drill mgmtClusterKubeconfig --show-secrets > /tmp/drill-mgmt-kc.yaml" >&2
+  echo "    export DRILL_KUBECONFIG=/tmp/drill-mgmt-kc.yaml" >&2
   exit 1
 fi
 

@@ -126,8 +126,9 @@ tasks:
 
         echo ""
         echo "=== Phase 2: Export drill mgmt kubeconfig + API URL ==="
+        # v2 flat named exports per L2-unlock T1.2 D1
         DRILL_KC=/tmp/drill-mgmt-kc.yaml
-        cd infra/pulumi-drill && npx pulumi stack output --json | jq -r '.outputs.mgmtCluster.kubeconfig' > "$DRILL_KC"
+        cd infra/pulumi-drill && npx pulumi stack output --stack drill mgmtClusterKubeconfig --show-secrets > "$DRILL_KC"
         chmod 600 "$DRILL_KC"
         cd - > /dev/null
         # API URL is per drill domain (Pulumi sets up DNS post-bootstrap)
