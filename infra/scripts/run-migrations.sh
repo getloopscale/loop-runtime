@@ -45,9 +45,14 @@ PG_PASS="${PG_PASS:-loopzero-dev-password}"
 PG_DB="${PG_DB:-loopzero}"
 PG_HOST="${PG_HOST:-postgresql.${NAMESPACE}.svc.cluster.local}"
 PG_PORT="${PG_PORT:-5432}"
+# SSL mode — local k3d bitnami uses sslmode=disable; DO managed PG REQUIRES
+# sslmode=require (DSN handshake fails otherwise). Drill helmfile bootstrap
+# wrapper sets PG_SSLMODE=require explicitly. Default preserves local k3d.
+# L2-unlock plan T2.1.bis (EC-02 MUST FIX).
+PG_SSLMODE="${PG_SSLMODE:-disable}"
 # Use the K8s Service DNS so this works regardless of pod IP rotation.
 # Drill sets PG_HOST + PG_PORT to managed PG endpoint (Pulumi output).
-DSN_DEFAULT="postgres://${PG_USER}:${PG_PASS}@${PG_HOST}:${PG_PORT}/${PG_DB}?sslmode=disable&x-migrations-table=schema_migrations"
+DSN_DEFAULT="postgres://${PG_USER}:${PG_PASS}@${PG_HOST}:${PG_PORT}/${PG_DB}?sslmode=${PG_SSLMODE}&x-migrations-table=schema_migrations"
 DSN="${DSN:-$DSN_DEFAULT}"
 
 # kctl: kubectl dispatcher. Selects --kubeconfig (drill) OR --context (local k3d)
