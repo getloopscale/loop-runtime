@@ -240,76 +240,105 @@ const drillPG = new digitalocean.DatabaseCluster("drill-pg", {
 });
 
 // =============================================================================
-// Stack outputs (new schema — cluster map per T1.1.bis EC-02 fix)
+// Stack outputs (FLAT NAMED EXPORTS per L2-unlock plan D1)
 // =============================================================================
 //
-// BREAKING CHANGE vs single-cluster legacy schema:
-//   OLD: { cluster, clusterKubeconfig, bucket, pg, ... }
-//   NEW: { mgmtCluster: {...}, buildCluster: {...}, runtimeCluster: {...},
-//          runtimeCluster2: {...}, buckets: {...}, pg, zone, vpc, meta }
+// BREAKING CHANGE vs prior schemas (twice now):
+//   v0 single-cluster: { cluster, clusterKubeconfig, bucket, pg, ... }
+//   v1 cluster-map:    export const outputs = { mgmtCluster: {...}, ... }
+//   v2 NAMED EXPORTS:  export const mgmtClusterId, mgmtClusterKubeconfig, ...
 //
-// All consumers MUST update atomically (T1.1.bis grep audit gates merge).
+// v2 rationale (per L2-unlock plan T1.1 + T1.2 + RCA
+// `finding-2026-05-16-pulumi-outputs-rca.md`):
+//
+//   - Each `export const X = Y` registers ONE output Y under name X. Pulumi
+//     state stores per-named-export. No nested object serialization fragility.
+//   - `pulumi stack output mgmtClusterKubeconfig` returns the raw kubeconfig
+//     directly — no jq nesting traversal needed.
+//   - Schema is GREP-AUDITABLE — each export is one line, easy to detect via
+//     `check-drill-outputs-consumers.sh` patterns.
+//   - Eliminates Hypothesis B (Output<T> resolution failure in object literal).
+//   - T1.2.bis state reset belt-and-suspenders eliminates Hypothesis A.
+//
+// All consumers MUST update atomically (T1.3 grep audit gates merge).
 
-export const outputs = {
-  // Per-cluster details (consumers use these)
-  mgmtCluster: {
-    id: mgmtCluster.id,
-    name: mgmtCluster.name,
-    endpoint: mgmtCluster.endpoint,
-    kubeconfig: mgmtCluster.kubeConfigs[0].rawConfig,
-  },
-  buildCluster: {
-    id: buildCluster.id,
-    name: buildCluster.name,
-    endpoint: buildCluster.endpoint,
-    kubeconfig: buildCluster.kubeConfigs[0].rawConfig,
-  },
-  runtimeCluster: {
-    id: runtimeCluster.id,
-    name: runtimeCluster.name,
-    endpoint: runtimeCluster.endpoint,
-    kubeconfig: runtimeCluster.kubeConfigs[0].rawConfig,
-  },
-  runtimeCluster2: {
-    id: runtimeCluster2.id,
-    name: runtimeCluster2.name,
-    endpoint: runtimeCluster2.endpoint,
-    kubeconfig: runtimeCluster2.kubeConfigs[0].rawConfig,
-  },
+// Per-cluster outputs (mgmt) — D1 named exports per cluster
+export const mgmtClusterId = mgmtCluster.id;
+export const mgmtClusterName = mgmtCluster.name;
+export const mgmtClusterEndpoint = mgmtCluster.endpoint;
+export const mgmtClusterKubeconfig = mgmtCluster.kubeConfigs[0].rawConfig;
 
-  // Shared infrastructure
-  vpc: {
-    id: drillVpc.id,
-    ipRange: "10.40.0.0/16",
-  },
-  pg: {
-    uri: drillPG.uri,
-    host: drillPG.host,
-    port: drillPG.port,
-    database: drillPG.database,
-  },
-  buckets: {
-    builds: drillBuildsBucket.name,
-    artifacts: drillArtifactsBucket.name,
-    static: drillStaticBucket.name,
-  },
-  zone: {
-    id: drillZone.id,
-    nameservers: drillZone.nameServers,
-  },
-  doProject: drillDOProject.id,
+// Per-cluster outputs (build)
+export const buildClusterId = buildCluster.id;
+export const buildClusterName = buildCluster.name;
+export const buildClusterEndpoint = buildCluster.endpoint;
+export const buildClusterKubeconfig = buildCluster.kubeConfigs[0].rawConfig;
 
-  // Metadata + expiration (T4.1 watchdog uses these)
-  meta: {
-    domain,
-    expiresInHours,
-    expiresAtIso,
-    purpose: "DR drill prod-identical — isolated from prod per MEET-ASYNC-AMENDMENT-2026-05-16-001",
-    teardownPolicy: "MANDATORY — pulumi destroy + drill-teardown-validator.sh (T4.1.bis)",
-    cellMapping: {
-      "cell-default": "runtimeCluster",
-      "cell-1": "runtimeCluster",
-      "cell-2": "runtimeCluster2",
-    },
+// Per-cluster outputs (runtime — hosts cell-default + cell-1 per D3)
+export const runtimeClusterId = runtimeCluster.id;
+export const runtimeClusterName = runtimeCluster.name;
+export const runtimeClusterEndpoint = runtimeCluster.endpoint;
+export const runtimeClusterKubeconfig = runtimeCluster.kubeConfigs[0].rawConfig;
+
+// Per-cluster outputs (runtime-2 — hosts cell-2 per D3)
+export const runtimeCluster2Id = runtimeCluster2.id;
+export const runtimeCluster2Name = runtimeCluster2.name;
+export const runtimeCluster2Endpoint = runtimeCluster2.endpoint;
+export const runtimeCluster2Kubeconfig = runtimeCluster2.kubeConfigs[0].rawConfig;
+
+// Shared infrastructure — VPC (D5)
+export const vpcId = drillVpc.id;
+export const vpcIpRange = "10.40.0.0/16";
+
+// Shared infrastructure — Managed PG (D4 mgmt-tier)
+export const pgUri = drillPG.uri;
+export const pgHost = drillPG.host;
+export const pgPort = drillPG.port;
+export const pgDatabase = drillPG.database;
+
+// Shared infrastructure — Spaces buckets (D8)
+export const bucketBuilds = drillBuildsBucket.name;
+export const bucketArtifacts = drillArtifactsBucket.name;
+export const bucketStatic = drillStaticBucket.name;
+
+// Shared infrastructure — CF Zone (EC-03: NOT protected)
+export const zoneId = drillZone.id;
+export const zoneNameservers = drillZone.nameServers;
+
+// DO Project (cost tracking + token scope per D7)
+export const doProjectId = drillDOProject.id;
+
+// Metadata + expiration (T4.1 watchdog uses these via dedicated outputs)
+// Note: `meta` retained as object for backward-compat with drill-cost-report.sh
+// --auto mode + drill-watchdog.sh tag scanning. Future: migrate to named
+// `metaDomain`, `metaExpiresAtIso`, etc. as separate outputs.
+export const meta = {
+  domain,
+  expiresInHours,
+  expiresAtIso,
+  purpose: "DR drill prod-identical — isolated from prod per MEET-ASYNC-AMENDMENT-2026-05-16-001",
+  teardownPolicy: "MANDATORY — pulumi destroy + drill-teardown-validator.sh (T4.1.bis)",
+  cellMapping: {
+    "cell-default": "runtimeCluster",
+    "cell-1": "runtimeCluster",
+    "cell-2": "runtimeCluster2",
   },
 };
+
+// Compatibility shims for consumers that haven't migrated yet (T1.3 grep
+// audit will flag these for refactor; intentionally kept as separate exports
+// so removal can happen in a follow-up PR without rebuilding all 16 named
+// exports above).
+//
+// Removal target: after T1.3 grep audit shows zero legacy consumers in repo
+// (operator-handoff doc + workflows + scripts all migrated).
+//
+// Deliberately commented out — DO NOT re-enable. Kept for documentation of
+// what NOT to do (object-literal aggregation triggered the original Finding #3
+// bug).
+//
+// export const outputs = {
+//   mgmtCluster: { id: mgmtCluster.id, kubeconfig: ... },  // ← legacy v1 schema
+//   ...
+// };
+

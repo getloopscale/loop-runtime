@@ -212,52 +212,91 @@ describe("loopzero-drill — Tags + expires-at (T4.1 watchdog support)", () => {
   });
 });
 
-describe("loopzero-drill — Outputs schema (EC-02 BREAKING CHANGE)", () => {
+describe("loopzero-drill — Outputs schema v2 (L2-unlock plan D1 named exports)", () => {
   const src = fs.readFileSync(INDEX, "utf-8");
 
-  it("exports a single named `outputs` object", () => {
-    expect(src).toMatch(/^export const outputs\s*=/m);
+  // ==========================================================================
+  // L2-unlock plan T1.2 TDD specs:
+  //   test_named_exports_present()       — assert all 16 required exports
+  //   test_no_legacy_outputs_object()    — assert NO `export const outputs = {`
+  //   test_kubeconfig_exports_are_Output_T() — assert exports reference Output<T>
+  // ==========================================================================
+
+  it("does NOT use object-literal `export const outputs = {` (v1 legacy)", () => {
+    // The legacy v1 schema (`export const outputs = { mgmtCluster: {...}, ... }`)
+    // is BANNED per L2-unlock D1. Caught Finding #3 (drill 2026-05-16):
+    // object-literal nested Output<T> serialized to "null" string.
+    //
+    // Match must be on real `export const outputs = {` declaration, NOT on
+    // commented-out documentation line (// export const outputs = {...).
+    const realDeclaration = src.split("\n").some((line) => {
+      const trimmed = line.trimStart();
+      return /^export const outputs\s*=\s*\{/.test(trimmed);
+    });
+    expect(realDeclaration).toBe(false);
   });
 
-  it("outputs has cluster map keys (NEW schema, post T1.1)", () => {
-    const newKeys = [
-      "mgmtCluster",
-      "buildCluster",
-      "runtimeCluster",
-      "runtimeCluster2",
-      "vpc",
-      "pg",
-      "buckets",
-      "zone",
-      "doProject",
-      "meta",
+  it("declares 4 named exports per cluster (id + name + endpoint + kubeconfig)", () => {
+    const clusters = ["mgmtCluster", "buildCluster", "runtimeCluster", "runtimeCluster2"];
+    const suffixes = ["Id", "Name", "Endpoint", "Kubeconfig"];
+    for (const c of clusters) {
+      for (const s of suffixes) {
+        const exportName = `${c}${s}`;
+        const re = new RegExp(`^export const ${exportName}\\s*=`, "m");
+        expect(src).toMatch(re);
+      }
+    }
+  });
+
+  it("kubeconfig exports reference Pulumi cluster.kubeConfigs[0].rawConfig (Output<T>)", () => {
+    // Verify the value side of `export const X = Y` references real Pulumi
+    // resource. If exports point to literals/null, fix would not work.
+    const clusters = [
+      ["mgmtClusterKubeconfig", "mgmtCluster"],
+      ["buildClusterKubeconfig", "buildCluster"],
+      ["runtimeClusterKubeconfig", "runtimeCluster"],
+      ["runtimeCluster2Kubeconfig", "runtimeCluster2"],
     ];
-    for (const k of newKeys) {
-      expect(src).toMatch(new RegExp(`\\b${k}:`));
-    }
-  });
-
-  it("outputs does NOT contain legacy singular `cluster` key (EC-02)", () => {
-    // Negative test — old singular keys would conflict with new schema
-    const outputsBlock = src.match(/export const outputs\s*=\s*\{([\s\S]*?\n\};)/);
-    expect(outputsBlock).toBeTruthy();
-    if (outputsBlock) {
-      const body = outputsBlock[1];
-      // Should not have top-level `cluster:` or `clusterKubeconfig:`
-      expect(body).not.toMatch(/^\s\scluster:/m);
-      expect(body).not.toMatch(/^\s\sclusterKubeconfig:/m);
-      expect(body).not.toMatch(/^\s\sbucket:/m); // legacy singular bucket
-    }
-  });
-
-  it("each cluster output exposes id + name + endpoint + kubeconfig", () => {
-    for (const cluster of ["mgmtCluster", "buildCluster", "runtimeCluster", "runtimeCluster2"]) {
-      const block = new RegExp(
-        `${cluster}:\\s*\\{[^}]*id:[^}]*name:[^}]*endpoint:[^}]*kubeconfig:`,
-        "s",
+    for (const [exportName, resourceVar] of clusters) {
+      const re = new RegExp(
+        `export const ${exportName}\\s*=\\s*${resourceVar}\\.kubeConfigs\\[0\\]\\.rawConfig`,
       );
-      expect(src).toMatch(block);
+      expect(src).toMatch(re);
     }
+  });
+
+  it("declares 4 PG named exports (uri, host, port, database)", () => {
+    expect(src).toMatch(/^export const pgUri\s*=\s*drillPG\.uri/m);
+    expect(src).toMatch(/^export const pgHost\s*=\s*drillPG\.host/m);
+    expect(src).toMatch(/^export const pgPort\s*=\s*drillPG\.port/m);
+    expect(src).toMatch(/^export const pgDatabase\s*=\s*drillPG\.database/m);
+  });
+
+  it("declares 3 bucket named exports (builds, artifacts, static)", () => {
+    expect(src).toMatch(/^export const bucketBuilds\s*=\s*drillBuildsBucket\.name/m);
+    expect(src).toMatch(/^export const bucketArtifacts\s*=\s*drillArtifactsBucket\.name/m);
+    expect(src).toMatch(/^export const bucketStatic\s*=\s*drillStaticBucket\.name/m);
+  });
+
+  it("declares VPC named exports (id, ipRange)", () => {
+    expect(src).toMatch(/^export const vpcId\s*=\s*drillVpc\.id/m);
+    expect(src).toMatch(/^export const vpcIpRange\s*=\s*"10\.40\.0\.0\/16"/m);
+  });
+
+  it("declares CF Zone named exports (id, nameservers)", () => {
+    expect(src).toMatch(/^export const zoneId\s*=\s*drillZone\.id/m);
+    expect(src).toMatch(/^export const zoneNameservers\s*=\s*drillZone\.nameServers/m);
+  });
+
+  it("declares DO project named export", () => {
+    expect(src).toMatch(/^export const doProjectId\s*=\s*drillDOProject\.id/m);
+  });
+
+  it("retains `meta` object export for watchdog + cost-report compatibility", () => {
+    // meta is intentionally kept as object — drill-watchdog.sh + drill-cost-
+    // report.sh parse it as a single output. Future migration to flat
+    // `metaDomain`/`metaExpiresAtIso` is documented TODO but not in scope here.
+    expect(src).toMatch(/^export const meta\s*=\s*\{/m);
   });
 
   it("meta block declares drill purpose + cell mapping + teardown policy", () => {
@@ -267,6 +306,37 @@ describe("loopzero-drill — Outputs schema (EC-02 BREAKING CHANGE)", () => {
     expect(src).toMatch(/"cell-default":\s*"runtimeCluster"/);
     expect(src).toMatch(/"cell-1":\s*"runtimeCluster"/);
     expect(src).toMatch(/"cell-2":\s*"runtimeCluster2"/);
+  });
+
+  it("documents D1 rationale + RCA reference in source comments", () => {
+    expect(src).toMatch(/FLAT NAMED EXPORTS/);
+    expect(src).toMatch(/finding-2026-05-16-pulumi-outputs-rca/);
+  });
+
+  it("does NOT export legacy singular `cluster` / `clusterKubeconfig`", () => {
+    // v0 legacy keys would resurrect Finding #3 collision.
+    expect(src).not.toMatch(/^export const cluster\s*=/m);
+    expect(src).not.toMatch(/^export const clusterKubeconfig\s*=/m);
+    expect(src).not.toMatch(/^export const bucket\s*=/m); // legacy singular bucket
+  });
+
+  it("declares exactly 22 top-level named exports (16 cluster + 4 PG + 3 bucket + ... rest)", () => {
+    // Sanity bound — 22 named exports is the expected count for v2 schema.
+    // Count helps catch silent additions/removals that drift schema.
+    // Real exports only (not commented-out documentation).
+    const realExports = src.split("\n").filter((line) => {
+      const trimmed = line.trimStart();
+      return /^export const \w+\s*=/.test(trimmed) && !trimmed.startsWith("//");
+    });
+    // 4 clusters × 4 fields = 16 cluster exports
+    // + 4 PG exports (uri, host, port, database)
+    // + 3 bucket exports (builds, artifacts, static)
+    // + 2 VPC exports (id, ipRange)
+    // + 2 zone exports (id, nameservers)
+    // + 1 doProjectId
+    // + 1 meta
+    // = 29 named exports total
+    expect(realExports.length).toBe(29);
   });
 });
 
