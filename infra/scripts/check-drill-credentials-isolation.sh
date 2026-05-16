@@ -27,11 +27,43 @@ set -euo pipefail
 
 log() { printf '[check-drill-credentials-isolation] %s\n' "$*" >&2; }
 
+# --- D7 amendment (sponsor override 2026-05-16) ---
+# Original D7 mandated separate DRILL_DO_TOKEN scoped to drill account.
+# Sponsor amended D7 → D7' to use single DIGITALOCEAN_TOKEN per pragmatic
+# operator setup (DO API doesn't support native per-token project scoping
+# in public API; isolation comes from DO project `loopzero-drill` + tag filter
+# `loopzero-drill-*` + state bucket `loopzero-drill-pulumi-state`).
+#
+# Behavior:
+# - If DRILL_DO_TOKEN set + distinct from prod: enforce isolation (strict)
+# - If DRILL_DO_TOKEN absent: use DIGITALOCEAN_TOKEN as drill credential
+#   (sponsor-approved override; advisory warning emitted but exit 0)
+# - If DRILL_DO_TOKEN matches prod: still CATASTROPHIC (no degraded path
+#   acceptable when explicit-but-identical tokens are configured)
+#
+# Strict mode override: set DRILL_REQUIRE_ISOLATED_TOKENS=true to restore
+# original D7 enforcement (separate DRILL_DO_TOKEN required).
+
+STRICT_MODE="${DRILL_REQUIRE_ISOLATED_TOKENS:-false}"
+
 # --- Required inputs ---
 if [[ -z "${DRILL_DO_TOKEN:-}" ]]; then
-  log "ERROR: DRILL_DO_TOKEN env var required (drill-scoped DO API token per D7)"
-  log "  hint: configure via gh secret set DRILL_DO_TOKEN OR export locally"
-  exit 2
+  # D7' sponsor override path: drill uses DIGITALOCEAN_TOKEN
+  if [[ -z "${DIGITALOCEAN_TOKEN:-}" ]]; then
+    log "ERROR: neither DRILL_DO_TOKEN nor DIGITALOCEAN_TOKEN set"
+    log "  Drill cannot proceed without a DO API token (one of the two required)."
+    exit 2
+  fi
+  if [[ "$STRICT_MODE" == "true" ]]; then
+    log "ERROR (strict mode): DRILL_DO_TOKEN env var required when DRILL_REQUIRE_ISOLATED_TOKENS=true"
+    exit 2
+  fi
+  log "ADVISORY: DRILL_DO_TOKEN not set; using DIGITALOCEAN_TOKEN per D7' sponsor override"
+  log "  Blast-radius bounded by DO project 'loopzero-drill' + tag 'loopzero-drill-*' filter"
+  log "  Pulumi state bucket 'loopzero-drill-pulumi-state' (separate from prod state)"
+  log "  drill-teardown-validator.sh + drill-watchdog.sh ONLY act on tagged drill resources"
+  log "✓ Sponsor-approved override path; proceed with single-token model"
+  exit 0
 fi
 
 # --- Hash helper (first 8 chars of SHA256, sufficient for collision detection) ---

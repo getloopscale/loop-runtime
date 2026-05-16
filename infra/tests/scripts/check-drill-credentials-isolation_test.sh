@@ -38,9 +38,36 @@ run_test() {
 }
 
 test_missing_drill_token_exits_2() {
+  # Neither DRILL_DO_TOKEN nor DIGITALOCEAN_TOKEN → exit 2
   local actual
   set +e
   env -u DRILL_DO_TOKEN -u DO_TOKEN -u DIGITALOCEAN_TOKEN \
+    "$SCRIPT" > /dev/null 2>&1
+  actual=$?
+  set -e
+  [[ "$actual" -eq 2 ]] && return 0 || return 1
+}
+
+test_d7_prime_override_advisory_exits_0() {
+  # D7' sponsor override: DRILL_DO_TOKEN absent BUT DIGITALOCEAN_TOKEN present
+  # → exit 0 with advisory (sponsor-approved single-token path)
+  local actual
+  set +e
+  env -u DRILL_DO_TOKEN \
+    DIGITALOCEAN_TOKEN="prod-token-only" \
+    "$SCRIPT" > /dev/null 2>&1
+  actual=$?
+  set -e
+  [[ "$actual" -eq 0 ]] && return 0 || return 1
+}
+
+test_strict_mode_requires_drill_token_exits_2() {
+  # DRILL_REQUIRE_ISOLATED_TOKENS=true + DRILL_DO_TOKEN absent → exit 2
+  local actual
+  set +e
+  env -u DRILL_DO_TOKEN \
+    DIGITALOCEAN_TOKEN="prod-token" \
+    DRILL_REQUIRE_ISOLATED_TOKENS=true \
     "$SCRIPT" > /dev/null 2>&1
   actual=$?
   set -e
@@ -118,7 +145,9 @@ test_drill_cf_matches_prod_exits_1() {
 echo "Running hermetic tests for check-drill-credentials-isolation.sh..."
 echo ""
 
-run_test "missing_DRILL_DO_TOKEN_exits_2" test_missing_drill_token_exits_2
+run_test "missing_BOTH_DRILL_and_DIGITALOCEAN_exits_2" test_missing_drill_token_exits_2
+run_test "D7-prime_sponsor_override_advisory_exits_0" test_d7_prime_override_advisory_exits_0
+run_test "strict_mode_requires_DRILL_DO_TOKEN_exits_2" test_strict_mode_requires_drill_token_exits_2
 run_test "drill_matches_prod_DO_TOKEN_exits_1" test_drill_matches_prod_do_token_exits_1
 run_test "drill_matches_prod_DIGITALOCEAN_TOKEN_exits_1" test_drill_matches_prod_digitalocean_token_exits_1
 run_test "drill_distinct_from_prod_exits_0" test_drill_distinct_from_prod_exits_0

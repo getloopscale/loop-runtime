@@ -16,7 +16,9 @@
 #
 # Pre-conditions (T0.1 governance ratification + iter 1 engineering):
 #   - MEET-ASYNC-AMENDMENT-2026-05-16-001 ratified by sponsor
-#   - DRILL_DO_TOKEN + DRILL_PULUMI_TOKEN + DRILL_CF_TOKEN secrets configured
+#   - DIGITALOCEAN_TOKEN + PULUMI_ACCESS_TOKEN + CLOUDFLARE_API_TOKEN +
+#     PULUMI_CONFIG_PASSPHRASE secrets configured (D7' sponsor override:
+#     single-token model; isolation via DO project + tags + state bucket)
 #   - infra/pulumi-drill/ provisions 4 clusters (T1.1)
 #   - drill-mint-jwt.sh + bootstrap-cell-*-cc-drill.sh present (T2.2 + T2.3)
 #   - drill-teardown-validator.sh present (T4.1.bis — doctl fallback)
@@ -77,10 +79,10 @@ jobs:
       - name: Provision drill stack (4 clusters, ~25min)
         id: provision
         env:
-          PULUMI_ACCESS_TOKEN: ${{ secrets.DRILL_PULUMI_TOKEN }}
-          DIGITALOCEAN_TOKEN: ${{ secrets.DRILL_DO_TOKEN }}
-          CLOUDFLARE_API_TOKEN: ${{ secrets.DRILL_CF_TOKEN }}
-          PULUMI_CONFIG_PASSPHRASE: ${{ secrets.DRILL_PULUMI_PASSPHRASE }}
+          PULUMI_ACCESS_TOKEN: ${{ secrets.PULUMI_ACCESS_TOKEN }}
+          DIGITALOCEAN_TOKEN: ${{ secrets.DIGITALOCEAN_TOKEN }}
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          PULUMI_CONFIG_PASSPHRASE: ${{ secrets.PULUMI_CONFIG_PASSPHRASE }}
         run: |
           cd infra/pulumi-drill
           pulumi stack select drill --create
@@ -125,10 +127,10 @@ jobs:
       - name: Teardown drill stack (MANDATORY)
         if: ${{ always() && !inputs.skip_teardown }}
         env:
-          PULUMI_ACCESS_TOKEN: ${{ secrets.DRILL_PULUMI_TOKEN }}
-          DIGITALOCEAN_TOKEN: ${{ secrets.DRILL_DO_TOKEN }}
-          CLOUDFLARE_API_TOKEN: ${{ secrets.DRILL_CF_TOKEN }}
-          PULUMI_CONFIG_PASSPHRASE: ${{ secrets.DRILL_PULUMI_PASSPHRASE }}
+          PULUMI_ACCESS_TOKEN: ${{ secrets.PULUMI_ACCESS_TOKEN }}
+          DIGITALOCEAN_TOKEN: ${{ secrets.DIGITALOCEAN_TOKEN }}
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          PULUMI_CONFIG_PASSPHRASE: ${{ secrets.PULUMI_CONFIG_PASSPHRASE }}
         run: |
           cd infra/pulumi-drill
           pulumi destroy --stack drill --yes --skip-preview || true
@@ -136,7 +138,7 @@ jobs:
       - name: Validate teardown (T4.1.bis doctl fallback)
         if: ${{ always() && !inputs.skip_teardown }}
         env:
-          DIGITALOCEAN_TOKEN: ${{ secrets.DRILL_DO_TOKEN }}
+          DIGITALOCEAN_TOKEN: ${{ secrets.DIGITALOCEAN_TOKEN }}
         run: |
           # Scans DO account for resources tagged loopzero-drill and force-deletes
           # any leftover from partial Pulumi destroy (EC-05 fix).
@@ -155,7 +157,7 @@ jobs:
               owner: context.repo.owner,
               repo: context.repo.repo,
               title: `[CRITICAL] cell-2 Stage 1 drill soak FAILED — run ${context.runId}`,
-              body: `Stage 1 (provision drill + 1h synthetic + teardown) failed in run ${context.runId}.\n\nLogs: ${context.serverUrl}/${context.repo.owner}/${context.repo.repo}/actions/runs/${context.runId}\n\nTriage:\n- Verify DRILL_* secrets configured\n- Verify pulumi-drill stack provisions 4 clusters (T1.1)\n- Verify drill-teardown ran (cost burn risk)\n- See plan 2026-05-16-drill-prod-identical-multicluster-plan.md`,
+              body: `Stage 1 (provision drill + 1h synthetic + teardown) failed in run ${context.runId}.\n\nLogs: ${context.serverUrl}/${context.repo.owner}/${context.repo.repo}/actions/runs/${context.runId}\n\nTriage:\n- Verify DIGITALOCEAN_TOKEN + PULUMI_ACCESS_TOKEN + CLOUDFLARE_API_TOKEN + PULUMI_CONFIG_PASSPHRASE secrets configured\n- Verify pulumi-drill stack provisions 4 clusters (T1.1)\n- Verify drill-teardown ran (cost burn risk)\n- See plan 2026-05-16-drill-prod-identical-multicluster-plan.md`,
               labels: ['priority/critical', 'area/multi-cell', 'cell-2-canary', 'drill']
             });
 
@@ -182,10 +184,10 @@ jobs:
       - name: Provision drill stack with 26h expires-at (EC-01 fix)
         id: provision
         env:
-          PULUMI_ACCESS_TOKEN: ${{ secrets.DRILL_PULUMI_TOKEN }}
-          DIGITALOCEAN_TOKEN: ${{ secrets.DRILL_DO_TOKEN }}
-          CLOUDFLARE_API_TOKEN: ${{ secrets.DRILL_CF_TOKEN }}
-          PULUMI_CONFIG_PASSPHRASE: ${{ secrets.DRILL_PULUMI_PASSPHRASE }}
+          PULUMI_ACCESS_TOKEN: ${{ secrets.PULUMI_ACCESS_TOKEN }}
+          DIGITALOCEAN_TOKEN: ${{ secrets.DIGITALOCEAN_TOKEN }}
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          PULUMI_CONFIG_PASSPHRASE: ${{ secrets.PULUMI_CONFIG_PASSPHRASE }}
         run: |
           cd infra/pulumi-drill
           pulumi stack select drill --create
@@ -246,10 +248,10 @@ jobs:
       - name: Teardown drill stack (MANDATORY — Stage 2 cost burn is highest)
         if: ${{ always() && !inputs.skip_teardown }}
         env:
-          PULUMI_ACCESS_TOKEN: ${{ secrets.DRILL_PULUMI_TOKEN }}
-          DIGITALOCEAN_TOKEN: ${{ secrets.DRILL_DO_TOKEN }}
-          CLOUDFLARE_API_TOKEN: ${{ secrets.DRILL_CF_TOKEN }}
-          PULUMI_CONFIG_PASSPHRASE: ${{ secrets.DRILL_PULUMI_PASSPHRASE }}
+          PULUMI_ACCESS_TOKEN: ${{ secrets.PULUMI_ACCESS_TOKEN }}
+          DIGITALOCEAN_TOKEN: ${{ secrets.DIGITALOCEAN_TOKEN }}
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          PULUMI_CONFIG_PASSPHRASE: ${{ secrets.PULUMI_CONFIG_PASSPHRASE }}
         run: |
           cd infra/pulumi-drill
           pulumi destroy --stack drill --yes --skip-preview || true
@@ -257,7 +259,7 @@ jobs:
       - name: Validate teardown (T4.1.bis doctl fallback)
         if: ${{ always() && !inputs.skip_teardown }}
         env:
-          DIGITALOCEAN_TOKEN: ${{ secrets.DRILL_DO_TOKEN }}
+          DIGITALOCEAN_TOKEN: ${{ secrets.DIGITALOCEAN_TOKEN }}
         run: |
           if [ -x infra/scripts/drill-teardown-validator.sh ]; then
             bash infra/scripts/drill-teardown-validator.sh

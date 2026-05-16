@@ -62,7 +62,7 @@ jobs:
       - name: Run watchdog (dry-run check)
         if: ${{ inputs.dry_run == true }}
         env:
-          DIGITALOCEAN_TOKEN: ${{ secrets.DRILL_DO_TOKEN }}
+          DIGITALOCEAN_TOKEN: ${{ secrets.DIGITALOCEAN_TOKEN }}
         run: |
           # Dry-run: invoke watchdog logic in scan-only mode by listing
           # drill clusters without destroying.
@@ -71,9 +71,9 @@ jobs:
       - name: Run watchdog (full destroy if expired)
         if: ${{ !inputs.dry_run }}
         env:
-          DIGITALOCEAN_TOKEN: ${{ secrets.DRILL_DO_TOKEN }}
-          PULUMI_ACCESS_TOKEN: ${{ secrets.DRILL_PULUMI_TOKEN }}
-          PULUMI_CONFIG_PASSPHRASE: ${{ secrets.DRILL_PULUMI_PASSPHRASE }}
+          DIGITALOCEAN_TOKEN: ${{ secrets.DIGITALOCEAN_TOKEN }}
+          PULUMI_ACCESS_TOKEN: ${{ secrets.PULUMI_ACCESS_TOKEN }}
+          PULUMI_CONFIG_PASSPHRASE: ${{ secrets.PULUMI_CONFIG_PASSPHRASE }}
         run: |
           bash infra/scripts/drill-watchdog.sh
 
