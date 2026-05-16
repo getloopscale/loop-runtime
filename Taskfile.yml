@@ -8,9 +8,12 @@ shell:
   - --norc
   - -c
 
-# Load .env.local if present — allows overriding dev credentials without editing Taskfile.
-# Copy .env.example to .env.local and customize. See .env.example for available variables.
+# Load credentials from .env files (precedence: later file overrides earlier).
+# Operator stores D7' drill credentials in .env per user directive 2026-05-16
+# (iter 10 — drill-l2-unlock plan); .env.local allows local-only overrides.
+# See concepts/operations/operator-handoff-2026-05-16-drill-l2-phase4.md.
 dotenv:
+  - .env
   - .env.local
 
 # Plan T1.3 — Taskfile split via includes (foundation iter 1; per-domain migration ongoing).

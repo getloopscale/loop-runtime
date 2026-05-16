@@ -86,7 +86,7 @@ test_missing_credentials_exits_1() {
   build_env_all_pass "$tmpdir"
   cd "$tmpdir"
   set +e
-  # Drop DIGITALOCEAN_TOKEN explicitly
+  # Drop DIGITALOCEAN_TOKEN explicitly (mandatory token per iter 10 backend-aware classification)
   PATH="$tmpdir/bin:/usr/bin:/bin" \
     PULUMI_ACCESS_TOKEN=fake \
     CLOUDFLARE_API_TOKEN=fake \
@@ -97,7 +97,33 @@ test_missing_credentials_exits_1() {
   local rc=$?
   set -e
   [[ "$rc" -eq 1 ]] || return 1
-  grep -q "Missing tokens.*DIGITALOCEAN_TOKEN" "$tmpdir/stderr.log" || return 1
+  # Iter 10 wording: "Missing MANDATORY tokens: DIGITALOCEAN_TOKEN ..."
+  grep -q "Missing MANDATORY tokens.*DIGITALOCEAN_TOKEN" "$tmpdir/stderr.log" || return 1
+}
+
+test_pulumi_access_token_missing_is_advisory_not_failure() {
+  # Iter 10 backend-aware: S3 backend doesn't need PULUMI_ACCESS_TOKEN.
+  # When only advisory token missing + mandatory all present → exit 0 (PASS).
+  local tmpdir="$1"
+  build_env_all_pass "$tmpdir"
+  cd "$tmpdir"
+  set +e
+  PATH="$tmpdir/bin:/usr/bin:/bin" \
+    DIGITALOCEAN_TOKEN=fake \
+    CLOUDFLARE_API_TOKEN=fake \
+    PULUMI_CONFIG_PASSPHRASE=fake \
+    PULUMI_DRILL_DIR="$tmpdir/infra/pulumi-drill" \
+    env -u PULUMI_ACCESS_TOKEN \
+    bash "$SCRIPT" 2>"$tmpdir/stderr.log" >"$tmpdir/stdout.log"
+  local rc=$?
+  set -e
+  [[ "$rc" -eq 0 ]] || {
+    echo "  expected exit 0 (advisory missing OK with S3 backend), got $rc" >&2
+    tail -10 "$tmpdir/stderr.log" >&2
+    return 1
+  }
+  # Stderr must mention advisory missing wording (operator transparency)
+  grep -q "advisory missing.*PULUMI_ACCESS_TOKEN" "$tmpdir/stderr.log" || return 1
 }
 
 test_missing_scripts_exits_2() {
@@ -310,6 +336,7 @@ run_test test_json_output_format
 run_test test_help_flag_exits_0
 run_test test_no_tokens_skips_check3_no_spurious_collision
 run_test test_isolation_check_exit_2_no_do_token
+run_test test_pulumi_access_token_missing_is_advisory_not_failure
 
 echo ""
 echo "Tests run:    $TESTS_RUN"

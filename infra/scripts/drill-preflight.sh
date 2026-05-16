@@ -80,21 +80,83 @@ record() {
   CHECK_RESULTS["$check"]="$status:$detail"
 }
 
-# --- Check 1: 4 credentials (D7' single-token model) ---
-log "Check 1/4: credentials (D7' single-token model)..."
+# --- Auto-source .env if present (operator credentials convention) ---
+# Per user directive 2026-05-16 + dogfood SKILL.md pattern: 4 D7' credentials
+# live in .env at repo root. We extract via grep+cut (NOT shell `source` —
+# avoids arbitrary code execution risk). Existing env vars take precedence
+# (operator-set vars override .env).
+#
+# SECURITY: NEVER use `bash -x` or `set -x` on this script — would leak token
+# values via stderr. Trace files containing token values must be deleted
+# immediately + token rotated (incident 2026-05-16 iter 10).
+#
+# Fix for pipefail abort: grep returns 1 on no-match; with `set -o pipefail`
+# the pipeline fails. We use `set +e/+pipefail` block around the extraction.
+ENV_FILE="${DRILL_ENV_FILE:-.env}"
+if [[ -f "$ENV_FILE" ]]; then
+  log "Loading credentials from $ENV_FILE (only vars not already set)..."
+  for token in DIGITALOCEAN_TOKEN PULUMI_ACCESS_TOKEN CLOUDFLARE_API_TOKEN PULUMI_CONFIG_PASSPHRASE; do
+    if [[ -z "${!token:-}" ]]; then
+      set +e
+      set +o pipefail
+      val=$(grep -E "^${token}=" "$ENV_FILE" 2>/dev/null | head -1 | cut -d= -f2-)
+      set -e
+      set -o pipefail
+      if [[ -n "$val" ]]; then
+        # Strip optional surrounding quotes
+        val="${val%\"}"
+        val="${val#\"}"
+        val="${val%\'}"
+        val="${val#\'}"
+        export "${token}=${val}"
+      fi
+      # Clear val from this scope (defense in depth — token NOT in subsequent log)
+      val=""
+    fi
+  done
+fi
+
+# --- Check 1: credentials (D7' single-token model) ---
+# Backend-aware classification per Pulumi.yaml `s3://loopzero-drill-pulumi-state`:
+#   MANDATORY (S3 backend requires):
+#     - DIGITALOCEAN_TOKEN — DO API (clusters/PG/Spaces/VPC provisioning)
+#     - CLOUDFLARE_API_TOKEN — CF Zone provisioning
+#     - PULUMI_CONFIG_PASSPHRASE — S3 state encryption (without this `pulumi up` fails immediately)
+#   ADVISORY (only required for Pulumi Cloud backend, NOT S3):
+#     - PULUMI_ACCESS_TOKEN — used if pulumi-cloud backend; absent OK with S3 backend
+log "Check 1/4: credentials (D7' single-token model, backend-aware)..."
+MANDATORY_TOKENS=(DIGITALOCEAN_TOKEN CLOUDFLARE_API_TOKEN PULUMI_CONFIG_PASSPHRASE)
+ADVISORY_TOKENS=(PULUMI_ACCESS_TOKEN)
 MISSING_TOKENS=()
-for token in DIGITALOCEAN_TOKEN PULUMI_ACCESS_TOKEN CLOUDFLARE_API_TOKEN PULUMI_CONFIG_PASSPHRASE; do
+MISSING_ADVISORY=()
+
+for token in "${MANDATORY_TOKENS[@]}"; do
   if [[ -z "${!token:-}" ]]; then
     MISSING_TOKENS+=("$token")
   fi
 done
 
+for token in "${ADVISORY_TOKENS[@]}"; do
+  if [[ -z "${!token:-}" ]]; then
+    MISSING_ADVISORY+=("$token")
+  fi
+done
+
 if [[ ${#MISSING_TOKENS[@]} -eq 0 ]]; then
-  log "  ✓ All 4 tokens present (DO + Pulumi + CF + passphrase)"
-  record "credentials" "PASS" ""
+  if [[ ${#MISSING_ADVISORY[@]} -eq 0 ]]; then
+    log "  ✓ All 4 tokens present (DO + CF + passphrase + Pulumi Cloud)"
+    record "credentials" "PASS" ""
+  else
+    log "  ✓ 3/3 mandatory tokens present (S3 backend); advisory missing: ${MISSING_ADVISORY[*]}"
+    log "    (PULUMI_ACCESS_TOKEN is only needed for Pulumi Cloud backend; drill uses S3 — OK)"
+    record "credentials" "PASS" "advisory-missing:${MISSING_ADVISORY[*]}"
+  fi
 else
-  log "  ✗ Missing tokens: ${MISSING_TOKENS[*]}"
-  record "credentials" "FAIL" "${MISSING_TOKENS[*]}"
+  log "  ✗ Missing MANDATORY tokens: ${MISSING_TOKENS[*]}"
+  if [[ ${#MISSING_ADVISORY[@]} -gt 0 ]]; then
+    log "    (advisory also missing: ${MISSING_ADVISORY[*]} — OK with S3 backend)"
+  fi
+  record "credentials" "FAIL" "mandatory-missing:${MISSING_TOKENS[*]}"
   EXIT_CODE=1
 fi
 

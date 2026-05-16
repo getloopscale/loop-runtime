@@ -28,6 +28,11 @@
 
 version: '3'
 
+# NOTE: dotenv declaration MUST be in root Taskfile.yml (Task v3 constraint).
+# Drill credentials (D7' single-token model) sourced from .env at repo root —
+# see root Taskfile.yml `dotenv:` directive (iter 10).
+# Operator reference: concepts/operations/operator-handoff-2026-05-16-drill-l2-phase4.md.
+
 tasks:
   up:
     desc: "Provision drill prod-identical stack (4 clusters, cost: ~$0.32/hr until teardown)"
