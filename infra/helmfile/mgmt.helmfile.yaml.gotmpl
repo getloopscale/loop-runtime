@@ -284,6 +284,12 @@ releases:
     version: 25.27.0
     values:
       - ../helm/monitoring/values-prometheus.yaml
+      # Iter 13 LIVE bug fix: drill env override disables alertmanager
+      # (no Slack webhook + PagerDuty Secret in drill → CrashLoopBackOff).
+      # Empty override in non-drill envs (file conditional).
+      {{- if eq .Environment.Name "drill" }}
+      - ../helm/monitoring/values-prometheus-drill.yaml
+      {{- end }}
 
   - name: grafana
     namespace: monitoring

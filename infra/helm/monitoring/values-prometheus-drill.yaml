@@ -1,0 +1,19 @@
+# Drill environment override for prometheus chart.
+# Plan: 2026-05-16-drill-l2-unlock iter 13 LIVE bug fix.
+#
+# Bug discovered LIVE: alertmanager fails with
+#   err="unsupported scheme \"\" for URL"
+# because drill env has no Slack webhook + PagerDuty integration key Secret
+# (those are operator-provisioned via infra/scripts/seed-alertmanager-secrets.sh
+# in prod/dev environments only).
+#
+# Drill is ephemeral + observation-only. Disable alertmanager to avoid
+# bootstrap-blocking CrashLoopBackOff that prevents helmfile --wait from
+# completing. Prometheus + Grafana + node-exporter still active for metrics
+# collection during drill L-series harness execution.
+#
+# DO NOT use this override outside drill env — prod/dev MUST have working
+# alertmanager for on-call escalation.
+
+alertmanager:
+  enabled: false
