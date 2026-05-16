@@ -51,10 +51,10 @@ jobs:
       - name: Verify Docker available
         run: docker version
 
-      # === Shellcheck warning+ on all 6 drill scripts ===
+      # === Shellcheck warning+ on all 6 production drill scripts ===
       # Pattern from CORRECTIONS sprint 2026-05-13 (memory: tool-unavailability
       # alternative routes — Docker fallback when shellcheck binary missing).
-      - name: Shellcheck warning+ on drill scripts
+      - name: Shellcheck warning+ on production drill scripts
         run: |
           docker run --rm -v "$(pwd):/mnt" -w /mnt \
             koalaman/shellcheck:stable -S warning \
@@ -64,6 +64,20 @@ jobs:
             infra/scripts/drill-evidence-capture.sh \
             infra/scripts/drill-teardown-validator.sh \
             infra/scripts/drill-preflight.sh
+
+      # === Shellcheck warning+ on hermetic test scripts ===
+      # Iter 9 add-on: test scripts ALSO subject to lint discipline. Caught
+      # SC2188 bare-redirect bug in drill-state-reset_test.sh (iter 9).
+      - name: Shellcheck warning+ on hermetic test scripts
+        run: |
+          docker run --rm -v "$(pwd):/mnt" -w /mnt \
+            koalaman/shellcheck:stable -S warning \
+            infra/tests/scripts/drill-state-reset_test.sh \
+            infra/tests/scripts/drill-helmfile-bootstrap_test.sh \
+            infra/tests/scripts/drill-cancel-refresh_test.sh \
+            infra/tests/scripts/drill-evidence-capture_test.sh \
+            infra/tests/scripts/drill-preflight_test.sh \
+            infra/tests/scripts/run-migrations_sslmode_test.sh
 
       # === 9 hermetic test suites for drill engineering surface ===
       # Each suite is independently hermetic — runs in seconds with PATH-shadow

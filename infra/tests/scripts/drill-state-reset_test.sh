@@ -300,7 +300,7 @@ test_force_idempotent_safe_to_re_run() {
   local rc1=$?
   # Simulate second invocation: stack now gone (no-stack scenario)
   echo "no-stack" > "$tmpdir/scenario.txt"
-  > "$tmpdir/invocations.txt"
+  : > "$tmpdir/invocations.txt"  # truncate (SC2188-clean form)
   run_script "$tmpdir" --force  # second run
   local rc2=$?
   set -e
