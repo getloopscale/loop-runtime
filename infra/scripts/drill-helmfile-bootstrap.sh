@@ -192,6 +192,98 @@ fi
 log "  PG_SSLMODE=require (T2.1.bis EC-02 fix)"
 log "  HELMFILE_ENVIRONMENT=$HELMFILE_ENV"
 
+# --- Phase 2 plan T2.1 — Per-service DSN env exports + K8s Secret reconciliation ---
+#
+# Bug #10 fix: ory-kratos/hydra/gitea had hardcoded postgresql.loopzero-system DSN.
+# Read 4 per-service DSN from Pulumi outputs (T1.3) + create K8s Secrets via
+# `kubectl apply` (idempotent) so chart's existingSecret pattern (T3.0+T3.1/2/3)
+# can reference them.
+#
+# T1.3.bis EC-1 CRITICAL: --show-secrets REQUIRED — otherwise DSN contains
+# '[secret]' literal → kratos crashloop with auth failure identical to Bug #10.
+# T2.1.bis EC-2: KUBECONFIG cross-cluster guard MUST run before Secret creation.
+
+log "Reading per-service DSN outputs (T1.3 + T1.3.bis EC-1: --show-secrets REQUIRED)..."
+KRATOS_DSN_VAL=$(pulumi_out kratosDsn true || true)
+HYDRA_DSN_VAL=$(pulumi_out hydraDsn true || true)
+GITEA_DSN_VAL=$(pulumi_out giteaDsn true || true)
+LOOPZERO_API_DSN_VAL=$(pulumi_out loopzeroApiDsn true || true)
+
+# Sanity check: DSN must NOT contain "[secret]" literal (T1.3.bis EC-1 regression guard)
+for dsn_pair in "kratos:$KRATOS_DSN_VAL" "hydra:$HYDRA_DSN_VAL" "gitea:$GITEA_DSN_VAL" "loopzero_api:$LOOPZERO_API_DSN_VAL"; do
+  svc="${dsn_pair%%:*}"
+  val="${dsn_pair#*:}"
+  if [[ -z "$val" ]]; then
+    log "ERROR: DSN for $svc is empty — Pulumi output kratosDsn/hydraDsn/giteaDsn/loopzeroApiDsn missing"
+    log "  hint: verify Phase 1 (T1.3) shipped — check 'pulumi stack output --stack drill kratosDsn --show-secrets'"
+    exit 2
+  fi
+  if [[ "$val" == *"[secret]"* ]]; then
+    log "ERROR: DSN for $svc contains '[secret]' literal — bug T1.3.bis EC-1"
+    log "  pulumi_out must use --show-secrets flag (helper function bug)"
+    exit 2
+  fi
+done
+
+export KRATOS_DSN="$KRATOS_DSN_VAL"
+export HYDRA_DSN="$HYDRA_DSN_VAL"
+export GITEA_DSN="$GITEA_DSN_VAL"
+export LOOPZERO_API_DSN="$LOOPZERO_API_DSN_VAL"
+# Clear locals from this scope (defense-in-depth — DSN NOT in subsequent log)
+KRATOS_DSN_VAL="" HYDRA_DSN_VAL="" GITEA_DSN_VAL="" LOOPZERO_API_DSN_VAL=""
+
+# Gitea uses 4 separate fields (NOT single DSN — chart-specific T3.3)
+# Parse DSN into HOST/USER/PASSWORD/DB for gitea chart consumption.
+# DSN format: postgres://USER:PASSWORD@HOST:PORT/DB?sslmode=require
+GITEA_USER=$(echo "$GITEA_DSN" | sed -E 's|postgres://([^:]+):.*|\1|')
+GITEA_PASSWORD=$(echo "$GITEA_DSN" | sed -E 's|postgres://[^:]+:([^@]+)@.*|\1|')
+GITEA_HOST=$(echo "$GITEA_DSN" | sed -E 's|.*@([^:]+):[0-9]+/.*|\1|')
+GITEA_PORT=$(echo "$GITEA_DSN" | sed -E 's|.*@[^:]+:([0-9]+)/.*|\1|')
+GITEA_DB=$(echo "$GITEA_DSN" | sed -E 's|.*/([^?]+)\?.*|\1|')
+export GITEA_HOST GITEA_PORT GITEA_USER GITEA_PASSWORD GITEA_DB
+log "  4 DSN env vars exported (kratos, hydra, gitea split-4, loopzero-api)"
+
+# --- T2.1.bis EC-2: KUBECONFIG cross-cluster guard ---
+# Verify DRILL_KUBECONFIG_DIR/mgmt.yaml points to drill mgmt (NOT prod/other)
+# Catastrophic if Secrets written to wrong cluster (potential prod cred exposure)
+# per finding-2026-05-16-drill-teardown-kubeconfig-orphan.md vector.
+log "T2.1.bis EC-2 guard: validating KUBECONFIG cluster identity..."
+MGMT_KUBECONFIG="$DRILL_KUBECONFIG_DIR/mgmt.yaml"
+CTX_INFO=$(KUBECONFIG="$MGMT_KUBECONFIG" kubectl cluster-info 2>/dev/null | head -1 || true)
+if ! echo "$CTX_INFO" | grep -qE 'loopzero-drill|loopzero-drill-mgmt|drill-mgmt'; then
+  log "ERROR: KUBECONFIG does not point to drill mgmt cluster"
+  log "  Got: $CTX_INFO"
+  log "  Expected pattern: loopzero-drill|loopzero-drill-mgmt|drill-mgmt"
+  log "  ABORTING Secret creation to prevent cross-cluster write (EC-2)"
+  exit 4
+fi
+log "  ✓ KUBECONFIG validated (drill mgmt cluster identity confirmed)"
+
+# Pre-create namespaces (idempotent — silent if exists)
+for ns in loopzero-system loopzero-auth; do
+  KUBECONFIG="$MGMT_KUBECONFIG" kubectl create namespace "$ns" --dry-run=client -o yaml | \
+    KUBECONFIG="$MGMT_KUBECONFIG" kubectl apply -f - >/dev/null
+done
+
+# Create per-service Secrets via dry-run|apply (idempotent + safe re-run)
+declare -A SECRET_TARGETS=(
+  ["ory-kratos-dsn-managed-pg:loopzero-auth"]="$KRATOS_DSN"
+  ["ory-hydra-dsn-managed-pg:loopzero-auth"]="$HYDRA_DSN"
+  ["gitea-dsn-managed-pg:loopzero-system"]="$GITEA_DSN"
+  ["loopzero-api-dsn-managed-pg:loopzero-system"]="$LOOPZERO_API_DSN"
+)
+for key in "${!SECRET_TARGETS[@]}"; do
+  secret_name="${key%%:*}"
+  namespace="${key##*:}"
+  dsn_val="${SECRET_TARGETS[$key]}"
+  KUBECONFIG="$MGMT_KUBECONFIG" kubectl create secret generic "$secret_name" \
+    --namespace "$namespace" \
+    --from-literal=dsn="$dsn_val" \
+    --dry-run=client -o yaml | \
+    KUBECONFIG="$MGMT_KUBECONFIG" kubectl apply -f - >/dev/null
+done
+log "  ✓ 4 DSN secrets reconciled to drill mgmt cluster"
+
 # --- Phase 3: Per-cluster helmfile sync ---
 log "Phase 3/4: Helmfile sync per cluster (mgmt → build → runtime → runtime-2)..."
 

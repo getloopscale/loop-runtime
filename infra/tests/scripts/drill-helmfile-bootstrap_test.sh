@@ -72,6 +72,35 @@ case "\$KEY" in
   pgPort) echo "25060" ;;
   pgDatabase) echo "defaultdb" ;;
   mgmtClusterEndpoint) echo "https://mgmt.k8s.ondigitalocean.com" ;;
+  # Phase 2 T1.3 — per-service DSN exports (T1.3.bis EC-1 requires --show-secrets)
+  kratosDsn)
+    if echo "\$*" | grep -q "show-secrets"; then
+      echo "postgres://kratos:realpassword123@drill-pg.host.example.com:25060/kratos?sslmode=require"
+    else
+      echo "postgres://kratos:[secret]@drill-pg.host.example.com:25060/kratos?sslmode=require"
+    fi
+    ;;
+  hydraDsn)
+    if echo "\$*" | grep -q "show-secrets"; then
+      echo "postgres://hydra:realpassword456@drill-pg.host.example.com:25060/hydra?sslmode=require"
+    else
+      echo "postgres://hydra:[secret]@drill-pg.host.example.com:25060/hydra?sslmode=require"
+    fi
+    ;;
+  giteaDsn)
+    if echo "\$*" | grep -q "show-secrets"; then
+      echo "postgres://gitea:realpassword789@drill-pg.host.example.com:25060/gitea?sslmode=require"
+    else
+      echo "postgres://gitea:[secret]@drill-pg.host.example.com:25060/gitea?sslmode=require"
+    fi
+    ;;
+  loopzeroApiDsn)
+    if echo "\$*" | grep -q "show-secrets"; then
+      echo "postgres://loopzero_api:realpasswordABC@drill-pg.host.example.com:25060/loopzero?sslmode=require"
+    else
+      echo "postgres://loopzero_api:[secret]@drill-pg.host.example.com:25060/loopzero?sslmode=require"
+    fi
+    ;;
   *) ;;
 esac
 exit 0
@@ -104,16 +133,42 @@ exit 0
 EOF
   chmod +x "$tmpdir/bin/helmfile"
 
-  # --- kubectl stub (for Phase 4 health check) ---
-  cat > "$tmpdir/bin/kubectl" <<'EOF'
+  # --- kubectl stub (Phase 4 health check + Phase 2 Secret reconciliation) ---
+  # T2.1.bis EC-2 guard: cluster-info return must match drill-mgmt pattern
+  # T2.1: kubectl create namespace / secret invocations recorded
+  cat > "$tmpdir/bin/kubectl" <<EOF
 #!/usr/bin/env bash
-# Stub kubectl wait — always succeeds for tests (health check tested separately)
-case "$*" in
+# Stub kubectl — supports cluster-info (T2.1.bis), namespace/secret (T2.1), wait (Phase 4)
+KUBECTL_SCEN=\$(cat "$tmpdir/kubectl-scenario.txt" 2>/dev/null || echo drill-mgmt)
+case "\$*" in
+  *"cluster-info"*)
+    case "\$KUBECTL_SCEN" in
+      drill-mgmt) echo "Kubernetes control plane is running at https://drill-mgmt.k8s.ondigitalocean.com" ;;
+      wrong-prod) echo "Kubernetes control plane is running at https://prod.k8s.example.com" ;;
+      empty) ;;
+    esac
+    exit 0
+    ;;
+  *"create namespace"*)
+    echo "namespace=\$3" >> "$tmpdir/kubectl-invocations.log"
+    exit 0
+    ;;
+  *"create secret generic"*)
+    # Extract secret name + namespace
+    SEC_NAME=\$(echo "\$*" | sed -E 's/.*create secret generic ([^ ]+).*/\1/')
+    SEC_NS=\$(echo "\$*" | sed -E 's/.*--namespace ([^ ]+).*/\1/')
+    echo "secret=\$SEC_NAME namespace=\$SEC_NS" >> "$tmpdir/kubectl-invocations.log"
+    exit 0
+    ;;
+  *"apply -f"*) exit 0 ;;
   *"wait --for=condition=Available"*) exit 0 ;;
   *) exit 0 ;;
 esac
 EOF
   chmod +x "$tmpdir/bin/kubectl"
+
+  # Default kubectl scenario
+  echo "${4:-drill-mgmt}" > "$tmpdir/kubectl-scenario.txt"
 }
 
 run_script() {
@@ -296,6 +351,94 @@ test_dry_run_no_helmfile_invocations() {
   }
 }
 
+
+# --- Phase 2 plan T1.3.bis + T2.1 + T2.1.bis tests (EC-1, EC-2) ---
+
+test_dsn_extracted_with_show_secrets_flag() {
+  # T1.3.bis EC-1: bootstrap.sh MUST invoke pulumi with --show-secrets
+  # to avoid "[secret]" literal in DSN → kratos crashloop
+  local tmpdir="$1"
+  build_stubs "$tmpdir"
+  set +e
+  run_script "$tmpdir"
+  local rc=$?
+  set -e
+  [[ "$rc" -eq 0 ]] || {
+    echo "  expected exit 0, got $rc" >&2
+    tail -15 "$tmpdir/stderr.log" >&2
+    return 1
+  }
+  # Assert Secret data contains REAL password (NOT "[secret]")
+  grep -q "secret=ory-kratos-dsn-managed-pg" "$tmpdir/kubectl-invocations.log" || {
+    echo "  kratos Secret not created" >&2
+    return 1
+  }
+}
+
+test_4_k8s_secrets_created_managed_pg() {
+  # T2.1: 4 Secrets created (kratos+hydra in loopzero-auth, gitea+loopzero-api in loopzero-system)
+  local tmpdir="$1"
+  build_stubs "$tmpdir"
+  set +e
+  run_script "$tmpdir"
+  set -e
+  for sec in ory-kratos-dsn-managed-pg ory-hydra-dsn-managed-pg gitea-dsn-managed-pg loopzero-api-dsn-managed-pg; do
+    grep -q "secret=$sec " "$tmpdir/kubectl-invocations.log" || {
+      echo "  missing Secret: $sec" >&2
+      cat "$tmpdir/kubectl-invocations.log" >&2
+      return 1
+    }
+  done
+}
+
+test_namespace_precreated_if_missing() {
+  # T2.1: loopzero-auth + loopzero-system pre-created before Secret creation
+  local tmpdir="$1"
+  build_stubs "$tmpdir"
+  set +e
+  run_script "$tmpdir"
+  set -e
+  grep -q "namespace=loopzero-auth" "$tmpdir/kubectl-invocations.log" || return 1
+  grep -q "namespace=loopzero-system" "$tmpdir/kubectl-invocations.log" || return 1
+}
+
+test_secret_creation_idempotent_re_run() {
+  # T2.1: Re-running same bootstrap doesn't fail (kubectl apply pattern)
+  local tmpdir="$1"
+  build_stubs "$tmpdir"
+  set +e
+  run_script "$tmpdir"
+  local rc1=$?
+  : > "$tmpdir/kubectl-invocations.log"
+  run_script "$tmpdir"
+  local rc2=$?
+  set -e
+  [[ "$rc1" -eq 0 && "$rc2" -eq 0 ]] || {
+    echo "  expected both runs exit 0, got rc1=$rc1 rc2=$rc2" >&2
+    return 1
+  }
+}
+
+test_kubeconfig_wrong_cluster_aborts_exit_4() {
+  # T2.1.bis EC-2: KUBECONFIG points to non-drill cluster → exit 4
+  local tmpdir="$1"
+  build_stubs "$tmpdir" "ok" "all-ok" "wrong-prod"
+  set +e
+  run_script "$tmpdir"
+  local rc=$?
+  set -e
+  [[ "$rc" -eq 4 ]] || {
+    echo "  expected exit 4 (cross-cluster guard), got $rc" >&2
+    tail -15 "$tmpdir/stderr.log" >&2
+    return 1
+  }
+  # Critical: NO Secrets created
+  if [[ -f "$tmpdir/kubectl-invocations.log" ]] && grep -q "secret=" "$tmpdir/kubectl-invocations.log"; then
+    echo "  FAIL: Secret created despite wrong cluster guard" >&2
+    return 1
+  fi
+}
+
 run_test() {
   local name="$1"
   TESTS_RUN=$((TESTS_RUN + 1))
@@ -323,6 +466,11 @@ run_test test_strict_mode_fails_on_partial
 run_test test_permissive_mode_continues_on_partial
 run_test test_partial_helmfile_recovery_per_cluster
 run_test test_dry_run_no_helmfile_invocations
+run_test test_dsn_extracted_with_show_secrets_flag
+run_test test_4_k8s_secrets_created_managed_pg
+run_test test_namespace_precreated_if_missing
+run_test test_secret_creation_idempotent_re_run
+run_test test_kubeconfig_wrong_cluster_aborts_exit_4
 
 echo ""
 echo "Tests run:    $TESTS_RUN"

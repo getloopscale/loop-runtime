@@ -240,6 +240,67 @@ const drillPG = new digitalocean.DatabaseCluster("drill-pg", {
 });
 
 // =============================================================================
+// 6.1. Per-app DatabaseDb resources (Phase 2 plan T1.1 + D1 — mirror pulumi-infra)
+// =============================================================================
+//
+// Managed PostgreSQL only creates "defaultdb". Platform services need their own
+// databases. Mirrors `infra/pulumi-infra/src/providers/digitalocean/database.ts:36-56`.
+//
+// EC-7 (DOCUMENTED ACCEPTED): `pulumi destroy` deletes these DBs + data. Drill
+// is ephemeral by design (D4 ADR + T4.8 mandatory teardown). Zero production
+// data — only L0+L1+L2 harness test fixtures. Data loss acceptable.
+
+const drillPgKratos = new digitalocean.DatabaseDb("drill-pg-kratos", {
+  clusterId: drillPG.id,
+  name: "kratos",
+});
+
+const drillPgHydra = new digitalocean.DatabaseDb("drill-pg-hydra", {
+  clusterId: drillPG.id,
+  name: "hydra",
+});
+
+const drillPgGitea = new digitalocean.DatabaseDb("drill-pg-gitea", {
+  clusterId: drillPG.id,
+  name: "gitea",
+});
+
+const drillPgLoopZero = new digitalocean.DatabaseDb("drill-pg-loopzero", {
+  clusterId: drillPG.id,
+  name: "loopzero",
+});
+
+// =============================================================================
+// 6.2. Per-app DatabaseUser resources (Phase 2 plan T1.2 + D1 — mirror pulumi-infra)
+// =============================================================================
+//
+// Each service gets its own user (no shared loopzero:loopzero-dev-password). Mirrors
+// `infra/pulumi-infra/src/providers/digitalocean/database.ts:90-112`.
+//
+// EC-5 (SHOULD TEST): DO API accepts 4 paralel User creates without rate limit
+// per prod precedence (pulumi-infra creates same 4 users + 4 DBs at scale).
+
+const drillPgKratosUser = new digitalocean.DatabaseUser("drill-pg-kratos-user", {
+  clusterId: drillPG.id,
+  name: "kratos",
+});
+
+const drillPgHydraUser = new digitalocean.DatabaseUser("drill-pg-hydra-user", {
+  clusterId: drillPG.id,
+  name: "hydra",
+});
+
+const drillPgGiteaUser = new digitalocean.DatabaseUser("drill-pg-gitea-user", {
+  clusterId: drillPG.id,
+  name: "gitea",
+});
+
+const drillPgLoopZeroApiUser = new digitalocean.DatabaseUser("drill-pg-loopzero-api-user", {
+  clusterId: drillPG.id,
+  name: "loopzero_api",
+});
+
+// =============================================================================
 // Stack outputs (FLAT NAMED EXPORTS per L2-unlock plan D1)
 // =============================================================================
 //
@@ -295,6 +356,15 @@ export const pgUri = drillPG.uri;
 export const pgHost = drillPG.host;
 export const pgPort = drillPG.port;
 export const pgDatabase = drillPG.database;
+
+// Per-service DSN exports (Phase 2 plan T1.3 + D2 — pulumi.interpolate for Output<T>)
+// CRITICAL: consumers MUST use `--show-secrets` flag when reading these (T1.3.bis EC-1).
+// Without --show-secrets, password renders as "[secret]" literal → invalid DSN → service crashloop.
+// sslmode=require matches T2.1.bis EC-02 fix from parent plan (managed PG enforces SSL).
+export const kratosDsn = pulumi.interpolate`postgres://${drillPgKratosUser.name}:${drillPgKratosUser.password}@${drillPG.host}:${drillPG.port}/${drillPgKratos.name}?sslmode=require`;
+export const hydraDsn = pulumi.interpolate`postgres://${drillPgHydraUser.name}:${drillPgHydraUser.password}@${drillPG.host}:${drillPG.port}/${drillPgHydra.name}?sslmode=require`;
+export const giteaDsn = pulumi.interpolate`postgres://${drillPgGiteaUser.name}:${drillPgGiteaUser.password}@${drillPG.host}:${drillPG.port}/${drillPgGitea.name}?sslmode=require`;
+export const loopzeroApiDsn = pulumi.interpolate`postgres://${drillPgLoopZeroApiUser.name}:${drillPgLoopZeroApiUser.password}@${drillPG.host}:${drillPG.port}/${drillPgLoopZero.name}?sslmode=require`;
 
 // Shared infrastructure — Spaces buckets (D8)
 export const bucketBuilds = drillBuildsBucket.name;

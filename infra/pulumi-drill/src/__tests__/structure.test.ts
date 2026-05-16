@@ -320,7 +320,7 @@ describe("loopzero-drill — Outputs schema v2 (L2-unlock plan D1 named exports)
     expect(src).not.toMatch(/^export const bucket\s*=/m); // legacy singular bucket
   });
 
-  it("declares exactly 22 top-level named exports (16 cluster + 4 PG + 3 bucket + ... rest)", () => {
+  it("declares exactly 33 top-level named exports (29 v2 + 4 DSN per-service via Phase 2 T1.3)", () => {
     // Sanity bound — 22 named exports is the expected count for v2 schema.
     // Count helps catch silent additions/removals that drift schema.
     // Real exports only (not commented-out documentation).
@@ -335,8 +335,112 @@ describe("loopzero-drill — Outputs schema v2 (L2-unlock plan D1 named exports)
     // + 2 zone exports (id, nameservers)
     // + 1 doProjectId
     // + 1 meta
-    // = 29 named exports total
-    expect(realExports.length).toBe(29);
+    // = 29 v2 named exports + 4 DSN (Phase 2 T1.3) = 33 total
+    expect(realExports.length).toBe(33);
+  });
+});
+
+// ============================================================================
+// Phase 2 plan T1.1 + T1.2 + T1.3 + T1.4 — per-app DBs + users + DSN exports
+// ============================================================================
+
+describe("loopzero-drill — Per-app DatabaseDb resources (Phase 2 T1.1)", () => {
+  const src = fs.readFileSync(INDEX, "utf-8");
+
+  it("provisions exactly 4 DatabaseDb resources", () => {
+    const matches = src.match(/new digitalocean\.DatabaseDb\(/g) ?? [];
+    expect(matches.length).toBe(4);
+  });
+
+  it("declares 4 DBs with kratos/hydra/gitea/loopzero names", () => {
+    expect(src).toMatch(/new digitalocean\.DatabaseDb\("drill-pg-kratos"/);
+    expect(src).toMatch(/new digitalocean\.DatabaseDb\("drill-pg-hydra"/);
+    expect(src).toMatch(/new digitalocean\.DatabaseDb\("drill-pg-gitea"/);
+    expect(src).toMatch(/new digitalocean\.DatabaseDb\("drill-pg-loopzero"/);
+  });
+
+  it("each DatabaseDb references drillPG.id for clusterId", () => {
+    const dbBlocks = src.match(/new digitalocean\.DatabaseDb\([^)]+\{[^}]+\}/g) ?? [];
+    expect(dbBlocks.length).toBe(4);
+    for (const block of dbBlocks) {
+      expect(block).toMatch(/clusterId:\s*drillPG\.id/);
+    }
+  });
+
+  it("database names exactly: kratos, hydra, gitea, loopzero", () => {
+    expect(src).toMatch(/name:\s*"kratos"/);
+    expect(src).toMatch(/name:\s*"hydra"/);
+    expect(src).toMatch(/name:\s*"gitea"/);
+    expect(src).toMatch(/name:\s*"loopzero"/);
+  });
+});
+
+describe("loopzero-drill — Per-app DatabaseUser resources (Phase 2 T1.2)", () => {
+  const src = fs.readFileSync(INDEX, "utf-8");
+
+  it("provisions exactly 4 DatabaseUser resources", () => {
+    const matches = src.match(/new digitalocean\.DatabaseUser\(/g) ?? [];
+    expect(matches.length).toBe(4);
+  });
+
+  it("declares 4 Users with kratos/hydra/gitea/loopzero-api Pulumi resource names", () => {
+    expect(src).toMatch(/new digitalocean\.DatabaseUser\("drill-pg-kratos-user"/);
+    expect(src).toMatch(/new digitalocean\.DatabaseUser\("drill-pg-hydra-user"/);
+    expect(src).toMatch(/new digitalocean\.DatabaseUser\("drill-pg-gitea-user"/);
+    expect(src).toMatch(/new digitalocean\.DatabaseUser\("drill-pg-loopzero-api-user"/);
+  });
+
+  it("user names match pulumi-infra: kratos, hydra, gitea, loopzero_api", () => {
+    const userBlocks = src.match(/new digitalocean\.DatabaseUser\([^)]+\{[^}]+\}/g) ?? [];
+    const userNames = userBlocks
+      .map((b) => b.match(/name:\s*"([^"]+)"/)?.[1])
+      .filter(Boolean)
+      .sort();
+    expect(userNames).toEqual(["gitea", "hydra", "kratos", "loopzero_api"]);
+  });
+
+  it("each DatabaseUser references drillPG.id for clusterId", () => {
+    const userBlocks = src.match(/new digitalocean\.DatabaseUser\([^)]+\{[^}]+\}/g) ?? [];
+    expect(userBlocks.length).toBe(4);
+    for (const block of userBlocks) {
+      expect(block).toMatch(/clusterId:\s*drillPG\.id/);
+    }
+  });
+});
+
+describe("loopzero-drill — Per-service DSN named exports (Phase 2 T1.3)", () => {
+  const src = fs.readFileSync(INDEX, "utf-8");
+
+  it("declares 4 DSN exports (kratosDsn, hydraDsn, giteaDsn, loopzeroApiDsn)", () => {
+    expect(src).toMatch(/^export const kratosDsn\s*=/m);
+    expect(src).toMatch(/^export const hydraDsn\s*=/m);
+    expect(src).toMatch(/^export const giteaDsn\s*=/m);
+    expect(src).toMatch(/^export const loopzeroApiDsn\s*=/m);
+  });
+
+  it("DSN exports use pulumi.interpolate for Output<T> handling", () => {
+    expect(src).toMatch(/export const kratosDsn\s*=\s*pulumi\.interpolate/);
+    expect(src).toMatch(/export const hydraDsn\s*=\s*pulumi\.interpolate/);
+    expect(src).toMatch(/export const giteaDsn\s*=\s*pulumi\.interpolate/);
+    expect(src).toMatch(/export const loopzeroApiDsn\s*=\s*pulumi\.interpolate/);
+  });
+
+  it("DSN format: postgres://USER:PASS@HOST:PORT/DB?sslmode=require", () => {
+    // EC-02 from parent plan: sslmode=require for managed PG
+    const dsnPattern = /pulumi\.interpolate`postgres:\/\/\$\{[^}]+\.name\}:\$\{[^}]+\.password\}@\$\{drillPG\.host\}:\$\{drillPG\.port\}\/\$\{[^}]+\.name\}\?sslmode=require`/;
+    const matches = src.match(new RegExp(dsnPattern.source, "g")) ?? [];
+    expect(matches.length).toBe(4);
+  });
+
+  it("each DSN uses per-app user (not shared loopzero:loopzero-dev-password)", () => {
+    expect(src).toMatch(/kratosDsn[\s\S]*drillPgKratosUser\.name/);
+    expect(src).toMatch(/hydraDsn[\s\S]*drillPgHydraUser\.name/);
+    expect(src).toMatch(/giteaDsn[\s\S]*drillPgGiteaUser\.name/);
+    expect(src).toMatch(/loopzeroApiDsn[\s\S]*drillPgLoopZeroApiUser\.name/);
+  });
+
+  it("documents T1.3.bis --show-secrets warning in source comment", () => {
+    expect(src).toMatch(/CRITICAL.*--show-secrets/);
   });
 });
 
