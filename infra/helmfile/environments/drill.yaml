@@ -1,49 +1,56 @@
-# Helmfile environment: drill (DR drill + pre-prod chaos+maturity validation)
+# Helmfile environment: drill (PROD-IDENTICAL 4-CLUSTER DR + maturity validation)
 #
-# MEET-ASYNC-AMENDMENT-2026-05-12-003 + user direction iter 16:
-# "criar a infra excluisivamente para testar os CHAOS e a MATURIDADE
-# DA PLATFORMA, DEPOIS DESTROY E PUBLISH REAL EM PRODUÇÃO".
+# Plan: 2026-05-16-drill-prod-identical-multicluster-plan.md v1.1
+# MEET-ASYNC-AMENDMENT-2026-05-16-001 (pending ratification)
 #
-# This environment targets the DOKS cluster provisioned by
-# infra/pulumi-drill/ (separate Pulumi stack, isolated state in
-# DO Spaces bucket `loopzero-drill-pulumi-state`).
+# CTO directive 2026-05-16: drill is now PROD-IDENTICAL. Removed all
+# "smaller footprint" / "in-cluster Postgres" / "single cluster" semantics
+# from v0 (MEET-ASYNC-AMENDMENT-2026-05-12-003). Drill mirrors prod
+# topology exactly so chaos+maturity validation reflects prod behavior 1:1.
+#
+# Target stack: infra/pulumi-drill/ (4 DOKS clusters per D1:
+#   mgmt + build + runtime + runtime-2; managed PG mgmt-tier per D4;
+#   shared VPC 10.40.0.0/16 per D5).
 #
 # Lifecycle:
-#   1. infra/pulumi-drill && pulumi up    (~10-15min)
-#   2. Configure kubeconfig from pulumi stack output
-#   3. helmfile -e drill sync             (~20-30min platform bootstrap)
-#   4. Run chaos + maturity validation
-#   5. infra/pulumi-drill && pulumi destroy (cleanup)
+#   1. infra/pulumi-drill && pulumi up                  (~25min provision 4 clusters)
+#   2. Export drill kubeconfigs from pulumi stack outputs to per-cluster files
+#   3. helmfile -e drill sync                            (~25min platform bootstrap)
+#   4. drill-mint-jwt.sh → JWT for L-series tests       (T2.2)
+#   5. bootstrap-cell-{default,1,2}-cc-drill.sh         (T2.3 D3 cell wiring)
+#   6. Run drill scenarios (L0-L4 + Stage 1/2 + chaos)
+#   7. infra/pulumi-drill && pulumi destroy             (~10min mandatory teardown)
+#   8. drill-teardown-validator.sh                      (T4.1.bis doctl fallback)
 #
-# Differences vs prod.yaml:
-#   - Domain isolated: loopzero-drill.example (separate CF Zone)
-#   - Smaller resource footprint (cost optimization for short-lived window)
-#   - In-cluster Postgres ENABLED (no managed PG attached — drill stack
-#     does NOT provision DB cluster to keep cost low; loopzero-api uses
-#     in-cluster postgresql Helm release)
-#   - chaos-mesh installed by default (the whole point of this env)
-#   - Policy mode: enforce (validates D2 mitigation #4 in pre-prod)
+# Differences vs prod.yaml (intentional, documented):
+#   - Domain isolated: loopzero-drill.example (separate CF Zone, D7)
+#   - ephemeral lifecycle (expires-at tag, watchdog auto-destroy)
+#   - chaos-mesh installed by default (drill IS the chaos test env)
+#   - policyMode: enforce (validates prod-bound mitigations BEFORE prod)
 #   - VAP noRuntimeImageMutations: Deny (full posture validation)
 
 domain: loopzero-drill.example
 dnsZone: loopzero-drill.example
 
+# Per D1: drill IS prod-identical topology. The marker `clusterTopology:
+# multi-cluster` is now MEANINGFUL — bootstrap iterates over 4 DOKS
+# clusters via per-cluster kubeconfig (Pulumi outputs).
 clusterRole: drill
 clusterTopology: multi-cluster
 
-# Match prod replica counts so HA validation surfaces same patterns prod
-# will encounter. api: 2 minimum to exercise MEET-ASYNC-003 Option A
-# (RollingUpdate + passive standby leader election); 3 to be even closer
-# to prod posture.
+# Per D2 + prod Pulumi.dev.yaml: mirror prod replica counts so HA chaos
+# scenarios surface same patterns prod will face. Drill IS NOT smaller —
+# CTO directive 2026-05-16 explicitly removed that.
 replicas:
-  api: 2
-  controller: 1
+  api: 2          # passive standby leader election (MEET-ASYNC-2026-05-12-003 Opt A)
+  controller: 1   # operator split-binary topology
   argocd: 1
   gitea: 1
   harbor: 1
 
-# Smaller resource limits for cost optimization. DOKS nodes are 2-vCPU
-# 4GB by default per pulumi-drill stack config (nodeCount=2).
+# Per D2 — prod tier specs (NOT minimal). Drill mgmt nodes are medium per
+# Pulumi.drill.yaml mgmtNodeSize=s-4vcpu-8gb-amd × 3 nodes. Runtime/build
+# are small (s-2vcpu-4gb × 2 nodes each).
 resources:
   default:
     requests:
@@ -62,11 +69,10 @@ registries:
   harborPrefix: "harbor.loopzero-drill.example/loopzero-platform/"
 
 loki:
-  maxGlobalStreamsPerUser: 50000  # smaller than prod (less tenant traffic)
-  # Audit M08 #18 / §6.C.4b — promtail cross-cluster push target (env-specific).
+  maxGlobalStreamsPerUser: 50000
   pushUrl: http://loki-internal.drill.loopzero-drill.example:3100/loki/api/v1/push
 
-# Policy mode: enforce — validates D2 mitigation #4 against fresh prod-like
+# Policy mode: enforce — validates D2 mitigation #4 against prod-identical
 # stack BEFORE real prod gets it. If chaos+maturity in drill shows enforce
 # breaks anything, we catch it here (cheap) instead of in prod (expensive).
 policyMode: enforce
@@ -74,34 +80,58 @@ noRuntimeImageMutations: true
 noRuntimeImageMutationsAction: Deny
 noRuntimeImageMutationsFailurePolicy: Fail
 
-# In-cluster Postgres ENABLED for drill: pulumi-drill stack does NOT
-# provision managed PG (cost optimization for short-lived window).
-# loopzero-api connects to in-cluster postgresql Helm release. Drill is
-# intentionally NOT testing managed-PG specifics; chaos focus is on
-# loopzero-api + reconcile loops + admission webhook behavior.
-inClusterPostgres: true
+# Per D4 — Managed PG mgmt-tier (db-s-2vcpu-4gb) provisioned by
+# infra/pulumi-drill/. Host + port + database injected via pulumi stack
+# output during helmfile sync (operator runbook).
+#
+# Removed: inClusterPostgres flag (was true in v0 "cost optimization"
+# semantics). Per CTO directive 2026-05-16, drill must be prod-identical;
+# managed PG specifics (pool, replica lag, failover) ARE testable here.
+inClusterPostgres: false
+
+# Managed PG connection details — operator populates from Pulumi outputs:
+#   pgHost: <pulumi stack output pg.host>
+#   pgPort: <pulumi stack output pg.port>
+#   pgDatabase: <pulumi stack output pg.database>
+# These keys are consumed by loopzero-api + migrations helm values.
 
 # DOKS default storage class.
 underlyingStorageClass: do-block-storage
 
-# Multi-cell metadata mirrors prod scheme. Single drill cluster acts as
-# cell-drill (per pulumi-drill stack `cellName: cell-drill`).
-runtimeCellId: cell-drill
+# Per D3 cell mapping — drill mirrors prod cell-to-cluster topology:
+#   cell-default + cell-1 → runtimeCluster (pulumi-drill output key)
+#   cell-2              → runtimeCluster2 (pulumi-drill output key)
+# Single-cell `runtimeCellId: cell-drill` removed per CTO directive
+# 2026-05-16 ("sistema NUNCA vai trabalhar com single cell").
+cells:
+  - id: cell-default
+    pulumiOutputKey: runtimeCluster
+  - id: cell-1
+    pulumiOutputKey: runtimeCluster
+  - id: cell-2
+    pulumiOutputKey: runtimeCluster2
 
-# DynamicRouter enabled — drill exercises cell discovery + routing
-# semantics. With 1 cell discovered (cell-drill), router selects it
-# deterministically.
+# DynamicRouter enabled — drill exercises full cell discovery + routing
+# semantics. With 3 cells discovered + 2 runtime clusters, routing rules
+# are real (not synthetic).
 dynamicRouter: true
 
-# Chaos Mesh installed for §3.D LIVE validation against drill cluster
-# (the WHOLE POINT of this env). Once we LIVE-validate chaos here,
-# real prod gets a clean baseline without chaos infrastructure
-# (chaos-mesh is a DR/test tool, not a prod runtime dependency).
+# Chaos Mesh installed for §3.D LIVE validation against drill cluster.
+# After drill LIVE-validates chaos posture, prod gets clean baseline
+# (chaos-mesh is DR/test tool, NOT prod runtime dependency).
 installChaosMesh: true
 
 # Velero backup config — same bucket pattern as prod but pointed at
-# drill-specific bucket (set by pulumi-drill stack output).
+# drill-specific bucket (set by pulumi-drill stack output buckets.builds).
 velero:
   bucket: loopzero-drill-velero-backups
   region: sfo3
   s3Url: https://sfo3.digitaloceanspaces.com
+
+# Cross-cluster URLs (loopzero-platform-topology ConfigMap). Per D1 + D5,
+# drill clusters share VPC so private endpoints are valid. Operator
+# populates from Pulumi stack outputs during helmfile sync.
+#   crossCluster.argoApi: <buildCluster argo workflows endpoint>
+#   crossCluster.giteaApi: <mgmtCluster gitea endpoint>
+#   crossCluster.lokiGateway: <buildCluster loki endpoint>
+#   crossCluster.prometheusApi: <mgmtCluster prometheus endpoint>
