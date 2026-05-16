@@ -233,7 +233,13 @@ for cluster in "${CLUSTERS[@]}"; do
     runtime-2) CLUSTER_HELMFILE="runtime.helmfile.yaml.gotmpl" ;;
     *)         CLUSTER_HELMFILE="${cluster}.helmfile.yaml.gotmpl" ;;
   esac
-  if helmfile -e "$HELMFILE_ENV" --file "$HELMFILE_DIR/$CLUSTER_HELMFILE" sync 2>>/tmp/helmfile-${cluster}.log; then
+  # Iter 12 LIVE bug fix: helmfile default timeout (5min) insufficient for drill
+  # first-time provisioning (managed PG cold start ~4m + PVC creation +
+  # prometheus install). Use 15min timeout per release. HELMFILE_RELEASE_TIMEOUT
+  # env override for operator tuning.
+  HELMFILE_RELEASE_TIMEOUT="${HELMFILE_RELEASE_TIMEOUT:-900}"  # 15 minutes
+  if helmfile -e "$HELMFILE_ENV" --file "$HELMFILE_DIR/$CLUSTER_HELMFILE" sync --concurrency 1 \
+       --args "--timeout ${HELMFILE_RELEASE_TIMEOUT}s --wait" 2>>/tmp/helmfile-${cluster}.log; then
     log "  ✓ $cluster sync OK"
   else
     PARTIAL_FAILURES+=("$cluster")

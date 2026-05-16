@@ -213,6 +213,19 @@ fi
 
 # --- Force mode: execute destructive state ops ---
 log "FORCE MODE — executing destructive state operations"
+
+# Iter 11 LIVE bug fix: backup Pulumi.<stack>.yaml BEFORE rm/init operations
+# because `pulumi stack init` OVERWRITES the file with empty config + new
+# encryptionsalt. Without backup, all stack config (domain, doProject,
+# region, K8s versions) and encrypted secrets (cfAccountId) are LOST.
+PULUMI_STACK_YAML="$PULUMI_DIR/Pulumi.drill.yaml"
+PULUMI_STACK_BACKUP=""
+if [[ -f "$PULUMI_STACK_YAML" ]]; then
+  PULUMI_STACK_BACKUP="${AUDIT_DIR}/Pulumi.drill.yaml.backup-$(date +%Y%m%dT%H%M%SZ)"
+  cp "$PULUMI_STACK_YAML" "$PULUMI_STACK_BACKUP"
+  log "Backed up Pulumi.drill.yaml → $PULUMI_STACK_BACKUP"
+fi
+
 log "Step 1/2: pulumi stack rm drill --yes --force"
 # --force needed when state has phantom resources (cloud was teardown via
 # `pulumi destroy` separately + state still has stale resource registrations).
@@ -223,29 +236,44 @@ log "Step 1/2: pulumi stack rm drill --yes --force"
 # `pulumi destroy`).
 if ! pulumi stack rm drill --yes --force 2>>"$AUDIT_FILE"; then
   log "ERROR: pulumi stack rm --force failed (see $AUDIT_FILE)"
+  # Restore backup even on failure (defensive)
+  [[ -n "$PULUMI_STACK_BACKUP" && -f "$PULUMI_STACK_BACKUP" ]] && cp "$PULUMI_STACK_BACKUP" "$PULUMI_STACK_YAML"
   echo "**Result:** RM_FAILED" >> "$AUDIT_FILE"
   exit 3
 fi
 
 if [[ "$SKIP_INIT" == "true" ]]; then
   log "Step 2/2 SKIPPED (--skip-init)"
+  # Still restore backup so Pulumi.drill.yaml has original config + salt
+  [[ -n "$PULUMI_STACK_BACKUP" && -f "$PULUMI_STACK_BACKUP" ]] && cp "$PULUMI_STACK_BACKUP" "$PULUMI_STACK_YAML"
   {
     echo "**Result:** RM_COMPLETED_NO_REINIT"
     echo ""
     echo "Operator MUST run \`pulumi stack init drill\` before next \`pulumi up\`."
+    echo "Pulumi.drill.yaml backup restored from $PULUMI_STACK_BACKUP."
   } >> "$AUDIT_FILE"
 else
   log "Step 2/2: pulumi stack init drill"
   if ! pulumi stack init drill --secrets-provider passphrase 2>>"$AUDIT_FILE"; then
     log "ERROR: pulumi stack init failed (see $AUDIT_FILE)"
+    [[ -n "$PULUMI_STACK_BACKUP" && -f "$PULUMI_STACK_BACKUP" ]] && cp "$PULUMI_STACK_BACKUP" "$PULUMI_STACK_YAML"
     echo "**Result:** INIT_FAILED" >> "$AUDIT_FILE"
     exit 3
+  fi
+  # Iter 11 LIVE bug fix: pulumi stack init wrote NEW encryptionsalt + empty
+  # config to Pulumi.drill.yaml. Restore backup so all stack config + encrypted
+  # secrets (e.g., cfAccountId) are preserved with original salt → pulumi up
+  # can decrypt secrets normally.
+  if [[ -n "$PULUMI_STACK_BACKUP" && -f "$PULUMI_STACK_BACKUP" ]]; then
+    cp "$PULUMI_STACK_BACKUP" "$PULUMI_STACK_YAML"
+    log "Restored Pulumi.drill.yaml from backup (preserves config + encryptionsalt + secrets)"
   fi
   {
     echo "**Result:** RESET_COMPLETED"
     echo ""
     echo "Stack 'drill' state is now empty. Next \`pulumi up\` will provision"
     echo "fresh resources (existing cloud resources unaffected unless imported)."
+    echo "Pulumi.drill.yaml restored from $PULUMI_STACK_BACKUP (preserves config + salt + secrets)."
   } >> "$AUDIT_FILE"
 fi
 
