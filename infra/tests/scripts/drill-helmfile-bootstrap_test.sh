@@ -71,7 +71,8 @@ case "\$KEY" in
   pgHost) echo "drill-pg.host.example.com" ;;
   pgPort) echo "25060" ;;
   pgDatabase) echo "defaultdb" ;;
-  mgmtClusterEndpoint) echo "https://mgmt.k8s.ondigitalocean.com" ;;
+  # Iter Phase 2 ad-hoc fix: UUID matches drill-mgmt cluster-info stub for EC-2 guard
+  mgmtClusterEndpoint) echo "https://aaaaaaaa-bbbb-cccc-dddd-eeeeeeeeeeee.k8s.ondigitalocean.com" ;;
   # Phase 2 T1.3 — per-service DSN exports (T1.3.bis EC-1 requires --show-secrets)
   kratosDsn)
     if echo "\$*" | grep -q "show-secrets"; then
@@ -143,8 +144,9 @@ KUBECTL_SCEN=\$(cat "$tmpdir/kubectl-scenario.txt" 2>/dev/null || echo drill-mgm
 case "\$*" in
   *"cluster-info"*)
     case "\$KUBECTL_SCEN" in
-      drill-mgmt) echo "Kubernetes control plane is running at https://drill-mgmt.k8s.ondigitalocean.com" ;;
-      wrong-prod) echo "Kubernetes control plane is running at https://prod.k8s.example.com" ;;
+      # Iter Phase 2 ad-hoc fix: UUID-based comparison vs Pulumi mgmtClusterEndpoint stub
+      drill-mgmt) echo "Kubernetes control plane is running at https://aaaaaaaa-bbbb-cccc-dddd-eeeeeeeeeeee.k8s.ondigitalocean.com" ;;
+      wrong-prod) echo "Kubernetes control plane is running at https://11111111-2222-3333-4444-555555555555.k8s.ondigitalocean.com" ;;
       empty) ;;
     esac
     exit 0

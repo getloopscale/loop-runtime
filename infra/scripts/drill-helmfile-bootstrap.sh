@@ -247,17 +247,35 @@ log "  4 DSN env vars exported (kratos, hydra, gitea split-4, loopzero-api)"
 # Verify DRILL_KUBECONFIG_DIR/mgmt.yaml points to drill mgmt (NOT prod/other)
 # Catastrophic if Secrets written to wrong cluster (potential prod cred exposure)
 # per finding-2026-05-16-drill-teardown-kubeconfig-orphan.md vector.
+#
+# Robust check (iter Phase 2 ad-hoc fix): compare cluster-info endpoint UUID
+# against Pulumi output mgmtClusterEndpoint. DOKS API endpoints are
+# `<uuid>.k8s.ondigitalocean.com` — UUID match guarantees same cluster.
 log "T2.1.bis EC-2 guard: validating KUBECONFIG cluster identity..."
 MGMT_KUBECONFIG="$DRILL_KUBECONFIG_DIR/mgmt.yaml"
 CTX_INFO=$(KUBECONFIG="$MGMT_KUBECONFIG" kubectl cluster-info 2>/dev/null | head -1 || true)
-if ! echo "$CTX_INFO" | grep -qE 'loopzero-drill|loopzero-drill-mgmt|drill-mgmt'; then
-  log "ERROR: KUBECONFIG does not point to drill mgmt cluster"
-  log "  Got: $CTX_INFO"
-  log "  Expected pattern: loopzero-drill|loopzero-drill-mgmt|drill-mgmt"
+EXPECTED_ENDPOINT=$(pulumi_out mgmtClusterEndpoint || true)
+
+# Extract UUID from both endpoint strings (format: https://UUID.k8s.ondigitalocean.com)
+CTX_UUID=$(echo "$CTX_INFO" | grep -oE '[a-f0-9]{8}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{12}' | head -1)
+EXPECTED_UUID=$(echo "$EXPECTED_ENDPOINT" | grep -oE '[a-f0-9]{8}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{12}' | head -1)
+
+if [[ -z "$CTX_UUID" || -z "$EXPECTED_UUID" ]]; then
+  log "ERROR: Cannot extract UUID from cluster endpoints"
+  log "  Got KUBECONFIG: $CTX_INFO"
+  log "  Got Pulumi expected: $EXPECTED_ENDPOINT"
+  log "  ABORTING Secret creation (EC-2)"
+  exit 4
+fi
+
+if [[ "$CTX_UUID" != "$EXPECTED_UUID" ]]; then
+  log "ERROR: KUBECONFIG points to DIFFERENT cluster than drill mgmt"
+  log "  KUBECONFIG UUID:  $CTX_UUID"
+  log "  Expected UUID:    $EXPECTED_UUID"
   log "  ABORTING Secret creation to prevent cross-cluster write (EC-2)"
   exit 4
 fi
-log "  ✓ KUBECONFIG validated (drill mgmt cluster identity confirmed)"
+log "  ✓ KUBECONFIG validated (UUID match: $CTX_UUID)"
 
 # Pre-create namespaces (idempotent — silent if exists)
 for ns in loopzero-system loopzero-auth; do
