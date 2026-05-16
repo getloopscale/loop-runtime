@@ -78,6 +78,12 @@ LEGACY_PATTERNS=(
   # jq nested access.
   '"\s*\+\s*\.(mgmt|build|runtime)Cluster2?\.'                  # `" + .mgmtCluster.X` jq concat
   '"\s*\+\s*\.pg\.(host|port|uri|database)'                     # `" + .pg.host` jq concat
+  # Phantom-output access (iter 7 bug discovery in drill-l2-scale.yml):
+  # `pulumi stack output apiUrl` queries an output that NEVER existed in v0
+  # or v2 (no apiUrl in src/index.ts exports). Returns empty string silently
+  # → downstream curl fails on empty URL. Catches operator-believed-exists
+  # outputs that the drill stack never produced.
+  'pulumi stack output apiUrl'                                  # phantom output (v0+v1+v2 all miss)
 )
 
 # Directories to exclude from scan (legacy source allowed to retain patterns

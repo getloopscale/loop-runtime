@@ -102,8 +102,10 @@ jobs:
         run: |
           npx pulumi stack select drill --create
           npx pulumi up --stack drill --yes --skip-preview
-          # Export API endpoint for downstream steps
-          API_URL=$(npx pulumi stack output apiUrl --stack drill)
+          # API URL is per drill domain (CF Zone provides DNS); apiUrl is NOT a
+          # v2 named export per L2-unlock T1.2 D1 — derive from drill domain
+          # constant (matches cell2-soaks.yml pattern).
+          API_URL="https://api.loopzero-drill.example"
           echo "api_url=$API_URL" >> "$GITHUB_OUTPUT"
           # Wait for API health
           for i in $(seq 1 60); do
