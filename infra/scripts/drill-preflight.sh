@@ -93,24 +93,52 @@ record() {
 # Fix for pipefail abort: grep returns 1 on no-match; with `set -o pipefail`
 # the pipeline fails. We use `set +e/+pipefail` block around the extraction.
 ENV_FILE="${DRILL_ENV_FILE:-.env}"
+
+# Helper to extract value from .env safely (no pipefail abort)
+_extract_env_val() {
+  local key="$1"
+  local file="$2"
+  local v
+  set +e
+  set +o pipefail
+  v=$(grep -E "^${key}=" "$file" 2>/dev/null | head -1 | cut -d= -f2-)
+  set -e
+  set -o pipefail
+  # Strip optional surrounding quotes
+  v="${v%\"}"
+  v="${v#\"}"
+  v="${v%\'}"
+  v="${v#\'}"
+  printf '%s' "$v"
+}
+
 if [[ -f "$ENV_FILE" ]]; then
   log "Loading credentials from $ENV_FILE (only vars not already set)..."
   for token in DIGITALOCEAN_TOKEN PULUMI_ACCESS_TOKEN CLOUDFLARE_API_TOKEN PULUMI_CONFIG_PASSPHRASE; do
     if [[ -z "${!token:-}" ]]; then
-      set +e
-      set +o pipefail
-      val=$(grep -E "^${token}=" "$ENV_FILE" 2>/dev/null | head -1 | cut -d= -f2-)
-      set -e
-      set -o pipefail
+      val=$(_extract_env_val "$token" "$ENV_FILE")
       if [[ -n "$val" ]]; then
-        # Strip optional surrounding quotes
-        val="${val%\"}"
-        val="${val#\"}"
-        val="${val%\'}"
-        val="${val#\'}"
         export "${token}=${val}"
       fi
-      # Clear val from this scope (defense in depth — token NOT in subsequent log)
+      val=""
+    fi
+  done
+
+  # SPACES_* → AWS_* auto-mapping (iter 11 LIVE bug fix):
+  # Pulumi S3 backend (s3://loopzero-drill-pulumi-state) uses aws-sdk which
+  # looks for AWS_ACCESS_KEY_ID + AWS_SECRET_ACCESS_KEY env vars. DO Spaces
+  # credentials are stored as SPACES_* in .env (per prod workflow pattern
+  # infra-bootstrap.yml + infra-drift.yml + infra-destroy.yml). Auto-map
+  # SPACES_* → AWS_* if AWS_* not already set. NEVER overrides operator-set.
+  for pair in "SPACES_ACCESS_KEY_ID:AWS_ACCESS_KEY_ID" \
+              "SPACES_SECRET_ACCESS_KEY:AWS_SECRET_ACCESS_KEY"; do
+    src="${pair%%:*}"
+    dst="${pair##*:}"
+    if [[ -z "${!dst:-}" ]]; then
+      val=$(_extract_env_val "$src" "$ENV_FILE")
+      if [[ -n "$val" ]]; then
+        export "${dst}=${val}"
+      fi
       val=""
     fi
   done
@@ -122,10 +150,12 @@ fi
 #     - DIGITALOCEAN_TOKEN — DO API (clusters/PG/Spaces/VPC provisioning)
 #     - CLOUDFLARE_API_TOKEN — CF Zone provisioning
 #     - PULUMI_CONFIG_PASSPHRASE — S3 state encryption (without this `pulumi up` fails immediately)
+#     - AWS_ACCESS_KEY_ID — DO Spaces S3 backend access (or SPACES_ACCESS_KEY_ID auto-mapped)
+#     - AWS_SECRET_ACCESS_KEY — DO Spaces S3 backend secret (or SPACES_SECRET_ACCESS_KEY auto-mapped)
 #   ADVISORY (only required for Pulumi Cloud backend, NOT S3):
 #     - PULUMI_ACCESS_TOKEN — used if pulumi-cloud backend; absent OK with S3 backend
 log "Check 1/4: credentials (D7' single-token model, backend-aware)..."
-MANDATORY_TOKENS=(DIGITALOCEAN_TOKEN CLOUDFLARE_API_TOKEN PULUMI_CONFIG_PASSPHRASE)
+MANDATORY_TOKENS=(DIGITALOCEAN_TOKEN CLOUDFLARE_API_TOKEN PULUMI_CONFIG_PASSPHRASE AWS_ACCESS_KEY_ID AWS_SECRET_ACCESS_KEY)
 ADVISORY_TOKENS=(PULUMI_ACCESS_TOKEN)
 MISSING_TOKENS=()
 MISSING_ADVISORY=()
@@ -242,17 +272,40 @@ if [[ -d "$PULUMI_DIR" ]]; then
     STACK_LIST=$(cd "$PULUMI_DIR" && npx pulumi stack ls --json 2>/dev/null || echo '[]')
   fi
 
+  # Iter 11 LIVE bug fix: distinguish empty stack (resourceCount=0, OK to proceed)
+  # from non-empty stack (resourceCount>0, real leftover requiring teardown).
+  # Empty stack registration is the legitimate post-state-reset state — `pulumi up`
+  # will populate it with fresh resources.
   if echo "$STACK_LIST" | grep -q '"drill"'; then
-    LEFTOVER=true
+    # Extract resourceCount for drill stack via python (no jq dependency)
+    RESOURCE_COUNT=$(echo "$STACK_LIST" | python3 -c '
+import sys, json
+try:
+    stacks = json.load(sys.stdin)
+    for s in stacks:
+        if s.get("name") == "drill":
+            print(s.get("resourceCount", 0))
+            sys.exit(0)
+    print(0)
+except Exception:
+    print(0)
+' 2>/dev/null || echo 0)
+    if [[ "$RESOURCE_COUNT" -gt 0 ]]; then
+      LEFTOVER=true
+    fi
   fi
 fi
 
 if [[ "$LEFTOVER" == "true" ]]; then
-  log "  ✗ Leftover drill stack detected — run 'task drill:down' first"
-  record "no_leftover_stack" "FAIL" "drill-stack-exists"
+  log "  ✗ Leftover drill stack detected with $RESOURCE_COUNT resources — run 'task drill:down' first"
+  record "no_leftover_stack" "FAIL" "drill-stack-has-${RESOURCE_COUNT}-resources"
   [[ "$EXIT_CODE" -eq 0 ]] && EXIT_CODE=4
 else
-  log "  ✓ No leftover drill stack"
+  if echo "${STACK_LIST:-}" | grep -q '"drill"'; then
+    log "  ✓ Empty drill stack registration (OK — pulumi up will populate)"
+  else
+    log "  ✓ No drill stack registration"
+  fi
   record "no_leftover_stack" "PASS" ""
 fi
 

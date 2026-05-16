@@ -224,7 +224,16 @@ for cluster in "${CLUSTERS[@]}"; do
     continue
   fi
 
-  if helmfile -e "$HELMFILE_ENV" --file "$HELMFILE_DIR/helmfile.yaml" sync 2>>/tmp/helmfile-${cluster}.log; then
+  # Per-cluster helmfile file mapping (iter 11 LIVE bug fix — no unified helmfile.yaml exists):
+  #   mgmt    → mgmt.helmfile.yaml.gotmpl
+  #   build   → build.helmfile.yaml.gotmpl
+  #   runtime → runtime.helmfile.yaml.gotmpl
+  #   runtime-2 → runtime.helmfile.yaml.gotmpl (reuses runtime, same workload pattern)
+  case "$cluster" in
+    runtime-2) CLUSTER_HELMFILE="runtime.helmfile.yaml.gotmpl" ;;
+    *)         CLUSTER_HELMFILE="${cluster}.helmfile.yaml.gotmpl" ;;
+  esac
+  if helmfile -e "$HELMFILE_ENV" --file "$HELMFILE_DIR/$CLUSTER_HELMFILE" sync 2>>/tmp/helmfile-${cluster}.log; then
     log "  ✓ $cluster sync OK"
   else
     PARTIAL_FAILURES+=("$cluster")

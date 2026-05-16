@@ -78,7 +78,7 @@ case "$*" in
     esac
     exit 0
     ;;
-  "stack rm drill --yes")
+  "stack rm drill --yes --force")
     if [[ "$SCEN" == "rm-fails" ]]; then
       echo "stub: rm failed" >&2
       exit 1

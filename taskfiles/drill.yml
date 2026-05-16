@@ -48,6 +48,13 @@ tasks:
       - |
         cd infra/pulumi-drill
         EXPIRES_IN="${EXPIRES_IN:-8}"
+        # Iter 11 LIVE bug fix: pulumi login MUST happen before stack ops.
+        # Backend URL pattern mirrors prod (.github/workflows/infra-bootstrap.yml:35).
+        # DO Spaces requires region=us-east-1 (sigil) + endpoint=<region>.digitaloceanspaces.com
+        # + s3ForcePathStyle=true. Idempotent (pulumi login on already-logged-in is no-op).
+        DRILL_BACKEND="${DRILL_BACKEND_URL:-s3://loopzero-drill-pulumi-state?endpoint=sfo3.digitaloceanspaces.com&region=us-east-1&s3ForcePathStyle=true}"
+        echo "Logging in to Pulumi backend: $DRILL_BACKEND"
+        npx pulumi login "$DRILL_BACKEND"
         npx pulumi stack select drill --create
         npx pulumi config set loopzero-drill:expiresInHours "$EXPIRES_IN"
         npx pulumi up --stack drill --yes --skip-preview
@@ -229,7 +236,7 @@ tasks:
         # Pass criteria: success_rate >= 90% + p95 <= 10min
         L2_EXIT=0
         LOOPZERO_E2E=1 LOOPZERO_REAL_DEPLOY=1 LOOPZERO_LOAD_LEVEL=l2 \
-        LOOPZERO_L2_CONCURRENCY="{{.L2_CONCURRENCY | default \"50\"}}" \
+        LOOPZERO_L2_CONCURRENCY='{{.L2_CONCURRENCY | default "50"}}' \
         LOOPZERO_DRILL_API_URL="$API_URL" \
         LOOPZERO_TOKEN="$JWT" \
           go test -timeout 120m -v \

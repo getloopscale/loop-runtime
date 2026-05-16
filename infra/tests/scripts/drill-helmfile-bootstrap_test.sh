@@ -41,8 +41,11 @@ build_stubs() {
     printf 'apiVersion: v1\nkind: Config\ncurrent-context: %s\n' "$c" > "$tmpdir/drill-kc/$c.yaml"
   done
 
-  # helmfile.yaml (placeholder)
-  touch "$tmpdir/helmfile/helmfile.yaml"
+  # Per-cluster helmfile files (iter 11 LIVE bug fix — no unified helmfile.yaml)
+  touch "$tmpdir/helmfile/mgmt.helmfile.yaml.gotmpl"
+  touch "$tmpdir/helmfile/build.helmfile.yaml.gotmpl"
+  touch "$tmpdir/helmfile/runtime.helmfile.yaml.gotmpl"
+  # runtime-2 reuses runtime.helmfile.yaml.gotmpl per script mapping
 
   echo "$pulumi_scenario" > "$tmpdir/pulumi-scenario.txt"
   echo "$helmfile_scenario" > "$tmpdir/helmfile-scenario.txt"

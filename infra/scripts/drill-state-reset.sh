@@ -213,9 +213,16 @@ fi
 
 # --- Force mode: execute destructive state ops ---
 log "FORCE MODE — executing destructive state operations"
-log "Step 1/2: pulumi stack rm drill --yes"
-if ! pulumi stack rm drill --yes 2>>"$AUDIT_FILE"; then
-  log "ERROR: pulumi stack rm failed (see $AUDIT_FILE)"
+log "Step 1/2: pulumi stack rm drill --yes --force"
+# --force needed when state has phantom resources (cloud was teardown via
+# `pulumi destroy` separately + state still has stale resource registrations).
+# Iter 11 LIVE bug discovery: drill state had 4 phantom resources (v0 legacy
+# from cluster bb47d1d8 teardown in iter 5 fault-finding); pulumi stack rm
+# without --force rejected. --force is appropriate in this script context
+# because this script operates ONLY on state (NEVER cloud resources — that's
+# `pulumi destroy`).
+if ! pulumi stack rm drill --yes --force 2>>"$AUDIT_FILE"; then
+  log "ERROR: pulumi stack rm --force failed (see $AUDIT_FILE)"
   echo "**Result:** RM_FAILED" >> "$AUDIT_FILE"
   exit 3
 fi
