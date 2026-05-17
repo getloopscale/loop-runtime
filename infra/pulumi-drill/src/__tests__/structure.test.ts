@@ -453,16 +453,26 @@ describe("loopzero-drill — Per-service DSN named exports (Phase 2 T1.3)", () =
 
   it("DSN format: postgres://USER:PASS@HOST:PORT/DB?sslmode=require", () => {
     // EC-02 from parent plan: sslmode=require for managed PG
-    const dsnPattern = /pulumi\.interpolate`postgres:\/\/\$\{[^}]+\.name\}:\$\{[^}]+\.password\}@\$\{drillPG\.host\}:\$\{drillPG\.port\}\/\$\{[^}]+\.name\}\?sslmode=require`/;
+    // Bug #12 fix: USER = drillPG.user (doadmin), per-app DB still preserves isolation
+    const dsnPattern = /pulumi\.interpolate`postgres:\/\/\$\{drillPG\.user\}:\$\{drillPG\.password\}@\$\{drillPG\.host\}:\$\{drillPG\.port\}\/\$\{[^}]+\.name\}\?sslmode=require`/;
     const matches = src.match(new RegExp(dsnPattern.source, "g")) ?? [];
     expect(matches.length).toBe(4);
   });
 
-  it("each DSN uses per-app user (not shared loopzero:loopzero-dev-password)", () => {
-    expect(src).toMatch(/kratosDsn[\s\S]*drillPgKratosUser\.name/);
-    expect(src).toMatch(/hydraDsn[\s\S]*drillPgHydraUser\.name/);
-    expect(src).toMatch(/giteaDsn[\s\S]*drillPgGiteaUser\.name/);
-    expect(src).toMatch(/loopzeroApiDsn[\s\S]*drillPgLoopZeroApiUser\.name/);
+  it("each DSN uses doadmin auth (Bug #12 fix — schema public permission)", () => {
+    // DO Managed PG 16 restricts CREATE on public schema for per-app users.
+    // Mirrors prod precedent: pulumi-platform/src/index.ts:112-115 (Gitea uses doadmin).
+    // Per-app DB names preserved for logical isolation.
+    expect(src).toMatch(/kratosDsn[\s\S]*?\$\{drillPG\.user\}[\s\S]*?\/\$\{drillPgKratos\.name\}/);
+    expect(src).toMatch(/hydraDsn[\s\S]*?\$\{drillPG\.user\}[\s\S]*?\/\$\{drillPgHydra\.name\}/);
+    expect(src).toMatch(/giteaDsn[\s\S]*?\$\{drillPG\.user\}[\s\S]*?\/\$\{drillPgGitea\.name\}/);
+    expect(src).toMatch(/loopzeroApiDsn[\s\S]*?\$\{drillPG\.user\}[\s\S]*?\/\$\{drillPgLoopZero\.name\}/);
+  });
+
+  it("documents Bug #12 root cause in source comment", () => {
+    expect(src).toMatch(/Bug #12 LIVE FIX/);
+    expect(src).toMatch(/permission denied for schema/);
+    expect(src).toMatch(/Mirrors prod precedent/);
   });
 
   it("documents T1.3.bis --show-secrets warning in source comment", () => {

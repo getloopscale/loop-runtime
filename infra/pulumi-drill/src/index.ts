@@ -386,10 +386,22 @@ export const pgDatabase = drillPG.database;
 // CRITICAL: consumers MUST use `--show-secrets` flag when reading these (T1.3.bis EC-1).
 // Without --show-secrets, password renders as "[secret]" literal → invalid DSN → service crashloop.
 // sslmode=require matches T2.1.bis EC-02 fix from parent plan (managed PG enforces SSL).
-export const kratosDsn = pulumi.interpolate`postgres://${drillPgKratosUser.name}:${drillPgKratosUser.password}@${drillPG.host}:${drillPG.port}/${drillPgKratos.name}?sslmode=require`;
-export const hydraDsn = pulumi.interpolate`postgres://${drillPgHydraUser.name}:${drillPgHydraUser.password}@${drillPG.host}:${drillPG.port}/${drillPgHydra.name}?sslmode=require`;
-export const giteaDsn = pulumi.interpolate`postgres://${drillPgGiteaUser.name}:${drillPgGiteaUser.password}@${drillPG.host}:${drillPG.port}/${drillPgGitea.name}?sslmode=require`;
-export const loopzeroApiDsn = pulumi.interpolate`postgres://${drillPgLoopZeroApiUser.name}:${drillPgLoopZeroApiUser.password}@${drillPG.host}:${drillPG.port}/${drillPgLoopZero.name}?sslmode=require`;
+//
+// Bug #12 LIVE FIX (caught 2026-05-17 iter 2 on ory-kratos migration):
+// DO Managed PG 16 restricts schema permissions on `public` — per-app users
+// can connect but CANNOT `CREATE TABLE` (ERROR: permission denied for schema
+// public, SQLSTATE 42501). Solution: use `doadmin` (cluster admin) for auth,
+// keep per-app DB names for logical isolation. Mirrors prod precedent at
+// `infra/pulumi-platform/src/index.ts:112-115` (Gitea uses doadmin for exact
+// same reason: "DO managed PG15+ restricts schema permissions on the public
+// schema — custom users can't CREATE tables without GRANT").
+//
+// Per-app DatabaseUser resources retained for future GRANT-based hardening
+// (when drill becomes long-lived) but not used in DSN.
+export const kratosDsn = pulumi.interpolate`postgres://${drillPG.user}:${drillPG.password}@${drillPG.host}:${drillPG.port}/${drillPgKratos.name}?sslmode=require`;
+export const hydraDsn = pulumi.interpolate`postgres://${drillPG.user}:${drillPG.password}@${drillPG.host}:${drillPG.port}/${drillPgHydra.name}?sslmode=require`;
+export const giteaDsn = pulumi.interpolate`postgres://${drillPG.user}:${drillPG.password}@${drillPG.host}:${drillPG.port}/${drillPgGitea.name}?sslmode=require`;
+export const loopzeroApiDsn = pulumi.interpolate`postgres://${drillPG.user}:${drillPG.password}@${drillPG.host}:${drillPG.port}/${drillPgLoopZero.name}?sslmode=require`;
 
 // Shared infrastructure — Spaces buckets (D8)
 export const bucketBuilds = drillBuildsBucket.name;
