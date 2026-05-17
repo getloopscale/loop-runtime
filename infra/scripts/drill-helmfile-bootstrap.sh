@@ -451,6 +451,18 @@ for cell in cell-default cell-1 cell-2; do
 done
 log "  ✓ 3 CCs marked status.connected=true (loopzero-api will find cells at startup)"
 
+# Bug #25 LIVE FIX (caught 2026-05-17 iter 18): operator charts require
+# GITEA_TOKEN env var. Extract from gitea-admin Secret (created by generate-
+# secrets.sh with key `token`) and export as GITEA_TOKEN_VAL for operator
+# drill values overrides to consume via `{{ env "GITEA_TOKEN_VAL" }}`.
+GITEA_TOKEN_VAL_RAW="$(kubectl get secret -n loopzero-system gitea-admin -o jsonpath='{.data.token}' 2>/dev/null || echo "")"
+if [[ -n "$GITEA_TOKEN_VAL_RAW" ]]; then
+  export GITEA_TOKEN_VAL="$(echo "$GITEA_TOKEN_VAL_RAW" | base64 -d 2>/dev/null || echo "$GITEA_TOKEN_VAL_RAW")"
+  log "  ✓ GITEA_TOKEN_VAL exported for operator charts (Bug #25 fix)"
+else
+  log "  WARN: gitea-admin Secret not found yet (operator startup may fail)"
+fi
+
 # Bug #16 LIVE FIX (caught 2026-05-17 iter 7 on loopzero-api ImagePullBackOff):
 # generate-secrets.sh registry block uses base64(SPACES_KEY:SPACES_SECRET)
 # which is WRONG auth format for DOCR (DOCR uses DO API token, NOT Spaces).

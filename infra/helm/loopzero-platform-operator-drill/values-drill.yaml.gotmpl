@@ -14,3 +14,9 @@ image:
   repository: loopzero-platform-operator
   tag: '{{ env "LOOPZERO_PLATFORM_OPERATOR_TAG" | default "drill-phase2-ce4e90f0" }}'
   pullPolicy: IfNotPresent
+
+# Bug #25 LIVE fix (2026-05-17 iter 18): operator chart auto-creates
+# Secret from .Values.secrets.giteaToken if needed.
+secrets:
+  create: true
+  giteaToken: '{{ env "GITEA_TOKEN_VAL" | default "drill-stub-token" }}'
