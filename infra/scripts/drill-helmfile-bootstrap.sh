@@ -405,6 +405,38 @@ log "  ✓ Managed Valkey env exported (gitea + harbor will use $REDIS_HOST_VAL:
 bash "$HELMFILE_DIR/scripts/generate-secrets.sh" drill mgmt
 log "  ✓ Platform Secrets generated (loopzero-db, gitea, minio, harbor, velero, registry-pull)"
 
+# Bug #19 LIVE FIX (caught 2026-05-17 iter 12 on loopzero-api CrashLoopBackOff):
+# loopzero-api startup calls setupCellRouter which requires >=1 ClusterCredential
+# CR in loopzero-system. setupCellRouter is fail-fast (os.Exit(1) on 0 cells).
+#
+# Previously Phase 5 (bootstrap-cell-*-cc-drill.sh) ran AFTER Phase 4a
+# (helmfile sync waits for loopzero-api Ready). Circular dependency.
+#
+# Fix: install loopzero-crds FIRST (chart provides CRDs), apply ClusterCredentials
+# (loopzero.io/v1 CRs valid after CRDs registered), THEN proceed with full
+# helmfile sync (loopzero-api will find the cells at startup).
+log "Phase 2.6/4: Install loopzero-crds + bootstrap ClusterCredentials (Bug #19 fix)..."
+helmfile -e "$HELMFILE_ENV" --file "$HELMFILE_DIR/mgmt.helmfile.yaml.gotmpl" --selector name=loopzero-crds sync \
+  --args "--timeout ${HELMFILE_RELEASE_TIMEOUT:-900}s --wait" 2>&1 | tee -a "/tmp/helmfile-mgmt.log" | tail -5 || {
+  log "ERROR: loopzero-crds install failed (Bug #19 fix pre-step)"
+  exit 3
+}
+log "  ✓ loopzero-crds installed — applying 3 ClusterCredentials (cell-default + cell-1 + cell-2)..."
+export DRILL_KUBECONFIG="$MGMT_KUBECONFIG"
+bash "$(cd "$(dirname "$0")" && pwd)/bootstrap-cell-default-cc-drill.sh" 2>&1 | tail -3 || {
+  log "ERROR: bootstrap cell-default failed"
+  exit 3
+}
+bash "$(cd "$(dirname "$0")" && pwd)/bootstrap-cell-1-cc-drill.sh" 2>&1 | tail -3 || {
+  log "ERROR: bootstrap cell-1 failed"
+  exit 3
+}
+bash "$(cd "$(dirname "$0")" && pwd)/bootstrap-cell-2-cc-drill.sh" 2>&1 | tail -3 || {
+  log "ERROR: bootstrap cell-2 failed"
+  exit 3
+}
+log "  ✓ 3 ClusterCredentials applied (loopzero-api will find cells at startup)"
+
 # Bug #16 LIVE FIX (caught 2026-05-17 iter 7 on loopzero-api ImagePullBackOff):
 # generate-secrets.sh registry block uses base64(SPACES_KEY:SPACES_SECRET)
 # which is WRONG auth format for DOCR (DOCR uses DO API token, NOT Spaces).
