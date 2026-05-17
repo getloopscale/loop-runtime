@@ -9,12 +9,12 @@
 # `required` directive (EC-4 fail-fast) per kratos/hydra precedent.
 # Drill uses managed PG with sslmode=require (T2.1.bis EC-02).
 #
-# Bug #15 LIVE FIX (caught 2026-05-17 iter 5):
+# Bug #15 LIVE FIX (caught 2026-05-17 iter 5-6):
 # Default values.yaml points cache/session/queue at `gitea-redis:6379`
-# (in-cluster bitnami chart Service). Drill uses DO Managed Valkey instead
-# (mirror prod ADR-0016 D-6, CTO Golden Rule #0). GITEA_REDIS_HOST +
-# GITEA_REDIS_PASSWORD env vars are set by drill-helmfile-bootstrap.sh
-# from Pulumi outputs (redisHost privateHost via VPC, redisPassword).
+# (in-cluster bitnami chart). Drill uses DO Managed Valkey instead
+# (mirror prod ADR-0016 D-6, CTO Golden Rule #0). DO Managed Valkey
+# requires TLS — use `rediss://` URL format (mirror values-ha.yaml prod
+# pattern). go-chi/session redis adapter auto-detects scheme.
 
 gitea:
   config:
@@ -26,15 +26,16 @@ gitea:
       USER: {{ requiredEnv "GITEA_USER" | quote }}
       PASSWD: {{ requiredEnv "GITEA_PASSWORD" | quote }}
       SSL_MODE: require
-    # Managed Valkey (DO non-prod tier, single-node) — replaces in-cluster
-    # bitnami/redis. Uses TLS (rediss://) per DO managed default. Auth via
-    # password from Pulumi redisPassword output. Pool sizing same as values.yaml.
-    cache:
-      ADAPTER: redis
-      HOST: 'rediss://default:{{ requiredEnv "GITEA_REDIS_PASSWORD" }}@{{ requiredEnv "GITEA_REDIS_HOST" }}:{{ requiredEnv "GITEA_REDIS_PORT" }}/0?pool_size=100&idle_timeout=180s'
+    # Managed Valkey (DO non-prod tier) with TLS — rediss:// URL format.
+    # Mirrors values-ha.yaml prod pattern: URL scheme, NOT k=v format.
+    # go-chi/session redis adapter parses URL via go-redis Options.
+    # User "default" + password from Pulumi redisPassword output.
     session:
       PROVIDER: redis
-      PROVIDER_CONFIG: 'network=tcp,addr={{ requiredEnv "GITEA_REDIS_HOST" }}:{{ requiredEnv "GITEA_REDIS_PORT" }},password={{ requiredEnv "GITEA_REDIS_PASSWORD" }},db=1,pool_size=100,idle_timeout=180s,tls=true,skip_verify=false'
+      PROVIDER_CONFIG: 'rediss://default:{{ requiredEnv "GITEA_REDIS_PASSWORD" }}@{{ requiredEnv "GITEA_REDIS_HOST" }}:{{ requiredEnv "GITEA_REDIS_PORT" }}/0?pool_size=100&idle_timeout=180s'
+    cache:
+      ADAPTER: redis
+      HOST: 'rediss://default:{{ requiredEnv "GITEA_REDIS_PASSWORD" }}@{{ requiredEnv "GITEA_REDIS_HOST" }}:{{ requiredEnv "GITEA_REDIS_PORT" }}/1?pool_size=100&idle_timeout=180s'
     queue:
       TYPE: redis
       CONN_STR: 'rediss://default:{{ requiredEnv "GITEA_REDIS_PASSWORD" }}@{{ requiredEnv "GITEA_REDIS_HOST" }}:{{ requiredEnv "GITEA_REDIS_PORT" }}/2?pool_size=100&idle_timeout=180s'
