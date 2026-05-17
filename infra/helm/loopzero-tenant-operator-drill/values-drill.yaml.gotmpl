@@ -21,3 +21,12 @@ image:
 secrets:
   create: true
   giteaToken: '{{ env "GITEA_TOKEN_VAL" | default "drill-stub-token" }}'
+
+# Bug #26 LIVE fix (2026-05-17 iter 19): operator requires BUILD_KUBECONFIG +
+# RUNTIME_KUBECONFIG env vars. Reference ConfigMaps pre-created by
+# drill-helmfile-bootstrap.sh Phase 2.7.
+kubeconfig:
+  build:
+    existingConfigMap: loopzero-build-kubeconfig
+  runtime:
+    existingConfigMap: loopzero-runtime-kubeconfig

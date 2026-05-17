@@ -463,6 +463,19 @@ else
   log "  WARN: gitea-admin Secret not found yet (operator startup may fail)"
 fi
 
+# Bug #26 LIVE FIX (caught 2026-05-17 iter 19): operators require BUILD_KUBECONFIG
+# + RUNTIME_KUBECONFIG env vars pointing to mounted files. Chart mounts when
+# kubeconfig.{build,runtime}.existingConfigMap is set. Create ConfigMaps now
+# from drill kubeconfigs we already have at /tmp/drill-kc/.
+log "Bug #26 fix: creating build + runtime kubeconfig ConfigMaps for operators..."
+kubectl create configmap loopzero-build-kubeconfig --namespace loopzero-system \
+  --from-file=kubeconfig="$DRILL_KUBECONFIG_DIR/build.yaml" \
+  --dry-run=client -o yaml | kubectl apply -f - >/dev/null
+kubectl create configmap loopzero-runtime-kubeconfig --namespace loopzero-system \
+  --from-file=kubeconfig="$DRILL_KUBECONFIG_DIR/runtime.yaml" \
+  --dry-run=client -o yaml | kubectl apply -f - >/dev/null
+log "  ✓ ConfigMaps loopzero-build-kubeconfig + loopzero-runtime-kubeconfig created"
+
 # Bug #16 LIVE FIX (caught 2026-05-17 iter 7 on loopzero-api ImagePullBackOff):
 # generate-secrets.sh registry block uses base64(SPACES_KEY:SPACES_SECRET)
 # which is WRONG auth format for DOCR (DOCR uses DO API token, NOT Spaces).
