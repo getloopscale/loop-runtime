@@ -687,6 +687,46 @@ EOF
   }
 }
 
+test_pg_password_extracted_from_postgresql_scheme() {
+  # Bug #17 LIVE fix (caught 2026-05-17 iter 10): DO Managed PG returns
+  # pgUri with scheme "postgresql://" (NOT "postgres://"). Old regex
+  # `^postgres://` didn't match → LOOPZERO_DB_PASSWORD ended up being the
+  # ENTIRE URI → double-wrapped DSN → loopzero-api CrashLoopBackOff
+  # "too many colons in address".
+  local tmpdir="$1"
+  build_stubs "$tmpdir"
+  # Override pulumi pgUri to use postgresql:// scheme (DO mgmt PG default)
+  sed -i 's|postgres://doadmin:realdoadminpassword@drill-pg|postgresql://doadmin:realdoadminpassword@drill-pg|g' "$tmpdir/bin/pulumi"
+  # Wrap generate-secrets stub to capture LOOPZERO_DB_PASSWORD value
+  cat > "$tmpdir/helmfile/scripts/generate-secrets.sh" <<EOF
+#!/usr/bin/env bash
+echo "LOOPZERO_DB_PASSWORD=\${LOOPZERO_DB_PASSWORD:-EMPTY}" > "$tmpdir/db-password-extracted.log"
+exit 0
+EOF
+  chmod +x "$tmpdir/helmfile/scripts/generate-secrets.sh"
+
+  set +e
+  run_script "$tmpdir" >/dev/null 2>&1
+  local rc=$?
+  set -e
+  [[ "$rc" -eq 0 ]] || {
+    echo "  script exit $rc (expected 0 — extraction must succeed for postgresql:// scheme)" >&2
+    tail -10 "$tmpdir/stderr.log" >&2
+    return 1
+  }
+  # LOOPZERO_DB_PASSWORD must be the password ONLY, not the full URI
+  if grep -q "LOOPZERO_DB_PASSWORD=postgresql://" "$tmpdir/db-password-extracted.log"; then
+    echo "  FAIL: Bug #17 regression — extracted password contains 'postgresql://'" >&2
+    cat "$tmpdir/db-password-extracted.log" >&2
+    return 1
+  fi
+  grep -q "LOOPZERO_DB_PASSWORD=realdoadminpassword$" "$tmpdir/db-password-extracted.log" || {
+    echo "  FAIL: expected LOOPZERO_DB_PASSWORD=realdoadminpassword, got:" >&2
+    cat "$tmpdir/db-password-extracted.log" >&2
+    return 1
+  }
+}
+
 run_test() {
   local name="$1"
   TESTS_RUN=$((TESTS_RUN + 1))
@@ -724,6 +764,7 @@ run_test test_generate_secrets_env_vars_pulumi_sourced
 run_test test_generate_secrets_uses_mgmt_kubeconfig
 run_test test_managed_valkey_env_vars_exported
 run_test test_managed_valkey_missing_outputs_exits_2
+run_test test_pg_password_extracted_from_postgresql_scheme
 
 echo ""
 echo "Tests run:    $TESTS_RUN"

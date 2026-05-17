@@ -340,9 +340,26 @@ export LOOPZERO_DB_USER="doadmin"
 export LOOPZERO_DB_PASSWORD="$(pulumi_out pgPassword true 2>/dev/null || echo "")"
 if [[ -z "$LOOPZERO_DB_PASSWORD" ]]; then
   # Fall back to extracting from pgUri (pulumi-drill doesn't export pgPassword
-  # as separate output — only via pgUri composite). Parse postgres://user:pass@...
+  # as separate output — only via pgUri composite).
+  #
+  # Bug #17 LIVE FIX (caught 2026-05-17 iter 10 on loopzero-api CrashLoopBackOff
+  # "too many colons in address"): DO Managed PG returns pgUri with scheme
+  # "postgresql://" (NOT "postgres://"). The old sed regex `^postgres://`
+  # didn't match → substitution failed silently → LOOPZERO_DB_PASSWORD ended up
+  # being the ENTIRE URI → generate-secrets.sh built a double-wrapped DSN:
+  #   postgresql://doadmin:postgresql://doadmin:PASS@host:port/db?...@host:...
+  #
+  # Fix: regex matches both schemes via `postgres(ql)?://`. Defensive: also
+  # validate the extracted password doesn't contain `://` (a sentinel that
+  # extraction failed and we got the URI itself).
   PG_URI="$(pulumi_out pgUri true)"
-  LOOPZERO_DB_PASSWORD="$(echo "$PG_URI" | sed -E 's|^postgres://[^:]+:([^@]+)@.*$|\1|')"
+  LOOPZERO_DB_PASSWORD="$(echo "$PG_URI" | sed -E 's|^postgres(ql)?://[^:]+:([^@]+)@.*$|\2|')"
+  if [[ -z "$LOOPZERO_DB_PASSWORD" || "$LOOPZERO_DB_PASSWORD" == *"://"* ]]; then
+    log "ERROR: pgUri password extraction failed (Bug #17 regression)"
+    log "  pgUri scheme may have changed; expected postgres:// or postgresql://"
+    log "  extracted: $(echo "$LOOPZERO_DB_PASSWORD" | sed 's/./*/g' | head -c 50)..."
+    exit 2
+  fi
 fi
 export LOOPZERO_DB_NAME="loopzero"
 
