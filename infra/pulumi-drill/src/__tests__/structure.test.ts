@@ -408,6 +408,32 @@ describe("loopzero-drill — Per-app DatabaseUser resources (Phase 2 T1.2)", () 
   });
 });
 
+describe("loopzero-drill — DatabaseFirewall (Phase 2 Bug #11 LIVE fix)", () => {
+  const src = fs.readFileSync(INDEX, "utf-8");
+
+  it("declares exactly 1 DatabaseFirewall (drill-pg-firewall)", () => {
+    const matches = src.match(/new digitalocean\.DatabaseFirewall\(/g) ?? [];
+    expect(matches.length).toBe(1);
+    expect(src).toMatch(/new digitalocean\.DatabaseFirewall\("drill-pg-firewall"/);
+  });
+
+  it("firewall references drillPG.id for clusterId", () => {
+    expect(src).toMatch(/DatabaseFirewall\("drill-pg-firewall"[\s\S]*?clusterId:\s*drillPG\.id/);
+  });
+
+  it("firewall allows all 4 DOKS clusters (mgmt + build + runtime + runtime-2)", () => {
+    const firewallBlock = src.match(/DatabaseFirewall\("drill-pg-firewall"[\s\S]+?\}\);/)?.[0] ?? "";
+    expect(firewallBlock).toMatch(/type:\s*"k8s",\s*value:\s*mgmtCluster\.id/);
+    expect(firewallBlock).toMatch(/type:\s*"k8s",\s*value:\s*buildCluster\.id/);
+    expect(firewallBlock).toMatch(/type:\s*"k8s",\s*value:\s*runtimeCluster\.id/);
+    expect(firewallBlock).toMatch(/type:\s*"k8s",\s*value:\s*runtimeCluster2\.id/);
+  });
+
+  it("documents Bug #11 LIVE root cause in source comment", () => {
+    expect(src).toMatch(/Bug #11[\s\S]*?context deadline exceeded/);
+  });
+});
+
 describe("loopzero-drill — Per-service DSN named exports (Phase 2 T1.3)", () => {
   const src = fs.readFileSync(INDEX, "utf-8");
 

@@ -301,6 +301,31 @@ const drillPgLoopZeroApiUser = new digitalocean.DatabaseUser("drill-pg-loopzero-
 });
 
 // =============================================================================
+// 6.3. DatabaseFirewall (Phase 2 Bug #11 LIVE fix — mirror pulumi/{prod}+pulumi-infra)
+// =============================================================================
+//
+// Without this, DO managed PG defaults to "trusted sources only" and DOKS pods
+// time out connecting to port 25060. Caught LIVE 2026-05-17 iter 1 on ory-kratos
+// migration job: "Error: context deadline exceeded" after 900s.
+//
+// Mirrors `infra/pulumi/src/providers/digitalocean/database.ts:75` +
+// `infra/pulumi-infra/src/providers/digitalocean/database.ts:62`.
+//
+// Rules: all 4 DOKS clusters need PG access (mgmt for loopzero-api/kratos/hydra/gitea
+// migrations, build for loopzero-api API calls into workflow steps, runtime+runtime-2
+// for cell-aware operator reconciles that read tenant state).
+
+new digitalocean.DatabaseFirewall("drill-pg-firewall", {
+  clusterId: drillPG.id,
+  rules: [
+    { type: "k8s", value: mgmtCluster.id },
+    { type: "k8s", value: buildCluster.id },
+    { type: "k8s", value: runtimeCluster.id },
+    { type: "k8s", value: runtimeCluster2.id },
+  ],
+});
+
+// =============================================================================
 // Stack outputs (FLAT NAMED EXPORTS per L2-unlock plan D1)
 // =============================================================================
 //

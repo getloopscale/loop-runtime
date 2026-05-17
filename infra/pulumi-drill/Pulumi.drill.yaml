@@ -9,7 +9,7 @@ config:
   # Stage 2 cell2-soaks (24h soak) overrides via `pulumi config set loopzero-drill:expiresInHours 26`
   # before `pulumi up` (cell2-soaks.yml workflow propagates this).
   # Max 48h enforced in code (src/index.ts:71).
-  loopzero-drill:expiresInHours: "4"
+  loopzero-drill:expiresInHours: "8"
   # === Mgmt cluster (medium per D2) ===
   loopzero-drill:mgmtK8sVersion: 1.33.9-do.6
   loopzero-drill:mgmtNodeSize: s-4vcpu-8gb-amd
