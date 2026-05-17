@@ -47,6 +47,21 @@ build_stubs() {
   touch "$tmpdir/helmfile/runtime.helmfile.yaml.gotmpl"
   # runtime-2 reuses runtime.helmfile.yaml.gotmpl per script mapping
 
+  # Bug #19+20+21+22 LIVE fix stubs — Phase 2.6 bootstrap-cell scripts.
+  # Drill helmfile bootstrap calls infra/scripts/bootstrap-cell-{default,1,2}-cc-drill.sh
+  # which need to exist (and exit 0) for hermetic tests. The real scripts are
+  # at infra/scripts/bootstrap-cell-*-cc-drill.sh; in tests we shadow them via
+  # a sibling-bin lookup that mirrors the production path resolution.
+  mkdir -p "$tmpdir/scripts"
+  for cell in default 1 2; do
+    cat > "$tmpdir/scripts/bootstrap-cell-${cell}-cc-drill.sh" <<EOF2
+#!/usr/bin/env bash
+echo "[stub-bootstrap-cell-${cell}-cc-drill] applied cell-${cell}" >> "$tmpdir/cc-bootstrap.log"
+exit 0
+EOF2
+    chmod +x "$tmpdir/scripts/bootstrap-cell-${cell}-cc-drill.sh"
+  done
+
   # generate-secrets.sh stub (Bug #13 LIVE fix — Phase 2.5)
   # Records invocations + env vars for assertions, returns 0 (success).
   cat > "$tmpdir/helmfile/scripts/generate-secrets.sh" <<EOF
@@ -150,7 +165,12 @@ EOF
 SCEN=\$(cat "$tmpdir/helmfile-scenario.txt" 2>/dev/null || echo all-ok)
 # Detect which cluster via KUBECONFIG env (set per cluster by orchestrator)
 CLUSTER_FROM_KC=\$(basename "\${KUBECONFIG:-unknown}" .yaml)
-echo "\$CLUSTER_FROM_KC" >> "$tmpdir/cluster-order.txt"
+# Bug #19 fix: Phase 2.6 calls helmfile with --selector for loopzero-crds-only
+# install. That's a single-cluster pre-step, not a full sync iteration —
+# don't record it in cluster-order.txt (which only tracks full per-cluster syncs).
+if ! echo "\$*" | grep -q -- "--selector"; then
+  echo "\$CLUSTER_FROM_KC" >> "$tmpdir/cluster-order.txt"
+fi
 
 # Record env vars for assertions
 {
@@ -205,6 +225,13 @@ case "\$*" in
     echo "docker-registry-secret=\$SEC_NAME namespace=\$SEC_NS" >> "$tmpdir/kubectl-invocations.log"
     exit 0
     ;;
+  *"patch clustercredential"*)
+    # Bug #22 fix: record patch invocation, return success
+    CC_NAME=\$(echo "\$*" | sed -E 's/.*patch clustercredential ([^ ]+).*/\1/')
+    echo "patch-cc=\$CC_NAME" >> "$tmpdir/kubectl-invocations.log"
+    echo "clustercredential.loopzero.io/\$CC_NAME patched"
+    exit 0
+    ;;
   *"apply -f"*) exit 0 ;;
   *"wait --for=condition=Available"*) exit 0 ;;
   *) exit 0 ;;
@@ -223,6 +250,8 @@ run_script() {
   # Bug #16 LIVE fix: drill-helmfile-bootstrap.sh requires DIGITALOCEAN_TOKEN
   # to create loopzero-registry-pull Secret via kubectl docker-registry. Tests
   # provide a stub value (real token not needed because kubectl is stubbed).
+  # Bug #19 LIVE fix: provide MOCK_PULUMI_JSON for bootstrap-cell-*-cc-drill
+  # scripts (Phase 2.6) so they don't need a real Pulumi backend in tests.
   PATH="$tmpdir/bin:/usr/bin:/bin" \
     DRILL_KUBECONFIG_DIR="$tmpdir/drill-kc" \
     PULUMI_DRILL_DIR="$tmpdir/pulumi-drill" \
@@ -230,6 +259,7 @@ run_script() {
     HELMFILE_ENV=drill \
     HEALTH_WAIT_TIMEOUT=5s \
     DIGITALOCEAN_TOKEN="${DIGITALOCEAN_TOKEN:-dop_v1_stub_drill_test_token_aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa}" \
+    MOCK_PULUMI_JSON='{"runtimeClusterEndpoint":"https://stub-runtime.example.com","runtimeClusterKubeconfig":"apiVersion: v1\nkind: Config","runtimeCluster2Endpoint":"https://stub-runtime2.example.com","runtimeCluster2Kubeconfig":"apiVersion: v1\nkind: Config"}' \
     bash "$SCRIPT" "$@" 2>"$tmpdir/stderr.log" >"$tmpdir/stdout.log"
 }
 
