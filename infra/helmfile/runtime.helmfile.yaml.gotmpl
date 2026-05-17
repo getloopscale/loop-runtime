@@ -229,6 +229,11 @@ releases:
   - name: static-assets
     namespace: loopzero-system
     chart: ../helm/static-assets
+    # Bug #32 LIVE fix (2026-05-17 iter 24): static-assets readiness times
+    # out at 15m on DOKS. Drill L2 harness doesn't deploy static apps —
+    # only dynamic deploys (Rollout-backed services). Skip in drill to
+    # unblock Phase 4a runtime sync.
+    installed: {{ ne .Environment.Name "drill" }}
     needs:
       - loopzero-system/rbac
     values:
