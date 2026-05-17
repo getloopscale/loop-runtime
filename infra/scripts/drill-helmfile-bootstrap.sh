@@ -469,10 +469,10 @@ fi
 # from drill kubeconfigs we already have at /tmp/drill-kc/.
 log "Bug #26 fix: creating build + runtime kubeconfig ConfigMaps for operators..."
 kubectl create configmap loopzero-build-kubeconfig --namespace loopzero-system \
-  --from-file=kubeconfig="$DRILL_KUBECONFIG_DIR/build.yaml" \
+  --from-file=config="$DRILL_KUBECONFIG_DIR/build.yaml" \
   --dry-run=client -o yaml | kubectl apply -f - >/dev/null
 kubectl create configmap loopzero-runtime-kubeconfig --namespace loopzero-system \
-  --from-file=kubeconfig="$DRILL_KUBECONFIG_DIR/runtime.yaml" \
+  --from-file=config="$DRILL_KUBECONFIG_DIR/runtime.yaml" \
   --dry-run=client -o yaml | kubectl apply -f - >/dev/null
 log "  ✓ ConfigMaps loopzero-build-kubeconfig + loopzero-runtime-kubeconfig created"
 

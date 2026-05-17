@@ -504,6 +504,10 @@ releases:
   - name: loopzero-cloud
     namespace: loopzero-system
     chart: ../helm/loopzero-cloud
+    # Bug #29 LIVE fix (2026-05-17 iter 20): loopzero-cloud image not in DOCR
+    # for drill. Skip — drill L2 harness goes through loopzero-api directly,
+    # not loopzero-cloud dashboard. Production keeps loopzero-cloud installed.
+    installed: {{ ne .Environment.Name "drill" }}
     needs:
       - loopzero-auth/ory-hydra
       - loopzero-system/loopzero-api
@@ -538,9 +542,14 @@ releases:
   - name: smoke-test
     namespace: loopzero-system
     chart: ../helm/smoke-test
+    # Bug #29 LIVE fix: skip in drill — depends on loopzero-cloud (skipped).
+    # Drill validates via Phase 6 L2 harness directly.
+    installed: {{ ne .Environment.Name "drill" }}
     needs:
       - loopzero-system/loopzero-api
+{{- if ne .Environment.Name "drill" }}
       - loopzero-system/loopzero-cloud
+{{- end }}
       - loopzero-system/loopzero-tenant-operator
       - loopzero-system/loopzero-app-operator
       - loopzero-system/loopzero-preview-operator
