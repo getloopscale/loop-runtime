@@ -125,7 +125,7 @@ EOF
   # 3. Create ClusterCredential CR in mgmt cluster.
   local CC_MANIFEST
   CC_MANIFEST=$(cat <<EOF
-apiVersion: loopzero.io/v1alpha1
+apiVersion: loopzero.io/v1
 kind: ClusterCredential
 metadata:
   name: ${CELL_ID}
