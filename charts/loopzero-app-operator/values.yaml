@@ -90,10 +90,15 @@ networkPolicy:
         - protocol: TCP
           port: 8443
   extraEgress:
-    # Kubernetes API server
+    # Kubernetes API server.
+    # Bug #24 LIVE fix (2026-05-17 iter 17): DOKS exposes K8s API on port
+    # 443 (ClusterIP 10.245.0.1:443), NOT 6443. Local k3d uses 6443.
+    # Allow BOTH so this chart works on k3d, DOKS, EKS, GKE uniformly.
     - ports:
         - protocol: TCP
           port: 6443
+        - protocol: TCP
+          port: 443
 
 topologySpreadConstraints:
   enabled: false
