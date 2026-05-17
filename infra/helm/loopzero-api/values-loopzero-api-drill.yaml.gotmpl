@@ -1,5 +1,5 @@
 # Drill environment override for loopzero-api chart.
-# Plan: 2026-05-16-drill-l2-unlock-phase2 — Bug #16 LIVE fix.
+# Plan: 2026-05-16-drill-l2-unlock-phase2 — Bug #16 + #18 LIVE fix.
 #
 # Default values.yaml uses tag=latest which doesn't exist in DOCR
 # (only immutable tags like REDACTED_SECRET_061, dev, commit-sha). Drill
@@ -8,13 +8,21 @@
 # created by drill-helmfile-bootstrap.sh via `kubectl create secret
 # docker-registry` (canonical DOCR pattern, mirrors prod posture).
 #
-# Tag selection: REDACTED_SECRET_061 is the most recent stable tag in DOCR
-# (pushed 2026-04-28). Override via LOOPZERO_API_IMAGE_TAG env var when
-# testing a newer build.
+# Tag selection rationale:
+# - REDACTED_SECRET_061 (2026-04-28) was PRE iter-19 leader fix (commit b32e87b5
+#   on 2026-05-12). Drill iter 11 caught Bug #18: secondary pod
+#   CrashLoopBackOff because the pre-fix code blocked main() synchronously
+#   during leader election (60s startup probe failure).
+# - drill-phase2-9ad223a5 (2026-05-17) includes the iter-19 fix
+#   (goroutine-wrapped setupLeaderElection + standby HTTP server serves
+#   /api/v1/health while waiting). LIVE multi-replica (replicaCount=2)
+#   validated in iter 12 (Bug #18 closure evidence).
+#
+# Override via LOOPZERO_API_IMAGE_TAG env var when testing a newer build.
 
 image:
   repository: registry.digitalocean.com/loopzero-system/loopzero-api
-  tag: '{{ env "LOOPZERO_API_IMAGE_TAG" | default "REDACTED_SECRET_061" }}'
+  tag: '{{ env "LOOPZERO_API_IMAGE_TAG" | default "drill-phase2-9ad223a5" }}'
   pullPolicy: IfNotPresent
 
 imagePullSecrets:
