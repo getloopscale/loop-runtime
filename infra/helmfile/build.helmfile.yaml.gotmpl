@@ -20,6 +20,12 @@ environments:
     # end-to-end-deploy-validation-plan T0.3 — 3 separate k3d clusters.
     values:
       - environments/standalone-multi.yaml
+  drill:
+    # Bug #30 LIVE fix (2026-05-17 iter 21): drill needs build cluster
+    # bootstrap to install Argo Workflows + BuildKit on the drill build
+    # DOKS cluster. Reuses drill.yaml values from mgmt helmfile.
+    values:
+      - environments/drill.yaml
 
 ---
 helmDefaults:

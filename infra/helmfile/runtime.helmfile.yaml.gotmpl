@@ -24,6 +24,12 @@ environments:
     # end-to-end-deploy-validation-plan T0.3 — 3 separate k3d clusters.
     values:
       - environments/standalone-multi.yaml
+  drill:
+    # Bug #30 LIVE fix (2026-05-17 iter 21): drill runtime + runtime-2
+    # clusters need Traefik + cert-manager + cf-tunnel bootstrap.
+    # Reuses drill.yaml env values.
+    values:
+      - environments/drill.yaml
 
 ---
 helmDefaults:
