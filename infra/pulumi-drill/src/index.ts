@@ -326,6 +326,54 @@ new digitalocean.DatabaseFirewall("drill-pg-firewall", {
 });
 
 // =============================================================================
+// 7. Managed Valkey/Redis (Bug #15 LIVE fix — mirror infra/pulumi/src/components/mgmt-redis-ha.ts)
+// =============================================================================
+//
+// Per ADR-0016 D-6 + CTO Golden Rule #0 ("ambiente local fidedigno ao prod"):
+// drill MUST use DO Managed Valkey, NOT in-cluster bitnami/redis. In-cluster
+// redis is a STANDALONE/local-k3d pattern. Production uses managed Valkey
+// because:
+//   - Internal Redis = SPOF (single-replica StatefulSet)
+//   - Sessions/queues/cache lost on pod restart
+//   - No automated backups
+//   - Helm-managed Service naming drift (Bug #15: gitea-redis vs
+//     gitea-redis-master Service name mismatch)
+//
+// Bug #15 LIVE caught 2026-05-17 iter 5: gitea pod CrashLoopBackOff on
+// `cache.Init failed: dial tcp: lookup gitea-redis on 10.245.0.10:53: no
+// such host`. Root cause: bitnami/redis chart creates Service
+// `gitea-redis-master` but gitea config points to `gitea-redis`. Wrong fix
+// would be addr=gitea-redis-master:6379 — right fix is replace in-cluster
+// redis with managed Valkey (prod parity).
+//
+// Sizing: drill = non-prod tier (db-amd-1vcpu-2gb single-node) matching
+// non-prod prod config. Same engine version (valkey 8) for parity.
+
+const drillRedis = new digitalocean.DatabaseCluster("drill-redis", {
+  name: `${doProject}-redis`,
+  engine: "valkey",
+  version: "8",
+  size: "db-amd-1vcpu-2gb", // non-prod tier (mirrors mgmt-redis-ha.ts:45 non-prod)
+  region,
+  nodeCount: 1,
+  privateNetworkUuid: drillVpc.id,
+  tags: drillTags,
+});
+
+// Firewall: same 4 DOKS clusters as drill-pg (mgmt needs Redis for gitea
+// cache/session/queue + harbor sessions; build/runtime currently don't but
+// kept symmetric for future hardening + zero added cost since rules are free).
+new digitalocean.DatabaseFirewall("drill-redis-firewall", {
+  clusterId: drillRedis.id,
+  rules: [
+    { type: "k8s", value: mgmtCluster.id },
+    { type: "k8s", value: buildCluster.id },
+    { type: "k8s", value: runtimeCluster.id },
+    { type: "k8s", value: runtimeCluster2.id },
+  ],
+});
+
+// =============================================================================
 // Stack outputs (FLAT NAMED EXPORTS per L2-unlock plan D1)
 // =============================================================================
 //
@@ -381,6 +429,17 @@ export const pgUri = drillPG.uri;
 export const pgHost = drillPG.host;
 export const pgPort = drillPG.port;
 export const pgDatabase = drillPG.database;
+
+// Shared infrastructure — Managed Valkey/Redis (Bug #15 LIVE fix)
+// Mirrors prod precedent infra/pulumi/src/components/mgmt-redis-ha.ts:65-69.
+// Used by gitea (cache/session/queue) + harbor (sessions/queue/cache) via
+// drill-helmfile-bootstrap.sh exporting LOOPZERO_*_REDIS_HOST/PASSWORD env vars.
+// privateHost ensures DOKS pods reach Valkey via internal VPC (10.40.0.0/16),
+// NOT public internet (would require explicit firewall allow per IP).
+export const redisHost = drillRedis.privateHost;
+export const redisPort = drillRedis.port;
+export const redisPassword = drillRedis.password;
+export const redisUri = drillRedis.uri; // full rediss://user:pass@host:port/0 — convenience
 
 // Per-service DSN exports (Phase 2 plan T1.3 + D2 — pulumi.interpolate for Output<T>)
 // CRITICAL: consumers MUST use `--show-secrets` flag when reading these (T1.3.bis EC-1).

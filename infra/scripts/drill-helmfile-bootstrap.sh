@@ -354,6 +354,37 @@ export LOOPZERO_SPACES_SECRET="${SPACES_SECRET_ACCESS_KEY:-${AWS_SECRET_ACCESS_K
 # Set LOOPZERO_PROFILE=cloud so generate-secrets uses managed PG path (not standalone fallback).
 export LOOPZERO_PROFILE="cloud"
 
+# Bug #15 LIVE FIX: Managed Valkey credentials (replaces in-cluster bitnami).
+# Per CTO Golden Rule #0 + ADR-0016 D-6: drill uses DO Managed Valkey,
+# mirrors prod posture. drill helmfile skips gitea-redis + harbor-redis
+# releases when env=drill (installed: false). These env vars feed:
+#   - gitea drill values override (cache/session/queue redis addr)
+#   - generate-secrets.sh harbor-redis-credentials Secret (HOST/PASSWORD)
+REDIS_HOST_VAL="$(pulumi_out redisHost false)"
+REDIS_PORT_VAL="$(pulumi_out redisPort false)"
+REDIS_PASSWORD_VAL="$(pulumi_out redisPassword true)"
+if [[ -z "$REDIS_HOST_VAL" || -z "$REDIS_PORT_VAL" || -z "$REDIS_PASSWORD_VAL" ]]; then
+  log "ERROR: missing Pulumi redis* outputs (redisHost/redisPort/redisPassword)"
+  log "  hint: managed Valkey not yet provisioned. Re-run 'task drill:up' to recreate."
+  exit 2
+fi
+# Sanity check: reject "[secret]" literal (--show-secrets not honored)
+if [[ "$REDIS_PASSWORD_VAL" == "[secret]" ]]; then
+  log "ERROR: redisPassword renders as literal '[secret]' — pulumi_out must use --show-secrets"
+  exit 2
+fi
+
+# Export for gitea drill values override consumption
+export GITEA_REDIS_HOST="$REDIS_HOST_VAL"
+export GITEA_REDIS_PORT="$REDIS_PORT_VAL"
+export GITEA_REDIS_PASSWORD="$REDIS_PASSWORD_VAL"
+
+# Export for generate-secrets.sh harbor-redis-credentials path (line 303
+# in generate-secrets.sh uses LOOPZERO_HARBOR_REDIS_HOST default fallback).
+export LOOPZERO_HARBOR_REDIS_HOST="$REDIS_HOST_VAL"
+export LOOPZERO_HARBOR_REDIS_PASSWORD="$REDIS_PASSWORD_VAL"
+log "  ✓ Managed Valkey env exported (gitea + harbor will use $REDIS_HOST_VAL:$REDIS_PORT_VAL)"
+
 bash "$HELMFILE_DIR/scripts/generate-secrets.sh" drill mgmt
 log "  ✓ Platform Secrets generated (loopzero-db, gitea, minio, harbor, velero, registry-pull)"
 

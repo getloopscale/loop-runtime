@@ -97,6 +97,16 @@ case "\$KEY" in
     fi
     ;;
   pgPassword) ;;  # pulumi-drill doesn't export this — script falls back to pgUri parse
+  # Bug #15 LIVE fix — Managed Valkey outputs
+  redisHost) echo "drill-redis.host.private.example.com" ;;
+  redisPort) echo "25061" ;;
+  redisPassword)
+    if echo "\$*" | grep -q "show-secrets"; then
+      echo "realvalkeypassword999"
+    else
+      echo "[secret]"
+    fi
+    ;;
   # Iter Phase 2 ad-hoc fix: UUID matches drill-mgmt cluster-info stub for EC-2 guard
   mgmtClusterEndpoint) echo "https://aaaaaaaa-bbbb-cccc-dddd-eeeeeeeeeeee.k8s.ondigitalocean.com" ;;
   # Phase 2 T1.3 — per-service DSN exports (T1.3.bis EC-1 requires --show-secrets)
@@ -556,6 +566,115 @@ test_generate_secrets_uses_mgmt_kubeconfig() {
   }
 }
 
+test_managed_valkey_env_vars_exported() {
+  # Bug #15 LIVE fix: drill uses DO Managed Valkey (mirror prod ADR-0016 D-6).
+  # Script MUST read redisHost/Port/Password from Pulumi + export 5 env vars:
+  #   GITEA_REDIS_HOST/PORT/PASSWORD (for gitea drill values override)
+  #   LOOPZERO_HARBOR_REDIS_HOST/PASSWORD (for generate-secrets.sh harbor-redis-credentials)
+  local tmpdir="$1"
+  build_stubs "$tmpdir"
+  # Extend stub to record GITEA_REDIS_* + LOOPZERO_HARBOR_REDIS_* env vars
+  cat > "$tmpdir/helmfile/scripts/generate-secrets.sh" <<EOF
+#!/usr/bin/env bash
+{
+  echo "GITEA_REDIS_HOST=\${GITEA_REDIS_HOST:-}"
+  echo "GITEA_REDIS_PORT=\${GITEA_REDIS_PORT:-}"
+  echo "GITEA_REDIS_PASSWORD_set=\$([[ -n \"\${GITEA_REDIS_PASSWORD:-}\" ]] && echo yes || echo no)"
+  echo "LOOPZERO_HARBOR_REDIS_HOST=\${LOOPZERO_HARBOR_REDIS_HOST:-}"
+  echo "LOOPZERO_HARBOR_REDIS_PASSWORD_set=\$([[ -n \"\${LOOPZERO_HARBOR_REDIS_PASSWORD:-}\" ]] && echo yes || echo no)"
+} >> "$tmpdir/redis-env.log"
+exit 0
+EOF
+  chmod +x "$tmpdir/helmfile/scripts/generate-secrets.sh"
+
+  set +e
+  run_script "$tmpdir" >/dev/null 2>&1
+  local rc=$?
+  set -e
+  [[ "$rc" -eq 0 ]] || { echo "  script exit $rc" >&2; tail -10 "$tmpdir/stderr.log" >&2; return 1; }
+  [[ -f "$tmpdir/redis-env.log" ]] || { echo "  FAIL: generate-secrets not invoked" >&2; return 1; }
+
+  grep -q "GITEA_REDIS_HOST=drill-redis.host.private.example.com" "$tmpdir/redis-env.log" || {
+    echo "  FAIL: GITEA_REDIS_HOST not from Pulumi redisHost" >&2
+    cat "$tmpdir/redis-env.log" >&2
+    return 1
+  }
+  grep -q "GITEA_REDIS_PORT=25061" "$tmpdir/redis-env.log" || {
+    echo "  FAIL: GITEA_REDIS_PORT not from Pulumi redisPort" >&2
+    return 1
+  }
+  grep -q "GITEA_REDIS_PASSWORD_set=yes" "$tmpdir/redis-env.log" || {
+    echo "  FAIL: GITEA_REDIS_PASSWORD not extracted with --show-secrets" >&2
+    return 1
+  }
+  grep -q "LOOPZERO_HARBOR_REDIS_HOST=drill-redis.host.private.example.com" "$tmpdir/redis-env.log" || {
+    echo "  FAIL: LOOPZERO_HARBOR_REDIS_HOST not from Pulumi redisHost" >&2
+    return 1
+  }
+  grep -q "LOOPZERO_HARBOR_REDIS_PASSWORD_set=yes" "$tmpdir/redis-env.log" || {
+    echo "  FAIL: LOOPZERO_HARBOR_REDIS_PASSWORD not extracted with --show-secrets" >&2
+    return 1
+  }
+}
+
+test_managed_valkey_missing_outputs_exits_2() {
+  # Bug #15 LIVE fix: script must fail-fast if Pulumi redis* outputs missing
+  # (e.g., pulumi up didn't provision Managed Valkey yet).
+  local tmpdir="$1"
+  build_stubs "$tmpdir"
+  # Override pulumi stub to omit redis* outputs
+  cat > "$tmpdir/bin/pulumi" <<EOF
+#!/usr/bin/env bash
+KEY=""
+for arg in "\$@"; do
+  case "\$arg" in
+    pulumi|stack|output|--stack|drill|--cwd|--show-secrets) ;;
+    "$tmpdir/pulumi-drill") ;;
+    *) KEY="\$arg" ;;
+  esac
+done
+case "\$KEY" in
+  pgHost) echo "drill-pg.host.example.com" ;;
+  pgPort) echo "25060" ;;
+  pgDatabase) echo "defaultdb" ;;
+  pgUri)
+    if echo "\$*" | grep -q "show-secrets"; then
+      echo "postgres://doadmin:realdoadminpassword@drill-pg.host.example.com:25060/defaultdb?sslmode=require"
+    else
+      echo "postgres://doadmin:[secret]@drill-pg.host.example.com:25060/defaultdb?sslmode=require"
+    fi
+    ;;
+  mgmtClusterEndpoint) echo "https://aaaaaaaa-bbbb-cccc-dddd-eeeeeeeeeeee.k8s.ondigitalocean.com" ;;
+  kratosDsn|hydraDsn|giteaDsn|loopzeroApiDsn)
+    if echo "\$*" | grep -q "show-secrets"; then
+      echo "postgres://doadmin:realpassword@drill-pg.host.example.com:25060/x?sslmode=require"
+    else
+      echo "postgres://doadmin:[secret]@drill-pg.host.example.com:25060/x?sslmode=require"
+    fi
+    ;;
+  redisHost|redisPort|redisPassword) ;;  # Intentionally empty (regression scenario)
+  *) ;;
+esac
+exit 0
+EOF
+  chmod +x "$tmpdir/bin/pulumi"
+
+  set +e
+  run_script "$tmpdir" >/dev/null 2>&1
+  local rc=$?
+  set -e
+  [[ "$rc" -eq 2 ]] || {
+    echo "  expected exit 2 (missing Pulumi redis outputs), got $rc" >&2
+    tail -10 "$tmpdir/stderr.log" >&2
+    return 1
+  }
+  grep -q "missing Pulumi redis\* outputs" "$tmpdir/stderr.log" || {
+    echo "  FAIL: error message must reference redis outputs" >&2
+    tail -5 "$tmpdir/stderr.log" >&2
+    return 1
+  }
+}
+
 run_test() {
   local name="$1"
   TESTS_RUN=$((TESTS_RUN + 1))
@@ -591,6 +710,8 @@ run_test test_kubeconfig_wrong_cluster_aborts_exit_4
 run_test test_generate_secrets_called_with_drill_mgmt_args
 run_test test_generate_secrets_env_vars_pulumi_sourced
 run_test test_generate_secrets_uses_mgmt_kubeconfig
+run_test test_managed_valkey_env_vars_exported
+run_test test_managed_valkey_missing_outputs_exits_2
 
 echo ""
 echo "Tests run:    $TESTS_RUN"

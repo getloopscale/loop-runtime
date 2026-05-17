@@ -150,6 +150,47 @@ describe("loopzero-drill — Managed PG mgmt-tier (D4)", () => {
   });
 });
 
+describe("loopzero-drill — Managed Valkey/Redis (Bug #15 LIVE fix)", () => {
+  const src = fs.readFileSync(INDEX, "utf-8");
+
+  it("provisions DatabaseCluster drill-redis with valkey 8", () => {
+    expect(src).toMatch(/new digitalocean\.DatabaseCluster\("drill-redis"/);
+    expect(src).toMatch(/drill-redis[\s\S]+?engine:\s*"valkey"/);
+    expect(src).toMatch(/drill-redis[\s\S]+?version:\s*"8"/);
+  });
+
+  it("Valkey uses non-prod tier (db-amd-1vcpu-2gb single-node)", () => {
+    expect(src).toMatch(/drill-redis[\s\S]+?size:\s*"db-amd-1vcpu-2gb"/);
+    expect(src).toMatch(/drill-redis[\s\S]+?nodeCount:\s*1/);
+  });
+
+  it("Valkey attached to drill VPC (private networking)", () => {
+    expect(src).toMatch(/drill-redis[\s\S]+?privateNetworkUuid:\s*drillVpc\.id/);
+  });
+
+  it("Valkey firewall allows all 4 DOKS clusters", () => {
+    const fwBlock = src.match(/DatabaseFirewall\("drill-redis-firewall"[\s\S]+?\}\);/)?.[0] ?? "";
+    expect(fwBlock).toMatch(/clusterId:\s*drillRedis\.id/);
+    expect(fwBlock).toMatch(/type:\s*"k8s",\s*value:\s*mgmtCluster\.id/);
+    expect(fwBlock).toMatch(/type:\s*"k8s",\s*value:\s*buildCluster\.id/);
+    expect(fwBlock).toMatch(/type:\s*"k8s",\s*value:\s*runtimeCluster\.id/);
+    expect(fwBlock).toMatch(/type:\s*"k8s",\s*value:\s*runtimeCluster2\.id/);
+  });
+
+  it("exports redisHost (privateHost), redisPort, redisPassword, redisUri", () => {
+    expect(src).toMatch(/^export const redisHost\s*=\s*drillRedis\.privateHost/m);
+    expect(src).toMatch(/^export const redisPort\s*=\s*drillRedis\.port/m);
+    expect(src).toMatch(/^export const redisPassword\s*=\s*drillRedis\.password/m);
+    expect(src).toMatch(/^export const redisUri\s*=\s*drillRedis\.uri/m);
+  });
+
+  it("documents Bug #15 root cause + ADR-0016 prod parity in comment", () => {
+    expect(src).toMatch(/Bug #15 LIVE/);
+    expect(src).toMatch(/ADR-0016/);
+    expect(src).toMatch(/mirror.*mgmt-redis-ha/i);
+  });
+});
+
 describe("loopzero-drill — Spaces buckets (D8)", () => {
   const src = fs.readFileSync(INDEX, "utf-8");
 
@@ -320,9 +361,8 @@ describe("loopzero-drill — Outputs schema v2 (L2-unlock plan D1 named exports)
     expect(src).not.toMatch(/^export const bucket\s*=/m); // legacy singular bucket
   });
 
-  it("declares exactly 33 top-level named exports (29 v2 + 4 DSN per-service via Phase 2 T1.3)", () => {
-    // Sanity bound — 22 named exports is the expected count for v2 schema.
-    // Count helps catch silent additions/removals that drift schema.
+  it("declares exactly 37 top-level named exports (33 prior + 4 redis via Bug #15)", () => {
+    // Sanity bound — count helps catch silent additions/removals that drift schema.
     // Real exports only (not commented-out documentation).
     const realExports = src.split("\n").filter((line) => {
       const trimmed = line.trimStart();
@@ -330,13 +370,14 @@ describe("loopzero-drill — Outputs schema v2 (L2-unlock plan D1 named exports)
     });
     // 4 clusters × 4 fields = 16 cluster exports
     // + 4 PG exports (uri, host, port, database)
+    // + 4 Redis exports (host, port, password, uri) — Bug #15 LIVE fix
     // + 3 bucket exports (builds, artifacts, static)
     // + 2 VPC exports (id, ipRange)
     // + 2 zone exports (id, nameservers)
     // + 1 doProjectId
     // + 1 meta
-    // = 29 v2 named exports + 4 DSN (Phase 2 T1.3) = 33 total
-    expect(realExports.length).toBe(33);
+    // = 33 v2 named exports + 4 DSN (Phase 2 T1.3) = 37 total
+    expect(realExports.length).toBe(37);
   });
 });
 
@@ -411,10 +452,11 @@ describe("loopzero-drill — Per-app DatabaseUser resources (Phase 2 T1.2)", () 
 describe("loopzero-drill — DatabaseFirewall (Phase 2 Bug #11 LIVE fix)", () => {
   const src = fs.readFileSync(INDEX, "utf-8");
 
-  it("declares exactly 1 DatabaseFirewall (drill-pg-firewall)", () => {
+  it("declares 2 DatabaseFirewall (drill-pg-firewall + drill-redis-firewall via Bug #15)", () => {
     const matches = src.match(/new digitalocean\.DatabaseFirewall\(/g) ?? [];
-    expect(matches.length).toBe(1);
+    expect(matches.length).toBe(2);
     expect(src).toMatch(/new digitalocean\.DatabaseFirewall\("drill-pg-firewall"/);
+    expect(src).toMatch(/new digitalocean\.DatabaseFirewall\("drill-redis-firewall"/);
   });
 
   it("firewall references drillPG.id for clusterId", () => {

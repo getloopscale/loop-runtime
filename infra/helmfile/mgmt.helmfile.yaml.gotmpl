@@ -188,6 +188,11 @@ releases:
     namespace: loopzero-system
     chart: bitnami/redis
     version: 19.6.4
+    # Bug #15 LIVE FIX: drill uses DO Managed Valkey (prod ADR-0016 D-6
+    # parity, CTO Golden Rule #0). In-cluster bitnami redis remains for
+    # standalone/local k3d (no DO managed access). Drill bootstrap exports
+    # GITEA_REDIS_HOST/PORT/PASSWORD from Pulumi outputs.
+    installed: {{ ne .Environment.Name "drill" }}
     values:
       - ../helm/redis/values.yaml
 
@@ -202,7 +207,10 @@ releases:
       # which works on any K8s including k3d (no NFS kernel module dep).
       - nfs-system/nfs-server-provisioner
 {{- end }}
+{{- if ne .Environment.Name "drill" }}
+      # Drill uses DO Managed Valkey (Bug #15 fix) — no in-cluster gitea-redis.
       - loopzero-system/gitea-redis
+{{- end }}
       # iter 16 audit: explicit needs:traefik because Gitea uses IngressRoute.
       # Without this, helmfile may install gitea before traefik (works by luck
       # via NFS dependency, but fragile).
@@ -331,6 +339,10 @@ releases:
     namespace: loopzero-system
     chart: bitnami/redis
     version: 19.6.4
+    # Bug #15 LIVE FIX: drill uses DO Managed Valkey (prod parity).
+    # Harbor in drill connects via LOOPZERO_HARBOR_REDIS_HOST/PASSWORD env vars
+    # set by drill-helmfile-bootstrap.sh from Pulumi outputs.
+    installed: {{ ne .Environment.Name "drill" }}
     values:
       - ../helm/redis/values.yaml
 
@@ -342,7 +354,9 @@ releases:
       - cert-manager/cert-manager
       - traefik/traefik
       - loopzero-system/minio
+{{- if ne .Environment.Name "drill" }}
       - loopzero-system/harbor-redis
+{{- end }}
     values:
       - ../helm/harbor/values.yaml
 
