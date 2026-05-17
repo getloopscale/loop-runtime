@@ -1,0 +1,16 @@
+# Drill environment override for loopzero-platform-operator chart.
+# Plan: 2026-05-16-drill-l2-unlock-phase2 — Bug #23 LIVE fix.
+#
+# Operator chart default: image.repository=loopzero-platform-operator + tag=dev
+# (relative repo, used by local k3d via k3d-loopzero-registry). Drill needs
+# global.registry + global.imagePullSecrets for DOCR pull.
+
+global:
+  registry: registry.digitalocean.com/loopzero-system
+  imagePullSecrets:
+    - name: loopzero-registry-pull
+
+image:
+  repository: loopzero-platform-operator
+  tag: '{{ env "LOOPZERO_PLATFORM_OPERATOR_TAG" | default "drill-phase2-ce4e90f0" }}'
+  pullPolicy: IfNotPresent

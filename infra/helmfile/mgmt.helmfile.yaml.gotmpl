@@ -450,6 +450,11 @@ releases:
 {{- if eq (.Values | get "clusterRole" "dev") "standalone" }}
       - ../../charts/loopzero-tenant-operator/values-standalone-multi.yaml
 {{- end }}
+{{- if eq .Environment.Name "drill" }}
+      # Bug #23 LIVE fix (2026-05-17 iter 16): drill needs DOCR registry +
+      # imagePullSecrets to pull operator image from DigitalOcean.
+      - ../helm/loopzero-tenant-operator-drill/values-drill.yaml.gotmpl
+{{- end }}
 
   - name: loopzero-app-operator
     namespace: loopzero-system
@@ -461,6 +466,9 @@ releases:
       - ../../charts/loopzero-app-operator/values.yaml
 {{- if eq (.Values | get "clusterRole" "dev") "standalone" }}
       - ../../charts/loopzero-app-operator/values-standalone-multi.yaml
+{{- end }}
+{{- if eq .Environment.Name "drill" }}
+      - ../helm/loopzero-app-operator-drill/values-drill.yaml.gotmpl
 {{- end }}
 
   - name: loopzero-preview-operator
@@ -474,6 +482,9 @@ releases:
 {{- if eq (.Values | get "clusterRole" "dev") "standalone" }}
       - ../../charts/loopzero-preview-operator/values-standalone-multi.yaml
 {{- end }}
+{{- if eq .Environment.Name "drill" }}
+      - ../helm/loopzero-preview-operator-drill/values-drill.yaml.gotmpl
+{{- end }}
 
   - name: loopzero-platform-operator
     namespace: loopzero-system
@@ -485,6 +496,9 @@ releases:
       - ../../charts/loopzero-platform-operator/values.yaml
 {{- if eq (.Values | get "clusterRole" "dev") "standalone" }}
       - ../../charts/loopzero-platform-operator/values-standalone-multi.yaml
+{{- end }}
+{{- if eq .Environment.Name "drill" }}
+      - ../helm/loopzero-platform-operator-drill/values-drill.yaml.gotmpl
 {{- end }}
 
   - name: loopzero-cloud
