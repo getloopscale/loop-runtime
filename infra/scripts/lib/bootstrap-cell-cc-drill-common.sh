@@ -137,7 +137,10 @@ spec:
   cellID: ${CELL_ID}
   clusterName: ${CELL_ID}
   apiServer: ${TARGET_ENDPOINT}
-  kubeconfigSecretRef:
+  scope:
+    argocd: true
+    operators: true
+  secretRef:
     name: ${SECRET_NAME}
     namespace: ${NS}
 EOF
