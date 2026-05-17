@@ -617,12 +617,12 @@ for target in "${HEALTH_TARGETS_MGMT[@]}"; do
   fi
 done
 
-# build cluster: argo-workflows-server
+# build cluster: argo-workflows-server (Bug #34 fix: actual deployment name)
 export KUBECONFIG="$DRILL_KUBECONFIG_DIR/build.yaml"
 if ! kubectl wait --for=condition=Available --timeout="$HEALTH_WAIT_TIMEOUT" \
-    deployment/argo-server -n argo 2>&1 | tee -a /tmp/drill-health-build.log; then
-  log "  ✗ build cluster: argo-server not Available"
-  kubectl get deployment/argo-server -n argo -o jsonpath='{.status}' 2>&1 | head -3 | sed 's/^/    /'
+    deployment/argo-workflows-server -n argo 2>&1 | tee -a /tmp/drill-health-build.log; then
+  log "  ✗ build cluster: argo-workflows-server not Available — diagnostic:"
+  kubectl get deployments -n argo 2>&1 | head -5 | sed 's/^/    /'
   if [[ "$STRICT_BOOTSTRAP" == "true" ]]; then
     exit 4
   fi
