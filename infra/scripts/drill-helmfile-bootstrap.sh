@@ -592,6 +592,12 @@ fi
 
 log "Phase 4/4: Health check (wait for core services Ready)..."
 
+# Bug #33 LIVE fix (2026-05-17 iter 26): kubectl wait timeout was 5m default
+# which is insufficient for Deployment.status.availableReplicas to propagate
+# after helm install completes (specially under DOKS API load post-bootstrap).
+# Bump to 10m. Also capture stderr to log for diagnostic instead of silencing.
+HEALTH_WAIT_TIMEOUT="${HEALTH_WAIT_TIMEOUT:-10m}"
+
 # mgmt cluster: loopzero-api, ArgoCD, hydra
 export KUBECONFIG="$DRILL_KUBECONFIG_DIR/mgmt.yaml"
 HEALTH_TARGETS_MGMT=(
@@ -602,8 +608,9 @@ HEALTH_TARGETS_MGMT=(
 for target in "${HEALTH_TARGETS_MGMT[@]}"; do
   log "  Waiting on mgmt: $target (timeout $HEALTH_WAIT_TIMEOUT)"
   # shellcheck disable=SC2086
-  if ! kubectl wait --for=condition=Available --timeout="$HEALTH_WAIT_TIMEOUT" $target 2>/dev/null; then
-    log "  ✗ mgmt health check failed: $target"
+  if ! kubectl wait --for=condition=Available --timeout="$HEALTH_WAIT_TIMEOUT" $target 2>&1 | tee -a /tmp/drill-health-mgmt.log; then
+    log "  ✗ mgmt health check failed: $target — diagnostic:"
+    kubectl get $target -o jsonpath='{.status}' 2>&1 | head -3 | sed 's/^/    /' | tee -a /tmp/drill-health-mgmt.log
     if [[ "$STRICT_BOOTSTRAP" == "true" ]]; then
       exit 4
     fi
@@ -613,8 +620,9 @@ done
 # build cluster: argo-workflows-server
 export KUBECONFIG="$DRILL_KUBECONFIG_DIR/build.yaml"
 if ! kubectl wait --for=condition=Available --timeout="$HEALTH_WAIT_TIMEOUT" \
-    deployment/argo-server -n argo 2>/dev/null; then
+    deployment/argo-server -n argo 2>&1 | tee -a /tmp/drill-health-build.log; then
   log "  ✗ build cluster: argo-server not Available"
+  kubectl get deployment/argo-server -n argo -o jsonpath='{.status}' 2>&1 | head -3 | sed 's/^/    /'
   if [[ "$STRICT_BOOTSTRAP" == "true" ]]; then
     exit 4
   fi
