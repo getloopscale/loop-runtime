@@ -542,12 +542,32 @@ for cluster in "${CLUSTERS[@]}"; do
   # prometheus install). Use 15min timeout per release. HELMFILE_RELEASE_TIMEOUT
   # env override for operator tuning.
   HELMFILE_RELEASE_TIMEOUT="${HELMFILE_RELEASE_TIMEOUT:-900}"  # 15 minutes
-  if helmfile -e "$HELMFILE_ENV" --file "$HELMFILE_DIR/$CLUSTER_HELMFILE" sync --concurrency 1 \
-       --args "--timeout ${HELMFILE_RELEASE_TIMEOUT}s --wait" 2>>/tmp/helmfile-${cluster}.log; then
-    log "  ✓ $cluster sync OK"
+  # Bug #32b LIVE fix (2026-05-17 iter 25): DOKS API server returns EOF on
+  # rapid sequential helm pre-install hooks during early bootstrap (cold
+  # API server). Add retry: 3 attempts with 30s backoff between failures.
+  # GODEBUG=http2client=0 disables HTTP/2 for the helmfile binary (prevents
+  # HTTP/2 GOAWAY race against DOKS).
+  HELMFILE_RETRY_MAX="${HELMFILE_RETRY_MAX:-3}"
+  helmfile_attempt=0
+  helmfile_ok=false
+  while [[ $helmfile_attempt -lt $HELMFILE_RETRY_MAX ]]; do
+    helmfile_attempt=$((helmfile_attempt + 1))
+    log "  $cluster sync attempt $helmfile_attempt/$HELMFILE_RETRY_MAX..."
+    if GODEBUG=http2client=0 helmfile -e "$HELMFILE_ENV" --file "$HELMFILE_DIR/$CLUSTER_HELMFILE" sync --concurrency 1 \
+         --args "--timeout ${HELMFILE_RELEASE_TIMEOUT}s --wait" 2>>/tmp/helmfile-${cluster}.log; then
+      helmfile_ok=true
+      break
+    fi
+    if [[ $helmfile_attempt -lt $HELMFILE_RETRY_MAX ]]; then
+      log "  $cluster sync attempt $helmfile_attempt FAILED — sleeping 30s before retry"
+      sleep 30
+    fi
+  done
+  if $helmfile_ok; then
+    log "  ✓ $cluster sync OK (attempt $helmfile_attempt/$HELMFILE_RETRY_MAX)"
   else
     PARTIAL_FAILURES+=("$cluster")
-    log "  ✗ $cluster sync FAILED (log: /tmp/helmfile-${cluster}.log)"
+    log "  ✗ $cluster sync FAILED after $HELMFILE_RETRY_MAX attempts (log: /tmp/helmfile-${cluster}.log)"
     if [[ "$STRICT_BOOTSTRAP" == "true" ]]; then
       log "STRICT_BOOTSTRAP=true → aborting on first failure"
       log "  Resume command: bash $0 --from-cluster $cluster"
