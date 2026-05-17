@@ -321,6 +321,19 @@ log "  ✓ 4 DSN secrets reconciled to drill mgmt cluster"
 # env vars: LOOPZERO_DB_HOST/PORT/USER/PASSWORD/NAME (Pulumi outputs) +
 # LOOPZERO_SPACES_KEY/SECRET (.env mapped).
 log "Phase 2.5/4: Generate platform Secrets via generate-secrets.sh (Bug #13 fix)..."
+
+# Bug #14 LIVE FIX (caught 2026-05-17 iter 4 on velero install):
+# Without exporting KUBECONFIG to drill mgmt, generate-secrets.sh inherits
+# the parent shell's KUBECONFIG which often points to a local k3d cluster
+# (loopzero-mgmt). The platform Secrets get created on the WRONG cluster and
+# velero install on drill mgmt fails: "MountVolume.SetUp failed for volume
+# 'cloud-credentials' : secret 'velero-s3-credentials' not found".
+#
+# Phase 2 uses inline `KUBECONFIG=$MGMT_KUBECONFIG kubectl ...` (no export)
+# so the inherited KUBECONFIG at this point is whatever the parent task set.
+# Export drill mgmt kubeconfig explicitly to scope generate-secrets.sh.
+export KUBECONFIG="$MGMT_KUBECONFIG"
+
 export LOOPZERO_DB_HOST="$(pulumi_out pgHost false)"
 export LOOPZERO_DB_PORT="$(pulumi_out pgPort false)"
 export LOOPZERO_DB_USER="doadmin"

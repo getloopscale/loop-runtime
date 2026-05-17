@@ -59,6 +59,7 @@ build_stubs() {
   echo "LOOPZERO_DB_NAME=\${LOOPZERO_DB_NAME:-} LOOPZERO_PROFILE=\${LOOPZERO_PROFILE:-}"
   echo "LOOPZERO_SPACES_KEY_set=\$([[ -n \"\${LOOPZERO_SPACES_KEY:-}\" ]] && echo yes || echo no)"
   echo "LOOPZERO_DB_PASSWORD_set=\$([[ -n \"\${LOOPZERO_DB_PASSWORD:-}\" ]] && echo yes || echo no)"
+  echo "KUBECONFIG=\${KUBECONFIG:-EMPTY}"
 } >> "$tmpdir/generate-secrets.log"
 exit 0
 EOF
@@ -526,6 +527,35 @@ test_generate_secrets_env_vars_pulumi_sourced() {
   }
 }
 
+test_generate_secrets_uses_mgmt_kubeconfig() {
+  # Bug #14 LIVE fix: KUBECONFIG MUST be exported to drill mgmt before calling
+  # generate-secrets.sh. Otherwise inherits parent shell's KUBECONFIG (often
+  # local k3d) and platform Secrets get created on the wrong cluster.
+  # Symptom: velero pod fails with "secret 'velero-s3-credentials' not found"
+  # even though generate-secrets log shows "applied (idempotent)".
+  local tmpdir="$1"
+  build_stubs "$tmpdir"
+  # Set a DECOY KUBECONFIG to simulate parent shell pointing to wrong cluster.
+  export KUBECONFIG="/tmp/SHOULD-NOT-BE-USED-decoy.yaml"
+  set +e
+  run_script "$tmpdir" >/dev/null 2>&1
+  local rc=$?
+  set -e
+  unset KUBECONFIG
+  [[ "$rc" -eq 0 ]] || { echo "  script exit $rc" >&2; return 1; }
+  # Validate generate-secrets received drill mgmt kubeconfig, NOT decoy
+  if grep -q "KUBECONFIG=.*SHOULD-NOT-BE-USED-decoy" "$tmpdir/generate-secrets.log"; then
+    echo "  FAIL: generate-secrets inherited decoy KUBECONFIG instead of mgmt (Bug #14 regression)" >&2
+    grep "KUBECONFIG=" "$tmpdir/generate-secrets.log" >&2
+    return 1
+  fi
+  grep -q "KUBECONFIG=.*mgmt.yaml$" "$tmpdir/generate-secrets.log" || {
+    echo "  FAIL: generate-secrets did not receive drill mgmt kubeconfig" >&2
+    grep "KUBECONFIG=" "$tmpdir/generate-secrets.log" >&2 || echo "  (no KUBECONFIG line)" >&2
+    return 1
+  }
+}
+
 run_test() {
   local name="$1"
   TESTS_RUN=$((TESTS_RUN + 1))
@@ -560,6 +590,7 @@ run_test test_secret_creation_idempotent_re_run
 run_test test_kubeconfig_wrong_cluster_aborts_exit_4
 run_test test_generate_secrets_called_with_drill_mgmt_args
 run_test test_generate_secrets_env_vars_pulumi_sourced
+run_test test_generate_secrets_uses_mgmt_kubeconfig
 
 echo ""
 echo "Tests run:    $TESTS_RUN"
