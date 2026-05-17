@@ -398,6 +398,10 @@ releases:
   - name: loopzero-api
     namespace: loopzero-system
     chart: ../helm/loopzero-api
+{{- if eq .Environment.Name "drill" }}
+    values:
+      - ../helm/loopzero-api/values-loopzero-api-drill.yaml.gotmpl
+{{- end }}
     needs:
       - argocd/argocd
       - loopzero-system/gitea

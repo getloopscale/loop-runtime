@@ -1,0 +1,21 @@
+# Drill environment override for loopzero-api chart.
+# Plan: 2026-05-16-drill-l2-unlock-phase2 — Bug #16 LIVE fix.
+#
+# Default values.yaml uses tag=latest which doesn't exist in DOCR
+# (only immutable tags like REDACTED_SECRET_061, dev, commit-sha). Drill
+# pulls from same prod DOCR namespace (`registry.digitalocean.com/loopzero-system`)
+# using DIGITALOCEAN_TOKEN-based pull secret (loopzero-registry-pull),
+# created by drill-helmfile-bootstrap.sh via `kubectl create secret
+# docker-registry` (canonical DOCR pattern, mirrors prod posture).
+#
+# Tag selection: REDACTED_SECRET_061 is the most recent stable tag in DOCR
+# (pushed 2026-04-28). Override via LOOPZERO_API_IMAGE_TAG env var when
+# testing a newer build.
+
+image:
+  repository: registry.digitalocean.com/loopzero-system/loopzero-api
+  tag: '{{ env "LOOPZERO_API_IMAGE_TAG" | default "REDACTED_SECRET_061" }}'
+  pullPolicy: IfNotPresent
+
+imagePullSecrets:
+  - name: loopzero-registry-pull

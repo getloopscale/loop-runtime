@@ -388,6 +388,26 @@ log "  ✓ Managed Valkey env exported (gitea + harbor will use $REDIS_HOST_VAL:
 bash "$HELMFILE_DIR/scripts/generate-secrets.sh" drill mgmt
 log "  ✓ Platform Secrets generated (loopzero-db, gitea, minio, harbor, velero, registry-pull)"
 
+# Bug #16 LIVE FIX (caught 2026-05-17 iter 7 on loopzero-api ImagePullBackOff):
+# generate-secrets.sh registry block uses base64(SPACES_KEY:SPACES_SECRET)
+# which is WRONG auth format for DOCR (DOCR uses DO API token, NOT Spaces).
+# Replace with canonical kubectl create secret docker-registry pattern that
+# DOCR documents officially. Uses DIGITALOCEAN_TOKEN as both username +
+# password (DO standard token-only auth).
+if [[ -n "${DIGITALOCEAN_TOKEN:-}" ]]; then
+  log "Bug #16 fix: re-creating loopzero-registry-pull Secret with DO token auth..."
+  kubectl create secret docker-registry loopzero-registry-pull \
+    --namespace loopzero-system \
+    --docker-server=registry.digitalocean.com \
+    --docker-username="$DIGITALOCEAN_TOKEN" \
+    --docker-password="$DIGITALOCEAN_TOKEN" \
+    --dry-run=client -o yaml | kubectl apply -f - >/dev/null
+  log "  ✓ loopzero-registry-pull Secret reconciled (docker-registry type, DO token auth)"
+else
+  log "ERROR: DIGITALOCEAN_TOKEN missing — cannot create loopzero-registry-pull"
+  exit 2
+fi
+
 # --- Phase 3: Per-cluster helmfile sync ---
 log "Phase 3/4: Helmfile sync per cluster (mgmt → build → runtime → runtime-2)..."
 

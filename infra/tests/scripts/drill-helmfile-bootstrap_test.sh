@@ -198,6 +198,13 @@ case "\$*" in
     echo "secret=\$SEC_NAME namespace=\$SEC_NS" >> "$tmpdir/kubectl-invocations.log"
     exit 0
     ;;
+  *"create secret docker-registry"*)
+    # Bug #16 fix: extract registry pull secret name + namespace
+    SEC_NAME=\$(echo "\$*" | sed -E 's/.*create secret docker-registry ([^ ]+).*/\1/')
+    SEC_NS=\$(echo "\$*" | sed -E 's/.*--namespace ([^ ]+).*/\1/')
+    echo "docker-registry-secret=\$SEC_NAME namespace=\$SEC_NS" >> "$tmpdir/kubectl-invocations.log"
+    exit 0
+    ;;
   *"apply -f"*) exit 0 ;;
   *"wait --for=condition=Available"*) exit 0 ;;
   *) exit 0 ;;
@@ -213,12 +220,16 @@ run_script() {
   local tmpdir="$1"
   shift
 
+  # Bug #16 LIVE fix: drill-helmfile-bootstrap.sh requires DIGITALOCEAN_TOKEN
+  # to create loopzero-registry-pull Secret via kubectl docker-registry. Tests
+  # provide a stub value (real token not needed because kubectl is stubbed).
   PATH="$tmpdir/bin:/usr/bin:/bin" \
     DRILL_KUBECONFIG_DIR="$tmpdir/drill-kc" \
     PULUMI_DRILL_DIR="$tmpdir/pulumi-drill" \
     HELMFILE_DIR="$tmpdir/helmfile" \
     HELMFILE_ENV=drill \
     HEALTH_WAIT_TIMEOUT=5s \
+    DIGITALOCEAN_TOKEN="${DIGITALOCEAN_TOKEN:-dop_v1_stub_drill_test_token_aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa}" \
     bash "$SCRIPT" "$@" 2>"$tmpdir/stderr.log" >"$tmpdir/stdout.log"
 }
 
@@ -328,6 +339,7 @@ test_strict_mode_fails_on_partial() {
     HELMFILE_DIR="$tmpdir/helmfile" \
     HEALTH_WAIT_TIMEOUT=5s \
     STRICT_BOOTSTRAP=true \
+    DIGITALOCEAN_TOKEN="dop_v1_stub_drill_test_token_aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa" \
     bash "$SCRIPT" 2>"$tmpdir/stderr.log" >"$tmpdir/stdout.log"
   local rc=$?
   set -e
