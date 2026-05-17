@@ -398,10 +398,6 @@ releases:
   - name: loopzero-api
     namespace: loopzero-system
     chart: ../helm/loopzero-api
-{{- if eq .Environment.Name "drill" }}
-    values:
-      - ../helm/loopzero-api/values-loopzero-api-drill.yaml.gotmpl
-{{- end }}
     needs:
       - argocd/argocd
       - loopzero-system/gitea
@@ -413,6 +409,12 @@ releases:
       # standalone-multi to use locally-built image with GITEA_ORG support.
 {{- if eq (.Values | get "clusterRole" "dev") "standalone" }}
       - ../helm/loopzero-api/values-standalone-multi.yaml
+{{- end }}
+      # Bug #16 LIVE fix (caught 2026-05-17 iter 7-8): drill env override
+      # for loopzero-api image tag (DOCR :latest doesn't exist — pinned to
+      # REDACTED_SECRET_061). MUST be LAST in values list to win merge precedence.
+{{- if eq .Environment.Name "drill" }}
+      - ../helm/loopzero-api/values-loopzero-api-drill.yaml.gotmpl
 {{- end }}
     set:
       # Finding 2026-05-12 — wire env-file `replicas.api` to chart
