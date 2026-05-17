@@ -34,7 +34,7 @@ build_stubs() {
   local pulumi_scenario="${2:-ok}"     # ok | empty-pg
   local helmfile_scenario="${3:-all-ok}"  # all-ok | runtime-fails | all-fail
 
-  mkdir -p "$tmpdir/bin" "$tmpdir/pulumi-drill" "$tmpdir/helmfile" "$tmpdir/drill-kc"
+  mkdir -p "$tmpdir/bin" "$tmpdir/pulumi-drill" "$tmpdir/helmfile" "$tmpdir/helmfile/scripts" "$tmpdir/drill-kc"
 
   # 4 kubeconfig files (per cluster)
   for c in mgmt build runtime runtime-2; do
@@ -46,6 +46,23 @@ build_stubs() {
   touch "$tmpdir/helmfile/build.helmfile.yaml.gotmpl"
   touch "$tmpdir/helmfile/runtime.helmfile.yaml.gotmpl"
   # runtime-2 reuses runtime.helmfile.yaml.gotmpl per script mapping
+
+  # generate-secrets.sh stub (Bug #13 LIVE fix — Phase 2.5)
+  # Records invocations + env vars for assertions, returns 0 (success).
+  cat > "$tmpdir/helmfile/scripts/generate-secrets.sh" <<EOF
+#!/usr/bin/env bash
+# Stub generate-secrets.sh for hermetic test.
+# Records: which env (\$1) + which cluster (\$2) + which env vars passed.
+{
+  echo "env=\$1 cluster=\$2"
+  echo "LOOPZERO_DB_HOST=\${LOOPZERO_DB_HOST:-} LOOPZERO_DB_PORT=\${LOOPZERO_DB_PORT:-} LOOPZERO_DB_USER=\${LOOPZERO_DB_USER:-}"
+  echo "LOOPZERO_DB_NAME=\${LOOPZERO_DB_NAME:-} LOOPZERO_PROFILE=\${LOOPZERO_PROFILE:-}"
+  echo "LOOPZERO_SPACES_KEY_set=\$([[ -n \"\${LOOPZERO_SPACES_KEY:-}\" ]] && echo yes || echo no)"
+  echo "LOOPZERO_DB_PASSWORD_set=\$([[ -n \"\${LOOPZERO_DB_PASSWORD:-}\" ]] && echo yes || echo no)"
+} >> "$tmpdir/generate-secrets.log"
+exit 0
+EOF
+  chmod +x "$tmpdir/helmfile/scripts/generate-secrets.sh"
 
   echo "$pulumi_scenario" > "$tmpdir/pulumi-scenario.txt"
   echo "$helmfile_scenario" > "$tmpdir/helmfile-scenario.txt"
@@ -71,6 +88,14 @@ case "\$KEY" in
   pgHost) echo "drill-pg.host.example.com" ;;
   pgPort) echo "25060" ;;
   pgDatabase) echo "defaultdb" ;;
+  pgUri)
+    if echo "\$*" | grep -q "show-secrets"; then
+      echo "postgres://doadmin:realdoadminpassword@drill-pg.host.example.com:25060/defaultdb?sslmode=require"
+    else
+      echo "postgres://doadmin:[secret]@drill-pg.host.example.com:25060/defaultdb?sslmode=require"
+    fi
+    ;;
+  pgPassword) ;;  # pulumi-drill doesn't export this — script falls back to pgUri parse
   # Iter Phase 2 ad-hoc fix: UUID matches drill-mgmt cluster-info stub for EC-2 guard
   mgmtClusterEndpoint) echo "https://aaaaaaaa-bbbb-cccc-dddd-eeeeeeeeeeee.k8s.ondigitalocean.com" ;;
   # Phase 2 T1.3 — per-service DSN exports (T1.3.bis EC-1 requires --show-secrets)
@@ -441,6 +466,66 @@ test_kubeconfig_wrong_cluster_aborts_exit_4() {
   fi
 }
 
+test_generate_secrets_called_with_drill_mgmt_args() {
+  # Bug #13 LIVE fix: generate-secrets.sh MUST be called once with `drill mgmt`
+  local tmpdir="$1"
+  build_stubs "$tmpdir"
+  set +e
+  run_script "$tmpdir" >/dev/null 2>&1
+  local rc=$?
+  set -e
+  [[ "$rc" -eq 0 ]] || { echo "  script exit $rc" >&2; return 1; }
+  [[ -f "$tmpdir/generate-secrets.log" ]] || {
+    echo "  FAIL: generate-secrets.sh never invoked (Bug #13 regression)" >&2
+    return 1
+  }
+  local invocations
+  invocations=$(grep -c "^env=" "$tmpdir/generate-secrets.log" || echo 0)
+  [[ "$invocations" -ge 1 ]] || {
+    echo "  FAIL: expected >=1 generate-secrets invocation, got $invocations" >&2
+    return 1
+  }
+  grep -q "^env=drill cluster=mgmt$" "$tmpdir/generate-secrets.log" || {
+    echo "  FAIL: generate-secrets not called with 'drill mgmt' args" >&2
+    cat "$tmpdir/generate-secrets.log" >&2
+    return 1
+  }
+}
+
+test_generate_secrets_env_vars_pulumi_sourced() {
+  # Bug #13 LIVE fix: env vars MUST be sourced from Pulumi outputs (drill PG)
+  # and SPACES_* (.env mapped).
+  local tmpdir="$1"
+  build_stubs "$tmpdir"
+  # Pre-export SPACES_* so script can re-export as LOOPZERO_SPACES_*
+  export SPACES_ACCESS_KEY_ID="test-spaces-key"
+  export SPACES_SECRET_ACCESS_KEY="test-spaces-secret"
+  set +e
+  run_script "$tmpdir" >/dev/null 2>&1
+  local rc=$?
+  set -e
+  unset SPACES_ACCESS_KEY_ID SPACES_SECRET_ACCESS_KEY
+  [[ "$rc" -eq 0 ]] || { echo "  script exit $rc" >&2; return 1; }
+  # Validate env vars present in invocation log
+  grep -q "LOOPZERO_DB_HOST=drill-pg.host.example.com" "$tmpdir/generate-secrets.log" || {
+    echo "  FAIL: LOOPZERO_DB_HOST not from Pulumi pgHost" >&2
+    grep "LOOPZERO_DB_HOST" "$tmpdir/generate-secrets.log" >&2 || echo "  (no LOOPZERO_DB_HOST line)" >&2
+    return 1
+  }
+  grep -q "LOOPZERO_PROFILE=cloud" "$tmpdir/generate-secrets.log" || {
+    echo "  FAIL: LOOPZERO_PROFILE not set to 'cloud' (would trigger B33 standalone fallback)" >&2
+    return 1
+  }
+  grep -q "LOOPZERO_SPACES_KEY_set=yes" "$tmpdir/generate-secrets.log" || {
+    echo "  FAIL: LOOPZERO_SPACES_KEY not exported from SPACES_ACCESS_KEY_ID" >&2
+    return 1
+  }
+  grep -q "LOOPZERO_DB_PASSWORD_set=yes" "$tmpdir/generate-secrets.log" || {
+    echo "  FAIL: LOOPZERO_DB_PASSWORD not parsed from pgUri fallback" >&2
+    return 1
+  }
+}
+
 run_test() {
   local name="$1"
   TESTS_RUN=$((TESTS_RUN + 1))
@@ -473,6 +558,8 @@ run_test test_4_k8s_secrets_created_managed_pg
 run_test test_namespace_precreated_if_missing
 run_test test_secret_creation_idempotent_re_run
 run_test test_kubeconfig_wrong_cluster_aborts_exit_4
+run_test test_generate_secrets_called_with_drill_mgmt_args
+run_test test_generate_secrets_env_vars_pulumi_sourced
 
 echo ""
 echo "Tests run:    $TESTS_RUN"

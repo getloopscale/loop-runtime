@@ -302,6 +302,48 @@ for key in "${!SECRET_TARGETS[@]}"; do
 done
 log "  ✓ 4 DSN secrets reconciled to drill mgmt cluster"
 
+# --- Phase 2.5: Generate platform Secrets via generate-secrets.sh (Bug #13 LIVE fix) ---
+#
+# Bug #13 root cause (caught LIVE 2026-05-17 iter 3 on velero install):
+# Helmfile mgmt sync requires platform Secrets pre-existing:
+#   velero-system/velero-s3-credentials
+#   loopzero-system/loopzero-db-credentials (loopzero-api uses .data.uri)
+#   loopzero-system/gitea-admin (gitea chart admin password)
+#   loopzero-system/minio-credentials (rootUser/rootPassword)
+#   loopzero-system/harbor-admin + loopzero-system/harbor-redis-credentials
+#   loopzero-system/loopzero-registry-pull
+#
+# Without these, velero install times out at 900s ("Error: context deadline
+# exceeded") because BackupStorageLocation validation Job hangs trying to
+# auth to DO Spaces. Then loopzero-api crashloops with DATABASE_URL not set.
+#
+# generate-secrets.sh is idempotent — safe to call on re-sync. Required
+# env vars: LOOPZERO_DB_HOST/PORT/USER/PASSWORD/NAME (Pulumi outputs) +
+# LOOPZERO_SPACES_KEY/SECRET (.env mapped).
+log "Phase 2.5/4: Generate platform Secrets via generate-secrets.sh (Bug #13 fix)..."
+export LOOPZERO_DB_HOST="$(pulumi_out pgHost false)"
+export LOOPZERO_DB_PORT="$(pulumi_out pgPort false)"
+export LOOPZERO_DB_USER="doadmin"
+export LOOPZERO_DB_PASSWORD="$(pulumi_out pgPassword true 2>/dev/null || echo "")"
+if [[ -z "$LOOPZERO_DB_PASSWORD" ]]; then
+  # Fall back to extracting from pgUri (pulumi-drill doesn't export pgPassword
+  # as separate output — only via pgUri composite). Parse postgres://user:pass@...
+  PG_URI="$(pulumi_out pgUri true)"
+  LOOPZERO_DB_PASSWORD="$(echo "$PG_URI" | sed -E 's|^postgres://[^:]+:([^@]+)@.*$|\1|')"
+fi
+export LOOPZERO_DB_NAME="loopzero"
+
+# DO Spaces credentials (drill uses isolated DRILL_DO_TOKEN per D7 but
+# Spaces keys are global per DO account — same as prod).
+export LOOPZERO_SPACES_KEY="${SPACES_ACCESS_KEY_ID:-${AWS_ACCESS_KEY_ID:-}}"
+export LOOPZERO_SPACES_SECRET="${SPACES_SECRET_ACCESS_KEY:-${AWS_SECRET_ACCESS_KEY:-}}"
+
+# Set LOOPZERO_PROFILE=cloud so generate-secrets uses managed PG path (not standalone fallback).
+export LOOPZERO_PROFILE="cloud"
+
+bash "$HELMFILE_DIR/scripts/generate-secrets.sh" drill mgmt
+log "  ✓ Platform Secrets generated (loopzero-db, gitea, minio, harbor, velero, registry-pull)"
+
 # --- Phase 3: Per-cluster helmfile sync ---
 log "Phase 3/4: Helmfile sync per cluster (mgmt → build → runtime → runtime-2)..."
 
