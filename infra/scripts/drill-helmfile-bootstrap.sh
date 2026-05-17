@@ -435,7 +435,21 @@ bash "$(cd "$(dirname "$0")" && pwd)/bootstrap-cell-2-cc-drill.sh" 2>&1 | tail -
   log "ERROR: bootstrap cell-2 failed"
   exit 3
 }
-log "  ✓ 3 ClusterCredentials applied (loopzero-api will find cells at startup)"
+log "  ✓ 3 ClusterCredentials applied"
+
+# Bug #22 LIVE FIX (caught 2026-05-17 iter 15 on loopzero-api 0 CCs discovered):
+# K8sCellStore.LoadCells filters by status.connected=true (set by
+# ClusterCredentialController when apiServer is reachable). The operator
+# isn't installed yet (chicken-and-egg). For drill, we KNOW apiServers
+# are reachable (we provisioned them), so set status.connected=true
+# manually via kubectl patch. Mirrors `task k3d:heal` H13 pattern.
+log "Bug #22 fix: patching status.connected=true on 3 CCs..."
+for cell in cell-default cell-1 cell-2; do
+  kubectl patch clustercredential "$cell" --type=merge --subresource=status \
+    -p '{"status":{"connected":true,"lastReconciledAt":"'$(date -u +%Y-%m-%dT%H:%M:%SZ)'"}}' \
+    --namespace loopzero-system 2>&1 | grep -E "patched|^Error" | head -1
+done
+log "  ✓ 3 CCs marked status.connected=true (loopzero-api will find cells at startup)"
 
 # Bug #16 LIVE FIX (caught 2026-05-17 iter 7 on loopzero-api ImagePullBackOff):
 # generate-secrets.sh registry block uses base64(SPACES_KEY:SPACES_SECRET)
