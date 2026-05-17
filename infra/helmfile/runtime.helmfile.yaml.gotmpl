@@ -131,6 +131,11 @@ releases:
     namespace: keda
     chart: kedacore/keda-add-ons-http
     version: 0.8.0
+    # Bug #31 LIVE fix (2026-05-17 iter 22): keda-http-addon webhook readiness
+    # times out at 900s on DOKS small nodes. Drill L2 harness (50 deploys)
+    # doesn't exercise scale-to-zero — KEDA itself is enough. Skip the
+    # HTTP addon in drill to unblock Phase 4a runtime sync.
+    installed: {{ ne .Environment.Name "drill" }}
     needs:
       - keda/keda
     values:
