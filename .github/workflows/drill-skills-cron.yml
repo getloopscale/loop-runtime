@@ -1,0 +1,207 @@
+# drill-skills-cron.yml — Scheduled LIVE drill skill execution.
+#
+# Plan: 2026-05-18-drill-skills-trio-plan.md T5.1 / ADR D7
+#
+# Three cron schedules (per ADR D7 cost-benefit analysis):
+#   - cleanroom-drill: weekly Sunday 02:00 UTC (~$0.30/run)
+#   - dogfood-drill:   monthly 1st Sunday 03:00 UTC (~$2/run)
+#   - chaos-test-drill: quarterly 1st Sunday Jan/Apr/Jul/Oct 04:00 UTC (~$3/run)
+#
+# Annual cost estimate: ~$180. Acceptable for prod-parity insurance.
+#
+# Manual workflow_dispatch allows operator-triggered runs for ad-hoc validation.
+# CI bypasses --confirm-cost + LOOPZERO_DRILL_SKILL_SPONSOR via CI=true env (per ADR D3+D8).
+
+name: drill-skills-cron
+
+on:
+  schedule:
+    # Weekly Sunday 02:00 UTC → /cleanroom-drill
+    - cron: '0 2 * * 0'
+    # Monthly 1st day 03:00 UTC → /dogfood-drill
+    # (cron evaluates on day-of-month=1 only; will fire on any weekday matching)
+    - cron: '0 3 1 * *'
+    # Quarterly 1st day Jan/Apr/Jul/Oct 04:00 UTC → /chaos-test-drill
+    - cron: '0 4 1 1,4,7,10 *'
+
+  workflow_dispatch:
+    inputs:
+      skill:
+        description: 'Skill to dispatch'
+        required: true
+        type: choice
+        options:
+          - cleanroom-drill
+          - dogfood-drill
+          - chaos-test-drill
+      scenario:
+        description: 'Chaos scenario (only for chaos-test-drill)'
+        required: false
+        type: choice
+        default: 'all'
+        options:
+          - all
+          - pod-kill-api
+          - build-network
+          - buildkit-io
+          - pg-managed-failover
+          - cert-renewal-fault
+
+permissions:
+  contents: read
+
+jobs:
+  # ---- Determine which skill to dispatch based on cron schedule or input ----
+  prepare:
+    runs-on: ubuntu-22.04
+    outputs:
+      skill: ${{ steps.detect.outputs.skill }}
+      scenario: ${{ steps.detect.outputs.scenario }}
+    steps:
+      - id: detect
+        env:
+          MANUAL_SKILL: ${{ inputs.skill }}
+          MANUAL_SCENARIO: ${{ inputs.scenario }}
+          SCHEDULE: ${{ github.event.schedule }}
+        run: |
+          if [[ -n "$MANUAL_SKILL" ]]; then
+            echo "skill=$MANUAL_SKILL" >> "$GITHUB_OUTPUT"
+            echo "scenario=$MANUAL_SCENARIO" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+          case "$SCHEDULE" in
+            "0 2 * * 0") echo "skill=cleanroom-drill" >> "$GITHUB_OUTPUT" ;;
+            "0 3 1 * *") echo "skill=dogfood-drill" >> "$GITHUB_OUTPUT" ;;
+            "0 4 1 1,4,7,10 *")
+              echo "skill=chaos-test-drill" >> "$GITHUB_OUTPUT"
+              echo "scenario=all" >> "$GITHUB_OUTPUT"
+              ;;
+            *) echo "::error::Unknown schedule: $SCHEDULE"; exit 1 ;;
+          esac
+
+  # ---- Cleanroom drill ----
+  cleanroom-drill:
+    needs: prepare
+    if: needs.prepare.outputs.skill == 'cleanroom-drill'
+    runs-on: ubuntu-22.04
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'npm'
+          cache-dependency-path: 'infra/pulumi-drill/package-lock.json'
+      - name: Install Pulumi CLI
+        uses: pulumi/actions@v5
+      - name: Install Task
+        run: |
+          curl -sL https://taskfile.dev/install.sh | sh -s -- -d -b /usr/local/bin
+      - name: Install kubectl + helm + helmfile
+        run: |
+          curl -sLO https://dl.k8s.io/release/v1.32.0/bin/linux/amd64/kubectl
+          chmod +x kubectl && sudo mv kubectl /usr/local/bin/
+          curl -sLO https://get.helm.sh/helm-v3.14.4-linux-amd64.tar.gz
+          tar -xzf helm-v3.14.4-linux-amd64.tar.gz && sudo mv linux-amd64/helm /usr/local/bin/
+      - name: Dispatch cleanroom-drill (CI mode bypasses --confirm-cost + sponsor)
+        env:
+          CI: 'true'
+          DIGITALOCEAN_TOKEN: ${{ secrets.DIGITALOCEAN_TOKEN }}
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          PULUMI_CONFIG_PASSPHRASE: ${{ secrets.PULUMI_CONFIG_PASSPHRASE }}
+          PULUMI_ACCESS_TOKEN: ${{ secrets.PULUMI_ACCESS_TOKEN }}
+          SPACES_ACCESS_KEY_ID: ${{ secrets.SPACES_ACCESS_KEY_ID }}
+          SPACES_SECRET_ACCESS_KEY: ${{ secrets.SPACES_SECRET_ACCESS_KEY }}
+          AWS_ACCESS_KEY_ID: ${{ secrets.SPACES_ACCESS_KEY_ID }}
+          AWS_SECRET_ACCESS_KEY: ${{ secrets.SPACES_SECRET_ACCESS_KEY }}
+        run: bash infra/scripts/drill-cleanroom-orchestrator.sh
+      - name: Upload audit trail
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: cleanroom-drill-audit-${{ github.run_id }}
+          path: /tmp/drill-audit-cleanroom-drill-*
+          retention-days: 30
+
+  # ---- Dogfood drill ----
+  dogfood-drill:
+    needs: prepare
+    if: needs.prepare.outputs.skill == 'dogfood-drill'
+    runs-on: ubuntu-22.04
+    timeout-minutes: 75
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'npm'
+          cache-dependency-path: 'infra/pulumi-drill/package-lock.json'
+      - uses: pulumi/actions@v5
+      - name: Install tools
+        run: |
+          curl -sL https://taskfile.dev/install.sh | sh -s -- -d -b /usr/local/bin
+          curl -sLO https://dl.k8s.io/release/v1.32.0/bin/linux/amd64/kubectl
+          chmod +x kubectl && sudo mv kubectl /usr/local/bin/
+          curl -sLO https://get.helm.sh/helm-v3.14.4-linux-amd64.tar.gz
+          tar -xzf helm-v3.14.4-linux-amd64.tar.gz && sudo mv linux-amd64/helm /usr/local/bin/
+      - name: Dispatch dogfood-drill
+        env:
+          CI: 'true'
+          DIGITALOCEAN_TOKEN: ${{ secrets.DIGITALOCEAN_TOKEN }}
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          PULUMI_CONFIG_PASSPHRASE: ${{ secrets.PULUMI_CONFIG_PASSPHRASE }}
+          PULUMI_ACCESS_TOKEN: ${{ secrets.PULUMI_ACCESS_TOKEN }}
+          SPACES_ACCESS_KEY_ID: ${{ secrets.SPACES_ACCESS_KEY_ID }}
+          SPACES_SECRET_ACCESS_KEY: ${{ secrets.SPACES_SECRET_ACCESS_KEY }}
+          AWS_ACCESS_KEY_ID: ${{ secrets.SPACES_ACCESS_KEY_ID }}
+          AWS_SECRET_ACCESS_KEY: ${{ secrets.SPACES_SECRET_ACCESS_KEY }}
+        run: bash infra/scripts/drill-dogfood-orchestrator.sh
+      - name: Upload audit trail
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: dogfood-drill-audit-${{ github.run_id }}
+          path: /tmp/drill-audit-dogfood-drill-*
+          retention-days: 30
+
+  # ---- Chaos drill ----
+  chaos-test-drill:
+    needs: prepare
+    if: needs.prepare.outputs.skill == 'chaos-test-drill'
+    runs-on: ubuntu-22.04
+    timeout-minutes: 90
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'npm'
+          cache-dependency-path: 'infra/pulumi-drill/package-lock.json'
+      - uses: pulumi/actions@v5
+      - name: Install tools
+        run: |
+          curl -sL https://taskfile.dev/install.sh | sh -s -- -d -b /usr/local/bin
+          curl -sLO https://dl.k8s.io/release/v1.32.0/bin/linux/amd64/kubectl
+          chmod +x kubectl && sudo mv kubectl /usr/local/bin/
+          curl -sLO https://get.helm.sh/helm-v3.14.4-linux-amd64.tar.gz
+          tar -xzf helm-v3.14.4-linux-amd64.tar.gz && sudo mv linux-amd64/helm /usr/local/bin/
+      - name: Dispatch chaos-test-drill
+        env:
+          CI: 'true'
+          SCENARIO: ${{ needs.prepare.outputs.scenario }}
+          DIGITALOCEAN_TOKEN: ${{ secrets.DIGITALOCEAN_TOKEN }}
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          PULUMI_CONFIG_PASSPHRASE: ${{ secrets.PULUMI_CONFIG_PASSPHRASE }}
+          PULUMI_ACCESS_TOKEN: ${{ secrets.PULUMI_ACCESS_TOKEN }}
+          SPACES_ACCESS_KEY_ID: ${{ secrets.SPACES_ACCESS_KEY_ID }}
+          SPACES_SECRET_ACCESS_KEY: ${{ secrets.SPACES_SECRET_ACCESS_KEY }}
+          AWS_ACCESS_KEY_ID: ${{ secrets.SPACES_ACCESS_KEY_ID }}
+          AWS_SECRET_ACCESS_KEY: ${{ secrets.SPACES_SECRET_ACCESS_KEY }}
+        run: bash infra/scripts/drill-chaos-orchestrator.sh --scenario "$SCENARIO"
+      - name: Upload audit trail
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: chaos-test-drill-audit-${{ github.run_id }}
+          path: /tmp/drill-audit-chaos-test-drill-*
+          retention-days: 30

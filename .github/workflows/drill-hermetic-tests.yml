@@ -21,13 +21,18 @@ on:
     paths:
       - 'infra/scripts/drill-*.sh'
       - 'infra/scripts/lib/bootstrap-cell-cc-drill-common.sh'
+      - 'infra/scripts/lib/drill-skill-common.sh'
       - 'infra/scripts/check-drill-outputs-consumers.sh'
       - 'infra/scripts/run-migrations.sh'
       - 'infra/tests/scripts/drill-*_test.sh'
       - 'infra/tests/scripts/bootstrap-drill-cc_test.sh'
       - 'infra/tests/scripts/check-drill-outputs-consumers_test.sh'
       - 'infra/tests/scripts/run-migrations_sslmode_test.sh'
+      - 'infra/tests/chaos/manifests/drill-*.yaml'
       - 'infra/pulumi-drill/**'
+      - '.claude/skills/cleanroom-drill/**'
+      - '.claude/skills/dogfood-drill/**'
+      - '.claude/skills/chaos-test-drill/**'
       - 'taskfiles/drill.yml'
       - '.github/workflows/drill-hermetic-tests.yml'
   push:
@@ -113,6 +118,16 @@ jobs:
 
       - name: Operator pre-flight consolidator tests
         run: bash infra/tests/scripts/drill-preflight_test.sh
+
+      # === Drill Skills Trio (plan 2026-05-18-drill-skills-trio) ===
+      - name: T1.2 — cleanroom-drill orchestrator hermetic tests (8/8)
+        run: bash infra/tests/scripts/drill-cleanroom-orchestrator_test.sh
+
+      - name: T2.2 — dogfood-drill orchestrator hermetic tests (11/11)
+        run: bash infra/tests/scripts/drill-dogfood-orchestrator_test.sh
+
+      - name: T3.2 — chaos-test-drill orchestrator hermetic tests (8/8)
+        run: bash infra/tests/scripts/drill-chaos-orchestrator_test.sh
 
       # === Vitest pulumi-drill structure tests ===
       - name: Setup Node
