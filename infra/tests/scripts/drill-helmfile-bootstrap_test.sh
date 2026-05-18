@@ -253,7 +253,7 @@ run_script() {
   # Bug #19 LIVE fix: provide MOCK_PULUMI_JSON for bootstrap-cell-*-cc-drill
   # scripts (Phase 2.6) so they don't need a real Pulumi backend in tests.
   PATH="$tmpdir/bin:/usr/bin:/bin" \
-    DRILL_KUBECONFIG_DIR="$tmpdir/drill-kc" \
+    DRILL_KUBECONFIG_DIR="$tmpdir/drill-kc" DRILL_BOOTSTRAP_SKIP_LIVE_PATCHES=true \
     PULUMI_DRILL_DIR="$tmpdir/pulumi-drill" \
     HELMFILE_DIR="$tmpdir/helmfile" \
     HELMFILE_ENV=drill \
@@ -364,7 +364,7 @@ test_strict_mode_fails_on_partial() {
   build_stubs "$tmpdir" "ok" "runtime-fails"
   set +e
   PATH="$tmpdir/bin:/usr/bin:/bin" \
-    DRILL_KUBECONFIG_DIR="$tmpdir/drill-kc" \
+    DRILL_KUBECONFIG_DIR="$tmpdir/drill-kc" DRILL_BOOTSTRAP_SKIP_LIVE_PATCHES=true \
     PULUMI_DRILL_DIR="$tmpdir/pulumi-drill" \
     HELMFILE_DIR="$tmpdir/helmfile" \
     HEALTH_WAIT_TIMEOUT=5s \

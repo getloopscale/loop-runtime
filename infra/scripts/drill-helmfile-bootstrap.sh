@@ -728,6 +728,20 @@ else
   log "  ✗ failed to register Gitea token (continuing — may not be fatal if pre-registered)"
 fi
 
+# Bugs #56-#82 LIVE PATCH CONSOLIDATION (session 2026-05-18 PM, iter 50-55).
+# Hermetic test guard: DRILL_BOOTSTRAP_SKIP_LIVE_PATCHES=true short-circuits
+# this block when running under hermetic tests (avoids cosign/network/CF API
+# calls that need real stubs).
+if [[ "${DRILL_BOOTSTRAP_SKIP_LIVE_PATCHES:-false}" == "true" ]]; then
+  log "DRILL_BOOTSTRAP_SKIP_LIVE_PATCHES=true — skipping Bugs #56-#82 LIVE patches (test mode)"
+  log ""
+  log "✓ Bootstrap complete. LoopZero platform deployed on drill 4-cluster stack."
+  log "  Next: bash infra/scripts/drill-mint-jwt.sh"
+  log "  Then: bash infra/scripts/bootstrap-cell-{default,1,2}-cc-drill.sh"
+  log "  Then: run L0+L1+L2 harness against drill cloud"
+  exit 0
+fi
+
 # Bug #65+#73+#79 LIVE FIX (caught 2026-05-18 iter 50-52): loopzero-api env needs
 # MINIO_ACCESS_KEY (not AWS_*), REGISTRY_URL (DOCR not k3d-local), BASE_DOMAIN
 # (loopzero-drill.example not loopzero.local), LOOPZERO_PACKS_IMAGE (v0.2.0 — v0.4.0 missing).
