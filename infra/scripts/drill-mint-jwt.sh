@@ -131,15 +131,33 @@ if [[ -n "${DRILL_PG_HOST:-}" ]]; then
   #   (b) Seed tables in `loopzero` DB per Bug #12 fix.
   DRILL_PG_DB="${DRILL_PG_DB:-loopzero}"
   run_psql() {
+    # Bug #39 v3 (2026-05-18 iter 36): kubectl run --rm -i races on pod attach
+    # (one-shot command pod terminates before attach completes). Use Job-like
+    # pattern: run (no attach) → wait completion → logs → exitCode → delete.
     local POD_NAME="drill-psql-$$-$RANDOM"
     kubectl --kubeconfig "$DRILL_KUBECONFIG" -n "$NS_LOOPZERO" run "$POD_NAME" \
-      --rm -i --restart=Never --image=postgres:16-alpine --quiet \
+      --restart=Never --image=postgres:16-alpine --quiet \
       --env="PGPASSWORD=$DRILL_PG_PASS" \
       --env="PGSSLMODE=require" \
       --command -- \
       psql --host="$DRILL_PG_HOST" --port="$DRILL_PG_PORT" \
            --username=doadmin --dbname="$DRILL_PG_DB" \
-           --no-psqlrc -v ON_ERROR_STOP=1 "$@"
+           --no-psqlrc -v ON_ERROR_STOP=1 "$@" >/dev/null 2>&1
+    # Wait for pod to reach terminal state (Succeeded or Failed)
+    kubectl --kubeconfig "$DRILL_KUBECONFIG" -n "$NS_LOOPZERO" wait \
+      --for=jsonpath='{.status.phase}'=Succeeded "pod/$POD_NAME" \
+      --timeout=120s >/dev/null 2>&1 || true
+    local PHASE EXIT
+    PHASE=$(kubectl --kubeconfig "$DRILL_KUBECONFIG" -n "$NS_LOOPZERO" get pod "$POD_NAME" -o jsonpath='{.status.phase}' 2>/dev/null || echo "Unknown")
+    EXIT=$(kubectl --kubeconfig "$DRILL_KUBECONFIG" -n "$NS_LOOPZERO" get pod "$POD_NAME" -o jsonpath='{.status.containerStatuses[0].state.terminated.exitCode}' 2>/dev/null || echo "1")
+    # Echo logs to stderr (preserves stdout for callers that pipe stdout)
+    kubectl --kubeconfig "$DRILL_KUBECONFIG" -n "$NS_LOOPZERO" logs "$POD_NAME" >&2 2>/dev/null || true
+    kubectl --kubeconfig "$DRILL_KUBECONFIG" -n "$NS_LOOPZERO" delete pod "$POD_NAME" --wait=false >/dev/null 2>&1 || true
+    if [ "$PHASE" != "Succeeded" ] || [ "${EXIT:-1}" != "0" ]; then
+      echo "ERROR: drill-psql pod $POD_NAME phase=$PHASE exitCode=$EXIT" >&2
+      return "${EXIT:-1}"
+    fi
+    return 0
   }
 else
   # In-cluster fallback (rare for drill — typically only used in tests)
