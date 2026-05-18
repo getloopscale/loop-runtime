@@ -98,6 +98,26 @@ fi
 # expects DRILL_PG_HOST + DRILL_PG_PASS env). Else exec into pod.
 SEED_SLUG=$(printf '%s' "$SEED_TENANT_ID" | tr -c 'a-zA-Z0-9' '-' | tr '[:upper:]' '[:lower:]')
 
+# Bug #37 LIVE FIX (2026-05-18 iter 30): drill uses managed PG (no in-cluster
+# postgresql svc). If DRILL_PG_HOST unset, auto-read from Pulumi outputs.
+if [[ -z "${DRILL_PG_HOST:-}" ]] && [[ -d "infra/pulumi-drill" ]]; then
+  log "DRILL_PG_HOST not set — auto-discovering from Pulumi outputs..."
+  PULUMI_GET() {
+    local key="$1"
+    local extra="${2:-}"
+    (cd infra/pulumi-drill && npx pulumi stack output --stack drill "$key" $extra 2>/dev/null)
+  }
+  DRILL_PG_HOST=$(PULUMI_GET pgHost) || true
+  DRILL_PG_PORT=$(PULUMI_GET pgPort) || true
+  PG_URI_FULL=$(PULUMI_GET pgUri --show-secrets) || true
+  # Parse password from pgUri (regex matches postgres:// + postgresql:// per Bug #17)
+  if [[ -n "$PG_URI_FULL" ]]; then
+    DRILL_PG_PASS=$(echo "$PG_URI_FULL" | sed -E 's|^postgres(ql)?://[^:]+:([^@]+)@.*$|\2|')
+    export DRILL_PG_HOST DRILL_PG_PORT DRILL_PG_PASS
+    log "  ✓ DRILL_PG_HOST=$DRILL_PG_HOST DRILL_PG_PORT=$DRILL_PG_PORT (password parsed from pgUri)"
+  fi
+fi
+
 if [[ -n "${DRILL_PG_HOST:-}" ]]; then
   # Managed PG path (preferred for drill — D4 mgmt-tier managed PG)
   DRILL_PG_PASS="${DRILL_PG_PASS:-loopzero-drill-password}"
