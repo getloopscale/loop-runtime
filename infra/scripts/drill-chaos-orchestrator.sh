@@ -207,10 +207,18 @@ measure_slo() {
   drill_skill_log "  monitoring SLO during $id (budget ${budget}s)..."
   sleep "$budget"
 
-  # Analyze traffic log for 5xx rate
+  # Analyze traffic log for 5xx rate.
+  # `grep -c` exits 1 when no matches even though it prints "0" — `|| echo "0"`
+  # would then concatenate, producing "0\n0" that breaks arithmetic. Workaround:
+  # always succeed via `|| true`, then default empty to 0.
   local total fails rate
-  total=$(wc -l < "$TRAFFIC_LOG" 2>/dev/null || echo "0")
-  fails=$(grep -cE "HTTP 5[0-9][0-9]" "$TRAFFIC_LOG" 2>/dev/null || echo "0")
+  total=$(wc -l < "$TRAFFIC_LOG" 2>/dev/null || true)
+  total="${total:-0}"
+  fails=$(grep -cE "HTTP 5[0-9][0-9]" "$TRAFFIC_LOG" 2>/dev/null || true)
+  fails="${fails:-0}"
+  # Strip whitespace (wc -l can emit leading spaces on some platforms)
+  total="${total// /}"
+  fails="${fails// /}"
   if [[ "$total" -gt 0 ]]; then
     rate=$(( fails * 100 / total ))
     drill_skill_log "  SLO: ${fails}/${total} 5xx (${rate}%)"
