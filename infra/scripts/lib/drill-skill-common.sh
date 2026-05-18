@@ -87,6 +87,26 @@ drill_skill_load_dotenv() {
     fi
   done < "$dotenv"
   drill_skill_log ".env auto-load: $loaded variables exported"
+
+  # --- SPACES_* → AWS_* translation (S3-compatible backend) ---
+  # Pulumi uses AWS SDK for `s3://` backend URLs (DO Spaces is S3-API-compatible).
+  # The AWS SDK reads AWS_ACCESS_KEY_ID + AWS_SECRET_ACCESS_KEY. Operators
+  # typically store DO Spaces creds as SPACES_* in .env, so we map them here.
+  # Caller-set AWS_* always wins. Idempotent.
+  if [[ -z "${AWS_ACCESS_KEY_ID:-}" ]] && [[ -n "${SPACES_ACCESS_KEY_ID:-}" ]]; then
+    export AWS_ACCESS_KEY_ID="$SPACES_ACCESS_KEY_ID"
+    drill_skill_log "  + mapped SPACES_ACCESS_KEY_ID → AWS_ACCESS_KEY_ID"
+  fi
+  if [[ -z "${AWS_SECRET_ACCESS_KEY:-}" ]] && [[ -n "${SPACES_SECRET_ACCESS_KEY:-}" ]]; then
+    export AWS_SECRET_ACCESS_KEY="$SPACES_SECRET_ACCESS_KEY"
+    drill_skill_log "  + mapped SPACES_SECRET_ACCESS_KEY → AWS_SECRET_ACCESS_KEY"
+  fi
+  # DO Spaces S3-compat uses "us-east-1" sigil region (NOT the actual DO region).
+  # See taskfiles/drill.yml:up — region=us-east-1 in backend URL.
+  if [[ -z "${AWS_REGION:-}" ]]; then
+    export AWS_REGION="us-east-1"
+  fi
+
   export _DRILL_SKILL_DOTENV_LOADED=1
 }
 

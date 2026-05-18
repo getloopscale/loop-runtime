@@ -301,6 +301,53 @@ EOF
   echo "$result" | grep -q "PRECEDENCE_KEY=from-shell" || { echo "  caller env should win — got: $result" >&2; return 1; }
 }
 
+test_dotenv_spaces_maps_to_aws() {
+  local tmpdir
+  tmpdir=$(mktemp -d -t drill-dotenv-test-XXXXXX)
+  cat > "$tmpdir/.env" <<'EOF'
+SPACES_ACCESS_KEY_ID=spaces-key-id
+SPACES_SECRET_ACCESS_KEY=spaces-secret
+EOF
+  set +e
+  result=$(bash -c "
+    set -euo pipefail
+    cd '$tmpdir'
+    unset AWS_ACCESS_KEY_ID AWS_SECRET_ACCESS_KEY AWS_REGION
+    source '$LIB' 2>/dev/null
+    echo \"AWS_ACCESS_KEY_ID=\${AWS_ACCESS_KEY_ID:-MISS}\"
+    echo \"AWS_SECRET_ACCESS_KEY=\${AWS_SECRET_ACCESS_KEY:-MISS}\"
+    echo \"AWS_REGION=\${AWS_REGION:-MISS}\"
+  ")
+  local rc=$?
+  set -e
+  rm -rf "$tmpdir"
+  [[ "$rc" -eq 0 ]] || return 1
+  echo "$result" | grep -q "AWS_ACCESS_KEY_ID=spaces-key-id" || { echo "  AWS_ACCESS_KEY_ID not mapped" >&2; return 1; }
+  echo "$result" | grep -q "AWS_SECRET_ACCESS_KEY=spaces-secret" || { echo "  AWS_SECRET_ACCESS_KEY not mapped" >&2; return 1; }
+  echo "$result" | grep -q "AWS_REGION=us-east-1" || { echo "  AWS_REGION default not us-east-1 sigil" >&2; return 1; }
+}
+
+test_dotenv_existing_aws_wins_over_spaces() {
+  local tmpdir
+  tmpdir=$(mktemp -d -t drill-dotenv-test-XXXXXX)
+  cat > "$tmpdir/.env" <<'EOF'
+SPACES_ACCESS_KEY_ID=from-spaces
+EOF
+  set +e
+  result=$(bash -c "
+    set -euo pipefail
+    cd '$tmpdir'
+    export AWS_ACCESS_KEY_ID=from-caller
+    source '$LIB' 2>/dev/null
+    echo \"AWS_ACCESS_KEY_ID=\${AWS_ACCESS_KEY_ID}\"
+  ")
+  local rc=$?
+  set -e
+  rm -rf "$tmpdir"
+  [[ "$rc" -eq 0 ]] || return 1
+  echo "$result" | grep -q "AWS_ACCESS_KEY_ID=from-caller" || { echo "  existing AWS_* should win — got: $result" >&2; return 1; }
+}
+
 test_dotenv_no_file_is_silent_noop() {
   local tmpdir
   tmpdir=$(mktemp -d -t drill-dotenv-test-XXXXXX)
@@ -351,6 +398,8 @@ run_test test_lib_double_sourcing_idempotent
 run_test test_dotenv_auto_load_exports_keys
 run_test test_dotenv_auto_load_tolerates_invalid_lines
 run_test test_dotenv_caller_env_wins_over_dotenv
+run_test test_dotenv_spaces_maps_to_aws
+run_test test_dotenv_existing_aws_wins_over_spaces
 run_test test_dotenv_no_file_is_silent_noop
 
 echo ""
