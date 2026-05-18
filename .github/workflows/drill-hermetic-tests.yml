@@ -120,6 +120,9 @@ jobs:
         run: bash infra/tests/scripts/drill-preflight_test.sh
 
       # === Drill Skills Trio (plan 2026-05-18-drill-skills-trio) ===
+      - name: T4.1 — drill-skill-common library hermetic tests (11/11)
+        run: bash infra/tests/scripts/drill-skill-common_test.sh
+
       - name: T1.2 — cleanroom-drill orchestrator hermetic tests (8/8)
         run: bash infra/tests/scripts/drill-cleanroom-orchestrator_test.sh
 
