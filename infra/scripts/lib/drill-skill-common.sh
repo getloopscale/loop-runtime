@@ -384,26 +384,39 @@ drill_skill_teardown() {
     npx pulumi refresh --stack drill --yes --skip-preview > "$_pr_log" 2>&1
   ) || true  # refresh failure is non-fatal; destroy will surface real errors
   tail -3 "$_pr_log" | sed 's/^/    /' || true
-  drill_skill_log "  Step 2b: pulumi destroy"
-  # Capture pulumi destroy output to a tmpfile first, then tail/sed for display.
-  # This avoids the pipefail trap where `pulumi … | tail | sed` returns sed's
-  # exit code (always 0), masking real pulumi failure — OR worse, when pulumi
-  # exits 0 but `tail -5` sees fewer than 5 lines etc, the pipeline's effective
-  # exit is non-zero with pipefail on, causing a false-positive failure log.
-  local _pd_log
+  drill_skill_log "  Step 2b: pulumi destroy (max 3 iterations for residual cleanup)"
+  # Pulumi destroy can leave 2-4 orphan resources in state when DOKS / managed
+  # DB deletions cascade out-of-order (deletion completes async server-side after
+  # pulumi gives up waiting). Solution: refresh + destroy up to 3 times, stop
+  # when resource count reaches 0 (idempotent — destroy on clean state is no-op).
+  local _pd_log _resource_count _pd_rc
   _pd_log=$(mktemp -t drill-pulumi-destroy-XXXXXX.log)
-  local _pd_rc=0
-  (
-    cd "${PULUMI_DRILL_DIR:-infra/pulumi-drill}" && \
-    npx pulumi destroy --stack drill --yes --skip-preview > "$_pd_log" 2>&1
-  ) || _pd_rc=$?
-  tail -5 "$_pd_log" | sed 's/^/    /'
-  if [[ "$_pd_rc" -eq 0 ]]; then
-    drill_skill_log "  ✓ pulumi destroy complete"
-  else
-    drill_skill_log "  ✗ pulumi destroy exited $_pd_rc — manual cleanup may be required"
-    drill_skill_log "  full log: $_pd_log"
-  fi
+  local _retry
+  for _retry in 1 2 3; do
+    _pd_rc=0
+    (
+      cd "${PULUMI_DRILL_DIR:-infra/pulumi-drill}" && \
+      npx pulumi destroy --stack drill --yes --skip-preview > "$_pd_log" 2>&1
+    ) || _pd_rc=$?
+    tail -5 "$_pd_log" | sed "s/^/    [iter $_retry] /"
+    # Check if state is now empty
+    _resource_count=$(
+      cd "${PULUMI_DRILL_DIR:-infra/pulumi-drill}" && \
+      npx pulumi stack ls --json 2>/dev/null | \
+        grep -oE '"resourceCount":[0-9]+' | head -1 | grep -oE '[0-9]+' || echo "unknown"
+    )
+    if [[ "$_resource_count" == "0" ]]; then
+      drill_skill_log "  ✓ pulumi destroy complete (state empty after iter $_retry)"
+      return 0
+    fi
+    drill_skill_log "  iter $_retry: rc=$_pd_rc, $_resource_count residual resources — refreshing + retrying"
+    (
+      cd "${PULUMI_DRILL_DIR:-infra/pulumi-drill}" && \
+      npx pulumi refresh --stack drill --yes --skip-preview > /dev/null 2>&1
+    ) || true
+  done
+  drill_skill_log "  ✗ pulumi destroy still has $_resource_count residual resources after 3 iters"
+  drill_skill_log "  full log: $_pd_log"
 
   # Step 3: validator (doctl fallback per T4.1.bis)
   if [[ -x infra/scripts/drill-teardown-validator.sh ]]; then
