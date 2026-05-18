@@ -305,16 +305,37 @@ drill_skill_teardown() {
   drill_skill_log "Mandatory teardown initiated..."
 
   # Step 1: capture evidence pre-teardown (best-effort)
+  # drill-evidence-capture.sh expects an identifier (regex ^[a-zA-Z0-9._-]+$),
+  # NOT a path. Pass only the basename of DRILL_SKILL_AUDIT_DIR.
   if [[ -x infra/scripts/drill-evidence-capture.sh ]]; then
-    bash infra/scripts/drill-evidence-capture.sh "${DRILL_SKILL_AUDIT_DIR:-/tmp/drill-audit-evac}" 2>&1 \
+    local _audit_id="${DRILL_SKILL_AUDIT_DIR:-/tmp/drill-audit-evac}"
+    _audit_id="$(basename "$_audit_id")"
+    bash infra/scripts/drill-evidence-capture.sh "$_audit_id" 2>&1 \
       | tail -5 | sed 's/^/  /' || true
   fi
 
-  # Step 2: Pulumi destroy
-  if task drill:down 2>&1 | tail -5 | sed 's/^/  /'; then
-    drill_skill_log "  ✓ task drill:down complete"
+  # Step 2: Pulumi destroy (direct invocation — bypasses Task v3 dotenv gap)
+  # task drill:down inherits .env via Task `dotenv:` directive, but that does NOT
+  # auto-translate SPACES_* → AWS_* required by Pulumi S3 backend. The lib's
+  # drill_skill_load_dotenv (called on source) HAS already done that translation,
+  # so by calling pulumi directly here we use the correct AWS_* env vars.
+  # Includes refresh-then-destroy retry sequence to absorb state drift from
+  # validator-only teardowns (real cloud deleted, Pulumi state out of sync).
+  local _backend="${DRILL_BACKEND_URL:-s3://loopzero-drill-pulumi-state?endpoint=sfo3.digitaloceanspaces.com&region=us-east-1&s3ForcePathStyle=true}"
+  drill_skill_log "  Step 2a: pulumi refresh (sync state with reality)"
+  (
+    cd "${PULUMI_DRILL_DIR:-infra/pulumi-drill}" && \
+    npx pulumi login "$_backend" >/dev/null 2>&1 && \
+    npx pulumi refresh --stack drill --yes --skip-preview 2>&1 | tail -3 | sed 's/^/    /' || true
+  )
+  drill_skill_log "  Step 2b: pulumi destroy"
+  if (
+    cd "${PULUMI_DRILL_DIR:-infra/pulumi-drill}" && \
+    npx pulumi destroy --stack drill --yes --skip-preview 2>&1 | tail -5 | sed 's/^/    /'
+  ); then
+    drill_skill_log "  ✓ pulumi destroy complete"
   else
-    drill_skill_log "  ✗ task drill:down failed — manual cleanup may be required"
+    drill_skill_log "  ✗ pulumi destroy failed — manual cleanup may be required"
   fi
 
   # Step 3: validator (doctl fallback per T4.1.bis)
