@@ -144,12 +144,21 @@ cd "$ROOT_DIR"
 
 # --- Step 4: Bootstrap (drill-helmfile-bootstrap) ---
 drill_skill_log "Step 4/8: drill-helmfile-bootstrap (Phase 4a + Bugs #56-#82)"
+# Capture full bootstrap output to a log file. Previous `| tail -10 | sed` lost
+# critical diagnostics (e.g., Bug #43 migrations step) when the script is long.
+BOOTSTRAP_LOG="${DRILL_SKILL_AUDIT_DIR:-/tmp}/helmfile-bootstrap.log"
 if ! DRILL_KUBECONFIG_DIR=/tmp/drill-kc STRICT_BOOTSTRAP=true \
-     bash "$ROOT_DIR/infra/scripts/drill-helmfile-bootstrap.sh" 2>&1 | tail -10 | sed 's/^/  /'; then
-  drill_skill_emit_finding "S0" "drill-helmfile-bootstrap failed"
+     bash "$ROOT_DIR/infra/scripts/drill-helmfile-bootstrap.sh" > "$BOOTSTRAP_LOG" 2>&1; then
+  drill_skill_log "  ✗ drill-helmfile-bootstrap failed — last 30 lines:"
+  tail -30 "$BOOTSTRAP_LOG" 2>/dev/null | sed 's/^/    /' >&2 || true
+  drill_skill_log "  full bootstrap log: $BOOTSTRAP_LOG"
+  drill_skill_emit_finding "S0" "drill-helmfile-bootstrap failed (log: $BOOTSTRAP_LOG)"
   drill_skill_teardown || true
   exit 5
 fi
+# On success, show tail (compact context for normal runs)
+tail -10 "$BOOTSTRAP_LOG" | sed 's/^/  /'
+drill_skill_log "  (full bootstrap log: $BOOTSTRAP_LOG)"
 
 # --- Step 5: Phase 4 health check ---
 drill_skill_log "Step 5/8: Phase 4 health check (loopzero-api + ArgoCD + Argo Workflows)"
