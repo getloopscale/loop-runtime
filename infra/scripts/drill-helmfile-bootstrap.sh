@@ -728,10 +728,268 @@ else
   log "  ✗ failed to register Gitea token (continuing — may not be fatal if pre-registered)"
 fi
 
+# Bug #65+#73+#79 LIVE FIX (caught 2026-05-18 iter 50-52): loopzero-api env needs
+# MINIO_ACCESS_KEY (not AWS_*), REGISTRY_URL (DOCR not k3d-local), BASE_DOMAIN
+# (loopzero-drill.example not loopzero.local), LOOPZERO_PACKS_IMAGE (v0.2.0 — v0.4.0 missing).
+log "Bug #65+#73+#79 fix: loopzero-api drill env (registry+domain+minio+packs)..."
+SPACES_KEY=$(awk -F= '/^SPACES_ACCESS_KEY_ID=/{print $2}' .env 2>/dev/null || echo "")
+SPACES_SECRET=$(awk -F= '/^SPACES_SECRET_ACCESS_KEY=/{print $2}' .env 2>/dev/null || echo "")
+DRILL_BASE_DOMAIN="${DRILL_BASE_DOMAIN:-loopzero-drill.example}"
+LOOPZERO_PACKS_TAG="${LOOPZERO_PACKS_IMAGE_TAG:-v0.2.0}"
+kubectl -n loopzero-system set env deployment/loopzero-api \
+  MINIO_ACCESS_KEY="$SPACES_KEY" \
+  MINIO_SECRET_KEY="$SPACES_SECRET" \
+  AWS_ACCESS_KEY_ID="$SPACES_KEY" \
+  AWS_SECRET_ACCESS_KEY="$SPACES_SECRET" \
+  REGISTRY_URL=registry.digitalocean.com/loopzero-system \
+  BASE_DOMAIN="$DRILL_BASE_DOMAIN" \
+  SOURCE_BUCKET=loopzero-drill-builds-sfo3 \
+  MINIO_ENDPOINT="https://sfo3.digitaloceanspaces.com" \
+  LOOPZERO_PACKS_IMAGE="registry.digitalocean.com/loopzero-system/loopzero-packs-runner:$LOOPZERO_PACKS_TAG" >/dev/null
+log "  ✓ loopzero-api env: REGISTRY_URL/BASE_DOMAIN/MINIO_*/LOOPZERO_PACKS_IMAGE set"
+
+# Bug #56 LIVE FIX (caught 2026-05-18 iter 44): generate-secrets.sh creates
+# SYNTHETIC in-cluster kubeconfigs assuming single-cluster topology. Drill
+# multi-cluster needs REAL kubeconfigs in loopzero-cluster-kubeconfigs Secret +
+# KUBE_CONTEXT env vars matching DOKS context names.
+log "Bug #56 fix: loopzero-cluster-kubeconfigs Secret with REAL drill kubeconfigs..."
+kubectl -n loopzero-system create secret generic loopzero-cluster-kubeconfigs \
+  --from-file=mgmt.kubeconfig="$DRILL_KUBECONFIG_DIR/mgmt.yaml" \
+  --from-file=build.kubeconfig="$DRILL_KUBECONFIG_DIR/build.yaml" \
+  --from-file=runtime.kubeconfig="$DRILL_KUBECONFIG_DIR/runtime.yaml" \
+  --from-file=runtime-2.kubeconfig="$DRILL_KUBECONFIG_DIR/runtime-2.yaml" \
+  --dry-run=client -o yaml | kubectl apply -f - >/dev/null
+# Set context names to actual DOKS context names
+MGMT_CTX=$(grep "current-context" "$DRILL_KUBECONFIG_DIR/mgmt.yaml" | awk '{print $2}')
+BUILD_CTX=$(grep "current-context" "$DRILL_KUBECONFIG_DIR/build.yaml" | awk '{print $2}')
+RUNTIME_CTX=$(grep "current-context" "$DRILL_KUBECONFIG_DIR/runtime.yaml" | awk '{print $2}')
+kubectl -n loopzero-system set env deployment/loopzero-api \
+  MGMT_KUBE_CONTEXT="$MGMT_CTX" \
+  BUILD_KUBE_CONTEXT="$BUILD_CTX" \
+  RUNTIME_KUBE_CONTEXT="$RUNTIME_CTX" >/dev/null
+log "  ✓ Real kubeconfigs mounted + KUBE_CONTEXT env set to DOKS context names"
+
+# Bug #60 LIVE FIX (caught 2026-05-18 iter 44): operator Secrets have dual
+# GITEA_TOKEN keys (upper + camel) — both must hold the registered token.
+# Bug #57 LIVE FIX: operator chart yaml indent bug means GITEA_URL/GITEA_ORG
+# env vars must be set via kubectl set env (T2 chart fix pending).
+log "Bug #57+#60 fix: operator drill env (GITEA_URL + dual GITEA_TOKEN)..."
+TOKEN_B64=$(echo -n "${GITEA_TOKEN_NEW:-stub}" | base64 -w0)
+for OP in loopzero-tenant-operator loopzero-app-operator loopzero-preview-operator loopzero-platform-operator; do
+  if kubectl -n loopzero-system get deployment "$OP" >/dev/null 2>&1; then
+    kubectl -n loopzero-system set env deployment/"$OP" \
+      GITEA_URL=http://gitea-http.loopzero-system.svc.cluster.local:3000 \
+      GITEA_ORG=loopzero \
+      ARGOCD_URL=http://argocd-server.argocd.svc.cluster.local:80 \
+      BASE_DOMAIN="$DRILL_BASE_DOMAIN" >/dev/null 2>&1 || true
+    if kubectl -n loopzero-system get secret "$OP" >/dev/null 2>&1 && [[ -n "${GITEA_TOKEN_NEW:-}" ]]; then
+      kubectl -n loopzero-system patch secret "$OP" --type=json -p="[{\"op\":\"replace\",\"path\":\"/data/GITEA_TOKEN\",\"value\":\"$TOKEN_B64\"},{\"op\":\"replace\",\"path\":\"/data/giteaToken\",\"value\":\"$TOKEN_B64\"}]" >/dev/null 2>&1 || true
+    fi
+  fi
+done
+log "  ✓ 4 operators env + Secret tokens patched"
+
+# Bug #59 LIVE FIX (caught 2026-05-18 iter 44): operator NetworkPolicy egress
+# port 3000 only allows kubernetes.io/metadata.name=gitea but drill Gitea is
+# in loopzero-system namespace (T2 chart fix pending).
+log "Bug #59 fix: operator NetworkPolicy egress to loopzero-system for Gitea..."
+for OP in loopzero-tenant-operator loopzero-app-operator loopzero-preview-operator loopzero-platform-operator; do
+  kubectl -n loopzero-system patch networkpolicy "$OP" --type=json \
+    -p='[{"op":"replace","path":"/spec/egress/2/to/0/namespaceSelector/matchLabels","value":{"kubernetes.io/metadata.name":"loopzero-system"}}]' >/dev/null 2>&1 || true
+done
+log "  ✓ NetworkPolicy egress patched (best-effort, some may already exist)"
+
+# Bug #61 LIVE FIX (caught 2026-05-18 iter 51): Argo Workflow PVCs hardcode
+# `storageClassName: local-path` (workflow_builder.go:278 — Bug #21 fix for DO
+# CSI rate limit). DOKS has no local-path-provisioner by default.
+log "Bug #61 fix: install local-path-provisioner on build cluster..."
+KUBECONFIG="$DRILL_KUBECONFIG_DIR/build.yaml" kubectl apply \
+  -f https://raw.githubusercontent.com/rancher/local-path-provisioner/v0.0.30/deploy/local-path-storage.yaml >/dev/null 2>&1
+log "  ✓ local-path-provisioner deployed on build cluster"
+
+# Bug #62 LIVE FIX (caught 2026-05-18 iter 51): loopzero-registry-pull Secret
+# missing in argo namespace (build cluster) — needed for workflow steps
+# pulling loopzero-clone-runner/loopzero-packs-runner/loopzero-syft-scanner/loopzero-cosign-signer.
+log "Bug #62 fix: loopzero-registry-pull Secret in argo ns + SA imagePullSecrets..."
+DO_TOKEN_VAL=$(awk -F= '/^DIGITALOCEAN_TOKEN=/{print $2}' .env 2>/dev/null || echo "${DIGITALOCEAN_TOKEN:-}")
+KUBECONFIG="$DRILL_KUBECONFIG_DIR/build.yaml" kubectl -n argo create secret docker-registry loopzero-registry-pull \
+  --docker-server=registry.digitalocean.com \
+  --docker-username="$DO_TOKEN_VAL" --docker-password="$DO_TOKEN_VAL" \
+  --docker-email=drill@loopzero.example \
+  --dry-run=client -o yaml | KUBECONFIG="$DRILL_KUBECONFIG_DIR/build.yaml" kubectl apply -f - >/dev/null
+for SA in loopzero-build-sa default; do
+  KUBECONFIG="$DRILL_KUBECONFIG_DIR/build.yaml" kubectl -n argo patch serviceaccount "$SA" \
+    -p '{"imagePullSecrets":[{"name":"loopzero-registry-pull"}]}' >/dev/null 2>&1 || true
+done
+log "  ✓ DOCR pull secret + SAs patched in argo ns (build cluster)"
+
+# Bug #63 LIVE FIX (caught 2026-05-18 iter 51): loopzero-minio-credentials Secret
+# missing in argo ns — workflows envFrom this Secret for S3 access.
+log "Bug #63 fix: loopzero-minio-credentials Secret in argo ns..."
+KUBECONFIG="$DRILL_KUBECONFIG_DIR/build.yaml" kubectl -n argo create secret generic loopzero-minio-credentials \
+  --from-literal=MINIO_ENDPOINT="https://sfo3.digitaloceanspaces.com" \
+  --from-literal=AWS_ACCESS_KEY_ID="$SPACES_KEY" \
+  --from-literal=AWS_SECRET_ACCESS_KEY="$SPACES_SECRET" \
+  --from-literal=AWS_DEFAULT_REGION="sfo3" \
+  --from-literal=AWS_ENDPOINT_URL="https://sfo3.digitaloceanspaces.com" \
+  --from-literal=AWS_S3_FORCE_PATH_STYLE="true" \
+  --dry-run=client -o yaml | KUBECONFIG="$DRILL_KUBECONFIG_DIR/build.yaml" kubectl apply -f - >/dev/null
+log "  ✓ loopzero-minio-credentials in argo ns"
+
+# Bug #64 LIVE FIX (caught 2026-05-18 iter 50): CWT loopzero-clone hardcodes
+# bucket name `loopzero-builds` (chart default sourceBucket). Drill bucket is
+# loopzero-drill-builds-sfo3 — patch CWT in build cluster (T2 chart fix pending).
+log "Bug #64 fix: patch loopzero-clone CWT bucket name to drill bucket..."
+KUBECONFIG="$DRILL_KUBECONFIG_DIR/build.yaml" kubectl get clusterworkflowtemplate loopzero-clone -o yaml 2>/dev/null | \
+  sed 's|loopzero/loopzero-builds/|loopzero/loopzero-drill-builds-sfo3/|g' | \
+  KUBECONFIG="$DRILL_KUBECONFIG_DIR/build.yaml" kubectl apply -f - >/dev/null 2>&1
+log "  ✓ CWT loopzero-clone bucket→loopzero-drill-builds-sfo3"
+
+# Bug #72 LIVE FIX (caught 2026-05-18 iter 51): buildkit-registry-config
+# Secret missing in argo ns — BuildKit needs DOCR creds to push images.
+log "Bug #72 fix: buildkit-registry-config Secret with DOCR auth..."
+AUTH_B64=$(printf '%s:%s' "$DO_TOKEN_VAL" "$DO_TOKEN_VAL" | base64 -w0)
+DOCR_CONFIG=$(printf '{"auths":{"registry.digitalocean.com":{"auth":"%s"}}}' "$AUTH_B64")
+KUBECONFIG="$DRILL_KUBECONFIG_DIR/build.yaml" kubectl -n argo create secret generic buildkit-registry-config \
+  --from-literal="config.json=$DOCR_CONFIG" \
+  --dry-run=client -o yaml | KUBECONFIG="$DRILL_KUBECONFIG_DIR/build.yaml" kubectl apply -f - >/dev/null
+log "  ✓ buildkit-registry-config in argo ns"
+
+# Bug #74 LIVE FIX (caught 2026-05-18 iter 51): cosign-signing-key Secret
+# missing — cosign step needs encrypted keypair to sign images.
+log "Bug #74 fix: cosign keypair generation + Secret..."
+if ! KUBECONFIG="$DRILL_KUBECONFIG_DIR/build.yaml" kubectl -n argo get secret cosign-signing-key >/dev/null 2>&1; then
+  COSIGN_DIR=$(mktemp -d)
+  COSIGN_PW="drillcosign$(openssl rand -hex 8)"
+  (cd "$COSIGN_DIR" && COSIGN_PASSWORD="$COSIGN_PW" cosign generate-key-pair >/dev/null 2>&1) || {
+    log "  ✗ cosign generate-key-pair failed (cosign may be missing)"
+  }
+  if [[ -f "$COSIGN_DIR/cosign.key" ]]; then
+    KUBECONFIG="$DRILL_KUBECONFIG_DIR/build.yaml" kubectl -n argo create secret generic cosign-signing-key \
+      --from-file=cosign.key="$COSIGN_DIR/cosign.key" \
+      --from-file=cosign.pub="$COSIGN_DIR/cosign.pub" \
+      --from-literal=cosign.password="$COSIGN_PW" \
+      --dry-run=client -o yaml | KUBECONFIG="$DRILL_KUBECONFIG_DIR/build.yaml" kubectl apply -f - >/dev/null
+    rm -rf "$COSIGN_DIR"
+    log "  ✓ cosign-signing-key generated + applied"
+  fi
+else
+  log "  ✓ cosign-signing-key already exists"
+fi
+
+# Bug #66 LIVE FIX (caught 2026-05-18 iter 47): ArgoCD on mgmt cluster needs
+# argocd-creds-gitea Secret to authenticate Gitea repo reads.
+log "Bug #66 fix: argocd-creds-gitea Secret in argocd ns..."
+if [[ -n "${GITEA_TOKEN_NEW:-}" ]]; then
+  kubectl -n argocd create secret generic argocd-creds-gitea \
+    --from-literal=type=git \
+    --from-literal=url="http://gitea-http.loopzero-system.svc.cluster.local:3000/" \
+    --from-literal=username=gitea_admin \
+    --from-literal=password="$GITEA_TOKEN_NEW" \
+    --dry-run=client -o yaml | kubectl apply -f - >/dev/null
+  kubectl -n argocd label secret argocd-creds-gitea argocd.argoproj.io/secret-type=repo-creds --overwrite >/dev/null 2>&1
+  # Restart ArgoCD repo-server to pick up new creds
+  kubectl -n argocd rollout restart deployment/argocd-repo-server >/dev/null 2>&1
+  log "  ✓ argocd-creds-gitea applied + repo-server restarted"
+fi
+
+# Bug #81 LIVE FIX (caught 2026-05-18 iter 53): runtime cluster needs
+# letsencrypt-prod ClusterIssuer with CF DNS-01 — loopzero-api manifests reference
+# this issuer for tenant TLS. Without it certs stay Failed → HTTPS unusable.
+log "Bug #81 fix: letsencrypt-prod ClusterIssuer (CF DNS-01) on runtime cluster..."
+CF_TOKEN_VAL=$(awk -F= '/^CLOUDFLARE_API_TOKEN=/{print $2}' .env 2>/dev/null || echo "${CLOUDFLARE_API_TOKEN:-}")
+if [[ -n "$CF_TOKEN_VAL" ]]; then
+  for RC in runtime runtime-2; do
+    KC="$DRILL_KUBECONFIG_DIR/$RC.yaml"
+    [[ -f "$KC" ]] || continue
+    KUBECONFIG="$KC" kubectl create namespace cert-manager --dry-run=client -o yaml | KUBECONFIG="$KC" kubectl apply -f - >/dev/null 2>&1
+    KUBECONFIG="$KC" kubectl -n cert-manager create secret generic cloudflare-api-token \
+      --from-literal=api-token="$CF_TOKEN_VAL" \
+      --dry-run=client -o yaml | KUBECONFIG="$KC" kubectl apply -f - >/dev/null
+    cat <<EOF_ISSUER | KUBECONFIG="$KC" kubectl apply -f - >/dev/null 2>&1
+apiVersion: cert-manager.io/v1
+kind: ClusterIssuer
+metadata:
+  name: letsencrypt-prod
+spec:
+  acme:
+    email: ops@loopzero.example
+    server: https://acme-v02.api.letsencrypt.org/directory
+    privateKeySecretRef:
+      name: letsencrypt-prod-account
+    solvers:
+      - dns01:
+          cloudflare:
+            apiTokenSecretRef:
+              name: cloudflare-api-token
+              key: api-token
+        selector:
+          dnsZones:
+            - $DRILL_BASE_DOMAIN
+EOF_ISSUER
+  done
+  log "  ✓ letsencrypt-prod ClusterIssuer + cloudflare-api-token on runtime clusters"
+else
+  log "  ✗ CLOUDFLARE_API_TOKEN not set — letsencrypt-prod ClusterIssuer skipped"
+fi
+
+# Bug #82 LIVE FIX (caught 2026-05-18 iter 53): CF zone needs wildcard A
+# record `*.loopzero-drill.example` → runtime cluster Traefik LB IP so tenant
+# apps resolve publicly + cert-manager DNS-01 works.
+log "Bug #82 fix: CF wildcard A record → runtime cluster Traefik LB..."
+if [[ -n "$CF_TOKEN_VAL" ]]; then
+  # Get runtime Traefik LB IP (wait up to 5min for assignment)
+  RUNTIME_LB_IP=""
+  for i in 1 2 3 4 5 6 7 8 9 10; do
+    RUNTIME_LB_IP=$(KUBECONFIG="$DRILL_KUBECONFIG_DIR/runtime.yaml" kubectl -n traefik get svc traefik -o jsonpath='{.status.loadBalancer.ingress[0].ip}' 2>/dev/null || echo "")
+    [[ -n "$RUNTIME_LB_IP" ]] && break
+    sleep 30
+  done
+  if [[ -n "$RUNTIME_LB_IP" ]]; then
+    ZONE_ID=$(cd infra/pulumi-drill && npx pulumi stack output --stack drill zoneId 2>/dev/null || echo "")
+    if [[ -n "$ZONE_ID" ]]; then
+      # Delete existing wildcard if present (idempotent)
+      EXISTING_ID=$(curl -s -H "Authorization: Bearer $CF_TOKEN_VAL" \
+        "https://api.cloudflare.com/client/v4/zones/$ZONE_ID/dns_records?name=*.$DRILL_BASE_DOMAIN" \
+        2>/dev/null | python3 -c "import json,sys; d=json.load(sys.stdin); print(d.get('result',[{}])[0].get('id',''))" 2>/dev/null || echo "")
+      [[ -n "$EXISTING_ID" ]] && curl -s -X DELETE \
+        "https://api.cloudflare.com/client/v4/zones/$ZONE_ID/dns_records/$EXISTING_ID" \
+        -H "Authorization: Bearer $CF_TOKEN_VAL" >/dev/null 2>&1
+      curl -s -X POST "https://api.cloudflare.com/client/v4/zones/$ZONE_ID/dns_records" \
+        -H "Authorization: Bearer $CF_TOKEN_VAL" -H "Content-Type: application/json" \
+        -d "{\"type\":\"A\",\"name\":\"*.$DRILL_BASE_DOMAIN\",\"content\":\"$RUNTIME_LB_IP\",\"ttl\":60,\"proxied\":false}" >/dev/null 2>&1
+      log "  ✓ CF wildcard A *.$DRILL_BASE_DOMAIN → $RUNTIME_LB_IP"
+    fi
+  else
+    log "  ✗ Runtime Traefik LB IP not assigned yet — wildcard A record skipped (re-run when LB ready)"
+  fi
+fi
+
+# Bug #69 LIVE FIX (caught 2026-05-18 iter 47): loopzero-api restart cycles can
+# leak pg_advisory_lock when old pods don't release before new ones acquire.
+# Reconcile loops won't start without leader → builds get reaper-failed.
+# Heal: terminate any backend holding the leader lock before final restart.
+log "Bug #69 fix: terminate stale leader-election pg_advisory_lock holders..."
+PG_PASS_VAL=$(echo "$LOOPZERO_API_DSN_VAL" | sed -E 's|^postgres(ql)?://[^:]+:([^@]+)@.*$|\2|')
+KILL_LOCK_POD="drill-kill-lock-$RANDOM"
+kubectl -n loopzero-system run "$KILL_LOCK_POD" --restart=Never --image=postgres:16-alpine --quiet \
+  --env="PGPASSWORD=$PG_PASS_VAL" --env="PGSSLMODE=require" --command -- \
+  psql --host="$PG_HOST_VAL" --port="$PG_PORT_VAL" --username=doadmin --dbname=loopzero \
+       --no-psqlrc -c "SELECT pg_terminate_backend(pid) FROM pg_locks WHERE locktype='advisory' AND granted=true;" >/dev/null 2>&1 || true
+kubectl -n loopzero-system wait --for=jsonpath='{.status.phase}'=Succeeded "pod/$KILL_LOCK_POD" --timeout=60s >/dev/null 2>&1 || true
+kubectl -n loopzero-system delete pod "$KILL_LOCK_POD" --wait=false >/dev/null 2>&1 || true
+log "  ✓ Stale pg_advisory_lock holders terminated"
+
 # Restart loopzero-api to pick up env + secret changes
 log "Bug #46+#54 fix: restart loopzero-api to reload env vars..."
 kubectl -n loopzero-system rollout restart deployment/loopzero-api >/dev/null
 kubectl -n loopzero-system rollout status deployment/loopzero-api --timeout=180s 2>&1 | tail -2 | sed 's/^/  /'
+
+# Restart 4 split operators to pick up env changes
+log "Bug #57+#60 fix: restart operators to reload env + token..."
+for OP in loopzero-tenant-operator loopzero-app-operator loopzero-preview-operator loopzero-platform-operator; do
+  kubectl -n loopzero-system rollout restart deployment/"$OP" >/dev/null 2>&1 || true
+done
 
 log ""
 log "✓ Bootstrap complete. LoopZero platform deployed on drill 4-cluster stack."
