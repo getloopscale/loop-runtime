@@ -629,6 +629,24 @@ if ! kubectl wait --for=condition=Available --timeout="$HEALTH_WAIT_TIMEOUT" \
 fi
 
 log ""
+
+# Bug #36 LIVE FIX (caught 2026-05-18 iter 29): drill-mint-jwt.sh requires
+# loopzero-bootstrap-credentials Secret which is created by bootstrap-oauth-clients.sh.
+# In local k3d this runs via task setup. In drill we need to run it explicitly
+# AFTER mgmt sync (loopzero-auth Hydra Ready) BEFORE drill-mint-jwt.
+log "Bug #36 fix: bootstrapping OAuth clients in Hydra (creates loopzero-bootstrap-credentials)..."
+export KUBECONFIG="$DRILL_KUBECONFIG_DIR/mgmt.yaml"
+export HYDRA_NAMESPACE="loopzero-auth"
+if bash "$HELMFILE_DIR/scripts/bootstrap-oauth-clients.sh" 2>&1 | tail -5; then
+  log "  ✓ OAuth clients bootstrapped (loopzero-cli + loopzero-bootstrap)"
+else
+  log "  ✗ bootstrap-oauth-clients.sh failed — JWT mint will fail downstream"
+  if [[ "$STRICT_BOOTSTRAP" == "true" ]]; then
+    exit 4
+  fi
+fi
+
+log ""
 log "✓ Bootstrap complete. LoopZero platform deployed on drill 4-cluster stack."
 log "  Next: bash infra/scripts/drill-mint-jwt.sh"
 log "  Then: bash infra/scripts/bootstrap-cell-{default,1,2}-cc-drill.sh"
