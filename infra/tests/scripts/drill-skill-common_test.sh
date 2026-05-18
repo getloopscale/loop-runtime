@@ -181,6 +181,21 @@ test_emit_finding_appends_to_audit_md() {
   rm -rf "$tmpdir"
 }
 
+test_acquire_lock_inherits_in_chained_child() {
+  set +e
+  # Simulate child sub-orchestrator: parent already exported _DRILL_SKILL_LOCK_HELD
+  out=$(bash -c "
+    set -euo pipefail
+    export _DRILL_SKILL_LOCK_HELD=parent-skill
+    source '$LIB' >/dev/null 2>&1
+    drill_skill_acquire_lock 'child-skill' 2>&1
+  ")
+  local rc=$?
+  set -e
+  [[ "$rc" -eq 0 ]] || { echo "  child acquire should return 0 when parent holds — rc=$rc" >&2; return 1; }
+  echo "$out" | grep -q "lock inherited from parent" || { echo "  expected inheritance marker — got: $out" >&2; return 1; }
+}
+
 test_acquire_lock_blocks_concurrent_dispatch() {
   local tmpdir
   tmpdir=$(mktemp -d -t drill-lib-test-XXXXXX)
@@ -442,6 +457,7 @@ run_test test_sponsor_check_with_valid_initials_passes
 run_test test_sponsor_check_with_ci_bypasses
 run_test test_init_audit_creates_dir_structure
 run_test test_emit_finding_appends_to_audit_md
+run_test test_acquire_lock_inherits_in_chained_child
 run_test test_acquire_lock_blocks_concurrent_dispatch
 run_test test_lib_double_sourcing_idempotent
 run_test test_dotenv_auto_load_exports_keys

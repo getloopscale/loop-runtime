@@ -165,8 +165,17 @@ drill_skill_confirm_cost() {
 }
 
 # --- EC-1: Concurrent skill dispatch guard ---
+# When invoked by a sibling orchestrator (dogfood-drill or chaos-test-drill
+# calling cleanroom-drill as foundation), the parent already holds the lock.
+# A child trying to acquire it would deadlock. We detect chained invocations
+# via _DRILL_SKILL_LOCK_HELD env (exported by the parent's acquire) and treat
+# the child's call as a no-op pass-through.
 drill_skill_acquire_lock() {
   local skill_name="$1"
+  if [[ -n "${_DRILL_SKILL_LOCK_HELD:-}" ]]; then
+    drill_skill_log "lock inherited from parent orchestrator ($_DRILL_SKILL_LOCK_HELD) — no re-acquire"
+    return 0
+  fi
   exec 200>"$DRILL_SKILL_LOCK_FILE"
   if ! flock -n 200; then
     drill_skill_log "✗ Another drill skill already holds the lock ($DRILL_SKILL_LOCK_FILE)"
@@ -174,6 +183,8 @@ drill_skill_acquire_lock() {
     return 2
   fi
   echo "$$ $skill_name $(date -u +%FT%TZ)" > "$DRILL_SKILL_LOCK_FILE"
+  # Mark held so child processes (sub-orchestrators) see and pass through
+  export _DRILL_SKILL_LOCK_HELD="$skill_name"
   return 0
 }
 
