@@ -127,16 +127,21 @@ if [[ -n "${DRILL_PG_HOST:-}" ]]; then
     log "  hint: install postgresql-client OR unset DRILL_PG_HOST to use in-cluster fallback"
     exit 2
   fi
-  # Bug #38 LIVE fix (2026-05-18 iter 31): two issues stacked
-  # (a) DO managed PG requires sslmode=require — use connection URI to make
-  #     all params (sslmode, host, port, user, db, password) unambiguous
-  # (b) Seed tables (users/tenants/tenant_members) are in `loopzero` DB
-  #     (per Bug #12 — loopzero-api migrations target ${drillPgLoopZero.name}),
-  #     NOT in `defaultdb`. Connect to loopzero DB for seeds.
+  # Bug #38 LIVE fix v2 (2026-05-18 iter 32): URI format silently failed because
+  # doadmin password contains URI-reserved chars (@:/?#) which break URI parsing.
+  # psql then fell back to socket. Use individual flags + PGPASSWORD/PGSSLMODE env
+  # vars (no URI). connect_timeout=10 prevents hangs.
+  #   (b) Seed tables in `loopzero` DB per Bug #12 fix.
   DRILL_PG_DB="${DRILL_PG_DB:-loopzero}"
   run_psql() {
-    psql "postgresql://doadmin:${DRILL_PG_PASS}@${DRILL_PG_HOST}:${DRILL_PG_PORT}/${DRILL_PG_DB}?sslmode=require" \
+    PGPASSWORD="$DRILL_PG_PASS" PGSSLMODE=require psql \
+      --host="$DRILL_PG_HOST" \
+      --port="$DRILL_PG_PORT" \
+      --username=doadmin \
+      --dbname="$DRILL_PG_DB" \
+      --no-psqlrc \
       -v ON_ERROR_STOP=1 \
+      -v connect_timeout=10 \
       "$@"
   }
 else
