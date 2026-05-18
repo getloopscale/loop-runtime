@@ -218,6 +218,48 @@ EOF
   drill_skill_cleanup_old_audits &
 }
 
+# --- Fixture helper: ensure source.bundle exists for hello-server e2e fixture ---
+# J03 dogfood journey uploads a git bundle of the hello-server fixture as the
+# tenant's source. We don't commit the binary bundle (rots with fixture changes);
+# instead, this helper generates it on-demand from the fixture files.
+# Args: <fixture_dir> (default: infra/tests/e2e/fixtures/hello-server)
+# Idempotent: skips if bundle already exists and is newer than fixture sources.
+drill_skill_ensure_source_bundle() {
+  local fixture_dir="${1:-infra/tests/e2e/fixtures/hello-server}"
+  local bundle_path="$fixture_dir/source.bundle"
+  if [[ -f "$bundle_path" ]]; then
+    # Check if any source file is newer than the bundle (excludes bundle itself).
+    # `find -newer` returns matches that are strictly newer than the reference.
+    local newer_src
+    newer_src=$(find "$fixture_dir" -type f \
+        \( -name "*.js" -o -name "*.json" -o -name "*.yaml" -o -name "*.ts" \) \
+        ! -name "source.bundle" \
+        -newer "$bundle_path" 2>/dev/null | head -1)
+    if [[ -z "$newer_src" ]]; then
+      return 0
+    fi
+    drill_skill_log "source.bundle older than $newer_src — regenerating"
+  fi
+  drill_skill_log "Generating $bundle_path from fixture..."
+  local tmpgit
+  tmpgit=$(mktemp -d -t source-bundle-XXXXXX)
+  cp -r "$fixture_dir"/* "$tmpgit/"
+  (
+    cd "$tmpgit" && \
+    git init -q -b main && \
+    git -c user.email=drill@loopzero.local -c user.name=drill add . && \
+    git -c user.email=drill@loopzero.local -c user.name=drill commit -q -m "drill fixture" && \
+    git bundle create "$bundle_path" --all 2>&1
+  ) >/dev/null
+  rm -rf "$tmpgit"
+  if [[ -f "$bundle_path" ]]; then
+    drill_skill_log "  ✓ source.bundle generated ($(stat -c%s "$bundle_path") bytes)"
+    return 0
+  fi
+  drill_skill_log "  ✗ source.bundle generation failed"
+  return 1
+}
+
 # --- D6: Prod-parity invariants check ---
 # Args: <kubeconfig> <tenant_namespace>
 # Returns 0 if all 5 invariants PASS, N where N=violation count.

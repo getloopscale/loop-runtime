@@ -133,6 +133,9 @@ drill_skill_log "  ✓ JWT minted (len=${#LOOPZERO_TOKEN})"
 
 # --- Step 3: 12 user journeys ---
 drill_skill_log "Step 3/4: Run 12 user journeys"
+# Ensure fixture source.bundle exists for J03 source upload journey
+drill_skill_ensure_source_bundle "$ROOT_DIR/infra/tests/e2e/fixtures/hello-server" || \
+  drill_skill_log "  warn: source.bundle generation failed — J03 will fail soft"
 
 # API URL via Traefik LB IP + curl --resolve (CF wildcard A record provides DNS too)
 API_URL="https://api.${DRILL_BASE_DOMAIN:-loopzero-drill.example}/api/v1"

@@ -348,6 +348,55 @@ EOF
   echo "$result" | grep -q "AWS_ACCESS_KEY_ID=from-caller" || { echo "  existing AWS_* should win — got: $result" >&2; return 1; }
 }
 
+test_ensure_source_bundle_generates_when_missing() {
+  local tmpdir
+  tmpdir=$(mktemp -d -t drill-bundle-test-XXXXXX)
+  mkdir -p "$tmpdir/fixture"
+  cat > "$tmpdir/fixture/index.js" <<'EOF'
+console.log("hello");
+EOF
+  cat > "$tmpdir/fixture/package.json" <<'EOF'
+{"name":"hello","version":"0.1.0"}
+EOF
+  set +e
+  bash -c "
+    set -euo pipefail
+    source '$LIB' 2>/dev/null
+    drill_skill_ensure_source_bundle '$tmpdir/fixture'
+    [[ -f '$tmpdir/fixture/source.bundle' ]] || exit 1
+    [[ \$(stat -c%s '$tmpdir/fixture/source.bundle') -gt 100 ]] || exit 2
+  "
+  local rc=$?
+  set -e
+  rm -rf "$tmpdir"
+  [[ "$rc" -eq 0 ]] || return 1
+}
+
+test_ensure_source_bundle_idempotent_when_fresh() {
+  local tmpdir
+  tmpdir=$(mktemp -d -t drill-bundle-test-XXXXXX)
+  mkdir -p "$tmpdir/fixture"
+  echo "x" > "$tmpdir/fixture/index.js"
+  set +e
+  # First call generates (silenced). Touch bundle to be newer than sources.
+  # Second call is what we test — capture only its output.
+  out=$(bash -c "
+    set -euo pipefail
+    source '$LIB' 2>/dev/null
+    drill_skill_ensure_source_bundle '$tmpdir/fixture' >/dev/null 2>&1
+    sleep 1
+    touch '$tmpdir/fixture/source.bundle'
+    # Capture only the second call's output:
+    drill_skill_ensure_source_bundle '$tmpdir/fixture' 2>&1
+  ")
+  local rc=$?
+  set -e
+  rm -rf "$tmpdir"
+  [[ "$rc" -eq 0 ]] || return 1
+  # Second invocation should be silent (idempotent — bundle fresh)
+  ! echo "$out" | grep -qE "Generating|regenerating" || { echo "  expected silent idempotent — got: $out" >&2; return 1; }
+}
+
 test_dotenv_no_file_is_silent_noop() {
   local tmpdir
   tmpdir=$(mktemp -d -t drill-dotenv-test-XXXXXX)
@@ -400,6 +449,8 @@ run_test test_dotenv_auto_load_tolerates_invalid_lines
 run_test test_dotenv_caller_env_wins_over_dotenv
 run_test test_dotenv_spaces_maps_to_aws
 run_test test_dotenv_existing_aws_wins_over_spaces
+run_test test_ensure_source_bundle_generates_when_missing
+run_test test_ensure_source_bundle_idempotent_when_fresh
 run_test test_dotenv_no_file_is_silent_noop
 
 echo ""
