@@ -13,7 +13,8 @@
 set -euo pipefail
 
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/../../.." && pwd)"
-SCRIPT="$ROOT/infra/scripts/drill-cleanroom-orchestrator.sh"
+# shellcheck disable=SC2034
+SCRIPT="$ROOT/infra/scripts/drill-cleanroom-orchestrator.sh"  # reference only — tests invoke via $tmpdir copy
 
 TESTS_RUN=0
 TESTS_PASSED=0

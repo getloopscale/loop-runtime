@@ -8,7 +8,8 @@
 set -euo pipefail
 
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/../../.." && pwd)"
-SCRIPT_PATH="$ROOT/infra/scripts/drill-dogfood-orchestrator.sh"
+# shellcheck disable=SC2034
+SCRIPT_PATH="$ROOT/infra/scripts/drill-dogfood-orchestrator.sh"  # reference only — tests invoke via $tmpdir copy
 
 TESTS_RUN=0
 TESTS_PASSED=0

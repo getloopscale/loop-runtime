@@ -90,7 +90,6 @@ drill_skill_acquire_lock() {
 
 # --- EC-4: Audit dir cleanup (>30 days) ---
 drill_skill_cleanup_old_audits() {
-  local now ts dir
   find "$DRILL_SKILL_AUDIT_BASE"-* -maxdepth 0 -type d -mtime "+$DRILL_SKILL_AUDIT_TTL_DAYS" \
        -exec rm -rf {} \; 2>/dev/null || true
 }

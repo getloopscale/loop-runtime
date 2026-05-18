@@ -130,7 +130,6 @@ test_sponsor_check_with_ci_bypasses() {
 test_init_audit_creates_dir_structure() {
   local tmpdir
   tmpdir=$(mktemp -d -t drill-lib-test-XXXXXX)
-  local audit_dir audit_md
   set +e
   result=$(bash -c "
     set -euo pipefail
