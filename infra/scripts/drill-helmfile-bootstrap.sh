@@ -646,6 +646,29 @@ else
   fi
 fi
 
+# Bug #43 LIVE FIX (caught 2026-05-18 iter 37): run-migrations.sh was never
+# invoked in drill bootstrap → loopzero DB had no relations (users, tenants,
+# tenant_members), causing drill-mint-jwt.sh seed step to fail with
+# `relation "users" does not exist`. Migrations must run AFTER helm sync
+# (loopzero-api pod has migrate binary baked in) BEFORE drill-mint-jwt seed.
+log "Bug #43 fix: running DB migrations against drill mgmt PG..."
+export KUBECONFIG="$DRILL_KUBECONFIG_DIR/mgmt.yaml"
+PG_HOST="$PG_HOST_VAL" \
+PG_PORT="$PG_PORT_VAL" \
+PG_USER=doadmin \
+PG_PASS=$(echo "$LOOPZERO_API_DSN_VAL" | sed -E 's|^postgres(ql)?://[^:]+:([^@]+)@.*$|\2|') \
+PG_DB=loopzero \
+PG_SSLMODE=require \
+DRILL_KUBECONFIG="$DRILL_KUBECONFIG_DIR/mgmt.yaml" \
+NAMESPACE="loopzero-system" \
+  bash "infra/scripts/run-migrations.sh" 2>&1 | tail -20 | sed 's/^/  /' || {
+  log "  ✗ run-migrations.sh failed"
+  if [[ "$STRICT_BOOTSTRAP" == "true" ]]; then
+    exit 4
+  fi
+}
+log "  ✓ DB migrations applied"
+
 log ""
 log "✓ Bootstrap complete. LoopZero platform deployed on drill 4-cluster stack."
 log "  Next: bash infra/scripts/drill-mint-jwt.sh"
