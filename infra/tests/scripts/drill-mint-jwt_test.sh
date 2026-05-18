@@ -70,6 +70,33 @@ case "\$*" in
     sleep 120 &
     exit 0
     ;;
+  *"run drill-psql"*|*"run "*"--restart=Never --image=postgres"*)
+    # Bug #39 v3: drill-mint-jwt uses transient psql pod via kubectl run
+    # because DO Managed PG firewall blocks local IP. Stub: succeed silently.
+    exit 0
+    ;;
+  *"wait --for=jsonpath="*"Succeeded"*)
+    # Bug #39 v3: wait for transient psql pod Succeeded phase.
+    exit 0
+    ;;
+  *"get pod"*"jsonpath"*"status.phase"*)
+    # Bug #39 v3: read pod phase post-wait — must return Succeeded.
+    printf 'Succeeded'
+    exit 0
+    ;;
+  *"get pod"*"exitCode"*)
+    # Bug #39 v3: read pod exitCode — must return 0.
+    printf '0'
+    exit 0
+    ;;
+  *"logs"*"drill-psql"*)
+    # Bug #39 v3: pod logs (psql output) — return success/empty.
+    exit 0
+    ;;
+  *"delete pod"*"drill-psql"*)
+    # Bug #39 v3: cleanup transient psql pod.
+    exit 0
+    ;;
   *)
     exit 0
     ;;

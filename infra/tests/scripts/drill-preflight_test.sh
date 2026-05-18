@@ -60,6 +60,8 @@ run_preflight() {
     PULUMI_ACCESS_TOKEN=fake \
     CLOUDFLARE_API_TOKEN=fake \
     PULUMI_CONFIG_PASSPHRASE=fake \
+    AWS_ACCESS_KEY_ID=fake \
+    AWS_SECRET_ACCESS_KEY=fake \
     PULUMI_DRILL_DIR="$tmpdir/infra/pulumi-drill" \
     bash "$SCRIPT" "$@" 2>"$tmpdir/stderr.log" >"$tmpdir/stdout.log"
 }
@@ -91,7 +93,7 @@ test_missing_credentials_exits_1() {
     PULUMI_ACCESS_TOKEN=fake \
     CLOUDFLARE_API_TOKEN=fake \
     PULUMI_CONFIG_PASSPHRASE=fake \
-    PULUMI_DRILL_DIR="$tmpdir/infra/pulumi-drill" \
+    AWS_ACCESS_KEY_ID=fake AWS_SECRET_ACCESS_KEY=fake PULUMI_DRILL_DIR="$tmpdir/infra/pulumi-drill" \
     env -u DIGITALOCEAN_TOKEN \
     bash "$SCRIPT" 2>"$tmpdir/stderr.log" >"$tmpdir/stdout.log"
   local rc=$?
@@ -112,7 +114,7 @@ test_pulumi_access_token_missing_is_advisory_not_failure() {
     DIGITALOCEAN_TOKEN=fake \
     CLOUDFLARE_API_TOKEN=fake \
     PULUMI_CONFIG_PASSPHRASE=fake \
-    PULUMI_DRILL_DIR="$tmpdir/infra/pulumi-drill" \
+    AWS_ACCESS_KEY_ID=fake AWS_SECRET_ACCESS_KEY=fake PULUMI_DRILL_DIR="$tmpdir/infra/pulumi-drill" \
     env -u PULUMI_ACCESS_TOKEN \
     bash "$SCRIPT" 2>"$tmpdir/stderr.log" >"$tmpdir/stdout.log"
   local rc=$?
@@ -172,11 +174,12 @@ EOF
 test_leftover_stack_exits_4() {
   local tmpdir="$1"
   build_env_all_pass "$tmpdir"
-  # Replace pulumi stub to return existing drill stack
+  # Replace pulumi stub to return existing drill stack with resourceCount>0
+  # (iter 11 fix: preflight only fails on non-empty stack — empty registration is OK)
   cat > "$tmpdir/bin/pulumi" <<'EOF'
 #!/usr/bin/env bash
 if [[ "$*" == "stack ls --json" ]]; then
-  echo '[{"name":"drill","current":true}]'
+  echo '[{"name":"drill","current":true,"resourceCount":25}]'
 fi
 exit 0
 EOF
@@ -257,7 +260,7 @@ EOF
     PULUMI_ACCESS_TOKEN=fake \
     CLOUDFLARE_API_TOKEN=fake \
     PULUMI_CONFIG_PASSPHRASE=fake \
-    PULUMI_DRILL_DIR="$tmpdir/infra/pulumi-drill" \
+    AWS_ACCESS_KEY_ID=fake AWS_SECRET_ACCESS_KEY=fake PULUMI_DRILL_DIR="$tmpdir/infra/pulumi-drill" \
     env -u DIGITALOCEAN_TOKEN \
     bash "$SCRIPT" 2>"$tmpdir/stderr.log" >"$tmpdir/stdout.log"
   local rc=$?
@@ -295,7 +298,7 @@ EOF
     PULUMI_ACCESS_TOKEN=fake \
     CLOUDFLARE_API_TOKEN=fake \
     PULUMI_CONFIG_PASSPHRASE=fake \
-    PULUMI_DRILL_DIR="$tmpdir/infra/pulumi-drill" \
+    AWS_ACCESS_KEY_ID=fake AWS_SECRET_ACCESS_KEY=fake PULUMI_DRILL_DIR="$tmpdir/infra/pulumi-drill" \
     bash "$SCRIPT" 2>"$tmpdir/stderr.log" >"$tmpdir/stdout.log"
   local rc=$?
   set -e

@@ -390,10 +390,15 @@ test_permissive_mode_continues_on_partial() {
   # Default permissive STILL exits 3 if PARTIAL_FAILURES not empty,
   # but should have continued past the failure (all 4 clusters processed).
   [[ "$rc" -eq 3 ]] || return 1
-  local count
-  count=$(wc -l < "$tmpdir/cluster-order.txt")
-  [[ "$count" -eq 4 ]] || {
-    echo "  expected 4 clusters processed (permissive), got $count" >&2
+  # Bug #32b retry: failing cluster gets HELMFILE_RETRY_MAX=3 attempts logged
+  # to cluster-order.txt (1× mgmt + 1× build + 3× runtime + 1× runtime-2 = 6).
+  # The actual invariant is: all 4 UNIQUE clusters were attempted (permissive
+  # didn't abort early on first failure — runtime-2 was reached).
+  local unique_count
+  unique_count=$(sort -u "$tmpdir/cluster-order.txt" | wc -l)
+  [[ "$unique_count" -eq 4 ]] || {
+    echo "  expected 4 UNIQUE clusters processed (permissive), got $unique_count" >&2
+    sort -u "$tmpdir/cluster-order.txt" >&2
     return 1
   }
 }
