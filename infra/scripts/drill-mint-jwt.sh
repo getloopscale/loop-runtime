@@ -57,7 +57,10 @@ SEED_DISPLAY_NAME="${SEED_DISPLAY_NAME:-Drill Bootstrap}"
 SEED_USERNAME="${SEED_USERNAME:-bootstrap}"
 
 NS_LOOPZERO="${LOOPZERO_NAMESPACE:-loopzero-system}"
-NS_HYDRA="${HYDRA_NAMESPACE:-loopzero-system}"
+# Bug #35 LIVE fix (2026-05-18 iter 28): drill helmfile installs ory-hydra
+# in loopzero-auth namespace (chart default), not loopzero-system. Default this to
+# loopzero-auth to match drill. Local k3d standalone may override via env.
+NS_HYDRA="${HYDRA_NAMESPACE:-loopzero-auth}"
 HYDRA_PORT_LOCAL="${HYDRA_PORT_LOCAL:-14444}"
 
 # Minimum JWT TTL — EC-07 fix. L3 spec runs 60min; buffer 1h.
