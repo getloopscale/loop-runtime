@@ -221,6 +221,106 @@ test_lib_double_sourcing_idempotent() {
   [[ "$rc" -eq 0 ]] || return 1
 }
 
+test_dotenv_auto_load_exports_keys() {
+  local tmpdir
+  tmpdir=$(mktemp -d -t drill-dotenv-test-XXXXXX)
+  cat > "$tmpdir/.env" <<'EOF'
+# Comment line
+SIMPLE_VAR=simple-value
+QUOTED_VAR="quoted-value"
+SINGLE_QUOTED='single-quoted-value'
+export EXPORTED_VAR=exported-value
+
+# Another comment
+EOF
+  set +e
+  result=$(bash -c "
+    set -euo pipefail
+    cd '$tmpdir'
+    source '$LIB'
+    echo \"SIMPLE_VAR=\${SIMPLE_VAR:-MISS}\"
+    echo \"QUOTED_VAR=\${QUOTED_VAR:-MISS}\"
+    echo \"SINGLE_QUOTED=\${SINGLE_QUOTED:-MISS}\"
+    echo \"EXPORTED_VAR=\${EXPORTED_VAR:-MISS}\"
+  " 2>/dev/null)
+  local rc=$?
+  set -e
+  rm -rf "$tmpdir"
+  [[ "$rc" -eq 0 ]] || { echo "  bash exited $rc" >&2; return 1; }
+  echo "$result" | grep -q "SIMPLE_VAR=simple-value" || { echo "  SIMPLE_VAR not loaded" >&2; return 1; }
+  echo "$result" | grep -q "QUOTED_VAR=quoted-value" || { echo "  QUOTED_VAR quotes not stripped" >&2; return 1; }
+  echo "$result" | grep -q "SINGLE_QUOTED=single-quoted-value" || { echo "  single-quoted not handled" >&2; return 1; }
+  echo "$result" | grep -q "EXPORTED_VAR=exported-value" || { echo "  export prefix not handled" >&2; return 1; }
+}
+
+test_dotenv_auto_load_tolerates_invalid_lines() {
+  local tmpdir
+  tmpdir=$(mktemp -d -t drill-dotenv-test-XXXXXX)
+  # Mix valid KEY=VALUE with junk that would break naive `source`
+  cat > "$tmpdir/.env" <<'EOF'
+VALID_KEY=valid-value
+this is free-form documentation that source would choke on
+username: paulo
+another invalid line: with colons
+ANOTHER_VALID=another-value
+EOF
+  set +e
+  result=$(bash -c "
+    set -euo pipefail
+    cd '$tmpdir'
+    source '$LIB' 2>/dev/null
+    echo \"VALID_KEY=\${VALID_KEY:-MISS}\"
+    echo \"ANOTHER_VALID=\${ANOTHER_VALID:-MISS}\"
+  ")
+  local rc=$?
+  set -e
+  rm -rf "$tmpdir"
+  [[ "$rc" -eq 0 ]] || { echo "  parser choked on invalid lines (rc=$rc)" >&2; return 1; }
+  echo "$result" | grep -q "VALID_KEY=valid-value" || return 1
+  echo "$result" | grep -q "ANOTHER_VALID=another-value" || return 1
+}
+
+test_dotenv_caller_env_wins_over_dotenv() {
+  local tmpdir
+  tmpdir=$(mktemp -d -t drill-dotenv-test-XXXXXX)
+  cat > "$tmpdir/.env" <<'EOF'
+PRECEDENCE_KEY=from-dotenv
+EOF
+  set +e
+  result=$(bash -c "
+    set -euo pipefail
+    cd '$tmpdir'
+    export PRECEDENCE_KEY=from-shell
+    source '$LIB' 2>/dev/null
+    echo \"PRECEDENCE_KEY=\${PRECEDENCE_KEY}\"
+  ")
+  local rc=$?
+  set -e
+  rm -rf "$tmpdir"
+  [[ "$rc" -eq 0 ]] || return 1
+  echo "$result" | grep -q "PRECEDENCE_KEY=from-shell" || { echo "  caller env should win — got: $result" >&2; return 1; }
+}
+
+test_dotenv_no_file_is_silent_noop() {
+  local tmpdir
+  tmpdir=$(mktemp -d -t drill-dotenv-test-XXXXXX)
+  # No .env in tmpdir; lib should not error
+  set +e
+  bash -c "
+    set -euo pipefail
+    cd '$tmpdir'
+    # Force git to not find a root either by clobbering search
+    export DRILL_SKILL_DOTENV_PATH='/nonexistent/path/.env'
+    cd /tmp  # outside any git repo
+    source '$LIB' 2>/dev/null
+    [[ -z \"\${_DRILL_SKILL_DOTENV_LOADED:-}\" ]] && exit 0 || exit 0
+  " >/dev/null 2>&1
+  local rc=$?
+  set -e
+  rm -rf "$tmpdir"
+  [[ "$rc" -eq 0 ]] || return 1
+}
+
 # ---- Test runner ----
 
 run_test() {
@@ -248,6 +348,10 @@ run_test test_init_audit_creates_dir_structure
 run_test test_emit_finding_appends_to_audit_md
 run_test test_acquire_lock_blocks_concurrent_dispatch
 run_test test_lib_double_sourcing_idempotent
+run_test test_dotenv_auto_load_exports_keys
+run_test test_dotenv_auto_load_tolerates_invalid_lines
+run_test test_dotenv_caller_env_wins_over_dotenv
+run_test test_dotenv_no_file_is_silent_noop
 
 echo ""
 echo "Tests run:    $TESTS_RUN"

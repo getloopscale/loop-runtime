@@ -24,6 +24,75 @@ drill_skill_log() {
   printf '[drill-skill] %s\n' "$*" >&2
 }
 
+# --- .env auto-load ---
+# Auto-detects and sources a .env file from common locations so that operators
+# don't need to `source .env` before invoking. Honors DRILL_SKILL_DOTENV_PATH
+# override; falls back to ./env, $PWD/.env, then $(git rev-parse --show-toplevel)/.env.
+# Idempotent: skips reload if _DRILL_SKILL_DOTENV_LOADED is set.
+# Safe: no-op if no .env found, silent on parse errors (best-effort).
+drill_skill_load_dotenv() {
+  if [[ -n "${_DRILL_SKILL_DOTENV_LOADED:-}" ]]; then
+    return 0
+  fi
+  local candidates=()
+  if [[ -n "${DRILL_SKILL_DOTENV_PATH:-}" ]]; then
+    candidates+=("$DRILL_SKILL_DOTENV_PATH")
+  fi
+  candidates+=("$PWD/.env")
+  local repo_root
+  repo_root=$(git rev-parse --show-toplevel 2>/dev/null || echo "")
+  if [[ -n "$repo_root" ]]; then
+    candidates+=("$repo_root/.env")
+  fi
+  local dotenv=""
+  local cand
+  for cand in "${candidates[@]}"; do
+    if [[ -f "$cand" ]]; then
+      dotenv="$cand"
+      break
+    fi
+  done
+  if [[ -z "$dotenv" ]]; then
+    return 0
+  fi
+  drill_skill_log ".env auto-load: parsing $dotenv"
+  # Robust parser: read line-by-line, accept only KEY=VALUE where KEY matches
+  # the POSIX shell name rule. Skips comments, blanks, and any line that
+  # doesn't match — prevents `source` from choking on free-form documentation
+  # lines inside .env (a common source of bootstrap failures).
+  local line key value loaded=0
+  while IFS= read -r line || [[ -n "$line" ]]; do
+    # Strip trailing CR (Windows line endings) + leading whitespace
+    line="${line%$'\r'}"
+    line="${line#"${line%%[![:space:]]*}"}"
+    # Skip blank + comment lines
+    [[ -z "$line" ]] && continue
+    [[ "$line" =~ ^# ]] && continue
+    # Accept "export KEY=VALUE" or "KEY=VALUE"
+    line="${line#export }"
+    if [[ "$line" =~ ^([A-Za-z_][A-Za-z0-9_]*)=(.*)$ ]]; then
+      key="${BASH_REMATCH[1]}"
+      value="${BASH_REMATCH[2]}"
+      # Strip surrounding single or double quotes if present
+      if [[ "$value" =~ ^\"(.*)\"$ ]]; then
+        value="${BASH_REMATCH[1]}"
+      elif [[ "$value" =~ ^\'(.*)\'$ ]]; then
+        value="${BASH_REMATCH[1]}"
+      fi
+      # Only set if not already exported (caller env wins over .env)
+      if [[ -z "${!key:-}" ]]; then
+        export "$key=$value"
+        loaded=$((loaded + 1))
+      fi
+    fi
+  done < "$dotenv"
+  drill_skill_log ".env auto-load: $loaded variables exported"
+  export _DRILL_SKILL_DOTENV_LOADED=1
+}
+
+# Auto-invoke on source so consumers don't have to remember
+drill_skill_load_dotenv
+
 # --- Constants ---
 DRILL_SKILL_LOCK_FILE="/tmp/drill-skill.lock"
 DRILL_SKILL_AUDIT_BASE="/tmp/drill-audit"
