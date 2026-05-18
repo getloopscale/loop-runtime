@@ -122,27 +122,24 @@ if [[ -n "${DRILL_PG_HOST:-}" ]]; then
   # Managed PG path (preferred for drill — D4 mgmt-tier managed PG)
   DRILL_PG_PASS="${DRILL_PG_PASS:-loopzero-drill-password}"
   DRILL_PG_PORT="${DRILL_PG_PORT:-25060}"
-  if ! command -v psql > /dev/null 2>&1; then
-    log "ERROR: psql client not installed but DRILL_PG_HOST set (managed PG mode)"
-    log "  hint: install postgresql-client OR unset DRILL_PG_HOST to use in-cluster fallback"
-    exit 2
-  fi
-  # Bug #38 LIVE fix v2 (2026-05-18 iter 32): URI format silently failed because
-  # doadmin password contains URI-reserved chars (@:/?#) which break URI parsing.
-  # psql then fell back to socket. Use individual flags + PGPASSWORD/PGSSLMODE env
-  # vars (no URI). connect_timeout=10 prevents hangs.
+  # Bug #39 LIVE fix (2026-05-18 iter 33): DO Managed PG DatabaseFirewall restricts
+  # to cluster_uuid auth (per Bug #11 prod-parity mandate, CTO Rule #0). Local psql
+  # cannot reach the DB (firewall blocks IP). Solution: run psql FROM INSIDE the
+  # mgmt cluster via transient pod (cluster_uuid auth passes firewall).
+  # Bug #38 v2 retention: still uses individual flags + PGPASSWORD/PGSSLMODE env
+  # to avoid URI-encode pitfall with special chars in doadmin password.
   #   (b) Seed tables in `loopzero` DB per Bug #12 fix.
   DRILL_PG_DB="${DRILL_PG_DB:-loopzero}"
   run_psql() {
-    PGPASSWORD="$DRILL_PG_PASS" PGSSLMODE=require psql \
-      --host="$DRILL_PG_HOST" \
-      --port="$DRILL_PG_PORT" \
-      --username=doadmin \
-      --dbname="$DRILL_PG_DB" \
-      --no-psqlrc \
-      -v ON_ERROR_STOP=1 \
-      -v connect_timeout=10 \
-      "$@"
+    local POD_NAME="drill-psql-$$-$RANDOM"
+    kubectl --kubeconfig "$DRILL_KUBECONFIG" -n "$NS_LOOPZERO" run "$POD_NAME" \
+      --rm -i --restart=Never --image=postgres:16-alpine --quiet \
+      --env="PGPASSWORD=$DRILL_PG_PASS" \
+      --env="PGSSLMODE=require" \
+      --command -- \
+      psql --host="$DRILL_PG_HOST" --port="$DRILL_PG_PORT" \
+           --username=doadmin --dbname="$DRILL_PG_DB" \
+           --no-psqlrc -v ON_ERROR_STOP=1 "$@"
   }
 else
   # In-cluster fallback (rare for drill — typically only used in tests)
