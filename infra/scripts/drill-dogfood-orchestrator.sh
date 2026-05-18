@@ -123,9 +123,18 @@ drill_skill_log "Step 2/4: Mint JWT for journey auth"
 DRILL_KC=/tmp/drill-mgmt-kc.yaml
 export DRILL_KUBECONFIG="$DRILL_KC"
 export KUBECONFIG="$DRILL_KC"
-# Also export DRILL_PG_HOST for drill-mint-jwt's user seed step (Bug #35 doc).
+# Export DRILL_PG_HOST + DRILL_PG_PASS + DRILL_PG_PORT from pulumi outputs.
+# drill-mint-jwt.sh has its own auto-discovery (Bug #37) but short-circuits
+# if DRILL_PG_HOST is set without DRILL_PG_PASS, causing psql to fall back to
+# placeholder "loopzero-drill-password" → auth fail. We set ALL THREE explicitly.
 DRILL_PG_HOST=$(cd "$ROOT_DIR/infra/pulumi-drill" && npx pulumi stack output --stack drill pgHost 2>/dev/null || echo "")
-export DRILL_PG_HOST
+DRILL_PG_PORT=$(cd "$ROOT_DIR/infra/pulumi-drill" && npx pulumi stack output --stack drill pgPort 2>/dev/null || echo "25060")
+DRILL_PG_URI=$(cd "$ROOT_DIR/infra/pulumi-drill" && npx pulumi stack output --stack drill pgUri --show-secrets 2>/dev/null || echo "")
+if [[ -n "$DRILL_PG_URI" ]]; then
+  # Parse password from postgres://doadmin:PASS@host:port/db
+  DRILL_PG_PASS=$(echo "$DRILL_PG_URI" | sed -E 's|^postgres(ql)?://[^:]+:([^@]+)@.*$|\2|')
+fi
+export DRILL_PG_HOST DRILL_PG_PORT DRILL_PG_PASS
 JWT_LOG=/tmp/drill-mint-jwt.log
 if ! JWT=$(bash "$ROOT_DIR/infra/scripts/drill-mint-jwt.sh" 2>"$JWT_LOG"); then
   drill_skill_log "  ✗ drill-mint-jwt failed — last 10 lines of stderr:"

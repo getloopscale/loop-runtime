@@ -399,12 +399,23 @@ drill_skill_teardown() {
       npx pulumi destroy --stack drill --yes --skip-preview > "$_pd_log" 2>&1
     ) || _pd_rc=$?
     tail -5 "$_pd_log" | sed "s/^/    [iter $_retry] /"
-    # Check if state is now empty
+    # Check if state is now empty via `pulumi stack` (formatted output).
+    # Pulumi prints "Current stack resources (N):" — extract N from parens.
+    # Also matches legacy "N resources" format as fallback.
     _resource_count=$(
       cd "${PULUMI_DRILL_DIR:-infra/pulumi-drill}" && \
-      npx pulumi stack ls --json 2>/dev/null | \
-        grep -oE '"resourceCount":[0-9]+' | head -1 | grep -oE '[0-9]+' || echo "unknown"
+      npx pulumi stack --stack drill 2>/dev/null | \
+        grep -oE 'Current stack resources \([0-9]+\)|[0-9]+ resources' | head -1 | \
+        grep -oE '[0-9]+' || echo ""
     )
+    if [[ -z "$_resource_count" ]]; then
+      # Fallback: if rc=0 and we can't get count, trust the rc
+      if [[ "$_pd_rc" -eq 0 ]]; then
+        drill_skill_log "  ✓ pulumi destroy complete (rc=0, count unparseable)"
+        return 0
+      fi
+      _resource_count="?"
+    fi
     if [[ "$_resource_count" == "0" ]]; then
       drill_skill_log "  ✓ pulumi destroy complete (state empty after iter $_retry)"
       return 0
