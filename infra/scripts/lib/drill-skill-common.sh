@@ -1,0 +1,264 @@
+#!/usr/bin/env bash
+# SPDX-License-Identifier: Apache-2.0
+# Copyright 2025-2026 The LoopZero Authors
+#
+# drill-skill-common.sh — Shared library for /cleanroom-drill, /dogfood-drill, /chaos-test-drill
+#
+# Plan: 2026-05-18-drill-skills-trio-plan.md
+# ADR D2: extracted from session 2026-05-17/18 patterns (cost confirmation, audit init,
+# prod-parity invariants, mandatory teardown, sponsor accountability).
+#
+# Sourced (not executed) by drill-{cleanroom,dogfood,chaos}-orchestrator.sh.
+# All functions prefixed `drill_skill_` to avoid namespace collision.
+
+set -euo pipefail
+
+# Source guard — prevent double-sourcing
+if [[ -n "${_DRILL_SKILL_COMMON_SOURCED:-}" ]]; then
+  return 0
+fi
+_DRILL_SKILL_COMMON_SOURCED=1
+
+# --- Logging helper ---
+drill_skill_log() {
+  printf '[drill-skill] %s\n' "$*" >&2
+}
+
+# --- Constants ---
+DRILL_SKILL_LOCK_FILE="/tmp/drill-skill.lock"
+DRILL_SKILL_AUDIT_BASE="/tmp/drill-audit"
+DRILL_SKILL_AUDIT_TTL_DAYS=30
+
+# --- D8: Sponsor accountability ---
+# Validates LOOPZERO_DRILL_SKILL_SPONSOR env (operator initials) OR CI bypass.
+drill_skill_sponsor_check() {
+  if [[ "${CI:-false}" == "true" ]]; then
+    drill_skill_log "CI=true — sponsor check bypassed (audit logs CI as sponsor)"
+    export DRILL_SKILL_SPONSOR_VALUE="ci"
+    return 0
+  fi
+  if [[ -z "${LOOPZERO_DRILL_SKILL_SPONSOR:-}" ]]; then
+    drill_skill_log "✗ LOOPZERO_DRILL_SKILL_SPONSOR env not set (operator initials required)"
+    drill_skill_log "  hint: export LOOPZERO_DRILL_SKILL_SPONSOR=<your-initials>"
+    return 2
+  fi
+  # Sanitize: max 8 chars alphanumeric
+  if ! [[ "$LOOPZERO_DRILL_SKILL_SPONSOR" =~ ^[A-Za-z0-9]{1,8}$ ]]; then
+    drill_skill_log "✗ LOOPZERO_DRILL_SKILL_SPONSOR invalid format (1-8 alphanumeric)"
+    return 2
+  fi
+  export DRILL_SKILL_SPONSOR_VALUE="$LOOPZERO_DRILL_SKILL_SPONSOR"
+  return 0
+}
+
+# --- D3: Cost guardrail ---
+# Args: <estimate_usd> <duration_min>
+# Requires --confirm-cost arg OR CI=true env, else exits 2.
+drill_skill_confirm_cost() {
+  local estimate_usd="$1"
+  local duration_min="$2"
+
+  drill_skill_log "Cost estimate: ~\$${estimate_usd} (${duration_min}min × \$0.32/hr drill stack)"
+
+  if [[ "${CI:-false}" == "true" ]]; then
+    drill_skill_log "CI=true — cost auto-confirmed"
+    return 0
+  fi
+
+  if [[ "${DRILL_SKILL_CONFIRM_COST:-false}" != "true" ]]; then
+    drill_skill_log "✗ --confirm-cost flag required for dispatch (or set CI=true env)"
+    drill_skill_log "  hint: re-invoke with --confirm-cost to acknowledge cost"
+    return 2
+  fi
+
+  drill_skill_log "Cost confirmed by operator"
+  return 0
+}
+
+# --- EC-1: Concurrent skill dispatch guard ---
+drill_skill_acquire_lock() {
+  local skill_name="$1"
+  exec 200>"$DRILL_SKILL_LOCK_FILE"
+  if ! flock -n 200; then
+    drill_skill_log "✗ Another drill skill already holds the lock ($DRILL_SKILL_LOCK_FILE)"
+    drill_skill_log "  Check running processes or remove stale lock manually."
+    return 2
+  fi
+  echo "$$ $skill_name $(date -u +%FT%TZ)" > "$DRILL_SKILL_LOCK_FILE"
+  return 0
+}
+
+# --- EC-4: Audit dir cleanup (>30 days) ---
+drill_skill_cleanup_old_audits() {
+  local now ts dir
+  find "$DRILL_SKILL_AUDIT_BASE"-* -maxdepth 0 -type d -mtime "+$DRILL_SKILL_AUDIT_TTL_DAYS" \
+       -exec rm -rf {} \; 2>/dev/null || true
+}
+
+# --- D8 + audit-trail init ---
+# Args: <skill_name>
+# Creates audit dir + log file + markdown skeleton.
+# Sets globals: DRILL_SKILL_AUDIT_DIR, DRILL_SKILL_AUDIT_MD, DRILL_SKILL_LOG_FILE
+drill_skill_init_audit() {
+  local skill_name="$1"
+  local ts
+  ts=$(date -u +%FT%H%M%SZ)
+  export DRILL_SKILL_AUDIT_DIR="${DRILL_SKILL_AUDIT_BASE}-${skill_name}-${ts}"
+  export DRILL_SKILL_AUDIT_MD="${DRILL_SKILL_AUDIT_DIR}/audit.md"
+  export DRILL_SKILL_LOG_FILE="${DRILL_SKILL_AUDIT_DIR}/run.log"
+  mkdir -p "$DRILL_SKILL_AUDIT_DIR"
+  cat > "$DRILL_SKILL_AUDIT_MD" <<EOF
+---
+type: audit
+created_at: $(date -u +%FT%TZ)
+skill: $skill_name
+sponsor: ${DRILL_SKILL_SPONSOR_VALUE:-unknown}
+status: IN_PROGRESS
+---
+
+# Drill Skill Audit — $skill_name
+
+**Start:** $(date -u +%FT%TZ)
+**Sponsor:** ${DRILL_SKILL_SPONSOR_VALUE:-unknown}
+
+## Steps
+
+EOF
+  drill_skill_log "Audit dir: $DRILL_SKILL_AUDIT_DIR"
+
+  # Clean old audits in background
+  drill_skill_cleanup_old_audits &
+}
+
+# --- D6: Prod-parity invariants check ---
+# Args: <kubeconfig> <tenant_namespace>
+# Returns 0 if all 5 invariants PASS, N where N=violation count.
+drill_skill_check_invariants() {
+  local kubeconfig="$1"
+  local tenant_ns="$2"
+  local violations=0
+
+  drill_skill_log "Checking 5 prod-parity invariants in $tenant_ns..."
+
+  # Invariant 1: image registry = DOCR
+  local image
+  image=$(kubectl --kubeconfig "$kubeconfig" -n "$tenant_ns" get pod -l loopzero.io/app-type=server \
+    -o jsonpath='{.items[0].spec.containers[0].image}' 2>/dev/null || echo "")
+  if [[ "$image" != registry.digitalocean.com/loopzero-system/* ]]; then
+    drill_skill_emit_finding "S0" "Invariant #1 FAIL: image not DOCR ($image)"
+    violations=$((violations + 1))
+  else
+    drill_skill_log "  ✓ #1 image DOCR: $image"
+  fi
+
+  # Invariant 2: TLS cert = Let's Encrypt (best-effort — needs Secret access)
+  local cert_issuer
+  cert_issuer=$(kubectl --kubeconfig "$kubeconfig" -n "$tenant_ns" get secret \
+    -l "controller.cert-manager.io/fao=true" -o jsonpath='{.items[0].metadata.annotations.cert-manager\.io/issuer-name}' 2>/dev/null || echo "")
+  if [[ "$cert_issuer" != "letsencrypt-prod" ]]; then
+    drill_skill_emit_finding "S0" "Invariant #2 FAIL: TLS issuer not letsencrypt-prod ($cert_issuer)"
+    violations=$((violations + 1))
+  else
+    drill_skill_log "  ✓ #2 cert Issuer: $cert_issuer"
+  fi
+
+  # Invariant 3: PG host = DO Managed (firewall enabled)
+  local pg_host
+  pg_host=$(kubectl --kubeconfig "$kubeconfig" -n loopzero-system get secret loopzero-db-credentials \
+    -o jsonpath='{.data.host}' 2>/dev/null | base64 -d 2>/dev/null || echo "")
+  if [[ "$pg_host" != *.db.ondigitalocean.com ]]; then
+    drill_skill_emit_finding "S0" "Invariant #3 FAIL: PG host not DO Managed ($pg_host)"
+    violations=$((violations + 1))
+  else
+    drill_skill_log "  ✓ #3 PG host: $pg_host (DO Managed)"
+  fi
+
+  # Invariant 4: Valkey TLS port 25061
+  local valkey_port
+  valkey_port=$(kubectl --kubeconfig "$kubeconfig" -n loopzero-system get secret loopzero-db-credentials \
+    -o jsonpath='{.data.redis_port}' 2>/dev/null | base64 -d 2>/dev/null || echo "")
+  # Allow either explicit Valkey port secret OR omitted if non-applicable
+  if [[ -n "$valkey_port" ]] && [[ "$valkey_port" != "25061" ]]; then
+    drill_skill_emit_finding "S0" "Invariant #4 FAIL: Valkey port not 25061 ($valkey_port)"
+    violations=$((violations + 1))
+  else
+    drill_skill_log "  ✓ #4 Valkey TLS port: ${valkey_port:-N/A}"
+  fi
+
+  # Invariant 5: DNS resolves via CF nameservers
+  local domain ns_check
+  domain="${DRILL_BASE_DOMAIN:-loopzero-drill.example}"
+  ns_check=$(dig +short "$domain" NS 2>/dev/null | head -1 || echo "")
+  if [[ "$ns_check" != *.ns.cloudflare.com. ]]; then
+    drill_skill_emit_finding "S1" "Invariant #5 WARN: NS not CF for $domain ($ns_check)"
+    # S1 not S0 because local /etc/hosts override CAN bypass for testing
+  else
+    drill_skill_log "  ✓ #5 NS via CF: $ns_check"
+  fi
+
+  return "$violations"
+}
+
+# --- D7: Emit finding to audit md ---
+# Args: <severity> <description>
+drill_skill_emit_finding() {
+  local severity="$1"
+  local description="$2"
+  if [[ -z "${DRILL_SKILL_AUDIT_MD:-}" ]]; then
+    drill_skill_log "warn: audit md not initialized — finding lost: [$severity] $description"
+    return 0
+  fi
+  printf -- '- [%s] %s\n' "$severity" "$description" >> "$DRILL_SKILL_AUDIT_MD"
+}
+
+# --- D4: Mandatory teardown wrapper ---
+# Args: (none — uses DRILL_SKILL_AUDIT_DIR + invokes drill-teardown-validator.sh)
+drill_skill_teardown() {
+  drill_skill_log "Mandatory teardown initiated..."
+
+  # Step 1: capture evidence pre-teardown (best-effort)
+  if [[ -x infra/scripts/drill-evidence-capture.sh ]]; then
+    bash infra/scripts/drill-evidence-capture.sh "${DRILL_SKILL_AUDIT_DIR:-/tmp/drill-audit-evac}" 2>&1 \
+      | tail -5 | sed 's/^/  /' || true
+  fi
+
+  # Step 2: Pulumi destroy
+  if task drill:down 2>&1 | tail -5 | sed 's/^/  /'; then
+    drill_skill_log "  ✓ task drill:down complete"
+  else
+    drill_skill_log "  ✗ task drill:down failed — manual cleanup may be required"
+  fi
+
+  # Step 3: validator (doctl fallback per T4.1.bis)
+  if [[ -x infra/scripts/drill-teardown-validator.sh ]]; then
+    if bash infra/scripts/drill-teardown-validator.sh 2>&1 | tail -5 | sed 's/^/  /'; then
+      drill_skill_log "  ✓ teardown validator PASS"
+    else
+      drill_skill_log "  ✗ teardown validator FAIL — residuals may exist"
+      return 7
+    fi
+  fi
+
+  # Step 4: finalize audit md
+  if [[ -n "${DRILL_SKILL_AUDIT_MD:-}" ]] && [[ -f "$DRILL_SKILL_AUDIT_MD" ]]; then
+    {
+      echo ""
+      echo "**End:** $(date -u +%FT%TZ)"
+      echo "**Teardown:** CLEAN"
+    } >> "$DRILL_SKILL_AUDIT_MD"
+  fi
+
+  return 0
+}
+
+# --- Cleanup on exit (trap) ---
+drill_skill_cleanup_on_exit() {
+  local exit_code=$?
+  # Release lock
+  flock -u 200 2>/dev/null || true
+  rm -f "$DRILL_SKILL_LOCK_FILE" 2>/dev/null || true
+  return "$exit_code"
+}
+
+# Auto-set trap when sourced
+trap drill_skill_cleanup_on_exit EXIT
