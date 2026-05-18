@@ -65,7 +65,7 @@ case "\$*" in
   *"wait --for=condition=Available"*"loopzero-api"*) exit 0 ;;
   *"wait --for=condition=Available"*"argocd-server"*) exit 0 ;;
   *"wait --for=condition=Available"*"argo-workflows-server"*) exit 0 ;;
-  *"clustercredential"*"jsonpath=\{.status.connected\}"*)
+  *"clustercredential"*"jsonpath={.status.connected}"*)
     echo "$cell_connected"
     exit 0 ;;
   *"secret loopzero-db-credentials"*"data.host"*)
@@ -236,6 +236,23 @@ test_help_flag_exits_0() {
   echo "$out" | grep -q "drill bootstrap reproducibility" || return 1
 }
 
+test_skip_teardown_env_keeps_stack_alive() {
+  local tmpdir="$1"
+  build_stubs "$tmpdir"
+  set +e
+  out=$(cd "$tmpdir" && \
+    PATH="$tmpdir/bin:/usr/bin:/bin" \
+    CI=false \
+    LOOPZERO_DRILL_SKILL_SPONSOR=tt \
+    DRILL_SKIP_TEARDOWN=true \
+    bash "$tmpdir/infra/scripts/drill-cleanroom-orchestrator.sh" --confirm-cost 2>&1)
+  local rc=$?
+  set -e
+  [[ "$rc" -eq 0 ]] || { echo "  expected exit 0, got $rc" >&2; echo "$out" | tail -5 >&2; return 1; }
+  echo "$out" | grep -q "Teardown SKIPPED" || { echo "  expected 'Teardown SKIPPED' marker in output" >&2; return 1; }
+  echo "$out" | grep -q "stack ALIVE for chained validation" || { echo "  expected ALIVE marker" >&2; return 1; }
+}
+
 # ---- Test runner ----
 
 run_test() {
@@ -264,6 +281,7 @@ run_test test_provision_fail_triggers_teardown_exits_4
 run_test test_bootstrap_fail_exits_5
 run_test test_dry_run_skips_all_phases
 run_test test_help_flag_exits_0
+run_test test_skip_teardown_env_keeps_stack_alive
 
 echo ""
 echo "Tests run:    $TESTS_RUN"

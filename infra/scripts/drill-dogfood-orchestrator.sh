@@ -102,11 +102,15 @@ fi
 
 # --- Step 1: Foundation — cleanroom-drill ---
 if [[ "$SKIP_CLEANROOM" != "true" ]]; then
-  drill_skill_log "Step 1/4: cleanroom-drill (foundation)"
-  # Pass cost-confirm and sponsor through env (avoid double-prompt)
+  drill_skill_log "Step 1/4: cleanroom-drill (foundation, DRILL_SKIP_TEARDOWN=true to preserve stack)"
+  # DRILL_SKIP_TEARDOWN=true keeps the provisioned stack ALIVE so journeys in
+  # step 3 have something to invoke against. Dogfood-drill does its OWN
+  # teardown after journeys + invariants. ADR D4 (mandatory teardown) is
+  # preserved at the dogfood-drill level (always calls drill_skill_teardown).
   if ! DRILL_SKILL_CONFIRM_COST=true \
+       DRILL_SKIP_TEARDOWN=true \
        bash "$ROOT_DIR/infra/scripts/drill-cleanroom-orchestrator.sh" --confirm-cost \
-       2>&1 | tail -10 | sed 's/^/  /'; then
+       2>&1 | tail -15 | sed 's/^/  /'; then
     drill_skill_emit_finding "S0" "cleanroom-drill foundation step failed"
     exit 3
   fi

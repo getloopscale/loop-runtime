@@ -115,10 +115,13 @@ fi
 
 # --- Step 1: cleanroom-drill foundation ---
 if [[ "$SKIP_CLEANROOM" != "true" ]]; then
-  drill_skill_log "Step 1/5: cleanroom-drill (foundation)"
+  drill_skill_log "Step 1/5: cleanroom-drill (foundation, DRILL_SKIP_TEARDOWN=true to preserve stack)"
+  # DRILL_SKIP_TEARDOWN=true keeps stack ALIVE for chaos scenarios below.
+  # ADR D4 preserved: this orchestrator does its own teardown at end.
   if ! DRILL_SKILL_CONFIRM_COST=true \
+       DRILL_SKIP_TEARDOWN=true \
        bash "$ROOT_DIR/infra/scripts/drill-cleanroom-orchestrator.sh" --confirm-cost \
-       2>&1 | tail -10 | sed 's/^/  /'; then
+       2>&1 | tail -15 | sed 's/^/  /'; then
     drill_skill_emit_finding "S0" "cleanroom-drill foundation failed"
     exit 3
   fi

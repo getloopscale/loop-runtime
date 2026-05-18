@@ -42,6 +42,11 @@ source "$SCRIPT_DIR/lib/drill-skill-common.sh"
 # --- Argument parsing ---
 DRILL_SKILL_CONFIRM_COST="${DRILL_SKILL_CONFIRM_COST:-false}"
 DRY_RUN="${DRY_RUN:-false}"
+# Internal opt-out for chained orchestrators (dogfood-drill / chaos-test-drill)
+# that need the provisioned stack to remain alive for their own validation steps.
+# NOT exposed as CLI flag — env-only, used by sibling orchestrators only.
+# Default keeps ADR D4 (mandatory teardown discipline) intact.
+DRILL_SKIP_TEARDOWN="${DRILL_SKIP_TEARDOWN:-false}"
 
 usage() {
   cat <<USAGE
@@ -214,7 +219,15 @@ else
   drill_skill_emit_finding "S1" "Invariant #5 WARN: NS not CF for $domain"
 fi
 
-# --- Step 8: MANDATORY teardown ---
+# --- Step 8: MANDATORY teardown (opt-out via DRILL_SKIP_TEARDOWN for chained orchestrators) ---
+if [[ "$DRILL_SKIP_TEARDOWN" == "true" ]]; then
+  drill_skill_log "Step 8/8: Teardown SKIPPED (DRILL_SKIP_TEARDOWN=true — chained orchestrator will tear down)"
+  drill_skill_log ""
+  drill_skill_log "✓ cleanroom-drill PASS — stack ALIVE for chained validation"
+  drill_skill_log "  Audit dir: $DRILL_SKILL_AUDIT_DIR"
+  exit 0
+fi
+
 drill_skill_log "Step 8/8: Mandatory teardown"
 if ! drill_skill_teardown; then
   exit 7
