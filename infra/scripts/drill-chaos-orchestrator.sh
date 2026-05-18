@@ -118,13 +118,19 @@ if [[ "$SKIP_CLEANROOM" != "true" ]]; then
   drill_skill_log "Step 1/5: cleanroom-drill (foundation, DRILL_SKIP_TEARDOWN=true to preserve stack)"
   # DRILL_SKIP_TEARDOWN=true keeps stack ALIVE for chaos scenarios below.
   # ADR D4 preserved: this orchestrator does its own teardown at end.
+  # Output to own log file so failure causes survive (was losing detail to truncation).
+  CLEANROOM_LOG="${DRILL_SKILL_AUDIT_DIR:-/tmp}/cleanroom-output.log"
   if ! DRILL_SKILL_CONFIRM_COST=true \
        DRILL_SKIP_TEARDOWN=true \
        bash "$ROOT_DIR/infra/scripts/drill-cleanroom-orchestrator.sh" --confirm-cost \
-       2>&1 | tail -15 | sed 's/^/  /'; then
-    drill_skill_emit_finding "S0" "cleanroom-drill foundation failed"
+       > "$CLEANROOM_LOG" 2>&1; then
+    drill_skill_log "  ✗ cleanroom-drill foundation failed — last 40 lines:"
+    tail -40 "$CLEANROOM_LOG" 2>/dev/null | sed 's/^/    /' >&2 || true
+    drill_skill_log "  full cleanroom log: $CLEANROOM_LOG"
+    drill_skill_emit_finding "S0" "cleanroom-drill foundation failed (log: $CLEANROOM_LOG)"
     exit 3
   fi
+  drill_skill_log "  ✓ cleanroom-drill PASS (full log: $CLEANROOM_LOG)"
 else
   drill_skill_log "Step 1/5: SKIPPED (--skip-cleanroom)"
 fi

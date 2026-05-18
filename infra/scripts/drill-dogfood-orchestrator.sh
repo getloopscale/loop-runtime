@@ -107,13 +107,20 @@ if [[ "$SKIP_CLEANROOM" != "true" ]]; then
   # step 3 have something to invoke against. Dogfood-drill does its OWN
   # teardown after journeys + invariants. ADR D4 (mandatory teardown) is
   # preserved at the dogfood-drill level (always calls drill_skill_teardown).
+  # Cleanroom log redirected to own file so failure causes are visible (was
+  # losing helmfile bootstrap errors to `| tail -15 | sed` truncation).
+  CLEANROOM_LOG="${DRILL_SKILL_AUDIT_DIR:-/tmp}/cleanroom-output.log"
   if ! DRILL_SKILL_CONFIRM_COST=true \
        DRILL_SKIP_TEARDOWN=true \
        bash "$ROOT_DIR/infra/scripts/drill-cleanroom-orchestrator.sh" --confirm-cost \
-       2>&1 | tail -15 | sed 's/^/  /'; then
-    drill_skill_emit_finding "S0" "cleanroom-drill foundation step failed"
+       > "$CLEANROOM_LOG" 2>&1; then
+    drill_skill_log "  ✗ cleanroom-drill foundation step failed — last 40 lines:"
+    tail -40 "$CLEANROOM_LOG" 2>/dev/null | sed 's/^/    /' >&2 || true
+    drill_skill_log "  full cleanroom log: $CLEANROOM_LOG"
+    drill_skill_emit_finding "S0" "cleanroom-drill foundation step failed (log: $CLEANROOM_LOG)"
     exit 3
   fi
+  drill_skill_log "  ✓ cleanroom-drill PASS (full log: $CLEANROOM_LOG)"
 else
   drill_skill_log "Step 1/4: SKIPPED (--skip-cleanroom)"
 fi
