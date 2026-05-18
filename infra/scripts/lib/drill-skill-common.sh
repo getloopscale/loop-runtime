@@ -376,19 +376,33 @@ drill_skill_teardown() {
   # validator-only teardowns (real cloud deleted, Pulumi state out of sync).
   local _backend="${DRILL_BACKEND_URL:-s3://loopzero-drill-pulumi-state?endpoint=sfo3.digitaloceanspaces.com&region=us-east-1&s3ForcePathStyle=true}"
   drill_skill_log "  Step 2a: pulumi refresh (sync state with reality)"
+  local _pr_log
+  _pr_log=$(mktemp -t drill-pulumi-refresh-XXXXXX.log)
   (
     cd "${PULUMI_DRILL_DIR:-infra/pulumi-drill}" && \
     npx pulumi login "$_backend" >/dev/null 2>&1 && \
-    npx pulumi refresh --stack drill --yes --skip-preview 2>&1 | tail -3 | sed 's/^/    /' || true
-  )
+    npx pulumi refresh --stack drill --yes --skip-preview > "$_pr_log" 2>&1
+  ) || true  # refresh failure is non-fatal; destroy will surface real errors
+  tail -3 "$_pr_log" | sed 's/^/    /' || true
   drill_skill_log "  Step 2b: pulumi destroy"
-  if (
+  # Capture pulumi destroy output to a tmpfile first, then tail/sed for display.
+  # This avoids the pipefail trap where `pulumi … | tail | sed` returns sed's
+  # exit code (always 0), masking real pulumi failure — OR worse, when pulumi
+  # exits 0 but `tail -5` sees fewer than 5 lines etc, the pipeline's effective
+  # exit is non-zero with pipefail on, causing a false-positive failure log.
+  local _pd_log
+  _pd_log=$(mktemp -t drill-pulumi-destroy-XXXXXX.log)
+  local _pd_rc=0
+  (
     cd "${PULUMI_DRILL_DIR:-infra/pulumi-drill}" && \
-    npx pulumi destroy --stack drill --yes --skip-preview 2>&1 | tail -5 | sed 's/^/    /'
-  ); then
+    npx pulumi destroy --stack drill --yes --skip-preview > "$_pd_log" 2>&1
+  ) || _pd_rc=$?
+  tail -5 "$_pd_log" | sed 's/^/    /'
+  if [[ "$_pd_rc" -eq 0 ]]; then
     drill_skill_log "  ✓ pulumi destroy complete"
   else
-    drill_skill_log "  ✗ pulumi destroy failed — manual cleanup may be required"
+    drill_skill_log "  ✗ pulumi destroy exited $_pd_rc — manual cleanup may be required"
+    drill_skill_log "  full log: $_pd_log"
   fi
 
   # Step 3: validator (doctl fallback per T4.1.bis)

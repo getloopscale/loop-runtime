@@ -123,11 +123,17 @@ drill_skill_log "Step 2/4: Mint JWT for journey auth"
 DRILL_KC=/tmp/drill-mgmt-kc.yaml
 export DRILL_KUBECONFIG="$DRILL_KC"
 export KUBECONFIG="$DRILL_KC"
-JWT=$(bash "$ROOT_DIR/infra/scripts/drill-mint-jwt.sh" 2>&1) || {
-  drill_skill_emit_finding "S0" "drill-mint-jwt failed"
+# Also export DRILL_PG_HOST for drill-mint-jwt's user seed step (Bug #35 doc).
+DRILL_PG_HOST=$(cd "$ROOT_DIR/infra/pulumi-drill" && npx pulumi stack output --stack drill pgHost 2>/dev/null || echo "")
+export DRILL_PG_HOST
+JWT_LOG=/tmp/drill-mint-jwt.log
+if ! JWT=$(bash "$ROOT_DIR/infra/scripts/drill-mint-jwt.sh" 2>"$JWT_LOG"); then
+  drill_skill_log "  ✗ drill-mint-jwt failed — last 10 lines of stderr:"
+  tail -10 "$JWT_LOG" 2>/dev/null | sed 's/^/    /' >&2 || true
+  drill_skill_emit_finding "S0" "drill-mint-jwt failed (log: $JWT_LOG)"
   drill_skill_teardown || true
   exit 4
-}
+fi
 export LOOPZERO_TOKEN="${JWT##*$'\n'}"  # last line
 drill_skill_log "  ✓ JWT minted (len=${#LOOPZERO_TOKEN})"
 
