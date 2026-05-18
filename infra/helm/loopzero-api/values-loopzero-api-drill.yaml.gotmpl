@@ -27,3 +27,9 @@ image:
 
 imagePullSecrets:
   - name: loopzero-registry-pull
+
+# Bug #40 LIVE fix (2026-05-18 iter 34): drill overlay was missing `domain`
+# override → IngressRoute Host(api.dev.loopzero.example) (default) did not match
+# the drill API URL `api.loopzero-drill.example`, causing Traefik 404 on /health.
+# Drill domain comes from pulumi-drill CF Zone (loopzero-drill.example).
+domain: loopzero-drill.example
