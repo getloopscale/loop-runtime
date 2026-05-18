@@ -127,10 +127,15 @@ if [[ -n "${DRILL_PG_HOST:-}" ]]; then
     log "  hint: install postgresql-client OR unset DRILL_PG_HOST to use in-cluster fallback"
     exit 2
   fi
+  # Bug #38 LIVE fix (2026-05-18 iter 31): two issues stacked
+  # (a) DO managed PG requires sslmode=require — use connection URI to make
+  #     all params (sslmode, host, port, user, db, password) unambiguous
+  # (b) Seed tables (users/tenants/tenant_members) are in `loopzero` DB
+  #     (per Bug #12 — loopzero-api migrations target ${drillPgLoopZero.name}),
+  #     NOT in `defaultdb`. Connect to loopzero DB for seeds.
+  DRILL_PG_DB="${DRILL_PG_DB:-loopzero}"
   run_psql() {
-    PGPASSWORD="$DRILL_PG_PASS" psql \
-      -h "$DRILL_PG_HOST" -p "$DRILL_PG_PORT" \
-      -U doadmin -d defaultdb \
+    psql "postgresql://doadmin:${DRILL_PG_PASS}@${DRILL_PG_HOST}:${DRILL_PG_PORT}/${DRILL_PG_DB}?sslmode=require" \
       -v ON_ERROR_STOP=1 \
       "$@"
   }
