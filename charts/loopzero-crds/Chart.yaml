@@ -1,6 +1,6 @@
 apiVersion: v2
 name: loopzero-crds
-description: CRDs for the LoopZero PaaS platform (lifecycle independent)
+description: CRDs for the LoopZeroCloud platform (lifecycle independent)
 type: application
 version: 0.2.0
 appVersion: "dev"

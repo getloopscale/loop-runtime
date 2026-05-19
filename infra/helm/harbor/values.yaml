@@ -1,7 +1,7 @@
 # SPDX-License-Identifier: Apache-2.0
 # Copyright 2025-2026 The LoopZero Authors
 #
-# Harbor values — MINIMAL deployment for LoopZero PaaS registry.
+# Harbor values — MINIMAL deployment for LoopZeroCloud registry.
 # Decision: MEET-2026-04-11-048 (Harbor + DO Spaces)
 #
 # CRITICAL mandates from the meeting:

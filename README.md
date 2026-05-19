@@ -592,7 +592,7 @@ cd pkg && go test ./...       # Shared library tests
 
 **Proprietary / Commercial** — see [LICENSE](LICENSE).
 
-LoopZero PaaS is a managed offering operated by loopzero.example. Self-hosted deployment is available under a commercial license — contact `getloopscale@gmail.com`.
+LoopZeroCloud is a managed offering operated by loopzero.example. Self-hosted deployment is available under a commercial license — contact `getloopscale@gmail.com`.
 
 ## Contributing
 

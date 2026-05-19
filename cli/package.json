@@ -1,7 +1,7 @@
 {
   "name": "@loopzero/cli",
   "version": "0.1.0",
-  "description": "CLI-first Kubernetes PaaS for monorepo deployments",
+  "description": "CLI-first Kubernetes LoopZeroCloud for monorepo deployments",
   "main": "dist/index.js",
   "bin": {
     "loopzero": "./bin/loopzero"

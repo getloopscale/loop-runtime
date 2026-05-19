@@ -1,6 +1,6 @@
 apiVersion: v2
 name: loopzero-cloud
-description: LoopZero PaaS auth and billing service
+description: LoopZeroCloud auth and billing service
 type: application
 version: 0.2.0
 appVersion: "dev"

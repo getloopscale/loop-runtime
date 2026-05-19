@@ -1,6 +1,6 @@
 apiVersion: v2
 name: loopzero-platform
-description: LoopZero PaaS platform umbrella chart — installs all components
+description: LoopZeroCloud platform umbrella chart — installs all components
 type: application
 version: 0.2.0
 appVersion: "dev"

@@ -1,6 +1,6 @@
 apiVersion: v2
 name: loopzero-app-operator
-description: LoopZero PaaS application operator — manages LoopZeroApplications and ExposedRoutes
+description: LoopZeroCloud application operator — manages LoopZeroApplications and ExposedRoutes
 type: application
 version: 0.1.0
 appVersion: "dev"

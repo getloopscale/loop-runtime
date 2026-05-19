@@ -20,7 +20,7 @@ FROM alpine:3.22
 
 LABEL org.opencontainers.image.source="https://github.com/loopzero/loopzero"
 LABEL org.opencontainers.image.title="loopzero-cloud"
-LABEL org.opencontainers.image.description="LoopZero PaaS cloud service"
+LABEL org.opencontainers.image.description="LoopZeroCloud service"
 
 RUN apk add --no-cache ca-certificates && adduser -D -u 1000 loopzero
 COPY --from=builder /cloud-api /cloud-api

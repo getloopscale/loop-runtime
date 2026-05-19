@@ -1,6 +1,6 @@
 apiVersion: v2
 name: loopzero-tenant-operator
-description: LoopZero PaaS tenant operator — manages tenants, environments, namespaces, RBAC, and ArgoCD resources
+description: LoopZeroCloud tenant operator — manages tenants, environments, namespaces, RBAC, and ArgoCD resources
 type: application
 version: 0.1.0
 appVersion: "dev"

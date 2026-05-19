@@ -1,6 +1,6 @@
 apiVersion: v2
 name: loopzero-preview-operator
-description: LoopZero PaaS preview operator — manages preview environments with namespace isolation and TTL
+description: LoopZeroCloud preview operator — manages preview environments with namespace isolation and TTL
 type: application
 version: 0.1.0
 appVersion: "dev"

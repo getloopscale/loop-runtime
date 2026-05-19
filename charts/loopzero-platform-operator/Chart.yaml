@@ -1,6 +1,6 @@
 apiVersion: v2
 name: loopzero-platform-operator
-description: LoopZero PaaS platform operator — manages ClusterCredentials, GitRepositoryBindings, and PlatformBootstraps
+description: LoopZeroCloud platform operator — manages ClusterCredentials, GitRepositoryBindings, and PlatformBootstraps
 type: application
 version: 0.1.0
 appVersion: "dev"

@@ -1,6 +1,6 @@
 # loopzero-platform — Umbrella Chart
 
-LoopZero PaaS platform umbrella chart. Composes all platform components (CRDs, API, operators, cloud, dashboard, build templates, monitoring, admission policies) for ArgoCD-driven Day-2 GitOps installation.
+LoopZeroCloud platform umbrella chart. Composes all platform components (CRDs, API, operators, cloud, dashboard, build templates, monitoring, admission policies) for ArgoCD-driven Day-2 GitOps installation.
 
 ## Quick Start
 
