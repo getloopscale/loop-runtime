@@ -350,6 +350,13 @@ releases:
     namespace: loopzero-system
     chart: harbor/harbor
     version: 1.16.2
+    # Plan 2026-05-19-drill-skills-rigor-restoration Bug #1 (Phase 4 LIVE):
+    # Harbor has RWO PVCs (jobservice + registry) that block helm upgrade
+    # rolling restarts — new pod can't attach until old pod releases PVC.
+    # Drill uses DOCR directly (not Harbor as registry proxy) per Bug #16.
+    # Disable Harbor in drill — saves provision time + eliminates PVC conflict.
+    # Production keeps Harbor for image scanning + offline cache.
+    installed: {{ ne .Environment.Name "drill" }}
     needs:
       - cert-manager/cert-manager
       - traefik/traefik
