@@ -118,11 +118,20 @@ fi
 
 # --- Step 2: Provision (task drill:up) ---
 drill_skill_log "Step 2/8: Pulumi up (Phase 1)"
-if ! task drill:up 2>&1 | tail -5 | sed 's/^/  /'; then
-  drill_skill_emit_finding "S0" "task drill:up failed"
+# Capture full pulumi up output to log (was truncating to tail -5 — lost
+# critical error context when pulumi reports "N errored" with detailed
+# per-resource diagnostics earlier in stream).
+PROVISION_LOG="${DRILL_SKILL_AUDIT_DIR:-/tmp}/pulumi-up.log"
+if ! task drill:up > "$PROVISION_LOG" 2>&1; then
+  drill_skill_log "  ✗ task drill:up failed — last 40 lines:"
+  tail -40 "$PROVISION_LOG" 2>/dev/null | sed 's/^/    /' >&2 || true
+  drill_skill_log "  full pulumi up log: $PROVISION_LOG"
+  drill_skill_emit_finding "S0" "task drill:up failed (log: $PROVISION_LOG)"
   drill_skill_teardown || true
   exit 4
 fi
+tail -5 "$PROVISION_LOG" | sed 's/^/  /'
+drill_skill_log "  (full pulumi up log: $PROVISION_LOG)"
 
 # --- Step 3: Export kubeconfigs ---
 drill_skill_log "Step 3/8: Export per-cluster kubeconfigs to /tmp/drill-kc/"
