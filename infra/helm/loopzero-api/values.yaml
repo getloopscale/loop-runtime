@@ -77,6 +77,17 @@ env:
   LOOPZERO_LOG_LEVEL: "info"
   LOOPZERO_CLUSTER_ISSUER: "letsencrypt-prod"
 
+# Plan 2026-05-19-drill-skills-rigor-restoration T2.1: kubeContexts é
+# env-specific (k3d synthetic uses "in-cluster"; drill/prod use DOKS context
+# names like "do-sfo3-loopzero-drill-mgmt-cluster"). Default fallback "in-cluster"
+# para local k3d standalone-multi; overlays drill+prod sobrescrevem.
+# Padrão environment-overlay-with-reuse: canonical define schema + fallback
+# safe-for-local; overlays supplem env-specific values via env templating.
+kubeContexts:
+  mgmt: "in-cluster"
+  build: "in-cluster"
+  runtime: "in-cluster"
+
 # F-7 (dogfood-2026-05-08-fixes T0.1, ADR D7) — bootstrap chart toggle for
 # OTel exporter. Default false because local k3d does not install Tempo;
 # without this flag the API spam-logs `traces export: rpc error` every 5s.

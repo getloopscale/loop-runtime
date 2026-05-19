@@ -33,3 +33,29 @@ imagePullSecrets:
 # the drill API URL `api.loopzero-drill.example`, causing Traefik 404 on /health.
 # Drill domain comes from pulumi-drill CF Zone (loopzero-drill.example).
 domain: loopzero-drill.example
+
+# Plan 2026-05-19-drill-skills-rigor-restoration T2.1 LIVE fix (Bug #24 root cause):
+# Canonical values.yaml does NOT set JWT_ISSUER / JWKS_URL. api/cmd/setup_auth.go:58-60
+# reads os.Getenv() which returns empty string when env vars absent → validator
+# constructed with empty URLs → ALL JWT validation fails 401.
+# Affected envs: drill (this file) + values-prod.yaml (PROD HAS SAME BUG — separate
+# commit). Local k3d standalone-multi works "by accident" — uses Hydra default
+# issuer http://localhost:4444/ which matches hardcoded standalone-multi JWT_ISSUER.
+# Drill exposed this via dogfood-drill 11/12 journeys 401 — Bug #24 workaround
+# (now reverted in commit 82835ad8) was masking, not fixing.
+#
+# Issuer string MUST exactly match what Hydra emits (per Hydra
+# values-hydra-drill.yaml.gotmpl urls.self.issuer setting in this same commit).
+# JWKS URL is fetched from inside loopzero-api pod cross-namespace.
+env:
+  JWT_ISSUER: "http://ory-hydra-public.loopzero-auth.svc.cluster.local:4444/"
+  JWKS_URL: "http://ory-hydra-public.loopzero-auth.svc.cluster.local:4444/.well-known/jwks.json"
+
+# Plan 2026-05-19-drill-skills-rigor-restoration T2.1 — DOKS contexts.
+# Bootstrap script (drill-helmfile-bootstrap.sh:782-784) exports these env
+# vars from downloaded kubeconfig current-context line. Replaces the
+# kubectl set env workaround (lines 785-788) that was T2-deferred.
+kubeContexts:
+  mgmt: {{ requiredEnv "MGMT_KUBE_CONTEXT" | quote }}
+  build: {{ requiredEnv "BUILD_KUBE_CONTEXT" | quote }}
+  runtime: {{ requiredEnv "RUNTIME_KUBE_CONTEXT" | quote }}

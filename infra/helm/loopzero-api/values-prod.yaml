@@ -10,3 +10,15 @@ env:
   # multi-cell code path; cells.status (in DB) gates which cells
   # accept tenant pinning.
   LOOPZERO_DYNAMIC_ROUTER: "true"
+  # Plan 2026-05-19-drill-skills-rigor-restoration T2.1 — PROD-PARITY fix
+  # caught by drill skill. Canonical values.yaml does NOT set JWT_ISSUER/JWKS_URL;
+  # api/cmd/setup_auth.go:58-60 reads os.Getenv() returning empty string when
+  # vars absent → JWT validator constructed with empty URLs → ALL tenant-scoped
+  # requests fail 401. Pulumi platform overlay NEVER set these (verified via
+  # grep across infra/pulumi*/ — comments in values-standalone-multi.yaml
+  # claiming "Pulumi sets prod" were stale). Drill caught this Bug #24 in
+  # dogfood-drill 11/12 journeys 401.
+  # Issuer string MUST match Hydra config (values-ory-hydra has same FQDN).
+  # JWKS URL is fetched cross-namespace from inside loopzero-api pod.
+  JWT_ISSUER: "http://ory-hydra-public.loopzero-auth.svc.cluster.local:4444/"
+  JWKS_URL: "http://ory-hydra-public.loopzero-auth.svc.cluster.local:4444/.well-known/jwks.json"

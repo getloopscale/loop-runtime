@@ -20,8 +20,29 @@ hydra:
     # --- URLs ---
     urls:
       self:
-        # LOCAL DEV — production overridden by Pulumi
-        issuer: "http://localhost:4444/"
+        # Plan 2026-05-19-drill-skills-rigor-restoration T2.1 PROD-PARITY fix:
+        # Previous default was "http://localhost:4444/" with comment "production
+        # overridden by Pulumi" — BUT Pulumi NEVER overrode (verified via grep
+        # across infra/pulumi*/). PROD Hydra was emitting JWT with iss=localhost
+        # which couldn't match anything real, breaking JWT validation system-wide
+        # had any prod canary actually exercised the flow end-to-end (was
+        # mascarado por Bug #24 no drill, nunca testado em prod). Cross-namespace
+        # FQDN: Hydra em loopzero-auth ns, loopzero-api em loopzero-system ns, ambos
+        # resolvem via cluster.local. Works for local k3d (CoreDNS) + drill
+        # (DOKS) + prod (DOKS). Single source of truth — overlays env-specific
+        # apenas para casos especiais (e.g., external HTTPS gateway).
+        issuer: "http://ory-hydra-public.loopzero-auth.svc.cluster.local:4444/"
+      # Plan 2026-05-19-drill-skills-rigor-restoration T2.1 — KNOWN GAP:
+      # login/consent/logout URLs apontam para localhost:4455 (k3d port-forward
+      # do Kratos UI) — funciona LOCAL apenas. Em drill/prod NÃO existe Ingress
+      # para Kratos UI atualmente (verificado via kubectl get ingressroute -A em
+      # drill 2026-05-19), então OAuth auth-code flow (browser redirect) NÃO
+      # FUNCIONA em drill/prod. Para dogfood-drill que usa client_credentials
+      # grant (machine-to-machine, sem browser), este gap é IRRELEVANTE.
+      # Para customer-facing OAuth flow: criar IngressRoute para Kratos UI +
+      # override estes URLs em values-hydra-{drill,prod}.yaml.gotmpl com FQDN
+      # público HTTPS (e.g., https://auth.loopzero-drill.example/login). Fix
+      # documentado como follow-up gap (não bloqueia dogfood-drill).
       login: "http://localhost:4455/login"
       consent: "http://localhost:4455/consent"
       logout: "http://localhost:4455/logout"

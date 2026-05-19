@@ -37,11 +37,13 @@ env:
   # esse outro nome em outro contexto). audience hardcoded "loopzero-engine"
   # bate com aud das tokens emitidas pelo loopzero-bootstrap client.
   JWKS_URL: "http://ory-hydra-public.loopzero-auth.svc.cluster.local:4444/.well-known/jwks.json"
-  # JWT_ISSUER deve casar com `hydra.config.urls.self.issuer` da chart
-  # ory-hydra. Em standalone-multi o helm values ficou em
-  # `http://localhost:4444/` (default da chart). Em dev/prod o overlay
-  # de Pulumi seta para a URL pública real (ex: https://auth.<domain>).
-  JWT_ISSUER: "http://localhost:4444/"
+  # Plan 2026-05-19-drill-skills-rigor-restoration T2.1 LIVE fix:
+  # Canonical ory-hydra/values.yaml issuer agora aponta para FQDN
+  # cluster.local (Pulumi NUNCA setou apesar do comentário antigo "Pulumi
+  # overrides"; bug PROD-affecting caught via drill skill). Local k3d
+  # mantém alinhamento com canonical via FQDN — CoreDNS resolve dentro
+  # do cluster, mesmo padrão funciona local + drill + prod.
+  JWT_ISSUER: "http://ory-hydra-public.loopzero-auth.svc.cluster.local:4444/"
   # CHG-2026-04-29-DOGFOOD iter 9 — k3d-loopzero-registry serve plain HTTP (no
   # TLS/auth). BuildKit precisa do flag `insecure=true` no buildkitd.toml
   # gerado por api/internal/argo/buildkit.go; sem isso o `buildctl` faz
