@@ -157,6 +157,33 @@ assert_contains "diagnosis.md cites payload" "loopzero-engine" "$diag_content"
 empty_result=$(echo -n "" | decode_jwt_segment 0 2>&1 || echo "ERROR_AS_EXPECTED")
 assert_contains "decode_jwt_segment empty input handled" "ERROR_AS_EXPECTED" "$empty_result"
 
+# ---- Case 15: decode_jwt_segment malformed JWT (only 1 segment) ----
+# Iter 2 edge case: JWT without dots → cut returns the whole thing as seg1,
+# segments 2+ are empty. Decoder must reject gracefully.
+malformed_jwt="notajwttoken"
+mal_result=$(decode_jwt_payload "$malformed_jwt" 2>&1 || echo "ERROR_AS_EXPECTED")
+# Either empty string (decode failed gracefully) or ERROR marker — both acceptable
+if [[ -z "$mal_result" || "$mal_result" == *"ERROR_AS_EXPECTED"* ]]; then
+  echo "PASS: decode_jwt_payload malformed JWT handled gracefully"
+  pass=$((pass+1))
+else
+  echo "FAIL: decode_jwt_payload malformed JWT produced unexpected output: $mal_result"
+  fail=$((fail+1))
+fi
+
+# ---- Case 16: extract_jwt_claim returns 1 when jq missing ----
+# Iter 2 edge case: extract_jwt_claim guards against jq absence (returns 1).
+# Simulate by overriding command with non-existent path.
+unset_jq_result=$(PATH="/tmp/no-bin-here" extract_jwt_claim "$JWT_FIXTURE" "iss" 2>&1; echo "rc=$?")
+# Should either produce empty + rc=1 or fail cleanly
+if [[ "$unset_jq_result" == *"rc=1"* ]] || [[ -z "${unset_jq_result%rc=*}" ]]; then
+  echo "PASS: extract_jwt_claim handles missing jq"
+  pass=$((pass+1))
+else
+  echo "FAIL: extract_jwt_claim missing jq behavior: $unset_jq_result"
+  fail=$((fail+1))
+fi
+
 # ---- Final report ----
 total=$((pass + fail))
 echo ""

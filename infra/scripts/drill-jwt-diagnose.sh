@@ -57,6 +57,12 @@ decode_jwt_segment() {
   if [[ -z "$jwt" ]]; then
     return 1
   fi
+  # Validate JWT shape: must have 2 dots (3 segments: header.payload.signature).
+  # Defensive guard against malformed input (e.g., mint script failure producing
+  # plain error string). Without this, decoder would emit binary garbage silently.
+  if [[ "$jwt" != *.*.* ]]; then
+    return 1
+  fi
 
   local segment
   segment=$(echo -n "$jwt" | cut -d. -f$((segment_index + 1)))

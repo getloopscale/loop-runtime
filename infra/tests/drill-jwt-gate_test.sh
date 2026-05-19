@@ -151,6 +151,28 @@ source "$LIB"
 echo "PASS: lib double-source idempotent (no error)"
 pass=$((pass+1))
 
+# ---- Case 9 (iter 2 edge): 3xx redirect treated as FAIL ----
+# 2xx wildcard intentionally does NOT match 301/302. JWT auth gates should be
+# direct 200/201 — redirects suggest API misconfiguration or proxy interference.
+cat > "$WORK/curl-301.sh" <<'EOF'
+#!/usr/bin/env bash
+echo -n "301"
+EOF
+chmod +x "$WORK/curl-301.sh"
+out=$(verify_jwt_auth_e2e "http://test/api" "$WORK/mint-ok.sh" "$WORK/curl-301.sh" "tn-test" 2>&1)
+rc=$?
+assert_eq "301 redirect → exit 1 (NOT 2xx wildcard)" "1" "$rc"
+
+# ---- Case 10 (iter 2 edge): 422 unprocessable → FAIL ----
+cat > "$WORK/curl-422.sh" <<'EOF'
+#!/usr/bin/env bash
+echo -n "422"
+EOF
+chmod +x "$WORK/curl-422.sh"
+out=$(verify_jwt_auth_e2e "http://test/api" "$WORK/mint-ok.sh" "$WORK/curl-422.sh" "tn-test" 2>&1)
+rc=$?
+assert_eq "422 unprocessable → exit 1" "1" "$rc"
+
 # ---- Final report ----
 total=$((pass + fail))
 echo ""

@@ -235,6 +235,55 @@ prev_sourced="${_DRILL_DOGFOOD_JOURNEYS_SOURCED:-}"
 source "$LIB"
 assert_eq "source guard idempotent" "$prev_sourced" "$_DRILL_DOGFOOD_JOURNEYS_SOURCED"
 
+# ---- Case 14 (iter 2 edge): resolve_loopzero_cli fails when npm build fails ----
+# Iter 2: simulate npm build returning non-zero (e.g., TS compile error).
+mkdir -p "$WORK/bin-npm-fail"
+cat > "$WORK/bin-npm-fail/npm" <<'EOF'
+#!/usr/bin/env bash
+exit 1
+EOF
+chmod +x "$WORK/bin-npm-fail/npm"
+out=$(PATH="$WORK/bin-node20:$WORK/bin-npm-fail:$PATH" resolve_loopzero_cli "$WORK/repo-ok" 2>&1)
+rc=$?
+assert_eq "npm build failure → exit 1" "1" "$rc"
+[[ "$out" == *"npm run build failed"* ]] && \
+  { echo "PASS: npm fail error message clear"; pass=$((pass+1)); } || \
+  { echo "FAIL: npm fail log: $out"; fail=$((fail+1)); }
+
+# ---- Case 15 (iter 2 edge): prova_de_vida with 0 pods (selector matches nothing) ----
+# Stub kubectl emitting empty (no matching pods)
+mkdir -p "$WORK/bin-kubectl-empty"
+cat > "$WORK/bin-kubectl-empty/kubectl" <<'EOF'
+#!/usr/bin/env bash
+echo ""
+EOF
+chmod +x "$WORK/bin-kubectl-empty/kubectl"
+out=$(PATH="$WORK/bin-kubectl-empty:$PATH" \
+  prova_de_vida "test-ctx" "test-ns" "no-such-app" 2>&1)
+rc=$?
+assert_eq "no pods matching → exit 1" "1" "$rc"
+
+# ---- Case 16 (iter 2 edge): wait_for_argocd_prune timeout (app always present) ----
+# Stub kubectl that always says app present (get application exit 0)
+mkdir -p "$WORK/bin-kubectl-present"
+cat > "$WORK/bin-kubectl-present/kubectl" <<'EOF'
+#!/usr/bin/env bash
+case "$*" in
+  *"annotate application"*) exit 0 ;;
+  *"get application"*)      exit 0 ;;  # app STILL present
+  *)                        exit 0 ;;
+esac
+EOF
+chmod +x "$WORK/bin-kubectl-present/kubectl"
+# Use very short timeout (4s) so test doesn't drag
+out=$(PATH="$WORK/bin-kubectl-present:$PATH" DRILL_PRUNE_TIMEOUT=4 \
+  wait_for_argocd_prune "test-ctx" "test-app" 2>&1)
+rc=$?
+assert_eq "timeout exceeded → exit 1" "1" "$rc"
+[[ "$out" == *"still present after"* ]] && \
+  { echo "PASS: timeout error message clear"; pass=$((pass+1)); } || \
+  { echo "FAIL: timeout log: $out"; fail=$((fail+1)); }
+
 # ---- Final report ----
 total=$((pass + fail))
 echo ""
