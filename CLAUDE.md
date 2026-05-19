@@ -4,7 +4,7 @@ Contract between Claude and the LoopZero codebase. Read before touching any file
 
 ## What This Project Is
 
-LoopZero is a **CLI-first Kubernetes PaaS** for monorepo deployments. Vercel-quality DX for backends — `loopzero login`, `loopzero init`, `loopzero deploy`, and in under 5 minutes every service is live with TLS, preview environments on every PR, and rollback with one command. No Kubernetes. No infrastructure YAML.
+LoopZero is a **CLI-first managed cloud (Kubernetes-backed)** for monorepo deployments. Vercel-quality DX for backends — `loopzero login`, `loopzero init`, `loopzero deploy`, and in under 5 minutes every service is live with TLS, preview environments on every PR, and rollback with one command. No Kubernetes. No infrastructure YAML.
 
 The authoritative spec is the code itself + `CHANGELOG.md` + relevant ADRs. If this file and the codebase conflict, the codebase wins.
 
@@ -23,6 +23,46 @@ The authoritative spec is the code itself + `CHANGELOG.md` + relevant ADRs. If t
 **Path to maturity 4.0** (currently 3.49 per modular audit baseline 2026-05-11): (a) first CI Sunday cron GREEN producing real `cell2-soaks.yml` workflow run evidence — **2026-05-16 reformulated:** workflow now provisions an ephemeral drill prod-identical 4-cluster stack instead of assuming a non-existent DEV cluster (per plan `2026-05-16-drill-prod-identical-multicluster-plan.md`, finding `concepts/operations/finding-2026-05-16-gate-a-cell2-soaks-multilayer-blocker.md`). Stage 1 (1h) + Stage 2 (24h with EXPIRES_IN=26h per EC-01) execute via drill stack with mandatory teardown + doctl validator fallback (T4.1.bis EC-05). Gate (a) closure now requires DRILL_DO_TOKEN + DRILL_PULUMI_TOKEN + DRILL_CF_TOKEN secrets configured + MEET-ASYNC-AMENDMENT-2026-05-16-001 ratification + first cron GREEN. AND (b) 1 prod customer day-trial with no incidents (Sprint 9 prod canary). Local 7-day GREEN streak DROPPED as a gate (D7 reformulated 2026-05-03 — tautological in static dev env without diurnal traffic; CI cron + real prod usage are the legitimate signals). **Audit-grind progress (2026-05-12 to 2026-05-13, full tally in `.claude/knowledge-base/audits/2026-05-12-grind-summary.md` + log.md entries):** 30 of the 27 §6 backlog findings closed inline (some closures addressed multiple sub-items), 4 RFCs/design docs landed for the T2/T3 items, 5 latent bugs captured during code-walks under audit context, 3 operator runbooks/templates/dashboards shipped for Wave 2 onboarding. **Sponsor-direct-approval pattern (2026-05-13):** §6.B.2 + §6.B.3 (orphan CRD deletion, 2 CRDs deleted symmetrically) AND §6.B.5 (service-auth Ed25519 dual-control adoption) both shipped via the new pattern documented in `meetings/MEET-2026-05-13-orphan-crd-deletion.md` + `meetings/MEET-2026-05-13-ed25519-sponsor-approval.md` — sponsor explicit override of the Change Governor meeting after RFC review. Audit gaps M03 #2/#3 + M10 G1 closed (engineering side). Score un-bumped because Rule 11 requires 3 evidence sources (T1 commit+test, T2 LIVE log, T3 CI run) and the customer-trial LIVE evidence is still pending. The two original maturity gates remain the bottleneck.
 
 **Known issues:** Local k3d cert-manager letsencrypt-prod cannot issue for `*.loopzero.local` (no public DNS for ACME challenge) — self-signed CA issuer (`loopzero-local-ca-issuer`) fills local gap, production uses CF-managed TLS so no impact, local Stage 1 canary HTTP probes report HTTP 000 in `--smoke` mode (probes informational only). Local chaos-mesh installation in k3d enters CrashLoopBackOff with `informer cache sync timeout` — full chaos suite validation deferred to drill cluster (`pulumi-drill`); local chaos test framework is multi-replica-correct as of commit `99d90dc6` and 3 specs PASS without chaos-mesh dependency. Loki cross-cluster URL was helmfile-hardcoded to k3d local IP (would silently fail cross-VPC in prod); fixed as of `ef7a7c16` — promtail values now `.gotmpl`-templated per environment, prod points at DOKS internal LB explicitly. ADR claim "auto-blocks via W1.14 hook" for cosign keyless cutover was stale (W1.14 only protects ADR deletion); real deadline ratchet shipped as `infra/scripts/check-cosign-cutover-deadline.sh` + weekly cron in `9249e207`.
+
+---
+
+## Voice and Tone
+
+**Locked 2026-05-15** (strategic review — Option A: 5th and final aspirational-voice formalization in the monorepo). LoopZeroCloud has adopted the aspirational voice originally scoped to LoopZeroKit. The operational guide — three communication layers (HERO / BODY / DEEP DIVE), vocabulary translation, banned terms list, storytelling rules, before/after examples — lives in [`../loopzerokit/CLAUDE.md`](../loopzerokit/CLAUDE.md). Read it before writing any public copy for this project.
+
+**Applies to:**
+
+- `PITCH.md` — landing-page copy at project root
+- `loopzero.example` site copy referencing LoopZeroCloud
+- Sales-led conversations, launch material, blog posts
+
+**Does NOT apply to (stays technical-direct):**
+
+- `README.md` (the engineering-facing reference — already mixes audiences but leans technical)
+- This `CLAUDE.md`, `CHANGELOG.md`, `GOVERNANCE.md`, `SECURITY.md`
+- Internal docs (`docs/`, `.claude/knowledge-base/`, ADRs, meetings, plans, audits)
+- Source code, comments, error messages, CLI internal output
+
+**Cross-Project Rule 9 — Cloud abstraction (in force regardless of voice):**
+
+LoopZeroCloud hides its infrastructure the same way Vercel hides Lambda/CloudFront. User-facing copy says `loopzero deploy`, `live URL`, `rollback`, `production`, `canary deploys`, `signed container images`, `audit log`. **Never** in user-facing copy: `Kubernetes`, `cluster`, `BuildKit`, `ArgoCD`, `Cosign`, `Argo Rollouts`, `KEDA`, `Gitea`, `MinIO`, `ESO`, `cell`, `Pulumi`, `Helmfile`, `Tilt`, `Ory`, `Traefik`. These terms are allowed **only** in: `README.md` "Architecture" / "Self-Hosted" sections, this `CLAUDE.md`, ADRs, `docs/`, internal runbooks, source code.
+
+The PITCH.md follows CR-9 strictly — internals appear only in the "Architecture" DEEP DIVE block, deliberately abstracted ("the runtime is hidden behind `loopzero deploy`", "GitOps under the hood", "supply-chain by default") so the document remains usable on `loopzero.example` without further redaction.
+
+**Locked Narrative (governed by root `CLAUDE.md`, not this file; refined 2026-05-19 strategic review #2):**
+
+- HERO (root, EN): *"Build AI Agents and Apps faster with LoopZero."*
+- Hero tagline (root): *"Chat. Build. Deploy. From idea to live agent in minutes."*
+- Sub-headline (root, EN): *"The complete ecosystem to ship AI agents — open-source AI chat, frameworks, and a managed runtime where your agent actually runs. ~4 minutes from start to live. Your code, your repo."*
+- LoopZeroCloud-specific HERO (this product, retained as Deploy-layer founding hero): *"Where AI agents actually run."* + *"Type an idea. Get a real backend."* as secondary anchor
+- LoopZeroCloud sub-headline (this product): *"The Deploy layer of the LoopZero ecosystem. We build it, ship it, and hand you a live URL — in ~4 minutes."*
+- Proof point: *"~4 min deploy · ~3s rollback · 30 frameworks · signed images by default · multi-cell isolation."*
+- BODY anchor: *"Chat with LoopZeroCode. Build with LoopZeroCreate + LoopZeroKit. Deploy on LoopZero."*
+- Hero pattern: Variant A
+- Demo interaction: Demo 1
+- Positioning mix: "Vercel + Mastra + Claude Code" (full cycle in one ecosystem; the verbs are Chat / Build / Deploy)
+
+If a piece of LoopZeroCloud copy contradicts the Locked Narrative in [`../CLAUDE.md`](../CLAUDE.md), or the operational rules in [`../loopzerokit/CLAUDE.md`](../loopzerokit/CLAUDE.md), or Cross-Project Rule 9, the root rules win — surface the conflict before publishing.
 
 ---
 
@@ -232,7 +272,7 @@ Skills/slash commands (subset): `/sprint`, `/implement`, `/test`, `/review`, `/d
 | 10 | Static Frontend Delivery | ✅ |
 | 11 | Auth + Billing | ✅ |
 | H1-H7 | Hardening themes (runtime, TLS, PG HA, observability, pipeline, ops, workload security). Note: H12-H18 referenced in Multi-Cell section are cleanroom heal entries, not hardening sprints. | ✅ all 7 themes complete |
-| Cleanroom Dogfood Loop | Real PaaS test: destroy infra + setup + 12 journeys end-to-end | ✅ 12/12 GREEN (2026-05-05, tag `dogfood-cleanroom-converged-20260505`). 39 bugs B1-B39 fixed canonically. |
+| Cleanroom Dogfood Loop | Real LoopZeroCloud test: destroy infra + setup + 12 journeys end-to-end | ✅ 12/12 GREEN (2026-05-05, tag `dogfood-cleanroom-converged-20260505`). 39 bugs B1-B39 fixed canonically. |
 | Argo Rollouts Progressive Delivery | Canary deploys (per-plan steps + Traefik weighted routing + AnalysisTemplate + KEDA targets Rollout) | ✅ 2026-05-07 — 15 plan tasks (T0.1-T5.2) complete. Warm-infra journey **80/80 GREEN in 41m41s**, fresh-cleanroom journey **71/72 GREEN in 42m49s** (1 unrelated ESO timing fail). 6 fixes: F-17 (fixture), F-18 (progressDeadlineSeconds=300), F-19 (S1 sync_client.go accepts Rollout), F-20 (S2 e2e scaffolding), F-21 (Taskfile bootstrap selector includes argo-rollouts), F-22 (S1 ClusterRole + argoproj.io RBAC). |
 | Build Mode Dispatch + User Dockerfile Security | Strategy-pattern dispatch for `build: dockerfile` opt-in + dockerfile-lint security barrier | ✅ 2026-05-08 — 4 phases complete (T0-T4). Restored `LanguageStrategy.DockerfileStep` (was removed in MEET-2026-03-29-017); new `UserDockerfileStrategy` distinct from `CustomStrategy`; `ResolveStrategyForApp(AppSpec)` dispatches `build: dockerfile` apps to UserDockerfileStrategy. New `loopzero-dockerfile-lint` binary (Go, `tools/loopzero-dockerfile-lint/`) enforces hard rejection rules: FROM allow-list (docker.io/library/*, ghcr.io/*, DOCR, k3d-loopzero-registry, public.ecr.aws/, gcr.io/, mcr.microsoft.com/, quay.io/, opt-in via LOOPZERO_DOCKERFILE_ALLOWED_REGISTRIES), --privileged/--security=insecure RUN flags, absolute/escaping bind mounts, reserved env keys (LOOPZERO_*/KUBERNETES_*/AWS_*/DO_*), seccomp/apparmor unconfined. Soft warnings: USER root in final stage, ADD remote URL, apt without --no-install-recommends, HEALTHCHECK without CMD. loopzero-packs v0.4.0 canonical lenient contract published. loopzero-api uses `dockerfileStepTemplateName(strategy)` to wire DAG correctly (no hardcoded "generate-dockerfile"). LIVE: 25/25 lint unit tests + 17 strategy/dispatch tests + e2e `journey_user_dockerfile_test.go` 3/3 GREEN (T4.3 happy + T4.4 rejection). Full journey suite 74/75 PASS in 45m45s (1 J03 ESO timing flake unrelated). |
 | Dogfood 2026-05-08 Fixes | F-1..F-7 closed: golang-migrate canonical, ESO ExternalSecret instrumentation+fix, build_events dead code, Application phase fast-path Healthy, OTel local off, seed cell_id, test scaffolding cleanup | ✅ 2026-05-08 — 14 plan tasks across 5 phases. Plan v1.1 with edge-case review (12 edges, 5 MUST FIX folded into tasks). Root causes identified LIVE via instrumentation (e.g., F-2 was runtime.kubeconfig context name drift between F-11 and B34). 9 commits. F-2 ExternalSecret CR Synced=True LIVE; F-6 Application phase Progressing→Serving LIVE; F-1 schema_migrations populated version=10 dirty=false. Heal H17 (schema_migrations backfill) + H18 (stale gitea-credentials-template) codified. Final journey 81/82 PASS (98.8%, single fail = pre-existing T4.3 deploy race outside plan scope). LP-009 added to local-prod divergence matrix. |
