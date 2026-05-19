@@ -183,18 +183,43 @@ if echo "$MIGRATE_VERSION_OUT" | grep -qiE "no migration|nilversion|first run|no
 fi
 
 # Apply any missing migrations (no-op if up to date).
+# Bug #14 LIVE FIX (caught 2026-05-18 dogfood-drill iter 6):
+# Previous code logged "checking if 'no change'" but did NOT actually check —
+# always fell through to "Migrations applied successfully" log line. In drill
+# DOKS first-run (empty PG, no schema_migrations, no tenants table), migrate
+# up exit=1 was masked as idempotent → drill-mint-jwt later failed with
+# `relation "users" does not exist` because schema was NEVER applied.
+#
+# Proper disambiguation: capture stdout+stderr, then on non-zero exit:
+# (a) "no change" string in output → genuinely idempotent, OK
+# (b) `migrate version` reports a numeric version → schema_migrations exists,
+#     migrations are applied → idempotent OK
+# (c) neither (a) nor (b) → real failure, exit with error
 log "Running migrate up..."
-kctl -n "$NAMESPACE" exec "$LOOPZERO_API_POD" -- \
-  migrate -path /migrations -database "$DSN" -verbose up || {
-    EXIT=$?
-    if [[ $EXIT -eq 0 ]]; then
-      true
+MIGRATE_UP_OUT="$(kctl -n "$NAMESPACE" exec "$LOOPZERO_API_POD" -- \
+  migrate -path /migrations -database "$DSN" -verbose up 2>&1)" && MIGRATE_UP_EXIT=0 || MIGRATE_UP_EXIT=$?
+echo "$MIGRATE_UP_OUT" | sed 's/^/  [migrate-up] /'
+if [[ $MIGRATE_UP_EXIT -ne 0 ]]; then
+  log "  migrate up exit=$MIGRATE_UP_EXIT — disambiguating no-change vs real failure"
+  # Check (a): explicit "no change" message
+  if echo "$MIGRATE_UP_OUT" | grep -qiE "no change|nothing to apply"; then
+    log "  ✓ Disambiguation: 'no change' — schema already current (idempotent re-run)"
+  else
+    # Check (b): migrate version returns a numeric version
+    POST_VERSION_OUT="$(kctl -n "$NAMESPACE" exec "$LOOPZERO_API_POD" -- \
+      migrate -path /migrations -database "$DSN" version 2>&1 || true)"
+    # grep returns exit 1 on no match → pipefail + set -e would kill script.
+    # Append `|| true` to ensure pipeline exits 0 regardless of grep result.
+    POST_VERSION_NUMBER=$(echo "$POST_VERSION_OUT" | grep -oE '^[0-9]+' | head -1 || true)
+    if [[ -n "$POST_VERSION_NUMBER" ]] && [[ "$POST_VERSION_NUMBER" -ge "$HIGHEST" ]]; then
+      log "  ✓ Disambiguation: schema_migrations version=$POST_VERSION_NUMBER >= highest=$HIGHEST (idempotent)"
     else
-      # `migrate up` returns non-zero when there's nothing to apply ("no change")
-      # in some versions. Inspect output to disambiguate.
-      log "  migrate up exit=$EXIT — checking if 'no change' (idempotent re-run)"
+      log "  ✗ Disambiguation: REAL FAILURE — migrate up exited $MIGRATE_UP_EXIT without 'no change' AND version=${POST_VERSION_NUMBER:-MISSING} < highest=$HIGHEST"
+      log "  ✗ Schema NOT applied. Subsequent steps requiring tables (users, tenants) will fail."
+      exit "$MIGRATE_UP_EXIT"
     fi
-  }
+  fi
+fi
 
 log "Migrations applied successfully."
 log "Current schema_migrations status (via migrate version):"

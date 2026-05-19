@@ -28,6 +28,7 @@ on:
       - 'infra/tests/scripts/bootstrap-drill-cc_test.sh'
       - 'infra/tests/scripts/check-drill-outputs-consumers_test.sh'
       - 'infra/tests/scripts/run-migrations_sslmode_test.sh'
+      - 'infra/tests/scripts/run-migrations_bug14_test.sh'
       - 'infra/tests/chaos/manifests/drill-*.yaml'
       - 'infra/pulumi-drill/**'
       - '.claude/skills/cleanroom-drill/**'
@@ -106,6 +107,9 @@ jobs:
 
       - name: T2.1.bis — run-migrations PG_SSLMODE tests
         run: bash infra/tests/scripts/run-migrations_sslmode_test.sh
+
+      - name: Bug #14 — run-migrations no-change vs real-failure disambiguation
+        run: bash infra/tests/scripts/run-migrations_bug14_test.sh
 
       - name: T3.1 — drill-cancel-refresh hermetic tests
         run: bash infra/tests/scripts/drill-cancel-refresh_test.sh
