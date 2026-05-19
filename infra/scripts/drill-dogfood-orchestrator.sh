@@ -272,9 +272,12 @@ fi
 
 # --- Step 4: 5 prod-parity invariants check ---
 drill_skill_log "Step 4/4: 5 prod-parity invariants check"
-# Use runtime cluster kubeconfig + dynamic tenant ns
+# Use runtime cluster kubeconfig + seed tenant ns.
+# Bug #27 LIVE FIX (2026-05-19): Bug #23 rewrite removed TENANT_ID variable
+# (was "tn-dogfood-drill-..."). Re-derive from SEED_TENANT_ID (matches the
+# tenant JWT was minted for + cell wiring).
 RUNTIME_KC=/tmp/drill-kc/runtime.yaml
-TENANT_NS="loopzero-${TENANT_ID}-production"
+TENANT_NS="loopzero-${SEED_TENANT_ID:-tn-e2etest}-production"
 if [[ -f "$RUNTIME_KC" ]]; then
   if drill_skill_check_invariants "$RUNTIME_KC" "$TENANT_NS"; then
     drill_skill_log "  ✓ All 5 invariants PASS"
