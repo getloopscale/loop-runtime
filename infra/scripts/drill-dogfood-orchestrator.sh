@@ -174,16 +174,23 @@ run_journey() {
   local extra_curl_args=("${@:6}")
 
   local actual
+  # Bug #22: previous code used `... || echo "000"` BUT curl with -w "%{http_code}"
+  # ALWAYS prints the status (or "000" on connection failure), so the `||`
+  # branch concatenated → actual="000\n000". Drop the fallback.
   actual=$(curl -s -m 30 -X "$method" "${API_URL}${path}" \
     -H "Authorization: Bearer $LOOPZERO_TOKEN" \
     "${extra_curl_args[@]}" \
-    -o /dev/null -w "%{http_code}" || echo "000")
+    -o /dev/null -w "%{http_code}" 2>/dev/null) || actual="000"
+  # Normalize empty (rare curl edge case) to "000"
+  actual="${actual:-000}"
 
   if [[ "$actual" == "$expected_code" ]]; then
     drill_skill_log "  ✓ $id $desc (HTTP $actual)"
     JOURNEYS_PASSED=$((JOURNEYS_PASSED + 1))
     return 0
   fi
+  # Log failure visibility (was silent — only in audit md)
+  drill_skill_log "  ✗ $id $desc: HTTP $actual (expected $expected_code)"
   drill_skill_emit_finding "S0" "$id $desc: HTTP $actual (expected $expected_code)"
   JOURNEYS_FAILED=$((JOURNEYS_FAILED + 1))
   return 1

@@ -978,6 +978,30 @@ if [[ -n "$CF_TOKEN_VAL" ]]; then
         -H "Authorization: Bearer $CF_TOKEN_VAL" -H "Content-Type: application/json" \
         -d "{\"type\":\"A\",\"name\":\"*.$DRILL_BASE_DOMAIN\",\"content\":\"$RUNTIME_LB_IP\",\"ttl\":60,\"proxied\":false}" >/dev/null 2>&1
       log "  ✓ CF wildcard A *.$DRILL_BASE_DOMAIN → $RUNTIME_LB_IP"
+
+      # Bug #21 LIVE FIX (caught 2026-05-19 dogfood-drill iter 7):
+      # api.loopzero-drill.example pre-existing A record (stale from prior drill
+      # iters) takes DNS precedence over wildcard *.loopzero-drill.example. The
+      # wildcard points to runtime LB (tenant workloads), but API requests
+      # must reach MGMT LB. Without this fix, dogfood-drill journeys all
+      # return HTTP 000 (curl can't connect to stale IP).
+      # Solution: explicit A record `api.<domain>` → MGMT LB IP. Delete
+      # existing record first (idempotent), then POST new.
+      MGMT_LB_IP=$(KUBECONFIG="$DRILL_KUBECONFIG_DIR/mgmt.yaml" kubectl -n traefik get svc traefik -o jsonpath='{.status.loadBalancer.ingress[0].ip}' 2>/dev/null || echo "")
+      if [[ -n "$MGMT_LB_IP" ]]; then
+        API_EXISTING_ID=$(curl -s -H "Authorization: Bearer $CF_TOKEN_VAL" \
+          "https://api.cloudflare.com/client/v4/zones/$ZONE_ID/dns_records?name=api.$DRILL_BASE_DOMAIN" \
+          2>/dev/null | python3 -c "import json,sys; d=json.load(sys.stdin); print(d.get('result',[{}])[0].get('id',''))" 2>/dev/null || echo "")
+        [[ -n "$API_EXISTING_ID" ]] && curl -s -X DELETE \
+          "https://api.cloudflare.com/client/v4/zones/$ZONE_ID/dns_records/$API_EXISTING_ID" \
+          -H "Authorization: Bearer $CF_TOKEN_VAL" >/dev/null 2>&1
+        curl -s -X POST "https://api.cloudflare.com/client/v4/zones/$ZONE_ID/dns_records" \
+          -H "Authorization: Bearer $CF_TOKEN_VAL" -H "Content-Type: application/json" \
+          -d "{\"type\":\"A\",\"name\":\"api.$DRILL_BASE_DOMAIN\",\"content\":\"$MGMT_LB_IP\",\"ttl\":60,\"proxied\":false}" >/dev/null 2>&1
+        log "  ✓ CF explicit A api.$DRILL_BASE_DOMAIN → $MGMT_LB_IP (mgmt cluster)"
+      else
+        log "  ✗ MGMT Traefik LB IP not assigned — api.$DRILL_BASE_DOMAIN A record skipped"
+      fi
     fi
   else
     log "  ✗ Runtime Traefik LB IP not assigned yet — wildcard A record skipped (re-run when LB ready)"
