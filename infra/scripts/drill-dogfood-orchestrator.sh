@@ -94,7 +94,9 @@ drill_skill_init_audit "dogfood-drill"
 
 if [[ "$DRY_RUN" == "true" ]]; then
   drill_skill_log "DRY_RUN=true — would execute 7 CLI journeys (login/create/init/deploy/scale/rollback/delete) + 5 invariants"
-  for j in J01 J02 J03 J04 J05 J06 J07 J08 J09 J10 J11 J12; do
+  for j in "J01 API health (curl)" "J02 loopzero login" "J03 loopzero project create" \
+           "J04 loopzero deploy + Prova de Vida" "J05 loopzero scale" "J06 loopzero rollback" \
+           "J07 loopzero project delete + Prova de Morte"; do
     drill_skill_log "  [DRY] $j"
   done
   exit 0
