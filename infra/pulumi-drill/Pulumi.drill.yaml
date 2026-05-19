@@ -16,11 +16,11 @@ config:
   loopzero-drill:mgmtNodeCount: "3"
   # === Build cluster (small per D2) ===
   loopzero-drill:buildK8sVersion: 1.33.9-do.6
-  loopzero-drill:buildNodeSize: s-2vcpu-4gb
+  loopzero-drill:buildNodeSize: s-2vcpu-4gb-amd
   loopzero-drill:buildNodeCount: "2"
   # === Runtime + Runtime-2 clusters (small per D2; cell mapping per D3) ===
   loopzero-drill:runtimeK8sVersion: 1.33.9-do.6
-  loopzero-drill:runtimeNodeSize: s-2vcpu-4gb
+  loopzero-drill:runtimeNodeSize: s-2vcpu-4gb-amd
   loopzero-drill:runtimeNodeCount: "2"
   # === Secrets (drill-scoped per D7) ===
   loopzero-drill:cfAccountId:
