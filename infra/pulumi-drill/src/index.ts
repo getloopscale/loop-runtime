@@ -232,7 +232,7 @@ const drillPG = new digitalocean.DatabaseCluster("drill-pg", {
   name: `${doProject}-pg`,
   engine: "pg",
   version: "16",
-  size: "db-s-2vcpu-4gb", // mgmt-tier per D4 (was db-s-1vcpu-1gb single-cluster legacy)
+  size: "db-amd-2vcpu-4gb", // mgmt-tier per D4 (Bug #26 2026-05-19: AMD variant; sfo3 db-s-2vcpu-4gb capacity exhausted during marathon)
   region,
   nodeCount: 1,
   privateNetworkUuid: drillVpc.id,
