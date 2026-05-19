@@ -1030,6 +1030,24 @@ log "Bug #46+#54 fix: restart loopzero-api to reload env vars..."
 kubectl -n loopzero-system rollout restart deployment/loopzero-api >/dev/null
 kubectl -n loopzero-system rollout status deployment/loopzero-api --timeout=180s 2>&1 | tail -2 | sed 's/^/  /'
 
+# T2.2 gate (plan 2026-05-19-drill-skills-rigor-restoration ADR D2):
+# verify JWT auth wiring end-to-end BEFORE Phase 5 cell wiring. Drift between
+# drill Hydra issuer and loopzero-api JWT_ISSUER would otherwise only surface as
+# 401 in dogfood-drill — too late, and historically masked by Bug #24 workaround.
+# shellcheck source=infra/scripts/lib/drill-jwt-gate.sh
+source "$(dirname "${BASH_SOURCE[0]}")/lib/drill-jwt-gate.sh"
+log "T2.2 gate: verifying JWT auth wiring end-to-end..."
+if ! verify_jwt_auth_e2e \
+    "${API_URL:-https://api.loopzero-drill.example}" \
+    "$(dirname "${BASH_SOURCE[0]}")/drill-mint-jwt.sh" \
+    "curl" \
+    "${SEED_TENANT_ID:-tn-e2etest}"; then
+  log "T2.2 gate FAIL — aborting bootstrap before Phase 5"
+  log "  diagnose: bash infra/scripts/drill-jwt-diagnose.sh"
+  exit 1
+fi
+log "  ✓ JWT auth gate PASS"
+
 # Restart 4 split operators to pick up env changes
 log "Bug #57+#60 fix: restart operators to reload env + token..."
 for OP in loopzero-tenant-operator loopzero-app-operator loopzero-preview-operator loopzero-platform-operator; do

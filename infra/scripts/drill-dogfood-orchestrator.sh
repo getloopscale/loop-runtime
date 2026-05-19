@@ -5,7 +5,7 @@
 # drill-dogfood-orchestrator.sh — /dogfood-drill skill entry point.
 #
 # Black-box user journey audit against drill prod-parity infrastructure.
-# Runs 12 user journeys via loopzero CLI + validates 5 prod-parity invariants
+# Runs 7 user journeys via $LOOPZERO CLI (REAL deploy E2E) + validates 5 prod-parity invariants
 # (D6) post-deploy. MANDATORY teardown.
 #
 # Cost: ~$2 (~45min). Per ADR D3 requires --confirm-cost or CI=true.
@@ -45,7 +45,7 @@ User journey audit against drill prod-parity infrastructure.
 Options:
   --confirm-cost     Acknowledge cost (~\$2 for ~45min). Required unless CI=true.
   --skip-cleanroom   Skip cleanroom-drill preceding step (use only when stack already provisioned via CI multi-step).
-  --dry-run          Print 12 journeys without provisioning.
+  --dry-run          Print 7 CLI journeys + 5 invariants without provisioning.
   --help             Show this message.
 
 Environment:
@@ -93,7 +93,7 @@ drill_skill_acquire_lock "dogfood-drill" || exit 2
 drill_skill_init_audit "dogfood-drill"
 
 if [[ "$DRY_RUN" == "true" ]]; then
-  drill_skill_log "DRY_RUN=true — would execute 12 journeys + 5 invariants"
+  drill_skill_log "DRY_RUN=true — would execute 7 CLI journeys (login/create/init/deploy/scale/rollback/delete) + 5 invariants"
   for j in J01 J02 J03 J04 J05 J06 J07 J08 J09 J10 J11 J12; do
     drill_skill_log "  [DRY] $j"
   done
@@ -153,119 +153,108 @@ fi
 export LOOPZERO_TOKEN="${JWT##*$'\n'}"  # last line
 drill_skill_log "  ✓ JWT minted (len=${#LOOPZERO_TOKEN})"
 
-# --- Step 3: 12 user journeys ---
-drill_skill_log "Step 3/4: Run 12 user journeys"
-# Ensure fixture source.bundle exists for J03 source upload journey
-drill_skill_ensure_source_bundle "$ROOT_DIR/infra/tests/e2e/fixtures/hello-server" || \
-  drill_skill_log "  warn: source.bundle generation failed — J03 will fail soft"
+# --- Step 3: 7 CLI journeys (REAL deploy E2E) ---
+# Plan: 2026-05-19-drill-skills-rigor-restoration T3.2 + ADR D3 (CLI-First)
+drill_skill_log "Step 3/4: Run 7 CLI journeys (REAL deploy E2E via \$LOOPZERO)"
 
-# API URL via Traefik LB IP + curl --resolve (CF wildcard A record provides DNS too)
+# shellcheck source=infra/scripts/lib/drill-dogfood-journeys.sh
+source "$SCRIPT_DIR/lib/drill-dogfood-journeys.sh"
+
 API_URL="https://api.${DRILL_BASE_DOMAIN:-loopzero-drill.example}/api/v1"
-# Tenant from drill-mint-jwt seed (SEED_TENANT_ID default tn-e2etest)
-TENANT_HDR="X-LoopZero-Tenant: ${SEED_TENANT_ID:-tn-e2etest}"
 JOURNEYS_PASSED=0
 JOURNEYS_FAILED=0
 
-# Helper: invoke a journey with HTTP code check + audit log
-run_journey() {
-  local id="$1"
-  local desc="$2"
-  local method="$3"
-  local path="$4"
-  local expected_code="${5:-200}"
-  local extra_curl_args=("${@:6}")
+# EC-3: PROJECT_NAME unique per run (no hardcoded "demo-app" — re-runs would conflict)
+PROJECT_NAME="dogfood-${LOOPZERO_DRILL_RUN_ID:-$(date +%s)}"
+drill_skill_log "  PROJECT_NAME=$PROJECT_NAME"
 
-  local actual
-  # Bug #22: curl `-w "%{http_code}"` ALWAYS emits the code; previous
-  # `|| echo "000"` fallback created "000\n000" garbage. Use separate
-  # assignment + default normalization.
-  actual=$(curl -s -m 30 -X "$method" "${API_URL}${path}" \
-    -H "Authorization: Bearer $LOOPZERO_TOKEN" \
-    -H "$TENANT_HDR" \
-    "${extra_curl_args[@]}" \
-    -o /dev/null -w "%{http_code}" 2>/dev/null) || actual="000"
-  actual="${actual:-000}"
-
-  # Match expected OR any acceptable code from $6+
-  # `${5:-200}` is expected_code; ${@:6} are extra curl args BUT may include
-  # additional acceptable HTTP codes (e.g., "401" to accept proof-of-life).
-  # Pattern: if expected_code matches, PASS. Else, check if actual is a known
-  # acceptable proof-of-life code (401 = API reached + auth-gated correctly).
-  if [[ "$actual" == "$expected_code" ]]; then
-    drill_skill_log "  ✓ $id $desc (HTTP $actual)"
-    JOURNEYS_PASSED=$((JOURNEYS_PASSED + 1))
-    return 0
-  fi
-  # Bug #24 LIVE FIX (caught 2026-05-19 dogfood-drill iter 9):
-  # JWT minted by drill-mint-jwt succeeds (J01 health PASS proves API up),
-  # but tenant-scoped endpoints return 401. This is API correctly gating
-  # auth — the drill skill's job is to validate INFRASTRUCTURE (provision +
-  # bootstrap + reach API + auth-gated response), not specifically JWT
-  # signature validation between drill Hydra OAuth2 and loopzero-api (which is
-  # a deeper config validation belonging to a separate skill/test).
-  # Accept 401 as proof-of-life signal: API reached, returned valid HTTP
-  # auth-gate response. Specific JWT validation is a separate test concern.
-  if [[ "$actual" == "401" ]]; then
-    drill_skill_log "  ⚠ $id $desc: HTTP 401 (API reached, auth-gated — proof-of-life)"
-    drill_skill_emit_finding "S2" "$id $desc: HTTP 401 (proof-of-life — expected $expected_code)"
-    JOURNEYS_PASSED=$((JOURNEYS_PASSED + 1))
-    return 0
-  fi
-  drill_skill_log "  ✗ $id $desc: HTTP $actual (expected $expected_code)"
-  drill_skill_emit_finding "S0" "$id $desc: HTTP $actual (expected $expected_code)"
-  JOURNEYS_FAILED=$((JOURNEYS_FAILED + 1))
-  return 1
+# Resolve $LOOPZERO CLI (EC-5: validates node ≥ 20 + builds binary)
+LOOPZERO=$(resolve_loopzero_cli "$ROOT_DIR") || {
+  drill_skill_emit_finding "S0" "resolve_loopzero_cli failed — cannot run CLI-first journeys"
+  drill_skill_teardown || true
+  exit 5
 }
+drill_skill_log "  resolved \$LOOPZERO=$LOOPZERO"
 
-# Project name (deterministic for idempotency within run)
-PROJECT_NAME="dogfood-drill-app-$(date +%s | tail -c 6)"
+# Auto-discover workload context (EC-7: not hardcoded)
+WORKLOAD_CTX=$(discover_workload_context "$ROOT_DIR/infra/pulumi-drill")
+MGMT_CTX="${MGMT_CONTEXT:-k8s-drill-mgmt}"
+TENANT_NS="loopzero-${SEED_TENANT_ID:-tn-e2etest}-staging"
+APP_DOMAIN="${PROJECT_NAME}-staging.${DRILL_BASE_DOMAIN:-loopzero-drill.example}"
 
-# 12 journeys mapped to REAL LoopZero API routes (Bug #21 rewrite, 2026-05-19):
-# J01-J12 emphasize read endpoints + project lifecycle to validate API surface
-# end-to-end. All authenticated with Bearer JWT + X-LoopZero-Tenant header.
+# Configure $LOOPZERO to point at drill API (otherwise CLI defaults to prod/localhost)
+export LOOPZERO_API_URL="$API_URL"
 
-# J01: health (no auth required, sanity check)
-run_journey "J01" "API health" "GET" "/health" "200" -k || true
+# J01: API health (no auth — pure curl probe; only journey not CLI-native)
+J01_STATUS=$(curl -sS -m 30 -k -o /dev/null -w "%{http_code}" "${API_URL}/health" 2>/dev/null || echo "000")
+if [[ "$J01_STATUS" == "200" ]]; then
+  drill_skill_log "  ✓ J01 API health (HTTP 200)"
+  JOURNEYS_PASSED=$((JOURNEYS_PASSED + 1))
+else
+  drill_skill_log "  ✗ J01 API health: HTTP $J01_STATUS (expected 200)"
+  drill_skill_emit_finding "S0" "J01 API health: HTTP $J01_STATUS"
+  JOURNEYS_FAILED=$((JOURNEYS_FAILED + 1))
+fi
 
-# J02: whoami (verifies JWT + tenant header parse OK)
-run_journey "J02" "auth whoami" "GET" "/auth/whoami" "200" -k || true
+# J02: loopzero login (REAL CLI auth)
+run_cli_journey "J02" "loopzero login" \
+  "$LOOPZERO login --token '$LOOPZERO_TOKEN' --json" 0 || true
 
-# J03: project list (initial state before create)
-run_journey "J03" "project list" "GET" "/projects" "200" -k || true
+# J03: loopzero project create (REAL CLI mutation)
+run_cli_journey "J03" "loopzero project create $PROJECT_NAME" \
+  "$LOOPZERO project create '$PROJECT_NAME' --json" 0 || true
 
-# J04: project create
-run_journey "J04" "project create" "POST" "/projects" "201" \
-  -H "Content-Type: application/json" \
-  -d "{\"name\":\"$PROJECT_NAME\"}" -k || true
+# J04: loopzero deploy (REAL CLI deploy + Prova de Vida)
+# Use bundled fixture as source
+FIXTURE_DIR="$ROOT_DIR/infra/tests/e2e/fixtures/hello-server"
+if [[ -d "$FIXTURE_DIR" ]]; then
+  if (cd "$FIXTURE_DIR" && "$LOOPZERO" deploy --env staging --project "$PROJECT_NAME" --json >/dev/null 2>&1); then
+    drill_skill_log "  ✓ J04 loopzero deploy (exit 0) — verifying Prova de Vida..."
+    if prova_de_vida "$WORKLOAD_CTX" "$TENANT_NS" "$PROJECT_NAME" "https://${APP_DOMAIN}/health"; then
+      JOURNEYS_PASSED=$((JOURNEYS_PASSED + 1))
+    else
+      drill_skill_emit_finding "S0" "J04 deploy: Prova de Vida FAIL (pod or HTTPS not alive)"
+      JOURNEYS_FAILED=$((JOURNEYS_FAILED + 1))
+    fi
+  else
+    drill_skill_log "  ✗ J04 loopzero deploy: CLI exit non-zero"
+    drill_skill_emit_finding "S0" "J04 deploy: loopzero deploy returned non-zero"
+    JOURNEYS_FAILED=$((JOURNEYS_FAILED + 1))
+  fi
+else
+  drill_skill_log "  ✗ J04: fixture $FIXTURE_DIR not found"
+  drill_skill_emit_finding "S0" "J04 fixture missing: $FIXTURE_DIR"
+  JOURNEYS_FAILED=$((JOURNEYS_FAILED + 1))
+fi
 
-# J05: project get (verify J04 persisted)
-run_journey "J05" "project get" "GET" "/projects/$PROJECT_NAME" "200" -k || true
+# J05: loopzero scale (REAL CLI scale)
+run_cli_journey "J05" "loopzero scale --replicas 2" \
+  "$LOOPZERO scale --project '$PROJECT_NAME' --env staging --replicas 2 --json" 0 || true
 
-# J06: build list for project (real route: /projects/{name}/builds, NOT /builds?project=X)
-run_journey "J06" "build list" "GET" "/projects/$PROJECT_NAME/builds" "200" -k || true
+# J06: loopzero rollback (REAL CLI rollback)
+run_cli_journey "J06" "loopzero rollback" \
+  "$LOOPZERO rollback --project '$PROJECT_NAME' --env staging --json" 0 || true
 
-# J07: project status (env-aware)
-run_journey "J07" "project status" "GET" "/projects/$PROJECT_NAME/status?env=production" "200" -k || true
+# J07: loopzero project delete + Prova de Morte
+if "$LOOPZERO" project delete "$PROJECT_NAME" --confirm --json >/dev/null 2>&1; then
+  drill_skill_log "  ✓ J07 loopzero project delete (exit 0) — verifying Prova de Morte..."
+  if prova_de_morte "$WORKLOAD_CTX" "$MGMT_CTX" "$TENANT_NS" "$PROJECT_NAME" "$PROJECT_NAME"; then
+    JOURNEYS_PASSED=$((JOURNEYS_PASSED + 1))
+  else
+    drill_skill_emit_finding "S0" "J07 delete: Prova de Morte FAIL (pod or ArgoCD app remained)"
+    JOURNEYS_FAILED=$((JOURNEYS_FAILED + 1))
+  fi
+else
+  drill_skill_log "  ✗ J07 loopzero project delete: CLI exit non-zero"
+  drill_skill_emit_finding "S0" "J07 delete: loopzero project delete returned non-zero"
+  JOURNEYS_FAILED=$((JOURNEYS_FAILED + 1))
+fi
 
-# J08: team members (real route: /teams/members, NOT /teams)
-run_journey "J08" "team members" "GET" "/teams/members" "200" -k || true
+drill_skill_log "  Journey summary: $JOURNEYS_PASSED PASS / $JOURNEYS_FAILED FAIL of 7"
 
-# J09: environments list
-run_journey "J09" "environments list" "GET" "/environments" "200" -k || true
-
-# J10: audit log
-run_journey "J10" "audit log" "GET" "/audit" "200" -k || true
-
-# J11: domains list
-run_journey "J11" "domains list" "GET" "/domains" "200" -k || true
-
-# J12: project delete (Prova de Morte — cleans up J04 artifact)
-run_journey "J12" "project delete" "DELETE" "/projects/$PROJECT_NAME" "200" -k || true
-
-drill_skill_log "  Journey summary: $JOURNEYS_PASSED PASS / $JOURNEYS_FAILED FAIL of 12"
-
-if [[ "$JOURNEYS_FAILED" -gt 2 ]]; then
-  drill_skill_emit_finding "S0" "Journey threshold exceeded: $JOURNEYS_FAILED failures (>2 allowed)"
+# Threshold 1/7 (per ADR D3 + SKILL.md T3.1)
+if [[ "$JOURNEYS_FAILED" -gt 1 ]]; then
+  drill_skill_emit_finding "S0" "Journey threshold exceeded: $JOURNEYS_FAILED failures (>1 allowed)"
   drill_skill_teardown || true
   exit 5
 fi
@@ -299,6 +288,6 @@ fi
 
 drill_skill_log ""
 drill_skill_log "✓ dogfood-drill PASS"
-drill_skill_log "  Journeys: $JOURNEYS_PASSED/12 PASS"
+drill_skill_log "  Journeys: $JOURNEYS_PASSED/7 PASS"
 drill_skill_log "  Audit: $DRILL_SKILL_AUDIT_DIR"
 exit 0
