@@ -653,10 +653,15 @@ fi
 # (loopzero-api pod has migrate binary baked in) BEFORE drill-mint-jwt seed.
 log "Bug #43 fix: running DB migrations against drill mgmt PG..."
 export KUBECONFIG="$DRILL_KUBECONFIG_DIR/mgmt.yaml"
+# Bug #18 LIVE FIX (caught 2026-05-19 chaos-drill iter 3): LOOPZERO_API_DSN_VAL is
+# CLEARED at line 233 (`LOOPZERO_API_DSN_VAL=""` defense-in-depth). Use the
+# exported $LOOPZERO_API_DSN (line 231) which preserves the DSN through scope.
+# Without this fix, PG_PASS was parsed from empty string → empty → migrate
+# tried to auth doadmin with empty password → pq: password auth failed.
 PG_HOST="$PG_HOST_VAL" \
 PG_PORT="$PG_PORT_VAL" \
 PG_USER=doadmin \
-PG_PASS=$(echo "$LOOPZERO_API_DSN_VAL" | sed -E 's|^postgres(ql)?://[^:]+:([^@]+)@.*$|\2|') \
+PG_PASS=$(echo "$LOOPZERO_API_DSN" | sed -E 's|^postgres(ql)?://[^:]+:([^@]+)@.*$|\2|') \
 PG_DB=loopzero \
 PG_SSLMODE=require \
 DRILL_KUBECONFIG="$DRILL_KUBECONFIG_DIR/mgmt.yaml" \
@@ -984,7 +989,9 @@ fi
 # Reconcile loops won't start without leader → builds get reaper-failed.
 # Heal: terminate any backend holding the leader lock before final restart.
 log "Bug #69 fix: terminate stale leader-election pg_advisory_lock holders..."
-PG_PASS_VAL=$(echo "$LOOPZERO_API_DSN_VAL" | sed -E 's|^postgres(ql)?://[^:]+:([^@]+)@.*$|\2|')
+# Bug #18 LIVE FIX (caught 2026-05-19): use $LOOPZERO_API_DSN (exported) not
+# $LOOPZERO_API_DSN_VAL (cleared at line 233 for defense-in-depth).
+PG_PASS_VAL=$(echo "$LOOPZERO_API_DSN" | sed -E 's|^postgres(ql)?://[^:]+:([^@]+)@.*$|\2|')
 KILL_LOCK_POD="drill-kill-lock-$RANDOM"
 kubectl -n loopzero-system run "$KILL_LOCK_POD" --restart=Never --image=postgres:16-alpine --quiet \
   --env="PGPASSWORD=$PG_PASS_VAL" --env="PGSSLMODE=require" --command -- \
