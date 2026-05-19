@@ -267,15 +267,48 @@ func (d *ProjectDeleter) deleteEnvironment(ctx context.Context, req domain.Proje
 	if d.sync != nil {
 		// Trigger ArgoCD sync with prune to remove K8s resources after gitops manifests
 		// were deleted. Without this, manual-sync ArgoCD won't detect the removal.
+		//
+		// Plan 2026-05-19-drill-skills-rigor-restoration Bug D fix:
+		// Previously this was `slog.Warn` (silent degradation) — caller received 200 OK
+		// even when sync failed (e.g., DEPLOY_SERVICE_AUTH_FAILED), leaving zombie K8s
+		// resources that drove ongoing infra bill until manual cleanup. Per CLAUDE.md
+		// "gitops.Remove failure is FATAL" principle: sync failure is equally FATAL
+		// because manifests-removed-from-Git + resources-still-running is identically
+		// broken state (ArgoCD detect drift, can't reconcile).
+		//
+		// Fix: 3-attempt exponential backoff (1s/3s/9s ≈ 13s total) to ride out
+		// transient auth/network blips; if still failing, return error → caller emits
+		// 5xx + user sees "delete partially failed, retry".
 		argoAppName := req.TenantID + "-" + env
 		syncCtx, syncCancel := context.WithTimeout(ctx, 30*time.Second)
 		defer syncCancel()
-		if syncErr := d.sync.TriggerSync(syncCtx, argoAppName); syncErr != nil {
-			slog.Warn("argocd sync after delete failed (resources may remain until next manual sync)",
-				"app", argoAppName, "error", syncErr)
-		} else {
-			slog.Info("argocd sync triggered after gitops remove",
-				"app", argoAppName, "project", req.ProjectName, "environment", env)
+
+		var lastErr error
+		for attempt := 1; attempt <= 3; attempt++ {
+			lastErr = d.sync.TriggerSync(syncCtx, argoAppName)
+			if lastErr == nil {
+				slog.Info("argocd sync triggered after gitops remove",
+					"app", argoAppName, "project", req.ProjectName, "environment", env,
+					"attempt", attempt)
+				break
+			}
+			slog.Warn("argocd sync attempt failed",
+				"app", argoAppName, "attempt", attempt, "error", lastErr)
+			if attempt < 3 {
+				backoff := time.Duration(1<<uint(attempt-1)) * 3 * time.Second // 3s, 6s
+				if attempt == 1 {
+					backoff = 1 * time.Second // 1s, 3s, 9s — fast first retry
+				}
+				select {
+				case <-syncCtx.Done():
+					lastErr = syncCtx.Err()
+				case <-time.After(backoff):
+				}
+			}
+		}
+		if lastErr != nil {
+			return cancelledBuilds, fmt.Errorf("project delete: argocd sync failed after 3 attempts for %s (gitops manifests removed but K8s resources remain — retry delete or sync ArgoCD app %s manually): %w",
+				argoAppName, argoAppName, lastErr)
 		}
 	}
 

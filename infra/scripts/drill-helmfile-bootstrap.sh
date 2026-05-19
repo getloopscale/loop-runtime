@@ -135,6 +135,16 @@ for cmd in helmfile kubectl pulumi; do
   fi
 done
 
+# Plan 2026-05-19-drill-skills-rigor-restoration Bug C cleanup:
+# Export DOKS context names ANTES de Phase 3 helmfile sync. loopzero-api drill
+# overlay (values-loopzero-api-drill.yaml.gotmpl) consome via `requiredEnv` —
+# substitui kubectl-set-env workaround pós-sync (que era revertido a cada
+# re-sync). Names extraídos do current-context line dos kubeconfigs baixados.
+export MGMT_KUBE_CONTEXT=$(grep "current-context" "$DRILL_KUBECONFIG_DIR/mgmt.yaml" | awk '{print $2}')
+export BUILD_KUBE_CONTEXT=$(grep "current-context" "$DRILL_KUBECONFIG_DIR/build.yaml" | awk '{print $2}')
+export RUNTIME_KUBE_CONTEXT=$(grep "current-context" "$DRILL_KUBECONFIG_DIR/runtime.yaml" | awk '{print $2}')
+log "  ✓ Exported DOKS context names: mgmt=$MGMT_KUBE_CONTEXT build=$BUILD_KUBE_CONTEXT runtime=$RUNTIME_KUBE_CONTEXT"
+
 # --- Phase 1: Read Pulumi outputs ---
 log "Phase 1/4: Reading Pulumi outputs (v2 flat named exports)..."
 
@@ -483,14 +493,23 @@ log "  ✓ ConfigMaps loopzero-build-kubeconfig + loopzero-runtime-kubeconfig cr
 # DOCR documents officially. Uses DIGITALOCEAN_TOKEN as both username +
 # password (DO standard token-only auth).
 if [[ -n "${DIGITALOCEAN_TOKEN:-}" ]]; then
-  log "Bug #16 fix: re-creating loopzero-registry-pull Secret with DO token auth..."
-  kubectl create secret docker-registry loopzero-registry-pull \
-    --namespace loopzero-system \
-    --docker-server=registry.digitalocean.com \
-    --docker-username="$DIGITALOCEAN_TOKEN" \
-    --docker-password="$DIGITALOCEAN_TOKEN" \
-    --dry-run=client -o yaml | kubectl apply -f - >/dev/null
-  log "  ✓ loopzero-registry-pull Secret reconciled (docker-registry type, DO token auth)"
+  # Plan 2026-05-19-drill-skills-rigor-restoration Bug B fix:
+  # Operator (environment_rbac.go:170) lookup secret named "loopzero-system" em
+  # mgmt loopzero-system ns (source) — copia para tenant ns como "loopzero-system".
+  # Previous bootstrap only created "loopzero-registry-pull" → operator log
+  # "SourceMissing" silently → tenant pods ImagePullBackOff. Fix: criar
+  # AMBOS nomes (canonical "loopzero-system" for operator + legacy
+  # "loopzero-registry-pull" for Argo workflow + build pipeline).
+  log "Bug #16+B fix: re-creating loopzero-system + loopzero-registry-pull Secrets (DO token auth)..."
+  for SECRET_NAME in loopzero-system loopzero-registry-pull; do
+    kubectl create secret docker-registry "$SECRET_NAME" \
+      --namespace loopzero-system \
+      --docker-server=registry.digitalocean.com \
+      --docker-username="$DIGITALOCEAN_TOKEN" \
+      --docker-password="$DIGITALOCEAN_TOKEN" \
+      --dry-run=client -o yaml | kubectl apply -f - >/dev/null
+  done
+  log "  ✓ loopzero-system + loopzero-registry-pull Secrets reconciled (docker-registry, DO token auth)"
 else
   log "ERROR: DIGITALOCEAN_TOKEN missing — cannot create loopzero-registry-pull"
   exit 2
@@ -778,15 +797,11 @@ kubectl -n loopzero-system create secret generic loopzero-cluster-kubeconfigs \
   --from-file=runtime.kubeconfig="$DRILL_KUBECONFIG_DIR/runtime.yaml" \
   --from-file=runtime-2.kubeconfig="$DRILL_KUBECONFIG_DIR/runtime-2.yaml" \
   --dry-run=client -o yaml | kubectl apply -f - >/dev/null
-# Set context names to actual DOKS context names
-MGMT_CTX=$(grep "current-context" "$DRILL_KUBECONFIG_DIR/mgmt.yaml" | awk '{print $2}')
-BUILD_CTX=$(grep "current-context" "$DRILL_KUBECONFIG_DIR/build.yaml" | awk '{print $2}')
-RUNTIME_CTX=$(grep "current-context" "$DRILL_KUBECONFIG_DIR/runtime.yaml" | awk '{print $2}')
-kubectl -n loopzero-system set env deployment/loopzero-api \
-  MGMT_KUBE_CONTEXT="$MGMT_CTX" \
-  BUILD_KUBE_CONTEXT="$BUILD_CTX" \
-  RUNTIME_KUBE_CONTEXT="$RUNTIME_CTX" >/dev/null
-log "  ✓ Real kubeconfigs mounted + KUBE_CONTEXT env set to DOKS context names"
+# Plan 2026-05-19-drill-skills-rigor-restoration Bug C cleanup:
+# REMOVED kubectl-set-env workaround (lines 790-797 pre-fix). MGMT/BUILD/
+# RUNTIME_KUBE_CONTEXT env vars são agora exportadas em Phase 0 pre-flight
+# e consumidas pelo Helm chart via .Values.kubeContexts (sobrevive re-sync).
+log "  ✓ Real kubeconfigs mounted (context names provided to chart via export at Phase 0)"
 
 # Bug #60 LIVE FIX (caught 2026-05-18 iter 44): operator Secrets have dual
 # GITEA_TOKEN keys (upper + camel) — both must hold the registered token.
@@ -915,16 +930,28 @@ fi
 # Bug #81 LIVE FIX (caught 2026-05-18 iter 53): runtime cluster needs
 # letsencrypt-prod ClusterIssuer with CF DNS-01 — loopzero-api manifests reference
 # this issuer for tenant TLS. Without it certs stay Failed → HTTPS unusable.
-log "Bug #81 fix: letsencrypt-prod ClusterIssuer (CF DNS-01) on runtime cluster..."
+#
+# Plan 2026-05-19-drill-skills-rigor-restoration Bug A fix:
+# Previous code only applied to runtime clusters — MGMT was MISSING. loopzero-api
+# Certificate (api.loopzero-drill.example) lives in mgmt cluster loopzero-system ns;
+# without ClusterIssuer there, cert stuck "DoesNotExist" 93min during LIVE
+# Phase 4 (TRAEFIK DEFAULT CERT self-signed detected via curl). Loop now
+# includes mgmt explicitly. Also unified secret name to `cloudflare-api-token-secret`
+# (matches infra/manifests/cluster-issuers/letsencrypt-{staging,prod}.yaml).
+log "Bug #81+A fix: letsencrypt-prod ClusterIssuer (CF DNS-01) on mgmt + runtime clusters..."
 CF_TOKEN_VAL=$(awk -F= '/^CLOUDFLARE_API_TOKEN=/{print $2}' .env 2>/dev/null || echo "${CLOUDFLARE_API_TOKEN:-}")
 if [[ -n "$CF_TOKEN_VAL" ]]; then
-  for RC in runtime runtime-2; do
+  for RC in mgmt runtime runtime-2; do
     KC="$DRILL_KUBECONFIG_DIR/$RC.yaml"
     [[ -f "$KC" ]] || continue
     KUBECONFIG="$KC" kubectl create namespace cert-manager --dry-run=client -o yaml | KUBECONFIG="$KC" kubectl apply -f - >/dev/null 2>&1
-    KUBECONFIG="$KC" kubectl -n cert-manager create secret generic cloudflare-api-token \
-      --from-literal=api-token="$CF_TOKEN_VAL" \
-      --dry-run=client -o yaml | KUBECONFIG="$KC" kubectl apply -f - >/dev/null
+    # Both secret names (legacy `cloudflare-api-token` for backward-compat +
+    # canonical `cloudflare-api-token-secret` matching infra/manifests/cluster-issuers/)
+    for SECRET_NAME in cloudflare-api-token cloudflare-api-token-secret; do
+      KUBECONFIG="$KC" kubectl -n cert-manager create secret generic "$SECRET_NAME" \
+        --from-literal=api-token="$CF_TOKEN_VAL" \
+        --dry-run=client -o yaml | KUBECONFIG="$KC" kubectl apply -f - >/dev/null
+    done
     cat <<EOF_ISSUER | KUBECONFIG="$KC" kubectl apply -f - >/dev/null 2>&1
 apiVersion: cert-manager.io/v1
 kind: ClusterIssuer
@@ -940,14 +967,14 @@ spec:
       - dns01:
           cloudflare:
             apiTokenSecretRef:
-              name: cloudflare-api-token
+              name: cloudflare-api-token-secret
               key: api-token
         selector:
           dnsZones:
             - $DRILL_BASE_DOMAIN
 EOF_ISSUER
   done
-  log "  ✓ letsencrypt-prod ClusterIssuer + cloudflare-api-token on runtime clusters"
+  log "  ✓ letsencrypt-prod ClusterIssuer + CF token secret on mgmt + runtime clusters"
 else
   log "  ✗ CLOUDFLARE_API_TOKEN not set — letsencrypt-prod ClusterIssuer skipped"
 fi

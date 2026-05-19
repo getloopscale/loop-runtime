@@ -25,6 +25,10 @@ spec:
       selector:
         dnsZones:
         - loopzero.example
+        # Plan 2026-05-19-drill-skills-rigor-restoration Bug A fix:
+        # drill zone explicitly added — previous omission meant staging
+        # ClusterIssuer was useless against drill stack via DNS-01 solver.
+        - loopzero-drill.example
     - http01:
         ingress:
           class: traefik

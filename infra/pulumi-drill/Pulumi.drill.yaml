@@ -25,3 +25,7 @@ config:
   # === Secrets (drill-scoped per D7) ===
   loopzero-drill:cfAccountId:
     secure: v1:OX3Yr/J8t9G06xUf:H7mS42qEH5IQamBRkyQjilMIl5pGXAMW+2EzxrPLcTAfivVEf+aQuJB3BZoEaO4k
+  digitalocean:spacesAccessId:
+    secure: v1:07uHlgqRVXJhVRO1:GUYSa/gTrTi1wc+fd62hLOFFS/WddOXYtKyfjNW3vw03PCoF
+  digitalocean:spacesSecretKey:
+    secure: v1:I85huq/xxv4EN+58:v3qClteYtBx/2QXatVuID55hFRlg8LA/c/TgfSNQiYQFoq8qPtHxkwVSLlDQ2+6NkpwKp0sjeOWonbM=
