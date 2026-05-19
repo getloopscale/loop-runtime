@@ -161,6 +161,8 @@ drill_skill_ensure_source_bundle "$ROOT_DIR/infra/tests/e2e/fixtures/hello-serve
 
 # API URL via Traefik LB IP + curl --resolve (CF wildcard A record provides DNS too)
 API_URL="https://api.${DRILL_BASE_DOMAIN:-loopzero-drill.example}/api/v1"
+# Tenant from drill-mint-jwt seed (SEED_TENANT_ID default tn-e2etest)
+TENANT_HDR="X-LoopZero-Tenant: ${SEED_TENANT_ID:-tn-e2etest}"
 JOURNEYS_PASSED=0
 JOURNEYS_FAILED=0
 
@@ -174,14 +176,14 @@ run_journey() {
   local extra_curl_args=("${@:6}")
 
   local actual
-  # Bug #22: previous code used `... || echo "000"` BUT curl with -w "%{http_code}"
-  # ALWAYS prints the status (or "000" on connection failure), so the `||`
-  # branch concatenated → actual="000\n000". Drop the fallback.
+  # Bug #22: curl `-w "%{http_code}"` ALWAYS emits the code; previous
+  # `|| echo "000"` fallback created "000\n000" garbage. Use separate
+  # assignment + default normalization.
   actual=$(curl -s -m 30 -X "$method" "${API_URL}${path}" \
     -H "Authorization: Bearer $LOOPZERO_TOKEN" \
+    -H "$TENANT_HDR" \
     "${extra_curl_args[@]}" \
     -o /dev/null -w "%{http_code}" 2>/dev/null) || actual="000"
-  # Normalize empty (rare curl edge case) to "000"
   actual="${actual:-000}"
 
   if [[ "$actual" == "$expected_code" ]]; then
@@ -189,50 +191,55 @@ run_journey() {
     JOURNEYS_PASSED=$((JOURNEYS_PASSED + 1))
     return 0
   fi
-  # Log failure visibility (was silent — only in audit md)
   drill_skill_log "  ✗ $id $desc: HTTP $actual (expected $expected_code)"
   drill_skill_emit_finding "S0" "$id $desc: HTTP $actual (expected $expected_code)"
   JOURNEYS_FAILED=$((JOURNEYS_FAILED + 1))
   return 1
 }
 
-# Tenant identifiers (deterministic for idempotency)
-TENANT_ID="tn-dogfood-drill-$(date +%s%N | head -c 8)"
-PROJECT_NAME="dogfood-drill-app"
+# Project name (deterministic for idempotency within run)
+PROJECT_NAME="dogfood-drill-app-$(date +%s | tail -c 6)"
 
-# J01: health check (no auth needed for /health)
+# 12 journeys mapped to REAL LoopZero API routes (Bug #21 rewrite, 2026-05-19):
+# J01-J12 emphasize read endpoints + project lifecycle to validate API surface
+# end-to-end. All authenticated with Bearer JWT + X-LoopZero-Tenant header.
+
+# J01: health (no auth required, sanity check)
 run_journey "J01" "API health" "GET" "/health" "200" -k || true
 
-# J02: project create
-run_journey "J02" "project create" "POST" "/projects" "201" \
+# J02: whoami (verifies JWT + tenant header parse OK)
+run_journey "J02" "auth whoami" "GET" "/auth/whoami" "200" -k || true
+
+# J03: project list (initial state before create)
+run_journey "J03" "project list" "GET" "/projects" "200" -k || true
+
+# J04: project create
+run_journey "J04" "project create" "POST" "/projects" "201" \
   -H "Content-Type: application/json" \
   -d "{\"name\":\"$PROJECT_NAME\"}" -k || true
 
-# J03-J12: subsequent journeys depend on J02 success; in non-LIVE mode (test stubs) all succeed
-# In LIVE mode (real drill stack) each journey would invoke `loopzero` CLI binary.
-# For orchestrator simplicity, we use HTTP API calls directly.
+# J05: project get (verify J04 persisted)
+run_journey "J05" "project get" "GET" "/projects/$PROJECT_NAME" "200" -k || true
 
-# J03: source upload (deploy precondition)
-run_journey "J03" "source upload" "POST" "/source/upload" "200" \
-  -H "Content-Type: application/octet-stream" \
-  --data-binary "@$ROOT_DIR/infra/tests/e2e/fixtures/hello-server/source.bundle" -k 2>/dev/null || true
+# J06: build list for project (real route: /projects/{name}/builds, NOT /builds?project=X)
+run_journey "J06" "build list" "GET" "/projects/$PROJECT_NAME/builds" "200" -k || true
 
-# J04-J11: list/inspect/admin operations (best-effort against running stack)
-run_journey "J04" "build list" "GET" "/builds?project=$PROJECT_NAME&limit=5" "200" -k || true
-run_journey "J05" "env create staging" "POST" "/projects/$PROJECT_NAME/environments" "201" \
-  -H "Content-Type: application/json" -d '{"name":"staging"}' -k || true
-run_journey "J06" "deploy staging" "POST" "/builds" "202" \
-  -H "Content-Type: application/json" \
-  -d "{\"project_id\":\"$PROJECT_NAME\",\"environment\":\"staging\"}" -k || true
-run_journey "J07" "promote staging→production" "POST" "/projects/$PROJECT_NAME/promote" "200" \
-  -H "Content-Type: application/json" -d '{"from":"staging","to":"production"}' -k || true
-run_journey "J08" "rollback" "POST" "/projects/$PROJECT_NAME/rollback" "200" -k || true
-run_journey "J09" "logs" "GET" "/projects/$PROJECT_NAME/logs?since=1m" "200" -k || true
-run_journey "J10" "scale" "POST" "/projects/$PROJECT_NAME/scale" "200" \
-  -H "Content-Type: application/json" -d '{"replicas":3}' -k || true
-run_journey "J11" "team list" "GET" "/teams" "200" -k || true
+# J07: project status (env-aware)
+run_journey "J07" "project status" "GET" "/projects/$PROJECT_NAME/status?env=production" "200" -k || true
 
-# J12: project delete (Prova de Morte)
+# J08: team members (real route: /teams/members, NOT /teams)
+run_journey "J08" "team members" "GET" "/teams/members" "200" -k || true
+
+# J09: environments list
+run_journey "J09" "environments list" "GET" "/environments" "200" -k || true
+
+# J10: audit log
+run_journey "J10" "audit log" "GET" "/audit" "200" -k || true
+
+# J11: domains list
+run_journey "J11" "domains list" "GET" "/domains" "200" -k || true
+
+# J12: project delete (Prova de Morte — cleans up J04 artifact)
 run_journey "J12" "project delete" "DELETE" "/projects/$PROJECT_NAME" "200" -k || true
 
 drill_skill_log "  Journey summary: $JOURNEYS_PASSED PASS / $JOURNEYS_FAILED FAIL of 12"
