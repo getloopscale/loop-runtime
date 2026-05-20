@@ -94,10 +94,11 @@ hydra_mint_start_pf() {
 #   KUBECTL_CMD       — kubectl command prefix (e.g., "kubectl --context X")
 #   CLIENT_ID         — OAuth client_id
 #   CLIENT_SECRET     — OAuth client_secret
-#   SCOPE             — optional scope (default: empty for client_credentials)
-#   EXPIRES_IN        — optional expires_in seconds (default: 86400 / 24h)
+#   SCOPE             — optional scope (default: empty)
+#   AUDIENCE          — optional audience (default: empty; drill uses "loopzero-engine")
+#   MIN_JWT_TTL       — optional min TTL seconds (default: 0 disabled; drill EC-07 uses 7200)
 # Output: JWT to stdout
-# Exit: 0 success, 2 mint failure
+# Exit: 0 success, 2 mint failure, 4 JWT TTL too short (EC-07)
 mint_jwt() {
   hydra_mint_check_deps || return 1
 
@@ -111,6 +112,7 @@ mint_jwt() {
     -d "client_id=${CLIENT_ID}" \
     -d "client_secret=${CLIENT_SECRET}" \
     ${SCOPE:+-d "scope=${SCOPE}"} \
+    ${AUDIENCE:+-d "audience=${AUDIENCE}"} \
     2>&1) || {
     kill "$pf_pid" 2>/dev/null || true
     echo "[hydra-mint] ERROR: curl failed: $token_resp" >&2
@@ -130,6 +132,25 @@ mint_jwt() {
   if [[ -z "$jwt" ]]; then
     echo "[hydra-mint] ERROR: empty JWT (token_resp: $token_resp)" >&2
     return 2
+  fi
+
+  # EC-07 TTL validation (drill must have JWT TTL >= 2h to cover L3 60min spec)
+  if [[ -n "${MIN_JWT_TTL:-}" && "$MIN_JWT_TTL" -gt 0 ]]; then
+    local payload_b64
+    payload_b64=$(echo "$jwt" | cut -d. -f2)
+    case $((${#payload_b64} % 4)) in
+      2) payload_b64="${payload_b64}==" ;;
+      3) payload_b64="${payload_b64}=" ;;
+    esac
+    local payload_json exp iat ttl
+    payload_json=$(echo "$payload_b64" | tr '_-' '/+' | base64 -d 2>/dev/null || true)
+    exp=$(echo "$payload_json" | python3 -c 'import sys,json; print(json.load(sys.stdin).get("exp",0))' 2>/dev/null || echo 0)
+    iat=$(echo "$payload_json" | python3 -c 'import sys,json; print(json.load(sys.stdin).get("iat",0))' 2>/dev/null || echo 0)
+    ttl=$((exp - iat))
+    if [[ "$ttl" -lt "$MIN_JWT_TTL" ]]; then
+      echo "[hydra-mint] ERROR: JWT TTL ${ttl}s < min ${MIN_JWT_TTL}s (EC-07 fail)" >&2
+      return 4
+    fi
   fi
 
   echo "$jwt"
