@@ -54,9 +54,6 @@ EXEMPT_CHARTS=(
   # Each subsequent session should pick one off this list, add a schema
   # with TDD red coverage, and remove from this list.
 
-  # Smoke test chart (local-only). Lowest priority for schema.
-  "infra/helm/smoke-test"
-
 )
 
 is_exempt() {

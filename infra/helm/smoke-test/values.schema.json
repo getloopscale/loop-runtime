@@ -1,0 +1,65 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://loopzero.platform/schemas/smoke-test/values.schema.json",
+  "title": "smoke-test chart values schema",
+  "description": "Plan 2026-05-20 T2.5 ext — fail-fast on smoke-test config drift. Smoke test is a Job that asserts every Deployment/StatefulSet in declared namespaces is Ready + that critical endpoints respond. Misconfigured namespaces[] / endpoints[] = silent false-pass.",
+  "type": "object",
+  "properties": {
+    "image": {
+      "type": "object",
+      "required": ["repository", "tag"],
+      "properties": {
+        "repository": {
+          "type": "string",
+          "minLength": 1,
+          "pattern": "^[a-z0-9][a-z0-9.-]*(/[a-z0-9._-]+)*$",
+          "description": "Container image. B47 LIVE FIX: MUST bundle BOTH kubectl + curl (alpine/k8s default). bitnamilegacy/kubectl lacks curl = Phase 2 endpoint probes fail with 'command not found'."
+        },
+        "tag": {
+          "type": "string",
+          "minLength": 1,
+          "not": { "const": "latest" },
+          "description": "Pinned tag (e.g., '1.32.5'). Bare 'latest' rejected."
+        },
+        "pullPolicy": {
+          "type": "string",
+          "enum": ["Always", "IfNotPresent", "Never"]
+        }
+      }
+    },
+    "namespaces": {
+      "type": "array",
+      "minItems": 1,
+      "items": {
+        "type": "string",
+        "minLength": 1,
+        "pattern": "^[a-z0-9]([-a-z0-9]*[a-z0-9])?$",
+        "description": "K8s namespace name (RFC 1123 DNS label). Empty array = no Phase 1 check = silent false-pass."
+      },
+      "description": "Namespaces to scan for Deployment/StatefulSet readiness. At least one required."
+    },
+    "endpoints": {
+      "type": "array",
+      "minItems": 1,
+      "items": {
+        "type": "object",
+        "required": ["name", "url"],
+        "properties": {
+          "name": {
+            "type": "string",
+            "minLength": 1,
+            "description": "Human-readable endpoint identifier (used in test output)."
+          },
+          "url": {
+            "type": "string",
+            "pattern": "^https?://[a-z0-9][a-z0-9.-]*(:[0-9]+)?(/.*)?$",
+            "description": "Cluster-internal service URL (http://<svc>.<ns>.svc.cluster.local:<port>/path). Anchored pattern catches typo + uppercase hostnames + non-numeric ports."
+          }
+        }
+      },
+      "description": "HTTP endpoints to probe in Phase 2."
+    }
+  },
+  "required": ["image", "namespaces", "endpoints"],
+  "additionalProperties": true
+}

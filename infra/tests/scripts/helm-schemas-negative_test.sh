@@ -1071,6 +1071,47 @@ containerSecurityContext:
   capabilities: {drop: [ALL]}" \
   "static-assets INF-G08 — readOnlyRootFilesystem=false REJECTED"
 
+# --- smoke-test silent false-pass protection ---
+
+assert_rejects \
+  "infra/helm/smoke-test/values.schema.json" \
+  "image: {repository: alpine/k8s, tag: '1.32.5'}
+namespaces: []
+endpoints:
+  - {name: loopzero-api, url: 'http://loopzero-api.loopzero-system.svc.cluster.local:3001/health'}" \
+  "smoke-test — empty namespaces[] REJECTED (would silently false-pass Phase 1)"
+
+assert_rejects \
+  "infra/helm/smoke-test/values.schema.json" \
+  "image: {repository: alpine/k8s, tag: '1.32.5'}
+namespaces: [loopzero-system]
+endpoints: []" \
+  "smoke-test — empty endpoints[] REJECTED (would silently false-pass Phase 2)"
+
+assert_rejects \
+  "infra/helm/smoke-test/values.schema.json" \
+  "image: {repository: alpine/k8s, tag: '1.32.5'}
+namespaces: ['UPPER-NS']
+endpoints:
+  - {name: loopzero-api, url: 'http://loopzero-api.loopzero-system.svc.cluster.local:3001/health'}" \
+  "smoke-test — uppercase namespace REJECTED (RFC 1123)"
+
+assert_rejects \
+  "infra/helm/smoke-test/values.schema.json" \
+  "image: {repository: alpine/k8s, tag: '1.32.5'}
+namespaces: [loopzero-system]
+endpoints:
+  - {name: loopzero-api, url: 'ftp://loopzero-api.svc/health'}" \
+  "smoke-test — endpoint with non-http scheme REJECTED"
+
+assert_rejects \
+  "infra/helm/smoke-test/values.schema.json" \
+  "image: {repository: alpine/k8s, tag: latest}
+namespaces: [loopzero-system]
+endpoints:
+  - {name: loopzero-api, url: 'http://loopzero-api.svc/health'}" \
+  "smoke-test — image tag=latest REJECTED (Bug #16 pattern)"
+
 # --- Summary ---
 echo ""
 echo "Tests run:    $TESTS_RUN"
