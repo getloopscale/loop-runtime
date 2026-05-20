@@ -1,0 +1,34 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://loopzero.platform/schemas/network-policies/values.schema.json",
+  "title": "network-policies chart values schema",
+  "description": "Plan 2026-05-20 T2.5 ext — fail-fast on egress posture misconfiguration. Critical because T8.5b deep-review-remediation 3-layer rollout (defaultDenyEgress + loopzeroSystemAllowEgress + namespaces) requires precise toggles. Typo in boolean = silent egress allow/deny inversion = data leak OR DOS at deploy time.",
+  "type": "object",
+  "properties": {
+    "defaultDenyIngress": {
+      "type": "boolean",
+      "description": "When true, all inbound traffic to enforced namespaces is rejected unless explicitly allowed. Default: true (safe — egress is the more complex side)."
+    },
+    "defaultDenyEgress": {
+      "type": "boolean",
+      "description": "When true, ALL outbound from enforced namespaces is rejected unless allowed by loopzeroSystemAllowEgress rules. Default: false (T8.5c staging soak gate). Apply order per edge-case review: loopzeroSystemAllowEgress first, then defaultDenyEgress."
+    },
+    "loopzeroSystemAllowEgress": {
+      "type": "boolean",
+      "description": "When true, per-component allow-egress NetworkPolicies are installed. SAFE to enable independently — additive to namespace without default-deny is no-op. MUST be true before defaultDenyEgress=true."
+    },
+    "namespaces": {
+      "type": "array",
+      "minItems": 1,
+      "items": {
+        "type": "string",
+        "minLength": 1,
+        "pattern": "^[a-z0-9]([-a-z0-9]*[a-z0-9])?$",
+        "description": "K8s namespace name — RFC 1123 lowercase DNS label (1-63 chars, [a-z0-9-], no leading/trailing dash)."
+      },
+      "description": "Namespaces where these policies apply. At least one required (otherwise chart installs no resources)."
+    }
+  },
+  "required": ["defaultDenyIngress", "defaultDenyEgress", "loopzeroSystemAllowEgress", "namespaces"],
+  "additionalProperties": false
+}
