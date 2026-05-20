@@ -43,9 +43,9 @@ hydra:
       # override estes URLs em values-hydra-{drill,prod}.yaml.gotmpl com FQDN
       # público HTTPS (e.g., https://auth.loopzero-drill.example/login). Fix
       # documentado como follow-up gap (não bloqueia dogfood-drill).
-      login: "http://localhost:4455/login"
-      consent: "http://localhost:4455/consent"
-      logout: "http://localhost:4455/logout"
+      login: "{{ .Values.uiBaseUrl | default "http://localhost:4455" }}/login"
+      consent: "{{ .Values.uiBaseUrl | default "http://localhost:4455" }}/consent"
+      logout: "{{ .Values.uiBaseUrl | default "http://localhost:4455" }}/logout"
 
     # --- OAuth2 ---
     oauth2:
@@ -58,7 +58,7 @@ hydra:
           enabled: true
           allowed_origins:
             - "http://localhost:3000"
-            - "http://localhost:4455"
+            - "{{ .Values.uiBaseUrl | default "http://localhost:4455" }}"
           allowed_methods:
             - GET
             - POST

@@ -68,3 +68,6 @@ velero:
   bucket: velero-backups
   region: us-east-1
   s3Url: http://minio.loopzero-system.svc:9000
+
+# Plan v1.2 T2.3 / D4 — kratos+hydra UI base URL placeholder
+uiBaseUrl: "http://localhost:4455"

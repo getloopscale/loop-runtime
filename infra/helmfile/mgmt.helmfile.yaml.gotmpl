@@ -221,10 +221,9 @@ releases:
 {{- end }}
     values:
       - ../helm/gitea/values.yaml
-      # Phase 2 plan T3.3 (EC-3 fix): drill env DB connection override → managed PG
-      {{- if eq .Environment.Name "drill" }}
-      - values/drill/gitea.yaml.gotmpl
-      {{- end }}
+      # Layered values per env (Plan v1.2 T2.2 — auto-resolve eliminates inline drill conditional).
+      # Non-drill envs have empty stub files; drill overrides DB connection → managed PG.
+      - values/{{ .Environment.Name }}/gitea.yaml.gotmpl
       # B28 (CHG-2026-04-28-LAYERED-BOOTSTRAP) — Gitea HA (2 replicas + RWX
       # NFS) is a LoopZero Cloud production posture (CHG-002a). Self-hosting
       # standalone runs single-replica + RWO (no NFS kernel module dep,
@@ -298,10 +297,8 @@ releases:
       - ../helm/monitoring/values-prometheus.yaml
       # Iter 13 LIVE bug fix: drill env override disables alertmanager
       # (no Slack webhook + PagerDuty Secret in drill → CrashLoopBackOff).
-      # Empty override in non-drill envs (file conditional).
-      {{- if eq .Environment.Name "drill" }}
-      - values/drill/prometheus.yaml
-      {{- end }}
+      # Layered values per env (T2.2 — empty stub in non-drill envs).
+      - values/{{ .Environment.Name }}/prometheus.yaml.gotmpl
 
   - name: grafana
     namespace: monitoring
@@ -382,11 +379,9 @@ releases:
       - loopzero-system/postgresql
 {{- end }}
     values:
-      - ../helm/ory-kratos/values.yaml
-      # Phase 2 plan T3.1 (EC-3 fix): drill env DSN override → managed PG
-      {{- if eq .Environment.Name "drill" }}
-      - values/drill/ory-kratos.yaml.gotmpl
-      {{- end }}
+      - ../helm/ory-kratos/values.yaml.gotmpl
+      # Layered values per env (T2.2). Drill env DSN override → managed PG.
+      - values/{{ .Environment.Name }}/ory-kratos.yaml.gotmpl
 
   - name: ory-hydra
     namespace: loopzero-auth
@@ -395,11 +390,9 @@ releases:
     needs:
       - loopzero-auth/ory-kratos
     values:
-      - ../helm/ory-hydra/values.yaml
-      # Phase 2 plan T3.2 (EC-3 fix): drill env DSN override → managed PG
-      {{- if eq .Environment.Name "drill" }}
-      - values/drill/ory-hydra.yaml.gotmpl
-      {{- end }}
+      - ../helm/ory-hydra/values.yaml.gotmpl
+      # Layered values per env (T2.2). Drill env DSN override → managed PG.
+      - values/{{ .Environment.Name }}/ory-hydra.yaml.gotmpl
 
   # Wave 2: LoopZero platform
   - name: loopzero-api
@@ -420,9 +413,8 @@ releases:
       # Bug #16 LIVE fix (caught 2026-05-17 iter 7-8): drill env override
       # for loopzero-api image tag (DOCR :latest doesn't exist — pinned to
       # REDACTED_SECRET_061). MUST be LAST in values list to win merge precedence.
-{{- if eq .Environment.Name "drill" }}
-      - values/drill/loopzero-api.yaml.gotmpl
-{{- end }}
+      # Layered values per env (T2.2). Drill env JWT_ISSUER + cross-namespace JWKS URL.
+      - values/{{ .Environment.Name }}/loopzero-api.yaml.gotmpl
     set:
       # Finding 2026-05-12 — wire env-file `replicas.api` to chart
       # `replicaCount`. Before this, the env-file value was orphan config:
@@ -457,11 +449,8 @@ releases:
 {{- if eq (.Values | get "clusterRole" "dev") "standalone" }}
       - ../../charts/loopzero-tenant-operator/values-standalone-multi.yaml
 {{- end }}
-{{- if eq .Environment.Name "drill" }}
-      # Bug #23 LIVE fix (2026-05-17 iter 16): drill needs DOCR registry +
-      # imagePullSecrets to pull operator image from DigitalOcean.
-      - values/drill/loopzero-tenant-operator.yaml.gotmpl
-{{- end }}
+      # Layered values per env (T2.2). Drill: DOCR registry + imagePullSecrets (Bug #23 fix).
+      - values/{{ .Environment.Name }}/loopzero-tenant-operator.yaml.gotmpl
 
   - name: loopzero-app-operator
     namespace: loopzero-system
@@ -474,9 +463,8 @@ releases:
 {{- if eq (.Values | get "clusterRole" "dev") "standalone" }}
       - ../../charts/loopzero-app-operator/values-standalone-multi.yaml
 {{- end }}
-{{- if eq .Environment.Name "drill" }}
-      - values/drill/loopzero-app-operator.yaml.gotmpl
-{{- end }}
+      # Layered values per env (T2.2). Drill: DOCR registry + imagePullSecrets.
+      - values/{{ .Environment.Name }}/loopzero-app-operator.yaml.gotmpl
 
   - name: loopzero-preview-operator
     namespace: loopzero-system
@@ -489,9 +477,8 @@ releases:
 {{- if eq (.Values | get "clusterRole" "dev") "standalone" }}
       - ../../charts/loopzero-preview-operator/values-standalone-multi.yaml
 {{- end }}
-{{- if eq .Environment.Name "drill" }}
-      - values/drill/loopzero-preview-operator.yaml.gotmpl
-{{- end }}
+      # Layered values per env (T2.2). Drill: DOCR registry + imagePullSecrets.
+      - values/{{ .Environment.Name }}/loopzero-preview-operator.yaml.gotmpl
 
   - name: loopzero-platform-operator
     namespace: loopzero-system
@@ -504,9 +491,8 @@ releases:
 {{- if eq (.Values | get "clusterRole" "dev") "standalone" }}
       - ../../charts/loopzero-platform-operator/values-standalone-multi.yaml
 {{- end }}
-{{- if eq .Environment.Name "drill" }}
-      - values/drill/loopzero-platform-operator.yaml.gotmpl
-{{- end }}
+      # Layered values per env (T2.2). Drill: DOCR registry + imagePullSecrets.
+      - values/{{ .Environment.Name }}/loopzero-platform-operator.yaml.gotmpl
 
   - name: loopzero-cloud
     namespace: loopzero-system

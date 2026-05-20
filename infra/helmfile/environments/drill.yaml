@@ -135,3 +135,6 @@ velero:
 #   crossCluster.giteaApi: <mgmtCluster gitea endpoint>
 #   crossCluster.lokiGateway: <buildCluster loki endpoint>
 #   crossCluster.prometheusApi: <mgmtCluster prometheus endpoint>
+
+# Plan v1.2 T2.3 / D4 — kratos+hydra UI base URL placeholder (drill DOKS)
+uiBaseUrl: "https://app.loopzero-drill.example"

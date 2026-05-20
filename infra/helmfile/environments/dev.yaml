@@ -82,3 +82,6 @@ velero:
   bucket: loopzero-infra-sfo3-velero-backups
   region: sfo3
   s3Url: https://sfo3.digitaloceanspaces.com
+
+# Plan v1.2 T2.3 / D4 — kratos+hydra UI base URL placeholder
+uiBaseUrl: "http://localhost:4455"

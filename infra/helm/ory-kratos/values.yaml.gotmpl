@@ -22,7 +22,7 @@ kratos:
 
     # --- Self-Service Flows ---
     selfservice:
-      default_browser_return_url: "http://localhost:4455/"
+      default_browser_return_url: "{{ .Values.uiBaseUrl | default "http://localhost:4455" }}/"
 
       methods:
         password:
@@ -47,7 +47,7 @@ kratos:
           config:
             # Account linking: when a user signs in with a social provider and
             # the email already exists, link the accounts automatically.
-            base_redirect_uri: "http://localhost:4455/"
+            base_redirect_uri: "{{ .Values.uiBaseUrl | default "http://localhost:4455" }}/"
             providers:
               # GitHub OAuth — configured via Pulumi secrets in production.
               # LOCAL DEV: set GITHUB_CLIENT_ID and GITHUB_CLIENT_SECRET env vars,
@@ -72,7 +72,7 @@ kratos:
       flows:
         registration:
           enabled: true
-          ui_url: "http://localhost:4455/registration"
+          ui_url: "{{ .Values.uiBaseUrl | default "http://localhost:4455" }}/registration"
           after:
             password:
               hooks:
@@ -82,27 +82,27 @@ kratos:
                 - hook: session
 
         login:
-          ui_url: "http://localhost:4455/login"
+          ui_url: "{{ .Values.uiBaseUrl | default "http://localhost:4455" }}/login"
           # NOTE: login.after hooks are NOT supported in Kratos v26.
           # Kratos creates sessions automatically on successful login.
 
         verification:
           enabled: true
-          ui_url: "http://localhost:4455/verification"
+          ui_url: "{{ .Values.uiBaseUrl | default "http://localhost:4455" }}/verification"
 
         recovery:
           enabled: true
-          ui_url: "http://localhost:4455/recovery"
+          ui_url: "{{ .Values.uiBaseUrl | default "http://localhost:4455" }}/recovery"
 
         settings:
-          ui_url: "http://localhost:4455/settings"
+          ui_url: "{{ .Values.uiBaseUrl | default "http://localhost:4455" }}/settings"
 
         error:
-          ui_url: "http://localhost:4455/error"
+          ui_url: "{{ .Values.uiBaseUrl | default "http://localhost:4455" }}/error"
 
         logout:
           after:
-            default_browser_return_url: "http://localhost:4455/login"
+            default_browser_return_url: "{{ .Values.uiBaseUrl | default "http://localhost:4455" }}/login"
 
     # --- Security ---
     security:
