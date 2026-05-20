@@ -362,6 +362,129 @@ clusterImagePolicyKeyless:
   identityRegexp: '^https://github\\.com/getloopscale/loopzero/'" \
   "admission-policies — oidcIssuer garbage string REJECTED (pattern not format)"
 
+# --- ory-kratos uiBaseUrl pattern (EC-8 no trailing slash) ---
+
+assert_rejects \
+  "infra/helm/ory-kratos/values.schema.json" \
+  "kratos: {}" \
+  "ory-kratos — missing uiBaseUrl REJECTED (required field)"
+
+assert_rejects \
+  "infra/helm/ory-kratos/values.schema.json" \
+  "uiBaseUrl: 'http://localhost:4455/'" \
+  "ory-kratos — uiBaseUrl with trailing slash REJECTED (EC-8)"
+
+assert_rejects \
+  "infra/helm/ory-kratos/values.schema.json" \
+  "uiBaseUrl: 'not-a-url'" \
+  "ory-kratos — uiBaseUrl without scheme REJECTED"
+
+assert_rejects \
+  "infra/helm/ory-kratos/values.schema.json" \
+  "uiBaseUrl: 'ftp://example.com'" \
+  "ory-kratos — uiBaseUrl wrong scheme REJECTED (only http/https)"
+
+assert_rejects \
+  "infra/helm/ory-kratos/values.schema.json" \
+  "uiBaseUrl: 'https://app.loopzero-drill.example/login'" \
+  "ory-kratos — uiBaseUrl with path REJECTED (host-only per pattern)"
+
+# --- ory-hydra uiBaseUrl pattern (same constraint as kratos) ---
+
+assert_rejects \
+  "infra/helm/ory-hydra/values.schema.json" \
+  "hydra: {}" \
+  "ory-hydra — missing uiBaseUrl REJECTED (required field)"
+
+assert_rejects \
+  "infra/helm/ory-hydra/values.schema.json" \
+  "uiBaseUrl: 'http://localhost:4455/'" \
+  "ory-hydra — uiBaseUrl with trailing slash REJECTED (EC-8)"
+
+# --- loopzero-api image.tag + replicas constraints ---
+
+assert_rejects \
+  "infra/helm/loopzero-api/values.schema.json" \
+  "image:
+  repository: 'registry.digitalocean.com/loopzero-system/loopzero-api'
+  tag: ''
+kubeContexts:
+  mgmt: 'mgmt-ctx'
+  build: 'build-ctx'
+  runtime: 'runtime-ctx'" \
+  "loopzero-api — empty image.tag REJECTED (minLength=1)"
+
+assert_rejects \
+  "infra/helm/loopzero-api/values.schema.json" \
+  "image:
+  repository: 'registry.digitalocean.com/loopzero-system/loopzero-api'
+  tag: 'v1.0.0'
+kubeContexts:
+  mgmt: ''
+  build: 'build-ctx'
+  runtime: 'runtime-ctx'" \
+  "loopzero-api — empty kubeContexts.mgmt REJECTED (minLength=1)"
+
+assert_rejects \
+  "infra/helm/loopzero-api/values.schema.json" \
+  "image:
+  repository: 'registry.digitalocean.com/loopzero-system/loopzero-api'
+  tag: 'v1.0.0'
+replicas:
+  api: 0" \
+  "loopzero-api — replicas.api=0 REJECTED (minimum=1)"
+
+assert_rejects \
+  "infra/helm/loopzero-api/values.schema.json" \
+  "image:
+  repository: 'registry.digitalocean.com/loopzero-system/loopzero-api'
+  tag: 'v1.0.0'
+replicas:
+  api: -1" \
+  "loopzero-api — replicas.api negative REJECTED (minimum=1)"
+
+# --- OCI published loopzero-admission-policies (symmetric fix verification) ---
+# Per CLAUDE.md Helm Chart Dual System: 3 charts overlap (loopzero-api, loopzero-cloud,
+# loopzero-admission-policies). When patching one, patch the other. This block
+# verifies the symmetric fix to charts/loopzero-admission-policies/values.schema.json
+# (commit 52278ab9 fixed infra/helm version; this verifies OCI version).
+
+assert_rejects \
+  "charts/loopzero-admission-policies/values.schema.json" \
+  "clusterImagePolicyKeyless:
+  enabled: true
+  name: loopzero-keyless
+  fulcioURL: 'garbage-string'
+  rekorURL: https://rekor.sigstore.dev
+  oidcIssuer: https://token.actions.githubusercontent.com
+  imageGlobs: ['registry.digitalocean.com/loopzero-system/**']
+  identityRegexp: '^https://github\\.com/getloopscale/loopzero/'" \
+  "OCI loopzero-admission-policies — fulcioURL garbage REJECTED (symmetric fix)"
+
+assert_rejects \
+  "charts/loopzero-admission-policies/values.schema.json" \
+  "clusterImagePolicyKeyless:
+  enabled: true
+  name: loopzero-keyless
+  fulcioURL: https://fulcio.sigstore.dev
+  rekorURL: 'not-a-url'
+  oidcIssuer: https://token.actions.githubusercontent.com
+  imageGlobs: ['registry.digitalocean.com/loopzero-system/**']
+  identityRegexp: '^https://github\\.com/getloopscale/loopzero/'" \
+  "OCI loopzero-admission-policies — rekorURL garbage REJECTED (symmetric fix)"
+
+assert_rejects \
+  "charts/loopzero-admission-policies/values.schema.json" \
+  "clusterImagePolicyKeyless:
+  enabled: true
+  name: loopzero-keyless
+  fulcioURL: https://fulcio.sigstore.dev
+  rekorURL: https://rekor.sigstore.dev
+  oidcIssuer: 'plain-string'
+  imageGlobs: ['registry.digitalocean.com/loopzero-system/**']
+  identityRegexp: '^https://github\\.com/getloopscale/loopzero/'" \
+  "OCI loopzero-admission-policies — oidcIssuer garbage REJECTED (symmetric fix)"
+
 # --- Summary ---
 echo ""
 echo "Tests run:    $TESTS_RUN"

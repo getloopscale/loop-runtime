@@ -77,9 +77,21 @@
           "type": "array",
           "items": { "type": "string", "minLength": 1 }
         },
-        "fulcioURL": { "type": "string", "format": "uri" },
-        "rekorURL": { "type": "string", "format": "uri" },
-        "oidcIssuer": { "type": "string", "format": "uri" },
+        "fulcioURL": {
+          "type": "string",
+          "pattern": "^https?://[^\\s/$.?#].[^\\s]*$",
+          "description": "Fulcio URL. Pattern enforced (format:uri silently permissive — see infra/helm/admission-policies/values.schema.json 2026-05-20 finding)."
+        },
+        "rekorURL": {
+          "type": "string",
+          "pattern": "^https?://[^\\s/$.?#].[^\\s]*$",
+          "description": "Rekor URL. Pattern-based per format:uri bug class."
+        },
+        "oidcIssuer": {
+          "type": "string",
+          "pattern": "^https?://[^\\s/$.?#].[^\\s]*$",
+          "description": "OIDC issuer URL. Pattern-based per format:uri bug class."
+        },
         "identityRegexp": { "type": "string", "minLength": 1 }
       }
     },

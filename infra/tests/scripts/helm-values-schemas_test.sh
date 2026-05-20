@@ -54,17 +54,28 @@ if ! python3 -c "import jsonschema, yaml" 2>/dev/null; then
 fi
 
 # --- Discover all schemas ---
+# Covers BOTH chart systems (per CLAUDE.md Helm Chart Dual System):
+#   - infra/helm/ — bootstrap charts (consumed by Helmfile L2)
+#   - charts/    — published OCI charts (consumed by ArgoCD L3)
+# When patching schema in one, apply equivalent fix to the other per the
+# CLAUDE.md "patch one, patch other" guidance for the 3 overlapping
+# charts (loopzero-api, loopzero-cloud, loopzero-admission-policies).
 SCHEMAS=()
 while IFS= read -r schema; do
   SCHEMAS+=("$schema")
-done < <(find "$ROOT/infra/helm" -name "values.schema.json" -type f | sort)
+done < <(
+  {
+    find "$ROOT/infra/helm" -name "values.schema.json" -type f 2>/dev/null
+    find "$ROOT/charts" -name "values.schema.json" -type f 2>/dev/null
+  } | sort
+)
 
 if [[ ${#SCHEMAS[@]} -eq 0 ]]; then
-  log "ERROR: no values.schema.json found under infra/helm/"
+  log "ERROR: no values.schema.json found under infra/helm/ or charts/"
   exit 5
 fi
 
-log "Discovered ${#SCHEMAS[@]} chart schemas"
+log "Discovered ${#SCHEMAS[@]} chart schemas (infra/helm + charts/)"
 
 # --- Per-schema validation ---
 for schema in "${SCHEMAS[@]}"; do
@@ -79,30 +90,40 @@ for schema in "${SCHEMAS[@]}"; do
     continue
   fi
 
-  # Step 2: schema declares draft/2020-12 (project convention)
-  if ! python3 -c "
+  # Step 2: schema declares known draft (draft/2020-12 preferred, draft-07
+  #   acceptable for charts/ published charts that pre-date the convention).
+  draft=$(python3 -c "
 import json
 with open('$schema') as f:
     s = json.load(f)
 declared = s.get('\$schema', '')
-if 'draft/2020-12' not in declared:
-    print(f'expected draft/2020-12, got: {declared}')
-    exit(1)
-" 2>/dev/null; then
-    log "  [FAIL] $chart_name: schema does not declare draft/2020-12"
+if 'draft/2020-12' in declared:
+    print('2020-12')
+elif 'draft-07' in declared:
+    print('07')
+else:
+    print('unknown:' + declared)
+" 2>/dev/null)
+
+  if [[ "$draft" == "unknown:"* ]]; then
+    log "  [FAIL] $chart_name: schema does not declare known draft ($draft)"
     TESTS_FAILED=$((TESTS_FAILED + 1))
     continue
   fi
 
-  # Step 3: jsonschema library validates schema itself
+  # Step 3: jsonschema library validates schema itself per declared draft
   if ! python3 -c "
 import json
 import jsonschema
 with open('$schema') as f:
     s = json.load(f)
-jsonschema.Draft202012Validator.check_schema(s)
+draft = '$draft'
+if draft == '2020-12':
+    jsonschema.Draft202012Validator.check_schema(s)
+elif draft == '07':
+    jsonschema.Draft7Validator.check_schema(s)
 " 2>/dev/null; then
-    log "  [FAIL] $chart_name: jsonschema rejects schema as invalid draft/2020-12"
+    log "  [FAIL] $chart_name: jsonschema rejects schema as invalid draft-$draft"
     TESTS_FAILED=$((TESTS_FAILED + 1))
     continue
   fi
