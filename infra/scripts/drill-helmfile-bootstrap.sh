@@ -515,6 +515,22 @@ else
   exit 2
 fi
 
+# Plan 2026-05-19-drill-skills-rigor-restoration Bug #56 ordering fix:
+# loopzero-cluster-kubeconfigs Secret MUST be overridden with REAL DOKS kubeconfigs
+# BEFORE Phase 3 helm install loopzero-api (--wait blocks pod Ready). Otherwise
+# pods boot with synthetic "in-cluster" kubeconfig from generate-secrets.sh
+# (Phase 2.5) and crash with `context "do-sfo3-..." does not exist`. Bootstrap
+# stuck 15min during Phase 4 LIVE (commit 168922f2). Previous fix at line 793
+# was too late. Override here pre-empts.
+log "Bug #56 ordering fix: overriding loopzero-cluster-kubeconfigs Secret with REAL drill kubeconfigs PRE-Phase-3..."
+kubectl -n loopzero-system create secret generic loopzero-cluster-kubeconfigs \
+  --from-file=mgmt.kubeconfig="$DRILL_KUBECONFIG_DIR/mgmt.yaml" \
+  --from-file=build.kubeconfig="$DRILL_KUBECONFIG_DIR/build.yaml" \
+  --from-file=runtime.kubeconfig="$DRILL_KUBECONFIG_DIR/runtime.yaml" \
+  --from-file=runtime-2.kubeconfig="$DRILL_KUBECONFIG_DIR/runtime-2.yaml" \
+  --dry-run=client -o yaml | kubectl apply -f - >/dev/null
+log "  ✓ loopzero-cluster-kubeconfigs Secret now has 4 REAL kubeconfigs (mgmt+build+runtime+runtime-2)"
+
 # --- Phase 3: Per-cluster helmfile sync ---
 log "Phase 3/4: Helmfile sync per cluster (mgmt → build → runtime → runtime-2)..."
 

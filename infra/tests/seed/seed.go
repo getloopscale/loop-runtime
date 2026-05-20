@@ -23,6 +23,8 @@ import (
 	"os/exec"
 	"strings"
 	"time"
+
+	"github.com/jackc/pgx/v5"
 )
 
 const (
@@ -197,12 +199,50 @@ ON CONFLICT (id) DO NOTHING;
 		ProjectID, TenantID, ProjectName, UserID,
 	)
 
-	cmd := exec.Command("psql", dbURL, "-c", sql)
-	output, err := cmd.CombinedOutput()
+	// Use pgx directly (same driver as loopzero-api) instead of `psql` binary.
+	// Plan 2026-05-19-drill-skills-rigor-restoration: drill validation uses
+	// managed DOKS PG (no psql binary needed on host). Eliminates dependency
+	// on system psql client — matches production posture (loopzero-api uses pgx,
+	// not psql shell-out).
+	ctx, cancel := context.WithTimeout(context.Background(), 60*time.Second)
+	defer cancel()
+	conn, err := pgx.Connect(ctx, dbURL)
 	if err != nil {
-		return fmt.Errorf("psql failed: %w\noutput: %s", err, output)
+		return fmt.Errorf("pgx connect failed: %w", err)
+	}
+	defer func() { _ = conn.Close(ctx) }()
+	if _, err := conn.Exec(ctx, sql); err != nil {
+		return fmt.Errorf("pgx exec failed: %w", err)
 	}
 	return nil
+}
+
+// kubectlArgs returns ["kubectl", "--kubeconfig", path] when DRILL_KUBECONFIG
+// is set (drill validation against DOKS), otherwise ["kubectl", "--context", ctx]
+// for local k3d. Plan 2026-05-19-drill-skills-rigor-restoration.
+//
+// Per-cluster kubeconfig resolution (drill multi-cluster):
+//   - mgmt: $DRILL_KUBECONFIG (default for any context not in DRILL_KUBECONFIG_DIR)
+//   - k3d-loopzero-build / k3d-loopzero-workload: $DRILL_KUBECONFIG_DIR/build.yaml /
+//     $DRILL_KUBECONFIG_DIR/runtime.yaml if DRILL_KUBECONFIG_DIR set, else
+//     defaults to mgmt kubeconfig.
+func kubectlArgs(kubeContext string) []string {
+	dir := os.Getenv("DRILL_KUBECONFIG_DIR")
+	if dir != "" {
+		// Map well-known local k3d contexts to drill cluster kubeconfigs.
+		switch kubeContext {
+		case "k3d-loopzero-build":
+			return []string{"kubectl", "--kubeconfig", dir + "/build.yaml", "--insecure-skip-tls-verify"}
+		case "k3d-loopzero-workload":
+			return []string{"kubectl", "--kubeconfig", dir + "/runtime.yaml", "--insecure-skip-tls-verify"}
+		case "k3d-loopzero-mgmt", "":
+			return []string{"kubectl", "--kubeconfig", dir + "/mgmt.yaml", "--insecure-skip-tls-verify"}
+		}
+	}
+	if kc := os.Getenv("DRILL_KUBECONFIG"); kc != "" {
+		return []string{"kubectl", "--kubeconfig", kc, "--insecure-skip-tls-verify"}
+	}
+	return []string{"kubectl", "--context", kubeContext}
 }
 
 // EnsureTenantCR creates or updates the Tenant CR via kubectl apply.
@@ -247,7 +287,8 @@ func EnsureTenantCR(kubeContext string) error {
 		return fmt.Errorf("failed to marshal tenant CR: %w", err)
 	}
 
-	cmd := exec.Command("kubectl", "--context", kubeContext, "apply", "-f", "-")
+	args := append(kubectlArgs(kubeContext), "apply", "-f", "-")
+	cmd := exec.Command(args[0], args[1:]...)
 	cmd.Stdin = bytes.NewReader(crJSON)
 	output, err := cmd.CombinedOutput()
 	if err != nil {
@@ -325,8 +366,8 @@ func ExpectedNamespacesByContext() []expectedNamespace {
 func findMissingNamespacesByContext(expected []expectedNamespace) []string {
 	var missing []string
 	for _, e := range expected {
-		cmd := exec.Command("kubectl", "--context", e.context,
-			"get", "namespace", e.name, "--no-headers", "-o", "name")
+		args := append(kubectlArgs(e.context), "get", "namespace", e.name, "--no-headers", "-o", "name")
+		cmd := exec.Command(args[0], args[1:]...)
 		if err := cmd.Run(); err != nil {
 			missing = append(missing, e.context+"/"+e.name)
 		}
@@ -339,8 +380,8 @@ func findMissingNamespacesByContext(expected []expectedNamespace) []string {
 func findMissingNamespaces(kubeContext string, expected []string) []string {
 	var missing []string
 	for _, ns := range expected {
-		cmd := exec.Command("kubectl", "--context", kubeContext,
-			"get", "namespace", ns, "--no-headers", "-o", "name")
+		args := append(kubectlArgs(kubeContext), "get", "namespace", ns, "--no-headers", "-o", "name")
+		cmd := exec.Command(args[0], args[1:]...)
 		if err := cmd.Run(); err != nil {
 			missing = append(missing, ns)
 		}

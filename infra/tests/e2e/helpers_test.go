@@ -316,16 +316,25 @@ func waitHTTP200WithHost(host, path string, timeout time.Duration) {
 
 	targetURL := fmt.Sprintf("https://%s%s", host, path)
 
-	// Create TLS client that connects to localhost:port but sends the host header.
+	// Plan 2026-05-19-drill-skills-rigor-restoration: drill validation against
+	// DOKS resolves host via public DNS (CF wildcard A record → runtime LB).
+	// Local k3d still dials localhost:8443 via Traefik port-forward.
+	dialTarget := "127.0.0.1:" + port
+	if os.Getenv("DRILL_KUBECONFIG_DIR") != "" {
+		// Drill mode: let real DNS resolve to runtime cluster LB.
+		dialTarget = ""
+	}
+
 	transport := &http.Transport{
 		TLSClientConfig: &tls.Config{
-			InsecureSkipVerify: true, //nolint:gosec // E2E test against local k3d
+			InsecureSkipVerify: true, //nolint:gosec // E2E test against local k3d or drill DOKS
 			ServerName:         host,
 		},
-		DialContext: func(_ context.Context, _, _ string) (net.Conn, error) {
-			// Override DNS resolution to point at localhost Traefik.
-			return net.DialTimeout("tcp", "127.0.0.1:"+port, 5*time.Second)
-		},
+	}
+	if dialTarget != "" {
+		transport.DialContext = func(_ context.Context, _, _ string) (net.Conn, error) {
+			return net.DialTimeout("tcp", dialTarget, 5*time.Second)
+		}
 	}
 	client := &http.Client{
 		Transport: transport,
@@ -354,14 +363,21 @@ func httpGetWithHost(host, path string) (int, string, error) {
 
 	targetURL := fmt.Sprintf("https://%s%s", host, path)
 
+	// Plan 2026-05-19-drill-skills-rigor-restoration: drill mode = real DNS.
+	dialTarget := "127.0.0.1:" + port
+	if os.Getenv("DRILL_KUBECONFIG_DIR") != "" {
+		dialTarget = ""
+	}
 	transport := &http.Transport{
 		TLSClientConfig: &tls.Config{
-			InsecureSkipVerify: true, //nolint:gosec // E2E test against local k3d
+			InsecureSkipVerify: true, //nolint:gosec // E2E test against local k3d or drill DOKS
 			ServerName:         host,
 		},
-		DialContext: func(_ context.Context, _, _ string) (net.Conn, error) {
-			return net.DialTimeout("tcp", "127.0.0.1:"+port, 5*time.Second)
-		},
+	}
+	if dialTarget != "" {
+		transport.DialContext = func(_ context.Context, _, _ string) (net.Conn, error) {
+			return net.DialTimeout("tcp", dialTarget, 5*time.Second)
+		}
 	}
 	client := &http.Client{
 		Transport: transport,
