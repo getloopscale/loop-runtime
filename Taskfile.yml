@@ -140,6 +140,38 @@ tasks:
           echo "[audit:secrets] ✓ No plaintext secrets detected in tracked YAML/JSON."
         fi
 
+  audit:security-context:
+    desc: "INF-G08 audit — pod/container securityContext hardening (matches infra-gates.yml CI gate)"
+    # 2026-05-20 CI/local parity bug class (CTO Rule 0 ambiente local
+    # fidedigno): scripts/audit-security-context.sh is referenced in
+    # .github/workflows/infra-gates.yml step 'INF-G08: securityContext
+    # audit' but had no local Taskfile shortcut — operator had to
+    # remember exact path + --gate flag. Adding task target restores
+    # parity with same exit semantics CI uses.
+    cmds:
+      - bash scripts/audit-security-context.sh --gate
+
+  audit:charts-schema-present:
+    desc: "INF-G17 audit — values.schema.json presence on every OCI chart (matches infra-gates.yml CI gate)"
+    # Mirrors infra-gates.yml 'INF-G17: Chart schema validation' step.
+    # Library chart loopzero-common is exempt (per CI convention).
+    cmds:
+      - |
+        MISSING=()
+        for chart in charts/*/; do
+          chart_name=$(basename "$chart")
+          if [ "$chart_name" = "loopzero-common" ]; then continue; fi
+          if [ ! -f "$chart/values.schema.json" ]; then
+            MISSING+=("$chart_name")
+          fi
+        done
+        if [ ${#MISSING[@]} -gt 0 ]; then
+          echo "[audit:charts-schema-present] ⚠ Charts MISSING values.schema.json:"
+          for m in "${MISSING[@]}"; do echo "  - $m"; done
+          exit 1
+        fi
+        echo "[audit:charts-schema-present] ✓ All OCI charts (excl. loopzero-common library) have values.schema.json"
+
   setup:
     desc: Full setup from scratch — clusters + infra + networking + CRDs + DB + tokens + standalone bootstrap
     cmds:
