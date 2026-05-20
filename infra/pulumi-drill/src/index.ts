@@ -48,6 +48,7 @@ import { LoopZeroVpc } from "./components/loopzero-vpc";
 import { LoopZeroCFZone } from "./components/loopzero-cf-zone";
 import { LoopZeroDOProject } from "./components/loopzero-do-project";
 import { LoopZeroManagedDb } from "./components/loopzero-managed-db";
+import { LoopZeroDOKSCluster } from "./components/loopzero-doks-cluster";
 
 const config = new pulumi.Config("loopzero-drill");
 
@@ -144,64 +145,49 @@ const drillVpc = new LoopZeroVpc("drill-vpc", {
 //   cell-default + cell-1 → runtimeCluster
 //   cell-2              → runtimeCluster2
 
-const mgmtCluster = new digitalocean.KubernetesCluster("drill-mgmt", {
-  name: `${doProject}-mgmt-cluster`,
+// Plan v1.2 T3.1 — LoopZeroDOKSCluster component (4 instances replace inline declarations).
+const mgmtCluster = new LoopZeroDOKSCluster("drill-mgmt", {
+  clusterName: `${doProject}-mgmt-cluster`,
   region,
   version: mgmtK8sVersion,
   vpcUuid: drillVpc.id,
-  autoUpgrade: false, // mirror prod posture
+  nodePoolName: "drill-mgmt-pool",
+  nodeSize: mgmtNodeSize,
+  nodeCount: mgmtNodeCount,
   tags: drillTags,
-  nodePool: {
-    name: "drill-mgmt-pool",
-    size: mgmtNodeSize,
-    nodeCount: mgmtNodeCount,
-    tags: drillTags,
-  },
 });
 
-const buildCluster = new digitalocean.KubernetesCluster("drill-build", {
-  name: `${doProject}-build-cluster`,
+const buildCluster = new LoopZeroDOKSCluster("drill-build", {
+  clusterName: `${doProject}-build-cluster`,
   region,
   version: buildK8sVersion,
   vpcUuid: drillVpc.id,
-  autoUpgrade: false,
+  nodePoolName: "drill-build-pool",
+  nodeSize: buildNodeSize,
+  nodeCount: buildNodeCount,
   tags: drillTags,
-  nodePool: {
-    name: "drill-build-pool",
-    size: buildNodeSize,
-    nodeCount: buildNodeCount,
-    tags: drillTags,
-  },
 });
 
-const runtimeCluster = new digitalocean.KubernetesCluster("drill-runtime", {
-  name: `${doProject}-runtime-cluster`,
+const runtimeCluster = new LoopZeroDOKSCluster("drill-runtime", {
+  clusterName: `${doProject}-runtime-cluster`,
   region,
   version: runtimeK8sVersion,
   vpcUuid: drillVpc.id,
-  autoUpgrade: false,
+  nodePoolName: "drill-runtime-pool",
+  nodeSize: runtimeNodeSize,
+  nodeCount: runtimeNodeCount,
   tags: drillTags,
-  nodePool: {
-    name: "drill-runtime-pool",
-    size: runtimeNodeSize,
-    nodeCount: runtimeNodeCount,
-    tags: drillTags,
-  },
 });
 
-const runtimeCluster2 = new digitalocean.KubernetesCluster("drill-runtime-2", {
-  name: `${doProject}-runtime-2-cluster`,
+const runtimeCluster2 = new LoopZeroDOKSCluster("drill-runtime-2", {
+  clusterName: `${doProject}-runtime-2-cluster`,
   region,
   version: runtimeK8sVersion,
   vpcUuid: drillVpc.id,
-  autoUpgrade: false,
+  nodePoolName: "drill-runtime-2-pool",
+  nodeSize: runtimeNodeSize,
+  nodeCount: runtimeNodeCount,
   tags: drillTags,
-  nodePool: {
-    name: "drill-runtime-2-pool",
-    size: runtimeNodeSize,
-    nodeCount: runtimeNodeCount,
-    tags: drillTags,
-  },
 });
 
 // =============================================================================
