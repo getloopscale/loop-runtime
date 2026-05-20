@@ -5,21 +5,27 @@ version: "3"
 
 tasks:
   helm:lint:
-    desc: Lint all Helm charts
+    desc: Lint all Helm charts (--strict, matches CI helm-charts.yml + INF-G17)
     cmds:
       - |
+        # 2026-05-20 CTO Rule 0 fix (ambiente local fidedigno ao prod):
+        # Previously this task ran `helm lint` WITHOUT --strict, while
+        # .github/workflows/helm-charts.yml runs WITH --strict. Operator
+        # passing `task helm:lint` locally then failing CI = CI/local parity
+        # bug. Restored symmetry: both use --strict (catches lint warnings as
+        # errors per INF-G17 mandate).
         FAILED=0
         for chart in charts/*/; do
           echo "Linting $chart..."
-          if ! helm lint "$chart" 2>&1; then
+          if ! helm lint --strict "$chart" 2>&1; then
             FAILED=1
           fi
         done
         if [ "$FAILED" -ne 0 ]; then
-          echo "FAILED: one or more charts failed lint"
+          echo "FAILED: one or more charts failed lint --strict"
           exit 1
         fi
-        echo "All charts passed lint"
+        echo "All charts passed lint --strict"
 
   helm:template:
     desc: Render all chart templates (dry-run)
