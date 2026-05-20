@@ -42,6 +42,8 @@
 import * as pulumi from "@pulumi/pulumi";
 import * as digitalocean from "@pulumi/digitalocean";
 import * as cloudflare from "@pulumi/cloudflare";
+// Plan v1.2 T3.1 — Component Resources (incremental Pulumi componentization per ADR D1).
+import { LoopZeroSpacesBucket } from "./components/loopzero-spaces-bucket";
 
 const config = new pulumi.Config("loopzero-drill");
 
@@ -206,20 +208,24 @@ const runtimeCluster2 = new digitalocean.KubernetesCluster("drill-runtime-2", {
 // 5. DO Spaces buckets (3 — mirroring prod use) — D8
 // =============================================================================
 
-const drillBuildsBucket = new digitalocean.SpacesBucket("drill-builds", {
-  name: `loopzero-drill-builds-${region}`,
+// Plan v1.2 T3.1 — LoopZeroSpacesBucket component (replaces 4 inline SpacesBucket
+// declarations). Each instance is 1 component call site. Pattern enables future
+// extraction of LoopZeroVPC, LoopZeroMgmtCluster, LoopZeroManagedPG, etc. (incremental
+// Pulumi componentize per ADR D1).
+const drillBuildsBucket = new LoopZeroSpacesBucket("drill-builds", {
+  bucketName: `loopzero-drill-builds-${region}`,
   region,
   forceDestroy: true,
 });
 
-const drillArtifactsBucket = new digitalocean.SpacesBucket("drill-artifacts", {
-  name: `loopzero-drill-artifacts-${region}`,
+const drillArtifactsBucket = new LoopZeroSpacesBucket("drill-artifacts", {
+  bucketName: `loopzero-drill-artifacts-${region}`,
   region,
   forceDestroy: true,
 });
 
-const drillStaticBucket = new digitalocean.SpacesBucket("drill-static", {
-  name: `loopzero-drill-static-${region}`,
+const drillStaticBucket = new LoopZeroSpacesBucket("drill-static", {
+  bucketName: `loopzero-drill-static-${region}`,
   region,
   forceDestroy: true,
 });
@@ -234,8 +240,8 @@ const drillStaticBucket = new digitalocean.SpacesBucket("drill-static", {
 //
 // lifecycleRule: 30-day expiration to keep storage cost bounded
 // (drill is iteration env; backups older than 30d have no recovery value).
-const drillVeleroBucket = new digitalocean.SpacesBucket("drill-velero", {
-  name: `loopzero-drill-velero-backups`,
+const drillVeleroBucket = new LoopZeroSpacesBucket("drill-velero", {
+  bucketName: `loopzero-drill-velero-backups`,
   region,
   forceDestroy: true,
   acl: "private",
