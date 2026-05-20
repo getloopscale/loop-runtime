@@ -8,9 +8,12 @@ import (
 	"errors"
 	"os"
 	"testing"
+	"time"
 
+	k8serrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime/schema"
+	k8stypes "k8s.io/apimachinery/pkg/types"
 	"k8s.io/client-go/dynamic"
 	"k8s.io/client-go/rest"
 	"k8s.io/client-go/tools/clientcmd"
@@ -64,12 +67,44 @@ func getDynamicClient(t *testing.T) dynamic.Interface {
 	return client
 }
 
-// cleanupTenant deletes a Tenant CR, ignoring NotFound errors.
+// cleanupTenant deletes a Tenant CR and BLOCKS until the apiserver
+// returns NotFound. Two failure modes are handled:
+//
+//  1. Async deletion: K8s Delete returns immediately but the object
+//     stays in etcd until finalizers run. Consecutive test runs that
+//     reuse the same name catch the CR mid-deletion and EnsureTenant
+//     takes the wrong branch (Update on a terminating object), then
+//     AddEnvironment Get → NotFound.
+//
+//  2. Stuck finalizer: the Tenant CRD declares finalizer
+//     `loopzero.io/tenant-cleanup` which is owned by the LoopZero Operator.
+//     Test environments (k3d local) typically run WITHOUT the operator,
+//     so deletions never complete. We patch the finalizers list to
+//     empty so the apiserver removes the object immediately.
+//
+// Combined: Delete first (graceful — operator-aware envs honor it),
+// then patch finalizers if it's still around, then poll for NotFound.
 func cleanupTenant(t *testing.T, client dynamic.Interface, name string) {
 	t.Helper()
-	_ = client.Resource(tenantGVR).Namespace("loopzero-system").Delete(
-		context.Background(), name, metav1.DeleteOptions{},
-	)
+	ctx := context.Background()
+	res := client.Resource(tenantGVR).Namespace("loopzero-system")
+
+	_ = res.Delete(ctx, name, metav1.DeleteOptions{})
+
+	// If finalizers block deletion, strip them via JSON merge patch.
+	// Idempotent: NotFound here means delete already completed.
+	patch := []byte(`{"metadata":{"finalizers":null}}`)
+	_, _ = res.Patch(ctx, name, k8stypes.MergePatchType, patch, metav1.PatchOptions{})
+
+	deadline := time.Now().Add(5 * time.Second)
+	for time.Now().Before(deadline) {
+		_, err := res.Get(ctx, name, metav1.GetOptions{})
+		if k8serrors.IsNotFound(err) {
+			return
+		}
+		time.Sleep(50 * time.Millisecond)
+	}
+	t.Logf("cleanupTenant: %q not deleted within 5s — apiserver may be slow", name)
 }
 
 func TestTenantCRManager_EnsureTenant_Creates(t *testing.T) {
