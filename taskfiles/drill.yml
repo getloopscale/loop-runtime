@@ -196,7 +196,9 @@ tasks:
         # STRICT_BOOTSTRAP=true: fail-fast on any helmfile partial sync.
         # Sets PG_SSLMODE=require automatically (T2.1.bis EC-02 for managed PG).
         BOOTSTRAP_EXIT=0
-        DRILL_KUBECONFIG_DIR=/tmp/drill-kc STRICT_BOOTSTRAP=true \
+        # Plan v1.2 T5.1: LOOPZERO_TEST_ENV=drill is canonical (DRILL_KUBECONFIG_DIR
+        # retained as path source; removal of dual-var pending T5.2 deprecation window).
+        LOOPZERO_TEST_ENV=drill DRILL_KUBECONFIG_DIR=/tmp/drill-kc STRICT_BOOTSTRAP=true \
           bash infra/scripts/drill-helmfile-bootstrap.sh || BOOTSTRAP_EXIT=$?
         if [ "$BOOTSTRAP_EXIT" -ne 0 ]; then
           echo "ERROR: drill-helmfile-bootstrap.sh failed (exit $BOOTSTRAP_EXIT)"

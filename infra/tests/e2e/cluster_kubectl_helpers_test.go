@@ -59,18 +59,47 @@ func localContextFor(role ClusterRole) string {
 }
 
 // clusterKubectlArgs returns the base kubectl argv for the given cluster
-// role. On drill (DRILL_KUBECONFIG_DIR set) it points at the right
-// kubeconfig file with --insecure-skip-tls-verify. Locally it uses
-// --context. First element is always "kubectl".
+// role. Resolves env via LOOPZERO_TEST_ENV (preferred) or DRILL_KUBECONFIG_DIR
+// (legacy, deprecated per plan v1.2 T5.1 — removal in T5.2 after
+// 1-sprint deprecation window per EC-23).
+//
+// Resolution order:
+//   1. LOOPZERO_TEST_ENV=drill + DRILL_KUBECONFIG_DIR set → drill DOKS resolver
+//   2. LOOPZERO_TEST_ENV=k3d (or unset) → local k3d resolver (default)
+//   3. LOOPZERO_TEST_ENV=prod → stub (returns error placeholder)
+//
+// Legacy fallback (DEPRECATED — removed in T5.2):
+//   DRILL_KUBECONFIG_DIR set without LOOPZERO_TEST_ENV → routes to drill
+//   resolver with stderr deprecation warning.
 //
 // Example:
 //
 //	base := clusterKubectlArgs(ClusterMgmt)
 //	cmd := exec.Command(base[0], append(base[1:], "get", "ns")...)
 func clusterKubectlArgs(role ClusterRole) []string {
-	if dir := os.Getenv("DRILL_KUBECONFIG_DIR"); dir != "" {
-		return []string{"kubectl", "--kubeconfig", dir + "/" + drillFileFor(role), "--insecure-skip-tls-verify"}
+	testEnv := os.Getenv("LOOPZERO_TEST_ENV")
+	drillDir := os.Getenv("DRILL_KUBECONFIG_DIR")
+
+	// EC-23 deprecation warning: legacy env var still works during deprecation window.
+	if testEnv == "" && drillDir != "" {
+		_, _ = os.Stderr.WriteString("[cluster_kubectl_helpers] DEPRECATION: DRILL_KUBECONFIG_DIR alone is deprecated per plan v1.2 T5.1 / EC-23.\n[cluster_kubectl_helpers] Set LOOPZERO_TEST_ENV=drill (and keep DRILL_KUBECONFIG_DIR for path). Legacy fallback removed in T5.2.\n")
+		testEnv = "drill"
 	}
+
+	// Drill DOKS resolver
+	if testEnv == "drill" {
+		if drillDir == "" {
+			panic("[cluster_kubectl_helpers] LOOPZERO_TEST_ENV=drill requires DRILL_KUBECONFIG_DIR pointing at /tmp/drill-kc/")
+		}
+		return []string{"kubectl", "--kubeconfig", drillDir + "/" + drillFileFor(role), "--insecure-skip-tls-verify"}
+	}
+
+	// Prod resolver — stub (future-ready per D5 ADR)
+	if testEnv == "prod" {
+		panic("[cluster_kubectl_helpers] LOOPZERO_TEST_ENV=prod not yet supported — operator action: implement prod kubeconfig resolver per ADR D5")
+	}
+
+	// Default: local k3d (LOOPZERO_TEST_ENV=k3d or unset)
 	return []string{"kubectl", "--context", localContextFor(role)}
 }
 
