@@ -109,8 +109,8 @@ func runLoopZeroWithStdin(stdin string, args ...string) (stdout, stderr string, 
 // also empty. This restores intended auth-failure path coverage.
 func runLoopZeroNoToken(args ...string) (stdout, stderr string, exitCode int) {
 	cmd := exec.Command("loopzero", args...)
-	emptyXDG, err := os.MkdirTemp("", "loopzero-e2e-noauth-")
-	if err != nil {
+	emptyXDG, xdgErr := os.MkdirTemp("", "loopzero-e2e-noauth-")
+	if xdgErr != nil {
 		emptyXDG = "/tmp/loopzero-e2e-noauth-fallback"
 		_ = os.MkdirAll(emptyXDG, 0o755)
 	}
