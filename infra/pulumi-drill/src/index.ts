@@ -45,6 +45,8 @@ import * as cloudflare from "@pulumi/cloudflare";
 // Plan v1.2 T3.1 — Component Resources (incremental Pulumi componentization per ADR D1).
 import { LoopZeroSpacesBucket } from "./components/loopzero-spaces-bucket";
 import { LoopZeroVpc } from "./components/loopzero-vpc";
+import { LoopZeroCFZone } from "./components/loopzero-cf-zone";
+import { LoopZeroDOProject } from "./components/loopzero-do-project";
 
 const config = new pulumi.Config("loopzero-drill");
 
@@ -103,26 +105,21 @@ const drillTags = [
 // 71d6c460 left zone orphan). Drill is ephemeral by design; isolation
 // guarantees come from D7 (separate account + scoped token).
 
-const drillZone = new cloudflare.Zone(
-  "drill-zone",
-  {
-    zone: domain,
-    accountId: config.requireSecret("cfAccountId"),
-    type: "full",
-  },
-  // Intentionally no resource options — drill zone is ephemeral.
-);
+// Plan v1.2 T3.1 — LoopZeroCFZone component (was inline new cloudflare.Zone).
+const drillZone = new LoopZeroCFZone("drill-zone", {
+  domain,
+  accountId: config.requireSecret("cfAccountId"),
+  type: "full",
+});
 
 // =============================================================================
 // 2. DO Project (cost tracking + token scope isolation per D7)
 // =============================================================================
 
-const drillDOProject = new digitalocean.Project("drill-project", {
-  name: doProject,
+// Plan v1.2 T3.1 — LoopZeroDOProject component (was inline new digitalocean.Project).
+const drillDOProject = new LoopZeroDOProject("drill-project", {
+  projectName: doProject,
   description: `LoopZero drill prod-identical stack — expires ${expiresAtIso} — destroyed after run`,
-  purpose: "Service or API",
-  environment: "Staging",
-  resources: [],
 });
 
 // =============================================================================
