@@ -762,6 +762,67 @@ assert_rejects \
     runAsNonRoot: false" \
   "argocd INF-G08 — server.runAsNonRoot=false REJECTED (const:true)"
 
+# --- argo-workflows build cluster RBAC + scale protection ---
+
+assert_rejects \
+  "infra/helm/argo-workflows/values.schema.json" \
+  "images:
+  cloneRunner: 'registry.do/loopzero/runner-no-tag'
+sourceBucket: loopzero-builds" \
+  "argo-workflows — cloneRunner image without tag REJECTED"
+
+assert_rejects \
+  "infra/helm/argo-workflows/values.schema.json" \
+  "images:
+  cloneRunner: 'registry.do/loopzero/runner:v1'
+sourceBucket: 'UPPER-BUCKET'" \
+  "argo-workflows — uppercase sourceBucket REJECTED (RFC 1123)"
+
+assert_rejects \
+  "infra/helm/argo-workflows/values.schema.json" \
+  "images:
+  cloneRunner: 'registry.do/loopzero/runner:v1'
+sourceBucket: '-bad-leading'" \
+  "argo-workflows — sourceBucket leading-dash REJECTED"
+
+assert_rejects \
+  "infra/helm/argo-workflows/values.schema.json" \
+  "images:
+  cloneRunner: 'registry.do/loopzero/runner:v1'
+sourceBucket: loopzero-builds
+controller:
+  workflowWorkers: 0" \
+  "argo-workflows — workflowWorkers=0 REJECTED (minimum=1)"
+
+assert_rejects \
+  "infra/helm/argo-workflows/values.schema.json" \
+  "images:
+  cloneRunner: 'registry.do/loopzero/runner:v1'
+sourceBucket: loopzero-builds
+controller:
+  workflowWorkers: 500" \
+  "argo-workflows — workflowWorkers=500 REJECTED (maximum=128 OOM bound)"
+
+assert_rejects \
+  "infra/helm/argo-workflows/values.schema.json" \
+  "images:
+  cloneRunner: 'registry.do/loopzero/runner:v1'
+sourceBucket: loopzero-builds
+controller:
+  metricsConfig:
+    port: 80" \
+  "argo-workflows — metrics port 80 REJECTED (privileged, non-root would fail)"
+
+assert_rejects \
+  "infra/helm/argo-workflows/values.schema.json" \
+  "images:
+  cloneRunner: 'registry.do/loopzero/runner:v1'
+sourceBucket: loopzero-builds
+controller:
+  securityContext:
+    runAsNonRoot: false" \
+  "argo-workflows INF-G08 — controller runAsNonRoot=false REJECTED"
+
 # --- Summary ---
 echo ""
 echo "Tests run:    $TESTS_RUN"

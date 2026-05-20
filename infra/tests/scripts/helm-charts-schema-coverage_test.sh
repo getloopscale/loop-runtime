@@ -54,12 +54,6 @@ EXEMPT_CHARTS=(
   # Each subsequent session should pick one off this list, add a schema
   # with TDD red coverage, and remove from this list.
 
-  # Argo Workflows bootstrap chart — wraps upstream argo-workflows +
-  # LoopZero-specific build cluster RBAC. Schema would constrain controller
-  # config + workflow defaults.
-  "infra/helm/argo-workflows"
-
-
   # chaos-mesh wrapper + LoopZero CRD allow-lists. Schema would constrain
   # PSA enforcement + RBAC narrow.
   "infra/helm/chaos-mesh"
