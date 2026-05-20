@@ -56,9 +56,13 @@ hydra:
       public:
         cors:
           enabled: true
+          # Plan v1.2 T2.3 / D4 — CORS origins. uiBaseUrl is the auth UI
+          # (Kratos), dashboardOrigin is the LoopZero dashboard (local port 3000
+          # in dev; same host as uiBaseUrl in drill/prod). Env files override
+          # both per environment.
           allowed_origins:
-            - "http://localhost:3000"
             - "{{ .Values.uiBaseUrl | default "http://localhost:4455" }}"
+            - "{{ .Values.dashboardOrigin | default "http://localhost:3000" }}"
           allowed_methods:
             - GET
             - POST

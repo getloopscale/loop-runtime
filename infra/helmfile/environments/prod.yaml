@@ -92,3 +92,4 @@ velero:
 
 # Plan v1.2 T2.3 / D4 — kratos+hydra UI base URL placeholder (prod DOKS)
 uiBaseUrl: "https://app.loopzero.example"
+dashboardOrigin: "https://cloud.loopzero.example"

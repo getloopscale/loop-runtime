@@ -138,3 +138,4 @@ velero:
 
 # Plan v1.2 T2.3 / D4 — kratos+hydra UI base URL placeholder (drill DOKS)
 uiBaseUrl: "https://app.loopzero-drill.example"
+dashboardOrigin: "https://cloud.loopzero-drill.example"
