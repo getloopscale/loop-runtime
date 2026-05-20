@@ -54,11 +54,6 @@ EXEMPT_CHARTS=(
   # Each subsequent session should pick one off this list, add a schema
   # with TDD red coverage, and remove from this list.
 
-  # ArgoCD bootstrap chart — wraps upstream argo-cd values + LoopZero-specific
-  # notifications/repos/projects templates. Schema would constrain
-  # notifications config (B17 risk area).
-  "infra/helm/argocd"
-
   # Argo Workflows bootstrap chart — wraps upstream argo-workflows +
   # LoopZero-specific build cluster RBAC. Schema would constrain controller
   # config + workflow defaults.

@@ -719,6 +719,49 @@ auth:
   database: loopzero" \
   "postgresql — empty image.registry REJECTED (minLength=1)"
 
+# --- argocd B17 + T-05 + INF-G08 protection ---
+
+assert_rejects \
+  "infra/helm/argocd/values.schema.json" \
+  "notifications:
+  services:
+    webhook: 'invalid-key'" \
+  "argocd B17 — notifications.services (deprecated key) REJECTED"
+
+assert_rejects \
+  "infra/helm/argocd/values.schema.json" \
+  "controller:
+  replicas: 0" \
+  "argocd T-05 — controller.replicas=0 REJECTED (minimum=1)"
+
+assert_rejects \
+  "infra/helm/argocd/values.schema.json" \
+  "controller:
+  replicas: 50" \
+  "argocd T-05 — controller.replicas=50 REJECTED (maximum=10)"
+
+assert_rejects \
+  "infra/helm/argocd/values.schema.json" \
+  "server:
+  service:
+    type: NodePort
+    nodePortHttp: 8080" \
+  "argocd — nodePort outside K8s default range REJECTED (30000-32767)"
+
+assert_rejects \
+  "infra/helm/argocd/values.schema.json" \
+  "global:
+  image:
+    tag: 'latest'" \
+  "argocd — image.tag=latest REJECTED (semver required)"
+
+assert_rejects \
+  "infra/helm/argocd/values.schema.json" \
+  "server:
+  containerSecurityContext:
+    runAsNonRoot: false" \
+  "argocd INF-G08 — server.runAsNonRoot=false REJECTED (const:true)"
+
 # --- Summary ---
 echo ""
 echo "Tests run:    $TESTS_RUN"
