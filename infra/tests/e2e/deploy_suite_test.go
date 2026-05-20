@@ -84,9 +84,13 @@ var _ = SynchronizedBeforeSuite(func() []byte {
 
 	token := resolveToken()
 	Expect(token).NotTo(BeEmpty(), "resolveToken returned empty — no dogfood JWT available")
+	// Plan 2026-05-19-drill-skills-rigor-restoration: --expires-in 3600 (1h)
+	// was too short — drill full suite runs 4h+ and token expired mid-suite,
+	// causing all post-1h specs to fail AUTH_REQUIRED. Use 86400 (24h) matching
+	// JWT actual TTL from Hydra client_credentials grant.
 	loginCmd := exec.Command("loopzero", "login",
 		"--token", token,
-		"--expires-in", "3600",
+		"--expires-in", "86400",
 		"--json",
 	)
 	loginCmd.Env = append(os.Environ(),

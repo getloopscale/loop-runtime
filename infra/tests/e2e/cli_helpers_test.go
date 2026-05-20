@@ -100,11 +100,25 @@ func runLoopZeroWithStdin(stdin string, args ...string) (stdout, stderr string, 
 
 // runLoopZeroNoToken runs `loopzero <args...>` with LOOPZERO_TOKEN deliberately empty.
 // Used to exercise auth-failure paths.
+//
+// Plan 2026-05-19-drill-skills-rigor-restoration: per T2 amendment 2026-05-13
+// (finding-2026-05-13-e2e-token-refresh-divergence), CLI now reads token from
+// configStore (XDG_CONFIG_HOME) populated by BeforeSuite. Setting LOOPZERO_TOKEN=""
+// alone is NOT enough — configStore would still have a token. Fix: point
+// XDG_CONFIG_HOME to a temp empty dir for this invocation so configStore is
+// also empty. This restores intended auth-failure path coverage.
 func runLoopZeroNoToken(args ...string) (stdout, stderr string, exitCode int) {
 	cmd := exec.Command("loopzero", args...)
+	emptyXDG, err := os.MkdirTemp("", "loopzero-e2e-noauth-")
+	if err != nil {
+		emptyXDG = "/tmp/loopzero-e2e-noauth-fallback"
+		_ = os.MkdirAll(emptyXDG, 0o755)
+	}
+	defer os.RemoveAll(emptyXDG)
 	cmd.Env = append(os.Environ(),
 		"LOOPZERO_API_URL="+apiURL(),
 		"LOOPZERO_TOKEN=",
+		"XDG_CONFIG_HOME="+emptyXDG,
 	)
 
 	var outBuf, errBuf strings.Builder
