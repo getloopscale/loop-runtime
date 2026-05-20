@@ -17,22 +17,22 @@
         "docrPrefix": {
           "type": "string",
           "minLength": 5,
-          "pattern": "/$",
-          "description": "DOCR registry prefix MUST end with '/' (used as string prefix match in VAP). Empty/missing = B16 class bug: policy-controller deny-by-default rejects ALL pods."
+          "pattern": "^[^\\s]+/$",
+          "description": "DOCR registry prefix MUST end with '/' AND contain no whitespace (anchored pattern catches 'registry with space/' which was accepted by un-anchored '/$' — 2026-05-20 shadow bug). Used as string prefix match in VAP. Empty/missing/garbage = B16 class bug."
         },
         "harborPrefix": {
           "type": "string",
           "minLength": 5,
-          "pattern": "/$",
-          "description": "Harbor registry prefix MUST end with '/'. Same B16 risk if empty."
+          "pattern": "^[^\\s]+/$",
+          "description": "Harbor registry prefix. Same B16 risk + anchored pattern catches whitespace garbage."
         },
         "additionalPrefixes": {
           "type": "array",
           "items": {
             "type": "string",
             "minLength": 1,
-            "pattern": "/$",
-            "description": "Each additional prefix MUST end with '/'. Standalone-multi sets k3d-loopzero-registry:5000/<tenant>/ for locally-built images."
+            "pattern": "^[^\\s]+/$",
+            "description": "Each additional prefix MUST end with '/' AND no whitespace. Standalone-multi sets k3d-loopzero-registry:5000/<tenant>/ for locally-built images."
           },
           "description": "Opt-in additional registry prefixes accepted by restrict-registries VAP. Default empty (prod allows only DOCR + Harbor)."
         }

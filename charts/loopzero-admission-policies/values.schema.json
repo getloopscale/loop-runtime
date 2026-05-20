@@ -9,11 +9,25 @@
     "registries": {
       "type": "object",
       "properties": {
-        "docrPrefix": { "type": "string" },
-        "harborPrefix": { "type": "string" },
+        "docrPrefix": {
+          "type": "string",
+          "minLength": 5,
+          "pattern": "^[^\\s]+/$",
+          "description": "DOCR prefix MUST end with '/' and contain no whitespace (B16 + anchored pattern bug class, symmetric with infra/helm/admission-policies fix 2026-05-20)."
+        },
+        "harborPrefix": {
+          "type": "string",
+          "minLength": 5,
+          "pattern": "^[^\\s]+/$",
+          "description": "Harbor prefix. Same constraint as docrPrefix."
+        },
         "additionalPrefixes": {
           "type": "array",
-          "items": { "type": "string" }
+          "items": {
+            "type": "string",
+            "minLength": 1,
+            "pattern": "^[^\\s]+/$"
+          }
         }
       }
     },

@@ -143,6 +143,39 @@ clusterImagePolicy:
   name: loopzero-images" \
   "admission-policies B16 — docrPrefix without trailing / REJECTED"
 
+# Shadow bug (2026-05-20): un-anchored '/\$' accepted strings with leading
+# whitespace. Anchored '^[^\s]+/\$' catches it. Test locks in fix.
+assert_rejects \
+  "infra/helm/admission-policies/values.schema.json" \
+  "registries:
+  docrPrefix: 'registry with space/'
+  harborPrefix: 'harbor.dev.loopzero.example/loopzero-platform/'
+clusterImagePolicy:
+  enabled: true
+  name: loopzero-images" \
+  "admission-policies — docrPrefix with whitespace REJECTED (anchored pattern)"
+
+assert_rejects \
+  "infra/helm/admission-policies/values.schema.json" \
+  "registries:
+  docrPrefix: 'registry.digitalocean.com/loopzero-system/'
+  harborPrefix: 'harbor.with whitespace/loopzero/'
+clusterImagePolicy:
+  enabled: true
+  name: loopzero-images" \
+  "admission-policies — harborPrefix with whitespace REJECTED (anchored pattern)"
+
+assert_rejects \
+  "infra/helm/admission-policies/values.schema.json" \
+  "registries:
+  docrPrefix: 'registry.digitalocean.com/loopzero-system/'
+  harborPrefix: 'harbor.dev.loopzero.example/loopzero-platform/'
+  additionalPrefixes: ['bad prefix with space/']
+clusterImagePolicy:
+  enabled: true
+  name: loopzero-images" \
+  "admission-policies — additionalPrefixes item with whitespace REJECTED"
+
 assert_rejects \
   "infra/helm/admission-policies/values.schema.json" \
   "registries:
