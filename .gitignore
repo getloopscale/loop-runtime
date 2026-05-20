@@ -65,7 +65,15 @@ operators/preview-operator
 operators/tenant-operator
 cloud/main
 /cmd
-/scripts
+# /scripts — REMOVED 2026-05-20 (was catastrophically ignoring directory
+# containing 5+ CI-referenced scripts: audit-security-context.sh,
+# check-action-pinning.sh, check-divergence-matrix.sh, check-taskfile-
+# interface.sh, run-polaris.sh. CI jobs in infra-gates.yml were silently
+# failing because their `bash scripts/<name>.sh` commands found no file
+# in checkouts.) The original `/scripts` rule was likely intended to
+# ignore a top-level `scripts/` directory used as scratch space by some
+# previous tooling — but the same path was reused for CI-critical
+# scripts and the rule was never re-evaluated.
 
 # Test output
 *.test

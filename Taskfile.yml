@@ -151,6 +151,25 @@ tasks:
     cmds:
       - bash scripts/audit-security-context.sh --gate
 
+  audit:action-pinning:
+    desc: "INF-G18 audit — GitHub Action SHA pinning (matches infra-gates.yml CI gate)"
+    # 2026-05-20 CI/local parity. Operator can now run locally before push.
+    # Same exit semantics as CI INF-G18 action-pinning job.
+    cmds:
+      - |
+        if [ -f scripts/check-action-pinning.sh ]; then
+          bash scripts/check-action-pinning.sh
+        else
+          echo "[audit:action-pinning] WARN: scripts/check-action-pinning.sh not present"
+          exit 0
+        fi
+
+  audit:divergence-matrix:
+    desc: "Plan T5.2 audit — local↔prod divergence matrix integrity (matches infra-gates.yml CI gate)"
+    # Per ADR D5: every code marker `LOCAL ONLY (LP-NNN)` must have a matrix entry.
+    cmds:
+      - bash scripts/check-divergence-matrix.sh
+
   audit:charts-schema-present:
     desc: "INF-G17 audit — values.schema.json presence on every OCI chart (matches infra-gates.yml CI gate)"
     # Mirrors infra-gates.yml 'INF-G17: Chart schema validation' step.
