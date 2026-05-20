@@ -1,0 +1,20 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://loopzero.platform/schemas/ory-kratos/values.schema.json",
+  "title": "Ory Kratos LoopZero wrapper values schema",
+  "description": "Plan v1.2 T2.5 / D4 — fail-fast on missing keys per ADR. Schema enforces uiBaseUrl pattern (no trailing slash per EC-8) and required-by-env override discipline.",
+  "type": "object",
+  "required": ["uiBaseUrl"],
+  "properties": {
+    "uiBaseUrl": {
+      "type": "string",
+      "pattern": "^https?://[^/]+(:[0-9]+)?$",
+      "description": "Base URL for Kratos UI redirects (login, registration, etc.). No trailing slash (EC-8). Per env: dev/standalone/standalone-multi=http://localhost:4455; drill=https://app.loopzero-drill.example; prod=https://app.loopzero.example. Set via infra/helmfile/environments/<env>.yaml."
+    },
+    "kratos": {
+      "type": "object",
+      "description": "Upstream ory/kratos chart values pass-through. Schema does not constrain (delegates to upstream chart's own schema)."
+    }
+  },
+  "additionalProperties": true
+}
