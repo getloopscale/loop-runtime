@@ -78,7 +78,8 @@ bootstrap_gitea() {
   done
 
   log "Gitea: token generated, orgs created"
-  echo "$TOKEN" > /tmp/gitea-token.txt
+  # Plan v1.2 T7.3 / D6 — secret transport via script-scope var (no /tmp world-readable).
+  export GITEA_TOKEN_OUT="$TOKEN"
 }
 
 # ── 2. ArgoCD ────────────────────────────────────────────
@@ -126,7 +127,8 @@ bootstrap_argocd() {
       python3 -c "import sys,json; print(json.load(sys.stdin).get('token',''))" 2>/dev/null)
 
     if [ -n "$API_KEY" ]; then
-      echo "$API_KEY" > /tmp/argocd-token.txt
+      # Plan v1.2 T7.3 / D6 — secret transport via script-scope var (no /tmp world-readable).
+      export ARGOCD_TOKEN_OUT="$API_KEY"
       log "ArgoCD: apiKey generated"
     else
       warn "ArgoCD: could not generate apiKey"
@@ -141,8 +143,10 @@ bootstrap_argocd() {
 bootstrap_secrets() {
   log "=== K8s Secrets ==="
 
-  GITEA_TOKEN=$(cat /tmp/gitea-token.txt 2>/dev/null || kubectl get secret loopzero-platform-tokens -n "$NAMESPACE" -o jsonpath='{.data.GITEA_ADMIN_TOKEN}' 2>/dev/null | base64 -d || echo "")
-  ARGOCD_TOKEN=$(cat /tmp/argocd-token.txt 2>/dev/null || kubectl get secret loopzero-platform-tokens -n "$NAMESPACE" -o jsonpath='{.data.ARGOCD_AUTH_TOKEN}' 2>/dev/null | base64 -d || echo "")
+  # Plan v1.2 T7.3 / D6 — read from script-scope vars (set by bootstrap_gitea/argocd)
+  # OR fall back to existing K8s Secret (idempotent re-run). No /tmp world-readable transport.
+  GITEA_TOKEN="${GITEA_TOKEN_OUT:-$(kubectl get secret loopzero-platform-tokens -n "$NAMESPACE" -o jsonpath='{.data.GITEA_ADMIN_TOKEN}' 2>/dev/null | base64 -d || echo '')}"
+  ARGOCD_TOKEN="${ARGOCD_TOKEN_OUT:-$(kubectl get secret loopzero-platform-tokens -n "$NAMESPACE" -o jsonpath='{.data.ARGOCD_AUTH_TOKEN}' 2>/dev/null | base64 -d || echo '')}"
 
   # Platform tokens secret (idempotent via kubectl apply)
   kubectl apply -f - <<EOF
@@ -260,7 +264,7 @@ main() {
   done
 
   log "Bootstrap complete for stack: $STACK"
-  rm -f /tmp/gitea-token.txt /tmp/argocd-token.txt
+  # Plan v1.2 T7.3 — no /tmp secret files to clean up (transport now via script vars).
 }
 
 main "$@"

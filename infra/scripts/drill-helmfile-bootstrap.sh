@@ -731,8 +731,11 @@ log "Bug #46+#52 fix: patching loopzero-api env (GITEA_URL/LOOPZERO_DYNAMIC_ROUT
 SERVICE_AUTH_SECRET="${LOOPZERO_SERVICE_AUTH_SECRET:-drill-l2-test-shared-secret-$(openssl rand -hex 12)}"
 kubectl -n loopzero-system patch secret loopzero-db-credentials --type=json -p="[{\"op\":\"add\",\"path\":\"/data/LOOPZERO_SERVICE_AUTH_SECRET\",\"value\":\"$(echo -n "$SERVICE_AUTH_SECRET" | base64 -w0)\"}]" 2>/dev/null || \
   kubectl -n loopzero-system patch secret loopzero-db-credentials --type=json -p="[{\"op\":\"replace\",\"path\":\"/data/LOOPZERO_SERVICE_AUTH_SECRET\",\"value\":\"$(echo -n "$SERVICE_AUTH_SECRET" | base64 -w0)\"}]" 2>/dev/null
-echo "$SERVICE_AUTH_SECRET" > /tmp/drill-service-auth-secret.txt
-log "  SERVICE_AUTH_SECRET saved to /tmp/drill-service-auth-secret.txt"
+# Plan v1.2 T7.3 / D6: secret is already in K8s Secret loopzero-db-credentials.
+# Previously also wrote to /tmp/drill-service-auth-secret.txt — eliminated
+# (per SOPS posture, world-readable /tmp writes for secrets are anti-pattern).
+# Consumers should `kubectl -n loopzero-system get secret loopzero-db-credentials -o jsonpath='{.data.LOOPZERO_SERVICE_AUTH_SECRET}' | base64 -d`.
+log "  SERVICE_AUTH_SECRET stored in K8s Secret loopzero-system/loopzero-db-credentials (LOOPZERO_SERVICE_AUTH_SECRET key)"
 
 kubectl -n loopzero-system set env deployment/loopzero-api \
   GITEA_URL=http://gitea-http.loopzero-system.svc.cluster.local:3000 \
