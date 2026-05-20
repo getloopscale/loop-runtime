@@ -109,9 +109,10 @@ jobs:
         env:
           DRILL_KUBECONFIG: /tmp/drill-mgmt-kc.yaml
         run: |
-          bash infra/scripts/bootstrap-cell-default-cc-drill.sh
-          bash infra/scripts/bootstrap-cell-1-cc-drill.sh
-          bash infra/scripts/bootstrap-cell-2-cc-drill.sh
+          # Plan v1.2 T4.2: consolidated bootstrap-cell-cc.sh --cell --env
+          bash infra/helmfile/scripts/bootstrap-cell-cc.sh --cell default --env drill
+          bash infra/helmfile/scripts/bootstrap-cell-cc.sh --cell 1 --env drill
+          bash infra/helmfile/scripts/bootstrap-cell-cc.sh --cell 2 --env drill
 
       - name: Stage 1 LIVE (1h synthetic soak)
         env:
@@ -214,9 +215,10 @@ jobs:
         env:
           DRILL_KUBECONFIG: /tmp/drill-mgmt-kc.yaml
         run: |
-          bash infra/scripts/bootstrap-cell-default-cc-drill.sh
-          bash infra/scripts/bootstrap-cell-1-cc-drill.sh
-          bash infra/scripts/bootstrap-cell-2-cc-drill.sh
+          # Plan v1.2 T4.2: consolidated bootstrap-cell-cc.sh --cell --env
+          bash infra/helmfile/scripts/bootstrap-cell-cc.sh --cell default --env drill
+          bash infra/helmfile/scripts/bootstrap-cell-cc.sh --cell 1 --env drill
+          bash infra/helmfile/scripts/bootstrap-cell-cc.sh --cell 2 --env drill
 
       - name: Stage 2 LIVE (24h soak)
         env:

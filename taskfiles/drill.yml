@@ -227,9 +227,10 @@ tasks:
 
         echo ""
         echo "=== Phase 5: Bootstrap cell wiring (T2.3 D3 mapping) ==="
-        bash infra/scripts/bootstrap-cell-default-cc-drill.sh
-        bash infra/scripts/bootstrap-cell-1-cc-drill.sh
-        bash infra/scripts/bootstrap-cell-2-cc-drill.sh
+        # Plan v1.2 T4.2: consolidated bootstrap-cell-cc.sh --cell --env
+        bash infra/helmfile/scripts/bootstrap-cell-cc.sh --cell default --env drill
+        bash infra/helmfile/scripts/bootstrap-cell-cc.sh --cell 1 --env drill
+        bash infra/helmfile/scripts/bootstrap-cell-cc.sh --cell 2 --env drill
 
         echo ""
         echo "=== Phase 6: Run L2 scale (50 concurrent) ==="

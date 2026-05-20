@@ -433,15 +433,17 @@ helmfile -e "$HELMFILE_ENV" --file "$HELMFILE_DIR/mgmt.helmfile.yaml.gotmpl" --s
 }
 log "  ✓ loopzero-crds installed — applying 3 ClusterCredentials (cell-default + cell-1 + cell-2)..."
 export DRILL_KUBECONFIG="$MGMT_KUBECONFIG"
-bash "$(cd "$(dirname "$0")" && pwd)/bootstrap-cell-default-cc-drill.sh" 2>&1 | tail -3 || {
+# Plan v1.2 T4.2: consolidated bootstrap-cell-cc.sh --cell --env
+CELL_SCRIPT="$(cd "$(dirname "$0")/../.." && pwd)/infra/helmfile/scripts/bootstrap-cell-cc.sh"
+bash "$CELL_SCRIPT" --cell default --env drill 2>&1 | tail -3 || {
   log "ERROR: bootstrap cell-default failed"
   exit 3
 }
-bash "$(cd "$(dirname "$0")" && pwd)/bootstrap-cell-1-cc-drill.sh" 2>&1 | tail -3 || {
+bash "$CELL_SCRIPT" --cell 1 --env drill 2>&1 | tail -3 || {
   log "ERROR: bootstrap cell-1 failed"
   exit 3
 }
-bash "$(cd "$(dirname "$0")" && pwd)/bootstrap-cell-2-cc-drill.sh" 2>&1 | tail -3 || {
+bash "$CELL_SCRIPT" --cell 2 --env drill 2>&1 | tail -3 || {
   log "ERROR: bootstrap cell-2 failed"
   exit 3
 }
