@@ -133,9 +133,9 @@ tasks:
         4 = leftover drill stack (run task drill:down first)
         5 = argument error
 
-      For machine-readable output: bash infra/scripts/drill-preflight.sh --json
+      For machine-readable output: bash infra/scripts/dr/preflight.sh --json
     cmds:
-      - bash infra/scripts/drill-preflight.sh
+      - bash infra/scripts/dr/preflight.sh
     env:
       DIGITALOCEAN_TOKEN: '{{.DIGITALOCEAN_TOKEN}}'
       PULUMI_ACCESS_TOKEN: '{{.PULUMI_ACCESS_TOKEN}}'
@@ -155,7 +155,7 @@ tasks:
 
       Pass criteria: success >= 90%, p95 <= 10min.
     preconditions:
-      - sh: bash infra/scripts/drill-preflight.sh
+      - sh: bash infra/scripts/dr/preflight.sh
         msg: "Pre-flight gate failed — see exit code + run 'task drill:preflight' for diagnosis"
     cmds:
       - |

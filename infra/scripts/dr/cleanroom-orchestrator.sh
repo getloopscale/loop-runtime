@@ -111,7 +111,7 @@ fi
 
 # --- Step 1: Pre-flight gate ---
 drill_skill_log "Step 1/8: Pre-flight gate (drill-preflight.sh)"
-if ! bash "$ROOT_DIR/infra/scripts/drill-preflight.sh" 2>&1 | tail -10; then
+if ! bash "$ROOT_DIR/infra/scripts/dr/preflight.sh" 2>&1 | tail -10; then
   drill_skill_emit_finding "S0" "Pre-flight gate failed"
   exit 3
 fi

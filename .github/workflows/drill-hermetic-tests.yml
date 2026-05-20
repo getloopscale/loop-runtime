@@ -69,7 +69,7 @@ jobs:
             infra/scripts/dr/cancel-refresh.sh \
             infra/scripts/dr/evidence-capture.sh \
             infra/scripts/dr/teardown-validator.sh \
-            infra/scripts/drill-preflight.sh
+            infra/scripts/dr/preflight.sh
 
       # === Shellcheck warning+ on hermetic test scripts ===
       # Iter 9 add-on: test scripts ALSO subject to lint discipline. Caught
