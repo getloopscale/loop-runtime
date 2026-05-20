@@ -518,6 +518,32 @@ assert_rejects \
   identityRegexp: '^https://github\\.com/getloopscale/loopzero/'" \
   "OCI loopzero-admission-policies — oidcIssuer garbage REJECTED (symmetric fix)"
 
+# --- OCI loopzero-platform global.registry first-char enforcement (2026-05-20 shadow bug audit) ---
+
+assert_rejects \
+  "charts/loopzero-platform/values.schema.json" \
+  "global:
+  registry: '.bad-leading-dot'" \
+  "OCI loopzero-platform — registry leading-dot REJECTED (first char [a-z0-9])"
+
+assert_rejects \
+  "charts/loopzero-platform/values.schema.json" \
+  "global:
+  registry: '-bad-leading-dash'" \
+  "OCI loopzero-platform — registry leading-dash REJECTED (first char [a-z0-9])"
+
+assert_rejects \
+  "charts/loopzero-platform/values.schema.json" \
+  "global:
+  registry: 'UPPERCASE.com'" \
+  "OCI loopzero-platform — registry uppercase REJECTED"
+
+assert_rejects \
+  "charts/loopzero-platform/values.schema.json" \
+  "global:
+  registry: 'registry.com/path with space'" \
+  "OCI loopzero-platform — registry whitespace REJECTED"
+
 # --- Summary ---
 echo ""
 echo "Tests run:    $TESTS_RUN"

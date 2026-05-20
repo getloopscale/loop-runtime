@@ -11,8 +11,8 @@
         "registry": {
           "type": "string",
           "minLength": 1,
-          "pattern": "^[a-z0-9.-]+(/[a-z0-9._-]+)*$",
-          "description": "Container image registry (FQDN, no protocol). Default: registry.digitalocean.com/loopzero-system"
+          "pattern": "^[a-z0-9][a-z0-9.-]*(/[a-z0-9._-]+)*$",
+          "description": "Container image registry (FQDN, no protocol). Default: registry.digitalocean.com/loopzero-system. First char MUST be [a-z0-9] (catches leading-dot/leading-dash garbage per 2026-05-20 shadow bug audit). Subsequent chars allow [a-z0-9.-] for FQDN segments + optional /path."
         },
         "imagePullSecrets": {
           "type": "array",
