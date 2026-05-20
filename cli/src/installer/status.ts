@@ -58,8 +58,14 @@ export function getPlatformStatus(): PlatformStatus {
 
   for (const name of LOOPZERO_COMPONENTS) {
     try {
+      // 2026-05-20: append `2>/dev/null` so kubectl jsonpath errors do not
+      // leak to process.stderr — execSync default stdio inherits child stderr,
+      // corrupting `loopzero platform status --json` output when items[] is empty
+      // (NotInstalled component). The empty-jsonpath path is intentional; we
+      // catch the throw and record NotInstalled. The stderr leak was a real
+      // CLI bug exposed by drill JSON probe.
       const output = execSync(
-        `kubectl get deploy -n loopzero-system -l app=${name} -o jsonpath="{.items[0].status.readyReplicas}/{.items[0].spec.replicas}"`,
+        `kubectl get deploy -n loopzero-system -l app=${name} -o jsonpath="{.items[0].status.readyReplicas}/{.items[0].spec.replicas}" 2>/dev/null`,
         { encoding: 'utf-8', timeout: 5_000 },
       ).trim();
       components.push({
