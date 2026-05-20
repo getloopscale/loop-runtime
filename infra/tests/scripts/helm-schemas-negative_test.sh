@@ -422,6 +422,41 @@ assert_rejects \
   "uiBaseUrl: 'https://app.loopzero-drill.example/login'" \
   "ory-kratos — uiBaseUrl with path REJECTED (host-only per pattern)"
 
+# 2026-05-20 pattern-audit follow-up (closes shadow bug class):
+# Old pattern '^https?://[^/]+(:[0-9]+)?\$' was greedy-permissive —
+# '[^/]+' matched any non-slash sequence including :abc / ?query / @userinfo.
+# New pattern '^https?://[a-z0-9][a-z0-9.-]*(:[0-9]+)?\$' tightens to
+# FQDN-like host + optional numeric port. Tests lock in fix.
+assert_rejects \
+  "infra/helm/ory-kratos/values.schema.json" \
+  "uiBaseUrl: 'http://localhost:abc'" \
+  "ory-kratos — uiBaseUrl with non-numeric port REJECTED (shadow bug fix)"
+
+assert_rejects \
+  "infra/helm/ory-kratos/values.schema.json" \
+  "uiBaseUrl: 'http://localhost:4455:8080'" \
+  "ory-kratos — uiBaseUrl with double port REJECTED"
+
+assert_rejects \
+  "infra/helm/ory-kratos/values.schema.json" \
+  "uiBaseUrl: 'http://localhost?query=1'" \
+  "ory-kratos — uiBaseUrl with query string REJECTED"
+
+assert_rejects \
+  "infra/helm/ory-kratos/values.schema.json" \
+  "uiBaseUrl: 'http://user:pass@localhost'" \
+  "ory-kratos — uiBaseUrl with userinfo embedded REJECTED (auth injection guard)"
+
+assert_rejects \
+  "infra/helm/ory-hydra/values.schema.json" \
+  "uiBaseUrl: 'http://localhost:abc'" \
+  "ory-hydra — uiBaseUrl with non-numeric port REJECTED (symmetric fix)"
+
+assert_rejects \
+  "infra/helm/ory-hydra/values.schema.json" \
+  "uiBaseUrl: 'http://user:pass@localhost'" \
+  "ory-hydra — uiBaseUrl with userinfo REJECTED (auth injection guard)"
+
 # --- ory-hydra uiBaseUrl pattern (same constraint as kratos) ---
 
 assert_rejects \

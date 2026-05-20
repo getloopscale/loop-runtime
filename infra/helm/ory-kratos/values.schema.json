@@ -8,8 +8,8 @@
   "properties": {
     "uiBaseUrl": {
       "type": "string",
-      "pattern": "^https?://[^/]+(:[0-9]+)?$",
-      "description": "Base URL for Kratos UI redirects (login, registration, etc.). No trailing slash (EC-8). Per env: dev/standalone/standalone-multi=http://localhost:4455; drill=https://app.loopzero-drill.example; prod=https://app.loopzero.example. Set via infra/helmfile/environments/<env>.yaml."
+      "pattern": "^https?://[a-z0-9][a-z0-9.-]*(:[0-9]+)?$",
+      "description": "Base URL for Kratos UI redirects (login, registration, etc.). Anchored pattern: scheme http(s), FQDN-like host ([a-z0-9.-] starting with alnum), optional :NNNN numeric port. NO trailing slash (EC-8), NO query/fragment, NO userinfo (catches http://user:pass@host injection), NO non-numeric port (catches http://host:abc). Per env: dev/standalone/standalone-multi=http://localhost:4455; drill=https://app.loopzero-drill.example; prod=https://app.loopzero.example. Set via infra/helmfile/environments/<env>.yaml. (2026-05-20 pattern audit closed shadow bug class: old pattern '^https?://[^/]+(:[0-9]+)?\\$' was too permissive — '[^/]+' greedy-matched any non-slash sequence including :abc, ?query, @userinfo.)"
     },
     "kratos": {
       "type": "object",
