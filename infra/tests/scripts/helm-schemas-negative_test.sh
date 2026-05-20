@@ -823,6 +823,59 @@ controller:
     runAsNonRoot: false" \
   "argo-workflows INF-G08 — controller runAsNonRoot=false REJECTED"
 
+# --- chaos-mesh ADR-0016 D-4 + PSA restricted protection ---
+
+assert_rejects \
+  "infra/helm/chaos-mesh/values.schema.json" \
+  "chaos-mesh:
+  dashboard:
+    create: true" \
+  "chaos-mesh — dashboard.create=true REJECTED (attack surface, const:false)"
+
+assert_rejects \
+  "infra/helm/chaos-mesh/values.schema.json" \
+  "chaos-mesh:
+  controllerManager:
+    podSecurityContext:
+      runAsNonRoot: false
+      runAsUser: 1000
+      seccompProfile: {type: RuntimeDefault}" \
+  "chaos-mesh PSA — controller runAsNonRoot=false REJECTED (const:true)"
+
+assert_rejects \
+  "infra/helm/chaos-mesh/values.schema.json" \
+  "chaos-mesh:
+  controllerManager:
+    securityContext:
+      allowPrivilegeEscalation: true
+      capabilities: {drop: [ALL]}
+      readOnlyRootFilesystem: true" \
+  "chaos-mesh PSA — allowPrivilegeEscalation=true REJECTED (const:false)"
+
+assert_rejects \
+  "infra/helm/chaos-mesh/values.schema.json" \
+  "chaos-mesh:
+  chaosDaemon:
+    socketPath: '/no-sock-suffix'" \
+  "chaos-mesh — chaosDaemon socketPath without .sock REJECTED"
+
+assert_rejects \
+  "infra/helm/chaos-mesh/values.schema.json" \
+  "chaos-mesh:
+  chaosDaemon:
+    runtime: 'rkt'" \
+  "chaos-mesh — chaosDaemon runtime 'rkt' REJECTED (enum: containerd|docker|cri-o)"
+
+assert_rejects \
+  "infra/helm/chaos-mesh/values.schema.json" \
+  "chaos-mesh:
+  controllerManager:
+    securityContext:
+      allowPrivilegeEscalation: false
+      capabilities: {drop: [NET_RAW]}
+      readOnlyRootFilesystem: true" \
+  "chaos-mesh PSA — capabilities drop missing ALL REJECTED"
+
 # --- Summary ---
 echo ""
 echo "Tests run:    $TESTS_RUN"

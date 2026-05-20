@@ -54,10 +54,6 @@ EXEMPT_CHARTS=(
   # Each subsequent session should pick one off this list, add a schema
   # with TDD red coverage, and remove from this list.
 
-  # chaos-mesh wrapper + LoopZero CRD allow-lists. Schema would constrain
-  # PSA enforcement + RBAC narrow.
-  "infra/helm/chaos-mesh"
-
   # cloudflared deployment template (LoopZero CF Tunnel egress). Schema would
   # constrain tunnel ID format + replica count + secret refs.
   "infra/helm/cloudflared"
