@@ -114,7 +114,7 @@ jobs:
           SPACES_SECRET_ACCESS_KEY: ${{ secrets.SPACES_SECRET_ACCESS_KEY }}
           AWS_ACCESS_KEY_ID: ${{ secrets.SPACES_ACCESS_KEY_ID }}
           AWS_SECRET_ACCESS_KEY: ${{ secrets.SPACES_SECRET_ACCESS_KEY }}
-        run: bash infra/scripts/drill-cleanroom-orchestrator.sh
+        run: bash infra/scripts/dr/cleanroom-orchestrator.sh
       - name: Upload audit trail
         if: always()
         uses: actions/upload-artifact@v4
@@ -155,7 +155,7 @@ jobs:
           SPACES_SECRET_ACCESS_KEY: ${{ secrets.SPACES_SECRET_ACCESS_KEY }}
           AWS_ACCESS_KEY_ID: ${{ secrets.SPACES_ACCESS_KEY_ID }}
           AWS_SECRET_ACCESS_KEY: ${{ secrets.SPACES_SECRET_ACCESS_KEY }}
-        run: bash infra/scripts/drill-dogfood-orchestrator.sh
+        run: bash infra/scripts/dr/dogfood-orchestrator.sh
       - name: Upload audit trail
         if: always()
         uses: actions/upload-artifact@v4
@@ -197,7 +197,7 @@ jobs:
           SPACES_SECRET_ACCESS_KEY: ${{ secrets.SPACES_SECRET_ACCESS_KEY }}
           AWS_ACCESS_KEY_ID: ${{ secrets.SPACES_ACCESS_KEY_ID }}
           AWS_SECRET_ACCESS_KEY: ${{ secrets.SPACES_SECRET_ACCESS_KEY }}
-        run: bash infra/scripts/drill-chaos-orchestrator.sh --scenario "$SCENARIO"
+        run: bash infra/scripts/dr/chaos-orchestrator.sh --scenario "$SCENARIO"
       - name: Upload audit trail
         if: always()
         uses: actions/upload-artifact@v4

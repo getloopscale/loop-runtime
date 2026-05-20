@@ -110,7 +110,7 @@ tasks:
       For local testing of watchdog logic. CI invokes via
       .github/workflows/drill-auto-destroy-watchdog.yml every 6h.
     cmds:
-      - bash infra/scripts/drill-watchdog.sh
+      - bash infra/scripts/dr/watchdog.sh
     env:
       DIGITALOCEAN_TOKEN: '{{.DIGITALOCEAN_TOKEN}}'
       PULUMI_ACCESS_TOKEN: '{{.PULUMI_ACCESS_TOKEN}}'
