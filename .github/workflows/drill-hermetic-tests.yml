@@ -188,6 +188,36 @@ jobs:
           npm ci
           npm test
 
+      # === Helm chart render-time build gate (Plan 2026-05-20 T4.1) ===
+      # Cross-coverage of the helm-render test packages: fails this
+      # workflow if any helm render test package no longer compiles
+      # (b9f19dc8 class of regression — helpers symbol removed while
+      # still referenced downstream).
+      #
+      # The FULL render-time suite (~5min, 20 packages) runs in
+      # `helm-charts.yml` which is the canonical domain. This step is
+      # the fast cross-workflow build gate (~5s) ensuring drill
+      # hermetic CI also notices a broken helm render API surface.
+      - name: Set up Go for helm render build gate
+        uses: actions/setup-go@0aaccfd150d50ccaeb58ebd88d36e91967a5f35b # v5.4.0
+        with:
+          go-version: '1.25.10'
+          cache-dependency-path: infra/tests/go.sum
+
+      - name: Set up Helm for helm render build gate
+        uses: ./.github/actions/setup-helm
+        with:
+          version: v3.14.4
+
+      - name: Set up Task for helm render build gate
+        uses: arduino/setup-task@b91d5d2c96a56797b48ac1e0e89220bf64044611 # v2.0.0
+        with:
+          version: 3.x
+          repo-token: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Helm render-test build gate (task helm:test:vet)
+        run: task helm:test:vet
+
       # === Summary ===
       - name: Drill engineering surface validated
         run: |
