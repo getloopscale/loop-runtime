@@ -77,10 +77,6 @@ EXEMPT_CHARTS=(
   # password ref + storage backend.
   "infra/helm/harbor"
 
-  # PostgreSQL LoopZero bootstrap + production values. Schema would constrain
-  # PVC sizes + replica count + auth secret refs.
-  "infra/helm/postgresql"
-
   # Smoke test chart (local-only). Lowest priority for schema.
   "infra/helm/smoke-test"
 

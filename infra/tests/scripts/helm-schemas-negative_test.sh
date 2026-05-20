@@ -659,6 +659,66 @@ namespaces: ['loopzero-system']
 unknownToggle: true" \
   "network-policies — unknown key REJECTED (additionalProperties:false catches typos)"
 
+# --- postgresql B19/B21/B27/B29 protection ---
+
+assert_rejects \
+  "infra/helm/postgresql/values.schema.json" \
+  "image:
+  registry: docker.io
+  repository: 'UPPER/postgresql'
+auth:
+  username: loopzero
+  password: loopzero-dev-password
+  database: loopzero" \
+  "postgresql B19 — uppercase image repository REJECTED"
+
+assert_rejects \
+  "infra/helm/postgresql/values.schema.json" \
+  "image:
+  registry: docker.io
+  repository: 'bitnami/postgresql'
+auth:
+  username: 'LoopZero-User'
+  password: loopzero-dev-password
+  database: loopzero" \
+  "postgresql — username with dash+uppercase REJECTED (PG identifier)"
+
+assert_rejects \
+  "infra/helm/postgresql/values.schema.json" \
+  "image:
+  registry: docker.io
+  repository: 'bitnami/postgresql'
+auth:
+  username: loopzero
+  password: ''
+  database: loopzero" \
+  "postgresql — empty auth.password REJECTED (no auto-gen)"
+
+assert_rejects \
+  "infra/helm/postgresql/values.schema.json" \
+  "image:
+  registry: docker.io
+  repository: 'bitnami/postgresql'
+auth:
+  username: loopzero
+  password: loopzero-dev-password
+  database: loopzero
+primary:
+  persistence:
+    size: '10gb'" \
+  "postgresql — PVC size '10gb' (wrong unit) REJECTED (Gi required)"
+
+assert_rejects \
+  "infra/helm/postgresql/values.schema.json" \
+  "image:
+  registry: ''
+  repository: 'bitnami/postgresql'
+auth:
+  username: loopzero
+  password: loopzero-dev-password
+  database: loopzero" \
+  "postgresql — empty image.registry REJECTED (minLength=1)"
+
 # --- Summary ---
 echo ""
 echo "Tests run:    $TESTS_RUN"
