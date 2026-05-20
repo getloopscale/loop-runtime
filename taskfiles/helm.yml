@@ -95,6 +95,57 @@ tasks:
     desc: Run helm test hooks post-install
     cmds:
       - helm test loopzero -n loopzero-system
+  helm:test:
+    desc: |
+      Run helm chart RENDER-TIME tests (Plan 2026-05-20 T4.2).
+      Tier 2 between schema validation and LIVE drill. Tests render the
+      chart, unmarshal into typed K8s structs, and assert structural
+      invariants (Microsoft 2026 6 categories). 18 charts covered; total
+      ~190 assertions; ~245s runtime with -p 1 serialization.
+
+      Uses -p 1 to serialize across test packages: each package spawns
+      its own `helm dep update` and 3+ concurrent helm processes contend
+      for helm's global cache (would intermittently FAIL otherwise).
+    dir: infra/tests
+    cmds:
+      - go test -tags helm_render -count=1 -timeout 300s -p 1 ./helm/...
+
+  helm:test:chart:
+    desc: |
+      Run render-time tests for a SINGLE chart.
+      Usage: task helm:test:chart -- loopzero-api
+             task helm:test:chart -- loopzero-cloud
+             task helm:test:chart -- harbor
+      Faster than full suite (~1-30s per chart). Useful while iterating
+      on a chart change.
+    dir: infra/tests
+    cmds:
+      - go test -tags helm_render -count=1 -timeout 60s ./helm/{{.CLI_ARGS}}/...
+
+  helm:test:vet:
+    desc: |
+      Run go vet over all helm render test packages (Plan T4.2 build-gate).
+      Catches the b9f19dc8 class of regression (helpers symbol removed
+      while still referenced downstream). Same gate runs as
+      TestBuildGate_AllHelmRenderPackagesCompile inside the suite.
+    dir: infra/tests
+    cmds:
+      - go vet -tags helm_render ./helm/...
+
+  helm:test:env:
+    desc: |
+      Run render-time tests filtered by environment (dev/drill/prod).
+      Tests for per-env stubs catch env drift bugs (image registry mismatch,
+      wrong replicas, cluster-local DNS in prod, etc.).
+      Usage: task helm:test:env -- dev
+             task helm:test:env -- drill
+             task helm:test:env -- prod
+      Note: only loopzero-api has per-env tests today (T2.2); other charts
+      have defaults-only tests (image tags injected externally).
+    dir: infra/tests
+    cmds:
+      - go test -tags helm_render -count=1 -timeout 60s -p 1 -run "_{{.CLI_ARGS | replace "-" ""}}_" ./helm/...
+
   helm:repos:
     desc: Add all required Helm repositories
     cmds:
