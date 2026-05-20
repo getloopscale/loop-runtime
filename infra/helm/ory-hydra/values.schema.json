@@ -1,0 +1,20 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://loopzero.platform/schemas/ory-hydra/values.schema.json",
+  "title": "Ory Hydra LoopZero wrapper values schema",
+  "description": "Plan v1.2 T2.5 / D4 — fail-fast on missing keys per ADR.",
+  "type": "object",
+  "required": ["uiBaseUrl"],
+  "properties": {
+    "uiBaseUrl": {
+      "type": "string",
+      "pattern": "^https?://[^/]+(:[0-9]+)?$",
+      "description": "Base URL for Hydra UI (login/consent/logout + CORS). No trailing slash (EC-8). Same value as ory-kratos uiBaseUrl. Set via infra/helmfile/environments/<env>.yaml."
+    },
+    "hydra": {
+      "type": "object",
+      "description": "Upstream ory/hydra chart values pass-through."
+    }
+  },
+  "additionalProperties": true
+}
