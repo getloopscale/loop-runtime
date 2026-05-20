@@ -876,6 +876,59 @@ assert_rejects \
       readOnlyRootFilesystem: true" \
   "chaos-mesh PSA — capabilities drop missing ALL REJECTED"
 
+# --- cloudflared CF Tunnel deployment protection ---
+
+assert_rejects \
+  "infra/helm/cloudflared/values.schema.json" \
+  "replicaCount: 0
+image: {repository: cloudflare/cloudflared, tag: '2024.12.2'}
+tokenSecret: {name: tok, key: token}
+resources:
+  requests: {cpu: 50m, memory: 64Mi}
+  limits: {cpu: 200m, memory: 256Mi}" \
+  "cloudflared — replicaCount=0 REJECTED (minimum=1 for HA)"
+
+assert_rejects \
+  "infra/helm/cloudflared/values.schema.json" \
+  "replicaCount: 2
+image: {repository: cloudflare/cloudflared, tag: latest}
+tokenSecret: {name: tok, key: token}
+resources:
+  requests: {cpu: 50m, memory: 64Mi}
+  limits: {cpu: 200m, memory: 256Mi}" \
+  "cloudflared — image tag=latest REJECTED (not:const, Bug #16 pattern)"
+
+assert_rejects \
+  "infra/helm/cloudflared/values.schema.json" \
+  "replicaCount: 2
+image: {repository: cloudflare/cloudflared, tag: '2024.12.2'}
+tokenSecret: {name: '', key: token}
+resources:
+  requests: {cpu: 50m, memory: 64Mi}
+  limits: {cpu: 200m, memory: 256Mi}" \
+  "cloudflared — empty tokenSecret.name REJECTED (would cause CrashLoopBackOff)"
+
+assert_rejects \
+  "infra/helm/cloudflared/values.schema.json" \
+  "replicaCount: 2
+image: {repository: cloudflare/cloudflared, tag: '2024.12.2'}
+tokenSecret: {name: 'UPPER-SEC', key: token}
+resources:
+  requests: {cpu: 50m, memory: 64Mi}
+  limits: {cpu: 200m, memory: 256Mi}" \
+  "cloudflared — uppercase secret name REJECTED (RFC 1123)"
+
+assert_rejects \
+  "infra/helm/cloudflared/values.schema.json" \
+  "replicaCount: 2
+image: {repository: cloudflare/cloudflared, tag: '2024.12.2'}
+tokenSecret: {name: tok, key: token}
+resources:
+  requests: {cpu: 50m, memory: 64Mi}
+  limits: {cpu: 200m, memory: 256Mi}
+metricsPort: 80" \
+  "cloudflared — metricsPort=80 REJECTED (privileged port, non-root conflict)"
+
 # --- Summary ---
 echo ""
 echo "Tests run:    $TESTS_RUN"
