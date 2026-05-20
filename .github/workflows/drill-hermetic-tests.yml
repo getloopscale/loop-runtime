@@ -31,6 +31,7 @@ on:
       - 'infra/tests/scripts/run-migrations_bug14_test.sh'
       - 'infra/tests/chaos/manifests/drill-*.yaml'
       - 'infra/tests/scripts/helm-values-schemas_test.sh'
+      - 'infra/tests/scripts/helm-schemas-negative_test.sh'
       - 'infra/helm/**/values.schema.json'
       - 'infra/helm/**/values.yaml'
       - 'infra/pulumi-drill/**'
@@ -146,6 +147,9 @@ jobs:
       - name: T2.5 ext — helm values.schema.json hermetic gate (8 charts)
         run: bash infra/tests/scripts/helm-values-schemas_test.sh
 
+      - name: T2.5 ext — helm schemas TDD negative gate (16 rejection cases)
+        run: bash infra/tests/scripts/helm-schemas-negative_test.sh
+
       # === Vitest pulumi-drill structure tests ===
       - name: Setup Node
         uses: actions/setup-node@1d0ff469b7ec7b3cb9d8673fde0c81c44821de2a # v4.2.0
@@ -165,7 +169,7 @@ jobs:
         run: |
           echo "✓ shellcheck warning+ EXIT=0 (6 scripts)"
           echo "✓ 9 hermetic test suites PASS (60+ tests)"
-          echo "✓ helm values.schema.json gate PASS (8 charts)"
+          echo "✓ helm values.schema.json gate PASS (8 charts positive + 16 negative)"
           echo "✓ vitest pulumi-drill structure PASS (48 tests)"
           echo "✓ LIVE grep audit returns 0 legacy consumers"
           echo ""

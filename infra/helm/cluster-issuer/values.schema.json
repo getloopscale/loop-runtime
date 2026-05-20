@@ -15,8 +15,8 @@
       "properties": {
         "email": {
           "type": "string",
-          "format": "email",
-          "description": "ACME account email — MUST be valid. Let's Encrypt sends expiry warnings here."
+          "pattern": "^[^@\\s]+@[^@\\s]+\\.[^@\\s]+$",
+          "description": "ACME account email — MUST match basic email pattern (anything@anything.anything, no spaces). Let's Encrypt sends expiry warnings here. Note: schema uses pattern (always enforced) instead of format:email (only enforced when consumer passes FormatChecker — not the case in helm/helmfile lint)."
         },
         "server": {
           "type": "string",
