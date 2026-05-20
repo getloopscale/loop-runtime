@@ -148,22 +148,30 @@ log "  ✓ Exported DOKS context names: mgmt=$MGMT_KUBE_CONTEXT build=$BUILD_KUB
 # --- Phase 1: Read Pulumi outputs ---
 log "Phase 1/4: Reading Pulumi outputs (v2 flat named exports)..."
 
-# Helper: pulumi stack output NAME
+# Plan 2026-05-20 T4.3 (amendment per finding-2026-05-20-t4-3-scope-rethink):
+# Consume shared lib infra/helmfile/scripts/lib/pulumi-output.sh instead of
+# inlining the pulumi/npx fallback dispatch. Lib API:
+#   pulumi_output --dir DIR --stack STACK [--secret] [--json] KEY
+SCRIPT_DIR_BOOTSTRAP="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+LIB_PULUMI_OUTPUT="${SCRIPT_DIR_BOOTSTRAP}/../helmfile/scripts/lib/pulumi-output.sh"
+if [[ ! -r "$LIB_PULUMI_OUTPUT" ]]; then
+  log "ERROR: shared lib not found at $LIB_PULUMI_OUTPUT"
+  log "  Plan 2026-05-20 T4.3 amendment — drill-helmfile-bootstrap.sh depends on this lib"
+  exit 2
+fi
+# shellcheck source=../helmfile/scripts/lib/pulumi-output.sh
+source "$LIB_PULUMI_OUTPUT"
+
+# Thin wrapper preserves caller-side signature (existing call sites in this
+# script call `pulumi_out KEY [secret]`). Lib accepts --secret as a flag, so
+# wrapper translates positional arg to flag form.
 pulumi_out() {
   local key="$1"
   local secret="${2:-false}"
-  if command -v pulumi >/dev/null 2>&1; then
-    if [[ "$secret" == "true" ]]; then
-      pulumi stack output --stack drill --cwd "$PULUMI_DRILL_DIR" "$key" --show-secrets 2>/dev/null
-    else
-      pulumi stack output --stack drill --cwd "$PULUMI_DRILL_DIR" "$key" 2>/dev/null
-    fi
+  if [[ "$secret" == "true" ]]; then
+    pulumi_output --dir "$PULUMI_DRILL_DIR" --stack drill --secret "$key"
   else
-    if [[ "$secret" == "true" ]]; then
-      (cd "$PULUMI_DRILL_DIR" && npx pulumi stack output --stack drill "$key" --show-secrets 2>/dev/null)
-    else
-      (cd "$PULUMI_DRILL_DIR" && npx pulumi stack output --stack drill "$key" 2>/dev/null)
-    fi
+    pulumi_output --dir "$PULUMI_DRILL_DIR" --stack drill "$key"
   fi
 }
 
