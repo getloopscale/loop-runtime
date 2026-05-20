@@ -224,6 +224,30 @@ const drillStaticBucket = new digitalocean.SpacesBucket("drill-static", {
   forceDestroy: true,
 });
 
+// Plan v1.2 T6.1 — Velero backup bucket (closes finding-2026-05-20 Gap 1).
+// Velero BSL "default" was Unavailable in drill iter 2026-05-20 because
+// the bucket `loopzero-drill-velero-backups` (referenced by
+// infra/helmfile/environments/drill.yaml velero.bucket) did not exist.
+// Operator action: re-run `pulumi up --stack drill` to provision this
+// bucket; after that, Velero BSL transitions to Available within ~60s
+// and 5 Schedule CRs apply automatically (Gap 2 closes secondarily).
+//
+// lifecycleRule: 30-day expiration to keep storage cost bounded
+// (drill is iteration env; backups older than 30d have no recovery value).
+const drillVeleroBucket = new digitalocean.SpacesBucket("drill-velero", {
+  name: `loopzero-drill-velero-backups`,
+  region,
+  forceDestroy: true,
+  acl: "private",
+  lifecycleRules: [
+    {
+      id: "expire-30d",
+      enabled: true,
+      expiration: { days: 30 },
+    },
+  ],
+});
+
 // =============================================================================
 // 6. Managed PostgreSQL (mgmt-tier per D4)
 // =============================================================================
@@ -466,6 +490,9 @@ export const loopzeroApiDsn = pulumi.interpolate`postgres://${drillPG.user}:${dr
 export const bucketBuilds = drillBuildsBucket.name;
 export const bucketArtifacts = drillArtifactsBucket.name;
 export const bucketStatic = drillStaticBucket.name;
+// Plan v1.2 T6.1 — Velero backup bucket (Gap 1 closure).
+export const bucketVeleroBackups = drillVeleroBucket.name;
+export const bucketVeleroEndpoint = pulumi.interpolate`https://${region}.digitaloceanspaces.com`;
 
 // Shared infrastructure — CF Zone (EC-03: NOT protected)
 export const zoneId = drillZone.id;
