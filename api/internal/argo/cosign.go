@@ -69,7 +69,7 @@ type CosignSignParams struct {
 // B7 (CHG-2026-04-22-001): insecureRegistry mirrors the same toggle used by BuildKit
 // (InfraParams.RegistryInsecure). When true, cosign receives --allow-insecure-registry
 // so it speaks HTTP (local k3d dev). Config.Validate() enforces false in production.
-func cosignSignTemplate(appName, imageTag string, insecureRegistry bool) *forge.Container {
+func cosignSignTemplate(appName, imageTag string, insecureRegistry bool) *forge.Script {
 	return cosignSignTemplateWithParams(CosignSignParams{
 		AppName:          appName,
 		ImageTag:         imageTag,
@@ -82,7 +82,7 @@ func cosignSignTemplate(appName, imageTag string, insecureRegistry bool) *forge.
 // both key-based and keyless modes. Plan T4.1 entry point for callers that
 // want to opt into keyless. The legacy 3-arg cosignSignTemplate is kept as a
 // thin wrapper to avoid touching ~10 existing call sites unnecessarily.
-func cosignSignTemplateWithParams(p CosignSignParams) *forge.Container {
+func cosignSignTemplateWithParams(p CosignSignParams) *forge.Script {
 	if p.Keyless {
 		return cosignSignTemplateKeyless(p)
 	}
@@ -91,7 +91,7 @@ func cosignSignTemplateWithParams(p CosignSignParams) *forge.Container {
 
 // cosignSignTemplateKeyBased is the original key-based signing template.
 // Renamed-extracted from `cosignSignTemplate` to make the mode-split explicit.
-func cosignSignTemplateKeyBased(appName, imageTag string, insecureRegistry bool) *forge.Container {
+func cosignSignTemplateKeyBased(appName, imageTag string, insecureRegistry bool) *forge.Script {
 	metadataFile := fmt.Sprintf("%s/metadata-%s.json", workspaceMountPath, appName)
 
 	// cosign v3 distinguishes: --allow-insecure-registry (self-signed TLS) from
@@ -150,10 +150,11 @@ echo "Image signed successfully"
 `, metadataFile, imageTag, insecureFlag, cosignKeyMountPath, appName, imageTag,
 		imageTag, outSignaturePath, outDigestPath)
 
-	return &forge.Container{
+	return &forge.Script{
 		Name:    fmt.Sprintf("sign-image-%s", appName),
 		Image:   loopzeroCosignImage(),
-		Command: []string{"sh", "-c", script},
+		Command: []string{"sh"},
+		Source:  script,
 		Outputs: []forge.Parameter{
 			{
 				Name:      "signature",
@@ -219,7 +220,7 @@ echo "Image signed successfully"
 //
 // The CODE is delivered (Plan P4.1 closure); runtime activation tracks
 // Sprint 9 readiness review.
-func cosignSignTemplateKeyless(p CosignSignParams) *forge.Container {
+func cosignSignTemplateKeyless(p CosignSignParams) *forge.Script {
 	metadataFile := fmt.Sprintf("%s/metadata-%s.json", workspaceMountPath, p.AppName)
 
 	insecureFlag := ""
@@ -285,10 +286,11 @@ echo "Image signed successfully (keyless)"
 		p.ImageTag, outSignaturePath,
 		outDigestPath)
 
-	return &forge.Container{
+	return &forge.Script{
 		Name:    fmt.Sprintf("sign-image-%s", p.AppName),
 		Image:   loopzeroCosignImage(),
-		Command: []string{"sh", "-c", script},
+		Command: []string{"sh"},
+		Source:  script,
 		Outputs: []forge.Parameter{
 			{Name: "signature", ValueFrom: &model.ValueFrom{Path: outSignaturePath}},
 			{Name: "digest", ValueFrom: &model.ValueFrom{Path: outDigestPath}},

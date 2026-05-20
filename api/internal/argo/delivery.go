@@ -22,7 +22,7 @@ import (
 //
 // Uses aws cli for S3 operations. Credentials come from the existing
 // loopzero-minio-credentials Secret in the build namespace (envFrom in CWT).
-func (b *WorkflowBuilder) uploadAssetsTemplate(spec services.WorkflowSpec, plan services.AppBuildPlan) *forge.Container {
+func (b *WorkflowBuilder) uploadAssetsTemplate(spec services.WorkflowSpec, plan services.AppBuildPlan) *forge.Script {
 	appPath := plan.AppPath
 	if appPath == "" || appPath == "." {
 		appPath = "."
@@ -79,10 +79,11 @@ aws s3 sync "$OUTPUT_DIR/" "s3://%s/%s" --endpoint-url "$MINIO_ENDPOINT" --acl p
 echo "Upload complete"
 `, appPath, s3BucketStaticAssets, s3Dest, s3BucketStaticAssets, s3Dest)
 
-	return &forge.Container{
+	return &forge.Script{
 		Name:    fmt.Sprintf("deliver-artifact-%s", plan.AppName),
 		Image:   imageAWSCLI,
-		Command: []string{"sh", "-c", script},
+		Command: []string{"sh"},
+		Source:  script,
 		Env: []forge.EnvBuilder{
 			forge.Env{Name: "HOME", Value: "/tmp"},
 		},

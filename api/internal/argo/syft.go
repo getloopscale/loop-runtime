@@ -44,7 +44,7 @@ const (
 func syftScanTemplate(
 	tenantID, projectID, commitSHA, appName, imageTag string,
 	insecureRegistry bool,
-) *forge.Container {
+) *forge.Script {
 	metadataFile := fmt.Sprintf("%s/metadata-%s.json", workspaceMountPath, appName)
 	sbomLocalPath := fmt.Sprintf("%s/sbom-%s.cdx.json", sbomLocalDir, appName)
 	s3Key := fmt.Sprintf(sbomS3PathTemplate, tenantID, projectID, commitSHA, appName)
@@ -129,10 +129,11 @@ echo "SBOM generated and uploaded successfully"
 		outComponentCountPath, // 18: write count output
 	)
 
-	return &forge.Container{
+	return &forge.Script{
 		Name:    fmt.Sprintf("sbom-%s", appName),
 		Image:   loopzeroSyftImage(),
-		Command: []string{"sh", "-c", script},
+		Command: []string{"sh"},
+		Source:  script,
 		Outputs: []forge.Parameter{
 			{
 				Name:      "sbom_s3_key",

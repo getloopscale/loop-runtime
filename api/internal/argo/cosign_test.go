@@ -16,7 +16,7 @@ import (
 
 func TestCosignSignTemplate_Secure_NoInsecureFlag(t *testing.T) {
 	c := cosignSignTemplate("api", "registry.example.com/org/app:abc", false)
-	script := c.Command[len(c.Command)-1]
+	script := c.Source
 	if strings.Contains(script, "--allow-insecure-registry") {
 		t.Errorf("secure registry must NOT emit --allow-insecure-registry:\n%s", script)
 	}
@@ -24,7 +24,7 @@ func TestCosignSignTemplate_Secure_NoInsecureFlag(t *testing.T) {
 
 func TestCosignSignTemplate_Insecure_EmitsFlag(t *testing.T) {
 	c := cosignSignTemplate("api", "k3d-loopzero-registry:5000/tenant/app:abc", true)
-	script := c.Command[len(c.Command)-1]
+	script := c.Source
 	if !strings.Contains(script, "--allow-http-registry") {
 		t.Errorf("insecure registry MUST emit --allow-http-registry (for plain HTTP local):\n%s", script)
 	}
@@ -88,7 +88,7 @@ func TestCosignSignTemplate_DeclaresOutputs(t *testing.T) {
 // the output param declaration would yield empty strings.
 func TestCosignSignTemplate_ScriptWritesOutputFiles(t *testing.T) {
 	c := cosignSignTemplate("api", "registry.example.com/org/app:abc", false)
-	script := c.Command[len(c.Command)-1]
+	script := c.Source
 
 	// Must reference both output paths (so the script writes them).
 	pathSig := ""
@@ -126,7 +126,7 @@ func TestCosignSignTemplateKeyless_UsesFulcioAndRekor(t *testing.T) {
 		InsecureRegistry: false,
 		Keyless:          true,
 	})
-	script := c.Command[len(c.Command)-1]
+	script := c.Source
 
 	// Must reference Fulcio + Rekor URLs.
 	if !strings.Contains(script, "fulcio.sigstore.dev") {
@@ -169,7 +169,7 @@ func TestCosignSignTemplateKeyless_PrivateFulcioOverride(t *testing.T) {
 		FulcioURL: "https://fulcio.loopzero.internal",
 		RekorURL:  "https://rekor.loopzero.internal",
 	})
-	script := c.Command[len(c.Command)-1]
+	script := c.Source
 
 	if !strings.Contains(script, "fulcio.loopzero.internal") {
 		t.Errorf("private Fulcio URL must override default:\n%s", script)
@@ -210,7 +210,7 @@ func TestCosignSignTemplateWithParams_DispatchesByMode(t *testing.T) {
 		ImageTag: "registry.example.com/org/app:abc",
 		Keyless:  false,
 	})
-	if !strings.Contains(keyBased.Command[len(keyBased.Command)-1], "--key ") {
+	if !strings.Contains(keyBased.Source, "--key ") {
 		t.Errorf("Keyless=false must dispatch to key-based template (which uses --key)")
 	}
 
@@ -219,7 +219,7 @@ func TestCosignSignTemplateWithParams_DispatchesByMode(t *testing.T) {
 		ImageTag: "registry.example.com/org/app:abc",
 		Keyless:  true,
 	})
-	if strings.Contains(keyless.Command[len(keyless.Command)-1], "--key ") {
+	if strings.Contains(keyless.Source, "--key ") {
 		t.Errorf("Keyless=true must dispatch to keyless template (no --key flag)")
 	}
 }
