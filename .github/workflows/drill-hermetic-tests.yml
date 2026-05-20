@@ -34,6 +34,7 @@ on:
       - 'infra/tests/scripts/helm-schemas-negative_test.sh'
       - 'infra/tests/scripts/helm-charts-schema-coverage_test.sh'
       - 'infra/tests/scripts/helm-patterns-audit_test.sh'
+      - 'infra/tests/scripts/ci-path-filter-coverage_test.sh'
       - 'infra/helm/**/values.schema.json'
       - 'infra/helm/**/values.yaml'
       - 'infra/pulumi-drill/**'
@@ -165,6 +166,9 @@ jobs:
 
       - name: T2.5 ext — helm patterns audit (131 cases across 12 unique regexes)
         run: bash infra/tests/scripts/helm-patterns-audit_test.sh
+
+      - name: T2.5 ext — CI path-filter coverage (silent no-trigger guard)
+        run: bash infra/tests/scripts/ci-path-filter-coverage_test.sh
 
       # === Vitest pulumi-drill structure tests ===
       - name: Setup Node
