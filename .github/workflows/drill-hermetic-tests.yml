@@ -30,6 +30,9 @@ on:
       - 'infra/tests/scripts/run-migrations_sslmode_test.sh'
       - 'infra/tests/scripts/run-migrations_bug14_test.sh'
       - 'infra/tests/chaos/manifests/drill-*.yaml'
+      - 'infra/tests/scripts/helm-values-schemas_test.sh'
+      - 'infra/helm/**/values.schema.json'
+      - 'infra/helm/**/values.yaml'
       - 'infra/pulumi-drill/**'
       - '.claude/skills/cleanroom-drill/**'
       - '.claude/skills/dogfood-drill/**'
@@ -136,6 +139,13 @@ jobs:
       - name: T3.2 — chaos-test-drill orchestrator hermetic tests (8/8)
         run: bash infra/tests/scripts/drill-chaos-orchestrator_test.sh
 
+      # === Helm values.schema.json gate (plan 2026-05-20 T2.5 ext) ===
+      - name: Install jsonschema + PyYAML for schema gate
+        run: pip3 install --user jsonschema pyyaml
+
+      - name: T2.5 ext — helm values.schema.json hermetic gate (8 charts)
+        run: bash infra/tests/scripts/helm-values-schemas_test.sh
+
       # === Vitest pulumi-drill structure tests ===
       - name: Setup Node
         uses: actions/setup-node@1d0ff469b7ec7b3cb9d8673fde0c81c44821de2a # v4.2.0
@@ -155,6 +165,7 @@ jobs:
         run: |
           echo "✓ shellcheck warning+ EXIT=0 (6 scripts)"
           echo "✓ 9 hermetic test suites PASS (60+ tests)"
+          echo "✓ helm values.schema.json gate PASS (8 charts)"
           echo "✓ vitest pulumi-drill structure PASS (48 tests)"
           echo "✓ LIVE grep audit returns 0 legacy consumers"
           echo ""
