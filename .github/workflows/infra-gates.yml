@@ -26,6 +26,17 @@ on:
       - ".github/workflows/**"
       - "scripts/audit-security-context.sh"
       - "scripts/check-action-pinning.sh"
+      # 2026-05-20: extend filter to include divergence-matrix gate
+      # (was missing — script changes did not re-trigger CI validation)
+      - "scripts/check-divergence-matrix.sh"
+      - ".claude/knowledge-base/concepts/operations/local-prod-divergence-matrix.md"
+      - "docs/runbooks/local-prod-divergence-matrix.md"
+      # Files where LP-NNN markers live — changing them should trigger
+      # matrix integrity re-check
+      - "api/**/*.go"
+      - "operators/**/*.go"
+      - "cli/src/**/*.ts"
+      - "pkg/**/*.go"
       - "docs/technical/infra/sota-gates.md"
   pull_request:
     branches: [develop, homolog, main]
@@ -35,6 +46,14 @@ on:
       - ".github/workflows/**"
       - "scripts/audit-security-context.sh"
       - "scripts/check-action-pinning.sh"
+      # 2026-05-20: matrix integrity (see push filter notes above)
+      - "scripts/check-divergence-matrix.sh"
+      - ".claude/knowledge-base/concepts/operations/local-prod-divergence-matrix.md"
+      - "docs/runbooks/local-prod-divergence-matrix.md"
+      - "api/**/*.go"
+      - "operators/**/*.go"
+      - "cli/src/**/*.ts"
+      - "pkg/**/*.go"
       - "docs/technical/infra/sota-gates.md"
 
 permissions:
