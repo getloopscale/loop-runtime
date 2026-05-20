@@ -274,6 +274,17 @@ func proveDead(tenant, project, env string) {
 		"Prova de Morte failed: resources still exist for project %s in %s", project, ns)
 }
 
+// e2eBaseDomain returns the base domain for app hostnames in the current env.
+// Plan 2026-05-19-drill-skills-rigor-restoration: drill DOKS uses CF wildcard
+// (loopzero-drill.example) while local k3d uses loopzero.local. DRILL_KUBECONFIG_DIR
+// presence is the signal for drill mode.
+func e2eBaseDomain() string {
+	if os.Getenv("DRILL_KUBECONFIG_DIR") != "" {
+		return e2eBaseDomainDrill
+	}
+	return e2eBaseDomainLocal
+}
+
 // resolveTraefikPort returns the Traefik HTTPS port for a tenant based on cell assignment.
 // cell-2 uses port 8444, everything else uses 8443.
 func resolveTraefikPort(tenant string) string {

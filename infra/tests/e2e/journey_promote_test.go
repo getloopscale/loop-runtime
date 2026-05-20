@@ -35,8 +35,8 @@ var _ = Describe("Journey 05: Promote", Ordered, Label("journey"), func() {
 		skipIfNotE2E()
 		seedE2E()
 
-		stagingHost = seed.TenantID + "-" + project + "-" + app + "-staging.loopzero.local"
-		prodHost = seed.TenantID + "-" + project + "-" + app + "-production.loopzero.local"
+		stagingHost = seed.TenantID + "-" + project + "-" + app + "-staging." + e2eBaseDomain()
+		prodHost = seed.TenantID + "-" + project + "-" + app + "-production." + e2eBaseDomain()
 
 		ensureProjectDeleted(project)
 

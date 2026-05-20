@@ -133,6 +133,12 @@ const (
 	// e2eTraefikPortCell2 is the Traefik port for cell-2.
 	e2eTraefikPortCell2 = "8444"
 
+	// e2eBaseDomainLocal is the local k3d base domain.
+	e2eBaseDomainLocal = "loopzero.local"
+
+	// e2eBaseDomainDrill is the drill DOKS base domain (CF wildcard A record).
+	e2eBaseDomainDrill = "loopzero-drill.example"
+
 	// mgmtKubeContext is the kubectl context for the management cluster.
 	mgmtKubeContext = "k3d-loopzero-mgmt"
 

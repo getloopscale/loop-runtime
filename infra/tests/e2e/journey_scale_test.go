@@ -34,7 +34,7 @@ var _ = Describe("Journey 04: Scale", Ordered, Label("journey"), func() {
 		skipIfNotE2E()
 		seedE2E()
 
-		host = seed.TenantID + "-" + project + "-" + app + "-" + env + ".loopzero.local"
+		host = seed.TenantID + "-" + project + "-" + app + "-" + env + "." + e2eBaseDomain()
 
 		ensureProjectDeleted(project)
 

@@ -40,7 +40,7 @@ var _ = Describe("Journey 03: Secrets Lifecycle", Ordered, Label("journey"), fun
 		skipIfNotE2E()
 		seedE2E()
 
-		host = seed.TenantID + "-" + project + "-" + app + "-" + env + ".loopzero.local"
+		host = seed.TenantID + "-" + project + "-" + app + "-" + env + "." + e2eBaseDomain()
 		secretValue = fmt.Sprintf("ginkgo-test-%d", time.Now().Unix())
 
 		ensureProjectDeleted(project)

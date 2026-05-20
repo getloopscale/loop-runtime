@@ -73,7 +73,7 @@ var _ = Describe("Journey 13: Progressive Delivery (canary)", Ordered, Label("jo
 		// Host is computed but not used in the assertion specs below — they
 		// query the Rollout/TraefikService directly. Project name + tenant
 		// suffice for kubectl scoping.
-		_ = seed.TenantID + "-" + project + "-" + app + "-" + env + ".loopzero.local"
+		_ = seed.TenantID + "-" + project + "-" + app + "-" + env + "." + e2eBaseDomain()
 		ensureProjectDeleted(project)
 		// Dedicated fixture (project=rollout-canary-app) so this Describe
 		// does not collide with journey 01's solo-deploy (project=solo-server)

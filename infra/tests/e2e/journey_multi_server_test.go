@@ -38,7 +38,7 @@ var _ = Describe("Journey 02: Multi-Server", Ordered, Label("journey"), func() {
 		skipIfNotE2E()
 		seedE2E()
 
-		apiHost = seed.TenantID + "-" + project + "-api-" + env + ".loopzero.local"
+		apiHost = seed.TenantID + "-" + project + "-api-" + env + "." + e2eBaseDomain()
 		ns = "loopzero-" + seed.TenantID + "-" + env
 
 		ensureProjectDeleted(project)
