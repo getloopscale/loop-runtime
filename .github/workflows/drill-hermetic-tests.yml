@@ -129,6 +129,14 @@ jobs:
       - name: Operator pre-flight consolidator tests
         run: bash infra/tests/scripts/drill-preflight_test.sh
 
+      # 2026-05-20: hermetic tests previously orphan (existed but unwired)
+      # — surfaced via Plan T2.5 ext audit of CI/local parity gaps.
+      - name: drill-mint-jwt hermetic tests (T2.1 closure)
+        run: bash infra/tests/scripts/drill-mint-jwt_test.sh
+
+      - name: drill credentials isolation hermetic tests (EC-NEW-5)
+        run: bash infra/tests/scripts/check-drill-credentials-isolation_test.sh
+
       # === Drill Skills Trio (plan 2026-05-18-drill-skills-trio) ===
       - name: T4.1 — drill-skill-common library hermetic tests (11/11)
         run: bash infra/tests/scripts/drill-skill-common_test.sh
