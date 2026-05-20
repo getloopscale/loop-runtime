@@ -47,6 +47,7 @@ import { LoopZeroSpacesBucket } from "./components/loopzero-spaces-bucket";
 import { LoopZeroVpc } from "./components/loopzero-vpc";
 import { LoopZeroCFZone } from "./components/loopzero-cf-zone";
 import { LoopZeroDOProject } from "./components/loopzero-do-project";
+import { LoopZeroManagedDb } from "./components/loopzero-managed-db";
 
 const config = new pulumi.Config("loopzero-drill");
 
@@ -257,8 +258,9 @@ const drillVeleroBucket = new LoopZeroSpacesBucket("drill-velero", {
 // 6. Managed PostgreSQL (mgmt-tier per D4)
 // =============================================================================
 
-const drillPG = new digitalocean.DatabaseCluster("drill-pg", {
-  name: `${doProject}-pg`,
+// Plan v1.2 T3.1 — LoopZeroManagedDb component (was inline new digitalocean.DatabaseCluster).
+const drillPG = new LoopZeroManagedDb("drill-pg", {
+  clusterName: `${doProject}-pg`,
   engine: "pg",
   version: "16",
   size: "db-amd-2vcpu-4gb", // mgmt-tier per D4 (Bug #26 2026-05-19: AMD variant; sfo3 db-s-2vcpu-4gb capacity exhausted during marathon)
@@ -378,8 +380,9 @@ new digitalocean.DatabaseFirewall("drill-pg-firewall", {
 // Sizing: drill = non-prod tier (db-amd-1vcpu-2gb single-node) matching
 // non-prod prod config. Same engine version (valkey 8) for parity.
 
-const drillRedis = new digitalocean.DatabaseCluster("drill-redis", {
-  name: `${doProject}-redis`,
+// Plan v1.2 T3.1 — LoopZeroManagedDb component (Valkey variant).
+const drillRedis = new LoopZeroManagedDb("drill-redis", {
+  clusterName: `${doProject}-redis`,
   engine: "valkey",
   version: "8",
   size: "db-amd-1vcpu-2gb", // non-prod tier (mirrors mgmt-redis-ha.ts:45 non-prod)
