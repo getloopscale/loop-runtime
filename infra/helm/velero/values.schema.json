@@ -1,0 +1,102 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://loopzero.platform/schemas/velero/values.schema.json",
+  "title": "velero DR backup chart values schema",
+  "description": "Plan 2026-05-20 T2.5 ext — fail-fast on unreplaced REPLACE-AT-INSTALL-TIME placeholders. Critical because per binding memory feedback_velero_must_be_in_drill: 'Velero DEVE ESTA NO DRILL TEST' — silent placeholder leak in drill would cause Journey 12 to SKIP (Velero not installed) and mask drill prod-parity gap.",
+  "type": "object",
+  "properties": {
+    "velero": {
+      "type": "object",
+      "description": "Upstream velero chart values pass-through. Helmfile env templates inject bucket/region/s3Url at install time.",
+      "properties": {
+        "credentials": {
+          "type": "object",
+          "properties": {
+            "useSecret": { "type": "boolean" },
+            "existingSecret": {
+              "type": "string",
+              "minLength": 1,
+              "description": "Name of Secret holding S3-compatible credentials (key=cloud in AWS INI format). Created by generate-secrets.sh per env (T1.3)."
+            }
+          }
+        },
+        "configuration": {
+          "type": "object",
+          "properties": {
+            "backupStorageLocation": {
+              "type": "array",
+              "minItems": 1,
+              "description": "At least one BSL required (otherwise Velero has no backup target).",
+              "items": {
+                "type": "object",
+                "required": ["name", "provider", "bucket"],
+                "properties": {
+                  "name": { "type": "string", "minLength": 1 },
+                  "provider": {
+                    "type": "string",
+                    "enum": ["aws", "gcp", "azure"],
+                    "description": "S3-compatible (aws), GCS, or Azure Blob. DO Spaces + MinIO use 'aws'."
+                  },
+                  "bucket": {
+                    "type": "string",
+                    "minLength": 1,
+                    "not": {
+                      "const": "REPLACE-AT-INSTALL-TIME"
+                    },
+                    "description": "Bucket name — MUST be templated by helmfile env values. Literal 'REPLACE-AT-INSTALL-TIME' = unreplaced placeholder bug. Schema rejects to fail-fast at lint time."
+                  },
+                  "default": { "type": "boolean" },
+                  "config": {
+                    "type": "object",
+                    "properties": {
+                      "region": {
+                        "type": "string",
+                        "minLength": 1,
+                        "not": {
+                          "const": "REPLACE-AT-INSTALL-TIME"
+                        },
+                        "description": "Region — see bucket.not.const note above."
+                      },
+                      "s3Url": {
+                        "type": "string",
+                        "minLength": 1,
+                        "not": {
+                          "const": "REPLACE-AT-INSTALL-TIME"
+                        },
+                        "description": "S3-compatible endpoint URL. Must be templated by helmfile env. DO Spaces: https://<region>.digitaloceanspaces.com. MinIO: http://minio.loopzero-system.svc.cluster.local:9000."
+                      },
+                      "s3ForcePathStyle": {
+                        "type": "string",
+                        "enum": ["true", "false"],
+                        "description": "MUST be 'true' for DO Spaces + MinIO (path-style addressing). AWS S3 ignores."
+                      }
+                    }
+                  }
+                }
+              }
+            },
+            "volumeSnapshotLocation": {
+              "type": "array",
+              "description": "Empty array OK — V1 does not back up PV data (per velero-backup-dr-plan ADR D4)."
+            }
+          }
+        },
+        "initContainers": {
+          "type": "array",
+          "minItems": 1,
+          "description": "At least one plugin init container required — velero-plugin-for-aws is canonical for S3-compatible targets.",
+          "items": {
+            "type": "object",
+            "required": ["name", "image"],
+            "properties": {
+              "name": { "type": "string", "minLength": 1 },
+              "image": { "type": "string", "minLength": 1 }
+            }
+          }
+        }
+      }
+    }
+  },
+  "required": ["velero"],
+  "additionalProperties": true
+}
