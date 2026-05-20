@@ -186,6 +186,81 @@ func TestNewOptions_rejects_missing_env_file(t *testing.T) {
 	}
 }
 
+// TestBootstrapChartPath_resolves_overlapping_charts confirms explicit
+// bootstrap-only resolution for the 3 overlapping charts (loopzero-api,
+// loopzero-cloud, admission-policies). Closes the variant-ambiguity gap
+// surfaced during T3.1 (commit 05cecb64).
+func TestBootstrapChartPath_resolves_overlapping_charts(t *testing.T) {
+	t.Parallel()
+
+	cases := []string{"loopzero-api", "loopzero-cloud", "admission-policies"}
+	for _, name := range cases {
+		t.Run(name, func(t *testing.T) {
+			got, err := BootstrapChartPath(name)
+			if err != nil {
+				t.Fatalf("BootstrapChartPath(%q): %v", name, err)
+			}
+			if !strings.Contains(got, filepath.Join("infra", "helm", name)) {
+				t.Errorf("BootstrapChartPath(%q)=%q must contain infra/helm/%s",
+					name, got, name)
+			}
+		})
+	}
+}
+
+// TestPublishedChartPath_resolves_overlapping_charts confirms explicit
+// published-variant resolution for the 2 charts that exist in both
+// infra/helm/ AND charts/ (loopzero-api, loopzero-cloud).
+func TestPublishedChartPath_resolves_overlapping_charts(t *testing.T) {
+	t.Parallel()
+
+	cases := []string{"loopzero-api", "loopzero-cloud"}
+	for _, name := range cases {
+		t.Run(name, func(t *testing.T) {
+			got, err := PublishedChartPath(name)
+			if err != nil {
+				t.Fatalf("PublishedChartPath(%q): %v", name, err)
+			}
+			if !strings.Contains(got, filepath.Join("charts", name)) {
+				t.Errorf("PublishedChartPath(%q)=%q must contain charts/%s",
+					name, got, name)
+			}
+		})
+	}
+}
+
+// TestBootstrapChartPath_rejects_published_only_chart confirms that
+// asking for the bootstrap variant of a published-only chart errors
+// clearly (no fallback). loopzero-dashboard exists ONLY in charts/.
+func TestBootstrapChartPath_rejects_published_only_chart(t *testing.T) {
+	t.Parallel()
+
+	_, err := BootstrapChartPath("loopzero-dashboard")
+	if err == nil {
+		t.Fatal("BootstrapChartPath(loopzero-dashboard) should error — chart " +
+			"exists only in charts/, no bootstrap variant")
+	}
+	if !strings.Contains(err.Error(), "infra/helm") {
+		t.Errorf("error %q should mention infra/helm", err.Error())
+	}
+}
+
+// TestPublishedChartPath_rejects_bootstrap_only_chart confirms that
+// asking for the published variant of a bootstrap-only chart errors
+// clearly (no fallback). cloudflared exists ONLY in infra/helm/.
+func TestPublishedChartPath_rejects_bootstrap_only_chart(t *testing.T) {
+	t.Parallel()
+
+	_, err := PublishedChartPath("cloudflared")
+	if err == nil {
+		t.Fatal("PublishedChartPath(cloudflared) should error — chart " +
+			"exists only in infra/helm/, no published variant")
+	}
+	if !strings.Contains(err.Error(), "charts/") {
+		t.Errorf("error %q should mention charts/", err.Error())
+	}
+}
+
 // TestRepoRoot_resolves_from_anywhere addresses EC-5: chart path resolution
 // from non-CWD invocation. repoRoot uses runtime.Caller, not CWD, so should
 // work regardless of where tests are invoked from.

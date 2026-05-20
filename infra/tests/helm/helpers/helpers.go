@@ -111,6 +111,44 @@ func repoRoot() (string, error) {
 	return root, nil
 }
 
+// BootstrapChartPath resolves to infra/helm/<name>/ ONLY.
+// Use when the test deliberately targets the bootstrap (Helmfile L2)
+// variant of an overlapping chart (loopzero-api, loopzero-cloud,
+// admission-policies). For non-overlapping charts, ChartPath suffices.
+func BootstrapChartPath(chartName string) (string, error) {
+	if chartName == "" {
+		return "", fmt.Errorf("chart name cannot be empty")
+	}
+	root, err := repoRoot()
+	if err != nil {
+		return "", err
+	}
+	candidate := filepath.Join(root, "infra", "helm", chartName)
+	if _, err := os.Stat(filepath.Join(candidate, "Chart.yaml")); err == nil {
+		return candidate, nil
+	}
+	return "", fmt.Errorf("bootstrap chart %q not found at infra/helm/", chartName)
+}
+
+// PublishedChartPath resolves to charts/<name>/ ONLY.
+// Use when the test deliberately targets the published (OCI / ArgoCD L3)
+// variant of an overlapping chart. Published variants typically use the
+// loopzero-common library for full labels + container hardening.
+func PublishedChartPath(chartName string) (string, error) {
+	if chartName == "" {
+		return "", fmt.Errorf("chart name cannot be empty")
+	}
+	root, err := repoRoot()
+	if err != nil {
+		return "", err
+	}
+	candidate := filepath.Join(root, "charts", chartName)
+	if _, err := os.Stat(filepath.Join(candidate, "Chart.yaml")); err == nil {
+		return candidate, nil
+	}
+	return "", fmt.Errorf("published chart %q not found at charts/", chartName)
+}
+
 // ChartPath resolves a chart name to its absolute filesystem path.
 //
 // Lookup order (matches CLAUDE.md Helm Chart Dual System):
@@ -118,6 +156,10 @@ func repoRoot() (string, error) {
 //  2. charts/<name>/ (published OCI charts, ArgoCD L3)
 //
 // Returns error if chart not found in either location.
+//
+// For overlapping charts (loopzero-api, loopzero-cloud, admission-policies),
+// prefer the explicit BootstrapChartPath / PublishedChartPath helpers
+// so the test pins to a single variant deterministically.
 func ChartPath(chartName string) (string, error) {
 	if chartName == "" {
 		return "", fmt.Errorf("chart name cannot be empty")
