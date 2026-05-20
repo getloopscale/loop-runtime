@@ -44,6 +44,7 @@ import * as digitalocean from "@pulumi/digitalocean";
 import * as cloudflare from "@pulumi/cloudflare";
 // Plan v1.2 T3.1 — Component Resources (incremental Pulumi componentization per ADR D1).
 import { LoopZeroSpacesBucket } from "./components/loopzero-spaces-bucket";
+import { LoopZeroVpc } from "./components/loopzero-vpc";
 
 const config = new pulumi.Config("loopzero-drill");
 
@@ -128,8 +129,9 @@ const drillDOProject = new digitalocean.Project("drill-project", {
 // 3. VPC (D5 — shared across 4 clusters, prod-identical pattern)
 // =============================================================================
 
-const drillVpc = new digitalocean.Vpc("drill-vpc", {
-  name: `${doProject}-vpc-${region}`,
+// Plan v1.2 T3.1 — LoopZeroVpc component (was inline new digitalocean.Vpc).
+const drillVpc = new LoopZeroVpc("drill-vpc", {
+  vpcName: `${doProject}-vpc-${region}`,
   region,
   ipRange: "10.40.0.0/16", // disjoint from prod 10.20.0.0/16 + homolog 10.30.0.0/16
   description: `LoopZero drill VPC (4 clusters share). Expires ${expiresAtIso}.`,
