@@ -20,12 +20,11 @@
         },
         "server": {
           "type": "string",
-          "format": "uri",
           "enum": [
             "https://acme-v02.api.letsencrypt.org/directory",
             "https://acme-staging-v02.api.letsencrypt.org/directory"
           ],
-          "description": "ACME server URL. Prod = letsencrypt.org/directory (5 cert/week rate limit). Staging = acme-staging (no rate limit, untrusted CA). Other URLs rejected to prevent accidental third-party ACME provider."
+          "description": "ACME server URL. Prod = letsencrypt.org/directory (5 cert/week rate limit). Staging = acme-staging (no rate limit, untrusted CA). Other URLs rejected to prevent accidental third-party ACME provider. Note: format:uri removed (silently permissive in default jsonschema) — enum is the load-bearing constraint here, format is redundant."
         },
         "privateKeySecretRef": {
           "type": "string",

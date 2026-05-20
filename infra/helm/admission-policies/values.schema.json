@@ -79,17 +79,18 @@
         },
         "fulcioURL": {
           "type": "string",
-          "format": "uri",
-          "description": "Fulcio cert authority URL (default https://fulcio.sigstore.dev for Sigstore public-good instance)."
+          "pattern": "^https?://[^\\s/$.?#].[^\\s]*$",
+          "description": "Fulcio cert authority URL (default https://fulcio.sigstore.dev for Sigstore public-good instance). Schema uses pattern (always enforced) instead of format:uri (silently permissive in default jsonschema)."
         },
         "rekorURL": {
           "type": "string",
-          "format": "uri",
-          "description": "Rekor transparency log URL (default https://rekor.sigstore.dev)."
+          "pattern": "^https?://[^\\s/$.?#].[^\\s]*$",
+          "description": "Rekor transparency log URL (default https://rekor.sigstore.dev). Pattern-based per format:uri silent-permissiveness bug class (2026-05-20)."
         },
         "oidcIssuer": {
           "type": "string",
-          "format": "uri"
+          "pattern": "^https?://[^\\s/$.?#].[^\\s]*$",
+          "description": "OIDC issuer URL (e.g., https://token.actions.githubusercontent.com). Pattern-based per format:uri silent-permissiveness bug class."
         },
         "identityRegexp": {
           "type": "string",

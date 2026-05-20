@@ -41,35 +41,84 @@ if ! python3 -c "import jsonschema, yaml" 2>/dev/null; then
   exit 5
 fi
 
-# Helper: assert that python validation of $1 (schema path) against $2 (values
-# inline YAML/JSON literal) RAISES jsonschema.ValidationError. Test name $3.
+# Helper: assert that jsonschema validation of $1 (schema path) against $2
+# (values inline YAML literal) RAISES jsonschema.ValidationError. Test name $3.
+#
+# Iter 2 self-bug fix (2026-05-20): original implementation interpolated the
+# YAML literal into a `python3 -c "..."` heredoc, which crashed on YAML
+# strings containing backslash-escapes (e.g., `^https://github\.com/...`)
+# with SyntaxError. Bash interpreted exit 1 (python crash) as "schema
+# rejected" — FALSE POSITIVE. Triple-bug class:
+#   1. Test infrastructure lied (rejected = crashed)
+#   2. format:uri schema flaw was MASKED (test "passed" without testing)
+#   3. Future regression would still be masked
+# Fix (no workaround): use tempfiles for YAML + schema script. Cleanly
+# separates python source from data. Python validation result is observable
+# via marker file; bash distinguishes accept/reject/crash by 3 distinct
+# exit codes (0=accepted=test FAIL, 1=rejected=test PASS, 2=crashed=test
+# CRASH report).
 assert_rejects() {
   local schema="$1"
   local values_yaml="$2"
   local test_name="$3"
   TESTS_RUN=$((TESTS_RUN + 1))
 
-  if python3 -c "
+  local yaml_tmp
+  yaml_tmp=$(mktemp -t helm-schema-neg-XXXXXX.yaml)
+  printf '%s\n' "$values_yaml" > "$yaml_tmp"
+
+  local validator_tmp
+  validator_tmp=$(mktemp -t helm-schema-validator-XXXXXX.py)
+  cat > "$validator_tmp" <<'PYEOF'
 import json
 import sys
 import jsonschema
 import yaml
-with open('$ROOT/$schema') as f:
-    schema_obj = json.load(f)
-values_obj = yaml.safe_load('''$values_yaml''')
+
+schema_path = sys.argv[1]
+values_path = sys.argv[2]
+
+try:
+    with open(schema_path) as f:
+        schema_obj = json.load(f)
+    with open(values_path) as f:
+        values_obj = yaml.safe_load(f)
+except Exception as e:
+    print(f"CRASH: setup failed: {e}", file=sys.stderr)
+    sys.exit(2)
+
 try:
     jsonschema.validate(instance=values_obj, schema=schema_obj)
-    print('SCHEMA ACCEPTED — this is the bug', file=sys.stderr)
-    sys.exit(0)  # ACCEPTANCE = test failure (we want rejection)
-except jsonschema.ValidationError:
-    sys.exit(1)  # REJECTION = test pass
-" 2>/dev/null; then
-    log "  [FAIL] $test_name — schema ACCEPTED bad values (constraint missing)"
-    TESTS_FAILED=$((TESTS_FAILED + 1))
-  else
-    log "  [PASS] $test_name — schema correctly rejected"
-    TESTS_PASSED=$((TESTS_PASSED + 1))
-  fi
+    sys.exit(0)  # accepted (caller treats as FAIL — we want rejection)
+except jsonschema.ValidationError as e:
+    sys.exit(1)  # rejected (caller treats as PASS)
+except Exception as e:
+    print(f"CRASH: validation engine error: {e}", file=sys.stderr)
+    sys.exit(2)
+PYEOF
+
+  # Iter 3 self-bug fix: under `set -euo pipefail`, a non-zero exit from
+  # python3 aborts the script BEFORE rc=$? captures the exit code. Use
+  # an explicit guard (|| true) to disarm `set -e` for this call. Capture
+  # rc immediately afterwards while still within the guard's scope.
+  local rc=0
+  python3 "$validator_tmp" "$ROOT/$schema" "$yaml_tmp" 2>/dev/null || rc=$?
+  rm -f "$yaml_tmp" "$validator_tmp"
+
+  case "$rc" in
+    0)
+      log "  [FAIL] $test_name — schema ACCEPTED bad values (constraint missing)"
+      TESTS_FAILED=$((TESTS_FAILED + 1))
+      ;;
+    1)
+      log "  [PASS] $test_name — schema correctly rejected"
+      TESTS_PASSED=$((TESTS_PASSED + 1))
+      ;;
+    *)
+      log "  [CRASH] $test_name — validation engine crashed (exit $rc); test inconclusive"
+      TESTS_FAILED=$((TESTS_FAILED + 1))
+      ;;
+  esac
 }
 
 # --- admission-policies B16 protection ---
@@ -252,6 +301,66 @@ acme:
   server: https://malicious-acme.example.com/directory
   privateKeySecretRef: letsencrypt-prod" \
   "cluster-issuer — acme.server unknown URL REJECTED (only LE prod+staging)"
+
+# --- admission-policies keyless URI bug class protection (TDD red found
+#     format:'uri' is silently permissive in jsonschema; we use pattern instead) ---
+
+assert_rejects \
+  "infra/helm/admission-policies/values.schema.json" \
+  "registries:
+  docrPrefix: 'registry.digitalocean.com/loopzero-system/'
+  harborPrefix: 'harbor.dev.loopzero.example/loopzero-platform/'
+clusterImagePolicy:
+  enabled: true
+  name: loopzero-images
+clusterImagePolicyKeyless:
+  enabled: true
+  name: loopzero-keyless
+  mode: warn
+  imageGlobs: ['registry.digitalocean.com/loopzero-system/**']
+  fulcioURL: 'not-a-url'
+  rekorURL: https://rekor.sigstore.dev
+  oidcIssuer: https://token.actions.githubusercontent.com
+  identityRegexp: '^https://github\\.com/getloopscale/loopzero/'" \
+  "admission-policies — fulcioURL garbage string REJECTED (pattern not format)"
+
+assert_rejects \
+  "infra/helm/admission-policies/values.schema.json" \
+  "registries:
+  docrPrefix: 'registry.digitalocean.com/loopzero-system/'
+  harborPrefix: 'harbor.dev.loopzero.example/loopzero-platform/'
+clusterImagePolicy:
+  enabled: true
+  name: loopzero-images
+clusterImagePolicyKeyless:
+  enabled: true
+  name: loopzero-keyless
+  mode: warn
+  imageGlobs: ['registry.digitalocean.com/loopzero-system/**']
+  fulcioURL: https://fulcio.sigstore.dev
+  rekorURL: 'plain-string-not-url'
+  oidcIssuer: https://token.actions.githubusercontent.com
+  identityRegexp: '^https://github\\.com/getloopscale/loopzero/'" \
+  "admission-policies — rekorURL garbage string REJECTED (pattern not format)"
+
+assert_rejects \
+  "infra/helm/admission-policies/values.schema.json" \
+  "registries:
+  docrPrefix: 'registry.digitalocean.com/loopzero-system/'
+  harborPrefix: 'harbor.dev.loopzero.example/loopzero-platform/'
+clusterImagePolicy:
+  enabled: true
+  name: loopzero-images
+clusterImagePolicyKeyless:
+  enabled: true
+  name: loopzero-keyless
+  mode: warn
+  imageGlobs: ['registry.digitalocean.com/loopzero-system/**']
+  fulcioURL: https://fulcio.sigstore.dev
+  rekorURL: https://rekor.sigstore.dev
+  oidcIssuer: 'no-scheme-here'
+  identityRegexp: '^https://github\\.com/getloopscale/loopzero/'" \
+  "admission-policies — oidcIssuer garbage string REJECTED (pattern not format)"
 
 # --- Summary ---
 echo ""
