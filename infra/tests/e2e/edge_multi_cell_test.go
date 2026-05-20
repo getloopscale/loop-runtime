@@ -302,7 +302,8 @@ var _ = Describe("Edge: Multi-Cell Routing", Label("edge-case"), func() {
 
 		// Isolation: pod must NOT appear on the workload (cell-default) context.
 		// Namespace may not even exist there — that's a valid pass.
-		isoCmd := exec.Command("kubectl", "--context", workloadKubeContext,
+		// Drill-aware via kubectlForCluster(ClusterWorkload) (2026-05-20).
+		isoCmd := kubectlForCluster(ClusterWorkload,
 			"-n", ns, "get", "pods",
 			"-l", label, "--ignore-not-found", "-o", "name")
 		isoOut, _ := isoCmd.CombinedOutput()

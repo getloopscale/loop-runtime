@@ -56,8 +56,12 @@ const veleroNamespace = "velero-system"
 // of bare task setup). Check for the actual Velero CRD registration.
 // When Velero is genuinely installed, backups.velero.io CRD is present.
 // When only the namespace is provisioned without Velero, CRD is absent.
+//
+// 2026-05-20 drill-parity fix: switch from "--context mgmtKubeContext"
+// to clusterKubectlArgs(ClusterMgmt) so drill DOKS runs resolve the
+// right cluster (per feedback_velero_must_be_in_drill memory).
 func veleroInstalled() bool {
-	cmd := exec.Command("kubectl", "--context", mgmtKubeContext,
+	cmd := kubectlForCluster(ClusterMgmt,
 		"get", "crd", "backups.velero.io", "--no-headers", "-o", "name")
 	return cmd.Run() == nil
 }
@@ -70,10 +74,10 @@ func veleroCLIAvailable() bool {
 	return err == nil
 }
 
-// kubectlMgmt builds a kubectl command rooted at the mgmt context.
+// kubectlMgmt builds a kubectl command rooted at the mgmt cluster.
+// Drill-aware via clusterKubectlArgs(ClusterMgmt) (2026-05-20).
 func kubectlMgmt(args ...string) *exec.Cmd {
-	all := append([]string{"--context", mgmtKubeContext}, args...)
-	return exec.Command("kubectl", all...)
+	return kubectlForCluster(ClusterMgmt, args...)
 }
 
 // veleroNs builds a kubectl command scoped to velero-system.

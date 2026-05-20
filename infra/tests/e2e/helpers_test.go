@@ -236,13 +236,13 @@ func waitBuildTerminal(buildID string, timeout time.Duration) string {
 // proveDead verifies that all resources for a project are cleaned up
 // (namespace gone or zero resources with loopzero.io/project label).
 // This is the "Prova de Morte" assertion from bash journeys.
+// 2026-05-20 drill-parity: uses kubectlForCluster(ClusterWorkload, ...).
 func proveDead(tenant, project, env string) {
 	ns := fmt.Sprintf("loopzero-%s-%s", tenant, env)
-	ctx := workloadKubeContext
 
 	Eventually(func() bool {
 		// Check if namespace still exists.
-		checkNS := exec.Command("kubectl", "--context", ctx,
+		checkNS := kubectlForCluster(ClusterWorkload,
 			"get", "namespace", ns, "--no-headers", "-o", "name")
 		if checkNS.Run() != nil {
 			// Namespace doesn't exist — fully cleaned up.
@@ -261,7 +261,7 @@ func proveDead(tenant, project, env string) {
 			"ingressroute.traefik.io",
 			"traefikservice.traefik.io",
 		} {
-			checkRes := exec.Command("kubectl", "--context", ctx,
+			checkRes := kubectlForCluster(ClusterWorkload,
 				"-n", ns, "get", resource, "-l", label,
 				"--no-headers", "--ignore-not-found", "-o", "name")
 			output, err := checkRes.CombinedOutput()

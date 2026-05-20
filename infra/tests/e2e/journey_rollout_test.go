@@ -39,16 +39,17 @@ import (
 // argoRolloutsInstalled reports whether the Rollout CRD is registered on
 // the workload cluster. Mirrors the F-07 fix pattern: namespace existence
 // is unreliable; CRD registration is canonical signal of install.
+// 2026-05-20 drill-parity fix: drill-aware via clusterKubectlArgs.
 func argoRolloutsInstalled() bool {
-	cmd := exec.Command("kubectl", "--context", workloadKubeContext,
+	cmd := kubectlForCluster(ClusterWorkload,
 		"get", "crd", "rollouts.argoproj.io", "--no-headers", "-o", "name")
 	return cmd.Run() == nil
 }
 
-// kubectlWorkload builds a kubectl command rooted at the workload context.
+// kubectlWorkload builds a kubectl command rooted at the workload cluster.
+// Drill-aware via clusterKubectlArgs(ClusterWorkload) (2026-05-20).
 func kubectlWorkload(args ...string) *exec.Cmd {
-	all := append([]string{"--context", workloadKubeContext}, args...)
-	return exec.Command("kubectl", all...)
+	return kubectlForCluster(ClusterWorkload, args...)
 }
 
 var _ = Describe("Journey 13: Progressive Delivery (canary)", Ordered, Label("journey", "rollout"), func() {

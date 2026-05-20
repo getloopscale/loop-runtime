@@ -11,7 +11,6 @@ package e2e
 
 import (
 	"os"
-	"os/exec"
 	"strings"
 	"time"
 
@@ -83,7 +82,7 @@ var _ = Describe("Journey 02: Multi-Server", Ordered, Label("journey"), func() {
 		// Eventually-poll for up to 90s — workload primitive should
 		// converge well within that window in cleanroom-cold-start.
 		Eventually(func() []string {
-			cmd := exec.Command("kubectl", "--context", workloadKubeContext,
+			cmd := kubectlForCluster(ClusterWorkload,
 				"-n", ns, "get", "deployments.apps,rollouts.argoproj.io",
 				"-l", "loopzero.io/project="+project,
 				"--no-headers", "-o", "custom-columns=NAME:.metadata.name")
@@ -111,7 +110,7 @@ var _ = Describe("Journey 02: Multi-Server", Ordered, Label("journey"), func() {
 	})
 
 	It("worker has no IngressRoute", func() {
-		cmd := exec.Command("kubectl", "--context", workloadKubeContext,
+		cmd := kubectlForCluster(ClusterWorkload,
 			"-n", ns, "get", "ingressroute.traefik.io",
 			"-l", "loopzero.io/project="+project+",loopzero.io/app-name=worker",
 			"--no-headers", "--ignore-not-found", "-o", "name")
@@ -122,7 +121,7 @@ var _ = Describe("Journey 02: Multi-Server", Ordered, Label("journey"), func() {
 	})
 
 	It("worker pod is Running", func() {
-		cmd := exec.Command("kubectl", "--context", workloadKubeContext,
+		cmd := kubectlForCluster(ClusterWorkload,
 			"-n", ns, "get", "pod",
 			"-l", "loopzero.io/app-name=worker",
 			"--field-selector=status.phase=Running",

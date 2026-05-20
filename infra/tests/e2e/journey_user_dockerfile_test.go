@@ -78,9 +78,9 @@ var _ = Describe("Journey: User Dockerfile happy path", Ordered, Label("journey"
 		ns := "loopzero-" + seed.TenantID + "-" + env
 		resName := project + "-" + app
 
-		// Wait for Pod (via Rollout) Running.
+		// Wait for Pod (via Rollout) Running. Drill-aware via kubectlForCluster.
 		Eventually(func() string {
-			cmd := exec.Command("kubectl", "--context", workloadKubeContext,
+			cmd := kubectlForCluster(ClusterWorkload,
 				"-n", ns, "get", "pod", "-l", "app="+resName,
 				"-o", "jsonpath={.items[0].status.phase}")
 			out, _ := cmd.CombinedOutput()
@@ -184,14 +184,15 @@ func deployAndExpectBuildTerminal(dir, env, expectedStatus string, timeout time.
 // inspecting workflow CRs via kubectl on the build cluster.
 func workflowStepsForBuild(buildID string) (hasLint, hasPacks bool) {
 	// Try kubectl on build cluster first — it's the source of truth.
-	cmd := exec.Command("kubectl", "--context", buildKubeContext,
+	// Drill-aware via kubectlForCluster(ClusterBuild) (2026-05-20).
+	cmd := kubectlForCluster(ClusterBuild,
 		"-n", "argo", "get", "workflows",
 		"-l", fmt.Sprintf("loopzero.io/build-id=%s", buildID),
 		"-o", "jsonpath={range .items[*].status.nodes.*}{.displayName}{\"\\n\"}{end}")
 	out, err := cmd.CombinedOutput()
 	if err != nil {
 		// Fallback: name-based search (loopzero-build-build-<buildID>-...)
-		cmd = exec.Command("kubectl", "--context", buildKubeContext,
+		cmd = kubectlForCluster(ClusterBuild,
 			"-n", "argo", "get", "workflows",
 			"-o", "jsonpath={range .items[?(@.metadata.name)]}{.metadata.name}{\"\\n\"}{end}")
 		out, _ = cmd.CombinedOutput()
@@ -206,7 +207,7 @@ func workflowStepsForBuild(buildID string) (hasLint, hasPacks bool) {
 		if matchedName == "" {
 			return false, false
 		}
-		cmd = exec.Command("kubectl", "--context", buildKubeContext,
+		cmd = kubectlForCluster(ClusterBuild,
 			"-n", "argo", "get", "workflow", matchedName,
 			"-o", "jsonpath={range .status.nodes.*}{.displayName}{\"\\n\"}{end}")
 		out, _ = cmd.CombinedOutput()
