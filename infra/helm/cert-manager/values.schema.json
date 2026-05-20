@@ -1,0 +1,113 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://loopzero.platform/schemas/cert-manager/values.schema.json",
+  "title": "cert-manager LoopZero wrapper values schema",
+  "description": "Plan 2026-05-20 T2.5 ext — fail-fast on LoopZero-specific cert-manager hardening invariants. INF-G08 + ADR D7 hardened pod security context defaults uniformly across pod-bearing charts; regression to root/privileged would fail VAP requireResourceLimits + requirePodSecurityStandard. Schema enforces non-root + capability drop + read-only root FS at lint time.",
+  "type": "object",
+  "properties": {
+    "resources": {
+      "type": "object",
+      "required": ["limits", "requests"],
+      "properties": {
+        "limits": {
+          "type": "object",
+          "required": ["cpu", "memory"],
+          "description": "CPU + memory limits MUST be set (VAP requireResourceLimits)."
+        },
+        "requests": {
+          "type": "object",
+          "required": ["cpu", "memory"],
+          "description": "CPU + memory requests MUST be set (VAP requireResourceLimits)."
+        }
+      }
+    },
+    "securityContext": {
+      "type": "object",
+      "required": ["runAsNonRoot", "runAsUser", "seccompProfile"],
+      "properties": {
+        "runAsNonRoot": {
+          "type": "boolean",
+          "const": true,
+          "description": "LoopZero invariant INF-G08: MUST be true. Setting to false would let cert-manager controller run as root in cert-manager namespace. Schema rejects false at lint."
+        },
+        "runAsUser": {
+          "type": "integer",
+          "minimum": 1,
+          "description": "MUST be >= 1 (UID 0 = root). Default 1000."
+        },
+        "runAsGroup": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "fsGroup": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "seccompProfile": {
+          "type": "object",
+          "required": ["type"],
+          "properties": {
+            "type": {
+              "type": "string",
+              "enum": ["RuntimeDefault", "Localhost"],
+              "description": "Seccomp profile type. 'RuntimeDefault' = recommended. 'Unconfined' explicitly rejected (would weaken syscall isolation)."
+            }
+          }
+        }
+      }
+    },
+    "containerSecurityContext": {
+      "type": "object",
+      "required": ["readOnlyRootFilesystem", "allowPrivilegeEscalation", "runAsNonRoot", "capabilities"],
+      "properties": {
+        "readOnlyRootFilesystem": {
+          "type": "boolean",
+          "const": true,
+          "description": "LoopZero INF-G08: read-only root FS MUST be enforced. False would allow controller to write arbitrary paths (cred-stealing risk)."
+        },
+        "allowPrivilegeEscalation": {
+          "type": "boolean",
+          "const": false,
+          "description": "LoopZero INF-G08: privilege escalation MUST be forbidden."
+        },
+        "runAsNonRoot": {
+          "type": "boolean",
+          "const": true
+        },
+        "capabilities": {
+          "type": "object",
+          "required": ["drop"],
+          "properties": {
+            "drop": {
+              "type": "array",
+              "minItems": 1,
+              "contains": {
+                "type": "string",
+                "const": "ALL"
+              },
+              "description": "MUST contain 'ALL' (drops every Linux capability). Partial drop list = weakness."
+            }
+          }
+        }
+      }
+    },
+    "installCRDs": {
+      "type": "boolean",
+      "description": "Whether the chart installs cert-manager CRDs. Default: true. If false, CRDs must be pre-installed via separate step (operator decision)."
+    },
+    "prometheus": {
+      "type": "object",
+      "properties": {
+        "enabled": { "type": "boolean" },
+        "servicemonitor": {
+          "type": "object",
+          "properties": {
+            "enabled": { "type": "boolean" }
+          }
+        }
+      }
+    }
+  },
+  "required": ["resources", "securityContext", "containerSecurityContext"],
+  "additionalProperties": true
+}

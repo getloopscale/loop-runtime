@@ -64,10 +64,6 @@ EXEMPT_CHARTS=(
   # config + workflow defaults.
   "infra/helm/argo-workflows"
 
-  # cert-manager wrapper + cluster-issuer + traefik-tls. Schema would
-  # constrain ACME issuer kind enum + email format (similar to existing
-  # cluster-issuer schema, but for the wrapper).
-  "infra/helm/cert-manager"
 
   # chaos-mesh wrapper + LoopZero CRD allow-lists. Schema would constrain
   # PSA enforcement + RBAC narrow.

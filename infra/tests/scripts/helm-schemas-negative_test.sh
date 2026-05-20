@@ -544,6 +544,121 @@ assert_rejects \
   registry: 'registry.com/path with space'" \
   "OCI loopzero-platform — registry whitespace REJECTED"
 
+# --- cert-manager INF-G08 hardening invariants (4 critical cases) ---
+
+assert_rejects \
+  "infra/helm/cert-manager/values.schema.json" \
+  "resources:
+  limits: {cpu: 200m, memory: 128Mi}
+  requests: {cpu: 50m, memory: 64Mi}
+securityContext:
+  runAsNonRoot: false
+  runAsUser: 1000
+  seccompProfile: {type: RuntimeDefault}
+containerSecurityContext:
+  readOnlyRootFilesystem: true
+  allowPrivilegeEscalation: false
+  runAsNonRoot: true
+  capabilities: {drop: [ALL]}" \
+  "cert-manager INF-G08 — runAsNonRoot=false REJECTED (const:true)"
+
+assert_rejects \
+  "infra/helm/cert-manager/values.schema.json" \
+  "resources:
+  limits: {cpu: 200m, memory: 128Mi}
+  requests: {cpu: 50m, memory: 64Mi}
+securityContext:
+  runAsNonRoot: true
+  runAsUser: 1000
+  seccompProfile: {type: RuntimeDefault}
+containerSecurityContext:
+  readOnlyRootFilesystem: false
+  allowPrivilegeEscalation: false
+  runAsNonRoot: true
+  capabilities: {drop: [ALL]}" \
+  "cert-manager INF-G08 — readOnlyRootFilesystem=false REJECTED (const:true)"
+
+assert_rejects \
+  "infra/helm/cert-manager/values.schema.json" \
+  "resources:
+  limits: {cpu: 200m, memory: 128Mi}
+  requests: {cpu: 50m, memory: 64Mi}
+securityContext:
+  runAsNonRoot: true
+  runAsUser: 1000
+  seccompProfile: {type: Unconfined}
+containerSecurityContext:
+  readOnlyRootFilesystem: true
+  allowPrivilegeEscalation: false
+  runAsNonRoot: true
+  capabilities: {drop: [ALL]}" \
+  "cert-manager INF-G08 — seccompProfile Unconfined REJECTED (enum)"
+
+assert_rejects \
+  "infra/helm/cert-manager/values.schema.json" \
+  "resources:
+  limits: {cpu: 200m, memory: 128Mi}
+  requests: {cpu: 50m, memory: 64Mi}
+securityContext:
+  runAsNonRoot: true
+  runAsUser: 1000
+  seccompProfile: {type: RuntimeDefault}
+containerSecurityContext:
+  readOnlyRootFilesystem: true
+  allowPrivilegeEscalation: false
+  runAsNonRoot: true
+  capabilities: {drop: [NET_RAW]}" \
+  "cert-manager INF-G08 — capabilities drop missing ALL REJECTED"
+
+assert_rejects \
+  "infra/helm/cert-manager/values.schema.json" \
+  "resources: {}
+securityContext:
+  runAsNonRoot: true
+  runAsUser: 1000
+  seccompProfile: {type: RuntimeDefault}
+containerSecurityContext:
+  readOnlyRootFilesystem: true
+  allowPrivilegeEscalation: false
+  runAsNonRoot: true
+  capabilities: {drop: [ALL]}" \
+  "cert-manager — resources without limits/requests REJECTED (VAP)"
+
+# --- network-policies egress posture protection ---
+
+assert_rejects \
+  "infra/helm/network-policies/values.schema.json" \
+  "defaultDenyIngress: 'true'
+defaultDenyEgress: false
+loopzeroSystemAllowEgress: false
+namespaces: ['loopzero-system']" \
+  "network-policies — defaultDenyIngress as string REJECTED (boolean)"
+
+assert_rejects \
+  "infra/helm/network-policies/values.schema.json" \
+  "defaultDenyIngress: true
+defaultDenyEgress: false
+loopzeroSystemAllowEgress: false
+namespaces: []" \
+  "network-policies — empty namespaces REJECTED (minItems=1)"
+
+assert_rejects \
+  "infra/helm/network-policies/values.schema.json" \
+  "defaultDenyIngress: true
+defaultDenyEgress: false
+loopzeroSystemAllowEgress: false
+namespaces: ['UPPERCASE-NS']" \
+  "network-policies — uppercase namespace REJECTED (RFC 1123 pattern)"
+
+assert_rejects \
+  "infra/helm/network-policies/values.schema.json" \
+  "defaultDenyIngress: true
+defaultDenyEgress: false
+loopzeroSystemAllowEgress: false
+namespaces: ['loopzero-system']
+unknownToggle: true" \
+  "network-policies — unknown key REJECTED (additionalProperties:false catches typos)"
+
 # --- Summary ---
 echo ""
 echo "Tests run:    $TESTS_RUN"
