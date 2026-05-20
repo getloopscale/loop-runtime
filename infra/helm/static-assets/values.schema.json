@@ -1,0 +1,168 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://loopzero.platform/schemas/static-assets/values.schema.json",
+  "title": "static-assets chart values schema",
+  "description": "Plan 2026-05-20 T2.5 ext — fail-fast on static-asset delivery config drift. Protects: B82 (k3d kubeconfig localhost-trap), nginx-s3-gateway readOnlyRootFilesystem requirement (silently destroys envsubst), s3 backend credentials secret refs, INF-G08 hardening invariants.",
+  "type": "object",
+  "properties": {
+    "replicaCount": {
+      "type": "integer",
+      "minimum": 1,
+      "maximum": 10
+    },
+    "image": {
+      "type": "object",
+      "required": ["repository", "tag"],
+      "properties": {
+        "repository": {
+          "type": "string",
+          "minLength": 1,
+          "pattern": "^[a-z0-9][a-z0-9.-]*(/[a-z0-9._-]+)*$"
+        },
+        "tag": {
+          "type": "string",
+          "minLength": 1,
+          "not": { "const": "latest" },
+          "description": "Pinned tag (e.g., 'latest-20260420'). Bare 'latest' rejected — reproducibility hostile (Bug #16 pattern)."
+        },
+        "pullPolicy": {
+          "type": "string",
+          "enum": ["Always", "IfNotPresent", "Never"]
+        }
+      }
+    },
+    "s3": {
+      "type": "object",
+      "required": ["bucket", "server", "port", "proto", "region"],
+      "properties": {
+        "bucket": {
+          "type": "string",
+          "minLength": 1,
+          "pattern": "^[a-z0-9][a-z0-9-]*[a-z0-9]$|^[a-z0-9]$"
+        },
+        "server": {
+          "type": "string",
+          "minLength": 1,
+          "description": "S3 endpoint host. Local k3d: docker-bridge IP. dev/prod: DO Spaces regional endpoint (sfo3.digitaloceanspaces.com)."
+        },
+        "port": {
+          "type": ["integer", "string"],
+          "description": "S3 endpoint port. Local: 32000 (NodePort), DO Spaces: 443. Accepts integer OR numeric string (helmfile may template as either)."
+        },
+        "proto": {
+          "type": "string",
+          "enum": ["http", "https"],
+          "description": "HTTP for local MinIO over docker bridge. HTTPS for DO Spaces."
+        },
+        "region": {
+          "type": "string",
+          "minLength": 1,
+          "pattern": "^[a-z0-9-]+$",
+          "description": "AWS-style region code (e.g., 'us-east-1', 'sfo3'). Lowercase + dashes only."
+        },
+        "style": {
+          "type": "string",
+          "enum": ["path", "virtual"],
+          "description": "URL style. 'path' for MinIO (s3.example.com/bucket/key). 'virtual' for AWS S3 (bucket.s3.example.com/key)."
+        }
+      }
+    },
+    "credentialsSecret": {
+      "type": "object",
+      "required": ["name", "accessKeyIdKey", "secretAccessKeyKey"],
+      "properties": {
+        "name": {
+          "type": "string",
+          "minLength": 1,
+          "pattern": "^[a-z0-9]([-a-z0-9]*[a-z0-9])?$",
+          "description": "K8s Secret resource name (RFC 1123 DNS label)."
+        },
+        "accessKeyIdKey": {
+          "type": "string",
+          "minLength": 1,
+          "description": "Secret data key holding AWS_ACCESS_KEY_ID."
+        },
+        "secretAccessKeyKey": {
+          "type": "string",
+          "minLength": 1,
+          "description": "Secret data key holding AWS_SECRET_ACCESS_KEY."
+        }
+      }
+    },
+    "service": {
+      "type": "object",
+      "properties": {
+        "type": {
+          "type": "string",
+          "enum": ["ClusterIP", "NodePort", "LoadBalancer"]
+        },
+        "port": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 65535
+        }
+      }
+    },
+    "resources": {
+      "type": "object",
+      "required": ["limits", "requests"],
+      "properties": {
+        "limits": {
+          "type": "object",
+          "required": ["cpu", "memory"]
+        },
+        "requests": {
+          "type": "object",
+          "required": ["cpu", "memory"]
+        }
+      }
+    },
+    "podSecurityContext": {
+      "type": "object",
+      "required": ["runAsNonRoot", "runAsUser", "seccompProfile"],
+      "properties": {
+        "runAsNonRoot": {
+          "type": "boolean",
+          "const": true,
+          "description": "INF-G08: MUST be non-root."
+        },
+        "runAsUser": { "type": "integer", "minimum": 1 },
+        "seccompProfile": {
+          "type": "object",
+          "required": ["type"],
+          "properties": {
+            "type": {
+              "type": "string",
+              "enum": ["RuntimeDefault", "Localhost"]
+            }
+          }
+        }
+      }
+    },
+    "containerSecurityContext": {
+      "type": "object",
+      "required": ["allowPrivilegeEscalation", "readOnlyRootFilesystem", "capabilities"],
+      "properties": {
+        "allowPrivilegeEscalation": { "type": "boolean", "const": false },
+        "readOnlyRootFilesystem": {
+          "type": "boolean",
+          "const": true,
+          "description": "B82 LIVE FIX: nginx-s3-gateway with readOnlyRootFilesystem=true silently DESTROYS envsubst-generated config. Schema must NOT allow false here — actually, the opposite: chart MUST run with readOnlyRootFilesystem=true to enforce INF-G08; B82 was fixed by ensuring writable emptyDir for envsubst output, not by relaxing security. Keep const:true."
+        },
+        "capabilities": {
+          "type": "object",
+          "required": ["drop"],
+          "properties": {
+            "drop": {
+              "type": "array",
+              "minItems": 1,
+              "contains": { "const": "ALL" }
+            }
+          }
+        }
+      }
+    }
+  },
+  "required": ["replicaCount", "image", "s3", "credentialsSecret"],
+  "additionalProperties": true
+}

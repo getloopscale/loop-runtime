@@ -1005,6 +1005,72 @@ assert_rejects \
       port: 'abc'" \
   "harbor — database port non-numeric string REJECTED (pattern: ^[0-9]+\$)"
 
+# --- static-assets CF Worker config protection ---
+
+assert_rejects \
+  "infra/helm/static-assets/values.schema.json" \
+  "replicaCount: 1
+image: {repository: nginxinc/nginx-s3-gateway, tag: latest}
+s3: {bucket: loopzero-static-assets, server: '172.18.0.3', port: 32000, proto: http, region: us-east-1}
+credentialsSecret: {name: static-assets-s3, accessKeyIdKey: AWS_ACCESS_KEY_ID, secretAccessKeyKey: AWS_SECRET_ACCESS_KEY}" \
+  "static-assets — image tag=latest REJECTED (not:const, Bug #16)"
+
+assert_rejects \
+  "infra/helm/static-assets/values.schema.json" \
+  "replicaCount: 1
+image: {repository: nginxinc/nginx-s3-gateway, tag: 'latest-20260420'}
+s3: {bucket: loopzero-static-assets, server: '172.18.0.3', port: 32000, proto: ftp, region: us-east-1}
+credentialsSecret: {name: static-assets-s3, accessKeyIdKey: AWS_ACCESS_KEY_ID, secretAccessKeyKey: AWS_SECRET_ACCESS_KEY}" \
+  "static-assets — s3.proto=ftp REJECTED (enum: http|https)"
+
+assert_rejects \
+  "infra/helm/static-assets/values.schema.json" \
+  "replicaCount: 1
+image: {repository: nginxinc/nginx-s3-gateway, tag: 'latest-20260420'}
+s3: {bucket: loopzero-static-assets, server: '172.18.0.3', port: 32000, proto: http, region: 'US-EAST-1'}
+credentialsSecret: {name: static-assets-s3, accessKeyIdKey: AWS_ACCESS_KEY_ID, secretAccessKeyKey: AWS_SECRET_ACCESS_KEY}" \
+  "static-assets — uppercase region REJECTED (pattern ^[a-z0-9-]+\$)"
+
+assert_rejects \
+  "infra/helm/static-assets/values.schema.json" \
+  "replicaCount: 1
+image: {repository: nginxinc/nginx-s3-gateway, tag: 'latest-20260420'}
+s3: {bucket: 'UPPER-BUCKET', server: '172.18.0.3', port: 32000, proto: http, region: us-east-1}
+credentialsSecret: {name: static-assets-s3, accessKeyIdKey: AWS_ACCESS_KEY_ID, secretAccessKeyKey: AWS_SECRET_ACCESS_KEY}" \
+  "static-assets — uppercase s3.bucket REJECTED (RFC 1123)"
+
+assert_rejects \
+  "infra/helm/static-assets/values.schema.json" \
+  "replicaCount: 1
+image: {repository: nginxinc/nginx-s3-gateway, tag: 'latest-20260420'}
+s3: {bucket: loopzero-static-assets, server: '172.18.0.3', port: 32000, proto: http, region: us-east-1}
+credentialsSecret: {name: 'UPPER-SEC', accessKeyIdKey: AWS_ACCESS_KEY_ID, secretAccessKeyKey: AWS_SECRET_ACCESS_KEY}" \
+  "static-assets — uppercase credentialsSecret.name REJECTED"
+
+assert_rejects \
+  "infra/helm/static-assets/values.schema.json" \
+  "replicaCount: 1
+image: {repository: nginxinc/nginx-s3-gateway, tag: 'latest-20260420'}
+s3: {bucket: loopzero-static-assets, server: '172.18.0.3', port: 32000, proto: http, region: us-east-1}
+credentialsSecret: {name: static-assets-s3, accessKeyIdKey: AWS_ACCESS_KEY_ID, secretAccessKeyKey: AWS_SECRET_ACCESS_KEY}
+podSecurityContext:
+  runAsNonRoot: false
+  runAsUser: 1000
+  seccompProfile: {type: RuntimeDefault}" \
+  "static-assets INF-G08 — runAsNonRoot=false REJECTED"
+
+assert_rejects \
+  "infra/helm/static-assets/values.schema.json" \
+  "replicaCount: 1
+image: {repository: nginxinc/nginx-s3-gateway, tag: 'latest-20260420'}
+s3: {bucket: loopzero-static-assets, server: '172.18.0.3', port: 32000, proto: http, region: us-east-1}
+credentialsSecret: {name: static-assets-s3, accessKeyIdKey: AWS_ACCESS_KEY_ID, secretAccessKeyKey: AWS_SECRET_ACCESS_KEY}
+containerSecurityContext:
+  allowPrivilegeEscalation: false
+  readOnlyRootFilesystem: false
+  capabilities: {drop: [ALL]}" \
+  "static-assets INF-G08 — readOnlyRootFilesystem=false REJECTED"
+
 # --- Summary ---
 echo ""
 echo "Tests run:    $TESTS_RUN"

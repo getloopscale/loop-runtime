@@ -57,9 +57,6 @@ EXEMPT_CHARTS=(
   # Smoke test chart (local-only). Lowest priority for schema.
   "infra/helm/smoke-test"
 
-  # Static assets CF Worker config chart. Schema would constrain worker
-  # script SHA + KV namespace IDs.
-  "infra/helm/static-assets"
 )
 
 is_exempt() {
