@@ -35,6 +35,7 @@ on:
       - 'infra/tests/scripts/helm-charts-schema-coverage_test.sh'
       - 'infra/tests/scripts/helm-patterns-audit_test.sh'
       - 'infra/tests/scripts/ci-path-filter-coverage_test.sh'
+      - 'infra/tests/scripts/plan-2026-05-20-criteria_test.sh'
       - 'infra/helm/**/values.schema.json'
       - 'infra/helm/**/values.yaml'
       - 'infra/pulumi-drill/**'
@@ -169,6 +170,9 @@ jobs:
 
       - name: T2.5 ext — CI path-filter coverage (silent no-trigger guard)
         run: bash infra/tests/scripts/ci-path-filter-coverage_test.sh
+
+      - name: Plan 2026-05-20 — plan-specific criteria (4/4 measurable)
+        run: bash infra/tests/scripts/plan-2026-05-20-criteria_test.sh
 
       # === Vitest pulumi-drill structure tests ===
       - name: Setup Node
