@@ -6,10 +6,17 @@ on:
     branches: [develop, homolog, main]
     paths:
       - "charts/**"
+      # 2026-05-20: extended to include workflow itself + referenced
+      # script (run-polaris.sh) so changes re-trigger CI validation.
+      # Same bug class as infra-gates.yml divergence-matrix path gap.
+      - ".github/workflows/helm-charts.yml"
+      - "scripts/run-polaris.sh"
   pull_request:
     branches: [develop, homolog, main]
     paths:
       - "charts/**"
+      - ".github/workflows/helm-charts.yml"
+      - "scripts/run-polaris.sh"
 
 env:
   OCI_REGISTRY: oci://registry.digitalocean.com/loopzero-system/helm
