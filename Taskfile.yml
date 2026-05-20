@@ -84,6 +84,62 @@ tasks:
   # QA Tooling — E2E test preparation
   # ===========================================================================
 
+  install:sops:
+    desc: "Plan v1.2 T7.1 — install sops + age + helm-secrets plugin for secrets-in-git encryption (D6)"
+    cmds:
+      - |
+        set -e
+        echo "[install:sops] Installing sops + age..."
+        if command -v sops >/dev/null && command -v age >/dev/null; then
+          echo "[install:sops] sops + age already installed."
+        elif command -v brew >/dev/null; then
+          brew install sops age
+        elif command -v apt-get >/dev/null; then
+          sudo apt-get install -y age
+          curl -fsSL https://github.com/getsops/sops/releases/latest/download/sops-v3.10.2.linux.amd64 -o /tmp/sops
+          sudo install /tmp/sops /usr/local/bin/sops
+        else
+          echo "[install:sops] ERROR: install brew or apt first; or install sops + age manually." >&2
+          exit 1
+        fi
+        echo "[install:sops] Installing helm-secrets plugin..."
+        if helm plugin list 2>/dev/null | grep -q secrets; then
+          echo "[install:sops] helm-secrets plugin already installed."
+        else
+          helm plugin install https://github.com/jkroepke/helm-secrets || true
+        fi
+        echo "[install:sops] Verify:"
+        sops --version
+        age --version
+        helm secrets --version
+        echo ""
+        echo "[install:sops] Next: generate age keypair + update .sops.yaml recipients:"
+        echo "  age-keygen -o ~/.config/sops/age/keys.txt"
+        echo "  age-keygen -y ~/.config/sops/age/keys.txt   # public key for .sops.yaml"
+
+  audit:secrets:
+    desc: "Plan v1.2 T7.2 — audit repo for plaintext secrets that should be SOPS-encrypted"
+    cmds:
+      - |
+        set -e
+        echo "[audit:secrets] Scanning for plaintext private keys + suspicious patterns..."
+        # Patterns: BEGIN PRIVATE KEY, api_key, secret_key inline (not in tests/docs)
+        HITS=$(grep -rE "BEGIN [A-Z ]*PRIVATE KEY|api[_-]?key:\s+['\"]?[a-zA-Z0-9]{20,}|secret[_-]?key:\s+['\"]?[a-zA-Z0-9]{20,}" \
+          --include='*.yaml' --include='*.yml' --include='*.json' \
+          infra/ charts/ 2>&1 \
+          | grep -vE "(_test\.|/test/|/__tests__/|REPLACE_|placeholder|stub|example)" \
+          | grep -vE "schema|\.lock" \
+          | head -30 || true)
+        if [[ -n "$HITS" ]]; then
+          echo "[audit:secrets] ⚠ Potential plaintext secrets found:"
+          echo "$HITS"
+          echo ""
+          echo "[audit:secrets] Encrypt them: source infra/scripts/lib/sops.sh && sops_encrypt FILE"
+          exit 1
+        else
+          echo "[audit:secrets] ✓ No plaintext secrets detected in tracked YAML/JSON."
+        fi
+
   setup:
     desc: Full setup from scratch — clusters + infra + networking + CRDs + DB + tokens + standalone bootstrap
     cmds:

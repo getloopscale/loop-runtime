@@ -1,0 +1,32 @@
+# SOPS configuration — Plan v1.2 T7.2 / D6 (ADOPT SOPS + age).
+#
+# Per EC-24: prod isolation via creation_rules per path. Non-prod (drill, dev,
+# standalone-multi) share one age key; prod has its own.
+#
+# To bootstrap:
+#   age-keygen -o ~/.config/sops/age/keys.txt
+#   # Get public key:
+#   age-keygen -y ~/.config/sops/age/keys.txt
+#   # Add the public key to this file under the appropriate creation_rule.
+#
+# CI workflows MUST inject SOPS_AGE_KEY env from GitHub Secrets (EC-19).
+# See infra/scripts/lib/sops.sh for wrappers + audit helpers.
+
+creation_rules:
+  # Production secrets — prod key only (must be added by operator post-key-gen)
+  - path_regex: ^infra/secrets/prod/.*\.(yaml|yml)$
+    # Placeholder — replace with real prod recipient public key:
+    # age: age1prod-recipient-public-key-here
+    age: REPLACE_WITH_PROD_AGE_RECIPIENT
+    encrypted_regex: ^(data|stringData|password|secret|token|key)$
+
+  # Non-prod secrets (drill, dev, standalone, standalone-multi)
+  - path_regex: ^infra/secrets/(drill|dev|standalone.*)/.*\.(yaml|yml)$
+    # Placeholder — replace with non-prod recipient public key:
+    age: REPLACE_WITH_NONPROD_AGE_RECIPIENT
+    encrypted_regex: ^(data|stringData|password|secret|token|key)$
+
+  # Default fallback (catch any infra/secrets/* not yet matched)
+  - path_regex: ^infra/secrets/.*\.(yaml|yml)$
+    age: REPLACE_WITH_NONPROD_AGE_RECIPIENT
+    encrypted_regex: ^(data|stringData|password|secret|token|key)$
