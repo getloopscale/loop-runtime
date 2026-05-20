@@ -133,31 +133,41 @@ ON CONFLICT (tenant_id, user_id) DO UPDATE SET
 " >/dev/null
 log "membership ensured"
 
-# 6) Mint a fresh JWT via Hydra client_credentials.
+# 6) Mint a fresh JWT via Hydra client_credentials (shared lib per T4.4).
 CSEC=$(kubectl --context "$SEED_CTX" -n "$NS_LOOPZERO" get secret loopzero-bootstrap-credentials -o jsonpath='{.data.client_secret}' 2>/dev/null | base64 -d)
 if [[ -z "$CSEC" ]]; then
   log "ERROR: loopzero-bootstrap-credentials Secret not found — run bootstrap-oauth-clients.sh first (context=$SEED_CTX)"
   exit 1
 fi
 
-# Use a short-lived port-forward to Hydra public.
-pkill -f "kubectl.*port-forward.*ory-hydra-public" 2>/dev/null || true
-sleep 1
-kubectl --context "$SEED_CTX" -n "$NS_HYDRA" port-forward svc/ory-hydra-public 14444:4444 >/dev/null 2>&1 &
-PF_PID=$!
-trap "kill $PF_PID 2>/dev/null || true" EXIT
-sleep 4
+# Plan 2026-05-20 T4.4 — consume shared lib (replaces ~25 LOC of duplicated
+# port-forward + curl + token parse that was identical to drill-mint-jwt.sh).
+# Lib path: same directory as this script + lib/hydra-mint.sh
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+LIB_HYDRA_MINT="${SCRIPT_DIR}/lib/hydra-mint.sh"
+if [[ ! -r "$LIB_HYDRA_MINT" ]]; then
+  log "ERROR: shared lib not found at $LIB_HYDRA_MINT"
+  exit 1
+fi
+# shellcheck source=lib/hydra-mint.sh
+source "$LIB_HYDRA_MINT"
 
-TOKEN_RESP=$(curl -sf -X POST http://localhost:14444/oauth2/token \
-  -d "grant_type=client_credentials" \
-  -d "client_id=loopzero-bootstrap" \
-  -d "client_secret=$CSEC" \
-  -d "scope=openid offline_access" \
-  -d "audience=loopzero-engine")
+# shellcheck disable=SC2034  # All exported for mint_jwt
+HYDRA_NAMESPACE="$NS_HYDRA"
+HYDRA_PORT_LOCAL=14444
+KUBECTL_CMD="kubectl --context $SEED_CTX"
+CLIENT_ID="loopzero-bootstrap"
+CLIENT_SECRET="$CSEC"
+SCOPE="openid offline_access"
+AUDIENCE="loopzero-engine"
+# MIN_JWT_TTL deliberately unset (local k3d does not enforce EC-07 like drill)
 
-TOKEN=$(printf '%s' "$TOKEN_RESP" | python3 -c 'import sys,json; print(json.load(sys.stdin).get("access_token",""))' 2>/dev/null || true)
+if ! TOKEN=$(mint_jwt); then
+  log "ERROR: JWT mint via shared lib failed (see lib stderr above)"
+  exit 1
+fi
 if [[ -z "$TOKEN" ]]; then
-  log "ERROR: token mint failed: $(printf '%s' "$TOKEN_RESP" | head -c 120)"
+  log "ERROR: lib returned success but token empty (unexpected)"
   exit 1
 fi
 

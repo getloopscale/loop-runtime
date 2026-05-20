@@ -210,45 +210,65 @@ ON CONFLICT (tenant_id, user_id) DO UPDATE SET
 " >/dev/null
 log "Seed complete"
 
-# --- Hydra port-forward (drill mgmt cluster) ---
-pkill -f "kubectl.*port-forward.*ory-hydra-public" 2>/dev/null || true
-sleep 1
-kubectl --kubeconfig "$DRILL_KUBECONFIG" -n "$NS_HYDRA" \
-  port-forward svc/ory-hydra-public "${HYDRA_PORT_LOCAL}":4444 >/dev/null 2>&1 &
-PF_PID=$!
-trap "kill $PF_PID 2>/dev/null || true" EXIT
-sleep 4
+# --- Hydra port-forward + JWT mint via shared lib ---
+# Plan 2026-05-20 T4.4 — consume infra/helmfile/scripts/lib/hydra-mint.sh
+# (replaces ~55 LOC of duplicated port-forward + curl + TTL check that was
+# identical to seed-local-user.sh logic).
+#
+# Per ADR D3 (scripts parametrized by env): we pre-resolve drill-specific
+# env (kubeconfig, secret, namespace, port) here and DELEGATE the pure
+# mint flow (port-forward + curl + EC-07 TTL validation) to the lib.
+#
+# Lib API contract (verified hermetically in lib self-test):
+#   - mint_jwt reads: HYDRA_NAMESPACE, HYDRA_PORT_LOCAL, KUBECTL_CMD,
+#     CLIENT_ID, CLIENT_SECRET, SCOPE, AUDIENCE, MIN_JWT_TTL
+#   - mint_jwt writes: JWT to stdout, errors to stderr
+#   - mint_jwt exits: 0 success, 1 deps missing, 2 mint failure, 4 TTL too short
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+LIB_HYDRA_MINT="${SCRIPT_DIR}/../helmfile/scripts/lib/hydra-mint.sh"
+if [[ ! -r "$LIB_HYDRA_MINT" ]]; then
+  log "ERROR: shared lib not found at $LIB_HYDRA_MINT"
+  log "  Plan 2026-05-20 T4.4 — drill-mint-jwt.sh depends on this lib"
+  exit 1
+fi
+# shellcheck source=../helmfile/scripts/lib/hydra-mint.sh
+source "$LIB_HYDRA_MINT"
 
-# Sanity check Hydra reachable
-if ! curl -sf -m 5 "http://localhost:${HYDRA_PORT_LOCAL}/.well-known/openid-configuration" >/dev/null 2>&1; then
-  log "ERROR: Hydra not reachable on localhost:${HYDRA_PORT_LOCAL} after port-forward + 4s wait"
-  exit 2
+log "Minting JWT via Hydra client_credentials grant (via shared lib)..."
+
+# shellcheck disable=SC2034  # All exported for mint_jwt
+HYDRA_NAMESPACE="$NS_HYDRA"
+HYDRA_PORT_LOCAL="$HYDRA_PORT_LOCAL"
+KUBECTL_CMD="kubectl --kubeconfig $DRILL_KUBECONFIG"
+CLIENT_ID="loopzero-bootstrap"
+CLIENT_SECRET="$CSEC"
+SCOPE="openid offline_access"
+AUDIENCE="loopzero-engine"
+MIN_JWT_TTL="$MIN_JWT_TTL_SECONDS"
+
+if ! TOKEN=$(mint_jwt); then
+  RC=$?
+  # Map lib exit codes to drill-mint-jwt.sh contract (preserve external API):
+  #   lib 1 (deps missing)  → drill 2 (Hydra path issue)
+  #   lib 2 (mint failure)  → drill 3 (JWT mint failed)
+  #   lib 4 (TTL too short) → drill 4 (EC-07)
+  case "$RC" in
+    1|2) exit 3 ;;
+    4)   exit 4 ;;
+    *)   exit 3 ;;
+  esac
 fi
 
-# --- Mint JWT with EC-07 explicit TTL request ---
-# Note: actual TTL is determined by Hydra client config (TTL=2h+). We request
-# `scope=openid offline_access` to ensure refresh capability. Hydra client
-# `loopzero-bootstrap` is provisioned by bootstrap-oauth-clients.sh with TTL
-# matching MIN_JWT_TTL_SECONDS (operator must ensure helmfile env drill
-# configures Hydra client TTL >= 7200s).
-log "Minting JWT via Hydra client_credentials grant..."
-TOKEN_RESP=$(curl -sf -X POST "http://localhost:${HYDRA_PORT_LOCAL}/oauth2/token" \
-  -d "grant_type=client_credentials" \
-  -d "client_id=loopzero-bootstrap" \
-  -d "client_secret=$CSEC" \
-  -d "scope=openid offline_access" \
-  -d "audience=loopzero-engine" 2>&1 || true)
-
-TOKEN=$(printf '%s' "$TOKEN_RESP" | python3 -c 'import sys,json; print(json.load(sys.stdin).get("access_token",""))' 2>/dev/null || true)
 if [[ -z "$TOKEN" ]]; then
-  log "ERROR: JWT mint failed. Hydra response: $(printf '%s' "$TOKEN_RESP" | head -c 200)"
+  log "ERROR: lib returned success but token empty (unexpected — investigate)"
   exit 3
 fi
 
-# --- EC-07 fix: validate JWT TTL >= MIN_JWT_TTL_SECONDS ---
-# Decode JWT payload (no signature verification — we trust Hydra issued it).
+# --- Decode actual TTL for logging (lib already validated >= MIN_JWT_TTL) ---
+# Caller-side parse preserves observable contract: hermetic tests assert that
+# stderr contains "JWT TTL: <ttl>s". Even though the lib already validated
+# the minimum, the actual value is informative for operators inspecting logs.
 PAYLOAD_B64=$(printf '%s' "$TOKEN" | cut -d. -f2)
-# Pad b64 if needed (JWT uses url-safe b64 without padding)
 case $((${#PAYLOAD_B64} % 4)) in
   2) PAYLOAD_B64="${PAYLOAD_B64}==" ;;
   3) PAYLOAD_B64="${PAYLOAD_B64}=" ;;
@@ -257,14 +277,7 @@ PAYLOAD_JSON=$(printf '%s' "$PAYLOAD_B64" | tr '_-' '/+' | base64 -d 2>/dev/null
 EXP=$(printf '%s' "$PAYLOAD_JSON" | python3 -c 'import sys,json; print(json.load(sys.stdin).get("exp",0))' 2>/dev/null || echo 0)
 IAT=$(printf '%s' "$PAYLOAD_JSON" | python3 -c 'import sys,json; print(json.load(sys.stdin).get("iat",0))' 2>/dev/null || echo 0)
 JWT_TTL=$((EXP - IAT))
-
-if [[ "$JWT_TTL" -lt "$MIN_JWT_TTL_SECONDS" ]]; then
-  log "ERROR: JWT TTL (${JWT_TTL}s) below minimum required (${MIN_JWT_TTL_SECONDS}s)"
-  log "  EC-07 fix: L3 spec runs 60min; buffer requires TTL >= ${MIN_JWT_TTL_SECONDS}s"
-  log "  Hint: increase Hydra client loopzero-bootstrap accessTokenStrategy or TTL config in helmfile env drill"
-  exit 4
-fi
 log "JWT TTL: ${JWT_TTL}s (>= ${MIN_JWT_TTL_SECONDS}s required ✓)"
 
-# --- Output: single line JWT to stdout ---
+# --- Output: single line JWT to stdout (contract preserved) ---
 printf '%s\n' "$TOKEN"
