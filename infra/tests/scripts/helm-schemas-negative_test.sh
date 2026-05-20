@@ -929,6 +929,82 @@ resources:
 metricsPort: 80" \
   "cloudflared — metricsPort=80 REJECTED (privileged port, non-root conflict)"
 
+# --- harbor MEET-2026-04-11-048 mandates protection ---
+
+assert_rejects \
+  "infra/helm/harbor/values.schema.json" \
+  "harbor:
+  trivy:
+    enabled: true" \
+  "harbor MEET — trivy enabled REJECTED (const:false, syft+grype in pipeline)"
+
+assert_rejects \
+  "infra/helm/harbor/values.schema.json" \
+  "harbor:
+  notary:
+    enabled: true" \
+  "harbor MEET — notary enabled REJECTED (const:false, cosign instead)"
+
+assert_rejects \
+  "infra/helm/harbor/values.schema.json" \
+  "harbor:
+  chartmuseum:
+    enabled: true" \
+  "harbor — chartmuseum enabled REJECTED (deprecated by Harbor 2.10+)"
+
+assert_rejects \
+  "infra/helm/harbor/values.schema.json" \
+  "harbor:
+  expose:
+    type: loadBalancer" \
+  "harbor — expose.type=loadBalancer REJECTED (bypasses Traefik)"
+
+assert_rejects \
+  "infra/helm/harbor/values.schema.json" \
+  "harbor:
+  expose:
+    tls:
+      enabled: true" \
+  "harbor — expose.tls.enabled=true REJECTED (double TLS with Traefik)"
+
+assert_rejects \
+  "infra/helm/harbor/values.schema.json" \
+  "harbor:
+  externalURL: 'http://harbor.dev.loopzero.example'" \
+  "harbor — HTTP externalURL REJECTED (pattern requires https://)"
+
+assert_rejects \
+  "infra/helm/harbor/values.schema.json" \
+  "harbor:
+  database:
+    type: internal" \
+  "harbor MEET — database.type=internal REJECTED (state isolation violation)"
+
+assert_rejects \
+  "infra/helm/harbor/values.schema.json" \
+  "harbor:
+  database:
+    type: external
+    external:
+      maxOpenConns: 100" \
+  "harbor MEET — maxOpenConns=100 REJECTED (>50 PG pool budget burn)"
+
+assert_rejects \
+  "infra/helm/harbor/values.schema.json" \
+  "harbor:
+  nginx:
+    replicas: 1" \
+  "harbor — nginx.replicas=1 REJECTED (const:0, Traefik is the ingress)"
+
+assert_rejects \
+  "infra/helm/harbor/values.schema.json" \
+  "harbor:
+  database:
+    type: external
+    external:
+      port: 'abc'" \
+  "harbor — database port non-numeric string REJECTED (pattern: ^[0-9]+\$)"
+
 # --- Summary ---
 echo ""
 echo "Tests run:    $TESTS_RUN"
