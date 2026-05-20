@@ -1,5 +1,5 @@
 {
-  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
   "title": "loopzero-app-operator values",
   "description": "Schema for loopzero-api Helm chart. Per INF-G17 + plan ADR D4, schema is mandatory for all published charts in charts/.",
   "type": "object",

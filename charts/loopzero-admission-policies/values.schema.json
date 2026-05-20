@@ -1,5 +1,5 @@
 {
-  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
   "title": "loopzero-admission-policies values",
   "description": "Schema for loopzero-admission-policies chart. Defines ValidatingAdmissionPolicies (VAP) + ClusterImagePolicy + alerts for LoopZero platform constraints. Per INF-G17 + ADR-0040 (charts SOTA T1.2 — alignment with infra/helm/admission-policies).",
   "type": "object",
