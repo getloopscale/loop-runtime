@@ -223,7 +223,7 @@ releases:
       - ../helm/gitea/values.yaml
       # Phase 2 plan T3.3 (EC-3 fix): drill env DB connection override → managed PG
       {{- if eq .Environment.Name "drill" }}
-      - ../helm/gitea/values-gitea-drill.yaml.gotmpl
+      - values/drill/gitea.yaml.gotmpl
       {{- end }}
       # B28 (CHG-2026-04-28-LAYERED-BOOTSTRAP) — Gitea HA (2 replicas + RWX
       # NFS) is a LoopZero Cloud production posture (CHG-002a). Self-hosting
@@ -300,7 +300,7 @@ releases:
       # (no Slack webhook + PagerDuty Secret in drill → CrashLoopBackOff).
       # Empty override in non-drill envs (file conditional).
       {{- if eq .Environment.Name "drill" }}
-      - ../helm/monitoring/values-prometheus-drill.yaml
+      - values/drill/prometheus.yaml
       {{- end }}
 
   - name: grafana
@@ -385,7 +385,7 @@ releases:
       - ../helm/ory-kratos/values.yaml
       # Phase 2 plan T3.1 (EC-3 fix): drill env DSN override → managed PG
       {{- if eq .Environment.Name "drill" }}
-      - ../helm/ory-kratos/values-kratos-drill.yaml.gotmpl
+      - values/drill/ory-kratos.yaml.gotmpl
       {{- end }}
 
   - name: ory-hydra
@@ -398,7 +398,7 @@ releases:
       - ../helm/ory-hydra/values.yaml
       # Phase 2 plan T3.2 (EC-3 fix): drill env DSN override → managed PG
       {{- if eq .Environment.Name "drill" }}
-      - ../helm/ory-hydra/values-hydra-drill.yaml.gotmpl
+      - values/drill/ory-hydra.yaml.gotmpl
       {{- end }}
 
   # Wave 2: LoopZero platform
@@ -421,7 +421,7 @@ releases:
       # for loopzero-api image tag (DOCR :latest doesn't exist — pinned to
       # REDACTED_SECRET_061). MUST be LAST in values list to win merge precedence.
 {{- if eq .Environment.Name "drill" }}
-      - ../helm/loopzero-api/values-loopzero-api-drill.yaml.gotmpl
+      - values/drill/loopzero-api.yaml.gotmpl
 {{- end }}
     set:
       # Finding 2026-05-12 — wire env-file `replicas.api` to chart
@@ -460,7 +460,7 @@ releases:
 {{- if eq .Environment.Name "drill" }}
       # Bug #23 LIVE fix (2026-05-17 iter 16): drill needs DOCR registry +
       # imagePullSecrets to pull operator image from DigitalOcean.
-      - ../helm/loopzero-tenant-operator-drill/values-drill.yaml.gotmpl
+      - values/drill/loopzero-tenant-operator.yaml.gotmpl
 {{- end }}
 
   - name: loopzero-app-operator
@@ -475,7 +475,7 @@ releases:
       - ../../charts/loopzero-app-operator/values-standalone-multi.yaml
 {{- end }}
 {{- if eq .Environment.Name "drill" }}
-      - ../helm/loopzero-app-operator-drill/values-drill.yaml.gotmpl
+      - values/drill/loopzero-app-operator.yaml.gotmpl
 {{- end }}
 
   - name: loopzero-preview-operator
@@ -490,7 +490,7 @@ releases:
       - ../../charts/loopzero-preview-operator/values-standalone-multi.yaml
 {{- end }}
 {{- if eq .Environment.Name "drill" }}
-      - ../helm/loopzero-preview-operator-drill/values-drill.yaml.gotmpl
+      - values/drill/loopzero-preview-operator.yaml.gotmpl
 {{- end }}
 
   - name: loopzero-platform-operator
@@ -505,7 +505,7 @@ releases:
       - ../../charts/loopzero-platform-operator/values-standalone-multi.yaml
 {{- end }}
 {{- if eq .Environment.Name "drill" }}
-      - ../helm/loopzero-platform-operator-drill/values-drill.yaml.gotmpl
+      - values/drill/loopzero-platform-operator.yaml.gotmpl
 {{- end }}
 
   - name: loopzero-cloud
