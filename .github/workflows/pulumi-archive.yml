@@ -153,7 +153,7 @@ jobs:
         if: always()
         # pragma: allow-tag-pin
         # TODO(INF-G18 / plan T1.1): Renovate Bot resolves to @<sha40> on first run.
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@65c4c4a1ddee5b72f698fdd19549f0f0fb45cf08 # v4.6.0
         with:
           name: pulumi-archive-${{ github.run_id }}
           path: |
