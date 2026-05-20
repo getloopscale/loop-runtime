@@ -196,9 +196,9 @@ MISSING_SCRIPTS=()
 for script in \
   infra/scripts/drill-state-reset.sh \
   infra/scripts/drill-helmfile-bootstrap.sh \
-  infra/scripts/drill-cancel-refresh.sh \
-  infra/scripts/drill-evidence-capture.sh \
-  infra/scripts/drill-teardown-validator.sh; do
+  infra/scripts/dr/cancel-refresh.sh \
+  infra/scripts/dr/evidence-capture.sh \
+  infra/scripts/dr/teardown-validator.sh; do
   if [[ ! -x "$script" ]]; then
     MISSING_SCRIPTS+=("$script")
   fi

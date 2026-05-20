@@ -144,8 +144,8 @@ jobs:
         run: |
           # Scans DO account for resources tagged loopzero-drill and force-deletes
           # any leftover from partial Pulumi destroy (EC-05 fix).
-          if [ -x infra/scripts/drill-teardown-validator.sh ]; then
-            bash infra/scripts/drill-teardown-validator.sh
+          if [ -x infra/scripts/dr/teardown-validator.sh ]; then
+            bash infra/scripts/dr/teardown-validator.sh
           else
             echo "::warning::drill-teardown-validator.sh not yet implemented (T4.1.bis pending)"
           fi
@@ -265,8 +265,8 @@ jobs:
         env:
           DIGITALOCEAN_TOKEN: ${{ secrets.DIGITALOCEAN_TOKEN }}
         run: |
-          if [ -x infra/scripts/drill-teardown-validator.sh ]; then
-            bash infra/scripts/drill-teardown-validator.sh
+          if [ -x infra/scripts/dr/teardown-validator.sh ]; then
+            bash infra/scripts/dr/teardown-validator.sh
           else
             echo "::warning::drill-teardown-validator.sh not yet implemented (T4.1.bis pending)"
           fi
