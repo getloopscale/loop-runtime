@@ -1,0 +1,136 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://loopzero.platform/schemas/admission-policies/values.schema.json",
+  "title": "admission-policies chart values schema",
+  "description": "Plan 2026-05-20 T2.5 ext — fail-fast on missing/invalid admission policy config. Critical because B16-class bug (policy-controller deny-by-default with no matching ClusterImagePolicy) rejects ALL tenant pods cluster-wide.",
+  "type": "object",
+  "properties": {
+    "domain": {
+      "type": "string",
+      "minLength": 3,
+      "description": "Base domain (e.g., dev.loopzero.example). Used to derive Harbor registry hostname."
+    },
+    "registries": {
+      "type": "object",
+      "required": ["docrPrefix", "harborPrefix"],
+      "properties": {
+        "docrPrefix": {
+          "type": "string",
+          "minLength": 5,
+          "pattern": "/$",
+          "description": "DOCR registry prefix MUST end with '/' (used as string prefix match in VAP). Empty/missing = B16 class bug: policy-controller deny-by-default rejects ALL pods."
+        },
+        "harborPrefix": {
+          "type": "string",
+          "minLength": 5,
+          "pattern": "/$",
+          "description": "Harbor registry prefix MUST end with '/'. Same B16 risk if empty."
+        },
+        "additionalPrefixes": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "minLength": 1,
+            "pattern": "/$",
+            "description": "Each additional prefix MUST end with '/'. Standalone-multi sets k3d-loopzero-registry:5000/<tenant>/ for locally-built images."
+          },
+          "description": "Opt-in additional registry prefixes accepted by restrict-registries VAP. Default empty (prod allows only DOCR + Harbor)."
+        }
+      }
+    },
+    "clusterImagePolicy": {
+      "type": "object",
+      "required": ["enabled", "name"],
+      "properties": {
+        "enabled": { "type": "boolean" },
+        "name": {
+          "type": "string",
+          "minLength": 1,
+          "description": "Policy name (e.g., loopzero-images-warn). Must be unique per ClusterImagePolicy CR."
+        },
+        "mode": {
+          "type": "string",
+          "enum": ["warn", "enforce"],
+          "description": "warn=log+admit, enforce=reject unsigned. ADR-0050 default = enforce (local + dev). Prod retains warn until cosign keyless cutover (Sprint 9)."
+        },
+        "staticAction": {
+          "type": "string",
+          "enum": ["pass", "fail"],
+          "description": "Static action when no signature verifiable yet. Default 'pass' to avoid breaking during dual-signing window."
+        },
+        "imageGlobs": {
+          "type": "array",
+          "minItems": 1,
+          "items": { "type": "string", "minLength": 1 },
+          "description": "At least one image glob required (otherwise policy applies to nothing = useless)."
+        }
+      }
+    },
+    "clusterImagePolicyKeyless": {
+      "type": "object",
+      "properties": {
+        "enabled": { "type": "boolean" },
+        "name": { "type": "string", "minLength": 1 },
+        "mode": { "type": "string", "enum": ["warn", "enforce"] },
+        "imageGlobs": {
+          "type": "array",
+          "minItems": 1,
+          "items": { "type": "string", "minLength": 1 }
+        },
+        "fulcioURL": {
+          "type": "string",
+          "format": "uri",
+          "description": "Fulcio cert authority URL (default https://fulcio.sigstore.dev for Sigstore public-good instance)."
+        },
+        "rekorURL": {
+          "type": "string",
+          "format": "uri",
+          "description": "Rekor transparency log URL (default https://rekor.sigstore.dev)."
+        },
+        "oidcIssuer": {
+          "type": "string",
+          "format": "uri"
+        },
+        "identityRegexp": {
+          "type": "string",
+          "minLength": 1,
+          "description": "Identity regex MUST narrowly scope to expected OIDC subjects (e.g., '^https://github\\.com/getloopscale/loopzero/'). Wildcard = supply chain risk."
+        }
+      },
+      "if": { "properties": { "enabled": { "const": true } } },
+      "then": { "required": ["name", "mode", "imageGlobs", "fulcioURL", "rekorURL", "oidcIssuer", "identityRegexp"] }
+    },
+    "vaps": {
+      "type": "object",
+      "description": "Per-VAP toggles. Each MUST be explicit boolean (no defaulting via Helm null coalescing).",
+      "properties": {
+        "disallowLatestTag": { "type": "boolean" },
+        "restrictRegistries": { "type": "boolean" },
+        "requireResourceLimits": { "type": "boolean" },
+        "protectPlatformNetworkpolicies": { "type": "boolean" },
+        "argocdManagedBy": { "type": "boolean" },
+        "requireImageSignature": { "type": "boolean" },
+        "tenantNamespace": { "type": "boolean" },
+        "noRuntimeImageMutations": { "type": "boolean" },
+        "noRuntimeImageMutationsAction": {
+          "type": "string",
+          "enum": ["Warn", "Deny"]
+        },
+        "noRuntimeImageMutationsFailurePolicy": {
+          "type": "string",
+          "enum": ["Ignore", "Fail"]
+        }
+      }
+    },
+    "alerts": {
+      "type": "object",
+      "properties": {
+        "enabled": { "type": "boolean" },
+        "namespace": { "type": "string", "minLength": 1 },
+        "prometheusReleaseLabel": { "type": "string", "minLength": 1 }
+      }
+    }
+  },
+  "required": ["registries", "clusterImagePolicy"],
+  "additionalProperties": true
+}
