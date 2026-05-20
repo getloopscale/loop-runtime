@@ -223,11 +223,11 @@ func (b *WorkflowBuilder) Build(spec services.WorkflowSpec) (*forge.Workflow, er
 		Entrypoint:         entrypointName,
 		OnExit:             onExitName,
 		ServiceAccountName: serviceAccountName,
-		Parallelism:        ptr(workflowParallelism),
+		Parallelism:        forge.Ptr(workflowParallelism),
 		TTLStrategy: &forge.TTLStrategy{
-			SecondsAfterCompletion: ptr(ttlAfterCompletion),
-			SecondsAfterSuccess:    ptr(ttlAfterSuccess),
-			SecondsAfterFailure:    ptr(ttlAfterFailure),
+			SecondsAfterCompletion: forge.Ptr(ttlAfterCompletion),
+			SecondsAfterSuccess:    forge.Ptr(ttlAfterSuccess),
+			SecondsAfterFailure:    forge.Ptr(ttlAfterFailure),
 		},
 		// F-13 (CHG-2026-04-29-DOGFOOD T5.5) — `OnPodCompletion` deleta o pod
 		// individual após cada step finalizar (Success OU Error). Sem isso,
@@ -282,9 +282,9 @@ func (b *WorkflowBuilder) Build(spec services.WorkflowSpec) (*forge.Workflow, er
 		// FSGroup ensures the PVC volume is writable by non-root user 1000.
 		// Without this, the PVC is mounted as root-owned and cp/mkdir fail.
 		SecurityContext: &model.PodSecurityContext{
-			FSGroup:    ptr(rootlessUID),
-			RunAsUser:  ptr(rootlessUID),
-			RunAsGroup: ptr(rootlessUID),
+			FSGroup:    forge.Ptr(rootlessUID),
+			RunAsUser:  forge.Ptr(rootlessUID),
+			RunAsGroup: forge.Ptr(rootlessUID),
 		},
 		// PVC multi-attach is handled upstream as of loopzero-forge v0.4.0
 		// (issue getloopscale/loopzero-forge#11): Workflow.Build() injects the

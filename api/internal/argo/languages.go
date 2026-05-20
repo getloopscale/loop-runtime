@@ -157,21 +157,21 @@ func (s *NodeStrategy) CacheKey() string { return "node-modules" }
 func (s *NodeStrategy) CacheDirs() []string { return []string{"node_modules"} }
 
 func (s *NodeStrategy) ValidateStep(apps []services.AppSpec) *forge.Container {
-	return buildContainer("validate-workspace", imageNode, resourcesTiny(), scriptValidateNode(apps))
+	return buildContainer("validate-workspace", imageNode, forge.ResourcesTiny(), scriptValidateNode(apps))
 }
 
 func (s *NodeStrategy) InstallStep(apps []services.AppSpec) *forge.Container {
-	c := buildContainer("install-deps", imageNode, resourcesMedium(), scriptInstallNode(apps))
-	c.RetryStrategy = retryStrategy(3, "5s", "2", "60s")
+	c := buildContainer("install-deps", imageNode, forge.ResourcesMedium(), scriptInstallNode(apps))
+	c.RetryStrategy = forge.NewRetryOnFailure(3, "5s", "2", "60s")
 	return c
 }
 
 func (s *NodeStrategy) BuildStep(apps []services.AppSpec) *forge.Container {
-	return buildContainer("build-apps", imageNode, resourcesMedium(), scriptBuildNode(apps))
+	return buildContainer("build-apps", imageNode, forge.ResourcesMedium(), scriptBuildNode(apps))
 }
 
 func (s *NodeStrategy) ScanStep() *forge.Container {
-	return buildContainer("security-scan", imageNode, resourcesSmall(), scriptScanNode())
+	return buildContainer("security-scan", imageNode, forge.ResourcesSmall(), scriptScanNode())
 }
 
 func (s *NodeStrategy) DockerfileStep(apps []services.AppSpec, totalApps int) *forge.Container {
@@ -197,21 +197,21 @@ func (s *GoStrategy) CacheDirs() []string {
 }
 
 func (s *GoStrategy) ValidateStep(apps []services.AppSpec) *forge.Container {
-	return buildContainer("validate-workspace", imageGolang, resourcesTiny(), scriptValidateGo(apps))
+	return buildContainer("validate-workspace", imageGolang, forge.ResourcesTiny(), scriptValidateGo(apps))
 }
 
 func (s *GoStrategy) InstallStep(apps []services.AppSpec) *forge.Container {
-	c := buildContainer("install-deps", imageGolang, resourcesMedium(), scriptInstallGo(apps))
-	c.RetryStrategy = retryStrategy(3, "5s", "2", "60s")
+	c := buildContainer("install-deps", imageGolang, forge.ResourcesMedium(), scriptInstallGo(apps))
+	c.RetryStrategy = forge.NewRetryOnFailure(3, "5s", "2", "60s")
 	return c
 }
 
 func (s *GoStrategy) BuildStep(apps []services.AppSpec) *forge.Container {
-	return buildContainer("build-apps", imageGolang, resourcesMedium(), scriptBuildGo(apps))
+	return buildContainer("build-apps", imageGolang, forge.ResourcesMedium(), scriptBuildGo(apps))
 }
 
 func (s *GoStrategy) ScanStep() *forge.Container {
-	return buildContainer("security-scan", imageGolang, resourcesSmall(), scriptScanGo())
+	return buildContainer("security-scan", imageGolang, forge.ResourcesSmall(), scriptScanGo())
 }
 
 func (s *GoStrategy) DockerfileStep(apps []services.AppSpec, totalApps int) *forge.Container {
@@ -234,12 +234,12 @@ func (s *PythonStrategy) CacheKey() string { return "pip-cache" }
 func (s *PythonStrategy) CacheDirs() []string { return []string{"/workspace/.cache/pip"} }
 
 func (s *PythonStrategy) ValidateStep(apps []services.AppSpec) *forge.Container {
-	return buildContainer("validate-workspace", imagePython, resourcesTiny(), scriptValidatePython(apps))
+	return buildContainer("validate-workspace", imagePython, forge.ResourcesTiny(), scriptValidatePython(apps))
 }
 
 func (s *PythonStrategy) InstallStep(apps []services.AppSpec) *forge.Container {
-	c := buildContainer("install-deps", imagePython, resourcesMedium(), scriptInstallPython(apps))
-	c.RetryStrategy = retryStrategy(3, "5s", "2", "60s")
+	c := buildContainer("install-deps", imagePython, forge.ResourcesMedium(), scriptInstallPython(apps))
+	c.RetryStrategy = forge.NewRetryOnFailure(3, "5s", "2", "60s")
 	return c
 }
 
@@ -247,11 +247,11 @@ func (s *PythonStrategy) BuildStep(apps []services.AppSpec) *forge.Container {
 	// REVIEW-LEVE-1: Python build step needs resourcesMedium (2Gi) like Node/Go.
 	// Python projects with C extensions (numpy, pandas, tensorflow) compile from
 	// source on Alpine and OOMKill at 256Mi.
-	return buildContainer("build-apps", imagePython, resourcesMedium(), scriptBuildPython(apps))
+	return buildContainer("build-apps", imagePython, forge.ResourcesMedium(), scriptBuildPython(apps))
 }
 
 func (s *PythonStrategy) ScanStep() *forge.Container {
-	return buildContainer("security-scan", imagePython, resourcesSmall(), scriptScanPython())
+	return buildContainer("security-scan", imagePython, forge.ResourcesSmall(), scriptScanPython())
 }
 
 func (s *PythonStrategy) DockerfileStep(apps []services.AppSpec, totalApps int) *forge.Container {
@@ -268,16 +268,16 @@ func (s *RubyStrategy) Name() string                        { return "ruby" }
 func (s *RubyStrategy) CacheKey() string                    { return "bundle-cache" }
 func (s *RubyStrategy) CacheDirs() []string                 { return []string{"/workspace/vendor/bundle"} }
 func (s *RubyStrategy) ValidateStep(apps []services.AppSpec) *forge.Container {
-	return buildContainer("validate-workspace", imageRuby, resourcesTiny(), scriptValidateFile(apps, "Gemfile"))
+	return buildContainer("validate-workspace", imageRuby, forge.ResourcesTiny(), scriptValidateFile(apps, "Gemfile"))
 }
 func (s *RubyStrategy) InstallStep(apps []services.AppSpec) *forge.Container {
-	return buildContainer("install-deps", imageRuby, resourcesSmall(), scriptInstallRuby(apps))
+	return buildContainer("install-deps", imageRuby, forge.ResourcesSmall(), scriptInstallRuby(apps))
 }
 func (s *RubyStrategy) BuildStep(_ []services.AppSpec) *forge.Container {
-	return buildContainer("build-apps", imageRuby, resourcesTiny(), noopScript("Ruby — no compile step"))
+	return buildContainer("build-apps", imageRuby, forge.ResourcesTiny(), noopScript("Ruby — no compile step"))
 }
 func (s *RubyStrategy) ScanStep() *forge.Container {
-	return buildContainer("security-scan", imageRuby, resourcesTiny(), `set -euo pipefail
+	return buildContainer("security-scan", imageRuby, forge.ResourcesTiny(), `set -euo pipefail
 cd /workspace
 gem install bundler-audit 2>/dev/null && bundle-audit check 2>/dev/null || echo "bundle-audit not available or scan failed — skipping"
 `)
@@ -296,16 +296,16 @@ func (s *JavaStrategy) Name() string                        { return "java" }
 func (s *JavaStrategy) CacheKey() string                    { return "maven-cache" }
 func (s *JavaStrategy) CacheDirs() []string                 { return []string{"/workspace/.m2", "/workspace/.gradle"} }
 func (s *JavaStrategy) ValidateStep(apps []services.AppSpec) *forge.Container {
-	return buildContainer("validate-workspace", imageAlpine, resourcesTiny(), scriptValidateFileAny(apps, "pom.xml", "build.gradle", "build.gradle.kts"))
+	return buildContainer("validate-workspace", imageAlpine, forge.ResourcesTiny(), scriptValidateFileAny(apps, "pom.xml", "build.gradle", "build.gradle.kts"))
 }
 func (s *JavaStrategy) InstallStep(_ []services.AppSpec) *forge.Container {
-	return buildContainer("install-deps", imageAlpine, resourcesTiny(), noopScript("Java — deps installed during build"))
+	return buildContainer("install-deps", imageAlpine, forge.ResourcesTiny(), noopScript("Java — deps installed during build"))
 }
 func (s *JavaStrategy) BuildStep(_ []services.AppSpec) *forge.Container {
-	return buildContainer("build-apps", imageAlpine, resourcesTiny(), noopScript("Java — build happens in Dockerfile (multi-stage)"))
+	return buildContainer("build-apps", imageAlpine, forge.ResourcesTiny(), noopScript("Java — build happens in Dockerfile (multi-stage)"))
 }
 func (s *JavaStrategy) ScanStep() *forge.Container {
-	return buildContainer("security-scan", imageAlpine, resourcesTiny(), noopScript("Java security scan — skipped (use Dockerfile-based scan)"))
+	return buildContainer("security-scan", imageAlpine, forge.ResourcesTiny(), noopScript("Java security scan — skipped (use Dockerfile-based scan)"))
 }
 func (s *JavaStrategy) DockerfileStep(apps []services.AppSpec, totalApps int) *forge.Container {
 	return loopzeroPacksDockerfileStep(apps, totalApps)
@@ -321,16 +321,16 @@ func (s *PHPStrategy) Name() string                        { return "php" }
 func (s *PHPStrategy) CacheKey() string                    { return "composer-cache" }
 func (s *PHPStrategy) CacheDirs() []string                 { return []string{"/workspace/vendor"} }
 func (s *PHPStrategy) ValidateStep(apps []services.AppSpec) *forge.Container {
-	return buildContainer("validate-workspace", imageAlpine, resourcesTiny(), scriptValidateFile(apps, "composer.json"))
+	return buildContainer("validate-workspace", imageAlpine, forge.ResourcesTiny(), scriptValidateFile(apps, "composer.json"))
 }
 func (s *PHPStrategy) InstallStep(_ []services.AppSpec) *forge.Container {
-	return buildContainer("install-deps", imageAlpine, resourcesTiny(), noopScript("PHP — deps installed in Dockerfile"))
+	return buildContainer("install-deps", imageAlpine, forge.ResourcesTiny(), noopScript("PHP — deps installed in Dockerfile"))
 }
 func (s *PHPStrategy) BuildStep(_ []services.AppSpec) *forge.Container {
-	return buildContainer("build-apps", imageAlpine, resourcesTiny(), noopScript("PHP — no compile step"))
+	return buildContainer("build-apps", imageAlpine, forge.ResourcesTiny(), noopScript("PHP — no compile step"))
 }
 func (s *PHPStrategy) ScanStep() *forge.Container {
-	return buildContainer("security-scan", imageAlpine, resourcesTiny(), noopScript("PHP security scan — skipped"))
+	return buildContainer("security-scan", imageAlpine, forge.ResourcesTiny(), noopScript("PHP security scan — skipped"))
 }
 func (s *PHPStrategy) DockerfileStep(apps []services.AppSpec, totalApps int) *forge.Container {
 	return loopzeroPacksDockerfileStep(apps, totalApps)
@@ -346,16 +346,16 @@ func (s *RustStrategy) Name() string                        { return "rust" }
 func (s *RustStrategy) CacheKey() string                    { return "cargo-cache" }
 func (s *RustStrategy) CacheDirs() []string                 { return []string{"/workspace/target"} }
 func (s *RustStrategy) ValidateStep(apps []services.AppSpec) *forge.Container {
-	return buildContainer("validate-workspace", imageAlpine, resourcesTiny(), scriptValidateFile(apps, "Cargo.toml"))
+	return buildContainer("validate-workspace", imageAlpine, forge.ResourcesTiny(), scriptValidateFile(apps, "Cargo.toml"))
 }
 func (s *RustStrategy) InstallStep(_ []services.AppSpec) *forge.Container {
-	return buildContainer("install-deps", imageAlpine, resourcesTiny(), noopScript("Rust — deps built during cargo build"))
+	return buildContainer("install-deps", imageAlpine, forge.ResourcesTiny(), noopScript("Rust — deps built during cargo build"))
 }
 func (s *RustStrategy) BuildStep(_ []services.AppSpec) *forge.Container {
-	return buildContainer("build-apps", imageAlpine, resourcesTiny(), noopScript("Rust — build happens in Dockerfile (multi-stage)"))
+	return buildContainer("build-apps", imageAlpine, forge.ResourcesTiny(), noopScript("Rust — build happens in Dockerfile (multi-stage)"))
 }
 func (s *RustStrategy) ScanStep() *forge.Container {
-	return buildContainer("security-scan", imageAlpine, resourcesTiny(), `set -euo pipefail
+	return buildContainer("security-scan", imageAlpine, forge.ResourcesTiny(), `set -euo pipefail
 cd /workspace
 cargo audit 2>/dev/null || echo "cargo-audit not available — skipping"
 `)
@@ -378,19 +378,19 @@ func (s *CustomStrategy) CacheKey() string { return "" }
 func (s *CustomStrategy) CacheDirs() []string { return nil }
 
 func (s *CustomStrategy) ValidateStep(_ []services.AppSpec) *forge.Container {
-	return buildContainer("validate-workspace", imageAlpine, resourcesTiny(), scriptValidateCustom())
+	return buildContainer("validate-workspace", imageAlpine, forge.ResourcesTiny(), scriptValidateCustom())
 }
 
 func (s *CustomStrategy) InstallStep(_ []services.AppSpec) *forge.Container {
-	return buildContainer("install-deps", imageAlpine, resourcesTiny(), noopScript("No install step for custom framework — user manages dependencies in Dockerfile"))
+	return buildContainer("install-deps", imageAlpine, forge.ResourcesTiny(), noopScript("No install step for custom framework — user manages dependencies in Dockerfile"))
 }
 
 func (s *CustomStrategy) BuildStep(_ []services.AppSpec) *forge.Container {
-	return buildContainer("build-apps", imageAlpine, resourcesTiny(), noopScript("No build step for custom framework — build happens in Dockerfile"))
+	return buildContainer("build-apps", imageAlpine, forge.ResourcesTiny(), noopScript("No build step for custom framework — build happens in Dockerfile"))
 }
 
 func (s *CustomStrategy) ScanStep() *forge.Container {
-	return buildContainer("security-scan", imageAlpine, resourcesTiny(), noopScript("No security scan for custom framework"))
+	return buildContainer("security-scan", imageAlpine, forge.ResourcesTiny(), noopScript("No security scan for custom framework"))
 }
 
 // DockerfileStep — CustomStrategy means user manages everything in their
@@ -429,22 +429,22 @@ func (s *UserDockerfileStrategy) CacheKey() string               { return "" }
 func (s *UserDockerfileStrategy) CacheDirs() []string            { return nil }
 
 func (s *UserDockerfileStrategy) ValidateStep(_ []services.AppSpec) *forge.Container {
-	return buildContainer("validate-workspace", imageAlpine, resourcesTiny(),
+	return buildContainer("validate-workspace", imageAlpine, forge.ResourcesTiny(),
 		noopScript("user-dockerfile build mode — workspace validation skipped (user-managed Dockerfile)"))
 }
 
 func (s *UserDockerfileStrategy) InstallStep(_ []services.AppSpec) *forge.Container {
-	return buildContainer("install-deps", imageAlpine, resourcesTiny(),
+	return buildContainer("install-deps", imageAlpine, forge.ResourcesTiny(),
 		noopScript("user-dockerfile build mode — dependencies installed inside Dockerfile"))
 }
 
 func (s *UserDockerfileStrategy) BuildStep(_ []services.AppSpec) *forge.Container {
-	return buildContainer("build-apps", imageAlpine, resourcesTiny(),
+	return buildContainer("build-apps", imageAlpine, forge.ResourcesTiny(),
 		noopScript("user-dockerfile build mode — build happens inside Dockerfile"))
 }
 
 func (s *UserDockerfileStrategy) ScanStep() *forge.Container {
-	return buildContainer("security-scan", imageAlpine, resourcesTiny(),
+	return buildContainer("security-scan", imageAlpine, forge.ResourcesTiny(),
 		noopScript("user-dockerfile build mode — security scan deferred to dockerfile-lint + post-build SBOM"))
 }
 
@@ -482,7 +482,7 @@ func loopzeroPacksDockerfileStep(apps []services.AppSpec, totalApps int) *forge.
 			workspaceMountPath, appPath, app.Name, output,
 		)
 	}
-	return buildContainer("generate-dockerfile", loopzeroPacks(), resourcesSmall(), script)
+	return buildContainer("generate-dockerfile", loopzeroPacks(), forge.ResourcesSmall(), script)
 }
 
 // loopzeroPacks returns the loopzero-packs-runner image, allowing override via env var.
@@ -526,46 +526,9 @@ func buildContainer(name, image string, resources *forge.ResourceRequirements, s
 		},
 		Resources: resources,
 		SecurityContext: &model.SecurityContext{
-			RunAsNonRoot: ptr(true),
-			RunAsUser:    ptr(rootlessUID),
+			RunAsNonRoot: forge.Ptr(true),
+			RunAsUser:    forge.Ptr(rootlessUID),
 		},
-	}
-}
-
-func retryStrategy(limit int, duration, factor, maxDuration string) *forge.RetryStrategy {
-	return &forge.RetryStrategy{
-		Limit:       ptr(limit),
-		RetryPolicy: forge.RetryPolicy("OnFailure"),
-		Backoff: &forge.Backoff{
-			Duration:    duration,
-			Factor:      factor,
-			MaxDuration: maxDuration,
-		},
-		// Skip retry on OOM kill (exit 137) — retrying will fail again with same memory limits.
-		// Exit code 1 remains retryable (transient DNS/npm/registry failures).
-		// MEET-2026-03-30-021 F3-C2: only exit 137 is irrecoverable.
-		Expression: `asInt(lastRetry.exitCode) != 137`,
-	}
-}
-
-func resourcesTiny() *forge.ResourceRequirements {
-	return &forge.ResourceRequirements{
-		Requests: forge.ResourceList{CPU: "50m", Memory: "32Mi"},
-		Limits:   forge.ResourceList{CPU: "100m", Memory: "64Mi"},
-	}
-}
-
-func resourcesSmall() *forge.ResourceRequirements {
-	return &forge.ResourceRequirements{
-		Requests: forge.ResourceList{CPU: "100m", Memory: "128Mi"},
-		Limits:   forge.ResourceList{CPU: "500m", Memory: "256Mi"},
-	}
-}
-
-func resourcesMedium() *forge.ResourceRequirements {
-	return &forge.ResourceRequirements{
-		Requests: forge.ResourceList{CPU: "500m", Memory: "512Mi"},
-		Limits:   forge.ResourceList{CPU: "2000m", Memory: "2Gi"},
 	}
 }
 

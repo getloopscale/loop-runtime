@@ -169,9 +169,9 @@ echo "SBOM generated and uploaded successfully"
 			Limits:   forge.ResourceList{CPU: "500m", Memory: "1Gi"},
 		},
 		SecurityContext: &model.SecurityContext{
-			RunAsUser:    ptr(rootlessUID),
-			RunAsGroup:   ptr(rootlessUID),
-			RunAsNonRoot: ptr(true),
+			RunAsUser:    forge.Ptr(rootlessUID),
+			RunAsGroup:   forge.Ptr(rootlessUID),
+			RunAsNonRoot: forge.Ptr(true),
 		},
 	}
 }

@@ -190,9 +190,9 @@ echo "Image signed successfully"
 			Limits:   forge.ResourceList{CPU: "500m", Memory: "256Mi"},
 		},
 		SecurityContext: &model.SecurityContext{
-			RunAsUser:    ptr(rootlessUID),
-			RunAsGroup:   ptr(rootlessUID),
-			RunAsNonRoot: ptr(true),
+			RunAsUser:    forge.Ptr(rootlessUID),
+			RunAsGroup:   forge.Ptr(rootlessUID),
+			RunAsNonRoot: forge.Ptr(true),
 		},
 	}
 }
@@ -318,9 +318,9 @@ echo "Image signed successfully (keyless)"
 			Limits:   forge.ResourceList{CPU: "500m", Memory: "256Mi"},
 		},
 		SecurityContext: &model.SecurityContext{
-			RunAsUser:    ptr(rootlessUID),
-			RunAsGroup:   ptr(rootlessUID),
-			RunAsNonRoot: ptr(true),
+			RunAsUser:    forge.Ptr(rootlessUID),
+			RunAsGroup:   forge.Ptr(rootlessUID),
+			RunAsNonRoot: forge.Ptr(true),
 		},
 	}
 }

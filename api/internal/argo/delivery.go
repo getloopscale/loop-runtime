@@ -97,6 +97,6 @@ echo "Upload complete"
 			Requests: forge.ResourceList{CPU: "100m", Memory: "128Mi"},
 			Limits:   forge.ResourceList{CPU: "500m", Memory: "512Mi"},
 		},
-		RetryStrategy: retryStrategy(2, "10s", "2", "120s"),
+		RetryStrategy: forge.NewRetryOnFailure(2, "10s", "2", "120s"),
 	}
 }

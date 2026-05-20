@@ -163,9 +163,9 @@ func (b *WorkflowBuilder) buildkitContainer(p buildkitParams) *forge.Container {
 			Limits:   forge.ResourceList{CPU: "2000m", Memory: "4Gi"},
 		},
 		SecurityContext: &model.SecurityContext{
-			RunAsUser:    ptr(rootlessUID),
-			RunAsGroup:   ptr(rootlessUID),
-			RunAsNonRoot: ptr(true),
+			RunAsUser:    forge.Ptr(rootlessUID),
+			RunAsGroup:   forge.Ptr(rootlessUID),
+			RunAsNonRoot: forge.Ptr(true),
 			// Seccomp Unconfined required for rootlesskit to create user namespaces
 			// on managed Kubernetes (DOKS, EKS, GKE).
 			SeccompProfile: &model.SeccompProfile{Type: "Unconfined"},
@@ -180,7 +180,7 @@ func (b *WorkflowBuilder) buildkitContainer(p buildkitParams) *forge.Container {
 		// (image layer pulls + dependency install + build). Bump MaxDuration
 		// to 900s (15 min) — happy path remains 2-3min. Budget covers 3 retries
 		// with exponential backoff 10s, 20s, 40s.
-		RetryStrategy: retryStrategy(3, "10s", "2", "900s"),
+		RetryStrategy: forge.NewRetryOnFailure(3, "10s", "2", "900s"),
 	}
 }
 

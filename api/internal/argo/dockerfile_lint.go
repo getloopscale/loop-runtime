@@ -58,7 +58,7 @@ func dockerfileLintStep(apps []services.AppSpec) *forge.Container {
 		"set -e\n/usr/local/bin/loopzero-dockerfile-lint --source %q --apps %q\n",
 		workspaceMountPath, args,
 	)
-	return buildContainer("dockerfile-lint", dockerfileLintImage(), resourcesTiny(), script)
+	return buildContainer("dockerfile-lint", dockerfileLintImage(), forge.ResourcesTiny(), script)
 }
 
 // dockerfileLintImage returns the linter image, allowing override via env.
