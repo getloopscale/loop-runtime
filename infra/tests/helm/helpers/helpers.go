@@ -271,6 +271,45 @@ type kindAndAPI struct {
 	Kind       string `yaml:"kind"`
 }
 
+// SplitYAMLByKind splits multi-document YAML output and returns RAW
+// docs (as YAML strings) whose Kind matches the requested value.
+//
+// Used when a chart emits multiple resources of the SAME kind
+// (e.g., loopzero-crds emits 8 CustomResourceDefinitions, loopzero-admission-policies
+// emits 6 ValidatingAdmissionPolicies). Callers iterate the returned
+// slice and unmarshal each entry into the appropriate typed struct.
+//
+// Returns the matching docs in render-order. Empty slice if no match
+// (test should assert this case explicitly if it matters).
+//
+// Example:
+//
+//	for _, raw := range helpers.SplitYAMLByKind(out, "CustomResourceDefinition") {
+//	    var crd apiextV1.CustomResourceDefinition
+//	    yaml.Unmarshal([]byte(raw), &crd)
+//	    // ... assertions per CRD
+//	}
+func SplitYAMLByKind(output, kind string) []string {
+	docs := strings.Split(output, "\n---")
+	matches := make([]string, 0)
+	for _, doc := range docs {
+		doc = strings.TrimSpace(doc)
+		doc = strings.TrimPrefix(doc, "---\n")
+		doc = strings.TrimSpace(doc)
+		if doc == "" {
+			continue
+		}
+		var meta kindAndAPI
+		if err := yaml.Unmarshal([]byte(doc), &meta); err != nil {
+			continue
+		}
+		if meta.Kind == kind {
+			matches = append(matches, doc)
+		}
+	}
+	return matches
+}
+
 // MustUnmarshalK8SYamlByKind splits multi-document YAML output and
 // unmarshales the document matching kind into out. Fails the test with
 // clear error if no matching kind is found.
@@ -278,6 +317,9 @@ type kindAndAPI struct {
 // This addresses the case where a single template file emits multiple
 // K8s resources (e.g., loopzero-api/templates/deployment.yaml emits both
 // Service AND Deployment).
+//
+// For multiple same-kind docs (e.g., 8 CRDs in one render), use
+// SplitYAMLByKind which returns raw YAML for iteration.
 //
 // Example:
 //
