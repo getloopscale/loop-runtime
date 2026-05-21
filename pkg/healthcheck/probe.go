@@ -34,6 +34,11 @@ import (
 // FlagName is the CLI flag that toggles the self-probe mode.
 const FlagName = "--healthcheck-probe"
 
+// exitFunc is the function used to exit the probe process. Indirected
+// through a package-level var so tests can substitute it without
+// terminating the test binary (canonical Go pattern for os.Exit).
+var exitFunc = os.Exit
+
 // MaybeRunAndExit checks os.Args for FlagName. If present, performs an HTTP
 // GET against url with a 3-second timeout, then calls os.Exit(0) on 2xx or
 // os.Exit(1) otherwise. Returns false (and does NOT call os.Exit) if the
@@ -54,23 +59,42 @@ func MaybeRunAndExit(url string) bool {
 	return false
 }
 
-func runProbe(url string) {
-	ctx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
+// probe performs the HTTP GET and returns a probe result.
+// Separated from runProbe so it is testable without forking a process
+// or trapping os.Exit. runProbe is a thin wrapper that translates the
+// result into stderr message + exit code.
+func probe(url string, timeout time.Duration) (statusCode int, err error) {
+	ctx, cancel := context.WithTimeout(context.Background(), timeout)
 	defer cancel()
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet, url, nil)
 	if err != nil {
-		fmt.Fprintf(os.Stderr, "healthcheck-probe: request build failed: %v\n", err)
-		os.Exit(1)
+		return 0, fmt.Errorf("request build failed: %w", err)
 	}
 	resp, err := http.DefaultClient.Do(req)
 	if err != nil {
-		fmt.Fprintf(os.Stderr, "healthcheck-probe: GET %s failed: %v\n", url, err)
-		os.Exit(1)
+		return 0, fmt.Errorf("GET %s failed: %w", url, err)
 	}
 	defer resp.Body.Close()
-	if resp.StatusCode >= 200 && resp.StatusCode < 300 {
-		os.Exit(0)
+	return resp.StatusCode, nil
+}
+
+// classifyProbeResult is pure: maps (statusCode, err) → (exitCode, stderrMsg).
+// Tested directly; runProbe calls it before os.Exit.
+func classifyProbeResult(url string, statusCode int, err error) (exitCode int, stderrMsg string) {
+	if err != nil {
+		return 1, fmt.Sprintf("healthcheck-probe: %v\n", err)
 	}
-	fmt.Fprintf(os.Stderr, "healthcheck-probe: GET %s returned %d\n", url, resp.StatusCode)
-	os.Exit(1)
+	if statusCode >= 200 && statusCode < 300 {
+		return 0, ""
+	}
+	return 1, fmt.Sprintf("healthcheck-probe: GET %s returned %d\n", url, statusCode)
+}
+
+func runProbe(url string) {
+	statusCode, err := probe(url, 3*time.Second)
+	exitCode, stderrMsg := classifyProbeResult(url, statusCode, err)
+	if stderrMsg != "" {
+		fmt.Fprint(os.Stderr, stderrMsg)
+	}
+	exitFunc(exitCode)
 }
