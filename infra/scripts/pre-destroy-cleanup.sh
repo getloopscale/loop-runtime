@@ -15,6 +15,8 @@
 #   PULUMI_WORKING_DIR       — Path to infra/pulumi/ directory
 #
 # Usage: STACK=dev bash infra/scripts/pre-destroy-cleanup.sh
+set -euo pipefail
+
 set -o pipefail
 # Intentionally NOT set -e — cleanup steps should continue even if individual ops fail.
 

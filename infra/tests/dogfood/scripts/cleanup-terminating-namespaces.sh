@@ -23,6 +23,8 @@
 # SPDX-License-Identifier: Apache-2.0
 # Copyright 2025-2026 The LoopZero Authors
 
+set -euo pipefail
+
 set -uo pipefail
 
 CTX="${CTX:-k3d-loopzero-workload}"

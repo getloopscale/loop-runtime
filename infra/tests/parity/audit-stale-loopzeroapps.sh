@@ -19,6 +19,8 @@
 #
 # SPDX-License-Identifier: Apache-2.0
 
+set -euo pipefail
+
 set -uo pipefail
 
 KUBECTL_CONTEXT="${KUBECTL_CONTEXT:-k3d-loopzero-mgmt}"

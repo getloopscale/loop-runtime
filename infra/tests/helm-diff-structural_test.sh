@@ -10,6 +10,8 @@
 #
 # Run: bash infra/tests/helm-diff-structural_test.sh
 
+set -euo pipefail
+
 set -u
 
 SCRIPT="$(cd "$(dirname "$0")/../.." && pwd)/infra/scripts/helm-diff-structural.sh"

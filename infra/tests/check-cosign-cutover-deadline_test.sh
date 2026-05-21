@@ -5,6 +5,8 @@
 # script is dormant pre-GA and ratcheting post-GA. These tests prove each
 # stage of the ratchet.
 
+set -euo pipefail
+
 set -u
 
 SCRIPT="$(cd "$(dirname "$0")/../.." && pwd)/infra/scripts/check-cosign-cutover-deadline.sh"

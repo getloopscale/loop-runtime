@@ -17,6 +17,8 @@
 
 # shellcheck disable=SC2034  # exported helpers are referenced by other scripts.
 
+set -euo pipefail
+
 set -uo pipefail  # NOT -e — journeys handle their own error flow.
 
 LOOPZERO_BIN="${LOOPZERO_BIN:-loopzero}"

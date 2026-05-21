@@ -25,6 +25,8 @@
 #   DRY_RUN=1 bash infra/scripts/regen-all-scoped-kubeconfigs.sh
 #   bash infra/scripts/regen-all-scoped-kubeconfigs.sh --as-of <test-fixture>
 
+set -euo pipefail
+
 set -uo pipefail
 
 MGMT_CONTEXT="${MGMT_CONTEXT:-k3d-loopzero-mgmt}"

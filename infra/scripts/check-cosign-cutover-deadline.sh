@@ -30,6 +30,8 @@
 #   ./check-cosign-cutover-deadline.sh
 #   ./check-cosign-cutover-deadline.sh --as-of 2026-09-15  # for testing
 
+set -euo pipefail
+
 set -uo pipefail
 
 REPO_ROOT="$(cd "$(dirname "$0")/../.." && pwd)"

@@ -21,6 +21,7 @@
 # Tests: go-memory, buildkit, argocd-memory, gitea-push, pod-memory, all
 
 set -euo pipefail
+
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 export LOOPZERO_CAPACITY=1
 

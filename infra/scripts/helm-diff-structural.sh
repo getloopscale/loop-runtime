@@ -30,6 +30,8 @@
 #   1  Usage error (bad args, missing files).
 #   2  Structural risk detected. CI MUST block.
 
+set -euo pipefail
+
 set -uo pipefail
 
 if [[ $# -ne 3 ]]; then

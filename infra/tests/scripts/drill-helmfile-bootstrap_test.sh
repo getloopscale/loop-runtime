@@ -436,7 +436,6 @@ test_dry_run_no_helmfile_invocations() {
   }
 }
 
-
 # --- Phase 2 plan T1.3.bis + T2.1 + T2.1.bis tests (EC-1, EC-2) ---
 
 test_dsn_extracted_with_show_secrets_flag() {

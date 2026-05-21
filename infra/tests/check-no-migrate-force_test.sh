@@ -13,6 +13,8 @@
 # shellcheck disable=SC2155  # local var=$(...) is intentional; tempdir creation is allowed to fail loudly via set -u
 # shellcheck disable=SC2064  # trap RETURN is GLOBAL in bash (no set -T) — when test function returns, trap fires in run_test's scope where local $root is out-of-scope. Double-quote expansion at trap-set time captures the literal path so cleanup works correctly.
 
+set -euo pipefail
+
 set -uo pipefail
 
 SCRIPT="$(cd "$(dirname "$0")/.." && pwd)/scripts/check-no-migrate-force.sh"

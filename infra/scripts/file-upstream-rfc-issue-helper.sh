@@ -34,6 +34,8 @@
 #   2 — gh issue create failed
 #   3 — operator cancelled
 
+set -euo pipefail
+
 set -uo pipefail
 
 UPSTREAM_REPO="${UPSTREAM_REPO:-getloopscale/loopzero-forge}"

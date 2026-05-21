@@ -15,6 +15,8 @@
 #
 # SPDX-License-Identifier: Apache-2.0
 
+set -euo pipefail
+
 set -euxo pipefail
 
 LOOPZERO_REF="${LOOPZERO_REF:-develop}"

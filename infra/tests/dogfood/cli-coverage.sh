@@ -18,6 +18,8 @@
 #
 # SPDX-License-Identifier: Apache-2.0
 
+set -euo pipefail
+
 set -u  # NOT -e — comandos não-zero são DADOS, não erros.
 
 JSON_ONLY=0

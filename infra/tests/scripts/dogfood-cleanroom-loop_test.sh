@@ -17,6 +17,8 @@
 # Run:   bash infra/tests/scripts/dogfood-cleanroom-loop_test.sh
 # SPDX-License-Identifier: Apache-2.0
 
+set -euo pipefail
+
 set -uo pipefail
 
 REPO_ROOT="$(cd "$(dirname "$0")/../../.." && pwd)"

@@ -35,6 +35,8 @@
 #   2  — outcome B chosen but `doctl databases firewalls remove` failed
 #   3  — operator cancelled (explicit non-confirmation of DECOMMISSIONED)
 
+set -euo pipefail
+
 set -uo pipefail
 
 TARGET_IP="${TARGET_IP:-209.38.205.78}"

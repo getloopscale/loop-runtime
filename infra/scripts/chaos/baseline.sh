@@ -20,6 +20,8 @@
 #   1 — pre-flight failure (kubectl unreachable, no clusters)
 #   2 — measurement failure (couldn't capture metric)
 
+set -euo pipefail
+
 set -uo pipefail
 
 SCENARIO="${1:-baseline}"

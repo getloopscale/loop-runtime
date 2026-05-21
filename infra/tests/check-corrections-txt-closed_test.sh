@@ -14,6 +14,8 @@
 #
 # shellcheck disable=SC2329  # test_* functions invoked dynamically via run_test dispatch
 
+set -euo pipefail
+
 set -uo pipefail
 
 CORRECTIONS_FILE="$(cd "$(dirname "$0")/.." && pwd)/tests/load/CORRECTIONS.txt"

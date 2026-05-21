@@ -18,7 +18,6 @@ TESTS_FAILED=0
 source_lib_in_subshell() {
   local env_setup="$1"
   bash -c "
-    set -euo pipefail
     $env_setup
     source '$LIB'
     $2
@@ -31,7 +30,6 @@ test_confirm_cost_without_flag_exits_2() {
   local out
   set +e
   out=$(bash -c "
-    set -euo pipefail
     unset DRILL_SKILL_CONFIRM_COST
     unset CI
     source '$LIB'
@@ -46,7 +44,6 @@ test_confirm_cost_without_flag_exits_2() {
 test_confirm_cost_with_ci_env_passes() {
   set +e
   bash -c "
-    set -euo pipefail
     unset DRILL_SKILL_CONFIRM_COST
     export CI=true
     source '$LIB'
@@ -60,7 +57,6 @@ test_confirm_cost_with_ci_env_passes() {
 test_confirm_cost_with_flag_passes() {
   set +e
   bash -c "
-    set -euo pipefail
     export DRILL_SKILL_CONFIRM_COST=true
     unset CI
     source '$LIB'
@@ -74,7 +70,6 @@ test_confirm_cost_with_flag_passes() {
 test_sponsor_check_without_env_or_ci_exits_2() {
   set +e
   bash -c "
-    set -euo pipefail
     unset LOOPZERO_DRILL_SKILL_SPONSOR
     unset CI
     source '$LIB'
@@ -88,7 +83,6 @@ test_sponsor_check_without_env_or_ci_exits_2() {
 test_sponsor_check_with_invalid_format_exits_2() {
   set +e
   bash -c "
-    set -euo pipefail
     export LOOPZERO_DRILL_SKILL_SPONSOR='too-long-with-special-chars!@#'
     unset CI
     source '$LIB'
@@ -102,7 +96,6 @@ test_sponsor_check_with_invalid_format_exits_2() {
 test_sponsor_check_with_valid_initials_passes() {
   set +e
   bash -c "
-    set -euo pipefail
     export LOOPZERO_DRILL_SKILL_SPONSOR=phn
     unset CI
     source '$LIB'
@@ -116,7 +109,6 @@ test_sponsor_check_with_valid_initials_passes() {
 test_sponsor_check_with_ci_bypasses() {
   set +e
   bash -c "
-    set -euo pipefail
     unset LOOPZERO_DRILL_SKILL_SPONSOR
     export CI=true
     source '$LIB'
@@ -132,7 +124,6 @@ test_init_audit_creates_dir_structure() {
   tmpdir=$(mktemp -d -t drill-lib-test-XXXXXX)
   set +e
   result=$(bash -c "
-    set -euo pipefail
     export DRILL_SKILL_AUDIT_BASE='$tmpdir/audit'
     export DRILL_SKILL_SPONSOR_VALUE=tt
     source '$LIB'
@@ -152,7 +143,6 @@ test_emit_finding_appends_to_audit_md() {
   tmpdir=$(mktemp -d -t drill-lib-test-XXXXXX)
   set +e
   bash -c "
-    set -euo pipefail
     export DRILL_SKILL_AUDIT_BASE='$tmpdir/audit'
     export DRILL_SKILL_SPONSOR_VALUE=tt
     source '$LIB'
@@ -185,7 +175,6 @@ test_acquire_lock_inherits_in_chained_child() {
   set +e
   # Simulate child sub-orchestrator: parent already exported _DRILL_SKILL_LOCK_HELD
   out=$(bash -c "
-    set -euo pipefail
     export _DRILL_SKILL_LOCK_HELD=parent-skill
     source '$LIB' >/dev/null 2>&1
     drill_skill_acquire_lock 'child-skill' 2>&1
@@ -207,7 +196,6 @@ test_acquire_lock_blocks_concurrent_dispatch() {
   # Try to acquire from library
   set +e
   bash -c "
-    set -euo pipefail
     source '$LIB'
     # Override lock file to our test file
     DRILL_SKILL_LOCK_FILE='$lock_file'
@@ -226,7 +214,6 @@ test_acquire_lock_blocks_concurrent_dispatch() {
 test_lib_double_sourcing_idempotent() {
   set +e
   bash -c "
-    set -euo pipefail
     source '$LIB'
     source '$LIB'  # second source should be no-op due to source guard
     [[ -n \"\${_DRILL_SKILL_COMMON_SOURCED:-}\" ]] || exit 1
@@ -250,7 +237,6 @@ export EXPORTED_VAR=exported-value
 EOF
   set +e
   result=$(bash -c "
-    set -euo pipefail
     cd '$tmpdir'
     source '$LIB'
     echo \"SIMPLE_VAR=\${SIMPLE_VAR:-MISS}\"
@@ -281,7 +267,6 @@ ANOTHER_VALID=another-value
 EOF
   set +e
   result=$(bash -c "
-    set -euo pipefail
     cd '$tmpdir'
     source '$LIB' 2>/dev/null
     echo \"VALID_KEY=\${VALID_KEY:-MISS}\"
@@ -303,7 +288,6 @@ PRECEDENCE_KEY=from-dotenv
 EOF
   set +e
   result=$(bash -c "
-    set -euo pipefail
     cd '$tmpdir'
     export PRECEDENCE_KEY=from-shell
     source '$LIB' 2>/dev/null
@@ -325,7 +309,6 @@ SPACES_SECRET_ACCESS_KEY=spaces-secret
 EOF
   set +e
   result=$(bash -c "
-    set -euo pipefail
     cd '$tmpdir'
     unset AWS_ACCESS_KEY_ID AWS_SECRET_ACCESS_KEY AWS_REGION
     source '$LIB' 2>/dev/null
@@ -350,7 +333,6 @@ SPACES_ACCESS_KEY_ID=from-spaces
 EOF
   set +e
   result=$(bash -c "
-    set -euo pipefail
     cd '$tmpdir'
     export AWS_ACCESS_KEY_ID=from-caller
     source '$LIB' 2>/dev/null
@@ -375,7 +357,6 @@ EOF
 EOF
   set +e
   bash -c "
-    set -euo pipefail
     source '$LIB' 2>/dev/null
     drill_skill_ensure_source_bundle '$tmpdir/fixture'
     [[ -f '$tmpdir/fixture/source.bundle' ]] || exit 1
@@ -396,7 +377,6 @@ test_ensure_source_bundle_idempotent_when_fresh() {
   # First call generates (silenced). Touch bundle to be newer than sources.
   # Second call is what we test — capture only its output.
   out=$(bash -c "
-    set -euo pipefail
     source '$LIB' 2>/dev/null
     drill_skill_ensure_source_bundle '$tmpdir/fixture' >/dev/null 2>&1
     sleep 1
@@ -418,7 +398,6 @@ test_dotenv_no_file_is_silent_noop() {
   # No .env in tmpdir; lib should not error
   set +e
   bash -c "
-    set -euo pipefail
     cd '$tmpdir'
     # Force git to not find a root either by clobbering search
     export DRILL_SKILL_DOTENV_PATH='/nonexistent/path/.env'

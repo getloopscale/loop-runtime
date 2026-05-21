@@ -50,6 +50,8 @@
 #   4 — reconcile activity not resumed within 90s
 #   5 — post-cutover invariant verification failed
 
+set -euo pipefail
+
 set -uo pipefail
 
 CTX="${1:-}"

@@ -1,5 +1,7 @@
 #!/bin/bash
 # Sanitizer v4 — strips all helm-generated non-determinism.
+set -euo pipefail
+
 sed -E \
   -e 's/uid: [a-f0-9-]+/uid: <REDACTED>/g' \
   -e 's/creationTimestamp: .+/creationTimestamp: <REDACTED>/g' \

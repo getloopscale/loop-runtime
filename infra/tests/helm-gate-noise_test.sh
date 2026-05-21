@@ -11,6 +11,8 @@
 #
 # SPDX-License-Identifier: Apache-2.0
 
+set -euo pipefail
+
 set -u
 
 SCRIPT="$(cd "$(dirname "$0")/../.." && pwd)/infra/scripts/helm-gate-noise.sh"

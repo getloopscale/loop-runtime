@@ -37,6 +37,8 @@
 #
 # SPDX-License-Identifier: Apache-2.0
 
+set -euo pipefail
+
 set -uo pipefail
 
 DRY_RUN="${DRY_RUN:-0}"

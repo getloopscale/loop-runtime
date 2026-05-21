@@ -36,6 +36,8 @@
 #   3 — live cloud resources detected (caller must abort T3.2)
 #   4 — archive failed (S3 write or PULUMI export error)
 
+set -euo pipefail
+
 set -uo pipefail
 
 REPO_ROOT="$(cd "$(dirname "$0")/../.." && pwd)"

@@ -12,6 +12,8 @@
 #   0 — all checks PASS
 #   1 — one or more checks FAILED
 
+set -euo pipefail
+
 set -u
 
 PASS=0

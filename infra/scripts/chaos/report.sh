@@ -16,6 +16,8 @@
 #     --reasons "" \
 #     --output /tmp/chaos-C01-2026.../report.md
 
+set -euo pipefail
+
 set -uo pipefail
 
 SCENARIO="" MANIFEST="" RUN_DIR="" VERDICT="" OUTPUT=""

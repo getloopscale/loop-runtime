@@ -13,6 +13,8 @@
 #   KUBECONFIG=/tmp/mgmt-kc.yaml bash infra/scripts/health-check-platform.sh
 #   KUBECONFIG=/tmp/mgmt-kc.yaml BUILD_KUBECONFIG=/tmp/build-kc.yaml bash infra/scripts/health-check-platform.sh
 
+set -euo pipefail
+
 set -uo pipefail
 
 NAMESPACE="${NAMESPACE:-loopzero-system}"

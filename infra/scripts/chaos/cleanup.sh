@@ -17,6 +17,8 @@
 #   1 — usage / context unreachable
 #   2 — cleanup failed; manual intervention required
 
+set -euo pipefail
+
 set -uo pipefail
 
 TARGET_CTX="${TARGET_CONTEXT:-k3d-loopzero-mgmt}"

@@ -28,6 +28,8 @@
 #   bash infra/scripts/check-no-migrate-force.sh                  # scan repo
 #   bash infra/scripts/check-no-migrate-force.sh --root /tmp/x   # scan custom root (testing)
 
+set -euo pipefail
+
 set -uo pipefail
 
 ROOT="$(cd "$(dirname "$0")/../.." && pwd)"

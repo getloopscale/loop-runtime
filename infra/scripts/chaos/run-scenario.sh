@@ -25,6 +25,8 @@
 #   2 — FAIL (SLO violated OR recovery exceeded budget)
 #   3 — INCONCLUSIVE (chaos resource never entered Running)
 
+set -euo pipefail
+
 set -uo pipefail
 
 SCENARIO=""

@@ -14,6 +14,8 @@
 #   1 — usage / pre-flight failure
 #   2 — any FAIL or INCONCLUSIVE in suite
 
+set -euo pipefail
+
 set -uo pipefail
 
 BASELINE_DURATION="${BASELINE_DURATION:-1m}"

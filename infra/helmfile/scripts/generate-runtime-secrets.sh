@@ -14,6 +14,7 @@
 # ADR D9 — cloudflared Deployment moved from Pulumi to Helmfile. Tunnel token
 # is sourced from `pulumi stack output cfTunnelToken --show-secrets`.
 set -euo pipefail
+
 ENV="${1:?usage: $0 <env> <cluster-id>}"
 CLUSTER_ID="${2:?usage: $0 <env> <cluster-id>}"
 

@@ -8,6 +8,8 @@
 # like cosign-cutover because rotation cadence is shorter), 90d hard
 # deadline matches cosign-cutover.
 
+set -euo pipefail
+
 set -u
 
 SCRIPT="$(cd "$(dirname "$0")/../.." && pwd)/infra/scripts/check-service-auth-rotation.sh"

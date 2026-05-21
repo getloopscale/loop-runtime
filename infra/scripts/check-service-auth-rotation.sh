@@ -32,6 +32,8 @@
 #   ./check-service-auth-rotation.sh
 #   ./check-service-auth-rotation.sh --as-of 2026-09-15  # testing
 
+set -euo pipefail
+
 set -uo pipefail
 
 REPO_ROOT="$(cd "$(dirname "$0")/../.." && pwd)"

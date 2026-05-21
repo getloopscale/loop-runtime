@@ -16,6 +16,8 @@
 # shellcheck disable=SC2155  # local var=$(...) intentional; mktemp failure surfaced via set -u
 # shellcheck disable=SC2064  # trap RETURN is GLOBAL in bash — double-quote expansion captures literal fixture path at trap-set time so cleanup fires correctly after test function returns.
 
+set -euo pipefail
+
 set -uo pipefail
 
 SCRIPT="$(cd "$(dirname "$0")/.." && pwd)/scripts/regen-all-scoped-kubeconfigs.sh"

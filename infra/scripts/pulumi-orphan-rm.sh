@@ -37,6 +37,8 @@
 #   2 — pre-flight failed (archive freshness, live resources, etc)
 #   3 — `pulumi stack rm` failed for any stack
 
+set -euo pipefail
+
 set -uo pipefail
 
 REPO_ROOT="$(cd "$(dirname "$0")/../.." && pwd)"
