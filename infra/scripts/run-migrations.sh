@@ -27,6 +27,19 @@
 
 set -euo pipefail
 
+# T2.2-followup (plan 2026-05-21-deep-review-remediation): adopt dry-run lib.
+# In dry-run mode, the script prints what migration would be applied
+# (via `migrate version`) and exits without executing `migrate up`.
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+# shellcheck source=lib/dry-run.sh disable=SC1091
+source "$SCRIPT_DIR/lib/dry-run.sh"
+parse_dry_run_flag "$@"
+if [ "${#REMAINING_ARGS[@]}" -gt 0 ]; then
+  set -- "${REMAINING_ARGS[@]}"
+else
+  set --
+fi
+
 # Plan 2026-05-16 T2.4 — parameterize cluster reference for drill.
 #
 # Two modes:
@@ -203,6 +216,15 @@ fi
 #     migrations are applied → idempotent OK
 # (c) neither (a) nor (b) → real failure, exit with error
 log "Running migrate up..."
+if [[ "$DRY_RUN" == "1" ]]; then
+  log "DRY_RUN=1 — skipping 'migrate up'. Would have executed:"
+  log "  kubectl exec $LOOPZERO_API_POD -- migrate -path /migrations -database \$DSN -verbose up"
+  log "Current schema version (read-only):"
+  kctl -n "$NAMESPACE" exec "$LOOPZERO_API_POD" -- \
+    migrate -path /migrations -database "$DSN" version 2>&1 | sed 's/^/  /' || true
+  log "Exiting cleanly without applying migrations."
+  exit 0
+fi
 MIGRATE_UP_OUT="$(kctl -n "$NAMESPACE" exec "$LOOPZERO_API_POD" -- \
   migrate -path /migrations -database "$DSN" -verbose up 2>&1)" && MIGRATE_UP_EXIT=0 || MIGRATE_UP_EXIT=$?
 echo "$MIGRATE_UP_OUT" | sed 's/^/  [migrate-up] /'
