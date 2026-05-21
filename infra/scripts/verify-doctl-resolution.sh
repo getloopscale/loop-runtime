@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# verify-corrections-item-C.sh
+# verify-doctl-resolution.sh
 #
 # CORRECTIONS.txt item C (plan T1.3) — operator-led verification helper.
 # Wraps the 3-step doctl protocol from `finding-2026-05-13-item-C-resolution.md`
@@ -13,9 +13,9 @@
 #       (c) DO_API_TOKEN env var set (alias normalized below)
 #
 # Usage:
-#   bash infra/scripts/verify-corrections-item-C.sh
-#   TARGET_IP=209.38.205.78 bash infra/scripts/verify-corrections-item-C.sh
-#   DB_ID=<uuid> bash infra/scripts/verify-corrections-item-C.sh  # skip interactive picker
+#   bash infra/scripts/verify-doctl-resolution.sh
+#   TARGET_IP=209.38.205.78 bash infra/scripts/verify-doctl-resolution.sh
+#   DB_ID=<uuid> bash infra/scripts/verify-doctl-resolution.sh  # skip interactive picker
 #
 # CONCURRENCY ASSUMPTION (per iter-19 sprint audit):
 #   This helper is operator-led and assumes single-operator invocation. There
@@ -28,7 +28,7 @@
 #   If 2 operators DO need to coordinate (e.g., handoff mid-decision),
 #   manually serialize the invocations OR use `--dry-run` to preview only.
 #
-# Exit codes (aligned with sibling helper file-corrections-item-I-upstream.sh
+# Exit codes (aligned with sibling helper file-upstream-rfc-issue-helper.sh
 # per iter-18 sprint audit — operator cancellation is NOT a usage error):
 #   0  — verification complete (one of outcomes A/B/C chosen + finding doc updated)
 #   1  — usage error / doctl not auth / no databases / invalid input

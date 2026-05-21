@@ -23,8 +23,17 @@ jobs:
       - name: List open plans
         id: plans
         run: |
-          # Find plans with checkboxes that may need validation
-          PLANS=$(find docs/plans -name "*-plan.md" -type f | grep -v "edge-cases" | tr '\n' ' ')
+          # T4.2 (plan 2026-05-21-deep-review-remediation): scan BOTH docs/plans
+          # (active) AND .claude/knowledge-base/plans (historical/active mix
+          # post 2026-05-11 consolidation). docs/evidence/ was deleted in same
+          # consolidation — see L49 for the heuristic now pointing to
+          # knowledge-base/audits/ as evidence canonical location.
+          PLANS=$(
+            (
+              find docs/plans -name "*-plan.md" -type f 2>/dev/null
+              find .claude/knowledge-base/plans -name "*-plan.md" -type f 2>/dev/null
+            ) | grep -v "edge-cases" | tr '\n' ' '
+          )
           echo "Found plans: $PLANS"
           echo "plans=$PLANS" >> "$GITHUB_OUTPUT"
           echo "count=$(echo $PLANS | wc -w)" >> "$GITHUB_OUTPUT"
@@ -46,7 +55,10 @@ jobs:
             # Heuristic checks (full /cross-validation skill invocation requires Claude — this is a CI lightweight pass)
             # 1. Check tasks marked [x] have evidence
             COMPLETED=$(grep -c "^- \[x\]" "$plan" 2>/dev/null || echo 0)
-            EVIDENCE_REFS=$(grep -c "docs/evidence/" "$plan" 2>/dev/null || echo 0)
+            # T4.2: docs/evidence/ was deleted 2026-05-11. Evidence canonical
+            # path is now .claude/knowledge-base/audits/ — count refs to either
+            # for backward compat with older plans.
+            EVIDENCE_REFS=$(grep -cE "(docs/evidence/|knowledge-base/audits/)" "$plan" 2>/dev/null || echo 0)
 
             if [[ "$COMPLETED" -gt 5 && "$EVIDENCE_REFS" -eq 0 ]]; then
               echo "- ⚠️ **GRAVE**: $COMPLETED completed tasks; 0 evidence file references" >> "$REPORT"

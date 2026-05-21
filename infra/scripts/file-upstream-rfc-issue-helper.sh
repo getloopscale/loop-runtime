@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# file-corrections-item-I-upstream.sh
+# file-upstream-rfc-issue-helper.sh
 #
 # CORRECTIONS.txt item I (plan T3.1) — sponsor-led upstream issue filing helper.
 # Renders the RFC at `concepts/operations/rfc-2026-05-13-loopzero-forge-node-affinity.md`
@@ -13,9 +13,9 @@
 #     `getloopscale/loopzero-forge` (sponsor org access — NOT a personal token)
 #
 # Usage:
-#   bash infra/scripts/file-corrections-item-I-upstream.sh             # interactive --web
-#   bash infra/scripts/file-corrections-item-I-upstream.sh --auto      # non-interactive
-#   bash infra/scripts/file-corrections-item-I-upstream.sh --dry-run   # print body, don't file
+#   bash infra/scripts/file-upstream-rfc-issue-helper.sh             # interactive --web
+#   bash infra/scripts/file-upstream-rfc-issue-helper.sh --auto      # non-interactive
+#   bash infra/scripts/file-upstream-rfc-issue-helper.sh --dry-run   # print body, don't file
 #
 # Env overrides:
 #   UPSTREAM_REPO  — default `getloopscale/loopzero-forge`

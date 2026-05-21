@@ -60,7 +60,7 @@ jobs:
           1. Invoke ${{ steps.select.outputs.persona }} persona on dimension ${{ steps.select.outputs.dimension }}
           2. Compare resulting score against .claude/knowledge-base/audits/2026-05-11/SUMMARY.md
           3. If |delta| > 0.3 → open issue "adversarial drift detected"
-          4. Update docs/governance/spotcheck-history.yaml with finding
+          4. Update .claude/knowledge-base/governance/spotcheck-history.yaml with finding
 
           For now this workflow emits the selection. Full adversarial invocation
           requires (a) Claude API key in CI OR (b) manual operator follow-up.
@@ -68,9 +68,9 @@ jobs:
 
       - name: Append to spotcheck history (selection-only)
         run: |
-          mkdir -p docs/governance/spotcheck-history
+          mkdir -p .claude/knowledge-base/governance/spotcheck-history
           DATE=$(date +%Y-%m-%d)
-          HIST_FILE="docs/governance/spotcheck-history/${DATE}.yaml"
+          HIST_FILE=".claude/knowledge-base/governance/spotcheck-history/${DATE}.yaml"
           cat > "$HIST_FILE" <<EOF
           date: ${DATE}
           seed: ${{ steps.select.outputs.seed }}

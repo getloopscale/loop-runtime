@@ -7,8 +7,10 @@ name: decay-scan
 
 on:
   schedule:
-    # Sundays 02:00 UTC (after drill-prod-identical-soak.yml at 01:00)
-    - cron: "0 2 * * 0"
+    # T4.6 (plan 2026-05-21-deep-review-remediation): staggered to Sunday
+    # 02:30 UTC to avoid triple-collision with drill-prod-identical-soak.yml
+    # (02:00 weekly) + drill-skills-cron.yml (02:00 weekly cleanroom).
+    - cron: "30 2 * * 0"
   workflow_dispatch:
     inputs:
       dry_run:

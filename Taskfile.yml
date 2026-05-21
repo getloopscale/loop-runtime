@@ -211,21 +211,13 @@ tasks:
       cleanroom dogfood. Production helmfile sync runs all of these as
       post-sync hooks; standalone (k3d) does not, so we run them explicitly.
 
-      Discovered & codified by real-paas-cleanroom-dogfood-loop iters 9-22:
-        B9  — generate-secrets.sh creates loopzero-db-credentials + ESO secrets
-        B10 — bootstrap-eso-cluster-secret-store.sh wires loopzero-mgmt-store
-        B11 — k3d:bootstrap-workload installs ESO CRDs in workload cluster
-        B12 — bootstrap-oauth-clients.sh registers loopzero-cli + loopzero-bootstrap
-              clients in Hydra and stores loopzero-bootstrap-credentials Secret
-        B13 — admission-policies chart with k3d-loopzero-registry prefix
-        B16 — sigstore policy-controller (provides ClusterImagePolicy CRD)
-        B20 — provision-api-tokens.sh re-run to restore the Gitea API token
-              that generate-secrets.sh overwrites with a random unregistered
-              value (idempotent — POSTs the same name to Gitea API)
-        B21 — generate-build-secrets.sh in build cluster context produces
-              cosign-signing-key Secret in argo namespace
-        B24 — cell-default ClusterCredential CR direct-applied (lib script
-              uses cluster-name as CR name, would collide with H12's workload CR)
+      Full B-patch index (B9-B82+) lives in CHANGELOG.md under
+      "Cleanroom Dogfood Loop" / "Drill L2 Phase 2 (drill-l2-phase2)"
+      sections. Each step below corresponds to one or more codified patches
+      from those loops. T5.5 (plan 2026-05-21-deep-review-remediation)
+      replaced the stale partial B9-B24 enumeration that used to live here
+      with this canonical pointer — the comment was missing 80%+ of the
+      actual patches (B14, B15, B17-19, B22, B23, B25-82+).
     cmds:
       - bash infra/helmfile/scripts/generate-secrets.sh standalone mgmt
       - task: k3d:bootstrap-workload

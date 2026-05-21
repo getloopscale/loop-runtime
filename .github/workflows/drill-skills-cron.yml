@@ -16,8 +16,11 @@ name: drill-skills-cron
 
 on:
   schedule:
-    # Weekly Sunday 02:00 UTC → /cleanroom-drill
-    - cron: '0 2 * * 0'
+    # T4.6 (plan 2026-05-21-deep-review-remediation): staggered to Sunday
+    # 03:30 UTC (was 02:00) to avoid triple-collision with
+    # drill-prod-identical-soak.yml (02:00) + decay-scan.yml (02:30 after
+    # T4.6) on the same Sunday.
+    - cron: '30 3 * * 0'
     # Monthly 1st day 03:00 UTC → /dogfood-drill
     # (cron evaluates on day-of-month=1 only; will fire on any weekday matching)
     - cron: '0 3 1 * *'
