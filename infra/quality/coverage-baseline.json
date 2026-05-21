@@ -1,0 +1,33 @@
+{
+  "schema_version": "1.0",
+  "generated_at": "2026-05-21T02:43:12Z",
+  "critical_packages": [
+    "github.com/loopzero/loopzero/pkg/errors",
+    "github.com/loopzero/loopzero/pkg/errors/http",
+    "github.com/loopzero/loopzero/pkg/jwt",
+    "github.com/loopzero/loopzero/pkg/statemachine",
+    "github.com/loopzero/loopzero/pkg/naming",
+    "github.com/loopzero/loopzero/pkg/lock",
+    "github.com/loopzero/loopzero/pkg/enforcement",
+    "github.com/loopzero/loopzero/pkg/id",
+    "github.com/loopzero/loopzero/pkg/circuitbreaker",
+    "github.com/loopzero/loopzero/pkg/healthcheck",
+    "github.com/loopzero/loopzero/pkg/conditions",
+    "github.com/loopzero/loopzero/pkg/logging"
+  ],
+  "packages": {
+    "github.com/loopzero/loopzero/pkg/circuitbreaker": { "line": 95.3, "min_required": 90 },
+    "github.com/loopzero/loopzero/pkg/conditions": { "line": 100.0, "min_required": 90 },
+    "github.com/loopzero/loopzero/pkg/correlation": { "line": 100.0, "min_required": 90 },
+    "github.com/loopzero/loopzero/pkg/enforcement": { "line": 96.5, "min_required": 90 },
+    "github.com/loopzero/loopzero/pkg/errors": { "line": 84.8, "min_required": 90 },
+    "github.com/loopzero/loopzero/pkg/errors/http": { "line": 93.8, "min_required": 90 },
+    "github.com/loopzero/loopzero/pkg/healthcheck": { "line": 15.0, "min_required": 90 },
+    "github.com/loopzero/loopzero/pkg/id": { "line": 91.7, "min_required": 90 },
+    "github.com/loopzero/loopzero/pkg/jwt": { "line": 89.8, "min_required": 90 },
+    "github.com/loopzero/loopzero/pkg/logging": { "line": 100.0, "min_required": 90 },
+    "github.com/loopzero/loopzero/pkg/naming": { "line": 98.4, "min_required": 90 },
+    "github.com/loopzero/loopzero/pkg/serviceauth": { "line": 91.5, "min_required": 86 },
+    "github.com/loopzero/loopzero/pkg/statemachine": { "line": 60.3, "min_required": 90 }
+  }
+}
