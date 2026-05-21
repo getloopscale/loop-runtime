@@ -701,31 +701,34 @@ tasks:
   # ---------------------------------------------------------------------------
   # S0.13: Build pipeline tooling images
   # ---------------------------------------------------------------------------
-  images:build:
-    desc: Build and push tooling images (clone-runner, packs-runner, syft-scanner, cosign-signer) to local k3d registry
+  # T5.6 (plan 2026-05-21-deep-review-remediation): per-image build tasks
+  # for fast iteration. Each task is independently runnable; `images:build`
+  # composes them all sequentially for full setup. Operator can rebuild
+  # just one image (e.g., `task images:build:cosign-signer`) when iterating
+  # on a single piece, cutting dev rebuild time from ~15min to ~3min.
+  images:build:clone-runner:
+    desc: Build + push loopzero-clone-runner (both :latest and :v0.1.0 tags)
     cmds:
       - |
         echo "=== Building loopzero-clone-runner ==="
-        # T8.3 of deep-review-remediation-plan (closes find_infra_005 MEDIUM)
-        # pinned Tilt env vars to :v0.1.0; the build script must publish BOTH
-        # :latest AND :v0.1.0 so api/internal/argo/cosign.go loopzeroCosignImage()
-        # / loopzeroSyftImage() / loopzeroCloneImage() can resolve via LOOPZERO_*_IMAGE.
+        # Pinned Tilt env vars to :v0.1.0; the build must publish BOTH
+        # :latest AND :v0.1.0 so api/internal/argo/cosign.go can resolve
+        # via LOOPZERO_CLONE_IMAGE env var.
         docker build -t localhost:5000/loopzero-clone-runner:latest infra/images/clone-runner/
         docker tag  localhost:5000/loopzero-clone-runner:latest localhost:5000/loopzero-clone-runner:v0.1.0
         docker push localhost:5000/loopzero-clone-runner:latest
         docker push localhost:5000/loopzero-clone-runner:v0.1.0
         echo "  Pushed: localhost:5000/loopzero-clone-runner:{latest,v0.1.0}"
+
+  images:build:packs-runner:
+    desc: Build + push loopzero-packs-runner (canonical lenient v0.4.0 via build-and-push-loopzero-packs.sh)
+    cmds:
       - |
         echo "=== Building loopzero-packs-runner (canonical, lenient v0.4.0) ==="
         # build-mode-dispatch-and-dockerfile-security-plan T3.3 fix (2026-05-08):
-        # Use the canonical build-and-push script which:
-        #   - Builds from /home/paulo/loopzero-packs/Dockerfile.generate (lenient
-        #     contract canonical — copies user Dockerfile verbatim, exits 0)
-        #   - Tags as :v0.4.0 AND :latest (matches API env LOOPZERO_PACKS_IMAGE)
-        #   - Idempotent + verifies registry has the tag post-push
-        # The previous local stub (infra/images/packs-runner/) cloned the
-        # remote main branch which historically pinned to the strict-mode
-        # version, breaking every `build: dockerfile` deploy.
+        # Use the canonical script — builds from /home/paulo/loopzero-packs/
+        # Dockerfile.generate (lenient contract — copies user Dockerfile
+        # verbatim, exits 0). Tags as :v0.4.0 AND :latest. Idempotent.
         if [ -d /home/paulo/loopzero-packs ]; then
           bash infra/scripts/build-and-push-loopzero-packs.sh
         else
@@ -734,17 +737,22 @@ tasks:
           docker push localhost:5000/loopzero-packs-runner:latest
           echo "  Pushed: localhost:5000/loopzero-packs-runner:latest (legacy)"
         fi
+
+  images:build:dockerfile-lint:
+    desc: Build + push loopzero-dockerfile-lint (security barrier for user Dockerfiles)
+    cmds:
       - |
         echo "=== Building loopzero-dockerfile-lint (build-mode-dispatch security barrier) ==="
-        # build-mode-dispatch-and-dockerfile-security-plan T3.3 fix (2026-05-08):
-        # The dockerfile-lint binary enforces hard rejection rules
-        # (FROM allow-list, --privileged/--security=insecure RUN flags,
-        # bind-mount escape, reserved env keys, seccomp/apparmor unconfined)
-        # on user-supplied Dockerfiles BEFORE BuildKit consumes them.
-        # API env LOOPZERO_DOCKERFILE_LINT_IMAGE points to :v0.1.0; without
-        # this image present, every `build: dockerfile` deploy fails at
-        # workflow image-pull. Idempotent.
+        # Enforces hard rejection rules (FROM allow-list, --privileged/
+        # --security=insecure RUN flags, bind-mount escape, reserved env
+        # keys, seccomp/apparmor unconfined) on user Dockerfiles BEFORE
+        # BuildKit consumes them. API env LOOPZERO_DOCKERFILE_LINT_IMAGE
+        # points to :v0.1.0. Idempotent.
         bash infra/scripts/build-and-push-dockerfile-lint.sh
+
+  images:build:syft-scanner:
+    desc: Build + push loopzero-syft-scanner (Sprint 6 SBOM generation)
+    cmds:
       - |
         echo "=== Building loopzero-syft-scanner (Sprint 6 / T0.2) ==="
         # T8.3 + NEW-11 (2026-04-30): publish both :latest and :v0.1.0.
@@ -753,16 +761,28 @@ tasks:
         docker push localhost:5000/loopzero-syft-scanner:latest
         docker push localhost:5000/loopzero-syft-scanner:v0.1.0
         echo "  Pushed: localhost:5000/loopzero-syft-scanner:{latest,v0.1.0}"
+
+  images:build:cosign-signer:
+    desc: Build + push loopzero-cosign-signer (Sprint 6 supply-chain signing)
+    cmds:
       - |
         echo "=== Building loopzero-cosign-signer (Sprint 6 supply-chain) ==="
-        # T8.3 + NEW-11/NEW-12 (2026-04-30): cosign-signer was excluded from
-        # this list pre-NEW-12; pre-T8.3 only :latest was pushed. Tilt env
-        # LOOPZERO_COSIGN_IMAGE points to :v0.1.0 — must publish both tags.
+        # NEW-11/NEW-12 (2026-04-30): publish both :latest and :v0.1.0.
+        # Tilt env LOOPZERO_COSIGN_IMAGE points to :v0.1.0.
         docker build -t localhost:5000/loopzero-cosign-signer:latest infra/images/cosign-signer/
         docker tag  localhost:5000/loopzero-cosign-signer:latest localhost:5000/loopzero-cosign-signer:v0.1.0
         docker push localhost:5000/loopzero-cosign-signer:latest
         docker push localhost:5000/loopzero-cosign-signer:v0.1.0
         echo "  Pushed: localhost:5000/loopzero-cosign-signer:{latest,v0.1.0}"
+
+  images:build:
+    desc: Build + push ALL tooling images (composite of 5 per-image tasks)
+    cmds:
+      - task: images:build:clone-runner
+      - task: images:build:packs-runner
+      - task: images:build:dockerfile-lint
+      - task: images:build:syft-scanner
+      - task: images:build:cosign-signer
 
   # ---------------------------------------------------------------------------
   # S0.14: Composite tasks
