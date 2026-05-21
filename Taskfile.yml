@@ -224,50 +224,18 @@ tasks:
       - bash infra/helmfile/scripts/bootstrap-eso-cluster-secret-store.sh
       - HYDRA_NAMESPACE=loopzero-system bash infra/helmfile/scripts/bootstrap-oauth-clients.sh
       - bash infra/scripts/provision-api-tokens.sh
-      # B30 fix (real-paas-cleanroom-dogfood-loop iter 25, 2026-05-05):
-      # generate-secrets.sh creates `gitea-credentials-template` with a
-      # random GITEA_TOKEN and username `loopzero` (org name, not user). When
-      # ArgoCD picks this template (URL prefix matches), HTTP basic auth
-      # to Gitea fails with 401. provision-api-tokens.sh creates
-      # `argocd-creds-gitea` with the real registered token and username
-      # `gitea_admin`, but ArgoCD's first-match-wins order is undefined.
-      # Sync `gitea-credentials-template` to use the same registered
-      # username + password so either Secret produces a valid auth.
-      - |
-        REAL_PWD=$(kubectl --context k3d-loopzero-mgmt -n argocd get secret argocd-creds-gitea -o jsonpath='{.data.password}' | base64 -d)
-        REAL_USER=$(kubectl --context k3d-loopzero-mgmt -n argocd get secret argocd-creds-gitea -o jsonpath='{.data.username}' | base64 -d)
-        if [[ -n "$REAL_PWD" && -n "$REAL_USER" ]]; then
-          kubectl --context k3d-loopzero-mgmt -n argocd patch secret gitea-credentials-template \
-            --type=merge \
-            -p "{\"stringData\":{\"username\":\"${REAL_USER}\",\"password\":\"${REAL_PWD}\"}}"
-        fi
-      # B28 fix (real-paas-cleanroom-dogfood-loop iter 23, 2026-05-05):
-      # restart argocd-repo-server so it picks up the freshly written
-      # repo-creds Secrets. Without restart, ArgoCD caches the previous
-      # (or empty) creds and returns `authentication required` when
-      # resolving tenant gitops repo revisions, which fails post-build
-      # sync and marks the build FAILED.
-      - kubectl --context k3d-loopzero-mgmt -n argocd rollout restart deploy/argocd-repo-server
-      - kubectl --context k3d-loopzero-mgmt -n argocd rollout status deploy/argocd-repo-server --timeout=60s
+      # T5.3 (plan 2026-05-21-deep-review-remediation): extracted 4 inline
+      # B-patches to named scripts so each can be re-run individually if
+      # only that slice needs fixing during cleanroom debugging.
+      # Run order matters — each script depends on its predecessor.
+      - bash infra/helmfile/scripts/bootstrap-patch-argocd-gitea-creds.sh
+      - bash infra/helmfile/scripts/bootstrap-patch-argocd-repo-server-restart.sh
       - |
         kubectl config use-context k3d-loopzero-build >/dev/null 2>&1
         bash infra/helmfile/scripts/generate-build-secrets.sh standalone
         kubectl config use-context k3d-loopzero-mgmt >/dev/null 2>&1
-      - |
-        helm repo list 2>/dev/null | grep -q '^sigstore' || helm repo add sigstore https://sigstore.github.io/helm-charts
-        helm repo update >/dev/null 2>&1 || true
-        helm upgrade --install policy-controller sigstore/policy-controller \
-          --version 0.8.1 \
-          --kube-context k3d-loopzero-workload \
-          --namespace cosign-system --create-namespace \
-          -f infra/helm/policy-controller/values.yaml \
-          --wait --timeout 3m
-      - |
-        helm upgrade --install admission-policies infra/helm/admission-policies \
-          --kube-context k3d-loopzero-workload \
-          --namespace cosign-system --create-namespace \
-          --set 'registries.additionalPrefixes[0]=k3d-loopzero-registry:5000/' \
-          --wait --timeout 2m
+      - bash infra/helmfile/scripts/bootstrap-patch-sigstore-policy-controller.sh
+      - bash infra/helmfile/scripts/bootstrap-patch-admission-policies.sh
       # 2026-05-14 (plan T0.2): provision runtime-2 platform BEFORE the
       # CC bootstrap so cell-2 has a reachable workload destination.
       - task: k3d:bootstrap-runtime-2
