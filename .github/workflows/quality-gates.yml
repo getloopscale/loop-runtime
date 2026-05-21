@@ -1,0 +1,256 @@
+name: Quality Gates
+
+# Plan 2026-05-21-comprehensive-quality-gates v1.1.
+# Single workflow with multiple jobs — each Required Status Check.
+
+on:
+  pull_request:
+    branches: [develop, main]
+  push:
+    branches: [develop, main]
+
+permissions:
+  contents: read
+  pull-requests: write
+
+jobs:
+  # =========================================================================
+  # Phase 2 gates
+  # =========================================================================
+
+  coverage-diff:
+    name: Quality Gates - Coverage Diff Gate
+    runs-on: ubuntu-latest
+    if: github.event_name == 'pull_request'
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+        with:
+          fetch-depth: 0
+
+      - name: Set up Go
+        uses: actions/setup-go@0aaccfd150d50ccaeb58ebd88d36e91967a5f35b # v5.4.0
+        with:
+          go-version: '1.25.10'
+
+      - name: Install gocovmerge
+        run: go install github.com/wadey/gocovmerge@latest
+
+      - name: Build PR diff file list (path:line per added line)
+        run: |
+          BASE_REF="origin/${{ github.base_ref }}" HEAD_REF=HEAD \
+            bash infra/scripts/quality/git-diff-to-lines.sh > /tmp/pr-diff.txt
+
+      - name: Generate coverage
+        run: |
+          # Run Go coverage (CI quality target)
+          bash infra/scripts/quality/coverage-go.sh
+          # Stub CLI lcov (Phase 1 wiring; full integration in next iter)
+          : > /tmp/cli-coverage.lcov
+          bash infra/scripts/quality/coverage-merge.sh
+
+      - name: Run coverage-diff gate
+        run: |
+          bash infra/scripts/quality/coverage-diff.sh
+        env:
+          DIFF_FILE: /tmp/pr-diff.txt
+          LCOV_FILE: /tmp/coverage-merged.lcov
+          THRESHOLD: 80
+
+  baseline-regression:
+    name: Quality Gates - Baseline Regression Gate
+    runs-on: ubuntu-latest
+    if: github.event_name == 'pull_request'
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+
+      - name: Set up Go
+        uses: actions/setup-go@0aaccfd150d50ccaeb58ebd88d36e91967a5f35b # v5.4.0
+        with:
+          go-version: '1.25.10'
+
+      - name: Generate current coverage
+        run: bash infra/scripts/quality/coverage-go.sh
+
+      - name: Build current-coverage JSON from profile
+        run: |
+          : > /tmp/empty.lcov
+          DRY_RUN=1 GO_PROFILE=/tmp/coverage.out CLI_LCOV=/tmp/empty.lcov \
+            bash infra/scripts/quality/baseline-update.sh > /tmp/current-coverage.json
+
+      - name: Read defer label state
+        id: defer
+        run: |
+          if echo "${{ join(github.event.pull_request.labels.*.name, ',') }}" | grep -q "coverage-baseline-defer"; then
+            echo "present=1" >> "$GITHUB_OUTPUT"
+          else
+            echo "present=0" >> "$GITHUB_OUTPUT"
+          fi
+          # Defer reason from PR body
+          echo "${{ github.event.pull_request.body }}" | \
+            grep -oE 'Defer reason:[[:space:]]*[^[:space:]].*' | head -1 > /tmp/defer-reason.txt || true
+          echo "reason=$(cat /tmp/defer-reason.txt)" >> "$GITHUB_OUTPUT"
+
+      - name: Run baseline-compare gate
+        run: bash infra/scripts/quality/baseline-compare.sh
+        env:
+          CURRENT_FILE: /tmp/current-coverage.json
+          DEFER_LABEL_PRESENT: ${{ steps.defer.outputs.present }}
+          DEFER_REASON: ${{ steps.defer.outputs.reason }}
+
+  # =========================================================================
+  # Phase 5 gates
+  # =========================================================================
+
+  template-compliance:
+    name: Quality Gates - PR Template Compliance
+    runs-on: ubuntu-latest
+    if: github.event_name == 'pull_request'
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+
+      - name: Run template-compliance gate
+        run: bash infra/scripts/quality/template-compliance.sh
+        env:
+          PR_BODY: ${{ github.event.pull_request.body }}
+          PR_AUTHOR: ${{ github.event.pull_request.user.login }}
+          PR_LABELS: ${{ join(github.event.pull_request.labels.*.name, ',') }}
+
+  regression-test:
+    name: Quality Gates - Bug-fix Regression Test Gate
+    runs-on: ubuntu-latest
+    if: github.event_name == 'pull_request'
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+        with:
+          fetch-depth: 0
+
+      - name: Run regression-test gate
+        run: |
+          PR_DIFF_FILES=$(git diff --name-only --diff-filter=AM "origin/${{ github.base_ref }}...HEAD")
+          export PR_DIFF_FILES
+          bash infra/scripts/quality/check-regression-test.sh
+        env:
+          PR_TITLE: ${{ github.event.pull_request.title }}
+          PR_BODY: ${{ github.event.pull_request.body }}
+
+  test-deletion:
+    name: Quality Gates - Test Deletion Audit
+    runs-on: ubuntu-latest
+    if: github.event_name == 'pull_request'
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+        with:
+          fetch-depth: 0
+
+      - name: Run test-deletion gate
+        run: bash infra/scripts/quality/check-test-deletion.sh
+        env:
+          BASE_REF: origin/${{ github.base_ref }}
+          HEAD_REF: HEAD
+          PR_BODY: ${{ github.event.pull_request.body }}
+          PR_LABELS: ${{ join(github.event.pull_request.labels.*.name, ',') }}
+
+  # =========================================================================
+  # Phase 6 gates
+  # =========================================================================
+
+  pyramid:
+    name: Quality Gates - Test Pyramid
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+
+      - name: Regenerate inventory
+        run: bash infra/scripts/quality/test-inventory.sh
+
+      - name: Run pyramid gate
+        run: bash infra/scripts/quality/check-pyramid.sh
+        env:
+          PR_LABELS: ${{ github.event_name == 'pull_request' && join(github.event.pull_request.labels.*.name, ',') || '' }}
+
+  mock-budget:
+    name: Quality Gates - Mock Budget
+    runs-on: ubuntu-latest
+    # ADVISORY MODE INITIALLY: legacy test files exist with high mock
+    # counts predating the budget. Cleanup is Phase 4 backlog.
+    continue-on-error: true
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+
+      - name: Run mock-budget gate (advisory until Phase 4 cleanup)
+        run: bash infra/scripts/quality/check-mock-budget.sh
+
+  skip-link:
+    name: Quality Gates - Skip-Link Enforcement
+    runs-on: ubuntu-latest
+    # ADVISORY MODE INITIALLY (per plan phased rollout pattern):
+    # 109 legacy skip() calls without issue URL exist as of 2026-05-21
+    # baseline. Cleanup is Phase 4 backlog. Once cleanup completes,
+    # remove continue-on-error to graduate to blocking mode.
+    continue-on-error: true
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+
+      - name: Run skip-link gate (advisory until Phase 4 cleanup)
+        run: bash infra/scripts/quality/check-skip-link.sh
+
+  runtime-slo:
+    name: Quality Gates - Runtime SLO
+    runs-on: ubuntu-latest
+    if: github.event_name == 'pull_request'
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+
+      - name: Set up Go
+        uses: actions/setup-go@0aaccfd150d50ccaeb58ebd88d36e91967a5f35b # v5.4.0
+        with:
+          go-version: '1.25.10'
+
+      - name: Run go test capturing output
+        run: |
+          cd pkg && go test -v -timeout 90s ./... > /tmp/go-test-output.log 2>&1 || true
+
+      - name: Run runtime-slo gate
+        run: bash infra/scripts/quality/check-runtime-slo.sh
+
+  # =========================================================================
+  # Hermetic tests for all gate scripts (build gate)
+  # =========================================================================
+
+  hermetic-tests:
+    name: Quality Gates Hermetic Tests
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+
+      - name: Set up Go
+        uses: actions/setup-go@0aaccfd150d50ccaeb58ebd88d36e91967a5f35b # v5.4.0
+        with:
+          go-version: '1.25.10'
+
+      - name: Install gocovmerge
+        run: go install github.com/wadey/gocovmerge@latest
+
+      - name: T1.1 coverage-go hermetic tests
+        run: bash infra/tests/scripts/coverage-go_test.sh
+
+      - name: T1.1 coverage-merge hermetic tests
+        run: bash infra/tests/scripts/coverage-merge_test.sh
+
+      - name: T1.2 baseline-update hermetic tests
+        run: bash infra/tests/scripts/baseline-update_test.sh
+
+      - name: T1.3 test-inventory hermetic tests
+        run: bash infra/tests/scripts/test-inventory_test.sh
+
+      - name: T2.1 coverage-diff hermetic tests
+        run: bash infra/tests/scripts/coverage-diff_test.sh
+
+      - name: T2.2 baseline-compare hermetic tests
+        run: bash infra/tests/scripts/baseline-compare_test.sh
+
+      - name: T5.1 template-compliance hermetic tests
+        run: bash infra/tests/scripts/template-compliance_test.sh
+
+      - name: T5.2 check-regression-test hermetic tests
+        run: bash infra/tests/scripts/check-regression-test_test.sh
