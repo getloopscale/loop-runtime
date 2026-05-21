@@ -8,11 +8,8 @@
 # the lib in each grandfathered script incrementally.
 #
 # Snapshot taken: 2026-05-21
-infra/scripts/dr-drill.sh
-infra/scripts/bootstrap-seed-tenant-cr.sh
 infra/scripts/bootstrap-platform.sh
 infra/scripts/check-service-auth-rotation.sh
 infra/helmfile/scripts/install-local-path-provisioner.sh
-infra/helmfile/scripts/create-wiring-configmap.sh
 infra/helmfile/scripts/bootstrap-patch-admission-policies.sh
 infra/helmfile/scripts/bootstrap-patch-sigstore-policy-controller.sh

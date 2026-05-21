@@ -54,12 +54,40 @@ is_exempt_path() {
 STATE_WRITER_PATTERN='(kubectl[[:space:]]+(apply|create|delete|patch)|helm[[:space:]]+(install|uninstall|upgrade)|pulumi[[:space:]]+(up|destroy)|doctl[[:space:]]+(databases|kubernetes|registry)[[:space:]]+(delete|create)|git[[:space:]]+push)'
 DRY_RUN_SUPPORT_PATTERN='(DRY_RUN|--dry-run|parse_dry_run_flag|lib/dry-run\.sh|kubectl[[:space:]]+--dry-run=client)'
 
+# Strip non-code lines before pattern matching to avoid false positives
+# where destructive commands appear only inside backtick-quoted strings
+# (e.g. operator instruction messages like "Operator: ... `pulumi up`")
+# or shell comments documenting log file contents.
+#
+# Stripping rules (applied in order):
+#   1. Drop comment lines (lines whose first non-whitespace char is #)
+#   2. Drop backtick-quoted substrings (`...` — markdown/shell command refs
+#      in operator messages)
+#   3. Drop doc-string heredoc-like content between `cat <<EOF` and `EOF`
+#      lines (best-effort — covers report templates documenting expected
+#      content of artifact files).
+#
+# Tradeoffs: stripping is heuristic. A script that does `echo \`kubectl
+# apply -f x\`` (sub-shell command execution) would slip past. But that
+# pattern is rare in our codebase (CI gate complemented by code review).
+strip_non_code() {
+  local f="$1"
+  # Drop comments + backtick-quoted spans + heredoc bodies.
+  awk '
+    /^[[:space:]]*#/ { next }
+    /<<[[:space:]]*'\''?EOF'\''?/ { in_heredoc=1; next }
+    in_heredoc && /^EOF[[:space:]]*$/ { in_heredoc=0; next }
+    in_heredoc { next }
+    { print }
+  ' "$f" | sed -E 's/`[^`]*`//g'
+}
+
 while IFS= read -r path; do
   [ -f "$path" ] || continue
   if is_exempt_path "$path"; then continue; fi
 
-  # Has destructive pattern?
-  if ! grep -qE "$STATE_WRITER_PATTERN" "$path" 2>/dev/null; then
+  # Has destructive pattern (after stripping comments/backticks)?
+  if ! strip_non_code "$path" | grep -qE "$STATE_WRITER_PATTERN" 2>/dev/null; then
     continue  # not a state-writer
   fi
 
