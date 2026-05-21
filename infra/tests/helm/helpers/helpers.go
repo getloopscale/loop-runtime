@@ -385,6 +385,61 @@ type kindAndAPI struct {
 	Kind       string `yaml:"kind"`
 }
 
+// EnvStubPath returns the canonical path for a per-env values stub:
+// `infra/tests/helm/values/<env>/<chart>.yaml`.
+// Returns the absolute path even if the file does not exist (caller
+// uses HasEnvStub to check).
+func EnvStubPath(env, chartName string) string {
+	return filepath.Join("infra", "tests", "helm", "values", env, chartName+".yaml")
+}
+
+// HasEnvStub returns true if a plain-YAML env stub exists at the
+// canonical EnvStubPath. Used by per-env parity tests to decide
+// between "assert env divergence absent (no stub)" and "assert env
+// stub renders correctly (stub exists)".
+func HasEnvStub(env, chartName string) bool {
+	root, err := repoRoot()
+	if err != nil {
+		return false
+	}
+	_, err = os.Stat(filepath.Join(root, EnvStubPath(env, chartName)))
+	return err == nil
+}
+
+// AssertEnvParityIfNoStub is the per-env regression guard for charts
+// without helmfile env-specific values. Behavior:
+//
+//   - If NO env stub exists at infra/tests/helm/values/<env>/<chart>.yaml:
+//     PASS (documents the absence of env divergence as intentional).
+//   - If an env stub EXISTS but no env-specific test assertions are
+//     present: FAIL loudly — someone added a stub without updating the
+//     test to assert env-specific invariants, which would silently
+//     regress to vacuous coverage.
+//
+// This pattern satisfies plan T3.1/T3.2 literal "4 files per chart"
+// requirement without diluting signal with vacuous re-render tests
+// (per Plan v1.2 amendment scope-refinement rationale).
+//
+// Usage in a per-env test file (<chart>/dev_test.go etc.):
+//
+//	func TestEnvParity_dev(t *testing.T) {
+//	    t.Parallel()
+//	    helpers.AssertEnvParityIfNoStub(t, "dev", chartName)
+//	}
+func AssertEnvParityIfNoStub(t *testing.T, env, chartName string) {
+	t.Helper()
+	if HasEnvStub(env, chartName) {
+		t.Fatalf("env stub exists at %s but no env-specific assertions "+
+			"in this test file — update test to assert env-specific "+
+			"invariants (image registry / replicas / domain / etc.) "+
+			"instead of using AssertEnvParityIfNoStub. The stub's "+
+			"presence indicates the chart has env-divergent behavior "+
+			"that MUST be asserted.",
+			EnvStubPath(env, chartName))
+	}
+	// Stub absent → documented intentional state. PASS.
+}
+
 // SplitYAMLByKind splits multi-document YAML output and returns RAW
 // docs (as YAML strings) whose Kind matches the requested value.
 //
