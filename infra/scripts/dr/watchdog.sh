@@ -31,6 +31,20 @@
 
 set -euo pipefail
 
+# T2.2-followup (plan 2026-05-21-deep-review-remediation): adopt the
+# shared dry-run lib. The watchdog gates `pulumi destroy`; in dry-run
+# mode it logs intent without destroying — useful for operator
+# sanity-check during incident response.
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+# shellcheck source=../lib/dry-run.sh disable=SC1091
+source "$SCRIPT_DIR/../lib/dry-run.sh"
+parse_dry_run_flag "$@"
+if [ "${#REMAINING_ARGS[@]}" -gt 0 ]; then
+  set -- "${REMAINING_ARGS[@]}"
+else
+  set --
+fi
+
 # --- Input validation ---
 if [[ -z "${DIGITALOCEAN_TOKEN:-}" ]]; then
   echo "[drill-watchdog] ERROR: DIGITALOCEAN_TOKEN required" >&2
@@ -111,7 +125,7 @@ log "Found expired drill stack(s). Initiating destroy + validate sequence..."
 
 if [[ -n "${PULUMI_ACCESS_TOKEN:-}" ]] && [[ -d "$PULUMI_DIR" ]]; then
   log "Attempting pulumi destroy --stack drill..."
-  if (cd "$PULUMI_DIR" && pulumi destroy --stack drill --yes --skip-preview 2>&1); then
+  if (cd "$PULUMI_DIR" && apply pulumi destroy --stack drill --yes --skip-preview 2>&1); then
     log "✓ pulumi destroy succeeded"
   else
     log "  pulumi destroy failed or partial; falling back to validator"

@@ -10,7 +10,6 @@
 # Snapshot taken: 2026-05-21
 infra/scripts/pre-destroy-cleanup.sh
 infra/scripts/dr/preflight.sh
-infra/scripts/dr/watchdog.sh
 infra/scripts/dr-drill.sh
 infra/scripts/chaos/report.sh
 infra/scripts/bootstrap-seed-tenant-cr.sh
