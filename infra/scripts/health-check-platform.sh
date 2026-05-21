@@ -10,8 +10,8 @@
 # Exit codes: 0 = healthy, 1 = degraded (some checks failed)
 #
 # Usage:
-#   KUBECONFIG=/tmp/mgmt-kc.yaml bash infra/scripts/health-check.sh
-#   KUBECONFIG=/tmp/mgmt-kc.yaml BUILD_KUBECONFIG=/tmp/build-kc.yaml bash infra/scripts/health-check.sh
+#   KUBECONFIG=/tmp/mgmt-kc.yaml bash infra/scripts/health-check-platform.sh
+#   KUBECONFIG=/tmp/mgmt-kc.yaml BUILD_KUBECONFIG=/tmp/build-kc.yaml bash infra/scripts/health-check-platform.sh
 
 set -uo pipefail
 

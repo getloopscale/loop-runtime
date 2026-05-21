@@ -20,6 +20,12 @@ fail() { echo "[bootstrap] ERROR: $*" >&2; exit 1; }
 
 # ensure_exists "label" "check_cmd" "create_cmd"
 # Runs check_cmd. If it succeeds (resource exists), skips. Otherwise runs create_cmd.
+#
+# eval-safe (T2.3 of plan 2026-05-21-deep-review-remediation): the only
+# callers in this file pass internally-constructed kubectl commands
+# (e.g., 'kubectl get ns loopzero-system'). No user-input flows to $check_cmd
+# or $create_cmd. Refactoring to array expansion would require touching
+# all ~25 callsites; deferred until ergonomic value justifies the churn.
 ensure_exists() {
   local label="$1" check_cmd="$2" create_cmd="$3"
   if eval "$check_cmd" >/dev/null 2>&1; then

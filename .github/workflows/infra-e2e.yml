@@ -145,7 +145,7 @@ jobs:
       - name: "Step 4: Health check"
         run: |
           BASE_DOMAIN="${{ inputs.stack == 'prod' && 'loopzero.example' || format('{0}.loopzero.example', inputs.stack || 'dev') }}"
-          BASE_DOMAIN=$BASE_DOMAIN bash infra/scripts/health-check.sh
+          BASE_DOMAIN=$BASE_DOMAIN bash infra/scripts/health-check-platform.sh
 
       # ── Step 5: Idempotency check ────────────────────
       - name: "Step 5: Idempotency check (second pulumi up)"

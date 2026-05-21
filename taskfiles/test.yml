@@ -1021,7 +1021,7 @@ tasks:
   governance:health:
     desc: Pre-flight health check of the governance system (89+ checks). Part of pre-Dogfood-Gate.
     cmds:
-      - bash infra/scripts/governance/health-check.sh
+      - bash infra/scripts/governance/health-check-governance.sh
 
   governance:lint:
     desc: Markdownlint check for docs/governance/ + scoring-* + maturity-history (project relaxed rules)

@@ -8,6 +8,19 @@
 # Analog of infra/helmfile/scripts/seed-local-user.sh adapted for DOKS drill
 # (instead of k3d-loopzero-mgmt local context).
 #
+# JWT script taxonomy (T2.6 of plan 2026-05-21-deep-review-remediation):
+#   - infra/helmfile/scripts/lib/hydra-mint.sh  — SHARED LOW-LEVEL LIB
+#     (sourced by both this script + seed-local-user.sh; the actual mint flow)
+#   - infra/scripts/drill-mint-jwt.sh           — DRILL ENTRY POINT (THIS FILE)
+#     (drill-context wrapper, parametrizes hydra-mint.sh for DOKS)
+#   - infra/scripts/dr/jwt-diagnose.sh          — DIAGNOSTIC TOOL
+#     (NOT a minter — inspects an existing JWT for validity, claims, TTL)
+# Not duplicates: each has a distinct role in the layer model. The agent's
+# deep-review v2 flagged this as "consolidation candidate"; T2.6 audit
+# confirmed the consolidation already happened via lib/hydra-mint.sh at
+# an earlier T4.4 task (commit history). This header now documents the
+# layering so future audits don't re-flag.
+#
 # Used by:
 #   - .github/workflows/drill-l2-scale.yml — bi-weekly L2 cron + manual dispatch
 #   - .github/workflows/drill-prod-identical-soak.yml — Stage 1/2 soaks (post T3.4 redirect)

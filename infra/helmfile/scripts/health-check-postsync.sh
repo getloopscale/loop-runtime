@@ -4,7 +4,7 @@
 # Each check retries 30x with 10s interval (5min total).
 #
 # Usage:
-#   health-check.sh <role> [domain]
+#   health-check-postsync.sh <role> [domain]
 #     role:   mgmt | build | runtime | wire
 #     domain: optional, defaults to env LOOPZERO_DOMAIN or dev.loopzero.example
 set -euo pipefail

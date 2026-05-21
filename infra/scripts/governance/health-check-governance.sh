@@ -1,12 +1,12 @@
 #!/usr/bin/env bash
-# health-check.sh — Aggregator pre-flight check for the governance system.
+# health-check-governance.sh — Aggregator pre-flight check for the governance system.
 #
 # Part of pre-Dogfood-Gate checks. Validates that governance scripts + workflows +
 # evidence files are all healthy and consistent. Does NOT require LIVE infrastructure.
 #
 # Usage:
 #   task governance:health
-#   bash infra/scripts/governance/health-check.sh
+#   bash infra/scripts/governance/health-check-governance.sh
 #
 # Exit codes:
 #   0 — all checks PASS
