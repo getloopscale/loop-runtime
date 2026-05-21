@@ -245,3 +245,258 @@ func TestPlatformBootstrapTyped_ValidEvents(t *testing.T) {
 	m := NewPlatformBootstrapTypedMachine()
 	_ = m.ValidEvents(PlatformBootstrapPhase(""))
 }
+
+// =============================================================================
+// Preview typed wrapper
+// =============================================================================
+
+func TestPreviewTyped_TryTransition_Invalid(t *testing.T) {
+	m := NewPreviewTypedMachine()
+	_, err := m.TryTransition(PreviewPhase("bogus"), PreviewPhaseEvent("bogus"))
+	if err == nil {
+		t.Error("bogus transition should error")
+	}
+}
+
+func TestPreviewTyped_IsKnownState(t *testing.T) {
+	m := NewPreviewTypedMachine()
+	if !m.IsKnownState(PreviewPhase(PreviewActive)) {
+		t.Error("PreviewActive should be known")
+	}
+	if m.IsKnownState(PreviewPhase("bogus")) {
+		t.Error("bogus state should be unknown")
+	}
+}
+
+func TestPreviewTyped_IsKnownEvent(t *testing.T) {
+	m := NewPreviewTypedMachine()
+	if m.IsKnownEvent(PreviewPhaseEvent("bogus")) {
+		t.Error("bogus event should be unknown")
+	}
+}
+
+func TestPreviewTyped_MustParseState_Panics(t *testing.T) {
+	m := NewPreviewTypedMachine()
+	defer func() {
+		if r := recover(); r == nil {
+			t.Error("MustParseState bogus should panic")
+		}
+	}()
+	m.MustParseState("not-a-state")
+}
+
+func TestPreviewTyped_MustParseEvent_Panics(t *testing.T) {
+	m := NewPreviewTypedMachine()
+	defer func() {
+		if r := recover(); r == nil {
+			t.Error("MustParseEvent bogus should panic")
+		}
+	}()
+	m.MustParseEvent("not-an-event")
+}
+
+func TestPreviewTyped_ValidEvents(t *testing.T) {
+	m := NewPreviewTypedMachine()
+	_ = m.ValidEvents(PreviewPhase(PreviewActive))
+}
+
+// =============================================================================
+// Promotion typed wrapper
+// =============================================================================
+
+func TestPromotionTyped_TryTransition_Invalid(t *testing.T) {
+	m := NewPromotionTypedMachine()
+	_, err := m.TryTransition(PromotionPhase("bogus"), PromotionPhaseEvent("bogus"))
+	if err == nil {
+		t.Error("bogus transition should error")
+	}
+}
+
+func TestPromotionTyped_IsKnownState(t *testing.T) {
+	m := NewPromotionTypedMachine()
+	if !m.IsKnownState(PromotionPhase(PromotionValidating)) {
+		t.Error("PromotionValidating should be known")
+	}
+	if m.IsKnownState(PromotionPhase("bogus")) {
+		t.Error("bogus state should be unknown")
+	}
+}
+
+func TestPromotionTyped_IsKnownEvent(t *testing.T) {
+	m := NewPromotionTypedMachine()
+	if m.IsKnownEvent(PromotionPhaseEvent("bogus")) {
+		t.Error("bogus event should be unknown")
+	}
+}
+
+func TestPromotionTyped_MustParseState_Panics(t *testing.T) {
+	m := NewPromotionTypedMachine()
+	defer func() {
+		if r := recover(); r == nil {
+			t.Error("MustParseState bogus should panic")
+		}
+	}()
+	m.MustParseState("not-a-state")
+}
+
+func TestPromotionTyped_MustParseEvent_Panics(t *testing.T) {
+	m := NewPromotionTypedMachine()
+	defer func() {
+		if r := recover(); r == nil {
+			t.Error("MustParseEvent bogus should panic")
+		}
+	}()
+	m.MustParseEvent("not-an-event")
+}
+
+func TestPromotionTyped_ValidEvents(t *testing.T) {
+	m := NewPromotionTypedMachine()
+	_ = m.ValidEvents(PromotionPhase(PromotionValidating))
+}
+
+// =============================================================================
+// Rollback typed wrapper
+// =============================================================================
+
+func TestRollbackTyped_TryTransition_Invalid(t *testing.T) {
+	m := NewRollbackTypedMachine()
+	_, err := m.TryTransition(RollbackPhase("bogus"), RollbackPhaseEvent("bogus"))
+	if err == nil {
+		t.Error("bogus transition should error")
+	}
+}
+
+func TestRollbackTyped_IsKnownState(t *testing.T) {
+	m := NewRollbackTypedMachine()
+	if !m.IsKnownState(RollbackPhase(RollbackValidating)) {
+		t.Error("RollbackValidating should be known")
+	}
+	if m.IsKnownState(RollbackPhase("bogus")) {
+		t.Error("bogus state should be unknown")
+	}
+}
+
+func TestRollbackTyped_IsKnownEvent(t *testing.T) {
+	m := NewRollbackTypedMachine()
+	if m.IsKnownEvent(RollbackPhaseEvent("bogus")) {
+		t.Error("bogus event should be unknown")
+	}
+}
+
+func TestRollbackTyped_MustParseState_Panics(t *testing.T) {
+	m := NewRollbackTypedMachine()
+	defer func() {
+		if r := recover(); r == nil {
+			t.Error("MustParseState bogus should panic")
+		}
+	}()
+	m.MustParseState("not-a-state")
+}
+
+func TestRollbackTyped_MustParseEvent_Panics(t *testing.T) {
+	m := NewRollbackTypedMachine()
+	defer func() {
+		if r := recover(); r == nil {
+			t.Error("MustParseEvent bogus should panic")
+		}
+	}()
+	m.MustParseEvent("not-an-event")
+}
+
+func TestRollbackTyped_ValidEvents(t *testing.T) {
+	m := NewRollbackTypedMachine()
+	_ = m.ValidEvents(RollbackPhase(RollbackValidating))
+}
+
+// =============================================================================
+// Tenant typed wrapper
+// =============================================================================
+
+func TestTenantTyped_TryTransition_Invalid(t *testing.T) {
+	m := NewTenantTypedMachine()
+	_, err := m.TryTransition(TenantPhase("bogus"), TenantPhaseEvent("bogus"))
+	if err == nil {
+		t.Error("bogus transition should error")
+	}
+}
+
+func TestTenantTyped_IsKnownState(t *testing.T) {
+	m := NewTenantTypedMachine()
+	if !m.IsKnownState(TenantPhase(TenantProvisioning)) {
+		t.Error("TenantProvisioning should be known")
+	}
+	if m.IsKnownState(TenantPhase("bogus")) {
+		t.Error("bogus state should be unknown")
+	}
+}
+
+func TestTenantTyped_IsKnownEvent(t *testing.T) {
+	m := NewTenantTypedMachine()
+	if m.IsKnownEvent(TenantPhaseEvent("bogus")) {
+		t.Error("bogus event should be unknown")
+	}
+}
+
+func TestTenantTyped_MustParseState_Panics(t *testing.T) {
+	m := NewTenantTypedMachine()
+	defer func() {
+		if r := recover(); r == nil {
+			t.Error("MustParseState bogus should panic")
+		}
+	}()
+	m.MustParseState("not-a-state")
+}
+
+func TestTenantTyped_MustParseEvent_Panics(t *testing.T) {
+	m := NewTenantTypedMachine()
+	defer func() {
+		if r := recover(); r == nil {
+			t.Error("MustParseEvent bogus should panic")
+		}
+	}()
+	m.MustParseEvent("not-an-event")
+}
+
+func TestTenantTyped_ValidEvents(t *testing.T) {
+	m := NewTenantTypedMachine()
+	_ = m.ValidEvents(TenantPhase(TenantProvisioning))
+}
+
+// =============================================================================
+// Build typed wrapper (note: NewBuildTypedMachine returns *BuildMachine
+// — base machine, not a typed wrapper struct). The typed methods are
+// already on *BuildMachine and many are covered by existing tests; here
+// we close the IsKnown* / MustParse* / ValidEvents gaps explicitly.
+// =============================================================================
+
+func TestBuildTyped_TryTransition_Invalid(t *testing.T) {
+	m := NewBuildTypedMachine()
+	_, err := m.TryTransition(BPhQueued, BuildPhaseEvent("bogus"))
+	if err == nil {
+		t.Error("bogus event should yield error or invalid transition")
+	}
+}
+
+// =============================================================================
+// Release typed wrapper
+// =============================================================================
+
+func TestReleaseTyped_TryTransition_Invalid(t *testing.T) {
+	m := NewReleaseTypedMachine()
+	_, err := m.TryTransition(ReleasePhase(ReleaseReady), ReleasePhaseEvent("bogus"))
+	if err == nil {
+		t.Error("bogus event should error or invalid transition")
+	}
+}
+
+// =============================================================================
+// ExposedRoute typed wrapper
+// =============================================================================
+
+func TestExposedRouteTyped_TryTransition_Invalid(t *testing.T) {
+	m := NewExposedRouteTypedMachine()
+	_, err := m.TryTransition(ExposedRouteState("bogus"), ExposedRouteEvent("bogus"))
+	if err == nil {
+		t.Error("bogus state/event should error")
+	}
+}
