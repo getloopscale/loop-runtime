@@ -14,7 +14,7 @@
 mode: distributed
 
 rootUser: loopzero-admin
-rootPassword: loopzero-dev-password  # LOCAL DEV ONLY — override in CI
+rootPassword: ""  # T1.3: empty triggers MinIO fail-fast
 
 statefulset:
   replicaCount: 4

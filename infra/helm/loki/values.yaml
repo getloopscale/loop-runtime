@@ -22,7 +22,7 @@ loki:
       endpoint: minio.loopzero-system:9000
       bucketnames: loopzero-logs
       access_key_id: loopzero-admin
-      secret_access_key: loopzero-dev-password   # LOCAL DEV ONLY — override for production
+      secret_access_key: ""   # T1.3: empty triggers Loki S3 client fail-fast; helmfile env or --set required
       s3ForcePathStyle: true
       insecure: true                         # LOCAL DEV ONLY — MinIO without TLS
   limits_config:

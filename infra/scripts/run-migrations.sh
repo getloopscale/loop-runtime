@@ -41,7 +41,14 @@ set -euo pipefail
 MGMT_CONTEXT="${MGMT_CONTEXT:-k3d-loopzero-mgmt}"
 NAMESPACE="${NAMESPACE:-loopzero-system}"
 PG_USER="${PG_USER:-loopzero}"
-PG_PASS="${PG_PASS:-loopzero-dev-password}"
+# T1.3 (plan 2026-05-21-deep-review-remediation): read from K8s Secret SoT.
+# Fail fast if neither env nor Secret provides it.
+PG_PASS="${PG_PASS:-$(kubectl --context "$MGMT_CONTEXT" -n "$NAMESPACE" get secret loopzero-db-credentials -o jsonpath='{.data.password}' 2>/dev/null | base64 -d || true)}"
+if [[ -z "$PG_PASS" ]]; then
+  echo "ERROR: PG_PASS unset AND loopzero-db-credentials Secret missing in $NAMESPACE" >&2
+  echo "       Run generate-secrets.sh first OR set PG_PASS env var" >&2
+  exit 1
+fi
 PG_DB="${PG_DB:-loopzero}"
 PG_HOST="${PG_HOST:-postgresql.${NAMESPACE}.svc.cluster.local}"
 PG_PORT="${PG_PORT:-5432}"

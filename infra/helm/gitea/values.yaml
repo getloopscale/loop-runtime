@@ -4,7 +4,7 @@
 gitea:
   admin:
     username: gitea_admin
-    password: loopzero-gitea-dev-2026  # LOCAL DEV ONLY — matches provision-api-tokens.sh defaults
+    password: ""  # T1.3: empty → Gitea generates random admin password at first start; helmfile inline `--set gitea.admin.password=$LOOPZERO_GITEA_ADMIN_PASSWORD` OR --values override. See docs/operations/credentials-required.md.
     email: admin@loopzero.local
   livenessProbe:
     enabled: true
@@ -16,7 +16,7 @@ gitea:
       HOST: postgresql.loopzero-system.svc.cluster.local:5432
       NAME: gitea
       USER: loopzero
-      PASSWD: loopzero-dev-password  # LOCAL DEV ONLY — override for production
+      PASSWD: ""  # T1.3: empty → Gitea startup fails fast with explicit DB auth error; override via helmfile inline or --set gitea.config.database.PASSWD=$LOOPZERO_DB_PASSWORD
       SSL_MODE: disable
       MAX_OPEN_CONNS: "8"        # Bug #44 HA: 8 pods × 8 = 64 conns — under DO PG default 50 headroom
       MAX_IDLE_CONNS: "4"

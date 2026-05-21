@@ -10,8 +10,10 @@ kratos:
     type: initContainer
 
   config:
-    # DSN — overridden by Pulumi in production (managed PostgreSQL)
-    dsn: "postgres://loopzero:loopzero-dev-password@postgresql.loopzero-system.svc.cluster.local:5432/kratos?sslmode=disable"
+    # T1.3 (plan 2026-05-21-deep-review-remediation): DSN templated via helmfile
+    # env. LOOPZERO_DB_PASSWORD required (set by task setup OR generate-secrets.sh).
+    # Pulumi prod overrides this entire DSN via Secret reference.
+    dsn: "postgres://loopzero:{{ requiredEnv \"LOOPZERO_DB_PASSWORD\" }}@postgresql.loopzero-system.svc.cluster.local:5432/kratos?sslmode=disable"
 
     # --- Identity ---
     identity:

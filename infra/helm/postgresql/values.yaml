@@ -16,7 +16,7 @@ image:
 
 auth:
   username: loopzero
-  password: loopzero-dev-password  # LOCAL DEV ONLY — override for production
+  password: ""  # T1.3 (plan 2026-05-21-deep-review-remediation): empty triggers Bitnami chart fail-fast; helmfile inline override OR --set auth.password=$LOOPZERO_DB_PASSWORD required. See docs/operations/credentials-required.md.
   database: loopzero
 
 # Create additional databases required by platform components.

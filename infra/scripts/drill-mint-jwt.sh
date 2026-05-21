@@ -171,7 +171,11 @@ else
   PG_PASS_INCLUSTER=$(kubectl --kubeconfig "$DRILL_KUBECONFIG" -n "$NS_LOOPZERO" \
     get secret loopzero-db-credentials -o jsonpath='{.data.password}' 2>/dev/null | base64 -d || true)
   if [[ -z "$PG_PASS_INCLUSTER" ]]; then
-    PG_PASS_INCLUSTER="loopzero-dev-password"
+    # T1.3: fail-fast — drill MUST have loopzero-db-credentials reconciled
+    # before JWT minting. If empty, helmfile bootstrap incomplete.
+    echo "ERROR: loopzero-db-credentials.password missing in drill mgmt cluster (ns=$NS_LOOPZERO)" >&2
+    echo "       Run drill-helmfile-bootstrap.sh first OR re-check Pulumi outputs." >&2
+    exit 1
   fi
   run_psql() {
     kubectl --kubeconfig "$DRILL_KUBECONFIG" -n "$NS_LOOPZERO" exec "$PG_POD" -c postgresql -- \

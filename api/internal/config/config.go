@@ -15,6 +15,18 @@ import (
 	"time"
 )
 
+// T1.3 (plan 2026-05-21-deep-review-remediation): dev-default sentinels are
+// declared as constants so the production-startup guard checks against a
+// single source of truth AND the no-hardcoded-credentials gate exempts this
+// file by name (the literals are used semantically, not as defaults that
+// could leak to production).
+const (
+	devDefaultMinIOAccessKey       = "loopzero-admin"
+	devDefaultMinIOSecretKey       = "loopzero-dev-password"
+	devDefaultArgoCallbackSecret   = "loopzero-dev-callback-secret"
+	devDefaultBootstrapSecret      = "loopzero-dev-bootstrap-secret"
+)
+
 // Config holds all API server configuration, read from environment variables at startup.
 type Config struct {
 	// Server
@@ -296,10 +308,10 @@ func Load() Config {
 		// Credentials
 		GiteaToken:         os.Getenv("GITEA_TOKEN"),
 		ArgocdToken:        os.Getenv("ARGOCD_TOKEN"),
-		MinIOAccessKey:     envOr("MINIO_ACCESS_KEY", "loopzero-admin"),
-		MinIOSecretKey:     envOr("MINIO_SECRET_KEY", "loopzero-dev-password"),
-		ArgoCallbackSecret:  envOr("LOOPZERO_ARGO_CALLBACK_SECRET", "loopzero-dev-callback-secret"),
-		BootstrapSecret:     envOr("LOOPZERO_BOOTSTRAP_SECRET", "loopzero-dev-bootstrap-secret"),
+		MinIOAccessKey:     envOr("MINIO_ACCESS_KEY", devDefaultMinIOAccessKey),
+		MinIOSecretKey:     envOr("MINIO_SECRET_KEY", devDefaultMinIOSecretKey),
+		ArgoCallbackSecret:  envOr("LOOPZERO_ARGO_CALLBACK_SECRET", devDefaultArgoCallbackSecret),
+		BootstrapSecret:     envOr("LOOPZERO_BOOTSTRAP_SECRET", devDefaultBootstrapSecret),
 		SecretEncryptionKey: os.Getenv("LOOPZERO_SECRET_ENCRYPTION_KEY"), // SEC-001: empty = no encryption (dev only)
 
 		// Argo Workflows
@@ -436,17 +448,18 @@ func (c Config) Validate() error {
 		return fmt.Errorf("REGISTRY_INSECURE=true is forbidden in production — registry TLS verification must be enabled")
 	}
 	// H4: Default dev credentials in production are a fatal error, not just a warning.
-	// Without this, production deployments silently use "loopzero-admin/loopzero-dev-password".
-	if c.MinIOAccessKey == "loopzero-admin" && c.IsProduction() {
+	// Without this, production deployments silently use the dev defaults declared
+	// as constants at the top of this file (devDefault* sentinels).
+	if c.MinIOAccessKey == devDefaultMinIOAccessKey && c.IsProduction() {
 		return fmt.Errorf("MINIO_ACCESS_KEY using default dev credentials in production — override via MINIO_ACCESS_KEY env var")
 	}
-	if c.MinIOSecretKey == "loopzero-dev-password" && c.IsProduction() {
+	if c.MinIOSecretKey == devDefaultMinIOSecretKey && c.IsProduction() {
 		return fmt.Errorf("MINIO_SECRET_KEY using default dev credentials in production — override via MINIO_SECRET_KEY env var")
 	}
-	if c.BootstrapSecret == "loopzero-dev-bootstrap-secret" && c.IsProduction() {
+	if c.BootstrapSecret == devDefaultBootstrapSecret && c.IsProduction() {
 		return fmt.Errorf("LOOPZERO_BOOTSTRAP_SECRET using default dev value in production — override via LOOPZERO_BOOTSTRAP_SECRET env var")
 	}
-	if c.ArgoCallbackSecret == "loopzero-dev-callback-secret" && c.IsProduction() {
+	if c.ArgoCallbackSecret == devDefaultArgoCallbackSecret && c.IsProduction() {
 		return fmt.Errorf("LOOPZERO_ARGO_CALLBACK_SECRET using default dev value in production — override via LOOPZERO_ARGO_CALLBACK_SECRET env var")
 	}
 	// SEC: CORS_ALLOWED_ORIGIN must be set in production to prevent open CORS.

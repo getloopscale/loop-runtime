@@ -137,7 +137,11 @@ if [[ -z "${LOOPZERO_DB_HOST:-}" ]]; then
   LOOPZERO_DB_PORT="5432"
   LOOPZERO_DB_USER="${LOOPZERO_DB_USER:-loopzero}"
   LOOPZERO_DB_NAME="${LOOPZERO_DB_NAME:-loopzero}"
-  LOOPZERO_DB_PASSWORD="${LOOPZERO_DB_PASSWORD:-loopzero-dev-password}"
+  # T1.3 (plan 2026-05-21-deep-review-remediation): no hardcoded fallback.
+  # Get-or-generate from existing K8s Secret OR fail fast with named missing var.
+  # If LOOPZERO_DB_PASSWORD is set in env, use it; else read from loopzero-db-credentials
+  # Secret; else generate a fresh random value (32 bytes openssl).
+  LOOPZERO_DB_PASSWORD="${LOOPZERO_DB_PASSWORD:-$(get_or_generate loopzero-db-credentials loopzero-system password)}"
   DB_SSLMODE="disable"
   log "B33: standalone fallback — DB at $LOOPZERO_DB_HOST (sslmode=disable)"
 else

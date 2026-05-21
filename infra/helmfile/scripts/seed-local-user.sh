@@ -71,9 +71,11 @@ fi
 # 2) DB password from Secret.
 PGPASS=$(kubectl --context "$SEED_CTX" -n "$NS_LOOPZERO" get secret loopzero-db-credentials -o jsonpath='{.data.password}' 2>/dev/null | base64 -d)
 if [[ -z "$PGPASS" ]]; then
-  # Fallback to default (helmfile generated standalone password).
-  PGPASS="loopzero-dev-password"
-  log "warn: loopzero-db-credentials.password missing — falling back to default"
+  # T1.3 (plan 2026-05-21-deep-review-remediation): fail-fast instead of
+  # hardcoded fallback. loopzero-db-credentials must exist BEFORE seed runs —
+  # generate-secrets.sh in bootstrap:standalone creates it.
+  log "error: loopzero-db-credentials.password missing in $NS_LOOPZERO — run generate-secrets.sh first OR set LOOPZERO_DB_PASSWORD env var before task setup"
+  exit 1
 fi
 
 run_psql() {

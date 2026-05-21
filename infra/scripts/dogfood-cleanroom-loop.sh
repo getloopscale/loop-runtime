@@ -283,7 +283,16 @@ phase_dogfood() {
     return 50
   fi
   log "PG port-forward up on localhost:${PG_PF_PORT} (PID=$PF_PID)"
-  local PG_URL="postgres://loopzero:loopzero-dev-password@127.0.0.1:${PG_PF_PORT}/loopzero?sslmode=disable"
+  # T1.3 (plan 2026-05-21-deep-review-remediation): read PG password from
+  # K8s Secret (canonical SoT). No hardcoded fallback.
+  local PG_PASS
+  PG_PASS=$(kubectl -n loopzero-system get secret loopzero-db-credentials -o jsonpath='{.data.password}' 2>/dev/null | base64 -d)
+  if [[ -z "$PG_PASS" ]]; then
+    log_err "phase_dogfood: loopzero-db-credentials.password missing in loopzero-system — run generate-secrets.sh first"
+    kill $PF_PID 2>/dev/null || true
+    return 50
+  fi
+  local PG_URL="postgres://loopzero:${PG_PASS}@127.0.0.1:${PG_PF_PORT}/loopzero?sslmode=disable"
   # NOTE on JWT expiry in Phase 6 (do NOT re-add the seed-local-user.sh
   # re-mint that was reverted on 2026-05-13):
   #

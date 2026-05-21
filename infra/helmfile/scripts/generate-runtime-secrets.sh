@@ -115,8 +115,11 @@ if [[ -z "$S3_KEY" || -z "$S3_SECRET" ]]; then
   if [[ "${LOOPZERO_PROFILE:-${ENV:-}}" == *standalone* ]]; then
     # Standalone uses MinIO root creds (helm/minio/values.yaml defaults).
     # Real production never hits this branch.
-    S3_KEY="${S3_KEY:-loopzero-admin}"
-    S3_SECRET="${S3_SECRET:-loopzero-dev-password}"
+    # T1.3: pull credentials from minio-credentials Secret if it exists
+    # (created by generate-secrets.sh earlier in the bootstrap chain), else
+    # generate fresh random values. No hardcoded literal.
+    S3_KEY="${S3_KEY:-$(kubectl -n loopzero-system get secret minio-credentials -o jsonpath='{.data.accesskey}' 2>/dev/null | base64 -d 2>/dev/null || openssl rand -hex 8)}"
+    S3_SECRET="${S3_SECRET:-$(kubectl -n loopzero-system get secret minio-credentials -o jsonpath='{.data.secretkey}' 2>/dev/null | base64 -d 2>/dev/null || openssl rand -base64 24 | tr -d '/+=')}"
     log "B82: standalone fallback — using MinIO root credentials for static-assets-s3"
   else
     log "WARNING: static-assets-s3 credentials missing — static frontend delivery will fail"

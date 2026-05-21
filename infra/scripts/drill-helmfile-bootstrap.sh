@@ -761,7 +761,16 @@ kubectl -n loopzero-system port-forward svc/gitea-http 13030:3000 >/tmp/drill-gi
 GPF=$!
 sleep 4
 GITEA_USER="${GITEA_ADMIN_USER:-gitea_admin}"
-GITEA_PASS="${GITEA_ADMIN_PASS:-loopzero-gitea-dev-2026}"
+# T1.3 (plan 2026-05-21-deep-review-remediation): no hardcoded fallback.
+# In drill, GITEA_ADMIN_PASS MUST be set in env (drill-l2-scale workflow
+# injects it from gitea-admin Secret minted earlier in the chain).
+# Read from K8s Secret if env unset, else fail fast.
+GITEA_PASS="${GITEA_ADMIN_PASS:-$(kubectl -n loopzero-system get secret gitea-admin -o jsonpath='{.data.password}' 2>/dev/null | base64 -d || true)}"
+if [[ -z "$GITEA_PASS" ]]; then
+  echo "ERROR: GITEA_ADMIN_PASS unset AND gitea-admin Secret missing" >&2
+  echo "       Run generate-secrets.sh first OR set GITEA_ADMIN_PASS env var" >&2
+  exit 1
+fi
 # Ensure loopzero org (idempotent)
 curl -s -X POST "http://localhost:13030/api/v1/orgs" -u "${GITEA_USER}:${GITEA_PASS}" \
   -H "Content-Type: application/json" \

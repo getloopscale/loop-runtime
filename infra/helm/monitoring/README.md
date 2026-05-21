@@ -217,7 +217,7 @@ Shows three sections: Prometheus targets (with last scrape time), active alerts,
 
 | UI | URL | Credentials |
 |----|-----|-------------|
-| Grafana | `http://localhost:3002` | admin / loopzero-dev-password |
+| Grafana | `http://localhost:3002` | admin / `kubectl -n monitoring get secret grafana -o jsonpath='{.data.admin-password}' \| base64 -d` (T1.3: chart-generated random) |
 | Prometheus | `http://localhost:9090` | — |
 | Alertmanager | `http://localhost:30093` | — |
 

@@ -4,7 +4,7 @@
 mode: standalone
 
 rootUser: loopzero-admin
-rootPassword: loopzero-dev-password  # LOCAL DEV ONLY — override for production
+rootPassword: ""  # T1.3: empty triggers MinIO fail-fast; override via helmfile env or --set
 
 livenessProbe:
   enabled: true
