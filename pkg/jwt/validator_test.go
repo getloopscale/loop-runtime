@@ -1165,3 +1165,47 @@ func TestValidator_WithCircuitBreaker_ServesCachedKeysWhenOpen(t *testing.T) {
 		t.Errorf("expected stale-cache fallback to validate token; got: %v", err)
 	}
 }
+
+// Coverage push (Plan 2026-05-21 v1.1 T4.2): close validateWithSecret
+// "unexpected signing method" branch.
+//
+// TestSessionTokenIssuer_RejectsNonHMACSignedToken — tokens signed with
+// a non-HMAC algorithm (e.g., RSA) must be rejected by the keyfunc
+// type-assertion check. Closes validateWithSecret coverage gap.
+func TestSessionTokenIssuer_RejectsNonHMACSignedToken(t *testing.T) {
+	rsaKey, err := rsa.GenerateKey(rand.Reader, 2048)
+	if err != nil {
+		t.Fatalf("generate RSA key: %v", err)
+	}
+	now := time.Now()
+	token := goJWT.NewWithClaims(goJWT.SigningMethodRS256, &SessionClaims{
+		Email: "test@example.com",
+		RegisteredClaims: goJWT.RegisteredClaims{
+			Subject:   "test-user",
+			Issuer:    "test-issuer",
+			Audience:  goJWT.ClaimStrings{"test-audience"},
+			ExpiresAt: goJWT.NewNumericDate(now.Add(1 * time.Hour)),
+		},
+	})
+	rsaSigned, err := token.SignedString(rsaKey)
+	if err != nil {
+		t.Fatalf("sign RSA: %v", err)
+	}
+
+	issuer := NewSessionTokenIssuer("hmac-secret-bytes-bytes-bytes-32!", "test-issuer", "test-audience", time.Hour)
+	_, err = issuer.ValidateSession(rsaSigned)
+	if err == nil {
+		t.Fatal("expected validation to fail for RSA-signed token against HMAC issuer")
+	}
+}
+
+// TestSessionTokenIssuer_RejectsMalformedToken — garbage token triggers
+// ParseWithClaims error path before keyfunc runs, covering error branch
+// in validateWithSecret.
+func TestSessionTokenIssuer_RejectsMalformedToken(t *testing.T) {
+	issuer := NewSessionTokenIssuer("hmac-secret-bytes-bytes-bytes-32!", "test-issuer", "test-audience", time.Hour)
+	_, err := issuer.ValidateSession("not.a.valid.jwt.at.all")
+	if err == nil {
+		t.Fatal("expected malformed token to fail validation")
+	}
+}
