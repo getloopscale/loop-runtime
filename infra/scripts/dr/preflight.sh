@@ -41,6 +41,25 @@
 
 set -euo pipefail
 
+# T2.2-followup (plan 2026-05-21-deep-review-remediation): adopt the shared
+# dry-run lib. preflight.sh itself performs zero destructive operations
+# (only read-only pulumi stack ls + grep), but it is the canonical entry-
+# point that operators invoke BEFORE `task drill:l2-scale` (which writes
+# state via Pulumi up + helmfile sync). Accepting `--dry-run` here lets
+# the operator pipeline preview end-to-end intent before any DO billing
+# starts. When DRY_RUN=1, all 4 checks still execute (they are read-only
+# diagnostics) but the verdict line names the dry-run mode explicitly so
+# downstream automation knows to propagate the flag to drill:l2-scale.
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+# shellcheck source=../lib/dry-run.sh disable=SC1091
+source "$SCRIPT_DIR/../lib/dry-run.sh"
+parse_dry_run_flag "$@"
+if [ "${#REMAINING_ARGS[@]}" -gt 0 ]; then
+  set -- "${REMAINING_ARGS[@]}"
+else
+  set --
+fi
+
 # --- Argument parsing ---
 JSON_OUT=false
 
@@ -52,6 +71,9 @@ while [[ $# -gt 0 ]]; do
 drill-preflight.sh — Operator Phase 4 pre-flight consolidator
 
   --json       JSON output (machine-readable for CI/CD)
+  --dry-run    Mark verdict as DRY-RUN preview (checks still run — they are
+               read-only diagnostics; downstream `task drill:l2-scale` must
+               also receive --dry-run to stay non-destructive)
   -h, --help   Show this help
 
 Plan: 2026-05-16-drill-l2-unlock operator handoff
@@ -319,7 +341,11 @@ fi
 # --- Aggregate verdict ---
 if [[ "$EXIT_CODE" -eq 0 ]]; then
   VERDICT="PASS"
-  NEXT_ACTION="Operator may proceed: 'task drill:l2-scale'"
+  if [[ "${DRY_RUN:-0}" == "1" ]]; then
+    NEXT_ACTION="DRY-RUN preview OK. To actually provision: rerun WITHOUT --dry-run, then 'task drill:l2-scale'"
+  else
+    NEXT_ACTION="Operator may proceed: 'task drill:l2-scale'"
+  fi
 else
   VERDICT="FAIL"
   NEXT_ACTION="Fix failing checks before invoking drill Phase 4"
