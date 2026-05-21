@@ -122,9 +122,23 @@ export const runtimeClusterEndpoint = infra.runtimeCluster.endpoint;
 export const runtimeKubeconfig = pulumi.secret(infra.runtimeCluster.kubeconfig);
 
 // Runtime cluster (cell-2) — physically provisioned, activation handled at L2.
-export const runtime2ClusterName = infra.runtimeCluster2.clusterName;
-export const runtime2ClusterEndpoint = infra.runtimeCluster2.endpoint;
-export const runtime2Kubeconfig = pulumi.secret(infra.runtimeCluster2.kubeconfig);
+// T7.5 (plan 2026-05-21-deep-review-remediation): align with pulumi-drill
+// convention. pulumi-drill exports `runtimeCluster2{Id,Name,Endpoint,
+// Kubeconfig}` (Naming ADR Rule 2: no numeric suffix without semantic
+// context — `Cluster` provides the context). Renamed canonical exports
+// to match; OLD `runtime2*` names retained as aliases for one release
+// window per EC-04 mandatory (pulumi-output.sh suppresses stderr — silent
+// failures if a consumer reads a missing key during migration).
+export const runtimeCluster2Name = infra.runtimeCluster2.clusterName;
+export const runtimeCluster2Endpoint = infra.runtimeCluster2.endpoint;
+export const runtimeCluster2Kubeconfig = pulumi.secret(infra.runtimeCluster2.kubeconfig);
+
+// EC-04 backward-compat aliases — DELETE in subsequent PR after consumer
+// scripts (drill-helmfile-bootstrap.sh + lib/pulumi-output.sh) are
+// confirmed to read the canonical names.
+export const runtime2ClusterName = runtimeCluster2Name;
+export const runtime2ClusterEndpoint = runtimeCluster2Endpoint;
+export const runtime2Kubeconfig = runtimeCluster2Kubeconfig;
 
 // Database
 export const dbHost = infra.database.privateHost;
