@@ -106,10 +106,8 @@ github.com/stretchr/testify v1.3.0/go.mod h1:M5WIy9Dh21IEIfnGCwXGc5bZfKNJtfHm1UV
 github.com/stretchr/testify v1.7.0/go.mod h1:6Fq8oRcR53rry900zMqJjRRixrwX3KX962/h/Wwjteg=
 github.com/stretchr/testify v1.11.1 h1:7s2iGBzp5EwR7/aIZr8ao5+dra3wiQyKjjFuvgVKu7U=
 github.com/stretchr/testify v1.11.1/go.mod h1:wZwfW3scLgRK+23gO65QZefKpKQRnfz6sD981Nm4B6U=
-github.com/getloopscale/loopzero-forge v0.4.1-0.20260520173502-87c647f0c071 h1:P6IedL5gQqz+iUZyIlW9BoM5X1oj/pReZbZcNhk9ZZI=
-github.com/getloopscale/loopzero-forge v0.4.1-0.20260520173502-87c647f0c071/go.mod h1:P3ldWSYV9Say0dTlWpg+yUnaiBTRP3kXGulZdAduZVI=
-github.com/getloopscale/loopzero-forge v0.4.1-0.20260520232709-c649e041f06e h1:WxX0yq9b2lGO8nUbx3OvYl+csfLL/ovunvLgib9DdxQ=
-github.com/getloopscale/loopzero-forge v0.4.1-0.20260520232709-c649e041f06e/go.mod h1:P3ldWSYV9Say0dTlWpg+yUnaiBTRP3kXGulZdAduZVI=
+github.com/getloopscale/loopzero-forge v0.5.1 h1:Qaa8QlOODu2tlIAM54itKDjGbrg0jEdRUx38fKZiPqU=
+github.com/getloopscale/loopzero-forge v0.5.1/go.mod h1:P3ldWSYV9Say0dTlWpg+yUnaiBTRP3kXGulZdAduZVI=
 github.com/x448/float16 v0.8.4 h1:qLwI1I70+NjRFUR3zs1JPUCgaCXSh3SW62uAKT1mSBM=
 github.com/x448/float16 v0.8.4/go.mod h1:14CWIYCyZA/cWjXOioeEpHeN/83MdbZDRQHoFcYsOfg=
 github.com/yuin/gopher-lua v1.1.1 h1:kYKnWBjvbNP4XLT3+bPEwAXJx262OhaHDWDVOPjL46M=

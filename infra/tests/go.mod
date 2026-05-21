@@ -118,7 +118,7 @@ require (
 	github.com/tklauser/numcpus v0.10.0 // indirect
 	github.com/urfave/cli v1.22.16 // indirect
 	github.com/loopzero/loopzero/pkg v0.0.0 // indirect
-	github.com/getloopscale/loopzero-forge v0.4.1-0.20260520173502-87c647f0c071 // indirect
+	github.com/getloopscale/loopzero-forge v0.5.1 // indirect
 	github.com/virtuald/go-ordered-json v0.0.0-20170621173500-b18e6e673d74 // indirect
 	github.com/x448/float16 v0.8.4 // indirect
 	github.com/yusufpapurcu/wmi v1.2.4 // indirect

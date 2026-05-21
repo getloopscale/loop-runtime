@@ -302,8 +302,8 @@ github.com/tklauser/numcpus v0.10.0/go.mod h1:BiTKazU708GQTYF4mB+cmlpT2Is1gLk7XV
 github.com/urfave/cli v1.22.2/go.mod h1:Gos4lmkARVdJ6EkW0WaNv/tZAAMe9V7XWyB60NtXRu0=
 github.com/urfave/cli v1.22.16 h1:MH0k6uJxdwdeWQTwhSO42Pwr4YLrNLwBtg1MRgTqPdQ=
 github.com/urfave/cli v1.22.16/go.mod h1:EeJR6BKodywf4zciqrdw6hpCPk68JO9z5LazXZMn5Po=
-github.com/getloopscale/loopzero-forge v0.4.1-0.20260520173502-87c647f0c071 h1:P6IedL5gQqz+iUZyIlW9BoM5X1oj/pReZbZcNhk9ZZI=
-github.com/getloopscale/loopzero-forge v0.4.1-0.20260520173502-87c647f0c071/go.mod h1:P3ldWSYV9Say0dTlWpg+yUnaiBTRP3kXGulZdAduZVI=
+github.com/getloopscale/loopzero-forge v0.5.1 h1:Qaa8QlOODu2tlIAM54itKDjGbrg0jEdRUx38fKZiPqU=
+github.com/getloopscale/loopzero-forge v0.5.1/go.mod h1:P3ldWSYV9Say0dTlWpg+yUnaiBTRP3kXGulZdAduZVI=
 github.com/virtuald/go-ordered-json v0.0.0-20170621173500-b18e6e673d74 h1:JwtAtbp7r/7QSyGz8mKUbYJBg2+6Cd7OjM8o/GNOcVo=
 github.com/virtuald/go-ordered-json v0.0.0-20170621173500-b18e6e673d74/go.mod h1:RmMWU37GKR2s6pgrIEB4ixgpVCt/cf7dnJv3fuH1J1c=
 github.com/x448/float16 v0.8.4 h1:qLwI1I70+NjRFUR3zs1JPUCgaCXSh3SW62uAKT1mSBM=

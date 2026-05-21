@@ -7,6 +7,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+### Changed
+- Bumped `github.com/getloopscale/loopzero-forge` from pseudo-version `v0.4.1-0.20260520232709-c649e041f06e` to stable tag `v0.5.1` in `api/go.mod` and `infra/tests/go.mod`. v0.5.1 packages the `NewRetryOnFailure` factory and `ResourcesTiny/Small/Medium` presets that LoopZero Cloud already consumes across 67 call sites in `api/internal/argo/`. Stable tag removes pseudo-version churn and gives Renovate/Dependabot a clean baseline.
+
 ### Added
 - **Infra Standardization Plan v1.2 — substantial engineering progress** (plan `2026-05-20-infra-standardization-and-secrets-plan.md` v1.2, sponsor ratified "Eu ratifico" 2026-05-20T13:30Z via `MEET-2026-05-20-infra-standardization.md`). Session 2026-05-20 delivered 25 commits across 6/8 phases (#infra-standardization-2026-05-20):
   - **Phase 0 — Governance**: 9 ADRs (D1-D9) ratified + MEET record + strategy deep-research doc
