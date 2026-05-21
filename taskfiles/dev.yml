@@ -561,6 +561,15 @@ tasks:
     cmds:
       - bash infra/scripts/clean-incremental.sh
 
+  teardown:
+    desc: |
+      Alias for clean:all (T5.7 of plan 2026-05-21-deep-review-remediation).
+      Some skill docs + onboarding flows expect `task teardown` as the
+      destructive reset command; this alias prevents "task teardown does
+      not exist" UX bug (per to-plan SKILL.md T0.3).
+    cmds:
+      - task: clean:all
+
   clean:all:
     desc: Full teardown — delete clusters, registry, and all artifacts
     cmds:
