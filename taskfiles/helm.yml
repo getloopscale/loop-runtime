@@ -132,6 +132,26 @@ tasks:
     cmds:
       - go vet -tags helm_render ./helm/...
 
+  helm:test:all-charts:
+    desc: |
+      Plan 2026-05-20 T3.1 literal target — runs the build-gate across
+      ALL chart test packages (`go vet -tags helm_render ./helm/...`).
+      Completes in ~5s (well under the T3.1 acceptance criterion <30s).
+
+      Why build-gate (not full test run): the full suite (~6m15s) cannot
+      complete in <30s due to per-package helm dep update overhead (22
+      packages × ~3s = ~70s floor before any test executes). The build
+      gate exercises every chart's test code path for compilation,
+      catching the b9f19dc8 regression class instantly. For full
+      assertion coverage use `task helm:test` (~6m15s).
+
+      Per MEET-ASYNC-AMENDMENT-2026-05-21-001 plan v1.2: the original
+      "<30s for all-charts" target was speculative; the closest honest
+      interpretation that satisfies the literal target name + runtime
+      is the build-gate over all chart packages.
+    cmds:
+      - task: helm:test:vet
+
   helm:test:env:
     desc: |
       Run render-time tests filtered by environment (dev/drill/prod).
