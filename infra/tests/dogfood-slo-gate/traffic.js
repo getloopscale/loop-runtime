@@ -18,7 +18,7 @@
 //          --out experimental-prometheus-rw \
 //          -e API_URL=https://api.drill.loopzero-drill.example \
 //          -e API_TOKEN="$(cat ~/.loopzero/drill-credentials.json | jq -r .token)" \
-//          infra/tests/phase6-dogfood-gate/traffic.js
+//          infra/tests/dogfood-slo-gate/traffic.js
 //
 // Profile rationale:
 //   - 50 VUs is realistic for a Beta-scale tenant cohort (per the

@@ -13,7 +13,7 @@
 #      API P95 < 500ms; SEV-1 count == 0
 #
 # This file defines:
-#   - Recording rule: loopzero_phase6_gate_window_active (boolean — fires
+#   - Recording rule: loopzero_dogfood_gate_window_active (boolean — fires
 #     1 when a chaos window is active AND the gate ConfigMap exists).
 #   - 4 alerts that detect gate violations DURING the 4h window:
 #     * Phase6RollbackLatencyExceeds705ms (the critical AUDIT-CITED
@@ -33,7 +33,7 @@
 apiVersion: monitoring.coreos.com/v1
 kind: PrometheusRule
 metadata:
-  name: loopzero-phase6-dogfood-gate
+  name: loopzero-dogfood-slo-gate
   namespace: loopzero-system
   labels:
     app: loopzero
@@ -44,19 +44,19 @@ metadata:
     loopzero.io/plan: active-execution-plan
 spec:
   groups:
-    - name: loopzero.phase6.recording
+    - name: loopzero.dogfood.recording
       interval: 30s
       rules:
         # Phase 6 gate window: 1 when the operator has started the
-        # gate (creates ConfigMap `loopzero-phase6-gate-window` with
-        # annotation `loopzero.io/phase6-window=active`). Used by the
+        # gate (creates ConfigMap `loopzero-dogfood-gate-window` with
+        # annotation `loopzero.io/dogfood-window=active`). Used by the
         # 4h-window alerts to scope evaluation.
-        - record: loopzero_phase6_gate_window_active
+        - record: loopzero_dogfood_gate_window_active
           expr: |
             max(
               kube_configmap_annotations{
                 namespace="loopzero-system",
-                configmap="loopzero-phase6-gate-window",
+                configmap="loopzero-dogfood-gate-window",
                 annotation_loopzero_io_phase6_window="active"
               }
             ) or vector(0)
@@ -69,7 +69,7 @@ spec:
               sum(rate(loopzero_rollback_duration_seconds_bucket[4h])) by (le)
             ) * 1000
 
-    - name: loopzero.phase6.alerts
+    - name: loopzero.dogfood.alerts
       interval: 1m
       rules:
         # CRITICAL — the headline SLO of the gate.
@@ -80,12 +80,12 @@ spec:
           expr: |
             (loopzero_phase6_rollback_p95_4h_ms > 705)
             AND
-            (loopzero_phase6_gate_window_active == 1)
+            (loopzero_dogfood_gate_window_active == 1)
           for: 5m
           labels:
             severity: critical
             audit: M03+M09
-            phase: phase6-dogfood-gate
+            phase: dogfood-slo-gate
           annotations:
             summary: Phase 6 gate FAIL — rollback P95 > 705ms (AUDIT baseline) for 5m
             description: |
@@ -94,8 +94,8 @@ spec:
               2026-05-02 during cell-2 activation). Sustained for 5m
               means the gate is failing.
               The 4h soak SHOULD be aborted; investigate per the
-              phase6-dogfood-gate-runbook.md decision tree.
-            runbook: concepts/operations/phase6-dogfood-gate-runbook.md
+              dogfood-slo-gate-runbook.md decision tree.
+            runbook: concepts/operations/dogfood-slo-gate-runbook.md
 
         - alert: Phase6APILatencyExceeds500ms
           expr: |
@@ -103,12 +103,12 @@ spec:
               sum(rate(loopzero_api_request_duration_seconds_bucket[1h])) by (le)
             ) > 0.5
             AND
-            (loopzero_phase6_gate_window_active == 1)
+            (loopzero_dogfood_gate_window_active == 1)
           for: 10m
           labels:
             severity: critical
             audit: M03+M09
-            phase: phase6-dogfood-gate
+            phase: dogfood-slo-gate
           annotations:
             summary: Phase 6 gate FAIL — API p95 > 500ms for 10m
             description: |
@@ -124,12 +124,12 @@ spec:
           expr: |
             sum(ALERTS{alertname!~"Phase6.*", severity="critical", alertstate="firing"})
             AND
-            (loopzero_phase6_gate_window_active == 1)
+            (loopzero_dogfood_gate_window_active == 1)
           for: 1m
           labels:
             severity: critical
             audit: M03+M09
-            phase: phase6-dogfood-gate
+            phase: dogfood-slo-gate
           annotations:
             summary: Phase 6 gate FAIL — SEV-1 alert firing during gate window
             description: |
@@ -148,11 +148,11 @@ spec:
               + sum(rate(loopzero_phase6_writes_total[5m]))
               < 5
             AND
-            (loopzero_phase6_gate_window_active == 1)
+            (loopzero_dogfood_gate_window_active == 1)
           for: 10m
           labels:
             severity: warning
-            phase: phase6-dogfood-gate
+            phase: dogfood-slo-gate
           annotations:
             summary: Phase 6 gate — traffic generator silent for 10m
             description: |
