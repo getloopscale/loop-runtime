@@ -40,6 +40,21 @@
 
 set -euo pipefail
 
+# T2.2-followup (plan 2026-05-21-deep-review-remediation): adopt the
+# shared dry-run lib. Apply wrapper gates each destructive doctl call.
+# Sourcing path uses absolute resolution so script works both when
+# invoked directly + via Taskfile.
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+# shellcheck source=../lib/dry-run.sh disable=SC1091
+source "$SCRIPT_DIR/../lib/dry-run.sh"
+parse_dry_run_flag "$@"
+# Rebuild positional args without --dry-run so downstream code is unchanged.
+if [ "${#REMAINING_ARGS[@]}" -gt 0 ]; then
+  set -- "${REMAINING_ARGS[@]}"
+else
+  set --
+fi
+
 # --- Input validation ---
 if [[ -z "${DIGITALOCEAN_TOKEN:-}" ]]; then
   echo "[drill-teardown-validator] ERROR: DIGITALOCEAN_TOKEN env var required (drill-scoped per D7)" >&2
@@ -117,7 +132,7 @@ if [[ -n "$DOKS_DRILL" ]]; then
     ID=$(echo "$line" | awk '{print $1}')
     NAME=$(echo "$line" | awk '{print $2}')
     log "  Force-deleting DOKS cluster $NAME ($ID)..."
-    if doctl kubernetes cluster delete "$ID" --force --dangerous >/dev/null 2>&1; then
+    if apply doctl kubernetes cluster delete "$ID" --force --dangerous >/dev/null 2>&1; then
       RESIDUAL_DELETED=$((RESIDUAL_DELETED + 1))
       echo "- Force-deleted DOKS $NAME ($ID)" >> "$AUDIT_FILE"
     else
@@ -147,7 +162,7 @@ if [[ -n "$DB_DRILL" ]]; then
     ID=$(echo "$line" | awk '{print $1}')
     NAME=$(echo "$line" | awk '{print $2}')
     log "  Force-deleting managed DB $NAME ($ID)..."
-    if doctl databases delete "$ID" --force >/dev/null 2>&1; then
+    if apply doctl databases delete "$ID" --force >/dev/null 2>&1; then
       RESIDUAL_DELETED=$((RESIDUAL_DELETED + 1))
       echo "- Force-deleted managed DB $NAME ($ID)" >> "$AUDIT_FILE"
     else
@@ -203,7 +218,7 @@ if [[ -n "$VPC_DRILL" ]]; then
           sleep "$delay"
         fi
       fi
-      if doctl vpcs delete "$ID" --force >/dev/null 2>&1; then
+      if apply doctl vpcs delete "$ID" --force >/dev/null 2>&1; then
         VPC_DELETED=true
         break
       fi
