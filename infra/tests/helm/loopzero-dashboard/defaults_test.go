@@ -45,7 +45,7 @@ func TestLoopZeroDashboard_Defaults_DeploymentName(t *testing.T) {
 func TestLoopZeroDashboard_Defaults_StandardHelmLabels(t *testing.T) {
 	t.Parallel()
 	deploy := renderDefaultDeployment(t)
-	labels := deploy.ObjectMeta.Labels
+	labels := deploy.Labels
 	require.Equal(t, "loopzero-dashboard", labels["app.kubernetes.io/name"])
 	require.Equal(t, releaseName, labels["app.kubernetes.io/instance"])
 	require.Equal(t, "Helm", labels["app.kubernetes.io/managed-by"])
@@ -55,7 +55,7 @@ func TestLoopZeroDashboard_Defaults_SelectorMatchesPodLabels(t *testing.T) {
 	t.Parallel()
 	deploy := renderDefaultDeployment(t)
 	selector := deploy.Spec.Selector.MatchLabels
-	podLabels := deploy.Spec.Template.ObjectMeta.Labels
+	podLabels := deploy.Spec.Template.Labels
 	require.NotEmpty(t, selector)
 	for k, v := range selector {
 		require.Equalf(t, v, podLabels[k], "selector[%q] vs pod[%q]", k, k)

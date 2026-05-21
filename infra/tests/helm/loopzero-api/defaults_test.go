@@ -57,25 +57,9 @@ func renderDefaultDeployment(t *testing.T) appsV1.Deployment {
 	return deploy
 }
 
-// renderDefaultService renders loopzero-api Service from deployment.yaml
-// (template emits BOTH Service + Deployment in one file).
-func renderDefaultService(t *testing.T) coreV1.Service {
-	t.Helper()
-
-	chartPath, err := helpers.ChartPath(chartName)
-	require.NoError(t, err)
-
-	opts, err := helpers.NewOptions(chartPath, "")
-	require.NoError(t, err)
-
-	output := helpers.RenderTemplate(t, opts, chartPath, releaseName,
-		[]string{"templates/deployment.yaml"})
-	require.NotEmpty(t, output)
-
-	var svc coreV1.Service
-	helpers.MustUnmarshalK8SYamlByKind(t, output, "Service", &svc)
-	return svc
-}
+// (renderDefaultService removed 2026-05-21 as unused — lint cleanup.
+// The Service kind asserts live in env-specific tests where they're
+// actually exercised; default tests focus on Deployment shape.)
 
 // =============================================================================
 // Category 1: Identity & Labels
@@ -100,7 +84,7 @@ func TestLoopZeroAPI_Defaults_StandardHelmLabels(t *testing.T) {
 	t.Parallel()
 
 	deploy := renderDefaultDeployment(t)
-	labels := deploy.ObjectMeta.Labels
+	labels := deploy.Labels
 
 	require.NotEmpty(t, labels, "deployment must have labels")
 	require.Equal(t, "loopzero-api", labels["app"],
@@ -118,7 +102,7 @@ func TestLoopZeroAPI_Defaults_SelectorMatchesPodLabels(t *testing.T) {
 
 	deploy := renderDefaultDeployment(t)
 	selector := deploy.Spec.Selector.MatchLabels
-	podLabels := deploy.Spec.Template.ObjectMeta.Labels
+	podLabels := deploy.Spec.Template.Labels
 
 	require.NotEmpty(t, selector, "selector.matchLabels must not be empty")
 	require.NotEmpty(t, podLabels, "pod template labels must not be empty")

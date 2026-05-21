@@ -53,7 +53,7 @@ func TestCloudPublished_FullStandardLabels(t *testing.T) {
 		"app.kubernetes.io/version",
 		"app.kubernetes.io/part-of",
 	} {
-		require.NotEmptyf(t, d.ObjectMeta.Labels[key],
+		require.NotEmptyf(t, d.Labels[key],
 			"published variant must emit %q label (loopzero-common library)",
 			key)
 	}

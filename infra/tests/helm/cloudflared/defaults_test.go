@@ -82,6 +82,6 @@ func TestCloudflared_AppLabelMatches(t *testing.T) {
 		d.Spec.Selector.MatchLabels["app"],
 		"selector must target app=cloudflared")
 	require.Equal(t, "cloudflared",
-		d.Spec.Template.ObjectMeta.Labels["app"],
+		d.Spec.Template.Labels["app"],
 		"pod template label must match selector")
 }

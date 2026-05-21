@@ -49,7 +49,7 @@ func TestDefaults_DeploymentName(t *testing.T) {
 func TestDefaults_StandardHelmLabels(t *testing.T) {
 	t.Parallel()
 	d := renderDeployment(t)
-	l := d.ObjectMeta.Labels
+	l := d.Labels
 	require.Equal(t, chartName, l["app.kubernetes.io/name"])
 	require.Equal(t, releaseName, l["app.kubernetes.io/instance"])
 	require.Equal(t, "Helm", l["app.kubernetes.io/managed-by"])
@@ -59,7 +59,7 @@ func TestDefaults_SelectorMatchesPodLabels(t *testing.T) {
 	t.Parallel()
 	d := renderDeployment(t)
 	for k, v := range d.Spec.Selector.MatchLabels {
-		require.Equalf(t, v, d.Spec.Template.ObjectMeta.Labels[k],
+		require.Equalf(t, v, d.Spec.Template.Labels[k],
 			"selector[%q] vs pod[%q] mismatch — orphan ReplicaSet risk", k, k)
 	}
 }

@@ -91,7 +91,7 @@ func TestLoopZeroCloud_Defaults_BootstrapLabels(t *testing.T) {
 	t.Parallel()
 
 	deploy := renderDefaultDeployment(t)
-	labels := deploy.ObjectMeta.Labels
+	labels := deploy.Labels
 
 	require.Equal(t, "loopzero-cloud", labels["app"])
 	require.Equal(t, "loopzero-cloud", labels["loopzero.io/component"])
@@ -105,7 +105,7 @@ func TestLoopZeroCloud_Defaults_SelectorMatchesPodLabels(t *testing.T) {
 
 	deploy := renderDefaultDeployment(t)
 	selector := deploy.Spec.Selector.MatchLabels
-	podLabels := deploy.Spec.Template.ObjectMeta.Labels
+	podLabels := deploy.Spec.Template.Labels
 
 	require.NotEmpty(t, selector)
 	for k, v := range selector {

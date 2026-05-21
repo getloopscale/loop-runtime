@@ -193,7 +193,7 @@ type chartYaml struct {
 //
 // This addresses edge case EC-3 (loopzero-common library chart).
 func IsLibraryChart(chartPath string) (bool, error) {
-	data, err := os.ReadFile(filepath.Join(chartPath, "Chart.yaml"))
+	data, err := os.ReadFile(filepath.Join(chartPath, "Chart.yaml")) //nolint:gosec // chart path is test-controlled (resolved via ChartPath sanity-checked at repo root)
 	if err != nil {
 		return false, fmt.Errorf("read Chart.yaml: %w", err)
 	}
@@ -208,7 +208,7 @@ func IsLibraryChart(chartPath string) (bool, error) {
 // `dependencies:` block in Chart.yaml. Such charts need `helm dep
 // update` before render to populate the local charts/ subdirectory.
 func hasDependencies(chartPath string) (bool, error) {
-	data, err := os.ReadFile(filepath.Join(chartPath, "Chart.yaml"))
+	data, err := os.ReadFile(filepath.Join(chartPath, "Chart.yaml")) //nolint:gosec // chart path is test-controlled (resolved via ChartPath sanity-checked at repo root)
 	if err != nil {
 		return false, fmt.Errorf("read Chart.yaml: %w", err)
 	}
@@ -225,7 +225,7 @@ func hasDependencies(chartPath string) (bool, error) {
 //
 // This addresses edge case EC-2 (charts with dependencies: block).
 func runHelmDepUpdate(chartPath string) error {
-	cmd := exec.Command("helm", "dependency", "update", chartPath)
+	cmd := exec.Command("helm", "dependency", "update", chartPath) //nolint:gosec // chartPath is test-controlled (resolved via ChartPath sanity-checked at repo root)
 	output, err := cmd.CombinedOutput()
 	if err != nil {
 		return fmt.Errorf("helm dep update %s failed: %w\noutput: %s",
@@ -269,7 +269,7 @@ func NewOptions(chartPath, envValuesFile string) (*helm.Options, error) {
 			return nil, fmt.Errorf("env values file not found: %s", absPath)
 		}
 		// Verify plain YAML (no .gotmpl template directives) per D10
-		data, ferr := os.ReadFile(absPath)
+		data, ferr := os.ReadFile(absPath) //nolint:gosec // absPath is test-controlled (env values stub path resolved to repo root)
 		if ferr != nil {
 			return nil, fmt.Errorf("read env values: %w", ferr)
 		}

@@ -67,7 +67,7 @@ func TestPublished_FullStandardLabels(t *testing.T) {
 		"app.kubernetes.io/version",
 		"app.kubernetes.io/part-of",
 	} {
-		require.NotEmptyf(t, d.ObjectMeta.Labels[key],
+		require.NotEmptyf(t, d.Labels[key],
 			"published variant must emit standard label %q "+
 				"(missing = drift toward bootstrap minimal-label style)", key)
 	}
@@ -136,7 +136,7 @@ func TestPublished_ConfigChecksumAnnotation(t *testing.T) {
 	// (otherwise pods would silently run with stale config until manual
 	// delete). Bootstrap variant lacks these annotations.
 	d := renderDeploy(t)
-	ann := d.Spec.Template.ObjectMeta.Annotations
+	ann := d.Spec.Template.Annotations
 	require.NotEmpty(t, ann, "pod template MUST have annotations")
 	require.NotEmptyf(t, ann["checksum/config"],
 		"published variant must annotate pod with checksum/config — "+
