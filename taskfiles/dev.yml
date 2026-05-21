@@ -563,11 +563,27 @@ tasks:
 
   teardown:
     desc: |
-      Alias for clean:all (T5.7 of plan 2026-05-21-deep-review-remediation).
-      Some skill docs + onboarding flows expect `task teardown` as the
-      destructive reset command; this alias prevents "task teardown does
-      not exist" UX bug (per to-plan SKILL.md T0.3).
+      Confirmation-gated alias for clean:all (T5.7 of plan
+      2026-05-21-deep-review-remediation).
+
+      INCIDENT 2026-05-21: a bare alias `teardown → clean:all` was
+      previously committed (62e87834) and SOMETHING in the commit
+      pipeline invoked it, destroying the operator's k3d dev clusters.
+      Root cause not identified. This version requires CONFIRM=yes env
+      var to actually execute clean:all — prevents accidental triggers
+      from automated tooling.
+
+      Usage:
+        CONFIRM=yes task teardown    # actually destructive
+        task teardown                # safe — prints help + exits 1
     cmds:
+      - |
+        if [[ "${CONFIRM:-}" != "yes" ]]; then
+          echo "task teardown requires explicit confirmation."
+          echo "Run: CONFIRM=yes task teardown"
+          echo "(Or use canonical: task clean:all)"
+          exit 1
+        fi
       - task: clean:all
 
   clean:all:
