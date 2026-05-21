@@ -396,3 +396,52 @@ func TestDoubleWrapWithStack_preserves_first_capture(t *testing.T) {
 		t.Errorf("double WrapWithStack lost or replaced first capture")
 	}
 }
+
+// Coverage push (Plan 2026-05-21 v1.1 T4.2): close NotFound constructor gaps.
+
+func TestNewEnvironmentNotFound(t *testing.T) {
+	err := NewEnvironmentNotFound("staging")
+	if err.Code != "ENVIRONMENT_NOT_FOUND" {
+		t.Errorf("Code = %q; want ENVIRONMENT_NOT_FOUND", err.Code)
+	}
+	if !strings.Contains(err.Message, "staging") {
+		t.Errorf("Message %q should mention 'staging'", err.Message)
+	}
+}
+
+func TestNewDomainNotFound(t *testing.T) {
+	err := NewDomainNotFound("example.com")
+	if err.Code != "DOMAIN_NOT_FOUND" {
+		t.Errorf("Code = %q; want DOMAIN_NOT_FOUND", err.Code)
+	}
+	if !strings.Contains(err.Message, "example.com") {
+		t.Errorf("Message %q should mention 'example.com'", err.Message)
+	}
+}
+
+func TestNewRepositoryNotLinked(t *testing.T) {
+	err := NewRepositoryNotLinked("my-project")
+	if err.Code != "REPOSITORY_NOT_LINKED" {
+		t.Errorf("Code = %q; want REPOSITORY_NOT_LINKED", err.Code)
+	}
+	if !strings.Contains(err.Message, "my-project") {
+		t.Errorf("Message %q should mention 'my-project'", err.Message)
+	}
+}
+
+func TestDisplayPlanName_AllValues(t *testing.T) {
+	cases := []struct{ in, want string }{
+		{"starter", "Starter"},
+		{"pro", "Pro"},
+		{"team", "Team"},
+		{"enterprise", "Enterprise"},
+		{"unknown-plan", "unknown-plan"},  // default branch
+		{"", ""},                          // empty defaults
+	}
+	for _, c := range cases {
+		got := displayPlanName(c.in)
+		if got != c.want {
+			t.Errorf("displayPlanName(%q) = %q; want %q", c.in, got, c.want)
+		}
+	}
+}
