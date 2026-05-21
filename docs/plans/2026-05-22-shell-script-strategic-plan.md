@@ -1,11 +1,18 @@
 # Plan: Shell Script Strategic Reduction (269 → <30)
 
-> **Version 1.0** — Reduzir progressivamente o inventário de 269 scripts shell (44,586 LOC)
+> **Version 1.1** — Reduzir progressivamente o inventário de 269 scripts shell (44,586 LOC)
 > para menos de 30 (<3,000 LOC) através de DELEGATION para orchestrators canônicos
 > (helmfile/Tilt/Ginkgo/SDK-native Go), DELETE de dead code, e proibição explícita
 > de novos scripts bash. Esse plano substitui o plano original
 > `2026-05-21-bash-to-go-migration-plan.md` (cuja estratégia "migrar tudo para Go"
 > revelou-se sub-ótima — virava shell-wrap em Go sem ganho real).
+>
+> **v1.1 changelog (2026-05-22 post-edge-case-review):** incorporou 4 MUST FIX edges
+> identificados em `docs/plans/2026-05-22-shell-script-strategic-edge-case-review.md`:
+> - EC-01: T2.3.a (master-sync helmfile para evitar race postgresql↔gitea)
+> - EC-02: T2.3.b (portable base64 — `kubectl -o go-template` em vez de `base64 -d`)
+> - EC-03: T1.1.a (dynamic-invocation grep antes de validation) + T0.1 test
+> - EC-04: T6.2 acceptance criteria + test para shallow clone scenario
 
 ---
 
@@ -304,6 +311,8 @@ RED:     TestProposeDisposition_DeadCode() — 0 callers + last-mod>90d → DELE
 RED:     TestProposeDisposition_HermeticTest() — `X_test.sh` exists, X.sh exists → AUTO-DIE
 RED:     TestProposeDisposition_BareHelmWrapper() — script contains `helm upgrade` → DELEGATE-HELMFILE
 RED:     TestProposeDisposition_PureLogicGate() — script in `check*.sh` pattern → MIGRATE-GO-PUREFN
+RED:     TestProposeDisposition_ScriptWithDynamicCaller_NotMarkedDead() — EC-03: script cujo basename aparece em `bash "$VAR"` em outro arquivo → caller_count >= 1 (não 0). Fixture: scriptA.sh chama `bash "$DIR/scriptB.sh"`; scriptB.sh deve ter scriptA.sh como caller.
+RED:     TestScanRepo_HandlesSymlinks_NoCycle() — EC-07: fixture com symlink `alias.sh -> ../real.sh`; assert (a) script listado UMA vez (não duas), (b) callers de `alias.sh` E `real.sh` consolidados.
 RED:     TestEmitCSV_StableSchema() — output columns: path,loc,last_mod_utc,caller_count,disposition,callers
 RED:     TestEmitCSV_DeterministicOrder() — sorted by path
 
@@ -377,18 +386,36 @@ docs/scripts-audit/2026-05-22-dead-set-validated.csv — (NEW) validated subset
 
 #### Tasks
 1. Filter CSV de T0.1 para `disposition=DELETE-DEAD` → working set
-2. Para cada script, executar validation method acima
-3. Manter `dead-set.md` com decisão fundamentada por script
-4. Produzir `dead-set-validated.csv` com subset confirmado
-5. Submit para review (commit + push, operator review na PR/branch)
+2. **T1.1.a (EC-03 anti-false-positive):** ANTES de marcar qualquer script como confirmed-dead,
+   rodar grep para invocações dinâmicas:
+   ```bash
+   for script in $(awk -F, '$5=="DELETE-DEAD"{print $1}' docs/scripts-audit/2026-05-22.csv); do
+     basename=$(basename "$script")
+     # Procura padrões como: bash "$VAR", source "$DIR/X.sh", bash $(fn)
+     if grep -rE "bash[[:space:]]+[\"\$]|source[[:space:]]+[\"\$]" \
+          --include="*.sh" --include="*.yml" --include="*.gotmpl" infra/ taskfiles/ Taskfile.yml \
+          | grep -q "$basename"; then
+       echo "FALSE-POSITIVE candidate: $script (referenced via interpolation)"
+     fi
+   done
+   ```
+   Qualquer script que apareça em interpolation → re-classify como `REVIEW-NEEDED`, NÃO delete.
+3. Para cada script remanescente, executar validation method acima (git log + docs grep)
+4. Manter `dead-set.md` com decisão fundamentada por script
+5. Produzir `dead-set-validated.csv` com subset confirmado
+6. Submit para review (commit + push, operator review na PR/branch)
 
 #### TDD
 ```
 RED:     N/A — esta task é diagnóstico/análise manual, não tem código pra TDD
+         (o test que cobre o anti-falso-positivo está no T0.1: TestProposeDisposition_ScriptWithDynamicCaller_NotMarkedDead)
 VERIFY:  cat docs/scripts-audit/2026-05-22-dead-set-validated.csv | wc -l
          # esperado: 20-30 scripts (subset conservador)
          git log --oneline -1 -- docs/scripts-audit/2026-05-22-dead-set-validated.csv
          # verifica que existe + tem timestamp
+         # T1.1.a verification:
+         grep -E "REVIEW-NEEDED.*\(interpolation\)" docs/scripts-audit/2026-05-22-dead-set.md
+         # esperado: 0+ entries (qualquer script com dynamic-call reclassificado)
 ```
 
 #### Acceptance Criteria
@@ -669,59 +696,114 @@ taskfiles/infra.yml — rewrite infra:install:mgmt, infra:install:build, infra:i
 - `infra:install:workload`: converter cert-manager + traefik + external-secrets + argo-rollouts
 
 #### Deep Dives
-**Pattern canônico per release:**
+**T2.3.a (EC-01) MASTER-SYNC pattern (mandatory — overrides per-selector default):**
+
+Em fresh cleanroom, `helmfile needs:` só resolve dentro da MESMA invocation helmfile.
+Se postgresql install em invocation A e gitea install em invocation B (separadas com `--selector`),
+o `set: PASSWD` do gitea (que usa `exec kubectl get secret postgresql`) falha porque
+postgresql Secret ainda não existe no momento da resolução do gitea values.
+
+**Pattern OBRIGATÓRIO** — single master sync per cluster:
 ```yaml
-- |
-  export LOOPZERO_DB_PASSWORD=$(kubectl --context {{.MGMT_CONTEXT}} -n loopzero-system \
-    get secret postgresql -o jsonpath='{.data.password}' | base64 -d)
-  helmfile -f infra/helmfile/mgmt.helmfile.yaml.gotmpl \
-    -e standalone-multi \
-    --kube-context {{.MGMT_CONTEXT}} \
-    --selector name=gitea \
-    sync
+infra:install:mgmt:
+  cmds:
+    - |
+      # Single sync — helmfile resolve dependency order via needs:
+      helmfile -f infra/helmfile/mgmt.helmfile.yaml.gotmpl \
+        -e standalone-multi \
+        --kube-context {{.MGMT_CONTEXT}} \
+        sync
 ```
 
-**Optimization opportunity (Phase 2.4):** se TODOS os releases podem rodar via single
-`helmfile sync` (sem `--selector`), reduzir N invocations para 1 master sync.
+Helmfile releases MUST declarar `needs:` explicit:
+```yaml
+- name: postgresql
+  # ... (no needs:)
+- name: gitea
+  needs: [loopzero-system/postgresql]  # garante postgresql Ready antes de gitea sync
+```
+
+**T2.3.b (EC-02) PORTABLE secret extraction (mandatory — substitui `base64 -d`):**
+
+Pattern `kubectl ... | base64 -d` quebra em macOS (BSD `base64` usa `-D` minúsculo errado).
+Substituir por `kubectl -o go-template` (decoded direto, zero pipe):
+
+```yaml
+# WRONG (Linux-only, breaks Mac)
+export LOOPZERO_DB_PASSWORD=$(kubectl ... get secret postgresql -o jsonpath='{.data.password}' | base64 -d)
+
+# RIGHT (portable, Mac+Linux)
+export LOOPZERO_DB_PASSWORD=$(kubectl --context {{.MGMT_CONTEXT}} -n loopzero-system \
+  get secret postgresql -o go-template='{{`{{.data.password | base64decode}}`}}')
+```
+
+Note: o pattern `{{`...`}}` escapa as Go template braces dentro do gotmpl Taskfile.
+Alternativa simpler se Taskfile não tem gotmpl: usar shell heredoc OU `openssl base64 -d -A`.
 
 **Invariants:**
 - Cada release de Taskfile original tem equivalente helmfile invocation
 - LOOPZERO_DB_PASSWORD exportado quando releases que precisam vão rodar
 - Cluster context correto per invocation (mgmt vs build vs workload)
+- **Master sync resolve ordering via `needs:` — NÃO usar --selector que quebra needs**
+- **Secret extraction usa `go-template` ou `openssl` — NÃO `base64 -d` (portability)**
 
 **Edge cases:**
 - Helmfile sync pode timeout em rede lenta → `--timeout` flag
-- Secret postgresql pode não existir no primeiro sync → `needs:` no helmfile resolve
+- Secret postgresql pode não existir no primeiro sync → `needs:` no helmfile resolve **(SE master sync usado per T2.3.a)**
 
 #### Tasks
 1. Backup `taskfiles/infra.yml` (git tracks)
-2. Rewrite `infra:install:mgmt` per pattern acima — UMA invocation per release ou
-   single master sync
-3. Rewrite `infra:install:build` similar
-4. Rewrite `infra:install:workload` similar
-5. Validar local: `task setup` from fresh state (delete clusters, recreate, install)
-6. Commit + push
+2. **T2.3.a (EC-01) — MASTER SYNC:** Rewrite `infra:install:mgmt` para usar SINGLE
+   `helmfile sync` (sem `--selector`) per cluster. Verificar releases declaram `needs:`
+   apropriadamente em `mgmt.helmfile.yaml.gotmpl` (gitea needs postgresql, ory-* needs
+   postgresql, argocd needs Secret, etc.).
+3. **T2.3.b (EC-02) — PORTABLE BASE64:** Substituir TODO `kubectl ... | base64 -d`
+   em `taskfiles/` por `kubectl -o go-template='{{.data.X | base64decode}}'` OU
+   `openssl base64 -d -A`. Verificar via grep que zero ocorrências de `base64 -d`
+   restam em taskfiles/.
+4. Rewrite `infra:install:build` similar (master sync + portable extraction)
+5. Rewrite `infra:install:workload` similar
+6. Validar local: `task setup` from fresh state (delete clusters, recreate, install)
+7. Commit + push
 
 #### TDD
 ```
 RED:     TestTaskfile_NoBareHelmUpgrade_InInstallMgmt — grep 'helm upgrade --install'
          em taskfiles/infra.yml infra:install:mgmt block → exit 1 (none found)
+RED:     TestTaskfile_NoBareBase64Decode_InInstallTargets — EC-02: grep 'base64 -d'
+         em taskfiles/infra.yml install:* blocks → exit 1 (none found)
+RED:     TestTaskfile_UsesMasterHelmfileSync_NoSelector — EC-01: grep 'helmfile.*--selector'
+         em infra:install:mgmt block → exit 1 (zero matches = master sync). Selectors
+         OK em outras tasks operacionais; apenas install blocks são master-sync.
+RED:     TestHelmfile_GiteaNeedsPostgresql — EC-01: parse mgmt.helmfile.yaml.gotmpl,
+         assert gitea release tem postgresql em needs: list.
 GREEN:   Edit replaces
 VERIFY:  task clean:all && task setup
          # PASS criterion: exit 0 + all 4 clusters Running + all helm releases Deployed
+         # T2.3.b portability sanity (run em Mac OR docker linux/amd64):
+         grep -RE 'base64[[:space:]]+-d\b' taskfiles/
+         # esperado: zero matches (zero portabilidade Linux-only)
 ```
 
 #### Acceptance Criteria
 - [ ] Zero `helm upgrade --install` em `infra:install:*` blocks
+- [ ] **EC-01:** `infra:install:mgmt`/`build`/`workload` usam SINGLE master `helmfile sync`
+      (sem `--selector`); ordering resolvido via `needs:` declarations no .gotmpl
+- [ ] **EC-01:** `mgmt.helmfile.yaml.gotmpl` tem `needs:` explícito em gitea+ory-* releases
+      apontando para postgresql
+- [ ] **EC-02:** Zero ocorrências de `base64 -d` em `taskfiles/`; substituições via
+      `kubectl -o go-template` OU `openssl base64 -d -A` (portable)
 - [ ] `task setup` from cold start succeeds (exit 0) em ≤25min
 - [ ] All Bitnami/upstream charts converge primeiro try
 - [ ] LIVE smoke: `kubectl --context k3d-loopzero-mgmt -n loopzero-system get pods` mostra
       gitea/postgresql/minio/argocd/ory-* todos Running
 
 #### DoD
-- [ ] Tasks 1-6 completos
-- [ ] `task setup` PASS LIVE em fresh cluster
+- [ ] Tasks 1-7 completos (incluindo T2.3.a + T2.3.b)
+- [ ] `task setup` PASS LIVE em fresh cluster (Linux mínimo; Mac validation se possível)
 - [ ] Commit + push
+- [ ] EC-01 verificado: `grep -c 'needs:' infra/helmfile/mgmt.helmfile.yaml.gotmpl` ≥ 4
+- [ ] EC-02 verificado: `grep -RE 'base64[[:space:]]+-d\b' taskfiles/` retorna zero matches
 
 ### T2.4 — Validate cleanroom funcional
 
@@ -1154,13 +1236,25 @@ cmd/loopzero-ops/quality_subcmd.go — wire gate
 - `.sh` em `_legacy/` paths: still blocked (forbidden zone)
 - Renamed file (R status): treated as new + old (require allowlist update)
 - Modified existing file (M status): NOT blocked (only A status)
+- **EC-04 shallow clone trap:** `git diff origin/main...HEAD` requer histórico
+  completo da base branch. GitHub Actions default `actions/checkout` é `fetch-depth: 1`
+  (shallow). Sem fetch-depth: 0, base-ref unreachable → diff vira "tudo novo" →
+  gate marca TODOS os scripts allowlistados como violations → CI fica permanentemente
+  vermelho → operadores aprendem a desabilitar gate → D3 fica letra-morta.
+
+**EC-04 mitigation requirements (mandatory):**
+1. Gate detecta unreachable base-ref e falha com erro CLARO (não com 100 falsos positivos)
+2. CI workflow YAML usa `actions/checkout@v4` com `fetch-depth: 0`
+3. Gate documenta no help: "Requires full git history; set fetch-depth: 0 in checkout"
 
 #### Tasks
 1. Implement `parseAllowlist(path string) (map[string]bool, error)`
 2. Implement `Check(cfg Config) (*Outcome, error)` with git diff logic
-3. Wire to `quality nonewbash` subcommand
-4. Add to ci.yml as PR-blocking step
-5. Test: fixture com PR fictício adicionando `.sh` → gate FAIL
+3. **EC-04 pre-flight:** Antes do diff, executar `git rev-parse --verify {baseRef}`;
+   se falha, retornar `LoopZeroError{Code: "BASE_REF_UNREACHABLE", Hint: "Set fetch-depth: 0 in actions/checkout"}`
+4. Wire to `quality nonewbash` subcommand
+5. Add to ci.yml as PR-blocking step **com `fetch-depth: 0` explícito** no checkout
+6. Test: fixture com PR fictício adicionando `.sh` → gate FAIL
 
 #### TDD
 ```
@@ -1168,22 +1262,39 @@ RED:     TestParseAllowlist_ParsesMarkdownTable — fixture allowlist → set wi
 RED:     TestCheck_NewBashWithoutAllowlist_Blocks — fixture diff with new .sh → Pass=false
 RED:     TestCheck_NewBashWithAllowlist_Passes — fixture diff with .sh in allowlist → Pass=true
 RED:     TestCheck_ModifiedExistingBash_NotBlocked — fixture diff with M (not A) → Pass=true
+RED:     TestCheck_ShallowClone_FailsWithClearError — EC-04: simular base-ref unreachable
+         (criar repo com `git clone --depth=1` em tmpdir, rodar gate); assert error.Code==
+         "BASE_REF_UNREACHABLE" + hint mention "fetch-depth: 0". Garante que falha é
+         actionable e NÃO produz 100 falsos positivos silenciosamente.
+RED:     TestCheck_RenamedBashOutsideAllowlist_Blocked — EC-06: fixture diff com
+         `R100 old.sh new.sh` onde new.sh não está em allowlist; assert Pass=false
+         + mensagem ("Rename detected: add 'new.sh' to allowlist OR keep old name")
 GREEN:   Implement
 VERIFY:  cd pkg && go test ./quality/nonewbash/...  # cov ≥ 90%
          /tmp/loopzero-ops quality nonewbash --base-ref origin/main --head-ref HEAD
          # exit 0 on clean branch, exit 1 if branch added unauthorized .sh
+         # EC-04 sanity: verificar ci.yml tem fetch-depth: 0
+         grep -A2 'actions/checkout' .github/workflows/ci.yml | grep -c 'fetch-depth: 0'
+         # esperado: ≥1 (no job que invoca gate)
 ```
 
 #### Acceptance Criteria
 - [ ] Gate detecta novos `.sh` (A status) outside allowlist
 - [ ] Gate aceita `.sh` em allowlist
 - [ ] Gate ignora modificações (M status) — só new files
+- [ ] **EC-04:** Gate falha com `BASE_REF_UNREACHABLE` typed error quando base-ref unreachable
+      (não produz falsos positivos em massa)
+- [ ] **EC-04:** CI workflow YAML usa `actions/checkout@v4` com `fetch-depth: 0` no job
+      que invoca `loopzero-ops quality nonewbash`
+- [ ] **EC-06:** Gate trata file rename (R status) como new file (requires allowlist update)
 - [ ] CI workflow invoca gate em todos PRs
 
 #### DoD
-- [ ] Tasks 1-5 completos
-- [ ] CI workflow updated
-- [ ] Self-test em PR fictício: adicionar `.sh` random → CI fails
+- [ ] Tasks 1-6 completos (incluindo EC-04 pre-flight)
+- [ ] CI workflow updated (com fetch-depth: 0)
+- [ ] Self-test em PR fictício: adicionar `.sh` random → CI fails (deterministicamente)
+- [ ] Self-test EC-04: simular shallow clone localmente, gate falha com erro claro
+      (não com 100 falsos positivos)
 
 ### T6.3 — Build `loopzero-ops quality no-shell-wrap` audit gate
 
@@ -1302,8 +1413,12 @@ assert loc <= 3000, f'LOC={loc} exceeds 3000'
 | 12 | Block creation of new bash scripts | T6.1 + T6.2 | Allowlist + CI gate `no-new-bash` |
 | 13 | Block shell-wrap em Go | T6.3 | CI gate `no-shell-wrap` audita pkg/* |
 | 14 | Validate redução atingida | T6.4 | Re-audit + comparar com baseline |
+| 15 | **EC-01:** Race postgresql↔gitea em cleanroom | T2.3.a + T2.3 needs: invariant | Master helmfile sync respeita `needs:` |
+| 16 | **EC-02:** `base64 -d` quebra em macOS | T2.3.b | Substituir por `kubectl -o go-template` ou `openssl base64 -d -A` |
+| 17 | **EC-03:** Audit caller-detection misses dynamic invocations | T1.1.a + T0.1 TDD | Grep `bash "$VAR"` pattern antes de validation; test cobertura |
+| 18 | **EC-04:** CI shallow clone falsifica gate no-new-bash | T6.2 EC-04 pre-flight + `fetch-depth: 0` | Pre-flight rev-parse + checkout config explicit |
 
-**Coverage: 14/14 gaps covered (100%)**
+**Coverage: 18/18 gaps covered (100%)**
 
 ---
 
