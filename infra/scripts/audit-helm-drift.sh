@@ -1,7 +1,8 @@
 #!/usr/bin/env bash
 # audit-helm-drift.sh — detect drift between charts/ (published) and infra/helm/ (bootstrap)
 #
-# Per ADR-0041 (drift detector advisory→blocking) + CH-G16 NEW gate.
+# Per ADR-0041 (drift detector graduated advisory→blocking 2026-05-21 per
+# T3.2 of plan 2026-05-21-deep-review-remediation) + CH-G16 NEW gate.
 # Reports drifts that should be either:
 #   (a) documented as intentional via ADR (e.g., loopzero-api dev minimal vs prod full)
 #   (b) fixed as regression (e.g., loopzero-admission-policies pre-T1.2)
@@ -10,13 +11,15 @@
 #   bash scripts/audit-helm-drift.sh                      # human-readable
 #   bash scripts/audit-helm-drift.sh --output-format=github-annotations
 #
-# Exit codes:
+# Exit codes (BLOCKING):
 #   0 — no drifts OR all drifts have approving ADR
-#   1 — drifts without ADR detected
+#   1 — drifts without ADR detected (FAIL CI)
 #   2 — script error (yq missing, charts missing)
 #
 # Plan: charts-sota-implementation-plan T1.3
-# Gate: CH-G16 (advisory mode initially per ADR-0041 CONDITION-3)
+# Gate: CH-G16 (BLOCKING — graduated from advisory 2026-05-21 per T3.2).
+# Consumer: .github/workflows/charts-drift-cron.yml exits 1 on this script's
+# exit 1, opens GitHub issue with drift report, fails the workflow run.
 
 set -euo pipefail
 
