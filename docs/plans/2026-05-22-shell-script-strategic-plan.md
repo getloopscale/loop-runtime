@@ -1,0 +1,1412 @@
+# Plan: Shell Script Strategic Reduction (269 → <30)
+
+> **Version 1.0** — Reduzir progressivamente o inventário de 269 scripts shell (44,586 LOC)
+> para menos de 30 (<3,000 LOC) através de DELEGATION para orchestrators canônicos
+> (helmfile/Tilt/Ginkgo/SDK-native Go), DELETE de dead code, e proibição explícita
+> de novos scripts bash. Esse plano substitui o plano original
+> `2026-05-21-bash-to-go-migration-plan.md` (cuja estratégia "migrar tudo para Go"
+> revelou-se sub-ótima — virava shell-wrap em Go sem ganho real).
+
+---
+
+## Context
+
+### Estado atual (2026-05-22, branch `refactor/shell-scripts-strategic` @ `10d9389b`)
+
+- **269 scripts .sh** totalizando **44,586 LOC** distribuídos em 15+ diretórios
+- **Plano anterior** (`2026-05-21-bash-to-go-migration-plan.md`) migrou 22 scripts em uma sessão,
+  mas auto-diagnóstico revelou: 6 das 22 migrações eram **shell-wrap em Go**
+  (continuam dependendo de `pulumi`/`aws`/`kubectl`/`gh` CLIs externos via `shellrun.Runner`),
+  net +5,500 LOC Go pra retirar -1,400 LOC bash sem reduzir dependências externas
+- **Cleanroom (`task setup → infra:install:mgmt`) está BROKEN**: 2 bugs reais surfacearam
+  (gitea `PASSWD=""` por design + ory-kratos/hydra `values.yaml.gotmpl` missing)
+  porque o Taskfile bypassa o L2 helmfile orchestrator canônico
+- **Tilt funciona** mas é o canonical dev loop não-documentado;
+  `task setup` é vestige bit-rotted que ninguém roda
+
+### Evidência da fragmentação arquitetural
+
+Quando uma operação simples (bootstrap gitea) requer **4 arquivos coordenados**:
+- `infra/helm/gitea/values.yaml` (chart values)
+- `taskfiles/infra.yml` (install invocation)
+- `infra/helmfile/scripts/bootstrap-patch-argocd-gitea-creds.sh` (post-install patch)
+- `infra/helmfile/scripts/generate-secrets.sh` (pre-install secret generation)
+
+…qualquer mudança quebra em 1 dos 4. Bash existe pra preencher o gap que o orchestrator
+não cobre, mas isso fragmenta responsabilidade ao invés de centralizá-la.
+
+### Os 3 insights estratégicos
+
+1. **Bash existe porque orchestrator não engloba.** Solução não é migrar bash — é **fortalecer
+   orchestrator** (helmfile/Tilt/ArgoCD) pra bash não precisar existir.
+2. **Migrar bash sem eliminar dependência é teatro.** Shell-wrap em Go (`shellrun.Runner.Run("pulumi", ...)`)
+   dobra LOC sem reduzir CLIs externos requeridos.
+3. **Bash não é o problema; arquitetura é.** O custo dos 269 scripts é fragmentação de
+   responsabilidade, não verbosidade.
+
+### Links
+
+- Origem: discussão da sessão 2026-05-21 (`Ralph loop` reflection)
+- Plano substituído: `docs/plans/2026-05-21-bash-to-go-migration-plan.md` (DEPRECATED)
+- Branch base: `10d9389b` (estado pré-migração)
+- Develop atual: contém 22 migrações desta sessão (6 reverter como dívida, 16 manter como wins)
+
+---
+
+## Objective
+
+**Done:** Repositório com **< 30 scripts shell** (~93% redução), nenhum no caminho crítico
+operacional, cleanroom + tilt up + Ginkgo journey 76/76 funcionais 100%, **regra explícita
+proibindo criação de novos scripts bash** como parte do sistema.
+
+### Metas mensuráveis
+
+- **N(bash) ≤ 30** (de 269 — redução ≥ 89%)
+- **LOC(bash) ≤ 3,000** (de 44,586 — redução ≥ 93%)
+- **`task setup` → `tilt up` → Ginkgo journey 76/76 GREEN** em fresh k3d
+- **CI gate ativo** que **bloqueia** criação de novos `.sh` outside whitelist
+- **Allowlist explícita** documentada com justificativa por script remanescente
+- **Zero shell-wrap em Go** (auditoria automática: `pkg/*` que usa `shellrun.Runner.Run`
+  para CLI quando há SDK Go nativo disponível)
+
+---
+
+## ADRs
+
+### D1 — Tilt é o canonical dev loop
+
+**Decision:** `tilt up` é o **único** dev loop suportado. `task setup` será
+DEPRECATED com aviso e eventualmente removido.
+
+**Rationale:** CLAUDE.md já lista Tilt como "Dev loop" canônico. `task setup` é um path
+paralelo bit-rotted que duplica orquestração. Manter ambos = drift garantido.
+
+**Consequences:**
+- Documentação (CLAUDE.md, README) reescrita para "use `tilt up`"
+- `task setup` vira alias depreciado com warn message
+- Operadores aprendem único path
+- Bug-hunt concentrado em UM orchestrator (Tiltfile + helmfile)
+
+### D2 — Helmfile é o L2 orchestrator canônico
+
+**Decision:** **Toda** invocação de `helm upgrade`/`helm install` no repo passa por
+`helmfile sync`. Bare-helm em Taskfile/scripts é PROIBIDO.
+
+**Rationale:** CLAUDE.md já declara: "**L2 (Helmfile):** orchestrator de 32 Helm releases…
+**L2 é o SoT real desses workloads**, não Pulumi". Taskfile bare-helm é duplicação
+do que helmfile já faz.
+
+**Consequences:**
+- Charts ganham `set:` blocks + `hooks:` directives para coisas que bash fazia
+- ~30 scripts/linhas de Taskfile eliminados
+- Cleanroom passa a usar mesmo path que Tilt (consistência)
+
+### D3 — Criação de NOVOS scripts bash é PROIBIDA por padrão
+
+**Decision:** A partir desta sessão, **qualquer novo arquivo `.sh` criado no repo
+deve passar por gate CI explícito**. Default = BLOCK. Exceção requer ADR + entry
+em `.claude/rules/shell-scripts-allowlist.md`.
+
+**Rationale:** Sem essa regra, futuras sessões continuarão preencher gaps com bash,
+re-inflando o inventário. A entropia precisa ser **estrutural**, não dependente de
+disciplina humana.
+
+**Consequences:**
+- CI gate `loopzero-ops quality no-new-bash` bloqueia PRs que adicionam `.sh` sem allowlist
+- Forçar developers a usar orchestrator nativo ou Go SDK
+- 1 script novo legítimo → 1 entry na allowlist + justificativa = pequena fricção
+  desincentiva criação acidental
+
+### D4 — Bash existente sobrevive APENAS se passar 4 critérios
+
+**Decision:** Para um `.sh` existente ficar no repo após este plano, deve atender
+**TODOS** os 4 critérios:
+1. **Necessário** — operação que não tem orchestrator canônico (Tilt/helmfile/ArgoCD/Pulumi-auto)
+2. **Simples** — < 100 LOC, < 3 níveis de aninhamento, sem state machine
+3. **Operator-time** — usado por humano em incident/drill/migration (não no caminho crítico CI/dev)
+4. **Allowlisted** — entry em `.claude/rules/shell-scripts-allowlist.md` com justificativa
+
+**Rationale:** Se um script falha em qualquer critério, há sempre uma alternativa
+(orchestrator/Go SDK/Ginkgo). Os 4 critérios eliminam ambiguidade na decisão.
+
+**Consequences:**
+- ~15-25 scripts qualificam (break-glass, file-rfc, etc.)
+- Restante (~240) vai para DELEGATE/MIGRATE/DELETE
+
+### D5 — Shell-wrap em Go é PROIBIDO
+
+**Decision:** `pkg/*` Go que usa `shellrun.Runner.Run("cmd", ...)` quando existe SDK
+Go nativo (`pulumi-go-sdk`, `helm-sdk-go`, `client-go`, `aws-sdk-go-v2`, `go-github`) é
+**dívida técnica** e **proibido** sem justificativa documentada.
+
+**Rationale:** Shell-wrap não elimina dependência de CLI externa — apenas move sintaxe.
+Net: dobra LOC sem ganho real. As 6 migrações shell-wrap desta sessão (categoria B)
+são exemplo do anti-pattern.
+
+**Consequences:**
+- Migrações Go aprovadas APENAS quando: (a) pure-logic OR (b) SDK-native nativo
+- CI gate `loopzero-ops quality no-shell-wrap` audita `pkg/*` por padrão `shellrun.Runner.Run`
+  com argumento em allowlist de CLIs problemáticos
+
+### D6 — `*_test.sh` morre com o `*.sh` que testa (auto-die)
+
+**Decision:** Hermetic tests `infra/tests/scripts/X_test.sh` são deletados
+**automaticamente** quando o `X.sh` correspondente é deletado/migrado.
+
+**Rationale:** Não há valor em testes que validam código deletado. ~50 scripts
+auto-eliminam quando consumers morrem.
+
+**Consequences:**
+- Net: redução automática sem trabalho explícito
+- Migrações Go que substituem `.sh` devem **incluir testify** que substitui o `_test.sh`
+
+### D7 — Tilt + helmfile cobrem 90% dos casos; bash fica para o resto
+
+**Decision:** A divisão estratégica é:
+- **Orchestration declarativa** (cluster bootstrap, install, sync) → **helmfile/Tilt**
+- **Test orchestration** → **Ginkgo**
+- **State management** (Pulumi state ops) → **Pulumi Automation API Go SDK**
+- **Pure-logic CI gates** (regex, file walk, parse) → **pkg/quality testify**
+- **Generators** → **`//go:generate`**
+- **Operator-time simples e raro** → **bash allowlisted**
+
+**Rationale:** Cada categoria tem ferramenta canônica madura. Bash deve ser exceção,
+não regra.
+
+**Consequences:**
+- Plan tem fases dedicadas para cada categoria
+- Sucesso = cada `.sh` remanescente cabe em "operator-time simples e raro"
+
+---
+
+## Dependency Graph
+
+```
+Phase 0: Real Usage Audit
+    │
+    ▼
+Phase 1: Delete Dead Code ───────────┐
+    │                                 │
+    ▼                                 │
+Phase 2: Delegate to Helmfile         │  (Phase 1 podia paralelizar
+    │  (UNBLOCKS CLEANROOM)           │   com 2, mas serializamos
+    │                                 │   pra reduzir conflitos)
+    ▼                                 │
+Phase 3: Deprecate task setup ───────┤
+    │  (canonicalize Tilt)            │
+    │                                 │
+    ▼                                 │
+    ├──────────────────────────┐      │
+    │                          │      │
+Phase 4: Migrate to Ginkgo  Phase 5: SDK-native Go   (paralelo)
+    │ (test orchestrators)   │ (Pulumi Auto API,
+    │                        │  generators, etc.)
+    ▼                        ▼
+    └────────┬───────────────┘
+             ▼
+        Phase 6: Lock The Door
+        (no-new-bash CI gate,
+         allowlist, ADR rules)
+```
+
+**Sequencial:** Phase 0 → 1 → 2 → 3 → [4 ∥ 5] → 6
+**Razão da sequência:** Phase 2 desbloqueia cleanroom (critical path). Phase 3 só
+faz sentido após Phase 2 funcionar. Phases 4 e 5 podem paralelizar (touch sets
+diferentes). Phase 6 é gate final.
+
+---
+
+## Phase 0: Real Usage Audit
+
+**Objective:** Antes de deletar/migrar/manter QUALQUER script, ter dados objetivos sobre
+quem chama o quê, último modificação, LOC, e disposição proposta.
+
+### T0.1 — Build `loopzero-ops scripts audit` Go tool
+
+#### Objective
+Ferramenta Go que escaneia todos os `.sh` do repo, faz grep de callers em CI/Taskfile/
+helmfile/outros scripts, e emite CSV canônico para review humano.
+
+#### Evidence
+Sem inventário objetivo, qualquer decisão de "este script é dead" vira opinião.
+Plano anterior (`2026-05-21-bash-to-go-migration-plan.md`) migrou 22 scripts sem
+audit prévio e descobriu (post-hoc) que 6 eram teatro.
+
+#### Files to edit
+```
+pkg/quality/scriptsaudit/check.go        — (NEW) audit logic + CSV emitter
+pkg/quality/scriptsaudit/check_test.go   — (NEW) testify tests (≥90% cov)
+cmd/loopzero-ops/quality_subcmd.go           — add `scripts-audit` gate
+docs/scripts-audit/2026-05-22.csv        — (NEW) baseline audit output
+```
+
+#### Deep file dependency analysis
+- `pkg/quality/scriptsaudit/check.go` (NEW): puro Go, sem shell-out. Usa `filepath.WalkDir`
+  pra encontrar `.sh`, lê linhas pra contar LOC, `regexp` pra buscar callers.
+- `cmd/loopzero-ops/quality_subcmd.go`: adiciona case `scripts-audit` no switch.
+  Reusa pattern dos 16 gates pure-logic já migrados.
+- `docs/scripts-audit/2026-05-22.csv`: artefato de baseline. Reviewed por operador
+  antes de Phase 1.
+
+#### Deep Dives
+**Caller detection regex:** `<script-name>(?:\.sh)?\b` em arquivos:
+- `.github/workflows/*.yml`
+- `Taskfile.yml`, `taskfiles/*.yml`
+- `infra/helmfile/**/*.gotmpl`
+- `infra/scripts/**/*.sh` (cross-script calls)
+- `Tiltfile`, `Tiltfile.local`
+- `infra/tests/**/*.sh` (hermetic tests reference parent)
+
+**Disposition column** (one of):
+- `KEEP-OPERATOR` — passes all 4 D4 criteria
+- `DELEGATE-HELMFILE` — bare-helm wrapper, migrate to helmfile sync
+- `DELEGATE-TILT` — covered by Tiltfile path
+- `DELEGATE-ARGOCD` — covered by ArgoCD self-manage
+- `MIGRATE-GO-PUREFN` — pure logic, candidate for pkg/quality
+- `MIGRATE-GO-SDK` — has Go SDK alternative
+- `MIGRATE-GINKGO` — test orchestrator pattern
+- `MIGRATE-GENERATOR` — `//go:generate` candidate
+- `AUTO-DIE` — `*_test.sh` whose parent is gone/migrating
+- `DELETE-DEAD` — 0 callers + > 90d untouched
+- `REVIEW-NEEDED` — defaults; operator must decide
+
+**Invariants:**
+- Toda linha do CSV preenchida (no nulls em disposition)
+- Sum(KEEP + DELEGATE + MIGRATE + AUTO + DELETE + REVIEW) == N(total .sh)
+- LOC per script accurate (sanity: `wc -l` comparison)
+
+**Edge cases:**
+- Scripts referenciados apenas em comments de outros files → still count
+- Scripts referenciados em CHANGELOG mas não em código vivo → mark REVIEW-NEEDED
+- Scripts referenciados em `_legacy/` paths → mark DELETE-DEAD candidate
+- Symlinked scripts (rare, but possible) → handle via `filepath.EvalSymlinks`
+
+#### Tasks
+1. Criar `pkg/quality/scriptsaudit/` package (check.go + test)
+2. Implementar `ScanRepo(root string) ([]Script, error)` que retorna struct com
+   {Path, LOC, LastModUTC, Callers []string, Disposition string}
+3. Implementar `detectCallers(scriptName string, searchPaths []string) []string`
+   usando regexp + filepath.WalkDir
+4. Implementar `proposeDisposition(s Script) string` (heurísticas baseadas em D4
+   + categorização per propósito)
+5. Implementar `EmitCSV(scripts []Script, w io.Writer) error` (encoding/csv)
+6. Wire em `cmd/loopzero-ops/quality_subcmd.go` como `quality scripts-audit`
+7. Rodar contra repo, salvar baseline em `docs/scripts-audit/2026-05-22.csv`
+
+#### TDD
+```
+RED:     TestScanRepo_FindsAllShellScripts() — assert finds 269 (baseline)
+RED:     TestScanRepo_ExcludesNodeModules() — vendor/ + node_modules/ excluded
+RED:     TestDetectCallers_FindsTaskfileRefs() — fixture: Taskfile com `bash X.sh` → caller
+RED:     TestDetectCallers_FindsCIYamlRefs() — fixture: .github/workflows/Y.yml com X.sh
+RED:     TestDetectCallers_FindsCrossScriptRefs() — script A.sh chama bash B.sh → B has caller A
+RED:     TestProposeDisposition_DeadCode() — 0 callers + last-mod>90d → DELETE-DEAD
+RED:     TestProposeDisposition_HermeticTest() — `X_test.sh` exists, X.sh exists → AUTO-DIE
+RED:     TestProposeDisposition_BareHelmWrapper() — script contains `helm upgrade` → DELEGATE-HELMFILE
+RED:     TestProposeDisposition_PureLogicGate() — script in `check*.sh` pattern → MIGRATE-GO-PUREFN
+RED:     TestEmitCSV_StableSchema() — output columns: path,loc,last_mod_utc,caller_count,disposition,callers
+RED:     TestEmitCSV_DeterministicOrder() — sorted by path
+
+GREEN:   Implement scanRepo + detectCallers + proposeDisposition + emitCSV
+
+REFACTOR: extract `dispositionHeuristics` map for testability
+
+VERIFY:  cd pkg && go test -coverprofile=/tmp/sa.cov ./quality/scriptsaudit/...
+         # coverage ≥ 90%
+         cd /home/paulo/loopzero && /tmp/loopzero-ops quality scripts-audit > docs/scripts-audit/2026-05-22.csv
+         wc -l docs/scripts-audit/2026-05-22.csv  # should be 269+1 (header)
+```
+
+#### Acceptance Criteria
+- [ ] `pkg/quality/scriptsaudit` package criado com ≥90% test coverage
+- [ ] `loopzero-ops quality scripts-audit` emite CSV com 269 entries + header
+- [ ] CSV reviewed por operador (HUMAN GATE — registrado em docs/scripts-audit/REVIEWED.md)
+- [ ] Pass: `/code-audit` complexity check (≤10 cyclomatic)
+- [ ] Pass: `/code-audit` lint (zero warnings golangci-lint)
+- [ ] Pass: `/code-audit` size (file ≤500 LOC)
+
+#### DoD
+- [ ] Tasks 1-7 completos
+- [ ] Hermetic tests passam (`go test ./quality/scriptsaudit/...`)
+- [ ] Baseline CSV committado em `docs/scripts-audit/2026-05-22.csv`
+- [ ] `docs/scripts-audit/REVIEWED.md` documenta operador-review com timestamp
+- [ ] CHANGELOG entry sob `### Added`
+
+---
+
+## Phase 1: Delete Dead Code
+
+**Objective:** Eliminar scripts com 0 callers documentados, reduzindo inventário
+imediatamente sem mudar comportamento de nada vivo.
+
+### T1.1 — Audit + propose `DELETE-DEAD` set
+
+#### Objective
+A partir do CSV de Phase 0, isolar scripts com `disposition=DELETE-DEAD`, validar
+manualmente (sample de 5-10), e produzir lista final pra deletion.
+
+#### Evidence
+CSV de T0.1 marca disposição inicial. Mas falsos-positivos existem (script
+referenciado em runbook MD mas não em código vivo, por exemplo). Validação manual
+necessária antes de delete em massa.
+
+#### Files to edit
+```
+docs/scripts-audit/2026-05-22-dead-set.md — (NEW) dead set documented + validation
+docs/scripts-audit/2026-05-22-dead-set-validated.csv — (NEW) validated subset
+```
+
+#### Deep file dependency analysis
+- `docs/scripts-audit/2026-05-22-dead-set.md`: lista cada script proposto pra delete +
+  evidência ("0 callers em [...]" + "last-mod > 90d") + decisão manual
+- `docs/scripts-audit/2026-05-22-dead-set-validated.csv`: subset confirmado para
+  Phase 1.2 executar
+
+#### Deep Dives
+**Validation methodology:**
+1. Para cada script em `disposition=DELETE-DEAD`, executar manual:
+   - `git log --follow -- <script>` — último commit + autor + razão
+   - `grep -r <script-basename> docs/ .claude/ README.md` — refs em docs/runbooks
+2. Se script aparece em runbook MD ativo: re-classify como `KEEP-OPERATOR` ou
+   `MIGRATE-GO-SDK` (não DELETE)
+3. Se script é `_legacy/` path: confirm via `git log --diff-filter=A` que é mesmo legacy
+
+**Anti-pattern evitado:**
+- NÃO deletar script só porque tem 0 callers no código — verificar docs/runbooks
+- NÃO deletar script tocado nos últimos 30d (pode ser WIP)
+
+#### Tasks
+1. Filter CSV de T0.1 para `disposition=DELETE-DEAD` → working set
+2. Para cada script, executar validation method acima
+3. Manter `dead-set.md` com decisão fundamentada por script
+4. Produzir `dead-set-validated.csv` com subset confirmado
+5. Submit para review (commit + push, operator review na PR/branch)
+
+#### TDD
+```
+RED:     N/A — esta task é diagnóstico/análise manual, não tem código pra TDD
+VERIFY:  cat docs/scripts-audit/2026-05-22-dead-set-validated.csv | wc -l
+         # esperado: 20-30 scripts (subset conservador)
+         git log --oneline -1 -- docs/scripts-audit/2026-05-22-dead-set-validated.csv
+         # verifica que existe + tem timestamp
+```
+
+#### Acceptance Criteria
+- [ ] `dead-set.md` lista 20-50 scripts candidatos + rationale por linha
+- [ ] `dead-set-validated.csv` é subset conservador (excluir qualquer dúvida)
+- [ ] Cada entry no validated CSV tem evidence column ("0 callers em [...], last-mod 2025-XX-XX")
+
+#### DoD
+- [ ] Tasks 1-5 completos
+- [ ] Validated CSV committado
+- [ ] PR description tem inventário do que será deletado
+
+### T1.2 — Bulk delete validated dead set
+
+#### Objective
+Executar `git rm` em massa do subset validado, criando 1 commit atômico por dir
+(facilita revert se necessário).
+
+#### Evidence
+Phase 1 só funciona se chegar até a tela final. T1.1 produz a lista; T1.2 executa.
+
+#### Files to edit
+```
+infra/scripts/<dead-script-1>.sh — DELETE
+infra/scripts/<dead-script-2>.sh — DELETE
+... (N entries from dead-set-validated.csv)
+CHANGELOG.md — (NEW entry under ### Removed)
+```
+
+#### Deep file dependency analysis
+- Cada `.sh` deletado: verify NÃO está em callers list de outro script
+  (validation already done em T1.1 mas re-check em T1.2 antes de delete)
+- Companion `_test.sh` files: auto-delete junto (D6 — auto-die)
+- CHANGELOG: 1 entry per directory grouping ("Removed 8 dead scripts from infra/scripts/")
+
+#### Deep Dives
+**Commit strategy:**
+- 1 commit por subdirectory (e.g., `infra/scripts/`, `infra/tests/scripts/`)
+- Commit message format:
+  ```
+  chore(cleanup): delete N dead scripts in {dir}/ (Phase 1.2)
+
+  Per docs/scripts-audit/2026-05-22-dead-set-validated.csv. 0 callers
+  documentados em CI/Taskfile/helmfile/Tiltfile/cross-scripts. last-mod
+  > 90 days. No active runbook references.
+
+  Scripts deleted:
+  - <name1>.sh (N LOC, last-mod YYYY-MM-DD)
+  - <name2>.sh (N LOC, last-mod YYYY-MM-DD)
+  ...
+
+  Total: -N LOC bash.
+  ```
+
+**Safety nets:**
+- `git revert` trivial se descobrir caller posterior
+- Branch isolada (`refactor/shell-scripts-strategic`) — não toca develop até merge
+- Operator approval no PR antes de merge
+
+#### Tasks
+1. `cd /home/paulo/loopzero`
+2. Para cada subdirectory grouping em validated CSV:
+   a. `git rm <scripts>`
+   b. Commit per pattern acima
+3. Update CHANGELOG.md `### Removed` section
+4. Push branch
+
+#### TDD
+```
+RED:     TestNoCallerRemainsForDeletedScripts — corre `loopzero-ops quality scripts-audit`
+         após delete, verifica que NENHUM script remanescente lista um deletado como caller
+GREEN:   Os deletes em si (manual git rm)
+VERIFY:  /tmp/loopzero-ops quality scripts-audit > /tmp/post-delete.csv
+         python3 -c "import csv; [print(r) for r in csv.DictReader(open('/tmp/post-delete.csv'))
+           if any(c in DELETED_SET for c in r['callers'].split(';'))]"
+         # esperado: empty output (no orphan callers)
+```
+
+#### Acceptance Criteria
+- [ ] N(deleted) matches `dead-set-validated.csv` exactly
+- [ ] Post-delete audit confirms zero orphan callers
+- [ ] CHANGELOG entry covers all directories affected
+- [ ] Branch buildable (no `make`/`task` broken)
+
+#### DoD
+- [ ] N commits (1 per dir grouping) committed + pushed
+- [ ] `task lint` passa no branch
+- [ ] CI workflows (que não foram afetados) ainda funcionam (validar via dry-run de Taskfile)
+
+---
+
+## Phase 2: Delegate to Helmfile (UNBLOCKS CLEANROOM)
+
+**Objective:** Substituir todas as invocações bare-helm em `taskfiles/infra.yml` por
+`helmfile sync` apropriado, adicionando `set:`/`hooks:` no helmfile para cobrir
+gaps (gitea PASSWD, kratos/hydra DSN env).
+
+### T2.1 — Audit bare-helm calls + map to helmfile releases
+
+#### Objective
+Cada `helm upgrade --install X ...` em Taskfile → release name correspondente em
+`infra/helmfile/mgmt.helmfile.yaml.gotmpl`. Produzir mapping table.
+
+#### Evidence
+Bug discovery da sessão 2026-05-21: cleanroom falhou em gitea (PASSWD empty),
+kratos/hydra (values.yaml missing — só `.gotmpl`). Helmfile já tem as 32 releases
+declaradas corretamente.
+
+#### Files to edit
+```
+docs/scripts-audit/2026-05-22-helmfile-mapping.md — (NEW) mapping table
+```
+
+#### Deep file dependency analysis
+- Read `taskfiles/infra.yml` exhaustively
+- Read `infra/helmfile/mgmt.helmfile.yaml.gotmpl` releases
+- Read `infra/helmfile/build.helmfile.yaml.gotmpl` releases
+- Read `infra/helmfile/runtime.helmfile.yaml.gotmpl` releases
+- Match each bare-helm to its helmfile release; flag any without match
+
+#### Deep Dives
+**Expected mapping examples:**
+```
+Taskfile call                                  | Helmfile release    | Action
+helm upgrade --install postgresql ...          | mgmt:postgresql     | helmfile sync --selector name=postgresql
+helm upgrade --install gitea ...               | mgmt:gitea          | helmfile sync --selector name=gitea + add set: PASSWD
+helm upgrade --install ory-kratos ...          | mgmt:ory-kratos     | helmfile sync (already gotmpl-ready)
+helm upgrade --install argocd ...              | mgmt:argocd         | helmfile sync --selector name=argocd
+helm upgrade --install argo-workflows ...      | build:argo-workflows| helmfile -f build.helmfile sync --selector ...
+helm upgrade --install cert-manager ...        | runtime:cert-manager| helmfile -f runtime.helmfile sync --selector ...
+```
+
+**Flags to add to helmfile releases:**
+- `set:` blocks para injetar secrets (gitea PASSWD, etc.)
+- `hooks:` directives para presync/postsync bash que ainda for necessário
+
+#### Tasks
+1. `grep -n 'helm upgrade --install' taskfiles/infra.yml` → enumerate all
+2. Para cada release, find correspondent em mgmt/build/runtime helmfile
+3. Documentar gaps (releases que NÃO têm match — precisam ser ADICIONADAS ao helmfile)
+4. Documentar secrets/env vars que cada release precisa
+5. Produzir `helmfile-mapping.md` com tabela completa
+
+#### TDD
+```
+RED:     N/A — task de análise + documentação
+VERIFY:  grep -c '| helmfile' docs/scripts-audit/2026-05-22-helmfile-mapping.md
+         # esperado: N (count de bare-helm calls em Taskfile)
+```
+
+#### Acceptance Criteria
+- [ ] Mapping table cobre 100% das bare-helm calls em Taskfile
+- [ ] Gaps (releases sem helmfile equivalent) explicitamente listados
+- [ ] Secrets/env vars per release documentados
+
+#### DoD
+- [ ] `helmfile-mapping.md` committed
+- [ ] Operator review (HUMAN GATE — registrar approval)
+
+### T2.2 — Fix helmfile releases for secret injection
+
+#### Objective
+Para cada release que precisa de secret/env injection (gitea PASSWD, ory-kratos/hydra
+DSN env), adicionar `set:` block ou `environments.values` no helmfile.
+
+#### Evidence
+- Gitea `values.yaml` tem `PASSWD: ""` (T1.3 comment: "override via helmfile inline or --set")
+- ory-kratos/hydra usam `requiredEnv "LOOPZERO_DB_PASSWORD"` no DSN (precisa env exportado)
+
+#### Files to edit
+```
+infra/helmfile/mgmt.helmfile.yaml.gotmpl — add set: blocks for gitea + others
+infra/helm/ory-kratos/values.yaml.gotmpl — fix YAML escape '\"' → '"' (single-quoted YAML)
+infra/helm/ory-hydra/values.yaml.gotmpl — fix YAML escape '\"' → '"' (single-quoted YAML)
+infra/helmfile/values/standalone-multi/gitea.yaml.gotmpl — (maybe) add PASSWD override
+```
+
+#### Deep file dependency analysis
+- `mgmt.helmfile.yaml.gotmpl` gitea release: add `set:` block ou referência a env var
+  via `values:` com gotmpl que faz `kubectl get secret postgresql -o jsonpath=...`
+- `ory-kratos/values.yaml.gotmpl` linha 16: substituir `"postgres://...{{ requiredEnv \"LOOPZERO_DB_PASSWORD\" }}..."`
+  por `'postgres://...{{ requiredEnv "LOOPZERO_DB_PASSWORD" }}...'` (YAML single-quoted)
+- `ory-hydra/values.yaml.gotmpl` linha 20: mesma correção
+
+#### Deep Dives
+**Helmfile pattern para inject Secret value at sync time:**
+```yaml
+releases:
+  - name: gitea
+    chart: gitea-charts/gitea
+    values:
+      - ../helm/gitea/values.yaml
+    set:
+      - name: gitea.config.database.PASSWD
+        value: '{{ exec "kubectl" (list "--context" .Values.kubeContext "-n" "loopzero-system" "get" "secret" "postgresql" "-o" "jsonpath={.data.password}") | b64dec }}'
+```
+
+OU alternativa com env var (mais simples):
+```yaml
+environments:
+  standalone-multi:
+    values:
+      - kubeContext: k3d-loopzero-mgmt
+    secrets:
+      - LOOPZERO_DB_PASSWORD: ref+kubectl://secret/postgresql?context=k3d-loopzero-mgmt&namespace=loopzero-system&key=password
+```
+
+(usa helmfile-secrets plugin se disponível, OU fallback para shell `kubectl ... | b64decode`)
+
+**YAML escape fix:**
+```yaml
+# WRONG (gotmpl can't parse \" inside YAML "")
+dsn: "postgres://...{{ requiredEnv \"PASSWORD\" }}..."
+
+# RIGHT (single-quoted YAML, double-quoted gotmpl literal)
+dsn: 'postgres://...{{ requiredEnv "PASSWORD" }}...'
+```
+
+**Invariants:**
+- Gitea install converge no primeiro try (sem CrashLoop)
+- Kratos/Hydra install converge sem template render error
+- Secrets nunca aparecem em values.yaml plain — sempre injected at sync time
+
+**Edge cases:**
+- `kubectl exec` em helmfile values requer contexto correto (`--context k3d-loopzero-mgmt`)
+- Secret pode não existir no primeiro sync (race: postgresql install precisa terminar antes)
+  → solucionado por `needs:` directive no helmfile (gitea needs postgresql)
+
+#### Tasks
+1. Editar `ory-kratos/values.yaml.gotmpl` linha 16: single-quote YAML fix
+2. Editar `ory-hydra/values.yaml.gotmpl` linha 20: single-quote YAML fix
+3. Editar `mgmt.helmfile.yaml.gotmpl` gitea release: adicionar `set:` block
+   pra `PASSWD` via exec kubectl
+4. Validar local: `cd infra/helmfile && helmfile -e standalone-multi --selector name=gitea template`
+   (template, não sync — só renderiza, não aplica)
+5. Validar local: kratos + hydra template também
+6. Commit + push
+
+#### TDD
+```
+RED:     TestHelmfileTemplate_GiteaHasPASSWD — helmfile template gitea + grep PASSWD não vazio
+RED:     TestHelmfileTemplate_KratosDSNRendered — helmfile template kratos + grep "postgres://" rendered
+RED:     TestHelmfileTemplate_HydraDSNRendered — helmfile template hydra + grep "postgres://" rendered
+GREEN:   Implement set: + escape fixes
+VERIFY:  LOOPZERO_DB_PASSWORD=test123 helmfile -f infra/helmfile/mgmt.helmfile.yaml.gotmpl \
+           -e standalone-multi --selector name=ory-kratos template | grep "postgres://loopzero:test123@"
+         # exit 0 → DSN injected corretamente
+```
+
+#### Acceptance Criteria
+- [ ] `helmfile template` para gitea/kratos/hydra renders sem erro
+- [ ] DSN/PASSWD aparecem populados (não vazio) no rendered template
+- [ ] Nenhuma credencial em values.yaml plain (always injected)
+
+#### DoD
+- [ ] Tasks 1-6 completos
+- [ ] `helmfile template` PASS para 3 releases
+- [ ] Edits committed em branch
+
+### T2.3 — Rewrite `infra:install:mgmt` to use helmfile
+
+#### Objective
+Substituir os ~10 `helm upgrade --install ...` bloks em `taskfiles/infra.yml` por
+chamadas `helmfile sync --selector name=X`.
+
+#### Evidence
+Bug raiz da cleanroom: bypassa helmfile, duplica orquestração.
+
+#### Files to edit
+```
+taskfiles/infra.yml — rewrite infra:install:mgmt, infra:install:build, infra:install:workload
+```
+
+#### Deep file dependency analysis
+- `infra:install:mgmt`: era 10+ bare-helm calls → torna-se `helmfile sync` per selector
+  (ou single `helmfile sync` se ordem por `needs:` já está correta)
+- `infra:install:build`: similar — converter argo-workflows + buildkit cwts
+- `infra:install:workload`: converter cert-manager + traefik + external-secrets + argo-rollouts
+
+#### Deep Dives
+**Pattern canônico per release:**
+```yaml
+- |
+  export LOOPZERO_DB_PASSWORD=$(kubectl --context {{.MGMT_CONTEXT}} -n loopzero-system \
+    get secret postgresql -o jsonpath='{.data.password}' | base64 -d)
+  helmfile -f infra/helmfile/mgmt.helmfile.yaml.gotmpl \
+    -e standalone-multi \
+    --kube-context {{.MGMT_CONTEXT}} \
+    --selector name=gitea \
+    sync
+```
+
+**Optimization opportunity (Phase 2.4):** se TODOS os releases podem rodar via single
+`helmfile sync` (sem `--selector`), reduzir N invocations para 1 master sync.
+
+**Invariants:**
+- Cada release de Taskfile original tem equivalente helmfile invocation
+- LOOPZERO_DB_PASSWORD exportado quando releases que precisam vão rodar
+- Cluster context correto per invocation (mgmt vs build vs workload)
+
+**Edge cases:**
+- Helmfile sync pode timeout em rede lenta → `--timeout` flag
+- Secret postgresql pode não existir no primeiro sync → `needs:` no helmfile resolve
+
+#### Tasks
+1. Backup `taskfiles/infra.yml` (git tracks)
+2. Rewrite `infra:install:mgmt` per pattern acima — UMA invocation per release ou
+   single master sync
+3. Rewrite `infra:install:build` similar
+4. Rewrite `infra:install:workload` similar
+5. Validar local: `task setup` from fresh state (delete clusters, recreate, install)
+6. Commit + push
+
+#### TDD
+```
+RED:     TestTaskfile_NoBareHelmUpgrade_InInstallMgmt — grep 'helm upgrade --install'
+         em taskfiles/infra.yml infra:install:mgmt block → exit 1 (none found)
+GREEN:   Edit replaces
+VERIFY:  task clean:all && task setup
+         # PASS criterion: exit 0 + all 4 clusters Running + all helm releases Deployed
+```
+
+#### Acceptance Criteria
+- [ ] Zero `helm upgrade --install` em `infra:install:*` blocks
+- [ ] `task setup` from cold start succeeds (exit 0) em ≤25min
+- [ ] All Bitnami/upstream charts converge primeiro try
+- [ ] LIVE smoke: `kubectl --context k3d-loopzero-mgmt -n loopzero-system get pods` mostra
+      gitea/postgresql/minio/argocd/ory-* todos Running
+
+#### DoD
+- [ ] Tasks 1-6 completos
+- [ ] `task setup` PASS LIVE em fresh cluster
+- [ ] Commit + push
+
+### T2.4 — Validate cleanroom funcional
+
+#### Objective
+Rodar full cleanroom skill (`/cleanroom`) e confirmar 4/4 phases PASS.
+
+#### Evidence
+Goal binding original (cleared via /goal clear): "cleanroom 100% funcional".
+Continua sendo o success criterion deste plano.
+
+#### Files to edit
+N/A — esta task é execução + validação, não código
+
+#### Tasks
+1. `task clean:all && task setup` from cold start
+2. `tilt up` (background)
+3. Aguardar tilt build images + deploy API/operators
+4. `task doctor`
+5. Verificar PASS=N FAIL=0 (skill spec: "PASS=38" baseline)
+
+#### TDD
+```
+RED:     N/A — task de validação operacional
+VERIFY:  task doctor 2>&1 | tee /tmp/doctor.txt
+         grep -E "^PASS: " /tmp/doctor.txt  # esperado: PASS: ≥38
+         grep -E "^FAIL: " /tmp/doctor.txt  # esperado: FAIL: 0
+```
+
+#### Acceptance Criteria
+- [ ] task setup exit 0 em ≤25min
+- [ ] tilt up converge (build + deploy completo) em ≤15min
+- [ ] task doctor PASS=N FAIL=0 (N depending on baseline)
+- [ ] Zero S0/S1 findings
+
+#### DoD
+- [ ] Cleanroom execução documentada em `docs/cleanroom-runs/2026-05-22.md`
+  com timestamps + log snippets
+
+---
+
+## Phase 3: Deprecate `task setup` chain (canonicalize Tilt)
+
+**Objective:** Após Phase 2 desbloquear cleanroom, formalizar Tilt como único dev loop
+e marcar `task setup` como deprecated.
+
+### T3.1 — Update CLAUDE.md + README to canonicalize Tilt
+
+#### Objective
+Documentação clara que dev loop é `tilt up`. `task setup` vira pré-requisito
+(criar clusters + install platform) mas dev loop é Tilt.
+
+#### Files to edit
+```
+CLAUDE.md — atualizar Sprint Plan / development commands section
+README.md — first-steps section
+docs/operations/dev-loop.md — (NEW) canonical guide
+```
+
+#### Tasks
+1. CLAUDE.md: substituir `task setup; tilt up` por explicit "task setup creates platform,
+   tilt up runs dev loop"
+2. README.md: substituir Getting Started com canonical flow
+3. Criar `dev-loop.md` com troubleshooting (port-forwards, common errors)
+
+#### TDD
+```
+RED:     N/A — documentação
+VERIFY:  grep -c "task setup.*tilt up\|tilt up.*task setup" CLAUDE.md README.md
+         # esperado: 0 (no co-mention as if equal)
+         grep -c "canonical dev loop" docs/operations/dev-loop.md
+         # esperado: ≥1
+```
+
+#### Acceptance Criteria
+- [ ] CLAUDE.md cite Tilt explicitamente como canonical
+- [ ] dev-loop.md criado com sections: Quick Start, Troubleshooting, FAQ
+
+#### DoD
+- [ ] Docs committed
+- [ ] Operator review
+
+### T3.2 — Add deprecation warning to `task setup`
+
+#### Objective
+Adicionar print warning em `task setup` indicando que dev loop deve ser via Tilt.
+
+#### Files to edit
+```
+Taskfile.yml — adicionar echo warning no início de setup target
+```
+
+#### Tasks
+1. Adicionar primeiro cmd em `setup:` target: `echo "[NOTICE] task setup creates platform; dev loop is via 'tilt up'. See docs/operations/dev-loop.md"`
+
+#### TDD
+```
+RED:     TestTaskfileSetup_HasDeprecationNotice — grep "tilt up" no Taskfile.yml setup block
+GREEN:   Edit
+VERIFY:  task setup --dry-run 2>&1 | grep -c "tilt up"
+         # esperado: ≥1
+```
+
+#### Acceptance Criteria
+- [ ] Warning aparece no início de task setup
+
+#### DoD
+- [ ] Commit + push
+
+---
+
+## Phase 4: Migrate Test Orchestrators to Ginkgo
+
+**Objective:** Converter scripts em `infra/tests/parity/`, `infra/tests/dogfood/`
+(active, não _legacy) para Ginkgo specs, reaproveitando fixtures de `infra/tests/e2e/`.
+
+### T4.1 — Audit parity/dogfood scripts + map to Ginkgo Describe blocks
+
+#### Objective
+Para cada script de teste shell em parity/dogfood, identificar:
+- O que testa (probe + assertion)
+- Fixtures necessárias
+- Equivalent Ginkgo `Describe("...") / It("...")` block
+
+#### Files to edit
+```
+docs/scripts-audit/2026-05-22-ginkgo-mapping.md — (NEW) mapping
+```
+
+#### Tasks
+1. Para cada `.sh` em `infra/tests/parity/`: identificar tipo (degrau 1/2/3, k3d/droplet/DOKS)
+2. Para cada `.sh` em `infra/tests/dogfood/` (não _legacy): identificar journey
+3. Documentar mapping table
+
+#### TDD
+```
+RED:     N/A — análise
+VERIFY:  cat docs/scripts-audit/2026-05-22-ginkgo-mapping.md | grep -c '^|'
+         # esperado: ≥30 entries (uma per script de teste)
+```
+
+#### Acceptance Criteria
+- [ ] Mapping cobre 100% dos scripts em parity/ e dogfood/ (não _legacy)
+
+#### DoD
+- [ ] Doc committed + reviewed
+
+### T4.2 — Convert top-5 parity scripts to Ginkgo specs
+
+#### Objective
+Migrate 5 scripts mais representativos pra Ginkgo. Estabelecer pattern reutilizável
+pelos restantes.
+
+#### Files to edit
+```
+infra/tests/e2e/parity_test.go — (NEW) Ginkgo Describe blocks
+infra/tests/parity/validate-matrix.sh — DELETE (substituído por Ginkgo)
+infra/tests/parity/audit-regression-matrix.sh — DELETE
+infra/tests/parity/k3d-virgin-install.sh — DELETE
+infra/tests/parity/droplet-install.sh — KEEP (operator-time DOKS, no Ginkgo equivalent)
+infra/tests/parity/doks-install.sh — KEEP (operator-time DOKS)
+```
+
+#### Tasks
+1. Criar `parity_test.go` com Ginkgo `Describe("Parity matrix")` + 5 `It` blocks
+2. Migrar logic + assertions dos 3 scripts deletados
+3. Validar: `LOOPZERO_E2E=1 go run ginkgo -v --label-filter=parity ./infra/tests/e2e/`
+4. Commit + delete bash + push
+
+#### TDD
+```
+RED:     TestParityMatrix_K3dVirgin — Ginkgo It block testa k3d virgin path
+GREEN:   Implement
+VERIFY:  LOOPZERO_E2E=1 go run github.com/onsi/ginkgo/v2/ginkgo -v \
+           --label-filter="parity" --timeout=10m ./infra/tests/e2e/
+         # esperado: pass
+```
+
+#### Acceptance Criteria
+- [ ] 5 Ginkgo It blocks substituem 3 shell scripts (consolidam logic)
+- [ ] Ginkgo run PASS local
+- [ ] Bash deletado em mesmo commit
+
+#### DoD
+- [ ] Commits committed + pushed
+- [ ] Pattern documented in `docs/scripts-audit/parity-ginkgo-pattern.md`
+
+### T4.3 — Convert remaining parity + dogfood scripts (batch)
+
+#### Objective
+Aplicar pattern de T4.2 aos remaining scripts. Cada batch é 1 commit.
+
+#### Files to edit
+- Multiple `infra/tests/e2e/*_test.go` (NEW Ginkgo specs)
+- Multiple `infra/tests/parity/*.sh` (DELETE)
+- Multiple `infra/tests/dogfood/*.sh` (DELETE, exceto _legacy queja é DELETE-DEAD)
+
+#### Tasks
+1. Por batch (5-10 scripts), repetir pattern T4.2
+2. Validar Ginkgo run após cada batch
+3. CHANGELOG entry por batch
+
+#### TDD + Acceptance + DoD
+Same structure as T4.2, repeated per batch.
+
+### T4.4 — Delete `_legacy/` entirely
+
+#### Objective
+12 scripts em `infra/tests/dogfood/journeys/_legacy/` são por definição legacy.
+DELETE em massa.
+
+#### Tasks
+1. `git rm -r infra/tests/dogfood/journeys/_legacy/`
+2. CHANGELOG entry
+3. Commit + push
+
+#### Acceptance Criteria
+- [ ] `_legacy/` directory removed
+- [ ] Zero callers (verified via T0.1 audit re-run)
+
+---
+
+## Phase 5: SDK-native Go Migrations (parallel with Phase 4)
+
+**Objective:** Pulumi ops + generators + remaining pure-logic gates. **SDK-native only**
+— shell-wrap em Go é PROIBIDO per D5.
+
+### T5.1 — Pulumi Automation API migration (replaces pulumi-archive, pulumi-orphan-rm)
+
+#### Objective
+Rewrite as 2 migrações shell-wrap desta sessão (pulumi-archive + pulumi-orphan-rm)
+para usar `pulumi-go-sdk` Automation API. Net: elimina dependência `pulumi` CLI binary.
+
+#### Files to edit
+```
+pkg/pulumi/archive/check.go — REWRITE usando pulumi.AutoLocalWorkspace
+pkg/pulumi/archive/check_test.go — UPDATE (Mock via auto.NewLocalWorkspace + testdata)
+pkg/pulumi/orphanrm/check.go — REWRITE usando auto API
+pkg/pulumi/orphanrm/check_test.go — UPDATE
+go.mod (pkg/) — ADD github.com/pulumi/pulumi/sdk/v3
+```
+
+#### Deep file dependency analysis
+- `pkg/pulumi/archive/check.go`: substituir `shellrun.Runner.Run(ctx, "pulumi", ...)`
+  por `auto.NewLocalWorkspace + ws.SelectStack + stack.Export`
+- `pkg/pulumi/archive/check_test.go`: testar via testdata fixtures de stack state
+  JSON (não via MockRunner)
+
+#### Deep Dives
+**Automation API pattern:**
+```go
+import "github.com/pulumi/pulumi/sdk/v3/go/auto"
+
+ws, err := auto.NewLocalWorkspace(ctx,
+    auto.WorkDir(filepath.Join(root, "infra/pulumi-infra")),
+    auto.EnvVars(map[string]string{"PULUMI_CONFIG_PASSPHRASE": passphrase}))
+if err != nil { return err }
+
+stack, err := auto.SelectStack(ctx, "dev", ws)
+if err != nil { return err }
+
+state, err := stack.Export(ctx)  // No pulumi CLI shellout — pure Go API
+if err != nil { return err }
+```
+
+**Trade-off:** Automation API requer same `PULUMI_CONFIG_PASSPHRASE` env, mas elimina
+binary dep. Net: melhor em CI (sem `pulumi` install step), mas dependency adicionada
+ao go.mod.
+
+#### Tasks
+1. `cd pkg && go get github.com/pulumi/pulumi/sdk/v3`
+2. Rewrite `pkg/pulumi/archive/check.go` usando auto API
+3. Rewrite `pkg/pulumi/archive/check_test.go` (testdata-based)
+4. Same para `pkg/pulumi/orphanrm/`
+5. Build + test
+6. Commit + push
+
+#### TDD
+```
+RED:     TestAutoAPI_ExportStack — test export via auto.NewLocalWorkspace + mock workspace
+RED:     TestAutoAPI_NoShellrunCalled — sanity: package não importa shellrun
+GREEN:   Implement
+VERIFY:  cd pkg && go test ./pulumi/...
+         # esperado: cov ≥ 90%
+         grep -rn 'shellrun' pkg/pulumi/  # esperado: 0 matches
+```
+
+#### Acceptance Criteria
+- [ ] Zero `shellrun` import em `pkg/pulumi/*`
+- [ ] Test coverage ≥ 90%
+- [ ] LIVE smoke: roda contra real Pulumi stack sem `pulumi` CLI no PATH
+
+#### DoD
+- [ ] Tasks 1-6 completos
+- [ ] Commits committed + pushed
+- [ ] go.mod updated
+
+### T5.2 — Migrate generators to `//go:generate`
+
+#### Objective
+Scripts geradores (gen-state-machine-dots.sh, generate-secrets-key, etc.) → `go generate`
+em arquivo Go apropriado.
+
+#### Files to edit
+```
+pkg/statemachine/visualize.go — adicionar `//go:generate go run ./cmd/gen-dots`
+pkg/statemachine/cmd/gen-dots/main.go — (NEW) generator binary
+infra/scripts/gen-state-machine-dots.sh — DELETE
+```
+
+#### Tasks
+1. Criar `pkg/statemachine/cmd/gen-dots/main.go` — calls `Visualize()` + writes `.dot` files
+2. Adicionar `//go:generate` directive em visualize.go
+3. Documentar workflow: `cd pkg && go generate ./statemachine/...`
+4. Delete bash + Taskfile entry update
+
+#### TDD
+```
+RED:     TestGenerator_ProducesAllDotFiles — `go generate` produces N .dot files
+GREEN:   Implement
+VERIFY:  cd pkg && go generate ./statemachine/...
+         ls docs/state-machines/*.dot | wc -l  # esperado: N (matches state machine count)
+```
+
+#### Acceptance Criteria
+- [ ] `go generate` produces expected `.dot` files
+- [ ] Bash deletado
+- [ ] Taskfile updated to call `go generate`
+
+#### DoD
+- [ ] Tasks 1-4 completos
+- [ ] Commits committed + pushed
+
+### T5.3 — Identify remaining pure-logic gates (audit-time decision)
+
+#### Objective
+Phase 0 audit identifies scripts ainda candidatos a pure-logic Go migration.
+Migrar OS QUE SOBRARAM após Phase 2 (delegate to helmfile reduz set).
+
+#### Files to edit
+Multiple `pkg/quality/<gate>/check.go` (NEW) per migration
+
+#### Tasks
+Same pattern as the 16 already migrated (Categoria A).
+1. Per script: check.go + check_test.go + wire in quality_subcmd
+2. Delete bash + CHANGELOG entry
+
+#### TDD + Acceptance + DoD
+Same template per migration.
+
+---
+
+## Phase 6: Lock The Door (No-New-Bash Gate + Allowlist)
+
+**Objective:** Tornar a redução **estrutural** — bloquear via CI a criação de novos
+`.sh` outside da allowlist. Sem isso, o esforço regridir.
+
+### T6.1 — Create `.claude/rules/shell-scripts-allowlist.md`
+
+#### Objective
+Lista explícita de scripts bash KEEP-OPERATOR per D4 criteria, com justificativa
+linha-a-linha.
+
+#### Files to edit
+```
+.claude/rules/shell-scripts-allowlist.md — (NEW)
+```
+
+#### Deep Dives
+**Format:**
+```markdown
+# Shell Scripts Allowlist
+
+Scripts permitidos no repo. Cada entry justifica per D4 (necessário + simples +
+operator-time + allowlisted). Novos scripts requerem PR adding-entry-here + ADR.
+
+## infra/scripts/
+
+| Script | LOC | Justificativa |
+|---|---:|---|
+| break-glass.sh | 145 | Operator-time emergency procedure; cluster-admin SA + audit trail. Sem alternative Go SDK ad-hoc. Critério D4: SIM (4/4). |
+| migrate-tenant-namespace.sh | 229 | One-off migration operator-driven; complex multi-step kubectl orchestration. Critério D4: PARCIAL (op-time SIM, simples NO). Plano P7: avaliar Go migration. |
+...
+```
+
+#### Tasks
+1. Listar scripts post-Phase 5 (after delete + migrate)
+2. Per script, validar criteria D4 (4 checkmarks)
+3. Documentar justificativa per linha
+4. Marcar scripts que FALHAM critério como "review-needed-Phase-7"
+
+#### TDD
+```
+RED:     N/A — documentação
+VERIFY:  wc -l .claude/rules/shell-scripts-allowlist.md  # esperado: ≥30 lines (header + entries)
+         # Count entries vs actual scripts:
+         grep -c '^| ' .claude/rules/shell-scripts-allowlist.md
+         find infra/ scripts/ -name '*.sh' | wc -l
+         # esperado: counts iguais (1 entry per script)
+```
+
+#### Acceptance Criteria
+- [ ] Toda `.sh` no repo tem entry na allowlist
+- [ ] Toda entry tem justificativa D4
+
+#### DoD
+- [ ] Allowlist committed
+- [ ] Operator review
+
+### T6.2 — Build `loopzero-ops quality no-new-bash` CI gate
+
+#### Objective
+Gate Go que falha PR se introduz novo `.sh` não presente na allowlist.
+
+#### Files to edit
+```
+pkg/quality/nonewbash/check.go — (NEW)
+pkg/quality/nonewbash/check_test.go — (NEW)
+cmd/loopzero-ops/quality_subcmd.go — wire gate
+.github/workflows/ci.yml — invoke gate em PRs
+```
+
+#### Deep Dives
+**Algorithm:**
+1. Parse `.claude/rules/shell-scripts-allowlist.md` → extract allowed set
+2. `git diff --name-only --diff-filter=A origin/main...HEAD -- '*.sh'` → new scripts
+3. For each new script: check if in allowlist
+4. If yes: PASS. If no: FAIL with helpful message ("Add entry to allowlist OR use Go/helmfile alternative")
+
+**Edge cases:**
+- `.sh` em `_legacy/` paths: still blocked (forbidden zone)
+- Renamed file (R status): treated as new + old (require allowlist update)
+- Modified existing file (M status): NOT blocked (only A status)
+
+#### Tasks
+1. Implement `parseAllowlist(path string) (map[string]bool, error)`
+2. Implement `Check(cfg Config) (*Outcome, error)` with git diff logic
+3. Wire to `quality nonewbash` subcommand
+4. Add to ci.yml as PR-blocking step
+5. Test: fixture com PR fictício adicionando `.sh` → gate FAIL
+
+#### TDD
+```
+RED:     TestParseAllowlist_ParsesMarkdownTable — fixture allowlist → set with N entries
+RED:     TestCheck_NewBashWithoutAllowlist_Blocks — fixture diff with new .sh → Pass=false
+RED:     TestCheck_NewBashWithAllowlist_Passes — fixture diff with .sh in allowlist → Pass=true
+RED:     TestCheck_ModifiedExistingBash_NotBlocked — fixture diff with M (not A) → Pass=true
+GREEN:   Implement
+VERIFY:  cd pkg && go test ./quality/nonewbash/...  # cov ≥ 90%
+         /tmp/loopzero-ops quality nonewbash --base-ref origin/main --head-ref HEAD
+         # exit 0 on clean branch, exit 1 if branch added unauthorized .sh
+```
+
+#### Acceptance Criteria
+- [ ] Gate detecta novos `.sh` (A status) outside allowlist
+- [ ] Gate aceita `.sh` em allowlist
+- [ ] Gate ignora modificações (M status) — só new files
+- [ ] CI workflow invoca gate em todos PRs
+
+#### DoD
+- [ ] Tasks 1-5 completos
+- [ ] CI workflow updated
+- [ ] Self-test em PR fictício: adicionar `.sh` random → CI fails
+
+### T6.3 — Build `loopzero-ops quality no-shell-wrap` audit gate
+
+#### Objective
+Auditar `pkg/*` por padrão `shellrun.Runner.Run(<CLI-on-allowlist>, ...)` quando há
+SDK Go nativo disponível.
+
+#### Files to edit
+```
+pkg/quality/noshellwrap/check.go — (NEW)
+pkg/quality/noshellwrap/check_test.go — (NEW)
+cmd/loopzero-ops/quality_subcmd.go — wire
+.github/workflows/ci.yml — invoke
+```
+
+#### Deep Dives
+**Forbidden CLI set** (CLIs que têm Go SDK nativo):
+- `pulumi` → use `pulumi-go-sdk` automation API
+- `helm` → use `helm.sh/helm/v3` SDK
+- `kubectl` → use `client-go` (k8s.io/client-go)
+- `aws` → use `aws-sdk-go-v2`
+- `gh` → use `go-github` (github.com/google/go-github)
+
+**Allowed CLI set** (legítimos pra shellrun):
+- `git` (no good Go alternative)
+- `diff`, `sed`, `awk`, `grep` (system utils)
+- `docker`, `k3d` (Go SDKs exist but immature)
+
+**Algorithm:**
+1. `filepath.WalkDir pkg/`, encontrar arquivos `.go`
+2. Per file: parse `ast.File`, find `shellrun.Runner.Run` calls
+3. Para cada call, extract primeiro argument literal string
+4. Se em forbidden set + sem `//nolint:shell-wrap` justification comment → VIOLATION
+
+**Pre-existing exceptions:** os 6 shell-wraps desta sessão (categoria B) precisam ser
+migrados (Phase 5.1 cobre pulumi-archive/pulumi-orphan-rm já). Outros (chaos/cleanuporphan,
+credentialsisolation, upstream/rfcfile) podem manter `//nolint:shell-wrap` comment com
+justificativa OR também migrar.
+
+#### Tasks
+1. Implement AST walker
+2. Per call site, check CLI argument
+3. Allow `//nolint:shell-wrap` escape hatch with required reason
+4. Wire to quality gate + CI
+
+#### TDD
+```
+RED:     TestNoShellWrap_DetectsForbiddenCLI — fixture pkg with shellrun.Run("pulumi"...) → violation
+RED:     TestNoShellWrap_AllowsAllowedCLI — fixture pkg with shellrun.Run("git"...) → PASS
+RED:     TestNoShellWrap_HonorsNolintComment — fixture with //nolint:shell-wrap → PASS
+GREEN:   Implement AST walker
+VERIFY:  cd pkg && go test ./quality/noshellwrap/...
+         /tmp/loopzero-ops quality noshellwrap  # exit 0 OR exit 1 with list of violations
+```
+
+#### Acceptance Criteria
+- [ ] Gate detecta `shellrun.Runner.Run("pulumi"...)` sem nolint
+- [ ] Gate aceita allowlisted CLIs (git, diff, etc.)
+- [ ] Gate aceita nolint comment com reason
+
+#### DoD
+- [ ] Tasks completos
+- [ ] CI workflow invoca gate
+
+### T6.4 — Final inventory validation
+
+#### Objective
+Re-run `loopzero-ops quality scripts-audit` post-Phase-5 e confirmar metas atingidas.
+
+#### Tasks
+1. Rodar audit
+2. Comparar com baseline 2026-05-22
+3. Verificar metas: N(bash) ≤ 30, LOC(bash) ≤ 3,000
+4. Documentar redução em `docs/scripts-audit/2026-05-22-final.md`
+
+#### TDD
+```
+VERIFY:  /tmp/loopzero-ops quality scripts-audit > /tmp/final.csv
+         python3 -c "
+import csv
+rows = list(csv.DictReader(open('/tmp/final.csv')))
+n = len(rows)
+loc = sum(int(r['loc']) for r in rows)
+print(f'N={n} LOC={loc}')
+assert n <= 30, f'N={n} exceeds 30'
+assert loc <= 3000, f'LOC={loc} exceeds 3000'
+"
+```
+
+#### Acceptance Criteria
+- [ ] N(bash) ≤ 30
+- [ ] LOC(bash) ≤ 3,000
+- [ ] All remaining scripts em allowlist
+
+#### DoD
+- [ ] Final audit committed
+- [ ] CHANGELOG section "Phase 6 complete: 269 → N scripts (X% reduction)"
+
+---
+
+## Coverage Matrix
+
+| # | Gap / Requirement | Task(s) | Resolution |
+|---|---|---|---|
+| 1 | Inventário objetivo de 269 scripts + callers | T0.1 | `loopzero-ops quality scripts-audit` emite CSV |
+| 2 | Identificar dead code candidates | T1.1 + T0.1 | CSV disposition column |
+| 3 | Delete dead scripts | T1.2 | git rm em batch per dir |
+| 4 | Desbloquear cleanroom (Bug A gitea PASSWD) | T2.2 + T2.3 | helmfile set: block injects PASSWD from postgres Secret |
+| 5 | Desbloquear cleanroom (Bug B kratos/hydra .gotmpl) | T2.2 + T2.3 | YAML escape fix + helmfile sync replaces bare-helm |
+| 6 | Eliminar bare-helm em Taskfile | T2.3 | infra:install:* delegates to helmfile sync |
+| 7 | Canonicalize Tilt como dev loop | T3.1 + T3.2 | docs + deprecation warning |
+| 8 | Migrate test orchestrators to Ginkgo | T4.1 + T4.2 + T4.3 | parity_test.go + dogfood specs |
+| 9 | Delete `_legacy/` | T4.4 | git rm -r |
+| 10 | Eliminate pulumi CLI shell-wrap | T5.1 | pulumi-go-sdk Automation API |
+| 11 | Generators to `//go:generate` | T5.2 | Idiomatic Go pattern |
+| 12 | Block creation of new bash scripts | T6.1 + T6.2 | Allowlist + CI gate `no-new-bash` |
+| 13 | Block shell-wrap em Go | T6.3 | CI gate `no-shell-wrap` audita pkg/* |
+| 14 | Validate redução atingida | T6.4 | Re-audit + comparar com baseline |
+
+**Coverage: 14/14 gaps covered (100%)**
+
+---
+
+## Global Definition of Done
+
+- [ ] Phases 0-6 completos (ordem sequencial respeitada per dependency graph)
+- [ ] Toda task tem tests passing (Go testify + Ginkgo onde aplicável)
+- [ ] Zero golangci-lint warnings em `pkg/quality/scriptsaudit`, `pkg/quality/nonewbash`,
+      `pkg/quality/noshellwrap`, `pkg/pulumi/archive`, `pkg/pulumi/orphanrm`
+- [ ] Pre-release bias: backward compat NÃO required; deletes deliberados
+- [ ] code-audit checks passing nos new packages
+- [ ] **`/cross-validation 2026-05-22-shell-script-strategic-plan` PASSED** — zero CRITICO,
+      zero GRAVE
+- [ ] Metas mensuráveis atingidas:
+  - [ ] N(bash) ≤ 30 (de 269)
+  - [ ] LOC(bash) ≤ 3,000 (de 44,586)
+  - [ ] `task setup` PASS em fresh cluster
+  - [ ] `tilt up` converge
+  - [ ] CI gate `no-new-bash` ATIVO
+  - [ ] CI gate `no-shell-wrap` ATIVO
+  - [ ] `.claude/rules/shell-scripts-allowlist.md` cobre 100% dos remaining
+- [ ] **Evidence:** N/A — este plano NÃO afeta maturity score (é refactor interno).
+- [ ] **`/dogfood full` PASSED** (see Dogfood Gate below)
+
+---
+
+## Dogfood Gate (MANDATORY — NON-NEGOTIABLE)
+
+### Execution
+
+```bash
+# 1. Fresh infrastructure
+task clean:all && task setup && tilt up &
+task doctor
+
+# 2. Run full dogfood
+/dogfood full
+```
+
+### Pass Criteria
+
+- [ ] `/dogfood full` executed on clean infrastructure
+- [ ] Pre-Flight Check: ALL checks PASS (esperado ≥38 após Phase 2)
+- [ ] Zero S0 (Bloqueante) findings
+- [ ] Zero S1 (Grave) findings related to script-reduction scope (gitea PASSWD,
+      kratos/hydra DSN, helmfile sync, Tilt canonicalization)
+- [ ] Prova de Vida passes for every deploy performed during dogfood
+- [ ] Prova de Morte passes for every delete performed during dogfood
+- [ ] No regressions in previously passing flows (Ginkgo journey 76/76)
+- [ ] Observability check passes
+- [ ] Rule 3 clean: zero internal terms in any CLI output
+
+### On Failure
+
+If `/dogfood full` finds S0 or S1:
+1. Fix ALL S0/S1 findings (não workarounds — root-cause per D5 mindset)
+2. Re-run `/dogfood full` on fresh infrastructure
+3. Repeat until zero S0/S1
+
+S2-S4 findings documented mas não block plan completion.
+
+---
+
+## Cross-Validation
+
+Mandatory antes de `/dogfood`. Per `.claude/skills/cross-validation`:
+
+```
+/cross-validation 2026-05-22-shell-script-strategic
+```
+
+Must return APROVADO with:
+- Zero CRITICO findings
+- Zero GRAVE findings
+- Every task DoD checkbox verified
+- Every test name verified to exist in code
+- Every file path verified to be edited
+- ADRs D1-D7 verified in code (e.g., D5 verified by absence of shell-wrap, D3 verified
+  by CI gate ATIVO)
+
+REPROVADO em cross-validation bloqueia progression para dogfood.
+
+---
+
+## Anti-Patterns Forbidden
+
+1. **Shell-wrap em Go.** Migrar `script.sh` que invoca `pulumi`/`helm`/`kubectl`/`aws`/`gh`
+   para Go que invoca o mesmo via `shellrun.Runner.Run` = PROIBIDO per D5. Use SDK
+   nativo OU deixe bash.
+
+2. **Migration sem usage audit.** Toda migração depende de Phase 0 (T0.1) ter rodado e
+   o CSV reviewed. Não migrar "no escuro" como o plano anterior.
+
+3. **Creation de novos `.sh` para preencher gap.** Per D3, é PROIBIDO. Se há gap, fix
+   o orchestrator (helmfile/Tilt/ArgoCD).
+
+4. **Deletion sem validation.** Phase 1 requer T1.1 validation manual antes de T1.2
+   bulk delete. Anti-pattern: trust audit blindly.
+
+5. **Helmfile bypass.** Per D2, bare-helm é PROIBIDO. Se uma task precisa de "helm
+   install X", deve ser via helmfile (que tem release X declarado).
+
+6. **`task setup` reinvention.** Per D1, Tilt é canonical. Não criar 3o orchestrator.
+
+7. **Skip cross-validation.** Per global DoD, cross-validation é mandatory. Pular
+   cross-validation = plan incompleto.
