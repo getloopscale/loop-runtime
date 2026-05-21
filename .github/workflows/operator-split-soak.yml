@@ -11,7 +11,7 @@
 # Per MEET-2026-05-04-069 + MEET-070, these are infeasible in a Ralph loop
 # iteration (wall-clock-bound, not compute-bound). This workflow runs the
 # gate on production DOKS clusters via weekly cron — same pattern as
-# cell2-soaks.yml.
+# drill-prod-identical-soak.yml.
 #
 # Pre-conditions (enforced by stages' --dry-run preflight):
 #   - All 4 split operator charts deployed (loopzero-{tenant,app,preview,platform}-operator)
@@ -25,7 +25,7 @@ name: operator-split dogfood gate (4h soak + chaos + SLO)
 
 on:
   schedule:
-    # Saturday 02:00 UTC — separate from cell2-soaks.yml (Sunday) to avoid
+    # Saturday 02:00 UTC — separate from drill-prod-identical-soak.yml (Sunday) to avoid
     # competing soak runs and ease debug attribution.
     - cron: '0 2 * * 6'
   workflow_dispatch:

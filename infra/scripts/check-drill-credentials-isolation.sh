@@ -8,7 +8,7 @@
 # DRILL_CF_TOKEN equals the corresponding prod token, drill teardown could
 # accidentally destroy production resources. This script is the runtime
 # safety check invoked by skill /drill-test Etapa 1.1 pre-flight AND by
-# cell2-soaks.yml workflow before any provision step.
+# drill-prod-identical-soak.yml workflow before any provision step.
 #
 # Compares SHA256 first-8-chars of DRILL_* tokens vs prod tokens. If hashes
 # match (or prod token present in same env as drill token), exits 1 with

@@ -22,7 +22,7 @@
 #   5. Emits audit-trail markdown report
 #
 # Used by:
-#   - .github/workflows/cell2-soaks.yml (Stage 1 + Stage 2 post-teardown)
+#   - .github/workflows/drill-prod-identical-soak.yml (Stage 1 + Stage 2 post-teardown)
 #   - .github/workflows/drill-l2-scale.yml (post-teardown)
 #   - .github/workflows/drill-auto-destroy-watchdog.yml (cron T4.1)
 #   - infra/scripts/drill-watchdog.sh (T4.1 wrapper)

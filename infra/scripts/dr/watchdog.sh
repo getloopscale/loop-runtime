@@ -17,7 +17,7 @@
 # leak hundreds of dollars before billing dashboard catches it.
 #
 # Per D6: default expiresInHours=8 covers most drill runs. Stage 2
-# cell2-soaks overrides to 26h (T3.4.bis EC-01). 48h ceiling enforced
+# drill-prod-identical-soak overrides to 26h (T3.4.bis EC-01). 48h ceiling enforced
 # in Pulumi stack code.
 #
 # Idempotent: if no expired stacks, exits 0 with audit trail.

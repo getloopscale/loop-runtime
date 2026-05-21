@@ -9,7 +9,7 @@ name: adversarial-spotcheck
 
 on:
   schedule:
-    - cron: "0 4 * * *"  # 04:00 UTC daily (after status-refresh 06:00 prev cycle)
+    - cron: "0 4 * * *"  # 04:00 UTC daily
   workflow_dispatch:
     inputs:
       seed:

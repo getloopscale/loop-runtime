@@ -10,7 +10,7 @@
 # dashboard catches it. Watchdog catches within 6h max → $1.92 max leak.
 #
 # Per D6 + T3.4.bis: default drill expires-at is 8h (Stage 1 + ad-hoc);
-# Stage 2 cell2-soaks overrides to 26h. 48h ceiling enforced in
+# Stage 2 drill-prod-identical-soak overrides to 26h. 48h ceiling enforced in
 # infra/pulumi-drill/src/index.ts:71.
 #
 # Belt-and-suspenders with T4.2 DO budget alerts (different layer —

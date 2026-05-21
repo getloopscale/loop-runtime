@@ -475,10 +475,16 @@ export const redisUri = drillRedis.uri; // full rediss://user:pass@host:port/0 â
 //
 // Per-app DatabaseUser resources retained for future GRANT-based hardening
 // (when drill becomes long-lived) but not used in DSN.
-export const kratosDsn = pulumi.interpolate`postgres://${drillPG.user}:${drillPG.password}@${drillPG.host}:${drillPG.port}/${drillPgKratos.name}?sslmode=require`;
-export const hydraDsn = pulumi.interpolate`postgres://${drillPG.user}:${drillPG.password}@${drillPG.host}:${drillPG.port}/${drillPgHydra.name}?sslmode=require`;
-export const giteaDsn = pulumi.interpolate`postgres://${drillPG.user}:${drillPG.password}@${drillPG.host}:${drillPG.port}/${drillPgGitea.name}?sslmode=require`;
-export const loopzeroApiDsn = pulumi.interpolate`postgres://${drillPG.user}:${drillPG.password}@${drillPG.host}:${drillPG.port}/${drillPgLoopZero.name}?sslmode=require`;
+// T0.4 (plan 2026-05-21-deep-review-remediation): wrap DSN exports in
+// pulumi.secret() so the embedded ${drillPG.password} is marked secret in
+// stack state output. Without the wrap, `pulumi stack output kratosDsn`
+// prints the password in plaintext + the password leaks to the state file
+// as a non-secret value. Per ADR D3: any Pulumi output embedding an
+// Output<string> of sensitive value MUST be pulumi.secret-wrapped.
+export const kratosDsn = pulumi.secret(pulumi.interpolate`postgres://${drillPG.user}:${drillPG.password}@${drillPG.host}:${drillPG.port}/${drillPgKratos.name}?sslmode=require`);
+export const hydraDsn = pulumi.secret(pulumi.interpolate`postgres://${drillPG.user}:${drillPG.password}@${drillPG.host}:${drillPG.port}/${drillPgHydra.name}?sslmode=require`);
+export const giteaDsn = pulumi.secret(pulumi.interpolate`postgres://${drillPG.user}:${drillPG.password}@${drillPG.host}:${drillPG.port}/${drillPgGitea.name}?sslmode=require`);
+export const loopzeroApiDsn = pulumi.secret(pulumi.interpolate`postgres://${drillPG.user}:${drillPG.password}@${drillPG.host}:${drillPG.port}/${drillPgLoopZero.name}?sslmode=require`);
 
 // Shared infrastructure â€” Spaces buckets (D8)
 export const bucketBuilds = drillBuildsBucket.name;

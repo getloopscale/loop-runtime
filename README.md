@@ -97,7 +97,7 @@ No infrastructure to manage. No build config required. Just push.
 |---------|--------|-------|
 | ~~Preview environments~~ | ~~High~~ | ✅ Shipped 2026-04-26 (Sprint 5 / CHG-2026-04-26-PREVIEW-IMPL). All 14 plan tasks done, E2E validated against live k3d (12 specs pass: PR opened→preview, synchronize→UPSERT, concurrent PRs, PR closed→cleanup + 8 CLI specs). |
 | ~~Cell-2 activation (multi-cell dev)~~ | ~~Low~~ | ✅ Shipped 2026-05-03 (cell-2-activation-plan + fix-all-platform-issues-plan). 12/12 ADR gates LIVE GREEN persistente. T4.3 LIVE: `loopzero deploy` → Pod Running on loopzero-runtime-2, `/health` 200, cell-1 NotFound (isolation). |
-| Cell-2 production canary (stages 4-5) | Medium | Stage 4: 1 customer 7-day. Stage 5: 10/50/100% with 7-day holds. Pending Sprint 9 readiness review per ADR D6. CI cron `cell2-soaks.yml` armed for ADR-compliant 1h+24h Sunday runs. |
+| Cell-2 production canary (stages 4-5) | Medium | Stage 4: 1 customer 7-day. Stage 5: 10/50/100% with 7-day holds. Pending Sprint 9 readiness review per ADR D6. CI cron `drill-prod-identical-soak.yml` armed for ADR-compliant 1h+24h Sunday runs. |
 | ~~SBOM generation (syft)~~ | ~~Medium~~ | ✅ Shipped (Sprint 6). Per-release CycloneDX manifest persisted in S3 with presigned URL endpoint. |
 | Admission policy DENY mode | Medium | warn-mode shipped (Sprint 6). Deny-flip pending Sprint 9 with cosign keyless verification + Fulcio. |
 | ~~`loopzero scale` end-to-end persistence~~ | ~~Medium~~ | ✅ Shipped — scaling config persisted and enforced end-to-end |
@@ -259,7 +259,7 @@ Every plan includes: GitHub auto-deploy on push, monorepo support (30+ framework
 | Operators (Ginkgo + envtest) | 200+ specs | Passing (+ application reaper 10 fake-client tests + cell-aware factory 7 tests, no envtest dependency) |
 | Pulumi (vitest) | 310+ specs | Passing (heal-script H14 24 invariants + migrations-forward-only 11 invariants) |
 | State machines | 10 application + 9 release + 7 build | Passing (`ApplicationCleaned` terminal state via `ApplicationOrphaned` event added 2026-05-03) |
-| CI pipeline | 35 workflows | Green (incl. `cell2-soaks.yml` weekly Sunday 02:00 UTC + `platform-health-7day-watch.yml` hourly) |
+| CI pipeline | 48 workflows | Green (incl. drill prod-identical canary soak weekly Sunday 02:00 UTC + chaos-suite weekly Sunday 03:00 UTC) |
 | Regression matrix | 166 entries | 0 critical miss, audit GREEN |
 | Cleanroom dogfood (E2E) | preflight + 11 journeys | **12/12 GREEN** — fresh destroy/setup cycle validates all commands end-to-end (~33min) |
 | Ginkgo journey suite (Argo Rollouts) | 80 specs | **80/80 GREEN** — canary happy path, auto-abort on failure, promote/rollback over Rollouts, multi-server naming |
@@ -512,8 +512,8 @@ loopzero deploy (or git push)
 | Edge | Cloudflare Tunnel + Worker + KV + Zone Management |
 | Static assets | DigitalOcean Spaces + CDN |
 | Monitoring | Prometheus + Grafana + Loki + Tempo + OpenTelemetry |
-| IaC | 5 Pulumi projetos (TS): `pulumi/` (L1 DO+CF), `pulumi-infra/` (multi-cluster topology), `pulumi-platform/` (L2 com 32 Helm releases), `pulumi-control-plane/` (STUB com 16 TODOs), `pulumi-shared/` (contratos) |
-| CI/CD | GitHub Actions (35 workflows) |
+| IaC | 5 Pulumi projetos (TS): `pulumi/` (L1 DO+CF), `pulumi-infra/` (multi-cluster topology), `pulumi-platform/` (L2 com 32 Helm releases), `pulumi-drill/` (DR drill prod-identical stack), `pulumi-shared/` (cross-project type contracts). Nota: `pulumi-control-plane/` foi deletado em 2026-05-15 (close-all-gaps T2.1) — control-plane workloads agora vivem em L2 Helmfile, não Pulumi, per MEET-2026-05-12 D3. |
+| CI/CD | GitHub Actions (48 workflows — verified 2026-05-21) |
 | Helm charts | 16 bootstrap próprios + 18 value overlays para upstream (`infra/helm/`) + 13 published (`charts/`) |
 
 ### Production Infrastructure (DigitalOcean)

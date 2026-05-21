@@ -14,7 +14,7 @@
 # wall-clock-bound (4h+ soak), not compute-bound — Ralph Loop iterations
 # cannot execute it honestly. This workflow runs the gate on production
 # DOKS clusters via weekly cron — same pattern as
-# operator-split-soak.yml + cell2-soaks.yml.
+# operator-split-soak.yml + drill-prod-identical-soak.yml.
 #
 # Pre-conditions (enforced by preflight):
 #   - All 4 split operator charts deployed
@@ -29,7 +29,7 @@ name: pkg-sota dogfood gate (4h soak + RFC9457 + CB recovery + SLO)
 
 on:
   schedule:
-    # Friday 02:00 UTC — separate from cell2-soaks.yml (Sunday) and
+    # Friday 02:00 UTC — separate from drill-prod-identical-soak.yml (Sunday) and
     # operator-split-soak.yml (Saturday) to avoid overlapping soak runs.
     - cron: '0 2 * * 5'
   workflow_dispatch:

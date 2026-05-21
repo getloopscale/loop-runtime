@@ -4,7 +4,7 @@
 # Per ADR D5 (preserved from chaos-mesh-experiments-plan, now superseded):
 # weekly cron is the GameDay approach. Validates 12 failure scenarios
 # (9 existing + 3 new from §3.B) against k3d clusters with SLO evidence
-# capture. Auto-creates issue on failure (per cell2-soaks.yml pattern).
+# capture. Auto-creates issue on failure (per drill-prod-identical-soak.yml pattern).
 #
 # The suite is gated by LOOPZERO_CHAOS_TEST=1 and runs only after
 # `task setup` brings up the 4 k3d clusters + chaos-mesh release is
@@ -14,7 +14,7 @@ name: Chaos Suite (weekly resilience)
 
 on:
   schedule:
-    # Sunday 03:00 UTC — 1h offset from cell2-soaks (02:00 UTC) so the
+    # Sunday 03:00 UTC — 1h offset from drill-prod-identical-soak (02:00 UTC) so the
     # two workflows don't compete for runner resources OR for cluster
     # state. Both are weekly resilience signals.
     - cron: '0 3 * * 0'
@@ -32,7 +32,7 @@ concurrency:
 
 permissions:
   contents: read
-  issues: write  # auto-issue on failure (cell2-soaks pattern)
+  issues: write  # auto-issue on failure (drill-prod-identical-soak pattern)
 
 jobs:
   chaos:

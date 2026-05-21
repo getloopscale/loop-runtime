@@ -22,7 +22,7 @@ name: Drill L2 Scale Test (CTO Rule 5)
 on:
   schedule:
     # Bi-weekly: 1st and 15th of every month at 04:00 UTC
-    # Low-traffic window; avoids competition with cell2-soaks cron (02:00 UTC Sunday)
+    # Low-traffic window; avoids competition with drill-prod-identical-soak cron (02:00 UTC Sunday)
     - cron: '0 4 1,15 * *'
   workflow_dispatch:
     inputs:
@@ -104,7 +104,7 @@ jobs:
           npx pulumi up --stack drill --yes --skip-preview
           # API URL is per drill domain (CF Zone provides DNS); apiUrl is NOT a
           # v2 named export per L2-unlock T1.2 D1 — derive from drill domain
-          # constant (matches cell2-soaks.yml pattern).
+          # constant (matches drill-prod-identical-soak.yml pattern).
           API_URL="https://api.loopzero-drill.example"
           echo "api_url=$API_URL" >> "$GITHUB_OUTPUT"
           # Wait for API health

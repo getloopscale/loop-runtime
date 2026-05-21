@@ -10,7 +10,7 @@
 #
 # Used by:
 #   - .github/workflows/drill-l2-scale.yml — bi-weekly L2 cron + manual dispatch
-#   - .github/workflows/cell2-soaks.yml — Stage 1/2 soaks (post T3.4 redirect)
+#   - .github/workflows/drill-prod-identical-soak.yml — Stage 1/2 soaks (post T3.4 redirect)
 #   - .claude/skills/drill-test/SKILL.md — Etapa 3 (mint JWT) per drill ciclo
 #
 # Exit codes:

@@ -215,9 +215,16 @@ fi
 
 # --- Check 3: Advisory mode (D7' credentials isolation) ---
 # Isolation script exit codes:
-#   0 = OK (D7' single-token path OR isolated tokens)
-#   1 = CATASTROPHIC collision (DRILL_*_TOKEN matches prod hash)
-#   2 = No DO token at all (neither DRILL_DO_TOKEN nor DIGITALOCEAN_TOKEN)
+#   0 = OK (D7' single-token model — DIGITALOCEAN_TOKEN with project/tag/bucket isolation)
+#   1 = CATASTROPHIC collision (legacy DRILL_*_TOKEN still set AND matches prod hash)
+#   2 = No DO token at all (DIGITALOCEAN_TOKEN unset)
+#
+# T0.5 (plan 2026-05-21-deep-review-remediation): D7' sponsor override (2026-05-16)
+# replaced the dual-token model with a single shared DIGITALOCEAN_TOKEN — isolation
+# is at DO project + tag (loopzero-drill-*) + state bucket level, NOT token level.
+# The legacy drill-prefixed DO token is deprecated; the collision case (exit 1)
+# is preserved only for operators migrating from the pre-D7' workflow.
+#
 # Skip check 3 if check 1 already reported missing credentials (exit 1) —
 # isolation check would just re-report the same missing-token symptom with
 # misleading "collision" interpretation.
@@ -246,7 +253,7 @@ else
       [[ "$EXIT_CODE" -eq 0 ]] && EXIT_CODE=3
       ;;
     2)
-      log "  ✗ No DO token configured (DRILL_DO_TOKEN nor DIGITALOCEAN_TOKEN set)"
+      log "  ✗ No DO token configured (DIGITALOCEAN_TOKEN unset — per D7' single-token model)"
       record "advisory_mode" "FAIL" "no-do-token"
       [[ "$EXIT_CODE" -eq 0 ]] && EXIT_CODE=3
       ;;
