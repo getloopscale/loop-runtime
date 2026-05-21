@@ -1,0 +1,21 @@
+# Dry-run-support baseline (T6.2 — plan 2026-05-21-deep-review-remediation).
+#
+# Format: one repo-relative path per non-comment line.
+# Lines starting with # and blank lines ignored.
+#
+# Purpose: grandfather state-writing scripts that don't yet support
+# --dry-run. T2.2 shipped lib/dry-run.sh; T2.2-followup will adopt
+# the lib in each grandfathered script incrementally.
+#
+# Snapshot taken: 2026-05-21
+infra/scripts/pre-destroy-cleanup.sh
+infra/scripts/dr/teardown-validator.sh
+infra/scripts/dr/preflight.sh
+infra/scripts/dr/watchdog.sh
+infra/scripts/dr-drill.sh
+infra/scripts/chaos/report.sh
+infra/scripts/bootstrap-seed-tenant-cr.sh
+infra/scripts/bootstrap-platform.sh
+infra/scripts/check-service-auth-rotation.sh
+infra/helmfile/scripts/install-local-path-provisioner.sh
+infra/helmfile/scripts/create-wiring-configmap.sh
