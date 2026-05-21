@@ -500,3 +500,99 @@ func TestExposedRouteTyped_TryTransition_Invalid(t *testing.T) {
 		t.Error("bogus state/event should error")
 	}
 }
+
+// =============================================================================
+// Build typed wrapper helpers (IsKnown/MustParse/ValidEvents at 0%)
+// =============================================================================
+
+func TestBuildTyped_IsKnownState(t *testing.T) {
+	m := NewBuildTypedMachine()
+	if !m.IsKnownState(BPhQueued) {
+		t.Error("BPhQueued should be known")
+	}
+	if m.IsKnownState(BuildPhase("bogus")) {
+		t.Error("bogus state should be unknown")
+	}
+}
+
+func TestBuildTyped_IsKnownEvent(t *testing.T) {
+	m := NewBuildTypedMachine()
+	if m.IsKnownEvent(BuildPhaseEvent("bogus")) {
+		t.Error("bogus event should be unknown")
+	}
+}
+
+func TestBuildTyped_MustParseEvent_Panics(t *testing.T) {
+	m := NewBuildTypedMachine()
+	defer func() {
+		if r := recover(); r == nil {
+			t.Error("MustParseEvent bogus should panic")
+		}
+	}()
+	m.MustParseEvent("not-an-event")
+}
+
+func TestBuildTyped_ValidEvents(t *testing.T) {
+	m := NewBuildTypedMachine()
+	_ = m.ValidEvents(BPhQueued)
+}
+
+// =============================================================================
+// Release typed wrapper helpers (0% on IsKnown/MustParse* + ValidEvents)
+// =============================================================================
+
+func TestReleaseTyped_IsKnownState(t *testing.T) {
+	m := NewReleaseTypedMachine()
+	if !m.IsKnownState(ReleasePhase(ReleaseReady)) {
+		t.Error("ReleaseReady should be known")
+	}
+	if m.IsKnownState(ReleasePhase("bogus")) {
+		t.Error("bogus state should be unknown")
+	}
+}
+
+func TestReleaseTyped_IsKnownEvent(t *testing.T) {
+	m := NewReleaseTypedMachine()
+	if m.IsKnownEvent(ReleasePhaseEvent("bogus")) {
+		t.Error("bogus event should be unknown")
+	}
+}
+
+func TestReleaseTyped_MustParseState_Panics(t *testing.T) {
+	m := NewReleaseTypedMachine()
+	defer func() {
+		if r := recover(); r == nil {
+			t.Error("MustParseState bogus should panic")
+		}
+	}()
+	m.MustParseState("not-a-state")
+}
+
+func TestReleaseTyped_MustParseEvent_Panics(t *testing.T) {
+	m := NewReleaseTypedMachine()
+	defer func() {
+		if r := recover(); r == nil {
+			t.Error("MustParseEvent bogus should panic")
+		}
+	}()
+	m.MustParseEvent("not-an-event")
+}
+
+func TestReleaseTyped_ValidEvents(t *testing.T) {
+	m := NewReleaseTypedMachine()
+	_ = m.ValidEvents(ReleasePhase(ReleaseReady))
+}
+
+// =============================================================================
+// ExposedRoute typed wrapper helpers (MustParseEvent at 0%)
+// =============================================================================
+
+func TestExposedRouteTyped_MustParseEvent_Panics(t *testing.T) {
+	m := NewExposedRouteTypedMachine()
+	defer func() {
+		if r := recover(); r == nil {
+			t.Error("MustParseEvent bogus should panic")
+		}
+	}()
+	m.MustParseEvent("not-an-event")
+}
