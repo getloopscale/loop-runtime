@@ -27,11 +27,61 @@
 
 set -euo pipefail
 
+# T2.2-followup (plan 2026-05-21-deep-review-remediation): adopt shared
+# dry-run lib. dr-drill.sh has 6 destructive operations (2× pulumi up,
+# 2× pulumi destroy, helmfile sync, argocd app sync). When DRY_RUN=1,
+# all destructive calls print intent without executing — operator can
+# preview the entire 6-stage drill (prepare→smoke→disaster→recover→
+# verify→teardown) before committing real DO billing (~$0.32/hr).
+#
+# Bug fix (caught during T2.2-followup audit): the original argument
+# parser was positional-only — `STAGE="${1:-all}"` would treat any
+# flag like --stage as the STAGE name, breaking the documented
+# `--stage STAGE` and `--skip-teardown` flags. Rewritten to use proper
+# getopt-style parsing so the docstring matches behavior.
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+# shellcheck source=./lib/dry-run.sh disable=SC1091
+source "$SCRIPT_DIR/lib/dry-run.sh"
+parse_dry_run_flag "$@"
+if [ "${#REMAINING_ARGS[@]}" -gt 0 ]; then
+  set -- "${REMAINING_ARGS[@]}"
+else
+  set --
+fi
+
 REPO_ROOT="${REPO_ROOT:-/home/paulo/loopzero}"
 DRILL_DIR="$REPO_ROOT/infra/pulumi-drill"
 EVIDENCE_DIR="$REPO_ROOT/.claude/knowledge-base/reviews/dr-drill-$(date +%Y-%m-%d)"
-STAGE="${1:-all}"
+STAGE="all"
 SKIP_TEARDOWN=false
+
+while [[ $# -gt 0 ]]; do
+  case "$1" in
+    --stage)
+      STAGE="$2"; shift 2 ;;
+    --stage=*)
+      STAGE="${1#*=}"; shift ;;
+    --skip-teardown)
+      SKIP_TEARDOWN=true; shift ;;
+    -h|--help)
+      cat <<'HELP'
+dr-drill.sh — DR drill orchestration
+
+  --stage <prepare|smoke|disaster|recover|verify|teardown|all>
+                    Stage to run (default: all)
+  --skip-teardown   Skip the final teardown stage (when --stage=all)
+  --dry-run         Preview commands without executing (no DO billing)
+  -h, --help        Show this help
+HELP
+      exit 0 ;;
+    prepare|smoke|disaster|recover|verify|teardown|all)
+      # Backward-compat: bare positional stage (e.g., dr-drill.sh prepare)
+      STAGE="$1"; shift ;;
+    *)
+      echo "ERROR: unknown argument '$1' — use --help" >&2
+      exit 2 ;;
+  esac
+done
 
 # Pre-flight: refuse to run if wrong Pulumi stack selected (EC-NEW-5)
 preflight() {
@@ -69,7 +119,7 @@ stage_prepare() {
   cd "$DRILL_DIR"
   echo "prepare_start=$(timestamp)" >> "$EVIDENCE_DIR/timeline.env"
 
-  pulumi up --stack drill --yes --suppress-outputs
+  apply pulumi up --stack drill --yes --suppress-outputs
 
   echo "prepare_complete=$(timestamp)" >> "$EVIDENCE_DIR/timeline.env"
   echo "  ✓ Pulumi resources provisioned"
@@ -87,7 +137,7 @@ stage_smoke() {
 
   # Deploy fixture (uses loopzero CLI against drill cluster)
   echo "  Deploying fixture tenant app..."
-  loopzero deploy --project drill-fixture --env production || {
+  apply loopzero deploy --project drill-fixture --env production || {
     echo "  ✗ Fixture deploy failed (may indicate drill cluster not fully ready)"
     return 1
   }
@@ -114,7 +164,7 @@ stage_disaster() {
 
   echo "disaster_start=$(timestamp)" >> "$EVIDENCE_DIR/timeline.env"
 
-  pulumi destroy --stack drill --yes --suppress-outputs
+  apply pulumi destroy --stack drill --yes --suppress-outputs
 
   echo "disaster_complete=$(timestamp)" >> "$EVIDENCE_DIR/timeline.env"
   echo "  ✓ All drill resources destroyed"
@@ -127,17 +177,18 @@ stage_recover() {
   echo "recover_start=$(timestamp)" >> "$EVIDENCE_DIR/timeline.env"
 
   # 1. Pulumi up (recreates DOKS, CF zone, Spaces, PG)
-  pulumi up --stack drill --yes --suppress-outputs
+  apply pulumi up --stack drill --yes --suppress-outputs
 
   echo "recover_pulumi_complete=$(timestamp)" >> "$EVIDENCE_DIR/timeline.env"
   echo "  ✓ Cloud primitives recreated"
 
   # 2. Helmfile sync (install platform services on new cluster)
+  # pulumi stack output is read-only — safe outside apply
   pulumi stack output --stack drill clusterKubeconfig --show-secrets > /tmp/drill-kubeconfig
   export KUBECONFIG=/tmp/drill-kubeconfig
 
   cd "$REPO_ROOT/infra/helmfile"
-  helmfile -e drill sync || {
+  apply helmfile -e drill sync || {
     echo "  ✗ Helmfile sync failed"
     return 1
   }
@@ -146,7 +197,7 @@ stage_recover() {
   echo "  ✓ Platform services installed"
 
   # 3. ArgoCD sync (bootstrap fixture tenant app)
-  argocd app sync drill-fixture --insecure || true
+  apply argocd app sync drill-fixture --insecure || true
   echo "recover_argocd_complete=$(timestamp)" >> "$EVIDENCE_DIR/timeline.env"
   echo "  ✓ ArgoCD bootstrap complete"
 }
@@ -179,7 +230,7 @@ stage_teardown() {
   cd "$DRILL_DIR"
   echo "teardown_start=$(timestamp)" >> "$EVIDENCE_DIR/timeline.env"
 
-  pulumi destroy --stack drill --yes --suppress-outputs
+  apply pulumi destroy --stack drill --yes --suppress-outputs
 
   echo "teardown_complete=$(timestamp)" >> "$EVIDENCE_DIR/timeline.env"
   echo "  ✓ Drill resources destroyed"

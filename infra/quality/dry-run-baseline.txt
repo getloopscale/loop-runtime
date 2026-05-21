@@ -12,4 +12,3 @@ infra/scripts/bootstrap-platform.sh
 infra/scripts/check-service-auth-rotation.sh
 infra/helmfile/scripts/install-local-path-provisioner.sh
 infra/helmfile/scripts/bootstrap-patch-admission-policies.sh
-infra/helmfile/scripts/bootstrap-patch-sigstore-policy-controller.sh

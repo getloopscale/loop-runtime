@@ -9,15 +9,31 @@
 # admission-policies chart consumes. Required in workload cluster.
 #
 # Idempotent (helm upgrade --install).
+#
+# T2.2-followup (plan 2026-05-21-deep-review-remediation): adopts shared
+# dry-run lib. --dry-run prints intended helm install without executing,
+# useful for cleanroom previews and bootstrap script debugging.
 
 set -euo pipefail
 
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+# shellcheck source=../../scripts/lib/dry-run.sh disable=SC1091
+source "$SCRIPT_DIR/../../scripts/lib/dry-run.sh"
+parse_dry_run_flag "$@"
+if [ "${#REMAINING_ARGS[@]}" -gt 0 ]; then
+  set -- "${REMAINING_ARGS[@]}"
+else
+  set --
+fi
+
 CONTEXT="${KUBECONTEXT:-k3d-loopzero-workload}"
 
-helm repo list 2>/dev/null | grep -q '^sigstore' || helm repo add sigstore https://sigstore.github.io/helm-charts
-helm repo update >/dev/null 2>&1 || true
+# helm repo list is read-only — safe outside apply
+helm repo list 2>/dev/null | grep -q '^sigstore' || apply helm repo add sigstore https://sigstore.github.io/helm-charts
+# repo update tolerates transient network failures (best-effort refresh)
+apply helm repo update >/dev/null 2>&1 || true
 
-helm upgrade --install policy-controller sigstore/policy-controller \
+apply helm upgrade --install policy-controller sigstore/policy-controller \
   --version 0.8.1 \
   --kube-context "$CONTEXT" \
   --namespace cosign-system --create-namespace \
