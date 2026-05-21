@@ -2,6 +2,8 @@
 # k3d-cross-cluster-heal.sh — idempotent recovery of cross-cluster connectivity
 # in local k3d standalone-multi after `k3d cluster stop/start` cycles.
 #
+set -euo pipefail
+
 # CHG-2026-04-30-DOGFOOD-LOCAL-HEAL — codifies the 9 manual workarounds (H1-H9)
 # discovered LIVE during dogfood E2E unblock 2026-04-30:
 #
@@ -115,7 +117,6 @@
 # SPDX-License-Identifier: Apache-2.0
 # Copyright 2025-2026 The LoopZero Authors
 
-set -euo pipefail
 
 set -uo pipefail
 

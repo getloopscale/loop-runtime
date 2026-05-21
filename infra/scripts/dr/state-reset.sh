@@ -2,6 +2,8 @@
 # SPDX-License-Identifier: Apache-2.0
 # Copyright 2025-2026 The LoopZero Authors
 #
+set -euo pipefail
+
 # Plan 2026-05-16-drill-l2-unlock T1.2.bis (EC-01 MUST FIX).
 #
 # Pulumi state clean-slate helper for drill stack.
@@ -60,7 +62,6 @@
 # and exits 0 with audit note. Operator can re-run after dropped network
 # without consequences.
 
-set -euo pipefail
 
 # --- Argument parsing ---
 DRY_RUN=true
