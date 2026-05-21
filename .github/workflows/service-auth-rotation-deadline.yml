@@ -60,6 +60,9 @@ jobs:
 
       - name: Check rotation deadline
         id: rotation
+        # rationale (T6.8): captures exit code via outputs; auto-issue step
+        # re-fails using the captured code. continue-on-error lets the
+        # issue-creation step run when deadline approaches/passes.
         continue-on-error: true
         run: |
           chmod +x infra/scripts/check-service-auth-rotation.sh

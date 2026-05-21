@@ -82,6 +82,8 @@ jobs:
       - name: Pre-destroy cleanup
         id: cleanup
         run: STACK="${{ inputs.stack }}" bash infra/scripts/pre-destroy-cleanup.sh
+        # rationale (T6.8): pre-destroy cleanup is best-effort — failures here
+        # are expected when resources were already cleaned in a prior partial run.
         continue-on-error: true
 
       - name: Report cleanup result

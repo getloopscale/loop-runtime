@@ -63,6 +63,9 @@ jobs:
 
       - name: Check deadline
         id: deadline
+        # rationale (T6.8): captures exit code via outputs; a subsequent
+        # auto-issue step uses the captured code. continue-on-error lets
+        # this step "fail" softly so the issue-creation step still runs.
         continue-on-error: true
         run: |
           chmod +x infra/scripts/check-cosign-cutover-deadline.sh

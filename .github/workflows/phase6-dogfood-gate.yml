@@ -162,6 +162,8 @@ jobs:
 
       - name: Phase 5 — SLO assertion via Prometheus
         id: slo
+        # rationale (T6.8): SLO probe failure is post-processed by next step
+        # (auto-issue + re-fail). continue-on-error captures exit code via id.
         continue-on-error: true
         run: |
           set -e

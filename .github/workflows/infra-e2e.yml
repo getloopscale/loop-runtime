@@ -86,6 +86,7 @@ jobs:
       - name: "Step 1: Pre-destroy cleanup"
         if: inputs.skip_destroy != true
         run: STACK=${{ inputs.stack || 'dev' }} bash infra/scripts/pre-destroy-cleanup.sh
+        # rationale (T6.8): pre-destroy cleanup is best-effort during E2E setup.
         continue-on-error: true
 
       - name: "Step 1: State reset"

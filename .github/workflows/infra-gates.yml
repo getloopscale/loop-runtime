@@ -144,9 +144,9 @@ jobs:
         run: npm ci
 
       - name: Run knip (warn-mode)
-        # Warn-mode: continue-on-error until baseline = 0. Baseline documented
-        # Flip to fail-on-finding when
-        # all current findings either deleted or moved to ignore with reason.
+        # rationale (T6.8): warn-mode until knip baseline reaches 0. Flip to
+        # fail-on-finding when all current findings deleted or moved to ignore.
+        # graduation: tracked in T-INF-G14 backlog
         continue-on-error: true
         working-directory: cli
         run: npx knip --no-progress
