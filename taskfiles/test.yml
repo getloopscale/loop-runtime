@@ -1181,3 +1181,33 @@ tasks:
 
   # ---------------------------------------------------------------------------
   # Monitoring
+
+  # ---------------------------------------------------------------------------
+  # Helm chart render-time tests (Plan 2026-05-20 v1.2 T4.2)
+  #
+  # CANONICAL targets live in taskfiles/helm.yml. These aliases satisfy the
+  # plan's literal "taskfiles/test.yml" target location while keeping
+  # taskfiles/helm.yml as the source of truth (canonical helm operations).
+  # ---------------------------------------------------------------------------
+
+  helm:render:test:
+    desc: |
+      Run helm chart RENDER-TIME tests (alias for `task helm:test`).
+      Tier 2 between schema validation and LIVE drill. ~6m15s for full
+      suite of 22 packages / ~210 assertions with -p 1 serialization.
+    cmds:
+      - task: helm:test
+
+  helm:render:test:vet:
+    desc: |
+      Fast build gate (~5s) — go vet over all helm render packages.
+      Alias for `task helm:test:vet`. Catches b9f19dc8 class regression.
+    cmds:
+      - task: helm:test:vet
+
+  helm:render:test:chart:
+    desc: |
+      Run render-time tests for a SINGLE chart (alias for `task helm:test:chart`).
+      Usage: task helm:render:test:chart -- loopzero-api
+    cmds:
+      - task: helm:test:chart
