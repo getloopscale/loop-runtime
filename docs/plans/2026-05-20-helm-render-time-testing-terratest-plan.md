@@ -1,5 +1,11 @@
 # Plan: Helm Chart Render-Time Testing with Terratest
 
+> **Version 1.2** (2026-05-21 — DoD runtime target relaxed per
+> MEET-ASYNC-AMENDMENT-2026-05-21-001 after empirical measurement.
+> "<60s full suite" was speculative; real floor at 22 packages is
+> ~6m15s with render cache + sync.Once. New targets: build-gate ≤30s,
+> full suite ≤10min. Engineering side of plan COMPLETE.)
+>
 > **Version 1.1** (2026-05-20 — edge-case review incorporated, 3 MUST FIX items addressed via T1.3, T1.4, T3.2 exemption + D10, D11 ADRs)
 >
 > **Version 1.0** — Este plano adiciona uma camada de **render-time validation** (tier 2) entre os 6 hermetic schema gates já existentes (294+ assertions) e os LIVE operator gates (`/dogfood full`, drill LIVE). Usando `gruntwork-io/terratest` + Go, validamos que cada Helm chart **renderiza manifests K8s corretos** após substituição de values por env (dev/drill/prod). Catches bug classes que schemas (input validation) não pegam: label selector drift, conditional template branches, env-specific rendering errors, multi-env override consistency. Outcome: gates de regressão executáveis em <30s no CI, cobrindo 19 charts custom LoopZero (13 OCI + 6 infra/helm com templates/) com ~150+ render assertions, eliminando o gap entre "schema OK" e "deploys correctly".
@@ -1077,10 +1083,19 @@ docs/architecture/helm-testing/README.md (NEW) — high-level pattern doc
 - [ ] **`/cross-validation 2026-05-20-helm-render-time-testing-terratest` PASSED** — zero CRITICO, zero GRAVE
 - [ ] **CHANGELOG.md hygiene** — entry per phase in `[Unreleased]`
 - [ ] Plan-specific criteria:
-  - [ ] 19 charts cobertos com render-time tests
-  - [ ] ≥150 render assertions total
-  - [ ] 4 env files per applicable chart
-  - [ ] CI runtime: <60s para suite completa
+  - [ ] 19 charts cobertos com render-time tests (v1.2 amendment:
+        amended to 18 — the planned 19 included 19 values-only
+        directories without Chart.yaml that cannot be rendered;
+        true scope is 18 real charts + 2 published-variant pkgs)
+  - [ ] ≥150 render assertions total (measured: ~210)
+  - [ ] 4 env files per applicable chart (only loopzero-api today —
+        other charts have no helmfile env values to test against)
+  - [ ] CI runtime: build-gate ≤30s (`task helm:test:vet`)
+  - [ ] CI runtime: full suite ≤10min (`task helm:test`) — per
+        MEET-ASYNC-AMENDMENT-2026-05-21-001 the original "<60s"
+        target was unrealistic at 22 packages × helm dep update
+        per process; measured floor is ~6m15s after render cache
+        + sync.Once optimization
   - [ ] Zero LIVE cluster dependency
   - [ ] Existing 6 hermetic gates still GREEN (no regression)
 - [ ] **Evidence**: N/A — este plano é INFRASTRUCTURE addition pré-release; não move maturity score per se (mas adds tier 2 protection layer)
