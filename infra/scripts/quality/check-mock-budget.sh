@@ -28,11 +28,14 @@ VIOLATION_DETAILS=""
 # Read opt-out budget from file comment
 read_opt_out_budget() {
   local f="$1"
-  # Look for `// mock-budget: N` in first 50 lines
-  head -50 "$f" 2>/dev/null \
-    | grep -oE '//[[:space:]]*mock-budget:[[:space:]]*[0-9]+' \
-    | grep -oE '[0-9]+' \
-    | head -1
+  # Look for `// mock-budget: N` in first 50 lines.
+  # `|| true` on the trailing pipe to neutralize pipefail when the file
+  # has no annotation (grep returns 1 on no-match, which aborts under
+  # set -euo pipefail). Empty stdout = "no opt-out".
+  { head -50 "$f" 2>/dev/null \
+      | grep -oE '//[[:space:]]*mock-budget:[[:space:]]*[0-9]+' \
+      | grep -oE '[0-9]+' \
+      | head -1; } || true
 }
 
 count_go_mocks() {

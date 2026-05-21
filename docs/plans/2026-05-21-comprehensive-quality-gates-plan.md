@@ -1097,13 +1097,13 @@ GREEN:   Implement
 ```
 
 #### Acceptance Criteria
-- [ ] Gate counts mocks correctly (declaration vs inline callback)
-- [ ] Honors opt-out
-- [ ] EC-9 distinction enforced via regex restricting to top-level
+- [x] Gate counts mocks correctly (declaration vs inline callback)
+- [x] Honors opt-out (cli/tests/unit/platform-install-validate-l3.test.ts uses `// mock-budget: 7 — …`)
+- [x] EC-9 distinction enforced via regex restricting to top-level
 
 #### DoD
-- [ ] Design smell catchable
-- [ ] Callback false positives eliminated
+- [x] Design smell catchable (BLOCKING since 2026-05-21; previously advisory)
+- [x] Callback false positives eliminated (silent-abort bug in `read_opt_out_budget` fixed: `set -euo pipefail` was aborting on files without the annotation)
 
 ### T6.5 — Skip-with-issue-link gate (per D9)
 
@@ -1141,13 +1141,19 @@ GREEN:   Implement with comprehensive regex coverage
 ```
 
 #### Acceptance Criteria
-- [ ] Gate scans all *_test.go + *.test.ts
-- [ ] Requires URL or filename suffix
-- [ ] EC-8 covers ALL skip API variants (t.Skip/SkipNow/Skipf, it.skip,
+- [x] Gate scans all *_test.go + *.test.ts
+- [x] Requires URL or filename suffix
+- [x] EC-8 covers ALL skip API variants (t.Skip/SkipNow/Skipf, it.skip,
       describe.skip, xit, xdescribe)
+- [x] Baseline-aware blocking mode (graduated 2026-05-21) — 109 legacy
+      violations grandfathered in `infra/quality/skip-link-baseline.txt`;
+      NEW violations FAIL the gate. Backed by 10/10 hermetic tests in
+      `infra/tests/scripts/check-skip-link-baseline_test.sh`.
 
 #### DoD
-- [ ] No invisible skipped tests in ANY skip API form
+- [x] No invisible skipped tests in ANY skip API form (BLOCKING since
+      2026-05-21; baseline-aware so legacy debt can be paid down
+      incrementally without re-introducing new violations)
 
 ---
 

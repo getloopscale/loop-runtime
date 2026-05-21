@@ -171,27 +171,26 @@ jobs:
   mock-budget:
     name: Quality Gates - Mock Budget
     runs-on: ubuntu-latest
-    # ADVISORY MODE INITIALLY: legacy test files exist with high mock
-    # counts predating the budget. Cleanup is Phase 4 backlog.
-    continue-on-error: true
+    # BLOCKING MODE (graduated 2026-05-21): only known offender carries a
+    # documented `// mock-budget: N — <reason>` opt-out comment per ADR D8.
+    # New violations fail the gate.
     steps:
       - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
 
-      - name: Run mock-budget gate (advisory until Phase 4 cleanup)
+      - name: Run mock-budget gate (blocking)
         run: bash infra/scripts/quality/check-mock-budget.sh
 
   skip-link:
     name: Quality Gates - Skip-Link Enforcement
     runs-on: ubuntu-latest
-    # ADVISORY MODE INITIALLY (per plan phased rollout pattern):
-    # 109 legacy skip() calls without issue URL exist as of 2026-05-21
-    # baseline. Cleanup is Phase 4 backlog. Once cleanup completes,
-    # remove continue-on-error to graduate to blocking mode.
-    continue-on-error: true
+    # BLOCKING MODE (graduated 2026-05-21) using baseline-aware subtraction:
+    # 109 legacy violations are grandfathered in
+    # infra/quality/skip-link-baseline.txt. NEW violations FAIL the gate.
+    # Phase 4 backlog: shrink the baseline incrementally.
     steps:
       - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
 
-      - name: Run skip-link gate (advisory until Phase 4 cleanup)
+      - name: Run skip-link gate (blocking; baseline-aware)
         run: bash infra/scripts/quality/check-skip-link.sh
 
   runtime-slo:

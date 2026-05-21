@@ -1,3 +1,6 @@
+// mock-budget: 7 — wires --validate-l3 across child_process + installer +
+// helmfile-runner + pulumi-runner + preflight + health-checks + drift; each is
+// a distinct collaborator in the install orchestrator, not a design smell.
 // CHG-2026-04-30-INFRA-PARITY / T8.1 — `--validate-l3` flag regression.
 //
 // When --validate-l3 is set AND the platform reaches phase=Ready, Step 6 must
