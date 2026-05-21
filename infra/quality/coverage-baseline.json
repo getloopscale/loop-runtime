@@ -1,6 +1,6 @@
 {
   "schema_version": "1.0",
-  "generated_at": "2026-05-21T03:19:20Z",
+  "generated_at": "2026-05-21T03:25:37Z",
   "critical_packages": [
     "github.com/loopzero/loopzero/pkg/errors",
     "github.com/loopzero/loopzero/pkg/errors/http",
@@ -28,6 +28,6 @@
     "github.com/loopzero/loopzero/pkg/logging": { "line": 100.0, "min_required": 90 },
     "github.com/loopzero/loopzero/pkg/naming": { "line": 98.4, "min_required": 90 },
     "github.com/loopzero/loopzero/pkg/serviceauth": { "line": 91.5, "min_required": 86 },
-    "github.com/loopzero/loopzero/pkg/statemachine": { "line": 74.2, "min_required": 90 }
+    "github.com/loopzero/loopzero/pkg/statemachine": { "line": 93.7, "min_required": 90 }
   }
 }
