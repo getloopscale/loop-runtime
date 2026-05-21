@@ -18,7 +18,26 @@
 
 set -euo pipefail
 
-set -uo pipefail
+# T2.2-followup (plan 2026-05-21-deep-review-remediation): adopt shared
+# dry-run lib. chaos/report.sh writes a single Markdown report file to
+# `$OUTPUT`; with --dry-run it prints the report to stdout WITHOUT writing
+# the file, useful for operator template inspection during chaos
+# scenario development.
+#
+# Bug fix (caught during T2.2-followup audit): previous code had a
+# redundant `set -uo pipefail` immediately after `set -euo pipefail`.
+# The redundant call OMITS `-e` and therefore DISABLES error-fail
+# semantics. Removed in this commit — failures in report metadata
+# extraction now propagate correctly.
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+# shellcheck source=../lib/dry-run.sh disable=SC1091
+source "$SCRIPT_DIR/../lib/dry-run.sh"
+parse_dry_run_flag "$@"
+if [ "${#REMAINING_ARGS[@]}" -gt 0 ]; then
+  set -- "${REMAINING_ARGS[@]}"
+else
+  set --
+fi
 
 SCENARIO="" MANIFEST="" RUN_DIR="" VERDICT="" OUTPUT=""
 PRE_P95=0 DURING_P95=0 POST_P95=0
@@ -49,6 +68,14 @@ done
   echo "ERROR: missing required arg" >&2
   exit 1
 }
+
+# In dry-run mode, redirect $OUTPUT to /dev/stdout so the report is emitted
+# without writing to disk. Existing destination preserved for normal runs.
+ORIGINAL_OUTPUT="$OUTPUT"
+if [ "${DRY_RUN:-0}" = "1" ]; then
+  dry_run_log "would write chaos report to $OUTPUT — printing to stdout instead"
+  OUTPUT="/dev/stdout"
+fi
 
 # Extract metadata from manifest
 HYPOTHESIS=$(grep "loopzero.io/hypothesis:" "$MANIFEST" | head -1 | sed 's/.*loopzero.io\/hypothesis: *//;s/^"//;s/"$//' || echo "(missing)")
@@ -167,4 +194,4 @@ cat >> "$OUTPUT" <<EOF
 - Cleanup failed
 EOF
 
-echo "$OUTPUT"
+echo "$ORIGINAL_OUTPUT"

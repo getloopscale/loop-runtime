@@ -9,7 +9,6 @@
 #
 # Snapshot taken: 2026-05-21
 infra/scripts/dr-drill.sh
-infra/scripts/chaos/report.sh
 infra/scripts/bootstrap-seed-tenant-cr.sh
 infra/scripts/bootstrap-platform.sh
 infra/scripts/check-service-auth-rotation.sh
