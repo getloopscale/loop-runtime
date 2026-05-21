@@ -67,6 +67,7 @@ jobs:
   securitycontext-audit:
     name: "INF-G08: securityContext audit"
     runs-on: ubuntu-latest
+    timeout-minutes: 30
     steps:
       - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
 
@@ -93,6 +94,7 @@ jobs:
   action-pinning:
     name: "INF-G18: Action SHA pinning"
     runs-on: ubuntu-latest
+    timeout-minutes: 30
     steps:
       - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
 
@@ -112,6 +114,7 @@ jobs:
   divergence-matrix:
     name: "Plan T5.2: divergence matrix integrity"
     runs-on: ubuntu-latest
+    timeout-minutes: 30
     steps:
       - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
 
@@ -126,6 +129,7 @@ jobs:
   ts-orphan-exports:
     name: "Plan T0.3: knip orphan-exports (CLI)"
     runs-on: ubuntu-latest
+    timeout-minutes: 30
     steps:
       - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
 
@@ -162,6 +166,7 @@ jobs:
   chart-schema:
     name: "INF-G17: Chart schema validation"
     runs-on: ubuntu-latest
+    timeout-minutes: 30
     steps:
       - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
 

@@ -46,6 +46,7 @@ jobs:
   parity-preflight:
     name: parity preflight (offline gates)
     runs-on: ubuntu-latest
+    timeout-minutes: 30
     steps:
       - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
 
@@ -65,6 +66,7 @@ jobs:
   cli-tests-parity:
     name: CLI tests — parity-related
     runs-on: ubuntu-latest
+    timeout-minutes: 30
     steps:
       - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
 
@@ -92,6 +94,7 @@ jobs:
   pulumi-parity-tests:
     name: Pulumi tests — parity-related
     runs-on: ubuntu-latest
+    timeout-minutes: 30
     steps:
       - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
 

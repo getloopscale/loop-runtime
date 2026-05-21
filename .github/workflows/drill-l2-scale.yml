@@ -49,6 +49,7 @@ jobs:
   pre-flight-gate:
     name: Pre-flight isolation verification
     runs-on: ubuntu-latest
+    timeout-minutes: 30
     outputs:
       proceed: ${{ steps.gate.outputs.proceed }}
     steps:

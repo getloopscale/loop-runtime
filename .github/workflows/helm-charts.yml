@@ -44,6 +44,7 @@ jobs:
   lint:
     name: Lint Charts
     runs-on: ubuntu-latest
+    timeout-minutes: 30
     steps:
       - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
 
@@ -158,6 +159,7 @@ jobs:
   validate:
     name: Validate Manifests
     runs-on: ubuntu-latest
+    timeout-minutes: 30
     steps:
       - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
 
@@ -210,6 +212,7 @@ jobs:
   ct-lint:
     name: chart-testing lint (CH-G18 / ADR-0039)
     runs-on: ubuntu-latest
+    timeout-minutes: 30
     steps:
       - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
         with:
@@ -231,6 +234,7 @@ jobs:
   ct-install:
     name: chart-testing install matrix (CH-G18 / ADR-0039)
     runs-on: ubuntu-latest
+    timeout-minutes: 30
     if: github.event_name == 'pull_request'
     strategy:
       fail-fast: false
@@ -270,6 +274,7 @@ jobs:
   chartsnap:
     name: chartsnap whole-chart snapshot (CH-G12 / T4.2)
     runs-on: ubuntu-latest
+    timeout-minutes: 30
     if: github.event_name == 'pull_request'
     steps:
       - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
@@ -310,6 +315,7 @@ jobs:
   helm-diff:
     name: helm-diff PR gate (CH-G05 / T4.3)
     runs-on: ubuntu-latest
+    timeout-minutes: 30
     if: github.event_name == 'pull_request'
     steps:
       - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
@@ -392,6 +398,7 @@ jobs:
     # `task helm:test:vet` step closes that hole.
     name: Render-time tests (Plan 2026-05-20 T4.1)
     runs-on: ubuntu-latest
+    timeout-minutes: 30
     steps:
       - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
 
@@ -425,6 +432,7 @@ jobs:
   crd-sync:
     name: CRD Sync Check
     runs-on: ubuntu-latest
+    timeout-minutes: 30
     steps:
       - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
 
@@ -461,6 +469,7 @@ jobs:
   package-push:
     name: Package & Push OCI
     runs-on: ubuntu-latest
+    timeout-minutes: 30
     # Plan 2026-05-20 T4.1: render-tests gates publishing — a chart that
     # passes lint but emits wrong structure (e.g. orphan selector, missing
     # security context) MUST NOT reach DOCR.

@@ -54,6 +54,7 @@ jobs:
   # ---- Determine which skill to dispatch based on cron schedule or input ----
   prepare:
     runs-on: ubuntu-22.04
+    timeout-minutes: 30
     outputs:
       skill: ${{ steps.detect.outputs.skill }}
       scenario: ${{ steps.detect.outputs.scenario }}

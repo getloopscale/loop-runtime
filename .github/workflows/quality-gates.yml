@@ -21,6 +21,7 @@ jobs:
   coverage-diff:
     name: Quality Gates - Coverage Diff Gate
     runs-on: ubuntu-latest
+    timeout-minutes: 30
     if: github.event_name == 'pull_request'
     steps:
       - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
@@ -59,6 +60,7 @@ jobs:
   baseline-regression:
     name: Quality Gates - Baseline Regression Gate
     runs-on: ubuntu-latest
+    timeout-minutes: 30
     if: github.event_name == 'pull_request'
     steps:
       - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
@@ -104,6 +106,7 @@ jobs:
   template-compliance:
     name: Quality Gates - PR Template Compliance
     runs-on: ubuntu-latest
+    timeout-minutes: 30
     if: github.event_name == 'pull_request'
     steps:
       - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
@@ -118,6 +121,7 @@ jobs:
   regression-test:
     name: Quality Gates - Bug-fix Regression Test Gate
     runs-on: ubuntu-latest
+    timeout-minutes: 30
     if: github.event_name == 'pull_request'
     steps:
       - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
@@ -136,6 +140,7 @@ jobs:
   test-deletion:
     name: Quality Gates - Test Deletion Audit
     runs-on: ubuntu-latest
+    timeout-minutes: 30
     if: github.event_name == 'pull_request'
     steps:
       - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
@@ -157,6 +162,7 @@ jobs:
   pyramid:
     name: Quality Gates - Test Pyramid
     runs-on: ubuntu-latest
+    timeout-minutes: 30
     steps:
       - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
 
@@ -171,6 +177,7 @@ jobs:
   mock-budget:
     name: Quality Gates - Mock Budget
     runs-on: ubuntu-latest
+    timeout-minutes: 30
     # BLOCKING MODE (graduated 2026-05-21): only known offender carries a
     # documented `// mock-budget: N — <reason>` opt-out comment per ADR D8.
     # New violations fail the gate.
@@ -183,6 +190,7 @@ jobs:
   skip-link:
     name: Quality Gates - Skip-Link Enforcement
     runs-on: ubuntu-latest
+    timeout-minutes: 30
     # BLOCKING MODE (graduated 2026-05-21) using baseline-aware subtraction:
     # 109 legacy violations are grandfathered in
     # infra/quality/skip-link-baseline.txt. NEW violations FAIL the gate.
@@ -196,6 +204,7 @@ jobs:
   runtime-slo:
     name: Quality Gates - Runtime SLO
     runs-on: ubuntu-latest
+    timeout-minutes: 30
     if: github.event_name == 'pull_request'
     steps:
       - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
@@ -219,6 +228,7 @@ jobs:
   hermetic-tests:
     name: Quality Gates Hermetic Tests
     runs-on: ubuntu-latest
+    timeout-minutes: 30
     steps:
       - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
 
