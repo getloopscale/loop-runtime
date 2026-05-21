@@ -1,0 +1,123 @@
+name: Quality Gates - Coverage Report
+
+# Plan 2026-05-21-comprehensive-quality-gates v1.1 T1.1.
+# Phase 1: measurement only — no enforcement yet (Phase 2 adds gates).
+
+on:
+  push:
+    branches: [develop, main]
+    paths:
+      - 'api/**'
+      - 'cli/**'
+      - 'pkg/**'
+      - 'operators/**'
+      - 'infra/scripts/quality/**'
+      - 'taskfiles/test.yml'
+      - '.github/workflows/coverage-report.yml'
+  pull_request:
+    branches: [develop, main]
+    paths:
+      - 'api/**'
+      - 'cli/**'
+      - 'pkg/**'
+      - 'operators/**'
+      - 'infra/scripts/quality/**'
+      - 'taskfiles/test.yml'
+      - '.github/workflows/coverage-report.yml'
+
+permissions:
+  contents: read
+  pull-requests: write  # for PR comments
+
+jobs:
+  coverage:
+    name: Coverage Report (Go + CLI)
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+        with:
+          fetch-depth: 0  # diff-cover needs base ref
+
+      - name: Set up Go
+        uses: actions/setup-go@0aaccfd150d50ccaeb58ebd88d36e91967a5f35b # v5.4.0
+        with:
+          go-version: '1.25.10'
+
+      - name: Set up Node
+        uses: actions/setup-node@39370e3970a6d050c480ffad4ff0ed4d3fdee5af # v4.1.0
+        with:
+          node-version: '20'
+          cache: npm
+          cache-dependency-path: cli/package-lock.json
+
+      - name: Set up Task
+        uses: arduino/setup-task@b91d5d2c96a56797b48ac1e0e89220bf64044611 # v2.0.0
+        with:
+          version: 3.x
+          repo-token: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Install gocovmerge
+        run: go install github.com/wadey/gocovmerge@latest
+
+      - name: Install CLI deps
+        run: cd cli && npm ci
+
+      - name: Run coverage suite
+        run: task test:coverage
+
+      - name: Upload Go coverage profile
+        uses: actions/upload-artifact@65c4c4a1ddee5b72f698fdd19549f0f0fb45cf08 # v4.6.0
+        with:
+          name: coverage-go-profile
+          path: /tmp/coverage.out
+          retention-days: 30
+
+      - name: Upload CLI lcov
+        uses: actions/upload-artifact@65c4c4a1ddee5b72f698fdd19549f0f0fb45cf08 # v4.6.0
+        with:
+          name: coverage-cli-lcov
+          path: /tmp/cli-coverage.lcov
+          retention-days: 30
+
+      - name: Upload merged lcov
+        uses: actions/upload-artifact@65c4c4a1ddee5b72f698fdd19549f0f0fb45cf08 # v4.6.0
+        with:
+          name: coverage-merged-lcov
+          path: /tmp/coverage-merged.lcov
+          retention-days: 30
+
+      - name: Summary (Phase 1 — measurement only, no gates yet)
+        run: |
+          echo "::group::Coverage summary"
+          if [ -f /tmp/coverage-merged.lcov ]; then
+            file_count=$(grep -c '^SF:' /tmp/coverage-merged.lcov || echo 0)
+            echo "Files in merged report: $file_count"
+          else
+            echo "No merged report generated"
+          fi
+          echo "::endgroup::"
+          echo ""
+          echo "Phase 1 of Quality Gates plan: measurement only."
+          echo "Phase 2 will add PR-blocking diff gate + baseline regression gate."
+
+  hermetic-tests:
+    name: Coverage scripts hermetic tests
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+
+      - name: Set up Go
+        uses: actions/setup-go@0aaccfd150d50ccaeb58ebd88d36e91967a5f35b # v5.4.0
+        with:
+          go-version: '1.25.10'
+
+      - name: Install gocovmerge
+        run: go install github.com/wadey/gocovmerge@latest
+
+      - name: T1.1 coverage-go script hermetic tests
+        run: bash infra/tests/scripts/coverage-go_test.sh
+
+      - name: T1.1 coverage-merge script hermetic tests
+        run: bash infra/tests/scripts/coverage-merge_test.sh

@@ -1183,6 +1183,34 @@ tasks:
   # Monitoring
 
   # ---------------------------------------------------------------------------
+  # Quality Gates: Coverage measurement (Plan 2026-05-21 v1.1 T1.1)
+  # ---------------------------------------------------------------------------
+
+  test:coverage:go:
+    desc: |
+      Run Go coverage across all packages. Output: /tmp/coverage.out.
+      Excludes vendor/, handles doc-only packages (EC-10).
+    cmds:
+      - bash infra/scripts/quality/coverage-go.sh
+
+  test:coverage:cli:
+    desc: |
+      Run CLI (TS/JS) coverage via jest --coverage. Output: /tmp/cli-coverage.lcov.
+      Excludes node_modules.
+    cmds:
+      - bash infra/scripts/quality/coverage-cli.sh
+
+  test:coverage:
+    desc: |
+      Run both Go + CLI coverage + merge into unified lcov.
+      Output: /tmp/coverage-merged.lcov (consumable by codecov, diff-cover, etc).
+      Phase 2 gates (diff + baseline) consume this output.
+    cmds:
+      - task: test:coverage:go
+      - task: test:coverage:cli
+      - bash infra/scripts/quality/coverage-merge.sh
+
+  # ---------------------------------------------------------------------------
   # Helm chart render-time tests (Plan 2026-05-20 v1.2 T4.2)
   #
   # CANONICAL targets live in taskfiles/helm.yml. These aliases satisfy the
