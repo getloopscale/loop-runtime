@@ -17,6 +17,34 @@
 # Usage: STACK=dev bash infra/scripts/pre-destroy-cleanup.sh
 set -euo pipefail
 
+# T2.2-followup (plan 2026-05-21-deep-review-remediation): adopt dry-run
+# lib via early-exit gate. The script has 12+ destructive kubectl/helm/
+# doctl calls with intentional `|| true` per-call (cleanup is best-effort).
+# Rather than wrap each with `apply` (would change error-recovery
+# semantics), gate the entire script — operator gets a clear preview of
+# the cleanup intent without any destructive side effects.
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+# shellcheck source=lib/dry-run.sh disable=SC1091
+source "$SCRIPT_DIR/lib/dry-run.sh"
+parse_dry_run_flag "$@"
+if [ "${#REMAINING_ARGS[@]}" -gt 0 ]; then
+  set -- "${REMAINING_ARGS[@]}"
+else
+  set --
+fi
+
+if [[ "$DRY_RUN" == "1" ]]; then
+  echo "[pre-destroy-cleanup] DRY_RUN=1 — would execute these cleanup operations:"
+  echo "  1. Patch CRD/ArgoCD/Helm finalizers to allow garbage collection"
+  echo "  2. Delete owner=helm-tagged Secrets in loopzero-system"
+  echo "  3. Force-delete tenant namespaces (loopzero-tenant-*, --grace-period=0)"
+  echo "  4. Delete K8s resources from remote workload cluster via scoped kubeconfig"
+  echo "  5. Empty + delete DO Spaces buckets (loopzero-static-*, loopzero-builds-*)"
+  echo "  6. Clean up CF KV namespaces + Workers"
+  echo "(Operator: re-run without --dry-run to actually execute)"
+  exit 0
+fi
+
 set -o pipefail
 # Intentionally NOT set -e — cleanup steps should continue even if individual ops fail.
 
