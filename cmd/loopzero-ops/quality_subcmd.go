@@ -9,8 +9,10 @@ import (
 	"fmt"
 	"os"
 	"strings"
+	"time"
 
 	"github.com/loopzero/loopzero/pkg/quality/actionpinning"
+	"github.com/loopzero/loopzero/pkg/quality/cosigncutover"
 	"github.com/loopzero/loopzero/pkg/quality/divergencematrix"
 	"github.com/loopzero/loopzero/pkg/quality/helmdrift"
 	"github.com/loopzero/loopzero/pkg/quality/mockbudget"
@@ -97,6 +99,8 @@ func runQuality(args []string) int {
 		return runProdImageTags(args[1:])
 	case "no-migrate-force":
 		return runNoMigrateForce(args[1:])
+	case "cosign-cutover":
+		return runCosignCutover(args[1:])
 	default:
 		fmt.Fprintf(os.Stderr, "unknown gate: %s\n\n%s", args[0], qualityHelp)
 		return 1
@@ -599,4 +603,65 @@ func runNoMigrateForce(args []string) int {
 		fmt.Println("[no-migrate-force] no matches — OK.")
 	}
 	return 0
+}
+
+func runCosignCutover(args []string) int {
+	fs := flag.NewFlagSet("cosign-cutover", flag.ContinueOnError)
+	root := fs.String("root", ".", "repo root directory")
+	asOfStr := fs.String("as-of", "", "reference date YYYY-MM-DD (testing; default: today)")
+	if err := fs.Parse(args); err != nil {
+		return 1
+	}
+	cfg := cosigncutover.Config{Root: *root}
+	if *asOfStr != "" {
+		t, err := time.Parse("2006-01-02", *asOfStr)
+		if err != nil {
+			fmt.Fprintf(os.Stderr, "::error::invalid --as-of date: %s\n", *asOfStr)
+			return 1
+		}
+		cfg.AsOf = t
+	}
+	o, err := cosigncutover.Check(cfg)
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "::error::%v\n", err)
+		return 1
+	}
+	if o.Dormant {
+		fmt.Println("[cosign-cutover] pre-GA — marker absent. Check is dormant.")
+		return 0
+	}
+	fmt.Printf("[cosign-cutover] v1.0 GA = %s; days since = %d\n", o.GADate, o.Days)
+	gha := os.Getenv("GITHUB_ACTIONS") != ""
+	switch {
+	case o.Blocked:
+		msg := fmt.Sprintf("cosign keyless cutover DEADLINE BLOWN at day %d (>90 days post v1.0 GA). "+
+			"No sponsor exception found. Per ADR 2026-05-12-cosign-keyless-v11-cutover.md this auto-blocks. "+
+			"To unblock: execute the cutover and update the ADR, OR create "+
+			".github/cosign-cutover-exception.txt with an 'approved-by: <name>' line.", o.Days)
+		if gha {
+			fmt.Printf("::error::%s\n", msg)
+		} else {
+			fmt.Fprintf(os.Stderr, "[cosign-cutover] BLOCK: %s\n", msg)
+		}
+		return 2
+	case o.ExceptionPermitted:
+		msg := fmt.Sprintf("cosign keyless cutover deadline (90d) BLOWN at day %d — sponsor exception present. Permitting.", o.Days)
+		if gha {
+			fmt.Printf("::warning::%s\n", msg)
+		} else {
+			fmt.Fprintf(os.Stderr, "[cosign-cutover] WARN (exception-permitted): %s\n", msg)
+		}
+		return 0
+	case o.Warn:
+		msg := fmt.Sprintf("cosign keyless cutover slip-alert: day %d of 90 (deadline approaching). T0+75d sponsor-exception window open.", o.Days)
+		if gha {
+			fmt.Printf("::warning::%s\n", msg)
+		} else {
+			fmt.Fprintf(os.Stderr, "[cosign-cutover] WARN: %s\n", msg)
+		}
+		return 0
+	default:
+		fmt.Printf("[cosign-cutover] within budget (day %d of 90) — OK.\n", o.Days)
+		return 0
+	}
 }

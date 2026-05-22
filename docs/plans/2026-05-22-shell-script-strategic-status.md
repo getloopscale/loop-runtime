@@ -12,6 +12,31 @@
 
 ## Iteration log
 
+### Iter 22 (2026-05-22) — Phase 5 T5.3 (cosign-cutover gate + AUTO-DIE pair)
+
+**Commit:** (current)
+
+**Done:**
+- `pkg/quality/cosigncutover/` (NEW) — pure-Go gate replacing
+  `check-cosign-cutover-deadline.sh` (§6.B.4 keyless v1.1 90-day deadline).
+  Reads `.github/v1.0-ga-date.txt` (dormant if absent), computes days since GA
+  via Go time arithmetic (replaces bash date(1)); ≤75 OK, 75<d≤90 warn,
+  >90 BLOCK unless `.github/cosign-cutover-exception.txt` has an `approved-by: `
+  line. 12 tests GREEN (all 10 bash cases + 2 extra), 95.2% coverage.
+- **Exit codes:** binary returns 0/1/2 (dormant/within/warn=0, parse-error=1,
+  blocked=2). Verified all ratchet stages via temp roots. CI consumers branch
+  only on zero/non-zero (`outcome == 'failure'`), so the `go run` wrapper
+  collapsing non-zero→1 is functionally equivalent.
+- **Parity:** bash + Go both dormant (exit 0) on the live repo (pre-GA).
+- `cmd/loopzero-ops` `cosign-cutover` subcommand (--as-of for testing).
+- `cosign-cutover-deadline.yml` repointed: Go test (self-check) + Go gate.
+- **2 scripts DELETED:** `check-cosign-cutover-deadline.sh` (123) +
+  `check-cosign-cutover-deadline_test.sh` (134) — D6 AUTO-DIE. allowlist 240 (was 242).
+
+**Script count: 242 → 240** (19 deletions cumulative). 20 Go quality gates.
+
+---
+
 ### Iter 21 (2026-05-22) — Phase 5 T5.3 (no-migrate-force gate + AUTO-DIE pair)
 
 **Commit:** (current)
