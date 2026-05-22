@@ -12,6 +12,30 @@
 
 ## Iteration log
 
+### Iter 7 (2026-05-22) — Phase 3 COMPLETE (T3.1+T3.2 — canonicalize Tilt)
+
+**Commit:** (current)
+
+**Done:**
+- `Taskfile.yml` (T3.2): setup target prepends `[NOTICE]` echoes pointing
+  to `docs/operations/dev-loop.md` + clarifies `tilt up` is the canonical
+  dev loop. Setup desc rewritten to describe one-shot vs day-to-day distinction.
+- `docs/operations/dev-loop.md` (T3.1 NEW): canonical operator guide covering
+  cold start sequence, dev loop semantics, common operations (mid-day changes,
+  helm chart change, CRD/migration changes), when NOT to use task setup,
+  troubleshooting table cross-referencing T2.3/T2.2/T2.3.b fixes.
+- `README.md` (T3.1): Setup section now explicitly distinguishes ONE-SHOT vs
+  DEV LOOP; links to docs/operations/dev-loop.md.
+- `CLAUDE.md` (T3.1): development commands section reflects same distinction;
+  task dev:up marked as legacy alias.
+- `pkg/quality/phase3gate/` — 4 hermetic Go tests GREEN validating Phase 3
+  doc/Taskfile compliance.
+
+**Phase 3 COMPLETE** (no T2.4-style HARD STOP — Phase 3 is doc/notice only,
+not requiring LIVE validation).
+
+---
+
 ### Iter 6 (2026-05-22) — Phase 2 ENGINEERING COMPLETE (T2.1+T2.2+T2.3, critical path)
 
 **Commit:** (current)
@@ -188,8 +212,8 @@ Regression locked NOW.
 | | T2.2 fix helmfile releases (gitea PASSWD + kratos/hydra YAML escape) | ✅ **DONE** (iter 6) — single-quoted YAML EC-02 | Ralph |
 | | T2.3 rewrite infra:install:mgmt (T2.3.a master-sync + T2.3.b portable base64) | ✅ **DONE** (iter 6) — Taskfile fully migrated to helmfile sync | Ralph |
 | | T2.4 validate cleanroom funcional | 🔴 **HARD STOP** — operator runs `task clean:all && task setup && task doctor` | Operator |
-| **3 Deprecate task setup** | T3.1 update CLAUDE.md + README + dev-loop.md | ⚪ Pending Phase 2 | Ralph |
-| | T3.2 deprecation warning in task setup | ⚪ Pending T3.1 | Ralph |
+| **3 Deprecate task setup** | T3.1 update CLAUDE.md + README + dev-loop.md | ✅ **DONE** (iter 7) | Ralph |
+| | T3.2 deprecation warning in task setup | ✅ **DONE** (iter 7) — [NOTICE] echoes in setup target | Ralph |
 | **4 Migrate to Ginkgo** | T4.1 audit parity/dogfood scripts | ⚪ Parallel-eligible post-Phase-3 | Ralph |
 | | T4.2 convert top-5 parity scripts | ⚪ Pending T4.1 | Ralph |
 | | T4.3 convert remaining parity + dogfood | ⚪ Pending T4.2 | Ralph |

@@ -69,9 +69,11 @@ If a piece of LoopZeroCloud copy contradicts the Locked Narrative in [`../CLAUDE
 ## Development Commands
 
 ```bash
-task setup               # Bootstrap k3d clusters + Helm + CRDs (idempotent)
-task dev:up              # Boot k3d clusters + dependencies
-tilt up                  # Dev loop with hot reload
+task setup               # ONE-SHOT cold start: 4 k3d clusters + Helmfile sync (15-25min)
+tilt up                  # DEV LOOP: hot reload of API/operators/CLI (canonical day-to-day)
+task dev:up              # Alias: invokes setup + tilt-up reminder (legacy)
+# Per T3.2 of plan 2026-05-22: `task setup` is the platform installer.
+# `tilt up` is the canonical dev loop. See docs/operations/dev-loop.md.
 task doctor              # Environment health check
 
 task test                # All tests

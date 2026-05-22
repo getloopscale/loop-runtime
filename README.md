@@ -596,10 +596,15 @@ Go 1.25+, Node.js 20+, Docker, [k3d](https://k3d.io), [Tilt](https://tilt.dev), 
 ### Setup
 
 ```bash
-task setup       # Create 4 k3d clusters + install all infrastructure (idempotent)
-tilt up          # Start dev loop with hot reload
-task doctor      # Verify everything is healthy
+task setup       # ONE-SHOT: 4 k3d clusters + Helmfile-orchestrated infra + CRDs + tokens (15-25min)
+tilt up          # DEV LOOP: hot reload of API/operators/CLI on file save
+task doctor      # HEALTH CHECK: 38+ invariants across clusters/pods/tokens
 ```
+
+**Distinction (canonical per plan 2026-05-22 Phase 3):**
+- `task setup` is for **cold start** / fresh cleanroom / recovery. One-shot.
+- `tilt up` is the **day-to-day dev loop**. Hot reload, no manual rebuilds.
+- See `docs/operations/dev-loop.md` for full workflow guide.
 
 ### Tests
 
