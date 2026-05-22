@@ -52,19 +52,14 @@ Environment:
   LOOPZERO_DRILL_SKILL_SPONSOR    Operator initials. Required unless CI=true.
   CI                          true bypasses --confirm-cost + sponsor.
 
-Journeys (12):
-  J01 loopzero login + whoami
-  J02 loopzero project create
-  J03 loopzero init + deploy minimal Node.js app
-  J04 loopzero build list/inspect
-  J05 loopzero env create staging
-  J06 loopzero deploy --env staging
-  J07 loopzero promote staging → production
-  J08 loopzero rollback
-  J09 loopzero logs (Loki cross-cluster)
-  J10 loopzero scale up/down
-  J11 loopzero team list
-  J12 loopzero project delete (Prova de Morte)
+Journeys (7):
+  J01 API health (curl)
+  J02 loopzero login
+  J03 loopzero project create
+  J04 loopzero deploy + Prova de Vida
+  J05 loopzero scale
+  J06 loopzero rollback
+  J07 loopzero project delete + Prova de Morte
 
 Invariants (5):
   #1 image registry = DOCR

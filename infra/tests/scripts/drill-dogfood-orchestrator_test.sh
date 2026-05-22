@@ -169,7 +169,7 @@ test_ci_bypass_dry_run() {
   [[ "$rc" -eq 0 ]] || return 1
 }
 
-test_dry_run_lists_12_journeys() {
+test_dry_run_lists_7_journeys() {
   local tmpdir="$1"
   build_stubs "$tmpdir"
   set +e
@@ -179,7 +179,7 @@ test_dry_run_lists_12_journeys() {
   [[ "$rc" -eq 0 ]] || return 1
   local count
   count=$(echo "$out" | grep -cE "\[DRY\] J[0-9]+")
-  [[ "$count" -eq 12 ]] || { echo "  expected 12 journeys, got $count" >&2; return 1; }
+  [[ "$count" -eq 7 ]] || { echo "  expected 7 journeys, got $count" >&2; return 1; }
 }
 
 test_cleanroom_failure_aborts_dogfood() {
@@ -210,7 +210,7 @@ test_help_flag() {
   local rc=$?
   set -e
   [[ "$rc" -eq 0 ]] || return 1
-  echo "$out" | grep -q "Journeys (12)" || { echo "  missing 'Journeys (12)' in help" >&2; return 1; }
+  echo "$out" | grep -q "Journeys (7)" || { echo "  missing 'Journeys (7)' in help" >&2; return 1; }
   echo "$out" | grep -q "Invariants (5)" || { echo "  missing 'Invariants (5)' in help" >&2; return 1; }
 }
 
@@ -288,7 +288,7 @@ echo "=== drill-dogfood-orchestrator hermetic tests (T2.2) ==="
 run_test test_missing_confirm_cost_exits_2
 run_test test_missing_sponsor_exits_2
 run_test test_ci_bypass_dry_run
-run_test test_dry_run_lists_12_journeys
+run_test test_dry_run_lists_7_journeys
 run_test test_cleanroom_failure_aborts_dogfood
 run_test test_skip_cleanroom_flag
 run_test test_help_flag
