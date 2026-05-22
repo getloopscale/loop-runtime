@@ -258,8 +258,10 @@ jobs:
         run: |
           cd pkg && go test -v -timeout 90s ./... > /tmp/go-test-output.log 2>&1 || true
 
+      # T5.3 of plan 2026-05-22: migrated from check-runtime-slo.sh to pure-Go
+      # gate (loopzero-ops). Parses go test -v log; per-test ≤60s, per-suite ≤600s.
       - name: Run runtime-slo gate
-        run: bash infra/scripts/quality/check-runtime-slo.sh
+        run: cd cmd/loopzero-ops && go run . quality runtime-slo --log /tmp/go-test-output.log
 
   # =========================================================================
   # Hermetic tests for all gate scripts (build gate)

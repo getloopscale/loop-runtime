@@ -16,6 +16,7 @@ import (
 	"github.com/loopzero/loopzero/pkg/quality/nonewbash"
 	"github.com/loopzero/loopzero/pkg/quality/noshellwrap"
 	"github.com/loopzero/loopzero/pkg/quality/regressiontest"
+	"github.com/loopzero/loopzero/pkg/quality/runtimeslo"
 	"github.com/loopzero/loopzero/pkg/quality/scriptsaudit"
 	"github.com/loopzero/loopzero/pkg/quality/skiplink"
 	"github.com/loopzero/loopzero/pkg/quality/taskfileinterface"
@@ -85,6 +86,8 @@ func runQuality(args []string) int {
 		return runSkipLink(args[1:])
 	case "helm-drift":
 		return runHelmDrift(args[1:])
+	case "runtime-slo":
+		return runRuntimeSLO(args[1:])
 	default:
 		fmt.Fprintf(os.Stderr, "unknown gate: %s\n\n%s", args[0], qualityHelp)
 		return 1
@@ -472,5 +475,32 @@ func runHelmDrift(args []string) int {
 		return 1
 	}
 	fmt.Println("✓ All drifts have approving ADRs (intentional).")
+	return 0
+}
+
+func runRuntimeSLO(args []string) int {
+	fs := flag.NewFlagSet("runtime-slo", flag.ContinueOnError)
+	logFile := fs.String("log", "/tmp/go-test-output.log", "go test -v output log")
+	if err := fs.Parse(args); err != nil {
+		return 1
+	}
+	o, err := runtimeslo.Check(runtimeslo.Config{LogFile: *logFile, Limits: runtimeslo.DefaultLimits()})
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "[runtime-slo] %v\n", err)
+		return 5
+	}
+	if o.Skipped {
+		fmt.Printf("[runtime-slo] no go test log at %s — skip\n", *logFile)
+		return 0
+	}
+	if !o.Pass {
+		fmt.Fprintf(os.Stderr, "[runtime-slo] FAIL: %d test(s)/suite(s) over SLO:\n", len(o.Violations))
+		for _, v := range o.Violations {
+			fmt.Fprintf(os.Stderr, "  %s\n", v)
+		}
+		fmt.Fprintln(os.Stderr, "[runtime-slo] for legitimate slow tests, add: // slow_test: <issue-url>")
+		return 1
+	}
+	fmt.Println("[runtime-slo] PASS — all tests/suites within SLO")
 	return 0
 }

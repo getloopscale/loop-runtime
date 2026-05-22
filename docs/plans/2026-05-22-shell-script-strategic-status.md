@@ -12,6 +12,21 @@
 
 ## Iteration log
 
+### Iter 18 (2026-05-22) — Phase 5 T5.3 (runtime-slo pure-Go gate)
+
+**Commit:** (current)
+
+**Done:**
+- `pkg/quality/runtimeslo/` (NEW) — pure-Go gate replacing `check-runtime-slo.sh`.
+  Parses `go test -v` log; per-test ≤60s, per-suite ≤600s (regexp + strconv,
+  replaces bash sed/awk). 9 tests GREEN incl. boundary-exact + missing-log-skip.
+- `cmd/loopzero-ops` `runtime-slo` subcommand + `.github/workflows/quality-gates.yml`.
+- `check-runtime-slo.sh` DELETED; allowlist 244 (was 245).
+
+**Script count: 245 → 244** (13 deletions cumulative). 16 Go quality gates.
+
+---
+
 ### Iter 17 (2026-05-22) — Phase 5 T5.3 (helm-drift gate + AUTO-DIE, JSON parity)
 
 **Commit:** (current)
