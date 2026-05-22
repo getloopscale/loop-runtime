@@ -14,6 +14,7 @@ import (
 	"github.com/loopzero/loopzero/pkg/quality/actionpinning"
 	"github.com/loopzero/loopzero/pkg/quality/agplisolation"
 	"github.com/loopzero/loopzero/pkg/quality/alertrunbooks"
+	"github.com/loopzero/loopzero/pkg/quality/baseimagedigest"
 	"github.com/loopzero/loopzero/pkg/quality/clibundlesize"
 	"github.com/loopzero/loopzero/pkg/quality/deadlineratchet"
 	"github.com/loopzero/loopzero/pkg/quality/decisionsdeletion"
@@ -124,6 +125,8 @@ func runQuality(args []string) int {
 		return runOrphanAlerts(args[1:])
 	case "alert-runbooks":
 		return runAlertRunbooks(args[1:])
+	case "base-image-digest":
+		return runBaseImageDigest(args[1:])
 	default:
 		fmt.Fprintf(os.Stderr, "unknown gate: %s\n\n%s", args[0], qualityHelp)
 		return 1
@@ -656,6 +659,27 @@ func runServiceAuthRotation(args []string) int {
 		exception: ".github/service-auth-rotation-exception.txt",
 		adr:       "2026-05-13-service-auth-ed25519-adoption.md",
 	})
+}
+
+func runBaseImageDigest(args []string) int {
+	fs := flag.NewFlagSet("base-image-digest", flag.ContinueOnError)
+	root := fs.String("root", ".", "repo root directory")
+	if err := fs.Parse(args); err != nil {
+		return 1
+	}
+	o := baseimagedigest.Check(baseimagedigest.Config{Root: *root})
+	if !o.Pass {
+		for _, v := range o.Violations {
+			fmt.Printf("BASE-IMAGE-DIGEST VIOLATION: %s\n", v)
+		}
+		fmt.Fprintf(os.Stderr, "\nFAIL — %d tag-only base image(s).\n", len(o.Violations))
+		fmt.Fprintln(os.Stderr, "Fix: replace 'tag' with 'tag@sha256:<digest>' (Renovate pinDigests: true),")
+		fmt.Fprintln(os.Stderr, "OR add '# pragma: allow-tag-pin' on the line above the FROM, OR refresh the")
+		fmt.Fprintln(os.Stderr, "baseline in pkg/quality/baseimagedigest if the bump is intentional + grandfathered.")
+		return 1
+	}
+	fmt.Printf("PASS — %d FROM directive(s); every base image is digest-pinned, baselined, or pragma'd.\n", o.Scanned)
+	return 0
 }
 
 func runAlertRunbooks(args []string) int {

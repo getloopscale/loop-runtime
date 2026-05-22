@@ -12,6 +12,30 @@
 
 ## Iteration log
 
+### Iter 35 (2026-05-22) — Phase 5 T5.3 (base-image-digest gate + 2nd RED-state finding)
+
+**Done:**
+- `check_base_image_digest_pin.sh` (T4.6, REVIEW-NEEDED, read-verified pure-logic
+  — "cosign"/"k3d" were a Dockerfile path + a registry pattern, not invocations)
+  migrated to `pkg/quality/baseimagedigest/` (production Dockerfile base images
+  must be digest-pinned). 12 tests, 95.3% coverage.
+- **EXACT parity including the gate's RED state.** Bash reports 7 violations
+  (all `golang:1.25.10-alpine3.22` — the grandfather baseline still says 1.25.9
+  after a Go toolchain bump). Go reports the byte-identical 7 (diff clean). The
+  gate is a blocking ci.yml step → currently RED.
+- **Did NOT mask** (anti-lying): refreshing the baseline 1.25.9→1.25.10 is a
+  content/governance decision, not migration. Documented in
+  `finding-2026-05-22-base-image-digest-backlog.md` with operator remediation
+  (digest-pin OR conscious baseline refresh OR pragma).
+- `cmd/loopzero-ops` `base-image-digest` subcommand; `ci.yml` repointed (preserves red).
+- `check_base_image_digest_pin.sh` (134) DELETED; allowlist 226 (was 227).
+
+**Script count: 227 → 226** (33 deletions cumulative). 28 Go quality gates.
+2nd stale-baseline finding (after alert-runbooks iter 33): version-string-keyed
+grandfather lists go stale on every bump — the migration faithfully surfaces it.
+
+---
+
 ### Iter 34 (2026-05-22) — Phase 5 T5.3 (consolidate check_actions_sha_pinned → actionpinning, DRY)
 
 **Done:**

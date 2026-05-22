@@ -590,7 +590,10 @@ jobs:
           cd cmd/loopzero-ops && go run . quality cli-bundle-size --root "${GITHUB_WORKSPACE}"
 
       - name: Base image digest pinning lint (T4.6 deep-review-remediation)
-        run: bash infra/scripts/check_base_image_digest_pin.sh
+        # T5.3 of plan 2026-05-22: migrated check_base_image_digest_pin.sh to pure-Go gate.
+        # Exact parity preserved (same 7-violation backlog — golang baseline drifted
+        # 1.25.9→1.25.10; see finding-2026-05-22-base-image-digest-backlog.md; NOT masked).
+        run: cd cmd/loopzero-ops && go run . quality base-image-digest --root "${GITHUB_WORKSPACE}"
 
   # ──────────────────────────────────────────────────────────────────────
   # Quality-Gate Phase 4 — 5 baseline-tracking gates
