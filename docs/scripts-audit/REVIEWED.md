@@ -77,3 +77,24 @@ Next action: proceed to Phase 1.1 (T1.1 dead-set validation)
 (operator fills above when reviewing the baseline)
 
 ---
+
+## Review 2026-05-22 (iter 11) — T1.1 dead-set validation
+
+**Performed by:** ralph-loop-iter11 (engineering validation; operator sign-off still pending)
+**Output:** `docs/scripts-audit/2026-05-22-dead-set.md`
+
+**Finding: validated dead-set = 0 scripts.**
+
+The 73 raw zero-caller scripts collapse to 0 safely-deletable after applying
+T1.1.a (EC-03 dynamic-invocation grep) + orphan-test-of-live-code check:
+- 13 `cell2-gate-c*.sh` are dynamically sourced via `$LIB_DIR/cell2-gate-${g}.sh`
+  (EC-03 catch — would have been a destructive false-positive delete).
+- 2 hermetic tests (`dry-run-lib_test.sh`, `values_gate_test.sh`) test LIVE code
+  → WIRE-CANDIDATE, not delete.
+- 1 (`sanitize.sh`) pairs with render-drill.sh snapshot harness → REVIEW-NEEDED.
+
+**Conclusion:** No T1.2 bulk-delete this branch. Big reductions come from Phase 4
+(Ginkgo migration of parity/dogfood test orchestrators) + Phase 5 (pure-logic
+Go migrations) + operator-reviewed dead-set with git-history context.
+
+This validation PREVENTED a 15-script destructive delete. That is its purpose.

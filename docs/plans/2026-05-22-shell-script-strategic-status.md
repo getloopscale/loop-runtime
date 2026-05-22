@@ -12,6 +12,32 @@
 
 ## Iteration log
 
+### Iter 11 (2026-05-22) — Phase 1 T1.1 dead-set validation (0 deletable; prevented destructive delete)
+
+**Commit:** (current)
+
+**Done:**
+- `docs/scripts-audit/2026-05-22-dead-set.md` (NEW) — T1.1 validation output.
+- `docs/scripts-audit/REVIEWED.md` — appended iter-11 finding.
+
+**Finding: validated dead-set = 0 scripts.** The 73 raw zero-caller scripts
+collapse to 0 safely-deletable:
+- **13 `cell2-gate-c*.sh`** dynamically sourced via `$LIB_DIR/cell2-gate-${g}.sh`
+  (T1.1.a EC-03 catch — would have been a destructive false-positive delete).
+- **2 hermetic tests** (`dry-run-lib_test.sh`, `values_gate_test.sh`) test LIVE
+  code → WIRE-CANDIDATE not delete (deleting destroys coverage).
+- **1** (`sanitize.sh`) pairs with render-drill.sh snapshot harness → REVIEW-NEEDED.
+
+**Honest outcome:** NO deletion this iter. The validation PREVENTED a 15-script
+destructive delete (13 live dynamically-sourced + 2 valid tests). Per
+"NUNCA MINTA" + anti-pattern "Deletion sem validation" — did NOT fabricate
+deletions to inflate the count. Big reductions deferred to Phase 4 (Ginkgo) +
+Phase 5 (pure-logic) + operator-reviewed dead-set.
+
+**Phase 1: T1.1 done (engineering validation); T1.2 = NO-OP (empty dead-set).**
+
+---
+
 ### Iter 10 (2026-05-22) — Phase 5 T5.3 (divergence-matrix pure-Go gate)
 
 **Commit:** (current)
@@ -283,8 +309,8 @@ Regression locked NOW.
 | Phase | Task | State | Owner |
 |-------|------|-------|-------|
 | **0 Real Usage Audit** | T0.1 audit Go tool + baseline CSV | ✅ **DONE** (engineering); operator review PENDING | Ralph + Operator |
-| **1 Delete Dead Code** | T1.1 dead-set validation (manual) | 🟡 Blocked by T0.1 operator review | Operator |
-| | T1.2 bulk delete validated set | ⚪ Pending T1.1 | Ralph |
+| **1 Delete Dead Code** | T1.1 dead-set validation (manual) | ✅ **DONE** (iter 11) — validated dead-set EMPTY; prevented 15-script destructive delete | Ralph |
+| | T1.2 bulk delete validated set | ✅ **NO-OP** (iter 11) — dead-set empty; nothing safely deletable on this branch | Ralph |
 | **2 Delegate to Helmfile** | T2.1 audit bare-helm calls | ✅ **DONE** (iter 6) — mapping doc with gaps + EC-01/EC-02 plan | Ralph |
 | | T2.2 fix helmfile releases (gitea PASSWD + kratos/hydra YAML escape) | ✅ **DONE** (iter 6) — single-quoted YAML EC-02 | Ralph |
 | | T2.3 rewrite infra:install:mgmt (T2.3.a master-sync + T2.3.b portable base64) | ✅ **DONE** (iter 6) — Taskfile fully migrated to helmfile sync | Ralph |
