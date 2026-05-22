@@ -50,8 +50,8 @@ func TestDetectsMissingScriptTarget(t *testing.T) {
 // TestPassesWhenTargetExists — SCRIPT= pointing at an existing repo file is OK.
 func TestPassesWhenTargetExists(t *testing.T) {
 	root := fixture(t, map[string]string{
-		"infra/scripts/dr/real.sh":        "#!/bin/bash\nexit 0\n",
-		"infra/tests/scripts/ok_test.sh":  "#!/bin/bash\nSCRIPT=\"$ROOT/infra/scripts/dr/real.sh\"\n",
+		"infra/scripts/dr/real.sh":       "#!/bin/bash\nexit 0\n",
+		"infra/tests/scripts/ok_test.sh": "#!/bin/bash\nSCRIPT=\"$ROOT/infra/scripts/dr/real.sh\"\n",
 	})
 	out, err := Check(Config{Root: root})
 	if err != nil {
@@ -95,7 +95,7 @@ func TestSkipsUnresolvableVarPaths(t *testing.T) {
 // TestHandlesDefaultValueSyntax — SCRIPT_UNDER_TEST="${X:-infra/scripts/real.sh}".
 func TestHandlesDefaultValueSyntax(t *testing.T) {
 	root := fixture(t, map[string]string{
-		"infra/scripts/quality/real.sh":  "#!/bin/bash\nexit 0\n",
+		"infra/scripts/quality/real.sh":   "#!/bin/bash\nexit 0\n",
 		"infra/tests/scripts/def_test.sh": "#!/bin/bash\nSCRIPT_UNDER_TEST=\"${SCRIPT_UNDER_TEST:-infra/scripts/quality/real.sh}\"\n",
 	})
 	out, err := Check(Config{Root: root})
@@ -124,8 +124,8 @@ func TestDetectsMissingDefaultValueTarget(t *testing.T) {
 // TestSkipsExcludedDirs — a broken test under node_modules/worktrees is pruned.
 func TestSkipsExcludedDirs(t *testing.T) {
 	root := fixture(t, map[string]string{
-		"node_modules/x/bad_test.sh":           "#!/bin/bash\nSCRIPT=\"$ROOT/infra/scripts/gone.sh\"\n",
-		".claude/worktrees/w/infra/y_test.sh":  "#!/bin/bash\nSCRIPT=\"$ROOT/infra/scripts/gone.sh\"\n",
+		"node_modules/x/bad_test.sh":          "#!/bin/bash\nSCRIPT=\"$ROOT/infra/scripts/gone.sh\"\n",
+		".claude/worktrees/w/infra/y_test.sh": "#!/bin/bash\nSCRIPT=\"$ROOT/infra/scripts/gone.sh\"\n",
 	})
 	out, err := Check(Config{Root: root})
 	if err != nil {
