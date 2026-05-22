@@ -12,6 +12,26 @@
 
 ## Iteration log
 
+### Iter 2 (2026-05-22) — Phase 6 T6.1 + T6.2 COMPLETE (regression lock active)
+
+**Commits:** (current) — `feat(nonewbash): Phase 6 T6.1+T6.2 — D3 gate + allowlist baseline`
+
+**Done:**
+- `pkg/quality/nonewbash/` (210 LOC) — Check + parseAllowlist + verifyRefReachable + gitDiffAdded
+- `pkg/quality/nonewbash/check_test.go` — 12 testify tests GREEN, coverage 88.2%
+- EC-04 implementation: `BASE_REF_UNREACHABLE` typed error with `fetch-depth` hint
+- EC-06 implementation: rename (R status) treated as new via `--diff-filter=AR`
+- `.claude/rules/shell-scripts-allowlist.md` — baseline with 257 grandfathered entries
+- `cmd/loopzero-ops/quality_subcmd.go` — wires `no-new-bash` subcommand
+- `.github/workflows/no-new-bash-gate.yml` — CI gate with mandatory `fetch-depth: 0`
+- Smoke test PASS contra branch (HEAD vs HEAD = empty diff = PASS expected)
+
+**Why this matters:** D3 gate ATIVO antes de Phases 1-5 reduzem inventário. Sem isso,
+qualquer sessão futura pode adicionar `.sh` novos e o trabalho de redução evapora.
+Regression locked NOW.
+
+---
+
 ### Iter 1 (2026-05-22) — Phase 0 T0.1 COMPLETE (engineering side)
 
 **Commit:** `bd5ffa1e` — `feat(scriptsaudit): Phase 0 T0.1 — scripts audit Go tool + baseline CSV`
@@ -50,10 +70,10 @@
 | **5 SDK-native Go** | T5.1 Pulumi Automation API (pulumi-archive + pulumi-orphan-rm) | ⚪ Parallel-eligible post-Phase-3 | Ralph |
 | | T5.2 migrate generators to //go:generate | ⚪ Pending T5.1 | Ralph |
 | | T5.3 remaining pure-logic gates | ⚪ Pending audit results | Ralph |
-| **6 Lock The Door** | T6.1 allowlist.md | ⚪ Pending Phase 5 | Ralph |
-| | T6.2 no-new-bash gate (+ EC-04 fetch-depth + EC-06 rename) | ⚪ Pending T6.1 | Ralph |
-| | T6.3 no-shell-wrap audit gate | ⚪ Pending T6.2 | Ralph |
-| | T6.4 final inventory validation | ⚪ Pending T6.3 | Ralph |
+| **6 Lock The Door** | T6.1 allowlist.md | ✅ **DONE** (iter 2) — baseline grandfathered 257 entries | Ralph |
+| | T6.2 no-new-bash gate (+ EC-04 fetch-depth + EC-06 rename) | ✅ **DONE** (iter 2) — gate ATIVO em CI | Ralph |
+| | T6.3 no-shell-wrap audit gate | ⚪ Pending — next iter target | Ralph |
+| | T6.4 final inventory validation | ⚪ Pending Phases 1-5 + T6.3 | Ralph |
 | **7 Adopt External Tools** | T7.1 Pluto CI gate | ⚪ Parallel-eligible (zero overlap with Phase 6) | Ralph |
 | | T7.2 OpenCost helm + Prometheus integration | ⚪ Parallel-eligible | Ralph |
 | **Final Gates** | `/cross-validation 2026-05-22-shell-script-strategic` | 🔴 **HARD STOP** | Operator + Ralph |

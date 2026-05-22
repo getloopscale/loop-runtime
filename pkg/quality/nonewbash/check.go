@@ -1,0 +1,170 @@
+// SPDX-License-Identifier: Apache-2.0
+// Copyright 2025-2026 The LoopZero Authors
+
+// Package nonewbash implements the D3 governance gate from
+// docs/plans/2026-05-22-shell-script-strategic-plan.md: "Creation of new
+// bash scripts is FORBIDDEN by default; exceptions require entry in
+// .claude/rules/shell-scripts-allowlist.md".
+//
+// The gate scans `git diff --diff-filter=AR base...head -- '*.sh'`
+// (added + renamed-to) and fails if any new script is not in the
+// allowlist. Modified (M) and deleted (D) scripts are NOT blocked.
+//
+// EC-04: gate fails LOUD with `BASE_REF_UNREACHABLE` when base-ref is
+// unreachable (shallow clone), rather than silently treating "everything
+// is new". Operators MUST set actions/checkout fetch-depth: 0.
+//
+// EC-06: renames (R status) treated as new at the new path.
+package nonewbash
+
+import (
+	"bufio"
+	"fmt"
+	"os"
+	"os/exec"
+	"path/filepath"
+	"regexp"
+	"strings"
+)
+
+// Config tells Check where to operate.
+type Config struct {
+	RepoRoot      string // absolute path to repo root
+	AllowlistPath string // path to allowlist MD relative to RepoRoot
+	BaseRef       string // base git ref (e.g., "origin/main")
+	HeadRef       string // head git ref (e.g., "HEAD")
+}
+
+// Outcome captures the result of a Check invocation.
+type Outcome struct {
+	Pass       bool     // true if no violations
+	Violations []string // human-readable per-violation messages
+}
+
+// Check is the entry point invoked by `loopzero-ops quality no-new-bash`.
+// Returns outcome + error. Error is reserved for INFRASTRUCTURE failures
+// (git missing, allowlist unreadable, base-ref unreachable); policy
+// violations come back via Outcome.Violations + Pass=false.
+func Check(cfg Config) (*Outcome, error) {
+	// 1. Read allowlist
+	allowlistFull := filepath.Join(cfg.RepoRoot, cfg.AllowlistPath)
+	allowlistBytes, err := os.ReadFile(allowlistFull)
+	if err != nil {
+		return nil, fmt.Errorf("read allowlist %s: %w", cfg.AllowlistPath, err)
+	}
+	allowed, err := parseAllowlist(string(allowlistBytes))
+	if err != nil {
+		return nil, fmt.Errorf("parse allowlist: %w", err)
+	}
+
+	// 2. EC-04 pre-flight: verify base-ref reachable
+	if err := verifyRefReachable(cfg.RepoRoot, cfg.BaseRef); err != nil {
+		return nil, err
+	}
+
+	// 3. Get new (A + R) .sh files from diff
+	added, err := gitDiffAdded(cfg.RepoRoot, cfg.BaseRef, cfg.HeadRef)
+	if err != nil {
+		return nil, fmt.Errorf("git diff: %w", err)
+	}
+
+	// 4. Check each new script against allowlist
+	outcome := &Outcome{Pass: true}
+	for _, path := range added {
+		if !allowed[path] {
+			outcome.Pass = false
+			outcome.Violations = append(outcome.Violations,
+				fmt.Sprintf("new bash script %q not in allowlist (%s). "+
+					"Per plan D3: add entry to allowlist + ADR, OR use Go/helmfile alternative.",
+					path, cfg.AllowlistPath))
+		}
+	}
+	return outcome, nil
+}
+
+// verifyRefReachable does `git rev-parse --verify <ref>` to confirm presence.
+// On failure, returns a typed error with BASE_REF_UNREACHABLE and the actionable
+// hint to set fetch-depth: 0 in CI.
+func verifyRefReachable(repoRoot, ref string) error {
+	cmd := exec.Command("git", "rev-parse", "--verify", "--quiet", ref+"^{commit}")
+	cmd.Dir = repoRoot
+	if err := cmd.Run(); err != nil {
+		return fmt.Errorf(
+			"BASE_REF_UNREACHABLE: base ref %q not found in local git history. "+
+				"This typically means a shallow clone (default GitHub Actions checkout depth=1). "+
+				"Fix: set `fetch-depth: 0` on actions/checkout@v4 step, OR run "+
+				"`git fetch origin %s` before invoking the gate. Underlying: %v",
+			ref, ref, err)
+	}
+	return nil
+}
+
+// gitDiffAdded runs `git diff --name-only --diff-filter=AR base...head -- '*.sh'`
+// and returns the list of paths (added or renamed-to).
+//
+// Renames are interesting: `--diff-filter=R` shows the new path (the one
+// after rename). git diff's default rename detection treats them as A + D
+// of separate paths unless -M flag is used; here we explicitly include R
+// because the new path is what the allowlist must cover.
+func gitDiffAdded(repoRoot, base, head string) ([]string, error) {
+	cmd := exec.Command("git", "diff", "--name-only", "--diff-filter=AR",
+		base+"..."+head, "--", "*.sh")
+	cmd.Dir = repoRoot
+	out, err := cmd.CombinedOutput()
+	if err != nil {
+		return nil, fmt.Errorf("git diff failed: %v\n%s", err, out)
+	}
+	var paths []string
+	for _, line := range strings.Split(strings.TrimSpace(string(out)), "\n") {
+		line = strings.TrimSpace(line)
+		if line == "" {
+			continue
+		}
+		if !strings.HasSuffix(line, ".sh") {
+			continue
+		}
+		paths = append(paths, line)
+	}
+	return paths, nil
+}
+
+// allowlistRowRe matches a Markdown table row whose first column ends in .sh.
+// Allows whitespace tolerance. Rejects placeholder tokens containing `<` or `>`
+// (used in template/example rows that should not be parsed as real entries).
+// Example matches:
+//
+//	| infra/scripts/foo.sh | 145 | reason |
+//	|infra/scripts/foo.sh|145|reason|
+//
+// Example rejected (placeholder syntax):
+//
+//	| <script-path-relative-to-repo-root>.sh | <LOC> | <reason> |
+var allowlistRowRe = regexp.MustCompile(`^\|\s*([^\s|<>]+\.sh)\s*\|`)
+
+// parseAllowlist extracts the set of allowed .sh paths from the markdown
+// content. Robust to:
+//   - empty file
+//   - non-table content interspersed with tables
+//   - non-.sh entries (silently skipped)
+//   - whitespace variations in table cells
+//   - header separator rows (|---|---|) which never match the .sh pattern
+func parseAllowlist(content string) (map[string]bool, error) {
+	allowed := map[string]bool{}
+	scanner := bufio.NewScanner(strings.NewReader(content))
+	for scanner.Scan() {
+		line := scanner.Text()
+		match := allowlistRowRe.FindStringSubmatch(line)
+		if match == nil {
+			continue
+		}
+		path := strings.TrimSpace(match[1])
+		if path == "" {
+			continue
+		}
+		allowed[path] = true
+	}
+	if err := scanner.Err(); err != nil {
+		return nil, err
+	}
+	return allowed, nil
+}
