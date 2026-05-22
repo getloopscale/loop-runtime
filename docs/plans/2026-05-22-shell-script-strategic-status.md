@@ -12,6 +12,33 @@
 
 ## Iteration log
 
+### Iter 27 (2026-05-22) — Phase 5 T5.3 (audit self-correction + KEEP-CI-ORCHESTRATOR)
+
+**Done:**
+- **Caught a false-negative in my own iter-25 audit.** `validate-helmfile-templates.sh`
+  was flagged "genuine pure-logic", but it pipes `helmfile template` into
+  `kubeconform` (two external CLIs). The iter-25 grep heuristic used `\bhelm\b`
+  which does NOT match "helmfile", and didn't check for `kubeconform`/`helmfile`.
+  Migrating it would be a shell-wrap-in-disguise (D5). Reclassified to
+  **KEEP-CI-ORCHESTRATOR** — the script's own comment explains it is deliberately
+  shell to avoid the Taskfile Go-template vs kubeconform `{{.ResourceKind}}` collision.
+- **Re-audited the last "genuine pure-logic" candidate with the corrected lens**
+  (now checking helmfile/kubeconform/jq/yq too): `governance/validate-evidence.sh`
+  uses ONLY python3 for YAML frontmatter parsing — **confirmed genuine
+  MIGRATE-GO-PUREFN** (219 LOC, 2 consumers: test.yml + health-check-governance.sh).
+- **Corrected disposition map after iter-25:** of the original 7 MIGRATE-GO-PUREFN
+  candidates, only `governance/validate-evidence.sh` remains a genuine pure-logic
+  target (check-decisions-deletion migrated iter 26; check-stack-coverage iter 24;
+  check-prod-vap-readiness reclassified iter 25; validate-helmfile-templates
+  reclassified this iter; 3 drill/* pending per-read verify).
+
+**Script count: 235 (unchanged — reclassification, not deletion).** 22 Go gates.
+Lesson: audit heuristics need read-verification before action — `\bhelm\b`
+silently missed `helmfile`; always confirm by reading (per memory
+[[feedback_tool_adoption_grep_first]] generalised to disposition audits).
+
+---
+
 ### Iter 26 (2026-05-22) — Phase 5 T5.3 (decisions-deletion gate + AUTO-DIE pair)
 
 **Commit:** (current)
