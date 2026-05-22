@@ -128,11 +128,19 @@ jobs:
         with:
           fetch-depth: 0
 
+      - name: Set up Go
+        uses: actions/setup-go@0aaccfd150d50ccaeb58ebd88d36e91967a5f35b # v5.4.0
+        with:
+          go-version: '1.25.10'
+          cache-dependency-path: cmd/loopzero-ops/go.sum
+
+      # T5.3 of plan 2026-05-22: migrated from check-regression-test.sh to
+      # pure-Go gate (loopzero-ops). PR_DIFF_FILES computed here (git is ALLOWED CLI).
       - name: Run regression-test gate
         run: |
           PR_DIFF_FILES=$(git diff --name-only --diff-filter=AM "origin/${{ github.base_ref }}...HEAD")
           export PR_DIFF_FILES
-          bash infra/scripts/quality/check-regression-test.sh
+          cd cmd/loopzero-ops && go run . quality regression-test
         env:
           PR_TITLE: ${{ github.event.pull_request.title }}
           PR_BODY: ${{ github.event.pull_request.body }}
@@ -277,5 +285,3 @@ jobs:
       - name: T5.1 template-compliance hermetic tests
         run: bash infra/tests/scripts/template-compliance_test.sh
 
-      - name: T5.2 check-regression-test hermetic tests
-        run: bash infra/tests/scripts/check-regression-test_test.sh

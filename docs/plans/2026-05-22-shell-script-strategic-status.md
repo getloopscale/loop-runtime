@@ -12,6 +12,28 @@
 
 ## Iteration log
 
+### Iter 14 (2026-05-22) — Phase 5 T5.3 (regression-test gate + AUTO-DIE test deleted)
+
+**Commit:** (current)
+
+**Done:**
+- `pkg/quality/regressiontest/` (NEW) — pure-Go gate replacing
+  `check-regression-test.sh`. Detects bug-fix issue refs (fix/closes/Bug #N)
+  in PR title/body/commits via regexp; requires a test file in the diff.
+  9 tests GREEN.
+- `cmd/loopzero-ops` — `regression-test` subcommand.
+- `.github/workflows/quality-gates.yml` — regression-test job runs Go gate;
+  REMOVED the now-orphan hermetic-test step (`check-regression-test_test.sh`).
+- **2 scripts DELETED:** `check-regression-test.sh` (migrated) +
+  `check-regression-test_test.sh` (D6 AUTO-DIE — its parent migrated to Go,
+  the Go testify suite replaces the bash hermetic test).
+- allowlist 250 (was 252).
+
+**Script count: 252 → 250** (7 deletions cumulative; first AUTO-DIE pair).
+12 Go quality gates total.
+
+---
+
 ### Iter 13 (2026-05-22) — Phase 5 T5.3 (test-pyramid pure-Go gate, eliminates python3 dep)
 
 **Commit:** (current)

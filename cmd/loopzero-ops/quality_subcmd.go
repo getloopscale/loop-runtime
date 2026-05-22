@@ -9,6 +9,7 @@ import (
 	"os"
 
 	"github.com/loopzero/loopzero/pkg/quality/divergencematrix"
+	"github.com/loopzero/loopzero/pkg/quality/regressiontest"
 	"github.com/loopzero/loopzero/pkg/quality/nonewbash"
 	"github.com/loopzero/loopzero/pkg/quality/noshellwrap"
 	"github.com/loopzero/loopzero/pkg/quality/scriptsaudit"
@@ -71,6 +72,8 @@ func runQuality(args []string) int {
 		return runTestDeletion(args[1:])
 	case "test-pyramid":
 		return runTestPyramid(args[1:])
+	case "regression-test":
+		return runRegressionTest(args[1:])
 	default:
 		fmt.Fprintf(os.Stderr, "unknown gate: %s\n\n%s", args[0], qualityHelp)
 		return 1
@@ -281,5 +284,32 @@ func runTestPyramid(args []string) int {
 		return 1
 	}
 	fmt.Println("[pyramid] PASS: ratios within bounds")
+	return 0
+}
+
+func runRegressionTest(args []string) int {
+	_ = args
+	o := regressiontest.Check(regressiontest.Config{
+		Title:     os.Getenv("PR_TITLE"),
+		Body:      os.Getenv("PR_BODY"),
+		Commits:   os.Getenv("PR_COMMITS"),
+		DiffFiles: os.Getenv("PR_DIFF_FILES"),
+	})
+	if o.Skipped {
+		fmt.Println("[regression-gate] no bug-fix references — SKIP gate")
+		return 0
+	}
+	if len(o.IssueRefs) > 0 {
+		fmt.Println("[regression-gate] detected bug-fix references:")
+		for _, r := range o.IssueRefs {
+			fmt.Printf("  %s\n", r)
+		}
+	}
+	if !o.Pass {
+		fmt.Fprintf(os.Stderr, "[regression-gate] FAIL: %s\n", o.Reason)
+		fmt.Fprintln(os.Stderr, "Add a regression test in a *_test.go or *.test.ts file referencing the bug.")
+		return 1
+	}
+	fmt.Println("[regression-gate] PASS — test file found in diff")
 	return 0
 }
