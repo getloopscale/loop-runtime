@@ -138,10 +138,10 @@ for ex in docs/architecture/governance/concept-*.excalidraw; do
     check "json-valid $(basename "$ex")" python3 -c "import json; json.load(open('$ex'))"
 done
 
-echo ""
-echo "6. Evidence fixtures + real evidence file pass validator"
-check_with_output "fixture valid-three-sources" bash infra/scripts/governance/validate-evidence.sh docs/evidence/_fixtures/valid-three-sources.md
-check_with_output "real evidence: validate-evidence-script" bash infra/scripts/governance/validate-evidence.sh docs/evidence/tests-confidence/2026-05-11-validate-evidence-script.md
+# Section 6 (evidence-file validator checks) removed 2026-05-22 (T5.3): the
+# docs/evidence/ tree was deleted in the 2026-05-11 consolidation, so these
+# checks always failed on missing files. Evidence now lives in
+# .claude/knowledge-base/audits/. See finding-2026-05-22-dead-evidence-validator.md.
 
 echo ""
 echo "7. Independence config passes verification"

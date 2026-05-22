@@ -12,6 +12,39 @@
 
 ## Iteration log
 
+### Iter 28 (2026-05-22) — Phase 5 T5.3 (DELETE dead evidence-validator subsystem)
+
+**Commit:** (current)
+
+**Done:**
+- **The last "genuine pure-logic" candidate was DEAD, not migratable.**
+  `validate-evidence.sh` validated the `docs/evidence/` per-claim YAML tree that
+  was deleted in the 2026-05-11 consolidation (evidence now in
+  knowledge-base/audits per Rule 11). Zero live inputs, no workflow consumer.
+  Correct disposition: **DELETE, not migrate** (porting dead code to Go would
+  have been the worst outcome). Documented in
+  `finding-2026-05-22-dead-evidence-validator.md`.
+- **Coordinated complete deletion** (no half-finished work):
+  - `validate-evidence.sh` (219 LOC) deleted.
+  - `taskfiles/test.yml`: 3 dead tasks removed (`validate:evidence`,
+    `validate:evidence:fixtures`, `governance:reset-fixtures`) — verified none
+    were deps of other tasks.
+  - `health-check-governance.sh`: section 6 (validator calls on deleted
+    fixtures — always-failing) removed.
+  - allowlist entry removed.
+- **Flagged for follow-up (not touched):** `scan-decay.sh` (partially live —
+  scans deleted docs/evidence AND a live SUMMARY.md); health-check section 8
+  (scoring-2026-05-11 yaml refs) — separate potential dead refs.
+
+**Script count: 235 → 234** (25 deletions cumulative). 22 Go quality gates.
+**Phase 5 T5.3 pure-logic migration backlog EXHAUSTED:** all 7 original
+MIGRATE-GO-PUREFN candidates resolved — 3 migrated (stack-coverage iter24,
+decisions-deletion iter26, + earlier check-* gates), 2 reclassified KEEP
+(prod-vap-readiness iter25, validate-helmfile-templates iter27), 1 deleted-as-dead
+(this iter), and the 3 drill/* remain pending per-read KEEP-verify.
+
+---
+
 ### Iter 27 (2026-05-22) — Phase 5 T5.3 (audit self-correction + KEEP-CI-ORCHESTRATOR)
 
 **Done:**

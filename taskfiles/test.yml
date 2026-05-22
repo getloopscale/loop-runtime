@@ -983,18 +983,12 @@ tasks:
       - ginkgo -v --label-filter="journey || smoke || edge-case" --timeout=60m ./infra/tests/e2e/
 
   # ---------------------------------------------------------------------------
-  # Evidence validation (status-validation-and-doc-consolidation-plan T0.1)
-
-  validate:evidence:
-    desc: Validate evidence files against docs/GOVERNANCE.md (§1 Evidence Bar) (3-tier policy)
-    cmds:
-      - bash infra/scripts/governance/validate-evidence.sh --all docs/evidence/
-
-  validate:evidence:fixtures:
-    desc: Run validator against fixtures (TDD regression check)
-    cmds:
-      - bash infra/scripts/governance/validate-evidence.sh --all docs/evidence/_fixtures/ || true
-      - echo "Fixtures exercise pass/fail/expired paths. exit 0/1/2 per fixture is expected."
+  # NOTE: validate:evidence + validate:evidence:fixtures tasks removed
+  # 2026-05-22 (T5.3) — they validated the docs/evidence/ per-claim YAML tree
+  # which was DELETED in the 2026-05-11 consolidation (evidence is now in
+  # .claude/knowledge-base/audits/ per CLAUDE.md Rule 11). The validator
+  # (validate-evidence.sh) had zero live inputs and no workflow consumer.
+  # See finding-2026-05-22-dead-evidence-validator.md.
 
   decay:scan:
     desc: Scan evidence files for expired TTL (markdown report)
@@ -1036,10 +1030,8 @@ tasks:
     cmds:
       - npx -y markdownlint-cli2 "docs/governance/**/*.md"
 
-  governance:reset-fixtures:
-    desc: Refresh evidence fixtures + re-run validator (after policy schema changes)
-    cmds:
-      - bash infra/scripts/governance/validate-evidence.sh --all docs/evidence/_fixtures/ || true
+  # NOTE: governance:reset-fixtures removed 2026-05-22 (T5.3) — operated on the
+  # deleted docs/evidence/_fixtures/ tree (see finding-2026-05-22-dead-evidence-validator.md).
 
   # ---------------------------------------------------------------------------
   # Monitoring
