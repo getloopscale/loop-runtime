@@ -1,6 +1,6 @@
-# Plan: Shell Script Strategic Reduction (269 → <30)
+# Plan: Shell Script Strategic Reduction (269 → <30) + External Tool Adoption (P0)
 
-> **Version 1.2** — Reduzir progressivamente o inventário de 269 scripts shell (44,586 LOC)
+> **Version 1.3** — Reduzir progressivamente o inventário de 269 scripts shell (44,586 LOC)
 > para menos de 30 (<3,000 LOC) através de DELEGATION para orchestrators canônicos
 > (helmfile/Tilt/Ginkgo/SDK-native Go), DELETE de dead code, e proibição explícita
 > de novos scripts bash. Esse plano substitui o plano original
@@ -20,6 +20,15 @@
 > CLAUDE.md + identified que Phase 6 cria 2 novos gates `pkg/quality/*` — ausência
 > de "verifique tool externa primeiro" pode levar reimplementação de Pluto / Kubescape /
 > outros como Go gates internos (anti-pattern simétrico ao D5 shell-wrap).
+>
+> **v1.3 changelog (2026-05-22):** adicionou **Phase 7 — Adopt External Tools (P0)** com
+> 2 tasks paralelas materializando Anti-Pattern #8 ("adopt > reinvent"):
+> - T7.1: Adopt **Pluto** (Fairwinds) — deprecated K8s API detector, CI gate em helm-charts.yml
+> - T7.2: Adopt **OpenCost** — cost attribution per tenant via namespace label, mgmt cluster
+>
+> Justificativa: kubetools-review identificou estes como **P0 gaps reais** (zero matches
+> em grep do repo). Pluto destrava futuro upgrade DOKS v1.32→v1.33. OpenCost destrava
+> validação do pricing model Pro $29 / Team $99 para Sprint 9 prod canary.
 
 ---
 
@@ -218,15 +227,23 @@ Phase 4: Migrate to Ginkgo  Phase 5: SDK-native Go   (paralelo)
     ▼                        ▼
     └────────┬───────────────┘
              ▼
-        Phase 6: Lock The Door
-        (no-new-bash CI gate,
-         allowlist, ADR rules)
+    ┌────────┴───────────────┐
+    │                        │
+Phase 6: Lock The Door   Phase 7: Adopt External Tools  (paralelo)
+(no-new-bash gate,       (T7.1 Pluto CI gate ∥
+ no-shell-wrap gate,      T7.2 OpenCost helm)
+ allowlist)
+    │                        │
+    └────────┬───────────────┘
+             ▼
+       (Dogfood Gate + Cross-Validation)
 ```
 
-**Sequencial:** Phase 0 → 1 → 2 → 3 → [4 ∥ 5] → 6
+**Sequencial:** Phase 0 → 1 → 2 → 3 → [4 ∥ 5] → [6 ∥ 7] → Dogfood
 **Razão da sequência:** Phase 2 desbloqueia cleanroom (critical path). Phase 3 só
 faz sentido após Phase 2 funcionar. Phases 4 e 5 podem paralelizar (touch sets
-diferentes). Phase 6 é gate final.
+diferentes). Phases 6 e 7 também paralelas (Phase 6 = governance interno; Phase 7 =
+external tool adoption; zero file overlap).
 
 ---
 
@@ -1402,6 +1419,268 @@ assert loc <= 3000, f'LOC={loc} exceeds 3000'
 
 ---
 
+## Phase 7: Adopt External Tools (P0 gaps from kubetools-review)
+
+**Objective:** Adotar 2 external tools identificadas como P0 gaps reais na análise
+kubetools-review (2026-05-22). Materializa Anti-Pattern #8 ("adopt > reinvent")
+implementando a ferramenta externa madura em vez de criar gate Go interno equivalente.
+
+**Trade-off explícito:** Phase 7 é scope addition além do shell-script-reduction
+original. Inclusa porque (a) Anti-Pattern #8 criou anchor que necessita demonstração
+prática, (b) ambas adoções têm impacto direto no go-to-market (Pluto destrava DOKS
+upgrade; OpenCost destrava pricing validation Sprint 9), (c) execução paralela
+a Phase 6 — zero file overlap.
+
+### T7.1 — Adopt Pluto (Fairwinds deprecated K8s API detector)
+
+#### Objective
+Adicionar CI gate que escaneia manifests por APIs Kubernetes deprecated/removed,
+falhando PR se encontrar. Materializa "tool externa madura > Go gate interno"
+(Anti-Pattern #8) para o caso deprecated-API check.
+
+#### Evidence
+DOKS hoje roda v1.32.13; v1.33 já é stable. Próximo upgrade pode quebrar manifests
+usando APIs deprecated (e.g., `policy/v1beta1 PodDisruptionBudget` removida em v1.25,
+mas hipoteticamente APIs novas vão sair na v1.34+). Sem Pluto, descobrimos no
+upgrade live = production incident potencial.
+
+Pluto é tool madura (Fairwinds, ativa, último release < 6 meses), CLI binary
+distribuído, **NÃO requer instalação no cluster** — escaneia manifests estáticos.
+
+#### Files to edit
+```
+.github/workflows/helm-charts.yml  — add `pluto-check` job (NEW step)
+.trivyignore-pluto                 — (NEW, optional) suppressions documentadas
+infra/scripts/pluto-scan.sh        — (NEW se necessário, allowlisted; OR usar Action direto)
+docs/operations/k8s-upgrade-runbook.md — (NEW) reference Pluto output em upgrade flow
+.claude/rules/shell-scripts-allowlist.md — entry se pluto-scan.sh criado
+```
+
+#### Deep file dependency analysis
+- `helm-charts.yml`: adicionar job paralelo `pluto-check` que renderiza TODOS os
+  Helm charts (`infra/helm/*` + `charts/*`) via `helm template` e roda Pluto contra o
+  output. Não substitui kubeconform/Polaris — complementa.
+- `pluto-scan.sh` opcional: pode rodar Action `FairwindsOps/pluto@<sha>` direto
+  no workflow YAML, evitando criar script. **Decisão default:** Action direto (sem script).
+- `k8s-upgrade-runbook.md`: doc operator que `pluto detect-helm` deve rodar antes
+  de aceitar upgrade DOKS, e como interpretar output (FATAL vs DEPRECATED).
+
+#### Deep Dives
+
+**Pluto modes (per docs):**
+- `pluto detect` — scan stdin (raw YAML)
+- `pluto detect-files -d <dir>` — scan directory recursively
+- `pluto detect-helm` — scan installed Helm releases (requires kubeconfig — NÃO usar em CI)
+- `pluto detect-api-resources` — scan via kubeconfig (NÃO usar em CI)
+
+**CI workflow integration pattern (canonical):**
+```yaml
+- name: Render all Helm charts for Pluto scan
+  run: |
+    mkdir -p /tmp/rendered-manifests
+    for chart in infra/helm/*/ charts/*/; do
+      name=$(basename "$chart")
+      helm template "$name" "$chart" > "/tmp/rendered-manifests/${name}.yaml" 2>/dev/null || true
+    done
+
+- name: Pluto - detect deprecated K8s APIs
+  uses: FairwindsOps/pluto/github-action@<sha>  # pin SHA per INF-G18
+  with:
+    fileFolder: /tmp/rendered-manifests
+    target-versions: k8s=v1.32.0  # current DOKS version
+    only-show-removed: false  # show deprecated + removed
+```
+
+**Failure thresholds (decisão default — revisável):**
+- **FAIL CI** se: API removida no target version (FATAL); API deprecated com replacement
+  disponível há > 2 versions
+- **WARN only** (não fail) se: API deprecated recente (current version - 1)
+
+**Invariants:**
+- Pluto runs em TODO PR que toca `infra/helm/**`, `charts/**`, `.github/workflows/helm-charts.yml`
+- Pluto runs em weekly cron (proativo — captura novas deprecations sem PR trigger)
+- Pluto version pinned via Renovate (não floating)
+- Suppressions documentadas em `.trivyignore-pluto` com link para ADR/runbook
+
+**Edge cases:**
+- Helm chart com `range` ou `if` que produz YAML condicional → Pluto vê só rendered output, não template; aceitável.
+- Chart com CRDs próprios (loopzero-crds) → Pluto não conhece — passa silently. OK (não é deprecated API check).
+- Action `FairwindsOps/pluto@<sha>` requer `fileFolder` existir + ter `.yaml`/`.yml` files; empty dir → exit 0 silently. **Test fixture mandatório** para validar deteção real.
+
+#### Tasks
+1. Adicionar job `pluto-check` em `helm-charts.yml` paralelo aos existentes
+2. SHA-pin Action via Renovate config (`.github/renovate.json` já trata)
+3. Criar fixture de teste: chart com `apiVersion: policy/v1beta1` (removed em v1.25)
+   → Pluto detect → CI fails
+4. Criar `docs/operations/k8s-upgrade-runbook.md` (ou seção em runbook existente)
+   documentando workflow de upgrade DOKS com Pluto check
+5. Update `.claude/rules/shell-scripts-allowlist.md` (T6.1) **SE** decidir criar
+   `infra/scripts/pluto-scan.sh` (default decision: NÃO criar — Action direto)
+6. Commit + push
+
+#### TDD
+```
+RED:     TestPlutoFixture_DetectsRemovedAPI — fixture com kind: PodDisruptionBudget
+         apiVersion: policy/v1beta1 (removido em v1.25); rodar pluto detect-files
+         → exit code != 0
+RED:     TestPlutoFixture_PassesOnCurrent — fixture com kind: PodDisruptionBudget
+         apiVersion: policy/v1 (current) → exit 0
+RED:     TestWorkflow_PlutoJobPresent — grep `pluto-check:` em helm-charts.yml → 1+
+GREEN:   Implement workflow job + fixture
+VERIFY:  # Local validation (requires Pluto binary):
+         pluto detect-files -d infra/helm/ --target-versions k8s=v1.32.0
+         # Expected: exit 0 today (no deprecated APIs in current manifests)
+         # CI validation:
+         act -j pluto-check  # GitHub Actions local runner
+```
+
+#### Acceptance Criteria
+- [ ] `pluto-check` job em `helm-charts.yml` (paralelo)
+- [ ] Action SHA-pinned
+- [ ] Fixture test demonstra detecção de API removida
+- [ ] Runbook DOKS upgrade documenta Pluto check
+- [ ] LIVE: workflow PASS contra current manifests (zero deprecated detected hoje)
+- [ ] LIVE: workflow FAIL contra fixture deliberada
+
+#### DoD
+- [ ] Tasks 1-6 completos
+- [ ] CI green em PR
+- [ ] Fixture test funciona (deliberado FAIL)
+- [ ] CHANGELOG entry sob `### Added` mencionando Pluto adoption + tool inventory README update
+- [ ] README.md § Quality & Validation Gates atualizado adicionando Pluto entry
+
+### T7.2 — Adopt OpenCost (cost attribution per tenant)
+
+#### Objective
+Instalar OpenCost no mgmt cluster, integrado com Prometheus existente, para
+emitir métricas de custo por tenant (via namespace label). Materializa
+Anti-Pattern #8 ("adopt > reinvent") para o caso cost-attribution — alternativa
+a `pkg/quality/costattribution/` Go interno (que seria reimplementação).
+
+#### Evidence
+Pricing model documentado em CLAUDE.md (Starter Free / Pro $29 / Team $99 /
+Enterprise custom) não tem **nenhuma** validação de custo real per-tenant.
+Sprint 9 gate "(b) 1 prod customer day-trial with no incidents" requer baseline
+para responder: "Pro $29 cobre custo de 10 projects do customer X?".
+
+OpenCost é tool madura (CNCF Sandbox, ex-Kubecost OSS, ativa), Helm chart oficial
+em `opencost-charts/opencost`, integra com Prometheus federation (já temos).
+Cost source = DigitalOcean pricing (free public data).
+
+#### Files to edit
+```
+infra/helm/opencost/Chart.yaml                              — (NEW) chart wrapper
+infra/helm/opencost/values.yaml                             — (NEW) defaults
+infra/helm/opencost/values.schema.json                      — (NEW) schema (per T3.1 pattern)
+infra/helmfile/mgmt.helmfile.yaml.gotmpl                    — add opencost release (needs: monitoring)
+infra/helmfile/values/standalone-multi/opencost.yaml.gotmpl — (NEW) env-specific config
+infra/helm/monitoring/templates/opencost-podmonitor.yaml    — (NEW) Prometheus scrape config
+charts/loopzero-monitoring/templates/opencost-rules.yaml        — (NEW, optional) recording rules
+docs/operations/cost-attribution.md                         — (NEW) operator guide
+README.md                                                   — update Stack table adding OpenCost
+CLAUDE.md                                                   — update Stack/Helm charts list
+```
+
+#### Deep file dependency analysis
+- `infra/helm/opencost/`: wrapper chart pointing to upstream `opencost/opencost`
+  via dependency, com overrides LoopZero-specific (namespace label = `loopzero.io/tenant`).
+- `mgmt.helmfile.yaml.gotmpl`: adicionar release com `needs: [loopzero-system/monitoring]`
+  (precisa Prometheus rodando primeiro pra scrape).
+- `monitoring/templates/opencost-podmonitor.yaml`: PodMonitor CR que faz Prometheus
+  scrapear `:9003/metrics` do OpenCost pod.
+- `cost-attribution.md`: doc operador — como rodar `kubectl port-forward svc/opencost 9090`
+  pra ver dashboard local; como query `kubectl_pod_cost_per_hour` per `loopzero.io/tenant`.
+
+#### Deep Dives
+
+**OpenCost deployment topology (decisão de design):**
+- **Onde instalar:** mgmt cluster (Prometheus federation já lá; multi-cluster querying
+  via federation está OK).
+- **Per-cell ou central:** central (mgmt). Cada cell tem seu Prometheus → federation
+  envia métricas pra mgmt → OpenCost lá calcula attribution.
+- **Storage:** OpenCost mantém estado em memória (rolling window 15d default). Long-term
+  storage via Prometheus existente (Thanos seria over-engineering hoje).
+
+**Cost calculation source (decisão de design):**
+- DigitalOcean **on-demand** pricing (public, free): https://www.digitalocean.com/pricing
+- OpenCost `kubecostProductConfigs.customPricesEnabled: true` com `cpu/$0.0...`, `ram/$0.0...`
+  override per DOKS node sizes
+- **Alternative rejected:** AWS pricing API (irrelevante — não usamos AWS), Cloud Marketplace
+  pricing (DO não publica em formato OpenCost-native)
+
+**Tenant attribution label:**
+- LoopZero tenant CR `metadata.labels[loopzero.io/tenant]` já existe em workload namespaces
+- OpenCost `kubecostMetrics.emitNamespaceAnnotationsAsLabels: true` para emergir labels
+- Query Prometheus: `sum by (namespace) (kubecost_namespace_cost_per_hour{label_loopzero_io_tenant!=""})`
+
+**Multi-cell consideration:**
+- Cell-default + cell-1 + cell-2 cada um tem workload namespaces — OpenCost central
+  precisa scraping cross-cluster
+- Default: Prometheus federation já scrapea cells → OpenCost calcula sobre métricas
+  federadas — works out of the box, NOT requires per-cell OpenCost install
+
+**Invariants:**
+- OpenCost pod Running em mgmt cluster pós-sync
+- Prometheus scrapea `:9003/metrics` (200 OK, métricas presentes)
+- Query `sum(kubecost_namespace_cost_per_hour) by (namespace)` retorna dados pra todos os tenant namespaces
+- Cost per tenant visível na Grafana via dashboard novo (`docs/operations/cost-attribution.md` referencia)
+
+**Edge cases:**
+- Tenant namespace recém-criado → OpenCost leva 1h pra ter dados meaningful (rolling window). DOC.
+- Tenant suspended → namespace ainda existe; cost continua attribuído. Comportamento esperado.
+- Cell drain → workloads movem, cost attribuição segue namespace. OK.
+
+#### Tasks
+1. Criar `infra/helm/opencost/` wrapper chart (Chart.yaml + values.yaml + values.schema.json)
+2. Adicionar release em `mgmt.helmfile.yaml.gotmpl` com `needs: [loopzero-system/monitoring]`
+3. Adicionar PodMonitor em `infra/helm/monitoring/templates/opencost-podmonitor.yaml`
+4. Validar local: `helmfile -e standalone-multi --selector name=opencost template` renderiza sem erro
+5. Validar local: instalar em k3d mgmt cluster, verificar pod Running + metrics endpoint
+6. Criar `docs/operations/cost-attribution.md` com query examples + Grafana dashboard ID
+7. Update README.md § Stack + § Helm Charts Inventory adicionando OpenCost
+8. Update CLAUDE.md § Stack (Platform Charts section) adicionando OpenCost
+9. Commit + push
+
+#### TDD
+```
+RED:     TestHelmfileTemplate_OpenCostRendersSemErro — helmfile template opencost → exit 0
+RED:     TestOpenCostPod_RunningPostSync — k8s assertion: pod loopzero-system/opencost Running
+         apos `helmfile sync --selector name=opencost` em test cluster
+RED:     TestPodMonitor_OpenCostScrapeConfigured — PodMonitor CR criada com endpoints[0].port=metrics
+RED:     TestPrometheusQuery_OpenCostMetricsPresent — query `up{job="opencost"}=1` retorna >=1
+         apos pod Ready + Prometheus scrape window (60s)
+GREEN:   Implement chart + helmfile entry + PodMonitor
+VERIFY:  # Local validation:
+         task setup  # mgmt cluster + monitoring + opencost
+         kubectl --context k3d-loopzero-mgmt -n loopzero-system get pods -l app=opencost
+         # Expected: 1/1 Running
+         kubectl --context k3d-loopzero-mgmt -n loopzero-system port-forward svc/opencost 9003:9003 &
+         curl -sf http://localhost:9003/metrics | grep kubecost_
+         # Expected: metrics present
+         # Grafana validation:
+         kubectl --context k3d-loopzero-mgmt -n loopzero-system port-forward svc/grafana 3000:80 &
+         # Browser → http://localhost:3000 → import OpenCost dashboard
+```
+
+#### Acceptance Criteria
+- [ ] `infra/helm/opencost/` chart criado com values.schema.json
+- [ ] Helmfile release adicionada com `needs:` correto
+- [ ] PodMonitor configurada
+- [ ] LIVE local: pod Running + métricas presentes em Prometheus
+- [ ] Operator runbook `docs/operations/cost-attribution.md` criado
+- [ ] README.md + CLAUDE.md Stack tables atualizadas
+- [ ] Pass: schema validation (`task validate:helm-charts`)
+- [ ] Pass: kubeconform contra rendered template
+
+#### DoD
+- [ ] Tasks 1-9 completos
+- [ ] Local validation: kubecost métricas presentes em Prometheus
+- [ ] Cross-cell scenario validado: cell-1 + cell-2 workloads aparecem em queries (via federation)
+- [ ] CHANGELOG entry sob `### Added` mencionando OpenCost adoption
+- [ ] Grafana dashboard ID documentado (community dashboard ID OR custom JSON em `infra/helm/monitoring/dashboards/opencost.json`)
+
+---
+
 ## Coverage Matrix
 
 | # | Gap / Requirement | Task(s) | Resolution |
@@ -1424,14 +1703,16 @@ assert loc <= 3000, f'LOC={loc} exceeds 3000'
 | 16 | **EC-02:** `base64 -d` quebra em macOS | T2.3.b | Substituir por `kubectl -o go-template` ou `openssl base64 -d -A` |
 | 17 | **EC-03:** Audit caller-detection misses dynamic invocations | T1.1.a + T0.1 TDD | Grep `bash "$VAR"` pattern antes de validation; test cobertura |
 | 18 | **EC-04:** CI shallow clone falsifica gate no-new-bash | T6.2 EC-04 pre-flight + `fetch-depth: 0` | Pre-flight rev-parse + checkout config explicit |
+| 19 | **P0 gap kubetools-review:** Deprecated K8s API detection (DOKS upgrade safety) | T7.1 | Pluto CI gate em helm-charts.yml com SHA-pin |
+| 20 | **P0 gap kubetools-review:** Cost attribution per tenant (Sprint 9 pricing validation) | T7.2 | OpenCost helm chart no mgmt cluster, attribution via `loopzero.io/tenant` label |
 
-**Coverage: 18/18 gaps covered (100%)**
+**Coverage: 20/20 gaps covered (100%)**
 
 ---
 
 ## Global Definition of Done
 
-- [ ] Phases 0-6 completos (ordem sequencial respeitada per dependency graph)
+- [ ] Phases 0-7 completos (ordem sequencial respeitada per dependency graph; 6 e 7 paralelas)
 - [ ] Toda task tem tests passing (Go testify + Ginkgo onde aplicável)
 - [ ] Zero golangci-lint warnings em `pkg/quality/scriptsaudit`, `pkg/quality/nonewbash`,
       `pkg/quality/noshellwrap`, `pkg/pulumi/archive`, `pkg/pulumi/orphanrm`
@@ -1447,6 +1728,11 @@ assert loc <= 3000, f'LOC={loc} exceeds 3000'
   - [ ] CI gate `no-new-bash` ATIVO
   - [ ] CI gate `no-shell-wrap` ATIVO
   - [ ] `.claude/rules/shell-scripts-allowlist.md` cobre 100% dos remaining
+  - [ ] **T7.1:** Pluto CI gate ATIVO em `helm-charts.yml` — PASS contra current manifests
+  - [ ] **T7.2:** OpenCost pod Running mgmt cluster — métricas presentes em Prometheus
+        com attribution per tenant via `loopzero.io/tenant` label
+  - [ ] README.md § Tool Inventory atualizado (Pluto + OpenCost movidos de "P0 gap" para adopted)
+  - [ ] CLAUDE.md § Stack + § Tool Inventory atualizados removendo Pluto + OpenCost dos "v1.x deferred"
 - [ ] **Evidence:** N/A — este plano NÃO afeta maturity score (é refactor interno).
 - [ ] **`/dogfood full` PASSED** (see Dogfood Gate below)
 
