@@ -31,7 +31,7 @@ on:
       - '.github/v1.0-ga-date.txt'
       - '.github/cosign-cutover-exception.txt'
       - '.github/workflows/cosign-cutover-deadline.yml'
-      - 'pkg/quality/cosigncutover/**'
+      - 'pkg/quality/deadlineratchet/**'
   workflow_dispatch:
 
 permissions:
@@ -64,7 +64,7 @@ jobs:
         # Self-check: if the gate's own tests fail, refuse to run the real
         # check — a broken gate could otherwise silently exit 0 while the
         # deadline is blown.
-        run: cd pkg && go test ./quality/cosigncutover/...
+        run: cd pkg && go test ./quality/deadlineratchet/...
 
       - name: Check deadline
         id: deadline

@@ -12,7 +12,7 @@ import (
 	"time"
 
 	"github.com/loopzero/loopzero/pkg/quality/actionpinning"
-	"github.com/loopzero/loopzero/pkg/quality/cosigncutover"
+	"github.com/loopzero/loopzero/pkg/quality/deadlineratchet"
 	"github.com/loopzero/loopzero/pkg/quality/divergencematrix"
 	"github.com/loopzero/loopzero/pkg/quality/helmdrift"
 	"github.com/loopzero/loopzero/pkg/quality/mockbudget"
@@ -101,6 +101,8 @@ func runQuality(args []string) int {
 		return runNoMigrateForce(args[1:])
 	case "cosign-cutover":
 		return runCosignCutover(args[1:])
+	case "service-auth-rotation":
+		return runServiceAuthRotation(args[1:])
 	default:
 		fmt.Fprintf(os.Stderr, "unknown gate: %s\n\n%s", args[0], qualityHelp)
 		return 1
@@ -606,13 +608,51 @@ func runNoMigrateForce(args []string) int {
 }
 
 func runCosignCutover(args []string) int {
-	fs := flag.NewFlagSet("cosign-cutover", flag.ContinueOnError)
+	return runRatchet("cosign-cutover", deadlineratchet.Spec{
+		MarkerRelPath:    ".github/v1.0-ga-date.txt",
+		ExceptionRelPath: ".github/cosign-cutover-exception.txt",
+		WarnDay:          75,
+		DeadlineDay:      90,
+	}, args, ratchetLabels{
+		dormant:   "pre-GA — marker absent. Check is dormant.",
+		subject:   "cosign keyless cutover",
+		exception: ".github/cosign-cutover-exception.txt",
+		adr:       "2026-05-12-cosign-keyless-v11-cutover.md",
+	})
+}
+
+func runServiceAuthRotation(args []string) int {
+	return runRatchet("service-auth-rotation", deadlineratchet.Spec{
+		MarkerRelPath:    ".github/service-auth-ed25519-rotation-date.txt",
+		ExceptionRelPath: ".github/service-auth-rotation-exception.txt",
+		WarnDay:          60,
+		DeadlineDay:      90,
+	}, args, ratchetLabels{
+		dormant:   "no rotation marker — check is dormant. First rotation should create it.",
+		subject:   "service-auth Ed25519 rotation",
+		exception: ".github/service-auth-rotation-exception.txt",
+		adr:       "2026-05-13-service-auth-ed25519-adoption.md",
+	})
+}
+
+type ratchetLabels struct {
+	dormant   string // dormant-state message
+	subject   string // e.g. "cosign keyless cutover"
+	exception string // exception file path (for the unblock hint)
+	adr       string // governing ADR filename
+}
+
+// runRatchet is the shared CLI handler for deadline-ratchet gates (cosign
+// cutover §6.B.4, service-auth rotation §6.B.5). Exit: 0 OK/warn/exception,
+// 1 usage/parse error, 2 blocked.
+func runRatchet(name string, spec deadlineratchet.Spec, args []string, lbl ratchetLabels) int {
+	fs := flag.NewFlagSet(name, flag.ContinueOnError)
 	root := fs.String("root", ".", "repo root directory")
 	asOfStr := fs.String("as-of", "", "reference date YYYY-MM-DD (testing; default: today)")
 	if err := fs.Parse(args); err != nil {
 		return 1
 	}
-	cfg := cosigncutover.Config{Root: *root}
+	cfg := deadlineratchet.Config{Root: *root}
 	if *asOfStr != "" {
 		t, err := time.Parse("2006-01-02", *asOfStr)
 		if err != nil {
@@ -621,47 +661,40 @@ func runCosignCutover(args []string) int {
 		}
 		cfg.AsOf = t
 	}
-	o, err := cosigncutover.Check(cfg)
+	o, err := deadlineratchet.Check(spec, cfg)
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "::error::%v\n", err)
 		return 1
 	}
 	if o.Dormant {
-		fmt.Println("[cosign-cutover] pre-GA — marker absent. Check is dormant.")
+		fmt.Printf("[%s] %s\n", name, lbl.dormant)
 		return 0
 	}
-	fmt.Printf("[cosign-cutover] v1.0 GA = %s; days since = %d\n", o.GADate, o.Days)
+	fmt.Printf("[%s] start = %s; days since = %d\n", name, o.Date, o.Days)
 	gha := os.Getenv("GITHUB_ACTIONS") != ""
+	emit := func(level, msg string) {
+		if gha {
+			fmt.Printf("::%s::%s\n", level, msg)
+		} else {
+			fmt.Fprintf(os.Stderr, "[%s] %s: %s\n", name, strings.ToUpper(level), msg)
+		}
+	}
 	switch {
 	case o.Blocked:
-		msg := fmt.Sprintf("cosign keyless cutover DEADLINE BLOWN at day %d (>90 days post v1.0 GA). "+
-			"No sponsor exception found. Per ADR 2026-05-12-cosign-keyless-v11-cutover.md this auto-blocks. "+
-			"To unblock: execute the cutover and update the ADR, OR create "+
-			".github/cosign-cutover-exception.txt with an 'approved-by: <name>' line.", o.Days)
-		if gha {
-			fmt.Printf("::error::%s\n", msg)
-		} else {
-			fmt.Fprintf(os.Stderr, "[cosign-cutover] BLOCK: %s\n", msg)
-		}
+		emit("error", fmt.Sprintf("%s DEADLINE BLOWN at day %d (>%d days). No sponsor exception found. "+
+			"Per ADR %s this auto-blocks. To unblock: execute it and update the marker, OR create "+
+			"%s with an 'approved-by: <name>' line.", lbl.subject, o.Days, spec.DeadlineDay, lbl.adr, lbl.exception))
 		return 2
 	case o.ExceptionPermitted:
-		msg := fmt.Sprintf("cosign keyless cutover deadline (90d) BLOWN at day %d — sponsor exception present. Permitting.", o.Days)
-		if gha {
-			fmt.Printf("::warning::%s\n", msg)
-		} else {
-			fmt.Fprintf(os.Stderr, "[cosign-cutover] WARN (exception-permitted): %s\n", msg)
-		}
+		emit("warning", fmt.Sprintf("%s deadline (%dd) BLOWN at day %d — sponsor exception present. Permitting.",
+			lbl.subject, spec.DeadlineDay, o.Days))
 		return 0
 	case o.Warn:
-		msg := fmt.Sprintf("cosign keyless cutover slip-alert: day %d of 90 (deadline approaching). T0+75d sponsor-exception window open.", o.Days)
-		if gha {
-			fmt.Printf("::warning::%s\n", msg)
-		} else {
-			fmt.Fprintf(os.Stderr, "[cosign-cutover] WARN: %s\n", msg)
-		}
+		emit("warning", fmt.Sprintf("%s slip-alert: day %d of %d (deadline approaching). T0+%dd window open.",
+			lbl.subject, o.Days, spec.DeadlineDay, spec.WarnDay))
 		return 0
 	default:
-		fmt.Printf("[cosign-cutover] within budget (day %d of 90) — OK.\n", o.Days)
+		fmt.Printf("[%s] within budget (day %d of %d) — OK.\n", name, o.Days, spec.DeadlineDay)
 		return 0
 	}
 }

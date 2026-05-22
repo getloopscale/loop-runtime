@@ -12,6 +12,34 @@
 
 ## Iteration log
 
+### Iter 23 (2026-05-22) — Phase 5 T5.3 (service-auth-rotation + DRY ratchet extraction)
+
+**Commit:** (current)
+
+**Done:**
+- **DRY refactor:** the bash author marked `check-service-auth-rotation.sh` as
+  "the same ratchet pattern as cosign-cutover; operator learns ONE pattern".
+  Rather than ship a near-identical Go copy, extracted the shared business
+  logic into `pkg/quality/deadlineratchet/` (parameterised by
+  `Spec{markerFile, exceptionFile, warnDay, deadlineDay}`). 16 tests covering
+  BOTH the cosign (75/90) and service-auth (60/90) specs, 94.6% coverage.
+- **Refactored cosigncutover into the shared core:** deleted
+  `pkg/quality/cosigncutover/` (iter-22 standalone); its logic now lives in
+  deadlineratchet. CLI handlers `runCosignCutover` + `runServiceAuthRotation`
+  are thin wrappers over a shared `runRatchet` helper (Spec + labels).
+- `cmd/loopzero-ops` `service-auth-rotation` subcommand added; `cosign-cutover`
+  repointed to the shared core. Both dormant on the live repo (parity).
+- 3 consumers repointed: `cosign-cutover-deadline.yml`,
+  `service-auth-rotation-deadline.yml` (bash → Go test + Go gate),
+  `taskfiles/security.yml` (2 tasks).
+- **2 scripts DELETED:** `check-service-auth-rotation.sh` (125) +
+  `check-service-auth-rotation_test.sh` (108) — D6 AUTO-DIE. allowlist 238 (was 240).
+
+**Script count: 240 → 238** (21 deletions cumulative). 20 Go quality gates
+(cosigncutover folded into deadlineratchet; +service-auth shares it).
+
+---
+
 ### Iter 22 (2026-05-22) — Phase 5 T5.3 (cosign-cutover gate + AUTO-DIE pair)
 
 **Commit:** (current)
