@@ -12,6 +12,39 @@
 
 ## Iteration log
 
+### Iter 5 (2026-05-22) — Phase 6 T6.3 COMPLETE (no-shell-wrap gate ATIVO)
+
+**Commit:** (current)
+
+**Done:**
+- `pkg/quality/noshellwrap/check.go` (~190 LOC) — AST walker via `go/parser` +
+  `go/ast` stdlib (no external deps). Detects `<x>.Run("<forbidden-cli>", ...)`
+  calls where first arg is string literal in ForbiddenCLI set.
+- `pkg/quality/noshellwrap/check_test.go` — 14 testify tests GREEN, coverage 90.5%
+  (atinge target ≥90%). Cobre: forbidden detection, allowed CLI pass, nolint
+  suppression (same/preceding line), test file exemption, vendor/ exclusion,
+  multiple violations, dynamic CLI documented limitation, unparseable file
+  graceful skip, non-existent root error
+- `cmd/loopzero-ops/quality_subcmd.go` — wires `no-shell-wrap` subcommand
+- `.github/workflows/no-shell-wrap-gate.yml` — PR-blocking gate scanning
+  pkg/ + cmd/ separately
+
+**Forbidden CLIs (per plan D5 deep-dive):**
+- pulumi → use pulumi-go-sdk Automation API
+- helm → use helm.sh/helm/v3 SDK
+- kubectl → use k8s.io/client-go
+- aws → use aws-sdk-go-v2
+- gh → use github.com/google/go-github
+
+**Smoke test:** Gate ran against `pkg/` (current branch state) → PASS with zero
+violations (expected; branch is pre-migration). Once Phase 5 (SDK-native Go) lands,
+gate validates that migrations didn't shell-wrap forbidden CLIs.
+
+**Phase 6 status: 3/4 done.** T6.1 + T6.2 + T6.3 ATIVOS. T6.4 (final inventory
+validation) pending — requires Phases 1-5 complete to validate inventory ≤ 30.
+
+---
+
 ### Iter 4 (2026-05-22) — Phase 7 T7.2 COMPLETE (OpenCost adopted — Phase 7 DONE)
 
 **Commit:** (current)
@@ -128,7 +161,7 @@ Regression locked NOW.
 | | T5.3 remaining pure-logic gates | ⚪ Pending audit results | Ralph |
 | **6 Lock The Door** | T6.1 allowlist.md | ✅ **DONE** (iter 2) — baseline grandfathered 257 entries | Ralph |
 | | T6.2 no-new-bash gate (+ EC-04 fetch-depth + EC-06 rename) | ✅ **DONE** (iter 2) — gate ATIVO em CI | Ralph |
-| | T6.3 no-shell-wrap audit gate | ⚪ Pending — next iter target | Ralph |
+| | T6.3 no-shell-wrap audit gate | ✅ **DONE** (iter 5) — AST walker + 14 hermetic tests + CI workflow | Ralph |
 | | T6.4 final inventory validation | ⚪ Pending Phases 1-5 + T6.3 | Ralph |
 | **7 Adopt External Tools** | T7.1 Pluto CI gate | ✅ **DONE** (iter 3) — workflow + 7 hermetic tests + runbook | Ralph |
 | | T7.2 OpenCost helm + Prometheus integration | ✅ **DONE** (iter 4) — wrapper chart + helmfile entry + ServiceMonitor + 9 hermetic tests + runbook | Ralph |

@@ -9,6 +9,7 @@ import (
 	"os"
 
 	"github.com/loopzero/loopzero/pkg/quality/nonewbash"
+	"github.com/loopzero/loopzero/pkg/quality/noshellwrap"
 	"github.com/loopzero/loopzero/pkg/quality/scriptsaudit"
 )
 
@@ -30,6 +31,12 @@ GATES:
                     --allowlist PATH  allowlist MD (default: ".claude/rules/shell-scripts-allowlist.md")
                     --base-ref REF    base git ref (default: "origin/main")
                     --head-ref REF    head git ref (default: "HEAD")
+
+  no-shell-wrap   Fail if Go code in pkg/* uses shellrun.Run(<forbidden-cli>, ...)
+                  without //nolint:shell-wrap suppression (D5 gate).
+                  Forbidden: pulumi, helm, kubectl, aws, gh (use Go SDK instead).
+                  Flags:
+                    --root DIR  directory to scan (default: "pkg")
 `
 
 func runQuality(args []string) int {
@@ -45,6 +52,8 @@ func runQuality(args []string) int {
 		return runScriptsAudit(args[1:])
 	case "no-new-bash":
 		return runNoNewBash(args[1:])
+	case "no-shell-wrap":
+		return runNoShellWrap(args[1:])
 	default:
 		fmt.Fprintf(os.Stderr, "unknown gate: %s\n\n%s", args[0], qualityHelp)
 		return 1
@@ -127,5 +136,31 @@ func runScriptsAudit(args []string) int {
 		// Visibility for operator running interactively
 		fmt.Fprintf(os.Stderr, "scripts-audit: %d scripts inventoried to %s\n", len(scripts), *output)
 	}
+	return 0
+}
+
+func runNoShellWrap(args []string) int {
+	fs := flag.NewFlagSet("no-shell-wrap", flag.ContinueOnError)
+	root := fs.String("root", "pkg", "directory to scan")
+	if err := fs.Parse(args); err != nil {
+		return 1
+	}
+	outcome, err := noshellwrap.Check(noshellwrap.Config{Root: *root})
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "no-shell-wrap: %v\n", err)
+		return 5
+	}
+	if !outcome.Pass {
+		fmt.Fprintln(os.Stderr, "no-shell-wrap: FAIL — Go code wraps forbidden CLI without nolint:")
+		for _, v := range outcome.Violations {
+			fmt.Fprintf(os.Stderr, "  - %s\n", v)
+		}
+		fmt.Fprintln(os.Stderr, "")
+		fmt.Fprintln(os.Stderr, "To fix: use the Go SDK (pulumi-go-sdk, helm.sh/helm/v3, client-go,")
+		fmt.Fprintln(os.Stderr, "aws-sdk-go-v2, go-github) OR add //nolint:shell-wrap on the call line")
+		fmt.Fprintln(os.Stderr, "with justificativa per plan D5 + Anti-Pattern #8.")
+		return 1
+	}
+	fmt.Println("no-shell-wrap: PASS — no forbidden shell wraps detected")
 	return 0
 }
