@@ -555,7 +555,10 @@ jobs:
           extra_args: --only-verified --results=verified,unknown
 
       - name: GitHub Actions SHA pinning lint (T4.1 deep-review-remediation)
-        run: bash infra/scripts/check_actions_sha_pinned.sh
+        # T5.3 of plan 2026-05-22: check_actions_sha_pinned.sh CONSOLIDATED into
+        # the existing pure-Go action-pinning gate (DRY — one SHA-pinning gate).
+        # --actions-dir preserves this gate's composite-action.yml coverage.
+        run: cd cmd/loopzero-ops && go run . quality action-pinning --workflows-dir "${GITHUB_WORKSPACE}/.github/workflows" --actions-dir "${GITHUB_WORKSPACE}/.github/actions"
 
       - name: Orphan PrometheusRule alerts lint (T5.10 deep-review-remediation)
         # T5.3 of plan 2026-05-22: migrated check_orphan_alerts.sh to pure-Go gate.

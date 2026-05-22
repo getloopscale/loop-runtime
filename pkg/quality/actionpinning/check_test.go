@@ -184,6 +184,74 @@ func TestCheck_MultipleFiles_Sorted(t *testing.T) {
 	}
 }
 
+// TestActionsDir_CompliantCompositeAction — composite action.yml with a
+// SHA-pinned ref passes; FileCount includes it.
+func TestActionsDir_CompliantCompositeAction(t *testing.T) {
+	dir := t.TempDir()
+	wf := filepath.Join(dir, "workflows")
+	if err := os.MkdirAll(wf, 0o755); err != nil {
+		t.Fatalf("mkdir: %v", err)
+	}
+	writeWorkflow(t, wf, "ci.yml", "      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683\n")
+	actions := filepath.Join(dir, "actions", "setup-go")
+	if err := os.MkdirAll(actions, 0o755); err != nil {
+		t.Fatalf("mkdir: %v", err)
+	}
+	if err := os.WriteFile(filepath.Join(actions, "action.yml"),
+		[]byte("runs:\n  steps:\n    - uses: actions/setup-go@0aaccfd150d50ccaeb58ebd88d36e91967a5f35b\n"), 0o644); err != nil {
+		t.Fatalf("write action.yml: %v", err)
+	}
+	o, err := Check(Config{WorkflowsDir: wf, ActionsDir: filepath.Join(dir, "actions")})
+	if err != nil {
+		t.Fatalf("Check: %v", err)
+	}
+	if !o.Pass {
+		t.Errorf("expected pass, got %v", o.Violations)
+	}
+	if o.WorkflowCount != 1 || o.FileCount != 2 {
+		t.Errorf("expected 1 workflow + 2 files, got wf=%d files=%d", o.WorkflowCount, o.FileCount)
+	}
+}
+
+// TestActionsDir_TagPinnedCompositeActionFails — a tag-pinned ref inside a
+// composite action.yml is caught.
+func TestActionsDir_TagPinnedCompositeActionFails(t *testing.T) {
+	dir := t.TempDir()
+	wf := filepath.Join(dir, "workflows")
+	if err := os.MkdirAll(wf, 0o755); err != nil {
+		t.Fatalf("mkdir: %v", err)
+	}
+	writeWorkflow(t, wf, "ci.yml", "      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683\n")
+	actions := filepath.Join(dir, "actions", "bad")
+	if err := os.MkdirAll(actions, 0o755); err != nil {
+		t.Fatalf("mkdir: %v", err)
+	}
+	if err := os.WriteFile(filepath.Join(actions, "action.yml"),
+		[]byte("runs:\n  steps:\n    - uses: actions/setup-node@v4\n"), 0o644); err != nil {
+		t.Fatalf("write action.yml: %v", err)
+	}
+	o, err := Check(Config{WorkflowsDir: wf, ActionsDir: filepath.Join(dir, "actions")})
+	if err != nil {
+		t.Fatalf("Check: %v", err)
+	}
+	if o.Pass {
+		t.Error("expected fail — composite action has @v4 tag pin")
+	}
+}
+
+// TestActionsDir_Missing — a nonexistent ActionsDir is tolerated.
+func TestActionsDir_Missing(t *testing.T) {
+	dir := t.TempDir()
+	writeWorkflow(t, dir, "ci.yml", "      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683\n")
+	o, err := Check(Config{WorkflowsDir: dir, ActionsDir: filepath.Join(dir, "nonexistent")})
+	if err != nil {
+		t.Fatalf("Check: %v", err)
+	}
+	if !o.Pass || o.FileCount != 1 {
+		t.Errorf("missing actions dir should be tolerated, got pass=%v files=%d", o.Pass, o.FileCount)
+	}
+}
+
 // TestIsCompliant — unit coverage of the ref classifier.
 func TestIsCompliant(t *testing.T) {
 	cases := map[string]bool{

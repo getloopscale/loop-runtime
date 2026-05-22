@@ -12,6 +12,33 @@
 
 ## Iteration log
 
+### Iter 34 (2026-05-22) — Phase 5 T5.3 (consolidate check_actions_sha_pinned → actionpinning, DRY)
+
+**Done:**
+- `check_actions_sha_pinned.sh` (T4.1, REVIEW-NEEDED, read-verified pure-logic —
+  the "cosign" in its help text is a comment, not an invocation) is the SAME
+  invariant as the iter-19 `actionpinning` gate (INF-G18): SHA-pin GitHub
+  Actions. Rather than ship a 3rd action-pinning gate, **consolidated** into
+  the existing one (DRY, same precedent as deadlineratchet iter 23).
+- Extended `pkg/quality/actionpinning/` Config with `ActionsDir` — when set,
+  also scans `<dir>/*/action.{yml,yaml}` composite-action manifests (the extra
+  coverage check_actions_sha_pinned had). +3 tests, 91.8% coverage. FileCount
+  added to Outcome.
+- `ci.yml` "GitHub Actions SHA pinning lint" step repointed to
+  `action-pinning --workflows-dir ... --actions-dir .github/actions`. Parity:
+  PASS (55 files = 51 workflows + 4 composite actions; matches the bash gate's
+  green state).
+- `check_actions_sha_pinned.sh` (101) DELETED; allowlist 227 (was 228).
+- **Note (CI redundancy, deferred):** infra-gates INF-G18 job also runs the
+  action-pinning gate (workflows-only). The two CI consumers now share ONE Go
+  gate impl (DRY at code level); fully de-duping the two CI jobs is deferred to
+  avoid changing path-trigger coverage.
+
+**Script count: 228 → 227** (32 deletions cumulative). 27 Go quality gates
+(no new gate — consolidated into existing actionpinning).
+
+---
+
 ### Iter 33 (2026-05-22) — Phase 5 T5.3 (alert-runbooks gate + RED-state finding)
 
 **Commit:** (current)

@@ -544,10 +544,11 @@ func runRuntimeSLO(args []string) int {
 func runActionPinning(args []string) int {
 	fs := flag.NewFlagSet("action-pinning", flag.ContinueOnError)
 	dir := fs.String("workflows-dir", ".github/workflows", "directory of *.yml workflow files")
+	actionsDir := fs.String("actions-dir", "", "optional dir of composite actions (<dir>/*/action.yml) to also scan")
 	if err := fs.Parse(args); err != nil {
 		return 1
 	}
-	o, err := actionpinning.Check(actionpinning.Config{WorkflowsDir: *dir})
+	o, err := actionpinning.Check(actionpinning.Config{WorkflowsDir: *dir, ActionsDir: *actionsDir})
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "action-pinning: %v\n", err)
 		return 2
@@ -562,7 +563,8 @@ func runActionPinning(args []string) int {
 		fmt.Fprintln(os.Stderr, "If a line is genuinely exempt, prepend: # pragma: allow-tag-pin")
 		return 1
 	}
-	fmt.Printf("✅ INF-G18 GREEN — 0 tag-pinned actions in %d workflows.\n", o.WorkflowCount)
+	fmt.Printf("✅ INF-G18 GREEN — 0 tag-pinned actions in %d files (%d workflows + composite actions).\n",
+		o.FileCount, o.WorkflowCount)
 	return 0
 }
 

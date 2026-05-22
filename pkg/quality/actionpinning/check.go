@@ -35,12 +35,18 @@ const PragmaLookback = 4
 type Config struct {
 	// WorkflowsDir is the directory holding *.yml workflow files.
 	WorkflowsDir string
+	// ActionsDir, when set, additionally scans composite-action manifests at
+	// <ActionsDir>/*/action.yml (and action.yaml). This unifies the former
+	// check_actions_sha_pinned.sh gate (which also pinned composite actions)
+	// into this single SHA-pinning gate (DRY — one invariant, one gate).
+	ActionsDir string
 }
 
 // Outcome captures the result.
 type Outcome struct {
 	Pass          bool
-	WorkflowCount int
+	WorkflowCount int // count of workflow *.yml files scanned
+	FileCount     int // total files scanned (workflows + composite actions)
 	Violations    []string // "file:line: <line>"
 }
 
@@ -77,8 +83,18 @@ func Check(cfg Config) (*Outcome, error) {
 		}
 	}
 	sort.Strings(files)
+	workflowCount := len(files)
 
-	outcome := &Outcome{Pass: true, WorkflowCount: len(files)}
+	// Optionally also scan composite-action manifests.
+	if cfg.ActionsDir != "" {
+		actionFiles, err := compositeActionManifests(cfg.ActionsDir)
+		if err != nil {
+			return nil, err
+		}
+		files = append(files, actionFiles...)
+	}
+
+	outcome := &Outcome{Pass: true, WorkflowCount: workflowCount, FileCount: len(files)}
 	for _, f := range files {
 		v, err := scanFile(f)
 		if err != nil {
@@ -90,6 +106,29 @@ func Check(cfg Config) (*Outcome, error) {
 		outcome.Pass = false
 	}
 	return outcome, nil
+}
+
+// compositeActionManifests returns sorted <actionsDir>/*/action.{yml,yaml}
+// paths. A missing actionsDir is tolerated (returns no files).
+func compositeActionManifests(actionsDir string) ([]string, error) {
+	entries, err := os.ReadDir(actionsDir)
+	if err != nil {
+		return nil, nil // no composite-actions dir → nothing extra to scan
+	}
+	var files []string
+	for _, e := range entries {
+		if !e.IsDir() {
+			continue
+		}
+		for _, name := range []string{"action.yml", "action.yaml"} {
+			p := filepath.Join(actionsDir, e.Name(), name)
+			if info, statErr := os.Stat(p); statErr == nil && !info.IsDir() {
+				files = append(files, p)
+			}
+		}
+	}
+	sort.Strings(files)
+	return files, nil
 }
 
 // scanFile returns the list of "file:line: <line>" violations in one workflow.
