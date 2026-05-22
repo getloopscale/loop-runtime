@@ -1,0 +1,100 @@
+---
+# Pluto deprecated K8s API gate (T7.1 of plan 2026-05-22-shell-script-strategic-plan.md v1.3)
+#
+# Materializes Anti-Pattern #8 ("adopt > reinvent"): adopts Fairwinds Pluto
+# external tool instead of reimplementing as pkg/quality/deprecatedapicheck/
+# Go gate. Scans rendered Helm chart output for K8s APIs deprecated or removed
+# in the target K8s version.
+#
+# Why: DOKS today runs v1.32.13; v1.33 is stable. Without this gate, a future
+# upgrade could break manifests that use removed APIs (e.g., policy/v1beta1
+# PodDisruptionBudget removed in v1.25, autoscaling/v1 HPA removed in newer).
+# Production incident risk: workloads silently fail to apply after upgrade.
+#
+# Failure thresholds (revisable):
+#  - FAIL CI: API removed in target version OR deprecated > 2 versions ago
+#  - WARN only: API deprecated in the most recent version (current minus 1)
+
+name: pluto-deprecated-apis (T7.1)
+
+on:
+  pull_request:
+    branches:
+      - main
+      - develop
+    paths:
+      - "charts/**"
+      - "infra/helm/**"
+      - ".github/workflows/pluto-deprecated-apis.yml"
+      - "infra/tests/pluto/**"
+  # Run weekly even without PR — captures new deprecations announced upstream
+  # without waiting for a chart change.
+  schedule:
+    - cron: "30 6 * * 1"  # Mon 06:30 UTC
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+env:
+  # Target K8s version for the deprecation scan. Aligned with current DOKS
+  # production version. Bump when planning a DOKS minor upgrade — gate
+  # immediately reports manifests that will break.
+  K8S_TARGET_VERSION: v1.32.0
+
+jobs:
+  pluto-check:
+    name: Pluto — deprecated K8s API detector
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+
+      - name: Set up Helm
+        uses: azure/setup-helm@b9e51907a09c216f16ebe8536097933489208112 # v4.3.0
+        with:
+          version: v3.14.4
+
+      - name: Render all Helm charts for static scan
+        run: |
+          set -euo pipefail
+          mkdir -p /tmp/rendered-manifests
+          # infra/helm/<chart>/ — bootstrap charts (Helmfile L2)
+          for chart_dir in infra/helm/*/; do
+            chart_name=$(basename "$chart_dir")
+            # Skip Chart.yaml-less directories defensively
+            [[ -f "$chart_dir/Chart.yaml" ]] || continue
+            # `helm template` with chart's own values; intentionally generic
+            # context (no kubeContext) since we scan output statically.
+            helm template "$chart_name" "$chart_dir" \
+              > "/tmp/rendered-manifests/infra-${chart_name}.yaml" 2>/dev/null || {
+              echo "::warning::skipping infra/helm/${chart_name} (template render failed)"
+              continue
+            }
+          done
+          # charts/<chart>/ — OCI-published charts (ArgoCD L3)
+          for chart_dir in charts/*/; do
+            chart_name=$(basename "$chart_dir")
+            [[ -f "$chart_dir/Chart.yaml" ]] || continue
+            helm template "$chart_name" "$chart_dir" \
+              > "/tmp/rendered-manifests/charts-${chart_name}.yaml" 2>/dev/null || {
+              echo "::warning::skipping charts/${chart_name} (template render failed)"
+              continue
+            }
+          done
+          echo "::group::rendered manifests"
+          ls -lh /tmp/rendered-manifests/
+          echo "::endgroup::"
+
+      - name: Pluto — detect deprecated/removed APIs
+        uses: FairwindsOps/pluto/github-action@a4cc0e1b6f06d24cb1ae6e827d56607c5a23eb73 # v5.21.6
+        with:
+          fileFolder: /tmp/rendered-manifests
+          target-versions: k8s=${{ env.K8S_TARGET_VERSION }}
+          # only-show-removed=false → also report deprecated APIs, not just removed
+          only-show-removed: false
+
+      - name: Annotate failure
+        if: failure()
+        run: |
+          echo "::error title=Pluto Deprecated API::Helm chart renders contain K8s APIs deprecated or removed in ${{ env.K8S_TARGET_VERSION }}. See workflow log for affected manifests. Update apiVersion in chart templates. See docs/operations/k8s-upgrade-runbook.md for upgrade workflow."

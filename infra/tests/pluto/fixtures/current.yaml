@@ -1,0 +1,37 @@
+# Fixture: manifest with current (non-deprecated) APIs
+# Used to validate that Pluto correctly PASSES manifests with current apiVersion.
+# Manually invoke: pluto detect-files -d infra/tests/pluto/fixtures/ \
+#                    --target-versions k8s=v1.32.0 --only-show-removed=true
+# Expected: exit code 0 (no removed APIs detected)
+# (NOTE: this fixture will FAIL against v1.25.0 because of deprecated.yaml peer;
+#  run with `pluto detect-files -d <path-to-this-file-only>` to isolate.)
+apiVersion: policy/v1  # current as of v1.32
+kind: PodDisruptionBudget
+metadata:
+  name: example-pdb
+  namespace: default
+spec:
+  minAvailable: 1
+  selector:
+    matchLabels:
+      app: example
+---
+apiVersion: autoscaling/v2  # current as of v1.32
+kind: HorizontalPodAutoscaler
+metadata:
+  name: example-hpa
+  namespace: default
+spec:
+  scaleTargetRef:
+    apiVersion: apps/v1
+    kind: Deployment
+    name: example
+  minReplicas: 1
+  maxReplicas: 10
+  metrics:
+    - type: Resource
+      resource:
+        name: cpu
+        target:
+          type: Utilization
+          averageUtilization: 80

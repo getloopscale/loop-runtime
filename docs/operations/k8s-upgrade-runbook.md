@@ -1,0 +1,108 @@
+# Kubernetes Upgrade Runbook (DOKS)
+
+Operator-facing guide for upgrading the DOKS minor version (e.g., v1.32 → v1.33).
+Adopted via plan `docs/plans/2026-05-22-shell-script-strategic-plan.md` v1.3 Phase 7 T7.1.
+
+---
+
+## Pre-flight: Pluto deprecated API check
+
+Before approving any DOKS minor upgrade, run the Pluto CI gate to confirm
+that all current Helm charts compile to manifests using APIs available in
+the target K8s version.
+
+### Automated (CI)
+
+The workflow `.github/workflows/pluto-deprecated-apis.yml` runs:
+- On every PR touching `charts/**`, `infra/helm/**`, or the workflow itself
+- Weekly via cron (Mon 06:30 UTC) — catches new deprecations announced upstream
+- On `workflow_dispatch` — operator can trigger before planning an upgrade
+
+The gate fails CI if any rendered manifest contains:
+- An API **REMOVED** in the target K8s version (FATAL)
+- An API **DEPRECATED** with replacement available (warning surfaced via `only-show-removed: false`)
+
+### Manual (operator-time before upgrade)
+
+When planning a minor upgrade, bump `K8S_TARGET_VERSION` in the workflow file
+to the **target** version and run via `workflow_dispatch`. Example:
+
+```yaml
+# .github/workflows/pluto-deprecated-apis.yml
+env:
+  K8S_TARGET_VERSION: v1.33.0  # was v1.32.0
+```
+
+Trigger manually:
+```bash
+gh workflow run pluto-deprecated-apis.yml --ref refactor/k8s-upgrade-v1.33
+```
+
+Read the workflow output:
+- **PASS**: no removed/deprecated APIs detected — upgrade is API-safe
+- **FAIL**: list of affected manifests + apiVersion to update. Address each
+  (update chart templates to use replacement apiVersion) BEFORE proceeding
+  with the upgrade.
+
+---
+
+## Upgrade sequence (after Pluto PASS)
+
+1. **Pre-upgrade evidence:**
+   - Pluto gate PASS for target version ✓
+   - Backup snapshot of mgmt PG via Velero (verify via `/dogfood velero` skill)
+   - Document current cluster versions: `doctl kubernetes cluster list`
+
+2. **Upgrade cell-default (canary cell):**
+   ```bash
+   doctl kubernetes cluster upgrade <mgmt-cluster-id> --version v1.33-do.0
+   doctl kubernetes cluster upgrade <build-cluster-id> --version v1.33-do.0
+   ```
+   Wait for upgrade complete (~10-20min per cluster).
+
+3. **Validate health post-mgmt+build upgrade:**
+   - `task doctor` PASS=N FAIL=0
+   - All pods in mgmt namespace Running
+   - ArgoCD repo creds + sync functional
+
+4. **Smoke deploy:**
+   - Test deploy against cell-default
+   - Validate `loopzero deploy` → live URL responds 200
+   - SSE rollout events flow correctly
+
+5. **Upgrade additional cells (one at a time):**
+   ```bash
+   doctl kubernetes cluster upgrade <runtime-cluster-id> --version v1.33-do.0
+   doctl kubernetes cluster upgrade <runtime-cell-2-id> --version v1.33-do.0
+   ```
+
+6. **Post-upgrade evidence:**
+   - All cells on target version: `doctl kubernetes cluster list | grep -v <target>`
+   - Update `K8S_TARGET_VERSION` env in pluto workflow to the new version (locks gate to current production)
+   - Run `/dogfood full` end-to-end pass (12 journeys GREEN)
+
+---
+
+## Rollback (if Pluto warned but ignored, or post-upgrade incidents)
+
+DOKS does **NOT** support minor-version rollback in-place. The recovery path:
+
+1. **Hot-fix forward** if affected manifest still works (most cases):
+   - Identify affected workload via ArgoCD UI Degraded state
+   - Update chart template to use replacement apiVersion
+   - Helmfile/ArgoCD sync — typically <5min recovery
+
+2. **Cold restore** if upgrade is catastrophic (extremely rare):
+   - Velero restore from pre-upgrade snapshot
+   - Re-provision DOKS clusters at PREVIOUS version (Pulumi `--target` versioning)
+   - Repoint DNS via Cloudflare Worker — see `docs/operations/dns-cutover-runbook.md`
+
+---
+
+## Reference
+
+- Pluto upstream: https://pluto.docs.fairwinds.com/
+- Workflow file: `.github/workflows/pluto-deprecated-apis.yml`
+- Hermetic tests: `pkg/quality/plutogate/check_test.go`
+- Test fixtures: `infra/tests/pluto/fixtures/{deprecated,current}.yaml`
+- Plan section: `docs/plans/2026-05-22-shell-script-strategic-plan.md` Phase 7 T7.1

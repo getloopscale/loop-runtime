@@ -12,6 +12,32 @@
 
 ## Iteration log
 
+### Iter 3 (2026-05-22) — Phase 7 T7.1 COMPLETE (Pluto adopted)
+
+**Commit:** (current)
+
+**Done:**
+- `.github/workflows/pluto-deprecated-apis.yml` — Fairwinds Pluto Action SHA-pinned;
+  scans all Helm chart renders (`infra/helm/` + `charts/`) on PR + weekly cron + workflow_dispatch
+- `infra/tests/pluto/fixtures/deprecated.yaml` — fixture with `policy/v1beta1 PodDisruptionBudget`
+  (removed in v1.25); manual invoke validates gate sensitivity
+- `infra/tests/pluto/fixtures/current.yaml` — fixture with current stable APIs
+- `pkg/quality/plutogate/` — hermetic Go tests (7/7 GREEN) validating workflow YAML
+  structure (SHA-pin, target-versions set, only-show-removed: false)
+- `docs/operations/k8s-upgrade-runbook.md` — operator runbook for DOKS minor upgrade
+  with Pluto check sequence + rollback strategy
+- CLAUDE.md updated: Pluto moved from "P0 gap" → "ADOPTED 2026-05-22 via plan T7.1"
+
+**Anti-Pattern #8 materialized:** NO Go gate reimplementation. External Pluto Action
+adopted as-is, validated only via YAML-structure hermetic tests.
+
+**Why this matters:** Destrava próximo DOKS minor upgrade (v1.32 → v1.33). Sem
+Pluto, manifest com API removida no target version causaria failure post-upgrade
+silenciosamente. Workflow scans `infra/helm/` + `charts/` rendered output before
+PR merge.
+
+---
+
 ### Iter 2 (2026-05-22) — Phase 6 T6.1 + T6.2 COMPLETE (regression lock active)
 
 **Commits:** (current) — `feat(nonewbash): Phase 6 T6.1+T6.2 — D3 gate + allowlist baseline`
@@ -74,8 +100,8 @@ Regression locked NOW.
 | | T6.2 no-new-bash gate (+ EC-04 fetch-depth + EC-06 rename) | ✅ **DONE** (iter 2) — gate ATIVO em CI | Ralph |
 | | T6.3 no-shell-wrap audit gate | ⚪ Pending — next iter target | Ralph |
 | | T6.4 final inventory validation | ⚪ Pending Phases 1-5 + T6.3 | Ralph |
-| **7 Adopt External Tools** | T7.1 Pluto CI gate | ⚪ Parallel-eligible (zero overlap with Phase 6) | Ralph |
-| | T7.2 OpenCost helm + Prometheus integration | ⚪ Parallel-eligible | Ralph |
+| **7 Adopt External Tools** | T7.1 Pluto CI gate | ✅ **DONE** (iter 3) — workflow + 7 hermetic tests + runbook | Ralph |
+| | T7.2 OpenCost helm + Prometheus integration | ⚪ Pending — next iter target | Ralph |
 | **Final Gates** | `/cross-validation 2026-05-22-shell-script-strategic` | 🔴 **HARD STOP** | Operator + Ralph |
 | | `/dogfood full` on clean infra | 🔴 **HARD STOP** | Operator |
 | | `/chaos-test --full` validation | 🔴 **HARD STOP** | Operator |
