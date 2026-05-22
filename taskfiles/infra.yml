@@ -84,6 +84,21 @@ tasks:
     desc: Install platform components in workload cluster via Helmfile (T2.3 of plan 2026-05-22)
     deps: [helm:repos]
     cmds:
+      # Pre-sync: runtime secrets on the workload cluster. The master sync below
+      # deploys `static-assets` (nginx-s3-gateway), which mounts the Secret
+      # `static-assets-s3` (AWS_ACCESS_KEY_ID/AWS_SECRET_ACCESS_KEY). Without it
+      # the pod stays in CreateContainerConfigError and the sync wait stalls.
+      # In standalone-multi the S3 backend is mgmt-cluster MinIO, so source the
+      # real creds from the mgmt `minio-credentials` Secret and run
+      # generate-runtime-secrets.sh against the workload context (KUBECONFIG,
+      # no global current-context mutation). Idempotent.
+      - |
+        S3_KEY=$(kubectl --context {{.MGMT_CONTEXT}} -n loopzero-system get secret minio-credentials -o jsonpath='{.data.accesskey}' | base64 -d)
+        S3_SECRET=$(kubectl --context {{.MGMT_CONTEXT}} -n loopzero-system get secret minio-credentials -o jsonpath='{.data.secretkey}' | base64 -d)
+        KUBECONFIG=$(k3d kubeconfig write loopzero-workload) \
+          LOOPZERO_PROFILE=standalone-multi \
+          LOOPZERO_S3_ACCESS_KEY="$S3_KEY" LOOPZERO_S3_SECRET_KEY="$S3_SECRET" \
+          bash infra/helmfile/scripts/generate-runtime-secrets.sh standalone-multi workload
       # T2.3.a (EC-01) MASTER SYNC — runtime helmfile declares:
       # cert-manager, traefik, keda, keda-http-addon, argo-rollouts, policy-controller,
       # admission-policies, promtail, cloudflared, cluster-issuer, rbac, static-assets.
