@@ -578,7 +578,8 @@ jobs:
         run: cd cmd/loopzero-ops && go run . quality alert-runbooks --root "${GITHUB_WORKSPACE}"
 
       - name: ClusterImagePolicy mode flip governance lint (T8.6 deep-review-remediation)
-        run: bash infra/scripts/check_clusterimagepolicy_mode.sh
+        # T5.3 of plan 2026-05-22: migrated check_clusterimagepolicy_mode.sh to pure-Go gate.
+        run: cd cmd/loopzero-ops && go run . quality clusterimagepolicy-mode --root "${GITHUB_WORKSPACE}"
 
       - name: CLI bundle size guard (T9.3 deep-review-remediation)
         # T5.3 of plan 2026-05-22: migrated check_cli_bundle_size.sh to pure-Go

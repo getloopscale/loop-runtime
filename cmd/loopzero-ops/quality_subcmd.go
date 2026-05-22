@@ -15,6 +15,7 @@ import (
 	"github.com/loopzero/loopzero/pkg/quality/agplisolation"
 	"github.com/loopzero/loopzero/pkg/quality/alertrunbooks"
 	"github.com/loopzero/loopzero/pkg/quality/baseimagedigest"
+	"github.com/loopzero/loopzero/pkg/quality/clusterimagepolicymode"
 	"github.com/loopzero/loopzero/pkg/quality/clibundlesize"
 	"github.com/loopzero/loopzero/pkg/quality/deadlineratchet"
 	"github.com/loopzero/loopzero/pkg/quality/decisionsdeletion"
@@ -127,6 +128,8 @@ func runQuality(args []string) int {
 		return runAlertRunbooks(args[1:])
 	case "base-image-digest":
 		return runBaseImageDigest(args[1:])
+	case "clusterimagepolicy-mode":
+		return runClusterImagePolicyMode(args[1:])
 	default:
 		fmt.Fprintf(os.Stderr, "unknown gate: %s\n\n%s", args[0], qualityHelp)
 		return 1
@@ -659,6 +662,25 @@ func runServiceAuthRotation(args []string) int {
 		exception: ".github/service-auth-rotation-exception.txt",
 		adr:       "2026-05-13-service-auth-ed25519-adoption.md",
 	})
+}
+
+func runClusterImagePolicyMode(args []string) int {
+	fs := flag.NewFlagSet("clusterimagepolicy-mode", flag.ContinueOnError)
+	root := fs.String("root", ".", "repo root directory")
+	if err := fs.Parse(args); err != nil {
+		return 1
+	}
+	o := clusterimagepolicymode.Check(clusterimagepolicymode.Config{Root: *root})
+	if !o.Pass {
+		fmt.Fprintf(os.Stderr, "FAIL — clusterImagePolicy.mode governance violation: %s\n", o.Reason)
+		fmt.Fprintln(os.Stderr, "")
+		fmt.Fprintln(os.Stderr, "The deny-flip rejects unsigned images at admission. Either revert mode to")
+		fmt.Fprintln(os.Stderr, "'warn', OR add an ADR in .claude/knowledge-base/decisions/ (or a MEET record)")
+		fmt.Fprintln(os.Stderr, "referencing the cutover (T8.6 / find_infra_008 / deny-mode / mitigation #4).")
+		return 1
+	}
+	fmt.Printf("PASS — %s\n", o.Reason)
+	return 0
 }
 
 func runBaseImageDigest(args []string) int {

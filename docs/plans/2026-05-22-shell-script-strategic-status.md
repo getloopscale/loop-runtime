@@ -12,6 +12,29 @@
 
 ## Iteration log
 
+### Iter 36 (2026-05-22) — Phase 5 T5.3 (clusterimagepolicy-mode gate — check_*.sh batch done)
+
+**Done:**
+- `check_clusterimagepolicy_mode.sh` (T8.6, REVIEW-NEEDED, read-verified
+  pure-logic — "helm"/"cosign" were a values-file path + a comment) migrated to
+  `pkg/quality/clusterimagepolicymode/` (admission-policies mode may be
+  'enforce' only with an ADR/MEET deny-flip sign-off). 12 tests, 92.0% coverage.
+- **Parity:** both PASS — mode is 'enforce' with ADR sign-off in
+  knowledge-base/decisions (the Go gate finds the same sign-off keywords).
+- `cmd/loopzero-ops` `clusterimagepolicy-mode` subcommand; `ci.yml` repointed.
+- `check_clusterimagepolicy_mode.sh` (102) DELETED; allowlist 225 (was 226).
+
+**Script count: 226 → 225** (34 deletions cumulative). 29 Go quality gates.
+**The infra/scripts root `check_*.sh` batch is now DONE** — remaining two are
+not pure-logic migrations: `check-prod-vap-readiness.sh` (KEEP-OPERATOR, live
+kubectl+cosign+argocd, reclassified iter 25) and `check-drill-credentials-isolation.sh`
+(read-access blocked by a permission rule on the "credentials" path — pending
+operator-side read-verify). Heuristic false-positives across the batch: 6 total
+(helmfile/path-helm ×4, pulumi-as-pattern, cosign-comment) — all caught by
+read-verify before action.
+
+---
+
 ### Iter 35 (2026-05-22) — Phase 5 T5.3 (base-image-digest gate + 2nd RED-state finding)
 
 **Done:**
