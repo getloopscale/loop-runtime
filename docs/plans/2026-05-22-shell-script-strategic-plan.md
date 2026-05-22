@@ -1,6 +1,6 @@
 # Plan: Shell Script Strategic Reduction (269 → <30)
 
-> **Version 1.1** — Reduzir progressivamente o inventário de 269 scripts shell (44,586 LOC)
+> **Version 1.2** — Reduzir progressivamente o inventário de 269 scripts shell (44,586 LOC)
 > para menos de 30 (<3,000 LOC) através de DELEGATION para orchestrators canônicos
 > (helmfile/Tilt/Ginkgo/SDK-native Go), DELETE de dead code, e proibição explícita
 > de novos scripts bash. Esse plano substitui o plano original
@@ -13,6 +13,13 @@
 > - EC-02: T2.3.b (portable base64 — `kubectl -o go-template` em vez de `base64 -d`)
 > - EC-03: T1.1.a (dynamic-invocation grep antes de validation) + T0.1 test
 > - EC-04: T6.2 acceptance criteria + test para shallow clone scenario
+>
+> **v1.2 changelog (2026-05-22 post-kubetools-review):** incorporou Anti-Pattern #8
+> (não reinventar tool externa madura como gate Go interno). Justificativa: análise
+> kubetools.collabnix.com vs LoopZero (2026-05-22) revelou Rule 12 (grep-first) em
+> CLAUDE.md + identified que Phase 6 cria 2 novos gates `pkg/quality/*` — ausência
+> de "verifique tool externa primeiro" pode levar reimplementação de Pluto / Kubescape /
+> outros como Go gates internos (anti-pattern simétrico ao D5 shell-wrap).
 
 ---
 
@@ -1525,3 +1532,22 @@ REPROVADO em cross-validation bloqueia progression para dogfood.
 
 7. **Skip cross-validation.** Per global DoD, cross-validation é mandatory. Pular
    cross-validation = plan incompleto.
+
+8. **Reinventar tool externa madura como gate Go interno.** **Antes** de implementar
+   qualquer `pkg/quality/X` novo (Phase 6 cria 2; Phase 5 sugere "remaining pure-logic
+   gates"), verificar kubetools / CNCF landscape per **Rule 12** (`CLAUDE.md` + `README.md`
+   § Tool Inventory). Implementar Go gate apenas se:
+   - (a) nenhuma tool externa madura cobre o caso (e.g., Pluto cobre deprecated-API;
+     Kubescape cobre security posture; OpenCost cobre cost — não reimplementar);
+   - (b) OU lógica é pure-logic do **domínio LoopZero** que não tem equivalente externo
+     (e.g., `no-new-bash` que parseia allowlist própria, `no-shell-wrap` que audita
+     `pkg/*` por padrão `shellrun.Runner.Run`, `prodimagetags` que enforce ADR-0020 D1).
+
+   **Pattern simétrico ao D5 (no shell-wrap em Go):** D5 proíbe Go envolvendo CLI
+   externa quando há SDK Go nativo. Anti-pattern #8 proíbe Go reimplementando lógica
+   quando há tool externa madura. Em ambos os casos, **adopt > reinvent**.
+
+   **Trade-off documentado:** Tool externa adiciona dependency (binary download em CI
+   OU Helm chart no cluster) — aceitável se substitui implementação interna que
+   precisaria manutenção. Tool externa abandonada (último release > 2y) = NOT mature
+   = OK reimplementar.
