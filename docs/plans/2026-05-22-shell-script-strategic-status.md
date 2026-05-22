@@ -12,6 +12,26 @@
 
 ## Iteration log
 
+### Iter 32 (2026-05-22) — Phase 5 T5.3 (orphan-alerts gate, REVIEW-NEEDED → pure-logic)
+
+**Commit:** (current)
+
+**Done:**
+- `check_orphan_alerts.sh` (REVIEW-NEEDED, read-verified pure-logic) migrated to
+  `pkg/quality/orphanalerts/` (T5.10: reject PrometheusRule alerts with an
+  `expr: vector(0) > 1` placeholder whose metric isn't emitted). Reads YAMLs in
+  infra/helm/monitoring/manifests, finds the alert name in the 5 lines above
+  the expr, checks an exception list. 11 tests, 95.3% coverage.
+- **Heuristic false-positive #3:** iter-25 audit tagged this live:[helm] — but
+  "helm" was the *directory name* in the rules path, not a helm invocation.
+  Genuine pure-logic (grep/sed only). Confirms (again) read-verify > grep heuristic.
+- `cmd/loopzero-ops` `orphan-alerts` subcommand; `ci.yml` repointed. Parity: both PASS.
+- `check_orphan_alerts.sh` (80) DELETED; allowlist 229 (was 230).
+
+**Script count: 230 → 229** (30 deletions cumulative). 26 Go quality gates.
+
+---
+
 ### Iter 31 (2026-05-22) — Phase 5 T5.3 (agpl-isolation gate, REVIEW-NEEDED → pure-logic)
 
 **Commit:** (current)

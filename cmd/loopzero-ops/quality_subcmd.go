@@ -23,6 +23,7 @@ import (
 	"github.com/loopzero/loopzero/pkg/quality/nomigrateforce"
 	"github.com/loopzero/loopzero/pkg/quality/nonewbash"
 	"github.com/loopzero/loopzero/pkg/quality/noshellwrap"
+	"github.com/loopzero/loopzero/pkg/quality/orphanalerts"
 	"github.com/loopzero/loopzero/pkg/quality/prodimagetags"
 	"github.com/loopzero/loopzero/pkg/quality/regressiontest"
 	"github.com/loopzero/loopzero/pkg/quality/runtimeslo"
@@ -118,6 +119,8 @@ func runQuality(args []string) int {
 		return runCLIBundleSize(args[1:])
 	case "agpl-isolation":
 		return runAGPLIsolation(args[1:])
+	case "orphan-alerts":
+		return runOrphanAlerts(args[1:])
 	default:
 		fmt.Fprintf(os.Stderr, "unknown gate: %s\n\n%s", args[0], qualityHelp)
 		return 1
@@ -648,6 +651,27 @@ func runServiceAuthRotation(args []string) int {
 		exception: ".github/service-auth-rotation-exception.txt",
 		adr:       "2026-05-13-service-auth-ed25519-adoption.md",
 	})
+}
+
+func runOrphanAlerts(args []string) int {
+	fs := flag.NewFlagSet("orphan-alerts", flag.ContinueOnError)
+	root := fs.String("root", ".", "repo root directory")
+	if err := fs.Parse(args); err != nil {
+		return 1
+	}
+	o := orphanalerts.Check(orphanalerts.Config{Root: *root})
+	if !o.Pass {
+		fmt.Fprintf(os.Stderr, "FAIL — %d orphan alert(s) (vector(0) > 1 placeholder, metric not emitted):\n", len(o.Violations))
+		for _, v := range o.Violations {
+			fmt.Fprintf(os.Stderr, "  ORPHAN-ALERT VIOLATION: %s\n", v)
+		}
+		fmt.Fprintln(os.Stderr, "")
+		fmt.Fprintln(os.Stderr, "Either wire the real metric + rewrite the expr, OR add the alert name to")
+		fmt.Fprintln(os.Stderr, "ExceptionList (pkg/quality/orphanalerts) with a comment + linked work item.")
+		return 1
+	}
+	fmt.Println("PASS — no orphan alerts.")
+	return 0
 }
 
 func runAGPLIsolation(args []string) int {

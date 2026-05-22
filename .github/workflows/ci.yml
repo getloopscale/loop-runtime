@@ -558,7 +558,8 @@ jobs:
         run: bash infra/scripts/check_actions_sha_pinned.sh
 
       - name: Orphan PrometheusRule alerts lint (T5.10 deep-review-remediation)
-        run: bash infra/scripts/check_orphan_alerts.sh
+        # T5.3 of plan 2026-05-22: migrated check_orphan_alerts.sh to pure-Go gate.
+        run: cd cmd/loopzero-ops && go run . quality orphan-alerts --root "${GITHUB_WORKSPACE}"
 
       - name: Migration regression-test coverage (T3.4 deep-review-remediation)
         run: bash infra/scripts/migration_test_coverage.sh
