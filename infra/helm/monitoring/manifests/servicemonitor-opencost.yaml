@@ -1,0 +1,29 @@
+# ServiceMonitor for OpenCost (cost attribution per tenant).
+# Plan T7.2 of 2026-05-22-shell-script-strategic-plan.md v1.3.
+#
+# Scrapes OpenCost :9003 metrics endpoint where cost data lives:
+#   - kubecost_cluster_cpu_cost
+#   - kubecost_cluster_memory_cost
+#   - kubecost_namespace_cost_per_hour (per-tenant attribution via namespace)
+#
+# Query per-tenant cost via Prometheus federation:
+#   sum by (namespace) (kubecost_namespace_cost_per_hour{label_loopzero_io_tenant!=""})
+apiVersion: monitoring.coreos.com/v1
+kind: ServiceMonitor
+metadata:
+  name: loopzero-opencost
+  namespace: monitoring
+  labels:
+    release: monitoring
+spec:
+  namespaceSelector:
+    matchNames:
+      - loopzero-system
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: opencost
+  endpoints:
+    - port: http
+      path: /metrics
+      interval: 60s
+      scrapeTimeout: 30s

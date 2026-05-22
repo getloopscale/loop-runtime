@@ -202,7 +202,7 @@ cd infra/pulumi && npx pulumi preview --stack dev # Preview
 
 ### Known Gaps (CONSCIOUS NO — see § Tool Inventory and audit 2026-05-22)
 
-- Cost attribution per tenant (OpenCost/Kubecost) — P0 for Sprint 9 pricing validation (plan 2026-05-22 T7.2 pending)
+- ~~Cost attribution per tenant (OpenCost/Kubecost)~~ **ADOPTED 2026-05-22 (plan T7.2)** — wrapper at `infra/helm/opencost/` + helmfile release with `needs: monitoring/prometheus` + ServiceMonitor at `infra/helm/monitoring/manifests/servicemonitor-opencost.yaml` + runbook `docs/operations/cost-attribution.md`. LIVE validation (pod Running + Prometheus scrape) operator HARD STOP.
 - ~~Pluto (deprecated API detector) — P0 before next DOKS minor upgrade~~ **ADOPTED 2026-05-22 (plan T7.1)** — workflow `.github/workflows/pluto-deprecated-apis.yml` + hermetic tests `pkg/quality/plutogate/` + runbook `docs/operations/k8s-upgrade-runbook.md`
 - Slack alerting destination (Botkube/Robusta) — Prometheus alerts exist; routing missing
 - K8sGPT, Falco/Tetragon, Kubescape — deferred to v1.x
@@ -257,7 +257,7 @@ This project consciously chose to adopt OR reject specific tools. The **stack in
 
 | Tool | When to revisit |
 |------|------------------|
-| **OpenCost** | Sprint 9 (pricing validation) — **P0 actually, not deferred; just not adopted yet** |
+| ~~**OpenCost**~~ | **ADOPTED 2026-05-22** via plan T7.2 — see `infra/helm/opencost/` + `docs/operations/cost-attribution.md` |
 | ~~**Pluto**~~ | **ADOPTED 2026-05-22** via plan T7.1 — see `.github/workflows/pluto-deprecated-apis.yml` |
 | Falco / Tetragon | Enterprise tier compliance ask |
 | Kubescape | After kube-bench wins evaluated |

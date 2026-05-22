@@ -81,6 +81,11 @@ repositories:
     url: https://charts.bitnami.com/bitnami
   - name: chaos-mesh
     url: https://charts.chaos-mesh.org
+  # Plan T7.2 (2026-05-22) — OpenCost adopted for cost attribution per tenant.
+  # Materializes Anti-Pattern #8 ("adopt > reinvent"): no Go gate
+  # reimplementation; external OpenCost chart adopted as-is.
+  - name: opencost
+    url: https://opencost.github.io/opencost-helm-chart
   # velero-backup-dr-plan v1.0 / T1.2 — Velero upstream chart for K8s
   # resource backups (BSL on DO Spaces in cloud, MinIO in standalone).
   - name: vmware-tanzu
@@ -308,6 +313,21 @@ releases:
       - monitoring/prometheus
     values:
       - ../helm/monitoring/values-grafana.yaml
+
+  # Plan T7.2 (2026-05-22 v1.3) — OpenCost cost attribution per tenant.
+  # Adopts external opencost-charts upstream via LoopZero wrapper at
+  # infra/helm/opencost/. Per Anti-Pattern #8: NO Go gate reimplementation;
+  # tool adopted as-is. Federation-friendly (single mgmt install covers all cells).
+  - name: opencost
+    namespace: loopzero-system
+    chart: ../helm/opencost
+    version: 1.0.0
+    needs:
+      - monitoring/prometheus
+    values:
+      - ../helm/opencost/values.yaml
+      # Layered per-env overrides (placeholder; empty stub in standalone-multi).
+      - values/{{ .Environment.Name }}/opencost.yaml.gotmpl
 
   - name: tempo
     namespace: monitoring

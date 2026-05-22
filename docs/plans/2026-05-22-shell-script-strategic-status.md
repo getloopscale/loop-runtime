@@ -12,6 +12,36 @@
 
 ## Iteration log
 
+### Iter 4 (2026-05-22) — Phase 7 T7.2 COMPLETE (OpenCost adopted — Phase 7 DONE)
+
+**Commit:** (current)
+
+**Done:**
+- `infra/helm/opencost/Chart.yaml` — wrapper chart pointing to upstream
+  `opencost-helm-chart` v1.45.0
+- `infra/helm/opencost/values.yaml` — defaults: external Prometheus integration
+  (LoopZero's existing one), DigitalOcean customPricing, non-root + readOnlyRootFilesystem
+- `infra/helm/opencost/values.schema.json` — schema gate per T3.1 pattern
+- `infra/helmfile/mgmt.helmfile.yaml.gotmpl` — added opencost-helm-chart repo +
+  release with `needs: [monitoring/prometheus]`
+- `infra/helmfile/values/{dev,drill,prod,standalone,standalone-multi}/opencost.yaml.gotmpl`
+  — 5 env-stub override files (consistent with prometheus/grafana pattern)
+- `infra/helm/monitoring/manifests/servicemonitor-opencost.yaml` — Prometheus
+  scrape config for :9003/metrics, interval 60s
+- `pkg/quality/opencostgate/` — 9 hermetic Go tests GREEN validating YAML
+  structure (per Anti-Pattern #8: NO production Go code)
+- `docs/operations/cost-attribution.md` — operator runbook with DO pricing
+  values, Prometheus queries, validation sequence
+- CLAUDE.md updated: OpenCost moved from "P0 gap" / "v1.x deferred" → "ADOPTED 2026-05-22"
+
+**Phase 7 SUMMARY (T7.1 + T7.2 both done):**
+- Pluto (iter 3) — deprecated K8s API detector, CI gate active
+- OpenCost (iter 4) — cost attribution per tenant, Helm chart in mgmt
+- Both Anti-Pattern #8 materialized: external tool ADOPTED, zero Go gate reimplementation
+- Both LIVE validation pending operator action (cleanroom or drill cluster)
+
+---
+
 ### Iter 3 (2026-05-22) — Phase 7 T7.1 COMPLETE (Pluto adopted)
 
 **Commit:** (current)
@@ -101,7 +131,7 @@ Regression locked NOW.
 | | T6.3 no-shell-wrap audit gate | ⚪ Pending — next iter target | Ralph |
 | | T6.4 final inventory validation | ⚪ Pending Phases 1-5 + T6.3 | Ralph |
 | **7 Adopt External Tools** | T7.1 Pluto CI gate | ✅ **DONE** (iter 3) — workflow + 7 hermetic tests + runbook | Ralph |
-| | T7.2 OpenCost helm + Prometheus integration | ⚪ Pending — next iter target | Ralph |
+| | T7.2 OpenCost helm + Prometheus integration | ✅ **DONE** (iter 4) — wrapper chart + helmfile entry + ServiceMonitor + 9 hermetic tests + runbook | Ralph |
 | **Final Gates** | `/cross-validation 2026-05-22-shell-script-strategic` | 🔴 **HARD STOP** | Operator + Ralph |
 | | `/dogfood full` on clean infra | 🔴 **HARD STOP** | Operator |
 | | `/chaos-test --full` validation | 🔴 **HARD STOP** | Operator |
