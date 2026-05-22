@@ -12,6 +12,33 @@
 
 ## Iteration log
 
+### Iter 26 (2026-05-22) — Phase 5 T5.3 (decisions-deletion gate + AUTO-DIE pair)
+
+**Commit:** (current)
+
+**Done:**
+- `pkg/quality/decisionsdeletion/` (NEW) — pure-Go gate replacing
+  `check-decisions-deletion.sh` (T1.14: deletion of a ratified ADR/MEET/
+  runbook/inventory requires a `superseded_by:` superseder). Decision logic over
+  `git diff`/`git ls-tree`/`git show` — git is on the D5 allow-list (only
+  pulumi/helm/kubectl/aws/gh are forbidden shell-wraps). 11 tests (8 bash
+  scenarios + 3 extra), 94.0% coverage.
+- **KISS simplification:** removed dead error-return plumbing — git failures are
+  tolerated as "no data" (mirrors bash `|| true`), so the internal helpers and
+  Check return no error. This both honors "no error handling for can't-happen"
+  AND lifted coverage 89.2% → 94.0%.
+- **Version-portable glob:** replicated the bash `git ls-tree` glob-filter
+  workaround (ls-tree lacks `:(glob)` magic in git ≤2.43) via `filepath.Match`.
+- `cmd/loopzero-ops` `decisions-deletion` subcommand. Parity: both clean on the
+  live repo (HEAD~1..HEAD).
+- `decisions-stability-check.yml` repointed to Go gate (+Go setup).
+- **2 scripts DELETED:** `check-decisions-deletion.sh` (140) +
+  `check-decisions-deletion_test.sh` (152) — D6 AUTO-DIE. allowlist 235 (was 237).
+
+**Script count: 237 → 235** (24 deletions cumulative). 22 Go quality gates.
+
+---
+
 ### Iter 25 (2026-05-22) — Phase 5 T5.3 (disposition audit + KEEP-OPERATOR reclassify)
 
 **Commit:** (current)

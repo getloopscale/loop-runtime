@@ -13,6 +13,7 @@ import (
 
 	"github.com/loopzero/loopzero/pkg/quality/actionpinning"
 	"github.com/loopzero/loopzero/pkg/quality/deadlineratchet"
+	"github.com/loopzero/loopzero/pkg/quality/decisionsdeletion"
 	"github.com/loopzero/loopzero/pkg/quality/divergencematrix"
 	"github.com/loopzero/loopzero/pkg/quality/helmdrift"
 	"github.com/loopzero/loopzero/pkg/quality/mockbudget"
@@ -106,6 +107,8 @@ func runQuality(args []string) int {
 		return runServiceAuthRotation(args[1:])
 	case "stack-coverage":
 		return runStackCoverage(args[1:])
+	case "decisions-deletion":
+		return runDecisionsDeletion(args[1:])
 	default:
 		fmt.Fprintf(os.Stderr, "unknown gate: %s\n\n%s", args[0], qualityHelp)
 		return 1
@@ -636,6 +639,37 @@ func runServiceAuthRotation(args []string) int {
 		exception: ".github/service-auth-rotation-exception.txt",
 		adr:       "2026-05-13-service-auth-ed25519-adoption.md",
 	})
+}
+
+func runDecisionsDeletion(args []string) int {
+	fs := flag.NewFlagSet("decisions-deletion", flag.ContinueOnError)
+	root := fs.String("root", ".", "repo root directory")
+	base := fs.String("base-ref", "origin/main", "base git ref")
+	head := fs.String("head-ref", "HEAD", "head git ref")
+	if err := fs.Parse(args); err != nil {
+		return 1
+	}
+	o := decisionsdeletion.Check(decisionsdeletion.Config{RepoRoot: *root, BaseRef: *base, HeadRef: *head})
+	for _, s := range o.Superseded {
+		fmt.Printf("✓ %s (properly superseded)\n", s)
+	}
+	if !o.Pass {
+		fmt.Fprintf(os.Stderr, "✗ VIOLATION: %d protected file(s) deleted without a superseding record:\n", len(o.Violations))
+		for _, v := range o.Violations {
+			fmt.Fprintf(os.Stderr, "  - %s\n", v)
+		}
+		fmt.Fprintln(os.Stderr, "")
+		fmt.Fprintln(os.Stderr, "Per Plan Amendment Policy, deletion of a ratified ADR/MEET/runbook/inventory")
+		fmt.Fprintln(os.Stderr, "requires a superseding file with 'superseded_by: <deleted-basename>' frontmatter,")
+		fmt.Fprintln(os.Stderr, "OR explicit MEET ratification of the deletion.")
+		return 1
+	}
+	if len(o.DeletedFiles) == 0 {
+		fmt.Println("✓ No protected decisions/meetings/runbooks deleted. Stability hook clean.")
+	} else {
+		fmt.Printf("✓ All %d deletion(s) properly superseded. Stability hook clean.\n", len(o.DeletedFiles))
+	}
+	return 0
 }
 
 func runStackCoverage(args []string) int {

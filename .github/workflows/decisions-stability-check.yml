@@ -26,8 +26,7 @@ on:
       - '.claude/knowledge-base/meetings/**'
       - '.claude/knowledge-base/concepts/operations/**'
       - '.github/workflows/decisions-stability-check.yml'
-      - 'infra/scripts/check-decisions-deletion.sh'
-      - 'infra/scripts/check-decisions-deletion_test.sh'
+      - 'pkg/quality/decisionsdeletion/**'
 
 permissions:
   contents: read
@@ -44,18 +43,27 @@ jobs:
         with:
           fetch-depth: 0
 
+      - name: Set up Go
+        uses: actions/setup-go@0aaccfd150d50ccaeb58ebd88d36e91967a5f35b # v5.4.0
+        with:
+          go-version: '1.25.10'
+          cache-dependency-path: cmd/loopzero-ops/go.sum
+
       - name: Ensure base ref available
         run: |
           git fetch --no-tags --depth=1 origin "${{ github.base_ref }}"
           echo "Base ref: ${{ github.base_ref }}"
           echo "PR head: ${{ github.event.pull_request.head.sha }}"
 
+      # T5.3 of plan 2026-05-22: migrated from check-decisions-deletion.sh + its
+      # hermetic test (D6 AUTO-DIE) to a pure-Go gate. git is on the D5 allow-list
+      # (only pulumi/helm/kubectl/aws/gh are forbidden shell-wraps).
       - name: Run decisions deletion guard
         run: |
-          chmod +x infra/scripts/check-decisions-deletion.sh
-          ./infra/scripts/check-decisions-deletion.sh \
-            "origin/${{ github.base_ref }}" \
-            "${{ github.event.pull_request.head.sha }}"
+          cd cmd/loopzero-ops && go run . quality decisions-deletion \
+            --root "${GITHUB_WORKSPACE}" \
+            --base-ref "origin/${{ github.base_ref }}" \
+            --head-ref "${{ github.event.pull_request.head.sha }}"
 
       - name: Annotate violation
         if: failure()
