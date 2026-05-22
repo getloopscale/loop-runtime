@@ -14,6 +14,7 @@ import (
 	"github.com/loopzero/loopzero/pkg/quality/scriptsaudit"
 	"github.com/loopzero/loopzero/pkg/quality/taskfileinterface"
 	"github.com/loopzero/loopzero/pkg/quality/testdeletion"
+	"github.com/loopzero/loopzero/pkg/quality/testpyramid"
 )
 
 const qualityHelp = `loopzero-ops quality — quality gate orchestrator
@@ -68,6 +69,8 @@ func runQuality(args []string) int {
 		return runDivergenceMatrix(args[1:])
 	case "test-deletion":
 		return runTestDeletion(args[1:])
+	case "test-pyramid":
+		return runTestPyramid(args[1:])
 	default:
 		fmt.Fprintf(os.Stderr, "unknown gate: %s\n\n%s", args[0], qualityHelp)
 		return 1
@@ -247,5 +250,36 @@ func runTestDeletion(args []string) int {
 		return 1
 	}
 	fmt.Printf("[test-deletion] PASS — %s\n", o.Reason)
+	return 0
+}
+
+func runTestPyramid(args []string) int {
+	fs := flag.NewFlagSet("test-pyramid", flag.ContinueOnError)
+	inv := fs.String("inventory", "infra/quality/test-inventory.json", "test inventory JSON")
+	if err := fs.Parse(args); err != nil {
+		return 1
+	}
+	o, err := testpyramid.Check(testpyramid.Config{
+		InventoryFile: *inv,
+		PRLabels:      os.Getenv("PR_LABELS"),
+		Thresholds:    testpyramid.DefaultThresholds(),
+	})
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "[pyramid] %v\n", err)
+		return 1
+	}
+	if o.Deferred {
+		fmt.Println("[pyramid] EC-12: 'pyramid-defer' label — PASS (auto-issue should be opened)")
+		return 0
+	}
+	if !o.Pass {
+		fmt.Fprintln(os.Stderr, "[pyramid] FAIL: pyramid out of bounds:")
+		for _, v := range o.Violations {
+			fmt.Fprintf(os.Stderr, "  %s\n", v)
+		}
+		fmt.Fprintln(os.Stderr, "[pyramid] use 'pyramid-defer' label for one-PR override")
+		return 1
+	}
+	fmt.Println("[pyramid] PASS: ratios within bounds")
 	return 0
 }

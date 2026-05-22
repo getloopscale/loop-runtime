@@ -177,8 +177,16 @@ jobs:
       - name: Regenerate inventory
         run: bash infra/scripts/quality/test-inventory.sh
 
+      - name: Set up Go
+        uses: actions/setup-go@0aaccfd150d50ccaeb58ebd88d36e91967a5f35b # v5.4.0
+        with:
+          go-version: '1.25.10'
+          cache-dependency-path: cmd/loopzero-ops/go.sum
+
+      # T5.3 of plan 2026-05-22: migrated from check-pyramid.sh to pure-Go gate
+      # (loopzero-ops). Reads test-inventory JSON via encoding/json — no python3 dep.
       - name: Run pyramid gate
-        run: bash infra/scripts/quality/check-pyramid.sh
+        run: cd cmd/loopzero-ops && go run . quality test-pyramid --inventory "${GITHUB_WORKSPACE}/infra/quality/test-inventory.json"
         env:
           PR_LABELS: ${{ github.event_name == 'pull_request' && join(github.event.pull_request.labels.*.name, ',') || '' }}
 

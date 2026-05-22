@@ -12,6 +12,24 @@
 
 ## Iteration log
 
+### Iter 13 (2026-05-22) — Phase 5 T5.3 (test-pyramid pure-Go gate, eliminates python3 dep)
+
+**Commit:** (current)
+
+**Done:**
+- `pkg/quality/testpyramid/` (NEW) — pure-Go gate replacing
+  `infra/scripts/quality/check-pyramid.sh`. Reads test-inventory JSON via
+  encoding/json — ELIMINATES the python3 dependency the bash shelled out to.
+  Honors `pyramid-defer` label (EC-12). 7 tests GREEN incl. boundary-exact.
+- `cmd/loopzero-ops` — `test-pyramid` subcommand. Smoke PASS vs live inventory.
+- `.github/workflows/quality-gates.yml` — pyramid job runs Go gate + Go setup.
+- `infra/scripts/quality/check-pyramid.sh` — DELETED.
+- allowlist 252 (was 253).
+
+**Script count: 253 → 252** (5 deletions cumulative). 11 Go quality gates total.
+
+---
+
 ### Iter 12 (2026-05-22) — Phase 5 T5.3 (test-deletion pure-Go gate)
 
 **Commit:** (current)
