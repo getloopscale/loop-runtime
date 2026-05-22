@@ -12,6 +12,26 @@
 
 ## Iteration log
 
+### Iter 20 (2026-05-22) — Phase 5 T5.3 (prod-image-tags pure-Go gate)
+
+**Commit:** (current)
+
+**Done:**
+- `pkg/quality/prodimagetags/` (NEW) — pure-Go gate replacing
+  `infra/scripts/check-prod-image-tags.sh` (T1.16, ADR-0020 D1). Walks
+  charts/ + infra/helm/ + infra/helmfile/environments/prod.yaml for mutable
+  `:prod`/`:latest` image tags; exempts dev/staging-scoped files, comments,
+  and `# loopzero:mutable-tag-allowed` overrides. 12 tests GREEN, 90.4% coverage.
+- **Parity verified:** bash + Go both scan 298 files, both exit 0 GREEN.
+- `cmd/loopzero-ops` `prod-image-tags` subcommand (optional positional scan-path args).
+- `.github/workflows/prod-image-tag-check.yml` — runs Go gate; path filter
+  repointed `check-prod-image-tags.sh` → `pkg/quality/prodimagetags/**`.
+- `check-prod-image-tags.sh` DELETED; allowlist 244 (was 245).
+
+**Script count: 245 → 244** (15 deletions cumulative). 18 Go quality gates.
+
+---
+
 ### Iter 19 (2026-05-22) — Phase 5 T5.3 (action-pinning pure-Go gate + LATENT BUG FIXED)
 
 **Commit:** (current)

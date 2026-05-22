@@ -16,6 +16,7 @@ import (
 	"github.com/loopzero/loopzero/pkg/quality/mockbudget"
 	"github.com/loopzero/loopzero/pkg/quality/nonewbash"
 	"github.com/loopzero/loopzero/pkg/quality/noshellwrap"
+	"github.com/loopzero/loopzero/pkg/quality/prodimagetags"
 	"github.com/loopzero/loopzero/pkg/quality/regressiontest"
 	"github.com/loopzero/loopzero/pkg/quality/runtimeslo"
 	"github.com/loopzero/loopzero/pkg/quality/scriptsaudit"
@@ -91,6 +92,8 @@ func runQuality(args []string) int {
 		return runRuntimeSLO(args[1:])
 	case "action-pinning":
 		return runActionPinning(args[1:])
+	case "prod-image-tags":
+		return runProdImageTags(args[1:])
 	default:
 		fmt.Fprintf(os.Stderr, "unknown gate: %s\n\n%s", args[0], qualityHelp)
 		return 1
@@ -530,5 +533,31 @@ func runActionPinning(args []string) int {
 		return 1
 	}
 	fmt.Printf("✅ INF-G18 GREEN — 0 tag-pinned actions in %d workflows.\n", o.WorkflowCount)
+	return 0
+}
+
+func runProdImageTags(args []string) int {
+	fs := flag.NewFlagSet("prod-image-tags", flag.ContinueOnError)
+	root := fs.String("root", ".", "repo root directory")
+	if err := fs.Parse(args); err != nil {
+		return 1
+	}
+	scanPaths := fs.Args() // optional positional scan-path overrides
+	o, err := prodimagetags.Check(prodimagetags.Config{Root: *root, ScanPaths: scanPaths})
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "prod-image-tags: %v\n", err)
+		return 2
+	}
+	if !o.Pass {
+		fmt.Fprintf(os.Stderr, "✗ VIOLATION: %d mutable image tag(s) in production-scoped manifests:\n", len(o.Violations))
+		for _, v := range o.Violations {
+			fmt.Fprintf(os.Stderr, "  %s\n", v)
+		}
+		fmt.Fprintln(os.Stderr, "")
+		fmt.Fprintln(os.Stderr, "Per ADR-0020 D1: production manifests MUST use immutable :sha7 tags.")
+		fmt.Fprintln(os.Stderr, "To override an intentional case, add '# loopzero:mutable-tag-allowed' + ADR ref.")
+		return 1
+	}
+	fmt.Printf("✓ Scanned %d file(s). No :prod or :latest tags in production manifests.\n", o.ScannedFiles)
 	return 0
 }

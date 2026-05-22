@@ -20,7 +20,7 @@ on:
       - 'infra/helm/**/*.yml'
       - 'infra/helmfile/**/*.yaml'
       - 'infra/helmfile/**/*.yml'
-      - 'infra/scripts/check-prod-image-tags.sh'
+      - 'pkg/quality/prodimagetags/**'
       - '.github/workflows/prod-image-tag-check.yml'
 
 permissions:
@@ -36,10 +36,16 @@ jobs:
       - name: Checkout PR head
         uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
 
-      - name: Run prod image tag enforcement
-        run: |
-          chmod +x infra/scripts/check-prod-image-tags.sh
-          ./infra/scripts/check-prod-image-tags.sh
+      - name: Set up Go
+        uses: actions/setup-go@0aaccfd150d50ccaeb58ebd88d36e91967a5f35b # v5.4.0
+        with:
+          go-version: '1.25.10'
+          cache-dependency-path: cmd/loopzero-ops/go.sum
+
+      # T5.3 of plan 2026-05-22: migrated from infra/scripts/check-prod-image-tags.sh
+      # to pure-Go gate (loopzero-ops). Same default scan paths + exemptions.
+      - name: Run prod image tag enforcement (T1.16)
+        run: cd cmd/loopzero-ops && go run . quality prod-image-tags --root "${GITHUB_WORKSPACE}"
 
       - name: Annotate violation
         if: failure()
