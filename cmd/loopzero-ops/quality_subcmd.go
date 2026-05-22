@@ -31,6 +31,7 @@ import (
 	"github.com/loopzero/loopzero/pkg/quality/regressiontest"
 	"github.com/loopzero/loopzero/pkg/quality/runtimeslo"
 	"github.com/loopzero/loopzero/pkg/quality/scriptsaudit"
+	"github.com/loopzero/loopzero/pkg/quality/securitycontext"
 	"github.com/loopzero/loopzero/pkg/quality/skiplink"
 	"github.com/loopzero/loopzero/pkg/quality/stackcoverage"
 	"github.com/loopzero/loopzero/pkg/quality/taskfileinterface"
@@ -130,6 +131,8 @@ func runQuality(args []string) int {
 		return runBaseImageDigest(args[1:])
 	case "clusterimagepolicy-mode":
 		return runClusterImagePolicyMode(args[1:])
+	case "security-context":
+		return runSecurityContext(args[1:])
 	default:
 		fmt.Fprintf(os.Stderr, "unknown gate: %s\n\n%s", args[0], qualityHelp)
 		return 1
@@ -662,6 +665,73 @@ func runServiceAuthRotation(args []string) int {
 		exception: ".github/service-auth-rotation-exception.txt",
 		adr:       "2026-05-13-service-auth-ed25519-adoption.md",
 	})
+}
+
+func runSecurityContext(args []string) int {
+	fs := flag.NewFlagSet("security-context", flag.ContinueOnError)
+	root := fs.String("root", ".", "repo root directory")
+	gate := fs.Bool("gate", false, "gate mode: exit 1 if any NON-CONFORMANT chart lacks an ADR exception")
+	if err := fs.Parse(args); err != nil {
+		return 1
+	}
+	o, err := securitycontext.Check(securitycontext.Config{Root: *root})
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "security-context: %v\n", err)
+		return 2
+	}
+
+	if *gate {
+		if o.Pass {
+			fmt.Println("✅ securityContext audit GREEN — 0 NON-CONFORMANT charts without ADR exception.")
+			return 0
+		}
+		fmt.Fprintf(os.Stderr, "❌ securityContext audit FAILED — %d NON-CONFORMANT chart(s) without ADR:\n", len(o.Violations))
+		for _, v := range o.Violations {
+			fmt.Fprintf(os.Stderr, "  - %s\n", v)
+			fmt.Fprintf(os.Stderr, "    Action: fix securityContext in infra/helm/%s/, OR create infra/helm/%s/ADR-securitycontext-exception.md\n", v, v)
+		}
+		return 1
+	}
+
+	// report mode — markdown matrix to stdout.
+	yn := func(b bool) string {
+		if b {
+			return "yes"
+		}
+		return "no"
+	}
+	fmt.Println("# securityContext Audit — infra/helm/")
+	fmt.Println()
+	fmt.Printf("**Charts inspected:** %d\n\n", len(o.Charts))
+	fmt.Println("| Chart | runAsNonRoot | readOnlyRootFS | drop:[ALL] | allowPrivilegeEscalation:false | Status | ADR Exception |")
+	fmt.Println("|---|---|---|---|---|---|---|")
+	var conformant, partial, nonconf, na int
+	for _, c := range o.Charts {
+		if !c.PodBearing {
+			fmt.Printf("| %s | n/a | n/a | n/a | n/a | N/A (no pods) | — |\n", c.Name)
+			na++
+			continue
+		}
+		adr := "—"
+		if c.HasADR {
+			adr = "✅ exists"
+		} else if c.Status == "NON-CONFORMANT" {
+			adr = "❌ missing"
+		}
+		fmt.Printf("| %s | %s | %s | %s | %s | %s | %s |\n",
+			c.Name, yn(c.RunAsNonRoot), yn(c.ReadOnlyRootFS), yn(c.DropAll), yn(c.NoPrivEsc), c.Status, adr)
+		switch c.Status {
+		case "CONFORMANT":
+			conformant++
+		case "PARTIAL":
+			partial++
+		case "NON-CONFORMANT":
+			nonconf++
+		}
+	}
+	fmt.Printf("\n## Summary\n\n- CONFORMANT: %d/%d\n- PARTIAL: %d/%d\n- NON-CONFORMANT: %d/%d\n- N/A (no pods): %d/%d\n- NON-CONFORMANT without ADR: %d\n",
+		conformant, len(o.Charts), partial, len(o.Charts), nonconf, len(o.Charts), na, len(o.Charts), len(o.Violations))
+	return 0
 }
 
 func runClusterImagePolicyMode(args []string) int {

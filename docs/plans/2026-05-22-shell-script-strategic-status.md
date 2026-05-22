@@ -12,6 +12,30 @@
 
 ## Iteration log
 
+### Iter 37 (2026-05-22) — Phase 5 T5.3 (security-context audit gate — 2-mode)
+
+**Done:**
+- `scripts/audit-security-context.sh` (INF-G08, MIGRATE-GO-PUREFN, read-verified
+  pure-logic — the "helm" was the `infra/helm/` path, false-positive #7) migrated
+  to `pkg/quality/securitycontext/` (audits bootstrap charts for runAsNonRoot /
+  readOnlyRootFilesystem / drop:[ALL] / allowPrivilegeEscalation:false; ADR
+  exception escape hatch). 11 tests, 98.4% coverage.
+- **Two modes preserved:** `--gate` (exit 1 on NON-CONFORMANT without ADR) and
+  default report (markdown matrix). CLI handler renders both.
+- **Parity (data-level):** identical classification of all 35 charts —
+  23 CONFORMANT / 12 N/A / 0 PARTIAL / 0 NON-CONFORMANT; gate GREEN in both.
+  (Report markdown differs only cosmetically — bash uses `**bold**` summary.)
+- `cmd/loopzero-ops` `security-context` subcommand; `infra-gates.yml` INF-G08 job
+  repointed (+Go setup, both gate + report-artifact steps); path filters updated.
+- `audit-security-context.sh` (226) DELETED; allowlist 224 (was 225).
+
+**Script count: 225 → 224** (35 deletions cumulative). 30 Go quality gates.
+The MIGRATE-GO-PUREFN backlog is now exhausted: the only remaining MIGRATE-GO-*
+entries are the 3 pulumi-* (MIGRATE-GO-SDK = T5.1 Automation API, deferred — heavy
+dep + LIVE) and check-drill-credentials-isolation.sh (read-access blocked).
+
+---
+
 ### Iter 36 (2026-05-22) — Phase 5 T5.3 (clusterimagepolicy-mode gate — check_*.sh batch done)
 
 **Done:**
