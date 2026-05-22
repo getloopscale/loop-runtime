@@ -128,7 +128,13 @@ log "capturing pod restart counts..."
 
 restart_count() {
   local ctx="$1" ns="$2" selector="$3"
-  kubectl --context "$ctx" get pods -n "$ns" -l "$selector" -o jsonpath='{range .items[*]}{.status.containerStatuses[0].restartCount}{"\n"}{end}' 2>/dev/null | awk '{s+=$1} END {print s+0}'
+  # `|| true` after the pipe: control-plane pods (loopzero-api, operators, pg,
+  # gitea) only exist on the mgmt cluster. When TARGET_CTX is workload/build,
+  # the kubectl query returns non-zero (ns/pods absent) and — under
+  # `set -e` + `pipefail` — would abort the whole baseline. The fallback keeps
+  # the count at 0 for clusters that don't host that pod, so chaos scenarios
+  # targeting non-mgmt clusters (C03/C04/C06/C10) can still capture a baseline.
+  kubectl --context "$ctx" get pods -n "$ns" -l "$selector" -o jsonpath='{range .items[*]}{.status.containerStatuses[0].restartCount}{"\n"}{end}' 2>/dev/null | awk '{s+=$1} END {print s+0}' || echo 0
 }
 
 LOOPZERO_API_RESTARTS=$(restart_count "$TARGET_CTX" loopzero-system "app=loopzero-api")
@@ -152,7 +158,17 @@ count_healthy_argocd_apps() {
   fi
 }
 ARGOCD_HEALTHY=$(count_healthy_argocd_apps | head -1)
-ARGOCD_TOTAL=$(kubectl --context "$TARGET_CTX" get applications -n argocd --no-headers 2>/dev/null | wc -l)
+# Capture-then-count (same guard pattern as count_healthy_argocd_apps): the
+# `argocd` namespace only exists on the mgmt cluster. For workload/build target
+# contexts (C03/C04/C06/C10) the kubectl returns non-zero and — under `set -e`
+# + `pipefail` — `$(... | wc -l)` would abort the baseline. Defaulting to 0
+# keeps non-mgmt scenarios runnable.
+count_argocd_total() {
+  local out
+  out=$(kubectl --context "$TARGET_CTX" get applications -n argocd --no-headers 2>/dev/null) || out=""
+  if [[ -z "$out" ]]; then echo 0; else printf '%s\n' "$out" | grep -c . || echo 0; fi
+}
+ARGOCD_TOTAL=$(count_argocd_total | head -1)
 ARGOCD_TOTAL="${ARGOCD_TOTAL:-0}"
 
 # ---------------------------------------------------------------------------

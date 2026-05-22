@@ -91,13 +91,17 @@ for sid in C01 C02 C03 C04 C05 C06 C07 C08 C09 C10; do
 
   scenario_start=$(date -u +%s)
 
+  # Capture rc WITHOUT letting `set -e` abort the whole suite when a single
+  # scenario's pre-flight die()s (e.g. chaos-mesh missing on a target cluster).
+  # Without the `&& rc=0 || rc=$?` guard, set -e aborts at the invocation line
+  # before the case below can record INCONCLUSIVE and continue to the next
+  # scenario — turning one missing prereq into a total suite abort.
+  rc=0
   TARGET_CONTEXT="$target" bash "$SCRIPTS_DIR/run-scenario.sh" \
     --scenario "$sid" \
     --baseline-duration "$BASELINE_DURATION" \
     --target-context "$target" \
-    > "$SUITE_DIR/$sid.log" 2>&1
-
-  rc=$?
+    > "$SUITE_DIR/$sid.log" 2>&1 || rc=$?
   scenario_end=$(date -u +%s)
   scenario_dur=$((scenario_end - scenario_start))
   TOTAL_DURATION=$((TOTAL_DURATION + scenario_dur))
@@ -110,7 +114,11 @@ for sid in C01 C02 C03 C04 C05 C06 C07 C08 C09 C10; do
 
   # Extract verdict reasons from scenario log
   reason=$(grep "during chaos:" "$SUITE_DIR/$sid.log" 2>/dev/null | head -1 | sed 's/.*\[chaos\]//' || echo "")
-  metrics=$(grep -E "baseline p95:|success rate:" "$SUITE_DIR/$sid.log" | tail -2 | head -2 | tr '\n' ' ' | sed 's/\[chaos\]//g')
+  # `|| echo ""` guard: when a scenario dies early (e.g. baseline aborts) its
+  # log has no "baseline p95:" line, so grep returns 1 and — under `set -e` +
+  # `pipefail` — would crash run-full.sh BEFORE recording the verdict, turning
+  # one failed scenario into a total suite abort with no verdict logged.
+  metrics=$(grep -E "baseline p95:|success rate:" "$SUITE_DIR/$sid.log" 2>/dev/null | tail -2 | head -2 | tr '\n' ' ' | sed 's/\[chaos\]//g' || echo "")
 
   RESULTS+=("| $sid | $target | $verdict | ${scenario_dur}s | $metrics |")
 
