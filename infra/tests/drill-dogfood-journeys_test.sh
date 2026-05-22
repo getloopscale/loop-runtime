@@ -85,8 +85,8 @@ EOF
 chmod +x "$WORK/bin-mock/npm"
 
 # ---- Case 1: resolve_loopzero_cli fails with node v18 ----
-out=$(PATH="$WORK/bin-node18:$WORK/bin-mock:$PATH" resolve_loopzero_cli "$WORK/repo-ok" 2>&1)
-rc=$?
+# `if` context so set -e doesn't abort on the (expected) non-zero return.
+if out=$(PATH="$WORK/bin-node18:$WORK/bin-mock:$PATH" resolve_loopzero_cli "$WORK/repo-ok" 2>&1); then rc=0; else rc=$?; fi
 assert_eq "node v18 → resolve_loopzero_cli exit 1" "1" "$rc"
 [[ "$out" == *"requires node ≥ 20"* ]] && \
   { echo "PASS: v18 error message clear"; pass=$((pass+1)); } || \
@@ -101,8 +101,7 @@ assert_eq "node v20 → resolve_loopzero_cli exit 0" "0" "$rc"
   { echo "FAIL: v20 output: $out"; fail=$((fail+1)); }
 
 # ---- Case 3: resolve_loopzero_cli fails when cli/ directory missing ----
-out=$(PATH="$WORK/bin-node20:$WORK/bin-mock:$PATH" resolve_loopzero_cli "$WORK/nonexistent" 2>&1)
-rc=$?
+if out=$(PATH="$WORK/bin-node20:$WORK/bin-mock:$PATH" resolve_loopzero_cli "$WORK/nonexistent" 2>&1); then rc=0; else rc=$?; fi
 assert_eq "missing cli/ dir → exit 1" "1" "$rc"
 
 # ============================================================
@@ -144,14 +143,14 @@ assert_eq "ok cmd does not increment JOURNEYS_FAILED" "0" "$JOURNEYS_FAILED"
 # ---- Case 7: command fails (exit 2) → JOURNEYS_FAILED++ ----
 JOURNEYS_PASSED=0
 JOURNEYS_FAILED=0
-run_cli_journey "TJ2" "fail command" "$WORK/cmd-fail.sh" 0 >/dev/null 2>&1
+run_cli_journey "TJ2" "fail command" "$WORK/cmd-fail.sh" 0 >/dev/null 2>&1 || true
 assert_eq "fail cmd increments JOURNEYS_FAILED" "1" "$JOURNEYS_FAILED"
 assert_eq "fail cmd does not increment JOURNEYS_PASSED" "0" "$JOURNEYS_PASSED"
 
 # ---- Case 8: expected exit code matching (non-zero expected) ----
 JOURNEYS_PASSED=0
 JOURNEYS_FAILED=0
-run_cli_journey "TJ3" "expects exit 2" "$WORK/cmd-fail.sh" 2 >/dev/null 2>&1
+run_cli_journey "TJ3" "expects exit 2" "$WORK/cmd-fail.sh" 2 >/dev/null 2>&1 || true
 assert_eq "matching non-zero exit → PASS" "1" "$JOURNEYS_PASSED"
 
 # ============================================================
@@ -188,18 +187,16 @@ assert_eq "Running + ready → exit 0" "0" "$rc"
   { echo "FAIL: prova_de_vida log: $out"; fail=$((fail+1)); }
 
 # ---- Case 10: pod Pending → FAIL ----
-out=$(PATH="$WORK/bin-kubectl:$PATH" MOCK_KUBECTL_PHASE="Pending" MOCK_KUBECTL_READY="false" \
-  prova_de_vida "test-ctx" "test-ns" "test-app" 2>&1)
-rc=$?
+if out=$(PATH="$WORK/bin-kubectl:$PATH" MOCK_KUBECTL_PHASE="Pending" MOCK_KUBECTL_READY="false" \
+  prova_de_vida "test-ctx" "test-ns" "test-app" 2>&1); then rc=0; else rc=$?; fi
 assert_eq "Pending → exit 1" "1" "$rc"
 [[ "$out" == *"phase=Pending"* ]] && \
   { echo "PASS: Pending error message clear"; pass=$((pass+1)); } || \
   { echo "FAIL: Pending log: $out"; fail=$((fail+1)); }
 
 # ---- Case 11: Running but container not ready → FAIL ----
-out=$(PATH="$WORK/bin-kubectl:$PATH" MOCK_KUBECTL_PHASE="Running" MOCK_KUBECTL_READY="false" \
-  prova_de_vida "test-ctx" "test-ns" "test-app" 2>&1)
-rc=$?
+if out=$(PATH="$WORK/bin-kubectl:$PATH" MOCK_KUBECTL_PHASE="Running" MOCK_KUBECTL_READY="false" \
+  prova_de_vida "test-ctx" "test-ns" "test-app" 2>&1); then rc=0; else rc=$?; fi
 assert_eq "Running but ready=false → exit 1" "1" "$rc"
 
 # ============================================================
@@ -245,8 +242,7 @@ cat > "$WORK/bin-npm-fail/npm" <<'EOF'
 exit 1
 EOF
 chmod +x "$WORK/bin-npm-fail/npm"
-out=$(PATH="$WORK/bin-node20:$WORK/bin-npm-fail:$PATH" resolve_loopzero_cli "$WORK/repo-ok" 2>&1)
-rc=$?
+if out=$(PATH="$WORK/bin-node20:$WORK/bin-npm-fail:$PATH" resolve_loopzero_cli "$WORK/repo-ok" 2>&1); then rc=0; else rc=$?; fi
 assert_eq "npm build failure → exit 1" "1" "$rc"
 [[ "$out" == *"npm run build failed"* ]] && \
   { echo "PASS: npm fail error message clear"; pass=$((pass+1)); } || \
@@ -260,9 +256,8 @@ cat > "$WORK/bin-kubectl-empty/kubectl" <<'EOF'
 echo ""
 EOF
 chmod +x "$WORK/bin-kubectl-empty/kubectl"
-out=$(PATH="$WORK/bin-kubectl-empty:$PATH" \
-  prova_de_vida "test-ctx" "test-ns" "no-such-app" 2>&1)
-rc=$?
+if out=$(PATH="$WORK/bin-kubectl-empty:$PATH" \
+  prova_de_vida "test-ctx" "test-ns" "no-such-app" 2>&1); then rc=0; else rc=$?; fi
 assert_eq "no pods matching → exit 1" "1" "$rc"
 
 # ---- Case 16 (iter 2 edge): wait_for_argocd_prune timeout (app always present) ----
@@ -278,9 +273,8 @@ esac
 EOF
 chmod +x "$WORK/bin-kubectl-present/kubectl"
 # Use very short timeout (4s) so test doesn't drag
-out=$(PATH="$WORK/bin-kubectl-present:$PATH" DRILL_PRUNE_TIMEOUT=4 \
-  wait_for_argocd_prune "test-ctx" "test-app" 2>&1)
-rc=$?
+if out=$(PATH="$WORK/bin-kubectl-present:$PATH" DRILL_PRUNE_TIMEOUT=4 \
+  wait_for_argocd_prune "test-ctx" "test-app" 2>&1); then rc=0; else rc=$?; fi
 assert_eq "timeout exceeded → exit 1" "1" "$rc"
 [[ "$out" == *"still present after"* ]] && \
   { echo "PASS: timeout error message clear"; pass=$((pass+1)); } || \
