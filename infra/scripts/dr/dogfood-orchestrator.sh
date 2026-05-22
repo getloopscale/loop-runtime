@@ -109,7 +109,7 @@ if [[ "$SKIP_CLEANROOM" != "true" ]]; then
   CLEANROOM_LOG="${DRILL_SKILL_AUDIT_DIR:-/tmp}/cleanroom-output.log"
   if ! DRILL_SKILL_CONFIRM_COST=true \
        DRILL_SKIP_TEARDOWN=true \
-       bash "$ROOT_DIR/infra/scripts/drill-cleanroom-orchestrator.sh" --confirm-cost \
+       bash "$ROOT_DIR/infra/scripts/dr/cleanroom-orchestrator.sh" --confirm-cost \
        > "$CLEANROOM_LOG" 2>&1; then
     drill_skill_log "  ✗ cleanroom-drill foundation step failed — last 40 lines:"
     tail -40 "$CLEANROOM_LOG" 2>/dev/null | sed 's/^/    /' >&2 || true
