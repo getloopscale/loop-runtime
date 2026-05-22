@@ -12,6 +12,7 @@ import (
 	"time"
 
 	"github.com/loopzero/loopzero/pkg/quality/actionpinning"
+	"github.com/loopzero/loopzero/pkg/quality/agplisolation"
 	"github.com/loopzero/loopzero/pkg/quality/clibundlesize"
 	"github.com/loopzero/loopzero/pkg/quality/deadlineratchet"
 	"github.com/loopzero/loopzero/pkg/quality/decisionsdeletion"
@@ -115,6 +116,8 @@ func runQuality(args []string) int {
 		return runDrillOutputsConsumers(args[1:])
 	case "cli-bundle-size":
 		return runCLIBundleSize(args[1:])
+	case "agpl-isolation":
+		return runAGPLIsolation(args[1:])
 	default:
 		fmt.Fprintf(os.Stderr, "unknown gate: %s\n\n%s", args[0], qualityHelp)
 		return 1
@@ -645,6 +648,28 @@ func runServiceAuthRotation(args []string) int {
 		exception: ".github/service-auth-rotation-exception.txt",
 		adr:       "2026-05-13-service-auth-ed25519-adoption.md",
 	})
+}
+
+func runAGPLIsolation(args []string) int {
+	fs := flag.NewFlagSet("agpl-isolation", flag.ContinueOnError)
+	root := fs.String("root", ".", "repo root directory")
+	if err := fs.Parse(args); err != nil {
+		return 1
+	}
+	o := agplisolation.Check(agplisolation.Config{Root: *root})
+	if !o.Pass {
+		fmt.Fprintf(os.Stderr, "FAIL — %d AGPL violation(s) outside the ADR-0048 allow-list:\n", len(o.Violations))
+		for _, v := range o.Violations {
+			fmt.Fprintf(os.Stderr, "  AGPL VIOLATION: %s\n", v)
+		}
+		fmt.Fprintln(os.Stderr, "")
+		fmt.Fprintln(os.Stderr, "AGPL-3.0 has copyleft network-distribution requirements. Either re-implement")
+		fmt.Fprintln(os.Stderr, "with an Apache-2.0 alternative, OR add the import to DefaultAllowlist in")
+		fmt.Fprintln(os.Stderr, "pkg/quality/agplisolation with a NEW ADR + legal sign-off.")
+		return 1
+	}
+	fmt.Println("PASS — no AGPL imports outside the ADR-0048 allow-list.")
+	return 0
 }
 
 func runCLIBundleSize(args []string) int {

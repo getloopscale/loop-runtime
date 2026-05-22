@@ -564,7 +564,8 @@ jobs:
         run: bash infra/scripts/migration_test_coverage.sh
 
       - name: AGPL isolation lint (T9.1 deep-review-remediation, ADR-0048)
-        run: bash infra/scripts/check_agpl_isolation.sh
+        # T5.3 of plan 2026-05-22: migrated check_agpl_isolation.sh to pure-Go gate.
+        run: cd cmd/loopzero-ops && go run . quality agpl-isolation --root "${GITHUB_WORKSPACE}"
 
       - name: Alert runbook coverage lint (T5.8 deep-review-remediation)
         run: bash infra/scripts/check_alert_runbooks.sh

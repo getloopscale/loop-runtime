@@ -12,6 +12,31 @@
 
 ## Iteration log
 
+### Iter 31 (2026-05-22) — Phase 5 T5.3 (agpl-isolation gate, REVIEW-NEEDED → pure-logic)
+
+**Commit:** (current)
+
+**Done:**
+- `check_agpl_isolation.sh` (REVIEW-NEEDED, read-verified pure-logic) migrated to
+  `pkg/quality/agplisolation/` (T9.1/ADR-0048: AGPL imports allowed only in the
+  operator-binary allowlist; scans api/cli/cloud/pkg/operators *.go). 10 tests,
+  94.9% coverage.
+- **Self-reference trap caught + fixed:** the gate scans pkg/, and check.go's
+  own COMMENT contained the contiguous `"github.com/<agpl>` literal → self-flagged.
+  Reworded the comment (and the test's) to break the literal; runtime builds the
+  search string as importPrefix+pattern so the source never holds it contiguously.
+  Tests use a FAKE pattern via Config to keep test source clean too.
+- `cmd/loopzero-ops` `agpl-isolation` subcommand; `ci.yml` security job repointed.
+  Parity: both PASS (minio/madmin-go only in the allowlisted provisioner.go).
+- `check_agpl_isolation.sh` (75) DELETED; allowlist 230 (was 231).
+
+**Script count: 231 → 230** (29 deletions cumulative). 25 Go quality gates.
+Pattern (3rd time): the self-reference trap recurs for any gate that scans its
+own source tree (no-migrate-force, drill-outputs, now agpl-isolation) — the fix
+is always: skip own pkg + keep the trigger literal non-contiguous in source.
+
+---
+
 ### Iter 30 (2026-05-22) — Phase 5 T5.3 (cli-bundle-size gate, REVIEW-NEEDED → pure-logic)
 
 **Commit:** (current)
