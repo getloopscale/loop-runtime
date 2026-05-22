@@ -12,6 +12,34 @@
 
 ## Iteration log
 
+### Iter 25 (2026-05-22) — Phase 5 T5.3 (disposition audit + KEEP-OPERATOR reclassify)
+
+**Commit:** (current)
+
+**Done:**
+- **Caught a false MIGRATE-GO-PUREFN classification.** `check-prod-vap-readiness.sh`
+  was tagged MIGRATE-GO-PUREFN but genuinely executes `kubectl` + `cosign` +
+  `argocd` against a LIVE prod cluster (VAP-flip pre-flight). Migrating it would
+  be a shell-wrap-in-disguise (violates D5) or a heavy SDK rewrite for a tool
+  run a handful of times. Per D4 (operator-time) + Anti-Pattern #8, reclassified
+  to **KEEP-OPERATOR** after read-verification.
+- **Audited all 7 remaining MIGRATE-GO-PUREFN candidates** for live-CLI usage to
+  prevent future iterations chasing false targets:
+  - **Genuine pure-logic (migrate-able):** `validate-helmfile-templates.sh`,
+    `check-decisions-deletion.sh` (+AUTO-DIE test), `governance/validate-evidence.sh`.
+  - **Live-CLI — likely KEEP-OPERATOR (pending per-script read-verify):**
+    `check-drill-credentials-isolation.sh` (pulumi),
+    `check-drill-outputs-consumers.sh` (kubectl+pulumi),
+    `audit-security-context.sh` (helm), `check-prod-vap-readiness.sh` (DONE).
+    NOTE: grep heuristic — must read each to distinguish execution from
+    string-literal greps before reclassifying (avoid inverse misclassification).
+
+**Script count: 237 (unchanged — reclassification, not deletion).** 21 Go gates.
+Discernment per D4/D5/Anti-Pattern #8: the plan's goal is the RIGHT disposition,
+not "migrate everything".
+
+---
+
 ### Iter 24 (2026-05-22) — Phase 5 T5.3 (stack-coverage gate + WIRED a dead gate)
 
 **Commit:** (current)
