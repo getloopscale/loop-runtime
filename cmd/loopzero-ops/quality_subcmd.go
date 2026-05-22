@@ -9,6 +9,7 @@ import (
 	"os"
 
 	"github.com/loopzero/loopzero/pkg/quality/divergencematrix"
+	"github.com/loopzero/loopzero/pkg/quality/mockbudget"
 	"github.com/loopzero/loopzero/pkg/quality/regressiontest"
 	"github.com/loopzero/loopzero/pkg/quality/nonewbash"
 	"github.com/loopzero/loopzero/pkg/quality/noshellwrap"
@@ -74,6 +75,8 @@ func runQuality(args []string) int {
 		return runTestPyramid(args[1:])
 	case "regression-test":
 		return runRegressionTest(args[1:])
+	case "mock-budget":
+		return runMockBudget(args[1:])
 	default:
 		fmt.Fprintf(os.Stderr, "unknown gate: %s\n\n%s", args[0], qualityHelp)
 		return 1
@@ -311,5 +314,34 @@ func runRegressionTest(args []string) int {
 		return 1
 	}
 	fmt.Println("[regression-gate] PASS — test file found in diff")
+	return 0
+}
+
+func runMockBudget(args []string) int {
+	fs := flag.NewFlagSet("mock-budget", flag.ContinueOnError)
+	dir := fs.String("dir", ".", "target directory to scan")
+	budget := fs.Int("budget", mockbudget.DefaultBudget, "max mocks per test file")
+	if err := fs.Parse(args); err != nil {
+		return 1
+	}
+	if env := os.Getenv("BUDGET"); env != "" {
+		if n, e := fmt.Sscanf(env, "%d", budget); n == 1 && e == nil {
+			// budget set from env
+		}
+	}
+	o, err := mockbudget.Check(mockbudget.Config{TargetDir: *dir, Budget: *budget})
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "[mock-budget] %v\n", err)
+		return 5
+	}
+	if !o.Pass {
+		fmt.Fprintf(os.Stderr, "[mock-budget] FAIL: %d file(s) over budget:\n", len(o.Violations))
+		for _, v := range o.Violations {
+			fmt.Fprintf(os.Stderr, "  %s\n", v)
+		}
+		fmt.Fprintln(os.Stderr, "[mock-budget] design smell — refactor/split OR add: // mock-budget: N — <reason>")
+		return 1
+	}
+	fmt.Printf("[mock-budget] PASS — all test files within budget (%d mocks/file)\n", *budget)
 	return 0
 }

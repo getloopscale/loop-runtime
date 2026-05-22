@@ -12,6 +12,24 @@
 
 ## Iteration log
 
+### Iter 15 (2026-05-22) — Phase 5 T5.3 (mock-budget pure-Go gate, parity-verified)
+
+**Commit:** (current)
+
+**Done:**
+- `pkg/quality/mockbudget/` (NEW) — pure-Go gate replacing
+  `check-mock-budget.sh`. Counts top-level mock declarations (Go: gomock/
+  mock.New; TS: jest.mock/vi.mock), honors `// mock-budget: N` opt-out (ADR D8).
+  10 tests GREEN.
+- **Parity verified:** bash + Go both PASS exit 0 against real repo before delete.
+- `cmd/loopzero-ops` — `mock-budget` subcommand.
+- `.github/workflows/quality-gates.yml` — mock-budget job runs Go gate.
+- `check-mock-budget.sh` DELETED; allowlist 249 (was 250).
+
+**Script count: 250 → 249** (8 deletions cumulative). 13 Go quality gates total.
+
+---
+
 ### Iter 14 (2026-05-22) — Phase 5 T5.3 (regression-test gate + AUTO-DIE test deleted)
 
 **Commit:** (current)
