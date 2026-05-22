@@ -12,6 +12,28 @@
 
 ## Iteration log
 
+### Iter 12 (2026-05-22) — Phase 5 T5.3 (test-deletion pure-Go gate)
+
+**Commit:** (current)
+
+**Done:**
+- `pkg/quality/testdeletion/` (NEW) — pure-Go gate replacing
+  `infra/scripts/quality/check-test-deletion.sh`. Shells `git diff` (ALLOWED
+  CLI per D5) + DiffOverride seam for hermetic tests. 9 tests GREEN.
+- `cmd/loopzero-ops/quality_subcmd.go` — wires `test-deletion` subcommand (reads
+  BASE_REF/HEAD_REF/PR_BODY/PR_LABELS env).
+- `.github/workflows/quality-gates.yml` — test-deletion job runs Go gate.
+- `infra/scripts/quality/check-test-deletion.sh` — DELETED.
+- allowlist 253 (was 254).
+
+**T5.1 deferred:** Pulumi Automation API migration (pulumi-archive.sh,
+pulumi-orphan-rm.sh) requires heavy `github.com/pulumi/pulumi/sdk/v3` dep +
+LIVE Pulumi stack validation (operator HARD STOP per plan T5.1 acceptance).
+
+**Script count: 254 → 253** (4 deletions cumulative).
+
+---
+
 ### Iter 11 (2026-05-22) — Phase 1 T1.1 dead-set validation (0 deletable; prevented destructive delete)
 
 **Commit:** (current)

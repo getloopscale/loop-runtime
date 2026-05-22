@@ -147,8 +147,16 @@ jobs:
         with:
           fetch-depth: 0
 
+      - name: Set up Go
+        uses: actions/setup-go@0aaccfd150d50ccaeb58ebd88d36e91967a5f35b # v5.4.0
+        with:
+          go-version: '1.25.10'
+          cache-dependency-path: cmd/loopzero-ops/go.sum
+
+      # T5.3 of plan 2026-05-22: migrated from check-test-deletion.sh to pure-Go
+      # gate (loopzero-ops). git is an ALLOWED CLI per D5 — gate shells `git diff`.
       - name: Run test-deletion gate
-        run: bash infra/scripts/quality/check-test-deletion.sh
+        run: cd cmd/loopzero-ops && go run . quality test-deletion
         env:
           BASE_REF: origin/${{ github.base_ref }}
           HEAD_REF: HEAD

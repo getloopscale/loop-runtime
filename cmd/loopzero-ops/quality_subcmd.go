@@ -13,6 +13,7 @@ import (
 	"github.com/loopzero/loopzero/pkg/quality/noshellwrap"
 	"github.com/loopzero/loopzero/pkg/quality/scriptsaudit"
 	"github.com/loopzero/loopzero/pkg/quality/taskfileinterface"
+	"github.com/loopzero/loopzero/pkg/quality/testdeletion"
 )
 
 const qualityHelp = `loopzero-ops quality — quality gate orchestrator
@@ -65,6 +66,8 @@ func runQuality(args []string) int {
 		return runTaskfileInterface(args[1:])
 	case "divergence-matrix":
 		return runDivergenceMatrix(args[1:])
+	case "test-deletion":
+		return runTestDeletion(args[1:])
 	default:
 		fmt.Fprintf(os.Stderr, "unknown gate: %s\n\n%s", args[0], qualityHelp)
 		return 1
@@ -221,5 +224,28 @@ func runDivergenceMatrix(args []string) int {
 		return 1
 	}
 	fmt.Println("divergence-matrix: GREEN — matrix integrity OK")
+	return 0
+}
+
+func runTestDeletion(args []string) int {
+	_ = args
+	o := testdeletion.Check(testdeletion.Config{
+		BaseRef:  os.Getenv("BASE_REF"),
+		HeadRef:  os.Getenv("HEAD_REF"),
+		PRBody:   os.Getenv("PR_BODY"),
+		PRLabels: os.Getenv("PR_LABELS"),
+	})
+	if len(o.DeletedTests) > 0 {
+		fmt.Fprintln(os.Stderr, "[test-deletion] TRUE test deletions detected:")
+		for _, f := range o.DeletedTests {
+			fmt.Fprintf(os.Stderr, "  %s\n", f)
+		}
+	}
+	if !o.Pass {
+		fmt.Fprintf(os.Stderr, "[test-deletion] FAIL: %s\n", o.Reason)
+		fmt.Fprintln(os.Stderr, "Add 'test-deletion-approved' label OR 'Test deletion justification: <reason>' to PR body.")
+		return 1
+	}
+	fmt.Printf("[test-deletion] PASS — %s\n", o.Reason)
 	return 0
 }
