@@ -12,6 +12,52 @@
 
 ## Iteration log
 
+### Iter 42 (2026-05-22) — cleanup-plan Phase 0/T2.1/T3.1 + HONEST recalibration of N(bash) reduction
+
+Implemented `docs/plans/2026-05-22-script-cleanup-plan.md` autonomous slice. **4 commits.**
+
+**T0.1 (detector hardening) — DONE:** `pkg/quality/scriptsaudit` now recognizes 4
+false-positive classes (dynamic `source "$DIR/${v}.sh"`, CI glob-runners, Dockerfile
+ENTRYPOINT, harness hooks) + 2 shell-out refinements (check-/generate-* that invoke
+kubectl/helm/cosign are NOT pure-logic → KEEP) + line-start helm detection (no more
+matching `helm install` inside comments/echo/die strings) + excludes `.claude/worktrees`.
+92.6% cover, golangci-lint 0. CSV regenerated: **221 scripts** (was double-counting
+worktrees → 281).
+
+**CRITICAL honest finding — the autonomous migration slice is EMPTY:**
+- `MIGRATE-GO-PUREFN`: 23 → **0**. The "23" was a STALE-CSV artifact (those gates
+  were already deleted/migrated in earlier phases; CSV predated the deletions).
+- `MIGRATE-GENERATOR`: 4 → **0** (the 3 generate-*-secrets are shell-out injectors → DELEGATE-HELMFILE).
+- Both hermetic-migration buckets are now empty. **There is no clean autonomous
+  pure-logic gate left to migrate.** The prior session's "exhausted at iter 38" was correct.
+
+**Refreshed disposition tally (221):** REVIEW-NEEDED 111 · AUTO-DIE 56 · MIGRATE-GINKGO 36 ·
+KEEP-OPERATOR 9 · DELEGATE-HELMFILE 5 · MIGRATE-GO-SDK 3 · DELEGATE-ARGOCD 1.
+
+**T2.1 (helmfile-delegation-map.md) — DONE:** of 5 DELEGATE-HELMFILE, only **1**
+(`bootstrap-patch-admission-policies`) is a clean delegation. 3 secret-generators are
+**blocked on an ESO-generator T2/T3 MEET** (helmfile cannot mint deterministic creds;
+relocating to a bash hook does not advance ≤30). `k3d-cross-cluster-heal` is a heal-tool
+false-positive → KEEP. **Honest Phase 2 reduction: ~1 script, not the plan's ~25.**
+
+**T3.1 (ginkgo-migration-map.md) — DONE:** of 36 MIGRATE-GINKGO, only ~4 are CI-invoked.
+Biggest win = `cell2-activation-gates` + 13 dynamically-sourced `cell2-gate-c*.sh` libs
+collapse into 1 table-driven Describe (**14 → 1**). ~7 are EC-1 grep-before-delete orphan
+candidates (greps run: `audit-argocd-drift` is referenced in a runbook = manual KEEP; 4
+others have zero refs but need operator orphan-vs-manual judgment). Bucket A/B
+(canary/SLO/install parity) need LIVE multi-cell/drill. **None autonomous.**
+
+**Recalibrated path to ≤30 (honest):** N(bash)=221. The reduction is now understood to
+depend ENTIRELY on operator-gated LIVE work: (a) Phase 3 cell2-gate collapse (14→1, LIVE
+multi-cell), (b) Phase 3 EC-1 orphan deletes (~7, operator judgment), (c) Phase 3
+journey-overlap deletes (~9, LIVE), (d) Phase 2 admission-policies fold (1, LIVE),
+(e) a T2/T3 ESO-generator MEET for the 3 secret-generators, (f) operator classification
+of 111 REVIEW-NEEDED. **No further autonomous reduction is possible.** Per EC-5: if the
+minimal D4-justified KEEP set exceeds 30, the literal ≤30 target needs a MEET to adjust.
+
+**Promise eligibility: ❌ FALSE** — N(bash)=221 ≫ 30; the reduction path is operator-gated
+LIVE + a T2/T3 MEET. Emitting the promise would be a lie. Autonomous slice complete.
+
 ### Iter 41 (2026-05-22) — 3 LIVE gates GREEN (cleanroom + dogfood + chaos-test)
 
 **Done (LIVE on fresh k3d cleanroom):**
