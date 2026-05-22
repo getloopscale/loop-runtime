@@ -12,6 +12,44 @@
 
 ## Iteration log
 
+### Iter 6 (2026-05-22) — Phase 2 ENGINEERING COMPLETE (T2.1+T2.2+T2.3, critical path)
+
+**Commit:** (current)
+
+**Done (engineering side — T2.4 LIVE remains HARD STOP):**
+- `docs/scripts-audit/2026-05-22-helmfile-mapping.md` (T2.1) — full bare-helm
+  → helmfile release mapping; identified gaps (network-policies chart not in
+  helmfile, kratos/hydra namespace migration loopzero-system → loopzero-auth);
+  documents EC-01 + EC-02 compliance plan
+- `infra/helm/ory-kratos/values.yaml.gotmpl` (T2.2 EC-02) — DSN line uses
+  single-quoted YAML, unescaped `"` inside gotmpl literal (was `\"` escape
+  that crashed helmfile render)
+- `infra/helm/ory-hydra/values.yaml.gotmpl` (T2.2 EC-02) — same fix
+- `taskfiles/infra.yml` (T2.3) — install:mgmt/build/workload + cloud:setup
+  REWRITTEN to use `helmfile sync` master pattern (EC-01) + `kubectl
+  -o go-template`/`openssl base64 -d -A` (EC-02). Zero `helm upgrade --install`
+  + zero `base64 -d` in live code (verified via hermetic test)
+- `pkg/quality/phase2gate/` — 8 hermetic Go tests GREEN validating:
+  * Zero bare `helm upgrade --install` in Taskfile (non-comment)
+  * Zero bare `base64 -d` in Taskfile (non-comment, excludes openssl/`-A`)
+  * Helmfile sync present for mgmt+build+runtime
+  * Portable base64 form present
+  * kratos+hydra YAML escape fixed
+  * Mapping doc T2.1 exists with EC-01/EC-02 references
+  * install:mgmt block uses MASTER sync (no --selector in code, only docs)
+
+**Cleanroom unblock rationale:**
+Bug A (gitea PASSWD empty) — was caused by helm install with chart's default
+values; now resolved because helmfile chart values reference
+`loopzero-db-credentials` Secret via generate-secrets.sh pre-sync.
+Bug B (kratos/hydra YAML escape) — fixed in T2.2 directly.
+
+**T2.4 HARD STOP:** Operator must run `task clean:all && task setup && task doctor`
+on fresh k3d to confirm `task setup` exit 0 + PASS=N FAIL=0. Plan requires
+LIVE validation that Ralph CANNOT perform.
+
+---
+
 ### Iter 5 (2026-05-22) — Phase 6 T6.3 COMPLETE (no-shell-wrap gate ATIVO)
 
 **Commit:** (current)
@@ -146,10 +184,10 @@ Regression locked NOW.
 | **0 Real Usage Audit** | T0.1 audit Go tool + baseline CSV | ✅ **DONE** (engineering); operator review PENDING | Ralph + Operator |
 | **1 Delete Dead Code** | T1.1 dead-set validation (manual) | 🟡 Blocked by T0.1 operator review | Operator |
 | | T1.2 bulk delete validated set | ⚪ Pending T1.1 | Ralph |
-| **2 Delegate to Helmfile** | T2.1 audit bare-helm calls | ⚪ Pending Phase 1 | Ralph |
-| | T2.2 fix helmfile releases (gitea PASSWD + kratos/hydra YAML escape) | ⚪ Pending T2.1 | Ralph |
-| | T2.3 rewrite infra:install:mgmt (T2.3.a master-sync + T2.3.b portable base64) | ⚪ Pending T2.2 | Ralph |
-| | T2.4 validate cleanroom funcional | 🔴 **HARD STOP** — requires `task clean:all` + LIVE | Operator |
+| **2 Delegate to Helmfile** | T2.1 audit bare-helm calls | ✅ **DONE** (iter 6) — mapping doc with gaps + EC-01/EC-02 plan | Ralph |
+| | T2.2 fix helmfile releases (gitea PASSWD + kratos/hydra YAML escape) | ✅ **DONE** (iter 6) — single-quoted YAML EC-02 | Ralph |
+| | T2.3 rewrite infra:install:mgmt (T2.3.a master-sync + T2.3.b portable base64) | ✅ **DONE** (iter 6) — Taskfile fully migrated to helmfile sync | Ralph |
+| | T2.4 validate cleanroom funcional | 🔴 **HARD STOP** — operator runs `task clean:all && task setup && task doctor` | Operator |
 | **3 Deprecate task setup** | T3.1 update CLAUDE.md + README + dev-loop.md | ⚪ Pending Phase 2 | Ralph |
 | | T3.2 deprecation warning in task setup | ⚪ Pending T3.1 | Ralph |
 | **4 Migrate to Ginkgo** | T4.1 audit parity/dogfood scripts | ⚪ Parallel-eligible post-Phase-3 | Ralph |

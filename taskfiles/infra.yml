@@ -5,111 +5,73 @@ version: "3"
 
 tasks:
   infra:install:mgmt:
-    desc: Install platform components in mgmt cluster
+    desc: Install platform components in mgmt cluster via Helmfile (T2.3 of plan 2026-05-22)
     deps: [helm:repos]
     cmds:
-      - >-
-        helm upgrade --install postgresql bitnami/postgresql
-        --kube-context {{.MGMT_CONTEXT}}
-        --namespace loopzero-system --create-namespace
-        --version 18.5.14
-        -f infra/helm/postgresql/values.yaml
-        --wait --timeout 5m
-      # Ensure gitea database exists (initdb.scripts may not re-run on PV reuse)
+      # T2.3.a (EC-01) MASTER SYNC — single `helmfile sync` per cluster. Helmfile
+      # `needs:` directives resolve ordering (postgresql first, then dependent
+      # releases like gitea/kratos/hydra). Master-sync REQUIRED to avoid race
+      # `Secret postgresql not found` when dependent release sync invoked
+      # before postgres install completes. Per-release `--selector` would
+      # bypass `needs:` — DO NOT use.
+      #
+      # T2.3.b (EC-02) PORTABLE BASE64 — `kubectl -o go-template='{{`{{.data.X | base64decode}}`}}'`
+      # returns DECODED bytes directly. Replaces `base64 -d` (Linux GNU) which
+      # silently breaks on macOS BSD (uses `-D` capital).
+      #
+      # Pre-sync: generate-secrets.sh creates LOOPZERO_DB_PASSWORD Secret if missing
+      # (idempotent — picks up existing for re-runs). Required by ory-kratos +
+      # ory-hydra values.yaml.gotmpl `requiredEnv "LOOPZERO_DB_PASSWORD"`.
+      - bash infra/helmfile/scripts/generate-secrets.sh standalone-multi mgmt
       - |
-        echo "Ensuring gitea database exists..."
-        POD=$(kubectl --context {{.MGMT_CONTEXT}} -n loopzero-system get pod -l app.kubernetes.io/name=postgresql -o jsonpath='{.items[0].metadata.name}')
-        PG_ADMIN_PASS=$(kubectl --context {{.MGMT_CONTEXT}} -n loopzero-system get secret postgresql -o jsonpath='{.data.postgres-password}' | base64 -d)
-        kubectl --context {{.MGMT_CONTEXT}} -n loopzero-system exec -i "$POD" -c postgresql -- \
-          env PGPASSWORD="$PG_ADMIN_PASS" psql -U postgres -tc "SELECT 1 FROM pg_database WHERE datname='gitea'" | grep -q 1 || \
-        kubectl --context {{.MGMT_CONTEXT}} -n loopzero-system exec -i "$POD" -c postgresql -- \
-          env PGPASSWORD="$PG_ADMIN_PASS" psql -U postgres -c "CREATE DATABASE gitea OWNER {{.PG_USER}}"
-        echo "gitea database: ensured"
-      # Redis (session/cache/queue backend for Gitea HA) — StatefulSet + PDB + NetworkPolicy.
-      # Gitea values.yaml hardcodes `gitea-redis:6379` as session/cache/queue addr; without this
-      # Service the gitea pod CrashLoopBackOffs on `cache.Init failed: lookup gitea-redis ... no such host`.
-      # Applied BEFORE `helm install gitea` so the Service is reachable when the pod boots.
-      - kubectl --context {{.MGMT_CONTEXT}} apply -f infra/helm/gitea/templates/redis.yaml
-      - kubectl --context {{.MGMT_CONTEXT}} -n loopzero-system rollout status statefulset/gitea-redis --timeout=3m
-      - >-
-        helm upgrade --install gitea gitea-charts/gitea
-        --kube-context {{.MGMT_CONTEXT}}
-        --namespace loopzero-system
-        --version 10.6.0
-        -f infra/helm/gitea/values.yaml
-        --wait --timeout 3m
-      - >-
-        helm upgrade --install minio minio/minio
-        --kube-context {{.MGMT_CONTEXT}}
-        --namespace loopzero-system
-        --version 5.4.0
-        -f infra/helm/minio/values.yaml
-        --wait --timeout 3m
-      # MinIO lifecycle rules (cache expiration) — delete-and-recreate (Job spec is immutable)
-      - kubectl --context {{.MGMT_CONTEXT}} delete job minio-lifecycle-setup -n loopzero-system --ignore-not-found 2>/dev/null
-      - kubectl --context {{.MGMT_CONTEXT}} apply -f infra/helm/minio/lifecycle-job.yaml
-      # Ensure kratos and hydra databases exist (Ory services need separate databases)
+        # Portable secret extraction (T2.3.b EC-02) — works on macOS + Linux
+        export LOOPZERO_DB_PASSWORD=$(kubectl --context {{.MGMT_CONTEXT}} -n loopzero-system \
+          get secret loopzero-db-credentials -o go-template='{{`{{.data.password | base64decode}}`}}' \
+          2>/dev/null || echo "")
+        if [ -z "$LOOPZERO_DB_PASSWORD" ]; then
+          echo "ERROR: LOOPZERO_DB_PASSWORD not in loopzero-db-credentials Secret — run generate-secrets.sh first"
+          exit 1
+        fi
+        helmfile -f infra/helmfile/mgmt.helmfile.yaml.gotmpl \
+          -e standalone-multi \
+          --kube-context {{.MGMT_CONTEXT}} \
+          sync --skip-deps
+      # Post-sync: database creation (gitea/kratos/hydra) — helmfile sync
+      # creates postgres + chart values but cannot create per-service databases.
+      # kubectl exec into postgres pod, create DBs idempotently.
       - |
-        echo "Ensuring kratos and hydra databases exist..."
+        echo "Ensuring gitea/kratos/hydra databases exist..."
         POD=$(kubectl --context {{.MGMT_CONTEXT}} -n loopzero-system get pod -l app.kubernetes.io/name=postgresql -o jsonpath='{.items[0].metadata.name}')
-        PG_ADMIN_PASS=$(kubectl --context {{.MGMT_CONTEXT}} -n loopzero-system get secret postgresql -o jsonpath='{.data.postgres-password}' | base64 -d)
-        for DB in kratos hydra; do
+        # Portable secret extraction (T2.3.b EC-02)
+        PG_ADMIN_PASS=$(kubectl --context {{.MGMT_CONTEXT}} -n loopzero-system \
+          get secret postgresql -o go-template='{{`{{.data.password | base64decode}}`}}')
+        for DB in gitea kratos hydra; do
           kubectl --context {{.MGMT_CONTEXT}} -n loopzero-system exec -i "$POD" -c postgresql -- \
             env PGPASSWORD="$PG_ADMIN_PASS" psql -U postgres -tc "SELECT 1 FROM pg_database WHERE datname='$DB'" | grep -q 1 || \
           kubectl --context {{.MGMT_CONTEXT}} -n loopzero-system exec -i "$POD" -c postgresql -- \
             env PGPASSWORD="$PG_ADMIN_PASS" psql -U postgres -c "CREATE DATABASE $DB OWNER {{.PG_USER}}"
           echo "$DB database: ensured"
         done
-      # Ory Kratos — identity management (signup, login, recovery)
-      - >-
-        helm upgrade --install ory-kratos ory/kratos
-        --kube-context {{.MGMT_CONTEXT}}
-        --namespace loopzero-system
-        --version 0.61.0
-        -f infra/helm/ory-kratos/values.yaml
-        --wait --timeout 5m
-      # Ory Hydra — OAuth2 server (JWT, Device Code Flow, PKCE)
-      - >-
-        helm upgrade --install ory-hydra ory/hydra
-        --kube-context {{.MGMT_CONTEXT}}
-        --namespace loopzero-system
-        --version 0.61.0
-        -f infra/helm/ory-hydra/values.yaml
-        --wait --timeout 5m
-      - >-
-        helm upgrade --install argocd argo/argo-cd
-        --kube-context {{.MGMT_CONTEXT}}
-        --namespace argocd --create-namespace
-        --version 7.3.11
-        -f infra/helm/argocd/values.yaml
-        --wait --timeout 5m
-      # PodDisruptionBudgets: Helm charts create their own PDBs.
-      # Manual apply removed — conflicts with chart-managed PDBs (minAvailable vs maxUnavailable).
-      # NetworkPolicies for loopzero-system namespace.
-      # CHG-2026-05-05: file moved into Helm chart structure (templates/loopzero-system.yaml).
-      # Use helm install instead of raw manifest apply.
-      - >-
-        helm upgrade --install network-policies infra/helm/network-policies
-        --kube-context {{.MGMT_CONTEXT}}
-        --namespace loopzero-system
-        --create-namespace
-        --wait --timeout 1m
+      # Post-sync: MinIO lifecycle rules (Job spec immutable — delete-and-recreate)
+      - kubectl --context {{.MGMT_CONTEXT}} delete job minio-lifecycle-setup -n loopzero-system --ignore-not-found 2>/dev/null
+      - kubectl --context {{.MGMT_CONTEXT}} apply -f infra/helm/minio/lifecycle-job.yaml
 
   infra:install:build:
-    desc: Install platform components in build cluster
+    desc: Install platform components in build cluster via Helmfile (T2.3 of plan 2026-05-22)
     deps: [helm:repos]
     cmds:
+      # T2.3.a (EC-01) MASTER SYNC — single helmfile sync per cluster.
+      # Build helmfile declares: argo-workflows, loopzero-build-cwts, loki, promtail.
+      # CWTs (loopzero-build-cwts release) handle Helm directives via the chart's
+      # own template render — no separate `helm template | kubectl apply` step needed.
       - >-
-        helm upgrade --install argo-workflows argo/argo-workflows
+        helmfile -f infra/helmfile/build.helmfile.yaml.gotmpl
+        -e standalone-multi
         --kube-context {{.BUILD_CONTEXT}}
-        --namespace argo --create-namespace
-        --version 1.0.5
-        -f infra/helm/argo-workflows/values.yaml
-        --wait --timeout 3m
-      # MinIO credentials Secret for cache CWTs (envFrom.secretRef)
-      # CWTs read credentials from this Secret instead of workflow parameters.
+        sync --skip-deps
+      # Post-sync: MinIO credentials Secret for cache CWTs (envFrom.secretRef)
       - kubectl --context {{.BUILD_CONTEXT}} apply -f infra/helm/minio/minio-credentials-secret.yaml
-      # BuildKit registry config (insecure k3d registry)
+      # Post-sync: BuildKit registry config (insecure k3d registry) — non-helm Secret
       - |
         kubectl --context {{.BUILD_CONTEXT}} -n argo create secret generic buildkit-registry-config \
           --from-literal=config.json='{"auths":{}}' \
@@ -117,77 +79,52 @@ tasks:
           http = true
           insecure = true' \
           --dry-run=client -o yaml | kubectl --context {{.BUILD_CONTEXT}} apply -f -
-      # Render CWTs via Helm template (CWT files contain Helm directives like
-      # {{- if .Values.minio.insecure }} that must be rendered before applying).
-      # Local dev overrides clone-runner image to use k3d registry.
-      - >-
-        helm template loopzero-cwts infra/helm/argo-workflows/
-        -f infra/helm/argo-workflows/values.yaml
-        --set images.cloneRunner=k3d-loopzero-registry:5000/loopzero-clone-runner:latest
-        | kubectl --context {{.BUILD_CONTEXT}} apply -f -
 
   infra:install:workload:
-    desc: Install platform components in workload cluster
+    desc: Install platform components in workload cluster via Helmfile (T2.3 of plan 2026-05-22)
     deps: [helm:repos]
     cmds:
-      # cert-manager must be in the workload cluster (same cluster as Traefik + IngressRoutes)
+      # T2.3.a (EC-01) MASTER SYNC — runtime helmfile declares:
+      # cert-manager, traefik, keda, keda-http-addon, argo-rollouts, policy-controller,
+      # admission-policies, promtail, cloudflared, cluster-issuer, rbac, static-assets.
       - >-
-        helm upgrade --install cert-manager jetstack/cert-manager
+        helmfile -f infra/helmfile/runtime.helmfile.yaml.gotmpl
+        -e standalone-multi
         --kube-context {{.WORKLOAD_CONTEXT}}
-        --namespace cert-manager --create-namespace
-        --version v1.14.5
-        -f infra/helm/cert-manager/values.yaml
-        --wait --timeout 3m
-      # Self-signed CA chain (issuers only — wildcard cert + TLSStore applied after Traefik)
-      - kubectl --context {{.WORKLOAD_CONTEXT}} apply -f infra/helm/cert-manager/cluster-issuer.yaml
-      # Traefik ingress controller with TLS, HA (2 replicas), and PDB
-      - >-
-        helm upgrade --install traefik traefik/traefik
-        --kube-context {{.WORKLOAD_CONTEXT}}
-        --namespace traefik --create-namespace
-        --version 28.3.0
-        -f infra/helm/traefik/values.yaml
-        --wait --timeout 3m
-      # Traefik middlewares: rate-limit, body-limit, security-headers
+        sync --skip-deps
+      # Post-sync: Traefik middlewares + wildcard cert + TLSStore
+      # (these are non-helm CRs that depend on Traefik + cert-manager CRDs being installed)
       - kubectl --context {{.WORKLOAD_CONTEXT}} apply -f infra/helm/traefik/middlewares.yaml
-      # Wildcard cert + TLSStore (requires Traefik CRDs + namespace — must come after Traefik install)
       - kubectl --context {{.WORKLOAD_CONTEXT}} apply -f infra/helm/cert-manager/traefik-tls.yaml
 
   infra:install:monitoring:
-    desc: Install Prometheus + Grafana + OTel in mgmt cluster
-    deps: [helm:repos]
+    desc: |
+      Install Prometheus + Grafana + OTel in mgmt cluster.
+
+      Note (T2.3 of plan 2026-05-22): monitoring releases (prometheus, grafana,
+      otel-collector, tempo, opencost) are now declared in mgmt.helmfile.yaml.gotmpl
+      and installed by `infra:install:mgmt`. This task is now a no-op alias for
+      backward compatibility — invokes dashboards:install + infra:install:loki only.
     cmds:
-      - >-
-        helm upgrade --install monitoring prometheus-community/kube-prometheus-stack
-        --kube-context {{.MGMT_CONTEXT}}
-        --namespace monitoring --create-namespace
-        --version 82.15.1
-        -f infra/helm/monitoring/values.yaml
-        --wait --timeout 8m
-      - >-
-        helm upgrade --install otel-collector open-telemetry/opentelemetry-collector
-        --kube-context {{.MGMT_CONTEXT}}
-        --namespace monitoring
-        --version 0.108.0
-        -f infra/helm/otel/values.yaml
-        --wait --timeout 3m
       - task: dashboards:install
       - task: infra:install:loki
 
   infra:install:loki:
-    desc: Install Grafana Loki (log aggregation) in mgmt cluster + Promtail in build cluster
+    desc: |
+      Install Grafana Loki (log aggregation) in build cluster + Promtail.
+
+      Note (T2.3 of plan 2026-05-22): loki + promtail are declared in
+      build.helmfile.yaml.gotmpl. This task uses helmfile sync for the
+      loki/promtail releases specifically (legacy compat — full install
+      happens in `infra:install:build`).
     deps: [helm:repos]
     cmds:
       - >-
-        helm upgrade --install loki grafana/loki
-        --kube-context {{.MGMT_CONTEXT}}
-        --namespace monitoring --create-namespace
-        --version 6.24.0
-        -f infra/helm/loki/values.yaml
-        --wait --timeout 5m
-      - >-
-        kubectl --context {{.MGMT_CONTEXT}}
-        apply -f infra/helm/loki/nodeport-service.yaml
+        helmfile -f infra/helmfile/build.helmfile.yaml.gotmpl
+        -e standalone-multi
+        --kube-context {{.BUILD_CONTEXT}}
+        --selector name=loki sync --skip-deps
+      - kubectl --context {{.MGMT_CONTEXT}} apply -f infra/helm/loki/nodeport-service.yaml
       # Promtail DaemonSet — scrape config filters for Argo Workflow pods ONLY (`workflows_argoproj_io_workflow` label).
       # At setup time, no workflows exist yet, so promtail's `/ready` endpoint returns 500 ("Unable to find any logs to tail").
       # `--wait` would timeout every bootstrap; readiness converges automatically once the first build runs.
@@ -281,13 +218,26 @@ tasks:
   # Cloud Auth: Ory Kratos + Hydra (Sprint 11)
   # ---------------------------------------------------------------------------
   cloud:setup:
-    desc: Install Ory Kratos + Hydra for auth (idempotent)
+    desc: |
+      Install Ory Kratos + Hydra for auth (idempotent).
+
+      Note (T2.3 of plan 2026-05-22): kratos + hydra are declared in
+      mgmt.helmfile.yaml.gotmpl and installed by `infra:install:mgmt`.
+      This task is now a thin wrapper that re-runs the helmfile sync for
+      these specific releases + ensures databases exist.
+
+      Pre-T2.3 namespace was loopzero-system; helmfile uses loopzero-auth. Migration
+      validated in T2.4 LIVE cleanroom.
     deps: [helm:repos]
     cmds:
+      # Ensure kratos + hydra databases (idempotent — chart values.yaml.gotmpl
+      # uses requiredEnv LOOPZERO_DB_PASSWORD which is set by generate-secrets.sh).
       - |
         echo "=== Ensuring kratos and hydra databases ==="
         POD=$(kubectl --context {{.MGMT_CONTEXT}} -n loopzero-system get pod -l app.kubernetes.io/name=postgresql -o jsonpath='{.items[0].metadata.name}')
-        PG_ADMIN_PASS=$(kubectl --context {{.MGMT_CONTEXT}} -n loopzero-system get secret postgresql -o jsonpath='{.data.postgres-password}' | base64 -d)
+        # T2.3.b (EC-02) — portable base64 via kubectl go-template
+        PG_ADMIN_PASS=$(kubectl --context {{.MGMT_CONTEXT}} -n loopzero-system \
+          get secret postgresql -o go-template='{{`{{.data.password | base64decode}}`}}')
         for DB in kratos hydra; do
           kubectl --context {{.MGMT_CONTEXT}} -n loopzero-system exec -i "$POD" -c postgresql -- \
             env PGPASSWORD="$PG_ADMIN_PASS" psql -U postgres -tc "SELECT 1 FROM pg_database WHERE datname='$DB'" | grep -q 1 || \
@@ -295,20 +245,17 @@ tasks:
             env PGPASSWORD="$PG_ADMIN_PASS" psql -U postgres -c "CREATE DATABASE $DB OWNER {{.PG_USER}}"
           echo "$DB database: ensured"
         done
-      - >-
-        helm upgrade --install ory-kratos ory/kratos
-        --kube-context {{.MGMT_CONTEXT}}
-        --namespace loopzero-system
-        --version 0.61.0
-        -f infra/helm/ory-kratos/values.yaml
-        --wait --timeout 5m
-      - >-
-        helm upgrade --install ory-hydra ory/hydra
-        --kube-context {{.MGMT_CONTEXT}}
-        --namespace loopzero-system
-        --version 0.61.0
-        -f infra/helm/ory-hydra/values.yaml
-        --wait --timeout 5m
+      # T2.3.a (EC-01) — helmfile sync ory releases via master pattern (needs:
+      # resolves postgresql → kratos → hydra ordering automatically).
+      - |
+        export LOOPZERO_DB_PASSWORD=$(kubectl --context {{.MGMT_CONTEXT}} -n loopzero-system \
+          get secret loopzero-db-credentials -o go-template='{{`{{.data.password | base64decode}}`}}' \
+          2>/dev/null || echo "")
+        helmfile -f infra/helmfile/mgmt.helmfile.yaml.gotmpl \
+          -e standalone-multi \
+          --kube-context {{.MGMT_CONTEXT}} \
+          --selector name=ory-kratos --selector name=ory-hydra \
+          sync --skip-deps
       - task: cloud:health
 
   cloud:health:
@@ -631,14 +578,17 @@ tasks:
         PASS=0
         FAIL=0
 
-        # Check ArgoCD token
-        ARGOCD_TOKEN=$(kubectl --context {{.MGMT_CONTEXT}} get secret loopzero-api-tokens -n loopzero-system -o jsonpath='{.data.argocd-token}' 2>/dev/null | base64 -d 2>/dev/null)
+        # Check ArgoCD token (T2.3.b portable base64 — kubectl go-template)
+        ARGOCD_TOKEN=$(kubectl --context {{.MGMT_CONTEXT}} -n loopzero-system \
+          get secret loopzero-api-tokens -o go-template='{{`{{.data.argocd-token | base64decode}}`}}' \
+          2>/dev/null)
         if [ -z "$ARGOCD_TOKEN" ]; then
           echo "  [FAIL] ArgoCD token — not found in secret loopzero-api-tokens"
           FAIL=$((FAIL+1))
         else
           # Check if token has expiration
-          EXP=$(echo "$ARGOCD_TOKEN" | cut -d. -f2 | base64 -d 2>/dev/null | python3 -c "
+          # T2.3.b portable: openssl base64 -d -A as fallback (no kubectl involved here — decoding JWT middle segment)
+          EXP=$(echo "$ARGOCD_TOKEN" | cut -d. -f2 | openssl base64 -d -A 2>/dev/null | python3 -c "
         import sys, json, datetime
         try:
           data = json.load(sys.stdin)
@@ -672,8 +622,10 @@ tasks:
           fi
         fi
 
-        # Check Gitea token
-        GITEA_TOKEN=$(kubectl --context {{.MGMT_CONTEXT}} get secret loopzero-api-tokens -n loopzero-system -o jsonpath='{.data.gitea-token}' 2>/dev/null | base64 -d 2>/dev/null)
+        # Check Gitea token (T2.3.b portable base64 — kubectl go-template)
+        GITEA_TOKEN=$(kubectl --context {{.MGMT_CONTEXT}} -n loopzero-system \
+          get secret loopzero-api-tokens -o go-template='{{`{{.data.gitea-token | base64decode}}`}}' \
+          2>/dev/null)
         if [ -z "$GITEA_TOKEN" ]; then
           echo "  [FAIL] Gitea token — not found"
           FAIL=$((FAIL+1))

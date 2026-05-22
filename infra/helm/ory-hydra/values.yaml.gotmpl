@@ -17,7 +17,11 @@ hydra:
     # T1.3 (plan 2026-05-21-deep-review-remediation): DSN templated via helmfile
     # env. LOOPZERO_DB_PASSWORD required (set by task setup OR generate-secrets.sh).
     # Pulumi prod overrides this entire DSN via Secret reference.
-    dsn: "postgres://loopzero:{{ requiredEnv \"LOOPZERO_DB_PASSWORD\" }}@postgresql.loopzero-system.svc.cluster.local:5432/hydra?sslmode=disable"
+    # EC-02 of plan 2026-05-22 v1.1 — single-quoted YAML allows unescaped
+    # double quotes inside gotmpl template literal. Previous `"..."` form
+    # with `\"` escape failed helmfile template render with
+    # `unexpected "\\" in operand`. Cleanroom bug discovered 2026-05-21.
+    dsn: 'postgres://loopzero:{{ requiredEnv "LOOPZERO_DB_PASSWORD" }}@postgresql.loopzero-system.svc.cluster.local:5432/hydra?sslmode=disable'
 
     # --- URLs ---
     urls:
