@@ -277,6 +277,33 @@ func TestProposeDisposition_BareHelmWrapper(t *testing.T) {
 	}
 }
 
+// TestScriptHasRealHelmInvocation — T0.1 false-positive-awareness: `helm
+// install`/`upgrade` inside a comment, an echo string, or a die() error message
+// is NOT a real invocation and must not trigger DELEGATE-HELMFILE.
+func TestScriptHasRealHelmInvocation(t *testing.T) {
+	cases := []struct {
+		name string
+		body string
+		want bool
+	}{
+		{"real-command", "#!/bin/bash\nhelm upgrade --install foo charts/foo\n", true},
+		{"real-indented", "#!/bin/bash\nif true; then\n    helm install foo charts/foo\nfi\n", true},
+		{"comment", "#!/bin/bash\n# install: helm upgrade --install chaos-mesh ...\n", false},
+		{"echo-string", "#!/bin/bash\necho \"    helm install chaos-mesh ...\"\n", false},
+		{"die-message", "#!/bin/bash\nkubectl get crd x || die \"install: helm upgrade --install ...\"\n", false},
+		{"none", "#!/bin/bash\nkubectl apply -f x.yaml\n", false},
+	}
+	for _, c := range cases {
+		path := filepath.Join(t.TempDir(), c.name+".sh")
+		if err := os.WriteFile(path, []byte(c.body), 0o644); err != nil {
+			t.Fatalf("write: %v", err)
+		}
+		if got := scriptHasRealHelmInvocation(path); got != c.want {
+			t.Errorf("%s: scriptHasRealHelmInvocation = %v, want %v", c.name, got, c.want)
+		}
+	}
+}
+
 // TestProposeDisposition_PureLogicGate — script pattern `check-*.sh` em
 // infra/scripts/ é candidato a MIGRATE-GO-PUREFN.
 func TestProposeDisposition_PureLogicGate(t *testing.T) {

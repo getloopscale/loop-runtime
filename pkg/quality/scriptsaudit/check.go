@@ -422,8 +422,11 @@ func ProposeDisposition(s Script) string {
 		return "DELETE-DEAD"
 	}
 
-	// 3. Bare helm wrapper: contains `helm upgrade` or `helm install`
-	if scriptContains(s.Path, "helm upgrade", "helm install ") {
+	// 3. Bare helm wrapper: a REAL `helm upgrade/install` command (line-start,
+	//    not inside a comment / echo string / die() message — a frequent
+	//    false-positive class for chaos/heal orchestrators that merely print
+	//    install instructions).
+	if scriptHasRealHelmInvocation(s.Path) {
 		return "DELEGATE-HELMFILE"
 	}
 
@@ -488,6 +491,31 @@ func scriptInvokesExternalCLI(path string) bool {
 		return false
 	}
 	return externalCLITokens.Match(data)
+}
+
+// helmInvocationLine matches a REAL helm upgrade/install command at the start
+// of a line (ignoring leading whitespace). It deliberately does NOT match
+// `helm install` embedded mid-line (echo strings, die() messages) — those are
+// instructions, not invocations.
+var helmInvocationLine = regexp.MustCompile(`^\s*helm\s+(upgrade|install)\b`)
+
+// scriptHasRealHelmInvocation returns true if the script body contains a real
+// `helm upgrade/install` command — a non-comment line whose first token is
+// `helm`. Comment lines (`#…`) and string-embedded mentions are skipped.
+func scriptHasRealHelmInvocation(path string) bool {
+	data, err := os.ReadFile(path) // #nosec G304 -- audit tool intentionally reads scanned script paths
+	if err != nil {
+		return false
+	}
+	for _, line := range strings.Split(string(data), "\n") {
+		if strings.HasPrefix(strings.TrimSpace(line), "#") {
+			continue
+		}
+		if helmInvocationLine.MatchString(line) {
+			return true
+		}
+	}
+	return false
 }
 
 // scriptContains reads the script file and returns true if it contains
