@@ -208,8 +208,11 @@ if [[ -n "$REG_IP" ]]; then
     if docker exec "$container" grep -qE "^${REG_IP}[[:space:]]+${REGISTRY_HOST}\b" /etc/hosts 2>/dev/null; then
       log "  $container: $REGISTRY_HOST → $REG_IP already present"
     else
+      # NOTE: docker bind-mounts /etc/hosts, so `sed -i` (write-temp + rename)
+      # fails with "can't move ...: Resource busy". Use cat-truncate (in-place
+      # write, no rename) to dedup, then append. Fix: finding-2026-05-22-pg-password-divergence § k3d-heal-H4.
       docker exec "$container" sh -c \
-        "sed -i '/[[:space:]]${REGISTRY_HOST}\$/d' /etc/hosts && echo '${REG_IP} ${REGISTRY_HOST}' >> /etc/hosts" \
+        "grep -v '[[:space:]]${REGISTRY_HOST}\$' /etc/hosts > /tmp/.loopzerohosts 2>/dev/null; cat /tmp/.loopzerohosts > /etc/hosts && echo '${REG_IP} ${REGISTRY_HOST}' >> /etc/hosts && rm -f /tmp/.loopzerohosts" \
         2>/dev/null && log "  $container: added $REG_IP $REGISTRY_HOST"
     fi
   }
