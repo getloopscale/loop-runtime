@@ -428,6 +428,15 @@ releases:
   - name: loopzero-api
     namespace: loopzero-system
     chart: ../helm/loopzero-api
+    # STANDALONE (local k3d): loopzero-api is owned by `tilt up` (self-contained
+    # infra/tilt/api-deployment.yaml + docker_build hash-tagged image). The
+    # helmfile chart uses image :latest which is NEVER built locally (only the
+    # 5 build-pipeline images are), so installing it here produced a 2-container
+    # frankenstein pod (helmfile `loopzero-api` :latest unpullable + tilt `api`) and
+    # its --wait deadlocked `task setup` before the build/workload clusters
+    # installed. Cloud/dev/prod/drill keep it installed (images from DOCR/CI).
+    # See finding-2026-05-22-pg-password-divergence § helmfile<->tilt dual-ownership.
+    installed: {{ ne (.Values | get "clusterRole" "dev") "standalone" }}
     needs:
       - argocd/argocd
       - loopzero-system/gitea
@@ -470,6 +479,9 @@ releases:
   - name: loopzero-tenant-operator
     namespace: loopzero-system
     chart: ../../charts/loopzero-tenant-operator
+    # STANDALONE: tilt owns operators (infra/tilt/*-operator-deployment.yaml).
+    # Same dual-ownership reason as loopzero-api. See finding-2026-05-22-pg-password-divergence.
+    installed: {{ ne (.Values | get "clusterRole" "dev") "standalone" }}
     needs:
       - loopzero-system/loopzero-api
       # B45: LoopZero CRDs must exist before controller-runtime starts watches.
@@ -485,6 +497,8 @@ releases:
   - name: loopzero-app-operator
     namespace: loopzero-system
     chart: ../../charts/loopzero-app-operator
+    # STANDALONE: tilt owns operators. See finding-2026-05-22-pg-password-divergence.
+    installed: {{ ne (.Values | get "clusterRole" "dev") "standalone" }}
     needs:
       - loopzero-system/loopzero-api
       - loopzero-system/loopzero-crds
@@ -499,6 +513,8 @@ releases:
   - name: loopzero-preview-operator
     namespace: loopzero-system
     chart: ../../charts/loopzero-preview-operator
+    # STANDALONE: tilt owns operators. See finding-2026-05-22-pg-password-divergence.
+    installed: {{ ne (.Values | get "clusterRole" "dev") "standalone" }}
     needs:
       - loopzero-system/loopzero-api
       - loopzero-system/loopzero-crds
@@ -513,6 +529,8 @@ releases:
   - name: loopzero-platform-operator
     namespace: loopzero-system
     chart: ../../charts/loopzero-platform-operator
+    # STANDALONE: tilt owns operators. See finding-2026-05-22-pg-password-divergence.
+    installed: {{ ne (.Values | get "clusterRole" "dev") "standalone" }}
     needs:
       - loopzero-system/loopzero-api
       - loopzero-system/loopzero-crds
@@ -530,7 +548,8 @@ releases:
     # Bug #29 LIVE fix (2026-05-17 iter 20): loopzero-cloud image not in DOCR
     # for drill. Skip — drill L2 harness goes through loopzero-api directly,
     # not loopzero-cloud dashboard. Production keeps loopzero-cloud installed.
-    installed: {{ ne .Environment.Name "drill" }}
+    # STANDALONE: tilt owns loopzero-cloud (dual-ownership, same as loopzero-api).
+    installed: {{ and (ne .Environment.Name "drill") (ne (.Values | get "clusterRole" "dev") "standalone") }}
     needs:
       - loopzero-auth/ory-hydra
       - loopzero-system/loopzero-api
@@ -567,7 +586,9 @@ releases:
     chart: ../helm/smoke-test
     # Bug #29 LIVE fix: skip in drill — depends on loopzero-cloud (skipped).
     # Drill validates via Phase 6 L2 harness directly.
-    installed: {{ ne .Environment.Name "drill" }}
+    # STANDALONE: depends on the tilt-owned app tier (loopzero-api/cloud/operators),
+    # so skip the helmfile smoke-test locally too. See finding-2026-05-22-pg-password-divergence.
+    installed: {{ and (ne .Environment.Name "drill") (ne (.Values | get "clusterRole" "dev") "standalone") }}
     needs:
       - loopzero-system/loopzero-api
 {{- if ne .Environment.Name "drill" }}
