@@ -28,11 +28,15 @@ TESTS_FAILED=0
 build_env_all_pass() {
   local tmpdir="$1"
 
-  mkdir -p "$tmpdir/infra/scripts" "$tmpdir/infra/pulumi-drill" "$tmpdir/bin"
+  mkdir -p "$tmpdir/infra/scripts/dr" "$tmpdir/infra/pulumi-drill" "$tmpdir/bin"
 
-  # Create executable script placeholders (drill-preflight only checks -x)
-  for script in drill-state-reset drill-helmfile-bootstrap drill-cancel-refresh \
-                drill-evidence-capture drill-teardown-validator \
+  # Create executable script placeholders at the paths dr/preflight.sh checks
+  # (drill-preflight only checks -x). Post dr/ relocation: state-reset,
+  # cancel-refresh, evidence-capture, teardown-validator live under dr/;
+  # drill-helmfile-bootstrap stayed at infra/scripts/; the isolation script
+  # is at infra/scripts/.
+  for script in dr/state-reset dr/cancel-refresh dr/evidence-capture \
+                dr/teardown-validator drill-helmfile-bootstrap \
                 check-drill-credentials-isolation; do
     echo '#!/usr/bin/env bash' > "$tmpdir/infra/scripts/$script.sh"
     echo 'exit 0' >> "$tmpdir/infra/scripts/$script.sh"
