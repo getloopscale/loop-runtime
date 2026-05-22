@@ -6,11 +6,43 @@
 **Plan version:** v1.3 (`docs/plans/2026-05-22-shell-script-strategic-plan.md`)
 **Branch:** `refactor/shell-scripts-strategic`
 **Promise:** "TODAS AS TASKS, CRITERIOS DE ACEITES, DODs CONCLUIDOS E VALIDADOS CLEANROON, DOGFOOD E CHAOS-TEST FUNCIIONAIS"
-**Promise eligibility:** ❌ FALSE — Phases 1-7 + 3 LIVE gates pending
+**Promise eligibility:** ❌ FALSE — Phases 2/4 + T5.1 + N(bash)≤30 still pending (3 LIVE gates now GREEN)
 
 ---
 
 ## Iteration log
+
+### Iter 41 (2026-05-22) — 3 LIVE gates GREEN (cleanroom + dogfood + chaos-test)
+
+**Done (LIVE on fresh k3d cleanroom):**
+- **Cleanroom:** converged — `task setup` exit 0, `task doctor` FAIL=0.
+- **`/dogfood full`:** PASS — Ginkgo journey 106 effective Passed / 0 Failed / 236 Skipped.
+  Root-caused + fixed the only 3 failures (Velero V-2/V-7/V-8): LIVE
+  `velero-s3-credentials` was stale `minioadmin` (script already root-fixed in
+  86b3dc18; the cleanroom secret was patched live for minio-credentials but the
+  velero copy was missed). Patched + restarted velero → BSL Available → Journey 12
+  re-run 8/8 GREEN.
+- **`/chaos-test --full`:** PASS — **10/10 scenarios (C01-C10)**. Required:
+  (a) install chaos-mesh in mgmt+workload+build (was opt-in `installChaosMesh:false`,
+  absent on all 3 — C03/C04/C06/C10 target workload/build);
+  (b) fix 3 `set -e`+`pipefail` fragilities in `baseline.sh` (restart_count +
+  ARGOCD_TOTAL assumed control-plane/argocd namespaces exist on the target cluster;
+  they only exist on mgmt) + `run-full.sh` (rc capture + metrics grep aborted the
+  whole suite on one scenario's pre-flight failure). Commit `cabfaf19`.
+  The 3 INCONCLUSIVE in the bundled run were a timing artifact (baseline.sh edit
+  landed mid-run); re-ran C03/C04/C06 individually with the fixed baseline → all PASS.
+
+**Still pending (operator-gated / not Ralph-safe — blocks the promise):**
+- N(bash) = 221 (target ≤30). Requires Phase 2 (delegate `infra:install:*` to
+  helmfile sync under LIVE cleanroom) + Phase 4 (migrate ~32 parity/dogfood `.sh`
+  to Ginkgo, then delete). Both destroy/recreate infra or migrate test orchestration.
+- T5.1 (`pkg/pulumi/archive` + `pkg/pulumi/orphanrm`) MISSING — Pulumi Automation
+  API; heavy dep + needs a real Pulumi backend to validate, not LIVE-testable here.
+
+**Cross-validation verdict (full plan DoD): REPROVADO** — principal DoD unmet
+(N(bash)≤30; T5.1 absent; Phases 2/4 incomplete). The delivered subset is conformant
+and green (no-new-bash + no-shell-wrap gates PASS, scriptsaudit/Pluto/OpenCost/allowlist
+present). The 3 LIVE gates the operator prioritized are now functional.
 
 ### Iter 40 (2026-05-22) — Phase 1 read-verify: 4 zero-ref candidates are functional-but-unwired (NOT deleted)
 
