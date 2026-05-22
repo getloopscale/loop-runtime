@@ -36,7 +36,7 @@ ROOT_DIR="$(cd "$SCRIPT_DIR/../.." && pwd)"
 cd "$ROOT_DIR"
 
 # shellcheck source=infra/scripts/lib/drill-skill-common.sh
-source "$SCRIPT_DIR/lib/drill-skill-common.sh"
+source "$SCRIPT_DIR/../lib/drill-skill-common.sh"
 
 # --- Args ---
 DRILL_SKILL_CONFIRM_COST="${DRILL_SKILL_CONFIRM_COST:-false}"

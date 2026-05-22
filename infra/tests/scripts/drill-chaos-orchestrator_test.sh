@@ -20,6 +20,7 @@ build_stubs() {
   local curl_code="${4:-200}"
 
   mkdir -p "$tmpdir/bin" "$tmpdir/infra/scripts" "$tmpdir/infra/scripts/lib" \
+           "$tmpdir/infra/scripts/dr" \
            "$tmpdir/infra/tests/chaos/manifests"
 
   # Stub: cleanroom-drill
@@ -97,7 +98,7 @@ EOF
 
   # Copy real lib + orchestrator
   cp "$ROOT/infra/scripts/lib/drill-skill-common.sh" "$tmpdir/infra/scripts/lib/"
-  cp "$ROOT/infra/scripts/dr/chaos-orchestrator.sh" "$tmpdir/infra/scripts/"
+  cp "$ROOT/infra/scripts/dr/chaos-orchestrator.sh" "$tmpdir/infra/scripts/dr/"
   chmod +x "$tmpdir/infra/scripts/dr/chaos-orchestrator.sh"
 
   # Fake runtime kubeconfig

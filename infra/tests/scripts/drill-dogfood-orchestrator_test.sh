@@ -22,7 +22,7 @@ build_stubs() {
   local curl_code="${4:-200}"
   local invariant_pass="${5:-true}"
 
-  mkdir -p "$tmpdir/bin" "$tmpdir/infra/scripts" "$tmpdir/infra/scripts/lib" "$tmpdir/infra/tests/e2e/fixtures/hello-server"
+  mkdir -p "$tmpdir/bin" "$tmpdir/infra/scripts" "$tmpdir/infra/scripts/lib" "$tmpdir/infra/scripts/dr" "$tmpdir/infra/tests/e2e/fixtures/hello-server"
 
   # Stub: cleanroom-drill (delegated foundation step)
   cat > "$tmpdir/infra/scripts/dr/cleanroom-orchestrator.sh" <<EOF
@@ -114,7 +114,7 @@ EOF
 
   # Copy real lib + orchestrator
   cp "$ROOT/infra/scripts/lib/drill-skill-common.sh" "$tmpdir/infra/scripts/lib/"
-  cp "$ROOT/infra/scripts/dr/dogfood-orchestrator.sh" "$tmpdir/infra/scripts/"
+  cp "$ROOT/infra/scripts/dr/dogfood-orchestrator.sh" "$tmpdir/infra/scripts/dr/"
   chmod +x "$tmpdir/infra/scripts/dr/dogfood-orchestrator.sh"
 
   # Fake runtime kubeconfig (file exists for invariants step)

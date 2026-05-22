@@ -37,7 +37,7 @@ cd "$ROOT_DIR"
 
 # Source shared library (Phase 4 T4.1)
 # shellcheck source=infra/scripts/lib/drill-skill-common.sh
-source "$SCRIPT_DIR/lib/drill-skill-common.sh"
+source "$SCRIPT_DIR/../lib/drill-skill-common.sh"
 
 # --- Argument parsing ---
 DRILL_SKILL_CONFIRM_COST="${DRILL_SKILL_CONFIRM_COST:-false}"

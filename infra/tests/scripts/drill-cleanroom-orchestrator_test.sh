@@ -30,7 +30,7 @@ build_stubs() {
   local cell_connected="${5:-true}"
   local pg_host_managed="${6:-true}"
 
-  mkdir -p "$tmpdir/bin" "$tmpdir/infra/scripts" "$tmpdir/infra/pulumi-drill"
+  mkdir -p "$tmpdir/bin" "$tmpdir/infra/scripts" "$tmpdir/infra/scripts/dr" "$tmpdir/infra/pulumi-drill"
 
   # Stub: task (drill:up + drill:down)
   cat > "$tmpdir/bin/task" <<EOF
@@ -121,7 +121,7 @@ EOF
   # Copy real lib + orchestrator + invoke with stub PATH
   mkdir -p "$tmpdir/infra/scripts/lib"
   cp "$ROOT/infra/scripts/lib/drill-skill-common.sh" "$tmpdir/infra/scripts/lib/"
-  cp "$ROOT/infra/scripts/dr/cleanroom-orchestrator.sh" "$tmpdir/infra/scripts/"
+  cp "$ROOT/infra/scripts/dr/cleanroom-orchestrator.sh" "$tmpdir/infra/scripts/dr/"
   chmod +x "$tmpdir/infra/scripts/dr/cleanroom-orchestrator.sh"
 
   # Stub Taskfile (orchestrator runs from tmpdir/infra/scripts/.. = tmpdir)

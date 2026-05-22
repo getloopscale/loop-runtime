@@ -29,7 +29,7 @@ ROOT_DIR="$(cd "$SCRIPT_DIR/../.." && pwd)"
 cd "$ROOT_DIR"
 
 # shellcheck source=infra/scripts/lib/drill-skill-common.sh
-source "$SCRIPT_DIR/lib/drill-skill-common.sh"
+source "$SCRIPT_DIR/../lib/drill-skill-common.sh"
 
 # --- Args ---
 DRILL_SKILL_CONFIRM_COST="${DRILL_SKILL_CONFIRM_COST:-false}"
@@ -160,7 +160,7 @@ drill_skill_log "  ✓ JWT minted (len=${#LOOPZERO_TOKEN})"
 drill_skill_log "Step 3/4: Run 7 CLI journeys (REAL deploy E2E via \$LOOPZERO)"
 
 # shellcheck source=infra/scripts/lib/drill-dogfood-journeys.sh
-source "$SCRIPT_DIR/lib/drill-dogfood-journeys.sh"
+source "$SCRIPT_DIR/../lib/drill-dogfood-journeys.sh"
 
 API_URL="https://api.${DRILL_BASE_DOMAIN:-loopzero-drill.example}/api/v1"
 JOURNEYS_PASSED=0
