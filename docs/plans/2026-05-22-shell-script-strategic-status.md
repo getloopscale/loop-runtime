@@ -12,6 +12,35 @@
 
 ## Iteration log
 
+### Iter 19 (2026-05-22) — Phase 5 T5.3 (action-pinning pure-Go gate + LATENT BUG FIXED)
+
+**Commit:** (current)
+
+**Done:**
+- `pkg/quality/actionpinning/` (NEW) — pure-Go gate replacing
+  `scripts/check-action-pinning.sh` (INF-G18 supply-chain SHA-pinning).
+  Scans `.github/workflows/*.yml` for `uses:` refs not pinned to a 40-hex SHA;
+  exempts relative-path reusable workflows + `# pragma: allow-tag-pin` within a
+  4-line comment-only lookback window. 13 tests GREEN, 92.4% coverage.
+- **LATENT NO-OP BUG FOUND + FIXED:** the bash regex `^[[:space:]]*uses:`
+  never matched the inline `- uses:` form used by 100% of LoopZero workflows — the
+  gate always reported GREEN regardless of violations. Go matcher corrected to
+  `^[[:space:]]*-?[[:space:]]*uses:` (catches inline + standalone). Documented
+  in `finding-2026-05-22-action-pinning-noop.md`.
+- `cmd/loopzero-ops` `action-pinning` subcommand.
+- `.github/workflows/infra-gates.yml` — action-pinning job rewritten to call
+  the Go gate (removed the `if [ -f ... ] else exit 0` silent-no-op wrapper);
+  path filters repointed `scripts/check-action-pinning.sh` → `pkg/quality/actionpinning/**`.
+- **Parity:** Go gate GREEN on real repo (0 violations — all tag-pins are
+  pragma-exempt), same verdict as bash but for the CORRECT reason (functional,
+  not no-op).
+- `check-action-pinning.sh` DELETED; allowlist 245 (was 246).
+
+**Script count: 246 → 245** (14 deletions cumulative; repo find=259 incl.
+non-allowlist skill/test helpers). 17 Go quality gates.
+
+---
+
 ### Iter 18 (2026-05-22) — Phase 5 T5.3 (runtime-slo pure-Go gate)
 
 **Commit:** (current)

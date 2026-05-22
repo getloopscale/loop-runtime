@@ -25,7 +25,7 @@ on:
       - "charts/**"
       - ".github/workflows/**"
       - "scripts/audit-security-context.sh"
-      - "scripts/check-action-pinning.sh"
+      - "pkg/quality/actionpinning/**"
       # 2026-05-20: extend filter to include divergence-matrix gate
       # (was missing — script changes did not re-trigger CI validation)
       - "pkg/quality/divergencematrix/**"
@@ -45,7 +45,7 @@ on:
       - "charts/**"
       - ".github/workflows/**"
       - "scripts/audit-security-context.sh"
-      - "scripts/check-action-pinning.sh"
+      - "pkg/quality/actionpinning/**"
       # 2026-05-20: matrix integrity (see push filter notes above)
       - "pkg/quality/divergencematrix/**"
       - ".claude/knowledge-base/concepts/operations/local-prod-divergence-matrix.md"
@@ -98,14 +98,18 @@ jobs:
     steps:
       - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
 
-      - name: Check action pinning
-        run: |
-          if [ -f scripts/check-action-pinning.sh ]; then
-            bash scripts/check-action-pinning.sh
-          else
-            echo "::warning::scripts/check-action-pinning.sh not yet created (T1.1 pending)"
-            exit 0
-          fi
+      - name: Set up Go
+        uses: actions/setup-go@0aaccfd150d50ccaeb58ebd88d36e91967a5f35b # v5.4.0
+        with:
+          go-version: '1.25.10'
+          cache-dependency-path: cmd/loopzero-ops/go.sum
+
+      # T5.3 of plan 2026-05-22: migrated from scripts/check-action-pinning.sh to
+      # pure-Go gate. The bash regex `^[[:space:]]*uses:` silently MISSED the
+      # inline `- uses:` form (latent no-op — see finding-2026-05-22-action-pinning-noop).
+      # The Go gate fixes that: it matches both inline and standalone uses lines.
+      - name: Run action-pinning gate (INF-G18)
+        run: cd cmd/loopzero-ops && go run . quality action-pinning --workflows-dir "${GITHUB_WORKSPACE}/.github/workflows"
 
   # ──────────────────────────────────────────────────────────────────────
   # Plan T5.2 — Local↔Prod divergence matrix integrity

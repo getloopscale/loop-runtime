@@ -10,6 +10,7 @@ import (
 	"os"
 	"strings"
 
+	"github.com/loopzero/loopzero/pkg/quality/actionpinning"
 	"github.com/loopzero/loopzero/pkg/quality/divergencematrix"
 	"github.com/loopzero/loopzero/pkg/quality/helmdrift"
 	"github.com/loopzero/loopzero/pkg/quality/mockbudget"
@@ -88,6 +89,8 @@ func runQuality(args []string) int {
 		return runHelmDrift(args[1:])
 	case "runtime-slo":
 		return runRuntimeSLO(args[1:])
+	case "action-pinning":
+		return runActionPinning(args[1:])
 	default:
 		fmt.Fprintf(os.Stderr, "unknown gate: %s\n\n%s", args[0], qualityHelp)
 		return 1
@@ -502,5 +505,30 @@ func runRuntimeSLO(args []string) int {
 		return 1
 	}
 	fmt.Println("[runtime-slo] PASS — all tests/suites within SLO")
+	return 0
+}
+
+func runActionPinning(args []string) int {
+	fs := flag.NewFlagSet("action-pinning", flag.ContinueOnError)
+	dir := fs.String("workflows-dir", ".github/workflows", "directory of *.yml workflow files")
+	if err := fs.Parse(args); err != nil {
+		return 1
+	}
+	o, err := actionpinning.Check(actionpinning.Config{WorkflowsDir: *dir})
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "action-pinning: %v\n", err)
+		return 2
+	}
+	if !o.Pass {
+		fmt.Fprintf(os.Stderr, "❌ INF-G18 FAILED — %d tag-pinned action(s):\n\n", len(o.Violations))
+		for _, v := range o.Violations {
+			fmt.Fprintf(os.Stderr, "  %s\n", v)
+		}
+		fmt.Fprintln(os.Stderr, "")
+		fmt.Fprintln(os.Stderr, "Action: replace each @v<N> with @<sha40> (40-char commit SHA).")
+		fmt.Fprintln(os.Stderr, "If a line is genuinely exempt, prepend: # pragma: allow-tag-pin")
+		return 1
+	}
+	fmt.Printf("✅ INF-G18 GREEN — 0 tag-pinned actions in %d workflows.\n", o.WorkflowCount)
 	return 0
 }
