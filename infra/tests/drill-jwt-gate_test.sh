@@ -95,32 +95,28 @@ EOF
 chmod +x "$WORK/curl-000.sh"
 
 # ---- Case 1: 200 response → exit 0 (PASS) ----
-out=$(verify_jwt_auth_e2e "http://test/api" "$WORK/mint-ok.sh" "$WORK/curl-200.sh" "tn-test" 2>&1)
-rc=$?
+if out=$(verify_jwt_auth_e2e "http://test/api" "$WORK/mint-ok.sh" "$WORK/curl-200.sh" "tn-test" 2>&1); then rc=0; else rc=$?; fi
 assert_eq "200 response → exit 0" "0" "$rc"
 [[ "$out" == *"PASS (HTTP 200)"* ]] && \
   { echo "PASS: 200 produces PASS log"; pass=$((pass+1)); } || \
   { echo "FAIL: 200 log: $out"; fail=$((fail+1)); }
 
 # ---- Case 2: 401 response → exit 1 (FAIL) ----
-out=$(verify_jwt_auth_e2e "http://test/api" "$WORK/mint-ok.sh" "$WORK/curl-401.sh" "tn-test" 2>&1)
-rc=$?
+if out=$(verify_jwt_auth_e2e "http://test/api" "$WORK/mint-ok.sh" "$WORK/curl-401.sh" "tn-test" 2>&1); then rc=0; else rc=$?; fi
 assert_eq "401 response → exit 1" "1" "$rc"
 [[ "$out" == *"FAIL (HTTP 401"* ]] && \
   { echo "PASS: 401 produces FAIL log"; pass=$((pass+1)); } || \
   { echo "FAIL: 401 log: $out"; fail=$((fail+1)); }
-[[ "$out" == *"drill-jwt-diagnose"* ]] && \
+[[ "$out" == *"jwt-diagnose"* ]] && \
   { echo "PASS: 401 log points to diagnose script"; pass=$((pass+1)); } || \
   { echo "FAIL: 401 log missing diagnose pointer: $out"; fail=$((fail+1)); }
 
 # ---- Case 3: 500 response → exit 1 (FAIL) ----
-out=$(verify_jwt_auth_e2e "http://test/api" "$WORK/mint-ok.sh" "$WORK/curl-500.sh" "tn-test" 2>&1)
-rc=$?
+if out=$(verify_jwt_auth_e2e "http://test/api" "$WORK/mint-ok.sh" "$WORK/curl-500.sh" "tn-test" 2>&1); then rc=0; else rc=$?; fi
 assert_eq "500 response → exit 1" "1" "$rc"
 
 # ---- Case 4: 000 (network error) → exit 1 ----
-out=$(verify_jwt_auth_e2e "http://test/api" "$WORK/mint-ok.sh" "$WORK/curl-000.sh" "tn-test" 2>&1)
-rc=$?
+if out=$(verify_jwt_auth_e2e "http://test/api" "$WORK/mint-ok.sh" "$WORK/curl-000.sh" "tn-test" 2>&1); then rc=0; else rc=$?; fi
 assert_eq "000 response → exit 1" "1" "$rc"
 
 # ---- Case 5: 201 response → exit 0 (PASS) — 2xx wildcard works ----
@@ -129,21 +125,18 @@ cat > "$WORK/curl-201.sh" <<'EOF'
 echo -n "201"
 EOF
 chmod +x "$WORK/curl-201.sh"
-out=$(verify_jwt_auth_e2e "http://test/api" "$WORK/mint-ok.sh" "$WORK/curl-201.sh" "tn-test" 2>&1)
-rc=$?
+if out=$(verify_jwt_auth_e2e "http://test/api" "$WORK/mint-ok.sh" "$WORK/curl-201.sh" "tn-test" 2>&1); then rc=0; else rc=$?; fi
 assert_eq "201 response → exit 0 (2xx wildcard)" "0" "$rc"
 
 # ---- Case 6: mint failure → exit 1 ----
-out=$(verify_jwt_auth_e2e "http://test/api" "$WORK/mint-fail.sh" "$WORK/curl-200.sh" "tn-test" 2>&1)
-rc=$?
+if out=$(verify_jwt_auth_e2e "http://test/api" "$WORK/mint-fail.sh" "$WORK/curl-200.sh" "tn-test" 2>&1); then rc=0; else rc=$?; fi
 assert_eq "mint failure → exit 1" "1" "$rc"
 [[ "$out" == *"JWT mint failed"* ]] && \
   { echo "PASS: mint failure produces explicit log"; pass=$((pass+1)); } || \
   { echo "FAIL: mint failure log: $out"; fail=$((fail+1)); }
 
 # ---- Case 7: invalid JWT format (no dots) → exit 1 ----
-out=$(verify_jwt_auth_e2e "http://test/api" "$WORK/mint-bad.sh" "$WORK/curl-200.sh" "tn-test" 2>&1)
-rc=$?
+if out=$(verify_jwt_auth_e2e "http://test/api" "$WORK/mint-bad.sh" "$WORK/curl-200.sh" "tn-test" 2>&1); then rc=0; else rc=$?; fi
 assert_eq "invalid JWT format → exit 1" "1" "$rc"
 
 # ---- Case 8: function preserves source guard idempotency ----
@@ -161,8 +154,7 @@ cat > "$WORK/curl-301.sh" <<'EOF'
 echo -n "301"
 EOF
 chmod +x "$WORK/curl-301.sh"
-out=$(verify_jwt_auth_e2e "http://test/api" "$WORK/mint-ok.sh" "$WORK/curl-301.sh" "tn-test" 2>&1)
-rc=$?
+if out=$(verify_jwt_auth_e2e "http://test/api" "$WORK/mint-ok.sh" "$WORK/curl-301.sh" "tn-test" 2>&1); then rc=0; else rc=$?; fi
 assert_eq "301 redirect → exit 1 (NOT 2xx wildcard)" "1" "$rc"
 
 # ---- Case 10 (iter 2 edge): 422 unprocessable → FAIL ----
@@ -171,8 +163,7 @@ cat > "$WORK/curl-422.sh" <<'EOF'
 echo -n "422"
 EOF
 chmod +x "$WORK/curl-422.sh"
-out=$(verify_jwt_auth_e2e "http://test/api" "$WORK/mint-ok.sh" "$WORK/curl-422.sh" "tn-test" 2>&1)
-rc=$?
+if out=$(verify_jwt_auth_e2e "http://test/api" "$WORK/mint-ok.sh" "$WORK/curl-422.sh" "tn-test" 2>&1); then rc=0; else rc=$?; fi
 assert_eq "422 unprocessable → exit 1" "1" "$rc"
 
 # ---- Final report ----
