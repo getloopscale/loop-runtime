@@ -325,6 +325,38 @@ func TestProposeDisposition_PureCheckScript_StaysPureFn(t *testing.T) {
 	}
 }
 
+// TestProposeDisposition_GeneratorThatShellsOut_NotPureGenerator — T0.1
+// false-positive-awareness: a `generate-*.sh` that injects secrets via kubectl
+// is a bootstrap injector, NOT a pure file generator. It belongs to the
+// helmfile-delegation slice, not a hermetic go:generate migration.
+func TestProposeDisposition_GeneratorThatShellsOut_NotPureGenerator(t *testing.T) {
+	root := t.TempDir()
+	path := filepath.Join(root, "generate-secrets.sh")
+	body := "#!/bin/bash\nPW=$(openssl rand -hex 16)\nkubectl create secret generic foo --from-literal=pw=$PW\n"
+	if err := os.WriteFile(path, []byte(body), 0o644); err != nil {
+		t.Fatalf("write: %v", err)
+	}
+	s := Script{Path: path, LOC: 3, LastMod: time.Now(), Callers: []string{"Taskfile.yml"}}
+	if disp := ProposeDisposition(s); disp == "MIGRATE-GENERATOR" {
+		t.Errorf("generate-* that shells out must NOT be MIGRATE-GENERATOR, got %s", disp)
+	}
+}
+
+// TestProposeDisposition_PureGenerator_StaysGenerator — converse: a generate-*
+// with no external CLI (writes files only) remains MIGRATE-GENERATOR.
+func TestProposeDisposition_PureGenerator_StaysGenerator(t *testing.T) {
+	root := t.TempDir()
+	path := filepath.Join(root, "gen-state-machine-dots.sh")
+	body := "#!/bin/bash\nfor m in build release; do echo \"digraph $m {}\" > docs/$m.dot; done\n"
+	if err := os.WriteFile(path, []byte(body), 0o644); err != nil {
+		t.Fatalf("write: %v", err)
+	}
+	s := Script{Path: path, LOC: 2, LastMod: time.Now(), Callers: []string{"Taskfile.yml"}}
+	if disp := ProposeDisposition(s); disp != "MIGRATE-GENERATOR" {
+		t.Errorf("pure generate-* must stay MIGRATE-GENERATOR, got %s", disp)
+	}
+}
+
 // TestProposeDisposition_ScriptWithDynamicCaller_NotMarkedDead — EC-03:
 // Quando script é referenciado via interpolação dinâmica (`bash "$VAR"`),
 // caller_count fica em zero (regex não pega), mas a heurística NÃO deve marcar

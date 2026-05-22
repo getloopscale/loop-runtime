@@ -455,8 +455,14 @@ func ProposeDisposition(s Script) string {
 		return "MIGRATE-GO-SDK"
 	}
 
-	// 8. Generator pattern: gen-*.sh or generate-*.sh
+	// 8. Generator pattern: gen-*.sh or generate-*.sh — but only if it's a PURE
+	//    file generator. A generate-* that shells out (e.g. injects secrets via
+	//    kubectl) is a bootstrap injector → helmfile-delegation slice, not a
+	//    hermetic go:generate migration.
 	if strings.HasPrefix(stem, "gen-") || strings.HasPrefix(stem, "generate-") {
+		if scriptInvokesExternalCLI(s.Path) {
+			return "DELEGATE-HELMFILE"
+		}
 		return "MIGRATE-GENERATOR"
 	}
 
