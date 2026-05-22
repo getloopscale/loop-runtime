@@ -131,3 +131,15 @@ infra/tests/unit/operator_cutover_invariants_test.go:86
 infra/tests/unit/operator_metrics_registration_test.go:65
 infra/tests/unit/workflow_template_test.go:63
 pkg/serviceauth/payload_test.go:93
+
+# --- Added 2026-05-22 (plan T5.3 skip-link gate migration to Go) ---
+# 4 are fixture string-literals in the skip-link gate's OWN test (test data
+# that necessarily contains t.Skip( patterns — unavoidable self-reference).
+# 2 are env-conditional skips in test files added this session (run-from-env
+# guards, same accepted class as the existing grandfathered entries).
+pkg/quality/scriptsaudit/check_test.go:97
+pkg/quality/skiplink/check_test.go:40
+pkg/quality/skiplink/check_test.go:57
+pkg/quality/skiplink/check_test.go:99
+pkg/quality/skiplink/check_test.go:118
+pkg/statemachine/cmd/gen-dots/gen_dots_test.go:121

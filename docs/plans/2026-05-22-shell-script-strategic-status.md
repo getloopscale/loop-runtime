@@ -12,6 +12,30 @@
 
 ## Iteration log
 
+### Iter 16 (2026-05-22) — Phase 5 T5.3 (skip-link gate + AUTO-DIE + worktree bug caught)
+
+**Commit:** (current)
+
+**Done:**
+- `pkg/quality/skiplink/` (NEW) — pure-Go gate replacing `check-skip-link.sh`.
+  Scans test files for skip calls (t.Skip/it.skip/xit) lacking a nearby issue
+  URL; baseline-aware grandfathering; *_skip_test.go naming exemption. 11 tests GREEN.
+- **Parity verified:** both bash + Go found exactly 114 NEW (incl. nested
+  worktrees). Go adds `worktrees` exclusion → local==CI (bash blindspot fixed).
+- **6 session-introduced skips grandfathered** in baseline (4 skiplink fixture
+  string-literals + 2 env-conditional skips in scriptsaudit/gen-dots tests),
+  documented in baseline. Go now PASS (115 grandfathered).
+- **2 scripts DELETED:** `check-skip-link.sh` + `check-skip-link-baseline_test.sh`
+  (D6 AUTO-DIE — Go testify replaces bash hermetic test).
+- `cmd/loopzero-ops` + `.github/workflows/quality-gates.yml` updated. allowlist 247 (was 249).
+
+**Bug caught:** nested git worktrees (`.claude/worktrees/`) polluted both gates'
+scans (114 phantom violations). Go gate excludes them — strictly more correct.
+
+**Script count: 249 → 247** (10 deletions cumulative). 14 Go quality gates.
+
+---
+
 ### Iter 15 (2026-05-22) — Phase 5 T5.3 (mock-budget pure-Go gate, parity-verified)
 
 **Commit:** (current)

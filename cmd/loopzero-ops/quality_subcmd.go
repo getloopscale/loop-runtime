@@ -14,6 +14,7 @@ import (
 	"github.com/loopzero/loopzero/pkg/quality/nonewbash"
 	"github.com/loopzero/loopzero/pkg/quality/noshellwrap"
 	"github.com/loopzero/loopzero/pkg/quality/scriptsaudit"
+	"github.com/loopzero/loopzero/pkg/quality/skiplink"
 	"github.com/loopzero/loopzero/pkg/quality/taskfileinterface"
 	"github.com/loopzero/loopzero/pkg/quality/testdeletion"
 	"github.com/loopzero/loopzero/pkg/quality/testpyramid"
@@ -77,6 +78,8 @@ func runQuality(args []string) int {
 		return runRegressionTest(args[1:])
 	case "mock-budget":
 		return runMockBudget(args[1:])
+	case "skip-link":
+		return runSkipLink(args[1:])
 	default:
 		fmt.Fprintf(os.Stderr, "unknown gate: %s\n\n%s", args[0], qualityHelp)
 		return 1
@@ -343,5 +346,41 @@ func runMockBudget(args []string) int {
 		return 1
 	}
 	fmt.Printf("[mock-budget] PASS — all test files within budget (%d mocks/file)\n", *budget)
+	return 0
+}
+
+func runSkipLink(args []string) int {
+	fs := flag.NewFlagSet("skip-link", flag.ContinueOnError)
+	dir := fs.String("dir", ".", "target directory to scan")
+	baseline := fs.String("baseline", "infra/quality/skip-link-baseline.txt", "baseline file")
+	ignoreBaseline := fs.Bool("ignore-baseline", false, "treat all violations as new")
+	if err := fs.Parse(args); err != nil {
+		return 1
+	}
+	o, err := skiplink.Check(skiplink.Config{
+		TargetDir:      *dir,
+		BaselineFile:   *baseline,
+		IgnoreBaseline: *ignoreBaseline,
+	})
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "[skip-link] %v\n", err)
+		return 5
+	}
+	if !o.Pass {
+		fmt.Fprintf(os.Stderr, "[skip-link] FAIL: %d NEW skip(s) without issue URL:\n", len(o.NewViolations))
+		for _, v := range o.NewViolations {
+			fmt.Fprintf(os.Stderr, "  %s\n", v)
+		}
+		fmt.Fprintln(os.Stderr, "[skip-link] fix: add a GitHub issue URL near the Skip, OR rename to *_skip_test.go")
+		if o.BaselineCount > 0 {
+			fmt.Fprintf(os.Stderr, "[skip-link] note: %d grandfathered violations in baseline — do NOT add new entries\n", o.BaselineCount)
+		}
+		return 1
+	}
+	if o.BaselineCount > 0 {
+		fmt.Printf("[skip-link] PASS — no NEW violations (%d grandfathered)\n", o.BaselineCount)
+	} else {
+		fmt.Println("[skip-link] PASS — all skip calls have issue URL")
+	}
 	return 0
 }
