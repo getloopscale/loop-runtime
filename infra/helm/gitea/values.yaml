@@ -49,20 +49,23 @@ gitea:
     # Bug #44 HA config (per Gitea Enterprise HA docs + helm-gitea/ha-setup.md).
     # Without these, session/cache/queue use in-memory per-pod → auth cache
     # misses race across pods, producing 401 mid-stream. Redis shares state.
-    # B29 history: previously `gitea-redis-master` because Bitnami chart was
-    # used. CHG-2026-05-05 (charts-sota-implementation-plan dogfood):
-    # infra/helm/gitea/templates/redis.yaml ships a STANDALONE redis StatefulSet
-    # whose Service is named `gitea-redis` (NOT `gitea-redis-master`). Bitnami
-    # `<release>-master` convention does NOT apply here. Use `gitea-redis:6379`.
+    # Redis is the bitnami `gitea-redis` Helmfile release (standalone), whose
+    # primary Service is `gitea-redis-master:6379`. The CHG-2026-05-05 attempt to
+    # ship a custom `gitea-redis`-named Service via infra/helm/gitea/templates/
+    # redis.yaml is DEAD: the gitea release uses the REMOTE gitea-charts/gitea
+    # chart, so that local template is never rendered. Pointing at the bare
+    # `gitea-redis` made gitea crash with "lookup gitea-redis: no such host"
+    # (finding-2026-05-22-pg-password-divergence § gitea-redis). Use the bitnami
+    # primary service name. Prod parity: same bitnami release runs in dev/prod.
     session:
       PROVIDER: redis
-      PROVIDER_CONFIG: "network=tcp,addr=gitea-redis:6379,db=0,pool_size=100,idle_timeout=180s"
+      PROVIDER_CONFIG: "network=tcp,addr=gitea-redis-master:6379,db=0,pool_size=100,idle_timeout=180s"
     cache:
       ADAPTER: redis
-      HOST: "network=tcp,addr=gitea-redis:6379,db=1,pool_size=100,idle_timeout=180s"
+      HOST: "network=tcp,addr=gitea-redis-master:6379,db=1,pool_size=100,idle_timeout=180s"
     queue:
       TYPE: redis
-      CONN_STR: "network=tcp,addr=gitea-redis:6379,db=2,pool_size=100,idle_timeout=180s"
+      CONN_STR: "network=tcp,addr=gitea-redis-master:6379,db=2,pool_size=100,idle_timeout=180s"
     # Bleve repo indexer breaks HA — disable for multi-pod
     indexer:
       ISSUE_INDEXER_TYPE: db
