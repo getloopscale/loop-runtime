@@ -64,7 +64,14 @@ operators/platform-operator
 operators/preview-operator
 operators/tenant-operator
 cloud/main
-/cmd
+# /cmd was previously fully-ignored — but per same lesson as /scripts (2026-05-20),
+# silently ignoring a whole top-level dir is catastrophic because CI/build paths
+# point inside. Phase 0 T0.1 of plan 2026-05-22-shell-script-strategic-plan.md
+# requires cmd/loopzero-ops to be a committed Go package. Allow source files; still
+# block compiled binaries.
+!/cmd/
+/cmd/*/loopzero-ops
+/cmd/*/main
 # /scripts — REMOVED 2026-05-20 (was catastrophically ignoring directory
 # containing 5+ CI-referenced scripts: audit-security-context.sh,
 # check-action-pinning.sh, check-divergence-matrix.sh, check-taskfile-
