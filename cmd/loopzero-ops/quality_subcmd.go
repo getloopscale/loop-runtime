@@ -15,8 +15,8 @@ import (
 	"github.com/loopzero/loopzero/pkg/quality/agplisolation"
 	"github.com/loopzero/loopzero/pkg/quality/alertrunbooks"
 	"github.com/loopzero/loopzero/pkg/quality/baseimagedigest"
-	"github.com/loopzero/loopzero/pkg/quality/clusterimagepolicymode"
 	"github.com/loopzero/loopzero/pkg/quality/clibundlesize"
+	"github.com/loopzero/loopzero/pkg/quality/clusterimagepolicymode"
 	"github.com/loopzero/loopzero/pkg/quality/deadlineratchet"
 	"github.com/loopzero/loopzero/pkg/quality/decisionsdeletion"
 	"github.com/loopzero/loopzero/pkg/quality/divergencematrix"
@@ -37,6 +37,7 @@ import (
 	"github.com/loopzero/loopzero/pkg/quality/taskfileinterface"
 	"github.com/loopzero/loopzero/pkg/quality/testdeletion"
 	"github.com/loopzero/loopzero/pkg/quality/testpyramid"
+	"github.com/loopzero/loopzero/pkg/quality/testtargets"
 )
 
 const qualityHelp = `loopzero-ops quality — quality gate orchestrator
@@ -109,6 +110,8 @@ func runQuality(args []string) int {
 		return runProdImageTags(args[1:])
 	case "no-migrate-force":
 		return runNoMigrateForce(args[1:])
+	case "test-targets":
+		return runTestTargets(args[1:])
 	case "cosign-cutover":
 		return runCosignCutover(args[1:])
 	case "service-auth-rotation":
@@ -600,6 +603,37 @@ func runProdImageTags(args []string) int {
 		return 1
 	}
 	fmt.Printf("✓ Scanned %d file(s). No :prod or :latest tags in production manifests.\n", o.ScannedFiles)
+	return 0
+}
+
+func runTestTargets(args []string) int {
+	fs := flag.NewFlagSet("test-targets", flag.ContinueOnError)
+	root := fs.String("root", ".", "repo root directory")
+	if err := fs.Parse(args); err != nil {
+		return 1
+	}
+	o, err := testtargets.Check(testtargets.Config{Root: *root})
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "test-targets: %v\n", err)
+		return 1
+	}
+	if !o.Pass {
+		msg := fmt.Sprintf("%d *_test.sh target(s) point at a missing repo path. "+
+			"A relocated/deleted script-under-test left its test pointing at a dead "+
+			"SCRIPT=/SCRIPT_UNDER_TEST= path (the dr/ relocation rot, finding "+
+			"2026-05-22). Repoint the test to the new path or delete the orphan test.",
+			len(o.Violations))
+		if os.Getenv("GITHUB_ACTIONS") != "" {
+			fmt.Printf("::error::%s\n", msg)
+		} else {
+			fmt.Fprintf(os.Stderr, "[test-targets] BLOCK: %s\n", msg)
+		}
+		for _, v := range o.Violations {
+			fmt.Fprintf(os.Stderr, "  %s\n", v)
+		}
+		return 2
+	}
+	fmt.Printf("[test-targets] all %d test target(s) resolve — OK.\n", o.Checked)
 	return 0
 }
 
