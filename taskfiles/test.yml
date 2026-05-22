@@ -128,7 +128,11 @@ tasks:
     cmds:
       - cd infra/tests && go test ./e2e/... -v -run "Chaos" -timeout 15m
 
-  test:coverage:
+  # Renamed from `test:coverage` 2026-05-22 (plan T5.3 gate caught duplicate key):
+  # this HTML-per-component variant was SHADOWED by the merged-lcov `test:coverage`
+  # at the bottom of this file (Task v3 silently uses the last definition). Renamed
+  # to `test:coverage:html` to preserve functionality without the shadow.
+  test:coverage:html:
     desc: Run all tests with coverage reports (HTML per component)
     env:
       KUBEBUILDER_ASSETS:

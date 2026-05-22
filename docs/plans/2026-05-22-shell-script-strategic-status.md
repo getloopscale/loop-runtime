@@ -12,6 +12,33 @@
 
 ## Iteration log
 
+### Iter 9 (2026-05-22) — Phase 5 T5.3 partial (taskfile-interface gate + LATENT BUG fixed)
+
+**Commit:** (current)
+
+**Done:**
+- `pkg/quality/taskfileinterface/` (NEW) — pure-Go gate replacing
+  `scripts/check-taskfile-interface.sh`. Parses Taskfile.yml + flattened
+  includes DIRECTLY via gopkg.in/yaml.v3 (NO `task` binary dependency — the
+  bash version shelled `task --list-all`). 8 tests GREEN.
+- `cmd/loopzero-ops/quality_subcmd.go` — wires `taskfile-interface` subcommand.
+- `scripts/check-taskfile-interface.sh` — DELETED.
+- `.claude/rules/shell-scripts-allowlist.md` — entry removed (255, was 256).
+
+**LATENT BUG SURFACED + FIXED (per error-documentation rule):**
+The Go parser caught a duplicate `test:coverage` key in taskfiles/test.yml
+(line 131 HTML variant SHADOWED by line 1061 merged-lcov variant). Task v3
+silently used the last → line-131 task was dead code. The bash gate
+(`task --list-all` output parsing) never noticed. Fixed: renamed line-131 to
+`test:coverage:html`. Gate now surfaces parse errors loud (not silent-skip).
+Finding doc: `concepts/operations/finding-2026-05-22-taskfile-duplicate-key.md`.
+
+**Script count: 256 → 255.**
+**Phase 5: 2/3** (T5.2 + T5.3-first-migration done; T5.1 Pulumi + more T5.3
+pure-logic migrations pending).
+
+---
+
 ### Iter 8 (2026-05-22) — Phase 5 T5.2 COMPLETE (generators → //go:generate)
 
 **Commit:** (current)

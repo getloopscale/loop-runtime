@@ -11,6 +11,7 @@ import (
 	"github.com/loopzero/loopzero/pkg/quality/nonewbash"
 	"github.com/loopzero/loopzero/pkg/quality/noshellwrap"
 	"github.com/loopzero/loopzero/pkg/quality/scriptsaudit"
+	"github.com/loopzero/loopzero/pkg/quality/taskfileinterface"
 )
 
 const qualityHelp = `loopzero-ops quality — quality gate orchestrator
@@ -37,6 +38,11 @@ GATES:
                   Forbidden: pulumi, helm, kubectl, aws, gh (use Go SDK instead).
                   Flags:
                     --root DIR  directory to scan (default: "pkg")
+
+  taskfile-interface  Fail if any public Taskfile command no longer resolves.
+                  Parses Taskfile.yml + includes directly (no task binary).
+                  Flags:
+                    --root DIR  repo root (default: ".")
 `
 
 func runQuality(args []string) int {
@@ -54,6 +60,8 @@ func runQuality(args []string) int {
 		return runNoNewBash(args[1:])
 	case "no-shell-wrap":
 		return runNoShellWrap(args[1:])
+	case "taskfile-interface":
+		return runTaskfileInterface(args[1:])
 	default:
 		fmt.Fprintf(os.Stderr, "unknown gate: %s\n\n%s", args[0], qualityHelp)
 		return 1
@@ -162,5 +170,31 @@ func runNoShellWrap(args []string) int {
 		return 1
 	}
 	fmt.Println("no-shell-wrap: PASS — no forbidden shell wraps detected")
+	return 0
+}
+
+func runTaskfileInterface(args []string) int {
+	fs := flag.NewFlagSet("taskfile-interface", flag.ContinueOnError)
+	root := fs.String("root", ".", "repo root directory")
+	if err := fs.Parse(args); err != nil {
+		return 1
+	}
+	outcome, err := taskfileinterface.Check(taskfileinterface.Config{RepoRoot: *root})
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "taskfile-interface: %v\n", err)
+		return 5
+	}
+	if !outcome.Pass {
+		fmt.Fprintln(os.Stderr, "taskfile-interface: FAIL — public Taskfile command(s) missing:")
+		for _, m := range outcome.Missing {
+			fmt.Fprintf(os.Stderr, "  - %s\n", m)
+		}
+		fmt.Fprintln(os.Stderr, "")
+		fmt.Fprintln(os.Stderr, "Action: define these in Taskfile.yml or an included taskfiles/*.yml.")
+		fmt.Fprintln(os.Stderr, "If intentionally renamed/removed, update ExpectedCommands in")
+		fmt.Fprintln(os.Stderr, "pkg/quality/taskfileinterface/check.go AND CI consumers.")
+		return 1
+	}
+	fmt.Printf("taskfile-interface: PASS — all %d public commands resolve\n", len(taskfileinterface.ExpectedCommands))
 	return 0
 }
