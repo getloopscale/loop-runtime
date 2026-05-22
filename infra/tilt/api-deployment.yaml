@@ -217,9 +217,9 @@ spec:
             - name: BASE_DOMAIN
               value: "loopzero.local"
             - name: JWKS_URL
-              value: "http://ory-hydra-public.loopzero-system.svc.cluster.local:4444/.well-known/jwks.json"
+              value: "http://ory-hydra-public.loopzero-auth.svc.cluster.local:4444/.well-known/jwks.json"
             - name: JWT_ISSUER
-              value: "http://localhost:4444/"
+              value: "http://ory-hydra-public.loopzero-auth.svc.cluster.local:4444/"
             - name: LOOPZERO_CLUSTER_ISSUER
               value: "loopzero-ca-issuer"
           ports:
