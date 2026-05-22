@@ -453,6 +453,10 @@ jobs:
         # T5.3 of plan 2026-05-22: migrated from check-no-migrate-force.sh to
         # pure-Go gate (loopzero-ops). Same allowlist-marker semantics + scope.
         run: cd cmd/loopzero-ops && go run . quality no-migrate-force --root "${GITHUB_WORKSPACE}"
+      - name: Reject stale test-script targets (finding 2026-05-22 drill-suite rot)
+        # Fails if any *_test.sh SCRIPT=/SCRIPT_UNDER_TEST= points at a missing
+        # repo path — the relocation-rot class that silently broke 7 drill tests.
+        run: cd cmd/loopzero-ops && go run . quality test-targets --root "${GITHUB_WORKSPACE}"
       - name: Forward-only migrations
         run: |
           viol=$(grep -rlnE '^\s*(ALTER\s+TABLE\s+\w+\s+)?DROP\s+(TABLE|COLUMN)' \
