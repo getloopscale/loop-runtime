@@ -188,6 +188,16 @@ releases:
     installed: {{ .Values.inClusterPostgres | default false }}
     values:
       - ../helm/postgresql/values.yaml
+    # Consume the canonical loopzero-db-credentials secret (minted by
+    # generate-secrets.sh BEFORE this sync) so PG initializes the `loopzero` user
+    # with the SAME password kratos/hydra/loopzero-api read from that secret.
+    # Without this, Bitnami auto-generates a divergent random password →
+    # kratos SASL auth fails → helmfile --wait deadlocks. The secret carries
+    # both `postgres-password` (admin) and `password` (loopzero user) keys, which
+    # are Bitnami's default secretKeys. Fix: finding-2026-05-22-pg-password-divergence.
+    set:
+      - name: auth.existingSecret
+        value: loopzero-db-credentials
 
   - name: gitea-redis
     namespace: loopzero-system

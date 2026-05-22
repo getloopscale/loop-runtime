@@ -149,12 +149,22 @@ else
 fi
 DB_PASSWORD="${LOOPZERO_DB_PASSWORD:-$(get_or_generate loopzero-db-credentials loopzero-system password)}"
 DB_URI="${LOOPZERO_DB_URI:-postgresql://${LOOPZERO_DB_USER:-loopzero}:${DB_PASSWORD}@${LOOPZERO_DB_HOST}:${LOOPZERO_DB_PORT:-5432}/${LOOPZERO_DB_NAME:-loopzero}?sslmode=${DB_SSLMODE}}"
+# Superuser (postgres) password — required so the in-cluster Bitnami PostgreSQL
+# (standalone profile) can consume this secret via auth.existingSecret. Bitnami
+# needs BOTH the admin key (postgres-password) and the custom-user key (password).
+# Without it the chart auto-generates a random password for the `loopzero` user that
+# diverges from what kratos/hydra/loopzero-api read here — kratos then fails SASL auth
+# at config-load and blocks `task setup` on the helmfile --wait. Root cause:
+# finding-2026-05-22-pg-password-divergence. Cloud (--provider) uses managed PG and
+# does NOT install the in-cluster chart, so this key is inert there.
+DB_ADMIN_PASSWORD="${LOOPZERO_DB_ADMIN_PASSWORD:-$(get_or_generate loopzero-db-credentials loopzero-system postgres-password)}"
 apply_secret loopzero-db-credentials loopzero-system \
   --from-literal=host="${LOOPZERO_DB_HOST}" \
   --from-literal=port="${LOOPZERO_DB_PORT:-5432}" \
   --from-literal=database="${LOOPZERO_DB_NAME:-loopzero}" \
   --from-literal=user="${LOOPZERO_DB_USER:-loopzero}" \
   --from-literal=password="${DB_PASSWORD}" \
+  --from-literal=postgres-password="${DB_ADMIN_PASSWORD}" \
   --from-literal=uri="${DB_URI}"
 
 # 2) Gitea admin password + token — IDEMPOTENT (iter 14 fix).

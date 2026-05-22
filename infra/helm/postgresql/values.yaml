@@ -16,7 +16,14 @@ image:
 
 auth:
   username: loopzero
-  password: ""  # T1.3 (plan 2026-05-21-deep-review-remediation): empty triggers Bitnami chart fail-fast; helmfile inline override OR --set auth.password=$LOOPZERO_DB_PASSWORD required. See docs/operations/credentials-required.md.
+  # Password is NOT set here. The helmfile postgresql release sets
+  # auth.existingSecret=loopzero-db-credentials (minted by generate-secrets.sh
+  # pre-sync) so PG initializes the `loopzero` user with the SAME password
+  # kratos/hydra/loopzero-api read. An inline value here would diverge from that
+  # secret. Earlier this was "" expecting a never-wired $LOOPZERO_DB_PASSWORD
+  # override → Bitnami auto-generated a random password → kratos SASL auth
+  # failed (finding-2026-05-22-pg-password-divergence). See docs/operations/credentials-required.md.
+  password: ""
   database: loopzero
 
 # Create additional databases required by platform components.
