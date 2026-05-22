@@ -7,9 +7,9 @@
   "properties": {
     "replicaCount": {
       "type": "integer",
-      "minimum": 1,
+      "minimum": 0,
       "maximum": 10,
-      "description": "Cloudflared replicas. Default 2 for HA (CF Tunnel handles connection multiplexing). >10 = diminishing returns + CF tunnel session overhead."
+      "description": "Cloudflared replicas. Default 2 for HA (CF Tunnel handles connection multiplexing). 0 is a legitimate DISABLED state used by runtime.helmfile for multi-cluster LOCAL topology (standalone-multi: 4 separate k3d clusters use direct cross-cluster networking, no CF Tunnel). >10 = diminishing returns + CF tunnel session overhead."
     },
     "image": {
       "type": "object",
