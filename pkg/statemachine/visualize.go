@@ -1,6 +1,8 @@
 // SPDX-License-Identifier: Apache-2.0
 // Copyright 2025-2026 The LoopZero Authors
 
+//go:generate go run ./cmd/gen-dots --write --out ../../docs/state-machines
+
 package statemachine
 
 import (

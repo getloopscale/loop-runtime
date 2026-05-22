@@ -33,13 +33,17 @@ tasks:
 
   pkg:state-machine-dots:check:
     desc: Verify docs/state-machines/*.dot match pkg/statemachine.Visualize() output (gate T2.7)
+    # T5.2 of plan 2026-05-22: migrated from gen-state-machine-dots.sh to
+    # idiomatic Go cmd/gen-dots invoked via the statemachine package.
     cmds:
-      - bash infra/scripts/gen-state-machine-dots.sh --check
+      - cd pkg && go run ./statemachine/cmd/gen-dots --check --out ../docs/state-machines
 
   pkg:state-machine-dots:write:
     desc: Regenerate DOT files for every state machine (run before commit if statemachine changed)
+    # T5.2 of plan 2026-05-22: `go generate ./statemachine/...` also works
+    # (visualize.go has the //go:generate directive).
     cmds:
-      - bash infra/scripts/gen-state-machine-dots.sh --write
+      - cd pkg && go run ./statemachine/cmd/gen-dots --write --out ../docs/state-machines
 
   pkg:soak:smoke:
     desc: Local-equivalent of pkg-soak.yml T3.2 special validation (RFC 9457 + CB obs + kstatus); runs vs http://localhost:13001

@@ -12,6 +12,32 @@
 
 ## Iteration log
 
+### Iter 8 (2026-05-22) — Phase 5 T5.2 COMPLETE (generators → //go:generate)
+
+**Commit:** (current)
+
+**Done:**
+- `pkg/statemachine/cmd/gen-dots/main.go` (NEW) — idiomatic Go generator
+  replacing `infra/scripts/gen-state-machine-dots.sh`. `--write`/`--check`/`--out`
+  flags. Deterministic output (Visualize sorts states+transitions).
+- `pkg/statemachine/visualize.go` — added `//go:generate go run ./cmd/gen-dots
+  --write --out ../../docs/state-machines` directive.
+- `pkg/statemachine/cmd/gen-dots/gen_dots_test.go` — 6 tests GREEN:
+  ProducesAllDotFiles, DeterministicOutput, CheckDrift (missing/modified/current),
+  CommittedDotsAreCurrent (validates REAL committed DOTs match Visualize).
+- `taskfiles/test.yml` — pkg:state-machine-dots:check/write now invoke
+  `go run ./statemachine/cmd/gen-dots` (was `bash gen-state-machine-dots.sh`).
+- `infra/scripts/gen-state-machine-dots.sh` — DELETED (git rm).
+- `.claude/rules/shell-scripts-allowlist.md` — entry removed (256, was 257).
+
+**Validation:** `go generate ./statemachine/...` produces byte-identical DOTs
+to committed (zero git diff). no-shell-wrap gate PASS (gen-dots uses Visualize()
+not shellrun).
+
+**Script count: 257 → 256** (first deletion of the reduction journey).
+
+---
+
 ### Iter 7 (2026-05-22) — Phase 3 COMPLETE (T3.1+T3.2 — canonicalize Tilt)
 
 **Commit:** (current)
@@ -219,7 +245,7 @@ Regression locked NOW.
 | | T4.3 convert remaining parity + dogfood | ⚪ Pending T4.2 | Ralph |
 | | T4.4 delete _legacy/ | ⚪ Pending T4.3 | Ralph |
 | **5 SDK-native Go** | T5.1 Pulumi Automation API (pulumi-archive + pulumi-orphan-rm) | ⚪ Parallel-eligible post-Phase-3 | Ralph |
-| | T5.2 migrate generators to //go:generate | ⚪ Pending T5.1 | Ralph |
+| | T5.2 migrate generators to //go:generate | ✅ **DONE** (iter 8) — gen-state-machine-dots.sh → cmd/gen-dots + //go:generate; script DELETED | Ralph |
 | | T5.3 remaining pure-logic gates | ⚪ Pending audit results | Ralph |
 | **6 Lock The Door** | T6.1 allowlist.md | ✅ **DONE** (iter 2) — baseline grandfathered 257 entries | Ralph |
 | | T6.2 no-new-bash gate (+ EC-04 fetch-depth + EC-06 rename) | ✅ **DONE** (iter 2) — gate ATIVO em CI | Ralph |
