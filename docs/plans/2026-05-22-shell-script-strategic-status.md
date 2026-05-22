@@ -12,6 +12,29 @@
 
 ## Iteration log
 
+### Iter 40 (2026-05-22) — Phase 1 read-verify: 4 zero-ref candidates are functional-but-unwired (NOT deleted)
+
+**Done:**
+- Read-verified the next 4 zero-ref candidates (`chaos/run-full.sh`,
+  `quality/flaky-track.sh`, `verify-doctl-resolution.sh`,
+  `dogfood/cli-coverage.sh`). **None is conclusively dead** — all are *functional*
+  operator/skill tooling that is merely not grep-wired (e.g. chaos/run-full.sh
+  still runs all 10 scenarios; the suite just uses the Go framework instead).
+  Unlike regenerate-status.sh (smoking-gun STALE header + deleted target), these
+  have no such proof, and chaos/dogfood/drill tooling is operator-critical.
+- **Did NOT delete** — retiring functional-but-unwired tooling is operator
+  judgment, not autonomous deletion. Recorded the 4 + their dispositions in the
+  operator-handoff so they aren't re-investigated.
+- **Closes the dead-detection sweep:** of ~10 zero-ref candidates, exactly 1 was
+  conclusively dead (regenerate-status, iter 39). The rest are harness-hook /
+  dynamically-sourced (false-positives) or functional-but-unwired (operator-decides).
+
+**Script count: 223 (unchanged — no conclusively-dead script this iteration).**
+30 Go quality gates. Autonomous Phase 1 + Phase 5 work is now genuinely complete;
+remaining is operator-gated (Phase 2/4, T5.1, T6.4, 4 LIVE HARD STOPs).
+
+---
+
 ### Iter 39 (2026-05-22) — Phase 1 (delete dead): regenerate-status.sh (read-verified)
 
 **Done:**

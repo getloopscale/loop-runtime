@@ -68,6 +68,34 @@ A genuinely-dead script must be confirmed by: reading it + checking for dynamic
 (`$VAR`-interpolated) sourcing + checking harness/skill invocation + checking
 CI test-runner globs. Heuristic lists are a STARTING POINT, never an action list.
 
+### Dead-deletion outcomes (read-verified)
+
+- **CONCLUSIVELY DEAD → deleted (iter 39):** `regenerate-status.sh` — its own
+  header declares it STALE (regenerated `docs/STATUS.md`, deleted 2026-05-11) and
+  it no-ops when the target is absent. Zero live consumers. This is the *only*
+  smoking-gun-dead script found.
+- **FUNCTIONAL-BUT-UNWIRED → NOT deleted (operator decides, iter 40):** four
+  zero-ref scripts were read-verified as *functional* operator/skill tooling that
+  is merely not grep-wired — deleting them is a judgment call, not auto-safe:
+  - `infra/scripts/chaos/run-full.sh` — bash sequential chaos runner; the suite
+    uses the Go framework (`go test ./chaos/...`) and the skill uses
+    `run-scenario.sh` per-scenario, so this is redundant but still works.
+  - `infra/scripts/quality/flaky-track.sh` — retry-event logger; producer for the
+    flaky-aggregator cron, but no test wrapper currently calls it ("implemented
+    but not wired").
+  - `infra/scripts/verify-doctl-resolution.sh` — drill doctl-resolution check;
+    plausibly drill-skill/operator-invoked.
+  - `infra/tests/dogfood/cli-coverage.sh` — dogfood Phase 6 coverage helper;
+    plausibly dogfood-skill-invoked.
+
+  **Operator action:** for each, decide KEEP-OPERATOR (it's a real convenience →
+  document why) OR delete (truly superseded). Do NOT auto-delete — chaos/dogfood
+  tooling is operator-critical.
+
+**Takeaway:** conclusively-dead scripts are RARE (1 of the ~10 zero-ref
+candidates). The rest are functional-but-unwired — retiring them is operator
+judgment, not autonomous deletion.
+
 ---
 
 ## Tool-classification caveat (for the remaining REVIEW-NEEDED triage)
