@@ -44,7 +44,7 @@ tasks:
         POD=$(kubectl --context {{.MGMT_CONTEXT}} -n loopzero-system get pod -l app.kubernetes.io/name=postgresql -o jsonpath='{.items[0].metadata.name}')
         # Portable secret extraction (T2.3.b EC-02)
         PG_ADMIN_PASS=$(kubectl --context {{.MGMT_CONTEXT}} -n loopzero-system \
-          get secret loopzero-db-credentials -o go-template='{{`{{.data.postgres-password | base64decode}}`}}')
+          get secret loopzero-db-credentials -o go-template='{{`{{index .data "postgres-password" | base64decode}}`}}')
         for DB in gitea kratos hydra; do
           kubectl --context {{.MGMT_CONTEXT}} -n loopzero-system exec -i "$POD" -c postgresql -- \
             env PGPASSWORD="$PG_ADMIN_PASS" psql -U postgres -tc "SELECT 1 FROM pg_database WHERE datname='$DB'" | grep -q 1 || \
@@ -237,7 +237,7 @@ tasks:
         POD=$(kubectl --context {{.MGMT_CONTEXT}} -n loopzero-system get pod -l app.kubernetes.io/name=postgresql -o jsonpath='{.items[0].metadata.name}')
         # T2.3.b (EC-02) — portable base64 via kubectl go-template
         PG_ADMIN_PASS=$(kubectl --context {{.MGMT_CONTEXT}} -n loopzero-system \
-          get secret loopzero-db-credentials -o go-template='{{`{{.data.postgres-password | base64decode}}`}}')
+          get secret loopzero-db-credentials -o go-template='{{`{{index .data "postgres-password" | base64decode}}`}}')
         for DB in kratos hydra; do
           kubectl --context {{.MGMT_CONTEXT}} -n loopzero-system exec -i "$POD" -c postgresql -- \
             env PGPASSWORD="$PG_ADMIN_PASS" psql -U postgres -tc "SELECT 1 FROM pg_database WHERE datname='$DB'" | grep -q 1 || \
