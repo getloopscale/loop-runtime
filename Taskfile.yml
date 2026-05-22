@@ -167,8 +167,9 @@ tasks:
   audit:divergence-matrix:
     desc: "Plan T5.2 audit — local↔prod divergence matrix integrity (matches infra-gates.yml CI gate)"
     # Per ADR D5: every code marker `LOCAL ONLY (LP-NNN)` must have a matrix entry.
+    # T5.3 of plan 2026-05-22: migrated from check-divergence-matrix.sh to pure-Go gate.
     cmds:
-      - bash scripts/check-divergence-matrix.sh
+      - cd cmd/loopzero-ops && go run . quality divergence-matrix --root "{{.ROOT_DIR}}"
 
   audit:charts-schema-present:
     desc: "INF-G17 audit — values.schema.json presence on every OCI chart (matches infra-gates.yml CI gate)"

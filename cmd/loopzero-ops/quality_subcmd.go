@@ -8,6 +8,7 @@ import (
 	"fmt"
 	"os"
 
+	"github.com/loopzero/loopzero/pkg/quality/divergencematrix"
 	"github.com/loopzero/loopzero/pkg/quality/nonewbash"
 	"github.com/loopzero/loopzero/pkg/quality/noshellwrap"
 	"github.com/loopzero/loopzero/pkg/quality/scriptsaudit"
@@ -62,6 +63,8 @@ func runQuality(args []string) int {
 		return runNoShellWrap(args[1:])
 	case "taskfile-interface":
 		return runTaskfileInterface(args[1:])
+	case "divergence-matrix":
+		return runDivergenceMatrix(args[1:])
 	default:
 		fmt.Fprintf(os.Stderr, "unknown gate: %s\n\n%s", args[0], qualityHelp)
 		return 1
@@ -196,5 +199,27 @@ func runTaskfileInterface(args []string) int {
 		return 1
 	}
 	fmt.Printf("taskfile-interface: PASS — all %d public commands resolve\n", len(taskfileinterface.ExpectedCommands))
+	return 0
+}
+
+func runDivergenceMatrix(args []string) int {
+	fs := flag.NewFlagSet("divergence-matrix", flag.ContinueOnError)
+	root := fs.String("root", ".", "repo root directory")
+	if err := fs.Parse(args); err != nil {
+		return 1
+	}
+	outcome, err := divergencematrix.Check(divergencematrix.Config{RepoRoot: *root})
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "divergence-matrix: %v\n", err)
+		return 5
+	}
+	if !outcome.Pass {
+		fmt.Fprintf(os.Stderr, "divergence-matrix: FAIL — %d issue(s):\n", len(outcome.Violations))
+		for _, v := range outcome.Violations {
+			fmt.Fprintf(os.Stderr, "  %s\n", v)
+		}
+		return 1
+	}
+	fmt.Println("divergence-matrix: GREEN — matrix integrity OK")
 	return 0
 }

@@ -28,7 +28,7 @@ on:
       - "scripts/check-action-pinning.sh"
       # 2026-05-20: extend filter to include divergence-matrix gate
       # (was missing — script changes did not re-trigger CI validation)
-      - "scripts/check-divergence-matrix.sh"
+      - "pkg/quality/divergencematrix/**"
       - ".claude/knowledge-base/concepts/operations/local-prod-divergence-matrix.md"
       - "docs/runbooks/local-prod-divergence-matrix.md"
       # Files where LP-NNN markers live — changing them should trigger
@@ -47,7 +47,7 @@ on:
       - "scripts/audit-security-context.sh"
       - "scripts/check-action-pinning.sh"
       # 2026-05-20: matrix integrity (see push filter notes above)
-      - "scripts/check-divergence-matrix.sh"
+      - "pkg/quality/divergencematrix/**"
       - ".claude/knowledge-base/concepts/operations/local-prod-divergence-matrix.md"
       - "docs/runbooks/local-prod-divergence-matrix.md"
       - "api/**/*.go"
@@ -118,8 +118,17 @@ jobs:
     steps:
       - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
 
-      - name: Run check-divergence-matrix.sh
-        run: bash scripts/check-divergence-matrix.sh
+      - name: Set up Go
+        uses: actions/setup-go@0aaccfd150d50ccaeb58ebd88d36e91967a5f35b # v5.4.0
+        with:
+          go-version: '1.25.10'
+          cache-dependency-path: cmd/loopzero-ops/go.sum
+
+      # T5.3 of plan 2026-05-22: migrated from check-divergence-matrix.sh to
+      # pure-Go gate (no shell-out). Same invariant: every code marker
+      # `LOCAL ONLY (LP-NNN)` must have a matrix entry + OPEN entries need markers.
+      - name: Run divergence-matrix gate
+        run: cd cmd/loopzero-ops && go run . quality divergence-matrix --root "${GITHUB_WORKSPACE}"
 
   # ──────────────────────────────────────────────────────────────────────
   # Plan T0.3 — TypeScript orphan-exports gate (knip)

@@ -12,6 +12,30 @@
 
 ## Iteration log
 
+### Iter 10 (2026-05-22) — Phase 5 T5.3 (divergence-matrix pure-Go gate)
+
+**Commit:** (current)
+
+**Done:**
+- `pkg/quality/divergencematrix/` (NEW) — pure-Go gate replacing
+  `scripts/check-divergence-matrix.sh`. Walks api/operators/cli/pkg/infra/scripts
+  for `LOCAL ONLY (LP-NNN)` markers, cross-references matrix entries. Excludes
+  test files (fixtures contain example markers). 8 tests GREEN.
+- `cmd/loopzero-ops/quality_subcmd.go` — wires `divergence-matrix` subcommand.
+- `Taskfile.yml audit:divergence-matrix` — calls Go gate via `go run`.
+- `.github/workflows/infra-gates.yml` — divergence-matrix job runs Go gate +
+  path filters repointed to `pkg/quality/divergencematrix/**`.
+- `scripts/check-divergence-matrix.sh` — DELETED.
+- `.claude/rules/shell-scripts-allowlist.md` — entry removed (254, was 255).
+
+**Design refinement:** gate excludes `_test.go`/`_test.sh` from marker scan
+(test fixtures legitimately contain example LP-NNN that aren't production
+LOCAL-ONLY paths). Live check PASS (0 violations against real repo).
+
+**Script count: 255 → 254.**
+
+---
+
 ### Iter 9 (2026-05-22) — Phase 5 T5.3 partial (taskfile-interface gate + LATENT BUG fixed)
 
 **Commit:** (current)
