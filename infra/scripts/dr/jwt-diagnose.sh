@@ -35,7 +35,7 @@ set -euo pipefail
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 
 # shellcheck source=infra/scripts/lib/drill-skill-common.sh
-source "$SCRIPT_DIR/lib/drill-skill-common.sh"
+source "$SCRIPT_DIR/../lib/drill-skill-common.sh"
 
 # Test-mode guard: when sourced for hermetic testing, skip top-level execution
 # and only expose function definitions. Tests set this env var.
@@ -299,7 +299,7 @@ main() {
   drill_skill_log "step 1: minting fresh JWT"
   rm -f ~/.loopzero/drill-token.txt ~/.loopzero/drill-token-cache.json 2>/dev/null || true
   local jwt
-  jwt=$(bash "$SCRIPT_DIR/drill-mint-jwt.sh" 2>/dev/null) || {
+  jwt=$(bash "$SCRIPT_DIR/../drill-mint-jwt.sh" 2>/dev/null) || {
     drill_skill_log "ERROR: drill-mint-jwt.sh failed"
     exit 1
   }

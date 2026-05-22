@@ -23,23 +23,23 @@ build_stubs() {
            "$tmpdir/infra/tests/chaos/manifests"
 
   # Stub: cleanroom-drill
-  cat > "$tmpdir/infra/scripts/drill-cleanroom-orchestrator.sh" <<EOF
+  cat > "$tmpdir/infra/scripts/dr/cleanroom-orchestrator.sh" <<EOF
 #!/usr/bin/env bash
 exit $cleanroom_exit
 EOF
-  chmod +x "$tmpdir/infra/scripts/drill-cleanroom-orchestrator.sh"
+  chmod +x "$tmpdir/infra/scripts/dr/cleanroom-orchestrator.sh"
 
-  cat > "$tmpdir/infra/scripts/drill-teardown-validator.sh" <<EOF
+  cat > "$tmpdir/infra/scripts/dr/teardown-validator.sh" <<EOF
 #!/usr/bin/env bash
 exit 0
 EOF
-  chmod +x "$tmpdir/infra/scripts/drill-teardown-validator.sh"
+  chmod +x "$tmpdir/infra/scripts/dr/teardown-validator.sh"
 
-  cat > "$tmpdir/infra/scripts/drill-evidence-capture.sh" <<EOF
+  cat > "$tmpdir/infra/scripts/dr/evidence-capture.sh" <<EOF
 #!/usr/bin/env bash
 exit 0
 EOF
-  chmod +x "$tmpdir/infra/scripts/drill-evidence-capture.sh"
+  chmod +x "$tmpdir/infra/scripts/dr/evidence-capture.sh"
 
   # Stub: helm
   cat > "$tmpdir/bin/helm" <<EOF
@@ -97,8 +97,8 @@ EOF
 
   # Copy real lib + orchestrator
   cp "$ROOT/infra/scripts/lib/drill-skill-common.sh" "$tmpdir/infra/scripts/lib/"
-  cp "$ROOT/infra/scripts/drill-chaos-orchestrator.sh" "$tmpdir/infra/scripts/"
-  chmod +x "$tmpdir/infra/scripts/drill-chaos-orchestrator.sh"
+  cp "$ROOT/infra/scripts/dr/chaos-orchestrator.sh" "$tmpdir/infra/scripts/"
+  chmod +x "$tmpdir/infra/scripts/dr/chaos-orchestrator.sh"
 
   # Fake runtime kubeconfig
   mkdir -p /tmp/drill-kc
@@ -113,7 +113,7 @@ run_orchestrator() {
     CI=false \
     LOOPZERO_DRILL_SKILL_SPONSOR=tt \
     TRAFFIC_DURATION=2 \
-    bash "$tmpdir/infra/scripts/drill-chaos-orchestrator.sh" "$@" 2>&1
+    bash "$tmpdir/infra/scripts/dr/chaos-orchestrator.sh" "$@" 2>&1
 }
 
 # ---- Tests ----
@@ -123,7 +123,7 @@ test_missing_confirm_cost_exits_2() {
   build_stubs "$tmpdir"
   set +e
   PATH="$tmpdir/bin:/usr/bin:/bin" CI=false LOOPZERO_DRILL_SKILL_SPONSOR=tt \
-    bash "$tmpdir/infra/scripts/drill-chaos-orchestrator.sh" >/dev/null 2>&1
+    bash "$tmpdir/infra/scripts/dr/chaos-orchestrator.sh" >/dev/null 2>&1
   local rc=$?
   set -e
   [[ "$rc" -eq 2 ]] || return 1
@@ -134,7 +134,7 @@ test_unknown_scenario_exits_1() {
   build_stubs "$tmpdir"
   set +e
   PATH="$tmpdir/bin:/usr/bin:/bin" CI=true \
-    bash "$tmpdir/infra/scripts/drill-chaos-orchestrator.sh" --scenario invalid-id >/dev/null 2>&1
+    bash "$tmpdir/infra/scripts/dr/chaos-orchestrator.sh" --scenario invalid-id >/dev/null 2>&1
   local rc=$?
   set -e
   [[ "$rc" -eq 1 ]] || { echo "  expected exit 1, got $rc" >&2; return 1; }
@@ -180,7 +180,7 @@ test_help_lists_5_scenarios() {
   local tmpdir="$1"
   build_stubs "$tmpdir"
   set +e
-  out=$(bash "$tmpdir/infra/scripts/drill-chaos-orchestrator.sh" --help 2>&1)
+  out=$(bash "$tmpdir/infra/scripts/dr/chaos-orchestrator.sh" --help 2>&1)
   local rc=$?
   set -e
   [[ "$rc" -eq 0 ]] || return 1

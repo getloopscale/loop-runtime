@@ -16,9 +16,15 @@
 set -euo pipefail
 
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/../../.." && pwd)"
-SCRIPT_DEFAULT="$ROOT/infra/scripts/bootstrap-cell-default-cc-drill.sh"
-SCRIPT_1="$ROOT/infra/scripts/bootstrap-cell-1-cc-drill.sh"
-SCRIPT_2="$ROOT/infra/scripts/bootstrap-cell-2-cc-drill.sh"
+# The 3 per-cell bootstrap-cell-*-cc-drill.sh scripts were consolidated into one
+# parametrized function in commit 1a9f1f77 (Phase 4 T4.2). The test now sources
+# the lib and calls the function. Per-cell (CELL_ID, PULUMI_KEY) mapping (D3):
+#   cell-default → runtimeCluster · cell-1 → runtimeCluster · cell-2 → runtimeCluster2
+LIB="$ROOT/infra/scripts/lib/bootstrap-cell-cc-drill-common.sh"
+
+# run_cc CELL_ID PULUMI_KEY [--dry-run] — runs the consolidated function in a
+# subshell so env/PATH overrides apply and the return code propagates as $?.
+run_cc() { ( source "$LIB"; bootstrap_cell_cc_drill "$@" ); }
 
 TESTS_RUN=0
 TESTS_PASSED=0
@@ -130,8 +136,8 @@ test_missing_kubeconfig_exits_1() {
   build_stubs "$tmpdir"
   local actual
   set +e
-  env -u DRILL_KUBECONFIG PATH="$tmpdir/bin:$PATH" \
-    "$SCRIPT_DEFAULT" > /dev/null 2>&1
+  ( unset DRILL_KUBECONFIG; export PATH="$tmpdir/bin:$PATH"; \
+    run_cc cell-default runtimeCluster ) > /dev/null 2>&1
   actual=$?
   set -e
   [[ "$actual" -eq 1 ]] && return 0 || return 1
@@ -145,7 +151,7 @@ test_dry_run_prints_manifests() {
   stdout=$(DRILL_KUBECONFIG="$tmpdir/fake-kc.yaml" \
     DRILL_PULUMI_DIR="$tmpdir" \
     PATH="$tmpdir/bin:$PATH" \
-    "$SCRIPT_DEFAULT" --dry-run 2>/dev/null || true)
+    run_cc cell-default runtimeCluster --dry-run 2>/dev/null || true)
   # Must contain ClusterCredential + Secret manifests
   grep -q "kind: ClusterCredential" <<< "$stdout" && \
     grep -q "kind: Secret" <<< "$stdout"
@@ -159,7 +165,7 @@ test_d3_default_maps_runtimeCluster() {
   stdout=$(DRILL_KUBECONFIG="$tmpdir/fake-kc.yaml" \
     DRILL_PULUMI_DIR="$tmpdir" \
     PATH="$tmpdir/bin:$PATH" \
-    "$SCRIPT_DEFAULT" --dry-run 2>/dev/null || true)
+    run_cc cell-default runtimeCluster --dry-run 2>/dev/null || true)
   # Default → runtimeCluster (NOT runtimeCluster2)
   grep -q "aaa.k8s.ondigitalocean.com" <<< "$stdout" && \
     ! grep -q "bbb.k8s.ondigitalocean.com" <<< "$stdout" && \
@@ -174,7 +180,7 @@ test_d3_cell1_maps_runtimeCluster() {
   stdout=$(DRILL_KUBECONFIG="$tmpdir/fake-kc.yaml" \
     DRILL_PULUMI_DIR="$tmpdir" \
     PATH="$tmpdir/bin:$PATH" \
-    "$SCRIPT_1" --dry-run 2>/dev/null || true)
+    run_cc cell-1 runtimeCluster --dry-run 2>/dev/null || true)
   # cell-1 → runtimeCluster (NOT runtimeCluster2)
   grep -q "aaa.k8s.ondigitalocean.com" <<< "$stdout" && \
     ! grep -q "bbb.k8s.ondigitalocean.com" <<< "$stdout" && \
@@ -189,7 +195,7 @@ test_d3_cell2_maps_runtimeCluster2() {
   stdout=$(DRILL_KUBECONFIG="$tmpdir/fake-kc.yaml" \
     DRILL_PULUMI_DIR="$tmpdir" \
     PATH="$tmpdir/bin:$PATH" \
-    "$SCRIPT_2" --dry-run 2>/dev/null || true)
+    run_cc cell-2 runtimeCluster2 --dry-run 2>/dev/null || true)
   # cell-2 → runtimeCluster2 (NOT runtimeCluster)
   grep -q "bbb.k8s.ondigitalocean.com" <<< "$stdout" && \
     ! grep -q "aaa.k8s.ondigitalocean.com" <<< "$stdout" && \
@@ -207,14 +213,14 @@ test_ec08_idempotency_default() {
   DRILL_KUBECONFIG="$tmpdir/fake-kc.yaml" \
     DRILL_PULUMI_DIR="$tmpdir" \
     PATH="$tmpdir/bin:$PATH" \
-    "$SCRIPT_DEFAULT" > /dev/null 2>&1
+    run_cc cell-default runtimeCluster > /dev/null 2>&1
   local first_run_size
   first_run_size=$(wc -c < "$tmpdir/kubectl.log")
   # Run again
   DRILL_KUBECONFIG="$tmpdir/fake-kc.yaml" \
     DRILL_PULUMI_DIR="$tmpdir" \
     PATH="$tmpdir/bin:$PATH" \
-    "$SCRIPT_DEFAULT" > /dev/null 2>&1
+    run_cc cell-default runtimeCluster > /dev/null 2>&1
   local second_run_size
   second_run_size=$(wc -c < "$tmpdir/kubectl.log")
   # Second run doubles the log (apply called identically twice)
@@ -231,7 +237,7 @@ test_pulumi_output_missing_key_exits_1() {
   DRILL_KUBECONFIG="$tmpdir/fake-kc.yaml" \
     DRILL_PULUMI_DIR="$tmpdir" \
     PATH="$tmpdir/bin:$PATH" \
-    "$SCRIPT_DEFAULT" > /dev/null 2>&1
+    run_cc cell-default runtimeCluster > /dev/null 2>&1
   actual=$?
   set -e
   [[ "$actual" -eq 1 ]] && return 0 || return 1

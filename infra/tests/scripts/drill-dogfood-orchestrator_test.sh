@@ -9,7 +9,7 @@ set -euo pipefail
 
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/../../.." && pwd)"
 # shellcheck disable=SC2034
-SCRIPT_PATH="$ROOT/infra/scripts/drill-dogfood-orchestrator.sh"  # reference only — tests invoke via $tmpdir copy
+SCRIPT_PATH="$ROOT/infra/scripts/dr/dogfood-orchestrator.sh"  # reference only — tests invoke via $tmpdir copy
 
 TESTS_RUN=0
 TESTS_PASSED=0
@@ -25,11 +25,11 @@ build_stubs() {
   mkdir -p "$tmpdir/bin" "$tmpdir/infra/scripts" "$tmpdir/infra/scripts/lib" "$tmpdir/infra/tests/e2e/fixtures/hello-server"
 
   # Stub: cleanroom-drill (delegated foundation step)
-  cat > "$tmpdir/infra/scripts/drill-cleanroom-orchestrator.sh" <<EOF
+  cat > "$tmpdir/infra/scripts/dr/cleanroom-orchestrator.sh" <<EOF
 #!/usr/bin/env bash
 exit $cleanroom_exit
 EOF
-  chmod +x "$tmpdir/infra/scripts/drill-cleanroom-orchestrator.sh"
+  chmod +x "$tmpdir/infra/scripts/dr/cleanroom-orchestrator.sh"
 
   # Stub: drill-mint-jwt (returns JWT on stdout)
   cat > "$tmpdir/infra/scripts/drill-mint-jwt.sh" <<EOF
@@ -40,17 +40,17 @@ EOF
   chmod +x "$tmpdir/infra/scripts/drill-mint-jwt.sh"
 
   # Stub: drill-teardown-validator
-  cat > "$tmpdir/infra/scripts/drill-teardown-validator.sh" <<EOF
+  cat > "$tmpdir/infra/scripts/dr/teardown-validator.sh" <<EOF
 #!/usr/bin/env bash
 exit 0
 EOF
-  chmod +x "$tmpdir/infra/scripts/drill-teardown-validator.sh"
+  chmod +x "$tmpdir/infra/scripts/dr/teardown-validator.sh"
 
-  cat > "$tmpdir/infra/scripts/drill-evidence-capture.sh" <<EOF
+  cat > "$tmpdir/infra/scripts/dr/evidence-capture.sh" <<EOF
 #!/usr/bin/env bash
 exit 0
 EOF
-  chmod +x "$tmpdir/infra/scripts/drill-evidence-capture.sh"
+  chmod +x "$tmpdir/infra/scripts/dr/evidence-capture.sh"
 
   # Stub: task (drill:down)
   cat > "$tmpdir/bin/task" <<EOF
@@ -114,8 +114,8 @@ EOF
 
   # Copy real lib + orchestrator
   cp "$ROOT/infra/scripts/lib/drill-skill-common.sh" "$tmpdir/infra/scripts/lib/"
-  cp "$ROOT/infra/scripts/drill-dogfood-orchestrator.sh" "$tmpdir/infra/scripts/"
-  chmod +x "$tmpdir/infra/scripts/drill-dogfood-orchestrator.sh"
+  cp "$ROOT/infra/scripts/dr/dogfood-orchestrator.sh" "$tmpdir/infra/scripts/"
+  chmod +x "$tmpdir/infra/scripts/dr/dogfood-orchestrator.sh"
 
   # Fake runtime kubeconfig (file exists for invariants step)
   mkdir -p /tmp/drill-kc
@@ -130,7 +130,7 @@ run_orchestrator() {
   PATH="$tmpdir/bin:/usr/bin:/bin" \
     CI=false \
     LOOPZERO_DRILL_SKILL_SPONSOR=tt \
-    bash "$tmpdir/infra/scripts/drill-dogfood-orchestrator.sh" "$@" 2>&1
+    bash "$tmpdir/infra/scripts/dr/dogfood-orchestrator.sh" "$@" 2>&1
 }
 
 # ---- Tests ----
@@ -140,7 +140,7 @@ test_missing_confirm_cost_exits_2() {
   build_stubs "$tmpdir"
   set +e
   PATH="$tmpdir/bin:/usr/bin:/bin" CI=false LOOPZERO_DRILL_SKILL_SPONSOR=tt \
-    bash "$tmpdir/infra/scripts/drill-dogfood-orchestrator.sh" >/dev/null 2>&1
+    bash "$tmpdir/infra/scripts/dr/dogfood-orchestrator.sh" >/dev/null 2>&1
   local rc=$?
   set -e
   [[ "$rc" -eq 2 ]] || { echo "  got $rc, expected 2" >&2; return 1; }
@@ -152,7 +152,7 @@ test_missing_sponsor_exits_2() {
   set +e
   PATH="$tmpdir/bin:/usr/bin:/bin" CI=false \
     env -u LOOPZERO_DRILL_SKILL_SPONSOR \
-    bash "$tmpdir/infra/scripts/drill-dogfood-orchestrator.sh" --confirm-cost >/dev/null 2>&1
+    bash "$tmpdir/infra/scripts/dr/dogfood-orchestrator.sh" --confirm-cost >/dev/null 2>&1
   local rc=$?
   set -e
   [[ "$rc" -eq 2 ]] || return 1
@@ -163,7 +163,7 @@ test_ci_bypass_dry_run() {
   build_stubs "$tmpdir"
   set +e
   PATH="$tmpdir/bin:/usr/bin:/bin" CI=true \
-    bash "$tmpdir/infra/scripts/drill-dogfood-orchestrator.sh" --dry-run >/dev/null 2>&1
+    bash "$tmpdir/infra/scripts/dr/dogfood-orchestrator.sh" --dry-run >/dev/null 2>&1
   local rc=$?
   set -e
   [[ "$rc" -eq 0 ]] || return 1
@@ -206,7 +206,7 @@ test_help_flag() {
   local tmpdir="$1"
   build_stubs "$tmpdir"
   set +e
-  out=$(bash "$tmpdir/infra/scripts/drill-dogfood-orchestrator.sh" --help 2>&1)
+  out=$(bash "$tmpdir/infra/scripts/dr/dogfood-orchestrator.sh" --help 2>&1)
   local rc=$?
   set -e
   [[ "$rc" -eq 0 ]] || return 1
@@ -259,7 +259,7 @@ test_invariants_run_against_runtime_cluster() {
   # This test validates the orchestrator references RUNTIME_KC = /tmp/drill-kc/runtime.yaml
   local tmpdir="$1"
   build_stubs "$tmpdir"
-  grep -q "RUNTIME_KC=/tmp/drill-kc/runtime.yaml" "$tmpdir/infra/scripts/drill-dogfood-orchestrator.sh" || {
+  grep -q "RUNTIME_KC=/tmp/drill-kc/runtime.yaml" "$tmpdir/infra/scripts/dr/dogfood-orchestrator.sh" || {
     echo "  RUNTIME_KC not referenced correctly" >&2
     return 1
   }

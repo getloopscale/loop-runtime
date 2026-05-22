@@ -17,7 +17,7 @@
 set -euo pipefail
 
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/../../.." && pwd)"
-SCRIPT="$ROOT/infra/scripts/drill-preflight.sh"
+SCRIPT="$ROOT/infra/scripts/dr/preflight.sh"
 
 TESTS_RUN=0
 TESTS_PASSED=0

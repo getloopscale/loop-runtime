@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # infra/tests/drill-jwt-diagnose_test.sh
 #
-# Hermetic unit tests for infra/scripts/drill-jwt-diagnose.sh.
+# Hermetic unit tests for infra/scripts/dr/jwt-diagnose.sh.
 #
 # Plan: docs/plans/2026-05-19-drill-skills-rigor-restoration-plan.md T1.1
 #
@@ -20,7 +20,7 @@ set -euo pipefail
 set -u
 
 REPO_ROOT="$(cd "$(dirname "$0")/../.." && pwd)"
-SCRIPT="$REPO_ROOT/infra/scripts/drill-jwt-diagnose.sh"
+SCRIPT="$REPO_ROOT/infra/scripts/dr/jwt-diagnose.sh"
 [[ -x "$SCRIPT" ]] || { echo "FAIL: $SCRIPT not executable"; exit 1; }
 
 # Source the script in test mode (skips top-level main execution)

@@ -11,7 +11,7 @@
 set -euo pipefail
 
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/../../.." && pwd)"
-SCRIPT="$ROOT/infra/scripts/drill-cancel-refresh.sh"
+SCRIPT="$ROOT/infra/scripts/dr/cancel-refresh.sh"
 
 TESTS_RUN=0
 TESTS_PASSED=0

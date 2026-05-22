@@ -23,7 +23,7 @@
 set -euo pipefail
 
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/../../.." && pwd)"
-SCRIPT="$ROOT/infra/scripts/drill-state-reset.sh"
+SCRIPT="$ROOT/infra/scripts/dr/state-reset.sh"
 
 TESTS_RUN=0
 TESTS_PASSED=0

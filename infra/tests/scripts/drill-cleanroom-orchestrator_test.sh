@@ -14,7 +14,7 @@ set -euo pipefail
 
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/../../.." && pwd)"
 # shellcheck disable=SC2034
-SCRIPT="$ROOT/infra/scripts/drill-cleanroom-orchestrator.sh"  # reference only — tests invoke via $tmpdir copy
+SCRIPT="$ROOT/infra/scripts/dr/cleanroom-orchestrator.sh"  # reference only — tests invoke via $tmpdir copy
 
 TESTS_RUN=0
 TESTS_PASSED=0
@@ -90,11 +90,11 @@ EOF
   chmod +x "$tmpdir/bin/dig"
 
   # Stub: drill-preflight (per arg exit)
-  cat > "$tmpdir/infra/scripts/drill-preflight.sh" <<EOF
+  cat > "$tmpdir/infra/scripts/dr/preflight.sh" <<EOF
 #!/usr/bin/env bash
 exit $preflight_exit
 EOF
-  chmod +x "$tmpdir/infra/scripts/drill-preflight.sh"
+  chmod +x "$tmpdir/infra/scripts/dr/preflight.sh"
 
   # Stub: drill-helmfile-bootstrap
   cat > "$tmpdir/infra/scripts/drill-helmfile-bootstrap.sh" <<EOF
@@ -104,25 +104,25 @@ EOF
   chmod +x "$tmpdir/infra/scripts/drill-helmfile-bootstrap.sh"
 
   # Stub: drill-teardown-validator
-  cat > "$tmpdir/infra/scripts/drill-teardown-validator.sh" <<EOF
+  cat > "$tmpdir/infra/scripts/dr/teardown-validator.sh" <<EOF
 #!/usr/bin/env bash
 echo "stub teardown validator OK"
 exit 0
 EOF
-  chmod +x "$tmpdir/infra/scripts/drill-teardown-validator.sh"
+  chmod +x "$tmpdir/infra/scripts/dr/teardown-validator.sh"
 
   # Stub: drill-evidence-capture
-  cat > "$tmpdir/infra/scripts/drill-evidence-capture.sh" <<EOF
+  cat > "$tmpdir/infra/scripts/dr/evidence-capture.sh" <<EOF
 #!/usr/bin/env bash
 exit 0
 EOF
-  chmod +x "$tmpdir/infra/scripts/drill-evidence-capture.sh"
+  chmod +x "$tmpdir/infra/scripts/dr/evidence-capture.sh"
 
   # Copy real lib + orchestrator + invoke with stub PATH
   mkdir -p "$tmpdir/infra/scripts/lib"
   cp "$ROOT/infra/scripts/lib/drill-skill-common.sh" "$tmpdir/infra/scripts/lib/"
-  cp "$ROOT/infra/scripts/drill-cleanroom-orchestrator.sh" "$tmpdir/infra/scripts/"
-  chmod +x "$tmpdir/infra/scripts/drill-cleanroom-orchestrator.sh"
+  cp "$ROOT/infra/scripts/dr/cleanroom-orchestrator.sh" "$tmpdir/infra/scripts/"
+  chmod +x "$tmpdir/infra/scripts/dr/cleanroom-orchestrator.sh"
 
   # Stub Taskfile (orchestrator runs from tmpdir/infra/scripts/.. = tmpdir)
   cat > "$tmpdir/Taskfile.yml" <<EOF
@@ -140,7 +140,7 @@ run_orchestrator() {
   PATH="$tmpdir/bin:/usr/bin:/bin" \
     CI=false \
     LOOPZERO_DRILL_SKILL_SPONSOR=tt \
-    bash "$tmpdir/infra/scripts/drill-cleanroom-orchestrator.sh" "$@" 2>&1
+    bash "$tmpdir/infra/scripts/dr/cleanroom-orchestrator.sh" "$@" 2>&1
 }
 
 # ---- Tests ----
@@ -152,7 +152,7 @@ test_missing_confirm_cost_exits_2() {
   PATH="$tmpdir/bin:/usr/bin:/bin" \
     CI=false \
     LOOPZERO_DRILL_SKILL_SPONSOR=tt \
-    bash "$tmpdir/infra/scripts/drill-cleanroom-orchestrator.sh" >/dev/null 2>&1
+    bash "$tmpdir/infra/scripts/dr/cleanroom-orchestrator.sh" >/dev/null 2>&1
   local rc=$?
   set -e
   [[ "$rc" -eq 2 ]] || { echo "  expected exit 2, got $rc" >&2; return 1; }
@@ -165,7 +165,7 @@ test_missing_sponsor_env_exits_2() {
   PATH="$tmpdir/bin:/usr/bin:/bin" \
     CI=false \
     env -u LOOPZERO_DRILL_SKILL_SPONSOR \
-    bash "$tmpdir/infra/scripts/drill-cleanroom-orchestrator.sh" --confirm-cost >/dev/null 2>&1
+    bash "$tmpdir/infra/scripts/dr/cleanroom-orchestrator.sh" --confirm-cost >/dev/null 2>&1
   local rc=$?
   set -e
   [[ "$rc" -eq 2 ]] || { echo "  expected exit 2 (no sponsor), got $rc" >&2; return 1; }
@@ -178,7 +178,7 @@ test_ci_bypasses_confirm_cost_and_sponsor() {
   PATH="$tmpdir/bin:/usr/bin:/bin" \
     CI=true \
     env -u LOOPZERO_DRILL_SKILL_SPONSOR \
-    bash "$tmpdir/infra/scripts/drill-cleanroom-orchestrator.sh" --dry-run >/dev/null 2>&1
+    bash "$tmpdir/infra/scripts/dr/cleanroom-orchestrator.sh" --dry-run >/dev/null 2>&1
   local rc=$?
   set -e
   [[ "$rc" -eq 0 ]] || { echo "  expected exit 0 in CI dry-run, got $rc" >&2; return 1; }
@@ -229,7 +229,7 @@ test_help_flag_exits_0() {
   local tmpdir="$1"
   build_stubs "$tmpdir"
   set +e
-  out=$(bash "$tmpdir/infra/scripts/drill-cleanroom-orchestrator.sh" --help 2>&1)
+  out=$(bash "$tmpdir/infra/scripts/dr/cleanroom-orchestrator.sh" --help 2>&1)
   local rc=$?
   set -e
   [[ "$rc" -eq 0 ]] || { echo "  expected exit 0, got $rc" >&2; return 1; }
@@ -245,7 +245,7 @@ test_skip_teardown_env_keeps_stack_alive() {
     CI=false \
     LOOPZERO_DRILL_SKILL_SPONSOR=tt \
     DRILL_SKIP_TEARDOWN=true \
-    bash "$tmpdir/infra/scripts/drill-cleanroom-orchestrator.sh" --confirm-cost 2>&1)
+    bash "$tmpdir/infra/scripts/dr/cleanroom-orchestrator.sh" --confirm-cost 2>&1)
   local rc=$?
   set -e
   [[ "$rc" -eq 0 ]] || { echo "  expected exit 0, got $rc" >&2; echo "$out" | tail -5 >&2; return 1; }
