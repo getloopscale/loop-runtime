@@ -573,11 +573,13 @@ jobs:
         run: bash infra/scripts/check_clusterimagepolicy_mode.sh
 
       - name: CLI bundle size guard (T9.3 deep-review-remediation)
+        # T5.3 of plan 2026-05-22: migrated check_cli_bundle_size.sh to pure-Go
+        # gate (loopzero-ops). Build dist first, then the gate sums cli/dist/*.js.
         run: |
           if [ ! -d cli/dist ]; then
             (cd cli && npm install --silent && npm run build)
           fi
-          bash infra/scripts/check_cli_bundle_size.sh
+          cd cmd/loopzero-ops && go run . quality cli-bundle-size --root "${GITHUB_WORKSPACE}"
 
       - name: Base image digest pinning lint (T4.6 deep-review-remediation)
         run: bash infra/scripts/check_base_image_digest_pin.sh

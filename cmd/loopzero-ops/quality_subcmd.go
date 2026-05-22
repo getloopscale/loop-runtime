@@ -12,6 +12,7 @@ import (
 	"time"
 
 	"github.com/loopzero/loopzero/pkg/quality/actionpinning"
+	"github.com/loopzero/loopzero/pkg/quality/clibundlesize"
 	"github.com/loopzero/loopzero/pkg/quality/deadlineratchet"
 	"github.com/loopzero/loopzero/pkg/quality/decisionsdeletion"
 	"github.com/loopzero/loopzero/pkg/quality/divergencematrix"
@@ -112,6 +113,8 @@ func runQuality(args []string) int {
 		return runDecisionsDeletion(args[1:])
 	case "drill-outputs-consumers":
 		return runDrillOutputsConsumers(args[1:])
+	case "cli-bundle-size":
+		return runCLIBundleSize(args[1:])
 	default:
 		fmt.Fprintf(os.Stderr, "unknown gate: %s\n\n%s", args[0], qualityHelp)
 		return 1
@@ -642,6 +645,29 @@ func runServiceAuthRotation(args []string) int {
 		exception: ".github/service-auth-rotation-exception.txt",
 		adr:       "2026-05-13-service-auth-ed25519-adoption.md",
 	})
+}
+
+func runCLIBundleSize(args []string) int {
+	fs := flag.NewFlagSet("cli-bundle-size", flag.ContinueOnError)
+	root := fs.String("root", ".", "repo root directory")
+	if err := fs.Parse(args); err != nil {
+		return 1
+	}
+	o := clibundlesize.Check(clibundlesize.Config{Root: *root})
+	mb := func(b int64) float64 { return float64(b) / 1024 / 1024 }
+	if o.Skipped {
+		fmt.Println("[cli-bundle-size] PASS — cli/dist not present (run 'cd cli && npm run build' first).")
+		return 0
+	}
+	if !o.Pass {
+		fmt.Fprintf(os.Stderr, "[cli-bundle-size] FAIL — cli/dist %.1f MB > cap %.1f MB (T9.3 governance).\n",
+			mb(o.TotalBytes), mb(o.MaxBytes))
+		fmt.Fprintln(os.Stderr, "Options: (1) remove/lazy-load the heavy dependency, OR")
+		fmt.Fprintln(os.Stderr, "(2) bump MaxBytes in pkg/quality/clibundlesize + add an ADR justifying the growth.")
+		return 1
+	}
+	fmt.Printf("[cli-bundle-size] PASS — cli/dist %.1f MB <= cap %.1f MB.\n", mb(o.TotalBytes), mb(o.MaxBytes))
+	return 0
 }
 
 func runDrillOutputsConsumers(args []string) int {

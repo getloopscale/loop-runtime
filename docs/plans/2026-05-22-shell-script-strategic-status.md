@@ -12,6 +12,31 @@
 
 ## Iteration log
 
+### Iter 30 (2026-05-22) — Phase 5 T5.3 (cli-bundle-size gate, REVIEW-NEEDED → pure-logic)
+
+**Commit:** (current)
+
+**Done:**
+- **Orphan-test heuristic produced false positives** (most `*_test.sh` are
+  standalone CI test harnesses, not AUTO-DIE pairs of a deleted parent) — did
+  NOT mass-delete; applied the read-verify discipline.
+- Audited the `check_*.sh` (root) set with the corrected CLI lens; found
+  `check_cli_bundle_size.sh` (REVIEW-NEEDED) is genuine pure-logic (sums
+  cli/dist/*.js bytes vs a 4 MiB cap; find/awk only). Migrated to
+  `pkg/quality/clibundlesize/`. 8 tests, 95.2% coverage.
+- **KISS:** made the walk tolerate per-entry stat errors (bash `find` does too),
+  so Check returns no error and there is no dead error-handling — lifted
+  coverage 85.2% → 95.2%.
+- `cmd/loopzero-ops` `cli-bundle-size` subcommand; `ci.yml` security job repointed
+  (Go gate; job already has setup-go). Parity: both PASS, both report 0.5 MB.
+- `check_cli_bundle_size.sh` (63) DELETED; allowlist 231 (was 232).
+
+**Script count: 232 → 231** (28 deletions cumulative). 24 Go quality gates.
+Note: also found `check_agpl_isolation.sh` (live:[]) as a likely pure-logic
+target for a future iteration.
+
+---
+
 ### Iter 29 (2026-05-22) — Phase 5 T5.3 (drill-outputs-consumers gate + audit correction #2)
 
 **Commit:** (current)
