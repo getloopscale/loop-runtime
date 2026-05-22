@@ -179,6 +179,7 @@ emit_token "$GITEA_PWD" > "$GITEA_PWD_FILE"
 emit_token "$GITEA_TOKEN" > "$GITEA_TOKEN_FILE"
 
 apply_secret gitea-admin loopzero-system \
+  --from-literal=username="${LOOPZERO_GITEA_ADMIN_USER:-gitea_admin}" \
   --from-file=password="$GITEA_PWD_FILE" \
   --from-file=token="$GITEA_TOKEN_FILE"
 
