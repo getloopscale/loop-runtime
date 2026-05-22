@@ -14,6 +14,7 @@ import (
 	"github.com/loopzero/loopzero/pkg/quality/divergencematrix"
 	"github.com/loopzero/loopzero/pkg/quality/helmdrift"
 	"github.com/loopzero/loopzero/pkg/quality/mockbudget"
+	"github.com/loopzero/loopzero/pkg/quality/nomigrateforce"
 	"github.com/loopzero/loopzero/pkg/quality/nonewbash"
 	"github.com/loopzero/loopzero/pkg/quality/noshellwrap"
 	"github.com/loopzero/loopzero/pkg/quality/prodimagetags"
@@ -94,6 +95,8 @@ func runQuality(args []string) int {
 		return runActionPinning(args[1:])
 	case "prod-image-tags":
 		return runProdImageTags(args[1:])
+	case "no-migrate-force":
+		return runNoMigrateForce(args[1:])
 	default:
 		fmt.Fprintf(os.Stderr, "unknown gate: %s\n\n%s", args[0], qualityHelp)
 		return 1
@@ -559,5 +562,41 @@ func runProdImageTags(args []string) int {
 		return 1
 	}
 	fmt.Printf("✓ Scanned %d file(s). No :prod or :latest tags in production manifests.\n", o.ScannedFiles)
+	return 0
+}
+
+func runNoMigrateForce(args []string) int {
+	fs := flag.NewFlagSet("no-migrate-force", flag.ContinueOnError)
+	root := fs.String("root", ".", "repo root directory")
+	if err := fs.Parse(args); err != nil {
+		return 1
+	}
+	o, err := nomigrateforce.Check(nomigrateforce.Config{Root: *root})
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "no-migrate-force: %v\n", err)
+		return 1
+	}
+	if !o.Pass {
+		// allowlist: migrate force (this is the gate's own diagnostic message)
+		msg := fmt.Sprintf("%d unallowlisted occurrence(s) of 'migrate force' in production code. "+
+			"Per CORRECTIONS.txt item B, forcing a migration on a production DB corrupts "+
+			"schema_migrations. Use psql for ad-hoc SQL, OR add a '# allowlist: migrate force "+
+			"(rationale)' marker on the same line or within 3 lines above.", len(o.Blocked))
+		if os.Getenv("GITHUB_ACTIONS") != "" {
+			fmt.Printf("::error::%s\n", msg)
+		} else {
+			fmt.Fprintf(os.Stderr, "[no-migrate-force] BLOCK: %s\n", msg)
+		}
+		fmt.Fprintln(os.Stderr, "[no-migrate-force] blocked matches:")
+		for _, b := range o.Blocked {
+			fmt.Fprintf(os.Stderr, "  %s\n", b)
+		}
+		return 2 // contract: exit 2 for violations (matches legacy bash gate)
+	}
+	if o.MatchCount > 0 {
+		fmt.Printf("[no-migrate-force] all %d matches allowlisted — OK.\n", o.MatchCount)
+	} else {
+		fmt.Println("[no-migrate-force] no matches — OK.")
+	}
 	return 0
 }

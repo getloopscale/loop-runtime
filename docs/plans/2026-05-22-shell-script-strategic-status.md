@@ -12,6 +12,34 @@
 
 ## Iteration log
 
+### Iter 21 (2026-05-22) — Phase 5 T5.3 (no-migrate-force gate + AUTO-DIE pair)
+
+**Commit:** (current)
+
+**Done:**
+- `pkg/quality/nomigrateforce/` (NEW) — pure-Go gate replacing
+  `check-no-migrate-force.sh` (CORRECTIONS.txt item B). Walks repo for the
+  literal `migrate force` pattern; permits via `# allowlist:` / `// allowlist:`
+  marker on same line or within 3 lines above. Excludes docs dirs + binaries
+  (NUL-byte heuristic). Preserves **exit code 2** for violations (contract).
+  16 tests GREEN (all 13 bash cases + 3 Go-specific), 91.1% coverage.
+- **Self-reference handled:** the gate's own source mentions `migrate force`
+  literally; DefaultSkipSuffixes skips its package files + CORRECTIONS.txt, and
+  the loopzero-ops handler line carries an inline allowlist marker (dogfoods the
+  gate's own allowlist mechanism).
+- **Parity verified:** before-change the bash gate passed (0 blocked); after
+  deleting the bash+test and adding skip/marker, the Go gate is GREEN
+  (13 matches, all allowlisted) on the live repo.
+- `cmd/loopzero-ops` `no-migrate-force` subcommand.
+- 2 workflows repointed: `check-no-migrate-force.yml` (Go test + Go gate) and
+  `ci.yml` "Reject migrate force" step (+Go setup). Path filters updated.
+- **2 scripts DELETED:** `check-no-migrate-force.sh` (164) +
+  `check-no-migrate-force_test.sh` (213) — D6 AUTO-DIE. allowlist 242 (was 244).
+
+**Script count: 244 → 242** (17 deletions cumulative). 19 Go quality gates.
+
+---
+
 ### Iter 20 (2026-05-22) — Phase 5 T5.3 (prod-image-tags pure-Go gate)
 
 **Commit:** (current)
