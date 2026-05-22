@@ -12,6 +12,29 @@
 
 ## Iteration log
 
+### Iter 17 (2026-05-22) — Phase 5 T5.3 (helm-drift gate + AUTO-DIE, JSON parity)
+
+**Commit:** (current)
+
+**Done:**
+- `pkg/quality/helmdrift/` (NEW) — pure-Go gate replacing `audit-helm-drift.sh`.
+  Compares template-file sets between charts/ (published) + infra/helm/
+  (bootstrap); drift OK only if approved by ADR (registry: loopzero-api/loopzero-cloud
+  → ADR-0043; conceptual pair loopzero-admission-policies → admission-policies).
+  7 tests GREEN. Replaces bash find/comm/awk — no external CLI.
+- **Triple parity verified:** human exit 0, same 2 drift pairs detected, AND
+  JSON schema byte-compatible (consumed by charts-drift-cron.yml issue creation).
+  Go sorts template lists deterministically (benign improvement over bash).
+- `cmd/loopzero-ops` — `helm-drift` subcommand (human/github-annotations/json formats).
+- `.github/workflows/charts-drift-cron.yml` — runs Go gate `--format json`.
+- **2 scripts DELETED:** `audit-helm-drift.sh` + `audit-helm-drift.test.sh`
+  (D6 AUTO-DIE; no standalone workflow consumer for the test).
+- allowlist 245 (was 247).
+
+**Script count: 247 → 245** (12 deletions cumulative). 15 Go quality gates.
+
+---
+
 ### Iter 16 (2026-05-22) — Phase 5 T5.3 (skip-link gate + AUTO-DIE + worktree bug caught)
 
 **Commit:** (current)

@@ -4,15 +4,18 @@
 package main
 
 import (
+	"encoding/json"
 	"flag"
 	"fmt"
 	"os"
+	"strings"
 
 	"github.com/loopzero/loopzero/pkg/quality/divergencematrix"
+	"github.com/loopzero/loopzero/pkg/quality/helmdrift"
 	"github.com/loopzero/loopzero/pkg/quality/mockbudget"
-	"github.com/loopzero/loopzero/pkg/quality/regressiontest"
 	"github.com/loopzero/loopzero/pkg/quality/nonewbash"
 	"github.com/loopzero/loopzero/pkg/quality/noshellwrap"
+	"github.com/loopzero/loopzero/pkg/quality/regressiontest"
 	"github.com/loopzero/loopzero/pkg/quality/scriptsaudit"
 	"github.com/loopzero/loopzero/pkg/quality/skiplink"
 	"github.com/loopzero/loopzero/pkg/quality/taskfileinterface"
@@ -80,6 +83,8 @@ func runQuality(args []string) int {
 		return runMockBudget(args[1:])
 	case "skip-link":
 		return runSkipLink(args[1:])
+	case "helm-drift":
+		return runHelmDrift(args[1:])
 	default:
 		fmt.Fprintf(os.Stderr, "unknown gate: %s\n\n%s", args[0], qualityHelp)
 		return 1
@@ -382,5 +387,90 @@ func runSkipLink(args []string) int {
 	} else {
 		fmt.Println("[skip-link] PASS — all skip calls have issue URL")
 	}
+	return 0
+}
+
+func runHelmDrift(args []string) int {
+	fs := flag.NewFlagSet("helm-drift", flag.ContinueOnError)
+	root := fs.String("root", ".", "repo root directory")
+	format := fs.String("format", "human", "output format: human | github-annotations")
+	if err := fs.Parse(args); err != nil {
+		return 1
+	}
+	o, err := helmdrift.Check(helmdrift.Config{RepoRoot: *root})
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "helm-drift: %v\n", err)
+		return 5
+	}
+
+	if *format == "json" {
+		// Match the legacy bash JSON schema (consumed by charts-drift-cron.yml).
+		type driftJSON struct {
+			Pair                     string   `json:"pair"`
+			Intentional              bool     `json:"intentional"`
+			ADR                      *string  `json:"adr"`
+			Severity                 string   `json:"severity"`
+			TemplatesOnlyInPublished []string `json:"templates_only_in_published"`
+			TemplatesOnlyInBootstrap []string `json:"templates_only_in_bootstrap"`
+		}
+		out := struct {
+			Drifts []driftJSON `json:"drifts"`
+		}{Drifts: []driftJSON{}}
+		for _, d := range o.Drifts {
+			sev := "high"
+			var adr *string
+			if d.Intentional {
+				sev = "info"
+				a := d.ADR
+				adr = &a
+			}
+			pub, boot := d.OnlyInPublished, d.OnlyInBootstrap
+			if pub == nil {
+				pub = []string{}
+			}
+			if boot == nil {
+				boot = []string{}
+			}
+			out.Drifts = append(out.Drifts, driftJSON{
+				Pair: d.Pair, Intentional: d.Intentional, ADR: adr, Severity: sev,
+				TemplatesOnlyInPublished: pub, TemplatesOnlyInBootstrap: boot,
+			})
+		}
+		b, _ := json.Marshal(out)
+		fmt.Println(string(b))
+		if !o.Pass {
+			return 1
+		}
+		return 0
+	}
+
+	if len(o.Drifts) == 0 {
+		fmt.Println("✓ charts/ ↔ infra/helm/ drift audit: no drifts detected.")
+		return 0
+	}
+	for _, d := range o.Drifts {
+		marker := "⚠"
+		status := "needs ADR or fix"
+		if d.Intentional {
+			marker = "ℹ"
+			status = "intentional (approved by " + d.ADR + ")"
+		}
+		if *format == "github-annotations" && !d.Intentional {
+			fmt.Printf("::warning::Drift detected for %s: templates differ\n", d.Pair)
+		}
+		fmt.Printf("%s %s\n", marker, d.Pair)
+		if len(d.OnlyInPublished) > 0 {
+			fmt.Printf("  Only in published: %s\n", strings.Join(d.OnlyInPublished, " "))
+		}
+		if len(d.OnlyInBootstrap) > 0 {
+			fmt.Printf("  Only in bootstrap: %s\n", strings.Join(d.OnlyInBootstrap, " "))
+		}
+		fmt.Printf("  STATUS: %s\n", status)
+	}
+	if !o.Pass {
+		fmt.Fprintln(os.Stderr, "❌ Drifts without approving ADR detected.")
+		return 1
+	}
+	fmt.Println("✓ All drifts have approving ADRs (intentional).")
 	return 0
 }
