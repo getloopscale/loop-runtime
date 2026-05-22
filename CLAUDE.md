@@ -109,36 +109,103 @@ cd infra/pulumi && npx pulumi preview --stack dev # Preview
 9. **CLI is the primary interface** — Every feature lives in CLI before dashboard. Dashboard-only features are product bugs.
 10. **Local equals production** — Same Helm charts, same operators, same build pipeline. No Docker Compose shortcuts. No "dev mode" with different behavior.
 11. **Claims need evidence** — Any claim affecting maturity score requires **3 evidence sources** (T1 commit+test, T2 LIVE log, T3 CI run). Maturity-claim confidence cap **90-95%** (single-model family correlation residual; originally ratified as ADR-0051 in the governance suite removed 2026-05-11, but the cap remains binding). Note: this cap applies to maturity claims only — the 95%+ implementation confidence rule (`.claude/rules/workflow.md`) is a separate, stricter gate for all code changes. TTL applies: 30d operational / 60d arch / 90d strategic. Latest baseline: `.claude/knowledge-base/audits/2026-05-11/SUMMARY.md` (12 module audits + this aggregate). The previous `docs/evidence/{dim}/` per-claim tree was consolidated into the audits folder during the same cleanup.
+12. **Tool adoption claims need grep, not memory** — Before classifying any external tool/library as "adopted" or "gap" (comparing against CNCF landscape, kubetools, awesome-lists, or evaluating a new dependency), **grep the repo FIRST**: `grep -ril "<tool>" infra/ charts/ .github/workflows/ taskfiles/`. Authoritative inventory lives in (a) `infra/helm/<chart>/` (bootstrap charts), (b) `charts/<chart>/` (OCI-published), (c) `infra/helmfile/environments/*.yaml`, (d) `.github/workflows/*.yml` (CI tooling). **This file is a curated summary, NOT an authoritative tool inventory** — classifying from memory produces false positives. Codified 2026-05-22 after false-positive incident (Velero/Trivy/Polaris/kubeconform/helm-chartsnap/chart-testing/Renovate/TruffleHog misclassified as "gap" when all already adopted). See § Tool Inventory below.
 
 ---
 
 ## Stack
 
+> **Inventory verified 2026-05-22 via grep** (`infra/helm/` + `charts/` + `infra/helmfile/` + `.github/workflows/`). When CLAUDE.md and the file system disagree, the file system wins — see Rule 12.
+
+### Application Layers
+
 | Layer | Technology |
 |-------|-----------|
 | CLI | TypeScript + Commander (`cli/`) |
 | API | Go 1.25 + chi + pgx (`api/`) |
-| Operators | Go 1.25 + kubebuilder + controller-runtime (`operators/`) |
+| Operators | Go 1.25 + kubebuilder + controller-runtime (`operators/`) — 4 split binaries (tenant/app/preview/platform) |
 | Shared libs | Go (`pkg/`: errors, errors/http, logging, id, naming, conditions, statemachine, jwt, enforcement, circuitbreaker, healthcheck) |
-| Database | PostgreSQL 16 (managed DO) |
-| Build | Argo Workflows + BuildKit (rootless) |
-| Image signing | cosign (in-pipeline, key-based) |
-| GitOps | Gitea 1.22.6 + ArgoCD 2.13.3 (manual sync) |
-| Progressive delivery | Argo Rollouts 1.7.2 (Helm chart `infra/helm/argo-rollouts/`, native Traefik traffic router for `traefik.io/v1alpha1`, dashboard disabled, PSA restricted) |
-| Ingress | Traefik 28.3.0 + cert-manager 1.14.5 |
-| Storage | MinIO / DO Spaces (S3) |
-| Registry | DigitalOcean Container Registry |
-| Observability | Prometheus 25.27.0 + Grafana 8.5.2 + OTel + Tempo + Loki 6.24.0 + Promtail 6.16.6 |
-| Secrets | External Secrets Operator 0.14.3 |
+| Database | PostgreSQL 16 (managed DO prod; chart `infra/helm/postgresql/` self-hosted) |
+| Migrations | golang-migrate (forward-only `.up.sql`) |
 | Auth | Ory Kratos + Ory Hydra + Redis |
-| Edge | Cloudflare Tunnel + Worker + KV |
-| Autoscaling | KEDA 2.16.1 + HTTP Add-on 0.8.0 |
-| IaC | **Bipartite SoT formalizado per MEET-2026-05-12 D3.** **L1 (Pulumi):** 5 projetos — `pulumi/` (DO+CF cloud primitives), `pulumi-infra/` (multi-cluster topology), `pulumi-platform/` (bootstrap 32 Helm releases), `pulumi-drill/` (DR drill stack — **PROD-IDENTICAL 4-cluster topology** per plan `2026-05-16-drill-prod-identical-multicluster-plan.md` v1.1: mgmt medium + build small + runtime small + runtime-2 small + managed PG mgmt-tier + shared VPC 10.40.0.0/16, mirroring `pulumi/src/components/infra.ts:139-186`. Separate state bucket `loopzero-drill-pulumi-state` + separate credentials D7. Auto-destroy watchdog cron every 6h via `drill-auto-destroy-watchdog.yml`. Cost ~$0.32/hr active.), `pulumi-shared/` (contracts/interfaces). The previous `pulumi-control-plane/` stub (16 TODOs already reduced to 64-LOC empty-program guard by Wave 1 T1.8) was DELETED 2026-05-15 per close-all-gaps plan T2.1 — control-plane workloads ship via L2 helmfile, not Pulumi. **L2 (Helmfile):** orchestrator de 32 Helm releases (loopzero-api, loopzero-cloud, Kratos, Hydra, ArgoCD, Gitea, MinIO, etc.) — **L2 é o SoT real desses workloads**, não Pulumi. **L3 (ArgoCD):** Day-2 GitOps para tenant workloads from Gitea. **Decision tree para on-call:** is it a cloud resource? → L1 Pulumi. Is it a K8s platform workload? → L2 Helmfile. Is it a tenant app? → L3 ArgoCD. |
+
+### Platform Charts (`infra/helm/`, 34 dirs — bootstrap via Helmfile L2)
+
+| Domain | Charts |
+|--------|--------|
+| Identity/Auth | `ory-kratos`, `ory-hydra`, `redis` |
+| Build | `argo-workflows`, `harbor` (auxiliary registry; prod uses DOCR) |
+| GitOps | `argocd`, `gitea` |
+| Progressive delivery | `argo-rollouts` (Traefik v3 traffic router `traefik.io/v1alpha1`, dashboard disabled, PSA restricted), `keda`, `keda-http-addon` |
+| Ingress/TLS | `traefik`, `cert-manager`, `cluster-issuer`, `cloudflared` |
+| Storage | `minio`, `nfs-server-provisioner` (with ADR exception) |
+| Admission | `admission-policies` (VAPs custom), `policy-controller` (sigstore) |
+| Network | `network-policies` (deny-all baseline) |
+| Observability | `monitoring` (Prometheus + Grafana), `loki`, `promtail`, `tempo`, `otel`, `blackbox-exporter` |
+| Resilience | `chaos-mesh`, `velero` |
+| Testing | `k6-operator`, `smoke-test` |
+| LoopZero platform | `loopzero-api`, `loopzero-cloud`, `static-assets`, `external-secrets` |
+
+### Published Charts (`charts/`, 13 dirs — OCI registry, ArgoCD L3 + loopzero-common library)
+
+`loopzero-admission-policies`, `loopzero-api`, `loopzero-app-operator`, `loopzero-build-cwts`, `loopzero-cloud`, `loopzero-common`, `loopzero-crds`, `loopzero-dashboard`, `loopzero-monitoring`, `loopzero-platform`, `loopzero-platform-operator`, `loopzero-preview-operator`, `loopzero-tenant-operator`
+
+### IaC + Local Dev
+
+| Layer | Tooling |
+|-------|---------|
+| L1 (cloud primitives) | Pulumi (TS) — 5 projects: `pulumi/` (DO+CF), `pulumi-infra/` (multi-cluster topology), `pulumi-platform/` (32 Helm releases), `pulumi-drill/` (DR prod-identical 4-cluster stack), `pulumi-shared/` (contracts). `pulumi-control-plane/` deleted 2026-05-15 per close-all-gaps T2.1. Bipartite SoT per MEET-2026-05-12 D3. |
+| L2 (platform workloads) | Helmfile v1.0+ — orchestrator de 32 Helm releases. **SoT real desses workloads**, não Pulumi. |
+| L3 (tenant Day-2 GitOps) | ArgoCD 2.13.3 (manual sync, from Gitea) |
 | Local clusters | k3d × 4 (mgmt, build, workload, runtime-2) |
 | Dev loop | Tilt + Taskfile (2929 lines across 7 files) |
-| Helm | 16 custom bootstrap charts + 49 value files across 34 chart dirs (`infra/helm/`) + 13 published charts (`charts/`) |
-| CI/CD | GitHub Actions (48 workflows — count verified 2026-05-21 per T0.8 of plan deep-review-remediation) |
-| Migrations | golang-migrate (forward-only `.up.sql`) |
+| Drill cost | ~$0.32/hr active; auto-destroy watchdog cron every 6h |
+
+### Edge + Registry
+
+| Layer | Tooling |
+|-------|---------|
+| Edge proxy | Cloudflare Tunnel + Worker `loopzero-static-delivery` + KV `loopzero-routing` + Zone Mgmt |
+| Container registry (prod) | DigitalOcean Container Registry (`registry.digitalocean.com/loopzero-system`) |
+| Static delivery | DO Spaces + CDN |
+
+### Supply Chain Security (CI-enforced)
+
+| Tool | Where | What |
+|------|-------|------|
+| **cosign** | `build-images.yml` + `cosign-rotation-drill.yml` + `cosign-cutover-deadline.yml` | Image signing (keyed; keyless v1.1 with Fulcio committed for cutover) |
+| **syft** | `build-images.yml` | SBOM generation (CycloneDX) |
+| **Trivy** | `ci.yml` (fs scan) + `build-images.yml` (image scan + **auto-delete vulnerable images from DOCR** on failure post-push) | CVE scanning with `severity=CRITICAL,HIGH`, `exit-code: 1` |
+| **TruffleHog** | `ci.yml` | Secret scanner (`--only-verified`) |
+| **sigstore policy-controller** | `infra/helm/policy-controller/` | Admission deny-by-default; `loopzero-images-warn` warn-mode ClusterImagePolicy (B16) |
+
+### Quality + Validation (CI gates)
+
+| Tool | Where | What |
+|------|-------|------|
+| **kubeconform** | `task validate:manifests` + `helm-charts.yml` | K8s manifest schema validation (`--strict`) |
+| **Polaris (Fairwinds)** | `scripts/run-polaris.sh --severity=danger` | K8s best-practices linter (DANGER bloqueia merge) |
+| **chart-testing (ct)** | `helm-charts.yml` matrix multi-K8s-version | Helm chart lint + install test |
+| **helm-chartsnap** | `helm-charts.yml` | Snapshot testing to detect chart output drift |
+| **helm-diff** | `infra/scripts/helm-diff-structural.sh` + helmfile | Pre-sync diff (mandatory plugin) |
+| **golangci-lint v2.11+** | `ci.yml` + `task lint` | Go lint |
+| **ESLint** | `cli/` package.json | TypeScript lint |
+| **`pkg/quality/*` gates** | `cmd/loopzero-ops quality <gate>` + multiple `*.yml` workflows | 18+ pure-logic gates (prod-image-tags, no-migrate-force, dogfood-slo, etc.) |
+| **Renovate** | `.github/renovate.json` | Dependency mgmt with `pinDigests: true` (INF-G18 SHA pinning), weekly grouped PRs |
+
+### CI/CD
+
+| Layer | Tooling |
+|-------|---------|
+| Pipeline | GitHub Actions (48 workflows verified 2026-05-21 per T0.8) |
+| Build engine | Argo Workflows + BuildKit (rootless single-container) + Docker buildx |
+
+### Known Gaps (CONSCIOUS NO — see § Tool Inventory and audit 2026-05-22)
+
+- Cost attribution per tenant (OpenCost/Kubecost) — P0 for Sprint 9 pricing validation
+- Pluto (deprecated API detector) — P0 before next DOKS minor upgrade
+- Slack alerting destination (Botkube/Robusta) — Prometheus alerts exist; routing missing
+- K8sGPT, Falco/Tetragon, Kubescape — deferred to v1.x
 
 ---
 
@@ -161,6 +228,48 @@ loopzero/
 ```
 
 Use `Glob` / `git ls-files` for current details.
+
+---
+
+## Tool Inventory (Authoritative — for Rule 12 verification)
+
+This project consciously chose to adopt OR reject specific tools. The **stack inventory above is the source of truth** for "what's installed"; this section documents the **rejected/deferred** set so we don't re-evaluate the same decisions every sprint.
+
+### Rejected by design (do NOT propose adoption without ADR)
+
+| Category | Rejected | Reason |
+|----------|----------|--------|
+| Multi-tenancy | vCluster, Kamaji, KubeZoo, KubeStellar | LoopZero uses namespace + cell isolation (ADR-0008/0021); sticky placement, no auto-rebalance |
+| Service Mesh | Istio, Linkerd, Kong, Gloo Mesh, OSM, APISIX | KISS: Traefik standalone; apps comunicate via public API; mesh adds latency without gain |
+| CNI advanced | Cilium, Calico advanced features | NetworkPolicy basics suffice for cell isolation; eBPF maturity bar too high |
+| FaaS | Knative, OpenFaaS, Fission, Kubeless | LoopZero is PaaS for containers, not FaaS |
+| ML/AI workloads | Kubeflow, Volcano, Kuberay | Out of scope for LoopZeroCloud GA |
+| IaC alternatives | Crossplane, Terraform direct | Pulumi (TS) chosen — familiarity advantage |
+| GitOps alternatives | Flux, PipeCD, Tekton | ArgoCD chosen — UI + multi-cluster + manual sync model |
+| Edge | KubeEdge, OpenYurt, SuperEdge | Regional cells in DO, no edge computing |
+| Federation | Karmada, Kubeadmiral | DynamicRouter owns placement; federation auto-rebalance forbidden |
+| Secret encryption | Sealed Secrets | ESO scales better for multi-tenant secret sync |
+| Node autoscaling | Karpenter | DOKS managed nodepool; Karpenter is AWS-first |
+| Policy engine | Kyverno | sigstore policy-controller + VAPs + Polaris suffice; revisit only if >3 policies accumulate |
+| DB operator | KubeBlocks, CNPG, Crunchy | DOKS managed PG in prod; standalone Helm chart locally |
+
+### Deferred to v1.x (revisit post-GA)
+
+| Tool | When to revisit |
+|------|------------------|
+| **OpenCost** | Sprint 9 (pricing validation) — **P0 actually, not deferred; just not adopted yet** |
+| **Pluto** | Before next DOKS minor upgrade — **P0 actually** |
+| Falco / Tetragon | Enterprise tier compliance ask |
+| Kubescape | After kube-bench wins evaluated |
+| HolmesGPT | After K8sGPT validates value |
+| Karpor / Pixie / DeepFlow / Alaz (eBPF obs) | v2.x when cells > 10 |
+| Kueue | If batch/HPC workloads added |
+| Litmus | Not adopted — Chaos Mesh covers chaos engineering |
+
+### How to use this section
+
+- **Before proposing a new tool:** check this table. If rejected, the burden of proof is on you (write ADR explaining why constraints changed).
+- **Before classifying a tool as "gap":** grep the repo per Rule 12. If the grep returns matches in `infra/helm/`, `charts/`, or `.github/workflows/`, it's already adopted — refresh this file.
 
 ---
 

@@ -514,7 +514,55 @@ loopzero deploy (or git push)
 | Monitoring | Prometheus + Grafana + Loki + Tempo + OpenTelemetry |
 | IaC | 5 Pulumi projetos (TS): `pulumi/` (L1 DO+CF), `pulumi-infra/` (multi-cluster topology), `pulumi-platform/` (L2 com 32 Helm releases), `pulumi-drill/` (DR drill prod-identical stack), `pulumi-shared/` (cross-project type contracts). Nota: `pulumi-control-plane/` foi deletado em 2026-05-15 (close-all-gaps T2.1) — control-plane workloads agora vivem em L2 Helmfile, não Pulumi, per MEET-2026-05-12 D3. |
 | CI/CD | GitHub Actions (48 workflows — verified 2026-05-21) |
-| Helm charts | 16 bootstrap próprios + 18 value overlays para upstream (`infra/helm/`) + 13 published (`charts/`) |
+| Helm charts | 34 bootstrap (`infra/helm/`) + 13 published (`charts/`) — verified 2026-05-22 |
+
+### Helm Charts Inventory (`infra/helm/`, 34 dirs)
+
+Bootstrap charts installed via Helmfile L2. Counts and names verified 2026-05-22 via `ls infra/helm/`.
+
+| Domain | Charts |
+|--------|--------|
+| Identity / Auth | `ory-kratos`, `ory-hydra`, `redis` |
+| Build pipeline | `argo-workflows`, `harbor` (auxiliary registry; prod uses DOCR) |
+| GitOps | `argocd`, `gitea` |
+| Progressive delivery | `argo-rollouts`, `keda`, `keda-http-addon` |
+| Ingress / TLS | `traefik`, `cert-manager`, `cluster-issuer`, `cloudflared` |
+| Storage | `minio`, `nfs-server-provisioner` |
+| Admission control | `admission-policies` (custom VAPs), `policy-controller` (sigstore) |
+| Network | `network-policies` (deny-all baseline) |
+| Observability | `monitoring` (Prom+Grafana), `loki`, `promtail`, `tempo`, `otel`, `blackbox-exporter` |
+| Resilience | `chaos-mesh`, `velero` |
+| Load + smoke testing | `k6-operator`, `smoke-test` |
+| LoopZero platform | `loopzero-api`, `loopzero-cloud`, `static-assets`, `external-secrets`, `postgresql` |
+
+### Published OCI Charts (`charts/`, 13 dirs)
+
+For ArgoCD L3 + downstream consumers. Use `loopzero-common` library for consistent labels and security contexts.
+
+`loopzero-admission-policies` · `loopzero-api` · `loopzero-app-operator` · `loopzero-build-cwts` · `loopzero-cloud` · `loopzero-common` · `loopzero-crds` · `loopzero-dashboard` · `loopzero-monitoring` · `loopzero-platform` · `loopzero-platform-operator` · `loopzero-preview-operator` · `loopzero-tenant-operator`
+
+### Supply Chain Security (CI-enforced)
+
+| Tool | Where | What it does |
+|------|-------|-----------|
+| **cosign** | `build-images.yml` + rotation drill + cutover deadline checks | Image signing (keyed today; keyless v1.1 with Fulcio committed for cutover) |
+| **syft** | `build-images.yml` | SBOM generation (CycloneDX) + per-build download endpoint (`GET /builds/{id}/sbom`) |
+| **Trivy** | `ci.yml` (filesystem scan) + `build-images.yml` (image scan) | CVE scanning, `CRITICAL,HIGH` severity, `exit-code: 1` — **auto-deletes vulnerable images from DOCR** on post-push failure |
+| **TruffleHog** | `ci.yml` | Secret scanner (`--only-verified`) |
+| **sigstore policy-controller** | `infra/helm/policy-controller/` | Admission deny-by-default; `loopzero-images-warn` warn-mode ClusterImagePolicy |
+
+### Quality & Validation Gates (CI-enforced)
+
+| Tool | Where | What it does |
+|------|-------|-----------|
+| **kubeconform** | `task validate:manifests`, `helm-charts.yml` | K8s manifest schema validation (`--strict`) |
+| **Polaris (Fairwinds)** | `scripts/run-polaris.sh --severity=danger` | K8s best-practices linter (DANGER blocks merge) |
+| **chart-testing (ct)** | `helm-charts.yml` multi-K8s-version matrix | Helm chart lint + install test |
+| **helm-chartsnap** | `helm-charts.yml` | Snapshot testing to detect chart output drift |
+| **helm-diff** | `infra/scripts/helm-diff-structural.sh` + helmfile plugin | Pre-sync structural diff |
+| **golangci-lint v2.11+** | `ci.yml`, `task lint` | Go static analysis |
+| **18+ `pkg/quality/*` gates** | `cmd/loopzero-ops quality <gate>` wired in workflows | Pure-logic gates (prod-image-tags, no-migrate-force, dogfood-slo, etc.) |
+| **Renovate** | `.github/renovate.json` | Dependency mgmt with `pinDigests: true` (INF-G18 SHA pinning), weekly grouped PRs |
 
 ### Production Infrastructure (DigitalOcean)
 
