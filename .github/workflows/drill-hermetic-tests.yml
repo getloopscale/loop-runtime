@@ -22,11 +22,10 @@ on:
       - 'infra/scripts/drill-*.sh'
       - 'infra/scripts/lib/bootstrap-cell-cc-drill-common.sh'
       - 'infra/scripts/lib/drill-skill-common.sh'
-      - 'infra/scripts/check-drill-outputs-consumers.sh'
+      - 'pkg/quality/drilloutputs/**'
       - 'infra/scripts/run-migrations.sh'
       - 'infra/tests/scripts/drill-*_test.sh'
       - 'infra/tests/scripts/bootstrap-drill-cc_test.sh'
-      - 'infra/tests/scripts/check-drill-outputs-consumers_test.sh'
       - 'infra/tests/scripts/run-migrations_sslmode_test.sh'
       - 'infra/tests/scripts/run-migrations_bug14_test.sh'
       - 'infra/tests/chaos/manifests/drill-*.yaml'
@@ -65,6 +64,14 @@ jobs:
       - name: Verify Docker available
         run: docker version
 
+      # Go is needed for the loopzero-ops pure-Go gates invoked below (T5.3 of
+      # plan 2026-05-22 migrated check-drill-outputs-consumers.sh to Go).
+      - name: Set up Go
+        uses: actions/setup-go@0aaccfd150d50ccaeb58ebd88d36e91967a5f35b # v5.4.0
+        with:
+          go-version: '1.25.10'
+          cache-dependency-path: cmd/loopzero-ops/go.sum
+
       # === Shellcheck warning+ on all 6 production drill scripts ===
       # Pattern from CORRECTIONS sprint 2026-05-13 (memory: tool-unavailability
       # alternative routes — Docker fallback when shellcheck binary missing).
@@ -100,15 +107,17 @@ jobs:
       - name: T1.2.bis — drill-state-reset hermetic tests
         run: bash infra/tests/scripts/drill-state-reset_test.sh
 
-      - name: T1.3 — check-drill-outputs-consumers grep audit tests
-        run: bash infra/tests/scripts/check-drill-outputs-consumers_test.sh
+      # T5.3 of plan 2026-05-22: migrated check-drill-outputs-consumers.sh + its
+      # hermetic test (D6 AUTO-DIE) to the pure-Go drilloutputs gate (loopzero-ops).
+      - name: T1.3 — drill-outputs-consumers grep audit tests (pure-Go)
+        run: cd pkg && go test ./quality/drilloutputs/...
 
       - name: T1.3 — bootstrap-drill-cc (cell wiring) tests
         run: bash infra/tests/scripts/bootstrap-drill-cc_test.sh
 
-      - name: T1.3 — check-drill-outputs-consumers LIVE repo scan
+      - name: T1.3 — drill-outputs-consumers LIVE repo scan (pure-Go)
         # Confirms zero legacy consumers in current repo state
-        run: bash infra/scripts/check-drill-outputs-consumers.sh
+        run: cd cmd/loopzero-ops && go run . quality drill-outputs-consumers --root "${GITHUB_WORKSPACE}"
 
       - name: T2.1 — drill-helmfile-bootstrap hermetic tests
         run: bash infra/tests/scripts/drill-helmfile-bootstrap_test.sh

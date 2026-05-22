@@ -15,6 +15,7 @@ import (
 	"github.com/loopzero/loopzero/pkg/quality/deadlineratchet"
 	"github.com/loopzero/loopzero/pkg/quality/decisionsdeletion"
 	"github.com/loopzero/loopzero/pkg/quality/divergencematrix"
+	"github.com/loopzero/loopzero/pkg/quality/drilloutputs"
 	"github.com/loopzero/loopzero/pkg/quality/helmdrift"
 	"github.com/loopzero/loopzero/pkg/quality/mockbudget"
 	"github.com/loopzero/loopzero/pkg/quality/nomigrateforce"
@@ -109,6 +110,8 @@ func runQuality(args []string) int {
 		return runStackCoverage(args[1:])
 	case "decisions-deletion":
 		return runDecisionsDeletion(args[1:])
+	case "drill-outputs-consumers":
+		return runDrillOutputsConsumers(args[1:])
 	default:
 		fmt.Fprintf(os.Stderr, "unknown gate: %s\n\n%s", args[0], qualityHelp)
 		return 1
@@ -639,6 +642,33 @@ func runServiceAuthRotation(args []string) int {
 		exception: ".github/service-auth-rotation-exception.txt",
 		adr:       "2026-05-13-service-auth-ed25519-adoption.md",
 	})
+}
+
+func runDrillOutputsConsumers(args []string) int {
+	fs := flag.NewFlagSet("drill-outputs-consumers", flag.ContinueOnError)
+	root := fs.String("root", ".", "repo root directory")
+	if err := fs.Parse(args); err != nil {
+		return 1
+	}
+	o, err := drilloutputs.Check(drilloutputs.Config{Root: *root})
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "drill-outputs-consumers: %v\n", err)
+		return 2
+	}
+	if !o.Pass {
+		fmt.Fprintf(os.Stderr, "✗ Found %d legacy drill-outputs consumer reference(s):\n", len(o.Findings))
+		for _, f := range o.Findings {
+			fmt.Fprintf(os.Stderr, "  %s\n", f)
+		}
+		fmt.Fprintln(os.Stderr, "")
+		fmt.Fprintln(os.Stderr, "Each match MUST use the v2 FLAT NAMED EXPORTS schema: replace nested")
+		fmt.Fprintln(os.Stderr, "cluster/pg/bucket access with direct named outputs, e.g. mgmtClusterKubeconfig,")
+		fmt.Fprintln(os.Stderr, "pgHost, bucketBuilds (pulumi stack output <name>).")
+		fmt.Fprintln(os.Stderr, "Per L2-unlock plan T1.3 + EC-02. See finding-2026-05-16-pulumi-outputs-rca.md.")
+		return 1
+	}
+	fmt.Println("✓ No legacy drill-outputs consumers found.")
+	return 0
 }
 
 func runDecisionsDeletion(args []string) int {

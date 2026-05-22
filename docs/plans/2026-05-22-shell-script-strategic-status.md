@@ -12,6 +12,37 @@
 
 ## Iteration log
 
+### Iter 29 (2026-05-22) — Phase 5 T5.3 (drill-outputs-consumers gate + audit correction #2)
+
+**Commit:** (current)
+
+**Done:**
+- **Audit false-negative #2 caught + corrected.** `check-drill-outputs-consumers.sh`
+  was flagged live-CLI (pulumi/kubectl) in iter-25, but the pulumi/kubectl
+  strings are GREP TARGETS in its LEGACY_PATTERNS array, not executions — it is
+  a genuine **pure-logic grep-audit**. Migrated to `pkg/quality/drilloutputs/`.
+- **No PCRE lookahead needed:** the bash used `cluster\b(?!Kubeconfig|Map|Endpoint)`
+  + `\.outputs\.cluster\b(?!Map)`; both lookaheads are REDUNDANT with the
+  preceding `\b` (word boundary already excludes the suffixed forms). RE2 forms
+  drop them with zero behaviour change. 16 tests (11 bash scenarios + 5), 93.9% cov.
+- **Self-reference handled:** check.go embeds all patterns as literals → skips
+  `pkg/quality/drilloutputs/`; reworded the loopzero-ops handler hint to avoid the
+  literal `.outputs.X` forms (they self-matched the gate).
+- **Parity:** real legacy consumers (excluding gate-doc files) = ZERO in both
+  bash and Go. Post-cleanup the Go gate is correctly GREEN (no real consumers).
+- `cmd/loopzero-ops` `drill-outputs-consumers` subcommand; `drill-hermetic-tests.yml`
+  repointed (Go test + Go LIVE scan, +Go setup early in the job).
+- **2 scripts DELETED:** `check-drill-outputs-consumers.sh` (180) +
+  `check-drill-outputs-consumers_test.sh` (279) — D6 AUTO-DIE. allowlist 232 (was 234).
+
+**Script count: 234 → 232** (27 deletions cumulative). 23 Go quality gates.
+Of the 3 drill/* "pending KEEP-verify": this one was MIGRATABLE (read-verify
+flipped it from KEEP to migrate — heuristic false-negative #2). Remaining:
+check-drill-credentials-isolation.sh (read-access blocked by a permission rule
+on the "credentials" path — pending operator-side verification).
+
+---
+
 ### Iter 28 (2026-05-22) — Phase 5 T5.3 (DELETE dead evidence-validator subsystem)
 
 **Commit:** (current)
