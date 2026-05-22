@@ -80,6 +80,25 @@ exit 0
 EOF
   chmod +x "$tmpdir/helmfile/scripts/generate-secrets.sh"
 
+  # bootstrap-oauth-clients.sh stub — invoked at $HELMFILE_DIR/scripts/ (line 685).
+  # Real script needs LIVE Kratos/Hydra; stub returns 0 so the bootstrap reaches
+  # exit 0 and the per-phase assertions are not masked by a late oauth failure.
+  cat > "$tmpdir/helmfile/scripts/bootstrap-oauth-clients.sh" <<'EOF'
+#!/usr/bin/env bash
+exit 0
+EOF
+  chmod +x "$tmpdir/helmfile/scripts/bootstrap-oauth-clients.sh"
+
+  # run-migrations.sh stub — script invokes the cwd-relative path
+  # `infra/scripts/run-migrations.sh` (line 714). run_script cd's into $tmpdir,
+  # so the stub lives at $tmpdir/infra/scripts/. Real script needs a LIVE DB.
+  mkdir -p "$tmpdir/infra/scripts"
+  cat > "$tmpdir/infra/scripts/run-migrations.sh" <<'EOF'
+#!/usr/bin/env bash
+exit 0
+EOF
+  chmod +x "$tmpdir/infra/scripts/run-migrations.sh"
+
   echo "$pulumi_scenario" > "$tmpdir/pulumi-scenario.txt"
   echo "$helmfile_scenario" > "$tmpdir/helmfile-scenario.txt"
 
@@ -247,6 +266,11 @@ run_script() {
   local tmpdir="$1"
   shift
 
+  # cwd = $tmpdir so the script's cwd-relative `infra/scripts/run-migrations.sh`
+  # (line 714) resolves to the hermetic stub. All other paths the script uses are
+  # absolute (env: HELMFILE_DIR/PULUMI_DRILL_DIR/DRILL_KUBECONFIG_DIR) or $0-relative.
+  cd "$tmpdir"
+
   # Bug #16 LIVE fix: drill-helmfile-bootstrap.sh requires DIGITALOCEAN_TOKEN
   # to create loopzero-registry-pull Secret via kubectl docker-registry. Tests
   # provide a stub value (real token not needed because kubectl is stubbed).
@@ -259,6 +283,7 @@ run_script() {
     HELMFILE_ENV=drill \
     HEALTH_WAIT_TIMEOUT=5s \
     DIGITALOCEAN_TOKEN="${DIGITALOCEAN_TOKEN:-dop_v1_stub_drill_test_token_aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa}" \
+    GITEA_ADMIN_PASS="${GITEA_ADMIN_PASS:-stub-gitea-admin-pass}" \
     MOCK_PULUMI_JSON='{"runtimeClusterEndpoint":"https://stub-runtime.example.com","runtimeClusterKubeconfig":"apiVersion: v1\nkind: Config","runtimeCluster2Endpoint":"https://stub-runtime2.example.com","runtimeCluster2Kubeconfig":"apiVersion: v1\nkind: Config"}' \
     bash "$SCRIPT" "$@" 2>"$tmpdir/stderr.log" >"$tmpdir/stdout.log"
 }
