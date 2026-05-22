@@ -362,18 +362,25 @@ fi
 # H8 — loopzero-api Deployment env: LOOPZERO_*_IMAGE local registry overrides.
 # ---------------------------------------------------------------------------
 log "H8: ensuring LOOPZERO_*_IMAGE env on loopzero-api"
-declare -A IMG_OVERRIDES=(
-  [LOOPZERO_CLONE_IMAGE]="${REGISTRY_HOST}:5000/loopzero-clone-runner:latest"
-  [LOOPZERO_PACKS_IMAGE]="${REGISTRY_HOST}:5000/loopzero-packs-runner:latest"
-  [LOOPZERO_SYFT_IMAGE]="${REGISTRY_HOST}:5000/loopzero-syft-scanner:latest"
-  [LOOPZERO_COSIGN_IMAGE]="${REGISTRY_HOST}:5000/loopzero-cosign-signer:latest"
-)
-ENV_ARGS=()
-for k in "${!IMG_OVERRIDES[@]}"; do
-  ENV_ARGS+=("${k}=${IMG_OVERRIDES[$k]}")
-done
-kubectl --context "$MGMT_CTX" -n loopzero-system set env deploy/loopzero-api "${ENV_ARGS[@]}" >/dev/null 2>&1
-log "  set ${#ENV_ARGS[@]} image override env vars"
+# loopzero-api is tilt-owned in standalone (helmfile app-tier installed:false), so
+# the Deployment does not exist during `task setup` (before `tilt up`). Skip the
+# env-patch when absent — tilt's api-deployment.yaml already wires LOOPZERO_*_IMAGE.
+if ! kubectl --context "$MGMT_CTX" -n loopzero-system get deploy loopzero-api >/dev/null 2>&1; then
+  log "  loopzero-api deployment absent — skipping LOOPZERO_*_IMAGE env-patch (tilt-owned in standalone)"
+else
+  declare -A IMG_OVERRIDES=(
+    [LOOPZERO_CLONE_IMAGE]="${REGISTRY_HOST}:5000/loopzero-clone-runner:latest"
+    [LOOPZERO_PACKS_IMAGE]="${REGISTRY_HOST}:5000/loopzero-packs-runner:latest"
+    [LOOPZERO_SYFT_IMAGE]="${REGISTRY_HOST}:5000/loopzero-syft-scanner:latest"
+    [LOOPZERO_COSIGN_IMAGE]="${REGISTRY_HOST}:5000/loopzero-cosign-signer:latest"
+  )
+  ENV_ARGS=()
+  for k in "${!IMG_OVERRIDES[@]}"; do
+    ENV_ARGS+=("${k}=${IMG_OVERRIDES[$k]}")
+  done
+  kubectl --context "$MGMT_CTX" -n loopzero-system set env deploy/loopzero-api "${ENV_ARGS[@]}" >/dev/null 2>&1
+  log "  set ${#ENV_ARGS[@]} image override env vars"
+fi
 
 # ---------------------------------------------------------------------------
 # H9 — loopzero-build-cwts release with images.cloneRunner local registry.
@@ -425,7 +432,14 @@ if [[ -z "$TC_DEPLOY" ]]; then
   TC_DEPLOY=$(kubectl --context "$MGMT_CTX" -n loopzero-system get deploy \
     -l app=tenant-operator -o name 2>/dev/null | head -1)
 fi
-[[ -z "$TC_DEPLOY" ]] && TC_DEPLOY="deploy/tenant-operator"
+# tenant-operator may be absent in standalone (tilt-owned, installed:false in the
+# mgmt helmfile per the dual-ownership fix — tilt's manifest already sets
+# WORKLOAD_CLUSTER_URL). Skip the operator env-patch + rollout when the deployment
+# does not exist, so the bootstrap heal does not fail under `set -e`. The ArgoCD
+# Application URL patching below still runs. Fix: finding-2026-05-22-pg-password-divergence § k3d-heal-H10.
+if [[ -z "$TC_DEPLOY" ]] || ! kubectl --context "$MGMT_CTX" -n loopzero-system get "$TC_DEPLOY" >/dev/null 2>&1; then
+  log "  tenant-operator deployment absent — skipping operator env-patch + rollout (tilt-owned in standalone)"
+else
 CURRENT_URL=$(kubectl --context "$MGMT_CTX" -n loopzero-system get "$TC_DEPLOY" \
   -o jsonpath='{.spec.template.spec.containers[0].env[?(@.name=="WORKLOAD_CLUSTER_URL")].value}' 2>/dev/null)
 if [[ "$CURRENT_URL" == "$WORKLOAD_URL" ]]; then
@@ -463,6 +477,7 @@ for t in $TENANTS; do
     loopzero.io/heal-trigger="$(date +%s)" --overwrite >/dev/null 2>&1
 done
 [[ -n "$TENANTS" ]] && log "  triggered reconcile on $(echo $TENANTS | wc -w) Active tenant(s)"
+fi  # end tenant-operator-present guard (H10 dual-ownership fix)
 
 # Patch only TENANT ArgoCD Applications carrying a stale URL.
 # CHG-2026-04-30-DELETE-SINGLE-CELL: skip apps that use destination.name
@@ -870,10 +885,17 @@ fi
 # Restart loopzero-api so kubeconfigs Secret refresh takes effect (H2).
 # ---------------------------------------------------------------------------
 log "rolling loopzero-api so refreshed kubeconfigs take effect"
-kubectl --context "$MGMT_CTX" -n loopzero-system rollout restart deploy/loopzero-api >/dev/null 2>&1
-kubectl --context "$MGMT_CTX" -n loopzero-system rollout status deploy/loopzero-api --timeout=90s >/dev/null 2>&1 \
-  && log "  loopzero-api Ready" \
-  || warn "loopzero-api rollout did not complete cleanly"
+# loopzero-api is tilt-owned in standalone (helmfile app-tier installed:false), so the
+# Deployment is absent during `task setup` (before `tilt up`). Skip when absent;
+# tilt picks up the refreshed kubeconfigs Secret on its own next reconcile.
+if ! kubectl --context "$MGMT_CTX" -n loopzero-system get deploy loopzero-api >/dev/null 2>&1; then
+  log "  loopzero-api deployment absent — skipping rollout (tilt-owned in standalone)"
+else
+  kubectl --context "$MGMT_CTX" -n loopzero-system rollout restart deploy/loopzero-api >/dev/null 2>&1
+  kubectl --context "$MGMT_CTX" -n loopzero-system rollout status deploy/loopzero-api --timeout=90s >/dev/null 2>&1 \
+    && log "  loopzero-api Ready" \
+    || warn "loopzero-api rollout did not complete cleanly"
+fi
 
 # Also restart argocd-application-controller for the cluster secret refresh.
 kubectl --context "$MGMT_CTX" -n argocd rollout restart statefulset argocd-application-controller >/dev/null 2>&1
