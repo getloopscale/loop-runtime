@@ -12,6 +12,27 @@
 
 ## Iteration log
 
+### Iter 39 (2026-05-22) — Phase 1 (delete dead): regenerate-status.sh (read-verified)
+
+**Done:**
+- **One conclusively-dead script deleted** via read-verify (NOT heuristic):
+  `infra/scripts/governance/regenerate-status.sh` (200 LOC). Its own header
+  declares it STALE — it regenerated `docs/STATUS.md`, deleted in the 2026-05-11
+  consolidation; it exits early as a no-op when the target is absent.
+- **Verified dead:** swept all `governance/*.sh` for live consumers — only
+  regenerate-status.sh has ZERO (the other 5 are wired: test.yml, decay-scan.yml,
+  adversarial-spotcheck.yml, health-check). Its only "refs" were bookkeeping
+  (allowlist + audit CSV), not invocations.
+- This is Phase 1 (delete dead) done with per-script read-verification, per the
+  iter-38 caveat that heuristics alone are unsafe.
+
+**Script count: 224 → 223** (36 deletions cumulative). 30 Go quality gates.
+Phase 1 dead-deletion continues only where a script is CONCLUSIVELY dead by
+reading (stale header + zero live consumers + no dynamic invocation) — not by
+heuristic list.
+
+---
+
 ### Iter 38 (2026-05-22) — Phase 5 autonomous SATURATION + operator handoff
 
 **Done:**
