@@ -12,6 +12,28 @@
 
 ## Iteration log
 
+### Iter 38 (2026-05-22) — Phase 5 autonomous SATURATION + operator handoff
+
+**Done:**
+- Confirmed the MIGRATE-GO-PUREFN backlog is **exhausted** (gen-state-machine-dots
+  already done via go:generate; the 3 pulumi-* are MIGRATE-GO-SDK/T5.1 deferred;
+  check-drill-credentials-isolation read-access blocked).
+- **Dead-script detection: two heuristics tried, both unreliable** — orphan-test
+  (false-positives on standalone assertion harnesses) AND zero-reference
+  (false-positives on `.claude/hooks/*` harness hooks + dynamically-sourced
+  `cell2-gate-c*.sh` + CI-runner `*_test.sh`). Did NOT mass-delete — confirmed
+  e.g. `crd-semantic-diff.test.sh` is alive (parent in helm-charts.yml).
+- Wrote `docs/plans/2026-05-22-shell-script-strategic-operator-handoff.md`:
+  maps the remaining operator-gated work (Phase 2 helmfile, Phase 4 Ginkgo, T5.1
+  pulumi SDK, T6.4 inventory, 4 LIVE HARD STOPs) + records the 2 dead-detection
+  caveats + the tool-classification caveat (7 grep false-positives this campaign).
+
+**Script count: 224 (unchanged — saturation iteration, no safe deletion left).**
+30 Go quality gates. The path to ≤30 is now Phase 2 + Phase 4, both LIVE/operator-gated.
+Ralph-safe Phase 5 T5.3 work is COMPLETE.
+
+---
+
 ### Iter 37 (2026-05-22) — Phase 5 T5.3 (security-context audit gate — 2-mode)
 
 **Done:**
