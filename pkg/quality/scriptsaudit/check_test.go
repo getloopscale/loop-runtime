@@ -292,6 +292,39 @@ func TestProposeDisposition_PureLogicGate(t *testing.T) {
 	}
 }
 
+// TestProposeDisposition_CheckScriptThatShellsOut_NotPureFn — T0.1
+// false-positive-awareness: a `check-*.sh`/`validate-*.sh` that invokes an
+// external CLI (kubectl/helm/cosign/doctl/pulumi/argocd) is NOT pure-logic;
+// migrating it to Go would be a forbidden shell-wrap (parent D5). It must NOT
+// be classified MIGRATE-GO-PUREFN.
+func TestProposeDisposition_CheckScriptThatShellsOut_NotPureFn(t *testing.T) {
+	root := t.TempDir()
+	path := filepath.Join(root, "check-prod-vap-readiness.sh")
+	body := "#!/bin/bash\nkubectl get validatingadmissionpolicy\ncosign verify $IMG\n"
+	if err := os.WriteFile(path, []byte(body), 0o644); err != nil {
+		t.Fatalf("write: %v", err)
+	}
+	s := Script{Path: path, LOC: 3, LastMod: time.Now(), Callers: []string{".github/workflows/x.yml"}}
+	if disp := ProposeDisposition(s); disp == "MIGRATE-GO-PUREFN" {
+		t.Errorf("check-* that shells out must NOT be MIGRATE-GO-PUREFN, got %s", disp)
+	}
+}
+
+// TestProposeDisposition_PureCheckScript_StaysPureFn — converse: a check-*.sh
+// with NO external CLI invocation remains a MIGRATE-GO-PUREFN candidate.
+func TestProposeDisposition_PureCheckScript_StaysPureFn(t *testing.T) {
+	root := t.TempDir()
+	path := filepath.Join(root, "check-prod-image-tags.sh")
+	body := "#!/bin/bash\ngrep -r ':latest' manifests/ && exit 1\nexit 0\n"
+	if err := os.WriteFile(path, []byte(body), 0o644); err != nil {
+		t.Fatalf("write: %v", err)
+	}
+	s := Script{Path: path, LOC: 3, LastMod: time.Now(), Callers: []string{".github/workflows/x.yml"}}
+	if disp := ProposeDisposition(s); disp != "MIGRATE-GO-PUREFN" {
+		t.Errorf("pure check-* must stay MIGRATE-GO-PUREFN, got %s", disp)
+	}
+}
+
 // TestProposeDisposition_ScriptWithDynamicCaller_NotMarkedDead — EC-03:
 // Quando script é referenciado via interpolação dinâmica (`bash "$VAR"`),
 // caller_count fica em zero (regex não pega), mas a heurística NÃO deve marcar
@@ -513,6 +546,125 @@ func TestCountLines_NoTrailingNewline(t *testing.T) {
 	}
 	if n != 2 {
 		t.Errorf("expected 2 lines (last without \\n), got %d", n)
+	}
+}
+
+// === Phase 0 T0.1: false-positive-aware reference detection ===
+
+// TestDetectsDynamicSourcedLib — EC false-positive class #1: a lib sourced via
+// `source "$DIR/cell2-gate-${g}.sh"` must be credited a caller even though its
+// literal basename never appears in the parent. Without this, the 13 cell2-gate
+// libs false-positive to DELETE-DEAD.
+func TestDetectsDynamicSourcedLib(t *testing.T) {
+	root := fixtureRepo(t, map[string]string{
+		"infra/tests/parity/lib/cell2-gate-c5.sh": "#!/bin/bash\necho gate5\n",
+		"infra/tests/parity/cell2-activation-gates.sh": `#!/bin/bash
+LIB_DIR="$(dirname "$0")/lib"
+for g in c1 c5 c12; do
+  source "$LIB_DIR/cell2-gate-${g}.sh"
+done
+`,
+	})
+	scripts, err := ScanRepo(root)
+	if err != nil {
+		t.Fatalf("ScanRepo: %v", err)
+	}
+	var lib *Script
+	for i := range scripts {
+		if strings.HasSuffix(scripts[i].Path, "cell2-gate-c5.sh") {
+			lib = &scripts[i]
+			break
+		}
+	}
+	if lib == nil {
+		t.Fatal("cell2-gate-c5.sh not found")
+	}
+	if len(lib.Callers) == 0 {
+		t.Errorf("dynamically-sourced lib must have a caller, got 0 (false-positive DELETE-DEAD risk)")
+	}
+}
+
+// TestDetectsGlobRunnerTestScripts — EC false-positive class #2: a test script
+// run by a CI glob-runner (`for f in infra/tests/scripts/drill-*_test.sh`) must
+// be credited a caller even though only the glob (not the literal name) appears.
+func TestDetectsGlobRunnerTestScripts(t *testing.T) {
+	root := fixtureRepo(t, map[string]string{
+		"infra/tests/scripts/drill-mint-jwt_test.sh": "#!/bin/bash\necho t\n",
+		".github/workflows/drill-hermetic-tests.yml": `
+jobs:
+  test:
+    steps:
+      - run: |
+          for f in infra/tests/scripts/drill-*_test.sh; do bash "$f"; done
+`,
+	})
+	scripts, err := ScanRepo(root)
+	if err != nil {
+		t.Fatalf("ScanRepo: %v", err)
+	}
+	var ts *Script
+	for i := range scripts {
+		if strings.HasSuffix(scripts[i].Path, "drill-mint-jwt_test.sh") {
+			ts = &scripts[i]
+			break
+		}
+	}
+	if ts == nil {
+		t.Fatal("drill-mint-jwt_test.sh not found")
+	}
+	if len(ts.Callers) == 0 {
+		t.Errorf("glob-runner test script must have a caller, got 0")
+	}
+}
+
+// TestDetectsDockerfileEntrypoint — EC false-positive class #3: a container
+// entrypoint referenced by Dockerfile ENTRYPOINT must be credited a caller.
+func TestDetectsDockerfileEntrypoint(t *testing.T) {
+	root := fixtureRepo(t, map[string]string{
+		"cloud/dashboard/docker-entrypoint.sh": "#!/bin/sh\nexec node server.js\n",
+		"cloud/dashboard/Dockerfile": `FROM node:20
+COPY docker-entrypoint.sh /usr/local/bin/
+ENTRYPOINT ["docker-entrypoint.sh"]
+`,
+	})
+	scripts, err := ScanRepo(root)
+	if err != nil {
+		t.Fatalf("ScanRepo: %v", err)
+	}
+	var ep *Script
+	for i := range scripts {
+		if strings.HasSuffix(scripts[i].Path, "docker-entrypoint.sh") {
+			ep = &scripts[i]
+			break
+		}
+	}
+	if ep == nil {
+		t.Fatal("docker-entrypoint.sh not found")
+	}
+	foundDockerfile := false
+	for _, c := range ep.Callers {
+		if strings.Contains(c, "Dockerfile") {
+			foundDockerfile = true
+		}
+	}
+	if !foundDockerfile {
+		t.Errorf("Dockerfile ENTRYPOINT must be a caller, got %v", ep.Callers)
+	}
+}
+
+// TestDetectsHookRegistration — EC false-positive class #4: a Claude harness
+// hook (.claude/hooks/*.sh) is registered with the harness, not invoked by
+// literal basename; it must NOT be classified DELETE-DEAD even if old + 0-caller.
+func TestDetectsHookRegistration(t *testing.T) {
+	old := time.Now().Add(-200 * 24 * time.Hour)
+	s := Script{
+		Path:    ".claude/hooks/task-completed.sh",
+		LOC:     100,
+		LastMod: old,
+		Callers: nil,
+	}
+	if disp := ProposeDisposition(s); disp == "DELETE-DEAD" {
+		t.Errorf("harness hook must not be DELETE-DEAD, got %s", disp)
 	}
 }
 

@@ -52,6 +52,9 @@ var excludedDirs = map[string]bool{
 	"build":        true,
 	".idea":        true,
 	".vscode":      true,
+	// Claude Code harness artifact: ephemeral agent worktree checkouts (a full
+	// repo clone). Auditing it double-counts every script. Untracked, transient.
+	"worktrees": true,
 }
 
 // callerSearchExtensions — file extensions ScanRepo searches when detecting
@@ -158,7 +161,7 @@ func ScanRepo(root string) ([]Script, error) {
 // countLines reads a file and counts newline-terminated lines. Empty file
 // returns 0; file without trailing newline still counts its last line.
 func countLines(path string) (int, error) {
-	data, err := os.ReadFile(path)
+	data, err := os.ReadFile(path) // #nosec G304 -- audit tool intentionally reads scanned script paths
 	if err != nil {
 		return 0, err
 	}
@@ -218,24 +221,84 @@ func populateCallers(root string, scripts []Script) error {
 		if !isCallerSearchFile(d.Name()) {
 			return nil
 		}
-		data, err := os.ReadFile(path)
+		data, err := os.ReadFile(path) // #nosec G304 G122 -- read-only audit tool; scanned paths are repo files, no TOCTOU mutation
 		if err != nil {
 			return nil // skip unreadable files (best-effort)
 		}
 		text := string(data)
 		relPath, _ := filepath.Rel(root, path)
+		// Indirect references (CI glob-runners, dynamic `source "$DIR/${v}.sh"`)
+		// resolve to basename globs; collect them once per file.
+		globs := indirectReferenceGlobs(text)
 		// For each script, look for `<basename>` or `<stem>` references
 		for _, r := range refs {
 			// Skip self-references (script referencing itself)
 			if relPath == scripts[r.idx].Path {
 				continue
 			}
-			if containsReference(text, r.basename, r.stem) {
+			if containsReference(text, r.basename, r.stem) || matchesAnyGlob(r.basename, globs) {
 				scripts[r.idx].Callers = append(scripts[r.idx].Callers, relPath)
 			}
 		}
 		return nil
 	})
+}
+
+// globRefPattern matches a path-glob token ending in .sh that contains a `*`
+// wildcard — e.g. `infra/tests/scripts/drill-*_test.sh` in a CI glob-runner.
+var globRefPattern = regexp.MustCompile(`[A-Za-z0-9_./*-]*\*[A-Za-z0-9_./*-]*\.sh`)
+
+// dynSourceRefPattern matches a dynamically-interpolated path ending in .sh —
+// e.g. `source "$LIB_DIR/cell2-gate-${g}.sh"`. Captures the literal prefix
+// (group 1) and suffix (group 2) bracketing the `${var}`/`$var` interpolation.
+var dynSourceRefPattern = regexp.MustCompile(`([A-Za-z0-9_.-]+)\$\{?[A-Za-z_][A-Za-z0-9_]*\}?([A-Za-z0-9_.-]*\.sh)`)
+
+// indirectReferenceGlobs scans `text` for glob-runner and dynamic-source
+// patterns and returns the set of basename globs they imply (e.g.
+// `drill-*_test.sh`, `cell2-gate-*.sh`). A glob with no literal stem char
+// (e.g. bare `*.sh`) is dropped — too broad to credit reliably.
+func indirectReferenceGlobs(text string) []string {
+	seen := map[string]bool{}
+	out := []string{}
+	add := func(g string) {
+		if g == "" || seen[g] {
+			return
+		}
+		// Require ≥2 literal (non-glob, non-suffix) chars to avoid bare `*.sh`.
+		stem := strings.TrimSuffix(g, ".sh")
+		stem = strings.ReplaceAll(stem, "*", "")
+		if len(stem) < 2 {
+			return
+		}
+		seen[g] = true
+		out = append(out, g)
+	}
+	for _, m := range globRefPattern.FindAllString(text, -1) {
+		add(filepath.Base(m))
+	}
+	for _, m := range dynSourceRefPattern.FindAllStringSubmatch(text, -1) {
+		// m[1] = literal prefix, m[2] = literal suffix; interpolation → `*`.
+		add(filepath.Base(m[1] + "*" + m[2]))
+	}
+	return out
+}
+
+// matchesAnyGlob returns true if basename matches any of the basename globs
+// (glob `*` → `[^/]*`, anchored full match).
+func matchesAnyGlob(basename string, globs []string) bool {
+	for _, g := range globs {
+		if globMatchesBasename(g, basename) {
+			return true
+		}
+	}
+	return false
+}
+
+// globMatchesBasename does an anchored basename match where `*` matches any run
+// of non-`/` chars. Reuses path.Match semantics via filepath.Match.
+func globMatchesBasename(glob, basename string) bool {
+	ok, err := filepath.Match(glob, basename)
+	return err == nil && ok
 }
 
 // isCallerSearchFile decides whether a file is searched for caller patterns.
@@ -250,6 +313,11 @@ func isCallerSearchFile(name string) bool {
 	}
 	// Special: Tiltfile, Tiltfile.local
 	if strings.HasPrefix(name, "Tiltfile") {
+		return true
+	}
+	// Dockerfile / Dockerfile.* / *.Dockerfile — container ENTRYPOINT/CMD/COPY
+	// referencing an entrypoint .sh is a valid (non-literal-bash) caller.
+	if strings.HasPrefix(name, "Dockerfile") || strings.HasSuffix(name, ".Dockerfile") {
 		return true
 	}
 	return false
@@ -337,6 +405,13 @@ func ProposeDisposition(s Script) string {
 	base := filepath.Base(s.Path)
 	stem := strings.TrimSuffix(base, ".sh")
 
+	// 0. Harness hooks/scripts: registered with the Claude Code harness (settings
+	//    + hook events), not invoked by literal basename. KEEP regardless of
+	//    caller_count to prevent false DELETE-DEAD (EC false-positive class #4).
+	if strings.Contains(s.Path, ".claude/hooks/") || strings.Contains(s.Path, ".claude/scripts/") {
+		return "KEEP-OPERATOR"
+	}
+
 	// 1. Hermetic test pattern: X_test.sh — AUTO-DIE (D6: morre com pai)
 	if strings.HasSuffix(stem, "_test") {
 		return "AUTO-DIE"
@@ -364,8 +439,14 @@ func ProposeDisposition(s Script) string {
 		return "MIGRATE-GINKGO"
 	}
 
-	// 6. Pure-logic gate naming: check-*.sh, validate-*.sh, audit-*.sh
+	// 6. Pure-logic gate naming: check-*.sh, validate-*.sh, audit-*.sh — BUT
+	//    only if genuinely pure-logic. A gate that shells out to kubectl/helm/
+	//    cosign/etc. is NOT pure-logic; porting it to Go would be a forbidden
+	//    shell-wrap (parent D5). Those stay bash → KEEP-OPERATOR.
 	if strings.HasPrefix(stem, "check-") || strings.HasPrefix(stem, "validate-") || strings.HasPrefix(stem, "audit-") {
+		if scriptInvokesExternalCLI(s.Path) {
+			return "KEEP-OPERATOR"
+		}
 		return "MIGRATE-GO-PUREFN"
 	}
 
@@ -388,10 +469,25 @@ func ProposeDisposition(s Script) string {
 	return "REVIEW-NEEDED"
 }
 
+// externalCLITokens — tools whose invocation makes a script LIVE/effectful,
+// disqualifying a pure-logic Go migration (parent D5 shell-wrap prohibition).
+var externalCLITokens = regexp.MustCompile(`\b(kubectl|helm|helmfile|cosign|argocd|doctl|pulumi|terraform)\b`)
+
+// scriptInvokesExternalCLI returns true if the script body invokes any of the
+// effectful external CLIs. Best-effort: an unreadable file returns false (the
+// caller's prefix heuristic still applies).
+func scriptInvokesExternalCLI(path string) bool {
+	data, err := os.ReadFile(path) // #nosec G304 -- audit tool intentionally reads scanned script paths
+	if err != nil {
+		return false
+	}
+	return externalCLITokens.Match(data)
+}
+
 // scriptContains reads the script file and returns true if it contains
 // ANY of the given substrings.
 func scriptContains(path string, needles ...string) bool {
-	data, err := os.ReadFile(path)
+	data, err := os.ReadFile(path) // #nosec G304 -- audit tool intentionally reads scanned script paths
 	if err != nil {
 		return false
 	}
