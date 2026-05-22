@@ -12,6 +12,26 @@
 
 ## Iteration log
 
+### Iter 24 (2026-05-22) — Phase 5 T5.3 (stack-coverage gate + WIRED a dead gate)
+
+**Commit:** (current)
+
+**Done:**
+- `pkg/quality/stackcoverage/` (NEW) — pure-Go gate replacing
+  `check-stack-coverage.sh` (T10.1: every LanguageStrategy in languages.go must
+  have an E2E fixture). Reads languages.go (regex `type XStrategy`) + walks
+  fixtures (framework:/build: grep). 9 tests GREEN, 90.2% coverage.
+- **Fixed "implemented but not wired":** the bash gate was NEVER referenced by
+  any workflow or taskfile — it never ran in CI. Migrated AND wired it as a
+  blocking job in `quality-gates.yml` (runs on every PR/push). Now it has teeth.
+- `cmd/loopzero-ops` `stack-coverage` subcommand.
+- **Parity:** bash + Go both PASS (9 strategies covered) on the live repo.
+- `check-stack-coverage.sh` DELETED; allowlist 237 (was 238).
+
+**Script count: 238 → 237** (22 deletions cumulative). 21 Go quality gates.
+
+---
+
 ### Iter 23 (2026-05-22) — Phase 5 T5.3 (service-auth-rotation + DRY ratchet extraction)
 
 **Commit:** (current)

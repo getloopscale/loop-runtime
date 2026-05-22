@@ -24,6 +24,7 @@ import (
 	"github.com/loopzero/loopzero/pkg/quality/runtimeslo"
 	"github.com/loopzero/loopzero/pkg/quality/scriptsaudit"
 	"github.com/loopzero/loopzero/pkg/quality/skiplink"
+	"github.com/loopzero/loopzero/pkg/quality/stackcoverage"
 	"github.com/loopzero/loopzero/pkg/quality/taskfileinterface"
 	"github.com/loopzero/loopzero/pkg/quality/testdeletion"
 	"github.com/loopzero/loopzero/pkg/quality/testpyramid"
@@ -103,6 +104,8 @@ func runQuality(args []string) int {
 		return runCosignCutover(args[1:])
 	case "service-auth-rotation":
 		return runServiceAuthRotation(args[1:])
+	case "stack-coverage":
+		return runStackCoverage(args[1:])
 	default:
 		fmt.Fprintf(os.Stderr, "unknown gate: %s\n\n%s", args[0], qualityHelp)
 		return 1
@@ -633,6 +636,37 @@ func runServiceAuthRotation(args []string) int {
 		exception: ".github/service-auth-rotation-exception.txt",
 		adr:       "2026-05-13-service-auth-ed25519-adoption.md",
 	})
+}
+
+func runStackCoverage(args []string) int {
+	fs := flag.NewFlagSet("stack-coverage", flag.ContinueOnError)
+	root := fs.String("root", ".", "repo root directory")
+	if err := fs.Parse(args); err != nil {
+		return 1
+	}
+	o, err := stackcoverage.Check(stackcoverage.Config{Root: *root})
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "[stack-coverage] FAIL: %v\n", err)
+		return 1
+	}
+	if !o.Pass {
+		if len(o.TypeErrors) > 0 {
+			fmt.Fprintln(os.Stderr, "[stack-coverage] strategy type drift in languages.go:")
+			for _, e := range o.TypeErrors {
+				fmt.Fprintf(os.Stderr, "  %s\n", e)
+			}
+		}
+		if len(o.Missing) > 0 {
+			fmt.Fprintln(os.Stderr, "[stack-coverage] strategies without E2E fixture coverage:")
+			for _, m := range o.Missing {
+				fmt.Fprintf(os.Stderr, "  %s (add infra/tests/e2e/fixtures/<name>/loopzero.yaml with framework: %s)\n", m, m)
+			}
+		}
+		fmt.Fprintln(os.Stderr, "[stack-coverage] add fixtures OR deregister the strategy from languages.go::ResolveStrategy.")
+		return 1
+	}
+	fmt.Printf("[stack-coverage] PASS: all %d strategies have fixture coverage.\n", o.StrategyCount)
+	return 0
 }
 
 type ratchetLabels struct {
