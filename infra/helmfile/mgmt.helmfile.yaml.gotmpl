@@ -264,6 +264,17 @@ releases:
 {{- if or (eq .Environment.Name "dev") (eq .Environment.Name "prod") }}
       - ../helm/minio/values-distributed.yaml
 {{- end }}
+{{- if or (eq .Environment.Name "standalone") (eq .Environment.Name "standalone-multi") }}
+    # Standalone: pin MinIO root password deterministically. The chart leaves
+    # rootPassword empty (fail-fast for prod), which makes the official chart
+    # auto-generate a RANDOM password — but loopzero-api (infra/tilt/api-deployment.yaml)
+    # and static-assets consume the deterministic loopzero-dev-password. Random vs
+    # hardcoded => SOURCE_UPLOAD_FAILED (access denied). Same deterministic-creds
+    # pattern as PG (T1.3). rootUser=loopzero-admin comes from values.yaml.
+    set:
+      - name: rootPassword
+        value: "loopzero-dev-password"
+{{- end }}
 
   # velero-backup-dr-plan v1.0 / T1.2 — Velero server (Wave -1, infra
   # backup component). Bucket/region/s3Url come from environment values

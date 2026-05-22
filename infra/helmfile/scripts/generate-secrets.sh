@@ -272,14 +272,19 @@ fi
 
 # 3) MinIO / S3 root creds — IDEMPOTENT.
 # Cloud (DO Spaces): uses LOOPZERO_SPACES_KEY / LOOPZERO_SPACES_SECRET from Pulumi.
-# Standalone: generates with MinIO chart defaults (minioadmin/minioadmin).
+# Standalone: MUST match the MinIO chart root (rootUser=loopzero-admin from
+# infra/helm/minio/values.yaml + rootPassword=loopzero-dev-password pinned in the
+# standalone helmfile set:) AND the loopzero-api env (infra/tilt/api-deployment.yaml).
+# Using minioadmin/random here diverged from MinIO's actual root, causing
+# SOURCE_UPLOAD_FAILED (access denied) on every deploy. Deterministic creds,
+# same pattern as PG (T1.3).
 if [[ -n "${LOOPZERO_SPACES_KEY:-}" ]]; then
   apply_secret minio-credentials loopzero-system \
     --from-literal=accesskey="${LOOPZERO_SPACES_KEY}" \
     --from-literal=secretkey="${LOOPZERO_SPACES_SECRET:-}"
 else
-  MINIO_ACCESS="${MINIO_ROOT_USER:-minioadmin}"
-  MINIO_SECRET="${MINIO_ROOT_PASSWORD:-$(get_or_generate minio-credentials loopzero-system secretkey)}"
+  MINIO_ACCESS="${MINIO_ROOT_USER:-loopzero-admin}"
+  MINIO_SECRET="${MINIO_ROOT_PASSWORD:-loopzero-dev-password}"
   apply_secret minio-credentials loopzero-system \
     --from-literal=accesskey="$MINIO_ACCESS" \
     --from-literal=secretkey="$MINIO_SECRET"
@@ -303,8 +308,8 @@ if [[ -n "${LOOPZERO_SPACES_KEY:-}" ]]; then
   VELERO_AK="${LOOPZERO_SPACES_KEY}"
   VELERO_SK="${LOOPZERO_SPACES_SECRET:-}"
 else
-  VELERO_AK="${MINIO_ROOT_USER:-minioadmin}"
-  VELERO_SK="${MINIO_ROOT_PASSWORD:-$(get_or_generate minio-credentials loopzero-system secretkey)}"
+  VELERO_AK="${MINIO_ROOT_USER:-loopzero-admin}"
+  VELERO_SK="${MINIO_ROOT_PASSWORD:-loopzero-dev-password}"
 fi
 VELERO_CLOUD_INI="$(printf '[default]\naws_access_key_id=%s\naws_secret_access_key=%s\n' "$VELERO_AK" "$VELERO_SK")"
 apply_secret velero-s3-credentials velero-system \
