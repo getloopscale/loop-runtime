@@ -12,6 +12,30 @@
 
 ## Iteration log
 
+### Iter 33 (2026-05-22) — Phase 5 T5.3 (alert-runbooks gate + RED-state finding)
+
+**Commit:** (current)
+
+**Done:**
+- `check_alert_runbooks.sh` (REVIEW-NEEDED, read-verified pure-logic — python3
+  heredoc, no infra CLI) migrated to `pkg/quality/alertrunbooks/` (T5.8: every
+  PrometheusRule alert needs a runbook_url annotation). 11 tests, 93.2% coverage.
+- **EXACT parity verified — including the gate's CURRENT RED state.** The bash
+  gate exits 1 with **33 violations** on the live repo (33 alerts lack runbooks,
+  beyond the 14-name baseline). The Go gate reports the byte-identical 33
+  (diff clean). The gate is a blocking ci.yml step → CI is currently red on it.
+- **Did NOT mask the red state** (anti-lying rule): silently baselining the 33
+  would hide a real gap. Documented in `finding-2026-05-22-alert-runbooks-backlog.md`
+  with operator remediation (add runbooks OR consciously baseline w/ work items).
+- `cmd/loopzero-ops` `alert-runbooks` subcommand; `ci.yml` repointed (preserves red).
+- `check_alert_runbooks.sh` (81) DELETED; allowlist 228 (was 229).
+
+**Script count: 229 → 228** (31 deletions cumulative). 27 Go quality gates.
+Heuristic false-positive #4: iter-25 tagged live:[helm] — again the rules-dir
+path component, not a helm invocation.
+
+---
+
 ### Iter 32 (2026-05-22) — Phase 5 T5.3 (orphan-alerts gate, REVIEW-NEEDED → pure-logic)
 
 **Commit:** (current)

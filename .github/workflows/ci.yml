@@ -569,7 +569,10 @@ jobs:
         run: cd cmd/loopzero-ops && go run . quality agpl-isolation --root "${GITHUB_WORKSPACE}"
 
       - name: Alert runbook coverage lint (T5.8 deep-review-remediation)
-        run: bash infra/scripts/check_alert_runbooks.sh
+        # T5.3 of plan 2026-05-22: migrated check_alert_runbooks.sh to pure-Go gate.
+        # Exact parity preserved (same 33-violation backlog the bash gate reports —
+        # see finding-2026-05-22-alert-runbooks-backlog.md; NOT masked by migration).
+        run: cd cmd/loopzero-ops && go run . quality alert-runbooks --root "${GITHUB_WORKSPACE}"
 
       - name: ClusterImagePolicy mode flip governance lint (T8.6 deep-review-remediation)
         run: bash infra/scripts/check_clusterimagepolicy_mode.sh

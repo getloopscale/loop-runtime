@@ -13,6 +13,7 @@ import (
 
 	"github.com/loopzero/loopzero/pkg/quality/actionpinning"
 	"github.com/loopzero/loopzero/pkg/quality/agplisolation"
+	"github.com/loopzero/loopzero/pkg/quality/alertrunbooks"
 	"github.com/loopzero/loopzero/pkg/quality/clibundlesize"
 	"github.com/loopzero/loopzero/pkg/quality/deadlineratchet"
 	"github.com/loopzero/loopzero/pkg/quality/decisionsdeletion"
@@ -121,6 +122,8 @@ func runQuality(args []string) int {
 		return runAGPLIsolation(args[1:])
 	case "orphan-alerts":
 		return runOrphanAlerts(args[1:])
+	case "alert-runbooks":
+		return runAlertRunbooks(args[1:])
 	default:
 		fmt.Fprintf(os.Stderr, "unknown gate: %s\n\n%s", args[0], qualityHelp)
 		return 1
@@ -651,6 +654,26 @@ func runServiceAuthRotation(args []string) int {
 		exception: ".github/service-auth-rotation-exception.txt",
 		adr:       "2026-05-13-service-auth-ed25519-adoption.md",
 	})
+}
+
+func runAlertRunbooks(args []string) int {
+	fs := flag.NewFlagSet("alert-runbooks", flag.ContinueOnError)
+	root := fs.String("root", ".", "repo root directory")
+	if err := fs.Parse(args); err != nil {
+		return 1
+	}
+	o := alertrunbooks.Check(alertrunbooks.Config{Root: *root})
+	if !o.Pass {
+		for _, v := range o.Violations {
+			fmt.Printf("RUNBOOK-MISSING VIOLATION: %s\n", v)
+		}
+		fmt.Fprintf(os.Stderr, "\nFAIL — %d alert(s) without runbook annotation.\n", len(o.Violations))
+		fmt.Fprintln(os.Stderr, "To fix: add a `runbook_url:` annotation linking to recovery docs, OR add the")
+		fmt.Fprintln(os.Stderr, "alert name to ExceptionList (pkg/quality/alertrunbooks) with an explanation.")
+		return 1
+	}
+	fmt.Println("PASS — every alert has a runbook (or is in the exception list).")
+	return 0
 }
 
 func runOrphanAlerts(args []string) int {
