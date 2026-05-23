@@ -60,7 +60,6 @@ Proposed disposition per script (operator ratifies). Evidence is mechanical fact
 | drill | infra/scripts/lib/drill-dogfood-journeys.sh | 242 | — | yes | MIGRATE-loopzero-ops-drill (LIVE-gate before delete) |
 | drill | infra/scripts/lib/drill-skill-common.sh | 464 | — | yes | MIGRATE-loopzero-ops-drill (LIVE-gate before delete) |
 | other | infra/scripts/migrate-tenant-namespace.sh | 229 | yes | yes | MIGRATE-go (python-wrapper — focused TDD) |
-| quality | infra/scripts/quality/flaky-track.sh | 77 | yes | — | MIGRATE-go (python-wrapper — focused TDD) |
 | drill | infra/scripts/velero-dr-drill.sh | 413 | — | yes | MIGRATE-loopzero-ops-drill (LIVE-gate before delete) |
 | bootstrap | infra/tests/bootstrap-smoke.sh | 304 | — | yes | DELEGATE-declarative (T2) |
 | test | infra/tests/capacity/run-capacity.sh | 85 | — | yes | MIGRATE-ginkgo (LIVE) |
