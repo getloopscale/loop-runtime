@@ -196,8 +196,8 @@ fi
 
 # Gate 9.56: pkg/ Real Usage Matrix freshness (PKG-G14, pkg-sota plan T1.7).
 # Fails when docs/technical/pkg/architecture.md does not reflect current
-# `pkg/X` import counts (gate runs `pkg-usage-matrix.sh --check`).
-if bash "${REPO_ROOT}/infra/scripts/pkg-usage-matrix.sh" --check >/dev/null 2>&1; then
+# `pkg/X` import counts. T1.5 of plan 2026-05-23: migrated to pure-Go gate.
+if (cd "${REPO_ROOT}/cmd/loopzero-ops" && go run . quality pkg-usage-matrix --root "${REPO_ROOT}" --check) >/dev/null 2>&1; then
   result 0 "validate:pkg-usage-matrix (gate PKG-G14)"
 else
   result 1 "validate:pkg-usage-matrix (run \`task pkg:usage-matrix:write\`)"

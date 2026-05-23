@@ -29,6 +29,7 @@ import (
 	"github.com/loopzero/loopzero/pkg/quality/nonewbash"
 	"github.com/loopzero/loopzero/pkg/quality/noshellwrap"
 	"github.com/loopzero/loopzero/pkg/quality/orphanalerts"
+	"github.com/loopzero/loopzero/pkg/quality/pkgusagematrix"
 	"github.com/loopzero/loopzero/pkg/quality/prodimagetags"
 	"github.com/loopzero/loopzero/pkg/quality/regressiontest"
 	"github.com/loopzero/loopzero/pkg/quality/runtimeslo"
@@ -76,6 +77,14 @@ GATES:
                     --root DIR             repo root (default: ".")
                     --migrations-dir DIR   override migrations dir
                     --tests-dir DIR        override unit tests dir
+
+  pkg-usage-matrix
+                  Keep the pkg Real Usage Matrix doc in sync with imports.
+                  Flags:
+                    --root DIR       repo root (default: ".")
+                    --doc-path PATH  override matrix doc path
+                    --check          verify freshness (default)
+                    --write          regenerate the matrix
 
   no-shell-wrap   Fail if Go code in pkg/* uses shellrun.Run(<forbidden-cli>, ...)
                   without //nolint:shell-wrap suppression (D5 gate).
@@ -134,6 +143,8 @@ func runQuality(args []string) int {
 		return runDanglingScriptRefs(args[1:])
 	case "migration-test-coverage":
 		return runMigrationTestCoverage(args[1:])
+	case "pkg-usage-matrix":
+		return runPkgUsageMatrix(args[1:])
 	case "cosign-cutover":
 		return runCosignCutover(args[1:])
 	case "service-auth-rotation":
@@ -263,6 +274,43 @@ func runMigrationTestCoverage(args []string) int {
 	})
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "migration-test-coverage: %v\n", err)
+		return 5
+	}
+	for _, m := range outcome.Messages {
+		fmt.Println(m)
+	}
+	if !outcome.Pass {
+		return 1
+	}
+	return 0
+}
+
+// runPkgUsageMatrix is the gate replacing pkg-usage-matrix.sh: keeps the pkg
+// Real Usage Matrix doc in sync with actual imports. --check verifies, --write
+// regenerates. Pure-logic (grep of imports), hermetic.
+func runPkgUsageMatrix(args []string) int {
+	fs := flag.NewFlagSet("pkg-usage-matrix", flag.ContinueOnError)
+	root := fs.String("root", ".", "repo root directory")
+	docPath := fs.String("doc-path", "", "override matrix doc path")
+	write := fs.Bool("write", false, "regenerate the matrix (default: --check only)")
+	fs.Bool("check", true, "verify matrix freshness (default)")
+	if err := fs.Parse(args); err != nil {
+		return 1
+	}
+	if absRoot, err := os.Getwd(); err == nil && *root == "." {
+		*root = absRoot
+	}
+	mode := pkgusagematrix.ModeCheck
+	if *write {
+		mode = pkgusagematrix.ModeWrite
+	}
+
+	outcome, err := pkgusagematrix.Run(pkgusagematrix.Config{
+		Root:    *root,
+		DocPath: *docPath,
+	}, mode)
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "pkg-usage-matrix: %v\n", err)
 		return 5
 	}
 	for _, m := range outcome.Messages {
