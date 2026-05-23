@@ -14,6 +14,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/loopzero/loopzero/pkg/quality/advisorylock"
 	"github.com/loopzero/loopzero/pkg/quality/agplisolation"
 	"github.com/loopzero/loopzero/pkg/quality/alertrunbooks"
 	"github.com/loopzero/loopzero/pkg/quality/baseimagedigest"
@@ -108,6 +109,13 @@ GATES:
                   Fail if any infra/images/*/Dockerfile FROM resolves to Docker
                   Hub (must use mirror.gcr.io / DOCR / full-path registry; B8
                   regression). Migrated from dockerfile-no-docker-hub_test.sh.
+                  Flags:
+                    --root DIR      repo root (default: ".")
+
+  advisory-lock-scope
+                  Fail if production code (api/, infra/scripts/) uses session-
+                  scoped pg_advisory_lock( (Rule 7 — only the _xact_ variant is
+                  pool-safe). Migrated from check-advisory-lock-scope_test.sh.
                   Flags:
                     --root DIR      repo root (default: ".")
 
@@ -227,6 +235,8 @@ func runQuality(args []string) int {
 		return runPostgresqlPDBConfig(args[1:])
 	case "dockerfile-no-docker-hub":
 		return runDockerfileNoDockerHub(args[1:])
+	case "advisory-lock-scope":
+		return runAdvisoryLockScope(args[1:])
 	case "migration-test-coverage":
 		return runMigrationTestCoverage(args[1:])
 	case "pkg-usage-matrix":
@@ -452,6 +462,37 @@ func runDockerfileNoDockerHub(args []string) int {
 		return 1
 	}
 	fmt.Println("dockerfile-no-docker-hub: PASS — all FROMs use a mirror/private registry")
+	return 0
+}
+
+// runAdvisoryLockScope is the Go home for the advisory-lock-scope gate (migrated
+// from infra/tests/scripts/check-advisory-lock-scope_test.sh). Forbids
+// session-scoped pg_advisory_lock( in production code (CLAUDE.md Rule 7).
+func runAdvisoryLockScope(args []string) int {
+	fs := flag.NewFlagSet("advisory-lock-scope", flag.ContinueOnError)
+	root := fs.String("root", ".", "repo root directory")
+	if err := fs.Parse(args); err != nil {
+		return 1
+	}
+	if absRoot, err := os.Getwd(); err == nil && *root == "." {
+		*root = absRoot
+	}
+
+	outcome, err := advisorylock.Check(advisorylock.Config{RepoRoot: *root})
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "advisory-lock-scope: %v\n", err)
+		return 5
+	}
+	if !outcome.Pass {
+		fmt.Fprintf(os.Stderr, "advisory-lock-scope: FAIL — %d session-scoped pg_advisory_lock( call(s):\n", len(outcome.Violations))
+		for _, v := range outcome.Violations {
+			fmt.Fprintf(os.Stderr, "  %s\n", v)
+		}
+		fmt.Fprintln(os.Stderr, "")
+		fmt.Fprintln(os.Stderr, "Fix: replace with pg_advisory_xact_lock( — transaction-scoped, pool-safe (Rule 7).")
+		return 1
+	}
+	fmt.Println("advisory-lock-scope: PASS — no session-scoped pg_advisory_lock( in production code")
 	return 0
 }
 

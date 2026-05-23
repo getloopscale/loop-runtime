@@ -116,7 +116,6 @@ Proposed disposition per script (operator ratifies). Evidence is mechanical fact
 | test | infra/tests/runner/run-k6.sh | 83 | — | yes | MIGRATE-ginkgo (LIVE) |
 | test | infra/tests/runner/safety.sh | 56 | — | yes | MIGRATE-ginkgo (LIVE) |
 | drill | infra/tests/scripts/bootstrap-drill-cc_test.sh | 264 | — | yes | COUPLED (dies when its target homes) |
-| test | infra/tests/scripts/check-advisory-lock-scope_test.sh | 47 | — | — | COUPLED (dies when its target homes) |
 | test | infra/tests/scripts/check-cli-exit-codes_test.sh | 73 | — | — | COUPLED (dies when its target homes) |
 | drill | infra/tests/scripts/check-drill-credentials-isolation_test.sh | 163 | — | yes | COUPLED (dies when its target homes) |
 | test | infra/tests/scripts/check-dry-run-support_test.sh | 141 | — | yes | COUPLED (dies when its target homes) |
