@@ -21,9 +21,9 @@
 # an earlier T4.4 task (commit history). This header now documents the
 # layering so future audits don't re-flag.
 #
-# Used by:
-#   - .github/workflows/drill-l2-scale.yml — bi-weekly L2 cron + manual dispatch
-#   - .github/workflows/drill-prod-identical-soak.yml — Stage 1/2 soaks (post T3.4 redirect)
+# Used by (operator-run — GitHub Actions removed 2026-05-23):
+#   - task drill:l2-scale — L2 scale run (was bi-weekly cron + manual dispatch)
+#   - drill soaks — Stage 1/2 soaks
 #   - .claude/skills/drill-test/SKILL.md — Etapa 3 (mint JWT) per drill ciclo
 #
 # Exit codes:

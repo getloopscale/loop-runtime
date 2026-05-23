@@ -143,13 +143,10 @@ tasks:
         fi
 
   audit:security-context:
-    desc: "INF-G08 audit — pod/container securityContext hardening (matches infra-gates.yml CI gate)"
-    # 2026-05-20 CI/local parity bug class (CTO Rule 0 ambiente local
-    # fidedigno): scripts/audit-security-context.sh is referenced in
-    # .github/workflows/infra-gates.yml step 'INF-G08: securityContext
-    # audit' but had no local Taskfile shortcut — operator had to
-    # remember exact path + --gate flag. Adding task target restores
-    # parity with same exit semantics CI uses.
+    desc: "INF-G08 audit — pod/container securityContext hardening"
+    # Local task home for scripts/audit-security-context.sh --gate. (Was also
+    # an infra-gates.yml CI step until GitHub Actions was removed 2026-05-23;
+    # this task is now the canonical runner — wire it into the real CI if any.)
     cmds:
       - bash scripts/audit-security-context.sh --gate
 

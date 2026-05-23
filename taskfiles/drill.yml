@@ -19,11 +19,12 @@
 #
 # Mandatory teardown after every session (T4.1 watchdog is safety net only).
 #
-# Used by:
-#   - .github/workflows/drill-l2-scale.yml (bi-weekly L2 cron)
-#   - .github/workflows/cell2-soaks.yml (Sunday cron + manual dispatch)
-#   - .github/workflows/drill-auto-destroy-watchdog.yml (cron every 6h)
-#   - .github/workflows/pulumi-reconstruction-drill.yml (quarterly DR)
+# Used by (operator-run — GitHub Actions removed 2026-05-23; the cron cadences
+# below are now operator/real-CI responsibilities, not GitHub workflows):
+#   - task drill:l2-scale     (was bi-weekly L2 cron)
+#   - drill soaks             (was Sunday cron + manual dispatch)
+#   - task drill:watchdog     (was cron every 6h — run periodically)
+#   - DR reconstruction drill (was quarterly cron)
 #   - .claude/skills/drill-test/SKILL.md (operator-friendly invocation)
 
 version: '3'
@@ -49,7 +50,7 @@ tasks:
         cd infra/pulumi-drill
         EXPIRES_IN="${EXPIRES_IN:-8}"
         # Iter 11 LIVE bug fix: pulumi login MUST happen before stack ops.
-        # Backend URL pattern mirrors prod (.github/workflows/infra-bootstrap.yml:35).
+        # Backend URL pattern mirrors prod bootstrap.
         # DO Spaces requires region=us-east-1 (sigil) + endpoint=<region>.digitaloceanspaces.com
         # + s3ForcePathStyle=true. Idempotent (pulumi login on already-logged-in is no-op).
         DRILL_BACKEND="${DRILL_BACKEND_URL:-s3://loopzero-drill-pulumi-state?endpoint=sfo3.digitaloceanspaces.com&region=us-east-1&s3ForcePathStyle=true}"
@@ -107,8 +108,8 @@ tasks:
   watchdog:
     desc: "Run drill-watchdog.sh standalone (scan + destroy if expired)"
     summary: |
-      For local testing of watchdog logic. CI invokes via
-      .github/workflows/drill-auto-destroy-watchdog.yml every 6h.
+      For local testing of watchdog logic. Operator runs periodically
+      (every ~6h while a drill stack is active; GitHub cron removed 2026-05-23).
     cmds:
       - bash infra/scripts/dr/watchdog.sh
     env:

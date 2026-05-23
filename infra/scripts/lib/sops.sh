@@ -16,7 +16,8 @@
 #   sops_check FILE    — verify file is properly encrypted (no plaintext leaked)
 #
 # Per EC-24: prod isolation via .sops.yaml creation_rules per path.
-# Per EC-19: CI workflows must inject SOPS_AGE_KEY env from GitHub Secrets.
+# Per EC-19: the real CI must inject SOPS_AGE_KEY env (GitHub Actions removed
+# 2026-05-23 — the prior sops_audit_ci workflow check was dropped).
 #
 # Usage:
 #   source infra/scripts/lib/sops.sh
@@ -86,26 +87,9 @@ sops_check() {
   fi
 }
 
-# --- Verify CI workflow has SOPS_AGE_KEY (EC-19) ---
-sops_audit_ci() {
-  local WORKFLOW_DIR="${1:-.github/workflows}"
-  local FOUND=0
-  local MISSING=0
-  for wf in "$WORKFLOW_DIR"/*.yml; do
-    [[ -f "$wf" ]] || continue
-    if grep -qE "helmfile.*(sync|apply|template)" "$wf"; then
-      # Workflow uses helmfile — should have SOPS_AGE_KEY env
-      if grep -qE "SOPS_AGE_KEY" "$wf"; then
-        FOUND=$((FOUND+1))
-      else
-        echo "[sops_audit_ci] WARN: $wf invokes helmfile but lacks SOPS_AGE_KEY env" >&2
-        MISSING=$((MISSING+1))
-      fi
-    fi
-  done
-  echo "[sops_audit_ci] $FOUND workflows OK / $MISSING missing SOPS_AGE_KEY"
-  [[ $MISSING -eq 0 ]]
-}
+# NOTE: sops_audit_ci() (audited .github/workflows for SOPS_AGE_KEY, EC-19) was
+# removed 2026-05-23 — GitHub Actions was deleted; the function scanned a
+# non-existent dir and had no callers. Re-add against the real CI if needed.
 
 # Self-test if invoked directly (not sourced)
 if [[ "${BASH_SOURCE[0]}" == "${0}" ]]; then
@@ -113,8 +97,7 @@ if [[ "${BASH_SOURCE[0]}" == "${0}" ]]; then
   echo ""
   echo "Functions provided:"
   echo "  sops_available, sops_assert_available, sops_encrypt FILE,"
-  echo "  sops_decrypt FILE, sops_edit FILE, sops_check FILE,"
-  echo "  sops_audit_ci [WORKFLOW_DIR]"
+  echo "  sops_decrypt FILE, sops_edit FILE, sops_check FILE"
   echo ""
   echo "Pre-flight:"
   if sops_available; then

@@ -15,8 +15,8 @@
 #
 # Used by:
 #   - task test:coverage:go
-#   - .github/workflows/coverage-report.yml
 #   - Phase 2 gates (coverage-diff, baseline-compare)
+# (GitHub coverage-report.yml workflow removed 2026-05-23 — run via task/real CI.)
 
 set -euo pipefail
 

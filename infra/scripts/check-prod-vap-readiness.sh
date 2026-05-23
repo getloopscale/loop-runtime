@@ -3,8 +3,9 @@
 # Warn/Ignore to Deny/Fail in prod.
 #
 # Per EC-NEW-4: flipping to Deny without verifying ALL existing pods are
-# signed + no kubectl-set-image automation exists = catastrophic cluster down.
-# This script verifies pre-flip safety.
+# signed = catastrophic cluster down. This script verifies pre-flip safety.
+# (The kubectl-set-image-in-CI-workflows check was dropped 2026-05-23 — GitHub
+# Actions removed; verify no set-image automation in the real CI manually.)
 #
 # Usage:
 #   KUBECONFIG=~/.kube/prod ./check-prod-vap-readiness.sh
@@ -62,21 +63,13 @@ else
   FAILURES+=("Unsigned pods present — flip would reject these pod recreations")
 fi
 
-# Check 2 — No kubectl set image cron in workflows
-echo ""
-echo "[2/4] Scanning for 'kubectl set image' usage in CI workflows..."
-SET_IMAGE_USAGE=$(grep -rln "kubectl set image" /home/paulo/loopzero/.github/workflows/ 2>/dev/null || true)
-if [[ -z "$SET_IMAGE_USAGE" ]]; then
-  echo "    ✓ No 'kubectl set image' in CI workflows"
-else
-  echo "    ✗ Found 'kubectl set image' usage:"
-  echo "$SET_IMAGE_USAGE" | sed 's/^/        - /'
-  FAILURES+=("kubectl set image automation must be replaced with GitOps before flip")
-fi
+# NOTE: the former "Check 2 — no kubectl set image in CI workflows" was removed
+# 2026-05-23 (GitHub Actions deleted → no workflows to scan; the check could only
+# pass vacuously). 4 checks → 3.
 
-# Check 3 — ArgoCD apps all Synced (no pending image updates)
+# Check 2 — ArgoCD apps all Synced (no pending image updates)
 echo ""
-echo "[3/4] Verifying ArgoCD applications all Synced..."
+echo "[2/3] Verifying ArgoCD applications all Synced..."
 if command -v argocd &>/dev/null; then
   OOS_APPS=$(argocd app list -o json 2>/dev/null | jq -r '.[] | select(.status.sync.status != "Synced") | .metadata.name' || echo "")
   if [[ -z "$OOS_APPS" ]]; then
@@ -90,9 +83,9 @@ else
   echo "    ⚠ argocd CLI not installed; skipping check (operator must verify manually)"
 fi
 
-# Check 4 — No active VAP audit_log warnings in last 7 days
+# Check 3 — No active VAP audit_log warnings in last 7 days
 echo ""
-echo "[4/4] Scanning admission audit events for last 7 days..."
+echo "[3/3] Scanning admission audit events for last 7 days..."
 RECENT_WARNS=$(kubectl get events -A --field-selector=reason=ValidationFailure --since=168h 2>/dev/null | grep -c "noRuntimeImageMutations" || true)
 if [[ "$RECENT_WARNS" == "0" ]]; then
   echo "    ✓ No noRuntimeImageMutations warn events in last 7 days"
@@ -105,7 +98,7 @@ fi
 echo ""
 echo "===== Pre-Flight Summary ====="
 if [[ ${#FAILURES[@]} -eq 0 ]]; then
-  echo "✓ All 4 checks PASS. Safe to flip:"
+  echo "✓ All 3 checks PASS. Safe to flip:"
   echo ""
   echo "Next steps:"
   echo "  1. Edit infra/helmfile/environments/prod.yaml:"

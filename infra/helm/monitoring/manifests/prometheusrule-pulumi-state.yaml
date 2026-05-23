@@ -39,9 +39,10 @@ spec:
             description: |
               loopzero_pulumi_archives_total has not incremented in >90
               days. The archive bucket s3://loopzero-archive/pulumi-state/
-              should be receiving quarterly snapshots per condition
-              C12 (.github/workflows/pulumi-archive.yml). Either:
-              (a) the workflow is broken/disabled (check Actions tab);
+              should be receiving quarterly snapshots (condition C12,
+              `loopzero-ops pulumi archive`). Either:
+              (a) the archive job is not running — it was a GitHub workflow
+                  until 2026-05-23; re-home to the real CI / a scheduled task;
               (b) Pulumi backend is producing 0 stacks (also fires
                   PulumiStacksTotalZero — investigate together);
               (c) AWS S3 access for the archive bucket is broken

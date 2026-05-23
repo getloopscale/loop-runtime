@@ -4,8 +4,9 @@
 #
 # Plan 2026-05-16 T4.1 — Drill auto-destroy watchdog.
 #
-# Runs as a cron job (every 6h via .github/workflows/drill-auto-destroy-
-# watchdog.yml). Scans DO for resources tagged with `loopzero-drill-expires-
+# Operator-run periodically (~every 6h while a drill stack is active; the GitHub
+# cron was removed 2026-05-23 — run via `task drill:watchdog` or the real CI).
+# Scans DO for resources tagged with `loopzero-drill-expires-
 # at-<ISO>`, parses the expiration, and destroys any stack whose
 # expires-at < now via:
 #   1. pulumi destroy --stack drill (best effort)

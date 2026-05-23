@@ -14,7 +14,6 @@ import (
 	"strings"
 	"time"
 
-	"github.com/loopzero/loopzero/pkg/quality/actionpinning"
 	"github.com/loopzero/loopzero/pkg/quality/agplisolation"
 	"github.com/loopzero/loopzero/pkg/quality/alertrunbooks"
 	"github.com/loopzero/loopzero/pkg/quality/baseimagedigest"
@@ -27,15 +26,12 @@ import (
 	"github.com/loopzero/loopzero/pkg/quality/crdsemanticdiff"
 	"github.com/loopzero/loopzero/pkg/quality/danglingdata"
 	"github.com/loopzero/loopzero/pkg/quality/danglingrefs"
-	"github.com/loopzero/loopzero/pkg/quality/advisorymode"
-	"github.com/loopzero/loopzero/pkg/quality/dockerfilemirror"
-	"github.com/loopzero/loopzero/pkg/quality/jobtimeout"
-	"github.com/loopzero/loopzero/pkg/quality/pgpdb"
 	"github.com/loopzero/loopzero/pkg/quality/deadlineratchet"
 	"github.com/loopzero/loopzero/pkg/quality/decisionsdeletion"
 	"github.com/loopzero/loopzero/pkg/quality/divergencematrix"
-	"github.com/loopzero/loopzero/pkg/quality/gitdiff"
+	"github.com/loopzero/loopzero/pkg/quality/dockerfilemirror"
 	"github.com/loopzero/loopzero/pkg/quality/drilloutputs"
+	"github.com/loopzero/loopzero/pkg/quality/gitdiff"
 	"github.com/loopzero/loopzero/pkg/quality/helmdiffstructural"
 	"github.com/loopzero/loopzero/pkg/quality/helmdrift"
 	"github.com/loopzero/loopzero/pkg/quality/migrationtestcoverage"
@@ -44,6 +40,7 @@ import (
 	"github.com/loopzero/loopzero/pkg/quality/nonewbash"
 	"github.com/loopzero/loopzero/pkg/quality/noshellwrap"
 	"github.com/loopzero/loopzero/pkg/quality/orphanalerts"
+	"github.com/loopzero/loopzero/pkg/quality/pgpdb"
 	"github.com/loopzero/loopzero/pkg/quality/pkgusagematrix"
 	"github.com/loopzero/loopzero/pkg/quality/prodimagetags"
 	"github.com/loopzero/loopzero/pkg/quality/regressiontest"
@@ -55,10 +52,10 @@ import (
 	"github.com/loopzero/loopzero/pkg/quality/stackcoverage"
 	"github.com/loopzero/loopzero/pkg/quality/taskfileinterface"
 	"github.com/loopzero/loopzero/pkg/quality/templatecompliance"
-	"github.com/loopzero/loopzero/pkg/quality/unhomedlogic"
 	"github.com/loopzero/loopzero/pkg/quality/testdeletion"
 	"github.com/loopzero/loopzero/pkg/quality/testpyramid"
 	"github.com/loopzero/loopzero/pkg/quality/testtargets"
+	"github.com/loopzero/loopzero/pkg/quality/unhomedlogic"
 )
 
 const qualityHelp = `loopzero-ops quality — quality gate orchestrator
@@ -100,13 +97,6 @@ GATES:
                     --base-ref REF  base git ref (default: "origin/develop")
                     --head-ref REF  head git ref (default: "HEAD")
 
-  job-timeout-coverage
-                  Fail if any .github/workflows/*.yml job lacks job-level
-                  timeout-minutes (reusable-workflow callers exempt). Migrated
-                  from job-timeout-coverage_test.sh (plan 2026-05-23).
-                  Flags:
-                    --root DIR      repo root (default: ".")
-
   postgresql-pdb-config
                   Fail if infra/helm/postgresql/values.yaml does not set
                   primary.pdb.create: false (B2 regression). Migrated from
@@ -118,13 +108,6 @@ GATES:
                   Fail if any infra/images/*/Dockerfile FROM resolves to Docker
                   Hub (must use mirror.gcr.io / DOCR / full-path registry; B8
                   regression). Migrated from dockerfile-no-docker-hub_test.sh.
-                  Flags:
-                    --root DIR      repo root (default: ".")
-
-  advisory-mode-annotated
-                  Fail if any workflow continue-on-error:true lacks a
-                  rationale comment or graduation marker within 5 lines above.
-                  Migrated from advisory-mode-annotated_test.sh (plan 2026-05-23).
                   Flags:
                     --root DIR      repo root (default: ".")
 
@@ -230,8 +213,6 @@ func runQuality(args []string) int {
 		return runHelmDrift(args[1:])
 	case "runtime-slo":
 		return runRuntimeSLO(args[1:])
-	case "action-pinning":
-		return runActionPinning(args[1:])
 	case "prod-image-tags":
 		return runProdImageTags(args[1:])
 	case "no-migrate-force":
@@ -242,14 +223,10 @@ func runQuality(args []string) int {
 		return runDanglingScriptRefs(args[1:])
 	case "dangling-data-refs":
 		return runDanglingDataRefs(args[1:])
-	case "job-timeout-coverage":
-		return runJobTimeoutCoverage(args[1:])
 	case "postgresql-pdb-config":
 		return runPostgresqlPDBConfig(args[1:])
 	case "dockerfile-no-docker-hub":
 		return runDockerfileNoDockerHub(args[1:])
-	case "advisory-mode-annotated":
-		return runAdvisoryModeAnnotated(args[1:])
 	case "migration-test-coverage":
 		return runMigrationTestCoverage(args[1:])
 	case "pkg-usage-matrix":
@@ -421,42 +398,6 @@ func runDanglingDataRefs(args []string) int {
 	return 0
 }
 
-// runJobTimeoutCoverage is the Go home for the job-timeout-coverage gate
-// (migrated from infra/tests/workflows/job-timeout-coverage_test.sh). Fails if
-// any workflow job lacks job-level timeout-minutes (reusable callers exempt).
-func runJobTimeoutCoverage(args []string) int {
-	fs := flag.NewFlagSet("job-timeout-coverage", flag.ContinueOnError)
-	root := fs.String("root", ".", "repo root directory")
-	if err := fs.Parse(args); err != nil {
-		return 1
-	}
-	if absRoot, err := os.Getwd(); err == nil && *root == "." {
-		*root = absRoot
-	}
-
-	outcome, err := jobtimeout.Check(jobtimeout.Config{
-		WorkflowsDir: filepath.Join(*root, ".github", "workflows"),
-	})
-	if err != nil {
-		fmt.Fprintf(os.Stderr, "job-timeout-coverage: %v\n", err)
-		return 5
-	}
-	fmt.Printf("Total jobs: %d\n", outcome.Total)
-	fmt.Printf("Has timeout-minutes: %d\n", outcome.Covered)
-	fmt.Printf("Reusable-workflow callers (exempt): %d\n", outcome.ReusableCallers)
-	fmt.Printf("Violations: %d\n", len(outcome.Violations))
-	if !outcome.Pass {
-		for _, v := range outcome.Violations {
-			fmt.Fprintf(os.Stderr, "FAIL: %s\n", v)
-		}
-		fmt.Fprintln(os.Stderr, "")
-		fmt.Fprintln(os.Stderr, "To fix: add 'timeout-minutes: N' under runs-on: in each violating job (default 30).")
-		return 1
-	}
-	fmt.Println("job-timeout-coverage: PASS — all non-reusable-caller jobs have timeout-minutes")
-	return 0
-}
-
 // runPostgresqlPDBConfig is the Go home for the postgresql-pdb-config gate
 // (migrated from infra/tests/scripts/postgresql-pdb-config_test.sh). Guards the
 // B2 regression: the postgresql chart must set primary.pdb.create: false.
@@ -511,41 +452,6 @@ func runDockerfileNoDockerHub(args []string) int {
 		return 1
 	}
 	fmt.Println("dockerfile-no-docker-hub: PASS — all FROMs use a mirror/private registry")
-	return 0
-}
-
-// runAdvisoryModeAnnotated is the Go home for the advisory-mode-annotated gate
-// (migrated from infra/tests/workflows/advisory-mode-annotated_test.sh). Fails
-// any continue-on-error: true lacking a rationale comment or graduation marker.
-func runAdvisoryModeAnnotated(args []string) int {
-	fs := flag.NewFlagSet("advisory-mode-annotated", flag.ContinueOnError)
-	root := fs.String("root", ".", "repo root directory")
-	if err := fs.Parse(args); err != nil {
-		return 1
-	}
-	if absRoot, err := os.Getwd(); err == nil && *root == "." {
-		*root = absRoot
-	}
-
-	outcome, err := advisorymode.Check(advisorymode.Config{
-		WorkflowsDir: filepath.Join(*root, ".github", "workflows"),
-	})
-	if err != nil {
-		fmt.Fprintf(os.Stderr, "advisory-mode-annotated: %v\n", err)
-		return 5
-	}
-	fmt.Printf("Total continue-on-error: true: %d\n", outcome.Total)
-	fmt.Printf("Annotated (rationale or graduation): %d\n", outcome.Annotated)
-	fmt.Printf("Violations: %d\n", len(outcome.Violations))
-	if !outcome.Pass {
-		for _, v := range outcome.Violations {
-			fmt.Fprintf(os.Stderr, "FAIL: %s\n", v)
-		}
-		fmt.Fprintln(os.Stderr, "")
-		fmt.Fprintln(os.Stderr, "Fix: add (within 5 lines above) a `# rationale: ...` or `# graduation: YYYY-MM-DD` comment.")
-		return 1
-	}
-	fmt.Println("advisory-mode-annotated: PASS — all continue-on-error: true entries are governance-tagged")
 	return 0
 }
 
@@ -1396,33 +1302,6 @@ func runRuntimeSLO(args []string) int {
 		return 1
 	}
 	fmt.Println("[runtime-slo] PASS — all tests/suites within SLO")
-	return 0
-}
-
-func runActionPinning(args []string) int {
-	fs := flag.NewFlagSet("action-pinning", flag.ContinueOnError)
-	dir := fs.String("workflows-dir", ".github/workflows", "directory of *.yml workflow files")
-	actionsDir := fs.String("actions-dir", "", "optional dir of composite actions (<dir>/*/action.yml) to also scan")
-	if err := fs.Parse(args); err != nil {
-		return 1
-	}
-	o, err := actionpinning.Check(actionpinning.Config{WorkflowsDir: *dir, ActionsDir: *actionsDir})
-	if err != nil {
-		fmt.Fprintf(os.Stderr, "action-pinning: %v\n", err)
-		return 2
-	}
-	if !o.Pass {
-		fmt.Fprintf(os.Stderr, "❌ INF-G18 FAILED — %d tag-pinned action(s):\n\n", len(o.Violations))
-		for _, v := range o.Violations {
-			fmt.Fprintf(os.Stderr, "  %s\n", v)
-		}
-		fmt.Fprintln(os.Stderr, "")
-		fmt.Fprintln(os.Stderr, "Action: replace each @v<N> with @<sha40> (40-char commit SHA).")
-		fmt.Fprintln(os.Stderr, "If a line is genuinely exempt, prepend: # pragma: allow-tag-pin")
-		return 1
-	}
-	fmt.Printf("✅ INF-G18 GREEN — 0 tag-pinned actions in %d files (%d workflows + composite actions).\n",
-		o.FileCount, o.WorkflowCount)
 	return 0
 }
 

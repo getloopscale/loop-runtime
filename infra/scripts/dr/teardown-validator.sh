@@ -21,11 +21,10 @@
 #   4. Re-validates count is zero
 #   5. Emits audit-trail markdown report
 #
-# Used by:
-#   - .github/workflows/drill-prod-identical-soak.yml (Stage 1 + Stage 2 post-teardown)
-#   - .github/workflows/drill-l2-scale.yml (post-teardown)
-#   - .github/workflows/drill-auto-destroy-watchdog.yml (cron T4.1)
-#   - infra/scripts/drill-watchdog.sh (T4.1 wrapper)
+# Used by (operator-run — GitHub Actions removed 2026-05-23):
+#   - drill soaks (Stage 1 + Stage 2 post-teardown)
+#   - task drill:l2-scale (post-teardown)
+#   - infra/scripts/dr/watchdog.sh (T4.1 wrapper)
 #
 # Exit codes:
 #   0 — Zero residuals (clean) OR successfully force-deleted residuals

@@ -9,11 +9,10 @@ tasks:
     cmds:
       - |
         # 2026-05-20 CTO Rule 0 fix (ambiente local fidedigno ao prod):
-        # Previously this task ran `helm lint` WITHOUT --strict, while
-        # .github/workflows/helm-charts.yml runs WITH --strict. Operator
-        # passing `task helm:lint` locally then failing CI = CI/local parity
-        # bug. Restored symmetry: both use --strict (catches lint warnings as
-        # errors per INF-G17 mandate).
+        # this task runs `helm lint` WITH --strict (catches lint warnings as
+        # errors per INF-G17 mandate). Keep --strict so local == whatever the
+        # real CI runs. (The former GitHub helm-charts.yml workflow that also
+        # ran --strict was removed 2026-05-23.)
         FAILED=0
         for chart in charts/*/; do
           echo "Linting $chart..."

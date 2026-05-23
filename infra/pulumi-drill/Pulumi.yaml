@@ -11,9 +11,9 @@ description: >
     - DO API token scoped only to loopzero-drill project
     - Pulumi state backend bucket separate
 
-  Lifecycle: provisioned + destroyed quarterly by
-  .github/workflows/pulumi-reconstruction-drill.yml or operator on-demand
-  via infra/scripts/dr-drill.sh.
+  Lifecycle: provisioned + destroyed quarterly by the operator on-demand via
+  infra/scripts/dr-drill.sh (the GitHub reconstruction-drill cron was removed
+  2026-05-23 — re-home to the real CI if quarterly automation is wanted).
 
 template:
   description: LoopZero DR drill — quarterly disaster recovery validation

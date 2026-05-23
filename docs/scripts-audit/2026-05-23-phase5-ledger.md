@@ -51,8 +51,8 @@ Proposed disposition per script (operator ratifies). Evidence is mechanical fact
 | drill | infra/scripts/dr/jwt-diagnose.sh | 372 | — | yes | MIGRATE-loopzero-ops-drill (LIVE-gate before delete) |
 | drill | infra/scripts/dr/preflight.sh | 381 | — | yes | MIGRATE-loopzero-ops-drill (LIVE-gate before delete) |
 | drill | infra/scripts/dr/state-reset.sh | 340 | — | yes | MIGRATE-loopzero-ops-drill (LIVE-gate before delete) |
-| drill | infra/scripts/dr/teardown-validator.sh | 283 | — | yes | MIGRATE-loopzero-ops-drill (LIVE-gate before delete) |
-| drill | infra/scripts/dr/watchdog.sh | 149 | — | yes | MIGRATE-loopzero-ops-drill (LIVE-gate before delete) |
+| drill | infra/scripts/dr/teardown-validator.sh | 282 | — | yes | MIGRATE-loopzero-ops-drill (LIVE-gate before delete) |
+| drill | infra/scripts/dr/watchdog.sh | 150 | — | yes | MIGRATE-loopzero-ops-drill (LIVE-gate before delete) |
 | drill | infra/scripts/drill-helmfile-bootstrap.sh | 1126 | — | yes | MIGRATE-loopzero-ops-drill (LIVE-gate before delete) |
 | drill | infra/scripts/drill-mint-jwt.sh | 300 | — | yes | MIGRATE-loopzero-ops-drill (LIVE-gate before delete) |
 | bootstrap | infra/scripts/lib/bootstrap-cell-cc-common.sh | 161 | — | yes | DELEGATE-declarative (T2) |
@@ -123,7 +123,6 @@ Proposed disposition per script (operator ratifies). Evidence is mechanical fact
 | test | infra/tests/scripts/check-environment-lock_test.sh | 118 | — | yes | COUPLED (dies when its target homes) |
 | test | infra/tests/scripts/check-pulumi-secrets_test.sh | 85 | — | yes | COUPLED (dies when its target homes) |
 | test | infra/tests/scripts/check-shell-hygiene_test.sh | 56 | — | — | COUPLED (dies when its target homes) |
-| test | infra/tests/scripts/ci-path-filter-coverage_test.sh | 132 | — | yes | COUPLED (dies when its target homes) |
 | test | infra/tests/scripts/coverage-go_test.sh | 231 | — | — | COUPLED (dies when its target homes) |
 | test | infra/tests/scripts/dogfood-cleanroom-loop_test.sh | 161 | — | yes | COUPLED (dies when its target homes) |
 | drill | infra/tests/scripts/drill-cancel-refresh_test.sh | 217 | — | yes | COUPLED (dies when its target homes) |
