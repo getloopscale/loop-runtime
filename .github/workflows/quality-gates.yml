@@ -37,9 +37,13 @@ jobs:
         run: go install github.com/wadey/gocovmerge@latest
 
       - name: Build PR diff file list (path:line per added line)
+        # Migrated to pure-Go (pkg/quality/gitdiff) per plan 2026-05-23 — drops the
+        # Python heredoc; exact parity proven (619 lines). Refs via env (safe).
+        env:
+          BASE_REF: origin/${{ github.base_ref }}
+          HEAD_REF: HEAD
         run: |
-          BASE_REF="origin/${{ github.base_ref }}" HEAD_REF=HEAD \
-            bash infra/scripts/quality/git-diff-to-lines.sh > /tmp/pr-diff.txt
+          (cd cmd/loopzero-ops && go run . quality git-diff-to-lines) > /tmp/pr-diff.txt
 
       - name: Generate coverage
         run: |

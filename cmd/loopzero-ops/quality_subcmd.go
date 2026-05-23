@@ -8,6 +8,7 @@ import (
 	"flag"
 	"fmt"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"strconv"
 	"strings"
@@ -28,6 +29,7 @@ import (
 	"github.com/loopzero/loopzero/pkg/quality/deadlineratchet"
 	"github.com/loopzero/loopzero/pkg/quality/decisionsdeletion"
 	"github.com/loopzero/loopzero/pkg/quality/divergencematrix"
+	"github.com/loopzero/loopzero/pkg/quality/gitdiff"
 	"github.com/loopzero/loopzero/pkg/quality/drilloutputs"
 	"github.com/loopzero/loopzero/pkg/quality/helmdiffstructural"
 	"github.com/loopzero/loopzero/pkg/quality/helmdrift"
@@ -136,6 +138,9 @@ GATES:
                   per capability domain; monotonic baseline ratchet.
                   Flags: --report  --update-baseline  --allowlist PATH  --baseline PATH
 
+  git-diff-to-lines  Emit one path:line per PR-touched line (git diff --unified=0).
+                  Flags: --base REF  --head REF (fall back to $BASE_REF/$HEAD_REF)
+
   no-shell-wrap   Fail if Go code in pkg/* uses shellrun.Run(<forbidden-cli>, ...)
                   without //nolint:shell-wrap suppression (D5 gate).
                   Forbidden: pulumi, helm, kubectl, aws, gh (use Go SDK instead).
@@ -213,6 +218,8 @@ func runQuality(args []string) int {
 		return runSpotcheckDimension(args[1:])
 	case "unhomed-logic":
 		return runUnhomedLogic(args[1:])
+	case "git-diff-to-lines":
+		return runGitDiffToLines(args[1:])
 	case "cosign-cutover":
 		return runCosignCutover(args[1:])
 	case "service-auth-rotation":
@@ -507,6 +514,39 @@ func runSpotcheckDimension(args []string) int {
 	}
 	for _, m := range outcome.Messages {
 		fmt.Println(m)
+	}
+	return 0
+}
+
+// runGitDiffToLines replaces git-diff-to-lines.sh (a bash+Python wrapper):
+// runs `git diff --unified=0 base...head` and emits one `path:line` per
+// touched line. Parse logic lives in the tested pkg/quality/gitdiff.
+func runGitDiffToLines(args []string) int {
+	fs := flag.NewFlagSet("git-diff-to-lines", flag.ContinueOnError)
+	base := fs.String("base", "", "base ref (falls back to $BASE_REF, then origin/main)")
+	head := fs.String("head", "", "head ref (falls back to $HEAD_REF, then HEAD)")
+	if err := fs.Parse(args); err != nil {
+		return 1
+	}
+	b := firstNonEmpty(*base, os.Getenv("BASE_REF"), "origin/main")
+	h := firstNonEmpty(*head, os.Getenv("HEAD_REF"), "HEAD")
+	// #nosec G204 -- b/h are CI-controlled git refs, not user input.
+	cmd := exec.Command("git", "diff", "--unified=0", b+"..."+h)
+	out, err := cmd.Output()
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "git-diff-to-lines: git diff %s...%s: %v\n", b, h, err)
+		return 5
+	}
+	pairs, err := gitdiff.Parse(strings.NewReader(string(out)))
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "git-diff-to-lines: parse: %v\n", err)
+		return 5
+	}
+	if s := gitdiff.FormatLines(pairs); s != "" {
+		fmt.Print(s)
+		if !strings.HasSuffix(s, "\n") {
+			fmt.Println()
+		}
 	}
 	return 0
 }
