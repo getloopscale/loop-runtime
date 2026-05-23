@@ -17,6 +17,7 @@ import (
 	"github.com/loopzero/loopzero/pkg/quality/baseimagedigest"
 	"github.com/loopzero/loopzero/pkg/quality/clibundlesize"
 	"github.com/loopzero/loopzero/pkg/quality/clusterimagepolicymode"
+	"github.com/loopzero/loopzero/pkg/quality/danglingrefs"
 	"github.com/loopzero/loopzero/pkg/quality/deadlineratchet"
 	"github.com/loopzero/loopzero/pkg/quality/decisionsdeletion"
 	"github.com/loopzero/loopzero/pkg/quality/divergencematrix"
@@ -58,6 +59,15 @@ GATES:
                     --allowlist PATH  allowlist MD (default: ".claude/rules/shell-scripts-allowlist.md")
                     --base-ref REF    base git ref (default: "origin/main")
                     --head-ref REF    head git ref (default: "HEAD")
+
+  dangling-script-refs
+                  Fail if a .sh deleted in the diff is still referenced (live)
+                  by Taskfile/CI/SKILL/infra callers (T0.1 migration backstop).
+                  Requires fetch-depth: 0 in CI checkout.
+                  Flags:
+                    --root DIR      repo root (default: ".")
+                    --base-ref REF  base git ref (default: "origin/develop")
+                    --head-ref REF  head git ref (default: "HEAD")
 
   no-shell-wrap   Fail if Go code in pkg/* uses shellrun.Run(<forbidden-cli>, ...)
                   without //nolint:shell-wrap suppression (D5 gate).
@@ -112,6 +122,8 @@ func runQuality(args []string) int {
 		return runNoMigrateForce(args[1:])
 	case "test-targets":
 		return runTestTargets(args[1:])
+	case "dangling-script-refs":
+		return runDanglingScriptRefs(args[1:])
 	case "cosign-cutover":
 		return runCosignCutover(args[1:])
 	case "service-auth-rotation":
@@ -180,6 +192,43 @@ func runNoNewBash(args []string) int {
 		return 1
 	}
 	fmt.Println("no-new-bash: PASS — no new bash scripts outside allowlist")
+	return 0
+}
+
+// runDanglingScriptRefs is the T0.1 backstop gate: fail if a deleted .sh is
+// still referenced (live) by any caller surface. Requires fetch-depth: 0.
+func runDanglingScriptRefs(args []string) int {
+	fs := flag.NewFlagSet("dangling-script-refs", flag.ContinueOnError)
+	root := fs.String("root", ".", "repo root directory")
+	baseRef := fs.String("base-ref", "origin/develop", "base git ref")
+	headRef := fs.String("head-ref", "HEAD", "head git ref")
+	if err := fs.Parse(args); err != nil {
+		return 1
+	}
+	if absRoot, err := os.Getwd(); err == nil && *root == "." {
+		*root = absRoot
+	}
+
+	outcome, err := danglingrefs.Check(danglingrefs.Config{
+		RepoRoot: *root,
+		BaseRef:  *baseRef,
+		HeadRef:  *headRef,
+	})
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "dangling-script-refs: %v\n", err)
+		return 5
+	}
+	if !outcome.Pass {
+		fmt.Fprintln(os.Stderr, "dangling-script-refs: FAIL — deleted scripts still referenced by live callers:")
+		for _, v := range outcome.Violations {
+			fmt.Fprintf(os.Stderr, "  - %s\n", v)
+		}
+		fmt.Fprintln(os.Stderr, "")
+		fmt.Fprintln(os.Stderr, "Per plan D2: rewire ALL 4 caller surfaces (Taskfile/CI/SKILL/scripts) in the")
+		fmt.Fprintln(os.Stderr, "same PR that deletes the script. See docs/plans/2026-05-23-incremental-bash-to-go-migration-plan.md")
+		return 1
+	}
+	fmt.Println("dangling-script-refs: PASS — no deleted script left with live references")
 	return 0
 }
 
