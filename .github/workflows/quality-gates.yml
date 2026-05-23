@@ -361,3 +361,8 @@ jobs:
           cd pkg && go test ./quality/dockerfilemirror/...
           cd ../cmd/loopzero-ops && go run . quality dockerfile-no-docker-hub --root ../..
 
+      - name: advisory-mode-annotated gate + hermetic tests (pure-Go, migrated from bash, plan 2026-05-23)
+        run: |
+          cd pkg && go test ./quality/advisorymode/...
+          cd ../cmd/loopzero-ops && go run . quality advisory-mode-annotated --root ../..
+

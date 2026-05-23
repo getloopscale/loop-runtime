@@ -27,6 +27,7 @@ import (
 	"github.com/loopzero/loopzero/pkg/quality/crdsemanticdiff"
 	"github.com/loopzero/loopzero/pkg/quality/danglingdata"
 	"github.com/loopzero/loopzero/pkg/quality/danglingrefs"
+	"github.com/loopzero/loopzero/pkg/quality/advisorymode"
 	"github.com/loopzero/loopzero/pkg/quality/dockerfilemirror"
 	"github.com/loopzero/loopzero/pkg/quality/jobtimeout"
 	"github.com/loopzero/loopzero/pkg/quality/pgpdb"
@@ -117,6 +118,13 @@ GATES:
                   Fail if any infra/images/*/Dockerfile FROM resolves to Docker
                   Hub (must use mirror.gcr.io / DOCR / full-path registry; B8
                   regression). Migrated from dockerfile-no-docker-hub_test.sh.
+                  Flags:
+                    --root DIR      repo root (default: ".")
+
+  advisory-mode-annotated
+                  Fail if any workflow continue-on-error:true lacks a
+                  rationale comment or graduation marker within 5 lines above.
+                  Migrated from advisory-mode-annotated_test.sh (plan 2026-05-23).
                   Flags:
                     --root DIR      repo root (default: ".")
 
@@ -240,6 +248,8 @@ func runQuality(args []string) int {
 		return runPostgresqlPDBConfig(args[1:])
 	case "dockerfile-no-docker-hub":
 		return runDockerfileNoDockerHub(args[1:])
+	case "advisory-mode-annotated":
+		return runAdvisoryModeAnnotated(args[1:])
 	case "migration-test-coverage":
 		return runMigrationTestCoverage(args[1:])
 	case "pkg-usage-matrix":
@@ -501,6 +511,41 @@ func runDockerfileNoDockerHub(args []string) int {
 		return 1
 	}
 	fmt.Println("dockerfile-no-docker-hub: PASS — all FROMs use a mirror/private registry")
+	return 0
+}
+
+// runAdvisoryModeAnnotated is the Go home for the advisory-mode-annotated gate
+// (migrated from infra/tests/workflows/advisory-mode-annotated_test.sh). Fails
+// any continue-on-error: true lacking a rationale comment or graduation marker.
+func runAdvisoryModeAnnotated(args []string) int {
+	fs := flag.NewFlagSet("advisory-mode-annotated", flag.ContinueOnError)
+	root := fs.String("root", ".", "repo root directory")
+	if err := fs.Parse(args); err != nil {
+		return 1
+	}
+	if absRoot, err := os.Getwd(); err == nil && *root == "." {
+		*root = absRoot
+	}
+
+	outcome, err := advisorymode.Check(advisorymode.Config{
+		WorkflowsDir: filepath.Join(*root, ".github", "workflows"),
+	})
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "advisory-mode-annotated: %v\n", err)
+		return 5
+	}
+	fmt.Printf("Total continue-on-error: true: %d\n", outcome.Total)
+	fmt.Printf("Annotated (rationale or graduation): %d\n", outcome.Annotated)
+	fmt.Printf("Violations: %d\n", len(outcome.Violations))
+	if !outcome.Pass {
+		for _, v := range outcome.Violations {
+			fmt.Fprintf(os.Stderr, "FAIL: %s\n", v)
+		}
+		fmt.Fprintln(os.Stderr, "")
+		fmt.Fprintln(os.Stderr, "Fix: add (within 5 lines above) a `# rationale: ...` or `# graduation: YYYY-MM-DD` comment.")
+		return 1
+	}
+	fmt.Println("advisory-mode-annotated: PASS — all continue-on-error: true entries are governance-tagged")
 	return 0
 }
 
