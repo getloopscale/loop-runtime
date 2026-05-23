@@ -55,10 +55,6 @@ Proposed disposition per script (operator ratifies). Evidence is mechanical fact
 | drill | infra/scripts/dr/watchdog.sh | 149 | — | yes | MIGRATE-loopzero-ops-drill (LIVE-gate before delete) |
 | drill | infra/scripts/drill-helmfile-bootstrap.sh | 1126 | — | yes | MIGRATE-loopzero-ops-drill (LIVE-gate before delete) |
 | drill | infra/scripts/drill-mint-jwt.sh | 300 | — | yes | MIGRATE-loopzero-ops-drill (LIVE-gate before delete) |
-| governance | infra/scripts/governance/bias-check.sh | 253 | yes | — | MIGRATE-go (python-wrapper — focused TDD) |
-| governance | infra/scripts/governance/health-check-governance.sh | 210 | — | — | MIGRATE-loopzero-ops (pure-logic — autonomous) |
-| governance | infra/scripts/governance/scan-decay.sh | 168 | yes | — | MIGRATE-go (python-wrapper — focused TDD) |
-| governance | infra/scripts/governance/verify-independence.sh | 131 | yes | — | MIGRATE-go (python-wrapper — focused TDD) |
 | bootstrap | infra/scripts/lib/bootstrap-cell-cc-common.sh | 161 | — | yes | DELEGATE-declarative (T2) |
 | drill | infra/scripts/lib/bootstrap-cell-cc-drill-common.sh | 166 | — | yes | MIGRATE-loopzero-ops-drill (LIVE-gate before delete) |
 | drill | infra/scripts/lib/drill-dogfood-journeys.sh | 242 | — | yes | MIGRATE-loopzero-ops-drill (LIVE-gate before delete) |
