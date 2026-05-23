@@ -102,6 +102,37 @@ func TestCount_LegitKeepNoContent_StaysHomed(t *testing.T) {
 	}
 }
 
+func TestLedger_EvidenceAndDisposition(t *testing.T) {
+	al := "| Script | LOC | Justificativa |\n|---|---:|---|\n" +
+		"| infra/scripts/governance/scan-decay.sh | 168 | REVIEW-NEEDED |\n" +
+		"| infra/scripts/dr/preflight.sh | 175 | REVIEW-NEEDED |\n" +
+		"| infra/scripts/break-glass.sh | 145 | REVIEW-NEEDED |\n" +
+		"| infra/tests/scripts/foo_test.sh | 50 | AUTO-DIE |\n"
+	bodies := map[string]string{
+		"infra/scripts/governance/scan-decay.sh": "#!/usr/bin/env bash\npython3 - <<'PY'\nPY\n",
+		"infra/scripts/dr/preflight.sh":          "#!/usr/bin/env bash\nkubectl get nodes\n",
+		"infra/scripts/break-glass.sh":           "#!/usr/bin/env bash\nkubectl delete pod x\n",
+		"infra/tests/scripts/foo_test.sh":        "#!/usr/bin/env bash\necho test\n",
+	}
+	led := Ledger(al, func(p string) (string, bool) { b, ok := bodies[p]; return b, ok })
+	byPath := map[string]Entry{}
+	for _, e := range led {
+		byPath[e.Path] = e
+	}
+	if d := byPath["infra/scripts/governance/scan-decay.sh"]; !d.HasPython || d.Disposition != "MIGRATE-go (python-wrapper — focused TDD)" {
+		t.Errorf("python-wrapper mis-dispositioned: %+v", d)
+	}
+	if d := byPath["infra/scripts/dr/preflight.sh"]; !d.ShellsLive || d.Disposition != "MIGRATE-loopzero-ops-drill (LIVE-gate before delete)" {
+		t.Errorf("drill mis-dispositioned: %+v", d)
+	}
+	if d := byPath["infra/scripts/break-glass.sh"]; !d.ShellsLive || d.Disposition != "KEEP-OPERATOR? (live-cluster tool — operator ratify)" {
+		t.Errorf("live-tool mis-dispositioned: %+v", d)
+	}
+	if d := byPath["infra/tests/scripts/foo_test.sh"]; d.Disposition != "COUPLED (dies when its target homes)" {
+		t.Errorf("_test.sh mis-dispositioned: %+v", d)
+	}
+}
+
 // RED-honest: the gate must FAIL if a PR increases un-homed logic.
 func TestRatchet_FailsOnIncrease(t *testing.T) {
 	baseline := Counts{Total: 5, ByDomain: map[string]int{"test": 2}}

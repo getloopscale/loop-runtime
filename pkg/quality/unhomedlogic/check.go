@@ -146,6 +146,67 @@ func Count(allowlistMD string, readBody ReadBody) Counts {
 	return c
 }
 
+// Entry is one un-homed script's row in the Phase-5 classification ledger.
+type Entry struct {
+	Path        string
+	Domain      string
+	LOC         int
+	HasPython   bool // embeds a Python heredoc (reimplementable logic)
+	ShellsLive  bool // invokes kubectl/k3d/doctl/helm/pulumi/argocd/cosign
+	Disposition string
+}
+
+var shellsLiveRe = regexp.MustCompile(`\b(kubectl|k3d|doctl|helm|pulumi|argocd|cosign)\b`)
+
+// Ledger emits a proposed disposition + evidence per un-homed script, for
+// operator (sponsor) ratification in one pass. Heuristic dispositions — the
+// operator corrects; the evidence (python/shells-live/LOC) is mechanical fact.
+func Ledger(allowlistMD string, readBody ReadBody) []Entry {
+	var entries []Entry
+	for _, line := range strings.Split(allowlistMD, "\n") {
+		m := allowlistRowRe.FindStringSubmatch(line)
+		if m == nil {
+			continue
+		}
+		path := strings.TrimSpace(m[1])
+		justif := m[2]
+		if classify(path, justif) == Homed {
+			continue
+		}
+		e := Entry{Path: path, Domain: domainOf(path)}
+		if readBody != nil {
+			if body, ok := readBody(path); ok {
+				e.LOC = strings.Count(body, "\n")
+				e.HasPython = hasReimplementableLogic(body)
+				e.ShellsLive = shellsLiveRe.MatchString(body)
+			}
+		}
+		e.Disposition = proposeDisposition(e)
+		entries = append(entries, e)
+	}
+	return entries
+}
+
+// proposeDisposition is the heuristic the operator ratifies.
+func proposeDisposition(e Entry) string {
+	switch {
+	case e.HasPython:
+		return "MIGRATE-go (python-wrapper — focused TDD)"
+	case strings.HasSuffix(e.Path, "_test.sh"):
+		return "COUPLED (dies when its target homes)"
+	case e.Domain == "drill":
+		return "MIGRATE-loopzero-ops-drill (LIVE-gate before delete)"
+	case e.Domain == "bootstrap":
+		return "DELEGATE-declarative (T2)"
+	case e.Domain == "test" || e.Domain == "chaos":
+		return "MIGRATE-ginkgo (LIVE)"
+	case e.ShellsLive:
+		return "KEEP-OPERATOR? (live-cluster tool — operator ratify)"
+	default:
+		return "MIGRATE-loopzero-ops (pure-logic — autonomous)"
+	}
+}
+
 // isKeepLabel reports whether the justificativa carries a KEEP-* disposition
 // (as opposed to homed-by-path: hooks / container entrypoints).
 func isKeepLabel(justif string) bool {

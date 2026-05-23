@@ -559,6 +559,7 @@ func runUnhomedLogic(args []string) int {
 	baselinePath := fs.String("baseline", "infra/quality/unhomed-baseline.json", "baseline JSON")
 	root := fs.String("root", ".", "repo root (for content-verifying KEEP claims)")
 	report := fs.Bool("report", false, "print per-domain un-homed counts (no gate)")
+	ledger := fs.Bool("ledger", false, "emit per-script disposition + evidence (markdown, for Phase-5 review)")
 	update := fs.Bool("update-baseline", false, "ratchet the baseline to current (write)")
 	fs.Bool("check", true, "ratchet against baseline (default)")
 	if err := fs.Parse(args); err != nil {
@@ -582,6 +583,27 @@ func runUnhomedLogic(args []string) int {
 	if *report {
 		for _, l := range current.Render() {
 			fmt.Println(l)
+		}
+		return 0
+	}
+
+	if *ledger {
+		entries := unhomedlogic.Ledger(string(data), readBody)
+		fmt.Println("# Phase-5 Classification Ledger — un-homed operational logic")
+		fmt.Println("")
+		fmt.Println("Proposed disposition per script (operator ratifies). Evidence is mechanical fact.")
+		fmt.Println("")
+		fmt.Println("| Domain | Script | LOC | Python | ShellsLive | Proposed disposition |")
+		fmt.Println("|---|---|---:|:---:|:---:|---|")
+		yn := func(b bool) string {
+			if b {
+				return "yes"
+			}
+			return "—"
+		}
+		for _, e := range entries {
+			fmt.Printf("| %s | %s | %d | %s | %s | %s |\n",
+				e.Domain, e.Path, e.LOC, yn(e.HasPython), yn(e.ShellsLive), e.Disposition)
 		}
 		return 0
 	}
