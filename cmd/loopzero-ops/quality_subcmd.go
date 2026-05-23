@@ -25,6 +25,7 @@ import (
 	"github.com/loopzero/loopzero/pkg/quality/coveragediff"
 	"github.com/loopzero/loopzero/pkg/quality/coveragemerge"
 	"github.com/loopzero/loopzero/pkg/quality/crdsemanticdiff"
+	"github.com/loopzero/loopzero/pkg/quality/danglingdata"
 	"github.com/loopzero/loopzero/pkg/quality/danglingrefs"
 	"github.com/loopzero/loopzero/pkg/quality/deadlineratchet"
 	"github.com/loopzero/loopzero/pkg/quality/decisionsdeletion"
@@ -78,6 +79,17 @@ GATES:
   dangling-script-refs
                   Fail if a .sh deleted in the diff is still referenced (live)
                   by Taskfile/CI/SKILL/infra callers (T0.1 migration backstop).
+                  Requires fetch-depth: 0 in CI checkout.
+                  Flags:
+                    --root DIR      repo root (default: ".")
+                    --base-ref REF  base git ref (default: "origin/develop")
+                    --head-ref REF  head git ref (default: "HEAD")
+
+  dangling-data-refs
+                  Mirror of dangling-script-refs: fail if a config/data file
+                  (.yaml/.yml/.json) deleted in the diff is still referenced
+                  (live) by an executable caller (.sh or workflow/Taskfile YAML).
+                  Closes the data-orphan class (governance subsystem 2026-05-23).
                   Requires fetch-depth: 0 in CI checkout.
                   Flags:
                     --root DIR      repo root (default: ".")
@@ -196,6 +208,8 @@ func runQuality(args []string) int {
 		return runTestTargets(args[1:])
 	case "dangling-script-refs":
 		return runDanglingScriptRefs(args[1:])
+	case "dangling-data-refs":
+		return runDanglingDataRefs(args[1:])
 	case "migration-test-coverage":
 		return runMigrationTestCoverage(args[1:])
 	case "pkg-usage-matrix":
@@ -325,6 +339,45 @@ func runDanglingScriptRefs(args []string) int {
 		return 1
 	}
 	fmt.Println("dangling-script-refs: PASS — no deleted script left with live references")
+	return 0
+}
+
+// runDanglingDataRefs is the mirror backstop: fail if a deleted config/data
+// file is still referenced (live) by an executable caller. Closes the
+// data-orphan class (the 2026-05-11 consolidation deleted maturity-scoring data
+// but left the governance scripts dangling). Requires fetch-depth: 0.
+func runDanglingDataRefs(args []string) int {
+	fs := flag.NewFlagSet("dangling-data-refs", flag.ContinueOnError)
+	root := fs.String("root", ".", "repo root directory")
+	baseRef := fs.String("base-ref", "origin/develop", "base git ref")
+	headRef := fs.String("head-ref", "HEAD", "head git ref")
+	if err := fs.Parse(args); err != nil {
+		return 1
+	}
+	if absRoot, err := os.Getwd(); err == nil && *root == "." {
+		*root = absRoot
+	}
+
+	outcome, err := danglingdata.Check(danglingdata.Config{
+		RepoRoot: *root,
+		BaseRef:  *baseRef,
+		HeadRef:  *headRef,
+	})
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "dangling-data-refs: %v\n", err)
+		return 5
+	}
+	if !outcome.Pass {
+		fmt.Fprintln(os.Stderr, "dangling-data-refs: FAIL — deleted config/data files still referenced by live callers:")
+		for _, v := range outcome.Violations {
+			fmt.Fprintf(os.Stderr, "  - %s\n", v)
+		}
+		fmt.Fprintln(os.Stderr, "")
+		fmt.Fprintln(os.Stderr, "When deleting a config/data tree, remove or rewire the scripts that read it in")
+		fmt.Fprintln(os.Stderr, "the SAME change. See finding-2026-05-23-governance-subsystem-orphaned.md")
+		return 1
+	}
+	fmt.Println("dangling-data-refs: PASS — no deleted data file left with live references")
 	return 0
 }
 
