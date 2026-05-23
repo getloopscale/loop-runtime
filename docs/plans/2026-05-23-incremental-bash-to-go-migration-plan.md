@@ -220,7 +220,7 @@ VERIFY:  task ops:build && <bin> --help
 > **Autonomous salvage ceiling reached.** Remaining script-reduction is NOT clean autonomous salvage:
 > - `flaky-track` — half-built/unwired feature (finding `finding-2026-05-23-flaky-tracker-half-built.md`); needs a product decision (finish vs abandon), not a port.
 > - `branch-protection-update` — shells `gh`, mutates branch protection = operator-time.
-> - `governance/*` (scan-decay, bias-check, verify-independence, spotcheck, health-check-governance) — an **inter-coupled audit subsystem** (no bkp port; pairs with python + prompt `.md` siblings). From-scratch Go authoring warrants focused TDD work, not loop-grind.
+> - `governance/*`: `spotcheck-dimension` was genuinely pure-bash-logic → **authored to `pkg/quality/spotcheck` (TDD, N(bash) 193→192)**. The other 4 (scan-decay, bias-check, verify-independence, health-check-governance) are **bash-wrapped Python heredocs** (`python3 - <<PY` doing YAML parse + governance logic), NOT pure bash. Migrating them = reimplementing Python governance-correctness logic in Go — focused, carefully-tested work (a subtly-wrong independence/decay check could false-pass a governance gate), explicitly NOT an autonomous loop-grind target.
 > - The ~73 shell-out scripts (Tier-C drill + parity + dogfood orchestrators) — LIVE-gated.
 
 ### T1.1 — `pulumi-archive.sh` → `pkg/pulumi/archive`
