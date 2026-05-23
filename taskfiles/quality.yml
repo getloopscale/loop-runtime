@@ -1,0 +1,45 @@
+version: '3'
+
+# Quality gates — re-homed from .github/workflows (deleted 2026-05-23, GitHub
+# Actions is not the CI/CD platform). These are platform-agnostic: they run
+# locally for the operator and can be invoked by any real CI via `task quality:*`.
+#
+# Layers:
+#   quality:hermetic  — pure-Go gate unit tests + build (no repo state needed)
+#   quality:gates     — full-repo-scan gates (deterministic; no git diff)
+#   quality:diff      — PR-diff gates (need a BASE_REF; for CI/PR context)
+#   quality:all       — hermetic + gates (the standard local/CI suite)
+
+tasks:
+  build:
+    desc: Build the loopzero-ops quality binary to /tmp/loopzero-ops
+    cmds:
+      - cd cmd/loopzero-ops && go build -o /tmp/loopzero-ops .
+
+  hermetic:
+    desc: Run pkg/quality hermetic Go tests + verify both modules build
+    cmds:
+      - cd pkg && go test ./quality/...
+      - cd cmd/loopzero-ops && go build ./...
+
+  gates:
+    desc: Full-repo-scan quality gates (no git diff required)
+    deps: [build]
+    cmds:
+      - /tmp/loopzero-ops quality unhomed-logic --check
+      - /tmp/loopzero-ops quality postgresql-pdb-config
+      - /tmp/loopzero-ops quality dockerfile-no-docker-hub
+
+  diff:
+    desc: 'PR-diff quality gates (override base with BASE_REF=<ref>; default origin/main)'
+    deps: [build]
+    vars:
+      BASE_REF: '{{.BASE_REF | default "origin/main"}}'
+    cmds:
+      - /tmp/loopzero-ops quality no-new-bash --base-ref {{.BASE_REF}} --head-ref HEAD
+      - /tmp/loopzero-ops quality dangling-script-refs --base-ref {{.BASE_REF}} --head-ref HEAD
+      - /tmp/loopzero-ops quality dangling-data-refs --base-ref {{.BASE_REF}} --head-ref HEAD
+
+  all:
+    desc: Standard quality suite — hermetic tests + full-scan gates
+    deps: [hermetic, gates]

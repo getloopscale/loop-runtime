@@ -48,6 +48,8 @@ includes:
   drill:
     taskfile: ./taskfiles/drill.yml
     optional: false
+  quality:
+    taskfile: ./taskfiles/quality.yml
 
 vars:
   MGMT_CONTEXT: k3d-loopzero-mgmt
