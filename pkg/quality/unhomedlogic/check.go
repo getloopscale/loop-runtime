@@ -55,15 +55,21 @@ type Counts struct {
 	SuspectKeeps []string `json:"suspect_keeps,omitempty"`
 }
 
-// reimplementableLogicRe detects a Python heredoc — substantial portable logic
-// that does NOT belong in a "kept" break-glass/orchestrator script. A genuine
-// operator break-glass is shell glue, not an embedded program.
-var reimplementableLogicRe = regexp.MustCompile(`(?m)(python3?\s+(-\s+)?<<|<<\s*['"]?(PY|PYEOF|PYTHON))`)
+// reimplementableLogicRe detects ANY Python use (heredoc or `python3` call) —
+// substantial portable logic that should be Go, not a "kept" shell script.
+// A genuine operator break-glass is shell glue, not Python.
+var reimplementableLogicRe = regexp.MustCompile(`(?m)(\bpython3?\b|<<\s*['"]?(PY|PYEOF|PYTHON))`)
 
-// hasReimplementableLogic reports whether a script body embeds a Python heredoc.
+// hasReimplementableLogic reports whether a script body embeds/invokes Python.
 func hasReimplementableLogic(body string) bool {
 	return reimplementableLogicRe.MatchString(body)
 }
+
+// shellsExternalRe detects orchestration of external dev CLIs (gh/npm/go/node/
+// curl/psql). Per D5/anti-pattern-8, a Go program that just shells these adds
+// no value over the script — so such scripts are KEEP-orchestrator candidates,
+// NOT "pure-logic autonomous" migration targets.
+var shellsExternalRe = regexp.MustCompile(`\b(gh|npm|go|node|curl|psql)\b`)
 
 // homedMarkers are the disposition tags that mean "justified keep".
 var homedMarkers = []string{"KEEP-OPERATOR", "KEEP-CI-ORCHESTRATOR"}
@@ -148,12 +154,13 @@ func Count(allowlistMD string, readBody ReadBody) Counts {
 
 // Entry is one un-homed script's row in the Phase-5 classification ledger.
 type Entry struct {
-	Path        string
-	Domain      string
-	LOC         int
-	HasPython   bool // embeds a Python heredoc (reimplementable logic)
-	ShellsLive  bool // invokes kubectl/k3d/doctl/helm/pulumi/argocd/cosign
-	Disposition string
+	Path           string
+	Domain         string
+	LOC            int
+	HasPython      bool // embeds/invokes Python (reimplementable logic)
+	ShellsLive     bool // invokes kubectl/k3d/doctl/helm/pulumi/argocd/cosign
+	ShellsExternal bool // invokes gh/npm/go/node/curl/psql (orchestrator, anti-pattern-8)
+	Disposition    string
 }
 
 var shellsLiveRe = regexp.MustCompile(`\b(kubectl|k3d|doctl|helm|pulumi|argocd|cosign)\b`)
@@ -179,6 +186,7 @@ func Ledger(allowlistMD string, readBody ReadBody) []Entry {
 				e.LOC = strings.Count(body, "\n")
 				e.HasPython = hasReimplementableLogic(body)
 				e.ShellsLive = shellsLiveRe.MatchString(body)
+				e.ShellsExternal = shellsExternalRe.MatchString(body)
 			}
 		}
 		e.Disposition = proposeDisposition(e)
@@ -202,6 +210,8 @@ func proposeDisposition(e Entry) string {
 		return "MIGRATE-ginkgo (LIVE)"
 	case e.ShellsLive:
 		return "KEEP-OPERATOR? (live-cluster tool — operator ratify)"
+	case e.ShellsExternal:
+		return "KEEP-orchestrator? (wraps gh/npm/go/curl — anti-pattern-8, ratify)"
 	default:
 		return "MIGRATE-loopzero-ops (pure-logic — autonomous)"
 	}
