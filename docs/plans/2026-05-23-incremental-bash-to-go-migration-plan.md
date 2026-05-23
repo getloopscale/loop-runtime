@@ -214,6 +214,14 @@ VERIFY:  task ops:build && <bin> --help
 > - ⚠️ **T1.1** pulumi-archive: operator-gated (real archive needs Pulumi) + has a non-obvious caller surface (`adr-verification-matrices.test.ts` asserts the bash file EXISTS — that assertion must be updated when the bash is deleted).
 >
 > **Refined Tier-A reality:** only 2 of the 5 listed candidates were truly pure-logic/hermetic (both done). The rest carry a shared-helper or runtime dependency — effectively Tier-A.5/B.
+>
+> **REVIEW-NEEDED pure-logic batch (2026-05-23, beyond Tier-A):** triaged the 91 REVIEW-NEEDED scripts → 18 pure-logic candidates, 73 shell-out to live tools (LIVE/keep). Of the 18, migrated **7** via bkp salvage: `coverage-merge`, `coverage-diff` (+ `gitdiff`/`coverageparse` internal helpers), `baseline-compare`, `baseline-update` (+ `baseline` helper), `template-compliance`. **N(bash) 209→193 cumulative.** All wired env-safe (no GitHub Actions `${{ }}` injection), bash + `_test.sh` deleted, allowlist rows removed, no-dangling green.
+>
+> **Autonomous salvage ceiling reached.** Remaining script-reduction is NOT clean autonomous salvage:
+> - `flaky-track` — half-built/unwired feature (finding `finding-2026-05-23-flaky-tracker-half-built.md`); needs a product decision (finish vs abandon), not a port.
+> - `branch-protection-update` — shells `gh`, mutates branch protection = operator-time.
+> - `governance/*` (scan-decay, bias-check, verify-independence, spotcheck, health-check-governance) — an **inter-coupled audit subsystem** (no bkp port; pairs with python + prompt `.md` siblings). From-scratch Go authoring warrants focused TDD work, not loop-grind.
+> - The ~73 shell-out scripts (Tier-C drill + parity + dogfood orchestrators) — LIVE-gated.
 
 ### T1.1 — `pulumi-archive.sh` → `pkg/pulumi/archive`
 - **Salvage source:** `develop-bkp` commit `b8659429` (green).
