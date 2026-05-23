@@ -28,8 +28,8 @@ USAGE:
   loopzero-ops <subcommand> [flags]
 
 SUBCOMMANDS:
-  quality scripts-audit [--root DIR]   Emit shell-script inventory CSV
-                                       (Phase 0 T0.1 of strategic plan)
+  quality <gate> [flags]               Run a CI quality gate (see quality --help)
+  pulumi archive [flags]               Export Pulumi stack state to S3 archive
 
 EXIT CODES (PERMANENT — CLAUDE.md Rule 4):
   0  success
@@ -51,6 +51,8 @@ func run(args []string) int {
 		return 0
 	case "quality":
 		return runQuality(args[1:])
+	case "pulumi":
+		return runPulumi(args[1:])
 	default:
 		fmt.Fprintf(os.Stderr, "unknown subcommand: %s\n\n%s", args[0], helpText)
 		return 1

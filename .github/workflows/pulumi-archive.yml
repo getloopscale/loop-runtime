@@ -116,15 +116,17 @@ jobs:
           AWS_REGION: ${{ secrets.PULUMI_ARCHIVE_AWS_REGION }}
           PULUMI_ACCESS_TOKEN: ${{ secrets.PULUMI_ACCESS_TOKEN }}
           PULUMI_CONFIG_PASSPHRASE: ${{ secrets.PULUMI_CONFIG_PASSPHRASE }}
+        # T1.1 of plan 2026-05-23: migrated pulumi-archive.sh to pure-Go
+        # (pkg/pulumi/archive via pkg/shellrun; testable mock injection).
         run: |
           if [[ "${{ inputs.mode }}" == "dry-run" ]]; then
-            bash infra/scripts/pulumi-archive.sh --dry-run
+            (cd cmd/loopzero-ops && go run . pulumi archive --dry-run --root "${GITHUB_WORKSPACE}")
           else
             # Quarterly + workflow_dispatch archive-only mode: re-archive
-            # all stacks even if previously archived. The script's
-            # idempotency check (C11) ensures bit-identical archives
-            # produce identical S3 keys (modulo timestamp suffix).
-            bash infra/scripts/pulumi-archive.sh --archive-only
+            # all stacks even if previously archived. The idempotency check
+            # (C11) ensures bit-identical archives produce identical S3 keys
+            # (modulo timestamp suffix).
+            (cd cmd/loopzero-ops && go run . pulumi archive --archive-only --root "${GITHUB_WORKSPACE}")
           fi
 
       - name: Append audit-log entry

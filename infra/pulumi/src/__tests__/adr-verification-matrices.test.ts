@@ -84,10 +84,13 @@ describe("ADR-0021 (infra-normalize) verification matrix D1-D10", () => {
     }
   });
 
-  it("D2 — T3.x archive scripts shipped (single Pulumi project)", () => {
-    expect(fileExists("infra/scripts/pulumi-archive.sh")).toBe(true);
+  it("D2 — T3.x archive tooling shipped (single Pulumi project)", () => {
+    // pulumi-archive.sh migrated to pure-Go (pkg/pulumi/archive) per T1.1 of
+    // plan 2026-05-23-incremental-bash-to-go-migration; wired via
+    // `loopzero-ops pulumi archive` in pulumi-archive.yml.
+    expect(fileExists("pkg/pulumi/archive/check.go")).toBe(true);
     // pulumi-orphan-rm.sh deleted 2026-05-22 (unwired standalone tool — recreate
-    // ad-hoc if pulumi orphan cleanup is needed; pulumi-archive.sh remains wired).
+    // ad-hoc if pulumi orphan cleanup is needed).
   });
 
   it("D3 — multi-cell stack: cells migration + observability + admin pin + CC bootstrap", () => {
