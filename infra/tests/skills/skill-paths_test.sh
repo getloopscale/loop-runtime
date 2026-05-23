@@ -90,6 +90,24 @@ for skill_md in "$SKILLS_DIR"/*/SKILL.md; do
     fi
   done < <(grep -oE 'infra/scripts/[a-zA-Z0-9_./-]+\.sh' "$skill_md" 2>/dev/null | sort -u)
 
+  # 2a-bis. EC-1: SKILLs reference dr/ scripts in an ABBREVIATED form too
+  # (e.g. `dr/teardown-validator.sh` without the infra/scripts/ prefix). The
+  # 2a grep misses these, so a SKILL could point at a deleted dr/ script and
+  # pass falsely — the exact failure class that abandoned the develop-bkp
+  # migration. Resolve the bare form against infra/scripts/dr/ and assert
+  # existence. (Lines carrying the full path are caught here too, harmlessly
+  # resolving to the same file.)
+  while IFS= read -r drref; do
+    [ -z "$drref" ] && continue
+    case "$drref" in
+      *"*"*) continue ;;  # skip wildcard doc patterns
+    esac
+    CHECKED_PATHS=$((CHECKED_PATHS + 1))
+    if [ ! -e "$REPO_ROOT/infra/scripts/$drref" ]; then
+      fail "$skill_name: missing dr/ script (abbreviated form) infra/scripts/$drref"
+    fi
+  done < <(grep -oE 'dr/[a-zA-Z0-9_-]+\.sh' "$skill_md" 2>/dev/null | sort -u)
+
   # 2b. Extract `task <name>` invocations — ONLY from backticked refs or code blocks.
   # Natural language ("this task accomplishes Y") shares the `task <word>` shape
   # but is NOT an invocation; the only reliable signal is markdown backtick code.
