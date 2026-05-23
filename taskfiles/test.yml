@@ -995,55 +995,16 @@ tasks:
       - ginkgo -v --label-filter="journey || smoke || edge-case" --timeout=60m ./infra/tests/e2e/
 
   # ---------------------------------------------------------------------------
-  # NOTE: validate:evidence + validate:evidence:fixtures tasks removed
-  # 2026-05-22 (T5.3) — they validated the docs/evidence/ per-claim YAML tree
-  # which was DELETED in the 2026-05-11 consolidation (evidence is now in
-  # .claude/knowledge-base/audits/ per CLAUDE.md Rule 11). The validator
-  # (validate-evidence.sh) had zero live inputs and no workflow consumer.
-  # See finding-2026-05-22-dead-evidence-validator.md.
-
-  decay:scan:
-    desc: Scan evidence files for expired TTL (markdown report)
-    cmds:
-      - bash infra/scripts/governance/scan-decay.sh
-
-  decay:scan:json:
-    desc: Decay scan with JSON output (for CI consumption)
-    cmds:
-      - bash infra/scripts/governance/scan-decay.sh --json
-
-  bias:check:
-    desc: Scan markdown file(s) for 6 bias patterns
-    cmds:
-      - 'bash infra/scripts/governance/bias-check.sh {{.CLI_ARGS}}'
-
-  bias:check:all:
-    desc: Scan all plans for bias patterns
-    cmds:
-      - bash infra/scripts/governance/bias-check.sh --all docs/plans/
-
-  cross-validate:plans:
-    desc: Cross-validate plans against filesystem (files-to-edit vs reality)
-    cmds:
-      - python3 infra/scripts/governance/cross-validate-plan.py docs/plans/
-
-  decay:scan:catalog:
-    desc: Decay scan of claim-catalog.yaml (T1.4) — distinct from evidence-file scan
-    cmds:
-      - python3 infra/scripts/governance/scan-catalog-decay.py --catalog docs/governance/claim-catalog.yaml --output docs/governance/stale-claims-$(date +%Y-%m-%d).md
-
-  governance:health:
-    desc: Pre-flight health check of the governance system (89+ checks). Part of pre-Dogfood-Gate.
-    cmds:
-      - bash infra/scripts/governance/health-check-governance.sh
-
-  governance:lint:
-    desc: Markdownlint check for docs/governance/ + scoring-* + maturity-history (project relaxed rules)
-    cmds:
-      - npx -y markdownlint-cli2 "docs/governance/**/*.md"
-
-  # NOTE: governance:reset-fixtures removed 2026-05-22 (T5.3) — operated on the
-  # deleted docs/evidence/_fixtures/ tree (see finding-2026-05-22-dead-evidence-validator.md).
+  # NOTE: the entire governance task family (decay:scan*, bias:check*,
+  # cross-validate:plans, governance:health, governance:lint) was removed
+  # 2026-05-23 — the status-validation / maturity-scoring subsystem's DATA
+  # (docs/governance/, docs/evidence/, docs/maturity-*, scoring-2026-05-11/)
+  # was DELETED in the 2026-05-11 consolidation, leaving the scripts dangling
+  # (always exit 1/2 on missing inputs; none ran as blocking CI gates).
+  # The scripts + python helpers + decay-scan.yml workflow were deleted with
+  # this change. See finding-2026-05-23-governance-subsystem-orphaned.md.
+  # (Earlier T5.3 already removed validate:evidence + governance:reset-fixtures
+  # for the same root cause — finding-2026-05-22-dead-evidence-validator.md.)
 
   # ---------------------------------------------------------------------------
   # Monitoring
