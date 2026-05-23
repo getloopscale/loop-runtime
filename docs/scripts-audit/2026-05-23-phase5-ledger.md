@@ -150,5 +150,4 @@ Proposed disposition per script (operator ratifies). Evidence is mechanical fact
 | test | infra/tests/skills/skill-paths_test.sh | 152 | — | yes | COUPLED (dies when its target homes) |
 | drill | infra/tests/snapshots/render-drill.sh | 28 | — | — | MIGRATE-loopzero-ops-drill (LIVE-gate before delete) |
 | test | infra/tests/snapshots/sanitize.sh | 18 | — | yes | MIGRATE-ginkgo (LIVE) |
-| test | infra/tests/workflows/action-pinning-governance_test.sh | 81 | — | — | COUPLED (dies when its target homes) |
 | test | infra/tests/workflows/advisory-mode-annotated_test.sh | 85 | — | — | COUPLED (dies when its target homes) |
