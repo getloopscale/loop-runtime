@@ -48,6 +48,21 @@ func (d Disposition) String() string {
 type Counts struct {
 	Total    int            `json:"total"`
 	ByDomain map[string]int `json:"by_domain"`
+	// SuspectKeeps lists scripts tagged KEEP-* but whose body contains
+	// reimplementable logic (a Python heredoc) — i.e. a program masquerading
+	// as a "kept" operator script. These are counted as un-homed: the KEEP
+	// claim is content-invalid. Closes the relabel-to-game-GREEN bias vector.
+	SuspectKeeps []string `json:"suspect_keeps,omitempty"`
+}
+
+// reimplementableLogicRe detects a Python heredoc — substantial portable logic
+// that does NOT belong in a "kept" break-glass/orchestrator script. A genuine
+// operator break-glass is shell glue, not an embedded program.
+var reimplementableLogicRe = regexp.MustCompile(`(?m)(python3?\s+(-\s+)?<<|<<\s*['"]?(PY|PYEOF|PYTHON))`)
+
+// hasReimplementableLogic reports whether a script body embeds a Python heredoc.
+func hasReimplementableLogic(body string) bool {
+	return reimplementableLogicRe.MatchString(body)
 }
 
 // homedMarkers are the disposition tags that mean "justified keep".
@@ -96,8 +111,14 @@ func domainOf(path string) string {
 // allowlistRowRe matches a markdown table row whose first column ends in .sh.
 var allowlistRowRe = regexp.MustCompile(`^\|\s*([^\s|<>]+\.sh)\s*\|[^|]*\|([^|]*)\|`)
 
+// ReadBody returns a script's content for content-verification. May be nil
+// (label-only counting) or return ("", false) when a file is unreadable.
+type ReadBody func(path string) (string, bool)
+
 // Count tallies un-homed scripts per domain from allowlist markdown content.
-func Count(allowlistMD string) Counts {
+// When readBody is non-nil, a KEEP-tagged script whose body embeds a Python
+// heredoc is reclassified as un-homed (a "suspect KEEP") — content beats label.
+func Count(allowlistMD string, readBody ReadBody) Counts {
 	c := Counts{ByDomain: map[string]int{}}
 	for _, line := range strings.Split(allowlistMD, "\n") {
 		m := allowlistRowRe.FindStringSubmatch(line)
@@ -106,12 +127,34 @@ func Count(allowlistMD string) Counts {
 		}
 		path := strings.TrimSpace(m[1])
 		justif := m[2]
-		if classify(path, justif) == Unhomed {
+		unhomed := classify(path, justif) == Unhomed
+
+		// Content verification: a KEEP claim is invalid if the body embeds
+		// reimplementable logic. Hooks/entrypoints are exempt (genuine glue).
+		if !unhomed && readBody != nil && isKeepLabel(justif) {
+			if body, ok := readBody(path); ok && hasReimplementableLogic(body) {
+				unhomed = true
+				c.SuspectKeeps = append(c.SuspectKeeps, path)
+			}
+		}
+
+		if unhomed {
 			c.Total++
 			c.ByDomain[domainOf(path)]++
 		}
 	}
 	return c
+}
+
+// isKeepLabel reports whether the justificativa carries a KEEP-* disposition
+// (as opposed to homed-by-path: hooks / container entrypoints).
+func isKeepLabel(justif string) bool {
+	for _, m := range homedMarkers {
+		if strings.Contains(justif, m) {
+			return true
+		}
+	}
+	return false
 }
 
 // RatchetCheck enforces the monotonic invariant: current must not exceed the

@@ -8,6 +8,7 @@ import (
 	"flag"
 	"fmt"
 	"os"
+	"path/filepath"
 	"strconv"
 	"strings"
 	"time"
@@ -516,6 +517,7 @@ func runUnhomedLogic(args []string) int {
 	fs := flag.NewFlagSet("unhomed-logic", flag.ContinueOnError)
 	allowlist := fs.String("allowlist", ".claude/rules/shell-scripts-allowlist.md", "allowlist markdown")
 	baselinePath := fs.String("baseline", "infra/quality/unhomed-baseline.json", "baseline JSON")
+	root := fs.String("root", ".", "repo root (for content-verifying KEEP claims)")
 	report := fs.Bool("report", false, "print per-domain un-homed counts (no gate)")
 	update := fs.Bool("update-baseline", false, "ratchet the baseline to current (write)")
 	fs.Bool("check", true, "ratchet against baseline (default)")
@@ -527,7 +529,15 @@ func runUnhomedLogic(args []string) int {
 		fmt.Fprintf(os.Stderr, "unhomed-logic: read allowlist: %v\n", err)
 		return 5
 	}
-	current := unhomedlogic.Count(string(data))
+	// Content verification: read each script body to invalidate suspect KEEPs.
+	readBody := func(p string) (string, bool) {
+		b, err := os.ReadFile(filepath.Join(*root, p)) // #nosec G304 -- repo-internal script path
+		if err != nil {
+			return "", false
+		}
+		return string(b), true
+	}
+	current := unhomedlogic.Count(string(data), readBody)
 
 	if *report {
 		for _, l := range current.Render() {
@@ -560,6 +570,14 @@ func runUnhomedLogic(args []string) int {
 	ok, regressions := unhomedlogic.RatchetCheck(current, baseline)
 	for _, l := range current.Render() {
 		fmt.Println(l)
+	}
+	if len(current.SuspectKeeps) > 0 {
+		fmt.Fprintln(os.Stderr, "unhomed-logic: FAIL — suspect KEEP (script tagged KEEP-* but embeds a Python heredoc = reimplementable logic, not break-glass):")
+		for _, s := range current.SuspectKeeps {
+			fmt.Fprintf(os.Stderr, "  - %s\n", s)
+		}
+		fmt.Fprintln(os.Stderr, "A KEEP claim must be genuine operator glue. Move the logic to loopzero-ops/Go, or drop the KEEP tag.")
+		return 1
 	}
 	if !ok {
 		fmt.Fprintln(os.Stderr, "unhomed-logic: FAIL — un-homed operational logic increased:")

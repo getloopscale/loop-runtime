@@ -60,7 +60,7 @@ func TestDomainOf(t *testing.T) {
 }
 
 func TestCount_UnhomedPerDomain(t *testing.T) {
-	c := Count(fixtureAllowlist)
+	c := Count(fixtureAllowlist, nil)
 	// Homed: 3 (1 hook + break-glass KEEP-OPERATOR + validate-helmfile KEEP-CI).
 	// Unhomed: 5 (coverage-cli quality, dr/preflight drill, validate-matrix test,
 	//             generate-secrets bootstrap, foo_test test).
@@ -70,6 +70,35 @@ func TestCount_UnhomedPerDomain(t *testing.T) {
 	if c.ByDomain["quality"] != 1 || c.ByDomain["drill"] != 1 ||
 		c.ByDomain["bootstrap"] != 1 || c.ByDomain["test"] != 2 {
 		t.Fatalf("per-domain wrong: %v", c.ByDomain)
+	}
+}
+
+// Anti-bias content verification: a KEEP-tagged script that embeds a Python
+// heredoc is a program masquerading as break-glass → counted un-homed.
+func TestCount_SuspectKeep_PythonHeredocIsUnhomed(t *testing.T) {
+	al := "| Script | LOC | Justificativa |\n|---|---:|---|\n" +
+		"| infra/scripts/governance/scan-decay.sh | 168 | KEEP-OPERATOR — audit tool |\n" +
+		"| infra/scripts/break-glass.sh | 145 | KEEP-OPERATOR — emergency steps |\n"
+	bodies := map[string]string{
+		"infra/scripts/governance/scan-decay.sh": "#!/usr/bin/env bash\npython3 - <<'PY'\nimport yaml\nPY\n",
+		"infra/scripts/break-glass.sh":           "#!/usr/bin/env bash\nkubectl delete pod x\nhelm rollback y\n",
+	}
+	read := func(p string) (string, bool) { b, ok := bodies[p]; return b, ok }
+	c := Count(al, read)
+	if c.Total != 1 {
+		t.Fatalf("suspect KEEP (python heredoc) must count un-homed; legit break-glass stays homed. Total=%d suspects=%v", c.Total, c.SuspectKeeps)
+	}
+	if len(c.SuspectKeeps) != 1 || c.SuspectKeeps[0] != "infra/scripts/governance/scan-decay.sh" {
+		t.Fatalf("scan-decay must be flagged suspect, break-glass must not: %v", c.SuspectKeeps)
+	}
+}
+
+func TestCount_LegitKeepNoContent_StaysHomed(t *testing.T) {
+	al := "| Script | LOC | Justificativa |\n|---|---:|---|\n" +
+		"| infra/scripts/break-glass.sh | 145 | KEEP-OPERATOR — emergency |\n"
+	read := func(p string) (string, bool) { return "#!/usr/bin/env bash\nkubectl get pods\n", true }
+	if c := Count(al, read); c.Total != 0 || len(c.SuspectKeeps) != 0 {
+		t.Fatalf("legit KEEP (no python) must stay homed: Total=%d suspects=%v", c.Total, c.SuspectKeeps)
 	}
 }
 

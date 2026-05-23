@@ -124,7 +124,7 @@ jobs:
       - name: Un-homed logic must not increase (plan 2026-05-23)
         # Unbiased migration tracker: a PR may NEVER increase un-homed shell
         # logic (total or per-domain). GREEN reached only by homing capabilities.
-        run: cd cmd/loopzero-ops && go run . quality unhomed-logic --check --allowlist "${GITHUB_WORKSPACE}/.claude/rules/shell-scripts-allowlist.md" --baseline "${GITHUB_WORKSPACE}/infra/quality/unhomed-baseline.json"
+        run: cd cmd/loopzero-ops && go run . quality unhomed-logic --check --root "${GITHUB_WORKSPACE}" --allowlist "${GITHUB_WORKSPACE}/.claude/rules/shell-scripts-allowlist.md" --baseline "${GITHUB_WORKSPACE}/infra/quality/unhomed-baseline.json"
 
   # =========================================================================
   # Phase 5 gates
