@@ -203,6 +203,14 @@ VERIFY:  task ops:build && <bin> --help
 
 > **Per-script task template (applies to every T1.x):** ① cherry-pick or port the Go package + tests from `develop-bkp`; ② re-run `go test` on `develop`; ③ register `loopzero-ops` subcommand; ④ **4-surface rewire** (Taskfile/CI/SKILL/surviving-scripts) — grep-clean; ⑤ run the hermetic gate; ⑥ delete the bash + its `_test.sh`; ⑦ assert `no-dangling-script-refs` clean; ⑧ remove allowlist entry.
 
+> **Execution status (2026-05-23):**
+> - ✅ **T1.4** migration_test_coverage → `pkg/quality/migrationtestcoverage` (pure-logic, hermetic). Done; verdict parity preserved.
+> - ✅ **T1.5** pkg-usage-matrix → `pkg/quality/pkgusagematrix` (pure-logic, hermetic). Done; verdict parity preserved.
+> - ⚠️ **T1.3** crd-semantic-diff + ⚠️ **T1.6** helm-diff-structural are **NOT pure-logic** (EC-4 finding): they shell out to `helm template`/`helm diff` via `pkg/shellrun` — a ~1100-LOC shared abstraction (9 files incl. tailpods/mock/OS-specific) absent on `develop`. Adopting `pkg/shellrun` is an **automatic T2** (new shared `pkg/`) requiring a governance decision, not an autonomous step. **Blocked pending T2** — see finding `finding-2026-05-23-shellrun-dependency-blocks-tier-a.md`.
+> - ⚠️ **T1.1** pulumi-archive: operator-gated (real archive needs Pulumi) + has a non-obvious caller surface (`adr-verification-matrices.test.ts` asserts the bash file EXISTS — that assertion must be updated when the bash is deleted).
+>
+> **Refined Tier-A reality:** only 2 of the 5 listed candidates were truly pure-logic/hermetic (both done). The rest carry a shared-helper or runtime dependency — effectively Tier-A.5/B.
+
 ### T1.1 — `pulumi-archive.sh` → `pkg/pulumi/archive`
 - **Salvage source:** `develop-bkp` commit `b8659429` (green).
 - **Callers:** Taskfile drill targets + (per allowlist) MIGRATE-GO-SDK candidate.
