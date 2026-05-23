@@ -34,16 +34,12 @@ Proposed disposition per script (operator ratifies). Evidence is mechanical fact
 | bootstrap | infra/helmfile/scripts/wire-clusters.sh | 84 | — | yes | DELEGATE-declarative (T2) |
 | bootstrap | infra/scripts/bootstrap-platform.sh | 276 | — | yes | DELEGATE-declarative (T2) |
 | bootstrap | infra/scripts/bootstrap-seed-tenant-cr.sh | 58 | — | yes | DELEGATE-declarative (T2) |
-| other | infra/scripts/break-glass.sh | 145 | — | yes | KEEP-OPERATOR? (live-cluster tool — operator ratify) |
-| other | infra/scripts/build-and-push-dockerfile-lint.sh | 64 | — | yes | KEEP-OPERATOR? (live-cluster tool — operator ratify) |
-| other | infra/scripts/build-and-push-loopzero-packs.sh | 83 | — | yes | KEEP-OPERATOR? (live-cluster tool — operator ratify) |
 | chaos | infra/scripts/chaos/baseline.sh | 228 | — | yes | MIGRATE-ginkgo (LIVE) |
 | chaos | infra/scripts/chaos/cleanup.sh | 113 | — | yes | MIGRATE-ginkgo (LIVE) |
 | chaos | infra/scripts/chaos/report.sh | 197 | — | yes | MIGRATE-ginkgo (LIVE) |
 | chaos | infra/scripts/chaos/run-full.sh | 181 | — | yes | MIGRATE-ginkgo (LIVE) |
 | chaos | infra/scripts/chaos/run-scenario.sh | 289 | — | yes | MIGRATE-ginkgo (LIVE) |
 | drill | infra/scripts/check-drill-credentials-isolation.sh | 125 | — | yes | MIGRATE-loopzero-ops-drill (LIVE-gate before delete) |
-| other | infra/scripts/clean-incremental.sh | 61 | — | yes | KEEP-OPERATOR? (live-cluster tool — operator ratify) |
 | other | infra/scripts/dogfood-cleanroom-loop.sh | 424 | yes | yes | MIGRATE-go (python-wrapper — focused TDD) |
 | drill | infra/scripts/dr-drill.sh | 297 | — | yes | MIGRATE-loopzero-ops-drill (LIVE-gate before delete) |
 | drill | infra/scripts/dr/cancel-refresh.sh | 142 | — | yes | MIGRATE-loopzero-ops-drill (LIVE-gate before delete) |
@@ -59,34 +55,16 @@ Proposed disposition per script (operator ratifies). Evidence is mechanical fact
 | drill | infra/scripts/dr/watchdog.sh | 149 | — | yes | MIGRATE-loopzero-ops-drill (LIVE-gate before delete) |
 | drill | infra/scripts/drill-helmfile-bootstrap.sh | 1126 | — | yes | MIGRATE-loopzero-ops-drill (LIVE-gate before delete) |
 | drill | infra/scripts/drill-mint-jwt.sh | 300 | — | yes | MIGRATE-loopzero-ops-drill (LIVE-gate before delete) |
-| other | infra/scripts/ensure-project.sh | 49 | — | — | KEEP-orchestrator? (wraps gh/npm/go/curl — anti-pattern-8, ratify) |
 | governance | infra/scripts/governance/bias-check.sh | 253 | yes | — | MIGRATE-go (python-wrapper — focused TDD) |
 | governance | infra/scripts/governance/health-check-governance.sh | 210 | — | — | MIGRATE-loopzero-ops (pure-logic — autonomous) |
 | governance | infra/scripts/governance/scan-decay.sh | 168 | yes | — | MIGRATE-go (python-wrapper — focused TDD) |
 | governance | infra/scripts/governance/verify-independence.sh | 131 | yes | — | MIGRATE-go (python-wrapper — focused TDD) |
-| other | infra/scripts/health-check-platform.sh | 202 | — | yes | KEEP-OPERATOR? (live-cluster tool — operator ratify) |
-| other | infra/scripts/k3d-cross-cluster-heal.sh | 1005 | — | yes | KEEP-OPERATOR? (live-cluster tool — operator ratify) |
 | bootstrap | infra/scripts/lib/bootstrap-cell-cc-common.sh | 161 | — | yes | DELEGATE-declarative (T2) |
 | drill | infra/scripts/lib/bootstrap-cell-cc-drill-common.sh | 166 | — | yes | MIGRATE-loopzero-ops-drill (LIVE-gate before delete) |
 | drill | infra/scripts/lib/drill-dogfood-journeys.sh | 242 | — | yes | MIGRATE-loopzero-ops-drill (LIVE-gate before delete) |
 | drill | infra/scripts/lib/drill-skill-common.sh | 464 | — | yes | MIGRATE-loopzero-ops-drill (LIVE-gate before delete) |
-| other | infra/scripts/lib/dry-run.sh | 86 | — | yes | KEEP-OPERATOR? (live-cluster tool — operator ratify) |
-| other | infra/scripts/lib/sops.sh | 126 | — | yes | KEEP-OPERATOR? (live-cluster tool — operator ratify) |
 | other | infra/scripts/migrate-tenant-namespace.sh | 229 | yes | yes | MIGRATE-go (python-wrapper — focused TDD) |
-| other | infra/scripts/operator-cutover-execute.sh | 286 | — | yes | KEEP-OPERATOR? (live-cluster tool — operator ratify) |
-| other | infra/scripts/pkg-soak-smoke.sh | 161 | — | yes | KEEP-OPERATOR? (live-cluster tool — operator ratify) |
-| other | infra/scripts/pre-destroy-cleanup.sh | 305 | — | yes | KEEP-OPERATOR? (live-cluster tool — operator ratify) |
-| other | infra/scripts/provision-api-tokens.sh | 357 | — | yes | KEEP-OPERATOR? (live-cluster tool — operator ratify) |
-| quality | infra/scripts/quality/branch-protection-update.sh | 84 | — | — | KEEP-orchestrator? (wraps gh/npm/go/curl — anti-pattern-8, ratify) |
-| quality | infra/scripts/quality/coverage-cli.sh | 58 | — | — | KEEP-orchestrator? (wraps gh/npm/go/curl — anti-pattern-8, ratify) |
-| quality | infra/scripts/quality/coverage-go.sh | 120 | — | — | KEEP-orchestrator? (wraps gh/npm/go/curl — anti-pattern-8, ratify) |
 | quality | infra/scripts/quality/flaky-track.sh | 77 | yes | — | MIGRATE-go (python-wrapper — focused TDD) |
-| quality | infra/scripts/quality/test-inventory.sh | 173 | — | yes | KEEP-OPERATOR? (live-cluster tool — operator ratify) |
-| other | infra/scripts/regen-all-scoped-kubeconfigs.sh | 220 | — | yes | KEEP-OPERATOR? (live-cluster tool — operator ratify) |
-| other | infra/scripts/run-migrations.sh | 261 | — | yes | KEEP-OPERATOR? (live-cluster tool — operator ratify) |
-| other | infra/scripts/setup-cross-cluster-networking.sh | 86 | — | yes | KEEP-OPERATOR? (live-cluster tool — operator ratify) |
-| other | infra/scripts/setup-host-inotify-limits.sh | 96 | — | yes | KEEP-OPERATOR? (live-cluster tool — operator ratify) |
-| other | infra/scripts/update-cross-cluster-ips.sh | 171 | — | yes | KEEP-OPERATOR? (live-cluster tool — operator ratify) |
 | drill | infra/scripts/velero-dr-drill.sh | 413 | — | yes | MIGRATE-loopzero-ops-drill (LIVE-gate before delete) |
 | bootstrap | infra/tests/bootstrap-smoke.sh | 304 | — | yes | DELEGATE-declarative (T2) |
 | test | infra/tests/capacity/run-capacity.sh | 85 | — | yes | MIGRATE-ginkgo (LIVE) |
@@ -181,8 +159,3 @@ Proposed disposition per script (operator ratifies). Evidence is mechanical fact
 | test | infra/tests/workflows/action-pinning-governance_test.sh | 81 | — | — | COUPLED (dies when its target homes) |
 | test | infra/tests/workflows/advisory-mode-annotated_test.sh | 85 | — | — | COUPLED (dies when its target homes) |
 | test | infra/tests/workflows/job-timeout-coverage_test.sh | 105 | yes | — | MIGRATE-go (python-wrapper — focused TDD) |
-| other | scripts/run-polaris.sh | 116 | — | yes | KEEP-OPERATOR? (live-cluster tool — operator ratify) |
-| other | tools/admin-evict-tenants.sh | 126 | — | yes | KEEP-OPERATOR? (live-cluster tool — operator ratify) |
-| other | tools/capture-capacity-baselines.sh | 71 | — | yes | KEEP-OPERATOR? (live-cluster tool — operator ratify) |
-| other | tools/infra-destroy-safe.sh | 386 | — | yes | KEEP-OPERATOR? (live-cluster tool — operator ratify) |
-| other | tools/l3-stability-loop.sh | 108 | — | yes | KEEP-OPERATOR? (live-cluster tool — operator ratify) |
