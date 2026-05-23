@@ -17,6 +17,8 @@ import (
 	"github.com/loopzero/loopzero/pkg/quality/baseimagedigest"
 	"github.com/loopzero/loopzero/pkg/quality/clibundlesize"
 	"github.com/loopzero/loopzero/pkg/quality/clusterimagepolicymode"
+	"github.com/loopzero/loopzero/pkg/quality/coveragediff"
+	"github.com/loopzero/loopzero/pkg/quality/coveragemerge"
 	"github.com/loopzero/loopzero/pkg/quality/crdsemanticdiff"
 	"github.com/loopzero/loopzero/pkg/quality/danglingrefs"
 	"github.com/loopzero/loopzero/pkg/quality/deadlineratchet"
@@ -104,6 +106,12 @@ GATES:
                     --base PATH    base rendered YAML (required)
                     --pr PATH      PR rendered YAML (required)
 
+  coverage-merge  Merge Go + TS coverage into one lcov.
+                  Flags: --go-profile PATH  --cli-lcov PATH  --output PATH (req)
+
+  coverage-diff   Diff-aware coverage threshold gate on touched lines.
+                  Flags: --diff PATH  --lcov PATH  --threshold N  --report PATH
+
   no-shell-wrap   Fail if Go code in pkg/* uses shellrun.Run(<forbidden-cli>, ...)
                   without //nolint:shell-wrap suppression (D5 gate).
                   Forbidden: pulumi, helm, kubectl, aws, gh (use Go SDK instead).
@@ -167,6 +175,10 @@ func runQuality(args []string) int {
 		return runCRDSemanticDiff(args[1:])
 	case "helm-diff-structural":
 		return runHelmDiffStructural(args[1:])
+	case "coverage-merge":
+		return runCoverageMerge(args[1:])
+	case "coverage-diff":
+		return runCoverageDiff(args[1:])
 	case "cosign-cutover":
 		return runCosignCutover(args[1:])
 	case "service-auth-rotation":
@@ -367,6 +379,63 @@ func runCRDSemanticDiff(args []string) int {
 	})
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "crd-semantic-diff: %v\n", err)
+		return 5
+	}
+	for _, m := range outcome.Messages {
+		fmt.Println(m)
+	}
+	if !outcome.Pass {
+		return 1
+	}
+	return 0
+}
+
+// runCoverageMerge replaces coverage-merge.sh: merges Go + TS lcov into one.
+func runCoverageMerge(args []string) int {
+	fs := flag.NewFlagSet("coverage-merge", flag.ContinueOnError)
+	goProfile := fs.String("go-profile", "", "Go coverage profile path")
+	cliLCOV := fs.String("cli-lcov", "", "TypeScript lcov path")
+	output := fs.String("output", "", "merged lcov destination (required)")
+	if err := fs.Parse(args); err != nil {
+		return 1
+	}
+	if *output == "" {
+		fmt.Fprintln(os.Stderr, "coverage-merge: --output required")
+		return 1
+	}
+	outcome, err := coveragemerge.Merge(coveragemerge.Config{
+		GoProfilePath: *goProfile,
+		CLILCOVPath:   *cliLCOV,
+		OutputPath:    *output,
+	})
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "coverage-merge: %v\n", err)
+		return 5
+	}
+	for _, m := range outcome.Messages {
+		fmt.Println(m)
+	}
+	return 0
+}
+
+// runCoverageDiff replaces coverage-diff.sh: diff-aware coverage threshold gate.
+func runCoverageDiff(args []string) int {
+	fs := flag.NewFlagSet("coverage-diff", flag.ContinueOnError)
+	diff := fs.String("diff", "", "touched-lines file (path:line per line)")
+	lcov := fs.String("lcov", "", "merged lcov report")
+	threshold := fs.Float64("threshold", 80.0, "minimum coverage percent on touched lines")
+	report := fs.String("report", "", "optional Markdown report destination")
+	if err := fs.Parse(args); err != nil {
+		return 1
+	}
+	outcome, err := coveragediff.Run(coveragediff.Config{
+		DiffPath:   *diff,
+		LCOVPath:   *lcov,
+		Threshold:  *threshold,
+		ReportPath: *report,
+	})
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "coverage-diff: %v\n", err)
 		return 5
 	}
 	for _, m := range outcome.Messages {

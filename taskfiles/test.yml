@@ -1074,7 +1074,8 @@ tasks:
     cmds:
       - task: test:coverage:go
       - task: test:coverage:cli
-      - bash infra/scripts/quality/coverage-merge.sh
+      # T migrated to pure-Go gate (pkg/quality/coveragemerge) per plan 2026-05-23.
+      - cd cmd/loopzero-ops && go run . quality coverage-merge --go-profile /tmp/coverage.out --cli-lcov /tmp/cli-coverage.lcov --output /tmp/coverage-merged.lcov
 
   # ---------------------------------------------------------------------------
   # Helm chart render-time tests (Plan 2026-05-20 v1.2 T4.2)

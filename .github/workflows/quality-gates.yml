@@ -47,15 +47,19 @@ jobs:
           bash infra/scripts/quality/coverage-go.sh
           # Stub CLI lcov (Phase 1 wiring; full integration in next iter)
           : > /tmp/cli-coverage.lcov
-          bash infra/scripts/quality/coverage-merge.sh
+          # Migrated to pure-Go gate (pkg/quality/coveragemerge) per plan 2026-05-23.
+          (cd cmd/loopzero-ops && go run . quality coverage-merge \
+            --go-profile /tmp/coverage.out \
+            --cli-lcov /tmp/cli-coverage.lcov \
+            --output /tmp/coverage-merged.lcov)
 
       - name: Run coverage-diff gate
+        # Migrated to pure-Go gate (pkg/quality/coveragediff) per plan 2026-05-23.
         run: |
-          bash infra/scripts/quality/coverage-diff.sh
-        env:
-          DIFF_FILE: /tmp/pr-diff.txt
-          LCOV_FILE: /tmp/coverage-merged.lcov
-          THRESHOLD: 80
+          (cd cmd/loopzero-ops && go run . quality coverage-diff \
+            --diff /tmp/pr-diff.txt \
+            --lcov /tmp/coverage-merged.lcov \
+            --threshold 80)
 
   baseline-regression:
     name: Quality Gates - Baseline Regression Gate
@@ -304,17 +308,14 @@ jobs:
       - name: T1.1 coverage-go hermetic tests
         run: bash infra/tests/scripts/coverage-go_test.sh
 
-      - name: T1.1 coverage-merge hermetic tests
-        run: bash infra/tests/scripts/coverage-merge_test.sh
+      - name: coverage-merge + coverage-diff hermetic tests (pure-Go, plan 2026-05-23)
+        run: cd pkg && go test ./quality/coveragemerge/... ./quality/coveragediff/... ./quality/coverageparse/... ./quality/gitdiff/...
 
       - name: T1.2 baseline-update hermetic tests
         run: bash infra/tests/scripts/baseline-update_test.sh
 
       - name: T1.3 test-inventory hermetic tests
         run: bash infra/tests/scripts/test-inventory_test.sh
-
-      - name: T2.1 coverage-diff hermetic tests
-        run: bash infra/tests/scripts/coverage-diff_test.sh
 
       - name: T2.2 baseline-compare hermetic tests
         run: bash infra/tests/scripts/baseline-compare_test.sh
