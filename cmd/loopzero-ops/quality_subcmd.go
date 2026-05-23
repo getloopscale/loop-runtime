@@ -23,6 +23,7 @@ import (
 	"github.com/loopzero/loopzero/pkg/quality/divergencematrix"
 	"github.com/loopzero/loopzero/pkg/quality/drilloutputs"
 	"github.com/loopzero/loopzero/pkg/quality/helmdrift"
+	"github.com/loopzero/loopzero/pkg/quality/migrationtestcoverage"
 	"github.com/loopzero/loopzero/pkg/quality/mockbudget"
 	"github.com/loopzero/loopzero/pkg/quality/nomigrateforce"
 	"github.com/loopzero/loopzero/pkg/quality/nonewbash"
@@ -68,6 +69,13 @@ GATES:
                     --root DIR      repo root (default: ".")
                     --base-ref REF  base git ref (default: "origin/develop")
                     --head-ref REF  head git ref (default: "HEAD")
+
+  migration-test-coverage
+                  Fail if a DB migration lacks a regression test.
+                  Flags:
+                    --root DIR             repo root (default: ".")
+                    --migrations-dir DIR   override migrations dir
+                    --tests-dir DIR        override unit tests dir
 
   no-shell-wrap   Fail if Go code in pkg/* uses shellrun.Run(<forbidden-cli>, ...)
                   without //nolint:shell-wrap suppression (D5 gate).
@@ -124,6 +132,8 @@ func runQuality(args []string) int {
 		return runTestTargets(args[1:])
 	case "dangling-script-refs":
 		return runDanglingScriptRefs(args[1:])
+	case "migration-test-coverage":
+		return runMigrationTestCoverage(args[1:])
 	case "cosign-cutover":
 		return runCosignCutover(args[1:])
 	case "service-auth-rotation":
@@ -229,6 +239,38 @@ func runDanglingScriptRefs(args []string) int {
 		return 1
 	}
 	fmt.Println("dangling-script-refs: PASS — no deleted script left with live references")
+	return 0
+}
+
+// runMigrationTestCoverage is the gate replacing migration_test_coverage.sh:
+// every DB migration must have a regression test. Pure-logic, hermetic.
+func runMigrationTestCoverage(args []string) int {
+	fs := flag.NewFlagSet("migration-test-coverage", flag.ContinueOnError)
+	root := fs.String("root", ".", "repo root directory")
+	migrationsDir := fs.String("migrations-dir", "", "override migrations dir")
+	testsDir := fs.String("tests-dir", "", "override unit tests dir")
+	if err := fs.Parse(args); err != nil {
+		return 1
+	}
+	if absRoot, err := os.Getwd(); err == nil && *root == "." {
+		*root = absRoot
+	}
+
+	outcome, err := migrationtestcoverage.Check(migrationtestcoverage.Config{
+		Root:          *root,
+		MigrationsDir: *migrationsDir,
+		UnitTestsDir:  *testsDir,
+	})
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "migration-test-coverage: %v\n", err)
+		return 5
+	}
+	for _, m := range outcome.Messages {
+		fmt.Println(m)
+	}
+	if !outcome.Pass {
+		return 1
+	}
 	return 0
 }
 

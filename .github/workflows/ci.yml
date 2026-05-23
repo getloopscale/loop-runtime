@@ -569,7 +569,9 @@ jobs:
         run: cd cmd/loopzero-ops && go run . quality orphan-alerts --root "${GITHUB_WORKSPACE}"
 
       - name: Migration regression-test coverage (T3.4 deep-review-remediation)
-        run: bash infra/scripts/migration_test_coverage.sh
+        # T1.4 of plan 2026-05-23: migrated migration_test_coverage.sh to pure-Go
+        # gate (preserves verdict — parity proven 15/17). Uses go run per D6.
+        run: cd cmd/loopzero-ops && go run . quality migration-test-coverage --root "${GITHUB_WORKSPACE}"
 
       - name: AGPL isolation lint (T9.1 deep-review-remediation, ADR-0048)
         # T5.3 of plan 2026-05-22: migrated check_agpl_isolation.sh to pure-Go gate.
