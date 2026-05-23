@@ -27,6 +27,7 @@ import (
 	"github.com/loopzero/loopzero/pkg/quality/crdsemanticdiff"
 	"github.com/loopzero/loopzero/pkg/quality/danglingdata"
 	"github.com/loopzero/loopzero/pkg/quality/danglingrefs"
+	"github.com/loopzero/loopzero/pkg/quality/jobtimeout"
 	"github.com/loopzero/loopzero/pkg/quality/deadlineratchet"
 	"github.com/loopzero/loopzero/pkg/quality/decisionsdeletion"
 	"github.com/loopzero/loopzero/pkg/quality/divergencematrix"
@@ -95,6 +96,13 @@ GATES:
                     --root DIR      repo root (default: ".")
                     --base-ref REF  base git ref (default: "origin/develop")
                     --head-ref REF  head git ref (default: "HEAD")
+
+  job-timeout-coverage
+                  Fail if any .github/workflows/*.yml job lacks job-level
+                  timeout-minutes (reusable-workflow callers exempt). Migrated
+                  from job-timeout-coverage_test.sh (plan 2026-05-23).
+                  Flags:
+                    --root DIR      repo root (default: ".")
 
   migration-test-coverage
                   Fail if a DB migration lacks a regression test.
@@ -210,6 +218,8 @@ func runQuality(args []string) int {
 		return runDanglingScriptRefs(args[1:])
 	case "dangling-data-refs":
 		return runDanglingDataRefs(args[1:])
+	case "job-timeout-coverage":
+		return runJobTimeoutCoverage(args[1:])
 	case "migration-test-coverage":
 		return runMigrationTestCoverage(args[1:])
 	case "pkg-usage-matrix":
@@ -378,6 +388,42 @@ func runDanglingDataRefs(args []string) int {
 		return 1
 	}
 	fmt.Println("dangling-data-refs: PASS — no deleted data file left with live references")
+	return 0
+}
+
+// runJobTimeoutCoverage is the Go home for the job-timeout-coverage gate
+// (migrated from infra/tests/workflows/job-timeout-coverage_test.sh). Fails if
+// any workflow job lacks job-level timeout-minutes (reusable callers exempt).
+func runJobTimeoutCoverage(args []string) int {
+	fs := flag.NewFlagSet("job-timeout-coverage", flag.ContinueOnError)
+	root := fs.String("root", ".", "repo root directory")
+	if err := fs.Parse(args); err != nil {
+		return 1
+	}
+	if absRoot, err := os.Getwd(); err == nil && *root == "." {
+		*root = absRoot
+	}
+
+	outcome, err := jobtimeout.Check(jobtimeout.Config{
+		WorkflowsDir: filepath.Join(*root, ".github", "workflows"),
+	})
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "job-timeout-coverage: %v\n", err)
+		return 5
+	}
+	fmt.Printf("Total jobs: %d\n", outcome.Total)
+	fmt.Printf("Has timeout-minutes: %d\n", outcome.Covered)
+	fmt.Printf("Reusable-workflow callers (exempt): %d\n", outcome.ReusableCallers)
+	fmt.Printf("Violations: %d\n", len(outcome.Violations))
+	if !outcome.Pass {
+		for _, v := range outcome.Violations {
+			fmt.Fprintf(os.Stderr, "FAIL: %s\n", v)
+		}
+		fmt.Fprintln(os.Stderr, "")
+		fmt.Fprintln(os.Stderr, "To fix: add 'timeout-minutes: N' under runs-on: in each violating job (default 30).")
+		return 1
+	}
+	fmt.Println("job-timeout-coverage: PASS — all non-reusable-caller jobs have timeout-minutes")
 	return 0
 }
 

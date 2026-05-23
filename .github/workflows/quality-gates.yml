@@ -346,3 +346,8 @@ jobs:
       - name: T1.3 test-inventory hermetic tests
         run: bash infra/tests/scripts/test-inventory_test.sh
 
+      - name: job-timeout-coverage gate + hermetic tests (pure-Go, migrated from bash, plan 2026-05-23)
+        run: |
+          cd pkg && go test ./quality/jobtimeout/...
+          cd ../cmd/loopzero-ops && go run . quality job-timeout-coverage --root ../..
+
