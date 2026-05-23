@@ -119,5 +119,5 @@ jobs:
       - name: T1.1 coverage-go script hermetic tests
         run: bash infra/tests/scripts/coverage-go_test.sh
 
-      - name: T1.1 coverage-merge script hermetic tests
-        run: bash infra/tests/scripts/coverage-merge_test.sh
+      - name: coverage-merge hermetic tests (pure-Go, plan 2026-05-23)
+        run: cd pkg && go test ./quality/coveragemerge/...
