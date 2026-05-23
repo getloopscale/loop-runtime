@@ -15,6 +15,8 @@ import (
 	"github.com/loopzero/loopzero/pkg/quality/agplisolation"
 	"github.com/loopzero/loopzero/pkg/quality/alertrunbooks"
 	"github.com/loopzero/loopzero/pkg/quality/baseimagedigest"
+	"github.com/loopzero/loopzero/pkg/quality/baselinecompare"
+	"github.com/loopzero/loopzero/pkg/quality/baselineupdate"
 	"github.com/loopzero/loopzero/pkg/quality/clibundlesize"
 	"github.com/loopzero/loopzero/pkg/quality/clusterimagepolicymode"
 	"github.com/loopzero/loopzero/pkg/quality/coveragediff"
@@ -42,6 +44,7 @@ import (
 	"github.com/loopzero/loopzero/pkg/quality/skiplink"
 	"github.com/loopzero/loopzero/pkg/quality/stackcoverage"
 	"github.com/loopzero/loopzero/pkg/quality/taskfileinterface"
+	"github.com/loopzero/loopzero/pkg/quality/templatecompliance"
 	"github.com/loopzero/loopzero/pkg/quality/testdeletion"
 	"github.com/loopzero/loopzero/pkg/quality/testpyramid"
 	"github.com/loopzero/loopzero/pkg/quality/testtargets"
@@ -112,6 +115,16 @@ GATES:
   coverage-diff   Diff-aware coverage threshold gate on touched lines.
                   Flags: --diff PATH  --lcov PATH  --threshold N  --report PATH
 
+  baseline-compare  Per-package coverage regression gate vs baseline.
+                  Flags: --baseline PATH  --current PATH  --default-min N
+                         --slack N  --defer  --defer-reason STR
+
+  baseline-update Regenerate coverage baseline JSON (--dry-run → stdout).
+                  Flags: --go-profile PATH  --lcov PATH  --baseline PATH  --dry-run
+
+  template-compliance  PR-template checkbox compliance gate.
+                  Flags: --pr-body STR  --pr-author STR  --pr-labels CSV
+
   no-shell-wrap   Fail if Go code in pkg/* uses shellrun.Run(<forbidden-cli>, ...)
                   without //nolint:shell-wrap suppression (D5 gate).
                   Forbidden: pulumi, helm, kubectl, aws, gh (use Go SDK instead).
@@ -179,6 +192,12 @@ func runQuality(args []string) int {
 		return runCoverageMerge(args[1:])
 	case "coverage-diff":
 		return runCoverageDiff(args[1:])
+	case "baseline-compare":
+		return runBaselineCompare(args[1:])
+	case "baseline-update":
+		return runBaselineUpdate(args[1:])
+	case "template-compliance":
+		return runTemplateCompliance(args[1:])
 	case "cosign-cutover":
 		return runCosignCutover(args[1:])
 	case "service-auth-rotation":
@@ -436,6 +455,126 @@ func runCoverageDiff(args []string) int {
 	})
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "coverage-diff: %v\n", err)
+		return 5
+	}
+	for _, m := range outcome.Messages {
+		fmt.Println(m)
+	}
+	if !outcome.Pass {
+		return 1
+	}
+	return 0
+}
+
+// firstNonEmpty returns the first non-empty string (flag value > env fallback).
+func firstNonEmpty(vals ...string) string {
+	for _, v := range vals {
+		if v != "" {
+			return v
+		}
+	}
+	return ""
+}
+
+// runBaselineCompare replaces baseline-compare.sh: per-package coverage
+// regression gate vs the checked-in baseline.
+func runBaselineCompare(args []string) int {
+	fs := flag.NewFlagSet("baseline-compare", flag.ContinueOnError)
+	baseline := fs.String("baseline", "", "checked-in baseline JSON")
+	current := fs.String("current", "", "PR-side coverage JSON")
+	defaultMin := fs.Float64("default-min", 80.0, "min for newly-added packages")
+	slack := fs.Float64("slack", 3.0, "tolerance below baseline (pp)")
+	deferLabel := fs.Bool("defer", false, "defer label present (EC-2 escape valve)")
+	deferReason := fs.String("defer-reason", "", "defer justification")
+	if err := fs.Parse(args); err != nil {
+		return 1
+	}
+	// Env fallback matches the bash env contract (BASELINE_FILE, CURRENT_FILE,
+	// DEFER_*). Untrusted PR-derived DEFER_REASON arrives via env, not CLI arg.
+	baselinePath := firstNonEmpty(*baseline, os.Getenv("BASELINE_FILE"))
+	currentPath := firstNonEmpty(*current, os.Getenv("CURRENT_FILE"))
+	deferPresent := *deferLabel || os.Getenv("DEFER_LABEL_PRESENT") == "1"
+	reason := firstNonEmpty(*deferReason, os.Getenv("DEFER_REASON"))
+	outcome, err := baselinecompare.Run(baselinecompare.Config{
+		BaselinePath:      baselinePath,
+		CurrentPath:       currentPath,
+		DefaultMin:        *defaultMin,
+		SlackPP:           *slack,
+		DeferLabelPresent: deferPresent,
+		DeferReason:       reason,
+	})
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "baseline-compare: %v\n", err)
+		return 5
+	}
+	for _, m := range outcome.Messages {
+		fmt.Println(m)
+	}
+	if !outcome.Pass {
+		return 1
+	}
+	return 0
+}
+
+// runBaselineUpdate replaces baseline-update.sh: regenerates the coverage
+// baseline JSON. --dry-run prints the would-be JSON to stdout.
+func runBaselineUpdate(args []string) int {
+	fs := flag.NewFlagSet("baseline-update", flag.ContinueOnError)
+	goProfile := fs.String("go-profile", "", "Go coverage profile")
+	lcov := fs.String("lcov", "", "CLI lcov.info")
+	baseline := fs.String("baseline", "", "baseline JSON write target")
+	dryRun := fs.Bool("dry-run", false, "print would-be JSON to stdout instead of writing")
+	if err := fs.Parse(args); err != nil {
+		return 1
+	}
+	// Env fallback matches bash contract (DRY_RUN, GO_PROFILE, CLI_LCOV, BASELINE_FILE).
+	result, err := baselineupdate.Run(baselineupdate.Config{
+		GoProfilePath: firstNonEmpty(*goProfile, os.Getenv("GO_PROFILE")),
+		LCOVPath:      firstNonEmpty(*lcov, os.Getenv("CLI_LCOV")),
+		BaselinePath:  firstNonEmpty(*baseline, os.Getenv("BASELINE_FILE")),
+		DryRun:        *dryRun || os.Getenv("DRY_RUN") == "1",
+	})
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "baseline-update: %v\n", err)
+		return 5
+	}
+	if *dryRun {
+		fmt.Print(string(result.JSON))
+	} else {
+		fmt.Fprintf(os.Stderr, "baseline-update: wrote %d packages to %s\n", result.PackagesWritten, result.OutputPath)
+	}
+	return 0
+}
+
+// runTemplateCompliance replaces template-compliance.sh: PR-template checkbox
+// compliance gate.
+func runTemplateCompliance(args []string) int {
+	fs := flag.NewFlagSet("template-compliance", flag.ContinueOnError)
+	prBody := fs.String("pr-body", "", "PR markdown body (falls back to $PR_BODY)")
+	prAuthor := fs.String("pr-author", "", "PR author login (falls back to $PR_AUTHOR)")
+	prLabels := fs.String("pr-labels", "", "CSV PR labels (falls back to $PR_LABELS)")
+	if err := fs.Parse(args); err != nil {
+		return 1
+	}
+	// Env fallback: PR body is untrusted input. CI passes it via env var
+	// (NOT a CLI arg) to avoid GitHub Actions ${{ }} shell-injection.
+	body, author, labels := *prBody, *prAuthor, *prLabels
+	if body == "" {
+		body = os.Getenv("PR_BODY")
+	}
+	if author == "" {
+		author = os.Getenv("PR_AUTHOR")
+	}
+	if labels == "" {
+		labels = os.Getenv("PR_LABELS")
+	}
+	outcome, err := templatecompliance.Run(templatecompliance.Config{
+		PRBody:   body,
+		PRAuthor: author,
+		PRLabels: labels,
+	})
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "template-compliance: %v\n", err)
 		return 5
 	}
 	for _, m := range outcome.Messages {

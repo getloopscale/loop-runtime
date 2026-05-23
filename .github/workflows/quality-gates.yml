@@ -78,10 +78,12 @@ jobs:
         run: bash infra/scripts/quality/coverage-go.sh
 
       - name: Build current-coverage JSON from profile
+        # Migrated to pure-Go gate (pkg/quality/baselineupdate) per plan 2026-05-23.
         run: |
           : > /tmp/empty.lcov
-          DRY_RUN=1 GO_PROFILE=/tmp/coverage.out CLI_LCOV=/tmp/empty.lcov \
-            bash infra/scripts/quality/baseline-update.sh > /tmp/current-coverage.json
+          export DRY_RUN=1 GO_PROFILE=/tmp/coverage.out CLI_LCOV=/tmp/empty.lcov
+          export BASELINE_FILE="${GITHUB_WORKSPACE}/infra/quality/coverage-baseline.json"
+          (cd cmd/loopzero-ops && go run . quality baseline-update) > /tmp/current-coverage.json
 
       - name: Read defer label state
         id: defer
@@ -97,8 +99,10 @@ jobs:
           echo "reason=$(cat /tmp/defer-reason.txt)" >> "$GITHUB_OUTPUT"
 
       - name: Run baseline-compare gate
-        run: bash infra/scripts/quality/baseline-compare.sh
+        # Migrated to pure-Go gate (pkg/quality/baselinecompare) per plan 2026-05-23.
+        run: (cd cmd/loopzero-ops && go run . quality baseline-compare)
         env:
+          BASELINE_FILE: ${{ github.workspace }}/infra/quality/coverage-baseline.json
           CURRENT_FILE: /tmp/current-coverage.json
           DEFER_LABEL_PRESENT: ${{ steps.defer.outputs.present }}
           DEFER_REASON: ${{ steps.defer.outputs.reason }}
@@ -116,7 +120,9 @@ jobs:
       - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
 
       - name: Run template-compliance gate
-        run: bash infra/scripts/quality/template-compliance.sh
+        # Migrated to pure-Go gate (pkg/quality/templatecompliance) per plan 2026-05-23.
+        # PR_BODY passed via env (NOT CLI arg) to avoid GitHub Actions injection.
+        run: (cd cmd/loopzero-ops && go run . quality template-compliance)
         env:
           PR_BODY: ${{ github.event.pull_request.body }}
           PR_AUTHOR: ${{ github.event.pull_request.user.login }}
@@ -311,15 +317,9 @@ jobs:
       - name: coverage-merge + coverage-diff hermetic tests (pure-Go, plan 2026-05-23)
         run: cd pkg && go test ./quality/coveragemerge/... ./quality/coveragediff/... ./quality/coverageparse/... ./quality/gitdiff/...
 
-      - name: T1.2 baseline-update hermetic tests
-        run: bash infra/tests/scripts/baseline-update_test.sh
+      - name: baseline + template-compliance hermetic tests (pure-Go, plan 2026-05-23)
+        run: cd pkg && go test ./quality/baselineupdate/... ./quality/baselinecompare/... ./quality/baseline/... ./quality/templatecompliance/...
 
       - name: T1.3 test-inventory hermetic tests
         run: bash infra/tests/scripts/test-inventory_test.sh
-
-      - name: T2.2 baseline-compare hermetic tests
-        run: bash infra/tests/scripts/baseline-compare_test.sh
-
-      - name: T5.1 template-compliance hermetic tests
-        run: bash infra/tests/scripts/template-compliance_test.sh
 
