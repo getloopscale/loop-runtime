@@ -6,7 +6,7 @@ Proposed disposition per script (operator ratifies). Evidence is mechanical fact
 |---|---|---:|:---:|:---:|---|
 | bootstrap | infra/helmfile/scripts/bootstrap-cell-cc.sh | 149 | — | yes | DELEGATE-declarative (T2) |
 | bootstrap | infra/helmfile/scripts/bootstrap-eso-cluster-secret-store.sh | 196 | — | yes | DELEGATE-declarative (T2) |
-| bootstrap | infra/helmfile/scripts/bootstrap-oauth-clients.sh | 172 | yes | yes | MIGRATE-go (python-wrapper — focused TDD) |
+| bootstrap | infra/helmfile/scripts/bootstrap-oauth-clients.sh | 172 | — | yes | DELEGATE-declarative (T2) |
 | bootstrap | infra/helmfile/scripts/bootstrap-patch-admission-policies.sh | 29 | — | yes | DELEGATE-declarative (T2) |
 | bootstrap | infra/helmfile/scripts/bootstrap-patch-sigstore-policy-controller.sh | 43 | — | yes | DELEGATE-declarative (T2) |
 | bootstrap | infra/helmfile/scripts/bootstrap-patch-argocd-gitea-creds.sh | 45 | — | yes | DELEGATE-declarative (T2) |
@@ -14,16 +14,16 @@ Proposed disposition per script (operator ratifies). Evidence is mechanical fact
 | bootstrap | infra/helmfile/scripts/create-wiring-configmap.sh | 85 | — | yes | DELEGATE-declarative (T2) |
 | bootstrap | infra/helmfile/scripts/generate-build-secrets.sh | 120 | — | yes | DELEGATE-declarative (T2) |
 | bootstrap | infra/helmfile/scripts/generate-runtime-secrets.sh | 140 | — | yes | DELEGATE-declarative (T2) |
-| bootstrap | infra/helmfile/scripts/generate-secrets.sh | 391 | yes | yes | MIGRATE-go (python-wrapper — focused TDD) |
+| bootstrap | infra/helmfile/scripts/generate-secrets.sh | 391 | — | yes | DELEGATE-declarative (T2) |
 | bootstrap | infra/helmfile/scripts/health-check-postsync.sh | 108 | — | yes | DELEGATE-declarative (T2) |
 | bootstrap | infra/helmfile/scripts/install-local-path-provisioner.sh | 24 | — | yes | DELEGATE-declarative (T2) |
-| bootstrap | infra/helmfile/scripts/lib/argocd-register.sh | 99 | yes | yes | MIGRATE-go (python-wrapper — focused TDD) |
-| bootstrap | infra/helmfile/scripts/lib/clustercredential-create.sh | 159 | yes | yes | MIGRATE-go (python-wrapper — focused TDD) |
-| bootstrap | infra/helmfile/scripts/lib/hydra-mint.sh | 171 | yes | yes | MIGRATE-go (python-wrapper — focused TDD) |
-| bootstrap | infra/helmfile/scripts/lib/pulumi-output.sh | 127 | yes | yes | MIGRATE-go (python-wrapper — focused TDD) |
+| bootstrap | infra/helmfile/scripts/lib/argocd-register.sh | 99 | — | yes | DELEGATE-declarative (T2) |
+| bootstrap | infra/helmfile/scripts/lib/clustercredential-create.sh | 159 | — | yes | DELEGATE-declarative (T2) |
+| bootstrap | infra/helmfile/scripts/lib/hydra-mint.sh | 171 | — | yes | DELEGATE-declarative (T2) |
+| bootstrap | infra/helmfile/scripts/lib/pulumi-output.sh | 127 | — | yes | DELEGATE-declarative (T2) |
 | bootstrap | infra/helmfile/scripts/lib/scoped-kubeconfig.sh | 183 | — | yes | DELEGATE-declarative (T2) |
 | bootstrap | infra/helmfile/scripts/migrate-database.sh | 44 | — | yes | DELEGATE-declarative (T2) |
-| bootstrap | infra/helmfile/scripts/regression-checks.sh | 200 | yes | yes | MIGRATE-go (python-wrapper — focused TDD) |
+| bootstrap | infra/helmfile/scripts/regression-checks.sh | 200 | — | yes | DELEGATE-declarative (T2) |
 | bootstrap | infra/helmfile/scripts/seed-local-user.sh | 187 | — | yes | DELEGATE-declarative (T2) |
 | bootstrap | infra/helmfile/scripts/test_helpers/mock-kubectl.sh | 54 | — | yes | DELEGATE-declarative (T2) |
 | bootstrap | infra/helmfile/scripts/test_helpers/run-all.sh | 37 | — | yes | DELEGATE-declarative (T2) |
@@ -31,8 +31,8 @@ Proposed disposition per script (operator ratifies). Evidence is mechanical fact
 | bootstrap | infra/helmfile/scripts/test_helpers/test-generate-runtime-secrets.sh | 51 | — | yes | DELEGATE-declarative (T2) |
 | bootstrap | infra/helmfile/scripts/test_helpers/test-generate-secrets.sh | 83 | — | yes | DELEGATE-declarative (T2) |
 | bootstrap | infra/helmfile/scripts/test_helpers/test-idempotency.sh | 202 | — | yes | DELEGATE-declarative (T2) |
-| bootstrap | infra/helmfile/scripts/wire-clusters.sh | 84 | yes | yes | MIGRATE-go (python-wrapper — focused TDD) |
-| bootstrap | infra/scripts/bootstrap-platform.sh | 276 | yes | yes | MIGRATE-go (python-wrapper — focused TDD) |
+| bootstrap | infra/helmfile/scripts/wire-clusters.sh | 84 | — | yes | DELEGATE-declarative (T2) |
+| bootstrap | infra/scripts/bootstrap-platform.sh | 276 | — | yes | DELEGATE-declarative (T2) |
 | bootstrap | infra/scripts/bootstrap-seed-tenant-cr.sh | 58 | — | yes | DELEGATE-declarative (T2) |
 | other | infra/scripts/break-glass.sh | 145 | — | yes | KEEP-OPERATOR? (live-cluster tool — operator ratify) |
 | other | infra/scripts/build-and-push-dockerfile-lint.sh | 64 | — | yes | KEEP-OPERATOR? (live-cluster tool — operator ratify) |
@@ -49,23 +49,23 @@ Proposed disposition per script (operator ratifies). Evidence is mechanical fact
 | drill | infra/scripts/dr/cancel-refresh.sh | 142 | — | yes | MIGRATE-loopzero-ops-drill (LIVE-gate before delete) |
 | drill | infra/scripts/dr/chaos-orchestrator.sh | 275 | — | yes | MIGRATE-loopzero-ops-drill (LIVE-gate before delete) |
 | drill | infra/scripts/dr/cleanroom-orchestrator.sh | 257 | — | yes | MIGRATE-loopzero-ops-drill (LIVE-gate before delete) |
-| drill | infra/scripts/dr/cost-report.sh | 159 | yes | yes | MIGRATE-go (python-wrapper — focused TDD) |
+| drill | infra/scripts/dr/cost-report.sh | 159 | — | yes | MIGRATE-loopzero-ops-drill (LIVE-gate before delete) |
 | drill | infra/scripts/dr/dogfood-orchestrator.sh | 290 | — | yes | MIGRATE-loopzero-ops-drill (LIVE-gate before delete) |
 | drill | infra/scripts/dr/evidence-capture.sh | 298 | — | yes | MIGRATE-loopzero-ops-drill (LIVE-gate before delete) |
 | drill | infra/scripts/dr/jwt-diagnose.sh | 372 | — | yes | MIGRATE-loopzero-ops-drill (LIVE-gate before delete) |
-| drill | infra/scripts/dr/preflight.sh | 381 | yes | yes | MIGRATE-go (python-wrapper — focused TDD) |
-| drill | infra/scripts/dr/state-reset.sh | 340 | yes | yes | MIGRATE-go (python-wrapper — focused TDD) |
+| drill | infra/scripts/dr/preflight.sh | 381 | — | yes | MIGRATE-loopzero-ops-drill (LIVE-gate before delete) |
+| drill | infra/scripts/dr/state-reset.sh | 340 | — | yes | MIGRATE-loopzero-ops-drill (LIVE-gate before delete) |
 | drill | infra/scripts/dr/teardown-validator.sh | 283 | — | yes | MIGRATE-loopzero-ops-drill (LIVE-gate before delete) |
 | drill | infra/scripts/dr/watchdog.sh | 149 | — | yes | MIGRATE-loopzero-ops-drill (LIVE-gate before delete) |
-| drill | infra/scripts/drill-helmfile-bootstrap.sh | 1126 | yes | yes | MIGRATE-go (python-wrapper — focused TDD) |
-| drill | infra/scripts/drill-mint-jwt.sh | 300 | yes | yes | MIGRATE-go (python-wrapper — focused TDD) |
+| drill | infra/scripts/drill-helmfile-bootstrap.sh | 1126 | — | yes | MIGRATE-loopzero-ops-drill (LIVE-gate before delete) |
+| drill | infra/scripts/drill-mint-jwt.sh | 300 | — | yes | MIGRATE-loopzero-ops-drill (LIVE-gate before delete) |
 | other | infra/scripts/ensure-project.sh | 49 | — | — | KEEP-orchestrator? (wraps gh/npm/go/curl — anti-pattern-8, ratify) |
 | governance | infra/scripts/governance/bias-check.sh | 253 | yes | — | MIGRATE-go (python-wrapper — focused TDD) |
-| governance | infra/scripts/governance/health-check-governance.sh | 210 | yes | — | MIGRATE-go (python-wrapper — focused TDD) |
+| governance | infra/scripts/governance/health-check-governance.sh | 210 | — | — | MIGRATE-loopzero-ops (pure-logic — autonomous) |
 | governance | infra/scripts/governance/scan-decay.sh | 168 | yes | — | MIGRATE-go (python-wrapper — focused TDD) |
 | governance | infra/scripts/governance/verify-independence.sh | 131 | yes | — | MIGRATE-go (python-wrapper — focused TDD) |
-| other | infra/scripts/health-check-platform.sh | 202 | yes | yes | MIGRATE-go (python-wrapper — focused TDD) |
-| other | infra/scripts/k3d-cross-cluster-heal.sh | 1005 | yes | yes | MIGRATE-go (python-wrapper — focused TDD) |
+| other | infra/scripts/health-check-platform.sh | 202 | — | yes | KEEP-OPERATOR? (live-cluster tool — operator ratify) |
+| other | infra/scripts/k3d-cross-cluster-heal.sh | 1005 | — | yes | KEEP-OPERATOR? (live-cluster tool — operator ratify) |
 | bootstrap | infra/scripts/lib/bootstrap-cell-cc-common.sh | 161 | — | yes | DELEGATE-declarative (T2) |
 | drill | infra/scripts/lib/bootstrap-cell-cc-drill-common.sh | 166 | — | yes | MIGRATE-loopzero-ops-drill (LIVE-gate before delete) |
 | drill | infra/scripts/lib/drill-dogfood-journeys.sh | 242 | — | yes | MIGRATE-loopzero-ops-drill (LIVE-gate before delete) |
@@ -75,43 +75,43 @@ Proposed disposition per script (operator ratifies). Evidence is mechanical fact
 | other | infra/scripts/migrate-tenant-namespace.sh | 229 | yes | yes | MIGRATE-go (python-wrapper — focused TDD) |
 | other | infra/scripts/operator-cutover-execute.sh | 286 | — | yes | KEEP-OPERATOR? (live-cluster tool — operator ratify) |
 | other | infra/scripts/pkg-soak-smoke.sh | 161 | — | yes | KEEP-OPERATOR? (live-cluster tool — operator ratify) |
-| other | infra/scripts/pre-destroy-cleanup.sh | 305 | yes | yes | MIGRATE-go (python-wrapper — focused TDD) |
-| other | infra/scripts/provision-api-tokens.sh | 357 | yes | yes | MIGRATE-go (python-wrapper — focused TDD) |
-| quality | infra/scripts/quality/branch-protection-update.sh | 84 | yes | — | MIGRATE-go (python-wrapper — focused TDD) |
+| other | infra/scripts/pre-destroy-cleanup.sh | 305 | — | yes | KEEP-OPERATOR? (live-cluster tool — operator ratify) |
+| other | infra/scripts/provision-api-tokens.sh | 357 | — | yes | KEEP-OPERATOR? (live-cluster tool — operator ratify) |
+| quality | infra/scripts/quality/branch-protection-update.sh | 84 | — | — | KEEP-orchestrator? (wraps gh/npm/go/curl — anti-pattern-8, ratify) |
 | quality | infra/scripts/quality/coverage-cli.sh | 58 | — | — | KEEP-orchestrator? (wraps gh/npm/go/curl — anti-pattern-8, ratify) |
 | quality | infra/scripts/quality/coverage-go.sh | 120 | — | — | KEEP-orchestrator? (wraps gh/npm/go/curl — anti-pattern-8, ratify) |
 | quality | infra/scripts/quality/flaky-track.sh | 77 | yes | — | MIGRATE-go (python-wrapper — focused TDD) |
 | quality | infra/scripts/quality/test-inventory.sh | 173 | — | yes | KEEP-OPERATOR? (live-cluster tool — operator ratify) |
-| other | infra/scripts/regen-all-scoped-kubeconfigs.sh | 220 | yes | yes | MIGRATE-go (python-wrapper — focused TDD) |
+| other | infra/scripts/regen-all-scoped-kubeconfigs.sh | 220 | — | yes | KEEP-OPERATOR? (live-cluster tool — operator ratify) |
 | other | infra/scripts/run-migrations.sh | 261 | — | yes | KEEP-OPERATOR? (live-cluster tool — operator ratify) |
-| other | infra/scripts/setup-cross-cluster-networking.sh | 86 | yes | yes | MIGRATE-go (python-wrapper — focused TDD) |
+| other | infra/scripts/setup-cross-cluster-networking.sh | 86 | — | yes | KEEP-OPERATOR? (live-cluster tool — operator ratify) |
 | other | infra/scripts/setup-host-inotify-limits.sh | 96 | — | yes | KEEP-OPERATOR? (live-cluster tool — operator ratify) |
 | other | infra/scripts/update-cross-cluster-ips.sh | 171 | — | yes | KEEP-OPERATOR? (live-cluster tool — operator ratify) |
-| drill | infra/scripts/velero-dr-drill.sh | 413 | yes | yes | MIGRATE-go (python-wrapper — focused TDD) |
-| bootstrap | infra/tests/bootstrap-smoke.sh | 304 | yes | yes | MIGRATE-go (python-wrapper — focused TDD) |
+| drill | infra/scripts/velero-dr-drill.sh | 413 | — | yes | MIGRATE-loopzero-ops-drill (LIVE-gate before delete) |
+| bootstrap | infra/tests/bootstrap-smoke.sh | 304 | — | yes | DELEGATE-declarative (T2) |
 | test | infra/tests/capacity/run-capacity.sh | 85 | — | yes | MIGRATE-ginkgo (LIVE) |
 | chaos | infra/tests/chaos/values_gate_test.sh | 109 | — | yes | COUPLED (dies when its target homes) |
-| test | infra/tests/charts/values-schema-coverage_test.sh | 82 | yes | yes | MIGRATE-go (python-wrapper — focused TDD) |
+| test | infra/tests/charts/values-schema-coverage_test.sh | 82 | — | yes | COUPLED (dies when its target homes) |
 | test | infra/tests/check-corrections-txt-closed_test.sh | 146 | — | — | COUPLED (dies when its target homes) |
 | test | infra/tests/check-regen-scoped-kubeconfigs_test.sh | 213 | — | yes | COUPLED (dies when its target homes) |
 | test | infra/tests/docs/credentials-sot_test.sh | 105 | — | yes | COUPLED (dies when its target homes) |
 | test | infra/tests/docs/no-hardcoded-credentials_test.sh | 74 | — | yes | COUPLED (dies when its target homes) |
 | test | infra/tests/docs/pulumi-required-secrets_test.sh | 119 | — | yes | COUPLED (dies when its target homes) |
-| test | infra/tests/dogfood/cli-coverage.sh | 244 | yes | yes | MIGRATE-go (python-wrapper — focused TDD) |
+| test | infra/tests/dogfood/cli-coverage.sh | 244 | — | yes | MIGRATE-ginkgo (LIVE) |
 | test | infra/tests/dogfood/full-loop.sh | 246 | yes | — | MIGRATE-go (python-wrapper — focused TDD) |
-| test | infra/tests/dogfood/preflight.sh | 484 | yes | yes | MIGRATE-go (python-wrapper — focused TDD) |
-| test | infra/tests/dogfood/repro-findings.sh | 302 | yes | yes | MIGRATE-go (python-wrapper — focused TDD) |
-| test | infra/tests/dogfood/scripts/cleanup-stuck-finalizers.sh | 104 | yes | yes | MIGRATE-go (python-wrapper — focused TDD) |
-| test | infra/tests/dogfood/scripts/cleanup-terminating-namespaces.sh | 111 | yes | yes | MIGRATE-go (python-wrapper — focused TDD) |
+| test | infra/tests/dogfood/preflight.sh | 484 | — | yes | MIGRATE-ginkgo (LIVE) |
+| test | infra/tests/dogfood/repro-findings.sh | 302 | — | yes | MIGRATE-ginkgo (LIVE) |
+| test | infra/tests/dogfood/scripts/cleanup-stuck-finalizers.sh | 104 | — | yes | MIGRATE-ginkgo (LIVE) |
+| test | infra/tests/dogfood/scripts/cleanup-terminating-namespaces.sh | 111 | — | yes | MIGRATE-ginkgo (LIVE) |
 | test | infra/tests/dogfood/setup-monorepo-turbo.sh | 66 | — | — | MIGRATE-ginkgo (LIVE) |
 | drill | infra/tests/drill-dogfood-journeys_test.sh | 293 | — | yes | COUPLED (dies when its target homes) |
 | drill | infra/tests/drill-jwt-diagnose_test.sh | 199 | — | yes | COUPLED (dies when its target homes) |
 | drill | infra/tests/drill-jwt-gate_test.sh | 179 | — | — | COUPLED (dies when its target homes) |
-| test | infra/tests/e2e/local-install-deploy.sh | 398 | yes | yes | MIGRATE-go (python-wrapper — focused TDD) |
+| test | infra/tests/e2e/local-install-deploy.sh | 398 | — | yes | MIGRATE-ginkgo (LIVE) |
 | test | infra/tests/e2e/supply-chain-e2e.sh | 200 | — | yes | MIGRATE-ginkgo (LIVE) |
 | test | infra/tests/load/run-l1.sh | 154 | — | — | MIGRATE-ginkgo (LIVE) |
 | test | infra/tests/load/run-tests.sh | 106 | — | yes | MIGRATE-ginkgo (LIVE) |
-| test | infra/tests/load/stress-20k.sh | 139 | yes | yes | MIGRATE-go (python-wrapper — focused TDD) |
+| test | infra/tests/load/stress-20k.sh | 139 | — | yes | MIGRATE-ginkgo (LIVE) |
 | test | infra/tests/parity/audit-argocd-drift.sh | 102 | — | yes | MIGRATE-ginkgo (LIVE) |
 | test | infra/tests/parity/audit-golden-test.sh | 120 | — | — | MIGRATE-ginkgo (LIVE) |
 | test | infra/tests/parity/audit-regression-matrix.sh | 160 | — | yes | MIGRATE-ginkgo (LIVE) |
@@ -137,7 +137,7 @@ Proposed disposition per script (operator ratifies). Evidence is mechanical fact
 | test | infra/tests/parity/lib/cell2-gate-c9.sh | 25 | — | yes | MIGRATE-ginkgo (LIVE) |
 | test | infra/tests/parity/lib/cell2-gate-postflip.sh | 54 | — | yes | MIGRATE-ginkgo (LIVE) |
 | test | infra/tests/parity/preflight.sh | 212 | — | yes | MIGRATE-ginkgo (LIVE) |
-| test | infra/tests/parity/validate-matrix.sh | 304 | yes | yes | MIGRATE-go (python-wrapper — focused TDD) |
+| test | infra/tests/parity/validate-matrix.sh | 304 | — | yes | MIGRATE-ginkgo (LIVE) |
 | test | infra/tests/runner/run-chaos.sh | 133 | — | yes | MIGRATE-ginkgo (LIVE) |
 | test | infra/tests/runner/run-k6.sh | 83 | — | yes | MIGRATE-ginkgo (LIVE) |
 | test | infra/tests/runner/safety.sh | 56 | — | yes | MIGRATE-ginkgo (LIVE) |
@@ -166,9 +166,9 @@ Proposed disposition per script (operator ratifies). Evidence is mechanical fact
 | drill | infra/tests/scripts/drill-teardown-validator_test.sh | 300 | — | yes | COUPLED (dies when its target homes) |
 | test | infra/tests/scripts/dry-run-lib_test.sh | 122 | — | — | COUPLED (dies when its target homes) |
 | test | infra/tests/scripts/helm-charts-schema-coverage_test.sh | 154 | — | yes | COUPLED (dies when its target homes) |
-| test | infra/tests/scripts/helm-patterns-audit_test.sh | 205 | yes | yes | MIGRATE-go (python-wrapper — focused TDD) |
+| test | infra/tests/scripts/helm-patterns-audit_test.sh | 205 | — | yes | COUPLED (dies when its target homes) |
 | test | infra/tests/scripts/helm-schemas-negative_test.sh | 1159 | yes | yes | MIGRATE-go (python-wrapper — focused TDD) |
-| test | infra/tests/scripts/helm-values-schemas_test.sh | 196 | yes | yes | MIGRATE-go (python-wrapper — focused TDD) |
+| test | infra/tests/scripts/helm-values-schemas_test.sh | 196 | — | yes | COUPLED (dies when its target homes) |
 | test | infra/tests/scripts/k3d-docker-hub-mirror_test.sh | 73 | — | yes | COUPLED (dies when its target homes) |
 | test | infra/tests/scripts/plan-2026-05-20-criteria_test.sh | 134 | — | yes | COUPLED (dies when its target homes) |
 | test | infra/tests/scripts/postgresql-pdb-config_test.sh | 49 | yes | yes | MIGRATE-go (python-wrapper — focused TDD) |

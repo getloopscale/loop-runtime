@@ -55,12 +55,14 @@ type Counts struct {
 	SuspectKeeps []string `json:"suspect_keeps,omitempty"`
 }
 
-// reimplementableLogicRe detects ANY Python use (heredoc or `python3` call) —
-// substantial portable logic that should be Go, not a "kept" shell script.
-// A genuine operator break-glass is shell glue, not Python.
-var reimplementableLogicRe = regexp.MustCompile(`(?m)(\bpython3?\b|<<\s*['"]?(PY|PYEOF|PYTHON))`)
+// reimplementableLogicRe detects a Python HEREDOC — the script IS a Python
+// program wearing a bash costume (its substance is reimplementable logic). A
+// script that merely *calls* python3 for one step is classified by its domain.
+// Precise (heredoc) avoids mislabeling test/drill orchestrators that shell out
+// to python helpers as "python-wrappers".
+var reimplementableLogicRe = regexp.MustCompile(`(?m)(python3?\s+(-\s+)?<<|<<\s*['"]?(PY|PYEOF|PYTHON))`)
 
-// hasReimplementableLogic reports whether a script body embeds/invokes Python.
+// hasReimplementableLogic reports whether a script body embeds a Python heredoc.
 func hasReimplementableLogic(body string) bool {
 	return reimplementableLogicRe.MatchString(body)
 }
