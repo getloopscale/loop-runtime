@@ -93,8 +93,8 @@ tasks:
       # generate-runtime-secrets.sh against the workload context (KUBECONFIG,
       # no global current-context mutation). Idempotent.
       - |
-        S3_KEY=$(kubectl --context {{.MGMT_CONTEXT}} -n loopzero-system get secret minio-credentials -o jsonpath='{.data.accesskey}' | base64 -d)
-        S3_SECRET=$(kubectl --context {{.MGMT_CONTEXT}} -n loopzero-system get secret minio-credentials -o jsonpath='{.data.secretkey}' | base64 -d)
+        S3_KEY=$(kubectl --context {{.MGMT_CONTEXT}} -n loopzero-system get secret minio-credentials -o jsonpath='{.data.accesskey}' | openssl base64 -d -A)
+        S3_SECRET=$(kubectl --context {{.MGMT_CONTEXT}} -n loopzero-system get secret minio-credentials -o jsonpath='{.data.secretkey}' | openssl base64 -d -A)
         KUBECONFIG=$(k3d kubeconfig write loopzero-workload) \
           LOOPZERO_PROFILE=standalone-multi \
           LOOPZERO_S3_ACCESS_KEY="$S3_KEY" LOOPZERO_S3_SECRET_KEY="$S3_SECRET" \
