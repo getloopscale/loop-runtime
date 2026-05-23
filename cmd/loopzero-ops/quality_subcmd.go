@@ -17,6 +17,7 @@ import (
 	"github.com/loopzero/loopzero/pkg/quality/baseimagedigest"
 	"github.com/loopzero/loopzero/pkg/quality/clibundlesize"
 	"github.com/loopzero/loopzero/pkg/quality/clusterimagepolicymode"
+	"github.com/loopzero/loopzero/pkg/quality/crdsemanticdiff"
 	"github.com/loopzero/loopzero/pkg/quality/danglingrefs"
 	"github.com/loopzero/loopzero/pkg/quality/deadlineratchet"
 	"github.com/loopzero/loopzero/pkg/quality/decisionsdeletion"
@@ -86,6 +87,14 @@ GATES:
                     --check          verify freshness (default)
                     --write          regenerate the matrix
 
+  crd-semantic-diff
+                  Detect semantic drift between source CRDs and the rendered
+                  loopzero-crds chart. Needs helm at runtime (CI has it).
+                  Flags:
+                    --root DIR     repo root (default: ".")
+                    --crd NAME     limit to a single CRD short-name
+                    --verbose      append inline diff snippets
+
   no-shell-wrap   Fail if Go code in pkg/* uses shellrun.Run(<forbidden-cli>, ...)
                   without //nolint:shell-wrap suppression (D5 gate).
                   Forbidden: pulumi, helm, kubectl, aws, gh (use Go SDK instead).
@@ -145,6 +154,8 @@ func runQuality(args []string) int {
 		return runMigrationTestCoverage(args[1:])
 	case "pkg-usage-matrix":
 		return runPkgUsageMatrix(args[1:])
+	case "crd-semantic-diff":
+		return runCRDSemanticDiff(args[1:])
 	case "cosign-cutover":
 		return runCosignCutover(args[1:])
 	case "service-auth-rotation":
@@ -311,6 +322,40 @@ func runPkgUsageMatrix(args []string) int {
 	}, mode)
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "pkg-usage-matrix: %v\n", err)
+		return 5
+	}
+	for _, m := range outcome.Messages {
+		fmt.Println(m)
+	}
+	if !outcome.Pass {
+		return 1
+	}
+	return 0
+}
+
+// runCRDSemanticDiff is the gate replacing crd-semantic-diff.sh: detects
+// semantic drift between source CRDs and the rendered loopzero-crds chart.
+// Shells out to `helm template` directly (no shared abstraction); unit tests
+// are hermetic via the override hook.
+func runCRDSemanticDiff(args []string) int {
+	fs := flag.NewFlagSet("crd-semantic-diff", flag.ContinueOnError)
+	root := fs.String("root", ".", "repo root directory")
+	crd := fs.String("crd", "", "limit to a single CRD short-name (e.g. tenants)")
+	verbose := fs.Bool("verbose", false, "append inline diff snippets")
+	if err := fs.Parse(args); err != nil {
+		return 1
+	}
+	if absRoot, err := os.Getwd(); err == nil && *root == "." {
+		*root = absRoot
+	}
+
+	outcome, err := crdsemanticdiff.Check(crdsemanticdiff.Config{
+		Root:      *root,
+		CRDFilter: *crd,
+		Verbose:   *verbose,
+	})
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "crd-semantic-diff: %v\n", err)
 		return 5
 	}
 	for _, m := range outcome.Messages {

@@ -206,7 +206,8 @@ VERIFY:  task ops:build && <bin> --help
 > **Execution status (2026-05-23):**
 > - ✅ **T1.4** migration_test_coverage → `pkg/quality/migrationtestcoverage` (pure-logic, hermetic). Done; verdict parity preserved.
 > - ✅ **T1.5** pkg-usage-matrix → `pkg/quality/pkgusagematrix` (pure-logic, hermetic). Done; verdict parity preserved.
-> - ⚠️ **T1.3** crd-semantic-diff + ⚠️ **T1.6** helm-diff-structural are **NOT pure-logic** (EC-4 finding): they shell out to `helm template`/`helm diff` via `pkg/shellrun` — a ~1100-LOC shared abstraction (9 files incl. tailpods/mock/OS-specific) absent on `develop`. Adopting `pkg/shellrun` is an **automatic T2** (new shared `pkg/`) requiring a governance decision, not an autonomous step. **Blocked pending T2** — see finding `finding-2026-05-23-shellrun-dependency-blocks-tier-a.md`.
+> - ✅ **T1.3** crd-semantic-diff → `pkg/quality/crdsemanticdiff`. **Resolved via Option 2** (inline `exec.Command("helm","template")` instead of the `pkg/shellrun` abstraction — no T2 trigger). Bonus: semantic diff done in `yaml.v3`, **dropping the `yq` dependency** the bash carried. Migrated, wired (helm-charts.yml), bash deleted, gate runs GREEN (8 CRDs in sync).
+> - ⚠️ **T1.6** helm-diff-structural: wraps `helm diff` (a plugin) more deeply — still open whether Option 2 (inline) or Option 3 (keep bash, Anti-Pattern-8) applies. See finding `finding-2026-05-23-shellrun-dependency-blocks-tier-a.md`.
 > - ⚠️ **T1.1** pulumi-archive: operator-gated (real archive needs Pulumi) + has a non-obvious caller surface (`adr-verification-matrices.test.ts` asserts the bash file EXISTS — that assertion must be updated when the bash is deleted).
 >
 > **Refined Tier-A reality:** only 2 of the 5 listed candidates were truly pure-logic/hermetic (both done). The rest carry a shared-helper or runtime dependency — effectively Tier-A.5/B.

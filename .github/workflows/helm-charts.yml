@@ -458,10 +458,9 @@ jobs:
           fi
 
       - name: Check CRD semantic spec drift (CH-G06)
-        # charts-sota T1.4: replaces the legacy `grep -q name` nominal check
-        # with a true semantic spec diff via `yq` (group, scope, versions[].schema, etc).
-        run: |
-          bash infra/scripts/crd-semantic-diff.sh
+        # T1.3 of plan 2026-05-23: migrated crd-semantic-diff.sh to pure-Go gate
+        # (semantic diff in yaml.v3 — drops the yq dependency; helm still needed).
+        run: cd cmd/loopzero-ops && go run . quality crd-semantic-diff --root "${GITHUB_WORKSPACE}"
 
   # ──────────────────────────────────────────────────────────────────────
   # Package + Push (only on push to main/develop/homolog, not PRs)
