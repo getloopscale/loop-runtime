@@ -23,6 +23,7 @@ import (
 	"github.com/loopzero/loopzero/pkg/quality/decisionsdeletion"
 	"github.com/loopzero/loopzero/pkg/quality/divergencematrix"
 	"github.com/loopzero/loopzero/pkg/quality/drilloutputs"
+	"github.com/loopzero/loopzero/pkg/quality/helmdiffstructural"
 	"github.com/loopzero/loopzero/pkg/quality/helmdrift"
 	"github.com/loopzero/loopzero/pkg/quality/migrationtestcoverage"
 	"github.com/loopzero/loopzero/pkg/quality/mockbudget"
@@ -95,6 +96,14 @@ GATES:
                     --crd NAME     limit to a single CRD short-name
                     --verbose      append inline diff snippets
 
+  helm-diff-structural
+                  Fail only on structurally risky chart diffs (security-resource
+                  removal, namespace change, security-context downgrade).
+                  Flags:
+                    --chart NAME   chart name (diagnostics)
+                    --base PATH    base rendered YAML (required)
+                    --pr PATH      PR rendered YAML (required)
+
   no-shell-wrap   Fail if Go code in pkg/* uses shellrun.Run(<forbidden-cli>, ...)
                   without //nolint:shell-wrap suppression (D5 gate).
                   Forbidden: pulumi, helm, kubectl, aws, gh (use Go SDK instead).
@@ -156,6 +165,8 @@ func runQuality(args []string) int {
 		return runPkgUsageMatrix(args[1:])
 	case "crd-semantic-diff":
 		return runCRDSemanticDiff(args[1:])
+	case "helm-diff-structural":
+		return runHelmDiffStructural(args[1:])
 	case "cosign-cutover":
 		return runCosignCutover(args[1:])
 	case "service-auth-rotation":
@@ -356,6 +367,40 @@ func runCRDSemanticDiff(args []string) int {
 	})
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "crd-semantic-diff: %v\n", err)
+		return 5
+	}
+	for _, m := range outcome.Messages {
+		fmt.Println(m)
+	}
+	if !outcome.Pass {
+		return 1
+	}
+	return 0
+}
+
+// runHelmDiffStructural is the gate replacing helm-diff-structural.sh: fails
+// CI only on STRUCTURALLY RISKY chart diffs (security-resource removal,
+// namespace change, security-context downgrade). Shells out to `diff -u`.
+func runHelmDiffStructural(args []string) int {
+	fs := flag.NewFlagSet("helm-diff-structural", flag.ContinueOnError)
+	chart := fs.String("chart", "", "chart name (diagnostics)")
+	base := fs.String("base", "", "path to base rendered YAML")
+	pr := fs.String("pr", "", "path to PR rendered YAML")
+	if err := fs.Parse(args); err != nil {
+		return 1
+	}
+	if *base == "" || *pr == "" {
+		fmt.Fprintln(os.Stderr, "helm-diff-structural: --base and --pr are required")
+		return 1
+	}
+
+	outcome, err := helmdiffstructural.Check(helmdiffstructural.Config{
+		Chart:    *chart,
+		BasePath: *base,
+		PRPath:   *pr,
+	})
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "helm-diff-structural: %v\n", err)
 		return 5
 	}
 	for _, m := range outcome.Messages {

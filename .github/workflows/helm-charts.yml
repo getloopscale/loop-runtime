@@ -357,8 +357,8 @@ jobs:
         #
         # Non-structural diffs (image tags, replicas, env vars, label edits)
         # print to stdout but DO NOT block — operator reviews in the PR.
-        # Script: infra/scripts/helm-diff-structural.sh (10 unit tests in
-        # infra/tests/helm-diff-structural_test.sh, all GREEN).
+        # T1.6 of plan 2026-05-23: migrated to pure-Go gate
+        # pkg/quality/helmdiffstructural (exec.Command diff -u; no shellrun).
         env:
           HELM_DIFF_THREE_WAY_MERGE: "true"
           HELM_DIFF_NORMALIZE_MANIFESTS: "true"
@@ -373,7 +373,7 @@ jobs:
             helm template "$name" "$chart" > /tmp/${name}-base.yaml 2>/dev/null || echo "" > /tmp/${name}-base.yaml
             git checkout HEAD -- "$chart" 2>/dev/null || true
             git stash pop 2>/dev/null || true
-            bash infra/scripts/helm-diff-structural.sh "$name" /tmp/${name}-base.yaml /tmp/${name}-pr.yaml
+            (cd cmd/loopzero-ops && go run . quality helm-diff-structural --chart "$name" --base /tmp/${name}-base.yaml --pr /tmp/${name}-pr.yaml)
             echo "::endgroup::"
           done
 
