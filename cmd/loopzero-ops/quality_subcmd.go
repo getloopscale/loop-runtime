@@ -23,6 +23,7 @@ import (
 	"github.com/loopzero/loopzero/pkg/quality/clibundlesize"
 	"github.com/loopzero/loopzero/pkg/quality/cliexitcodes"
 	"github.com/loopzero/loopzero/pkg/quality/clusterimagepolicymode"
+	"github.com/loopzero/loopzero/pkg/quality/correctionstxt"
 	"github.com/loopzero/loopzero/pkg/quality/coveragediff"
 	"github.com/loopzero/loopzero/pkg/quality/coveragemerge"
 	"github.com/loopzero/loopzero/pkg/quality/crdsemanticdiff"
@@ -132,6 +133,13 @@ GATES:
                   Fail if any non-lib .sh (infra/scripts, infra/helmfile/scripts,
                   infra/tests) lacks 'set -euo pipefail' in its top 60 lines
                   (**/lib/*.sh exempt). Migrated from check-shell-hygiene_test.sh.
+                  Flags:
+                    --root DIR      repo root (default: ".")
+
+  corrections-txt-closed
+                  Fail if infra/tests/load/CORRECTIONS.txt has any item without
+                  a STATUS annotation, or a header missing the audit-finding
+                  ref. Migrated from check-corrections-txt-closed_test.sh.
                   Flags:
                     --root DIR      repo root (default: ".")
 
@@ -257,6 +265,8 @@ func runQuality(args []string) int {
 		return runCLIExitCodes(args[1:])
 	case "shell-hygiene":
 		return runShellHygiene(args[1:])
+	case "corrections-txt-closed":
+		return runCorrectionsTxtClosed(args[1:])
 	case "migration-test-coverage":
 		return runMigrationTestCoverage(args[1:])
 	case "pkg-usage-matrix":
@@ -580,6 +590,35 @@ func runShellHygiene(args []string) int {
 		return 1
 	}
 	fmt.Printf("shell-hygiene: PASS — %d scripts have set -euo pipefail (libs in **/lib/*.sh exempt)\n", outcome.Total)
+	return 0
+}
+
+// runCorrectionsTxtClosed is the Go home for the corrections-txt-closed gate
+// (migrated from infra/tests/check-corrections-txt-closed_test.sh). Enforces
+// close-out hygiene on the drill war-journal infra/tests/load/CORRECTIONS.txt.
+func runCorrectionsTxtClosed(args []string) int {
+	fs := flag.NewFlagSet("corrections-txt-closed", flag.ContinueOnError)
+	root := fs.String("root", ".", "repo root directory")
+	if err := fs.Parse(args); err != nil {
+		return 1
+	}
+	if absRoot, err := os.Getwd(); err == nil && *root == "." {
+		*root = absRoot
+	}
+
+	outcome, err := correctionstxt.Check(filepath.Join(*root, "infra", "tests", "load", "CORRECTIONS.txt"))
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "corrections-txt-closed: %v\n", err)
+		return 5
+	}
+	if !outcome.Pass {
+		fmt.Fprintf(os.Stderr, "corrections-txt-closed: FAIL — %d close-out violation(s):\n", len(outcome.Violations))
+		for _, v := range outcome.Violations {
+			fmt.Fprintf(os.Stderr, "  %s\n", v)
+		}
+		return 1
+	}
+	fmt.Println("corrections-txt-closed: PASS — all CORRECTIONS.txt items are annotated + closed out")
 	return 0
 }
 

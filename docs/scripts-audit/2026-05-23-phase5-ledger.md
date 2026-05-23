@@ -66,7 +66,6 @@ Proposed disposition per script (operator ratifies). Evidence is mechanical fact
 | test | infra/tests/capacity/run-capacity.sh | 85 | — | yes | MIGRATE-ginkgo (LIVE) |
 | chaos | infra/tests/chaos/values_gate_test.sh | 109 | — | yes | COUPLED (dies when its target homes) |
 | test | infra/tests/charts/values-schema-coverage_test.sh | 82 | — | yes | COUPLED (dies when its target homes) |
-| test | infra/tests/check-corrections-txt-closed_test.sh | 146 | — | — | COUPLED (dies when its target homes) |
 | test | infra/tests/check-regen-scoped-kubeconfigs_test.sh | 213 | — | yes | COUPLED (dies when its target homes) |
 | test | infra/tests/docs/credentials-sot_test.sh | 105 | — | yes | COUPLED (dies when its target homes) |
 | test | infra/tests/docs/no-hardcoded-credentials_test.sh | 74 | — | yes | COUPLED (dies when its target homes) |

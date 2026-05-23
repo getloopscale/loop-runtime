@@ -32,6 +32,7 @@ tasks:
       - /tmp/loopzero-ops quality advisory-lock-scope
       - /tmp/loopzero-ops quality cli-exit-codes
       - /tmp/loopzero-ops quality shell-hygiene
+      - /tmp/loopzero-ops quality corrections-txt-closed
 
   diff:
     desc: 'PR-diff quality gates (override base with BASE_REF=<ref>; default origin/main)'
