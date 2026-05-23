@@ -351,3 +351,8 @@ jobs:
           cd pkg && go test ./quality/jobtimeout/...
           cd ../cmd/loopzero-ops && go run . quality job-timeout-coverage --root ../..
 
+      - name: postgresql-pdb-config gate + hermetic tests (pure-Go, migrated from bash, plan 2026-05-23)
+        run: |
+          cd pkg && go test ./quality/pgpdb/...
+          cd ../cmd/loopzero-ops && go run . quality postgresql-pdb-config --root ../..
+

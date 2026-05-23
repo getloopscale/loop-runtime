@@ -145,7 +145,6 @@ Proposed disposition per script (operator ratifies). Evidence is mechanical fact
 | test | infra/tests/scripts/helm-values-schemas_test.sh | 196 | — | yes | COUPLED (dies when its target homes) |
 | test | infra/tests/scripts/k3d-docker-hub-mirror_test.sh | 73 | — | yes | COUPLED (dies when its target homes) |
 | test | infra/tests/scripts/plan-2026-05-20-criteria_test.sh | 134 | — | yes | COUPLED (dies when its target homes) |
-| test | infra/tests/scripts/postgresql-pdb-config_test.sh | 49 | yes | yes | MIGRATE-go (python-wrapper — focused TDD) |
 | test | infra/tests/scripts/run-migrations_bug14_test.sh | 164 | — | yes | COUPLED (dies when its target homes) |
 | test | infra/tests/scripts/run-migrations_sslmode_test.sh | 116 | — | yes | COUPLED (dies when its target homes) |
 | test | infra/tests/scripts/test-inventory_test.sh | 215 | — | — | COUPLED (dies when its target homes) |
@@ -154,4 +153,3 @@ Proposed disposition per script (operator ratifies). Evidence is mechanical fact
 | test | infra/tests/snapshots/sanitize.sh | 18 | — | yes | MIGRATE-ginkgo (LIVE) |
 | test | infra/tests/workflows/action-pinning-governance_test.sh | 81 | — | — | COUPLED (dies when its target homes) |
 | test | infra/tests/workflows/advisory-mode-annotated_test.sh | 85 | — | — | COUPLED (dies when its target homes) |
-| test | infra/tests/workflows/job-timeout-coverage_test.sh | 105 | yes | — | MIGRATE-go (python-wrapper — focused TDD) |

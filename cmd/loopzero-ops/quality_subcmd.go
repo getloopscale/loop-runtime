@@ -28,6 +28,7 @@ import (
 	"github.com/loopzero/loopzero/pkg/quality/danglingdata"
 	"github.com/loopzero/loopzero/pkg/quality/danglingrefs"
 	"github.com/loopzero/loopzero/pkg/quality/jobtimeout"
+	"github.com/loopzero/loopzero/pkg/quality/pgpdb"
 	"github.com/loopzero/loopzero/pkg/quality/deadlineratchet"
 	"github.com/loopzero/loopzero/pkg/quality/decisionsdeletion"
 	"github.com/loopzero/loopzero/pkg/quality/divergencematrix"
@@ -101,6 +102,13 @@ GATES:
                   Fail if any .github/workflows/*.yml job lacks job-level
                   timeout-minutes (reusable-workflow callers exempt). Migrated
                   from job-timeout-coverage_test.sh (plan 2026-05-23).
+                  Flags:
+                    --root DIR      repo root (default: ".")
+
+  postgresql-pdb-config
+                  Fail if infra/helm/postgresql/values.yaml does not set
+                  primary.pdb.create: false (B2 regression). Migrated from
+                  postgresql-pdb-config_test.sh (plan 2026-05-23).
                   Flags:
                     --root DIR      repo root (default: ".")
 
@@ -220,6 +228,8 @@ func runQuality(args []string) int {
 		return runDanglingDataRefs(args[1:])
 	case "job-timeout-coverage":
 		return runJobTimeoutCoverage(args[1:])
+	case "postgresql-pdb-config":
+		return runPostgresqlPDBConfig(args[1:])
 	case "migration-test-coverage":
 		return runMigrationTestCoverage(args[1:])
 	case "pkg-usage-matrix":
@@ -424,6 +434,32 @@ func runJobTimeoutCoverage(args []string) int {
 		return 1
 	}
 	fmt.Println("job-timeout-coverage: PASS — all non-reusable-caller jobs have timeout-minutes")
+	return 0
+}
+
+// runPostgresqlPDBConfig is the Go home for the postgresql-pdb-config gate
+// (migrated from infra/tests/scripts/postgresql-pdb-config_test.sh). Guards the
+// B2 regression: the postgresql chart must set primary.pdb.create: false.
+func runPostgresqlPDBConfig(args []string) int {
+	fs := flag.NewFlagSet("postgresql-pdb-config", flag.ContinueOnError)
+	root := fs.String("root", ".", "repo root directory")
+	if err := fs.Parse(args); err != nil {
+		return 1
+	}
+	if absRoot, err := os.Getwd(); err == nil && *root == "." {
+		*root = absRoot
+	}
+
+	outcome, err := pgpdb.Check(filepath.Join(*root, "infra", "helm", "postgresql", "values.yaml"))
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "postgresql-pdb-config: %v\n", err)
+		return 1
+	}
+	if !outcome.Pass {
+		fmt.Fprintf(os.Stderr, "postgresql-pdb-config: FAIL — %s\n", outcome.Message)
+		return 1
+	}
+	fmt.Printf("postgresql-pdb-config: PASS — %s\n", outcome.Message)
 	return 0
 }
 
