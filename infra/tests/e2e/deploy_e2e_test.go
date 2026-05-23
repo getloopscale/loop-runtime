@@ -39,7 +39,7 @@ func requireKubeContexts(t *testing.T) {
 	for _, ctx := range []string{"k3d-loopzero-mgmt", "k3d-loopzero-build", "k3d-loopzero-workload"} {
 		cmd := exec.Command("kubectl", "config", "get-contexts", "-o", "name", ctx)
 		if err := cmd.Run(); err != nil {
-			t.Fatalf("missing kube context %s: run bootstrap-cluster.sh first (%v)", ctx, err)
+			t.Fatalf("missing kube context %s: run `task setup` first (%v)", ctx, err)
 		}
 	}
 }
