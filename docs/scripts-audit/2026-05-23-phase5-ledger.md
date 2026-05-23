@@ -116,12 +116,10 @@ Proposed disposition per script (operator ratifies). Evidence is mechanical fact
 | test | infra/tests/runner/run-k6.sh | 83 | — | yes | MIGRATE-ginkgo (LIVE) |
 | test | infra/tests/runner/safety.sh | 56 | — | yes | MIGRATE-ginkgo (LIVE) |
 | drill | infra/tests/scripts/bootstrap-drill-cc_test.sh | 264 | — | yes | COUPLED (dies when its target homes) |
-| test | infra/tests/scripts/check-cli-exit-codes_test.sh | 73 | — | — | COUPLED (dies when its target homes) |
 | drill | infra/tests/scripts/check-drill-credentials-isolation_test.sh | 163 | — | yes | COUPLED (dies when its target homes) |
 | test | infra/tests/scripts/check-dry-run-support_test.sh | 141 | — | yes | COUPLED (dies when its target homes) |
 | test | infra/tests/scripts/check-environment-lock_test.sh | 118 | — | yes | COUPLED (dies when its target homes) |
 | test | infra/tests/scripts/check-pulumi-secrets_test.sh | 85 | — | yes | COUPLED (dies when its target homes) |
-| test | infra/tests/scripts/check-shell-hygiene_test.sh | 56 | — | — | COUPLED (dies when its target homes) |
 | test | infra/tests/scripts/coverage-go_test.sh | 231 | — | — | COUPLED (dies when its target homes) |
 | test | infra/tests/scripts/dogfood-cleanroom-loop_test.sh | 161 | — | yes | COUPLED (dies when its target homes) |
 | drill | infra/tests/scripts/drill-cancel-refresh_test.sh | 217 | — | yes | COUPLED (dies when its target homes) |

@@ -30,6 +30,8 @@ tasks:
       - /tmp/loopzero-ops quality postgresql-pdb-config
       - /tmp/loopzero-ops quality dockerfile-no-docker-hub
       - /tmp/loopzero-ops quality advisory-lock-scope
+      - /tmp/loopzero-ops quality cli-exit-codes
+      - /tmp/loopzero-ops quality shell-hygiene
 
   diff:
     desc: 'PR-diff quality gates (override base with BASE_REF=<ref>; default origin/main)'

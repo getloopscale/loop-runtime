@@ -21,6 +21,7 @@ import (
 	"github.com/loopzero/loopzero/pkg/quality/baselinecompare"
 	"github.com/loopzero/loopzero/pkg/quality/baselineupdate"
 	"github.com/loopzero/loopzero/pkg/quality/clibundlesize"
+	"github.com/loopzero/loopzero/pkg/quality/cliexitcodes"
 	"github.com/loopzero/loopzero/pkg/quality/clusterimagepolicymode"
 	"github.com/loopzero/loopzero/pkg/quality/coveragediff"
 	"github.com/loopzero/loopzero/pkg/quality/coveragemerge"
@@ -48,6 +49,7 @@ import (
 	"github.com/loopzero/loopzero/pkg/quality/runtimeslo"
 	"github.com/loopzero/loopzero/pkg/quality/scriptsaudit"
 	"github.com/loopzero/loopzero/pkg/quality/securitycontext"
+	"github.com/loopzero/loopzero/pkg/quality/shellhygiene"
 	"github.com/loopzero/loopzero/pkg/quality/skiplink"
 	"github.com/loopzero/loopzero/pkg/quality/spotcheck"
 	"github.com/loopzero/loopzero/pkg/quality/stackcoverage"
@@ -116,6 +118,20 @@ GATES:
                   Fail if production code (api/, infra/scripts/) uses session-
                   scoped pg_advisory_lock( (Rule 7 — only the _xact_ variant is
                   pool-safe). Migrated from check-advisory-lock-scope_test.sh.
+                  Flags:
+                    --root DIR      repo root (default: ".")
+
+  cli-exit-codes
+                  Fail if cli/src process.exit() uses a code outside 0-5
+                  (Rule 4; 130/143 allowed only in SIG handlers). Migrated from
+                  check-cli-exit-codes_test.sh.
+                  Flags:
+                    --root DIR      repo root (default: ".")
+
+  shell-hygiene
+                  Fail if any non-lib .sh (infra/scripts, infra/helmfile/scripts,
+                  infra/tests) lacks 'set -euo pipefail' in its top 60 lines
+                  (**/lib/*.sh exempt). Migrated from check-shell-hygiene_test.sh.
                   Flags:
                     --root DIR      repo root (default: ".")
 
@@ -237,6 +253,10 @@ func runQuality(args []string) int {
 		return runDockerfileNoDockerHub(args[1:])
 	case "advisory-lock-scope":
 		return runAdvisoryLockScope(args[1:])
+	case "cli-exit-codes":
+		return runCLIExitCodes(args[1:])
+	case "shell-hygiene":
+		return runShellHygiene(args[1:])
 	case "migration-test-coverage":
 		return runMigrationTestCoverage(args[1:])
 	case "pkg-usage-matrix":
@@ -493,6 +513,73 @@ func runAdvisoryLockScope(args []string) int {
 		return 1
 	}
 	fmt.Println("advisory-lock-scope: PASS — no session-scoped pg_advisory_lock( in production code")
+	return 0
+}
+
+// runCLIExitCodes is the Go home for the cli-exit-codes gate (migrated from
+// infra/tests/scripts/check-cli-exit-codes_test.sh). Enforces Rule 4: cli/src
+// process.exit() codes are 0-5 only (130/143 allowed only in SIG handlers).
+func runCLIExitCodes(args []string) int {
+	fs := flag.NewFlagSet("cli-exit-codes", flag.ContinueOnError)
+	root := fs.String("root", ".", "repo root directory")
+	if err := fs.Parse(args); err != nil {
+		return 1
+	}
+	if absRoot, err := os.Getwd(); err == nil && *root == "." {
+		*root = absRoot
+	}
+
+	outcome, err := cliexitcodes.Check(cliexitcodes.Config{RepoRoot: *root})
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "cli-exit-codes: %v\n", err)
+		return 5
+	}
+	if outcome.Skipped {
+		fmt.Println("cli-exit-codes: SKIP — cli/src/ not present")
+		return 0
+	}
+	if !outcome.Pass {
+		fmt.Fprintf(os.Stderr, "cli-exit-codes: FAIL — %d process.exit() call(s) outside 0-5 contract:\n", len(outcome.Violations))
+		for _, v := range outcome.Violations {
+			fmt.Fprintf(os.Stderr, "  %s\n", v)
+		}
+		fmt.Fprintln(os.Stderr, "")
+		fmt.Fprintln(os.Stderr, "Permanent contract (Rule 4): 0/1/2/3/4/5 only. SIG handlers may use 130/143.")
+		return 1
+	}
+	fmt.Println("cli-exit-codes: PASS — all cli/src exit codes within 0-5 contract (signal handlers exempt)")
+	return 0
+}
+
+// runShellHygiene is the Go home for the shell-hygiene gate (migrated from
+// infra/tests/scripts/check-shell-hygiene_test.sh). Every non-lib .sh under
+// infra/scripts, infra/helmfile/scripts, infra/tests must set a `set -euo
+// pipefail` variant in its top 60 lines.
+func runShellHygiene(args []string) int {
+	fs := flag.NewFlagSet("shell-hygiene", flag.ContinueOnError)
+	root := fs.String("root", ".", "repo root directory")
+	if err := fs.Parse(args); err != nil {
+		return 1
+	}
+	if absRoot, err := os.Getwd(); err == nil && *root == "." {
+		*root = absRoot
+	}
+
+	outcome, err := shellhygiene.Check(shellhygiene.Config{RepoRoot: *root})
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "shell-hygiene: %v\n", err)
+		return 5
+	}
+	if !outcome.Pass {
+		fmt.Fprintf(os.Stderr, "shell-hygiene: FAIL — %d / %d scripts missing set -euo pipefail in top 60 lines:\n", len(outcome.Violations), outcome.Total)
+		for _, v := range outcome.Violations {
+			fmt.Fprintf(os.Stderr, "  %s\n", v)
+		}
+		fmt.Fprintln(os.Stderr, "")
+		fmt.Fprintln(os.Stderr, "Add 'set -euo pipefail' near the top. Sourced libs in **/lib/*.sh are exempt.")
+		return 1
+	}
+	fmt.Printf("shell-hygiene: PASS — %d scripts have set -euo pipefail (libs in **/lib/*.sh exempt)\n", outcome.Total)
 	return 0
 }
 
