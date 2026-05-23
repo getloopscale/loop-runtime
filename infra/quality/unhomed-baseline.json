@@ -1,0 +1,12 @@
+{
+  "total": 183,
+  "by_domain": {
+    "bootstrap": 32,
+    "chaos": 6,
+    "drill": 36,
+    "governance": 4,
+    "other": 25,
+    "quality": 6,
+    "test": 74
+  }
+}

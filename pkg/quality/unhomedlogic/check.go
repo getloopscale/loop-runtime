@@ -1,0 +1,151 @@
+// SPDX-License-Identifier: Apache-2.0
+// Copyright 2025-2026 The LoopZero Authors
+
+// Package unhomedlogic implements the unbiased migration tracker for plan
+// 2026-05-23-operational-logic-capability-architecture: it counts
+// "un-homed operational logic" — shell scripts that still carry imperative
+// capability that belongs in a professional home (loopzero-ops CLI / declarative
+// config / controller / Go-Ginkgo test).
+//
+// Unbiased by design:
+//   - Classification reads the disposition the TEAM already wrote in the
+//     allowlist (KEEP-OPERATOR / KEEP-CI-ORCHESTRATOR / MIGRATE-* / AUTO-DIE /
+//     REVIEW-NEEDED / DELEGATE-*), plus harness hooks. The gate does not
+//     invent classifications — it only counts.
+//   - The KPI is a monotonic baseline ratchet: a PR may NEVER increase
+//     un-homed logic (total OR any domain). GREEN (target) is reached only by
+//     genuinely homing capabilities (delete / delegate), never by relabeling.
+//
+// This is the RED/GREEN test for the migration: RED today (un-homed > 0),
+// ratcheting toward GREEN (un-homed == 0 for migrated domains).
+package unhomedlogic
+
+import (
+	"fmt"
+	"regexp"
+	"sort"
+	"strings"
+)
+
+// Disposition is the homed-ness of a script.
+type Disposition int
+
+const (
+	// Unhomed — imperative capability with no professional home (migration target).
+	Unhomed Disposition = iota
+	// Homed — justified keep (operator break-glass / CI orchestrator) or harness hook.
+	Homed
+)
+
+func (d Disposition) String() string {
+	if d == Homed {
+		return "homed"
+	}
+	return "unhomed"
+}
+
+// Counts is the un-homed tally.
+type Counts struct {
+	Total    int            `json:"total"`
+	ByDomain map[string]int `json:"by_domain"`
+}
+
+// homedMarkers are the disposition tags that mean "justified keep".
+var homedMarkers = []string{"KEEP-OPERATOR", "KEEP-CI-ORCHESTRATOR"}
+
+// classify decides homed-ness from the script path + its allowlist justificativa.
+// Harness hooks (.claude/) and runtime container entrypoints are homed; an
+// explicit KEEP-* disposition is homed; everything else is un-homed.
+func classify(path, justif string) Disposition {
+	if strings.HasPrefix(path, ".claude/") {
+		return Homed // Claude/CI harness hook
+	}
+	if strings.HasSuffix(path, "docker-entrypoint.sh") {
+		return Homed // container runtime entrypoint
+	}
+	for _, m := range homedMarkers {
+		if strings.Contains(justif, m) {
+			return Homed
+		}
+	}
+	return Unhomed
+}
+
+// domainOf maps a script path to its capability domain.
+func domainOf(path string) string {
+	switch {
+	case strings.HasPrefix(path, ".claude/"):
+		return "harness"
+	case strings.Contains(path, "/quality/"):
+		return "quality"
+	case strings.Contains(path, "/governance/"):
+		return "governance"
+	case strings.Contains(path, "/chaos/"):
+		return "chaos"
+	case strings.Contains(path, "/dr/") || strings.Contains(path, "drill"):
+		return "drill"
+	case strings.Contains(path, "helmfile/scripts/") || strings.Contains(path, "bootstrap"):
+		return "bootstrap"
+	case strings.HasPrefix(path, "infra/tests/"):
+		return "test"
+	default:
+		return "other"
+	}
+}
+
+// allowlistRowRe matches a markdown table row whose first column ends in .sh.
+var allowlistRowRe = regexp.MustCompile(`^\|\s*([^\s|<>]+\.sh)\s*\|[^|]*\|([^|]*)\|`)
+
+// Count tallies un-homed scripts per domain from allowlist markdown content.
+func Count(allowlistMD string) Counts {
+	c := Counts{ByDomain: map[string]int{}}
+	for _, line := range strings.Split(allowlistMD, "\n") {
+		m := allowlistRowRe.FindStringSubmatch(line)
+		if m == nil {
+			continue
+		}
+		path := strings.TrimSpace(m[1])
+		justif := m[2]
+		if classify(path, justif) == Unhomed {
+			c.Total++
+			c.ByDomain[domainOf(path)]++
+		}
+	}
+	return c
+}
+
+// RatchetCheck enforces the monotonic invariant: current must not exceed the
+// baseline — neither in total nor in any single domain. Returns the list of
+// regressing domains on failure.
+func RatchetCheck(current, baseline Counts) (ok bool, regressions []string) {
+	if current.Total > baseline.Total {
+		regressions = append(regressions,
+			fmt.Sprintf("TOTAL un-homed increased %d → %d", baseline.Total, current.Total))
+	}
+	var domains []string
+	for d := range current.ByDomain {
+		domains = append(domains, d)
+	}
+	sort.Strings(domains)
+	for _, d := range domains {
+		if current.ByDomain[d] > baseline.ByDomain[d] {
+			regressions = append(regressions,
+				fmt.Sprintf("domain %q un-homed increased %d → %d", d, baseline.ByDomain[d], current.ByDomain[d]))
+		}
+	}
+	return len(regressions) == 0, regressions
+}
+
+// Render produces the per-domain report lines.
+func (c Counts) Render() []string {
+	lines := []string{fmt.Sprintf("un-homed operational logic: %d scripts", c.Total)}
+	var domains []string
+	for d := range c.ByDomain {
+		domains = append(domains, d)
+	}
+	sort.Strings(domains)
+	for _, d := range domains {
+		lines = append(lines, fmt.Sprintf("  %-12s %d", d, c.ByDomain[d]))
+	}
+	return lines
+}

@@ -47,6 +47,7 @@ import (
 	"github.com/loopzero/loopzero/pkg/quality/stackcoverage"
 	"github.com/loopzero/loopzero/pkg/quality/taskfileinterface"
 	"github.com/loopzero/loopzero/pkg/quality/templatecompliance"
+	"github.com/loopzero/loopzero/pkg/quality/unhomedlogic"
 	"github.com/loopzero/loopzero/pkg/quality/testdeletion"
 	"github.com/loopzero/loopzero/pkg/quality/testpyramid"
 	"github.com/loopzero/loopzero/pkg/quality/testtargets"
@@ -130,6 +131,10 @@ GATES:
   spotcheck-dimension  Seeded pick of 1 audit dimension + persona.
                   Flags: --seed N (0 → $SPOTCHECK_SEED or time.Now)
 
+  unhomed-logic   Unbiased migration tracker — count un-homed shell scripts
+                  per capability domain; monotonic baseline ratchet.
+                  Flags: --report  --update-baseline  --allowlist PATH  --baseline PATH
+
   no-shell-wrap   Fail if Go code in pkg/* uses shellrun.Run(<forbidden-cli>, ...)
                   without //nolint:shell-wrap suppression (D5 gate).
                   Forbidden: pulumi, helm, kubectl, aws, gh (use Go SDK instead).
@@ -205,6 +210,8 @@ func runQuality(args []string) int {
 		return runTemplateCompliance(args[1:])
 	case "spotcheck-dimension":
 		return runSpotcheckDimension(args[1:])
+	case "unhomed-logic":
+		return runUnhomedLogic(args[1:])
 	case "cosign-cutover":
 		return runCosignCutover(args[1:])
 	case "service-auth-rotation":
@@ -500,6 +507,70 @@ func runSpotcheckDimension(args []string) int {
 	for _, m := range outcome.Messages {
 		fmt.Println(m)
 	}
+	return 0
+}
+
+// runUnhomedLogic is the unbiased migration tracker: counts un-homed
+// operational logic from the allowlist + ratchets a monotonic baseline.
+func runUnhomedLogic(args []string) int {
+	fs := flag.NewFlagSet("unhomed-logic", flag.ContinueOnError)
+	allowlist := fs.String("allowlist", ".claude/rules/shell-scripts-allowlist.md", "allowlist markdown")
+	baselinePath := fs.String("baseline", "infra/quality/unhomed-baseline.json", "baseline JSON")
+	report := fs.Bool("report", false, "print per-domain un-homed counts (no gate)")
+	update := fs.Bool("update-baseline", false, "ratchet the baseline to current (write)")
+	fs.Bool("check", true, "ratchet against baseline (default)")
+	if err := fs.Parse(args); err != nil {
+		return 1
+	}
+	data, err := os.ReadFile(*allowlist) // #nosec G304 -- repo-internal allowlist path
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "unhomed-logic: read allowlist: %v\n", err)
+		return 5
+	}
+	current := unhomedlogic.Count(string(data))
+
+	if *report {
+		for _, l := range current.Render() {
+			fmt.Println(l)
+		}
+		return 0
+	}
+
+	if *update {
+		b, _ := json.MarshalIndent(current, "", "  ")
+		if err := os.WriteFile(*baselinePath, append(b, '\n'), 0o600); err != nil {
+			fmt.Fprintf(os.Stderr, "unhomed-logic: write baseline: %v\n", err)
+			return 5
+		}
+		fmt.Printf("unhomed-logic: baseline ratcheted to %d un-homed\n", current.Total)
+		return 0
+	}
+
+	// --check (default): fail if current exceeds baseline (regression).
+	bdata, err := os.ReadFile(*baselinePath) // #nosec G304 -- repo-internal baseline path
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "unhomed-logic: no baseline at %s — run --update-baseline first\n", *baselinePath)
+		return 5
+	}
+	var baseline unhomedlogic.Counts
+	if err := json.Unmarshal(bdata, &baseline); err != nil {
+		fmt.Fprintf(os.Stderr, "unhomed-logic: parse baseline: %v\n", err)
+		return 5
+	}
+	ok, regressions := unhomedlogic.RatchetCheck(current, baseline)
+	for _, l := range current.Render() {
+		fmt.Println(l)
+	}
+	if !ok {
+		fmt.Fprintln(os.Stderr, "unhomed-logic: FAIL — un-homed operational logic increased:")
+		for _, r := range regressions {
+			fmt.Fprintf(os.Stderr, "  - %s\n", r)
+		}
+		fmt.Fprintln(os.Stderr, "Per plan 2026-05-23-operational-logic-capability-architecture: a PR may never")
+		fmt.Fprintln(os.Stderr, "increase un-homed logic. Home the capability (loopzero-ops/declarative/test) or delete it.")
+		return 1
+	}
+	fmt.Printf("unhomed-logic: PASS — %d un-homed (≤ baseline %d)\n", current.Total, baseline.Total)
 	return 0
 }
 

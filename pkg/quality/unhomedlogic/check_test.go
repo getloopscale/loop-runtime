@@ -1,0 +1,111 @@
+// SPDX-License-Identifier: Apache-2.0
+// Copyright 2025-2026 The LoopZero Authors
+
+package unhomedlogic
+
+import "testing"
+
+// fixtureAllowlist mimics the shell-scripts-allowlist.md table structure.
+const fixtureAllowlist = `# Shell Scripts Allowlist
+
+| Script | LOC | Justificativa |
+|---|---:|---|
+| .claude/hooks/task-completed.sh | 102 | grandfathered — harness hook |
+| infra/scripts/break-glass.sh | 145 | KEEP-OPERATOR — live emergency, D4 operator-time |
+| infra/kubeconform-schemas/validate-helmfile-templates.sh | 74 | KEEP-CI-ORCHESTRATOR — pipes two CLIs |
+| infra/scripts/quality/coverage-cli.sh | 58 | grandfathered 2026-05-22 — REVIEW-NEEDED |
+| infra/scripts/dr/preflight.sh | 175 | grandfathered 2026-05-22 — REVIEW-NEEDED |
+| infra/tests/parity/validate-matrix.sh | 304 | grandfathered 2026-05-22 — MIGRATE-GINKGO |
+| infra/helmfile/scripts/generate-secrets.sh | 370 | grandfathered 2026-05-22 — MIGRATE-GENERATOR |
+| infra/tests/scripts/foo_test.sh | 50 | grandfathered 2026-05-22 — AUTO-DIE |
+`
+
+func TestClassify_KeepIsHomed(t *testing.T) {
+	cases := []struct {
+		path, justif string
+		want         Disposition
+	}{
+		{".claude/hooks/task-completed.sh", "grandfathered — harness hook", Homed},
+		{"infra/scripts/break-glass.sh", "KEEP-OPERATOR — live emergency", Homed},
+		{"infra/kubeconform-schemas/validate-helmfile-templates.sh", "KEEP-CI-ORCHESTRATOR", Homed},
+		{"infra/scripts/quality/coverage-cli.sh", "REVIEW-NEEDED", Unhomed},
+		{"infra/tests/parity/validate-matrix.sh", "MIGRATE-GINKGO", Unhomed},
+		{"infra/helmfile/scripts/generate-secrets.sh", "MIGRATE-GENERATOR", Unhomed},
+		{"infra/tests/scripts/foo_test.sh", "AUTO-DIE", Unhomed},
+	}
+	for _, c := range cases {
+		if got := classify(c.path, c.justif); got != c.want {
+			t.Errorf("classify(%q, %q) = %v, want %v", c.path, c.justif, got, c.want)
+		}
+	}
+}
+
+func TestDomainOf(t *testing.T) {
+	cases := map[string]string{
+		"infra/scripts/quality/coverage-cli.sh":           "quality",
+		"infra/scripts/governance/bias-check.sh":          "governance",
+		"infra/scripts/dr/preflight.sh":                   "drill",
+		"infra/scripts/drill-mint-jwt.sh":                 "drill",
+		"infra/scripts/chaos/run-full.sh":                 "chaos",
+		"infra/helmfile/scripts/generate-secrets.sh":      "bootstrap",
+		"infra/scripts/bootstrap-platform.sh":             "bootstrap",
+		"infra/tests/parity/validate-matrix.sh":           "test",
+		".claude/hooks/task-completed.sh":                 "harness",
+	}
+	for path, want := range cases {
+		if got := domainOf(path); got != want {
+			t.Errorf("domainOf(%q) = %q, want %q", path, got, want)
+		}
+	}
+}
+
+func TestCount_UnhomedPerDomain(t *testing.T) {
+	c := Count(fixtureAllowlist)
+	// Homed: 3 (1 hook + break-glass KEEP-OPERATOR + validate-helmfile KEEP-CI).
+	// Unhomed: 5 (coverage-cli quality, dr/preflight drill, validate-matrix test,
+	//             generate-secrets bootstrap, foo_test test).
+	if c.Total != 5 {
+		t.Fatalf("Total un-homed = %d, want 5\nbyDomain=%v", c.Total, c.ByDomain)
+	}
+	if c.ByDomain["quality"] != 1 || c.ByDomain["drill"] != 1 ||
+		c.ByDomain["bootstrap"] != 1 || c.ByDomain["test"] != 2 {
+		t.Fatalf("per-domain wrong: %v", c.ByDomain)
+	}
+}
+
+// RED-honest: the gate must FAIL if a PR increases un-homed logic.
+func TestRatchet_FailsOnIncrease(t *testing.T) {
+	baseline := Counts{Total: 5, ByDomain: map[string]int{"test": 2}}
+	current := Counts{Total: 6, ByDomain: map[string]int{"test": 3}}
+	ok, regressions := RatchetCheck(current, baseline)
+	if ok {
+		t.Fatal("ratchet must FAIL when un-homed increases (5→6)")
+	}
+	if len(regressions) == 0 {
+		t.Fatal("must report the regressing domain")
+	}
+}
+
+func TestRatchet_OKOnDecrease(t *testing.T) {
+	baseline := Counts{Total: 5, ByDomain: map[string]int{"test": 2}}
+	current := Counts{Total: 3, ByDomain: map[string]int{"test": 1}}
+	if ok, _ := RatchetCheck(current, baseline); !ok {
+		t.Fatal("ratchet must PASS when un-homed decreases (5→3)")
+	}
+}
+
+func TestRatchet_OKOnEqual(t *testing.T) {
+	b := Counts{Total: 5, ByDomain: map[string]int{"test": 2}}
+	if ok, _ := RatchetCheck(b, b); !ok {
+		t.Fatal("ratchet must PASS when unchanged")
+	}
+}
+
+// Anti-bias: per-domain ratchet — total can hold but a domain regressing fails.
+func TestRatchet_FailsOnPerDomainIncreaseEvenIfTotalHolds(t *testing.T) {
+	baseline := Counts{Total: 5, ByDomain: map[string]int{"test": 2, "drill": 3}}
+	current := Counts{Total: 5, ByDomain: map[string]int{"test": 4, "drill": 1}}
+	if ok, regressions := RatchetCheck(current, baseline); ok || len(regressions) == 0 {
+		t.Fatalf("must FAIL: test domain regressed 2→4 even though total held (ok=%v regs=%v)", ok, regressions)
+	}
+}
