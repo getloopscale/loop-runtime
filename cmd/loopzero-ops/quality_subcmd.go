@@ -8,6 +8,7 @@ import (
 	"flag"
 	"fmt"
 	"os"
+	"strconv"
 	"strings"
 	"time"
 
@@ -42,6 +43,7 @@ import (
 	"github.com/loopzero/loopzero/pkg/quality/scriptsaudit"
 	"github.com/loopzero/loopzero/pkg/quality/securitycontext"
 	"github.com/loopzero/loopzero/pkg/quality/skiplink"
+	"github.com/loopzero/loopzero/pkg/quality/spotcheck"
 	"github.com/loopzero/loopzero/pkg/quality/stackcoverage"
 	"github.com/loopzero/loopzero/pkg/quality/taskfileinterface"
 	"github.com/loopzero/loopzero/pkg/quality/templatecompliance"
@@ -125,6 +127,9 @@ GATES:
   template-compliance  PR-template checkbox compliance gate.
                   Flags: --pr-body STR  --pr-author STR  --pr-labels CSV
 
+  spotcheck-dimension  Seeded pick of 1 audit dimension + persona.
+                  Flags: --seed N (0 → $SPOTCHECK_SEED or time.Now)
+
   no-shell-wrap   Fail if Go code in pkg/* uses shellrun.Run(<forbidden-cli>, ...)
                   without //nolint:shell-wrap suppression (D5 gate).
                   Forbidden: pulumi, helm, kubectl, aws, gh (use Go SDK instead).
@@ -198,6 +203,8 @@ func runQuality(args []string) int {
 		return runBaselineUpdate(args[1:])
 	case "template-compliance":
 		return runTemplateCompliance(args[1:])
+	case "spotcheck-dimension":
+		return runSpotcheckDimension(args[1:])
 	case "cosign-cutover":
 		return runCosignCutover(args[1:])
 	case "service-auth-rotation":
@@ -462,6 +469,36 @@ func runCoverageDiff(args []string) int {
 	}
 	if !outcome.Pass {
 		return 1
+	}
+	return 0
+}
+
+// runSpotcheckDimension replaces spotcheck-dimension.sh: seeded pick of one
+// audit dimension + persona for the nightly adversarial spotcheck.
+func runSpotcheckDimension(args []string) int {
+	fs := flag.NewFlagSet("spotcheck-dimension", flag.ContinueOnError)
+	seed := fs.Int64("seed", 0, "selection seed (0 → $SPOTCHECK_SEED or time.Now)")
+	if err := fs.Parse(args); err != nil {
+		return 1
+	}
+	s := *seed
+	if s == 0 {
+		if env := os.Getenv("SPOTCHECK_SEED"); env != "" {
+			if v, err := strconv.ParseInt(env, 10, 64); err == nil {
+				s = v
+			}
+		}
+	}
+	if s == 0 {
+		s = time.Now().Unix()
+	}
+	outcome, err := spotcheck.Run(spotcheck.Config{Seed: s})
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "spotcheck-dimension: %v\n", err)
+		return 5
+	}
+	for _, m := range outcome.Messages {
+		fmt.Println(m)
 	}
 	return 0
 }

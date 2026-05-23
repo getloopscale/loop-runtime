@@ -37,7 +37,8 @@ jobs:
             SEED="$(date +%s)"
           fi
           export SPOTCHECK_SEED="$SEED"
-          bash infra/scripts/governance/spotcheck-dimension.sh > /tmp/spotcheck.txt
+          # Migrated to pure-Go gate (pkg/quality/spotcheck) per plan 2026-05-23.
+          (cd cmd/loopzero-ops && go run . quality spotcheck-dimension) > /tmp/spotcheck.txt
           DIM=$(grep "^selected_dimension:" /tmp/spotcheck.txt | awk '{print $2}')
           PERSONA=$(grep "^selected_persona:" /tmp/spotcheck.txt | awk '{print $2}')
           echo "dimension=$DIM" >> "$GITHUB_OUTPUT"
