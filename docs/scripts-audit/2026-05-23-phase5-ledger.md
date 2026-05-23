@@ -125,7 +125,6 @@ Proposed disposition per script (operator ratifies). Evidence is mechanical fact
 | test | infra/tests/scripts/check-shell-hygiene_test.sh | 56 | — | — | COUPLED (dies when its target homes) |
 | test | infra/tests/scripts/ci-path-filter-coverage_test.sh | 132 | — | yes | COUPLED (dies when its target homes) |
 | test | infra/tests/scripts/coverage-go_test.sh | 231 | — | — | COUPLED (dies when its target homes) |
-| test | infra/tests/scripts/dockerfile-no-docker-hub_test.sh | 57 | — | — | COUPLED (dies when its target homes) |
 | test | infra/tests/scripts/dogfood-cleanroom-loop_test.sh | 161 | — | yes | COUPLED (dies when its target homes) |
 | drill | infra/tests/scripts/drill-cancel-refresh_test.sh | 217 | — | yes | COUPLED (dies when its target homes) |
 | drill | infra/tests/scripts/drill-chaos-orchestrator_test.sh | 260 | — | yes | COUPLED (dies when its target homes) |

@@ -27,6 +27,7 @@ import (
 	"github.com/loopzero/loopzero/pkg/quality/crdsemanticdiff"
 	"github.com/loopzero/loopzero/pkg/quality/danglingdata"
 	"github.com/loopzero/loopzero/pkg/quality/danglingrefs"
+	"github.com/loopzero/loopzero/pkg/quality/dockerfilemirror"
 	"github.com/loopzero/loopzero/pkg/quality/jobtimeout"
 	"github.com/loopzero/loopzero/pkg/quality/pgpdb"
 	"github.com/loopzero/loopzero/pkg/quality/deadlineratchet"
@@ -109,6 +110,13 @@ GATES:
                   Fail if infra/helm/postgresql/values.yaml does not set
                   primary.pdb.create: false (B2 regression). Migrated from
                   postgresql-pdb-config_test.sh (plan 2026-05-23).
+                  Flags:
+                    --root DIR      repo root (default: ".")
+
+  dockerfile-no-docker-hub
+                  Fail if any infra/images/*/Dockerfile FROM resolves to Docker
+                  Hub (must use mirror.gcr.io / DOCR / full-path registry; B8
+                  regression). Migrated from dockerfile-no-docker-hub_test.sh.
                   Flags:
                     --root DIR      repo root (default: ".")
 
@@ -230,6 +238,8 @@ func runQuality(args []string) int {
 		return runJobTimeoutCoverage(args[1:])
 	case "postgresql-pdb-config":
 		return runPostgresqlPDBConfig(args[1:])
+	case "dockerfile-no-docker-hub":
+		return runDockerfileNoDockerHub(args[1:])
 	case "migration-test-coverage":
 		return runMigrationTestCoverage(args[1:])
 	case "pkg-usage-matrix":
@@ -460,6 +470,37 @@ func runPostgresqlPDBConfig(args []string) int {
 		return 1
 	}
 	fmt.Printf("postgresql-pdb-config: PASS — %s\n", outcome.Message)
+	return 0
+}
+
+// runDockerfileNoDockerHub is the Go home for the dockerfile-no-docker-hub gate
+// (migrated from infra/tests/scripts/dockerfile-no-docker-hub_test.sh). Fails if
+// any infra/images/*/Dockerfile FROM would resolve to Docker Hub.
+func runDockerfileNoDockerHub(args []string) int {
+	fs := flag.NewFlagSet("dockerfile-no-docker-hub", flag.ContinueOnError)
+	root := fs.String("root", ".", "repo root directory")
+	if err := fs.Parse(args); err != nil {
+		return 1
+	}
+	if absRoot, err := os.Getwd(); err == nil && *root == "." {
+		*root = absRoot
+	}
+
+	outcome, err := dockerfilemirror.Check(dockerfilemirror.Config{
+		ImagesDir: filepath.Join(*root, "infra", "images"),
+	})
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "dockerfile-no-docker-hub: %v\n", err)
+		return 1
+	}
+	fmt.Printf("%d/%d Dockerfile FROMs OK\n", outcome.OK, outcome.Total)
+	if !outcome.Pass {
+		for _, v := range outcome.Violations {
+			fmt.Fprintf(os.Stderr, "FAIL: %s\n", v)
+		}
+		return 1
+	}
+	fmt.Println("dockerfile-no-docker-hub: PASS — all FROMs use a mirror/private registry")
 	return 0
 }
 
