@@ -6,6 +6,17 @@ version: "3"
 # Future iterations expand to test:*, test:report:*, test:e2e:*, dead-code, lint.
 
 tasks:
+  ops:build:
+    desc: Build the loopzero-ops gate binary to bin/loopzero-ops (D6 — canonical stable path)
+    # T0.3 of plan 2026-05-23-incremental-bash-to-go-migration. Replaces the
+    # develop-bkp anti-pattern of `(cd cmd/loopzero-ops && go build -o /tmp/loopzero-ops .)`
+    # duplicated across ~15 call sites. Gates invoke `bin/loopzero-ops <gate>`, OR
+    # `go run ./cmd/loopzero-ops <gate>` for one-shot CI use (see docs/operations/loopzero-ops.md).
+    cmds:
+      - mkdir -p bin
+      - cd cmd/loopzero-ops && go build -o ../../bin/loopzero-ops .
+      - ./bin/loopzero-ops quality --help >/dev/null && echo "ops:build OK — bin/loopzero-ops ready"
+
   parity:preflight:
     desc: Run parity validation suite preflight (offline, <2s) — shellcheck + audit + dry-runs
     cmds:
