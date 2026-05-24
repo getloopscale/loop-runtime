@@ -40,11 +40,17 @@ below was confirmed by READING, not just the grep count.
 |---|---|---|---|
 | `dr/cost-report.sh` (159) | cost arithmetic + markdown given `--start/--end` (105-159) | `--auto` pulumi-output read (68-98) | `loopzero-ops drill cost` |
 | `chaos/run-scenario.sh` (289) — SPLIT | SLO verdict: drift/budget over baseline/during/post JSON (138-257) | chaos-mesh `kubectl apply` injection + sampling | `loopzero-ops chaos slo-compare` |
-| `dr/teardown-validator.sh` (282) — SPLIT | residual-count + retry-with-backoff DECISION (pure over gathered counts) | `doctl databases/kubernetes list` gathering | `loopzero-ops drill teardown-validate` |
-| `dr/evidence-capture.sh` (298) — SPLIT | fault-tolerant JSON shaping (partial-input-tolerant assembly) | `kubectl`/`doctl` evidence gathering | `loopzero-ops drill evidence-shape` |
-| `drill-mint-jwt.sh` (300) — SPLIT (TBD C1) | TTL/claim decode-assert half (needs line-range confirm in C1) | hydra `kubectl exec` minting | `loopzero-ops drill jwt-validate` |
+**Confirmed migratable: 2 (cost-report, run-scenario SLO-compare) — both PORTED 2026-05-24.**
 
-**Confirmed migratable: 2 (cost-report, run-scenario SLO-compare). Probable (needs C1/C2 line-range confirm): 3 (teardown-validate, evidence-shape, mint-jwt TTL half).**
+### The 3 "probable" candidates — RECLASSIFIED KEEP-OPERATOR after reading (2026-05-24)
+
+| Script | Why NOT migratable (reading evidence) |
+|---|---|
+| `dr/teardown-validator.sh` (282) | Every step is `doctl <type> list` (gathering) + `apply doctl <type> delete` (force-delete) + flock + audit-trail writes. The residual COUNT is incremented inline as doctl lists return (lines 118-119,149-150,179-180); the retry-backoff is interleaved with `apply doctl vpcs delete` (210-224). Only a trivial 3-way verdict is pure (263-279: CLEAN/RECOVERED/PARTIAL from 3 counts → exit 0/0/3) — not worth a Go round-trip (the risky doctl work stays untested either way). KEEP-OPERATOR. |
+| `dr/evidence-capture.sh` (298) | 21 `kubectl`/`doctl`/`pulumi` gather calls vs 4 jq lines. Phases: audit skeleton write, pulumi-outputs gather, kubectl pod-manifests+metrics gather per cluster, git-commit forensic anchor. No separable pure shaper. KEEP-OPERATOR. |
+| `drill-mint-jwt.sh` (300) | The TTL assertion (EC-07, ≥7200s) was ALREADY consolidated into `lib/hydra-mint.sh:mint_jwt` (lines 232,237,245) — embedded in the port-forward+curl minting flow, NOT a separable pure decode. KEEP-OPERATOR. |
+
+**FINAL honest yield: 2 SPLITs (logic extracted to loopzero-ops), ~0 full script deletes** (cost-report keeps its `--auto` Pulumi gathering; run-scenario keeps chaos-mesh injection). The 3 "probable" all collapsed to KEEP-OPERATOR on reading — the same over-count pattern as Track B. See `finding-2026-05-24-track-c-yield-is-two-splits.md`.
 
 ### ORCHESTRATION → KEEP-OPERATOR (no routine pure-logic to extract)
 

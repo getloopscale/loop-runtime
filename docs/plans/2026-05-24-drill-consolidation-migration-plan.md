@@ -139,7 +139,7 @@ RED:     TestDrillJWT_ValidTTL_Pass / _ExpiredTTL_Fail / _MissingClaim_Fail / _P
 GREEN:   implement via pkg/jwt
 VERIFY:  cd cmd/loopzero-ops && go test ./...; loopzero-ops drill jwt-validate <token> == bash exit
 ```
-- [ ] Go gate parity with bash; 3 SKILLs rewired; `skill-paths` GREEN; bash deletion DEFERRED to C5.
+- [x] **RECLASSIFIED KEEP-OPERATOR 2026-05-24** — `drill-jwt-gate.sh` is `verify_jwt_auth_e2e` (LIVE curl e2e, not TTL decode); the TTL assertion in `drill-mint-jwt.sh` is embedded in `lib/hydra-mint.sh:mint_jwt` (port-forward+curl), not separable. No pure-logic to port. See `finding-2026-05-24-track-c-yield-is-two-splits`. No SKILL rewire needed (no pure piece extracted).
 
 ---
 
@@ -174,7 +174,8 @@ GREEN:   implement 3 subcommands
 VERIFY:  go test ./...; each loopzero-ops drill X == bash exit/output
 ```
 - [ ] 3 subcommands parity-proven; skills rewired; cost+evidence bash fully ported (delete C5); teardown reduced to gathering+call.
-  - [x] **cost DONE 2026-05-24** — `pkg/quality/drillcost` + `loopzero-ops drill cost`; 5 Go tests; **byte-identical parity** vs `cost-report.sh --start/--end`; bash rewired to delegate (keeps `--auto` Pulumi gathering); no SKILL `bash` caller (only back-compat comments). Bash deletion DEFERRED to C5 (after C4 DOKS). evidence-shape + teardown-validate: PENDING.
+  - [x] **cost DONE 2026-05-24** — `pkg/quality/drillcost` + `loopzero-ops drill cost`; 5 Go tests; **byte-identical parity** vs `cost-report.sh --start/--end`; bash rewired to delegate (keeps `--auto` Pulumi gathering); no SKILL `bash` caller (only back-compat comments). Bash deletion DEFERRED to C5 (after C4 DOKS).
+  - [x] **teardown-validate + evidence-shape RECLASSIFIED KEEP-OPERATOR 2026-05-24** — both are doctl/kubectl/pulumi-woven orchestration (teardown: count inline with `doctl list`, retry interleaved with `doctl delete`, only a trivial 3-way verdict is pure; evidence: 21 gather calls vs 4 jq lines). Not worth a Go round-trip that leaves the I/O untested. See `finding-2026-05-24-track-c-yield-is-two-splits`.
 
 ---
 
