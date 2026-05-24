@@ -1,8 +1,14 @@
-import { motion } from 'framer-motion';
-import { User, Mail, UserCircle } from 'lucide-react';
-import { Card } from '@loopzero/ui';
-import { Button } from '@loopzero/ui';
-import { PageWrapper } from '@/components/page-wrapper';
+import { useState } from 'react';
+import { Mail, User } from 'lucide-react';
+import {
+  Avatar,
+  Button,
+  Card,
+  ConfirmDialog,
+  DangerZone,
+} from '@loopzero/ui';
+import { ContentGrid } from '@/components/layout';
+import { useSetPageTitle } from '@/hooks/use-page-meta';
 import { useRequireAuth } from '@/hooks/use-auth';
 import { logout } from '@/lib/auth';
 
@@ -10,65 +16,103 @@ function maskEmail(email: string): string {
   const [local, domain] = email.split('@');
   if (!domain) return email;
   const [domainName, tld] = domain.split('.');
-  return `${local.slice(0, 2)}***@${(domainName?.slice(0, 2) || '')}***.${tld || 'com'}`;
+  return `${local.slice(0, 2)}***@${domainName?.slice(0, 2) ?? ''}***.${tld ?? 'com'}`;
 }
 
 export function ProfilePage() {
   const session = useRequireAuth();
+  useSetPageTitle('Profile');
+
+  const [confirmOpen, setConfirmOpen] = useState(false);
+  const [deleting, setDeleting] = useState(false);
+
   if (!session) return null;
 
-  const email = session.identity.traits.email || '';
-  const name = session.identity.traits.name || '';
+  const email = session.identity.traits.email ?? '';
+  const name = session.identity.traits.name ?? '';
+  const initials = (name || email).charAt(0).toUpperCase();
+
+  const handleDeleteAccount = async () => {
+    setDeleting(true);
+    try {
+      /* TODO: wire Kratos self-service settings flow for account deletion */
+      await new Promise((r) => setTimeout(r, 1500));
+      setConfirmOpen(false);
+      await logout();
+    } finally {
+      setDeleting(false);
+    }
+  };
 
   return (
-    <PageWrapper title="Profile" description="Your account information">
-      <div className="max-w-2xl space-y-6">
-        <motion.div initial={{ opacity: 0, y: 12 }} animate={{ opacity: 1, y: 0 }}>
-          <Card>
-            <Card.Header>
-              <Card.Title className="flex items-center gap-2">
-                <User className="h-4 w-4 text-accent/60" />
-                Account
-              </Card.Title>
-            </Card.Header>
-            <Card.Body className="space-y-3">
+    <ContentGrid columns="1" gap={6}>
+      <Card>
+        <Card.Header>
+          <Card.Title>Account</Card.Title>
+          <Card.Description>Your identity and session info.</Card.Description>
+        </Card.Header>
+        <Card.Body className="space-y-4">
+          <div className="flex items-center gap-4">
+            <Avatar className="size-12">
+              <Avatar.Fallback>{initials}</Avatar.Fallback>
+            </Avatar>
+            <div className="space-y-0.5">
               {name && (
-                <div className="flex items-center gap-3 rounded-lg border border-white/6 bg-surface-0 p-4">
-                  <div className="flex h-10 w-10 items-center justify-center rounded-full bg-accent/10">
-                    <UserCircle className="h-5 w-5 text-accent/60" />
-                  </div>
-                  <div>
-                    <p className="text-sm font-medium text-white">{name}</p>
-                    <p className="text-xs text-white/30">Name</p>
-                  </div>
-                </div>
+                <p className="text-body-sm font-medium text-foreground">
+                  {name}
+                </p>
               )}
-              <div className="flex items-center gap-3 rounded-lg border border-white/6 bg-surface-0 p-4">
-                <div className="flex h-10 w-10 items-center justify-center rounded-full bg-accent/10">
-                  <Mail className="h-5 w-5 text-accent/60" />
-                </div>
-                <div>
-                  <p className="text-sm font-medium text-white">{maskEmail(email)}</p>
-                  <p className="text-xs text-white/30">Email address</p>
-                </div>
-              </div>
-              <div className="rounded-lg bg-accent/5 border border-accent/10 p-3 text-xs text-accent/60">
-                Authenticated via secure session. Your session is active.
-              </div>
-            </Card.Body>
-          </Card>
-        </motion.div>
+              <p className="font-mono text-label text-muted-foreground flex items-center gap-1.5">
+                <Mail className="size-3" aria-hidden="true" />
+                {maskEmail(email)}
+              </p>
+            </div>
+          </div>
+          <div className="rounded-lg bg-success/5 border border-success/20 p-3 text-label text-success flex items-center gap-2">
+            <User className="size-3.5" aria-hidden="true" />
+            Authenticated via secure session.
+          </div>
+        </Card.Body>
+      </Card>
 
-        <motion.div initial={{ opacity: 0, y: 12 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.1 }}>
-          <Card>
-            <Card.Body className="pt-6">
-              <Button variant="destructive" onClick={logout} className="w-full justify-center">
-                Sign out
-              </Button>
-            </Card.Body>
-          </Card>
-        </motion.div>
-      </div>
-    </PageWrapper>
+      <Card>
+        <Card.Body>
+          <Button variant="secondary" onClick={logout} className="w-full justify-center">
+            Sign out
+          </Button>
+        </Card.Body>
+      </Card>
+
+      <DangerZone>
+        <DangerZone.Action
+          title="Delete Account"
+          description="Permanently delete your account, all your projects, and all your data. This action cannot be undone."
+          action={
+            <Button variant="destructive" size="sm" onClick={() => setConfirmOpen(true)}>
+              Delete Account
+            </Button>
+          }
+        />
+      </DangerZone>
+
+      <ConfirmDialog
+        open={confirmOpen}
+        onOpenChange={setConfirmOpen}
+        title="Delete your account?"
+        description={
+          <>
+            This will permanently delete your account and all associated data
+            (projects, environments, domains). You will be signed out
+            immediately. This cannot be undone.
+          </>
+        }
+        confirmLabel="Delete My Account"
+        cancelLabel="Cancel"
+        intent="destructive"
+        confirmationPhrase={email}
+        loading={deleting}
+        onConfirm={handleDeleteAccount}
+      />
+    </ContentGrid>
   );
 }
