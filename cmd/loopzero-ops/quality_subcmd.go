@@ -52,6 +52,7 @@ import (
 	"github.com/loopzero/loopzero/pkg/quality/securitycontext"
 	"github.com/loopzero/loopzero/pkg/quality/shellhygiene"
 	"github.com/loopzero/loopzero/pkg/quality/skiplink"
+	"github.com/loopzero/loopzero/pkg/quality/scriptcount"
 	"github.com/loopzero/loopzero/pkg/quality/spotcheck"
 	"github.com/loopzero/loopzero/pkg/quality/stackcoverage"
 	"github.com/loopzero/loopzero/pkg/quality/taskfileinterface"
@@ -135,6 +136,15 @@ GATES:
                   (**/lib/*.sh exempt). Migrated from check-shell-hygiene_test.sh.
                   Flags:
                     --root DIR      repo root (default: ".")
+
+  script-count    Program-level monotonic ceiling on canonical .sh count
+                  (Script Minimization Program T0.1). Fails if a PR increases
+                  the count above the baseline. Excludes .claude/worktrees/ and
+                  trash/ (EC-1). --update-baseline ratchets the ceiling DOWN.
+                  Flags:
+                    --root DIR         repo root (default ".")
+                    --baseline PATH    baseline JSON (default infra/quality/script-count-baseline.json)
+                    --update-baseline  ratchet ceiling down to current (write)
 
   corrections-txt-closed
                   Fail if infra/tests/load/CORRECTIONS.txt has any item without
@@ -267,6 +277,8 @@ func runQuality(args []string) int {
 		return runShellHygiene(args[1:])
 	case "corrections-txt-closed":
 		return runCorrectionsTxtClosed(args[1:])
+	case "script-count":
+		return runScriptCount(args[1:])
 	case "migration-test-coverage":
 		return runMigrationTestCoverage(args[1:])
 	case "pkg-usage-matrix":
@@ -619,6 +631,60 @@ func runCorrectionsTxtClosed(args []string) int {
 		return 1
 	}
 	fmt.Println("corrections-txt-closed: PASS — all CORRECTIONS.txt items are annotated + closed out")
+	return 0
+}
+
+// runScriptCount is the program-level monotonic ceiling on canonical .sh count
+// (Script Minimization Program T0.1). Excludes .claude/worktrees/ and trash/
+// (EC-1). --update-baseline ratchets the ceiling DOWN to current (never up).
+func runScriptCount(args []string) int {
+	fs := flag.NewFlagSet("script-count", flag.ContinueOnError)
+	root := fs.String("root", ".", "repo root directory")
+	baselinePath := fs.String("baseline", "infra/quality/script-count-baseline.json", "baseline JSON ceiling")
+	update := fs.Bool("update-baseline", false, "ratchet the ceiling down to current count (write)")
+	if err := fs.Parse(args); err != nil {
+		return 1
+	}
+	if absRoot, err := os.Getwd(); err == nil && *root == "." {
+		*root = absRoot
+	}
+	data, err := os.ReadFile(*baselinePath) // #nosec G304 -- repo-internal baseline path
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "script-count: read baseline: %v\n", err)
+		return 5
+	}
+	base, err := scriptcount.ParseBaseline(data)
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "script-count: parse baseline: %v\n", err)
+		return 5
+	}
+	v, err := scriptcount.Check(*root, base)
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "script-count: %v\n", err)
+		return 5
+	}
+	if *update {
+		if v.Count > base.CanonicalSH {
+			fmt.Fprintf(os.Stderr, "script-count: refuse to ratchet UP (%d > baseline %d)\n", v.Count, base.CanonicalSH)
+			return 1
+		}
+		out := fmt.Sprintf("{\n  \"canonical_sh\": %d\n}\n", v.Count)
+		if err := os.WriteFile(*baselinePath, []byte(out), 0o644); err != nil { // #nosec G306 -- repo-internal baseline
+			fmt.Fprintf(os.Stderr, "script-count: write baseline: %v\n", err)
+			return 5
+		}
+		fmt.Printf("script-count: baseline ratcheted to %d\n", v.Count)
+		return 0
+	}
+	if !v.OK {
+		fmt.Fprintf(os.Stderr, "script-count: FAIL — %d canonical .sh > baseline %d (a PR may never increase the count; see docs/plans/2026-05-24-script-minimization-program-plan.md)\n", v.Count, v.Baseline)
+		return 1
+	}
+	if v.Improved {
+		fmt.Printf("script-count: PASS — %d canonical .sh (< baseline %d; run --update-baseline to ratchet)\n", v.Count, v.Baseline)
+		return 0
+	}
+	fmt.Printf("script-count: PASS — %d canonical .sh (== baseline %d)\n", v.Count, v.Baseline)
 	return 0
 }
 

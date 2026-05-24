@@ -27,6 +27,7 @@ tasks:
     deps: [build]
     cmds:
       - /tmp/loopzero-ops quality unhomed-logic --check
+      - /tmp/loopzero-ops quality script-count
       - /tmp/loopzero-ops quality postgresql-pdb-config
       - /tmp/loopzero-ops quality dockerfile-no-docker-hub
       - /tmp/loopzero-ops quality advisory-lock-scope
