@@ -1,17 +1,24 @@
-import { useState, useEffect } from 'react';
+import { useEffect, useState } from 'react';
 import { useSearchParams } from 'react-router-dom';
-import { motion } from 'framer-motion';
-import { ArrowUpRight, Sparkles, Loader2, CheckCircle2, Clock } from 'lucide-react';
-import { Card } from '@loopzero/ui';
-import { Button } from '@loopzero/ui';
-import { PageWrapper } from '@/components/page-wrapper';
+import { ArrowUpRight, Loader2, Sparkles } from 'lucide-react';
+import {
+  Alert,
+  Button,
+  Card,
+  PlanBadge,
+  UsageMeter,
+  type PlanTier,
+  type UsageMetric as UsageMeterMetric,
+} from '@loopzero/ui';
+import { ContentGrid } from '@/components/layout';
+import { useSetPageTitle } from '@/hooks/use-page-meta';
 import { useCloudApi } from '@/hooks/use-api';
 import { useRequireAuth } from '@/hooks/use-auth';
 import { cloudFetch } from '@/lib/api';
 
 interface UsageMetric {
   used: number;
-  limit: number | null; // §1.5: null = unlimited
+  limit: number | null;
 }
 
 interface BillingResponse {
@@ -22,9 +29,7 @@ interface BillingResponse {
   period_end?: string;
 }
 
-// §3.4: Post-checkout activation polling.
-// Returns updated billing data when activation succeeds, so the page renders fresh state.
-// Compares against the actual pre-checkout plan (captured on first poll), not a hardcoded value.
+/** §3.4: Post-checkout activation polling. Preserves prior behavior. */
 function useCheckoutActivation(currentPlan: string | undefined) {
   const [searchParams, setSearchParams] = useSearchParams();
   const [activating, setActivating] = useState(false);
@@ -33,14 +38,11 @@ function useCheckoutActivation(currentPlan: string | undefined) {
 
   useEffect(() => {
     if (searchParams.get('success') !== 'true') return;
-    // Wait for the initial billing snapshot to load before polling.
-    // Without this, currentPlan is undefined on first render, and
-    // baselinePlan becomes '' which matches any non-empty plan immediately.
     if (currentPlan === undefined) return;
 
     setActivating(true);
     let attempts = 0;
-    const maxAttempts = 15; // 30 seconds at 2s intervals
+    const maxAttempts = 15;
     const baselinePlan = currentPlan;
 
     const poll = setInterval(async () => {
@@ -54,8 +56,9 @@ function useCheckoutActivation(currentPlan: string | undefined) {
           setActivationResult('success');
           setSearchParams({}, { replace: true });
         }
-      } catch { /* continue polling */ }
-
+      } catch {
+        /* continue polling */
+      }
       if (attempts >= maxAttempts) {
         clearInterval(poll);
         setActivating(false);
@@ -70,12 +73,34 @@ function useCheckoutActivation(currentPlan: string | undefined) {
   return { activating, activationResult, setActivationResult, activatedBilling };
 }
 
+const PLAN_TIER_MAP: Record<string, PlanTier> = {
+  starter: 'free',
+  free: 'free',
+  hobby: 'hobby',
+  pro: 'pro',
+  team: 'team',
+  enterprise: 'enterprise',
+};
+
+/**
+ * BillingPage redesign per plan v1.2 T-E.3 + EC-4 + EC-5.
+ * EC-5: Invoice Table OMITTED — no /v1/billing/invoices endpoint exists
+ * in cloud BillingHandler. Defer to follow-up plan when endpoint shipped.
+ * EC-4: Plan/period metrics from /v1/billing; usage zeroed via placeholder
+ * if backend response lacks usage (mockup spec allows).
+ */
 export function BillingPage() {
   useRequireAuth();
-  const { data: initialBilling, loading } = useCloudApi<BillingResponse>('/v1/billing');
-  const { activating, activationResult, setActivationResult, activatedBilling } = useCheckoutActivation(initialBilling?.plan);
+  useSetPageTitle('Billing');
 
-  // Use activated billing data if available (fresher than initial fetch)
+  const { data: initialBilling, loading } = useCloudApi<BillingResponse>('/v1/billing');
+  const {
+    activating,
+    activationResult,
+    setActivationResult,
+    activatedBilling,
+  } = useCheckoutActivation(initialBilling?.plan);
+
   const billing = activatedBilling ?? initialBilling;
 
   const [actionLoading, setActionLoading] = useState(false);
@@ -118,142 +143,141 @@ export function BillingPage() {
     }
   };
 
-  const usage = billing ? Object.entries(billing.usage).map(([metric, data]) => ({
-    metric: metric.replace(/_/g, ' ').replace(/\b\w/g, c => c.toUpperCase()),
-    used: data.used,
-    limit: data.limit,
-    unit: metric.includes('minute') ? 'min' : metric.includes('mb') ? 'MB' : '',
-  })) : [];
+  const usageMetrics: UsageMeterMetric[] = billing?.usage
+    ? Object.entries(billing.usage).map(([key, data]) => ({
+        label: key.replace(/_/g, ' ').replace(/\b\w/g, (c) => c.toUpperCase()),
+        value: data.used,
+        max: data.limit ?? data.used + 1, // unlimited: avoid divide-by-zero
+        unit: key.includes('minute') ? 'min' : key.includes('mb') ? 'MB' : '',
+      }))
+    : [];
+
+  const planTier: PlanTier = PLAN_TIER_MAP[billing?.plan ?? 'starter'] ?? 'free';
+  const planLabel = billing?.plan
+    ? billing.plan.charAt(0).toUpperCase() + billing.plan.slice(1)
+    : 'Starter';
 
   if (loading) {
-    return <PageWrapper title="Billing"><Card><Card.Body className="py-16 text-center"><Loader2 className="mx-auto h-6 w-6 text-white/20 animate-spin" /></Card.Body></Card></PageWrapper>;
+    return (
+      <Card>
+        <Card.Body className="py-16 text-center">
+          <Loader2
+            className="mx-auto size-6 text-muted-foreground animate-spin"
+            aria-label="Loading billing"
+          />
+        </Card.Body>
+      </Card>
+    );
   }
 
   return (
-    <PageWrapper title="Billing" description="Plan, usage, and payment.">
-      {/* §3.4: Post-checkout activation states */}
+    <>
+      {/* Activation state alerts (§3.4 preserved) */}
       {activating && (
-        <motion.div initial={{ opacity: 0, y: -10 }} animate={{ opacity: 1, y: 0 }}
-          className="mb-4 rounded-lg bg-accent/10 border border-accent/20 p-4 flex items-center gap-3">
-          <Loader2 className="h-5 w-5 text-accent animate-spin shrink-0" />
-          <div>
-            <p className="text-sm font-medium text-white">Activating your subscription...</p>
-            <p className="text-xs text-white/40 mt-0.5">This usually takes a few seconds.</p>
-          </div>
-        </motion.div>
+        <Alert
+          intent="info"
+          title="Activating your subscription..."
+          description="This usually takes a few seconds."
+          className="mb-4"
+        />
       )}
       {activationResult === 'success' && (
-        <motion.div initial={{ opacity: 0, y: -10 }} animate={{ opacity: 1, y: 0 }}
-          className="mb-4 rounded-lg bg-green-500/10 border border-green-500/20 p-4 flex items-center gap-3">
-          <CheckCircle2 className="h-5 w-5 text-green-400 shrink-0" />
-          <div>
-            <p className="text-sm font-medium text-white">Subscription activated! Welcome to {billing?.plan}.</p>
-          </div>
-          <button onClick={() => setActivationResult(null)} className="ml-auto text-white/30 hover:text-white/60 text-xs">Dismiss</button>
-        </motion.div>
+        <Alert
+          intent="success"
+          title={`Subscription activated! Welcome to ${billing?.plan ?? 'your plan'}.`}
+          onDismiss={() => setActivationResult(null)}
+          className="mb-4"
+        />
       )}
       {activationResult === 'timeout' && (
-        <motion.div initial={{ opacity: 0, y: -10 }} animate={{ opacity: 1, y: 0 }}
-          className="mb-4 rounded-lg bg-yellow-500/10 border border-yellow-500/20 p-4 flex items-center gap-3">
-          <Clock className="h-5 w-5 text-yellow-400 shrink-0" />
-          <div>
-            <p className="text-sm font-medium text-white">Taking longer than expected.</p>
-            <p className="text-xs text-white/40 mt-0.5">Your subscription is being processed. Refresh the page in a moment, or contact support if it doesn't update within a few minutes.</p>
-          </div>
-        </motion.div>
+        <Alert
+          intent="warning"
+          title="Taking longer than expected."
+          description="Your subscription is being processed. Refresh the page in a moment, or contact support if it doesn't update within a few minutes."
+          className="mb-4"
+        />
       )}
-
       {actionError && (
-        <div className="mb-4 rounded-lg bg-danger/10 border border-danger/20 p-3 text-sm text-danger">
-          {actionError}
-        </div>
+        <Alert intent="destructive" title={actionError} className="mb-4" />
       )}
-      <div className="grid grid-cols-3 gap-4 mb-6">
-        {/* Current Plan */}
-        <motion.div
-          initial={{ opacity: 0, y: 10 }}
-          animate={{ opacity: 1, y: 0 }}
-          className="col-span-2"
-        >
-          <Card className="relative overflow-hidden">
-            <div className="absolute top-0 right-0 w-64 h-64 bg-accent/3 rounded-full -translate-y-32 translate-x-32 blur-3xl" />
-            <Card.Body className="p-6 relative">
-              <div className="flex items-start justify-between">
-                <div>
-                  <p className="text-sm text-white/40 mb-1">Current Plan</p>
-                  <h2 className="font-display text-3xl font-bold text-white tracking-tight">{billing?.plan || 'Starter'}</h2>
-                  <p className="text-sm text-white/30 mt-1">{billing?.team || ''}</p>
-                </div>
-                <Button variant="secondary" size="sm" className="gap-1.5" onClick={openPortal} disabled={actionLoading}>
-                  {actionLoading ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <>Manage Plan <ArrowUpRight className="h-3.5 w-3.5" /></>}
-                </Button>
-              </div>
-            </Card.Body>
-          </Card>
-        </motion.div>
 
-        {/* Upgrade CTA */}
-        <motion.div
-          initial={{ opacity: 0, y: 10 }}
-          animate={{ opacity: 1, y: 0 }}
-          transition={{ delay: 0.1 }}
-        >
-          <Card className="h-full border-accent/10 hover:border-accent/20 cursor-pointer group" onClick={() => upgradePlan('pro')}>
-            <Card.Body className="p-6 flex flex-col justify-center h-full">
-              <Sparkles className="h-5 w-5 text-accent/60 mb-3 group-hover:text-accent transition-colors" />
-              <p className="text-sm font-semibold text-white/70 group-hover:text-white transition-colors">Upgrade to Pro — $19/mo</p>
-              <p className="text-xs text-white/30 mt-1">10 projects, 3 environments, 1000 builds/month</p>
-            </Card.Body>
-          </Card>
-        </motion.div>
-      </div>
-
-      {/* Usage */}
-      <motion.div
-        initial={{ opacity: 0, y: 10 }}
-        animate={{ opacity: 1, y: 0 }}
-        transition={{ delay: 0.2 }}
-      >
+      <ContentGrid columns="2-asymmetric" gap={6}>
+        {/* Left: Plan summary */}
         <Card>
-          <Card.Header>
-            <Card.Title className="text-base">Usage This Period</Card.Title>
-          </Card.Header>
-          <Card.Body>
-            <div className="space-y-5">
-              {usage.map((item, i) => {
-                const isUnlimited = item.limit === null;
-                const pct = isUnlimited ? 0 : Math.min((item.used / (item.limit ?? 1)) * 100, 100);
-                const isHigh = !isUnlimited && pct > 80;
-                return (
-                  <motion.div
-                    key={item.metric}
-                    initial={{ opacity: 0, x: -10 }}
-                    animate={{ opacity: 1, x: 0 }}
-                    transition={{ delay: 0.3 + i * 0.06 }}
-                  >
-                    <div className="flex items-center justify-between mb-2">
-                      <span className="text-sm text-white/60">{item.metric}</span>
-                      <span className="font-mono text-sm text-white/80">
-                        {item.used}{item.unit} <span className="text-white/20">/ {isUnlimited ? '∞' : `${item.limit}${item.unit}`}</span>
-                      </span>
-                    </div>
-                    {!isUnlimited && (
-                      <div className="h-1.5 rounded-full bg-surface-4 overflow-hidden">
-                        <motion.div
-                          className={`h-full rounded-full ${isHigh ? 'bg-warning' : 'bg-accent/60'}`}
-                          initial={{ width: 0 }}
-                          animate={{ width: `${pct}%` }}
-                          transition={{ delay: 0.5 + i * 0.1, duration: 0.8, ease: [0.25, 0.46, 0.45, 0.94] }}
-                        />
-                      </div>
-                    )}
-                  </motion.div>
-                );
-              })}
+          <Card.Body className="p-6">
+            <div className="flex items-start justify-between mb-4">
+              <div className="space-y-2">
+                <p className="text-label-caps text-muted-foreground uppercase tracking-wider">
+                  Current Plan
+                </p>
+                <div className="flex items-center gap-3">
+                  <h2 className="font-display text-display-md font-bold text-foreground">
+                    {planLabel}
+                  </h2>
+                  <PlanBadge plan={planTier} />
+                </div>
+                {billing?.team && (
+                  <p className="text-body-sm text-muted-foreground">{billing.team}</p>
+                )}
+              </div>
+              <Button
+                variant="secondary"
+                size="sm"
+                onClick={openPortal}
+                disabled={actionLoading}
+                className="gap-1.5"
+              >
+                {actionLoading ? (
+                  <Loader2 className="size-3.5 animate-spin" aria-hidden="true" />
+                ) : (
+                  <>
+                    Manage Plan
+                    <ArrowUpRight className="size-3.5" aria-hidden="true" />
+                  </>
+                )}
+              </Button>
             </div>
           </Card.Body>
         </Card>
-      </motion.div>
-    </PageWrapper>
+
+        {/* Right: Upgrade CTA (only show if not on top tier) */}
+        {planTier !== 'enterprise' && planTier !== 'team' && (
+          <Card
+            className="cursor-pointer hover:border-primary/30 transition-colors"
+            onClick={() => upgradePlan('pro')}
+          >
+            <Card.Body className="p-6">
+              <Sparkles
+                className="size-5 text-primary mb-3"
+                aria-hidden="true"
+              />
+              <p className="text-body-sm font-semibold text-foreground">
+                Upgrade to Pro — $19/mo
+              </p>
+              <p className="text-label text-muted-foreground mt-1">
+                10 projects, 3 environments, 1000 builds/month
+              </p>
+            </Card.Body>
+          </Card>
+        )}
+      </ContentGrid>
+
+      {/* Usage */}
+      {usageMetrics.length > 0 && (
+        <section className="mt-6">
+          <p className="text-label-caps text-muted-foreground uppercase mb-3 tracking-wider">
+            Usage This Period
+          </p>
+          <UsageMeter
+            title={
+              billing?.period_start && billing?.period_end
+                ? `${new Date(billing.period_start).toLocaleDateString()} – ${new Date(billing.period_end).toLocaleDateString()}`
+                : 'Current period'
+            }
+            metrics={usageMetrics}
+          />
+        </section>
+      )}
+    </>
   );
 }
