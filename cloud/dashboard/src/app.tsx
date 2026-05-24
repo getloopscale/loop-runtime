@@ -1,6 +1,5 @@
 import { BrowserRouter, Routes, Route } from 'react-router-dom';
-import { Sidebar } from '@/components/sidebar';
-import { VerificationBanner } from '@/components/verification-banner';
+import { DashboardLayout } from '@/components/layout';
 import { OverviewPage } from '@/pages/overview';
 import { ProjectsPage } from '@/pages/projects';
 import { EnvironmentsPage } from '@/pages/environments';
@@ -14,33 +13,6 @@ import { RegisterPage } from '@/pages/register';
 import { VerificationPage } from '@/pages/verification';
 import { RecoveryPage } from '@/pages/recovery';
 import { DeviceSuccessPage } from '@/pages/device-success';
-import { useRequireAuth } from '@/hooks/use-auth';
-import { isEmailVerified } from '@/lib/auth';
-import { Loader2 } from 'lucide-react';
-
-function DashboardLayout({ children }: { children: React.ReactNode }) {
-  const session = useRequireAuth();
-
-  if (session === null) {
-    return (
-      <div className="bg-surface-0 min-h-screen text-white flex items-center justify-center">
-        <Loader2 className="h-6 w-6 text-accent animate-spin" />
-      </div>
-    );
-  }
-
-  const verified = isEmailVerified(session);
-
-  return (
-    <div className="bg-surface-0 min-h-screen text-white">
-      <Sidebar />
-      <main className="ml-[220px] p-8 pt-6">
-        {!verified && <VerificationBanner />}
-        {children}
-      </main>
-    </div>
-  );
-}
 
 export default function App() {
   return (
