@@ -897,6 +897,13 @@ tasks:
     cmds:
       - ginkgo -v --label-filter="journey" --timeout=60m ./infra/tests/e2e/
 
+  e2e:parity:
+    desc: 'Run prod-parity validation specs (Track B migration; local skips cloud-labeled). ~20-40min'
+    env:
+      LOOPZERO_E2E: "1"
+    cmds:
+      - ginkgo -v --label-filter="parity && !cloud" --timeout=60m ./infra/tests/e2e/
+
   e2e:smoke:
     desc: Run E2E smoke subset (<5 min)
     env:
