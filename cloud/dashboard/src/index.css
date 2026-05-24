@@ -1,15 +1,24 @@
-/* @loopzero/ui canonical consumer entry (T-A.0 v1.2 — D-1 resolved).
- * styles.css ships tailwindcss + fonts.css (self-hosted Geist) + tokens.css
- * + tokens-v4.css + base layer in ONE import per its JSDoc:
- *   "What ships at @loopzero/ui/styles.css since RFC 0008 follow-up
- *    (0.5.1-next.0). Consumer imports this once and the framework's
- *    Tailwind v4 build picks up [...]"
- * Replaces previous 3 imports (fonts-cdn + tokens + styles) + redundant
- * @import 'tailwindcss'. Without tokens-v4.css (which preset.css and
- * styles.css both include), Tailwind v4 utilities bg-primary/text-foreground
- * emit className with no matching CSS rule (verified pre-fix: grep
- * --color-primary in dist returned 0). */
-@import "@loopzero/ui/styles.css";
+/* @loopzero/ui canonical consumer entry (T-A.0 v1.2 — D-1 resolved, revised).
+ * Per .llms.txt line 51 canonical pattern + preset.css JSDoc:
+ *   @import "tailwindcss";
+ *   @import "@loopzero/ui/preset.css";
+ *
+ * preset.css = tokens.css + tokens-v4.css (the @theme namespace Tailwind v4
+ * reads to emit utilities). Without it, bg-primary/text-foreground emit
+ * className with no matching CSS rule.
+ *
+ * fonts-cdn.css preferred over styles.css's bundled fonts.css because
+ * styles.css references ./fonts/geist-*.woff2 at relative paths that don't
+ * resolve in consumer build context. CDN avoids font file bundling entirely.
+ *
+ * styles.css NOT imported — its @layer base (Tailwind v4 preflight regression
+ * compensation, body font, focus ring, scrollbar) is nice-to-have but adds
+ * CSS @import-ordering conflict (custom-variant + @theme can't come after
+ * @layer per CSS spec). Local @layer base below handles dashboard-specific
+ * defaults (scrollbar, selection). */
+@import 'tailwindcss';
+@import '@loopzero/ui/preset.css';
+@import '@loopzero/ui/fonts-cdn.css';
 
 @custom-variant dark (&:is(.dark *));
 
