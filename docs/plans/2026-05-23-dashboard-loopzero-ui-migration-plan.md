@@ -17,6 +17,14 @@ Alternativas rejeitadas e por quê:
 
 ## Changelog
 
+- **v1.4 (2026-05-24)** — Phases 2-5 marcadas SUBSUMED pelo plano sucessor `2026-05-24-dashboard-visual-redesign-mockup-aligned-plan.md v1.2` (executado nas iterações ralph loop). Validação T-H.4 do plano sucessor disparou este bump:
+  - **Phase 2 (layout shell)**: SUBSUMED — T2.1 substituída por T-C.1 v1.2 (AppSidebar), T2.2 substituída por T-B.2 v1.2 (DashboardLayout + PageMetaProvider), T2.3 substituída por T-E.5 v1.2 (Alert primitive)
+  - **Phase 3 (auth pages)**: SUBSUMED — T3.1-T3.5 substituídas por T-G.1-T-G.5 v1.2 (5 commits)
+  - **Phase 4 (core pages)**: SUBSUMED — T4.1-T4.5 substituídas por T-D.1 + T-E.1 + T-E.2 + T-E.3 + T-E.4 v1.2
+  - **Phase 5 (secondary pages)**: SUBSUMED — T5.1-T5.3 substituídas por T-F.1-T-F.3 v1.2
+  - **Phase 1 ✅ DONE** durante v1.2 execution (commits 6c849f07, 0a992944, 09bbbb17, 4ec9f571 etc.)
+  - **Phase 6 PERMANECE pendente** — agora deve rodar APÓS v1.2 visual redesign para fazer cleanup (T6.1 remove deps redundantes per D-3 v1.2, T6.2 prune local @theme tokens, T6.3 final bundle measure agora avalia estado pós-redesign não pós-Phase-5)
+
 - **v1.3 (2026-05-23 23:55 UTC)** — Sponsor ratificou Opção A do prerequisite (Tailwind v4 inline). Mudanças:
   - **Prerequisite RESOLVIDO** — seção atualizada, opções B/C documentadas como rejeitadas com razão
   - **Nova T0.0.bis**: Tailwind v3 → v4 upgrade (entre T0.0 e T0.1). Inclui codemod oficial `@tailwindcss/upgrade`, nova dep `@tailwindcss/vite`, reescrita `tailwind.config.ts` → CSS-first `@theme {}` em `index.css`, migração `darkMode: 'class'` strategy

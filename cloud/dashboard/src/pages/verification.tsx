@@ -25,6 +25,9 @@ export function VerificationPage() {
     } else {
       window.location.href = `${KRATOS_URL}/self-service/verification/browser`;
     }
+    // WAI-ARIA-equivalent: submitCode intentionally NOT in deps to avoid
+    // infinite re-render loop (function identity changes each render).
+    // flowId + searchParams are the actual change triggers per D-9 v1.2.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [flowId, searchParams]);
 
