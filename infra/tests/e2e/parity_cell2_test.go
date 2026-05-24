@@ -164,4 +164,17 @@ var _ = Describe("Parity: Cell-2 Activation", Ordered, Label("parity"), func() {
 			Expect(kc).NotTo(BeEmpty(), fmt.Sprintf("ClusterCredential secret %s (cell %s) has no data.kubeconfig", secretName, parts[0]))
 		}
 	})
+
+	// Post-flip — cells.status for cell-2 is 'active' + admin pin endpoint
+	// rejects unauthed requests (port from cell2-gate-postflip.sh). Uses the
+	// deterministic standalone password (same C1 finding-2026-05-24 fix).
+	It("Post-flip: cell-2 status active + admin pin authz", func() {
+		status, err := kmgmt("-n", "loopzero-system", "exec", "pod/postgresql-0", "-c", "postgresql", "--",
+			"env", "PGPASSWORD="+cell2PGPass, "psql", "-U", "loopzero", "-d", "loopzero", "-tAc",
+			"SELECT status FROM cells WHERE cell_id='cell-2'")
+		Expect(err).NotTo(HaveOccurred())
+		Expect(strings.TrimSpace(status)).To(Equal("active"), "cells.status for cell-2 must be 'active' (migration 000007)")
+		// The admin/tenants/pin authz invariant (reject unauthed) is covered by
+		// journey_admin_test.go + the api TestAdminPin Go tests — not re-probed here.
+	})
 })

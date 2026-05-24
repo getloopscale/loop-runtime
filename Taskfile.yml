@@ -60,7 +60,7 @@ vars:
   # matches production wire-clusters.sh + Pulumi convention (LOOPZERO_RUNTIME2_KUBECONFIG).
   # ClusterCredential CR is named `cell-2` with spec.clusterName=loopzero-runtime-2.
   # Status starts 'maintenance' in cells SQL table (migration 000006); migration
-  # 000007 flips to 'active' after cell2-activation-gates.sh passes 12/12.
+  # 000007 flips to 'active' after cell-2 activation invariants pass (now Ginkgo: ginkgo --label-filter=parity --focus='Cell-2 Activation', migrated from cell2-activation-gates.sh TB1.1 2026-05-24).
   RUNTIME2_CONTEXT: k3d-loopzero-runtime-2
   # Standardized port-forward ports (avoid conflicts between tasks)
   PG_PORT: 15432
