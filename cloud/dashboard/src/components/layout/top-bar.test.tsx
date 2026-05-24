@@ -1,4 +1,5 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
+import { useEffect } from 'react';
 import { render, screen } from '@/test/render';
 
 vi.mock('@/hooks/use-projects', () => ({
@@ -6,11 +7,15 @@ vi.mock('@/hooks/use-projects', () => ({
 }));
 
 import { TopBar } from './top-bar';
-import { PageMetaProvider, usePageMeta } from '@/hooks/use-page-meta';
+import { usePageMeta } from '@/hooks/use-page-meta';
 
 function TitleSetter({ title }: { title: string }) {
   const { setPageTitle } = usePageMeta();
-  setPageTitle(title);
+  // setPageTitle must run in an effect — calling it during render triggers
+  // React's "setState during render" warning (state update on parent provider).
+  useEffect(() => {
+    setPageTitle(title);
+  }, [setPageTitle, title]);
   return null;
 }
 
