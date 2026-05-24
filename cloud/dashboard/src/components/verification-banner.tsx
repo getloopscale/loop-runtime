@@ -1,27 +1,24 @@
-import { AlertTriangle, ArrowRight } from 'lucide-react';
+import { Alert, Button } from '@loopzero/ui';
 import { getVerificationURL } from '@/lib/auth';
 
 /**
  * Non-dismissible banner shown when user's email is not verified.
+ * Uses @loopzero/ui <Alert intent="warning"> primitive (Brief #3, shipped
+ * 0.9.0-next.0). 27 LOC custom → 11 LOC composition per D-6 v1.2 ADR.
+ *
  * Links to Kratos self-service verification flow.
  */
 export function VerificationBanner() {
   return (
-    <div className="mb-6 flex items-center justify-between rounded-lg border border-warning/20 bg-warning/5 px-4 py-3">
-      <div className="flex items-center gap-3">
-        <AlertTriangle className="h-4 w-4 text-warning shrink-0" />
-        <div>
-          <p className="text-sm font-medium text-warning">Verify your email</p>
-          <p className="text-xs text-warning/60">Check your inbox for a verification code. Some features are disabled until verified.</p>
-        </div>
-      </div>
-      <a
-        href={getVerificationURL()}
-        className="flex items-center gap-1.5 rounded-md bg-warning/10 px-3 py-1.5 text-xs font-medium text-warning hover:bg-warning/20 transition-colors shrink-0"
-      >
-        Verify now
-        <ArrowRight className="h-3 w-3" />
-      </a>
-    </div>
+    <Alert
+      intent="warning"
+      title="Verify your email"
+      description="Check your inbox for a verification code. Some features are disabled until verified."
+      action={
+        <Button variant="secondary" size="sm" asChild>
+          <a href={getVerificationURL()}>Verify now</a>
+        </Button>
+      }
+    />
   );
 }
