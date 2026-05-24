@@ -116,6 +116,39 @@ Acceptance pending:
 
 Outstanding: T-H.1 visual smoke (sponsor browser validation).
 
+## T-extra LOC measurement (Global DoD checklist item)
+
+Plan v1.2 Objective + Global DoD: "LOC dashboard src/ ≤1.400 (target -52% vs T0.0 baseline 2.914)"
+
+**Actual**: `find src -type f \( -name "*.ts" -o -name "*.tsx" \) -not -name "*.test.*" | xargs wc -l` reports **3437 total**.
+
+Delta: **+18%** (target was **-52%**). Miss by 2037 LOC.
+
+Heavy contributors:
+
+| File | LOC | Driver |
+|---|---|---|
+| login.tsx | 342 | Kratos OIDC vanilla DOM form + state machine + Google SVG inline (15 LOC for brand logo, retained per .llms.txt anti-pattern justified comment) |
+| billing.tsx | 283 | useCheckoutActivation polling state machine (preserved §3.4) + plan adapter + UsageMeter mapping |
+| register.tsx | 280 | Same Kratos state machine + "check your email" success state |
+| domains.tsx | 254 | DNS record CopyButton + CodeBlock + verification state per domain |
+| recovery.tsx | 201 | 3-phase Kratos flow (email → code → success) |
+| verification.tsx | 178 | 4-state Kratos flow (loading/input/success/error) |
+
+Comment density audit:
+- login.tsx: 13 comment lines out of 342 (3.8%)
+- billing.tsx: 9 comments out of 283 (3.2%)
+- register.tsx: 1 comment out of 280 (0.4%)
+- domains.tsx: 0 comments out of 254
+
+LOC is real code (JSX + state management + Kratos flow handlers), not bloat. Cannot meaningfully reduce without:
+- Dropping Kratos state machine UX (loses error display + multi-phase polish)
+- Removing OIDC vanilla DOM form (breaks GitHub/Google login per EC-4)
+- Removing useCheckoutActivation polling (loses §3.4 post-purchase UX)
+- Rewriting all auth pages against `<LoginSplit>` primitive (different shape, structural redesign)
+
+LOC target ≤1400 was set BEFORE measuring real Kratos flow + adapter complexity. Same structural-unrealistic-target pattern as D7 bundle.
+
 ## Completion promise honesty (final state post all optimization attempts)
 
 Per ralph loop rule, completion promise `<promise>TODAS AS TASKS, CRITERIOS DE ACEITES, DODs CONCLUIDOS E VALIDADOS</promise>` requires ALL tasks + acceptance + DoD validated unconditionally.
