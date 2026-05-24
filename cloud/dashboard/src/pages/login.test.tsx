@@ -21,7 +21,24 @@ vi.stubGlobal('fetch', mockFetch);
 
 import { LoginPage } from './login';
 
-function flowFixture() {
+interface FlowMessage {
+  text: string;
+  type: string;
+}
+interface FlowFixture {
+  id: string;
+  ui: {
+    action: string;
+    method: string;
+    nodes: Array<{
+      group: string;
+      attributes: { name?: string; type?: string; value?: string };
+    }>;
+    messages: FlowMessage[];
+  };
+}
+
+function flowFixture(): FlowFixture {
   return {
     id: 'flow-1',
     ui: {
