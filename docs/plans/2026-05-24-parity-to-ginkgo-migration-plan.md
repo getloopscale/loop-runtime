@@ -328,7 +328,9 @@ GREEN:   implement parse + resolve matching bash grammar
 REFACTOR: none
 VERIFY:  cd cmd/loopzero-ops && go test ./... ; /tmp/loopzero-ops quality regression-matrix == bash exit
 ```
-- [ ] Go gate parity with bash; wired; 2 bash deleted; baselines ratcheted; `task quality:all` GREEN.
+- [x] **DONE 2026-05-24** (commit `a6a3d46a`). Go gate `pkg/quality/regressionmatrix` + `loopzero-ops quality regression-matrix` wired into `task quality:gates`; golden test folded into `TestGolden_*`; 2 bash deleted; allowlist rows dropped; script-count 126→124 + unhomed 90→88 ratcheted; `task quality:gates` GREEN; `dangling-script-refs` PASS.
+  - **DEVIATION from "faithful port of exit=2":** the plan's Evidence assumed exit=2 was "pre-existing-RED on some token". It was NOT — the bash exited 2 via a `set -e` abort on a helper `return 2` BEFORE scanning (a crash, never a token verdict) — `finding-2026-05-24-audit-regression-matrix-set-e-abort`. Reproducing a crash is nonsensical; the Go gate implements the INTENDED scan (166 entries, miss=0). Documented in finding + commit + log (not a silent amendment).
+  - **validate-matrix.sh RETAINED** (plan line 314 condition false): it is a 16-gate master runner, not a pure orchestrator of the matrix audit. Only its 2 matrix-audit invocations were re-pointed to the Go gate.
 
 ---
 
@@ -352,7 +354,7 @@ VERIFY:  cd cmd/loopzero-ops && go test ./... ; /tmp/loopzero-ops quality regres
 - [ ] All B0–B5 phases complete
 - [ ] ≥18 parity `.sh` deleted; `infra/tests/parity/*.sh` ≤ 4
 - [ ] All parity assertions exist as Ginkgo specs (`Label("parity")`) or the regression-matrix Go gate
-- [ ] `audit-regression-matrix`/`loopzero-ops quality regression-matrix` GREEN (tokens re-pointed)
+- [x] `loopzero-ops quality regression-matrix` GREEN (tokens re-pointed) — DONE 2026-05-24 (`a6a3d46a`)
 - [ ] `LOOPZERO_E2E=1 ginkgo --label-filter=parity` GREEN LIVE
 - [ ] `dangling-script-refs` + `taskfile-interface` + `script-count` GREEN; baselines ratcheted
 - [ ] `/cross-validation 2026-05-24-parity-to-ginkgo-migration` PASSED
