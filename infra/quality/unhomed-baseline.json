@@ -1,10 +1,10 @@
 {
-  "total": 138,
+  "total": 111,
   "by_domain": {
     "bootstrap": 32,
     "chaos": 6,
-    "drill": 36,
+    "drill": 23,
     "other": 1,
-    "test": 63
+    "test": 49
   }
 }
