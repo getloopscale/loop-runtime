@@ -7,7 +7,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+### Added
+- **Dashboard bundle budget gate** (`cloud/dashboard`, MEET-ASYNC-AMENDMENT-2026-05-24-002, pending sponsor ratification). New `size-limit@^12.1.0` + `@size-limit/preset-app@^12.1.0` devDeps + 9-entry `package.json#size-limit` config: 8 per-chunk caps (react-vendor ≤55 KB brotli, @loopzero/ui ≤50, radix ≤35, vendor ≤25, router ≤15, lucide ≤4, index ≤8, per-route ≤10) + 1 total HARD GATE (≤240 KB brotli ≈ ≤280 KB gzip). Current: 178.28 KB brotli total — 26% headroom below the gate. Exposed as `npm run size` + `npm run size:why` (per-chunk diagnostic) + `task quality:dashboard-bundle` (operator/CI). Thresholds grounded in Web Almanac 2024 SaaS-dashboard p25/p50 + Calibre/SpeedCurve guideline + 6 peer dashboard measurements (Linear/Vercel/Stripe/GitHub/Railway/Render) per the MEET. Brotli replaces gzip as the canonical unit because (a) it's what CloudFlare serves modern browsers and (b) `size-limit` measures brotli by default — single-tool, single-unit eliminates measurement drift.
+
 ### Changed
+- **`MEET-ASYNC-AMENDMENT-2026-05-24-001` § DoD-A superseded** by `MEET-ASYNC-AMENDMENT-2026-05-24-002` for the `cloud/dashboard` visual redesign plan v1.2 → v1.3. MEET-001's "≤210 KB gzip total" was a single threshold without per-chunk enforcement or industry grounding; MEET-002 replaces it with the tiered brotli budget above and ships the enforcement tooling. MEET-001 § DoD-B (LOC ≤3500) + § DoD-C (T-H.1 visual smoke deferred) remain in force unchanged.
 - Bumped `github.com/getloopscale/loopzero-forge` from pseudo-version `v0.4.1-0.20260520232709-c649e041f06e` to stable tag `v0.5.1` in `api/go.mod` and `infra/tests/go.mod`. v0.5.1 packages the `NewRetryOnFailure` factory and `ResourcesTiny/Small/Medium` presets that LoopZero Cloud already consumes across 67 call sites in `api/internal/argo/`. Stable tag removes pseudo-version churn and gives Renovate/Dependabot a clean baseline.
 
 ### Added

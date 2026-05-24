@@ -9,8 +9,57 @@
     "preview": "vite preview",
     "lint": "eslint .",
     "test": "vitest run",
-    "test:watch": "vitest"
+    "test:watch": "vitest",
+    "size": "size-limit",
+    "size:why": "size-limit --why"
   },
+  "size-limit": [
+    {
+      "name": "01 — react-vendor (React 19 runtime)",
+      "path": "dist/assets/react-vendor-*.js",
+      "limit": "55 KB"
+    },
+    {
+      "name": "02 — @loopzero/ui (design system)",
+      "path": "dist/assets/loopzero-ui-*.js",
+      "limit": "50 KB"
+    },
+    {
+      "name": "03 — radix (transitive via @loopzero/ui)",
+      "path": "dist/assets/radix-*.js",
+      "limit": "35 KB"
+    },
+    {
+      "name": "04 — vendor (misc transitive deps)",
+      "path": "dist/assets/vendor-*.js",
+      "limit": "25 KB"
+    },
+    {
+      "name": "05 — router (react-router-dom)",
+      "path": "dist/assets/router-*.js",
+      "limit": "15 KB"
+    },
+    {
+      "name": "06 — lucide (icon set)",
+      "path": "dist/assets/lucide-*.js",
+      "limit": "4 KB"
+    },
+    {
+      "name": "07 — app entry (index)",
+      "path": "dist/assets/index-*.js",
+      "limit": "8 KB"
+    },
+    {
+      "name": "08 — per-route chunk hard cap (worst-case)",
+      "path": "dist/assets/register-*.js",
+      "limit": "10 KB"
+    },
+    {
+      "name": "TOTAL initial JS — HARD GATE (MEET-ASYNC-002 v1.3, brotli)",
+      "path": "dist/assets/*.js",
+      "limit": "240 KB"
+    }
+  ],
   "dependencies": {
     "@loopzero/ui": "0.9.0-next.0",
     "lucide-react": "^0.460.0",
@@ -19,6 +68,7 @@
     "react-router-dom": "^7.0.0"
   },
   "devDependencies": {
+    "@size-limit/preset-app": "^12.1.0",
     "@tailwindcss/postcss": "^4.3.0",
     "@testing-library/jest-dom": "^6.9.1",
     "@testing-library/react": "^16.3.2",
@@ -28,6 +78,7 @@
     "@vitejs/plugin-react": "^4.3.0",
     "jsdom": "^29.1.1",
     "postcss": "^8.4.0",
+    "size-limit": "^12.1.0",
     "tailwindcss": "^4.3.0",
     "typescript": "^5.6.0",
     "vite": "^6.0.0",

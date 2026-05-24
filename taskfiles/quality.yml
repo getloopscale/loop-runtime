@@ -44,6 +44,17 @@ tasks:
       - /tmp/loopzero-ops quality dangling-script-refs --base-ref {{.BASE_REF}} --head-ref HEAD
       - /tmp/loopzero-ops quality dangling-data-refs --base-ref {{.BASE_REF}} --head-ref HEAD
 
+  dashboard-bundle:
+    desc: Dashboard bundle budget gate — size-limit per chunk + total brotli (MEET-ASYNC-002 v1.3)
+    dir: cloud/dashboard
+    cmds:
+      - npm run build
+      - npm run size
+
   all:
     desc: Standard quality suite — hermetic tests + full-scan gates
     deps: [hermetic, gates]
+
+  all-with-frontend:
+    desc: Full quality suite including frontend bundle gate (slower; for pre-release)
+    deps: [hermetic, gates, dashboard-bundle]
