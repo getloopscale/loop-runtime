@@ -116,20 +116,52 @@ Acceptance pending:
 
 Outstanding: T-H.1 visual smoke (sponsor browser validation).
 
-## Completion promise honesty
+## Completion promise honesty (final state post all optimization attempts)
 
 Per ralph loop rule, completion promise `<promise>TODAS AS TASKS, CRITERIOS DE ACEITES, DODs CONCLUIDOS E VALIDADOS</promise>` requires ALL tasks + acceptance + DoD validated unconditionally.
 
-Current state:
-- ✅ 29/30 tasks implemented + committed
-- ✅ Build verde across all 23 commits in Phase A-G
-- ✅ TypeScript strict zero errors
+Current state (final iteration):
+- ✅ 29/30 tasks implemented + committed (29 commits total)
+- ✅ Build verde across all commits
+- ✅ TypeScript strict zero errors (`tsc -b --force` silent)
+- ✅ Vitest 20/20 passing (7 auth + 13 page smoke tests)
 - ✅ Anti-pattern audit clean (per T-H.2)
-- ❌ Bundle exceeds D7 target (+47% gzip vs ≤+30% target)
+- ✅ Bundle architecture optimized (route code-split + manualChunks vendor split)
+- ❌ Bundle exceeds D7 target (+41% gzip vs ≤+30% target — STRUCTURAL floor; cannot reduce without dropping primitives)
 - ⏳ T-H.1 visual smoke requires sponsor browser execution
 
-**Cannot emit completion promise.** Two acceptance criteria not validated:
-1. T-H.1 visual smoke needs sponsor execution against running k3d cluster
-2. T-H.3 bundle exceeds D7 target — needs explicit sponsor "accept overshoot" decision OR route-level code-split work
+Optimizations attempted (all committed):
+| Attempt | Δ JS gzip | Result |
+|---|---|---|
+| Single-theme provider (D8) | -3 KB | Modest |
+| Delete orphan pages + framer-motion | 0 KB | Tree-shake had already done it |
+| React.lazy route-level code-split | -9 KB | Main reduced |
+| Vite manualChunks vendor split | 0 KB initial / cache win | Cache benefits only |
 
-Plan v1.2 final closure waits on sponsor for both.
+Conclusion: bundle floor is structural at ~188 KB gzip (= +41% vs 134 KB baseline) given:
+- React 19: ~60 KB gzip
+- @loopzero/ui foundation + consumed primitives: ~52 KB gzip
+- Radix peer-deps: ~35 KB gzip
+- Router: ~13 KB gzip
+- Lucide icons: ~3 KB gzip
+- Vendor + app shell: ~25 KB gzip
+
+D7 target ≤+30% was set BEFORE consumer measurement. Going below current
++41% gzip would require:
+- Drop @loopzero/ui composites (UX loss, anula 30 commits of work)
+- Rewrite against shadcn copy-paste (anula library adoption)
+- Service Worker with HTTP push for vendor caching (significant new infra)
+
+**Cannot emit completion promise.** Two acceptance criteria not validated:
+1. T-H.1 visual smoke — sponsor execution against running k3d cluster
+   (subset proven: 13/13 page modules smoke-test loading without error)
+2. T-H.3 bundle exceeds D7 — needs sponsor decision:
+   - Accept overshoot + amend D7 (plan v1.2 → v1.3 with new target +50%)
+   - Open follow-up plan for service worker vendor strategy
+   - Reject (anula trabalho)
+
+Plan v1.2 final closure waits on sponsor for both. Ralph loop will
+iterate forever without sponsor unblock — this is by design per:
+
+> "If the loop should stop, the promise statement will become true
+> naturally. Do not force it by lying."
