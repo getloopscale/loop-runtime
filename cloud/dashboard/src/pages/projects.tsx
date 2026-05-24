@@ -1,7 +1,7 @@
 import { motion } from 'framer-motion';
 import { FolderKanban, Globe, Clock, ArrowRight, Loader2 } from 'lucide-react';
 import { Card, CardContent } from '@/components/ui/card';
-import { Badge } from '@/components/ui/badge';
+import { Badge } from '@loopzero/ui';
 import { PageWrapper } from '@/components/page-wrapper';
 import { useEngineApi } from '@/hooks/use-api';
 import { useRequireAuth } from '@/hooks/use-auth';

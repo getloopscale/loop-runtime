@@ -1,7 +1,7 @@
 import { motion } from 'framer-motion';
 import { ArrowUpRight, Box, Clock, Zap, Loader2 } from 'lucide-react';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
-import { Badge } from '@/components/ui/badge';
+import { Badge } from '@loopzero/ui';
 import { PageWrapper } from '@/components/page-wrapper';
 import { useEngineApi } from '@/hooks/use-api';
 import { useRequireAuth } from '@/hooks/use-auth';
@@ -96,7 +96,7 @@ export function OverviewPage() {
                     </div>
                   </div>
                   <div className="flex items-center gap-4">
-                    <Badge variant={deploy.status === 'live' ? 'success' : 'danger'}>
+                    <Badge variant={deploy.status === 'live' ? 'success' : 'destructive'}>
                       {deploy.status}
                     </Badge>
                     <span className="font-mono text-xs text-white/20 w-12 text-right">{deploy.duration}</span>

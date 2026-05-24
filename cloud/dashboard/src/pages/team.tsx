@@ -1,7 +1,7 @@
 import { motion } from 'framer-motion';
 import { UserPlus, Loader2 } from 'lucide-react';
 import { Card, CardContent } from '@/components/ui/card';
-import { Badge } from '@/components/ui/badge';
+import { Badge } from '@loopzero/ui';
 import { Button } from '@loopzero/ui';
 import { PageWrapper } from '@/components/page-wrapper';
 import { useEngineApi } from '@/hooks/use-api';

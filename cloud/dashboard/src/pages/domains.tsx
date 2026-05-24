@@ -2,7 +2,7 @@ import { useState } from 'react';
 import { motion } from 'framer-motion';
 import { Globe, Shield, Clock, AlertCircle, Loader2, RefreshCw } from 'lucide-react';
 import { Card, CardContent } from '@/components/ui/card';
-import { Badge } from '@/components/ui/badge';
+import { Badge } from '@loopzero/ui';
 import { Button } from '@loopzero/ui';
 import { PageWrapper } from '@/components/page-wrapper';
 import { useEngineApi } from '@/hooks/use-api';
