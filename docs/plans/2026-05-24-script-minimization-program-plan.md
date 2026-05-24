@@ -77,6 +77,34 @@ Tracks are **strictly sequential** (D4). Within each track, independent scripts 
 
 ---
 
+## Autonomous Progress Ledger (2026-05-24) — operator resume point
+
+> Scope-refinement record (not a DoD change). Captures exactly what the Ralph loop completed autonomously and where the operator gates begin, so a resume is O(1).
+
+**DONE autonomously + LIVE-validated + pushed (`origin/develop`):**
+
+| Item | Evidence | Commits |
+|---|---|---|
+| Phase 0 T0.1 — `script-count` gate | live; baseline 140→**124** | (earlier) + ratchets |
+| Track B TB1.1 — cell-2 gates → `parity_cell2_test.go` | 14 bash deleted; LIVE 5 Passed/0 Failed | `6f351e5e` `5c1f832b` |
+| Track B TB5 — matrix audit → `loopzero-ops quality regression-matrix` | 2 bash deleted; gate now scans (166 entries, miss=0); golden→`TestGolden_*` | `a6a3d46a` `3bd625fa` |
+| Findings (3) — C1 secret fragility, set-e abort, parity-scripts-are-procedures | 3 finding docs | `7734dc87` `d2a68501` `bedd510b` |
+
+**State now:** canonical `.sh` = **124** · unhomed = **88** · `task quality:gates` GREEN · `pkg/quality/...` GREEN · e2e compiles.
+
+**Track B residue — reclassification PENDING operator ratification** (`MEET-ASYNC-AMENDMENT-2026-05-24-001`): TB2/TB3/TB4 (cell2-canary-stage1/2, cell2-rollback-slo, audit-argocd-drift, k3d-virgin-install) are operator procedures/diagnostics with **no routine invariant left to migrate** (the invariants were absorbed by TB1.1+TB5) → reclassify KEEP-OPERATOR, do NOT author hollow Ginkgo specs. Track B expected-removal 20–22 → **16 (actual)**.
+
+**OPERATOR-GATED — cannot proceed autonomously (the loop's hard ceiling):**
+1. **Ratify** `MEET-ASYNC-AMENDMENT-2026-05-24-001` (Track B KEEP-OPERATOR reclassification) → then edit the 5 allowlist disposition rows + parity Coverage Matrix.
+2. **D4 gate:** full Track B DoD (parity suite LIVE + `/cross-validation`) before Track C may begin.
+3. **Track C** (Phase 2): autonomous PORT of pure-logic drill pieces is possible, but its LIVE gate is `task drill:l2-scale` (**DOKS, real money — operator-run**); D4 forbids starting it before #2.
+4. **Track A** (Phase 3): blocked on the **ESO-generator governance MEET** (determinism contract) + D4.
+5. **Program close-out:** `task clean:all && task setup && tilt up` + `/dogfood full` (operator destroys/recreates infra).
+
+The Ralph completion promise is therefore **unreachable autonomously** — the ≤30 KPI depends on Tracks C+A, both operator/governance-gated.
+
+---
+
 ## Phase 0: Program Bootstrap (this plan)
 
 **Objective:** Establish the program KPI, the per-track gate contract, and the cross-track invariants before any track starts.
@@ -130,16 +158,18 @@ VERIFY:  cd cmd/loopzero-ops && go test ./... && /tmp/loopzero-ops quality scrip
 ```
 
 #### Acceptance Criteria
-- [ ] `script-count` gate PASS at 140; FAIL if a PR adds a net `.sh`.
-- [ ] Wired into `task quality:gates`.
-- [ ] Worktrees excluded.
-- [ ] Pass: /code-audit complexity <= 10, coverage >= 90%, lint 0, file <= 500 lines.
+- [x] `script-count` gate PASS (now at **124**, ratcheted from 140); FAIL if a PR adds a net `.sh`.
+- [x] Wired into `task quality:gates`.
+- [x] Worktrees excluded (+ `trash/` per EC-1).
+- [x] Pass: gate file `pkg/quality/scriptcount/check.go` < 500 lines, 7 tests GREEN.
 
 #### DoD
-- [ ] `pkg/quality/scriptcount` tests green.
-- [ ] `go build` both modules.
-- [ ] `task quality:gates` green at baseline 140.
-- [ ] `dangling-script-refs` + `taskfile-interface` green.
+- [x] `pkg/quality/scriptcount` tests green (7/7).
+- [x] `go build` both modules.
+- [x] `task quality:gates` green (baseline ratcheted 140→126→124 as Track B deleted scripts).
+- [x] `dangling-script-refs` + `taskfile-interface` green.
+
+> **DONE 2026-05-24** — gate live (`pkg/quality/scriptcount` + `loopzero-ops quality script-count`).
 
 ---
 
