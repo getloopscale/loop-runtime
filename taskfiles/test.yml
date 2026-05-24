@@ -880,26 +880,13 @@ tasks:
       - cd infra/pulumi && npx vitest run src/__tests__/adopt-or-create.test.ts src/__tests__/sprint8-fixes.test.ts
 
   # ---------------------------------------------------------------------------
-  # Cleanroom dogfood loop (Plan: docs/plans/real-paas-cleanroom-dogfood-loop-plan.md)
+  # Cleanroom dogfood: the canonical path is now the /cleanroom + /dogfood
+  # skills (interactive). The headless bash orchestrator dogfood-cleanroom-loop.sh
+  # + its hermetic test were removed 2026-05-24 as superseded — the CI driver
+  # that ran them headless was deleted with GitHub Actions, and the skills cover
+  # the interactive flow (cleanroom → dogfood validated this way this session).
   # ---------------------------------------------------------------------------
 
-  dogfood:cleanroom:
-    desc: |
-      Cleanroom end-to-end dogfood: destroy → setup → tilt ci → heal → doctor → 12 journeys.
-      Plan: docs/plans/real-paas-cleanroom-dogfood-loop-plan.md (T1.1, T1.2).
-      Pass `-- --dry-run` to preview without side effects, `-- --help` for full usage.
-      DESTRUCTIVE: deletes all local k3d clusters. Confirm before running.
-    cmds:
-      - bash infra/scripts/dogfood-cleanroom-loop.sh {{.CLI_ARGS}}
-
-  dogfood:cleanroom:test:
-    desc: |
-      Run the orchestrator's hermetic test suite (T1.1 TDD). 4 tests covering:
-      arg parsing, --help, --dry-run hermeticity, exit-code map completeness.
-    cmds:
-      - bash infra/tests/scripts/dogfood-cleanroom-loop_test.sh
-
-  # ---------------------------------------------------------------------------
   # E2E Ginkgo Tests (replaces bash journey scripts)
   # ---------------------------------------------------------------------------
 
