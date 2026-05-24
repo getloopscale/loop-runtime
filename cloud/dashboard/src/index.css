@@ -1,11 +1,15 @@
-/* @loopzero/ui design system — MUST precede Tailwind import so design tokens
- * resolve via utility classes. fonts-cdn.css ships Geist Sans + Geist Mono
- * (locked per D1 of plan, replaces DM Sans + JetBrains Mono + Cabinet Grotesk). */
-@import '@loopzero/ui/fonts-cdn.css';
-@import '@loopzero/ui/tokens.css';
-@import '@loopzero/ui/styles.css';
-
-@import 'tailwindcss';
+/* @loopzero/ui canonical consumer entry (T-A.0 v1.2 — D-1 resolved).
+ * styles.css ships tailwindcss + fonts.css (self-hosted Geist) + tokens.css
+ * + tokens-v4.css + base layer in ONE import per its JSDoc:
+ *   "What ships at @loopzero/ui/styles.css since RFC 0008 follow-up
+ *    (0.5.1-next.0). Consumer imports this once and the framework's
+ *    Tailwind v4 build picks up [...]"
+ * Replaces previous 3 imports (fonts-cdn + tokens + styles) + redundant
+ * @import 'tailwindcss'. Without tokens-v4.css (which preset.css and
+ * styles.css both include), Tailwind v4 utilities bg-primary/text-foreground
+ * emit className with no matching CSS rule (verified pre-fix: grep
+ * --color-primary in dist returned 0). */
+@import "@loopzero/ui/styles.css";
 
 @custom-variant dark (&:is(.dark *));
 
