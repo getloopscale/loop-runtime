@@ -1,5 +1,9 @@
-@import url('https://fonts.googleapis.com/css2?family=DM+Sans:ital,opsz,wght@0,9..40,100..1000;1,9..40,100..1000&family=JetBrains+Mono:wght@400;500;600&display=swap')
-layer(base);
+/* @loopzero/ui design system — MUST precede Tailwind import so design tokens
+ * resolve via utility classes. fonts-cdn.css ships Geist Sans + Geist Mono
+ * (locked per D1 of plan, replaces DM Sans + JetBrains Mono + Cabinet Grotesk). */
+@import '@loopzero/ui/fonts-cdn.css';
+@import '@loopzero/ui/tokens.css';
+@import '@loopzero/ui/styles.css';
 
 @import 'tailwindcss';
 
@@ -28,9 +32,10 @@ layer(base);
   --color-danger: #ef4444;
   --color-warning: #f59e0b;
 
-  --font-sans: 'DM Sans', system-ui, sans-serif;
-  --font-mono: 'JetBrains Mono', 'Fira Code', monospace;
-  --font-display: 'Cabinet Grotesk', 'DM Sans', system-ui, sans-serif;
+  /* Fonts intentionally NOT defined here — Geist Sans + Geist Mono come from
+   * @loopzero/ui/fonts-cdn.css imported above (D1 of plan: theme is locked to
+   * Violet Forge which uses Geist). DM Sans + JetBrains Mono + Cabinet Grotesk
+   * from the v3 era are deliberately retired. */
 
   --animate-slide-in: slide-in 0.4s ease-out;
   --animate-fade-in: fade-in 0.3s ease-out;

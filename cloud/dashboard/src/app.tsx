@@ -22,7 +22,7 @@ function DashboardLayout({ children }: { children: React.ReactNode }) {
 
   if (session === null) {
     return (
-      <div className="dark bg-surface-0 min-h-screen text-white flex items-center justify-center">
+      <div className="bg-surface-0 min-h-screen text-white flex items-center justify-center">
         <Loader2 className="h-6 w-6 text-accent animate-spin" />
       </div>
     );
@@ -31,7 +31,7 @@ function DashboardLayout({ children }: { children: React.ReactNode }) {
   const verified = isEmailVerified(session);
 
   return (
-    <div className="dark bg-surface-0 min-h-screen text-white">
+    <div className="bg-surface-0 min-h-screen text-white">
       <Sidebar />
       <main className="ml-[220px] p-8 pt-6">
         {!verified && <VerificationBanner />}
