@@ -101,8 +101,10 @@ RED:     N/A (audit doc) — verification: every PURE-LOGIC row cites line range
 GREEN:   drill-migration-map.md complete, 25/25 classified
 VERIFY:  grep -c "PURE-LOGIC\|ORCHESTRATION" drill-migration-map.md == 25
 ```
-- [ ] 25/25 classified with evidence; honest yield estimate (expected ~8–13 PURE-LOGIC).
-- [ ] No code changed (read-only audit).
+- [x] **DONE 2026-05-24** — `docs/operations/drill-migration-map.md`. 21/21 scripts classified (actual count; "25" was the loose unhomed drill=20+chaos=5 estimate). Evidence-cited with line ranges + 3 corrections to the plan's pure-logic premises.
+- [x] No code changed (read-only audit).
+
+> **HONEST YIELD (corrected down from ~8–13):** only **2 confirmed** PURE-LOGIC migratable (cost arithmetic, chaos SLO-compare) + **3 probable** (teardown-validate, evidence-shape, mint-jwt TTL). Realistic delete-after-C4 ≈ 2–4 scripts. Key premise errors caught: `drill-jwt-gate.sh` is a LIVE curl e2e (NOT TTL decode); the chaos SLO verdict lives in `run-scenario.sh:235-257` (NOT `report.sh`, which only formats); `chaos/baseline.sh` only samples LIVE. Same over-count pattern as Track B.
 
 ---
 
