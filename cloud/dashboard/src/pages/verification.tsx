@@ -1,21 +1,21 @@
 import { useEffect, useState } from 'react';
 import { useSearchParams } from 'react-router-dom';
-import { motion } from 'framer-motion';
-import { CheckCircle2, Loader2, Mail, AlertCircle } from 'lucide-react';
-import { Button } from '@loopzero/ui';
-
+import { AlertCircle, CheckCircle2, Loader2, Mail } from 'lucide-react';
+import { Alert, Button, Card, Input } from '@loopzero/ui';
 import { API_URL } from '@/lib/config';
+
 const KRATOS_URL = API_URL;
+
+type Status = 'loading' | 'input' | 'success' | 'error';
 
 export function VerificationPage() {
   const [searchParams] = useSearchParams();
-  const [status, setStatus] = useState<'loading' | 'input' | 'success' | 'error'>('loading');
-  const [code, setCode] = useState(searchParams.get('code') || '');
+  const [status, setStatus] = useState<Status>('loading');
+  const [code, setCode] = useState(searchParams.get('code') ?? '');
   const [error, setError] = useState('');
 
   const flowId = searchParams.get('flow');
 
-  // Auto-submit if code is in URL (from email link)
   useEffect(() => {
     const urlCode = searchParams.get('code');
     if (flowId && urlCode) {
@@ -23,15 +23,14 @@ export function VerificationPage() {
     } else if (flowId) {
       setStatus('input');
     } else {
-      // No flow — start one
       window.location.href = `${KRATOS_URL}/self-service/verification/browser`;
     }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [flowId, searchParams]);
 
   const submitCode = async (flow: string, verificationCode: string) => {
     setStatus('loading');
     try {
-      // Get flow to find action URL and CSRF token
       const flowResp = await fetch(`${KRATOS_URL}/self-service/verification/flows?id=${flow}`, {
         credentials: 'include',
         headers: { Accept: 'application/json' },
@@ -42,9 +41,10 @@ export function VerificationPage() {
         return;
       }
       const flowData = await flowResp.json();
-      const csrfNode = flowData.ui?.nodes?.find((n: { attributes: { name?: string } }) => n.attributes.name === 'csrf_token');
+      const csrfNode = flowData.ui?.nodes?.find(
+        (n: { attributes: { name?: string } }) => n.attributes.name === 'csrf_token',
+      );
 
-      // Submit the code
       const resp = await fetch(flowData.ui.action, {
         method: 'POST',
         credentials: 'include',
@@ -80,61 +80,96 @@ export function VerificationPage() {
   };
 
   return (
-    <div className="min-h-screen bg-surface-0 flex items-center justify-center">
-      <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} className="w-full max-w-sm">
-        <div className="rounded-2xl border border-white/6 bg-surface-1/80 backdrop-blur-xl p-8 shadow-2xl shadow-black/40 text-center">
-
+    <div className="min-h-screen bg-background flex items-center justify-center p-6">
+      <Card className="w-full max-w-sm">
+        <Card.Body className="p-8 text-center space-y-4">
           {status === 'loading' && (
             <>
-              <Loader2 className="h-8 w-8 text-accent animate-spin mx-auto mb-4" />
-              <p className="text-sm text-white/40">Verifying your email...</p>
+              <Loader2
+                className="size-8 text-primary animate-spin mx-auto"
+                aria-label="Verifying"
+              />
+              <p className="text-body-sm text-muted-foreground">
+                Verifying your email...
+              </p>
             </>
           )}
 
           {status === 'success' && (
             <>
-              <CheckCircle2 className="h-12 w-12 text-accent mx-auto mb-4" />
-              <h1 className="font-display text-xl font-semibold text-white mb-2">Email verified</h1>
-              <p className="text-sm text-white/40 mb-6">Your account is now fully active.</p>
-              <a href="/">
-                <Button size="lg" className="w-full justify-center h-12">Go to dashboard</Button>
-              </a>
+              <CheckCircle2
+                className="size-12 text-success mx-auto"
+                aria-hidden="true"
+              />
+              <div className="space-y-1">
+                <h1 className="font-display text-title-sm font-semibold text-foreground">
+                  Email verified
+                </h1>
+                <p className="text-body-sm text-muted-foreground">
+                  Your account is now fully active.
+                </p>
+              </div>
+              <Button asChild variant="primary" size="lg" className="w-full justify-center">
+                <a href="/">Go to dashboard</a>
+              </Button>
             </>
           )}
 
           {status === 'error' && (
             <>
-              <AlertCircle className="h-12 w-12 text-danger mx-auto mb-4" />
-              <h1 className="font-display text-xl font-semibold text-white mb-2">Verification failed</h1>
-              <p className="text-sm text-white/40 mb-6">{error}</p>
-              <a href="/">
-                <Button size="lg" className="w-full justify-center h-12">Go to dashboard</Button>
-              </a>
+              <AlertCircle
+                className="size-12 text-destructive mx-auto"
+                aria-hidden="true"
+              />
+              <div className="space-y-1">
+                <h1 className="font-display text-title-sm font-semibold text-foreground">
+                  Verification failed
+                </h1>
+                <p className="text-body-sm text-muted-foreground">{error}</p>
+              </div>
+              <Button asChild variant="primary" size="lg" className="w-full justify-center">
+                <a href="/">Go to dashboard</a>
+              </Button>
             </>
           )}
 
           {status === 'input' && (
             <>
-              <Mail className="h-12 w-12 text-accent/60 mx-auto mb-4" />
-              <h1 className="font-display text-xl font-semibold text-white mb-2">Enter verification code</h1>
-              <p className="text-sm text-white/40 mb-6">Check your email for a 6-digit code.</p>
-              {error && (
-                <div className="mb-4 rounded-lg bg-danger/10 border border-danger/20 p-3 text-sm text-danger">
-                  {error}
-                </div>
-              )}
+              <Mail className="size-12 text-primary mx-auto" aria-hidden="true" />
+              <div className="space-y-1">
+                <h1 className="font-display text-title-sm font-semibold text-foreground">
+                  Enter verification code
+                </h1>
+                <p className="text-body-sm text-muted-foreground">
+                  Check your email for a 6-digit code.
+                </p>
+              </div>
+              {error && <Alert intent="destructive" title={error} />}
               <form onSubmit={handleSubmit} className="space-y-4">
-                <input type="text" value={code} onChange={e => setCode(e.target.value)} required
-                  placeholder="Enter code" maxLength={6} autoFocus
-                  className="w-full rounded-lg border border-white/8 bg-surface-0 px-3 py-2.5 text-sm text-white placeholder:text-white/20 focus:border-accent/30 focus:outline-hidden text-center tracking-widest text-lg" />
-                <Button type="submit" size="lg" className="w-full justify-center h-12">
+                <Input
+                  type="text"
+                  value={code}
+                  onChange={(e) => setCode(e.target.value)}
+                  required
+                  placeholder="Enter code"
+                  maxLength={6}
+                  autoFocus
+                  aria-label="Verification code"
+                  className="text-center tracking-widest text-body-sm"
+                />
+                <Button
+                  type="submit"
+                  variant="primary"
+                  size="lg"
+                  className="w-full justify-center"
+                >
                   Verify
                 </Button>
               </form>
             </>
           )}
-        </div>
-      </motion.div>
+        </Card.Body>
+      </Card>
     </div>
   );
 }

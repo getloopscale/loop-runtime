@@ -1,21 +1,25 @@
-import { motion } from 'framer-motion';
-import { CheckCircle2, Zap } from 'lucide-react';
+import { CheckCircle2 } from 'lucide-react';
+import { Card } from '@loopzero/ui';
 
 export function DeviceSuccessPage() {
   return (
-    <div className="min-h-screen bg-surface-0 flex items-center justify-center">
-      <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} className="w-full max-w-sm">
-        <div className="rounded-2xl border border-white/6 bg-surface-1/80 backdrop-blur-xl p-8 shadow-2xl shadow-black/40 text-center">
-          <div className="flex items-center gap-2.5 justify-center mb-6">
-            <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-accent/10 border border-accent/20">
-              <Zap className="h-5 w-5 text-accent" />
-            </div>
+    <div className="min-h-screen bg-background flex items-center justify-center p-6">
+      <Card className="w-full max-w-sm">
+        <Card.Body className="p-8 text-center space-y-4">
+          <CheckCircle2
+            className="size-12 text-success mx-auto"
+            aria-hidden="true"
+          />
+          <div className="space-y-1">
+            <h1 className="font-display text-title-sm font-semibold text-foreground">
+              CLI authorized
+            </h1>
+            <p className="text-body-sm text-muted-foreground">
+              You can close this tab and return to your terminal.
+            </p>
           </div>
-          <CheckCircle2 className="h-12 w-12 text-accent mx-auto mb-4" />
-          <h1 className="font-display text-xl font-semibold text-white mb-2">CLI authorized</h1>
-          <p className="text-sm text-white/40">You can close this tab and return to your terminal.</p>
-        </div>
-      </motion.div>
+        </Card.Body>
+      </Card>
     </div>
   );
 }
