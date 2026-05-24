@@ -336,16 +336,24 @@ VERIFY:  cd cmd/loopzero-ops && go test ./... ; /tmp/loopzero-ops quality regres
 
 ## Coverage Matrix
 
+> **AMENDED 2026-05-24** (MEET-ASYNC-AMENDMENT-2026-05-24-001, RATIFIED): the
+> "~20–22 migrate" projection was wrong. Actual Track B removal = **16** (14 cell-2
+> gates in TB1.1 + 2 audit scripts in TB5). The other 10 parity scripts have no
+> routine invariant left to migrate (operator procedures / cloud provisioning /
+> orchestrators / diagnostic) → reclassified **KEEP-OPERATOR**, not migrated.
+
 | # | Parity script(s) | Task | Resolution |
 |---|---|---|---|
-| 1 | cell2-activation-gates + c1..c12 + postflip (14) | TB1.1 | → parity_cell2_test.go (13 It) |
-| 2 | cell2-canary-stage1/2 (2); rollback-slo folded in C4 | TB2.1 | → parity_cell2_canary_test.go |
-| 3 | k3d-virgin-install + preflight (2) | TB3.1 | → parity_install_test.go (local) |
-| 4 | doks-install + droplet-install (2) | TB3.1 | assertions → Ginkgo cloud-label; provisioning KEEP per D3 |
-| 5 | droplet-cloud-init (1) | TB3.1 | KEEP (declarative cloud-init render) |
-| 6 | audit-golden-test (1) | TB4.1 | delete-redundant (Terratest) or migrate |
-| 7 | audit-argocd-drift (1) | TB4.1 | → parity_audit_test.go |
-| 8 | audit-regression-matrix + validate-matrix (2) | TB5.1 | → loopzero-ops quality regression-matrix (Go gate) |
+| 1 | cell2-activation-gates + c1..c12 + postflip (14) | TB1.1 | ✅ DONE → parity_cell2_test.go (5 It + Skips), 14 bash deleted |
+| 2 | cell2-canary-stage1/2 + rollback-slo (3) | TB2.1 | **KEEP-OPERATOR** — mutating canary/SLO procedures (invariants already in TB1.1) |
+| 3 | k3d-virgin-install + preflight (2) | TB3.1 | **KEEP-OPERATOR** — cleanroom install + 16-gate meta-orchestrator |
+| 4 | doks-install + droplet-install (2) | TB3.1 | **KEEP-OPERATOR** — cloud provisioning (per D3) |
+| 5 | droplet-cloud-init (1) | TB3.1 | **KEEP-OPERATOR** — declarative cloud-init render (per D3) |
+| 6 | audit-golden-test (1) | TB5 | ✅ DONE — was the matrix-auditor self-test (not helm-render); folded into TestGolden_*, bash deleted |
+| 7 | audit-argocd-drift (1) | TB4.1 | **KEEP-OPERATOR** — drift triage diagnostic (no routine invariant) |
+| 8 | audit-regression-matrix + validate-matrix (2) | TB5.1 | ✅ DONE (audit-regression-matrix → loopzero-ops Go gate, deleted); validate-matrix **KEEP-OPERATOR** (16-gate master runner) |
+
+**Actual removal: 16 scripts (TB1.1: 14 + TB5: 2). Remaining 10 = KEEP-OPERATOR (ratified).**
 
 **Coverage: 26/26 parity scripts addressed. Expected removal: ~20–22 (≤4 KEEP: droplet-cloud-init + irreducible doks/droplet provisioning).**
 
