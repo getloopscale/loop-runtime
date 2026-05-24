@@ -1,7 +1,7 @@
 import { motion } from 'framer-motion';
 import { User, Mail, UserCircle } from 'lucide-react';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
-import { Button } from '@/components/ui/button';
+import { Button } from '@loopzero/ui';
 import { PageWrapper } from '@/components/page-wrapper';
 import { useRequireAuth } from '@/hooks/use-auth';
 import { logout } from '@/lib/auth';
@@ -62,7 +62,7 @@ export function ProfilePage() {
         <motion.div initial={{ opacity: 0, y: 12 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.1 }}>
           <Card>
             <CardContent className="pt-6">
-              <Button variant="danger" onClick={logout} className="w-full justify-center">
+              <Button variant="destructive" onClick={logout} className="w-full justify-center">
                 Sign out
               </Button>
             </CardContent>

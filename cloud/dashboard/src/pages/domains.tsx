@@ -3,7 +3,7 @@ import { motion } from 'framer-motion';
 import { Globe, Shield, Clock, AlertCircle, Loader2, RefreshCw } from 'lucide-react';
 import { Card, CardContent } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
-import { Button } from '@/components/ui/button';
+import { Button } from '@loopzero/ui';
 import { PageWrapper } from '@/components/page-wrapper';
 import { useEngineApi } from '@/hooks/use-api';
 import { useRequireAuth } from '@/hooks/use-auth';
@@ -132,7 +132,7 @@ export function DomainsPage() {
                       {d.status === 'pending_verification' && (
                         <Button
                           size="sm"
-                          variant="outline"
+                          variant="secondary"
                           className="text-xs"
                           disabled={verifying === d.domain}
                           onClick={() => handleVerify(d.domain)}

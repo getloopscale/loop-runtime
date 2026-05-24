@@ -1,7 +1,7 @@
 import { motion } from 'framer-motion';
 import { AlertTriangle, Terminal } from 'lucide-react';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
-import { Button } from '@/components/ui/button';
+import { Button } from '@loopzero/ui';
 import { PageWrapper } from '@/components/page-wrapper';
 
 export function SettingsPage() {
@@ -46,7 +46,7 @@ export function SettingsPage() {
                   <p className="text-sm font-medium text-white/70">Delete Team</p>
                   <p className="text-xs text-white/30 mt-0.5">Permanently delete this team and all its projects</p>
                 </div>
-                <Button variant="danger" size="sm">Delete Team</Button>
+                <Button variant="destructive" size="sm">Delete Team</Button>
               </div>
             </CardContent>
           </Card>

@@ -2,7 +2,7 @@ import { useEffect, useState } from 'react';
 import { useSearchParams, Link } from 'react-router-dom';
 import { motion } from 'framer-motion';
 import { KeyRound, CheckCircle2 } from 'lucide-react';
-import { Button } from '@/components/ui/button';
+import { Button } from '@loopzero/ui';
 import { type Flow, getFlow, submitFlow, getCsrfToken, getFlowMessages } from '@/lib/kratos';
 
 import { API_URL } from '@/lib/config';

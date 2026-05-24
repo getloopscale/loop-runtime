@@ -2,7 +2,7 @@ import { useEffect, useState } from 'react';
 import { useNavigate, useSearchParams, Link } from 'react-router-dom';
 import { motion } from 'framer-motion';
 import { Zap, Github, Loader2, AlertCircle } from 'lucide-react';
-import { Button } from '@/components/ui/button';
+import { Button } from '@loopzero/ui';
 import { getSession, startLogin } from '@/lib/auth';
 import { clearToken } from '@/lib/api';
 
