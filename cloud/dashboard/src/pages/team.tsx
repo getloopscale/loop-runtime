@@ -56,10 +56,10 @@ export function TeamPage() {
               initial={{ opacity: 0, x: -8 }}
               animate={{ opacity: 1, x: 0 }}
               transition={{ delay: i * 0.06, duration: 0.3 }}
-              className="flex items-center justify-between px-5 py-4 border-b border-white/[0.04] last:border-0 group hover:bg-white/[0.02] transition-colors"
+              className="flex items-center justify-between px-5 py-4 border-b border-white/4 last:border-0 group hover:bg-white/2 transition-colors"
             >
               <div className="flex items-center gap-3">
-                <div className="flex h-9 w-9 items-center justify-center rounded-full bg-surface-4 text-sm font-semibold text-white/50 border border-white/[0.06] group-hover:border-accent/20 group-hover:text-accent/70 transition-all">
+                <div className="flex h-9 w-9 items-center justify-center rounded-full bg-surface-4 text-sm font-semibold text-white/50 border border-white/6 group-hover:border-accent/20 group-hover:text-accent/70 transition-all">
                   {avatar}
                 </div>
                 <div>

@@ -50,7 +50,7 @@ export function OverviewPage() {
             <Card className="group cursor-default">
               <CardContent className="p-5">
                 <div className="flex items-center justify-between mb-3">
-                  <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-white/[0.04] border border-white/[0.06] group-hover:border-accent/20 group-hover:bg-accent/5 transition-all duration-300">
+                  <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-white/4 border border-white/6 group-hover:border-accent/20 group-hover:bg-accent/5 transition-all duration-300">
                     <stat.icon className="h-4 w-4 text-white/30 group-hover:text-accent transition-colors duration-300" />
                   </div>
                   <ArrowUpRight className="h-3.5 w-3.5 text-white/10 group-hover:text-white/30 transition-colors" />
@@ -75,7 +75,7 @@ export function OverviewPage() {
           <CardContent>
             {recentDeploys.length === 0 && (
               <div className="py-8 text-center text-white/20 text-sm">
-                No deploys yet. Run <code className="bg-white/5 px-2 py-0.5 rounded font-mono text-xs">loopzero deploy</code> to get started.
+                No deploys yet. Run <code className="bg-white/5 px-2 py-0.5 rounded-sm font-mono text-xs">loopzero deploy</code> to get started.
               </div>
             )}
             <div className="space-y-0 -mt-2">
@@ -85,7 +85,7 @@ export function OverviewPage() {
                   initial={{ opacity: 0, x: -10 }}
                   animate={{ opacity: 1, x: 0 }}
                   transition={{ delay: 0.4 + i * 0.06 }}
-                  className="group flex items-center justify-between py-3 border-b border-white/[0.04] last:border-0 hover:bg-white/[0.02] -mx-6 px-6 transition-colors cursor-pointer"
+                  className="group flex items-center justify-between py-3 border-b border-white/4 last:border-0 hover:bg-white/2 -mx-6 px-6 transition-colors cursor-pointer"
                 >
                   <div className="flex items-center gap-4">
                     <div className={`h-2 w-2 rounded-full ${deploy.status === 'live' ? 'bg-accent animate-pulse-subtle' : 'bg-danger'}`} />

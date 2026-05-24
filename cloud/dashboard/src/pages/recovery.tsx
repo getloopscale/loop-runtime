@@ -87,7 +87,7 @@ export function RecoveryPage() {
   return (
     <div className="min-h-screen bg-surface-0 flex items-center justify-center">
       <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} className="w-full max-w-sm">
-        <div className="rounded-2xl border border-white/[0.06] bg-surface-1/80 backdrop-blur-xl p-8 shadow-2xl shadow-black/40">
+        <div className="rounded-2xl border border-white/6 bg-surface-1/80 backdrop-blur-xl p-8 shadow-2xl shadow-black/40">
           <div className="flex h-12 w-12 items-center justify-center rounded-xl bg-accent/10 border border-accent/20 mx-auto mb-6">
             <KeyRound className="h-6 w-6 text-accent" />
           </div>
@@ -98,7 +98,7 @@ export function RecoveryPage() {
               <p className="text-sm text-white/40 mb-6 text-center">Enter your email and we'll send you a recovery code.</p>
               <form onSubmit={handleEmailSubmit} className="space-y-4">
                 <input type="email" value={email} onChange={e => setEmail(e.target.value)} required placeholder="you@example.com"
-                  className="w-full rounded-lg border border-white/[0.08] bg-surface-0 px-3 py-2.5 text-sm text-white placeholder:text-white/20 focus:border-accent/30 focus:outline-none" />
+                  className="w-full rounded-lg border border-white/8 bg-surface-0 px-3 py-2.5 text-sm text-white placeholder:text-white/20 focus:border-accent/30 focus:outline-hidden" />
                 {errorMessage && <p className="text-xs text-danger">{errorMessage}</p>}
                 <Button type="submit" size="lg" className="w-full justify-center h-12" disabled={loading}>
                   {loading ? 'Sending...' : 'Send recovery code'}
@@ -113,7 +113,7 @@ export function RecoveryPage() {
               <p className="text-sm text-white/40 mb-6 text-center">Check your email for a 6-digit code.</p>
               <form onSubmit={handleCodeSubmit} className="space-y-4">
                 <input type="text" value={code} onChange={e => setCode(e.target.value)} required placeholder="Enter code"
-                  className="w-full rounded-lg border border-white/[0.08] bg-surface-0 px-3 py-2.5 text-sm text-white placeholder:text-white/20 focus:border-accent/30 focus:outline-none text-center tracking-widest text-lg" />
+                  className="w-full rounded-lg border border-white/8 bg-surface-0 px-3 py-2.5 text-sm text-white placeholder:text-white/20 focus:border-accent/30 focus:outline-hidden text-center tracking-widest text-lg" />
                 {errorMessage && <p className="text-xs text-danger text-center">{errorMessage}</p>}
                 <Button type="submit" size="lg" className="w-full justify-center h-12" disabled={loading}>
                   {loading ? 'Verifying...' : 'Verify code'}

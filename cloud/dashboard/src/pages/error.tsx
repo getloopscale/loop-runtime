@@ -49,7 +49,7 @@ export function ErrorPage() {
   return (
     <div className="min-h-screen bg-surface-0 flex items-center justify-center">
       <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} className="w-full max-w-sm">
-        <div className="rounded-2xl border border-white/[0.06] bg-surface-1/80 backdrop-blur-xl p-8 shadow-2xl shadow-black/40 text-center">
+        <div className="rounded-2xl border border-white/6 bg-surface-1/80 backdrop-blur-xl p-8 shadow-2xl shadow-black/40 text-center">
           <AlertTriangle className="h-12 w-12 text-warning mx-auto mb-4" />
           <h1 className="font-display text-xl font-semibold text-white mb-2">Something went wrong</h1>
           {loading ? (

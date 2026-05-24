@@ -124,7 +124,7 @@ export function RegisterPage() {
     return (
       <div className="min-h-screen bg-surface-0 flex items-center justify-center">
         <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} className="w-full max-w-sm">
-          <div className="rounded-2xl border border-white/[0.06] bg-surface-1/80 backdrop-blur-xl p-8 shadow-2xl shadow-black/40 text-center">
+          <div className="rounded-2xl border border-white/6 bg-surface-1/80 backdrop-blur-xl p-8 shadow-2xl shadow-black/40 text-center">
             <div className="flex h-12 w-12 items-center justify-center rounded-xl bg-accent/10 border border-accent/20 mx-auto mb-4">
               <Mail className="h-6 w-6 text-accent" />
             </div>
@@ -149,9 +149,9 @@ export function RegisterPage() {
 
   return (
     <div className="min-h-screen bg-surface-0 flex items-center justify-center relative overflow-hidden">
-      <div className="absolute top-1/4 -left-32 w-96 h-96 bg-accent/[0.04] rounded-full blur-[120px]" />
+      <div className="absolute top-1/4 -left-32 w-96 h-96 bg-accent/4 rounded-full blur-[120px]" />
       <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.5 }} className="relative w-full max-w-sm">
-        <div className="rounded-2xl border border-white/[0.06] bg-surface-1/80 backdrop-blur-xl p-8 shadow-2xl shadow-black/40">
+        <div className="rounded-2xl border border-white/6 bg-surface-1/80 backdrop-blur-xl p-8 shadow-2xl shadow-black/40">
           <div className="flex items-center gap-2.5 mb-8">
             <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-accent/10 border border-accent/20">
               <Zap className="h-5 w-5 text-accent" />
@@ -164,7 +164,7 @@ export function RegisterPage() {
 
           {allErrors.length > 0 && (
             <div className="mb-4 rounded-lg bg-danger/10 border border-danger/20 p-3 text-sm text-danger flex items-start gap-2">
-              <AlertCircle className="h-4 w-4 mt-0.5 flex-shrink-0" />
+              <AlertCircle className="h-4 w-4 mt-0.5 shrink-0" />
               <span>{allErrors[0].text}</span>
             </div>
           )}
@@ -181,17 +181,17 @@ export function RegisterPage() {
           </div>
 
           <div className="relative my-6">
-            <div className="absolute inset-0 flex items-center"><div className="w-full border-t border-white/[0.06]" /></div>
+            <div className="absolute inset-0 flex items-center"><div className="w-full border-t border-white/6" /></div>
             <div className="relative flex justify-center"><span className="bg-surface-1/80 px-3 text-xs text-white/20">or with email</span></div>
           </div>
 
           <form onSubmit={submitPassword} className="space-y-3">
             <input type="text" value={name} onChange={e => setName(e.target.value)} placeholder="Name" autoComplete="name"
-              className="w-full rounded-lg border border-white/[0.08] bg-surface-0 px-3 py-2.5 text-sm text-white placeholder:text-white/20 focus:border-accent/30 focus:outline-none" />
+              className="w-full rounded-lg border border-white/8 bg-surface-0 px-3 py-2.5 text-sm text-white placeholder:text-white/20 focus:border-accent/30 focus:outline-hidden" />
             <input type="email" value={email} onChange={e => setEmail(e.target.value)} required placeholder="Email" autoComplete="email"
-              className="w-full rounded-lg border border-white/[0.08] bg-surface-0 px-3 py-2.5 text-sm text-white placeholder:text-white/20 focus:border-accent/30 focus:outline-none" />
+              className="w-full rounded-lg border border-white/8 bg-surface-0 px-3 py-2.5 text-sm text-white placeholder:text-white/20 focus:border-accent/30 focus:outline-hidden" />
             <input type="password" value={password} onChange={e => setPassword(e.target.value)} required placeholder="Password (min. 8 characters)" autoComplete="new-password"
-              className="w-full rounded-lg border border-white/[0.08] bg-surface-0 px-3 py-2.5 text-sm text-white placeholder:text-white/20 focus:border-accent/30 focus:outline-none" />
+              className="w-full rounded-lg border border-white/8 bg-surface-0 px-3 py-2.5 text-sm text-white placeholder:text-white/20 focus:border-accent/30 focus:outline-hidden" />
             <Button type="submit" size="lg" className="w-full justify-center h-12" disabled={submitting}>
               {submitting ? <Loader2 className="h-4 w-4 animate-spin" /> : 'Create account'}
             </Button>

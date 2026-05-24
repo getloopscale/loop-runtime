@@ -82,7 +82,7 @@ export function VerificationPage() {
   return (
     <div className="min-h-screen bg-surface-0 flex items-center justify-center">
       <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} className="w-full max-w-sm">
-        <div className="rounded-2xl border border-white/[0.06] bg-surface-1/80 backdrop-blur-xl p-8 shadow-2xl shadow-black/40 text-center">
+        <div className="rounded-2xl border border-white/6 bg-surface-1/80 backdrop-blur-xl p-8 shadow-2xl shadow-black/40 text-center">
 
           {status === 'loading' && (
             <>
@@ -126,7 +126,7 @@ export function VerificationPage() {
               <form onSubmit={handleSubmit} className="space-y-4">
                 <input type="text" value={code} onChange={e => setCode(e.target.value)} required
                   placeholder="Enter code" maxLength={6} autoFocus
-                  className="w-full rounded-lg border border-white/[0.08] bg-surface-0 px-3 py-2.5 text-sm text-white placeholder:text-white/20 focus:border-accent/30 focus:outline-none text-center tracking-widest text-lg" />
+                  className="w-full rounded-lg border border-white/8 bg-surface-0 px-3 py-2.5 text-sm text-white placeholder:text-white/20 focus:border-accent/30 focus:outline-hidden text-center tracking-widest text-lg" />
                 <Button type="submit" size="lg" className="w-full justify-center h-12">
                   Verify
                 </Button>

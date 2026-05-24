@@ -43,7 +43,7 @@ export function ProjectsPage() {
             <FolderKanban className="mx-auto h-10 w-10 text-white/10 mb-4" />
             <p className="text-white/40 mb-2">No projects yet</p>
             <p className="text-sm text-white/20">
-              Run <code className="font-mono bg-surface-3 px-2 py-0.5 rounded text-accent/70">loopzero init</code> to create your first project
+              Run <code className="font-mono bg-surface-3 px-2 py-0.5 rounded-sm text-accent/70">loopzero init</code> to create your first project
             </p>
           </CardContent>
         </Card>
@@ -72,7 +72,7 @@ export function ProjectsPage() {
                     <ArrowRight className="h-4 w-4 text-white/10 group-hover:text-white/30 group-hover:translate-x-0.5 transition-all" />
                   </div>
 
-                  <div className="border-t border-white/[0.04] px-5 py-3 flex gap-2">
+                  <div className="border-t border-white/4 px-5 py-3 flex gap-2">
                     {(project.apps ?? []).map((app) => (
                       <div key={app.name} className="flex items-center gap-2 rounded-md bg-surface-3/50 px-2.5 py-1.5">
                         <div className={`h-1.5 w-1.5 rounded-full ${app.status === 'live' ? 'bg-accent' : 'bg-danger'}`} />

@@ -31,9 +31,9 @@ function UserFooter() {
   const email = ''; // Will be populated by session in future
 
   return (
-    <div className="mx-3 mb-4 flex items-center justify-between rounded-lg border border-white/[0.06] bg-surface-1 px-3 py-2.5">
+    <div className="mx-3 mb-4 flex items-center justify-between rounded-lg border border-white/6 bg-surface-1 px-3 py-2.5">
       <div className="flex items-center gap-2 min-w-0">
-        <div className="flex h-6 w-6 items-center justify-center rounded-full bg-accent/10 flex-shrink-0">
+        <div className="flex h-6 w-6 items-center justify-center rounded-full bg-accent/10 shrink-0">
           <User className="h-3 w-3 text-accent/60" />
         </div>
         <span className="text-xs text-white/40 truncate">{email || 'User'}</span>
@@ -47,7 +47,7 @@ function UserFooter() {
 
 export function Sidebar() {
   return (
-    <aside className="fixed left-0 top-0 z-40 flex h-screen w-[220px] flex-col border-r border-white/[0.06] bg-surface-0">
+    <aside className="fixed left-0 top-0 z-40 flex h-screen w-[220px] flex-col border-r border-white/6 bg-surface-0">
       {/* Logo */}
       <div className="flex items-center gap-2.5 px-5 py-5">
         <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-accent/10 border border-accent/20">
@@ -92,7 +92,7 @@ export function Sidebar() {
       </nav>
 
       {/* CLI hint */}
-      <div className="mx-3 mb-3 rounded-lg border border-white/[0.06] bg-surface-1 p-3">
+      <div className="mx-3 mb-3 rounded-lg border border-white/6 bg-surface-1 p-3">
         <div className="flex items-center gap-2 text-xs text-white/30">
           <Terminal className="h-3.5 w-3.5" />
           <span className="font-mono">loopzero deploy</span>

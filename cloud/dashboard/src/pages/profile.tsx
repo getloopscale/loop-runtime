@@ -33,7 +33,7 @@ export function ProfilePage() {
             </CardHeader>
             <CardContent className="space-y-3">
               {name && (
-                <div className="flex items-center gap-3 rounded-lg border border-white/[0.06] bg-surface-0 p-4">
+                <div className="flex items-center gap-3 rounded-lg border border-white/6 bg-surface-0 p-4">
                   <div className="flex h-10 w-10 items-center justify-center rounded-full bg-accent/10">
                     <UserCircle className="h-5 w-5 text-accent/60" />
                   </div>
@@ -43,7 +43,7 @@ export function ProfilePage() {
                   </div>
                 </div>
               )}
-              <div className="flex items-center gap-3 rounded-lg border border-white/[0.06] bg-surface-0 p-4">
+              <div className="flex items-center gap-3 rounded-lg border border-white/6 bg-surface-0 p-4">
                 <div className="flex h-10 w-10 items-center justify-center rounded-full bg-accent/10">
                   <Mail className="h-5 w-5 text-accent/60" />
                 </div>

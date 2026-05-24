@@ -40,7 +40,7 @@ export function EnvironmentsPage() {
             <Card className="group">
               <CardContent className="p-5 flex items-center justify-between">
                 <div className="flex items-center gap-4">
-                  <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-surface-3 border border-white/[0.06]">
+                  <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-surface-3 border border-white/6">
                     <Globe className="h-4.5 w-4.5 text-white/30" />
                   </div>
                   <div>

@@ -95,7 +95,7 @@ export function AccountPage() {
                 <div>
                   <label className="block text-xs text-white/40 mb-1.5">New password</label>
                   <input type="password" value={newPassword} onChange={e => setNewPassword(e.target.value)} required placeholder="Min. 8 characters"
-                    className="w-full rounded-lg border border-white/[0.08] bg-surface-0 px-3 py-2.5 text-sm text-white placeholder:text-white/20 focus:border-accent/30 focus:outline-none" />
+                    className="w-full rounded-lg border border-white/8 bg-surface-0 px-3 py-2.5 text-sm text-white placeholder:text-white/20 focus:border-accent/30 focus:outline-hidden" />
                 </div>
                 {errorMessage && <p className="text-xs text-danger">{errorMessage}</p>}
                 <Button type="submit" size="sm" disabled={loading}>
@@ -119,7 +119,7 @@ export function AccountPage() {
               <CardContent>
                 <div className="space-y-3">
                   {oidcNodes.map((node, i) => (
-                    <div key={i} className="flex items-center justify-between rounded-lg border border-white/[0.06] bg-surface-0 p-3">
+                    <div key={i} className="flex items-center justify-between rounded-lg border border-white/6 bg-surface-0 p-3">
                       <span className="text-sm text-white/60 capitalize">{node.attributes.value || node.meta.label?.text || 'Social account'}</span>
                       <span className="text-xs text-accent/60">Connected</span>
                     </div>

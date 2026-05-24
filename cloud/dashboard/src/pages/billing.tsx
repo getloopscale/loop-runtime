@@ -135,7 +135,7 @@ export function BillingPage() {
       {activating && (
         <motion.div initial={{ opacity: 0, y: -10 }} animate={{ opacity: 1, y: 0 }}
           className="mb-4 rounded-lg bg-accent/10 border border-accent/20 p-4 flex items-center gap-3">
-          <Loader2 className="h-5 w-5 text-accent animate-spin flex-shrink-0" />
+          <Loader2 className="h-5 w-5 text-accent animate-spin shrink-0" />
           <div>
             <p className="text-sm font-medium text-white">Activating your subscription...</p>
             <p className="text-xs text-white/40 mt-0.5">This usually takes a few seconds.</p>
@@ -145,7 +145,7 @@ export function BillingPage() {
       {activationResult === 'success' && (
         <motion.div initial={{ opacity: 0, y: -10 }} animate={{ opacity: 1, y: 0 }}
           className="mb-4 rounded-lg bg-green-500/10 border border-green-500/20 p-4 flex items-center gap-3">
-          <CheckCircle2 className="h-5 w-5 text-green-400 flex-shrink-0" />
+          <CheckCircle2 className="h-5 w-5 text-green-400 shrink-0" />
           <div>
             <p className="text-sm font-medium text-white">Subscription activated! Welcome to {billing?.plan}.</p>
           </div>
@@ -155,7 +155,7 @@ export function BillingPage() {
       {activationResult === 'timeout' && (
         <motion.div initial={{ opacity: 0, y: -10 }} animate={{ opacity: 1, y: 0 }}
           className="mb-4 rounded-lg bg-yellow-500/10 border border-yellow-500/20 p-4 flex items-center gap-3">
-          <Clock className="h-5 w-5 text-yellow-400 flex-shrink-0" />
+          <Clock className="h-5 w-5 text-yellow-400 shrink-0" />
           <div>
             <p className="text-sm font-medium text-white">Taking longer than expected.</p>
             <p className="text-xs text-white/40 mt-0.5">Your subscription is being processed. Refresh the page in a moment, or contact support if it doesn't update within a few minutes.</p>
@@ -176,7 +176,7 @@ export function BillingPage() {
           className="col-span-2"
         >
           <Card className="relative overflow-hidden">
-            <div className="absolute top-0 right-0 w-64 h-64 bg-accent/[0.03] rounded-full -translate-y-32 translate-x-32 blur-3xl" />
+            <div className="absolute top-0 right-0 w-64 h-64 bg-accent/3 rounded-full -translate-y-32 translate-x-32 blur-3xl" />
             <CardContent className="p-6 relative">
               <div className="flex items-start justify-between">
                 <div>

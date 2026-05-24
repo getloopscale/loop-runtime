@@ -15,7 +15,7 @@ export function SettingsPage() {
               <CardDescription>Most settings are managed via the CLI for maximum control.</CardDescription>
             </CardHeader>
             <CardContent>
-              <div className="rounded-lg bg-surface-0 border border-white/[0.06] p-4 font-mono text-sm">
+              <div className="rounded-lg bg-surface-0 border border-white/6 p-4 font-mono text-sm">
                 <div className="flex items-center gap-2 text-white/30 mb-3">
                   <Terminal className="h-3.5 w-3.5" />
                   <span className="text-xs">terminal</span>
@@ -41,7 +41,7 @@ export function SettingsPage() {
               <CardDescription>Irreversible actions. Proceed with extreme caution.</CardDescription>
             </CardHeader>
             <CardContent>
-              <div className="flex items-center justify-between p-4 rounded-lg border border-danger/10 bg-danger/[0.03]">
+              <div className="flex items-center justify-between p-4 rounded-lg border border-danger/10 bg-danger/3">
                 <div>
                   <p className="text-sm font-medium text-white/70">Delete Team</p>
                   <p className="text-xs text-white/30 mt-0.5">Permanently delete this team and all its projects</p>

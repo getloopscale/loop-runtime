@@ -88,7 +88,7 @@ export function DomainsPage() {
             <Globe className="mx-auto h-10 w-10 text-white/10 mb-4" />
             <p className="text-white/40 mb-2">No custom domains configured</p>
             <p className="text-sm text-white/20">
-              Run <code className="font-mono bg-surface-3 px-2 py-0.5 rounded text-accent/70">loopzero domain add &lt;domain&gt; --project &lt;p&gt; --app &lt;a&gt; --env &lt;e&gt;</code> to add one
+              Run <code className="font-mono bg-surface-3 px-2 py-0.5 rounded-sm text-accent/70">loopzero domain add &lt;domain&gt; --project &lt;p&gt; --app &lt;a&gt; --env &lt;e&gt;</code> to add one
             </p>
           </CardContent>
         </Card>
@@ -156,13 +156,13 @@ export function DomainsPage() {
                         <span className="text-xs text-white/50">Add these DNS records to activate your domain:</span>
                       </div>
                       <div className="font-mono text-xs space-y-2">
-                        <div className="flex gap-4 bg-surface-2/50 rounded p-2">
+                        <div className="flex gap-4 bg-surface-2/50 rounded-sm p-2">
                           <span className="text-white/30 w-14">CNAME</span>
                           <span className="text-white/60">{d.domain}</span>
                           <span className="text-white/20">→</span>
                           <span className="text-accent/70">{d.cname_target}</span>
                         </div>
-                        <div className="flex gap-4 bg-surface-2/50 rounded p-2">
+                        <div className="flex gap-4 bg-surface-2/50 rounded-sm p-2">
                           <span className="text-white/30 w-14">TXT</span>
                           <span className="text-white/60">{d.verification.txt_name}</span>
                           <span className="text-white/20">→</span>
