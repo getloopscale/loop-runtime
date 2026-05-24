@@ -46,6 +46,7 @@ import (
 	"github.com/loopzero/loopzero/pkg/quality/pgpdb"
 	"github.com/loopzero/loopzero/pkg/quality/pkgusagematrix"
 	"github.com/loopzero/loopzero/pkg/quality/prodimagetags"
+	"github.com/loopzero/loopzero/pkg/quality/regressionmatrix"
 	"github.com/loopzero/loopzero/pkg/quality/regressiontest"
 	"github.com/loopzero/loopzero/pkg/quality/runtimeslo"
 	"github.com/loopzero/loopzero/pkg/quality/scriptsaudit"
@@ -279,6 +280,8 @@ func runQuality(args []string) int {
 		return runCorrectionsTxtClosed(args[1:])
 	case "script-count":
 		return runScriptCount(args[1:])
+	case "regression-matrix":
+		return runRegressionMatrix(args[1:])
 	case "migration-test-coverage":
 		return runMigrationTestCoverage(args[1:])
 	case "pkg-usage-matrix":
@@ -685,6 +688,54 @@ func runScriptCount(args []string) int {
 		return 0
 	}
 	fmt.Printf("script-count: PASS — %d canonical .sh (== baseline %d)\n", v.Count, v.Baseline)
+	return 0
+}
+
+// runRegressionMatrix is the matrix-integrity gate replacing
+// audit-regression-matrix.sh + audit-golden-test.sh (Track B TB5). It audits
+// the bootstrap regression matrix: every entry's Verification artifact must
+// still resolve in the repo. FAILs if any critical (Pode Recorrer=NÃO) entry's
+// artifact is unresolvable. Unlike the bash original, it has no set-e/return-2
+// fragility (the prior gate silently aborted at exit 2 — see
+// finding-2026-05-24-audit-regression-matrix-set-e-abort).
+func runRegressionMatrix(args []string) int {
+	fs := flag.NewFlagSet("regression-matrix", flag.ContinueOnError)
+	root := fs.String("root", ".", "repo root directory")
+	matrix := fs.String("matrix", "docs/runbooks/bootstrap-regression-matrix.md", "matrix markdown path (repo-relative)")
+	strict := fs.Bool("strict", false, "fail on ANY miss, not just critical (Pode Recorrer=NÃO) ones")
+	if err := fs.Parse(args); err != nil {
+		return 1
+	}
+	if absRoot, err := os.Getwd(); err == nil && *root == "." {
+		*root = absRoot
+	}
+	matrixPath := *matrix
+	if !filepath.IsAbs(matrixPath) {
+		matrixPath = filepath.Join(*root, matrixPath)
+	}
+	v, err := regressionmatrix.Check(matrixPath, *root, *strict)
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "regression-matrix: %v\n", err)
+		return 5
+	}
+	fmt.Printf("regression-matrix: %d entries — OK=%d miss=%d (critical=%d) skip=%d\n",
+		v.Total, v.OK, v.Miss, v.MissCritical, v.Skip)
+	for _, e := range v.MissEntries {
+		marker := " "
+		if e.CanRecur == regressionmatrix.CanRecurNo {
+			marker = "!"
+		}
+		verify := e.Verification
+		if len(verify) > 80 {
+			verify = verify[:80]
+		}
+		fmt.Printf("  MISS%s #%s [%s] %s\n", marker, e.ID, e.CanRecur, verify)
+	}
+	if v.Failed() {
+		fmt.Fprintf(os.Stderr, "regression-matrix: FAIL — %d unresolved critical artifact(s); the matrix claims protection that no longer resolves in the repo\n", v.MissCritical)
+		return 1
+	}
+	fmt.Println("regression-matrix: PASS")
 	return 0
 }
 

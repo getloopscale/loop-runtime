@@ -103,12 +103,19 @@ for script in "${PARITY_DIR}"/*.sh; do
   result $? "bash-syntax:$name"
 done
 
-# Gate 3: matrix integrity audit
-bash "${PARITY_DIR}/audit-regression-matrix.sh" >/dev/null 2>&1
+# Gate 3: matrix integrity audit — migrated to the Go gate
+# `loopzero-ops quality regression-matrix` (Track B TB5). The bash
+# audit-regression-matrix.sh aborted at exit 2 under set -e (a helper return 2
+# propagated as a fatal) so it never scanned — see
+# finding-2026-05-24-audit-regression-matrix-set-e-abort. The Go gate has no
+# such fragility.
+( cd "${REPO_ROOT}/cmd/loopzero-ops" && go run . quality regression-matrix --root "${REPO_ROOT}" ) >/dev/null 2>&1
 result $? "matrix-integrity-audit"
 
-# Gate 3b: golden test for the audit script itself (catches audit regressions)
-bash "${PARITY_DIR}/audit-golden-test.sh" >/dev/null 2>&1
+# Gate 3b: golden test for the audit logic itself (catches audit regressions).
+# Now a Go unit test (TestGolden_*) — the faithful port of the deleted
+# audit-golden-test.sh, folded into the gate's own package.
+( cd "${REPO_ROOT}" && go test ./pkg/quality/regressionmatrix/... ) >/dev/null 2>&1
 result $? "matrix-audit:golden-test"
 
 # Gate 4: droplet --dry-run with mock creds

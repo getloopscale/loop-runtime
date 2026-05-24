@@ -65,12 +65,16 @@ tasks:
   parity:audit:
     desc: Verify regression matrix integrity (every entry's Verification token resolves in repo)
     cmds:
-      - bash infra/tests/parity/audit-regression-matrix.sh
+      # Migrated to the Go gate (Track B TB5). The bash audit-regression-matrix.sh
+      # aborted at exit 2 under set -e and never scanned — see
+      # finding-2026-05-24-audit-regression-matrix-set-e-abort.
+      - cd cmd/loopzero-ops && go run . quality regression-matrix --root ..
 
   parity:audit:golden:
-    desc: Golden test for the audit script (catches audit regressions)
+    desc: Golden test for the matrix-audit logic (catches audit regressions)
     cmds:
-      - bash infra/tests/parity/audit-golden-test.sh
+      # Now the Go unit test TestGolden_* (faithful port of audit-golden-test.sh).
+      - go test ./pkg/quality/regressionmatrix/...
 
   parity:k3d-virgin:
     desc: T5.1 — k3d virgin install (degrau 1, $0, ~10min)
