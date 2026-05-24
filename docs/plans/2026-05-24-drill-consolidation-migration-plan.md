@@ -210,7 +210,8 @@ GREEN:   implement slo-compare
 VERIFY:  go test ./...; loopzero-ops chaos slo-compare baseline.json during.json post.json == report.sh verdict
 ```
 - [ ] slo-compare parity with report.sh verdict; chaos-test skill rewired for the verdict; baseline/run-*/cleanup KEEP-documented.
-  - [x] **Go port DONE 2026-05-24** — `pkg/quality/chaosslo` + `loopzero-ops chaos slo-compare` (new `chaos` subcommand group). 9 Go tests; e2e PASS(0)/FAIL(2)/INCONCLUSIVE(5). FAIL reason strings byte-identical to `run-scenario.sh:240-258`. **Correction (C0):** the verdict lives in `run-scenario.sh:235-259`, NOT `report.sh` (which only formats `--verdict`). **run-scenario.sh rewire DEFERRED** — it is a LIVE-validated chaos path (10/10 2026-05-23); the verdict-block→`loopzero-ops chaos slo-compare` swap must be re-validated by a local `/chaos-test` run before edit (D3 "LIVE gate before touching the path"). No bash deleted (C5).
+  - [x] **Go port DONE 2026-05-24** — `pkg/quality/chaosslo` + `loopzero-ops chaos slo-compare` (new `chaos` subcommand group). 9 Go tests; e2e PASS(0)/FAIL(2)/INCONCLUSIVE(5). FAIL reason strings byte-identical to `run-scenario.sh:240-258`. **Correction (C0):** the verdict lives in `run-scenario.sh:235-259`, NOT `report.sh` (which only formats `--verdict`).
+  - [x] **run-scenario.sh REWIRED + LIVE-VALIDATED 2026-05-24** — verdict block (235-259) now delegates to `loopzero-ops chaos slo-compare` (exit-code-driven: 0=PASS/2=FAIL/5=INCONCLUSIVE; REASONS via `mapfile` from the `  - ` lines). Validated by a real `/chaos-test` C01 pod-kill (operator-authorized): **verdict PASS via the rewired path**, exit 0, correct restart-delta handling (-2 ≤ 2), cleanup verified zero-orphan. chaos-mesh reinstalled on mgmt (6/6). Bash deletion still DEFERRED to C5 (run-scenario.sh stays — chaos-mesh injection is KEEP-OPERATOR; only the verdict logic moved).
 
 ---
 
