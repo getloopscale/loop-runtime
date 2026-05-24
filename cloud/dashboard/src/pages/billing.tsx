@@ -2,7 +2,7 @@ import { useState, useEffect } from 'react';
 import { useSearchParams } from 'react-router-dom';
 import { motion } from 'framer-motion';
 import { ArrowUpRight, Sparkles, Loader2, CheckCircle2, Clock } from 'lucide-react';
-import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
+import { Card } from '@loopzero/ui';
 import { Button } from '@loopzero/ui';
 import { PageWrapper } from '@/components/page-wrapper';
 import { useCloudApi } from '@/hooks/use-api';
@@ -126,7 +126,7 @@ export function BillingPage() {
   })) : [];
 
   if (loading) {
-    return <PageWrapper title="Billing"><Card><CardContent className="py-16 text-center"><Loader2 className="mx-auto h-6 w-6 text-white/20 animate-spin" /></CardContent></Card></PageWrapper>;
+    return <PageWrapper title="Billing"><Card><Card.Body className="py-16 text-center"><Loader2 className="mx-auto h-6 w-6 text-white/20 animate-spin" /></Card.Body></Card></PageWrapper>;
   }
 
   return (
@@ -177,7 +177,7 @@ export function BillingPage() {
         >
           <Card className="relative overflow-hidden">
             <div className="absolute top-0 right-0 w-64 h-64 bg-accent/3 rounded-full -translate-y-32 translate-x-32 blur-3xl" />
-            <CardContent className="p-6 relative">
+            <Card.Body className="p-6 relative">
               <div className="flex items-start justify-between">
                 <div>
                   <p className="text-sm text-white/40 mb-1">Current Plan</p>
@@ -188,7 +188,7 @@ export function BillingPage() {
                   {actionLoading ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <>Manage Plan <ArrowUpRight className="h-3.5 w-3.5" /></>}
                 </Button>
               </div>
-            </CardContent>
+            </Card.Body>
           </Card>
         </motion.div>
 
@@ -199,11 +199,11 @@ export function BillingPage() {
           transition={{ delay: 0.1 }}
         >
           <Card className="h-full border-accent/10 hover:border-accent/20 cursor-pointer group" onClick={() => upgradePlan('pro')}>
-            <CardContent className="p-6 flex flex-col justify-center h-full">
+            <Card.Body className="p-6 flex flex-col justify-center h-full">
               <Sparkles className="h-5 w-5 text-accent/60 mb-3 group-hover:text-accent transition-colors" />
               <p className="text-sm font-semibold text-white/70 group-hover:text-white transition-colors">Upgrade to Pro — $19/mo</p>
               <p className="text-xs text-white/30 mt-1">10 projects, 3 environments, 1000 builds/month</p>
-            </CardContent>
+            </Card.Body>
           </Card>
         </motion.div>
       </div>
@@ -215,10 +215,10 @@ export function BillingPage() {
         transition={{ delay: 0.2 }}
       >
         <Card>
-          <CardHeader>
-            <CardTitle className="text-base">Usage This Period</CardTitle>
-          </CardHeader>
-          <CardContent>
+          <Card.Header>
+            <Card.Title className="text-base">Usage This Period</Card.Title>
+          </Card.Header>
+          <Card.Body>
             <div className="space-y-5">
               {usage.map((item, i) => {
                 const isUnlimited = item.limit === null;
@@ -251,7 +251,7 @@ export function BillingPage() {
                 );
               })}
             </div>
-          </CardContent>
+          </Card.Body>
         </Card>
       </motion.div>
     </PageWrapper>

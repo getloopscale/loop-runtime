@@ -1,6 +1,6 @@
 import { motion } from 'framer-motion';
 import { UserPlus, Loader2 } from 'lucide-react';
-import { Card, CardContent } from '@/components/ui/card';
+import { Card } from '@loopzero/ui';
 import { Badge } from '@loopzero/ui';
 import { Button } from '@loopzero/ui';
 import { PageWrapper } from '@/components/page-wrapper';
@@ -31,7 +31,7 @@ export function TeamPage() {
   const members = data?.members || [];
 
   if (loading) {
-    return <PageWrapper title="Team" description="Manage who has access."><Card><CardContent className="py-16 text-center"><Loader2 className="mx-auto h-6 w-6 text-white/20 animate-spin" /></CardContent></Card></PageWrapper>;
+    return <PageWrapper title="Team" description="Manage who has access."><Card><Card.Body className="py-16 text-center"><Loader2 className="mx-auto h-6 w-6 text-white/20 animate-spin" /></Card.Body></Card></PageWrapper>;
   }
 
   return (
@@ -46,7 +46,7 @@ export function TeamPage() {
       }
     >
       <Card>
-        <CardContent className="p-0">
+        <Card.Body className="p-0">
           {members.map((member, i) => {
             const displayName = member.name || member.username || member.email.split('@')[0];
             const avatar = displayName.charAt(0).toUpperCase();
@@ -74,7 +74,7 @@ export function TeamPage() {
             </motion.div>
             );
           })}
-        </CardContent>
+        </Card.Body>
       </Card>
     </PageWrapper>
   );

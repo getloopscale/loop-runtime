@@ -1,7 +1,7 @@
 import { useState } from 'react';
 import { motion } from 'framer-motion';
 import { Globe, Shield, Clock, AlertCircle, Loader2, RefreshCw } from 'lucide-react';
-import { Card, CardContent } from '@/components/ui/card';
+import { Card } from '@loopzero/ui';
 import { Badge } from '@loopzero/ui';
 import { Button } from '@loopzero/ui';
 import { PageWrapper } from '@/components/page-wrapper';
@@ -81,23 +81,23 @@ export function DomainsPage() {
   return (
     <PageWrapper title="Custom Domains" description="Map your own domains to deployed apps.">
       {loading ? (
-        <Card><CardContent className="py-16 text-center"><Loader2 className="mx-auto h-6 w-6 text-white/20 animate-spin" /></CardContent></Card>
+        <Card><Card.Body className="py-16 text-center"><Loader2 className="mx-auto h-6 w-6 text-white/20 animate-spin" /></Card.Body></Card>
       ) : domains.length === 0 ? (
         <Card>
-          <CardContent className="py-16 text-center">
+          <Card.Body className="py-16 text-center">
             <Globe className="mx-auto h-10 w-10 text-white/10 mb-4" />
             <p className="text-white/40 mb-2">No custom domains configured</p>
             <p className="text-sm text-white/20">
               Run <code className="font-mono bg-surface-3 px-2 py-0.5 rounded-sm text-accent/70">loopzero domain add &lt;domain&gt; --project &lt;p&gt; --app &lt;a&gt; --env &lt;e&gt;</code> to add one
             </p>
-          </CardContent>
+          </Card.Body>
         </Card>
       ) : (
         <motion.div variants={container} initial="hidden" animate="show" className="space-y-3">
           {domains.map((d) => (
             <motion.div key={d.id} variants={item}>
               <Card className="group hover:border-accent/20">
-                <CardContent className="p-0">
+                <Card.Body className="p-0">
                   <div className="flex items-center justify-between p-5">
                     <div className="flex items-center gap-4">
                       <div className="flex h-9 w-9 items-center justify-center rounded-lg bg-accent/5 border border-accent/10">
@@ -171,7 +171,7 @@ export function DomainsPage() {
                       </div>
                     </div>
                   )}
-                </CardContent>
+                </Card.Body>
               </Card>
             </motion.div>
           ))}

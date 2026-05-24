@@ -3,7 +3,7 @@ import { useSearchParams } from 'react-router-dom';
 import { motion } from 'framer-motion';
 import { KeyRound, CheckCircle2, Github, Loader2 } from 'lucide-react';
 import { Button } from '@loopzero/ui';
-import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
+import { Card } from '@loopzero/ui';
 import { PageWrapper } from '@/components/page-wrapper';
 import { useRequireAuth } from '@/hooks/use-auth';
 import { type Flow, getFlow, submitFlow, getCsrfToken, getFlowMessages, getFieldErrors } from '@/lib/kratos';
@@ -79,13 +79,13 @@ export function AccountPage() {
         {/* Change Password */}
         <motion.div initial={{ opacity: 0, y: 12 }} animate={{ opacity: 1, y: 0 }}>
           <Card>
-            <CardHeader>
-              <CardTitle className="flex items-center gap-2">
+            <Card.Header>
+              <Card.Title className="flex items-center gap-2">
                 <KeyRound className="h-4 w-4 text-accent/60" />
                 Change password
-              </CardTitle>
-            </CardHeader>
-            <CardContent>
+              </Card.Title>
+            </Card.Header>
+            <Card.Body>
               {success && (
                 <div className="mb-4 rounded-lg bg-accent/10 border border-accent/20 p-3 text-sm text-accent flex items-center gap-2">
                   <CheckCircle2 className="h-4 w-4" /> Password updated successfully.
@@ -102,7 +102,7 @@ export function AccountPage() {
                   {loading ? 'Updating...' : 'Update password'}
                 </Button>
               </form>
-            </CardContent>
+            </Card.Body>
           </Card>
         </motion.div>
 
@@ -110,13 +110,13 @@ export function AccountPage() {
         {oidcNodes.length > 0 && (
           <motion.div initial={{ opacity: 0, y: 12 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.1 }}>
             <Card>
-              <CardHeader>
-                <CardTitle className="flex items-center gap-2">
+              <Card.Header>
+                <Card.Title className="flex items-center gap-2">
                   <Github className="h-4 w-4 text-accent/60" />
                   Connected accounts
-                </CardTitle>
-              </CardHeader>
-              <CardContent>
+                </Card.Title>
+              </Card.Header>
+              <Card.Body>
                 <div className="space-y-3">
                   {oidcNodes.map((node, i) => (
                     <div key={i} className="flex items-center justify-between rounded-lg border border-white/6 bg-surface-0 p-3">
@@ -125,7 +125,7 @@ export function AccountPage() {
                     </div>
                   ))}
                 </div>
-              </CardContent>
+              </Card.Body>
             </Card>
           </motion.div>
         )}

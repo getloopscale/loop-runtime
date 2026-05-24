@@ -1,6 +1,6 @@
 import { motion } from 'framer-motion';
 import { User, Mail, UserCircle } from 'lucide-react';
-import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
+import { Card } from '@loopzero/ui';
 import { Button } from '@loopzero/ui';
 import { PageWrapper } from '@/components/page-wrapper';
 import { useRequireAuth } from '@/hooks/use-auth';
@@ -25,13 +25,13 @@ export function ProfilePage() {
       <div className="max-w-2xl space-y-6">
         <motion.div initial={{ opacity: 0, y: 12 }} animate={{ opacity: 1, y: 0 }}>
           <Card>
-            <CardHeader>
-              <CardTitle className="flex items-center gap-2">
+            <Card.Header>
+              <Card.Title className="flex items-center gap-2">
                 <User className="h-4 w-4 text-accent/60" />
                 Account
-              </CardTitle>
-            </CardHeader>
-            <CardContent className="space-y-3">
+              </Card.Title>
+            </Card.Header>
+            <Card.Body className="space-y-3">
               {name && (
                 <div className="flex items-center gap-3 rounded-lg border border-white/6 bg-surface-0 p-4">
                   <div className="flex h-10 w-10 items-center justify-center rounded-full bg-accent/10">
@@ -55,17 +55,17 @@ export function ProfilePage() {
               <div className="rounded-lg bg-accent/5 border border-accent/10 p-3 text-xs text-accent/60">
                 Authenticated via secure session. Your session is active.
               </div>
-            </CardContent>
+            </Card.Body>
           </Card>
         </motion.div>
 
         <motion.div initial={{ opacity: 0, y: 12 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.1 }}>
           <Card>
-            <CardContent className="pt-6">
+            <Card.Body className="pt-6">
               <Button variant="destructive" onClick={logout} className="w-full justify-center">
                 Sign out
               </Button>
-            </CardContent>
+            </Card.Body>
           </Card>
         </motion.div>
       </div>

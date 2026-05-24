@@ -1,6 +1,6 @@
 import { motion } from 'framer-motion';
 import { FolderKanban, Globe, Clock, ArrowRight, Loader2 } from 'lucide-react';
-import { Card, CardContent } from '@/components/ui/card';
+import { Card } from '@loopzero/ui';
 import { Badge } from '@loopzero/ui';
 import { PageWrapper } from '@/components/page-wrapper';
 import { useEngineApi } from '@/hooks/use-api';
@@ -36,23 +36,23 @@ export function ProjectsPage() {
   return (
     <PageWrapper title="Projects" description="All projects in your team.">
       {loading ? (
-        <Card><CardContent className="py-16 text-center"><Loader2 className="mx-auto h-6 w-6 text-white/20 animate-spin" /></CardContent></Card>
+        <Card><Card.Body className="py-16 text-center"><Loader2 className="mx-auto h-6 w-6 text-white/20 animate-spin" /></Card.Body></Card>
       ) : projects.length === 0 ? (
         <Card>
-          <CardContent className="py-16 text-center">
+          <Card.Body className="py-16 text-center">
             <FolderKanban className="mx-auto h-10 w-10 text-white/10 mb-4" />
             <p className="text-white/40 mb-2">No projects yet</p>
             <p className="text-sm text-white/20">
               Run <code className="font-mono bg-surface-3 px-2 py-0.5 rounded-sm text-accent/70">loopzero init</code> to create your first project
             </p>
-          </CardContent>
+          </Card.Body>
         </Card>
       ) : (
         <motion.div variants={container} initial="hidden" animate="show" className="space-y-4">
           {projects.map((project) => (
             <motion.div key={project.name} variants={item}>
               <Card className="group cursor-pointer hover:border-accent/20">
-                <CardContent className="p-0">
+                <Card.Body className="p-0">
                   <div className="flex items-center justify-between p-5 pb-4">
                     <div className="flex items-center gap-3">
                       <div className="flex h-9 w-9 items-center justify-center rounded-lg bg-accent/5 border border-accent/10">
@@ -81,7 +81,7 @@ export function ProjectsPage() {
                       </div>
                     ))}
                   </div>
-                </CardContent>
+                </Card.Body>
               </Card>
             </motion.div>
           ))}

@@ -1,6 +1,6 @@
 import { motion } from 'framer-motion';
 import { ArrowUpRight, Box, Clock, Zap, Loader2 } from 'lucide-react';
-import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
+import { Card } from '@loopzero/ui';
 import { Badge } from '@loopzero/ui';
 import { PageWrapper } from '@/components/page-wrapper';
 import { useEngineApi } from '@/hooks/use-api';
@@ -38,7 +38,7 @@ export function OverviewPage() {
 
   const loading = loadingProjects;
   if (loading) {
-    return <PageWrapper title="Overview"><Card><CardContent className="py-16 text-center"><Loader2 className="mx-auto h-6 w-6 text-white/20 animate-spin" /></CardContent></Card></PageWrapper>;
+    return <PageWrapper title="Overview"><Card><Card.Body className="py-16 text-center"><Loader2 className="mx-auto h-6 w-6 text-white/20 animate-spin" /></Card.Body></Card></PageWrapper>;
   }
 
   return (
@@ -48,7 +48,7 @@ export function OverviewPage() {
         {stats.map((stat) => (
           <motion.div key={stat.label} variants={item}>
             <Card className="group cursor-default">
-              <CardContent className="p-5">
+              <Card.Body className="p-5">
                 <div className="flex items-center justify-between mb-3">
                   <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-white/4 border border-white/6 group-hover:border-accent/20 group-hover:bg-accent/5 transition-all duration-300">
                     <stat.icon className="h-4 w-4 text-white/30 group-hover:text-accent transition-colors duration-300" />
@@ -60,7 +60,7 @@ export function OverviewPage() {
                   <span className="text-sm text-white/40">{stat.label}</span>
                   <span className="text-xs text-accent/60">{stat.change}</span>
                 </div>
-              </CardContent>
+              </Card.Body>
             </Card>
           </motion.div>
         ))}
@@ -69,10 +69,10 @@ export function OverviewPage() {
       {/* Recent Deploys */}
       <motion.div initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.3, duration: 0.4 }}>
         <Card>
-          <CardHeader>
-            <CardTitle className="text-base">Recent Deploys</CardTitle>
-          </CardHeader>
-          <CardContent>
+          <Card.Header>
+            <Card.Title className="text-base">Recent Deploys</Card.Title>
+          </Card.Header>
+          <Card.Body>
             {recentDeploys.length === 0 && (
               <div className="py-8 text-center text-white/20 text-sm">
                 No deploys yet. Run <code className="bg-white/5 px-2 py-0.5 rounded-sm font-mono text-xs">loopzero deploy</code> to get started.
@@ -105,7 +105,7 @@ export function OverviewPage() {
                 </motion.div>
               ))}
             </div>
-          </CardContent>
+          </Card.Body>
         </Card>
       </motion.div>
     </PageWrapper>
