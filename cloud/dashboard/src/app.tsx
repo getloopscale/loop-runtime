@@ -12,6 +12,7 @@ import { DomainsPage } from '@/pages/domains';
 import { LoginPage } from '@/pages/login';
 import { RegisterPage } from '@/pages/register';
 import { VerificationPage } from '@/pages/verification';
+import { RecoveryPage } from '@/pages/recovery';
 import { DeviceSuccessPage } from '@/pages/device-success';
 import { useRequireAuth } from '@/hooks/use-auth';
 import { isEmailVerified } from '@/lib/auth';
@@ -48,6 +49,7 @@ export default function App() {
         <Route path="/login" element={<LoginPage />} />
         <Route path="/register" element={<RegisterPage />} />
         <Route path="/verification" element={<VerificationPage />} />
+        <Route path="/recovery" element={<RecoveryPage />} />
         <Route path="/device-success" element={<DeviceSuccessPage />} />
         <Route path="*" element={
           <DashboardLayout>
