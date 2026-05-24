@@ -209,6 +209,7 @@ GREEN:   implement slo-compare
 VERIFY:  go test ./...; loopzero-ops chaos slo-compare baseline.json during.json post.json == report.sh verdict
 ```
 - [ ] slo-compare parity with report.sh verdict; chaos-test skill rewired for the verdict; baseline/run-*/cleanup KEEP-documented.
+  - [x] **Go port DONE 2026-05-24** — `pkg/quality/chaosslo` + `loopzero-ops chaos slo-compare` (new `chaos` subcommand group). 9 Go tests; e2e PASS(0)/FAIL(2)/INCONCLUSIVE(5). FAIL reason strings byte-identical to `run-scenario.sh:240-258`. **Correction (C0):** the verdict lives in `run-scenario.sh:235-259`, NOT `report.sh` (which only formats `--verdict`). **run-scenario.sh rewire DEFERRED** — it is a LIVE-validated chaos path (10/10 2026-05-23); the verdict-block→`loopzero-ops chaos slo-compare` swap must be re-validated by a local `/chaos-test` run before edit (D3 "LIVE gate before touching the path"). No bash deleted (C5).
 
 ---
 
