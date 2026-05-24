@@ -30,6 +30,7 @@ USAGE:
 SUBCOMMANDS:
   quality <gate> [flags]               Run a CI quality gate (see quality --help)
   pulumi archive [flags]               Export Pulumi stack state to S3 archive
+  drill <subcommand> [flags]           Drill/DR pure-logic helpers (see drill --help)
 
 EXIT CODES (PERMANENT — CLAUDE.md Rule 4):
   0  success
@@ -53,6 +54,8 @@ func run(args []string) int {
 		return runQuality(args[1:])
 	case "pulumi":
 		return runPulumi(args[1:])
+	case "drill":
+		return runDrill(args[1:])
 	default:
 		fmt.Fprintf(os.Stderr, "unknown subcommand: %s\n\n%s", args[0], helpText)
 		return 1

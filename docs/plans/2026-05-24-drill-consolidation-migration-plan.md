@@ -174,6 +174,7 @@ GREEN:   implement 3 subcommands
 VERIFY:  go test ./...; each loopzero-ops drill X == bash exit/output
 ```
 - [ ] 3 subcommands parity-proven; skills rewired; cost+evidence bash fully ported (delete C5); teardown reduced to gathering+call.
+  - [x] **cost DONE 2026-05-24** — `pkg/quality/drillcost` + `loopzero-ops drill cost`; 5 Go tests; **byte-identical parity** vs `cost-report.sh --start/--end`; bash rewired to delegate (keeps `--auto` Pulumi gathering); no SKILL `bash` caller (only back-compat comments). Bash deletion DEFERRED to C5 (after C4 DOKS). evidence-shape + teardown-validate: PENDING.
 
 ---
 
