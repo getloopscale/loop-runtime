@@ -1016,14 +1016,14 @@ tasks:
       Run Go coverage across all packages. Output: /tmp/coverage.out.
       Excludes vendor/, handles doc-only packages (EC-10).
     cmds:
-      - bash infra/scripts/quality/coverage-go.sh
+      - bash infra/scripts/ci/coverage-go.sh
 
   test:coverage:cli:
     desc: |
       Run CLI (TS/JS) coverage via jest --coverage. Output: /tmp/cli-coverage.lcov.
       Excludes node_modules.
     cmds:
-      - bash infra/scripts/quality/coverage-cli.sh
+      - bash infra/scripts/ci/coverage-cli.sh
 
   test:coverage:
     desc: |

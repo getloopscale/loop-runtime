@@ -112,7 +112,7 @@ o drill (gate de maturidade `a`), os gates de qualidade, ou a publicação de im
 | `bootstrap-cell-cc-drill-common.sh` | Lib de CC cell para o drill | **BAIXO** | LIB → DRILL (1) | 166 · 05-17 | 1 | REVIEW-NEEDED |
 | `sops.sh` | Helper de criptografia SOPS (secrets) | **MÉDIO** | LIB (manuseia secrets) | 109 · 05-23 | — | KEEP-OPERATOR |
 
-## `infra/scripts/quality/` (4) — todos **TEST-CI** (gates de qualidade; zero prod runtime)
+## `infra/scripts/ci/` (4) — todos **TEST-CI** (gates de qualidade; zero prod runtime)
 
 | Script | Utilidade | Crit. | Impacto-PROD | LOC·mod | Invocado por | Allowlist |
 |---|---|---|---|---|---|---|

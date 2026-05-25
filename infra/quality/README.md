@@ -10,11 +10,11 @@ Operator handoff: `.claude/knowledge-base/concepts/operations/operator-handoff-2
 task test:coverage          # run Go + CLI coverage, output /tmp/coverage-merged.lcov
 
 # Local — gate dry-runs
-bash infra/scripts/quality/coverage-go.sh        # measure Go coverage
-bash infra/scripts/quality/test-inventory.sh     # build test inventory
-bash infra/scripts/quality/check-pyramid.sh      # validate pyramid ratio
-bash infra/scripts/quality/check-skip-link.sh    # find skip() without issue link
-bash infra/scripts/quality/check-mock-budget.sh  # find files >5 mocks
+bash infra/scripts/ci/coverage-go.sh        # measure Go coverage
+bash infra/scripts/ci/test-inventory.sh     # build test inventory
+bash infra/scripts/ci/check-pyramid.sh      # validate pyramid ratio
+bash infra/scripts/ci/check-skip-link.sh    # find skip() without issue link
+bash infra/scripts/ci/check-mock-budget.sh  # find files >5 mocks
 ```
 
 ## What each gate does
@@ -54,7 +54,7 @@ bash infra/scripts/quality/check-mock-budget.sh  # find files >5 mocks
 
 ## Adding a new gate
 
-1. Write script under `infra/scripts/quality/`
+1. Write script under `infra/scripts/ci/`
 2. Write hermetic test under `infra/tests/scripts/`
 3. Add job to `.github/workflows/quality-gates.yml`
 4. Add Required Status Check name to `.github/branch-protection-config.yml`
@@ -72,7 +72,7 @@ bash infra/scripts/quality/check-mock-budget.sh  # find files >5 mocks
 
 Currently each script is self-contained (KISS — no shared library yet). If
 patterns emerge (e.g., 3+ scripts parsing PR body), extract to
-`infra/scripts/quality/lib/`.
+`infra/scripts/ci/lib/`.
 
 ## Coverage of gaps from plan Coverage Matrix
 

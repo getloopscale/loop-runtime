@@ -5,9 +5,9 @@
 # `name:` field (case-sensitive). Verify via Actions UI before activation.
 #
 # Phased rollout:
-#   1. Operator runs: BRANCH=develop bash infra/scripts/quality/branch-protection-update.sh
+#   1. Operator runs: BRANCH=develop bash infra/scripts/ci/branch-protection-update.sh
 #   2. Wait 7 days advisory mode; monitor false-positive rate
-#   3. Operator runs: BRANCH=main bash infra/scripts/quality/branch-protection-update.sh
+#   3. Operator runs: BRANCH=main bash infra/scripts/ci/branch-protection-update.sh
 
 branches:
   develop:
