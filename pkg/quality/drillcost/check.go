@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: Apache-2.0
 // Copyright 2025-2026 The LoopZero Authors
 
-// Package drillcost is the pure-logic core of infra/scripts/dr/cost-report.sh
+// Package drillcost is the pure-logic core of infra/scripts/drill/cost-report.sh
 // (Track C TC2.1 of docs/plans/2026-05-24-drill-consolidation-migration-plan.md).
 //
 // It computes a drill run's cost from a provision/teardown window + DO hourly

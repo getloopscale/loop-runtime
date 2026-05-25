@@ -83,7 +83,7 @@ tasks:
         cd infra/pulumi-drill
         npx pulumi destroy --stack drill --yes --skip-preview || true
         echo "Pulumi destroy returned. Running validator (T4.1.bis EC-05 fallback)..."
-      - bash infra/scripts/dr/teardown-validator.sh
+      - bash infra/scripts/drill/teardown-validator.sh
       - echo "Drill stack destroyed + validated. Cost stopped."
     env:
       PULUMI_ACCESS_TOKEN: '{{.PULUMI_ACCESS_TOKEN}}'
@@ -101,7 +101,7 @@ tasks:
   validator:
     desc: "Run drill-teardown-validator.sh standalone (doctl scan + force-delete leftovers)"
     cmds:
-      - bash infra/scripts/dr/teardown-validator.sh
+      - bash infra/scripts/drill/teardown-validator.sh
     env:
       DIGITALOCEAN_TOKEN: '{{.DIGITALOCEAN_TOKEN}}'
 
@@ -111,7 +111,7 @@ tasks:
       For local testing of watchdog logic. Operator runs periodically
       (every ~6h while a drill stack is active; GitHub cron removed 2026-05-23).
     cmds:
-      - bash infra/scripts/dr/watchdog.sh
+      - bash infra/scripts/drill/watchdog.sh
     env:
       DIGITALOCEAN_TOKEN: '{{.DIGITALOCEAN_TOKEN}}'
       PULUMI_ACCESS_TOKEN: '{{.PULUMI_ACCESS_TOKEN}}'
@@ -134,9 +134,9 @@ tasks:
         4 = leftover drill stack (run task drill:down first)
         5 = argument error
 
-      For machine-readable output: bash infra/scripts/dr/preflight.sh --json
+      For machine-readable output: bash infra/scripts/drill/preflight.sh --json
     cmds:
-      - bash infra/scripts/dr/preflight.sh
+      - bash infra/scripts/drill/preflight.sh
     env:
       DIGITALOCEAN_TOKEN: '{{.DIGITALOCEAN_TOKEN}}'
       PULUMI_ACCESS_TOKEN: '{{.PULUMI_ACCESS_TOKEN}}'
@@ -156,7 +156,7 @@ tasks:
 
       Pass criteria: success >= 90%, p95 <= 10min.
     preconditions:
-      - sh: bash infra/scripts/dr/preflight.sh
+      - sh: bash infra/scripts/drill/preflight.sh
         msg: "Pre-flight gate failed — see exit code + run 'task drill:preflight' for diagnosis"
     cmds:
       - |
@@ -200,10 +200,10 @@ tasks:
         # Plan v1.2 T5.1: LOOPZERO_TEST_ENV=drill is canonical (DRILL_KUBECONFIG_DIR
         # retained as path source; removal of dual-var pending T5.2 deprecation window).
         LOOPZERO_TEST_ENV=drill DRILL_KUBECONFIG_DIR=/tmp/drill-kc STRICT_BOOTSTRAP=true \
-          bash infra/scripts/drill-helmfile-bootstrap.sh || BOOTSTRAP_EXIT=$?
+          bash infra/scripts/drill/drill-helmfile-bootstrap.sh || BOOTSTRAP_EXIT=$?
         if [ "$BOOTSTRAP_EXIT" -ne 0 ]; then
           echo "ERROR: drill-helmfile-bootstrap.sh failed (exit $BOOTSTRAP_EXIT)"
-          echo "  Resume via: bash infra/scripts/drill-helmfile-bootstrap.sh --from-cluster <name>"
+          echo "  Resume via: bash infra/scripts/drill/drill-helmfile-bootstrap.sh --from-cluster <name>"
           task drill:down
           exit "$BOOTSTRAP_EXIT"
         fi
@@ -220,13 +220,13 @@ tasks:
 
         echo ""
         echo "=== Phase 4c: Mint JWT for L2 test (T2.2) ==="
-        if [ ! -x infra/scripts/drill-mint-jwt.sh ]; then
+        if [ ! -x infra/scripts/drill/drill-mint-jwt.sh ]; then
           echo "ERROR: drill-mint-jwt.sh missing"
           task drill:down
           exit 1
         fi
         export DRILL_KUBECONFIG="$DRILL_KC"
-        JWT=$(bash infra/scripts/drill-mint-jwt.sh)
+        JWT=$(bash infra/scripts/drill/drill-mint-jwt.sh)
 
         echo ""
         echo "=== Phase 5: Bootstrap cell wiring (T2.3 D3 mapping) ==="
@@ -265,7 +265,7 @@ tasks:
   dr-drill:
     desc: "Full disaster recovery drill (alias for pulumi-reconstruction-drill.yml local equivalent)"
     cmds:
-      - bash infra/scripts/dr-drill.sh "{{.STAGE | default \"all\"}}"
+      - bash infra/scripts/drill/dr-drill.sh "{{.STAGE | default \"all\"}}"
     env:
       PULUMI_ACCESS_TOKEN: '{{.PULUMI_ACCESS_TOKEN}}'
       DIGITALOCEAN_TOKEN: '{{.DIGITALOCEAN_TOKEN}}'

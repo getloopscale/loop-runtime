@@ -1,6 +1,6 @@
 # NodePort service for cross-cluster access to Loki from build cluster.
 # Promtail on build cluster ships logs to Loki on mgmt cluster.
-# The actual endpoint IP is patched by infra/scripts/update-cross-cluster-ips.sh
+# The actual endpoint IP is patched by infra/scripts/local/update-cross-cluster-ips.sh
 # into infra/helm/promtail/values.yaml.
 apiVersion: v1
 kind: Service

@@ -65,7 +65,7 @@ tasks:
           echo "  fs.inotify.max_user_watches   = $ACTUAL_WATCHES  (need >= $REQUIRED_WATCHES)" >&2
           echo "" >&2
           echo "Fix once (persists across reboots):" >&2
-          echo "  sudo bash infra/scripts/setup-host-inotify-limits.sh" >&2
+          echo "  sudo bash infra/scripts/local/setup-host-inotify-limits.sh" >&2
           echo "" >&2
           echo "Rationale: .claude/knowledge-base/concepts/operations/finding-2026-05-13-k3d-agent-timeout.md" >&2
           exit 1
@@ -102,7 +102,7 @@ tasks:
 
       Pass DRY_RUN=1 to preview without modification.
     cmds:
-      - bash infra/scripts/regen-all-scoped-kubeconfigs.sh
+      - bash infra/scripts/local/regen-all-scoped-kubeconfigs.sh
 
   clusters:delete:
     desc: Delete all k3d clusters

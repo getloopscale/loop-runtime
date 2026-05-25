@@ -1495,7 +1495,7 @@ func TestF12LoopZeroApiTokensSecretGenerated(t *testing.T) {
 // no código operator/API) e T3.2 (ValidatingAdmissionPolicy) ficam T2
 // governance per CLAUDE.md Pre-release rule (tenant isolation contract).
 func TestF04MigrationScriptExists(t *testing.T) {
-	const path = "../../scripts/migrate-tenant-namespace.sh"
+	const path = "../../scripts/production/migrate-tenant-namespace.sh"
 	if _, err := os.Stat(path); err != nil {
 		t.Fatalf("F-04 regression: migration script missing: %v", err)
 	}
@@ -1747,10 +1747,10 @@ func TestF09EnsurePullSecretHandlesNotFound(t *testing.T) {
 
 // TestCleanIncrementalScript — exists + preserves cluster state.
 func TestCleanIncrementalScript(t *testing.T) {
-	if _, err := os.Stat("../../scripts/clean-incremental.sh"); err != nil {
+	if _, err := os.Stat("../../scripts/local/clean-incremental.sh"); err != nil {
 		t.Errorf("end-to-end-deploy T0.1: clean-incremental.sh missing: %v", err)
 	}
-	data, _ := os.ReadFile("../../scripts/clean-incremental.sh")
+	data, _ := os.ReadFile("../../scripts/local/clean-incremental.sh")
 	s := string(data)
 	clusterDeleteString := "cluster" + " " + "delete"
 	if strings.Contains(s, "k3d "+clusterDeleteString) {

@@ -232,7 +232,7 @@ tasks:
       - task: k3d:bootstrap-workload
       - bash infra/helmfile/scripts/bootstrap-eso-cluster-secret-store.sh
       - HYDRA_NAMESPACE=loopzero-auth bash infra/helmfile/scripts/bootstrap-oauth-clients.sh
-      - bash infra/scripts/provision-api-tokens.sh
+      - bash infra/scripts/production/provision-api-tokens.sh
       # T5.3 (plan 2026-05-21-deep-review-remediation): extracted 4 inline
       # B-patches to named scripts so each can be re-run individually if
       # only that slice needs fixing during cleanroom debugging.
@@ -252,7 +252,7 @@ tasks:
       # (cell-default + cell-1 + cell-2). Closes CTO Golden Rule #1 gap.
       - task: k3d:bootstrap-cells
       - HYDRA_NAMESPACE=loopzero-auth bash infra/helmfile/scripts/seed-local-user.sh
-      - bash infra/scripts/bootstrap-seed-tenant-cr.sh
+      - bash infra/scripts/local/bootstrap-seed-tenant-cr.sh
 
   dev:up:
     desc: Boot dev environment (clusters + Helm deps). Run `tilt up` separately for the dev loop.
@@ -335,7 +335,7 @@ tasks:
       Production has scoped SAs + permanent helmfile values; this is a LOCAL-DEV recovery only.
       Safe to re-run after every restart.
     cmds:
-      - bash infra/scripts/k3d-cross-cluster-heal.sh
+      - bash infra/scripts/local/k3d-cross-cluster-heal.sh
 
   cli:link:
     desc: Symlink 'loopzero' CLI to PATH (makes `loopzero` available globally)

@@ -106,11 +106,11 @@ tasks:
     # F-1 (dogfood-2026-05-08-fixes T1.2/T1.3, ADR D1):
     # Replaces the previous `for f in *.up.sql; do psql < $f` loop that
     # lacked version tracking and silently re-applied migrations every run.
-    # Calls infra/scripts/run-migrations.sh which uses the `migrate` binary
+    # Calls infra/scripts/production/run-migrations.sh which uses the `migrate` binary
     # already inside the loopzero-api image (api/Dockerfile copies migrations
     # to /migrations and installs migrate to /usr/local/bin/migrate).
     cmds:
-      - MGMT_CONTEXT={{.MGMT_CONTEXT}} PG_USER={{.PG_USER}} PG_PASS={{.PG_PASS}} PG_DB={{.PG_DB}} bash infra/scripts/run-migrations.sh
+      - MGMT_CONTEXT={{.MGMT_CONTEXT}} PG_USER={{.PG_USER}} PG_PASS={{.PG_PASS}} PG_DB={{.PG_DB}} bash infra/scripts/production/run-migrations.sh
 
   # ---------------------------------------------------------------------------
   # S1: Development seed data
@@ -154,7 +154,7 @@ tasks:
   dev:ensure-project:
     desc: Create default project via API (triggers Tenant CR + ArgoCD Application)
     cmds:
-      - bash infra/scripts/ensure-project.sh
+      - bash infra/scripts/ci/ensure-project.sh
 
   # ---------------------------------------------------------------------------
   # S2: E2E seed data

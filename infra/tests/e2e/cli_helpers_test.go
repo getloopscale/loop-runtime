@@ -98,6 +98,41 @@ func runLoopZeroWithStdin(stdin string, args ...string) (stdout, stderr string, 
 	return outBuf.String(), errBuf.String(), exitCode
 }
 
+// runLoopZeroInDir executes `loopzero <args...>` with the given working directory.
+// Used for commands like `validate`, `project delete`, `deploy` that operate on cwd.
+//
+// Migrated from cli_validate_test.go on 2026-05-25 when that file (and 50
+// other cli_*_test.go specs) was deleted per user mandate to absorb only
+// journey-relevant tests. LOOPZERO_API_TIMEOUT is bumped to 120s (vs CLI
+// default 30s in cli/src/config/constants.ts:53) because project delete
+// cascades through cancel builds + gitops remove + ArgoCD sync and exceeds
+// 30s on LIVE k3d. Auth via configStore (XDG_CONFIG_HOME from BeforeSuite),
+// matching runLoopZero per T2 amendment 2026-05-13.
+func runLoopZeroInDir(dir string, args ...string) (stdout, stderr string, exitCode int) {
+	cmd := exec.Command("loopzero", args...)
+	cmd.Dir = dir
+	cmd.Env = append(os.Environ(),
+		"LOOPZERO_API_URL="+apiURL(),
+		"LOOPZERO_API_TIMEOUT=120000",
+		"LOOPZERO_TOKEN=",
+	)
+
+	var outBuf, errBuf strings.Builder
+	cmd.Stdout = &outBuf
+	cmd.Stderr = &errBuf
+
+	err := cmd.Run()
+	exitCode = 0
+	if err != nil {
+		if exitErr, ok := err.(*exec.ExitError); ok {
+			exitCode = exitErr.ExitCode()
+		} else {
+			exitCode = -1
+		}
+	}
+	return outBuf.String(), errBuf.String(), exitCode
+}
+
 // runLoopZeroNoToken runs `loopzero <args...>` with LOOPZERO_TOKEN deliberately empty.
 // Used to exercise auth-failure paths.
 //

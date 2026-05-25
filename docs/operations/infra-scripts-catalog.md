@@ -84,7 +84,7 @@ o drill (gate de maturidade `a`), os gates de qualidade, ou a publicação de im
 | `baseline.sh` | Captura baseline steady-state (curl /health + kubectl) | **MÉDIO** | TEST-CI | 228 · 05-22 | SKILL, script, go-test | REVIEW-NEEDED |
 | `report.sh` | Relatório markdown (recebe `--verdict`) | **BAIXO** | TEST-CI | 197 · 05-21 | SKILL, script, go-test | REVIEW-NEEDED |
 
-## `infra/scripts/dr/` (11) — todos **DRILL** (DOKS efêmero isolado; zero prod)
+## `infra/scripts/drill/` (11) — todos **DRILL** (DOKS efêmero isolado; zero prod)
 
 | Script | Utilidade | Crit. | Impacto-PROD | LOC·mod | Invocado por | Allowlist |
 |---|---|---|---|---|---|---|
