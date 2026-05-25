@@ -15,6 +15,7 @@ import { useSetPageTitle } from '@/hooks/use-page-meta';
 import { useCloudApi } from '@/hooks/use-api';
 import { useRequireAuth } from '@/hooks/use-auth';
 import { cloudFetch } from '@/lib/api';
+import { formatDate, formatNumber } from '@/lib/format';
 
 interface UsageMetric {
   used: number;
@@ -147,8 +148,17 @@ export function BillingPage() {
     ? Object.entries(billing.usage).map(([key, data]) => ({
         label: key.replace(/_/g, ' ').replace(/\b\w/g, (c) => c.toUpperCase()),
         value: data.used,
-        max: data.limit ?? data.used + 1, // unlimited: avoid divide-by-zero
+        max: data.limit ?? Number.MAX_SAFE_INTEGER, // EC-5: unlimited
         unit: key.includes('minute') ? 'min' : key.includes('mb') ? 'MB' : '',
+        // T-C.2 P-1/P-2: use formatNumber for consistent thousand-separators +
+        // compact-millions on Edge Requests / large counters. ADR-D1.bis for null limit.
+        formatter: (v) => {
+          if (data.limit === null) return `${formatNumber(v, 'grouped')} / Unlimited`;
+          const useMillions = data.limit >= 1_000_000;
+          return useMillions
+            ? `${formatNumber(v, 'grouped')} / ${formatNumber(data.limit, 'compact')}`
+            : `${formatNumber(v, 'grouped')} / ${formatNumber(data.limit, 'grouped')}`;
+        },
       }))
     : [];
 
@@ -271,7 +281,7 @@ export function BillingPage() {
           <UsageMeter
             title={
               billing?.period_start && billing?.period_end
-                ? `${new Date(billing.period_start).toLocaleDateString()} – ${new Date(billing.period_end).toLocaleDateString()}`
+                ? `${formatDate(billing.period_start, 'date')} – ${formatDate(billing.period_end, 'date')}`
                 : 'Current period'
             }
             metrics={usageMetrics}

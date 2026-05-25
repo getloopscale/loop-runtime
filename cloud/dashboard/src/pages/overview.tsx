@@ -14,6 +14,7 @@ import { useSetPageTitle } from '@/hooks/use-page-meta';
 import { useRequireAuth } from '@/hooks/use-auth';
 import { useProjects } from '@/hooks/use-projects';
 import { useCloudApi } from '@/hooks/use-api';
+import { formatNumber } from '@/lib/format';
 
 interface UsageMetricShape {
   used: number;
@@ -63,13 +64,13 @@ export function OverviewPage() {
   // Formatter for UsageMeter metric row's value/max text.
   // Per ADR-D1.bis: limit===null renders "{used} / Unlimited".
   // UsageMeter primitive natively handles over-quota (value>max → text-warning + warning intent).
+  // Uses formatNumber() from lib/format.ts per T-C.2 migration (en-US locale per ADR-D1).
   function fmtMetric(value: number, max: number | null, opts?: { compactMillions?: boolean }): string {
-    if (max === null) return `${value.toLocaleString()} / Unlimited`;
+    if (max === null) return `${formatNumber(value, 'grouped')} / Unlimited`;
     if (opts?.compactMillions && max >= 1_000_000) {
-      const compactMax = max % 1_000_000 === 0 ? `${max / 1_000_000}M` : `${(max / 1_000_000).toFixed(2)}M`;
-      return `${value.toLocaleString()} / ${compactMax}`;
+      return `${formatNumber(value, 'grouped')} / ${formatNumber(max, 'compact')}`;
     }
-    return `${value.toLocaleString()} / ${max.toLocaleString()}`;
+    return `${formatNumber(value, 'grouped')} / ${formatNumber(max, 'grouped')}`;
   }
 
   const dataMetric = pickMetric('Fast Data Transfer', 100);

@@ -11,6 +11,7 @@ import { ActionBar } from '@/components/layout';
 import { useSetPageTitle } from '@/hooks/use-page-meta';
 import { useEngineApi } from '@/hooks/use-api';
 import { useRequireAuth } from '@/hooks/use-auth';
+import { formatDate } from '@/lib/format';
 
 interface Member {
   username?: string;
@@ -125,7 +126,7 @@ export function TeamPage() {
                       </Table.Cell>
                       <Table.Cell align="right" numeric>
                         <span className="text-label text-muted-foreground">
-                          {m.joined ?? '—'}
+                          {formatDate(m.joined, 'date')}
                         </span>
                       </Table.Cell>
                     </Table.Row>

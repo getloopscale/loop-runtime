@@ -15,6 +15,7 @@ import { useSetPageTitle } from '@/hooks/use-page-meta';
 import { useEngineApi } from '@/hooks/use-api';
 import { useRequireAuth } from '@/hooks/use-auth';
 import { engineFetch } from '@/lib/api';
+import { formatDate } from '@/lib/format';
 
 interface Domain {
   id: string;
@@ -177,7 +178,7 @@ export function DomainsPage() {
                             <span>·</span>
                             <span>
                               Verified{' '}
-                              {new Date(d.verified_at).toLocaleDateString()}
+                              {formatDate(d.verified_at, 'date')}
                             </span>
                           </>
                         )}
