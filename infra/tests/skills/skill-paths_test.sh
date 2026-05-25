@@ -90,13 +90,14 @@ for skill_md in "$SKILLS_DIR"/*/SKILL.md; do
     fi
   done < <(grep -oE 'infra/scripts/[a-zA-Z0-9_./-]+\.sh' "$skill_md" 2>/dev/null | sort -u)
 
-  # 2a-bis. EC-1: SKILLs reference dr/ scripts in an ABBREVIATED form too
-  # (e.g. `dr/teardown-validator.sh` without the infra/scripts/ prefix). The
-  # 2a grep misses these, so a SKILL could point at a deleted dr/ script and
+  # 2a-bis. EC-1: SKILLs reference drill/ scripts in an ABBREVIATED form too
+  # (e.g. `drill/teardown-validator.sh` without the infra/scripts/ prefix). The
+  # 2a grep misses these, so a SKILL could point at a deleted/moved script and
   # pass falsely — the exact failure class that abandoned the develop-bkp
-  # migration. Resolve the bare form against infra/scripts/dr/ and assert
+  # migration. Resolve the bare form against infra/scripts/drill/ and assert
   # existence. (Lines carrying the full path are caught here too, harmlessly
-  # resolving to the same file.)
+  # resolving to the same file.) Renamed dr/ → drill/ in the 2026-05-25 module
+  # reorg (3/N); the abbreviated prefix tracked here MUST match the live dir.
   while IFS= read -r drref; do
     [ -z "$drref" ] && continue
     case "$drref" in
@@ -104,9 +105,9 @@ for skill_md in "$SKILLS_DIR"/*/SKILL.md; do
     esac
     CHECKED_PATHS=$((CHECKED_PATHS + 1))
     if [ ! -e "$REPO_ROOT/infra/scripts/$drref" ]; then
-      fail "$skill_name: missing dr/ script (abbreviated form) infra/scripts/$drref"
+      fail "$skill_name: missing drill/ script (abbreviated form) infra/scripts/$drref"
     fi
-  done < <(grep -oE 'dr/[a-zA-Z0-9_-]+\.sh' "$skill_md" 2>/dev/null | sort -u)
+  done < <(grep -oE 'drill/[a-zA-Z0-9_-]+\.sh' "$skill_md" 2>/dev/null | sort -u)
 
   # 2b. Extract `task <name>` invocations — ONLY from backticked refs or code blocks.
   # Natural language ("this task accomplishes Y") shares the `task <word>` shape

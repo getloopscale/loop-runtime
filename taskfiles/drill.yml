@@ -83,7 +83,7 @@ tasks:
         cd infra/pulumi-drill
         npx pulumi destroy --stack drill --yes --skip-preview || true
         echo "Pulumi destroy returned. Running validator (T4.1.bis EC-05 fallback)..."
-      - bash infra/scripts/dr/teardown-validator.sh
+      - bash infra/scripts/drill/teardown-validator.sh
       - echo "Drill stack destroyed + validated. Cost stopped."
     env:
       PULUMI_ACCESS_TOKEN: '{{.PULUMI_ACCESS_TOKEN}}'
@@ -101,7 +101,7 @@ tasks:
   validator:
     desc: "Run drill-teardown-validator.sh standalone (doctl scan + force-delete leftovers)"
     cmds:
-      - bash infra/scripts/dr/teardown-validator.sh
+      - bash infra/scripts/drill/teardown-validator.sh
     env:
       DIGITALOCEAN_TOKEN: '{{.DIGITALOCEAN_TOKEN}}'
 
@@ -111,7 +111,7 @@ tasks:
       For local testing of watchdog logic. Operator runs periodically
       (every ~6h while a drill stack is active; GitHub cron removed 2026-05-23).
     cmds:
-      - bash infra/scripts/dr/watchdog.sh
+      - bash infra/scripts/drill/watchdog.sh
     env:
       DIGITALOCEAN_TOKEN: '{{.DIGITALOCEAN_TOKEN}}'
       PULUMI_ACCESS_TOKEN: '{{.PULUMI_ACCESS_TOKEN}}'
@@ -134,9 +134,9 @@ tasks:
         4 = leftover drill stack (run task drill:down first)
         5 = argument error
 
-      For machine-readable output: bash infra/scripts/dr/preflight.sh --json
+      For machine-readable output: bash infra/scripts/drill/preflight.sh --json
     cmds:
-      - bash infra/scripts/dr/preflight.sh
+      - bash infra/scripts/drill/preflight.sh
     env:
       DIGITALOCEAN_TOKEN: '{{.DIGITALOCEAN_TOKEN}}'
       PULUMI_ACCESS_TOKEN: '{{.PULUMI_ACCESS_TOKEN}}'
@@ -156,7 +156,7 @@ tasks:
 
       Pass criteria: success >= 90%, p95 <= 10min.
     preconditions:
-      - sh: bash infra/scripts/dr/preflight.sh
+      - sh: bash infra/scripts/drill/preflight.sh
         msg: "Pre-flight gate failed — see exit code + run 'task drill:preflight' for diagnosis"
     cmds:
       - |

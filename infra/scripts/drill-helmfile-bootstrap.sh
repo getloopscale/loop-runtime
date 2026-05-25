@@ -1108,7 +1108,7 @@ if ! verify_jwt_auth_e2e \
     "curl" \
     "${SEED_TENANT_ID:-tn-e2etest}"; then
   log "T2.2 gate FAIL — aborting bootstrap before Phase 5"
-  log "  diagnose: bash infra/scripts/dr/jwt-diagnose.sh"
+  log "  diagnose: bash infra/scripts/drill/jwt-diagnose.sh"
   exit 1
 fi
 log "  ✓ JWT auth gate PASS"

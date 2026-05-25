@@ -61,7 +61,7 @@ verify_jwt_auth_e2e() {
       ;;
     *)
       echo "drill-jwt-gate: FAIL (HTTP $status — expected 2xx)"
-      echo "drill-jwt-gate: investigate via infra/scripts/dr/jwt-diagnose.sh"
+      echo "drill-jwt-gate: investigate via infra/scripts/drill/jwt-diagnose.sh"
       return 1
       ;;
   esac

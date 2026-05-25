@@ -179,7 +179,7 @@ func liveReferences(repoRoot, delPath string) ([]string, error) {
 }
 
 // dirBaseForm returns the `<parentdir>/<basename>` suffix used by SKILL docs
-// (e.g. "dr/preflight.sh" for "infra/scripts/dr/preflight.sh"). This carries
+// (e.g. "drill/preflight.sh" for "infra/scripts/drill/preflight.sh"). This carries
 // the parent dir, so it never collides with a same-basename file elsewhere.
 func dirBaseForm(p string) string {
 	dir := filepath.Base(filepath.Dir(p))

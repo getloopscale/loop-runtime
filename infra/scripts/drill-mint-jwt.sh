@@ -13,7 +13,7 @@
 #     (sourced by both this script + seed-local-user.sh; the actual mint flow)
 #   - infra/scripts/drill-mint-jwt.sh           — DRILL ENTRY POINT (THIS FILE)
 #     (drill-context wrapper, parametrizes hydra-mint.sh for DOKS)
-#   - infra/scripts/dr/jwt-diagnose.sh          — DIAGNOSTIC TOOL
+#   - infra/scripts/drill/jwt-diagnose.sh        — DIAGNOSTIC TOOL
 #     (NOT a minter — inspects an existing JWT for validity, claims, TTL)
 # Not duplicates: each has a distinct role in the layer model. The agent's
 # deep-review v2 flagged this as "consolidation candidate"; T2.6 audit
