@@ -658,6 +658,79 @@ Auto-dismisses when verification completes.
 
 ---
 
+## 10. Motion System (NEW v1.1)
+
+Per Linear pattern + ADR D7 of plan FAANG v1.2. Tokens em `cloud/dashboard/src/index.css`.
+
+### Tokens
+
+| Token | Value | Use |
+|-------|-------|-----|
+| `--motion-instant` | 0ms | Immediate response (focus ring, active state) |
+| `--motion-fast` | 90ms | Hover transitions, color shifts |
+| `--motion-base` | 180ms | Default transition (Linear standard) |
+| `--motion-slow` | 320ms | Modal enter/exit, large surface transitions |
+| `--easing-standard` | `cubic-bezier(0.2, 0, 0, 1)` | Default easing |
+| `--easing-decelerate` | `cubic-bezier(0, 0, 0, 1)` | Enter transitions |
+| `--easing-accelerate` | `cubic-bezier(0.3, 0, 1, 1)` | Exit transitions |
+
+### Accessibility — `prefers-reduced-motion` (WCAG 2.3.3)
+
+When user OS preference is `reduce-motion`, all `--motion-*` tokens collapse to `0ms` + universal selector overrides `animation-duration` + `transition-duration` to `0ms !important`. This catches Tailwind `animate-*` utilities + any inline transitions.
+
+### Usage examples
+
+```tsx
+<div className="transition-colors" style={{ transitionDuration: 'var(--motion-base)', transitionTimingFunction: 'var(--easing-standard)' }}>
+```
+
+OR via Tailwind utilities (when motion duration utility is added — Phase 5 follow-up):
+```tsx
+<div className="transition-colors duration-base ease-standard">
+```
+
+## 11. Token Deprecation Policy (NEW v1.2 — ADR D13 / G13 FAANG gap)
+
+> Per FAANG best practice (Linear 4-tier deprecation + Material Design 3 versioning). Token changes are NOT silent — they follow explicit lifecycle stages so consumers (cloud/dashboard, future @loopzero/ui consumers) have migration runway.
+
+### 4-tier lifecycle
+
+| Tier | Status | Behavior | Duration |
+|------|--------|----------|----------|
+| **1. Active** | `Stable` | Token rendered as documented; consumers use freely | Indefinite |
+| **2. Deprecated** | `Soft warn` | Token still rendered + functional; `@deprecated` annotation em DSS doc; CHANGELOG entry "Will be removed in v{N+1}.0" | Min 1 minor version |
+| **3. Removed-Next-Minor** | `Hard warn` | Token rendered with console.warn em dev mode; CI gate `pkg/quality/deprecated-tokens` lança `warning` (não-blocker); CHANGELOG "Removed in v{this+1}.0" | 1 minor version |
+| **4. Removed** | `Gone` | Token classe Tailwind / CSS var não existe mais; consumer build fail; CHANGELOG "Removed v{N}" | Permanent |
+
+### Semver alignment
+
+- **MINOR** (0.x.0): can move tokens from Tier 1 → Tier 2 (Deprecated). Add new tokens freely.
+- **MINOR** following: Tier 2 → Tier 3 (Removed-Next-Minor with warn).
+- **MAJOR** (X.0.0): Tier 3 → Tier 4 (Removed). Breaking change documented.
+
+### Communication channels
+
+- DSS doc § change log mark `[DEPRECATED]` next to token name + target version
+- `@loopzero/ui` upstream CHANGELOG.md per release
+- Consumer projects: `pkg/quality/deprecated-tokens` CI gate (future task; not yet implemented)
+
+### Example (hypothetical)
+
+If `--color-surface-3` were renamed `--color-elevation-3`:
+- v0.13.0: `--color-surface-3` Tier 2 (Deprecated). DSS notes "renamed → use --color-elevation-3". Both work.
+- v0.14.0: `--color-surface-3` Tier 3 (warn em dev console). `[loopzero-ui] --color-surface-3 deprecated, use --color-elevation-3`.
+- v1.0.0: `--color-surface-3` Tier 4 (removed). Consumer build fails.
+
+### Current deprecations
+
+None. DSS v1.0/v1.1/v1.2 was first formal version stack — no deprecations yet. This policy applies forward.
+
+### Enforcement
+
+- **Author responsibility:** any DSS PR adding/renaming/removing token MUST update Change log + § 11 if Tier transition
+- **Consumer responsibility:** read CHANGELOG.md + DSS § 11 before bumping @loopzero/ui version
+- **CI (future):** `pkg/quality/deprecated-tokens` scans consumer code for Tier 3 tokens, emits warning
+
 ## 12. Versioning
 
 This document is versioned. Changes go through:
@@ -669,3 +742,5 @@ This document is versioned. Changes go through:
 **Change log:**
 
 - v1.0 (2026-05-25): initial draft post-polish plan completion (commits 15ec00b8 → b67b8550)
+- v1.1 (2026-05-25 — plan FAANG v1.2 Phase 2): added § 10 Motion System per ADR D7 + EC-3. CSS impl em cloud/dashboard/src/index.css (commit f1e08c0a).
+- v1.2 (2026-05-25 — plan FAANG v1.2 Phase 5): added § 11 Token Deprecation Policy per ADR D13 + G13 FAANG gap. 4-tier semver-aligned lifecycle (commit pending).
