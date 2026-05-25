@@ -893,6 +893,43 @@ else
 fi
 
 # ---------------------------------------------------------------------------
+# H19 — ArgoCD cell cluster Secret CA hardening (stale-CA-proof).
+# Bootstrap-created ArgoCD cluster Secrets (e.g. cluster-cell-default) pin a
+# tlsClientConfig.caData snapshot. k3s rotates its server CA across cluster
+# restarts, so that caData goes stale and ArgoCD fails to sync with
+# "Failed to load live state: ... x509: certificate signed by unknown
+# authority" → Application sync=Unknown → tenant workloads never deploy on
+# that cell (deploy reports release ACTIVE but no pod). The heal-registered
+# clusters (recreate_argocd_cluster, H3) already use insecure:true; bootstrap
+# ones don't. Flip any cell cluster Secret that still carries caData to
+# tlsClientConfig.insecure:true (same local-k3d posture as H3) so a rotated
+# CA can't wedge GitOps. Discovered LIVE 2026-05-25 (dogfood Journey 05
+# staging HTTP 200 timeout root-caused to cluster-cell-default stale CA).
+log "H19: hardening ArgoCD cell cluster Secrets against stale CA (insecure for local k3d)"
+H19_PATCHED=0
+for H19_SECRET in $(kubectl --context "$MGMT_CTX" -n argocd get secrets \
+  -l argocd.argoproj.io/secret-type=cluster -o name 2>/dev/null \
+  | sed 's#secret/##' | grep -E '^cluster-cell-'); do
+  H19_INSECURE=$(kubectl --context "$MGMT_CTX" -n argocd get secret "$H19_SECRET" \
+    -o jsonpath='{.data.config}' 2>/dev/null | base64 -d 2>/dev/null \
+    | python3 -c 'import sys,json; print(json.load(sys.stdin).get("tlsClientConfig",{}).get("insecure",False))' 2>/dev/null || echo "True")
+  if [[ "$H19_INSECURE" == "True" ]]; then continue; fi
+  H19_NEW=$(kubectl --context "$MGMT_CTX" -n argocd get secret "$H19_SECRET" \
+    -o jsonpath='{.data.config}' 2>/dev/null | base64 -d 2>/dev/null \
+    | python3 -c 'import sys,json; c=json.load(sys.stdin); c["tlsClientConfig"]={"insecure":True}; print(json.dumps(c))' 2>/dev/null || echo "")
+  if [[ -z "$H19_NEW" ]]; then continue; fi
+  H19_NEW_B64=$(printf '%s' "$H19_NEW" | base64 -w0)
+  kubectl --context "$MGMT_CTX" -n argocd patch secret "$H19_SECRET" \
+    --type=json -p "[{\"op\":\"replace\",\"path\":\"/data/config\",\"value\":\"$H19_NEW_B64\"}]" >/dev/null 2>&1 \
+    && { log "  $H19_SECRET → tlsClientConfig.insecure=true (stale caData dropped)"; H19_PATCHED=1; } \
+    || warn "  $H19_SECRET patch failed"
+done
+if [[ "$H19_PATCHED" -eq 1 ]]; then
+  kubectl --context "$MGMT_CTX" -n argocd rollout restart statefulset/argocd-application-controller >/dev/null 2>&1 \
+    && log "  argocd-application-controller restarted to reload cluster Secrets" || true
+fi
+
+# ---------------------------------------------------------------------------
 # Restart loopzero-api so kubeconfigs Secret refresh takes effect (H2).
 # ---------------------------------------------------------------------------
 log "rolling loopzero-api so refreshed kubeconfigs take effect"
