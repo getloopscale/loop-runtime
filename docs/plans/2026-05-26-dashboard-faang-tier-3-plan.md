@@ -1,6 +1,6 @@
 # Dashboard FAANG-Tier 3 Refactor Plan
 
-> **Version 1.0** — Refactor incremental do `cloud/dashboard/` em 3 phases para atingir UX-tier "Differentiation Features" alinhado a concorrentes top (Vercel/Linear/Stripe) com signature distintivo (LoopZero's own voice: CLI-first amplification + Vercel density + Linear keyboard). Cobre as 2 violações P1 + 5 P2 do density audit, os 8 V-gaps do Vercel benchmark, e os 6 fails do loopzero-ui slop test, mais 8 features novas que concorrentes têm e LoopZero não. Pre-release context. **STATUS: PROPOSED — T3 governance gate pending sponsor approval + ADR ratification.**
+> **Version 1.1** — Refactor incremental do `cloud/dashboard/` em **4 phases (Phase 0 backend pre-flight + Phases 1-3)** para atingir UX-tier "Differentiation Features" alinhado a concorrentes top (Vercel/Linear/Stripe) com signature distintivo (LoopZero's own voice: CLI-first amplification + Vercel density + Linear keyboard). Cobre as 2 violações P1 + 5 P2 do density audit, os 8 V-gaps do Vercel benchmark, e os 6 fails do loopzero-ui slop test, mais 8 features novas que concorrentes têm e LoopZero não — agora com **23 edge cases incorporados** (Phase 0 sub-tasks + 6 MUST FIX sub-tasks + 7 SHOULD TEST + 7 DOCUMENT). Pre-release context. **STATUS: PROPOSED v1.1 — T3 governance gate pending sponsor approval + ADR ratification.**
 
 ## Source-of-truth references (consult ANTES de assumir API)
 
@@ -11,10 +11,12 @@
 - `CLAUDE.md` Voice/Tone section + Cross-Project Rule 9 — CLI-first product abstraction
 - `.claude/rules/pre-release-governance.md` — T3 classification + Plan Amendment Policy
 - `docs/handoff/2026-05-25-loopzero-ui-cloud-dashboard-brief-5.md` + `brief-6.md` — Brief #5 primitives consumption status
+- `docs/plans/2026-05-26-dashboard-faang-tier-3-edge-cases.md` — /edge-case-plan review (23 ECs) cujos findings foram incorporados nesta v1.1
 
 ## Changelog
 
 - **v1.0 (2026-05-26):** Initial PROPOSED draft consolidando inputs de 3 audits (DSS density, Vercel benchmark, loopzero-ui slop test) + decisões estratégicas (mirror=own-voice, escopo=incremental-3-phase, tier=3-differentiation).
+- **v1.1 (2026-05-26):** Incorpora 23 edge cases do /edge-case-plan review. Adiciona Phase 0 (5 backend pre-flight tasks) resolvendo backend-gap sistêmico. 6 MUST FIX viram sub-tasks explícitas (.1/.2) em T-DR-2.1/2.7/3.1/3.2/3.5/3.8. 7 SHOULD TEST entram como testes obrigatórios no TDD. 7 DOCUMENT viram seção "Known risks (documented)". Timing estimate +3-5 dias para Phase 0 → total 4.5-6.5 weeks. Coverage matrix expandido. Adiciona ADR D6 (Backend pre-flight gate é Phase 0 obrigatório, blocker para Phase 1).
 
 ## Context
 
@@ -69,15 +71,17 @@
 
 ## Objective
 
-**Dashboard atinge Tier 3 ("Differentiation Features") em 3 phases incrementais:**
+**Dashboard atinge Tier 3 ("Differentiation Features") em 4 phases incrementais (Phase 0 + Phases 1-3):**
+
+0. **Phase 0 (Backend pre-flight, NEW v1.1):** Verificar 4 endpoints/features backend não-confirmados existir. Decidir per-task: ship com backend OR ship com placeholder cards declarando "Coming Soon" OR negociar backend PR. Resolve EC-1, EC-2 e gaps em T-DR-3.4/3.9. **Blocker** para Phase 1 tasks afetadas. 3-5 dias.
 
 1. **Phase 1 (Foundational):** Close TODOS os 7 findings documentados (2 P1 + 5 P2 + 6 slop fails). Atinge "tecnicamente correto, density-compliant, slop-test 288/288". 1 week.
 
-2. **Phase 2 (Polish + Microinteractions):** Adiciona motion system + transitions polidas + loading states ricos + empty states contextuais. Atinge "feels alive". 1-2 weeks.
+2. **Phase 2 (Polish + Microinteractions):** Adiciona motion system + transitions polidas + loading states ricos + empty states contextuais. Atinge "feels alive". **Inclui sub-task obrigatória `prefers-reduced-motion` (EC-3) + optimistic UI rollback path (EC-4).** 1-2 weeks.
 
-3. **Phase 3 (Differentiation):** Implementa 8 features que concorrentes têm e LoopZero não: Command Palette, Breadcrumb, Notification Center, Sidebar Grouping, TopBar Kebab, Plan-Gating Inline, CLI Signature Integration, Real-time SSE wiring. **Requires Brief #7 to @loopzero/ui team** para primitives novos (CommandPalette, Breadcrumb, NotificationBell). 2-3 weeks.
+3. **Phase 3 (Differentiation):** Implementa 8 features que concorrentes têm e LoopZero não: Command Palette, Breadcrumb, Notification Center, Sidebar Grouping, TopBar Kebab, Plan-Gating Inline, CLI Signature Integration, Real-time SSE wiring. **Requires Brief #7 to @loopzero/ui team** para primitives novos (CommandPalette, Breadcrumb, NotificationBell). **Inclui sub-tasks obrigatórias Rule 3 sanitize (EC-7), CLI command whitelist (EC-8), CodeBlock internal-terms hook (EC-9), cmd+k mount scope (EC-5), breadcrumb route labels (EC-6).** 2-3 weeks.
 
-**Total: 4-6 weeks. Gate entre cada phase: re-run density audit + slop test + Lighthouse + manual UX review por sponsor.**
+**Total: 4.5-6.5 weeks (v1.1, Phase 0 added). Gate entre cada phase: re-run density audit + slop test + Lighthouse + manual UX review por sponsor.**
 
 **Skip: Tier 4 personalization (sidebar reorder, density-per-user, custom themes per workspace) — YAGNI pre-release per CLAUDE.md design-principles.md.**
 
@@ -130,16 +134,31 @@
 - **Consequences:**
   - ✅ Reuse pattern Brief #4/#5/#6 (validated workflow)
   - ✅ Primitives shippped servem outros consumers (não só LoopZero)
-  - ❌ Phase 3 depends de upstream timing — risk de delay. Mitigated: Brief #7 envia early (end of Phase 2), upstream typical 24-72h response per Brief #4 evidence
+  - ❌ Phase 3 depends de upstream timing — risk de delay. Mitigated: Brief #7 envia early (end of Phase 2), upstream typical 24-72h response per Brief #4 evidence; contingency em "Known risks" (EC-23) defer T-DR-3.1+3.4 se Brief #7 > 1 week
 
-## Coverage Matrix
+### D6 — Backend pre-flight como Phase 0 obrigatório (NEW v1.1)
+
+- **Context:** /edge-case-plan review identificou backend-prep gap sistêmico — 4 tasks (T-DR-1.3 payment last4, T-DR-1.4 API keys + workspace settings, T-DR-3.4 Notification audit_log via SSE, T-DR-3.9 SSE status endpoint) supõem endpoints/features backend não-confirmados existir.
+- **Decision:** Adicionar Phase 0 (5 backend pre-flight tasks) ANTES de Phase 1. Cada task verifica endpoint existe via grep em api/internal/routes + curl smoke teste. Per task, decidir: (a) backend ready → Phase 1 task executa normal; (b) backend não pronto, mas baixo esforço → negociar backend PR antes; (c) backend não pronto, alto esforço → re-escopar Phase 1 task para "Coming Soon" placeholder card documentado.
+- **Consequences:**
+  - ✅ Evita ship cards funcionalmente vazios (placeholder permanente disfarçado de feature)
+  - ✅ Surface backend dependencies ANTES de codar consumer-side
+  - ✅ Resolve EC-1 + EC-2 inteiros, parts de EC-?? T-DR-3.4 + T-DR-3.9
+  - ❌ Adiciona 3-5 dias ao timeline antes de visible progress
+  - ❌ Pode bloquear Phase 1 se backend gaps são grandes — mitigated por placeholder scope option
+
+## Coverage Matrix (v1.1 expanded with 23 edge cases)
 
 | Gap source | Item | Phase | Task |
 |------------|------|-------|------|
+| **Edge case EC-1** | **Payment Method last4 backend endpoint** | **0** | **T-DR-0.1** |
+| **Edge case EC-2** | **Workspace + API Keys endpoints** | **0** | **T-DR-0.2, 0.3** |
+| **Edge case (impl T-DR-3.4)** | **Audit log SSE endpoint** | **0** | **T-DR-0.4** |
+| **Edge case (impl T-DR-3.9)** | **Status SSE endpoint** | **0** | **T-DR-0.5** |
 | Density REPORT P1-1 | Overview empty states oversized | 1 | T-DR-1.1 |
 | Density REPORT P1-2 | Overview KPI count 3 → 5 | 1 | T-DR-1.2 |
-| Density REPORT P2-1 | Billing Plan card sub-dimensionada | 1 | T-DR-1.3 |
-| Density REPORT P2-2 | Settings sparseness (40% whitespace) | 1 | T-DR-1.4 |
+| Density REPORT P2-1 | Billing Plan card sub-dimensionada | 1 | T-DR-1.3 (gated por T-DR-0.1) |
+| Density REPORT P2-2 | Settings sparseness (40% whitespace) | 1 | T-DR-1.4 (gated por T-DR-0.2, 0.3) |
 | Density REPORT P2-3 | Profile Sign-out 1-button Card anti-pattern | 1 | T-DR-1.5 |
 | Density REPORT P2-4 | Profile sparseness (38% whitespace) | 1 | T-DR-1.5 |
 | Density REPORT P2-5 | ActionBar height 70px borderline (Projects/Domains) | 1 | T-DR-1.6 |
@@ -148,22 +167,128 @@
 | Slop C-05 | environments.tsx Loader2 inside Card | 1 | T-DR-1.8 |
 | Slop R-03 × 3 | DataTable >4 cols sem hideBelow (Projects/Domains/Environments) | 1 | T-DR-1.9 |
 | Slop T-06 | billing.tsx:212 font-bold redundante | 1 | T-DR-1.10 |
-| Vercel V-2 | Breadcrumb no TopBar | 3 | T-DR-3.2 |
+| Vercel V-2 | Breadcrumb no TopBar | 3 | T-DR-3.2 + sub 3.2.1 (EC-6) |
 | Vercel V-4 | ActionBar filter + layout-switch | 3 | T-DR-3.6 |
 | Vercel V-6 | Plan-gating inline (read-only banner pattern) | 3 | T-DR-3.7 |
 | Vercel V-8 | Usage panel scroll interno | 2 | T-DR-2.5 |
 | Vercel V-1 | Sidebar sub-nav | (deferred — ADR pendente; sem rotas profundas hoje) |
-| Vercel V-3 | TopBar kebab "..." menu | 3 | T-DR-3.5 |
-| Vercel V-5 | Notification bell | 3 | T-DR-3.4 |
+| Vercel V-3 | TopBar kebab "..." menu | 3 | T-DR-3.5 + subs 3.5.1 (EC-7) + 3.5.2 (EC-8) |
+| Vercel V-5 | Notification bell | 3 | T-DR-3.4 (gated por T-DR-0.4) |
 | Vercel V-7 | Sidebar visual grouping | 3 | T-DR-3.3 |
-| CLI signature (D4) | CodeBlock pattern em toda page | 3 | T-DR-3.8 |
-| Motion system | DSS v1.1 motion tokens | 2 | T-DR-2.1 |
-| Loading polish | PageShell skeleton + optimistic UI | 2 | T-DR-2.2 |
+| CLI signature (D4) | CodeBlock pattern em toda page | 3 | T-DR-3.8 + sub 3.8.1 (EC-9 Rule 3 hook) |
+| Motion system | DSS v1.1 motion tokens | 2 | T-DR-2.1 + sub 2.1.1 (EC-3 reduced-motion) |
+| Loading polish | PageShell skeleton + optimistic UI + useDelayedLoading | 2 | T-DR-2.2 (EC-14) |
 | Empty state quality | Contextual CTAs + icon variety | 2 | T-DR-2.4 |
-| Real-time SSE | Status badges live update | 3 | T-DR-3.9 |
-| Command Palette (Linear signature) | cmd+k everywhere | 3 | T-DR-3.1 (requires Brief #7) |
+| Real-time SSE | Status badges live update + BroadcastChannel multi-tab | 3 | T-DR-3.9 (EC-16, gated por T-DR-0.5) |
+| Command Palette (Linear signature) | cmd+k everywhere (post-auth only) | 3 | T-DR-3.1 + sub 3.1.1 (EC-5 mount scope) (requires Brief #7) |
+| Optimistic UI rollback | Team invite onError revert | 2 | T-DR-2.7 + sub 2.7.1 (EC-4) |
+| **Known risks (documented)** | EC-17..23 + EC-?? native notifications | All | "Known risks (documented)" section |
 
-**Coverage: 25/25 findings + signature features endereçadas.** P3 notes do density audit (DataTable mock-data sparseness) intencionalmente NÃO endereçadas — depende de data real, não defeito de design.
+**Coverage: 25/25 findings + 23 edge cases + signature features endereçadas.** P3 notes do density audit (DataTable mock-data sparseness) intencionalmente NÃO endereçadas — depende de data real, não defeito de design.
+
+## Phase 0 — Backend Pre-flight (NEW v1.1, resolve backend-gap)
+
+**Objetivo:** Verificar que 4 endpoints/features backend necessários para Phase 1+3 tasks EXISTEM antes de codar consumer. Decidir per-task: backend ready → executa, backend gap → negocia PR OR re-escopa para placeholder. 3-5 dias.
+
+**Methodology:** cada task = (1) `grep -rn` em `api/internal/routes` + `api/internal/services` por endpoint pattern, (2) `curl` smoke test contra `/api/v1/...` em k3d local, (3) registrar resultado em `docs/reviews/backend-preflight-2026-05-26.md` com verdict per task: READY / NEGOTIATE / RESCOPE.
+
+### T-DR-0.1 — Verify `/v1/billing` response shape inclui `payment_method.last4`
+
+**Resolves:** EC-1
+
+**Verify:**
+```bash
+grep -rn "payment_method\|last4" api/internal/services/billing
+curl -H "Authorization: Bearer $JWT" http://localhost/api/v1/billing | jq '.payment_method'
+```
+
+**Outcomes:**
+- READY → T-DR-1.3 implementa Payment Method card como planejado
+- NEGOTIATE → backend PR ~1 day adicionando Stripe customer.payment_method.card.last4 ao response shape
+- RESCOPE → T-DR-1.3 escopa apenas quota lines + next billing date (sem Payment Method preview)
+
+**DoD:**
+- [ ] Verdict documentado em backend-preflight report
+- [ ] Se NEGOTIATE: backend PR drafted + linked
+- [ ] Se RESCOPE: T-DR-1.3 spec atualizada removendo Payment Method scope
+
+### T-DR-0.2 — Verify Workspace Settings endpoints (Timezone, Default Env, Notifications)
+
+**Resolves:** EC-2 (parte 1)
+
+**Verify:**
+```bash
+grep -rn "workspace\|timezone\|notification_pref" api/internal/routes
+curl -H "Authorization: Bearer $JWT" http://localhost/api/v1/workspace 2>&1 | head
+```
+
+**Outcomes:**
+- READY → T-DR-1.4 (parte Workspace Settings card) implementa normal
+- NEGOTIATE → backend PR criando endpoints CRUD `/v1/workspace/{timezone,default_env,notifications}` ~2 days
+- RESCOPE → Workspace Settings card vira "Coming Soon" placeholder + documento gap em CLAUDE.md known issues
+
+### T-DR-0.3 — Verify API Keys endpoints (rotation, list, create)
+
+**Resolves:** EC-2 (parte 2)
+
+**Verify:**
+```bash
+grep -rn "api.key\|apikey\|api_key" api/internal/routes api/internal/services
+curl -H "Authorization: Bearer $JWT" http://localhost/api/v1/api-keys 2>&1 | head
+```
+
+**Outcomes:**
+- READY → T-DR-1.4 (parte API Keys card) implementa normal
+- NEGOTIATE → backend PR ~3 days (auth model + rotation + 1-time-display)
+- RESCOPE → API Keys card scope removido de T-DR-1.4 (CLI-only feature per DSS § 9.1)
+
+### T-DR-0.4 — Verify SSE endpoint para audit_log (Notification Center source)
+
+**Resolves:** T-DR-3.4 backend dependency (mencionado em EC-? mas não explícito em v1.0)
+
+**Verify:**
+```bash
+grep -rn "audit_log\|sse.*notification\|EventSource" api/internal/routes api/internal/sse
+curl -H "Authorization: Bearer $JWT" http://localhost/api/v1/audit/stream -N 2>&1 | head
+```
+
+**Outcomes:**
+- READY (SSE exists) → T-DR-3.4 wire SSE
+- READY (REST only, no SSE) → T-DR-3.4 wire REST polling 30s (acceptable per CHANGELOG.md mention "audit log filterable")
+- NEGOTIATE → backend PR adding SSE to audit_log endpoint (~2 days)
+- RESCOPE → Notification Center poll-only (no real-time); document trade-off
+
+### T-DR-0.5 — Verify SSE endpoint para live status updates (status badges)
+
+**Resolves:** T-DR-3.9 backend dependency
+
+**Verify:**
+```bash
+grep -rn "status.*sse\|application.status.*stream" api/internal/sse api/internal/routes
+# Per CHANGELOG.md, SSE existe para deploy events. Status updates SSE = different endpoint?
+```
+
+**Outcomes:**
+- READY (single SSE endpoint streams all event types incl status) → T-DR-3.9 wire normal
+- READY (separate SSE para status existe) → T-DR-3.9 wire normal
+- NEGOTIATE → backend PR extend SSE multiplex para status events (~2 days)
+- RESCOPE → T-DR-3.9 defer para v1.1, status badges permanecem polling em refresh
+
+### T-DR-0.6 — Phase 0 closure report
+
+**Files:**
+- `docs/reviews/backend-preflight-2026-05-26.md` (NEW) — consolidates 5 verdicts + decisions
+- Update plan v1.1 (this file) "Coverage Matrix" reflecting Phase 0 outcomes
+
+**DoD Phase 0:**
+- [ ] 5 verdicts documented
+- [ ] 0 NEGOTIATE PRs blocking (either merged OR escalated to backend team)
+- [ ] RESCOPE decisions ratified by sponsor
+- [ ] Phase 1 tasks afetadas (T-DR-1.3, 1.4, 3.4, 3.9) atualizadas no plano com scope final
+- [ ] Sponsor explicit go-ahead para Phase 1 começar
+- [ ] Commit `docs(dashboard): Phase 0 backend pre-flight verdicts + decisions`
+
+---
 
 ## Phase 1 — Foundational (close 10 documented findings)
 
@@ -256,6 +381,7 @@
 - `test_profile_sign_out_in_account_card_header` — não em standalone Card
 - `test_profile_recent_activity_card_renders` — 5 last actions
 - `test_profile_connected_apps_card_renders` — provider list
+- `test_profile_connected_apps_handles_missing_credentials` (SHOULD TEST EC-12) — quando `session.identity.credentials` undefined OR vazio, card mostra "No connected apps" sem crash
 
 **Acceptance:**
 - Density audit Profile verdict = PASS
@@ -268,11 +394,13 @@
 
 **TDD:**
 - `test_action_bar_height_at_most_64px` — assertion via render
+- `test_action_bar_height_consistent_across_4_consumers` (SHOULD TEST EC-10) — Overview/Projects/Domains/Team rendering ActionBar todos ≤64px sem clipping
 
 **Acceptance:**
 - ActionBar em Projects/Domains ≤ 64px (target 56-64, max 72)
+- TouchTarget ≥ 24×24px mantido (a11y)
 
-**Trade-off considerado:** Pode mexer em outras consumers (Team, Overview). Mitigated por revisão visual completa post-edit.
+**Trade-off considerado:** Pode mexer em outras consumers (Team, Overview). Mitigated por revisão visual completa post-edit + cross-consumer test EC-10.
 
 ### T-DR-1.7 — Projects raw button → Button asChild (closes slop L-01)
 
@@ -289,11 +417,13 @@
 
 **TDD:**
 - `test_projects_open_action_renders_button_primitive` — grep no raw `<button>` em source
+- `test_projects_open_action_navigates_via_link` (SHOULD TEST EC-11) — assert `navigate()` chamado UMA vez (not double-fired por Button onClick + Link click; Button asChild + Link compatibility)
 - Existing tests still PASS
 
 **Acceptance:**
 - Slop L-01 closed (grep `<button ` em projects.tsx = 0)
 - Slop A-03 closed (navigation via Link, not button onClick)
+- Button asChild + react-router-dom Link works (single navigation event per click)
 
 ### T-DR-1.8 — Environments PageShell migration (closes slop C-01 + C-05)
 
@@ -305,11 +435,13 @@
 - `test_environments_uses_page_shell` — assert PageShell wrapper
 - `test_environments_loading_via_page_shell_loading_prop`
 - `test_environments_empty_via_page_shell_empty_prop`
+- `test_environments_pagination_kicks_in_above_10_rows` (SHOULD TEST EC-13) — wire DataTable.pagination quando filtered.length > 10 (CD-01 gate)
 - Existing tests still PASS
 
 **Acceptance:**
 - Slop C-01 + C-05 closed
 - environments score 32/32
+- CD-01 gate honored (pagination above 10 rows)
 
 ### T-DR-1.9 — DataTable hideBelow markings (closes slop R-03 × 3)
 
@@ -367,28 +499,54 @@
 --easing-standard: cubic-bezier(0.2, 0, 0, 1)     /* default */
 --easing-decelerate: cubic-bezier(0, 0, 0, 1)     /* enter */
 --easing-accelerate: cubic-bezier(0.3, 0, 1, 1)   /* exit */
+
+/* MUST FIX EC-3 — respect OS accessibility setting */
+@media (prefers-reduced-motion: reduce) {
+  :root {
+    --motion-fast: 0ms;
+    --motion-base: 0ms;
+    --motion-slow: 0ms;
+  }
+}
 ```
 
+#### Sub-task T-DR-2.1.1 — `prefers-reduced-motion` honored (MUST FIX EC-3)
+
+**Files:**
+- `cloud/dashboard/src/styles/motion.css` — include media query block acima
+- `cloud/dashboard/src/styles/motion.test.ts` — assert override
+
 **TDD:**
+- `test_motion_respects_prefers_reduced_motion` — matchMedia mock + assert `--motion-base` resolves to `0ms`
+
+**Acceptance:**
+- WCAG 2.3.3 pass
+- Lighthouse a11y ≥ 95 mantém
+
+**TDD (Task base):**
 - `test_motion_tokens_in_tailwind_preset` — assert classes generated
 - DSS v1.1 doc updated
 
-**Acceptance:**
+**Acceptance (Task base):**
 - Motion CSS vars available globally
 - Tailwind utilities `transition-base`, `transition-fast`, `ease-standard` etc.
+- Sub-task 2.1.1 DoD met
 
 ### T-DR-2.2 — Loading transitions polish
 
 **Files to edit:**
 - `cloud/dashboard/src/pages/projects.tsx`, `domains.tsx`, `environments.tsx`, `team.tsx` — wire `<Skeleton>` rows (count=5) instead of generic spinners; opt-in via DataTable.loading + PageShell.loading
+- `cloud/dashboard/src/hooks/use-delayed-loading.tsx` (NEW) — pattern `useDelayedLoading(200ms)` para evitar skeleton flash em fetches rápidos
 - Optimistic UI: implement in T-DR-2.7 separately
 
 **TDD:**
 - `test_projects_loading_renders_skeleton_rows` — already PASS post T-MIG-3 (DataTable.loading handles)
 - Same for environments + team
+- `test_skeleton_hidden_when_fetch_under_200ms` (SHOULD TEST EC-14) — `useDelayedLoading(200)` só mostra skeleton se fetch demora >200ms (evita flicker em network rápido)
 
 **Acceptance:**
 - All loading states use Skeleton primitive (closes C-05 broader pattern)
+- Skeleton flash eliminado em sub-200ms fetches
 
 ### T-DR-2.3 — Hover/focus state polish
 
@@ -424,8 +582,26 @@
 - `cloud/dashboard/src/pages/team.tsx` (Invite) — optimistic add row before backend confirms
 - Pattern documented for future actions
 
-**TDD:**
+#### Sub-task T-DR-2.7.1 — Rollback path obrigatório (MUST FIX EC-4)
+
+**Pattern (mandatory):**
+```ts
+// onMutate: add optimistic row + return rollback context
+// onError: invoke rollback context (revert) + show <Alert variant="destructive">
+// onSettled: refetch to reconcile
+```
+
+Sem rollback, backend reject (409 email exists, 402 plan limit) deixa UI mostrando row inexistente → data loss confusion.
+
+**Acceptance:**
+- Backend 4xx/5xx → row removida + Alert destructive com mensagem actionable
+- Network failure → mesmo comportamento
+
+**TDD (mandatory per EC-4):**
 - `test_team_invite_optimistic_adds_row_before_response`
+- `test_team_invite_rolls_back_on_409_email_exists` — **MUST exist**
+- `test_team_invite_rolls_back_on_402_plan_limit` — **MUST exist**
+- `test_team_invite_shows_destructive_alert_on_error`
 
 **DoD Phase 2:**
 - [ ] All 7 tasks committed
@@ -447,14 +623,35 @@
 - `cloud/dashboard/src/components/layout/dashboard-layout.tsx` — wire cmd+k global shortcut
 - Actions catalog: Navigate to {Overview, Projects, ...}, Recent projects, Deploy {project}, Open CLI docs, Sign out, ...
 
-**TDD:**
+#### Sub-task T-DR-3.1.1 — Mount scope: DashboardLayout only, NOT auth pages (MUST FIX EC-5)
+
+**Constraint:** CommandPalette deve ser mounted DENTRO de `<DashboardLayout>` (post-auth shell), NUNCA em auth routes (login/register/recovery/verification). Senão palette responde cmd+k em auth context → vazia OR security smell (revela actions para non-auth).
+
+**Implementation:**
+```tsx
+// dashboard-layout.tsx — wrap content
+<DashboardLayout>
+  <CommandPalette catalog={...} />  {/* Mount aqui, NÃO em app.tsx root */}
+  {children}
+</DashboardLayout>
+```
+
+**TDD (mandatory per EC-5):**
+- `test_command_palette_not_mounted_on_login_route` — **MUST exist**
+- `test_command_palette_not_mounted_on_register_route`
+- `test_command_palette_not_mounted_on_recovery_route`
+- `test_command_palette_not_mounted_on_verification_route`
+- `test_command_palette_mounted_on_overview_route`
+
+**TDD (Task base):**
 - `test_command_palette_opens_on_cmd_k`
 - `test_command_palette_navigation_works`
 - `test_command_palette_fuzzy_search`
 
 **Acceptance:**
-- cmd+k opens palette everywhere
+- cmd+k opens palette everywhere POST-AUTH
 - Top-N catalog actions wired
+- Auth pages NÃO respondem a cmd+k
 
 ### T-DR-3.2 — Breadcrumb composite + TopBar wire (closes V-2)
 
@@ -463,7 +660,27 @@
 - Para rotas shallow (1 level), Breadcrumb degenera para single title (backward compatible)
 - Para rotas deep futuras (`/projects/{id}/deployments/{id}`), funciona automaticamente
 
-**TDD:**
+#### Sub-task T-DR-3.2.1 — Breadcrumb label resolver per route (MUST FIX EC-6)
+
+**Problem:** rotas dynamic como `/projects/:id` têm `id` que é UUID/name não-display-friendly. Sem resolver, breadcrumb mostra "Projects / 7b1e1e3d-3afa..." em vez de "Projects / acme-web".
+
+**Pattern (mandatory):**
+```ts
+// app.tsx route definition extended
+const routes = [
+  { path: '/projects', breadcrumbLabel: () => 'Projects' },
+  { path: '/projects/:id', breadcrumbLabel: ({ id }) => useProject(id)?.name ?? id },
+  // ...
+];
+```
+
+Breadcrumb composite carrega labels via hook que respeita lookup.
+
+**TDD (mandatory per EC-6):**
+- `test_breadcrumb_resolves_project_id_to_name` — `/projects/abc-123` → "acme-web"
+- `test_breadcrumb_fallback_for_unknown_route` (SHOULD TEST EC-15) — rota não registrada degrada para "Untitled" ou esconde breadcrumb (NÃO crash) — **MUST exist**
+
+**TDD (Task base):**
 - `test_top_bar_breadcrumb_renders_section_subpage`
 - `test_top_bar_breadcrumb_clickable_left_segments`
 
@@ -492,7 +709,47 @@
 **Files to edit:**
 - `cloud/dashboard/src/components/layout/top-bar.tsx` — add `<DropdownMenu>` no canto direito com actions: "Open in CLI" (copy command equivalente), "Copy as JSON" (page state), "Refresh", "Open docs"
 
-**TDD:**
+#### Sub-task T-DR-3.5.1 — "Copy as JSON" sanitize layer (MUST FIX EC-7, Rule 3)
+
+**Problem:** Page state pode incluir `tenant_id`, `cell_id`, `cellID`, raw CRD shapes — Rule 3 PROHIBITS internal terms em user-facing output (including --json shapes copied to clipboard).
+
+**Implementation:**
+```ts
+// cloud/dashboard/src/lib/sanitize.ts (NEW)
+const FORBIDDEN_KEYS = [
+  'tenant_id', 'cell_id', 'cellID',
+  'argocd_app', 'gitea_repo', 'minio_bucket',
+  // ...
+];
+export function sanitizeForCopy(obj: unknown): unknown {
+  // deep-strip forbidden keys
+}
+```
+
+**TDD (mandatory per EC-7):**
+- `test_copy_as_json_strips_tenant_id` — **MUST exist**
+- `test_copy_as_json_strips_cell_id` — **MUST exist**
+- `test_copy_as_json_strips_internal_arch_terms` — **MUST exist**
+- `test_copy_as_json_preserves_user_facing_fields` (project name, env name, status)
+
+#### Sub-task T-DR-3.5.2 — "Open in CLI" whitelist explícita (MUST FIX EC-8)
+
+**Problem:** Page state pode ter tokens, API keys, session IDs — copying acidental para clipboard vaza credenciais (apps monitor clipboard).
+
+**Implementation:**
+```ts
+// Whitelist EXPLICIT — only these fields go to CLI command
+const CLI_COPY_WHITELIST = ['project', 'environment', 'app', 'verb', 'name'];
+```
+
+NUNCA copy raw state. Build command string strict from whitelist.
+
+**TDD (mandatory per EC-8):**
+- `test_open_in_cli_never_includes_jwt` — **MUST exist**
+- `test_open_in_cli_never_includes_api_key`
+- `test_open_in_cli_only_includes_whitelist_fields`
+
+**TDD (Task base):**
 - `test_top_bar_kebab_renders`
 - `test_top_bar_kebab_open_in_cli_copies_command`
 
@@ -521,7 +778,27 @@
 - Toda page com actions — adicionar secondary section "Or use the CLI" (collapse default) com CodeBlock equivalent
 - Pages: Projects (loopzero project list/create), Domains (loopzero domain add), Environments (loopzero env create), Team (loopzero team invite), Settings (já existe — confirm pattern)
 
-**TDD:**
+#### Sub-task T-DR-3.8.1 — Rule 3 validation em CodeBlock contents (MUST FIX EC-9)
+
+**Problem:** Dev pode escrever `loopzero argocd sync` ou `loopzero gitops push` (Rule 3 forbidden terms) acreditando ser ok porque está em CodeBlock. Hook `.claude/hooks/internal-terms.py` existe mas v1.0 plan não wire-na em DoD.
+
+**Constraint:** Toda CodeBlock content deve passar `.claude/hooks/internal-terms.py` check. Commands em CLI signature devem usar product language only:
+- ✅ `loopzero deploy`, `loopzero project list`, `loopzero env create staging`, `loopzero domain add api.example.com`, `loopzero secret set KEY=value`
+- ❌ `argocd sync`, `kubectl apply`, `gitops push`, `kaniko build`, `gitea repo create`, `kubebuilder ...`
+
+**DoD addition:**
+- [ ] `.claude/hooks/internal-terms.py` rodado em CodeBlock contents de Projects/Domains/Environments/Team/Settings — zero hits
+- [ ] CI job adicionado em pkg/quality/* validando CodeBlock em src/ (similar a `task quality:gates` pattern)
+
+**TDD (mandatory per EC-9):**
+- `test_projects_cli_section_uses_product_language_only` — grep test
+- `test_domains_cli_section_uses_product_language_only`
+- `test_environments_cli_section_uses_product_language_only`
+- `test_team_cli_section_uses_product_language_only`
+- `test_billing_cli_section_uses_product_language_only`
+- `test_no_forbidden_terms_in_codeblock_content_across_all_pages` — aggregate test
+
+**TDD (Task base):**
 - `test_projects_cli_section_renders`
 - `test_domains_cli_section_renders`
 - Similar para domains/environments/team
@@ -529,6 +806,7 @@
 **Acceptance:**
 - Toda action page tem CLI equivalent visible inline (collapse default)
 - Pattern documented em DSS v1.1 Voice section
+- Sub-task 3.8.1 DoD met
 
 ### T-DR-3.9 — SSE real-time wire for status badges
 
@@ -538,6 +816,7 @@
 
 **TDD:**
 - `test_status_updates_live_via_sse`
+- `test_sse_uses_broadcast_channel_for_multi_tab` (SHOULD TEST EC-16) — single SSE connection compartilhada via BroadcastChannel (per existing pattern em `src/lib/api.ts` JWT-em-memória — DO NOT TOUCH). Evita N conexões simultâneas drainando backend.
 
 **DoD Phase 3:**
 - [ ] All 9 tasks committed
@@ -555,19 +834,25 @@
 - [ ] Manual sponsor review — FAANG-tier achievement gate
 - [ ] Brief #8 emitted ao @loopzero/ui (consumer report) similar to Brief #6 pattern
 
-## Global DoD
+## Global DoD (v1.1 expanded)
 
-- [ ] Phase 1, 2, 3 todos DoD met
-- [ ] 117+ → ~150+ vitest tests GREEN (estimate: +30 tests across 3 phases)
-- [ ] Bundle ≤ 180 KB (gate; aceitar 10-15 KB growth justificado por novas primitives)
+- [ ] Phase 0, 1, 2, 3 todos DoD met
+- [ ] 117+ → ~150+ vitest tests GREEN (estimate: +30-35 tests across 4 phases including new EC tests)
+- [ ] Bundle ≤ 180 KB (hard gate; aceitar 10-15 KB growth justificado por novas primitives — EC-18 mitigation enforced)
 - [ ] Density audit re-run: 0 P1 + 0 P2
 - [ ] loopzero-ui audit re-run: 100% across all 13 routes
 - [ ] Lighthouse scores: Performance ≥ 90, Accessibility ≥ 95, Best Practices ≥ 95
 - [ ] WCAG 2.5.8 AA pass em manual a11y audit
-- [ ] DSS bumped 1.0 → 1.1 (Motion + CLI signature pattern)
-- [ ] Brief #7 emitted + primitives shipped + Brief #8 closure
+- [ ] **WCAG 2.3.3 pass (prefers-reduced-motion respeitado per EC-3)**
+- [ ] DSS bumped 1.0 → 1.1 (Motion + CLI signature pattern + Empty vs Error convention)
+- [ ] Brief #7 emitted + primitives shipped + Brief #8 closure (OR EC-23 contingency activated)
 - [ ] CLAUDE.md updated (se signature pattern muda product language convention)
 - [ ] Vercel benchmark re-run: V-2, V-3, V-4, V-5, V-6, V-7, V-8 closed (V-1 deferred per D2)
+- [ ] **6 MUST FIX sub-tasks completed (EC-3, EC-4, EC-5, EC-6, EC-7+EC-8, EC-9)**
+- [ ] **7 SHOULD TEST tests added to TDD GREEN (EC-10..16)**
+- [ ] **7 DOCUMENT items registrados em "Known risks" section**
+- [ ] **`.claude/hooks/internal-terms.py` passa em todos CodeBlock contents (Rule 3)**
+- [ ] Backend pre-flight report (`docs/reviews/backend-preflight-2026-05-26.md`) commitado
 - [ ] Sponsor manual UX review = "FAANG-tier achieved" verdict
 
 ## Pre-release governance
@@ -577,9 +862,9 @@
 **Requires (per `.claude/rules/pre-release-governance.md`):**
 - [ ] Meeting `MEET-2026-05-26-dashboard-faang-tier-3.md` convened
 - [ ] Specialists: principal-architect, dx-engineer, production-design-reviewer, change-validation-planner
-- [ ] ADR D1-D5 ratification
-- [ ] Plan version bump v1.0 → v1.1 post-ratification
-- [ ] Sponsor explicit approval before T-DR-1.1 commit
+- [ ] ADR D1-D6 ratification (D6 NEW v1.1 = backend pre-flight gate)
+- [ ] Plan v1.1 ratified (or further bump v1.2 with meeting outcomes)
+- [ ] Sponsor explicit approval before T-DR-1.1 commit (Phase 0 pode rodar antes do meeting per read-only nature)
 
 **Plan Amendment Policy:**
 - Per-phase gates allow scope refinement (MEET lightweight) sem full re-meeting
@@ -587,16 +872,70 @@
 - Task deferral allowed within phase if technical blocker; document in MEET-ASYNC
 - Big-bang abandon (revert to v1.0 incremental) requires full T3 re-meeting
 
-## Timing estimate
+## Timing estimate (v1.1 updated, Phase 0 added)
 
 | Phase | Duration | Risk | Output |
 |-------|----------|------|--------|
-| Phase 1 | 1 week (5 days) | Low — execution of documented findings | 10 commits closing 7 P1/P2 + 5 slop fails |
-| Phase 2 | 1-2 weeks | Medium — motion system is new abstraction | DSS v1.1 + 7 commits + Brief #7 draft |
-| Phase 3 | 2-3 weeks | Medium-High — depends on @loopzero/ui Brief #7 turnaround | 9 commits + Brief #8 + final review |
-| **Total** | **4-6 weeks** | — | 26 commits + 2 briefs sent + 1 brief published + DSS bump + audit re-runs |
+| **Phase 0** | **3-5 days** | **Medium — backend gaps may require negotiation** | **6 tasks: 5 backend verifications + 1 closure report; ZERO consumer code (audit + decision only)** |
+| Phase 1 | 1 week (5 days) | Low — execution of documented findings + Phase 0 scope clarity | 10 commits closing 7 P1/P2 + 5 slop fails + 3 SHOULD TEST tests added |
+| Phase 2 | 1-2 weeks | Medium — motion system is new abstraction + 2 MUST FIX sub-tasks (EC-3, EC-4) | DSS v1.1 + 7 commits + Brief #7 draft |
+| Phase 3 | 2-3 weeks | Medium-High — depends on @loopzero/ui Brief #7 turnaround + 5 MUST FIX sub-tasks Rule 3 sanitize/whitelist/hook | 9 commits + Brief #8 + final review |
+| **Total** | **4.5-6.5 weeks** | — | 32 tasks (Phase 0: 6, Phase 1: 10, Phase 2: 7, Phase 3: 9) + 2 briefs sent + 1 brief published + DSS bump + audit re-runs |
+
+## Known risks (documented, accepted)
+
+Risks identificados pelo /edge-case-plan que NÃO viram MUST FIX nem SHOULD TEST — aceitos conscientemente com mitigação documentada. Cada um tem ID `EC-N` rastreável ao edge-cases.md.
+
+### EC-17 — Overview Alerts banner deve ser conditional (post-feature ship)
+
+- **Risco:** T-DR-1.1 substitui empty state por inline Alert banner ("Set up alerts →"). Quando feature alerts shipar, banner deveria sumir.
+- **Mitigação:** Plan documenta — banner é conditional render baseado em `alerts.length === 0`. Hoje sempre mostra (OK pre-feature). Quando feature ship, adicionar conditional.
+- **Acceptance:** quando T-DR-? (future alert feature) shipar, alert banner em Overview vira `{alerts.length === 0 && <Alert>...</Alert>}`.
+
+### EC-18 — Bundle hard gate (180 KB) pode ser violado em Phase 3
+
+- **Risco:** Plan v1.1 menciona "aceitar 10-15 KB growth justificado por novas primitives" mas hard gate é 180 KB e atual é 145.63 KB → headroom 34.37 KB. Brief #7 ship 5+ primitives (CommandPalette grande). Pode estourar.
+- **Mitigação:** Phase 3 DoD INCLUI bundle measurement OBRIGATÓRIO + escalation path: se excede 180 KB, escopo Phase 3 cortado para fit. Order de corte preferido: T-DR-3.4 NotificationBell > T-DR-3.5 TopBar kebab > T-DR-3.7 plan-gating (mais redundantes vs already-shipped UX).
+
+### EC-19 — Empty state vs Error state distinção
+
+- **Risco:** T-DR-2.4 fala "actionable CTA OR clear waiting state" mas não distingue de error state (API 500, network fail). Ambos podem renderizar EmptyState.
+- **Mitigação:** Plan documenta convenção — `<Alert variant="destructive">` reservado para errors, `<EmptyState>` somente para empty data (não-erro). DSS v1.1 documenta diferença em § 5.X.
+
+### EC-20 — Usage panel double-scroll UX risk
+
+- **Risco:** T-DR-2.5 adiciona scroll interno em UsageMeter (`max-h-[400px] overflow-y-auto`). Página tem scroll global → double scroll confuso em desktop.
+- **Mitigação:** Keep max-h conservative (400px max), prefer scroll global quando possível. Acceptable trade-off para acomodar 5+ KPIs. Re-evaluate se sponsor review flag.
+
+### EC-21 — Tab close durante optimistic mutation
+
+- **Risco:** Usuário fecha tab durante invite in-flight → optimistic state perdido, backend pode ter completado ou não.
+- **Mitigação:** Acceptable para invite flow (idempotent backend — duplicate invite returns same row). Document para futuros casos destructive (delete project) onde optimistic UI requires confirmation modal antes.
+
+### EC-22 — Filter/layout state persistence
+
+- **Risco:** T-DR-3.6 não especifica se filter (ActionBar) e layout (grid/list toggle) persiste.
+- **Mitigação:** Per-page localStorage (`dashboard:projects:filter`, `dashboard:projects:layout`) — Vercel pattern. Plan documenta em T-DR-3.6 implementation note.
+
+### EC-23 — Brief #7 timing risk (Phase 3 upstream dependency)
+
+- **Risco:** Phase 3 depends on @loopzero/ui Brief #7 turnaround. Brief #4 took 24h, Brief #5 took 72h. Brief #7 escopo maior (5+ primitives). Realistic: 1-2 weeks upstream.
+- **Mitigação:** Contingency plan — se Brief #7 turnaround > 1 week, defer T-DR-3.1 (CommandPalette) + T-DR-3.4 (NotificationBell) para v1.1 e ship Phase 3 com remaining 7 tasks. Decision gate at end-of-Phase-2 com Brief #7 status check.
+
+### EC-?? — Native browser notifications (T-DR-3.4 scope)
+
+- **Risco:** Native Notifications API (browser-level "Push" perm) não mencionado em plan T-DR-3.4 (in-app notification bell only).
+- **Mitigação:** YAGNI pre-release. In-app notification bell suffice. Native browser notifications = v1.x feature (requires user permission flow, service worker).
+
+---
 
 ## Validation gates between phases
+
+**Phase 0 → Phase 1 gate (NEW v1.1):**
+- 5 backend verifications documented em `docs/reviews/backend-preflight-2026-05-26.md`
+- 0 NEGOTIATE PRs blocking (either merged OR escalated to backend team OR sponsor-decided RESCOPE)
+- T-DR-1.3, T-DR-1.4, T-DR-3.4, T-DR-3.9 scopes ratified
+- Sponsor explicit go-ahead
 
 **Phase 1 → Phase 2 gate:**
 - Density audit: 0 P1 + 0 P2
@@ -607,11 +946,15 @@
 **Phase 2 → Phase 3 gate:**
 - Motion system shipped + DSS v1.1 published
 - All transitions audited via Lighthouse + manual review
+- **EC-3 verified: `prefers-reduced-motion` honored em matchMedia test**
+- **EC-4 verified: optimistic UI rollback tests GREEN**
 - Brief #7 sent to @loopzero/ui (early signal to upstream)
 
 **Phase 3 final gate:**
 - Vercel benchmark closure (V-2..V-8)
 - CLI signature pattern adopted across 6 pages
+- **EC-5, EC-6, EC-7, EC-8, EC-9 todos MUST FIX tests GREEN (cmd+k mount scope, breadcrumb labels, JSON sanitize, CLI whitelist, internal-terms hook)**
+- Bundle ≤ 180 KB (EC-18 risk mitigated)
 - Sponsor verdict: "FAANG-tier achieved" OR explicit deferred items documented
 
 ## Anti-patterns forbidden (per CLAUDE.md design-principles.md)
@@ -633,12 +976,25 @@
 - Onboarding flow redesign (separate plan if needed)
 - Public website redesign (loopzerokit lives separate)
 
-## Next steps
+## Next steps (v1.1 updated)
 
-1. **Sponsor review** este plan (PROPOSED → ACCEPTED status transition)
+1. **Sponsor review** este plan v1.1 (PROPOSED → ACCEPTED status transition)
 2. Convene meeting `MEET-2026-05-26-dashboard-faang-tier-3` via `/meeting` skill
-3. Ratify ADRs D1-D5
-4. Bump plan v1.0 → v1.1 com meeting outcomes
-5. Begin Phase 1 T-DR-1.1 (após approval)
+3. Ratify ADRs D1-D6 (D6 NEW = backend pre-flight gate)
+4. **Begin Phase 0** (T-DR-0.1..0.6) — 3-5 dias backend pre-flight (read-only verification, ZERO consumer code)
+5. **Phase 0 closure gate** — ratify backend decisions (READY/NEGOTIATE/RESCOPE per task) + sponsor go-ahead
+6. **Begin Phase 1** T-DR-1.1 (após Phase 0 closure)
 
-**Critical reminder:** per `.claude/rules/pre-release-governance.md`, código de Phase 1 não pode ser commitado antes do meeting + ADRs ratificados. Plano sozinho não é authorization para implementar.
+**Critical reminders:**
+- Per `.claude/rules/pre-release-governance.md`, código de Phase 1 não pode ser commitado antes do meeting + ADRs D1-D6 ratificados. Plano sozinho não é authorization para implementar.
+- **Phase 0 é READ-ONLY** (verification + documentation only). Pode rodar em parallel com meeting/ADR ratification — não consome o T3 governance gate.
+- Phase 1 só desbloqueia se Phase 0 closure gate met.
+
+## Edge-case-plan review reference
+
+Este plan v1.1 incorpora os 23 edge cases identificados em `docs/plans/2026-05-26-dashboard-faang-tier-3-edge-cases.md`:
+- **9 MUST FIX** → 6 sub-tasks explícitas (T-DR-2.1.1, 2.7.1, 3.1.1, 3.2.1, 3.5.1+3.5.2, 3.8.1) + Phase 0 (T-DR-0.1, 0.2, 0.3)
+- **7 SHOULD TEST** → testes obrigatórios em TDD sections (EC-10..16)
+- **7 DOCUMENT** → "Known risks (documented)" section (EC-17..23 + EC-?? native notifications)
+
+Pattern sistêmico mais perigoso resolvido: **backend-prep gap** via Phase 0 obrigatório (ADR D6).
