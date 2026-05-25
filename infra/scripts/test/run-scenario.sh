@@ -15,9 +15,9 @@
 # distinguishes chaos engineering from "kill pod see what happens".
 #
 # Usage:
-#   bash infra/scripts/chaos/run-scenario.sh --scenario C01
-#   bash infra/scripts/chaos/run-scenario.sh --scenario C01 --baseline-duration 2m
-#   bash infra/scripts/chaos/run-scenario.sh --scenario C01 --dry-run
+#   bash infra/scripts/test/run-scenario.sh --scenario C01
+#   bash infra/scripts/test/run-scenario.sh --scenario C01 --baseline-duration 2m
+#   bash infra/scripts/test/run-scenario.sh --scenario C01 --dry-run
 #
 # Exit codes:
 #   0 — PASS (SLO held + recovery within budget)
@@ -59,7 +59,7 @@ done
 
 REPO_ROOT="$(cd "$(dirname "$0")/../../.." && pwd)"
 MANIFESTS_DIR="$REPO_ROOT/infra/tests/chaos/manifests"
-SCRIPTS_DIR="$REPO_ROOT/infra/scripts/chaos"
+SCRIPTS_DIR="$REPO_ROOT/infra/scripts/test"
 TS=$(date -u +%Y%m%dT%H%M%SZ)
 RUN_DIR="/tmp/chaos-${SCENARIO}-${TS}"
 mkdir -p "$RUN_DIR"

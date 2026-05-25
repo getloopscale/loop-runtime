@@ -8,9 +8,9 @@
 # chaos state orphaned across runs.
 #
 # Usage:
-#   bash infra/scripts/chaos/cleanup.sh
-#   bash infra/scripts/chaos/cleanup.sh --target-context k3d-loopzero-build
-#   bash infra/scripts/chaos/cleanup.sh --all-contexts  # iterate all loopzero-* clusters
+#   bash infra/scripts/test/cleanup.sh
+#   bash infra/scripts/test/cleanup.sh --target-context k3d-loopzero-build
+#   bash infra/scripts/test/cleanup.sh --all-contexts  # iterate all loopzero-* clusters
 #
 # Exit codes:
 #   0 — cleanup complete; zero orphan chaos resources verified

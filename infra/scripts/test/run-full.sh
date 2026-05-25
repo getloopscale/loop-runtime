@@ -6,8 +6,8 @@
 # Markdown summary across all scenarios.
 #
 # Usage:
-#   bash infra/scripts/chaos/run-full.sh
-#   bash infra/scripts/chaos/run-full.sh --baseline-duration 1m
+#   bash infra/scripts/test/run-full.sh
+#   bash infra/scripts/test/run-full.sh --baseline-duration 1m
 #
 # Exit codes:
 #   0 — all PASS
@@ -29,7 +29,7 @@ while [[ $# -gt 0 ]]; do
 done
 
 REPO_ROOT="$(cd "$(dirname "$0")/../../.." && pwd)"
-SCRIPTS_DIR="$REPO_ROOT/infra/scripts/chaos"
+SCRIPTS_DIR="$REPO_ROOT/infra/scripts/test"
 TS=$(date -u +%Y%m%dT%H%M%SZ)
 SUITE_DIR="/tmp/chaos-full-${TS}"
 mkdir -p "$SUITE_DIR"

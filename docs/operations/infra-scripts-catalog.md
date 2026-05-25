@@ -74,7 +74,7 @@ o drill (gate de maturidade `a`), os gates de qualidade, ou a publicação de im
 | `velero-dr-drill.sh` | Drill de backup/restore Velero (T4.2) | **ALTO** | **DRILL** — isolado | 413 · 05-06 | operador | REVIEW-NEEDED |
 | `pkg-soak-smoke.sh` | Soak smoke de `pkg/` vs localhost:13001 | **MÉDIO** | **TEST-CI** — local | 161 · 05-04 | Task | KEEP-OPERATOR |
 
-## `infra/scripts/chaos/` (5) — todos **TEST-CI** (chaos-mesh local/drill; zero prod runtime)
+## `infra/scripts/test/` (5) — todos **TEST-CI** (chaos-mesh local/drill; zero prod runtime)
 
 | Script | Utilidade | Crit. | Impacto-PROD | LOC·mod | Invocado por | Allowlist |
 |---|---|---|---|---|---|---|

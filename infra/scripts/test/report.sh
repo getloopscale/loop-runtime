@@ -5,7 +5,7 @@
 # combines with baseline + during + post measurements, produces Markdown.
 #
 # Usage:
-#   bash infra/scripts/chaos/report.sh \
+#   bash infra/scripts/test/report.sh \
 #     --scenario C01 \
 #     --manifest infra/tests/chaos/manifests/pod-kill-api-leader.yaml \
 #     --run-dir /tmp/chaos-C01-2026... \
