@@ -489,7 +489,7 @@ tasks:
       TTL: '{{.TTL | default "4"}}'
       REASON: '{{.REASON | default ""}}'
     cmds:
-      - bash infra/scripts/break-glass.sh {{.CONTEXT}} {{.TTL}} "{{.REASON}}"
+      - bash infra/scripts/production/break-glass.sh {{.CONTEXT}} {{.TTL}} "{{.REASON}}"
 
   # ===========================================================================
   # Observability — Blackbox, pprof, Sloth
@@ -566,7 +566,7 @@ tasks:
   tokens:provision:
     desc: Provision API tokens (Gitea + ArgoCD) and build cluster kubeconfig
     cmds:
-      - bash infra/scripts/provision-api-tokens.sh
+      - bash infra/scripts/production/provision-api-tokens.sh
       - |
         echo ""
         if kubectl --context {{.MGMT_CONTEXT}} -n loopzero-system get deployment/loopzero-api >/dev/null 2>&1; then

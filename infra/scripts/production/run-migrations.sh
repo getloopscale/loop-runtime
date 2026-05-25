@@ -31,8 +31,8 @@ set -euo pipefail
 # In dry-run mode, the script prints what migration would be applied
 # (via `migrate version`) and exits without executing `migrate up`.
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-# shellcheck source=lib/dry-run.sh disable=SC1091
-source "$SCRIPT_DIR/lib/dry-run.sh"
+# shellcheck source=../lib/dry-run.sh disable=SC1091
+source "$SCRIPT_DIR/../lib/dry-run.sh"
 parse_dry_run_flag "$@"
 if [ "${#REMAINING_ARGS[@]}" -gt 0 ]; then
   set -- "${REMAINING_ARGS[@]}"
@@ -121,7 +121,7 @@ if [[ -z "${LOOPZERO_API_POD}" ]]; then
     log "      schema_migrations table will be seeded with the highest version"
     log "      so a later golang-migrate up call (via task k3d:heal H17 or"
     log "      task db:migrate post-tilt) is a no-op."
-    MIGRATIONS_DIR="$(cd "$(dirname "$0")/.." && pwd)/../api/internal/db/migrations"
+    MIGRATIONS_DIR="$(cd "$(dirname "$0")/../.." && pwd)/../api/internal/db/migrations"
     if [[ ! -d "$MIGRATIONS_DIR" ]]; then
       MIGRATIONS_DIR="$(pwd)/api/internal/db/migrations"
     fi

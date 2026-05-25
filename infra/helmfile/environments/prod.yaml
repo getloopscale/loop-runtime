@@ -43,7 +43,7 @@ loki:
 #
 # OPERATIONAL GATE before `helmfile -e prod sync` applies these values:
 #   1. Run pre-flight: KUBECONFIG=~/.kube/prod \
-#        infra/scripts/check-prod-vap-readiness.sh
+#        infra/scripts/production/check-prod-vap-readiness.sh
 #      Must return exit 0 (all 4 checks PASS):
 #        - All prod pods have valid cosign signatures
 #        - No `kubectl set image` cron exists in any prod workflow

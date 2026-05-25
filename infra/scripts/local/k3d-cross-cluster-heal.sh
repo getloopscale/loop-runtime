@@ -570,8 +570,8 @@ if [[ "$TOKEN_VALID" == "true" ]]; then
 else
   log "  argocd-token invalid/expired (exp=${EXP:-missing}); regenerating via provision-api-tokens.sh"
   REPO_ROOT=$(cd "$(dirname "$0")/../../.." && pwd)
-  if [[ -x "$REPO_ROOT/infra/scripts/provision-api-tokens.sh" ]]; then
-    bash "$REPO_ROOT/infra/scripts/provision-api-tokens.sh" >/dev/null 2>&1 \
+  if [[ -x "$REPO_ROOT/infra/scripts/production/provision-api-tokens.sh" ]]; then
+    bash "$REPO_ROOT/infra/scripts/production/provision-api-tokens.sh" >/dev/null 2>&1 \
       && log "  argocd-token regenerated (loopzero-api:apiKey, non-expiring)" \
       || warn "provision-api-tokens.sh failed — argocd sync calls may keep failing"
   else
@@ -942,7 +942,7 @@ fi
 # created schema_migrations. Pre-flight check `SELECT FROM schema_migrations`
 # fails on cleanroom rerun without this heal.
 #
-# Logic (delegated to infra/scripts/run-migrations.sh):
+# Logic (delegated to infra/scripts/production/run-migrations.sh):
 #   - if schema_migrations absent AND tenants present:
 #       # allowlist: migrate force (heal recovery — register existing schema, not prod-pod usage)
 #       migrate force <HIGHEST> → register existing schema as fully applied

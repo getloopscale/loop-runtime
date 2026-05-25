@@ -11,8 +11,8 @@
 # - Prometheus metric emitted via annotation (LoopZeroBreakGlassAccess alert fires)
 #
 # Usage:
-#   ./infra/scripts/break-glass.sh [context] [ttl_hours] [reason]
-#   ./infra/scripts/break-glass.sh do-nyc3-loopzero-infra-homolog-nyc3-mgmt 4 "hotfix: PG connection timeout"
+#   ./infra/scripts/production/break-glass.sh [context] [ttl_hours] [reason]
+#   ./infra/scripts/production/break-glass.sh do-nyc3-loopzero-infra-homolog-nyc3-mgmt 4 "hotfix: PG connection timeout"
 #
 # The script outputs a kubeconfig that expires after TTL.
 # All actions taken with this kubeconfig should be reconciled into Pulumi within 24h.

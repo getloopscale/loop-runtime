@@ -133,7 +133,7 @@ These are reconciled by `task bootstrap:standalone` (local) or by Pulumi+Helmfil
 | `infra/helm/ory-kratos/values.yaml.gotmpl:14` | `loopzero-dev-password` (DSN inline) | DSN constructed from required vars |
 | `infra/helmfile/scripts/generate-secrets.sh:140` | `loopzero-dev-password` fallback | `exit 1` if `LOOPZERO_DB_PASSWORD` unset |
 | `infra/helmfile/scripts/generate-runtime-secrets.sh:119` | `loopzero-dev-password` fallback | `exit 1` if `S3_SECRET` unset |
-| `infra/scripts/provision-api-tokens.sh:23` | `loopzero-gitea-dev-2026` fallback | `${GITEA_PASS:?required}` (per EC-01) |
+| `infra/scripts/production/provision-api-tokens.sh:23` | `loopzero-gitea-dev-2026` fallback | `${GITEA_PASS:?required}` (per EC-01) |
 
 Render-time grep gate (added in T1.3) will FAIL CI if any literal reaches a rendered manifest.
 
@@ -167,7 +167,7 @@ task doctor
 ```bash
 # Use re-run path (idempotent, refreshes both Secret + Gitea API):
 bash infra/helmfile/scripts/generate-secrets.sh standalone mgmt
-bash infra/scripts/provision-api-tokens.sh
+bash infra/scripts/production/provision-api-tokens.sh
 
 # ArgoCD repo-server cache invalidation:
 kubectl --context k3d-loopzero-mgmt -n argocd rollout restart deploy/argocd-repo-server

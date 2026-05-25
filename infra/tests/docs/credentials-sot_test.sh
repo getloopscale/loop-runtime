@@ -42,7 +42,7 @@ trap 'rm -f "$DISCOVERED_FILE"' EXIT
     infra/helmfile/scripts/generate-secrets.sh \
     infra/helmfile/scripts/generate-build-secrets.sh \
     infra/helmfile/scripts/generate-runtime-secrets.sh \
-    infra/scripts/provision-api-tokens.sh; do
+    infra/scripts/production/provision-api-tokens.sh; do
     if [ -f "$REPO_ROOT/$script" ]; then
       # `kubectl create secret generic NAME -n NS` where NAME is a literal token.
       # `|| true` neutralizes pipefail when a script has zero matches (under

@@ -29,7 +29,7 @@
 # Per condition C19: failure of any step here fails the gate.
 #
 # Usage:
-#   bash infra/scripts/operator-cutover-execute.sh <cluster-context>
+#   bash infra/scripts/production/operator-cutover-execute.sh <cluster-context>
 #
 # Required env (will be auto-set if absent):
 #   LOOPZERO_CUTOVER_COMMIT — defaults to HEAD; required for rollback
@@ -60,7 +60,7 @@ READY_TIMEOUT_SEC="${READY_TIMEOUT_SEC:-300}"
 AUTO_ROLLBACK="${AUTO_ROLLBACK:-true}"
 DRY_RUN="${DRY_RUN:-false}"
 
-REPO_ROOT="$(cd "$(dirname "$0")/../.." && pwd)"
+REPO_ROOT="$(cd "$(dirname "$0")/../../.." && pwd)"
 LOG_FILE="/tmp/operator-cutover-$(date +%Y%m%dT%H%M%S).log"
 exec > >(tee -a "$LOG_FILE") 2> >(tee -a "$LOG_FILE" >&2)
 

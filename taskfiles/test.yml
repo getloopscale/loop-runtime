@@ -785,7 +785,7 @@ tasks:
       preventiva) ficam T2 governance per CLAUDE.md Pre-release rule
       (touches tenant isolation contract).
     cmds:
-      - bash infra/scripts/migrate-tenant-namespace.sh {{.CLI_ARGS}}
+      - bash infra/scripts/production/migrate-tenant-namespace.sh {{.CLI_ARGS}}
 
   dogfood:repro:
     desc: |

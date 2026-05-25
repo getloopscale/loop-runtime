@@ -22,9 +22,9 @@
 #  3. Mesmo fluxo para Environment CRs.
 #
 # Uso:
-#   bash infra/scripts/migrate-tenant-namespace.sh                # dry-run
-#   bash infra/scripts/migrate-tenant-namespace.sh --apply        # commit
-#   bash infra/scripts/migrate-tenant-namespace.sh --apply --force-prefer=loopzero-system
+#   bash infra/scripts/production/migrate-tenant-namespace.sh                # dry-run
+#   bash infra/scripts/production/migrate-tenant-namespace.sh --apply        # commit
+#   bash infra/scripts/production/migrate-tenant-namespace.sh --apply --force-prefer=loopzero-system
 #
 # Exit codes:
 #   0 — sucesso (ou nada para fazer)

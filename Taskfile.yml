@@ -232,7 +232,7 @@ tasks:
       - task: k3d:bootstrap-workload
       - bash infra/helmfile/scripts/bootstrap-eso-cluster-secret-store.sh
       - HYDRA_NAMESPACE=loopzero-auth bash infra/helmfile/scripts/bootstrap-oauth-clients.sh
-      - bash infra/scripts/provision-api-tokens.sh
+      - bash infra/scripts/production/provision-api-tokens.sh
       # T5.3 (plan 2026-05-21-deep-review-remediation): extracted 4 inline
       # B-patches to named scripts so each can be re-run individually if
       # only that slice needs fixing during cleanroom debugging.

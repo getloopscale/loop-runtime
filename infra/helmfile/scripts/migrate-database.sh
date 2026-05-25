@@ -5,7 +5,7 @@
 # Plan 2026-05-16 T2.4 — Drill-aware migration runner wrapper.
 #
 # Thin wrapper at the path Helmfile expects (`infra/helmfile/scripts/`).
-# Delegates to the canonical `infra/scripts/run-migrations.sh` which holds
+# Delegates to the canonical `infra/scripts/production/run-migrations.sh` which holds
 # all the migration logic (golang-migrate canonical + psql-loop fallback +
 # kctl dispatcher for DRILL_KUBECONFIG OR k3d MGMT_CONTEXT).
 #
@@ -32,7 +32,7 @@
 set -euo pipefail
 
 WRAPPER_DIR="$(cd "$(dirname "$0")" && pwd)"
-CANONICAL_SCRIPT="$WRAPPER_DIR/../../scripts/run-migrations.sh"
+CANONICAL_SCRIPT="$WRAPPER_DIR/../../scripts/production/run-migrations.sh"
 
 if [[ ! -x "$CANONICAL_SCRIPT" ]]; then
   echo "[migrate-database] ERROR: canonical run-migrations.sh missing at $CANONICAL_SCRIPT" >&2

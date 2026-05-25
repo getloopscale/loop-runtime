@@ -34,7 +34,7 @@ REAL_USER=$(kubectl --context "$CONTEXT" -n argocd get secret argocd-creds-gitea
 
 if [[ -z "$REAL_PWD" ]] || [[ -z "$REAL_USER" ]]; then
   echo "ERROR: argocd-creds-gitea Secret missing or empty in $CONTEXT/argocd" >&2
-  echo "       Run bash infra/scripts/provision-api-tokens.sh first." >&2
+  echo "       Run bash infra/scripts/production/provision-api-tokens.sh first." >&2
   exit 1
 fi
 

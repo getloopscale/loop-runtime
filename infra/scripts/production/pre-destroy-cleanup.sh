@@ -14,7 +14,7 @@
 #   DOCTL_VERSION            — doctl version (default: 1.104.0)
 #   PULUMI_WORKING_DIR       — Path to infra/pulumi/ directory
 #
-# Usage: STACK=dev bash infra/scripts/pre-destroy-cleanup.sh
+# Usage: STACK=dev bash infra/scripts/production/pre-destroy-cleanup.sh
 set -euo pipefail
 
 # T2.2-followup (plan 2026-05-21-deep-review-remediation): adopt dry-run
@@ -24,8 +24,8 @@ set -euo pipefail
 # semantics), gate the entire script — operator gets a clear preview of
 # the cleanup intent without any destructive side effects.
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-# shellcheck source=lib/dry-run.sh disable=SC1091
-source "$SCRIPT_DIR/lib/dry-run.sh"
+# shellcheck source=../lib/dry-run.sh disable=SC1091
+source "$SCRIPT_DIR/../lib/dry-run.sh"
 parse_dry_run_flag "$@"
 if [ "${#REMAINING_ARGS[@]}" -gt 0 ]; then
   set -- "${REMAINING_ARGS[@]}"

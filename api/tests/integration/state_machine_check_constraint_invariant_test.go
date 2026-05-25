@@ -86,7 +86,7 @@ func extractStateSetFromConstraintDef(consrc string) []string {
 //
 // EC-6: this test must run against an existing-state DB (migrations applied
 // sequentially), not just a fresh fake schema. setupHardeningTestDB applies
-// real migrations from infra/scripts/run-migrations.sh.
+// real migrations from infra/scripts/production/run-migrations.sh.
 func TestStateMachineCheckConstraintInvariant(t *testing.T) {
 	pool := setupHardeningTestDB(t)
 	ctx := context.Background()

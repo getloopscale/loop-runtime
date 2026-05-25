@@ -711,7 +711,7 @@ PG_DB=loopzero \
 PG_SSLMODE=require \
 DRILL_KUBECONFIG="$DRILL_KUBECONFIG_DIR/mgmt.yaml" \
 NAMESPACE="loopzero-system" \
-  bash "infra/scripts/run-migrations.sh" 2>&1 | tail -20 | sed 's/^/  /' || {
+  bash "infra/scripts/production/run-migrations.sh" 2>&1 | tail -20 | sed 's/^/  /' || {
   log "  ✗ run-migrations.sh failed"
   if [[ "$STRICT_BOOTSTRAP" == "true" ]]; then
     exit 4

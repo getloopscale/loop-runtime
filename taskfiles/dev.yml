@@ -508,7 +508,7 @@ tasks:
       - |
         echo ""
         echo "=== Step 2/4: Provision API tokens ==="
-        bash infra/scripts/provision-api-tokens.sh
+        bash infra/scripts/production/provision-api-tokens.sh
       - |
         echo ""
         echo "=== Step 3/4: Seed E2E data ==="
