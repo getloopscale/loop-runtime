@@ -140,3 +140,26 @@ function formatBytes(bytes: number): string {
     : value.toLocaleString('en-US', { maximumFractionDigits: 2 });
   return `${formatted} ${units[unitIdx]}`;
 }
+
+/**
+ * Mask email's local part while preserving the full domain. Strong signal
+ * of "which account am I logged into" without exposing the local identifier.
+ * Per plan v1.1 T-D.1 (P-3 + EC-10 defensive).
+ *
+ * @example
+ *   maskEmail('demo@loopzero.example')        // "d***@loopzero.example"
+ *   maskEmail('a@b.com')                 // "*@b.com"            (single-char local)
+ *   maskEmail('verylonglocalpart@x.com') // "v********@x.com"    (capped at 8 stars)
+ *   maskEmail('john@doe@malformed.com')  // "john@doe@malformed.com" (EC-10 passthrough)
+ *   maskEmail('x@')                      // "x@"                 (no domain)
+ *   maskEmail('@y.com')                  // "@y.com"             (empty local)
+ */
+export function maskEmail(email: string): string {
+  const parts = email.split('@');
+  if (parts.length !== 2) return email;   // EC-10: multi-@ defensive passthrough
+  const [local, domain] = parts;
+  if (!domain) return email;               // "x@" → no domain
+  if (local.length === 0) return email;    // "@y.com" → empty local
+  if (local.length === 1) return `*@${domain}`;
+  return `${local[0]}${'*'.repeat(Math.min(local.length - 1, 8))}@${domain}`;
+}

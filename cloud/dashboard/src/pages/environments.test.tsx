@@ -54,9 +54,27 @@ describe('EnvironmentsPage', () => {
       error: false,
     });
     render(<EnvironmentsPage />);
-    // StatusDot renders the raw status as label per source: label={env.status ?? 'idle'}
-    expect(screen.getByText('live')).toBeInTheDocument();
-    expect(screen.getByText('failed')).toBeInTheDocument();
+    // T-D.2 (P-4): StatusDot label title-cased via statusLabel helper.
+    // 'live' → 'Live', 'failed' → 'Failed'.
+    expect(screen.getByText('Live')).toBeInTheDocument();
+    expect(screen.getByText('Failed')).toBeInTheDocument();
+  });
+
+  // T-D.2 EC-9: multi-word snake_case status title-cased
+  it('test_environments_status_label_title_cases_multi_word', () => {
+    mockUseEngineApi.mockReturnValue({
+      data: {
+        environments: [
+          { name: 'pr-1247', status: 'pending_verification', projects: 1, protected: false },
+        ],
+      },
+      loading: false,
+      error: false,
+    });
+    render(<EnvironmentsPage />);
+    // EC-9: 'pending_verification' should render as 'Pending Verification',
+    // NOT 'Pending_verification' (broken cap-only-first behavior).
+    expect(screen.getByText('Pending Verification')).toBeInTheDocument();
   });
 
   it('test_environments_timestamp_relative_format', () => {

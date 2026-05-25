@@ -34,8 +34,9 @@ describe('ProfilePage', () => {
     // Assert via the Avatar wrapper span class (size-12) + session-data text.
     expect(container.querySelector('.size-12')).toBeInTheDocument();
     expect(screen.getByText('Paulo')).toBeInTheDocument();
-    // Email is masked via maskEmail(): "paulo@example.com" → "pa***@ex***.com"
-    expect(screen.getByText(/pa\*\*\*@ex\*\*\*\.com/)).toBeInTheDocument();
+    // T-D.1 (P-3): email is masked preserving full domain.
+    // "paulo@example.com" → "p****@example.com" (5-char local → 1 + min(4,8) stars)
+    expect(screen.getByText(/p\*\*\*\*@example\.com/)).toBeInTheDocument();
   });
 
   it('test_profile_updates_display_name', () => {

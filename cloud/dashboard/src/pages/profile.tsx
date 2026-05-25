@@ -11,13 +11,7 @@ import { ContentGrid } from '@/components/layout';
 import { useSetPageTitle } from '@/hooks/use-page-meta';
 import { useRequireAuth } from '@/hooks/use-auth';
 import { logout } from '@/lib/auth';
-
-function maskEmail(email: string): string {
-  const [local, domain] = email.split('@');
-  if (!domain) return email;
-  const [domainName, tld] = domain.split('.');
-  return `${local.slice(0, 2)}***@${domainName?.slice(0, 2) ?? ''}***.${tld ?? 'com'}`;
-}
+import { maskEmail } from '@/lib/format';
 
 export function ProfilePage() {
   const session = useRequireAuth();

@@ -40,6 +40,20 @@ function mapStatus(status?: string): EnvStatusKind {
   }
 }
 
+/**
+ * Title-case a status string for display, handling snake_case (EC-9).
+ *   'live'                  → 'Live'
+ *   'pending_verification'  → 'Pending Verification'
+ *   undefined / ''          → 'Idle'
+ */
+function statusLabel(s?: string): string {
+  if (!s) return 'Idle';
+  return s
+    .split('_')
+    .map((w) => (w.length > 0 ? w.charAt(0).toUpperCase() + w.slice(1) : w))
+    .join(' ');
+}
+
 export function EnvironmentsPage() {
   useRequireAuth();
   useSetPageTitle('Environments');
@@ -112,7 +126,7 @@ export function EnvironmentsPage() {
                       {env.projects ?? 0}
                     </Table.Cell>
                     <Table.Cell>
-                      <StatusDot status={mapStatus(env.status)} label={env.status ?? 'idle'} />
+                      <StatusDot status={mapStatus(env.status)} label={statusLabel(env.status)} />
                     </Table.Cell>
                     <Table.Cell>
                       {env.protected ? (

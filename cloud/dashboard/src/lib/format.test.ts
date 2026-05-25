@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { formatDate, formatNumber } from './format';
+import { formatDate, formatNumber, maskEmail } from './format';
 
 describe('formatDate', () => {
   it('test_format_date_handles_4_intents', () => {
@@ -72,5 +72,34 @@ describe('formatNumber', () => {
     expect(formatNumber(0.423, 'percent')).toBe('42.3%');
     expect(formatNumber(0, 'percent')).toBe('0%');
     expect(formatNumber(1, 'percent')).toBe('100%');
+  });
+});
+
+describe('maskEmail (T-D.1 / P-3 / EC-10)', () => {
+  it('test_mask_email_preserves_domain', () => {
+    // Plan v1.1 T-D.1: preserve full domain, redact only local part
+    expect(maskEmail('demo@loopzero.example')).toBe('d***@loopzero.example');
+    expect(maskEmail('paulo@example.com')).toBe('p****@example.com');
+  });
+
+  it('test_mask_email_handles_single_char_local', () => {
+    expect(maskEmail('a@b.com')).toBe('*@b.com');
+    expect(maskEmail('x@example.org')).toBe('*@example.org');
+  });
+
+  it('test_mask_email_caps_mask_length', () => {
+    // Local "verylonglocalpart" = 17 chars → 1 + min(16, 8) = 1 + 8 = 9 chars
+    expect(maskEmail('verylonglocalpart@x.com')).toBe('v********@x.com');
+  });
+
+  // EC-10 (SHOULD TEST): defensive passthrough for malformed emails
+  it('test_mask_email_handles_multiple_at_signs', () => {
+    expect(maskEmail('a@b@c.com')).toBe('a@b@c.com');
+    expect(maskEmail('john@doe@malformed.com')).toBe('john@doe@malformed.com');
+  });
+
+  it('test_mask_email_handles_missing_domain', () => {
+    expect(maskEmail('x@')).toBe('x@');
+    expect(maskEmail('@y.com')).toBe('@y.com');
   });
 });
