@@ -7,6 +7,7 @@
 
 // MEET-040: Same-origin — relative URLs. Runtime config via /__config.js.
 import { API_URL } from './config';
+import { useMocks, getMockSession } from './dev-mocks';
 const KRATOS_URL = API_URL;
 
 export interface VerifiableAddress {
@@ -68,6 +69,10 @@ export function isEmailVerified(session: Session): boolean {
 
 /** Check if user has an active session. Returns session or null. */
 export async function getSession(): Promise<Session | null> {
+  // Visual-validation mock layer (dev-only, gated by VITE_USE_MOCKS env var,
+  // dead-code-eliminated in production builds). See lib/dev-mocks.ts.
+  if (useMocks()) return getMockSession();
+
   try {
     const resp = await fetch(`${KRATOS_URL}/sessions/whoami`, {
       credentials: 'include',
