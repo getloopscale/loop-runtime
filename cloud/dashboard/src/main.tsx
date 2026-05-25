@@ -3,12 +3,18 @@ import { createRoot } from 'react-dom/client';
 import { ThemeProvider, Toaster, violetForge } from '@loopzero/ui';
 import App from './app';
 import { installKratosMocks } from './lib/dev-mocks';
+import { initWebVitals } from './lib/rum';
 import './index.css';
 
 // Install Kratos fetch interceptor for `/self-service/*` paths when
 // VITE_USE_MOCKS=true. No-op otherwise. See dev-mocks.ts for guarantees:
 // EC-1 (never mutates window.location), EC-7 (recovery phase transition).
 installKratosMocks();
+
+// T-DR-5.2 v1.2 (Phase 5) — Web Vitals RUM reporter per ADR D8.
+// Dev: console.log LCP/INP/CLS with verdict. Prod: ready to POST to
+// /v1/telemetry/web-vitals when backend ships (zero consumer impact today).
+initWebVitals();
 
 /**
  * Single-theme provider per D8 ADR (plan v1.2 T-H decision).

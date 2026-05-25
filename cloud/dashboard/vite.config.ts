@@ -1,5 +1,6 @@
 import { defineConfig } from 'vite';
 import react from '@vitejs/plugin-react';
+import { visualizer } from 'rollup-plugin-visualizer';
 import path from 'path';
 
 /**
@@ -14,7 +15,18 @@ import path from 'path';
  * code that changes more frequently.
  */
 export default defineConfig({
-  plugins: [react()],
+  plugins: [
+    react(),
+    // T-DR-5.5 v1.2 (Phase 5) — Bundle analyzer per-route attribution.
+    // Outputs dist/bundle-stats.html on every build (open via npm run bundle:analyze).
+    // Resolves G5 FAANG gap (Vercel bundle analyzer parity).
+    visualizer({
+      filename: 'dist/bundle-stats.html',
+      template: 'treemap',
+      gzipSize: true,
+      brotliSize: true,
+    }),
+  ],
   resolve: {
     alias: {
       '@': path.resolve(__dirname, './src'),
