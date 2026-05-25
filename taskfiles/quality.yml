@@ -27,12 +27,20 @@ tasks:
     deps: [build]
     cmds:
       - /tmp/loopzero-ops quality unhomed-logic --check
+      - /tmp/loopzero-ops quality script-count
+      - /tmp/loopzero-ops quality regression-matrix
       - /tmp/loopzero-ops quality postgresql-pdb-config
       - /tmp/loopzero-ops quality dockerfile-no-docker-hub
       - /tmp/loopzero-ops quality advisory-lock-scope
       - /tmp/loopzero-ops quality cli-exit-codes
       - /tmp/loopzero-ops quality shell-hygiene
       - /tmp/loopzero-ops quality corrections-txt-closed
+      # Bash security/governance gates re-homed 2026-05-24 (were unwired since
+      # GitHub Actions removal). TODO: migrate these to pkg/quality Go gates
+      # (strategic home) and drop the bash. Until then they run here = enforced.
+      - bash infra/tests/docs/pulumi-required-secrets_test.sh   # security: prod/staging/drill secrets externalized
+      - bash infra/tests/skills/skill-paths_test.sh             # governance: SKILL.md path resolution (declared BLOCKING)
+      - bash infra/tests/docs/credentials-sot_test.sh           # doc-sync: credentials-required.md enumerates bootstrap Secrets
 
   diff:
     desc: 'PR-diff quality gates (override base with BASE_REF=<ref>; default origin/main)'

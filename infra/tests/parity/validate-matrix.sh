@@ -162,14 +162,16 @@ else
   result 2 "helm:lint-split-operators (helm missing)"
 fi
 
-# Gate 8: matrix integrity audit (already invoked transitively by
-# parity-preflight Gate 1 sub-gate, but call it explicitly so a failure
-# is surfaced unambiguously here too).
-bash "${REPO_ROOT}/infra/tests/parity/audit-regression-matrix.sh" >/dev/null 2>&1
+# Gate 8: matrix integrity audit — migrated to the Go gate
+# `loopzero-ops quality regression-matrix` (Track B TB5; the bash
+# audit-regression-matrix.sh aborted at exit 2 under set -e and never scanned —
+# see finding-2026-05-24-audit-regression-matrix-set-e-abort).
+( cd "${REPO_ROOT}/cmd/loopzero-ops" && go run . quality regression-matrix --root "${REPO_ROOT}" ) >/dev/null 2>&1
 result $? "matrix-integrity-audit:explicit"
 
-# Gate 9: matrix-audit golden test (audit script self-test).
-bash "${REPO_ROOT}/infra/tests/parity/audit-golden-test.sh" >/dev/null 2>&1
+# Gate 9: matrix-audit golden test — now the Go unit test TestGolden_*
+# (faithful port of the deleted audit-golden-test.sh).
+( cd "${REPO_ROOT}" && go test ./pkg/quality/regressionmatrix/... ) >/dev/null 2>&1
 result $? "matrix-audit-golden:explicit"
 
 # Gate 9.5: Sloth SLO file validation (Coverage Matrix #8).

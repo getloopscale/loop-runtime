@@ -102,58 +102,17 @@ if [[ -z "$START_TS" || -z "$END_TS" ]]; then
   exit 1
 fi
 
-# --- Compute duration ---
-START_EPOCH=$(date -u -d "$START_TS" +%s 2>/dev/null || echo 0)
-END_EPOCH=$(date -u -d "$END_TS" +%s 2>/dev/null || echo 0)
-if [[ "$START_EPOCH" -eq 0 || "$END_EPOCH" -eq 0 ]]; then
-  log "ERROR: invalid ISO timestamp(s) — START=$START_TS END=$END_TS"
-  exit 1
-fi
-if [[ "$END_EPOCH" -le "$START_EPOCH" ]]; then
-  log "ERROR: END_TS must be after START_TS"
-  exit 1
-fi
-
-DURATION_SECONDS=$((END_EPOCH - START_EPOCH))
-DURATION_HOURS=$(python3 -c "print(f'{$DURATION_SECONDS / 3600:.2f}')")
-DURATION_MIN=$((DURATION_SECONDS / 60))
-
-# --- Compute cost ---
-COST_MGMT=$(python3 -c "print(f'{$RATE_MGMT_HR * $DURATION_HOURS:.2f}')")
-COST_BUILD=$(python3 -c "print(f'{$RATE_BUILD_HR * $DURATION_HOURS:.2f}')")
-COST_RUNTIME=$(python3 -c "print(f'{$RATE_RUNTIME_HR * $DURATION_HOURS:.2f}')")
-COST_RUNTIME2=$(python3 -c "print(f'{$RATE_RUNTIME2_HR * $DURATION_HOURS:.2f}')")
-COST_PG=$(python3 -c "print(f'{$RATE_PG_HR * $DURATION_HOURS:.2f}')")
-COST_TOTAL=$(python3 -c "print(f'{$RATE_TOTAL_HR * $DURATION_HOURS:.2f}')")
-
-# --- Emit markdown report ---
-REPORT=$(cat <<EOF
-## Drill Run Cost Report
-
-**Window:** \`$START_TS\` → \`$END_TS\`  ($DURATION_MIN min / $DURATION_HOURS h)
-
-| Resource | Rate (\$/hr) | Cost |
-|---|---|---|
-| mgmt cluster (3 × s-4vcpu-8gb-amd) | \$$RATE_MGMT_HR | \$$COST_MGMT |
-| build cluster (2 × s-2vcpu-4gb) | \$$RATE_BUILD_HR | \$$COST_BUILD |
-| runtime cluster (2 × s-2vcpu-4gb) | \$$RATE_RUNTIME_HR | \$$COST_RUNTIME |
-| runtime-2 cluster (2 × s-2vcpu-4gb) | \$$RATE_RUNTIME2_HR | \$$COST_RUNTIME2 |
-| managed PG (db-s-2vcpu-4gb) | \$$RATE_PG_HR | \$$COST_PG |
-| Spaces (3 buckets, baseline) | ~\$0.007 | included |
-| **Total** | **\$$RATE_TOTAL_HR/hr** | **\$$COST_TOTAL** |
-
-**Pricing source:** DO public catalog, 2026-05-16.
-
-**Notes:**
-- Spaces buckets billed at \$5/mo baseline; ephemeral run cost negligible.
-- Plan 2026-05-16 budget envelope: ~\$2,000-3,000/yr cadence completa
-  (52 weekly × Stage 1+L2 + 52 weekly × Stage 2 + 4 quarterly DR + L3/L4 ad-hoc).
-EOF
-)
-
-if [[ -n "$OUTPUT" ]]; then
-  printf '%s\n' "$REPORT" > "$OUTPUT"
-  log "Report written: $OUTPUT (\$$COST_TOTAL total)"
+# --- Compute + render: delegated to the Go pure-logic core (Track C TC2.1) ---
+# The duration/cost arithmetic + markdown moved to pkg/quality/drillcost
+# (`loopzero-ops drill cost`), parity-proven byte-identical vs this script's prior
+# heredoc. This bash now keeps ONLY the --auto Pulumi-state gathering above
+# (orchestration, ADR D1). Validation (invalid/missing/end<=start) is enforced
+# by the Go subcommand. See docs/operations/drill-migration-map.md.
+REPO_ROOT="$(cd "$(dirname "$0")/../../.." && pwd)"
+OPS_ARGS=(drill cost --start "$START_TS" --end "$END_TS")
+[[ -n "$OUTPUT" ]] && OPS_ARGS+=(--output "$OUTPUT")
+if command -v loopzero-ops >/dev/null 2>&1; then
+  loopzero-ops "${OPS_ARGS[@]}"
 else
-  printf '%s\n' "$REPORT"
+  ( cd "$REPO_ROOT/cmd/loopzero-ops" && go run . "${OPS_ARGS[@]}" )
 fi

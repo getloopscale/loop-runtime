@@ -227,36 +227,31 @@ fi
 # ---------------------------------------------------------------------------
 log "=== Etapa 8: Verdict ==="
 
-# Default success thresholds (override per scenario if needed)
-SUCCESS_RATE_THRESHOLD=90  # API success >= 90% during chaos
-LATENCY_DEGRADATION_THRESHOLD=500  # p95 may degrade up to 500ms over baseline
-RESTART_DELTA_TOLERANCE=2  # at most 2 unexpected restarts
-
-VERDICT="PASS"
-REASONS=()
-
-if [[ "$DURING_SUCCESS" -lt "$SUCCESS_RATE_THRESHOLD" ]]; then
-  VERDICT="FAIL"
-  REASONS+=("API success during chaos: ${DURING_SUCCESS}% < ${SUCCESS_RATE_THRESHOLD}%")
-fi
-
-LATENCY_DEGRADATION=$((DURING_P95 - PRE_P95))
-if [[ "$LATENCY_DEGRADATION" -gt "$LATENCY_DEGRADATION_THRESHOLD" ]]; then
-  VERDICT="FAIL"
-  REASONS+=("P95 degradation during chaos: ${LATENCY_DEGRADATION}ms > ${LATENCY_DEGRADATION_THRESHOLD}ms")
-fi
-
-POST_LATENCY_DRIFT=$((POST_P95 - PRE_P95))
-if [[ "$POST_LATENCY_DRIFT" -gt 100 ]]; then  # 100ms post-recovery tolerance
-  VERDICT="FAIL"
-  REASONS+=("Post-recovery latency drift: ${POST_LATENCY_DRIFT}ms > 100ms")
-fi
-
+# Verdict: delegated to `loopzero-ops chaos slo-compare` (pkg/quality/chaosslo,
+# Track C TC3.1) — the threshold arithmetic (success>=90, p95-degradation<=500ms,
+# post-drift<=100ms, restart-delta<=2) moved to Go, parity-proven byte-identical
+# to the prior inline if-blocks. Verdict comes from the subcommand EXIT CODE
+# (0=PASS / 2=FAIL / 5=INCONCLUSIVE); REASONS from its "  - <reason>" lines.
+# RESTART_DELTA is still computed here (report.sh + log line consume it).
 RESTART_DELTA=$((POST_LOOPZERO_API_RESTARTS - PRE_LOOPZERO_API_RESTARTS))
-if [[ "$RESTART_DELTA" -gt "$RESTART_DELTA_TOLERANCE" ]]; then
-  VERDICT="FAIL"
-  REASONS+=("loopzero-api restart delta: $RESTART_DELTA > $RESTART_DELTA_TOLERANCE")
-fi
+
+set +e
+SLO_OUT=$(
+  if command -v loopzero-ops >/dev/null 2>&1; then
+    loopzero-ops chaos slo-compare "$RUN_DIR/baseline.json" "$RUN_DIR/during.json" "$RUN_DIR/post.json"
+  else
+    ( cd "$REPO_ROOT/cmd/loopzero-ops" && go run . chaos slo-compare "$RUN_DIR/baseline.json" "$RUN_DIR/during.json" "$RUN_DIR/post.json" )
+  fi
+)
+SLO_RC=$?
+set -e
+
+case "$SLO_RC" in
+  0) VERDICT="PASS" ;;
+  2) VERDICT="FAIL" ;;
+  *) VERDICT="INCONCLUSIVE" ;;
+esac
+mapfile -t REASONS < <(printf '%s\n' "$SLO_OUT" | sed -n 's/^  - //p')
 
 # Write report
 bash "$SCRIPTS_DIR/report.sh" \

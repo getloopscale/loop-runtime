@@ -99,12 +99,23 @@ var _ = Describe("Journey 13: Progressive Delivery (canary)", Ordered, Label("jo
 		ns := "loopzero-" + seed.TenantID + "-" + env
 		resName := project + "-" + app
 
-		// Rollout CR exists.
-		out, err := kubectlWorkload("get", "rollout",
-			"-n", ns, resName, "-o", "jsonpath={.metadata.name}").CombinedOutput()
-		Expect(err).NotTo(HaveOccurred(),
-			"Rollout %s/%s should exist (got: %s)", ns, resName, string(out))
-		Expect(strings.TrimSpace(string(out))).To(Equal(resName))
+		// Rollout CR exists. deployAndWaitSuccess waits for build SUCCEEDED
+		// (gitops push + sync trigger), but ArgoCD applies manifests to the
+		// workload cluster asynchronously — the Rollout may not be present on
+		// the first read. Poll until it appears, matching the eventually-
+		// consistent sync model (same pattern as the TraefikService spec below).
+		Eventually(func() error {
+			out, err := kubectlWorkload("get", "rollout",
+				"-n", ns, resName, "-o", "jsonpath={.metadata.name}").CombinedOutput()
+			if err != nil {
+				return &skipError{msg: "rollout not yet synced: " + strings.TrimSpace(string(out))}
+			}
+			if got := strings.TrimSpace(string(out)); got != resName {
+				return &skipError{msg: "rollout name mismatch: got " + got + " want " + resName}
+			}
+			return nil
+		}, 2*time.Minute, 5*time.Second).Should(Succeed(),
+			"Rollout %s/%s should exist after ArgoCD sync", ns, resName)
 
 		// Canary strategy declared.
 		stratOut, err := kubectlWorkload("get", "rollout",
