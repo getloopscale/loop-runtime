@@ -160,6 +160,7 @@ export function DomainsPage() {
     {
       key: 'environment',
       label: 'Environment',
+      className: 'hidden md:table-cell',
       render: (d) => <span className="text-body-sm">{d.environment}</span>,
     },
     {
@@ -174,6 +175,7 @@ export function DomainsPage() {
       key: 'verified_at',
       label: 'Verified',
       sortable: true,
+      className: 'hidden md:table-cell',
       render: (d) => (
         <span className="text-body-sm text-muted-foreground tabular-nums">
           {d.verified_at ? formatDate(d.verified_at, 'date') : '—'}

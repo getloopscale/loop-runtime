@@ -35,17 +35,22 @@ describe('OverviewPage', () => {
     expect(screen.getByRole('button', { name: /add new/i })).toBeInTheDocument();
   });
 
-  it('test_overview_renders_usage_meter_with_3_metrics', () => {
+  it('test_overview_renders_usage_meter_with_5_metrics', () => {
+    // T-DR-1.2 v1.2: KPI count 3 → 5 (closes P1-2). Build Minutes +
+    // Concurrent Builds added (data flows from /v1/billing.usage map).
     render(<OverviewPage />);
     expect(screen.getByText('Fast Data Transfer')).toBeInTheDocument();
     expect(screen.getByText('Fast Origin Transfer')).toBeInTheDocument();
     expect(screen.getByText('Edge Requests')).toBeInTheDocument();
+    expect(screen.getByText('Build Minutes')).toBeInTheDocument();
+    expect(screen.getByText('Concurrent Builds')).toBeInTheDocument();
   });
 
-  it('test_overview_renders_alerts_empty_state_with_cta', () => {
+  it('test_overview_no_alerts_section_removed_v12', () => {
+    // T-DR-1.1 v1.2: Alerts EmptyState removed (closes P1-1 CC-3 violation).
+    // Re-introduce when backend alert engine ships, as inline Alert banner.
     render(<OverviewPage />);
-    expect(screen.getByText('Get alerted for anomalies')).toBeInTheDocument();
-    expect(screen.getByRole('button', { name: /upgrade to pro/i })).toBeInTheDocument();
+    expect(screen.queryByText('Get alerted for anomalies')).not.toBeInTheDocument();
   });
 
   it('test_overview_renders_projects_empty_when_no_data', () => {
@@ -67,9 +72,12 @@ describe('OverviewPage', () => {
     expect(screen.getByText('beta')).toBeInTheDocument();
   });
 
-  it('test_overview_renders_recent_previews_empty', () => {
+  it('test_overview_no_recent_previews_section_removed_v12', () => {
+    // T-DR-1.1 v1.2: Recent Previews EmptyState removed (closes P1-1 CC-3
+    // violation, section ≥240px cortado). Re-introduce when preview list
+    // backend endpoint ships, as compact inline list.
     render(<OverviewPage />);
-    expect(screen.getByText('No recent previews')).toBeInTheDocument();
+    expect(screen.queryByText('No recent previews')).not.toBeInTheDocument();
   });
 
   it('test_overview_search_input_filters_projects', async () => {

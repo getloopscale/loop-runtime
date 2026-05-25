@@ -1,9 +1,8 @@
 import { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { Bell, Eye, FolderKanban, Loader2, Plus } from 'lucide-react';
+import { FolderKanban, Loader2, Plus } from 'lucide-react';
 import {
   Badge,
-  Button,
   Card,
   EmptyState,
   PageShell,
@@ -77,6 +76,8 @@ export function OverviewPage() {
   const dataMetric = pickMetric('Fast Data Transfer', 100);
   const originMetric = pickMetric('Fast Origin Transfer', 10);
   const requestsMetric = pickMetric('Edge Requests', 1_000_000);
+  const buildMinutesMetric = pickMetric('Build Minutes', 400);
+  const concurrentBuildsMetric = pickMetric('Concurrent Builds', 4);
 
   return (
     <PageShell
@@ -125,21 +126,28 @@ export function OverviewPage() {
                   unit: 'req',
                   formatter: (v) => fmtMetric(v, requestsMetric.max, { compactMillions: true }),
                 },
+                {
+                  label: 'Build Minutes',
+                  value: buildMinutesMetric.value,
+                  max: buildMinutesMetric.max ?? Number.MAX_SAFE_INTEGER,
+                  unit: 'min',
+                  formatter: (v) => fmtMetric(v, buildMinutesMetric.max),
+                },
+                {
+                  label: 'Concurrent Builds',
+                  value: concurrentBuildsMetric.value,
+                  max: concurrentBuildsMetric.max ?? Number.MAX_SAFE_INTEGER,
+                  unit: '',
+                  formatter: (v) => fmtMetric(v, concurrentBuildsMetric.max),
+                },
               ]}
             />
           </section>
 
-          <section>
-            <p className="text-label-caps text-muted-foreground uppercase mb-3 tracking-wider">
-              Alerts
-            </p>
-            <EmptyState
-              icon={Bell}
-              title="Get alerted for anomalies"
-              description="Automatically monitor your projects for anomalies and get notified."
-              action={<Button variant="primary">Upgrade to Pro</Button>}
-            />
-          </section>
+          {/* Alerts section removed v1.2 T-DR-1.1 (closes P1-1): feature
+              not yet backend-shipped; oversized empty state (270px) violated
+              CC-3 (max 1 empty state/page ≤200px). Re-introduce when
+              backend alert engine ships, scoped as inline Alert banner. */}
         </div>
 
         {/* Right column — Projects + Recent Previews */}
@@ -196,16 +204,10 @@ export function OverviewPage() {
             )}
           </section>
 
-          <section>
-            <p className="text-label-caps text-muted-foreground uppercase mb-3 tracking-wider">
-              Recent Previews
-            </p>
-            <EmptyState
-              icon={Eye}
-              title="No recent previews"
-              description="Preview deployments that you have recently visited or created will appear here."
-            />
-          </section>
+          {/* Recent Previews section removed v1.2 T-DR-1.1 (closes P1-1):
+              section ≥240px (cortado por viewport) violated CC-3. Backend
+              preview list endpoint not yet shipped — re-introduce when
+              data available, scoped as compact list inline. */}
         </div>
       </ContentGrid>
     </PageShell>
