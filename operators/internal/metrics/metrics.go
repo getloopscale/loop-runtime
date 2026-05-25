@@ -175,6 +175,22 @@ var (
 		},
 		[]string{"controller"},
 	)
+
+	// ClusterCredentialCAFetchTotal counts live CA fetch attempts in
+	// ClusterCredentialReconciler.reconcileArgoCDClusterSecret (plan
+	// 2026-05-25-live-ca-fetch-clustercredential, Op B). result:
+	//   - "success"          → live kube-root-ca.crt fetched and used
+	//   - "fallback"         → fetch failed; snapshot caData used (degraded)
+	//   - "skipped-insecure" → cr.Spec.TLS.Insecure=true short-circuit (Op A precedence)
+	// Sustained "fallback" > 0 over 7-day window blocks Phase 5 heal cleanup
+	// (T5.0 pre-flight gate enforces this via validate-op-b-soak.sh).
+	ClusterCredentialCAFetchTotal = prometheus.NewCounterVec(
+		prometheus.CounterOpts{
+			Name: "loopzero_clustercredential_ca_fetch_total",
+			Help: "Live CA fetch attempts in ClusterCredentialReconciler. result=success|fallback|skipped-insecure.",
+		},
+		[]string{"cluster", "result"},
+	)
 )
 
 func init() {
@@ -194,5 +210,7 @@ func init() {
 		FinalizerBlockedSeconds,
 		ReconcileQueueDepth,
 		StatusUpdateConflictsTotal,
+		// Op B (plan 2026-05-25-live-ca-fetch-clustercredential):
+		ClusterCredentialCAFetchTotal,
 	)
 }

@@ -21,9 +21,12 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/handler"
 	"sigs.k8s.io/controller-runtime/pkg/log"
 
+	"k8s.io/client-go/rest"
+
 	loopzerov1 "github.com/loopzero/loopzero/operators/api/v1"
 	"github.com/loopzero/loopzero/operators/internal/conditions"
 	"github.com/loopzero/loopzero/operators/internal/constants"
+	"github.com/loopzero/loopzero/operators/internal/metrics"
 	"github.com/loopzero/loopzero/operators/internal/shared"
 )
 
@@ -42,6 +45,13 @@ const (
 type ClusterCredentialReconciler struct {
 	client.Client
 	ArgoCDNamespace string
+
+	// CAFetcher reads the live cluster CA from the target cluster's
+	// kube-root-ca.crt ConfigMap on every reconcile (plan
+	// 2026-05-25-live-ca-fetch-clustercredential, T1.1 + T2.1).
+	// MUST be non-nil — wired by SetupClusterCredentialController to
+	// newKubeRootCAFetcher() by default. Tests inject fakes.
+	CAFetcher caFetcher
 }
 
 // clusterCredentialDetailTypes are the per-step conditions that
@@ -293,18 +303,6 @@ func (r *ClusterCredentialReconciler) reconcileArgoCDClusterSecret(ctx context.C
 	}
 
 	token := restConfig.BearerToken
-	caData := ""
-	if len(restConfig.CAData) > 0 {
-		// CHG-002b 2026-04-27 -- ArgoCD's `tlsClientConfig.caData` field is
-		// documented as base64-encoded PEM bytes (see argo-cd source:
-		// util/clusters/secret.go and the dynamic-cluster-distribution docs).
-		// Storing the raw PEM string here causes ArgoCD to attempt
-		// `base64.StdEncoding.Decode("-----BEGIN CERTIFICATE..."`) and fail
-		// with `illegal base64 data at input byte 0`, which manifests as
-		// `InvalidSpecError: unable to find destination server` on every
-		// Application managed by this cluster credential. Encode here.
-		caData = base64.StdEncoding.EncodeToString(restConfig.CAData)
-	}
 
 	// Fail-fast if no authentication mechanism found.
 	if token == "" && len(restConfig.CertData) == 0 {
@@ -324,6 +322,18 @@ func (r *ClusterCredentialReconciler) reconcileArgoCDClusterSecret(ctx context.C
 			"finding_ref", "SEC-005",
 		)
 	}
+
+	// Op B (plan 2026-05-25-live-ca-fetch-clustercredential, T2.1):
+	// resolve caData via live fetch from target cluster's kube-root-ca.crt
+	// ConfigMap. Falls back to kubeconfig snapshot on error. Skips fetch
+	// when insecure=true (ArgoCD ignores caData anyway — saves a network
+	// call and avoids noisy Warn in dev clusters).
+	//
+	// CAData format: ArgoCD expects base64-encoded PEM (NOT raw PEM bytes)
+	// per CHG-002b 2026-04-27 — encoding happens HERE after we have either
+	// the live PEM or the snapshot bytes.
+	caData, caSource := r.resolveCAData(ctx, cr, restConfig)
+	_ = caSource // referenced in observability log below
 
 	argoConfig := argoCDClusterConfig{
 		BearerToken: token,
@@ -375,6 +385,72 @@ func (r *ClusterCredentialReconciler) reconcileArgoCDClusterSecret(ctx context.C
 	return nil
 }
 
+// resolveCAData implements Op B (plan 2026-05-25-live-ca-fetch-clustercredential, T2.1):
+// fetches the live cluster CA from the target cluster's kube-root-ca.crt
+// ConfigMap, falls back to the kubeconfig snapshot on error, or short-circuits
+// when CR opts into insecure mode (Op A precedence per ADR D4).
+//
+// Returns (base64-encoded PEM, source-tag). source-tag is one of:
+//   - "live"             → fresh kube-root-ca.crt fetched
+//   - "fallback"         → fetch failed; snapshot caData used (degraded)
+//   - "skipped-insecure" → cr.Spec.TLS.Insecure=true; caData is "" (ArgoCD ignores)
+//
+// Always non-nil-safe; counter incremented per call for SRE visibility.
+// 5s fetch budget keeps reconcile under its 30s deadline even when fetch hangs.
+//
+// ADR D2 (graceful fallback): never returns error — degrades to existing
+// behavior. SRE detects degradation via loopzero_clustercredential_ca_fetch_total{result="fallback"}.
+func (r *ClusterCredentialReconciler) resolveCAData(
+	ctx context.Context,
+	cr *loopzerov1.ClusterCredential,
+	restConfig *rest.Config,
+) (caDataB64, source string) {
+	// D4: Op A precedence — short-circuit when insecure. ArgoCD ignores
+	// caData when insecure=true, so the fetch would waste a network call
+	// and produce noisy Warn logs in dev clusters where RBAC may legitimately
+	// block. Counter labeled "skipped-insecure" so SRE Grafana can pivot.
+	if cr.Spec.TLS.Insecure {
+		metrics.ClusterCredentialCAFetchTotal.
+			WithLabelValues(cr.Spec.ClusterName, "skipped-insecure").Inc()
+		return "", "skipped-insecure"
+	}
+
+	// D1: try live fetch with 5s budget (reconcile budget = 30s).
+	fetchCtx, cancel := context.WithTimeout(ctx, 5*time.Second)
+	defer cancel()
+
+	if r.CAFetcher == nil {
+		// Defensive: should not happen — SetupClusterCredentialController
+		// always wires newKubeRootCAFetcher. Log + fall through to snapshot.
+		log.FromContext(ctx).Error(nil, "Op B disabled: CAFetcher is nil — using snapshot caData",
+			"cluster", cr.Spec.ClusterName,
+			"audit", "ca_fetcher_unwired")
+	} else {
+		livePEM, fetchErr := r.CAFetcher.FetchClusterCA(fetchCtx, restConfig)
+		if fetchErr == nil {
+			metrics.ClusterCredentialCAFetchTotal.
+				WithLabelValues(cr.Spec.ClusterName, "success").Inc()
+			return base64.StdEncoding.EncodeToString(livePEM), "live"
+		}
+		// D2: graceful fallback. Log structured + metric for SRE visibility.
+		log.FromContext(ctx).Info("Op B live CA fetch failed; falling back to kubeconfig snapshot",
+			"cluster", cr.Spec.ClusterName,
+			"credential", cr.Name,
+			"error", fetchErr.Error(),
+			"audit", "ca_fetch_fallback",
+			"audit_insecure_bootstrap", "true",
+		)
+	}
+	metrics.ClusterCredentialCAFetchTotal.
+		WithLabelValues(cr.Spec.ClusterName, "fallback").Inc()
+
+	// Encode snapshot per CHG-002b 2026-04-27 contract (base64 PEM).
+	if len(restConfig.CAData) > 0 {
+		return base64.StdEncoding.EncodeToString(restConfig.CAData), "fallback"
+	}
+	return "", "fallback"
+}
+
 // reconcileDelete handles cleanup when a ClusterCredential is being deleted.
 func (r *ClusterCredentialReconciler) reconcileDelete(ctx context.Context, cr *loopzerov1.ClusterCredential) (ctrl.Result, error) {
 	logger := log.FromContext(ctx)
@@ -419,6 +495,7 @@ func SetupClusterCredentialController(mgr ctrl.Manager, argoCDNamespace string) 
 	reconciler := &ClusterCredentialReconciler{
 		Client:          mgr.GetClient(),
 		ArgoCDNamespace: argoCDNamespace,
+		CAFetcher:       newKubeRootCAFetcher(),
 	}
 	return ctrl.NewControllerManagedBy(mgr).
 		For(&loopzerov1.ClusterCredential{}, shared.ForOption()).
