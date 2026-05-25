@@ -101,10 +101,15 @@ export function OverviewPage() {
             <p className="text-label-caps text-muted-foreground uppercase mb-3 tracking-wider">
               Usage
             </p>
-            <UsageMeter
-              title="Last 30 days"
-              action={<Badge variant="outline">Upgrade</Badge>}
-              metrics={[
+            {/* T-DR-2.5 v1.2 (closes V-8 from Vercel benchmark): max-h
+                + overflow-y-auto acomoda 5+ KPIs sem inflar página.
+                Vercel pattern: panel scrolls internally rather than
+                forcing page growth. */}
+            <div className="max-h-[400px] overflow-y-auto">
+              <UsageMeter
+                title="Last 30 days"
+                action={<Badge variant="outline">Upgrade</Badge>}
+                metrics={[
                 {
                   label: 'Fast Data Transfer',
                   value: dataMetric.value,
@@ -141,7 +146,8 @@ export function OverviewPage() {
                   formatter: (v) => fmtMetric(v, concurrentBuildsMetric.max),
                 },
               ]}
-            />
+              />
+            </div>
           </section>
 
           {/* Alerts section removed v1.2 T-DR-1.1 (closes P1-1): feature
