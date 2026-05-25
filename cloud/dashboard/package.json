@@ -20,14 +20,14 @@
       "limit": "55 KB"
     },
     {
-      "name": "02 — @loopzero/ui (design system)",
+      "name": "02 — @loopzero/ui (design system, post-0.10 per-component dist)",
       "path": "dist/assets/loopzero-ui-*.js",
-      "limit": "50 KB"
+      "limit": "18 KB"
     },
     {
       "name": "03 — radix (transitive via @loopzero/ui)",
       "path": "dist/assets/radix-*.js",
-      "limit": "35 KB"
+      "limit": "22 KB"
     },
     {
       "name": "04 — vendor (misc transitive deps)",
@@ -55,13 +55,13 @@
       "limit": "10 KB"
     },
     {
-      "name": "TOTAL initial JS — HARD GATE (MEET-ASYNC-002 v1.3, brotli)",
+      "name": "TOTAL initial JS — HARD GATE (MEET-ASYNC-002 v1.4 post-Brief-4, brotli)",
       "path": "dist/assets/*.js",
-      "limit": "240 KB"
+      "limit": "180 KB"
     }
   ],
   "dependencies": {
-    "@loopzero/ui": "0.9.0-next.0",
+    "@loopzero/ui": "0.10.0-next.0",
     "lucide-react": "^0.460.0",
     "react": "^19.0.0",
     "react-dom": "^19.0.0",
