@@ -148,7 +148,11 @@ var _ = Describe("Journey 12: Velero Backup & DR", Label("journey"), func() {
 	It("V-3: 5 loopzero-* schedules exist and are Enabled", func() {
 		// One pass per schedule for clearer failure messages.
 		for _, name := range expectedSchedules {
-			cmd := veleroNs("get", "schedule", name,
+			// Fully-qualify schedules.velero.io: when chaos-mesh is also
+			// installed (resilience + backup coexist), the bare "schedule"
+			// short name is ambiguous and kubectl resolves it to
+			// schedules.chaos-mesh.org → false NotFound.
+			cmd := veleroNs("get", "schedules.velero.io", name,
 				"-o", "jsonpath={.metadata.name}={.spec.paused}")
 			out, err := cmd.CombinedOutput()
 			Expect(err).NotTo(HaveOccurred(),
@@ -166,7 +170,7 @@ var _ = Describe("Journey 12: Velero Backup & DR", Label("journey"), func() {
 	})
 
 	It("V-4: loopzero-crds-backup template includes all 10 loopzero.io CRDs", func() {
-		cmd := veleroNs("get", "schedule", "velero-loopzero-crds-backup",
+		cmd := veleroNs("get", "schedules.velero.io", "velero-loopzero-crds-backup",
 			"-o", "jsonpath={.spec.template.includedResources}")
 		out, err := cmd.CombinedOutput()
 		Expect(err).NotTo(HaveOccurred(),
