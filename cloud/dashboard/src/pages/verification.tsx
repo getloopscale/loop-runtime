@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react';
 import { useSearchParams } from 'react-router-dom';
 import { AlertCircle, CheckCircle2, Loader2, Mail } from 'lucide-react';
-import { Alert, Button, Card, Input } from '@loopzero/ui';
+import { Alert, Button, Card, PinInput } from '@loopzero/ui';
 import { API_URL } from '@/lib/config';
 
 const KRATOS_URL = API_URL;
@@ -151,23 +151,25 @@ export function VerificationPage() {
               </div>
               {error && <Alert intent="destructive" title={error} />}
               <form onSubmit={handleSubmit} className="space-y-4">
-                <Input
-                  size="lg"
-                  type="text"
+                {/* Brief #5 PinInput — 6-box OTP per DSS § 4 + Apple/Stripe/Clerk convention.
+                    Closes Deep Review § 2.12 P2. onComplete auto-submits when 6 digits typed. */}
+                <PinInput
+                  length={6}
                   value={code}
-                  onChange={(e) => setCode(e.target.value)}
-                  required
-                  placeholder="Enter code"
-                  maxLength={6}
+                  onChange={setCode}
+                  onComplete={(v) => flowId && submitCode(flowId, v)}
+                  inputMode="numeric"
+                  size="lg"
                   autoFocus
+                  error={!!error}
                   aria-label="Verification code"
-                  className="text-center tracking-widest text-body-sm"
                 />
                 <Button
                   type="submit"
                   variant="primary"
                   size="lg"
                   className="w-full justify-center"
+                  disabled={code.length !== 6}
                 >
                   Verify
                 </Button>
