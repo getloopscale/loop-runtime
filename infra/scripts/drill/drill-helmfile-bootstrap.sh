@@ -30,10 +30,10 @@
 # connection (DO mgmt-tier enforces SSL). Local k3d default preserved.
 #
 # Usage:
-#   bash infra/scripts/drill-helmfile-bootstrap.sh                    # default permissive
-#   STRICT_BOOTSTRAP=true bash infra/scripts/drill-helmfile-bootstrap.sh   # CI mode fail-fast
-#   bash infra/scripts/drill-helmfile-bootstrap.sh --from-cluster runtime # partial recovery (EC-05)
-#   bash infra/scripts/drill-helmfile-bootstrap.sh --dry-run          # preview only
+#   bash infra/scripts/drill/drill-helmfile-bootstrap.sh                    # default permissive
+#   STRICT_BOOTSTRAP=true bash infra/scripts/drill/drill-helmfile-bootstrap.sh   # CI mode fail-fast
+#   bash infra/scripts/drill/drill-helmfile-bootstrap.sh --from-cluster runtime # partial recovery (EC-05)
+#   bash infra/scripts/drill/drill-helmfile-bootstrap.sh --dry-run          # preview only
 #
 # Exit codes:
 #   0 — Bootstrap succeeded (all 4 clusters healthy)
@@ -153,13 +153,13 @@ log "Phase 1/4: Reading Pulumi outputs (v2 flat named exports)..."
 # inlining the pulumi/npx fallback dispatch. Lib API:
 #   pulumi_output --dir DIR --stack STACK [--secret] [--json] KEY
 SCRIPT_DIR_BOOTSTRAP="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-LIB_PULUMI_OUTPUT="${SCRIPT_DIR_BOOTSTRAP}/../helmfile/scripts/lib/pulumi-output.sh"
+LIB_PULUMI_OUTPUT="${SCRIPT_DIR_BOOTSTRAP}/../../helmfile/scripts/lib/pulumi-output.sh"
 if [[ ! -r "$LIB_PULUMI_OUTPUT" ]]; then
   log "ERROR: shared lib not found at $LIB_PULUMI_OUTPUT"
   log "  Plan 2026-05-20 T4.3 amendment — drill-helmfile-bootstrap.sh depends on this lib"
   exit 2
 fi
-# shellcheck source=../helmfile/scripts/lib/pulumi-output.sh
+# shellcheck source=../../helmfile/scripts/lib/pulumi-output.sh
 source "$LIB_PULUMI_OUTPUT"
 
 # Thin wrapper preserves caller-side signature (existing call sites in this
@@ -442,7 +442,7 @@ helmfile -e "$HELMFILE_ENV" --file "$HELMFILE_DIR/mgmt.helmfile.yaml.gotmpl" --s
 log "  ✓ loopzero-crds installed — applying 3 ClusterCredentials (cell-default + cell-1 + cell-2)..."
 export DRILL_KUBECONFIG="$MGMT_KUBECONFIG"
 # Plan v1.2 T4.2: consolidated bootstrap-cell-cc.sh --cell --env
-CELL_SCRIPT="$(cd "$(dirname "$0")/../.." && pwd)/infra/helmfile/scripts/bootstrap-cell-cc.sh"
+CELL_SCRIPT="$(cd "$(dirname "$0")/../../.." && pwd)/infra/helmfile/scripts/bootstrap-cell-cc.sh"
 bash "$CELL_SCRIPT" --cell default --env drill 2>&1 | tail -3 || {
   log "ERROR: bootstrap cell-default failed"
   exit 3
@@ -798,9 +798,9 @@ if [[ "${DRILL_BOOTSTRAP_SKIP_LIVE_PATCHES:-false}" == "true" ]]; then
   log "DRILL_BOOTSTRAP_SKIP_LIVE_PATCHES=true — skipping Bugs #56-#82 LIVE patches (test mode)"
   log ""
   log "✓ Bootstrap complete. LoopZero platform deployed on drill 4-cluster stack."
-  log "  Next: bash infra/scripts/drill-mint-jwt.sh"
+  log "  Next: bash infra/scripts/drill/drill-mint-jwt.sh"
   log "  Then: bash infra/scripts/bootstrap-cell-{default,1,2}-cc-drill.sh"
-  log "  Then: run L0+L1+L2 harness against drill cloud"
+  log "  Then: run L0+L1+L2 harness against drill cloud (Phase 6)"
   exit 0
 fi
 
@@ -1100,7 +1100,7 @@ kubectl -n loopzero-system rollout status deployment/loopzero-api --timeout=180s
 # drill Hydra issuer and loopzero-api JWT_ISSUER would otherwise only surface as
 # 401 in dogfood-drill — too late, and historically masked by Bug #24 workaround.
 # shellcheck source=infra/scripts/lib/drill-jwt-gate.sh
-source "$(dirname "${BASH_SOURCE[0]}")/lib/drill-jwt-gate.sh"
+source "$(dirname "${BASH_SOURCE[0]}")/../lib/drill-jwt-gate.sh"
 log "T2.2 gate: verifying JWT auth wiring end-to-end..."
 if ! verify_jwt_auth_e2e \
     "${API_URL:-https://api.loopzero-drill.example}" \

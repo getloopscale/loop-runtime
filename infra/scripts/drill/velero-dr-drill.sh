@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# infra/scripts/velero-dr-drill.sh
+# infra/scripts/drill/velero-dr-drill.sh
 #
 # velero-backup-dr-plan v1.0 / T4.2 — DR drill validation script.
 #

@@ -217,7 +217,7 @@ log "Check 2/4: 5 L2-unlock scripts present + executable..."
 MISSING_SCRIPTS=()
 for script in \
   infra/scripts/drill/state-reset.sh \
-  infra/scripts/drill-helmfile-bootstrap.sh \
+  infra/scripts/drill/drill-helmfile-bootstrap.sh \
   infra/scripts/drill/cancel-refresh.sh \
   infra/scripts/drill/evidence-capture.sh \
   infra/scripts/drill/teardown-validator.sh; do

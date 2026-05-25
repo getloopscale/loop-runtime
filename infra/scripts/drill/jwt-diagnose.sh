@@ -258,9 +258,9 @@ emit_diagnosis_report() {
     echo ""
     echo "Refer to plan T2.1 file-mapping by category:"
     echo "- **A (issuer):** edit \`infra/helmfile/values-ory-hydra-drill.yaml.gotmpl\` (urls.issuer) OR \`values-loopzero-api-drill.yaml.gotmpl\` (JWT_ISSUER env)"
-    echo "- **B (audience):** edit \`infra/scripts/drill-mint-jwt.sh\` (audience param) — T3 if changing \`api/cmd/setup_auth.go:60\` hardcoded 'loopzero-engine'"
+    echo "- **B (audience):** edit \`infra/scripts/drill/drill-mint-jwt.sh\` (audience param) — T3 if changing \`api/cmd/setup_auth.go:60\` hardcoded 'loopzero-engine'"
     echo "- **C (JWKS):** edit \`infra/helmfile/values-loopzero-api-drill.yaml.gotmpl\` (JWKS_URL with cross-namespace FQDN)"
-    echo "- **D (expired):** edit \`infra/scripts/drill-mint-jwt.sh\` (expires_in)"
+    echo "- **D (expired):** edit \`infra/scripts/drill/drill-mint-jwt.sh\` (expires_in)"
     echo "- **E (signature):** T3 — auth contract change requires meeting"
     echo "- **F:** manual review"
     echo ""
@@ -299,7 +299,7 @@ main() {
   drill_skill_log "step 1: minting fresh JWT"
   rm -f ~/.loopzero/drill-token.txt ~/.loopzero/drill-token-cache.json 2>/dev/null || true
   local jwt
-  jwt=$(bash "$SCRIPT_DIR/../drill-mint-jwt.sh" 2>/dev/null) || {
+  jwt=$(bash "$SCRIPT_DIR/drill-mint-jwt.sh" 2>/dev/null) || {
     drill_skill_log "ERROR: drill-mint-jwt.sh failed"
     exit 1
   }

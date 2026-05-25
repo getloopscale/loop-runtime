@@ -11,7 +11,7 @@
 # JWT script taxonomy (T2.6 of plan 2026-05-21-deep-review-remediation):
 #   - infra/helmfile/scripts/lib/hydra-mint.sh  — SHARED LOW-LEVEL LIB
 #     (sourced by both this script + seed-local-user.sh; the actual mint flow)
-#   - infra/scripts/drill-mint-jwt.sh           — DRILL ENTRY POINT (THIS FILE)
+#   - infra/scripts/drill/drill-mint-jwt.sh      — DRILL ENTRY POINT (THIS FILE)
 #     (drill-context wrapper, parametrizes hydra-mint.sh for DOKS)
 #   - infra/scripts/drill/jwt-diagnose.sh        — DIAGNOSTIC TOOL
 #     (NOT a minter — inspects an existing JWT for validity, claims, TTL)
@@ -242,13 +242,13 @@ log "Seed complete"
 #   - mint_jwt writes: JWT to stdout, errors to stderr
 #   - mint_jwt exits: 0 success, 1 deps missing, 2 mint failure, 4 TTL too short
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-LIB_HYDRA_MINT="${SCRIPT_DIR}/../helmfile/scripts/lib/hydra-mint.sh"
+LIB_HYDRA_MINT="${SCRIPT_DIR}/../../helmfile/scripts/lib/hydra-mint.sh"
 if [[ ! -r "$LIB_HYDRA_MINT" ]]; then
   log "ERROR: shared lib not found at $LIB_HYDRA_MINT"
   log "  Plan 2026-05-20 T4.4 — drill-mint-jwt.sh depends on this lib"
   exit 1
 fi
-# shellcheck source=../helmfile/scripts/lib/hydra-mint.sh
+# shellcheck source=../../helmfile/scripts/lib/hydra-mint.sh
 source "$LIB_HYDRA_MINT"
 
 log "Minting JWT via Hydra client_credentials grant (via shared lib)..."

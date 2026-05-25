@@ -200,10 +200,10 @@ tasks:
         # Plan v1.2 T5.1: LOOPZERO_TEST_ENV=drill is canonical (DRILL_KUBECONFIG_DIR
         # retained as path source; removal of dual-var pending T5.2 deprecation window).
         LOOPZERO_TEST_ENV=drill DRILL_KUBECONFIG_DIR=/tmp/drill-kc STRICT_BOOTSTRAP=true \
-          bash infra/scripts/drill-helmfile-bootstrap.sh || BOOTSTRAP_EXIT=$?
+          bash infra/scripts/drill/drill-helmfile-bootstrap.sh || BOOTSTRAP_EXIT=$?
         if [ "$BOOTSTRAP_EXIT" -ne 0 ]; then
           echo "ERROR: drill-helmfile-bootstrap.sh failed (exit $BOOTSTRAP_EXIT)"
-          echo "  Resume via: bash infra/scripts/drill-helmfile-bootstrap.sh --from-cluster <name>"
+          echo "  Resume via: bash infra/scripts/drill/drill-helmfile-bootstrap.sh --from-cluster <name>"
           task drill:down
           exit "$BOOTSTRAP_EXIT"
         fi
@@ -220,13 +220,13 @@ tasks:
 
         echo ""
         echo "=== Phase 4c: Mint JWT for L2 test (T2.2) ==="
-        if [ ! -x infra/scripts/drill-mint-jwt.sh ]; then
+        if [ ! -x infra/scripts/drill/drill-mint-jwt.sh ]; then
           echo "ERROR: drill-mint-jwt.sh missing"
           task drill:down
           exit 1
         fi
         export DRILL_KUBECONFIG="$DRILL_KC"
-        JWT=$(bash infra/scripts/drill-mint-jwt.sh)
+        JWT=$(bash infra/scripts/drill/drill-mint-jwt.sh)
 
         echo ""
         echo "=== Phase 5: Bootstrap cell wiring (T2.3 D3 mapping) ==="
@@ -265,7 +265,7 @@ tasks:
   dr-drill:
     desc: "Full disaster recovery drill (alias for pulumi-reconstruction-drill.yml local equivalent)"
     cmds:
-      - bash infra/scripts/dr-drill.sh "{{.STAGE | default \"all\"}}"
+      - bash infra/scripts/drill/dr-drill.sh "{{.STAGE | default \"all\"}}"
     env:
       PULUMI_ACCESS_TOKEN: '{{.PULUMI_ACCESS_TOKEN}}'
       DIGITALOCEAN_TOKEN: '{{.DIGITALOCEAN_TOKEN}}'

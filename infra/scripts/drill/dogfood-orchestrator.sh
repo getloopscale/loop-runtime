@@ -140,7 +140,7 @@ if [[ -n "$DRILL_PG_URI" ]]; then
 fi
 export DRILL_PG_HOST DRILL_PG_PORT DRILL_PG_PASS
 JWT_LOG=/tmp/drill-mint-jwt.log
-if ! JWT=$(bash "$ROOT_DIR/infra/scripts/drill-mint-jwt.sh" 2>"$JWT_LOG"); then
+if ! JWT=$(bash "$ROOT_DIR/infra/scripts/drill/drill-mint-jwt.sh" 2>"$JWT_LOG"); then
   drill_skill_log "  ✗ drill-mint-jwt failed — last 10 lines of stderr:"
   tail -10 "$JWT_LOG" 2>/dev/null | sed 's/^/    /' >&2 || true
   drill_skill_emit_finding "S0" "drill-mint-jwt failed (log: $JWT_LOG)"

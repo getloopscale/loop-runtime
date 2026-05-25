@@ -12,7 +12,7 @@ description: >
     - Pulumi state backend bucket separate
 
   Lifecycle: provisioned + destroyed quarterly by the operator on-demand via
-  infra/scripts/dr-drill.sh (the GitHub reconstruction-drill cron was removed
+  infra/scripts/drill/dr-drill.sh (the GitHub reconstruction-drill cron was removed
   2026-05-23 — re-home to the real CI if quarterly automation is wanted).
 
 template:

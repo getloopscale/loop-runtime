@@ -40,8 +40,8 @@ set -euo pipefail
 # `--stage STAGE` and `--skip-teardown` flags. Rewritten to use proper
 # getopt-style parsing so the docstring matches behavior.
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-# shellcheck source=./lib/dry-run.sh disable=SC1091
-source "$SCRIPT_DIR/lib/dry-run.sh"
+# shellcheck source=../lib/dry-run.sh disable=SC1091
+source "$SCRIPT_DIR/../lib/dry-run.sh"
 parse_dry_run_flag "$@"
 if [ "${#REMAINING_ARGS[@]}" -gt 0 ]; then
   set -- "${REMAINING_ARGS[@]}"
