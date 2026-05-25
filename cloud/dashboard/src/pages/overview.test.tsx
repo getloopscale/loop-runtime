@@ -14,12 +14,20 @@ vi.mock('@/hooks/use-projects', () => ({
   useProjects: () => mockUseProjects(),
 }));
 
+const mockUseCloudApi = vi.fn();
+vi.mock('@/hooks/use-api', () => ({
+  useCloudApi: () => mockUseCloudApi(),
+  useEngineApi: () => mockUseCloudApi(),
+}));
+
 import { OverviewPage } from './overview';
 
 describe('OverviewPage', () => {
   beforeEach(() => {
     vi.clearAllMocks();
     mockUseProjects.mockReturnValue({ projects: [], loading: false });
+    // Default: billing returns null (covers fallback path)
+    mockUseCloudApi.mockReturnValue({ data: null, loading: false, error: false });
   });
 
   it('test_overview_renders_action_bar_with_add_new', () => {
@@ -80,5 +88,83 @@ describe('OverviewPage', () => {
     await user.type(search, 'alp');
     expect(screen.getByText('alpha')).toBeInTheDocument();
     expect(screen.queryByText('beta')).not.toBeInTheDocument();
+  });
+
+  // ---- v1.1 T-A.2 (B-2 + EC-5 + EC-6) ----
+
+  it('test_overview_usage_reflects_billing_data_when_loaded', () => {
+    mockUseCloudApi.mockReturnValue({
+      data: {
+        plan: 'pro',
+        team: 'acme',
+        usage: {
+          'Fast Data Transfer': { used: 412, limit: 1000 },
+          'Fast Origin Transfer': { used: 87, limit: 250 },
+          'Edge Requests': { used: 1_240_000, limit: 10_000_000 },
+        },
+      },
+      loading: false,
+      error: false,
+    });
+    render(<OverviewPage />);
+    // Real "used" numbers from billing fixture must appear (412 instead of 0)
+    expect(screen.getByText(/412 \/ 1,000/)).toBeInTheDocument();
+    expect(screen.getByText(/87 \/ 250/)).toBeInTheDocument();
+    // Edge Requests gets compact-millions formatter
+    expect(screen.getByText(/1,240,000 \/ 10M/)).toBeInTheDocument();
+  });
+
+  it('test_overview_usage_falls_back_to_zero_when_billing_null', () => {
+    mockUseCloudApi.mockReturnValue({ data: null, loading: false, error: false });
+    render(<OverviewPage />);
+    // No billing → fallback to defaults (used=0, max=defaultLimit per pickMetric)
+    // Anchor regex to end-of-string ($) to avoid "0 / 10" matching "0 / 100"
+    expect(screen.getByText(/^0 \/ 100$/)).toBeInTheDocument();
+    expect(screen.getByText(/^0 \/ 10$/)).toBeInTheDocument();
+    expect(screen.getByText(/^0 \/ 1M$/)).toBeInTheDocument();
+  });
+
+  it('test_overview_usage_renders_unlimited_when_limit_null', () => {
+    // EC-5: Enterprise tier returns limit:null → "Unlimited" per ADR-D1.bis
+    mockUseCloudApi.mockReturnValue({
+      data: {
+        plan: 'enterprise',
+        team: 'acme',
+        usage: {
+          'Fast Data Transfer': { used: 5000, limit: null },
+          'Fast Origin Transfer': { used: 1500, limit: null },
+          'Edge Requests': { used: 50_000_000, limit: null },
+        },
+      },
+      loading: false,
+      error: false,
+    });
+    render(<OverviewPage />);
+    // All 3 rows show "/ Unlimited" via fmtMetric() when max===null
+    const unlimitedLabels = screen.getAllByText(/\/ Unlimited/);
+    expect(unlimitedLabels.length).toBe(3);
+  });
+
+  it('test_overview_usage_renders_over_quota', () => {
+    // EC-6: used > limit. UsageMeter primitive natively flips intent="warning"
+    // and adds text-warning class per .llms.txt over-quota detection.
+    mockUseCloudApi.mockReturnValue({
+      data: {
+        plan: 'pro',
+        team: 'acme',
+        usage: {
+          'Fast Data Transfer': { used: 1200, limit: 1000 },
+          'Fast Origin Transfer': { used: 87, limit: 250 },
+          'Edge Requests': { used: 500_000, limit: 1_000_000 },
+        },
+      },
+      loading: false,
+      error: false,
+    });
+    const { container } = render(<OverviewPage />);
+    // Over-quota row shows real numeric (not clamped to limit)
+    expect(screen.getByText(/1,200 \/ 1,000/)).toBeInTheDocument();
+    // UsageMeter primitive applies text-warning class to over-quota value
+    expect(container.querySelector('.text-warning')).toBeInTheDocument();
   });
 });
