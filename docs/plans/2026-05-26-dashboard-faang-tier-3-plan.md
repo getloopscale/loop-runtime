@@ -1,6 +1,6 @@
-# Dashboard FAANG-Tier 3 Refactor Plan
+# Dashboard FAANG Refactor Plan
 
-> **Version 1.1** — Refactor incremental do `cloud/dashboard/` em **4 phases (Phase 0 backend pre-flight + Phases 1-3)** para atingir UX-tier "Differentiation Features" alinhado a concorrentes top (Vercel/Linear/Stripe) com signature distintivo (LoopZero's own voice: CLI-first amplification + Vercel density + Linear keyboard). Cobre as 2 violações P1 + 5 P2 do density audit, os 8 V-gaps do Vercel benchmark, e os 6 fails do loopzero-ui slop test, mais 8 features novas que concorrentes têm e LoopZero não — agora com **23 edge cases incorporados** (Phase 0 sub-tasks + 6 MUST FIX sub-tasks + 7 SHOULD TEST + 7 DOCUMENT). Pre-release context. **STATUS: PROPOSED v1.1 — T3 governance gate pending sponsor approval + ADR ratification.**
+> **Version 1.2** — Refactor incremental do `cloud/dashboard/` em **6 phases (Phase 0 backend pre-flight + Phase 1-3 tier 3 differentiation + Phase 4 tier 4 personalization + Phase 5 FAANG-grade infra: Web Vitals + a11y CI + Storybook + bundle analyzer)** para atingir UX-tier "FAANG" alinhado a concorrentes top (Vercel/Linear/Stripe) com signature distintivo (LoopZero's own voice: CLI-first amplification + Vercel density + Linear keyboard). Cobre 25 findings documentados (2 P1 + 5 P2 + 4 P3 density + 8 V-gaps Vercel + 6 slop fails) + 23 edge cases incorporados + **15 FAANG best practices gaps (5 CRITICAL + 4 HIGH + 4 MEDIUM + 2 LOW)** identificados na revisão v1.2 (reverte ADR D3 skip-Tier-4, adiciona ADRs D7-D9 para Web Vitals / Observability / i18n primitives). Pre-release context. **STATUS: PROPOSED v1.2 — T3 governance gate pending sponsor approval + ADR D1-D9 ratification.**
 
 ## Source-of-truth references (consult ANTES de assumir API)
 
@@ -17,6 +17,7 @@
 
 - **v1.0 (2026-05-26):** Initial PROPOSED draft consolidando inputs de 3 audits (DSS density, Vercel benchmark, loopzero-ui slop test) + decisões estratégicas (mirror=own-voice, escopo=incremental-3-phase, tier=3-differentiation).
 - **v1.1 (2026-05-26):** Incorpora 23 edge cases do /edge-case-plan review. Adiciona Phase 0 (5 backend pre-flight tasks) resolvendo backend-gap sistêmico. 6 MUST FIX viram sub-tasks explícitas (.1/.2) em T-DR-2.1/2.7/3.1/3.2/3.5/3.8. 7 SHOULD TEST entram como testes obrigatórios no TDD. 7 DOCUMENT viram seção "Known risks (documented)". Timing estimate +3-5 dias para Phase 0 → total 4.5-6.5 weeks. Coverage matrix expandido. Adiciona ADR D6 (Backend pre-flight gate é Phase 0 obrigatório, blocker para Phase 1).
+- **v1.2 (2026-05-26):** Revisão "Best Practices FAANG" — identifica 15 FAANG gaps (5 CRITICAL + 4 HIGH + 4 MEDIUM + 2 LOW) que v1.1 não cobria. Adiciona Phase 4 (Tier 4 personalization, reverte ADR D3 SKIP decision) e Phase 5 (FAANG-grade infra: Web Vitals per-page + axe-core CI + Storybook/Ladle + bundle analyzer + RUM). Adiciona ADRs D7 (Web Vitals per-page budget), D8 (Real User Monitoring day-1), D9 (i18n primitives mesmo EN-only). Reverte D3. Updated timing 4.5-6.5 weeks → 6-9 weeks. Adiciona 5 cross-cutting tasks injetadas nas Phases existentes (empty state taxonomy P2-4, error boundaries P2-cross, search UX P2-cross, telemetry hooks P3-cross, design tokens deprecation P5). Tier matrix expandido (Tier 4 + Tier 5 cross-cutting). Plan renamed "FAANG-Tier 3 Refactor" → "FAANG Refactor" refletindo escopo expandido.
 
 ## Context
 
@@ -71,19 +72,23 @@
 
 ## Objective
 
-**Dashboard atinge Tier 3 ("Differentiation Features") em 4 phases incrementais (Phase 0 + Phases 1-3):**
+**Dashboard atinge UX-tier "FAANG" em 6 phases incrementais (Phase 0-5):**
 
 0. **Phase 0 (Backend pre-flight, NEW v1.1):** Verificar 4 endpoints/features backend não-confirmados existir. Decidir per-task: ship com backend OR ship com placeholder cards declarando "Coming Soon" OR negociar backend PR. Resolve EC-1, EC-2 e gaps em T-DR-3.4/3.9. **Blocker** para Phase 1 tasks afetadas. 3-5 dias.
 
 1. **Phase 1 (Foundational):** Close TODOS os 7 findings documentados (2 P1 + 5 P2 + 6 slop fails). Atinge "tecnicamente correto, density-compliant, slop-test 288/288". 1 week.
 
-2. **Phase 2 (Polish + Microinteractions):** Adiciona motion system + transitions polidas + loading states ricos + empty states contextuais. Atinge "feels alive". **Inclui sub-task obrigatória `prefers-reduced-motion` (EC-3) + optimistic UI rollback path (EC-4).** 1-2 weeks.
+2. **Phase 2 (Polish + Microinteractions):** Adiciona motion system + transitions polidas + loading states ricos + empty states contextuais. Atinge "feels alive". **Inclui sub-task obrigatória `prefers-reduced-motion` (EC-3) + optimistic UI rollback path (EC-4) + empty state taxonomy 3-tier (G6 FAANG) + error boundaries per-section (G7 FAANG) + search UX patterns debounce+virtualization (G8 FAANG).** 1-2 weeks.
 
-3. **Phase 3 (Differentiation):** Implementa 8 features que concorrentes têm e LoopZero não: Command Palette, Breadcrumb, Notification Center, Sidebar Grouping, TopBar Kebab, Plan-Gating Inline, CLI Signature Integration, Real-time SSE wiring. **Requires Brief #7 to @loopzero/ui team** para primitives novos (CommandPalette, Breadcrumb, NotificationBell). **Inclui sub-tasks obrigatórias Rule 3 sanitize (EC-7), CLI command whitelist (EC-8), CodeBlock internal-terms hook (EC-9), cmd+k mount scope (EC-5), breadcrumb route labels (EC-6).** 2-3 weeks.
+3. **Phase 3 (Differentiation):** Implementa 8 features que concorrentes têm e LoopZero não: Command Palette, Breadcrumb, Notification Center, Sidebar Grouping, TopBar Kebab, Plan-Gating Inline, CLI Signature Integration, Real-time SSE wiring. **Requires Brief #7 to @loopzero/ui team** para primitives novos (CommandPalette, Breadcrumb, NotificationBell). **Inclui sub-tasks obrigatórias Rule 3 sanitize (EC-7), CLI command whitelist (EC-8), CodeBlock internal-terms hook (EC-9), cmd+k mount scope (EC-5), breadcrumb route labels (EC-6) + telemetry hooks (G12 FAANG).** 2-3 weeks.
 
-**Total: 4.5-6.5 weeks (v1.1, Phase 0 added). Gate entre cada phase: re-run density audit + slop test + Lighthouse + manual UX review por sponsor.**
+4. **Phase 4 (Tier 4 Personalization, NEW v1.2 — reverte ADR D3 SKIP):** Implementa personalization features que Vercel/Linear têm: density-per-user toggle, theme-per-user (5 themes built-in via @loopzero/ui), sidebar reorder via drag-and-drop, recently-visited memory, saved filter presets. Resolve **G11 FAANG gap**. 1-2 weeks.
 
-**Skip: Tier 4 personalization (sidebar reorder, density-per-user, custom themes per workspace) — YAGNI pre-release per CLAUDE.md design-principles.md.**
+5. **Phase 5 (FAANG-grade Infra, NEW v1.2):** Performance budget formal (Core Web Vitals per-page LCP/INP/CLS), Real User Monitoring (web-vitals npm pkg), Axe-core CI integration (jest-axe + vitest-axe enforced), Storybook/Ladle para dashboard pages (espelha @loopzero/ui upstream pattern), Bundle analyzer (rollup-plugin-visualizer per-route attribution), Design tokens deprecation strategy (semver + 4-tier policy), i18n primitives architecture (EN-only at launch mas hooks setup). Resolve **G1, G2, G3, G4, G5, G9, G13 FAANG gaps (4 CRITICAL + 3 MEDIUM)**. 1-2 weeks.
+
+**Total: 6-9 weeks (v1.2, Phase 4-5 added). Gate entre cada phase: re-run density audit + slop test + Lighthouse + Web Vitals per-page + axe-core report + manual UX review por sponsor.**
+
+**Defer to post-FAANG v1.x (acceptable per pre-release):** G10 cross-browser matrix (Playwright Chrome/Firefox/Safari), G14 Service Worker/PWA, G15 onboarding flow. Documented em "Known risks (documented)" section.
 
 ## ADRs
 
@@ -108,14 +113,58 @@
   - ✅ Phase 1 não precisa novo descoberta — só executa o que 3 audits já apontaram
   - ❌ Sem "wow public moment" big-bang. Mitigated: Phase 3 entrega features dramáticas o suficiente
 
-### D3 — Skip Tier 4 (personalization) — YAGNI pre-release
+### D3 — Skip Tier 4 (personalization) — YAGNI pre-release [REVERTED v1.2]
 
-- **Context:** Personalization (sidebar reorder per user, density per user, custom workspace themes) é feature avançada de produtos com 1000+ users dando feedback divergente.
-- **Decision:** Defer to v1.x pós-GA. Pre-release single-user customization é YAGNI.
+- **Context (v1.0):** Personalization (sidebar reorder per user, density per user, custom workspace themes) é feature avançada de produtos com 1000+ users dando feedback divergente.
+- **Decision (v1.0):** Defer to v1.x pós-GA. Pre-release single-user customization é YAGNI.
+- **REVERSAL (v1.2):** "Best practices FAANG" revisão identifica que G11 (personalization) NÃO é Tier 4 wishlist — é Tier 3-equivalent FAANG signature. Vercel, Linear, Stripe TODOS shipam personalization day-1 (não 1000-user-feedback driven). Pre-release context não justifica skip — justifies escopo modesto (density toggle + theme switcher + sidebar reorder, sem custom workspace themes).
+- **Decision (v1.2):** Phase 4 NEW adiciona Tier 4 personalization com escopo modesto:
+  - Density toggle (compact/comfortable/spacious — already in @loopzero/ui ThemeProvider runtime)
+  - Theme switcher (5 themes already built-in via @loopzero/ui per CHANGELOG)
+  - Sidebar reorder via drag-and-drop (Linear pattern)
+  - Recently-visited memory (per-page localStorage)
+  - Saved filter presets (Vercel pattern)
 - **Consequences:**
-  - ✅ Foco em Tier 3 entregável em 4-6 weeks
-  - ✅ Personalization ADR fica pra quando temos data real (usage analytics)
-  - ❌ Concorrentes (Vercel) têm sidebar customizable — gap consciente, document
+  - ✅ Atende G11 FAANG gap (Vercel sidebar customizable parity)
+  - ✅ Reusa @loopzero/ui ThemeProvider + density runtime (zero custom infra)
+  - ✅ ~1-2 weeks adicionais (não-blocker pro core FAANG mas atinge "feels Linear")
+  - ❌ Adiciona 4-5 tasks ao plano
+
+### D7 — Performance budget formal (Core Web Vitals per-page) [NEW v1.2]
+
+- **Context:** Plan v1.1 menciona "Lighthouse ≥90" como acceptance global, mas sem per-page budget per Core Web Vitals (LCP, INP, CLS). FAANG standard (Google PageSpeed, Vercel) tracks per-route com budget gates em CI.
+- **Decision:** Phase 5 implementa formal per-page budget:
+  - **LCP** (Largest Contentful Paint) ≤ 2.5s — gates em /, /projects, /domains, /billing
+  - **INP** (Interaction to Next Paint) ≤ 200ms — gates em /verification (PinInput), /team (invite)
+  - **CLS** (Cumulative Layout Shift) ≤ 0.1 — gates em / (KPI strip + projects panel)
+  - **TBT** (Total Blocking Time) ≤ 200ms — gates em Phase 3 cmd+k open path
+- **Consequences:**
+  - ✅ FAANG-tier performance discipline
+  - ✅ Sub-200ms INP enforce previne skeleton-flash regression
+  - ❌ Requires Lighthouse CI setup ou web-vitals npm pkg + threshold gates
+
+### D8 — Real User Monitoring (RUM) from day-1 [NEW v1.2]
+
+- **Context:** Vercel/Linear/Stripe shipam RUM (real user telemetry) day-1 — não esperam prod usage pra começar coletar. FAANG pattern.
+- **Decision:** Phase 5 wire `web-vitals` npm pkg em `cloud/dashboard/src/main.tsx` enviando LCP/INP/CLS para backend telemetry endpoint OR console.log em dev mode. Backend RUM endpoint = future scope (não bloqueia consumer setup).
+- **Consequences:**
+  - ✅ Pre-release telemetry pronta — quando prod customers chegarem, signals fluindo dia-1
+  - ✅ Dev local mostra metrics console
+  - ❌ Requires nova dep (`web-vitals` ~5KB) + optional backend endpoint
+
+### D9 — i18n primitives setup mesmo se EN-only at launch [NEW v1.2]
+
+- **Context:** FAANG products never ship without i18n primitives setup, mesmo lançando EN-only. Custo retrofit é muito alto. Atual `lib/format.ts` hardcoded `en-US` locale.
+- **Decision:** Phase 5 wire i18n architecture com primitives setup (mas NÃO translate UI strings ainda):
+  - Adicionar `react-intl` OR `i18next` dependency
+  - Wrap app em `<IntlProvider locale="en-US">`
+  - Move all user-facing strings para `messages.en.json` namespace
+  - `lib/format.ts` receives locale via context (não hardcoded)
+  - RTL support architecture (Tailwind `dir` aware)
+- **Consequences:**
+  - ✅ Retrofit cost evitado (FAANG hard-lesson)
+  - ✅ pt-BR pode ser adicionada em PR de 1-2 hours quando sponsor pedir
+  - ❌ Phase 5 adiciona ~3-4 hours de setup + bundle delta (~10KB react-intl OR ~8KB i18next)
 
 ### D4 — CLI-First Signature Pattern: toda action page tem CodeBlock equivalente inline
 
@@ -834,36 +883,46 @@ NUNCA copy raw state. Build command string strict from whitelist.
 - [ ] Manual sponsor review — FAANG-tier achievement gate
 - [ ] Brief #8 emitted ao @loopzero/ui (consumer report) similar to Brief #6 pattern
 
-## Global DoD (v1.1 expanded)
+## Global DoD (v1.2 expanded with FAANG best practices)
 
-- [ ] Phase 0, 1, 2, 3 todos DoD met
-- [ ] 117+ → ~150+ vitest tests GREEN (estimate: +30-35 tests across 4 phases including new EC tests)
-- [ ] Bundle ≤ 180 KB (hard gate; aceitar 10-15 KB growth justificado por novas primitives — EC-18 mitigation enforced)
+- [ ] Phase 0, 1, 2, 3, 4, 5 todos DoD met
+- [ ] 117+ → ~180+ vitest tests GREEN (estimate: +60+ tests across 6 phases including FAANG gap tests)
+- [ ] Bundle ≤ 180 KB (hard gate; v1.2 adiciona ~25KB total — `@dnd-kit/sortable` 6KB + `web-vitals` 5KB + `react-intl` 10KB + minor; deve fit dentro do gate, validar no Phase 5 closure)
 - [ ] Density audit re-run: 0 P1 + 0 P2
 - [ ] loopzero-ui audit re-run: 100% across all 13 routes
 - [ ] Lighthouse scores: Performance ≥ 90, Accessibility ≥ 95, Best Practices ≥ 95
+- [ ] **Lighthouse CI gates per-page GREEN (LCP/INP/CLS/TBT per ADR D7) — NEW v1.2**
 - [ ] WCAG 2.5.8 AA pass em manual a11y audit
-- [ ] **WCAG 2.3.3 pass (prefers-reduced-motion respeitado per EC-3)**
-- [ ] DSS bumped 1.0 → 1.1 (Motion + CLI signature pattern + Empty vs Error convention)
+- [ ] WCAG 2.3.3 pass (prefers-reduced-motion respeitado per EC-3)
+- [ ] **Axe-core CI: zero violations em 13 routes (Phase 5 T-DR-5.3) — NEW v1.2**
+- [ ] DSS bumped 1.0 → 1.2 (Motion + CLI signature pattern + Empty vs Error convention + token deprecation policy)
 - [ ] Brief #7 emitted + primitives shipped + Brief #8 closure (OR EC-23 contingency activated)
 - [ ] CLAUDE.md updated (se signature pattern muda product language convention)
-- [ ] Vercel benchmark re-run: V-2, V-3, V-4, V-5, V-6, V-7, V-8 closed (V-1 deferred per D2)
-- [ ] **6 MUST FIX sub-tasks completed (EC-3, EC-4, EC-5, EC-6, EC-7+EC-8, EC-9)**
-- [ ] **7 SHOULD TEST tests added to TDD GREEN (EC-10..16)**
-- [ ] **7 DOCUMENT items registrados em "Known risks" section**
-- [ ] **`.claude/hooks/internal-terms.py` passa em todos CodeBlock contents (Rule 3)**
+- [ ] Vercel benchmark re-run: V-2..V-8 closed (V-1 deferred per D2)
+- [ ] 6 MUST FIX sub-tasks completed (EC-3, EC-4, EC-5, EC-6, EC-7+EC-8, EC-9)
+- [ ] 7 SHOULD TEST tests added to TDD GREEN (EC-10..16)
+- [ ] 7 DOCUMENT items registrados em "Known risks" section
+- [ ] `.claude/hooks/internal-terms.py` passa em todos CodeBlock contents (Rule 3)
 - [ ] Backend pre-flight report (`docs/reviews/backend-preflight-2026-05-26.md`) commitado
-- [ ] Sponsor manual UX review = "FAANG-tier achieved" verdict
+- [ ] **Phase 4: 5 personalization features shipped + persisted (G11) — NEW v1.2**
+- [ ] **Phase 5: 7 FAANG-grade infra tasks shipped (G1+G2+G3+G4+G5+G9+G13) — NEW v1.2**
+- [ ] **RUM web-vitals reporter wired (G2, ADR D8) — NEW v1.2**
+- [ ] **Ladle 8 page stories rendering (G4) — NEW v1.2**
+- [ ] **Bundle analyzer HTML accessible per-route attribution (G5) — NEW v1.2**
+- [ ] **i18n primitives setup: zero hardcoded English em components (G9, ADR D9) — NEW v1.2**
+- [ ] **Design tokens deprecation policy DSS v1.2 (G13) — NEW v1.2**
+- [ ] G10/G14/G15 explicitly deferred com mitigation documented em "Known risks"
+- [ ] Sponsor manual UX review = "**FAANG-grade achieved**" verdict
 
 ## Pre-release governance
 
 **Classification: T3** (architecture, design system, 13 pages, multi-week, brand-defining).
 
 **Requires (per `.claude/rules/pre-release-governance.md`):**
-- [ ] Meeting `MEET-2026-05-26-dashboard-faang-tier-3.md` convened
+- [ ] Meeting `MEET-2026-05-26-dashboard-faang.md` convened (renamed v1.2 — "tier 3" → "FAANG" reflete escopo expandido)
 - [ ] Specialists: principal-architect, dx-engineer, production-design-reviewer, change-validation-planner
-- [ ] ADR D1-D6 ratification (D6 NEW v1.1 = backend pre-flight gate)
-- [ ] Plan v1.1 ratified (or further bump v1.2 with meeting outcomes)
+- [ ] **ADR D1-D9 ratification (D3 reverted in v1.2; D7+D8+D9 NEW v1.2 = Web Vitals + RUM + i18n primitives)**
+- [ ] Plan v1.2 ratified
 - [ ] Sponsor explicit approval before T-DR-1.1 commit (Phase 0 pode rodar antes do meeting per read-only nature)
 
 **Plan Amendment Policy:**
@@ -872,15 +931,227 @@ NUNCA copy raw state. Build command string strict from whitelist.
 - Task deferral allowed within phase if technical blocker; document in MEET-ASYNC
 - Big-bang abandon (revert to v1.0 incremental) requires full T3 re-meeting
 
-## Timing estimate (v1.1 updated, Phase 0 added)
+## Timing estimate (v1.2 updated, Phase 4-5 added)
 
 | Phase | Duration | Risk | Output |
 |-------|----------|------|--------|
-| **Phase 0** | **3-5 days** | **Medium — backend gaps may require negotiation** | **6 tasks: 5 backend verifications + 1 closure report; ZERO consumer code (audit + decision only)** |
-| Phase 1 | 1 week (5 days) | Low — execution of documented findings + Phase 0 scope clarity | 10 commits closing 7 P1/P2 + 5 slop fails + 3 SHOULD TEST tests added |
-| Phase 2 | 1-2 weeks | Medium — motion system is new abstraction + 2 MUST FIX sub-tasks (EC-3, EC-4) | DSS v1.1 + 7 commits + Brief #7 draft |
-| Phase 3 | 2-3 weeks | Medium-High — depends on @loopzero/ui Brief #7 turnaround + 5 MUST FIX sub-tasks Rule 3 sanitize/whitelist/hook | 9 commits + Brief #8 + final review |
-| **Total** | **4.5-6.5 weeks** | — | 32 tasks (Phase 0: 6, Phase 1: 10, Phase 2: 7, Phase 3: 9) + 2 briefs sent + 1 brief published + DSS bump + audit re-runs |
+| **Phase 0** | 3-5 days | Medium — backend gaps may require negotiation | 6 tasks: 5 backend verifications + 1 closure report; ZERO consumer code |
+| Phase 1 | 1 week (5 days) | Low — execution of documented findings + Phase 0 scope clarity | 10 commits closing 7 P1/P2 + 5 slop fails |
+| Phase 2 | 1-2 weeks | Medium — motion system + MUST FIX sub-tasks + cross-cutting (empty taxonomy + error boundaries + search UX) | DSS v1.1 + 7+ commits + Brief #7 draft |
+| Phase 3 | 2-3 weeks | Medium-High — depends on @loopzero/ui Brief #7 turnaround + 5 MUST FIX sub-tasks Rule 3 + telemetry hooks | 9+ commits + Brief #8 + final review |
+| **Phase 4 (NEW v1.2)** | **1-2 weeks** | **Low-Medium — reusa @loopzero/ui ThemeProvider density + theme runtime** | **5 tasks personalization (density toggle, theme switcher, sidebar reorder, recent pages, filter presets)** |
+| **Phase 5 (NEW v1.2)** | **1-2 weeks** | **Low — infra setup tasks isoladas** | **7 tasks FAANG-grade infra (Lighthouse CI, RUM, Axe CI, Ladle, bundle analyzer, i18n, design tokens deprecation)** |
+| **Total** | **6-9 weeks** | — | 44 tasks (Phase 0: 6, Phase 1: 10, Phase 2: 7, Phase 3: 9, Phase 4: 5, Phase 5: 7) + 2 briefs sent + DSS bump v1.0→v1.2 + Lighthouse CI gates GREEN |
+
+## Phase 4 — Tier 4 Personalization (NEW v1.2, resolve G11 FAANG gap)
+
+**Objetivo:** Reverter ADR D3 SKIP — implementa personalization features que Vercel/Linear/Stripe shipam day-1. Escopo modesto: density toggle, theme switcher, sidebar reorder, recently-visited memory, saved filter presets. 1-2 weeks.
+
+### T-DR-4.1 — Density toggle in user menu (closes G11 #1)
+
+**Files to edit:**
+- `cloud/dashboard/src/components/layout/account-menu.tsx` — add density submenu (Compact/Comfortable/Spacious)
+- Hook into existing `@loopzero/ui` ThemeProvider `defaultDensity` runtime (per CHANGELOG already supports)
+- `localStorage` key `loopzero:user:density`
+
+**TDD:**
+- `test_density_toggle_persists_localstorage`
+- `test_density_toggle_applies_to_all_components_runtime`
+
+**Acceptance:**
+- User toggle persists across page refreshes
+- All loopzero-ui primitives respeitam density runtime
+
+### T-DR-4.2 — Theme switcher in user menu (closes G11 #2)
+
+**Files to edit:**
+- `cloud/dashboard/src/components/layout/account-menu.tsx` — add theme submenu (5 themes — Violet Forge default + 4 alternates per @loopzero/ui ships)
+- `localStorage` key `loopzero:user:theme`
+
+**TDD:**
+- `test_theme_switcher_persists_localstorage`
+- `test_theme_switcher_applies_runtime_no_flash`
+
+**Acceptance:**
+- 5 themes selecionáveis
+- No flash on theme switch (CSS vars swap instant)
+
+### T-DR-4.3 — Sidebar reorder via drag-and-drop (closes G11 #3, Vercel pattern)
+
+**Files to edit:**
+- `cloud/dashboard/src/components/layout/app-sidebar.tsx` — adopt `@dnd-kit/sortable` for nav items reorder
+- `localStorage` key `loopzero:user:sidebar_order` (array of nav item IDs)
+
+**TDD:**
+- `test_sidebar_drag_reorder_updates_localstorage`
+- `test_sidebar_order_persists_across_sessions`
+- `test_sidebar_default_order_when_no_localstorage`
+
+**Acceptance:**
+- Drag-to-reorder visual feedback
+- Order persists
+- Reset to default option in menu
+
+**Trade-off:** `@dnd-kit/sortable` ~6KB gzipped. Cabe no bundle gate (atual 145.67/180 KB).
+
+### T-DR-4.4 — Recently-visited memory (closes G11 #4)
+
+**Files to edit:**
+- `cloud/dashboard/src/hooks/use-recent-pages.tsx` (NEW) — tracks last 5 visited pages in `localStorage`
+- `cloud/dashboard/src/components/layout/app-sidebar.tsx` — render "Recent" section (auto-populated from hook)
+
+**TDD:**
+- `test_recent_pages_caps_at_5_entries`
+- `test_recent_pages_dedupes_visits`
+- `test_recent_pages_persists_across_sessions`
+
+### T-DR-4.5 — Saved filter presets (Vercel pattern, closes G11 #5)
+
+**Files to edit:**
+- `cloud/dashboard/src/components/layout/action-bar.tsx` — add "Save filter" option in ActionBar when search active
+- `localStorage` key `loopzero:user:filter_presets:{page}` (array of {name, query, filters})
+
+**TDD:**
+- `test_action_bar_save_filter_creates_preset`
+- `test_action_bar_load_preset_applies_query`
+- `test_filter_presets_per_page_isolated`
+
+**Acceptance:**
+- "Save filter" CTA quando search + filter active
+- Saved presets em ActionBar dropdown
+
+**DoD Phase 4:**
+- [ ] All 5 tasks committed
+- [ ] User can: density toggle, theme switch, reorder sidebar, see recent pages, save filter presets
+- [ ] All 5 features persist across sessions (localStorage)
+- [ ] Bundle ≤ 180 KB (`@dnd-kit/sortable` ~6KB delta documented)
+- [ ] Manual sponsor review: "personalization shipped"
+
+---
+
+## Phase 5 — FAANG-grade Infra (NEW v1.2, resolve G1-G5 + G9 + G13)
+
+**Objetivo:** Performance budget formal + RUM + a11y CI + Storybook + bundle analyzer + i18n primitives + design tokens deprecation. 1-2 weeks.
+
+### T-DR-5.1 — Core Web Vitals per-page budget (closes G1 CRITICAL, ADR D7)
+
+**Files to edit:**
+- `.lighthouserc.json` (NEW) — Lighthouse CI config com per-page thresholds (LCP/INP/CLS/TBT)
+- `taskfiles/quality.yml` — `task quality:lighthouse` target rodando Lighthouse CI contra dev server
+- `cloud/dashboard/docs/web-vitals-budget.md` (NEW) — per-page budget doc
+
+**TDD:**
+- `test_lighthouserc_thresholds_match_d7_spec`
+- Manual CI smoke: rodar Lighthouse CI em local k3d, assert pass
+
+**Acceptance:**
+- LCP ≤ 2.5s em /, /projects, /domains, /billing
+- INP ≤ 200ms em /verification (PinInput), /team
+- CLS ≤ 0.1 em /
+- TBT ≤ 200ms em Phase 3 cmd+k open path
+
+### T-DR-5.2 — Real User Monitoring (RUM) (closes G2 HIGH, ADR D8)
+
+**Files to edit:**
+- `cloud/dashboard/package.json` — add `web-vitals: ^4.0.0` dep (~5KB)
+- `cloud/dashboard/src/lib/rum.ts` (NEW) — wire web-vitals reporter
+- `cloud/dashboard/src/main.tsx` — invoke `onLCP`, `onINP`, `onCLS` reporters
+
+**TDD:**
+- `test_rum_reports_lcp_to_console_in_dev`
+- `test_rum_reports_inp_to_console_in_dev`
+
+**Acceptance:**
+- Dev mode: console.log of LCP/INP/CLS values on every interaction
+- Prod mode (future): POST to `/v1/telemetry/web-vitals` endpoint (backend = future scope)
+
+### T-DR-5.3 — Axe-core CI integration (closes G3 CRITICAL)
+
+**Files to edit:**
+- `cloud/dashboard/package.json` — add `vitest-axe: ^0.1.0` + `axe-core: ^4.10.0` devDeps
+- `cloud/dashboard/src/test/axe-setup.ts` (NEW) — auto-include axe checks em vitest setup
+- `cloud/dashboard/src/pages/*.test.tsx` — extend smoke tests com `axe.run(container)` per page
+- Update `.claude/rules/cli-output.md` ou similar para document axe CI gate
+
+**TDD:**
+- `test_all_pages_pass_axe_no_violations` — aggregate test
+- Per-page axe tests in existing smoke files
+
+**Acceptance:**
+- Zero axe violations em todas 13 routes
+- CI fails on new violations
+
+### T-DR-5.4 — Storybook/Ladle para dashboard pages (closes G4 HIGH)
+
+**Files to edit:**
+- `cloud/dashboard/package.json` — add `@ladle/react: ^4.0.0` devDep (lighter than Storybook)
+- `cloud/dashboard/.ladle/config.mjs` (NEW)
+- `cloud/dashboard/src/pages/*.stories.tsx` (NEW × 8 content pages) — story file per page com mock data fixtures
+
+**TDD:**
+- `npm run ladle build` succeed (no errors)
+- Visual smoke: ladle dev server renders all 8 page stories
+
+**Acceptance:**
+- 8 page stories em Ladle (overview, projects, environments, domains, billing, team, settings, profile)
+- Each story has loading/loaded/empty/error variants
+
+### T-DR-5.5 — Bundle analyzer per-route attribution (closes G5 CRITICAL)
+
+**Files to edit:**
+- `cloud/dashboard/package.json` — add `rollup-plugin-visualizer: ^5.0.0` devDep
+- `cloud/dashboard/vite.config.ts` — enable visualizer plugin (output `dist/bundle-stats.html`)
+- `cloud/dashboard/package.json` scripts — add `"bundle:analyze": "vite build && open dist/bundle-stats.html"`
+
+**TDD:**
+- `npm run bundle:analyze` succeed + HTML generated
+
+**Acceptance:**
+- Per-route bundle attribution visible
+- Identify any chunk >5KB unexpected
+
+### T-DR-5.6 — i18n primitives architecture setup (closes G9 MEDIUM, ADR D9)
+
+**Files to edit:**
+- `cloud/dashboard/package.json` — add `react-intl: ^7.0.0` dep (~10KB)
+- `cloud/dashboard/src/main.tsx` — wrap em `<IntlProvider locale="en-US" messages={enMessages}>`
+- `cloud/dashboard/src/messages/en.json` (NEW) — all user-facing strings extracted
+- `cloud/dashboard/src/lib/format.ts` — receive locale from context (não hardcoded `en-US`)
+- `cloud/dashboard/tailwind.config.ts` — RTL support via `dir` plugin
+
+**TDD:**
+- `test_intl_provider_wraps_app`
+- `test_lib_format_uses_context_locale`
+- `test_rtl_class_applied_when_dir_rtl`
+
+**Acceptance:**
+- All UI strings em `messages/en.json` (zero hardcoded English em components)
+- Bundle delta ~10KB (acceptable; Phase 4 + Phase 5 total deltas must fit em 180 KB gate)
+
+### T-DR-5.7 — Design tokens deprecation strategy (closes G13 MEDIUM)
+
+**Files to edit:**
+- `docs/design/2026-05-25-loopzero-dashboard-design-system.md` — add § 12 "Token Deprecation Policy"
+- Policy: 4-tier (current → deprecated → removed-next-minor → removed) com semver bumps
+
+**TDD:**
+- N/A (doc only)
+
+**Acceptance:**
+- DSS v1.2 documenta deprecation strategy per Linear pattern
+- Token changes from v1.1 → v1.2 documented em DSS migration guide
+
+**DoD Phase 5:**
+- [ ] All 7 tasks committed
+- [ ] Lighthouse CI gates GREEN
+- [ ] RUM reports LCP/INP/CLS in console
+- [ ] Axe-core: zero violations em 13 routes
+- [ ] Ladle: 8 page stories rendering
+- [ ] Bundle analyzer HTML accessible
+- [ ] i18n: zero hardcoded English strings em components
+- [ ] DSS v1.2 with deprecation policy
+
+---
 
 ## Known risks (documented, accepted)
 
@@ -927,6 +1198,21 @@ Risks identificados pelo /edge-case-plan que NÃO viram MUST FIX nem SHOULD TEST
 - **Risco:** Native Notifications API (browser-level "Push" perm) não mencionado em plan T-DR-3.4 (in-app notification bell only).
 - **Mitigação:** YAGNI pre-release. In-app notification bell suffice. Native browser notifications = v1.x feature (requires user permission flow, service worker).
 
+### G10 (DEFERRED v1.2) — Cross-browser matrix testing
+
+- **Risco:** Plan v1.2 só menciona viewport responsiveness (320/375/414/768), não cross-browser (Chrome/Firefox/Safari/Edge).
+- **Mitigação:** Defer para post-FAANG v1.x. Acceptable pre-release per LoopZero's context (developer-facing tool, Chrome-heavy audience). Playwright cross-browser matrix vira priority se enterprise customers reportarem Safari bugs.
+
+### G14 (DEFERRED v1.2) — Service Worker / PWA installable
+
+- **Risco:** Vercel/Linear são PWAs installable. LoopZero dashboard não.
+- **Mitigação:** Defer para post-FAANG v1.x. Workbox + offline strategy + install prompt UX = ~1 week dedicated. Não bloqueia "FAANG-tier" core (cmd+k + breadcrumb + notification + density discipline cobrem 90% do "feels FAANG" perception).
+
+### G15 (DEFERRED v1.2) — Onboarding flow / first-run UX
+
+- **Risco:** Stripe/Linear têm deliberate first-run UX (product tour, "Get started" checklist). LoopZero dashboard tem login → overview direto, sem onboarding moment.
+- **Mitigação:** Defer para post-FAANG v1.x. CLI-first onboarding via `loopzero login` + `loopzero init` (per CLAUDE.md "CLI is the primary interface") cobre LoopZero's positioning. Dashboard onboarding flow vira priority quando temos analytics mostrando drop-off em first-session.
+
 ---
 
 ## Validation gates between phases
@@ -950,23 +1236,41 @@ Risks identificados pelo /edge-case-plan que NÃO viram MUST FIX nem SHOULD TEST
 - **EC-4 verified: optimistic UI rollback tests GREEN**
 - Brief #7 sent to @loopzero/ui (early signal to upstream)
 
-**Phase 3 final gate:**
+**Phase 3 → Phase 4 gate (NEW v1.2):**
 - Vercel benchmark closure (V-2..V-8)
 - CLI signature pattern adopted across 6 pages
 - **EC-5, EC-6, EC-7, EC-8, EC-9 todos MUST FIX tests GREEN (cmd+k mount scope, breadcrumb labels, JSON sanitize, CLI whitelist, internal-terms hook)**
+- Telemetry hooks wired (G12)
 - Bundle ≤ 180 KB (EC-18 risk mitigated)
-- Sponsor verdict: "FAANG-tier achieved" OR explicit deferred items documented
+
+**Phase 4 → Phase 5 gate (NEW v1.2):**
+- 5 personalization features shipped + persisted via localStorage
+- `@dnd-kit/sortable` bundle delta dentro do gate
+- Manual sponsor review "personalization shipped"
+
+**Phase 5 final gate (NEW v1.2):**
+- Lighthouse CI gates GREEN (LCP/INP/CLS/TBT per-page)
+- RUM web-vitals reporter wired
+- Axe-core CI: zero violations em 13 routes
+- Ladle: 8 page stories rendering
+- Bundle analyzer HTML accessible
+- i18n: zero hardcoded English em components
+- DSS v1.2 with deprecation policy
+- Sponsor verdict: "**FAANG-grade achieved**" OR explicit deferred items (G10/G14/G15) documented
 
 ## Anti-patterns forbidden (per CLAUDE.md design-principles.md)
 
 - ❌ Big-bang full rewrite in single sprint (D2 explicit decision)
 - ❌ Copy Vercel descaradamente (D1 explicit decision)
 - ❌ Implement Phase N before Phase N-1 gate cleared
-- ❌ Skip ADR for any of D1-D5
+- ❌ Skip ADR for any of D1-D9 (D3 reverted v1.2)
 - ❌ Build features that backend doesn't support (e.g., notification center if audit_log endpoint missing)
 - ❌ Bumpar @loopzero/ui version mid-phase (do it antes de Phase 1 começar)
 - ❌ Add new dependency without ADR (per Rule 9 "Don't Reinvent")
-- ❌ Personalization features (Tier 4 explicitly skipped per D3)
+- ❌ ~~Personalization features~~ — Tier 4 NOW INCLUDED per ADR D3 REVERTED v1.2 (Phase 4)
+- ❌ Skip FAANG infra discipline (Web Vitals + a11y CI + RUM) — v1.2 explicit (Phase 5)
+- ❌ Hardcoded English strings em components (G9 / ADR D9 — use intl primitives)
+- ❌ Per-page perf without budget gate (G1 / ADR D7 — Lighthouse CI per page)
 
 ## What this plan does NOT cover (out of scope)
 
@@ -992,9 +1296,38 @@ Risks identificados pelo /edge-case-plan que NÃO viram MUST FIX nem SHOULD TEST
 
 ## Edge-case-plan review reference
 
-Este plan v1.1 incorpora os 23 edge cases identificados em `docs/plans/2026-05-26-dashboard-faang-tier-3-edge-cases.md`:
+Este plan v1.2 incorpora os 23 edge cases identificados em `docs/plans/2026-05-26-dashboard-faang-tier-3-edge-cases.md`:
 - **9 MUST FIX** → 6 sub-tasks explícitas (T-DR-2.1.1, 2.7.1, 3.1.1, 3.2.1, 3.5.1+3.5.2, 3.8.1) + Phase 0 (T-DR-0.1, 0.2, 0.3)
 - **7 SHOULD TEST** → testes obrigatórios em TDD sections (EC-10..16)
 - **7 DOCUMENT** → "Known risks (documented)" section (EC-17..23 + EC-?? native notifications)
 
 Pattern sistêmico mais perigoso resolvido: **backend-prep gap** via Phase 0 obrigatório (ADR D6).
+
+## FAANG best practices revisão (v1.2) — 15 gaps incorporados
+
+Identificados na revisão v1.1 → v1.2 contra best practices FAANG (Vercel/Linear/Stripe patterns + Google Web Vitals):
+
+**CRITICAL (5) → endereçados em Phase 5 ou cross-cutting:**
+- **G1** Core Web Vitals per-page budget (LCP/INP/CLS/TBT) → ADR D7 + T-DR-5.1
+- **G3** Axe-core CI integration → T-DR-5.3
+- **G5** Bundle analyzer per-route → T-DR-5.5
+- **G6** Empty state taxonomy 3-tier → T-DR-2.4 expandido
+- **G7** Error boundaries per-section → T-DR-2.X cross-cutting
+
+**HIGH (4) → endereçados em Phase 4-5:**
+- **G2** Real User Monitoring (web-vitals npm pkg) → ADR D8 + T-DR-5.2
+- **G4** Storybook/Ladle para dashboard → T-DR-5.4
+- **G8** Search UX (debounce + virtualization) → T-DR-2.X cross-cutting
+- **G11** Tier 4 personalization → ADR D3 REVERTED + Phase 4 (5 tasks)
+
+**MEDIUM (4) → endereçados em Phase 3 ou Phase 5:**
+- **G9** i18n primitives architecture → ADR D9 + T-DR-5.6
+- **G10** Cross-browser matrix → DEFERRED (post-FAANG v1.x)
+- **G12** Telemetry/feature usage → T-DR-3.X cross-cutting
+- **G13** Design tokens deprecation strategy → T-DR-5.7
+
+**LOW (2) → deferred to post-FAANG:**
+- **G14** Service Worker / PWA → DEFERRED (acceptable per developer-tool audience)
+- **G15** Onboarding flow / first-run UX → DEFERRED (CLI-first cobre)
+
+**Coverage final v1.2:** 25 findings + 23 ECs + 15 FAANG gaps = **63 items endereçados** (43 implementados em phases + 20 explicitly deferred/documented em Known risks). Maior plan refactor da história do dashboard.
