@@ -243,7 +243,7 @@ var _ = Describe("Journey 12: Velero Backup & DR", Label("journey"), func() {
 		// Foreground execution; the script's own watchdog enforces the
 		// inner timeout (default 300s, here we cap with a Gomega outer).
 		cmd := exec.Command("bash",
-			"../../scripts/velero-dr-drill.sh",
+			"../../scripts/drill/velero-dr-drill.sh",
 			"--context", mgmtKubeContext,
 			"--dry-run")
 		out, err := cmd.CombinedOutput()

@@ -1121,6 +1121,6 @@ done
 
 log ""
 log "✓ Bootstrap complete. LoopZero platform deployed on drill 4-cluster stack."
-log "  Next: bash infra/scripts/drill-mint-jwt.sh"
+log "  Next: bash infra/scripts/drill/drill-mint-jwt.sh"
 log "  Then: bash infra/scripts/bootstrap-cell-{default,1,2}-cc-drill.sh"
 log "  Then: run L0+L1+L2 harness against drill cloud"

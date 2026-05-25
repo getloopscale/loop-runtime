@@ -33,7 +33,7 @@ MGMT_CONTEXT="${MGMT_CONTEXT:-k3d-loopzero-mgmt}"
 LOCK_FILE="/tmp/loopzero-regen-scoped-kubeconfig.lock"
 LOCK_FD=200
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
-LIB_SCOPED_KUBECONFIG="$SCRIPT_DIR/../helmfile/scripts/lib/scoped-kubeconfig.sh"
+LIB_SCOPED_KUBECONFIG="$SCRIPT_DIR/../../helmfile/scripts/lib/scoped-kubeconfig.sh"
 
 # Test hook: --fixture <dir> overrides cell enumeration (used by hermetic tests
 # to feed a synthetic ClusterCredential list without touching a real cluster).

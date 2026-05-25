@@ -560,8 +560,8 @@ tasks:
   networking:setup:
     desc: Connect k3d cluster networks so mgmt can reach workload/build clusters
     cmds:
-      - bash infra/scripts/setup-cross-cluster-networking.sh
-      - bash infra/scripts/update-cross-cluster-ips.sh
+      - bash infra/scripts/local/setup-cross-cluster-networking.sh
+      - bash infra/scripts/local/update-cross-cluster-ips.sh
 
   tokens:provision:
     desc: Provision API tokens (Gitea + ArgoCD) and build cluster kubeconfig

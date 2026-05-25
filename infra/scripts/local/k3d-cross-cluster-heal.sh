@@ -387,7 +387,7 @@ fi
 # ---------------------------------------------------------------------------
 log "H9: ensuring loopzero-build-cwts uses local registry"
 if command -v helm >/dev/null 2>&1; then
-  REPO_ROOT=$(cd "$(dirname "$0")/../.." && pwd)
+  REPO_ROOT=$(cd "$(dirname "$0")/../../.." && pwd)
   if [[ -d "$REPO_ROOT/charts/loopzero-build-cwts" ]]; then
     helm upgrade --kube-context "$BUILD_CTX" -n argo loopzero-build-cwts \
       "$REPO_ROOT/charts/loopzero-build-cwts" \
@@ -569,7 +569,7 @@ if [[ "$TOKEN_VALID" == "true" ]]; then
   log "  argocd-token already valid (exp=$EXP, now=$NOW)"
 else
   log "  argocd-token invalid/expired (exp=${EXP:-missing}); regenerating via provision-api-tokens.sh"
-  REPO_ROOT=$(cd "$(dirname "$0")/../.." && pwd)
+  REPO_ROOT=$(cd "$(dirname "$0")/../../.." && pwd)
   if [[ -x "$REPO_ROOT/infra/scripts/provision-api-tokens.sh" ]]; then
     bash "$REPO_ROOT/infra/scripts/provision-api-tokens.sh" >/dev/null 2>&1 \
       && log "  argocd-token regenerated (loopzero-api:apiKey, non-expiring)" \
@@ -612,7 +612,7 @@ fi
 if [[ "$CELL1_CONNECTED" == "true" ]]; then
   log "  ClusterCredential with spec.cellID=cell-1 already connected — skip"
 else
-  REPO_ROOT=$(cd "$(dirname "$0")/../.." && pwd)
+  REPO_ROOT=$(cd "$(dirname "$0")/../../.." && pwd)
   CC_LIB="$REPO_ROOT/infra/helmfile/scripts/lib/clustercredential-create.sh"
   SCOPED_LIB="$REPO_ROOT/infra/helmfile/scripts/lib/scoped-kubeconfig.sh"
   WORKLOAD_KUBECONFIG=$(mktemp)
@@ -810,7 +810,7 @@ EOF
   else
     # Mode B — bootstrap fresh CR (CR doesn't exist).
     log "  cell-2 CR absent — bootstrapping via clustercredential-create.sh"
-    REPO_ROOT_H14=$(cd "$(dirname "$0")/../.." && pwd)
+    REPO_ROOT_H14=$(cd "$(dirname "$0")/../../.." && pwd)
     CC_LIB_H14="$REPO_ROOT_H14/infra/helmfile/scripts/lib/clustercredential-create.sh"
     SCOPED_LIB_H14="$REPO_ROOT_H14/infra/helmfile/scripts/lib/scoped-kubeconfig.sh"
     RUNTIME2_KUBECONFIG=$(mktemp)
@@ -917,18 +917,18 @@ kubectl --context "$MGMT_CTX" -n argocd rollout status statefulset argocd-applic
 # ---------------------------------------------------------------------------
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 
-if [[ -x "$SCRIPT_DIR/build/build-and-push-loopzero-packs.sh" ]]; then
+if [[ -x "$SCRIPT_DIR/../build/build-and-push-loopzero-packs.sh" ]]; then
   log "H16: ensuring loopzero-packs-runner v0.4.0 in k3d-loopzero-registry"
-  if bash "$SCRIPT_DIR/build/build-and-push-loopzero-packs.sh" >/dev/null 2>&1; then
+  if bash "$SCRIPT_DIR/../build/build-and-push-loopzero-packs.sh" >/dev/null 2>&1; then
     log "  loopzero-packs-runner: v0.4.0 + latest published"
   else
     warn "  loopzero-packs-runner build/push failed — set LOOPZERO_PACKS_SRC=skip if you've pre-loaded the image"
   fi
 fi
 
-if [[ -x "$SCRIPT_DIR/build/build-and-push-dockerfile-lint.sh" ]]; then
+if [[ -x "$SCRIPT_DIR/../build/build-and-push-dockerfile-lint.sh" ]]; then
   log "H16: ensuring loopzero-dockerfile-lint v0.1.0 in k3d-loopzero-registry"
-  if bash "$SCRIPT_DIR/build/build-and-push-dockerfile-lint.sh" >/dev/null 2>&1; then
+  if bash "$SCRIPT_DIR/../build/build-and-push-dockerfile-lint.sh" >/dev/null 2>&1; then
     log "  loopzero-dockerfile-lint: v0.1.0 + latest published"
   else
     warn "  loopzero-dockerfile-lint build/push failed — workflow with build:dockerfile apps will fail"

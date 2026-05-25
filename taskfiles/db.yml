@@ -154,7 +154,7 @@ tasks:
   dev:ensure-project:
     desc: Create default project via API (triggers Tenant CR + ArgoCD Application)
     cmds:
-      - bash infra/scripts/ensure-project.sh
+      - bash infra/scripts/ci/ensure-project.sh
 
   # ---------------------------------------------------------------------------
   # S2: E2E seed data

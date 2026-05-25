@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# infra/scripts/bootstrap-seed-tenant-cr.sh
+# infra/scripts/local/bootstrap-seed-tenant-cr.sh
 #
 # B26 fix (real-paas-cleanroom-dogfood-loop iter 22, 2026-05-05):
 # bootstraps the Tenant CR for the seed tenant (tn-e2etest) in

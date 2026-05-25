@@ -156,7 +156,7 @@ spec:
             # silently no-ops (logger.Warn only) and Pods later fail with
             # CreateContainerConfigError ("secret X not found"). Mounted from
             # loopzero-cluster-kubeconfigs Secret (key: runtime.kubeconfig)
-            # written by infra/scripts/k3d-cross-cluster-heal.sh.
+            # written by infra/scripts/local/k3d-cross-cluster-heal.sh.
             - name: RUNTIME_KUBECONFIG
               value: "/etc/loopzero/runtime/kubeconfig"
             # B34 fix: the mounted kubeconfig (loopzero-cluster-kubeconfigs Secret /
