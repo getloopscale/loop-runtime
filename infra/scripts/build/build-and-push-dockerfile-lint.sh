@@ -23,7 +23,7 @@ REGISTRY_PORT="${LOOPZERO_REGISTRY_PORT:-5000}"
 REGISTRY_HOST="${LOOPZERO_REGISTRY_HOST:-localhost}"
 IMAGE_NAME="loopzero-dockerfile-lint"
 
-REPO_ROOT="$(cd "$(dirname "$0")/../.." && pwd)"
+REPO_ROOT="$(cd "$(dirname "$0")/../../.." && pwd)"
 SOURCE_DIR="${REPO_ROOT}/tools/loopzero-dockerfile-lint"
 
 log() { printf '[build-dockerfile-lint %s] %s\n' "$(date +%H:%M:%S)" "$*"; }
