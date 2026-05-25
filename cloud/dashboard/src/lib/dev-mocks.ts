@@ -23,8 +23,25 @@ export function useMocks(): boolean {
   return import.meta.env.VITE_USE_MOCKS === 'true';
 }
 
-/** Fixture: a fully-authenticated session with a verified email. */
-export function getMockSession(): Session {
+/**
+ * Logged-out mock mode — when both `VITE_USE_MOCKS=true` AND
+ * `VITE_MOCK_LOGGED_OUT=true`, `getMockSession()` returns null so auth
+ * pages (login, register, recovery, verification) render their forms
+ * instead of redirecting to / per useRequireAuth logic. Enables visual
+ * validation of all 5 auth surfaces without real Kratos. (Plan T-B.1, ADR-D2.)
+ */
+export function useMocksLoggedOut(): boolean {
+  return useMocks() && import.meta.env.VITE_MOCK_LOGGED_OUT === 'true';
+}
+
+/**
+ * Fixture: a fully-authenticated session with a verified email — UNLESS
+ * `VITE_MOCK_LOGGED_OUT=true`, in which case returns null to simulate
+ * "no session" (useRequireAuth then keeps user on /login or wherever they
+ * landed).
+ */
+export function getMockSession(): Session | null {
+  if (useMocksLoggedOut()) return null;
   return {
     active: true,
     identity: {
@@ -208,4 +225,204 @@ export function getMockResponse<T>(path: string): T | null {
   }
   // Structured clone so mutations in components don't poison the fixture
   return JSON.parse(JSON.stringify(fixture)) as T;
+}
+
+// ============================================================================
+// Kratos flow fixtures (T-B.2, EC-1, EC-7)
+// ============================================================================
+//
+// Auth pages (login, register, recovery, verification) hit Kratos self-service
+// endpoints via raw fetch. To enable visual validation of those 4 surfaces,
+// install a `fetch` interceptor that matches `/self-service/*` paths and
+// returns canned flow JSON without ever hitting the network.
+//
+// EC-1 (MUST FIX): submit responses MUST NEVER include `redirect_browser_to`
+// — that would cause the page handler to mutate `window.location.href` and
+// break the dev tour. Mock submit responses are flow-shaped objects only.
+//
+// EC-7: recovery flow has 2 phases (email → code). Verification flow needs
+// `state: 'passed_challenge'` after submit for success render. Both encoded
+// in MOCK_FLOWS below + the submit-response logic.
+
+/**
+ * Mock flow fixtures — one per Kratos self-service flow type. Each matches
+ * the Flow interface in lib/kratos.ts so consumers receive a structurally
+ * valid object.
+ */
+const MOCK_FLOWS: Record<string, unknown> = {
+  login: {
+    id: 'mock-login-flow',
+    type: 'browser',
+    ui: {
+      action: '#mock-submit-login',
+      method: 'POST',
+      nodes: [
+        { type: 'input', group: 'default', attributes: { name: 'csrf_token', type: 'hidden', value: 'mock-csrf' }, messages: [], meta: {} },
+        { type: 'input', group: 'password', attributes: { name: 'identifier', type: 'email', required: true }, messages: [], meta: { label: { text: 'Email' } } },
+        { type: 'input', group: 'password', attributes: { name: 'password', type: 'password', required: true }, messages: [], meta: { label: { text: 'Password' } } },
+      ],
+      messages: [],
+    },
+  },
+  registration: {
+    id: 'mock-registration-flow',
+    type: 'browser',
+    ui: {
+      action: '#mock-submit-registration',
+      method: 'POST',
+      nodes: [
+        { type: 'input', group: 'default', attributes: { name: 'csrf_token', type: 'hidden', value: 'mock-csrf' }, messages: [], meta: {} },
+        { type: 'input', group: 'password', attributes: { name: 'traits.email', type: 'email', required: true }, messages: [], meta: { label: { text: 'Email' } } },
+        { type: 'input', group: 'password', attributes: { name: 'traits.name', type: 'text' }, messages: [], meta: { label: { text: 'Name' } } },
+        { type: 'input', group: 'password', attributes: { name: 'password', type: 'password', required: true }, messages: [], meta: { label: { text: 'Password' } } },
+      ],
+      messages: [],
+    },
+  },
+  recovery: {
+    // EC-7 phase 1: email input
+    id: 'mock-recovery-flow',
+    type: 'browser',
+    state: 'choose_method',
+    ui: {
+      action: '#mock-submit-recovery',
+      method: 'POST',
+      nodes: [
+        { type: 'input', group: 'default', attributes: { name: 'csrf_token', type: 'hidden', value: 'mock-csrf' }, messages: [], meta: {} },
+        { type: 'input', group: 'code', attributes: { name: 'email', type: 'email', required: true }, messages: [], meta: { label: { text: 'Email' } } },
+      ],
+      messages: [],
+    },
+  },
+  verification: {
+    id: 'mock-verification-flow',
+    type: 'browser',
+    state: 'choose_method',
+    ui: {
+      action: '#mock-submit-verification',
+      method: 'POST',
+      nodes: [
+        { type: 'input', group: 'default', attributes: { name: 'csrf_token', type: 'hidden', value: 'mock-csrf' }, messages: [], meta: {} },
+        { type: 'input', group: 'code', attributes: { name: 'code', type: 'text', required: true }, messages: [], meta: { label: { text: 'Verification code' } } },
+      ],
+      messages: [],
+    },
+  },
+};
+
+/**
+ * Phase-transitioned recovery flow (EC-7) — after the user submits the email
+ * (phase 1), the flow advances to `state: 'sent_email'` with a `code` input
+ * that the user must type. After code submit, state advances to
+ * `passed_challenge` (success).
+ */
+const MOCK_RECOVERY_CODE_PHASE = {
+  id: 'mock-recovery-flow',
+  type: 'browser',
+  state: 'sent_email',
+  ui: {
+    action: '#mock-submit-recovery',
+    method: 'POST',
+    nodes: [
+      { type: 'input', group: 'default', attributes: { name: 'csrf_token', type: 'hidden', value: 'mock-csrf' }, messages: [], meta: {} },
+      { type: 'input', group: 'code', attributes: { name: 'code', type: 'text', required: true }, messages: [], meta: { label: { text: 'Recovery code' } } },
+    ],
+    messages: [{ id: 1060001, text: 'An email containing a recovery code has been sent.', type: 'info' }],
+  },
+};
+
+/**
+ * Install a fetch interceptor when running with VITE_USE_MOCKS=true.
+ * Intercepts only `/self-service/*` paths; all other fetches fall through.
+ *
+ * Called once at module-import time via the side-effect `installKratosMocks()`
+ * call below; idempotent re-install is safe.
+ *
+ * EC-1 invariant: response payloads NEVER include `redirect_browser_to`,
+ * preventing the page handler from mutating `window.location.href`.
+ */
+let originalFetch: typeof fetch | null = null;
+
+export function installKratosMocks(): void {
+  if (!useMocks()) return;
+  if (typeof window === 'undefined') return;          // not in browser
+  if (originalFetch !== null) return;                  // already installed
+  originalFetch = window.fetch.bind(window);
+
+  window.fetch = async (input: RequestInfo | URL, init?: RequestInit): Promise<Response> => {
+    const url = typeof input === 'string' ? input : input instanceof URL ? input.href : input.url;
+
+    // Pass through anything that's not a Kratos self-service path
+    if (!url.includes('/self-service/')) {
+      return originalFetch!(input, init);
+    }
+
+    // Pass through Kratos /sessions/whoami — handled by getMockSession() in auth.ts
+    if (url.includes('/sessions/whoami')) {
+      return originalFetch!(input, init);
+    }
+
+    // Match the flow type from the URL: /self-service/{type}/browser or .../flows
+    const match = url.match(/\/self-service\/([a-z]+)\//);
+    const flowType = match?.[1] ?? '';
+
+    let body: unknown;
+
+    if (url.includes('/browser') || url.includes('/flows?id=')) {
+      // GET flow init or load by ID
+      body = MOCK_FLOWS[flowType] ?? null;
+    } else {
+      // POST submit — EC-1: NEVER include redirect_browser_to
+      // EC-7: recovery phase transition (email → code → passed_challenge)
+      body = computeMockSubmitResponse(flowType, init?.body);
+    }
+
+    return new Response(JSON.stringify(body), {
+      status: 200,
+      headers: { 'Content-Type': 'application/json' },
+    });
+  };
+}
+
+/**
+ * Compute the mock response to a POST submit. EC-1 guarantee: NEVER returns
+ * `redirect_browser_to`. EC-7 guarantee: recovery transitions email→code,
+ * verification transitions to `passed_challenge`.
+ */
+function computeMockSubmitResponse(flowType: string, requestBody: unknown): unknown {
+  // Parse the request body if provided (JSON string)
+  let parsedBody: Record<string, unknown> = {};
+  if (typeof requestBody === 'string') {
+    try { parsedBody = JSON.parse(requestBody); } catch { /* ignore */ }
+  }
+
+  switch (flowType) {
+    case 'recovery':
+      // EC-7: phase 1 (email submit) → advance to code phase
+      // phase 2 (code submit) → passed_challenge
+      if ('email' in parsedBody) {
+        return MOCK_RECOVERY_CODE_PHASE;
+      }
+      if ('code' in parsedBody) {
+        return { state: 'passed_challenge', ui: { messages: [], nodes: [] } };
+      }
+      return MOCK_FLOWS.recovery;
+
+    case 'verification':
+      // EC-7: any submit → passed_challenge state (success)
+      return {
+        ...(MOCK_FLOWS.verification as object),
+        state: 'passed_challenge',
+      };
+
+    case 'login':
+    case 'registration':
+      // Generic acknowledgment — no session, no redirect, no errors.
+      // EC-1: explicitly omit redirect_browser_to + session fields so the
+      // page handler stays on the current route without mutation.
+      return MOCK_FLOWS[flowType];
+
+    default:
+      return null;
+  }
 }

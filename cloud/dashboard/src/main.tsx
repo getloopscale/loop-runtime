@@ -2,7 +2,13 @@ import { StrictMode } from 'react';
 import { createRoot } from 'react-dom/client';
 import { ThemeProvider, Toaster, violetForge } from '@loopzero/ui';
 import App from './app';
+import { installKratosMocks } from './lib/dev-mocks';
 import './index.css';
+
+// Install Kratos fetch interceptor for `/self-service/*` paths when
+// VITE_USE_MOCKS=true. No-op otherwise. See dev-mocks.ts for guarantees:
+// EC-1 (never mutates window.location), EC-7 (recovery phase transition).
+installKratosMocks();
 
 /**
  * Single-theme provider per D8 ADR (plan v1.2 T-H decision).
