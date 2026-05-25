@@ -27,7 +27,7 @@
     {
       "name": "03 — radix (transitive via @loopzero/ui)",
       "path": "dist/assets/radix-*.js",
-      "limit": "22 KB"
+      "limit": "26 KB"
     },
     {
       "name": "04 — vendor (misc transitive deps)",

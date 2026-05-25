@@ -3,11 +3,12 @@ import { Globe, Loader2, RefreshCw, Shield } from 'lucide-react';
 import {
   Badge,
   Button,
-  Card,
   CodeBlock,
   CopyButton,
+  DataTable,
   EmptyState,
   StatusDot,
+  type DataTableColumn,
   type StatusKind,
 } from '@loopzero/ui';
 import { ActionBar } from '@/components/layout';
@@ -64,6 +65,45 @@ function statusLabel(status: string): string {
   return map[status] ?? status;
 }
 
+/**
+ * DNS records inline expansion for pending_verification domains.
+ * Rendered via DataTable expandable row. Closes Deep Review § 2.4 P1
+ * inline-DNS-records pattern (DSS § 9.2).
+ */
+function DnsRecords({ domain }: { domain: Domain }) {
+  if (!domain.verification) return null;
+  return (
+    <div className="px-4 py-3 bg-muted/20 border-t border-border/40">
+      <p className="text-label text-muted-foreground mb-3">
+        Add these DNS records to activate your domain:
+      </p>
+      <div className="space-y-2">
+        <div className="flex items-center gap-2">
+          <Badge variant="outline" className="font-mono">CNAME</Badge>
+          <div className="flex-1 font-mono text-label text-foreground">
+            {domain.domain} → {domain.cname_target}
+          </div>
+          <CopyButton value={domain.cname_target} label="Copy" />
+        </div>
+        <div className="flex items-center gap-2">
+          <Badge variant="outline" className="font-mono">TXT</Badge>
+          <div className="flex-1 font-mono text-label text-foreground">
+            {domain.verification.txt_name} → {domain.verification.txt_value}
+          </div>
+          <CopyButton value={domain.verification.txt_value} label="Copy" />
+        </div>
+      </div>
+      <CodeBlock
+        caption="Or run via CLI:"
+        code={`loopzero domain verify ${domain.domain}`}
+        terminal
+        copyable
+        className="mt-3"
+      />
+    </div>
+  );
+}
+
 export function DomainsPage() {
   useRequireAuth();
   useSetPageTitle('Domains');
@@ -77,10 +117,10 @@ export function DomainsPage() {
     d.domain.toLowerCase().includes(searchQuery.toLowerCase()),
   );
 
-  const handleVerify = async (domain: string) => {
-    setVerifying(domain);
+  const handleVerify = async (domainName: string) => {
+    setVerifying(domainName);
     try {
-      await engineFetch(`/api/v1/domains/${encodeURIComponent(domain)}/verify`, {
+      await engineFetch(`/api/v1/domains/${encodeURIComponent(domainName)}/verify`, {
         method: 'POST',
       });
       window.location.reload();
@@ -88,6 +128,84 @@ export function DomainsPage() {
       setVerifying(null);
     }
   };
+
+  // DataTable column definitions per Brief #5 + DSS § 4.4 conventions.
+  const columns: DataTableColumn<Domain>[] = [
+    {
+      key: 'domain',
+      label: 'Domain',
+      sortable: true,
+      render: (d) => (
+        <div className="flex items-center gap-2">
+          <Globe className="size-4 text-muted-foreground shrink-0" aria-hidden="true" />
+          <span className="font-medium text-foreground">{d.domain}</span>
+          {d.tls?.status === 'issued' && (
+            <Badge variant="success" className="text-label">
+              <Shield className="size-3 mr-1" aria-hidden="true" />
+              TLS
+            </Badge>
+          )}
+        </div>
+      ),
+    },
+    {
+      key: 'project',
+      label: 'Project / App',
+      render: (d) => (
+        <span className="text-body-sm text-muted-foreground font-mono">
+          {d.project}/{d.app}
+        </span>
+      ),
+    },
+    {
+      key: 'environment',
+      label: 'Environment',
+      render: (d) => <span className="text-body-sm">{d.environment}</span>,
+    },
+    {
+      key: 'status',
+      label: 'Status',
+      sortable: true,
+      render: (d) => (
+        <StatusDot status={mapStatus(d.status)} label={statusLabel(d.status)} />
+      ),
+    },
+    {
+      key: 'verified_at',
+      label: 'Verified',
+      sortable: true,
+      render: (d) => (
+        <span className="text-body-sm text-muted-foreground tabular-nums">
+          {d.verified_at ? formatDate(d.verified_at, 'date') : '—'}
+        </span>
+      ),
+    },
+    {
+      // Inline Verify column (vs rowActions DropdownMenu wrap).
+      // Verify is contextual single-action (only when pending_verification) —
+      // hiding behind an ellipsis menu adds friction without information density gain.
+      key: '__verify',
+      label: '',
+      align: 'right',
+      render: (d) =>
+        d.status === 'pending_verification' ? (
+          <Button
+            size="sm"
+            variant="secondary"
+            disabled={verifying === d.domain}
+            onClick={() => handleVerify(d.domain)}
+            className="gap-1.5"
+          >
+            {verifying === d.domain ? (
+              <Loader2 className="size-3 animate-spin" aria-hidden="true" />
+            ) : (
+              <RefreshCw className="size-3" aria-hidden="true" />
+            )}
+            Verify
+          </Button>
+        ) : null,
+    },
+  ];
 
   return (
     <>
@@ -104,152 +222,35 @@ export function DomainsPage() {
         }}
       />
 
-      {loading ? (
-        <Card>
-          <Card.Body className="py-16 text-center">
-            <Loader2
-              className="mx-auto size-6 text-muted-foreground animate-spin"
-              aria-label="Loading domains"
-            />
-          </Card.Body>
-        </Card>
-      ) : filtered.length === 0 ? (
-        <EmptyState
-          icon={Globe}
-          title={
-            searchQuery
-              ? 'No matching domains'
-              : 'No custom domains configured'
-          }
-          description={
-            searchQuery ? (
-              <>Try a different search term.</>
-            ) : (
-              <>
-                Run{' '}
-                <code className="bg-muted px-2 py-0.5 rounded font-mono">
-                  loopzero domain add &lt;domain&gt;
-                </code>{' '}
-                to add one.
-              </>
-            )
-          }
-        />
-      ) : (
-        <div className="space-y-3">
-          {filtered.map((d) => (
-            <Card key={d.id}>
-              <Card.Body className="p-0">
-                <div className="flex items-center justify-between p-5">
-                  <div className="flex items-center gap-4">
-                    <div className="flex h-9 w-9 items-center justify-center rounded-lg bg-primary/5 border border-primary/10">
-                      <Globe
-                        className="size-4 text-primary"
-                        aria-hidden="true"
-                      />
-                    </div>
-                    <div>
-                      <div className="flex items-center gap-2">
-                        <span className="font-medium text-foreground">
-                          {d.domain}
-                        </span>
-                        <StatusDot
-                          status={mapStatus(d.status)}
-                          label={statusLabel(d.status)}
-                        />
-                        {d.tls?.status === 'issued' && (
-                          <Badge variant="success">
-                            <Shield
-                              className="size-3 mr-1"
-                              aria-hidden="true"
-                            />
-                            TLS
-                          </Badge>
-                        )}
-                      </div>
-                      <div className="flex items-center gap-3 mt-1 text-label text-muted-foreground">
-                        <span>
-                          {d.project}/{d.app}
-                        </span>
-                        <span>·</span>
-                        <span>{d.environment}</span>
-                        {d.verified_at && (
-                          <>
-                            <span>·</span>
-                            <span>
-                              Verified{' '}
-                              {formatDate(d.verified_at, 'date')}
-                            </span>
-                          </>
-                        )}
-                      </div>
-                    </div>
-                  </div>
-
-                  {d.status === 'pending_verification' && (
-                    <Button
-                      size="sm"
-                      variant="secondary"
-                      disabled={verifying === d.domain}
-                      onClick={() => handleVerify(d.domain)}
-                      className="gap-1.5"
-                    >
-                      {verifying === d.domain ? (
-                        <Loader2
-                          className="size-3 animate-spin"
-                          aria-hidden="true"
-                        />
-                      ) : (
-                        <RefreshCw className="size-3" aria-hidden="true" />
-                      )}
-                      Verify
-                    </Button>
-                  )}
-                </div>
-
-                {/* DNS records for pending domains (D-7: CopyButton + CodeBlock) */}
-                {d.status === 'pending_verification' && d.verification && (
-                  <div className="border-t border-border/40 px-5 py-4 bg-muted/20">
-                    <p className="text-label text-muted-foreground mb-3">
-                      Add these DNS records to activate your domain:
-                    </p>
-                    <div className="space-y-2">
-                      <div className="flex items-center gap-2">
-                        <Badge variant="outline" className="font-mono">
-                          CNAME
-                        </Badge>
-                        <div className="flex-1 font-mono text-label text-foreground">
-                          {d.domain} → {d.cname_target}
-                        </div>
-                        <CopyButton value={d.cname_target} label="Copy" />
-                      </div>
-                      <div className="flex items-center gap-2">
-                        <Badge variant="outline" className="font-mono">
-                          TXT
-                        </Badge>
-                        <div className="flex-1 font-mono text-label text-foreground">
-                          {d.verification.txt_name} → {d.verification.txt_value}
-                        </div>
-                        <CopyButton
-                          value={d.verification.txt_value}
-                          label="Copy"
-                        />
-                      </div>
-                    </div>
-                    <CodeBlock
-                      caption={`Or run via CLI:`}
-                      code={`loopzero domain verify ${d.domain}`}
-                      terminal
-                      copyable
-                      className="mt-3"
-                    />
-                  </div>
-                )}
-              </Card.Body>
-            </Card>
-          ))}
-        </div>
-      )}
+      <DataTable<Domain>
+        columns={columns}
+        data={filtered}
+        rowKey={(d) => d.id}
+        stickyHeader
+        // DSS § 9.2 inline DNS records — Brief #5 DataTable expandable closes
+        // Deep Review § 2.4 P1 (was card-grid with full-card expansion).
+        expandable={(d) => (d.status === 'pending_verification' ? <DnsRecords domain={d} /> : null)}
+        loading={loading}
+        emptyState={
+          <EmptyState
+            icon={Globe}
+            title={searchQuery ? 'No matching domains' : 'No custom domains configured'}
+            description={
+              searchQuery ? (
+                <>Try a different search term.</>
+              ) : (
+                <>
+                  Run{' '}
+                  <code className="bg-muted px-2 py-0.5 rounded font-mono">
+                    loopzero domain add &lt;domain&gt;
+                  </code>{' '}
+                  to add one.
+                </>
+              )
+            }
+          />
+        }
+      />
     </>
   );
 }

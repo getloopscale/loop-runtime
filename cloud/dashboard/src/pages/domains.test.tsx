@@ -1,4 +1,5 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
+import { userEvent } from '@testing-library/user-event';
 import { render, screen } from '@/test/render';
 
 vi.mock('@/hooks/use-auth', () => ({
@@ -58,7 +59,9 @@ describe('DomainsPage', () => {
     expect(screen.getByRole('button', { name: /add domain/i })).toBeInTheDocument();
   });
 
-  it('test_domains_dns_record_copy_button_works', () => {
+  it('test_domains_dns_record_copy_button_works', async () => {
+    // Post Brief #5 migration: DNS records live in DataTable expandable rows.
+    // Default state = collapsed → must click expand button before Copy buttons visible.
     mockUseEngineApi.mockReturnValue({
       data: {
         domains: [
@@ -79,15 +82,20 @@ describe('DomainsPage', () => {
       loading: false,
       error: false,
     });
+    const user = userEvent.setup();
     render(<DomainsPage />);
-    // 2 CopyButton instances (CNAME + TXT) — Brief #3 CopyButton primitive shipped 0.9.0-next.0
-    const copyButtons = screen.getAllByRole('button', { name: /copy/i });
-    expect(copyButtons.length).toBeGreaterThanOrEqual(2);
+    // Click DataTable expander on the pending row to reveal DNS records.
+    const expander = screen.getByRole('button', { name: /expand|toggle/i });
+    await user.click(expander);
+    // Now CNAME + TXT rows + 2 CopyButton instances (Brief #3 primitive)
     expect(screen.getByText('CNAME')).toBeInTheDocument();
     expect(screen.getByText('TXT')).toBeInTheDocument();
+    const copyButtons = screen.getAllByRole('button', { name: /copy/i });
+    expect(copyButtons.length).toBeGreaterThanOrEqual(2);
   });
 
   it('test_domains_verification_state_displays_correctly', () => {
+    // Post Brief #5: Verify button lives in DataTable rowActions column.
     mockUseEngineApi.mockReturnValue({
       data: {
         domains: [
@@ -110,6 +118,7 @@ describe('DomainsPage', () => {
     });
     render(<DomainsPage />);
     expect(screen.getByText('Pending DNS')).toBeInTheDocument();
+    // DataTable rowActions cell renders Verify button when status = pending_verification
     expect(screen.getByRole('button', { name: /^verify$/i })).toBeInTheDocument();
   });
 });
