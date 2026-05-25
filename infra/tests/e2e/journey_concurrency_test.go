@@ -1,12 +1,17 @@
 // SPDX-License-Identifier: Apache-2.0
 // Copyright 2025-2026 The LoopZero Authors
 
-// Edge Cases: Concurrency + Idempotency (T2.1)
+// Journey 14: Concurrency + Lock Discipline (absorbed from edge_concurrency
+// + failure_scenarios on 2026-05-25 per user mandate "manter somente os
+// dogfood full, absorva o que faz sentido").
 //
-// Expands on concurrent_deploy_test.go (which already covers 2-goroutine
-// same-env rejection + cross-env success).
-//
-// New scenarios: idempotency key replay, 3+ concurrent deploys, lock release recovery.
+// Validates contracts that historically lived in non-journey files but
+// describe REAL user-observable behavior:
+//   - Idempotency-Key replay (same body → cached; different body → 4xx)
+//   - 3 concurrent deploys: 1 wins (202), 2 rejected (exit 3)
+//   - Environment lock released after build completes (next deploy succeeds)
+//   - Sync timeout error path leaks no internal terms (Rule 3)
+//   - Health probe failure error path leaks no internal terms (Rule 3)
 package e2e
 
 import (
@@ -23,7 +28,7 @@ import (
 	. "github.com/onsi/gomega"
 )
 
-var _ = Describe("Edge: Concurrency + Idempotency", Label("edge-case"), func() {
+var _ = Describe("Journey 14: Concurrency + Lock Discipline", Label("journey"), func() {
 	var workDir string
 
 	BeforeEach(func() {
@@ -40,24 +45,11 @@ var _ = Describe("Edge: Concurrency + Idempotency", Label("edge-case"), func() {
 		}
 	})
 
-	// Plan T5.2 (2026-05-14, F-04 fix): split into two subtests reflecting
-	// the actual idempotency contract (Stripe-style): same key + same body
-	// = cached replay; same key + different body = HTTP 400 / 409 with
-	// IDEMPOTENCY_KEY_REUSED_DIFFERENT_BODY (or similar).
-	//
-	// Pre-fix: a single test sent different bodies (test bug — fixture
-	// flow varied each call) with same key, expected 200, got correct 400.
-	// Now we explicitly assert both branches.
-
-	It("idempotency replay (same body): returns cached response", func() {
+	It("Idempotency: same body returns cached response (same build_id)", func() {
 		idempotencyKey := fmt.Sprintf("ginkgo-idem-same-%s", uniqueSuffix())
-		// Unique project_id per subtest avoids collisions with concurrent
-		// in-flight deploys from other specs (env-lock would return 409
-		// even before idempotency middleware runs).
 		projectID := fmt.Sprintf("idem-same-%s", uniqueSuffix())
-
-		// Deterministic body so two calls are byte-identical.
-		body := fmt.Sprintf(`{"project_id":"%s","environment":"production","commit_sha":"%s"}`, projectID, uniqueSuffix())
+		body := fmt.Sprintf(`{"project_id":"%s","environment":"production","commit_sha":"%s"}`,
+			projectID, uniqueSuffix())
 
 		firstResp := postWithIdempotencyKey(body, idempotencyKey)
 		Expect(firstResp.StatusCode).To(SatisfyAny(Equal(200), Equal(201), Equal(202)),
@@ -66,31 +58,23 @@ var _ = Describe("Edge: Concurrency + Idempotency", Label("edge-case"), func() {
 		secondResp := postWithIdempotencyKey(body, idempotencyKey)
 		Expect(secondResp.StatusCode).To(SatisfyAny(Equal(200), Equal(201), Equal(202)),
 			"replay should return same status; got %d body=%s", secondResp.StatusCode, secondResp.RawBody)
-
 		Expect(secondResp.BuildID).To(Equal(firstResp.BuildID),
 			"idempotency replay should return same build_id")
 	})
 
-	It("idempotency replay (different body): returns 4xx with reused-key code", func() {
+	It("Idempotency: different body with same key returns 4xx", func() {
 		idempotencyKey := fmt.Sprintf("ginkgo-idem-diff-%s", uniqueSuffix())
-		// Unique project_id per subtest avoids cross-spec env-lock contention.
 		projectID := fmt.Sprintf("idem-diff-%s", uniqueSuffix())
-		commitA := uniqueSuffix()
-		commitB := uniqueSuffix()
 
-		bodyA := fmt.Sprintf(`{"project_id":"%s","environment":"production","commit_sha":"%s"}`, projectID, commitA)
-		bodyB := fmt.Sprintf(`{"project_id":"%s","environment":"production","commit_sha":"%s"}`, projectID, commitB)
+		bodyA := fmt.Sprintf(`{"project_id":"%s","environment":"production","commit_sha":"%s"}`,
+			projectID, uniqueSuffix())
+		bodyB := fmt.Sprintf(`{"project_id":"%s","environment":"production","commit_sha":"%s"}`,
+			projectID, uniqueSuffix())
 
 		firstResp := postWithIdempotencyKey(bodyA, idempotencyKey)
-		Expect(firstResp.StatusCode).To(SatisfyAny(Equal(200), Equal(201), Equal(202)),
-			"first call should succeed; got %d body=%s", firstResp.StatusCode, firstResp.RawBody)
+		Expect(firstResp.StatusCode).To(SatisfyAny(Equal(200), Equal(201), Equal(202)))
 
 		secondResp := postWithIdempotencyKey(bodyB, idempotencyKey)
-		// Accept either 409 (canonical idempotency-key reuse) or 400
-		// (validation failure) — both signal a violated contract; the
-		// important invariant is "NOT 2xx" (would imply silent body
-		// swap). Code string check is best-effort because the exact
-		// error code may evolve.
 		Expect(secondResp.StatusCode).To(SatisfyAny(Equal(400), Equal(409), Equal(422)),
 			"reuse with different body must NOT return 2xx; got %d body=%s",
 			secondResp.StatusCode, secondResp.RawBody)
@@ -101,7 +85,6 @@ var _ = Describe("Edge: Concurrency + Idempotency", Label("edge-case"), func() {
 		results := make(chan deployResult, 3)
 		var wg sync.WaitGroup
 
-		// Launch 3 concurrent deploys.
 		for i := 0; i < 3; i++ {
 			wg.Add(1)
 			go func() {
@@ -113,26 +96,17 @@ var _ = Describe("Edge: Concurrency + Idempotency", Label("edge-case"), func() {
 			}()
 		}
 
-		close(barrier) // Release all goroutines simultaneously.
+		close(barrier)
 
 		done := make(chan struct{})
-		go func() {
-			wg.Wait()
-			close(done)
-		}()
+		go func() { wg.Wait(); close(done) }()
 
 		select {
 		case <-done:
-		// Plan T5.1 (2026-05-14, G2 fix): 5min was too tight given real
-		// Argo Workflow + BuildKit run time on k3d (~5-7 min). Raise
-		// to 10min to accommodate end-to-end termination without
-		// flaking. The contract being tested (1 wins, N rejected) is
-		// timing-independent — extra margin doesn't weaken the test.
 		case <-time.After(10 * time.Minute):
 			Fail("timed out waiting for 3 concurrent deploys")
 		}
 
-		// Collect results.
 		var successes, rejections int
 		for i := 0; i < 3; i++ {
 			r := <-results
@@ -151,21 +125,43 @@ var _ = Describe("Edge: Concurrency + Idempotency", Label("edge-case"), func() {
 		Expect(rejections).To(Equal(2), "exactly 2 deploys should be rejected")
 	})
 
-	It("lock released after build completes, next deploy succeeds", func() {
-		// First deploy.
+	It("Environment lock released after build completes (next deploy succeeds)", func() {
 		buildID, _ := deployAndWaitSuccess(workDir, "production", deployTimeout)
 		Expect(buildID).NotTo(BeEmpty())
 
-		// Second deploy should succeed (lock released).
 		buildID2, _ := deployAndWaitSuccess(workDir, "production", deployTimeout)
 		Expect(buildID2).NotTo(BeEmpty())
-		Expect(buildID2).NotTo(Equal(buildID))
+		Expect(buildID2).NotTo(Equal(buildID),
+			"second deploy must produce distinct build_id (lock released, new build submitted)")
+	})
+
+	It("Sync timeout error path leaks no internal terms (Rule 3)", func() {
+		stdout, stderr, exitCode := runLoopZero("status",
+			"--project", "nonexistent-sync-test",
+			"--env", "production", "--json")
+
+		expectAllowedExitCode(exitCode, "status for sync timeout scenario")
+		assertNoForbiddenTermsInAll(map[string]string{
+			"sync timeout stdout": stdout,
+			"sync timeout stderr": stderr,
+		})
+	})
+
+	It("Health probe failure error path leaks no internal terms (Rule 3)", func() {
+		stdout, stderr, exitCode := runLoopZero("status",
+			"--project", "nonexistent-health-test",
+			"--env", "production", "--json")
+
+		expectAllowedExitCode(exitCode, "status for nonexistent project")
+		assertNoForbiddenTermsInAll(map[string]string{
+			"health probe stdout": stdout,
+			"health probe stderr": stderr,
+		})
 	})
 })
 
-// idempotencyResponse captures the result of an API call. Includes
-// RawBody for diagnostics on unexpected status codes (so failures show
-// the API's actual error message, not just the integer code).
+// idempotencyResponse captures the result of an Idempotency-Key API call.
+// Moved here from edge_concurrency_test.go on 2026-05-25 absorption.
 type idempotencyResponse struct {
 	StatusCode int
 	BuildID    string
@@ -173,8 +169,8 @@ type idempotencyResponse struct {
 }
 
 // postWithIdempotencyKey posts a raw JSON body to /api/v1/builds with the
-// given Idempotency-Key header. Used by T5.2 subtests (same body / diff
-// body) — caller controls body bytes for deterministic contract testing.
+// given Idempotency-Key header. Caller controls body bytes for deterministic
+// contract testing (same-body cached replay vs different-body 4xx).
 func postWithIdempotencyKey(body, key string) idempotencyResponse {
 	url := fmt.Sprintf("%s/api/v1/builds", apiURL())
 
