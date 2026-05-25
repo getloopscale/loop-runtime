@@ -1,12 +1,11 @@
 import { useState } from 'react';
-import { Card, CodeBlock, ConfirmDialog, DangerZone, Button } from '@loopzero/ui';
-import { ContentGrid } from '@/components/layout';
-import { useSetPageTitle } from '@/hooks/use-page-meta';
+import { Card, CodeBlock, ConfirmDialog, DangerZone, Button, PageShell } from '@loopzero/ui';
+import { usePageMeta } from '@/hooks/use-page-meta';
 import { useRequireAuth } from '@/hooks/use-auth';
 
 export function SettingsPage() {
   useRequireAuth();
-  useSetPageTitle('Settings');
+  const { setPageTitle } = usePageMeta();  // wire to PageShell.onTitleChange callback
 
   const [confirmOpen, setConfirmOpen] = useState(false);
   const [deleting, setDeleting] = useState(false);
@@ -23,7 +22,11 @@ export function SettingsPage() {
   };
 
   return (
-    <ContentGrid columns="1" gap={6}>
+    <PageShell
+      title="Settings"
+      description="Workspace configuration — CLI-first per DSS § 9.1."
+      onTitleChange={setPageTitle}
+    >
       <Card>
         <Card.Header>
           <Card.Title>CLI-First</Card.Title>
@@ -74,6 +77,6 @@ loopzero env create staging`}
         loading={deleting}
         onConfirm={handleDeleteTeam}
       />
-    </ContentGrid>
+    </PageShell>
   );
 }

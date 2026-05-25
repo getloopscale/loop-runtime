@@ -5,13 +5,14 @@ import {
   Alert,
   Button,
   Card,
+  PageShell,
   PlanBadge,
   UsageMeter,
   type PlanTier,
   type UsageMetric as UsageMeterMetric,
 } from '@loopzero/ui';
 import { ContentGrid } from '@/components/layout';
-import { useSetPageTitle } from '@/hooks/use-page-meta';
+import { usePageMeta } from '@/hooks/use-page-meta';
 import { useCloudApi } from '@/hooks/use-api';
 import { useRequireAuth } from '@/hooks/use-auth';
 import { cloudFetch } from '@/lib/api';
@@ -92,7 +93,7 @@ const PLAN_TIER_MAP: Record<string, PlanTier> = {
  */
 export function BillingPage() {
   useRequireAuth();
-  useSetPageTitle('Billing');
+  const { setPageTitle } = usePageMeta();
 
   const { data: initialBilling, loading } = useCloudApi<BillingResponse>('/v1/billing');
   const {
@@ -167,21 +168,8 @@ export function BillingPage() {
     ? billing.plan.charAt(0).toUpperCase() + billing.plan.slice(1)
     : 'Starter';
 
-  if (loading) {
-    return (
-      <Card>
-        <Card.Body className="py-16 text-center">
-          <Loader2
-            className="mx-auto size-6 text-muted-foreground animate-spin"
-            aria-label="Loading billing"
-          />
-        </Card.Body>
-      </Card>
-    );
-  }
-
   return (
-    <>
+    <PageShell title="Billing" onTitleChange={setPageTitle} loading={loading}>
       {/* Activation state alerts (§3.4 preserved) */}
       {activating && (
         <Alert
@@ -288,6 +276,6 @@ export function BillingPage() {
           />
         </section>
       )}
-    </>
+    </PageShell>
   );
 }

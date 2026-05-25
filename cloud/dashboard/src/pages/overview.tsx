@@ -6,11 +6,12 @@ import {
   Button,
   Card,
   EmptyState,
+  PageShell,
   ProjectCard,
   UsageMeter,
 } from '@loopzero/ui';
-import { ActionBar, ContentGrid } from '@/components/layout';
-import { useSetPageTitle } from '@/hooks/use-page-meta';
+import { ContentGrid } from '@/components/layout';
+import { usePageMeta } from '@/hooks/use-page-meta';
 import { useRequireAuth } from '@/hooks/use-auth';
 import { useProjects } from '@/hooks/use-projects';
 import { useCloudApi } from '@/hooks/use-api';
@@ -41,7 +42,7 @@ interface BillingResponse {
  */
 export function OverviewPage() {
   useRequireAuth();
-  useSetPageTitle('Overview');
+  const { setPageTitle } = usePageMeta();
   const navigate = useNavigate();
   const { projects, loading } = useProjects();
   const { data: billing } = useCloudApi<BillingResponse>('/v1/billing');
@@ -78,18 +79,20 @@ export function OverviewPage() {
   const requestsMetric = pickMetric('Edge Requests', 1_000_000);
 
   return (
-    <>
-      <ActionBar
-        searchPlaceholder="Search projects..."
-        searchValue={searchQuery}
-        onSearchChange={setSearchQuery}
-        primaryAction={{
-          label: 'Add New',
-          icon: Plus,
-          onClick: () => navigate('/projects'),
-        }}
-      />
-
+    <PageShell
+      title="Overview"
+      onTitleChange={setPageTitle}
+      search={{
+        placeholder: 'Search projects...',
+        value: searchQuery,
+        onChange: setSearchQuery,
+      }}
+      primaryAction={{
+        label: 'Add New',
+        icon: Plus,
+        onClick: () => navigate('/projects'),
+      }}
+    >
       <ContentGrid columns="2-asymmetric" gap={6}>
         {/* Left column — Usage + Alerts */}
         <div className="space-y-6">
@@ -205,6 +208,6 @@ export function OverviewPage() {
           </section>
         </div>
       </ContentGrid>
-    </>
+    </PageShell>
   );
 }

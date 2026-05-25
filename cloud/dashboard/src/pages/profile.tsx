@@ -6,16 +6,16 @@ import {
   Card,
   ConfirmDialog,
   DangerZone,
+  PageShell,
 } from '@loopzero/ui';
-import { ContentGrid } from '@/components/layout';
-import { useSetPageTitle } from '@/hooks/use-page-meta';
+import { usePageMeta } from '@/hooks/use-page-meta';
 import { useRequireAuth } from '@/hooks/use-auth';
 import { logout } from '@/lib/auth';
 import { maskEmail } from '@/lib/format';
 
 export function ProfilePage() {
   const session = useRequireAuth();
-  useSetPageTitle('Profile');
+  const { setPageTitle } = usePageMeta();
 
   const [confirmOpen, setConfirmOpen] = useState(false);
   const [deleting, setDeleting] = useState(false);
@@ -39,7 +39,7 @@ export function ProfilePage() {
   };
 
   return (
-    <ContentGrid columns="1" gap={6}>
+    <PageShell title="Profile" onTitleChange={setPageTitle}>
       <Card>
         <Card.Header>
           <Card.Title>Account</Card.Title>
@@ -107,6 +107,6 @@ export function ProfilePage() {
         loading={deleting}
         onConfirm={handleDeleteAccount}
       />
-    </ContentGrid>
+    </PageShell>
   );
 }
