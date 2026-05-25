@@ -34,7 +34,6 @@ export function TopBar({ showProjectSelector = true }: TopBarProps) {
     <header className="h-14 border-b border-border/40 flex items-center justify-between px-6">
       {shouldShowSelector ? (
         <Select
-          aria-label="Select project"
           defaultValue="all"
           onValueChange={(value) => {
             if (value === 'all') {
@@ -44,12 +43,21 @@ export function TopBar({ showProjectSelector = true }: TopBarProps) {
             }
           }}
         >
-          <option value="all">All Projects</option>
-          {projects.map((p) => (
-            <option key={p.name} value={p.name}>
-              {p.name}
-            </option>
-          ))}
+          <Select.Trigger aria-label="Select project" className="w-48">
+            <Select.Value placeholder="All Projects" />
+          </Select.Trigger>
+          <Select.Content>
+            <Select.Item value="all">All Projects</Select.Item>
+            {projects.map((p) => (
+              <Select.Item
+                key={p.name}
+                value={p.name}
+                className="truncate overflow-hidden"
+              >
+                {p.name}
+              </Select.Item>
+            ))}
+          </Select.Content>
         </Select>
       ) : (
         <div />
