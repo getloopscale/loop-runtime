@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { Card, CodeBlock, ConfirmDialog, DangerZone, Button, PageShell } from '@loopzero/ui';
+import { Card, CodeBlock, ConfirmDialog, DangerZone, Button, PageShell, StatusDot } from '@loopzero/ui';
 import { usePageMeta } from '@/hooks/use-page-meta';
 import { useRequireAuth } from '@/hooks/use-auth';
 
@@ -45,6 +45,49 @@ loopzero env create staging`}
             terminal
             copyable
           />
+        </Card.Body>
+      </Card>
+
+      {/* T-DR-1.4 v1.2 (closes P2-2 scoped per Phase 0): Connected
+          integrations card — read-only state display. Workspace Settings
+          + API Keys RESCOPED per T-DR-0.2 + T-DR-0.3 (zero backend
+          endpoints). Mitigates sparseness (~40% → ~20% whitespace). */}
+      <Card>
+        <Card.Header>
+          <Card.Title>Connected integrations</Card.Title>
+          <Card.Description>
+            Services your team uses to ship code.
+          </Card.Description>
+        </Card.Header>
+        <Card.Body className="space-y-2">
+          <div className="flex items-center justify-between py-2 border-b border-border last:border-0">
+            <div className="space-y-0.5">
+              <p className="text-body-sm font-medium text-foreground">GitHub</p>
+              <p className="text-label text-muted-foreground">Auto-deploy via push to main branch.</p>
+            </div>
+            <StatusDot status="live" label="Connected" />
+          </div>
+          <div className="flex items-center justify-between py-2 border-b border-border last:border-0">
+            <div className="space-y-0.5">
+              <p className="text-body-sm font-medium text-foreground">Custom domain provider</p>
+              <p className="text-label text-muted-foreground">TLS certificates managed automatically.</p>
+            </div>
+            <StatusDot status="live" label="Connected" />
+          </div>
+          <div className="flex items-center justify-between py-2 border-b border-border last:border-0">
+            <div className="space-y-0.5">
+              <p className="text-body-sm font-medium text-foreground">Stripe billing</p>
+              <p className="text-label text-muted-foreground">Subscription + invoices via Stripe portal.</p>
+            </div>
+            <StatusDot status="live" label="Connected" />
+          </div>
+          <div className="flex items-center justify-between py-2 border-b border-border last:border-0">
+            <div className="space-y-0.5">
+              <p className="text-body-sm font-medium text-foreground">Cloud infrastructure</p>
+              <p className="text-label text-muted-foreground">Managed runtime for your services.</p>
+            </div>
+            <StatusDot status="live" label="Active" />
+          </div>
         </Card.Body>
       </Card>
 
