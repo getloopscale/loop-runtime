@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# infra/scripts/build-and-push-dockerfile-lint.sh
+# infra/scripts/build/build-and-push-dockerfile-lint.sh
 #
 # build-mode-dispatch-and-dockerfile-security-plan T3.3 (2026-05-07).
 #
@@ -11,7 +11,7 @@
 # cleanroom dogfood loop.
 #
 # Usage:
-#   bash infra/scripts/build-and-push-dockerfile-lint.sh
+#   bash infra/scripts/build/build-and-push-dockerfile-lint.sh
 #
 # SPDX-License-Identifier: Apache-2.0
 # Copyright 2025-2026 The LoopZero Authors

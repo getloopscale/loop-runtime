@@ -697,7 +697,7 @@ tasks:
         # Dockerfile.generate (lenient contract — copies user Dockerfile
         # verbatim, exits 0). Tags as :v0.4.0 AND :latest. Idempotent.
         if [ -d /home/paulo/loopzero-packs ]; then
-          bash infra/scripts/build-and-push-loopzero-packs.sh
+          bash infra/scripts/build/build-and-push-loopzero-packs.sh
         else
           echo "  /home/paulo/loopzero-packs not present — fallback to legacy stub"
           docker build -t localhost:5000/loopzero-packs-runner:latest infra/images/packs-runner/
@@ -715,7 +715,7 @@ tasks:
         # keys, seccomp/apparmor unconfined) on user Dockerfiles BEFORE
         # BuildKit consumes them. API env LOOPZERO_DOCKERFILE_LINT_IMAGE
         # points to :v0.1.0. Idempotent.
-        bash infra/scripts/build-and-push-dockerfile-lint.sh
+        bash infra/scripts/build/build-and-push-dockerfile-lint.sh
 
   images:build:syft-scanner:
     desc: Build + push loopzero-syft-scanner (Sprint 6 SBOM generation)

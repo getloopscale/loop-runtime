@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# infra/scripts/build-and-push-loopzero-packs.sh
+# infra/scripts/build/build-and-push-loopzero-packs.sh
 #
 # build-mode-dispatch-and-dockerfile-security-plan T3.3 (2026-05-07).
 #
@@ -12,7 +12,7 @@
 # is missing OR when cluster registry is unreachable.
 #
 # Usage:
-#   bash infra/scripts/build-and-push-loopzero-packs.sh         # build + push
+#   bash infra/scripts/build/build-and-push-loopzero-packs.sh         # build + push
 #   LOOPZERO_PACKS_SRC=/path/to/loopzero-packs bash ...sh            # custom path
 #   LOOPZERO_PACKS_SRC=skip bash ...sh                           # skip if image already present
 #
