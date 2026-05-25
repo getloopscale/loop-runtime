@@ -33,6 +33,7 @@ import (
 	"github.com/loopzero/loopzero/pkg/quality/decisionsdeletion"
 	"github.com/loopzero/loopzero/pkg/quality/divergencematrix"
 	"github.com/loopzero/loopzero/pkg/quality/dockerfilemirror"
+	"github.com/loopzero/loopzero/pkg/quality/drillcredisolation"
 	"github.com/loopzero/loopzero/pkg/quality/drilloutputs"
 	"github.com/loopzero/loopzero/pkg/quality/gitdiff"
 	"github.com/loopzero/loopzero/pkg/quality/helmdiffstructural"
@@ -282,6 +283,8 @@ func runQuality(args []string) int {
 		return runScriptCount(args[1:])
 	case "regression-matrix":
 		return runRegressionMatrix(args[1:])
+	case "drill-creds-isolation":
+		return runDrillCredsIsolation(args[1:])
 	case "migration-test-coverage":
 		return runMigrationTestCoverage(args[1:])
 	case "pkg-usage-matrix":
@@ -737,6 +740,28 @@ func runRegressionMatrix(args []string) int {
 	}
 	fmt.Println("regression-matrix: PASS")
 	return 0
+}
+
+// runDrillCredsIsolation is the pure-logic port of
+// infra/scripts/check-drill-credentials-isolation.sh (MIGRATE-GO-PUREFN). It
+// reads the DRILL_*/prod token env vars and verifies no DRILL_* token equals
+// its prod counterpart (catastrophic per D7). Exit: 0 safe / 1 catastrophic /
+// 2 missing.
+func runDrillCredsIsolation(_ []string) int {
+	r := drillcredisolation.Check(drillcredisolation.Env{
+		DrillDO:         os.Getenv("DRILL_DO_TOKEN"),
+		DigitalOcean:    os.Getenv("DIGITALOCEAN_TOKEN"),
+		DO:              os.Getenv("DO_TOKEN"),
+		DrillPulumi:     os.Getenv("DRILL_PULUMI_TOKEN"),
+		PulumiAccess:    os.Getenv("PULUMI_ACCESS_TOKEN"),
+		DrillCF:         os.Getenv("DRILL_CF_TOKEN"),
+		CloudflareAPI:   os.Getenv("CLOUDFLARE_API_TOKEN"),
+		RequireIsolated: os.Getenv("DRILL_REQUIRE_ISOLATED_TOKENS"),
+	})
+	for _, m := range r.Messages {
+		fmt.Fprintf(os.Stderr, "[drill-creds-isolation] %s\n", m)
+	}
+	return r.ExitCode
 }
 
 // runMigrationTestCoverage is the gate replacing migration_test_coverage.sh:
