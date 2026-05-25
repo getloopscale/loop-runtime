@@ -42,10 +42,13 @@ describe('ProjectsPage', () => {
   });
 
   it('test_projects_loading_state_renders_skeleton', () => {
+    // Post Brief #5 migration: DataTable loading state renders 5 skeleton
+    // rows (replaced standalone Loader2 spinner with built-in skeleton).
+    // Skeleton elements have `aria-busy="true"` or role="status".
     mockUseProjects.mockReturnValue({ projects: [], loading: true });
-    render(<ProjectsPage />);
-    // Loader2 has aria-label="Loading projects" per ProjectsPage source
-    expect(screen.getByLabelText('Loading projects')).toBeInTheDocument();
+    const { container } = render(<ProjectsPage />);
+    // DataTable renders skeleton with aria-busy on body
+    expect(container.querySelector('[aria-busy="true"], [role="status"]')).toBeInTheDocument();
   });
 
   it('test_projects_search_filters_by_name', async () => {
