@@ -66,7 +66,7 @@ set -euo pipefail
 #         change → cached 24h token in cell-default-kubeconfig Secret returns
 #         401 "the server has asked for the client to provide credentials".
 #         Detection: connected=false. Fix: mint fresh `kubectl create token`,
-#         patch Secret data.kubeconfig (preserves CA + in-cluster server URL).
+#         patch Secret data.kubeconfig (refreshes CA from kube-root-ca.crt + server URL).
 #
 #   H12 — ClusterCredential cell-1 missing despite cells SQL row status=active.
 #         Discovered LIVE 2026-05-01 (regression matrix entry 153): cells
@@ -650,7 +650,7 @@ fi
 #
 # Fix: detect connected=false on cell-default, mint fresh 24h SA token via
 # `kubectl create token`, patch the Secret data.kubeconfig with new token
-# (preserves CA + server fields). Controller probes ~30-60s later.
+# (refreshes CA from live kube-root-ca.crt + server). Controller probes ~30-60s later.
 # Idempotent (skips if already connected).
 # ---------------------------------------------------------------------------
 log "H13: ensuring ClusterCredential cell-default has valid SA token"
@@ -680,11 +680,22 @@ else
   if [[ -z "$H13_NEW_TOKEN" ]]; then
     warn "kubectl create token loopzero-system/default failed — manual SA recovery required"
   else
-    H13_CA=$(kubectl --context "$MGMT_CTX" -n loopzero-system get secret cell-default-kubeconfig \
-      -o jsonpath='{.data.kubeconfig}' 2>/dev/null | base64 -d 2>/dev/null \
-      | grep "certificate-authority-data:" | awk '{print $2}' || echo "")
+    # Source the CA from the LIVE in-cluster kube-root-ca.crt ConfigMap — this is
+    # the authoritative CA that signs the kubernetes.default.svc serving cert.
+    # k3s rotates its server CA across cluster restarts, so the CA cached in the
+    # Secret goes stale (different `k3s-server-ca@<ts>` generation) and the
+    # controller's TLS probe fails with "x509: certificate signed by unknown
+    # authority" even with a fresh SA token. Refresh the CA from the ConfigMap;
+    # fall back to the Secret's CA only if the ConfigMap is unreadable.
+    H13_CA=$(kubectl --context "$MGMT_CTX" -n loopzero-system get configmap kube-root-ca.crt \
+      -o jsonpath='{.data.ca\.crt}' 2>/dev/null | base64 -w0 2>/dev/null || echo "")
     if [[ -z "$H13_CA" ]]; then
-      warn "cell-default-kubeconfig Secret missing or malformed — cannot extract CA"
+      H13_CA=$(kubectl --context "$MGMT_CTX" -n loopzero-system get secret cell-default-kubeconfig \
+        -o jsonpath='{.data.kubeconfig}' 2>/dev/null | base64 -d 2>/dev/null \
+        | grep "certificate-authority-data:" | awk '{print $2}' || echo "")
+    fi
+    if [[ -z "$H13_CA" ]]; then
+      warn "cell-default CA unavailable (kube-root-ca.crt ConfigMap + Secret both missing)"
     else
       H13_KUBECONFIG_B64=$(cat <<EOF | base64 -w0
 apiVersion: v1
