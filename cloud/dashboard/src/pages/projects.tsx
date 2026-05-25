@@ -1,8 +1,9 @@
 import { useState } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { Link } from 'react-router-dom';
 import { ExternalLink, FolderKanban, Plus } from 'lucide-react';
 import {
   Badge,
+  Button,
   DataTable,
   EmptyState,
   StatusDot,
@@ -34,7 +35,6 @@ interface ProjectRow {
 export function ProjectsPage() {
   useRequireAuth();
   useSetPageTitle('Projects');
-  const navigate = useNavigate();
   const { projects, loading } = useProjects();
   const [searchQuery, setSearchQuery] = useState('');
 
@@ -62,6 +62,7 @@ export function ProjectsPage() {
       key: 'framework',
       label: 'Framework',
       sortable: true,
+      className: 'hidden md:table-cell',
       render: (r) =>
         r.framework ? (
           <Badge variant="outline" className="text-label uppercase">{r.framework}</Badge>
@@ -74,6 +75,7 @@ export function ProjectsPage() {
       label: 'Apps',
       sortable: true,
       align: 'right',
+      className: 'hidden md:table-cell',
       render: (r) => (
         <span className="text-body-sm text-muted-foreground tabular-nums">
           {r.apps_count}
@@ -83,6 +85,7 @@ export function ProjectsPage() {
     {
       key: 'environment',
       label: 'Environment',
+      className: 'hidden md:table-cell',
       render: (r) => (
         <span className="text-body-sm text-muted-foreground">{r.environment ?? '—'}</span>
       ),
@@ -107,17 +110,11 @@ export function ProjectsPage() {
       label: '',
       align: 'right',
       render: (r) => (
-        <button
-          type="button"
-          onClick={(e) => {
-            e.stopPropagation();
-            navigate(`/projects/${r.name}`);
-          }}
-          className="inline-flex items-center gap-1 text-label text-primary hover:text-primary-deep focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 rounded px-1"
-          aria-label={`Open ${r.name}`}
-        >
-          Open <ExternalLink className="size-3" aria-hidden="true" />
-        </button>
+        <Button variant="ghost" size="sm" asChild>
+          <Link to={`/projects/${r.name}`} aria-label={`Open ${r.name}`}>
+            Open <ExternalLink className="size-3" aria-hidden="true" />
+          </Link>
+        </Button>
       ),
     },
   ];

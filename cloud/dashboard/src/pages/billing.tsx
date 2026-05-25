@@ -209,7 +209,7 @@ export function BillingPage() {
                   Current Plan
                 </p>
                 <div className="flex items-center gap-3">
-                  <h2 className="font-display text-display-md font-bold text-foreground">
+                  <h2 className="font-display text-display-md text-foreground">
                     {planLabel}
                   </h2>
                   <PlanBadge plan={planTier} />
