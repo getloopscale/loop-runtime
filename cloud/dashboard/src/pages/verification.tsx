@@ -112,7 +112,8 @@ export function VerificationPage() {
                   Your account is now fully active.
                 </p>
               </div>
-              <Button asChild variant="primary" size="lg" className="w-full justify-center">
+              <Button asChild variant="primary" size="lg"
+ className="w-full justify-center">
                 <a href="/">Go to dashboard</a>
               </Button>
             </>
@@ -130,7 +131,8 @@ export function VerificationPage() {
                 </h1>
                 <p className="text-body-sm text-muted-foreground">{error}</p>
               </div>
-              <Button asChild variant="primary" size="lg" className="w-full justify-center">
+              <Button asChild variant="primary" size="lg"
+ className="w-full justify-center">
                 <a href="/">Go to dashboard</a>
               </Button>
             </>
@@ -150,6 +152,7 @@ export function VerificationPage() {
               {error && <Alert intent="destructive" title={error} />}
               <form onSubmit={handleSubmit} className="space-y-4">
                 <Input
+                  size="lg"
                   type="text"
                   value={code}
                   onChange={(e) => setCode(e.target.value)}

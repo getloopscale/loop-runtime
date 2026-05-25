@@ -253,6 +253,7 @@ export function LoginPage() {
           {/* Email/password form */}
           <form onSubmit={submitPassword} className="space-y-3">
             <Input
+              size="lg"
               type="email"
               value={email}
               onChange={(e) => setEmail(e.target.value)}
@@ -262,6 +263,7 @@ export function LoginPage() {
               aria-label="Email"
             />
             <Input
+              size="lg"
               type="password"
               value={password}
               onChange={(e) => setPassword(e.target.value)}

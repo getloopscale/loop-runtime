@@ -114,6 +114,7 @@ export function RecoveryPage() {
               {errorMessage && <Alert intent="destructive" title={errorMessage} />}
               <form onSubmit={handleEmailSubmit} className="space-y-4">
                 <Input
+                  size="lg"
                   type="email"
                   value={email}
                   onChange={(e) => setEmail(e.target.value)}
@@ -148,6 +149,7 @@ export function RecoveryPage() {
               {errorMessage && <Alert intent="destructive" title={errorMessage} />}
               <form onSubmit={handleCodeSubmit} className="space-y-4">
                 <Input
+                  size="lg"
                   type="text"
                   value={code}
                   onChange={(e) => setCode(e.target.value)}
@@ -183,7 +185,8 @@ export function RecoveryPage() {
                   Your password has been updated. You can now sign in.
                 </p>
               </div>
-              <Button asChild variant="primary" size="lg" className="w-full justify-center">
+              <Button asChild variant="primary" size="lg"
+ className="w-full justify-center">
                 <Link to="/login">Sign in</Link>
               </Button>
             </div>

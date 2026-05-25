@@ -223,6 +223,7 @@ export function RegisterPage() {
 
           <form onSubmit={submitPassword} className="space-y-3">
             <Input
+              size="lg"
               type="text"
               value={name}
               onChange={(e) => setName(e.target.value)}
@@ -231,6 +232,7 @@ export function RegisterPage() {
               aria-label="Name"
             />
             <Input
+              size="lg"
               type="email"
               value={email}
               onChange={(e) => setEmail(e.target.value)}
@@ -240,6 +242,7 @@ export function RegisterPage() {
               aria-label="Email"
             />
             <Input
+              size="lg"
               type="password"
               value={password}
               onChange={(e) => setPassword(e.target.value)}
