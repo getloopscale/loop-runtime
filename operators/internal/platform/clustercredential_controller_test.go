@@ -444,6 +444,96 @@ var _ = Describe("ClusterCredentialController", Ordered, func() {
 		})
 	})
 
+	Context("TLS insecure mode (issue #67)", func() {
+		// Regression for github.com/getloopscale/loopzero#67: when a CR declares
+		// spec.tls.insecure=true (the supported way to bypass TLS verification
+		// for development clusters with self-signed certs), the rendered
+		// ArgoCD cluster Secret MUST have config.tlsClientConfig.insecure=true.
+		//
+		// Pre-fix root cause: bootstrap scripts (bootstrap-cell-cc-common.sh,
+		// clustercredential-create.sh) created CRs WITHOUT tls.insecure, so
+		// CR.Spec.TLS.Insecure defaulted to false → reconciler wrote Secret
+		// with insecure=false + stale caData → ArgoCD x509 errors after k3s
+		// rotated its server CA. Reactive workaround (heal H19 patching the
+		// Secret) was overwritten by the next reconcile of this same loop.
+		//
+		// Fix: declarative — bash scripts set spec.tls.insecure=true for
+		// k3d-local CRs; this test proves the reconciler honors the flag
+		// and idempotency preserves it across reconciles.
+		It("propagates spec.tls.insecure=true to Secret config AND preserves across reconciles", func() {
+			secretName := "cc-tls-insecure-secret"
+			envtestURL := cfg.Host
+			kubeconfigData := buildEnvtestKubeconfigBytes()
+
+			secret := &corev1.Secret{
+				ObjectMeta: metav1.ObjectMeta{
+					Name:      secretName,
+					Namespace: "default",
+				},
+				Data: map[string][]byte{
+					"kubeconfig": kubeconfigData,
+				},
+			}
+			Expect(k8sClient.Create(ctx, secret)).To(Succeed())
+
+			cr := newClusterCredential(
+				"cc-tls-insecure", "default",
+				"workload-tls-insecure", envtestURL,
+				secretName, "default",
+			)
+			cr.Spec.TLS.Insecure = true
+			Expect(k8sClient.Create(ctx, cr)).To(Succeed())
+
+			argoSecretName := fmt.Sprintf("cluster-%s", "workload-tls-insecure")
+
+			// Wait for first reconciliation to write Secret with insecure=true.
+			Eventually(func(g Gomega) {
+				var argoSecret corev1.Secret
+				g.Expect(k8sClient.Get(ctx, types.NamespacedName{
+					Name:      argoSecretName,
+					Namespace: argoCDNamespace,
+				}, &argoSecret)).To(Succeed())
+
+				configRaw := argoSecret.Data["config"]
+				var argoCfg struct {
+					TLSClientConfig struct {
+						Insecure bool   `json:"insecure"`
+						CAData   string `json:"caData,omitempty"`
+					} `json:"tlsClientConfig"`
+				}
+				g.Expect(json.Unmarshal(configRaw, &argoCfg)).To(Succeed())
+				g.Expect(argoCfg.TLSClientConfig.Insecure).To(BeTrue(),
+					"spec.tls.insecure=true must propagate to Secret config.tlsClientConfig.insecure")
+			}, 30*time.Second, interval).Should(Succeed())
+
+			// Critical regression assertion: Consistently, across the
+			// reconciler's natural re-runs (Secret watcher + connectivity
+			// requeue), the insecure flag stays true. This is the test
+			// that would have caught the original bug — when a heal patch
+			// flipped insecure to true externally, the next reconcile
+			// rewrote the Secret from CR.Spec (which had insecure=false
+			// because scripts didn't set it). With the fix, CR.Spec is
+			// the source-of-truth AND it carries insecure=true.
+			Consistently(func(g Gomega) {
+				var argoSecret corev1.Secret
+				g.Expect(k8sClient.Get(ctx, types.NamespacedName{
+					Name:      argoSecretName,
+					Namespace: argoCDNamespace,
+				}, &argoSecret)).To(Succeed())
+
+				configRaw := argoSecret.Data["config"]
+				var argoCfg struct {
+					TLSClientConfig struct {
+						Insecure bool `json:"insecure"`
+					} `json:"tlsClientConfig"`
+				}
+				g.Expect(json.Unmarshal(configRaw, &argoCfg)).To(Succeed())
+				g.Expect(argoCfg.TLSClientConfig.Insecure).To(BeTrue(),
+					"insecure flag must persist across reconciles — operator MUST NOT regress to false")
+			}, 5*time.Second, interval).Should(Succeed())
+		})
+	})
+
 	Context("idempotency", func() {
 		It("should not change state when reconciled multiple times with same input", func() {
 			secretName := "cc-idempotent-secret"

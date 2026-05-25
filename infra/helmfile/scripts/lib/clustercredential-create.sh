@@ -31,6 +31,12 @@
 #   INGRESS_DOMAIN     loopzero.io/ingress-domain label value (default: empty)
 #   ARGOCD_SCOPE       "true" | "false" (default: true) — enables CC.spec.scope.argocd
 #   OPERATORS_SCOPE    "true" | "false" (default: true)
+#   TLS_INSECURE       "true" | "false" (default: false). Sets
+#                      CC.spec.tls.insecure — required for k3d-local clusters
+#                      whose self-signed CAs rotate across container restarts
+#                      (issue #67). Production (DOKS, Droplet) must leave it
+#                      false to enforce TLS verification with the CA bundled
+#                      in the kubeconfig.
 #
 # Idempotent: re-running with same args produces same end state
 # (kubectl apply patches existing).
@@ -52,6 +58,14 @@ LOOPZERO_NS="${LOOPZERO_NS:-loopzero-system}"
 INGRESS_DOMAIN="${INGRESS_DOMAIN:-}"
 ARGOCD_SCOPE="${ARGOCD_SCOPE:-true}"
 OPERATORS_SCOPE="${OPERATORS_SCOPE:-true}"
+TLS_INSECURE="${TLS_INSECURE:-false}"
+
+# Validate TLS_INSECURE strictly — anything but "true"/"false" is a caller bug
+# we want to surface, not silently coerce.
+case "$TLS_INSECURE" in
+  true|false) ;;
+  *) fail "TLS_INSECURE must be 'true' or 'false' (got: '$TLS_INSECURE')" 1 ;;
+esac
 
 log() { printf '[cc-create] %s\n' "$*" >&2; }
 fail() { log "ERROR: $*"; exit "${2:-1}"; }
@@ -150,7 +164,8 @@ spec:
   scope:
     argocd: ${ARGOCD_SCOPE}
     operators: ${OPERATORS_SCOPE}
-  tls: {}
+  tls:
+    insecure: ${TLS_INSECURE}
 EOF
 
 log "applied — controller will probe within 60s; check via:"

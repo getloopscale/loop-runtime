@@ -905,6 +905,27 @@ fi
 # tlsClientConfig.insecure:true (same local-k3d posture as H3) so a rotated
 # CA can't wedge GitOps. Discovered LIVE 2026-05-25 (dogfood Journey 05
 # staging HTTP 200 timeout root-caused to cluster-cell-default stale CA).
+# Issue #67 (2026-05-25): the previous H19 patched only the rendered Secret
+# in argocd namespace, but the ClusterCredential reconciler in
+# loopzero-platform-operator rewrites that Secret from CR.spec.tls.insecure on
+# every reconcile loop (Secret watcher, periodic recheck, or any CC edit).
+# Within minutes of H19 running, the Secret reverted to insecure:false and
+# x509 came back. Fix the source of truth — flip spec.tls.insecure on the
+# CR itself so the operator's next reconcile WRITES insecure:true into the
+# Secret instead of overwriting our patch.
+log "H19a: hardening ClusterCredential CRs (spec.tls.insecure=true — declarative source of truth)"
+H19A_PATCHED=0
+for H19A_CR in $(kubectl --context "$MGMT_CTX" -n loopzero-system get clustercredentials -o name 2>/dev/null \
+  | sed 's#clustercredential.loopzero.io/##'); do
+  H19A_CURRENT=$(kubectl --context "$MGMT_CTX" -n loopzero-system get clustercredential "$H19A_CR" \
+    -o jsonpath='{.spec.tls.insecure}' 2>/dev/null || echo "")
+  if [[ "$H19A_CURRENT" == "true" ]]; then continue; fi
+  kubectl --context "$MGMT_CTX" -n loopzero-system patch clustercredential "$H19A_CR" \
+    --type=merge -p '{"spec":{"tls":{"insecure":true}}}' >/dev/null 2>&1 \
+    && { log "  $H19A_CR → spec.tls.insecure=true"; H19A_PATCHED=1; } \
+    || warn "  $H19A_CR patch failed"
+done
+
 log "H19: hardening ArgoCD cell cluster Secrets against stale CA (insecure for local k3d)"
 H19_PATCHED=0
 for H19_SECRET in $(kubectl --context "$MGMT_CTX" -n argocd get secrets \

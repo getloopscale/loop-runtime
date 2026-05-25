@@ -35,6 +35,19 @@ fi
 # via LOOPZERO_INGRESS_DOMAIN env var. Local k3d sets loopzero.local via heal script.
 INGRESS_DOMAIN_VAL="${LOOPZERO_INGRESS_DOMAIN:-dev.loopzero.example}"
 
+# Issue #67: local k3d uses self-signed CAs that rotate across k3s container
+# restarts (server CA in /var/lib/rancher/k3s/server/tls/server-ca.crt is
+# regenerated). The signal for k3d-local is INGRESS_DOMAIN=loopzero.local (set
+# explicitly by the local heal script and never used in prod/dev). When local,
+# render the CR with spec.tls.insecure=true so the ArgoCD cluster Secret
+# doesn't bind to a CA that becomes stale. Prod (DOKS, Droplet) keeps
+# insecure=false to enforce TLS verification with the kubeconfig's CA.
+TLS_INSECURE_VAL="false"
+if [[ "$INGRESS_DOMAIN_VAL" == "loopzero.local" ]]; then
+  TLS_INSECURE_VAL="true"
+  log "k3d-local detected (ingress-domain=loopzero.local) — rendering ClusterCredential CRs with spec.tls.insecure=true (issue #67)"
+fi
+
 if [[ -n "${LOOPZERO_RUNTIME_KUBECONFIG:-}" ]]; then
   log "wiring runtime cluster..."
   SCOPED=$(KUBECONFIG="$LOOPZERO_RUNTIME_KUBECONFIG" "$SCRIPT_DIR/lib/scoped-kubeconfig.sh" runtime "$LOOPZERO_RUNTIME_KUBECONFIG")
@@ -45,6 +58,7 @@ if [[ -n "${LOOPZERO_RUNTIME_KUBECONFIG:-}" ]]; then
   # lib script directly) — preserves wire-clusters.sh idempotency intent.
   KUBECONFIG="$LOOPZERO_MGMT_KUBECONFIG" \
     INGRESS_DOMAIN="$INGRESS_DOMAIN_VAL" \
+    TLS_INSECURE="$TLS_INSECURE_VAL" \
     "$SCRIPT_DIR/lib/clustercredential-create.sh" \
     cell-1 runtime "$SCOPED" \
     || log "WARN: ClusterCredential cell-1 creation failed (continuing)"
@@ -60,6 +74,7 @@ if [[ -n "${LOOPZERO_RUNTIME2_KUBECONFIG:-}" ]]; then
   # T1.3: same INGRESS_DOMAIN as cell-1 — required for C7 (re-pin without DNS).
   KUBECONFIG="$LOOPZERO_MGMT_KUBECONFIG" \
     INGRESS_DOMAIN="$INGRESS_DOMAIN_VAL" \
+    TLS_INSECURE="$TLS_INSECURE_VAL" \
     "$SCRIPT_DIR/lib/clustercredential-create.sh" \
     cell-2 runtime-2 "$SCOPED" \
     || log "WARN: ClusterCredential cell-2 creation failed (continuing)"

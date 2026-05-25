@@ -125,6 +125,16 @@ spec:
   secretRef:
     name: ${SECRET_NAME}
     namespace: ${NS}
+  # Issue #67: this script bootstraps k3d-local cells whose k3s servers use
+  # self-signed CAs that rotate across container restarts. Without
+  # insecure:true, the ArgoCD cluster Secret stores caData from the initial
+  # kubeconfig and rejects subsequent connections with x509 "certificate
+  # signed by unknown authority" — silently breaking deploy/promote/rollback.
+  # Declarative source-of-truth on the CR eliminates the previous reactive
+  # workaround (heal H19 patching the rendered Secret and being overwritten
+  # by the next reconcile).
+  tls:
+    insecure: true
 YAML
     return 0
   fi
@@ -155,6 +165,16 @@ spec:
   secretRef:
     name: ${SECRET_NAME}
     namespace: ${NS}
+  # Issue #67: this script bootstraps k3d-local cells whose k3s servers use
+  # self-signed CAs that rotate across container restarts. Without
+  # insecure:true, the ArgoCD cluster Secret stores caData from the initial
+  # kubeconfig and rejects subsequent connections with x509 "certificate
+  # signed by unknown authority" — silently breaking deploy/promote/rollback.
+  # Declarative source-of-truth on the CR eliminates the previous reactive
+  # workaround (heal H19 patching the rendered Secret and being overwritten
+  # by the next reconcile).
+  tls:
+    insecure: true
 YAML
 
   log_cell "applied: CC ${CELL_ID} -> ${SECRET_NAME} -> https://${TARGET_IP}:6443 (k3d cluster: loopzero-${K3D_CLUSTER})"
