@@ -12,8 +12,8 @@
 #   - Active builds + active ArgoCD app sync state
 #
 # Usage:
-#   bash infra/scripts/chaos/baseline.sh <scenario-id> [--duration 5m]
-#   bash infra/scripts/chaos/baseline.sh C01 --duration 2m
+#   bash infra/scripts/test/baseline.sh <scenario-id> [--duration 5m]
+#   bash infra/scripts/test/baseline.sh C01 --duration 2m
 #
 # Exit codes:
 #   0 — baseline captured successfully (JSON written to /tmp/chaos-baseline-{scenario}-{ts}.json)
