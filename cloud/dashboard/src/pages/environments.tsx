@@ -1,8 +1,7 @@
 import { useState } from 'react';
-import { Box, Loader2, Lock } from 'lucide-react';
-import { Card, EmptyState, StatusDot, Table } from '@loopzero/ui';
-import { ActionBar } from '@/components/layout';
-import { useSetPageTitle } from '@/hooks/use-page-meta';
+import { Box, Lock } from 'lucide-react';
+import { Card, PageShell, StatusDot, Table } from '@loopzero/ui';
+import { usePageMeta } from '@/hooks/use-page-meta';
 import { useEngineApi } from '@/hooks/use-api';
 import { useRequireAuth } from '@/hooks/use-auth';
 
@@ -56,7 +55,7 @@ function statusLabel(s?: string): string {
 
 export function EnvironmentsPage() {
   useRequireAuth();
-  useSetPageTitle('Environments');
+  const { setPageTitle } = usePageMeta();
   const { data, loading } = useEngineApi<EnvsResponse>('/api/v1/environments');
   const [searchQuery, setSearchQuery] = useState('');
 
@@ -66,85 +65,74 @@ export function EnvironmentsPage() {
   );
 
   return (
-    <>
-      <ActionBar
-        searchPlaceholder="Search environments..."
-        searchValue={searchQuery}
-        onSearchChange={setSearchQuery}
-      />
-
-      {loading ? (
-        <Card>
-          <Card.Body className="py-16 text-center">
-            <Loader2
-              className="mx-auto size-6 text-muted-foreground animate-spin"
-              aria-label="Loading environments"
-            />
-          </Card.Body>
-        </Card>
-      ) : filtered.length === 0 ? (
-        <EmptyState
-          icon={Box}
-          title={
-            searchQuery ? 'No matching environments' : 'No environments yet'
-          }
-          description={
-            searchQuery ? (
-              <>Try a different search term.</>
-            ) : (
-              <>Environments are created automatically per project on first deploy.</>
-            )
-          }
-        />
-      ) : (
-        <Card>
-          <Card.Body className="p-0">
-            <Table>
-              <Table.Header>
-                <Table.Row>
-                  <Table.HeaderCell>Name</Table.HeaderCell>
-                  <Table.HeaderCell>Domain</Table.HeaderCell>
-                  <Table.HeaderCell align="right">Projects</Table.HeaderCell>
-                  <Table.HeaderCell>Status</Table.HeaderCell>
-                  <Table.HeaderCell>Protected</Table.HeaderCell>
+    <PageShell
+      title="Environments"
+      onTitleChange={setPageTitle}
+      search={{
+        placeholder: 'Search environments...',
+        value: searchQuery,
+        onChange: setSearchQuery,
+      }}
+      loading={loading}
+      empty={
+        !loading && filtered.length === 0
+          ? {
+              icon: Box,
+              title: searchQuery ? 'No matching environments' : 'No environments yet',
+              description: searchQuery
+                ? 'Try a different search term.'
+                : 'Environments are created automatically per project on first deploy.',
+            }
+          : undefined
+      }
+    >
+      <Card>
+        <Card.Body className="p-0">
+          <Table>
+            <Table.Header>
+              <Table.Row>
+                <Table.HeaderCell>Name</Table.HeaderCell>
+                <Table.HeaderCell className="hidden md:table-cell">Domain</Table.HeaderCell>
+                <Table.HeaderCell align="right" className="hidden md:table-cell">Projects</Table.HeaderCell>
+                <Table.HeaderCell>Status</Table.HeaderCell>
+                <Table.HeaderCell className="hidden md:table-cell">Protected</Table.HeaderCell>
+              </Table.Row>
+            </Table.Header>
+            <Table.Body>
+              {filtered.map((env) => (
+                <Table.Row key={env.name}>
+                  <Table.Cell>
+                    <span className="font-mono text-body-sm text-foreground">
+                      {env.name}
+                    </span>
+                  </Table.Cell>
+                  <Table.Cell className="hidden md:table-cell">
+                    <span className="font-mono text-label text-muted-foreground">
+                      {env.domain ?? '—'}
+                    </span>
+                  </Table.Cell>
+                  <Table.Cell align="right" numeric className="hidden md:table-cell">
+                    {env.projects ?? 0}
+                  </Table.Cell>
+                  <Table.Cell>
+                    <StatusDot status={mapStatus(env.status)} label={statusLabel(env.status)} />
+                  </Table.Cell>
+                  <Table.Cell className="hidden md:table-cell">
+                    {env.protected ? (
+                      <span className="inline-flex items-center gap-1 text-warning text-label">
+                        <Lock className="size-3" aria-hidden="true" />
+                        Protected
+                      </span>
+                    ) : (
+                      <span className="text-muted-foreground text-label">—</span>
+                    )}
+                  </Table.Cell>
                 </Table.Row>
-              </Table.Header>
-              <Table.Body>
-                {filtered.map((env) => (
-                  <Table.Row key={env.name}>
-                    <Table.Cell>
-                      <span className="font-mono text-body-sm text-foreground">
-                        {env.name}
-                      </span>
-                    </Table.Cell>
-                    <Table.Cell>
-                      <span className="font-mono text-label text-muted-foreground">
-                        {env.domain ?? '—'}
-                      </span>
-                    </Table.Cell>
-                    <Table.Cell align="right" numeric>
-                      {env.projects ?? 0}
-                    </Table.Cell>
-                    <Table.Cell>
-                      <StatusDot status={mapStatus(env.status)} label={statusLabel(env.status)} />
-                    </Table.Cell>
-                    <Table.Cell>
-                      {env.protected ? (
-                        <span className="inline-flex items-center gap-1 text-warning text-label">
-                          <Lock className="size-3" aria-hidden="true" />
-                          Protected
-                        </span>
-                      ) : (
-                        <span className="text-muted-foreground text-label">—</span>
-                      )}
-                    </Table.Cell>
-                  </Table.Row>
-                ))}
-              </Table.Body>
-            </Table>
-          </Card.Body>
-        </Card>
-      )}
-    </>
+              ))}
+            </Table.Body>
+          </Table>
+        </Card.Body>
+      </Card>
+    </PageShell>
   );
 }

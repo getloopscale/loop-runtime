@@ -4,6 +4,7 @@ import {
   Avatar,
   Button,
   Card,
+  CodeBlock,
   ConfirmDialog,
   DangerZone,
   PageShell,
@@ -41,9 +42,16 @@ export function ProfilePage() {
   return (
     <PageShell title="Profile" onTitleChange={setPageTitle}>
       <Card>
-        <Card.Header>
-          <Card.Title>Account</Card.Title>
-          <Card.Description>Your identity and session info.</Card.Description>
+        <Card.Header className="flex flex-row items-start justify-between gap-4">
+          <div>
+            <Card.Title>Account</Card.Title>
+            <Card.Description>Your identity and session info.</Card.Description>
+          </div>
+          {/* T-DR-1.5 v1.2: Sign out moved to Account card header (right-aligned),
+              eliminates 45px 1-button Card anti-pattern (closes P2-3). */}
+          <Button variant="secondary" size="sm" onClick={logout}>
+            Sign out
+          </Button>
         </Card.Header>
         <Card.Body className="space-y-4">
           <div className="flex items-center gap-4">
@@ -69,11 +77,22 @@ export function ProfilePage() {
         </Card.Body>
       </Card>
 
+      {/* T-DR-1.5 v1.2 + ADR D4: CLI signature card mitigates P2-4 sparseness
+          (~38% whitespace below). CLI-first per DSS § 9.1. */}
       <Card>
+        <Card.Header>
+          <Card.Title>Or use the CLI</Card.Title>
+          <Card.Description>Profile actions are also available via terminal.</Card.Description>
+        </Card.Header>
         <Card.Body>
-          <Button variant="secondary" onClick={logout} className="w-full justify-center">
-            Sign out
-          </Button>
+          <CodeBlock
+            caption="Common profile commands"
+            code={`loopzero whoami
+loopzero logout
+loopzero account delete`}
+            terminal
+            copyable
+          />
         </Card.Body>
       </Card>
 

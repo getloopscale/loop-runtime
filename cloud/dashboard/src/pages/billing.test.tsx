@@ -105,8 +105,28 @@ describe('BillingPage', () => {
     });
     render(<BillingPage />);
     expect(screen.getByText('Usage This Period')).toBeInTheDocument();
-    // Metric labels are humanized: "Build Minutes", "Bandwidth Mb"
-    expect(screen.getByText('Build Minutes')).toBeInTheDocument();
-    expect(screen.getByText('Bandwidth Mb')).toBeInTheDocument();
+    // T-DR-1.3 v1.2: metric labels now appear in BOTH places (Plan card
+    // quota Includes section + UsageMeter). Use getAllByText for ambiguity.
+    expect(screen.getAllByText('Build Minutes').length).toBeGreaterThanOrEqual(1);
+    expect(screen.getAllByText('Bandwidth Mb').length).toBeGreaterThanOrEqual(1);
+  });
+
+  it('test_billing_plan_card_renders_quota_summary_v12', () => {
+    // T-DR-1.3 v1.2 (closes P2-1): Plan card now shows "Includes" quota
+    // summary inline (drawn from billing.usage map).
+    mockUseCloudApi.mockReturnValue({
+      data: {
+        plan: 'pro',
+        team: 'acme',
+        usage: {
+          build_minutes: { used: 120, limit: 500 },
+          bandwidth_mb: { used: 1000, limit: 10000 },
+        },
+      },
+      loading: false,
+      error: false,
+    });
+    render(<BillingPage />);
+    expect(screen.getByText('Includes')).toBeInTheDocument();
   });
 });

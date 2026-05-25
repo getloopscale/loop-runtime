@@ -235,6 +235,24 @@ export function BillingPage() {
                 )}
               </Button>
             </div>
+            {/* T-DR-1.3 v1.2 (closes P2-1): quota summary inline. Backend
+                /v1/billing.payment_method.last4 + period_end RESCOPED per
+                Phase 0 T-DR-0.1 verdict. Quota lines come from billing.usage. */}
+            {billing?.usage && Object.keys(billing.usage).length > 0 && (
+              <div className="border-t border-border pt-4 mt-2 space-y-1.5">
+                <p className="text-label-caps text-muted-foreground uppercase tracking-wider mb-2">
+                  Includes
+                </p>
+                {Object.entries(billing.usage).slice(0, 4).map(([key, data]) => (
+                  <div key={key} className="flex justify-between text-body-sm">
+                    <span className="text-muted-foreground">{key.replace(/_/g, ' ').replace(/\b\w/g, (c) => c.toUpperCase())}</span>
+                    <span className="font-mono text-foreground tabular-nums">
+                      {data.limit === null ? 'Unlimited' : formatNumber(data.limit, 'grouped')}
+                    </span>
+                  </div>
+                ))}
+              </div>
+            )}
           </Card.Body>
         </Card>
 
