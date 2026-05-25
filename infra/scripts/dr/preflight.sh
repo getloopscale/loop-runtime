@@ -251,17 +251,21 @@ fi
 # isolation check would just re-report the same missing-token symptom with
 # misleading "collision" interpretation.
 log "Check 3/4: D7' advisory mode (credentials isolation)..."
-ISO_SCRIPT="infra/scripts/check-drill-credentials-isolation.sh"
-if [[ ! -x "$ISO_SCRIPT" ]]; then
-  log "  ✗ Isolation script missing: $ISO_SCRIPT"
-  record "advisory_mode" "FAIL" "isolation-script-missing"
-  [[ "$EXIT_CODE" -eq 0 ]] && EXIT_CODE=3
-elif [[ "${MISSING_TOKENS[*]:-}" == *"DIGITALOCEAN_TOKEN"* ]]; then
+# Migrated to the Go gate `loopzero-ops quality drill-creds-isolation`
+# (pkg/quality/drillcredisolation) — same tri-state exit contract:
+# 0 OK / 1 catastrophic / 2 missing. The bash check-drill-credentials-isolation.sh
+# was deleted (MIGRATE-GO-PUREFN). See docs/operations/infra-scripts-catalog.md.
+if [[ "${MISSING_TOKENS[*]:-}" == *"DIGITALOCEAN_TOKEN"* ]]; then
   log "  ⊘ Skipped (DIGITALOCEAN_TOKEN missing — covered by check 1)"
   record "advisory_mode" "SKIP" "no-do-token-check-1-covered"
 else
+  PF_REPO_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/../../.." && pwd)"
   set +e
-  bash "$ISO_SCRIPT" >/dev/null 2>&1
+  if command -v loopzero-ops >/dev/null 2>&1; then
+    loopzero-ops quality drill-creds-isolation >/dev/null 2>&1
+  else
+    ( cd "$PF_REPO_ROOT/cmd/loopzero-ops" && go run . quality drill-creds-isolation ) >/dev/null 2>&1
+  fi
   ISO_RC=$?
   set -e
   case "$ISO_RC" in

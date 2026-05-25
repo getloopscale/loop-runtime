@@ -1,6 +1,8 @@
 # infra/scripts — Catálogo de Scripts (utilidade + criticidade + impacto-PROD)
 
-> Catálogo de referência dos **52 scripts** em `infra/scripts/` (recursivo).
+> Catálogo de referência dos **51 scripts** em `infra/scripts/` (recursivo).
+> (`check-drill-credentials-isolation.sh` migrado para Go em 2026-05-24 →
+> `loopzero-ops quality drill-creds-isolation`; bash deletado.)
 > Criado 2026-05-24. Colunas: utilidade, criticidade, ambiente/impacto-PROD,
 > LOC·última-mod, quem invoca, disposição allowlist.
 >
@@ -69,7 +71,6 @@ o drill (gate de maturidade `a`), os gates de qualidade, ou a publicação de im
 | `dr-drill.sh` | Orquestração do DR drill | **ALTO** | **DRILL** — isolado | 297 · 05-21 | Task, script | DELEGATE-ARGOCD |
 | `drill-helmfile-bootstrap.sh` | Bootstrap prod-identical do drill (provisioning) | **CRÍTICO** | **DRILL** — isolado | 1126 · 05-21 | Task, SKILL | DELEGATE-HELMFILE |
 | `drill-mint-jwt.sh` | Minta JWT do drill via Hydra; assert TTL≥7200s | **ALTO** | **DRILL** — isolado | 300 · 05-23 | Task, SKILL, script | KEEP-OPERATOR |
-| `check-drill-credentials-isolation.sh` | Verifica isolamento creds drill vs prod (D7) | **MÉDIO** | **DRILL** — isolado | 125 · 05-21 | script | MIGRATE-GO-PUREFN |
 | `velero-dr-drill.sh` | Drill de backup/restore Velero (T4.2) | **ALTO** | **DRILL** — isolado | 413 · 05-06 | operador | REVIEW-NEEDED |
 | `pkg-soak-smoke.sh` | Soak smoke de `pkg/` vs localhost:13001 | **MÉDIO** | **TEST-CI** — local | 161 · 05-04 | Task | KEEP-OPERATOR |
 
