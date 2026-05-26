@@ -1,6 +1,8 @@
 # Plan: Live CA Fetch from `kube-root-ca.crt` on ClusterCredential Reconcile (Op B)
 
-> **Version 1.2** — Eliminates the entire class of "stale `caData` in ArgoCD cluster Secret" bugs (root cause behind closed issues #66 and #67) by making the `ClusterCredentialReconciler` fetch the live cluster CA from the target cluster's `kube-root-ca.crt` ConfigMap on every reconcile, instead of relying on the kubeconfig caData snapshot captured at bootstrap. Op (A) shipped in commit `40580a0b` is a local-only workaround (`spec.tls.insecure=true` for k3d cells); Op (B) makes both local AND prod share the same self-healing mechanism, achieves true CTO Rule 0 local↔prod parity, and unblocks future scenarios (DOKS CA rotation incidents, Enterprise multi-cell on-prem clusters with TLS verification required). Expected outcome: heal scripts H19/H19a become unnecessary; no manual operator intervention required when any target cluster rotates its CA.
+> **Version 1.3** — Eliminates the entire class of "stale `caData` in ArgoCD cluster Secret" bugs (root cause behind closed issues #66 and #67) by making the `ClusterCredentialReconciler` fetch the live cluster CA from the target cluster's `kube-root-ca.crt` ConfigMap on every reconcile, instead of relying on the kubeconfig caData snapshot captured at bootstrap. Op (A) shipped in commit `40580a0b` is a local-only workaround (`spec.tls.insecure=true` for k3d cells); Op (B) makes both local AND prod share the same self-healing mechanism, achieves true CTO Rule 0 local↔prod parity, and unblocks future scenarios (DOKS CA rotation incidents, Enterprise multi-cell on-prem clusters with TLS verification required). Expected outcome: heal scripts H19/H19a become unnecessary; no manual operator intervention required when any target cluster rotates its CA.
+>
+> **v1.3 amendment (2026-05-26):** T5.1 formally deferred to operator post-soak session per MEET-ASYNC-AMENDMENT-2026-05-26-op-b-t5-1-deferral (ratification pending). Rationale: 7-day soak is calendar elapsed time, not engineering blocker. All in-scope engineering tasks (T0-T4, T5.0, T6) **CONCLUDED + LIVE-validated**: chaos 10/10 + dogfood 112/0 + envtest 27/27 + Op B counter+fingerprint match LIVE. ADR D6 added documenting the deferral.
 
 ## Amendments
 
@@ -868,6 +870,12 @@ VERIFY:  bash infra/scripts/local/validate-op-b-soak.sh --days 7
 ---
 
 ### T5.1 — Delete H19 + H19a from heal script after 7-day stable soak
+
+**STATUS (v1.3, 2026-05-26): DEFERRED-TO-OPERATOR-POST-SOAK** per
+MEET-ASYNC-AMENDMENT-2026-05-26-op-b-t5-1-deferral + ADR D6. Out of scope for
+the current Ralph completion-promise; in scope for a future operator session
+once the 7-day soak window has elapsed AND `bash infra/scripts/local/validate-op-b-soak.sh --days 7`
+exits 0.
 
 #### Objective
 Remove the H19 (Secret patch) and H19a (CR patch) blocks from `infra/scripts/local/k3d-cross-cluster-heal.sh`. They become dead code once Op (B) is proven self-healing.
