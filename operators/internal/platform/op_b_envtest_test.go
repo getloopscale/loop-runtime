@@ -30,6 +30,7 @@ import (
 	. "github.com/onsi/gomega"
 
 	corev1 "k8s.io/api/core/v1"
+	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/types"
 	"k8s.io/client-go/tools/clientcmd"
@@ -104,8 +105,21 @@ func decodeOpBSecretCAData(s *corev1.Secret) string {
 	return string(decoded)
 }
 
-var _ = Describe("Op B: Live CA fetch (issue #67 follow-up)", func() {
+var _ = Describe("Op B: Live CA fetch (issue #67 follow-up)", Ordered, func() {
 	const argoNS = "argocd"
+
+	BeforeAll(func() {
+		// Op B reconciler writes the ArgoCD cluster Secret into the "argocd"
+		// namespace — envtest doesn't pre-create namespaces, so we ensure it
+		// exists once for the whole Describe (idempotent: AlreadyExists is OK
+		// because clustercredential_controller_test.go's BeforeAll may have
+		// already created it within the same suite run).
+		ns := &corev1.Namespace{ObjectMeta: metav1.ObjectMeta{Name: argoNS}}
+		err := k8sClient.Create(ctx, ns)
+		if err != nil && !apierrors.IsAlreadyExists(err) {
+			Expect(err).NotTo(HaveOccurred())
+		}
+	})
 
 	mkOpBCRAndSecret := func(name string) (*loopzerov1.ClusterCredential, *corev1.Secret, []byte) {
 		secretName := fmt.Sprintf("%s-secret", name)
