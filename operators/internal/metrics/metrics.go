@@ -3,9 +3,20 @@
 
 // Package metrics provides custom Prometheus metrics for operator controllers.
 // All metrics follow the loopzero_operator_ prefix convention for Grafana dashboards.
+//
+// Registration target: controller-runtime's metrics.Registry (NOT the default
+// prometheus registry). The operator's metricsserver.Options serves only from
+// the controller-runtime registry; metrics registered in
+// prometheus.DefaultRegisterer would silently never appear in the /metrics
+// endpoint. Discovered LIVE 2026-05-25 during Op B validation when the new
+// loopzero_clustercredential_ca_fetch_total counter didn't show up despite the
+// counter object being created and Inc()'d.
 package metrics
 
-import "github.com/prometheus/client_golang/prometheus"
+import (
+	"github.com/prometheus/client_golang/prometheus"
+	ctrlmetrics "sigs.k8s.io/controller-runtime/pkg/metrics"
+)
 
 var (
 	// ReconcileDuration measures the duration of each reconcile loop in seconds.
@@ -194,7 +205,7 @@ var (
 )
 
 func init() {
-	prometheus.MustRegister(
+	ctrlmetrics.Registry.MustRegister(
 		ReconcileDuration,
 		ReconcileErrors,
 		ReconcileTotal,
