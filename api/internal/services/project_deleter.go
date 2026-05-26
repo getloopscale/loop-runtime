@@ -5,12 +5,14 @@ package services
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"log/slog"
 	"time"
 
 	"github.com/loopzero/loopzero/api/internal/db"
 	"github.com/loopzero/loopzero/api/internal/domain"
+	loopzeroerrors "github.com/loopzero/loopzero/pkg/errors"
 )
 
 // WorkflowCanceller cancels Argo Workflows by ID.
@@ -150,11 +152,29 @@ func (d *ProjectDeleter) Delete(ctx context.Context, req domain.ProjectDeleteInp
 			}
 			// Always trigger ArgoCD sync after fallback — even if gitops.Remove
 			// returned error, there may be orphaned K8s resources to prune.
+			// finding-2026-05-26-dogfood-cleanup-prove-death-race: if a previous
+			// broken Rollout left the app's operationState=Failed, the first
+			// TriggerSync will hit ErrSyncOperationInProgress; terminate stuck
+			// op + retry once so the prune actually executes.
 			if d.sync != nil {
 				argoAppName := req.TenantID + "-production"
 				syncCtx, syncCancel := context.WithTimeout(ctx, 30*time.Second)
 				defer syncCancel()
-				if syncErr := d.sync.TriggerSync(syncCtx, argoAppName); syncErr != nil {
+				syncErr := d.sync.TriggerSync(syncCtx, argoAppName)
+				if syncErr != nil && errors.Is(syncErr, loopzeroerrors.ErrSyncOperationInProgress) {
+					slog.Warn("argocd sync stuck on fallback — terminating + retry",
+						"app", argoAppName)
+					type terminator interface {
+						TerminateOperation(ctx context.Context, appName string) error
+					}
+					if t, ok := d.sync.(terminator); ok {
+						if termErr := t.TerminateOperation(syncCtx, argoAppName); termErr == nil {
+							time.Sleep(1 * time.Second)
+							syncErr = d.sync.TriggerSync(syncCtx, argoAppName)
+						}
+					}
+				}
+				if syncErr != nil {
 					slog.Warn("argocd sync after fallback delete failed",
 						"app", argoAppName, "error", syncErr)
 				} else {
@@ -292,8 +312,31 @@ func (d *ProjectDeleter) deleteEnvironment(ctx context.Context, req domain.Proje
 					"attempt", attempt)
 				break
 			}
-			slog.Warn("argocd sync attempt failed",
-				"app", argoAppName, "attempt", attempt, "error", lastErr)
+			// MEET-2026-03-29-019 + finding-2026-05-26-dogfood-cleanup-prove-death-race:
+			// when ArgoCD app has a stuck operation (e.g., previous broken
+			// Rollout left operationState=Failed), TriggerSync returns
+			// ErrSyncOperationInProgress and retry alone hits the same wall.
+			// Terminate stuck op BEFORE retrying so prune can proceed and
+			// orphan K8s resources for THIS project get cleaned up.
+			if errors.Is(lastErr, loopzeroerrors.ErrSyncOperationInProgress) {
+				slog.Warn("argocd sync stuck — terminating operation before retry",
+					"app", argoAppName, "attempt", attempt)
+				type terminator interface {
+					TerminateOperation(ctx context.Context, appName string) error
+				}
+				if t, ok := d.sync.(terminator); ok {
+					if termErr := t.TerminateOperation(syncCtx, argoAppName); termErr != nil {
+						slog.Error("failed to terminate stuck argocd operation",
+							"app", argoAppName, "error", termErr)
+					} else {
+						slog.Info("terminated stuck argocd operation",
+							"app", argoAppName)
+					}
+				}
+			} else {
+				slog.Warn("argocd sync attempt failed",
+					"app", argoAppName, "attempt", attempt, "error", lastErr)
+			}
 			if attempt < 3 {
 				backoff := time.Duration(1<<uint(attempt-1)) * 3 * time.Second // 3s, 6s
 				if attempt == 1 {
