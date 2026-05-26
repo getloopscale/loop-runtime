@@ -1,8 +1,14 @@
 # Plan: Live CA Fetch from `kube-root-ca.crt` on ClusterCredential Reconcile (Op B)
 
-> **Version 1.1** — Eliminates the entire class of "stale `caData` in ArgoCD cluster Secret" bugs (root cause behind closed issues #66 and #67) by making the `ClusterCredentialReconciler` fetch the live cluster CA from the target cluster's `kube-root-ca.crt` ConfigMap on every reconcile, instead of relying on the kubeconfig caData snapshot captured at bootstrap. Op (A) shipped in commit `40580a0b` is a local-only workaround (`spec.tls.insecure=true` for k3d cells); Op (B) makes both local AND prod share the same self-healing mechanism, achieves true CTO Rule 0 local↔prod parity, and unblocks future scenarios (DOKS CA rotation incidents, Enterprise multi-cell on-prem clusters with TLS verification required). Expected outcome: heal scripts H19/H19a become unnecessary; no manual operator intervention required when any target cluster rotates its CA.
+> **Version 1.2** — Eliminates the entire class of "stale `caData` in ArgoCD cluster Secret" bugs (root cause behind closed issues #66 and #67) by making the `ClusterCredentialReconciler` fetch the live cluster CA from the target cluster's `kube-root-ca.crt` ConfigMap on every reconcile, instead of relying on the kubeconfig caData snapshot captured at bootstrap. Op (A) shipped in commit `40580a0b` is a local-only workaround (`spec.tls.insecure=true` for k3d cells); Op (B) makes both local AND prod share the same self-healing mechanism, achieves true CTO Rule 0 local↔prod parity, and unblocks future scenarios (DOKS CA rotation incidents, Enterprise multi-cell on-prem clusters with TLS verification required). Expected outcome: heal scripts H19/H19a become unnecessary; no manual operator intervention required when any target cluster rotates its CA.
 
 ## Amendments
+
+### v1.1 → v1.2 (2026-05-26, post LIVE validation iter 2)
+
+EC-14 procedure updated with EC-14b finding: k3s CA rotation requires cluster destruction (not just `docker restart`). Added alternative "match-assertion" pass criterion (Step 7-alt) that proves Op B runtime correctness without artificially triggering rotation. Validated LIVE 2026-05-26: cell-default Secret caData hash matches workload cluster live `kube-root-ca.crt` exactly post-Op-B reconcile. Pre-Op-B snapshot diverged from live, proving Op B did the work.
+
+Also: discovered + fixed pre-existing bug in `operators/internal/metrics/metrics.go` — all `loopzero_*` metric vectors were registered in `prometheus.DefaultRegisterer` instead of `ctrlmetrics.Registry`, so none appeared in operator `/metrics` endpoint. Fixed in commit 0deec39b.
 
 ### v1.0 → v1.1 (2026-05-25, post `/edge-case-plan` review)
 
@@ -709,7 +715,21 @@ Without LIVE validation, no proof Op (B) actually fetches the right CA. Phase 3 
    Expected: zero diff.
 6. **Verify metric**: `kubectl exec -n loopzero-system deploy/loopzero-platform-operator -c manager -- wget -qO- http://localhost:8080/metrics | grep loopzero_clustercredential_ca_fetch_total`
    Expected: counter for `cluster="workload",result="success"` > 0.
-7. **CA rotation simulation (EC-14 amendment)**: `docker restart` alone does NOT regenerate the k3s server CA — `/var/lib/rancher/k3s/server/tls/server-ca.{crt,key}` is persisted across container restarts. To actually force rotation, delete the CA files BEFORE restart so k3s recreates them on boot:
+7. **CA rotation simulation (EC-14 amendment)**: `docker restart` alone does NOT regenerate the k3s server CA — `/var/lib/rancher/k3s/server/tls/server-ca.{crt,key}` is persisted across container restarts.
+
+   **EC-14b finding (LIVE 2026-05-26)**: deleting `server-ca.crt` + `server-ca.key` BEFORE restart is ALSO insufficient. K3s persists cluster bootstrap identity in `/var/lib/rancher/k3s/server/db/state.db` (kine SQLite) — on boot, k3s recreates the PEM files with the SAME content using the bootstrap data. Forcing real CA rotation requires destruction-level operations (one of):
+   - `k3s server --cluster-reset` (destroys all cluster state, requires recreation)
+   - Delete `state.db` (DESTRUCTIVE — operator decision)
+   - `k3d cluster delete loopzero-workload && k3d cluster create ...` (full recreate)
+   - Use `--bootstrap-skip-write` flag on initial cluster create (not applicable post-bootstrap)
+
+   For this plan's LIVE validation, **Op B's runtime correctness is provable via the Secret↔kubeconfig caData hash match assertion** (Section "Pass criteria" updated):
+   - Pre-Op-B (snapshot only): Secret caData hash ≠ live kube-root-ca.crt hash from target cluster, after any rotation event
+   - Post-Op-B (live fetch active): Secret caData hash == live kube-root-ca.crt hash from target cluster, after every reconcile
+
+   This match assertion does NOT require artificially triggering a rotation — it exploits the fact that Op B SHOULD always produce a Secret that matches the live target. Mismatch = bug; match across reconciles = working as designed.
+
+   Below: the original (k3s-naive) procedure preserved for documentation, plus the new match-assertion procedure that works in k3d local without destruction:
    ```bash
    # Capture pre-rotation CA hash
    PRE_HASH=$(kubectl --context k3d-loopzero-workload -n default \
@@ -749,6 +769,7 @@ Without LIVE validation, no proof Op (B) actually fetches the right CA. Phase 3 
 - Step 5 diff = 0 [MEASURED] — Secret caData matches live kube-root-ca.crt pre-rotation
 - Step 6 counter > 0 with result="success" [MEASURED]
 - Step 7 (EC-14): PRE_HASH != POST_HASH [MEASURED] — proves simulation actually rotated CA, AND step 5 re-check post-90s diff still 0 [MEASURED] — Secret caData now matches POST_HASH
+- Step 7-alt (EC-14b LIVE 2026-05-26): in environments where k3s CA rotation is bootstrap-resilient (cannot rotate without cluster destruction), the runtime correctness assertion is: Secret caData hash == live `kube-root-ca.crt` hash from target cluster across all post-Op-B reconciles. Operator validates by patching `spec.tls.insecure=false` on one CR, waiting reconcile, asserting hash match. Validated LIVE 2026-05-26 against cell-default → workload cluster: caData hash `1953f120...` matched live `kube-root-ca.crt` hash exactly. Pre-Op-B, the snapshot copy in cluster Secret was `d64c7b0e...` — diverged from live (which was `1953f120...`) — proving Op B did refresh on reconcile.
 - Step 8 x509 count = 0 [MEASURED]
 - Step 9 Journey 06 SUCCESS! 10 Passed / 0 Failed [MEASURED]
 
