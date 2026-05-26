@@ -34,13 +34,16 @@ const (
 
 	// cleanupTimeout is the maximum time to wait for resource cleanup (Prova de Morte).
 	// 2026-05-09: bumped 5min → 10min after pristine cleanroom journey suite
-	// surfaced 5 false-fails ("Prova de Morte: resources still exist"). The
-	// cleanup pipeline (project delete → ArgoCD prune → finalizer drain) is
-	// genuinely slow on cold-start: no warm controller cache, no pre-pulled
-	// images for the prune controllers, ArgoCD repo-server cold deserialize.
-	// 10min absorbs the slowest observed convergence (~7min for full
-	// namespace + rollout + traefikservice prune in pristine cluster).
-	cleanupTimeout = 10 * time.Minute
+	// surfaced 5 false-fails ("Prova de Morte: resources still exist").
+	// 2026-05-26: bumped 10min → 15min after dogfood-fix2 LIVE run showed
+	// 3 Prova de Morte failures at exactly 600s. In warm-state runs (long
+	// suite with rollout-bad-health from Journey 13 leaving ArgoCD app
+	// Degraded + multiple project deletes contending for the same single
+	// ArgoCD application per tenant), full prune convergence took >10min
+	// (resources DID disappear eventually — verified post-suite). 15min
+	// absorbs the slowest observed convergence with operator + ArgoCD HA
+	// + serialized sync queue.
+	cleanupTimeout = 15 * time.Minute
 
 	// cliCommandTimeout is the maximum time for a non-deploy CLI command.
 	cliCommandTimeout = 30 * time.Second
