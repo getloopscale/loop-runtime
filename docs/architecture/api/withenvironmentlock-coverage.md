@@ -69,7 +69,7 @@ Per route in `api/internal/server/router.go`:
 
 | Route | Service | Locker site | Status |
 |-------|---------|-------------|--------|
-| `POST /api/v1/environments` | `EnvironmentHandler.Create` | Env create writes `environments` row + downstream provisioning | **REVIEW** |
+| `POST /api/v1/environments` | `EnvironmentHandler.Create` → `envMgr.AddEnvironment` → `k8s/tenant_cr_manager.go:139` | K8s API merge patch on Tenant CR (optimistic concurrency via resourceVersion); no PG (tenant,project,env) tuple touched | **NO-LOCK-REQUIRED** ✓ (iter 6 resolved) |
 | `DELETE /api/v1/environments/{name}` | `EnvironmentHandler.Delete` | Delegates to ProjectDeleter (env-scoped) | **LOCKED-SERVICE** ✓ (inherited) |
 | `POST /api/v1/secrets` | `secrets.Set` | `routes/secrets.go:35-58` references `services.EnvironmentLocker` + `adapters.PoolEnvironmentLocker` — Locker injected per env | **LOCKED-SERVICE** ✓ |
 | `DELETE /api/v1/secrets/{name}` | `secrets.DeleteSecret` | Same Locker as Set | **LOCKED-SERVICE** ✓ |
@@ -86,7 +86,7 @@ Per route in `api/internal/server/router.go`:
 
 | Route | Service | Locker site | Status |
 |-------|---------|-------------|--------|
-| `POST /api/v1/source/upload` | `sourceHandler.Upload` | Upload writes S3 bundle + DB row; env-scope. Locker injection per env | **REVIEW** |
+| `POST /api/v1/source/upload` | `sourceHandler.Upload` | Gitea git ref serialization (`store.PushBundle` line 193) + immutable S3 key (commit SHA); no PG tuple | **NO-LOCK-REQUIRED** ✓ (iter 6 resolved) |
 
 ### Preview environments
 
@@ -132,18 +132,24 @@ Per route in `api/internal/server/router.go`:
 
 - **Total mutating routes audited:** 34
 - **LOCKED-SERVICE (env-scope mutation w/ withEnvironmentLock):** 17 ✓
-- **NO-LOCK-REQUIRED (different lock domain OR no shared state):** 12 ✓
-- **REVIEW (audit follow-up needed):** 5 — see below
+- **NO-LOCK-REQUIRED (different lock domain OR no shared state):** 14 ✓ (12 initial + 2 resolved iter 6)
+- **REVIEW (audit follow-up needed):** 3 (down from 5 after iter 6 resolution)
 
 ## REVIEW items (follow-up actions)
 
-These 5 routes mutate state but the lock site is ambiguous from grep alone. Each warrants a code-review pass (separate task — not blocking this audit):
+5 routes initially flagged as ambiguous; 2 RESOLVED via iter 6 code-read (Ralph 2026-05-27). 3 remain for sponsor follow-up:
+
+### Resolved (iter 6 — code-read confirms NO-LOCK-REQUIRED)
+
+4. **`POST /api/v1/environments`** — **NO-LOCK-REQUIRED.** Env create writes Tenant CR via K8s API merge patch (`k8s/tenant_cr_manager.go:139 AddEnvironment`); K8s API server's optimistic concurrency (resourceVersion) is the serialization mechanism, NOT pg_advisory_xact_lock. Per `services/environment_ensurer.go:37` comment: "AddEnvironment uses tenant CR JSON merge patch" — different lock domain. **No PG (tenant,project,env) tuple touched.**
+
+5. **`POST /api/v1/source/upload`** — **NO-LOCK-REQUIRED.** Upload pushes bundle to Gitea via `store.PushBundle` (`routes/source.go:193`); Gitea git ref serialization handles concurrent pushes (route catches `"cannot lock ref" / "remote rejected"` errors at line 195-207 and maps to `DEPLOY_IN_PROGRESS` for consistent UX). S3 object store uses immutable key `<tenant>/source/<sourceID>.bundle` where sourceID is the commit SHA — no overwrite collision possible. **No PG (tenant,project,env) tuple touched.**
+
+### Remaining (3 — sponsor follow-up)
 
 1. **`POST /api/v1/builds/{id}/cancel`** — Direct cancel mutates `builds.status`. Currently via store update; should be inside Build.Locker path to prevent race with concurrent SUBMIT. Recommended: route through `BuildOrchestrator.Cancel(id, env)` with Locker call.
 2. **`POST /api/v1/projects`** — Create writes `projects` row + init envs. Project-scope, not env-scope. Lock domain ambiguous; recommend tenant-level serialization (not env lock).
-3. **`POST /api/v1/projects/{name}/connect`** — Connect writes `project_repository` (project-scope). UNIQUE constraint handles conflict; no env lock needed.
-4. **`POST /api/v1/environments`** — Env create writes `environments` row. Project-scope. Recommend explicit serialization via project-level advisory lock OR project_id UNIQUE constraint.
-5. **`POST /api/v1/source/upload`** — Writes S3 bundle + DB row. Env-scope intended; verify Locker injection.
+3. **`POST /api/v1/projects/{name}/connect`** — Connect writes `project_repository` (project-scope). UNIQUE constraint handles conflict; no env lock needed (likely NO-LOCK-REQUIRED but needs verify per #3 pattern).
 
 ## Invariants codified
 
