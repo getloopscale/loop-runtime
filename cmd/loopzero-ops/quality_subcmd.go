@@ -4,6 +4,7 @@
 package main
 
 import (
+	"context"
 	"encoding/json"
 	"flag"
 	"fmt"
@@ -16,6 +17,8 @@ import (
 
 	"github.com/loopzero/loopzero/pkg/quality/advisorylock"
 	"github.com/loopzero/loopzero/pkg/quality/helmoverlapparity"
+	"github.com/loopzero/loopzero/pkg/quality/trivyscan"
+	"github.com/loopzero/loopzero/pkg/quality/trufflehogscan"
 	"github.com/loopzero/loopzero/pkg/quality/agplisolation"
 	"github.com/loopzero/loopzero/pkg/quality/alertrunbooks"
 	"github.com/loopzero/loopzero/pkg/quality/baseimagedigest"
@@ -284,6 +287,10 @@ func runQuality(args []string) int {
 		return runAdvisoryLockScope(args[1:])
 	case "helm-overlap-parity":
 		return runHelmOverlapParity(args[1:])
+	case "trivy-scan":
+		return runTrivyScan(args[1:])
+	case "trufflehog-scan":
+		return runTrufflehogScan(args[1:])
 	case "cli-exit-codes":
 		return runCLIExitCodes(args[1:])
 	case "shell-hygiene":
@@ -586,6 +593,72 @@ func runHelmOverlapParity(args []string) int {
 		return 1
 	}
 	fmt.Println("helm-overlap-parity: PASS — bootstrap charts in parity with (or behind) published")
+	return 0
+}
+
+// runTrivyScan wraps `trivy fs --severity CRITICAL,HIGH` as a quality gate.
+// T4.7 of plan 2026-05-26-maturity-3-62-to-4-0-roadmap. Skip-on-missing —
+// returns exit 0 with Skipped reason when trivy binary absent (local-dev
+// fallback). PR-time enforcement happens in chosen CI platform (T0.2).
+func runTrivyScan(args []string) int {
+	fs := flag.NewFlagSet("trivy-scan", flag.ContinueOnError)
+	root := fs.String("root", ".", "repo root directory to scan")
+	severities := fs.String("severities", "CRITICAL,HIGH", "comma-separated severity filter")
+	if err := fs.Parse(args); err != nil {
+		return 1
+	}
+	if absRoot, err := os.Getwd(); err == nil && *root == "." {
+		*root = absRoot
+	}
+	outcome, err := trivyscan.Check(context.Background(), trivyscan.Config{
+		RepoRoot:   *root,
+		Severities: *severities,
+	})
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "trivy-scan: %v\n", err)
+		return 5
+	}
+	if outcome.Skipped {
+		fmt.Printf("trivy-scan: SKIP — %s\n", outcome.Reason)
+		return 0
+	}
+	if !outcome.Pass {
+		fmt.Fprintf(os.Stderr, "trivy-scan: FAIL\n%s\n", outcome.Reason)
+		return 1
+	}
+	fmt.Printf("trivy-scan: PASS — %s\n", outcome.Reason)
+	return 0
+}
+
+// runTrufflehogScan wraps `trufflehog git --only-verified --fail` as
+// a quality gate. T4.7 of plan. Same skip-on-missing pattern as trivy.
+func runTrufflehogScan(args []string) int {
+	fs := flag.NewFlagSet("trufflehog-scan", flag.ContinueOnError)
+	root := fs.String("root", ".", "repo root directory to scan")
+	verified := fs.Bool("only-verified", true, "use --only-verified (network call to validate secrets)")
+	if err := fs.Parse(args); err != nil {
+		return 1
+	}
+	if absRoot, err := os.Getwd(); err == nil && *root == "." {
+		*root = absRoot
+	}
+	outcome, err := trufflehogscan.Check(context.Background(), trufflehogscan.Config{
+		RepoRoot:     *root,
+		OnlyVerified: *verified,
+	})
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "trufflehog-scan: %v\n", err)
+		return 5
+	}
+	if outcome.Skipped {
+		fmt.Printf("trufflehog-scan: SKIP — %s\n", outcome.Reason)
+		return 0
+	}
+	if !outcome.Pass {
+		fmt.Fprintf(os.Stderr, "trufflehog-scan: FAIL\n%s\n", outcome.Reason)
+		return 1
+	}
+	fmt.Printf("trufflehog-scan: PASS — %s\n", outcome.Reason)
 	return 0
 }
 
