@@ -185,43 +185,20 @@ releases:
       - name: domain
         value: "{{ .Values.domain }}"
 
-  # T2.2 of plan 2026-05-26-maturity-3-62-to-4-0-roadmap: Sigstore Scaffolding
-  # (Fulcio + Rekor + CTLog + TUF) for cosign keyless signing infrastructure.
-  # DISABLED-BY-DEFAULT (commented out) — sponsor enables via T2.2 Change
-  # Governor meeting per ADR-2026-05-12 cosign cutover (hard deadline 2026-08-10).
+  # T2.2 Sigstore Scaffolding REMOVED from Helmfile per ADR-2026-05-27-T2.2-OFFLINE-TUF
+  # § "Engineering deliverables" #8: GitOps two-writers veto applied —
+  # Pulumi `Sigstore` ComponentResource at infra/pulumi-platform/src/services/sigstore.ts
+  # is the SOLE writer. Reasons:
+  #   - Helm-only path cannot enforce tufPreMintedKeys requirement (offline ceremony)
+  #   - Pulumi provides cleaner secret references + cert-manager wiring + DNS
+  #     coordination (Cloudflare records needed for fulcio.<domain>/rekor.<domain>)
+  #   - Two writers per resource = drift risk (GitOps conditional veto)
   #
-  # Engineering-ready: `infra/pulumi-platform/src/services/sigstore.ts` ships
-  # the Pulumi component + 9 hermetic vitest tests. Helmfile release below is
-  # the equivalent Helm-only path for sponsor preview without provisioning
-  # full Pulumi-platform stack. Choose ONE (Pulumi component OR Helmfile).
+  # Sponsor activates via Pulumi: stack config set { enabled: true,
+  # tufPreMintedKeys: <ceremony output>, rekorWitness: <public sigstore>,
+  # fulcioHostname, rekorHostname, oidcIssuer }.
   #
-  # Pre-flight (operator runs before enabling):
-  #   1. fulcio.<domain> + rekor.<domain> DNS A records exist
-  #   2. cert-manager + ClusterIssuer ready (letsencrypt-prod or self-signed-ca)
-  #   3. OIDC issuer URL of build cluster known (set sigstore.oidcIssuer)
-  #   4. Sponsor approved $30-50/mo budget per T2.2 meeting
-  #
-  # - name: sigstore-scaffolding
-  #   namespace: sigstore-system
-  #   chart: sigstore/scaffold
-  #   version: 0.7.16
-  #   needs:
-  #     - cert-manager/cert-manager
-  #   values:
-  #     - ../helm/sigstore-scaffolding/values.yaml  # operator creates this file
-  #     - fulcio:
-  #         server:
-  #           ingress:
-  #             http:
-  #               hosts:
-  #                 - host: "fulcio.{{ `{{ .Values.domain }}` }}"
-  #                   path: "/"
-  #     - rekor:
-  #         server:
-  #           ingress:
-  #             hosts:
-  #               - host: "rekor.{{ `{{ .Values.domain }}` }}"
-  #                 path: "/"
+  # See: docs/operations/tuf-root-ceremony.md (TODO) for ceremony procedure.
 
   - name: promtail
     namespace: monitoring

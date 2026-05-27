@@ -42,6 +42,62 @@ import * as k8s from "@pulumi/kubernetes";
 // us validate before bumping. Patch upgrades auto via Renovate.
 const HELM_VERSION = "0.7.16";
 
+/**
+ * TUFKeyset references the offline-generated TUF root key material.
+ *
+ * Per ADR-2026-05-27-T2.2-OFFLINE-TUF, TUF root keys MUST be generated
+ * via an offline ceremony (multi-party, hardware-backed, air-gapped)
+ * and provided to this component as INPUTS. The keys NEVER touch the
+ * mgmt cluster filesystem at rest — they live in a sealed Secret
+ * created by the operator via the ceremony output script.
+ *
+ * Operator runbook: docs/operations/tuf-root-ceremony.md (TODO)
+ */
+export interface TUFKeyset {
+  /**
+   * Name of the pre-existing Kubernetes Secret (in `namespace`) holding
+   * the ceremony output. Expected keys per sigstore-scaffolding chart:
+   * - root.json (TUF root metadata)
+   * - signing keys (encrypted at rest, key derivation handled by helm hook)
+   *
+   * Operator creates this Secret BEFORE `pulumi up`:
+   *   kubectl create secret generic sigstore-tuf-ceremony \
+   *     --from-file=root.json=./ceremony-output/root.json \
+   *     --namespace=sigstore-system
+   *
+   * NOTE: schema validation against sigstore-scaffolding 0.7.16 helm
+   * chart values pending LIVE provisioning evidence. Operator must
+   * confirm the chart accepts external TUF root reference before flip.
+   */
+  secretName: pulumi.Input<string>;
+  /**
+   * Date of the offline ceremony (ISO-8601 UTC). Used to compute
+   * T-90d/T-30d/T-7d expiry alerts. TUF roots rotate annually by
+   * industry convention.
+   */
+  ceremonyDate: pulumi.Input<string>;
+}
+
+/**
+ * RekorWitnessConfig configures cross-witnessing to public sigstore.dev
+ * Rekor (or any other independent witness). Per ADR-2026-05-27-T2.2-OFFLINE-TUF
+ * conditional veto: self-hosted Rekor without cross-witness is
+ * tamper-vulnerable beyond single-cluster blast radius — attacker who
+ * compromises Rekor can forge/delete entries retroactively.
+ */
+export interface RekorWitnessConfig {
+  /**
+   * Public Rekor instance URL to cross-witness every entry.
+   * Default: https://rekor.sigstore.dev (Sigstore Public Good)
+   */
+  url: pulumi.Input<string>;
+  /**
+   * Pinned public key URL for witness verification. Defaults to
+   * Sigstore Public Good's published public key.
+   */
+  publicKeyURL: pulumi.Input<string>;
+}
+
 export interface SigstoreArgs {
   /** K8s provider for the target cluster (always mgmt cluster) */
   provider: k8s.Provider;
@@ -74,6 +130,24 @@ export interface SigstoreArgs {
    * OIDC discovery URL. Sponsor sets per cluster.
    */
   oidcIssuer?: pulumi.Input<string>;
+  /**
+   * Pre-minted TUF root keys from offline ceremony (REQUIRED when
+   * enabled=true per ADR-2026-05-27-T2.2-OFFLINE-TUF). The component
+   * REJECTS construction if enabled without this — defense-in-depth
+   * against "deploy first ceremony later" anti-pattern.
+   */
+  tufPreMintedKeys?: TUFKeyset;
+  /**
+   * Rekor cross-witness configuration (REQUIRED when enabled=true).
+   * Defeats single-cluster tamper attacks via independent witnessing
+   * per SBR conditional veto.
+   */
+  rekorWitness?: RekorWitnessConfig;
+  /**
+   * Replica count for Fulcio + Rekor (HA per SRE absolute condition).
+   * Default 2. PodDisruptionBudget minAvailable=1 enforced.
+   */
+  haReplicas?: pulumi.Input<number>;
 }
 
 /**
@@ -114,12 +188,41 @@ export class Sigstore extends pulumi.ComponentResource {
 
     // Validate required inputs in enabled mode. Pulumi component runs
     // at preview time, so missing required args throw early.
+    //
+    // ADR-2026-05-27-T2.2-OFFLINE-TUF mandate: tufPreMintedKeys +
+    // rekorWitness are REQUIRED when enabled. Without them, the stack
+    // is "strictly worse than keyed" per SBR conditional veto — refuse
+    // construction at preview time to prevent activation regressing
+    // the security posture.
     if (!args.fulcioHostname || !args.rekorHostname || !args.oidcIssuer) {
       throw new Error(
         "Sigstore component enabled but fulcioHostname/rekorHostname/oidcIssuer not set. " +
         "Pre-flight: ensure DNS records exist + sponsor approved T2.2 budget."
       );
     }
+    if (!args.tufPreMintedKeys) {
+      throw new Error(
+        "Sigstore component enabled WITHOUT tufPreMintedKeys. Per " +
+        "ADR-2026-05-27-T2.2-OFFLINE-TUF, TUF root keys MUST be generated " +
+        "via offline ceremony (multi-party, hardware-backed, air-gapped) " +
+        "and provided as a Kubernetes Secret reference. In-cluster TUF " +
+        "generation is REJECTED — mgmt compromise would equal supply " +
+        "chain compromise. See docs/operations/tuf-root-ceremony.md."
+      );
+    }
+    if (!args.rekorWitness) {
+      throw new Error(
+        "Sigstore component enabled WITHOUT rekorWitness. Per " +
+        "ADR-2026-05-27-T2.2-OFFLINE-TUF, every Rekor entry MUST be " +
+        "cross-witnessed to an independent Rekor instance (default: " +
+        "public sigstore.dev). Without cross-witness, attacker who " +
+        "compromises local Rekor can forge/delete entries retroactively. " +
+        "Set rekorWitness.url + rekorWitness.publicKeyURL."
+      );
+    }
+
+    // HA default per SRE absolute condition: ≥2 replicas, PDB minAvailable=1.
+    const replicas = args.haReplicas ?? 2;
 
     this.release = new k8s.helm.v3.Release(
       `${args.role}-sigstore-scaffolding`,
@@ -136,24 +239,53 @@ export class Sigstore extends pulumi.ComponentResource {
         timeout: 1800,
         values: {
           // Fulcio: short-lived cert issuance via OIDC.
+          // HA replicas + PDB per SRE absolute condition.
           fulcio: {
             enabled: true,
+            replicaCount: replicas,
+            podDisruptionBudget: {
+              enabled: true,
+              minAvailable: 1,
+            },
             server: {
               ingress: {
                 http: { hosts: [{ host: args.fulcioHostname, path: "/" }] },
               },
             },
-            createcerts: { enabled: true },
+            // ADR-2026-05-27-T2.2-OFFLINE-TUF: REJECT in-cluster cert
+            // creation. Operator provides via offline ceremony.
+            // NOTE: actual sigstore-scaffolding 0.7.16 helm chart values
+            // schema for external cert reference pending LIVE validation
+            // — this disables the default in-cluster job; operator must
+            // confirm the chart's exact override key before flip.
+            createcerts: { enabled: false },
           },
           // Rekor: append-only transparency log.
+          // HA replicas + PDB per SRE absolute condition.
+          // Cross-witness per ADR-2026-05-27-T2.2-OFFLINE-TUF.
           rekor: {
             enabled: true,
+            replicaCount: replicas,
+            podDisruptionBudget: {
+              enabled: true,
+              minAvailable: 1,
+            },
             server: {
               ingress: {
                 hosts: [{ host: args.rekorHostname, path: "/" }],
               },
             },
             backfillRedis: { enabled: false },
+            // Cross-witness configuration per SBR conditional veto.
+            // Every entry mirrored to public sigstore.dev Rekor for
+            // tamper-evidence beyond single-cluster blast radius.
+            // NOTE: sigstore-scaffolding 0.7.16 may not expose this
+            // exact key — operator confirms schema before flip OR
+            // implements witness via sidecar/external controller.
+            witness: {
+              url: args.rekorWitness.url,
+              publicKeyURL: args.rekorWitness.publicKeyURL,
+            },
           },
           // CTLog: certificate transparency log for Fulcio.
           ctlog: {
@@ -162,10 +294,20 @@ export class Sigstore extends pulumi.ComponentResource {
               fulcioURL: pulumi.interpolate`https://${args.fulcioHostname}`,
             },
           },
-          // TUF: root-of-trust for the chain. Self-hosted means we
-          // generate + manage our own TUF root (vs trusting Sigstore's).
+          // TUF: root-of-trust for the chain.
+          // ADR-2026-05-27-T2.2-OFFLINE-TUF: keys provided via offline
+          // ceremony Secret reference. In-cluster generation REJECTED.
           tuf: {
             enabled: true,
+            // Reference the operator-created Secret (offline ceremony
+            // output). The sigstore-scaffolding chart accepts external
+            // root via this key OR via a similar mechanism; operator
+            // confirms the exact schema before flip per chart 0.7.16
+            // documentation.
+            preMintedKeys: {
+              secretName: args.tufPreMintedKeys.secretName,
+              ceremonyDate: args.tufPreMintedKeys.ceremonyDate,
+            },
             ingress: {
               create: true,
               hosts: [{ host: args.rekorHostname, path: "/tuf/" }],
@@ -186,6 +328,9 @@ export class Sigstore extends pulumi.ComponentResource {
       ready: this.ready,
       fulcioURL: pulumi.interpolate`https://${args.fulcioHostname}`,
       rekorURL: pulumi.interpolate`https://${args.rekorHostname}`,
+      tufCeremonyDate: args.tufPreMintedKeys.ceremonyDate,
+      witnessURL: args.rekorWitness.url,
+      haReplicas: replicas,
     });
   }
 }

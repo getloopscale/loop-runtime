@@ -187,6 +187,45 @@ describe("sigstore.ts — Sigstore component (T2.2 cosign keyless)", () => {
     expect(src).toMatch(/throw new Error.*fulcioHostname.*rekorHostname.*oidcIssuer/s);
   });
 
+  it("REJECTS enabled without tufPreMintedKeys (ADR-2026-05-27-T2.2-OFFLINE-TUF)", () => {
+    // Per offline TUF ceremony mandate: refuse construction at preview
+    // time if pre-minted keys not provided. In-cluster TUF generation
+    // is "strictly worse than keyed" per SBR conditional veto.
+    expect(src).toMatch(/if\s*\(\s*!args\.tufPreMintedKeys\s*\)/);
+    expect(src).toContain("offline ceremony");
+    expect(src).toContain("ADR-2026-05-27-T2.2-OFFLINE-TUF");
+  });
+
+  it("REJECTS enabled without rekorWitness (cross-witness mandatory)", () => {
+    // Per SBR conditional veto: without cross-witness, attacker who
+    // compromises local Rekor can forge/delete entries retroactively.
+    expect(src).toMatch(/if\s*\(\s*!args\.rekorWitness\s*\)/);
+    expect(src).toContain("cross-witnessed");
+  });
+
+  it("defaults HA to 2 replicas + PodDisruptionBudget minAvailable=1", () => {
+    // Per SRE absolute condition on production-readiness.
+    expect(src).toContain("haReplicas ?? 2");
+    expect(src).toContain("minAvailable: 1");
+    // Both Fulcio + Rekor must have PDB (separate components, separate failure modes).
+    const pdbMatches = src.match(/podDisruptionBudget:\s*{\s*enabled:\s*true/g);
+    expect(pdbMatches?.length, "must have PDB on BOTH Fulcio AND Rekor").toBeGreaterThanOrEqual(2);
+  });
+
+  it("disables in-cluster cert creation (createcerts: enabled: false)", () => {
+    // Per ADR offline ceremony mandate: in-cluster cert creation
+    // REJECTED. Operator provides via ceremony output Secret.
+    expect(src).toMatch(/createcerts:\s*{\s*enabled:\s*false/);
+  });
+
+  it("exports TUF ceremony date + witness URL + HA replicas in outputs", () => {
+    // Outputs surface operational metadata for observability + alerts
+    // (T-90d/T-30d/T-7d TUF root expiry countdown per ADR).
+    expect(src).toContain("tufCeremonyDate:");
+    expect(src).toContain("witnessURL:");
+    expect(src).toContain("haReplicas:");
+  });
+
   it("uses role-prefix naming for multi-stack isolation", () => {
     // Sigstore on mgmt cluster only, but role-prefix still avoids collisions
     // if drill stack also imports this component.
