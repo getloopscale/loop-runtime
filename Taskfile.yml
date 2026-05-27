@@ -275,8 +275,17 @@ tasks:
       bootstrap leaves the workload cluster without the Rollouts CRD, so
       every `loopzero deploy` (default-on progressive delivery) fails to
       apply the Rollout manifest and the journey suite cannot run.
+
+      D-FF-03 fix (2026-05-27, /dogfood live): cluster-issuer MUST be in
+      this list. Without it, `loopzero deploy` succeeds at build but fails at
+      ArgoCD sync with "Referenced ClusterIssuer not found: loopzero-ca-issuer"
+      — every Certificate stays in Issuing forever and ArgoCD app stays
+      OutOfSync/Missing waiting for healthy state. Discovered LIVE during
+      dogfood 2026-05-27: 5 of 8 Ginkgo journey failures all root-caused
+      to missing ClusterIssuer.
     cmds:
       - helmfile -f infra/helmfile/runtime.helmfile.yaml.gotmpl -e standalone-multi --kube-context k3d-loopzero-workload --selector name=cert-manager sync
+      - helmfile -f infra/helmfile/runtime.helmfile.yaml.gotmpl -e standalone-multi --kube-context k3d-loopzero-workload --selector name=cluster-issuer sync
       - helmfile -f infra/helmfile/runtime.helmfile.yaml.gotmpl -e standalone-multi --kube-context k3d-loopzero-workload --selector name=traefik sync
       - helmfile -f infra/helmfile/runtime.helmfile.yaml.gotmpl -e standalone-multi --kube-context k3d-loopzero-workload --selector name=external-secrets sync
       - helmfile -f infra/helmfile/runtime.helmfile.yaml.gotmpl -e standalone-multi --kube-context k3d-loopzero-workload --selector name=argo-rollouts sync
@@ -296,10 +305,15 @@ tasks:
       `task k3d:heal` invocation below also covers runtime-2 (extended
       2026-05-14).
 
+      D-FF-03 fix (2026-05-27, /dogfood live): cluster-issuer MUST be in
+      this list — same reason as k3d:bootstrap-workload above. Otherwise
+      tenants pinned to cell-2 have no ClusterIssuer for cert-manager.
+
       Idempotent: helmfile sync no-ops if releases match desired state.
     cmds:
       - task: k3d:heal
       - helmfile -f infra/helmfile/runtime.helmfile.yaml.gotmpl -e standalone-multi --kube-context k3d-loopzero-runtime-2 --selector name=cert-manager sync
+      - helmfile -f infra/helmfile/runtime.helmfile.yaml.gotmpl -e standalone-multi --kube-context k3d-loopzero-runtime-2 --selector name=cluster-issuer sync
       - helmfile -f infra/helmfile/runtime.helmfile.yaml.gotmpl -e standalone-multi --kube-context k3d-loopzero-runtime-2 --selector name=traefik sync
       - helmfile -f infra/helmfile/runtime.helmfile.yaml.gotmpl -e standalone-multi --kube-context k3d-loopzero-runtime-2 --selector name=external-secrets sync
       - helmfile -f infra/helmfile/runtime.helmfile.yaml.gotmpl -e standalone-multi --kube-context k3d-loopzero-runtime-2 --selector name=argo-rollouts sync
