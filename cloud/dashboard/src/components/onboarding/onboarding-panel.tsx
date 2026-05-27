@@ -84,7 +84,7 @@ export function OnboardingPanel() {
       <button
         type="button"
         onClick={() => setExpanded(true)}
-        className="fixed bottom-6 right-6 z-50 size-14 rounded-full bg-primary text-primary-foreground shadow-lg hover:scale-105 transition-transform flex items-center justify-center group"
+        className="fixed bottom-6 right-6 z-50 size-14 rounded-full bg-primary text-primary-foreground shadow-lg hover:scale-105 transition-transform flex items-center justify-center group focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary focus-visible:ring-offset-2 focus-visible:ring-offset-background"
         aria-label={`Get your app live — ${completed} of ${total} done. Click to expand.`}
       >
         <ProgressRing percent={percent} size={56} />
@@ -128,7 +128,7 @@ export function OnboardingPanel() {
             <button
               type="button"
               onClick={() => setExpanded(false)}
-              className="p-1.5 rounded-md text-muted-foreground hover:text-foreground hover:bg-muted/40"
+              className="p-1.5 rounded-md text-muted-foreground hover:text-foreground hover:bg-muted/40 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary focus-visible:ring-offset-1"
               aria-label="Collapse to badge"
             >
               <ChevronDown className="size-4" aria-hidden="true" />
@@ -139,7 +139,7 @@ export function OnboardingPanel() {
                 dismiss();
                 reportEvent('onboarding_dismissed');
               }}
-              className="p-1.5 rounded-md text-muted-foreground hover:text-foreground hover:bg-muted/40"
+              className="p-1.5 rounded-md text-muted-foreground hover:text-foreground hover:bg-muted/40 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary focus-visible:ring-offset-1"
               aria-label="Dismiss onboarding"
             >
               <X className="size-4" aria-hidden="true" />

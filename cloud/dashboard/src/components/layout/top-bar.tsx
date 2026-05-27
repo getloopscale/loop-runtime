@@ -96,7 +96,7 @@ export function TopBar({ showProjectSelector = true, onCommandPaletteOpen }: Top
           <button
             type="button"
             onClick={onCommandPaletteOpen}
-            className="inline-flex items-center gap-2.5 px-4 py-2 min-w-[200px] rounded-md border border-border/40 text-body-sm text-muted-foreground hover:text-foreground hover:border-border transition-colors"
+            className="inline-flex items-center gap-2.5 px-4 py-2 min-w-[200px] rounded-md border border-border/40 text-body-sm text-muted-foreground hover:text-foreground hover:border-border transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary focus-visible:ring-offset-2 focus-visible:ring-offset-background"
             aria-label={`Open command palette (${SHORTCUT_LABEL})`}
           >
             <Search className="size-4" aria-hidden="true" />

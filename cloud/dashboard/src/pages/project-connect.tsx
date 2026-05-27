@@ -118,6 +118,9 @@ export function ProjectConnectPage() {
   }
 
   return (
+    // T0.4: Repository connection is a workflow page — primary action varies
+    // by connection state (Install GitHub App / Select repo / Confirm). Inline
+    // CTAs per step is correct UX; no single header button fits all states.
     <PageShell title="Repository connection" description={`GitHub link for ${name}.`}>
       <div className="mb-4">
         <Button asChild variant="ghost" size="sm">

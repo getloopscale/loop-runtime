@@ -78,3 +78,45 @@ export function reportEvent(type: ActivationEvent, payload: Record<string, unkno
     // Defensive: any unexpected error swallowed
   }
 }
+
+/**
+ * T1.2 — UX interaction metrics taxonomy per sponsor critério #17.
+ *
+ * EC-03 note: /v1/telemetry/interactions endpoint NÃO existe em backend
+ * (grep confirmed em api/internal/routes/). Helper exported para use futuro
+ * mas wire-sites SKIPPED até backend route ship. Dev mode logs to console;
+ * prod sendBeacon falha silenciosamente até endpoint exist.
+ *
+ * Quando backend route shipar, wire em 5 paths críticos: rollback button,
+ * secrets add/delete, log viewer mount em error context, scale submit,
+ * team invite submit.
+ */
+export type InteractionCategory =
+  | 'rollback' | 'secrets' | 'logs' | 'scale'
+  | 'team' | 'billing' | 'domains' | 'deploys';
+
+export function trackInteraction(
+  category: InteractionCategory,
+  action: string,
+  payload: Record<string, unknown> = {},
+): void {
+  try {
+    const body = JSON.stringify({
+      type: 'interaction',
+      category,
+      action,
+      payload,
+      timestamp: Date.now(),
+    });
+    if (import.meta.env.DEV) {
+      // eslint-disable-next-line no-console
+      console.log(`[interaction] ${category}.${action}`, payload);
+      return;
+    }
+    try {
+      if (typeof navigator !== 'undefined' && navigator.sendBeacon) {
+        navigator.sendBeacon('/v1/telemetry/interactions', body);
+      }
+    } catch { /* never throw */ }
+  } catch { /* defensive */ }
+}
