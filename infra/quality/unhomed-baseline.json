@@ -1,9 +1,12 @@
 {
-  "total": 74,
+  "total": 75,
   "by_domain": {
     "bootstrap": 32,
     "drill": 16,
     "other": 6,
-    "test": 20
-  }
+    "test": 21
+  },
+  "_changelog": [
+    {"date": "2026-05-27", "from_total": 74, "to_total": 75, "from_test": 20, "to_test": 21, "reason": "Cleanroom session: render-loopzero-ci-workflows_test.sh added as T0.2 Cenário B POC hermetic render test. Wires `helm template` into yq queries, not pure-logic; legitimately under infra/tests/ domain (test bucket). Allowlisted in shell-scripts-allowlist.md as KEEP-CI-WIRED."}
+  ]
 }

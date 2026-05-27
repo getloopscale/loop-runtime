@@ -1,3 +1,6 @@
 {
-  "canonical_sh": 125
+  "canonical_sh": 127,
+  "_changelog": [
+    {"date": "2026-05-27", "from": 125, "to": 127, "reason": "T1.1 plan 2026-05-27-tenant-build-pipeline-gaps-closure: rekor-archive-old-entries.sh (operator daily cron Trillian archive) + cleanroom session: render-loopzero-ci-workflows_test.sh (T0.2 hermetic render test, CI-wired). Both allowlisted per D4 criteria (Necessary + Simple + Operator-time/CI-wired + Allowlisted)."}
+  ]
 }
