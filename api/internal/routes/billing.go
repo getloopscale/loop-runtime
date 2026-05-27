@@ -1,19 +1,22 @@
 // SPDX-License-Identifier: Apache-2.0
 // Copyright 2025-2026 The LoopZero Authors
 
-// T1.6 of deep-review-remediation-plan (closes find_billing_route_not_wired HIGH).
+// T1.6 of deep-review-remediation-plan (closes find_billing_route_not_wired HIGH)
+// + T2.7 of maturity-3-62-to-4-0-roadmap (Stripe Portal SDK).
 //
 // Wires GET /api/v1/billing and POST /api/v1/billing/portal so the CLI's
 // `loopzero billing` and `loopzero billing portal` commands actually have an
 // endpoint to call. Pre-T1.6 the CLI hit silent 404 because the routes
 // were declared in the spec but no handler existed in router.go.
 //
-// Scope: lightweight wiring that returns plan + usage. Full Stripe
-// Customer Portal session creation requires the Stripe Go SDK + tenant
-// stripe_customer_id lookup; that is Sprint 11 work. This handler:
+// Behavior:
 //   - GET /api/v1/billing → {plan, team, usage}
-//   - POST /api/v1/billing/portal → 400 NO_STRIPE_CUSTOMER for free
-//     tenants; placeholder URL for paid tenants pending Sprint 11.
+//   - POST /api/v1/billing/portal:
+//       * 400 NO_STRIPE_CUSTOMER for free tenants (no stripe_customer_id)
+//       * 200 with real one-time-use Stripe Portal URL when SDK is wired
+//         (production with STRIPE_SECRET_KEY env present)
+//       * 200 with legacy placeholder URL when SDK is unwired (local dev)
+//       * 502 BILLING_PROVIDER_UNAVAILABLE if Stripe API returns error
 
 package routes
 
@@ -44,11 +47,29 @@ type BillingPool interface {
 	QueryRow(ctx context.Context, sql string, args ...any) BillingRow
 }
 
+// PortalSessionCreator is the port that BillingHandler.Portal depends
+// on for minting Stripe Customer Portal session URLs. T2.7 of
+// maturity-3-62-to-4-0-roadmap plan. Production wiring uses
+// services.StripePortalSessionCreator (real SDK call). When the field
+// is nil, the handler falls back to the legacy placeholder URL — this
+// preserves back-compat for local dev + test environments without a
+// Stripe key configured.
+//
+// DIP per CLAUDE.md Rule 13.5: handler depends on this small interface
+// rather than the Stripe SDK directly, so (a) tests stay hermetic
+// without mock-of-stripe-internals and (b) a future provider swap
+// (Paddle, Lemon Squeezy) is a one-file change.
+type PortalSessionCreator interface {
+	CreateSession(ctx context.Context, customerID, returnURL string) (string, error)
+}
+
 // BillingHandler responds to GET /api/v1/billing + POST /api/v1/billing/portal.
 type BillingHandler struct {
-	pool       BillingPool
-	costSource enforcement.CostStore // optional — T1.9 cost cap usage display
-	logger     *slog.Logger
+	pool           BillingPool
+	costSource     enforcement.CostStore // optional — T1.9 cost cap usage display
+	portalCreator  PortalSessionCreator  // optional — T2.7 Stripe SDK; nil falls back to placeholder
+	portalReturnURL string                // optional — where Stripe sends customer post-portal-close
+	logger         *slog.Logger
 }
 
 // NewBillingHandler constructs a billing handler that reads plan + usage
@@ -63,6 +84,18 @@ func NewBillingHandler(pool BillingPool) *BillingHandler {
 // stays empty and CLI displays "no usage data".
 func (h *BillingHandler) WithCostSource(src enforcement.CostStore) *BillingHandler {
 	h.costSource = src
+	return h
+}
+
+// WithPortalSessionCreator wires the Stripe Customer Portal SDK so
+// POST /api/v1/billing/portal returns real one-time-use session URLs
+// (TTL=30min) instead of the placeholder login URL. T2.7 of
+// maturity-3-62-to-4-0-roadmap. Pass returnURL = where Stripe sends
+// the customer when they close the portal tab (typically dashboard
+// /billing path). Nil/empty preserves legacy placeholder behavior.
+func (h *BillingHandler) WithPortalSessionCreator(creator PortalSessionCreator, returnURL string) *BillingHandler {
+	h.portalCreator = creator
+	h.portalReturnURL = returnURL
 	return h
 }
 
@@ -203,13 +236,27 @@ func (h *BillingHandler) Portal(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// Sprint 11: real Stripe Customer Portal session creation lands here.
-	// For now we return the dashboard URL as a placeholder. Tenants with
-	// stripe_customer_id are paid customers — they have a real session
-	// upstream; this endpoint just hasn't gained the SDK call yet.
-	resp := PortalResponse{
-		URL: "https://billing.stripe.com/p/login/" + customerID,
+	// T2.7 of maturity-3-62-to-4-0-roadmap: if Stripe SDK is wired
+	// (production env with STRIPE_SECRET_KEY), mint a real one-time-use
+	// Portal session URL (TTL=30min, customer-scoped). Otherwise
+	// preserve legacy placeholder behavior so local dev + tests without
+	// a Stripe key keep working.
+	url := "https://billing.stripe.com/p/login/" + customerID // legacy fallback
+	if h.portalCreator != nil {
+		realURL, sdkErr := h.portalCreator.CreateSession(r.Context(), customerID, h.portalReturnURL)
+		if sdkErr != nil {
+			h.logger.Error("billing: portal session create failed",
+				"tenant", uc.TenantID,
+				"customer", customerID,
+				"error", sdkErr)
+			writeErrorJSON(w, http.StatusBadGateway, "BILLING_PROVIDER_UNAVAILABLE",
+				"The billing provider is temporarily unavailable. Try again in a few moments.")
+			return
+		}
+		url = realURL
 	}
+
+	resp := PortalResponse{URL: url}
 	w.Header().Set("Content-Type", "application/json")
 	_ = json.NewEncoder(w).Encode(resp)
 }

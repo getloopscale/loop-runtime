@@ -176,6 +176,23 @@ func buildServerConfig(
 		if dbDeps != nil && dbDeps.StdDB != nil {
 			billingHandler.WithCostSource(db.NewSQLCostStore(dbDeps.StdDB))
 		}
+		// T2.7 of maturity-3-62-to-4-0-roadmap: wire Stripe Customer
+		// Portal SDK if STRIPE_SECRET_KEY env is set. Production sets
+		// it via ESO from the prod Stripe secret. Local dev + tests
+		// without the env keep the legacy placeholder URL — no SDK
+		// call, no test pollution. Test-mode keys (sk_test_*) work
+		// fine and return real session URLs against Stripe's test
+		// dashboard, useful for staging environments.
+		if stripeKey := os.Getenv("STRIPE_SECRET_KEY"); stripeKey != "" {
+			returnURL := os.Getenv("BILLING_RETURN_URL")
+			if returnURL == "" {
+				returnURL = "https://app.loopzero.cloud/billing"
+			}
+			billingHandler.WithPortalSessionCreator(
+				services.NewStripePortalSessionCreator(stripeKey),
+				returnURL,
+			)
+		}
 		sc.BillingHandler = billingHandler
 		// AUDIT-10: single PostgresTeamStore instance serves both team admin
 		// endpoints and /whoami username lookup.

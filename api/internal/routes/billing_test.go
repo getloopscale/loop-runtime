@@ -165,3 +165,115 @@ func contains(s, sub string) bool {
 	}
 	return false
 }
+
+// fakePortalCreator is a test double for PortalSessionCreator. Records
+// the customerID + returnURL it was called with so tests can assert
+// the handler passed correct arguments.
+type fakePortalCreator struct {
+	url        string
+	err        error
+	gotCust    string
+	gotReturn  string
+	gotContext context.Context
+}
+
+func (f *fakePortalCreator) CreateSession(ctx context.Context, customerID, returnURL string) (string, error) {
+	f.gotCust = customerID
+	f.gotReturn = returnURL
+	f.gotContext = ctx
+	if f.err != nil {
+		return "", f.err
+	}
+	return f.url, nil
+}
+
+// T2.7: when SDK is wired, handler calls creator.CreateSession with the
+// tenant's stripe_customer_id and the configured return URL, returning
+// the real one-time-use portal URL.
+func TestBilling_Portal_WithSDK_HappyPath(t *testing.T) {
+	custID := "cus_TestSDKPath"
+	creator := &fakePortalCreator{url: "https://billing.stripe.com/p/session/test_xxx"}
+	h := NewBillingHandler(&fakeBillingPool{customerID: &custID}).
+		WithPortalSessionCreator(creator, "https://app.loopzero.cloud/billing")
+
+	req := httptest.NewRequest(http.MethodPost, "/api/v1/billing/portal", nil)
+	req = withAuth(req, defaultUserContext())
+	w := httptest.NewRecorder()
+
+	h.Portal(w, req)
+
+	if w.Code != http.StatusOK {
+		t.Fatalf("want 200, got %d body=%s", w.Code, w.Body.String())
+	}
+	var resp PortalResponse
+	_ = json.NewDecoder(w.Body).Decode(&resp)
+	if resp.URL != "https://billing.stripe.com/p/session/test_xxx" {
+		t.Errorf("want real portal URL from SDK, got %q", resp.URL)
+	}
+	if creator.gotCust != custID {
+		t.Errorf("creator received customer %q, want %q", creator.gotCust, custID)
+	}
+	if creator.gotReturn != "https://app.loopzero.cloud/billing" {
+		t.Errorf("creator received return URL %q, want app.loopzero.cloud/billing", creator.gotReturn)
+	}
+}
+
+// T2.7: SDK errors (Stripe rate limit, invalid key, network) map to
+// 502 BILLING_PROVIDER_UNAVAILABLE with product-language message
+// (Rule 3: no "Stripe" leak in user-facing string).
+func TestBilling_Portal_WithSDK_StripeError_Returns502(t *testing.T) {
+	custID := "cus_TestSDKError"
+	creator := &fakePortalCreator{err: errSDKFailure}
+	h := NewBillingHandler(&fakeBillingPool{customerID: &custID}).
+		WithPortalSessionCreator(creator, "https://app.loopzero.cloud/billing")
+
+	req := httptest.NewRequest(http.MethodPost, "/api/v1/billing/portal", nil)
+	req = withAuth(req, defaultUserContext())
+	w := httptest.NewRecorder()
+
+	h.Portal(w, req)
+
+	if w.Code != http.StatusBadGateway {
+		t.Fatalf("want 502 (BILLING_PROVIDER_UNAVAILABLE), got %d body=%s", w.Code, w.Body.String())
+	}
+	var body map[string]string
+	_ = json.NewDecoder(w.Body).Decode(&body)
+	if body["error"] != "BILLING_PROVIDER_UNAVAILABLE" {
+		t.Errorf("want error=BILLING_PROVIDER_UNAVAILABLE, got %q", body["error"])
+	}
+	// Rule 3 guard: message must not leak "Stripe" or "stripe" to user.
+	msg := body["message"]
+	if contains(msg, "Stripe") || contains(msg, "stripe") {
+		t.Errorf("Rule 3 violation: message leaks internal vendor name: %q", msg)
+	}
+}
+
+// T2.7: no-Stripe-customer EC-8 path still 400 even with SDK wired —
+// SDK only mints session for valid customers; missing customer is a
+// front-of-handler check that does NOT call the SDK.
+func TestBilling_Portal_NoCustomer_DoesNotCallSDK(t *testing.T) {
+	creator := &fakePortalCreator{url: "should-never-be-returned"}
+	h := NewBillingHandler(&fakeBillingPool{}). // no customer ID
+							WithPortalSessionCreator(creator, "https://app.loopzero.cloud/billing")
+
+	req := httptest.NewRequest(http.MethodPost, "/api/v1/billing/portal", nil)
+	req = withAuth(req, defaultUserContext())
+	w := httptest.NewRecorder()
+
+	h.Portal(w, req)
+
+	if w.Code != http.StatusBadRequest {
+		t.Fatalf("want 400 NO_STRIPE_CUSTOMER, got %d", w.Code)
+	}
+	if creator.gotCust != "" {
+		t.Errorf("SDK was called for customer-less tenant (got customer=%q); should short-circuit", creator.gotCust)
+	}
+}
+
+// errSDKFailure is a sentinel for SDK error simulation. Defined as
+// package-level var so the test reads naturally without inline new.
+var errSDKFailure = stripeErr("test sdk failure")
+
+type stripeErr string
+
+func (e stripeErr) Error() string { return string(e) }
