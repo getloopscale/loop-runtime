@@ -1,0 +1,159 @@
+// SPDX-License-Identifier: Apache-2.0
+// Copyright 2025-2026 The LoopZero Authors
+
+// Package helmoverlapparity implements the T1.2 gate of plan
+// 2026-05-26-maturity-3-62-to-4-0-roadmap-plan.md: enforce that the bootstrap
+// Helm charts in infra/helm/ never declare a version GREATER than their
+// published counterpart in charts/.
+//
+// CLAUDE.md § Helm Chart Dual System documents that 3 charts overlap
+// functionally between systems: loopzero-api, loopzero-cloud,
+// admission-policies/loopzero-admission-policies. Without a parity gate the
+// bootstrap (Helmfile L2 fast path) can silently advance while the published
+// chart (OCI registry, ArgoCD L3) lags — producing a runtime where Day-0 has
+// behavior A while Day-2 GitOps sync reverts to behavior B. The reverse
+// (bootstrap behind published) is allowed: ArgoCD has stricter semantics
+// (loopzero-common library, RBAC, monitoring) so it routinely leads.
+//
+// Closes M06 Helm HIGH gap (charts overlap drift undetected).
+package helmoverlapparity
+
+import (
+	"fmt"
+	"os"
+	"path/filepath"
+
+	"golang.org/x/mod/semver"
+	"gopkg.in/yaml.v3"
+)
+
+// Config tells Check which repo to scan.
+type Config struct {
+	RepoRoot string
+}
+
+// Outcome is the gate result. Pass=false when any bootstrap chart version
+// is GREATER than the published equivalent.
+type Outcome struct {
+	Pass       bool
+	Violations []string // human-readable diagnostics
+	Inspected  []Pair   // for transparency / reporting
+}
+
+// Pair captures the comparison of one logical chart across systems.
+type Pair struct {
+	BootstrapPath    string // infra/helm/<name>/Chart.yaml
+	PublishedPath    string // charts/<name>/Chart.yaml
+	BootstrapVersion string
+	PublishedVersion string
+	Status           string // "ok", "fail", "missing-bootstrap", "missing-published", "parse-error"
+	Detail           string // populated when Status != "ok"
+}
+
+// overlaps describes the canonical mapping. Adding a 4th overlap = add a row.
+// Mapping captures the asymmetric naming (bootstrap uses no "loopzero-" prefix
+// for admission-policies; published uses it).
+var overlaps = []struct {
+	BootstrapName string // infra/helm/<dir>
+	PublishedName string // charts/<dir>
+}{
+	{BootstrapName: "loopzero-api", PublishedName: "loopzero-api"},
+	{BootstrapName: "loopzero-cloud", PublishedName: "loopzero-cloud"},
+	{BootstrapName: "admission-policies", PublishedName: "loopzero-admission-policies"},
+}
+
+// Check enforces the parity invariant. Returns Outcome.Pass=true iff every
+// overlap row satisfies semver(bootstrap) <= semver(published).
+func Check(cfg Config) (*Outcome, error) {
+	out := &Outcome{Pass: true}
+	for _, o := range overlaps {
+		bootstrapPath := filepath.Join(cfg.RepoRoot, "infra", "helm", o.BootstrapName, "Chart.yaml")
+		publishedPath := filepath.Join(cfg.RepoRoot, "charts", o.PublishedName, "Chart.yaml")
+		p := Pair{
+			BootstrapPath: filepath.Join("infra", "helm", o.BootstrapName, "Chart.yaml"),
+			PublishedPath: filepath.Join("charts", o.PublishedName, "Chart.yaml"),
+		}
+
+		bootstrapVer, bootstrapErr := readChartVersion(bootstrapPath)
+		publishedVer, publishedErr := readChartVersion(publishedPath)
+
+		switch {
+		case bootstrapErr != nil && os.IsNotExist(bootstrapErr):
+			p.Status = "missing-bootstrap"
+			p.Detail = fmt.Sprintf("bootstrap Chart.yaml absent: %s", bootstrapPath)
+			out.Violations = append(out.Violations, p.Detail)
+			out.Pass = false
+		case publishedErr != nil && os.IsNotExist(publishedErr):
+			p.Status = "missing-published"
+			p.Detail = fmt.Sprintf("published Chart.yaml absent: %s", publishedPath)
+			out.Violations = append(out.Violations, p.Detail)
+			out.Pass = false
+		case bootstrapErr != nil:
+			p.Status = "parse-error"
+			p.Detail = fmt.Sprintf("read/parse %s: %v", bootstrapPath, bootstrapErr)
+			out.Violations = append(out.Violations, p.Detail)
+			out.Pass = false
+		case publishedErr != nil:
+			p.Status = "parse-error"
+			p.Detail = fmt.Sprintf("read/parse %s: %v", publishedPath, publishedErr)
+			out.Violations = append(out.Violations, p.Detail)
+			out.Pass = false
+		default:
+			p.BootstrapVersion = bootstrapVer
+			p.PublishedVersion = publishedVer
+			cmp, cmpErr := semverCompare(bootstrapVer, publishedVer)
+			if cmpErr != nil {
+				p.Status = "parse-error"
+				p.Detail = cmpErr.Error()
+				out.Violations = append(out.Violations, p.Detail)
+				out.Pass = false
+			} else if cmp > 0 {
+				p.Status = "fail"
+				p.Detail = fmt.Sprintf("%s bootstrap version %s > published %s (%s) — bootstrap must NOT lead published",
+					o.BootstrapName, bootstrapVer, publishedVer, o.PublishedName)
+				out.Violations = append(out.Violations, p.Detail)
+				out.Pass = false
+			} else {
+				p.Status = "ok"
+			}
+		}
+		out.Inspected = append(out.Inspected, p)
+	}
+	return out, nil
+}
+
+// chartMeta captures only the version field — we ignore everything else.
+type chartMeta struct {
+	Version string `yaml:"version"`
+}
+
+func readChartVersion(path string) (string, error) {
+	// #nosec G304 -- path constructed from fixed overlaps × repoRoot.
+	data, err := os.ReadFile(path)
+	if err != nil {
+		return "", err
+	}
+	var m chartMeta
+	if err := yaml.Unmarshal(data, &m); err != nil {
+		return "", fmt.Errorf("yaml unmarshal: %w", err)
+	}
+	if m.Version == "" {
+		return "", fmt.Errorf("Chart.yaml missing 'version' field")
+	}
+	return m.Version, nil
+}
+
+// semverCompare returns the result of comparing a vs b. Helm chart versions
+// are valid semver but lack the leading 'v' that golang.org/x/mod/semver
+// requires; we prepend it.
+func semverCompare(a, b string) (int, error) {
+	va := "v" + a
+	vb := "v" + b
+	if !semver.IsValid(va) {
+		return 0, fmt.Errorf("invalid semver %q", a)
+	}
+	if !semver.IsValid(vb) {
+		return 0, fmt.Errorf("invalid semver %q", b)
+	}
+	return semver.Compare(va, vb), nil
+}

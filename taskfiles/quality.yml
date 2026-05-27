@@ -32,6 +32,7 @@ tasks:
       - /tmp/loopzero-ops quality postgresql-pdb-config
       - /tmp/loopzero-ops quality dockerfile-no-docker-hub
       - /tmp/loopzero-ops quality advisory-lock-scope
+      - /tmp/loopzero-ops quality helm-overlap-parity
       - /tmp/loopzero-ops quality cli-exit-codes
       - /tmp/loopzero-ops quality shell-hygiene
       - /tmp/loopzero-ops quality corrections-txt-closed
