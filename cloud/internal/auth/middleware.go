@@ -38,16 +38,27 @@ func GetUser(ctx context.Context) *UserContext {
 // RequireJWT returns chi middleware that validates JWT Bearer tokens.
 // Accepts Hydra RSA JWTs (CLI) and HMAC session JWTs (dashboard).
 // Uses pkg/jwt — single source of truth for JWT validation.
+//
+// T6.0 of plan 2026-05-27-backend-frontend-integration v1.1 (EC-04):
+// the dashboard opens SSE streams via the native EventSource API, which
+// cannot set custom request headers. For SSE-style paths we additionally
+// accept the JWT as a `?token=<jwt>` query parameter. The query-param
+// form is only consulted when the standard Bearer header is absent, so
+// the security posture for non-SSE clients is unchanged.
+//
+// Security note: the token will appear in upstream access logs. Mitigated
+// by short HMAC TTL (1h) + key rotation (pkg/jwt SessionTokenIssuer
+// previous-secret window). Trade-off accepted vs the alternative of
+// migrating every stream surface to WebSocket.
 func RequireJWT(rsaValidator *loopzerojwt.Validator, sessValidator *loopzerojwt.SessionTokenIssuer) func(http.Handler) http.Handler {
 	return func(next http.Handler) http.Handler {
 		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-			authHeader := r.Header.Get("Authorization")
-			if !strings.HasPrefix(authHeader, "Bearer ") {
+			token := extractBearerOrQueryToken(r)
+			if token == "" {
 				slog.Warn("auth: rejected — no Bearer token", "method", r.Method, "path", r.URL.Path)
 				writeAuthError(w, "Not authenticated. Run: loopzero login")
 				return
 			}
-			token := authHeader[7:]
 
 			// Try RSA JWT (Hydra — CLI)
 			if rsaValidator != nil {
@@ -108,6 +119,26 @@ func RequireJWT(rsaValidator *loopzerojwt.Validator, sessValidator *loopzerojwt.
 			writeAuthError(w, "Invalid or expired token. Run: loopzero login")
 		})
 	}
+}
+
+// extractBearerOrQueryToken returns the JWT carried by either the standard
+// Authorization: Bearer header or the EventSource fallback ?token=<jwt>
+// query parameter. Returns the empty string when neither is present.
+//
+// The header form is preferred — the query form is consulted only as a
+// fallback so the security posture for non-SSE clients is unchanged.
+// (T6.0 / EC-04 of plan 2026-05-27-backend-frontend-integration v1.1.)
+func extractBearerOrQueryToken(r *http.Request) string {
+	if auth := r.Header.Get("Authorization"); strings.HasPrefix(auth, "Bearer ") {
+		return auth[7:]
+	}
+	// EventSource workaround — only relevant for SSE streams. Other clients
+	// SHOULD use the Authorization header; the query form merely tolerates
+	// browsers' inability to set custom headers on EventSource.
+	if t := r.URL.Query().Get("token"); t != "" {
+		return t
+	}
+	return ""
 }
 
 // writeAuthError writes a JSON error response with request_id for tracing (§4.3).

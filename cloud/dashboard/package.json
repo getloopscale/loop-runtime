@@ -14,7 +14,8 @@
     "size:why": "size-limit --why",
     "bundle:analyze": "vite build",
     "storybook": "storybook dev -p 6006",
-    "storybook:build": "storybook build"
+    "storybook:build": "storybook build",
+    "tree-shake-check": "npm run build && if grep -q 'lib/mocks' dist/assets/*.js; then echo 'FAIL: mocks chunk leaked into prod bundle (T7.1 / EC-10 of plan 2026-05-27-backend-frontend-integration v1.1)'; exit 1; else echo 'PASS: mocks tree-shaken from prod bundle'; fi"
   },
   "size-limit": [
     {

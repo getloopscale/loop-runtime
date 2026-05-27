@@ -3,17 +3,27 @@
   <head>
     <meta charset="UTF-8" />
     <!--
-      T3.1 + EC-12: Content Security Policy.
+      Content Security Policy.
+
+      T2.3 of plan 2026-05-27-backend-frontend-integration v1.1 — connect-src
+      is now 'self' only. The dashboard is served same-origin via the cloud
+      BFF (D2 + MEET-040); every API/auth/proxy hop is a relative URL, so
+      we no longer need cross-origin allow-list entries for api/accounts/auth
+      subdomains.
+
       - script-src 'unsafe-inline' kept for /__config.js runtime injection
         (no nonce per-request — that would need container entrypoint refactor,
         deferred to v1.1 per Phase 3 acceptance).
       - style-src 'unsafe-inline' required for Radix + Tailwind v4 inline styles.
-      - connect-src: self (proxied API) + Kratos/Hydra auth flows + Stripe
-        portal redirect + ws:/wss: for Vite HMR in dev (unused in prod).
+      - connect-src 'self' covers all dashboard egress (BFF proxies the rest).
+        ws:/wss: kept for Vite HMR in dev (unused in prod).
+        Stripe whitelist kept precautionarily (EC-13) — currently we redirect
+        via window.location only, but a future Stripe Elements adoption would
+        need it and the CSP cost is minimal.
       - frame-ancestors NOT enforced via meta — only via response header.
       - data:/blob:/https: in img-src cover avatars, base64 favicons, S3 assets.
     -->
-    <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' 'unsafe-inline'; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src 'self' data: https://fonts.gstatic.com; img-src 'self' data: blob: https:; connect-src 'self' ws: wss: https://api.loopzero.dev https://accounts.loopzero.dev https://auth.loopzero.dev https://checkout.stripe.com https://*.stripe.com; form-action 'self'; base-uri 'self'; object-src 'none'" />
+    <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' 'unsafe-inline'; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src 'self' data: https://fonts.gstatic.com; img-src 'self' data: blob: https:; connect-src 'self' ws: wss: https://checkout.stripe.com https://*.stripe.com; form-action 'self'; base-uri 'self'; object-src 'none'" />
     <link rel="icon" type="image/svg+xml" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%233ecf8e' stroke-width='2'%3E%3Cpath d='M13 2L3 14h9l-1 8 10-12h-9l1-8z'/%3E%3C/svg%3E" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <meta name="theme-color" content="#09090b" />

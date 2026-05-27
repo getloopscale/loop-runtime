@@ -37,3 +37,51 @@ describe('engineFetch — signal propagation (EC-03)', () => {
     expect(init.signal).toBe(controller.signal);
   });
 });
+
+describe('fetchWithAuth — Idempotency-Key auto-gen (T5.0 / EC-09)', () => {
+  beforeEach(() => {
+    vi.restoreAllMocks();
+  });
+
+  async function primeTokenAndCapture(method: string, explicitKey?: string): Promise<Record<string, string>> {
+    let callCount = 0;
+    const captured: Record<string, string> = {};
+    vi.spyOn(globalThis, 'fetch').mockImplementation(async (_url, init) => {
+      callCount++;
+      if (callCount === 1) {
+        return new Response(JSON.stringify({ access_token: 'tk', expires_in: 3600 }), { status: 200 });
+      }
+      Object.assign(captured, (init as RequestInit).headers as Record<string, string>);
+      return new Response(JSON.stringify({}), { status: 200 });
+    });
+    await exchangeSessionToken();
+    const requestInit: RequestInit = { method };
+    if (explicitKey) (requestInit.headers as Record<string, string>) = { 'Idempotency-Key': explicitKey };
+    await engineFetch('/foo', requestInit);
+    return captured;
+  }
+
+  it('test_POST_request_gets_auto_generated_uuid_idempotency_key', async () => {
+    const headers = await primeTokenAndCapture('POST');
+    expect(headers['Idempotency-Key']).toBeDefined();
+    // RFC 4122 UUID v4-ish shape (relaxed: 36 chars with 4 hyphens).
+    expect(headers['Idempotency-Key']).toMatch(/^[0-9a-f-]{36}$/i);
+  });
+
+  it('test_PATCH_and_DELETE_and_PUT_also_get_keys', async () => {
+    for (const method of ['PATCH', 'DELETE', 'PUT']) {
+      const h = await primeTokenAndCapture(method);
+      expect(h['Idempotency-Key'], `method=${method}`).toMatch(/^[0-9a-f-]{36}$/i);
+    }
+  });
+
+  it('test_GET_request_gets_no_idempotency_key', async () => {
+    const headers = await primeTokenAndCapture('GET');
+    expect(headers['Idempotency-Key']).toBeUndefined();
+  });
+
+  it('test_caller_explicit_key_wins_over_auto_gen', async () => {
+    const headers = await primeTokenAndCapture('POST', 'caller-deliberate-replay-key-001');
+    expect(headers['Idempotency-Key']).toBe('caller-deliberate-replay-key-001');
+  });
+});

@@ -216,6 +216,18 @@ func main() {
 		r.With(requireJWT).Get("/me", meHandler.Get)
 	})
 
+	// Telemetry — T1.2 of plan 2026-05-27-backend-frontend-integration v1.1.
+	// PUBLIC (no JWT) — sendBeacon API cannot set custom Authorization
+	// headers, so requiring auth would silently drop every beacon. Body cap
+	// 64 KiB (EC-03) defends against OOM via hostile / buggy clients.
+	telemetryHandler := routes.NewTelemetryHandler(logger)
+	r.Route("/v1/telemetry", func(r chi.Router) {
+		r.Post("/errors", telemetryHandler.Errors)
+		r.Post("/web-vitals", telemetryHandler.WebVitals)
+		r.Post("/events", telemetryHandler.Events)
+		r.Post("/interactions", telemetryHandler.Interactions)
+	})
+
 	// Hydra consent/login callbacks (browser redirects)
 	r.Get("/auth/login", consentHandler.Login)
 	r.Get("/auth/login/complete", consentHandler.LoginComplete)

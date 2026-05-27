@@ -103,6 +103,15 @@ async function ensureToken(): Promise<string | null> {
   return ok ? accessToken : null;
 }
 
+/**
+ * Exposed for SSE consumers (use-log-stream) that need the JWT inline in
+ * the URL query string because EventSource cannot set headers.
+ * T6.0 of plan 2026-05-27-backend-frontend-integration v1.1 (EC-04).
+ */
+export async function ensureSSEToken(): Promise<string | null> {
+  return ensureToken();
+}
+
 let redirecting = false;
 
 /** §3.6: Show notification before redirect, with reason in query param. */
@@ -169,6 +178,16 @@ async function fetchWithAuth<T>(base: string, path: string, token: string, optio
     'Authorization': `Bearer ${token}`,
     ...(options.headers as Record<string, string> || {}),
   };
+
+  // T5.0 of plan 2026-05-27-backend-frontend-integration v1.1 (EC-09).
+  // Auto-generate Idempotency-Key for every mutating verb so retries on
+  // network blips do not duplicate state. Caller can override with an
+  // explicit `headers['Idempotency-Key']` to make a deliberate replay
+  // (e.g., resume across reload).
+  const method = (options.method || 'GET').toUpperCase();
+  if (['POST', 'PATCH', 'PUT', 'DELETE'].includes(method) && !headers['Idempotency-Key']) {
+    headers['Idempotency-Key'] = crypto.randomUUID();
+  }
 
   try {
     const resp = await fetch(`${base}${path}`, { ...options, headers });

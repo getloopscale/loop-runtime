@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from 'react';
 import type { LogLine } from '@/lib/api/types';
 import { API_URL } from '@/lib/config';
+import { ensureSSEToken } from '@/lib/api';
 
 /**
  * use-log-stream — consumes a SSE log stream into a growing line buffer.
@@ -47,35 +48,57 @@ export function useLogStream(
     setConnected(false);
     bufferRef.current = [];
 
-    const url = `${API_URL}${path}`;
-    const es = new EventSource(url);
+    let cancelled = false;
+    let es: EventSource | null = null;
 
-    es.onopen = () => setConnected(true);
+    // T6.0 of plan 2026-05-27-backend-frontend-integration v1.1 (EC-04):
+    // EventSource cannot set Authorization headers, so we fetch the JWT
+    // first and pass it as ?token=<jwt>. The token only lives long
+    // enough to open the stream; the cloud BFF then proxies upstream
+    // with X-Service-Auth.
+    (async () => {
+      const token = await ensureSSEToken();
+      if (cancelled) return;
+      if (!token) {
+        setError(true);
+        return;
+      }
+      const separator = path.includes('?') ? '&' : '?';
+      const url = `${API_URL}${path}${separator}token=${encodeURIComponent(token)}`;
+      es = new EventSource(url);
 
-    es.onmessage = (event: MessageEvent) => {
-      let parsed: LogLine | null = null;
-      try {
-        parsed = JSON.parse(event.data) as LogLine;
-      } catch {
-        parsed = { ts: new Date().toISOString(), level: 'info', msg: String(event.data) };
-      }
-      if (!parsed) return;
-      bufferRef.current.push(parsed);
-      if (bufferRef.current.length > maxLines) {
-        bufferRef.current.splice(0, bufferRef.current.length - maxLines);
-      }
-      if (!pausedRef.current) {
-        setLines([...bufferRef.current]);
-      }
-    };
+      es.onopen = () => {
+        if (!cancelled) setConnected(true);
+      };
 
-    es.onerror = () => {
-      setError(true);
-      setConnected(false);
-    };
+      es.onmessage = (event: MessageEvent) => {
+        if (cancelled) return;
+        let parsed: LogLine | null = null;
+        try {
+          parsed = JSON.parse(event.data) as LogLine;
+        } catch {
+          parsed = { ts: new Date().toISOString(), level: 'info', msg: String(event.data) };
+        }
+        if (!parsed) return;
+        bufferRef.current.push(parsed);
+        if (bufferRef.current.length > maxLines) {
+          bufferRef.current.splice(0, bufferRef.current.length - maxLines);
+        }
+        if (!pausedRef.current) {
+          setLines([...bufferRef.current]);
+        }
+      };
+
+      es.onerror = () => {
+        if (cancelled) return;
+        setError(true);
+        setConnected(false);
+      };
+    })();
 
     return () => {
-      es.close();
+      cancelled = true;
+      es?.close();
       setConnected(false);
     };
   }, [path, maxLines]);
