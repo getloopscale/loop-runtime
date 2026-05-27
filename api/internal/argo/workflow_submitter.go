@@ -61,6 +61,11 @@ type WorkflowSubmitterConfig struct {
 	CosignKeyless   bool
 	CosignFulcioURL string // optional override (default: https://fulcio.sigstore.dev)
 	CosignRekorURL  string // optional override (default: https://rekor.sigstore.dev)
+	// CosignAttestEnabled toggles SLSA L3 SBOM-to-image attestation linking
+	// via cosignAttestTemplate(). false (default) = no attestation step.
+	// Plan 2026-05-27-M07-to-3-85 M2 T8.0 (v1.1 EC-3): MUST be wired via env var
+	// LOOPZERO_COSIGN_ATTEST_ENABLED to avoid silent "Implemented but not wired" pattern.
+	CosignAttestEnabled bool
 	// MinIO credentials are injected via K8s Secret (envFrom) in CWTs, not via workflow params.
 }
 
@@ -95,13 +100,14 @@ func NewWorkflowSubmitter(cfg WorkflowSubmitterConfig) (*WorkflowSubmitter, erro
 	}
 
 	builder := NewWorkflowBuilder(InfraParams{
-		RegistryURL:       cfg.RegistryURL,
-		RegistryInsecure:  cfg.RegistryInsecure,
-		BaseDomain:        cfg.BaseDomain,
-		HarborRegistryURL: cfg.HarborRegistryURL,
-		CosignKeyless:     cfg.CosignKeyless,
-		CosignFulcioURL:   cfg.CosignFulcioURL,
-		CosignRekorURL:    cfg.CosignRekorURL,
+		RegistryURL:         cfg.RegistryURL,
+		RegistryInsecure:    cfg.RegistryInsecure,
+		BaseDomain:          cfg.BaseDomain,
+		HarborRegistryURL:   cfg.HarborRegistryURL,
+		CosignKeyless:       cfg.CosignKeyless,
+		CosignFulcioURL:     cfg.CosignFulcioURL,
+		CosignRekorURL:      cfg.CosignRekorURL,
+		CosignAttestEnabled: cfg.CosignAttestEnabled,
 	})
 
 	return &WorkflowSubmitter{

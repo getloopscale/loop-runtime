@@ -78,6 +78,18 @@ type Config struct {
 	RegistryURL          string
 	RegistryInsecure     bool   // true for local dev registries without TLS
 	HarborRegistryURL    string // MEET-048: secondary registry for dual-push during migration. Empty = disabled.
+
+	// Cosign keyless signing config (M2 T8.0 of plan 2026-05-27-M07-to-3-85 — v1.1 EC-3 wire env var).
+	// CosignKeyless=false (default): keyed mode via cosign-signing-key Secret.
+	// CosignKeyless=true: keyless via Fulcio + Rekor + projected SA token.
+	// Requires Sigstore stack provisioned on build cluster (per plan M2 Phase 7).
+	// Without this wire, helm values bonitos viram pod env mas InfraParams default
+	// fica false (keyed) — silent teatro pattern "Implemented but not wired" do CLAUDE.md.
+	CosignKeyless       bool
+	CosignAttestEnabled bool   // SLSA L3 SBOM-to-image attestation; requires CosignKeyless=true
+	CosignFulcioURL     string // Override default Fulcio URL when CosignKeyless=true. Empty = cosign default (sigstore public).
+	CosignRekorURL      string // Override default Rekor URL when CosignKeyless=true. Empty = cosign default.
+
 	WorkloadIngressURL   string
 	BaseDomain           string // Base domain for app hostnames (e.g., "loopzero.local", "loopzero.cloud")
 	// B14 (MEET-2026-04-23-058): cert-manager ClusterIssuer used for all app TLS
@@ -300,6 +312,14 @@ func Load() Config {
 		RegistryURL:          envOr("REGISTRY_URL", "k3d-loopzero-registry:5000"),
 		RegistryInsecure:     os.Getenv("REGISTRY_INSECURE") == "true",
 		HarborRegistryURL:    os.Getenv("HARBOR_REGISTRY_URL"), // MEET-048: empty = disabled
+
+		// Cosign keyless config (M2 T8.0, v1.1 EC-3 of plan 2026-05-27-M07-to-3-85)
+		// Defaults preserve keyed mode (safe regression). Operator sets LOOPZERO_COSIGN_KEYLESS=true
+		// AFTER Sigstore stack provisioned em build cluster.
+		CosignKeyless:        envBool("LOOPZERO_COSIGN_KEYLESS", false),
+		CosignAttestEnabled:  envBool("LOOPZERO_COSIGN_ATTEST_ENABLED", false),
+		CosignFulcioURL:      os.Getenv("LOOPZERO_FULCIO_URL"),
+		CosignRekorURL:       os.Getenv("LOOPZERO_REKOR_URL"),
 		WorkloadIngressURL:   os.Getenv("WORKLOAD_INGRESS_URL"),
 		BaseDomain:           envOr("BASE_DOMAIN", "loopzero.local"),
 		ClusterIssuer:        os.Getenv("LOOPZERO_CLUSTER_ISSUER"),
@@ -539,4 +559,19 @@ func envTime(key string) time.Time {
 		slog.Warn("invalid timestamp in environment variable — ignoring", "key", key, "value", v)
 	}
 	return time.Time{}
+}
+
+// envBool parses an environment variable as bool. Accepts "true", "1", "yes" (case-insensitive)
+// as true; everything else (including unset) returns defaultValue.
+// Used by M2 T8.0 (v1.1 EC-3) for LOOPZERO_COSIGN_KEYLESS + LOOPZERO_COSIGN_ATTEST_ENABLED.
+func envBool(key string, defaultValue bool) bool {
+	v := os.Getenv(key)
+	if v == "" {
+		return defaultValue
+	}
+	if b, err := strconv.ParseBool(v); err == nil {
+		return b
+	}
+	slog.Warn("invalid bool in environment variable — using default", "key", key, "value", v, "default", defaultValue)
+	return defaultValue
 }

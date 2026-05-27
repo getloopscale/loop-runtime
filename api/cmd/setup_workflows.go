@@ -39,13 +39,23 @@ func setupWorkflows(cfg config.Config, httpTransport *http.Transport, logger *sl
 	// The workflow no longer calls the API. Build completion is detected
 	// by the BuildReconcileLoop polling Argo Workflow CRDs.
 	rawWorkflowSubmitter, err := argo.NewWorkflowSubmitter(argo.WorkflowSubmitterConfig{
-		Kubeconfig:        cfg.BuildKubeconfig,
-		Context:           cfg.BuildKubeContext,
-		RegistryURL:       cfg.RegistryURL,
-		RegistryInsecure:  cfg.RegistryInsecure,
-		BaseDomain:        cfg.BaseDomain,
-		HarborRegistryURL: cfg.HarborRegistryURL,
+		Kubeconfig:          cfg.BuildKubeconfig,
+		Context:             cfg.BuildKubeContext,
+		RegistryURL:         cfg.RegistryURL,
+		RegistryInsecure:    cfg.RegistryInsecure,
+		BaseDomain:          cfg.BaseDomain,
+		HarborRegistryURL:   cfg.HarborRegistryURL,
+		CosignKeyless:       cfg.CosignKeyless,       // v1.1 EC-3 wire env var
+		CosignAttestEnabled: cfg.CosignAttestEnabled, // v1.1 EC-3 wire env var
+		CosignFulcioURL:     cfg.CosignFulcioURL,
+		CosignRekorURL:      cfg.CosignRekorURL,
 	})
+	if cfg.CosignKeyless {
+		logger.Info("cosign keyless mode ENABLED",
+			"fulcio_url", cfg.CosignFulcioURL,
+			"rekor_url", cfg.CosignRekorURL,
+			"attest_enabled", cfg.CosignAttestEnabled)
+	}
 	if err != nil {
 		return nil, err
 	}

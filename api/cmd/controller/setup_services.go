@@ -49,11 +49,15 @@ func setupServices(cfg config.Config, dbAdapter *db.PgxAdapter, logger *slog.Log
 
 	// ---- Build cluster (Argo) ----
 	rawWorkflowSubmitter, err := argo.NewWorkflowSubmitter(argo.WorkflowSubmitterConfig{
-		Kubeconfig:       cfg.BuildKubeconfig,
-		Context:          cfg.BuildKubeContext,
-		RegistryURL:      cfg.RegistryURL,
-		RegistryInsecure: cfg.RegistryInsecure,
-		BaseDomain:       cfg.BaseDomain,
+		Kubeconfig:          cfg.BuildKubeconfig,
+		Context:             cfg.BuildKubeContext,
+		RegistryURL:         cfg.RegistryURL,
+		RegistryInsecure:    cfg.RegistryInsecure,
+		BaseDomain:          cfg.BaseDomain,
+		CosignKeyless:       cfg.CosignKeyless,       // v1.1 EC-3 wire env var
+		CosignAttestEnabled: cfg.CosignAttestEnabled, // v1.1 EC-3 wire env var
+		CosignFulcioURL:     cfg.CosignFulcioURL,
+		CosignRekorURL:      cfg.CosignRekorURL,
 	})
 	if err != nil {
 		logger.Error("failed to create workflow submitter", "error", err)

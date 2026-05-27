@@ -254,3 +254,66 @@ func TestLoad_ServiceAuthSecretCreatedAt_DefaultsToZero(t *testing.T) {
 		t.Errorf("ServiceAuthSecretCreatedAt should be zero when unset, got %v", cfg.ServiceAuthSecretCreatedAt)
 	}
 }
+
+// --- Cosign Keyless config (M2 T8.0, v1.1 EC-3 of plan 2026-05-27-M07-to-3-85) ---
+
+func TestLoad_CosignKeyless_DefaultsFalse(t *testing.T) {
+	// Per v1.1 EC-3: default MUST be false (safe regression — keyed mode preserved).
+	for _, k := range []string{"LOOPZERO_COSIGN_KEYLESS", "LOOPZERO_COSIGN_ATTEST_ENABLED", "LOOPZERO_FULCIO_URL", "LOOPZERO_REKOR_URL"} {
+		_ = os.Unsetenv(k)
+	}
+	cfg := Load()
+	if cfg.CosignKeyless {
+		t.Error("CosignKeyless must default to false when env unset")
+	}
+	if cfg.CosignAttestEnabled {
+		t.Error("CosignAttestEnabled must default to false when env unset")
+	}
+	if cfg.CosignFulcioURL != "" {
+		t.Errorf("CosignFulcioURL must default to empty, got %q", cfg.CosignFulcioURL)
+	}
+	if cfg.CosignRekorURL != "" {
+		t.Errorf("CosignRekorURL must default to empty, got %q", cfg.CosignRekorURL)
+	}
+}
+
+func TestLoad_CosignKeyless_TrueActivates(t *testing.T) {
+	t.Setenv("LOOPZERO_COSIGN_KEYLESS", "true")
+	cfg := Load()
+	if !cfg.CosignKeyless {
+		t.Error(`CosignKeyless must be true when env = "true"`)
+	}
+}
+
+func TestLoad_CosignAttestEnabled_TrueActivates(t *testing.T) {
+	t.Setenv("LOOPZERO_COSIGN_ATTEST_ENABLED", "true")
+	cfg := Load()
+	if !cfg.CosignAttestEnabled {
+		t.Error(`CosignAttestEnabled must be true when env = "true"`)
+	}
+}
+
+func TestLoad_CosignFulcioURL_PropagatesFromEnv(t *testing.T) {
+	t.Setenv("LOOPZERO_FULCIO_URL", "http://fulcio.sigstore-system.svc.cluster.local:80")
+	cfg := Load()
+	if cfg.CosignFulcioURL != "http://fulcio.sigstore-system.svc.cluster.local:80" {
+		t.Errorf("CosignFulcioURL not propagated, got %q", cfg.CosignFulcioURL)
+	}
+}
+
+func TestLoad_CosignRekorURL_PropagatesFromEnv(t *testing.T) {
+	t.Setenv("LOOPZERO_REKOR_URL", "http://rekor-server.sigstore-system.svc.cluster.local:80")
+	cfg := Load()
+	if cfg.CosignRekorURL != "http://rekor-server.sigstore-system.svc.cluster.local:80" {
+		t.Errorf("CosignRekorURL not propagated, got %q", cfg.CosignRekorURL)
+	}
+}
+
+func TestLoad_CosignKeyless_InvalidBoolDefaultsFalse(t *testing.T) {
+	// envBool helper falls back to default on parse error (logs warning).
+	t.Setenv("LOOPZERO_COSIGN_KEYLESS", "garbage")
+	cfg := Load()
+	if cfg.CosignKeyless {
+		t.Error("CosignKeyless must remain false when env is unparseable bool")
+	}
+}
