@@ -154,5 +154,21 @@ if (( NOW_EPOCH > DEADLINE_EPOCH )); then
 fi
 
 DAYS_LEFT=$(( (DEADLINE_EPOCH - NOW_EPOCH) / 86400 ))
-log "OK: mode=keyed, ${DAYS_LEFT} days remaining until cutover deadline ($DEADLINE_STR)"
+
+# T2.2 progressive warnings as cutover approaches. Operator should
+# trigger Sigstore Scaffolding provisioning (infra/pulumi-platform/src/services/sigstore.ts)
+# at T-30d so the 16h engineering window + soak completes before deadline.
+if (( DAYS_LEFT <= 7 )); then
+  log "URGENT: mode=keyed, only ${DAYS_LEFT} days remaining until cutover deadline ($DEADLINE_STR)"
+  log "        Sigstore provisioning MUST start NOW or cosign signing will FAIL CLOSED"
+  log "        Enable infra/pulumi-platform/src/services/sigstore.ts (T2.2)"
+elif (( DAYS_LEFT <= 15 )); then
+  log "WARN: mode=keyed, ${DAYS_LEFT} days remaining until cutover deadline ($DEADLINE_STR)"
+  log "      T-15d: confirm sponsor approved T2.2 Sigstore Scaffolding deployment"
+elif (( DAYS_LEFT <= 30 )); then
+  log "NOTICE: mode=keyed, ${DAYS_LEFT} days remaining until cutover deadline ($DEADLINE_STR)"
+  log "        T-30d: time to schedule T2.2 Change Governor meeting"
+else
+  log "OK: mode=keyed, ${DAYS_LEFT} days remaining until cutover deadline ($DEADLINE_STR)"
+fi
 exit 0

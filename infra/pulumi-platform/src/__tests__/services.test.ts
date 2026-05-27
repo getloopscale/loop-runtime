@@ -153,6 +153,73 @@ describe("prometheus.ts — Prometheus component", () => {
 });
 
 // ---------------------------------------------------------------------------
+// sigstore.ts — T2.2 cosign keyless infrastructure
+// ---------------------------------------------------------------------------
+
+describe("sigstore.ts — Sigstore component (T2.2 cosign keyless)", () => {
+  const src = readSrc("sigstore.ts");
+
+  it("pins helm chart to a fixed version (Renovate-friendly)", () => {
+    expect(src).toMatch(/const HELM_VERSION = "\d+\.\d+\.\d+"/);
+  });
+
+  it("uses official sigstore helm chart repository", () => {
+    expect(src).toContain('"https://sigstore.github.io/helm-charts"');
+  });
+
+  it("declares Fulcio + Rekor + CTLog + TUF in values (full keyless stack)", () => {
+    expect(src).toContain("fulcio:");
+    expect(src).toContain("rekor:");
+    expect(src).toContain("ctlog:");
+    expect(src).toContain("tuf:");
+  });
+
+  it("defaults to enabled=false (disabled-by-default safety)", () => {
+    // The component runs only when sponsor explicitly enables. Accidental
+    // import into a stack must NOT trigger provisioning ($30-50/mo cost).
+    expect(src).toMatch(/enabled\?:\s*boolean/);
+    expect(src).toMatch(/args\.enabled\s*\?\?\s*false/);
+  });
+
+  it("throws clear error if enabled without required hostnames", () => {
+    // Pre-flight validation per CLAUDE.md fail-fast philosophy: missing
+    // DNS records is a configuration error, not a runtime degradation.
+    expect(src).toMatch(/throw new Error.*fulcioHostname.*rekorHostname.*oidcIssuer/s);
+  });
+
+  it("uses role-prefix naming for multi-stack isolation", () => {
+    // Sigstore on mgmt cluster only, but role-prefix still avoids collisions
+    // if drill stack also imports this component.
+    expect(src).toContain("${args.role}-sigstore-scaffolding");
+  });
+
+  it("documents ADR-2026-05-12 cutover deadline reference", () => {
+    // The component header MUST cite the ADR so future readers find the
+    // 2026-08-10 hard deadline context.
+    expect(src).toContain("ADR 2026-05-12");
+    expect(src).toContain("2026-08-10");
+  });
+
+  it("exports ComponentResource with optional release + ready Output", () => {
+    expect(src).toContain("extends pulumi.ComponentResource");
+    expect(src).toContain("public readonly release?: k8s.helm.v3.Release");
+    expect(src).toContain("public readonly ready: pulumi.Output<boolean>");
+  });
+
+  it("sets long timeout for first-install TUF bootstrap (≥15min)", () => {
+    // Scaffolding chart bootstraps TUF root + multiple cert-manager certs
+    // sequentially; ACME issuance can hit 15-20min on first install.
+    // Default 5min would fail every cold-start.
+    expect(src).toMatch(/timeout:\s*\d+/);
+    const timeoutMatch = src.match(/timeout:\s*(\d+)/);
+    if (timeoutMatch) {
+      const seconds = parseInt(timeoutMatch[1], 10);
+      expect(seconds, "timeout must be ≥900s (15min) for first install").toBeGreaterThanOrEqual(900);
+    }
+  });
+});
+
+// ---------------------------------------------------------------------------
 // Cross-service invariants
 // ---------------------------------------------------------------------------
 
