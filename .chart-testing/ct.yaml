@@ -1,0 +1,42 @@
+# chart-testing (ct) configuration for LoopZero Helm charts
+# T2.5 of plan 2026-05-26-maturity-3-62-to-4-0-roadmap-plan.md
+#
+# chart-testing (ct) — https://github.com/helm/chart-testing
+#
+# Scope: validates published Helm charts em charts/ (OCI registry) against
+# multiple Kubernetes API versions. Detects deprecated APIs, invalid
+# templates, and missing required fields.
+#
+# NOT scoped: infra/helm/* bootstrap charts (those are validated via
+# helmfile dry-run + kubeconform in `task validate:manifests`).
+#
+# Operator action required to run: install ct binary
+#   go install github.com/helm/chart-testing/v3/ct@v3.11.0
+#
+# Then: task helm:ct-lint (this config)
+
+# Chart directories to test (relative to repo root).
+chart-dirs:
+  - charts
+
+# Tests run only on charts that changed since target branch.
+# For full-matrix runs, use: ct lint --all
+target-branch: main
+
+# Helm repository configuration.
+helm-extra-args: "--strict"
+
+# Kubernetes API versions to validate against. Matches DOKS production
+# (1.32) + 2 previous minors for deprecated-API detection.
+# When changing this list, also update taskfiles/helm.yml ct-install matrix.
+check-version-increment: false
+
+# Excluded charts (do not run ct against these).
+# loopzero-common is a library chart — has no installable resources.
+excluded-charts:
+  - loopzero-common
+
+# Required validations (when ct install runs).
+validate-maintainers: false
+validate-chart-schema: true
+validate-yaml: true
