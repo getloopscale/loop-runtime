@@ -83,16 +83,26 @@ Scheduled CronWorkflows:
 | Coverage report | Operator generates | Cron auto-publishes |
 | Required status checks | None (branch protection has no checks) | All quality gates required |
 
-## Sponsor decision criteria (per T0.2 of plan)
+## Sponsor decision criteria (per T0.2 of plan + ADR-2026-05-27-T0.2)
 
-| Option | Pros | Cons | Cost estimate |
-|--------|------|------|---------------|
-| GitLab CI | Integrated, mature | Requires GitLab SaaS or self-host | $$ |
-| Jenkins | Most flexible | High operational overhead, sec concerns | $ |
-| Drone CI | K8s-native, simple | Smaller community | $ |
-| BuildKite | Hybrid cloud+on-prem | Cost | $$$ |
-| Argo Events + Workflows | Re-uses existing infra | Less mature CI than Argo Workflows for builds | $ |
-| Self-hosted GH Actions runners | Re-uses workflows | Undoes 2026-05-23 decision | $$ |
+ADR `.claude/knowledge-base/decisions/2026-05-27-T0.2-ci-platform-choice.md`
+narrows 6 historical options to 3 viable cenarios with FAANG-grade SOTA review:
+
+| Cenário | Plataforma | Pros | Cons | Cost | Risk |
+|---------|-----------|------|------|------|------|
+| **A (RECOMMENDED)** | Gitea Actions self-hosted runner | Reuses existing Gitea install in mgmt cluster, GHA YAML syntax compat, scale-to-zero via KEDA, $0 infra cost | Smaller ecosystem (~2yr GA), Gitea web UI engineer-oriented | $0 | Medium |
+| **B** | Argo Workflows + Argo Events | Max K8s alignment, LoopZero team already manages Argo Workflows | Steep YAML curve, ~1wk setup for GitHub webhook integration | $0 | High setup |
+| **C (fallback)** | GitHub Actions SaaS (CI only, NOT CD) | Lowest setup (~30min), free tier sufficient, native PR Checks | Reverses 2026-05-23 decision (must explicitly rescope CI vs CD) | $0 (free tier) | Low engineering, requires re-litigation |
+
+**Adopter precedents:**
+- Cenário A: FOSDEM, internal corporate Git-first orgs, indie devs
+- Cenário B: Intuit, Adobe (control plane pattern), CNCF reference
+- Cenário C: Vast majority of OSS projects (default standard)
+
+**Engineering-ready POC for Cenário A** shipped this commit:
+- `infra/helm/gitea/values-actions-poc.yaml.disabled` (rename to `.yaml` to enable)
+- `.gitea/workflows/quality.yml.example` (rename to `.yml` to enable)
+- Sponsor flips files + adds values to helmfile mgmt stanza ≈ 1h operator work
 
 ## Operator HARD STOP
 
@@ -109,6 +119,9 @@ Per `customer-trial-onboarding-plan.md` EC-15 (DOCUMENT) — default fallback af
 ## Related
 
 - ADR 2026-05-23 (GitHub Actions removal)
+- ADR-2026-05-27-T0.2 (`.claude/knowledge-base/decisions/2026-05-27-T0.2-ci-platform-choice.md`) — formal 3-cenário comparison + recommendation
 - `taskfiles/quality.yml` (current gate harness)
 - `cmd/loopzero-ops/quality_subcmd.go` (gate CLI)
 - T0.2 of plan (decision driver)
+- `infra/helm/gitea/values-actions-poc.yaml.disabled` (POC for Cenário A)
+- `.gitea/workflows/quality.yml.example` (POC workflow)
