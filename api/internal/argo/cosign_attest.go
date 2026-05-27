@@ -98,13 +98,18 @@ if [ ! -r %s ]; then
   exit 1
 fi
 export SIGSTORE_ID_TOKEN="$(cat %s)"
-`, oidcTokenPath, oidcTokenPath, oidcTokenPath)
-		attestCmd = fmt.Sprintf(`COSIGN_EXPERIMENTAL=1 cosign attest --yes%s \
-  --fulcio-url=%s \
-  --rekor-url=%s \
+# cosign v2.5+: usar env vars Sigstore. Flags --fulcio-url/--rekor-url
+# colidem com TUF signing config: "cannot specify service URLs and use signing config".
+# LIVE discovery 2026-05-27 build v8 — env approach is canonical em v2.5+.
+export SIGSTORE_FULCIO_URL="%s"
+export SIGSTORE_REKOR_URL="%s"
+# Disable TUF signing config to allow custom URL override (we deploy own Sigstore).
+export SIGSTORE_USE_SIGNING_CONFIG="false"
+`, oidcTokenPath, oidcTokenPath, oidcTokenPath, fulcioURL, rekorURL)
+		attestCmd = fmt.Sprintf(`cosign attest --yes%s \
   --predicate %s \
   --type %s \
-  "%s@${DIGEST}" 2>&1`, insecureFlag, fulcioURL, rekorURL, p.SBOMLocalPath, cyclonedxPredicateType, p.ImageTag)
+  "%s@${DIGEST}" 2>&1`, insecureFlag, p.SBOMLocalPath, cyclonedxPredicateType, p.ImageTag)
 	} else {
 		attestCmd = fmt.Sprintf(`cosign attest --yes%s \
   --key %s/cosign.key \
@@ -190,16 +195,7 @@ echo "Attestation complete; Rekor entry: ${REKOR_URL}"
 			// Docker config for Rekor push auth.
 			forge.Env{Name: "DOCKER_CONFIG", Value: buildkitRegistryMount},
 		},
-		VolumeMounts: []forge.VolumeBuilder{
-			// Shared /workspace with syft step (SBOM file source).
-			&forge.EmptyDirVolume{BaseVolume: forge.BaseVolume{Name: volumeWorkspace, MountPath: workspaceMountPath}},
-			&forge.SecretVolume{BaseVolume: forge.BaseVolume{
-				Name: secretRegistryConfig, MountPath: buildkitRegistryMount, ReadOnly: true,
-			}, SecretName: secretRegistryConfig},
-			&forge.SecretVolume{BaseVolume: forge.BaseVolume{
-				Name: secretCosignKey, MountPath: cosignKeyMountPath, ReadOnly: true,
-			}, SecretName: secretCosignKey},
-		},
+		VolumeMounts: attestVolumeMounts(p.Keyless),
 		Resources: &forge.ResourceRequirements{
 			Requests: forge.ResourceList{CPU: "100m", Memory: "128Mi"},
 			Limits:   forge.ResourceList{CPU: "500m", Memory: "256Mi"},
@@ -210,4 +206,31 @@ echo "Attestation complete; Rekor entry: ${REKOR_URL}"
 			RunAsNonRoot: forge.Ptr(true),
 		},
 	}
+}
+
+// attestVolumeMounts returns the volume mounts for the cosign-attest step.
+// When keyless=true, mounts the workflow-level sigstore-token projected
+// volume at /var/run/secrets/sigstore so cosign can read SIGSTORE_ID_TOKEN.
+// The sigstore-token volume is injected pod-level by workflow_builder.buildVolumes()
+// when InfraParams.CosignKeyless=true.
+func attestVolumeMounts(keyless bool) []forge.VolumeBuilder {
+	mounts := []forge.VolumeBuilder{
+		// Shared /workspace PVC with syft step (SBOM file source via PVC).
+		&forge.PVCVolume{BaseVolume: forge.BaseVolume{Name: volumeWorkspace, MountPath: workspaceMountPath}},
+		&forge.SecretVolume{BaseVolume: forge.BaseVolume{
+			Name: secretRegistryConfig, MountPath: buildkitRegistryMount, ReadOnly: true,
+		}, SecretName: secretRegistryConfig},
+		&forge.SecretVolume{BaseVolume: forge.BaseVolume{
+			Name: secretCosignKey, MountPath: cosignKeyMountPath, ReadOnly: true,
+		}, SecretName: secretCosignKey},
+	}
+	if keyless {
+		// Reference the pod-level projected SA token volume injected by
+		// workflow_builder.buildVolumes() when CosignKeyless=true.
+		// VolumeMount only — the actual volume definition is at workflow level.
+		mounts = append(mounts, &forge.SecretVolume{BaseVolume: forge.BaseVolume{
+			Name: sigstoreTokenVolumeName, MountPath: sigstoreTokenMountPath, ReadOnly: true,
+		}, SecretName: sigstoreTokenVolumeName}) // SecretName ignored — name refers to projected vol
+	}
+	return mounts
 }

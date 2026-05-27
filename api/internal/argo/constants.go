@@ -82,6 +82,11 @@ const (
 	secretMinIOCreds      = "loopzero-minio-credentials" //nolint:gosec // G101 false positive: Secret resource NAME, not credential value
 	secretCosignKey       = "cosign-signing-key"
 	cosignKeyMountPath    = "/cosign"
+	// Sigstore keyless mode: workflow-level projected SA token volume + mount.
+	// Mounted at /var/run/secrets/sigstore/token (Sigstore standard path).
+	// Added pod-level via buildVolumes() when CosignKeyless=true.
+	sigstoreTokenVolumeName = "sigstore-token"
+	sigstoreTokenMountPath  = "/var/run/secrets/sigstore" //nolint:gosec // G101 filesystem PATH, not credential value
 	s3BucketStaticAssets  = "loopzero-static-assets"
 )
 

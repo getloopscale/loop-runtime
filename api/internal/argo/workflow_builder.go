@@ -549,13 +549,37 @@ func (b *WorkflowBuilder) buildOnExitDAG(spec services.WorkflowSpec, groups []la
 // buildVolumes returns the workflow-level volumes for the BuildKit build engine.
 // Single container pattern: only registry credentials are needed as a workflow-level volume.
 // The buildkitd socket is internal to each build-image container (no cross-container sharing).
+//
+// When CosignKeyless=true, a projected ServiceAccountToken volume with
+// audience="sigstore" is added so cosign-sign + cosign-attest can present
+// the SA token to Fulcio (loopzero-forge v0.6.0+, PR #20).
 func (b *WorkflowBuilder) buildVolumes() []forge.VolumeBuilder {
-	return []forge.VolumeBuilder{
+	vols := []forge.VolumeBuilder{
 		// Registry credentials for BuildKit push — mounted at /home/user/.docker/ in each build container.
 		&forge.SecretVolume{BaseVolume: forge.BaseVolume{Name: secretRegistryConfig}, SecretName: secretRegistryConfig},
 		// Sprint 6: cosign signing key for image signing after build.
 		&forge.SecretVolume{BaseVolume: forge.BaseVolume{Name: secretCosignKey}, SecretName: secretCosignKey},
 	}
+	if b.infraParams.CosignKeyless {
+		// M2 Phase 9 of plan 2026-05-27-M07-to-3-85: pod-level projected
+		// SA token volume com audience="sigstore". cosign reads token at
+		// /var/run/secrets/sigstore/token + presents to Fulcio for short-lived
+		// signing cert. Without this, keyless mode is teatro silencioso.
+		// Powered by loopzero-forge v0.6.0 ProjectedVolume + ServiceAccountToken
+		// projection (PR getloopscale/loopzero-forge#20).
+		expSec := int64(600) // K8s minimum (10min); kubelet rotates >80% expiry
+		vols = append(vols, &forge.ProjectedVolume{
+			BaseVolume: forge.BaseVolume{Name: sigstoreTokenVolumeName},
+			Sources: []forge.VolumeProjection{
+				{ServiceAccountToken: &forge.ServiceAccountTokenProjection{
+					Audience:          "sigstore",
+					Path:              "token",
+					ExpirationSeconds: &expSec,
+				}},
+			},
+		})
+	}
+	return vols
 }
 
 
