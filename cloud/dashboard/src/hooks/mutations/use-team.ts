@@ -7,7 +7,7 @@ export function useInviteMember() {
   const queryClient = useQueryClient();
   return useMutation({
     mutationFn: (input: { email: string; role: string }) =>
-      engineFetch('/api/v1/team/members', {
+      engineFetch('/api/v1/teams/members', {
         method: 'POST',
         body: JSON.stringify(input),
       }),
@@ -21,7 +21,7 @@ export function useRemoveMember() {
   const queryClient = useQueryClient();
   return useMutation({
     mutationFn: (memberId: string) =>
-      engineFetch(`/api/v1/team/members/${encodeURIComponent(memberId)}`, {
+      engineFetch(`/api/v1/teams/members/${encodeURIComponent(memberId)}`, {
         method: 'DELETE',
       }),
     onSuccess: () => {
@@ -34,7 +34,7 @@ export function useUpdateMemberRole() {
   const queryClient = useQueryClient();
   return useMutation({
     mutationFn: ({ memberId, role }: { memberId: string; role: string }) =>
-      engineFetch(`/api/v1/team/members/${encodeURIComponent(memberId)}`, {
+      engineFetch(`/api/v1/teams/members/${encodeURIComponent(memberId)}`, {
         method: 'PATCH',
         body: JSON.stringify({ role }),
       }),
