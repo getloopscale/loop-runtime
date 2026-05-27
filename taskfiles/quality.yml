@@ -33,6 +33,7 @@ tasks:
       - /tmp/loopzero-ops quality dockerfile-no-docker-hub
       - /tmp/loopzero-ops quality advisory-lock-scope
       - /tmp/loopzero-ops quality helm-overlap-parity
+      - /tmp/loopzero-ops quality prod-image-digests
       - /tmp/loopzero-ops quality trivy-scan
       - /tmp/loopzero-ops quality trufflehog-scan
       - /tmp/loopzero-ops quality dashboard-promtool

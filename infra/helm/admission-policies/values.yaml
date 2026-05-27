@@ -83,6 +83,14 @@ vaps:
   # Failure policy. Ignore is the safest default — VAP outage doesn't break
   # rollouts. Switch to Fail once policy is stable in production.
   noRuntimeImageMutationsFailurePolicy: Ignore
+  # T2.3 of maturity-3-62-to-4-0-roadmap: require image@sha256:<digest> for
+  # platform pods (loopzero-system, loopzero-system-build, argocd namespaces).
+  # Default ON in warn-mode (validationActions=[Warn, Audit]); sponsor flips
+  # requireImageDigestEnforce=true post-7d-soak to switch to Deny+Audit.
+  # Why warn first: legacy charts may still emit :tag refs until rollout
+  # propagates everywhere — warn surfaces the violation without blocking.
+  requireImageDigest: true
+  requireImageDigestEnforce: false
 
 # Toggle the policy-controller PrometheusRule (alerts).
 alerts:

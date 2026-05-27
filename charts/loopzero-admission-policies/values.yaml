@@ -60,6 +60,12 @@ vaps:
   noRuntimeImageMutations: false
   noRuntimeImageMutationsAction: Warn
   noRuntimeImageMutationsFailurePolicy: Ignore
+  # T2.3 of maturity-3-62-to-4-0-roadmap: require image@sha256:<digest> for
+  # platform pods (loopzero-system, loopzero-system-build, argocd namespaces).
+  # Default ON in warn-mode (validationActions=[Warn, Audit]); sponsor flips
+  # requireImageDigestEnforce=true post-7d-soak to switch to Deny+Audit.
+  requireImageDigest: true
+  requireImageDigestEnforce: false
 
 # PrometheusRule (alerts) toggle.
 alerts:

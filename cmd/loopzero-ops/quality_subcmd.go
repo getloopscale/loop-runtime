@@ -18,6 +18,7 @@ import (
 	"github.com/loopzero/loopzero/pkg/quality/advisorylock"
 	"github.com/loopzero/loopzero/pkg/quality/dashboardpromtool"
 	"github.com/loopzero/loopzero/pkg/quality/helmoverlapparity"
+	"github.com/loopzero/loopzero/pkg/quality/prodimagedigests"
 	"github.com/loopzero/loopzero/pkg/quality/trivyscan"
 	"github.com/loopzero/loopzero/pkg/quality/trufflehogscan"
 	"github.com/loopzero/loopzero/pkg/quality/agplisolation"
@@ -137,6 +138,16 @@ GATES:
                   T1.2 of plan 2026-05-26-maturity-3-62-to-4-0-roadmap-plan.md.
                   Flags:
                     --root DIR      repo root (default: ".")
+
+  prod-image-digests
+                  Detect hardcoded mutable :tag image references in published
+                  platform charts (charts/loopzero-*/templates). T2.3 of plan
+                  2026-05-26-maturity-3-62-to-4-0-roadmap. Default mode: WARN
+                  (violations reported, exit 0). Pass --enforce to fail on
+                  violations after 7-day soak validates zero false positives.
+                  Flags:
+                    --root DIR      repo root (default: ".")
+                    --enforce       fail on violations (default: warn-only)
 
   cli-exit-codes
                   Fail if cli/src process.exit() uses a code outside 0-5
@@ -288,6 +299,8 @@ func runQuality(args []string) int {
 		return runAdvisoryLockScope(args[1:])
 	case "helm-overlap-parity":
 		return runHelmOverlapParity(args[1:])
+	case "prod-image-digests":
+		return runProdImageDigests(args[1:])
 	case "trivy-scan":
 		return runTrivyScan(args[1:])
 	case "trufflehog-scan":
@@ -596,6 +609,50 @@ func runHelmOverlapParity(args []string) int {
 		return 1
 	}
 	fmt.Println("helm-overlap-parity: PASS — bootstrap charts in parity with (or behind) published")
+	return 0
+}
+
+// runProdImageDigests checks that published platform charts use
+// image@sha256:<digest> instead of mutable :tag references.
+// T2.3 of plan 2026-05-26-maturity-3-62-to-4-0-roadmap. Default mode:
+// WARN (violations reported, exit 0). Pass --enforce to fail on
+// violations after 7-day soak validates zero false positives.
+func runProdImageDigests(args []string) int {
+	fs := flag.NewFlagSet("prod-image-digests", flag.ContinueOnError)
+	root := fs.String("root", ".", "repo root directory")
+	enforce := fs.Bool("enforce", false, "fail on violations (default: warn-only)")
+	if err := fs.Parse(args); err != nil {
+		return 1
+	}
+	if absRoot, err := os.Getwd(); err == nil && *root == "." {
+		*root = absRoot
+	}
+
+	outcome, err := prodimagedigests.Check(prodimagedigests.Config{Root: *root, EnforceMode: *enforce})
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "prod-image-digests: %v\n", err)
+		return 5
+	}
+	if len(outcome.Violations) > 0 {
+		mode := "WARN"
+		if *enforce {
+			mode = "FAIL"
+		}
+		fmt.Fprintf(os.Stderr, "prod-image-digests: %s — %d mutable :tag reference(s) in platform charts:\n", mode, len(outcome.Violations))
+		for _, v := range outcome.Violations {
+			fmt.Fprintf(os.Stderr, "  %s\n", v)
+		}
+		fmt.Fprintln(os.Stderr, "")
+		fmt.Fprintln(os.Stderr, "Fix: replace `image: foo/bar:v1.2.3` with `image: foo/bar@sha256:<digest>`")
+		fmt.Fprintln(os.Stderr, "     OR use `{{ include \"loopzero-common.image\" . }}` helper which prefers digest.")
+		fmt.Fprintln(os.Stderr, "See docs/architecture/infra/diff/cosign-digest-enforcement.md for context.")
+		if !outcome.Pass {
+			return 1
+		}
+	}
+	if outcome.Pass {
+		fmt.Printf("prod-image-digests: PASS (scanned %d files, %d warn-mode violation(s))\n", outcome.ScannedFiles, len(outcome.Violations))
+	}
 	return 0
 }
 

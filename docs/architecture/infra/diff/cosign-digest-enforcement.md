@@ -1,19 +1,21 @@
 ---
 name: cosign-digest-enforcement
-description: PROPOSED — chart deployments emit image digest references (sha256) instead of mutable tags + ClusterImagePolicy enforces digest. T2.3 of plan 2026-05-26-maturity-3-62-to-4-0-roadmap.
+description: PARTIALLY IMPLEMENTED (warn-mode) — chart deployments emit image digest references via loopzero-common.image helper + VAP loopzero-require-image-digest enforces digest in WARN mode. T2.3 of plan 2026-05-26-maturity-3-62-to-4-0-roadmap.
 type: decision
 created_at: 2026-05-27
 updated_at: 2026-05-27
-updated_by: plan T1.5 + T2.3 design
+updated_by: T2.3 engineering implementation (warn-mode phase)
 ---
 
-<!-- PROPOSED STATE — depends on operator T2.3 HARD STOP (Change Governor meeting) -->
+<!-- PROPOSED STATE (warn-mode shipped; Deny-mode HARD STOP awaiting sponsor + 7-day soak) -->
 
 # Cosign Digest Enforcement — Infrastructure Diff
 
 > **Plan reference:** T2.3 + T1.5 of `docs/plans/completed/2026-05-26-maturity-3-62-to-4-0-roadmap-plan.md`
 >
-> **Depends on:** Change Governor meeting (T2 — Helm modifications + admission policy). EC-4 + EC-5 of edge-case-review absorbed inline.
+> **Status:** Phase 1 (warn-mode) ENGINEERING-READY. Phase 2 (Deny-mode) HARD STOP awaiting sponsor + 7-day soak.
+>
+> **Depends on:** Change Governor meeting confirms warn → enforce flip. EC-5 progressive rollout (warn before enforce) absorbed via 2 separate values: `requireImageDigest: true` (warn-mode default ON) + `requireImageDigestEnforce: false` (sponsor flips post-soak).
 
 ## AS-IS
 
@@ -99,16 +101,27 @@ Without progressive rollout, enforce-mode on Day 1 rejects pre-existing admissio
 
 Pre-release — break tag references after migration. Per plan ADR D1 (pre-release bias), backwards compatibility NOT required.
 
-## Operator HARD STOP
+## Engineering shipped (warn-mode phase)
 
-1. Sponsor approves T2.3 via Change Governor meeting (T2)
-2. Operator updates 7 chart deployment templates
-3. Operator updates values.schema.json with `oneOf` constraint (EC-4)
-4. Operator updates `infra/helm/policy-controller/values.yaml` (mode: warn + namespaceSelector)
-5. Operator updates `api/internal/argo/buildkit.go` to emit digest output
-6. Render tests PASS (`task helm:test`)
-7. 7-day Phase 1 warn-mode soak — operator audits `loopzero_policy_violation_total{mode="warn"}`
-8. Phase 2 flip after zero warnings
+1. ✅ `loopzero-common.image` helper updated to prefer `image.digest` over `image.tag` when set (`charts/loopzero-common/templates/_helpers.tpl`)
+2. ✅ ValidatingAdmissionPolicy `loopzero-require-image-digest` created in warn-mode (`infra/helm/admission-policies/templates/vap-require-image-digest.yaml` + `charts/loopzero-admission-policies/templates/vap-require-image-digest.yaml`)
+3. ✅ Quality gate `pkg/quality/prodimagedigests` (warn-mode default, `--enforce` flag for post-soak flip)
+4. ✅ Wired into `task quality:gates` orchestrator (`taskfiles/quality.yml`)
+5. ✅ Prometheus alert `LoopZeroImageDigestWarnRatePresent` (info severity, surfaces warn-mode violations for 7-day soak audit)
+6. ✅ values.yaml flags `requireImageDigest: true` + `requireImageDigestEnforce: false` in both chart systems
+
+## Operator HARD STOP (Deny-mode phase)
+
+1. Sponsor invokes `/meeting` for T2.3 Change Governor approval
+2. Operator deploys updated admission-policies + loopzero-common charts via ArgoCD
+3. 7-day Phase 1 warn-mode soak — operator audits:
+   - `apiserver_admission_policy_check_failures_total{policy="loopzero-require-image-digest"}` (Prometheus)
+   - `task quality:gates` output (`prod-image-digests` warnings count)
+   - Grafana `policy-controller` dashboard
+4. Operator updates build pipeline (`api/internal/argo/buildkit.go`) to write `imageDigest` value into Helm release values when deploying (currently builds emit digest but charts default to tag)
+5. Render tests PASS (`task helm:render-test`)
+6. Phase 2 flip after zero warnings: set `requireImageDigestEnforce: true` in helmfile overrides for prod
+7. `prod-image-digests` gate flips from warn to `--enforce` mode (CI block)
 
 ## Related
 

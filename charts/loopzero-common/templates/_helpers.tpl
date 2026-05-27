@@ -91,6 +91,16 @@ IMAGE
 {{/*
 Build container image reference from global registry + image config.
 Usage: {{ include "loopzero-common.image" . }}
+
+T2.3 of maturity-3-62-to-4-0-roadmap plan: prefer image@digest over image:tag
+when digest is set. Digest references are immutable — the same content hash
+always points at the same image, defeating tag re-pin attacks. Build pipeline
+emits the digest into image.digest at deploy time.
+
+Resolution order:
+  1. If image.digest is set + non-empty, use repository@digest (TAG IGNORED)
+  2. Otherwise, fall back to repository:tag (legacy / dev)
+Registry prefix is applied uniformly.
 */}}
 {{- define "loopzero-common.image" -}}
 {{- $registry := "" }}
@@ -98,11 +108,20 @@ Usage: {{ include "loopzero-common.image" . }}
 {{- $registry = .Values.global.registry | default "" }}
 {{- end }}
 {{- $repository := .Values.image.repository }}
-{{- $tag := .Values.image.tag | default .Chart.AppVersion }}
-{{- if $registry }}
-{{- printf "%s/%s:%s" $registry $repository $tag }}
+{{- $digest := .Values.image.digest | default "" }}
+{{- if $digest }}
+  {{- if $registry }}
+    {{- printf "%s/%s@%s" $registry $repository $digest }}
+  {{- else }}
+    {{- printf "%s@%s" $repository $digest }}
+  {{- end }}
 {{- else }}
-{{- printf "%s:%s" $repository $tag }}
+  {{- $tag := .Values.image.tag | default .Chart.AppVersion }}
+  {{- if $registry }}
+    {{- printf "%s/%s:%s" $registry $repository $tag }}
+  {{- else }}
+    {{- printf "%s:%s" $repository $tag }}
+  {{- end }}
 {{- end }}
 {{- end }}
 
