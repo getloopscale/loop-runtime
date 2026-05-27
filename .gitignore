@@ -32,6 +32,9 @@ build/
 # Dashboard build artifacts + vendored references (355MB, do not commit)
 cloud/dashboard/storybook-static/
 cloud/dashboard/referencia/
+
+# Composio plugin cache (per-machine, never tracked)
+.od/
 # Exempt the script module infra/scripts/build/ — it is hand-written sources,
 # not Node build output. Without this negation any NEW file added there would
 # be silently ignored (catastrophic — see line ~68).
