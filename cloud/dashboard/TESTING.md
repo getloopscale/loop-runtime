@@ -155,3 +155,30 @@ Tests must not depend on:
 
 If a test is flaky, fix it the same day. Skipping/disabling a test that
 fails intermittently is forbidden — flaky tests rot the suite trust.
+
+## VITE_USE_MOCKS — offline dev / emergency rollback
+
+The dashboard supports two modes:
+
+- **Default (no flag set):** all `cloudFetch` / `engineFetch` calls hit the
+  real cloud BFF (which in turn proxies the engine API). Use this whenever
+  a local Tilt stack is running. Backend-failure dialogs surface real
+  TCIA error states.
+- **`VITE_USE_MOCKS=true`:** `src/lib/mocks/server.ts` wraps `window.fetch`
+  and intercepts every `/api/v1/*` path via the `handlers.ts` route table.
+  Use this for offline dev OR as an emergency rollback if the live backend
+  is unavailable mid-session.
+
+Mocks are tree-shaken from production builds (T7.1 / EC-10 of plan
+2026-05-27-backend-frontend-integration v1.1). The CI gate
+`npm run tree-shake-check` greps the prod bundle for `lib/mocks` strings
+and fails the build if any chunk leaked.
+
+`npm run tree-shake-check` runs `vite build` then asserts:
+
+```bash
+! grep -q 'lib/mocks' dist/assets/*.js
+```
+
+This protects against an accidental import on a hot path that would defeat
+DCE. Add it to the CI pipeline before any release tag.
