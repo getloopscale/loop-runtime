@@ -161,7 +161,7 @@
 
 ### Recomendação next-step
 
-Este audit é o **insumo medido** para o plano de density refactor (`docs/plans/2026-05-26-dashboard-density-refactor-plan.md` — **ainda não criado**). Próximos passos sugeridos:
+Este audit é o **insumo medido** para o plano de density refactor (`docs/plans/completed/2026-05-26-dashboard-density-refactor-plan.md` — **ainda não criado**). Próximos passos sugeridos:
 
 1. Invocar `/to-plan` com este REPORT.md + os 13 screenshots como contexto, gerando o plano de density-refactor com tasks T-DR-1..T-DR-N enderecando os 2 P1s + 5 P2s
 2. Alternativa: `/edge-case-plan` para stress-test o plano antes de implementar
@@ -204,4 +204,4 @@ Total: **603,856 bytes** (13 PNGs at 1440×900 sem scrollbars).
 
 **Status do Ralph loop referente ao plano original:**
 
-O plano `docs/plans/2026-05-26-dashboard-density-refactor-plan.md` referenciado pelo loop **NÃO existe** (verificado por `find docs -name "*density*"` + `git log --all`). Este audit é o pré-requisito para CRIAR esse plano — não é o plano em si. Próxima ação requer `/to-plan` (consciente decisão do operator, não auto-execução).
+O plano `docs/plans/completed/2026-05-26-dashboard-density-refactor-plan.md` referenciado pelo loop **NÃO existe** (verificado por `find docs -name "*density*"` + `git log --all`). Este audit é o pré-requisito para CRIAR esse plano — não é o plano em si. Próxima ação requer `/to-plan` (consciente decisão do operator, não auto-execução).

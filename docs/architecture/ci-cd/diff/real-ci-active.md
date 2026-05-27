@@ -11,7 +11,7 @@ updated_by: plan T1.5 + T0.2 design
 
 # Real CI Platform Active — CI/CD Diff
 
-> **Plan reference:** T0.2 + T1.5 of `docs/plans/2026-05-26-maturity-3-62-to-4-0-roadmap-plan.md`
+> **Plan reference:** T0.2 + T1.5 of `docs/plans/completed/2026-05-26-maturity-3-62-to-4-0-roadmap-plan.md`
 >
 > **Depends on:** Sponsor T3 meeting to choose CI platform (6 options enumerated em T0.2). Decision blocks Phase 5 re-audit.
 

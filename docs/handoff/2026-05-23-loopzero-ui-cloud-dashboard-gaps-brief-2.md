@@ -4,7 +4,7 @@
 > **Output:** 8 new primitives + tests + stories + barrel exports, following existing `@loopzero/ui` conventions.
 > **Issued by:** LoopZeroCloud dashboard team (consumer), 2026-05-23.
 > **Companion to:** `loopzero/docs/handoff/2026-05-23-loopzero-ui-cloud-dashboard-gaps-brief.md` (Brief #1 — PaaS-shape gaps: UsageMeter, Progress, PlanBadge, AccountMenu).
-> **Consumer plan:** `loopzero/docs/plans/2026-05-23-dashboard-loopzero-ui-migration-plan.md` v1.1.
+> **Consumer plan:** `loopzero/docs/plans/completed/2026-05-23-dashboard-loopzero-ui-migration-plan.md` v1.1.
 
 ---
 
@@ -925,7 +925,7 @@ Same as Brief #1. Names are PaaS-shape semantic (Table, StatTile, CodeBlock), av
 ## Cross-reference
 
 - Brief #1: `loopzero/docs/handoff/2026-05-23-loopzero-ui-cloud-dashboard-gaps-brief.md` (4 PaaS-shape primitives — read first)
-- Consumer plan: `loopzero/docs/plans/2026-05-23-dashboard-loopzero-ui-migration-plan.md` v1.1
+- Consumer plan: `loopzero/docs/plans/completed/2026-05-23-dashboard-loopzero-ui-migration-plan.md` v1.1
 - Consumer mockup: `loopzero/cloud/dashboard/design/loopzero_overview_dashboard_mockup.html`
 - Library README: `loopzero-ui/README.md` § Quality Gates
 - Library voice: `loopzero-ui/CLAUDE.md` § Voice and Tone

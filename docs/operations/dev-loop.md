@@ -1,7 +1,7 @@
 # LoopZero Dev Loop — Canonical Guide
 
 This is the **canonical** developer workflow for local LoopZero development.
-Adopted via plan `docs/plans/2026-05-22-shell-script-strategic-plan.md` v1.3
+Adopted via plan `docs/plans/completed/2026-05-22-shell-script-strategic-plan.md` v1.3
 Phase 3 (T3.1+T3.2).
 
 ---
@@ -140,7 +140,7 @@ task db:migrate
 
 ## Phase 3 plan reference
 
-This document materializes T3.1 of `docs/plans/2026-05-22-shell-script-strategic-plan.md` v1.3.
+This document materializes T3.1 of `docs/plans/completed/2026-05-22-shell-script-strategic-plan.md` v1.3.
 
 Key cross-references:
 - T2.3 (Taskfile delegation to Helmfile): `docs/scripts-audit/2026-05-22-helmfile-mapping.md`

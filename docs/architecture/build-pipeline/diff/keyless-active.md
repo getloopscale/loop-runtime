@@ -11,7 +11,7 @@ updated_by: plan T1.5 + T2.2 design
 
 # Cosign Keyless Active — Build Pipeline Diff
 
-> **Plan reference:** T2.2 + T1.5 of `docs/plans/2026-05-26-maturity-3-62-to-4-0-roadmap-plan.md`
+> **Plan reference:** T2.2 + T1.5 of `docs/plans/completed/2026-05-26-maturity-3-62-to-4-0-roadmap-plan.md`
 >
 > **Depends on:** Sponsor sign-off em `.claude/governance-gate.local.md` for Fulcio + Rekor provisioning. ADR 2026-05-12 hard deadline T0+90d (2026-08-10).
 

@@ -5,7 +5,7 @@
 // per test file (top-level declarations only). A `// mock-budget: N — reason`
 // file comment raises the per-file budget.
 //
-// Plan T5.3 of docs/plans/2026-05-22-shell-script-strategic-plan.md v1.3:
+// Plan T5.3 of docs/plans/completed/2026-05-22-shell-script-strategic-plan.md v1.3:
 // replaces infra/scripts/quality/check-mock-budget.sh. Pure-Go (filepath.WalkDir
 // + regexp) — no external CLI. Genuine pure-logic win per D5.
 package mockbudget

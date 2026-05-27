@@ -3,7 +3,7 @@
 
 // Command gen-dots regenerates DOT files for every state machine.
 //
-// Plan T5.2 of docs/plans/2026-05-22-shell-script-strategic-plan.md v1.3:
+// Plan T5.2 of docs/plans/completed/2026-05-22-shell-script-strategic-plan.md v1.3:
 // replaces infra/scripts/gen-state-machine-dots.sh with idiomatic Go via
 // `//go:generate`. Output is deterministic (Visualize sorts states +
 // transitions) — drift between code and committed DOT signals unintended

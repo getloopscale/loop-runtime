@@ -2,7 +2,7 @@
 // Copyright 2025-2026 The LoopZero Authors
 
 // drill subcommand group — pure-logic pieces extracted from the drill/DR bash
-// orchestrators (Track C of docs/plans/2026-05-24-drill-consolidation-migration-plan.md).
+// orchestrators (Track C of docs/plans/completed/2026-05-24-drill-consolidation-migration-plan.md).
 // Only validation/arithmetic/shaping lives here; provisioning (pulumi/doctl/helm)
 // stays in bash (ADR D1 no-shell-wrap).
 package main

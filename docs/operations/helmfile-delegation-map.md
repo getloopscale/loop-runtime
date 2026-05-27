@@ -1,6 +1,6 @@
 # Helmfile Delegation Map (Phase 2 T2.1)
 
-> Autonomous prep audit for `docs/plans/2026-05-22-script-cleanup-plan.md` Phase 2.
+> Autonomous prep audit for `docs/plans/completed/2026-05-22-script-cleanup-plan.md` Phase 2.
 > Maps each `DELEGATE-HELMFILE`-classified script to the helmfile release that
 > should own it, and **flags the ones that have no clean helmfile equivalent
 > (→ KEEP)**. Read-only — no infra change. The LIVE implementation (T2.2) is an

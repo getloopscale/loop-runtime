@@ -1,6 +1,6 @@
 # Quality Gates — Engineer Reference
 
-Plan: `docs/plans/2026-05-21-comprehensive-quality-gates-plan.md` v1.1
+Plan: `docs/plans/completed/2026-05-21-comprehensive-quality-gates-plan.md` v1.1
 Operator handoff: `.claude/knowledge-base/concepts/operations/operator-handoff-2026-05-21-quality-gates.md`
 
 ## Quick start

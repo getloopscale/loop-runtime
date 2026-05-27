@@ -1,6 +1,6 @@
 # Cosign Signing Key Rotation Runbook
 
-> **Plan reference:** T3.3 of `docs/plans/2026-05-26-maturity-3-62-to-4-0-roadmap-plan.md`
+> **Plan reference:** T3.3 of `docs/plans/completed/2026-05-26-maturity-3-62-to-4-0-roadmap-plan.md`
 >
 > **Closes:** M07 Build Pipeline HIGH gap — enforcement gate (`check-cosign-cutover-deadline.sh`) wired here. Script lives em `infra/scripts/security/check-cosign-cutover-deadline.sh`.
 

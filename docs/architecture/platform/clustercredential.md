@@ -11,7 +11,7 @@ evidence_class: MEASURED
 
 # ClusterCredential — AS-IS architecture (post Op B)
 
-> Plan: `docs/plans/2026-05-25-live-ca-fetch-clustercredential-plan.md` v1.2 — T0.1 Pre-Plan
+> Plan: `docs/plans/completed/2026-05-25-live-ca-fetch-clustercredential-plan.md` v1.2 — T0.1 Pre-Plan
 > Code references: `operators/internal/platform/clustercredential_controller.go` + `operators/internal/platform/ca_fetcher.go`
 > LIVE evidence: [[2026-05-26-op-b-live-evidence]]
 

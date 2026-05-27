@@ -4,7 +4,7 @@
 #
 # drill-jwt-gate.sh — JWT auth wiring validator for drill bootstrap.
 #
-# Plan: docs/plans/2026-05-19-drill-skills-rigor-restoration-plan.md T2.2
+# Plan: docs/plans/completed/2026-05-19-drill-skills-rigor-restoration-plan.md T2.2
 # ADR D2: drift cross-cluster (Hydra issuer vs loopzero-api JWT_ISSUER) must be
 # caught at bootstrap time, not via tardy orchestrator workaround.
 #

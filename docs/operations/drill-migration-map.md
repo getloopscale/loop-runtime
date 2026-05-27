@@ -1,6 +1,6 @@
 # Drill / Chaos Migration Map (Track C — PURE-LOGIC vs ORCHESTRATION)
 
-> Classification audit for `docs/plans/2026-05-24-drill-consolidation-migration-plan.md`
+> Classification audit for `docs/plans/completed/2026-05-24-drill-consolidation-migration-plan.md`
 > Phase C0 (TC0.1). Mirror of `docs/operations/helmfile-delegation-map.md`. **Honest-yield
 > gate before any porting** — per the program's "claim-25-deliver-8" guardrail.
 >

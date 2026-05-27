@@ -2,7 +2,7 @@
 
 **Date:** 2026-05-21
 **Status:** Recommendations recorded; adoption deferred to per-tool sponsor decision
-**Plan:** `docs/plans/2026-05-21-deep-review-remediation-plan.md` T8.1–T8.4
+**Plan:** `docs/plans/completed/2026-05-21-deep-review-remediation-plan.md` T8.1–T8.4
 
 ## Context
 
@@ -105,4 +105,4 @@ Deep review v2 (`.claude/knowledge-base/reviews/2026-05-21-deep-review-naming-cr
 
 - Deep review v2: `.claude/knowledge-base/reviews/2026-05-21-deep-review-naming-credentials-toolchain.md` § "External tools — concrete adoption recommendations"
 - Naming Conventions ADR: `docs/decisions/2026-05-21-naming-conventions-adr.md`
-- Plan: `docs/plans/2026-05-21-deep-review-remediation-plan.md` T8.1–T8.4
+- Plan: `docs/plans/completed/2026-05-21-deep-review-remediation-plan.md` T8.1–T8.4

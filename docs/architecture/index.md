@@ -66,4 +66,4 @@ When PROPOSED implementation approved + LIVE-validated:
 - `.claude/rules/auto-docs.md` — page schema + write rules
 - `.claude/knowledge-base/index.md` — wider knowledge-base index (concepts, audits, ADRs, plans)
 - `.claude/skills/architecture-docs/` — skill that generates these
-- Plan `docs/plans/2026-05-26-maturity-3-62-to-4-0-roadmap-plan.md` T1.5 — context for new PROPOSED diff docs em this index
+- Plan `docs/plans/completed/2026-05-26-maturity-3-62-to-4-0-roadmap-plan.md` T1.5 — context for new PROPOSED diff docs em this index

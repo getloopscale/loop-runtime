@@ -10,7 +10,7 @@
 // (Documentation Reflects Real Usage).
 //
 // Replaces infra/scripts/pkg-usage-matrix.sh (~148 LOC) per Phase 7
-// of plan docs/plans/2026-05-21-bash-to-go-migration-plan.md.
+// of plan docs/plans/completed/2026-05-21-bash-to-go-migration-plan.md.
 package pkgusagematrix
 
 import (

@@ -497,7 +497,7 @@ flag as known gap.
 ## 4. Recommended remediation plan
 
 Convert this review into a tactical plan named
-`docs/plans/2026-05-26-dashboard-density-refactor-plan.md`:
+`docs/plans/completed/2026-05-26-dashboard-density-refactor-plan.md`:
 
 ### Phase A — Hierarchy & density (high impact)
 
@@ -580,8 +580,8 @@ To verify each fix in this review:
 ### LoopZero internal
 
 - `docs/design/2026-05-25-loopzero-dashboard-design-system.md` (companion DSS)
-- `docs/plans/2026-05-25-dashboard-visual-polish-plan.md` v1.1 (executed)
-- `docs/plans/2026-05-24-dashboard-visual-redesign-mockup-aligned-plan.md` v1.2 (parent)
+- `docs/plans/completed/2026-05-25-dashboard-visual-polish-plan.md` v1.1 (executed)
+- `docs/plans/completed/2026-05-24-dashboard-visual-redesign-mockup-aligned-plan.md` v1.2 (parent)
 - MEET-ASYNC-AMENDMENT-2026-05-24-001 (DoD relaxation, T-H.1 visual smoke evidence)
 - MEET-ASYNC-AMENDMENT-2026-05-24-002 v1.4 (bundle gates)
 

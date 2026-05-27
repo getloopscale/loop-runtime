@@ -2,7 +2,7 @@
 // Copyright 2025-2026 The LoopZero Authors
 
 // Envtest regression specs for Op B (live CA fetch from kube-root-ca.crt).
-// Plan: docs/plans/2026-05-25-live-ca-fetch-clustercredential-plan.md T3.1
+// Plan: docs/plans/completed/2026-05-25-live-ca-fetch-clustercredential-plan.md T3.1
 //
 // 4 specs cover:
 //   1. Live fetch overrides snapshot caData (stub returns distinct PEM →

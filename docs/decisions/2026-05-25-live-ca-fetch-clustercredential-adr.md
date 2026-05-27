@@ -4,7 +4,7 @@
 **Tier:** T2
 **Status:** RATIFIED (sponsor-direct)
 **Meeting:** [MEET-2026-05-25-op-b-live-ca-fetch](../../.claude/knowledge-base/meetings/MEET-2026-05-25-op-b-live-ca-fetch.md)
-**Plan:** [docs/plans/2026-05-25-live-ca-fetch-clustercredential-plan.md](../plans/2026-05-25-live-ca-fetch-clustercredential-plan.md) v1.2
+**Plan:** [docs/plans/completed/2026-05-25-live-ca-fetch-clustercredential-plan.md](../plans/2026-05-25-live-ca-fetch-clustercredential-plan.md) v1.2
 **LIVE evidence:** [reviews/2026-05-26-op-b-live-evidence](../../.claude/knowledge-base/reviews/2026-05-26-op-b-live-evidence.md)
 
 ## Context
@@ -91,8 +91,8 @@ This is the "X fetcher uses X" trap (now codified as a Known Systemic Pattern in
 
 ## Cross-references
 
-- Plan: `docs/plans/2026-05-25-live-ca-fetch-clustercredential-plan.md` v1.2
-- Edge review: `docs/plans/2026-05-25-live-ca-fetch-clustercredential-edge-review.md`
+- Plan: `docs/plans/completed/2026-05-25-live-ca-fetch-clustercredential-plan.md` v1.2
+- Edge review: `docs/plans/completed/2026-05-25-live-ca-fetch-clustercredential-edge-review.md`
 - LIVE evidence: `.claude/knowledge-base/reviews/2026-05-26-op-b-live-evidence.md`
 - Concept: `.claude/knowledge-base/concepts/operations/live-vs-snapshot-credentials.md`
 - Meeting: `.claude/knowledge-base/meetings/MEET-2026-05-25-op-b-live-ca-fetch.md`

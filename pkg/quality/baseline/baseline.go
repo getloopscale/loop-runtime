@@ -5,7 +5,7 @@
 // primitives consumed by Phase 5 baseline gates (T5.12 baseline-compare,
 // T5.16 baseline-update). Replaces the JSON parsing shared between
 // infra/scripts/quality/baseline-{compare,update}.sh per plan
-// docs/plans/2026-05-21-bash-to-go-migration-plan.md Phase 5.
+// docs/plans/completed/2026-05-21-bash-to-go-migration-plan.md Phase 5.
 //
 // Origin: plan 2026-05-21-comprehensive-quality-gates v1.1 T1.2 + T2.2.
 //

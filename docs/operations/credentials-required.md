@@ -228,7 +228,7 @@ Add a credential? You MUST update this doc in the same PR, or the gate fails.
 
 ## References
 
-- Plan: `docs/plans/2026-05-21-deep-review-remediation-plan.md` T1.1
+- Plan: `docs/plans/completed/2026-05-21-deep-review-remediation-plan.md` T1.1
 - Per ADR D1: SoT location is `docs/operations/`, NOT `.claude/knowledge-base/` (operator-visible)
 - Per ADR D2: hardcoded credential defaults are forbidden post-T1.3
 - Per D7' sponsor override 2026-05-16: drill uses shared `DIGITALOCEAN_TOKEN` with project-tag isolation

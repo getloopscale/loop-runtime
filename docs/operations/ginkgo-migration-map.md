@@ -1,6 +1,6 @@
 # Ginkgo Migration Map (Phase 3 T3.1)
 
-> Autonomous prep audit for `docs/plans/2026-05-22-script-cleanup-plan.md` Phase 3.
+> Autonomous prep audit for `docs/plans/completed/2026-05-22-script-cleanup-plan.md` Phase 3.
 > Maps each `MIGRATE-GINKGO`-classified script to an existing-or-new Ginkgo
 > `Describe`/`It`, identifies the CI workflow that invokes it, and flags
 > LIVE-only scenarios. Read-only — the LIVE conversion (T3.2) is an OPERATOR

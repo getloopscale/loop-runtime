@@ -1,6 +1,6 @@
 # Cell Drain Operational Runbook
 
-> **Plan reference:** T3.1 of `docs/plans/2026-05-26-maturity-3-62-to-4-0-roadmap-plan.md`
+> **Plan reference:** T3.1 of `docs/plans/completed/2026-05-26-maturity-3-62-to-4-0-roadmap-plan.md`
 >
 > **Closes:** M09 Multi-Cell MEDIUM gap — `cells.status` field supports `draining`/`maintenance`/`retired` but procedure was undocumented.
 

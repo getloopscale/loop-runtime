@@ -5,7 +5,7 @@
 // unit ≥70%, integration ≤25%, e2e ≤5%. A `pyramid-defer` PR label allows a
 // one-PR override.
 //
-// Plan T5.3 of docs/plans/2026-05-22-shell-script-strategic-plan.md v1.3:
+// Plan T5.3 of docs/plans/completed/2026-05-22-shell-script-strategic-plan.md v1.3:
 // replaces infra/scripts/quality/check-pyramid.sh. Pure-Go: reads the
 // test-inventory JSON via encoding/json — ELIMINATES the python3 dependency
 // the bash version shelled out to. Genuine pure-logic win per D5.

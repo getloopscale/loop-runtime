@@ -5,7 +5,7 @@
 // per ADR T2.2 + EC-2 escape valve. Replaces
 // infra/scripts/quality/baseline-compare.sh (~109 LOC) per Phase 5
 // T5.12 of plan
-// docs/plans/2026-05-21-bash-to-go-migration-plan.md.
+// docs/plans/completed/2026-05-21-bash-to-go-migration-plan.md.
 //
 // Origin: plan 2026-05-21-comprehensive-quality-gates v1.1 T2.2.
 //

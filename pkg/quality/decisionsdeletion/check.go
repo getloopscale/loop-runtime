@@ -5,7 +5,7 @@
 // governance artifact (ADR, MEET DR, operations runbook/inventory) is deleted
 // in a PR without a sibling file carrying a `superseded_by:` reference.
 //
-// Plan T5.3 of docs/plans/2026-05-22-shell-script-strategic-plan.md v1.3:
+// Plan T5.3 of docs/plans/completed/2026-05-22-shell-script-strategic-plan.md v1.3:
 // replaces infra/scripts/check-decisions-deletion.sh + its hermetic test
 // (D6 AUTO-DIE). Pure-Go decision logic over `git` output (git is on the D5
 // allow-list — only pulumi/helm/kubectl/aws/gh are forbidden shell-wraps).

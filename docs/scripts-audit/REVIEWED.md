@@ -1,6 +1,6 @@
 # Scripts Audit Review Log
 
-Per **T0.1 acceptance criteria** of `docs/plans/2026-05-22-shell-script-strategic-plan.md`:
+Per **T0.1 acceptance criteria** of `docs/plans/completed/2026-05-22-shell-script-strategic-plan.md`:
 operator-review (HUMAN GATE) of the baseline CSV before Phase 1 (delete) executes.
 
 This file is **append-only**. Each entry is a timestamped review of a specific

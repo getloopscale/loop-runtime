@@ -4,7 +4,7 @@
 #
 # drill-dogfood-journeys.sh — CLI-real journey helpers for dogfood-drill.
 #
-# Plan: docs/plans/2026-05-19-drill-skills-rigor-restoration-plan.md T3.2
+# Plan: docs/plans/completed/2026-05-19-drill-skills-rigor-restoration-plan.md T3.2
 # ADR D3: dogfood-drill é mirror de /dogfood (CLI-First Inviolável), NÃO de
 # drill-test (infra probes).
 #

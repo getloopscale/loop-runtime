@@ -1,7 +1,7 @@
 # Cross-Validation Report — Dashboard Visual Redesign
 
 **Data:** 2026-05-24
-**Plano:** `docs/plans/2026-05-24-dashboard-visual-redesign-mockup-aligned-plan.md` v1.2
+**Plano:** `docs/plans/completed/2026-05-24-dashboard-visual-redesign-mockup-aligned-plan.md` v1.2
 **Branch:** develop
 **Commits analisados:** 26+ (c18704c3..HEAD)
 

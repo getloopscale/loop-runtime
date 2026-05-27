@@ -115,6 +115,6 @@ jobs:
 
 ## References
 
-- Plan T4.5: `docs/plans/2026-05-21-deep-review-remediation-plan.md`
+- Plan T4.5: `docs/plans/completed/2026-05-21-deep-review-remediation-plan.md`
 - CTO Rule 0 (local-fidedigno-ao-prod) + Rule 5 (50k target prod sizing)
 - Per memory `feedback_golden_rules_cto_mandate`: drill credentials isolation + cost control are sponsor-priority

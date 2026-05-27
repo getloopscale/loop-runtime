@@ -1,6 +1,6 @@
 # Helm chart-testing (ct) Operational Runbook
 
-> **Plan reference:** T2.5 of `docs/plans/2026-05-26-maturity-3-62-to-4-0-roadmap-plan.md`
+> **Plan reference:** T2.5 of `docs/plans/completed/2026-05-26-maturity-3-62-to-4-0-roadmap-plan.md`
 >
 > **Closes:** M06 Helm MEDIUM gap — "Multi-K8s-version testing missing. Sem chart-testing matrix integration. 16 grep hits v1beta1/v1alpha API versions (deprecation risk K8s 1.30+)."
 

@@ -6,7 +6,7 @@
 // `*_skip_test.go` / `*.skip.test.ts` file. Baseline-aware: violations listed
 // in the baseline file are grandfathered; only NEW violations fail.
 //
-// Plan T5.3 of docs/plans/2026-05-22-shell-script-strategic-plan.md v1.3:
+// Plan T5.3 of docs/plans/completed/2026-05-22-shell-script-strategic-plan.md v1.3:
 // replaces infra/scripts/quality/check-skip-link.sh. Pure-Go (WalkDir + regexp)
 // — no external CLI. Genuine pure-logic win per D5.
 package skiplink

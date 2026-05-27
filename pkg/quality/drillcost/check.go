@@ -2,7 +2,7 @@
 // Copyright 2025-2026 The LoopZero Authors
 
 // Package drillcost is the pure-logic core of infra/scripts/drill/cost-report.sh
-// (Track C TC2.1 of docs/plans/2026-05-24-drill-consolidation-migration-plan.md).
+// (Track C TC2.1 of docs/plans/completed/2026-05-24-drill-consolidation-migration-plan.md).
 //
 // It computes a drill run's cost from a provision/teardown window + DO hourly
 // rates, and renders the markdown report. This is the ARITHMETIC + FORMATTING

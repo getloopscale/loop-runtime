@@ -5,7 +5,7 @@
 // images must be digest-pinned (FROM image:tag@sha256:<64-hex>), not tag-only,
 // to preserve SOURCE_DATE_EPOCH build reproducibility.
 //
-// Plan T5.3 of docs/plans/2026-05-22-shell-script-strategic-plan.md v1.3:
+// Plan T5.3 of docs/plans/completed/2026-05-22-shell-script-strategic-plan.md v1.3:
 // replaces infra/scripts/check_base_image_digest_pin.sh. Pure-Go (file read +
 // regexp) — replaces bash grep/sed. No external CLI. (The "cosign"/"k3d" in the
 // default lists are a Dockerfile path and a registry pattern, not invocations.)

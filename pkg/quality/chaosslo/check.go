@@ -2,7 +2,7 @@
 // Copyright 2025-2026 The LoopZero Authors
 
 // Package chaosslo is the pure-logic SLO verdict of the chaos resilience runner
-// (Track C TC3.1 of docs/plans/2026-05-24-drill-consolidation-migration-plan.md).
+// (Track C TC3.1 of docs/plans/completed/2026-05-24-drill-consolidation-migration-plan.md).
 //
 // It compares baseline / during / post chaos samples and decides whether the
 // SLO held (PASS) or was breached (FAIL), or whether a required metric is

@@ -6,7 +6,7 @@
 // is dormant until it exists, then warns inside a window and blocks past a hard
 // deadline unless a sponsor-signed exception file permits the slip.
 //
-// Plan T5.3 of docs/plans/2026-05-22-shell-script-strategic-plan.md v1.3:
+// Plan T5.3 of docs/plans/completed/2026-05-22-shell-script-strategic-plan.md v1.3:
 // extracts the shared core behind check-cosign-cutover-deadline.sh (§6.B.4) and
 // check-service-auth-rotation.sh (§6.B.5) — the original bash author noted both
 // were "the same ratchet pattern; operator learns ONE pattern". DRY: one piece

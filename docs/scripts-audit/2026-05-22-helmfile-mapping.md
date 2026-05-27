@@ -1,6 +1,6 @@
 # Bare-Helm → Helmfile Mapping (T2.1)
 
-Phase 2 of plan `docs/plans/2026-05-22-shell-script-strategic-plan.md` v1.3.
+Phase 2 of plan `docs/plans/completed/2026-05-22-shell-script-strategic-plan.md` v1.3.
 
 Maps every `helm upgrade --install` in `taskfiles/infra.yml` to its
 corresponding declared release in `infra/helmfile/{mgmt,build,runtime}.helmfile.yaml.gotmpl`.

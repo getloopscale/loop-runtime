@@ -5,7 +5,7 @@
 // concatenates it with a TypeScript lcov to produce one unified lcov
 // consumable by downstream tools (codecov, diff-cover, baseline-update).
 // Replaces infra/scripts/quality/coverage-merge.sh (~102 LOC) per Phase
-// 5 T5.11 of plan docs/plans/2026-05-21-bash-to-go-migration-plan.md.
+// 5 T5.11 of plan docs/plans/completed/2026-05-21-bash-to-go-migration-plan.md.
 //
 // Origin: plan 2026-05-21-comprehensive-quality-gates v1.1 T1.1.
 //

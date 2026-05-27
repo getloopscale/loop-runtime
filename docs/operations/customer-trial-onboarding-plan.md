@@ -1,6 +1,6 @@
 # Customer Trial Onboarding Plan
 
-> **Plan reference:** T0.4 of `docs/plans/2026-05-26-maturity-3-62-to-4-0-roadmap-plan.md`
+> **Plan reference:** T0.4 of `docs/plans/completed/2026-05-26-maturity-3-62-to-4-0-roadmap-plan.md`
 >
 > **Status:** Planning document. Customer trial execution per `production-canary-stage5-runbook.md`.
 

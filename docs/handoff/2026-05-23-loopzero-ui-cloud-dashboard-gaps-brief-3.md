@@ -356,7 +356,7 @@ This brief should ship as **`@loopzero/ui@0.9.0-next.0`** (minor bump from 0.8.0
 
 - Brief #1: `loopzero/docs/handoff/2026-05-23-loopzero-ui-cloud-dashboard-gaps-brief.md` (4 PaaS-shape primitives — shipped in 0.7.0)
 - Brief #2: `loopzero/docs/handoff/2026-05-23-loopzero-ui-cloud-dashboard-gaps-brief-2.md` (8 cross-cutting primitives — shipped in 0.8.0)
-- Consumer plan: `loopzero/docs/plans/2026-05-23-dashboard-loopzero-ui-migration-plan.md` v1.1 (pending v1.2 bump for Tailwind v4 + Geist fonts + theme API findings from llms.txt)
+- Consumer plan: `loopzero/docs/plans/completed/2026-05-23-dashboard-loopzero-ui-migration-plan.md` v1.1 (pending v1.2 bump for Tailwind v4 + Geist fonts + theme API findings from llms.txt)
 - llms.txt source-of-truth: `https://docs.loopzero.example/llms.txt`
 - Existing siblings for API patterns:
   - `loopzero-ui/src/components/primitives/toast/toast.tsx` — Alert is the persistent counterpart

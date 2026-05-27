@@ -1,7 +1,7 @@
 # Backend Pre-flight Report — Dashboard FAANG-Tier 3 Phase 0
 
 **Data:** 2026-05-25 (executado em Ralph loop autonomous mode)
-**Plan:** `docs/plans/2026-05-26-dashboard-faang-tier-3-plan.md` v1.1
+**Plan:** `docs/plans/completed/2026-05-26-dashboard-faang-tier-3-plan.md` v1.1
 **Phase:** 0 — Backend Pre-flight (T-DR-0.1..0.6)
 **Methodology:** read-only verification via `grep -rn` em `api/internal/{routes,services,sse,server}/`. SSE k3d local não disponível esta iteração — verifications pure-source (sem `curl` smoke).
 **Status:** COMPLETE — 5 verdicts documentados, 0 commits consumer-side.

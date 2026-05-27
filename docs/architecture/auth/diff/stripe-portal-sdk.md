@@ -11,7 +11,7 @@ updated_by: plan T1.5 + T2.7 design
 
 # Stripe Portal SDK Integration — Auth/Billing Diff
 
-> **Plan reference:** T2.7 + T1.5 of `docs/plans/2026-05-26-maturity-3-62-to-4-0-roadmap-plan.md`
+> **Plan reference:** T2.7 + T1.5 of `docs/plans/completed/2026-05-26-maturity-3-62-to-4-0-roadmap-plan.md`
 >
 > **Depends on:** Sponsor review for Stripe production key usage (T2 — API contract change, billing flow).
 

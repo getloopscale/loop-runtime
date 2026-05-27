@@ -4,7 +4,7 @@
 // Package agplisolation implements the T9.1 gate: fail CI if an AGPL-3.0 Go
 // package is imported outside its ADR-approved allow-list location.
 //
-// Plan T5.3 of docs/plans/2026-05-22-shell-script-strategic-plan.md v1.3:
+// Plan T5.3 of docs/plans/completed/2026-05-22-shell-script-strategic-plan.md v1.3:
 // replaces infra/scripts/check_agpl_isolation.sh. Pure-Go (filepath walk +
 // substring scan) — replaces bash grep. No external CLI.
 //

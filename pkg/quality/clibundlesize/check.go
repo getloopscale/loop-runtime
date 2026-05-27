@@ -4,7 +4,7 @@
 // Package clibundlesize implements the T9.3 gate: fail CI if the compiled CLI
 // bundle (cli/dist/*.js) grows beyond a documented byte cap.
 //
-// Plan T5.3 of docs/plans/2026-05-22-shell-script-strategic-plan.md v1.3:
+// Plan T5.3 of docs/plans/completed/2026-05-22-shell-script-strategic-plan.md v1.3:
 // replaces infra/scripts/check_cli_bundle_size.sh. Pure-Go (filepath walk +
 // size sum) — replaces bash find/awk. No external CLI.
 //

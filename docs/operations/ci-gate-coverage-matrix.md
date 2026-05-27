@@ -76,6 +76,6 @@ Each rule file declares its enforcement status openly via the Enforcement table 
 
 ## References
 
-- Plan: `docs/plans/2026-05-21-deep-review-remediation-plan.md` Phase T6 + T4
+- Plan: `docs/plans/completed/2026-05-21-deep-review-remediation-plan.md` Phase T6 + T4
 - ADR: `docs/decisions/2026-05-21-naming-conventions-adr.md`
 - Memory: `feedback_anti_lying_workaround_pattern` — advisory-without-graduation forbidden

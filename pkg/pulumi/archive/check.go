@@ -18,7 +18,7 @@
 // CHG-2026-04-30-INFRA-NORMALIZE / Phase 3 condition C14.
 //
 // Replaces infra/scripts/pulumi-archive.sh (~199 LOC) per Phase 7 of
-// plan docs/plans/2026-05-21-bash-to-go-migration-plan.md.
+// plan docs/plans/completed/2026-05-21-bash-to-go-migration-plan.md.
 package archive
 
 import (

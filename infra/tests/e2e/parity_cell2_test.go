@@ -4,7 +4,7 @@
 // Parity: Cell-2 Activation — Ginkgo home for the cell-2 multi-cell invariants
 // migrated from infra/tests/parity/cell2-activation-gates.sh +
 // lib/cell2-gate-c1..c12.sh (Track B, TB1.1 of plan
-// docs/plans/2026-05-24-parity-to-ginkgo-migration-plan.md).
+// docs/plans/completed/2026-05-24-parity-to-ginkgo-migration-plan.md).
 //
 // TB1.1 classification (per finding-2026-05-24 gate-heterogeneity): the 12 bash
 // activation gates are NOT uniform LIVE checks. Post-activation (cell-2 live):

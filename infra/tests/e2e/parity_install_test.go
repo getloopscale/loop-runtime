@@ -4,7 +4,7 @@
 // Parity: Install Matrix — Ginkgo home for the prod-parity install validation
 // migrated from infra/tests/parity/{k3d-virgin-install,preflight,doks-install,
 // droplet-install}.sh (Track B, TB3.1 of plan
-// docs/plans/2026-05-24-parity-to-ginkgo-migration-plan.md).
+// docs/plans/completed/2026-05-24-parity-to-ginkgo-migration-plan.md).
 //
 // SCAFFOLDING (TB0.1): the It bodies Skip() until TB3.1 ports the assertions.
 // Cloud (doks/droplet) assertions carry Label("cloud") so local

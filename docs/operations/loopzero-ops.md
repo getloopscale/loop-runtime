@@ -2,7 +2,7 @@
 
 `loopzero-ops` is the Go binary (`cmd/loopzero-ops`, a standalone Go module) that hosts
 the migrated quality gates and operational subcommands. It is the target of the
-incremental bash→Go migration (plan `docs/plans/2026-05-23-incremental-bash-to-go-migration-plan.md`).
+incremental bash→Go migration (plan `docs/plans/completed/2026-05-23-incremental-bash-to-go-migration-plan.md`).
 
 ## Why a single canonical invocation (ADR D6)
 

@@ -195,7 +195,7 @@ tasks:
     desc: |
       Full setup from scratch — clusters + infra + networking + CRDs + DB + tokens + standalone bootstrap.
 
-      Per T3.2 of docs/plans/2026-05-22-shell-script-strategic-plan.md v1.3:
+      Per T3.2 of docs/plans/completed/2026-05-22-shell-script-strategic-plan.md v1.3:
       `task setup` builds the PLATFORM (one-shot install). The DEV LOOP is `tilt up`.
       See docs/operations/dev-loop.md for the canonical developer workflow.
     cmds:

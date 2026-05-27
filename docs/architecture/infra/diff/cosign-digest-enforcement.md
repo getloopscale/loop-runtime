@@ -11,7 +11,7 @@ updated_by: plan T1.5 + T2.3 design
 
 # Cosign Digest Enforcement — Infrastructure Diff
 
-> **Plan reference:** T2.3 + T1.5 of `docs/plans/2026-05-26-maturity-3-62-to-4-0-roadmap-plan.md`
+> **Plan reference:** T2.3 + T1.5 of `docs/plans/completed/2026-05-26-maturity-3-62-to-4-0-roadmap-plan.md`
 >
 > **Depends on:** Change Governor meeting (T2 — Helm modifications + admission policy). EC-4 + EC-5 of edge-case-review absorbed inline.
 

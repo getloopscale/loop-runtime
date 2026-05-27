@@ -6,7 +6,7 @@
 // disposition (KEEP-OPERATOR / DELEGATE-* / MIGRATE-* / AUTO-DIE /
 // DELETE-DEAD / REVIEW-NEEDED).
 //
-// Phase 0 T0.1 of plan docs/plans/2026-05-22-shell-script-strategic-plan.md.
+// Phase 0 T0.1 of plan docs/plans/completed/2026-05-22-shell-script-strategic-plan.md.
 // The CSV emitted by this package is reviewed by an operator and drives
 // downstream phases (delete, delegate, migrate).
 //

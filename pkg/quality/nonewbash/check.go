@@ -2,7 +2,7 @@
 // Copyright 2025-2026 The LoopZero Authors
 
 // Package nonewbash implements the D3 governance gate from
-// docs/plans/2026-05-22-shell-script-strategic-plan.md: "Creation of new
+// docs/plans/completed/2026-05-22-shell-script-strategic-plan.md: "Creation of new
 // bash scripts is FORBIDDEN by default; exceptions require entry in
 // .claude/rules/shell-scripts-allowlist.md".
 //

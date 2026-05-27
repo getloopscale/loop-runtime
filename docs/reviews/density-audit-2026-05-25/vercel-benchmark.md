@@ -91,7 +91,7 @@ Os 2 screenshots do Vercel são a **régua externa**: se Vercel (o SaaS-de-refer
 
 ## Como usar este documento
 
-Este benchmark é o **segundo insumo** (junto com o REPORT.md) para o plano de density refactor **ainda não escrito** (`docs/plans/2026-05-26-dashboard-density-refactor-plan.md`).
+Este benchmark é o **segundo insumo** (junto com o REPORT.md) para o plano de density refactor **ainda não escrito** (`docs/plans/completed/2026-05-26-dashboard-density-refactor-plan.md`).
 
 Quando o `/to-plan` for invocado, recomenda-se incluir como contexto:
 1. `docs/reviews/density-audit-2026-05-25/REPORT.md` — violações internas DSS-based (2 P1 + 5 P2 + 4 P3)

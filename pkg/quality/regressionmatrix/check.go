@@ -8,7 +8,7 @@
 // a silent regression of the protection it claims.
 //
 // It replaces two bash scripts (Track B TB5 of plan
-// docs/plans/2026-05-24-script-minimization-program-plan.md):
+// docs/plans/completed/2026-05-24-script-minimization-program-plan.md):
 //   - infra/tests/parity/audit-regression-matrix.sh — the audit itself, and
 //   - infra/tests/parity/audit-golden-test.sh — the golden test that proves
 //     the audit detects a fabricated broken entry.

@@ -1,6 +1,6 @@
 # Production Canary Stage 5 Runbook (Customer Trial)
 
-> **Plan reference:** T0.3 + T0.4 of `docs/plans/2026-05-26-maturity-3-62-to-4-0-roadmap-plan.md`
+> **Plan reference:** T0.3 + T0.4 of `docs/plans/completed/2026-05-26-maturity-3-62-to-4-0-roadmap-plan.md`
 >
 > **Status:** Stage 5 = 1 production customer day-trial WITHOUT incidents. Gate (b) of CLAUDE.md "Path to maturity 4.0".
 

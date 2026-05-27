@@ -2,7 +2,7 @@
 // Copyright 2025-2026 The LoopZero Authors
 
 // Package noshellwrap implements the D5 governance gate from
-// docs/plans/2026-05-22-shell-script-strategic-plan.md: "Shell-wrap em Go is
+// docs/plans/completed/2026-05-22-shell-script-strategic-plan.md: "Shell-wrap em Go is
 // PROIBIDO — Go code that shells out to a CLI when a native Go SDK exists is
 // dívida técnica."
 //

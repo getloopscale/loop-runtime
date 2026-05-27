@@ -5,7 +5,7 @@
 # drill-jwt-diagnose.sh — Diagnose JWT 401 root cause between drill Hydra
 # OAuth2 server and loopzero-api validator.
 #
-# Plan: docs/plans/2026-05-19-drill-skills-rigor-restoration-plan.md T1.1
+# Plan: docs/plans/completed/2026-05-19-drill-skills-rigor-restoration-plan.md T1.1
 #
 # READ-ONLY: does NOT mutate drill stack. Safe to run repeatedly.
 # Idempotent: re-runs do not corrupt state.

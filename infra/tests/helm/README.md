@@ -6,7 +6,7 @@ asserts structural invariants. **Catches drift between `helm lint`
 passing and chart deploying broken structures (selector orphans,
 security context gaps, registry typos, etc.).**
 
-Plan: `docs/plans/2026-05-20-helm-render-time-testing-terratest-plan.md`
+Plan: `docs/plans/completed/2026-05-20-helm-render-time-testing-terratest-plan.md`
 
 ## Quick start
 

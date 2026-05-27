@@ -7,7 +7,7 @@
 // regression test before the fix").
 //
 // Replaces infra/scripts/migration_test_coverage.sh (~91 LOC) per
-// Phase 7 of plan docs/plans/2026-05-21-bash-to-go-migration-plan.md.
+// Phase 7 of plan docs/plans/completed/2026-05-21-bash-to-go-migration-plan.md.
 //
 // Origin: T3.4 of deep-review-remediation-plan / find_test_002 HIGH.
 package migrationtestcoverage

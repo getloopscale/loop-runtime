@@ -5,7 +5,7 @@
 // that references a bug/issue (fix #N, closes #N, Bug #N, ...) MUST add at
 // least one test file in its diff.
 //
-// Plan T5.3 of docs/plans/2026-05-22-shell-script-strategic-plan.md v1.3:
+// Plan T5.3 of docs/plans/completed/2026-05-22-shell-script-strategic-plan.md v1.3:
 // replaces infra/scripts/quality/check-regression-test.sh. Pure-Go (regexp +
 // string scan) — no external CLI. Genuine pure-logic win per D5.
 package regressiontest

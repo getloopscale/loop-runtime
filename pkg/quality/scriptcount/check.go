@@ -3,7 +3,7 @@
 
 // Package scriptcount is the program-level monotonic ceiling on the number of
 // canonical shell scripts (.sh) in the repository, for the Script Minimization
-// Program (docs/plans/2026-05-24-script-minimization-program-plan.md, T0.1).
+// Program (docs/plans/completed/2026-05-24-script-minimization-program-plan.md, T0.1).
 //
 // It complements:
 //   - no-new-bash (blocks ADDING a .sh not in the allowlist), and

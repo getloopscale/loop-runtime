@@ -1,7 +1,7 @@
 # Cost Attribution per Tenant (OpenCost)
 
 Operator-facing guide for the OpenCost integration adopted via plan
-`docs/plans/2026-05-22-shell-script-strategic-plan.md` v1.3 Phase 7 T7.2.
+`docs/plans/completed/2026-05-22-shell-script-strategic-plan.md` v1.3 Phase 7 T7.2.
 
 ---
 
@@ -144,4 +144,4 @@ from `infra/helm/monitoring/dashboards/opencost.json` (operator may custom).
 - Helmfile entry: `infra/helmfile/mgmt.helmfile.yaml.gotmpl` (look for `name: opencost`)
 - ServiceMonitor: `infra/helm/monitoring/manifests/servicemonitor-opencost.yaml`
 - Hermetic tests: `pkg/quality/opencostgate/check_test.go`
-- Plan section: `docs/plans/2026-05-22-shell-script-strategic-plan.md` Phase 7 T7.2
+- Plan section: `docs/plans/completed/2026-05-22-shell-script-strategic-plan.md` Phase 7 T7.2

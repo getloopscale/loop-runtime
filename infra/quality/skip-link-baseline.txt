@@ -7,7 +7,7 @@
 # BLOCKING mode for NEW violations introduced by future PRs, while the legacy
 # debt is paid down iteratively. See:
 #   - infra/scripts/quality/check-skip-link.sh
-#   - docs/plans/2026-05-21-comprehensive-quality-gates-plan.md (T6.5 + EC-8)
+#   - docs/plans/completed/2026-05-21-comprehensive-quality-gates-plan.md (T6.5 + EC-8)
 #
 # How to shrink this baseline (Phase 4 backlog target):
 #   1. Pick a violation, add `// https://github.com/loopzero/loopzero/issues/N` on

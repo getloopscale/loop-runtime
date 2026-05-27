@@ -4,7 +4,7 @@
 // Parity: Cell-2 Canary/Rollback — Ginkgo home for
 // infra/tests/parity/cell2-canary-stage1.sh + cell2-canary-stage2.sh
 // (Track B, TB2.1 of plan
-// docs/plans/2026-05-24-parity-to-ginkgo-migration-plan.md).
+// docs/plans/completed/2026-05-24-parity-to-ginkgo-migration-plan.md).
 //
 // SCAFFOLDING (TB0.1): It bodies Skip() until TB2.1 ports the canary
 // weight/health assertions. Per the local known-issue (HTTP 000 in --smoke),

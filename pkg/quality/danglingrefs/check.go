@@ -2,7 +2,7 @@
 // Copyright 2025-2026 The LoopZero Authors
 
 // Package danglingrefs implements the T0.1 backstop gate from
-// docs/plans/2026-05-23-incremental-bash-to-go-migration-plan.md.
+// docs/plans/completed/2026-05-23-incremental-bash-to-go-migration-plan.md.
 //
 // It fails when a .sh script DELETED (or renamed-away) in the diff is still
 // referenced — in a live, non-comment context — by any caller surface:
