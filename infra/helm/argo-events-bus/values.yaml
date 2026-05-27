@@ -16,7 +16,15 @@ eventBus:
   # Persistence for buffering events during transient controller restarts.
   persistence:
     enabled: true
-    storageClassName: ""  # use cluster default
+    # K8s semantics: storageClassName UNSET means "use cluster default".
+    # storageClassName: "" (literal empty string) DISABLES dynamic provisioning
+    # — PVCs stay Pending forever. The argo-events controller upstream forwards
+    # whatever is in EventBus CR (or "" when omitted) directly to the PVC spec,
+    # so we MUST pass a real class name. local-path is the k3d default.
+    # In prod (DOKS), override via env values to do-block-storage.
+    # Discovered LIVE during cleanroom 2026-05-27 (PVC Pending → JetStream
+    # never boots → Sensor can't dispatch → entire CI pipeline broken).
+    storageClassName: local-path
     size: 1Gi
   # Resource limits proportional to dev workload (~10 PR/day).
   resources:

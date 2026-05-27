@@ -21,7 +21,14 @@ spec:
     replicas: {{ .Values.eventBus.replicas }}
     {{- if .Values.eventBus.persistence.enabled }}
     persistence:
-      storageClassName: {{ .Values.eventBus.persistence.storageClassName | quote }}
+      # K8s semantics: storageClassName UNSET → use cluster default class.
+      # storageClassName: "" (empty string) DISABLES dynamic provisioning and
+      # requires a static pre-bound PV. We want the cluster default, so omit
+      # the field entirely when no override is set. Discovered LIVE during
+      # cleanroom 2026-05-27: EventBus PVC stuck Pending with empty SC.
+      {{- with .Values.eventBus.persistence.storageClassName }}
+      storageClassName: {{ . | quote }}
+      {{- end }}
       accessMode: ReadWriteOnce
       volumeSize: {{ .Values.eventBus.persistence.size }}
     {{- end }}
