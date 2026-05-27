@@ -43,7 +43,7 @@ metadata:
     # selector → "0 pods affected" → false-positive PASS (no signal).
     loopzero.io/prerequisite: "sigstore-active"
     loopzero.io/prerequisite-check: |
-      kubectl get pods -n sigstore-system -l app=fulcio \
+      kubectl get pods -n sigstore-system -l app.kubernetes.io/name=fulcio \
         --field-selector=status.phase=Running --no-headers | wc -l
       # Expected: > 0 (Fulcio Running). If 0, skip with explicit log.
 spec:
@@ -53,6 +53,10 @@ spec:
     namespaces:
       - sigstore-system
     labelSelectors:
-      app: fulcio
+      # Match Helm chart standard label (sigstore/fulcio helm chart sets
+      # app.kubernetes.io/name=fulcio per K8s recommended labels). Earlier
+      # `app: fulcio` was wrong assumption — discovered LIVE 2026-05-27 chaos
+      # iter 1 with "Failed to select targets: no pod is selected" warning.
+      app.kubernetes.io/name: fulcio
   # Single iteration; chaos-test SKILL re-runs as needed for soak.
   duration: "30s"
