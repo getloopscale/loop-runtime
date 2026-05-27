@@ -1,0 +1,83 @@
+{{- if .Values.networkPolicy.enabled }}
+# T0.2 Cenário B POC — NetworkPolicy isolating CI namespace.
+# Per ADR-2026-05-27-T0.2-RATIFIED D3 + SBR conditional:
+# "Runner namespace egress-restricted to Gitea API + DOCR + Sigstore only."
+#
+# Default deny-all; explicit allow per destination.
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: argo-ci-default-deny
+  namespace: {{ .Values.namespaceName }}
+  labels:
+    app.kubernetes.io/name: argo-ci-namespace
+    app.kubernetes.io/managed-by: {{ .Release.Service | quote }}
+    loopzero.io/component: ci
+spec:
+  podSelector: {}
+  policyTypes:
+    - Ingress
+    - Egress
+  # Egress allowlist
+  egress:
+    # DNS (required for service resolution)
+    - to:
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: kube-system
+          podSelector:
+            matchLabels:
+              k8s-app: kube-dns
+      ports:
+        - protocol: UDP
+          port: 53
+        - protocol: TCP
+          port: 53
+    # Gitea (status posting + repo clone)
+    - to:
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: loopzero-system
+          podSelector:
+            matchLabels:
+              app: gitea
+      ports:
+        - protocol: TCP
+          port: {{ .Values.networkPolicy.giteaPort }}
+    # Argo Server (Workflow CR queries by status script)
+    - to:
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: argo
+          podSelector:
+            matchLabels:
+              app.kubernetes.io/name: argo-server
+      ports:
+        - protocol: TCP
+          port: {{ .Values.networkPolicy.argoServerPort }}
+    # External: DOCR (image pulls) + sigstore.dev (optional cross-witness verification)
+    # Cluster-external traffic uses egress to "all" with port restriction
+    - to:
+        - ipBlock:
+            cidr: 0.0.0.0/0
+            except:
+              # Block internal cluster ranges (DNS rule above handles cluster-internal)
+              - 10.0.0.0/8
+              - 172.16.0.0/12
+              - 192.168.0.0/16
+      ports:
+        - protocol: TCP
+          port: 443  # HTTPS only (DOCR, sigstore, GitHub)
+  # Ingress: only from Argo Workflows controller + Argo Events Sensor
+  ingress:
+    - from:
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: argo
+          podSelector:
+            matchLabels:
+              app.kubernetes.io/name: argo-workflows-workflow-controller
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: argo-events
+{{- end }}

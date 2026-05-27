@@ -1,0 +1,42 @@
+# T0.2 Cenário B POC — Gitea webhook EventSource.
+# Per ADR-2026-05-27-T0.2-RATIFIED D1.
+#
+# Receives Gitea PR webhook events; validates HMAC signature; publishes
+# to default EventBus where Sensor (sensor-pr-trigger.yaml) subscribes.
+#
+# Operator points Gitea repo Settings → Webhooks at:
+#   https://<eventsource-svc>/{{ .Values.gitea.webhookPath }}
+# Secret: HMAC signing key from {{ .Values.gitea.webhookSecretRef }}
+apiVersion: argoproj.io/v1alpha1
+kind: EventSource
+metadata:
+  name: gitea-webhook
+  namespace: {{ .Values.namespace }}
+  labels:
+    app.kubernetes.io/name: loopzero-ci-workflows
+    app.kubernetes.io/managed-by: {{ .Release.Service | quote }}
+    loopzero.io/component: ci
+spec:
+  # EventBus reference (default in argo-events namespace per Phase 1).
+  eventBusName: default
+  # Service exposing the webhook receiver. Operator creates Ingress/Route
+  # via Traefik separately (cluster-specific, not chart-managed).
+  service:
+    ports:
+      - port: {{ .Values.gitea.webhookServicePort }}
+        targetPort: {{ .Values.gitea.webhookServicePort }}
+  webhook:
+    pr-events:
+      # Port the EventSource pod listens on.
+      port: "{{ .Values.gitea.webhookServicePort }}"
+      endpoint: {{ .Values.gitea.webhookPath | quote }}
+      method: POST
+      # HMAC SHA256 validation per Gitea native webhook signing.
+      authSecret:
+        name: {{ .Values.gitea.webhookSecretRef }}
+        key: {{ .Values.gitea.webhookSecretKey }}
+      # Filter: only forward PR action events the CI cares about.
+      # Reduces EventBus traffic + downstream Sensor evaluation cost.
+      filter:
+        expression: >-
+          body.action in {{ .Values.prEventFilter | toJson }}

@@ -1,0 +1,46 @@
+# T0.2 Cenário B POC — Argo Events defaults.
+# Per ADR-2026-05-27-T0.2-RATIFIED D1.
+
+# Upstream chart subkey — overrides for argo-events helm chart 2.4.x.
+argo-events:
+  # Controller configuration
+  controller:
+    replicas: 1  # dev default; prod overlay raises to 2
+    resources:
+      requests:
+        cpu: 100m
+        memory: 128Mi
+      limits:
+        cpu: 500m
+        memory: 256Mi
+
+  # Webhook controller (EventSource server)
+  webhook:
+    replicas: 1
+    resources:
+      requests:
+        cpu: 100m
+        memory: 128Mi
+      limits:
+        cpu: 500m
+        memory: 256Mi
+
+# EventBus configuration (JetStream NATS).
+# Provisioned as a custom resource via templates/eventbus.yaml.
+eventBus:
+  enabled: true
+  # Number of NATS replicas. 1 for dev; 3 for prod HA (per SRE-style HA pattern).
+  replicas: 1
+  # Persistence for buffering during outages (per EC-1 absorbed in plan).
+  persistence:
+    enabled: true
+    storageClassName: ""  # use cluster default
+    size: 1Gi
+  # Resource limits proportional to dev workload (~10 PR/day).
+  resources:
+    requests:
+      cpu: 100m
+      memory: 256Mi
+    limits:
+      cpu: 500m
+      memory: 512Mi

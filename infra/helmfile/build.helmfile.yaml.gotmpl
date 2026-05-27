@@ -86,6 +86,36 @@ releases:
       - name: workflow.serviceAccount.create
         value: "false"
 
+  # T0.2 Cenário B POC — CI infrastructure releases (post-MEET-2026-05-27).
+  # Per ADR-2026-05-27-T0.2-RATIFIED: Argo Workflows + Argo Events provide
+  # PR-time enforcement of `task quality:gates` via Gitea webhook → Sensor
+  # → quality-gate WorkflowTemplate. Boundary mitigation per D3: CI workflows
+  # in dedicated `argo-ci` namespace (NOT `argo` shared with tenant builds).
+
+  - name: argo-ci-namespace
+    namespace: argo-ci
+    chart: ../helm/argo-ci-namespace
+    # No needs — bootstraps the namespace itself.
+    values:
+      - ../helm/argo-ci-namespace/values.yaml
+
+  - name: argo-events
+    namespace: argo-events
+    chart: ../helm/argo-events
+    needs:
+      - argo/argo-workflows
+      - argo-ci/argo-ci-namespace
+    values:
+      - ../helm/argo-events/values.yaml
+
+  - name: loopzero-ci-workflows
+    namespace: argo-ci
+    chart: ../helm/loopzero-ci-workflows
+    needs:
+      - argo-events/argo-events
+    values:
+      - ../helm/loopzero-ci-workflows/values.yaml
+
   # Wave 0: Loki for build logs (NodePort 30100 for cross-cluster scrape)
   - name: loki
     namespace: monitoring

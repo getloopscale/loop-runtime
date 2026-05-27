@@ -1,0 +1,16 @@
+# T0.2 Cenário B POC — argo-ci namespace.
+# Per ADR-2026-05-27-T0.2-RATIFIED D3.
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: {{ .Values.namespaceName }}
+  labels:
+    app.kubernetes.io/name: argo-ci-namespace
+    app.kubernetes.io/managed-by: {{ .Release.Service | quote }}
+    app.kubernetes.io/instance: {{ .Release.Name | quote }}
+    loopzero.io/component: ci
+    loopzero.io/boundary: developer-plane
+    # Sigstore policy-controller exclusion: CI pods may not have
+    # cosign signatures yet (depends on T2.2 keyless infra activation).
+    # Per ADR-2026-05-27-T2.2-OFFLINE-TUF chicken-and-egg note.
+    policy.sigstore.dev/include: "false"

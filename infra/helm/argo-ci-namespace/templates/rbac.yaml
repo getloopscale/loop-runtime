@@ -1,0 +1,54 @@
+# T0.2 Cenário B POC — RBAC for loopzero-ci-runner ServiceAccount.
+# Per ADR-2026-05-27-T0.2-RATIFIED D3: namespace-scoped only
+# (RoleBinding, NOT ClusterRoleBinding).
+#
+# Permissions granted:
+#   - Workflows: create + get + list (Sensor creates them; status script reads)
+#   - Pods: get + log (status script tails pod logs for failure context)
+#   - ConfigMaps: get (status-posting script ConfigMap)
+#   - Secrets: get (gitea-api-token for status posting)
+apiVersion: rbac.authorization.k8s.io/v1
+kind: Role
+metadata:
+  name: {{ .Values.serviceAccount.name }}
+  namespace: {{ .Values.namespaceName }}
+  labels:
+    app.kubernetes.io/name: argo-ci-namespace
+    app.kubernetes.io/managed-by: {{ .Release.Service | quote }}
+    loopzero.io/component: ci
+rules:
+  - apiGroups: ["argoproj.io"]
+    resources: ["workflows", "workflows/finalizers"]
+    verbs: ["create", "get", "list", "watch", "patch"]
+  - apiGroups: ["argoproj.io"]
+    resources: ["workflowtaskresults", "workflowtasksets"]
+    verbs: ["create", "get", "list", "watch", "patch"]
+  - apiGroups: [""]
+    resources: ["pods", "pods/log"]
+    verbs: ["get", "list", "watch"]
+  - apiGroups: [""]
+    resources: ["configmaps"]
+    verbs: ["get", "list"]
+  - apiGroups: [""]
+    resources: ["secrets"]
+    verbs: ["get"]
+    # Lock to specific secrets to prevent secret enumeration.
+    resourceNames: ["gitea-api-token", "gitea-webhook-secret"]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: {{ .Values.serviceAccount.name }}
+  namespace: {{ .Values.namespaceName }}
+  labels:
+    app.kubernetes.io/name: argo-ci-namespace
+    app.kubernetes.io/managed-by: {{ .Release.Service | quote }}
+    loopzero.io/component: ci
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: Role
+  name: {{ .Values.serviceAccount.name }}
+subjects:
+  - kind: ServiceAccount
+    name: {{ .Values.serviceAccount.name }}
+    namespace: {{ .Values.namespaceName }}
