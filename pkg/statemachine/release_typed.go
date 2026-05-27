@@ -32,6 +32,9 @@ const (
 	RPhRolledBack      ReleasePhase = "ROLLED_BACK"
 	RPhRollbackFailed  ReleasePhase = "ROLLBACK_FAILED"
 	RPhCancelled       ReleasePhase = "CANCELLED"
+	// RPhArchived per T4.5 of plan 2026-05-26-maturity-3-62-to-4-0-roadmap.
+	// Mirrors ReleaseArchived (introduced by migration 000008).
+	RPhArchived ReleasePhase = "ARCHIVED"
 )
 
 // Typed event constants.
@@ -54,6 +57,8 @@ const (
 	RPEventManualResolve      ReleasePhaseEvent = "ManualResolve"
 	RPEventReactivated        ReleasePhaseEvent = "Reactivated"
 	RPEventProjectDeleted     ReleasePhaseEvent = "ProjectDeleted"
+	// RPEventArchived per T4.5; mirrors ReleaseArchiveEvent.
+	RPEventArchived ReleasePhaseEvent = "ReleaseArchived"
 )
 
 // ReleaseMachine is the typed wrapper around the shared *Machine.
@@ -138,11 +143,12 @@ const (
 )
 
 // IsReleasePhaseTerminal returns true if the phase is terminal.
-// Typed equivalent of the package-level IsReleaseTerminal — only
-// CANCELLED is truly terminal (SUPERSEDED + ROLLED_BACK can
-// reactivate via rollback).
+// Typed equivalent of the package-level IsReleaseTerminal — CANCELLED
+// and ARCHIVED are truly terminal (SUPERSEDED + ROLLED_BACK can
+// reactivate via rollback; ARCHIVED cannot). T4.5 added ARCHIVED per
+// migration 000008.
 func IsReleasePhaseTerminal(phase ReleasePhase) bool {
-	return phase == RPhCancelled
+	return phase == RPhCancelled || phase == RPhArchived
 }
 
 // IsReleasePhaseReapable mirrors the untyped IsReleaseReapable

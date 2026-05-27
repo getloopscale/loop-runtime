@@ -143,8 +143,9 @@ func TestReleaseMachine_IsTerminal(t *testing.T) {
 		}
 	}
 
-	// Only CANCELLED is truly terminal (cannot be recovered).
-	terminal := []State{ReleaseCancelled}
+	// CANCELLED + ARCHIVED are truly terminal (cannot be recovered).
+	// ARCHIVED added by T4.5 of plan 2026-05-26-maturity-3-62-to-4-0-roadmap.
+	terminal := []State{ReleaseCancelled, ReleaseArchived}
 	for _, s := range terminal {
 		if !m.IsTerminal(s) {
 			t.Errorf("state %q should be terminal", s)
@@ -219,11 +220,13 @@ func TestIsReleaseTerminal(t *testing.T) {
 	m := NewReleaseMachine()
 
 	// IsReleaseTerminal must be consistent with Machine.IsTerminal.
+	// ARCHIVED added 2026-05-27 per T4.5 of plan 2026-05-26-maturity-3-62-to-4-0-roadmap.
 	allStates := []State{
 		ReleaseReady, ReleasePending, ReleaseActive,
 		ReleaseGitMirrorFailed, ReleaseSyncFailed, ReleaseDriftAlert,
 		ReleaseRollingBack, ReleaseRollbackFailed,
 		ReleaseSuperseded, ReleaseRolledBack, ReleaseCancelled,
+		ReleaseArchived,
 	}
 
 	for _, s := range allStates {
@@ -256,6 +259,7 @@ func TestIsReleaseReapable(t *testing.T) {
 		{ReleaseDriftAlert, false},
 		{ReleaseRollingBack, false},
 		{ReleaseRollbackFailed, false},
+		{ReleaseArchived, false}, // T4.5: terminal, not reapable
 		{"UNKNOWN", false},
 	}
 
@@ -263,5 +267,89 @@ func TestIsReleaseReapable(t *testing.T) {
 		if got := IsReleaseReapable(tt.state); got != tt.want {
 			t.Errorf("IsReleaseReapable(%s) = %v, want %v", tt.state, got, tt.want)
 		}
+	}
+}
+
+// TestReleaseMachine_ArchiveTransitions exercises T4.5 of plan
+// 2026-05-26-maturity-3-62-to-4-0-roadmap — every non-terminal state that
+// migration 000008 archives (SUPERSEDED/ROLLED_BACK/failed) must accept
+// ReleaseArchiveEvent and land in ARCHIVED. CANCELLED is excluded because
+// it is already terminal — its archive happens via raw SQL UPDATE.
+func TestReleaseMachine_ArchiveTransitions(t *testing.T) {
+	m := NewReleaseMachine()
+	archivable := []State{
+		ReleaseSuperseded,
+		ReleaseRolledBack,
+		ReleaseGitMirrorFailed,
+		ReleaseSyncFailed,
+		ReleaseRollbackFailed,
+		ReleaseDriftAlert,
+	}
+	for _, from := range archivable {
+		t.Run(string(from), func(t *testing.T) {
+			next := m.Transition(from, ReleaseArchiveEvent)
+			if next != ReleaseArchived {
+				t.Errorf("Transition(%s, ReleaseArchiveEvent) = %s, want ARCHIVED", from, next)
+			}
+		})
+	}
+}
+
+// TestReleaseMachine_ArchiveFromCancelled_Rejected — CANCELLED is terminal;
+// archiver service must use raw UPDATE for it (per migration 000008
+// approach). This test guards the spec invariant.
+func TestReleaseMachine_ArchiveFromCancelled_Rejected(t *testing.T) {
+	m := NewReleaseMachine()
+	defer func() {
+		if r := recover(); r == nil {
+			t.Error("expected panic archiving CANCELLED via Transition (terminal sink)")
+		}
+	}()
+	m.Transition(ReleaseCancelled, ReleaseArchiveEvent)
+}
+
+// TestReleaseMachine_ArchiveFromActive_Rejected guarantees ACTIVE releases
+// cannot be archived without first cycling through CANCELLED/SUPERSEDED.
+func TestReleaseMachine_ArchiveFromActive_Rejected(t *testing.T) {
+	m := NewReleaseMachine()
+	defer func() {
+		if r := recover(); r == nil {
+			t.Error("expected panic archiving ACTIVE release directly")
+		}
+	}()
+	m.Transition(ReleaseActive, ReleaseArchiveEvent)
+}
+
+// TestReleaseMachine_ArchivedIsTerminal_NoReactivation enforces that
+// ARCHIVED is a sink — no event recovers it.
+func TestReleaseMachine_ArchivedIsTerminal_NoReactivation(t *testing.T) {
+	m := NewReleaseMachine()
+	if !m.IsTerminal(ReleaseArchived) {
+		t.Fatal("ARCHIVED should be terminal")
+	}
+	// Try to reactivate — should panic (no transition out of ARCHIVED).
+	defer func() {
+		if r := recover(); r == nil {
+			t.Error("expected panic on ARCHIVED -> Reactivated")
+		}
+	}()
+	m.Transition(ReleaseArchived, ReleaseReactivated)
+}
+
+// TestReleaseMachine_LoadArchivedFromDB ensures that loading an ARCHIVED row
+// from PG (via migration 000008 backfill) parses cleanly into the typed
+// machine. EC-14 of edge-case-review.
+func TestReleaseMachine_LoadArchivedFromDB(t *testing.T) {
+	m := NewReleaseTypedMachine()
+	// DB stores raw string "ARCHIVED" — MustParseState must not panic.
+	phase := m.MustParseState("ARCHIVED")
+	if phase != RPhArchived {
+		t.Errorf("MustParseState(\"ARCHIVED\") = %s, want %s", phase, RPhArchived)
+	}
+	if !m.IsTerminal(phase) {
+		t.Error("loaded ARCHIVED should be terminal")
+	}
+	if !m.IsKnownState(phase) {
+		t.Error("loaded ARCHIVED should be known")
 	}
 }
