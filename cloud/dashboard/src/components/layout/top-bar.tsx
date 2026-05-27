@@ -87,17 +87,20 @@ export function TopBar({ showProjectSelector = true, onCommandPaletteOpen }: Top
       )}
 
       {/* Right slot — Sprint 2 T2.6: CommandPalette trigger button.
-       * EC-13: shortcut label adapts to platform (⌘K em Mac, Ctrl+K em Win/Linux). */}
+       * EC-13: shortcut label adapts to platform (⌘K em Mac, Ctrl+K em Win/Linux).
+       * Sized +25% vs original per sponsor feedback (px-3 py-1.5 text-label →
+       * px-4 py-2 text-body-sm + larger icon + min-width). Bigger tap target +
+       * stronger visual affordance — search é uma surface principal de produto. */}
       <div className="ml-auto">
         {onCommandPaletteOpen && (
           <button
             type="button"
             onClick={onCommandPaletteOpen}
-            className="inline-flex items-center gap-2 px-3 py-1.5 rounded-md border border-border/40 text-label text-muted-foreground hover:text-foreground hover:border-border transition-colors"
+            className="inline-flex items-center gap-2.5 px-4 py-2 min-w-[200px] rounded-md border border-border/40 text-body-sm text-muted-foreground hover:text-foreground hover:border-border transition-colors"
             aria-label={`Open command palette (${SHORTCUT_LABEL})`}
           >
-            <Search className="size-3.5" aria-hidden="true" />
-            <span>Search…</span>
+            <Search className="size-4" aria-hidden="true" />
+            <span className="flex-1 text-left">Search…</span>
             <kbd className="font-mono text-label">{SHORTCUT_LABEL}</kbd>
           </button>
         )}
