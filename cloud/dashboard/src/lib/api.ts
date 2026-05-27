@@ -11,7 +11,7 @@
 // MEET-040: Single origin. Dashboard served at cloud.{domain} — all API calls are relative.
 // Runtime config via /__config.js (empty in prod = same-origin, set per-env in container).
 import { API_URL } from './config';
-import { useMocks, getMockResponse } from './dev-mocks';
+import { mocksEnabled } from './dev-mocks';
 const API_BASE = API_URL;
 
 export function getApiBase() { return API_BASE; }
@@ -51,7 +51,7 @@ export async function exchangeSessionToken(): Promise<boolean> {
   // Visual-validation mock layer (dev-only, gated by VITE_USE_MOCKS).
   // Set a fake token so hasValidToken() returns true and the dashboard
   // proceeds without trying to hit the real BFF endpoint.
-  if (useMocks()) {
+  if (mocksEnabled()) {
     accessToken = 'mock-jwt-for-visual-validation';
     tokenExpiresAt = Date.now() + 3600 * 1000;
     return true;
@@ -142,10 +142,11 @@ export function logout(): void {
 // /v1/billing, /v1/auth/* → cloud service (direct, same origin)
 // /engine/api/v1/* → cloud service proxy → engine API (BFF pattern)
 export async function cloudFetch<T>(path: string, options: RequestInit = {}): Promise<T | null> {
-  // Visual-validation mock layer (dev-only, gated by VITE_USE_MOCKS env var,
-  // dead-code-eliminated in production builds). See lib/dev-mocks.ts.
-  if (useMocks()) return getMockResponse<T>(path);
-
+  // Plan v1.0 (2026-05-26): mock mode no longer short-circuits via FIXTURES
+  // map. Instead, lib/mocks/server.ts wraps window.fetch and intercepts all
+  // /api/v1/* paths transparently — covering 47+ endpoints vs the old 5.
+  // The cloudFetch flow stays identical in mock + prod modes; the difference
+  // is purely WHO answers the network call.
   const token = await ensureToken();
   if (!token) {
     redirectToLogin('expired');

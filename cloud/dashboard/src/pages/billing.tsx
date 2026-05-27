@@ -268,7 +268,7 @@ export function BillingPage() {
                 aria-hidden="true"
               />
               <p className="text-body-sm font-semibold text-foreground">
-                Upgrade to Pro — $19/mo
+                Upgrade to Pro — $29/mo
               </p>
               <p className="text-label text-muted-foreground mt-1">
                 10 projects, 3 environments, 1000 builds/month

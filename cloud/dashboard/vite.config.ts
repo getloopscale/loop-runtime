@@ -1,5 +1,6 @@
 import { defineConfig } from 'vite';
 import react from '@vitejs/plugin-react';
+import { VitePWA } from 'vite-plugin-pwa';
 import { visualizer } from 'rollup-plugin-visualizer';
 import path from 'path';
 
@@ -16,7 +17,16 @@ import path from 'path';
  */
 export default defineConfig({
   plugins: [
-    react(),
+    // T0.2: React Compiler (auto-memoization). React 19 GA, babel-plugin@1.0.
+    // Auto-memoiza components + hooks sem useMemo/useCallback/memo() manuais.
+    // Build-time only, zero runtime overhead. Existing 6 manual memos convivem.
+    react({
+      babel: {
+        plugins: [
+          ['babel-plugin-react-compiler', {}],
+        ],
+      },
+    }),
     // T-DR-5.5 v1.2 (Phase 5) — Bundle analyzer per-route attribution.
     // Outputs dist/bundle-stats.html on every build (open via npm run bundle:analyze).
     // Resolves G5 FAANG gap (Vercel bundle analyzer parity).
@@ -25,6 +35,86 @@ export default defineConfig({
       template: 'treemap',
       gzipSize: true,
       brotliSize: true,
+    }),
+    // T4.2: Service Worker via vite-plugin-pwa + Workbox.
+    // EC-04 critical: auth endpoints MUST NEVER cache — stale token =
+    // security hole (user sees logged-in UI but session is expired).
+    // skipWaiting + clientsClaim = new build propaga em next page load
+    // (without these, SW waits ALL tabs to close — SPA user keeps tab
+    // open dias, never sees update).
+    VitePWA({
+      registerType: 'autoUpdate',
+      manifest: {
+        name: 'LoopZeroCloud',
+        short_name: 'LoopZero',
+        description: 'CLI-first managed cloud for monorepo deployments.',
+        theme_color: '#09090b',
+        background_color: '#09090b',
+        display: 'standalone',
+        start_url: '/',
+        icons: [
+          {
+            src: 'data:image/svg+xml;utf8,<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="%233ecf8e"><path d="M13 2L3 14h9l-1 8 10-12h-9l1-8z"/></svg>',
+            sizes: 'any',
+            type: 'image/svg+xml',
+            purpose: 'any',
+          },
+        ],
+      },
+      workbox: {
+        // EC-04: NEVER cache auth/session endpoints — would serve stale
+        // tokens making user appear logged-in when session is gone.
+        navigateFallbackDenylist: [
+          /\/api\/v1\/auth\//,
+          /\/sessions\//,
+          /\/self-service\//,
+          /\/oauth2\//,
+        ],
+        runtimeCaching: [
+          // Auth/session — NetworkOnly (no fallback, no cache).
+          {
+            urlPattern: ({ url }) =>
+              /\/api\/v1\/auth\//.test(url.pathname) ||
+              /\/sessions\//.test(url.pathname) ||
+              /\/self-service\//.test(url.pathname) ||
+              /\/oauth2\//.test(url.pathname),
+            handler: 'NetworkOnly',
+          },
+          // Generic API — NetworkFirst with 3s timeout, cache fallback.
+          {
+            urlPattern: /\/api\/v1\//,
+            handler: 'NetworkFirst',
+            options: {
+              cacheName: 'loopzero-api',
+              networkTimeoutSeconds: 3,
+              expiration: { maxEntries: 100, maxAgeSeconds: 60 * 60 },
+            },
+          },
+          // Static assets — CacheFirst, 30 days.
+          {
+            urlPattern: /\.(js|css|woff2?|svg|png|webp)$/,
+            handler: 'CacheFirst',
+            options: {
+              cacheName: 'loopzero-assets',
+              expiration: { maxEntries: 200, maxAgeSeconds: 60 * 60 * 24 * 30 },
+            },
+          },
+          // Runtime config — StaleWhileRevalidate (rarely changes but must
+          // refresh eventually after rotation).
+          {
+            urlPattern: /\/__config\.js$/,
+            handler: 'StaleWhileRevalidate',
+            options: { cacheName: 'loopzero-config' },
+          },
+        ],
+        // skipWaiting + clientsClaim: new SW activates immediately em next
+        // page load. Without these, SW waits all tabs close → SPA user com
+        // tab aberta nunca recebe update.
+        skipWaiting: true,
+        clientsClaim: true,
+      },
+      // Dev: SW disabled (Vite HMR conflicts with caching).
+      devOptions: { enabled: false },
     }),
   ],
   resolve: {

@@ -1,23 +1,35 @@
-/* @loopzero/ui canonical consumer entry (T-A.0 v1.2 — D-1 resolved, revised).
- * Per .llms.txt line 51 canonical pattern + preset.css JSDoc:
- *   @import "tailwindcss";
- *   @import "@loopzero/ui/preset.css";
+/* @loopzero/ui canonical consumer entry (T-A.0 v1.2 + 2026-05-26 visual fix).
  *
- * preset.css = tokens.css + tokens-v4.css (the @theme namespace Tailwind v4
- * reads to emit utilities). Without it, bg-primary/text-foreground emit
- * className with no matching CSS rule.
+ * Imports ordered per CSS spec (@import MUST precede non-import rules):
+ *   1. tailwindcss         — v4 core (preflight + utilities generator)
+ *   2. preset.css          — tokens.css + tokens-v4.css (@theme namespace)
+ *   3. components.css      — PRE-COMPILED composite utilities (~100KB)
+ *                            CRITICAL: without this, composites that reference
+ *                            classes Tailwind doesn't scan in dashboard src/
+ *                            (DataTable headers, Select trigger, Sidebar footer,
+ *                            etc.) render with NO matching CSS rule.
+ *   4. fonts-cdn.css       — Geist Sans + Geist Mono via CDN
  *
- * fonts-cdn.css preferred over styles.css's bundled fonts.css because
- * styles.css references ./fonts/geist-*.woff2 at relative paths that don't
- * resolve in consumer build context. CDN avoids font file bundling entirely.
- *
- * styles.css NOT imported — its @layer base (Tailwind v4 preflight regression
- * compensation, body font, focus ring, scrollbar) is nice-to-have but adds
- * CSS @import-ordering conflict (custom-variant + @theme can't come after
- * @layer per CSS spec). Local @layer base below handles dashboard-specific
- * defaults (scrollbar, selection). */
+ * Previous comment claimed styles.css "adds CSS @import-ordering conflict"
+ * with @theme — that's not strictly true: @import is allowed before @theme
+ * (which is not @layer base). We replicate styles.css critical base layer
+ * locally so the dashboard:
+ *   - Gets button cursor: pointer (Tailwind v4 dropped the v3 preflight rule;
+ *     without this, every native <button> renders with default arrow cursor —
+ *     buttons LOOK and FEEL dead).
+ *   - Uses themed border (`hsl(var(--border))`) instead of arbitrary
+ *     `border-white/6` (which produced inconsistent borders across composites).
+ *   - Uses themed background + foreground via --background / --foreground vars
+ *     instead of hard-coded surface-0 + white (which fought the Violet Forge
+ *     theme cascade).
+ *   - Display headings adopt --font-display (Geist).
+ *   - Code surfaces adopt --font-mono + tabular-nums.
+ *   - Focus ring is the themed violet --ring.
+ *   - Scrollbar styled with theme --primary.
+ */
 @import 'tailwindcss';
 @import '@loopzero/ui/preset.css';
+@import '@loopzero/ui/components.css';
 @import '@loopzero/ui/fonts-cdn.css';
 
 @custom-variant dark (&:is(.dark *));
@@ -34,21 +46,6 @@
   --color-loopzero-800: #0c3038;
   --color-loopzero-900: #04171c;
   --color-loopzero-950: #020c0f;
-
-  --color-surface-0: #09090b;
-  --color-surface-1: #0f0f12;
-  --color-surface-2: #17171c;
-  --color-surface-3: #1f1f26;
-  --color-surface-4: #27272f;
-
-  --color-accent: #3ecf8e;
-  --color-danger: #ef4444;
-  --color-warning: #f59e0b;
-
-  /* Fonts intentionally NOT defined here — Geist Sans + Geist Mono come from
-   * @loopzero/ui/fonts-cdn.css imported above (D1 of plan: theme is locked to
-   * Violet Forge which uses Geist). DM Sans + JetBrains Mono + Cabinet Grotesk
-   * from the v3 era are deliberately retired. */
 
   --animate-slide-in: slide-in 0.4s ease-out;
   --animate-fade-in: fade-in 0.3s ease-out;
@@ -83,32 +80,7 @@
   }
 }
 
-/*
-  The default border color has changed to `currentcolor` in Tailwind CSS v4,
-  so we've added these compatibility styles to make sure everything still
-  looks the same as it did with Tailwind CSS v3.
-
-  If we ever want to remove these styles, we need to add an explicit border
-  color utility to any element that depends on these defaults.
-*/
-@layer base {
-  *,
-  ::after,
-  ::before,
-  ::backdrop,
-  ::file-selector-button {
-    border-color: var(--color-gray-200, currentcolor);
-  }
-}
-
-@utility text-balance {
-  text-wrap: balance;
-}
-
-/* T-DR-2.1 + T-DR-2.1.1 (v1.2 Phase 2): Motion system foundation per DSS v1.1
- * § 10. Tokens: instant/fast/base/slow + 3 easing. Linear pattern (180ms base).
- * MUST FIX EC-3: prefers-reduced-motion honored per WCAG 2.3.3.
- */
+/* Motion tokens per DSS v1.1 § 10 + WCAG 2.3.3 reduced-motion compliance */
 :root {
   --motion-instant: 0ms;
   --motion-fast: 90ms;
@@ -125,7 +97,6 @@
     --motion-base: 0ms;
     --motion-slow: 0ms;
   }
-  /* Disable Tailwind animate-* utilities defined em @theme too */
   *,
   ::before,
   ::after {
@@ -135,33 +106,116 @@
   }
 }
 
+/* CRITICAL base layer — replicates @loopzero/ui/styles.css @layer base so we
+ * inherit the same visual baseline as upstream consumers without taking the
+ * full styles.css (which also pulls self-hosted fonts.css → font path resolve
+ * issue per original comment). */
 @layer base {
-  * {
-    @apply border-white/6;
+  /* Themed border across all elements — was `border-white/6` (wrong, fixed
+   * white shade fights theme cascade). Now uses --border var which Violet
+   * Forge sets to the correct neutral. */
+  *,
+  ::after,
+  ::before,
+  ::backdrop,
+  ::file-selector-button {
+    border-color: hsl(var(--border));
+  }
+
+  /* Tailwind v4 dropped the v3 button cursor preflight. Without this, every
+   * <button> renders with default arrow cursor and the whole dashboard feels
+   * dead. We restore the v3 behavior for *interactive* buttons only. */
+  button:not(:disabled):not([aria-disabled='true']),
+  [role='button']:not([aria-disabled='true']) {
+    cursor: pointer;
+  }
+
+  html {
+    font-family: var(--font-body);
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
+    text-rendering: optimizeLegibility;
   }
 
   body {
-    @apply bg-surface-0 text-white antialiased;
-    font-feature-settings: 'cv02', 'cv03', 'cv04', 'cv11';
+    background-color: hsl(var(--background));
+    color: hsl(var(--foreground));
+    /* OpenType ligatures (Geist 'liga' + 'ss01' is structural for the
+     * Vercel-tight glyph combinations) + cv02/03/04/11 stylistic alternates */
+    font-feature-settings:
+      'liga' 1,
+      'ss01' 1,
+      'cv02',
+      'cv03',
+      'cv04',
+      'cv11';
   }
 
-  /* Custom scrollbar */
-  ::-webkit-scrollbar {
-    width: 6px;
-    height: 6px;
+  /* Display headings inherit theme display font (Geist by default).
+   * Per-size tracking is set in tokens-v4.css; this is the safety net. */
+  h1,
+  h2,
+  h3,
+  h4 {
+    font-family: var(--font-display);
+    font-weight: 600;
   }
-  ::-webkit-scrollbar-track {
+
+  /* Code surfaces: use the mono token + tabular numerals so columns of
+   * numbers line up in tables/logs/metrics. */
+  code,
+  pre,
+  kbd,
+  samp {
+    font-family: var(--font-mono);
+    font-feature-settings:
+      'tnum' 1,
+      'liga' 1;
+  }
+
+  /* Themed focus ring (violet) — was outline:none then ad-hoc rings per
+   * component, inconsistent. Now uniform across all keyboard-focusable
+   * elements. */
+  :focus-visible {
+    outline: 2px solid hsl(var(--ring));
+    outline-offset: 2px;
+  }
+
+  /* Themed selection — was bg-accent/20 (green), now uses theme primary
+   * (violet) for brand consistency. */
+  ::selection {
+    background-color: hsl(var(--primary) / 0.25);
+    color: hsl(var(--foreground));
+  }
+
+  /* Native scrollbar — themed with --primary. Used by elements that don't
+   * wrap in <ScrollArea>. */
+  *::-webkit-scrollbar {
+    width: 10px;
+    height: 10px;
+  }
+  *::-webkit-scrollbar-track {
     background: transparent;
   }
-  ::-webkit-scrollbar-thumb {
-    @apply bg-white/10 rounded-full;
+  *::-webkit-scrollbar-thumb {
+    background-color: hsl(var(--primary) / 0.25);
+    border: 2px solid transparent;
+    background-clip: content-box;
+    border-radius: 9999px;
+    transition: background-color var(--motion-fast) var(--easing-standard);
   }
-  ::-webkit-scrollbar-thumb:hover {
-    @apply bg-white/20;
+  *::-webkit-scrollbar-thumb:hover {
+    background-color: hsl(var(--primary) / 0.5);
   }
+  *::-webkit-scrollbar-thumb:active {
+    background-color: hsl(var(--primary) / 0.75);
+  }
+  * {
+    scrollbar-width: thin;
+    scrollbar-color: hsl(var(--primary) / 0.3) transparent;
+  }
+}
 
-  /* Selection */
-  ::selection {
-    @apply bg-accent/20 text-white;
-  }
+@utility text-balance {
+  text-wrap: balance;
 }

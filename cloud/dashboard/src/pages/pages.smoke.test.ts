@@ -82,4 +82,74 @@ describe('pages smoke — modules compile + export named function', () => {
     const m = await import('./device-success');
     expect(typeof m.DeviceSuccessPage).toBe('function');
   });
+
+  it('exports ProjectDetailPage (plan v1.2 T0.3 — closes SG-06)', async () => {
+    const m = await import('./project-detail');
+    expect(typeof m.ProjectDetailPage).toBe('function');
+  });
+
+  it('exports NotFoundPage (plan v1.2 T0.3 — catch-all 404)', async () => {
+    const m = await import('./not-found');
+    expect(typeof m.NotFoundPage).toBe('function');
+  });
+
+  it('exports DeploymentsPage (plan v1.0 T1.1 — deploy lifecycle list)', async () => {
+    const m = await import('./deployments');
+    expect(typeof m.DeploymentsPage).toBe('function');
+  });
+
+  it('exports DeploymentDetailPage (plan v1.0 T1.2 — detail + BuildTimeline)', async () => {
+    const m = await import('./deployment-detail');
+    expect(typeof m.DeploymentDetailPage).toBe('function');
+  });
+
+  it('exports BuildLogsPage (plan v1.0 T1.3 — SSE log viewer)', async () => {
+    const m = await import('./build-logs');
+    expect(typeof m.BuildLogsPage).toBe('function');
+  });
+
+  it('exports BuildSBOMPage (plan v1.0 T1.4 — CycloneDX viewer)', async () => {
+    const m = await import('./build-sbom');
+    expect(typeof m.BuildSBOMPage).toBe('function');
+  });
+
+  it('exports BuildAttestationPage (plan v1.0 T1.5 — cosign envelope viewer)', async () => {
+    const m = await import('./build-attestation');
+    expect(typeof m.BuildAttestationPage).toBe('function');
+  });
+
+  it('exports RuntimeLogsPage (plan v1.0 T2.1 — runtime SSE viewer)', async () => {
+    const m = await import('./runtime-logs');
+    expect(typeof m.RuntimeLogsPage).toBe('function');
+  });
+
+  it('exports ProjectStatusPage (plan v1.0 T2.2 — 4-signal health card)', async () => {
+    const m = await import('./project-status');
+    expect(typeof m.ProjectStatusPage).toBe('function');
+  });
+
+  it('exports SecretsPage (plan v1.0 T3.1 — secrets CRUD)', async () => {
+    const m = await import('./secrets');
+    expect(typeof m.SecretsPage).toBe('function');
+  });
+
+  it('exports PreviewsPage (plan v1.0 T3.2 — preview envs)', async () => {
+    const m = await import('./previews');
+    expect(typeof m.PreviewsPage).toBe('function');
+  });
+
+  it('exports ProjectConnectPage (plan v1.0 T3.3 — GitHub connect)', async () => {
+    const m = await import('./project-connect');
+    expect(typeof m.ProjectConnectPage).toBe('function');
+  });
+
+  it('exports AuditPage (plan v1.0 T5.1 — audit log)', async () => {
+    const m = await import('./audit');
+    expect(typeof m.AuditPage).toBe('function');
+  });
+
+  it('exports ProjectScalePage (post-FAANG-refactor: scale dialog → page)', async () => {
+    const m = await import('./project-scale');
+    expect(typeof m.ProjectScalePage).toBe('function');
+  });
 });

@@ -1,166 +1,170 @@
-import { useState } from 'react';
-import { Link } from 'react-router-dom';
+import { useEffect, useState } from 'react';
+import { Link, useSearchParams, useNavigate } from 'react-router-dom';
 import { ExternalLink, FolderKanban, Plus } from 'lucide-react';
-import {
-  Badge,
-  Button,
-  DataTable,
-  EmptyState,
-  StatusDot,
-  type DataTableColumn,
-} from '@loopzero/ui';
-import { ActionBar } from '@/components/layout';
+import { Badge, Button, Card, PageShell, StatusDot, Table } from '@loopzero/ui';
 import { useSetPageTitle } from '@/hooks/use-page-meta';
 import { useRequireAuth } from '@/hooks/use-auth';
 import { useProjects } from '@/hooks/use-projects';
+import { CreateProjectSheet } from "@/components/sheets/create-project-sheet";
 import { formatDate } from '@/lib/format';
 
-interface ProjectRow {
-  name: string;
-  framework?: string;
-  apps_count: number;
-  last_deploy?: string;
-  environment?: string;
-}
-
 /**
- * ProjectsPage — entity list rendered via DataTable (post Brief #5 migration 3/4).
+ * ProjectsPage — entity list.
  *
- * Pre: 3-col ContentGrid of <ProjectCard> (~140px per card, sparse for entity
- * list with 5+ rows). Closes Deep Review § 2.2 P1.
+ * Visual consistency pattern (per 2026-05-26 sponsor directive "all tables
+ * must look like /environments"): PageShell + Card + Table primitive,
+ * matching environments.tsx style. Was previously DataTable composite +
+ * ActionBar; migrated to the simpler primitive so every list page in the
+ * dashboard renders the same header chrome.
  *
- * Post: DataTable with sortable columns + sticky header + Open action per row.
- * Information density doubled — same 5 projects fit in ~280px vs ~600px.
+ * Sorting was a DataTable freebie that the Table primitive doesn't provide;
+ * accepted trade-off for visual consistency. Sortable columns can be
+ * reintroduced later as an opt-in feature (likely upstream candidate).
  */
 export function ProjectsPage() {
   useRequireAuth();
   useSetPageTitle('Projects');
   const { projects, loading } = useProjects();
-  const [searchQuery, setSearchQuery] = useState('');
+  const navigate = useNavigate();
+  const [searchParams] = useSearchParams();
+  const [searchQuery, setSearchQuery] = useState(searchParams.get('q') ?? '');
+  const [createOpen, setCreateOpen] = useState(false);
+
+  // Sync ProjectsPage search input with `?q=` query param (sidebar search wire,
+  // plan v1.2 T0.5). Updates on URL change so back/forward works.
+  useEffect(() => {
+    const q = searchParams.get('q') ?? '';
+    setSearchQuery(q);
+  }, [searchParams]);
 
   const filteredProjects = projects.filter((p) =>
     p.name.toLowerCase().includes(searchQuery.toLowerCase()),
   );
 
-  // Adapter: backend Project shape → table row shape.
-  const rows: ProjectRow[] = filteredProjects.map((p) => ({
-    name: p.name,
-    framework: p.apps?.[0]?.framework,
-    apps_count: p.apps?.length ?? 0,
-    last_deploy: p.last_deploy,
-    environment: p.environment,
-  }));
-
-  const columns: DataTableColumn<ProjectRow>[] = [
-    {
-      key: 'name',
-      label: 'Project',
-      sortable: true,
-      render: (r) => <span className="font-medium text-foreground">{r.name}</span>,
-    },
-    {
-      key: 'framework',
-      label: 'Framework',
-      sortable: true,
-      className: 'hidden md:table-cell',
-      render: (r) =>
-        r.framework ? (
-          <Badge variant="outline" className="text-label uppercase">{r.framework}</Badge>
-        ) : (
-          <span className="text-body-sm text-muted-foreground">—</span>
-        ),
-    },
-    {
-      key: 'apps_count',
-      label: 'Apps',
-      sortable: true,
-      align: 'right',
-      className: 'hidden md:table-cell',
-      render: (r) => (
-        <span className="text-body-sm text-muted-foreground tabular-nums">
-          {r.apps_count}
-        </span>
-      ),
-    },
-    {
-      key: 'environment',
-      label: 'Environment',
-      className: 'hidden md:table-cell',
-      render: (r) => (
-        <span className="text-body-sm text-muted-foreground">{r.environment ?? '—'}</span>
-      ),
-    },
-    {
-      key: 'status',
-      label: 'Status',
-      render: () => <StatusDot status="live" label="Live" />,
-    },
-    {
-      key: 'last_deploy',
-      label: 'Last deploy',
-      sortable: true,
-      render: (r) => (
-        <span className="text-body-sm text-muted-foreground tabular-nums">
-          {r.last_deploy ? formatDate(r.last_deploy, 'relative') : '—'}
-        </span>
-      ),
-    },
-    {
-      key: '__open',
-      label: '',
-      align: 'right',
-      render: (r) => (
-        <Button variant="ghost" size="sm" asChild>
-          <Link to={`/projects/${r.name}`} aria-label={`Open ${r.name}`}>
-            Open <ExternalLink className="size-3" aria-hidden="true" />
-          </Link>
-        </Button>
-      ),
-    },
-  ];
-
   return (
-    <>
-      <ActionBar
-        searchPlaceholder="Search projects..."
-        searchValue={searchQuery}
-        onSearchChange={setSearchQuery}
-        primaryAction={{
-          label: 'New Project',
-          icon: Plus,
-          onClick: () => {
-            window.open('https://docs.loopzero.example/cli/init', '_blank');
-          },
-        }}
-      />
-
-      <DataTable<ProjectRow>
-        columns={columns}
-        data={rows}
-        rowKey={(r) => r.name}
-        stickyHeader
-        loading={loading}
-        defaultSort={{ key: 'last_deploy', direction: 'desc' }}
-        emptyState={
-          <EmptyState
-            icon={FolderKanban}
-            title={searchQuery ? 'No matching projects' : 'No projects yet'}
-            description={
-              searchQuery ? (
-                <>Try a different search term.</>
-              ) : (
-                <>
-                  Run{' '}
-                  <code className="bg-muted px-2 py-0.5 rounded font-mono">
-                    loopzero init
-                  </code>{' '}
-                  to create your first project.
-                </>
-              )
+    <PageShell
+      title="Projects"
+      search={{
+        placeholder: 'Search projects...',
+        value: searchQuery,
+        onChange: setSearchQuery,
+      }}
+      primaryAction={{
+        label: 'New Project',
+        icon: Plus,
+        // SG-01 CLOSED (plan v1.0 T4.1, 2026-05-26): real CreateProjectSheet
+        // wired to POST /api/v1/projects. Full GitHub picker wizard lives in
+        // a future iter — current dialog accepts name + creates the project.
+        onClick: () => setCreateOpen(true),
+      }}
+      loading={loading}
+      empty={
+        !loading && filteredProjects.length === 0
+          ? {
+              icon: FolderKanban,
+              title: searchQuery ? 'No matching projects' : 'Deploy your first project',
+              description: searchQuery
+                ? 'Try a different search term.'
+                : 'Run loopzero init in your terminal to connect a repo and ship.',
             }
-          />
-        }
+          : undefined
+      }
+    >
+      <Card>
+        <Card.Body className="p-0">
+          <Table>
+            <Table.Header>
+              <Table.Row>
+                <Table.HeaderCell>Project</Table.HeaderCell>
+                <Table.HeaderCell className="hidden md:table-cell">
+                  Framework
+                </Table.HeaderCell>
+                <Table.HeaderCell
+                  align="right"
+                  className="hidden md:table-cell"
+                >
+                  Apps
+                </Table.HeaderCell>
+                <Table.HeaderCell className="hidden md:table-cell">
+                  Environment
+                </Table.HeaderCell>
+                <Table.HeaderCell>Status</Table.HeaderCell>
+                <Table.HeaderCell className="hidden md:table-cell">
+                  Last deploy
+                </Table.HeaderCell>
+                <Table.HeaderCell align="right">
+                  <span className="sr-only">Open project</span>
+                </Table.HeaderCell>
+              </Table.Row>
+            </Table.Header>
+            <Table.Body>
+              {filteredProjects.map((p) => {
+                const framework = p.apps?.[0]?.framework;
+                const appsCount = p.apps?.length ?? 0;
+                const isLive = Boolean(p.last_deploy);
+                return (
+                  <Table.Row key={p.name}>
+                    <Table.Cell>
+                      <span className="font-medium text-body-sm text-foreground">
+                        {p.name}
+                      </span>
+                    </Table.Cell>
+                    <Table.Cell className="hidden md:table-cell">
+                      {framework ? (
+                        <Badge variant="outline" className="text-label uppercase">
+                          {framework}
+                        </Badge>
+                      ) : (
+                        <span className="text-body-sm text-muted-foreground">—</span>
+                      )}
+                    </Table.Cell>
+                    <Table.Cell
+                      align="right"
+                      numeric
+                      className="hidden md:table-cell"
+                    >
+                      {appsCount}
+                    </Table.Cell>
+                    <Table.Cell className="hidden md:table-cell">
+                      <span className="font-mono text-label text-muted-foreground">
+                        {p.environment ?? '—'}
+                      </span>
+                    </Table.Cell>
+                    <Table.Cell>
+                      <StatusDot
+                        status={isLive ? 'live' : 'idle'}
+                        label={isLive ? 'Live' : 'Idle'}
+                      />
+                    </Table.Cell>
+                    <Table.Cell className="hidden md:table-cell">
+                      <span className="text-body-sm text-muted-foreground tabular-nums">
+                        {p.last_deploy ? formatDate(p.last_deploy, 'relative') : '—'}
+                      </span>
+                    </Table.Cell>
+                    <Table.Cell align="right">
+                      <Button variant="ghost" size="sm" asChild>
+                        <Link
+                          to={`/projects/${p.name}`}
+                          aria-label={`Open ${p.name}`}
+                        >
+                          Open
+                          <ExternalLink className="size-3" aria-hidden="true" />
+                        </Link>
+                      </Button>
+                    </Table.Cell>
+                  </Table.Row>
+                );
+              })}
+            </Table.Body>
+          </Table>
+        </Card.Body>
+      </Card>
+
+      <CreateProjectSheet
+        open={createOpen}
+        onOpenChange={setCreateOpen}
+        onCreated={(p) => navigate(`/projects/${encodeURIComponent(p.name)}`)}
       />
-    </>
+    </PageShell>
   );
 }

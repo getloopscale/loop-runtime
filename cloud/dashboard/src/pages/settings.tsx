@@ -1,21 +1,33 @@
 import { useState } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { Card, CodeBlock, ConfirmDialog, DangerZone, Button, PageShell, StatusDot } from '@loopzero/ui';
 import { usePageMeta } from '@/hooks/use-page-meta';
 import { useRequireAuth } from '@/hooks/use-auth';
+import { useWhoami } from '@/hooks/use-whoami';
+import { engineFetch } from '@/lib/api';
 
 export function SettingsPage() {
   useRequireAuth();
-  const { setPageTitle } = usePageMeta();  // wire to PageShell.onTitleChange callback
+  const { setPageTitle } = usePageMeta();
+  const navigate = useNavigate();
+  const { whoami } = useWhoami();
 
   const [confirmOpen, setConfirmOpen] = useState(false);
   const [deleting, setDeleting] = useState(false);
 
   const handleDeleteTeam = async () => {
+    // Delete CURRENT team via whoami().team_id (was hardcoded "team-acme" —
+    // would have deleted demo tenant for every user in prod). Now correctly
+    // scoped to the authenticated session's active team.
+    if (!whoami?.team_id) return;
     setDeleting(true);
     try {
-      /* TODO: wire DELETE /api/v1/teams/{tenantId} when backend ready */
-      await new Promise((r) => setTimeout(r, 1500));
+      await engineFetch(
+        `/api/v1/tenants/${encodeURIComponent(whoami.team_id)}`,
+        { method: 'DELETE' },
+      );
       setConfirmOpen(false);
+      navigate('/');
     } finally {
       setDeleting(false);
     }
@@ -24,15 +36,14 @@ export function SettingsPage() {
   return (
     <PageShell
       title="Settings"
-      description="Workspace configuration — CLI-first per DSS § 9.1."
+      description="Workspace configuration."
       onTitleChange={setPageTitle}
     >
       <Card>
         <Card.Header>
           <Card.Title>CLI-First</Card.Title>
           <Card.Description>
-            Most workspace settings are managed via the CLI for maximum
-            control and scriptability.
+            Use the CLI to script most settings, or jump to a specific setting below.
           </Card.Description>
         </Card.Header>
         <Card.Body>

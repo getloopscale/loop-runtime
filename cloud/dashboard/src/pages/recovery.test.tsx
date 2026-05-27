@@ -4,6 +4,9 @@ import { render, screen, waitFor } from '@/test/render';
 
 vi.mock('@/lib/config', () => ({
   API_URL: 'http://kratos.local',
+  AUTH_URL: '',
+  ENGINE_URL: '',
+  ACCOUNTS_URL: '',
 }));
 
 const mockGetFlow = vi.fn();

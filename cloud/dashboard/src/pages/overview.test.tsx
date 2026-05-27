@@ -56,7 +56,8 @@ describe('OverviewPage', () => {
   it('test_overview_renders_projects_empty_when_no_data', () => {
     mockUseProjects.mockReturnValue({ projects: [], loading: false });
     render(<OverviewPage />);
-    expect(screen.getByText('No projects yet')).toBeInTheDocument();
+    // Copy reform v1.2 (audit Section 6 fold): "No projects yet" → "Deploy your first project"
+    expect(screen.getByText('Deploy your first project')).toBeInTheDocument();
   });
 
   it('test_overview_renders_project_cards_when_data_present', () => {

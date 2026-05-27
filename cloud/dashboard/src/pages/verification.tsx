@@ -2,9 +2,9 @@ import { useEffect, useState } from 'react';
 import { useSearchParams } from 'react-router-dom';
 import { AlertCircle, CheckCircle2, Loader2, Mail } from 'lucide-react';
 import { Alert, Button, Card, PinInput } from '@loopzero/ui';
-import { API_URL } from '@/lib/config';
+import { API_URL, AUTH_URL } from '@/lib/config';
 
-const KRATOS_URL = API_URL;
+const KRATOS_URL = AUTH_URL || API_URL;
 
 type Status = 'loading' | 'input' | 'success' | 'error';
 

@@ -12,6 +12,7 @@ import {
 import { usePageMeta } from '@/hooks/use-page-meta';
 import { useRequireAuth } from '@/hooks/use-auth';
 import { logout } from '@/lib/auth';
+import { engineFetch } from '@/lib/api';
 import { maskEmail } from '@/lib/format';
 
 export function ProfilePage() {
@@ -28,10 +29,15 @@ export function ProfilePage() {
   const initials = (name || email).charAt(0).toUpperCase();
 
   const handleDeleteAccount = async () => {
+    // SG-05 CLOSED (plan v1.0 T4.8, 2026-05-26): replaced setTimeout fake with
+    // real DELETE /api/v1/tenants/{id}. Backend soft-deletes with grace period;
+    // logout invalidates the local session so the user is redirected to /login.
     setDeleting(true);
     try {
-      /* TODO: wire Kratos self-service settings flow for account deletion */
-      await new Promise((r) => setTimeout(r, 1500));
+      const tenantId = session.identity.id;
+      await engineFetch(`/api/v1/tenants/${encodeURIComponent(tenantId)}`, {
+        method: 'DELETE',
+      });
       setConfirmOpen(false);
       await logout();
     } finally {

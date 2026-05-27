@@ -37,7 +37,8 @@ describe('ProjectsPage', () => {
   it('test_projects_empty_state_when_no_data', () => {
     mockUseProjects.mockReturnValue({ projects: [], loading: false });
     render(<ProjectsPage />);
-    expect(screen.getByText('No projects yet')).toBeInTheDocument();
+    // Copy reform v1.2 (audit Section 6 fold): "No projects yet" → "Deploy your first project"
+    expect(screen.getByText('Deploy your first project')).toBeInTheDocument();
     expect(screen.getByText(/loopzero init/i)).toBeInTheDocument();
   });
 

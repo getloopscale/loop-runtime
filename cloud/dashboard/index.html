@@ -2,6 +2,18 @@
 <html lang="en">
   <head>
     <meta charset="UTF-8" />
+    <!--
+      T3.1 + EC-12: Content Security Policy.
+      - script-src 'unsafe-inline' kept for /__config.js runtime injection
+        (no nonce per-request — that would need container entrypoint refactor,
+        deferred to v1.1 per Phase 3 acceptance).
+      - style-src 'unsafe-inline' required for Radix + Tailwind v4 inline styles.
+      - connect-src: self (proxied API) + Kratos/Hydra auth flows + Stripe
+        portal redirect + ws:/wss: for Vite HMR in dev (unused in prod).
+      - frame-ancestors NOT enforced via meta — only via response header.
+      - data:/blob:/https: in img-src cover avatars, base64 favicons, S3 assets.
+    -->
+    <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' 'unsafe-inline'; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src 'self' data: https://fonts.gstatic.com; img-src 'self' data: blob: https:; connect-src 'self' ws: wss: https://api.loopzero.dev https://accounts.loopzero.dev https://auth.loopzero.dev https://checkout.stripe.com https://*.stripe.com; form-action 'self'; base-uri 'self'; object-src 'none'" />
     <link rel="icon" type="image/svg+xml" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%233ecf8e' stroke-width='2'%3E%3Cpath d='M13 2L3 14h9l-1 8 10-12h-9l1-8z'/%3E%3C/svg%3E" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <meta name="theme-color" content="#09090b" />

@@ -1,5 +1,4 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
-import { userEvent } from '@testing-library/user-event';
 import { render, screen } from '@/test/render';
 
 vi.mock('@/hooks/use-auth', () => ({
@@ -59,9 +58,12 @@ describe('DomainsPage', () => {
     expect(screen.getByRole('button', { name: /add domain/i })).toBeInTheDocument();
   });
 
-  it('test_domains_dns_record_copy_button_works', async () => {
-    // Post Brief #5 migration: DNS records live in DataTable expandable rows.
-    // Default state = collapsed → must click expand button before Copy buttons visible.
+  it('test_domains_dns_record_copy_button_works', () => {
+    // Post 2026-05-26 migration (sponsor directive "all tables like /environments"):
+    // DataTable expandable → Table primitive with always-visible DNS records as a
+    // colSpan row directly below each pending_verification row. No click needed —
+    // the information is actionable so it stays visible. CopyButton instances
+    // (Brief #3 primitive) for CNAME + TXT values.
     mockUseEngineApi.mockReturnValue({
       data: {
         domains: [
@@ -82,12 +84,8 @@ describe('DomainsPage', () => {
       loading: false,
       error: false,
     });
-    const user = userEvent.setup();
     render(<DomainsPage />);
-    // Click DataTable expander on the pending row to reveal DNS records.
-    const expander = screen.getByRole('button', { name: /expand|toggle/i });
-    await user.click(expander);
-    // Now CNAME + TXT rows + 2 CopyButton instances (Brief #3 primitive)
+    // DNS records visible immediately (no expand click)
     expect(screen.getByText('CNAME')).toBeInTheDocument();
     expect(screen.getByText('TXT')).toBeInTheDocument();
     const copyButtons = screen.getAllByRole('button', { name: /copy/i });

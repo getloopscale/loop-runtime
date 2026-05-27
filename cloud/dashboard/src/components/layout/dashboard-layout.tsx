@@ -36,11 +36,22 @@ export function DashboardLayout({ children }: DashboardLayoutProps) {
 
   return (
     <PageMetaProvider>
+      <a
+        href="#main-content"
+        className="sr-only focus:not-sr-only focus:fixed focus:top-2 focus:left-2 focus:z-50 focus:px-3 focus:py-2 focus:rounded-md focus:bg-primary focus:text-primary-foreground focus:text-body-sm focus:font-medium"
+      >
+        Skip to main content
+      </a>
       <div className="bg-background min-h-screen text-foreground flex">
-        <AppSidebar session={session} />
+        <div className="border-r border-border/60 shrink-0">
+          <AppSidebar session={session} />
+        </div>
         <div className="flex-1 flex flex-col min-w-0">
           <TopBar />
-          <main className="flex-1 p-6">
+          <main
+            id="main-content"
+            className="flex-1 px-6 py-6 mx-auto w-full max-w-screen-2xl"
+          >
             {!verified && (
               <div className="mb-6">
                 <VerificationBanner />

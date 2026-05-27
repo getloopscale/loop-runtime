@@ -28,6 +28,10 @@ ralph-loop.local.md
 node_modules/
 dist/
 build/
+
+# Dashboard build artifacts + vendored references (355MB, do not commit)
+cloud/dashboard/storybook-static/
+cloud/dashboard/referencia/
 # Exempt the script module infra/scripts/build/ — it is hand-written sources,
 # not Node build output. Without this negation any NEW file added there would
 # be silently ignored (catastrophic — see line ~68).

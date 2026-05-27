@@ -11,9 +11,9 @@ import {
 import { GoogleBrandIcon } from '@/components/google-brand-icon';
 import { getSession, startLogin } from '@/lib/auth';
 import { clearToken } from '@/lib/api';
-import { API_URL } from '@/lib/config';
+import { API_URL, AUTH_URL } from '@/lib/config';
 
-const KRATOS_URL = API_URL;
+const KRATOS_URL = AUTH_URL || API_URL;
 
 interface FlowNode {
   group: string;
@@ -198,7 +198,7 @@ export function LoginPage() {
               Sign in
             </h1>
             <p className="text-body-sm text-muted-foreground">
-              Deploy your apps in under 5 minutes.
+              Sign in to manage your projects.
             </p>
           </div>
 

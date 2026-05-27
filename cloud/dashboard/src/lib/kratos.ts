@@ -2,9 +2,10 @@
 // All flows go through the public Kratos API (accounts.{domain}).
 // No internal terms (Kratos, Ory) are exposed to users.
 
-// MEET-040: Kratos is same-origin (cloud.{domain}/self-service/*). Relative URLs.
-import { API_URL } from './config';
-const ACCOUNTS_URL = API_URL;
+// Prefer dedicated ACCOUNTS_URL (Kratos may live at accounts.loopzero.dev in prod
+// while API lives at api.loopzero.dev). Falls back to API_URL for same-origin dev.
+import { API_URL, ACCOUNTS_URL as CONFIG_ACCOUNTS_URL } from './config';
+const ACCOUNTS_URL = CONFIG_ACCOUNTS_URL || API_URL;
 
 export interface FlowNode {
   type: string;

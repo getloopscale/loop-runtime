@@ -12,14 +12,14 @@
 // drift between mock and real backend stays visible in code review.
 //
 // **NOT** for tests (those use vi.mock at the hook layer). **NOT** for prod
-// (gated by env var at boot — `useMocks()` returns false unless VITE_USE_MOCKS
+// (gated by env var at boot — `mocksEnabled()` returns false unless VITE_USE_MOCKS
 // is set, and Vite's dead-code-elimination drops the import in prod builds
 // because the env var is statically resolvable at build time).
 
 import type { Session } from './auth';
 
 /** Single source of truth for "is the dev mock layer active?". */
-export function useMocks(): boolean {
+export function mocksEnabled(): boolean {
   return import.meta.env.VITE_USE_MOCKS === 'true';
 }
 
@@ -30,8 +30,8 @@ export function useMocks(): boolean {
  * instead of redirecting to / per useRequireAuth logic. Enables visual
  * validation of all 5 auth surfaces without real Kratos. (Plan T-B.1, ADR-D2.)
  */
-export function useMocksLoggedOut(): boolean {
-  return useMocks() && import.meta.env.VITE_MOCK_LOGGED_OUT === 'true';
+export function mocksLoggedOut(): boolean {
+  return mocksEnabled() && import.meta.env.VITE_MOCK_LOGGED_OUT === 'true';
 }
 
 /**
@@ -41,7 +41,7 @@ export function useMocksLoggedOut(): boolean {
  * landed).
  */
 export function getMockSession(): Session | null {
-  if (useMocksLoggedOut()) return null;
+  if (mocksLoggedOut()) return null;
   return {
     active: true,
     identity: {
@@ -344,7 +344,7 @@ const MOCK_RECOVERY_CODE_PHASE = {
 let originalFetch: typeof fetch | null = null;
 
 export function installKratosMocks(): void {
-  if (!useMocks()) return;
+  if (!mocksEnabled()) return;
   if (typeof window === 'undefined') return;          // not in browser
   if (originalFetch !== null) return;                  // already installed
   originalFetch = window.fetch.bind(window);

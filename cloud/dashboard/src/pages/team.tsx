@@ -1,15 +1,20 @@
 import { useState } from 'react';
-import { UserPlus, Users } from 'lucide-react';
+import { Trash2, UserPlus, Users } from 'lucide-react';
 import {
   Avatar,
   Badge,
+  Button,
   Card,
+  ConfirmDialog,
   PageShell,
+  Select,
   Table,
 } from '@loopzero/ui';
 import { usePageMeta } from '@/hooks/use-page-meta';
 import { useEngineApi } from '@/hooks/use-api';
 import { useRequireAuth } from '@/hooks/use-auth';
+import { InviteMemberSheet } from "@/components/sheets/invite-member-sheet";
+import { useRemoveMember, useUpdateMemberRole } from '@/hooks/mutations/use-team';
 import { formatDate } from '@/lib/format';
 
 interface Member {
@@ -37,6 +42,10 @@ export function TeamPage() {
   const { data, loading } = useEngineApi<TeamResponse>('/api/v1/teams/members');
   const members = data?.members ?? [];
   const [searchQuery, setSearchQuery] = useState('');
+  const [inviteOpen, setInviteOpen] = useState(false);
+  const [busy, setBusy] = useState<string | null>(null);
+  // T2.2: ConfirmDialog substitui native confirm()
+  const [removeTarget, setRemoveTarget] = useState<string | null>(null);
 
   const filtered = members.filter((m) => {
     const q = searchQuery.toLowerCase();
@@ -46,6 +55,22 @@ export function TeamPage() {
       (m.username ?? '').toLowerCase().includes(q)
     );
   });
+
+  // T1.3: mutations invalidate team cache → list re-renders sem reload.
+  const updateRole = useUpdateMemberRole();
+  const removeMember = useRemoveMember();
+
+  const handleRoleChange = (username: string, newRole: string) => {
+    setBusy(username);
+    updateRole.mutate(
+      { memberId: username, role: newRole },
+      { onSettled: () => setBusy(null) },
+    );
+  };
+
+  const handleRemove = (username: string) => {
+    setRemoveTarget(username);
+  };
 
   return (
     <PageShell
@@ -59,10 +84,7 @@ export function TeamPage() {
       primaryAction={{
         label: 'Invite',
         icon: UserPlus,
-        onClick: () => {
-          /* TODO: open invite dialog (future) */
-          window.open('https://docs.loopzero.example/teams/invite', '_blank');
-        },
+        onClick: () => setInviteOpen(true),
       }}
       loading={loading}
       empty={
@@ -85,7 +107,10 @@ export function TeamPage() {
                 <Table.HeaderCell>Member</Table.HeaderCell>
                 <Table.HeaderCell>Email</Table.HeaderCell>
                 <Table.HeaderCell>Role</Table.HeaderCell>
-                <Table.HeaderCell align="right">Joined</Table.HeaderCell>
+                <Table.HeaderCell>Joined</Table.HeaderCell>
+                <Table.HeaderCell align="right">
+                  <span className="sr-only">Actions</span>
+                </Table.HeaderCell>
               </Table.Row>
             </Table.Header>
             <Table.Body>
@@ -93,6 +118,9 @@ export function TeamPage() {
                 const displayName =
                   m.name ?? m.username ?? m.email.split('@')[0];
                 const initials = displayName.charAt(0).toUpperCase();
+                const memberKey = m.username ?? m.email;
+                const isOwner = m.role === 'owner';
+                const isBusy = busy === memberKey;
                 return (
                   <Table.Row key={m.email}>
                     <Table.Cell>
@@ -111,14 +139,49 @@ export function TeamPage() {
                       </span>
                     </Table.Cell>
                     <Table.Cell>
-                      <Badge variant={ROLE_VARIANTS[m.role] ?? 'default'}>
-                        {m.role}
-                      </Badge>
+                      {isOwner ? (
+                        <Badge variant={ROLE_VARIANTS[m.role] ?? 'default'}>
+                          {m.role}
+                        </Badge>
+                      ) : (
+                        <Select
+                          value={m.role}
+                          onValueChange={(v) => handleRoleChange(memberKey, v)}
+                          disabled={isBusy}
+                        >
+                          <Select.Trigger
+                            className="h-7 w-[110px]"
+                            aria-label={`Change role for ${displayName}`}
+                          >
+                            <Select.Value />
+                          </Select.Trigger>
+                          <Select.Content>
+                            <Select.Item value="admin">admin</Select.Item>
+                            <Select.Item value="member">member</Select.Item>
+                          </Select.Content>
+                        </Select>
+                      )}
                     </Table.Cell>
-                    <Table.Cell align="right" numeric>
-                      <span className="text-label text-muted-foreground">
+                    <Table.Cell>
+                      <span className="text-label text-muted-foreground tabular-nums">
                         {formatDate(m.joined, 'date')}
                       </span>
+                    </Table.Cell>
+                    <Table.Cell align="right">
+                      {!isOwner && (
+                        <Button
+                          variant="ghost"
+                          size="sm"
+                          onClick={() => handleRemove(memberKey)}
+                          disabled={isBusy}
+                          aria-label={`Remove ${displayName}`}
+                        >
+                          <Trash2
+                            className="size-4 text-destructive"
+                            aria-hidden="true"
+                          />
+                        </Button>
+                      )}
                     </Table.Cell>
                   </Table.Row>
                 );
@@ -127,6 +190,35 @@ export function TeamPage() {
           </Table>
         </Card.Body>
       </Card>
+
+      <InviteMemberSheet open={inviteOpen} onOpenChange={setInviteOpen} />
+
+      <ConfirmDialog
+        open={removeTarget !== null}
+        onOpenChange={(open) => !open && setRemoveTarget(null)}
+        title={`Remove ${removeTarget ?? ''}?`}
+        description={
+          <>
+            They will lose access to all projects and resources of this team
+            immediately. You can re-invite them later.
+          </>
+        }
+        confirmLabel="Remove member"
+        cancelLabel="Cancel"
+        intent="destructive"
+        loading={removeMember.isPending}
+        onConfirm={() => {
+          if (removeTarget) {
+            setBusy(removeTarget);
+            removeMember.mutate(removeTarget, {
+              onSettled: () => {
+                setBusy(null);
+                setRemoveTarget(null);
+              },
+            });
+          }
+        }}
+      />
     </PageShell>
   );
 }

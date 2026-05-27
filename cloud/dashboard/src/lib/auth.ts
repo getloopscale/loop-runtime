@@ -4,11 +4,19 @@
 // No Hydra, no PKCE, no tokens. Just HTTP-only session cookies.
 //
 // Hydra is only used for the CLI (Device Code Flow).
+//
+// SW INVARIANT (T4.2 + EC-04): Service Worker at vite.config.ts MUST never
+// cache auth/session endpoints (/api/v1/auth/*, /sessions/*, /self-service/*,
+// /oauth2/*). Stale token = security hole (UI shows logged-in but session is
+// gone). Always NetworkOnly handler for these patterns.
 
-// MEET-040: Same-origin — relative URLs. Runtime config via /__config.js.
-import { API_URL } from './config';
-import { useMocks, getMockSession } from './dev-mocks';
-const KRATOS_URL = API_URL;
+// AUTH_URL is the dedicated Kratos URL. Falls back to API_URL when AUTH_URL
+// isn't set (dev / same-origin). Production with split domains (Kratos at
+// accounts.loopzero.dev vs API at api.loopzero.dev) requires AUTH_URL set explicitly
+// via /__config.js — without this fallback the auth flow breaks silently.
+import { API_URL, AUTH_URL } from './config';
+import { mocksEnabled, getMockSession } from './dev-mocks';
+const KRATOS_URL = AUTH_URL || API_URL;
 
 export interface VerifiableAddress {
   value: string;
@@ -71,7 +79,7 @@ export function isEmailVerified(session: Session): boolean {
 export async function getSession(): Promise<Session | null> {
   // Visual-validation mock layer (dev-only, gated by VITE_USE_MOCKS env var,
   // dead-code-eliminated in production builds). See lib/dev-mocks.ts.
-  if (useMocks()) return getMockSession();
+  if (mocksEnabled()) return getMockSession();
 
   try {
     const resp = await fetch(`${KRATOS_URL}/sessions/whoami`, {

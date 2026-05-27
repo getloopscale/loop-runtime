@@ -19,9 +19,10 @@ describe('SettingsPage', () => {
   it('test_settings_renders_general_section', () => {
     // Plan v1.2 divergence: "General" section is CLI-First card (CodeBlock with
     // common commands) per design language — CLI-first principle (CLAUDE.md Rule 9).
+    // Copy reform v1.2 (audit Section 6 fold): apologetic → affirmative.
     render(<SettingsPage />);
     expect(screen.getByText('CLI-First')).toBeInTheDocument();
-    expect(screen.getByText(/Most workspace settings/i)).toBeInTheDocument();
+    expect(screen.getByText(/Use the CLI to script most settings/i)).toBeInTheDocument();
   });
 
   it('test_settings_save_general_calls_api', () => {

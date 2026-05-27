@@ -37,16 +37,19 @@ describe('TopBar', () => {
     expect(screen.queryByText('All Projects')).not.toBeInTheDocument();
   });
 
-  it('test_top_bar_renders_page_title_when_provided', () => {
-    // PageMetaProvider is already in test render wrapper; render setter + TopBar
-    // to set + read the title.
+  it('test_top_bar_does_NOT_duplicate_page_title_2026_05_26', () => {
+    // 2026-05-26 sponsor directive: pageTitle text was removed from TopBar
+    // because it duplicated (a) PageShell title rendered in page body, and
+    // (b) the project name shown by the Select itself on project-scoped routes.
+    // The useSetPageTitle hook + PageMetaProvider stay in place for future
+    // consumers (e.g., document.title sync).
     render(
       <>
         <TitleSetter title="My Test Page" />
         <TopBar />
       </>,
     );
-    expect(screen.getByText('My Test Page')).toBeInTheDocument();
+    expect(screen.queryByText('My Test Page')).not.toBeInTheDocument();
   });
 
   it('test_top_bar_hides_selector_on_settings_route', () => {

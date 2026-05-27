@@ -1,6 +1,14 @@
 import { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { FolderKanban, Loader2, Plus } from 'lucide-react';
+import {
+  ArrowRight,
+  FolderKanban,
+  Globe,
+  Loader2,
+  Plus,
+  Rocket,
+  Users,
+} from 'lucide-react';
 import {
   Badge,
   Card,
@@ -174,7 +182,7 @@ export function OverviewPage() {
             ) : filteredProjects.length === 0 ? (
               <EmptyState
                 icon={FolderKanban}
-                title={searchQuery ? 'No matching projects' : 'No projects yet'}
+                title={searchQuery ? 'No matching projects' : 'Deploy your first project'}
                 description={
                   searchQuery ? (
                     <>Try a different search term.</>
@@ -184,7 +192,7 @@ export function OverviewPage() {
                       <code className="bg-muted px-2 py-0.5 rounded font-mono">
                         loopzero init
                       </code>{' '}
-                      to create your first.
+                      in your terminal to connect a repo and ship.
                     </>
                   )
                 }
@@ -199,7 +207,11 @@ export function OverviewPage() {
                       name: p.name,
                       branch: 'main',
                       commitSha: '',
-                      status: 'live',
+                      // Honest status: 'live' only when project has a deploy timestamp
+                      // (plan v1.2 T0.6 — backend `last_deploy_status` audit pending).
+                      // 'queued' as fallback because ProjectCard accepts DeploymentStatus
+                      // (not 'idle'); 'queued' reads as "pending first deploy" — true.
+                      status: p.last_deploy ? 'live' : 'queued',
                       lastDeployedAt: p.last_deploy ?? new Date().toISOString(),
                       framework: p.apps?.[0]?.framework,
                     }}
@@ -210,10 +222,58 @@ export function OverviewPage() {
             )}
           </section>
 
-          {/* Recent Previews section removed v1.2 T-DR-1.1 (closes P1-1):
-              section ≥240px (cortado por viewport) violated CC-3. Backend
-              preview list endpoint not yet shipped — re-introduce when
-              data available, scoped as compact list inline. */}
+          {/* Quick actions — UI-only nav aids (replaces removed Recent Previews
+              section v1.2 T0.7 fold). Reduz a sensação de "anêmico" do Overview
+              sem inventar dados. Cada action é navegação real para surface
+              existente; nenhuma depende de backend novo. */}
+          <section>
+            <p className="text-label-caps text-muted-foreground uppercase mb-3 tracking-wider">
+              Quick actions
+            </p>
+            <Card>
+              <ul className="divide-y divide-border">
+                <li>
+                  <button
+                    type="button"
+                    onClick={() => navigate('/projects')}
+                    className="w-full flex items-center justify-between gap-3 px-4 py-3 text-left hover:bg-muted/40 transition-colors"
+                  >
+                    <span className="flex items-center gap-3">
+                      <Rocket className="size-4 text-primary" aria-hidden="true" />
+                      <span className="font-medium text-foreground">Deploy a project</span>
+                    </span>
+                    <ArrowRight className="size-4 text-muted-foreground" aria-hidden="true" />
+                  </button>
+                </li>
+                <li>
+                  <button
+                    type="button"
+                    onClick={() => navigate('/team')}
+                    className="w-full flex items-center justify-between gap-3 px-4 py-3 text-left hover:bg-muted/40 transition-colors"
+                  >
+                    <span className="flex items-center gap-3">
+                      <Users className="size-4 text-primary" aria-hidden="true" />
+                      <span className="font-medium text-foreground">Invite teammates</span>
+                    </span>
+                    <ArrowRight className="size-4 text-muted-foreground" aria-hidden="true" />
+                  </button>
+                </li>
+                <li>
+                  <button
+                    type="button"
+                    onClick={() => navigate('/domains')}
+                    className="w-full flex items-center justify-between gap-3 px-4 py-3 text-left hover:bg-muted/40 transition-colors"
+                  >
+                    <span className="flex items-center gap-3">
+                      <Globe className="size-4 text-primary" aria-hidden="true" />
+                      <span className="font-medium text-foreground">Add a custom domain</span>
+                    </span>
+                    <ArrowRight className="size-4 text-muted-foreground" aria-hidden="true" />
+                  </button>
+                </li>
+              </ul>
+            </Card>
+          </section>
         </div>
       </ContentGrid>
     </PageShell>
