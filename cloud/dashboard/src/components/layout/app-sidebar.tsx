@@ -32,7 +32,6 @@ import {
 import { Input, Sidebar } from '@loopzero/ui';
 import type { Session } from '@/lib/auth';
 import { TeamSwitcher } from '@/components/team/team-switcher';
-import { OnboardingChecklist } from '@/components/onboarding/onboarding-checklist';
 import { useOnboardingState } from '@/hooks/use-onboarding-state';
 import { reportEvent } from '@/lib/rum';
 import { withViewTransition } from '@/lib/view-transitions';
@@ -436,11 +435,6 @@ export function AppSidebar({ session }: AppSidebarProps) {
       <Sidebar className="w-[220px]">
         <div key={activeMenuId} className={`flex flex-col h-full ${slideClass}`}>
           {renderPanel(activeMenu)}
-
-          {/* Sprint 3 T3.2 — OnboardingChecklist mounts above footer, only
-              visible when state.isVisible is true (per ADR D2 persistent
-              checklist pattern). Renders null otherwise — zero footprint. */}
-          <OnboardingChecklist />
 
           <Sidebar.Footer className="mt-auto border-t border-border/60">
             <div className="px-3 py-3 space-y-2">

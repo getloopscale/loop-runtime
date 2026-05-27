@@ -10,6 +10,7 @@ import { useProjects } from '@/hooks/use-projects';
 import { VerificationBanner } from '@/components/verification-banner';
 import { CommandPalette } from '@/components/command/command-palette';
 import { buildCommands, sortByRecentDeploy } from '@/components/command/commands';
+import { OnboardingPanel } from '@/components/onboarding/onboarding-panel';
 import { AppSidebar } from './app-sidebar';
 import { TopBar } from './top-bar';
 
@@ -81,6 +82,11 @@ export function DashboardLayout({ children }: DashboardLayoutProps) {
         onOpenChange={setPaletteOpen}
         commands={commands}
       />
+      {/* Sprint 3 T3.2 v2: Floating onboarding panel (Linear/Vercel 2026
+          pattern). Bottom-right fixed, never competes with sidebar nav.
+          Collapses to badge with progress ring. Replaces cramped sidebar
+          widget (220px largura era ilegível). */}
+      <OnboardingPanel />
     </PageMetaProvider>
   );
 }
