@@ -119,6 +119,9 @@ const AuditPage = lazy(() =>
 const ProjectScalePage = lazy(() =>
   import('@/pages/project-scale').then((m) => ({ default: m.ProjectScalePage })),
 );
+const ProjectReadinessPage = lazy(() =>
+  import('@/pages/project-readiness').then((m) => ({ default: m.ProjectReadinessPage })),
+);
 
 function PageLoader() {
   return (
@@ -195,6 +198,10 @@ export default function App() {
                     <Route
                       path="/projects/:name/scale"
                       element={<Boundaried path="/projects/:name/scale"><ProjectScalePage /></Boundaried>}
+                    />
+                    <Route
+                      path="/projects/:name/readiness"
+                      element={<Boundaried path="/projects/:name/readiness"><ProjectReadinessPage /></Boundaried>}
                     />
                     <Route path="/environments" element={<Boundaried path="/environments"><EnvironmentsPage /></Boundaried>} />
                     <Route path="/team" element={<Boundaried path="/team"><TeamPage /></Boundaried>} />

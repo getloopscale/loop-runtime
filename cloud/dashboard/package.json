@@ -58,9 +58,9 @@
       "limit": "10 KB"
     },
     {
-      "name": "TOTAL initial JS — HARD GATE (Phase 2 nuqs + ConfirmDialog bump, brotli)",
+      "name": "TOTAL initial JS — HARD GATE (Sprint 1 ReadinessChecklist bump, brotli)",
       "path": "dist/assets/*.js",
-      "limit": "215 KB"
+      "limit": "218 KB"
     }
   ],
   "dependencies": {

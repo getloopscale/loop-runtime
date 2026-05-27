@@ -23,6 +23,7 @@ import {
   Search,
   Settings,
   ShieldAlert,
+  ShieldCheck,
   SlidersHorizontal,
   User,
   Users,
@@ -178,6 +179,7 @@ const MENUS: Record<string, MenuDefinition> = {
           { label: 'Status', path: '/projects/{project}/status', icon: Activity },
           { label: 'Runtime logs', path: '/projects/{project}/logs', icon: ScrollText },
           { label: 'Scale', path: '/projects/{project}/scale', icon: SlidersHorizontal },
+          { label: 'Readiness', path: '/projects/{project}/readiness', icon: ShieldCheck },
         ],
       },
       {
