@@ -28,10 +28,20 @@ spec:
 {{- if and .Values.clusterImagePolicyKeyless .Values.clusterImagePolicyKeyless.enabled }}
 ---
 # INF-G16 + MEET-2026-05-03-063 (MEET-B Track-1).
-# Keyless ClusterImagePolicy: accepts cosign signatures issued via GitHub OIDC →
+# Keyless ClusterImagePolicy: accepts cosign signatures issued via OIDC →
 # Fulcio short-lived cert → Rekor transparency log entry. Coexists with
 # loopzero-images-warn (key-based authority) during transition (≥ 7 days dual-signing).
 # After T4.4 cutover, loopzero-images-warn is removed and this becomes sole policy.
+#
+# T1.4 of plan 2026-05-27-tenant-build-pipeline-gaps-closure:
+# v1.1 EC-NEW-4 fix — OIDC issuer URL MUST be cluster-external (workload
+# clusters need to resolve build cluster's issuer). Fail-fast: if
+# oidcIssuer empty, refuse render (operator must set explicitly post-
+# Sigstore activation by extracting BUILD cluster external OIDC URL via
+# kubectl --context=loopzero-build get --raw /.well-known/openid-configuration).
+{{- if not .Values.clusterImagePolicyKeyless.oidcIssuer }}
+{{- fail "clusterImagePolicyKeyless.oidcIssuer is REQUIRED (per T1.4 of tenant-build-pipeline-gaps-closure-plan, v1.1 EC-NEW-4). Use BUILD cluster's external OIDC URL: kubectl --context=loopzero-build get --raw /.well-known/openid-configuration | jq -r .issuer" }}
+{{- end }}
 apiVersion: policy.sigstore.dev/v1beta1
 kind: ClusterImagePolicy
 metadata:
@@ -54,7 +64,13 @@ spec:
       keyless:
         url: {{ .Values.clusterImagePolicyKeyless.fulcioURL | quote }}
         identities:
+          # v1.1 EC-NEW-4: issuer is cluster-external OIDC URL of BUILD cluster
+          # (NOT intra-cluster https://kubernetes.default.svc.cluster.local
+          # which doesn't resolve cross-cluster → admission outage).
           - issuer: {{ .Values.clusterImagePolicyKeyless.oidcIssuer | quote }}
+            # v1.1 EC-NEW-11 SHOULD TEST: subjectRegExp anchored with ^...$
+            # to prevent prefix-matching attacks. Default scopes to
+            # loopzero-build-sa specifically.
             subjectRegExp: {{ .Values.clusterImagePolicyKeyless.identityRegexp | quote }}
         ctlog:
           url: {{ .Values.clusterImagePolicyKeyless.rekorURL | quote }}

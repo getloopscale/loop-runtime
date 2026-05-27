@@ -89,8 +89,8 @@
         },
         "oidcIssuer": {
           "type": "string",
-          "pattern": "^https?://[^\\s/$.?#].[^\\s]*$",
-          "description": "OIDC issuer URL (e.g., https://token.actions.githubusercontent.com). Pattern-based per format:uri silent-permissiveness bug class."
+          "pattern": "^$|^https?://[^\\s/$.?#].[^\\s]*$",
+          "description": "OIDC issuer URL — MUST be BUILD cluster's external OIDC URL (NOT intra-cluster). Per T1.4 of plan 2026-05-27-tenant-build-pipeline-gaps-closure v1.1 EC-NEW-4. Empty default + chart fail-fast (Helm fail() in cluster-image-policy.yaml) prevent accidental render. Pattern allows empty OR https URL."
         },
         "identityRegexp": {
           "type": "string",

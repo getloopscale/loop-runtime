@@ -54,8 +54,18 @@ clusterImagePolicyKeyless:
     - "harbor.dev.loopzero.example/loopzero-platform/**"
   fulcioURL: https://fulcio.sigstore.dev
   rekorURL: https://rekor.sigstore.dev
-  oidcIssuer: https://token.actions.githubusercontent.com
-  identityRegexp: "^https://github\\.com/getloopscale/loopzero/"
+  # v1.1 EC-NEW-4 fix — oidcIssuer MUST be set explicitly post-Sigstore
+  # activation. Use BUILD cluster's external OIDC URL (NOT intra-cluster
+  # which breaks cross-cluster verification). Extract via:
+  #   kubectl --context=loopzero-build get --raw /.well-known/openid-configuration | jq -r .issuer
+  # Empty default + chart fail-fast prevents accidental render with stale
+  # GitHub Actions issuer (now-removed).
+  oidcIssuer: ""
+  # v1.1 EC-NEW-11 SHOULD TEST: regex anchored ^...$ scopes strictly to
+  # loopzero-build-sa ServiceAccount. Prevents prefix-match attacks
+  # (e.g., system:serviceaccount:argo:loopzero-build-sa-malicious would
+  # match unanchored regex).
+  identityRegexp: "^system:serviceaccount:argo:loopzero-build-sa$"
 
 # Toggle individual VAPs (enabled by default).
 vaps:
@@ -97,3 +107,15 @@ alerts:
   enabled: true
   namespace: monitoring
   prometheusReleaseLabel: monitoring
+  # T1.2 + T1.1 of plan 2026-05-27-tenant-build-pipeline-gaps-closure:
+  # 4 Sigstore-specific alerts + 2 PV storage alerts gated by this flag.
+  # Default OFF — operator flips post-Sigstore activation to avoid alert
+  # noise when stack not yet deployed.
+  sigstoreEnabled: false
+
+# T1.2.b of plan 2026-05-27-tenant-build-pipeline-gaps-closure:
+# TUF ceremony date for tuf_root_expiry_timestamp emitter CronJob.
+# Operator sets post-ceremony via helmfile override:
+#   helmfile -e prod sync --set tufRootCeremonyDate=2026-06-15T10:00:00Z
+# Default empty disables the CronJob (better than emitting garbage).
+tufRootCeremonyDate: ""

@@ -103,8 +103,8 @@
         },
         "oidcIssuer": {
           "type": "string",
-          "pattern": "^https?://[^\\s/$.?#].[^\\s]*$",
-          "description": "OIDC issuer URL. Pattern-based per format:uri bug class."
+          "pattern": "^$|^https?://[^\\s/$.?#].[^\\s]*$",
+          "description": "OIDC issuer URL — MUST be BUILD cluster's external OIDC URL. T1.4 v1.1 EC-NEW-4. Empty default + chart fail-fast."
         },
         "identityRegexp": { "type": "string", "minLength": 1 }
       }
