@@ -1,4 +1,5 @@
-import { Fragment, useState } from 'react';
+import { Fragment, useEffect, useState } from 'react';
+import { useSearchParams } from 'react-router-dom';
 import { AddDomainSheet } from "@/components/sheets/add-domain-sheet";
 import { Globe, Loader2, RefreshCw, Shield, Trash2 } from 'lucide-react';
 import {
@@ -131,6 +132,18 @@ export function DomainsPage() {
   const [verifying, setVerifying] = useState<string | null>(null);
   const [searchQuery, setSearchQuery] = useState('');
   const [addOpen, setAddOpen] = useState(false);
+  const [searchParams, setSearchParams] = useSearchParams();
+
+  // EC-03 consumer wiring (Sprint 2 T2.3): CommandPalette "Add domain"
+  // navigates here with ?action=add. Open sheet + auto-clear param.
+  useEffect(() => {
+    if (searchParams.get('action') === 'add') {
+      setAddOpen(true);
+      const next = new URLSearchParams(searchParams);
+      next.delete('action');
+      setSearchParams(next, { replace: true });
+    }
+  }, [searchParams, setSearchParams]);
   // T2.2: ConfirmDialog substitui native confirm()
   const [deleteTarget, setDeleteTarget] = useState<string | null>(null);
 

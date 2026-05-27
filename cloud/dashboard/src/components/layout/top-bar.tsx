@@ -1,11 +1,17 @@
 import { useLocation, useNavigate, useParams } from 'react-router-dom';
-import { FolderKanban } from 'lucide-react';
+import { FolderKanban, Search } from 'lucide-react';
 import { Select } from '@loopzero/ui';
 import { useProjects } from '@/hooks/use-projects';
 
 interface TopBarProps {
   showProjectSelector?: boolean;
+  /** Sprint 2 T2.6 — invoked when user clicks the search/command button. */
+  onCommandPaletteOpen?: () => void;
 }
+
+// EC-13 platform-aware shortcut display
+const isMac = typeof navigator !== 'undefined' && /Mac|iPod|iPhone|iPad/.test(navigator.platform);
+const SHORTCUT_LABEL = isMac ? '⌘K' : 'Ctrl+K';
 
 /**
  * TopBar — horizontal strip above main content (h-14, border-b).
@@ -27,7 +33,7 @@ interface TopBarProps {
  * Uses use-projects.ts cache (D-3 v1.1) — same fetch shared with Overview
  * and Projects page without duplicate network calls.
  */
-export function TopBar({ showProjectSelector = true }: TopBarProps) {
+export function TopBar({ showProjectSelector = true, onCommandPaletteOpen }: TopBarProps) {
   const { projects } = useProjects();
   const location = useLocation();
   const navigate = useNavigate();
@@ -80,10 +86,22 @@ export function TopBar({ showProjectSelector = true }: TopBarProps) {
         </Select>
       )}
 
-      {/* Right slot — reserved for future quick actions (NotificationBell,
-       * CommandPalette trigger, etc.). `ml-auto` pushes whatever lands here
-       * to the right edge regardless of left-content width. */}
-      <div className="ml-auto" />
+      {/* Right slot — Sprint 2 T2.6: CommandPalette trigger button.
+       * EC-13: shortcut label adapts to platform (⌘K em Mac, Ctrl+K em Win/Linux). */}
+      <div className="ml-auto">
+        {onCommandPaletteOpen && (
+          <button
+            type="button"
+            onClick={onCommandPaletteOpen}
+            className="inline-flex items-center gap-2 px-3 py-1.5 rounded-md border border-border/40 text-label text-muted-foreground hover:text-foreground hover:border-border transition-colors"
+            aria-label={`Open command palette (${SHORTCUT_LABEL})`}
+          >
+            <Search className="size-3.5" aria-hidden="true" />
+            <span>Search…</span>
+            <kbd className="font-mono text-label">{SHORTCUT_LABEL}</kbd>
+          </button>
+        )}
+      </div>
     </header>
   );
 }

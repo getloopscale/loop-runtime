@@ -1,4 +1,5 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
+import { useSearchParams } from 'react-router-dom';
 import { Trash2, UserPlus, Users } from 'lucide-react';
 import {
   Avatar,
@@ -43,6 +44,18 @@ export function TeamPage() {
   const members = data?.members ?? [];
   const [searchQuery, setSearchQuery] = useState('');
   const [inviteOpen, setInviteOpen] = useState(false);
+  const [searchParams, setSearchParams] = useSearchParams();
+
+  // EC-03 consumer wiring (Sprint 2 T2.3): CommandPalette "Invite member"
+  // navigates here with ?action=invite. Open sheet + auto-clear param.
+  useEffect(() => {
+    if (searchParams.get('action') === 'invite') {
+      setInviteOpen(true);
+      const next = new URLSearchParams(searchParams);
+      next.delete('action');
+      setSearchParams(next, { replace: true });
+    }
+  }, [searchParams, setSearchParams]);
   const [busy, setBusy] = useState<string | null>(null);
   // T2.2: ConfirmDialog substitui native confirm()
   const [removeTarget, setRemoveTarget] = useState<string | null>(null);

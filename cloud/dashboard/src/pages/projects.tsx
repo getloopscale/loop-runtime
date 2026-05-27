@@ -26,7 +26,7 @@ export function ProjectsPage() {
   useSetPageTitle('Projects');
   const { projects, loading } = useProjects();
   const navigate = useNavigate();
-  const [searchParams] = useSearchParams();
+  const [searchParams, setSearchParams] = useSearchParams();
   const [searchQuery, setSearchQuery] = useState(searchParams.get('q') ?? '');
   const [createOpen, setCreateOpen] = useState(false);
 
@@ -36,6 +36,18 @@ export function ProjectsPage() {
     const q = searchParams.get('q') ?? '';
     setSearchQuery(q);
   }, [searchParams]);
+
+  // EC-03 consumer wiring (Sprint 2 T2.3): CommandPalette "Create project"
+  // navigates here with ?action=new. Open sheet + auto-clear param so re-renders
+  // don't re-trigger.
+  useEffect(() => {
+    if (searchParams.get('action') === 'new') {
+      setCreateOpen(true);
+      const next = new URLSearchParams(searchParams);
+      next.delete('action');
+      setSearchParams(next, { replace: true });
+    }
+  }, [searchParams, setSearchParams]);
 
   const filteredProjects = projects.filter((p) =>
     p.name.toLowerCase().includes(searchQuery.toLowerCase()),
