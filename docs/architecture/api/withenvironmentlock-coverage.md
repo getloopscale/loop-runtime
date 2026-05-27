@@ -50,7 +50,7 @@ Per route in `api/internal/server/router.go`:
 | Route | Service | Locker site | Status |
 |-------|---------|-------------|--------|
 | `POST /api/v1/builds` | `BuildHandler.Create` → `BuildOrchestrator.Submit` | `build_orchestrator.go:locker.Lock(...)` (Locker required field, line 214) | **LOCKED-SERVICE** ✓ |
-| `POST /api/v1/builds/{id}/cancel` | `BuildHandler.Cancel` → store update | Cancel mutates `builds.status` via UPDATE — wrapped via `build_reaper.go:locker` for reconcile flows. Direct user cancel: review-needed | **REVIEW** |
+| `POST /api/v1/builds/{id}/cancel` | `BuildHandler.Cancel` → `BuildOrchestrator.CancelBuild` | `services/build_orchestrator_cancel.go:42 o.locker.WithLock(ctx, build.TenantID, build.ProjectID, build.Environment, ...)` — ALL state mutations inside | **LOCKED-SERVICE** ✓ (iter 6 resolved) |
 | `POST /api/v1/projects/{name}/scale` | `ScaleHandler.Scale` → `PostgresScalingStore.Upsert` | `routes/scale.go:113` comment: "wraps inside withEnvironmentLock" | **LOCKED-SERVICE** ✓ |
 | `POST /api/v1/projects/{name}/rollback` | `RollbackHandler.Create` → `RollbackOrchestrator` | `rollback_orchestrator.go:55 Locker` | **LOCKED-SERVICE** ✓ |
 | `POST /api/v1/projects/{name}/promote` | `PromoteHandler.Create` → `PromotionOrchestrator` | `promotion_orchestrator.go:58 Locker` | **LOCKED-SERVICE** ✓ |
@@ -59,10 +59,10 @@ Per route in `api/internal/server/router.go`:
 
 | Route | Service | Locker site | Status |
 |-------|---------|-------------|--------|
-| `POST /api/v1/projects` | `projects.Create` | Project create writes `projects` row + downstream env init; lock contention low (no cross-env) | **REVIEW** |
+| `POST /api/v1/projects` | `projects.Create` → `h.store.CreateProject` + `crMgr.EnsureTenant` | UNIQUE constraint `(tenant_id, name)` on `projects` table handles concurrent collision (ErrProjectExists); K8s Tenant CR has its own optimistic concurrency | **NO-LOCK-REQUIRED** ✓ (iter 6 resolved) |
 | `DELETE /api/v1/projects/{name}` | `projects.Delete` → `ProjectDeleter.Delete` | `project_deleter.go:37 Locker` | **LOCKED-SERVICE** ✓ |
 | `DELETE /api/v1/projects/{name}/environments/{env}` | `projects.DeleteEnvironment` → same `ProjectDeleter` | Same as above | **LOCKED-SERVICE** ✓ |
-| `POST /api/v1/projects/{name}/connect` | `RepositoryHandler.Connect` | Connect writes `project_repository` row; conflict via UNIQUE constraint | **REVIEW** |
+| `POST /api/v1/projects/{name}/connect` | `RepositoryHandler.Connect` → `h.store.LinkRepository` | Idempotent via UNIQUE constraint (per `routes/repositories.go:134` comment); project-scope; no env tuple | **NO-LOCK-REQUIRED** ✓ (iter 6 resolved) |
 | `DELETE /api/v1/projects/{name}/connect` | `RepositoryHandler.Disconnect` | Disconnect deletes `project_repository`; no env lock needed (scope is project, not env) | **NO-LOCK-REQUIRED** (project-scope) |
 
 ### Environment / Secrets
@@ -131,9 +131,9 @@ Per route in `api/internal/server/router.go`:
 ## Summary
 
 - **Total mutating routes audited:** 34
-- **LOCKED-SERVICE (env-scope mutation w/ withEnvironmentLock):** 17 ✓
-- **NO-LOCK-REQUIRED (different lock domain OR no shared state):** 14 ✓ (12 initial + 2 resolved iter 6)
-- **REVIEW (audit follow-up needed):** 3 (down from 5 after iter 6 resolution)
+- **LOCKED-SERVICE (env-scope mutation w/ withEnvironmentLock):** 18 ✓ (17 initial + 1 resolved iter 6 — builds/cancel confirmed locker.WithLock)
+- **NO-LOCK-REQUIRED (different lock domain OR no shared state):** 16 ✓ (12 initial + 4 resolved iter 6 — env Create + source upload + projects POST + projects/connect)
+- **REVIEW (audit follow-up needed):** 0 ✓ — **100% classified after iter 6 code-read**
 
 ## REVIEW items (follow-up actions)
 
@@ -145,11 +145,13 @@ Per route in `api/internal/server/router.go`:
 
 5. **`POST /api/v1/source/upload`** — **NO-LOCK-REQUIRED.** Upload pushes bundle to Gitea via `store.PushBundle` (`routes/source.go:193`); Gitea git ref serialization handles concurrent pushes (route catches `"cannot lock ref" / "remote rejected"` errors at line 195-207 and maps to `DEPLOY_IN_PROGRESS` for consistent UX). S3 object store uses immutable key `<tenant>/source/<sourceID>.bundle` where sourceID is the commit SHA — no overwrite collision possible. **No PG (tenant,project,env) tuple touched.**
 
-### Remaining (3 — sponsor follow-up)
+### All RESOLVED (iter 6 — code-read confirms classification)
 
-1. **`POST /api/v1/builds/{id}/cancel`** — Direct cancel mutates `builds.status`. Currently via store update; should be inside Build.Locker path to prevent race with concurrent SUBMIT. Recommended: route through `BuildOrchestrator.Cancel(id, env)` with Locker call.
-2. **`POST /api/v1/projects`** — Create writes `projects` row + init envs. Project-scope, not env-scope. Lock domain ambiguous; recommend tenant-level serialization (not env lock).
-3. **`POST /api/v1/projects/{name}/connect`** — Connect writes `project_repository` (project-scope). UNIQUE constraint handles conflict; no env lock needed (likely NO-LOCK-REQUIRED but needs verify per #3 pattern).
+1. **`POST /api/v1/builds/{id}/cancel`** — **LOCKED-SERVICE** ✓. `BuildOrchestrator.CancelBuild` (`services/build_orchestrator_cancel.go:42`) explicitly uses `o.locker.WithLock(ctx, build.TenantID, build.ProjectID, build.Environment, ...)` — env-scope lock with ALL state mutations inside (per comment line 18: "All state mutations happen INSIDE the environment lock (Rule 6)"). Step 4 re-checks terminal state INSIDE lock to prevent race with concurrent SUBMIT.
+
+2. **`POST /api/v1/projects`** — **NO-LOCK-REQUIRED** ✓. `ProjectHandler.Create` (`routes/projects.go:131`) writes `projects` row via `h.store.CreateProject` + EnsureTenant CR. Project-scope, NOT env-scope. UNIQUE constraint on `(tenant_id, name)` handles concurrent collision (ErrProjectExists returned). K8s Tenant CR has its own optimistic concurrency via resourceVersion.
+
+3. **`POST /api/v1/projects/{name}/connect`** — **NO-LOCK-REQUIRED** ✓. `RepositoryHandler.Connect` (`routes/repositories.go:75`) writes `project_repository` via `h.store.LinkRepository`. Idempotent via UNIQUE constraint per `routes/repositories.go:134` comment: "Link (idempotent — if already linked to same project, no-op via unique constraint)". Project-scope.
 
 ## Invariants codified
 
