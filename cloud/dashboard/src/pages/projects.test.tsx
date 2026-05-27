@@ -37,9 +37,15 @@ describe('ProjectsPage', () => {
   it('test_projects_empty_state_when_no_data', () => {
     mockUseProjects.mockReturnValue({ projects: [], loading: false });
     render(<ProjectsPage />);
-    // Copy reform v1.2 (audit Section 6 fold): "No projects yet" → "Deploy your first project"
+    // Sprint 3 T3.3: EmptyProjectsHero replaces PageShell.empty when projects.length === 0.
+    // Hero shows hero title + 3 template cards (each containing "loopzero init <starter>") +
+    // "Or from your own repo" section with bare "loopzero init" CLI command.
     expect(screen.getByText('Deploy your first project')).toBeInTheDocument();
-    expect(screen.getByText(/loopzero init/i)).toBeInTheDocument();
+    // Multiple "loopzero init …" matches expected — assert at least one + the dashboard CTA
+    expect(screen.getAllByText(/loopzero init/i).length).toBeGreaterThan(0);
+    expect(
+      screen.getByRole('button', { name: /create project from dashboard/i }),
+    ).toBeInTheDocument();
   });
 
   it('test_projects_loading_state_renders_skeleton', () => {

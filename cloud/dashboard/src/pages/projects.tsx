@@ -6,6 +6,7 @@ import { useSetPageTitle } from '@/hooks/use-page-meta';
 import { useRequireAuth } from '@/hooks/use-auth';
 import { useProjects } from '@/hooks/use-projects';
 import { CreateProjectSheet } from "@/components/sheets/create-project-sheet";
+import { EmptyProjectsHero } from '@/components/onboarding/empty-projects-hero';
 import { formatDate } from '@/lib/format';
 
 /**
@@ -71,17 +72,22 @@ export function ProjectsPage() {
       }}
       loading={loading}
       empty={
-        !loading && filteredProjects.length === 0
+        // Only PageShell empty state for SEARCH no-match. For "no projects at all"
+        // (Sprint 3 T3.3), render EmptyProjectsHero inline below — empty-state-as-
+        // onboarding per ADR D2.
+        !loading && searchQuery && filteredProjects.length === 0
           ? {
               icon: FolderKanban,
-              title: searchQuery ? 'No matching projects' : 'Deploy your first project',
-              description: searchQuery
-                ? 'Try a different search term.'
-                : 'Run loopzero init in your terminal to connect a repo and ship.',
+              title: 'No matching projects',
+              description: 'Try a different search term.',
             }
           : undefined
       }
     >
+      {!loading && projects.length === 0 ? (
+        // Sprint 3 T3.3: empty-state-as-onboarding per ADR D2.
+        <EmptyProjectsHero onCreateFromDashboard={() => setCreateOpen(true)} />
+      ) : (
       <Card>
         <Card.Body className="p-0">
           <Table>
@@ -171,6 +177,7 @@ export function ProjectsPage() {
           </Table>
         </Card.Body>
       </Card>
+      )}
 
       <CreateProjectSheet
         open={createOpen}

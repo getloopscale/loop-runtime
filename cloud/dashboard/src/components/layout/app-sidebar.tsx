@@ -32,6 +32,9 @@ import {
 import { Input, Sidebar } from '@loopzero/ui';
 import type { Session } from '@/lib/auth';
 import { TeamSwitcher } from '@/components/team/team-switcher';
+import { OnboardingChecklist } from '@/components/onboarding/onboarding-checklist';
+import { useOnboardingState } from '@/hooks/use-onboarding-state';
+import { reportEvent } from '@/lib/rum';
 import { withViewTransition } from '@/lib/view-transitions';
 
 interface AppSidebarProps {
@@ -245,6 +248,8 @@ export function AppSidebar({ session }: AppSidebarProps) {
   const location = useLocation();
   const navigate = useNavigate();
   const [searchValue, setSearchValue] = useState('');
+  // Sprint 3 T3.6: Replay onboarding button visible when widget is dismissed.
+  const { state: onboardingState, replay: replayOnboarding } = useOnboardingState();
 
   const resolved = resolveActiveMenu(location.pathname);
   const activeMenuId = resolved.id;
@@ -432,6 +437,11 @@ export function AppSidebar({ session }: AppSidebarProps) {
         <div key={activeMenuId} className={`flex flex-col h-full ${slideClass}`}>
           {renderPanel(activeMenu)}
 
+          {/* Sprint 3 T3.2 — OnboardingChecklist mounts above footer, only
+              visible when state.isVisible is true (per ADR D2 persistent
+              checklist pattern). Renders null otherwise — zero footprint. */}
+          <OnboardingChecklist />
+
           <Sidebar.Footer className="mt-auto border-t border-border/60">
             <div className="px-3 py-3 space-y-2">
               <a
@@ -443,6 +453,22 @@ export function AppSidebar({ session }: AppSidebarProps) {
                 <BookOpen className="size-3.5 shrink-0" aria-hidden="true" />
                 <span>Documentation</span>
               </a>
+              {/* Sprint 3 T3.6: Replay onboarding link — visible only when
+                  user dismissed widget. EC-06 ensures replay() works even when
+                  all steps complete (resets DEFAULT_STATE). */}
+              {onboardingState.dismissed && (
+                <button
+                  type="button"
+                  onClick={() => {
+                    replayOnboarding();
+                    reportEvent('onboarding_replayed');
+                  }}
+                  className="flex items-center gap-2 text-body-sm text-muted-foreground hover:text-foreground transition-colors whitespace-nowrap"
+                >
+                  <BookOpen className="size-3.5 shrink-0" aria-hidden="true" />
+                  <span>Replay onboarding</span>
+                </button>
+              )}
               <div
                 className="flex items-center gap-2 text-label text-muted-foreground whitespace-nowrap"
                 role="status"

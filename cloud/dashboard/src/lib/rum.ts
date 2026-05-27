@@ -37,3 +37,44 @@ export function initWebVitals(): void {
   onINP(reporter);
   onCLS(reporter);
 }
+
+/**
+ * T3.5 — Activation event instrumentation. Emits onboarding lifecycle events
+ * via sendBeacon (prod) or console.log (dev). Same pattern as error-reporter.ts:
+ * never throws (telemetry MUST NOT crash app).
+ */
+export type ActivationEvent =
+  | 'onboarding_step_completed'
+  | 'onboarding_dismissed'
+  | 'onboarding_replayed'
+  | 'first_deploy_celebrated'
+  | 'cli_command_copied';
+
+export function reportEvent(type: ActivationEvent, payload: Record<string, unknown> = {}): void {
+  try {
+    const body = JSON.stringify({ type, payload, timestamp: Date.now() });
+
+    if (import.meta.env.DEV) {
+      // eslint-disable-next-line no-console
+      console.log(`[activation] ${type}`, payload);
+      return;
+    }
+
+    try {
+      if (typeof navigator !== 'undefined' && navigator.sendBeacon) {
+        navigator.sendBeacon('/v1/telemetry/events', body);
+      } else if (typeof fetch !== 'undefined') {
+        fetch('/v1/telemetry/events', {
+          method: 'POST',
+          body,
+          headers: { 'Content-Type': 'application/json' },
+          keepalive: true,
+        }).catch(() => {});
+      }
+    } catch {
+      // Transport failed — non-fatal observability gap
+    }
+  } catch {
+    // Defensive: any unexpected error swallowed
+  }
+}
