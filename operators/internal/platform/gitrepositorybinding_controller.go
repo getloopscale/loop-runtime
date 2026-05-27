@@ -24,6 +24,7 @@ import (
 	"github.com/loopzero/loopzero/operators/internal/gitea"
 	"github.com/loopzero/loopzero/operators/internal/httpclient"
 	"github.com/loopzero/loopzero/operators/internal/shared"
+	"github.com/loopzero/loopzero/pkg/correlation"
 )
 
 const (
@@ -75,6 +76,10 @@ func (r *GitRepositoryBindingReconciler) Reconcile(ctx context.Context, req ctrl
 		}
 		return ctrl.Result{}, err
 	}
+
+	// T1.1 of plan 2026-05-26-maturity-3-62-to-4-0-roadmap: propagate
+	// correlation-id from CR annotation into reconcile context (no-op se ausente).
+	ctx = correlation.WithID(ctx, binding.GetAnnotations()["loopzero.io/correlation-id"])
 
 	// kstatus universal per ADR-0025 D3 condition #1.
 	defer shared.DeferReadinessSummary(ctx, r.Client, req.NamespacedName,

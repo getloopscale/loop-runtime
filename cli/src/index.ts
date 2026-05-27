@@ -30,6 +30,7 @@ import { registerInfraCommands } from './register/infra';
 import { registerPreviewCommands } from './register/preview';
 import { registerScaleCommands } from './register/scale';
 import { registerPlatformCommands } from './register/platform';
+import { registerDiagnosticsCommands } from './register/diagnostics';
 import type { CommandDeps } from './register/types';
 
 // --- Cleanup registry for graceful signal handling (B-09) ---
@@ -168,6 +169,7 @@ export function createProgram(): Command {
   registerPreviewCommands(deps);
   registerScaleCommands(deps);
   registerPlatformCommands(deps);
+  registerDiagnosticsCommands(deps);
 
   // Handle case when no subcommand is given (e.g., `loopzero` or `loopzero --json`)
   program.argument('[args...]');

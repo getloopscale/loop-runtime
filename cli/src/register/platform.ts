@@ -47,7 +47,7 @@ export function registerPlatformCommands(deps: CommandDeps): void {
         skipRestoreSecrets: opts.restoreSecrets === false,
         validateL3: opts.validateL3 === true,
       });
-      process.exit(code);
+      process.exitCode = code;
     });
 
   platform
@@ -60,7 +60,7 @@ export function registerPlatformCommands(deps: CommandDeps): void {
       // register/scale.ts and register/project.ts).
       const json = process.argv.includes('--json');
       const code = await platformStatus({ writeTo, writeError }, { json });
-      process.exit(code);
+      process.exitCode = code;
     });
 
   platform
@@ -70,7 +70,7 @@ export function registerPlatformCommands(deps: CommandDeps): void {
     .option('-f, --values <file>', 'Path to customer values YAML file')
     .action(async (opts) => {
       const code = await platformUpgrade({ writeTo, writeError }, opts.version, opts.values);
-      process.exit(code);
+      process.exitCode = code;
     });
 
   platform
@@ -83,7 +83,7 @@ export function registerPlatformCommands(deps: CommandDeps): void {
         provider: opts.provider,
         deleteInfra: opts.deleteInfra,
       });
-      process.exit(code);
+      process.exitCode = code;
     });
 
   // CHG-2026-04-28-LAYERED-BOOTSTRAP iter 14 — Secret lifecycle commands.
@@ -99,7 +99,7 @@ export function registerPlatformCommands(deps: CommandDeps): void {
     .option('-o, --output <file>', 'Output path (default: ~/.loopzero/backups/secrets-manual-<ts>.yaml)')
     .action(async (opts) => {
       const code = await platformSecretsBackup({ writeTo, writeError }, opts.output);
-      process.exit(code);
+      process.exitCode = code;
     });
 
   secrets
@@ -108,7 +108,7 @@ export function registerPlatformCommands(deps: CommandDeps): void {
     .requiredOption('-f, --file <file>', 'Backup YAML file produced by `loopzero platform secrets backup`')
     .action(async (opts) => {
       const code = await platformSecretsRestore({ writeTo, writeError }, opts.file);
-      process.exit(code);
+      process.exitCode = code;
     });
 
   secrets
@@ -116,6 +116,6 @@ export function registerPlatformCommands(deps: CommandDeps): void {
     .description('List available Secret backups in ~/.loopzero/backups/')
     .action(async () => {
       const code = await platformSecretsList({ writeTo, writeError });
-      process.exit(code);
+      process.exitCode = code;
     });
 }

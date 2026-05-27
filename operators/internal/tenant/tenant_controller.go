@@ -32,6 +32,7 @@ import (
 	"github.com/loopzero/loopzero/operators/internal/harbor"
 	miniop "github.com/loopzero/loopzero/operators/internal/minio"
 	"github.com/loopzero/loopzero/operators/internal/shared"
+	"github.com/loopzero/loopzero/pkg/correlation"
 	"github.com/loopzero/loopzero/pkg/naming"
 	"github.com/loopzero/loopzero/pkg/statemachine"
 )
@@ -151,6 +152,13 @@ func (r *TenantReconciler) Reconcile(ctx context.Context, req ctrl.Request) (res
 		}
 		return ctrl.Result{}, err
 	}
+
+	// T1.1 of plan 2026-05-26-maturity-3-62-to-4-0-roadmap: when the CR
+	// carries the `loopzero.io/correlation-id` annotation (set by the API for
+	// HTTP-driven flows), inject it into the reconcile context so structured
+	// logs + audit_log writes trace back to the originating request. No-op
+	// for background reconciles (watch event without annotation).
+	ctx = correlation.WithID(ctx, tenant.GetAnnotations()["loopzero.io/correlation-id"])
 
 	// kstatus universal: SetReadinessSummary MUST be the LAST status
 	// mutation per ADR-0025 D3 condition #1. Defer ensures it runs even
