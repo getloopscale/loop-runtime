@@ -139,6 +139,15 @@ type AppRelease struct {
 	SBOMS3Key          string `json:"sbom_s3_key,omitempty"`
 	SBOMFormat         string `json:"sbom_format,omitempty"`
 	SBOMComponentCount int    `json:"sbom_component_count,omitempty"`
+
+	// T2.1 of plan 2026-05-27-tenant-build-pipeline-gaps-closure
+	// (SLSA L3 SBOM-to-image attestation linking).
+	// Rekor entry URL produced by `cosign attest --predicate <sbom>` step.
+	// Empty when CosignAttestEnabled=false (default until Sigstore active)
+	// OR when attest step failed (build also fails per ADR D1 — no continueOn).
+	// Backed by nullable releases.image_attestation_rekor_url DB column
+	// (migration 000019 — forward-only per pre-release governance).
+	ImageAttestationRekorURL string `json:"image_attestation_rekor_url,omitempty"`
 }
 
 // SyncClient abstracts ArgoCD sync operations (DIP).

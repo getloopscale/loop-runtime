@@ -61,6 +61,12 @@ type Release struct {
 	ImageDigest    *string    `json:"image_digest,omitempty"`
 	ImageSignature *string    `json:"image_signature,omitempty"`
 	ImageSignedAt  *time.Time `json:"image_signed_at,omitempty"`
+
+	// T2.1 of plan 2026-05-27-tenant-build-pipeline-gaps-closure.
+	// Rekor entry URL from cosign-attest step (SLSA L3 SBOM-attestation
+	// chain). NULL when CosignAttestEnabled=false (default) OR attest
+	// step never ran. Backed by migration 000019 nullable column.
+	ImageAttestationRekorURL *string `json:"image_attestation_rekor_url,omitempty"`
 }
 
 // ReleaseStore defines the interface for release persistence operations.

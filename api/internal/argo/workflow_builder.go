@@ -53,6 +53,17 @@ type InfraParams struct {
 	// CosignRekorURL overrides the default Rekor URL when CosignKeyless=true.
 	// Empty value = use sigstore.dev public Rekor (https://rekor.sigstore.dev).
 	CosignRekorURL string
+	// CosignAttestEnabled toggles SLSA L3 SBOM-to-image attestation linking
+	// via `cosign attest --predicate <sbom>` step. T2.1 of plan
+	// 2026-05-27-tenant-build-pipeline-gaps-closure.
+	// false (default): no attest step; signature + SBOM remain unlinked
+	//                  (functional but NOT SLSA L3 compliant)
+	// true:           attest step inserted with deps on BOTH sign + sbom
+	//                  (v1.1 EC-NEW-5); activeDeadlineSeconds: 180
+	//                  (v1.1 EC-NEW-6). Build fails cleanly if attest fails
+	//                  (no continueOn — SLSA L3 chain requires linked
+	//                  attestation OR the chain is broken per ADR D1).
+	CosignAttestEnabled bool
 }
 
 // WorkflowBuilder composes Argo Workflow CRs from ClusterWorkflowTemplate refs
@@ -169,6 +180,16 @@ func (b *WorkflowBuilder) Build(spec services.WorkflowSpec) (*forge.Workflow, er
 					spec.TenantID, spec.ProjectID, spec.CommitSHA,
 					appPlan.AppName, appPlan.ImageTag, b.infraParams.RegistryInsecure,
 				))
+				// T2.1 of plan 2026-05-27-tenant-build-pipeline-gaps-closure.
+				if b.infraParams.CosignAttestEnabled {
+					sbomLocalPath := fmt.Sprintf("%s/sbom-%s.cdx.json", sbomLocalDir, appPlan.AppName)
+					inlineTemplates = append(inlineTemplates, cosignAttestTemplate(CosignAttestParams{
+						AppName:       appPlan.AppName,
+						ImageTag:      appPlan.ImageTag,
+						SBOMLocalPath: sbomLocalPath,
+						Keyless:       b.infraParams.CosignKeyless,
+					}))
+				}
 				if b.infraParams.HarborRegistryURL != "" {
 					harborTag := naming.ImageTag(b.infraParams.HarborRegistryURL, spec.TenantID, spec.ProjectID, appPlan.AppName, spec.CommitSHA)
 					inlineTemplates = append(inlineTemplates, harborMirrorTemplate(appPlan.AppName, appPlan.ImageTag, harborTag))
@@ -184,11 +205,29 @@ func (b *WorkflowBuilder) Build(spec services.WorkflowSpec) (*forge.Workflow, er
 				spec.TenantID, spec.ProjectID, spec.CommitSHA,
 				app.Name, imageTag, b.infraParams.RegistryInsecure,
 			))
+			// T2.1 of plan 2026-05-27-tenant-build-pipeline-gaps-closure.
+			if b.infraParams.CosignAttestEnabled {
+				sbomLocalPath := fmt.Sprintf("%s/sbom-%s.cdx.json", sbomLocalDir, app.Name)
+				inlineTemplates = append(inlineTemplates, cosignAttestTemplate(CosignAttestParams{
+					AppName:       app.Name,
+					ImageTag:      imageTag,
+					SBOMLocalPath: sbomLocalPath,
+					Keyless:       b.infraParams.CosignKeyless,
+				}))
+			}
 			if b.infraParams.HarborRegistryURL != "" {
 				harborTag := naming.ImageTag(b.infraParams.HarborRegistryURL, spec.TenantID, spec.ProjectID, app.Name, spec.CommitSHA)
 				inlineTemplates = append(inlineTemplates, harborMirrorTemplate(app.Name, imageTag, harborTag))
 			}
 		}
+	}
+
+	// T3.1 of plan 2026-05-27-tenant-build-pipeline-gaps-closure.
+	// Per ADR D2: register single shared observability template invoked by
+	// mirror-harbor-{app} lifecycle hooks on Failed status. Skipped when
+	// HarborRegistryURL not set (no harbor mirrors exist → hook never fires).
+	if b.infraParams.HarborRegistryURL != "" {
+		inlineTemplates = append(inlineTemplates, harborMirrorObserveTemplate())
 	}
 
 	// Build the main DAG
@@ -401,11 +440,31 @@ func (b *WorkflowBuilder) buildMainDAG(spec services.WorkflowSpec, groups []lang
 				sbomTask := inlineTask(sbomTaskName, sbomTaskName, []string{signTaskName})
 				sbomTask.ContinueOn = &model.ContinueOn{Failed: true}
 				tasks = append(tasks, sbomTask)
+				// T2.1 of plan 2026-05-27-tenant-build-pipeline-gaps-closure.
+				// v1.1 EC-NEW-5: attest depends on BOTH sign + sbom.
+				// SLSA L3 requires linked attestation; without dep on sign,
+				// attest could run before sig in Rekor → broken chain.
+				// Gated by InfraParams.CosignAttestEnabled — disabled by
+				// default until Sigstore active (T1.4) + operator flips.
+				if b.infraParams.CosignAttestEnabled {
+					attestTaskName := fmt.Sprintf("attest-image-%s", appPlan.AppName)
+					attestTask := inlineTask(attestTaskName, attestTaskName, []string{signTaskName, sbomTaskName})
+					// NO continueOn — per ADR D1, attestation failure FAILS the
+					// build (signed image alone is INSUFFICIENT for SLSA L3).
+					tasks = append(tasks, attestTask)
+				}
 				// MEET-048: dual-push mirror to Harbor (best-effort)
 				if b.infraParams.HarborRegistryURL != "" {
 					mirrorTaskName := fmt.Sprintf("mirror-harbor-%s", appPlan.AppName)
 					mirrorTask := inlineTask(mirrorTaskName, mirrorTaskName, []string{buildTaskName})
 					mirrorTask.ContinueOn = &model.ContinueOn{Failed: true}
+					// T3.1 of plan 2026-05-27-tenant-build-pipeline-gaps-closure.
+					// Per ADR D2: lifecycle hook fires harbor-mirror-observe
+					// template when this task reaches Failed phase. Restores
+					// signal to silent best-effort mirror failures.
+					mirrorTask.Hooks = map[string]model.LifecycleHook{
+						"exit": harborMirrorObservabilityHook(mirrorTaskName, appPlan.AppName, spec.TenantID, b.infraParams.HarborRegistryURL),
+					}
 					tasks = append(tasks, mirrorTask)
 				}
 			}
@@ -425,11 +484,24 @@ func (b *WorkflowBuilder) buildMainDAG(spec services.WorkflowSpec, groups []lang
 			sbomTask := inlineTask(sbomTaskName, sbomTaskName, []string{signTaskName})
 			sbomTask.ContinueOn = &model.ContinueOn{Failed: true}
 			tasks = append(tasks, sbomTask)
+			// T2.1 of plan 2026-05-27-tenant-build-pipeline-gaps-closure.
+			// v1.1 EC-NEW-5: attest depends on BOTH sign + sbom.
+			if b.infraParams.CosignAttestEnabled {
+				attestTaskName := fmt.Sprintf("attest-image-%s", app.Name)
+				attestTask := inlineTask(attestTaskName, attestTaskName, []string{signTaskName, sbomTaskName})
+				tasks = append(tasks, attestTask)
+			}
 			// MEET-048: dual-push mirror to Harbor (best-effort)
 			if b.infraParams.HarborRegistryURL != "" {
 				mirrorTaskName := fmt.Sprintf("mirror-harbor-%s", app.Name)
 				mirrorTask := inlineTask(mirrorTaskName, mirrorTaskName, []string{buildTaskName})
 				mirrorTask.ContinueOn = &model.ContinueOn{Failed: true}
+				// T3.1 of plan 2026-05-27-tenant-build-pipeline-gaps-closure.
+				// Per ADR D2: lifecycle hook fires harbor-mirror-observe
+				// template when Failed; restores visibility.
+				mirrorTask.Hooks = map[string]model.LifecycleHook{
+					"exit": harborMirrorObservabilityHook(mirrorTaskName, app.Name, spec.TenantID, b.infraParams.HarborRegistryURL),
+				}
 				tasks = append(tasks, mirrorTask)
 			}
 		}

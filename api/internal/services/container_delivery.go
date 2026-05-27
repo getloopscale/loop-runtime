@@ -242,6 +242,16 @@ func (c *ContainerDeliveryActivator) phaseACreateRelease(ctx context.Context, bu
 			if first.ImageSignedAt != nil && first.ImageSignature != "" {
 				release.ImageSignedAt = first.ImageSignedAt
 			}
+			// T2.1 of plan 2026-05-27-tenant-build-pipeline-gaps-closure.
+			// Per ADR D1: SLSA L3 attestation chain — Rekor URL of
+			// cosign-attest step persisted alongside signature for
+			// downstream verification (loopzero deploy --verify-attestation).
+			// Empty when CosignAttestEnabled=false (default) or attest
+			// step never ran. Empty release column stays NULL.
+			if first.ImageAttestationRekorURL != "" {
+				url := first.ImageAttestationRekorURL
+				release.ImageAttestationRekorURL = &url
+			}
 		}
 
 		if err := c.releaseStore.Create(ctx, tx, release); err != nil {
