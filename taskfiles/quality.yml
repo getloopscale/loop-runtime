@@ -35,6 +35,7 @@ tasks:
       - /tmp/loopzero-ops quality helm-overlap-parity
       - /tmp/loopzero-ops quality trivy-scan
       - /tmp/loopzero-ops quality trufflehog-scan
+      - /tmp/loopzero-ops quality dashboard-promtool
       - /tmp/loopzero-ops quality cli-exit-codes
       - /tmp/loopzero-ops quality shell-hygiene
       - /tmp/loopzero-ops quality corrections-txt-closed

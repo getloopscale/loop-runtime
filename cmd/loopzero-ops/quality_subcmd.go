@@ -16,6 +16,7 @@ import (
 	"time"
 
 	"github.com/loopzero/loopzero/pkg/quality/advisorylock"
+	"github.com/loopzero/loopzero/pkg/quality/dashboardpromtool"
 	"github.com/loopzero/loopzero/pkg/quality/helmoverlapparity"
 	"github.com/loopzero/loopzero/pkg/quality/trivyscan"
 	"github.com/loopzero/loopzero/pkg/quality/trufflehogscan"
@@ -291,6 +292,8 @@ func runQuality(args []string) int {
 		return runTrivyScan(args[1:])
 	case "trufflehog-scan":
 		return runTrufflehogScan(args[1:])
+	case "dashboard-promtool":
+		return runDashboardPromtool(args[1:])
 	case "cli-exit-codes":
 		return runCLIExitCodes(args[1:])
 	case "shell-hygiene":
@@ -659,6 +662,45 @@ func runTrufflehogScan(args []string) int {
 		return 1
 	}
 	fmt.Printf("trufflehog-scan: PASS — %s\n", outcome.Reason)
+	return 0
+}
+
+// runDashboardPromtool validates Grafana dashboards JSON syntax (always)
+// and PromQL queries via promtool (skip-on-missing). T4.3 of plan
+// 2026-05-26-maturity-3-62-to-4-0-roadmap.
+func runDashboardPromtool(args []string) int {
+	fs := flag.NewFlagSet("dashboard-promtool", flag.ContinueOnError)
+	dashboardsDir := fs.String("dir", "infra/helm/monitoring/dashboards", "dashboard directory to scan")
+	if err := fs.Parse(args); err != nil {
+		return 1
+	}
+	outcome, err := dashboardpromtool.Check(context.Background(),
+		dashboardpromtool.Config{DashboardsDir: *dashboardsDir})
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "dashboard-promtool: %v\n", err)
+		return 5
+	}
+	if len(outcome.SyntaxErrors) > 0 {
+		fmt.Fprintf(os.Stderr, "dashboard-promtool: FAIL — %d JSON syntax errors:\n", len(outcome.SyntaxErrors))
+		for _, e := range outcome.SyntaxErrors {
+			fmt.Fprintf(os.Stderr, "  %s\n", e)
+		}
+		return 1
+	}
+	if len(outcome.PromtoolErrors) > 0 {
+		fmt.Fprintf(os.Stderr, "dashboard-promtool: FAIL — %d PromQL parse errors:\n", len(outcome.PromtoolErrors))
+		for _, e := range outcome.PromtoolErrors {
+			fmt.Fprintf(os.Stderr, "  %s\n", e)
+		}
+		return 1
+	}
+	if outcome.PromtoolSkipped {
+		fmt.Printf("dashboard-promtool: PASS (JSON syntax %d/%d) — promtool SKIP (%s)\n",
+			outcome.TotalScanned, outcome.TotalScanned, outcome.PromtoolReason)
+	} else {
+		fmt.Printf("dashboard-promtool: PASS — %d dashboards (JSON syntax + PromQL semantic)\n",
+			outcome.TotalScanned)
+	}
 	return 0
 }
 
