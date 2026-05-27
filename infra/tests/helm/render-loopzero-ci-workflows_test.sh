@@ -62,11 +62,13 @@ done
 
 log "=== argo-ci-namespace resource count ==="
 RESOURCES=$(helm template infra/helm/argo-ci-namespace 2>/dev/null | grep -E "^kind:" | awk '{print $2}' | sort | uniq)
-assert "namespace.yaml renders Namespace" "echo \"$RESOURCES\" | grep -q Namespace"
+# Namespace creation DELEGATED to Helmfile createNamespace:true (2026-05-27 fix)
+# per FAANG single-writer principle. Chart only manages content (RBAC + SA + NP).
 assert "rbac.yaml renders Role" "echo \"$RESOURCES\" | grep -q '^Role$'"
 assert "rbac.yaml renders RoleBinding (NOT ClusterRoleBinding per ADR D3)" "echo \"$RESOURCES\" | grep -q RoleBinding"
 assert "serviceaccount.yaml renders ServiceAccount" "echo \"$RESOURCES\" | grep -q ServiceAccount"
 assert "networkpolicy.yaml renders NetworkPolicy" "echo \"$RESOURCES\" | grep -q NetworkPolicy"
+assert "chart does NOT manage Namespace (Helmfile owns ns lifecycle)" "! echo \"$RESOURCES\" | grep -q '^Namespace$'"
 
 # Confirm NO ClusterRoleBinding (boundary mitigation per ADR D3)
 CRB_COUNT=$(helm template infra/helm/argo-ci-namespace 2>/dev/null | grep -c "^kind: ClusterRoleBinding" || true)
@@ -152,10 +154,12 @@ for expected in drill-watchdog weekly-soak coverage-report cosign-deadline; do
 done
 
 # Verify schedules (use grep -F fixed-string to avoid regex shell-escaping)
-assert "drill-watchdog schedule every 6h" "helm template infra/helm/loopzero-ci-workflows 2>/dev/null | grep -qF '0 */6 * * *'"
-assert "weekly-soak schedule Sunday 02:00" "helm template infra/helm/loopzero-ci-workflows 2>/dev/null | grep -qF '0 2 * * 0'"
-assert "coverage-report schedule Monday 09:00" "helm template infra/helm/loopzero-ci-workflows 2>/dev/null | grep -qF '0 9 * * 1'"
-assert "cosign-deadline schedule daily 00:00" "helm template infra/helm/loopzero-ci-workflows 2>/dev/null | grep -qF '0 0 * * *'"
+# Argo Workflows v4.x: schedules is plural array — schedule strings appear under `- "..."`
+assert "drill-watchdog schedule every 6h" "helm template infra/helm/loopzero-ci-workflows 2>/dev/null | grep -qF '\"0 */6 * * *\"'"
+assert "weekly-soak schedule Sunday 02:00" "helm template infra/helm/loopzero-ci-workflows 2>/dev/null | grep -qF '\"0 2 * * 0\"'"
+assert "coverage-report schedule Monday 09:00" "helm template infra/helm/loopzero-ci-workflows 2>/dev/null | grep -qF '\"0 9 * * 1\"'"
+assert "cosign-deadline schedule daily 00:00" "helm template infra/helm/loopzero-ci-workflows 2>/dev/null | grep -qF '\"0 0 * * *\"'"
+assert "v4.x schedules plural array (not v3 singular)" "helm template infra/helm/loopzero-ci-workflows 2>/dev/null | grep -qE 'schedules:'"
 
 # ---------------------------------------------------------------------------
 # Test 9: Cenário A POC files PRESERVED (ADR D5)

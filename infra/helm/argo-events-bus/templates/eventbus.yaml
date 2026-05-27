@@ -1,22 +1,23 @@
-{{- if .Values.eventBus.enabled }}
-# T0.2 Cenário B POC — EventBus (JetStream NATS).
-# Per ADR-2026-05-27-T0.2-RATIFIED D1: EventSource publishes; Sensor
-# subscribes. EventBus buffers during transient outages (per EC-1).
+# T0.2 Cenário B POC — EventBus (JetStream NATS) CR.
+# Per ADR-2026-05-27-T0.2-RATIFIED D1.
 #
-# Native JetStream (NATS) chosen over default Stan (deprecated).
-# Persistence enabled by default for buffering durability.
+# Deployed AFTER argo-events upstream chart (Helmfile needs: ordering)
+# so CRDs are registered before this CR is applied. WITHOUT this
+# split, helm install would error:
+#   "no matches for kind EventBus in version argoproj.io/v1alpha1"
+# discovered LIVE during cleanroom 2026-05-27.
 apiVersion: argoproj.io/v1alpha1
 kind: EventBus
 metadata:
   name: default
-  namespace: argo-events  # CI namespace per ADR D3
+  namespace: argo-events
   labels:
-    app.kubernetes.io/name: argo-events
+    app.kubernetes.io/name: argo-events-bus
     app.kubernetes.io/managed-by: {{ .Release.Service | quote }}
     loopzero.io/component: ci
 spec:
   jetstream:
-    version: latest  # Renovate-pinned upstream chart version controls
+    version: latest  # Renovate-pinned via upstream chart
     replicas: {{ .Values.eventBus.replicas }}
     {{- if .Values.eventBus.persistence.enabled }}
     persistence:
@@ -27,4 +28,3 @@ spec:
     containerTemplate:
       resources:
         {{- toYaml .Values.eventBus.resources | nindent 8 }}
-{{- end }}

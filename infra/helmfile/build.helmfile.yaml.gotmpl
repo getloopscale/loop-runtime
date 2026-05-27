@@ -108,11 +108,25 @@ releases:
     values:
       - ../helm/argo-events/values.yaml
 
+  # FAANG-pattern split: EventBus CR in separate chart that depends on
+  # argo-events (controller + CRDs). Without this, helm install fails:
+  #   "no matches for kind EventBus in version argoproj.io/v1alpha1"
+  # because Helm renders+applies all release manifests BEFORE CRDs from
+  # the dependency chart are registered in K8s API discovery.
+  # Discovered LIVE during cleanroom iter 2026-05-27.
+  - name: argo-events-bus
+    namespace: argo-events
+    chart: ../helm/argo-events-bus
+    needs:
+      - argo-events/argo-events
+    values:
+      - ../helm/argo-events-bus/values.yaml
+
   - name: loopzero-ci-workflows
     namespace: argo-ci
     chart: ../helm/loopzero-ci-workflows
     needs:
-      - argo-events/argo-events
+      - argo-events/argo-events-bus
     values:
       - ../helm/loopzero-ci-workflows/values.yaml
 

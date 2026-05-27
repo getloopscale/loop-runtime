@@ -1,0 +1,28 @@
+# T0.2 Cenário B POC — argo-events-bus chart values.
+#
+# This chart holds the EventBus CR ONLY. Splits the CR from the upstream
+# argo-events controller chart so Helmfile `needs:` enforces CRD-first
+# install ordering. Without this split, helm install fails:
+#   "no matches for kind EventBus in version argoproj.io/v1alpha1"
+# because Helm renders+applies all release manifests before CRDs from
+# the dependency chart are registered in K8s API.
+#
+# Operator pattern: Helmfile installs argo-events FIRST (controller+CRDs),
+# WAIT for CRDs reconciled, THEN install argo-events-bus (just the CR).
+
+eventBus:
+  # Number of NATS replicas. 1 for dev; 3 for prod HA.
+  replicas: 1
+  # Persistence for buffering events during transient controller restarts.
+  persistence:
+    enabled: true
+    storageClassName: ""  # use cluster default
+    size: 1Gi
+  # Resource limits proportional to dev workload (~10 PR/day).
+  resources:
+    requests:
+      cpu: 100m
+      memory: 256Mi
+    limits:
+      cpu: 500m
+      memory: 512Mi
