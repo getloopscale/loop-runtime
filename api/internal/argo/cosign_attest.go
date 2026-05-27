@@ -32,6 +32,16 @@ type CosignAttestParams struct {
 	ImageTag      string
 	SBOMLocalPath string // e.g., /workspace/sbom-{app}.cdx.json from syft step
 	Keyless       bool   // mirror CosignKeyless InfraParams flag
+	// InsecureRegistry mirror RegistryInsecure InfraParams flag — adds
+	// --allow-http-registry --allow-insecure-registry flags for local
+	// k3d HTTP-only registries. Discovered LIVE 2026-05-27 (build v5):
+	// without these flags, cosign attest fails "http: server gave HTTP
+	// response to HTTPS client" against k3d-loopzero-registry:5000.
+	InsecureRegistry bool
+	// FulcioURL + RekorURL used when Keyless=true. Empty → cosign defaults
+	// (Sigstore public infra). Mirror CosignFulcioURL / CosignRekorURL InfraParams.
+	FulcioURL string
+	RekorURL  string
 	// CyclonedxPredicateType is the in-toto predicate type URI.
 	// Per ADR D1: https://cyclonedx.org/bom (in-toto + SLSA standard).
 	// Hardcoded constant to prevent operator drift.
@@ -61,10 +71,46 @@ const attestStepActiveDeadlineSeconds = 180
 func cosignAttestTemplate(p CosignAttestParams) *forge.Script {
 	metadataFile := fmt.Sprintf("%s/metadata-%s.json", workspaceMountPath, p.AppName)
 	const outRekorURLPath = "/tmp/cosign-attest-rekor-url.txt"
+	const oidcTokenPath = "/var/run/secrets/sigstore/token" //nolint:gosec // G101 false positive: filesystem PATH, not credential value
 
+	// Build cosign attest command — keyed vs keyless variants per Keyless flag.
+	// Keyless mode (M2 of plan 2026-05-27-M07-to-3-85): uses Fulcio short-lived
+	// cert from projected SA OIDC token, NOT static --key. Discovered LIVE
+	// 2026-05-27 attest pod FAIL — original ship sempre usava --key mesmo em keyless.
+	// InsecureRegistry adds --allow-http-registry --allow-insecure-registry para k3d.
 	insecureFlag := ""
+	if p.InsecureRegistry {
+		insecureFlag = " --allow-http-registry --allow-insecure-registry"
+	}
+	var attestSetup, attestCmd string
 	if p.Keyless {
-		// Keyless mode: no insecure flag needed (Fulcio is HTTPS).
+		fulcioURL := p.FulcioURL
+		if fulcioURL == "" {
+			fulcioURL = "https://fulcio.sigstore.dev"
+		}
+		rekorURL := p.RekorURL
+		if rekorURL == "" {
+			rekorURL = "https://rekor.sigstore.dev"
+		}
+		attestSetup = fmt.Sprintf(`# Keyless mode: read OIDC identity token for Fulcio.
+if [ ! -r %s ]; then
+  echo "ERROR: SA OIDC token not mounted at %s — keyless mode unavailable" >&2
+  exit 1
+fi
+export SIGSTORE_ID_TOKEN="$(cat %s)"
+`, oidcTokenPath, oidcTokenPath, oidcTokenPath)
+		attestCmd = fmt.Sprintf(`COSIGN_EXPERIMENTAL=1 cosign attest --yes%s \
+  --fulcio-url=%s \
+  --rekor-url=%s \
+  --predicate %s \
+  --type %s \
+  "%s@${DIGEST}" 2>&1`, insecureFlag, fulcioURL, rekorURL, p.SBOMLocalPath, cyclonedxPredicateType, p.ImageTag)
+	} else {
+		attestCmd = fmt.Sprintf(`cosign attest --yes%s \
+  --key %s/cosign.key \
+  --predicate %s \
+  --type %s \
+  "%s@${DIGEST}" 2>&1`, insecureFlag, cosignKeyMountPath, p.SBOMLocalPath, cyclonedxPredicateType, p.ImageTag)
 	}
 
 	script := fmt.Sprintf(`set -e
@@ -81,6 +127,7 @@ fi
 echo "Attesting image: %s@${DIGEST}"
 echo "SBOM source: %s"
 echo "Predicate type: %s"
+echo "Mode: keyless=%t"
 
 # Verify SBOM file exists (syft step may have failed; without SBOM,
 # attest is meaningless — fail loud).
@@ -89,16 +136,15 @@ if [ ! -f %s ]; then
   exit 1
 fi
 
-# cosign attest --predicate creates in-toto attestation, signs it with
-# the same key as cosign-sign (key OR keyless), and uploads to Rekor.
-# The Rekor entry URL is captured for DB persistence (T2.2).
-ATTEST_OUTPUT=$(cosign attest --yes%s \
-  --key %s/cosign.key \
-  --predicate %s \
-  --type %s \
-  "%s@${DIGEST}" 2>&1)
-
+%s
+# cosign attest --predicate creates in-toto attestation, signs it (key OR keyless),
+# and uploads to Rekor. Rekor entry URL captured for DB persistence (T2.2).
+# bash quirk fix: set -e + command substitution kills script on cosign fail
+# BEFORE we can read $?. Disable -e around attest, capture exit explicitly.
+set +e
+ATTEST_OUTPUT=$(%s)
 ATTEST_EXIT=$?
+set -e
 echo "$ATTEST_OUTPUT"
 
 if [ $ATTEST_EXIT -ne 0 ]; then
@@ -110,7 +156,7 @@ fi
 
 # Extract Rekor entry URL from cosign output. Format varies by cosign
 # version; v2.2+ logs "tlog entry created with index: N" + provides URL.
-REKOR_URL=$(echo "$ATTEST_OUTPUT" | sed -n 's/.*\(https:\/\/rekor[^ ]*\).*/\1/p' | head -1)
+REKOR_URL=$(echo "$ATTEST_OUTPUT" | sed -n 's/.*\(https*:\/\/rekor[^ ]*\).*/\1/p' | head -1)
 if [ -z "$REKOR_URL" ]; then
   # Fallback: best-effort — empty URL acceptable if cosign didn't log it.
   REKOR_URL="unknown"
@@ -119,9 +165,8 @@ printf '%%s' "${REKOR_URL}" > %s
 
 echo "Attestation complete; Rekor entry: ${REKOR_URL}"
 `, p.AppName, p.AppName, metadataFile, p.ImageTag, p.SBOMLocalPath,
-		cyclonedxPredicateType, p.SBOMLocalPath, p.SBOMLocalPath,
-		insecureFlag, cosignKeyMountPath, p.SBOMLocalPath, cyclonedxPredicateType,
-		p.ImageTag, outRekorURLPath)
+		cyclonedxPredicateType, p.Keyless, p.SBOMLocalPath, p.SBOMLocalPath,
+		attestSetup, attestCmd, outRekorURLPath)
 
 	return &forge.Script{
 		Name:    fmt.Sprintf("attest-image-%s", p.AppName),

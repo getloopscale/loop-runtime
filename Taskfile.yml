@@ -290,7 +290,6 @@ tasks:
       - helmfile -f infra/helmfile/runtime.helmfile.yaml.gotmpl -e standalone-multi --kube-context k3d-loopzero-workload --selector name=external-secrets sync
       - helmfile -f infra/helmfile/runtime.helmfile.yaml.gotmpl -e standalone-multi --kube-context k3d-loopzero-workload --selector name=argo-rollouts sync
 
-  k3d:bootstrap-runtime-2:
   k3d:bootstrap-build-cert-manager:
     desc: |
       Bootstrap cert-manager + cluster-issuer em loopzero-build cluster.
@@ -301,6 +300,7 @@ tasks:
       - helmfile -f infra/helmfile/runtime.helmfile.yaml.gotmpl -e standalone-multi --kube-context k3d-loopzero-build --selector name=cert-manager sync
       - helmfile -f infra/helmfile/runtime.helmfile.yaml.gotmpl -e standalone-multi --kube-context k3d-loopzero-build --selector name=cluster-issuer sync
 
+  k3d:bootstrap-runtime-2:
     desc: |
       Bootstrap the runtime-2 (k3d-loopzero-runtime-2) cluster with cert-manager
       + traefik + external-secrets + argo-rollouts via helmfile. Mirrors

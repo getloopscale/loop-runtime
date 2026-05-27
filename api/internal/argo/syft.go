@@ -12,7 +12,15 @@ import (
 
 // SBOM artifact constants — single source of truth for paths/format.
 const (
-	sbomLocalDir       = "/tmp"
+	// sbomLocalDir MUST be the shared workspace PVC mount path so subsequent
+	// DAG steps (cosign-attest) can read the SBOM file. Each step runs in
+	// its OWN pod; /tmp is pod-local, /workspace is the shared PVC mount
+	// (per workflow_builder.go VolumeClaimTemplates).
+	// Discovered LIVE 2026-05-27 (M2 Phase 9 plan 2026-05-27-M07-to-3-85):
+	// cosign-attest pod failed with "ERROR: SBOM file not found at
+	// /tmp/sbom-X.cdx.json (syft step did not produce output)" — SBOM was
+	// in /tmp of syft pod (gone after pod cleanup), not in shared PVC.
+	sbomLocalDir = workspaceMountPath
 	sbomFormatCDXJSON  = "cyclonedx-json"
 	sbomS3PathTemplate = "sbom/%s/%s/%s/%s.cdx.json" // tenant/project/commit/app
 )

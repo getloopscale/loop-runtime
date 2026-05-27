@@ -187,7 +187,10 @@ func (b *WorkflowBuilder) Build(spec services.WorkflowSpec) (*forge.Workflow, er
 						AppName:       appPlan.AppName,
 						ImageTag:      appPlan.ImageTag,
 						SBOMLocalPath: sbomLocalPath,
-						Keyless:       b.infraParams.CosignKeyless,
+						Keyless:          b.infraParams.CosignKeyless,
+						InsecureRegistry: b.infraParams.RegistryInsecure,
+						FulcioURL:        b.infraParams.CosignFulcioURL,
+						RekorURL:         b.infraParams.CosignRekorURL,
 					}))
 				}
 				if b.infraParams.HarborRegistryURL != "" {
@@ -213,6 +216,8 @@ func (b *WorkflowBuilder) Build(spec services.WorkflowSpec) (*forge.Workflow, er
 					ImageTag:      imageTag,
 					SBOMLocalPath: sbomLocalPath,
 					Keyless:       b.infraParams.CosignKeyless,
+					FulcioURL:     b.infraParams.CosignFulcioURL,
+					RekorURL:      b.infraParams.CosignRekorURL,
 				}))
 			}
 			if b.infraParams.HarborRegistryURL != "" {
