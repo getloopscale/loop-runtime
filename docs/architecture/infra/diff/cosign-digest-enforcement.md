@@ -110,6 +110,24 @@ Pre-release — break tag references after migration. Per plan ADR D1 (pre-relea
 5. ✅ Prometheus alert `LoopZeroImageDigestWarnRatePresent` (info severity, surfaces warn-mode violations for 7-day soak audit)
 6. ✅ values.yaml flags `requireImageDigest: true` + `requireImageDigestEnforce: false` in both chart systems
 
+## Discovery 2026-05-27 — tenant-side digest pipeline already shipped
+
+Recon executado post-R3.a-d revelou que o **tenant apps deploy flow** já emite `image@sha256:<digest>` desde **2026-04-29** (commit context: CHG-2026-04-29-DOGFOOD iter 8). Pipeline confirmado:
+
+| Etapa | Arquivo:linha | Comportamento |
+|-------|--------------|---------------|
+| Build callback enriquece release | `api/internal/services/build_reconcile_complete.go:61` | `enrichAppReleasesWithAttestation` popula `AppRelease.ImageDigestSHA256` do workflow output |
+| Digest map construído | `build_reconcile_complete.go:72-77` | `digests := map[string]string{}` por app name |
+| Forward para manifest builder | `build_reconcile_complete.go:84` | `BuildManifestApps(...AppDigests: digests...)` |
+| Fail-loud se digest ausente | `api/internal/services/manifest_builder.go:70-77` | Returns error claro "the supply-chain VAP rejects tag-only references and the build pipeline must emit the cosign digest output" |
+| Image ref renderizado | `manifest_builder.go:77` | `naming.ImageDigestRef(...)` gera `repo@sha256:...` |
+| Aplicado em Rollout/Deployment | `api/internal/manifests/renderer_rollout.go:328` + `renderer_deployment.go:29` | `Image: app.ImageRef` (já é o digest ref) |
+
+**Implicação para esta diff doc:** o escopo do T2.3 plan era inteiramente correto sobre **platform charts** (loopzero-api, loopzero-cloud, operators) e tenant workloads são **já compliant** com a invariante de digest-only. O VAP `loopzero-require-image-digest` shipped hoje **valida** ambos os caminhos uniformemente.
+
+**Gap real residual** (única coisa pendente fora dos sponsor/operator HARD STOPs já listados):
+- **Platform charts publishing pipeline** (R3.g.3 no roadmap macro): `task images:build` + chart publish atualmente emite `image.tag: dev` para `charts/loopzero-*/values.yaml`. Para fechar 100% precisa: build → digest extract → values rewrite → OCI push. Trabalho gated por R5 (CI platform escolhida define onde isso roda).
+
 ## Operator HARD STOP (Deny-mode phase)
 
 1. Sponsor invokes `/meeting` for T2.3 Change Governor approval

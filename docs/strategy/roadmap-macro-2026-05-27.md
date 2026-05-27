@@ -101,12 +101,16 @@ Os itens abaixo NÃO são novos trabalhos eng. São pipelines onde a primeira et
 | R3.d | Prometheus alert `LoopZeroImageDigestWarnRatePresent` (info severity) | ✅ DONE `af0fb32c` | Eng autonomous |
 | R3.e | Deploy updated admission-policies + loopzero-common via ArgoCD | ⏳ PENDENTE | Operator |
 | R3.f | 7-day Phase 1 warn-mode soak (audit Prometheus + Grafana policy-controller dashboard) | ⏳ PENDENTE | Time |
-| R3.g | Build pipeline emite `imageDigest` into Helm values (modifica `api/internal/argo/buildkit.go` ou release values) | ⏳ PENDENTE | Eng ~2h |
+| R3.g.1 | **Tenant apps** deploy emite digest via build_reconcile pipeline (`build_reconcile_complete.go:65-77` → `manifest_builder.go:70-77` → `naming.ImageDigestRef`) | ✅ **DONE 2026-04-29** (CHG-2026-04-29-DOGFOOD iter 8 — descoberto em recon 2026-05-27) | Eng pré-existente |
+| R3.g.2 | Helm helper `loopzero-common.image` prefere `image.digest` quando set (charts) | ✅ DONE hoje `af0fb32c` | Eng autonomous |
+| R3.g.3 | **Platform charts publishing pipeline** emite `image.digest` em `charts/loopzero-*/values.yaml` (DOCR push + digest extract + values rewrite) | ⏳ PENDENTE — depende de R5 (CI platform decidida) | Operator post-R5 |
 | R3.h | Sponsor T2.3 meeting (Change Governor) | ⏳ PENDENTE | Sponsor |
 | R3.i | Flip `requireImageDigestEnforce=true` em prod overrides | ⏳ PENDENTE | Operator |
 | R3.j | `prod-image-digests` gate `--enforce` flag em CI (post-R15) | ⏳ PENDENTE | Operator |
 
 **Live scan inicial:** 3 warn-mode violations detectadas (helm test pods `busybox:1.36`, `curlimages/curl:8.7.1`). Baixo impacto, ephemeral. Sponsor decide se warrants fix antes do Deny-flip.
+
+**Discovery 2026-05-27 (recon pós-R3.a-d):** o tenant-side digest pipeline (R3.g.1) **já funciona desde 2026-04-29** (CHG-2026-04-29-DOGFOOD iter 8). `manifest_builder.go` fails-loud se digest ausente, e `build_reconcile_complete.go` propaga o digest do BuildKit para `naming.ImageDigestRef()`. O único gap real é R3.g.3 (platform charts publishing), que é gated por R5 — esses charts hoje têm `image.tag: dev` hardcoded em `charts/loopzero-*/values.yaml` porque nunca passam pelo build_reconcile pipeline; sobem via ArgoCD a partir do OCI registry de charts publicados.
 
 ### R4 — T2.7 Stripe Portal SDK
 
