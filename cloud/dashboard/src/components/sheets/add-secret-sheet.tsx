@@ -60,7 +60,12 @@ export function AddSecretSheet({ open, onOpenChange, onCreated }: AddSecretSheet
       reset();
       onOpenChange(false);
     } catch (e) {
-      setError(e instanceof Error ? e.message : 'Something went wrong.');
+      // T0.1 TCIA — sponsor critério #6
+      setError(
+        e instanceof Error
+          ? `Add secret failed: ${e.message}. No secret was stored. Retry, or contact support if it persists.`
+          : 'Add secret failed. No secret was stored. Retry, or contact support if it persists.',
+      );
     } finally {
       setSubmitting(false);
     }

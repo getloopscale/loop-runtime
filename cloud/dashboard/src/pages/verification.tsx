@@ -3,6 +3,7 @@ import { useSearchParams } from 'react-router-dom';
 import { AlertCircle, CheckCircle2, Loader2, Mail } from 'lucide-react';
 import { Alert, Button, Card, PinInput } from '@loopzero/ui';
 import { API_URL, AUTH_URL } from '@/lib/config';
+import { enrichKratosError } from '@/lib/kratos';
 
 const KRATOS_URL = AUTH_URL || API_URL;
 
@@ -65,14 +66,25 @@ export function VerificationPage() {
         setStatus('success');
       } else if (data.ui?.messages) {
         const errors = data.ui.messages.filter((m: { type: string }) => m.type === 'error');
-        setError(errors[0]?.text || 'Invalid code. Please try again.');
+        // EC-02: enrich generic Kratos messages com TCIA action context
+        setError(
+          enrichKratosError(
+            errors[0]?.text || 'Invalid code. Request a new verification link from the sign-in page.',
+            'verification',
+          ),
+        );
         setStatus('input');
       } else {
-        setError('Verification failed. Please try again.');
+        setError(
+          'Verification failed. Request a new verification link from the sign-in page, or contact support if it persists.',
+        );
         setStatus('input');
       }
     } catch {
-      setError('Something went wrong. Please try again.');
+      // T0.1 TCIA — sponsor critério #6
+      setError(
+        'Verification request failed. Your network may be unreachable or the link expired. Request a new verification link from the sign-in page.',
+      );
       setStatus('error');
     }
   };

@@ -43,7 +43,12 @@ export function InviteMemberSheet({ open, onOpenChange, onInvited }: InviteMembe
       setEmail('');
       onOpenChange(false);
     } catch (e) {
-      setError(e instanceof Error ? e.message : 'Something went wrong.');
+      // T0.1 TCIA — sponsor critério #6
+      setError(
+        e instanceof Error
+          ? `Invite failed: ${e.message}. No invitation was sent. Retry, or contact support if it persists.`
+          : 'Invite failed. No invitation was sent. Retry, or contact support if it persists.',
+      );
     } finally {
       setSubmitting(false);
     }

@@ -52,7 +52,12 @@ export function PromoteDialog({
       onPromoted?.(res);
       onOpenChange(false);
     } catch (e) {
-      setError(e instanceof Error ? e.message : 'Something went wrong.');
+      // T0.1 TCIA — sponsor critério #6
+      setError(
+        e instanceof Error
+          ? `Promote failed: ${e.message}. The current release remains active. Retry, or rollback if it persists.`
+          : 'Promote failed. The current release remains active. Retry, or contact support if it persists.',
+      );
     } finally {
       setSubmitting(false);
     }

@@ -45,7 +45,12 @@ export function CreateEnvironmentSheet({ open, onOpenChange, onCreated }: Create
       setIsProtected(false);
       onOpenChange(false);
     } catch (e) {
-      setError(e instanceof Error ? e.message : 'Something went wrong.');
+      // T0.1 TCIA — sponsor critério #6
+      setError(
+        e instanceof Error
+          ? `Create environment failed: ${e.message}. No environment was created. Retry, or contact support if it persists.`
+          : 'Create environment failed. No environment was created. Retry, or contact support if it persists.',
+      );
     } finally {
       setSubmitting(false);
     }

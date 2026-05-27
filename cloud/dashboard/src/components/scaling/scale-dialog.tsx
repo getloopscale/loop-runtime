@@ -78,7 +78,10 @@ export function ScaleDialog({
       onScaled?.(res);
       onOpenChange(false);
     } catch (e) {
-      const msg = e instanceof Error ? e.message : 'Something went wrong.';
+      // T0.1 TCIA — sponsor critério #6
+      const msg = e instanceof Error
+        ? `Scale failed: ${e.message}. Current replicas remain unchanged. Retry, or contact support if it persists.`
+        : 'Scale failed. Current replicas remain unchanged. Retry, or contact support if it persists.';
       setError(msg);
     } finally {
       setSubmitting(false);

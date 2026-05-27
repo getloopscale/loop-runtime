@@ -49,7 +49,12 @@ export function CreateProjectSheet({ open, onOpenChange, onCreated }: CreateProj
       setName('');
       onOpenChange(false);
     } catch (e) {
-      setError(e instanceof Error ? e.message : 'Something went wrong.');
+      // T0.1 TCIA — sponsor critério #6
+      setError(
+        e instanceof Error
+          ? `Create project failed: ${e.message}. No project was created. Retry, or contact support if it persists.`
+          : 'Create project failed. No project was created. Retry, or contact support if it persists.',
+      );
     } finally {
       setSubmitting(false);
     }

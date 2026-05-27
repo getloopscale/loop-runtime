@@ -69,7 +69,13 @@ export function ProjectScalePage() {
       }
       setSuccess(res);
     } catch (e) {
-      setError(e instanceof Error ? e.message : 'Something went wrong.');
+      // T0.1 TCIA pattern: Title + Cause + Impact + Action. Replaces generic
+      // "Something went wrong" — sponsor critério #6 + #9 (precision > marketing).
+      setError(
+        e instanceof Error
+          ? `Scale request failed: ${e.message}. Current replicas remain unchanged. Retry the form, or contact support if it persists.`
+          : 'Scale request failed. Current replicas remain unchanged. Retry the form, or contact support if it persists.',
+      );
     } finally {
       setSubmitting(false);
     }

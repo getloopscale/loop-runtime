@@ -1,5 +1,5 @@
 import { useParams, Link, useNavigate } from 'react-router-dom';
-import { ArrowLeft, Box, FolderKanban, Loader2 } from 'lucide-react';
+import { ArrowLeft, Box, FolderKanban, Loader2, Rocket } from 'lucide-react';
 import { Badge, Button, Card, CodeBlock, ConfirmDialog, DangerZone, EmptyState, PageShell } from '@loopzero/ui';
 import { useSetPageTitle } from '@/hooks/use-page-meta';
 import { useRequireAuth } from '@/hooks/use-auth';
@@ -153,7 +153,25 @@ export function ProjectDetailPage() {
           </Card>
         )}
 
-        {recentBuilds.length > 0 && (
+        {/* T0.2 EC-06: empty state shown when builds load completed e zero. NÃO durante loading (would flash). */}
+        {recentBuilds.length === 0 ? (
+          <Card>
+            <Card.Body className="py-10">
+              <EmptyState
+                icon={Rocket}
+                title="No deployments yet"
+                description="Run `loopzero deploy` from your project directory, or connect a Git repository to ship on every push."
+                action={
+                  <Button asChild variant="primary" size="sm">
+                    <Link to={`/projects/${encodeURIComponent(project.name)}/connect`}>
+                      Connect repository
+                    </Link>
+                  </Button>
+                }
+              />
+            </Card.Body>
+          </Card>
+        ) : (
           <Card>
             <Card.Header>
               <div className="flex items-center justify-between">
@@ -196,7 +214,7 @@ export function ProjectDetailPage() {
 
         <Card>
           <Card.Header>
-            <Card.Title className="text-body-sm">Open in your terminal</Card.Title>
+            <Card.Title className="text-body-sm">Open in your terminal</Card.Title>{/* T0.2 closes recent-deploys ternary */}
             <Card.Description>Use the CLI for full control of this project.</Card.Description>
           </Card.Header>
           <Card.Body>

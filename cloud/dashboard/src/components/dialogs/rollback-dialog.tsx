@@ -52,7 +52,12 @@ export function RollbackDialog({
       setPhrase('');
       onOpenChange(false);
     } catch (e) {
-      setError(e instanceof Error ? e.message : 'Something went wrong.');
+      // T0.1 TCIA — sponsor critério #6
+      setError(
+        e instanceof Error
+          ? `Rollback failed: ${e.message}. The current release remains active. Retry, or contact support if it persists.`
+          : 'Rollback failed. The current release remains active. Retry, or contact support if it persists.',
+      );
     } finally {
       setSubmitting(false);
     }

@@ -143,10 +143,11 @@ export function LogViewer({
         className="flex-1 overflow-y-auto bg-surface-1 font-mono text-label"
       >
         {filtered.length === 0 ? (
+          // T0.2 D4 — empty state com what/why/action context
           <div className="px-4 py-12 text-center text-muted-foreground">
             {lines.length === 0
-              ? 'Waiting for log lines…'
-              : 'No lines match your filter.'}
+              ? 'No log lines yet. Logs stream here as your app runs — trigger a request or wait for the next event.'
+              : 'No lines match your filter. Clear search or change severity to see more lines.'}
           </div>
         ) : (
           filtered.map((line, i) => (

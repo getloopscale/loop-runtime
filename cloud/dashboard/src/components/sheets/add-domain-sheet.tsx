@@ -51,7 +51,12 @@ export function AddDomainSheet({
       setDomain('');
       onOpenChange(false);
     } catch (e) {
-      setError(e instanceof Error ? e.message : 'Something went wrong.');
+      // T0.1 TCIA — sponsor critério #6
+      setError(
+        e instanceof Error
+          ? `Add domain failed: ${e.message}. No domain was registered. Retry, or contact support if it persists.`
+          : 'Add domain failed. No domain was registered. Retry, or contact support if it persists.',
+      );
     } finally {
       setSubmitting(false);
     }

@@ -99,3 +99,36 @@ export function getFieldErrors(flow: Flow, fieldName: string): string[] {
   const node = flow.ui.nodes.find(n => n.attributes.name === fieldName);
   return (node?.messages || []).filter(m => m.type === 'error').map(m => m.text);
 }
+
+/**
+ * T0.1 EC-02 — enrich generic Kratos error messages with TCIA action context.
+ *
+ * Kratos sometimes returns generic phrases ("An unexpected error occurred",
+ * "Internal server error") that lack the Action step required by sponsor
+ * critério #6. This helper detects generic phrases and appends a context-
+ * specific Action sentence. Specific Kratos messages (e.g., "Invalid email")
+ * pass through unchanged — they're already actionable.
+ */
+const GENERIC_KRATOS_PHRASES = [
+  'an unexpected error occurred',
+  'internal server error',
+  'something went wrong',
+  'an error occurred',
+];
+
+type KratosErrorContext = 'login' | 'recovery' | 'verification' | 'registration';
+
+const ACTION_BY_CONTEXT: Record<KratosErrorContext, string> = {
+  login: 'Check your credentials and retry, or contact support@loopzero.example if it persists.',
+  recovery: 'Check your email address and network connection, then retry.',
+  verification: 'Request a new verification link from the sign-in page.',
+  registration: 'Check your inputs and retry, or contact support if it persists.',
+};
+
+export function enrichKratosError(rawMessage: string, context: KratosErrorContext): string {
+  if (!rawMessage) return rawMessage;
+  const lower = rawMessage.toLowerCase();
+  const isGeneric = GENERIC_KRATOS_PHRASES.some((p) => lower.includes(p));
+  if (!isGeneric) return rawMessage;
+  return `${rawMessage}. ${ACTION_BY_CONTEXT[context]}`;
+}

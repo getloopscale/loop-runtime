@@ -8,6 +8,7 @@ import {
   submitFlow,
   getCsrfToken,
   getFlowMessages,
+  enrichKratosError,
 } from '@/lib/kratos';
 import { API_URL } from '@/lib/config';
 
@@ -57,12 +58,16 @@ export function RecoveryPage() {
       setFlow(result);
       const messages = getFlowMessages(result);
       if (messages.some((m) => m.includes('error') || m.includes('Error'))) {
-        setErrorMessage(messages[0]);
+        // EC-02: enrich generic Kratos messages com TCIA action context
+        setErrorMessage(enrichKratosError(messages[0], 'recovery'));
       } else {
         setPhase('code');
       }
     } catch {
-      setErrorMessage('Something went wrong. Please try again.');
+      // T0.1 TCIA — sponsor critério #6
+      setErrorMessage(
+        'Recovery email request failed. Check your email address and network connection, then retry. Contact support@loopzero.example if it persists.',
+      );
     } finally {
       setLoading(false);
     }
@@ -84,10 +89,12 @@ export function RecoveryPage() {
       } else {
         setFlow(result);
         const errors = getFlowMessages(result);
-        if (errors.length > 0) setErrorMessage(errors[0]);
+        if (errors.length > 0) setErrorMessage(enrichKratosError(errors[0], 'recovery'));
       }
     } catch {
-      setErrorMessage('Invalid or expired code. Please try again.');
+      setErrorMessage(
+        'Invalid or expired code. Request a new recovery email from the sign-in page, or contact support if it persists.',
+      );
     } finally {
       setLoading(false);
     }
