@@ -260,19 +260,24 @@ if [ ! -r %s ]; then
   echo "ERROR: SA OIDC token not mounted at %s — keyless mode unavailable" >&2
   exit 1
 fi
-export SIGSTORE_ID_TOKEN="$(cat %s)"
+SIGSTORE_ID_TOKEN="$(cat %s)"
 
-# cosign v2.5+: usar SIGSTORE_FULCIO_URL/REKOR_URL env vars + disable signing
-# config (não usar --fulcio-url/--rekor-url flags — TUF conflict). Mirror do
-# cosign_attest.go pattern. LIVE discovered build v9 2026-05-27.
-export SIGSTORE_FULCIO_URL="%s"
-export SIGSTORE_REKOR_URL="%s"
-export SIGSTORE_USE_SIGNING_CONFIG="false"
+# cosign v2.4.x: use --fulcio-url/--rekor-url/--identity-token flags directly.
+# 2026-05-28 Ralph iter 3: downgraded from v3.0.6 (client-side reject bug)
+# and v2.5+ env-var-only (no flag fallback). v2.4 uses simpler API path.
+# --insecure-skip-verify skips SCT (CTLog public key) verification since
+# our self-hosted CTLog public key isn't in the default TUF root.
+FULCIO_URL="%s"
+REKOR_URL="%s"
 
 # Sign keyless. Fulcio issues short-lived cert; Rekor records the entry.
 # bash quirk fix: set -e + cosign fail kills script silently. Capture exit.
 set +e
 cosign sign --yes%s \
+  --identity-token="$SIGSTORE_ID_TOKEN" \
+  --fulcio-url="$FULCIO_URL" \
+  --rekor-url="$REKOR_URL" \
+  --insecure-skip-verify \
   -a "build-system=loopzero" \
   -a "app=%s" \
   -a "mode=keyless" \

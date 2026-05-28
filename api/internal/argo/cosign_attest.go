@@ -97,16 +97,17 @@ if [ ! -r %s ]; then
   echo "ERROR: SA OIDC token not mounted at %s — keyless mode unavailable" >&2
   exit 1
 fi
-export SIGSTORE_ID_TOKEN="$(cat %s)"
-# cosign v2.5+: usar env vars Sigstore. Flags --fulcio-url/--rekor-url
-# colidem com TUF signing config: "cannot specify service URLs and use signing config".
-# LIVE discovery 2026-05-27 build v8 — env approach is canonical em v2.5+.
-export SIGSTORE_FULCIO_URL="%s"
-export SIGSTORE_REKOR_URL="%s"
-# Disable TUF signing config to allow custom URL override (we deploy own Sigstore).
-export SIGSTORE_USE_SIGNING_CONFIG="false"
+SIGSTORE_ID_TOKEN="$(cat %s)"
+# 2026-05-28 Ralph iter 3: cosign v2.4.x flags directly (downgrade from v2.5+
+# env-var-only to support simpler API + skip SCT for self-hosted CTLog).
+FULCIO_URL="%s"
+REKOR_URL="%s"
 `, oidcTokenPath, oidcTokenPath, oidcTokenPath, fulcioURL, rekorURL)
 		attestCmd = fmt.Sprintf(`cosign attest --yes%s \
+  --identity-token="$SIGSTORE_ID_TOKEN" \
+  --fulcio-url="$FULCIO_URL" \
+  --rekor-url="$REKOR_URL" \
+  --insecure-skip-verify \
   --predicate %s \
   --type %s \
   "%s@${DIGEST}" 2>&1`, insecureFlag, p.SBOMLocalPath, cyclonedxPredicateType, p.ImageTag)
