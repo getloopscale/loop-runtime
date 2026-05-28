@@ -7,6 +7,10 @@ import (
 	"strings"
 	"sync"
 	"testing"
+
+	"github.com/prometheus/client_golang/prometheus/testutil"
+
+	"github.com/loopzero/loopzero/api/internal/metrics"
 )
 
 // T2.3 (Test 2 + Test 7) of plan 2026-05-28-meet-001-engineering-closure-plan.md.
@@ -233,4 +237,99 @@ func TestEnrichAttestation_ConcurrentSlices_NoDataRace(t *testing.T) {
 		}
 	}()
 	wg.Wait()
+}
+
+// T4.1 (CR-8): the enrichment must emit Sigstore observability counters
+// so SLO alerts have signal even before the cosign scripts surface
+// duration outputs (operator follow-up). These tests pin the
+// emit-side-effect contract; they're separate from the existing
+// TestEnrich* set which asserts pure slice mutation.
+
+func TestEnrichAttestation_EmitsSignTotal_SuccessOnSignature(t *testing.T) {
+	metrics.CosignSignTotal.Reset()
+	apps := []AppRelease{{Name: "api"}}
+	status := &WorkflowStatus{
+		Phase: "Succeeded",
+		Outputs: map[string]map[string]string{
+			"sign-image-api":   {"signature": "sig:abc"},
+			"attest-image-api": {"rekor-url": "https://rekor.loopzero.test/x"},
+		},
+	}
+	enrichAppReleasesWithAttestation(apps, status)
+	if got := testutil.ToFloat64(metrics.CosignSignTotal.WithLabelValues("success")); got != 1 {
+		t.Errorf("sign_total{success} = %v, want 1", got)
+	}
+	if got := testutil.ToFloat64(metrics.CosignSignTotal.WithLabelValues("failure")); got != 0 {
+		t.Errorf("sign_total{failure} = %v, want 0", got)
+	}
+}
+
+func TestEnrichAttestation_EmitsSignTotal_FailureWhenSignStepEmpty(t *testing.T) {
+	metrics.CosignSignTotal.Reset()
+	metrics.CosignSignErrors.Reset()
+	apps := []AppRelease{{Name: "api"}}
+	status := &WorkflowStatus{
+		Phase: "Succeeded",
+		Outputs: map[string]map[string]string{
+			"sign-image-api": {}, // ran but produced no signature
+		},
+	}
+	enrichAppReleasesWithAttestation(apps, status)
+	if got := testutil.ToFloat64(metrics.CosignSignTotal.WithLabelValues("failure")); got != 1 {
+		t.Errorf("sign_total{failure} = %v, want 1", got)
+	}
+	if got := testutil.ToFloat64(metrics.CosignSignErrors.WithLabelValues("fulcio")); got != 1 {
+		t.Errorf("sign_errors{fulcio} = %v, want 1 (sign step ran but no signature → fulcio attribution)", got)
+	}
+}
+
+func TestEnrichAttestation_EmitsAttestTotal_FailureWhenURLEmpty(t *testing.T) {
+	metrics.CosignAttestTotal.Reset()
+	metrics.CosignAttestErrors.Reset()
+	apps := []AppRelease{{Name: "api"}}
+	status := &WorkflowStatus{
+		Phase: "Succeeded",
+		Outputs: map[string]map[string]string{
+			"attest-image-api": {"rekor-url": "unknown"}, // sentinel → empty after enrichment
+		},
+	}
+	enrichAppReleasesWithAttestation(apps, status)
+	if got := testutil.ToFloat64(metrics.CosignAttestTotal.WithLabelValues("failure")); got != 1 {
+		t.Errorf("attest_total{failure} = %v, want 1 (unknown sentinel)", got)
+	}
+	if got := testutil.ToFloat64(metrics.CosignAttestErrors.WithLabelValues("rekor")); got != 1 {
+		t.Errorf("attest_errors{rekor} = %v, want 1", got)
+	}
+}
+
+func TestEnrichAttestation_EmitsRekorURLNullCounter(t *testing.T) {
+	metrics.ReleaseAttestationRekorURLPersist.Reset()
+	apps := []AppRelease{{Name: "api"}, {Name: "web"}}
+	status := &WorkflowStatus{
+		Phase: "Succeeded",
+		Outputs: map[string]map[string]string{
+			"attest-image-api": {"rekor-url": "https://rekor.loopzero.test/x"},
+			"attest-image-web": {"rekor-url": ""}, // empty → null bucket
+		},
+	}
+	enrichAppReleasesWithAttestation(apps, status)
+	if got := testutil.ToFloat64(metrics.ReleaseAttestationRekorURLPersist.WithLabelValues("populated")); got != 1 {
+		t.Errorf("rekor_url{populated} = %v, want 1", got)
+	}
+	if got := testutil.ToFloat64(metrics.ReleaseAttestationRekorURLPersist.WithLabelValues("null")); got != 1 {
+		t.Errorf("rekor_url{null} = %v, want 1", got)
+	}
+}
+
+func TestEnrichAttestation_NilStatus_NoMetricEmission(t *testing.T) {
+	metrics.CosignSignTotal.Reset()
+	metrics.ReleaseAttestationRekorURLPersist.Reset()
+	apps := []AppRelease{{Name: "api"}}
+	enrichAppReleasesWithAttestation(apps, nil)
+	if got := testutil.ToFloat64(metrics.CosignSignTotal.WithLabelValues("success")); got != 0 {
+		t.Errorf("sign_total{success} = %v, want 0 (nil status must not emit)", got)
+	}
+	if got := testutil.ToFloat64(metrics.ReleaseAttestationRekorURLPersist.WithLabelValues("null")); got != 0 {
+		t.Errorf("rekor_url{null} = %v, want 0 (nil status must not emit)", got)
+	}
 }

@@ -1,0 +1,142 @@
+// SPDX-License-Identifier: Apache-2.0
+// Copyright 2025-2026 The LoopZero Authors
+
+package metrics
+
+import (
+	"github.com/prometheus/client_golang/prometheus"
+	"github.com/prometheus/client_golang/prometheus/promauto"
+)
+
+// T4.1 of plan 2026-05-28-meet-001-engineering-closure-plan.md.
+// CR-8 (MEET-2026-05-28-001 SRE + Production Design): "Zero loopzero_cosign_*
+// / loopzero_sign_* / loopzero_attest_* / loopzero_rekor_* / loopzero_fulcio_* metrics
+// in the codebase. You cannot detect Sigstore brownouts in prod." This
+// file ships the 8 metrics that close that gap.
+//
+// Naming: loopzero_<subsystem>_<name> per CLAUDE.md spec §15.2.
+// EC-6 fix (plan v1.1): NO circuit_breaker_state metric — Production
+// Design Review flagged that as a separate workstream (no circuit
+// breaker exists yet). Re-add when the circuit breaker lands.
+// EC-7 fix (plan v1.1): sign_total + attest_total counters added as
+// denominators for the T4.2 error-rate alerts.
+
+// signHistogramBuckets — cosign sign duration buckets.
+//
+// Default Prometheus buckets (0.005s..10s) are inappropriate: cosign
+// sign typically takes 1-30s (Fulcio cert issue + Rekor record). We
+// use linear buckets 1s..56s (1, 6, 11, 16, ..., 56) to give 12 bins
+// across the realistic range. Operators can tune via Helm later
+// (EC-16 generalized — histogram buckets are operator-tunable).
+var signHistogramBuckets = prometheus.LinearBuckets(1, 5, 12)
+
+var (
+	// 1. CosignSignDuration — cosign sign step duration in seconds.
+	CosignSignDuration = promauto.NewHistogramVec(prometheus.HistogramOpts{
+		Name:    "loopzero_cosign_sign_duration_seconds",
+		Help:    "Duration of cosign sign-image step in seconds.",
+		Buckets: signHistogramBuckets,
+	}, []string{"keyless"})
+
+	// 2. CosignAttestDuration — cosign attest step duration in seconds.
+	CosignAttestDuration = promauto.NewHistogramVec(prometheus.HistogramOpts{
+		Name:    "loopzero_cosign_attest_duration_seconds",
+		Help:    "Duration of cosign attest-image step in seconds.",
+		Buckets: signHistogramBuckets,
+	}, []string{"keyless"})
+
+	// 3. CosignSignTotal — total cosign sign attempts by result.
+	// Denominator for LoopZeroCosignSignErrorRate alert (T4.2 / EC-7).
+	CosignSignTotal = promauto.NewCounterVec(prometheus.CounterOpts{
+		Name: "loopzero_cosign_sign_total",
+		Help: "Total cosign sign-image invocations by result.",
+	}, []string{"result"}) // result="success" | "failure"
+
+	// 4. CosignAttestTotal — total cosign attest attempts by result.
+	// Denominator for LoopZeroCosignAttestErrorRate alert (T4.2 / EC-7).
+	CosignAttestTotal = promauto.NewCounterVec(prometheus.CounterOpts{
+		Name: "loopzero_cosign_attest_total",
+		Help: "Total cosign attest-image invocations by result.",
+	}, []string{"result"}) // result="success" | "failure"
+
+	// 5. CosignSignErrors — sign errors attributed to a Sigstore component.
+	// Labels: component="fulcio|rekor|ctlog|other".
+	CosignSignErrors = promauto.NewCounterVec(prometheus.CounterOpts{
+		Name: "loopzero_cosign_sign_errors_total",
+		Help: "Cosign sign errors by upstream Sigstore component.",
+	}, []string{"component"})
+
+	// 6. CosignAttestErrors — attest errors attributed to a Sigstore component.
+	CosignAttestErrors = promauto.NewCounterVec(prometheus.CounterOpts{
+		Name: "loopzero_cosign_attest_errors_total",
+		Help: "Cosign attest errors by upstream Sigstore component.",
+	}, []string{"component"})
+
+	// 7. ReleaseAttestationRekorURLPersist — Rekor URL persistence outcome.
+	// Labels: result="null" (no URL persisted) | "populated" (URL persisted).
+	// The ratio populated/(null+populated) is the SLI for the T4.2
+	// LoopZeroReleaseAttestationRekorURLNullRate alert.
+	ReleaseAttestationRekorURLPersist = promauto.NewCounterVec(prometheus.CounterOpts{
+		Name: "loopzero_release_attestation_rekor_url_null_total",
+		Help: "Releases bucketed by whether image_attestation_rekor_url was persisted.",
+	}, []string{"result"}) // result="null" | "populated"
+
+	// 8. FulcioCertIssuanceDuration — cert issuance latency from Fulcio.
+	// Distinct from CosignSignDuration: the sign step is end-to-end
+	// (cert issue + Rekor record). This isolates the Fulcio call so
+	// operators can root-cause "sign slow but Rekor fast" or vice versa.
+	FulcioCertIssuanceDuration = promauto.NewHistogram(prometheus.HistogramOpts{
+		Name:    "loopzero_fulcio_cert_issuance_duration_seconds",
+		Help:    "Fulcio certificate issuance call duration (subset of cosign sign).",
+		Buckets: prometheus.LinearBuckets(0.5, 1, 10), // 0.5s..9.5s
+	})
+)
+
+// ObserveCosignSign records duration + result + (optional) failing component
+// in a single call. The empty-output guard (EC-NEW of plan v1.1) lives at
+// the call site (enrichAppReleasesWithAttestation): callers must NOT pass
+// a negative or implausible duration; this function trusts its input.
+func ObserveCosignSign(keyless bool, durationSeconds float64, success bool, errorComponent string) {
+	label := "false"
+	if keyless {
+		label = "true"
+	}
+	CosignSignDuration.WithLabelValues(label).Observe(durationSeconds)
+	if success {
+		CosignSignTotal.WithLabelValues("success").Inc()
+	} else {
+		CosignSignTotal.WithLabelValues("failure").Inc()
+		if errorComponent != "" {
+			CosignSignErrors.WithLabelValues(errorComponent).Inc()
+		}
+	}
+}
+
+// ObserveCosignAttest mirrors ObserveCosignSign for the attest step.
+func ObserveCosignAttest(keyless bool, durationSeconds float64, success bool, errorComponent string) {
+	label := "false"
+	if keyless {
+		label = "true"
+	}
+	CosignAttestDuration.WithLabelValues(label).Observe(durationSeconds)
+	if success {
+		CosignAttestTotal.WithLabelValues("success").Inc()
+	} else {
+		CosignAttestTotal.WithLabelValues("failure").Inc()
+		if errorComponent != "" {
+			CosignAttestErrors.WithLabelValues(errorComponent).Inc()
+		}
+	}
+}
+
+// ObserveRekorURLPersist increments the appropriate bucket of
+// ReleaseAttestationRekorURLPersist based on whether a non-empty URL
+// landed in the row. Empty (including the "unknown" sentinel removed
+// in M07 Ralph iter 5) counts as "null".
+func ObserveRekorURLPersist(rekorURL string) {
+	if rekorURL == "" || rekorURL == "unknown" {
+		ReleaseAttestationRekorURLPersist.WithLabelValues("null").Inc()
+		return
+	}
+	ReleaseAttestationRekorURLPersist.WithLabelValues("populated").Inc()
+}

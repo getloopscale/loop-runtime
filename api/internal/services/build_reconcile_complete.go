@@ -272,10 +272,68 @@ func enrichAppReleasesWithAttestation(apps []AppRelease, status *WorkflowStatus)
 		// literal "unknown" (cosign output parser fallback) stays NULL —
 		// downstream code already gates on empty before persisting.
 		attestStep := naming.AttestStepName(app.Name)
+		var rekorURL string
 		if attestOutputs, ok := status.Outputs[attestStep]; ok {
 			if url := attestOutputs["rekor-url"]; url != "" && url != "unknown" {
 				apps[i].ImageAttestationRekorURL = url
+				rekorURL = url
 			}
 		}
+
+		// T4.1 (CR-8) of plan 2026-05-28-meet-001-engineering-closure v1.1:
+		// emit Sigstore observability counters from the enrichment.
+		// Duration histograms are intentionally NOT emitted here — they
+		// require the cosign scripts to surface `sign_duration_ms` /
+		// `attest_duration_ms` output params (plan T4.1 tasks #3+#4,
+		// operator follow-up). The counters below are derived from the
+		// existing outputs map and give immediate SLO signal.
+		emitSigstoreObservations(status, app.Name, rekorURL)
 	}
+}
+
+// emitSigstoreObservations is the metric-emission half of the
+// enrichment. Split out so the unit tests in
+// build_reconcile_complete_failure_test.go can keep asserting pure
+// enrichment behavior while sigstore_observations_test.go pins the
+// metric side-effects independently. EC-NEW (plan T4.1) guard: the
+// duration histogram observation is skipped here entirely until
+// `*_duration_ms` outputs land — emitting `Observe(0)` would create
+// a misleading bucket-0 spike.
+func emitSigstoreObservations(status *WorkflowStatus, appName, rekorURL string) {
+	if status == nil {
+		return
+	}
+	// sign_total: success when the sign-image step produced a signature.
+	signStep := naming.SignStepName(appName)
+	signOK := false
+	var signComponent string
+	if out, ok := status.Outputs[signStep]; ok {
+		if out["signature"] != "" {
+			signOK = true
+		} else {
+			// Sign step ran but produced no signature → Fulcio failure
+			// most likely (the cert issue step is where signless aborts
+			// almost always originate). Operators can refine via the
+			// step's exit code if surfaced.
+			signComponent = "fulcio"
+		}
+	}
+	metrics.ObserveCosignSign(true /* keyless */, 0, signOK, signComponent)
+
+	// attest_total: success when the attest step produced a non-null URL.
+	// Empty / "unknown" URL counts as failure with Rekor attribution.
+	attestStep := naming.AttestStepName(appName)
+	attestOK := false
+	var attestComponent string
+	if _, ok := status.Outputs[attestStep]; ok {
+		if rekorURL != "" {
+			attestOK = true
+		} else {
+			attestComponent = "rekor"
+		}
+	}
+	metrics.ObserveCosignAttest(true /* keyless */, 0, attestOK, attestComponent)
+
+	// rekor_url null/populated SLI counter.
+	metrics.ObserveRekorURLPersist(rekorURL)
 }
