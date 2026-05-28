@@ -124,6 +124,13 @@ func NewRouter(cfg Config) *chi.Mux {
 	if cfg.AdminPinner != nil {
 		r.Post("/api/v1/admin/tenants/pin", routes.AdminPinCellHandler(cfg.AdminPinner))
 	}
+	// T4.4 of plan 2026-05-28-meet-001-engineering-closure-plan.md:
+	// diagnostic read-only endpoint for on-call to inspect a release's
+	// signing + attestation chain without source access. The handler
+	// enforces LOOPZERO_ADMIN_API + X-Service-Auth itself.
+	if cfg.ReleaseInspector != nil {
+		r.Get("/api/v1/admin/releases/{id}/inspect", routes.AdminReleaseInspectHandler(cfg.ReleaseInspector))
+	}
 
 	// Protected routes (auth required)
 	if cfg.TokenValidator != nil && cfg.MemberStore != nil {

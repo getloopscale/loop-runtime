@@ -15,6 +15,7 @@ import (
 
 	"github.com/loopzero/loopzero/api/internal/middleware"
 	"github.com/loopzero/loopzero/api/internal/routes"
+	"github.com/loopzero/loopzero/api/internal/services"
 	"github.com/loopzero/loopzero/api/internal/source"
 	"github.com/loopzero/loopzero/api/internal/sse"
 	"github.com/loopzero/loopzero/pkg/enforcement"
@@ -112,6 +113,11 @@ type Config struct {
 	BillingHandler *routes.BillingHandler
 	AdminEvictor            routes.TenantEvictor
 	AdminPinner             routes.CellPinner // CHG-2026-04-30-DELETE-SINGLE-CELL
+	// T4.4 of plan 2026-05-28-meet-001-engineering-closure: diagnostic
+	// read-only endpoint for on-call. Nil-safe — when unset, the route
+	// is not mounted and the handler answers 404 like the other admin
+	// routes. Wired by api/cmd/setup_server.go.
+	ReleaseInspector services.ReleaseInspector
 	PlanLimiter             *enforcement.PlanLimiter
 	// CostEnforcer gates quantity-style metrics (egress bytes, registry pulls,
 	// build minutes) against per-plan caps from cost_counters (migration 000017).
