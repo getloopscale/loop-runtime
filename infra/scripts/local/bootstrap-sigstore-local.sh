@@ -76,43 +76,39 @@ log "  CA fetched (${#CA_PEM} bytes)"
 
 # -- Step 4: Patch Fulcio ConfigMap with OIDCIssuer.CACert --
 log "Step 4/6: Patching Fulcio ConfigMap with K8s OIDC CACert"
+command -v jq >/dev/null || die "jq required for JSON manipulation"
 TMP_CONFIG=$(mktemp)
 trap 'rm -f "$TMP_CONFIG"' EXIT
 
-# Build new config with CACert field (escapes embedded newlines for JSON).
-CA_ESCAPED=$(printf '%s' "$CA_PEM" | python3 -c 'import sys, json; print(json.dumps(sys.stdin.read()))')
-
-python3 <<PY > "$TMP_CONFIG"
-import json
-config = {
-    "OIDCIssuers": {
-        "https://kubernetes.default.svc.cluster.local": {
-            "IssuerURL": "https://kubernetes.default.svc.cluster.local",
-            "ClientID": "sigstore",
-            "Type": "kubernetes",
-            "CACert": ${CA_ESCAPED}
-        },
-        "https://kubernetes.default.svc": {
-            "IssuerURL": "https://kubernetes.default.svc",
-            "ClientID": "sigstore",
-            "Type": "kubernetes",
-            "CACert": ${CA_ESCAPED}
-        }
+# Build Fulcio config JSON with K8s OIDC issuers + CACert (PEM).
+# jq escapes embedded newlines/quotes correctly. Static issuer config plus
+# CACert var only — no Python/heredoc embeds.
+jq -n --arg ca "$CA_PEM" '{
+  OIDCIssuers: {
+    "https://kubernetes.default.svc.cluster.local": {
+      IssuerURL: "https://kubernetes.default.svc.cluster.local",
+      ClientID: "sigstore",
+      Type: "kubernetes",
+      CACert: $ca
     },
-    "MetaIssuers": {
-        "https://kubernetes.*.svc": {
-            "ClientID": "sigstore",
-            "Type": "kubernetes"
-        }
+    "https://kubernetes.default.svc": {
+      IssuerURL: "https://kubernetes.default.svc",
+      ClientID: "sigstore",
+      Type: "kubernetes",
+      CACert: $ca
     }
-}
-print(json.dumps(config, indent=2))
-PY
+  },
+  MetaIssuers: {
+    "https://kubernetes.*.svc": {
+      ClientID: "sigstore",
+      Type: "kubernetes"
+    }
+  }
+}' > "$TMP_CONFIG"
 
-CONFIG_JSON=$(cat "$TMP_CONFIG")
-kctl patch cm fulcio-server-config -n fulcio-system \
-  --type=merge \
-  -p "$(python3 -c "import json,sys; print(json.dumps({'data': {'config.json': sys.argv[1]}}))" "$CONFIG_JSON")"
+# Wrap config.json into a ConfigMap merge-patch using jq (single-line slurp).
+PATCH=$(jq -nc --slurpfile cfg "$TMP_CONFIG" '{data: {"config.json": ($cfg[0] | tojson)}}')
+kctl patch cm fulcio-server-config -n fulcio-system --type=merge -p "$PATCH"
 
 log "  Restarting Fulcio to pick up new config"
 kctl rollout restart deployment/fulcio-server -n fulcio-system
