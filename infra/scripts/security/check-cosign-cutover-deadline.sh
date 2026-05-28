@@ -107,6 +107,52 @@ if [[ -n "$EMERGENCY_REASON" ]]; then
   exit 0
 fi
 
+# --- T0.2 of plan 2026-05-28-meet-001-engineering-closure v1.1: cosign v3
+# upgrade deadline check (ADR-2026-05-28-cosign-v2.4.3-deadline). Runs BEFORE
+# mode check because v3 upgrade is orthogonal to keyed/keyless mode (the v3
+# upgrade lock-in concern stands even when keyless mode is active).
+# Reads ConfigMap `loopzero-cosign-version-config` with REQUIRED fields:
+#   - target_version (e.g., "v3"). Absent → PASS (no upgrade pending).
+#   - set_at (YYYY-MM-DD). REQUIRED when target_version=v3.
+# EC-1 fix: set_at is mandatory to prevent operator rewriting the ConfigMap
+# to reset the clock.
+V3_CM_NS="${COSIGN_V3_CONFIG_NS:-loopzero-system}"
+V3_CM_NAME="${COSIGN_V3_CONFIG_NAME:-loopzero-cosign-version-config}"
+
+v3_read_field() {
+  local key="$1"
+  if [[ "$DRY_RUN" == "1" ]]; then echo ""; return 0; fi
+  kubectl get cm "$V3_CM_NAME" -n "$V3_CM_NS" \
+    -o jsonpath="{.data.$key}" 2>/dev/null
+}
+
+V3_TARGET="$(v3_read_field target_version || true)"
+if [[ -n "$V3_TARGET" ]]; then
+  V3_SET_AT="$(v3_read_field set_at || true)"
+  if [[ -z "$V3_SET_AT" ]]; then
+    log "FAIL: ConfigMap $V3_CM_NS/$V3_CM_NAME has target_version=$V3_TARGET but missing required 'set_at' field; refusing ambiguous deadline (ADR-2026-05-28-cosign-v2.4.3-deadline)"
+    exit 1
+  fi
+  # Parse set_at as epoch
+  if ! V3_SET_AT_EPOCH=$(date -u -d "$V3_SET_AT" +%s 2>/dev/null); then
+    if ! V3_SET_AT_EPOCH=$(date -u -j -f "%Y-%m-%d" "$V3_SET_AT" +%s 2>/dev/null); then
+      log "FAIL: cannot parse set_at='$V3_SET_AT' (expected YYYY-MM-DD)"
+      exit 1
+    fi
+  fi
+  NOW_EPOCH_V3=$(date -u +%s)
+  AGE_DAYS=$(( (NOW_EPOCH_V3 - V3_SET_AT_EPOCH) / 86400 ))
+  if (( AGE_DAYS > 90 )); then
+    log "FAIL: cosign v3 upgrade deadline T0+90d crossed (target=$V3_TARGET, set_at=$V3_SET_AT, age=${AGE_DAYS}d)"
+    log "      Operator must complete cosign v2.4.3 → v3 upgrade per ADR-2026-05-28-cosign-v2.4.3-deadline"
+    exit 1
+  elif (( AGE_DAYS > 60 )); then
+    REMAINING_DAYS=$((90 - AGE_DAYS))
+    log "WARN: cosign v3 upgrade deadline T0+60d crossed (target=$V3_TARGET, set_at=$V3_SET_AT, age=${AGE_DAYS}d, ${REMAINING_DAYS}d to T0+90d FAIL)" >&2
+  fi
+fi
+# --- end v3 deadline check ---
+
 # Read mode
 MODE="$(read_cm_field mode || true)"
 if [[ -z "$MODE" ]]; then
