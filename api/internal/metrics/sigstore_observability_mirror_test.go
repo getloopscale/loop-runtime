@@ -199,3 +199,77 @@ func mapKeys(m map[string]bool) []string {
 	}
 	return out
 }
+
+// emissionCallRe matches `<MetricName>.WithLabelValues(...).<Op>(...)`
+// for Vec metrics, or `<MetricName>.<Op>(...)` for plain metrics.
+// Op is Observe/Inc/Add/Set — the four canonical Prometheus mutators.
+var emissionCallRe = regexp.MustCompile(`(?m)\b([A-Z][A-Za-z0-9]+)\.(?:WithLabelValues\([^)]*\)\.)?(?:Observe|Inc|Add|Set)\(`)
+
+// metricVarToName maps an exported Go variable name (e.g.
+// CosignSignTotal) back to its declared Prometheus name (e.g.
+// loopzero_cosign_sign_total). Used to cross-reference emission sites
+// against the declared-metric set.
+var metricVarToName = map[string]string{
+	"CosignSignDuration":                "loopzero_cosign_sign_duration_seconds",
+	"CosignAttestDuration":              "loopzero_cosign_attest_duration_seconds",
+	"CosignSignTotal":                   "loopzero_cosign_sign_total",
+	"CosignAttestTotal":                 "loopzero_cosign_attest_total",
+	"CosignSignErrors":                  "loopzero_cosign_sign_errors_total",
+	"CosignAttestErrors":                "loopzero_cosign_attest_errors_total",
+	"ReleaseAttestationRekorURLPersist": "loopzero_release_attestation_rekor_url_null_total",
+	"FulcioCertIssuanceDuration":        "loopzero_fulcio_cert_issuance_duration_seconds",
+}
+
+// TestSigstoreMetrics_AllDeclaredHaveWrapper asserts every metric
+// declared in sigstore_metrics.go has at least one Observe/Inc/Add/Set
+// emission site WITHIN the metrics package (i.e. an Observe* wrapper
+// touches it). This catches the "orphan metric" class: declared and
+// dashboarded but with no emission code path anywhere — guaranteed
+// to render empty panels in production no matter how much chaos /
+// real load the platform sees.
+//
+// Found this case live during the 25th Ralph iteration (commit
+// 9e47759f run): `loopzero_fulcio_cert_issuance_duration_seconds` was
+// declared + dashboarded (T4.3 Panel 32) but had zero emission code
+// paths. Fixed in this commit by adding `ObserveFulcioCertIssuance`.
+//
+// The wrapper does NOT need to currently be CALLED from production
+// code (the operator follow-up for cosign script duration outputs
+// is documented inline). It just needs to exist, so future engineers
+// have a definitively-named extension point to wire into when the
+// dependency is ready.
+func TestSigstoreMetrics_AllDeclaredHaveWrapper(t *testing.T) {
+	root := repoRoot(t)
+	src, err := os.ReadFile(filepath.Join(root, "api/internal/metrics/sigstore_metrics.go"))
+	if err != nil {
+		t.Fatalf("read sigstore_metrics.go: %v", err)
+	}
+	srcStr := string(src)
+
+	// Find emission sites: every <VarName>(.WithLabelValues(...))?.Op(
+	emitted := map[string]bool{}
+	for _, m := range emissionCallRe.FindAllStringSubmatch(srcStr, -1) {
+		varName := m[1]
+		if metric, ok := metricVarToName[varName]; ok {
+			emitted[metric] = true
+		}
+	}
+
+	// Cross-reference against declared metrics.
+	declared := extractDeclarations(t, filepath.Join(root, "api/internal/metrics/sigstore_metrics.go"))
+	declaredList := mapKeys(declared)
+	sort.Strings(declaredList)
+
+	var orphans []string
+	for _, m := range declaredList {
+		if !emitted[m] {
+			orphans = append(orphans, m)
+		}
+	}
+	if len(orphans) > 0 {
+		t.Errorf("declared T4.1 metrics with NO Observe wrapper inside sigstore_metrics.go: %v\n"+
+			"Add an Observe<Name>() function that calls the metric's Observe/Inc — even if "+
+			"no production code calls the wrapper yet, the wrapper marks the metric as "+
+			"intentionally-extension-ready, not orphan.", orphans)
+	}
+}

@@ -140,3 +140,32 @@ func ObserveRekorURLPersist(rekorURL string) {
 	}
 	ReleaseAttestationRekorURLPersist.WithLabelValues("populated").Inc()
 }
+
+// ObserveFulcioCertIssuance records a Fulcio cert issuance duration.
+//
+// CURRENT WIRING STATE (2026-05-28): no production code calls this
+// wrapper. The metric was declared + dashboarded (T4.1 Panel 32 of
+// sigstore-pipeline.json) under the assumption that the cosign sign
+// script would surface a `fulcio_cert_issuance_ms` output param —
+// that's the operator follow-up listed in the T4.1 commit message
+// (f3ea35d2) as tasks #3+#4 of plan
+// 2026-05-28-meet-001-engineering-closure.
+//
+// The wrapper exists today so:
+//   1. The metrics-to-emit-mirror defensive test
+//      (TestSigstoreMetrics_AllDeclaredHaveWrapper) finds a wrapper
+//      for every declared metric, catching the orphan-metric class.
+//   2. Operator can wire `ObserveFulcioCertIssuance(seconds)` at the
+//      cosign script output extraction site once the duration is
+//      surfaced — no need to invent the API at LIVE-instrumentation
+//      time.
+//
+// Negative or implausible durations are silently dropped per the
+// "trust the caller's guard at the emission site" contract documented
+// for the other Observe* wrappers (EC-NEW of plan T4.1).
+func ObserveFulcioCertIssuance(durationSeconds float64) {
+	if durationSeconds < 0 {
+		return
+	}
+	FulcioCertIssuanceDuration.Observe(durationSeconds)
+}
