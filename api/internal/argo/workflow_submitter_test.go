@@ -132,6 +132,9 @@ func TestWorkflowSubmitter_SubmitCreatesWorkflow(t *testing.T) {
 	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 	defer cancel()
 
+	apps := []services.AppSpec{
+		{Name: "api", Type: "server", Port: 3000},
+	}
 	workflowID, err := submitter.Submit(ctx, services.WorkflowSpec{
 		BuildID:     "test-build-001",
 		TenantID:    "acme",
@@ -139,9 +142,8 @@ func TestWorkflowSubmitter_SubmitCreatesWorkflow(t *testing.T) {
 		Environment: "production",
 		CommitSHA:   "abc123def456",
 		Namespace:   "build-acme",
-		Apps: []services.AppSpec{
-			{Name: "api", Type: "server", Port: 3000},
-		},
+		Apps:        apps,
+		Plan:        planFromApps(apps),
 	})
 	if err != nil {
 		t.Fatalf("Submit failed: %v", err)
@@ -168,6 +170,9 @@ func TestWorkflowSubmitter_CancelWorkflow(t *testing.T) {
 	defer cancel()
 
 	// Submit a workflow
+	apps := []services.AppSpec{
+		{Name: "web", Type: "frontend", Port: 0, Rendering: "static"},
+	}
 	workflowID, err := submitter.Submit(ctx, services.WorkflowSpec{
 		BuildID:     "test-cancel-001",
 		TenantID:    "acme",
@@ -175,9 +180,8 @@ func TestWorkflowSubmitter_CancelWorkflow(t *testing.T) {
 		Environment: "staging",
 		CommitSHA:   "def456",
 		Namespace:   "build-acme",
-		Apps: []services.AppSpec{
-			{Name: "web", Type: "frontend", Port: 0},
-		},
+		Apps:        apps,
+		Plan:        planFromApps(apps),
 	})
 	if err != nil {
 		t.Fatalf("Submit failed: %v", err)
@@ -200,6 +204,11 @@ func TestWorkflowSubmitter_SubmitWithMultipleApps(t *testing.T) {
 	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 	defer cancel()
 
+	apps := []services.AppSpec{
+		{Name: "api", Type: "server", Port: 3000},
+		{Name: "web", Type: "frontend", Port: 0, Rendering: "static"},
+		{Name: "worker", Type: "worker", Port: 0},
+	}
 	workflowID, err := submitter.Submit(ctx, services.WorkflowSpec{
 		BuildID:     "test-multi-001",
 		TenantID:    "acme",
@@ -207,11 +216,8 @@ func TestWorkflowSubmitter_SubmitWithMultipleApps(t *testing.T) {
 		Environment: "production",
 		CommitSHA:   "789abc",
 		Namespace:   "build-acme",
-		Apps: []services.AppSpec{
-			{Name: "api", Type: "server", Port: 3000},
-			{Name: "web", Type: "frontend", Port: 0},
-			{Name: "worker", Type: "worker", Port: 0},
-		},
+		Apps:        apps,
+		Plan:        planFromApps(apps),
 	})
 	if err != nil {
 		t.Fatalf("Submit failed: %v", err)

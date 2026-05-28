@@ -25,49 +25,24 @@ import (
 )
 
 // buildkitParams holds the resolved parameters for a BuildKit build container.
-// Both buildkitTemplateForApp and buildkitTemplateFromPlan resolve their inputs
-// into this common struct, which buildkitContainer uses to generate the template.
+// buildkitTemplateFromPlan resolves AppBuildPlan inputs into this common struct,
+// which buildkitContainer uses to generate the template. T1.3 deleted the
+// legacy buildkitTemplateForApp peer.
 type buildkitParams struct {
 	AppName        string
 	ImageTag       string
 	DockerfilePath string
 	ContextPath    string
 	CacheRef       string
-	BuildArgs      map[string]string // nil for legacy (no build args)
+	BuildArgs      map[string]string
 	NoCache        bool
 }
 
-// buildkitTemplateForApp generates a single-container BuildKit template for a single app.
-//
-// Architecture (MEET-2026-03-26-007): Single container runs both buildkitd (background daemon)
-// and buildctl (foreground client) via rootlesskit. This eliminates the sidecar pattern and
-// its associated false-failure problem (sidecar exit code 1 on SIGTERM causing Argo to mark
-// successful builds as Failed).
-//
-// Security: rootlesskit requires seccompProfile: Unconfined + AppArmor: unconfined for user
-// namespace creation on managed Kubernetes (DOKS, EKS, GKE). buildctl args are not
-// user-injectable (constructed programmatically). See MEET-2026-03-26-007 security review.
-func (b *WorkflowBuilder) buildkitTemplateForApp(spec services.WorkflowSpec, app services.AppSpec) *forge.Container {
-	// Image path: {registry}/{tenant}/{project}-{app}:{sha}
-	// Flattened to 2 levels to stay within DO Container Registry nesting limit.
-	// Previously 3 levels ({tenant}/{project}/{app}) caused 403 on DO.
-	// ARCH-001 fix: single source of truth for image tag format
-	destination := naming.ImageTag(b.infraParams.RegistryURL, spec.TenantID, spec.ProjectID, app.Name, spec.CommitSHA)
-	cacheRef := fmt.Sprintf("%s/%s/%s-%s:buildcache",
-		b.infraParams.RegistryURL, spec.TenantID, spec.ProjectID, app.Name)
-
-	// Per-app Dockerfile naming — single source of truth (MEET-2026-03-29-018).
-	dockerfile := dockerfilePathForApp(app.Name, len(spec.Apps))
-
-	return b.buildkitContainer(buildkitParams{
-		AppName:        app.Name,
-		ImageTag:       destination,
-		DockerfilePath: dockerfile,
-		ContextPath:    workspaceMountPath,
-		CacheRef:       cacheRef,
-		NoCache:        spec.NoCache,
-	})
-}
+// buildkitTemplateForApp was the legacy single-arg BuildKit template generator
+// that derived imageTag/cacheRef/dockerfile from spec.Apps inline. Deleted in
+// T1.3 (CR-2 of MEET-2026-05-28-001) along with all spec.Apps fallback paths
+// in WorkflowBuilder. The only emission path now is buildkitTemplateFromPlan,
+// which consumes resolved AppBuildPlan fields produced by services.CreateBuildPlan.
 
 // buildkitTemplateFromPlan generates a single-container BuildKit template using resolved
 // fields from AppBuildPlan. Same architecture as buildkitTemplateForApp (MEET-2026-03-26-007)

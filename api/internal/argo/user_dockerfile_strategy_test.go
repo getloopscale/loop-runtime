@@ -152,13 +152,15 @@ func TestWorkflowBuilder_BuildDockerfileApp_EmitsLintNotPacks(t *testing.T) {
 		RegistryInsecure: true,
 		BaseDomain:       "loopzero.local",
 	})
+	apps := []services.AppSpec{
+		{Name: "api", Path: ".", Framework: "node", Build: "dockerfile", Type: "server", Port: 3000},
+	}
 	spec := services.WorkflowSpec{
 		BuildID:   "build-test",
 		TenantID:  "acme",
 		ProjectID: "myproj",
-		Apps: []services.AppSpec{
-			{Name: "api", Path: ".", Framework: "node", Build: "dockerfile", Type: "server", Port: 3000},
-		},
+		Apps:      apps,
+		Plan:      planFromApps(apps),
 	}
 
 	wf, err := b.Build(spec)
@@ -190,13 +192,15 @@ func TestWorkflowBuilder_NodeApp_EmitsPacksNotLint(t *testing.T) {
 		RegistryInsecure: true,
 		BaseDomain:       "loopzero.local",
 	})
+	apps := []services.AppSpec{
+		{Name: "api", Path: ".", Framework: "node", Build: "", Type: "server", Port: 3000},
+	}
 	spec := services.WorkflowSpec{
 		BuildID:   "build-test",
 		TenantID:  "acme",
 		ProjectID: "myproj",
-		Apps: []services.AppSpec{
-			{Name: "api", Path: ".", Framework: "node", Build: "", Type: "server", Port: 3000},
-		},
+		Apps:      apps,
+		Plan:      planFromApps(apps),
 	}
 
 	wf, err := b.Build(spec)
@@ -230,14 +234,19 @@ func TestWorkflowBuilder_MixedMonorepo_RoutesPerApp(t *testing.T) {
 		RegistryInsecure: true,
 		BaseDomain:       "loopzero.local",
 	})
+	apps := []services.AppSpec{
+		{Name: "api", Path: "apps/api", Framework: "node", Build: "dockerfile", Type: "server", Port: 3000},
+		// Frontend MUST declare Rendering: "static" — NormalizeApp rejects
+		// frontends without it (CDN-delivery contract). The legacy spec.Apps
+		// fallback bypassed normalization; T1.3 (CR-2) deleted that bypass.
+		{Name: "web", Path: "apps/web", Framework: "node", Build: "", Type: "frontend", Rendering: "static"},
+	}
 	spec := services.WorkflowSpec{
 		BuildID:   "build-test",
 		TenantID:  "acme",
 		ProjectID: "myproj",
-		Apps: []services.AppSpec{
-			{Name: "api", Path: "apps/api", Framework: "node", Build: "dockerfile", Type: "server", Port: 3000},
-			{Name: "web", Path: "apps/web", Framework: "node", Build: "", Type: "frontend"},
-		},
+		Apps:      apps,
+		Plan:      planFromApps(apps),
 	}
 
 	wf, err := b.Build(spec)

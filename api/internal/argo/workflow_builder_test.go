@@ -20,7 +20,16 @@ func testInfraParams() InfraParams {
 	}
 }
 
+// testSpec returns a WorkflowSpec wired with the default test fixtures.
+// T1.3 (CR-2): Build() now requires spec.Plan; testSpec auto-populates a
+// minimal Plan synthesized from the default Apps so existing tests that only
+// override spec.Apps continue to exercise the Plan-driven emission path
+// transparently. Tests that need a custom Plan should overwrite spec.Plan
+// AFTER calling testSpec(), and may also overwrite spec.Apps independently.
 func testSpec() services.WorkflowSpec {
+	apps := []services.AppSpec{
+		{Name: "api", Type: "server", Port: 3000, Framework: "express"},
+	}
 	return services.WorkflowSpec{
 		BuildID:       "build-001",
 		TenantID:      "acme",
@@ -28,10 +37,32 @@ func testSpec() services.WorkflowSpec {
 		Environment:   "production",
 		CommitSHA:     "abc123",
 		CorrelationID: "corr-001",
-		Apps: []services.AppSpec{
-			{Name: "api", Type: "server", Port: 3000, Framework: "express"},
-		},
+		Apps:          apps,
+		Plan:          planFromApps(apps),
 	}
+}
+
+// planFromApps invokes the production services.CreateBuildPlan pipeline on a
+// list of AppSpecs so test inputs and production semantics stay aligned.
+// Defaults match testSpec(): tenant=acme, project=my-app, sha=abc123,
+// registry=k3d-loopzero-registry:5000 (testInfraParams). Use planFromAppsCustom
+// for non-default tenant/project/sha/registry combinations.
+func planFromApps(apps []services.AppSpec) *services.BuildPlan {
+	return planFromAppsCustom(apps, "acme", "my-app", "abc123", "k3d-loopzero-registry:5000")
+}
+
+func planFromAppsCustom(apps []services.AppSpec, tenantID, projectID, commitSHA, registryURL string) *services.BuildPlan {
+	units := make([]services.AppUnit, 0, len(apps))
+	for _, a := range apps {
+		unit, err := services.NormalizeApp(a.Name, a)
+		if err != nil {
+			// Tests pass valid specs; normalization should never fail here.
+			panic("planFromApps: NormalizeApp failed for " + a.Name + ": " + err.Error())
+		}
+		units = append(units, unit)
+	}
+	plan := services.CreateBuildPlan(units, tenantID, projectID, commitSHA, registryURL)
+	return &plan
 }
 
 // ---------------------------------------------------------------------------
@@ -246,6 +277,7 @@ func TestWorkflowBuilder_Build_CustomStrategy_NoSaveCache(t *testing.T) {
 	builder := NewWorkflowBuilder(testInfraParams())
 	spec := testSpec()
 	spec.Apps = []services.AppSpec{{Name: "api", Type: "server", Port: 3000, Framework: "custom"}}
+	spec.Plan = planFromApps(spec.Apps)
 	wf, err := builder.Build(spec)
 	if err != nil {
 		t.Fatalf("Build() error: %v", err)
@@ -522,6 +554,7 @@ func TestWorkflowBuilder_Build_GoStrategy_LanguageLabel(t *testing.T) {
 	builder := NewWorkflowBuilder(testInfraParams())
 	spec := testSpec()
 	spec.Apps = []services.AppSpec{{Name: "api", Type: "server", Port: 8080, Framework: "go"}}
+	spec.Plan = planFromApps(spec.Apps)
 	wf, err := builder.Build(spec)
 	if err != nil {
 		t.Fatalf("Build() error: %v", err)
@@ -534,6 +567,7 @@ func TestWorkflowBuilder_Build_PythonStrategy_LanguageLabel(t *testing.T) {
 	builder := NewWorkflowBuilder(testInfraParams())
 	spec := testSpec()
 	spec.Apps = []services.AppSpec{{Name: "api", Type: "server", Port: 8000, Framework: "fastapi"}}
+	spec.Plan = planFromApps(spec.Apps)
 	wf, err := builder.Build(spec)
 	if err != nil {
 		t.Fatalf("Build() error: %v", err)
@@ -548,10 +582,16 @@ func TestWorkflowBuilder_Build_MixedLanguage_PerLanguageSteps(t *testing.T) {
 	// Both get independent pipelines in the same workflow.
 	builder := NewWorkflowBuilder(testInfraParams())
 	spec := testSpec()
+	// T1.3 (CR-2): legacy spec.Apps fallback resolved Framework="" via
+	// ResolveStrategyForApp's defaulting to "node". The Plan-driven path
+	// goes through NormalizeApp which canonicalizes "" → "custom". To assert
+	// the per-language-step contract for node, the fixture must declare
+	// Framework explicitly.
 	spec.Apps = []services.AppSpec{
-		{Name: "api", Type: "server", Port: 3000, Framework: ""},      // → Node (default)
-		{Name: "worker", Type: "worker", Port: 0, Framework: "go"},    // → Go
+		{Name: "api", Type: "server", Port: 3000, Framework: "node"},
+		{Name: "worker", Type: "worker", Port: 0, Framework: "go"},
 	}
+	spec.Plan = planFromApps(spec.Apps)
 	wf, err := builder.Build(spec)
 	if err != nil {
 		t.Fatalf("Build() error: %v", err)
@@ -592,9 +632,11 @@ func TestWorkflowBuilder_Build_MultiApp_EndAtBuildImage(t *testing.T) {
 	spec := testSpec()
 	spec.Apps = []services.AppSpec{
 		{Name: "api", Type: "server", Port: 3000, Path: "services/api", Framework: "express"},
-		{Name: "web", Type: "frontend", Port: 0, Path: "apps/web", Framework: "nextjs"},
+		// NormalizeApp requires Rendering: "static" for frontends (CDN delivery).
+		{Name: "web", Type: "frontend", Port: 0, Path: "apps/web", Framework: "nextjs", Rendering: "static"},
 		{Name: "worker", Type: "worker", Port: 0, Path: "services/worker", Framework: "node"},
 	}
+	spec.Plan = planFromApps(spec.Apps)
 	wf, err := builder.Build(spec)
 	if err != nil {
 		t.Fatalf("Build() error: %v", err)
@@ -991,6 +1033,7 @@ func TestWorkflowBuilder_BuildKit_MultiApp_IndependentContainers(t *testing.T) {
 		{Name: "api", Type: "server", Port: 3000, Framework: "express"},
 		{Name: "worker", Type: "worker", Port: 0, Framework: "node"},
 	}
+	spec.Plan = planFromApps(spec.Apps)
 	wf, err := builder.Build(spec)
 	if err != nil {
 		t.Fatalf("Build() error: %v", err)
@@ -1018,10 +1061,15 @@ func TestWorkflowBuilder_BuildKit_MultiApp_IndependentContainers(t *testing.T) {
 func TestWorkflowBuilder_BuildKit_MetadataFilePath(t *testing.T) {
 	builder := NewWorkflowBuilder(testInfraParams())
 	spec := testSpec()
+	// T1.3 (CR-2): The Plan-driven path enforces NormalizeApp rules; static
+	// frontends route to "deliver-artifact-{app}" (S3 upload), not
+	// "build-image-{app}". The assertion here is about per-app metadata file
+	// paths in build-image containers, so both apps must be container-delivered.
 	spec.Apps = []services.AppSpec{
 		{Name: "api", Type: "server", Port: 3000, Framework: "express"},
-		{Name: "web", Type: "frontend", Port: 0, Framework: "nextjs"},
+		{Name: "web", Type: "server", Port: 4000, Framework: "express"},
 	}
+	spec.Plan = planFromApps(spec.Apps)
 	wf, err := builder.Build(spec)
 	if err != nil {
 		t.Fatalf("Build() error: %v", err)
@@ -1259,7 +1307,11 @@ func TestWorkflowBuilder_BuildPlan_MultiLanguageMonorepo(t *testing.T) {
 			},
 		},
 	}
-	// Also set spec.Apps for backward compat fields (not used by plan path)
+	// Also set spec.Apps for the language-grouping pass which still mirrors
+	// spec.Plan via planFromApps in modern tests. This test sets spec.Plan
+	// explicitly above (with the reg.io registry and per-app paths the
+	// assertions depend on), so we do NOT overwrite it via planFromApps —
+	// language grouping reads spec.Plan.Apps after the T1.3 refactor.
 	spec.Apps = []services.AppSpec{
 		{Name: "api", Type: "server", Port: 3000, Framework: "express"},
 		{Name: "gateway", Type: "server", Port: 8080, Framework: "go"},
@@ -1476,5 +1528,51 @@ func TestDockerfileName(t *testing.T) {
 		if got != tt.want {
 			t.Errorf("dockerfileName(%q) = %q, want %q", tt.input, got, tt.want)
 		}
+	}
+}
+
+// T1.3 (CR-2 of MEET-2026-05-28-001) — Build() must reject WorkflowSpec when
+// spec.Plan is nil. The production caller (build_orchestrator_submit.go) ALWAYS
+// constructs a BuildPlan via CreateBuildPlan before submitting; a nil Plan
+// indicates a programming error or an attempt to use the deleted legacy
+// spec.Apps fallback. Fail fast at the contract boundary.
+func TestWorkflowBuilder_Build_RejectsNilPlan(t *testing.T) {
+	builder := NewWorkflowBuilder(testInfraParams())
+	spec := services.WorkflowSpec{
+		BuildID:     "build-001",
+		TenantID:    "acme",
+		ProjectID:   "my-app",
+		Environment: "production",
+		CommitSHA:   "abc123",
+		Apps: []services.AppSpec{
+			{Name: "api", Type: "server", Port: 3000, Framework: "express"},
+		},
+		Plan: nil, // legacy path — must be rejected
+	}
+
+	_, err := builder.Build(spec)
+	if err == nil {
+		t.Fatal("expected Build() to error when spec.Plan is nil (legacy path deleted), got nil")
+	}
+	if !strings.Contains(err.Error(), "Plan") {
+		t.Errorf("expected error mentioning Plan, got: %v", err)
+	}
+}
+
+// EC-coverage: Plan present but Apps empty is also a contract violation.
+func TestWorkflowBuilder_Build_RejectsEmptyPlanApps(t *testing.T) {
+	builder := NewWorkflowBuilder(testInfraParams())
+	spec := services.WorkflowSpec{
+		BuildID:     "build-001",
+		TenantID:    "acme",
+		ProjectID:   "my-app",
+		Environment: "production",
+		CommitSHA:   "abc123",
+		Plan:        &services.BuildPlan{Apps: nil}, // Plan non-nil but no apps
+	}
+
+	_, err := builder.Build(spec)
+	if err == nil {
+		t.Fatal("expected Build() to error when spec.Plan.Apps is empty, got nil")
 	}
 }
