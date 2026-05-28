@@ -1,12 +1,13 @@
 {
-  "total": 83,
+  "total": 85,
   "by_domain": {
     "bootstrap": 33,
     "drill": 16,
-    "other": 7,
-    "test": 27
+    "other": 8,
+    "test": 28
   },
   "_changelog": [
+    {"date": "2026-05-28", "from_total": 83, "to_total": 85, "from_test": 27, "to_test": 28, "from_other": 7, "to_other": 8, "reason": "T4.5 of plan 2026-05-28-meet-001-engineering-closure v1.1: adds 2 scripts — m07-cutover-rollback.sh (categorized 'other' — production rollback orchestration, irreducible live-cluster + Pulumi + psql, KEEP-OPERATOR) + check-m07-rollback-dry-run_test.sh (categorized 'test' filename heuristic, KEEP-CI-WIRED 17/17 PASS hermetic mocks)."},
     {"date": "2026-05-28", "from_total": 82, "to_total": 83, "from_test": 26, "to_test": 27, "reason": "T3.1 of plan 2026-05-28-meet-001-engineering-closure v1.1: adds infra/tests/helm/sigstore-extras-podselector_test.sh (KEEP-CI-WIRED hermetic NetworkPolicy podSelector contract test: `helm template sigstore-extras` + awk assertions on namespaceSelector+podSelector AND-semantics in Fulcio/Rekor NPs, CTLog exempt for operator-internal traffic. Closes CR-7). Categorized 'test' bucket. Cannot migrate to Go gate without spawning helm CLI."},
     {"date": "2026-05-28", "from_total": 81, "to_total": 82, "from_test": 25, "to_test": 26, "reason": "T2.3 Test 4 of plan 2026-05-28-meet-001-engineering-closure v1.1: adds infra/tests/helm/sigstore-extras-policy_test.sh (KEEP-CI-WIRED hermetic NetworkPolicy contract test: `helm template sigstore-extras` + grep assertions on rendered target ports + podSelector labels + Ingress policyType count, locks CR-7 port contract independent of T3.1 selector refactor). Categorized 'test' bucket. Cannot migrate to Go gate without spawning helm CLI."},
     {"date": "2026-05-28", "from_total": 79, "to_total": 81, "from_test": 24, "to_test": 25, "from_other": 6, "to_other": 7, "reason": "T0.3 plan 2026-05-28-meet-001-engineering-closure v1.1: adds 2 scripts — m07-cutover-preflight.sh (categorized 'other' — production cutover orchestration, irreducible live-cluster, KEEP-OPERATOR) + check-m07-cutover-preflight_test.sh (categorized 'test' filename heuristic, KEEP-CI-WIRED hermetic 5/5 PASS)."},
