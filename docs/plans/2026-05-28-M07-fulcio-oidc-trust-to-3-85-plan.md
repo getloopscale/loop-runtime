@@ -9,6 +9,18 @@
 > **v1.3 amendment (2026-05-28, Ralph iter 4 pre-diagnose LIVE):** Read-only probes manuais (spawn pods `--rm` ephemeral, zero state mutation) **pré-classificaram o cenário ANTES do operator** rodar `task fulcio:diagnose`. Achados: (a) **Cenário C DESCARTADO** — SA token `iss=https://kubernetes.default.svc.cluster.local` JÁ MATCH OIDCIssuers config; (b) **Cenário A confirmed via variante 401** — discovery endpoint `https://kubernetes.default.svc.cluster.local/.well-known/openid-configuration` retorna **HTTP 401 Unauthorized** (NÃO 403 anonymous, NÃO 200). Root cause: K3s default binds `system:service-account-issuer-discovery` ClusterRole apenas a `system:authenticated` group, NOT `system:unauthenticated`. Fulcio (anonymous OIDC discovery client) recebe 401. **Diagnose script v1.3:** verdict logic agora trata 401 também como Cenário A (commit pending). **Pre-criado fix yaml:** `cenario-a-anonymous-discovery.yaml` (ClusterRoleBinding). **Operator pode pular Phase 1 + ir direto para Phase 2:** apply o YAML + re-trigger build LIVE. Test count Phase 0: **10/10 PASS** (era 9/9 v1.1; +1 test_cenario_a_401_unauthorized).
 >
 > **v1.4 amendment (2026-05-28, Ralph iter 5 LIVE Cenário A.1 INSUFFICIENT):** Apliquei ClusterRoleBinding `service-account-issuer-discovery-anon` LIVE — discovery endpoint **STILL returns 401**. Investigação adicional revelou: `/healthz` e `/livez` ALSO retornam 401 anonymous → K3s tem `--anonymous-auth=false` (k3s 1.30+ default). RBAC binding inútil porque requisição falha em AUTENTICAÇÃO antes de chegar em RBAC. **Cenário A split em A.1 (K3s anonymous=true + RBAC missing → CRB resolve) vs A.2 (K3s anonymous=false → CLUSTER recreate required, OR chart customization)**. CRB rolled back (harmless, sem efeito). **NEW operator HARD STOP path:** Cenário A.2 requer `k3d cluster delete loopzero-build && k3d cluster create loopzero-build --k3s-arg "--kube-apiserver-arg=anonymous-auth=true@server:*"` (~30min + ALL Sigstore state perdido) OR custom Fulcio image/chart with extraEnv para bearer SA token. Plan derivado v1.3 status atualizado: M07 3.85 target permanece atingível mas via **cluster recreate** (Cenário A.2 path), NÃO simple values override. Operator decision required: aceitar cluster recreate OU defer 3.85 + manter 3.80.
+>
+> **v1.5 amendment (2026-05-28, Ralph iter 6 — deeper Fulcio investigation + recommendation):** Verificações adicionais Claude-side fecharam hypothesis remanescentes:
+> - Fulcio chart 2.9.1 expõe `server.serviceAccount.mountToken: true` (default) → SA token IS mounted at `/var/run/secrets/kubernetes.io/serviceaccount/token` no Fulcio pod
+> - Fulcio config `Type: kubernetes` controla apenas identity SAN parsing — **NÃO** afeta como Fulcio fetch JWKS (continua go-oidc anonymous HTTP standard)
+> - **Conclusão definitiva:** nenhum Fulcio chart/config option resolve K3s `--anonymous-auth=false`. Chart 2.10+ pode trazer custom HTTP client config, mas não há roadmap público confirmando.
+>
+> **Recommendation final v1.5 (operator decision, NÃO Claude action):**
+> 1. **DEFER 3.85 + manter 3.80** (RECOMMENDED KISS): registra plan como BLOCKED no path local k3d; revisita em prod DOKS plano (DOKS tem anonymous-auth=true por default — fix path A.1 funcionaria); evita cluster recreate destrutivo + Sigstore state loss
+> 2. Cluster recreate (~30min + state loss) — only se 3.85 LOCAL é hard requirement antes de prod canary
+> 3. Custom Fulcio image fork — scope creep significativo (manter chart updates manualmente)
+>
+> Ralph iter 6 NÃO emit promise (gates cleanroom + dogfood + chaos-test não satisfeitos). Plan permanece OPEN aguardando operator decision entre os 3 paths. **Sem mudança LIVE nesta iter** — Phase 0 ainda 10/10 PASS, quality:gates EXIT=0.
 
 ## Context
 
