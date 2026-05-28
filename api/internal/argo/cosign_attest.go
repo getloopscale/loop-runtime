@@ -160,16 +160,22 @@ if [ $ATTEST_EXIT -ne 0 ]; then
   exit $ATTEST_EXIT
 fi
 
-# Extract Rekor entry URL from cosign output. Format varies by cosign
-# version; v2.2+ logs "tlog entry created with index: N" + provides URL.
-REKOR_URL=$(echo "$ATTEST_OUTPUT" | sed -n 's/.*\(https*:\/\/rekor[^ ]*\).*/\1/p' | head -1)
-if [ -z "$REKOR_URL" ]; then
-  # Fallback: best-effort — empty URL acceptable if cosign didn't log it.
-  REKOR_URL="unknown"
+# Extract Rekor entry URL from cosign output. cosign v2.4.3 logs
+# "tlog entry created with index: N" (no full URL). We reconstruct
+# the canonical Rekor entry URL from the configured $REKOR_URL + index,
+# falling back to scraping a literal URL if cosign ever emits one.
+# Result is empty when no index/URL found (downstream gates on empty —
+# NEVER emit "unknown" sentinel per M07 Ralph iter 5 enrichment rule).
+REKOR_ENTRY_URL=$(echo "$ATTEST_OUTPUT" | sed -n 's/.*\(https*:\/\/rekor[^ ]*\).*/\1/p' | head -1)
+if [ -z "$REKOR_ENTRY_URL" ]; then
+  REKOR_INDEX=$(echo "$ATTEST_OUTPUT" | sed -n 's/.*tlog entry created with index:[[:space:]]*\([0-9][0-9]*\).*/\1/p' | head -1)
+  if [ -n "$REKOR_INDEX" ] && [ -n "${REKOR_URL:-}" ]; then
+    REKOR_ENTRY_URL="${REKOR_URL%%/}/api/v1/log/entries?logIndex=${REKOR_INDEX}"
+  fi
 fi
-printf '%%s' "${REKOR_URL}" > %s
+printf '%%s' "${REKOR_ENTRY_URL}" > %s
 
-echo "Attestation complete; Rekor entry: ${REKOR_URL}"
+echo "Attestation complete; Rekor entry: ${REKOR_ENTRY_URL:-<none>}"
 `, p.AppName, p.AppName, metadataFile, p.ImageTag, p.SBOMLocalPath,
 		cyclonedxPredicateType, p.Keyless, p.SBOMLocalPath, p.SBOMLocalPath,
 		attestSetup, attestCmd, outRekorURLPath)

@@ -262,5 +262,19 @@ func enrichAppReleasesWithAttestation(apps []AppRelease, status *WorkflowStatus)
 				}
 			}
 		}
+
+		// M07 Ralph iter 5 (plan 2026-05-28-M07-fulcio-cacert-keyless-LIVE v1.6
+		// DoD item 9): attest-image step writes Rekor entry URL/index to
+		// `rekor-url` output parameter (see cosign_attest.go outRekorURLPath).
+		// Persist into BuildAppOutputs so container_delivery.go can write to
+		// releases.image_attestation_rekor_url (migration 000019). Empty or
+		// literal "unknown" (cosign output parser fallback) stays NULL —
+		// downstream code already gates on empty before persisting.
+		attestStep := "attest-image-" + app.Name
+		if attestOutputs, ok := status.Outputs[attestStep]; ok {
+			if url := attestOutputs["rekor-url"]; url != "" && url != "unknown" {
+				apps[i].ImageAttestationRekorURL = url
+			}
+		}
 	}
 }
