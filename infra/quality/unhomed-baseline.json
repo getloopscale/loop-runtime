@@ -1,12 +1,13 @@
 {
-  "total": 75,
+  "total": 77,
   "by_domain": {
     "bootstrap": 32,
     "drill": 16,
     "other": 6,
-    "test": 21
+    "test": 23
   },
   "_changelog": [
-    {"date": "2026-05-27", "from_total": 74, "to_total": 75, "from_test": 20, "to_test": 21, "reason": "Cleanroom session: render-loopzero-ci-workflows_test.sh added as T0.2 Cenário B POC hermetic render test. Wires `helm template` into yq queries, not pure-logic; legitimately under infra/tests/ domain (test bucket). Allowlisted in shell-scripts-allowlist.md as KEEP-CI-WIRED."}
+    {"date": "2026-05-27", "from_total": 74, "to_total": 75, "from_test": 20, "to_test": 21, "reason": "Cleanroom session: render-loopzero-ci-workflows_test.sh added as T0.2 Cenário B POC hermetic render test. Wires `helm template` into yq queries, not pure-logic; legitimately under infra/tests/ domain (test bucket). Allowlisted in shell-scripts-allowlist.md as KEEP-CI-WIRED."},
+    {"date": "2026-05-28", "from_total": 75, "to_total": 77, "from_test": 21, "to_test": 23, "reason": "M07 Phase 0 (plan 2026-05-28-M07-fulcio-oidc-trust-to-3-85 v1.1): adds 2 hermetic test scripts under infra/tests/ — check-fulcio-oidc-diagnose_test.sh (test runner 9/9 PASS, wired in task quality:gates) + fixtures/fulcio-diagnose/mock-kubectl.sh (mock kubectl helper, sourced only by the test runner). Both are CI-wired hermetic tests (zero network, fixture-driven) for the fulcio-oidc-diagnose live-cluster diagnostic. Cannot be migrated to pure-logic Go gate because they test a bash script + bash mock (Go test would need full shell process spawning). Allowlisted as KEEP-CI-WIRED in shell-scripts-allowlist.md."}
   ]
 }

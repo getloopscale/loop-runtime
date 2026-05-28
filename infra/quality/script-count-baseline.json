@@ -1,6 +1,7 @@
 {
-  "canonical_sh": 127,
+  "canonical_sh": 131,
   "_changelog": [
-    {"date": "2026-05-27", "from": 125, "to": 127, "reason": "T1.1 plan 2026-05-27-tenant-build-pipeline-gaps-closure: rekor-archive-old-entries.sh (operator daily cron Trillian archive) + cleanroom session: render-loopzero-ci-workflows_test.sh (T0.2 hermetic render test, CI-wired). Both allowlisted per D4 criteria (Necessary + Simple + Operator-time/CI-wired + Allowlisted)."}
+    {"date": "2026-05-27", "from": 125, "to": 127, "reason": "T1.1 plan 2026-05-27-tenant-build-pipeline-gaps-closure: rekor-archive-old-entries.sh (operator daily cron Trillian archive) + cleanroom session: render-loopzero-ci-workflows_test.sh (T0.2 hermetic render test, CI-wired). Both allowlisted per D4 criteria (Necessary + Simple + Operator-time/CI-wired + Allowlisted)."},
+    {"date": "2026-05-28", "from": 127, "to": 131, "reason": "M07 Phase 0 (plan 2026-05-28-M07-fulcio-oidc-trust-to-3-85 v1.1) — adds 4 scripts: (1) infra/scripts/local/fulcio-oidc-diagnose.sh (live-cluster diagnostic, KEEP-OPERATOR), (2) infra/scripts/local/lib/fulcio-probes.sh (lib sourced by diagnose, KEEP-OPERATOR), (3) infra/tests/check-fulcio-oidc-diagnose_test.sh (hermetic test runner 9/9 PASS, KEEP-CI-WIRED), (4) infra/tests/fixtures/fulcio-diagnose/mock-kubectl.sh (mock helper, KEEP-CI-WIRED). All allowlisted per D4 criteria; irreducible to pure-logic Go gates (live-cluster diagnostic + bash mock testing bash script). Pre-requisite for M07 3.85 cap (Sigstore Fulcio K8s OIDC trust automation)."}
   ]
 }
