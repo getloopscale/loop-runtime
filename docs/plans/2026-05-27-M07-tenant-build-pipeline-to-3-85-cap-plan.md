@@ -1,5 +1,7 @@
 # Plan: M07 Tenant Build Pipeline — 3.4 → ~3.85 (local-validation cap)
 
+> **Version 1.2** — Eleva M07 score registrado de 3.4 (baseline 2026-05-26) para 3.7 (M1) → 3.80 (path 1 sign-image threading fix). **M2 (3.85 local) DEFERRED to prod DOKS plan** após Ralph iter 8 (2026-05-28) confirmar Fulcio chart 2.9.1 + K3s structural blocker. Engineering Phase 0+1 shipped (script diagnose 10/10 tests + 4 layers LIVE fixes em K3s/RBAC) mas Fulcio HTTP 400 token verification persistente apesar de: anonymous-auth=true, ClusterRoleBinding system:unauthenticated, service-account-jwks-uri DNS, kube-root-ca mount em /etc/ssl/certs/. Detalhes completos: `docs/plans/2026-05-28-M07-fulcio-oidc-trust-to-3-85-plan.md` v1.6. 3.85 target será atingido em prod DOKS (anonymous-auth=true default + Fulcio chart upgrade path).
+>
 > **Version 1.1** — Eleva M07 score registrado de 3.4 (baseline 2026-05-26) para 3.7 (M1 — sem activation) e depois ~3.85 (M2 — Sigstore stack LIVE em k3d local-only). Teto efetivo deste plano é ~3.85 por **D1 — DNS Local-only**: prod activation (Fulcio/Rekor com TLS público) fica para plano separado. Engineering shipped esta sessão (commits `f1ca9bdf`, `01a561f2`, `686e78e1`, `d7e79882`, `e32b6b8c`) habilita M1; sponsor confirmou ceremony para M2.
 
 ## Changelog
