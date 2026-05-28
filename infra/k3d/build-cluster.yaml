@@ -51,6 +51,20 @@ options:
       - arg: "--disable=traefik"
         nodeFilters:
           - server:*
+      # M07 Ralph iter 5 (plan 2026-05-28-M07-fulcio-cacert-keyless-LIVE
+      # v1.6 Final Phase): Sigstore Fulcio fetches K8s OIDC discovery from
+      # `/.well-known/openid-configuration` to validate SA OIDC tokens
+      # presented by build pods (cosign sign --identity-token). Fulcio
+      # connects WITHOUT bearer token — relies on K3s anonymous-auth
+      # + ClusterRoleBinding system:unauthenticated →
+      # system:service-account-issuer-discovery. Some K3s configurations
+      # gate anonymous-auth off (default in upstream K8s 1.32+); the
+      # explicit flag below guarantees behavior matches DOKS production
+      # (CTO Golden Rule 0: local fidedigno ao prod). Without this,
+      # Fulcio logs "401 Unauthorized" + "unsupported issuer" → sign fails.
+      - arg: "--kube-apiserver-arg=anonymous-auth=true"
+        nodeFilters:
+          - server:*
   kubeconfig:
     updateDefaultKubeconfig: true
     switchCurrentContext: false
