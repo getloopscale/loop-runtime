@@ -10,6 +10,21 @@
 >
 > **v1.4 amendment (2026-05-28, Ralph iter 5 LIVE Cenário A.1 INSUFFICIENT):** Apliquei ClusterRoleBinding `service-account-issuer-discovery-anon` LIVE — discovery endpoint **STILL returns 401**. Investigação adicional revelou: `/healthz` e `/livez` ALSO retornam 401 anonymous → K3s tem `--anonymous-auth=false` (k3s 1.30+ default). RBAC binding inútil porque requisição falha em AUTENTICAÇÃO antes de chegar em RBAC. **Cenário A split em A.1 (K3s anonymous=true + RBAC missing → CRB resolve) vs A.2 (K3s anonymous=false → CLUSTER recreate required, OR chart customization)**. CRB rolled back (harmless, sem efeito). **NEW operator HARD STOP path:** Cenário A.2 requer `k3d cluster delete loopzero-build && k3d cluster create loopzero-build --k3s-arg "--kube-apiserver-arg=anonymous-auth=true@server:*"` (~30min + ALL Sigstore state perdido) OR custom Fulcio image/chart with extraEnv para bearer SA token. Plan derivado v1.3 status atualizado: M07 3.85 target permanece atingível mas via **cluster recreate** (Cenário A.2 path), NÃO simple values override. Operator decision required: aceitar cluster recreate OU defer 3.85 + manter 3.80.
 >
+> **v1.6 amendment (2026-05-28, Ralph iter 7 LIVE multi-layer fix attempted, residual blocker):** Executei LIVE Cenário A.2 fix sem cluster recreate (container docker restart preserva PVCs + Helm releases + TUF state — descoberta significativa vs plan v1.4 "blast radius ~30min + Sigstore state loss"). Layers traversed:
+> 1. **K3s `anonymous-auth=true`** via `/etc/rancher/k3s/config.yaml` + `docker restart k3d-loopzero-build-server-0` (~6s K3s ready) → discovery 401 → 403 (auth aceito, RBAC denial)
+> 2. **ClusterRoleBinding** `service-account-issuer-discovery-anon` aplicada → discovery 403 → 200 OK + anonymous JWKS 200 OK
+> 3. **K3s `service-account-jwks-uri=https://kubernetes.default.svc.cluster.local/openid/v1/jwks`** → discovery body agora retorna DNS-based jwks_uri (era raw IP `172.18.0.7:6443` que causaria SAN mismatch TLS)
+> 4. **Fulcio env `SSL_CERT_FILE=/var/run/secrets/kubernetes.io/serviceaccount/ca.crt`** patch para Fulcio trust K3s CA — **NÃO resolveu 400** (rolled back)
+>
+> **Residual blocker (Ralph iter 7 unresolved):** sign-image LIVE builds v12-v16 ALL ainda recebem Fulcio HTTP 400 `"error processing identity token"`. Fulcio logs em DEBUG silent (não loga REST 400 — apenas gRPC health checks). Direct POST `/api/v2/signingCert` com SA token aud=sigstore + iss correto também 400. Suspeita: Fulcio v1.8.6 go-oidc client tem pool de cert independente que ignora SSL_CERT_FILE, OR validação adicional silenciosa (talvez nbf/iat lag, kid mismatch, signature alg). **NEW values file:** `cenario-a-k3s-config.yaml` (k3s config persistente) documenta state que requer reapply após `docker rm`.
+>
+> **Recommendation final v1.6 (operator/sponsor decision):**
+> 1. **DEFER 3.85 + manter 3.80** (RECOMMENDED) — assumir LIVE k3d Sigstore residual issue como local-only; prod DOKS (anonymous-auth=true default + Fulcio chart upgrade roadmap) é onde 3.85 será atingido
+> 2. **Fork Fulcio chart 2.9.1** + adicionar custom HTTP client config OU build custom Fulcio image v1.8.6 com debug logging — scope creep alto
+> 3. **Upgrade Fulcio chart para 2.10+** se disponível com extraEnv/extraVolumes hooks (não verified upstream)
+>
+> Ralph iter 7 NÃO emit promise — 5 LIVE builds keyless attempted (v12-v16), TODOS failed sign-image em Fulcio 400. Sem LIVE GREEN end-to-end, 3.85 não pode ser registered.
+>
 > **v1.5 amendment (2026-05-28, Ralph iter 6 — deeper Fulcio investigation + recommendation):** Verificações adicionais Claude-side fecharam hypothesis remanescentes:
 > - Fulcio chart 2.9.1 expõe `server.serviceAccount.mountToken: true` (default) → SA token IS mounted at `/var/run/secrets/kubernetes.io/serviceaccount/token` no Fulcio pod
 > - Fulcio config `Type: kubernetes` controla apenas identity SAN parsing — **NÃO** afeta como Fulcio fetch JWKS (continua go-oidc anonymous HTTP standard)
