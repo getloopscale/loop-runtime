@@ -1,0 +1,43 @@
+# Cenário A — Anonymous discovery 401/403 fix (M07 plan 2026-05-28 T2.1)
+#
+# Ralph iter 4 LIVE-discovered (2026-05-28): K3s default binds
+# `system:service-account-issuer-discovery` ClusterRole apenas a
+# `system:authenticated` group, NOT `system:unauthenticated`. Fulcio
+# (anonymous OIDC discovery client) recebe HTTP 401 Unauthorized.
+#
+# Fix: ClusterRoleBinding binding the role to `system:unauthenticated`.
+# This is a Kubernetes RBAC resource (NOT a Helm chart values override).
+#
+# Apply via:
+#   KC=$(k3d kubeconfig write loopzero-build)
+#   kubectl --kubeconfig="$KC" apply -f \
+#     infra/pulumi-platform/values-fulcio-oidc-overrides/cenario-a-anonymous-discovery.yaml
+#
+# Then verify:
+#   kubectl --kubeconfig="$KC" run net-probe-verify --namespace=sigstore-system \
+#     --rm -i --restart=Never --image=alpine/curl --quiet \
+#     -- sh -c "curl -sk -w '\nSTATUS=%{http_code}\n' --max-time 5 \
+#       https://kubernetes.default.svc.cluster.local/.well-known/openid-configuration"
+#
+# Expected: STATUS=200 + JSON with issuer + jwks_uri.
+#
+# Security note: this exposes /openid/v1/jwks + /.well-known/openid-configuration
+# anonymously. That's the OIDC standard — JWKS endpoints are public by design
+# (public keys + discovery metadata, NO sensitive data).
+
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRoleBinding
+metadata:
+  name: service-account-issuer-discovery-anon
+  labels:
+    app.kubernetes.io/managed-by: loopzero-m07-fulcio-oidc-fix
+    loopzero.io/plan: 2026-05-28-M07-fulcio-oidc-trust-to-3-85
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: ClusterRole
+  name: system:service-account-issuer-discovery
+subjects:
+  - apiGroup: rbac.authorization.k8s.io
+    kind: Group
+    name: system:unauthenticated

@@ -132,6 +132,27 @@ test_cenario_a_anon_403() {
   ok "$name"
 }
 
+# ─── Test 4b: Cenário A 401 variant (Ralph iter 4 LIVE discovery) ─
+test_cenario_a_401_unauthorized() {
+  local name="test_cenario_a_401_unauthorized"
+  local out exit_code out_dir
+  out=$(run_diagnose "$FIXTURES_DIR/cenario-a-401-unauthorized.json")
+  exit_code=$(echo "$out" | sed -n '1p')
+  out_dir=$(echo "$out" | sed -n '3p')
+
+  if [[ "$exit_code" != "0" ]]; then
+    fail "$name" "expected exit=0, got $exit_code"
+    return
+  fi
+  local verdict
+  verdict=$(jq -r '.cenario' < "$out_dir/verdict.json" 2>/dev/null || echo "MISSING")
+  if [[ "$verdict" != "A" ]]; then
+    fail "$name" "expected verdict=A (401 should classify same as 403), got $verdict"
+    return
+  fi
+  ok "$name"
+}
+
 # ─── Test 5: Cenário B (NetworkPolicy timeout) ────────────────────
 test_cenario_b_netpol() {
   local name="test_cenario_b_netpol"
@@ -243,6 +264,7 @@ test_fixtures_valid_json
 test_mock_kubectl_coverage
 test_cenario_c_iss_mismatch
 test_cenario_a_anon_403
+test_cenario_a_401_unauthorized
 test_cenario_b_netpol
 test_cenario_d_tls_ca
 test_green_happy_path

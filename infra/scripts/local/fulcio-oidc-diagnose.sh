@@ -119,7 +119,13 @@ if [[ "$match_oidc" == "true" && "$discovery" == "200" && "$jwks" == "200" && "$
 elif [[ "$match_oidc" == "false" ]]; then
   VERDICT="C"
   EXIT_CODE=2
-elif [[ "$discovery" == "403" ]]; then
+elif [[ "$discovery" == "403" || "$discovery" == "401" ]]; then
+  # Cenário A: anonymous discovery blocked.
+  #   - 403 Forbidden = K3s explicit anonymous-auth=false
+  #   - 401 Unauthorized = K3s default behavior (system:service-account-issuer-discovery
+  #     ClusterRole bound only to system:authenticated, NOT system:unauthenticated).
+  #     Fix path identical: add ClusterRoleBinding for system:unauthenticated.
+  #     Descoberta LIVE 2026-05-28 Ralph iter 4.
   VERDICT="A"
   EXIT_CODE=0
 elif [[ "$discovery" != "200" || "$jwks" != "200" ]]; then
