@@ -10,6 +10,7 @@ import { SecretSetCommand, SecretListCommand, SecretDeleteCommand } from '../com
 import { BillingCommand } from '../commands/billing';
 import { ConnectCommand, DisconnectCommand, type ConnectionInfo } from '../commands/connect';
 import { runAdminEvict, AdminEvictInput, AdminEvictResponse } from '../commands/admin-evict';
+import { runAdminReleaseInspect, AdminReleaseInspectResponse } from '../commands/admin-release';
 import { API_REQUEST_TIMEOUT_MS } from '../config/constants';
 import { getGitRoot } from '../adapters/git';
 import { findLoopZeroYaml } from '../adapters/loopzero-yaml';
@@ -611,5 +612,51 @@ export function registerInfraCommands(deps: CommandDeps): void {
         }
         process.exitCode = 5;
       }
+    });
+
+  // T4.4 of plan 2026-05-28-meet-001-engineering-closure-plan.md.
+  // `loopzero admin release inspect <id>` — diagnostic CLI for the
+  // signing + attestation chain of a release. Wraps GET
+  // /api/v1/admin/releases/{id}/inspect.
+  const adminReleaseCmd = adminCmd
+    .command('release')
+    .description('Inspect release state (operator-only)');
+  adminReleaseCmd
+    .command('inspect <releaseId>')
+    .description('Show signing + attestation chain + audit trail for a release')
+    .action(async (releaseId: string) => {
+      const globalOpts = getGlobalOpts();
+      const serviceAuth = process.env.LOOPZERO_SERVICE_AUTH ?? '';
+
+      const getRelease = async (id: string): Promise<{
+        status: number;
+        body: AdminReleaseInspectResponse | { error: string; code: string };
+      }> => {
+        const res = await fetch(`${apiUrl}/api/v1/admin/releases/${encodeURIComponent(id)}/inspect`, {
+          method: 'GET',
+          headers: { 'X-Service-Auth': serviceAuth },
+        });
+        let body: unknown;
+        try {
+          body = await res.json();
+        } catch {
+          body = { error: 'response was not JSON', code: 'BAD_RESPONSE' };
+        }
+        return {
+          status: res.status,
+          body: body as AdminReleaseInspectResponse | { error: string; code: string },
+        };
+      };
+
+      const exitCode = await runAdminReleaseInspect(
+        { releaseId, json: globalOpts.json },
+        {
+          getServiceAuth: () => (serviceAuth ? serviceAuth : null),
+          getRelease,
+          writeTo,
+          writeError,
+        },
+      );
+      process.exitCode = exitCode;
     });
 }
