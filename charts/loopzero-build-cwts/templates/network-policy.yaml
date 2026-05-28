@@ -78,3 +78,31 @@ spec:
           port: 6443
         - protocol: TCP
           port: 443
+    # Sigstore — Fulcio, Rekor, CTLog (M07 keyless signing, Ralph iter 4 2026-05-28)
+    # IMPORTANT: target ports (post-DNAT), NOT service ports. kube-router evaluates
+    # NetworkPolicy egress AFTER kube-proxy DNAT translates ClusterIP:80 -> PodIP:5555.
+    # An egress allowing only port 80 (general HTTP rule above) does NOT cover Fulcio
+    # because the actual destination port seen by iptables filter is 5555 (Fulcio
+    # HTTP backend), 5554 (gRPC), 3000 (Rekor), or 6962 (CTLog).
+    # Discovered LIVE via iptables-save inspection during M07 plan v1.5 work.
+    - to:
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: fulcio-system
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: rekor-system
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: ctlog-system
+      ports:
+        - protocol: TCP
+          port: 5555   # Fulcio HTTP backend
+        - protocol: TCP
+          port: 5554   # Fulcio gRPC
+        - protocol: TCP
+          port: 3000   # Rekor HTTP
+        - protocol: TCP
+          port: 6962   # CTLog HTTP
+        - protocol: TCP
+          port: 2112   # Sigstore metrics

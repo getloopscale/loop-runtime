@@ -270,6 +270,19 @@ SIGSTORE_ID_TOKEN="$(cat %s)"
 FULCIO_URL="%s"
 REKOR_URL="%s"
 
+# Wait for Fulcio service to be reachable (k3s iptables propagation race).
+# Workflow pods scheduled in ~2s; kube-proxy iptables for new services can
+# lag behind. Production DOKS has warm pods + managed networking and won't
+# see this. Local k3d only. Time budget: up to 20s (10 × 2s sleep).
+for i in 1 2 3 4 5 6 7 8 9 10; do
+  if cosign download policy "$FULCIO_URL" >/dev/null 2>&1 || \
+     wget -q --timeout=2 --tries=1 -O - "$FULCIO_URL/api/v2/configuration" >/dev/null 2>&1; then
+    break
+  fi
+  echo "Waiting for Fulcio reachable at $FULCIO_URL (attempt $i/10)..." >&2
+  sleep 2
+done
+
 # Sign keyless. Fulcio issues short-lived cert; Rekor records the entry.
 # bash quirk fix: set -e + cosign fail kills script silently. Capture exit.
 set +e

@@ -1,0 +1,126 @@
+# Sigstore NetworkPolicies — Cenário A.2 (kube-router default-deny fix)
+#
+# DISCOVERY (2026-05-28 Ralph iter 4):
+# - cosign v2.4.3 sign pod (namespace=argo) hit `connection refused` calling Fulcio.
+# - LIVE iptables-save in k3d-loopzero-build-server-0 revealed:
+#     -A KUBE-POD-FW-<hash> -m comment "rule to REJECT traffic destined for
+#      POD name:fulcio-server ... namespace: fulcio-system"
+#      -m mark ! --mark 0x10000/0x10000 -j REJECT
+# - kube-router (k3s default CNI) creates POD-FW chain per pod. Traffic without
+#   mark 0x10000 (set by allowing Ingress NetworkPolicy) gets REJECTED.
+# - Zero NetworkPolicy existed in fulcio-system/rekor-system/ctlog-system, so
+#   ZERO traffic was marked → ALL REJECTED.
+#
+# ROOT CAUSE: kube-router enforces default-deny semantics on every pod once the
+# POD-FW chain is created. Without explicit Ingress allow, the pod is
+# unreachable even when Service + Endpoints are healthy.
+#
+# FIX: Explicit NetworkPolicy permitting Ingress from argo namespace (workflow
+# pods) to Fulcio + Rekor + CTLog pods on their service ports.
+#
+# WHY FAANG (not workaround):
+# - Production DOKS also runs kube-router by default → same fix needed in prod.
+# - Per CLAUDE.md Rule 10 (local equals production): same NetworkPolicies.
+# - Explicit allow is preferred over disabling NetworkPolicy enforcement.
+# - Defense-in-depth: only argo namespace can reach Sigstore signing services.
+#
+# APPLY:
+#   kubectl --context k3d-loopzero-build apply -f sigstore-networkpolicies.yaml
+#
+# VERIFY:
+#   kubectl --context k3d-loopzero-build run nettest --rm -it --image=busybox:1.36 \
+#     -n argo -- wget -qO- --timeout=5 http://fulcio-server.fulcio-system.svc:80
+
+---
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: allow-argo-to-fulcio
+  namespace: fulcio-system
+  labels:
+    app.kubernetes.io/name: fulcio
+    app.kubernetes.io/managed-by: loopzero-m07-keyless
+    loopzero.io/purpose: sigstore-ingress-from-argo
+spec:
+  podSelector:
+    matchLabels:
+      app.kubernetes.io/name: fulcio
+  policyTypes:
+    - Ingress
+  ingress:
+    # Argo workflow pods (sign-image, attest-image steps) calling Fulcio HTTP/gRPC
+    - from:
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: argo
+      ports:
+        - protocol: TCP
+          port: 5555   # Fulcio HTTP backend (exposed as svc port 80)
+        - protocol: TCP
+          port: 5554   # Fulcio gRPC
+        - protocol: TCP
+          port: 2112   # Fulcio metrics (optional, for Prometheus scrape)
+
+---
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: allow-argo-to-rekor
+  namespace: rekor-system
+  labels:
+    app.kubernetes.io/name: rekor
+    app.kubernetes.io/managed-by: loopzero-m07-keyless
+    loopzero.io/purpose: sigstore-ingress-from-argo
+spec:
+  podSelector:
+    matchLabels:
+      app.kubernetes.io/name: rekor
+  policyTypes:
+    - Ingress
+  ingress:
+    # Argo workflow pods (sign-image step) calling Rekor for transparency log
+    - from:
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: argo
+      ports:
+        - protocol: TCP
+          port: 3000   # Rekor HTTP (default)
+        - protocol: TCP
+          port: 2112   # Rekor metrics
+    # Fulcio also calls Rekor for SCT inclusion
+    - from:
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: fulcio-system
+      ports:
+        - protocol: TCP
+          port: 3000
+
+---
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: allow-sigstore-to-ctlog
+  namespace: ctlog-system
+  labels:
+    app.kubernetes.io/name: ctlog
+    app.kubernetes.io/managed-by: loopzero-m07-keyless
+    loopzero.io/purpose: sigstore-ingress-from-fulcio
+spec:
+  podSelector:
+    matchLabels:
+      app.kubernetes.io/name: ctlog
+  policyTypes:
+    - Ingress
+  ingress:
+    # Fulcio calls CTLog for Signed Certificate Timestamp
+    - from:
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: fulcio-system
+      ports:
+        - protocol: TCP
+          port: 6962   # CTLog HTTP API
+        - protocol: TCP
+          port: 6963   # CTLog metrics
