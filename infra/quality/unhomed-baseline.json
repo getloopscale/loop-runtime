@@ -1,12 +1,13 @@
 {
-  "total": 81,
+  "total": 82,
   "by_domain": {
     "bootstrap": 33,
     "drill": 16,
     "other": 7,
-    "test": 25
+    "test": 26
   },
   "_changelog": [
+    {"date": "2026-05-28", "from_total": 81, "to_total": 82, "from_test": 25, "to_test": 26, "reason": "T2.3 Test 4 of plan 2026-05-28-meet-001-engineering-closure v1.1: adds infra/tests/helm/sigstore-extras-policy_test.sh (KEEP-CI-WIRED hermetic NetworkPolicy contract test: `helm template sigstore-extras` + grep assertions on rendered target ports + podSelector labels + Ingress policyType count, locks CR-7 port contract independent of T3.1 selector refactor). Categorized 'test' bucket. Cannot migrate to Go gate without spawning helm CLI."},
     {"date": "2026-05-28", "from_total": 79, "to_total": 81, "from_test": 24, "to_test": 25, "from_other": 6, "to_other": 7, "reason": "T0.3 plan 2026-05-28-meet-001-engineering-closure v1.1: adds 2 scripts — m07-cutover-preflight.sh (categorized 'other' — production cutover orchestration, irreducible live-cluster, KEEP-OPERATOR) + check-m07-cutover-preflight_test.sh (categorized 'test' filename heuristic, KEEP-CI-WIRED hermetic 5/5 PASS)."},
     {"date": "2026-05-28", "from_total": 78, "to_total": 79, "from_test": 23, "to_test": 24, "reason": "T0.2 plan 2026-05-28-meet-001-engineering-closure v1.1: adds check-cosign-v3-deadline_test.sh (hermetic test 5/5 PASS for ADR-2026-05-28-cosign-v2.4.3-deadline ConfigMap-driven deadline). Categorized as test (filename heuristic: no 'bootstrap' substring, default to test bucket). Tests bash deadline gate via mock kubectl reading MOCK_V3_* env vars. Irreducible to Go gate (tests bash extension to bash script)."},
     {"date": "2026-05-28", "from_total": 77, "to_total": 78, "from_bootstrap": 32, "to_bootstrap": 33, "reason": "T0.1 plan 2026-05-28-meet-001-engineering-closure v1.1: adds check-bootstrap-sigstore-context_test.sh (hermetic test 7/7 PASS for ADR-2026-05-28-T2.2-LOCAL-EXCEPTION context gate regex allowlist). Categorized as bootstrap by filename heuristic (contains 'bootstrap'). Tests bash gate logic on bootstrap-sigstore-local.sh via mock kubectl + helm — irreducible to Go gate (would need full shell process spawning). KEEP-CI-WIRED in shell-scripts-allowlist.md."},
