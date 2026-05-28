@@ -51,17 +51,21 @@ options:
       - arg: "--disable=traefik"
         nodeFilters:
           - server:*
-      # M07 Ralph iter 5 (plan 2026-05-28-M07-fulcio-cacert-keyless-LIVE
-      # v1.6 Final Phase): Sigstore Fulcio fetches K8s OIDC discovery from
-      # `/.well-known/openid-configuration` to validate SA OIDC tokens
-      # presented by build pods (cosign sign --identity-token). Fulcio
-      # connects WITHOUT bearer token — relies on K3s anonymous-auth
-      # + ClusterRoleBinding system:unauthenticated →
-      # system:service-account-issuer-discovery. Some K3s configurations
-      # gate anonymous-auth off (default in upstream K8s 1.32+); the
-      # explicit flag below guarantees behavior matches DOKS production
-      # (CTO Golden Rule 0: local fidedigno ao prod). Without this,
-      # Fulcio logs "401 Unauthorized" + "unsupported issuer" → sign fails.
+      # LOCAL-ONLY (not parity with production DOKS).
+      # See ADR .claude/knowledge-base/decisions/2026-05-28-T1.4-anonymous-auth-local-only.md
+      # and CR-3 of MEET-2026-05-28-001 for the full context.
+      #
+      # Sigstore Fulcio fetches K8s OIDC discovery from the apiserver's
+      # `/.well-known/openid-configuration`. On LOCAL k3d, Fulcio's K8s
+      # OIDC client connects ANONYMOUSLY because the k3s default disables
+      # anonymous-auth (unlike upstream K8s 1.32+). Forcing the flag here
+      # makes the LOCAL discovery path work via the built-in RBAC binding
+      # `system:unauthenticated → system:service-account-issuer-discovery`.
+      #
+      # PRODUCTION (DOKS) does NOT use this flag — Fulcio there connects
+      # AUTHENTICATED via a Pulumi-provisioned service account token
+      # (see ADR-2026-05-27-T2.2-OFFLINE-TUF). LOCAL keyless GREEN does
+      # NOT validate the PROD discovery code path.
       - arg: "--kube-apiserver-arg=anonymous-auth=true"
         nodeFilters:
           - server:*
