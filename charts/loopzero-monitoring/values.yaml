@@ -19,6 +19,14 @@ prometheusRules:
     enabled: true
   tracing:
     enabled: true
+  # T4.2 of plan 2026-05-28-meet-001-engineering-closure-plan.md.
+  # CR-8 SRE: SLO + error-rate alerts for Sigstore sign/attest +
+  # Rekor URL persistence. Defaults ON because the underlying metrics
+  # (T4.1) are always registered; disabling here keeps the alerts off
+  # if an operator hasn't yet onboarded Sigstore (zero series → no
+  # firing, but quiet operator dashboards).
+  sigstore:
+    enabled: true
 
 dashboards:
   enabled: true
