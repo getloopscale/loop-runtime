@@ -16,6 +16,7 @@ import (
 	"time"
 
 	"github.com/loopzero/loopzero/pkg/quality/advisorylock"
+	"github.com/loopzero/loopzero/pkg/quality/anonymousauth"
 	"github.com/loopzero/loopzero/pkg/quality/dashboardpromtool"
 	"github.com/loopzero/loopzero/pkg/quality/helmoverlapparity"
 	"github.com/loopzero/loopzero/pkg/quality/prodimagedigests"
@@ -128,6 +129,16 @@ GATES:
                   Fail if production code (api/, infra/scripts/) uses session-
                   scoped pg_advisory_lock( (Rule 7 — only the _xact_ variant is
                   pool-safe). Migrated from check-advisory-lock-scope_test.sh.
+                  Flags:
+                    --root DIR      repo root (default: ".")
+
+  anonymous-auth
+                  Fail if any file outside infra/k3d/ contains the LOCAL-only
+                  apiserver auth flag literal (see anonymousauth.ForbiddenLiteral).
+                  T1.5 / CR-3 of MEET-2026-05-28-001. The flag is a LOCAL k3d
+                  Sigstore-OIDC convenience; production DOKS uses authenticated
+                  discovery via Pulumi sigstore.ts. See ADR
+                  2026-05-28-T1.4-anonymous-auth-local-only.
                   Flags:
                     --root DIR      repo root (default: ".")
 
@@ -297,6 +308,8 @@ func runQuality(args []string) int {
 		return runDockerfileNoDockerHub(args[1:])
 	case "advisory-lock-scope":
 		return runAdvisoryLockScope(args[1:])
+	case "anonymous-auth":
+		return runAnonymousAuth(args[1:])
 	case "helm-overlap-parity":
 		return runHelmOverlapParity(args[1:])
 	case "prod-image-digests":
@@ -575,6 +588,40 @@ func runAdvisoryLockScope(args []string) int {
 		return 1
 	}
 	fmt.Println("advisory-lock-scope: PASS — no session-scoped pg_advisory_lock( in production code")
+	return 0
+}
+
+// runAnonymousAuth blocks `--kube-apiserver-arg=anonymous-auth=true` (the
+// substring `anonymous-auth=true`) anywhere outside `infra/k3d/`. T1.5 / CR-3
+// of MEET-2026-05-28-001 — see ADR
+// 2026-05-28-T1.4-anonymous-auth-local-only.md for why the flag is
+// LOCAL-only and why drift into a prod chart would broaden the apiserver
+// attack surface.
+func runAnonymousAuth(args []string) int {
+	fs := flag.NewFlagSet("anonymous-auth", flag.ContinueOnError)
+	root := fs.String("root", ".", "repo root directory")
+	if err := fs.Parse(args); err != nil {
+		return 1
+	}
+	if absRoot, err := os.Getwd(); err == nil && *root == "." {
+		*root = absRoot
+	}
+
+	outcome, err := anonymousauth.Check(anonymousauth.Config{RepoRoot: *root})
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "anonymous-auth: %v\n", err)
+		return 5
+	}
+	if !outcome.Pass {
+		fmt.Fprintf(os.Stderr, "anonymous-auth: FAIL — %d %q occurrence(s) outside infra/k3d/:\n", len(outcome.Violations), anonymousauth.ForbiddenLiteral)
+		for _, v := range outcome.Violations {
+			fmt.Fprintf(os.Stderr, "  %s\n", v)
+		}
+		fmt.Fprintln(os.Stderr, "")
+		fmt.Fprintln(os.Stderr, "Fix: remove the flag, or move the file under infra/k3d/. Production DOKS uses authenticated OIDC discovery via Pulumi sigstore.ts — see ADR 2026-05-28-T1.4-anonymous-auth-local-only.")
+		return 1
+	}
+	fmt.Printf("anonymous-auth: PASS — no %q outside infra/k3d/\n", anonymousauth.ForbiddenLiteral)
 	return 0
 }
 
