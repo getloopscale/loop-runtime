@@ -45,6 +45,7 @@ tasks:
       # (strategic home) and drop the bash. Until then they run here = enforced.
       - bash infra/tests/docs/pulumi-required-secrets_test.sh   # security: prod/staging/drill secrets externalized
       - bash infra/tests/skills/skill-paths_test.sh             # governance: SKILL.md path resolution (declared BLOCKING)
+      - bash infra/tests/check-fulcio-oidc-diagnose_test.sh     # M07 keyless: Fulcio OIDC trust diagnose script (T0.2 plan 2026-05-28)
       - bash infra/tests/docs/credentials-sot_test.sh           # doc-sync: credentials-required.md enumerates bootstrap Secrets
 
   diff:

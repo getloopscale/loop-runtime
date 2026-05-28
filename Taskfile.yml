@@ -373,6 +373,11 @@ tasks:
     cmds:
       - cd cli && npm run build
 
+  fulcio:diagnose:
+    desc: "Diagnose Fulcio K8s OIDC trust chain (M07 keyless — plan 2026-05-28)"
+    cmds:
+      - bash infra/scripts/local/fulcio-oidc-diagnose.sh {{.CLI_ARGS}}
+
   test:
     desc: Run all tests (unit + lint + manifest validation)
     cmds:
