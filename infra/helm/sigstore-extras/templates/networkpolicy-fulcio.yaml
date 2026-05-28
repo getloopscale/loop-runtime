@@ -15,10 +15,18 @@ spec:
   policyTypes:
     - Ingress
   ingress:
+    # T3.1 (CR-7): namespaceSelector AND podSelector inside the SAME
+    # `from` array entry = AND semantics. Only Argo Workflow-spawned
+    # pods (those labeled by the controller) in the source namespace
+    # may reach Fulcio — a debug pod in `argo` is rejected.
     - from:
         - namespaceSelector:
             matchLabels:
               kubernetes.io/metadata.name: {{ .Values.sourceNamespace }}
+          podSelector:
+            matchExpressions:
+              - key: {{ .Values.ingress.podLabel.key }}
+                operator: {{ .Values.ingress.podLabel.operator }}
       ports:
         - protocol: TCP
           port: {{ .Values.ports.fulcioHttp }}

@@ -15,15 +15,24 @@ spec:
   policyTypes:
     - Ingress
   ingress:
+    # T3.1 (CR-7): source-namespace ingress NARROWED via podSelector AND
+    # so only Argo Workflow-spawned pods reach Rekor.
     - from:
         - namespaceSelector:
             matchLabels:
               kubernetes.io/metadata.name: {{ .Values.sourceNamespace }}
+          podSelector:
+            matchExpressions:
+              - key: {{ .Values.ingress.podLabel.key }}
+                operator: {{ .Values.ingress.podLabel.operator }}
       ports:
         - protocol: TCP
           port: {{ .Values.ports.rekorHttp }}
         - protocol: TCP
           port: {{ .Values.ports.metrics }}
+    # Internal Fulcio → Rekor traffic stays namespaceSelector-only.
+    # All pods in fulcio-system are operator-managed; podSelector
+    # narrowing would only add noise without security gain.
     - from:
         - namespaceSelector:
             matchLabels:

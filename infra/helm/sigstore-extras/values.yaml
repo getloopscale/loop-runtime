@@ -11,6 +11,32 @@
 # In LoopZero: build workflows run in `argo` namespace.
 sourceNamespace: argo
 
+# Pod-level discriminator inside sourceNamespace.
+# T3.1 (CR-7) of plan 2026-05-28-meet-001-engineering-closure: the bare
+# namespaceSelector above was flagged because ANY pod in `argo`
+# (including, e.g., a debug pod a curious operator launched) could
+# reach Fulcio/Rekor/CTLog. We narrow ingress to pods labeled by the
+# Argo Workflows controller: the operator-managed
+# `workflows.argoproj.io/workflow=<name>` label is present on every
+# pod the controller spawns and on no other pod (verified against
+# argo-workflows v3.5+ template-rendering). The label key Exists is
+# the canonical match — value MUST stay free-form to accept any
+# workflow name.
+ingress:
+  podLabel:
+    key: workflows.argoproj.io/workflow
+    operator: Exists
+
+# Allowed Argo service accounts. Defense in depth: even if the pod
+# label were spoofed, the NetworkPolicy `from` clause does NOT support
+# a serviceAccountName matcher natively (NetworkPolicy v1 is selector-
+# only). The allowlist below is enforced ADDITIONALLY by the
+# sigstore-extras-podselector_test.sh contract test, which calls
+# `kubectl get sa -n <sourceNamespace>` and asserts every SA in this
+# list exists. Drift on Argo SA rename surfaces at CI time.
+allowedServiceAccounts:
+  - argo-workflow
+
 # Namespaces hosting Sigstore components.
 namespaces:
   fulcio: fulcio-system

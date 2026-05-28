@@ -15,6 +15,13 @@ spec:
   policyTypes:
     - Ingress
   ingress:
+    # T3.1 (CR-7) review: CTLog has NO tenant-facing ingress. cosign sign
+    # talks to Fulcio (which is podSelector-narrowed); Fulcio then talks
+    # internally to CTLog. All pods in fulcio-system are operator-managed
+    # Sigstore components — there is no attacker pivot worth a podSelector.
+    # Keeping namespaceSelector-only here is the right choice; the
+    # sigstore-extras-podselector_test.sh test below treats CTLog as
+    # exempt from the podSelector contract per the same reasoning.
     - from:
         - namespaceSelector:
             matchLabels:
