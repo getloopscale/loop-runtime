@@ -9,6 +9,8 @@ import (
 
 	forge "github.com/getloopscale/loopzero-forge"
 	"github.com/getloopscale/loopzero-forge/model"
+
+	"github.com/loopzero/loopzero/pkg/naming"
 )
 
 // loopzeroCosignImage returns the loopzero-cosign-signer image, allowing override via env var.
@@ -151,7 +153,7 @@ echo "Image signed successfully"
 		imageTag, outSignaturePath, outDigestPath)
 
 	return &forge.Script{
-		Name:    fmt.Sprintf("sign-image-%s", appName),
+		Name:    naming.SignStepName(appName),
 		Image:   loopzeroCosignImage(),
 		Command: []string{"sh"},
 		Source:  script,
@@ -318,7 +320,7 @@ echo "Image signed successfully (keyless)"
 		outDigestPath)
 
 	return &forge.Script{
-		Name:    fmt.Sprintf("sign-image-%s", p.AppName),
+		Name:    naming.SignStepName(p.AppName),
 		Image:   loopzeroCosignImage(),
 		Command: []string{"sh"},
 		Source:  script,

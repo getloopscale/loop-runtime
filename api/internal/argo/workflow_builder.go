@@ -448,14 +448,14 @@ func (b *WorkflowBuilder) buildMainDAG(spec services.WorkflowSpec, groups []lang
 				taskName := fmt.Sprintf("deliver-artifact-%s", appPlan.AppName)
 				tasks = append(tasks, inlineTask(taskName, taskName, []string{"build-apps" + suffix}))
 			} else {
-				buildTaskName := fmt.Sprintf("build-image-%s", appPlan.AppName)
+				buildTaskName := naming.BuildImageStepName(appPlan.AppName)
 				tasks = append(tasks, inlineTask(buildTaskName, buildTaskName, []string{dfTaskName}))
-				signTaskName := fmt.Sprintf("sign-image-%s", appPlan.AppName)
+				signTaskName := naming.SignStepName(appPlan.AppName)
 				tasks = append(tasks, inlineTask(signTaskName, signTaskName, []string{buildTaskName}))
 				// Sprint 6 / T1.1: SBOM scan after sign. continueOn.failed so
 				// SBOM failure does NOT block the deploy (best-effort observability,
 				// not a hard gate at this point).
-				sbomTaskName := fmt.Sprintf("sbom-%s", appPlan.AppName)
+				sbomTaskName := naming.SBOMStepName(appPlan.AppName)
 				sbomTask := inlineTask(sbomTaskName, sbomTaskName, []string{signTaskName})
 				sbomTask.ContinueOn = &model.ContinueOn{Failed: true}
 				tasks = append(tasks, sbomTask)
@@ -466,7 +466,7 @@ func (b *WorkflowBuilder) buildMainDAG(spec services.WorkflowSpec, groups []lang
 				// Gated by InfraParams.CosignAttestEnabled — disabled by
 				// default until Sigstore active (T1.4) + operator flips.
 				if b.infraParams.CosignAttestEnabled {
-					attestTaskName := fmt.Sprintf("attest-image-%s", appPlan.AppName)
+					attestTaskName := naming.AttestStepName(appPlan.AppName)
 					attestTask := inlineTask(attestTaskName, attestTaskName, []string{signTaskName, sbomTaskName})
 					// NO continueOn — per ADR D1, attestation failure FAILS the
 					// build (signed image alone is INSUFFICIENT for SLSA L3).
@@ -493,20 +493,20 @@ func (b *WorkflowBuilder) buildMainDAG(spec services.WorkflowSpec, groups []lang
 			strategy := ResolveStrategyForApp(app)
 			suffix := suffixForStrategy(groups, strategy.Name())
 			dfTaskName := dockerfileStepTemplateName(strategy) + suffix
-			buildTaskName := fmt.Sprintf("build-image-%s", app.Name)
+			buildTaskName := naming.BuildImageStepName(app.Name)
 			tasks = append(tasks, inlineTask(buildTaskName, buildTaskName, []string{dfTaskName}))
-			signTaskName := fmt.Sprintf("sign-image-%s", app.Name)
+			signTaskName := naming.SignStepName(app.Name)
 			tasks = append(tasks, inlineTask(signTaskName, signTaskName, []string{buildTaskName}))
 			// Sprint 6 / T1.1: SBOM scan after sign. continueOn.failed so
 			// SBOM failure does NOT block the deploy.
-			sbomTaskName := fmt.Sprintf("sbom-%s", app.Name)
+			sbomTaskName := naming.SBOMStepName(app.Name)
 			sbomTask := inlineTask(sbomTaskName, sbomTaskName, []string{signTaskName})
 			sbomTask.ContinueOn = &model.ContinueOn{Failed: true}
 			tasks = append(tasks, sbomTask)
 			// T2.1 of plan 2026-05-27-tenant-build-pipeline-gaps-closure.
 			// v1.1 EC-NEW-5: attest depends on BOTH sign + sbom.
 			if b.infraParams.CosignAttestEnabled {
-				attestTaskName := fmt.Sprintf("attest-image-%s", app.Name)
+				attestTaskName := naming.AttestStepName(app.Name)
 				attestTask := inlineTask(attestTaskName, attestTaskName, []string{signTaskName, sbomTaskName})
 				tasks = append(tasks, attestTask)
 			}

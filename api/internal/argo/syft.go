@@ -8,6 +8,8 @@ import (
 
 	forge "github.com/getloopscale/loopzero-forge"
 	"github.com/getloopscale/loopzero-forge/model"
+
+	"github.com/loopzero/loopzero/pkg/naming"
 )
 
 // SBOM artifact constants — single source of truth for paths/format.
@@ -138,7 +140,7 @@ echo "SBOM generated and uploaded successfully"
 	)
 
 	return &forge.Script{
-		Name:    fmt.Sprintf("sbom-%s", appName),
+		Name:    naming.SBOMStepName(appName),
 		Image:   loopzeroSyftImage(),
 		Command: []string{"sh"},
 		Source:  script,

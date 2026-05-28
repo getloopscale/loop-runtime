@@ -12,6 +12,7 @@ import (
 	"github.com/loopzero/loopzero/api/internal/db"
 	"github.com/loopzero/loopzero/api/internal/manifests"
 	"github.com/loopzero/loopzero/api/internal/metrics"
+	"github.com/loopzero/loopzero/pkg/naming"
 	"github.com/loopzero/loopzero/pkg/statemachine"
 )
 
@@ -221,9 +222,9 @@ func enrichAppReleasesWithAttestation(apps []AppRelease, status *WorkflowStatus)
 		return
 	}
 	for i, app := range apps {
-		signStep := "sign-image-" + app.Name
-		buildStep := "build-image-" + app.Name
-		sbomStep := "sbom-" + app.Name
+		signStep := naming.SignStepName(app.Name)
+		buildStep := naming.BuildImageStepName(app.Name)
+		sbomStep := naming.SBOMStepName(app.Name)
 
 		if signOutputs, ok := status.Outputs[signStep]; ok {
 			if sig := signOutputs["signature"]; sig != "" {
@@ -270,7 +271,7 @@ func enrichAppReleasesWithAttestation(apps []AppRelease, status *WorkflowStatus)
 		// releases.image_attestation_rekor_url (migration 000019). Empty or
 		// literal "unknown" (cosign output parser fallback) stays NULL —
 		// downstream code already gates on empty before persisting.
-		attestStep := "attest-image-" + app.Name
+		attestStep := naming.AttestStepName(app.Name)
 		if attestOutputs, ok := status.Outputs[attestStep]; ok {
 			if url := attestOutputs["rekor-url"]; url != "" && url != "unknown" {
 				apps[i].ImageAttestationRekorURL = url

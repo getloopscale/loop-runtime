@@ -131,7 +131,7 @@ func (b *WorkflowBuilder) buildkitContainer(p buildkitParams) *forge.Container {
 	}
 
 	return &forge.Container{
-		Name:  fmt.Sprintf("build-image-%s", p.AppName),
+		Name:  naming.BuildImageStepName(p.AppName),
 		Image: imageBuildKit,
 		// rootlesskit sets up user namespace, then runs the entrypoint script.
 		// Script starts buildkitd background, waits for socket, runs buildctl "$@".

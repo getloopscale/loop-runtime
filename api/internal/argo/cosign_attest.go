@@ -22,6 +22,8 @@ import (
 
 	forge "github.com/getloopscale/loopzero-forge"
 	"github.com/getloopscale/loopzero-forge/model"
+
+	"github.com/loopzero/loopzero/pkg/naming"
 )
 
 // CosignAttestParams configures the attestation step. AppName + ImageTag
@@ -181,7 +183,7 @@ echo "Attestation complete; Rekor entry: ${REKOR_ENTRY_URL:-<none>}"
 		attestSetup, attestCmd, outRekorURLPath)
 
 	return &forge.Script{
-		Name:    fmt.Sprintf("attest-image-%s", p.AppName),
+		Name:    naming.AttestStepName(p.AppName),
 		Image:   loopzeroCosignImage(),
 		Command: []string{"sh"},
 		Source:  script,
