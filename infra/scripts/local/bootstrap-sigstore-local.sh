@@ -36,6 +36,17 @@ die() { printf '[bootstrap-sigstore-local] ERROR: %s\n' "$*" >&2; exit 1; }
 
 kctl() { kubectl --context "$CONTEXT" "$@"; }
 
+# -- ADR-2026-05-28-T2.2-LOCAL-EXCEPTION context gate (T0.1 of plan
+#    2026-05-28-meet-001-engineering-closure) --
+# Authorizes this script ONLY for LOCAL k3d contexts (canonical build cluster
+# OR drill prod-identical ephemeral build cluster). Prod uses Pulumi
+# sigstore.ts per ADR-2026-05-27-T2.2-OFFLINE-TUF.
+ALLOWED_RE="${SIGSTORE_ALLOWED_CONTEXTS_REGEX:-^k3d-loopzero-(build|drill-build)$}"
+if [[ -n "${SIGSTORE_ALLOWED_CONTEXTS_REGEX:-}" ]]; then
+  printf '[bootstrap-sigstore-local] WARN: SIGSTORE_ALLOWED_CONTEXTS_REGEX overridden to %s (audit signal)\n' "$ALLOWED_RE" >&2
+fi
+[[ "$CONTEXT" =~ $ALLOWED_RE ]] || die "context $CONTEXT not in allowlist $ALLOWED_RE; prod uses Pulumi sigstore.ts (ADR-2026-05-27-T2.2-OFFLINE-TUF)"
+
 # -- Pre-flight --
 log "Pre-flight: context=$CONTEXT, scaffold=$SCAFFOLD_VERSION, release=$RELEASE_NAME"
 kctl cluster-info >/dev/null || die "Cannot reach context $CONTEXT"
