@@ -1,8 +1,10 @@
 # Plan: M07 → 3.85 — Fulcio K8s OIDC Trust Setup (LIVE Keyless GREEN)
 
-> **Version 1.1** — Continuação direta do plan derivado `2026-05-27-M07-tenant-build-pipeline-to-3-85-cap-plan.md` v1.1. Após Path 1 Research-first (commits `860a8397` + `74d537d8`) ter unificado o root cause sign+attest no MESMO gap Fulcio K8s OIDC, este plano codifica a diagnose como script automatizado, aplica o fix correspondente como **Pulumi values override** (declarativo, sobrevive a `pulumi up`), valida LIVE end-to-end (sign + attest + Rekor URL populated), e registra M07 3.80 → 3.85 com Evidence Bar §1 (T1+T2+T3). Outcome esperado: cosign keyless flow GREEN no k3d local; cap 3.85 atingido per ADR D1 do plan derivado; 3.9 cap remanescente fica gated apenas em prod DNS (plano separado).
+> **Version 1.2** — Continuação direta do plan derivado `2026-05-27-M07-tenant-build-pipeline-to-3-85-cap-plan.md` v1.1. Após Path 1 Research-first (commits `860a8397` + `74d537d8`) ter unificado o root cause sign+attest no MESMO gap Fulcio K8s OIDC, este plano codifica a diagnose como script automatizado, aplica o fix correspondente como **values declarativos** (Pulumi sigstore.ts OU Helm values fragment), valida LIVE end-to-end (sign + attest + Rekor URL populated), e registra M07 3.80 → 3.85 com Evidence Bar §1 (T1+T2+T3). Outcome esperado: cosign keyless flow GREEN no k3d local; cap 3.85 atingido per ADR D1 do plan derivado; 3.9 cap remanescente fica gated apenas em prod DNS (plano separado).
 >
 > **v1.1 amendment (2026-05-28):** Absorve 8 MUST FIX edge cases de `2026-05-28-M07-fulcio-oidc-trust-to-3-85-edge-case-review.md`. Categoria: Scope refinement (per `.claude/rules/pre-release-governance.md` § Plan Amendment Policy). Mudanças críticas: (a) EC-1 — corrige acceptance criteria T3.1+T4.1 para usar `releases.image_attestation_rekor_url` (schema real, NÃO `builds.attestation_url` que não existe); (b) EC-5 — força vitest assertion via `helm template` real para detectar chart contract drift; (c) EC-6 — Phase 2 guard para verdict=GREEN; (d) EC-8 — diferenciar pre-sign vs sign failure. Demais MUST FIX (EC-2/3/4/7) absorved inline em T0.1/T0.2 Deep Dives.
+>
+> **v1.2 amendment (2026-05-28, Ralph iter 3 proactive EC-5 LIVE validation):** Investigação Claude-side pré-Phase 2 descobriu que: (a) chart pinado em `sigstore.ts` (`scaffold 0.7.16`) **NÃO EXISTE** no upstream (latest disponível: 0.6.108); (b) LIVE deployment é `sigstore/fulcio 2.9.1` standalone + `sigstore/rekor 1.7.10` standalone (NÃO via scaffold umbrella); (c) schema correto é `config.contents.OIDCIssuers` (TOP-LEVEL, NÃO `fulcio.server.config.OIDCIssuers`); (d) chart `fulcio 2.9.1` NÃO expõe `extraVolumes`/`extraVolumeMounts`/`extraEnv` → Cenário D requer fallback path complexo (postRenderer, custom image, OR chart upgrade). **Pre-criados:** `infra/pulumi-platform/values-fulcio-oidc-overrides/cenario-c-issuer-mismatch.yaml` (ready-to-apply via `helm upgrade --reuse-values -f`) + `cenario-d-tls-ca-investigation.md` (4 fix paths documentados, operator decision required). T2.1 e T2.2 atualizados abaixo. ADR D2 não invalidado (declarativo via Helm values mantém idempotency); apenas path corrigido.
 
 ## Context
 
@@ -484,39 +486,44 @@ infra/pulumi-platform/src/__tests__/sigstore.test.ts — adicionar test assertin
 
 #### Deep Dives
 
-**Cenário C example (most likely 45%):**
-```typescript
-fulcio: {
-  // ... existing
-  server: {
-    // ... existing ingress + createcerts
-    config: {
-      OIDCIssuers: [
-        // Existing canonical
-        { ClientID: "sigstore", IssuerURL: "https://kubernetes.default.svc.cluster.local", Type: "kubernetes" },
-        // ADDED: K3s real issuer (extracted from Phase 1 verdict)
-        { ClientID: "sigstore", IssuerURL: "https://kubernetes.default.svc", Type: "kubernetes" },
-      ],
-    },
-  },
-},
+**Cenário C — LIVE PATH (v1.2 corrigido):**
+
+LIVE chart é `sigstore/fulcio 2.9.1` standalone. Schema correto: `config.contents.OIDCIssuers` (TOP-LEVEL, NÃO `fulcio.server.config`). Pre-gerado em `infra/pulumi-platform/values-fulcio-oidc-overrides/cenario-c-issuer-mismatch.yaml`:
+
+```yaml
+config:
+  contents:
+    OIDCIssuers:
+      - ClientID: sigstore
+        IssuerURL: https://kubernetes.default.svc.cluster.local
+        Type: kubernetes
+      # Operator: substituir IssuerURL com value EXATO de probe1-sa-token.json .iss
+      - ClientID: sigstore
+        IssuerURL: https://kubernetes.default.svc
+        Type: kubernetes
+    MetaIssuers:
+      - ClientID: sigstore
+        IssuerURL: https://kubernetes.*.svc
+        Type: kubernetes
 ```
 
-**Cenário D example (30%):**
-```typescript
-fulcio: {
-  // ...
-  server: {
-    // ...
-    extraVolumes: [
-      { name: "k8s-ca", configMap: { name: "kube-root-ca.crt" } },
-    ],
-    extraVolumeMounts: [
-      { name: "k8s-ca", mountPath: "/etc/ssl/certs/k8s-ca.crt", subPath: "ca.crt", readOnly: true },
-    ],
-  },
-},
+Apply path (LIVE — `helm upgrade --reuse-values`, NÃO `pulumi up`):
+```bash
+KC=$(k3d kubeconfig write loopzero-build)
+helm --kubeconfig="$KC" upgrade fulcio sigstore/fulcio \
+  --version 2.9.1 -n sigstore-system --reuse-values \
+  -f infra/pulumi-platform/values-fulcio-oidc-overrides/cenario-c-issuer-mismatch.yaml
 ```
+
+**Cenário D — NÃO trivial (v1.2 ⚠️ chart contract gap):**
+
+LIVE chart `sigstore/fulcio 2.9.1` **NÃO expõe** `extraVolumes`/`extraVolumeMounts`/`extraEnv` keys. Cenário D requer operator decision entre 4 fix paths documentados em `infra/pulumi-platform/values-fulcio-oidc-overrides/cenario-d-tls-ca-investigation.md`:
+1. Chart upgrade para v2.10+ (se expõe extraVolumes)
+2. Helm postRenderer (kustomize patch) — RECOMMENDED KISS
+3. Custom fulcio image com CA built-in
+4. K3s API server cert recognized CA (infra change, out of scope)
+
+**Recomendação:** apenas aplicar Cenário D fix se Phase 1 verdict=D explicitamente. Cenário C (probabilidade 45%) tem clean override; D (probabilidade 30%) tem trade-offs significantes.
 
 **Invariants:**
 - Override DEVE ser idempotente (`pulumi up` re-apply zero drift)
@@ -562,32 +569,40 @@ VERIFY:  cd infra/pulumi-platform && npm test
 
 ---
 
-### T2.2 — Operator: `pulumi up --stack sigstore-local`
+### T2.2 — Operator: `helm upgrade fulcio` (v1.2 corrigido — chart é standalone, NÃO scaffold)
 
 #### Objective
-Aplica override no cluster live.
+Aplica values override no cluster live via Helm direct (LIVE deploy é fulcio standalone, NÃO Pulumi scaffold).
 
 #### Evidence
-- Override em code só vale com `pulumi up`
-- Stack `sigstore-local` (Pulumi.sigstore-local.yaml já commitado em 860a8397)
+- v1.2 LIVE inspection: `helm list -n sigstore-system` mostra `fulcio-2.9.1` + `rekor-1.7.10` standalone (NÃO scaffold umbrella)
+- Sigstore.ts pinou chart `scaffold 0.7.16` (fictício — não existe upstream)
+- Pulumi up não foi (e não pode ser) usado para esse deploy
 
 #### Files to edit
-N/A (operator action)
+N/A (operator action; values fragment já pré-criado em Claude-side T2.1 v1.2)
 
 #### Deep file dependency analysis
-- `infra/pulumi-platform/Pulumi.sigstore-local.yaml` (existing): operator runs `pulumi up`; refresh state then apply
+- `infra/pulumi-platform/values-fulcio-oidc-overrides/cenario-c-issuer-mismatch.yaml` (NEW commit 2026-05-28 Ralph iter 3): values fragment ready-to-apply
 
 #### Deep Dives
-- `pulumi up` é idempotente (skip se no diff)
-- Espera Fulcio pod rollout (Helm release update triggers Deployment restart) ~60s
-- Verifica `kubectl --kubeconfig=$KC_BUILD -n sigstore-system get pods` mostra fulcio-server 1/1 Running com novo ConfigMap hash
+- `helm upgrade --reuse-values` preserva ca/server/MetaIssuers existentes + adiciona overrides
+- Triggers Deployment restart (~60s) com novo ConfigMap hash
+- Verifica `kubectl get cm fulcio-server-config` mostra novo OIDCIssuers entry
 
 #### Tasks
-1. Operator: `cd infra/pulumi-platform && pulumi stack select sigstore-local`
-2. Operator: `pulumi preview` (revisa diff esperado)
-3. Operator: `pulumi up --yes`
-4. Operator: `kubectl --kubeconfig=$(k3d kubeconfig write loopzero-build) -n sigstore-system get cm fulcio-server-config -o jsonpath='{.data.config\\.json}' | jq` — confirma OIDCIssuers patched
-5. Operator: aguarda fulcio-server pod Running 1/1 com novo image hash/configmap projection
+1. Operator: editar `cenario-c-issuer-mismatch.yaml` substituindo `IssuerURL: https://kubernetes.default.svc` pelo value EXATO de `jq -r .iss /tmp/fulcio-diagnose-out/probe1-sa-token.json` (apenas se diferente)
+2. Operator:
+   ```bash
+   KC=$(k3d kubeconfig write loopzero-build)
+   helm --kubeconfig="$KC" upgrade fulcio sigstore/fulcio \
+     --version 2.9.1 -n sigstore-system --reuse-values \
+     -f infra/pulumi-platform/values-fulcio-oidc-overrides/cenario-c-issuer-mismatch.yaml
+   ```
+3. Operator: `kubectl --kubeconfig="$KC" -n sigstore-system get cm fulcio-server-config -o jsonpath='{.data.config\\.json}' | jq '.OIDCIssuers'` — espera 2 entries
+4. Operator: aguarda fulcio-server pod Running 1/1 (rollout status)
+
+**Se Phase 1 verdict=D:** consultar `cenario-d-tls-ca-investigation.md` para 4 fix paths + escolher Path 2 (postRenderer) como recommended KISS.
 
 #### TDD
 N/A (operator action; T2.1 vitest cobre values rendering correctness)
