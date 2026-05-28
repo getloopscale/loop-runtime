@@ -1,0 +1,28 @@
+# sigstore-extras default values.
+#
+# These NetworkPolicies are mandatory for k3d/k3s environments where
+# kube-router is the default CNI. Without explicit Ingress allow rules,
+# kube-router KUBE-POD-FW chain REJECTs all traffic to Fulcio/Rekor/CTLog
+# pods (manifested as "connection refused" from caller).
+#
+# Discovery: M07 plan 2026-05-28 Ralph iter 4 via LIVE iptables-save.
+
+# Source namespace (caller pods that need to reach Sigstore).
+# In LoopZero: build workflows run in `argo` namespace.
+sourceNamespace: argo
+
+# Namespaces hosting Sigstore components.
+namespaces:
+  fulcio: fulcio-system
+  rekor: rekor-system
+  ctlog: ctlog-system
+
+# Target ports — these are POD ports (post-DNAT), NOT service ports.
+# kube-router NetworkPolicy enforcement filters by target port after
+# kube-proxy DNAT, so service port 80 does NOT cover svc:80 → pod:5555.
+ports:
+  fulcioHttp: 5555
+  fulcioGrpc: 5554
+  rekorHttp: 3000
+  ctlogHttp: 6962
+  metrics: 2112

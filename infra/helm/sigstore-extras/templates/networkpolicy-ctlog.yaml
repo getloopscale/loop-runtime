@@ -1,0 +1,24 @@
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: allow-sigstore-to-ctlog
+  namespace: {{ .Values.namespaces.ctlog }}
+  labels:
+    app.kubernetes.io/name: ctlog
+    app.kubernetes.io/managed-by: {{ .Release.Service }}
+    app.kubernetes.io/instance: {{ .Release.Name }}
+    loopzero.io/purpose: sigstore-ingress-from-fulcio
+spec:
+  podSelector:
+    matchLabels:
+      app.kubernetes.io/name: ctlog
+  policyTypes:
+    - Ingress
+  ingress:
+    - from:
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: {{ .Values.namespaces.fulcio }}
+      ports:
+        - protocol: TCP
+          port: {{ .Values.ports.ctlogHttp }}

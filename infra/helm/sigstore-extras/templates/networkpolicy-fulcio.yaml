@@ -1,0 +1,28 @@
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: allow-{{ .Values.sourceNamespace }}-to-fulcio
+  namespace: {{ .Values.namespaces.fulcio }}
+  labels:
+    app.kubernetes.io/name: fulcio
+    app.kubernetes.io/managed-by: {{ .Release.Service }}
+    app.kubernetes.io/instance: {{ .Release.Name }}
+    loopzero.io/purpose: sigstore-ingress-from-{{ .Values.sourceNamespace }}
+spec:
+  podSelector:
+    matchLabels:
+      app.kubernetes.io/name: fulcio
+  policyTypes:
+    - Ingress
+  ingress:
+    - from:
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: {{ .Values.sourceNamespace }}
+      ports:
+        - protocol: TCP
+          port: {{ .Values.ports.fulcioHttp }}
+        - protocol: TCP
+          port: {{ .Values.ports.fulcioGrpc }}
+        - protocol: TCP
+          port: {{ .Values.ports.metrics }}

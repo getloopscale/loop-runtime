@@ -1,0 +1,17 @@
+apiVersion: v2
+name: sigstore-extras
+description: |
+  Companion chart for sigstore-scaffold (LOCAL k3d only).
+  Provides:
+    - NetworkPolicy Ingress for fulcio-system/rekor-system/ctlog-system
+      (kube-router default-deny mitigation per M07 plan 2026-05-28)
+  Production deployments use Pulumi sigstore.ts ComponentResource per
+  ADR-2026-05-27-T2.2-OFFLINE-TUF (offline TUF ceremony required).
+type: application
+version: 0.1.0
+appVersion: "1.0.0"
+keywords:
+  - sigstore
+  - fulcio
+  - networkpolicy
+  - local-dev
