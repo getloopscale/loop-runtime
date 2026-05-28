@@ -260,6 +260,53 @@ func TestSchemaMirror_QueryFiltersToPublicSchema(t *testing.T) {
 	}
 }
 
+// TestSchemaMirror_MigrationsTableHasOneRow defends against the
+// schema_migrations bookkeeping corruption found during the dogfood
+// Pre-Flight check on 2026-05-28 (audit doc
+// 2026-05-28-dogfood-preflight-evidence.md). golang-migrate's
+// schema_migrations table SHOULD contain exactly one row representing
+// the most recent applied migration. A multi-row state — observed
+// LIVE as `(version=19, dirty=false)` + `(version=10, dirty=false)`
+// — indicates a manual psql DDL apply that bypassed the migration
+// runner, a stale `migrate force`, or two concurrent runs racing.
+//
+// The DDL was applied correctly in the corrupted case (the T2.1
+// triggers were present and functional), but the bookkeeping drift
+// makes future `task db:migrate` runs unpredictable: golang-migrate
+// reads the highest version and skips the gap, so migrations 11..N
+// might be re-applied or skipped depending on the runner state.
+//
+// This test makes the corruption a CI-visible failure on any
+// operator-cleanroom run, instead of needing the dogfood Pre-Flight
+// Etapa 0 to catch it.
+func TestSchemaMirror_MigrationsTableHasOneRow(t *testing.T) {
+	pool := mirrorTestPool(t)
+	ctx := context.Background()
+	var rowCount int
+	err := pool.QueryRow(ctx, `SELECT COUNT(*) FROM schema_migrations`).Scan(&rowCount)
+	if err != nil {
+		t.Fatalf("schema_migrations query: %v", err)
+	}
+	if rowCount != 1 {
+		// Surface the actual rows so the operator can decide whether to
+		// `migrate force <highest>` or rebuild cleanroom-fresh.
+		rows, qErr := pool.Query(ctx, `SELECT version, dirty FROM schema_migrations ORDER BY version DESC`)
+		if qErr == nil {
+			defer rows.Close()
+			t.Logf("schema_migrations actual rows:")
+			for rows.Next() {
+				var v int
+				var dirty bool
+				_ = rows.Scan(&v, &dirty)
+				t.Logf("  version=%d dirty=%v", v, dirty)
+			}
+		}
+		t.Errorf("schema_migrations has %d rows; expected exactly 1. Bookkeeping corruption — see "+
+			".claude/knowledge-base/audits/2026-05-28-dogfood-preflight-evidence.md "+
+			"for the remediation pattern (`migrate force <highest>` or cleanroom rebuild).", rowCount)
+	}
+}
+
 // releasesInsertExempt marks PG columns that are intentionally NOT in the
 // INSERT INTO releases statement because they are populated after INSERT:
 //   - DB default (now(), trigger-populated)
