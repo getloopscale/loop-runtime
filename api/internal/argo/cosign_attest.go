@@ -44,6 +44,11 @@ type CosignAttestParams struct {
 	// (Sigstore public infra). Mirror CosignFulcioURL / CosignRekorURL InfraParams.
 	FulcioURL string
 	RekorURL  string
+	// T1.2 of plan 2026-05-28-meet-001-engineering-closure v1.1 — CR-1 fix.
+	// InsecureSkipSCT renders `--insecure-skip-verify` flag in the cosign
+	// attest command. ONLY relevant when Keyless=true. Default false.
+	// EC-11 fix: flag omitted if Keyless=false regardless of this field.
+	InsecureSkipSCT bool
 	// CyclonedxPredicateType is the in-toto predicate type URI.
 	// Per ADR D1: https://cyclonedx.org/bom (in-toto + SLSA standard).
 	// Hardcoded constant to prevent operator drift.
@@ -105,14 +110,19 @@ SIGSTORE_ID_TOKEN="$(cat %s)"
 FULCIO_URL="%s"
 REKOR_URL="%s"
 `, oidcTokenPath, oidcTokenPath, oidcTokenPath, fulcioURL, rekorURL)
+		// T1.2 CR-1 fix: gate --insecure-skip-verify behind explicit InsecureSkipSCT.
+		// EC-11 fix: only render when Keyless=true (this branch is keyless-only).
+		skipSCTFlag := ""
+		if p.InsecureSkipSCT {
+			skipSCTFlag = "  --insecure-skip-verify \\\n"
+		}
 		attestCmd = fmt.Sprintf(`cosign attest --yes%s \
   --identity-token="$SIGSTORE_ID_TOKEN" \
   --fulcio-url="$FULCIO_URL" \
   --rekor-url="$REKOR_URL" \
-  --insecure-skip-verify \
-  --predicate %s \
+%s  --predicate %s \
   --type %s \
-  "%s@${DIGEST}" 2>&1`, insecureFlag, p.SBOMLocalPath, cyclonedxPredicateType, p.ImageTag)
+  "%s@${DIGEST}" 2>&1`, insecureFlag, skipSCTFlag, p.SBOMLocalPath, cyclonedxPredicateType, p.ImageTag)
 	} else {
 		attestCmd = fmt.Sprintf(`cosign attest --yes%s \
   --key %s/cosign.key \

@@ -66,6 +66,13 @@ type WorkflowSubmitterConfig struct {
 	// Plan 2026-05-27-M07-to-3-85 M2 T8.0 (v1.1 EC-3): MUST be wired via env var
 	// LOOPZERO_COSIGN_ATTEST_ENABLED to avoid silent "Implemented but not wired" pattern.
 	CosignAttestEnabled bool
+	// T1.2 of plan 2026-05-28-meet-001-engineering-closure v1.1.
+	// CR-1 fix: gate `--insecure-skip-verify` flag in cosign sign/attest
+	// scripts. Wired from Config.CosignInsecureSkipSCT (env var
+	// LOOPZERO_COSIGN_INSECURE_SKIP_SCT_VERIFY). Propagated to InfraParams →
+	// CosignSignParams / CosignAttestParams. Config.Validate() rejects
+	// true in production without TUF root pinned.
+	CosignInsecureSkipSCT bool
 	// MinIO credentials are injected via K8s Secret (envFrom) in CWTs, not via workflow params.
 }
 
@@ -104,10 +111,11 @@ func NewWorkflowSubmitter(cfg WorkflowSubmitterConfig) (*WorkflowSubmitter, erro
 		RegistryInsecure:    cfg.RegistryInsecure,
 		BaseDomain:          cfg.BaseDomain,
 		HarborRegistryURL:   cfg.HarborRegistryURL,
-		CosignKeyless:       cfg.CosignKeyless,
-		CosignFulcioURL:     cfg.CosignFulcioURL,
-		CosignRekorURL:      cfg.CosignRekorURL,
-		CosignAttestEnabled: cfg.CosignAttestEnabled,
+		CosignKeyless:         cfg.CosignKeyless,
+		CosignFulcioURL:       cfg.CosignFulcioURL,
+		CosignRekorURL:        cfg.CosignRekorURL,
+		CosignAttestEnabled:   cfg.CosignAttestEnabled,
+		CosignInsecureSkipSCT: cfg.CosignInsecureSkipSCT, // T1.2 CR-1 fix
 	})
 
 	return &WorkflowSubmitter{

@@ -58,6 +58,7 @@ func setupServices(cfg config.Config, dbAdapter *db.PgxAdapter, logger *slog.Log
 		CosignAttestEnabled: cfg.CosignAttestEnabled, // v1.1 EC-3 wire env var
 		CosignFulcioURL:     cfg.CosignFulcioURL,
 		CosignRekorURL:      cfg.CosignRekorURL,
+		CosignInsecureSkipSCT: cfg.CosignInsecureSkipSCT, // T1.2 CR-1 fix
 	})
 	if err != nil {
 		logger.Error("failed to create workflow submitter", "error", err)

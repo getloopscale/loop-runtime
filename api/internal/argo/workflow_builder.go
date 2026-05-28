@@ -64,6 +64,13 @@ type InfraParams struct {
 	//                  (no continueOn — SLSA L3 chain requires linked
 	//                  attestation OR the chain is broken per ADR D1).
 	CosignAttestEnabled bool
+	// T1.2 of plan 2026-05-28-meet-001-engineering-closure v1.1.
+	// CR-1 fix: gate `--insecure-skip-verify` flag in cosign sign/attest
+	// scripts behind explicit opt-in. Default false. When true, cosign
+	// sign/attest scripts render the flag; otherwise omitted.
+	// Config.Validate() rejects InsecureSkipSCT=true && IsProduction() &&
+	// !TUFRootPinned. Wired via Config.CosignInsecureSkipSCT.
+	CosignInsecureSkipSCT bool
 }
 
 // WorkflowBuilder composes Argo Workflow CRs from ClusterWorkflowTemplate refs
@@ -182,6 +189,7 @@ func (b *WorkflowBuilder) Build(spec services.WorkflowSpec) (*forge.Workflow, er
 					Keyless:          b.infraParams.CosignKeyless,
 					FulcioURL:        b.infraParams.CosignFulcioURL,
 					RekorURL:         b.infraParams.CosignRekorURL,
+					InsecureSkipSCT:  b.infraParams.CosignInsecureSkipSCT, // T1.2 CR-1 fix
 				}))
 				inlineTemplates = append(inlineTemplates, syftScanTemplate(
 					spec.TenantID, spec.ProjectID, spec.CommitSHA,
@@ -198,6 +206,7 @@ func (b *WorkflowBuilder) Build(spec services.WorkflowSpec) (*forge.Workflow, er
 						InsecureRegistry: b.infraParams.RegistryInsecure,
 						FulcioURL:        b.infraParams.CosignFulcioURL,
 						RekorURL:         b.infraParams.CosignRekorURL,
+					InsecureSkipSCT:  b.infraParams.CosignInsecureSkipSCT, // T1.2 CR-1 fix
 					}))
 				}
 				if b.infraParams.HarborRegistryURL != "" {
@@ -217,6 +226,7 @@ func (b *WorkflowBuilder) Build(spec services.WorkflowSpec) (*forge.Workflow, er
 				Keyless:          b.infraParams.CosignKeyless,
 				FulcioURL:        b.infraParams.CosignFulcioURL,
 				RekorURL:         b.infraParams.CosignRekorURL,
+					InsecureSkipSCT:  b.infraParams.CosignInsecureSkipSCT, // T1.2 CR-1 fix
 			}))
 			inlineTemplates = append(inlineTemplates, syftScanTemplate(
 				spec.TenantID, spec.ProjectID, spec.CommitSHA,
@@ -232,6 +242,7 @@ func (b *WorkflowBuilder) Build(spec services.WorkflowSpec) (*forge.Workflow, er
 					Keyless:       b.infraParams.CosignKeyless,
 					FulcioURL:     b.infraParams.CosignFulcioURL,
 					RekorURL:      b.infraParams.CosignRekorURL,
+					InsecureSkipSCT:  b.infraParams.CosignInsecureSkipSCT, // T1.2 CR-1 fix
 				}))
 			}
 			if b.infraParams.HarborRegistryURL != "" {

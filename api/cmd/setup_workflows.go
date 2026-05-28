@@ -49,6 +49,7 @@ func setupWorkflows(cfg config.Config, httpTransport *http.Transport, logger *sl
 		CosignAttestEnabled: cfg.CosignAttestEnabled, // v1.1 EC-3 wire env var
 		CosignFulcioURL:     cfg.CosignFulcioURL,
 		CosignRekorURL:      cfg.CosignRekorURL,
+		CosignInsecureSkipSCT: cfg.CosignInsecureSkipSCT, // T1.2 CR-1 fix
 	})
 	if cfg.CosignKeyless {
 		logger.Info("cosign keyless mode ENABLED",

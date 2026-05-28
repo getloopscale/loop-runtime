@@ -90,6 +90,23 @@ type Config struct {
 	CosignFulcioURL     string // Override default Fulcio URL when CosignKeyless=true. Empty = cosign default (sigstore public).
 	CosignRekorURL      string // Override default Rekor URL when CosignKeyless=true. Empty = cosign default.
 
+	// T1.2 of plan 2026-05-28-meet-001-engineering-closure v1.1.
+	// CR-1 fix from MEET-2026-05-28-001: `--insecure-skip-verify` was hardcoded
+	// unconditionally in cosign sign + attest scripts. Single env var flip
+	// (LOOPZERO_COSIGN_KEYLESS=true) bypassed SCT verification globally.
+	//
+	// CosignInsecureSkipSCT: render `--insecure-skip-verify` flag in cosign
+	// sign/attest commands. ONLY for LOCAL k3d with self-hosted CTLog whose
+	// public key isn't in the default TUF root. Default false.
+	//
+	// CosignTUFRootPinned: TUF root has been pinned (operator ceremony complete +
+	// Pulumi sigstore.ts deployed with `tufPreMintedKeys`). Default false.
+	//
+	// Validate() rejects CosignInsecureSkipSCT=true && IsProduction() &&
+	// !CosignTUFRootPinned (the "skip SCT in prod without TUF" attack vector).
+	CosignInsecureSkipSCT bool
+	CosignTUFRootPinned   bool
+
 	WorkloadIngressURL   string
 	BaseDomain           string // Base domain for app hostnames (e.g., "loopzero.local", "loopzero.cloud")
 	// B14 (MEET-2026-04-23-058): cert-manager ClusterIssuer used for all app TLS
@@ -318,6 +335,9 @@ func Load() Config {
 		// AFTER Sigstore stack provisioned em build cluster.
 		CosignKeyless:        envBool("LOOPZERO_COSIGN_KEYLESS", false),
 		CosignAttestEnabled:  envBool("LOOPZERO_COSIGN_ATTEST_ENABLED", false),
+		// T1.2 CR-1 fix: explicit env opt-in for SCT-skip flag (LOCAL only)
+		CosignInsecureSkipSCT: envBool("LOOPZERO_COSIGN_INSECURE_SKIP_SCT_VERIFY", false),
+		CosignTUFRootPinned:   envBool("LOOPZERO_COSIGN_TUF_ROOT_PINNED", false),
 		CosignFulcioURL:      os.Getenv("LOOPZERO_FULCIO_URL"),
 		CosignRekorURL:       os.Getenv("LOOPZERO_REKOR_URL"),
 		WorkloadIngressURL:   os.Getenv("WORKLOAD_INGRESS_URL"),
@@ -466,6 +486,14 @@ func (c Config) Validate() error {
 	// rendering all supply chain security (cosign, SBOM) useless.
 	if c.RegistryInsecure && c.IsProduction() {
 		return fmt.Errorf("REGISTRY_INSECURE=true is forbidden in production — registry TLS verification must be enabled")
+	}
+	// T1.2 of plan 2026-05-28-meet-001-engineering-closure v1.1.
+	// CR-1 fix from MEET-2026-05-28-001: gate `--insecure-skip-verify` flag.
+	// Allowed in prod ONLY when TUF root pinned (operator ceremony complete).
+	// Without TUF root, skipping SCT verification = any compromised Fulcio
+	// can forge signatures undetectable by the SLSA L3 chain.
+	if c.CosignInsecureSkipSCT && c.IsProduction() && !c.CosignTUFRootPinned {
+		return fmt.Errorf("LOOPZERO_COSIGN_INSECURE_SKIP_SCT_VERIFY=true requires LOOPZERO_COSIGN_TUF_ROOT_PINNED=true in production — SCT verification skip without TUF root is a supply-chain compromise vector")
 	}
 	// H4: Default dev credentials in production are a fatal error, not just a warning.
 	// Without this, production deployments silently use the dev defaults declared

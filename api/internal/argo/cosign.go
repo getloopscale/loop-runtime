@@ -46,6 +46,12 @@ type CosignSignParams struct {
 	Keyless           bool   // true = OIDC + Fulcio + Rekor; false = key-based
 	FulcioURL         string // optional override; empty = sigstore.dev public Fulcio
 	RekorURL          string // optional override; empty = sigstore.dev public Rekor
+	// T1.2 of plan 2026-05-28-meet-001-engineering-closure v1.1 — CR-1 fix.
+	// InsecureSkipSCT renders `--insecure-skip-verify` in the cosign sign
+	// command. ONLY relevant when Keyless=true (keyed mode does not use SCT).
+	// Default false; LOCAL k3d sets via Config.CosignInsecureSkipSCT.
+	// EC-11 fix: even when InsecureSkipSCT=true, flag is OMITTED if Keyless=false.
+	InsecureSkipSCT bool
 }
 
 // cosignSignTemplate generates an inline container template that signs a
@@ -229,6 +235,12 @@ func cosignSignTemplateKeyless(p CosignSignParams) *forge.Script {
 	if p.InsecureRegistry {
 		insecureFlag = " --allow-http-registry --allow-insecure-registry"
 	}
+	// T1.2 CR-1 fix: gate --insecure-skip-verify behind explicit InsecureSkipSCT.
+	// EC-11 fix: only render when Keyless=true (keyed mode does not use SCT).
+	skipSCTFlag := ""
+	if p.InsecureSkipSCT && p.Keyless {
+		skipSCTFlag = "  --insecure-skip-verify \\\n"
+	}
 
 	const (
 		outSignaturePath = "/tmp/cosign-sig.txt"
@@ -267,8 +279,9 @@ SIGSTORE_ID_TOKEN="$(cat %s)"
 # cosign v2.4.x: use --fulcio-url/--rekor-url/--identity-token flags directly.
 # 2026-05-28 Ralph iter 3: downgraded from v3.0.6 (client-side reject bug)
 # and v2.5+ env-var-only (no flag fallback). v2.4 uses simpler API path.
-# --insecure-skip-verify skips SCT (CTLog public key) verification since
-# our self-hosted CTLog public key isn't in the default TUF root.
+# SCT (signed certificate timestamp) verification is gated via InsecureSkipSCT
+# (T1.2 CR-1): self-hosted CTLog public key is not in default TUF root, so LOCAL
+# pins the skip flag; production requires TUF root pinning (see config.Validate).
 FULCIO_URL="%s"
 REKOR_URL="%s"
 
@@ -292,8 +305,7 @@ cosign sign --yes%s \
   --identity-token="$SIGSTORE_ID_TOKEN" \
   --fulcio-url="$FULCIO_URL" \
   --rekor-url="$REKOR_URL" \
-  --insecure-skip-verify \
-  -a "build-system=loopzero" \
+%s  -a "build-system=loopzero" \
   -a "app=%s" \
   -a "mode=keyless" \
   "%s@${DIGEST}"
@@ -314,6 +326,7 @@ echo "Image signed successfully (keyless)"
 		oidcTokenPath, oidcTokenPath, oidcTokenPath,
 		fulcioURL, rekorURL, // SIGSTORE_FULCIO_URL + SIGSTORE_REKOR_URL env vars
 		insecureFlag,
+		skipSCTFlag, // T1.2: conditional --insecure-skip-verify
 		p.AppName,
 		p.ImageTag,
 		p.ImageTag, outSignaturePath,

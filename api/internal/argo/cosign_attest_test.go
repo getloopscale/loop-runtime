@@ -181,3 +181,32 @@ func TestWorkflowBuilder_AttestStepDependsOnSignAndSyft(t *testing.T) {
 	t.Skip("DAG composition test deferred to integration test in workflow_builder_test.go " +
 		"(requires full WorkflowBuilder fixture setup). See T2.2 GREEN.")
 }
+
+// T1.2 of plan 2026-05-28-meet-001-engineering-closure v1.1.
+// CR-1 fix: gate `--insecure-skip-verify` flag behind explicit InsecureSkipSCT.
+
+func TestCosignAttestScript_RendersInsecureFlag_WhenEnabled(t *testing.T) {
+	c := cosignAttestTemplate(CosignAttestParams{
+		AppName:         "api",
+		ImageTag:        "registry.example.com/org/app:abc",
+		SBOMLocalPath:   "/workspace/sbom-api.cdx.json",
+		Keyless:         true,
+		InsecureSkipSCT: true,
+	})
+	if !strings.Contains(c.Source, "--insecure-skip-verify") {
+		t.Error("expected --insecure-skip-verify in rendered attest script when InsecureSkipSCT=true && Keyless=true")
+	}
+}
+
+func TestCosignAttestScript_OmitsInsecureFlag_WhenDisabled(t *testing.T) {
+	c := cosignAttestTemplate(CosignAttestParams{
+		AppName:         "api",
+		ImageTag:        "registry.example.com/org/app:abc",
+		SBOMLocalPath:   "/workspace/sbom-api.cdx.json",
+		Keyless:         true,
+		InsecureSkipSCT: false,
+	})
+	if strings.Contains(c.Source, "--insecure-skip-verify") {
+		t.Error("expected NO --insecure-skip-verify when InsecureSkipSCT=false (default)")
+	}
+}

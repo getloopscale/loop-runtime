@@ -223,3 +223,44 @@ func TestCosignSignTemplateWithParams_DispatchesByMode(t *testing.T) {
 		t.Errorf("Keyless=true must dispatch to keyless template (no --key flag)")
 	}
 }
+
+// T1.2 of plan 2026-05-28-meet-001-engineering-closure v1.1.
+// CR-1 fix: gate `--insecure-skip-verify` flag behind explicit InsecureSkipSCT.
+
+func TestCosignSignScript_RendersInsecureFlag_WhenEnabled(t *testing.T) {
+	c := cosignSignTemplateKeyless(CosignSignParams{
+		AppName:         "api",
+		ImageTag:        "registry.example.com/org/app:abc",
+		Keyless:         true,
+		InsecureSkipSCT: true,
+	})
+	if !strings.Contains(c.Source, "--insecure-skip-verify") {
+		t.Error("expected --insecure-skip-verify in rendered script when InsecureSkipSCT=true && Keyless=true")
+	}
+}
+
+func TestCosignSignScript_OmitsInsecureFlag_WhenDisabled(t *testing.T) {
+	c := cosignSignTemplateKeyless(CosignSignParams{
+		AppName:         "api",
+		ImageTag:        "registry.example.com/org/app:abc",
+		Keyless:         true,
+		InsecureSkipSCT: false,
+	})
+	if strings.Contains(c.Source, "--insecure-skip-verify") {
+		t.Error("expected NO --insecure-skip-verify when InsecureSkipSCT=false (default)")
+	}
+}
+
+// EC-11 fix: even when InsecureSkipSCT=true, flag omitted in keyed mode
+// (keyed signing does not use SCT verification at all).
+func TestCosignSignScript_KeyedMode_OmitsInsecureFlag_RegardlessOfEnv(t *testing.T) {
+	c := cosignSignTemplateWithParams(CosignSignParams{
+		AppName:         "api",
+		ImageTag:        "registry.example.com/org/app:abc",
+		Keyless:         false, // KEYED mode
+		InsecureSkipSCT: true,  // even if set, flag must be omitted
+	})
+	if strings.Contains(c.Source, "--insecure-skip-verify") {
+		t.Error("EC-11: --insecure-skip-verify must be OMITTED in keyed mode regardless of InsecureSkipSCT env")
+	}
+}

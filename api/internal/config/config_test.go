@@ -317,3 +317,59 @@ func TestLoad_CosignKeyless_InvalidBoolDefaultsFalse(t *testing.T) {
 		t.Error("CosignKeyless must remain false when env is unparseable bool")
 	}
 }
+
+// T1.2 of plan 2026-05-28-meet-001-engineering-closure v1.1.
+// CR-1 fix from MEET-2026-05-28-001: gate `--insecure-skip-verify` flag.
+
+func TestValidate_RejectsInsecureSkipSCT_InProd_WithoutTUF(t *testing.T) {
+	t.Setenv("LOOPZERO_CLUSTER_ISSUER", "letsencrypt-prod")
+	t.Setenv("LOOPZERO_ENV", "production")
+	t.Setenv("LOOPZERO_COSIGN_INSECURE_SKIP_SCT_VERIFY", "true")
+	t.Setenv("LOOPZERO_COSIGN_TUF_ROOT_PINNED", "false")
+	t.Setenv("LOOPZERO_SECRET_ENCRYPTION_KEY", "test-key")
+	cfg := Load()
+	err := cfg.Validate()
+	if err == nil {
+		t.Fatal("expected Validate error when INSECURE_SKIP_SCT=true && prod && !TUF_ROOT_PINNED")
+	}
+	if !contains(err.Error(), "INSECURE_SKIP_SCT_VERIFY") {
+		t.Errorf("error must mention INSECURE_SKIP_SCT_VERIFY, got: %v", err)
+	}
+}
+
+func TestValidate_AcceptsInsecureSkipSCT_InLocal(t *testing.T) {
+	t.Setenv("LOOPZERO_CLUSTER_ISSUER", "loopzero-ca-issuer")
+	t.Setenv("LOOPZERO_ENV", "local")
+	t.Setenv("LOOPZERO_COSIGN_INSECURE_SKIP_SCT_VERIFY", "true")
+	t.Setenv("LOOPZERO_COSIGN_TUF_ROOT_PINNED", "false")
+	cfg := Load()
+	if err := cfg.Validate(); err != nil {
+		t.Fatalf("Validate should accept INSECURE_SKIP_SCT in LOCAL: %v", err)
+	}
+}
+
+func TestValidate_AcceptsInsecureSkipSCT_InProd_WithTUF(t *testing.T) {
+	// Asserts: when TUF is pinned, Validate() does NOT raise the
+	// INSECURE_SKIP_SCT error. Other unrelated prod gates may still error
+	// (CORS, MINIO, etc.), but the SCT-specific gate must pass.
+	cfg := Config{
+		Env:                   "production",
+		CosignInsecureSkipSCT: true,
+		CosignTUFRootPinned:   true,
+	}
+	err := cfg.Validate()
+	if err != nil && contains(err.Error(), "INSECURE_SKIP_SCT_VERIFY") {
+		t.Fatalf("Validate must NOT raise INSECURE_SKIP_SCT_VERIFY error when TUF pinned: %v", err)
+	}
+}
+
+func TestLoad_CosignInsecureSkipSCT_DefaultsFalse(t *testing.T) {
+	// Default = false (safe by default)
+	cfg := Load()
+	if cfg.CosignInsecureSkipSCT {
+		t.Error("CosignInsecureSkipSCT default must be false (safe by default)")
+	}
+	if cfg.CosignTUFRootPinned {
+		t.Error("CosignTUFRootPinned default must be false (no ceremony performed)")
+	}
+}
