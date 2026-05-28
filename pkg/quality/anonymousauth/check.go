@@ -149,6 +149,7 @@ func scanFile(absPath, relPath string) ([]string, error) {
 	if info.Size() > maxScanSize {
 		return nil, nil
 	}
+	// #nosec G304 -- absPath comes from filepath.Walk of cfg.RepoRoot.
 	f, err := os.Open(absPath)
 	if err != nil {
 		return nil, err
