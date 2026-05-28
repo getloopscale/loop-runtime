@@ -245,6 +245,18 @@ tasks:
         kubectl config use-context k3d-loopzero-mgmt >/dev/null 2>&1
       - bash infra/helmfile/scripts/bootstrap-patch-sigstore-policy-controller.sh
       - bash infra/helmfile/scripts/bootstrap-patch-admission-policies.sh
+      # M07 LIVE keyless GREEN (Ralph iter 5 2026-05-28): Sigstore local stack
+      # for cosign keyless signing (Fulcio + Rekor + CTLog + sigstore-extras
+      # NetworkPolicies + dynamic K3s CACert config). Opt-out via env
+      # SKIP_SIGSTORE_LOCAL=1 (e.g., for fast iteration without M07 path).
+      # Idempotent: re-running on existing state is safe. Adds ~5min to setup.
+      - |
+        if [ "${SKIP_SIGSTORE_LOCAL:-0}" != "1" ]; then
+          bash infra/scripts/local/bootstrap-sigstore-local.sh || \
+            echo "[WARN] bootstrap-sigstore-local.sh failed — M07 LIVE keyless path will not work. Continuing."
+        else
+          echo "[NOTICE] SKIP_SIGSTORE_LOCAL=1 — skipping Sigstore LOCAL stack bootstrap"
+        fi
       # 2026-05-14 (plan T0.2): provision runtime-2 platform BEFORE the
       # CC bootstrap so cell-2 has a reachable workload destination.
       - task: k3d:bootstrap-runtime-2
