@@ -175,7 +175,14 @@ func (b *WorkflowBuilder) Build(spec services.WorkflowSpec) (*forge.Workflow, er
 				inlineTemplates = append(inlineTemplates, b.uploadAssetsTemplate(spec, appPlan))
 			} else {
 				inlineTemplates = append(inlineTemplates, b.buildkitTemplateFromPlan(spec, appPlan))
-				inlineTemplates = append(inlineTemplates, cosignSignTemplate(appPlan.AppName, appPlan.ImageTag, b.infraParams.RegistryInsecure))
+				inlineTemplates = append(inlineTemplates, cosignSignTemplateWithParams(CosignSignParams{
+					AppName:          appPlan.AppName,
+					ImageTag:         appPlan.ImageTag,
+					InsecureRegistry: b.infraParams.RegistryInsecure,
+					Keyless:          b.infraParams.CosignKeyless,
+					FulcioURL:        b.infraParams.CosignFulcioURL,
+					RekorURL:         b.infraParams.CosignRekorURL,
+				}))
 				inlineTemplates = append(inlineTemplates, syftScanTemplate(
 					spec.TenantID, spec.ProjectID, spec.CommitSHA,
 					appPlan.AppName, appPlan.ImageTag, b.infraParams.RegistryInsecure,
@@ -203,7 +210,14 @@ func (b *WorkflowBuilder) Build(spec services.WorkflowSpec) (*forge.Workflow, er
 		for _, app := range spec.Apps {
 			inlineTemplates = append(inlineTemplates, b.buildkitTemplateForApp(spec, app))
 			imageTag := naming.ImageTag(b.infraParams.RegistryURL, spec.TenantID, spec.ProjectID, app.Name, spec.CommitSHA)
-			inlineTemplates = append(inlineTemplates, cosignSignTemplate(app.Name, imageTag, b.infraParams.RegistryInsecure))
+			inlineTemplates = append(inlineTemplates, cosignSignTemplateWithParams(CosignSignParams{
+				AppName:          app.Name,
+				ImageTag:         imageTag,
+				InsecureRegistry: b.infraParams.RegistryInsecure,
+				Keyless:          b.infraParams.CosignKeyless,
+				FulcioURL:        b.infraParams.CosignFulcioURL,
+				RekorURL:         b.infraParams.CosignRekorURL,
+			}))
 			inlineTemplates = append(inlineTemplates, syftScanTemplate(
 				spec.TenantID, spec.ProjectID, spec.CommitSHA,
 				app.Name, imageTag, b.infraParams.RegistryInsecure,

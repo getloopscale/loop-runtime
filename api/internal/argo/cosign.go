@@ -262,14 +262,27 @@ if [ ! -r %s ]; then
 fi
 export SIGSTORE_ID_TOKEN="$(cat %s)"
 
+# cosign v2.5+: usar SIGSTORE_FULCIO_URL/REKOR_URL env vars + disable signing
+# config (não usar --fulcio-url/--rekor-url flags — TUF conflict). Mirror do
+# cosign_attest.go pattern. LIVE discovered build v9 2026-05-27.
+export SIGSTORE_FULCIO_URL="%s"
+export SIGSTORE_REKOR_URL="%s"
+export SIGSTORE_USE_SIGNING_CONFIG="false"
+
 # Sign keyless. Fulcio issues short-lived cert; Rekor records the entry.
-COSIGN_EXPERIMENTAL=1 cosign sign --yes%s \
-  --fulcio-url=%s \
-  --rekor-url=%s \
+# bash quirk fix: set -e + cosign fail kills script silently. Capture exit.
+set +e
+cosign sign --yes%s \
   -a "build-system=loopzero" \
   -a "app=%s" \
   -a "mode=keyless" \
   "%s@${DIGEST}"
+SIGN_EXIT=$?
+set -e
+if [ $SIGN_EXIT -ne 0 ]; then
+  echo "ERROR: cosign sign keyless failed (exit $SIGN_EXIT)" >&2
+  exit $SIGN_EXIT
+fi
 
 printf '%%s' "%s@${DIGEST}" > %s
 printf '%%s' "${DIGEST}"   > %s
@@ -279,8 +292,8 @@ echo "Image signed successfully (keyless)"
 		metadataFile,
 		p.ImageTag, fulcioURL, rekorURL,
 		oidcTokenPath, oidcTokenPath, oidcTokenPath,
+		fulcioURL, rekorURL, // SIGSTORE_FULCIO_URL + SIGSTORE_REKOR_URL env vars
 		insecureFlag,
-		fulcioURL, rekorURL,
 		p.AppName,
 		p.ImageTag,
 		p.ImageTag, outSignaturePath,
@@ -303,16 +316,7 @@ echo "Image signed successfully (keyless)"
 			// have keyless on by default but we keep the env var for compatibility.
 			forge.Env{Name: "COSIGN_EXPERIMENTAL", Value: "1"},
 		},
-		VolumeMounts: []forge.VolumeBuilder{
-			&forge.EmptyDirVolume{BaseVolume: forge.BaseVolume{Name: volumeWorkspace, MountPath: workspaceMountPath}},
-			&forge.SecretVolume{BaseVolume: forge.BaseVolume{
-				Name: secretRegistryConfig, MountPath: buildkitRegistryMount, ReadOnly: true,
-			}, SecretName: secretRegistryConfig},
-			// NOTE: SA OIDC token is mounted via projected volume defined in the
-			// workflow pod spec, not here. The container expects the token at
-			// /var/run/secrets/sigstore/token. The pod-level config is added by
-			// the workflow_builder when InfraParams.CosignKeyless=true.
-		},
+		VolumeMounts: signKeylessVolumeMounts(),
 		Resources: &forge.ResourceRequirements{
 			Requests: forge.ResourceList{CPU: "100m", Memory: "128Mi"},
 			Limits:   forge.ResourceList{CPU: "500m", Memory: "256Mi"},
@@ -322,5 +326,26 @@ echo "Image signed successfully (keyless)"
 			RunAsGroup:   forge.Ptr(rootlessUID),
 			RunAsNonRoot: forge.Ptr(true),
 		},
+	}
+}
+
+// signKeylessVolumeMounts returns the volume mounts for the cosign keyless
+// sign step. Mirrors attestVolumeMounts(keyless=true):
+//   - PVC /workspace shared with build-image/syft/attest (NOT EmptyDir — that
+//     would be pod-local and invisible to downstream DAG steps reading the
+//     signature/digest output files).
+//   - secretRegistryConfig for image push auth.
+//   - sigstore-token mount referencing the pod-level ProjectedVolume injected
+//     by workflow_builder.buildVolumes() when InfraParams.CosignKeyless=true.
+//     The SA token reaches the cosign container at /var/run/secrets/sigstore/token.
+func signKeylessVolumeMounts() []forge.VolumeBuilder {
+	return []forge.VolumeBuilder{
+		&forge.PVCVolume{BaseVolume: forge.BaseVolume{Name: volumeWorkspace, MountPath: workspaceMountPath}},
+		&forge.SecretVolume{BaseVolume: forge.BaseVolume{
+			Name: secretRegistryConfig, MountPath: buildkitRegistryMount, ReadOnly: true,
+		}, SecretName: secretRegistryConfig},
+		&forge.SecretVolume{BaseVolume: forge.BaseVolume{
+			Name: sigstoreTokenVolumeName, MountPath: sigstoreTokenMountPath, ReadOnly: true,
+		}, SecretName: sigstoreTokenVolumeName}, // SecretName ignored — name refers to projected vol
 	}
 }
