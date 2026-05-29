@@ -197,89 +197,42 @@ func TestIdempotencyStore_Cleanup_Error(t *testing.T) {
 // is wired (out of T1.5 scope).
 
 // =============================================================================
-// Cell Store tests
+// Cell Store tests — DELETED in T2.2 #2 of plan
+// 2026-05-29-sqlc-migration v1.3
 // =============================================================================
-
-func TestCellStore_CellTenantCounts_Empty(t *testing.T) {
-	rec := &recordingDBTX{}
-	store := &PostgresCellStore{DB: rec}
-
-	counts, err := store.CellTenantCounts(context.Background())
-	if err != nil {
-		t.Fatalf("unexpected error: %v", err)
-	}
-	if counts == nil {
-		t.Error("expected non-nil map")
-	}
-}
-
-func TestCellStore_CountByCell_Empty(t *testing.T) {
-	rec := &recordingDBTX{}
-	store := &PostgresCellStore{DB: rec}
-
-	counts, err := store.CountByCell(context.Background())
-	if err != nil {
-		t.Fatalf("unexpected error: %v", err)
-	}
-	if counts == nil {
-		t.Error("expected non-nil map")
-	}
-}
-
-func TestCellStore_GetTenantCellID_NotFound(t *testing.T) {
-	fake := &fakeDBTX{}
-	store := &PostgresCellStore{DB: fake}
-
-	_, err := store.GetTenantCellID(context.Background(), "nonexistent")
-	if err == nil {
-		t.Fatal("expected error for nonexistent tenant")
-	}
-}
-
-func TestCellStore_CellTenantCounts_WithData(t *testing.T) {
-	fake := &fakeDBTX{
-		queryRows: &fakeRowsMulti{
-			data: [][]any{
-				{"cell-sfo3", int(3)},
-				{"cell-nyc3", int(5)},
-			},
-		},
-	}
-	store := &PostgresCellStore{DB: fake}
-
-	counts, err := store.CellTenantCounts(context.Background())
-	if err != nil {
-		t.Fatalf("unexpected error: %v", err)
-	}
-	if counts["cell-sfo3"] != 3 {
-		t.Errorf("expected 3 for cell-sfo3, got: %d", counts["cell-sfo3"])
-	}
-}
-
-func TestCellStore_CellTenantCounts_QueryError(t *testing.T) {
-	fake := &fakeDBTX{queryErr: fmt.Errorf("db down")}
-	store := &PostgresCellStore{DB: fake}
-
-	_, err := store.CellTenantCounts(context.Background())
-	if err == nil {
-		t.Fatal("expected error")
-	}
-}
-
-func TestCellStore_GetTenantCellID_Success(t *testing.T) {
-	fake := &fakeDBTX{
-		queryRowResult: &fakeRowWithData{values: []any{"cell-sfo3"}},
-	}
-	store := &PostgresCellStore{DB: fake}
-
-	cellID, err := store.GetTenantCellID(context.Background(), "tn-1")
-	if err != nil {
-		t.Fatalf("unexpected error: %v", err)
-	}
-	if cellID != "cell-sfo3" {
-		t.Errorf("expected cell-sfo3, got: %s", cellID)
-	}
-}
+//
+// 6 stub-class tests previously here (TestCellStore_CellTenantCounts_
+// Empty/WithData/QueryError, _CountByCell_Empty, _GetTenantCellID_
+// NotFound/Success) used fakeDBTX / recordingDBTX stub responses to
+// verify PostgresCellStore behaviors. With T2.2 #2 migrating to sqlc-
+// backed via SqlcBridge, the fake pattern is incompatible.
+//
+// Classification per `.claude/knowledge-base/audits/2026-05-29-sqlc-
+// test-reshape-matrix.md` (stores_extra_test.go MIXED):
+//
+//   - KEEP-INVARIANT preserved structurally by CellStoreSqlc:
+//     * CellTenantCounts/CountByCell returns non-nil empty map when
+//       zero rows (wrapper `make(map[string]int, len(rows))` pattern
+//       handles zero-row case structurally)
+//     * GetTenantCellID error wrap with "cell store: get tenant
+//       cell_id:" prefix preserved verbatim
+//
+//   - DELETE-SCHEMA-MIRROR-DUPLICATE subset: stub-pass-through tests
+//     — sqlc compile-time + sqlcsync gate replace.
+//
+// PinTenantToCell 4-step sequence (KEEP-INVARIANT, exercised in
+// services/cell_pinner_test.go against the real wrapper):
+//   1. tenant exists → ErrCellPinnerTenantNotFound
+//   2. cell exists → ErrCellPinnerCellNotFound
+//   3. cell.status == 'active' → ErrCellPinnerNotPinnable
+//   4. capacity check (NULL = unlimited; excludes moving tenant) →
+//      ErrCellPinnerAtCapacity
+// preserved verbatim in cell_wrapper.go (each step is a sqlc query
+// + the wrapper sequences them with the error mapping).
+//
+// Per matrix § Phase 2 reshape window: KEEP-INVARIANT subset moves to
+// real-PG-gated tests when pgxmock or LOOPZERO_E2E_DATABASE_URL harness
+// is wired.
 
 // Keep import anchored
 var _ = loopzeroerrors.ErrBuildNotFound
