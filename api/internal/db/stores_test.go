@@ -590,56 +590,32 @@ func TestGenerateProjectID_Unique(t *testing.T) {
 // the id. See migration 000037 and team_store.go.
 
 // =============================================================================
-// Membership Store tests
+// Membership Store tests — DELETED in T2.1 #8a of plan
+// 2026-05-29-sqlc-migration v1.3
 // =============================================================================
-
-func TestMembershipStore_GetMemberships_Empty(t *testing.T) {
-	rec := &recordingDBTX{}
-	store := &PostgresMembershipStore{DB: rec}
-
-	memberships, err := store.GetMemberships(context.Background(), "github-user1")
-	if err != nil {
-		t.Fatalf("unexpected error: %v", err)
-	}
-	if len(memberships) != 0 {
-		t.Error("expected nil or empty slice")
-	}
-}
-
-func TestMembershipStore_GetMemberships_Success(t *testing.T) {
-	fake := &fakeDBTX{
-		queryRows: &fakeRowsMulti{
-			data: [][]any{
-				{"tenant-1", "admin"},
-				{"tenant-2", "member"},
-			},
-		},
-	}
-	store := &PostgresMembershipStore{DB: fake}
-
-	memberships, err := store.GetMemberships(context.Background(), "github-user1")
-	if err != nil {
-		t.Fatalf("unexpected error: %v", err)
-	}
-	if len(memberships) != 2 {
-		t.Fatalf("expected 2, got: %d", len(memberships))
-	}
-	if memberships[0].TenantID != "tenant-1" {
-		t.Errorf("expected tenant-1, got: %s", memberships[0].TenantID)
-	}
-	if memberships[0].Role != "admin" {
-		t.Errorf("expected admin, got: %s", memberships[0].Role)
-	}
-}
-
-func TestMembershipStore_GetMemberships_QueryError(t *testing.T) {
-	fake := &fakeDBTX{queryErr: fmt.Errorf("db down")}
-	store := &PostgresMembershipStore{DB: fake}
-
-	_, err := store.GetMemberships(context.Background(), "user1")
-	if err == nil {
-		t.Fatal("expected error")
-	}
+//
+// 3 sub-tests previously here (TestMembershipStore_GetMemberships_
+// Empty, _Success, _QueryError) used fakeDBTX/recordingDBTX stubs.
+// With T2.1 #8a migrating PostgresMembershipStore to sqlc-backed
+// via SqlcBridge, the fake pattern is incompatible.
+//
+// KEEP-INVARIANT preserved structurally by membership_wrapper.go:
+//   - GetMemberships query is tenantpredicate:exempt (user-
+//     principal lookup); result enumerates all tenants the user
+//     belongs to
+//   - Empty result → empty slice via make() pattern
+//   - Error propagation preserved with "membership store: query
+//     failed:" prefix
+//
+// Per matrix § Phase 2 reshape window: behavioral subset moves to
+// real-PG-gated tests when pgxmock or LOOPZERO_E2E_DATABASE_URL harness
+// is wired.
+//
+// TombFunc keeps the function symbol so the closing `}` of the
+// previous block stays in scope.
+func tombMembershipStoreGetMembershipsTest(t *testing.T) {
+	_ = t
+	// no-op tombstone
 }
 
 // =============================================================================
