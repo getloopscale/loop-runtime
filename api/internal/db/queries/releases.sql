@@ -79,3 +79,65 @@ WHERE tenant_id = $1
   AND status = 'ACTIVE'
 ORDER BY created_at DESC
 LIMIT 1;
+
+-- name: GetPreviousRelease :one
+-- Returns the most-recent SUPERSEDED-or-ROLLED-BACK release for a (tenant,
+-- project, env) tuple — the canonical "what should we rollback to?" query.
+SELECT * FROM releases
+WHERE tenant_id = $1
+  AND project_id = $2
+  AND environment = $3
+  AND status IN ('SUPERSEDED', 'ROLLED_BACK')
+ORDER BY created_at DESC
+LIMIT 1;
+
+-- tenantpredicate:exempt
+-- name: GetLatestByBuildID :one
+-- Returns the most-recent release for a given build_id. Used by the release
+-- inspector (T4.4 of plan 2026-05-28-meet-001) + reconcile loop. Cross-tenant
+-- because build IDs are globally unique and the caller validates tenant
+-- ownership before invoking.
+SELECT * FROM releases
+WHERE build_id = $1
+ORDER BY created_at DESC
+LIMIT 1;
+
+-- name: ListReleasesByEnv :many
+-- Paginated list of releases for a (tenant, project, env) tuple. Includes
+-- ARCHIVED unless caller filters. Limit is enforced at the caller.
+SELECT * FROM releases
+WHERE tenant_id = $1
+  AND project_id = $2
+  AND environment = $3
+ORDER BY created_at DESC
+LIMIT $4;
+
+-- name: SetReleaseGitCommit :one
+-- Records the git commit SHA on a release after the gitops push completes.
+-- Idempotent: re-applying with the same value is a no-op.
+UPDATE releases
+SET git_commit = $1
+WHERE id = $2 AND tenant_id = $3
+RETURNING *;
+
+-- name: AppendReleaseSideEffect :one
+-- Merges a JSON object into the release's side_effects column using the
+-- jsonb `||` concat operator. Repeated keys overwrite; others preserve.
+-- Used by the reconcile reaper to capture transition reasons (T4.1 of plan
+-- 2026-04-platform-fix-all-issues).
+UPDATE releases
+SET side_effects = COALESCE(side_effects, '{}'::jsonb) || $1::jsonb
+WHERE id = $2 AND tenant_id = $3
+RETURNING *;
+
+-- name: CancelReleasesByEnv :many
+-- Cancels all non-CANCELLED releases for a (tenant, project, env) tuple.
+-- Used by `loopzero cancel` (env-scoped) + tenant deletion cascade.
+UPDATE releases
+SET status = 'CANCELLED'
+WHERE tenant_id = $1
+  AND project_id = $2
+  AND environment = $3
+  AND status <> 'CANCELLED'
+  AND status <> 'ROLLED_BACK'
+RETURNING id;

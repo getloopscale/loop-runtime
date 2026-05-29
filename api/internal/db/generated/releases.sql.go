@@ -11,6 +11,91 @@ import (
 	"github.com/jackc/pgx/v5/pgtype"
 )
 
+const appendReleaseSideEffect = `-- name: AppendReleaseSideEffect :one
+UPDATE releases
+SET side_effects = COALESCE(side_effects, '{}'::jsonb) || $1::jsonb
+WHERE id = $2 AND tenant_id = $3
+RETURNING id, build_id, tenant_id, project_id, environment, status, correlation_id, created_by, git_commit, git_mirror_status, artifacts, side_effects, apps, cell_id, processing_by, processing_since, image_digest, image_signature, image_signed_at, created_at, image_attestation_rekor_url
+`
+
+type AppendReleaseSideEffectParams struct {
+	Column1  []byte `json:"column_1"`
+	ID       string `json:"id"`
+	TenantID string `json:"tenant_id"`
+}
+
+// Merges a JSON object into the release's side_effects column using the
+// jsonb `||` concat operator. Repeated keys overwrite; others preserve.
+// Used by the reconcile reaper to capture transition reasons (T4.1 of plan
+// 2026-04-platform-fix-all-issues).
+func (q *Queries) AppendReleaseSideEffect(ctx context.Context, db DBTX, arg AppendReleaseSideEffectParams) (Release, error) {
+	row := db.QueryRow(ctx, appendReleaseSideEffect, arg.Column1, arg.ID, arg.TenantID)
+	var i Release
+	err := row.Scan(
+		&i.ID,
+		&i.BuildID,
+		&i.TenantID,
+		&i.ProjectID,
+		&i.Environment,
+		&i.Status,
+		&i.CorrelationID,
+		&i.CreatedBy,
+		&i.GitCommit,
+		&i.GitMirrorStatus,
+		&i.Artifacts,
+		&i.SideEffects,
+		&i.Apps,
+		&i.CellID,
+		&i.ProcessingBy,
+		&i.ProcessingSince,
+		&i.ImageDigest,
+		&i.ImageSignature,
+		&i.ImageSignedAt,
+		&i.CreatedAt,
+		&i.ImageAttestationRekorUrl,
+	)
+	return i, err
+}
+
+const cancelReleasesByEnv = `-- name: CancelReleasesByEnv :many
+UPDATE releases
+SET status = 'CANCELLED'
+WHERE tenant_id = $1
+  AND project_id = $2
+  AND environment = $3
+  AND status <> 'CANCELLED'
+  AND status <> 'ROLLED_BACK'
+RETURNING id
+`
+
+type CancelReleasesByEnvParams struct {
+	TenantID    string `json:"tenant_id"`
+	ProjectID   string `json:"project_id"`
+	Environment string `json:"environment"`
+}
+
+// Cancels all non-CANCELLED releases for a (tenant, project, env) tuple.
+// Used by `loopzero cancel` (env-scoped) + tenant deletion cascade.
+func (q *Queries) CancelReleasesByEnv(ctx context.Context, db DBTX, arg CancelReleasesByEnvParams) ([]string, error) {
+	rows, err := db.Query(ctx, cancelReleasesByEnv, arg.TenantID, arg.ProjectID, arg.Environment)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []string
+	for rows.Next() {
+		var id string
+		if err := rows.Scan(&id); err != nil {
+			return nil, err
+		}
+		items = append(items, id)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const getActiveByEnv = `-- name: GetActiveByEnv :one
 SELECT id, build_id, tenant_id, project_id, environment, status, correlation_id, created_by, git_commit, git_mirror_status, artifacts, side_effects, apps, cell_id, processing_by, processing_since, image_digest, image_signature, image_signed_at, created_at, image_attestation_rekor_url FROM releases
 WHERE tenant_id = $1
@@ -32,6 +117,94 @@ type GetActiveByEnvParams struct {
 // enforced by the state machine + the WHERE clause below).
 func (q *Queries) GetActiveByEnv(ctx context.Context, db DBTX, arg GetActiveByEnvParams) (Release, error) {
 	row := db.QueryRow(ctx, getActiveByEnv, arg.TenantID, arg.ProjectID, arg.Environment)
+	var i Release
+	err := row.Scan(
+		&i.ID,
+		&i.BuildID,
+		&i.TenantID,
+		&i.ProjectID,
+		&i.Environment,
+		&i.Status,
+		&i.CorrelationID,
+		&i.CreatedBy,
+		&i.GitCommit,
+		&i.GitMirrorStatus,
+		&i.Artifacts,
+		&i.SideEffects,
+		&i.Apps,
+		&i.CellID,
+		&i.ProcessingBy,
+		&i.ProcessingSince,
+		&i.ImageDigest,
+		&i.ImageSignature,
+		&i.ImageSignedAt,
+		&i.CreatedAt,
+		&i.ImageAttestationRekorUrl,
+	)
+	return i, err
+}
+
+const getLatestByBuildID = `-- name: GetLatestByBuildID :one
+SELECT id, build_id, tenant_id, project_id, environment, status, correlation_id, created_by, git_commit, git_mirror_status, artifacts, side_effects, apps, cell_id, processing_by, processing_since, image_digest, image_signature, image_signed_at, created_at, image_attestation_rekor_url FROM releases
+WHERE build_id = $1
+ORDER BY created_at DESC
+LIMIT 1
+`
+
+// tenantpredicate:exempt
+// Returns the most-recent release for a given build_id. Used by the release
+// inspector (T4.4 of plan 2026-05-28-meet-001) + reconcile loop. Cross-tenant
+// because build IDs are globally unique and the caller validates tenant
+// ownership before invoking.
+func (q *Queries) GetLatestByBuildID(ctx context.Context, db DBTX, buildID string) (Release, error) {
+	row := db.QueryRow(ctx, getLatestByBuildID, buildID)
+	var i Release
+	err := row.Scan(
+		&i.ID,
+		&i.BuildID,
+		&i.TenantID,
+		&i.ProjectID,
+		&i.Environment,
+		&i.Status,
+		&i.CorrelationID,
+		&i.CreatedBy,
+		&i.GitCommit,
+		&i.GitMirrorStatus,
+		&i.Artifacts,
+		&i.SideEffects,
+		&i.Apps,
+		&i.CellID,
+		&i.ProcessingBy,
+		&i.ProcessingSince,
+		&i.ImageDigest,
+		&i.ImageSignature,
+		&i.ImageSignedAt,
+		&i.CreatedAt,
+		&i.ImageAttestationRekorUrl,
+	)
+	return i, err
+}
+
+const getPreviousRelease = `-- name: GetPreviousRelease :one
+SELECT id, build_id, tenant_id, project_id, environment, status, correlation_id, created_by, git_commit, git_mirror_status, artifacts, side_effects, apps, cell_id, processing_by, processing_since, image_digest, image_signature, image_signed_at, created_at, image_attestation_rekor_url FROM releases
+WHERE tenant_id = $1
+  AND project_id = $2
+  AND environment = $3
+  AND status IN ('SUPERSEDED', 'ROLLED_BACK')
+ORDER BY created_at DESC
+LIMIT 1
+`
+
+type GetPreviousReleaseParams struct {
+	TenantID    string `json:"tenant_id"`
+	ProjectID   string `json:"project_id"`
+	Environment string `json:"environment"`
+}
+
+// Returns the most-recent SUPERSEDED-or-ROLLED-BACK release for a (tenant,
+// project, env) tuple — the canonical "what should we rollback to?" query.
+func (q *Queries) GetPreviousRelease(ctx context.Context, db DBTX, arg GetPreviousReleaseParams) (Release, error) {
+	row := db.QueryRow(ctx, getPreviousRelease, arg.TenantID, arg.ProjectID, arg.Environment)
 	var i Release
 	err := row.Scan(
 		&i.ID,
@@ -228,6 +401,115 @@ func (q *Queries) InsertRelease(ctx context.Context, db DBTX, arg InsertReleaseP
 		arg.ImageSignedAt,
 		arg.ImageAttestationRekorUrl,
 	)
+	var i Release
+	err := row.Scan(
+		&i.ID,
+		&i.BuildID,
+		&i.TenantID,
+		&i.ProjectID,
+		&i.Environment,
+		&i.Status,
+		&i.CorrelationID,
+		&i.CreatedBy,
+		&i.GitCommit,
+		&i.GitMirrorStatus,
+		&i.Artifacts,
+		&i.SideEffects,
+		&i.Apps,
+		&i.CellID,
+		&i.ProcessingBy,
+		&i.ProcessingSince,
+		&i.ImageDigest,
+		&i.ImageSignature,
+		&i.ImageSignedAt,
+		&i.CreatedAt,
+		&i.ImageAttestationRekorUrl,
+	)
+	return i, err
+}
+
+const listReleasesByEnv = `-- name: ListReleasesByEnv :many
+SELECT id, build_id, tenant_id, project_id, environment, status, correlation_id, created_by, git_commit, git_mirror_status, artifacts, side_effects, apps, cell_id, processing_by, processing_since, image_digest, image_signature, image_signed_at, created_at, image_attestation_rekor_url FROM releases
+WHERE tenant_id = $1
+  AND project_id = $2
+  AND environment = $3
+ORDER BY created_at DESC
+LIMIT $4
+`
+
+type ListReleasesByEnvParams struct {
+	TenantID    string `json:"tenant_id"`
+	ProjectID   string `json:"project_id"`
+	Environment string `json:"environment"`
+	Limit       int32  `json:"limit"`
+}
+
+// Paginated list of releases for a (tenant, project, env) tuple. Includes
+// ARCHIVED unless caller filters. Limit is enforced at the caller.
+func (q *Queries) ListReleasesByEnv(ctx context.Context, db DBTX, arg ListReleasesByEnvParams) ([]Release, error) {
+	rows, err := db.Query(ctx, listReleasesByEnv,
+		arg.TenantID,
+		arg.ProjectID,
+		arg.Environment,
+		arg.Limit,
+	)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []Release
+	for rows.Next() {
+		var i Release
+		if err := rows.Scan(
+			&i.ID,
+			&i.BuildID,
+			&i.TenantID,
+			&i.ProjectID,
+			&i.Environment,
+			&i.Status,
+			&i.CorrelationID,
+			&i.CreatedBy,
+			&i.GitCommit,
+			&i.GitMirrorStatus,
+			&i.Artifacts,
+			&i.SideEffects,
+			&i.Apps,
+			&i.CellID,
+			&i.ProcessingBy,
+			&i.ProcessingSince,
+			&i.ImageDigest,
+			&i.ImageSignature,
+			&i.ImageSignedAt,
+			&i.CreatedAt,
+			&i.ImageAttestationRekorUrl,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const setReleaseGitCommit = `-- name: SetReleaseGitCommit :one
+UPDATE releases
+SET git_commit = $1
+WHERE id = $2 AND tenant_id = $3
+RETURNING id, build_id, tenant_id, project_id, environment, status, correlation_id, created_by, git_commit, git_mirror_status, artifacts, side_effects, apps, cell_id, processing_by, processing_since, image_digest, image_signature, image_signed_at, created_at, image_attestation_rekor_url
+`
+
+type SetReleaseGitCommitParams struct {
+	GitCommit *string `json:"git_commit"`
+	ID        string  `json:"id"`
+	TenantID  string  `json:"tenant_id"`
+}
+
+// Records the git commit SHA on a release after the gitops push completes.
+// Idempotent: re-applying with the same value is a no-op.
+func (q *Queries) SetReleaseGitCommit(ctx context.Context, db DBTX, arg SetReleaseGitCommitParams) (Release, error) {
+	row := db.QueryRow(ctx, setReleaseGitCommit, arg.GitCommit, arg.ID, arg.TenantID)
 	var i Release
 	err := row.Scan(
 		&i.ID,

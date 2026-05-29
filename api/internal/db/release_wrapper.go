@@ -189,6 +189,98 @@ func (s *ReleaseStoreSqlc) GetActiveByEnv(ctx context.Context, tenantID, project
 	return generatedRowToRelease(row), nil
 }
 
+// GetPreviousRelease returns the most-recent SUPERSEDED-or-ROLLED-BACK
+// release — the canonical rollback target for an env.
+func (s *ReleaseStoreSqlc) GetPreviousRelease(ctx context.Context, tenantID, projectID, env string) (*Release, error) {
+	row, err := s.q.GetPreviousRelease(ctx, s.pool, generated.GetPreviousReleaseParams{
+		TenantID:    tenantID,
+		ProjectID:   projectID,
+		Environment: env,
+	})
+	if err != nil {
+		if errors.Is(err, pgx.ErrNoRows) {
+			return nil, nil
+		}
+		return nil, fmt.Errorf("sqlc: get previous release: %w", err)
+	}
+	return generatedRowToRelease(row), nil
+}
+
+// GetLatestByBuildID returns the most-recent release for a build_id (cross-
+// tenant; caller validates ownership). Used by release_inspector + reconcile.
+func (s *ReleaseStoreSqlc) GetLatestByBuildID(ctx context.Context, buildID string) (*Release, error) {
+	row, err := s.q.GetLatestByBuildID(ctx, s.pool, buildID)
+	if err != nil {
+		if errors.Is(err, pgx.ErrNoRows) {
+			return nil, nil
+		}
+		return nil, fmt.Errorf("sqlc: get latest by build_id: %w", err)
+	}
+	return generatedRowToRelease(row), nil
+}
+
+// ListByEnv returns up to `limit` releases for a (tenant, project, env) tuple.
+func (s *ReleaseStoreSqlc) ListByEnv(ctx context.Context, tenantID, projectID, env string, limit int32) ([]Release, error) {
+	rows, err := s.q.ListReleasesByEnv(ctx, s.pool, generated.ListReleasesByEnvParams{
+		TenantID:    tenantID,
+		ProjectID:   projectID,
+		Environment: env,
+		Limit:       limit,
+	})
+	if err != nil {
+		return nil, fmt.Errorf("sqlc: list releases by env: %w", err)
+	}
+	out := make([]Release, 0, len(rows))
+	for _, r := range rows {
+		out = append(out, *generatedRowToRelease(r))
+	}
+	return out, nil
+}
+
+// SetGitCommit records the git commit SHA on a release after the gitops push.
+func (s *ReleaseStoreSqlc) SetGitCommit(ctx context.Context, tx pgx.Tx, releaseID, tenantID, commitSHA string) error {
+	_, err := s.q.SetReleaseGitCommit(ctx, s.db(tx), generated.SetReleaseGitCommitParams{
+		GitCommit: stringEmptyToNilPtr(commitSHA),
+		ID:        releaseID,
+		TenantID:  tenantID,
+	})
+	if err != nil {
+		return fmt.Errorf("sqlc: set git commit: %w", err)
+	}
+	return nil
+}
+
+// AppendSideEffect merges a JSON object into the release's side_effects
+// column via PostgreSQL jsonb concat (`||`). Repeated keys overwrite.
+func (s *ReleaseStoreSqlc) AppendSideEffect(ctx context.Context, tx pgx.Tx, releaseID, tenantID string, patch []byte) error {
+	if len(patch) == 0 {
+		return nil
+	}
+	_, err := s.q.AppendReleaseSideEffect(ctx, s.db(tx), generated.AppendReleaseSideEffectParams{
+		Column1:  patch,
+		ID:       releaseID,
+		TenantID: tenantID,
+	})
+	if err != nil {
+		return fmt.Errorf("sqlc: append side effect: %w", err)
+	}
+	return nil
+}
+
+// CancelAllByEnv cancels every non-CANCELLED release for an env. Returns
+// the slice of cancelled release IDs.
+func (s *ReleaseStoreSqlc) CancelAllByEnv(ctx context.Context, tx pgx.Tx, tenantID, projectID, env string) ([]string, error) {
+	ids, err := s.q.CancelReleasesByEnv(ctx, s.db(tx), generated.CancelReleasesByEnvParams{
+		TenantID:    tenantID,
+		ProjectID:   projectID,
+		Environment: env,
+	})
+	if err != nil {
+		return nil, fmt.Errorf("sqlc: cancel releases by env: %w", err)
+	}
+	return ids, nil
+}
+
 // -----------------------------------------------------------------------
 // Conversion helpers between db.Release (legacy public type) and the
 // sqlc-generated row type. We mirror nullable columns back and forth so
