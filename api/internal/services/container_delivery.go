@@ -469,21 +469,40 @@ func (c *ContainerDeliveryActivator) phaseEFinalize(ctx context.Context, build *
 }
 
 func (c *ContainerDeliveryActivator) triggerSyncWithRetry(ctx context.Context, appName string) error {
-	const maxAttempts = 3
+	// V9 dogfood 2026-05-29 unblock: per-error-type budget. Recoverable
+	// errors (ErrSyncOperationInProgress) get 8 attempts with linear
+	// backoff (let app-level lock queue drain naturally during dogfood
+	// concurrency); non-recoverable errors keep the 3-attempt budget
+	// (faster fail for genuine failures, preserves test contracts).
+	const (
+		maxAttempts                = 3 // for non-recoverable errors
+		maxAttemptsSyncInProgress  = 8 // for ErrSyncOperationInProgress
+		opInProgressLinearBackoffS = 5 // seconds — predictable cadence
+	)
 	var lastErr error
-	for attempt := 0; attempt < maxAttempts; attempt++ {
+	for attempt := 0; ; attempt++ {
 		err := c.sync.TriggerSync(ctx, appName)
 		if err == nil {
 			return nil
 		}
 		lastErr = err
 
-		// MEET-2026-03-29-019: If ArgoCD has a stuck operation, terminate it
-		// before retrying. Without this, all 3 retries hit the same 409 wall.
-		if errors.Is(err, loopzeroerrors.ErrSyncOperationInProgress) {
-			slog.Warn("argocd sync operation in progress — terminating stuck operation before retry",
+		isOpInProgress := errors.Is(err, loopzeroerrors.ErrSyncOperationInProgress)
+		budget := maxAttempts
+		if isOpInProgress {
+			budget = maxAttemptsSyncInProgress
+		}
+		if attempt+1 >= budget {
+			break
+		}
+
+		// MEET-2026-03-29-019 + V9 concurrency-aware: for stuck
+		// operations only terminate on the SECOND-TO-LAST attempt
+		// (earlier attempts back off and let queue drain without
+		// canceling a peer's sync; final attempt fails fast).
+		if isOpInProgress && attempt == budget-2 {
+			slog.Warn("argocd sync operation in progress — terminating stuck operation before final retry",
 				"app", appName, "attempt", attempt+1)
-			// Type-assert to access TerminateOperation (interface may not expose it)
 			type terminator interface {
 				TerminateOperation(ctx context.Context, appName string) error
 			}
@@ -496,12 +515,24 @@ func (c *ContainerDeliveryActivator) triggerSyncWithRetry(ctx context.Context, a
 						"app", appName)
 				}
 			}
+		} else if isOpInProgress {
+			slog.Info("argocd sync operation in progress — backing off to let queue drain",
+				"app", appName, "attempt", attempt+1)
 		} else {
 			slog.Warn("argocd trigger sync failed, retrying",
 				"app", appName, "attempt", attempt+1, "error", err)
 		}
 
-		backoff := time.Duration(1<<uint(attempt)) * time.Second
+		var backoff time.Duration
+		if isOpInProgress {
+			// Linear backoff (predictable cadence): 5s, 5s, 5s, 5s, 5s, 5s, 5s
+			// Total budget: ~35s for 8 attempts = fits in 60s service timeout
+			// budget while letting an ArgoCD sync queue of ~5-7 syncs drain.
+			backoff = time.Duration(opInProgressLinearBackoffS) * time.Second
+		} else {
+			// Exponential backoff (existing behavior): 1s, 2s, 4s
+			backoff = time.Duration(1<<uint(attempt)) * time.Second
+		}
 		select {
 		case <-ctx.Done():
 			return ctx.Err()
