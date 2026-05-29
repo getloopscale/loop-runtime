@@ -11,6 +11,7 @@ import (
 	"github.com/jackc/pgx/v5/pgxpool"
 
 	"github.com/loopzero/loopzero/api/internal/db"
+	"github.com/loopzero/loopzero/api/internal/db/generated"
 	"github.com/loopzero/loopzero/api/internal/lock"
 )
 
@@ -39,6 +40,31 @@ func (a *PgxTxDBTX) Exec(ctx context.Context, sql string, args ...any) (db.ExecR
 
 func (a *PgxTxDBTX) QueryRow(ctx context.Context, sql string, args ...any) db.Row {
 	return &pgxRowAdapter{row: a.Tx.QueryRow(ctx, sql, args...)}
+}
+
+// GeneratedDB returns the underlying pgx.Tx as a generated.DBTX (sqlc-
+// emitted pgx-native interface). Bridges PgxTxDBTX into sqlc-backed
+// stores so that calls executed inside withEnvironmentLock can
+// dispatch through SqlcBridge with the lock's transaction (not the
+// pool) — preserving the advisory-lock isolation invariant.
+//
+// Fixes the LIVE panic surfaced in the 2026-05-29 cleanroom dogfood
+// run:
+//   "build_wrapper: DBTX *adapters.PgxTxDBTX does not implement
+//    SqlcBridge — sqlc-backed stores require PgxAdapter /
+//    PgxTxAdapter or pgxmock per T0.6 reshape matrix"
+//
+// Root cause: PgxTxDBTX is the lock-side tx adapter (this package);
+// PgxTxAdapter is the placement-side tx adapter (api/internal/db).
+// Both wrap pgx.Tx for the same db.DBTX interface but only the
+// latter implemented SqlcBridge before this fix. The wrapper
+// dispatch via `tx.(SqlcBridge)` was failing the assertion in the
+// lock path. Adding GeneratedDB() here makes the lock-side adapter
+// satisfy the same bridge contract as the placement-side adapter
+// — uniform sqlc dispatch regardless of which tx-wrapping path
+// the caller took.
+func (a *PgxTxDBTX) GeneratedDB() generated.DBTX {
+	return a.Tx
 }
 
 // pgxRowsAdapter adapts pgx.Rows to db.Rows.
