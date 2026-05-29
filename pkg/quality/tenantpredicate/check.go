@@ -50,6 +50,7 @@ type Outcome struct {
 
 const (
 	defaultQueriesDir = "api/internal/db/queries"
+	defaultRawDir     = "api/internal/db/raw"
 	exemptionMarker   = "tenantpredicate:exempt"
 )
 
@@ -60,22 +61,108 @@ func Check(cfg Config) (Outcome, error) {
 	}
 
 	dir := filepath.Join(cfg.RepoRoot, defaultQueriesDir)
-	if _, err := os.Stat(dir); err != nil {
-		// Phase 0 baseline: directory may not exist yet → trivially PASS.
-		return Outcome{Pass: true}, nil
-	}
 
 	var allViolations []Violation
 	scanned := 0
 
-	err := filepath.Walk(dir, func(path string, info os.FileInfo, walkErr error) error {
+	// Phase 0 baseline: queries/ may not exist yet → skip the
+	// .sql scan loop but still run the raw/ scan below.
+	queriesDirExists := false
+	if _, err := os.Stat(dir); err == nil {
+		queriesDirExists = true
+	}
+
+	if queriesDirExists {
+		err := filepath.Walk(dir, func(path string, info os.FileInfo, walkErr error) error {
+			if walkErr != nil {
+				return walkErr
+			}
+			if info.IsDir() {
+				return nil
+			}
+			if !strings.HasSuffix(info.Name(), ".sql") {
+				return nil
+			}
+			scanned++
+
+			data, err := os.ReadFile(path)
+			if err != nil {
+				return err
+			}
+			fileViolations := scanQueryFile(path, string(data))
+			allViolations = append(allViolations, fileViolations...)
+			return nil
+		})
+		if err != nil {
+			return Outcome{}, err
+		}
+	}
+
+	// T4.1: extend gate to scan api/internal/db/raw/ subpackage. Raw
+	// queries are the sqlc-unparseable escape hatch (see raw/README.md);
+	// the gate enforces that raw .go files NEVER touch the
+	// SensitiveTables exclusion list (secret, audit_log, bootstrap
+	// users/tenants/tenant_members/subscriptions, tombstones, cells).
+	rawDir := filepath.Join(cfg.RepoRoot, defaultRawDir)
+	if _, err := os.Stat(rawDir); err == nil {
+		rawViolations, rawScanned, err := scanRawSubpackage(rawDir)
+		if err != nil {
+			return Outcome{}, err
+		}
+		allViolations = append(allViolations, rawViolations...)
+		scanned += rawScanned
+	}
+
+	return Outcome{
+		Pass:       len(allViolations) == 0,
+		Violations: allViolations,
+		Scanned:    scanned,
+	}, nil
+}
+
+// rawSensitiveTables mirrors api/internal/db/raw/sensitive_tables.go
+// SensitiveTables. Kept in sync via TestRawSensitiveTablesAlignment
+// (pkg/quality/tenantpredicate/raw_check_test.go).
+var rawSensitiveTables = []string{
+	"secrets",
+	"audit_log",
+	"users",
+	"tenants",
+	"tenant_members",
+	"subscriptions",
+	"tenants_pending_deletion",
+	"tenant_tombstones",
+	"cells",
+}
+
+// rawSQLLiteralPattern picks up SQL strings embedded in Go via the
+// backtick raw-string syntax (`...`) — the canonical shape for SQL
+// in api/internal/db/raw/*.go.
+var rawSQLLiteralPattern = regexp.MustCompile("`([^`]*\\bFROM\\s+[a-z_][a-z0-9_]*\\b[^`]*|[^`]*\\bINTO\\s+[a-z_][a-z0-9_]*\\b[^`]*|[^`]*\\bUPDATE\\s+[a-z_][a-z0-9_]*\\b[^`]*|[^`]*\\bJOIN\\s+[a-z_][a-z0-9_]*\\b[^`]*)`")
+
+// scanRawSubpackage walks api/internal/db/raw/ and rejects any raw
+// query that references a sensitive table.
+func scanRawSubpackage(rawDir string) ([]Violation, int, error) {
+	var violations []Violation
+	scanned := 0
+
+	err := filepath.Walk(rawDir, func(path string, info os.FileInfo, walkErr error) error {
 		if walkErr != nil {
 			return walkErr
 		}
 		if info.IsDir() {
 			return nil
 		}
-		if !strings.HasSuffix(info.Name(), ".sql") {
+		name := info.Name()
+		if !strings.HasSuffix(name, ".go") {
+			return nil
+		}
+		// Exclude test files + sensitive_tables.go itself (it
+		// names the tables as data, not as SQL).
+		if strings.HasSuffix(name, "_test.go") {
+			return nil
+		}
+		if name == "sensitive_tables.go" {
 			return nil
 		}
 		scanned++
@@ -84,19 +171,42 @@ func Check(cfg Config) (Outcome, error) {
 		if err != nil {
 			return err
 		}
-		fileViolations := scanQueryFile(path, string(data))
-		allViolations = append(allViolations, fileViolations...)
+		content := string(data)
+
+		// Extract every SQL string literal (backtick-quoted) and
+		// scan for references to sensitive tables.
+		matches := rawSQLLiteralPattern.FindAllString(content, -1)
+		for _, sqlLit := range matches {
+			// Identify all referenced tables via the existing
+			// fromTablePattern / insertTablePattern.
+			refs := extractTables(sqlLit)
+			for _, table := range refs {
+				if isRawSensitive(table) {
+					violations = append(violations, Violation{
+						File:   path,
+						Query:  filepath.Base(path),
+						Table:  table,
+						Reason: "raw-sensitive-table",
+						Detail: fmt.Sprintf("raw query at %s references sensitive table %q — sensitive tables MUST go through sqlc-backed wrappers (see api/internal/db/raw/README.md)", path, table),
+					})
+				}
+			}
+		}
 		return nil
 	})
 	if err != nil {
-		return Outcome{}, err
+		return nil, 0, err
 	}
+	return violations, scanned, nil
+}
 
-	return Outcome{
-		Pass:       len(allViolations) == 0,
-		Violations: allViolations,
-		Scanned:    scanned,
-	}, nil
+func isRawSensitive(table string) bool {
+	for _, t := range rawSensitiveTables {
+		if eqIgnoreCase(t, table) {
+			return true
+		}
+	}
+	return false
 }
 
 // ActionableFix returns the operator-facing message for FAIL output.

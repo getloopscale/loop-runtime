@@ -30,6 +30,17 @@ import (
 	"github.com/loopzero/loopzero/api/internal/db/generated"
 )
 
+// NOTE on raw subpackage seam (T4.1):
+// The window-function-based ranked-DELETE used in DeleteOldBuilds
+// below is the canonical T4.1 raw/ candidate. The corresponding
+// implementation lives in api/internal/db/raw/delete_old_builds.go
+// behind a raw.DBTX interface. To avoid an import cycle (raw cannot
+// import db, but db could import raw), this wrapper keeps the SQL
+// inline; callers outside the db package (e.g., services/scheduler
+// paths) MAY invoke raw.DeleteOldBuilds(ctx, dbAdapter, ...) directly,
+// which exercises the same SQL with the gate-protected boundary.
+// See raw/README.md for the scope + sensitive-tables exclusion.
+
 // PostgresBuildGCStore implements services.BuildGCStore for garbage
 // collection.
 //
