@@ -5,6 +5,7 @@
 package argocd
 
 import (
+	"bytes"
 	"context"
 	"crypto/tls"
 	"crypto/x509"
@@ -233,6 +234,19 @@ func (c *SyncClient) TriggerSync(ctx context.Context, appName string) error {
 	}
 	if resp.StatusCode >= 400 {
 		respBody, _ := io.ReadAll(resp.Body)
+		// V9 dogfood 2026-05-29: ArgoCD returns 400 (not 409) for
+		// "another operation is already in progress" — the dogfood
+		// concurrency races multiple deploys against the same shared
+		// `e2e-tenant-production` app. Legacy status-only check
+		// missed 400; callers (container_delivery.go +
+		// project_deleter.go) ALREADY have retry-with-
+		// TerminateOperation for ErrSyncOperationInProgress, so we
+		// map this status+body combination to the same typed error.
+		if bytes.Contains(respBody, []byte("another operation is already in progress")) {
+			span.RecordError(loopzeroerrors.ErrSyncOperationInProgress)
+			span.SetStatus(codes.Error, "sync operation in progress (status 400)")
+			return loopzeroerrors.ErrSyncOperationInProgress
+		}
 		syncErr := fmt.Errorf("argocd sync: status %d: %s", resp.StatusCode, string(respBody))
 		span.RecordError(syncErr)
 		span.SetStatus(codes.Error, syncErr.Error())
