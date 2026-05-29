@@ -17,6 +17,7 @@ import (
 
 	"github.com/loopzero/loopzero/pkg/quality/advisorylock"
 	"github.com/loopzero/loopzero/pkg/quality/anonymousauth"
+	"github.com/loopzero/loopzero/pkg/quality/sqlcsync"
 	"github.com/loopzero/loopzero/pkg/quality/dashboardpromtool"
 	"github.com/loopzero/loopzero/pkg/quality/helmoverlapparity"
 	"github.com/loopzero/loopzero/pkg/quality/prodimagedigests"
@@ -324,6 +325,8 @@ func runQuality(args []string) int {
 		return runCLIExitCodes(args[1:])
 	case "shell-hygiene":
 		return runShellHygiene(args[1:])
+	case "sqlc-sync":
+		return runSqlcSync(args[1:])
 	case "corrections-txt-closed":
 		return runCorrectionsTxtClosed(args[1:])
 	case "script-count":
@@ -2343,4 +2346,39 @@ func runRatchet(name string, spec deadlineratchet.Spec, args []string, lbl ratch
 		fmt.Printf("[%s] within budget (day %d of %d) — OK.\n", name, o.Days, spec.DeadlineDay)
 		return 0
 	}
+}
+
+// runSqlcSync verifies committed api/internal/db/generated/ is in-sync with a
+// fresh `sqlc generate`. T0.3 of plan 2026-05-29-sqlc-migration v1.2.
+// Successor gate to schema_mirror_test.go (deleted in T4.2 per D7 two-step
+// after this gate goes green for one CI cycle).
+func runSqlcSync(args []string) int {
+	fs := flag.NewFlagSet("sqlc-sync", flag.ContinueOnError)
+	root := fs.String("root", ".", "repo root directory")
+	if err := fs.Parse(args); err != nil {
+		return 1
+	}
+	if absRoot, err := os.Getwd(); err == nil && *root == "." {
+		*root = absRoot
+	}
+
+	outcome, err := sqlcsync.Check(sqlcsync.Config{RepoRoot: *root})
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "sqlc-sync: %v\n", err)
+		return 5
+	}
+	if !outcome.Pass {
+		fmt.Fprintf(os.Stderr, "sqlc-sync: FAIL — %d violation(s) between committed generated/ and fresh sqlc generate (version %s):\n",
+			len(outcome.Violations), outcome.SqlcVersion)
+		for _, v := range outcome.Violations {
+			fmt.Fprintf(os.Stderr, "  [%s] %s\n", v.Reason, v.File)
+			if v.Detail != "" {
+				fmt.Fprintf(os.Stderr, "%s\n", v.Detail)
+			}
+		}
+		fmt.Fprintf(os.Stderr, "\nFix: %s\n", sqlcsync.ActionableFix())
+		return 1
+	}
+	fmt.Printf("sqlc-sync: PASS — committed generated/ in-sync with sqlc %s\n", outcome.SqlcVersion)
+	return 0
 }
