@@ -42,13 +42,76 @@ export function initWebVitals(): void {
  * T3.5 — Activation event instrumentation. Emits onboarding lifecycle events
  * via sendBeacon (prod) or console.log (dev). Same pattern as error-reporter.ts:
  * never throws (telemetry MUST NOT crash app).
+ *
+ * Plan 2026-05-29-login-page-pragmatic-uplift (T2.2 D5): added 4 auth.method.*
+ * events. These follow the AuthTelemetryPayload schema with v:1 versioning.
+ * If backend /v1/telemetry/events ever adds schema validation, version bump
+ * here is the contract evolution point.
  */
 export type ActivationEvent =
   | 'onboarding_step_completed'
   | 'onboarding_dismissed'
   | 'onboarding_replayed'
   | 'first_deploy_celebrated'
-  | 'cli_command_copied';
+  | 'cli_command_copied'
+  | 'auth.method.attempt'
+  | 'auth.method.success'
+  | 'auth.method.failure'
+  | 'auth.method.cancelled';
+
+/**
+ * Auth telemetry types (plan 2026-05-29 T2.2 / D5 — FAANG-grade).
+ *
+ * PII-FREE INVARIANT for auth.method.* events:
+ * - NO email (user-supplied identifier)
+ * - NO IP (sendBeacon adds it at HTTP-layer; NEVER in payload)
+ * - NO Kratos session ID (server-side ephemeral)
+ * - NO user ID / tenant ID (post-auth concerns)
+ * - NO password (obviously)
+ * - NO referrer (could leak email via URL params)
+ *
+ * Allowed:
+ * - method (functional)
+ * - correlation_id (random UUID, no identifying info)
+ * - latency_ms (numeric)
+ * - reason (categorical enum)
+ * - viewport_bucket (categorical)
+ * - timestamp (epoch ms)
+ *
+ * Schema is versioned (v: 1) for future migration without ambiguity.
+ */
+export type AuthMethod = 'github' | 'google' | 'password' | 'passkey';
+
+export type AuthFailureReason =
+  | 'kratos_5xx'          // HTTP 500+ from Kratos (EC-1)
+  | 'kratos_validation'   // 400-class, Kratos ui error nodes
+  | 'csrf_expired'        // csrf_token invalid
+  | 'network'             // fetch threw
+  | 'aborted_by_user';    // user navigated away mid-flow
+
+export type ViewportBucket = 'mobile' | 'tablet' | 'desktop';
+
+export interface AuthTelemetryPayload {
+  v: 1;
+  method: AuthMethod;
+  correlation_id: string;
+  latency_ms?: number;
+  reason?: AuthFailureReason;
+  viewport_bucket: ViewportBucket;
+  timestamp: number;
+}
+
+/**
+ * viewportBucket — categorical viewport size (Tailwind sm/md/lg breakpoints).
+ * SSR-safe: returns 'desktop' when window is undefined.
+ */
+export function viewportBucket(): ViewportBucket {
+  if (typeof window === 'undefined') return 'desktop';
+  const w = window.innerWidth;
+  if (w < 640) return 'mobile';
+  if (w < 1024) return 'tablet';
+  return 'desktop';
+}
 
 export function reportEvent(type: ActivationEvent, payload: Record<string, unknown> = {}): void {
   try {

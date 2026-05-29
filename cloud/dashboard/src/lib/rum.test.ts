@@ -12,7 +12,7 @@
 // the receive contract). Same convention as error-reporter.test.ts.
 
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
-import { reportEvent, trackInteraction } from './rum';
+import { reportEvent, trackInteraction, viewportBucket } from './rum';
 
 // Shared console spy. vi.restoreAllMocks() in afterEach prevents bleed
 // between tests AND describe blocks — `vi.spyOn(console, 'log')` returns
@@ -119,5 +119,132 @@ describe('trackInteraction — UX interaction taxonomy (sponsor criterion #17)',
     const cycle: Record<string, unknown> = { x: 1 };
     cycle.self = cycle;
     expect(() => trackInteraction('logs', 'open', cycle)).not.toThrow();
+  });
+});
+
+// =============================================================================
+// Plan 2026-05-29 T2.2 — FAANG-grade auth telemetry (D5)
+// =============================================================================
+
+describe('reportEvent — auth.method.* events (T2.2 / D5)', () => {
+  let consoleSpy: ReturnType<typeof vi.spyOn>;
+
+  beforeEach(() => {
+    consoleSpy = vi.spyOn(console, 'log').mockImplementation(() => {});
+  });
+
+  afterEach(() => {
+    vi.restoreAllMocks();
+  });
+
+  it('test_rum_accepts_auth_method_attempt_event', () => {
+    reportEvent('auth.method.attempt', {
+      v: 1,
+      method: 'github',
+      correlation_id: '11111111-2222-3333-4444-555555555555',
+      viewport_bucket: 'desktop',
+      timestamp: Date.now(),
+    });
+    expect(consoleSpy).toHaveBeenCalledTimes(1);
+    const [tag, payload] = consoleSpy.mock.calls[0];
+    expect(tag).toBe('[activation] auth.method.attempt');
+    expect((payload as Record<string, unknown>).v).toBe(1);
+    expect((payload as Record<string, unknown>).method).toBe('github');
+  });
+
+  it('test_rum_accepts_auth_method_failure_with_reason', () => {
+    reportEvent('auth.method.failure', {
+      v: 1,
+      method: 'password',
+      correlation_id: '11111111-2222-3333-4444-555555555555',
+      latency_ms: 340,
+      reason: 'kratos_5xx',
+      viewport_bucket: 'mobile',
+      timestamp: Date.now(),
+    });
+    expect(consoleSpy).toHaveBeenCalledTimes(1);
+    const [, payload] = consoleSpy.mock.calls[0];
+    expect((payload as Record<string, unknown>).reason).toBe('kratos_5xx');
+    expect((payload as Record<string, unknown>).latency_ms).toBe(340);
+  });
+
+  it('test_rum_accepts_all_four_auth_method_events', () => {
+    const events = [
+      'auth.method.attempt',
+      'auth.method.success',
+      'auth.method.failure',
+      'auth.method.cancelled',
+    ] as const;
+    for (const ev of events) {
+      expect(() =>
+        reportEvent(ev, {
+          v: 1,
+          method: 'password',
+          correlation_id: 'x',
+          viewport_bucket: 'desktop',
+          timestamp: 0,
+        }),
+      ).not.toThrow();
+    }
+    expect(consoleSpy).toHaveBeenCalledTimes(events.length);
+  });
+});
+
+describe('viewportBucket — categorical viewport (T2.2 / D5)', () => {
+  let originalInnerWidth: number;
+
+  beforeEach(() => {
+    originalInnerWidth = window.innerWidth;
+  });
+
+  afterEach(() => {
+    Object.defineProperty(window, 'innerWidth', {
+      configurable: true,
+      writable: true,
+      value: originalInnerWidth,
+    });
+  });
+
+  function setViewport(width: number): void {
+    Object.defineProperty(window, 'innerWidth', {
+      configurable: true,
+      writable: true,
+      value: width,
+    });
+  }
+
+  it('test_rum_viewport_bucket_mobile', () => {
+    setViewport(400);
+    expect(viewportBucket()).toBe('mobile');
+  });
+
+  it('test_rum_viewport_bucket_mobile_at_boundary', () => {
+    setViewport(639);
+    expect(viewportBucket()).toBe('mobile');
+  });
+
+  it('test_rum_viewport_bucket_tablet', () => {
+    setViewport(800);
+    expect(viewportBucket()).toBe('tablet');
+  });
+
+  it('test_rum_viewport_bucket_tablet_at_lower_boundary', () => {
+    setViewport(640);
+    expect(viewportBucket()).toBe('tablet');
+  });
+
+  it('test_rum_viewport_bucket_tablet_at_upper_boundary', () => {
+    setViewport(1023);
+    expect(viewportBucket()).toBe('tablet');
+  });
+
+  it('test_rum_viewport_bucket_desktop', () => {
+    setViewport(1440);
+    expect(viewportBucket()).toBe('desktop');
+  });
+
+  it('test_rum_viewport_bucket_desktop_at_boundary', () => {
+    setViewport(1024);
+    expect(viewportBucket()).toBe('desktop');
   });
 });
