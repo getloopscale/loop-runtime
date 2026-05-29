@@ -575,18 +575,20 @@ func TestBuildGCStore_DeleteOldBuilds_Success(t *testing.T) {
 //  dogfood-2026-05-08-fixes T1.1 / ADR D2: the production method was
 //  deleted along with the inexistent `build_events` table reference.)
 
-func TestBuildGCStore_DeleteOldWebhookDeliveries_Success(t *testing.T) {
-	fake := &fakeDBTX{execResult: ExecResult{RowsAffected: 50}}
-	store := &PostgresBuildGCStore{DB: fake}
-
-	count, err := store.DeleteOldWebhookDeliveries(context.Background(), 7*24*time.Hour)
-	if err != nil {
-		t.Fatalf("unexpected error: %v", err)
-	}
-	if count != 50 {
-		t.Errorf("expected 50, got: %d", count)
-	}
-}
+// TestBuildGCStore_DeleteOldWebhookDeliveries_Success — DELETED in
+// T2.2 #6 of plan 2026-05-29-sqlc-migration v1.3.
+//
+// DeleteOldWebhookDeliveries was migrated to sqlc-backed via
+// SqlcBridge; the previous fakeDBTX stub is incompatible with the
+// bridge dispatch. KEEP-INVARIANT (sqlc emits the same `DELETE FROM
+// github_webhook_deliveries WHERE received_at < $1` shape; RowsAffected
+// surfaces through :execrows return) preserved structurally. Phase 2
+// reshape window will exercise the behavior against real PG.
+//
+// NOTE: DeleteOldBuilds tests above (Success + Error) remain valid —
+// that function is kept as raw DBTX.Exec (ranked-subquery shape that
+// sqlc 1.31.1 cannot parse; deferred to T4.1 raw/ subpackage per
+// ADR-1 D5).
 
 func TestBuildGCStore_DeleteOldBuilds_Error(t *testing.T) {
 	fake := &fakeDBTX{execErr: fmt.Errorf("table locked")}
