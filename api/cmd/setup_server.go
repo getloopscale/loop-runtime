@@ -298,12 +298,16 @@ func buildServerConfig(
 // keeps the routes layer decoupled from db types.
 //
 // Sprint 6 / T1.2.
+// T1.3b (plan 2026-05-29-sqlc-migration v1.3): adapter inner type
+// widened from concrete *PostgresAppAttestationStore to
+// db.AppAttestationStore interface so AppAttestationStoreSqlc drops in
+// without churn.
 type appSBOMStoreAdapter struct {
-	inner *db.PostgresAppAttestationStore
+	inner db.AppAttestationStore
 }
 
 func newAppSBOMStoreAdapter(d *db.PgxAdapter) *appSBOMStoreAdapter {
-	return &appSBOMStoreAdapter{inner: db.NewPostgresAppAttestationStore(d)}
+	return &appSBOMStoreAdapter{inner: db.NewAppAttestationStoreSqlc(d)}
 }
 
 func (a *appSBOMStoreAdapter) GetBuildAppSBOMs(

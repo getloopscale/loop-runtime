@@ -91,7 +91,11 @@ func setupOrchestrator(
 		PlanCap:           planCap,
 		ScalingResolver:   scalingResolver, // B40
 		// Sprint 6 / T3.1: per-app attestation persistence (signature + SBOM).
-		AppAttestationStore: db.NewPostgresAppAttestationStore(dbAdapter),
+		// T1.3b (plan 2026-05-29-sqlc-migration v1.3): sqlc-backed wrapper
+		// satisfies db.AppAttestationStore 1:1 — preserves ALL-signed
+		// atomicity invariant + F-S2-01 FK race closure (SaveAppAttestations
+		// Tx requires non-nil tx for atomic release+attestation commit).
+		AppAttestationStore: db.NewAppAttestationStoreSqlc(dbAdapter),
 		// T1.2 mitigation #3 of MEET-2026-05-12: per-sign cosign audit
 		// log. AuditLogger reuses WriteAuditLog as the canonical SQL.
 		AuditLogger: &db.AuditLogger{DB: dbAdapter},
