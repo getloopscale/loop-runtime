@@ -48,7 +48,11 @@ var _ = Describe("Journey 14: Concurrency + Lock Discipline", Label("journey"), 
 	It("Idempotency: same body returns cached response (same build_id)", func() {
 		idempotencyKey := fmt.Sprintf("ginkgo-idem-same-%s", uniqueSuffix())
 		projectID := fmt.Sprintf("idem-same-%s", uniqueSuffix())
-		body := fmt.Sprintf(`{"project_id":"%s","environment":"production","commit_sha":"%s"}`,
+		// T1.3 follow-up (2026-05-29): handler now rejects empty `apps` with
+		// 400 MISSING_FIELD instead of silently producing a no-op workflow.
+		// Send a minimal valid app shape so the idempotency contract is
+		// exercised against the canonical happy path.
+		body := fmt.Sprintf(`{"project_id":"%s","environment":"production","commit_sha":"%s","apps":[{"name":"app","type":"backend","port":3000,"framework":"node"}]}`,
 			projectID, uniqueSuffix())
 
 		firstResp := postWithIdempotencyKey(body, idempotencyKey)
@@ -66,9 +70,11 @@ var _ = Describe("Journey 14: Concurrency + Lock Discipline", Label("journey"), 
 		idempotencyKey := fmt.Sprintf("ginkgo-idem-diff-%s", uniqueSuffix())
 		projectID := fmt.Sprintf("idem-diff-%s", uniqueSuffix())
 
-		bodyA := fmt.Sprintf(`{"project_id":"%s","environment":"production","commit_sha":"%s"}`,
+		// T1.3 follow-up: both bodies need valid apps (see comment above).
+		// Differ them by app port so body hash diverges.
+		bodyA := fmt.Sprintf(`{"project_id":"%s","environment":"production","commit_sha":"%s","apps":[{"name":"app","type":"backend","port":3000,"framework":"node"}]}`,
 			projectID, uniqueSuffix())
-		bodyB := fmt.Sprintf(`{"project_id":"%s","environment":"production","commit_sha":"%s"}`,
+		bodyB := fmt.Sprintf(`{"project_id":"%s","environment":"production","commit_sha":"%s","apps":[{"name":"app","type":"backend","port":3001,"framework":"node"}]}`,
 			projectID, uniqueSuffix())
 
 		firstResp := postWithIdempotencyKey(bodyA, idempotencyKey)

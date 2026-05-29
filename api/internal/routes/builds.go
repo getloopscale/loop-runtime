@@ -233,6 +233,22 @@ func (h *BuildHandler) Create(w http.ResponseWriter, r *http.Request) {
 		))
 		return
 	}
+	// T1.3 follow-up (CR-2 regression caught during cleanroom Final Phase
+	// 2026-05-29): an empty `apps` array used to be silently accepted —
+	// SubmitBuild would create a Build row, build an empty WorkflowSpec, and
+	// the legacy spec.Apps fallback in workflow_builder would emit a Workflow
+	// CR with zero steps that Argo "succeeded" trivially. T1.3 (commit
+	// 2b9f8040) removed the fallback and added an invariant guard, exposing
+	// the gap — empty bodies now reach the guard as 500 INTERNAL_ERROR.
+	// Fail fast at the system boundary with a typed 400 instead.
+	if len(req.Apps) == 0 {
+		writeLoopZeroError(w, loopzeroerrors.NewLoopZeroError(
+			"MISSING_FIELD",
+			"At least one app is required. Check your loopzero.yaml for an `apps:` section.",
+			400,
+		))
+		return
+	}
 
 	// Environment validation (DA-10): lowercase only
 	if !environmentRegex.MatchString(req.Environment) {

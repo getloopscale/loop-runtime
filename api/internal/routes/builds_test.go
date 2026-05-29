@@ -65,7 +65,7 @@ func TestBuilds_Create_HappyPath(t *testing.T) {
 	}
 	h := NewBuildHandler(orch, slog.Default())
 
-	body := `{"project_id":"my-project","environment":"production","commit_sha":"abc123"}`
+	body := `{"project_id":"my-project","environment":"production","commit_sha":"abc123","apps":[{"name":"app","type":"backend","port":3000,"framework":"node"}]}`
 	req := httptest.NewRequest(http.MethodPost, "/api/v1/builds", bytes.NewBufferString(body))
 	req = withAuth(req, defaultUserContext())
 	w := httptest.NewRecorder()
@@ -112,6 +112,32 @@ func TestBuilds_Create_MissingEnvironment(t *testing.T) {
 
 	if w.Code != http.StatusBadRequest {
 		t.Fatalf("want 400, got %d body=%s", w.Code, w.Body.String())
+	}
+}
+
+// T1.3 follow-up regression test (CR-2): a body with `apps: []` (or no apps
+// field at all) used to slip through to the WorkflowBuilder where the
+// fail-fast invariant returned a wrapped error that the handler mapped to
+// a generic 500 INTERNAL_ERROR. The handler now rejects empty-apps with a
+// typed 400 MISSING_FIELD before any state mutation.
+func TestBuilds_Create_MissingApps(t *testing.T) {
+	h := NewBuildHandler(&fakeBuildOrch{}, slog.Default())
+
+	body := `{"project_id":"my-project","environment":"production","commit_sha":"abc123"}`
+	req := httptest.NewRequest(http.MethodPost, "/api/v1/builds", bytes.NewBufferString(body))
+	req = withAuth(req, defaultUserContext())
+	w := httptest.NewRecorder()
+
+	h.Create(w, req)
+
+	if w.Code != http.StatusBadRequest {
+		t.Fatalf("want 400, got %d body=%s", w.Code, w.Body.String())
+	}
+	if !bytes.Contains(w.Body.Bytes(), []byte("MISSING_FIELD")) {
+		t.Fatalf("want MISSING_FIELD code; body=%s", w.Body.String())
+	}
+	if !bytes.Contains(w.Body.Bytes(), []byte("app is required")) {
+		t.Fatalf("want 'app is required' message hint; body=%s", w.Body.String())
 	}
 }
 
@@ -165,7 +191,7 @@ func TestBuilds_Create_DeployInProgress(t *testing.T) {
 	}
 	h := NewBuildHandler(orch, slog.Default())
 
-	body := `{"project_id":"my-project","environment":"production"}`
+	body := `{"project_id":"my-project","environment":"production","apps":[{"name":"app","type":"backend","port":3000,"framework":"node"}]}`
 	req := httptest.NewRequest(http.MethodPost, "/api/v1/builds", bytes.NewBufferString(body))
 	req = withAuth(req, defaultUserContext())
 	w := httptest.NewRecorder()
