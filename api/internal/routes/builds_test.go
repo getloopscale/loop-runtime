@@ -65,7 +65,7 @@ func TestBuilds_Create_HappyPath(t *testing.T) {
 	}
 	h := NewBuildHandler(orch, slog.Default())
 
-	body := `{"project_id":"my-project","environment":"production","commit_sha":"abc123","apps":[{"name":"app","type":"backend","port":3000,"framework":"node"}]}`
+	body := `{"project_id":"my-project","environment":"production","commit_sha":"abc123","apps":[{"name":"app","type":"server","port":3000,"framework":"node"}]}`
 	req := httptest.NewRequest(http.MethodPost, "/api/v1/builds", bytes.NewBufferString(body))
 	req = withAuth(req, defaultUserContext())
 	w := httptest.NewRecorder()
@@ -191,7 +191,7 @@ func TestBuilds_Create_DeployInProgress(t *testing.T) {
 	}
 	h := NewBuildHandler(orch, slog.Default())
 
-	body := `{"project_id":"my-project","environment":"production","apps":[{"name":"app","type":"backend","port":3000,"framework":"node"}]}`
+	body := `{"project_id":"my-project","environment":"production","apps":[{"name":"app","type":"server","port":3000,"framework":"node"}]}`
 	req := httptest.NewRequest(http.MethodPost, "/api/v1/builds", bytes.NewBufferString(body))
 	req = withAuth(req, defaultUserContext())
 	w := httptest.NewRecorder()

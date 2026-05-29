@@ -52,7 +52,7 @@ var _ = Describe("Journey 14: Concurrency + Lock Discipline", Label("journey"), 
 		// 400 MISSING_FIELD instead of silently producing a no-op workflow.
 		// Send a minimal valid app shape so the idempotency contract is
 		// exercised against the canonical happy path.
-		body := fmt.Sprintf(`{"project_id":"%s","environment":"production","commit_sha":"%s","apps":[{"name":"app","type":"backend","port":3000,"framework":"node"}]}`,
+		body := fmt.Sprintf(`{"project_id":"%s","environment":"production","commit_sha":"%s","apps":[{"name":"app","type":"server","port":3000,"framework":"node"}]}`,
 			projectID, uniqueSuffix())
 
 		firstResp := postWithIdempotencyKey(body, idempotencyKey)
@@ -72,9 +72,9 @@ var _ = Describe("Journey 14: Concurrency + Lock Discipline", Label("journey"), 
 
 		// T1.3 follow-up: both bodies need valid apps (see comment above).
 		// Differ them by app port so body hash diverges.
-		bodyA := fmt.Sprintf(`{"project_id":"%s","environment":"production","commit_sha":"%s","apps":[{"name":"app","type":"backend","port":3000,"framework":"node"}]}`,
+		bodyA := fmt.Sprintf(`{"project_id":"%s","environment":"production","commit_sha":"%s","apps":[{"name":"app","type":"server","port":3000,"framework":"node"}]}`,
 			projectID, uniqueSuffix())
-		bodyB := fmt.Sprintf(`{"project_id":"%s","environment":"production","commit_sha":"%s","apps":[{"name":"app","type":"backend","port":3001,"framework":"node"}]}`,
+		bodyB := fmt.Sprintf(`{"project_id":"%s","environment":"production","commit_sha":"%s","apps":[{"name":"app","type":"server","port":3001,"framework":"node"}]}`,
 			projectID, uniqueSuffix())
 
 		firstResp := postWithIdempotencyKey(bodyA, idempotencyKey)
