@@ -141,3 +141,37 @@ WHERE tenant_id = $1
   AND status <> 'CANCELLED'
   AND status <> 'ROLLED_BACK'
 RETURNING id;
+
+-- tenantpredicate:exempt
+-- name: FindPendingReleasesByCell :many
+-- Cell-scoped reaper query: returns PENDING releases in a cell. The cell_id
+-- filter provides the multi-cell isolation (callers are reapers; they intentionally
+-- scan across tenants within a cell). Roadmap 03 multi-cell.
+SELECT * FROM releases
+WHERE cell_id = $1
+  AND status = 'PENDING'
+ORDER BY created_at ASC
+LIMIT 100;
+
+-- tenantpredicate:exempt
+-- name: FindActiveReleasesByCell :many
+-- Cell-scoped convergence-loop health query. DISTINCT ON returns the most-
+-- recent ACTIVE release per (tenant, project, env). MEET-2026-03-31-023 T1-4.
+SELECT DISTINCT ON (tenant_id, project_id, environment)
+       *
+FROM releases
+WHERE cell_id = $1
+  AND status = 'ACTIVE'
+ORDER BY tenant_id, project_id, environment, created_at DESC
+LIMIT 100;
+
+-- name: FindPendingReleasesByTenantEnv :many
+-- Callback-driven activation path (CODE-SCAN-001 fix). Tenant-scoped and
+-- per-env, more efficient than the cell-scoped FindPendingReleases when a
+-- specific build's callback fires.
+SELECT * FROM releases
+WHERE tenant_id = $1
+  AND environment = $2
+  AND status = 'PENDING'
+ORDER BY created_at ASC
+LIMIT 100;

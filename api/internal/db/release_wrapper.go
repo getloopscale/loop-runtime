@@ -281,6 +281,59 @@ func (s *ReleaseStoreSqlc) CancelAllByEnv(ctx context.Context, tx pgx.Tx, tenant
 	return ids, nil
 }
 
+// FindPendingReleases returns up to 100 PENDING releases scoped to the
+// given cell. Reaper path: intentionally cross-tenant within the cell.
+// Empty cellID defaults to CellDefault per multi-cell backward compat.
+func (s *ReleaseStoreSqlc) FindPendingReleases(ctx context.Context, cellID string) ([]Release, error) {
+	if cellID == "" {
+		cellID = CellDefault
+	}
+	rows, err := s.q.FindPendingReleasesByCell(ctx, s.pool, cellID)
+	if err != nil {
+		return nil, fmt.Errorf("sqlc: find pending releases: %w", err)
+	}
+	out := make([]Release, 0, len(rows))
+	for _, r := range rows {
+		out = append(out, *generatedRowToRelease(r))
+	}
+	return out, nil
+}
+
+// FindActiveReleases returns up to 100 ACTIVE releases scoped to the given
+// cell, DISTINCT ON (tenant, project, env) → most-recent per tuple. Used by
+// the convergence-loop health ticker (MEET-2026-03-31-023 T1-4).
+func (s *ReleaseStoreSqlc) FindActiveReleases(ctx context.Context, cellID string) ([]Release, error) {
+	if cellID == "" {
+		cellID = CellDefault
+	}
+	rows, err := s.q.FindActiveReleasesByCell(ctx, s.pool, cellID)
+	if err != nil {
+		return nil, fmt.Errorf("sqlc: find active releases: %w", err)
+	}
+	out := make([]Release, 0, len(rows))
+	for _, r := range rows {
+		out = append(out, *generatedRowToRelease(r))
+	}
+	return out, nil
+}
+
+// FindPendingReleasesByTenantEnv returns PENDING releases for a specific
+// (tenant, env). Used by the callback-driven activation path (CODE-SCAN-001).
+func (s *ReleaseStoreSqlc) FindPendingReleasesByTenantEnv(ctx context.Context, tenantID, env string) ([]Release, error) {
+	rows, err := s.q.FindPendingReleasesByTenantEnv(ctx, s.pool, generated.FindPendingReleasesByTenantEnvParams{
+		TenantID:    tenantID,
+		Environment: env,
+	})
+	if err != nil {
+		return nil, fmt.Errorf("sqlc: find pending releases by tenant+env: %w", err)
+	}
+	out := make([]Release, 0, len(rows))
+	for _, r := range rows {
+		out = append(out, *generatedRowToRelease(r))
+	}
+	return out, nil
+}
+
 // -----------------------------------------------------------------------
 // Conversion helpers between db.Release (legacy public type) and the
 // sqlc-generated row type. We mirror nullable columns back and forth so

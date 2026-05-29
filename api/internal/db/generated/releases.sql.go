@@ -96,6 +96,174 @@ func (q *Queries) CancelReleasesByEnv(ctx context.Context, db DBTX, arg CancelRe
 	return items, nil
 }
 
+const findActiveReleasesByCell = `-- name: FindActiveReleasesByCell :many
+SELECT DISTINCT ON (tenant_id, project_id, environment)
+       id, build_id, tenant_id, project_id, environment, status, correlation_id, created_by, git_commit, git_mirror_status, artifacts, side_effects, apps, cell_id, processing_by, processing_since, image_digest, image_signature, image_signed_at, created_at, image_attestation_rekor_url
+FROM releases
+WHERE cell_id = $1
+  AND status = 'ACTIVE'
+ORDER BY tenant_id, project_id, environment, created_at DESC
+LIMIT 100
+`
+
+// tenantpredicate:exempt
+// Cell-scoped convergence-loop health query. DISTINCT ON returns the most-
+// recent ACTIVE release per (tenant, project, env). MEET-2026-03-31-023 T1-4.
+func (q *Queries) FindActiveReleasesByCell(ctx context.Context, db DBTX, cellID string) ([]Release, error) {
+	rows, err := db.Query(ctx, findActiveReleasesByCell, cellID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []Release
+	for rows.Next() {
+		var i Release
+		if err := rows.Scan(
+			&i.ID,
+			&i.BuildID,
+			&i.TenantID,
+			&i.ProjectID,
+			&i.Environment,
+			&i.Status,
+			&i.CorrelationID,
+			&i.CreatedBy,
+			&i.GitCommit,
+			&i.GitMirrorStatus,
+			&i.Artifacts,
+			&i.SideEffects,
+			&i.Apps,
+			&i.CellID,
+			&i.ProcessingBy,
+			&i.ProcessingSince,
+			&i.ImageDigest,
+			&i.ImageSignature,
+			&i.ImageSignedAt,
+			&i.CreatedAt,
+			&i.ImageAttestationRekorUrl,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const findPendingReleasesByCell = `-- name: FindPendingReleasesByCell :many
+SELECT id, build_id, tenant_id, project_id, environment, status, correlation_id, created_by, git_commit, git_mirror_status, artifacts, side_effects, apps, cell_id, processing_by, processing_since, image_digest, image_signature, image_signed_at, created_at, image_attestation_rekor_url FROM releases
+WHERE cell_id = $1
+  AND status = 'PENDING'
+ORDER BY created_at ASC
+LIMIT 100
+`
+
+// tenantpredicate:exempt
+// Cell-scoped reaper query: returns PENDING releases in a cell. The cell_id
+// filter provides the multi-cell isolation (callers are reapers; they intentionally
+// scan across tenants within a cell). Roadmap 03 multi-cell.
+func (q *Queries) FindPendingReleasesByCell(ctx context.Context, db DBTX, cellID string) ([]Release, error) {
+	rows, err := db.Query(ctx, findPendingReleasesByCell, cellID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []Release
+	for rows.Next() {
+		var i Release
+		if err := rows.Scan(
+			&i.ID,
+			&i.BuildID,
+			&i.TenantID,
+			&i.ProjectID,
+			&i.Environment,
+			&i.Status,
+			&i.CorrelationID,
+			&i.CreatedBy,
+			&i.GitCommit,
+			&i.GitMirrorStatus,
+			&i.Artifacts,
+			&i.SideEffects,
+			&i.Apps,
+			&i.CellID,
+			&i.ProcessingBy,
+			&i.ProcessingSince,
+			&i.ImageDigest,
+			&i.ImageSignature,
+			&i.ImageSignedAt,
+			&i.CreatedAt,
+			&i.ImageAttestationRekorUrl,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const findPendingReleasesByTenantEnv = `-- name: FindPendingReleasesByTenantEnv :many
+SELECT id, build_id, tenant_id, project_id, environment, status, correlation_id, created_by, git_commit, git_mirror_status, artifacts, side_effects, apps, cell_id, processing_by, processing_since, image_digest, image_signature, image_signed_at, created_at, image_attestation_rekor_url FROM releases
+WHERE tenant_id = $1
+  AND environment = $2
+  AND status = 'PENDING'
+ORDER BY created_at ASC
+LIMIT 100
+`
+
+type FindPendingReleasesByTenantEnvParams struct {
+	TenantID    string `json:"tenant_id"`
+	Environment string `json:"environment"`
+}
+
+// Callback-driven activation path (CODE-SCAN-001 fix). Tenant-scoped and
+// per-env, more efficient than the cell-scoped FindPendingReleases when a
+// specific build's callback fires.
+func (q *Queries) FindPendingReleasesByTenantEnv(ctx context.Context, db DBTX, arg FindPendingReleasesByTenantEnvParams) ([]Release, error) {
+	rows, err := db.Query(ctx, findPendingReleasesByTenantEnv, arg.TenantID, arg.Environment)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []Release
+	for rows.Next() {
+		var i Release
+		if err := rows.Scan(
+			&i.ID,
+			&i.BuildID,
+			&i.TenantID,
+			&i.ProjectID,
+			&i.Environment,
+			&i.Status,
+			&i.CorrelationID,
+			&i.CreatedBy,
+			&i.GitCommit,
+			&i.GitMirrorStatus,
+			&i.Artifacts,
+			&i.SideEffects,
+			&i.Apps,
+			&i.CellID,
+			&i.ProcessingBy,
+			&i.ProcessingSince,
+			&i.ImageDigest,
+			&i.ImageSignature,
+			&i.ImageSignedAt,
+			&i.CreatedAt,
+			&i.ImageAttestationRekorUrl,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const getActiveByEnv = `-- name: GetActiveByEnv :one
 SELECT id, build_id, tenant_id, project_id, environment, status, correlation_id, created_by, git_commit, git_mirror_status, artifacts, side_effects, apps, cell_id, processing_by, processing_since, image_digest, image_signature, image_signed_at, created_at, image_attestation_rekor_url FROM releases
 WHERE tenant_id = $1
