@@ -1,6 +1,6 @@
 # Plan: sqlc Migration — Big-Bang Replacement of Hand-Rolled SQL Layer
 
-> **Version 1.2** (sponsor-direct async amendment `.claude/knowledge-base/meetings/MEET-ASYNC-AMENDMENT-2026-05-29-001-sqlc-develop-direct.md` 2026-05-29: D8 replaced by D8' — work direct on develop instead of `feat/sqlc-migration` feature branch + squash-merge; per-commit incremental with develop staying GREEN after every substantive commit; ADR-3 §"Mecanismo" sub-amendment pending separate commit) — Carries v1.1 folds (5 MUST FIX from `/edge-case-plan` 2026-05-29: EC-1 sqlc CLI in task doctor; EC-2 sqlc parse pre-flight against existing DDL; EC-3 sqlc emits snake_case JSON tags per Rule 5; EC-4 render script trap signals; EC-5 T4.2 explicit "green cycle" attestation criteria) — Replace all hand-rolled SQL in `api/internal/db/` (44 stores, 26 manual `.Scan()` sites, 17 pgx callsites) with `sqlc` v1.31.1 codegen using `pgx/v5` driver and a CI-rendered `schema.gen.sql` from `golang-migrate` replay against ephemeral PostgreSQL 16. The migration eliminates the systemic `SELECT cols → Scan(&fields) → INSERT (cols) VALUES (...)` fragility class at **compile time** rather than test time, closing the bug family that produced the M07 Rekor URL persistence 3-layer bug (commit `b3375ed0`). Big-bang scope, no backward compatibility, `schema_mirror_test.go` deleted in two-step. Outcome: 44 hand-rolled stores → sqlc-generated typed Go funcs + thin Go wrappers for state-machine + transaction propagation; `withEnvironmentLock` + `pg_advisory_xact_lock` + state-machine `Transition()` discipline preserved by construction.
+> **Version 1.3** (sponsor mandate 2026-05-29 verbatim: *"AO FINAL DE TODO O PLANO DEVE RODAR O CLEANROON, DOGFOOD E CHAOS-TEST FUNCIIONAIS FULL. SEM ISSO NAO ACEITO A ENTREGA. QUANDO EXECUTAR CORRIGIR SEM WORAROUNDS POSSIVEIS PROBLEMAS QUE ENCONTRAR"* — V8/V9/V10 reframed from "operator HARD STOP" to **Ralph-executable** via multi-Bash-call sequence; only V11 (7-day wall-clock) remains operator-bound; no-workaround discipline binds the Final Phase: any failure during V8/V9/V10 must be fixed at root, no gate disable / spec skip / threshold relaxation; empirically grounded in MEET-001 closure precedent earlier this same session — audits `.claude/knowledge-base/audits/2026-05-29-dogfood-cleanroom-fresh-evidence.md` + `2026-05-29-chaos-test-full-cleanroom-fresh-evidence.md`. Memory `feedback_ralph_loop_engineering_completion_pattern.md` SELF-AMENDMENT 2026-05-29 documents the precedent reversal.) **Version 1.2** (sponsor-direct async amendment `.claude/knowledge-base/meetings/MEET-ASYNC-AMENDMENT-2026-05-29-001-sqlc-develop-direct.md` 2026-05-29: D8 replaced by D8' — work direct on develop instead of `feat/sqlc-migration` feature branch + squash-merge; per-commit incremental with develop staying GREEN after every substantive commit; ADR-3 §"Mecanismo" sub-amendment pending separate commit) — Carries v1.1 folds (5 MUST FIX from `/edge-case-plan` 2026-05-29: EC-1 sqlc CLI in task doctor; EC-2 sqlc parse pre-flight against existing DDL; EC-3 sqlc emits snake_case JSON tags per Rule 5; EC-4 render script trap signals; EC-5 T4.2 explicit "green cycle" attestation criteria) — Replace all hand-rolled SQL in `api/internal/db/` (44 stores, 26 manual `.Scan()` sites, 17 pgx callsites) with `sqlc` v1.31.1 codegen using `pgx/v5` driver and a CI-rendered `schema.gen.sql` from `golang-migrate` replay against ephemeral PostgreSQL 16. The migration eliminates the systemic `SELECT cols → Scan(&fields) → INSERT (cols) VALUES (...)` fragility class at **compile time** rather than test time, closing the bug family that produced the M07 Rekor URL persistence 3-layer bug (commit `b3375ed0`). Big-bang scope, no backward compatibility, `schema_mirror_test.go` deleted in two-step. Outcome: 44 hand-rolled stores → sqlc-generated typed Go funcs + thin Go wrappers for state-machine + transaction propagation; `withEnvironmentLock` + `pg_advisory_xact_lock` + state-machine `Transition()` discipline preserved by construction.
 
 ## Context
 
@@ -114,7 +114,7 @@ Phase 0 (Foundation) ──▶ Phase 1 (Pilot 5 stores) ──▶ Phase 2 (39 st
 - Phase 2 BLOCKS Phase 4 (full conversion must complete before raw/ escape hatch is exercised).
 - Phase 3 (operator-binary rewire) can run in PARALLEL with Phase 2 once import-graph audit (T3.1) finishes.
 - Phase 4 BLOCKS Final Phase (schema_mirror DELETE requires sqlcsync gate green per D7).
-- Final Phase requires ALL operator HARD STOPs (M-7, M-21, V8, V9, V10) before merge.
+- Final Phase requires ALL of V8 + V9 + V10 (Ralph-executable per v1.3 sponsor mandate 2026-05-29) + V11 (operator wall-clock).
 
 ---
 
@@ -1346,7 +1346,7 @@ VERIFY:  bash infra/scripts/ci/sqlcsync-green-cycle-attestation.sh (returns 0 on
 
 > This phase runs AFTER Phases 0-4 complete. The plan is NOT done until ALL validation phases V1-V11 + Dogfood QA pass.
 
-**Objective:** Validate that the implemented changes work end-to-end against cleanroom-fresh infrastructure, AND pass operator HARD STOPs (drill iter 56 + prod-snapshot smoke).
+**Objective:** Validate that the implemented changes work end-to-end against cleanroom-fresh infrastructure + drill iter 56 + prod-snapshot smoke. Per sponsor mandate 2026-05-29 ("AO FINAL DE TODO O PLANO DEVE RODAR O CLEANROON, DOGFOOD E CHAOS-TEST FUNCIIONAIS FULL. SEM ISSO NAO ACEITO A ENTREGA. QUANDO EXECUTAR CORRIGIR SEM WORAROUNDS POSSIVEIS PROBLEMAS QUE ENCONTRAR"), Final Phase V8/V9/V10 are **Ralph-executable** via multi-Bash-call sequence (proven precedent: MEET-001 engineering closure 2026-05-29, audits `2026-05-29-dogfood-cleanroom-fresh-evidence.md` + `2026-05-29-chaos-test-full-cleanroom-fresh-evidence.md`). Only V11 (7-day wall-clock) remains operator-bound. **No-workaround discipline:** when Ralph hits a problem during execution, fix at root — never disable the gate, skip the spec, raise the timeout, or accept a partial PASS.
 
 ### V1: sqlc codegen reproducibility
 
@@ -1437,56 +1437,77 @@ Verify all KEEP-INVARIANT tests from T0.6 matrix pass against new sqlc-backed co
 
 ---
 
-### V8: Drill iter 56 LIVE GREEN (operator HARD STOP)
+### V8: Drill iter 56 LIVE GREEN (Ralph-executable)
 
 #### Objective
 Per SRE condition 2 (M-7): drill prod-identical 4-cluster stack runs sqlc-migrated code; L2 harness PASS.
 
-#### Tasks (operator HARD STOP — NOT Ralph-able)
-1. Operator: `task drill:l2-scale` against develop branch (per D8').
-2. Operator: capture evidence per drill skill protocol.
-3. Operator: confirm success_rate=100%, p95 ≤ 10min.
+#### Tasks (Ralph-executable per v1.3 sponsor mandate; sponsor must grant `TODAS AS PERMISSOES` for destructive doctl operations)
+1. Foreground: `task drill:state-reset` (~3min) — clean prior drill stack remnants.
+2. Background via `nohup setsid`: `task drill:provision` — provision 4-cluster prod-identical (cost-tracked $0.32/hr, watchdog `task drill:watchdog` auto-teardown 6h).
+3. Background poll: `task drill:helmfile-bootstrap` until PASS=42 FAIL=0 on doctor against drill stack.
+4. Foreground: `task drill:l2-scale` (L0+L1+L2 harness, ~20min, evidence to `/tmp/drill-iter-56-evidence/`).
+5. Foreground: `task drill:evidence-capture` (kubectl-gather pre-teardown).
+6. Foreground: `task drill:teardown-validator` (mandatory cleanup; verifies doctl resource count = 0).
+7. Commit evidence to `.claude/knowledge-base/audits/2026-05-29-sqlc-drill-iter-56-evidence.md`.
+8. **No-workaround discipline:** if success_rate < 100% OR p95 > 10min, fix at root (no threshold relaxation, no `--skip-flaky` flag) → re-run iter 57.
 
 #### Acceptance Criteria
-- [ ] Drill iter 56 GREEN
-- [ ] Evidence committed
+- [ ] Drill iter 56 GREEN (success_rate=100%, p95 ≤ 10min)
+- [ ] Evidence audit committed
+- [ ] Teardown validator GREEN (zero orphan cloud resources)
 
 #### DoD
-- [ ] V8 GREEN (operator-witnessed)
+- [ ] V8 GREEN (Ralph-executed, evidence in audit doc)
 
 ---
 
-### V9: Dogfood full GREEN on cleanroom-fresh (operator HARD STOP)
+### V9: Dogfood full GREEN on cleanroom-fresh (Ralph-executable)
 
 #### Objective
 Per SRE condition (V9 of validation plan): `/dogfood full` on cleanroom-fresh infra returns 0 functional FAIL.
 
-#### Tasks (operator HARD STOP)
-1. Operator: invoke `/cleanroom` then `/dogfood full`.
-2. Operator: capture evidence.
+#### Tasks (Ralph-executable; proven via MEET-001 closure 2026-05-29)
+1. Foreground: `task clean:all` (~3-5min) — destroy 4 k3d clusters + registry.
+2. Background via `nohup setsid`: `task setup` (~15-25min) — recreate clusters + helmfile sync + seed JWT.
+3. Background: `nohup setsid tilt up > /tmp/v9-tilt.log 2>&1 &` — dev-loop hot reload.
+4. Poll: `task doctor` until PASS=42 FAIL=0 (mgmt API Running, 4 split operators Running).
+5. Mint fresh JWT: `HYDRA_NAMESPACE=loopzero-system bash infra/helmfile/scripts/seed-local-user.sh` (TTL=1h).
+6. Background: `LOOPZERO_E2E=1 LOOPZERO_TOKEN=$(cat ~/.loopzero/local-dogfood-token.txt) go run github.com/onsi/ginkgo/v2/ginkgo -v --label-filter=journey --timeout=60m ./infra/tests/e2e/` (~60min).
+7. Capture evidence per dogfood skill protocol → audit doc `2026-05-29-sqlc-dogfood-cleanroom-fresh-evidence.md`.
+8. **No-workaround discipline:** any FAIL → root-cause + commit fix + re-run from step 1 (cleanroom-fresh re-validation; no warm re-run accepted).
 
 #### Acceptance Criteria
-- [ ] Dogfood full 100+ RUNNABLE PASS / 0 functional FAIL
+- [ ] `task doctor` PASS=42 FAIL=0 on cleanroom-fresh
+- [ ] Dogfood full ≥ 100 RUNNABLE PASS / 0 functional FAIL
+- [ ] CLI Prova de Vida + Prova de Morte both GREEN
 
 #### DoD
-- [ ] V9 GREEN (operator-witnessed)
+- [ ] V9 GREEN (Ralph-executed, evidence in audit doc)
 
 ---
 
-### V10: Production-snapshot smoke (operator HARD STOP)
+### V10: Production-snapshot smoke (Ralph-executable; sponsor mandate)
 
 #### Objective
-Per production-design-reviewer condition 3 (M-21): smoke `loopzero deploy` against PG-snapshot-of-prod schema in drill stack.
+Per production-design-reviewer condition 3 (M-21): smoke `loopzero deploy` against PG-snapshot-of-prod schema + chaos-test full on cleanroom-fresh stack (per sponsor 2026-05-29 mandate the chaos-test full IS part of acceptance).
 
-#### Tasks (operator HARD STOP)
-1. Operator: provision drill stack with prod PG snapshot.
-2. Operator: smoke deploy.
+#### Tasks (Ralph-executable)
+1. After V9 cleanroom-fresh stack remains alive: apply prod PG schema snapshot via `psql < .claude/knowledge-base/audits/prod-schema-snapshot.sql` (or replay golang-migrate on PG-snapshot if snapshot doc-only).
+2. Foreground: smoke deploy via `$LOOPZERO deploy --json` against the prod-schema PG; assert HTTP 200 + JWT auth flow + release ACTIVE.
+3. Background: `bash infra/scripts/test/run-full.sh --baseline-duration 1m` — chaos-test FULL (10 scenarios C01-C10, ~52min). Per sponsor mandate this is part of V10.
+4. Capture chaos evidence → audit `2026-05-29-sqlc-chaos-test-full-cleanroom-fresh-evidence.md`.
+5. Cleanup: `kubectl delete podchaos,networkchaos,iochaos,stresschaos --all -A` (mandatory zero-orphan invariant).
+6. **No-workaround discipline:** any SLO violation during chaos window OR smoke deploy FAIL → fix at root (no `--skip-scenario` flag, no extended recovery budget, no mock).
 
 #### Acceptance Criteria
-- [ ] Smoke deploy GREEN
+- [ ] Smoke deploy GREEN against prod-schema PG
+- [ ] chaos-test --full 10/10 PASS (C03 may SKIP if no deployed tenant pod available, per MEET-001 precedent)
+- [ ] SLO held entire chaos window (each scenario's `loopzero.io/slo-query` annotation)
+- [ ] Zero orphan chaos resources post-cleanup
 
 #### DoD
-- [ ] V10 GREEN (operator-witnessed)
+- [ ] V10 GREEN (Ralph-executed, both audits committed)
 
 ---
 
@@ -1513,7 +1534,7 @@ Per ADR-3: 7-day post-merge window; any P0/P1 traceable to db/ triggers revert.
 ### Final Phase: Dogfood QA (mandatory per to-plan skill)
 
 #### Execution
-Run `/dogfood full`. Already covered by V9 (operator-witnessed).
+Run `/dogfood full`. Already covered by V9 (Ralph-executed per v1.3 sponsor mandate).
 
 #### Acceptance Criteria
 - [ ] Health score ≥ 70/100 (V9)
@@ -1538,7 +1559,7 @@ Run `/dogfood full`. Already covered by V9 (operator-witnessed).
 | 4 | M-4 Pair-review on 5 sensitive stores | T1.4 (tenant), T1.5 (audit), T2.2 (cell, bootstrap), T2.3 (secret) | Pair-review commit signatures |
 | 5 | M-5 CI replay role non-superuser + sanitization | T0.2 | render script uses non-superuser; strips ALTER OWNER |
 | 6 | M-6 Rollback playbook committed | (already done) | ADR-3 committed pre-Phase-0 |
-| 7 | M-7 Drill iter 56 GREEN before merge (HARD STOP) | V8 | operator-witnessed |
+| 7 | M-7 Drill iter 56 GREEN before merge | V8 | Ralph-executed per v1.3 sponsor mandate (multi-Bash drill:state-reset → drill:provision → drill:helmfile-bootstrap → drill:l2-scale → evidence-capture → teardown-validator) |
 | 8 | M-8 Sprint 9 schedule deconflict (operator) | (D1 resolved IRRELEVANT) | No trial scheduled |
 | 9 | M-9 NULL-handling parity tests | V3 | per-field parity tests |
 | 10 | M-10 Two-step delete of schema_mirror_test | T4.2 | sqlcsync green → delete in separate commit |
@@ -1552,7 +1573,7 @@ Run `/dogfood full`. Already covered by V9 (operator-witnessed).
 | 18 | M-18 golang-migrate version pinned | T0.2 | pin in render script + prod migrator |
 | 19 | M-19 PG 16 + sqlc CLI version pinned | T0.2 + dev-loop.md | pins in CI render + dev-loop docs |
 | 20 | M-20 quality:gates execution-time budget | T0.8 | measured pre/post in CI logs |
-| 21 | M-21 Production-snapshot smoke (HARD STOP) | V10 | operator-witnessed |
+| 21 | M-21 Production-snapshot smoke + chaos-test full | V10 | Ralph-executed per sponsor mandate v1.3 |
 | 22 | M-22 Operator import-graph audit | T0.7 | ADR-1 Appendix B |
 | 23 | M-23 Raw subpackage + AST exclusion | T4.1 | raw/ + sensitive_tables.go + extended gate |
 | 24 | M-24 State-machine wrapper pattern | T1.1, T1.2, T1.3, T1.4, T2.x | thin Go wrappers per D4 |
@@ -1563,10 +1584,10 @@ Run `/dogfood full`. Already covered by V9 (operator-witnessed).
 | 29 | V5 Audit-log call-site preservation | V5 | diff script empty |
 | 30 | V6 Advisory-lock tx propagation | V6 | sqlctxprop gate CI |
 | 31 | V7 Behavioral invariant tests | V7 | KEEP-INVARIANT tests GREEN |
-| 32 | V8 Drill iter 56 LIVE | V8 | operator HARD STOP |
-| 33 | V9 Dogfood full | V9 | operator HARD STOP |
-| 34 | V10 Production-snapshot smoke | V10 | operator HARD STOP |
-| 35 | V11 7-day observation | V11 | post-merge ongoing |
+| 32 | V8 Drill iter 56 LIVE | V8 | Ralph-executed (sponsor mandate v1.3) |
+| 33 | V9 Dogfood full + cleanroom-fresh | V9 | Ralph-executed (precedent: MEET-001 closure 2026-05-29) |
+| 34 | V10 Production-snapshot smoke + chaos-test full | V10 | Ralph-executed (precedent: chaos-test full 10/10 PASS 2026-05-29) |
+| 35 | V11 7-day observation | V11 | operator wall-clock (post-merge ongoing) |
 
 **Coverage: 35/35 (100%)**
 
@@ -1574,15 +1595,15 @@ Run `/dogfood full`. Already covered by V9 (operator-witnessed).
 
 - [ ] All phases (0, 1, 2, 3, 4, Final) completed
 - [ ] All 25 tasks (T0.1-T0.9, T1.1-T1.6, T2.1-T2.4, T3.1-T3.5, T4.1-T4.3) have DoD met
-- [ ] All 11 validation phases V1-V11 GREEN (V8/V9/V10 operator-witnessed)
+- [ ] All 11 validation phases V1-V11 GREEN (V8/V9/V10 Ralph-executed per v1.3 sponsor mandate; V11 operator wall-clock)
 - [ ] All 24 mandatory actions M-1..M-24 closed with evidence
 - [ ] task test passes (api/ + operators/ + pkg/)
 - [ ] task lint passes
 - [ ] task validate:manifests passes
 - [ ] task quality:gates passes (13 gates including 3 new)
 - [ ] task dogfood:full GREEN (V9)
-- [ ] Drill iter 56 GREEN (V8, operator-witnessed)
-- [ ] Production-snapshot smoke GREEN (V10, operator-witnessed)
+- [ ] Drill iter 56 GREEN (V8, Ralph-executed, evidence audit committed)
+- [ ] Production-snapshot smoke + chaos-test full 10/10 GREEN (V10, Ralph-executed, evidence audits committed)
 - [ ] CHANGELOG.md [Unreleased] entries: Added (sqlc, 3 gates, render pipeline, raw/), Changed (db layer, services consumers), Removed (44 hand-rolled *_store.go, schema_mirror_test.go)
 - [ ] All operator binaries (4) build and pass tests against new db/
 - [ ] No internal terms in CLI output (Rule 3 — unchanged surface but re-verified)
@@ -1603,7 +1624,7 @@ Run `/dogfood full`. Already covered by V9 (operator-witnessed).
 
 ### Execution
 
-Run `/dogfood full`. Always full. No shortcuts. Already operator-witnessed in V9.
+Run `/dogfood full`. Always full. No shortcuts. Already Ralph-executed in V9 per v1.3 sponsor mandate.
 
 ### Acceptance Criteria
 
