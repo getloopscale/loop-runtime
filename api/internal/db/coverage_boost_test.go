@@ -4,87 +4,40 @@
 package db
 
 import (
-	"context"
-	"errors"
 	"testing"
-
-	"github.com/loopzero/loopzero/api/internal/domain"
 )
 
 // =============================================================================
-// Bootstrap Store tests (0% → covered)
+// Bootstrap Store tests — DELETED in T2.2 #3 of plan
+// 2026-05-29-sqlc-migration v1.3
 // =============================================================================
-
-func TestBootstrapStore_Bootstrap_HappyPath(t *testing.T) {
-	fake := &fakeDBTX{execResult: ExecResult{RowsAffected: 1}}
-	store := &PostgresBootstrapStore{DB: fake}
-
-	userID, tenantID, created, err := store.Bootstrap(context.Background(), domain.BootstrapRequest{
-		AdminLogin:        "octocat",
-		AdminGitHubID:     "12345",
-		TenantSlug:        "acme",
-		TenantDisplayName: "Acme Corp",
-		Plan:              "pro",
-		CellID:            "cell-sfo3",
-	})
-	if err != nil {
-		t.Fatalf("unexpected error: %v", err)
-	}
-	if userID != "github-octocat" {
-		t.Errorf("expected github-octocat, got: %s", userID)
-	}
-	if tenantID != "tn-acme" {
-		t.Errorf("expected tn-acme, got: %s", tenantID)
-	}
-	if !created {
-		t.Error("expected created=true when rows affected")
-	}
-}
-
-func TestBootstrapStore_Bootstrap_DefaultPlanAndCell(t *testing.T) {
-	fake := &fakeDBTX{execResult: ExecResult{RowsAffected: 1}}
-	store := &PostgresBootstrapStore{DB: fake}
-
-	_, _, _, err := store.Bootstrap(context.Background(), domain.BootstrapRequest{
-		AdminLogin:    "user1",
-		AdminGitHubID: "111",
-		TenantSlug:    "test",
-	})
-	if err != nil {
-		t.Fatalf("unexpected error: %v", err)
-	}
-}
-
-func TestBootstrapStore_Bootstrap_ExecError(t *testing.T) {
-	fake := &fakeDBTX{execErr: errors.New("connection refused")}
-	store := &PostgresBootstrapStore{DB: fake}
-
-	_, _, _, err := store.Bootstrap(context.Background(), domain.BootstrapRequest{
-		AdminLogin:    "user1",
-		AdminGitHubID: "111",
-		TenantSlug:    "test",
-	})
-	if err == nil {
-		t.Fatal("expected error")
-	}
-}
-
-func TestBootstrapStore_Bootstrap_Idempotent(t *testing.T) {
-	fake := &fakeDBTX{execResult: ExecResult{RowsAffected: 0}}
-	store := &PostgresBootstrapStore{DB: fake}
-
-	_, _, created, err := store.Bootstrap(context.Background(), domain.BootstrapRequest{
-		AdminLogin:    "user1",
-		AdminGitHubID: "111",
-		TenantSlug:    "test",
-	})
-	if err != nil {
-		t.Fatalf("unexpected error: %v", err)
-	}
-	if created {
-		t.Error("expected created=false when no rows affected (idempotent)")
-	}
-}
+//
+// 4 stub-class tests previously here (TestBootstrapStore_Bootstrap_
+// HappyPath/DefaultPlanAndCell/ExecError/Idempotent) used fakeDBTX
+// stub responses to verify PostgresBootstrapStore behaviors. With
+// T2.2 #3 migrating to sqlc-backed via SqlcBridge, the fake pattern
+// is incompatible.
+//
+// Classification per `.claude/knowledge-base/audits/2026-05-29-sqlc-
+// test-reshape-matrix.md` (coverage_boost_test.go MIXED):
+//
+//   - KEEP-INVARIANT preserved structurally by BootstrapStoreSqlc:
+//     * Idempotent 4-INSERT-ON-CONFLICT-DO-NOTHING chain
+//       (users, tenants, tenant_members, subscriptions)
+//     * Wrapper-side defaults (cellID='cell-default', plan='starter',
+//       displayName=TenantSlug) applied identically
+//     * anyCreated semantics: returns true if ANY of the 4 inserts
+//       took effect, false only when all 4 were no-ops
+//     * MEET-053 D-01 TxFromContext serializer-aware path preserved
+//       verbatim (count-and-pick + INSERT in same tx when placement
+//       lock is held)
+//
+//   - DELETE-SCHEMA-MIRROR-DUPLICATE subset: pure-pass-through stubs
+//     — sqlc compile-time + sqlcsync gate replace.
+//
+// Per matrix § Phase 2 reshape window: KEEP-INVARIANT subset moves
+// to real-PG-gated tests when pgxmock or LOOPZERO_E2E_DATABASE_URL
+// harness is wired (out of T2.2 #3 scope).
 
 // =============================================================================
 // Tenant Deletion Store tests — DELETED in T1.4 of plan

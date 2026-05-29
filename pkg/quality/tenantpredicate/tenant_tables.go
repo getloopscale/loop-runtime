@@ -52,6 +52,7 @@ var TenantOwnedTables = []string{
 	"tenants_pending_deletion", // T1.4 add (PostgresTenantDeletionStore); replaces obsolete `tenant_deletion` stub
 	"tenant_tombstones",        // T1.4 add (terminal-state audit record; keyed by tenant_id)
 	"cost_counters",
+	"subscriptions",            // T2.2 #3 add (PostgresBootstrapStore + billing flows; PRIMARY KEY tenant_id, single-row-per-tenant)
 	"users",                    // tenant-scoped via owner_id / active_tenant_id
 }
 
