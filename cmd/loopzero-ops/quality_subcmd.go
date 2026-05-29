@@ -18,6 +18,7 @@ import (
 	"github.com/loopzero/loopzero/pkg/quality/advisorylock"
 	"github.com/loopzero/loopzero/pkg/quality/anonymousauth"
 	"github.com/loopzero/loopzero/pkg/quality/sqlcsync"
+	"github.com/loopzero/loopzero/pkg/quality/sqlctxprop"
 	"github.com/loopzero/loopzero/pkg/quality/dashboardpromtool"
 	"github.com/loopzero/loopzero/pkg/quality/helmoverlapparity"
 	"github.com/loopzero/loopzero/pkg/quality/prodimagedigests"
@@ -327,6 +328,8 @@ func runQuality(args []string) int {
 		return runShellHygiene(args[1:])
 	case "sqlc-sync":
 		return runSqlcSync(args[1:])
+	case "sqlc-tx-prop":
+		return runSqlcTxProp(args[1:])
 	case "corrections-txt-closed":
 		return runCorrectionsTxtClosed(args[1:])
 	case "script-count":
@@ -2380,5 +2383,38 @@ func runSqlcSync(args []string) int {
 		return 1
 	}
 	fmt.Printf("sqlc-sync: PASS — committed generated/ in-sync with sqlc %s\n", outcome.SqlcVersion)
+	return 0
+}
+
+// runSqlcTxProp enforces that sqlc-generated calls inside withEnvironmentLock
+// use the WithTx(tx) form. T0.4 of plan 2026-05-29-sqlc-migration v1.2.
+// Per MEET-2026-05-29-001 distributed-systems-engineer R-DS-1: pool-bound
+// form risks bypassing the lock holder's transaction. Rule 6 + Rule 7
+// invariant preservation.
+func runSqlcTxProp(args []string) int {
+	fs := flag.NewFlagSet("sqlc-tx-prop", flag.ContinueOnError)
+	root := fs.String("root", ".", "repo root directory")
+	if err := fs.Parse(args); err != nil {
+		return 1
+	}
+	if absRoot, err := os.Getwd(); err == nil && *root == "." {
+		*root = absRoot
+	}
+
+	outcome, err := sqlctxprop.Check(sqlctxprop.Config{RepoRoot: *root})
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "sqlc-tx-prop: %v\n", err)
+		return 5
+	}
+	if !outcome.Pass {
+		fmt.Fprintf(os.Stderr, "sqlc-tx-prop: FAIL — %d violation(s) (scanned %d .go files):\n",
+			len(outcome.Violations), outcome.Scanned)
+		for _, v := range outcome.Violations {
+			fmt.Fprintf(os.Stderr, "  %s:%d  %s  — %s\n", v.File, v.Line, v.Function, v.Detail)
+		}
+		fmt.Fprintf(os.Stderr, "\nFix: %s\n", sqlctxprop.ActionableFix())
+		return 1
+	}
+	fmt.Printf("sqlc-tx-prop: PASS — %d .go files scanned; no pool-bound sqlc calls inside withEnvironmentLock\n", outcome.Scanned)
 	return 0
 }
