@@ -1,6 +1,6 @@
 # Plan: sqlc Migration — Big-Bang Replacement of Hand-Rolled SQL Layer
 
-> **Version 1.1** (folded 5 MUST FIX from `/edge-case-plan` 2026-05-29: EC-1 sqlc CLI in task doctor; EC-2 sqlc parse pre-flight against existing DDL; EC-3 sqlc emits snake_case JSON tags per Rule 5; EC-4 render script trap signals; EC-5 T4.2 explicit "green cycle" attestation criteria) — Replace all hand-rolled SQL in `api/internal/db/` (44 stores, 26 manual `.Scan()` sites, 17 pgx callsites) with `sqlc` v1.31.1 codegen using `pgx/v5` driver and a CI-rendered `schema.gen.sql` from `golang-migrate` replay against ephemeral PostgreSQL 16. The migration eliminates the systemic `SELECT cols → Scan(&fields) → INSERT (cols) VALUES (...)` fragility class at **compile time** rather than test time, closing the bug family that produced the M07 Rekor URL persistence 3-layer bug (commit `b3375ed0`). Big-bang scope, no backward compatibility, `schema_mirror_test.go` deleted in two-step. Outcome: 44 hand-rolled stores → sqlc-generated typed Go funcs + thin Go wrappers for state-machine + transaction propagation; `withEnvironmentLock` + `pg_advisory_xact_lock` + state-machine `Transition()` discipline preserved by construction.
+> **Version 1.2** (sponsor-direct async amendment `.claude/knowledge-base/meetings/MEET-ASYNC-AMENDMENT-2026-05-29-001-sqlc-develop-direct.md` 2026-05-29: D8 replaced by D8' — work direct on develop instead of `feat/sqlc-migration` feature branch + squash-merge; per-commit incremental with develop staying GREEN after every substantive commit; ADR-3 §"Mecanismo" sub-amendment pending separate commit) — Carries v1.1 folds (5 MUST FIX from `/edge-case-plan` 2026-05-29: EC-1 sqlc CLI in task doctor; EC-2 sqlc parse pre-flight against existing DDL; EC-3 sqlc emits snake_case JSON tags per Rule 5; EC-4 render script trap signals; EC-5 T4.2 explicit "green cycle" attestation criteria) — Replace all hand-rolled SQL in `api/internal/db/` (44 stores, 26 manual `.Scan()` sites, 17 pgx callsites) with `sqlc` v1.31.1 codegen using `pgx/v5` driver and a CI-rendered `schema.gen.sql` from `golang-migrate` replay against ephemeral PostgreSQL 16. The migration eliminates the systemic `SELECT cols → Scan(&fields) → INSERT (cols) VALUES (...)` fragility class at **compile time** rather than test time, closing the bug family that produced the M07 Rekor URL persistence 3-layer bug (commit `b3375ed0`). Big-bang scope, no backward compatibility, `schema_mirror_test.go` deleted in two-step. Outcome: 44 hand-rolled stores → sqlc-generated typed Go funcs + thin Go wrappers for state-machine + transaction propagation; `withEnvironmentLock` + `pg_advisory_xact_lock` + state-machine `Transition()` discipline preserved by construction.
 
 ## Context
 
@@ -89,10 +89,11 @@
 - **Rationale:** Per MEET-2026-05-29-001 Conflict 2 resolution — preserves bug-class coverage during transition; SRE veto-backed.
 - **Consequences:** Enables: zero-coverage-gap migration. Constrains: 2 separate commits required (cannot squash these two), with explicit sequence enforcement.
 
-### D8 — 14-day branch lifetime cap
-- **Decision:** Feature branch `feat/sqlc-migration` off develop; squash-merge on completion; ≤14-day lifetime; daily rebase by owner.
-- **Rationale:** Per MEET-2026-05-29-001 Conflict 4 + D3 operator-locked decision. Forces completion; prevents indefinite drift; CR-CONSENSUS-1 cognitive burnout mitigation via M-15 daily diary.
-- **Consequences:** Enables: clean single-commit history; clear rollback target. Constrains: <5%/day progress for 2 days → ratification meeting (M-15 escalation).
+### D8' — Work direct on develop (supersedes D8 per async amendment 2026-05-29)
+- **Decision:** Work direct on `develop` branch; per-commit incremental landings; **no feature branch, no squash-merge event**. Develop must stay GREEN (CI gates pass) after every substantive commit. (Supersedes prior D8 which mandated `feat/sqlc-migration` off develop + squash-merge + ≤14-day lifetime.)
+- **Rationale:** Per sponsor-direct async amendment `MEET-ASYNC-AMENDMENT-2026-05-29-001-sqlc-develop-direct.md` 2026-05-29. Sponsor (Paulo) directive: "Voce deve trabalhar na develop atualizada". Reduces multi-day RED window risk (R-SRE-1) — develop staying GREEN per commit forces smaller reviewable units. Aligns with parallel work threads already on develop (dashboard backend integration v1.1).
+- **Consequences:** Enables: immediate visibility to all develop consumers; no rebase debt against parallel threads; smaller per-commit blast radius; CI green discipline gate. Constrains: ADR-3 §"Mecanismo" rollback playbook requires sub-amendment from single-SHA atomic revert to per-commit-range revert (`git log --grep="sqlc" --oneline` to identify range; sequential `git revert <first>..<last>`). M-15 daily diary anchored to **progress %** instead of branch lifetime. CR-CONSENSUS-1 burnout mitigation still active via M-15.
+- **Superseded D8 archived in:** `MEET-ASYNC-AMENDMENT-2026-05-29-001-sqlc-develop-direct.md` § "Decision Synthesized" table comparison.
 
 ## Dependency Graph
 
@@ -667,8 +668,8 @@ End-to-end sanity check is mandatory before opening the Phase 1 store conversion
 #### Tasks
 1. Run all 8 verification checks.
 2. Document results in CHANGELOG.md `[Unreleased]` under Added (sqlc tooling, 3 gates, render pipeline).
-3. Open feature branch `feat/sqlc-migration` off develop.
-4. Commit Phase 0 deliverables to the feature branch.
+3. ~~Open feature branch `feat/sqlc-migration` off develop.~~ **Superseded by D8' async amendment (2026-05-29):** work direct on develop; no feature branch.
+4. Commit Phase 0 deliverables **direct to develop** (per D8'); each substantive commit must keep develop CI GREEN.
 
 #### TDD
 ```
@@ -681,8 +682,8 @@ VERIFY:  bash docs/plans/scripts/phase0-sanity.sh (or similar runner)
 #### Acceptance Criteria
 - [ ] All 8 verification checks GREEN
 - [ ] CHANGELOG.md [Unreleased] updated
-- [ ] Feature branch open
-- [ ] Phase 0 commit landed on feat/sqlc-migration
+- [ ] ~~Feature branch open~~ N/A per D8'
+- [ ] Phase 0 commit landed **on develop** with CI GREEN
 
 #### DoD
 - [ ] All Phase 0 deliverables verified GREEN as a system
@@ -1043,7 +1044,7 @@ Verify all 5 pilot stores integrate as a system before opening Phase 2 (39 more 
 3. `task lint` GREEN
 4. `task validate:manifests` GREEN
 5. Sample integration test: end-to-end deploy on cleanroom k3d (smoke `loopzero deploy` lifecycle)
-6. Commit Phase 1 deliverables to feat/sqlc-migration branch.
+6. Commit Phase 1 deliverables to develop branch (per D8').
 7. CHANGELOG.md [Unreleased] updated with 5 store conversions.
 8. Owner daily diary entry per M-15.
 
@@ -1079,7 +1080,7 @@ api/internal/services/* — (EDIT) update callers
 #### Tasks
 1. For each of 10 stores: write queries.sql, generate, wrapper, reshape tests, update callers, delete old store.
 2. Verify task test + quality:gates GREEN after each store (incremental green).
-3. Commit batch to feat/sqlc-migration branch.
+3. Commit batch to develop branch (per D8').
 
 #### TDD (per store)
 ```
@@ -1296,9 +1297,9 @@ VERIFY:  go test + quality:gates
 Per D7: ship sqlcsync gate + 1 full CI green cycle BEFORE deleting schema_mirror_test.go. Step 1 = ensure 1 full CI cycle has been GREEN on the feature branch with sqlcsync registered **AND with non-trivial coverage that exercises real codegen** (EC-5 explicit attestation — prevents trivially-green cycles from un-gating the delete).
 
 #### Tasks
-1. Verify last CI run on feat/sqlc-migration is GREEN with sqlcsync gate active.
+1. Verify last CI run on develop is GREEN on the substantive commit (per D8') with sqlcsync gate active.
 2. **EC-5 attestation:** verify that GREEN CI run is on a commit where (a) `pkg/quality/sqlcsync/` is registered in `task quality:gates`, AND (b) `api/internal/db/queries/` contains ≥30 .sql files (proves Phase 1+2 query authoring is substantive), AND (c) `api/internal/db/generated/` contains ≥30 .go files (proves codegen ran on real input), AND (d) `find api/internal/db -name '*_store.go' | wc -l` returns ≤14 (proves ≥30/44 stores have been converted). The "green cycle" cannot be trivially passing on Phase 0 baseline alone.
-3. Open a separate commit on feat/sqlc-migration that deletes schema_mirror_test.go.
+3. Open a separate commit on develop that deletes schema_mirror_test.go (per D8').
 4. Verify CI is still GREEN after the delete commit.
 
 #### TDD
@@ -1442,7 +1443,7 @@ Verify all KEEP-INVARIANT tests from T0.6 matrix pass against new sqlc-backed co
 Per SRE condition 2 (M-7): drill prod-identical 4-cluster stack runs sqlc-migrated code; L2 harness PASS.
 
 #### Tasks (operator HARD STOP — NOT Ralph-able)
-1. Operator: `task drill:l2-scale` against feat/sqlc-migration branch.
+1. Operator: `task drill:l2-scale` against develop branch (per D8').
 2. Operator: capture evidence per drill skill protocol.
 3. Operator: confirm success_rate=100%, p95 ≤ 10min.
 
@@ -1495,7 +1496,7 @@ Per production-design-reviewer condition 3 (M-21): smoke `loopzero deploy` again
 Per ADR-3: 7-day post-merge window; any P0/P1 traceable to db/ triggers revert.
 
 #### Tasks
-1. Merge feat/sqlc-migration to develop.
+1. **Per D8' there is no merge event** — substantive commits land directly on develop incrementally. V11 starts when the last sqlc-migration substantive commit lands on develop.
 2. Monitor for 7 days; daily check-in per M-15 diary.
 3. If any rollback trigger fires, execute ADR-3 rollback playbook.
 4. If 7 days clean, ADR-1 transitions from "active monitoring" to "historical record".
