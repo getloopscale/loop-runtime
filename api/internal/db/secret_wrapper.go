@@ -3,6 +3,20 @@
 
 package db
 
+// secret_wrapper.go — sqlc-backed implementation of
+// PostgresSecretStore. T2.2 (Batch B #4) of plan
+// docs/plans/2026-05-29-sqlc-migration-plan.md v1.3.
+//
+// PostgresSecretStore struct + NewPostgresSecretStore constructor
+// live in this file (inline — no separate _types.go needed; the
+// store is small and the AES-256-GCM encrypt() helper is tightly
+// coupled to the wrapper methods).
+//
+// SEC-001 invariant: encryptionKey != nil → AES-256-GCM
+// (nonce || ciphertext) before INSERT. nil key = plaintext (local
+// dev only — never in production). ListSecretNames NEVER returns
+// the value column.
+
 import (
 	"context"
 	"crypto/aes"
@@ -11,6 +25,7 @@ import (
 	"fmt"
 	"io"
 
+	"github.com/loopzero/loopzero/api/internal/db/generated"
 	"github.com/loopzero/loopzero/api/internal/domain"
 )
 
@@ -18,6 +33,9 @@ import (
 // SEC-001: Values are encrypted with AES-256-GCM before storage.
 // When encryptionKey is nil, values are stored as plaintext (local dev only).
 // The ListNames method NEVER returns values — only names and context.
+//
+// T2.2 Batch B #4: DB field type preserved (db.DBTX); methods
+// dispatch through SqlcBridge to sqlc-generated queries.
 type PostgresSecretStore struct {
 	DB            DBTX
 	encryptionKey []byte // 32-byte key for AES-256-GCM; nil disables encryption
@@ -33,6 +51,8 @@ func NewPostgresSecretStore(db DBTX, key []byte) (*PostgresSecretStore, error) {
 }
 
 // encrypt encrypts plaintext using AES-256-GCM. Returns nonce || ciphertext.
+// SEC-001 invariant: only path that turns user-provided bytes into the
+// blob persisted in secrets.encrypted_value.
 func (s *PostgresSecretStore) encrypt(plaintext []byte) ([]byte, error) {
 	if s.encryptionKey == nil {
 		return plaintext, nil // no encryption (local dev)
@@ -52,11 +72,15 @@ func (s *PostgresSecretStore) encrypt(plaintext []byte) ([]byte, error) {
 	return gcm.Seal(nonce, nonce, plaintext, nil), nil
 }
 
-// Set creates or updates a secret. Uses upsert (ON CONFLICT DO UPDATE).
-// SEC-001: Values are encrypted with AES-256-GCM before storage.
+// Set creates or updates a secret. Uses sqlc-generated UpsertSecret
+// (ON CONFLICT DO UPDATE returning xmax=0 to distinguish INSERT
+// from UPDATE).
+//
+// SEC-001: Values are encrypted via s.encrypt before persistence.
 // Returns true if the secret was created, false if updated.
-// Uses a single atomic statement to avoid race conditions between
-// concurrent Set calls for the same secret.
+// Single atomic statement — no race condition between concurrent
+// Set calls for the same secret (the legacy SELECT+INSERT race
+// is structurally absent).
 func (s *PostgresSecretStore) Set(ctx context.Context, tenantID, projectID, env, app, name string, value []byte) (created bool, err error) {
 	// SEC-001: Encrypt the value before storing.
 	encrypted, err := s.encrypt(value)
@@ -64,68 +88,89 @@ func (s *PostgresSecretStore) Set(ctx context.Context, tenantID, projectID, env,
 		return false, fmt.Errorf("secret_store: encrypt: %w", err)
 	}
 
+	bridge, err := s.bridge()
+	if err != nil {
+		return false, err
+	}
+	q := generated.New()
+
 	id := fmt.Sprintf("sec-%s-%s-%s-%s", tenantID, projectID, app, name)
 
-	// Single atomic upsert: xmax = 0 means the row was inserted (not updated).
-	// This eliminates the race condition from the previous SELECT + INSERT pattern.
-	row := s.DB.QueryRow(ctx,
-		`INSERT INTO secrets (id, tenant_id, project_id, environment, app, name, encrypted_value)
-		 VALUES ($1, $2, $3, $4, $5, $6, $7)
-		 ON CONFLICT (tenant_id, project_id, environment, app, name)
-		 DO UPDATE SET encrypted_value = $7, updated_at = NOW()
-		 RETURNING (xmax = 0) AS created`,
-		id, tenantID, projectID, env, app, name, encrypted,
-	)
-
-	if err := row.Scan(&created); err != nil {
+	created, err = q.UpsertSecret(ctx, bridge, generated.UpsertSecretParams{
+		ID:             id,
+		TenantID:       tenantID,
+		ProjectID:      projectID,
+		Environment:    env,
+		App:            app,
+		Name:           name,
+		EncryptedValue: encrypted,
+	})
+	if err != nil {
 		return false, fmt.Errorf("secret_store: set: %w", err)
 	}
-
 	return created, nil
 }
 
 // Delete removes a secret by name within tenant/project/env/app scope.
 // Returns true if a secret was deleted, false if it didn't exist.
 func (s *PostgresSecretStore) Delete(ctx context.Context, tenantID, projectID, env, app, name string) (deleted bool, err error) {
-	result, err := s.DB.Exec(ctx,
-		`DELETE FROM secrets WHERE tenant_id = $1 AND project_id = $2 AND environment = $3 AND app = $4 AND name = $5`,
-		tenantID, projectID, env, app, name,
-	)
+	bridge, err := s.bridge()
+	if err != nil {
+		return false, err
+	}
+	q := generated.New()
+	n, err := q.DeleteSecret(ctx, bridge, generated.DeleteSecretParams{
+		TenantID:    tenantID,
+		ProjectID:   projectID,
+		Environment: env,
+		App:         app,
+		Name:        name,
+	})
 	if err != nil {
 		return false, fmt.Errorf("secret_store: delete: %w", err)
 	}
-	return result.RowsAffected > 0, nil
+	return n > 0, nil
 }
 
 // ListNames returns metadata (name, environment, app) for all secrets
 // matching the given tenant, project, and environment.
 // Results are ordered alphabetically by name.
+// SEC-001 defense-in-depth: never returns the value column.
 func (s *PostgresSecretStore) ListNames(ctx context.Context, tenantID, projectID, env string) ([]domain.SecretMetadata, error) {
-	rows, err := s.DB.Query(ctx,
-		"SELECT name, environment, app FROM secrets WHERE tenant_id = $1 AND project_id = $2 AND environment = $3 ORDER BY name",
-		tenantID, projectID, env,
-	)
+	bridge, err := s.bridge()
+	if err != nil {
+		return nil, err
+	}
+	q := generated.New()
+	rows, err := q.ListSecretNames(ctx, bridge, generated.ListSecretNamesParams{
+		TenantID:    tenantID,
+		ProjectID:   projectID,
+		Environment: env,
+	})
 	if err != nil {
 		return nil, fmt.Errorf("secret_store: list names: %w", err)
 	}
-	defer rows.Close()
-
-	var result []domain.SecretMetadata
-	for rows.Next() {
-		var m domain.SecretMetadata
-		if err := rows.Scan(&m.Name, &m.Environment, &m.App); err != nil {
-			return nil, fmt.Errorf("secret_store: scan row: %w", err)
-		}
-		result = append(result, m)
-	}
-	if err := rows.Err(); err != nil {
-		return nil, fmt.Errorf("secret_store: iterate rows: %w", err)
-	}
 
 	// Return empty slice instead of nil to avoid null in JSON responses.
-	if result == nil {
-		result = []domain.SecretMetadata{}
+	result := make([]domain.SecretMetadata, 0, len(rows))
+	for _, row := range rows {
+		result = append(result, domain.SecretMetadata{
+			Name:        row.Name,
+			Environment: row.Environment,
+			App:         row.App,
+		})
 	}
-
 	return result, nil
+}
+
+// bridge returns the sqlc-compatible DBTX from s.DB.
+func (s *PostgresSecretStore) bridge() (generated.DBTX, error) {
+	if s.DB == nil {
+		return nil, fmt.Errorf("secret_store: nil DB")
+	}
+	bridge, ok := s.DB.(SqlcBridge)
+	if !ok {
+		return nil, fmt.Errorf("secret_store: DBTX %T does not implement SqlcBridge", s.DB)
+	}
+	return bridge.GeneratedDB(), nil
 }
