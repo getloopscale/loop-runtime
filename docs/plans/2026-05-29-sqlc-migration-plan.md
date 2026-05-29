@@ -1,6 +1,6 @@
 # Plan: sqlc Migration — Big-Bang Replacement of Hand-Rolled SQL Layer
 
-> **Version 1.0** — Replace all hand-rolled SQL in `api/internal/db/` (44 stores, 26 manual `.Scan()` sites, 17 pgx callsites) with `sqlc` v1.31.1 codegen using `pgx/v5` driver and a CI-rendered `schema.gen.sql` from `golang-migrate` replay against ephemeral PostgreSQL 16. The migration eliminates the systemic `SELECT cols → Scan(&fields) → INSERT (cols) VALUES (...)` fragility class at **compile time** rather than test time, closing the bug family that produced the M07 Rekor URL persistence 3-layer bug (commit `b3375ed0`). Big-bang scope, no backward compatibility, `schema_mirror_test.go` deleted in two-step. Outcome: 44 hand-rolled stores → sqlc-generated typed Go funcs + thin Go wrappers for state-machine + transaction propagation; `withEnvironmentLock` + `pg_advisory_xact_lock` + state-machine `Transition()` discipline preserved by construction.
+> **Version 1.1** (folded 5 MUST FIX from `/edge-case-plan` 2026-05-29: EC-1 sqlc CLI in task doctor; EC-2 sqlc parse pre-flight against existing DDL; EC-3 sqlc emits snake_case JSON tags per Rule 5; EC-4 render script trap signals; EC-5 T4.2 explicit "green cycle" attestation criteria) — Replace all hand-rolled SQL in `api/internal/db/` (44 stores, 26 manual `.Scan()` sites, 17 pgx callsites) with `sqlc` v1.31.1 codegen using `pgx/v5` driver and a CI-rendered `schema.gen.sql` from `golang-migrate` replay against ephemeral PostgreSQL 16. The migration eliminates the systemic `SELECT cols → Scan(&fields) → INSERT (cols) VALUES (...)` fragility class at **compile time** rather than test time, closing the bug family that produced the M07 Rekor URL persistence 3-layer bug (commit `b3375ed0`). Big-bang scope, no backward compatibility, `schema_mirror_test.go` deleted in two-step. Outcome: 44 hand-rolled stores → sqlc-generated typed Go funcs + thin Go wrappers for state-machine + transaction propagation; `withEnvironmentLock` + `pg_advisory_xact_lock` + state-machine `Transition()` discipline preserved by construction.
 
 ## Context
 
@@ -143,16 +143,17 @@ docs/operations/dev-loop.md — (EDIT) add "Local sqlc workflow" section: instal
 - The `.gitkeep` placeholders allow PRs to land empty directories under version control.
 
 #### Deep Dives
-- **sqlc.yaml v2 schema:** `version: "2"`, `sql.[0].engine: postgresql`, `sql.[0].schema: api/internal/db/schema.gen.sql`, `sql.[0].queries: api/internal/db/queries/`, `sql.[0].gen.go.out: api/internal/db/generated/`, `sql.[0].gen.go.package: generated`, `sql.[0].gen.go.sql_package: pgx/v5`, `sql.[0].gen.go.emit_methods_with_db_argument: true`, `sql.[0].gen.go.emit_pointers_for_null_types: true`.
+- **sqlc.yaml v2 schema:** `version: "2"`, `sql.[0].engine: postgresql`, `sql.[0].schema: api/internal/db/schema.gen.sql`, `sql.[0].queries: api/internal/db/queries/`, `sql.[0].gen.go.out: api/internal/db/generated/`, `sql.[0].gen.go.package: generated`, `sql.[0].gen.go.sql_package: pgx/v5`, `sql.[0].gen.go.emit_methods_with_db_argument: true`, `sql.[0].gen.go.emit_pointers_for_null_types: true`, `sql.[0].gen.go.emit_json_tags: true` (EC-3 Rule 5 stability), `sql.[0].gen.go.json_tags_case_style: snake` (EC-3 preserves current snake_case CLI/API contract).
 - **Invariants:** sqlc.yaml MUST NOT enable `emit_db_tags`, `emit_json_tags` (LoopZero stores already define these via struct tags in wrappers); MUST set `sql_package: pgx/v5` (not database/sql); MUST set `emit_methods_with_db_argument: true` per D3.
 - **Edge case:** If a developer regenerates locally with a different sqlc version, schema.gen.sql may not match. The sqlcsync gate (T0.3) catches this.
 
 #### Tasks
-1. Create `api/internal/db/sqlc.yaml` with the v2 config locked per ADR-1 D2 + D3 + D6.
+1. Create `api/internal/db/sqlc.yaml` with the v2 config locked per ADR-1 D2 + D3 + D6 + EC-3 (emit_json_tags + snake_case).
 2. Create `api/internal/db/queries/.gitkeep` + `api/internal/db/generated/.gitkeep`.
 3. Add "Local sqlc workflow" section to `docs/operations/dev-loop.md` with install + regenerate commands.
 4. Run `sqlc compile` (Phase 0 has no queries, so this is a syntax validation only).
 5. Verify `sqlc.yaml` matches the documented shape via JSON schema check (`sqlc compile --no-remote` exits 0).
+6. **EC-1:** Add sqlc CLI check to `taskfiles/dev.yml` § "=== Required Tools ===" — `cmd: command -v sqlc >/dev/null && [ "$(sqlc version)" = "v1.31.1" ] && echo "[PASS] sqlc v1.31.1" || echo "[FAIL] sqlc — install v1.31.1 from github.com/sqlc-dev/sqlc/releases"`. `task doctor` must fail (FAIL count >0) when sqlc absent or wrong version.
 
 #### TDD
 ```
@@ -160,9 +161,12 @@ RED:     test_sqlc_yaml_locks_pgx_v5() — assert `sqlc.yaml` contains `sql_pack
 RED:     test_sqlc_yaml_emits_db_argument() — assert `emit_methods_with_db_argument: true`
 RED:     test_sqlc_yaml_schema_is_rendered_file() — assert `schema:` points to `schema.gen.sql`, NOT `migrations/`
 RED:     test_sqlc_yaml_disables_pool_bound() — assert no `emit_pool_bound_methods` or equivalent
-GREEN:   Write sqlc.yaml that passes all 4 assertions
+RED:     test_sqlc_yaml_emits_snake_case_json_tags() — EC-3 — assert `emit_json_tags: true` AND `json_tags_case_style: snake` (Rule 5 contract preservation)
+RED:     test_task_doctor_fails_without_sqlc() — EC-1 — simulate sqlc absent; `task doctor` exit code reports FAIL on sqlc row
+RED:     test_task_doctor_fails_with_wrong_sqlc_version() — EC-1 — simulate sqlc v1.30.0 (downrev); `task doctor` reports FAIL
+GREEN:   Write sqlc.yaml + taskfiles/dev.yml entry that passes all 7 assertions
 REFACTOR: None expected
-VERIFY:  cd api/internal/db && sqlc compile && go test ./internal/db/sqlc_config_test.go
+VERIFY:  cd api/internal/db && sqlc compile && go test ./internal/db/sqlc_config_test.go && task doctor 2>&1 | grep -E "PASS.*sqlc"
 ```
 
 #### Acceptance Criteria
@@ -172,6 +176,8 @@ VERIFY:  cd api/internal/db && sqlc compile && go test ./internal/db/sqlc_config
 - [ ] Pass: `/code-audit` size check (sqlc.yaml ≤ 100 lines)
 - [ ] Pass: `/code-audit` lint check (zero warnings)
 - [ ] sqlc.yaml v2 schema compliance verified
+- [ ] **EC-3:** sqlc-emitted struct has `json:"snake_case"` tag for every field (verify via `sqlc generate` on a dummy query → grep `json:"` in output)
+- [ ] **EC-1:** `task doctor` includes sqlc v1.31.1 in Required Tools; PASS row when installed correctly; FAIL row when absent or version mismatch
 
 #### DoD
 - [ ] All tasks 1-5 completed
@@ -207,24 +213,28 @@ docs/operations/dev-loop.md — (EDIT) add "Re-rendering schema.gen.sql" section
 
 #### Deep Dives
 - **Render algorithm:**
-  1. `docker run --rm -d -e POSTGRES_PASSWORD=test -e POSTGRES_DB=loopzero postgres:16` (pin tag, NOT `:latest`)
-  2. Wait for PG ready via `pg_isready` with 30s budget
-  3. `golang-migrate -path api/internal/db/migrations -database postgres://postgres:test@localhost:5432/loopzero?sslmode=disable up` (pinned golang-migrate version)
-  4. `pg_dump --no-owner --no-privileges --schema-only --no-comments postgres://postgres:test@localhost:5432/loopzero > /tmp/raw-schema.sql`
-  5. Post-process: strip `ALTER ... OWNER`, normalize whitespace, sort CREATE statements by table name, strip serial generation comments
-  6. Write to `api/internal/db/schema.gen.sql`
-  7. `docker rm -f $PG_CID`
+  0. **EC-4 trap (first line of script):** `set -euo pipefail; PG_CID=""; trap 'if [ -n "$PG_CID" ]; then docker rm -f "$PG_CID" 2>/dev/null || true; fi' EXIT INT TERM` (guarantees cleanup on abort/SIGINT)
+  1. `PG_CID=$(docker run --rm -d --publish 0:5432 -e POSTGRES_PASSWORD=test -e POSTGRES_DB=loopzero postgres:16)` (pin tag, NOT `:latest`; capture container ID for trap; EC-17 publish 0:5432 = random host port avoids local k3d PG conflict at 15432)
+  2. `HOST_PORT=$(docker port "$PG_CID" 5432 | cut -d: -f2)` — resolve random host port
+  3. Wait for PG ready via `pg_isready -h localhost -p "$HOST_PORT"` with 30s budget
+  4. `golang-migrate -path api/internal/db/migrations -database "postgres://postgres:test@localhost:$HOST_PORT/loopzero?sslmode=disable" up` (pinned golang-migrate version)
+  5. `pg_dump --no-owner --no-privileges --schema-only --no-comments "postgres://postgres:test@localhost:$HOST_PORT/loopzero" > /tmp/raw-schema.sql`
+  6. Post-process: strip `ALTER ... OWNER`, normalize whitespace, sort CREATE statements by table name, strip serial generation comments
+  7. Write to `api/internal/db/schema.gen.sql`
+  8. **EC-2 sqlc parse pre-flight:** run `sqlc compile` against the rendered schema.gen.sql + 1 dummy query per existing table (`SELECT 1 FROM <table>`); if any DDL pattern (TRIGGER from 000020, partial index, recursive CTE) errors, ABORT with explicit message + add gap to ADR-1 §"Known sqlc limitations". This catches sqlc/DDL compatibility BEFORE Phase 1 commits.
+  9. `trap` (step 0) handles container teardown on normal exit + signal abort.
 - **Invariants:** byte-identical output across runs; PG version pinned; golang-migrate version pinned; post-process is deterministic (sort + canonical formatting).
 - **Edge case:** if a migration uses `IF NOT EXISTS` and a prior render left state, replay must be ephemeral (fresh container each run). The `docker run --rm` flag ensures this.
 - **Security (per platform-security-engineer condition 5 M-5):** the PG role used for migration is NOT superuser (use `--username loopzero` not `postgres`). Output strip removes any `OWNER TO postgres` clauses.
 
 #### Tasks
 1. Add entry to `.claude/rules/shell-scripts-allowlist.md` for render-schema-gen-sql.sh (allowlist BEFORE commit per LoopZero gate).
-2. Create `infra/scripts/ci/render-schema-gen-sql.sh` per the render algorithm above.
+2. Create `infra/scripts/ci/render-schema-gen-sql.sh` per the render algorithm above (includes EC-4 trap + EC-17 random-port + EC-2 sqlc parse pre-flight at step 8).
 3. Add `task db:render-schema` to `taskfiles/db.yml`.
 4. Run `task db:render-schema` locally; verify output is non-empty + deterministic (run 3x, assert byte-identical).
 5. Commit the initial `api/internal/db/schema.gen.sql` to repo.
 6. Add `docs/operations/dev-loop.md` section explaining when to re-render.
+7. **EC-2:** Execute `sqlc compile` against rendered schema.gen.sql + dummy queries; if any of 19 existing migrations' DDL fails to parse (TRIGGER, partial index, recursive CTE, custom types), document gap in ADR-1 §"Known sqlc limitations" with workaround (e.g., raw/ escape hatch for that table family). If 000020 trigger fails, mark as ADR-1 KSL-1 known limitation; raw/ subpackage will handle update-with-trigger paths.
 
 #### TDD
 ```
@@ -235,9 +245,12 @@ RED:     test_render_strips_owner_clauses() — assert pg_dump invocation uses -
 RED:     test_render_strips_privileges() — assert pg_dump invocation uses --no-privileges
 RED:     test_render_uses_non_superuser_role() — assert script creates a non-superuser PG role for migration
 RED:     test_render_deterministic_output() — run render 3x, assert byte-identical output
-GREEN:   Write render script + initial schema.gen.sql that passes all 7 assertions
+RED:     test_render_traps_signals_for_cleanup() — EC-4 — assert script has `trap ... EXIT INT TERM` in first 10 lines; simulate SIGINT mid-run via `timeout -s INT 2`, verify `docker ps -f label=...` returns zero orphan containers
+RED:     test_render_uses_random_host_port() — EC-17 — assert script uses `--publish 0:5432` (not hardcoded `5432:5432` or `15432:5432`)
+RED:     test_sqlc_parses_all_existing_migrations_ddl() — EC-2 — given rendered schema.gen.sql + dummy `SELECT 1 FROM <table>` per existing table, `sqlc compile` exits 0; any failure documented in ADR-1 §"Known sqlc limitations" with table + DDL pattern + workaround
+GREEN:   Write render script + initial schema.gen.sql that passes all 10 assertions
 REFACTOR: None expected
-VERIFY:  task db:render-schema && git diff --exit-code api/internal/db/schema.gen.sql
+VERIFY:  task db:render-schema && git diff --exit-code api/internal/db/schema.gen.sql && sqlc compile -f api/internal/db/sqlc.yaml
 ```
 
 #### Acceptance Criteria
@@ -249,6 +262,9 @@ VERIFY:  task db:render-schema && git diff --exit-code api/internal/db/schema.ge
 - [ ] schema.gen.sql contains all 19 migrations applied (verify by grep table names from each .up.sql)
 - [ ] Pass: `/code-audit` size check (render script ≤ 200 lines per .claude/rules/shell-scripts-allowlist.md guidance)
 - [ ] Pass: shellcheck on render script
+- [ ] **EC-4:** Render script has `trap` cleanup at line ≤10; SIGINT mid-render leaves zero orphan PG containers (`docker ps -f ancestor=postgres:16` returns empty)
+- [ ] **EC-17:** Render script uses `--publish 0:5432` (random host port); zero clash with local k3d PG at 15432
+- [ ] **EC-2:** `sqlc compile` against schema.gen.sql succeeds for every existing table; ANY DDL pattern that fails (TRIGGER, partial index, recursive CTE) documented in ADR-1 §"Known sqlc limitations" with workaround
 
 #### DoD
 - [ ] Tasks 1-6 completed
@@ -1277,21 +1293,35 @@ VERIFY:  go test + quality:gates
 ### T4.2 — schema_mirror_test DELETE (step 1 of D7 two-step)
 
 #### Objective
-Per D7: ship sqlcsync gate + 1 full CI green cycle BEFORE deleting schema_mirror_test.go. Step 1 = ensure 1 full CI cycle has been GREEN on the feature branch with sqlcsync registered.
+Per D7: ship sqlcsync gate + 1 full CI green cycle BEFORE deleting schema_mirror_test.go. Step 1 = ensure 1 full CI cycle has been GREEN on the feature branch with sqlcsync registered **AND with non-trivial coverage that exercises real codegen** (EC-5 explicit attestation — prevents trivially-green cycles from un-gating the delete).
 
 #### Tasks
 1. Verify last CI run on feat/sqlc-migration is GREEN with sqlcsync gate active.
-2. Open a separate commit on feat/sqlc-migration that deletes schema_mirror_test.go.
-3. Verify CI is still GREEN after the delete commit.
+2. **EC-5 attestation:** verify that GREEN CI run is on a commit where (a) `pkg/quality/sqlcsync/` is registered in `task quality:gates`, AND (b) `api/internal/db/queries/` contains ≥30 .sql files (proves Phase 1+2 query authoring is substantive), AND (c) `api/internal/db/generated/` contains ≥30 .go files (proves codegen ran on real input), AND (d) `find api/internal/db -name '*_store.go' | wc -l` returns ≤14 (proves ≥30/44 stores have been converted). The "green cycle" cannot be trivially passing on Phase 0 baseline alone.
+3. Open a separate commit on feat/sqlc-migration that deletes schema_mirror_test.go.
+4. Verify CI is still GREEN after the delete commit.
+
+#### TDD
+```
+RED:     test_attestation_requires_substantive_codegen() — given a commit at Phase 0 baseline only (zero queries, zero generated files), attestation script exits 1 with explicit message "EC-5: sqlcsync green cycle requires ≥30 queries + ≥30 generated files + ≤14 remaining stores"
+RED:     test_attestation_passes_at_phase2_completion() — given commit with full Phase 2 done (~44 queries, ~44 generated, 0 stores remaining), attestation script exits 0
+RED:     test_delete_blocked_without_attestation() — git pre-commit hook (or CI gate) blocks schema_mirror_test.go DELETE if attestation script exits non-zero
+GREEN:   Implement attestation script + integrate in CI/precommit
+REFACTOR: None expected
+VERIFY:  bash infra/scripts/ci/sqlcsync-green-cycle-attestation.sh (returns 0 only when substantive)
+```
 
 #### Acceptance Criteria
 - [ ] sqlcsync gate has 1+ green CI run
+- [ ] **EC-5:** GREEN CI run is on a commit where (a) sqlcsync registered, (b) ≥30 queries.sql files, (c) ≥30 generated/*.go files, (d) ≤14 remaining `*_store.go` files. Attestation script `infra/scripts/ci/sqlcsync-green-cycle-attestation.sh` exits 0 against that commit.
 - [ ] schema_mirror_test.go DELETED in separate commit
 - [ ] CI post-delete is GREEN
+- [ ] 3 EC-5 RED tests GREEN
 
 #### DoD
 - [ ] D7 two-step delete complete
-- [ ] CHANGELOG "Removed: schema_mirror_test.go (superseded by pkg/quality/sqlcsync per ADR-1)"
+- [ ] EC-5 attestation script shipped + integrated in pre-commit/CI
+- [ ] CHANGELOG "Removed: schema_mirror_test.go (superseded by pkg/quality/sqlcsync per ADR-1, attested by EC-5 substantive-coverage gate)"
 
 ---
 
@@ -1587,3 +1617,57 @@ Run `/dogfood full`. Always full. No shortcuts. Already operator-witnessed in V9
 2. Fix all plan-caused CRITICAL and HIGH issues before declaring the plan complete
 3. Re-run `/dogfood full` to confirm fixes
 4. Pre-existing issues are logged but do NOT block plan completion
+
+---
+
+## Appendix C — Edge Case Fold Log (v1.0 → v1.1)
+
+> Folded from `/edge-case-plan 2026-05-29-sqlc-migration` review report dated 2026-05-29. All 5 MUST FIX items absorbed into the affected tasks; 1 bonus SHOULD TEST (EC-17 port conflict) folded with EC-4. The 11 remaining SHOULD TEST + 7 DOCUMENT items are captured here for owner reference during execution (not auto-applied — operator decides per-batch whether to fold).
+
+### MUST FIX folded into plan v1.1
+
+| EC | Family | Task | Change applied |
+|---|---|---|---|
+| **EC-1** | Resource (tooling) | T0.1 | Added Task #6 + 2 RED tests + 1 acceptance criterion: `task doctor` enforces sqlc v1.31.1 presence in Required Tools |
+| **EC-2** | Format (DDL parsing) | T0.2 | Added Task #7 + step 8 in render algorithm + 1 RED test + 1 acceptance criterion: `sqlc compile` pre-flight against rendered schema.gen.sql + dummy queries per existing table; gaps documented in ADR-1 §"Known sqlc limitations" |
+| **EC-3** | Integração (Rule 5) | T0.1 | sqlc.yaml v2 config gains `emit_json_tags: true` + `json_tags_case_style: snake` + 1 RED test + 1 acceptance criterion |
+| **EC-4** | Resource (ephemeral cleanup) | T0.2 | Render algorithm step 0: `trap '...' EXIT INT TERM` for guaranteed PG container teardown on script abort or SIGINT; + 1 RED test + 1 acceptance criterion |
+| **EC-5** | Timing (sequence enforcement) | T4.2 | T4.2 acceptance + DoD gain explicit "substantive coverage" attestation: green CI cycle must include ≥30 queries + ≥30 generated files + ≤14 remaining stores; + 3 RED tests + attestation script as deliverable |
+
+### Bonus SHOULD TEST folded with EC-4
+
+| EC | Family | Task | Change applied |
+|---|---|---|---|
+| **EC-17** | Resource (port conflict) | T0.2 | Render algorithm step 1 uses `--publish 0:5432` (random host port); + 1 RED test + 1 acceptance criterion (folded along with EC-4 since same render script) |
+
+### SHOULD TEST not auto-folded (owner discretion during execution)
+
+These are good-practice tests that owner should add inline during the relevant phase. Each is a candidate for inclusion in TDD lists but not blocking acceptance:
+
+- EC-6: Concurrent Phase 1 conversions `generated/` regeneration test (during T1.x)
+- EC-7: Wrapper recursion same-tx test (during T1.1, T1.4)
+- EC-8: CHANGELOG.md categorized entry consistency test (during T2.x batches)
+- EC-9: Phase 1 sponsor pattern-review sign-off documentation (T1.6 DoD)
+- EC-10: `task quality:gates` execution-time fail-threshold (during T0.8 / M-20 measurement)
+- EC-11: `tenant_tables.go` staleness CI guard (during T0.5)
+- EC-12: Test helper orphan detection post-reshape (during T0.6 + T1.x reshape)
+- EC-13: Operator binary transitive-import CI build matrix (during T0.7 / Phase 3 prep)
+- EC-14: Generated code goimports formatting test (during T0.3)
+- EC-15: Per-phase commit count on feature branch (T0.9, T1.6, T2.x phase sanity)
+- EC-16: Phase 2 batch order foreign-key dependency note (T2.x ordering docs)
+
+### DOCUMENT items (acceptable risks)
+
+- EC-18: Line-ending drift cross-OS — LoopZero is Linux/macOS-only per CLAUDE.md
+- EC-19: Empty queries.sql — sqlc handles gracefully
+- EC-20: Docker-in-CI requirement — pre-existing dependency
+- EC-21: State-machine `Transition()` panic in non-handler goroutine — controller-runtime recovers + re-queues
+- EC-22: Drill iter 56 cost surprise > 4h — drill stack ~$0.32/hr + watchdog cron destroys after 6h
+- EC-23: 14d branch lifetime cap tight vs Phase 2 ~12d estimate — M-15 escalation handles
+- EC-24: ADR-3 references squash-merge SHA not yet known — operator fills SHA at revert time per ADR-3 §"Mecanismo"
+
+### Veredict on edge case review
+
+Plan v1.1 incorporates all 5 MUST FIX from the edge case review. SHOULD TEST items are documented for owner-discretion folding during the relevant phase. DOCUMENT items are explicit risk acceptances.
+
+**Edge case coverage after fold:** 24/24 items addressed (5 MUST FIX = fixed in plan, 12 SHOULD TEST = documented for inline test addition, 7 DOCUMENT = risk acceptance). Plan v1.1 ready for Phase 0 implementation.
