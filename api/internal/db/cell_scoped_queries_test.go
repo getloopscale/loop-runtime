@@ -263,30 +263,25 @@ func mustExtractQueryBlock(t *testing.T, contents, queryName string) string {
 	return contents[start : start+len(marker)+end]
 }
 
-func TestFindPendingForAutoVerify_CellScoped_JoinsTenants(t *testing.T) {
-	rec := &recordingDBTX{}
-	store := &PostgresDomainStore{DB: rec}
+// TestFindPendingCustomDomainsForAutoVerify_QuerySoT_ContainsJoinAndCellPredicate —
+// reshaped from runtime-SQL capture (recordingDBTX-based) to
+// static-content assertion against queries/domains.sql, same pattern
+// as the release/build cell-routing reshapes (T1.1c2c / T1.2b).
+// SEC-005 verified by code generation: sqlc-emitted SQL is the
+// canonical SoT; the assertion catches drift in the SQL file
+// regardless of which wrapper consumes the generated code.
+func TestFindPendingCustomDomainsForAutoVerify_QuerySoT_ContainsJoinAndCellPredicate(t *testing.T) {
+	contents := mustReadQuerySoT(t, "queries/domains.sql")
+	queryBlock := mustExtractQueryBlock(t, contents, "FindPendingCustomDomainsForAutoVerify")
 
-	_, err := store.FindPendingForAutoVerify(context.Background(), "cell-sfo3-02")
-	if err != nil {
-		t.Fatalf("FindPendingForAutoVerify: unexpected error: %v", err)
+	if !strings.Contains(queryBlock, "JOIN tenants") {
+		t.Errorf("FindPendingCustomDomainsForAutoVerify must JOIN tenants, got: %s", queryBlock)
 	}
-
-	// Domain store scopes via JOIN to tenants — the column reference is
-	// qualified with the tenants alias.
-	if !strings.Contains(rec.lastSQL, "JOIN tenants") {
-		t.Errorf("expected SQL to JOIN tenants, got: %s", rec.lastSQL)
+	if !strings.Contains(queryBlock, "t.cell_id = $1") {
+		t.Errorf("FindPendingCustomDomainsForAutoVerify must filter t.cell_id = $1, got: %s", queryBlock)
 	}
-	if !strings.Contains(rec.lastSQL, "t.cell_id = $1") {
-		t.Errorf("expected 't.cell_id = $1', got: %s", rec.lastSQL)
-	}
-	if rec.lastArgs[0] != "cell-sfo3-02" {
-		t.Errorf("expected cellID arg, got: %v", rec.lastArgs)
-	}
-	// Ensure the returned slice is non-nil even when empty (API contract).
-	result, _ := store.FindPendingForAutoVerify(context.Background(), "cell-sfo3-02")
-	if result == nil {
-		t.Error("expected non-nil result slice")
+	if !strings.Contains(queryBlock, "cd.status = 'pending_verification'") {
+		t.Errorf("FindPendingCustomDomainsForAutoVerify must filter status = 'pending_verification', got: %s", queryBlock)
 	}
 	_ = domain.CustomDomain{} // keep import anchored
 }

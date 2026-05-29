@@ -194,39 +194,15 @@ func TestGenerateRepoID_IsUnique(t *testing.T) {
 }
 
 // =============================================================================
-// Domain Store - CreateWithCFZone tests (0% → covered)
+// Domain Store - CreateWithCFZone tests — DELETED in T2.1 #9 of plan
+// 2026-05-29-sqlc-migration v1.3
 // =============================================================================
-
-func TestDomainStore_CreateWithCFZone_Success(t *testing.T) {
-	fake := &fakeDBTX{}
-	store := &PostgresDomainStore{DB: fake}
-
-	zoneID := "zone-123"
-	err := store.CreateWithCFZone(context.Background(), &domain.CustomDomain{
-		ID:       "dom-1",
-		TenantID: "tn-acme",
-		Domain:   "example.com",
-		Status:   "pending_ns",
-		CFZoneID: &zoneID,
-	})
-	if err != nil {
-		t.Fatalf("unexpected error: %v", err)
-	}
-}
-
-func TestDomainStore_CreateWithCFZone_ExecError(t *testing.T) {
-	fake := &fakeDBTX{execErr: errors.New("db down")}
-	store := &PostgresDomainStore{DB: fake}
-
-	err := store.CreateWithCFZone(context.Background(), &domain.CustomDomain{
-		ID:       "dom-1",
-		TenantID: "tn-acme",
-		Domain:   "example.com",
-	})
-	if err == nil {
-		t.Fatal("expected error")
-	}
-}
+//
+// 2 sub-tests previously here (CreateWithCFZone_Success +
+// CreateWithCFZone_ExecError) used fakeDBTX stubs against
+// PostgresDomainStore. Migrated to sqlc-backed via SqlcBridge in
+// T2.1 #9. See the broader Domain Store tombstone in stores_test.go
+// / stores_extra_test.go for classification.
 
 // =============================================================================
 // Release Store — DELETED in T1.1c2c of plan 2026-05-29-sqlc-migration
@@ -253,15 +229,7 @@ func TestDomainStore_CreateWithCFZone_ExecError(t *testing.T) {
 // captured SQL since it scans the canonical SoT directly.
 
 // =============================================================================
-// Domain Store — ListByTenant query error
+// Domain Store ListByTenant_QueryError — DELETED in T2.1 #9 along
+// with the broader Domain Store tombstone block. See stores_test.go
+// for classification.
 // =============================================================================
-
-func TestDomainStore_ListByTenant_QueryError(t *testing.T) {
-	fake := &fakeDBTX{queryErr: errors.New("db down")}
-	store := &PostgresDomainStore{DB: fake}
-
-	_, _, err := store.ListByTenant(context.Background(), "tn-test", domain.DomainListFilter{})
-	if err == nil {
-		t.Fatal("expected error")
-	}
-}

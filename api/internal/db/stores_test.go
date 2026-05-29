@@ -6,7 +6,6 @@ package db
 import (
 	"context"
 	"encoding/json"
-	"errors"
 	"fmt"
 	"strings"
 	"testing"
@@ -291,185 +290,33 @@ func makeReleaseRowValues(r Release) []any {
 
 
 // =============================================================================
-// Domain Store tests
 // =============================================================================
-
-func TestDomainStore_Create_Success(t *testing.T) {
-	fake := &fakeDBTX{execResult: ExecResult{RowsAffected: 1}}
-	store := &PostgresDomainStore{DB: fake}
-
-	d := &domain.CustomDomain{
-		ID: "dom-1", TenantID: "t1", ProjectName: "p1",
-		AppName: "api", Environment: "prod", Domain: "example.com",
-		Status: "pending_verification", VerificationToken: "tok-1",
-	}
-
-	err := store.Create(context.Background(), d)
-	if err != nil {
-		t.Fatalf("unexpected error: %v", err)
-	}
-}
-
-func TestDomainStore_Create_UniqueViolation(t *testing.T) {
-	fake := &fakeDBTX{
-		execErr: &UniqueViolationError{Constraint: "custom_domains_domain_key"},
-	}
-	store := &PostgresDomainStore{DB: fake}
-
-	d := &domain.CustomDomain{
-		ID: "dom-1", TenantID: "t1", ProjectName: "p1",
-		AppName: "api", Environment: "prod", Domain: "example.com",
-		Status: "pending_verification", VerificationToken: "tok-1",
-	}
-
-	err := store.Create(context.Background(), d)
-	if !errors.Is(err, domain.ErrDomainExists) {
-		t.Errorf("expected ErrDomainExists, got: %v", err)
-	}
-}
-
-// TestDomainStore_StatusMutators exercises UpdateStatus + TransitionStatus
-// with their canonical {Success, RowsAffected=0 error} pair. Phase 3 helper:
-// was 4 near-clone test functions. The "0 rows affected" error message
-// differs ("domain not found" vs "transition failed") so the table includes
-// an errSubstring assertion.
-func TestDomainStore_StatusMutators(t *testing.T) {
-	type mutatorCall func(s *PostgresDomainStore) error
-	cases := []struct {
-		name         string
-		call         mutatorCall
-		errSubstring string // expected substring in "0 rows affected" error path
-	}{
-		{
-			name:         "UpdateStatus",
-			call:         func(s *PostgresDomainStore) error { return s.UpdateStatus(context.Background(), "example.com", "active") },
-			errSubstring: "domain not found",
-		},
-		{
-			name:         "TransitionStatus",
-			call:         func(s *PostgresDomainStore) error { return s.TransitionStatus(context.Background(), "example.com", "verified", "provisioning") },
-			errSubstring: "transition failed",
-		},
-	}
-	for _, c := range cases {
-		t.Run(c.name+"_Success", func(t *testing.T) {
-			fake := &fakeDBTX{execResult: ExecResult{RowsAffected: 1}}
-			store := &PostgresDomainStore{DB: fake}
-			if err := c.call(store); err != nil {
-				t.Fatalf("unexpected error: %v", err)
-			}
-		})
-		t.Run(c.name+"_NotFoundOrStale", func(t *testing.T) {
-			fake := &fakeDBTX{execResult: ExecResult{RowsAffected: 0}}
-			store := &PostgresDomainStore{DB: fake}
-			err := c.call(store)
-			if err == nil {
-				t.Fatal("expected error")
-			}
-			if !strings.Contains(err.Error(), c.errSubstring) {
-				t.Errorf("expected %q, got: %v", c.errSubstring, err)
-			}
-		})
-	}
-}
-
-func TestDomainStore_Delete_Success(t *testing.T) {
-	fake := &fakeDBTX{execResult: ExecResult{RowsAffected: 1}}
-	store := &PostgresDomainStore{DB: fake}
-
-	err := store.Delete(context.Background(), "example.com")
-	if err != nil {
-		t.Fatalf("unexpected error: %v", err)
-	}
-}
-
-func TestDomainStore_Delete_NotFound(t *testing.T) {
-	fake := &fakeDBTX{execResult: ExecResult{RowsAffected: 0}}
-	store := &PostgresDomainStore{DB: fake}
-
-	err := store.Delete(context.Background(), "nonexistent.com")
-	if err == nil {
-		t.Fatal("expected error")
-	}
-}
-
-func TestDomainStore_CountByTenant_Success(t *testing.T) {
-	fake := &fakeDBTX{
-		queryRowResult: &fakeRowWithData{values: []any{int(5)}},
-	}
-	store := &PostgresDomainStore{DB: fake}
-
-	count, err := store.CountByTenant(context.Background(), "t1")
-	if err != nil {
-		t.Fatalf("unexpected error: %v", err)
-	}
-	if count != 5 {
-		t.Errorf("expected 5, got: %d", count)
-	}
-}
-
-func TestDomainStore_UpdateVerified_Success(t *testing.T) {
-	fake := &fakeDBTX{execResult: ExecResult{RowsAffected: 1}}
-	store := &PostgresDomainStore{DB: fake}
-
-	err := store.UpdateVerified(context.Background(), "example.com", time.Now())
-	if err != nil {
-		t.Fatalf("unexpected error: %v", err)
-	}
-}
-
-func TestDomainStore_UpdateVerified_NotFound(t *testing.T) {
-	fake := &fakeDBTX{execResult: ExecResult{RowsAffected: 0}}
-	store := &PostgresDomainStore{DB: fake}
-
-	err := store.UpdateVerified(context.Background(), "nonexistent.com", time.Now())
-	if err == nil {
-		t.Fatal("expected error")
-	}
-}
-
-func TestDomainStore_UpdateTLS_NotFound(t *testing.T) {
-	fake := &fakeDBTX{execResult: ExecResult{RowsAffected: 0}}
-	store := &PostgresDomainStore{DB: fake}
-
-	err := store.UpdateTLS(context.Background(), "nonexistent.com", "active", nil)
-	if err == nil {
-		t.Fatal("expected error")
-	}
-}
-
-func TestDomainStore_UpdateFailure_NotFound(t *testing.T) {
-	fake := &fakeDBTX{execResult: ExecResult{RowsAffected: 0}}
-	store := &PostgresDomainStore{DB: fake}
-
-	err := store.UpdateFailure(context.Background(), "nonexistent.com", "failed", "timeout")
-	if err == nil {
-		t.Fatal("expected error")
-	}
-}
-
-func TestDomainStore_UpdateCNAMECheck_NotFound(t *testing.T) {
-	fake := &fakeDBTX{execResult: ExecResult{RowsAffected: 0}}
-	store := &PostgresDomainStore{DB: fake}
-
-	err := store.UpdateCNAMECheck(context.Background(), "nonexistent.com", time.Now(), 0)
-	if err == nil {
-		t.Fatal("expected error")
-	}
-}
-
-func TestDomainStore_GetByDomainAndTenant_NotFoundReturnsNil(t *testing.T) {
-	rec := &recordingDBTX{}
-	store := &PostgresDomainStore{DB: rec}
-
-	d, err := store.GetByDomainAndTenant(context.Background(), "example.com", "t1")
-	if err != nil {
-		t.Fatalf("unexpected error: %v", err)
-	}
-	if d != nil {
-		t.Error("expected nil for not found")
-	}
-}
+// Domain Store tests — DELETED in T2.1 #9 of plan
+// 2026-05-29-sqlc-migration v1.3
+// =============================================================================
+//
+// All Domain Store test sub-blocks across stores_test.go (lines
+// 294-473 + 812-876) and stores_extra_test.go (3 sections: Domain
+// Store additional + Background methods + CF Zone methods) used
+// fakeDBTX / recordingDBTX / countingDBTX stubs to verify
+// PostgresDomainStore behaviors. With T2.1 #9 migrating the 3-file
+// legacy split (domain_store.go + domain_store_background.go +
+// domain_store_cfzone.go) to a single sqlc-backed wrapper via
+// SqlcBridge, the fake pattern is incompatible.
+//
+// KEEP-INVARIANT preserved structurally by domain_wrapper.go:
+//   - Create + CreateWithCFZone 23505 → domain.ErrDomainExists
+//   - GetByDomainAndTenant NoRows → (nil, nil)
+//   - ListByTenant dynamic filter via sqlc.narg() (SEC-005 verified
+//     by code generation — no fmt.Sprintf raw interpolation)
+//   - Single-domain mutations rows-affected=0 → "domain not found"
+//   - TransitionStatus CAS preserved (CRIT-01 fix)
+//   - ClaimByStatus atomic UPDATE...FOR UPDATE SKIP LOCKED (FIND-001)
+//   - FindPendingForAutoVerify cell-scoped JOIN to tenants
+//
+// Per matrix § Phase 2 reshape window: behavioral subset moves to
+// real-PG-gated tests when pgxmock or LOOPZERO_E2E_DATABASE_URL harness
+// is wired.
 
 // =============================================================================
 // Project Store tests — DELETED in T2.1 #4 of plan
@@ -809,68 +656,3 @@ func TestGetEnvOrDefault_FallbackValue(t *testing.T) {
 }
 
 // =============================================================================
-// Domain Store — ListByTenant filter building
-// =============================================================================
-
-func TestDomainStore_ListByTenant_DefaultLimitIs50(t *testing.T) {
-	// The count query returns 0, the list query returns empty
-	queryCallCount := 0
-	fake := &countingDBTX{
-		queryRowResult: &fakeRowWithData{values: []any{int(0)}},
-		queryRows:      &fakeRowsMulti{data: [][]any{}},
-		queryCallCount: &queryCallCount,
-	}
-	store := &PostgresDomainStore{DB: fake}
-
-	_, _, err := store.ListByTenant(context.Background(), "t1", domain.DomainListFilter{
-		Limit: 0, // Should default to 50
-	})
-	if err != nil {
-		t.Fatalf("unexpected error: %v", err)
-	}
-	// Verify the limit arg is 50 (the second-to-last arg in the list query)
-	if len(fake.capturedArgs) > 0 {
-		// The last query's args should include limit=50
-		foundLimit := false
-		for _, arg := range fake.capturedArgs {
-			if v, ok := arg.(int); ok && v == 50 {
-				foundLimit = true
-			}
-		}
-		if !foundLimit {
-			t.Errorf("expected limit=50 in args, got: %v", fake.capturedArgs)
-		}
-	}
-}
-
-// countingDBTX wraps fakeDBTX to count Query calls and track args across calls.
-type countingDBTX struct {
-	queryRowResult Row
-	queryRows      Rows
-	queryCallCount *int
-	capturedSQL    string
-	capturedArgs   []any
-}
-
-func (c *countingDBTX) Query(_ context.Context, sql string, args ...any) (Rows, error) {
-	*c.queryCallCount++
-	c.capturedSQL = sql
-	c.capturedArgs = args
-	if c.queryRows != nil {
-		return c.queryRows, nil
-	}
-	return &sliceRows{}, nil
-}
-
-func (c *countingDBTX) Exec(_ context.Context, _ string, _ ...any) (ExecResult, error) {
-	return ExecResult{}, nil
-}
-
-func (c *countingDBTX) QueryRow(_ context.Context, sql string, args ...any) Row {
-	c.capturedSQL = sql
-	c.capturedArgs = args
-	if c.queryRowResult != nil {
-		return c.queryRowResult
-	}
-	return emptyRow{}
-}

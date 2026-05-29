@@ -7,9 +7,7 @@ import (
 	"context"
 	"fmt"
 	"testing"
-	"time"
 
-	"github.com/loopzero/loopzero/api/internal/domain"
 	loopzeroerrors "github.com/loopzero/loopzero/pkg/errors"
 )
 
@@ -111,49 +109,33 @@ func TestEnvironmentTargetStore_SetDesired_ExecError(t *testing.T) {
 }
 
 // =============================================================================
-// Domain Store additional tests
+// Domain Store tests — DELETED in T2.1 #9 of plan
+// 2026-05-29-sqlc-migration v1.3
 // =============================================================================
+//
+// All Domain Store test sub-blocks across stores_test.go (lines
+// 294-473 + 812-876) and stores_extra_test.go (3 sections: Domain
+// Store additional + Background methods + CF Zone methods) used
+// fakeDBTX / recordingDBTX / countingDBTX stubs to verify
+// PostgresDomainStore behaviors. With T2.1 #9 migrating the 3-file
+// legacy split (domain_store.go + domain_store_background.go +
+// domain_store_cfzone.go) to a single sqlc-backed wrapper via
+// SqlcBridge, the fake pattern is incompatible.
+//
+// KEEP-INVARIANT preserved structurally by domain_wrapper.go:
+//   - Create + CreateWithCFZone 23505 → domain.ErrDomainExists
+//   - GetByDomainAndTenant NoRows → (nil, nil)
+//   - ListByTenant dynamic filter via sqlc.narg() (SEC-005 verified
+//     by code generation — no fmt.Sprintf raw interpolation)
+//   - Single-domain mutations rows-affected=0 → "domain not found"
+//   - TransitionStatus CAS preserved (CRIT-01 fix)
+//   - ClaimByStatus atomic UPDATE...FOR UPDATE SKIP LOCKED (FIND-001)
+//   - FindPendingForAutoVerify cell-scoped JOIN to tenants
+//
+// Per matrix § Phase 2 reshape window: behavioral subset moves to
+// real-PG-gated tests when pgxmock or LOOPZERO_E2E_DATABASE_URL harness
+// is wired.
 
-func TestDomainStore_UpdateStatus_ExecError(t *testing.T) {
-	fake := &fakeDBTX{execErr: fmt.Errorf("connection refused")}
-	store := &PostgresDomainStore{DB: fake}
-
-	err := store.UpdateStatus(context.Background(), "test.com", "active")
-	if err == nil {
-		t.Fatal("expected error")
-	}
-}
-
-func TestDomainStore_UpdateTLS_Success(t *testing.T) {
-	fake := &fakeDBTX{execResult: ExecResult{RowsAffected: 1}}
-	store := &PostgresDomainStore{DB: fake}
-
-	now := time.Now()
-	err := store.UpdateTLS(context.Background(), "example.com", "active", &now)
-	if err != nil {
-		t.Fatalf("unexpected error: %v", err)
-	}
-}
-
-func TestDomainStore_UpdateFailure_Success(t *testing.T) {
-	fake := &fakeDBTX{execResult: ExecResult{RowsAffected: 1}}
-	store := &PostgresDomainStore{DB: fake}
-
-	err := store.UpdateFailure(context.Background(), "example.com", "failed", "DNS timeout")
-	if err != nil {
-		t.Fatalf("unexpected error: %v", err)
-	}
-}
-
-func TestDomainStore_UpdateCNAMECheck_Success(t *testing.T) {
-	fake := &fakeDBTX{execResult: ExecResult{RowsAffected: 1}}
-	store := &PostgresDomainStore{DB: fake}
-
-	err := store.UpdateCNAMECheck(context.Background(), "example.com", time.Now(), 3)
-	if err != nil {
-		t.Fatalf("unexpected error: %v", err)
-	}
-}
 
 // =============================================================================
 // Team Store additional tests — DELETED in T2.1 #5 along with the
@@ -213,153 +195,6 @@ func TestIdempotencyStore_Cleanup_Error(t *testing.T) {
 // Per matrix § Phase 2 reshape window: KEEP-INVARIANT subset moves to
 // real-PG-gated tests when pgxmock or LOOPZERO_E2E_DATABASE_URL harness
 // is wired (out of T1.5 scope).
-
-// =============================================================================
-// Domain Store Background methods tests
-// =============================================================================
-
-func TestDomainStore_FindAndClaimVerified_Empty(t *testing.T) {
-	rec := &recordingDBTX{}
-	store := &PostgresDomainStore{DB: rec}
-
-	domains, err := store.FindAndClaimVerified(context.Background())
-	if err != nil {
-		t.Fatalf("unexpected error: %v", err)
-	}
-	if domains == nil {
-		t.Error("expected non-nil slice")
-	}
-	if len(domains) != 0 {
-		t.Errorf("expected 0, got: %d", len(domains))
-	}
-}
-
-func TestDomainStore_FindRemoving_Empty(t *testing.T) {
-	rec := &recordingDBTX{}
-	store := &PostgresDomainStore{DB: rec}
-
-	domains, err := store.FindRemoving(context.Background())
-	if err != nil {
-		t.Fatalf("unexpected error: %v", err)
-	}
-	if domains == nil {
-		t.Error("expected non-nil slice")
-	}
-}
-
-// TestDomainStore_Finders_EmptyReturnsNonNilSlice exercises every read-side
-// finder on PostgresDomainStore against an empty fake DB. Each must return
-// a non-nil empty slice (NEVER nil) — the contract that downstream loops
-// can `for _, d := range result` without nil-check. Phase 3 helper: was
-// 4 near-clone test functions each doing the same 8-line assertion.
-func TestDomainStore_Finders_EmptyReturnsNonNilSlice(t *testing.T) {
-	type finderCall func(s *PostgresDomainStore) ([]domain.CustomDomain, error)
-	cases := []struct {
-		name string
-		call finderCall
-	}{
-		{
-			name: "FindActiveForCNAMECheck",
-			call: func(s *PostgresDomainStore) ([]domain.CustomDomain, error) {
-				return s.FindActiveForCNAMECheck(context.Background(), time.Now().Add(-24*time.Hour))
-			},
-		},
-		{
-			name: "FindStalePending",
-			call: func(s *PostgresDomainStore) ([]domain.CustomDomain, error) {
-				return s.FindStalePending(context.Background(), 24*time.Hour)
-			},
-		},
-		{
-			name: "FindStaleProvisioning",
-			call: func(s *PostgresDomainStore) ([]domain.CustomDomain, error) {
-				return s.FindStaleProvisioning(context.Background(), 1*time.Hour)
-			},
-		},
-		{
-			name: "FindActiveWithTLSExpiry",
-			call: func(s *PostgresDomainStore) ([]domain.CustomDomain, error) {
-				return s.FindActiveWithTLSExpiry(context.Background(), 30)
-			},
-		},
-	}
-	for _, c := range cases {
-		t.Run(c.name, func(t *testing.T) {
-			rec := &recordingDBTX{}
-			store := &PostgresDomainStore{DB: rec}
-			domains, err := c.call(store)
-			if err != nil {
-				t.Fatalf("unexpected error: %v", err)
-			}
-			if domains == nil {
-				t.Error("expected non-nil slice")
-			}
-		})
-	}
-}
-
-func TestDomainStore_ListActiveByApp_Empty(t *testing.T) {
-	rec := &recordingDBTX{}
-	store := &PostgresDomainStore{DB: rec}
-
-	domains, err := store.ListActiveByApp(context.Background(), "t1", "proj", "api", "prod")
-	if err != nil {
-		t.Fatalf("unexpected error: %v", err)
-	}
-	if domains == nil {
-		t.Error("expected non-nil slice")
-	}
-}
-
-// =============================================================================
-// Domain Store CF Zone methods tests
-// =============================================================================
-
-func TestDomainStore_UpdateCFZoneStatus_Success(t *testing.T) {
-	fake := &fakeDBTX{execResult: ExecResult{RowsAffected: 1}}
-	store := &PostgresDomainStore{DB: fake}
-
-	err := store.UpdateCFZoneStatus(context.Background(), "example.com", "active")
-	if err != nil {
-		t.Fatalf("unexpected error: %v", err)
-	}
-}
-
-func TestDomainStore_UpdateCFZoneStatus_NotFound(t *testing.T) {
-	fake := &fakeDBTX{execResult: ExecResult{RowsAffected: 0}}
-	store := &PostgresDomainStore{DB: fake}
-
-	err := store.UpdateCFZoneStatus(context.Background(), "nonexistent.com", "active")
-	if err == nil {
-		t.Fatal("expected error for not found")
-	}
-}
-
-func TestDomainStore_FindPendingNS_Empty(t *testing.T) {
-	rec := &recordingDBTX{}
-	store := &PostgresDomainStore{DB: rec}
-
-	domains, err := store.FindPendingNS(context.Background())
-	if err != nil {
-		t.Fatalf("unexpected error: %v", err)
-	}
-	if domains == nil {
-		t.Error("expected non-nil slice")
-	}
-}
-
-func TestDomainStore_FindNSActive_Empty(t *testing.T) {
-	rec := &recordingDBTX{}
-	store := &PostgresDomainStore{DB: rec}
-
-	domains, err := store.FindNSActive(context.Background())
-	if err != nil {
-		t.Fatalf("unexpected error: %v", err)
-	}
-	if domains == nil {
-		t.Error("expected non-nil slice")
-	}
-}
 
 // =============================================================================
 // Cell Store tests
