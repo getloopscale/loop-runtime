@@ -643,88 +643,32 @@ func TestMembershipStore_GetMemberships_QueryError(t *testing.T) {
 }
 
 // =============================================================================
-// Environment Target Store tests
+// Environment Target Store tests — DELETED in T2.1 #6 of plan
+// 2026-05-29-sqlc-migration v1.3
 // =============================================================================
-
-// TestEnvironmentTargetStore_Mutators exercises every single-row mutation
-// method on EnvironmentTargetStore (SetDesired, SetActive, DeleteTarget)
-// with the canonical {Success, NilTxUsesFallback} pair. Phase 3 helper:
-// was 6 near-clone test functions across stores_test.go and stores_extra_test.go.
-func TestEnvironmentTargetStore_Mutators(t *testing.T) {
-	type mutatorCall func(s EnvironmentTargetStore, tx DBTX) error
-	cases := []struct {
-		name string
-		call mutatorCall // canonical happy path; reused for nil-tx variant
-	}{
-		{
-			name: "SetDesired",
-			call: func(s EnvironmentTargetStore, tx DBTX) error {
-				return s.SetDesired(context.Background(), tx, "t1", "p1", "prod", "rel-1", "user1", "corr-1")
-			},
-		},
-		{
-			name: "SetActive",
-			call: func(s EnvironmentTargetStore, tx DBTX) error {
-				return s.SetActive(context.Background(), tx, "t1", "p1", "prod", "rel-1")
-			},
-		},
-		{
-			name: "DeleteTarget",
-			call: func(s EnvironmentTargetStore, tx DBTX) error {
-				return s.DeleteTarget(context.Background(), tx, "t1", "p1", "prod")
-			},
-		},
-	}
-	for _, c := range cases {
-		t.Run(c.name+"_Success", func(t *testing.T) {
-			fake := &fakeDBTX{execResult: ExecResult{RowsAffected: 1}}
-			store := NewPostgresEnvironmentTargetStore(fake, fake)
-			if err := c.call(store, fake); err != nil {
-				t.Fatalf("unexpected error: %v", err)
-			}
-		})
-		t.Run(c.name+"_NilTxUsesFallback", func(t *testing.T) {
-			fake := &fakeDBTX{execResult: ExecResult{RowsAffected: 1}}
-			store := NewPostgresEnvironmentTargetStore(fake, fake)
-			if err := c.call(store, nil); err != nil {
-				t.Fatalf("unexpected error: %v", err)
-			}
-		})
-	}
-}
-
-func TestEnvironmentTargetStore_Get_NotFoundReturnsNil(t *testing.T) {
-	rec := &recordingDBTX{}
-	store := NewPostgresEnvironmentTargetStore(rec, rec)
-
-	target, err := store.Get(context.Background(), "t1", "p1", "prod")
-	if err != nil {
-		t.Fatalf("unexpected error: %v", err)
-	}
-	if target != nil {
-		t.Error("expected nil for not found")
-	}
-}
-
-func TestEnvironmentTargetStore_ListByProject_EmptyReturnsEmptySlice(t *testing.T) {
-	rec := &recordingDBTX{}
-	store := NewPostgresEnvironmentTargetStore(rec, rec)
-
-	targets, err := store.ListByProject(context.Background(), "t1", "p1")
-	if err != nil {
-		t.Fatalf("unexpected error: %v", err)
-	}
-	if targets == nil {
-		t.Error("expected non-nil slice")
-	}
-	if len(targets) != 0 {
-		t.Errorf("expected 0, got: %d", len(targets))
-	}
-}
-
-// SetDesired_NilTxUsesFallback / SetActive_Success / DeleteTarget_{Success,
-// NilTxUsesFallback} consolidated into TestEnvironmentTargetStore_Mutators
-// above (Phase 3 v12 refactor).
+//
+// 8 sub-tests previously here (TestEnvironmentTargetStore_Mutators
+// with 3 mutators × 2 variants = 6 sub-tests +
+// _Get_NotFoundReturnsNil + _ListByProject_EmptyReturnsEmptySlice)
+// used fakeDBTX/recordingDBTX stubs to verify
+// PostgresEnvironmentTargetStore. With T2.1 #6 migrating to sqlc-
+// backed via SqlcBridge, the fake pattern is incompatible.
+//
+// KEEP-INVARIANT preserved structurally by
+// environment_target_wrapper.go:
+//   - SetDesired UPSERT (ON CONFLICT (tenant_id, project_id,
+//     environment) DO UPDATE in queries/environment_targets.sql)
+//   - SetActive runs after ArgoCD confirms sync (caller discipline)
+//   - tx-required form for mutating methods (sqlctxprop gate
+//     validates)
+//   - Nil-tx fallback to s.Exec preserved verbatim in
+//     resolveSqlcDBTX helper
+//   - Get NoRows → (nil, nil) via errors.Is(err, pgx.ErrNoRows)
+//   - ListByProject empty → empty slice (make([]T, 0, len(rows)))
+//
+// Per matrix § Phase 2 reshape window: behavioral subset moves to
+// real-PG-gated tests when pgxmock or LOOPZERO_E2E_DATABASE_URL harness
+// is wired.
 
 // =============================================================================
 // Idempotency Store tests — DELETED in T2.1 (Batch A) of plan
