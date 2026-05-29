@@ -604,145 +604,44 @@ func TestGenerateProjectID_Unique(t *testing.T) {
 }
 
 // =============================================================================
-// Tenant Store tests
+// Tenant Store tests — DELETED in T1.4 of plan
+// 2026-05-29-sqlc-migration v1.3
 // =============================================================================
+//
+// 5 sub-tests previously here (TestTenantStore_ListTenantIDsByPattern_
+// Success/Empty, _DeleteTenantsFKOrdered_EmptyNoOp/ExecutesAllSteps/
+// ErrorStopsExecution) + the failOnNthExecDBTX wrapper + TestTruncateSQL
+// (testing the now-removed truncateSQL helper that lived in
+// tenant_store.go) — ALL used fakeDBTX-based stubs to verify
+// PostgresTenantStore behaviors. With T1.4 deleting PostgresTenantStore
+// and replacing it with TenantStoreSqlc (sqlc-backed via SqlcBridge),
+// the stub pattern is incompatible.
+//
+// Classification per `.claude/knowledge-base/audits/2026-05-29-sqlc-
+// test-reshape-matrix.md` line 37 (stores_test.go MIXED):
+//
+//   - KEEP-INVARIANT subset preserved structurally by TenantStoreSqlc:
+//     * Empty-input no-op (`if len(tenantIDs) == 0 { return counts, nil }`
+//       in TenantStoreSqlc.DeleteTenantsFKOrdered) — direct early
+//       return, structurally identical to legacy
+//     * 8-step FK-ordered cascade preserved verbatim — same step
+//       sequence (environment_targets → releases → build_apps →
+//       builds → projects → subscriptions → tenant_members → tenants)
+//       with step-name annotated error wrapping (more informative
+//       than legacy truncateSQL output)
+//     * Error stops execution: the wrapper iterates the steps slice
+//       and returns on first non-nil err — same loop discipline as
+//       legacy
+//
+//   - DELETE-SCHEMA-MIRROR-DUPLICATE subset: ListTenantIDsByPattern_
+//     Success/Empty stub-pass-through; failOnNthExecDBTX helper
+//     (legacy-specific test scaffolding); TestTruncateSQL (testing a
+//     helper that no longer exists). sqlc compile-time replaces.
+//
+// Per matrix § Phase 2 reshape window: KEEP-INVARIANT subset moves to
+// real-PG-gated tests when pgxmock or LOOPZERO_E2E_DATABASE_URL harness is
+// wired.
 
-func TestTenantStore_ListTenantIDsByPattern_Success(t *testing.T) {
-	fake := &fakeDBTX{
-		queryRows: &fakeRowsMulti{
-			data: [][]any{
-				{"tn-lt-l3-001"},
-				{"tn-lt-l3-002"},
-			},
-		},
-	}
-	store := &PostgresTenantStore{DB: fake}
-
-	ids, err := store.ListTenantIDsByPattern(context.Background(), "tn-lt-l3-%")
-	if err != nil {
-		t.Fatalf("unexpected error: %v", err)
-	}
-	if len(ids) != 2 {
-		t.Errorf("expected 2 IDs, got: %d", len(ids))
-	}
-	if ids[0] != "tn-lt-l3-001" {
-		t.Errorf("expected tn-lt-l3-001, got: %s", ids[0])
-	}
-}
-
-func TestTenantStore_ListTenantIDsByPattern_Empty(t *testing.T) {
-	fake := &fakeDBTX{
-		queryRows: &fakeRowsMulti{data: [][]any{}},
-	}
-	store := &PostgresTenantStore{DB: fake}
-
-	ids, err := store.ListTenantIDsByPattern(context.Background(), "no-match-%")
-	if err != nil {
-		t.Fatalf("unexpected error: %v", err)
-	}
-	if len(ids) != 0 {
-		t.Errorf("expected 0, got: %d", len(ids))
-	}
-}
-
-func TestTenantStore_DeleteTenantsFKOrdered_EmptyNoOp(t *testing.T) {
-	fake := &fakeDBTX{execResult: ExecResult{RowsAffected: 0}}
-	store := &PostgresTenantStore{DB: fake}
-
-	counts, err := store.DeleteTenantsFKOrdered(context.Background(), []string{})
-	if err != nil {
-		t.Fatalf("unexpected error: %v", err)
-	}
-	if counts.Tenants != 0 || counts.Builds != 0 {
-		t.Errorf("expected zero counts for empty input, got: %+v", counts)
-	}
-	if fake.execCalls != 0 {
-		t.Errorf("expected 0 exec calls for empty input, got: %d", fake.execCalls)
-	}
-}
-
-func TestTenantStore_DeleteTenantsFKOrdered_ExecutesAllSteps(t *testing.T) {
-	fake := &fakeDBTX{execResult: ExecResult{RowsAffected: 1}}
-	store := &PostgresTenantStore{DB: fake}
-
-	counts, err := store.DeleteTenantsFKOrdered(context.Background(), []string{"tn-1", "tn-2"})
-	if err != nil {
-		t.Fatalf("unexpected error: %v", err)
-	}
-	// Should execute 8 steps
-	if fake.execCalls != 8 {
-		t.Errorf("expected 8 exec calls, got: %d", fake.execCalls)
-	}
-	// Each step returns RowsAffected=1
-	if counts.Tenants != 1 {
-		t.Errorf("expected tenants=1, got: %d", counts.Tenants)
-	}
-}
-
-func TestTenantStore_DeleteTenantsFKOrdered_ErrorStopsExecution(t *testing.T) {
-	callCount := 0
-	fake := &fakeDBTX{
-		execResult: ExecResult{RowsAffected: 1},
-	}
-	// Override Exec to fail on step 3
-	originalExec := fake.execErr
-	_ = originalExec
-	store := &PostgresTenantStore{DB: &failOnNthExecDBTX{
-		base:    fake,
-		failAt:  3,
-		failErr: fmt.Errorf("FK violation"),
-		counter: &callCount,
-	}}
-
-	_, err := store.DeleteTenantsFKOrdered(context.Background(), []string{"tn-1"})
-	if err == nil {
-		t.Fatal("expected error")
-	}
-	if !strings.Contains(err.Error(), "step 3") {
-		t.Errorf("expected error at step 3, got: %v", err)
-	}
-}
-
-// failOnNthExecDBTX wraps a DBTX and fails on the Nth Exec call.
-type failOnNthExecDBTX struct {
-	base    *fakeDBTX
-	failAt  int
-	failErr error
-	counter *int
-}
-
-func (f *failOnNthExecDBTX) Query(ctx context.Context, sql string, args ...any) (Rows, error) {
-	return f.base.Query(ctx, sql, args...)
-}
-
-func (f *failOnNthExecDBTX) Exec(ctx context.Context, sql string, args ...any) (ExecResult, error) {
-	*f.counter++
-	if *f.counter == f.failAt {
-		return ExecResult{}, f.failErr
-	}
-	return f.base.Exec(ctx, sql, args...)
-}
-
-func (f *failOnNthExecDBTX) QueryRow(ctx context.Context, sql string, args ...any) Row {
-	return f.base.QueryRow(ctx, sql, args...)
-}
-
-func TestTruncateSQL(t *testing.T) {
-	tests := []struct {
-		input    string
-		expected string
-	}{
-		{"short", "short"},
-		{"exactly 40 chars exactly 40 chars exact", "exactly 40 chars exactly 40 chars exact"},
-		{"this string is way longer than 40 characters so it should be truncated", "this string is way longer than 40 charac..."},
-	}
-	for _, tt := range tests {
-		result := truncateSQL(tt.input)
-		if result != tt.expected {
-			t.Errorf("truncateSQL(%q) = %q, want %q", tt.input, result, tt.expected)
-		}
-	}
-}
 
 // =============================================================================
 // Team Store tests

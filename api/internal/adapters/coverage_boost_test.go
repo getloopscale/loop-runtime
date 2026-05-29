@@ -17,9 +17,14 @@ import (
 // =============================================================================
 
 func TestTenantDBDeleterAdapter_DeleteTenantsFKOrdered_MapsFields(t *testing.T) {
-	store := &db.PostgresTenantStore{}
-	// We can't call the real store without DB, so test the adapter wiring by
-	// verifying the adapter struct exists and satisfies the expected interface.
+	// T1.4 (plan 2026-05-29-sqlc-migration v1.3): store type widened
+	// from concrete *db.PostgresTenantStore (deleted) to
+	// db.AdminTenantStore interface. The test exercises the adapter
+	// wiring by constructing the sqlc-backed wrapper with a nil pool
+	// — db.NewTenantStoreSqlc(nil) returns a non-nil store that
+	// satisfies AdminTenantStore. Actual DB calls would panic via the
+	// SqlcBridge guard (which is the desired fail-fast behavior).
+	store := db.NewTenantStoreSqlc(nil)
 	adapter := &TenantDBDeleterAdapter{Store: store}
 	if adapter.Store == nil {
 		t.Fatal("expected non-nil store")

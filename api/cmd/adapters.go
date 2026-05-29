@@ -76,7 +76,11 @@ func (a *appCRAdapter) EnsureLoopZeroApplication(ctx context.Context, input serv
 // shouldn't prevent the API from starting. A startup log line makes the
 // degraded mode explicit.
 func buildAdminEvictor(cfg config.Config, dbAdapter *db.PgxAdapter) routes.TenantEvictor {
-	store := &db.PostgresTenantStore{DB: dbAdapter}
+	// T1.4 (plan 2026-05-29-sqlc-migration v1.3): sqlc-backed admin
+	// tenant store. ListTenantIDsByPattern + 8-step FK-ordered
+	// eviction cascade preserved verbatim; all queries are
+	// tenantpredicate:exempt per the admin path (LOOPZERO_ADMIN_API gate).
+	store := db.NewTenantStoreSqlc(dbAdapter)
 	dbDeleter := &adapters.TenantDBDeleterAdapter{Store: store}
 
 	k8sEv, err := k8s.NewTenantK8sEvictor(

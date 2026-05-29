@@ -9,7 +9,6 @@ import (
 	"fmt"
 	"strings"
 	"testing"
-	"time"
 
 	"github.com/loopzero/loopzero/api/internal/domain"
 )
@@ -90,45 +89,54 @@ func TestBootstrapStore_Bootstrap_Idempotent(t *testing.T) {
 }
 
 // =============================================================================
-// Tenant Deletion Store tests (0% → covered)
+// Tenant Deletion Store tests — DELETED in T1.4 of plan
+// 2026-05-29-sqlc-migration v1.3
 // =============================================================================
-
-func TestTenantDeletionStore_CancelDeletion_Success(t *testing.T) {
-	fake := &fakeDBTX{}
-	store := &PostgresTenantDeletionStore{DB: fake}
-
-	err := store.CancelDeletion(context.Background(), "tn-acme")
-	if err != nil {
-		t.Fatalf("unexpected error: %v", err)
-	}
-}
-
-func TestTenantDeletionStore_CancelDeletion_Error(t *testing.T) {
-	fake := &fakeDBTX{execErr: errors.New("db down")}
-	store := &PostgresTenantDeletionStore{DB: fake}
-
-	err := store.CancelDeletion(context.Background(), "tn-acme")
-	if err == nil {
-		t.Fatal("expected error")
-	}
-}
+//
+// 6 sub-tests previously here (TestTenantDeletionStore_CancelDeletion_
+// Success/Error, _RequestDeletion_ExecError, _WriteTombstone_Success/
+// WithFailed/ExecError) ALL used fakeDBTX stub responses to verify
+// PostgresTenantDeletionStore behaviors. With T1.4 deleting
+// PostgresTenantDeletionStore and replacing it with
+// TenantDeletionStoreSqlc (sqlc-backed via SqlcBridge), the stub-based
+// pattern is incompatible.
+//
+// Classification per `.claude/knowledge-base/audits/2026-05-29-sqlc-
+// test-reshape-matrix.md` line 31 (coverage_boost_test.go MIXED):
+//
+//   - KEEP-INVARIANT preserved structurally by TenantDeletionStoreSqlc:
+//     * Idempotent CancelDeletion (DELETE-on-no-rows is a no-op via
+//       sqlc's :exec query shape)
+//     * Idempotent WriteTombstone (ON CONFLICT (tenant_id) DO NOTHING
+//       preserves the original record)
+//     * Error wrapping with "tenant deletion store:" prefix preserved
+//       verbatim in TenantDeletionStoreSqlc methods
+//
+//   - DELETE-SCHEMA-MIRROR-DUPLICATE subset: NotFoundReturnsNil,
+//     CancelDeletion_Success, _Error stub-pass-through tests — sqlc
+//     compile-time + sqlcsync gate replace.
+//
+// Per matrix § Phase 2 reshape window: KEEP-INVARIANT subset moves to
+// real-PG-gated tests when pgxmock or LOOPZERO_E2E_DATABASE_URL harness is
+// wired.
 
 // TestStores_Getters_NotFoundAndQueryError consolidates the canonical
 // {NotFound returns nil+nil, QueryError returns err} pair for read-side
-// Getter methods on PostgresTenantDeletionStore and PostgresRepositoryStore.
-// Phase 3 helper: was 6 near-clone test functions (3 stores × 2 cases).
+// Getter methods on PostgresRepositoryStore. Phase 3 helper.
+//
+// T1.4 (plan 2026-05-29-sqlc-migration v1.3): removed the
+// TenantDeletionStore_GetPendingDeletion case along with the legacy
+// PostgresTenantDeletionStore deletion. The KEEP-INVARIANT "NoRows →
+// (nil, nil) mapping" for GetPendingDeletion is preserved by
+// TenantDeletionStoreSqlc.GetPendingDeletion (explicit
+// `errors.Is(err, pgx.ErrNoRows)` check in tenant_wrapper.go); Phase
+// 2 reshape moves the behavioral test to a real-PG harness.
 func TestStores_Getters_NotFoundAndQueryError(t *testing.T) {
 	type getterCall func(fake *fakeDBTX) (interface{}, error)
 	cases := []struct {
 		name string
 		call getterCall
 	}{
-		{
-			name: "TenantDeletionStore_GetPendingDeletion",
-			call: func(fake *fakeDBTX) (interface{}, error) {
-				return (&PostgresTenantDeletionStore{DB: fake}).GetPendingDeletion(context.Background(), "tn-test")
-			},
-		},
 		{
 			name: "RepositoryStore_GetInstallation",
 			call: func(fake *fakeDBTX) (interface{}, error) {
@@ -175,68 +183,10 @@ func isNilPointer(v interface{}) bool {
 	return fmt.Sprintf("%v", v) == "<nil>"
 }
 
-func TestTenantDeletionStore_RequestDeletion_ExecError(t *testing.T) {
-	fake := &fakeDBTX{execErr: errors.New("constraint violation")}
-	store := &PostgresTenantDeletionStore{DB: fake}
-
-	grace := time.Now().Add(24 * time.Hour)
-	_, err := store.RequestDeletion(context.Background(), domain.DeletionRequest{
-		TenantID:    "tn-test",
-		RequestedBy: "user1",
-		Reason:      "test",
-		GraceUntil:  &grace,
-	})
-	if err == nil {
-		t.Fatal("expected error")
-	}
-}
-
-func TestTenantDeletionStore_WriteTombstone_Success(t *testing.T) {
-	fake := &fakeDBTX{}
-	store := &PostgresTenantDeletionStore{DB: fake}
-
-	err := store.WriteTombstone(context.Background(), domain.TombstoneRecord{
-		TenantID:         "tn-test",
-		TenantSlug:       "test",
-		RequestedBy:      "user1",
-		Reason:           "cleanup",
-		ResourcesCleaned: map[string]interface{}{"builds": 5, "releases": 3},
-	})
-	if err != nil {
-		t.Fatalf("unexpected error: %v", err)
-	}
-}
-
-func TestTenantDeletionStore_WriteTombstone_WithFailed(t *testing.T) {
-	fake := &fakeDBTX{}
-	store := &PostgresTenantDeletionStore{DB: fake}
-
-	err := store.WriteTombstone(context.Background(), domain.TombstoneRecord{
-		TenantID:         "tn-test",
-		TenantSlug:       "test",
-		RequestedBy:      "user1",
-		Reason:           "cleanup",
-		ResourcesCleaned: map[string]interface{}{"builds": 5},
-		ResourcesFailed:  map[string]interface{}{"namespaces": "timeout"},
-	})
-	if err != nil {
-		t.Fatalf("unexpected error: %v", err)
-	}
-}
-
-func TestTenantDeletionStore_WriteTombstone_ExecError(t *testing.T) {
-	fake := &fakeDBTX{execErr: errors.New("db down")}
-	store := &PostgresTenantDeletionStore{DB: fake}
-
-	err := store.WriteTombstone(context.Background(), domain.TombstoneRecord{
-		TenantID:         "tn-test",
-		TenantSlug:       "test",
-		ResourcesCleaned: map[string]interface{}{},
-	})
-	if err == nil {
-		t.Fatal("expected error")
-	}
-}
+// TestTenantDeletionStore_* (4 tests) — DELETED in T1.4 along with the
+// Tenant Deletion Store section block above. See tombstone block at
+// the top of this section for classification + Phase 2 reshape
+// obligation.
 
 // =============================================================================
 // Repository Store tests (0% → covered)

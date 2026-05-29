@@ -15,8 +15,14 @@ import (
 // db.TenantDeletionCounts (infrastructure shape) to services.TenantDeletionCounts
 // (domain shape). Fields are identical; separate types exist to prevent a
 // cyclic import between services and db.
+//
+// T1.4 (plan 2026-05-29-sqlc-migration v1.3): Store field widened from
+// concrete *db.PostgresTenantStore to db.AdminTenantStore interface so
+// the sqlc-backed TenantStoreSqlc drops in without churn. Only
+// DeleteTenantsFKOrdered is consumed at this seam — interface stays
+// minimal.
 type TenantDBDeleterAdapter struct {
-	Store *db.PostgresTenantStore
+	Store db.AdminTenantStore
 }
 
 func (a *TenantDBDeleterAdapter) DeleteTenantsFKOrdered(ctx context.Context, tenantIDs []string) (services.TenantDeletionCounts, error) {
