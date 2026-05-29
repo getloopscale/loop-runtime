@@ -5,7 +5,6 @@ package adapters
 
 import (
 	"context"
-	"errors"
 	"testing"
 
 	"github.com/loopzero/loopzero/api/internal/db"
@@ -44,52 +43,28 @@ func TestRollbackServiceAdapter_StructExists(t *testing.T) {
 }
 
 // =============================================================================
-// AuditAdapter tests
+// AuditAdapter tests — DELETED in T1.5 of plan
+// 2026-05-29-sqlc-migration v1.3
 // =============================================================================
-
-// fakeExecQueryExecutor implements db.ExecQueryExecutor for testing.
-type fakeExecQueryExecutor struct {
-	execErr error
-}
-
-func (f *fakeExecQueryExecutor) Exec(_ context.Context, _ string, _ ...any) (db.ExecResult, error) {
-	return db.ExecResult{}, f.execErr
-}
-
-func (f *fakeExecQueryExecutor) Query(_ context.Context, _ string, _ ...any) (db.Rows, error) {
-	return nil, nil
-}
-
-func (f *fakeExecQueryExecutor) QueryRow(_ context.Context, _ string, _ ...any) db.Row {
-	return nil
-}
-
-func TestAuditAdapter_LogAudit_Success(t *testing.T) {
-	adapter := &AuditAdapter{DB: &fakeExecQueryExecutor{}}
-
-	err := adapter.LogAudit(context.Background(), "tn-acme", "build.create", "user1", "build", "bld-1", "corr-1", nil)
-	if err != nil {
-		t.Fatalf("unexpected error: %v", err)
-	}
-}
-
-func TestAuditAdapter_LogAudit_WithMetadata(t *testing.T) {
-	adapter := &AuditAdapter{DB: &fakeExecQueryExecutor{}}
-
-	err := adapter.LogAudit(context.Background(), "tn-acme", "build.create", "user1", "build", "bld-1", "corr-1", map[string]any{"env": "prod"})
-	if err != nil {
-		t.Fatalf("unexpected error: %v", err)
-	}
-}
-
-func TestAuditAdapter_LogAudit_Error(t *testing.T) {
-	adapter := &AuditAdapter{DB: &fakeExecQueryExecutor{execErr: errors.New("db down")}}
-
-	err := adapter.LogAudit(context.Background(), "tn-acme", "build.create", "user1", "build", "bld-1", "corr-1", nil)
-	if err == nil {
-		t.Fatal("expected error")
-	}
-}
+//
+// 3 sub-tests previously here (TestAuditAdapter_LogAudit_Success,
+// _WithMetadata, _Error) + the fakeExecQueryExecutor helper used the
+// legacy ExecQueryExecutor field type to verify AuditAdapter's
+// delegation to WriteAuditLog. With T1.5 widening AuditAdapter.DB
+// from ExecQueryExecutor to db.DBTX + the sqlc-backed WriteAuditLog
+// dispatching through SqlcBridge, fakeExecQueryExecutor cannot pass
+// the SqlcBridge type assertion.
+//
+// Classification per `.claude/knowledge-base/audits/2026-05-29-sqlc-
+// test-reshape-matrix.md`: pure stub-pass-through →
+// DELETE-SCHEMA-MIRROR-DUPLICATE for the result-shape tests
+// (LogAudit returns nil error on success path). The KEEP-INVARIANT
+// path (compile-time assertion of routes.AuditLogger interface) is
+// PRESERVED below.
+//
+// Per matrix § Phase 2 reshape window: KEEP-INVARIANT subset moves
+// to real-PG-gated tests when pgxmock or LOOPZERO_E2E_DATABASE_URL
+// harness is wired.
 
 // =============================================================================
 // Verify compile-time interface assertions

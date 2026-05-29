@@ -12,8 +12,14 @@ import (
 
 // AuditAdapter implements routes.AuditLogger backed by PostgreSQL.
 // MEET-2026-03-31-024: Application-level audit for sensitive operations.
+//
+// T1.5 (plan 2026-05-29-sqlc-migration v1.3): DB field type widened
+// from db.ExecQueryExecutor to db.DBTX so the sqlc-backed
+// WriteAuditLog can dispatch through the SqlcBridge. All call sites
+// of AuditAdapter pass *db.PgxAdapter which satisfies both
+// interfaces, so the swap is invisible at the seam.
 type AuditAdapter struct {
-	DB db.ExecQueryExecutor
+	DB db.DBTX
 }
 
 // Compile-time check.

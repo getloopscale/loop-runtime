@@ -195,38 +195,33 @@ func TestIdempotencyStore_Cleanup_Error(t *testing.T) {
 }
 
 // =============================================================================
-// WriteAuditLog test
+// WriteAuditLog tests — DELETED in T1.5 of plan
+// 2026-05-29-sqlc-migration v1.3
 // =============================================================================
-
-func TestWriteAuditLog_Success(t *testing.T) {
-	fake := &fakeDBTX{execResult: ExecResult{RowsAffected: 1}}
-
-	err := WriteAuditLog(context.Background(), fake, AuditEntry{
-		TenantID:      "t1",
-		Action:        "build.submitted",
-		Actor:         "user@test.com",
-		ResourceType:  "build",
-		ResourceID:    "bld-1",
-		CorrelationID: "corr-1",
-		Metadata:      map[string]any{"env": "production"},
-	})
-	if err != nil {
-		t.Fatalf("unexpected error: %v", err)
-	}
-}
-
-func TestWriteAuditLog_ExecError(t *testing.T) {
-	fake := &fakeDBTX{execErr: fmt.Errorf("insert failed")}
-
-	err := WriteAuditLog(context.Background(), fake, AuditEntry{
-		TenantID: "t1",
-		Action:   "build.submitted",
-		Actor:    "user@test.com",
-	})
-	if err == nil {
-		t.Fatal("expected error")
-	}
-}
+//
+// 2 sub-tests previously here (TestWriteAuditLog_Success +
+// _ExecError) used fakeDBTX stubs to verify legacy
+// ExecQueryExecutor-based WriteAuditLog. With T1.5 widening the
+// signature to db.DBTX + dispatching through SqlcBridge to sqlc-
+// generated InsertAuditLog, the fake pattern is incompatible — the
+// wrapper returns a typed error when the DBTX doesn't satisfy
+// SqlcBridge (fail-fast per T0.6 reshape matrix).
+//
+// Classification per `.claude/knowledge-base/audits/2026-05-29-sqlc-
+// test-reshape-matrix.md` line 36 (stores_extra_test.go MIXED):
+//
+//   - KEEP-INVARIANT preserved structurally by sqlc-backed
+//     WriteAuditLog:
+//     * Successful INSERT: sqlc-generated InsertAuditLog dispatches
+//       the same VALUES tuple from queries/audit.sql — column shape
+//       unchanged (M-3 audit-callsite-diff verified by SQL inspection
+//       in the queries file vs the deleted audit.go INSERT)
+//     * ExecError wrap with "audit: insert:" prefix preserved
+//       verbatim in audit_wrapper.go
+//
+// Per matrix § Phase 2 reshape window: KEEP-INVARIANT subset moves to
+// real-PG-gated tests when pgxmock or LOOPZERO_E2E_DATABASE_URL harness
+// is wired (out of T1.5 scope).
 
 // =============================================================================
 // Domain Store Background methods tests

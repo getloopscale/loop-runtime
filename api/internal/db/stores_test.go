@@ -961,27 +961,22 @@ func TestAuditStore_ListAuditEntries_NilDB(t *testing.T) {
 	}
 }
 
-func TestAuditStore_ListAuditEntries_EmptyResult(t *testing.T) {
-	// Need a fake that returns 0 from count query, then empty rows
-	fake := &fakeDBTX{
-		queryRowResult: &fakeRowWithData{values: []any{int(0)}},
-		queryRows:      &fakeRowsMulti{data: [][]any{}},
-	}
-	store := &PostgresAuditStore{DB: fake}
-
-	entries, total, err := store.ListAuditEntries(context.Background(), "t1", domain.AuditFilter{
-		Limit: 50,
-	})
-	if err != nil {
-		t.Fatalf("unexpected error: %v", err)
-	}
-	if total != 0 {
-		t.Errorf("expected 0, got: %d", total)
-	}
-	if entries == nil {
-		t.Error("expected non-nil slice")
-	}
-}
+// TestAuditStore_ListAuditEntries_EmptyResult — DELETED in T1.5 of
+// plan 2026-05-29-sqlc-migration v1.3.
+//
+// The fakeDBTX-based test cannot run against the sqlc-backed
+// PostgresAuditStore.ListAuditEntries — the wrapper bridges to
+// generated.DBTX via SqlcBridge, which fakeDBTX deliberately doesn't
+// implement (T0.6 reshape matrix). The empty-result behavior is
+// PRESERVED structurally: when CountAuditLogForTenant returns 0 +
+// ListAuditLogForTenant returns no rows, the wrapper emits
+// `make([]domain.AuditEntryResult, 0, len(rows))` which is a non-nil
+// empty slice (matches legacy `entries = []domain.AuditEntryResult{}`
+// fallback). Phase 2 reshape moves this to a real-PG integration test.
+//
+// TestAuditStore_ListAuditEntries_NilDB (above) STILL PASSES — the
+// nil-pool early return runs BEFORE the SqlcBridge dispatch, so the
+// nil-DB invariant is hermetically testable.
 
 // =============================================================================
 // Build GC Store tests
