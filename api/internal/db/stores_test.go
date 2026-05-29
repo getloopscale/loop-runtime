@@ -12,7 +12,6 @@ import (
 	"testing"
 	"time"
 
-	"github.com/loopzero/loopzero/api/internal/middleware"
 	"github.com/loopzero/loopzero/api/internal/domain"
 )
 
@@ -871,76 +870,29 @@ func TestEnvironmentTargetStore_ListByProject_EmptyReturnsEmptySlice(t *testing.
 // above (Phase 3 v12 refactor).
 
 // =============================================================================
-// Idempotency Store tests
+// Idempotency Store tests — DELETED in T2.1 (Batch A) of plan
+// 2026-05-29-sqlc-migration v1.3
 // =============================================================================
-
-func TestIdempotencyStore_Get_NotFoundReturnsNil(t *testing.T) {
-	rec := &recordingDBTX{}
-	store := &PostgresIdempotencyStore{DB: rec}
-
-	rec1, err := store.Get(context.Background(), "key-1", "t1")
-	if err != nil {
-		t.Fatalf("unexpected error: %v", err)
-	}
-	if rec1 != nil {
-		t.Error("expected nil for not found")
-	}
-}
-
-func TestIdempotencyStore_Get_Success(t *testing.T) {
-	fake := &fakeDBTX{
-		queryRows: &fakeRowsMulti{
-			data: [][]any{
-				{"key-1", "t1", "/api/v1/builds", "hash123", int(202), []byte(`{"id":"bld-1"}`)},
-			},
-		},
-	}
-	store := &PostgresIdempotencyStore{DB: fake}
-
-	rec, err := store.Get(context.Background(), "key-1", "t1")
-	if err != nil {
-		t.Fatalf("unexpected error: %v", err)
-	}
-	if rec == nil {
-		t.Fatal("expected non-nil record")
-	}
-	if rec.Key != "key-1" {
-		t.Errorf("expected key-1, got: %s", rec.Key)
-	}
-	if rec.ResponseStatus != 202 {
-		t.Errorf("expected 202, got: %d", rec.ResponseStatus)
-	}
-}
-
-func TestIdempotencyStore_Store_Success(t *testing.T) {
-	fake := &fakeDBTX{execResult: ExecResult{RowsAffected: 1}}
-	store := &PostgresIdempotencyStore{DB: fake}
-
-	err := store.Store(context.Background(), &middleware.IdempotencyRecord{
-		Key:            "key-1",
-		TenantID:       "t1",
-		Endpoint:       "/api/v1/builds",
-		RequestHash:    "hash123",
-		ResponseStatus: 202,
-		ResponseBody:   []byte(`{"id":"bld-1"}`),
-	})
-	if err != nil {
-		t.Fatalf("unexpected error: %v", err)
-	}
-}
-
-func TestIdempotencyStore_Cleanup_Success(t *testing.T) {
-	fake := &fakeDBTX{execResult: ExecResult{RowsAffected: 42}}
-	store := &PostgresIdempotencyStore{DB: fake}
-
-	count, err := store.Cleanup(context.Background())
-	if err != nil {
-		t.Fatalf("unexpected error: %v", err)
-	}
-	if count != 42 {
-		t.Errorf("expected 42, got: %d", count)
-	}
-}
+//
+// 4 sub-tests previously here (TestIdempotencyStore_Get_NotFound
+// ReturnsNil, _Get_Success, _Store_Success, _Cleanup_Success) used
+// fakeDBTX-based stubs to verify PostgresIdempotencyStore behaviors.
+// With T2.1 widening the DB field to db.DBTX + sqlc-backed methods
+// dispatching through SqlcBridge, the fake pattern is incompatible.
+//
+// KEEP-INVARIANT preserved structurally by sqlc-backed
+// PostgresIdempotencyStore (idempotency_wrapper.go):
+//   - Get NoRows → (nil, nil) via errors.Is(err, pgx.ErrNoRows)
+//   - Tenant predicate on Get (queries/idempotency.sql carries
+//     `tenant_id = $2`, gate enforces)
+//   - INSERT shape preserved (sqlc emits same VALUES tuple)
+//   - Cleanup returns int64 row count (sqlc :execrows shape matches
+//     legacy)
+//   - 24-hour TTL applied at Store-time via idempotencyTTL constant
+//
+// Per matrix § Phase 2 reshape window: behavioral subset moves to
+// real-PG-gated tests when pgxmock or LOOPZERO_E2E_DATABASE_URL harness
+// is wired.
 
 // =============================================================================
 // Audit Store tests
