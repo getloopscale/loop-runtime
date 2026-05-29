@@ -115,22 +115,24 @@ func TestToSnakeCase_HandlesLoopZeroAcronyms(t *testing.T) {
 	}
 }
 
-func TestExtractScanFieldsFromGoFile_FindsScannerArgs(t *testing.T) {
-	// release_store.go is in the same package directory — relative path
-	// works because tests run with cwd=package dir.
-	fields, err := ExtractScanFieldsFromGoFile("release_store.go", "scanReleaseFields")
-	if err != nil {
-		t.Fatalf("ExtractScanFieldsFromGoFile: %v", err)
-	}
-	// Spot-check the field shape rather than the full list (the list
-	// changes when columns are added). Existence of the CR-9 column +
-	// stable header fields is enough to prove the AST walker works.
-	for _, want := range []string{"ID", "BuildID", "ImageAttestationRekorURL", "TenantID"} {
-		if !contains(fields, want) {
-			t.Errorf("scanReleaseFields missing %q (got %v)", want, fields)
-		}
-	}
-}
+// TestExtractScanFieldsFromGoFile_FindsScannerArgs — DELETED 2026-05-29
+// in T1.1c2c of plan 2026-05-29-sqlc-migration v1.3.
+//
+// The original test invoked ExtractScanFieldsFromGoFile("release_store.go",
+// "scanReleaseFields") to verify that the schema_mirror AST walker
+// could enumerate the hand-rolled scan column list. With release_store.go
+// deleted by T1.1c2c (replaced by sqlc-generated row scanner in
+// generated/releases.sql.go), there is no `scanReleaseFields` symbol to
+// inspect.
+//
+// Per `.claude/knowledge-base/audits/2026-05-29-sqlc-test-reshape-matrix.md`
+// line 35, the entire `schema_mirror_test.go` (17 tests) is slated for
+// full DELETE in T4.2 per D7 two-step (sqlcsync gate green for 1 CI
+// cycle + ADR-1 status note + CHANGELOG entry). This early-delete
+// removes 2 tests (this one + TestSchemaMirror_Releases_DetectsMissing
+// FromScan below) that compile-broke after release_store.go deletion.
+// The remaining 15 schema_mirror tests still cover non-release tables
+// (builds, app_attestations) and remain in place until T4.2.
 
 // EC-12: meta-test enforces that every name in m07TablesUnderMirror has a
 // dedicated TestSchemaMirror_<TableName>_AllColumnsMirrored test. Adds a
@@ -438,18 +440,13 @@ func TestSchemaMirror_Releases_DetectsMissingFromStruct(t *testing.T) {
 	}
 }
 
-func TestSchemaMirror_Releases_DetectsMissingFromScan(t *testing.T) {
-	// Pretend release_store.go's scanReleaseFields is named differently —
-	// the AST extractor should return an empty slice (or skip). Use a
-	// non-existent function name as the synthetic omission proxy.
-	fields, err := ExtractScanFieldsFromGoFile("release_store.go", "doesNotExist")
-	if err != nil {
-		t.Fatalf("AST parse error: %v", err)
-	}
-	if len(fields) != 0 {
-		t.Errorf("expected zero fields for non-existent function, got %v", fields)
-	}
-}
+// TestSchemaMirror_Releases_DetectsMissingFromScan — DELETED 2026-05-29
+// in T1.1c2c of plan 2026-05-29-sqlc-migration v1.3. The original test
+// invoked ExtractScanFieldsFromGoFile("release_store.go", ...) which
+// fails after T1.1c2c deletion. Same rationale as TestExtractScanFields
+// FromGoFile_FindsScannerArgs above — release-store schema mirroring is
+// now replaced by sqlc compile-time guarantee + the structural
+// pkg/quality/sqlcsync gate.
 
 // Mirror stubs for builds + release_app_attestations: the migration column
 // set is small + stable; we assert the DB columns exist and are queryable

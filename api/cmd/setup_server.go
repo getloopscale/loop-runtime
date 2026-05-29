@@ -237,8 +237,11 @@ func buildServerConfig(
 		// behavior as when the workflow CR has been reaped). Operator
 		// follow-up: once db.BuildStore gains GetWorkflowIDByBuildID,
 		// wire the third argument to surface the workflow ID too.
+		// T1.1c2c (plan 2026-05-29-sqlc-migration v1.3): sqlc-backed
+		// wrapper satisfies db.ReleaseStore 1:1; ReleaseInspector
+		// reads via the same interface.
 		sc.ReleaseInspector = services.NewReleaseInspector(
-			db.NewPostgresReleaseStore(dbAdapter),
+			db.NewReleaseStoreSqlc(dbAdapter),
 			&db.PostgresAuditStore{DB: dbAdapter},
 			nil,
 		)

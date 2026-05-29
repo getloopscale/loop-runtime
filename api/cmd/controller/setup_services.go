@@ -39,7 +39,10 @@ type controllerDeps struct {
 func setupServices(cfg config.Config, dbAdapter *db.PgxAdapter, logger *slog.Logger) controllerDeps {
 	// ---- Stores ----
 	buildStore := db.NewPostgresBuildStore(dbAdapter)
-	releaseStore := db.NewPostgresReleaseStore(dbAdapter)
+	// T1.1c2c (plan 2026-05-29-sqlc-migration v1.3): sqlc-backed wrapper.
+	// Satisfies db.ReleaseStore interface 1:1 — service field types
+	// unchanged. State-machine SafeTransition runs at store layer (D4).
+	releaseStore := db.NewReleaseStoreSqlc(dbAdapter)
 	envTargetStore := db.NewPostgresEnvironmentTargetStore(dbAdapter, dbAdapter)
 	pgEventStore := sse.NewPostgresEventStore(dbAdapter, dbAdapter)
 	domainStore := &db.PostgresDomainStore{DB: dbAdapter}

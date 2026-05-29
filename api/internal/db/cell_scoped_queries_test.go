@@ -5,11 +5,19 @@ package db
 
 import (
 	"context"
+	"os"
 	"strings"
 	"testing"
 
 	"github.com/loopzero/loopzero/api/internal/domain"
 )
+
+// osReadFile is an indirection point so tests can stub file reads if
+// needed. Defaults to os.ReadFile. Kept package-level (not a var) so
+// the test SoT path is hermetic.
+func osReadFile(relPath string) ([]byte, error) {
+	return os.ReadFile(relPath)
+}
 
 // Roadmap 03 — Cell-Scoped Queries.
 //
@@ -155,45 +163,83 @@ func TestFindActiveBuilds_EmptyCellIDDefaultsToCellDefault(t *testing.T) {
 	}
 }
 
-func TestFindPendingReleases_CellScoped_PassesCellIDToWhere(t *testing.T) {
-	rec := &recordingDBTX{}
-	store := NewPostgresReleaseStore(rec)
+// T1.1c2c (plan 2026-05-29-sqlc-migration v1.3): the 2 release-store
+// cell-scoping tests below moved from recordingDBTX-based runtime-SQL
+// assertions to static-content assertions against the canonical SQL SoT
+// `queries/releases.sql`. With sqlc, the SQL no longer lives in Go
+// strings concatenated at runtime — it's pre-rendered at codegen time
+// from `queries/releases.sql`. The KEEP-INVARIANT promise of matrix § 4
+// "Multi-cell routing invariant" is preserved: cell_id predicate +
+// status filter MUST be present in the query SoT.
+//
+// Rationale: ReleaseStoreSqlc accepts db.DBTX but bridges to
+// generated.DBTX via SqlcBridge — recordingDBTX (used here) intentionally
+// does NOT implement SqlcBridge, by design, so we cannot reuse it. The
+// static-content test is a STRONGER invariant: it catches drift in the
+// SQL SoT regardless of which wrapper consumes the generated code.
 
-	_, err := store.FindPendingReleases(context.Background(), "cell-nyc3-01")
-	if err != nil {
-		t.Fatalf("FindPendingReleases: unexpected error: %v", err)
-	}
+const (
+	queryFileReleases = "queries/releases.sql"
+)
 
-	if !strings.Contains(rec.lastSQL, "cell_id = $1") {
-		t.Errorf("expected SQL to contain 'cell_id = $1', got: %s", rec.lastSQL)
+func TestFindPendingReleasesByCell_QuerySoT_ContainsCellAndStatusPredicates(t *testing.T) {
+	contents := mustReadQuerySoT(t, queryFileReleases)
+	queryBlock := mustExtractQueryBlock(t, contents, "FindPendingReleasesByCell")
+
+	if !strings.Contains(queryBlock, "cell_id = $1") {
+		t.Errorf("FindPendingReleasesByCell must filter cell_id = $1, got query: %s", queryBlock)
 	}
-	if len(rec.lastArgs) == 0 || rec.lastArgs[0] != "cell-nyc3-01" {
-		t.Errorf("expected first arg to be 'cell-nyc3-01', got: %v", rec.lastArgs)
-	}
-	// The surrounding state filter must still be present.
-	if !strings.Contains(rec.lastSQL, "status = 'PENDING'") {
-		t.Errorf("SQL must still filter by status=PENDING, got: %s", rec.lastSQL)
+	if !strings.Contains(queryBlock, "status = 'PENDING'") {
+		t.Errorf("FindPendingReleasesByCell must filter status = 'PENDING', got query: %s", queryBlock)
 	}
 }
 
-func TestFindActiveReleases_CellScoped_PassesCellIDToWhere(t *testing.T) {
-	rec := &recordingDBTX{}
-	store := NewPostgresReleaseStore(rec)
+func TestFindActiveReleasesByCell_QuerySoT_ContainsCellAndStatusPredicates(t *testing.T) {
+	contents := mustReadQuerySoT(t, queryFileReleases)
+	queryBlock := mustExtractQueryBlock(t, contents, "FindActiveReleasesByCell")
 
-	_, err := store.FindActiveReleases(context.Background(), "cell-nyc3-02")
+	if !strings.Contains(queryBlock, "cell_id = $1") {
+		t.Errorf("FindActiveReleasesByCell must filter cell_id = $1, got query: %s", queryBlock)
+	}
+	if !strings.Contains(queryBlock, "status = 'ACTIVE'") {
+		t.Errorf("FindActiveReleasesByCell must filter status = 'ACTIVE', got query: %s", queryBlock)
+	}
+	// DISTINCT ON (tenant_id, project_id, environment) is the canonical
+	// shape of the health-check ticker query (MEET-2026-03-31-023 T1-4).
+	if !strings.Contains(queryBlock, "DISTINCT ON (tenant_id, project_id, environment)") {
+		t.Errorf("FindActiveReleasesByCell must use DISTINCT ON for de-dup, got query: %s", queryBlock)
+	}
+}
+
+// mustReadQuerySoT reads the canonical SoT SQL file at queries/<name>.sql.
+// Returns the entire file contents.
+func mustReadQuerySoT(t *testing.T, relPath string) string {
+	t.Helper()
+	data, err := osReadFile(relPath)
 	if err != nil {
-		t.Fatalf("FindActiveReleases: unexpected error: %v", err)
+		t.Fatalf("read %s: %v", relPath, err)
 	}
+	return string(data)
+}
 
-	if !strings.Contains(rec.lastSQL, "cell_id = $1") {
-		t.Errorf("expected SQL to contain 'cell_id = $1', got: %s", rec.lastSQL)
+// mustExtractQueryBlock returns the substring of `contents` containing the
+// query identified by `-- name: <queryName>` up to the next `-- name:` or
+// EOF. This isolates one query from neighboring ones so assertions don't
+// match cross-query SQL fragments.
+func mustExtractQueryBlock(t *testing.T, contents, queryName string) string {
+	t.Helper()
+	marker := "-- name: " + queryName + " "
+	start := strings.Index(contents, marker)
+	if start < 0 {
+		t.Fatalf("query %q not found in SoT", queryName)
 	}
-	if !strings.Contains(rec.lastSQL, "status = 'ACTIVE'") {
-		t.Errorf("SQL must still filter by status=ACTIVE, got: %s", rec.lastSQL)
+	// Find next `-- name:` after start+len(marker), or EOF.
+	rest := contents[start+len(marker):]
+	end := strings.Index(rest, "\n-- name:")
+	if end < 0 {
+		return contents[start:]
 	}
-	if rec.lastArgs[0] != "cell-nyc3-02" {
-		t.Errorf("expected cellID arg, got: %v", rec.lastArgs)
-	}
+	return contents[start : start+len(marker)+end]
 }
 
 func TestFindPendingForAutoVerify_CellScoped_JoinsTenants(t *testing.T) {

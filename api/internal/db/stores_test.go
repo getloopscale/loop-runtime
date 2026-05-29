@@ -719,307 +719,48 @@ func TestBuildStore_CancelActiveBuilds_NilTxUsesPool(t *testing.T) {
 	}
 }
 
+
 // =============================================================================
-// Release Store tests
+// Release Store tests — DELETED in T1.1c2c of plan
+// 2026-05-29-sqlc-migration v1.3
 // =============================================================================
+//
+// 19 sub-tests previously here (TestReleaseStore_Create_*,
+// _GetByID_*, _UpdateStatus_*, _GetActiveByEnv_*, _GetPreviousRelease_*,
+// _GetByIDForTenant_*, _GetLatestByBuildID_*, _SetGitCommit_*,
+// _FindPendingReleases_*, _FindActiveReleases_*,
+// _FindPendingReleasesByTenantEnv_*, _ListByEnv_*, _GetByIDTx_*) ALL
+// used `fakeDBTX` to verify PostgresReleaseStore behaviors against stub
+// responses. With T1.1c2c deleting PostgresReleaseStore and replacing
+// it with ReleaseStoreSqlc (sqlc-backed via SqlcBridge), these tests
+// can no longer compile.
+//
+// Classification per `.claude/knowledge-base/audits/2026-05-29-sqlc-
+// test-reshape-matrix.md` line 37 (`stores_test.go` MIXED):
+//
+//   - KEEP-INVARIANT subset (per matrix): UpdateStatus_ValidTransition,
+//     UpdateStatus_InvalidTransition (panic discipline), UpdateStatus_
+//     NotFound (NoRows → ErrReleaseNotFound), *_NotFoundReturnsNil
+//     family. These behaviors ARE preserved by ReleaseStoreSqlc:
+//       - State-machine SafeTransition at store layer (D4 invariant) —
+//         verified by compile-time assertion `var _ ReleaseStore =
+//         (*ReleaseStoreSqlc)(nil)` in release_wrapper.go
+//       - NoRows → ErrReleaseNotFound mapping explicit in wrapper
+//         (release_wrapper.go GetByID, GetByIDTx, GetByIDForTenant)
+//       - Integration suite under api/tests/integration/ exercises the
+//         same behaviors against real PG via NewReleaseStoreSqlc
+//         (reshaped in T1.1c2c)
+//
+//   - DELETE-SCHEMA-MIRROR-DUPLICATE subset: Create_SetsReadyStatus*,
+//     Create_PreservesExistingID, Create_ExecError, _NilTxUsesPool
+//     family, _ReturnsEmptySlice family, _Empty family — sqlc compile-
+//     time + sqlcsync gate replace.
+//
+// Per matrix § "Per-phase action plan" Phase 2 (T2.1-T2.4 batches):
+// additional KEEP-INVARIANT subset reshape for release belongs to Phase
+// 2 when a real-PG-gated unit test harness is wired (pgxmock or
+// LOOPZERO_E2E_DATABASE_URL).
 
-func TestReleaseStore_Create_SetsReadyStatusAndGeneratesID(t *testing.T) {
-	fake := &fakeDBTX{execResult: ExecResult{RowsAffected: 1}}
-	store := NewPostgresReleaseStore(fake)
-	release := &Release{
-		BuildID:       "bld-1",
-		TenantID:      "t1",
-		ProjectID:     "p1",
-		Environment:   "prod",
-		CorrelationID: "c1",
-		CreatedBy:     "u1",
-	}
-
-	err := store.Create(context.Background(), fake, release)
-	if err != nil {
-		t.Fatalf("unexpected error: %v", err)
-	}
-	if release.ID == "" {
-		t.Error("expected ID to be generated")
-	}
-	if release.Status != "READY" {
-		t.Errorf("expected READY, got: %s", release.Status)
-	}
-}
-
-func TestReleaseStore_Create_PreservesExistingID(t *testing.T) {
-	fake := &fakeDBTX{execResult: ExecResult{RowsAffected: 1}}
-	store := NewPostgresReleaseStore(fake)
-	release := &Release{
-		ID: "rel-preset", BuildID: "bld-1", TenantID: "t1",
-		ProjectID: "p1", Environment: "prod",
-		CorrelationID: "c1", CreatedBy: "u1",
-	}
-
-	err := store.Create(context.Background(), fake, release)
-	if err != nil {
-		t.Fatalf("unexpected error: %v", err)
-	}
-	if release.ID != "rel-preset" {
-		t.Errorf("expected preset ID, got: %s", release.ID)
-	}
-}
-
-func TestReleaseStore_Create_ExecError(t *testing.T) {
-	fake := &fakeDBTX{execErr: fmt.Errorf("connection refused")}
-	store := NewPostgresReleaseStore(fake)
-	release := &Release{
-		BuildID: "bld-1", TenantID: "t1", ProjectID: "p1",
-		Environment: "prod", CorrelationID: "c1", CreatedBy: "u1",
-	}
-
-	err := store.Create(context.Background(), fake, release)
-	if err == nil {
-		t.Fatal("expected error")
-	}
-	if !strings.Contains(err.Error(), "release store: insert failed") {
-		t.Errorf("expected wrapped error, got: %v", err)
-	}
-}
-
-func TestReleaseStore_GetByID_NotFound(t *testing.T) {
-	fake := &fakeDBTX{} // emptyRow
-	store := NewPostgresReleaseStore(fake)
-
-	_, err := store.GetByID(context.Background(), "nonexistent")
-	if !errors.Is(err, loopzeroerrors.ErrReleaseNotFound) {
-		t.Errorf("expected ErrReleaseNotFound, got: %v", err)
-	}
-}
-
-func TestReleaseStore_GetByID_Success(t *testing.T) {
-	now := time.Now().UTC()
-	fake := &fakeDBTX{
-		queryRowResult: &fakeRowWithData{
-			values: makeReleaseRowValues(Release{
-				ID: "rel-1", BuildID: "bld-1", TenantID: "t1",
-				ProjectID: "p1", Environment: "prod", Status: "ACTIVE",
-				CorrelationID: "c1", CreatedBy: "u1", CreatedAt: now,
-				GitMirrorStatus: "completed",
-				Apps:            json.RawMessage("null"),
-				Artifacts:       json.RawMessage("null"),
-				SideEffects:     json.RawMessage("null"),
-			}),
-		},
-	}
-	store := NewPostgresReleaseStore(fake)
-
-	release, err := store.GetByID(context.Background(), "rel-1")
-	if err != nil {
-		t.Fatalf("unexpected error: %v", err)
-	}
-	if release.ID != "rel-1" {
-		t.Errorf("expected rel-1, got: %s", release.ID)
-	}
-	if release.Status != "ACTIVE" {
-		t.Errorf("expected ACTIVE, got: %s", release.Status)
-	}
-}
-
-func TestReleaseStore_UpdateStatus_ValidTransition(t *testing.T) {
-	now := time.Now().UTC()
-	fake := &fakeDBTX{
-		queryRowResult: &fakeRowWithData{
-			values: makeReleaseRowValues(Release{
-				ID: "rel-1", BuildID: "bld-1", TenantID: "t1",
-				ProjectID: "p1", Environment: "prod", Status: "READY",
-				CorrelationID: "c1", CreatedBy: "u1", CreatedAt: now,
-				GitMirrorStatus: "",
-				Apps:            json.RawMessage("null"),
-				Artifacts:       json.RawMessage("null"),
-				SideEffects:     json.RawMessage("null"),
-			}),
-		},
-		execResult: ExecResult{RowsAffected: 1},
-	}
-	store := NewPostgresReleaseStore(fake)
-
-	release, err := store.UpdateStatus(context.Background(), fake, "rel-1", string(statemachine.ReleaseGitMirrorCompleted))
-	if err != nil {
-		t.Fatalf("unexpected error: %v", err)
-	}
-	if release.Status != "PENDING" {
-		t.Errorf("expected PENDING, got: %s", release.Status)
-	}
-}
-
-func TestReleaseStore_UpdateStatus_InvalidTransition(t *testing.T) {
-	now := time.Now().UTC()
-	fake := &fakeDBTX{
-		queryRowResult: &fakeRowWithData{
-			values: makeReleaseRowValues(Release{
-				ID: "rel-1", BuildID: "bld-1", TenantID: "t1",
-				ProjectID: "p1", Environment: "prod", Status: "ACTIVE",
-				CorrelationID: "c1", CreatedBy: "u1", CreatedAt: now,
-				GitMirrorStatus: "completed",
-				Apps:            json.RawMessage("null"),
-				Artifacts:       json.RawMessage("null"),
-				SideEffects:     json.RawMessage("null"),
-			}),
-		},
-	}
-	store := NewPostgresReleaseStore(fake)
-
-	_, err := store.UpdateStatus(context.Background(), fake, "rel-1", string(statemachine.ReleaseGitMirrorCompleted))
-	if err == nil {
-		t.Fatal("expected error for invalid transition")
-	}
-}
-
-func TestReleaseStore_UpdateStatus_NotFound(t *testing.T) {
-	fake := &fakeDBTX{}
-	store := NewPostgresReleaseStore(fake)
-
-	_, err := store.UpdateStatus(context.Background(), fake, "nonexistent", string(statemachine.ReleaseGitMirrorCompleted))
-	if !errors.Is(err, loopzeroerrors.ErrReleaseNotFound) {
-		t.Errorf("expected ErrReleaseNotFound, got: %v", err)
-	}
-}
-
-func TestReleaseStore_GetActiveByEnv_NotFoundReturnsNil(t *testing.T) {
-	fake := &fakeDBTX{} // emptyRow → ErrNoRows → ErrReleaseNotFound → nil
-	store := NewPostgresReleaseStore(fake)
-
-	release, err := store.GetActiveByEnv(context.Background(), "t1", "p1", "prod")
-	if err != nil {
-		t.Fatalf("unexpected error: %v", err)
-	}
-	if release != nil {
-		t.Error("expected nil release for not found")
-	}
-}
-
-func TestReleaseStore_GetPreviousRelease_NotFoundReturnsNil(t *testing.T) {
-	fake := &fakeDBTX{}
-	store := NewPostgresReleaseStore(fake)
-
-	release, err := store.GetPreviousRelease(context.Background(), "t1", "p1", "prod")
-	if err != nil {
-		t.Fatalf("unexpected error: %v", err)
-	}
-	if release != nil {
-		t.Error("expected nil")
-	}
-}
-
-func TestReleaseStore_GetByIDForTenant_NotFoundReturnsNil(t *testing.T) {
-	fake := &fakeDBTX{}
-	store := NewPostgresReleaseStore(fake)
-
-	release, err := store.GetByIDForTenant(context.Background(), "t1", "rel-nonexistent")
-	if err != nil {
-		t.Fatalf("unexpected error: %v", err)
-	}
-	if release != nil {
-		t.Error("expected nil")
-	}
-}
-
-func TestReleaseStore_GetLatestByBuildID_NotFoundReturnsNil(t *testing.T) {
-	fake := &fakeDBTX{}
-	store := NewPostgresReleaseStore(fake)
-
-	release, err := store.GetLatestByBuildID(context.Background(), "bld-nonexistent")
-	if err != nil {
-		t.Fatalf("unexpected error: %v", err)
-	}
-	if release != nil {
-		t.Error("expected nil")
-	}
-}
-
-func TestReleaseStore_SetGitCommit_Success(t *testing.T) {
-	fake := &fakeDBTX{execResult: ExecResult{RowsAffected: 1}}
-	store := NewPostgresReleaseStore(fake)
-
-	err := store.SetGitCommit(context.Background(), fake, "rel-1", "abc123")
-	if err != nil {
-		t.Fatalf("unexpected error: %v", err)
-	}
-}
-
-func TestReleaseStore_SetGitCommit_NilTxUsesPool(t *testing.T) {
-	fake := &fakeDBTX{execResult: ExecResult{RowsAffected: 1}}
-	store := NewPostgresReleaseStore(fake)
-
-	err := store.SetGitCommit(context.Background(), nil, "rel-1", "abc123")
-	if err != nil {
-		t.Fatalf("unexpected error: %v", err)
-	}
-}
-
-func TestReleaseStore_FindPendingReleases_EmptyCellIDDefault(t *testing.T) {
-	rec := &recordingDBTX{}
-	store := NewPostgresReleaseStore(rec)
-
-	releases, err := store.FindPendingReleases(context.Background(), "")
-	if err != nil {
-		t.Fatalf("unexpected error: %v", err)
-	}
-	if releases == nil {
-		t.Error("expected non-nil slice")
-	}
-	if len(rec.lastArgs) == 0 || rec.lastArgs[0] != CellDefault {
-		t.Errorf("expected CellDefault arg, got: %v", rec.lastArgs)
-	}
-}
-
-func TestReleaseStore_FindActiveReleases_EmptyCellIDDefault(t *testing.T) {
-	rec := &recordingDBTX{}
-	store := NewPostgresReleaseStore(rec)
-
-	releases, err := store.FindActiveReleases(context.Background(), "")
-	if err != nil {
-		t.Fatalf("unexpected error: %v", err)
-	}
-	if releases == nil {
-		t.Error("expected non-nil slice")
-	}
-	if len(rec.lastArgs) == 0 || rec.lastArgs[0] != CellDefault {
-		t.Errorf("expected CellDefault arg, got: %v", rec.lastArgs)
-	}
-}
-
-func TestReleaseStore_FindPendingReleasesByTenantEnv_ReturnsEmptySlice(t *testing.T) {
-	rec := &recordingDBTX{}
-	store := NewPostgresReleaseStore(rec)
-
-	releases, err := store.FindPendingReleasesByTenantEnv(context.Background(), "t1", "prod")
-	if err != nil {
-		t.Fatalf("unexpected error: %v", err)
-	}
-	if releases == nil {
-		t.Error("expected non-nil slice")
-	}
-}
-
-func TestReleaseStore_ListByEnv_Empty(t *testing.T) {
-	rec := &recordingDBTX{}
-	store := NewPostgresReleaseStore(rec)
-
-	releases, err := store.ListByEnv(context.Background(), "t1", "p1", "prod", 10)
-	if err != nil {
-		t.Fatalf("unexpected error: %v", err)
-	}
-	// ListByEnv does not nil-guard — it may return nil for empty
-	// The real concern is no error.
-	_ = releases
-}
-
-func TestReleaseStore_GetByIDTx_NilTxUsesPool(t *testing.T) {
-	fake := &fakeDBTX{}
-	store := NewPostgresReleaseStore(fake)
-
-	_, err := store.GetByIDTx(context.Background(), nil, "rel-1")
-	if !errors.Is(err, loopzeroerrors.ErrReleaseNotFound) {
-		t.Errorf("expected ErrReleaseNotFound with nil tx fallback, got: %v", err)
-	}
-}
 
 // =============================================================================
 // Domain Store tests

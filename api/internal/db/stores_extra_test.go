@@ -17,172 +17,52 @@ import (
 )
 
 // =============================================================================
-// Release Store additional tests
+// Release Store additional tests — DELETED in T1.1c2c of plan
+// 2026-05-29-sqlc-migration v1.3
 // =============================================================================
-
-func TestReleaseStore_GetActiveByEnv_Success(t *testing.T) {
-	now := time.Now().UTC()
-	fake := &fakeDBTX{
-		queryRowResult: &fakeRowWithData{
-			values: makeReleaseRowValues(Release{
-				ID: "rel-act-1", BuildID: "bld-1", TenantID: "t1",
-				ProjectID: "p1", Environment: "prod", Status: "ACTIVE",
-				CorrelationID: "c1", CreatedBy: "u1", CreatedAt: now,
-				GitMirrorStatus: "completed", GitCommit: "abc123",
-				Apps: json.RawMessage("null"), Artifacts: json.RawMessage("null"),
-				SideEffects: json.RawMessage("null"),
-			}),
-		},
-	}
-	store := NewPostgresReleaseStore(fake)
-
-	release, err := store.GetActiveByEnv(context.Background(), "t1", "p1", "prod")
-	if err != nil {
-		t.Fatalf("unexpected error: %v", err)
-	}
-	if release == nil {
-		t.Fatal("expected non-nil release")
-	}
-	if release.ID != "rel-act-1" {
-		t.Errorf("expected rel-act-1, got: %s", release.ID)
-	}
-	if release.Status != "ACTIVE" {
-		t.Errorf("expected ACTIVE, got: %s", release.Status)
-	}
-}
-
-func TestReleaseStore_GetActiveByEnvTx_NotFoundReturnsNil(t *testing.T) {
-	fake := &fakeDBTX{}
-	store := NewPostgresReleaseStore(fake)
-
-	release, err := store.GetActiveByEnvTx(context.Background(), fake, "t1", "p1", "prod")
-	if err != nil {
-		t.Fatalf("unexpected error: %v", err)
-	}
-	if release != nil {
-		t.Error("expected nil release for not found")
-	}
-}
-
-func TestReleaseStore_GetPreviousRelease_Success(t *testing.T) {
-	now := time.Now().UTC()
-	fake := &fakeDBTX{
-		queryRowResult: &fakeRowWithData{
-			values: makeReleaseRowValues(Release{
-				ID: "rel-prev-1", BuildID: "bld-1", TenantID: "t1",
-				ProjectID: "p1", Environment: "prod", Status: "SUPERSEDED",
-				CorrelationID: "c1", CreatedBy: "u1", CreatedAt: now,
-				GitMirrorStatus: "completed", GitCommit: "prev-sha",
-				Apps: json.RawMessage("null"), Artifacts: json.RawMessage("null"),
-				SideEffects: json.RawMessage("null"),
-			}),
-		},
-	}
-	store := NewPostgresReleaseStore(fake)
-
-	release, err := store.GetPreviousRelease(context.Background(), "t1", "p1", "prod")
-	if err != nil {
-		t.Fatalf("unexpected error: %v", err)
-	}
-	if release == nil {
-		t.Fatal("expected non-nil release")
-	}
-	if release.Status != "SUPERSEDED" {
-		t.Errorf("expected SUPERSEDED, got: %s", release.Status)
-	}
-}
-
-func TestReleaseStore_GetByIDForTenant_Success(t *testing.T) {
-	now := time.Now().UTC()
-	fake := &fakeDBTX{
-		queryRowResult: &fakeRowWithData{
-			values: makeReleaseRowValues(Release{
-				ID: "rel-t1", BuildID: "bld-1", TenantID: "t1",
-				ProjectID: "p1", Environment: "prod", Status: "ACTIVE",
-				CorrelationID: "c1", CreatedBy: "u1", CreatedAt: now,
-				GitMirrorStatus: "completed",
-				Apps: json.RawMessage("null"), Artifacts: json.RawMessage("null"),
-				SideEffects: json.RawMessage("null"),
-			}),
-		},
-	}
-	store := NewPostgresReleaseStore(fake)
-
-	release, err := store.GetByIDForTenant(context.Background(), "t1", "rel-t1")
-	if err != nil {
-		t.Fatalf("unexpected error: %v", err)
-	}
-	if release == nil {
-		t.Fatal("expected non-nil release")
-	}
-	if release.ID != "rel-t1" {
-		t.Errorf("expected rel-t1, got: %s", release.ID)
-	}
-}
-
-func TestReleaseStore_GetLatestByBuildID_Success(t *testing.T) {
-	now := time.Now().UTC()
-	fake := &fakeDBTX{
-		queryRowResult: &fakeRowWithData{
-			values: makeReleaseRowValues(Release{
-				ID: "rel-latest", BuildID: "bld-1", TenantID: "t1",
-				ProjectID: "p1", Environment: "prod", Status: "PENDING",
-				CorrelationID: "c1", CreatedBy: "u1", CreatedAt: now,
-				GitMirrorStatus: "completed",
-				Apps: json.RawMessage("null"), Artifacts: json.RawMessage("null"),
-				SideEffects: json.RawMessage("null"),
-			}),
-		},
-	}
-	store := NewPostgresReleaseStore(fake)
-
-	release, err := store.GetLatestByBuildID(context.Background(), "bld-1")
-	if err != nil {
-		t.Fatalf("unexpected error: %v", err)
-	}
-	if release == nil {
-		t.Fatal("expected non-nil release")
-	}
-	if release.ID != "rel-latest" {
-		t.Errorf("expected rel-latest, got: %s", release.ID)
-	}
-}
-
-func TestReleaseStore_UpdateStatus_NilTxUsesPool(t *testing.T) {
-	now := time.Now().UTC()
-	fake := &fakeDBTX{
-		queryRowResult: &fakeRowWithData{
-			values: makeReleaseRowValues(Release{
-				ID: "rel-nil-tx", BuildID: "bld-1", TenantID: "t1",
-				ProjectID: "p1", Environment: "prod", Status: "READY",
-				CorrelationID: "c1", CreatedBy: "u1", CreatedAt: now,
-				GitMirrorStatus: "",
-				Apps: json.RawMessage("null"), Artifacts: json.RawMessage("null"),
-				SideEffects: json.RawMessage("null"),
-			}),
-		},
-		execResult: ExecResult{RowsAffected: 1},
-	}
-	store := NewPostgresReleaseStore(fake)
-
-	release, err := store.UpdateStatus(context.Background(), nil, "rel-nil-tx", string(statemachine.ReleaseGitMirrorCompleted))
-	if err != nil {
-		t.Fatalf("unexpected error: %v", err)
-	}
-	if release.Status != "PENDING" {
-		t.Errorf("expected PENDING, got: %s", release.Status)
-	}
-}
-
-func TestReleaseStore_SetGitCommit_ExecError(t *testing.T) {
-	fake := &fakeDBTX{execErr: fmt.Errorf("connection refused")}
-	store := NewPostgresReleaseStore(fake)
-
-	err := store.SetGitCommit(context.Background(), fake, "rel-1", "abc123")
-	if err == nil {
-		t.Fatal("expected error")
-	}
-}
+//
+// The 7 stub-class tests previously here (TestReleaseStore_GetActiveByEnv_
+// Success, TestReleaseStore_GetActiveByEnvTx_NotFoundReturnsNil,
+// TestReleaseStore_GetPreviousRelease_Success, TestReleaseStore_GetByID
+// ForTenant_Success, TestReleaseStore_GetLatestByBuildID_Success,
+// TestReleaseStore_UpdateStatus_NilTxUsesPool, TestReleaseStore_SetGit
+// Commit_ExecError) ALL used `fakeDBTX` stub responses to verify that
+// PostgresReleaseStore returned what the stub fed it — a pure pass-
+// through pattern.
+//
+// Classification per `.claude/knowledge-base/audits/2026-05-29-sqlc-
+// test-reshape-matrix.md` (T0.6) line 36:
+//
+//   - 4 are DELETE-SCHEMA-MIRROR-DUPLICATE (stub-pass-through; sqlc
+//     compile-time guarantee replaces them):
+//     * GetActiveByEnv_Success, GetByIDForTenant_Success,
+//       UpdateStatus_NilTxUsesPool, SetGitCommit_ExecError
+//
+//   - 3 are KEEP-INVARIANT subset reshape (per matrix:
+//     GetActiveByEnvTx_NotFoundReturnsNil, GetPreviousRelease_Success,
+//     GetLatestByBuildID_Success). These behaviors ARE preserved by
+//     ReleaseStoreSqlc (errors.Is(err, pgx.ErrNoRows) → nil mapping,
+//     state-machine SafeTransition discipline) AND are exercised by
+//     the integration suite under `api/tests/integration/` against
+//     real PG via `NewReleaseStoreSqlc`.
+//
+// Per matrix § "Per-phase action plan" — Phase 2 (T2.1-T2.4 batches) is
+// the canonical reshape window for `stores_extra_test.go`. With
+// PostgresReleaseStore deleted in T1.1c2c, the stub-based versions
+// COULD NOT compile any longer, so the deletion landed here; the Phase
+// 2 reshape window now owns the integration coverage for the
+// KEEP-INVARIANT subset against a real PG instance.
+//
+// Cross-refs:
+//   - `.claude/knowledge-base/audits/2026-05-29-sqlc-test-reshape-matrix.md`
+//   - `api/internal/db/release_wrapper.go` (ReleaseStoreSqlc)
+//   - `api/tests/integration/release_store_column_cascade_test.go`
+//     (M07 Rekor URL persistence regression — reshaped in T1.1c2c to
+//     use NewReleaseStoreSqlc)
+//   - `api/tests/integration/rollback_test.go` (rollback flow against
+//     real PG; reshaped in T1.1c2c)
+//   - `api/tests/integration/concurrent_builds_test.go` (concurrent-
+//     deploy 1×202+1×409 invariant; reshaped in T1.1c2c)
 
 // =============================================================================
 // Build Store additional tests

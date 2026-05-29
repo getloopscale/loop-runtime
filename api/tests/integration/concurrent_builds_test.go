@@ -225,7 +225,7 @@ func setupIntegrationTest(t *testing.T) *testIntegrationSetup {
 	// Create real stores backed by the pool
 	adapter := &db.PgxAdapter{Pool: pool}
 	buildStore := db.NewPostgresBuildStore(adapter)
-	releaseStore := db.NewPostgresReleaseStore(adapter)
+	releaseStore := db.NewReleaseStoreSqlc(adapter) // T1.1c2c (plan 2026-05-29-sqlc-migration v1.3)
 	envTargetStore := db.NewPostgresEnvironmentTargetStore(adapter, adapter)
 	eventStore := sse.NewPostgresEventStore(adapter, adapter)
 	idempotencyStore := &db.PostgresIdempotencyStore{DB: adapter}

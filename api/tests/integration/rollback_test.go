@@ -160,7 +160,7 @@ func TestRollback_SupersedesPreviousActiveRelease(t *testing.T) {
 	r1ID, r2ID, _ := seedRollbackData(t, adapter, testID)
 
 	// Create real stores
-	releaseStore := db.NewPostgresReleaseStore(adapter)
+	releaseStore := db.NewReleaseStoreSqlc(adapter) // T1.1c2c (plan 2026-05-29-sqlc-migration v1.3)
 	envTargetStore := db.NewPostgresEnvironmentTargetStore(adapter, adapter)
 	locker := &adapters.PoolEnvironmentLocker{Pool: pool}
 
@@ -273,7 +273,7 @@ func TestConcurrentRollbacks_ExactlyOneSucceeds(t *testing.T) {
 	}
 
 	// Create shared stores
-	releaseStore := db.NewPostgresReleaseStore(adapter)
+	releaseStore := db.NewReleaseStoreSqlc(adapter) // T1.1c2c (plan 2026-05-29-sqlc-migration v1.3)
 	envTargetStore := db.NewPostgresEnvironmentTargetStore(adapter, adapter)
 	locker := &adapters.PoolEnvironmentLocker{Pool: pool}
 

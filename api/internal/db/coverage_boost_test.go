@@ -440,87 +440,28 @@ func TestDomainStore_CreateWithCFZone_ExecError(t *testing.T) {
 }
 
 // =============================================================================
-// Release Store — FindPendingReleases/FindActiveReleases with explicit cellID
+// Release Store — DELETED in T1.1c2c of plan 2026-05-29-sqlc-migration
+// v1.3.
 // =============================================================================
-
-func TestReleaseStore_FindPendingReleases_WithCellID(t *testing.T) {
-	fake := &fakeDBTX{}
-	store := NewPostgresReleaseStore(fake)
-
-	releases, err := store.FindPendingReleases(context.Background(), "cell-sfo3")
-	if err != nil {
-		t.Fatalf("unexpected error: %v", err)
-	}
-	if len(releases) != 0 {
-		t.Errorf("expected empty, got %d", len(releases))
-	}
-}
-
-func TestReleaseStore_FindPendingReleases_QueryError(t *testing.T) {
-	fake := &fakeDBTX{queryErr: errors.New("db down")}
-	store := NewPostgresReleaseStore(fake)
-
-	_, err := store.FindPendingReleases(context.Background(), "cell-default")
-	if err == nil {
-		t.Fatal("expected error")
-	}
-}
-
-func TestReleaseStore_FindActiveReleases_WithCellID(t *testing.T) {
-	fake := &fakeDBTX{}
-	store := NewPostgresReleaseStore(fake)
-
-	releases, err := store.FindActiveReleases(context.Background(), "cell-sfo3")
-	if err != nil {
-		t.Fatalf("unexpected error: %v", err)
-	}
-	if len(releases) != 0 {
-		t.Errorf("expected empty, got %d", len(releases))
-	}
-}
-
-func TestReleaseStore_FindActiveReleases_QueryError(t *testing.T) {
-	fake := &fakeDBTX{queryErr: errors.New("db down")}
-	store := NewPostgresReleaseStore(fake)
-
-	_, err := store.FindActiveReleases(context.Background(), "cell-default")
-	if err == nil {
-		t.Fatal("expected error")
-	}
-}
-
-func TestReleaseStore_FindPendingReleasesByTenantEnv_QueryError(t *testing.T) {
-	fake := &fakeDBTX{queryErr: errors.New("db down")}
-	store := NewPostgresReleaseStore(fake)
-
-	_, err := store.FindPendingReleasesByTenantEnv(context.Background(), "t1", "prod")
-	if err == nil {
-		t.Fatal("expected error")
-	}
-}
-
-func TestReleaseStore_ListByEnv_QueryError(t *testing.T) {
-	fake := &fakeDBTX{queryErr: errors.New("db down")}
-	store := NewPostgresReleaseStore(fake)
-
-	_, err := store.ListByEnv(context.Background(), "t1", "p1", "prod", 10)
-	if err == nil {
-		t.Fatal("expected error")
-	}
-}
-
-func TestReleaseStore_GetLatestByBuildID_NotFound(t *testing.T) {
-	fake := &fakeDBTX{}
-	store := NewPostgresReleaseStore(fake)
-
-	release, err := store.GetLatestByBuildID(context.Background(), "bld-nonexistent")
-	if err != nil {
-		t.Fatalf("unexpected error: %v", err)
-	}
-	if release != nil {
-		t.Error("expected nil for nonexistent build")
-	}
-}
+//
+// The 7 release-store sub-tests previously here
+// (FindPendingReleases_WithCellID, FindPendingReleases_QueryError,
+// FindActiveReleases_WithCellID, FindActiveReleases_QueryError,
+// FindPendingReleasesByTenantEnv_QueryError, ListByEnv_QueryError,
+// GetLatestByBuildID_NotFound) ALL used `fakeDBTX` with empty / error
+// responses to verify that PostgresReleaseStore propagated the
+// query-error path and returned empty slices on no-result. Per T0.6
+// reshape matrix line 31, `coverage_boost_test.go` is classified MIXED
+// with "Mostly stub-error-path padding → DELETE-SCHEMA-MIRROR-DUPLICATE";
+// these 7 tests fall in that subset. The error-propagation invariant is
+// now structurally guaranteed by sqlc-generated code wrapping
+// `pgx.Conn.Query` (errors bubble up unmodified), and the "empty result
+// → empty slice" guarantee is preserved by ReleaseStoreSqlc.
+//
+// The cell-scoped routing invariant (cellID → WHERE cell_id = $1) is
+// covered by the static-content tests in cell_scoped_queries_test.go
+// against `queries/releases.sql` — a STRONGER invariant than runtime-
+// captured SQL since it scans the canonical SoT directly.
 
 // =============================================================================
 // Domain Store — ListByTenant query error
