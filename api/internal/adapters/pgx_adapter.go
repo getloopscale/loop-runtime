@@ -110,3 +110,17 @@ func (l *PoolEnvironmentLocker) WithLock(ctx context.Context, tenant, project, e
 	})
 	return err
 }
+
+// Compile-time assertion that PgxTxDBTX satisfies BOTH db.DBTX AND
+// db.SqlcBridge. The latter is critical: the lock-side adapter is
+// dispatched into sqlc-backed wrappers (via bridge() type-assertion)
+// during withEnvironmentLock-held mutations. Pre-fix-949aae1c, this
+// assertion was missing, the type satisfied DBTX but not SqlcBridge,
+// and the LIVE cleanroom dogfood retry surfaced the gap as a panic
+// in 18 of 52 specs (build_wrapper: bridge() type-assertion failed).
+//
+// If a future migration adds a NEW pgx.Tx wrapping adapter, the
+// equivalent compile-time assertions MUST be added — otherwise the
+// same class of bug recurs.
+var _ db.DBTX = (*PgxTxDBTX)(nil)
+var _ db.SqlcBridge = (*PgxTxDBTX)(nil)

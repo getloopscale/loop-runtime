@@ -124,6 +124,23 @@ func (a *PgxTxAdapter) GeneratedDB() generated.DBTX {
 	return a.Tx
 }
 
+// Compile-time assertion that BOTH PgxAdapter and PgxTxAdapter satisfy
+// db.DBTX AND db.SqlcBridge. Mirror of the assertions in
+// api/internal/adapters/pgx_adapter.go for the lock-side PgxTxDBTX
+// adapter. The two adapters target the same surface (pgx.Tx →
+// db.DBTX bridge with sqlc dispatch capability); both must remain
+// in lockstep.
+//
+// LIVE 2026-05-29 cleanroom dogfood retry surfaced that the lock-
+// side adapter was missing the SqlcBridge implementation while the
+// placement-side adapter (this one) had it. The compile-time
+// assertions on the lock-side now PREVENT that class of recurrence
+// — and these on the placement-side prevent the inverse.
+var _ DBTX = (*PgxAdapter)(nil)
+var _ SqlcBridge = (*PgxAdapter)(nil)
+var _ DBTX = (*PgxTxAdapter)(nil)
+var _ SqlcBridge = (*PgxTxAdapter)(nil)
+
 // pgxRows wraps pgx.Rows to implement our Rows interface.
 type pgxRows struct {
 	rows pgx.Rows
