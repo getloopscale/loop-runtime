@@ -126,7 +126,11 @@ func buildServerConfig(
 	// pre-migration the store returns sql.ErrNoRows and the CapChecker
 	// fails-open (no usage counted = allow).
 	if dbDeps != nil && dbDeps.StdDB != nil && dbDeps.PlanLimiter != nil {
-		costStore := db.NewSQLCostStore(dbDeps.StdDB)
+		// T2.2 #5 of sqlc-migration: cost_counters reads dispatch through
+		// SqlcBridge (DBTX) — dbAdapter is the pgx-based DBTX, not the
+		// legacy StdDB. StdDB is still retained for enforcement.LimitsStore
+		// which has a wider surface and lives outside api/internal/db/.
+		costStore := db.NewSQLCostStore(dbAdapter)
 		costChecker := enforcement.NewCapChecker(costStore)
 		// Reuse the same SQL `subscriptions.plan` lookup PlanLimiter uses,
 		// via a fresh NewSQLLimitsStore. PlanLimiter does not expose its
@@ -176,7 +180,8 @@ func buildServerConfig(
 		// usage map stays empty (graceful degradation).
 		billingHandler := routes.NewBillingHandler(billingPoolAdapter{pool: dbAdapter.Pool})
 		if dbDeps != nil && dbDeps.StdDB != nil {
-			billingHandler.WithCostSource(db.NewSQLCostStore(dbDeps.StdDB))
+			// T2.2 #5 of sqlc-migration: dispatches via SqlcBridge (DBTX).
+			billingHandler.WithCostSource(db.NewSQLCostStore(dbAdapter))
 		}
 		// T2.7 of maturity-3-62-to-4-0-roadmap: wire Stripe Customer
 		// Portal SDK if STRIPE_SECRET_KEY env is set. Production sets
