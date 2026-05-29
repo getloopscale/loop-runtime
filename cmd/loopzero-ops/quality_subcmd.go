@@ -19,6 +19,7 @@ import (
 	"github.com/loopzero/loopzero/pkg/quality/anonymousauth"
 	"github.com/loopzero/loopzero/pkg/quality/sqlcsync"
 	"github.com/loopzero/loopzero/pkg/quality/sqlctxprop"
+	"github.com/loopzero/loopzero/pkg/quality/tenantpredicate"
 	"github.com/loopzero/loopzero/pkg/quality/dashboardpromtool"
 	"github.com/loopzero/loopzero/pkg/quality/helmoverlapparity"
 	"github.com/loopzero/loopzero/pkg/quality/prodimagedigests"
@@ -330,6 +331,8 @@ func runQuality(args []string) int {
 		return runSqlcSync(args[1:])
 	case "sqlc-tx-prop":
 		return runSqlcTxProp(args[1:])
+	case "tenant-predicate":
+		return runTenantPredicate(args[1:])
 	case "corrections-txt-closed":
 		return runCorrectionsTxtClosed(args[1:])
 	case "script-count":
@@ -2416,5 +2419,37 @@ func runSqlcTxProp(args []string) int {
 		return 1
 	}
 	fmt.Printf("sqlc-tx-prop: PASS — %d .go files scanned; no pool-bound sqlc calls inside withEnvironmentLock\n", outcome.Scanned)
+	return 0
+}
+
+// runTenantPredicate enforces that every multi-tenant query carries the
+// `tenant_id = $N` predicate (or marks itself exempt). T0.5 of plan
+// 2026-05-29-sqlc-migration v1.2. Per platform-security-engineer condition
+// 1 (VETO-backed) + M-1 + M-2.
+func runTenantPredicate(args []string) int {
+	fs := flag.NewFlagSet("tenant-predicate", flag.ContinueOnError)
+	root := fs.String("root", ".", "repo root directory")
+	if err := fs.Parse(args); err != nil {
+		return 1
+	}
+	if absRoot, err := os.Getwd(); err == nil && *root == "." {
+		*root = absRoot
+	}
+
+	outcome, err := tenantpredicate.Check(tenantpredicate.Config{RepoRoot: *root})
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "tenant-predicate: %v\n", err)
+		return 5
+	}
+	if !outcome.Pass {
+		fmt.Fprintf(os.Stderr, "tenant-predicate: FAIL — %d violation(s) (scanned %d .sql files):\n",
+			len(outcome.Violations), outcome.Scanned)
+		for _, v := range outcome.Violations {
+			fmt.Fprintf(os.Stderr, "  [%s] %s @ %s:%s — %s\n", v.Reason, v.Query, v.File, v.Table, v.Detail)
+		}
+		fmt.Fprintf(os.Stderr, "\nFix: %s\n", tenantpredicate.ActionableFix())
+		return 1
+	}
+	fmt.Printf("tenant-predicate: PASS — %d .sql files scanned; every multi-tenant query carries tenant_id\n", outcome.Scanned)
 	return 0
 }
