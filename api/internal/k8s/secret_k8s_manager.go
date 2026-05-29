@@ -175,12 +175,23 @@ func (m *SecretK8sManager) CreateSecret(ctx context.Context, tenantID, projectID
 		},
 	}
 
-	_, err = m.runtimeDynamic.Resource(externalSecretGVR).Namespace(targetNamespace).Get(ctx, esName, metav1.GetOptions{})
+	existing, err := m.runtimeDynamic.Resource(externalSecretGVR).Namespace(targetNamespace).Get(ctx, esName, metav1.GetOptions{})
 	if err != nil {
 		if k8serrors.IsNotFound(err) {
 			_, err = m.runtimeDynamic.Resource(externalSecretGVR).Namespace(targetNamespace).Create(ctx, externalSecret, metav1.CreateOptions{})
 		}
 	} else {
+		// V9 dogfood 2026-05-29 cleanroom-fresh retry surfaced this bug:
+		// K8s Update is optimistic-concurrency by resourceVersion. The
+		// freshly-built `externalSecret` unstructured object has no
+		// resourceVersion → K8s rejects the Update with:
+		//   "metadata.resourceVersion: Invalid value: 0x0: must be
+		//    specified for an update"
+		// Fix: carry the existing object's resourceVersion forward so
+		// the Update commits against the same row the Get observed.
+		// This was THE V9-blocker — 13 dogfood specs failed on this
+		// path. Sponsor goal-directive 2026-05-29 unblocks via this fix.
+		externalSecret.SetResourceVersion(existing.GetResourceVersion())
 		_, err = m.runtimeDynamic.Resource(externalSecretGVR).Namespace(targetNamespace).Update(ctx, externalSecret, metav1.UpdateOptions{})
 	}
 	if err != nil {
