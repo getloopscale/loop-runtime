@@ -242,61 +242,25 @@ func TestEnvironmentTargetStoreDeleteTargetDBError(t *testing.T) {
 	}
 }
 
-// --- BuildStore.CancelActiveBuilds tests ---
+// --- BuildStore.CancelActiveBuilds tests — DELETED in T1.2b of plan
+//     2026-05-29-sqlc-migration v1.3 ---
+//
+// The 3 sub-tests previously here (TestBuildStoreCancelActiveBuilds
+// Success, _None, _DBError) + the fakeBuildDBForCancel/fakeCancelRows
+// helpers used stub responses to verify PostgresBuildStore.Cancel
+// ActiveBuilds returned (count, workflow_ids, err) correctly. With
+// T1.2b deleting PostgresBuildStore and replacing it with
+// BuildStoreSqlc (sqlc-backed via SqlcBridge), the fakes are
+// fundamentally incompatible.
+//
+// Classification per `.claude/knowledge-base/audits/2026-05-29-sqlc-
+// test-reshape-matrix.md`: pure stub-pass-through → DELETE-SCHEMA-
+// MIRROR-DUPLICATE for the result-shape tests; the count+filtering
+// behavior is preserved by BuildStoreSqlc.CancelActiveBuilds (filters
+// empty workflow_id from returned slice; matches legacy semantics).
+// Exercised end-to-end by the integration suite under api/tests/
+// integration/concurrent_builds_test.go (T1.2b reshape).
 
-func TestBuildStoreCancelActiveBuildsSuccess(t *testing.T) {
-	// Arrange: 3 builds cancelled, 2 with workflow IDs
-	fake := newFakeBuildDBForCancel([]string{"wf-1", "wf-2", ""})
-	store := db.NewPostgresBuildStore(fake)
-
-	// Act
-	count, wfIDs, err := store.CancelActiveBuilds(context.Background(), nil, "tenant-1", "proj-abc", "production")
-
-	// Assert
-	if err != nil {
-		t.Fatalf("expected no error, got %v", err)
-	}
-	if count != 3 {
-		t.Errorf("expected 3 cancelled builds, got %d", count)
-	}
-	if len(wfIDs) != 2 {
-		t.Errorf("expected 2 workflow IDs (empty ones filtered), got %d: %v", len(wfIDs), wfIDs)
-	}
-}
-
-func TestBuildStoreCancelActiveBuildsNone(t *testing.T) {
-	// Arrange
-	fake := newFakeBuildDBForCancel(nil)
-	store := db.NewPostgresBuildStore(fake)
-
-	// Act
-	count, wfIDs, err := store.CancelActiveBuilds(context.Background(), nil, "tenant-1", "proj-abc", "production")
-
-	// Assert
-	if err != nil {
-		t.Fatalf("expected no error, got %v", err)
-	}
-	if count != 0 {
-		t.Errorf("expected 0 cancelled builds, got %d", count)
-	}
-	if len(wfIDs) != 0 {
-		t.Errorf("expected 0 workflow IDs, got %v", wfIDs)
-	}
-}
-
-func TestBuildStoreCancelActiveBuildsDBError(t *testing.T) {
-	// Arrange
-	fake := &fakeBuildDBForCancel{queryErr: fmt.Errorf("connection refused")}
-	store := db.NewPostgresBuildStore(fake)
-
-	// Act
-	_, _, err := store.CancelActiveBuilds(context.Background(), nil, "tenant-1", "proj-abc", "production")
-
-	// Assert
-	if err == nil {
-		t.Fatal("expected error, got nil")
-	}
-}
 
 // --- Fakes for project delete tests ---
 
@@ -317,7 +281,10 @@ func (f *fakeDBTXForProject) Query(ctx context.Context, sql string, args ...any)
 }
 
 func (f *fakeDBTXForProject) QueryRow(ctx context.Context, sql string, args ...any) db.Row {
-	return &fakeRow{}
+	// fakeRowImpl shared no-op Row from secret_store_test.go — replaces
+	// the local fakeRow that was scoped to the now-deleted
+	// build_store_test.go (T1.2b tombstone).
+	return &fakeRowImpl{}
 }
 
 // fakeProjectRows implements db.Rows returning a single ProjectResult.
@@ -371,52 +338,3 @@ func (r *fakeMultiTargetRows) Scan(dest ...any) error {
 func (r *fakeMultiTargetRows) Err() error { return nil }
 func (r *fakeMultiTargetRows) Close()     {}
 
-// fakeBuildDBForCancel implements db.DBTX for testing CancelActiveBuilds.
-// CancelActiveBuilds uses Query with RETURNING to get workflow IDs.
-type fakeBuildDBForCancel struct {
-	workflowIDs []string // workflow IDs to return from RETURNING clause
-	queryErr    error
-}
-
-func newFakeBuildDBForCancel(workflowIDs []string) *fakeBuildDBForCancel {
-	return &fakeBuildDBForCancel{workflowIDs: workflowIDs}
-}
-
-func (f *fakeBuildDBForCancel) Exec(_ context.Context, _ string, _ ...any) (db.ExecResult, error) {
-	return db.ExecResult{}, nil
-}
-
-func (f *fakeBuildDBForCancel) Query(_ context.Context, _ string, _ ...any) (db.Rows, error) {
-	if f.queryErr != nil {
-		return nil, f.queryErr
-	}
-	return &fakeCancelRows{workflowIDs: f.workflowIDs, pos: -1}, nil
-}
-
-func (f *fakeBuildDBForCancel) QueryRow(_ context.Context, _ string, _ ...any) db.Row {
-	return &fakeRow{}
-}
-
-// fakeCancelRows implements db.Rows for CancelActiveBuilds RETURNING workflow_id.
-type fakeCancelRows struct {
-	workflowIDs []string
-	pos         int
-}
-
-func (r *fakeCancelRows) Next() bool {
-	r.pos++
-	return r.pos < len(r.workflowIDs)
-}
-
-func (r *fakeCancelRows) Scan(dest ...any) error {
-	if r.pos >= len(r.workflowIDs) {
-		return fmt.Errorf("no more rows")
-	}
-	if p, ok := dest[0].(*string); ok {
-		*p = r.workflowIDs[r.pos]
-	}
-	return nil
-}
-
-func (r *fakeCancelRows) Err() error { return nil }
-func (r *fakeCancelRows) Close()     {}

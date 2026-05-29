@@ -110,5 +110,8 @@ func (f *fakeQueryExecForInsert) Query(ctx context.Context, sql string, args ...
 }
 
 func (f *fakeQueryExecForInsert) QueryRow(ctx context.Context, sql string, args ...any) db.Row {
-	return &fakeRow{}
+	// fakeRowImpl shared no-op Row from secret_store_test.go — replaces
+	// the local fakeRow scoped to the now-deleted build_store_test.go
+	// (T1.2b tombstone).
+	return &fakeRowImpl{}
 }

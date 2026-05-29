@@ -17,14 +17,15 @@ import (
 )
 
 // StoreDeps holds all store instances created from the database adapter.
+//
+// T1.1c2c + T1.2b (plan 2026-05-29-sqlc-migration v1.3): BuildStore +
+// ReleaseStore field types use the db.* interfaces so the sqlc-backed
+// wrappers (BuildStoreSqlc, ReleaseStoreSqlc) drop in transparently. The
+// rest of StoreDeps already mixes concrete + interface types (EventStore,
+// SecretStore, BootstrapStore are interfaces; DomainStore + CellStore
+// are still concrete pending their T1.x/T2.x sqlc migrations).
 type StoreDeps struct {
-	BuildStore     *db.PostgresBuildStore
-	// T1.1c2c (plan 2026-05-29-sqlc-migration v1.3): ReleaseStore is now
-	// the db.ReleaseStore interface (was concrete *PostgresReleaseStore).
-	// Lets the wiring accept either *PostgresReleaseStore (legacy) or
-	// *ReleaseStoreSqlc (current), unblocks T1.1c2c swap, and aligns
-	// with the rest of the StoreDeps that already use interface types
-	// (e.g., EventStore, SecretStore, BootstrapStore).
+	BuildStore     db.BuildStore
 	ReleaseStore   db.ReleaseStore
 	EnvTargetStore *db.PostgresEnvironmentTargetStore
 	EventStore     sse.EventStore
@@ -44,7 +45,11 @@ type StoreDeps struct {
 // setupStores creates all data stores from the database adapter and config.
 func setupStores(dbAdapter *db.PgxAdapter, cfg config.Config, logger *slog.Logger) (*StoreDeps, error) {
 	// Sprint 2 stores
-	buildStore := db.NewPostgresBuildStore(dbAdapter)
+	// T1.2b (plan 2026-05-29-sqlc-migration v1.3): sqlc-backed wrapper.
+	// Satisfies db.BuildStore interface 1:1 — service field types
+	// unchanged. State-machine SafeTransition + concurrent-deploy
+	// rejection (Rule 6 + ARCH-002) preserved at store layer (D4).
+	buildStore := db.NewBuildStoreSqlc(dbAdapter)
 	// T1.1c2c (plan 2026-05-29-sqlc-migration v1.3): sqlc-backed wrapper.
 	// Satisfies db.ReleaseStore interface 1:1 — service field types
 	// unchanged. State-machine SafeTransition runs at store layer (D4).

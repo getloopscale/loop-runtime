@@ -17,10 +17,16 @@ import (
 	"github.com/loopzero/loopzero/api/internal/services"
 )
 
-// buildStoreAdmissionQuerier bridges *db.PostgresBuildStore to the
+// buildStoreAdmissionQuerier bridges the db.BuildStore interface to the
 // admission gate's ActiveBuildsQuerier contract. Roadmap 07.
+//
+// T1.2b (plan 2026-05-29-sqlc-migration v1.3): field type widened from
+// concrete *PostgresBuildStore (now deleted) to db.BuildStore interface
+// so BuildStoreSqlc + any future implementation drops in without churn.
+// Only FindActiveBuilds is consumed here — interface stays minimal at
+// the seam.
 type buildStoreAdmissionQuerier struct {
-	store *db.PostgresBuildStore
+	store db.BuildStore
 }
 
 func (q *buildStoreAdmissionQuerier) ActiveBuilds(ctx context.Context, cellID string) (admission.ActiveBuildsSnapshot, error) {

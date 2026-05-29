@@ -5,15 +5,12 @@ package db
 
 import (
 	"context"
-	"encoding/json"
 	"fmt"
-	"strings"
 	"testing"
 	"time"
 
 	"github.com/loopzero/loopzero/api/internal/domain"
 	loopzeroerrors "github.com/loopzero/loopzero/pkg/errors"
-	"github.com/loopzero/loopzero/pkg/statemachine"
 )
 
 // =============================================================================
@@ -65,96 +62,37 @@ import (
 //     deploy 1×202+1×409 invariant; reshaped in T1.1c2c)
 
 // =============================================================================
-// Build Store additional tests
+// Build Store tests — DELETED in T1.2b of plan
+// 2026-05-29-sqlc-migration v1.3
 // =============================================================================
+//
+// Build-related stub tests (Setters_NilTxUsesPool, GetBuildApps_NullJSON,
+// FindActiveBuilds_Empty, ListByProject_WithData, CancelActiveBuilds_
+// QueryError, UpdateStatus_QueuedToFailed, UpdateStatus_RunningToCancelling,
+// ListByProjectAndEnv_NoEnvFilter, ListByProjectAndEnv_QueryError,
+// ListByProjectAndEnv_NoEnvQueryError, ListByProject_QueryError) ALL used
+// fakeDBTX stub responses to verify PostgresBuildStore behaviors. With
+// T1.2b deleting PostgresBuildStore and replacing it with BuildStoreSqlc
+// (sqlc-backed via SqlcBridge), the stub-based pattern is incompatible.
+//
+// Classification per `.claude/knowledge-base/audits/2026-05-29-sqlc-test-
+// reshape-matrix.md` line 36 (stores_extra_test.go MIXED):
+//
+//   - KEEP-INVARIANT subset preserved by BuildStoreSqlc structurally:
+//       * UpdateStatus_QueuedToFailed + UpdateStatus_RunningToCancelling
+//         — state-machine SafeTransition at store layer (D4) + 3-way
+//         dispatch (ToRunning/ToTerminal/Other) covered by integration
+//         suite under api/tests/integration/concurrent_builds_test.go
+//
+//   - DELETE-SCHEMA-MIRROR-DUPLICATE subset: NilTxUsesPool family,
+//     NullJSON, FindActiveBuilds_Empty, ListByProject_WithData,
+//     CancelActiveBuilds_QueryError, ListByProjectAndEnv_*Error — sqlc
+//     compile-time + sqlcsync gate replace.
+//
+// Per matrix § Phase 2 reshape window: KEEP-INVARIANT subset moves to
+// real-PG-gated unit tests when pgxmock or LOOPZERO_E2E_DATABASE_URL harness
+// is wired.
 
-func TestBuildStore_SetWorkflowID_NilTxUsesPool(t *testing.T) {
-	fake := &fakeDBTX{execResult: ExecResult{RowsAffected: 1}}
-	store := NewPostgresBuildStore(fake)
-
-	err := store.SetWorkflowID(context.Background(), nil, "bld-1", "wf-abc")
-	if err != nil {
-		t.Fatalf("unexpected error: %v", err)
-	}
-}
-
-func TestBuildStore_SetAppsSpec_NilTxUsesPool(t *testing.T) {
-	fake := &fakeDBTX{execResult: ExecResult{RowsAffected: 1}}
-	store := NewPostgresBuildStore(fake)
-
-	apps := []BuildAppSpec{{Name: "api", Type: "server", Port: 8080}}
-	err := store.SetAppsSpec(context.Background(), nil, "bld-1", apps)
-	if err != nil {
-		t.Fatalf("unexpected error: %v", err)
-	}
-}
-
-func TestBuildStore_GetBuildApps_NullJSON(t *testing.T) {
-	fake := &fakeDBTX{
-		queryRowResult: &fakeRowWithData{
-			values: []any{json.RawMessage("null")},
-		},
-	}
-	store := NewPostgresBuildStore(fake)
-
-	apps, err := store.GetBuildApps(context.Background(), "bld-null-apps")
-	if err != nil {
-		t.Fatalf("unexpected error: %v", err)
-	}
-	if apps != nil {
-		t.Errorf("expected nil apps for null JSON, got: %v", apps)
-	}
-}
-
-func TestBuildStore_FindActiveBuilds_Empty(t *testing.T) {
-	rec := &recordingDBTX{}
-	store := NewPostgresBuildStore(rec)
-
-	builds, err := store.FindActiveBuilds(context.Background(), "cell-default")
-	if err != nil {
-		t.Fatalf("unexpected error: %v", err)
-	}
-	if builds == nil {
-		t.Error("expected non-nil slice")
-	}
-	if len(builds) != 0 {
-		t.Errorf("expected 0, got: %d", len(builds))
-	}
-}
-
-func TestBuildStore_ListByProject_WithData(t *testing.T) {
-	now := time.Now().UTC()
-	fake := &fakeDBTX{
-		queryRows: &fakeRowsMulti{
-			data: [][]any{
-				makeBuildRowValues(Build{
-					ID: "bld-lp-1", TenantID: "t1", ProjectID: "p1",
-					Environment: "prod", Status: "SUCCEEDED",
-					CorrelationID: "c1", CreatedBy: "u1", CreatedAt: now,
-				}),
-			},
-		},
-	}
-	store := NewPostgresBuildStore(fake)
-
-	builds, err := store.ListByProject(context.Background(), "t1", "p1", 10, 0)
-	if err != nil {
-		t.Fatalf("unexpected error: %v", err)
-	}
-	if len(builds) != 1 {
-		t.Errorf("expected 1, got: %d", len(builds))
-	}
-}
-
-func TestBuildStore_CancelActiveBuilds_QueryError(t *testing.T) {
-	fake := &fakeDBTX{queryErr: fmt.Errorf("db down")}
-	store := NewPostgresBuildStore(fake)
-
-	_, _, err := store.CancelActiveBuilds(context.Background(), fake, "t1", "p1", "prod")
-	if err == nil {
-		t.Fatal("expected error")
-	}
-}
 
 // =============================================================================
 // Environment Target Store additional tests
@@ -231,59 +169,6 @@ func TestTeamStore_AddMember_ExecError(t *testing.T) {
 	}
 }
 
-// =============================================================================
-// Build Store — UpdateStatus additional transitions
-// =============================================================================
-
-func TestBuildStore_UpdateStatus_QueuedToFailed(t *testing.T) {
-	now := time.Now().UTC()
-	fake := &fakeDBTX{
-		queryRowResult: &fakeRowWithData{
-			values: makeBuildRowValues(Build{
-				ID: "bld-qf", TenantID: "t1", ProjectID: "p1",
-				Environment: "prod", Status: "QUEUED",
-				CorrelationID: "c1", CreatedBy: "u1", CreatedAt: now,
-			}),
-		},
-		execResult: ExecResult{RowsAffected: 1},
-	}
-	store := NewPostgresBuildStore(fake)
-
-	build, err := store.UpdateStatus(context.Background(), fake, "bld-qf", string(statemachine.BuildFailedEvent))
-	if err != nil {
-		t.Fatalf("unexpected error: %v", err)
-	}
-	if build.Status != "FAILED" {
-		t.Errorf("expected FAILED, got: %s", build.Status)
-	}
-	// Verify finished_at is set for terminal state
-	if !strings.Contains(fake.capturedSQL, "finished_at") {
-		t.Error("expected SQL to set finished_at for terminal state")
-	}
-}
-
-func TestBuildStore_UpdateStatus_RunningToCancelling(t *testing.T) {
-	now := time.Now().UTC()
-	fake := &fakeDBTX{
-		queryRowResult: &fakeRowWithData{
-			values: makeBuildRowValues(Build{
-				ID: "bld-rc", TenantID: "t1", ProjectID: "p1",
-				Environment: "prod", Status: "RUNNING",
-				CorrelationID: "c1", CreatedBy: "u1", CreatedAt: now,
-			}),
-		},
-		execResult: ExecResult{RowsAffected: 1},
-	}
-	store := NewPostgresBuildStore(fake)
-
-	build, err := store.UpdateStatus(context.Background(), fake, "bld-rc", string(statemachine.BuildCancelRequested))
-	if err != nil {
-		t.Fatalf("unexpected error: %v", err)
-	}
-	if build.Status != "CANCELLING" {
-		t.Errorf("expected CANCELLING, got: %s", build.Status)
-	}
-}
 
 // =============================================================================
 // Idempotency Store additional tests
@@ -527,59 +412,6 @@ func TestCellStore_GetTenantCellID_NotFound(t *testing.T) {
 	_, err := store.GetTenantCellID(context.Background(), "nonexistent")
 	if err == nil {
 		t.Fatal("expected error for nonexistent tenant")
-	}
-}
-
-// =============================================================================
-// ListByProjectAndEnv — additional branch coverage
-// =============================================================================
-
-func TestBuildStore_ListByProjectAndEnv_NoEnvFilter(t *testing.T) {
-	fake := &fakeDBTX{
-		queryRowResult: &fakeRowWithData{values: []any{int(0)}},
-		queryRows:      &fakeRowsMulti{data: [][]any{}},
-	}
-	store := NewPostgresBuildStore(fake)
-
-	builds, total, err := store.ListByProjectAndEnv(context.Background(), "t1", "p1", "", 10, 0)
-	if err != nil {
-		t.Fatalf("unexpected error: %v", err)
-	}
-	if total != 0 {
-		t.Errorf("expected 0 total, got: %d", total)
-	}
-	if builds == nil {
-		t.Error("expected non-nil slice")
-	}
-}
-
-func TestBuildStore_ListByProjectAndEnv_QueryError(t *testing.T) {
-	fake := &fakeDBTX{queryErr: fmt.Errorf("connection refused")}
-	store := NewPostgresBuildStore(fake)
-
-	_, _, err := store.ListByProjectAndEnv(context.Background(), "t1", "p1", "prod", 10, 0)
-	if err == nil {
-		t.Fatal("expected error")
-	}
-}
-
-func TestBuildStore_ListByProjectAndEnv_NoEnvQueryError(t *testing.T) {
-	fake := &fakeDBTX{queryErr: fmt.Errorf("connection refused")}
-	store := NewPostgresBuildStore(fake)
-
-	_, _, err := store.ListByProjectAndEnv(context.Background(), "t1", "p1", "", 10, 0)
-	if err == nil {
-		t.Fatal("expected error")
-	}
-}
-
-func TestBuildStore_ListByProject_QueryError(t *testing.T) {
-	fake := &fakeDBTX{queryErr: fmt.Errorf("connection refused")}
-	store := NewPostgresBuildStore(fake)
-
-	_, err := store.ListByProject(context.Background(), "t1", "p1", 10, 0)
-	if err == nil {
-		t.Fatal("expected error")
 	}
 }
 

@@ -38,7 +38,11 @@ type controllerDeps struct {
 // fatal errors (e.g. unable to create the workflow submitter).
 func setupServices(cfg config.Config, dbAdapter *db.PgxAdapter, logger *slog.Logger) controllerDeps {
 	// ---- Stores ----
-	buildStore := db.NewPostgresBuildStore(dbAdapter)
+	// T1.2b (plan 2026-05-29-sqlc-migration v1.3): sqlc-backed wrapper.
+	// Satisfies db.BuildStore interface 1:1 — service field types
+	// unchanged. State-machine SafeTransition + concurrent-deploy
+	// rejection preserved at store layer (D4).
+	buildStore := db.NewBuildStoreSqlc(dbAdapter)
 	// T1.1c2c (plan 2026-05-29-sqlc-migration v1.3): sqlc-backed wrapper.
 	// Satisfies db.ReleaseStore interface 1:1 — service field types
 	// unchanged. State-machine SafeTransition runs at store layer (D4).
