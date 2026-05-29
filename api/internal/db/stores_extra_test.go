@@ -156,18 +156,9 @@ func TestDomainStore_UpdateCNAMECheck_Success(t *testing.T) {
 }
 
 // =============================================================================
-// Team Store additional tests
+// Team Store additional tests — DELETED in T2.1 #5 along with the
+// Team Store section in stores_test.go (same tombstone block applies)
 // =============================================================================
-
-func TestTeamStore_AddMember_ExecError(t *testing.T) {
-	fake := &fakeDBTX{execErr: fmt.Errorf("unique violation")}
-	store := &PostgresTeamStore{DB: fake}
-
-	err := store.AddMember(context.Background(), "t1", "github-user1", "member")
-	if err == nil {
-		t.Fatal("expected error")
-	}
-}
 
 
 // =============================================================================

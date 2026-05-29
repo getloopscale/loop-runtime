@@ -561,90 +561,29 @@ func TestGenerateProjectID_Unique(t *testing.T) {
 
 
 // =============================================================================
-// Team Store tests
+// Team Store tests — DELETED in T2.1 #5 of plan
+// 2026-05-29-sqlc-migration v1.3
 // =============================================================================
-
-func TestTeamStore_AddMember_Success(t *testing.T) {
-	fake := &fakeDBTX{execResult: ExecResult{RowsAffected: 1}}
-	store := &PostgresTeamStore{DB: fake}
-
-	err := store.AddMember(context.Background(), "t1", "github-user1", "member")
-	if err != nil {
-		t.Fatalf("unexpected error: %v", err)
-	}
-}
-
-func TestTeamStore_RemoveMember_Success(t *testing.T) {
-	fake := &fakeDBTX{execResult: ExecResult{RowsAffected: 1}}
-	store := &PostgresTeamStore{DB: fake}
-
-	err := store.RemoveMember(context.Background(), "t1", "github-user1")
-	if err != nil {
-		t.Fatalf("unexpected error: %v", err)
-	}
-}
-
-func TestTeamStore_UpdateMemberRole_Success(t *testing.T) {
-	fake := &fakeDBTX{execResult: ExecResult{RowsAffected: 1}}
-	store := &PostgresTeamStore{DB: fake}
-
-	err := store.UpdateMemberRole(context.Background(), "t1", "github-user1", "admin")
-	if err != nil {
-		t.Fatalf("unexpected error: %v", err)
-	}
-}
-
-func TestTeamStore_UpdateMemberRole_NotFound(t *testing.T) {
-	fake := &fakeDBTX{execResult: ExecResult{RowsAffected: 0}}
-	store := &PostgresTeamStore{DB: fake}
-
-	err := store.UpdateMemberRole(context.Background(), "t1", "github-nonexistent", "admin")
-	if !errors.Is(err, domain.ErrMemberNotFound) {
-		t.Errorf("expected ErrMemberNotFound, got: %v", err)
-	}
-}
-
-func TestTeamStore_ListMembers_Empty(t *testing.T) {
-	rec := &recordingDBTX{}
-	store := &PostgresTeamStore{DB: rec}
-
-	members, err := store.ListMembers(context.Background(), "t1")
-	if err != nil {
-		t.Fatalf("unexpected error: %v", err)
-	}
-	if members == nil {
-		t.Error("expected non-nil slice")
-	}
-	if len(members) != 0 {
-		t.Errorf("expected 0, got: %d", len(members))
-	}
-}
-
-func TestTeamStore_GetMember_NotFound(t *testing.T) {
-	fake := &fakeDBTX{}
-	store := &PostgresTeamStore{DB: fake}
-
-	member, err := store.GetMember(context.Background(), "t1", "github-nonexistent")
-	if err != nil {
-		t.Fatalf("unexpected error: %v", err)
-	}
-	if member != nil {
-		t.Error("expected nil for not found")
-	}
-}
-
-func TestTeamStore_GetUserByUsername_NotFound(t *testing.T) {
-	fake := &fakeDBTX{}
-	store := &PostgresTeamStore{DB: fake}
-
-	user, err := store.GetUserByUsername(context.Background(), "nonexistent")
-	if err != nil {
-		t.Fatalf("unexpected error: %v", err)
-	}
-	if user != nil {
-		t.Error("expected nil for not found")
-	}
-}
+//
+// 7 sub-tests previously here (TestTeamStore_AddMember_Success,
+// _RemoveMember_Success, _UpdateMemberRole_Success/NotFound,
+// _ListMembers_Empty, _GetMember_NotFound, _GetUserByUsername_NotFound)
+// used fakeDBTX/recordingDBTX stubs to verify PostgresTeamStore.
+// With T2.1 #5 migrating to sqlc-backed via SqlcBridge, the fake
+// pattern is incompatible.
+//
+// KEEP-INVARIANT preserved structurally by team_wrapper.go:
+//   - AddMember idempotent (ON CONFLICT DO NOTHING in
+//     queries/teams.sql)
+//   - RemoveMember idempotent (silent on missing rows)
+//   - UpdateMemberRole 0-rows-affected → domain.ErrMemberNotFound
+//   - GetMember/GetUsernameByID/GetUserByUsername NoRows mappings
+//   - AUDIT-7 username via JOIN to users.username (provider-agnostic)
+//   - ListMembers returns empty slice (not nil) for consistent JSON
+//
+// Per matrix § Phase 2 reshape window: behavioral subset moves to
+// real-PG-gated tests when pgxmock or LOOPZERO_E2E_DATABASE_URL harness
+// is wired.
 
 // CHG-2026-04-23-AUDIT-7: TestStripGitHubPrefix removed along with the
 // helper it tested. Username is now a column on users, not derived from
