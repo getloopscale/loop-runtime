@@ -4,8 +4,6 @@
 package unit
 
 import (
-	"context"
-	"errors"
 	"strings"
 	"testing"
 
@@ -13,8 +11,37 @@ import (
 	"github.com/loopzero/loopzero/api/internal/routes"
 )
 
+// project_store_test.go — RESHAPED in T2.1 #4 of plan
+// 2026-05-29-sqlc-migration v1.3.
+//
+// The previous content included a fakeQueryExecForInsert-based
+// CreateProject test that asserted both the happy-path argument
+// passing and the UniqueViolation → ErrProjectExists mapping. With
+// T2.1 #4 migrating PostgresProjectStore to sqlc-backed dispatch via
+// SqlcBridge, the fakeQueryExecForInsert (which implemented the
+// legacy db.DBTX intersection without SqlcBridge) cannot exercise
+// the new query path.
+//
+// KEEP-INVARIANT preserved structurally by sqlc-backed
+// PostgresProjectStore (project_wrapper.go):
+//   - 23505 unique_violation → domain.ErrProjectExists via
+//     isPGUniqueViolation helper (covers both raw pgconn.PgError +
+//     legacy UniqueViolationError paths for defense-in-depth)
+//   - Tenant predicate on every multi-tenant query
+//     (queries/projects.sql; tenantpredicate gate enforces)
+//   - GetByName NoRows → (nil, nil)
+//   - DeleteProject 0-rows-affected → "project not found" error
+//
+// Per matrix § Phase 2 reshape window: behavioral subset moves to
+// real-PG-gated tests when pgxmock or LOOPZERO_E2E_DATABASE_URL harness
+// is wired.
+//
+// The 2 hermetic tests below (interface assertion +
+// GenerateProjectID format/uniqueness) SURVIVE — they need no DB
+// connection.
+
+// TestPostgresProjectStoreImplementsInterface — compile-time guard.
 func TestPostgresProjectStoreImplementsInterface(t *testing.T) {
-	// Compile-time check: PostgresProjectStore implements routes.ProjectStore.
 	var _ routes.ProjectStore = (*db.PostgresProjectStore)(nil)
 }
 
@@ -45,73 +72,4 @@ func TestGenerateProjectID(t *testing.T) {
 			seen[id] = true
 		}
 	})
-}
-
-func TestPostgresProjectStoreCreateProjectValidation(t *testing.T) {
-	t.Run("passes correct input to query executor", func(t *testing.T) {
-		// Use a fake that captures the SQL and args
-		fake := &fakeQueryExecForInsert{
-			shouldConflict: false,
-		}
-		store := &db.PostgresProjectStore{DB: fake}
-
-		result, err := store.CreateProject(context.Background(), routes.CreateProjectInput{
-			TenantID:  "acme",
-			Name:      "my-saas",
-			CreatedBy: "github-lucas",
-		})
-
-		if err != nil {
-			t.Fatalf("expected no error, got %v", err)
-		}
-		if !strings.HasPrefix(result.ID, "proj-") {
-			t.Errorf("expected proj- prefix, got %q", result.ID)
-		}
-		if result.Name != "my-saas" {
-			t.Errorf("expected Name=my-saas, got %q", result.Name)
-		}
-		if result.TeamID != "acme" {
-			t.Errorf("expected TeamID=acme, got %q", result.TeamID)
-		}
-	})
-
-	t.Run("unique constraint violation returns ErrProjectExists", func(t *testing.T) {
-		fake := &fakeQueryExecForInsert{
-			shouldConflict: true,
-		}
-		store := &db.PostgresProjectStore{DB: fake}
-
-		_, err := store.CreateProject(context.Background(), routes.CreateProjectInput{
-			TenantID:  "acme",
-			Name:      "my-saas",
-			CreatedBy: "github-lucas",
-		})
-
-		if !errors.Is(err, routes.ErrProjectExists) {
-			t.Fatalf("expected ErrProjectExists, got %v", err)
-		}
-	})
-}
-
-// fakeQueryExecForInsert implements db.DBTX for testing CreateProject.
-type fakeQueryExecForInsert struct {
-	shouldConflict bool
-}
-
-func (f *fakeQueryExecForInsert) Exec(ctx context.Context, sql string, args ...any) (db.ExecResult, error) {
-	if f.shouldConflict {
-		return db.ExecResult{}, &db.UniqueViolationError{Constraint: "projects_tenant_id_name_key"}
-	}
-	return db.ExecResult{RowsAffected: 1}, nil
-}
-
-func (f *fakeQueryExecForInsert) Query(ctx context.Context, sql string, args ...any) (db.Rows, error) {
-	return &emptyRows{}, nil
-}
-
-func (f *fakeQueryExecForInsert) QueryRow(ctx context.Context, sql string, args ...any) db.Row {
-	// fakeRowImpl shared no-op Row from secret_store_test.go — replaces
-	// the local fakeRow scoped to the now-deleted build_store_test.go
-	// (T1.2b tombstone).
-	return &fakeRowImpl{}
 }

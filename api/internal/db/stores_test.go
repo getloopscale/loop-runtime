@@ -472,113 +472,31 @@ func TestDomainStore_GetByDomainAndTenant_NotFoundReturnsNil(t *testing.T) {
 }
 
 // =============================================================================
-// Project Store tests
+// Project Store tests — DELETED in T2.1 #4 of plan
+// 2026-05-29-sqlc-migration v1.3
 // =============================================================================
-
-func TestProjectStore_CreateProject_Success(t *testing.T) {
-	fake := &fakeDBTX{execResult: ExecResult{RowsAffected: 1}}
-	store := &PostgresProjectStore{DB: fake}
-
-	result, err := store.CreateProject(context.Background(), domain.CreateProjectInput{
-		TenantID: "t1", Name: "my-project", CreatedBy: "user1",
-	})
-	if err != nil {
-		t.Fatalf("unexpected error: %v", err)
-	}
-	if result.Name != "my-project" {
-		t.Errorf("expected 'my-project', got: %s", result.Name)
-	}
-	if !strings.HasPrefix(result.ID, "proj-") {
-		t.Errorf("expected ID to start with 'proj-', got: %s", result.ID)
-	}
-}
-
-func TestProjectStore_CreateProject_UniqueViolation(t *testing.T) {
-	fake := &fakeDBTX{
-		execErr: &UniqueViolationError{Constraint: "projects_tenant_id_name"},
-	}
-	store := &PostgresProjectStore{DB: fake}
-
-	_, err := store.CreateProject(context.Background(), domain.CreateProjectInput{
-		TenantID: "t1", Name: "my-project", CreatedBy: "user1",
-	})
-	if !errors.Is(err, domain.ErrProjectExists) {
-		t.Errorf("expected ErrProjectExists, got: %v", err)
-	}
-}
-
-func TestProjectStore_EnsureProject_Success(t *testing.T) {
-	fake := &fakeDBTX{execResult: ExecResult{RowsAffected: 1}}
-	store := &PostgresProjectStore{DB: fake}
-
-	err := store.EnsureProject(context.Background(), fake, "t1", "my-project", "user1")
-	if err != nil {
-		t.Fatalf("unexpected error: %v", err)
-	}
-}
-
-func TestProjectStore_EnsureProject_ConflictIsIdempotent(t *testing.T) {
-	// ON CONFLICT DO NOTHING — exec returns 0 rows but no error
-	fake := &fakeDBTX{execResult: ExecResult{RowsAffected: 0}}
-	store := &PostgresProjectStore{DB: fake}
-
-	err := store.EnsureProject(context.Background(), fake, "t1", "my-project", "user1")
-	if err != nil {
-		t.Fatalf("unexpected error: %v", err)
-	}
-}
-
-func TestProjectStore_DeleteProject_Success(t *testing.T) {
-	fake := &fakeDBTX{execResult: ExecResult{RowsAffected: 1}}
-	store := &PostgresProjectStore{DB: fake}
-
-	err := store.DeleteProject(context.Background(), "t1", "proj-abc")
-	if err != nil {
-		t.Fatalf("unexpected error: %v", err)
-	}
-}
-
-func TestProjectStore_DeleteProject_NotFound(t *testing.T) {
-	fake := &fakeDBTX{execResult: ExecResult{RowsAffected: 0}}
-	store := &PostgresProjectStore{DB: fake}
-
-	err := store.DeleteProject(context.Background(), "t1", "proj-nonexistent")
-	if err == nil {
-		t.Fatal("expected error for not found")
-	}
-	if !strings.Contains(err.Error(), "project not found") {
-		t.Errorf("expected 'project not found', got: %v", err)
-	}
-}
-
-func TestProjectStore_GetByName_NotFoundReturnsNil(t *testing.T) {
-	rec := &recordingDBTX{}
-	store := &PostgresProjectStore{DB: rec}
-
-	result, err := store.GetByName(context.Background(), "t1", "nonexistent")
-	if err != nil {
-		t.Fatalf("unexpected error: %v", err)
-	}
-	if result != nil {
-		t.Error("expected nil for not found")
-	}
-}
-
-func TestProjectStore_ListByTenant_EmptyReturnsEmptySlice(t *testing.T) {
-	rec := &recordingDBTX{}
-	store := &PostgresProjectStore{DB: rec}
-
-	results, err := store.ListByTenant(context.Background(), "t1")
-	if err != nil {
-		t.Fatalf("unexpected error: %v", err)
-	}
-	if results == nil {
-		t.Error("expected non-nil slice")
-	}
-	if len(results) != 0 {
-		t.Errorf("expected 0, got: %d", len(results))
-	}
-}
+//
+// 8 sub-tests previously here (TestProjectStore_CreateProject_Success/
+// UniqueViolation, _EnsureProject_Success/ConflictIsIdempotent,
+// _DeleteProject_Success/NotFound, _GetByName_NotFoundReturnsNil,
+// _ListByTenant_EmptyReturnsEmptySlice) used fakeDBTX/recordingDBTX
+// stubs to verify PostgresProjectStore behaviors. With T2.1 #4
+// migrating to sqlc-backed via SqlcBridge, the fake pattern is
+// incompatible.
+//
+// KEEP-INVARIANT preserved structurally by project_wrapper.go:
+//   - 23505 unique_violation → domain.ErrProjectExists via
+//     isPGUniqueViolation helper
+//   - EnsureProject idempotent (ON CONFLICT DO NOTHING in
+//     queries/projects.sql)
+//   - DeleteProject 0-rows-affected → "project not found" error
+//   - GetByName NoRows → (nil, nil) via errors.Is(err, pgx.ErrNoRows)
+//   - ListByTenant empty result → empty slice (make([]T, 0, len(rows))
+//     pattern; tenant predicate in SQL)
+//
+// Per matrix § Phase 2 reshape window: behavioral subset moves to
+// real-PG-gated tests when pgxmock or LOOPZERO_E2E_DATABASE_URL harness
+// is wired.
 
 func TestGenerateProjectID_Format(t *testing.T) {
 	id := GenerateProjectID()

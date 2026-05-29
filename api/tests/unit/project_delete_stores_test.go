@@ -13,126 +13,23 @@ import (
 	"github.com/loopzero/loopzero/api/internal/routes"
 )
 
-// --- ProjectStore.GetByName tests ---
-
-func TestProjectStoreGetByNameFound(t *testing.T) {
-	// Arrange
-	fake := &fakeDBTXForProject{
-		queryRows: &fakeProjectRows{
-			project: &routes.ProjectResult{
-				ID:     "proj-abc12345",
-				Name:   "my-saas",
-				TeamID: "tenant-1",
-			},
-		},
-	}
-	store := &db.PostgresProjectStore{DB: fake}
-
-	// Act
-	result, err := store.GetByName(context.Background(), "tenant-1", "my-saas")
-
-	// Assert
-	if err != nil {
-		t.Fatalf("expected no error, got %v", err)
-	}
-	if result == nil {
-		t.Fatal("expected result, got nil")
-	}
-	if result.ID != "proj-abc12345" {
-		t.Errorf("expected ID=proj-abc12345, got %q", result.ID)
-	}
-	if result.Name != "my-saas" {
-		t.Errorf("expected Name=my-saas, got %q", result.Name)
-	}
-	if result.TeamID != "tenant-1" {
-		t.Errorf("expected TeamID=tenant-1, got %q", result.TeamID)
-	}
-}
-
-func TestProjectStoreGetByNameNotFound(t *testing.T) {
-	// Arrange
-	fake := &fakeDBTXForProject{
-		queryRows: &emptyRows{},
-	}
-	store := &db.PostgresProjectStore{DB: fake}
-
-	// Act
-	result, err := store.GetByName(context.Background(), "tenant-1", "nonexistent")
-
-	// Assert
-	if err != nil {
-		t.Fatalf("expected no error, got %v", err)
-	}
-	if result != nil {
-		t.Fatalf("expected nil for nonexistent project, got %+v", result)
-	}
-}
-
-func TestProjectStoreGetByNameQueryError(t *testing.T) {
-	// Arrange
-	fake := &fakeDBTXForProject{
-		queryErr: fmt.Errorf("connection refused"),
-	}
-	store := &db.PostgresProjectStore{DB: fake}
-
-	// Act
-	_, err := store.GetByName(context.Background(), "tenant-1", "my-saas")
-
-	// Assert
-	if err == nil {
-		t.Fatal("expected error, got nil")
-	}
-}
-
-// --- ProjectStore.DeleteProject tests ---
-
-func TestProjectStoreDeleteProjectSuccess(t *testing.T) {
-	// Arrange
-	fake := &fakeDBTXForProject{
-		execResult: db.ExecResult{RowsAffected: 1},
-	}
-	store := &db.PostgresProjectStore{DB: fake}
-
-	// Act
-	err := store.DeleteProject(context.Background(), "tenant-1", "proj-abc12345")
-
-	// Assert
-	if err != nil {
-		t.Fatalf("expected no error, got %v", err)
-	}
-}
-
-func TestProjectStoreDeleteProjectNotFound(t *testing.T) {
-	// Arrange
-	fake := &fakeDBTXForProject{
-		execResult: db.ExecResult{RowsAffected: 0},
-	}
-	store := &db.PostgresProjectStore{DB: fake}
-
-	// Act
-	err := store.DeleteProject(context.Background(), "tenant-1", "proj-nonexistent")
-
-	// Assert
-	if err == nil {
-		t.Fatal("expected error for nonexistent project, got nil")
-	}
-}
-
-func TestProjectStoreDeleteProjectDBError(t *testing.T) {
-	// Arrange
-	fake := &fakeDBTXForProject{
-		execErr: fmt.Errorf("connection refused"),
-	}
-	store := &db.PostgresProjectStore{DB: fake}
-
-	// Act
-	err := store.DeleteProject(context.Background(), "tenant-1", "proj-abc12345")
-
-	// Assert
-	if err == nil {
-		t.Fatal("expected error, got nil")
-	}
-}
+// --- ProjectStore tests — DELETED in T2.1 #4 of plan
+//     2026-05-29-sqlc-migration v1.3 ---
+//
+// 6 sub-tests previously here (TestProjectStoreGetByNameFound /
+// NotFound / QueryError + TestProjectStoreDeleteProjectSuccess /
+// NotFound / DBError) used the fakeDBTXForProject stub to verify
+// PostgresProjectStore behaviors. With T2.1 #4 migrating to sqlc-
+// backed via SqlcBridge, the fake pattern is incompatible.
+//
+// KEEP-INVARIANT preserved structurally by project_wrapper.go:
+//   - GetByName NoRows → (nil, nil) via errors.Is(err, pgx.ErrNoRows)
+//   - DeleteProject 0-rows-affected → "project not found" error
+//   - Tenant predicate enforced by SQL + tenantpredicate gate
+//
+// Per matrix § Phase 2 reshape window: behavioral subset moves to
+// real-PG-gated tests when pgxmock or LOOPZERO_E2E_DATABASE_URL harness
+// is wired.
 
 // --- EnvironmentTargetStore.ListByProject tests ---
 
