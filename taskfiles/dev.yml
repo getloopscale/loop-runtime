@@ -46,6 +46,7 @@ tasks:
         check "psql"                 "psql --version"                   "sudo apt install postgresql-client"
         check "jq"                   "jq --version"                     "sudo apt install jq"
         check "curl"                 "curl --version"                   "sudo apt install curl"
+        check "sqlc (v1.31.1)"       "sqlc version | grep -q v1.31.1"   "go install github.com/sqlc-dev/sqlc/cmd/sqlc@v1.31.1  # EC-1 + D1 plan v1.2"
 
         echo ""
         echo "=== Optional Tools ==="

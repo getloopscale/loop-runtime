@@ -125,11 +125,58 @@ task db:migrate
 
 ---
 
+## Local sqlc Workflow (Phase 0 of `2026-05-29-sqlc-migration-plan.md` v1.2)
+
+The sqlc migration introduces a codegen step in `api/internal/db/`. Local workflow:
+
+**Install (pinned per plan D1 + EC-1):**
+
+```bash
+go install github.com/sqlc-dev/sqlc/cmd/sqlc@v1.31.1
+```
+
+`task doctor` checks for this binary at the pinned version under `=== Required Tools ===`. A version mismatch or absent binary produces a FAIL line — install before continuing.
+
+**Regenerate after editing `.sql` files:**
+
+```bash
+task db:generate                # regenerate api/internal/db/generated/*.go from queries/*.sql
+task db:verify-sync             # pkg/quality/sqlcsync gate: assert committed generated/ matches a fresh regen (CI runs this too)
+```
+
+**Re-render schema after applying a new migration:**
+
+```bash
+task db:render-schema           # spins ephemeral PostgreSQL 16, replays golang-migrate up, writes api/internal/db/schema.gen.sql
+git diff api/internal/db/schema.gen.sql   # MUST be the only change; if other diffs appear → render is non-deterministic
+git add api/internal/db/schema.gen.sql
+```
+
+**Authoritative pins (any drift = CI red):**
+
+- sqlc CLI: `v1.31.1` (pinned in `taskfiles/dev.yml` Required Tools check)
+- pgx driver: `pgx/v5` (pinned in `api/internal/db/sqlc.yaml` `gen.go.sql_package`)
+- PostgreSQL: `16` (pinned in `infra/scripts/ci/render-schema-gen-sql.sh` for render replay; matches DOKS managed PG)
+- golang-migrate: pinned in both CI render script AND `infra/scripts/production/run-migrations.sh` (version mismatch = render diff false positive)
+
+**When to NOT re-render `schema.gen.sql`:**
+
+- Editing only `queries/*.sql` (no schema change) → run `task db:generate` only
+- Editing only Go consumer code → no codegen action needed
+- Editing only tests → no codegen action needed
+
+`schema.gen.sql` re-renders ONLY when a new `.up.sql` migration lands.
+
+---
+
 ## Troubleshooting
 
 | Symptom | Likely cause | Fix |
 |---------|--------------|-----|
 | `task setup` fails at `infra:install:mgmt` step | LOOPZERO_DB_PASSWORD not in `loopzero-db-credentials` Secret | Run `bash infra/helmfile/scripts/generate-secrets.sh standalone-multi mgmt` first |
+| `task doctor` reports `[FAIL] sqlc (v1.31.1)` | sqlc CLI absent or wrong version | `go install github.com/sqlc-dev/sqlc/cmd/sqlc@v1.31.1` |
+| `task db:verify-sync` red on freshly-pulled branch | Locally-generated `generated/` diverges from committed (sqlc version drift) | Verify `sqlc version` returns `v1.31.1`; run `task db:generate` and commit any diff |
+| `task db:render-schema` produces non-empty diff after fresh run | Migration changed OR render non-determinism | If migration changed: `git add api/internal/db/schema.gen.sql && git commit`. If no migration change: render script is non-deterministic — see ADR-2 §"Reproducibility" |
 | Gitea pod CrashLoopBackOff `password authentication failed` | Wrong PASSWD in gitea chart values | Should be FIXED by T2.3 rewrite (helmfile chart values reference Secret) |
 | Kratos/Hydra render error `unexpected \\ in operand` | Old YAML escape `\"` | Should be FIXED by T2.2 (single-quoted YAML); if regression, see EC-02 docs |
 | Mac contributor: `base64 -d` unknown flag | macOS BSD vs GNU difference | FIXED by T2.3.b (uses `kubectl -o go-template` or `openssl base64 -d -A`) |
