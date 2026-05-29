@@ -157,6 +157,56 @@ tasks:
       - bash infra/scripts/ci/ensure-project.sh
 
   # ---------------------------------------------------------------------------
+  # sqlc migration (T0.2 of plan 2026-05-29-sqlc-migration v1.2)
+  # ---------------------------------------------------------------------------
+  db:render-schema:
+    desc: Render api/internal/db/schema.gen.sql via ephemeral PG 16 + golang-migrate replay (deterministic; EC-4 trap + EC-17 random port + EC-2 sqlc pre-flight)
+    cmds:
+      - bash infra/scripts/ci/render-schema-gen-sql.sh
+
+  db:generate:
+    desc: Regenerate api/internal/db/generated/*.go from queries/*.sql via sqlc v1.31.1
+    cmds:
+      - |
+        cd api/internal/db
+        if ! command -v sqlc >/dev/null; then
+          echo "[FAIL] sqlc not installed — run 'task doctor' for install instructions"
+          exit 1
+        fi
+        VERSION="$(sqlc version)"
+        if [ "$VERSION" != "v1.31.1" ]; then
+          echo "[FAIL] sqlc version mismatch: $VERSION (expected v1.31.1)"
+          echo "       Reinstall: go install github.com/sqlc-dev/sqlc/cmd/sqlc@v1.31.1"
+          exit 1
+        fi
+        sqlc generate
+        echo "[PASS] sqlc generate completed; verify api/internal/db/generated/ and commit any diff"
+
+  db:verify-sync:
+    desc: Verify committed api/internal/db/generated/ is in-sync with a fresh `sqlc generate` (pkg/quality/sqlcsync gate; CI runs this too)
+    cmds:
+      - |
+        if ! command -v sqlc >/dev/null; then
+          echo "[FAIL] sqlc not installed"
+          exit 1
+        fi
+        TMPDIR=$(mktemp -d)
+        trap 'rm -rf "$TMPDIR"' EXIT
+        cp -r api/internal/db/queries "$TMPDIR/"
+        cp api/internal/db/sqlc.yaml "$TMPDIR/"
+        cp api/internal/db/schema.gen.sql "$TMPDIR/"
+        cd "$TMPDIR"
+        sqlc generate
+        cd - >/dev/null
+        if diff -r api/internal/db/generated "$TMPDIR/generated" >/dev/null; then
+          echo "[PASS] generated/ in-sync with sqlc generate"
+        else
+          echo "[FAIL] generated/ out-of-sync — run 'task db:generate' && commit"
+          diff -r api/internal/db/generated "$TMPDIR/generated" | head -30
+          exit 1
+        fi
+
+  # ---------------------------------------------------------------------------
   # S2: E2E seed data
   # ---------------------------------------------------------------------------
   dev:seed:e2e:
