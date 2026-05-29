@@ -44,6 +44,7 @@ var TenantOwnedTables = []string{
 	"idempotency_keys",
 	"memberships",
 	"tenant_members",
+	"project_repositories",     // T2.1 #3 add (project ↔ GitHub repo link; UNIQUE on repo_full_name, partitioned by tenant_id)
 	"repositories",
 	"preview_environments",
 	"teams",

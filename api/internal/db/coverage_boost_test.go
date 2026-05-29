@@ -6,8 +6,6 @@ package db
 import (
 	"context"
 	"errors"
-	"fmt"
-	"strings"
 	"testing"
 
 	"github.com/loopzero/loopzero/api/internal/domain"
@@ -131,57 +129,17 @@ func TestBootstrapStore_Bootstrap_Idempotent(t *testing.T) {
 // TenantDeletionStoreSqlc.GetPendingDeletion (explicit
 // `errors.Is(err, pgx.ErrNoRows)` check in tenant_wrapper.go); Phase
 // 2 reshape moves the behavioral test to a real-PG harness.
-func TestStores_Getters_NotFoundAndQueryError(t *testing.T) {
-	type getterCall func(fake *fakeDBTX) (interface{}, error)
-	cases := []struct {
-		name string
-		call getterCall
-	}{
-		{
-			name: "RepositoryStore_GetInstallation",
-			call: func(fake *fakeDBTX) (interface{}, error) {
-				return (&PostgresRepositoryStore{DB: fake}).GetInstallation(context.Background(), 12345)
-			},
-		},
-		{
-			name: "RepositoryStore_GetByRepo",
-			call: func(fake *fakeDBTX) (interface{}, error) {
-				return (&PostgresRepositoryStore{DB: fake}).GetByRepo(context.Background(), "octocat/myapp")
-			},
-		},
-	}
-	for _, c := range cases {
-		t.Run(c.name+"_NotFound", func(t *testing.T) {
-			result, err := c.call(&fakeDBTX{})
-			if err != nil {
-				t.Fatalf("unexpected error: %v", err)
-			}
-			// Reflect-free nil check: typed-nil interface holds a non-nil
-			// runtime value, so we need to check the underlying concrete value.
-			// Each store returns a *Pointer; nil pointer wrapped in interface
-			// is what we expect for the "not found" case.
-			if !isNilPointer(result) {
-				t.Errorf("expected nil for not-found case, got: %+v", result)
-			}
-		})
-		t.Run(c.name+"_QueryError", func(t *testing.T) {
-			_, err := c.call(&fakeDBTX{queryErr: errors.New("db down")})
-			if err == nil {
-				t.Fatal("expected error from QueryError fake")
-			}
-		})
-	}
-}
+// TestStores_Getters_NotFoundAndQueryError — DELETED in T2.1 #3.
+//
+// The consolidated read-side getter test became vacuous after T1.4
+// removed the TenantDeletionStore case and T2.1 #3 removes the
+// Repository cases (the only 2 cases that remained). The "NoRows →
+// (nil, nil) mapping" invariant is preserved structurally by each
+// migrated wrapper (explicit `errors.Is(err, pgx.ErrNoRows)` check).
+//
+// isNilPointer helper deleted along with this test (unused after the
+// function deletion).
 
-// isNilPointer returns true if the interface holds a typed nil pointer.
-// Workaround for Go interface { *T }-equals-nil gotcha: comparing an
-// interface containing a nil *T to literal nil returns false.
-func isNilPointer(v interface{}) bool {
-	if v == nil {
-		return true
-	}
-	return fmt.Sprintf("%v", v) == "<nil>"
-}
 
 // TestTenantDeletionStore_* (4 tests) — DELETED in T1.4 along with the
 // Tenant Deletion Store section block above. See tombstone block at
@@ -189,155 +147,36 @@ func isNilPointer(v interface{}) bool {
 // obligation.
 
 // =============================================================================
-// Repository Store tests (0% → covered)
+// Repository Store tests — DELETED in T2.1 #3 of plan
+// 2026-05-29-sqlc-migration v1.3
 // =============================================================================
+//
+// 13 sub-tests previously here
+// (TestRepositoryStore_SaveInstallation_Success/Error,
+// _DeleteInstallation_Success/Error, _LinkRepository_Success/
+// UsesUpsertForIdempotency/Error, _UnlinkRepository_Success/
+// NotLinked/Error, _GetByProject_NotFound/QueryError) used fakeDBTX-
+// based stubs to verify PostgresRepositoryStore behaviors. With T2.1
+// #3 migrating to sqlc-backed via SqlcBridge, the fake pattern is
+// incompatible.
+//
+// KEEP-INVARIANT preserved structurally by repository_wrapper.go:
+//   - Idempotent UPSERT (ON CONFLICT (id) for installations;
+//     ON CONFLICT (repo_full_name) for project_repositories) lives in
+//     queries/repositories.sql
+//   - ErrRepositoryNotLinked sentinel (CHG-2026-04-23-AUDIT-21)
+//     returned by UnlinkRepository when rows-affected == 0
+//   - GetByRepo cross-tenant (webhook path; tenantpredicate:exempt)
+//   - GetByProject tenant-scoped (gate enforces tenant_id predicate)
+//
+// Per matrix § Phase 2 reshape window: behavioral subset moves to
+// real-PG-gated tests when pgxmock or LOOPZERO_E2E_DATABASE_URL harness
+// is wired.
+//
+// TestGenerateRepoID_HasPrefix + TestGenerateRepoID_IsUnique below
+// (lines 342 + 349 of the pre-T2.1#3 file) STILL PASS — they test
+// pure helper logic with no DBTX dependency.
 
-func TestRepositoryStore_SaveInstallation_Success(t *testing.T) {
-	fake := &fakeDBTX{}
-	store := &PostgresRepositoryStore{DB: fake}
-
-	err := store.SaveInstallation(context.Background(), 12345, "octocat", "User", nil)
-	if err != nil {
-		t.Fatalf("unexpected error: %v", err)
-	}
-}
-
-func TestRepositoryStore_SaveInstallation_Error(t *testing.T) {
-	fake := &fakeDBTX{execErr: errors.New("db down")}
-	store := &PostgresRepositoryStore{DB: fake}
-
-	err := store.SaveInstallation(context.Background(), 12345, "octocat", "User", nil)
-	if err == nil {
-		t.Fatal("expected error")
-	}
-}
-
-// GetInstallation NotFound/QueryError consolidated into TestStores_Getters_NotFoundAndQueryError.
-
-func TestRepositoryStore_DeleteInstallation_Success(t *testing.T) {
-	fake := &fakeDBTX{}
-	store := &PostgresRepositoryStore{DB: fake}
-
-	err := store.DeleteInstallation(context.Background(), 12345)
-	if err != nil {
-		t.Fatalf("unexpected error: %v", err)
-	}
-}
-
-func TestRepositoryStore_DeleteInstallation_Error(t *testing.T) {
-	fake := &fakeDBTX{execErr: errors.New("db down")}
-	store := &PostgresRepositoryStore{DB: fake}
-
-	err := store.DeleteInstallation(context.Background(), 12345)
-	if err == nil {
-		t.Fatal("expected error")
-	}
-}
-
-func TestRepositoryStore_LinkRepository_Success(t *testing.T) {
-	fake := &fakeDBTX{}
-	store := &PostgresRepositoryStore{DB: fake}
-
-	err := store.LinkRepository(context.Background(), "tn-acme", "myapp", "octocat/myapp", 12345, "main")
-	if err != nil {
-		t.Fatalf("unexpected error: %v", err)
-	}
-}
-
-// CHG-2026-04-29-DOGFOOD-REAL-E2E iter 13 / Achado #23.
-// project_repositories.repo_full_name has a UNIQUE constraint and the CLI
-// `loopzero connect` contract requires idempotency (re-run with same params must
-// succeed). Without ON CONFLICT, the second LinkRepository call exploded with
-// a constraint violation, surfacing as 500. This test asserts the upsert
-// pattern is in the generated SQL so the next refactor can't silently lose it.
-func TestRepositoryStore_LinkRepository_UsesUpsertForIdempotency(t *testing.T) {
-	fake := &fakeDBTX{}
-	store := &PostgresRepositoryStore{DB: fake}
-
-	if err := store.LinkRepository(context.Background(), "tn-acme", "myapp", "octocat/myapp", 12345, "main"); err != nil {
-		t.Fatalf("unexpected error: %v", err)
-	}
-	if !strings.Contains(fake.capturedSQL, "ON CONFLICT (repo_full_name)") {
-		t.Errorf("expected upsert ON CONFLICT (repo_full_name), got SQL:\n%s", fake.capturedSQL)
-	}
-	if !strings.Contains(fake.capturedSQL, "DO UPDATE SET") {
-		t.Errorf("expected DO UPDATE SET in upsert, got SQL:\n%s", fake.capturedSQL)
-	}
-	if !strings.Contains(fake.capturedSQL, "updated_at = now()") {
-		t.Errorf("expected updated_at refresh in conflict path, got SQL:\n%s", fake.capturedSQL)
-	}
-}
-
-func TestRepositoryStore_LinkRepository_Error(t *testing.T) {
-	fake := &fakeDBTX{execErr: errors.New("constraint violation")}
-	store := &PostgresRepositoryStore{DB: fake}
-
-	err := store.LinkRepository(context.Background(), "tn-acme", "myapp", "octocat/myapp", 12345, "main")
-	if err == nil {
-		t.Fatal("expected error")
-	}
-}
-
-func TestRepositoryStore_UnlinkRepository_Success(t *testing.T) {
-	// AUDIT-21: success requires RowsAffected > 0. Zero rows -> ErrRepositoryNotLinked.
-	fake := &fakeDBTX{execResult: ExecResult{RowsAffected: 1}}
-	store := &PostgresRepositoryStore{DB: fake}
-
-	err := store.UnlinkRepository(context.Background(), "tn-acme", "myapp")
-	if err != nil {
-		t.Fatalf("unexpected error: %v", err)
-	}
-}
-
-// CHG-2026-04-23-AUDIT-21: previously UnlinkRepository returned nil regardless
-// of whether any row was deleted, causing DELETE /projects/{name}/connect to
-// return 200 OK even when there was nothing to disconnect. Now the store
-// returns ErrRepositoryNotLinked when RowsAffected == 0, letting the handler
-// surface 404 instead of a misleading success.
-func TestRepositoryStore_UnlinkRepository_NotLinked(t *testing.T) {
-	fake := &fakeDBTX{execResult: ExecResult{RowsAffected: 0}}
-	store := &PostgresRepositoryStore{DB: fake}
-
-	err := store.UnlinkRepository(context.Background(), "tn-acme", "myapp")
-	if !errors.Is(err, ErrRepositoryNotLinked) {
-		t.Fatalf("want ErrRepositoryNotLinked, got %v", err)
-	}
-}
-
-func TestRepositoryStore_UnlinkRepository_Error(t *testing.T) {
-	fake := &fakeDBTX{execErr: errors.New("db down")}
-	store := &PostgresRepositoryStore{DB: fake}
-
-	err := store.UnlinkRepository(context.Background(), "tn-acme", "myapp")
-	if err == nil {
-		t.Fatal("expected error")
-	}
-}
-
-// GetByRepo NotFound/QueryError consolidated into TestStores_Getters_NotFoundAndQueryError.
-
-func TestRepositoryStore_GetByProject_NotFound(t *testing.T) {
-	fake := &fakeDBTX{}
-	store := &PostgresRepositoryStore{DB: fake}
-
-	repo, err := store.GetByProject(context.Background(), "tn-acme", "myapp")
-	if err != nil {
-		t.Fatalf("unexpected error: %v", err)
-	}
-	if repo != nil {
-		t.Error("expected nil for nonexistent project")
-	}
-}
-
-func TestRepositoryStore_GetByProject_QueryError(t *testing.T) {
-	fake := &fakeDBTX{queryErr: errors.New("db down")}
-	store := &PostgresRepositoryStore{DB: fake}
-
-	_, err := store.GetByProject(context.Background(), "tn-acme", "myapp")
-	if err == nil {
-		t.Fatal("expected error")
-	}
-}
 
 func TestGenerateRepoID_HasPrefix(t *testing.T) {
 	id := generateRepoID()
