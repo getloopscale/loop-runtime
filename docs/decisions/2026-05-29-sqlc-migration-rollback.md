@@ -1,10 +1,10 @@
 # ADR — sqlc migration rollback playbook (operator-witnessed criteria + atomic rollback mechanism)
 
 **Date:** 2026-05-29
-**Status:** Accepted (APPROVED WITH CONDITIONS — MEET-2026-05-29-001)
+**Status:** Accepted (APPROVED WITH CONDITIONS — MEET-2026-05-29-001) · **Sub-amended 2026-05-29** per `MEET-ASYNC-AMENDMENT-2026-05-29-001-sqlc-develop-direct.md` (D8 → D8' supersession): rollback mechanism changes from single squash-merge inverse to per-commit-range inversion. See § 2.2 sub-amendment block.
 **Tier:** T3 (architecture, stack, critical flow — coupled to ADR-1)
 **Authors:** Paulo (sponsor + operator) · Ralph (AI executor)
-**Meeting:** MEET-2026-05-29-001 (12 specialists)
+**Meeting:** MEET-2026-05-29-001 (12 specialists) + `MEET-ASYNC-AMENDMENT-2026-05-29-001-sqlc-develop-direct.md` (sponsor-direct)
 **Coupled ADRs:** [`2026-05-29-sqlc-adoption.md`](./2026-05-29-sqlc-adoption.md) · [`2026-05-29-schema-gen-sql-render.md`](./2026-05-29-schema-gen-sql-render.md)
 
 ---
@@ -46,10 +46,33 @@ This ADR is a **precondition** of ADR-1. M-6 of ADR-1 explicitly requires that t
 
 ### 2.2 Rollback mechanism
 
-The migration merges to `develop` via squash-commit (per ADR-1 M-8). This makes the rollback mechanism atomic:
+> **Sub-amendment 2026-05-29 (CURRENT mechanism — supersedes original below):**
+>
+> Per `MEET-ASYNC-AMENDMENT-2026-05-29-001-sqlc-develop-direct.md`, the migration now lands as **per-commit incremental** on `develop` (no squash-merge event per D8'). The rollback mechanism therefore changes from single-SHA atomic inversion to **per-commit-range inversion**:
+>
+> 1. **Identify the sqlc commit range** via `git log --grep="sqlc" --oneline` (every substantive sqlc-migration commit carries `sqlc` in its subject line per the canonical commit convention adopted for this migration). Verify range is contiguous; flag any non-sqlc commits interleaved (these need separate review).
+> 2. **Capture range as variables:** `FIRST=$(git log --grep="sqlc" --oneline | tail -1 | awk '{print $1}')` and `LAST=$(git log --grep="sqlc" --oneline | head -1 | awk '{print $1}')`.
+> 3. **Sequential per-commit inversion in chronological-reverse order** (newest sqlc commit first, oldest last) — use Git's standard inverse-commit operation against each SHA in the range. Single combined inversion commit avoids polluting history with N revert commits: produce a working-tree result via stash-pop pattern + commit as one "rollback ADR-3 §2.2-sub-amendment" message referencing the range bounds.
+> 4. **Run `task test` + `task quality:gates` + `task dogfood:full`** to confirm the inverted state is GREEN before push.
+> 5. **Push the single rollback commit to develop.**
+>
+> Operator-witnessed only (Ralph cannot execute per `.claude/rules/workflow.md` § Git Rules; the operator-witnessed carve-out from § 2.6 of this ADR still applies). The rollback commit subject MUST reference the sub-amendment + the range bounds + the triggering T-1..T-6 condition.
+>
+> **Risks specific to per-commit-range inversion (vs original squash):**
+> - Interleaved non-sqlc commits in the range → require manual triage (skip non-sqlc, invert only sqlc); higher cognitive load on operator
+> - Merge conflicts during inversion if parallel work touched the same files → operator handles per-conflict per standard merge conflict workflow
+> - Loss of single rollback-SHA shorthand → audit trail now references "rollback commit + range bounds" tuple instead of "rollback SHA"
+>
+> **Mitigation:** M-15 daily diary explicitly tracks the contiguous sqlc commit range; any interleaved commits are flagged in the diary at write time so the rollback range is pre-computed.
+
+---
+
+**Original mechanism (preserved for audit trail; superseded by sub-amendment above):**
+
+The migration merges to `develop` via squash-commit (per ADR-1 M-8 — **superseded by D8'**). This makes the rollback mechanism atomic:
 
 1. Identify the squash-merge SHA (call it `<sqlc-merge-sha>`).
-2. Create a new commit on `develop` that inverts `<sqlc-merge-sha>` using the standard Git inverse-commit operation (`git revert <sqlc-merge-sha>`). The new commit is created on `develop` directly.
+2. Create a new commit on `develop` that inverts `<sqlc-merge-sha>` using the standard Git inverse-commit operation. The new commit is created on `develop` directly.
 3. Run `task test` + `task quality:gates` + `task dogfood:full` to confirm the inverted state is GREEN.
 4. Push the new commit to `develop`.
 
