@@ -47,6 +47,13 @@ var _ = Describe("Journey 03: Secrets Lifecycle", Ordered, Label("journey"), fun
 
 		workDir = copyFixture("secret-app")
 		initGitRepo(workDir)
+
+		// V9 L15: loopzero secret set requires project record in DB. With L8
+		// env-per-journey isolation, each journey is now truly isolated, so
+		// the project must be created within the journey itself BEFORE
+		// attempting "sets secret before deploy". Pre-L8, journeys
+		// implicitly shared the project record from earlier specs.
+		runLoopZeroInDir(workDir, "project", "create", project, "--json")
 	})
 
 	AfterAll(func() {
