@@ -23,7 +23,7 @@ import (
 var _ = Describe("Journey: Logs", Ordered, Label("journey"), func() {
 	const (
 		project = "logs-fixture"
-		env     = "production"
+		env     = "j-logs"
 	)
 
 	var (

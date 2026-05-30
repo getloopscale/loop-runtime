@@ -23,7 +23,7 @@ var _ = Describe("Journey 01: Solo Deploy", Ordered, Label("journey", "smoke"), 
 	const (
 		project = "solo-server"
 		app     = "api"
-		env     = "production"
+		env     = "j-solo"
 	)
 
 	var (

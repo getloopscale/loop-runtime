@@ -26,7 +26,7 @@ var _ = Describe("Journey 03: Secrets Lifecycle", Ordered, Label("journey"), fun
 	const (
 		project    = "secret-app"
 		app        = "api"
-		env        = "production"
+		env        = "j-secrets"
 		secretName = "SECRET_PING"
 	)
 

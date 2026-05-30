@@ -22,7 +22,7 @@ var _ = Describe("Journey 04: Scale", Ordered, Label("journey"), func() {
 	const (
 		project = "solo-server"
 		app     = "api"
-		env     = "production"
+		env     = "j-scale"
 	)
 
 	var (

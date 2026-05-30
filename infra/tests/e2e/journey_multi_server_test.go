@@ -23,7 +23,7 @@ import (
 var _ = Describe("Journey 02: Multi-Server", Ordered, Label("journey"), func() {
 	const (
 		project = "multi-server"
-		env     = "production"
+		env     = "j-multi"
 	)
 
 	var (

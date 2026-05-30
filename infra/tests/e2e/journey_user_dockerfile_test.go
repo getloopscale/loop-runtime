@@ -38,7 +38,7 @@ var _ = Describe("Journey: User Dockerfile happy path", Ordered, Label("journey"
 	const (
 		project = "rollout-canary-app" // existing fixture has build: dockerfile + clean Dockerfile
 		app     = "api"
-		env     = "production"
+		env     = "j-udfile-a"
 	)
 
 	var workDir string
@@ -93,7 +93,7 @@ var _ = Describe("Journey: User Dockerfile happy path", Ordered, Label("journey"
 var _ = Describe("Journey: User Dockerfile rejection path", Ordered, Label("journey", "user-dockerfile"), func() {
 	const (
 		project = "malicious-dockerfile"
-		env     = "production"
+		env     = "j-udfile-b"
 	)
 
 	var workDir string

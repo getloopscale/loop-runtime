@@ -26,7 +26,7 @@ var _ = Describe("Journey 07: Custom Domain", Ordered, Label("journey"), func() 
 	const (
 		project = "solo-server"
 		app     = "api"
-		env     = "production"
+		env     = "j-domain"
 	)
 
 	var (

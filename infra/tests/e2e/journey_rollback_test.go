@@ -23,7 +23,7 @@ var _ = Describe("Journey 06: Rollback", Ordered, Label("journey"), func() {
 	const (
 		project = "versioned-app"
 		app     = "api"
-		env     = "production"
+		env     = "j-rollback"
 	)
 
 	var (

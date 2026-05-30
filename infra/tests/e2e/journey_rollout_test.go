@@ -56,7 +56,7 @@ var _ = Describe("Journey 13: Progressive Delivery (canary)", Ordered, Label("jo
 	const (
 		project = "rollout-canary-app"
 		app     = "api"
-		env     = "production"
+		env     = "j-rollout-a"
 	)
 
 	var (
@@ -182,7 +182,7 @@ var _ = Describe("Journey 13b: Progressive Delivery — Canary auto-abort", Orde
 	const (
 		project = "rollout-bad-health"
 		app     = "api"
-		env     = "production"
+		env     = "j-rollout-b"
 	)
 
 	var (
