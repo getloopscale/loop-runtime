@@ -268,9 +268,14 @@ func (c *SyncClient) TriggerSync(ctx context.Context, appName string) error {
 // This method is intended to be called by TriggerSync as a defensive measure
 // before the sync POST. Best-effort: callers should NOT block on errors here.
 //
-// Uses a bounded timeout (15s) so a slow repo-server cannot stall sync.
+// Uses a bounded timeout so a slow repo-server cannot stall sync.
+// V9 dogfood 2026-05-30 cascade fix #7: increased 15s → 60s. Under
+// dogfood concurrency the ArgoCD repo-server processes multiple
+// refresh requests sequentially; 15s exhausts before the server
+// completes the re-clone+re-render pass for prior requests in queue.
+// 60s gives 4x headroom while still bounding the worst-case stall.
 func (c *SyncClient) hardRefresh(ctx context.Context, appName string) error {
-	refreshCtx, cancel := context.WithTimeout(ctx, 15*time.Second)
+	refreshCtx, cancel := context.WithTimeout(ctx, 60*time.Second)
 	defer cancel()
 
 	url := fmt.Sprintf("%s/api/v1/applications/%s?refresh=hard", c.baseURL, appName)

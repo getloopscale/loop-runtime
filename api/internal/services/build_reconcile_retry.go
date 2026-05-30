@@ -16,9 +16,18 @@ import (
 
 // maxActivationAttempts is the maximum number of times the reconcile loop will
 // retry release activation before failing the build outright.
-// BRC-003 fix: prevents a RELEASING build with persistent failures (e.g., Gitea down)
-// from blocking the environment for the full 10-minute reaper timeout.
-const maxActivationAttempts = 3
+//
+// BRC-003 fix (original): prevents a RELEASING build with persistent failures
+// (e.g., Gitea down) from blocking the environment for the full 10-minute
+// reaper timeout. Original value: 3.
+//
+// V9 dogfood 2026-05-30 cascade fix (#7): increased 3 → 10 because dogfood
+// concurrency (5+ journeys deploying to shared `e2e-tenant-production`
+// ArgoCD app) causes ArgoCD app-level lock queue saturation that legitimately
+// takes 2-5 minutes to drain. With reaper Interval = 30s, 10 attempts =
+// ~5 min before fail-fast. Still bounded — persistent infra failure
+// (Gitea down) fails the build within 5 min, just not 90s.
+const maxActivationAttempts = 10
 
 // retryReleaseActivation handles builds in RELEASING state (MEET-2026-03-26-008).
 // These are builds where Phase 1 (image build) completed but Phase 2 (release
