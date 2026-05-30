@@ -93,6 +93,18 @@ func (s *ReleaseStoreSqlc) gen(tx DBTX) generated.DBTX {
 // Create inserts a Release row. Caller MUST provide a tx when this is
 // invoked inside withEnvironmentLock (sqlctxprop gate enforces).
 func (s *ReleaseStoreSqlc) Create(ctx context.Context, tx DBTX, r *Release) error {
+	// V9 dogfood 2026-05-29 LIVE-caught: releases.created_at is NOT
+	// NULL DEFAULT now() in the schema, but sqlc emits InsertRelease
+	// with an explicit `created_at` param (not DEFAULT). When the
+	// caller (e.g., ContainerDeliveryActivator) leaves r.CreatedAt
+	// zero, the wrapper would emit pgtype.Timestamptz{Valid: false}
+	// → NULL → PG rejects with 23502 "null value in column created_at
+	// violates not-null constraint". Fix: default to time.Now().UTC()
+	// when caller passes zero — mirrors PG's DEFAULT now() semantic.
+	createdAt := r.CreatedAt
+	if createdAt.IsZero() {
+		createdAt = time.Now().UTC()
+	}
 	params := generated.InsertReleaseParams{
 		ID:                       r.ID,
 		BuildID:                  r.BuildID,
@@ -102,7 +114,7 @@ func (s *ReleaseStoreSqlc) Create(ctx context.Context, tx DBTX, r *Release) erro
 		Status:                   r.Status,
 		CorrelationID:            r.CorrelationID,
 		CreatedBy:                r.CreatedBy,
-		CreatedAt:                pgtype.Timestamptz{Time: r.CreatedAt, Valid: !r.CreatedAt.IsZero()},
+		CreatedAt:                pgtype.Timestamptz{Time: createdAt, Valid: true},
 		GitCommit:                stringEmptyToNilPtr(r.GitCommit),
 		GitMirrorStatus:          r.GitMirrorStatus,
 		Apps:                     r.Apps,
