@@ -21,13 +21,14 @@ import (
 // (e.g., Gitea down) from blocking the environment for the full 10-minute
 // reaper timeout. Original value: 3.
 //
-// V9 dogfood 2026-05-30 cascade fix (#7): increased 3 → 10 because dogfood
-// concurrency (5+ journeys deploying to shared `e2e-tenant-production`
-// ArgoCD app) causes ArgoCD app-level lock queue saturation that legitimately
-// takes 2-5 minutes to drain. With reaper Interval = 30s, 10 attempts =
-// ~5 min before fail-fast. Still bounded — persistent infra failure
-// (Gitea down) fails the build within 5 min, just not 90s.
-const maxActivationAttempts = 10
+// V9 dogfood 2026-05-30 cascade fix (#7): increased 3 → 5. Pre-fix
+// 3 retries × reaper Interval=30s = 90s budget exhausted under
+// dogfood concurrency (5+ journeys racing on shared
+// `e2e-tenant-production` ArgoCD app); the queue legitimately takes
+// ~150s to drain. 5 retries = 2.5min budget — covers worst-case
+// queue drain while keeping fast-fail on real infra failure
+// (Gitea down etc still fails within 2.5min, not 90s).
+const maxActivationAttempts = 5
 
 // retryReleaseActivation handles builds in RELEASING state (MEET-2026-03-26-008).
 // These are builds where Phase 1 (image build) completed but Phase 2 (release

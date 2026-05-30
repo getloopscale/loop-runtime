@@ -476,17 +476,15 @@ func (c *ContainerDeliveryActivator) triggerSyncWithRetry(ctx context.Context, a
 	// (faster fail for genuine failures, preserves test contracts).
 	const (
 		maxAttempts = 3 // for non-recoverable errors (fail-fast on connection-refused etc)
-		// V9 dogfood 2026-05-30 cascade fix #7: budget increased
-		// 8 → 12 attempts with 10s linear backoff. Combined with the
-		// reaper Interval=30s and maxActivationAttempts=10 (10 retries),
-		// the total in-flight budget per build = 12*10 = 120s per
-		// activation attempt × 10 activation retries = 20min for the
-		// ArgoCD queue to drain under heavy dogfood concurrency. The
-		// SyncSerializer at the API layer already serializes per-app,
-		// so this budget covers the cumulative wait for upstream
-		// in-flight syncs to complete.
-		maxAttemptsSyncInProgress  = 12
-		opInProgressLinearBackoffS = 10
+		// V9 dogfood 2026-05-30 cascade fix #7 (conservative): 6
+		// attempts × 5s linear backoff = 30s per activation budget.
+		// Combined with reaper maxActivationAttempts=5 +
+		// Interval=30s tick: 5*(30s wait + 30s activate) = 5min
+		// total in-flight budget per build. The SyncSerializer
+		// already serializes per-app at the API layer; this budget
+		// covers cumulative wait for upstream in-flight syncs.
+		maxAttemptsSyncInProgress  = 6
+		opInProgressLinearBackoffS = 5
 	)
 	var lastErr error
 	for attempt := 0; ; attempt++ {
