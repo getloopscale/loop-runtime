@@ -137,14 +137,23 @@ func (o *PromotionOrchestrator) Promote(ctx context.Context, req PromotionReques
 
 	// Lock target environment and create the new release
 	err = o.deps.Locker.WithLock(ctx, req.TenantID, req.ProjectID, req.ToEnv, func(tx db.DBTX) error {
-		// Create new release in target environment
+		// Create new release in target environment.
+		// V9 L17 fix: create as READY (not PENDING). The post-push transition
+		// at line ~211 dispatches GitMirrorCompleted which the release state
+		// machine only allows from READY → PENDING. Creating as PENDING
+		// directly here caused the post-push UpdateStatus to fail with
+		// INVALID_TRANSITION (→ HTTP 409 → CLI mis-translates to
+		// DEPLOY_IN_PROGRESS, hiding the real bug).
+		// The "PENDING by default" assumption pre-dates the state machine
+		// hardening; the canonical lifecycle is READY → (push) →
+		// GitMirrorCompleted → PENDING → (sync) → SyncCompleted → ACTIVE.
 		newRelease = &db.Release{
 			ID:            "rel-" + id.GenerateReleaseID(),
 			BuildID:       sourceRelease.BuildID,
 			TenantID:      req.TenantID,
 			ProjectID:     req.ProjectID,
 			Environment:   req.ToEnv,
-			Status:        "PENDING",
+			Status:        "READY",
 			CorrelationID: req.CorrelationID,
 			CreatedBy:     req.UserID,
 			Apps:          sourceRelease.Apps,
@@ -208,8 +217,17 @@ func (o *PromotionOrchestrator) Promote(ctx context.Context, req PromotionReques
 				return fmt.Errorf("set git commit: %w", err)
 			}
 		}
-		if _, err := o.deps.Releases.UpdateStatus(ctx, tx, newRelease.ID, string("GitMirrorCompleted")); err != nil {
+		// V9 L17: capture the updated release so callers (and tests)
+		// observe the post-transition state (PENDING) rather than the
+		// stale in-memory READY snapshot. Without this, the orchestrator
+		// returned the release with its initial in-memory state, hiding
+		// the actual DB state from downstream consumers.
+		updated, err := o.deps.Releases.UpdateStatus(ctx, tx, newRelease.ID, string("GitMirrorCompleted"))
+		if err != nil {
 			return fmt.Errorf("transition release READY → PENDING: %w", err)
+		}
+		if updated != nil {
+			newRelease = updated
 		}
 		return nil
 	})

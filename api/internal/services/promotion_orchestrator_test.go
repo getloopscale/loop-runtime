@@ -47,6 +47,22 @@ func (f *fakePromotionReleaseStore) Create(_ context.Context, _ db.DBTX, release
 func (f *fakePromotionReleaseStore) UpdateStatus(_ context.Context, _ db.DBTX, id, event string) (*db.Release, error) {
 	f.lastStatus[id] = event
 	if r, ok := f.releases[id]; ok {
+		// V9 L17: mirror production behavior — apply the event to the
+		// stored release via the canonical transitions so callers
+		// observe the post-transition state. Production
+		// ReleaseStoreSqlc.UpdateStatus does this via the state machine
+		// and a real UPDATE; the mock must do the same for tests to
+		// validate the post-condition end-to-end.
+		switch event {
+		case "GitMirrorCompleted":
+			if r.Status == "READY" {
+				r.Status = "PENDING"
+			}
+		case "SyncCompleted":
+			if r.Status == "PENDING" {
+				r.Status = "ACTIVE"
+			}
+		}
 		return r, nil
 	}
 	return nil, nil
