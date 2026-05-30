@@ -6,6 +6,7 @@ package services
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"log/slog"
 	"strings"
@@ -15,6 +16,7 @@ import (
 
 	"github.com/loopzero/loopzero/api/internal/db"
 	"github.com/loopzero/loopzero/api/internal/metrics"
+	loopzeroerrors "github.com/loopzero/loopzero/pkg/errors"
 	"github.com/loopzero/loopzero/pkg/statemachine"
 )
 
@@ -481,6 +483,52 @@ func (r *ReleaseConvergenceLoop) retriggerSyncIfNeeded(ctx context.Context, rele
 	if err := r.sync_.TriggerSync(ctx, argoAppName); err != nil {
 		r.logger.Warn("release convergence: sync retrigger failed",
 			"release_id", release.ID, "app", argoAppName, "error", err)
+
+		// V9 L21: when TriggerSync fails with SYNC_OPERATION_IN_PROGRESS
+		// repeatedly, the ArgoCD app has a stale operation lock — typically
+		// caused by a controller restart mid-sync. Without intervention,
+		// every subsequent retrigger fails until the release sync-timeouts
+		// (5min) at which point the release is failed. We can short-circuit
+		// this by calling TerminateOperation after 2 consecutive failures
+		// to clear the stale lock, then the NEXT retrigger succeeds.
+		//
+		// Detection: errors.Is against ErrSyncOperationInProgress matches
+		// both the wrapped and unwrapped forms produced by sync_client.go.
+		//
+		// Discovered LIVE via cleanroom-fresh dogfood 2026-05-30 (audit
+		// 2026-05-30-V9-cleanroom-fresh): after a manual controller restart
+		// during initial TLS handshake recovery, 4 journeys cascaded into
+		// release ACTIVE timeout because their syncs were never re-tried
+		// successfully — the loop logged "sync retrigger failed" every poll
+		// for the full 5min sync_timeout window without ever calling
+		// TerminateOperation. The existing timeout-side TerminateOperation
+		// (line ~230) fires only AFTER failure; this new pre-failure path
+		// recovers without losing the release.
+		if errors.Is(err, loopzeroerrors.ErrSyncOperationInProgress) {
+			// Count this specific failure mode in the retrigger counter.
+			// After 2 consecutive failures (counter increments to 2 after
+			// the first failed retrigger gets the counter to 1, this
+			// second time gets it to 2), attempt termination.
+			//
+			// Why 2: a single transient race is normal (operation completes
+			// between the check and the retrigger). 2 consecutive
+			// failures = the operation is stuck.
+			counter.Add(1)
+			if counter.Load() >= 2 {
+				type terminator interface {
+					TerminateOperation(ctx context.Context, appName string) error
+				}
+				if t, ok := r.sync_.(terminator); ok {
+					if termErr := t.TerminateOperation(ctx, argoAppName); termErr != nil {
+						r.logger.Error("release convergence: failed to terminate stuck sync operation",
+							"release_id", release.ID, "app", argoAppName, "error", termErr)
+					} else {
+						r.logger.Info("release convergence: terminated stuck sync operation (L21 — pre-timeout recovery)",
+							"release_id", release.ID, "app", argoAppName, "consecutive_failures", counter.Load())
+					}
+				}
+			}
+		}
 		return
 	}
 
