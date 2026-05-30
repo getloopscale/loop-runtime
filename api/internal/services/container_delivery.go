@@ -476,14 +476,13 @@ func (c *ContainerDeliveryActivator) triggerSyncWithRetry(ctx context.Context, a
 	// (faster fail for genuine failures, preserves test contracts).
 	const (
 		maxAttempts = 3 // for non-recoverable errors (fail-fast on connection-refused etc)
-		// V9 dogfood 2026-05-30 cascade fix #7 (conservative): 6
-		// attempts × 5s linear backoff = 30s per activation budget.
-		// Combined with reaper maxActivationAttempts=5 +
-		// Interval=30s tick: 5*(30s wait + 30s activate) = 5min
-		// total in-flight budget per build. The SyncSerializer
-		// already serializes per-app at the API layer; this budget
-		// covers cumulative wait for upstream in-flight syncs.
-		maxAttemptsSyncInProgress  = 6
+		// V9 dogfood 2026-05-30 final tuning: 8 attempts × 5s linear
+		// backoff = 40s per activation budget. Combined with reaper
+		// maxActivationAttempts=10 × Interval=30s tick: ~5min total
+		// in-flight budget per build. The SyncSerializer already
+		// serializes per-app at the API layer; this budget covers
+		// cumulative wait for upstream in-flight syncs.
+		maxAttemptsSyncInProgress  = 8
 		opInProgressLinearBackoffS = 5
 	)
 	var lastErr error
