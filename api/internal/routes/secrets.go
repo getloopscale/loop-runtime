@@ -7,6 +7,7 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"log/slog"
 	"net/http"
 	"regexp"
@@ -196,6 +197,18 @@ func (h *SecretHandler) Set(w http.ResponseWriter, r *http.Request) {
 			})
 			return
 		}
+		// V9 L18: mirror mapBuildError + promote.go pattern — log unexpected
+		// errors for diagnosis. The silent-swallow pre-L18 made every
+		// secret-set failure indistinguishable from any other 5xx.
+		slog.Error("unexpected error in secret set handler",
+			"error", err.Error(),
+			"type", fmt.Sprintf("%T", err),
+			"tenant_id", uc.TenantID,
+			"project", project,
+			"environment", req.Environment,
+			"app", req.App,
+			"secret_name", req.Name,
+		)
 		writeLoopZeroError(w, loopzeroerrors.ErrInternalError)
 		return
 	}

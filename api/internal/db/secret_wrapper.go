@@ -94,7 +94,25 @@ func (s *PostgresSecretStore) Set(ctx context.Context, tenantID, projectID, env,
 	}
 	q := generated.New()
 
-	id := fmt.Sprintf("sec-%s-%s-%s-%s", tenantID, projectID, app, name)
+	// V9 L19 fix: include environment in the deterministic PK. The unique
+	// constraint is (tenant_id, project_id, environment, app, name) — the
+	// PK MUST be derivable from the SAME tuple, otherwise an UPSERT for a
+	// row that differs only in environment from an existing one collides
+	// on the PK before reaching the ON CONFLICT clause (which compares
+	// the unique-constraint columns, not the PK).
+	//
+	// Pre-L19, two secrets with the same (tenant, project, app, name) but
+	// different env (e.g. j-secrets vs production) shared the same PK
+	// "sec-<tenant>-<project>-<app>-<name>" and the second INSERT failed
+	// with SQLSTATE 23505 ("duplicate key violates secrets_pkey") —
+	// returning HTTP 500 INTERNAL_ERROR even though the user's request
+	// was valid.
+	//
+	// LIVE-discovered via v9L16 dogfood: Journey 03 sets secret on env
+	// "j-secrets" for project "secret-app" while an earlier journey had
+	// set a secret on env "production" for the same project. The PK
+	// collision blocked the second INSERT before ON CONFLICT could fire.
+	id := fmt.Sprintf("sec-%s-%s-%s-%s-%s", tenantID, projectID, env, app, name)
 
 	created, err = q.UpsertSecret(ctx, bridge, generated.UpsertSecretParams{
 		ID:             id,
