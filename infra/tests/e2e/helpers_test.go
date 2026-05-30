@@ -371,10 +371,12 @@ func waitHTTP200WithHost(host, path string, timeout time.Duration) {
 }
 
 // waitAppHealthyViaKubectl is the V9 Option-B bypass for local k3d
-// HTTP probes that flake on Traefik+DNS routing under load. It runs
-// `kubectl exec <pod> -- wget /<path>` directly inside the pod —
-// completely sidestepping the local k3d DNS+TLS+Traefik convergence
-// path documented in CLAUDE.md § Known issues.
+// HTTP probes that flake on Traefik+DNS routing under load. It uses
+// `kubectl port-forward <pod>` to tunnel an HTTP request from the
+// Ginkgo process directly to the pod — completely sidestepping the
+// local k3d DNS+TLS+Traefik convergence path AND the in-container
+// busybox/distroless tooling assumption (apps with scratch/distroless
+// bases have no wget/curl, so kubectl exec probe returns exit 127).
 //
 // Parameters:
 //   - project, app, env: identify the workload (namespace
@@ -387,12 +389,13 @@ func waitHTTP200WithHost(host, path string, timeout time.Duration) {
 //
 // Resilient to:
 //   - Pod not yet provisioned (Eventually retries)
-//   - Pod not yet Ready (kubectl exec returns non-zero, retry)
-//   - wget not available (falls back to curl, then to bash test)
+//   - Pod not yet Ready (port-forward fails, retry)
+//   - Distroless/scratch base image (port-forward works regardless)
 //
-// V9 Final fix (post-L9): bypasses the Eventually(httpProbeTimeout)
-// + per-request Timeout interaction that crowded out total specs.
-// Direct pod exec converges in seconds vs minutes.
+// V9 Final fix (post-L11): kubectl exec assumed wget/curl exist in the
+// app image, but loopzero-packs uses distroless base → exit 127. port-forward
+// works for any image because the kubelet tunnel runs OUTSIDE the
+// container's filesystem.
 func waitAppHealthyViaKubectl(project, app, env, path string, timeout time.Duration) {
 	resName := project + "-" + app
 	ns := "loopzero-" + seed.TenantID + "-" + env
@@ -431,29 +434,69 @@ func waitAppHealthyViaKubectl(project, app, env, path string, timeout time.Durat
 			return fmt.Errorf("no Running+Ready pod for app=%s in %s (status: %s)", resName, ns, lines[0])
 		}
 
-		// Exec /health probe inside the pod via wget (busybox-friendly).
-		// Fall back through tools that exist in common base images.
-		probeCmd := fmt.Sprintf(
-			"wget -qO- --timeout=5 http://localhost:3000%s 2>/dev/null || "+
-				"wget -qO- --timeout=5 http://localhost:8080%s 2>/dev/null || "+
-				"curl -sf --max-time 5 http://localhost:3000%s 2>/dev/null || "+
-				"curl -sf --max-time 5 http://localhost:8080%s 2>/dev/null",
-			path, path, path, path,
-		)
-		probeOut, probeErr := kubectlForCluster(ClusterWorkload,
-			"exec", "-n", ns, podName, "--",
-			"sh", "-c", probeCmd,
+		// Discover the container port the app listens on. loopzero-packs
+		// app images typically expose 3000 (node) or 8080 (other). We
+		// try the first containerPort declared.
+		portOut, perr := kubectlForCluster(ClusterWorkload,
+			"get", "pod", "-n", ns, podName,
+			"-o", "jsonpath={.spec.containers[0].ports[0].containerPort}",
 		).CombinedOutput()
-		if probeErr != nil {
-			return fmt.Errorf("kubectl exec %s -- probe failed: %s", podName, strings.TrimSpace(string(probeOut)))
+		appPort := strings.TrimSpace(string(portOut))
+		if perr != nil || appPort == "" {
+			appPort = "3000" // safe default for loopzero-packs node template
 		}
-		// Any non-empty response on stdout = pod returned HTTP 200.
-		if len(strings.TrimSpace(string(probeOut))) == 0 {
-			return fmt.Errorf("kubectl exec %s -- probe returned empty (pod /health may not exist)", podName)
+
+		// kubectl port-forward to a random local port, run HTTP GET,
+		// then kill the port-forward. Random port avoids contention
+		// when multiple journeys run sequentially.
+		// We pick a port in the range 39000-39999 using crypto/rand.
+		var portBuf [2]byte
+		_, _ = rand.Read(portBuf[:])
+		localPort := 39000 + (int(portBuf[0])<<8|int(portBuf[1]))%1000
+
+		ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+		defer cancel()
+
+		pfCmd := kubectlForCluster(ClusterWorkload,
+			"port-forward", "-n", ns, "pod/"+podName,
+			fmt.Sprintf("%d:%s", localPort, appPort),
+		)
+		// Start port-forward as background subprocess.
+		stderr := &strings.Builder{}
+		pfCmd.Stderr = stderr
+		if err := pfCmd.Start(); err != nil {
+			return fmt.Errorf("port-forward start failed: %v", err)
+		}
+		// Kill port-forward on function exit (deferred close).
+		killCh := make(chan struct{})
+		go func() {
+			select {
+			case <-killCh:
+			case <-ctx.Done():
+			}
+			_ = pfCmd.Process.Kill()
+			_, _ = pfCmd.Process.Wait()
+		}()
+		defer close(killCh)
+
+		// Wait briefly for port-forward to bind.
+		time.Sleep(500 * time.Millisecond)
+
+		// HTTP GET via the port-forwarded localhost tunnel.
+		client := &http.Client{Timeout: 5 * time.Second}
+		req, _ := http.NewRequest("GET", fmt.Sprintf("http://localhost:%d%s", localPort, path), nil)
+		resp, herr := client.Do(req)
+		if herr != nil {
+			return fmt.Errorf("port-forward HTTP probe to %s:%d%s failed: %v (pf stderr: %s)",
+				podName, localPort, path, herr, strings.TrimSpace(stderr.String()))
+		}
+		defer resp.Body.Close()
+		if resp.StatusCode != 200 {
+			return fmt.Errorf("port-forward HTTP probe to %s:%d%s returned %d", podName, localPort, path, resp.StatusCode)
 		}
 		return nil
 	}, timeout, 5*time.Second).Should(Succeed(),
-		"expected /health probe to succeed via kubectl exec on app=%s in namespace=%s within %s",
+		"expected /health probe to succeed via kubectl port-forward on app=%s in namespace=%s within %s",
 		resName, ns, timeout,
 	)
 }
