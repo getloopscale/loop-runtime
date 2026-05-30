@@ -85,9 +85,27 @@ func (c *ScalingConfig) Validate() error {
 		return newInvalidArgument(
 			"scale_to_zero=true requires min_replicas=0")
 	}
-	if c.Environment != "production" && c.Environment != "staging" && c.Environment != "preview" {
+	// Environment naming validation: must be non-empty, kebab-case, ≤63 chars
+	// (DNS label limit; namespaces are derived from environment name).
+	// LoopZero supports arbitrary tenant-created environments — the hardcoded
+	// whitelist [production, staging, preview] was incorrect (V9 L13 catch).
+	// Environment existence is enforced by withEnvironmentLock at the route
+	// level; this validator only enforces syntactic constraints.
+	if c.Environment == "" {
+		return newInvalidArgument("environment must not be empty")
+	}
+	if len(c.Environment) > 63 {
 		return newInvalidArgument(
-			fmt.Sprintf("environment must be one of [production, staging, preview], got %q", c.Environment))
+			fmt.Sprintf("environment %q exceeds 63-char DNS label limit", c.Environment))
+	}
+	for _, r := range c.Environment {
+		isLower := r >= 'a' && r <= 'z'
+		isDigit := r >= '0' && r <= '9'
+		isDash := r == '-'
+		if !isLower && !isDigit && !isDash {
+			return newInvalidArgument(
+				fmt.Sprintf("environment %q must be lowercase alphanumeric + dash (DNS label rules)", c.Environment))
+		}
 	}
 	return nil
 }

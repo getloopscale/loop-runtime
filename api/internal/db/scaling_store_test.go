@@ -58,12 +58,46 @@ func TestScalingConfig_Validate_RejectsScaleToZeroWithMinNonZero(t *testing.T) {
 }
 
 func TestScalingConfig_Validate_RejectsInvalidEnvironment(t *testing.T) {
-	c := ScalingConfig{
-		TenantID: "acme", ProjectID: "api", Environment: "bogus", AppName: "web",
-		MinReplicas: 1, MaxReplicas: 5,
+	// V9 L13 contract: env validation is DNS-label syntax only, not whitelist.
+	// "bogus" is valid (kebab-case lowercase). Invalid: empty, uppercase,
+	// underscore, >63 chars.
+	cases := []struct {
+		name string
+		env  string
+	}{
+		{"empty", ""},
+		{"uppercase", "Production"},
+		{"underscore", "my_env"},
+		{"too-long", "this-environment-name-is-way-too-long-for-the-dns-label-limit-of-63"},
+		{"special-char", "env!"},
 	}
-	if err := c.Validate(); err == nil {
-		t.Fatal("expected validation error for environment=bogus")
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			c := ScalingConfig{
+				TenantID: "acme", ProjectID: "api", Environment: tc.env, AppName: "web",
+				MinReplicas: 1, MaxReplicas: 5,
+			}
+			if err := c.Validate(); err == nil {
+				t.Fatalf("expected validation error for environment=%q", tc.env)
+			}
+		})
+	}
+}
+
+func TestScalingConfig_Validate_AcceptsCustomEnvironments(t *testing.T) {
+	// V9 L13 contract: tenant-created environments must work, not just
+	// the legacy [production, staging, preview] whitelist.
+	cases := []string{"production", "staging", "preview", "j-scale", "j-solo", "dev-1", "qa"}
+	for _, env := range cases {
+		t.Run(env, func(t *testing.T) {
+			c := ScalingConfig{
+				TenantID: "acme", ProjectID: "api", Environment: env, AppName: "web",
+				MinReplicas: 1, MaxReplicas: 5,
+			}
+			if err := c.Validate(); err != nil {
+				t.Fatalf("expected valid environment %q, got error: %v", env, err)
+			}
+		})
 	}
 }
 
