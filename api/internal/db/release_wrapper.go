@@ -93,17 +93,29 @@ func (s *ReleaseStoreSqlc) gen(tx DBTX) generated.DBTX {
 // Create inserts a Release row. Caller MUST provide a tx when this is
 // invoked inside withEnvironmentLock (sqlctxprop gate enforces).
 func (s *ReleaseStoreSqlc) Create(ctx context.Context, tx DBTX, r *Release) error {
-	// V9 dogfood 2026-05-29 LIVE-caught: releases.created_at is NOT
-	// NULL DEFAULT now() in the schema, but sqlc emits InsertRelease
-	// with an explicit `created_at` param (not DEFAULT). When the
-	// caller (e.g., ContainerDeliveryActivator) leaves r.CreatedAt
-	// zero, the wrapper would emit pgtype.Timestamptz{Valid: false}
-	// → NULL → PG rejects with 23502 "null value in column created_at
-	// violates not-null constraint". Fix: default to time.Now().UTC()
-	// when caller passes zero — mirrors PG's DEFAULT now() semantic.
+	// V9 dogfood 2026-05-29 LIVE-caught: sqlc-emitted InsertRelease
+	// forces explicit values for columns that PG schema declares as
+	// DEFAULT-bound. The legacy handwritten SQL relied on PG defaults
+	// to populate (created_at default now(), status default 'READY').
+	// sqlc-generated INSERT VALUES list passes every column → zero
+	// Go values become PG NULL/empty → constraint violations.
+	//
+	// Defaults applied wrapper-side (mirror PG defaults):
+	//   - created_at zero → time.Now().UTC()
+	//     (schema: NOT NULL DEFAULT now())
+	//   - status "" → "READY"
+	//     (schema: CHECK status IN ('READY', 'PENDING', ...);
+	//      statemachine.ReleaseReady is the initial state)
 	createdAt := r.CreatedAt
 	if createdAt.IsZero() {
 		createdAt = time.Now().UTC()
+	}
+	status := r.Status
+	if status == "" {
+		// Mirror pkg/statemachine/release.go: ReleaseReady = "READY"
+		// (initial state of the release lifecycle, before
+		// GitMirrorCompleted → PENDING → ACTIVE).
+		status = "READY"
 	}
 	params := generated.InsertReleaseParams{
 		ID:                       r.ID,
@@ -111,10 +123,12 @@ func (s *ReleaseStoreSqlc) Create(ctx context.Context, tx DBTX, r *Release) erro
 		TenantID:                 r.TenantID,
 		ProjectID:                r.ProjectID,
 		Environment:              r.Environment,
-		Status:                   r.Status,
+		Status:                   status,
 		CorrelationID:            r.CorrelationID,
 		CreatedBy:                r.CreatedBy,
 		CreatedAt:                pgtype.Timestamptz{Time: createdAt, Valid: true},
+		// Status defaulted above.
+
 		GitCommit:                stringEmptyToNilPtr(r.GitCommit),
 		GitMirrorStatus:          r.GitMirrorStatus,
 		Apps:                     r.Apps,
