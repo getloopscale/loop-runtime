@@ -11,6 +11,7 @@ package e2e
 
 import (
 	"os"
+	"time"
 
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
@@ -80,11 +81,21 @@ var _ = Describe("Journey 05: Promote", Ordered, Label("journey"), func() {
 	})
 
 	It("promotes staging to production", func() {
-		stdout, stderr, exitCode := runLoopZeroInDir(workDir, "promote",
-			"--from", "staging", "--to", "production", "--yes", "--json")
-
-		Expect(exitCode).To(Equal(0),
-			"loopzero promote should exit 0\nstdout: %s\nstderr: %s", stdout, stderr)
+		// V9 L14 fix: promote can race with envEnsurer (creating production
+		// env idempotently) or with the staging release still being persisted.
+		// Wrap in Eventually with DEPLOY_IN_PROGRESS-aware retry to handle
+		// the env-lock race. promoteTimeout (5min) is the budget for the
+		// race to clear.
+		var (
+			stdout, stderr string
+			exitCode       int
+		)
+		Eventually(func() int {
+			stdout, stderr, exitCode = runLoopZeroInDir(workDir, "promote",
+				"--from", "staging", "--to", "production", "--yes", "--json")
+			return exitCode
+		}, promoteTimeout, 5*time.Second).Should(Equal(0),
+			"loopzero promote should eventually exit 0\nlast stdout: %s\nlast stderr: %s", stdout, stderr)
 
 		// Verify promote response has expected fields per
 		// api/internal/routes/promote.go:64 PromotionResponse.NewRelease.
