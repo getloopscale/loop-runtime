@@ -44,6 +44,7 @@ import (
 
 	"github.com/loopzero/loopzero/api/internal/db/generated"
 	loopzeroerrors "github.com/loopzero/loopzero/pkg/errors"
+	"github.com/loopzero/loopzero/pkg/id"
 	"github.com/loopzero/loopzero/pkg/statemachine"
 )
 
@@ -100,12 +101,19 @@ func (s *ReleaseStoreSqlc) Create(ctx context.Context, tx DBTX, r *Release) erro
 	// sqlc-generated INSERT VALUES list passes every column → zero
 	// Go values become PG NULL/empty → constraint violations.
 	//
-	// Defaults applied wrapper-side (mirror PG defaults):
+	// Defaults applied wrapper-side (mirror PG defaults + legacy
+	// PostgresReleaseStore.Create behavior):
+	//   - id "" → id.GenerateReleaseID() (legacy generated; primary
+	//     key MUST be unique — empty string would collide on the 2nd
+	//     retry of the BuildReconcileLoop, violating releases_pkey)
 	//   - created_at zero → time.Now().UTC()
 	//     (schema: NOT NULL DEFAULT now())
 	//   - status "" → "READY"
 	//     (schema: CHECK status IN ('READY', 'PENDING', ...);
 	//      statemachine.ReleaseReady is the initial state)
+	if r.ID == "" {
+		r.ID = id.GenerateReleaseID()
+	}
 	createdAt := r.CreatedAt
 	if createdAt.IsZero() {
 		createdAt = time.Now().UTC()
