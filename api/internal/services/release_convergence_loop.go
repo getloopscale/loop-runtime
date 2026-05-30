@@ -282,6 +282,49 @@ func (r *ReleaseConvergenceLoop) verifyRelease(ctx context.Context, release *db.
 		if !synced && elapsed > 30*time.Second {
 			r.retriggerSyncIfNeeded(ctx, release, argoAppName)
 		}
+
+		// V9 L22: detect "ArgoCD controller queue-stuck" — release has been
+		// PENDING for >2min, TriggerSync calls returned 200 OK, but
+		// Application.status.operationState never advances (controller
+		// internal workqueue stopped processing).
+		//
+		// Recovery: PATCH App with refresh=hard annotation via ForceReconcile.
+		// ArgoCD watches for the annotation and triggers immediate
+		// reconciliation regardless of workqueue state. Idempotent — calling
+		// ForceReconcile multiple times for the same App is safe.
+		//
+		// Discovered via cleanroom-fresh dogfood 2026-05-30: 4 journey
+		// failures cascaded after ArgoCD controllers entered queue-stuck
+		// state. L21 (TerminateOperation on SYNC_OPERATION_IN_PROGRESS)
+		// did NOT fire because TriggerSync was succeeding — the lock
+		// wasn't stuck, the controller's workqueue was empty/stalled.
+		//
+		// We use the existing syncRetriggers counter as the threshold —
+		// after 3 retriggers with no progress, escalate to ForceReconcile.
+		// This is one-shot per maxSyncRetriggers cycle to avoid spamming
+		// ArgoCD.
+		if !synced && elapsed > 2*time.Minute {
+			if loaded, ok := r.syncRetriggers.Load(release.ID); ok {
+				counter := loaded.(*atomic.Int32)
+				if counter.Load() >= int32(maxSyncRetriggers) {
+					type forceReconciler interface {
+						ForceReconcile(ctx context.Context, appName string) error
+					}
+					if fr, ok := r.sync_.(forceReconciler); ok {
+						if frErr := fr.ForceReconcile(ctx, argoAppName); frErr != nil {
+							r.logger.Error("release convergence: ForceReconcile failed (L22 recovery)",
+								"release_id", release.ID, "app", argoAppName, "error", frErr)
+						} else {
+							r.logger.Info("release convergence: triggered ForceReconcile (L22 — controller queue-stuck recovery)",
+								"release_id", release.ID, "app", argoAppName, "retriggers_exhausted", counter.Load())
+							// Reset counter so subsequent ticks can retry TriggerSync
+							// after the controller picks up the refresh annotation.
+							counter.Store(0)
+						}
+					}
+				}
+			}
+		}
 		return // Not ready yet, will check on next tick
 	}
 

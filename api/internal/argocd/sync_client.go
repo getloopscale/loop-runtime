@@ -310,6 +310,69 @@ func (c *SyncClient) hardRefresh(ctx context.Context, appName string) error {
 	return nil
 }
 
+// ForceReconcile patches the Application's metadata.annotations to set
+// `argocd.argoproj.io/refresh = "hard"`. This is the canonical ArgoCD
+// pattern to trigger immediate controller reconciliation regardless
+// of workqueue state.
+//
+// V9 L22 fix: in cleanroom-fresh idle k3d, the ArgoCD application-controller's
+// internal workqueue can stop processing Applications even though the
+// controller pod is alive and reports healthy. The convergence loop sees
+// release PENDING and tries TriggerSync (which returns 200) but the
+// controller never picks up the work. The result is release sync_timeout
+// and a cascading dogfood failure.
+//
+// ForceReconcile bypasses the workqueue by setting the refresh annotation
+// directly on the Application resource. The controller's annotation watch
+// fires immediately and enqueues a fresh reconciliation. If the controller
+// is truly dead, this also fails (escalation to operator); if the
+// controller is just queue-stuck, this kicks it back into action.
+//
+// Verified canonical per ArgoCD upstream: argocd CLI `app get --refresh`
+// uses the same annotation mechanism.
+//
+// Called by ReleaseConvergenceLoop when Application.status.operationState
+// is empty for >2min despite TriggerSync having succeeded.
+func (c *SyncClient) ForceReconcile(ctx context.Context, appName string) error {
+	// PATCH /api/v1/applications/{name}?refresh=hard is the documented
+	// ArgoCD REST endpoint. Per ArgoCD docs:
+	//   "If refresh parameter is provided, it can take values:
+	//    - normal: compare desired vs live, update status
+	//    - hard:   re-fetch repo + compare + update status (cache invalidation)"
+	// Using `hard` because the L22 scenario typically involves stale repo
+	// cache as well as workqueue stagnation.
+	url := fmt.Sprintf("%s/api/v1/applications/%s?refresh=hard", c.baseURL, appName)
+
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, url, nil)
+	if err != nil {
+		return fmt.Errorf("force reconcile: create request: %w", err)
+	}
+	req.Header.Set("Authorization", "Bearer "+c.tokenProvider.Token())
+
+	resp, err := c.client.Do(req)
+	if err != nil {
+		return fmt.Errorf("force reconcile: request failed: %w", err)
+	}
+	defer func() { _ = resp.Body.Close() }()
+
+	if resp.StatusCode == 401 || resp.StatusCode == 403 {
+		if notifier, ok := c.tokenProvider.(AuthFailureNotifier); ok {
+			notifier.OnAuthFailure()
+		}
+		return loopzeroerrors.ErrDeployServiceAuthFailed
+	}
+	if resp.StatusCode == 404 {
+		return fmt.Errorf("force reconcile: application %q not found", appName)
+	}
+	if resp.StatusCode >= 400 {
+		respBody, _ := io.ReadAll(resp.Body)
+		return fmt.Errorf("force reconcile: status %d: %s", resp.StatusCode, string(respBody))
+	}
+	// Drain body so HTTP keep-alive can reuse the connection.
+	_, _ = io.Copy(io.Discard, resp.Body)
+	return nil
+}
+
 // TerminateOperation cancels a running sync operation on an ArgoCD Application.
 // MEET-2026-03-29-019: Used when TriggerSync returns ErrSyncOperationInProgress
 // and the operation is stuck. This clears the operation lock so a new sync can start.

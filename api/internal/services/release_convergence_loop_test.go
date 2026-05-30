@@ -441,3 +441,127 @@ func TestRetriggerSync_L21_DoesNotTerminateOnNonLockErrors(t *testing.T) {
 		t.Errorf("non-lock errors must NOT trigger TerminateOperation; got %d calls", client.terminateCount)
 	}
 }
+
+// --- V9 L22 tests ---
+//
+// L22 (commit pending): when ArgoCD application-controller workqueue
+// stalls (controller alive but not processing Apps), the convergence
+// loop calls ForceReconcile to PATCH the App with refresh=hard
+// annotation, kicking the controller back into action.
+//
+// Different from L21:
+// - L21 fires when TriggerSync RETURNS error SYNC_OPERATION_IN_PROGRESS
+// - L22 fires when TriggerSync SUCCEEDS but ArgoCD doesn't act on it
+
+// l22SyncClient tracks TriggerSync (succeeds), GetAppStatus (returns
+// not-synced/not-healthy to simulate stalled controller),
+// ForceReconcile + TerminateOperation invocations.
+type l22SyncClient struct {
+	triggerCount   int
+	statusCount    int
+	forceCount     int
+	terminateCount int
+}
+
+func (c *l22SyncClient) TriggerSync(_ context.Context, _ string) error {
+	c.triggerCount++
+	return nil
+}
+func (c *l22SyncClient) WaitForSync(_ context.Context, _ string, _ time.Duration, _ []string) error {
+	return context.DeadlineExceeded
+}
+func (c *l22SyncClient) GetAppStatus(_ context.Context, _ string, _ []string) (bool, bool, error) {
+	c.statusCount++
+	return false, false, nil // stalled — never synced, never healthy
+}
+func (c *l22SyncClient) ForceReconcile(_ context.Context, _ string) error {
+	c.forceCount++
+	return nil
+}
+func (c *l22SyncClient) TerminateOperation(_ context.Context, _ string) error {
+	c.terminateCount++
+	return nil
+}
+
+func TestL22_ForceReconcileFiresAfterMaxRetriggersExhausted(t *testing.T) {
+	// Arrange: SyncClient where TriggerSync always succeeds but ArgoCD
+	// never advances the app state (simulates L22 controller queue-stuck).
+	client := &l22SyncClient{}
+	rs := newFakeConvergenceReleaseStore()
+
+	// Release created >2min ago so the L22 elapsed > 2min gate fires.
+	oldCreated := time.Now().Add(-2*time.Minute - 30*time.Second) // > 2min L22 gate, < 3min sync_timeout default
+	rs.pending = []db.Release{
+		{
+			ID: "rel-l22-1", BuildID: "build-1", TenantID: "tn-1",
+			ProjectID: "proj-1", Environment: "production",
+			Status:    string(statemachine.ReleasePending),
+			CreatedAt: oldCreated,
+			Apps:      json.RawMessage(`[{"name":"api","rendering":"container"}]`),
+		},
+	}
+
+	loop := NewReleaseConvergenceLoop(
+		rs, newFakeConvergenceEnvTargetStore(), client, &fakeConvergenceLocker{},
+		&fakeConvergenceEventStore{},
+		"dev.loopzero.example", slog.Default(),
+		ReleaseConvergenceLoopConfig{},
+	)
+
+	// Act: exhaust maxSyncRetriggers (3 default) by calling retriggerSyncIfNeeded
+	// directly. Each call increments the per-release counter.
+	release := &rs.pending[0]
+	for i := 0; i < maxSyncRetriggers; i++ {
+		loop.retriggerSyncIfNeeded(context.Background(), release, "tn-1-production")
+	}
+
+	// Sanity: at this point ForceReconcile has NOT yet fired (it's gated
+	// behind a separate check in the main loop body, not in retriggerSyncIfNeeded).
+	if client.forceCount != 0 {
+		t.Errorf("ForceReconcile must not fire from retriggerSyncIfNeeded alone; got %d", client.forceCount)
+	}
+
+	// Act: run a full processPendingRelease tick. The main loop body
+	// detects "not synced + elapsed > 2min + retriggers exhausted" → L22.
+	loop.verifyRelease(context.Background(), release)
+
+	// Assert: ForceReconcile fires exactly once.
+	if client.forceCount != 1 {
+		t.Errorf("after exhausting retriggers + 2min elapsed, expected 1 ForceReconcile (L22 recovery); got %d", client.forceCount)
+	}
+}
+
+func TestL22_ForceReconcileDoesNotFireBeforeRetriggersExhausted(t *testing.T) {
+	// Arrange: Release just started — retriggers not yet exhausted.
+	client := &l22SyncClient{}
+	rs := newFakeConvergenceReleaseStore()
+	oldCreated := time.Now().Add(-2*time.Minute - 30*time.Second) // > 2min L22 gate, < 3min sync_timeout default
+	rs.pending = []db.Release{
+		{
+			ID: "rel-l22-2", BuildID: "build-2", TenantID: "tn-1",
+			ProjectID: "proj-1", Environment: "production",
+			Status:    string(statemachine.ReleasePending),
+			CreatedAt: oldCreated,
+			Apps:      json.RawMessage(`[{"name":"api","rendering":"container"}]`),
+		},
+	}
+
+	loop := NewReleaseConvergenceLoop(
+		rs, newFakeConvergenceEnvTargetStore(), client, &fakeConvergenceLocker{},
+		&fakeConvergenceEventStore{},
+		"dev.loopzero.example", slog.Default(),
+		ReleaseConvergenceLoopConfig{},
+	)
+
+	release := &rs.pending[0]
+	// Only 1 retrigger — counter == 1, < maxSyncRetriggers (3).
+	loop.retriggerSyncIfNeeded(context.Background(), release, "tn-1-production")
+
+	// Run processPendingRelease. L22 escalation should NOT fire because
+	// retriggers are not yet exhausted (counter < maxSyncRetriggers).
+	loop.verifyRelease(context.Background(), release)
+
+	if client.forceCount != 0 {
+		t.Errorf("L22 escalation MUST wait for maxSyncRetriggers exhaustion; got %d ForceReconcile calls", client.forceCount)
+	}
+}
