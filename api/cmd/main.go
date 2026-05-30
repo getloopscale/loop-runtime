@@ -235,6 +235,23 @@ func main() {
 		logger.Info("env ensurer wired — deploy --env <novo> will auto-create environments (T2.2 D5)")
 	}
 
+	// V9 L20: SecretResyncer wired post-envEnsurer in builds.go. Closes
+	// the set-secret-BEFORE-first-deploy race (audit
+	// 2026-05-30-V9-L19-99percent). Requires both a value-returning
+	// secret store (PostgresSecretStore.ListForResync) and a workload
+	// K8s creator (the same SecretK8sSync used by POST /api/v1/secrets).
+	if buildHandler != nil && stores != nil && k8sDeps != nil && k8sDeps.SecretK8sSync != nil {
+		if pgStore, ok := stores.SecretStore.(*db.PostgresSecretStore); ok {
+			resyncer := &services.SecretResyncer{
+				Store:  pgStore,
+				K8s:    k8sDeps.SecretK8sSync,
+				Logger: logger,
+			}
+			buildHandler = buildHandler.WithSecretResyncer(resyncer)
+			logger.Info("secret resyncer wired — deploy will repopulate ExternalSecrets post envEnsurer (V9 L20)")
+		}
+	}
+
 	healthServices := setupHealthServices(cfg)
 
 	rateLimiter := middleware.NewRateLimiter(60, 1*time.Minute)

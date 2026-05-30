@@ -81,6 +81,55 @@ func (q *Queries) ListSecretNames(ctx context.Context, db DBTX, arg ListSecretNa
 	return items, nil
 }
 
+const listSecretsForResync = `-- name: ListSecretsForResync :many
+SELECT name, app, encrypted_value
+FROM secrets
+WHERE tenant_id = $1 AND project_id = $2 AND environment = $3
+ORDER BY app, name
+`
+
+type ListSecretsForResyncParams struct {
+	TenantID    string `json:"tenant_id"`
+	ProjectID   string `json:"project_id"`
+	Environment string `json:"environment"`
+}
+
+type ListSecretsForResyncRow struct {
+	Name           string `json:"name"`
+	App            string `json:"app"`
+	EncryptedValue []byte `json:"encrypted_value"`
+}
+
+// V9 L20: Returns name+app+encrypted_value for all secrets in an env tuple.
+// Used by the deploy-side resync hook: after envEnsurer ensures the
+// workload namespace exists, the builds handler iterates these rows and
+// (re)creates ExternalSecrets on the workload cluster so pods can mount
+// secrets that were `loopzero secret set` BEFORE the namespace existed.
+//
+// Returns the encrypted column — the wrapper decrypts via SEC-001 AES-GCM
+// before passing values to the K8s sync. Caller MUST be on the resync
+// path (builds.go after EnsureEnvironment); other callers should use
+// ListSecretNames to avoid leaking values into unintended scopes.
+func (q *Queries) ListSecretsForResync(ctx context.Context, db DBTX, arg ListSecretsForResyncParams) ([]ListSecretsForResyncRow, error) {
+	rows, err := db.Query(ctx, listSecretsForResync, arg.TenantID, arg.ProjectID, arg.Environment)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []ListSecretsForResyncRow
+	for rows.Next() {
+		var i ListSecretsForResyncRow
+		if err := rows.Scan(&i.Name, &i.App, &i.EncryptedValue); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const upsertSecret = `-- name: UpsertSecret :one
 
 INSERT INTO secrets (id, tenant_id, project_id, environment, app, name, encrypted_value)

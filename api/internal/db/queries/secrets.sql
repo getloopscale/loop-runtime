@@ -38,3 +38,19 @@ SELECT name, environment, app
 FROM secrets
 WHERE tenant_id = $1 AND project_id = $2 AND environment = $3
 ORDER BY name;
+
+-- name: ListSecretsForResync :many
+-- V9 L20: Returns name+app+encrypted_value for all secrets in an env tuple.
+-- Used by the deploy-side resync hook: after envEnsurer ensures the
+-- workload namespace exists, the builds handler iterates these rows and
+-- (re)creates ExternalSecrets on the workload cluster so pods can mount
+-- secrets that were `loopzero secret set` BEFORE the namespace existed.
+--
+-- Returns the encrypted column — the wrapper decrypts via SEC-001 AES-GCM
+-- before passing values to the K8s sync. Caller MUST be on the resync
+-- path (builds.go after EnsureEnvironment); other callers should use
+-- ListSecretNames to avoid leaking values into unintended scopes.
+SELECT name, app, encrypted_value
+FROM secrets
+WHERE tenant_id = $1 AND project_id = $2 AND environment = $3
+ORDER BY app, name;

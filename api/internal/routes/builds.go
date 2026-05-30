@@ -148,11 +148,12 @@ type CellResolver interface {
 // detected by the BuildReconcileLoop which polls Argo Workflow CRDs from the
 // control plane. The build cluster no longer calls the API.
 type BuildHandler struct {
-	orch         BuildOrchestratorService
-	logger       *slog.Logger
-	admission    AdmissionChecker     // nil = disabled, no-op
-	cellResolver CellResolver         // MEET-053: resolves tenant → cell_id per-request
-	envEnsurer   EnvironmentEnsurer   // Plan T2.2 D5: auto-create env on first deploy --env <novo>
+	orch          BuildOrchestratorService
+	logger        *slog.Logger
+	admission     AdmissionChecker     // nil = disabled, no-op
+	cellResolver  CellResolver         // MEET-053: resolves tenant → cell_id per-request
+	envEnsurer    EnvironmentEnsurer   // Plan T2.2 D5: auto-create env on first deploy --env <novo>
+	secretResync  SecretResyncer       // V9 L20: resync PG secrets to workload K8s post-envEnsurer
 }
 
 // NewBuildHandler creates a new BuildHandler.
@@ -185,6 +186,25 @@ func (h *BuildHandler) WithAdmission(a AdmissionChecker, resolver CellResolver) 
 // T2.2 D5. Nil ensurer (default) preserves legacy behavior (env must pre-exist).
 func (h *BuildHandler) WithEnvironmentEnsurer(e EnvironmentEnsurer) *BuildHandler {
 	h.envEnsurer = e
+	return h
+}
+
+// SecretResyncer (re)creates ExternalSecrets on the workload cluster for
+// all secrets in (tenant, project, env). V9 L20: called after
+// EnsureEnvironment so secrets set BEFORE the namespace existed get
+// repopulated on workload. Idempotent: existing ExternalSecrets get a
+// new resourceVersion-friendly Update; missing ones get Create.
+type SecretResyncer interface {
+	ResyncEnv(ctx context.Context, tenantID, projectID, env string) error
+}
+
+// WithSecretResyncer wires a SecretResyncer so the build handler closes
+// the "set secret BEFORE first deploy" race documented in audit
+// 2026-05-30-V9-L19-99percent. Nil resyncer preserves legacy behavior:
+// secrets only sync at POST /api/v1/secrets time (which fails silently
+// when the namespace doesn't yet exist).
+func (h *BuildHandler) WithSecretResyncer(r SecretResyncer) *BuildHandler {
+	h.secretResync = r
 	return h
 }
 
@@ -279,6 +299,30 @@ func (h *BuildHandler) Create(w http.ResponseWriter, r *http.Request) {
 				))
 			}
 			return
+		}
+	}
+
+	// V9 L20: Resync PG secrets to workload K8s ExternalSecrets. Closes
+	// the race where `loopzero secret set` ran BEFORE the namespace existed
+	// (first deploy --env <novo> creates the namespace, but the secret
+	// POST K8s sync at line ~234 of secrets.go silently failed with
+	// "namespaces ... not found"). Pod start would later fail with
+	// CreateContainerConfigError because the K8s Secret was never
+	// created on workload.
+	//
+	// Best-effort: log resync errors but don't fail the deploy — the
+	// pod-start failure will surface as a deploy timeout if any required
+	// secret is missing. Per-secret sync errors are also non-fatal in
+	// the resyncer (e.g., partial-success when only one secret has a
+	// transient issue).
+	if h.secretResync != nil {
+		if resyncErr := h.secretResync.ResyncEnv(ctx, uc.TenantID, req.ProjectID, req.Environment); resyncErr != nil {
+			slog.Warn("secret resync failed — pods may fail to start with CreateContainerConfigError",
+				"error", resyncErr,
+				"tenant_id", uc.TenantID,
+				"project", req.ProjectID,
+				"environment", req.Environment,
+			)
 		}
 	}
 

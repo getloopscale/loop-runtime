@@ -72,6 +72,36 @@ func (s *PostgresSecretStore) encrypt(plaintext []byte) ([]byte, error) {
 	return gcm.Seal(nonce, nonce, plaintext, nil), nil
 }
 
+// decrypt is the inverse of encrypt. Reads nonce || ciphertext as written
+// by encrypt(), returns plaintext. V9 L20: required by ListForResync so
+// the deploy hook can repopulate ExternalSecrets with the original values.
+//
+// SEC-001 invariant: only path that turns persisted bytes back into
+// plaintext. Bypasses the encrypt() when encryptionKey is nil (matches
+// the local-dev no-encryption mode).
+func (s *PostgresSecretStore) decrypt(encrypted []byte) ([]byte, error) {
+	if s.encryptionKey == nil {
+		return encrypted, nil // matches encrypt() local-dev path
+	}
+	block, err := aes.NewCipher(s.encryptionKey)
+	if err != nil {
+		return nil, fmt.Errorf("secret_store: create cipher: %w", err)
+	}
+	gcm, err := cipher.NewGCM(block)
+	if err != nil {
+		return nil, fmt.Errorf("secret_store: create GCM: %w", err)
+	}
+	if len(encrypted) < gcm.NonceSize() {
+		return nil, fmt.Errorf("secret_store: ciphertext too short (%d bytes)", len(encrypted))
+	}
+	nonce, ciphertext := encrypted[:gcm.NonceSize()], encrypted[gcm.NonceSize():]
+	plain, err := gcm.Open(nil, nonce, ciphertext, nil)
+	if err != nil {
+		return nil, fmt.Errorf("secret_store: gcm open: %w", err)
+	}
+	return plain, nil
+}
+
 // Set creates or updates a secret. Uses sqlc-generated UpsertSecret
 // (ON CONFLICT DO UPDATE returning xmax=0 to distinguish INSERT
 // from UPDATE).
@@ -148,6 +178,58 @@ func (s *PostgresSecretStore) Delete(ctx context.Context, tenantID, projectID, e
 		return false, fmt.Errorf("secret_store: delete: %w", err)
 	}
 	return n > 0, nil
+}
+
+// SecretResyncEntry is a (name, app, plaintext-value) tuple returned by
+// ListForResync. V9 L20: only consumed by the deploy-time resync hook
+// in builds.go which (re)creates ExternalSecrets on the workload cluster
+// after the namespace has been ensured. Wrapper decrypts via SEC-001
+// AES-GCM before returning, so the caller gets plaintext values.
+type SecretResyncEntry struct {
+	Name  string
+	App   string
+	Value string
+}
+
+// ListForResync returns plaintext (name, app, value) for all secrets in
+// an env tuple. V9 L20: used by the deploy handler post-EnsureEnvironment
+// to repopulate ExternalSecrets on the workload cluster. This closes the
+// "set secret BEFORE first deploy" race where the K8s sync at POST time
+// fails (no namespace) and pods later fail to start with
+// CreateContainerConfigError.
+//
+// SEC-001: values are decrypted in this function before return; callers
+// MUST scope use to the resync path. Other read paths (CLI list, audit)
+// MUST use ListNames which never returns the value column.
+func (s *PostgresSecretStore) ListForResync(ctx context.Context, tenantID, projectID, env string) ([]SecretResyncEntry, error) {
+	bridge, err := s.bridge()
+	if err != nil {
+		return nil, err
+	}
+	q := generated.New()
+	rows, err := q.ListSecretsForResync(ctx, bridge, generated.ListSecretsForResyncParams{
+		TenantID:    tenantID,
+		ProjectID:   projectID,
+		Environment: env,
+	})
+	if err != nil {
+		return nil, fmt.Errorf("secret_store: list for resync: %w", err)
+	}
+	out := make([]SecretResyncEntry, 0, len(rows))
+	for _, row := range rows {
+		plain, derr := s.decrypt(row.EncryptedValue)
+		if derr != nil {
+			// Skip undecryptable rows (defense-in-depth: never panic in
+			// a deploy hook). Surface as ERROR so operators see drift.
+			return nil, fmt.Errorf("secret_store: decrypt %q: %w", row.Name, derr)
+		}
+		out = append(out, SecretResyncEntry{
+			Name:  row.Name,
+			App:   row.App,
+			Value: string(plain),
+		})
+	}
+	return out, nil
 }
 
 // ListNames returns metadata (name, environment, app) for all secrets
