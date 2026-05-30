@@ -27,12 +27,12 @@ const (
 	rollbackTimeout = 3 * time.Minute
 
 	// httpProbeTimeout is the maximum time to wait for an HTTP endpoint to respond.
-	// V9 dogfood 2026-05-30 fix L9: increased 5min → 10min. Under env-isolation
-	// (commit e99e721f), each journey creates a fresh ArgoCD app + namespace +
-	// TraefikService. Initial routing convergence sometimes exceeds 5min in
-	// k3d under CPU pressure with 11 concurrent journey apps. 10min budget
-	// covers the worst-case observed convergence in v9unlock retry.
-	httpProbeTimeout = 10 * time.Minute
+	// V9 dogfood 2026-05-30 final: reverted L9 (10min) back to 5min. With L10
+	// (kubectl exec bypass for Prova de Vida, commit 2fc25283) most probes
+	// converge in seconds, so the long timeout was unnecessary and crowded
+	// out total spec count under the 90min suite ceiling. 5min budget covers
+	// kubectl-exec convergence (~30s typical) with 10x headroom.
+	httpProbeTimeout = 5 * time.Minute
 
 	// probeTimeout is an alias for httpProbeTimeout used by deploy_e2e_test.go.
 	probeTimeout = httpProbeTimeout
