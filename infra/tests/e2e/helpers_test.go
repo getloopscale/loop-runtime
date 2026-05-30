@@ -349,7 +349,13 @@ func waitHTTP200WithHost(host, path string, timeout time.Duration) {
 	}
 	client := &http.Client{
 		Transport: transport,
-		Timeout:   10 * time.Second,
+		// V9 dogfood 2026-05-30 fix L9: per-request timeout 10s → 30s.
+		// Under env-isolation (commit e99e721f) each journey has its own
+		// ArgoCD app + TraefikService; the routing table takes longer to
+		// populate on first request after newly-created Service. 10s
+		// timeout caused spurious zero-status returns; 30s gives Traefik
+		// the headroom to resolve the new IngressRoute.
+		Timeout: 30 * time.Second,
 	}
 
 	Eventually(func() int {
