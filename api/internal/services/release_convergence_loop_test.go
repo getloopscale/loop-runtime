@@ -6,12 +6,14 @@ package services
 import (
 	"context"
 	"encoding/json"
+	"fmt"
 	"log/slog"
 	"sync"
 	"testing"
 	"time"
 
 	"github.com/loopzero/loopzero/api/internal/db"
+	loopzeroerrors "github.com/loopzero/loopzero/pkg/errors"
 	"github.com/loopzero/loopzero/pkg/statemachine"
 )
 
@@ -347,5 +349,95 @@ func TestReleaseConvergenceLoop_HealthCheck_ActiveUnhealthy_EmitsMetric(t *testi
 	// Assert: no status changes (health check is observability-only)
 	if len(rs.lastStatus) > 0 {
 		t.Error("health check should NOT change release state")
+	}
+}
+
+// --- V9 L21 tests ---
+//
+// L21 (commit a7daa7fc): when TriggerSync returns ErrSyncOperationInProgress
+// twice in a row, the convergence loop calls TerminateOperation to clear
+// the stale ArgoCD sync lock pre-timeout, rather than waiting 5min for the
+// sync_timeout path to fire TerminateOperation (which fails the release).
+
+// l21SyncClient counts TriggerSync + TerminateOperation invocations and
+// returns a configurable error from TriggerSync. Mirrors fake pattern
+// used in the rest of this file (no testify, no mockery).
+type l21SyncClient struct {
+	triggerCount    int
+	terminateCount  int
+	triggerErr      error
+}
+
+func (c *l21SyncClient) TriggerSync(_ context.Context, _ string) error {
+	c.triggerCount++
+	return c.triggerErr
+}
+func (c *l21SyncClient) WaitForSync(_ context.Context, _ string, _ time.Duration, _ []string) error {
+	return nil
+}
+func (c *l21SyncClient) GetAppStatus(_ context.Context, _ string, _ []string) (bool, bool, error) {
+	return false, false, nil
+}
+func (c *l21SyncClient) TerminateOperation(_ context.Context, _ string) error {
+	c.terminateCount++
+	return nil
+}
+
+func TestRetriggerSync_L21_TerminatesAfterTwoConsecutiveLockStuck(t *testing.T) {
+	// Arrange: SyncClient that always returns ErrSyncOperationInProgress.
+	client := &l21SyncClient{triggerErr: loopzeroerrors.ErrSyncOperationInProgress}
+
+	loop := NewReleaseConvergenceLoop(
+		newFakeConvergenceReleaseStore(),
+		newFakeConvergenceEnvTargetStore(),
+		client,
+		&fakeConvergenceLocker{},
+		&fakeConvergenceEventStore{},
+		"dev.loopzero.example", slog.Default(),
+		ReleaseConvergenceLoopConfig{},
+	)
+
+	release := &db.Release{ID: "rel-l21-1", TenantID: "tn-1", Environment: "production"}
+
+	// Act 1: first retrigger — should fail with lock-stuck, increment counter to 1.
+	loop.retriggerSyncIfNeeded(context.Background(), release, "tn-1-production")
+
+	if client.terminateCount != 0 {
+		t.Errorf("after 1 lock-stuck failure, expected 0 TerminateOperation calls; got %d", client.terminateCount)
+	}
+
+	// Act 2: second retrigger — counter hits 2, TerminateOperation MUST fire.
+	loop.retriggerSyncIfNeeded(context.Background(), release, "tn-1-production")
+
+	if client.terminateCount != 1 {
+		t.Errorf("after 2 consecutive lock-stuck failures, expected 1 TerminateOperation call (L21 pre-timeout recovery); got %d", client.terminateCount)
+	}
+}
+
+func TestRetriggerSync_L21_DoesNotTerminateOnNonLockErrors(t *testing.T) {
+	// Arrange: SyncClient that returns a generic non-lock error.
+	client := &l21SyncClient{triggerErr: fmt.Errorf("generic transient network error")}
+
+	loop := NewReleaseConvergenceLoop(
+		newFakeConvergenceReleaseStore(),
+		newFakeConvergenceEnvTargetStore(),
+		client,
+		&fakeConvergenceLocker{},
+		&fakeConvergenceEventStore{},
+		"dev.loopzero.example", slog.Default(),
+		ReleaseConvergenceLoopConfig{},
+	)
+
+	release := &db.Release{ID: "rel-l21-2", TenantID: "tn-1", Environment: "production"}
+
+	// Act: 5 consecutive non-lock failures.
+	for i := 0; i < 5; i++ {
+		loop.retriggerSyncIfNeeded(context.Background(), release, "tn-1-production")
+	}
+
+	// Assert: TerminateOperation should NEVER fire for non-lock errors.
+	// L21 is targeted at ErrSyncOperationInProgress specifically.
+	if client.terminateCount != 0 {
+		t.Errorf("non-lock errors must NOT trigger TerminateOperation; got %d calls", client.terminateCount)
 	}
 }
