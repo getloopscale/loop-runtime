@@ -75,7 +75,7 @@ var _ = Describe("Journey 03: Secrets Lifecycle", Ordered, Label("journey"), fun
 	})
 
 	It("app responds HTTP 200", func() {
-		waitHTTP200WithHost(host, "/health", httpProbeTimeout)
+		waitAppHealthyViaKubectl(project, app, env, "/health", httpProbeTimeout)
 	})
 
 	It("secret is visible in running app", func() {

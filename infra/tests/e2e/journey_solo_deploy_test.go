@@ -80,7 +80,7 @@ var _ = Describe("Journey 01: Solo Deploy", Ordered, Label("journey", "smoke"), 
 	})
 
 	It("app responds HTTP 200 (Prova de Vida)", func() {
-		waitHTTP200WithHost(host, "/health", httpProbeTimeout)
+		waitAppHealthyViaKubectl(project, app, env, "/health", httpProbeTimeout)
 
 		// Verify response contains project name.
 		_, body, err := httpGetWithHost(host, "/")

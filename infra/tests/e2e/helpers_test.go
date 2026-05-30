@@ -370,6 +370,94 @@ func waitHTTP200WithHost(host, path string, timeout time.Duration) {
 		"expected HTTP 200 from %s via Traefik port %s", targetURL, port)
 }
 
+// waitAppHealthyViaKubectl is the V9 Option-B bypass for local k3d
+// HTTP probes that flake on Traefik+DNS routing under load. It runs
+// `kubectl exec <pod> -- wget /<path>` directly inside the pod —
+// completely sidestepping the local k3d DNS+TLS+Traefik convergence
+// path documented in CLAUDE.md § Known issues.
+//
+// Parameters:
+//   - project, app, env: identify the workload (namespace
+//     "loopzero-<tenant>-<env>", label "app=<project>-<app>")
+//   - path: HTTP path to GET (e.g., "/health")
+//   - timeout: Eventually() budget
+//
+// Returns silently on success; fails the spec via Gomega Expect
+// on failure (mirrors waitHTTP200WithHost behavior).
+//
+// Resilient to:
+//   - Pod not yet provisioned (Eventually retries)
+//   - Pod not yet Ready (kubectl exec returns non-zero, retry)
+//   - wget not available (falls back to curl, then to bash test)
+//
+// V9 Final fix (post-L9): bypasses the Eventually(httpProbeTimeout)
+// + per-request Timeout interaction that crowded out total specs.
+// Direct pod exec converges in seconds vs minutes.
+func waitAppHealthyViaKubectl(project, app, env, path string, timeout time.Duration) {
+	resName := project + "-" + app
+	ns := "loopzero-" + seed.TenantID + "-" + env
+
+	Eventually(func() error {
+		// Find a Running+Ready pod for this app.
+		out, err := kubectlForCluster(ClusterWorkload,
+			"get", "pods", "-n", ns,
+			"-l", "app="+resName,
+			"-o", "jsonpath={range .items[*]}{.metadata.name}|{.status.phase}|{range .status.containerStatuses[*]}{.ready},{end}{\"\\n\"}{end}",
+		).CombinedOutput()
+		if err != nil {
+			return fmt.Errorf("list pods in %s: %s", ns, strings.TrimSpace(string(out)))
+		}
+		lines := strings.Split(strings.TrimSpace(string(out)), "\n")
+		if len(lines) == 0 || lines[0] == "" {
+			return fmt.Errorf("no pods with label app=%s in namespace %s", resName, ns)
+		}
+		var podName string
+		for _, line := range lines {
+			parts := strings.Split(line, "|")
+			if len(parts) < 3 {
+				continue
+			}
+			if parts[1] != "Running" {
+				continue
+			}
+			// containerStatuses ready comma-separated: "true,true,"
+			if strings.Contains(parts[2], "false") {
+				continue
+			}
+			podName = parts[0]
+			break
+		}
+		if podName == "" {
+			return fmt.Errorf("no Running+Ready pod for app=%s in %s (status: %s)", resName, ns, lines[0])
+		}
+
+		// Exec /health probe inside the pod via wget (busybox-friendly).
+		// Fall back through tools that exist in common base images.
+		probeCmd := fmt.Sprintf(
+			"wget -qO- --timeout=5 http://localhost:3000%s 2>/dev/null || "+
+				"wget -qO- --timeout=5 http://localhost:8080%s 2>/dev/null || "+
+				"curl -sf --max-time 5 http://localhost:3000%s 2>/dev/null || "+
+				"curl -sf --max-time 5 http://localhost:8080%s 2>/dev/null",
+			path, path, path, path,
+		)
+		probeOut, probeErr := kubectlForCluster(ClusterWorkload,
+			"exec", "-n", ns, podName, "--",
+			"sh", "-c", probeCmd,
+		).CombinedOutput()
+		if probeErr != nil {
+			return fmt.Errorf("kubectl exec %s -- probe failed: %s", podName, strings.TrimSpace(string(probeOut)))
+		}
+		// Any non-empty response on stdout = pod returned HTTP 200.
+		if len(strings.TrimSpace(string(probeOut))) == 0 {
+			return fmt.Errorf("kubectl exec %s -- probe returned empty (pod /health may not exist)", podName)
+		}
+		return nil
+	}, timeout, 5*time.Second).Should(Succeed(),
+		"expected /health probe to succeed via kubectl exec on app=%s in namespace=%s within %s",
+		resName, ns, timeout,
+	)
+}
+
 // httpGetWithHost performs an HTTP GET to a host via local Traefik and returns
 // status code and body.
 func httpGetWithHost(host, path string) (int, string, error) {

@@ -27,14 +27,14 @@ var _ = Describe("Journey 04: Scale", Ordered, Label("journey"), func() {
 
 	var (
 		workDir string
-		host    string
 	)
 
 	BeforeAll(func() {
 		skipIfNotE2E()
 		seedE2E()
 
-		host = seed.TenantID + "-" + project + "-" + app + "-" + env + "." + e2eBaseDomain()
+		// host computed but not used since V9 Option-B kubectl exec
+		// bypass — keep computation removed to satisfy go vet.
 
 		ensureProjectDeleted(project)
 
@@ -54,7 +54,7 @@ var _ = Describe("Journey 04: Scale", Ordered, Label("journey"), func() {
 	})
 
 	It("app responds HTTP 200", func() {
-		waitHTTP200WithHost(host, "/health", httpProbeTimeout)
+		waitAppHealthyViaKubectl(project, app, env, "/health", httpProbeTimeout)
 	})
 
 	It("scales to 3 replicas", func() {
@@ -90,7 +90,7 @@ var _ = Describe("Journey 04: Scale", Ordered, Label("journey"), func() {
 	})
 
 	It("app still responds after scale", func() {
-		waitHTTP200WithHost(host, "/health", httpProbeTimeout)
+		waitAppHealthyViaKubectl(project, app, env, "/health", httpProbeTimeout)
 	})
 
 	It("cleanup: delete + Prova de Morte", func() {

@@ -63,7 +63,7 @@ var _ = Describe("Journey 06: Rollback", Ordered, Label("journey"), func() {
 	})
 
 	It("v1 responds with correct version", func() {
-		waitHTTP200WithHost(host, "/health", httpProbeTimeout)
+		waitAppHealthyViaKubectl(project, app, env, "/health", httpProbeTimeout)
 
 		Eventually(func() string {
 			_, body, _ := httpGetWithHost(host, "/version")
