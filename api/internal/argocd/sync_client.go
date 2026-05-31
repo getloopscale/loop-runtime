@@ -334,16 +334,28 @@ func (c *SyncClient) hardRefresh(ctx context.Context, appName string) error {
 // Called by ReleaseConvergenceLoop when Application.status.operationState
 // is empty for >2min despite TriggerSync having succeeded.
 func (c *SyncClient) ForceReconcile(ctx context.Context, appName string) error {
-	// PATCH /api/v1/applications/{name}?refresh=hard is the documented
+	// V9 L22 fix #2 2026-05-31: bounded timeout (90s) — original implementation
+	// inherited the http.Client default which let context-deadline-exceeded
+	// errors stack up against a slow/queue-stuck repo-server. 90s gives the
+	// controller enough headroom to enqueue + start, but bounds the worst-case
+	// stall so the convergence-loop tick is not blocked.
+	//
+	// Use `refresh=normal` (not `hard`): hard forces re-clone of the entire
+	// repo at repo-server which compounds the cleanroom-fresh latency, AND we
+	// already invoke hardRefresh from TriggerSync before each sync. The
+	// purpose of ForceReconcile is to wake the controller workqueue, NOT to
+	// invalidate caches — `normal` does that without the repo round-trip.
+	reconcileCtx, cancel := context.WithTimeout(ctx, 90*time.Second)
+	defer cancel()
+
+	// PATCH /api/v1/applications/{name}?refresh=normal is the documented
 	// ArgoCD REST endpoint. Per ArgoCD docs:
 	//   "If refresh parameter is provided, it can take values:
 	//    - normal: compare desired vs live, update status
 	//    - hard:   re-fetch repo + compare + update status (cache invalidation)"
-	// Using `hard` because the L22 scenario typically involves stale repo
-	// cache as well as workqueue stagnation.
-	url := fmt.Sprintf("%s/api/v1/applications/%s?refresh=hard", c.baseURL, appName)
+	url := fmt.Sprintf("%s/api/v1/applications/%s?refresh=normal", c.baseURL, appName)
 
-	req, err := http.NewRequestWithContext(ctx, http.MethodGet, url, nil)
+	req, err := http.NewRequestWithContext(reconcileCtx, http.MethodGet, url, nil)
 	if err != nil {
 		return fmt.Errorf("force reconcile: create request: %w", err)
 	}

@@ -291,33 +291,31 @@ else
 fi
 
 # ---------------------------------------------------------------------------
-# H3 — Recreate ArgoCD cluster Secrets so the controller discovery cache
-# fully invalidates (a `kubectl patch` is not enough — the cache key is the
-# old apiServer URL; only delete+apply forces re-discovery).
+# H3 — REMOVED 2026-05-31 (V9-CLEANROOM-FRESH-FAANG-FIX, sponsor-direct).
 # ---------------------------------------------------------------------------
-log "H3: recreating ArgoCD cluster secrets (force discovery refresh)"
-recreate_argocd_cluster() {
-  local secret_name="$1" cluster_name="$2" server="$3" token="$4"
-  local config="{\"bearerToken\":\"${token}\",\"tlsClientConfig\":{\"insecure\":true}}"
-  kubectl --context "$MGMT_CTX" -n argocd delete secret "$secret_name" --ignore-not-found=true >/dev/null 2>&1
-  cat <<EOF | kubectl --context "$MGMT_CTX" apply -f - >/dev/null
-apiVersion: v1
-kind: Secret
-metadata:
-  name: $secret_name
-  namespace: argocd
-  labels:
-    argocd.argoproj.io/secret-type: cluster
-type: Opaque
-stringData:
-  name: $cluster_name
-  server: $server
-  config: '$config'
-EOF
-  log "  $secret_name → $server"
-}
-[[ -n "$RT_TOK" ]] && recreate_argocd_cluster runtime-argocd-cluster runtime "https://${RT_IP}:6443" "$RT_TOK"
-[[ -n "$BUILD_TOK" ]] && recreate_argocd_cluster build-argocd-cluster build "https://${BUILD_IP}:6443" "$BUILD_TOK"
+# Historical context: H3 used to create `runtime-argocd-cluster` and
+# `build-argocd-cluster` Secrets pointing at IPs that ALREADY map to the
+# canonical `cluster-cell-default` / `cluster-cell-1` Secrets that the
+# ClusterCredential controller emits. The duplication caused ArgoCD
+# application-controller to register 2-3 informers per server URL; on
+# shard re-assignment one informer always ended up orphan, leaving the
+# controller pod with cancelled watches and a 1.2GB allocation loop
+# (`Watch failed err="context canceled"` log spam, no Reconciliation
+# completed messages, all Applications stuck status.sync=""). LIVE-validated
+# 2026-05-31 cleanroom-fresh dogfood — Apps reconcile cleanly after the
+# duplicates are removed.
+#
+# Canonical source of truth post-ADR-0008 multi-cell:
+#   - cluster-cell-default      (managed-by=clustercredential-controller)
+#   - cluster-cell-1            (managed-by=clustercredential-controller)
+#   - cluster-cell-2            (managed-by=clustercredential-controller)
+#
+# H3 cleanup of stale Secrets is preserved here (idempotent — runs on every
+# heal invocation so prior installs auto-migrate).
+log "H3: removing legacy duplicate ArgoCD cluster secrets (V9-FAANG cleanup)"
+for stale in runtime-argocd-cluster build-argocd-cluster cluster-workload cluster-runtime-2; do
+  kubectl --context "$MGMT_CTX" -n argocd delete secret "$stale" --ignore-not-found=true >/dev/null 2>&1 && log "  deleted $stale"
+done
 
 # ---------------------------------------------------------------------------
 # H6 — empty buildkit-registry-config when DOCR creds absent.
@@ -507,36 +505,13 @@ if [[ -n "$TENANT_APPS" ]]; then
   done <<< "$TENANT_APPS"
 fi
 
-# Restore build-* and runtime-* AppOfApps destination URLs from cluster
-# secret server URLs (these are the in-ArgoCD secrets healed by H3).
-ARGO_APPS=$(kubectl --context "$MGMT_CTX" -n argocd get applications \
-  -o jsonpath='{range .items[*]}{.metadata.name}{"\n"}{end}' 2>/dev/null)
-BUILD_URL_FROM_SECRET=$(kubectl --context "$MGMT_CTX" -n argocd get secret \
-  build-argocd-cluster -o jsonpath='{.data.server}' 2>/dev/null | base64 -d 2>/dev/null)
-RUNTIME_URL_FROM_SECRET=$(kubectl --context "$MGMT_CTX" -n argocd get secret \
-  runtime-argocd-cluster -o jsonpath='{.data.server}' 2>/dev/null | base64 -d 2>/dev/null)
-for app in $ARGO_APPS; do
-  case "$app" in
-    build-*)
-      [[ -z "$BUILD_URL_FROM_SECRET" ]] && continue
-      cur=$(kubectl --context "$MGMT_CTX" -n argocd get application "$app" \
-        -o jsonpath='{.spec.destination.server}' 2>/dev/null)
-      [[ "$cur" == "$BUILD_URL_FROM_SECRET" ]] && continue
-      kubectl --context "$MGMT_CTX" -n argocd patch application "$app" \
-        --type=json -p="[{\"op\":\"replace\",\"path\":\"/spec/destination/server\",\"value\":\"$BUILD_URL_FROM_SECRET\"}]" \
-        >/dev/null 2>&1 && log "  build app $app: $cur → $BUILD_URL_FROM_SECRET"
-      ;;
-    runtime-*)
-      [[ -z "$RUNTIME_URL_FROM_SECRET" ]] && continue
-      cur=$(kubectl --context "$MGMT_CTX" -n argocd get application "$app" \
-        -o jsonpath='{.spec.destination.server}' 2>/dev/null)
-      [[ "$cur" == "$RUNTIME_URL_FROM_SECRET" ]] && continue
-      kubectl --context "$MGMT_CTX" -n argocd patch application "$app" \
-        --type=json -p="[{\"op\":\"replace\",\"path\":\"/spec/destination/server\",\"value\":\"$RUNTIME_URL_FROM_SECRET\"}]" \
-        >/dev/null 2>&1 && log "  runtime app $app: $cur → $RUNTIME_URL_FROM_SECRET"
-      ;;
-  esac
-done
+# NOTE: Legacy AppOfApps `build-*` / `runtime-*` Application destination
+# patches were removed 2026-05-31 alongside H3. LoopZero-managed Applications
+# (tenant + e2e dogfood) use `spec.destination.name` = cellID (e.g.
+# "cell-default", "cell-1") which resolves canonically via
+# `cluster-cell-*` Secrets. The legacy `build-` / `runtime-` apps were
+# infra-bootstrap remnants that have been migrated to direct helmfile
+# install (ADR-0008 multi-cell + 4-binary operator split).
 
 # ---------------------------------------------------------------------------
 # H11 — ArgoCD token expired. loopzero-api-tokens Secret may have expired (24h
@@ -612,29 +587,22 @@ fi
 if [[ "$CELL1_CONNECTED" == "true" ]]; then
   log "  ClusterCredential with spec.cellID=cell-1 already connected — skip"
 else
+  # V9-CLEANROOM-FRESH-FAANG-FIX 2026-05-31: invoke the ADR-0008 canonical
+  # bootstrap-cell-cc.sh (CR name = cell-1) instead of the legacy
+  # clustercredential-create.sh that named the CR after CLUSTER_NAME=workload.
+  # Legacy path produced duplicate ArgoCD cluster Secrets pointing at the
+  # same apiServer URL, triggering controller informer thrash and L22-class
+  # "Ignoring cluster" loops.
   REPO_ROOT=$(cd "$(dirname "$0")/../../.." && pwd)
-  CC_LIB="$REPO_ROOT/infra/helmfile/scripts/lib/clustercredential-create.sh"
-  SCOPED_LIB="$REPO_ROOT/infra/helmfile/scripts/lib/scoped-kubeconfig.sh"
-  WORKLOAD_KUBECONFIG=$(mktemp)
-  H12_TMP="$WORKLOAD_KUBECONFIG"
-  trap 'rm -f "$H12_TMP"' EXIT
-  k3d kubeconfig get loopzero-workload > "$WORKLOAD_KUBECONFIG" 2>/dev/null
-  if [[ -x "$CC_LIB" ]] && [[ -x "$SCOPED_LIB" ]] && [[ -s "$WORKLOAD_KUBECONFIG" ]]; then
-    # CLUSTER_NAME=workload matches k3d-loopzero-workload-server-0 container
-    # so scoped-kubeconfig can rewrite SERVER to docker bridge IP.
-    SCOPED=$(KUBECONFIG="$WORKLOAD_KUBECONFIG" "$SCOPED_LIB" workload "$WORKLOAD_KUBECONFIG" 2>/dev/null | grep -oE '/[^[:space:]]+kube[^[:space:]]*' | head -1 || echo "")
-    if [[ -n "$SCOPED" ]] && [[ -s "$SCOPED" ]]; then
-      # cell-2-activation-plan T1.3 / ADR C7: pass INGRESS_DOMAIN consistently
-      # across cell-1 + cell-2 + cell-default. Local k3d uses loopzero.local for
-      # both runtime clusters — guarantees rollback works without DNS change.
-      KUBECONFIG="" INGRESS_DOMAIN="loopzero.local" "$CC_LIB" cell-1 workload "$SCOPED" >/dev/null 2>&1 \
-        && log "  ClusterCredential 'workload' (cellID=cell-1, ingress-domain=loopzero.local) created/refreshed" \
-        || warn "clustercredential-create.sh cell-1 failed — see matrix entry 153 fix path (b)"
-    else
-      warn "scoped-kubeconfig.sh produced empty output for workload cluster"
-    fi
+  BOOTSTRAP="$REPO_ROOT/infra/helmfile/scripts/bootstrap-cell-cc.sh"
+  if [[ -x "$BOOTSTRAP" ]]; then
+    KUBECONFIG="$(k3d kubeconfig write loopzero-mgmt 2>/dev/null)" \
+      INGRESS_DOMAIN="loopzero.local" \
+      bash "$BOOTSTRAP" --cell 1 --env standalone-multi >/dev/null 2>&1 \
+      && log "  ClusterCredential cell-1 (CR name = cellID) created/refreshed via bootstrap-cell-cc.sh" \
+      || warn "bootstrap-cell-cc.sh --cell 1 failed — see matrix entry 153 fix path (b)"
   else
-    warn "wire-clusters lib scripts missing or workload kubeconfig empty"
+    warn "bootstrap-cell-cc.sh missing — cannot heal H12"
   fi
 fi
 
@@ -819,30 +787,23 @@ EOF
       fi
     fi
   else
-    # Mode B — bootstrap fresh CR (CR doesn't exist).
-    log "  cell-2 CR absent — bootstrapping via clustercredential-create.sh"
+    # Mode B — bootstrap fresh CR via ADR-0008 canonical script.
+    # V9-CLEANROOM-FRESH-FAANG-FIX 2026-05-31: invoke bootstrap-cell-cc.sh
+    # so CR name = cell-2 (not runtime-2). Legacy `clustercredential-create.sh
+    # cell-2 runtime-2` produced a duplicate cluster Secret pointing at the
+    # same apiServer URL as the canonical `cell-2` CC, triggering
+    # application-controller informer thrash (see H3 + wire-clusters.sh).
+    log "  cell-2 CR absent — bootstrapping via bootstrap-cell-cc.sh"
     REPO_ROOT_H14=$(cd "$(dirname "$0")/../../.." && pwd)
-    CC_LIB_H14="$REPO_ROOT_H14/infra/helmfile/scripts/lib/clustercredential-create.sh"
-    SCOPED_LIB_H14="$REPO_ROOT_H14/infra/helmfile/scripts/lib/scoped-kubeconfig.sh"
-    RUNTIME2_KUBECONFIG=$(mktemp)
-    H14_TMP="$RUNTIME2_KUBECONFIG"
-    trap 'rm -f "$H14_TMP"' EXIT
-    k3d kubeconfig get loopzero-runtime-2 > "$RUNTIME2_KUBECONFIG" 2>/dev/null
-    if [[ -x "$CC_LIB_H14" ]] && [[ -x "$SCOPED_LIB_H14" ]] && [[ -s "$RUNTIME2_KUBECONFIG" ]]; then
-      # CLUSTER_NAME=runtime-2 matches k3d-loopzero-runtime-2-server-0 container
-      # so scoped-kubeconfig can rewrite SERVER to docker bridge IP.
-      SCOPED_H14=$(KUBECONFIG="$RUNTIME2_KUBECONFIG" "$SCOPED_LIB_H14" runtime-2 "$RUNTIME2_KUBECONFIG" 2>/dev/null | grep -oE '/[^[:space:]]+kube[^[:space:]]*' | head -1 || echo "")
-      if [[ -n "$SCOPED_H14" ]] && [[ -s "$SCOPED_H14" ]]; then
-        # cell-2-activation-plan T1.3 / ADR C7: shared ingress-domain so re-pin
-        # between cell-1 and cell-2 needs no DNS change (5-min rollback SLO).
-        KUBECONFIG="" INGRESS_DOMAIN="loopzero.local" "$CC_LIB_H14" cell-2 runtime-2 "$SCOPED_H14" >/dev/null 2>&1 \
-          && log "  ClusterCredential 'runtime-2' (cellID=cell-2, ingress-domain=loopzero.local) created/refreshed" \
-          || warn "  clustercredential-create.sh cell-2 runtime-2 failed — see matrix entry 155 fix path (b)"
-      else
-        warn "  scoped-kubeconfig.sh produced empty output for runtime-2 cluster"
-      fi
+    BOOTSTRAP_H14="$REPO_ROOT_H14/infra/helmfile/scripts/bootstrap-cell-cc.sh"
+    if [[ -x "$BOOTSTRAP_H14" ]]; then
+      KUBECONFIG="$(k3d kubeconfig write loopzero-mgmt 2>/dev/null)" \
+        INGRESS_DOMAIN="loopzero.local" \
+        bash "$BOOTSTRAP_H14" --cell 2 --env standalone-multi >/dev/null 2>&1 \
+        && log "  ClusterCredential cell-2 (CR name = cellID) created/refreshed via bootstrap-cell-cc.sh" \
+        || warn "  bootstrap-cell-cc.sh --cell 2 failed — see matrix entry 155 fix path (b)"
     else
-      warn "  wire-clusters lib scripts missing or runtime-2 kubeconfig empty (runtime-2 cluster running?)"
+      warn "  bootstrap-cell-cc.sh missing — cannot heal H14 mode B (runtime-2 cluster running?)"
     fi
   fi
 fi

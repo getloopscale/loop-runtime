@@ -120,6 +120,33 @@ func (cb *CircuitBreakerSyncClient) TerminateOperation(ctx context.Context, appN
 	return nil
 }
 
+// ForceReconcile delegates to the inner SyncClient.
+// V9 L22 fix 2026-05-31: ReleaseConvergenceLoop performs a type assertion
+// `r.sync_.(forceReconciler)` to call ForceReconcile when retriggerSync has
+// exhausted (counter >= maxSyncRetriggers) AND the release has been stuck
+// for >2min. Without this wrapper method the assertion FAILS silently — the
+// inner *argocd.SyncClient has the method but `cb.inner` is typed as the
+// SyncClient interface (only TriggerSync + WaitForSync). The L22 escalation
+// path was a no-op for all wrapped sync clients, which is the actual
+// production wiring (workflows.SyncClient is *CircuitBreakerSyncClient per
+// setup_workflows.go). Discovered LIVE in cleanroom-fresh dogfood 2026-05-31:
+// J04 Scale release rel-30b7cc1ae4556e55 hit max retriggers + sync_timeout
+// without L22 ever firing.
+//
+// Like the other delegating methods, this re-asserts the interface on the
+// inner client so it works whether the inner is a real *argocd.SyncClient
+// or another wrapper. No circuit-breaker pre-check: ForceReconcile is a
+// recovery path; we want it to run even when the breaker is half-open.
+func (cb *CircuitBreakerSyncClient) ForceReconcile(ctx context.Context, appName string) error {
+	type forceReconciler interface {
+		ForceReconcile(ctx context.Context, appName string) error
+	}
+	if fr, ok := cb.inner.(forceReconciler); ok {
+		return fr.ForceReconcile(ctx, appName)
+	}
+	return nil
+}
+
 // GetSyncRevision delegates to the inner SyncClient.
 // Read-only operation — no circuit breaker needed.
 // Required so that the commit SHA verification type assertion succeeds

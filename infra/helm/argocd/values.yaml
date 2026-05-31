@@ -153,6 +153,16 @@ configs:
     # Prevents stuck Certificate/CRD from blocking all deploys indefinitely.
     # Without this, a single orphaned resource can lock the entire pipeline.
     controller.operation.processing.timeout: "300"
+    # V9-CLEANROOM-FRESH-FAANG-FIX 2026-05-31: with controller.replicas=3
+    # (T-05), the default `legacy` sharding algorithm exhibits a startup
+    # race where multiple shards keep re-assigning clusters during boot
+    # and all three controllers end up "Ignoring cluster" for the same
+    # cluster — Applications never get reconciled (status.sync.status="").
+    # `consistent-hashing` (GA in ArgoCD 2.10) computes a stable shard
+    # assignment per cluster and converges on first boot without thrash.
+    # Discovered LIVE in cleanroom-fresh dogfood 2026-05-31: 7/7 Apps
+    # never processed; all journeys requiring deploy timed out.
+    controller.sharding.algorithm: "consistent-hashing"
   repositories:
     # Gitea repository credentials for tenant GitOps repos.
     # ArgoCD uses these to clone tenant repos from the internal Gitea instance.
