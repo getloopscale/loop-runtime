@@ -78,12 +78,12 @@ func RequireJWT(rsaValidator *loopzerojwt.Validator, sessValidator *loopzerojwt.
 					}
 					if tenantID == "" {
 						// MEET-2026-04-07-039 B7: never fall back to "default" tenant.
-						slog.Warn("auth: JWT has no tenant_id", "sub", claims.RegisteredClaims.Subject, "path", r.URL.Path)
+						slog.Warn("auth: JWT has no tenant_id", "sub", claims.Subject, "path", r.URL.Path)
 						writeAuthError(w, "Account setup required. Please try logging in again.")
 						return
 					}
 					ctx := context.WithValue(r.Context(), userCtxKey, &UserContext{
-						Subject:  claims.RegisteredClaims.Subject,
+						Subject:  claims.Subject,
 						Email:    email,
 						Name:     name,
 						TenantID: tenantID,
@@ -100,12 +100,12 @@ func RequireJWT(rsaValidator *loopzerojwt.Validator, sessValidator *loopzerojwt.
 					tenantID := claims.TenantID
 					if tenantID == "" {
 						// MEET-2026-04-07-039 B7: never fall back to "default" tenant.
-						slog.Warn("auth: session JWT has no tenant_id", "sub", claims.RegisteredClaims.Subject, "path", r.URL.Path)
+						slog.Warn("auth: session JWT has no tenant_id", "sub", claims.Subject, "path", r.URL.Path)
 						writeAuthError(w, "Account setup required. Please try logging in again.")
 						return
 					}
 					ctx := context.WithValue(r.Context(), userCtxKey, &UserContext{
-						Subject:  claims.RegisteredClaims.Subject,
+						Subject:  claims.Subject,
 						Email:    claims.Email,
 						Name:     claims.Name,
 						TenantID: tenantID,
@@ -153,5 +153,5 @@ func writeAuthError(w http.ResponseWriter, message string) {
 	if requestID != "" {
 		resp["request_id"] = requestID
 	}
-	json.NewEncoder(w).Encode(resp)
+	_ = json.NewEncoder(w).Encode(resp)
 }

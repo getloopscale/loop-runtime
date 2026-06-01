@@ -2,7 +2,7 @@
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "$id": "https://loopzero.platform/schemas/ory-kratos/values.schema.json",
   "title": "Ory Kratos LoopZero wrapper values schema",
-  "description": "Plan v1.2 T2.5 / D4 — fail-fast on missing keys per ADR. Schema enforces uiBaseUrl pattern (no trailing slash per EC-8) and required-by-env override discipline.",
+  "description": "Plan v1.2 T2.5 / D4 — fail-fast on missing keys per ADR. Schema enforces uiBaseUrl pattern (no trailing slash per EC-8) and required-by-env override discipline. Extended by plan 2026-05-29-dashboard-public-integration-canonicalization T2.1 with public-URL keys for the dashboard public flow.",
   "type": "object",
   "required": ["uiBaseUrl"],
   "properties": {
@@ -11,9 +11,58 @@
       "pattern": "^https?://[a-z0-9][a-z0-9.-]*(:[0-9]+)?$",
       "description": "Base URL for Kratos UI redirects (login, registration, etc.). Anchored pattern: scheme http(s), FQDN-like host ([a-z0-9.-] starting with alnum), optional :NNNN numeric port. NO trailing slash (EC-8), NO query/fragment, NO userinfo (catches http://user:pass@host injection), NO non-numeric port (catches http://host:abc). Per env: dev/standalone/standalone-multi=http://localhost:4455; drill=https://app.loopzero-drill.example; prod=https://app.loopzero.example. Set via infra/helmfile/environments/<env>.yaml. (2026-05-20 pattern audit closed shadow bug class: old pattern '^https?://[^/]+(:[0-9]+)?\\$' was too permissive — '[^/]+' greedy-matched any non-slash sequence including :abc, ?query, @userinfo.)"
     },
+    "publicAuthUrl": {
+      "type": "string",
+      "pattern": "^https?://[a-z0-9][a-z0-9.-]*(:[0-9]+)?/?$",
+      "description": "Public Kratos hostname (browser-facing). When set, Kratos serve.public.base_url uses this, CORS is enabled, and session cookies scope to cookieDomain. T2.1 of plan 2026-05-29-dashboard-public-integration-canonicalization. v1.1 EC-07: env yamls MUST omit this key (not set it to empty) when not applicable — Go template default-fallback semantics require absence, not empty string."
+    },
+    "cookieDomain": {
+      "type": "string",
+      "pattern": "^[a-z0-9][a-z0-9.-]*$",
+      "description": "eTLD+1 for session cookie scope (e.g., loopzero.example). Must be a parent of every host that consumes the cookie (app/cloud/auth subdomains all share it). When unset (local dev), Kratos defaults to the request host. v1.1 EC-D2: legacy leading dot not required for modern browsers."
+    },
+    "corsAllowedOrigins": {
+      "type": "array",
+      "items": {
+        "type": "string",
+        "pattern": "^https?://"
+      },
+      "description": "Origins permitted for cross-origin XHR from the dashboard. Required (non-empty) when publicAuthUrl is set — see dependencies. v1.1 EC-06: CORS with empty allowed_origins silently 403s every browser request."
+    },
+    "allowedReturnUrls": {
+      "type": "array",
+      "items": {
+        "type": "string",
+        "pattern": "^https?://"
+      },
+      "description": "Prefixes Kratos accepts in ?return_to= callback URLs. Should include {publicAuthUrl, publicCloudUrl, uiBaseUrl} and their trailing-slash variants."
+    },
+    "dashboardRoute": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "login": {"type": "string", "pattern": "^/"},
+        "register": {"type": "string", "pattern": "^/"},
+        "recovery": {"type": "string", "pattern": "^/"},
+        "verification": {"type": "string", "pattern": "^/"},
+        "settings": {"type": "string", "pattern": "^/"},
+        "error": {"type": "string", "pattern": "^/"}
+      },
+      "description": "Per-flow path mapping for the React dashboard (cloud/dashboard/src/app.tsx). Defaults baked into chart template via sprig `dig`. Override only when dashboard routes diverge — e.g., a future i18n setup serving /pt/login. Without this map, the 2026-05-29 LIVE bug recurs: Kratos generates /registration but the React route is /register → 404 on signup."
+    },
     "kratos": {
       "type": "object",
       "description": "Upstream ory/kratos chart values pass-through. Schema does not constrain (delegates to upstream chart's own schema)."
+    }
+  },
+  "dependencies": {
+    "publicAuthUrl": {
+      "description": "v1.1 EC-06: setting publicAuthUrl without corsAllowedOrigins and cookieDomain produces a Kratos config that 403s every browser request and breaks session cross-host. Schema rejects partial configs to fail at helmfile lint time, not at LIVE login.",
+      "required": ["corsAllowedOrigins", "cookieDomain", "allowedReturnUrls"],
+      "properties": {
+        "corsAllowedOrigins": {"minItems": 1},
+        "allowedReturnUrls": {"minItems": 1}
+      }
     }
   },
   "additionalProperties": true

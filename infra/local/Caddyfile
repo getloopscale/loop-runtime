@@ -1,0 +1,56 @@
+## Caddy edge for the local-public dashboard demo
+##
+## T7.1 of plan 2026-05-29-dashboard-public-integration-canonicalization.
+##
+## Topology (droplet 165.227.121.20 OR any host with public DNS pointing at it):
+##
+##   browser → Cloudflare DNS (A record) → droplet :80/:443
+##                                          → Caddy (this file)
+##                                            → localhost:5173  (vite dev server)
+##                                            → localhost:13002 (loopzero-cloud via port-forward)
+##                                            → localhost:14433 (ory-kratos-public via port-forward)
+##
+## Auto-HTTPS via Let's Encrypt HTTP-01 challenge on :80.
+## Certs persist under /var/lib/caddy by default (or $XDG_DATA_HOME).
+##
+## Start with: `task cloud:caddy:up` (binds :80/:443, requires sudo).
+## Stop with:  `task cloud:caddy:down`.
+##
+## Required prereqs:
+##   - Caddy >= 2.7 installed
+##   - Cloudflare DNS A records pointing app/cloud/auth.loopzero.example at the host
+##   - `task cloud:port-forward:up` to expose loopzero-cloud + ory-kratos locally
+
+{
+  email admin@loopzero.example
+}
+
+# Dashboard (vite dev server with HMR)
+app.loopzero.example {
+  # WebSocket route MUST come first to win the match priority
+  @ws {
+    header Connection *Upgrade*
+    header Upgrade websocket
+  }
+  reverse_proxy @ws localhost:5173
+  reverse_proxy localhost:5173
+  encode gzip
+}
+
+# Cloud auth/billing service
+cloud.loopzero.example {
+  reverse_proxy localhost:13002
+  encode gzip
+  # Stripe webhook posts here; Caddy needs to pass through raw body for signature
+  # validation (cloud's billing webhook handler reads request body before parsing
+  # — Stripe-Signature HMAC depends on the exact bytes received).
+  request_body {
+    max_size 1MB
+  }
+}
+
+# Kratos public (browser-facing login/registration flows)
+auth.loopzero.example {
+  reverse_proxy localhost:14433
+  encode gzip
+}

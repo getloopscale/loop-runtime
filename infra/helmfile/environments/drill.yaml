@@ -139,3 +139,23 @@ velero:
 # Plan v1.2 T2.3 / D4 — kratos+hydra UI base URL placeholder (drill DOKS)
 uiBaseUrl: "https://app.loopzero-drill.example"
 dashboardOrigin: "https://cloud.loopzero-drill.example"
+
+# T2.2 of plan 2026-05-29-dashboard-public-integration-canonicalization.
+publicAuthUrl: "https://auth.loopzero-drill.example"
+publicCloudUrl: "https://cloud.loopzero-drill.example"
+cookieDomain: "loopzero-drill.example"
+corsAllowedOrigins:
+  - "https://app.loopzero-drill.example"
+  - "https://cloud.loopzero-drill.example"
+allowedReturnUrls:
+  - "https://app.loopzero-drill.example"
+  - "https://app.loopzero-drill.example/"
+  - "https://cloud.loopzero-drill.example"
+  - "https://cloud.loopzero-drill.example/"
+dashboardRoute:
+  login: /login
+  register: /register
+  recovery: /recovery
+  verification: /verification
+  settings: /settings
+  error: /login

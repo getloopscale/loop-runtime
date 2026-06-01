@@ -7,7 +7,12 @@ image:
   tag: dev
   pullPolicy: IfNotPresent
 
-replicaCount: 1
+# HA for the auth control plane (find_infra_011): a single pod means an
+# eviction during node maintenance takes consent/session flows offline.
+# Safe with the shared LOOPZERO_SERVICE_AUTH_SECRET requirement (T1.6) — both
+# replicas validate dashboard-proxied requests identically. replicaCount > 1
+# also activates the PDB template (pdb.yaml minAvailable: 1).
+replicaCount: 2
 revisionHistoryLimit: 3
 priorityClassName: system-cluster-critical
 

@@ -347,7 +347,12 @@ spec:
     matchLabels:
       app.kubernetes.io/name: hydra
   ingress:
-    # loopzero-api and loopzero-operators need JWKS + token introspection
+    # loopzero-api + loopzero-operators need JWKS + token introspection.
+    # loopzero-cloud's consent handler calls the Hydra admin API (consent accept,
+    # client registration) and the public API — it MUST be an explicit source
+    # so the OAuth flow does not depend on the policy being unenforced (T2.1 /
+    # find_infra_003: default-deny already blocks arbitrary pods; this allow-
+    # lists the legitimate caller).
     - from:
         - podSelector:
             matchLabels:
@@ -355,6 +360,9 @@ spec:
         - podSelector:
             matchLabels:
               app.kubernetes.io/component: loopzero-operator
+        - podSelector:
+            matchLabels:
+              app.kubernetes.io/name: loopzero-cloud
       ports:
         - port: 4444
           protocol: TCP

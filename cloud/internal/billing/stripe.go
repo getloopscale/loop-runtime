@@ -150,7 +150,11 @@ func (c *StripeClient) ReportUsage(subscriptionItemID string, quantity int64, ti
 	}
 
 	path := fmt.Sprintf("/subscription_items/%s/usage_records", subscriptionItemID)
-	return c.post(path, data, nil, "")
+	// Deterministic idempotency key: a given (subscription item, period) increment
+	// is applied at most once even if the reporter retries (e.g., on a transient
+	// network error or a multi-replica re-run). Stripe dedupes server-side.
+	idempotencyKey := fmt.Sprintf("usage-%s-%d", subscriptionItemID, timestamp)
+	return c.post(path, data, nil, idempotencyKey)
 }
 
 func (c *StripeClient) post(path string, data url.Values, result interface{}, idempotencyKey string) error {
@@ -168,7 +172,7 @@ func (c *StripeClient) post(path string, data url.Values, result interface{}, id
 	if err != nil {
 		return err
 	}
-	defer resp.Body.Close()
+	defer func() { _ = resp.Body.Close() }()
 
 	body, _ := io.ReadAll(resp.Body)
 	if resp.StatusCode >= 400 {

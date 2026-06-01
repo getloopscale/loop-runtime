@@ -7,9 +7,8 @@ metadata:
 data:
   CLOUD_LISTEN_ADDR: {{ .Values.config.listenAddr | quote }}
   KRATOS_PUBLIC_URL: {{ .Values.config.kratosPublicUrl | quote }}
-  KRATOS_ADMIN_URL: {{ .Values.config.kratosAdminUrl | quote }}
   HYDRA_PUBLIC_URL: {{ .Values.config.hydraPublicUrl | quote }}
-  HYDRA_ADMIN_URL: {{ .Values.config.hydraAdminUrl | quote }}
   HYDRA_CLIENT_ID: {{ .Values.config.hydraClientId | quote }}
+  # KRATOS_ADMIN_URL / HYDRA_ADMIN_URL live in the Secret (find_infra_007).
   ENGINE_API_URL: {{ .Values.config.engineApiUrl | quote }}
   LOOPZERO_ENV: {{ .Values.config.loopzeroEnv | quote }}

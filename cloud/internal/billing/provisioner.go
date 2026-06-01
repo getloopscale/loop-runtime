@@ -7,6 +7,7 @@ import (
 	"context"
 	"crypto/rand"
 	"database/sql"
+	"errors"
 	"fmt"
 	"log/slog"
 )
@@ -69,7 +70,7 @@ func (p *Provisioner) EnsureStripeCustomer(ctx context.Context, tenantID, email,
 		"SELECT stripe_customer_id FROM subscriptions WHERE tenant_id = $1",
 		tenantID,
 	).Scan(&customerID)
-	if err != nil && err != sql.ErrNoRows {
+	if err != nil && !errors.Is(err, sql.ErrNoRows) {
 		return "", err
 	}
 	if customerID.Valid && customerID.String != "" {

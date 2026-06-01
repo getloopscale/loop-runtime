@@ -56,6 +56,60 @@ tasks:
       - kubectl --context {{.MGMT_CONTEXT}} delete job minio-lifecycle-setup -n loopzero-system --ignore-not-found 2>/dev/null
       - kubectl --context {{.MGMT_CONTEXT}} apply -f infra/helm/minio/lifecycle-job.yaml
 
+  infra:install:mgmt-dashboard-only:
+    desc: |
+      Install only the 16 mgmt-cluster releases the dashboard demo needs (skips
+      harbor, opencost, chaos-mesh, monitoring, loki, tempo, otel, blackbox,
+      smoke-test, velero, nfs). Defaults to ENV=standalone-public; override
+      with ENV=<env>. Per T0.1 of plan 2026-05-29-dashboard-public-integration-
+      canonicalization-plan.md.
+    deps: [helm:repos]
+    vars:
+      ENV: '{{.ENV | default "standalone-public"}}'
+    cmds:
+      # v1.1 EC-01 guard: helmfile sync --selector exits 0 even when zero
+      # releases match. Block silent-empty installs.
+      - |
+        count=$(helmfile -f infra/helmfile/mgmt.helmfile.yaml.gotmpl \
+          -e {{.ENV}} \
+          --kube-context {{.MGMT_CONTEXT}} \
+          --selector profile=dashboard-only \
+          list --output json 2>/dev/null | jq -r 'length // 0')
+        if [ "$count" -lt 16 ]; then
+          echo "ERROR: profile=dashboard-only selector matched $count releases, expected >=16"
+          echo "Check labels in infra/helmfile/mgmt.helmfile.yaml.gotmpl"
+          exit 1
+        fi
+        echo "OK: dashboard-only selector matched $count releases"
+      # Same pre-sync as infra:install:mgmt for LOOPZERO_DB_PASSWORD
+      - bash infra/helmfile/scripts/generate-secrets.sh {{.ENV}} mgmt
+      - |
+        export LOOPZERO_DB_PASSWORD=$(kubectl --context {{.MGMT_CONTEXT}} -n loopzero-system \
+          get secret loopzero-db-credentials -o go-template='{{`{{.data.password | base64decode}}`}}' \
+          2>/dev/null || echo "")
+        if [ -z "$LOOPZERO_DB_PASSWORD" ]; then
+          echo "ERROR: LOOPZERO_DB_PASSWORD not in loopzero-db-credentials Secret — run generate-secrets.sh first"
+          exit 1
+        fi
+        helmfile -f infra/helmfile/mgmt.helmfile.yaml.gotmpl \
+          -e {{.ENV}} \
+          --kube-context {{.MGMT_CONTEXT}} \
+          --selector profile=dashboard-only \
+          sync --skip-deps
+      # Post-sync DB creation (idempotent, identical to mgmt)
+      - |
+        echo "Ensuring gitea/kratos/hydra databases exist..."
+        POD=$(kubectl --context {{.MGMT_CONTEXT}} -n loopzero-system get pod -l app.kubernetes.io/name=postgresql -o jsonpath='{.items[0].metadata.name}')
+        PG_ADMIN_PASS=$(kubectl --context {{.MGMT_CONTEXT}} -n loopzero-system \
+          get secret loopzero-db-credentials -o go-template='{{`{{index .data "postgres-password" | base64decode}}`}}')
+        for DB in gitea kratos hydra; do
+          kubectl --context {{.MGMT_CONTEXT}} -n loopzero-system exec -i "$POD" -c postgresql -- \
+            env PGPASSWORD="$PG_ADMIN_PASS" psql -U postgres -tc "SELECT 1 FROM pg_database WHERE datname='$DB'" | grep -q 1 || \
+          kubectl --context {{.MGMT_CONTEXT}} -n loopzero-system exec -i "$POD" -c postgresql -- \
+            env PGPASSWORD="$PG_ADMIN_PASS" psql -U postgres -c "CREATE DATABASE $DB OWNER {{.PG_USER}}"
+          echo "$DB database: ensured"
+        done
+
   infra:install:build:
     desc: Install platform components in build cluster via Helmfile (T2.3 of plan 2026-05-22)
     deps: [helm:repos]
@@ -750,6 +804,134 @@ tasks:
       - task: images:build:dockerfile-lint
       - task: images:build:syft-scanner
       - task: images:build:cosign-signer
+
+  # ---------------------------------------------------------------------------
+  # Dashboard public flow (local-Caddy demo droplet)
+  # Per plan 2026-05-29-dashboard-public-integration-canonicalization.
+  # ---------------------------------------------------------------------------
+
+  cloud:caddy:up:
+    desc: |
+      Start Caddy reverse proxy for the local-public dashboard flow. Caddy
+      binds :80 + :443 (requires sudo) and terminates Let's Encrypt TLS for
+      app/cloud/auth.loopzero.example. Routes to localhost:5173 (vite), :13002
+      (loopzero-cloud), :14433 (ory-kratos-public). T7.2 of plan.
+      v1.1 EC-S4 pre-check: ensures :80 + :443 are free before starting.
+    cmds:
+      - |
+        # Pre-check: ports 80/443 must be free
+        for port in 80 443; do
+          if ss -tlnp 2>/dev/null | grep -q ":$port "; then
+            echo "ERROR: port $port already bound. Stop the conflicting service first."
+            ss -tlnp | grep ":$port "
+            exit 1
+          fi
+        done
+      - |
+        if [ ! -f infra/local/Caddyfile ]; then
+          echo "ERROR: infra/local/Caddyfile missing. Run T7.1 first."
+          exit 1
+        fi
+      - |
+        CADDY=$(command -v caddy || echo $HOME/bin/caddy)
+        if [ ! -x "$CADDY" ]; then
+          echo "ERROR: caddy binary not found. Install from https://caddyserver.com/"
+          exit 1
+        fi
+        echo "Starting Caddy (sudo required for :80/:443)..."
+        sudo "$CADDY" start --config infra/local/Caddyfile
+
+  cloud:caddy:down:
+    desc: Stop the local Caddy reverse proxy.
+    cmds:
+      - |
+        CADDY=$(command -v caddy || echo $HOME/bin/caddy)
+        sudo "$CADDY" stop || echo "Caddy not running"
+
+  cloud:caddy:status:
+    desc: Show Caddy status + listening ports.
+    cmds:
+      - |
+        echo "=== Caddy listening on :80 / :443 ==="
+        ss -tlnp 2>/dev/null | grep -E ':80 |:443 ' || echo "  (nothing listening on :80/:443)"
+        echo ""
+        echo "=== Caddy process ==="
+        pgrep -alf 'caddy' || echo "  no caddy process"
+
+  cloud:port-forward:up:
+    desc: |
+      Start the 4 persistent port-forwards that Caddy proxies into. Auto-retry
+      on pod recreation (loopzero-cloud pod restart, kratos rollout, etc.). PID
+      file at /tmp/loopzero-port-forward-public.pids. T7.3 of plan.
+    cmds:
+      - bash infra/scripts/local/port-forward-public-dashboard.sh start
+
+  cloud:port-forward:down:
+    desc: Stop the 4 persistent port-forwards (clean shutdown of children).
+    cmds:
+      - bash infra/scripts/local/port-forward-public-dashboard.sh stop
+
+  cloud:port-forward:status:
+    desc: Show the 4 port-forwards + their ports.
+    cmds:
+      - bash infra/scripts/local/port-forward-public-dashboard.sh status
+
+  cloud:stripe:listen:
+    desc: |
+      Start `stripe listen` forwarding webhook events to the public cloud URL.
+      Use during local-public dev to validate Stripe webhook signature flow.
+      Requires `stripe login` (one-time per droplet). T4.1 of plan.
+      v1.1 EC-D2 pre-check: aborts if stripe CLI is not logged in.
+    vars:
+      WEBHOOK_URL: '{{.WEBHOOK_URL | default "https://cloud.loopzero.example/v1/webhooks/stripe"}}'
+    cmds:
+      - |
+        if ! command -v stripe >/dev/null 2>&1; then
+          echo "ERROR: stripe CLI not installed. https://stripe.com/docs/stripe-cli"
+          exit 1
+        fi
+        # Pre-check: stripe login state
+        if ! stripe config --list >/dev/null 2>&1; then
+          echo "ERROR: stripe CLI not configured. Run 'stripe login' first."
+          exit 1
+        fi
+      - |
+        echo "Forwarding Stripe webhooks → {{.WEBHOOK_URL}}"
+        echo "Copy the printed 'webhook signing secret' (whsec_*) and store via:"
+        echo ""
+        echo "  WHSEC='<paste here>'"
+        echo "  kubectl --context {{.MGMT_CONTEXT}} -n loopzero-system \\"
+        echo "    create secret generic loopzero-stripe-webhook \\"
+        echo "    --from-literal=STRIPE_WEBHOOK_SECRET=\$WHSEC \\"
+        echo "    --dry-run=client -o yaml | kubectl --context {{.MGMT_CONTEXT}} apply -f -"
+        echo "  kubectl --context {{.MGMT_CONTEXT}} -n loopzero-system rollout restart deploy/loopzero-cloud"
+        echo ""
+        echo "---"
+        stripe listen --forward-to {{.WEBHOOK_URL}}
+
+  cloud:dashboard-public:up:
+    desc: |
+      Composite: bring up the entire local-public dashboard demo. Runs
+      port-forward → caddy → demo seed (skip if data already present).
+      Use after `task infra:install:mgmt-dashboard-only ENV=standalone-public`.
+    cmds:
+      - task: cloud:port-forward:up
+      - task: cloud:caddy:up
+      - task: demo:seed
+
+  cloud:dashboard-public:down:
+    desc: Composite shutdown for the local-public dashboard demo.
+    cmds:
+      - task: cloud:caddy:down
+      - task: cloud:port-forward:down
+
+  demo:seed:
+    desc: |
+      Idempotent seed of the demo tenant with 2 projects + 8 builds + 5
+      releases + audit log entries. T6.1 of plan. Uses FK-respecting DELETE
+      order (env_targets → releases → builds → projects).
+    cmds:
+      - bash infra/scripts/local/seed-demo-data.sh
 
   # ---------------------------------------------------------------------------
   # S0.14: Composite tasks

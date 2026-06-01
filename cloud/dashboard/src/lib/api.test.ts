@@ -1,7 +1,44 @@
-import { describe, it, expect, vi, beforeEach } from 'vitest';
+// SPDX-License-Identifier: Apache-2.0
+// Copyright 2025-2026 The LoopZero Authors
+
+import { describe, it, expect, vi, beforeAll, beforeEach } from 'vitest';
 import { engineFetch, exchangeSessionToken } from './api';
 
 vi.mock('./config', () => ({ API_URL: 'http://test.local' }));
+
+// ---------------------------------------------------------------------------
+// T6.1 / find_sec_004 — the JWT must NEVER transit the BroadcastChannel.
+// ---------------------------------------------------------------------------
+
+const posted: unknown[] = [];
+beforeAll(() => {
+  vi.spyOn(BroadcastChannel.prototype, 'postMessage').mockImplementation(
+    (msg: unknown) => { posted.push(msg); },
+  );
+});
+
+describe('dashboard auth cross-tab coordination', () => {
+  it('never broadcasts the JWT over BroadcastChannel (find_sec_004)', async () => {
+    const api = await import('./api');
+    posted.length = 0;
+
+    api.logout(); // the only path that broadcasts
+
+    expect(posted.length).toBeGreaterThan(0);
+    for (const msg of posted) {
+      // No secret may transit the channel — neither a `token` field nor any
+      // JWT-looking string.
+      expect(msg).not.toHaveProperty('token');
+      expect(JSON.stringify(msg)).not.toContain('token');
+    }
+    // Logout coordination (carries no secret) is still present.
+    expect(posted.some((m) => (m as { type?: string }).type === 'logged-out')).toBe(true);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// EC-03 — engineFetch propagates AbortController signal to the underlying fetch.
+// ---------------------------------------------------------------------------
 
 describe('engineFetch — signal propagation (EC-03)', () => {
   beforeEach(() => {
@@ -37,6 +74,11 @@ describe('engineFetch — signal propagation (EC-03)', () => {
     expect(init.signal).toBe(controller.signal);
   });
 });
+
+// ---------------------------------------------------------------------------
+// T5.0 / EC-09 — fetchWithAuth auto-generates an Idempotency-Key for mutating
+// methods (POST/PATCH/PUT/DELETE) unless the caller already provided one.
+// ---------------------------------------------------------------------------
 
 describe('fetchWithAuth — Idempotency-Key auto-gen (T5.0 / EC-09)', () => {
   beforeEach(() => {

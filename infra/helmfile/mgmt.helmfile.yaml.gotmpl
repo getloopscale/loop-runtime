@@ -31,6 +31,13 @@ environments:
     # 1 host (mgmt + build + workload). Used for local E2E validation.
     values:
       - environments/standalone-multi.yaml
+  standalone-public:
+    # T2.2 of plan 2026-05-29-dashboard-public-integration-canonicalization.
+    # Same topology as standalone-multi, but configured for the local-Caddy
+    # public-DNS demo flow (app/cloud/auth.loopzero.example via Let's Encrypt).
+    # Used by `task infra:install:mgmt-dashboard-only ENV=standalone-public`.
+    values:
+      - environments/standalone-public.yaml
   drill:
     # MEET-ASYNC-AMENDMENT-2026-05-12-003 + active-execution-plan §2.2 —
     # pre-prod chaos + maturity validation on DOKS cluster provisioned by
@@ -108,6 +115,8 @@ repositories:
 releases:
   # Wave -3: CRDs and observability foundations (no dependencies)
   - name: cert-manager
+    labels:
+      profile: dashboard-only
     namespace: cert-manager
     chart: jetstack/cert-manager
     version: v1.14.5
@@ -143,6 +152,8 @@ releases:
   # Lifecycle-independent: chart never deletes CRDs
   # (helm.sh/resource-policy: keep) so re-runs are idempotent.
   - name: loopzero-crds
+    labels:
+      profile: dashboard-only
     namespace: loopzero-system
     chart: ../../charts/loopzero-crds
     values:
@@ -151,6 +162,8 @@ releases:
 
   # Wave -2: Ingress (depends on cert-manager for TLS)
   - name: traefik
+    labels:
+      profile: dashboard-only
     namespace: traefik
     chart: traefik/traefik
     version: 28.3.0
@@ -177,6 +190,8 @@ releases:
   # iter 20: closes gap where standalone customers had no DB unless they
   # brought their own. Now standalone is truly self-contained.
   - name: postgresql
+    labels:
+      profile: dashboard-only
     namespace: loopzero-system
     chart: bitnami/postgresql
     # B21 (CHG-2026-04-28-LAYERED-BOOTSTRAP) — Bitnami removed chart 16.0.7
@@ -200,6 +215,8 @@ releases:
         value: loopzero-db-credentials
 
   - name: gitea-redis
+    labels:
+      profile: dashboard-only
     namespace: loopzero-system
     chart: bitnami/redis
     version: 19.6.4
@@ -212,6 +229,8 @@ releases:
       - ../helm/redis/values.yaml
 
   - name: gitea
+    labels:
+      profile: dashboard-only
     namespace: loopzero-system
     chart: gitea-charts/gitea
     version: 10.6.0
@@ -250,6 +269,8 @@ releases:
 {{- end }}
 
   - name: minio
+    labels:
+      profile: dashboard-only
     namespace: loopzero-system
     chart: minio/minio
     version: 5.4.0
@@ -305,6 +326,8 @@ releases:
 
   # Wave 0: Platform services
   - name: argocd
+    labels:
+      profile: dashboard-only
     namespace: argocd
     chart: argo/argo-cd
     version: 7.3.11
@@ -412,6 +435,8 @@ releases:
   # `postgresql.loopzero-system.svc.cluster.local`. In dev/prod the postgres
   # is external (DO managed), so the `needs:` is conditionally rendered.
   - name: ory-kratos
+    labels:
+      profile: dashboard-only
     namespace: loopzero-auth
     chart: ory/kratos
     version: 0.61.0
@@ -425,6 +450,8 @@ releases:
       - values/{{ .Environment.Name }}/ory-kratos.yaml.gotmpl
 
   - name: ory-hydra
+    labels:
+      profile: dashboard-only
     namespace: loopzero-auth
     chart: ory/hydra
     version: 0.61.0
@@ -437,6 +464,8 @@ releases:
 
   # Wave 2: LoopZero platform
   - name: loopzero-api
+    labels:
+      profile: dashboard-only
     namespace: loopzero-system
     chart: ../helm/loopzero-api
     # STANDALONE (local k3d): loopzero-api is owned by `tilt up` (self-contained
@@ -488,6 +517,8 @@ releases:
   # (built from commit b1a8618a or earlier) and are governed by
   # CHG-NNNN-OPERATOR-SPLIT-PROD per ADR-0023 4-stage cutover.
   - name: loopzero-tenant-operator
+    labels:
+      profile: dashboard-only
     namespace: loopzero-system
     chart: ../../charts/loopzero-tenant-operator
     # STANDALONE: tilt owns operators (infra/tilt/*-operator-deployment.yaml).
@@ -506,6 +537,8 @@ releases:
       - values/{{ .Environment.Name }}/loopzero-tenant-operator.yaml.gotmpl
 
   - name: loopzero-app-operator
+    labels:
+      profile: dashboard-only
     namespace: loopzero-system
     chart: ../../charts/loopzero-app-operator
     # STANDALONE: tilt owns operators. See finding-2026-05-22-pg-password-divergence.
@@ -522,6 +555,8 @@ releases:
       - values/{{ .Environment.Name }}/loopzero-app-operator.yaml.gotmpl
 
   - name: loopzero-preview-operator
+    labels:
+      profile: dashboard-only
     namespace: loopzero-system
     chart: ../../charts/loopzero-preview-operator
     # STANDALONE: tilt owns operators. See finding-2026-05-22-pg-password-divergence.
@@ -538,6 +573,8 @@ releases:
       - values/{{ .Environment.Name }}/loopzero-preview-operator.yaml.gotmpl
 
   - name: loopzero-platform-operator
+    labels:
+      profile: dashboard-only
     namespace: loopzero-system
     chart: ../../charts/loopzero-platform-operator
     # STANDALONE: tilt owns operators. See finding-2026-05-22-pg-password-divergence.
@@ -554,6 +591,8 @@ releases:
       - values/{{ .Environment.Name }}/loopzero-platform-operator.yaml.gotmpl
 
   - name: loopzero-cloud
+    labels:
+      profile: dashboard-only
     namespace: loopzero-system
     chart: ../helm/loopzero-cloud
     # Bug #29 LIVE fix (2026-05-17 iter 20): loopzero-cloud image not in DOCR
@@ -569,6 +608,21 @@ releases:
       # CHG-2026-04-30-INFRA-PARITY / T1.3 — local registry override.
 {{- if eq (.Values | get "clusterRole" "dev") "standalone" }}
       - ../helm/loopzero-cloud/values-standalone-multi.yaml
+{{- end }}
+      # T3.1 of plan 2026-05-29-dashboard-public-integration-canonicalization.
+      # Inline values overlay: when env yaml provides publicAuthUrl (the
+      # browser-facing Kratos host), override loopzero-cloud's KRATOS_PUBLIC_URL
+      # so cloud's /v1/auth/session/token uses the public URL when redirecting
+      # the browser back to Kratos. Similarly, BILLING_RETURN_URL drives Stripe
+      # checkout success_url back to the dashboard.
+      # v1.1 EC-07: if-hasKey pattern (not | default) because empty string is
+      # NOT treated as zero-value in Go templates.
+      - env:
+{{- if hasKey .Values "publicAuthUrl" }}
+          KRATOS_PUBLIC_URL: {{ .Values.publicAuthUrl | trimSuffix "/" | quote }}
+{{- end }}
+{{- if hasKey .Values "uiBaseUrl" }}
+          BILLING_RETURN_URL: {{ .Values.uiBaseUrl | trimSuffix "/" | quote }}
 {{- end }}
 
   # Wave 90: Chaos engineering (active-execution-plan §3.A.4, iter 2)

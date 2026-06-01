@@ -20,7 +20,7 @@ import (
 
 	"github.com/go-chi/chi/v5"
 	chimw "github.com/go-chi/chi/v5/middleware"
-	_ "github.com/lib/pq"
+	_ "github.com/jackc/pgx/v5/stdlib"
 	"go.opentelemetry.io/contrib/instrumentation/net/http/otelhttp"
 	"go.opentelemetry.io/otel/trace"
 
@@ -32,6 +32,7 @@ import (
 	"github.com/loopzero/loopzero/cloud/internal/consent"
 	"github.com/loopzero/loopzero/cloud/internal/metering"
 	cloudmetrics "github.com/loopzero/loopzero/cloud/internal/metrics"
+	"github.com/loopzero/loopzero/cloud/internal/ratelimit"
 	"github.com/loopzero/loopzero/cloud/internal/routes"
 	"github.com/loopzero/loopzero/cloud/internal/tracing"
 )
@@ -58,7 +59,7 @@ func main() {
 	var db *sql.DB
 	if cfg.DatabaseURL != "" {
 		var err error
-		db, err = sql.Open("postgres", cfg.DatabaseURL)
+		db, err = sql.Open("pgx", cfg.DatabaseURL)
 		if err != nil {
 			logger.Error("failed to open database", "error", err)
 			os.Exit(1)
@@ -134,10 +135,24 @@ func main() {
 	// Universal JWT auth middleware (RSA + HMAC — one path for all)
 	requireJWT := auth.RequireJWT(jwtValidator, sessIssuer)
 
+	// Rate limiters (find_sec_007). Device endpoints are pre-auth → keyed on
+	// client IP (chimw.RealIP already resolves the real client behind the proxy).
+	// Device token is polled (~12/min legitimately) so its limit is generous.
+	// Billing mutations are per authenticated user.
+	deviceLimiter := ratelimit.NewInMemoryLimiter(60, time.Minute)
+	billingLimiter := ratelimit.NewInMemoryLimiter(30, time.Minute)
+	ipKey := func(r *http.Request) string { return ratelimit.Key("", r.RemoteAddr) }
+	userKey := func(r *http.Request) string {
+		if u := auth.GetUser(r.Context()); u != nil {
+			return ratelimit.Key(u.Subject, r.RemoteAddr)
+		}
+		return ratelimit.Key("", r.RemoteAddr)
+	}
+
 	// Handlers
 	deviceHandler := routes.NewDeviceHandler(hydra, cfg.BillingReturnURL)
 	meHandler := routes.NewMeHandler()
-	consentHandler := consent.NewHandler(hydra, tenantProvisioner, cfg.KratosPublicURL, cfg.KratosInternalURL, logger)
+	consentHandler := consent.NewHandler(hydra, tenantProvisioner, cfg.KratosPublicURL, cfg.KratosInternalURL, cfg.KratosAdminURL, logger)
 
 	// Router
 	r := chi.NewRouter()
@@ -196,7 +211,7 @@ func main() {
 			status = "degraded"
 		}
 
-		json.NewEncoder(w).Encode(map[string]string{
+		_ = json.NewEncoder(w).Encode(map[string]string{
 			"status": status,
 			"db":     dbStatus,
 		})
@@ -207,10 +222,12 @@ func main() {
 
 	// Auth endpoints (no auth — these ARE the auth flow)
 	r.Route("/v1/auth", func(r chi.Router) {
-		r.Post("/device/authorize", deviceHandler.Authorize)
-		r.Post("/device/token", deviceHandler.Token)
-		r.Post("/token/refresh", deviceHandler.Refresh)
-		r.Post("/session/token", sessionTokenHandler.Exchange) // Dashboard: Kratos session → JWT
+		// Device endpoints are unauthenticated — rate-limit per client IP to
+		// blunt brute force / abuse (find_sec_007).
+		r.With(ratelimit.Middleware(deviceLimiter, 60, ipKey)).Post("/device/authorize", deviceHandler.Authorize)
+		r.With(ratelimit.Middleware(deviceLimiter, 60, ipKey)).Post("/device/token", deviceHandler.Token)
+		r.With(ratelimit.Middleware(deviceLimiter, 60, ipKey)).Post("/token/refresh", deviceHandler.Refresh)
+		r.Post("/session/token", sessionTokenHandler.Exchange) // Dashboard: Kratos session → JWT (rate-limited inside the handler)
 
 		// /me requires JWT
 		r.With(requireJWT).Get("/me", meHandler.Get)
@@ -238,9 +255,14 @@ func main() {
 	if billingHandler != nil {
 		r.Route("/v1/billing", func(r chi.Router) {
 			r.Use(requireJWT)
+			// Per-user rate limit on billing endpoints (find_sec_007).
+			r.Use(ratelimit.Middleware(billingLimiter, 30, userKey))
+			// Reading billing status is allowed for any member of the team.
 			r.Get("/", billingHandler.GetBilling)
-			r.Get("/portal", billingHandler.Portal)
-			r.Post("/checkout", billingHandler.Checkout)
+			// Mutating billing (opening the Stripe portal, starting checkout) is
+			// owner-only. Role is resolved from the DB (S2.3), never the token.
+			r.With(auth.RequireRole(tenantProvisioner, "owner")).Get("/portal", billingHandler.Portal)
+			r.With(auth.RequireRole(tenantProvisioner, "owner")).Post("/checkout", billingHandler.Checkout)
 		})
 		// Webhook — NO JWT (Stripe signs with its own secret)
 		r.Post("/v1/webhooks/stripe", billingHandler.Webhook)
@@ -288,11 +310,12 @@ func main() {
 				targetPath = "/"
 			}
 
+			// #nosec G704 -- authenticated reverse proxy (requireJWT); host is the operator-configured EngineAPIURL, only the path is forwarded by design.
 			proxyReq, err := http.NewRequestWithContext(r.Context(), r.Method, engineURL+targetPath, r.Body)
 			if err != nil {
 				w.Header().Set("Content-Type", "application/json")
 				w.WriteHeader(http.StatusBadGateway)
-				json.NewEncoder(w).Encode(map[string]string{"code": "SERVICE_ERROR", "message": "Service temporarily unavailable. Try again."})
+				_ = json.NewEncoder(w).Encode(map[string]string{"code": "SERVICE_ERROR", "message": "Service temporarily unavailable. Try again."})
 				return
 			}
 			// Forward query params, content type, and correlation ID
@@ -332,14 +355,15 @@ func main() {
 				}
 			}
 
+			// #nosec G704 -- authenticated reverse proxy (requireJWT); destination host is the operator-configured EngineAPIURL, not attacker-controlled.
 			resp, err := engineClient.Do(proxyReq)
 			if err != nil {
 				w.Header().Set("Content-Type", "application/json")
 				w.WriteHeader(http.StatusBadGateway)
-				json.NewEncoder(w).Encode(map[string]string{"code": "SERVICE_UNAVAILABLE", "message": "Service temporarily unavailable. Try again."})
+				_ = json.NewEncoder(w).Encode(map[string]string{"code": "SERVICE_UNAVAILABLE", "message": "Service temporarily unavailable. Try again."})
 				return
 			}
-			defer resp.Body.Close()
+			defer func() { _ = resp.Body.Close() }()
 
 			// Copy response headers and body
 			for k, v := range resp.Header {
@@ -348,7 +372,7 @@ func main() {
 				}
 			}
 			w.WriteHeader(resp.StatusCode)
-			io.Copy(w, resp.Body)
+			_, _ = io.Copy(w, resp.Body)
 		})
 	})
 
@@ -408,14 +432,14 @@ func main() {
 		schedulerCancel() // Stop background metering jobs
 		ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 		defer cancel()
-		srv.Shutdown(ctx)
+		_ = srv.Shutdown(ctx)
 		if tracingShutdown != nil {
 			if err := tracingShutdown(ctx); err != nil {
 				logger.Warn("tracing shutdown error", "error", err)
 			}
 		}
 		if db != nil {
-			db.Close()
+			_ = db.Close()
 		}
 	}()
 

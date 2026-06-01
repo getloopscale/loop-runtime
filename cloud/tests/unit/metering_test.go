@@ -59,7 +59,7 @@ func TestReconcilerDriftCallback(t *testing.T) {
 	}
 
 	// With nil DB, reconciler skips — callback not called
-	reconciler.ReconcileBuilds()
+	_ = reconciler.ReconcileBuilds()
 	if called {
 		t.Error("DriftCallback should not be called with nil DB")
 	}

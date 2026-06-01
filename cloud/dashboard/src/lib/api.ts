@@ -21,22 +21,21 @@ let accessToken: string | null = null;
 let tokenExpiresAt = 0;
 let refreshPromise: Promise<boolean> | null = null; // Dedup concurrent refreshes
 
-// §3.3: BroadcastChannel for cross-tab coordination
-type AuthMessage =
-  | { type: 'token-refreshed'; token: string; expiresAt: number }
-  | { type: 'logged-out' };
+// §3.3: BroadcastChannel for cross-tab coordination.
+// SECURITY: the JWT is NEVER broadcast. The token lives only in this tab's
+// memory; broadcasting it would let any same-origin XSS subscribe to the channel
+// and exfiltrate tokens from every open tab. Each tab mints its own token from
+// its own Kratos session cookie via exchangeSessionToken(). Only logout (which
+// carries no secret) is coordinated across tabs.
+type AuthMessage = { type: 'logged-out' };
 
 let authChannel: BroadcastChannel | null = null;
 try {
   authChannel = new BroadcastChannel('loopzero-auth');
   authChannel.onmessage = (event: MessageEvent<AuthMessage>) => {
     const msg = event.data;
-    if (msg.type === 'token-refreshed') {
-      // Another tab refreshed the token — use it without redundant exchange
-      accessToken = msg.token;
-      tokenExpiresAt = msg.expiresAt;
-    } else if (msg.type === 'logged-out') {
-      // Another tab logged out — redirect this tab
+    if (msg.type === 'logged-out') {
+      // Another tab logged out — clear this tab's token and redirect.
       accessToken = null;
       tokenExpiresAt = 0;
       redirectToLogin('expired');
@@ -73,13 +72,8 @@ export async function exchangeSessionToken(): Promise<boolean> {
       accessToken = data.access_token;
       tokenExpiresAt = Date.now() + (data.expires_in * 1000) - 60000; // 60s buffer
 
-      // §3.3: Broadcast to other tabs
-      authChannel?.postMessage({
-        type: 'token-refreshed',
-        token: accessToken,
-        expiresAt: tokenExpiresAt,
-      } satisfies AuthMessage);
-
+      // SECURITY: do NOT broadcast the token. Each tab exchanges its own token
+      // from its Kratos session cookie on demand (see ensureToken).
       return true;
     } catch {
       return false;

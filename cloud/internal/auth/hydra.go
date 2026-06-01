@@ -25,6 +25,10 @@ type HydraClient struct {
 	httpClient *http.Client
 }
 
+// ClientID returns the trusted first-party OAuth2 client ID this service owns.
+// Used by the consent handler to reject auto-approval for any other client.
+func (c *HydraClient) ClientID() string { return c.clientID }
+
 // NewHydraClient creates a client for Ory Hydra.
 func NewHydraClient(publicURL, adminURL, clientID string) *HydraClient {
 	return &HydraClient{
@@ -73,7 +77,7 @@ func (c *HydraClient) DeviceAuthorize(scope string) (*DeviceAuthorizeResponse, e
 	if err != nil {
 		return nil, fmt.Errorf("device authorize request failed: %w", err)
 	}
-	defer resp.Body.Close()
+	defer func() { _ = resp.Body.Close() }()
 
 	body, err := io.ReadAll(resp.Body)
 	if err != nil {
@@ -104,7 +108,7 @@ func (c *HydraClient) DeviceToken(deviceCode string) (*TokenResponse, error) {
 	if err != nil {
 		return nil, fmt.Errorf("token request failed: %w", err)
 	}
-	defer resp.Body.Close()
+	defer func() { _ = resp.Body.Close() }()
 
 	body, err := io.ReadAll(resp.Body)
 	if err != nil {
@@ -143,7 +147,7 @@ func (c *HydraClient) RefreshToken(refreshToken string) (*TokenResponse, error) 
 	if err != nil {
 		return nil, fmt.Errorf("refresh request failed: %w", err)
 	}
-	defer resp.Body.Close()
+	defer func() { _ = resp.Body.Close() }()
 
 	body, err := io.ReadAll(resp.Body)
 	if err != nil {
@@ -184,7 +188,7 @@ func (c *HydraClient) GetLoginRequest(challenge string) (*LoginRequest, error) {
 	if err != nil {
 		return nil, fmt.Errorf("get login request failed: %w", err)
 	}
-	defer resp.Body.Close()
+	defer func() { _ = resp.Body.Close() }()
 
 	var req LoginRequest
 	if err := json.NewDecoder(resp.Body).Decode(&req); err != nil {
@@ -217,7 +221,7 @@ func (c *HydraClient) AcceptLogin(challenge, subject string) (string, error) {
 	if err != nil {
 		return "", fmt.Errorf("accept login failed: %w", err)
 	}
-	defer resp.Body.Close()
+	defer func() { _ = resp.Body.Close() }()
 
 	var result struct {
 		RedirectTo string `json:"redirect_to"`
@@ -235,7 +239,7 @@ func (c *HydraClient) GetConsentRequest(challenge string) (*ConsentRequest, erro
 	if err != nil {
 		return nil, fmt.Errorf("get consent request failed: %w", err)
 	}
-	defer resp.Body.Close()
+	defer func() { _ = resp.Body.Close() }()
 
 	var req ConsentRequest
 	if err := json.NewDecoder(resp.Body).Decode(&req); err != nil {
@@ -281,7 +285,7 @@ func (c *HydraClient) AcceptConsent(challenge string, grantScope, grantAudience 
 	if err != nil {
 		return "", fmt.Errorf("accept consent failed: %w", err)
 	}
-	defer resp.Body.Close()
+	defer func() { _ = resp.Body.Close() }()
 
 	var result struct {
 		RedirectTo string `json:"redirect_to"`
@@ -312,7 +316,7 @@ func (c *HydraClient) AcceptDeviceChallenge(challenge, userCode string) (string,
 	if err != nil {
 		return "", fmt.Errorf("accept device challenge failed: %w", err)
 	}
-	defer resp.Body.Close()
+	defer func() { _ = resp.Body.Close() }()
 
 	if resp.StatusCode >= 400 {
 		respBody, _ := io.ReadAll(resp.Body)
@@ -360,7 +364,7 @@ func (c *HydraClient) RegisterClient(redirectURIs []string) error {
 	if err != nil {
 		return fmt.Errorf("register client failed: %w", err)
 	}
-	defer resp.Body.Close()
+	defer func() { _ = resp.Body.Close() }()
 
 	if resp.StatusCode != http.StatusCreated && resp.StatusCode != http.StatusOK {
 		respBody, err := io.ReadAll(resp.Body)

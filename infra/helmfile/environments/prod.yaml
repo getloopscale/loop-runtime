@@ -93,3 +93,25 @@ velero:
 # Plan v1.2 T2.3 / D4 — kratos+hydra UI base URL placeholder (prod DOKS)
 uiBaseUrl: "https://app.loopzero.example"
 dashboardOrigin: "https://cloud.loopzero.example"
+
+# T2.2 of plan 2026-05-29-dashboard-public-integration-canonicalization.
+# Public-facing Kratos hostname + session cookie scope + CORS origins +
+# allowed return URLs for the prod dashboard flow.
+publicAuthUrl: "https://auth.loopzero.example"
+publicCloudUrl: "https://cloud.loopzero.example"
+cookieDomain: "loopzero.example"
+corsAllowedOrigins:
+  - "https://app.loopzero.example"
+  - "https://cloud.loopzero.example"
+allowedReturnUrls:
+  - "https://app.loopzero.example"
+  - "https://app.loopzero.example/"
+  - "https://cloud.loopzero.example"
+  - "https://cloud.loopzero.example/"
+dashboardRoute:
+  login: /login
+  register: /register
+  recovery: /recovery
+  verification: /verification
+  settings: /settings
+  error: /login

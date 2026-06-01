@@ -65,6 +65,11 @@ spec:
                 {{- else }}
                 name: {{ include "loopzero-common.fullname" . }}
                 {{- end }}
+            # T1.1 of plan 2026-05-29-dashboard-public-integration-canonicalization.
+            # Shared with loopzero-cloud — single source of truth for X-Service-Auth.
+            - secretRef:
+                name: loopzero-service-auth
+                optional: true
           {{- if or .Values.kubeconfig.build.existingConfigMap .Values.kubeconfig.runtime.existingConfigMap }}
           env:
             {{- if .Values.kubeconfig.build.existingConfigMap }}

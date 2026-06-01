@@ -170,3 +170,6 @@ builds/
 
 *.pyc
 __pycache__/
+
+# Operator-local files (not committed; T7.1 plan moved canonical Caddyfile to infra/local/)
+.local/

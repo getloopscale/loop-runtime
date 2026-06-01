@@ -202,6 +202,9 @@ spec:
             # B14 fix (real-paas-cleanroom-dogfood-loop iter 22, 2026-05-05):
             # service-auth secret for /api/v1/admin/* routes. Cleanroom-only
             # placeholder; production sets via Pulumi mgmt-api.ts (random Output).
+            # Per T1.1 of plan 2026-05-29-dashboard-public-integration-canonicalization,
+            # the loopzero-service-auth K8s Secret created by generate-secrets.sh
+            # MUST carry the same value so cloud (which reads via envFrom) matches.
             - name: LOOPZERO_SERVICE_AUTH_SECRET
               value: "cleanroom-service-auth-secret-do-not-use-in-prod"
             # CHG-2026-05-05-DOGFOOD-B38: enable admin API surface for

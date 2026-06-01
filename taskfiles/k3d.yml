@@ -91,6 +91,22 @@ tasks:
       - kubectl --context {{.WORKLOAD_CONTEXT}} cluster-info
       - kubectl --context {{.RUNTIME2_CONTEXT}} cluster-info
 
+  k3d:recover-degraded:
+    desc: |
+      Recover the mgmt cluster from a degraded state (stuck Terminating pods +
+      Deployments with 0 ready replicas) caused by apiserver overload OR
+      kubelet sandbox issues. Used after `kubectl set env`/`kubectl patch` start
+      returning `context deadline exceeded`.
+
+      Per T0.2 of plan 2026-05-29-dashboard-public-integration-canonicalization.
+
+      Idempotent. Pass DRY_RUN=1 to preview without modification.
+
+      WARNING: --force --grace-period=0 will drop in-flight requests on pods
+      in normal Terminating state. Use only when cluster is degraded.
+    cmds:
+      - bash infra/scripts/local/recover-mgmt-degraded.sh {{if eq .DRY_RUN "1"}}--dry-run{{end}}
+
   k3d:regen-scoped:
     desc: |
       Regenerate scoped SA kubeconfigs for every ClusterCredential except

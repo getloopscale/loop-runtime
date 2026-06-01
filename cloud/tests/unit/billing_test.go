@@ -52,6 +52,24 @@ func TestVerifySignature_MissingHeader(t *testing.T) {
 	}
 }
 
+// T4.2 of plan 2026-05-29-dashboard-public-integration-canonicalization.
+// v1.1 EC-S2 — fail-closed contract: when STRIPE_WEBHOOK_SECRET is empty
+// (e.g., the optional loopzero-stripe-webhook Secret is absent in dev), the
+// webhook MUST reject all events, not accept them unsigned. Accepting
+// unsigned events lets any attacker forge `subscription.cancelled` or
+// `customer.deleted` events and disrupt billing state.
+func TestVerifySignature_EmptySecret_FailsClosed(t *testing.T) {
+	// A perfectly valid signature header with a real timestamp — should still
+	// reject because the secret side of the HMAC is empty.
+	timestamp := fmt.Sprintf("%d", time.Now().Unix())
+	header := fmt.Sprintf("t=%s,v1=abc123def456", timestamp)
+
+	if err := billing.VerifySignature([]byte(`{"id":"evt_test"}`), header, ""); err == nil {
+		t.Fatal("FAIL-OPEN VULNERABILITY: VerifySignature accepted an event with EMPTY secret. " +
+			"This means anyone can forge Stripe webhooks. Fail-closed is mandatory.")
+	}
+}
+
 func TestVerifySignature_ExpiredTimestamp(t *testing.T) {
 	secret := "whsec_test_secret"
 	payload := []byte(`{"id":"evt_123"}`)
@@ -149,7 +167,7 @@ func TestStripeClient_IdempotencyKey(t *testing.T) {
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		receivedKey = r.Header.Get("Idempotency-Key")
 		w.WriteHeader(200)
-		w.Write([]byte(`{"id":"cus_test","email":"test@test.com"}`))
+		_, _ = w.Write([]byte(`{"id":"cus_test","email":"test@test.com"}`))
 	}))
 	defer srv.Close()
 

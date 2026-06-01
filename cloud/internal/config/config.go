@@ -1,6 +1,8 @@
 // SPDX-License-Identifier: Apache-2.0
 // Copyright 2025-2026 The LoopZero Authors
 
+// Package config loads and validates the cloud control-plane configuration
+// from the environment, enforcing production-safety invariants at startup.
 package config
 
 import (
@@ -114,9 +116,12 @@ func Load() Config {
 	cfg.StripeWebhookSecret = Secret(envOr("STRIPE_WEBHOOK_SECRET", ""))
 	cfg.BillingReturnURL = envOr("BILLING_RETURN_URL", "http://localhost:3000")
 	cfg.DatabaseURL = envOr("DATABASE_URL", "")
-	cfg.SessionTokenSecret = Secret(envOr("SESSION_TOKEN_SECRET", generateDevSecret()))
+	// Secrets are auto-generated only in non-production. In production they MUST
+	// be set explicitly — a per-pod random secret breaks multi-replica auth
+	// non-deterministically (different replicas reject each other's tokens).
+	cfg.SessionTokenSecret = Secret(envOr("SESSION_TOKEN_SECRET", devSecretFor(cfg.Environment)))
 	cfg.SessionTokenSecretPrevious = Secret(envOr("SESSION_TOKEN_SECRET_PREVIOUS", ""))
-	cfg.ServiceAuthSecret = Secret(envOr("LOOPZERO_SERVICE_AUTH_SECRET", generateDevSecret()))
+	cfg.ServiceAuthSecret = Secret(envOr("LOOPZERO_SERVICE_AUTH_SECRET", devSecretFor(cfg.Environment)))
 	return cfg
 }
 
@@ -141,6 +146,15 @@ func (c Config) Validate() error {
 		if len(c.SessionTokenSecret.Value()) < 32 {
 			return fmt.Errorf("SESSION_TOKEN_SECRET must be at least 32 characters in production")
 		}
+		if len(c.ServiceAuthSecret.Value()) < 32 {
+			return fmt.Errorf("LOOPZERO_SERVICE_AUTH_SECRET must be set (>=32 chars) in production — a per-pod random secret breaks multi-replica auth")
+		}
+		if c.KratosAdminURL == "" {
+			return fmt.Errorf("KRATOS_ADMIN_URL is required in production")
+		}
+		if c.HydraAdminURL == "" {
+			return fmt.Errorf("HYDRA_ADMIN_URL is required in production")
+		}
 	}
 	return nil
 }
@@ -150,6 +164,16 @@ func envOr(key, fallback string) string {
 		return v
 	}
 	return fallback
+}
+
+// devSecretFor returns an auto-generated secret in non-production environments,
+// and an empty string in production (forcing Validate() to require an explicit
+// secret). This prevents per-pod random secrets in multi-replica production.
+func devSecretFor(environment string) string {
+	if environment == "prod" {
+		return ""
+	}
+	return generateDevSecret()
 }
 
 // generateDevSecret creates a random secret for development.

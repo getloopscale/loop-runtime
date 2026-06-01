@@ -52,6 +52,17 @@ spec:
           envFrom:
             - configMapRef:
                 name: {{ include "loopzero-common.fullname" . }}
+            - secretRef:
+                name: {{ include "loopzero-common.fullname" . }}-admin
+            # T1.1 of plan 2026-05-29-dashboard-public-integration-canonicalization.
+            # Shared with loopzero-api — single source of truth for X-Service-Auth.
+            - secretRef:
+                name: loopzero-service-auth
+                optional: true
+            # P4-T4.2 of same plan. cloud/internal/billing/webhook.go fail-closed.
+            - secretRef:
+                name: loopzero-stripe-webhook
+                optional: true
           {{- with .Values.livenessProbe }}
           livenessProbe:
             {{- toYaml . | nindent 12 }}

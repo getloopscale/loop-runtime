@@ -188,6 +188,13 @@ spec:
             - secretRef:
                 name: {{ .Values.dbCredentialsSecret | quote }}
                 optional: true
+            # T1.1 of plan 2026-05-29-dashboard-public-integration-canonicalization.
+            # Shared with loopzero-cloud — single source of truth for X-Service-Auth.
+            # Eliminates the inline-literal drift that caused 401 on /engine/* in
+            # the 2026-05-29 LIVE session.
+            - secretRef:
+                name: loopzero-service-auth
+                optional: true
           resources:
             {{- toYaml .Values.resources | nindent 12 }}
           livenessProbe:

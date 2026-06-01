@@ -51,7 +51,7 @@ func (r *Reconciler) ReconcileBuilds() error {
 	if err != nil {
 		return fmt.Errorf("query actual builds: %w", err)
 	}
-	defer rows.Close()
+	defer func() { _ = rows.Close() }()
 
 	var driftCount, correctedCount int
 	for rows.Next() {
@@ -110,6 +110,9 @@ func (r *Reconciler) ReconcileBuilds() error {
 				r.DriftCallback(tenantID, "builds", recordedCount, actualCount, driftPct)
 			}
 		}
+	}
+	if err := rows.Err(); err != nil {
+		return fmt.Errorf("iterate actual builds: %w", err)
 	}
 
 	r.logger.Info("reconciliation complete", "metric", "builds",

@@ -66,7 +66,7 @@ func TestHandleCheckoutCompleted_DoesNotElevatePlan(t *testing.T) {
 		logger: slog.New(slog.NewTextHandler(io.Discard, nil)),
 	}
 
-	if err := handler.handleCheckoutCompleted(event); err != nil {
+	if err := handler.handleCheckoutCompleted(db, event); err != nil {
 		t.Fatalf("handleCheckoutCompleted: %v", err)
 	}
 
@@ -108,7 +108,7 @@ func TestHandleCheckoutCompleted_SQLDoesNotMentionPlan(t *testing.T) {
 		logger: slog.New(slog.NewTextHandler(io.Discard, nil)),
 	}
 
-	if err := handler.handleCheckoutCompleted(event); err != nil {
+	if err := handler.handleCheckoutCompleted(db, event); err != nil {
 		t.Fatalf("handleCheckoutCompleted: %v", err)
 	}
 
@@ -142,7 +142,7 @@ func TestHandleCheckoutCompleted_SkipsNonSubscriptionMode(t *testing.T) {
 		logger: slog.New(slog.NewTextHandler(io.Discard, nil)),
 	}
 
-	if err := handler.handleCheckoutCompleted(event); err != nil {
+	if err := handler.handleCheckoutCompleted(db, event); err != nil {
 		t.Fatalf("handleCheckoutCompleted: %v", err)
 	}
 

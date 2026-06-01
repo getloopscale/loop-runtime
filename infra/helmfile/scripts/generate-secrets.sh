@@ -172,6 +172,24 @@ apply_secret loopzero-db-credentials loopzero-system \
   --from-literal=postgres-password="${DB_ADMIN_PASSWORD}" \
   --from-literal=uri="${DB_URI}"
 
+# 1.b) Service-auth shared secret (loopzero-api ↔ loopzero-cloud X-Service-Auth header).
+# T1.1 of plan 2026-05-29-dashboard-public-integration-canonicalization.
+# Single Secret consumed via envFrom by BOTH deployments → no drift possible.
+# v1.1 EC-04: presync uses kubectl create | apply pattern (idempotent).
+# v1.1 EC-S1: random_password emits 32 base64-safe ASCII chars (no newline,
+# no quote, no comma) — sanity-check enforces.
+SERVICE_AUTH_SECRET="${LOOPZERO_SERVICE_AUTH_SECRET:-$(get_or_generate loopzero-service-auth loopzero-system LOOPZERO_SERVICE_AUTH_SECRET)}"
+# v1.1 EC-S1 sanity check: emitted value MUST be a printable, single-line
+# token; otherwise downstream envFrom semantics could leak literal newlines
+# into env vars (which would break HTTP header construction in cloud/cmd/main.go).
+if ! printf '%s' "$SERVICE_AUTH_SECRET" | grep -Eq '^[A-Za-z0-9_/+=-]{32,}$'; then
+  log "ERROR: generated LOOPZERO_SERVICE_AUTH_SECRET fails base64-safe ASCII sanity check"
+  log "  value=${SERVICE_AUTH_SECRET:0:8}... (length=${#SERVICE_AUTH_SECRET})"
+  exit 1
+fi
+apply_secret loopzero-service-auth loopzero-system \
+  --from-literal=LOOPZERO_SERVICE_AUTH_SECRET="${SERVICE_AUTH_SECRET}"
+
 # 2) Gitea admin password + token — IDEMPOTENT (iter 14 fix).
 GITEA_PWD="${LOOPZERO_GITEA_ADMIN_PASSWORD:-$(get_or_generate gitea-admin loopzero-system password)}"
 GITEA_TOKEN="${LOOPZERO_GITEA_TOKEN:-$(get_or_generate gitea-admin loopzero-system token)}"

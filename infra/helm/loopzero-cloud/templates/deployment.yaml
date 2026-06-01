@@ -73,6 +73,24 @@ spec:
                 name: {{ .Values.dbCredentialsSecret | quote }}
                 optional: true
             {{- end }}
+            # T1.1 of plan 2026-05-29-dashboard-public-integration-canonicalization.
+            # Single source of truth for LOOPZERO_SERVICE_AUTH_SECRET (and
+            # LOOPZERO_SERVICE_AUTH_SECRET_PREVIOUS during rotation). loopzero-api consumes
+            # the same Secret via envFrom — eliminates the inline-literal drift
+            # that produced 401 `Invalid service authentication` on /engine/* in
+            # the 2026-05-29 LIVE session. optional=true so dev clusters without
+            # the presync-generated Secret still boot (cloud reads from env and
+            # falls back to dev secret in cloud/internal/config/config.go:124).
+            - secretRef:
+                name: loopzero-service-auth
+                optional: true
+            # P4-T4.2 of same plan: Stripe webhook secret via Secret reference.
+            # optional=true so dev without `stripe listen` setup still boots.
+            # cloud/internal/billing/webhook.go MUST fail-closed when env unset
+            # (v1.1 EC-S2 hermetic test asserts this).
+            - secretRef:
+                name: loopzero-stripe-webhook
+                optional: true
           resources:
             {{- toYaml .Values.resources | nindent 12 }}
           readinessProbe:

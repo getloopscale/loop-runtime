@@ -21,7 +21,7 @@ func mockHydraServer(t *testing.T, tokenReady bool) *httptest.Server {
 		switch {
 		case r.URL.Path == "/oauth2/device/auth" && r.Method == "POST":
 			w.Header().Set("Content-Type", "application/json")
-			json.NewEncoder(w).Encode(map[string]interface{}{
+			_ = json.NewEncoder(w).Encode(map[string]interface{}{
 				"device_code":              "test-device-code",
 				"user_code":               "ABCD-1234",
 				"verification_uri":         "http://localhost:4455/device",
@@ -31,13 +31,13 @@ func mockHydraServer(t *testing.T, tokenReady bool) *httptest.Server {
 			})
 
 		case r.URL.Path == "/oauth2/token" && r.Method == "POST":
-			r.ParseForm()
+			_ = r.ParseForm()
 			grantType := r.FormValue("grant_type")
 
 			if grantType == "urn:ietf:params:oauth:grant-type:device_code" {
 				if tokenReady {
 					w.Header().Set("Content-Type", "application/json")
-					json.NewEncoder(w).Encode(map[string]interface{}{
+					_ = json.NewEncoder(w).Encode(map[string]interface{}{
 						"access_token":  "eyJ.test.jwt",
 						"refresh_token": "refresh-token-123",
 						"token_type":    "bearer",
@@ -46,7 +46,7 @@ func mockHydraServer(t *testing.T, tokenReady bool) *httptest.Server {
 				} else {
 					w.Header().Set("Content-Type", "application/json")
 					w.WriteHeader(http.StatusBadRequest)
-					json.NewEncoder(w).Encode(map[string]interface{}{
+					_ = json.NewEncoder(w).Encode(map[string]interface{}{
 						"error":             "authorization_pending",
 						"error_description": "The authorization request is still pending.",
 					})
@@ -56,7 +56,7 @@ func mockHydraServer(t *testing.T, tokenReady bool) *httptest.Server {
 
 			if grantType == "refresh_token" {
 				w.Header().Set("Content-Type", "application/json")
-				json.NewEncoder(w).Encode(map[string]interface{}{
+				_ = json.NewEncoder(w).Encode(map[string]interface{}{
 					"access_token":  "eyJ.refreshed.jwt",
 					"refresh_token": "new-refresh-token",
 					"token_type":    "bearer",
@@ -90,7 +90,7 @@ func TestDeviceAuthorize(t *testing.T) {
 	}
 
 	var resp map[string]interface{}
-	json.Unmarshal(w.Body.Bytes(), &resp)
+	_ = json.Unmarshal(w.Body.Bytes(), &resp)
 
 	if resp["user_code"] != "ABCD-1234" {
 		t.Errorf("user_code = %v, want ABCD-1234", resp["user_code"])
@@ -129,7 +129,7 @@ func TestDeviceTokenPending(t *testing.T) {
 	}
 
 	var resp map[string]interface{}
-	json.Unmarshal(w.Body.Bytes(), &resp)
+	_ = json.Unmarshal(w.Body.Bytes(), &resp)
 
 	if resp["status"] != "pending" {
 		t.Errorf("status = %v, want pending", resp["status"])
@@ -154,7 +154,7 @@ func TestDeviceTokenSuccess(t *testing.T) {
 	}
 
 	var resp map[string]interface{}
-	json.Unmarshal(w.Body.Bytes(), &resp)
+	_ = json.Unmarshal(w.Body.Bytes(), &resp)
 
 	if resp["access_token"] == nil {
 		t.Error("access_token missing")
@@ -209,7 +209,7 @@ func TestRefreshToken(t *testing.T) {
 	}
 
 	var resp map[string]interface{}
-	json.Unmarshal(w.Body.Bytes(), &resp)
+	_ = json.Unmarshal(w.Body.Bytes(), &resp)
 
 	if resp["access_token"] == nil {
 		t.Error("access_token missing")

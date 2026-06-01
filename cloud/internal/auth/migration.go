@@ -6,6 +6,7 @@ package auth
 import (
 	"context"
 	"database/sql"
+	"errors"
 	"fmt"
 	"log/slog"
 	"strings"
@@ -63,7 +64,7 @@ func (m *IdentityMigrator) EnsureMigration(ctx context.Context, kratosIdentityID
 		"SELECT id FROM users WHERE email = $1",
 		email,
 	).Scan(&legacyUserID)
-	if err == sql.ErrNoRows {
+	if errors.Is(err, sql.ErrNoRows) {
 		// No legacy user — this is a new signup, no migration needed
 		return nil
 	}
