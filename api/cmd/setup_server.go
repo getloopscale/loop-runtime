@@ -75,6 +75,11 @@ func buildServerConfig(
 		TokenValidator:               tokenValidator,
 		TenantCRMgr:                  k8sDeps.TenantCRMgr,
 		SecretK8sSync:                k8sDeps.SecretK8sSync,
+		// Sprint A T1.1 (closes comp-001 CRITICAL — secret mutations were
+		// running without advisory lock). Reuses the same locker injected
+		// into build orchestrators, so secret writes serialize with deploys
+		// on the same (tenant, project, env) key. Lock-domain parity EC-2.
+		SecretEnvLocker:              stores.Locker,
 		DomainHandler:                domainHandler,
 		BuildHandler:                 buildHandler,
 		// CHG-2026-04-25-ATTESTATION-WIRE Phase 6: wire concrete

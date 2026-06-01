@@ -73,6 +73,30 @@ func (h *SecretHandler) SetK8sSync(sync SecretK8sSync) {
 	h.k8sSync = sync
 }
 
+// SetLocker configures the environment lock for secret mutations. When set,
+// Set/DeleteSecret acquire a pg_advisory_xact_lock on the (tenant, project,
+// env) key BEFORE invoking the store mutation, serializing with concurrent
+// `loopzero deploy` flows that hold the same lock.
+//
+// Sprint A T1.1 (closes comp-001 CRITICAL): the locker was added to the
+// handler struct in deep-review-2026-05-10-remediation-plan but never
+// wired from server.Config. This setter mirrors SetK8sSync exactly so
+// server/router.go can inject the locker post-construction.
+//
+// Lock-domain parity (EC-2): inject *lock.PoolLocker (via
+// adapters.PoolEnvironmentLocker) — same advisory key as
+// lock.WithEnvironmentLock used by build handlers. Any other locker
+// implementation breaks cross-feature serialization.
+//
+// K8s sync OUTSIDE lock (EC-3, intentional design): h.k8sSync.CreateSecret
+// runs AFTER mutate returns AND AFTER the lock releases — PG is canonical,
+// K8s is eventual, and the lock has 5s timeout. Moving K8s sync inside
+// mutate is a REGRESSION VECTOR (would kill secret Sets every time K8s
+// API server is slow).
+func (h *SecretHandler) SetLocker(locker SecretEnvLocker) {
+	h.locker = locker
+}
+
 // secretListResponse is the JSON response for GET /api/v1/secrets.
 type secretListResponse struct {
 	Secrets []SecretMetadata `json:"secrets"`
@@ -273,6 +297,17 @@ func (h *SecretHandler) DeleteSecret(w http.ResponseWriter, r *http.Request) {
 	env := r.URL.Query().Get("environment")
 	app := r.URL.Query().Get("app")
 	project := r.URL.Query().Get("project")
+
+	// Sprint A T1.1 EC-1: validate environment query param. Without this,
+	// with the locker wired, empty-env DELETEs produce lock key
+	// "{tenant}:{project}:" (trailing colon) — two concurrent empty-env
+	// deletes contend on that single bucket → bogus DEPLOY_IN_PROGRESS
+	// 409s, and the store.Delete matches L19 PK rows that include the
+	// empty-env slot. Mirror the Set handler validation pattern.
+	if env == "" {
+		writeLoopZeroError(w, loopzeroerrors.ErrMissingField.Wrap("environment is required"))
+		return
+	}
 
 	// T1.1 of deep-review-2026-05-10-remediation-plan: same lock as Set.
 	var deleted bool

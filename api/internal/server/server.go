@@ -90,6 +90,14 @@ type Config struct {
 	ScaleHandler            *routes.ScaleHandler
 	BuildListHandler        *routes.BuildListHandler
 	SecretK8sSync           routes.SecretK8sSync
+	// SecretEnvLocker injects the environment lock into SecretHandler so
+	// Set/DeleteSecret serialize with concurrent `loopzero deploy` flows.
+	// Sprint A T1.1 (closes comp-001 CRITICAL — secret mutations were
+	// running without the advisory lock). Wired from cmd/setup_server.go
+	// using the same *adapters.PoolEnvironmentLocker injected into build
+	// orchestrators. nil-safe: when nil, SecretHandler falls back to
+	// the legacy non-locked path (test-friendly).
+	SecretEnvLocker         routes.SecretEnvLocker
 	EnvironmentHandler      *routes.EnvironmentHandler
 	TeamHandler             *routes.TeamHandler
 	// AUDIT-10: narrow store for /whoami username lookup. Nil is legal (handler

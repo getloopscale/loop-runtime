@@ -291,6 +291,12 @@ func registerProtectedRoutes(
 		if cfg.SecretK8sSync != nil {
 			secrets.SetK8sSync(cfg.SecretK8sSync)
 		}
+		// Sprint A T1.1 (closes comp-001 CRITICAL): wire the environment
+		// lock so Set/DeleteSecret serialize with concurrent `loopzero deploy`
+		// flows holding the same pg_advisory_xact_lock key.
+		if cfg.SecretEnvLocker != nil {
+			secrets.SetLocker(cfg.SecretEnvLocker)
+		}
 		r.Get("/api/v1/secrets", secrets.List)
 		r.With(rateLimitMiddlewares...).Post("/api/v1/secrets", secrets.Set)
 		r.With(rateLimitMiddlewares...).Delete("/api/v1/secrets/{name}", secrets.DeleteSecret)
