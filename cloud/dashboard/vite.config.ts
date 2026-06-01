@@ -52,11 +52,27 @@ export default defineConfig({
         background_color: '#09090b',
         display: 'standalone',
         start_url: '/',
+        // PWA manifest icons — use the real LoopZero mascot PNGs from public/.
+        // Previously this was an inline SVG raio (#3ecf8e), shadowing the
+        // brand assets. 192/512 sizes are the Android Chrome standard;
+        // `maskable` on 512 lets Android's adaptive-icon system crop safely.
         icons: [
           {
-            src: 'data:image/svg+xml;utf8,<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="%233ecf8e"><path d="M13 2L3 14h9l-1 8 10-12h-9l1-8z"/></svg>',
-            sizes: 'any',
-            type: 'image/svg+xml',
+            src: '/android-chrome-192x192.png',
+            sizes: '192x192',
+            type: 'image/png',
+            purpose: 'any',
+          },
+          {
+            src: '/android-chrome-512x512.png',
+            sizes: '512x512',
+            type: 'image/png',
+            purpose: 'any maskable',
+          },
+          {
+            src: '/apple-touch-icon.png',
+            sizes: '180x180',
+            type: 'image/png',
             purpose: 'any',
           },
         ],

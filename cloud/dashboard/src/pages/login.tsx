@@ -1,17 +1,26 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { useNavigate, useSearchParams, Link } from 'react-router-dom';
-import { Github, Loader2, Zap } from 'lucide-react';
+import { Github, Loader2 } from 'lucide-react';
 import {
   Alert,
   Button,
   Card,
   CodeBlock,
+  FormField,
   Input,
 } from '@loopzero/ui';
 import { GoogleBrandIcon } from '@/components/google-brand-icon';
 import { getSession, startLogin } from '@/lib/auth';
 import { clearToken } from '@/lib/api';
 import { API_URL, AUTH_URL } from '@/lib/config';
+import {
+  reportEvent,
+  viewportBucket,
+  type ActivationEvent,
+  type AuthFailureReason,
+  type AuthMethod,
+  type AuthTelemetryPayload,
+} from '@/lib/rum';
 
 const KRATOS_URL = AUTH_URL || API_URL;
 
@@ -33,11 +42,44 @@ interface Flow {
 }
 
 /**
- * Google logo as Lucide-equivalent inline SVG WAS at line 200 of v1 —
- * removed per D-7 v1.2 anti-pattern fix (.llms.txt line 118: never inline
- * SVG). Replaced by Lucide Chrome icon (proxy — there is no official
- * Lucide Google icon; Chrome is the closest brand-neutral proxy).
+ * safeErrorDetail — OWASP A07: never expose raw Kratos error text to UI.
+ *
+ * Priority order (first match wins, EC-2 from edge-case review):
+ *   1. csrf            → "Your session expired. Try again."
+ *   2. locked          → "This account is locked. Reset your password to continue."
+ *   3. provider (OIDC) → "Try a different sign-in method."
+ *   4. default         → undefined (no description, generic title only)
+ *
+ * EC-3: tolerates null/empty text without TypeError via (text ?? '').
  */
+function safeErrorDetail(
+  errors: { text: string | null }[] | undefined,
+): string | undefined {
+  if (!errors || errors.length === 0) return undefined;
+  const haystack = errors
+    .map((e) => (e.text ?? '').toLowerCase())
+    .join(' ');
+  if (haystack.includes('csrf')) return 'Your session expired. Try again.';
+  if (haystack.includes('locked'))
+    return 'This account is locked. Reset your password to continue.';
+  if (haystack.includes('provider')) return 'Try a different sign-in method.';
+  return undefined;
+}
+
+/**
+ * Classify Kratos validation error into a discriminated reason for telemetry.
+ * Used by emitAuthTelemetry to populate the `reason` field on failure events.
+ */
+function classifyKratosErrorReason(
+  errors: { text: string | null }[] | undefined,
+): AuthFailureReason {
+  if (!errors || errors.length === 0) return 'kratos_validation';
+  const haystack = errors
+    .map((e) => (e.text ?? '').toLowerCase())
+    .join(' ');
+  if (haystack.includes('csrf')) return 'csrf_expired';
+  return 'kratos_validation';
+}
 
 export function LoginPage() {
   const navigate = useNavigate();
@@ -47,6 +89,14 @@ export function LoginPage() {
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [submitting, setSubmitting] = useState(false);
+  const [networkError, setNetworkError] = useState(false);
+  // Per-attempt correlation context — funnel-stitching invariant.
+  // Captured at attempt time; consumed on outcome events to share correlation_id.
+  const authCtxRef = useRef<{
+    method: AuthMethod;
+    correlation_id: string;
+    started_at: number;
+  } | null>(null);
 
   useEffect(() => {
     clearToken();
@@ -86,12 +136,61 @@ export function LoginPage() {
   }, [searchParams, loading]);
 
   /**
-   * CRITICAL EC-4 v1.1 + D-7 v1.2: preserve vanilla DOM form.submit() —
+   * emitAuthTelemetry — FAANG-grade observable auth funnel.
+   *
+   * PII-FREE INVARIANT enforced by spec (`test_login_payload_pii_free`):
+   * payload NEVER contains email, password, sessionID, userID, tenantID,
+   * or referrer. See lib/rum.ts AuthTelemetryPayload doc block.
+   */
+  const emitAuthTelemetry = (
+    event: Extract<ActivationEvent, `auth.method.${string}`>,
+    ctx: { method: AuthMethod; correlation_id: string; started_at: number },
+    extras: { reason?: AuthFailureReason } = {},
+  ): void => {
+    const payload: AuthTelemetryPayload = {
+      v: 1,
+      method: ctx.method,
+      correlation_id: ctx.correlation_id,
+      latency_ms:
+        event === 'auth.method.attempt'
+          ? undefined
+          : Math.max(0, Date.now() - ctx.started_at),
+      reason: extras.reason,
+      viewport_bucket: viewportBucket(),
+      timestamp: Date.now(),
+    };
+    reportEvent(event, payload as unknown as Record<string, unknown>);
+  };
+
+  const startAuthAttempt = (method: AuthMethod): {
+    method: AuthMethod;
+    correlation_id: string;
+    started_at: number;
+  } => {
+    const ctx = {
+      method,
+      // RFC 4122 v4, browser-native, zero deps.
+      correlation_id: crypto.randomUUID(),
+      started_at: Date.now(),
+    };
+    authCtxRef.current = ctx;
+    emitAuthTelemetry('auth.method.attempt', ctx);
+    return ctx;
+  };
+
+  /**
+   * CRITICAL EC-4 (v1 login.tsx): preserve vanilla DOM form.submit() —
    * Kratos requires browser-level form POST to follow OIDC redirect.
    * Substituting fetch breaks GitHub/Google login (302 returned but
    * browser never navigates).
+   *
+   * OIDC ATTEMPT-ONLY: success/failure de OIDC vem do callback handler
+   * (provider → Kratos → /login?flow=X com error nodes OU navegação para /).
+   * Aqui só emitimos 'attempt'. Outcome telemetry para OIDC é responsabilidade
+   * do callback handler (fora deste plano).
    */
-  const submitOIDC = (provider: string) => {
+  const submitOIDC = (provider: 'github' | 'google') => {
+    startAuthAttempt(provider);
     if (!flow) {
       startLogin();
       return;
@@ -121,6 +220,9 @@ export function LoginPage() {
     e.preventDefault();
     if (!flow) return;
     setSubmitting(true);
+    setNetworkError(false);
+
+    const ctx = startAuthAttempt('password');
 
     const csrfNode = flow.ui.nodes.find(
       (n) => n.attributes.name === 'csrf_token',
@@ -139,18 +241,41 @@ export function LoginPage() {
         }),
       });
 
+      // EC-1 MUST FIX: HTTP 5xx from Kratos doesn't throw at fetch layer.
+      // Without this gate, the handler returned silently (same silent-error
+      // bug that the visible-network-error work was supposed to fix).
+      if (!resp.ok) {
+        setNetworkError(true);
+        emitAuthTelemetry('auth.method.failure', ctx, { reason: 'kratos_5xx' });
+        return;
+      }
+
       const data = await resp.json();
+
       if (data.redirect_browser_to) {
+        // Treat redirect (verification, step-up) as success-in-progress.
+        emitAuthTelemetry('auth.method.success', ctx);
         window.location.href = data.redirect_browser_to;
         return;
       }
       if (data.session) {
+        emitAuthTelemetry('auth.method.success', ctx);
         navigate('/', { replace: true });
         return;
       }
-      if (data.ui) setFlow(data);
+      if (data.ui) {
+        const errors = (data.ui.messages ?? []).filter(
+          (m: { type: string }) => m.type === 'error',
+        );
+        emitAuthTelemetry('auth.method.failure', ctx, {
+          reason: classifyKratosErrorReason(errors),
+        });
+        setFlow(data);
+      }
     } catch {
-      /* network error */
+      // EC-1 secondary: covers fetch throw AND resp.json() throw (e.g. HTML body).
+      setNetworkError(true);
+      emitAuthTelemetry('auth.method.failure', ctx, { reason: 'network' });
     } finally {
       setSubmitting(false);
     }
@@ -183,27 +308,41 @@ export function LoginPage() {
     <div className="min-h-screen bg-background flex items-center justify-center p-6">
       <Card className="w-full max-w-sm">
         <Card.Body className="p-8 space-y-6">
-          {/* Brand */}
-          <div className="flex items-center gap-2.5">
-            <div className="flex size-10 items-center justify-center rounded-xl bg-primary/10 border border-primary/20">
-              <Zap className="size-5 text-primary" aria-hidden="true" />
-            </div>
+          {/* Brand — stacked centered: pixel-art mascot logo on top,
+              wordmark "LoopZero" below. Logo at 60×60 (50% larger than the
+              prior 40×40 to anchor the card visual hierarchy).
+              <picture> ships WebP (~2 KB) to modern browsers, falls back to
+              PNG (~6 KB) for Safari < 14 / Firefox < 65 / IE. alt="" because
+              the wordmark below already provides the accessible name
+              (avoids screen-reader duplication). */}
+          <div className="flex flex-col items-center gap-2">
+            <picture>
+              <source srcSet="/logo-128.webp" type="image/webp" />
+              <img
+                src="/logo-128.png"
+                alt=""
+                width={60}
+                height={60}
+                className="size-[60px]"
+              />
+            </picture>
             <span className="font-display text-title-sm font-bold tracking-tight text-foreground">
               LoopZero
             </span>
           </div>
 
+          {/* T1.4 microcopy: universal welcome, locked-narrative subtitle. */}
           <div className="space-y-1">
             <h1 className="font-display text-title-sm font-semibold text-foreground">
-              Sign in
+              Sign in to LoopZero
             </h1>
             <p className="text-body-sm text-muted-foreground">
-              Sign in to manage your projects.
+              Deploy, monitor, and operate your workloads.
             </p>
           </div>
 
           {/* Session expired notice (§3.6) */}
-          {searchParams.get('reason') === 'expired' && allErrors.length === 0 && (
+          {searchParams.get('reason') === 'expired' && allErrors.length === 0 && !networkError && (
             <Alert
               intent="warning"
               description="Your session expired. Please sign in again."
@@ -211,8 +350,21 @@ export function LoginPage() {
             />
           )}
 
-          {allErrors.length > 0 && (
-            <Alert intent="destructive" title={allErrors[0].text} />
+          {/* T1.3: network/HTTP-5xx feedback (EC-1). networkError wins over Kratos errors. */}
+          {networkError && (
+            <Alert
+              intent="warning"
+              title="Network error. Check your connection and try again."
+            />
+          )}
+
+          {/* T1.1: OWASP-aligned generic title + safe-detail allow-list (D2). */}
+          {!networkError && allErrors.length > 0 && (
+            <Alert
+              intent="destructive"
+              title="We couldn't sign you in."
+              description={safeErrorDetail(allErrors)}
+            />
           )}
 
           {/* Social login */}
@@ -250,28 +402,40 @@ export function LoginPage() {
             </div>
           </div>
 
-          {/* Email/password form */}
+          {/* Email/password form — T2.1 FormField + visible Label (D4) */}
           <form onSubmit={submitPassword} className="space-y-3">
-            <Input
-              size="lg"
-              type="email"
-              value={email}
-              onChange={(e) => setEmail(e.target.value)}
-              required
-              placeholder="Email"
-              autoComplete="email"
-              aria-label="Email"
-            />
-            <Input
-              size="lg"
-              type="password"
-              value={password}
-              onChange={(e) => setPassword(e.target.value)}
-              required
-              placeholder="Password"
-              autoComplete="current-password"
-              aria-label="Password"
-            />
+            <FormField>
+              <FormField.Label>Email</FormField.Label>
+              <FormField.Control>
+                <Input
+                  size="lg"
+                  type="email"
+                  value={email}
+                  onChange={(e) => setEmail(e.target.value)}
+                  required
+                  placeholder="you@company.com"
+                  /* T3.1 D6: passkey via autofill, no dedicated button.
+                     Browser without WebAuthn ignores the token silently. */
+                  autoComplete="email webauthn"
+                  /* T1.2 EC-6: accepts mobile keyboard pop as tradeoff (Vercel/Linear-style). */
+                  autoFocus
+                />
+              </FormField.Control>
+            </FormField>
+            <FormField>
+              <FormField.Label>Password</FormField.Label>
+              <FormField.Control>
+                <Input
+                  size="lg"
+                  type="password"
+                  value={password}
+                  onChange={(e) => setPassword(e.target.value)}
+                  required
+                  placeholder="••••••••"
+                  autoComplete="current-password"
+                />
+              </FormField.Control>
+            </FormField>
             <Button
               type="submit"
               variant="primary"

@@ -24,7 +24,15 @@
       - data:/blob:/https: in img-src cover avatars, base64 favicons, S3 assets.
     -->
     <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' 'unsafe-inline'; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src 'self' data: https://fonts.gstatic.com; img-src 'self' data: blob: https:; connect-src 'self' ws: wss: https://checkout.stripe.com https://*.stripe.com; form-action 'self'; base-uri 'self'; object-src 'none'" />
-    <link rel="icon" type="image/svg+xml" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%233ecf8e' stroke-width='2'%3E%3Cpath d='M13 2L3 14h9l-1 8 10-12h-9l1-8z'/%3E%3C/svg%3E" />
+    <!-- LoopZero brand favicons. The PNG assets in public/ are the canonical
+         LoopZero mascot (committed 2026-05-19); these <link> tags re-wire them
+         after the previous inline-SVG placeholder (#3ecf8e raio) shadowed
+         the real brand. ico provides legacy browser fallback (sizes="any"
+         lets the browser pick the embedded size that fits its slot). -->
+    <link rel="icon" type="image/png" sizes="32x32" href="/favicon-32.png" />
+    <link rel="icon" type="image/png" sizes="16x16" href="/favicon-16.png" />
+    <link rel="icon" href="/favicon.ico" sizes="any" />
+    <link rel="apple-touch-icon" sizes="180x180" href="/apple-touch-icon.png" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <meta name="theme-color" content="#09090b" />
     <title>LoopZero — Dashboard</title>
