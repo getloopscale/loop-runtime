@@ -56,13 +56,6 @@ func NewSecretHandler(store SecretStore) *SecretHandler {
 	return &SecretHandler{store: store}
 }
 
-// Quality-Gate Phase 2: SetEnvironmentLocker removed — was implemented
-// per T1.1 of deep-review-2026-05-10-remediation-plan but never wired
-// from server.Config. Re-add (along with cfg.SecretEnvLocker field +
-// stores.Locker injection in cmd/setup_stores.go) when T1.1 is taken
-// to GREEN as a separate ticket. Until then h.locker stays nil and the
-// legacy "no lock" path is in effect.
-
 // SetAuditLogger configures audit logging for sensitive operations.
 func (h *SecretHandler) SetAuditLogger(audit AuditLogger) {
 	h.audit = audit

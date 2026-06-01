@@ -219,3 +219,50 @@ func TestReleaseStore_UpdateDifferentRekorURL_RaisesException(t *testing.T) {
 		t.Fatal("UPDATE clearing rekor URL must FAIL — write-once trigger missing or wrong")
 	}
 }
+
+// TestReleaseStore_UpdateFirstSetFromNull_Allowed (T0.3 EC-6 of plan
+// 2026-06-01-p1-security-hardening): the BEFORE UPDATE trigger has an
+// `OLD IS NOT NULL` guard, so a release INSERTed with NULL rekor URL can
+// later be UPDATEd to a non-NULL value exactly once (the first-set path
+// via UPDATE). This documents the intentional null→non-null transition
+// path used by the build_reconcile_complete flow when attestation is
+// enriched post-INSERT.
+func TestReleaseStore_UpdateFirstSetFromNull_Allowed(t *testing.T) {
+	pool := setupHardeningTestDB(t)
+	requireRekorURLTriggers(t, pool)
+	ctx := context.Background()
+
+	// Insert with NULL rekor URL (legacy / pre-attestation path).
+	releaseID, _, _ := seedReleaseRow(t, pool, nil)
+
+	// First-set via UPDATE: trigger's `OLD IS NOT NULL` guard skips the
+	// raise, so this succeeds.
+	firstURL := "https://rekor.loopzero.test/api/v1/log/entries?logIndex=200"
+	_, err := pool.Exec(ctx,
+		`UPDATE releases SET image_attestation_rekor_url = $1 WHERE id = $2`,
+		&firstURL, releaseID)
+	if err != nil {
+		t.Fatalf("first-set via UPDATE from NULL must succeed (OLD IS NOT NULL guard); got: %v", err)
+	}
+
+	// Verify the value is now persisted.
+	var got *string
+	row := pool.QueryRow(ctx,
+		`SELECT image_attestation_rekor_url FROM releases WHERE id = $1`, releaseID)
+	if err := row.Scan(&got); err != nil {
+		t.Fatalf("SELECT after first-set: %v", err)
+	}
+	if got == nil || *got != firstURL {
+		t.Errorf("first-set value mismatch: got %v want %s", got, firstURL)
+	}
+
+	// And the trigger should now reject subsequent mutations (write-once
+	// behaviour kicks in once OLD is non-NULL).
+	other := "https://attacker.example/log/entries?logIndex=999"
+	_, err = pool.Exec(ctx,
+		`UPDATE releases SET image_attestation_rekor_url = $1 WHERE id = $2`,
+		&other, releaseID)
+	if err == nil {
+		t.Fatal("second UPDATE after first-set must FAIL — write-once after non-NULL")
+	}
+}

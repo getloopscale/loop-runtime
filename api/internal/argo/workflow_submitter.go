@@ -73,6 +73,11 @@ type WorkflowSubmitterConfig struct {
 	// CosignSignParams / CosignAttestParams. Config.Validate() rejects
 	// true in production without TUF root pinned.
 	CosignInsecureSkipSCT bool
+	// Env is the canonical LOOPZERO_ENV value ("development" / "staging" /
+	// "production"). T1.1 of plan 2026-06-01-p1-security-hardening
+	// (sec-010 / CR-7) — drives per-tenant Fulcio audience selection
+	// via D4 dev-fallback in workflow_builder.audienceFor().
+	Env string
 	// MinIO credentials are injected via K8s Secret (envFrom) in CWTs, not via workflow params.
 }
 
@@ -116,6 +121,7 @@ func NewWorkflowSubmitter(cfg WorkflowSubmitterConfig) (*WorkflowSubmitter, erro
 		CosignRekorURL:        cfg.CosignRekorURL,
 		CosignAttestEnabled:   cfg.CosignAttestEnabled,
 		CosignInsecureSkipSCT: cfg.CosignInsecureSkipSCT, // T1.2 CR-1 fix
+		Env:                   cfg.Env,                   // T1.1 of plan 2026-06-01-p1-security-hardening (sec-010)
 	})
 
 	return &WorkflowSubmitter{

@@ -50,6 +50,7 @@ func setupWorkflows(cfg config.Config, httpTransport *http.Transport, logger *sl
 		CosignFulcioURL:     cfg.CosignFulcioURL,
 		CosignRekorURL:      cfg.CosignRekorURL,
 		CosignInsecureSkipSCT: cfg.CosignInsecureSkipSCT, // T1.2 CR-1 fix
+		Env:                   cfg.Env,                  // T1.1 of plan 2026-06-01-p1-security-hardening (sec-010 per-tenant Fulcio audience)
 	})
 	if cfg.CosignKeyless {
 		logger.Info("cosign keyless mode ENABLED",

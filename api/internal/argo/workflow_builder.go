@@ -71,6 +71,13 @@ type InfraParams struct {
 	// Config.Validate() rejects InsecureSkipSCT=true && IsProduction() &&
 	// !TUFRootPinned. Wired via Config.CosignInsecureSkipSCT.
 	CosignInsecureSkipSCT bool
+	// Env is the canonical LOOPZERO_ENV value ("development" / "staging" /
+	// "production"). T1.1 of plan 2026-06-01-p1-security-hardening
+	// (sec-010 / CR-7): drives per-tenant Fulcio audience via D4
+	// dev-fallback — development → legacy shared "sigstore" audience
+	// (Fulcio config not yet upgraded); staging/production →
+	// "sigstore-<tenantID>" enforcing cross-tenant signing isolation.
+	Env string
 }
 
 // WorkflowBuilder composes Argo Workflow CRs from ClusterWorkflowTemplate refs
@@ -316,7 +323,7 @@ func (b *WorkflowBuilder) Build(spec services.WorkflowSpec) (*forge.Workflow, er
 				StorageClassName: "local-path",
 			},
 		},
-		Volumes: b.buildVolumes(),
+		Volumes: b.buildVolumes(spec.TenantID),
 		// FSGroup ensures the PVC volume is writable by non-root user 1000.
 		// Without this, the PVC is mounted as root-owned and cp/mkdir fail.
 		SecurityContext: &model.PodSecurityContext{
@@ -508,10 +515,21 @@ func (b *WorkflowBuilder) buildOnExitDAG(spec services.WorkflowSpec, groups []la
 // Single container pattern: only registry credentials are needed as a workflow-level volume.
 // The buildkitd socket is internal to each build-image container (no cross-container sharing).
 //
-// When CosignKeyless=true, a projected ServiceAccountToken volume with
-// audience="sigstore" is added so cosign-sign + cosign-attest can present
-// the SA token to Fulcio (loopzero-forge v0.6.0+, PR #20).
-func (b *WorkflowBuilder) buildVolumes() []forge.VolumeBuilder {
+// When CosignKeyless=true, a projected ServiceAccountToken volume with a
+// per-tenant audience (D1 of plan 2026-06-01-p1-security-hardening) is
+// added so cosign-sign + cosign-attest can present the SA token to Fulcio
+// (loopzero-forge v0.6.0+, PR #20).
+//
+// sec-010 / CR-7 of MEET-2026-05-28-001: prior to T1.1 the audience was the
+// shared literal "sigstore" across all tenants. A pod in tenant-A's
+// namespace could present its SA token to Fulcio claiming to be tenant-B
+// (no audience binding to the tenant). Per-tenant audience
+// "sigstore-<tenantID>" enforces cross-tenant signing identity isolation.
+//
+// D4 dev-fallback: in development the Fulcio config has not yet been
+// upgraded to accept per-tenant audiences, so we keep the legacy shared
+// "sigstore" audience. Staging + production use the per-tenant form.
+func (b *WorkflowBuilder) buildVolumes(tenantID string) []forge.VolumeBuilder {
 	vols := []forge.VolumeBuilder{
 		// Registry credentials for BuildKit push — mounted at /home/user/.docker/ in each build container.
 		&forge.SecretVolume{BaseVolume: forge.BaseVolume{Name: secretRegistryConfig}, SecretName: secretRegistryConfig},
@@ -519,18 +537,17 @@ func (b *WorkflowBuilder) buildVolumes() []forge.VolumeBuilder {
 		&forge.SecretVolume{BaseVolume: forge.BaseVolume{Name: secretCosignKey}, SecretName: secretCosignKey},
 	}
 	if b.infraParams.CosignKeyless {
-		// M2 Phase 9 of plan 2026-05-27-M07-to-3-85: pod-level projected
-		// SA token volume com audience="sigstore". cosign reads token at
+		// M2 Phase 9 of plan 2026-05-27-M07-to-3-85 + T1.1 of plan
+		// 2026-06-01-p1-security-hardening: pod-level projected SA token
+		// volume with audience scoped per tenant. cosign reads token at
 		// /var/run/secrets/sigstore/token + presents to Fulcio for short-lived
 		// signing cert. Without this, keyless mode is teatro silencioso.
-		// Powered by loopzero-forge v0.6.0 ProjectedVolume + ServiceAccountToken
-		// projection (PR getloopscale/loopzero-forge#20).
 		expSec := int64(600) // K8s minimum (10min); kubelet rotates >80% expiry
 		vols = append(vols, &forge.ProjectedVolume{
 			BaseVolume: forge.BaseVolume{Name: sigstoreTokenVolumeName},
 			Sources: []forge.VolumeProjection{
 				{ServiceAccountToken: &forge.ServiceAccountTokenProjection{
-					Audience:          "sigstore",
+					Audience:          audienceFor(tenantID, b.infraParams.Env),
 					Path:              "token",
 					ExpirationSeconds: &expSec,
 				}},
@@ -538,6 +555,34 @@ func (b *WorkflowBuilder) buildVolumes() []forge.VolumeBuilder {
 		})
 	}
 	return vols
+}
+
+// audienceFor returns the Fulcio audience for a build's projected SA token.
+//
+// T1.1 of plan 2026-06-01-p1-security-hardening (sec-010 / CR-7):
+//   - "production" / "staging": "sigstore-<tenantID>" — per-tenant binding.
+//     Fulcio config (T1.2) accepts the matching audience list/regex; a pod
+//     in tenant-A cannot mint a token with tenant-B's audience because the
+//     kubelet refuses (SA → namespace scope) AND Fulcio rejects mismatches.
+//   - "development" / unknown / empty: "sigstore" legacy shared (D4
+//     dev-fallback) — local k3d Fulcio not yet configured for the
+//     per-tenant form; preserves current cleanroom-fresh trio behaviour.
+//
+// Empty tenantID in production+staging is treated as a programming error
+// and returns "sigstore-MISSING-TENANT" which Fulcio will reject — fail
+// closed rather than silently fall back to legacy. The convention surfaces
+// in logs and is caught by Fulcio's audience allowlist (T1.2).
+func audienceFor(tenantID, env string) string {
+	switch env {
+	case "production", "staging":
+		if tenantID == "" {
+			return "sigstore-MISSING-TENANT"
+		}
+		return "sigstore-" + tenantID
+	default:
+		// development OR unknown — legacy shared audience (D4 fallback).
+		return "sigstore"
+	}
 }
 
 
