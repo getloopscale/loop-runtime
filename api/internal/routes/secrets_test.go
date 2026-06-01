@@ -163,3 +163,43 @@ func TestSecretDelete_AcquiresEnvLock(t *testing.T) {
 		t.Fatalf("lock key mismatch on Delete: got %q want %q", locker.calls[0], want)
 	}
 }
+
+// TestSecretDelete_RejectsEmptyEnvParam — EC-1 of plan 2026-06-01-sprint-a-p1-hotfixes.
+// DELETE without ?environment= must 400 BEFORE the locker is consulted.
+// Rationale: with the locker wired (A1), an empty env produces lock key
+// "{tenant}:{project}:" (trailing colon) — two concurrent empty-env deletes
+// would contend on that bogus bucket → spurious DEPLOY_IN_PROGRESS 409s, and
+// store.Delete would match L19 PK rows that include the empty-env slot. The
+// guard at secrets.go:300-303 mirrors Set handler validation; this test
+// proves the guard fires AND that the locker is never invoked when env is
+// missing (fail-loud, fail-early).
+func TestSecretDelete_RejectsEmptyEnvParam(t *testing.T) {
+	store := &fakeSecretStoreT01{}
+	locker := &lockCountingFake{}
+	h := NewSecretHandler(store)
+	h.SetLocker(locker)
+
+	// NO environment query param — only project + app + name.
+	req := httptest.NewRequest(http.MethodDelete,
+		"/api/v1/secrets/DB_PASS?project=proj-x&app=api", nil)
+	req = withAuth(req, defaultUserContext())
+	req = withChiParam(req, "name", "DB_PASS")
+	w := httptest.NewRecorder()
+
+	h.DeleteSecret(w, req)
+
+	if w.Code != http.StatusBadRequest {
+		t.Fatalf("want 400 MISSING_FIELD for empty env; got %d body=%s", w.Code, w.Body.String())
+	}
+	if got := len(locker.calls); got != 0 {
+		t.Fatalf("locker MUST NOT be invoked when env validation fails; got %d calls=%v",
+			got, locker.calls)
+	}
+	if store.deleteCalls != 0 {
+		t.Fatalf("store.Delete MUST NOT be called when env validation fails; got %d", store.deleteCalls)
+	}
+	// Body should contain "environment" so the operator knows what to fix.
+	if !bytes.Contains(w.Body.Bytes(), []byte("environment")) {
+		t.Errorf("error body should mention 'environment'; got %s", w.Body.String())
+	}
+}

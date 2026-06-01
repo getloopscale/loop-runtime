@@ -348,11 +348,29 @@ tasks:
 
       Plan: 2026-05-14-dogfood-findings-and-multi-cell-coverage T0.1.
       Idempotent. Failures (cluster missing) abort early with clear msg.
+
+      Sprint A 2026-06-01 post-cleanroom finding: Each `bootstrap-cell-cc.sh`
+      invocation creates an ArgoCD `cluster` Secret via kubectl apply. When
+      these three Secrets land sequentially AFTER the argocd-application-controller
+      statefulset is already Running (controller.replicas=3 with consistent-hashing
+      sharding per `infra/helm/argocd/values.yaml`), the controllers can read
+      intermediate Secret-set state and end up with shards permanently mis-
+      assigned. Symptom: every Application's status.sync = "" forever, with
+      "Ignoring cluster" log spam. LIVE-validated in fresh cleanroom 2026-06-01:
+      `tn-e2etest-production` App stuck EMPTY/EMPTY until restart, restart
+      converged to Synced+Healthy in <30s with zero "Ignoring" logs.
+      Fix: restart the statefulset AFTER all 3 Secrets exist, so all 3
+      controller replicas boot with the final Secret set in their informer
+      cache. Idempotent (safe to re-run; no-op if no Secret changes).
     cmds:
       # Plan v1.2 T4.2: consolidated bootstrap-cell-cc.sh --cell --env
       - bash infra/helmfile/scripts/bootstrap-cell-cc.sh --cell default --env standalone-multi
       - bash infra/helmfile/scripts/bootstrap-cell-cc.sh --cell 1 --env standalone-multi
       - bash infra/helmfile/scripts/bootstrap-cell-cc.sh --cell 2 --env standalone-multi
+      # Sprint A 2026-06-01 — refresh app-controller informer cache so all
+      # 3 replicas see the final set of cluster Secrets at boot.
+      - kubectl --context k3d-loopzero-mgmt -n argocd rollout restart statefulset/argocd-application-controller
+      - kubectl --context k3d-loopzero-mgmt -n argocd rollout status statefulset/argocd-application-controller --timeout=180s
 
   k3d:heal:
     desc: |

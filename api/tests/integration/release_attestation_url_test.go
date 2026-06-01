@@ -266,3 +266,90 @@ func TestReleaseStore_UpdateFirstSetFromNull_Allowed(t *testing.T) {
 		t.Fatal("second UPDATE after first-set must FAIL — write-once after non-NULL")
 	}
 }
+
+// TestReleaseStore_InsertRolledBack_AuditLogNotPersisted — EC-6 of plan
+// 2026-06-01-sprint-a-p1-hotfixes. The AFTER INSERT trigger
+// `audit_attestation_url_set` fires inside the parent transaction. If the
+// transaction ROLLBACKs (e.g., FK violation downstream, application error
+// before COMMIT), the audit_log row MUST roll back too — leaving no orphan
+// audit entry referencing a release that never persisted.
+//
+// Regression guard against future "audit_log via outbox" refactors that
+// would decouple audit emission from the parent xact (such refactors would
+// silently create attestation-set audit rows for releases that never
+// existed, polluting compliance evidence).
+func TestReleaseStore_InsertRolledBack_AuditLogNotPersisted(t *testing.T) {
+	pool := setupHardeningTestDB(t)
+	requireRekorURLTriggers(t, pool)
+	ctx := context.Background()
+
+	suffix := fmt.Sprintf("%d", time.Now().UnixNano())
+	tenantID := "tn-rekor-rb-" + suffix
+	buildID := "bld-rekor-rb-" + suffix
+	releaseID := "rel-rekor-rb-" + suffix
+	correlationID := "corr-rekor-rb-" + suffix
+	rekorURL := "https://rekor.loopzero.test/api/v1/log/entries?logIndex=666"
+
+	// Pre-seed the build OUTSIDE the rolled-back tx so the FK can resolve.
+	_, err := pool.Exec(ctx,
+		`INSERT INTO builds (id, tenant_id, project_id, environment, status, correlation_id, created_by)
+		 VALUES ($1, $2, 'proj-rekor', 'production', 'SUCCEEDED', $3, 'system:test')`,
+		buildID, tenantID, correlationID)
+	if err != nil {
+		t.Fatalf("seed build (pre-tx): %v", err)
+	}
+	t.Cleanup(func() { _, _ = pool.Exec(ctx, "DELETE FROM builds WHERE id = $1", buildID) })
+
+	// Open xact, INSERT release (trigger fires + queues audit_log row),
+	// then ROLLBACK — both INSERTs evaporate.
+	tx, err := pool.Begin(ctx)
+	if err != nil {
+		t.Fatalf("BEGIN: %v", err)
+	}
+	_, err = tx.Exec(ctx,
+		`INSERT INTO releases (id, build_id, tenant_id, project_id, environment, status, correlation_id, created_by, image_attestation_rekor_url)
+		 VALUES ($1, $2, $3, 'proj-rekor', 'production', 'READY', $4, 'system:test', $5)`,
+		releaseID, buildID, tenantID, correlationID, &rekorURL)
+	if err != nil {
+		_ = tx.Rollback(ctx)
+		t.Fatalf("INSERT release in tx: %v", err)
+	}
+	// Sanity check WITHIN the tx: the audit row exists (trigger fired).
+	var inTxCount int
+	if err := tx.QueryRow(ctx,
+		`SELECT COUNT(*) FROM audit_log
+		 WHERE resource_id = $1 AND action = 'release.attestation_url_set'`,
+		releaseID).Scan(&inTxCount); err != nil {
+		_ = tx.Rollback(ctx)
+		t.Fatalf("count audit_log in-tx: %v", err)
+	}
+	if inTxCount != 1 {
+		_ = tx.Rollback(ctx)
+		t.Fatalf("audit_log row should exist mid-tx (trigger fired); got %d", inTxCount)
+	}
+	if err := tx.Rollback(ctx); err != nil {
+		t.Fatalf("ROLLBACK: %v", err)
+	}
+
+	// After ROLLBACK: zero audit rows for this release.
+	var postCount int
+	if err := pool.QueryRow(ctx,
+		`SELECT COUNT(*) FROM audit_log
+		 WHERE resource_id = $1 AND action = 'release.attestation_url_set'`,
+		releaseID).Scan(&postCount); err != nil {
+		t.Fatalf("count audit_log post-rollback: %v", err)
+	}
+	if postCount != 0 {
+		t.Errorf("audit_log row leaked across ROLLBACK boundary: got %d, want 0", postCount)
+	}
+
+	// And no orphan release.
+	var releaseCount int
+	if err := pool.QueryRow(ctx,
+		`SELECT COUNT(*) FROM releases WHERE id = $1`, releaseID).Scan(&releaseCount); err != nil {
+		t.Fatalf("count releases post-rollback: %v", err)
+	}
+	if releaseCount != 0 {
+		t.Errorf("release row leaked across ROLLBACK boundary: got %d, want 0", releaseCount)
+	}
+}
