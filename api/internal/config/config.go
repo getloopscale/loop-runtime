@@ -439,7 +439,38 @@ func Load() Config {
 // Validate logs warnings about insecure defaults and returns an error for
 // security violations in production that must not be ignored.
 // Called after Load() to surface non-production configuration (C-03).
+// validEnvs is the canonical LOOPZERO_ENV allowlist. Sprint A T2.1 (closes
+// sec-008 / CR-1 partial of MEET-2026-05-28-001): any LOOPZERO_ENV value not
+// in this set is rejected at startup. Prevents case-bypass like
+// LOOPZERO_ENV=Production silently degrading to non-prod IsProduction()
+// behavior (case-sensitive == compare). EC-8 ordering: this check runs
+// EARLY in Validate() so all subsequent IsProduction() gates can assume
+// a canonical value.
+var validEnvs = map[string]bool{
+	"development": true,
+	"staging":     true,
+	"production":  true,
+}
+
+// isValidEnv returns true iff s is a canonical LOOPZERO_ENV value. Exact
+// string match — NO case-fold, NO trim. A typo or case variant
+// (Production, prod, " production") fails fast at startup. Adding a new
+// env (e.g. "drill") requires updating this map + Validate() tests +
+// auditing every IsProduction() call site for whether the new env needs
+// near-prod treatment — explicit governance gate per plan ADR D2.
+func isValidEnv(s string) bool {
+	return validEnvs[s]
+}
+
 func (c Config) Validate() error {
+	// Sprint A T2.1 (2026-06-01, closes sec-008): LOOPZERO_ENV allowlist.
+	// Reject any non-canonical value to prevent case-bypass attacks on
+	// IsProduction()-gated security checks (CR-1 of MEET-2026-05-28-001).
+	// This check is FIRST so all downstream gates can trust c.Env.
+	if !isValidEnv(c.Env) {
+		return fmt.Errorf("LOOPZERO_ENV=%q invalid; allowed: development, staging, production", c.Env)
+	}
+
 	// B14 (MEET-2026-04-23-058): ClusterIssuer is required — no in-code default.
 	// Each environment (prod/staging/dev) MUST set LOOPZERO_CLUSTER_ISSUER explicitly.
 	// Prevents the "invisible default" footgun that caused B14.

@@ -130,6 +130,7 @@ func TestLoad_DisableLegacyLoops_NonTrueRejected(t *testing.T) {
 
 func TestValidate_RejectsMaxConnsLessThanMinConns(t *testing.T) {
 	cfg := Config{
+		Env:           "development", // Sprint A T2.1: allowlist requires canonical value
 		DBMaxConns:    5,
 		DBMinConns:    10,
 		ClusterIssuer: "test-issuer", // B14
@@ -145,6 +146,7 @@ func TestValidate_RejectsMaxConnsLessThanMinConns(t *testing.T) {
 
 func TestValidate_AcceptsValidPoolConfig(t *testing.T) {
 	cfg := Config{
+		Env:           "development", // Sprint A T2.1: allowlist requires canonical value
 		DBMaxConns:    25,
 		DBMinConns:    5,
 		ClusterIssuer: "test-issuer", // B14
@@ -157,6 +159,7 @@ func TestValidate_AcceptsValidPoolConfig(t *testing.T) {
 
 func TestValidate_AcceptsEqualPoolConfig(t *testing.T) {
 	cfg := Config{
+		Env:           "development", // Sprint A T2.1: allowlist requires canonical value
 		DBMaxConns:    10,
 		DBMinConns:    10,
 		ClusterIssuer: "test-issuer", // B14
@@ -169,7 +172,8 @@ func TestValidate_AcceptsEqualPoolConfig(t *testing.T) {
 
 func TestValidate_AcceptsZeroPoolConfig(t *testing.T) {
 	// Zero values should not trigger validation (unset config) — EXCEPT ClusterIssuer (B14)
-	cfg := Config{ClusterIssuer: "test-issuer"}
+	// + Env (Sprint A T2.1 allowlist).
+	cfg := Config{Env: "development", ClusterIssuer: "test-issuer"}
 	err := cfg.Validate()
 	if err != nil {
 		t.Fatalf("expected no error for zero config, got %v", err)
@@ -201,6 +205,7 @@ func TestValidate_ProductionRejectsInsecureRegistry(t *testing.T) {
 func TestValidate_WarnsReleasePendingLessThanSyncTimeout(t *testing.T) {
 	// This should warn but not error (cross-field validation)
 	cfg := Config{
+		Env:                   "development", // Sprint A T2.1: allowlist requires canonical value
 		ReleasePendingTimeout: 1 * time.Minute,
 		ArgocdSyncTimeout:     5 * time.Minute,
 		ClusterIssuer:         "test-issuer", // B14
@@ -337,14 +342,17 @@ func TestValidate_RejectsInsecureSkipSCT_InProd_WithoutTUF(t *testing.T) {
 	}
 }
 
-func TestValidate_AcceptsInsecureSkipSCT_InLocal(t *testing.T) {
+func TestValidate_AcceptsInsecureSkipSCT_InDevelopment(t *testing.T) {
+	// Sprint A T2.1 (2026-06-01): renamed from _InLocal — LOOPZERO_ENV
+	// allowlist now strict {development, staging, production}. "local"
+	// was never canonical; "development" is the canonical non-prod env.
 	t.Setenv("LOOPZERO_CLUSTER_ISSUER", "loopzero-ca-issuer")
-	t.Setenv("LOOPZERO_ENV", "local")
+	t.Setenv("LOOPZERO_ENV", "development")
 	t.Setenv("LOOPZERO_COSIGN_INSECURE_SKIP_SCT_VERIFY", "true")
 	t.Setenv("LOOPZERO_COSIGN_TUF_ROOT_PINNED", "false")
 	cfg := Load()
 	if err := cfg.Validate(); err != nil {
-		t.Fatalf("Validate should accept INSECURE_SKIP_SCT in LOCAL: %v", err)
+		t.Fatalf("Validate should accept INSECURE_SKIP_SCT in DEVELOPMENT: %v", err)
 	}
 }
 
@@ -371,5 +379,70 @@ func TestLoad_CosignInsecureSkipSCT_DefaultsFalse(t *testing.T) {
 	}
 	if cfg.CosignTUFRootPinned {
 		t.Error("CosignTUFRootPinned default must be false (no ceremony performed)")
+	}
+}
+
+// =============================================================================
+// Sprint A T2.1 — LOOPZERO_ENV allowlist (closes sec-008 / CR-1 partial)
+// =============================================================================
+
+func TestValidate_AcceptsCanonicalDevelopment(t *testing.T) {
+	cfg := Config{Env: "development", ClusterIssuer: "test-issuer"}
+	if err := cfg.Validate(); err != nil {
+		t.Fatalf("expected nil for canonical development, got %v", err)
+	}
+}
+
+func TestValidate_AcceptsCanonicalStaging(t *testing.T) {
+	cfg := Config{Env: "staging", ClusterIssuer: "test-issuer"}
+	if err := cfg.Validate(); err != nil {
+		t.Fatalf("expected nil for canonical staging, got %v", err)
+	}
+}
+
+func TestValidate_AcceptsCanonicalProduction(t *testing.T) {
+	// production requires many additional gates to pass — we ONLY assert
+	// the LOOPZERO_ENV allowlist gate does NOT raise. Any error returned MUST
+	// NOT mention "LOOPZERO_ENV" (other prod gates may still fire — that's fine).
+	cfg := Config{
+		Env:           "production",
+		ClusterIssuer: "letsencrypt-prod",
+	}
+	err := cfg.Validate()
+	if err != nil && contains(err.Error(), "LOOPZERO_ENV=") {
+		t.Errorf("Validate raised LOOPZERO_ENV allowlist error for canonical production: %v", err)
+	}
+}
+
+func TestValidate_RejectsCaseSensitiveProduction(t *testing.T) {
+	cfg := Config{Env: "Production", ClusterIssuer: "test-issuer"}
+	err := cfg.Validate()
+	if err == nil {
+		t.Fatal("expected error for LOOPZERO_ENV=Production (case bypass), got nil")
+	}
+	if !contains(err.Error(), `LOOPZERO_ENV="Production"`) {
+		t.Errorf("error should mention the rejected value, got: %v", err)
+	}
+	if !contains(err.Error(), "development, staging, production") {
+		t.Errorf("error should mention allowed set, got: %v", err)
+	}
+}
+
+func TestValidate_RejectsAbbreviatedProd(t *testing.T) {
+	cfg := Config{Env: "prod", ClusterIssuer: "test-issuer"}
+	err := cfg.Validate()
+	if err == nil {
+		t.Fatal("expected error for LOOPZERO_ENV=prod (abbreviated), got nil")
+	}
+	if !contains(err.Error(), `LOOPZERO_ENV="prod"`) {
+		t.Errorf("error should mention the rejected value, got: %v", err)
+	}
+}
+
+func TestValidate_RejectsLeadingWhitespace(t *testing.T) {
+	cfg := Config{Env: " production", ClusterIssuer: "test-issuer"}
+	err := cfg.Validate()
+	if err == nil {
+		t.Fatal("expected error for LOOPZERO_ENV with leading whitespace, got nil")
 	}
 }

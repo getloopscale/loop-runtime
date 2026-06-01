@@ -39,7 +39,10 @@ spec:
             - name: ENGINE_API_URL
               value: "http://loopzero-api.loopzero-system.svc.cluster.local:3001"
             - name: LOOPZERO_ENV
-              value: "dev"
+              # Sprint A T2.1 EC-4 (2026-06-01): canonicalized "dev" → "development"
+              # to align with config.Validate() allowlist {development, staging,
+              # production}. Out-of-allowlist values now fail-fast at startup.
+              value: "development"
           ports:
             - containerPort: 13002
               name: http
