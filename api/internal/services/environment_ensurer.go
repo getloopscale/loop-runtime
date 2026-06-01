@@ -29,6 +29,26 @@ type EnvironmentAdder interface {
 	AddEnvironment(ctx context.Context, tenantID, envName string) error
 }
 
+// EnvironmentReadinessChecker is the deep-readiness side: queries the
+// Environment CR `status.phase` directly. Returns true only after the
+// environment-controller has finished provisioning namespace + RBAC +
+// NetworkPolicy + ResourceQuota (CR phase=="Active"). Causally ordered
+// AFTER the tenant-controller updates AppProject destinations, so a single
+// "Active" signal is sufficient to gate Submit.
+//
+// Optional dependency — when nil, EnsureEnvironment falls back to the
+// legacy shallow check (Lister.HasEnvironment only). Test fakes can pass
+// nil to preserve existing unit-test surface area.
+//
+// Sprint A trio-fix 2026-06-01: introduced to close the race between
+// API → AddEnvironment → poll (returns true on Tenant CR spec match) →
+// Submit build → ArgoCD App stuck InvalidSpecError because AppProject
+// destinations hadn't been updated by tenant-controller yet. See
+// environment_cr_reader.go for the canonical implementation.
+type EnvironmentReadinessChecker interface {
+	IsReady(ctx context.Context, tenantID, envName string) (bool, error)
+}
+
 // EnvironmentEnsurer auto-creates an Environment if it doesn't exist for
 // the tenant, then waits for the operator to reconcile (phase=Active).
 // Plan T2.2 D5 — closes F-S1-02.
@@ -40,6 +60,11 @@ type EnvironmentEnsurer struct {
 	Lister  EnvironmentLister
 	Adder   EnvironmentAdder
 	Logger  *slog.Logger
+	// ReadinessChecker is the optional deep-readiness gate (Environment CR
+	// status.phase). When set, EnsureEnvironment polls for BOTH the shallow
+	// Lister check AND IsReady before returning success. Default nil =
+	// legacy behavior. Sprint A trio-fix 2026-06-01.
+	ReadinessChecker EnvironmentReadinessChecker
 	// WaitTimeout bounds how long EnsureEnvironment waits for the operator
 	// to reconcile after AddEnvironment. Default 60s (operator-led).
 	WaitTimeout time.Duration
@@ -117,10 +142,36 @@ func (e *EnvironmentEnsurer) EnsureEnvironment(ctx context.Context, tenantID, en
 			)
 		case <-ticker.C:
 			exists, err := e.Lister.HasEnvironment(waitCtx, tenantID, envName)
-			if err == nil && exists {
+			if err != nil || !exists {
+				// Continue polling on transient errors or env not yet present.
+				continue
+			}
+			// Sprint A trio-fix 2026-06-01: shallow check (env in
+			// tenant.spec.environments) is necessary but NOT sufficient.
+			// Without the deep check, API returned here BEFORE the
+			// tenant-controller updated AppProject destinations →
+			// downstream ArgoCD App stuck InvalidSpecError → SYNC_FAILED.
+			// The ReadinessChecker queries Environment CR.status.phase
+			// which the environment-controller sets to "Active" only
+			// after namespace + RBAC + NetworkPolicy + ResourceQuota
+			// + (causally) AppProject destinations are all in place.
+			// Nil checker (test fixtures, legacy boot) skips the gate.
+			if e.ReadinessChecker == nil {
 				return nil
 			}
-			// Continue polling on transient errors.
+			ready, rerr := e.ReadinessChecker.IsReady(waitCtx, tenantID, envName)
+			if rerr != nil {
+				// Treat readiness errors as transient — keep polling.
+				if e.Logger != nil {
+					e.Logger.Warn("env ensurer: readiness check error (continuing poll)",
+						"tenant_id", tenantID, "env", envName, "error", rerr)
+				}
+				continue
+			}
+			if ready {
+				return nil
+			}
+			// Not ready yet — keep polling.
 		}
 	}
 }

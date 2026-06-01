@@ -226,10 +226,23 @@ func main() {
 				return detail, err
 			},
 		)
+		// Sprint A trio-fix 2026-06-01: ReadinessChecker queries Environment
+		// CR.status.phase=="Active" before EnsureEnvironment returns. Without
+		// this, the legacy shallow check (env in tenant.spec.environments)
+		// passes BEFORE tenant-controller updates AppProject destinations,
+		// causing downstream ArgoCD App stuck InvalidSpecError → SYNC_FAILED →
+		// builds FAILED. LIVE-validated during 2026-06-01 trio dogfood (8 FAILs,
+		// all converging to this race). When dynamic client is unavailable
+		// (test boot, in-cluster RBAC denied), checker stays nil and ensurer
+		// falls back to legacy shallow-check path.
 		ensurer := &services.EnvironmentEnsurer{
 			Lister: lister,
 			Adder:  adder,
 			Logger: logger,
+		}
+		if mgmtDynamic := buildMgmtDynamicClient(logger); mgmtDynamic != nil {
+			ensurer.ReadinessChecker = services.NewEnvironmentCRReader(mgmtDynamic, "loopzero-system")
+			logger.Info("env readiness checker wired — EnsureEnvironment will poll Environment CR.status.phase before returning (Sprint A trio-fix 2026-06-01)")
 		}
 		buildHandler = buildHandler.WithEnvironmentEnsurer(ensurer)
 		logger.Info("env ensurer wired — deploy --env <novo> will auto-create environments (T2.2 D5)")
