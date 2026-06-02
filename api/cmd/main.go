@@ -227,22 +227,26 @@ func main() {
 			},
 		)
 		// Sprint A trio-fix 2026-06-01: ReadinessChecker queries Environment
-		// CR.status.phase=="Active" before EnsureEnvironment returns. Without
-		// this, the legacy shallow check (env in tenant.spec.environments)
-		// passes BEFORE tenant-controller updates AppProject destinations,
-		// causing downstream ArgoCD App stuck InvalidSpecError → SYNC_FAILED →
-		// builds FAILED. LIVE-validated during 2026-06-01 trio dogfood (8 FAILs,
-		// all converging to this race). When dynamic client is unavailable
-		// (test boot, in-cluster RBAC denied), checker stays nil and ensurer
-		// falls back to legacy shallow-check path.
+		// CR.status.phase=="Active" before EnsureEnvironment returns.
+		//
+		// 2026-06-02 H1 validation: TEMPORARILY DISABLED via LOOPZERO_ENV_READINESS_CHECKER
+		// gate (default false). Hypothesis: the readiness poll adds 2-30s per
+		// deploy × 11 journeys = +5min total, esgotando o budget 1h30m do
+		// suite timeout. Pre-Sprint-A baseline (commit 098b6846, 2026-05-31)
+		// passou 112/0/20 em 1h11m SEM esse gate. Re-enable após confirmar
+		// hypothesis OR re-tune PollInterval/WaitTimeout para minimizar custo.
 		ensurer := &services.EnvironmentEnsurer{
 			Lister: lister,
 			Adder:  adder,
 			Logger: logger,
 		}
-		if mgmtDynamic := buildMgmtDynamicClient(logger); mgmtDynamic != nil {
-			ensurer.ReadinessChecker = services.NewEnvironmentCRReader(mgmtDynamic, "loopzero-system")
-			logger.Info("env readiness checker wired — EnsureEnvironment will poll Environment CR.status.phase before returning (Sprint A trio-fix 2026-06-01)")
+		if os.Getenv("LOOPZERO_ENV_READINESS_CHECKER") == "true" {
+			if mgmtDynamic := buildMgmtDynamicClient(logger); mgmtDynamic != nil {
+				ensurer.ReadinessChecker = services.NewEnvironmentCRReader(mgmtDynamic, "loopzero-system")
+				logger.Info("env readiness checker wired — EnsureEnvironment will poll Environment CR.status.phase before returning (Sprint A trio-fix 2026-06-01)")
+			}
+		} else {
+			logger.Info("env readiness checker SKIPPED — LOOPZERO_ENV_READINESS_CHECKER=false (H1 validation 2026-06-02)")
 		}
 		buildHandler = buildHandler.WithEnvironmentEnsurer(ensurer)
 		logger.Info("env ensurer wired — deploy --env <novo> will auto-create environments (T2.2 D5)")
