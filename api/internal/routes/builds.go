@@ -23,19 +23,19 @@ import (
 
 // environmentRegex validates environment names (DA-10).
 //
-// Sprint B T3.2 (plan 2026-06-01-p2-interface-contracts-robustness, ADR D4):
-// hyphens are REJECTED for new env names. Rationale: sync_callback_activator.go
-// parses ArgoCD app names of the form "<tenantID>-<env>" via LastIndex("-")
-// which is ambiguous when env itself contains hyphens — e.g. "preview-pr-42"
-// would split into the wrong (tenant, env) pair. Disallowing hyphens at the
-// API boundary closes the bug class for all new envs. Existing hyphen-
-// containing envs (some e2e journey fixtures: j-rollout-a) remain in the DB
-// and continue to be served (regex applies only to env creation); the parser
-// limitation is documented in CHANGELOG until the e2e suite migrates.
+// Sprint B T3.2 (plan 2026-06-01-p2-interface-contracts-robustness, ADR D4)
+// REVERTED 2026-06-02 after trio dogfood regression: tightening to reject
+// hyphens broke 11/66 journey specs that use env names like j-rollout-a,
+// j-secrets, j-domain. Those names existed pre-T3.2 in DB-warmed setups
+// (grandfathered) but cleanroom-fresh resets the DB, making every env
+// "new" — the regex then rejects them at creation. Sponsor mandate trio
+// GREEN took precedence over closing code-005 MEDIUM in this iteration.
+// Future re-attempt requires migrating the e2e journey fixture names
+// FIRST (jrollouta etc.), then tightening the regex. Tracked as
+// follow-up in MEET-ASYNC-AMENDMENT-2026-06-02-002 (created post-revert).
 //
-// Allowed: lowercase letter start, then [a-z0-9], max 63 chars total.
-// Rejected: any hyphen, underscore, uppercase, leading digit, length > 63.
-var environmentRegex = regexp.MustCompile(`^[a-z][a-z0-9]{0,62}$`)
+// Lowercase, starts with letter, alphanumeric + hyphens, max 63 chars.
+var environmentRegex = regexp.MustCompile(`^[a-z][a-z0-9-]{0,62}$`)
 
 // AppAutoscalingInput mirrors the CLI autoscaling payload (field names match
 // what the CLI deploy.ts sends — snake_case target_cpu).

@@ -156,44 +156,48 @@ func TestBuilds_Create_InvalidEnvironmentName(t *testing.T) {
 	}
 }
 
-// Sprint B T3.2 (plan 2026-06-01-p2-interface-contracts-robustness, ADR D4):
-// the environmentRegex MUST reject names containing hyphens so the
-// LastIndex("-")-based parser in sync_callback_activator.go cannot
-// mis-split "<tenant>-<env>" ArgoCD app names. Existing hyphen envs in
-// DB are grandfathered (regex applies only at env creation).
-func TestEnvironmentRegex_RejectsHyphen(t *testing.T) {
-	rejected := []string{
-		"preview-pr-42",  // preview env naming pattern, primary motivating case
-		"j-rollout-a",    // e2e journey naming pattern
+// Sprint B T3.2 REVERTED 2026-06-02 — the regex tightening broke e2e
+// journey fixtures using hyphen env names (j-rollout-a, j-secrets, etc.)
+// in cleanroom-fresh DB state. Sponsor mandate trio GREEN took precedence
+// over closing code-005. These tests now lock the REVERTED behavior:
+// hyphens are accepted (regex match), but the bug class remains open.
+
+// TestEnvironmentRegex_AcceptsHyphensAfterRevert — locks the reverted
+// (legacy) behavior. Pre-Sprint-B and post-revert, hyphens ARE valid.
+// The code-005 finding remains open; re-attempt requires migrating e2e
+// fixture env names FIRST (see MEET-ASYNC-AMENDMENT-2026-06-02-002).
+func TestEnvironmentRegex_AcceptsHyphensAfterRevert(t *testing.T) {
+	accepted := []string{
+		"preview-pr-42",  // preview env naming pattern
+		"j-rollout-a",    // e2e journey fixture
 		"with-hyphen",
-		"a-",             // trailing hyphen
-		"-leading",       // leading non-letter (also disallowed by ^[a-z])
+		"a-z-end",
 	}
-	for _, name := range rejected {
+	for _, name := range accepted {
 		t.Run(name, func(t *testing.T) {
-			if environmentRegex.MatchString(name) {
-				t.Errorf("environmentRegex matched %q; T3.2 (ADR D4) requires reject", name)
+			if !environmentRegex.MatchString(name) {
+				t.Errorf("environmentRegex rejected %q after revert; legacy behavior must accept", name)
 			}
 		})
 	}
 }
 
-// TestEnvironmentRegex_AcceptsValidNames — positive cases. Ensures the
-// tightening did not regress the common canonical env names.
-func TestEnvironmentRegex_AcceptsValidNames(t *testing.T) {
+// TestEnvironmentRegex_AcceptsCanonicalNames — positive baseline: the
+// canonical env names (production, staging, dev) MUST always pass.
+func TestEnvironmentRegex_AcceptsCanonicalNames(t *testing.T) {
 	accepted := []string{
 		"production",
 		"staging",
 		"development",
 		"dev",
-		"preview42",     // T3.2 replacement for preview-pr-42
-		"jrollouta",     // T3.2 replacement for j-rollout-a
-		"a",             // single letter, minimum length
+		"preview42",
+		"jrollouta",
+		"a",
 	}
 	for _, name := range accepted {
 		t.Run(name, func(t *testing.T) {
 			if !environmentRegex.MatchString(name) {
-				t.Errorf("environmentRegex rejected %q; canonical env name must pass", name)
+				t.Errorf("environmentRegex rejected canonical %q", name)
 			}
 		})
 	}
@@ -202,9 +206,9 @@ func TestEnvironmentRegex_AcceptsValidNames(t *testing.T) {
 // TestSyncCallbackParser_GrandfatheredHyphenEnv_KnownLimitation —
 // EC-9 of the plan: documents the bounded limitation explicitly via
 // t.Skip so CI stays green while preserving the known-issue audit
-// trail. Tracked separately; out of T3.2 scope.
+// trail. Tracked separately as code-005 OPEN.
 func TestSyncCallbackParser_GrandfatheredHyphenEnv_KnownLimitation(t *testing.T) {
-	t.Skip("known parser limitation; tracked separately. Grandfathered hyphen-envs route incorrectly via LastIndex(\"-\") in sync_callback_activator.go. T3.2 prevents new occurrences via regex; parser fix is out of scope for this plan; documented in CHANGELOG.")
+	t.Skip("known parser limitation; tracked as code-005 OPEN. sync_callback_activator.go LastIndex(\"-\") parser is ambiguous for env names containing hyphens. T3.2 regex tightening reverted 2026-06-02 to keep trio GREEN. Re-attempt requires e2e fixture migration first (see MEET-ASYNC-AMENDMENT-2026-06-02-002).")
 }
 
 func TestBuilds_Create_Unauthenticated(t *testing.T) {
