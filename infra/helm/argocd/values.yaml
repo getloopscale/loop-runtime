@@ -91,18 +91,25 @@ repoServer:
     enabled: true
   resources:
     limits:
-      cpu: "500m"
-      memory: "512Mi"   # was 256Mi — iter 18: bump for cache headroom (B17 prevention)
+      cpu: "1000m"      # was 500m — Sprint A trio-fix 2026-06-02: bump for
+                         # concurrent manifest generation under dogfood load
+      memory: "1Gi"     # was 512Mi — Sprint A trio-fix: avoid OOM on 10+ concurrent journeys
     requests:
-      cpu: "100m"
-      memory: "256Mi"
+      cpu: "200m"       # was 100m — Sprint A trio-fix: keep room under burst
+      memory: "512Mi"   # was 256Mi
   # B17 prevention (iter 18) — repo-server caches Application state for the
   # configured TTL. Stale cache after rapid tenant create/delete cycles
   # caused "(cached)" misroutes in L3 #4. Mitigations:
   #   1. Reduce default cache TTL via env (10m → 1m for fresh-deploy scenarios)
-  #   2. Replicas: 2 so a forced restart doesn't cause sync downtime
+  #   2. Replicas: 3 (was 2) — Sprint A trio-fix 2026-06-02: under dogfood
+  #      load (10+ journeys submitting concurrent syncs), 2 replicas saturated
+  #      and ArgoCD returned "application refresh deadline exceeded" 30s
+  #      timeouts → release CANCELLED → spec FAIL. Bumping to 3 spreads the
+  #      manifest-generation load and recovers the convergence chain. LIVE-
+  #      observed in Sprint A trio v4b dogfood: 10/132 specs FAILED, all
+  #      converging to "no pods with label X" because App stuck Unknown.
   #   3. ConfigMap setting that invalidates manifest cache on revision change
-  replicas: 2
+  replicas: 3
   env:
     # Reduce manifest cache duration — default 24h is way too long for L3
     # where tenants are created+destroyed frequently.
