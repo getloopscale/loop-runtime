@@ -12,7 +12,11 @@ openbao:
   serviceNamespace: vault-system
   port: 8200
   scheme: http  # vault-local uses tlsDisable; prod overrides to https
-  caBundle: ""  # prod: cert-manager CA cert PEM (base64); local: empty
+  # Reference to existing Secret with ca.crt key (typically the openbao-tls
+  # Secret produced by cert-manager via openbao-cert chart). When set, the
+  # Job mounts it at /etc/openbao/ca and sets BAO_CACERT.
+  tlsCASecret: ""
+  tlsCASecretKey: "ca.crt"
 
 # How to authenticate the Job to OpenBao.
 # Option A (dev/local): root token inline via Secret managed by this chart.

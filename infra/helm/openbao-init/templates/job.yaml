@@ -55,9 +55,9 @@ spec:
                 secretKeyRef:
                   name: {{ $tokenSecret }}
                   key: {{ $tokenKey }}
-            {{- if .Values.openbao.caBundle }}
+            {{- if .Values.openbao.tlsCASecret }}
             - name: BAO_CACERT
-              value: /etc/openbao/ca/ca.crt
+              value: /etc/openbao/ca/{{ .Values.openbao.tlsCASecretKey | default "ca.crt" }}
             {{- end }}
           volumeMounts:
             - name: script
@@ -65,7 +65,7 @@ spec:
               readOnly: true
             - name: tmp
               mountPath: /tmp  # writable scratch for policy HCL files (readOnlyRootFilesystem=true)
-            {{- if .Values.openbao.caBundle }}
+            {{- if .Values.openbao.tlsCASecret }}
             - name: ca
               mountPath: /etc/openbao/ca
               readOnly: true
@@ -85,8 +85,8 @@ spec:
         - name: tmp
           emptyDir:
             sizeLimit: 16Mi  # bounded so a runaway script can't fill node disk
-        {{- if .Values.openbao.caBundle }}
+        {{- if .Values.openbao.tlsCASecret }}
         - name: ca
           secret:
-            secretName: openbao-init-ca
+            secretName: {{ .Values.openbao.tlsCASecret }}
         {{- end }}

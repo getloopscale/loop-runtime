@@ -87,9 +87,22 @@ releases:
       - loopzeroCaIssuerName: self-signed-issuer
 
   # ---------------------------------------------------------------------------
+  # openbao-cert — cert-manager Certificate (PRODLIKE.3). Produces Secret
+  # `openbao-tls` mounted by openbao chart via extraVolumes. Pre-req for
+  # HTTPS listener (replaces tls_disable=1 from previous devMode).
+  # ---------------------------------------------------------------------------
+  - name: openbao-cert
+    namespace: vault-system
+    chart: ../helm/openbao-cert
+    installed: {{ .Values | get "openbaoEnabled" false }}
+    needs:
+      - cert-manager/cluster-issuer
+
+  # ---------------------------------------------------------------------------
   # OpenBao — official chart, deploy direct (no operator).
-  # vault-local: server.dev.enabled=true (in-memory, root token well-known).
-  # prod: standalone mode with file/raft storage + AWS KMS auto-unseal.
+  # PRODLIKE refactor 2026-06-02: vault-local now uses server.standalone +
+  # Raft storage + HTTPS via cert-manager (was devMode + inmem + http).
+  # Shamir init is manual (operator-time) post-helm-install.
   # ---------------------------------------------------------------------------
   - name: openbao
     namespace: vault-system
@@ -98,11 +111,12 @@ releases:
     installed: {{ .Values | get "openbaoEnabled" false }}
     needs:
       - cert-manager/cluster-issuer
+      - vault-system/openbao-cert
     values:
       # Common across all envs
       - global:
           enabled: true
-          tlsDisable: true  # vault-local k3d; prod overrides below
+          tlsDisable: false  # HTTPS in BOTH local + prod (PRODLIKE.3)
         injector:
           enabled: false  # not using vault-agent sidecar pattern (yet)
         csi:
@@ -119,21 +133,61 @@ releases:
             limits:
               cpu: 500m
               memory: 512Mi
-          # Liveness/readiness against bao API
+          # Liveness/readiness against bao API (gracefully handle Sealed state)
           readinessProbe:
             enabled: true
+            # 472 = unsealed; 473 = sealed (we want sealed to NOT mark unready,
+            # otherwise Sealed pod is unreachable for unseal API call)
+            path: "/v1/sys/health?standbyok=true&sealedcode=204&uninitcode=204"
           livenessProbe:
             enabled: true
+            path: "/v1/sys/health?standbyok=true&sealedcode=204&uninitcode=204"
+          # Mount openbao-tls Secret (from cert-manager) for HTTPS
+          extraVolumes:
+            - type: secret
+              name: openbao-tls
+              path: /openbao/userconfig
 
-      # vault-local: dev mode (in-memory, no unseal, root token fixed)
+      # vault-local: standalone + Raft persistent + HTTPS (PRODLIKE.2)
+      # Replaces previous devMode (in-memory, http, auto-unseal). Shamir
+      # init is manual operator-time after helm install (see runbook).
       {{- if eq .Environment.Name "vault-local" }}
       - server:
           dev:
+            enabled: false  # NO MORE devMode — proper prod-posture
+          standalone:
             enabled: true
-            # VK.6 LIVE: matches values-standalone.yaml convention
-            # ("loopzero-dev-vault-root"). Pre-seed jobs reference this token.
-            devRootToken: "loopzero-dev-vault-root"
-          # NetworkPolicy ON even in standalone — validates policy templates
+            # HCL config: HTTPS listener (cert from openbao-tls Secret) +
+            # Raft single-node storage (persistent via PVC).
+            config: |
+              ui = true
+
+              listener "tcp" {
+                address     = "[::]:8200"
+                cluster_address = "[::]:8201"
+                tls_cert_file = "/openbao/userconfig/openbao-tls/tls.crt"
+                tls_key_file  = "/openbao/userconfig/openbao-tls/tls.key"
+                tls_client_ca_file = "/openbao/userconfig/openbao-tls/ca.crt"
+              }
+
+              storage "raft" {
+                path = "/openbao/data"
+                node_id = "openbao-0"
+              }
+
+              service_registration "kubernetes" {}
+
+              # Single-node — telemetry minimal
+              telemetry {
+                disable_hostname = true
+              }
+          # Data storage PVC (default 10Gi — fits k3d local-path-provisioner)
+          dataStorage:
+            enabled: true
+            size: 10Gi
+            mountPath: /openbao/data
+            storageClass: null  # cluster default (local-path)
+          # NetworkPolicy ON even in standalone (validates policy templates)
           networkPolicy:
             enabled: true
       {{- end }}
@@ -224,16 +278,32 @@ releases:
           tag: "2.5.4"
 
       {{- if eq .Environment.Name "vault-local" }}
+      # PRODLIKE.6 2026-06-02: vault-local now uses operator-provisioned
+      # Secret instead of inline token. Workflow:
+      #   1. helmfile sync openbao-cert + openbao (subem com Sealed=true)
+      #   2. bao operator init -key-shares=5 -key-threshold=3 → capture
+      #      shards + root token
+      #   3. bao operator unseal <key1> <key2> <key3> → Sealed=false
+      #   4. kubectl -n vault-system create secret generic openbao-init-token \
+      #        --from-literal=BAO_TOKEN=<root_token>
+      #   5. helmfile sync openbao-init (runs init Job against unsealed Vault)
+      # See: docs/operations/vault-cluster-local-runbook.md "PRODLIKE workflow"
       - openbao:
-          scheme: http  # devMode tlsDisable
+          scheme: https
+          # Reuse Secret openbao-tls produced by openbao-cert chart;
+          # mounts ca.crt at /etc/openbao/ca/ca.crt and sets BAO_CACERT.
+          tlsCASecret: openbao-tls
+          tlsCASecretKey: ca.crt
         auth:
-          # Matches server.dev.devRootToken set above
-          rootTokenInline: "loopzero-dev-vault-root"
+          existingSecret: openbao-init-token
+          existingSecretKey: BAO_TOKEN
       {{- end }}
 
       {{- if eq .Environment.Name "prod" }}
       - openbao:
           scheme: https
+          tlsCASecret: openbao-tls
+          tlsCASecretKey: ca.crt
         auth:
           # Operator-provisioned post Shamir init ceremony per
           # docs/operations/openbao-init-runbook.md.

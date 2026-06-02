@@ -32,20 +32,87 @@ locally save 5-7h of debug under prod pressure.
 └─────────────────────────────────────────────────────────────────────┘
 ```
 
-## Quick start
+## Quick start (PRODLIKE workflow — 2026-06-02)
+
+PRODLIKE refactor replaced devMode with proper prod-posture: Raft persistent
+storage, HTTPS via cert-manager, Shamir 5/3 manual unseal. The bootstrap is
+now a **3-phase sequence** instead of a single `task k3d:vault:bootstrap`
+(devMode was auto-unsealed; Shamir requires operator-time).
+
+### Phase 1: provision infrastructure (idempotent)
 
 ```bash
-task k3d:vault:create     # 43s — bring cluster up
-task k3d:vault:bootstrap  # 2-3min — install cert-manager + bank-vaults + openbao
-task k3d:vault:status     # show pods + Vault CR + seal state
+task k3d:vault:create     # 43s — k3d cluster
+helmfile -f infra/helmfile/vault.helmfile.yaml.gotmpl -e vault-local \
+  --kube-context k3d-loopzero-vault \
+  --selector name=cert-manager sync
+helmfile -f infra/helmfile/vault.helmfile.yaml.gotmpl -e vault-local \
+  --kube-context k3d-loopzero-vault \
+  --selector name=cluster-issuer sync
+helmfile -f infra/helmfile/vault.helmfile.yaml.gotmpl -e vault-local \
+  --kube-context k3d-loopzero-vault \
+  --selector name=openbao-cert sync   # creates Secret openbao-tls
+helmfile -f infra/helmfile/vault.helmfile.yaml.gotmpl -e vault-local \
+  --kube-context k3d-loopzero-vault \
+  --selector name=openbao sync         # pod Running but Sealed=true
 ```
 
-To destroy + start fresh:
+### Phase 2: Shamir init + unseal (operator-time)
+
+```bash
+# Init: capture 5 shards + root token (ONE-TIME; idempotent only via storage state)
+kubectl --context k3d-loopzero-vault -n vault-system exec openbao-0 -- sh -c \
+  'BAO_ADDR=https://127.0.0.1:8200 BAO_SKIP_VERIFY=true bao operator init \
+    -key-shares=5 -key-threshold=3 -format=json' > /tmp/openbao-init.json
+
+# Unseal: 3 of 5 shards (quorum)
+for i in 0 1 2; do
+  SHARD=$(jq -r ".unseal_keys_b64[$i]" /tmp/openbao-init.json)
+  kubectl --context k3d-loopzero-vault -n vault-system exec openbao-0 -- sh -c \
+    "BAO_ADDR=https://127.0.0.1:8200 BAO_SKIP_VERIFY=true bao operator unseal $SHARD"
+done
+
+# Verify Sealed=false
+kubectl --context k3d-loopzero-vault -n vault-system exec openbao-0 -- sh -c \
+  'BAO_ADDR=https://127.0.0.1:8200 BAO_SKIP_VERIFY=true bao status' | grep Sealed
+```
+
+### Phase 3: provision token Secret + init Job
+
+```bash
+ROOT_TOKEN=$(jq -r .root_token /tmp/openbao-init.json)
+kubectl --context k3d-loopzero-vault -n vault-system create secret generic \
+  openbao-init-token --from-literal=BAO_TOKEN="$ROOT_TOKEN"
+
+helmfile -f infra/helmfile/vault.helmfile.yaml.gotmpl -e vault-local \
+  --kube-context k3d-loopzero-vault \
+  --selector name=openbao-init sync
+```
+
+### Final validation
+
+```bash
+task k3d:vault:status     # all pods + bao status
+kubectl --context k3d-loopzero-vault -n vault-system exec openbao-0 -- sh -c \
+  "BAO_ADDR=https://127.0.0.1:8200 BAO_SKIP_VERIFY=true BAO_TOKEN=$ROOT_TOKEN \
+   bao kv put secret/test foo=bar && bao kv get secret/test"
+```
+
+### Cleanup + restart with same state
+
+PVC `data-openbao-0` is persistent — `task k3d:vault:destroy` deletes the
+k3d cluster but the underlying Docker volume survives. After `create` +
+helmfile sync, Vault comes back Sealed=true and requires unseal with the
+same shards. **Save `/tmp/openbao-init.json` somewhere safe** if you want
+to reuse state.
+
+### Full reset (lose all state)
 
 ```bash
 task k3d:vault:destroy
+docker volume prune -f   # WARNING: removes ALL unused Docker volumes
 task k3d:vault:create
-task k3d:vault:bootstrap
+# Re-run Phases 1-3 fresh (new shards, new root token)
 ```
 
 ## Releases deployed
