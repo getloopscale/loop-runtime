@@ -163,6 +163,100 @@ func TestAnonymousAuthGate_K3dBuildAllowlisted(t *testing.T) {
 	}
 }
 
+// T2.1 DoD-closure tests (Plano P3 iteration 2 of Ralph) — lock the
+// scan-skip fix that closes the LIVE-caught false-positive drift
+// blocking `task quality:gates -- --gate anonymous-auth` from
+// exit 0 on current repo state.
+
+// TestCheck_SkipsWorktreesDir: a full repo duplicate under
+// `.claude/worktrees/<name>/` is local-only git scratch space; scanning
+// it produces hits that mirror the canonical tree. isSkippedDir MUST
+// prune the entire subtree (not just the worktrees/ directory entry).
+func TestCheck_SkipsWorktreesDir(t *testing.T) {
+	root := t.TempDir()
+	// Simulate a git-worktree layout: .claude/worktrees/<name>/
+	// containing both the gate source AND a hypothetical Helm violation.
+	write(t, root, ".claude/worktrees/some-branch/pkg/quality/anonymousauth/check.go",
+		"const ForbiddenLiteral = \"anonymous-auth=true\"\n")
+	write(t, root, ".claude/worktrees/some-branch/infra/helm/x/values.yaml",
+		"extraArgs:\n  - --kube-apiserver-arg=anonymous-auth=true\n")
+	out, err := Check(Config{RepoRoot: root})
+	if err != nil {
+		t.Fatalf("Check error: %v", err)
+	}
+	if !out.Pass {
+		t.Fatalf("worktrees/ subtree MUST be entirely skipped (LIVE false-positive class); got %d violations: %v",
+			len(out.Violations), out.Violations)
+	}
+}
+
+// TestCheck_SkipsReviewOutputDir: deep-review output trees contain
+// SQLite databases (review.db) holding finding descriptions that
+// QUOTE the literal in prose. The dir MUST be entirely skipped so
+// the gate doesn't read SQLite binary as text.
+func TestCheck_SkipsReviewOutputDir(t *testing.T) {
+	root := t.TempDir()
+	// Synthetic review-output blob — content shape doesn't matter,
+	// only that the dir is pruned.
+	write(t, root, "api/review-output/finding-001.txt",
+		"finding: --kube-apiserver-arg=anonymous-auth=true was set on build cluster\n")
+	out, err := Check(Config{RepoRoot: root})
+	if err != nil {
+		t.Fatalf("Check error: %v", err)
+	}
+	if !out.Pass {
+		t.Fatalf("review-output/ MUST be entirely skipped (false-positive class); got: %v", out.Violations)
+	}
+}
+
+// TestCheck_SkipsBinaryDB: SQLite files are binary even if under
+// maxScanSize. Read as text they yield byte sequences that may match
+// the literal — but those are NOT executable artifacts. Both
+// `.db` and `.sqlite` extensions skip.
+func TestCheck_SkipsBinaryDB(t *testing.T) {
+	root := t.TempDir()
+	// Synthetic SQLite-like blob with the literal embedded in it.
+	write(t, root, "some/path/review.db",
+		"SQLite format 3\x00...random bytes...--kube-apiserver-arg=anonymous-auth=true...more bytes\n")
+	write(t, root, "another/path/data.sqlite",
+		"SQLite format 3\x00...--kube-apiserver-arg=anonymous-auth=true\n")
+	out, err := Check(Config{RepoRoot: root})
+	if err != nil {
+		t.Fatalf("Check error: %v", err)
+	}
+	if !out.Pass {
+		t.Fatalf(".db/.sqlite files MUST be skipped (binary blobs); got: %v", out.Violations)
+	}
+}
+
+// TestCheck_StillFlagsRealViolation: defense-in-depth — the new skips
+// MUST NOT regress the gate's actual contract. A real violation in a
+// production tree still trips. NOTE: fixture must not start lines with
+// `--` (that's classified as SQL comment by isCommentLine); we use the
+// canonical YAML shape `- arg: "..."` per existing TestCheck_FailsInProdHelm.
+func TestCheck_StillFlagsRealViolation_AfterSkipExtension(t *testing.T) {
+	root := t.TempDir()
+	// Worktrees subtree IS skipped...
+	write(t, root, ".claude/worktrees/x/infra/helm/y/values.yaml",
+		"extraArgs:\n  - --kube-apiserver-arg=anonymous-auth=true\n")
+	// ...but a real production hit STILL fires.
+	write(t, root, "infra/helm/loopzero-api/values.yaml",
+		"extraArgs:\n  - --kube-apiserver-arg=anonymous-auth=true\n")
+	out, err := Check(Config{RepoRoot: root})
+	if err != nil {
+		t.Fatalf("Check error: %v", err)
+	}
+	if out.Pass {
+		t.Fatal("real prod violation MUST still trip the gate after skip extension")
+	}
+	if len(out.Violations) != 1 {
+		t.Fatalf("expected exactly 1 violation (only the prod hit), got %d: %v", len(out.Violations), out.Violations)
+	}
+	if !strings.Contains(out.Violations[0], "infra/helm/loopzero-api/values.yaml") {
+		t.Errorf("violation must name prod path, not worktrees; got: %v", out.Violations[0])
+	}
+}
+
 // T2.1 companion test: a synthetic file OUTSIDE every allowlist entry that
 // nevertheless contains the literal MUST trip the gate. Uses a neutral path
 // (`api/internal/somewhere.go`) instead of a specific known directory so the

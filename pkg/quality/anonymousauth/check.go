@@ -110,6 +110,11 @@ func Check(cfg Config) (*Outcome, error) {
 		if strings.HasSuffix(rel, ".md") {
 			return nil
 		}
+		// Binary blobs (SQLite review databases, etc.) are not text-scannable
+		// — content matches are false positives.
+		if isBinaryExt(rel) {
+			return nil
+		}
 		hits, scanErr := scanFile(path, rel)
 		if scanErr != nil {
 			return scanErr
@@ -126,10 +131,35 @@ func Check(cfg Config) (*Outcome, error) {
 
 // isSkippedDir prunes large or vendor directories that may legitimately
 // embed third-party docs mentioning the literal (e.g., upstream K8s docs).
+// Also prunes local-only scratch trees that LIVE-caught false positives
+// during Plano P3 T2.1 (audit `2026-06-02-sprint-c-engineering-complete`):
+//   - `worktrees`: `.claude/worktrees/<name>/` is a full git-worktree clone
+//     of the repo (332KB+ duplicate including the gate's own check.go).
+//     Scanning it produces false positives that mirror every legitimate
+//     hit in the canonical tree.
+//   - `review-output`: deep-review SQLite DBs (`api/review-output/review.db`,
+//     `./review-output/*`) contain finding descriptions that QUOTE the
+//     literal in prose; treating those as executable artifacts is wrong.
 func isSkippedDir(name string) bool {
 	switch name {
-	case ".git", "node_modules", "vendor", "dist", "build", ".terraform", "__pycache__":
+	case ".git", "node_modules", "vendor", "dist", "build", ".terraform", "__pycache__",
+		"worktrees", "review-output":
 		return true
+	}
+	return false
+}
+
+// isBinaryExt reports whether the file extension is a binary blob that
+// MUST NOT be scanned as text. SQLite databases are the LIVE-caught
+// example (deep-review's `review.db` is <2MiB so the size cap doesn't
+// trip; the scanner reads it as text and matches finding-description
+// prose that quotes the gated literal). Add new binary extensions here
+// when they trip the gate.
+func isBinaryExt(rel string) bool {
+	for _, ext := range []string{".db", ".sqlite", ".sqlite3"} {
+		if strings.HasSuffix(rel, ext) {
+			return true
+		}
 	}
 	return false
 }
