@@ -365,24 +365,48 @@ releases:
       - cert-manager/cert-manager
     values:
       - ../helm/openbao/values.yaml
-      {{- if or (eq .Environment.Name "dev") (eq .Environment.Name "drill") }}
+      {{- if or (eq .Environment.Name "dev") (eq .Environment.Name "drill") (eq .Environment.Name "staging") (eq .Environment.Name "prod") }}
       - ../helm/openbao/values-prod.yaml
       {{- else }}
       - ../helm/openbao/values-standalone.yaml
       {{- end }}
     set:
-      # Inject Pulumi outputs (F1.1+F1.2) via env vars set by
-      # infra/helmfile/scripts/lib/pulumi-output.sh before helmfile sync.
-      # Standalone env doesn't need these (devMode skips unseal+backup).
-      {{- if or (eq .Environment.Name "dev") (eq .Environment.Name "drill") }}
+      # SCRIPT.6 (2026-06-02) — DOxAWS lifecycle independence.
+      # AWS KMS + DO Spaces resources are provisioned OUT-OF-BAND by
+      # infra/scripts/openbao/provision-aws-resources.sh (NOT via Pulumi).
+      # Operator workflow before `helmfile sync`:
+      #
+      #   $ infra/scripts/openbao/provision-aws-resources.sh --env <ENV>
+      #   $ set -a; source ~/.openbao-<ENV>-resources.env; set +a
+      #   $ helmfile -e <ENV> sync --selector name=openbao
+      #
+      # Standalone env (k3d local devMode) skips unseal+backup entirely
+      # and requires no env vars.
+      #
+      # NOTE: passing AWS/Spaces credentials via `--set` puts them in
+      # Helm release secret. For PROD, replace with explicit K8s Secrets
+      # (`openbao-aws-creds` + `openbao-backup-creds`) referenced via
+      # `existingSecret` in values-prod.yaml. Runbook:
+      # docs/operations/openbao-aws-resources-runbook.md.
+      {{- if or (eq .Environment.Name "dev") (eq .Environment.Name "drill") (eq .Environment.Name "staging") (eq .Environment.Name "prod") }}
       - name: unseal.awskms.kmsKeyId
         value: {{ requiredEnv "OPENBAO_AWS_KMS_KEY_ID" | quote }}
+      - name: unseal.awskms.region
+        value: {{ env "OPENBAO_AWS_REGION" | default "us-east-1" | quote }}
+      - name: unseal.awskms.accessKeyId
+        value: {{ requiredEnv "OPENBAO_AWS_ACCESS_KEY_ID" | quote }}
+      - name: unseal.awskms.secretAccessKey
+        value: {{ requiredEnv "OPENBAO_AWS_SECRET_ACCESS_KEY" | quote }}
       - name: backup.storage.endpoint
-        value: {{ requiredEnv "OPENBAO_BACKUP_BUCKET_ENDPOINT" | quote }}
+        value: {{ requiredEnv "OPENBAO_BACKUP_ENDPOINT" | quote }}
       - name: backup.storage.bucket
-        value: {{ requiredEnv "OPENBAO_BACKUP_BUCKET_NAME" | quote }}
+        value: {{ requiredEnv "OPENBAO_BACKUP_BUCKET" | quote }}
       - name: backup.storage.region
         value: {{ requiredEnv "OPENBAO_BACKUP_REGION" | quote }}
+      - name: backup.storage.accessKeyId
+        value: {{ requiredEnv "OPENBAO_BACKUP_ACCESS_KEY_ID" | quote }}
+      - name: backup.storage.secretAccessKey
+        value: {{ requiredEnv "OPENBAO_BACKUP_SECRET_ACCESS_KEY" | quote }}
       {{- end }}
 
   - name: prometheus
