@@ -1,0 +1,92 @@
+{{/* SPDX-License-Identifier: Apache-2.0 */}}
+{{/*
+INIT.2 — OpenBao post-startup config Job.
+
+Resolves which Secret holds the bao token:
+  - auth.existingSecret (prod path; operator-provisioned)
+  - else openbao-init-token (this chart's Secret from auth.rootTokenInline)
+
+The Job is annotated as a Helm hook (post-install + post-upgrade) so it
+re-runs whenever values change. ttlSecondsAfterFinished cleans up after
+success, preserving last failure pod for debugging.
+*/}}
+{{- $tokenSecret := .Values.auth.existingSecret | default "openbao-init-token" }}
+{{- $tokenKey := .Values.auth.existingSecretKey | default "BAO_TOKEN" }}
+{{- $baoAddr := printf "%s://%s.%s.svc.cluster.local:%d" .Values.openbao.scheme .Values.openbao.serviceName .Values.openbao.serviceNamespace (int .Values.openbao.port) }}
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: openbao-init
+  namespace: {{ .Release.Namespace }}
+  labels:
+    app.kubernetes.io/name: openbao-init
+    app.kubernetes.io/managed-by: {{ .Release.Service }}
+  annotations:
+    {{/* Re-run on every helm upgrade so engine/policy changes apply */}}
+    helm.sh/hook: post-install,post-upgrade
+    helm.sh/hook-weight: "5"
+    helm.sh/hook-delete-policy: before-hook-creation
+spec:
+  backoffLimit: {{ .Values.job.backoffLimit }}
+  activeDeadlineSeconds: {{ .Values.job.activeDeadlineSeconds }}
+  ttlSecondsAfterFinished: {{ .Values.job.ttlSecondsAfterFinished }}
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: openbao-init
+        app.kubernetes.io/managed-by: {{ .Release.Service }}
+    spec:
+      serviceAccountName: openbao-init
+      restartPolicy: OnFailure
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 100
+        fsGroup: 1000
+      containers:
+        - name: init
+          image: "{{ .Values.image.repository }}:{{ .Values.image.tag }}"
+          imagePullPolicy: {{ .Values.image.pullPolicy }}
+          command: ["/bin/sh", "/scripts/init.sh"]
+          env:
+            - name: BAO_ADDR
+              value: {{ $baoAddr | quote }}
+            - name: BAO_TOKEN
+              valueFrom:
+                secretKeyRef:
+                  name: {{ $tokenSecret }}
+                  key: {{ $tokenKey }}
+            {{- if .Values.openbao.caBundle }}
+            - name: BAO_CACERT
+              value: /etc/openbao/ca/ca.crt
+            {{- end }}
+          volumeMounts:
+            - name: script
+              mountPath: /scripts
+              readOnly: true
+            - name: tmp
+              mountPath: /tmp  # writable scratch for policy HCL files (readOnlyRootFilesystem=true)
+            {{- if .Values.openbao.caBundle }}
+            - name: ca
+              mountPath: /etc/openbao/ca
+              readOnly: true
+            {{- end }}
+          resources:
+            {{- toYaml .Values.resources | nindent 12 }}
+          securityContext:
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+            capabilities:
+              drop: ["ALL"]
+      volumes:
+        - name: script
+          configMap:
+            name: openbao-init-script
+            defaultMode: 0555
+        - name: tmp
+          emptyDir:
+            sizeLimit: 16Mi  # bounded so a runaway script can't fill node disk
+        {{- if .Values.openbao.caBundle }}
+        - name: ca
+          secret:
+            secretName: openbao-init-ca
+        {{- end }}

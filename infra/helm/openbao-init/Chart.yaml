@@ -1,0 +1,23 @@
+# SPDX-License-Identifier: Apache-2.0
+# F2+ openbao-init chart — provisions OpenBao secrets engines, auth methods,
+# and policies via a Job that runs `bao` CLI post-startup.
+#
+# Substitutes the BaoConfiguration CR declarative pattern that was removed
+# along with Bank-Vaults operator in BUG8.E pivot (2026-06-02). The init
+# Job is the canonical OpenBao/Vault pattern for environments where the
+# Vault chart is deployed directly (no surrounding controller).
+#
+# Idempotency: every `bao` command is wrapped to skip-on-already-exists.
+# Re-runs of the Job are safe (no-op when state already matches).
+#
+# Per VK scope of plan 2026-06-02-openbao-adoption (vault cluster isolation).
+
+apiVersion: v2
+name: openbao-init
+description: |
+  Post-startup configuration Job for OpenBao (secrets engines, auth methods,
+  policies). Idempotent. Reads root token from K8s Secret (created by Helm
+  values in dev/local; provisioned by ceremony in prod).
+type: application
+version: 0.1.0
+appVersion: "2.5.4"

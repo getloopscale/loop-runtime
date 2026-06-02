@@ -1,0 +1,97 @@
+{{/* SPDX-License-Identifier: Apache-2.0 */}}
+{{/* ConfigMap with bao CLI init script — idempotent (skip-on-exists). */}}
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: openbao-init-script
+  namespace: {{ .Release.Namespace }}
+  labels:
+    app.kubernetes.io/name: openbao-init
+    app.kubernetes.io/managed-by: {{ .Release.Service }}
+data:
+  init.sh: |
+    #!/bin/sh
+    set -eu
+
+    # Wait for OpenBao to be reachable + unsealed.
+    # The Helmfile `needs:` ordering ensures the Vault release reports
+    # Ready before this Job is created, but bao API may need a few seconds
+    # extra for the auto-unseal to complete.
+    echo "[INIT] Waiting for OpenBao API readiness..."
+    for i in $(seq 1 30); do
+      if bao status > /dev/null 2>&1; then
+        echo "[INIT] OpenBao reachable + unsealed."
+        break
+      fi
+      sleep 2
+    done
+    bao status || { echo "[INIT] OpenBao not reachable after 60s"; exit 1; }
+
+    # ---- Helper: idempotent secrets enable ----
+    enable_engine() {
+      path="$1"
+      type="$2"
+      description="$3"
+      opts="$4"
+      if bao secrets list -format=json | grep -q "\"${path}/\":"; then
+        echo "[INIT] Engine already mounted at path=${path} — skip"
+      else
+        echo "[INIT] Enabling engine path=${path} type=${type}"
+        if [ -n "$opts" ]; then
+          # shellcheck disable=SC2086
+          bao secrets enable -path="${path}" -description="${description}" $opts "${type}"
+        else
+          bao secrets enable -path="${path}" -description="${description}" "${type}"
+        fi
+      fi
+    }
+
+    # ---- Helper: idempotent auth enable ----
+    enable_auth() {
+      path="$1"
+      type="$2"
+      description="$3"
+      if bao auth list -format=json | grep -q "\"${path}/\":"; then
+        echo "[INIT] Auth method already enabled at path=${path} — skip"
+      else
+        echo "[INIT] Enabling auth method path=${path} type=${type}"
+        bao auth enable -path="${path}" -description="${description}" "${type}"
+      fi
+    }
+
+    # ---- Helper: idempotent policy write (always overwrite — policies are
+    # tracked by name, no diff overhead) ----
+    write_policy() {
+      name="$1"
+      file="$2"
+      echo "[INIT] Writing policy name=${name}"
+      bao policy write "${name}" "${file}"
+    }
+
+    # ---- Provision secrets engines ----
+    {{- range .Values.secretsEngines }}
+    {{- $opts := "" }}
+    {{- if eq .type "kv-v2" }}{{- $opts = "" }}{{- end }}
+    enable_engine "{{ .path }}" "{{ .type }}" "{{ .description }}" "{{ $opts }}"
+    {{- end }}
+
+    # ---- Provision auth methods ----
+    {{- range .Values.authMethods }}
+    enable_auth "{{ .path }}" "{{ .type }}" "{{ .description }}"
+    {{- end }}
+
+    # ---- Provision policies (HCL files written to disk first) ----
+    {{- range .Values.policies }}
+    cat > /tmp/policy-{{ .name }}.hcl <<'POLICY_EOF'
+    {{ .ruleHcl | nindent 4 }}
+    POLICY_EOF
+    write_policy "{{ .name }}" "/tmp/policy-{{ .name }}.hcl"
+    {{- end }}
+
+    echo "[INIT] Done. Final state:"
+    echo "--- secrets engines ---"
+    bao secrets list
+    echo "--- auth methods ---"
+    bao auth list
+    echo "--- policies ---"
+    bao policy list

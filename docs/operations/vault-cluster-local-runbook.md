@@ -54,11 +54,17 @@ task k3d:vault:bootstrap
 Pivoted to official `openbao/openbao` chart maintained by OpenBao org. Zero
 operator layer; deploys OpenBao StatefulSet via Helm direct.
 
+**INIT (F2+) 2026-06-02**: post-startup config via `infra/helm/openbao-init/`
+chart Job (substitui BaoConfiguration declarative pattern que sumiu com BUG8.E).
+Idempotent: re-runs são safe (skip-on-exists para engines/auth; policies write
+sempre overwrites).
+
 | Release | Namespace | Source | Purpose |
 |---------|-----------|--------|---------|
 | cert-manager | cert-manager | jetstack v1.15.3 | TLS certificate issuance (prod only) |
 | cluster-issuer | cert-manager | infra/helm/cluster-issuer | self-signed ClusterIssuer |
 | openbao | vault-system | openbao/openbao v0.28.3 (appVersion v2.5.4) | OpenBao StatefulSet (devMode local; HA Raft + KMS unseal prod) |
+| openbao-init | vault-system | infra/helm/openbao-init v0.1.0 | Post-startup Job: secrets engines + auth methods + policies (idempotent) |
 
 ## Validation outcome (2026-06-02 LIVE session)
 

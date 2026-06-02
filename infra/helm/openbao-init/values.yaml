@@ -1,0 +1,86 @@
+# SPDX-License-Identifier: Apache-2.0
+# F2+ openbao-init values — what to provision in OpenBao via `bao` CLI Job.
+#
+# Per VK validation (vault-local): root token comes inline from devMode
+# (`server.dev.devRootToken` = "loopzero-dev-vault-root" in vault.helmfile).
+# Per prod: root token is provided OUT-OF-BAND via K8s Secret created
+# after Shamir init ceremony (operator runbook openbao-init-runbook.md).
+
+# OpenBao endpoint (Service ClusterIP, port from chart oficial)
+openbao:
+  serviceName: openbao
+  serviceNamespace: vault-system
+  port: 8200
+  scheme: http  # vault-local uses tlsDisable; prod overrides to https
+  caBundle: ""  # prod: cert-manager CA cert PEM (base64); local: empty
+
+# How to authenticate the Job to OpenBao.
+# Option A (dev/local): root token inline via Secret managed by this chart.
+# Option B (prod): existingSecret with key BAO_TOKEN (operator-provisioned).
+auth:
+  # Set ONLY for dev/local. Creates Secret openbao-init-token with this value.
+  # In prod, leave empty and use existingSecret instead.
+  rootTokenInline: ""
+
+  # Reference to existing Secret (prod path).
+  existingSecret: ""
+  existingSecretKey: "BAO_TOKEN"
+
+# Image: official openbao/openbao container has bao CLI baked in.
+image:
+  repository: quay.io/openbao/openbao
+  tag: "2.5.4"
+  pullPolicy: IfNotPresent
+
+# Resources for the init Job (light — runs ~30s then exits)
+resources:
+  requests:
+    cpu: 50m
+    memory: 64Mi
+  limits:
+    cpu: 200m
+    memory: 128Mi
+
+# Job behavior
+job:
+  # backoffLimit: how many retries before Job fails permanently
+  backoffLimit: 3
+  # activeDeadlineSeconds: kill Job if exceeds this (max time including retries)
+  activeDeadlineSeconds: 300
+  # ttlSecondsAfterFinished: cleanup completed pods after this
+  ttlSecondsAfterFinished: 600
+
+# Secrets engines to enable (idempotent — skip if mounted).
+# Each entry: { path, type, description, options }.
+secretsEngines:
+  - path: secret  # kv-v2 already mounted by default in dev; harmless re-enable
+    type: kv-v2
+    description: "Generic kv-v2 store for LoopZero platform secrets"
+    options:
+      version: "2"
+  - path: transit
+    type: transit
+    description: "Per-tenant encryption keys (crypto-shredding pattern)"
+    options: {}
+
+# Auth methods to enable (idempotent).
+authMethods:
+  - path: kubernetes
+    type: kubernetes
+    description: "K8s ServiceAccount auth for in-cluster workloads"
+
+# Policies to provision. Each: { name, ruleHcl }.
+policies:
+  - name: loopzero-api-read
+    ruleHcl: |
+      path "secret/data/loopzero/+/*" {
+        capabilities = ["read"]
+      }
+  - name: loopzero-api-transit-encrypt
+    ruleHcl: |
+      path "transit/encrypt/+" {
+        capabilities = ["update"]
+      }
+      path "transit/decrypt/+" {
+        capabilities = ["update"]
+      }

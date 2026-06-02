@@ -138,7 +138,8 @@ releases:
             enabled: true
       {{- end }}
 
-      # prod: file/raft storage + AWS KMS unseal
+      # prod: file/raft storage + AWS KMS unseal — definido completamente abaixo
+      # (config inline + extraEnvironmentVars). Block continuation:
       {{- if eq .Environment.Name "prod" }}
       - server:
           dev:
@@ -196,4 +197,46 @@ releases:
             enabled: true
         global:
           tlsDisable: false  # prod uses cert-manager TLS
+      {{- end }}
+
+  # ---------------------------------------------------------------------------
+  # openbao-init — INIT.3 post-startup config Job: enables secrets engines,
+  # auth methods, policies via `bao` CLI. Idempotent. Substitutes the
+  # BaoConfiguration CR declarative pattern (eliminated in BUG8.E pivot).
+  #
+  # vault-local: root token from server.dev.devRootToken passed inline.
+  # prod: operator pre-creates Secret `openbao-init-token` post Shamir
+  # ceremony; this release references it via auth.existingSecret.
+  # ---------------------------------------------------------------------------
+  - name: openbao-init
+    namespace: vault-system
+    chart: ../helm/openbao-init
+    installed: {{ .Values | get "openbaoEnabled" false }}
+    needs:
+      - vault-system/openbao
+    values:
+      - openbao:
+          serviceName: openbao
+          serviceNamespace: vault-system
+          port: 8200
+        image:
+          repository: quay.io/openbao/openbao
+          tag: "2.5.4"
+
+      {{- if eq .Environment.Name "vault-local" }}
+      - openbao:
+          scheme: http  # devMode tlsDisable
+        auth:
+          # Matches server.dev.devRootToken set above
+          rootTokenInline: "loopzero-dev-vault-root"
+      {{- end }}
+
+      {{- if eq .Environment.Name "prod" }}
+      - openbao:
+          scheme: https
+        auth:
+          # Operator-provisioned post Shamir init ceremony per
+          # docs/operations/openbao-init-runbook.md.
+          existingSecret: openbao-init-token
+          existingSecretKey: BAO_TOKEN
       {{- end }}
