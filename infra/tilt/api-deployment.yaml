@@ -28,6 +28,17 @@ rules:
   - apiGroups: ["loopzero.io"]
     resources: ["clustercredentials"]
     verbs: ["get", "list", "watch"]
+  # --- Environment CRs: EnvironmentCRReader.IsReady (Sprint A trio-fix
+  # 2026-06-01, commit c892e355) polls status.phase==Active to gate the
+  # EnsureEnvironment poll loop. Without get permission, the readiness
+  # check returns RBAC-denied (treated as transient by the ensurer); the
+  # poll loop never sees ready=true and EnsureEnvironment times out at
+  # 60s → release CANCELLED, downstream specs FAIL. LIVE-observed during
+  # Sprint A trio v3b dogfood 2026-06-02: "env cr reader: get
+  # loopzero-system/e2e-tenant-j-rollout-a: environments.loopzero.io ... is forbidden".
+  - apiGroups: ["loopzero.io"]
+    resources: ["environments"]
+    verbs: ["get", "list", "watch"]
   # --- Secrets in loopzero-system: argocd-refresh-credentials, loopzero-cluster-
   # kubeconfigs, KubeMintingTokenProvider rotation, ESO sync.
   - apiGroups: [""]
