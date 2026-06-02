@@ -399,6 +399,63 @@ Skills/slash commands (subset): `/sprint`, `/implement`, `/test`, `/review`, `/d
 
 ---
 
+
+## Deep Review Roadmap (2026-06-01)
+
+> **Source**: Deep Review Loop completo `/home/paulo/loopzero/api/review-output/final_report.md` — 83 findings (2 critical + 9 high + 36 medium + 36 low), 10 threat models, 7 invariants validated, C4 composite **3.15 / 4.0**. Ordem por impacto×esforço×blast-radius. Cada sprint termina com trio FULL re-validation (cleanroom + dogfood --full + chaos-test --full) — padrão V9 L17-L22 + L22-FAANG `098b6846`. Memory: `reference_deep_review_roadmap_2026_06_01.md`.
+
+### 🔴 Sprint A — P1 HOTFIXES (~1 dia eng)
+
+Fecha 3 dos CR ainda abertos de MEET-2026-05-28-001 (CR-1/CR-6/CR-7) + 1 CRITICAL ativo.
+
+| # | Finding | Esforço | File |
+|---|---------|---------|------|
+| A1 | `comp-001` Wire `SecretEnvLocker` em setup_server.go (CRITICAL — mutation lock missing AGORA) | **1 linha** | `api/cmd/setup_server.go` |
+| A2 | `sec-008` `strings.EqualFold` em `IsProduction()` — `LOOPZERO_ENV=Production` bypassa SCT guard | **2 linhas** | `api/internal/config/config.go:547` |
+| A3 | `sec-009` DB trigger BEFORE UPDATE em `rekor_url` (write-once enforcement) | migration 000022 | `api/internal/db/migrations/` |
+| A4 | `sec-010` Per-tenant Fulcio SA audience (CR-7 cross-tenant signing forgery) | L effort | `api/internal/argo/workflow_builder.go:568` |
+
+### 🟠 Sprint B — P2 ARCH/CODE (~3-5 dias)
+
+| # | Finding | Esforço | File |
+|---|---------|---------|------|
+| B1 | `arch-016` Add `ForceReconcile/GetSyncRevision/TerminateOperation/GetAppStatus` à `SyncClient` interface formal (L22 root-cause class — interface under-spec causa silent type assertion failures) | M | `api/internal/services/build_orchestrator.go:154` |
+| B2 | `code-001` Promote orchestrator Lock2 re-verify (mirror rollback pattern, linha 210-219) | M | `api/internal/services/promotion_orchestrator.go:214-236` |
+| B3 | `code-005` Env-name regex tighten (proibir hyphens via validation, não comentário) | S | `api/internal/routes/builds.go` |
+| B4 | `val-002` Correlation-ID header canonical (`X-Correlation-ID` consistente em 3 routes) | S | `routes/builds.go`, `routes/promote.go`, `routes/rollback.go` |
+
+### 🟡 Sprint C — INFRA/CI (~1 semana)
+
+| # | Finding | Esforço | File |
+|---|---------|---------|------|
+| C1 | `infra-001` Selecionar plataforma CI (Gitea Actions natural — self-hosted, already in stack). T2 meeting required. | L | T2 meeting + ADR |
+| C2 | `infra-006` RLS owner bypass — policy `loopzero_service_role` para background workers | M | new migration |
+| C3 | `infra-007` Partial unique index `(tenant_id, project_id, environment) WHERE status='ACTIVE'` em releases | S | new migration |
+| C4 | `infra-003` Anonymous-auth gate cobrir `infra/k3d/*.yaml` (atualmente só checa Helm/Helmfile) | S | `pkg/quality/anonymousauth/check.go` |
+
+### 🟢 Sprint D — TEST DEBT + SECRETS HARDENING
+
+| # | Finding | Esforço | File |
+|---|---------|---------|------|
+| D1 | L19 regression test (secret PK collision em envs) — fix está lá mas sem test | S | `api/internal/db/secret_wrapper_test.go` |
+| D2 | L20 regression test (secret resync on deploy) — fix está lá mas sem test | S | `api/internal/services/secret_resyncer_test.go` |
+| D3 | `sec-001` AES-GCM AAD binding migration (não-breaking via dual-decrypt window) — cross-tenant ciphertext transplant possível sem AAD | XL | `api/internal/db/secret_wrapper.go:59` |
+
+### Anti-padrões inquebráveis (lições V9 + L22)
+
+1. **NÃO fazer Sprint A+B+C juntos** — L22 5-layer composition (`098b6846`) foi difícil de revisar; commits pequenos sequenciais melhor.
+2. **NÃO atacar 36 LOW primeiro** — backlog. Sprints A-D removem maior parte do risco real.
+3. **NÃO pular trio entre sprints** — dogfood/chaos pristine 2× foi a confiança que liberou push do `098b6846`. Mesma disciplina aqui.
+4. **NÃO promise compositoria** — emitir promise apenas quando trio FULL GREEN entre cada sprint.
+
+### Path to Sprint 9 (Polish + Launch)
+
+- Sprint A fecha CR-1/CR-6/CR-7 (3 dos 11 originais de MEET-2026-05-28-001).
+- Pós-Sprint A: **8/11 CRs fechados**; remaining 3 são operator HARD STOPs (TUF ceremony + Sigstore Pulumi stack + customer trial).
+- C4 Health pós-Sprint D estimado **3.65+** (alinhado com aggregate baseline 2026-05-27).
+- Trio re-run mandatório entre Sprint A→B→C→D.
+
+
 ## Architecture Overview
 
 ### Four Planes
