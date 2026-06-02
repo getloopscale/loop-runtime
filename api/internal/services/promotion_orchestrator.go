@@ -25,6 +25,10 @@ type PromotionReleaseStore interface {
 	// can match a sync notification to this release. Without it, the activator
 	// drops the callback (revision guard).
 	SetGitCommit(ctx context.Context, tx db.DBTX, id string, commitSHA string) error
+	// GetByIDForTenant re-fetches a release by ID, scoped by tenant. Used by the
+	// Sprint B T2.1 INSIDE-lock re-verify in Phase 5 (ADR D2). Mirrors the
+	// reference pattern in rollback_orchestrator.go:208-225.
+	GetByIDForTenant(ctx context.Context, tenantID, releaseID string) (*db.Release, error)
 }
 
 // PromotionEnvTargetStore abstracts environment target operations for promotion (DIP).
@@ -212,6 +216,40 @@ func (o *PromotionOrchestrator) Promote(ctx context.Context, req PromotionReques
 	// (rollback, status, the next promote) see no ACTIVE row in the target.
 	// Mirrors container_delivery.go phaseACreateRelease post-Push behavior.
 	transitionErr := o.deps.Locker.WithLock(ctx, req.TenantID, req.ProjectID, req.ToEnv, func(tx db.DBTX) error {
+		// Sprint B T2.1 (ADR D2): INSIDE-lock re-verify. Between Lock1 (where
+		// newRelease was created in READY state per L17 fix) and Lock2, another
+		// concurrent promote / rollback can have transitioned it (race window =
+		// the gitops Push between locks). Mirror the rollback_orchestrator
+		// Phase 5 pattern (lines 208-225): re-fetch the row, assert the
+		// expected source state, abort deterministically with INVALID_TRANSITION
+		// → HTTP 409 on mismatch.
+		//
+		// EC-4 (plan v1.1): target of the re-verify is newRelease (not
+		// sourceRelease). The race we close is two promotes both creating
+		// rows in the target env and both attempting GitMirrorCompleted on
+		// THEIR OWN row — but only one Lock2 holder at a time can call
+		// SetGitCommit. The canonical race signal is fresh.Status != READY
+		// OR fresh.GitCommit non-empty (another Lock2 holder already
+		// advanced the row).
+		fresh, fetchErr := o.deps.Releases.GetByIDForTenant(ctx, req.TenantID, newRelease.ID)
+		if fetchErr != nil {
+			return fmt.Errorf("promote: re-fetch target release inside Lock2: %w", fetchErr)
+		}
+		if fresh == nil {
+			return loopzeroerrors.NewInvalidTransition("READY", fmt.Sprintf(
+				"CONCURRENT_PROMOTE: release %s deleted between Lock1 and Lock2", newRelease.ID))
+		}
+		if fresh.Status != "READY" {
+			return loopzeroerrors.NewInvalidTransition(fresh.Status, fmt.Sprintf(
+				"CONCURRENT_PROMOTE: release %s no longer READY (current: %s); another promote raced",
+				newRelease.ID, fresh.Status))
+		}
+		if fresh.GitCommit != "" && commitSHA != "" && fresh.GitCommit != commitSHA {
+			return loopzeroerrors.NewInvalidTransition("READY", fmt.Sprintf(
+				"CONCURRENT_PROMOTE: release %s GitCommit already set to %s; another Lock2 holder advanced first",
+				newRelease.ID, fresh.GitCommit))
+		}
+
 		if commitSHA != "" {
 			if err := o.deps.Releases.SetGitCommit(ctx, tx, newRelease.ID, commitSHA); err != nil {
 				return fmt.Errorf("set git commit: %w", err)

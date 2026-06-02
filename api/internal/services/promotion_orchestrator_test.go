@@ -6,8 +6,10 @@ package services
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"log/slog"
+	"strings"
 	"testing"
 
 	"github.com/loopzero/loopzero/api/internal/db"
@@ -23,6 +25,13 @@ type fakePromotionReleaseStore struct {
 	activeByEnv map[string]*db.Release // key: tenant-project-env
 	created     []*db.Release
 	lastStatus  map[string]string
+
+	// Sprint B T2.1 (ADR D2): per-test hook that fires on every
+	// GetByIDForTenant call. Used to simulate the Lock1→Lock2 race:
+	// the hook mutates f.releases[releaseID] BEFORE the orchestrator's
+	// re-verify reads the row, so the re-verify sees stale-vs-current
+	// drift exactly like a concurrent promote would produce.
+	preLock2Mutator func(store *fakePromotionReleaseStore, releaseID string)
 }
 
 func newFakePromotionReleaseStore() *fakePromotionReleaseStore {
@@ -73,6 +82,25 @@ func (f *fakePromotionReleaseStore) SetGitCommit(_ context.Context, _ db.DBTX, i
 		r.GitCommit = sha
 	}
 	return nil
+}
+
+// Sprint B T2.1 (ADR D2): re-fetch used by the INSIDE-Lock2 re-verify.
+// Returns a copy of the stored release; nil indicates "deleted" which
+// the orchestrator maps to CONCURRENT_PROMOTE. Test hook
+// (preLock2Mutator) below lets specific specs simulate races by
+// mutating the row between Lock1 and Lock2.
+func (f *fakePromotionReleaseStore) GetByIDForTenant(_ context.Context, _, releaseID string) (*db.Release, error) {
+	if f.preLock2Mutator != nil {
+		f.preLock2Mutator(f, releaseID)
+	}
+	r, ok := f.releases[releaseID]
+	if !ok {
+		return nil, nil
+	}
+	// Return a defensive copy so callers cannot accidentally mutate
+	// the test store via the returned pointer.
+	cp := *r
+	return &cp, nil
 }
 
 type fakePromotionEnvTargetStore struct {
@@ -433,5 +461,145 @@ func TestPromote_NoBaseDomain_EmptyURL(t *testing.T) {
 	}
 	if result.URL != "" {
 		t.Errorf("expected empty URL, got %q", result.URL)
+	}
+}
+
+// =============================================================================
+// Sprint B T2.1 — Promotion Lock2 INSIDE-lock re-verify (ADR D2)
+// =============================================================================
+// Three structural specs assert the new race-detection behavior added in
+// promotion_orchestrator.go. The shared setup mirrors TestPromote_HappyPath
+// (single source release ACTIVE in staging, gitops + sync fakes idempotent);
+// each test sets fakePromotionReleaseStore.preLock2Mutator to simulate the
+// race that happens between Lock1 and Lock2 in production.
+
+// promoteTestFixture is the canonical happy-path fixture used by every T2.1
+// spec. Returned as a struct so each test can override fields surgically
+// (mutator, releases map) before invoking Promote.
+type promoteTestFixture struct {
+	orch *PromotionOrchestrator
+	rs   *fakePromotionReleaseStore
+	req  PromotionRequest
+}
+
+func newPromoteTestFixture() promoteTestFixture {
+	rs := newFakePromotionReleaseStore()
+	sourceRelease := &db.Release{
+		ID:          "rel-src-t21",
+		BuildID:     "build-t21",
+		TenantID:    "tn-t21",
+		ProjectID:   "proj-t21",
+		Environment: "staging",
+		Status:      string(statemachine.ReleaseActive),
+		GitCommit:   "src-commit-t21",
+		Apps:        json.RawMessage(`[{"name":"api","url":"https://api.staging.dev.loopzero.example"}]`),
+	}
+	rs.releases[sourceRelease.ID] = sourceRelease
+	rs.activeByEnv["tn-t21-proj-t21-staging"] = sourceRelease
+
+	orch := NewPromotionOrchestrator(PromotionOrchestratorDeps{
+		Releases:   rs,
+		EnvTargets: newFakePromotionEnvTargetStore(),
+		GitReader:  &fakePromotionGitReader{manifests: map[string][]byte{"src-commit-t21": []byte("deployment-yaml")}},
+		GitPusher:  &fakePromotionGitPusher{},
+		Sync:       &fakePromotionSyncClient{},
+		Locker:     &fakePromotionLocker{},
+		BaseDomain: "dev.loopzero.example",
+		Logger:     slog.Default(),
+	})
+
+	return promoteTestFixture{
+		orch: orch,
+		rs:   rs,
+		req: PromotionRequest{
+			TenantID:      "tn-t21",
+			ProjectID:     "proj-t21",
+			ProjectName:   "my-api",
+			FromEnv:       "staging",
+			ToEnv:         "production",
+			CorrelationID: "corr-t21",
+			UserID:        "user-t21",
+		},
+	}
+}
+
+// TestPromote_ReleaseStillReady_TransitionsSuccessfully — happy-path
+// regression: with no mutator wired, the INSIDE-Lock2 re-verify reads the
+// READY state set by Lock1 and proceeds to GitMirrorCompleted normally.
+// Asserts the re-verify path is INERT in the absence of a race.
+func TestPromote_ReleaseStillReady_TransitionsSuccessfully(t *testing.T) {
+	fx := newPromoteTestFixture()
+
+	result, err := fx.orch.Promote(context.Background(), fx.req)
+	if err != nil {
+		t.Fatalf("unexpected error on non-racing promote: %v", err)
+	}
+	if result == nil || result.NewRelease == nil {
+		t.Fatal("expected new release to be created")
+	}
+	if result.NewRelease.Status != "PENDING" {
+		t.Errorf("expected PENDING post-transition, got %s", result.NewRelease.Status)
+	}
+}
+
+// TestPromote_ConcurrentRace_RejectsLateTransition — the canonical race
+// case. preLock2Mutator simulates "another promote already advanced this
+// row" by flipping the target release's Status from READY to PENDING
+// between Lock1 (where it was created READY by the orchestrator) and the
+// re-verify inside Lock2. Asserts CONCURRENT_PROMOTE is surfaced via
+// INVALID_TRANSITION (Code → HTTP 409).
+func TestPromote_ConcurrentRace_RejectsLateTransition(t *testing.T) {
+	fx := newPromoteTestFixture()
+	// Race injection: just before GetByIDForTenant reads the row inside
+	// Lock2, mutate it to PENDING — the state another Lock2 holder would
+	// have left it in after applying GitMirrorCompleted.
+	fx.rs.preLock2Mutator = func(store *fakePromotionReleaseStore, releaseID string) {
+		if r, ok := store.releases[releaseID]; ok && r.Status == "READY" {
+			r.Status = "PENDING"
+		}
+	}
+
+	_, err := fx.orch.Promote(context.Background(), fx.req)
+	if err == nil {
+		t.Fatal("expected CONCURRENT_PROMOTE error; got nil")
+	}
+	var loopzeroErr *loopzeroerrors.LoopZeroError
+	if !errors.As(err, &loopzeroErr) {
+		t.Fatalf("expected wrapped *loopzeroerrors.LoopZeroError; got %T (%v)", err, err)
+	}
+	if loopzeroErr.Code != "INVALID_TRANSITION" {
+		t.Errorf("expected Code=INVALID_TRANSITION, got %s", loopzeroErr.Code)
+	}
+	if !strings.Contains(loopzeroErr.Message, "CONCURRENT_PROMOTE") {
+		t.Errorf("expected Message to mention CONCURRENT_PROMOTE, got %q", loopzeroErr.Message)
+	}
+}
+
+// TestPromote_ReleaseAlreadyPending_RejectsRetry — variant of the race
+// where the row is observed in PENDING (post-GitMirrorCompleted) before
+// Lock2 even runs. Same expected outcome: deterministic 409 via
+// INVALID_TRANSITION + CONCURRENT_PROMOTE detail. Distinguished from the
+// previous test by injecting the mutation on the FIRST call (before any
+// Lock1 logic), simulating an older PENDING row left from a prior promote
+// of the same target env that the orchestrator inadvertently re-encountered.
+func TestPromote_ReleaseAlreadyPending_RejectsRetry(t *testing.T) {
+	fx := newPromoteTestFixture()
+	// Force the row to PENDING the moment the re-verify reads it.
+	fx.rs.preLock2Mutator = func(store *fakePromotionReleaseStore, releaseID string) {
+		if r, ok := store.releases[releaseID]; ok {
+			r.Status = "PENDING"
+		}
+	}
+
+	_, err := fx.orch.Promote(context.Background(), fx.req)
+	if err == nil {
+		t.Fatal("expected CONCURRENT_PROMOTE on PENDING row; got nil")
+	}
+	var loopzeroErr *loopzeroerrors.LoopZeroError
+	if !errors.As(err, &loopzeroErr) {
+		t.Fatalf("expected *loopzeroerrors.LoopZeroError; got %T", err)
+	}
+	if loopzeroErr.Code != "INVALID_TRANSITION" {
+		t.Errorf("expected INVALID_TRANSITION, got %s", loopzeroErr.Code)
 	}
 }
