@@ -338,6 +338,53 @@ releases:
     values:
       - ../helm/argocd/values.yaml
 
+  # F1.7 of plan 2026-06-02-openbao-adoption v1.2 — OpenBao platform secret
+  # store stack (Q7 = Bank-Vaults operator + BaoConfiguration CRD as deploy
+  # tool). Opt-in via env value `openbaoEnabled: true` (default false keeps
+  # both releases inert until operator ratifies). See:
+  #   - MEET-ASYNC-AMENDMENT-2026-06-02-001-openbao-f1-execution.md
+  #   - decisions/2026-06-02-openbao-adoption.md
+  # Operator/instance separation per K8s operator pattern:
+  #   bank-vaults-operator (controller) in NS bank-vaults-operator
+  #   openbao (BaoConfig instance) in NS vault-system
+  - name: bank-vaults-operator
+    namespace: bank-vaults-operator
+    chart: ../helm/bank-vaults-operator
+    installed: {{ .Values | get "openbaoEnabled" false }}
+    needs:
+      - cert-manager/cert-manager
+    values:
+      - ../helm/bank-vaults-operator/values.yaml
+
+  - name: openbao
+    namespace: vault-system
+    chart: ../helm/openbao
+    installed: {{ .Values | get "openbaoEnabled" false }}
+    needs:
+      - bank-vaults-operator/bank-vaults-operator
+      - cert-manager/cert-manager
+    values:
+      - ../helm/openbao/values.yaml
+      {{- if or (eq .Environment.Name "dev") (eq .Environment.Name "drill") }}
+      - ../helm/openbao/values-prod.yaml
+      {{- else }}
+      - ../helm/openbao/values-standalone.yaml
+      {{- end }}
+    set:
+      # Inject Pulumi outputs (F1.1+F1.2) via env vars set by
+      # infra/helmfile/scripts/lib/pulumi-output.sh before helmfile sync.
+      # Standalone env doesn't need these (devMode skips unseal+backup).
+      {{- if or (eq .Environment.Name "dev") (eq .Environment.Name "drill") }}
+      - name: unseal.awskms.kmsKeyId
+        value: {{ requiredEnv "OPENBAO_AWS_KMS_KEY_ID" | quote }}
+      - name: backup.storage.endpoint
+        value: {{ requiredEnv "OPENBAO_BACKUP_BUCKET_ENDPOINT" | quote }}
+      - name: backup.storage.bucket
+        value: {{ requiredEnv "OPENBAO_BACKUP_BUCKET_NAME" | quote }}
+      - name: backup.storage.region
+        value: {{ requiredEnv "OPENBAO_BACKUP_REGION" | quote }}
+      {{- end }}
+
   - name: prometheus
     namespace: monitoring
     chart: prometheus-community/prometheus
