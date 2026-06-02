@@ -25,10 +25,19 @@ name: loopzero-bank-vaults-operator
 description: Bank-Vaults operator wrapper for LoopZero platform OpenBao management
 type: application
 version: 0.1.0
-appVersion: "1.23.0"
+# VK.6 LIVE fix 2026-06-02: bumped from 1.23.0 -> 1.24.0 (current latest
+# stable per GitHub releases). Also corrected OCI repository path from
+# `bank-vaults/charts` -> `bank-vaults/helm-charts` (the `/charts/` path
+# returned 403 because it does not exist; canonical path verified via
+# artifacthub.io/api search 2026-06-02).
+appVersion: "1.24.0"
 
 dependencies:
   - name: vault-operator
-    version: 1.23.0
-    repository: oci://ghcr.io/bank-vaults/charts
-    alias: bank-vaults
+    version: 1.24.0
+    repository: oci://ghcr.io/bank-vaults/helm-charts
+    # VK.6 LIVE fix 2026-06-02: removed `alias: bank-vaults`. With alias,
+    # `helm dep build` was looping ("Deleting outdated charts" + re-pull
+    # every run) because the tgz filename `vault-operator-X.tgz` didn't
+    # match the alias-expected `bank-vaults-X.tgz`. Aliases only make
+    # sense for multi-instance deployments; we have a single operator.

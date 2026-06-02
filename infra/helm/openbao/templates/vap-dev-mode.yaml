@@ -22,29 +22,36 @@ metadata:
   labels:
     {{- include "openbao.labels" . | nindent 4 }}
   annotations:
-    plan.loopzero.io/ref: "F1.9 (EC-04 B33 pattern) of plan 2026-06-02-openbao-adoption v1.2"
+    {{- include "openbao.annotations" . | nindent 4 }}
 spec:
   failurePolicy: Fail
   matchConstraints:
     resourceRules:
-      - apiGroups: ["bao.banzaicloud.io"]
+      # VK.6 LIVE fix 2026-06-02: changed from `baoconfigurations` to
+      # `vaults` because the canonical Bank-Vaults CRD is Vault, not
+      # BaoConfiguration. Updated together with templates/baoconfiguration.yaml.
+      - apiGroups: ["vault.banzaicloud.com"]
         apiVersions: ["v1alpha1"]
-        resources: ["baoconfigurations"]
+        resources: ["vaults"]
         operations: ["CREATE", "UPDATE"]
   matchConditions:
+    # VK.6 LIVE fix 2026-06-02: rewrote CEL expressions. The previous
+    # syntax used `(x | default(y))` which is Jsonnet/Kyverno syntax —
+    # CEL has no pipe operator. Use `has()` macro for safe key probing
+    # and direct access otherwise.
     - name: exclude-system-controllers
       expression: |
-        !('system:masters' in (request.userInfo.groups | default([]))) &&
+        !(has(request.userInfo.groups) && 'system:masters' in request.userInfo.groups) &&
         request.userInfo.username != 'system:serviceaccount:kube-system:namespace-controller' &&
         request.userInfo.username != 'system:kube-controller-manager'
   validations:
     - expression: |
-        object.spec.devMode == null ||
+        !has(object.spec.devMode) ||
         object.spec.devMode.enabled == false ||
         object.metadata.namespace != 'vault-system' ||
-        !('loopzero.io/env' in (object.metadata.labels | default({}))) ||
+        !(has(object.metadata.labels) && 'loopzero.io/env' in object.metadata.labels) ||
         object.metadata.labels['loopzero.io/env'] != 'prod'
-      message: "BaoConfiguration with devMode.enabled=true is forbidden in vault-system namespace labeled loopzero.io/env=prod (Q9-F1 + F1.9 EC-04). Use values-standalone.yaml profile for local k3d development only."
+      message: "Vault CR with devMode enabled is forbidden in vault-system namespace labeled loopzero.io/env=prod (Q9-F1 + F1.9 EC-04). Use values-standalone.yaml profile for local k3d development only."
       reason: Forbidden
 ---
 apiVersion: admissionregistration.k8s.io/v1

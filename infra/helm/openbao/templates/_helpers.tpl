@@ -16,7 +16,11 @@ F1.4 — Common Helm template helpers for loopzero-openbao chart.
 {{- printf "%s-%s" .Chart.Name .Chart.Version | replace "+" "_" | trunc 63 | trimSuffix "-" -}}
 {{- end -}}
 
-{{/* Common labels (per LoopZero convention) */}}
+{{/* Common labels (per LoopZero convention).
+
+VK.6 LIVE fix 2026-06-02: removed `plan.loopzero.io/ref` label which had
+illegal characters (spaces, colons) per K8s label spec (only alphanumeric,
+'.', '-', '_'). Moved to annotations in templates that need provenance. */}}
 {{- define "openbao.labels" -}}
 helm.sh/chart: {{ include "openbao.chart" . }}
 app.kubernetes.io/name: {{ include "openbao.name" . }}
@@ -25,7 +29,11 @@ app.kubernetes.io/version: {{ .Chart.AppVersion | quote }}
 app.kubernetes.io/managed-by: {{ .Release.Service }}
 app.kubernetes.io/component: secret-store
 loopzero.io/env: {{ .Values.env | quote }}
-plan.loopzero.io/ref: "F1.4 of 2026-06-02-openbao-adoption v1.2"
+{{- end -}}
+
+{{/* Common annotations — use for free-form provenance text */}}
+{{- define "openbao.annotations" -}}
+plan.loopzero.io/ref: "F1.4 of 2026-06-02-openbao-adoption v1.2 (VK.6 refactor 2026-06-02)"
 {{- end -}}
 
 {{/* Selector labels (subset for Service+PDB+NetworkPolicy match) */}}

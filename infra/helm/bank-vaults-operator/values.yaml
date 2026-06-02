@@ -15,11 +15,14 @@
 #   - image.tag NOT in [:latest, :main, :edge]
 #   - image.tag matches semver pattern X.Y.Z[-suffix]
 
-bank-vaults:
+# VK.6 LIVE fix 2026-06-02: top-level key changed from `bank-vaults`
+# (the removed alias) to `vault-operator` (the actual subchart name).
+# Bumped image tag 1.23.0 -> 1.24.0 to match chart version.
+vault-operator:
   # Operator deployment
   image:
     repository: ghcr.io/bank-vaults/bank-vaults-operator
-    tag: "1.23.0"
+    tag: "1.24.0"
     # digest: sha256:<filled-by-renovate-on-first-bump>
     pullPolicy: IfNotPresent
 

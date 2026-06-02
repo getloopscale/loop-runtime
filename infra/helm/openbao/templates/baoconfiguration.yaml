@@ -1,11 +1,17 @@
 {{/*
 SPDX-License-Identifier: Apache-2.0
-F1.4 — BaoConfiguration CR (Bank-Vaults operator consumes this).
+F1.4 — Vault CR (Bank-Vaults operator consumes this).
+
+VK.6 LIVE refactor 2026-06-02: refactored from `kind: BaoConfiguration`
++ `apiVersion: bao.banzaicloud.io/v1alpha1` (which DOES NOT EXIST in
+Bank-Vaults 1.24.0) to `kind: Vault` + `apiVersion: vault.banzaicloud.com/v1alpha1`
+(the canonical CR shipped by Bank-Vaults — same CR works for OpenBao via
+custom image override). Canonical schema verified via Bank-Vaults
+examples/base/vault.yaml.
 
 Scope per plan v1.2:
 - kv-v2 engine ONLY (transit/database/kubernetes engines in F2/F3/F6/F7)
 - Auth methods stubs ONLY (full roles + policies in F5)
-- Audit file sink stub (Promtail wires to Loki in F8)
 - Backup config — disabled by default; values-prod.yaml enables.
 
 EC-03 (MUST FIX P1): helm fail when unseal=awskms but kmsKeyId empty.
@@ -15,8 +21,8 @@ EC-03 (MUST FIX P1): helm fail when unseal=awskms but kmsKeyId empty.
 {{- fail "EC-03: unseal.awskms.kmsKeyId MUST be non-empty when unseal.type=awskms (silent plaintext fallback prevention)" -}}
 {{- end -}}
 
-apiVersion: bao.banzaicloud.io/v1alpha1
-kind: BaoConfiguration
+apiVersion: vault.banzaicloud.com/v1alpha1
+kind: Vault
 metadata:
   name: {{ include "openbao.fullname" . }}
   namespace: {{ include "openbao.namespace" . }}
@@ -24,138 +30,111 @@ metadata:
     {{- include "openbao.labels" . | nindent 4 }}
 spec:
   size: {{ .Values.size }}
-  image:
-    repository: {{ .Values.image.repository }}
-    tag: {{ .Values.image.tag | quote }}
-    {{- with .Values.image.digest }}
-    digest: {{ . | quote }}
-    {{- end }}
-    pullPolicy: {{ .Values.image.pullPolicy }}
 
-  {{/* Storage backend */}}
-  storage:
-    {{- if eq .Values.storage.type "inmemory" }}
-    inmemory:
-      enabled: true
-    {{- else if eq .Values.storage.type "raft" }}
-    raft:
-      enabled: true
-      size: {{ .Values.storage.raft.size }}
-      {{- with .Values.storage.raft.storageClass }}
-      storageClassName: {{ . | quote }}
-      {{- end }}
-    {{- else }}
-    {{- fail (printf "Unknown storage.type=%s — must be inmemory or raft" .Values.storage.type) }}
-    {{- end }}
+  # OpenBao image (canonical Bank-Vaults Vault CRD accepts custom images
+  # so we point at the OpenBao fork instead of HashiCorp Vault).
+  image: {{ .Values.image.repository }}:{{ .Values.image.tag }}
 
-  {{/* Unseal backend */}}
-  unseal:
-    type: {{ .Values.unseal.type }}
-    {{- if eq .Values.unseal.type "awskms" }}
-    awskms:
-      region: {{ .Values.unseal.awskms.region }}
-      kmsKeyId: {{ .Values.unseal.awskms.kmsKeyId | quote }}
-    {{- end }}
+  # ServiceAccount for the Vault Pod and Bank-Vaults configurer/unsealer.
+  serviceAccount: openbao
 
-  {{/* Dev mode (k3d only; VAP F1.9 blocks in prod NS) */}}
-  {{- if .Values.devMode.enabled }}
-  devMode:
-    enabled: true
-    rootToken: {{ .Values.devMode.rootToken | quote }}
-  {{- end }}
-
-  {{/* TLS — cert-manager Certificate (Q5-F1 reuse self-signed-issuer) */}}
-  {{- if .Values.tls.enabled }}
-  tls:
-    enabled: true
-    certManager:
-      enabled: {{ .Values.tls.certManager.enabled }}
-      issuerRef:
-        name: {{ .Values.tls.certManager.issuerRef.name }}
-        kind: {{ .Values.tls.certManager.issuerRef.kind }}
-  {{- end }}
-
-  {{/* Audit sink (F8 full wiring) */}}
-  audit:
-    - type: file
-      path: file
-      options:
-        file_path: {{ .Values.audit.file.filePath }}
-        log_raw: {{ .Values.audit.file.logRaw }}
-        hmac_accessor: {{ .Values.audit.file.hmacAccessor }}
-        format: {{ .Values.audit.file.format }}
-
-  {{/* Backup (F1.2 Pulumi bucket; F8 audit log archive) */}}
-  {{- if .Values.backup.enabled }}
-  backup:
-    enabled: true
-    schedule: {{ .Values.backup.schedule | quote }}
+  {{/* Vault/OpenBao config block (HCL/JSON-encoded). */}}
+  config:
+    {{- if .Values.devMode.enabled }}
+    {{/* Dev mode — single in-memory, root token, TLS disabled.
+         VAP F1.9 BLOCKS this in any namespace with loopzero.io/env=prod. */}}
     storage:
-      type: {{ .Values.backup.storage.type }}
-      endpoint: {{ .Values.backup.storage.endpoint | quote }}
-      bucket: {{ .Values.backup.storage.bucket | quote }}
-      region: {{ .Values.backup.storage.region | quote }}
-      pathPrefix: {{ .Values.backup.storage.pathPrefix | quote }}
-      credentialsSecret: {{ .Values.backup.storage.credentialsSecret }}
-    retention:
-      hourly: {{ .Values.backup.retention.hourly }}
-      daily: {{ .Values.backup.retention.daily }}
-      weekly: {{ .Values.backup.retention.weekly }}
+      inmem: {}
+    listener:
+      tcp:
+        address: "0.0.0.0:8200"
+        tls_disable: true
+    ui: true
+    {{- else if eq .Values.storage.type "raft" }}
+    {{/* Prod HA — Raft + KMS unseal (handled by unsealConfig). */}}
+    storage:
+      raft:
+        path: "/vault/file"
+    listener:
+      tcp:
+        address: "0.0.0.0:8200"
+        {{- if .Values.tls.enabled }}
+        tls_cert_file: /vault/tls/server.crt
+        tls_key_file: /vault/tls/server.key
+        {{- else }}
+        tls_disable: true
+        {{- end }}
+    ui: true
+    api_addr: "https://0.0.0.0:8200"
+    cluster_addr: "https://0.0.0.0:8201"
+    {{- else if eq .Values.storage.type "inmemory" }}
+    storage:
+      inmem: {}
+    listener:
+      tcp:
+        address: "0.0.0.0:8200"
+        tls_disable: true
+    ui: true
+    {{- end }}
+
+  {{/* Unseal config — only awskms here (vault-native KMS init).
+       devMode auto-unseals (no unsealConfig needed). */}}
+  {{- if and (not .Values.devMode.enabled) (eq .Values.unseal.type "awskms") }}
+  unsealConfig:
+    aws:
+      kmsRegion: {{ .Values.unseal.awskms.region }}
+      kmsKeyId: {{ .Values.unseal.awskms.kmsKeyId | quote }}
   {{- end }}
 
-  {{/* Resources per Q4 */}}
+  {{/* Resources per Q4 — applies to Vault pod */}}
   resources:
-    requests:
-      cpu: {{ .Values.resources.requests.cpu | quote }}
-      memory: {{ .Values.resources.requests.memory | quote }}
-    limits:
-      cpu: {{ .Values.resources.limits.cpu | quote }}
-      memory: {{ .Values.resources.limits.memory | quote }}
+    vault:
+      requests:
+        cpu: {{ .Values.resources.requests.cpu | quote }}
+        memory: {{ .Values.resources.requests.memory | quote }}
+      limits:
+        cpu: {{ .Values.resources.limits.cpu | quote }}
+        memory: {{ .Values.resources.limits.memory | quote }}
 
   {{/* PodAntiAffinity per Q4 (prod only) */}}
   {{- if .Values.podAntiAffinity.enabled }}
-  affinity:
-    podAntiAffinity:
-      requiredDuringSchedulingIgnoredDuringExecution:
-        - topologyKey: {{ .Values.podAntiAffinity.topologyKey }}
-          labelSelector:
-            matchLabels:
-              {{- include "openbao.selectorLabels" . | nindent 14 }}
+  vaultPodSpec:
+    affinity:
+      podAntiAffinity:
+        requiredDuringSchedulingIgnoredDuringExecution:
+          - topologyKey: {{ .Values.podAntiAffinity.topologyKey }}
+            labelSelector:
+              matchLabels:
+                vault_cr: {{ include "openbao.fullname" . }}
   {{- end }}
 
-  {{- with .Values.priorityClassName }}
-  priorityClassName: {{ . | quote }}
-  {{- end }}
+  {{/* External config — engines + auth + policies provisioned by configurer
+       sidecar after Vault is unsealed. */}}
+  externalConfig:
+    policies: []
 
-  serviceAccount:
-    create: true
-    name: openbao
+    secrets:
+      {{- if .Values.engines.kvV2.enabled }}
+      - path: {{ .Values.engines.kvV2.path }}
+        type: kv
+        description: "kv-v2 engine (LoopZero platform secrets)"
+        options:
+          version: 2
+      {{- end }}
+      {{- if .Values.engines.transit.enabled }}
+      - path: transit
+        type: transit
+        description: "transit engine (encryption-as-a-service)"
+      {{- end }}
+      {{- if .Values.engines.database.enabled }}
+      - path: database
+        type: database
+        description: "database engine (dynamic DB credentials)"
+      {{- end }}
+      {{- if .Values.engines.pki.enabled }}
+      - path: pki-internal
+        type: pki
+        description: "PKI engine (internal certificates)"
+      {{- end }}
 
-  {{/* Engines — F1.4 ships kv-v2 only */}}
-  secrets:
-    {{- if .Values.engines.kvV2.enabled }}
-    - type: kv-v2
-      path: {{ .Values.engines.kvV2.path }}
-    {{- end }}
-    {{- if .Values.engines.transit.enabled }}
-    - type: transit
-      path: transit
-    {{- end }}
-    {{- if .Values.engines.database.enabled }}
-    - type: database
-      path: database
-    {{- end }}
-    {{- if .Values.engines.kubernetes.enabled }}
-    - type: kubernetes
-      path: kubernetes-engine
-    {{- end }}
-    {{- if .Values.engines.pki.enabled }}
-    - type: pki
-      path: pki-internal
-    {{- end }}
-
-  {{/* Auth methods — F1.4 ships empty; F5 expands */}}
-  auth: []
-
-  {{/* Policies — F5 expands; F1.4 ships empty */}}
-  policies: []
+    auth: []
