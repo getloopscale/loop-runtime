@@ -7,9 +7,32 @@ import (
 	"context"
 	"fmt"
 	"log/slog"
+	"strings"
+	"time"
 
 	"github.com/loopzero/loopzero/api/internal/db"
 )
+
+// namespaceTerminatingRetryWindow bounds how long ResyncEnv waits for a
+// namespace stuck in `Terminating` state to be recreated before giving
+// up. Namespace deletion + recreation typically completes in 10-30s
+// (depending on finalizers + ESO operator cleanup). 60s gives ample
+// headroom without blocking the deploy handler indefinitely.
+//
+// LIVE-caught dogfood-trio 2026-06-02: Journey 03 Secrets Lifecycle.
+// Test sequence: deploy A → project delete (NS goes Terminating) →
+// secret POST (resync tries to create ExternalSecret, namespace still
+// terminating → forbidden) → deploy B (envEnsurer returns nil because
+// env exists in Tenant CR, but ns not yet Active) → resync runs ONCE,
+// fails on terminating, never retries → pod starts before ExternalSecret
+// → CreateContainerConfigError → 5min timeout.
+//
+// Fix: retry the resync when the K8s error indicates the namespace is
+// being terminated. The namespace WILL be recreated by the envEnsurer-
+// triggered Tenant CR reconcile in the workload cluster; once Active,
+// the create succeeds.
+const namespaceTerminatingRetryWindow = 60 * time.Second
+const namespaceTerminatingRetryInterval = 2 * time.Second
 
 // SecretResyncer fetches secret rows from PG and (re)creates ExternalSecrets
 // on the workload cluster via a K8s sync. V9 L20: closes the
@@ -61,7 +84,8 @@ func (r *SecretResyncer) ResyncEnv(ctx context.Context, tenantID, projectID, env
 	}
 	var firstErr error
 	for _, e := range entries {
-		if syncErr := r.K8s.CreateSecret(ctx, tenantID, projectID, env, e.App, e.Name, e.Value); syncErr != nil {
+		syncErr := r.syncOneWithTerminatingRetry(ctx, tenantID, projectID, env, e)
+		if syncErr != nil {
 			if r.Logger != nil {
 				r.Logger.Error("secret resync: ExternalSecret create/update failed",
 					"tenant_id", tenantID,
@@ -100,4 +124,77 @@ func countFailed(entries []db.SecretResyncEntry, firstErr error) int {
 		return 0
 	}
 	return 1 // conservative — only firstErr is captured today
+}
+
+// syncOneWithTerminatingRetry wraps K8s.CreateSecret with bounded retry
+// on the "namespace is being terminated" error class. The retry window
+// (namespaceTerminatingRetryWindow) covers the typical NS deletion +
+// recreation cycle (~10-30s in k3d, allow up to 60s for slow finalizers).
+//
+// Non-terminating errors are returned immediately — only the specific
+// "is being terminated" admission error triggers retry, so genuine bugs
+// (RBAC, network, malformed CR) fail fast.
+//
+// LIVE-caught dogfood-trio 2026-06-02 Journey 03 Secrets Lifecycle —
+// see namespaceTerminatingRetryWindow comment for the full timeline.
+func (r *SecretResyncer) syncOneWithTerminatingRetry(ctx context.Context, tenantID, projectID, env string, e db.SecretResyncEntry) error {
+	deadline := time.Now().Add(namespaceTerminatingRetryWindow)
+	attempt := 0
+	for {
+		attempt++
+		err := r.K8s.CreateSecret(ctx, tenantID, projectID, env, e.App, e.Name, e.Value)
+		if err == nil {
+			if attempt > 1 && r.Logger != nil {
+				r.Logger.Info("secret resync: succeeded after namespace-terminating retry",
+					"tenant_id", tenantID,
+					"project", projectID,
+					"environment", env,
+					"app", e.App,
+					"secret_name", e.Name,
+					"attempts", attempt,
+				)
+			}
+			return nil
+		}
+		// Only retry on the specific "is being terminated" admission error.
+		// Other errors (RBAC, malformed CR, network) fail fast.
+		if !isNamespaceTerminatingError(err) {
+			return err
+		}
+		if time.Now().After(deadline) {
+			return fmt.Errorf("namespace stayed terminating beyond %s window: %w", namespaceTerminatingRetryWindow, err)
+		}
+		if r.Logger != nil && attempt == 1 {
+			r.Logger.Info("secret resync: namespace terminating, will retry (envEnsurer recreates)",
+				"tenant_id", tenantID,
+				"project", projectID,
+				"environment", env,
+				"app", e.App,
+				"secret_name", e.Name,
+				"retry_window", namespaceTerminatingRetryWindow.String(),
+			)
+		}
+		select {
+		case <-ctx.Done():
+			return ctx.Err()
+		case <-time.After(namespaceTerminatingRetryInterval):
+		}
+	}
+}
+
+// isNamespaceTerminatingError detects the specific Kubernetes admission
+// error returned when a request creates a resource in a namespace whose
+// `metadata.deletionTimestamp` is set (NS in Terminating phase).
+//
+// The error message format is stable across modern K8s versions
+// (verified PG 1.27+): the literal "is being terminated" appears in the
+// .status.message of the StatusError. We string-match because the K8s
+// API doesn't expose a typed sentinel for this specific case — the
+// generic k8serrors.IsForbidden is too broad (also matches RBAC + PSA
+// violations which should NOT trigger our terminating-retry logic).
+func isNamespaceTerminatingError(err error) bool {
+	if err == nil {
+		return false
+	}
+	return strings.Contains(err.Error(), "is being terminated")
 }

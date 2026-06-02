@@ -35,6 +35,7 @@ import (
 	"errors"
 	"sync"
 	"testing"
+	"time"
 
 	"github.com/loopzero/loopzero/api/internal/db"
 )
@@ -234,4 +235,111 @@ func safeIndex(s []string, i int) string {
 		return "<MISSING>"
 	}
 	return s[i]
+}
+
+// TestSecretResyncer_NamespaceTerminating_Retries (LIVE-caught dogfood
+// trio 2026-06-02 Journey 03 Secrets Lifecycle): when K8s.CreateSecret
+// returns "is being terminated" on the first attempt, the resyncer
+// MUST retry with bounded backoff until namespace is recreated by
+// envEnsurer-triggered Tenant CR reconcile. Genuine errors fail fast.
+func TestSecretResyncer_NamespaceTerminating_Retries(t *testing.T) {
+	// K8s mock that returns terminating error on first call, success on second.
+	callsByName := make(map[string]int)
+	var mu sync.Mutex
+	k8s := &fakeSecretK8sCreator{
+		errFor: func(c secretCall) error {
+			mu.Lock()
+			defer mu.Unlock()
+			callsByName[c.Name]++
+			if callsByName[c.Name] == 1 {
+				return errors.New(`externalsecrets.external-secrets.io "es-api-secret-ping" is forbidden: unable to create new content in namespace loopzero-e2e-tenant-j-secrets because it is being terminated`)
+			}
+			return nil // succeed on retry
+		},
+	}
+	store := &fakeSecretResyncStore{
+		entries: []db.SecretResyncEntry{
+			{Name: "SECRET_PING", App: "api", Value: "v1"},
+		},
+	}
+	r := &SecretResyncer{Store: store, K8s: k8s}
+
+	err := r.ResyncEnv(context.Background(), "tn-a", "proj-x", "j-secrets")
+	if err != nil {
+		t.Fatalf("ResyncEnv MUST succeed after retry, got: %v", err)
+	}
+	mu.Lock()
+	defer mu.Unlock()
+	if callsByName["SECRET_PING"] != 2 {
+		t.Errorf("expected exactly 2 attempts (1 terminating + 1 success), got %d", callsByName["SECRET_PING"])
+	}
+}
+
+// TestSecretResyncer_NamespaceTerminating_TimeoutFailsExplicit: if the
+// namespace stays terminating beyond the retry window, the resyncer
+// MUST return a wrapped error (not infinite hang).
+func TestSecretResyncer_NamespaceTerminating_TimeoutFailsExplicit(t *testing.T) {
+	// K8s mock that ALWAYS returns terminating error.
+	k8s := &fakeSecretK8sCreator{
+		errFor: func(c secretCall) error {
+			return errors.New(`is being terminated`)
+		},
+	}
+	store := &fakeSecretResyncStore{
+		entries: []db.SecretResyncEntry{
+			{Name: "SECRET", App: "api", Value: "v"},
+		},
+	}
+	r := &SecretResyncer{Store: store, K8s: k8s}
+
+	// Use bounded ctx to avoid waiting the full 60s window in CI; the
+	// retry loop's select honors ctx.Done.
+	ctx, cancel := context.WithTimeout(context.Background(), 100*time.Millisecond)
+	defer cancel()
+
+	start := time.Now()
+	err := r.ResyncEnv(ctx, "tn-a", "proj-x", "j-secrets")
+	elapsed := time.Since(start)
+
+	if err == nil {
+		t.Fatal("expected error when namespace stays terminating, got nil")
+	}
+	// Must return within ~ctx timeout, not the full 60s.
+	if elapsed > 2*time.Second {
+		t.Errorf("expected fast return on ctx done; took %v", elapsed)
+	}
+}
+
+// TestSecretResyncer_NonTerminatingError_FailsFast: errors that are
+// NOT "is being terminated" (e.g., RBAC, malformed) MUST fail
+// immediately without retry — only the specific terminating-NS
+// error class triggers retry.
+func TestSecretResyncer_NonTerminatingError_FailsFast(t *testing.T) {
+	callCount := 0
+	k8s := &fakeSecretK8sCreator{
+		errFor: func(c secretCall) error {
+			callCount++
+			return errors.New(`forbidden: user "system:serviceaccount:..." cannot create externalsecrets`)
+		},
+	}
+	store := &fakeSecretResyncStore{
+		entries: []db.SecretResyncEntry{
+			{Name: "SECRET", App: "api", Value: "v"},
+		},
+	}
+	r := &SecretResyncer{Store: store, K8s: k8s}
+
+	start := time.Now()
+	err := r.ResyncEnv(context.Background(), "tn-a", "proj-x", "j-secrets")
+	elapsed := time.Since(start)
+
+	if err == nil {
+		t.Fatal("expected error for non-terminating failure, got nil")
+	}
+	if callCount != 1 {
+		t.Errorf("expected exactly 1 attempt (no retry for non-terminating), got %d", callCount)
+	}
+	if elapsed > 100*time.Millisecond {
+		t.Errorf("non-terminating error MUST fail fast; took %v", elapsed)
+	}
 }
