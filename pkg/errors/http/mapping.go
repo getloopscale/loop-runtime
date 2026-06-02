@@ -39,6 +39,7 @@ var statusByCode = map[string]int{
 	"BUILD_ALREADY_COMPLETED":   http.StatusConflict,            // 409
 	"PROJECT_EXISTS":            http.StatusConflict,            // 409
 	"SYNC_OPERATION_IN_PROGRESS": http.StatusConflict,           // 409
+	"CONCURRENT_ACTIVATION":     http.StatusConflict,            // 409 — partial unique index idx_releases_active_unique (migration 000022)
 
 	"TENANT_NOT_FOUND":     http.StatusNotFound,         // 404
 	"PROJECT_NOT_FOUND":    http.StatusNotFound,         // 404

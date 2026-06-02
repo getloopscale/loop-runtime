@@ -138,6 +138,16 @@ export class PromoteCommand {
       if (err.exitCode === 4) {
         return this.exitWithError(opts, 'Authentication failed. Run: loopzero login', 4, 'AUTH_REQUIRED');
       }
+      if (err.statusCode === 409 && err.code === 'CONCURRENT_ACTIVATION') {
+        // T5.1 CV-M-1 of plan 2026-06-01-p3-infra-observability-test-debt:
+        // partial unique index `idx_releases_active_unique` (migration
+        // 000022) rejected concurrent release activation. Distinct from
+        // DEPLOY_IN_PROGRESS (environment-lock race at the API boundary)
+        // because this fires at the DB-layer convergence-loop activation
+        // step. Operator interpretation: race between two convergence
+        // ticks; the convergence loop is idempotent — retry succeeds.
+        return this.exitWithError(opts, 'A previous release activation is still in progress. The platform will converge automatically — retry in a moment.', 3, 'CONCURRENT_ACTIVATION');
+      }
       if (err.statusCode === 409) {
         return this.exitWithError(opts, 'Another operation is in progress. Try again in a moment.', 3, 'DEPLOY_IN_PROGRESS');
       }

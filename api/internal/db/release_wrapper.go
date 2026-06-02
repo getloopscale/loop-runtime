@@ -40,6 +40,7 @@ import (
 	"time"
 
 	"github.com/jackc/pgx/v5"
+	"github.com/jackc/pgx/v5/pgconn"
 	"github.com/jackc/pgx/v5/pgtype"
 
 	"github.com/loopzero/loopzero/api/internal/db/generated"
@@ -47,6 +48,36 @@ import (
 	"github.com/loopzero/loopzero/pkg/id"
 	"github.com/loopzero/loopzero/pkg/statemachine"
 )
+
+// activeUniqueIndexName is the constraint name from migration 000022.
+// SQLSTATE 23505 violations matching this name indicate the partial
+// unique index `(tenant_id, project_id, environment) WHERE
+// status='ACTIVE'` rejected a second ACTIVE row — the
+// at-most-one-ACTIVE-release-per-env invariant. T5.1 CV-M-1 of plan
+// 2026-06-01-p3-infra-observability-test-debt v1.1.
+const activeUniqueIndexName = "idx_releases_active_unique"
+
+// isReleasesActiveUniqueViolation reports whether err is a Postgres
+// unique-violation specifically against `idx_releases_active_unique`.
+// Distinguished from generic 23505 (e.g., builds primary key collision)
+// by inspecting the ConstraintName field — false-positives on other
+// unique-index violations are NOT mapped to CONCURRENT_ACTIVATION.
+//
+// Used by UpdateStatus to surface the typed `CONCURRENT_ACTIVATION`
+// error (pkg/errors.NewConcurrentActivation) when the partial unique
+// index fires during a state transition to ACTIVE. The
+// convergence-loop retry on next reconcile tick converges the race
+// safely (loop is idempotent).
+func isReleasesActiveUniqueViolation(err error) bool {
+	var pgErr *pgconn.PgError
+	if !errors.As(err, &pgErr) {
+		return false
+	}
+	if pgErr.Code != "23505" {
+		return false
+	}
+	return pgErr.ConstraintName == activeUniqueIndexName
+}
 
 // Compile-time assertion: ReleaseStoreSqlc satisfies the db.ReleaseStore
 // interface 1:1 so T1.1c2c can swap NewPostgresReleaseStore →
@@ -240,6 +271,18 @@ func (s *ReleaseStoreSqlc) UpdateStatus(ctx context.Context, tx DBTX, releaseID,
 		TenantID: current.TenantID,
 	})
 	if err != nil {
+		// T5.1 CV-M-1: detect SQLSTATE 23505 against the partial
+		// unique index `idx_releases_active_unique` (migration 000022)
+		// and surface the typed CONCURRENT_ACTIVATION error so callers
+		// can map to HTTP 409 (registered in pkg/errors/http/mapping)
+		// and the CLI can show a specific message. Other 23505
+		// violations (e.g., a future PK collision) fall through to the
+		// generic wrapped error.
+		if isReleasesActiveUniqueViolation(err) {
+			return nil, loopzeroerrors.NewConcurrentActivation(
+				current.TenantID, current.ProjectID, current.Environment,
+			)
+		}
 		return nil, fmt.Errorf("sqlc: update release status: %w", err)
 	}
 	return generatedRowToRelease(row), nil

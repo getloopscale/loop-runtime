@@ -511,3 +511,27 @@ func NewIdempotencyConflict(key string) *LoopZeroError {
 		Message:    fmt.Sprintf("idempotency key '%s' was already used with a different request payload", key),
 	}
 }
+
+// NewConcurrentActivation creates a CONCURRENT_ACTIVATION error returned
+// when the partial unique index `idx_releases_active_unique` (migration
+// 000022) rejects a second ACTIVE release for the same (tenant, project,
+// environment) tuple. T5.1 CV-M-1 of plan
+// 2026-06-01-p3-infra-observability-test-debt (closes infra-007 DoD
+// "HTTP 409 CONCURRENT_ACTIVATION documented in CLI error mapping").
+//
+// Distinguished from DEPLOY_IN_PROGRESS (held by environment lock, race
+// at the API boundary) because this fires at the convergence-loop
+// activation step — two replicas attempting concurrent activation of
+// different releases for the same env. The DB enforces at-most-one
+// ACTIVE per env via the partial unique index; the second UPDATE hits
+// SQLSTATE 23505. Operator interpretation: race between sync_completion
+// callbacks; the loser retries on next reconcile tick (loop is idempotent).
+func NewConcurrentActivation(tenantID, projectID, env string) *LoopZeroError {
+	return &LoopZeroError{
+		Code: "CONCURRENT_ACTIVATION",
+		Message: fmt.Sprintf(
+			"another release activation is in progress for env '%s/%s'; retry on next convergence tick",
+			projectID, env,
+		),
+	}
+}

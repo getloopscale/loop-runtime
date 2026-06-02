@@ -445,3 +445,39 @@ func TestDisplayPlanName_AllValues(t *testing.T) {
 		}
 	}
 }
+
+// T5.1 CV-M-1 of plan 2026-06-01-p3-infra-observability-test-debt v1.1:
+// NewConcurrentActivation produces the CONCURRENT_ACTIVATION typed error
+// returned when partial unique index idx_releases_active_unique (migration
+// 000022) rejects a second ACTIVE release for the same env.
+
+func TestNewConcurrentActivation_CodeAndContext(t *testing.T) {
+	err := NewConcurrentActivation("tn-A", "proj-x", "production")
+	if err.Code != "CONCURRENT_ACTIVATION" {
+		t.Errorf("Code mismatch: got %q, want CONCURRENT_ACTIVATION", err.Code)
+	}
+	if !strings.Contains(err.Message, "proj-x") {
+		t.Errorf("Message must include project; got %q", err.Message)
+	}
+	if !strings.Contains(err.Message, "production") {
+		t.Errorf("Message must include environment; got %q", err.Message)
+	}
+	// Cause is unset (fresh sentinel-class error, not wrapped from PG).
+	if err.Cause != nil {
+		t.Errorf("Cause must be nil; got %v", err.Cause)
+	}
+}
+
+// TestNewConcurrentActivation_DistinctInstances: factory MUST return a
+// fresh struct each call so callers can wrap context without mutating
+// a shared global. Mirrors the discipline established by NewLockTimeout.
+func TestNewConcurrentActivation_DistinctInstances(t *testing.T) {
+	a := NewConcurrentActivation("tn", "p", "production")
+	b := NewConcurrentActivation("tn", "p", "production")
+	if a == b {
+		t.Error("factory MUST return distinct pointers (no shared global)")
+	}
+	if a.Code != b.Code {
+		t.Errorf("Code MUST be deterministic: %q != %q", a.Code, b.Code)
+	}
+}
