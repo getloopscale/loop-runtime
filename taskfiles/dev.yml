@@ -614,6 +614,71 @@ tasks:
         docker network rm k3d-loopzero 2>/dev/null || true
       - echo "Full teardown complete. Run 'task setup' to start fresh."
 
+  clean:deep:
+    desc: |
+      DEEP cleanroom — clean:all + docker prune all caches + drop kernel
+      page cache. Use BEFORE re-running trio when system has drifted
+      (multiple cleanrooms accumulated state, memory fragmentation).
+      Sprint A trio-fix 2026-06-02 (operator goal: "cleanroom mais
+      limpo possível"). Verified Δ vs `clean:all`:
+        - clean:all leaves: docker build cache (7+ GB), unused images
+          (3+ GB), kernel page cache (5+ GB cold)
+        - clean:deep recovers ALL of the above → ~15 GB freed +
+          memory cache reset.
+      Safer than reboot (preserves uptime, ssh sessions, tmux). If
+      problems persist after clean:deep + setup, then operator should
+      reboot the host.
+    cmds:
+      - task: clean:all
+      - |
+        echo ""
+        echo "=== DEEP cleanup — docker prune + cache flush ==="
+      - |
+        echo "Killing residual tilt + ginkgo processes..."
+        pkill -9 -f "tilt up" 2>/dev/null || true
+        pkill -9 -f "ginkgo -v" 2>/dev/null || true
+        pkill -9 -f "e2e\.test" 2>/dev/null || true
+        sleep 2
+      - |
+        echo "Pruning docker build cache (frees ~7GB after multiple Tilt rebuilds)..."
+        docker builder prune -a -f 2>&1 | tail -3
+      - |
+        echo "Pruning unused docker images (frees ~3GB after image GC churn)..."
+        docker image prune -a -f 2>&1 | tail -3
+      - |
+        echo "Pruning unused docker volumes (orphan non-k3d volumes)..."
+        docker volume prune -f 2>&1 | tail -3
+      - |
+        echo "Pruning stopped containers + dangling networks..."
+        docker container prune -f 2>&1 | tail -3
+        docker network prune -f 2>&1 | tail -3
+      - |
+        echo ""
+        echo "=== Kernel page cache flush (sync + drop_caches) ==="
+        sync
+        if [ -w /proc/sys/vm/drop_caches ]; then
+          echo 3 > /proc/sys/vm/drop_caches
+          echo "Dropped kernel page cache (vm.drop_caches=3)"
+        else
+          echo "WARN: /proc/sys/vm/drop_caches not writable; skipping"
+          echo "      Run as root or via sudo: 'echo 3 | sudo tee /proc/sys/vm/drop_caches'"
+        fi
+      - |
+        echo ""
+        echo "=== Post-cleanup state ==="
+        echo "Disk:"
+        df -h / 2>&1 | head -2
+        echo ""
+        echo "Memory:"
+        free -h | head -3
+        echo ""
+        echo "Docker:"
+        docker system df 2>&1 | head
+        echo ""
+        echo "DEEP cleanup complete. Run 'task setup' to start fresh."
+        echo "If problems persist after setup, consider 'sudo systemctl restart docker'"
+        echo "or full host reboot."
+
   # ===========================================================================
   # QA Tooling — Test reports (JUnit XML for CI/QA tools)
   # ===========================================================================
