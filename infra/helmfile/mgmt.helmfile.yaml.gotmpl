@@ -338,76 +338,18 @@ releases:
     values:
       - ../helm/argocd/values.yaml
 
-  # F1.7 of plan 2026-06-02-openbao-adoption v1.2 — OpenBao platform secret
-  # store stack (Q7 = Bank-Vaults operator + BaoConfiguration CRD as deploy
-  # tool). Opt-in via env value `openbaoEnabled: true` (default false keeps
-  # both releases inert until operator ratifies). See:
-  #   - MEET-ASYNC-AMENDMENT-2026-06-02-001-openbao-f1-execution.md
-  #   - decisions/2026-06-02-openbao-adoption.md
-  # Operator/instance separation per K8s operator pattern:
-  #   bank-vaults-operator (controller) in NS bank-vaults-operator
-  #   openbao (BaoConfig instance) in NS vault-system
-  - name: bank-vaults-operator
-    namespace: bank-vaults-operator
-    chart: ../helm/bank-vaults-operator
-    installed: {{ .Values | get "openbaoEnabled" false }}
-    needs:
-      - cert-manager/cert-manager
-    values:
-      - ../helm/bank-vaults-operator/values.yaml
-
-  - name: openbao
-    namespace: vault-system
-    chart: ../helm/openbao
-    installed: {{ .Values | get "openbaoEnabled" false }}
-    needs:
-      - bank-vaults-operator/bank-vaults-operator
-      - cert-manager/cert-manager
-    values:
-      - ../helm/openbao/values.yaml
-      {{- if or (eq .Environment.Name "dev") (eq .Environment.Name "drill") (eq .Environment.Name "staging") (eq .Environment.Name "prod") }}
-      - ../helm/openbao/values-prod.yaml
-      {{- else }}
-      - ../helm/openbao/values-standalone.yaml
-      {{- end }}
-    set:
-      # SCRIPT.6 (2026-06-02) — DOxAWS lifecycle independence.
-      # AWS KMS + DO Spaces resources are provisioned OUT-OF-BAND by
-      # infra/scripts/openbao/provision-aws-resources.sh (NOT via Pulumi).
-      # Operator workflow before `helmfile sync`:
-      #
-      #   $ infra/scripts/openbao/provision-aws-resources.sh --env <ENV>
-      #   $ set -a; source ~/.openbao-<ENV>-resources.env; set +a
-      #   $ helmfile -e <ENV> sync --selector name=openbao
-      #
-      # Standalone env (k3d local devMode) skips unseal+backup entirely
-      # and requires no env vars.
-      #
-      # NOTE: passing AWS/Spaces credentials via `--set` puts them in
-      # Helm release secret. For PROD, replace with explicit K8s Secrets
-      # (`openbao-aws-creds` + `openbao-backup-creds`) referenced via
-      # `existingSecret` in values-prod.yaml. Runbook:
-      # docs/operations/openbao-aws-resources-runbook.md.
-      {{- if or (eq .Environment.Name "dev") (eq .Environment.Name "drill") (eq .Environment.Name "staging") (eq .Environment.Name "prod") }}
-      - name: unseal.awskms.kmsKeyId
-        value: {{ requiredEnv "OPENBAO_AWS_KMS_KEY_ID" | quote }}
-      - name: unseal.awskms.region
-        value: {{ env "OPENBAO_AWS_REGION" | default "us-east-1" | quote }}
-      - name: unseal.awskms.accessKeyId
-        value: {{ requiredEnv "OPENBAO_AWS_ACCESS_KEY_ID" | quote }}
-      - name: unseal.awskms.secretAccessKey
-        value: {{ requiredEnv "OPENBAO_AWS_SECRET_ACCESS_KEY" | quote }}
-      - name: backup.storage.endpoint
-        value: {{ requiredEnv "OPENBAO_BACKUP_ENDPOINT" | quote }}
-      - name: backup.storage.bucket
-        value: {{ requiredEnv "OPENBAO_BACKUP_BUCKET" | quote }}
-      - name: backup.storage.region
-        value: {{ requiredEnv "OPENBAO_BACKUP_REGION" | quote }}
-      - name: backup.storage.accessKeyId
-        value: {{ requiredEnv "OPENBAO_BACKUP_ACCESS_KEY_ID" | quote }}
-      - name: backup.storage.secretAccessKey
-        value: {{ requiredEnv "OPENBAO_BACKUP_SECRET_ACCESS_KEY" | quote }}
-      {{- end }}
+  # OpenBao MOVED to dedicated vault cluster (T3 vault cluster isolation
+  # decision 2026-06-02, sponsor-direct D1-D5 ratified). OpenBao no longer
+  # lives in the mgmt cluster — it has its own DOKS cluster (loopzero-vault-prod)
+  # provisioned via separate Pulumi stack + bootstrapped via:
+  #   infra/helmfile/vault.helmfile.yaml.gotmpl (-e vault-local for k3d
+  #   validation; -e prod for DOKS HA Raft + AWS KMS unseal).
+  # See: docs/operations/vault-cluster-local-runbook.md
+  #      docs/operations/openbao-aws-resources-runbook.md
+  #
+  # BUG8.E pivot 2026-06-02: also dropped Bank-Vaults operator (informer
+  # cache bug in 1.24.0 AND 1.23.4; impersonating SA worked but operator
+  # itself reported NotFound). Replaced by official openbao/openbao chart.
 
   - name: prometheus
     namespace: monitoring

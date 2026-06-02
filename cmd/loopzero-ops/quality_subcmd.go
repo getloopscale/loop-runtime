@@ -53,7 +53,6 @@ import (
 	"github.com/loopzero/loopzero/pkg/quality/mockbudget"
 	"github.com/loopzero/loopzero/pkg/quality/nomigrateforce"
 	"github.com/loopzero/loopzero/pkg/quality/nonewbash"
-	"github.com/loopzero/loopzero/pkg/quality/openbaoprodsafe"
 	"github.com/loopzero/loopzero/pkg/quality/noshellwrap"
 	"github.com/loopzero/loopzero/pkg/quality/orphanalerts"
 	"github.com/loopzero/loopzero/pkg/quality/pgpdb"
@@ -329,8 +328,6 @@ func runQuality(args []string) int {
 		return runDashboardPromtool(args[1:])
 	case "cli-exit-codes":
 		return runCLIExitCodes(args[1:])
-	case "openbao-prod-safe":
-		return runOpenbaoProdSafe(args[1:])
 	case "shell-hygiene":
 		return runShellHygiene(args[1:])
 	case "sqlc-sync":
@@ -855,47 +852,6 @@ func runCLIExitCodes(args []string) int {
 		return 1
 	}
 	fmt.Println("cli-exit-codes: PASS — all cli/src exit codes within 0-5 contract (signal handlers exempt)")
-	return 0
-}
-
-// runOpenbaoProdSafe is the Go home for the openbao-prod-safe gate
-// (F1.9 of plan 2026-06-02-openbao-adoption v1.2). Enforces:
-//   1. infra/helm/openbao/values-prod.yaml has NO dev literals (loopzero-dev-*,
-//      devMode.enabled:true, rootToken non-empty)
-//   2. image.tag NOT in [latest, main, edge, devel, stable] — Renovate pins
-//   3. infra/helm/openbao/templates/vap-dev-mode.yaml exists + has
-//      matchConditions excluding system controllers (B33 pattern per EC-04)
-func runOpenbaoProdSafe(args []string) int {
-	fs := flag.NewFlagSet("openbao-prod-safe", flag.ContinueOnError)
-	root := fs.String("root", ".", "repo root directory")
-	if err := fs.Parse(args); err != nil {
-		return 1
-	}
-	if absRoot, err := os.Getwd(); err == nil && *root == "." {
-		*root = absRoot
-	}
-
-	outcome, err := openbaoprodsafe.Check(openbaoprodsafe.Config{RepoRoot: *root})
-	if err != nil {
-		fmt.Fprintf(os.Stderr, "openbao-prod-safe: %v\n", err)
-		return 5
-	}
-	if outcome.Skipped {
-		fmt.Println("openbao-prod-safe: SKIP — infra/helm/openbao/ not present")
-		return 0
-	}
-	if !outcome.Pass {
-		fmt.Fprintf(os.Stderr, "openbao-prod-safe: FAIL — %d violation(s):\n", len(outcome.Violations))
-		for _, v := range outcome.Violations {
-			fmt.Fprintf(os.Stderr, "  %s\n", v)
-		}
-		fmt.Fprintln(os.Stderr, "")
-		fmt.Fprintln(os.Stderr, "Per Q9-F1 + EC-04: prod values must not contain dev literals;")
-		fmt.Fprintln(os.Stderr, "image.tag must be pinned semver; VAP must block devMode in prod NS.")
-		fmt.Fprintln(os.Stderr, "See: .claude/knowledge-base/plans/2026-06-02-openbao-adoption-plan.md F1.9")
-		return 1
-	}
-	fmt.Println("openbao-prod-safe: PASS — no dev literals, no forbidden tags, VAP present with B33 matchConditions")
 	return 0
 }
 

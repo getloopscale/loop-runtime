@@ -40,7 +40,6 @@ tasks:
       - /tmp/loopzero-ops quality trufflehog-scan
       - /tmp/loopzero-ops quality dashboard-promtool
       - /tmp/loopzero-ops quality cli-exit-codes
-      - /tmp/loopzero-ops quality openbao-prod-safe  # F1.9 of plan 2026-06-02-openbao-adoption v1.2
       - /tmp/loopzero-ops quality shell-hygiene
       - /tmp/loopzero-ops quality corrections-txt-closed
       # sqlc T3 governance gates (T0.3-T0.5 of plan 2026-05-29-sqlc-
