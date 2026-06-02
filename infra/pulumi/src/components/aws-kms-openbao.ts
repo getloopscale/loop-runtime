@@ -172,9 +172,29 @@ export function createAwsKmsOpenbao(args: AwsKmsOpenbaoArgs): AwsKmsOpenbaoOutpu
   // The provider must be explicitly regional — the default loopzero-infra
   // Pulumi run uses DigitalOcean provider, so AWS resources need their
   // own provider instance scoped to the configured region.
+  //
+  // Credentials precedence (per F1.7 Helmfile env-var wiring):
+  //   1. Pulumi config `aws:accessKey`/`aws:secretKey` (set per-stack
+  //      via `pulumi config set --secret aws:accessKey ...`)
+  //   2. AWS_PROFILE env if (1) absent
+  //   3. AWS_ACCESS_KEY_ID/AWS_SECRET_ACCESS_KEY env if (2) absent
+  //
+  // Pulumi state backend (DO Spaces) consumes AWS_ACCESS_KEY_ID env
+  // vars too — to avoid clash, we override the AWS Provider explicitly
+  // with the Pulumi config values (which point to the openbao-pulumi-
+  // bootstrap IAM user per MEET-ASYNC Q2-F1).
+  const awsCfg = new pulumi.Config("aws");
+  const providerAccessKey = awsCfg.getSecret("accessKey");
+  const providerSecretKey = awsCfg.getSecret("secretKey");
+
   const awsProvider = new aws.Provider(
     `aws-openbao-${args.stackName}`,
-    { region: region as aws.Region },
+    {
+      region: region as aws.Region,
+      ...(providerAccessKey && providerSecretKey
+        ? { accessKey: providerAccessKey, secretKey: providerSecretKey }
+        : {}),
+    },
   );
 
   // 1. KMS key (EC-02: protect:true + 30d deletion window + rotation)
@@ -201,11 +221,15 @@ export function createAwsKmsOpenbao(args: AwsKmsOpenbaoArgs): AwsKmsOpenbaoOutpu
     { provider: awsProvider },
   );
 
-  // 2. IAM user (single-purpose, persistent)
+  // 2. IAM user (single-purpose, persistent).
+  // Per-stack naming: IAM users are global within AWS account, so
+  // per-env isolation requires distinct names. F1.1 originally used
+  // "openbao-unseal" globally; refactored to "openbao-unseal-<stack>"
+  // to allow dev+staging+prod to coexist in same AWS account.
   const unsealUser = new aws.iam.User(
     "openbao-unseal-user",
     {
-      name: "openbao-unseal",
+      name: `openbao-unseal-${args.stackName}`,
       path: "/loopzero/",
       tags,
     },
@@ -216,7 +240,7 @@ export function createAwsKmsOpenbao(args: AwsKmsOpenbaoArgs): AwsKmsOpenbaoOutpu
   const _userPolicy = new aws.iam.UserPolicy(
     "openbao-unseal-policy",
     {
-      name: "openbao-unseal-policy",
+      name: `openbao-unseal-policy-${args.stackName}`,
       user: unsealUser.name,
       policy: kmsKey.arn.apply((arn) => renderUnsealPolicyDocument(arn)),
     },

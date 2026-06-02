@@ -50,3 +50,12 @@ config:
   # Optional region override (default us-east-1):
   #   pulumi config set openbaoAwsRegion us-east-1 --stack prod
   # openbaoEnabled: false  # default — set via CLI when ready
+  loopzero-infra:spacesAccessKeyId:
+    secure: v1:YELG+/CfjKtksJaj:uCcqvIbxrcCMig/A3yc0wg6oKa4UxAEzYKB4H3X91z/wRc2R
+  loopzero-infra:spacesSecretAccessKey:
+    secure: v1:/mxsWf7LEWCGOzSO:h5TyKQHT953kV8BgLkR+zplKs6SZRvyGcyNMc8MU0N8siqwDU9sBl3tLoAyNb8dnJ5t5yr6j3uYCXYg=
+  loopzero-infra:digitaloceanToken:
+    secure: v1:SFEFqglTquk0LvnJ:XHaI5dI65mH+r2wMOT22mflTItIHYilfLTMb671d+zkscbZb4xxv8smXckk2AzSJo++Cm84kSxKPJmdMETeDDayYAmtEIN2wtMnkp5x3fH0gnizx+IHe
+  loopzero-infra:cfApiToken:
+    secure: v1:pwfm0eDR0K/DnO1c:UnFrcx5ZJ8IfpDN4W6zt+1bdlKFdP68yPGUTZbYLl+HNuZ+UIE+ogGnIlPfcGPbS8Xi5MTASpEgBelDg+NuRBkzeVhDx
+encryptionsalt: v1:61WYd0xVlaQ=:v1:FWU8qAcf/IyAODRU:ucm7lhQepqVqbcvDZAMAogljf4/xBA==

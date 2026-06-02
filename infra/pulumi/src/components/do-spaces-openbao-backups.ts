@@ -188,7 +188,11 @@ export function createDoSpacesOpenbaoBackups(
   validateArgs(args);
 
   const bucketRegion = args.bucketRegion ?? "nyc3";
-  const bucketName = args.bucketName ?? "loopzero-openbao-backups";
+  // DO Spaces bucket names are globally unique across all DO accounts in
+  // a region. Per-stack naming required for env isolation (dev+staging+
+  // prod coexisting). F1.2 originally used "loopzero-openbao-backups";
+  // refactored to "loopzero-openbao-backups-<stack>" for per-env distinct.
+  const bucketName = args.bucketName ?? `loopzero-openbao-backups-${args.stackName}`;
   const retentionHourlyDays = args.retentionHourlyDays ?? 7;
   const retentionDailyDays = args.retentionDailyDays ?? 30;
   const retentionWeeklyDays = args.retentionWeeklyDays ?? 84; // 12 weeks
