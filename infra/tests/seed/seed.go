@@ -245,8 +245,36 @@ func kubectlArgs(kubeContext string) []string {
 	return []string{"kubectl", "--context", kubeContext}
 }
 
-// EnsureTenantCR creates or updates the Tenant CR via kubectl apply.
+// EnsureTenantCR creates the Tenant CR if absent, OR merges baseline envs
+// (production + staging) into an existing CR without stripping envs added
+// dynamically via the API (`loopzero deploy --env <jX>` → AddEnvironment).
+//
+// Sprint A trio-fix 2026-06-02 (continuação do c892e355): seedE2E is called
+// from every journey's BeforeAll. Pre-fix, this `kubectl apply` overwrote
+// `spec.environments` with [production, staging] every time, stripping the
+// `j-solo`/`j-secrets`/`j-rollback`/etc envs that earlier journeys had
+// added via the API. The tenant-controller's GC loop then cascade-deleted
+// the orphan Environment CRs mid-flight, causing the downstream journey's
+// pods to never start.
+//
+// LIVE evidence (commit log entry 2026-06-02):
+//   - 00:38:33 — Journey 05 Promote BeforeAll → seedE2E → kubectl apply
+//   - 00:38:34 — env-controller: "environment is being deleted" (j-solo)
+//   - 00:38:54 — env-controller: "environment deletion complete"
+//   - Test: pod label app=solo-server-api never appeared → 300s timeout FAIL
+//
+// Fix: if Tenant CR already exists, fetch its current envs, union with the
+// baseline [production, staging], and submit the merged set. First-run
+// (CR absent) preserves the legacy creation behavior.
 func EnsureTenantCR(kubeContext string) error {
+	// Probe for existing CR — get current envs to preserve.
+	existingEnvs, exists, err := getExistingEnvs(kubeContext)
+	if err != nil {
+		// Surface unexpected errors; absent-CR is signaled by exists=false.
+		return fmt.Errorf("probe existing tenant CR: %w", err)
+	}
+
+	envs := mergeEnvs(existingEnvs)
 	tenantCR := map[string]interface{}{
 		"apiVersion": "loopzero.io/v1",
 		"kind":       "Tenant",
@@ -259,12 +287,9 @@ func EnsureTenantCR(kubeContext string) error {
 			"namespace": "loopzero-system",
 		},
 		"spec": map[string]interface{}{
-			"displayName": DisplayName,
-			"plan":        Plan,
-			"environments": []map[string]string{
-				{"name": "production", "cluster": "workload"},
-				{"name": "staging", "cluster": "workload"},
-			},
+			"displayName":  DisplayName,
+			"plan":         Plan,
+			"environments": envs,
 			"gitops": map[string]string{
 				"repoName": TenantID + "-gitops",
 				"branch":   "main",
@@ -281,6 +306,7 @@ func EnsureTenantCR(kubeContext string) error {
 			},
 		},
 	}
+	_ = exists // currently unused but kept for symmetry; future: skip apply when no merge needed.
 
 	crJSON, err := json.Marshal(tenantCR)
 	if err != nil {
@@ -295,6 +321,72 @@ func EnsureTenantCR(kubeContext string) error {
 		return fmt.Errorf("kubectl apply failed: %w\noutput: %s", err, output)
 	}
 	return nil
+}
+
+// getExistingEnvs fetches `spec.environments` from the existing Tenant CR.
+// Returns (envs, true, nil) when CR exists, (nil, false, nil) when absent,
+// or (nil, false, err) on unexpected error.
+func getExistingEnvs(kubeContext string) ([]map[string]string, bool, error) {
+	args := append(kubectlArgs(kubeContext),
+		"get", "tenant", TenantID, "-n", "loopzero-system",
+		"-o", "jsonpath={.spec.environments}",
+	)
+	cmd := exec.Command(args[0], args[1:]...)
+	out, err := cmd.CombinedOutput()
+	if err != nil {
+		// `kubectl get` returns non-zero when CR doesn't exist; treat as absent.
+		if bytes.Contains(out, []byte("not found")) || bytes.Contains(out, []byte("NotFound")) {
+			return nil, false, nil
+		}
+		return nil, false, fmt.Errorf("kubectl get tenant: %w\noutput: %s", err, out)
+	}
+	trimmed := bytes.TrimSpace(out)
+	if len(trimmed) == 0 || string(trimmed) == "null" {
+		return nil, true, nil // CR exists but no envs (edge case during teardown)
+	}
+	var rawEnvs []map[string]interface{}
+	if err := json.Unmarshal(trimmed, &rawEnvs); err != nil {
+		// Non-fatal: log and fall back to baseline. Better safe than strip.
+		return nil, true, nil
+	}
+	out2 := make([]map[string]string, 0, len(rawEnvs))
+	for _, e := range rawEnvs {
+		name, _ := e["name"].(string)
+		cluster, _ := e["cluster"].(string)
+		if name == "" {
+			continue
+		}
+		if cluster == "" {
+			cluster = "workload" // baseline default
+		}
+		out2 = append(out2, map[string]string{"name": name, "cluster": cluster})
+	}
+	return out2, true, nil
+}
+
+// mergeEnvs unions existing envs with the baseline [production, staging],
+// preserving dynamic-added entries (j-solo, j-secrets, etc) while ensuring
+// the baseline is always present.
+func mergeEnvs(existing []map[string]string) []map[string]string {
+	baseline := []map[string]string{
+		{"name": "production", "cluster": "workload"},
+		{"name": "staging", "cluster": "workload"},
+	}
+	if len(existing) == 0 {
+		return baseline
+	}
+	have := make(map[string]bool, len(existing))
+	for _, e := range existing {
+		have[e["name"]] = true
+	}
+	merged := make([]map[string]string, 0, len(existing)+len(baseline))
+	merged = append(merged, existing...)
+	for _, b := range baseline {
+		if !have[b["name"]] {
+			merged = append(merged, b)
+		}
+	}
+	return merged
 }
 
 // expectedNamespace describes a namespace that must exist on a specific
