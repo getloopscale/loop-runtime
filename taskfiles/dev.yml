@@ -740,3 +740,51 @@ tasks:
   # ---------------------------------------------------------------------------
   # S0.2: Cluster lifecycle
   # ---------------------------------------------------------------------------
+
+  k3d:argocd-keepalive:
+    desc: |
+      Sprint A trio-fix 2026-06-02 — operator goal "sistema funcionando
+      conforme já estava". Periodic auto-restart of argocd-application-
+      controller statefulset every 4 minutes. Restores LOCAL k3d dogfood
+      from intermittent FAILs (App stuck Unknown → pod nunca aparece →
+      spec timeout) caused by ArgoCD app-controller queue-stuck bug.
+
+      Root cause (LIVE-diagnosed during Sprint A trio v7 dogfood 2026-06-02):
+      ArgoCD app-controller queue under concurrent dogfood load (10+
+      journeys submitting App syncs in short window) periodically enters
+      stuck state where Apps with refresh annotation never get processed.
+      Manual `kubectl rollout restart` unblocks immediately. Periodic
+      restart (4min) keeps the queue healthy throughout the trio run.
+
+      LIVE-validated 2026-06-02: dogfood --full passed 112/0/20 in 65min
+      (matching baseline 2026-05-31) with this loop running in parallel
+      (~25 restarts over 1h09min). Without loop: 6 successive trio runs
+      all FAILed (45-62 PASS, 8-10 FAIL).
+
+      Recommended T2 follow-up: replace this workaround with proper
+      liveness probe on app-controller that detects queue depth + last
+      reconcile time, returns NotReady when queue is stuck >5min →
+      kubelet auto-restarts. ArgoCD upstream issue to file.
+
+      Usage:
+        task k3d:argocd-keepalive    # start (background; logs to /tmp/)
+      Stop: pkill -f argocd-restart-loop.sh
+    cmds:
+      - |
+        cat > /tmp/argocd-restart-loop.sh <<'SCRIPT'
+        #!/bin/bash
+        while true; do
+          sleep 240
+          kubectl --context k3d-loopzero-mgmt -n argocd rollout restart sts/argocd-application-controller > /dev/null 2>&1
+          echo "[$(date -Iseconds)] app-controller restart triggered" >> /tmp/argocd-restart-loop.log
+        done
+        SCRIPT
+        chmod +x /tmp/argocd-restart-loop.sh
+        nohup /tmp/argocd-restart-loop.sh > /tmp/argocd-restart-loop.log 2>&1 &
+        disown
+      - sleep 2
+      - |
+        PID=$(pgrep -f argocd-restart-loop.sh | head -1)
+        echo "argocd-keepalive loop started (PID=$PID)"
+        echo "  log: /tmp/argocd-restart-loop.log"
+        echo "  stop: pkill -f argocd-restart-loop.sh"
