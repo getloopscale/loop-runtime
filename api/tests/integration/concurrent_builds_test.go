@@ -177,6 +177,25 @@ func (f *fakeSyncClient) WaitForSync(ctx context.Context, appName string, timeou
 	return nil
 }
 
+// Sprint B T1.1 (ADR D1): stub methods to satisfy the widened SyncClient
+// interface. Integration concurrent-builds tests exercise only the
+// HTTP-layer lock semantics; ArgoCD-side recovery is out of scope here.
+func (f *fakeSyncClient) ForceReconcile(ctx context.Context, appName string) error {
+	return nil
+}
+
+func (f *fakeSyncClient) GetSyncRevision(ctx context.Context, appName string) (string, error) {
+	return "", nil
+}
+
+func (f *fakeSyncClient) TerminateOperation(ctx context.Context, appName string) error {
+	return nil
+}
+
+func (f *fakeSyncClient) GetAppStatus(ctx context.Context, appName string, deployedApps []string) (bool, bool, error) {
+	return true, true, nil
+}
+
 // --- Fake auth for HTTP layer ---
 
 type fakeTokenValidator struct{}

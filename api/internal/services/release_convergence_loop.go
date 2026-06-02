@@ -225,18 +225,15 @@ func (r *ReleaseConvergenceLoop) verifyRelease(ctx context.Context, release *db.
 			"elapsed", elapsed, "timeout", r.cfg.SyncTimeout)
 		// MEET-2026-03-29-019: Terminate stuck ArgoCD operation so the next deploy
 		// can proceed. Without this, the stuck operation persists and blocks all future syncs.
+		// Sprint B T1.1: TerminateOperation is now part of the SyncClient interface
+		// (was a duck-typed assertion pre-ADR D1).
 		argoApp := fmt.Sprintf("%s-%s", release.TenantID, release.Environment)
-		type terminator interface {
-			TerminateOperation(ctx context.Context, appName string) error
-		}
-		if t, ok := r.sync_.(terminator); ok {
-			if termErr := t.TerminateOperation(ctx, argoApp); termErr != nil {
-				r.logger.Error("release convergence: failed to terminate stuck operation",
-					"app", argoApp, "error", termErr)
-			} else {
-				r.logger.Info("release convergence: terminated stuck operation on timeout",
-					"app", argoApp, "release_id", release.ID)
-			}
+		if termErr := r.sync_.TerminateOperation(ctx, argoApp); termErr != nil {
+			r.logger.Error("release convergence: failed to terminate stuck operation",
+				"app", argoApp, "error", termErr)
+		} else {
+			r.logger.Info("release convergence: terminated stuck operation on timeout",
+				"app", argoApp, "release_id", release.ID)
 		}
 		r.failRelease(ctx, release, "Sync timeout: service did not become healthy within the time limit")
 		return
@@ -307,20 +304,17 @@ func (r *ReleaseConvergenceLoop) verifyRelease(ctx context.Context, release *db.
 			if loaded, ok := r.syncRetriggers.Load(release.ID); ok {
 				counter := loaded.(*atomic.Int32)
 				if counter.Load() >= int32(maxSyncRetriggers) {
-					type forceReconciler interface {
-						ForceReconcile(ctx context.Context, appName string) error
-					}
-					if fr, ok := r.sync_.(forceReconciler); ok {
-						if frErr := fr.ForceReconcile(ctx, argoAppName); frErr != nil {
-							r.logger.Error("release convergence: ForceReconcile failed (L22 recovery)",
-								"release_id", release.ID, "app", argoAppName, "error", frErr)
-						} else {
-							r.logger.Info("release convergence: triggered ForceReconcile (L22 — controller queue-stuck recovery)",
-								"release_id", release.ID, "app", argoAppName, "retriggers_exhausted", counter.Load())
-							// Reset counter so subsequent ticks can retry TriggerSync
-							// after the controller picks up the refresh annotation.
-							counter.Store(0)
-						}
+					// Sprint B T1.1: ForceReconcile is now part of the SyncClient
+					// interface (was a duck-typed assertion pre-ADR D1).
+					if frErr := r.sync_.ForceReconcile(ctx, argoAppName); frErr != nil {
+						r.logger.Error("release convergence: ForceReconcile failed (L22 recovery)",
+							"release_id", release.ID, "app", argoAppName, "error", frErr)
+					} else {
+						r.logger.Info("release convergence: triggered ForceReconcile (L22 — controller queue-stuck recovery)",
+							"release_id", release.ID, "app", argoAppName, "retriggers_exhausted", counter.Load())
+						// Reset counter so subsequent ticks can retry TriggerSync
+						// after the controller picks up the refresh annotation.
+						counter.Store(0)
 					}
 				}
 			}
@@ -333,25 +327,22 @@ func (r *ReleaseConvergenceLoop) verifyRelease(ctx context.Context, release *db.
 	// via the convergence path. The callback activator already has this check
 	// (sync_callback_activator.go:108-114); convergence loop must match.
 	if release.GitCommit != "" {
-		type revisionChecker interface {
-			GetSyncRevision(ctx context.Context, appName string) (string, error)
+		// Sprint B T1.1: GetSyncRevision is now part of the SyncClient interface
+		// (was a duck-typed assertion pre-ADR D1).
+		revision, revErr := r.sync_.GetSyncRevision(ctx, argoAppName)
+		if revErr != nil {
+			r.logger.Warn("release convergence: revision check failed",
+				"release_id", release.ID, "error", revErr)
+			return // Retry on next tick
 		}
-		if checker, ok := r.sync_.(revisionChecker); ok {
-			revision, revErr := checker.GetSyncRevision(ctx, argoAppName)
-			if revErr != nil {
-				r.logger.Warn("release convergence: revision check failed",
-					"release_id", release.ID, "error", revErr)
-				return // Retry on next tick
-			}
-			if revision != "" && revision != release.GitCommit {
-				metrics.RevisionMismatchTotal.Inc()
-				r.logger.Warn("release convergence: revision mismatch — retriggering sync",
-					"release_id", release.ID, "expected", release.GitCommit, "actual", revision)
-				// ArgoCD synced a different revision (from a previous deploy).
-				// Retrigger sync so ArgoCD picks up the new gitops commit.
-				r.retriggerSyncIfNeeded(ctx, release, argoAppName)
-				return // Will check again on next tick after sync completes
-			}
+		if revision != "" && revision != release.GitCommit {
+			metrics.RevisionMismatchTotal.Inc()
+			r.logger.Warn("release convergence: revision mismatch — retriggering sync",
+				"release_id", release.ID, "expected", release.GitCommit, "actual", revision)
+			// ArgoCD synced a different revision (from a previous deploy).
+			// Retrigger sync so ArgoCD picks up the new gitops commit.
+			r.retriggerSyncIfNeeded(ctx, release, argoAppName)
+			return // Will check again on next tick after sync completes
 		}
 	}
 
@@ -364,21 +355,10 @@ func (r *ReleaseConvergenceLoop) checkSync(ctx context.Context, appName string, 
 	// We poll externally via the convergence loop, so we don't want WaitForSync to block.
 	// Instead, just check status once.
 
-	// Type-assert to access getAppStatus if available, otherwise fall back to
-	// a single-iteration WaitForSync with minimal timeout.
-	type statusChecker interface {
-		GetAppStatus(ctx context.Context, appName string, deployedApps []string) (bool, bool, error)
-	}
-	if checker, ok := r.sync_.(statusChecker); ok {
-		return checker.GetAppStatus(ctx, appName, deployedApps)
-	}
-
-	// Fallback: use WaitForSync with 1-second timeout (one poll)
-	err = r.sync_.WaitForSync(ctx, appName, 1*time.Second, deployedApps)
-	if err != nil {
-		return false, false, nil // timeout = not ready yet
-	}
-	return true, true, nil
+	// Sprint B T1.1: GetAppStatus is now part of the SyncClient interface
+	// (was a duck-typed assertion pre-ADR D1). The WaitForSync fallback is no
+	// longer reachable because every implementer must satisfy GetAppStatus.
+	return r.sync_.GetAppStatus(ctx, appName, deployedApps)
 }
 
 func (r *ReleaseConvergenceLoop) activateRelease(ctx context.Context, release *db.Release) {
@@ -558,17 +538,14 @@ func (r *ReleaseConvergenceLoop) retriggerSyncIfNeeded(ctx context.Context, rele
 			// failures = the operation is stuck.
 			counter.Add(1)
 			if counter.Load() >= 2 {
-				type terminator interface {
-					TerminateOperation(ctx context.Context, appName string) error
-				}
-				if t, ok := r.sync_.(terminator); ok {
-					if termErr := t.TerminateOperation(ctx, argoAppName); termErr != nil {
-						r.logger.Error("release convergence: failed to terminate stuck sync operation",
-							"release_id", release.ID, "app", argoAppName, "error", termErr)
-					} else {
-						r.logger.Info("release convergence: terminated stuck sync operation (L21 — pre-timeout recovery)",
-							"release_id", release.ID, "app", argoAppName, "consecutive_failures", counter.Load())
-					}
+				// Sprint B T1.1: TerminateOperation is now part of the SyncClient
+				// interface (was a duck-typed assertion pre-ADR D1).
+				if termErr := r.sync_.TerminateOperation(ctx, argoAppName); termErr != nil {
+					r.logger.Error("release convergence: failed to terminate stuck sync operation",
+						"release_id", release.ID, "app", argoAppName, "error", termErr)
+				} else {
+					r.logger.Info("release convergence: terminated stuck sync operation (L21 — pre-timeout recovery)",
+						"release_id", release.ID, "app", argoAppName, "consecutive_failures", counter.Load())
 				}
 			}
 		}

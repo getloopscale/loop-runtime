@@ -480,6 +480,23 @@ func (f *fakeSyncClient) WaitForSync(ctx context.Context, appName string, timeou
 	return nil
 }
 
+// Sprint B T1.1 (ADR D1): stub methods to satisfy the widened SyncClient
+// interface. The build-orchestrator unit tests assert only the
+// TriggerSync/WaitForSync wiring; ArgoCD recovery is owned by
+// ReleaseConvergenceLoop tests.
+func (f *fakeSyncClient) ForceReconcile(ctx context.Context, appName string) error {
+	return nil
+}
+func (f *fakeSyncClient) GetSyncRevision(ctx context.Context, appName string) (string, error) {
+	return "", nil
+}
+func (f *fakeSyncClient) TerminateOperation(ctx context.Context, appName string) error {
+	return nil
+}
+func (f *fakeSyncClient) GetAppStatus(ctx context.Context, appName string, deployedApps []string) (bool, bool, error) {
+	return true, true, nil
+}
+
 // fakeEnvironmentLocker implements services.EnvironmentLocker.
 // It executes fn with a nil tx (unit tests don't need real transactions).
 type fakeEnvironmentLocker struct {

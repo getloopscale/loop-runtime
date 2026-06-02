@@ -151,11 +151,43 @@ type AppRelease struct {
 }
 
 // SyncClient abstracts ArgoCD sync operations (DIP).
+//
+// Sprint B T1.1 (plan 2026-06-01-p2-interface-contracts-robustness, ADR D1):
+// interface widened from 2 to 6 methods. The 4 added methods were previously
+// invoked via duck-typed assertions in release_convergence_loop.go
+// (`r.sync_.(forceReconciler)` etc.). The L22 incident (commit 098b6846)
+// proved that duck typing silently fails when an outer wrapper omits the
+// delegation — assertion returns ok=false at runtime, becomes a no-op,
+// undetected at compile time. Declaring the methods on the interface
+// forces every wrapper (e.g. CircuitBreakerSyncClient) to satisfy the
+// full surface OR fail to compile.
+//
+// Every implementer MUST satisfy these 6 methods:
+//   - *argocd.SyncClient (production, api/internal/argocd/sync_client.go)
+//   - *CircuitBreakerSyncClient (production wrapper, pg_circuit_breaker.go)
+//   - test fakes in *_test.go
 type SyncClient interface {
 	TriggerSync(ctx context.Context, appName string) error
 	// WaitForSync polls until the ArgoCD Application is synced and the specified
 	// deployedApps are healthy. If deployedApps is empty, checks global Application health.
 	WaitForSync(ctx context.Context, appName string, timeout time.Duration, deployedApps []string) error
+	// ForceReconcile annotates the ArgoCD Application with refresh=hard, bypassing
+	// the controller workqueue. Used by ReleaseConvergenceLoop as L22 recovery
+	// when TriggerSync returns 200 but operationState never advances.
+	ForceReconcile(ctx context.Context, appName string) error
+	// GetSyncRevision returns the last commit SHA actually synced by ArgoCD
+	// (Application.status.sync.revision). Used to detect revision mismatch
+	// between a release.GitCommit and what ArgoCD just synced — guards against
+	// rapid sequential deploys activating the wrong release.
+	GetSyncRevision(ctx context.Context, appName string) (string, error)
+	// TerminateOperation kills an in-flight ArgoCD sync operation. Used as
+	// L21 recovery when the operation lock is stuck (SYNC_OPERATION_IN_PROGRESS
+	// repeated >=2 consecutive ticks) and on sync-timeout to free the next deploy.
+	TerminateOperation(ctx context.Context, appName string) error
+	// GetAppStatus returns (synced, healthy) without blocking. Used by the
+	// convergence loop's single-shot status poll (external polling cadence).
+	// If deployedApps is empty, returns global Application health.
+	GetAppStatus(ctx context.Context, appName string, deployedApps []string) (synced, healthy bool, err error)
 }
 
 // EnvironmentLocker abstracts the advisory lock acquisition (DIP for testability).

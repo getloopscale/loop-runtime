@@ -29,6 +29,26 @@ func (f *fakeSyncClientCB) WaitForSync(_ context.Context, _ string, _ time.Durat
 	return f.waitErr
 }
 
+// Sprint B T1.1 (ADR D1): stub methods to satisfy the widened SyncClient
+// interface. Circuit-breaker tests exercise only Trigger/Wait error paths;
+// the recovery methods (ForceReconcile, GetSyncRevision, TerminateOperation,
+// GetAppStatus) flow through preCheck identically and don't need bespoke
+// coverage here — CircuitBreakerSyncClient's own implementations of those
+// methods are tested via the convergence-loop integration paths in
+// internal/services/release_convergence_loop_test.go.
+func (f *fakeSyncClientCB) ForceReconcile(_ context.Context, _ string) error {
+	return f.waitErr
+}
+func (f *fakeSyncClientCB) GetSyncRevision(_ context.Context, _ string) (string, error) {
+	return "", f.waitErr
+}
+func (f *fakeSyncClientCB) TerminateOperation(_ context.Context, _ string) error {
+	return f.waitErr
+}
+func (f *fakeSyncClientCB) GetAppStatus(_ context.Context, _ string, _ []string) (bool, bool, error) {
+	return true, true, f.waitErr
+}
+
 // --- Tests ---
 
 func TestPGCircuitBreaker_Closed_PassesThrough(t *testing.T) {

@@ -127,6 +127,20 @@ func (f *fakeConvergenceSyncClient) GetAppStatus(_ context.Context, _ string, _ 
 	return f.synced, f.healthy, nil
 }
 
+// Sprint B T1.1 (ADR D1): stub methods to satisfy the widened SyncClient
+// interface. fakeConvergenceSyncClient is used by tests that exercise the
+// happy path / status-poll behavior; these recovery methods are noop here
+// because dedicated tests (l21SyncClient, TestL21*, TestL22*) cover them.
+func (f *fakeConvergenceSyncClient) ForceReconcile(_ context.Context, _ string) error {
+	return nil
+}
+func (f *fakeConvergenceSyncClient) GetSyncRevision(_ context.Context, _ string) (string, error) {
+	return "", nil
+}
+func (f *fakeConvergenceSyncClient) TerminateOperation(_ context.Context, _ string) error {
+	return nil
+}
+
 type fakeConvergenceEventStore struct {
 	mu     sync.Mutex
 	events []struct{ BuildID, EventType string }
@@ -383,6 +397,17 @@ func (c *l21SyncClient) TerminateOperation(_ context.Context, _ string) error {
 	return nil
 }
 
+// Sprint B T1.1 (ADR D1): stub methods to satisfy the widened SyncClient
+// interface. The L21 recovery path tested here does NOT exercise
+// ForceReconcile (that's the L22 path) or GetSyncRevision (revision
+// mismatch path); noop is correct.
+func (c *l21SyncClient) ForceReconcile(_ context.Context, _ string) error {
+	return nil
+}
+func (c *l21SyncClient) GetSyncRevision(_ context.Context, _ string) (string, error) {
+	return "", nil
+}
+
 func TestRetriggerSync_L21_TerminatesAfterTwoConsecutiveLockStuck(t *testing.T) {
 	// Arrange: SyncClient that always returns ErrSyncOperationInProgress.
 	client := &l21SyncClient{triggerErr: loopzeroerrors.ErrSyncOperationInProgress}
@@ -481,6 +506,15 @@ func (c *l22SyncClient) ForceReconcile(_ context.Context, _ string) error {
 func (c *l22SyncClient) TerminateOperation(_ context.Context, _ string) error {
 	c.terminateCount++
 	return nil
+}
+
+// Sprint B T1.1 (ADR D1): stub method to satisfy the widened SyncClient
+// interface. L22 controller queue-stuck tests don't assert on
+// GetSyncRevision (the revision-mismatch path is exercised by a separate
+// test); returning empty signals "no revision known yet", which keeps the
+// revision-check branch inert in the L22 scenario.
+func (c *l22SyncClient) GetSyncRevision(_ context.Context, _ string) (string, error) {
+	return "", nil
 }
 
 func TestL22_ForceReconcileFiresAfterMaxRetriggersExhausted(t *testing.T) {

@@ -151,6 +151,20 @@ func (f *fakeConvergenceSyncClient) GetAppStatus(_ context.Context, _ string, _ 
 	defer f.mu.Unlock()
 	return f.synced, f.healthy, f.err
 }
+
+// Sprint B T1.1 (ADR D1): stub methods to satisfy the widened SyncClient
+// interface. tests/unit convergence regressions don't exercise these
+// recovery paths; dedicated tests in internal/services do.
+func (f *fakeConvergenceSyncClient) ForceReconcile(_ context.Context, _ string) error {
+	return nil
+}
+func (f *fakeConvergenceSyncClient) GetSyncRevision(_ context.Context, _ string) (string, error) {
+	return "", nil
+}
+func (f *fakeConvergenceSyncClient) TerminateOperation(_ context.Context, _ string) error {
+	return nil
+}
+
 func (f *fakeConvergenceSyncClient) setStatus(synced, healthy bool) {
 	f.mu.Lock()
 	defer f.mu.Unlock()

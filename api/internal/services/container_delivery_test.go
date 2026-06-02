@@ -151,6 +151,22 @@ func (f *fakeSyncContainer) WaitForSync(_ context.Context, _ string, _ time.Dura
 	return nil
 }
 
+// Sprint B T1.1 (ADR D1): stub methods to satisfy the widened SyncClient
+// interface. Container-delivery tests exercise only the TriggerSync /
+// WaitForSync paths; ArgoCD recovery methods are noop.
+func (f *fakeSyncContainer) ForceReconcile(_ context.Context, _ string) error {
+	return nil
+}
+func (f *fakeSyncContainer) GetSyncRevision(_ context.Context, _ string) (string, error) {
+	return "", nil
+}
+func (f *fakeSyncContainer) TerminateOperation(_ context.Context, _ string) error {
+	return nil
+}
+func (f *fakeSyncContainer) GetAppStatus(_ context.Context, _ string, _ []string) (bool, bool, error) {
+	return true, true, nil
+}
+
 type fakeGitOpsContainer struct {
 	pushErr   error
 	commitSHA string

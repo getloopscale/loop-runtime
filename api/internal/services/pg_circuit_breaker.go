@@ -59,6 +59,14 @@ type CircuitBreakerSyncClient struct {
 	openedAt       time.Time
 }
 
+// Compile-time assertion that *CircuitBreakerSyncClient satisfies the full
+// SyncClient interface declared in build_orchestrator.go. Sprint B T1.1
+// (ADR D1) — moves the L22-class regression detector from runtime
+// (duck-typed assertions in release_convergence_loop.go that fail silently)
+// to build time. If a future refactor accidentally drops one of the 6 methods,
+// the package fails to compile here rather than silently no-op in production.
+var _ SyncClient = (*CircuitBreakerSyncClient)(nil)
+
 // NewCircuitBreakerSyncClient creates an in-memory circuit breaker wrapping a SyncClient.
 func NewCircuitBreakerSyncClient(inner SyncClient, cfg CircuitBreakerConfig, logger *slog.Logger) *CircuitBreakerSyncClient {
 	return &CircuitBreakerSyncClient{
