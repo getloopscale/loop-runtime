@@ -132,7 +132,45 @@ func ActivateReleaseKernel(
 		return fmt.Errorf("activate release: get previous active: %w", err)
 	}
 
-	// Step 2: Transition PENDING → ACTIVE.
+	// Step 2: Supersede previous active release BEFORE activating the new one.
+	// T5.1 CV-M-1 dogfood regression fix (2026-06-02): partial unique index
+	// `idx_releases_active_unique` (migration 000022) enforces at-most-one-
+	// ACTIVE-per-env at the DB layer. Pre-fix order (UPDATE new ACTIVE first,
+	// then UPDATE prev SUPERSEDED) hit SQLSTATE 23505 because for an instant
+	// inside the tx, two rows were ACTIVE for the same (tenant, project, env)
+	// — which is precisely what the index now forbids. By superseding the
+	// previous release FIRST, we never have two ACTIVE rows simultaneously.
+	// Both UPDATEs run inside the same tx (withEnvironmentLock), so they
+	// remain atomic from any external observer's perspective: either both
+	// succeed (prev SUPERSEDED + new ACTIVE) or both rollback (prev stays
+	// ACTIVE + new stays PENDING).
+	//
+	// State machine validity:
+	//   - prev: ACTIVE --(RPEventNewActivated)--> SUPERSEDED  ✓
+	//   - new:  PENDING --(RPEventSyncCompleted)--> ACTIVE   ✓
+	// Both transitions are independent — order swap is safe.
+	//
+	// LIVE-caught regression: Journey 06 Rollback "v2 release is ACTIVE"
+	// timed out at 6m because convergence loop retried indefinitely with
+	// CONCURRENT_ACTIVATION errors until release reaper killed at sync
+	// timeout. Pre-T5.1 partial index, this bug was silent (2 ACTIVE rows
+	// coexisted briefly); post-T5.1 the index surfaces it, and the
+	// CONCURRENT_ACTIVATION typed error (CV-M-1, commit d8dbeaf4) made
+	// the loop fail-fast instead of silently retrying. The proper fix is
+	// at the activation kernel: invert the order.
+	if prevRelease != nil && prevRelease.ID != release.ID {
+		if _, supersedeErr := releaseStore.UpdateStatus(ctx, tx, prevRelease.ID, string(statemachine.RPEventNewActivated)); supersedeErr != nil {
+			logger.Error("activate release: failed to supersede previous",
+				"prev_id", prevRelease.ID, "new_id", release.ID, "error", supersedeErr)
+			return fmt.Errorf("activate release: supersede previous %s: %w", prevRelease.ID, supersedeErr)
+		}
+		logger.Info("activate release: superseded previous",
+			"prev_id", prevRelease.ID, "new_id", release.ID)
+	}
+
+	// Step 3: Transition PENDING → ACTIVE. With the previous release now
+	// SUPERSEDED (Step 2), the partial unique index allows this transition
+	// without violating the at-most-one-ACTIVE-per-env invariant.
 	if _, err := releaseStore.UpdateStatus(ctx, tx, release.ID, string(statemachine.RPEventSyncCompleted)); err != nil {
 		return fmt.Errorf("activate release: transition to ACTIVE: %w", err)
 	}
@@ -148,7 +186,7 @@ func ActivateReleaseKernel(
 	// Phase 4A: Deploy lead time — same value, separate histogram for executive SLO tracking.
 	metrics.DeployLeadTime.WithLabelValues(release.TenantID, release.Environment).Observe(float64(durationSecs))
 
-	// Step 3: Emit deploy.live SSE event.
+	// Step 4: Emit deploy.live SSE event.
 	liveData := safeJSONMarshal(map[string]interface{}{
 		"deploy_id": deriveDeployID(release.ID),
 		"status":    "live",
@@ -157,24 +195,9 @@ func ActivateReleaseKernel(
 		logger.Error("activate release: failed to emit deploy.live", "release_id", release.ID, "error", err)
 	}
 
-	// Step 4: Update environment target pointer.
+	// Step 5: Update environment target pointer.
 	if err := envTargetStore.SetActive(ctx, tx, release.TenantID, release.ProjectID, release.Environment, release.ID); err != nil {
 		return fmt.Errorf("activate release: set active: %w", err)
-	}
-
-	// Step 5: Supersede previous active release (queried in Step 1, before activation).
-	// T1.3 of deep-review-2026-05-10-remediation-plan (find_state_dual_active HIGH):
-	// MUST return the error so the outer transaction rolls back the new
-	// ACTIVE — otherwise we leave two releases ACTIVE in the same env,
-	// which downstream selectors treat as undefined behaviour.
-	if prevRelease != nil && prevRelease.ID != release.ID {
-		if _, supersedeErr := releaseStore.UpdateStatus(ctx, tx, prevRelease.ID, string(statemachine.RPEventNewActivated)); supersedeErr != nil {
-			logger.Error("activate release: failed to supersede previous",
-				"prev_id", prevRelease.ID, "new_id", release.ID, "error", supersedeErr)
-			return fmt.Errorf("activate release: supersede previous %s: %w", prevRelease.ID, supersedeErr)
-		}
-		logger.Info("activate release: superseded previous",
-			"prev_id", prevRelease.ID, "new_id", release.ID)
 	}
 
 	// Step 6: Emit deploy.completed SSE event — CLI waits for this to exit.
