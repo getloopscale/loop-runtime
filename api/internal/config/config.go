@@ -42,6 +42,18 @@ type Config struct {
 
 	// Database
 	DatabaseURL string // DATABASE_URL — validated for sslmode in production
+
+	// WorkerDatabaseURL — T3.1 of plan 2026-06-01-p3-infra-observability-
+	// test-debt v1.1 ADR D3. Connection string for background loops
+	// (reconcile, convergence, reapers, idempotency cleaner). When set,
+	// background loops use this URL with the `loopzero_worker` non-owner
+	// role so RLS policies apply (the `loopzero` owner bypasses RLS by
+	// design — see migration 000023 header). When EMPTY, background
+	// loops fall back to DatabaseURL (legacy behavior; RLS bypass via
+	// owner — works but loses defense-in-depth). Validation requires
+	// the URL to be non-empty in IsProduction() once migration 000023
+	// has shipped (operator-controlled rollout via env var).
+	WorkerDatabaseURL string // LOOPZERO_WORKER_DATABASE_URL
 	// Database Pool
 	DBMaxConns         int32
 	DBMinConns         int32
@@ -288,7 +300,8 @@ func Load() Config {
 		GracefulShutdownTime: envDuration("SERVER_GRACEFUL_SHUTDOWN", 15*time.Second),
 
 		// Database
-		DatabaseURL: os.Getenv("DATABASE_URL"),
+		DatabaseURL:       os.Getenv("DATABASE_URL"),
+		WorkerDatabaseURL: os.Getenv("LOOPZERO_WORKER_DATABASE_URL"),
 		// Database Pool
 		DBMaxConns:         int32(envInt("DB_MAX_CONNS", 25)),
 		DBMinConns:         int32(envInt("DB_MIN_CONNS", 5)),
@@ -549,11 +562,44 @@ func (c Config) Validate() error {
 	if c.DatabaseURL != "" && c.IsProduction() && strings.Contains(c.DatabaseURL, "sslmode=disable") {
 		return fmt.Errorf("DATABASE_URL contains sslmode=disable which is forbidden in production — use sslmode=require or sslmode=verify-full")
 	}
+	// T3.1 of plan 2026-06-01-p3-infra-observability-test-debt v1.1 ADR D3:
+	// LOOPZERO_WORKER_DATABASE_URL, when set, MUST also reject sslmode=disable
+	// in production for the same H1 reasoning. Empty value is allowed
+	// (falls back to DatabaseURL — legacy behavior, defense-in-depth gap
+	// is operator-tracked).
+	if c.WorkerDatabaseURL != "" && c.IsProduction() && strings.Contains(c.WorkerDatabaseURL, "sslmode=disable") {
+		return fmt.Errorf("LOOPZERO_WORKER_DATABASE_URL contains sslmode=disable which is forbidden in production — use sslmode=require or sslmode=verify-full")
+	}
 	// KEDA feature gate — informational log when enabled.
 	if c.KEDAEnabled {
 		slog.Warn("KEDA feature gate is enabled — scale-to-zero (min:0) autoscaling requests will be accepted")
 	}
 	return nil
+}
+
+// EffectiveWorkerDatabaseURL returns the connection string background
+// loops MUST use. When LOOPZERO_WORKER_DATABASE_URL is set (the
+// loopzero_worker non-owner role per migration 000023), RLS policies apply
+// to background queries. When empty (legacy), falls back to
+// DatabaseURL (loopzero owner role; RLS bypass — defense-in-depth gap).
+//
+// T3.1 of plan 2026-06-01-p3-infra-observability-test-debt v1.1 ADR D3.
+// Operator-controlled rollout: ship migration first, then flip the env
+// var on loopzero-api Deployment. Falling back to DatabaseURL keeps the
+// system functional in either state.
+func (c Config) EffectiveWorkerDatabaseURL() string {
+	if c.WorkerDatabaseURL != "" {
+		return c.WorkerDatabaseURL
+	}
+	return c.DatabaseURL
+}
+
+// WorkerRoleEnabled reports whether background loops are configured to
+// run as the `loopzero_worker` non-owner role (true) vs falling back to
+// the `loopzero` owner role (false). Used by observability to log the
+// active RLS-bypass posture at startup.
+func (c Config) WorkerRoleEnabled() bool {
+	return c.WorkerDatabaseURL != "" && c.WorkerDatabaseURL != c.DatabaseURL
 }
 
 // GiteaCrossCluster returns the Gitea URL accessible from the build cluster.
