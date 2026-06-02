@@ -29,6 +29,10 @@ import {
   createAwsKmsOpenbao,
   AwsKmsOpenbaoOutputs,
 } from "./components/aws-kms-openbao";
+import {
+  createDoSpacesOpenbaoBackups,
+  DoSpacesOpenbaoBackupsOutputs,
+} from "./components/do-spaces-openbao-backups";
 
 // --- Configuration ---
 const config = loadStackConfig();
@@ -231,6 +235,30 @@ export const awsUnsealAccessKeyId = openbaoKms
   : undefined;
 export const awsUnsealSecretKey = openbaoKms
   ? pulumi.secret(openbaoKms.unsealSecretKey)
+  : undefined;
+
+// OpenBao DO Spaces backup bucket (F1.2 of plan 2026-06-02-openbao-adoption v1.2).
+// Same `openbaoEnabled` flag as F1.1. Creates cross-region Spaces bucket
+// (NYC3 by default for SFO3 mgmt) + lifecycle policy (7d hourly/30d
+// daily/12w weekly per Q12) + scoped SpacesKey for Bank-Vaults consumption.
+// EC-13 validated at component-create time: bucket region MUST differ
+// from mgmt region.
+let openbaoBackups: DoSpacesOpenbaoBackupsOutputs | undefined;
+if (openbaoCfg.getBoolean("openbaoEnabled") === true) {
+  openbaoBackups = createDoSpacesOpenbaoBackups({
+    stackName: pulumi.getStack(),
+    bucketRegion: openbaoCfg.get("openbaoBackupRegion") ?? "nyc3",
+    mgmtRegion: config.region,
+  });
+}
+export const openbaoBackupBucketName = openbaoBackups?.bucketName;
+export const openbaoBackupBucketEndpoint = openbaoBackups?.bucketEndpoint;
+export const openbaoBackupRegion = openbaoBackups?.bucketRegion;
+export const openbaoBackupAccessKeyId = openbaoBackups
+  ? pulumi.secret(openbaoBackups.accessKeyId)
+  : undefined;
+export const openbaoBackupSecretKey = openbaoBackups
+  ? pulumi.secret(openbaoBackups.secretKey)
   : undefined;
 
 // Cross-cluster Loki push URL (audit M08 #18 / §6.C.4b step 6).
