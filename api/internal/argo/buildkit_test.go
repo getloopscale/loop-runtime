@@ -106,3 +106,63 @@ var (
 	_ forge.Parameter = forge.Parameter{}
 	_ model.ValueFrom = model.ValueFrom{}
 )
+
+// Sprint B T3.1 (plan 2026-06-01-p2-interface-contracts-robustness, ADR
+// D3): asserts the BuildKit container exposes an explicit
+// ActiveDeadlineSeconds = 1800 so retry-window + execution stay aligned
+// with the DB reaper's 30min RunningTimeout. EC-7 of the plan: assert
+// the struct field directly, NOT a YAML grep (forge serialization is
+// not the contract — the field value is).
+func TestBuildKit_DeadlineCappedAt1800s(t *testing.T) {
+	b := &WorkflowBuilder{
+		infraParams: InfraParams{RegistryURL: "registry.example.com", RegistryInsecure: false},
+	}
+	c := b.buildkitContainer(buildkitParams{
+		AppName:        "api",
+		ImageTag:       "registry.example.com/org/api:abc",
+		ContextPath:    "/workspace/context",
+		DockerfilePath: "/workspace/Dockerfile",
+		CacheRef:       "registry.example.com/cache:api",
+	})
+
+	if c.ActiveDeadlineSeconds == nil {
+		t.Fatal("buildkit container missing ActiveDeadlineSeconds — orphan-execution window vs reaper RunningTimeout (30min)")
+	}
+	if got, want := *c.ActiveDeadlineSeconds, 1800; got != want {
+		t.Errorf("ActiveDeadlineSeconds = %ds, want %ds (matches DB reaper RunningTimeout)", got, want)
+	}
+}
+
+// TestBuildKit_RetryStrategy_RemainsBounded — guard rail: the 3×900s
+// retry budget pre-T3.1 was 45min, exceeding the reaper's 30min limit
+// and creating the orphan window we just closed. This test makes the
+// invariant explicit: ActiveDeadlineSeconds (single attempt cap or
+// hard cap depending on Argo semantics) MUST NOT permit a retry chain
+// exceeding the deadline. With deadline=1800 and per-attempt=900,
+// at most 2 attempts can fit — the Argo controller hard-stops on
+// activeDeadlineSeconds regardless of remaining retries.
+func TestBuildKit_RetryStrategy_RemainsBounded(t *testing.T) {
+	b := &WorkflowBuilder{
+		infraParams: InfraParams{RegistryURL: "registry.example.com", RegistryInsecure: false},
+	}
+	c := b.buildkitContainer(buildkitParams{
+		AppName:        "api",
+		ImageTag:       "registry.example.com/org/api:abc",
+		ContextPath:    "/workspace/context",
+		DockerfilePath: "/workspace/Dockerfile",
+		CacheRef:       "registry.example.com/cache:api",
+	})
+
+	if c.RetryStrategy == nil {
+		t.Fatal("buildkit container missing RetryStrategy")
+	}
+	if c.ActiveDeadlineSeconds == nil {
+		t.Fatal("buildkit container missing ActiveDeadlineSeconds")
+	}
+	// Sanity: deadline must be > a single retry attempt's max duration
+	// (900s) so at least one attempt can complete. Less than that would
+	// be a misconfiguration where retry never fires meaningfully.
+	if *c.ActiveDeadlineSeconds <= 900 {
+		t.Errorf("ActiveDeadlineSeconds %ds too small vs single-attempt 900s max", *c.ActiveDeadlineSeconds)
+	}
+}

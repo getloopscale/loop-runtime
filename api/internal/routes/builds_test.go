@@ -156,6 +156,57 @@ func TestBuilds_Create_InvalidEnvironmentName(t *testing.T) {
 	}
 }
 
+// Sprint B T3.2 (plan 2026-06-01-p2-interface-contracts-robustness, ADR D4):
+// the environmentRegex MUST reject names containing hyphens so the
+// LastIndex("-")-based parser in sync_callback_activator.go cannot
+// mis-split "<tenant>-<env>" ArgoCD app names. Existing hyphen envs in
+// DB are grandfathered (regex applies only at env creation).
+func TestEnvironmentRegex_RejectsHyphen(t *testing.T) {
+	rejected := []string{
+		"preview-pr-42",  // preview env naming pattern, primary motivating case
+		"j-rollout-a",    // e2e journey naming pattern
+		"with-hyphen",
+		"a-",             // trailing hyphen
+		"-leading",       // leading non-letter (also disallowed by ^[a-z])
+	}
+	for _, name := range rejected {
+		t.Run(name, func(t *testing.T) {
+			if environmentRegex.MatchString(name) {
+				t.Errorf("environmentRegex matched %q; T3.2 (ADR D4) requires reject", name)
+			}
+		})
+	}
+}
+
+// TestEnvironmentRegex_AcceptsValidNames — positive cases. Ensures the
+// tightening did not regress the common canonical env names.
+func TestEnvironmentRegex_AcceptsValidNames(t *testing.T) {
+	accepted := []string{
+		"production",
+		"staging",
+		"development",
+		"dev",
+		"preview42",     // T3.2 replacement for preview-pr-42
+		"jrollouta",     // T3.2 replacement for j-rollout-a
+		"a",             // single letter, minimum length
+	}
+	for _, name := range accepted {
+		t.Run(name, func(t *testing.T) {
+			if !environmentRegex.MatchString(name) {
+				t.Errorf("environmentRegex rejected %q; canonical env name must pass", name)
+			}
+		})
+	}
+}
+
+// TestSyncCallbackParser_GrandfatheredHyphenEnv_KnownLimitation —
+// EC-9 of the plan: documents the bounded limitation explicitly via
+// t.Skip so CI stays green while preserving the known-issue audit
+// trail. Tracked separately; out of T3.2 scope.
+func TestSyncCallbackParser_GrandfatheredHyphenEnv_KnownLimitation(t *testing.T) {
+	t.Skip("known parser limitation; tracked separately. Grandfathered hyphen-envs route incorrectly via LastIndex(\"-\") in sync_callback_activator.go. T3.2 prevents new occurrences via regex; parser fix is out of scope for this plan; documented in CHANGELOG.")
+}
+
 func TestBuilds_Create_Unauthenticated(t *testing.T) {
 	h := NewBuildHandler(&fakeBuildOrch{}, slog.Default())
 

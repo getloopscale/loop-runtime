@@ -156,6 +156,16 @@ func (b *WorkflowBuilder) buildkitContainer(p buildkitParams) *forge.Container {
 		// to 900s (15 min) — happy path remains 2-3min. Budget covers 3 retries
 		// with exponential backoff 10s, 20s, 40s.
 		RetryStrategy: forge.NewRetryOnFailure(3, "10s", "2", "900s"),
+		// Sprint B T3.1 (plan 2026-06-01-p2-interface-contracts-robustness,
+		// ADR D3): hard cap at 1800s (30min) aligned with the DB reaper's
+		// RunningTimeout (services/build_reaper.go). Without this cap, the
+		// retry budget above (3 × 900s ≈ 45min cumulative) outlasts the
+		// reaper by 15min — the DB row transitions to FAILED while the
+		// workflow keeps running, an orphan-execution window.
+		// Builds legitimately requiring >30min must request an SLA bump
+		// (future tenant-plan field); for pre-release, 30min is the
+		// documented per-build SLA.
+		ActiveDeadlineSeconds: forge.Ptr(1800),
 	}
 }
 
