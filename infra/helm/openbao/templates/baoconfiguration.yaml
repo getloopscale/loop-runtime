@@ -1,0 +1,161 @@
+{{/*
+SPDX-License-Identifier: Apache-2.0
+F1.4 — BaoConfiguration CR (Bank-Vaults operator consumes this).
+
+Scope per plan v1.2:
+- kv-v2 engine ONLY (transit/database/kubernetes engines in F2/F3/F6/F7)
+- Auth methods stubs ONLY (full roles + policies in F5)
+- Audit file sink stub (Promtail wires to Loki in F8)
+- Backup config — disabled by default; values-prod.yaml enables.
+
+EC-03 (MUST FIX P1): helm fail when unseal=awskms but kmsKeyId empty.
+*/}}
+
+{{- if and (eq .Values.unseal.type "awskms") (eq (.Values.unseal.awskms.kmsKeyId | default "") "") -}}
+{{- fail "EC-03: unseal.awskms.kmsKeyId MUST be non-empty when unseal.type=awskms (silent plaintext fallback prevention)" -}}
+{{- end -}}
+
+apiVersion: bao.banzaicloud.io/v1alpha1
+kind: BaoConfiguration
+metadata:
+  name: {{ include "openbao.fullname" . }}
+  namespace: {{ include "openbao.namespace" . }}
+  labels:
+    {{- include "openbao.labels" . | nindent 4 }}
+spec:
+  size: {{ .Values.size }}
+  image:
+    repository: {{ .Values.image.repository }}
+    tag: {{ .Values.image.tag | quote }}
+    {{- with .Values.image.digest }}
+    digest: {{ . | quote }}
+    {{- end }}
+    pullPolicy: {{ .Values.image.pullPolicy }}
+
+  {{/* Storage backend */}}
+  storage:
+    {{- if eq .Values.storage.type "inmemory" }}
+    inmemory:
+      enabled: true
+    {{- else if eq .Values.storage.type "raft" }}
+    raft:
+      enabled: true
+      size: {{ .Values.storage.raft.size }}
+      {{- with .Values.storage.raft.storageClass }}
+      storageClassName: {{ . | quote }}
+      {{- end }}
+    {{- else }}
+    {{- fail (printf "Unknown storage.type=%s — must be inmemory or raft" .Values.storage.type) }}
+    {{- end }}
+
+  {{/* Unseal backend */}}
+  unseal:
+    type: {{ .Values.unseal.type }}
+    {{- if eq .Values.unseal.type "awskms" }}
+    awskms:
+      region: {{ .Values.unseal.awskms.region }}
+      kmsKeyId: {{ .Values.unseal.awskms.kmsKeyId | quote }}
+    {{- end }}
+
+  {{/* Dev mode (k3d only; VAP F1.9 blocks in prod NS) */}}
+  {{- if .Values.devMode.enabled }}
+  devMode:
+    enabled: true
+    rootToken: {{ .Values.devMode.rootToken | quote }}
+  {{- end }}
+
+  {{/* TLS — cert-manager Certificate (Q5-F1 reuse self-signed-issuer) */}}
+  {{- if .Values.tls.enabled }}
+  tls:
+    enabled: true
+    certManager:
+      enabled: {{ .Values.tls.certManager.enabled }}
+      issuerRef:
+        name: {{ .Values.tls.certManager.issuerRef.name }}
+        kind: {{ .Values.tls.certManager.issuerRef.kind }}
+  {{- end }}
+
+  {{/* Audit sink (F8 full wiring) */}}
+  audit:
+    - type: file
+      path: file
+      options:
+        file_path: {{ .Values.audit.file.filePath }}
+        log_raw: {{ .Values.audit.file.logRaw }}
+        hmac_accessor: {{ .Values.audit.file.hmacAccessor }}
+        format: {{ .Values.audit.file.format }}
+
+  {{/* Backup (F1.2 Pulumi bucket; F8 audit log archive) */}}
+  {{- if .Values.backup.enabled }}
+  backup:
+    enabled: true
+    schedule: {{ .Values.backup.schedule | quote }}
+    storage:
+      type: {{ .Values.backup.storage.type }}
+      endpoint: {{ .Values.backup.storage.endpoint | quote }}
+      bucket: {{ .Values.backup.storage.bucket | quote }}
+      region: {{ .Values.backup.storage.region | quote }}
+      pathPrefix: {{ .Values.backup.storage.pathPrefix | quote }}
+      credentialsSecret: {{ .Values.backup.storage.credentialsSecret }}
+    retention:
+      hourly: {{ .Values.backup.retention.hourly }}
+      daily: {{ .Values.backup.retention.daily }}
+      weekly: {{ .Values.backup.retention.weekly }}
+  {{- end }}
+
+  {{/* Resources per Q4 */}}
+  resources:
+    requests:
+      cpu: {{ .Values.resources.requests.cpu | quote }}
+      memory: {{ .Values.resources.requests.memory | quote }}
+    limits:
+      cpu: {{ .Values.resources.limits.cpu | quote }}
+      memory: {{ .Values.resources.limits.memory | quote }}
+
+  {{/* PodAntiAffinity per Q4 (prod only) */}}
+  {{- if .Values.podAntiAffinity.enabled }}
+  affinity:
+    podAntiAffinity:
+      requiredDuringSchedulingIgnoredDuringExecution:
+        - topologyKey: {{ .Values.podAntiAffinity.topologyKey }}
+          labelSelector:
+            matchLabels:
+              {{- include "openbao.selectorLabels" . | nindent 14 }}
+  {{- end }}
+
+  {{- with .Values.priorityClassName }}
+  priorityClassName: {{ . | quote }}
+  {{- end }}
+
+  serviceAccount:
+    create: true
+    name: openbao
+
+  {{/* Engines — F1.4 ships kv-v2 only */}}
+  secrets:
+    {{- if .Values.engines.kvV2.enabled }}
+    - type: kv-v2
+      path: {{ .Values.engines.kvV2.path }}
+    {{- end }}
+    {{- if .Values.engines.transit.enabled }}
+    - type: transit
+      path: transit
+    {{- end }}
+    {{- if .Values.engines.database.enabled }}
+    - type: database
+      path: database
+    {{- end }}
+    {{- if .Values.engines.kubernetes.enabled }}
+    - type: kubernetes
+      path: kubernetes-engine
+    {{- end }}
+    {{- if .Values.engines.pki.enabled }}
+    - type: pki
+      path: pki-internal
+    {{- end }}
+
+  {{/* Auth methods — F1.4 ships empty; F5 expands */}}
+  auth: []
+
+  {{/* Policies — F5 expands; F1.4 ships empty */}}
+  policies: []

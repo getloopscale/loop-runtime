@@ -1,0 +1,36 @@
+{{/*
+SPDX-License-Identifier: Apache-2.0
+F1.4 — cert-manager Certificate (Q5-F1: reuse self-signed-issuer
+ClusterIssuer). Default 90d TTL with auto-renew 60d (cert-manager
+standard). SPKI extractor CronJob (T2.5 + EC-09) reads the issued
+cert and pins SHA-256 SubjectPublicKeyInfo into loopzero-api Vault
+client config.
+
+DNS SANs include all per-pod Raft hostnames (vault-0, vault-1, ...)
+for OpenBao Raft cluster member auth.
+*/}}
+{{- if and .Values.tls.enabled .Values.tls.certManager.enabled -}}
+apiVersion: cert-manager.io/v1
+kind: Certificate
+metadata:
+  name: {{ include "openbao.fullname" . }}-tls
+  namespace: {{ include "openbao.namespace" . }}
+  labels:
+    {{- include "openbao.labels" . | nindent 4 }}
+spec:
+  secretName: {{ include "openbao.fullname" . }}-tls
+  duration: {{ .Values.tls.duration | default "2160h" }}
+  renewBefore: 1440h  # 60d (auto-renew 30d before expiry)
+  issuerRef:
+    name: {{ .Values.tls.certManager.issuerRef.name }}
+    kind: {{ .Values.tls.certManager.issuerRef.kind }}
+  dnsNames:
+    {{- include "openbao.dnsSans" . | nindent 4 }}
+  usages:
+    - server auth
+    - client auth   # Raft member-to-member mTLS
+  privateKey:
+    algorithm: RSA
+    size: 4096
+    rotationPolicy: Always   # rotate private key on each renewal
+{{- end }}

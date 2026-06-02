@@ -1,0 +1,152 @@
+# SPDX-License-Identifier: Apache-2.0
+# F1.4 — OpenBao chart shared defaults.
+#
+# Overridden by:
+#   - values-standalone.yaml (k3d dev-mode per Q9)
+#   - values-prod.yaml (HA + AWS KMS unseal per Q4+EC-03)
+#
+# Per MEET-ASYNC-AMENDMENT-2026-06-02-001-openbao-f1-execution.md.
+
+# Environment label applied to namespace (loopzero.io/env=<value>).
+# Used by VAP (F1.9) to gate dev-mode literals in prod namespace.
+# Override via values-standalone.yaml (=standalone) and values-prod.yaml (=prod).
+env: standalone
+
+# OpenBao image — pinned to latest stable per Q3-F1.
+# Renovate auto-bump weekly via "helm" group.
+# Quality gate F1.9 rejects :latest/:main/:edge/untagged.
+image:
+  repository: ghcr.io/openbao/openbao
+  tag: "2.2.0"
+  # digest: sha256:<filled-by-renovate>
+  pullPolicy: IfNotPresent
+
+# Cluster size — 1 for standalone, 3 for prod HA (Q4).
+size: 1
+
+# Storage backend.
+# - inmemory: k3d dev-mode (Q9). Volatile across pod restarts.
+# - raft: prod HA. PV-backed (10Gi per replica).
+storage:
+  type: inmemory
+  raft:
+    enabled: false
+    size: 10Gi
+    storageClass: ""  # cluster default per Q3-F1
+
+# Unseal backend.
+# - none: k3d dev-mode (Q9). `-dev-server` flag enables auto-unseal in memory.
+# - awskms: prod (Q3). AWS KMS key managed by F1.1 Pulumi component.
+unseal:
+  type: none
+  awskms:
+    region: us-east-1
+    kmsKeyId: ""  # F1.6 + EC-03 fail-block enforces non-empty in prod
+
+# Dev mode — Q9 k3d only. VAP (F1.9) rejects this in prod NS.
+devMode:
+  enabled: false
+  rootToken: ""  # k3d uses "loopzero-dev-vault-root" (well-known literal)
+
+# TLS — cert-manager Certificate (Q5-F1 reuse self-signed-issuer ClusterIssuer).
+tls:
+  enabled: true
+  certManager:
+    enabled: true
+    issuerRef:
+      name: self-signed-issuer
+      kind: ClusterIssuer
+  # Cert TTL per cert-manager default (90d) with auto-renew 60d.
+  duration: 2160h  # 90d
+
+# Audit log — file sink (Promtail wires to Loki in F8).
+audit:
+  file:
+    enabled: true
+    filePath: /vault/audit/audit.log
+    logRaw: false
+    hmacAccessor: true
+    format: json
+
+# Backup config — DO Spaces NYC3 cross-region per Q12.
+# F1.2 Pulumi component provides bucket + access key via Helmfile L2 wiring.
+backup:
+  enabled: false  # F1.6 enables for prod
+  schedule: "0 * * * *"  # hourly per Q12
+  storage:
+    type: s3-compatible
+    endpoint: ""  # filled by Helmfile L2 from Pulumi output openbaoBackupBucketEndpoint
+    bucket: ""    # filled from openbaoBackupBucketName
+    region: ""    # filled from openbaoBackupRegion
+    pathPrefix: "snapshots/"
+    credentialsSecret: openbao-backup-creds  # K8s Secret created by F1.7 Helmfile templating
+  retention:
+    hourly: 7    # Q12
+    daily: 30    # Q12
+    weekly: 12   # Q12
+
+# Resource limits per Q4.
+# Scale up only on measured contention (Prometheus alerts in F8).
+resources:
+  requests:
+    cpu: 100m
+    memory: 256Mi
+  limits:
+    cpu: 500m
+    memory: 512Mi
+
+# Q4: PodAntiAffinity hard, 1 pod per node + system-cluster-critical priority.
+# values-standalone.yaml relaxes for k3d single-node convenience.
+podAntiAffinity:
+  enabled: false  # values-prod.yaml sets true
+  topologyKey: kubernetes.io/hostname
+
+priorityClassName: ""  # values-prod.yaml sets system-cluster-critical
+
+# Q4: PDB minAvailable=2 (only relevant for size>=3).
+podDisruptionBudget:
+  enabled: false  # values-prod.yaml sets true
+  minAvailable: 2
+
+# NetworkPolicy (Q4-F1 + EC-01).
+networkPolicy:
+  enabled: true
+  ingressAllowedNamespaces:
+    - loopzero-system
+    - external-secrets
+    - monitoring
+  egressBlockRfc1918: true  # default deny RFC1918 except K8s API
+
+# Engines enabled in F1.4 scope (Q1+Q5+Q7 deferred to F2/F3/F6/F7).
+# F1.4 ships kv-v2 stub only.
+engines:
+  kvV2:
+    enabled: true
+    path: secret
+  transit:
+    enabled: false  # F3.1
+  database:
+    enabled: false  # F6.1
+  kubernetes:
+    enabled: false  # F7.1
+  pki:
+    enabled: false  # F11 deferred
+
+# Auth methods in F1.4 scope (full role expansion in F5).
+authMethods:
+  kubernetesMgmt:
+    enabled: false  # F5.1
+  oidcHydra:
+    enabled: false  # F5.x via Ory Hydra
+
+# ServiceMonitor for Prometheus scraping
+serviceMonitor:
+  enabled: true
+  namespace: monitoring
+  interval: 30s
+  scrapeTimeout: 10s
+
+# PrometheusRule with 4 P1 alerts (Q14 — stub in F1.4, full alerts in F8).
+prometheusRule:
+  enabled: true
+  namespace: monitoring

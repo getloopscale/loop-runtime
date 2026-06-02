@@ -1,0 +1,34 @@
+# SPDX-License-Identifier: Apache-2.0
+# F1.4 — ServiceMonitor (Prometheus scraping).
+{{- if .Values.serviceMonitor.enabled -}}
+apiVersion: monitoring.coreos.com/v1
+kind: ServiceMonitor
+metadata:
+  name: {{ include "openbao.fullname" . }}
+  namespace: {{ .Values.serviceMonitor.namespace | default "monitoring" }}
+  labels:
+    {{- include "openbao.labels" . | nindent 4 }}
+    prometheus: loopzero
+spec:
+  selector:
+    matchLabels:
+      {{- include "openbao.selectorLabels" . | nindent 6 }}
+  namespaceSelector:
+    matchNames:
+      - {{ include "openbao.namespace" . }}
+  endpoints:
+    - port: api
+      path: /v1/sys/metrics
+      params:
+        format:
+          - prometheus
+      interval: {{ .Values.serviceMonitor.interval | default "30s" }}
+      scrapeTimeout: {{ .Values.serviceMonitor.scrapeTimeout | default "10s" }}
+      scheme: https
+      tlsConfig:
+        insecureSkipVerify: false
+        ca:
+          secret:
+            name: {{ include "openbao.fullname" . }}-tls
+            key: ca.crt
+{{- end }}

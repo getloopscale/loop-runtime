@@ -1,0 +1,26 @@
+# SPDX-License-Identifier: Apache-2.0
+# F1.4 — OpenBao Service (ClusterIP).
+#
+# DNS: vault.vault-system.svc.cluster.local:8200 (Q2-F1 + helpers).
+# Consumers: loopzero-api, operators, ESO, Argo Workflows (via Helmfile L2
+# wiring with cross-cluster TokenReview broker per Q6 — F4 implements).
+apiVersion: v1
+kind: Service
+metadata:
+  name: {{ include "openbao.fullname" . }}
+  namespace: {{ include "openbao.namespace" . }}
+  labels:
+    {{- include "openbao.labels" . | nindent 4 }}
+spec:
+  type: ClusterIP
+  ports:
+    - name: api
+      port: 8200
+      protocol: TCP
+      targetPort: 8200
+    - name: cluster
+      port: 8201
+      protocol: TCP
+      targetPort: 8201
+  selector:
+    {{- include "openbao.selectorLabels" . | nindent 4 }}
