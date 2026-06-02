@@ -12,6 +12,7 @@ import (
 
 	"github.com/go-chi/chi/v5"
 
+	"github.com/loopzero/loopzero/api/internal/correlation"
 	"github.com/loopzero/loopzero/api/internal/middleware"
 	loopzeroerrors "github.com/loopzero/loopzero/pkg/errors"
 )
@@ -118,7 +119,12 @@ func (h *RollbackHandler) Create(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	correlationID := r.Header.Get("X-Correlation-ID")
+	// T6.1 of plan 2026-06-01-p3-infra-observability-test-debt — use the
+	// canonical `Correlation-ID` reader with backward-compat fallback to
+	// `X-Correlation-ID`. Helper emits a deprecation WARN on legacy hits
+	// so operators can identify lagging CLI clients before the next
+	// major drops the fallback.
+	correlationID := correlation.Read(r)
 
 	// Execute rollback
 	result, err := h.service.Rollback(ctx, RollbackInput{

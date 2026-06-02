@@ -15,6 +15,7 @@ import (
 
 	"github.com/go-chi/chi/v5"
 
+	"github.com/loopzero/loopzero/api/internal/correlation"
 	"github.com/loopzero/loopzero/api/internal/db"
 	"github.com/loopzero/loopzero/api/internal/domain"
 	"github.com/loopzero/loopzero/api/internal/metrics"
@@ -237,7 +238,7 @@ func (h *SecretHandler) Set(w http.ResponseWriter, r *http.Request) {
 			action = "SECRET_CREATED"
 		}
 		if auditErr := h.audit.LogAudit(ctx, uc.TenantID, action, uc.UserID,
-			"secret", req.Name, r.Header.Get("Correlation-ID"),
+			"secret", req.Name, correlation.Read(r),
 			map[string]any{"environment": req.Environment, "app": req.App, "project": project}); auditErr != nil {
 			slog.Error("failed to write audit log for secret set", "name", req.Name, "error", auditErr)
 		}
@@ -338,7 +339,7 @@ func (h *SecretHandler) DeleteSecret(w http.ResponseWriter, r *http.Request) {
 	// MEET-2026-03-31-024: Audit log for secret deletion
 	if h.audit != nil {
 		if auditErr := h.audit.LogAudit(ctx, uc.TenantID, "SECRET_DELETED", uc.UserID,
-			"secret", name, r.Header.Get("Correlation-ID"),
+			"secret", name, correlation.Read(r),
 			map[string]any{"environment": env, "app": app, "project": project}); auditErr != nil {
 			slog.Error("failed to write audit log for secret delete", "name", name, "error", auditErr)
 		}

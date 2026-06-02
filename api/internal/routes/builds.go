@@ -16,6 +16,7 @@ import (
 	"github.com/go-chi/chi/v5"
 
 	"github.com/loopzero/loopzero/api/internal/argo"
+	"github.com/loopzero/loopzero/api/internal/correlation"
 	"github.com/loopzero/loopzero/api/internal/middleware"
 	"github.com/loopzero/loopzero/api/internal/validation"
 	loopzeroerrors "github.com/loopzero/loopzero/pkg/errors"
@@ -421,7 +422,7 @@ func (h *BuildHandler) Create(w http.ResponseWriter, r *http.Request) {
 		NoCache:       req.NoCache,
 		Apps:          req.Apps,
 		CreatedBy:     uc.UserID,
-		CorrelationID: r.Header.Get("Correlation-ID"), //nolint:contextcheck // header from original request
+		CorrelationID: correlation.Read(r), //nolint:contextcheck // header from original request (T6.1 uniform read via helper)
 	})
 	if err != nil {
 		mapBuildError(w, err)

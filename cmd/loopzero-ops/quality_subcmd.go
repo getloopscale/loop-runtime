@@ -16,6 +16,7 @@ import (
 	"time"
 
 	"github.com/loopzero/loopzero/pkg/quality/advisorylock"
+	"github.com/loopzero/loopzero/pkg/quality/correlationheader"
 	"github.com/loopzero/loopzero/pkg/quality/anonymousauth"
 	"github.com/loopzero/loopzero/pkg/quality/sqlcsync"
 	"github.com/loopzero/loopzero/pkg/quality/sqlctxprop"
@@ -313,6 +314,8 @@ func runQuality(args []string) int {
 		return runAdvisoryLockScope(args[1:])
 	case "anonymous-auth":
 		return runAnonymousAuth(args[1:])
+	case "correlation-header":
+		return runCorrelationHeader(args[1:])
 	case "helm-overlap-parity":
 		return runHelmOverlapParity(args[1:])
 	case "prod-image-digests":
@@ -2451,5 +2454,38 @@ func runTenantPredicate(args []string) int {
 		return 1
 	}
 	fmt.Printf("tenant-predicate: PASS — %d .sql files scanned; every multi-tenant query carries tenant_id\n", outcome.Scanned)
+	return 0
+}
+
+// runCorrelationHeader scans api/internal/routes/*.go for direct
+// r.Header.Get("(X-)?Correlation-ID") literals. Routes MUST go through
+// api/internal/correlation.Read(r) instead (T6.1 of plan
+// 2026-06-01-p3-infra-observability-test-debt, ADR D5 — closes val-002).
+func runCorrelationHeader(args []string) int {
+	fs := flag.NewFlagSet("correlation-header", flag.ContinueOnError)
+	root := fs.String("root", ".", "repo root directory")
+	if err := fs.Parse(args); err != nil {
+		return 1
+	}
+	if absRoot, err := os.Getwd(); err == nil && *root == "." {
+		*root = absRoot
+	}
+
+	outcome, err := correlationheader.Check(correlationheader.Config{RepoRoot: *root})
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "correlation-header: %v\n", err)
+		return 5
+	}
+	if !outcome.Pass {
+		fmt.Fprintf(os.Stderr, "correlation-header: FAIL — %d direct r.Header.Get(\"(X-)?Correlation-ID\") call(s) in routes/:\n", len(outcome.Violations))
+		for _, v := range outcome.Violations {
+			fmt.Fprintf(os.Stderr, "  %s\n", v)
+		}
+		fmt.Fprintln(os.Stderr, "")
+		fmt.Fprintln(os.Stderr, "Fix: replace with `id := correlation.Read(r)` (api/internal/correlation).")
+		fmt.Fprintln(os.Stderr, "The helper handles backward-compat (X-Correlation-ID fallback) + deprecation WARN.")
+		return 1
+	}
+	fmt.Println("correlation-header: PASS — no direct r.Header.Get((X-)?Correlation-ID) in api/internal/routes/")
 	return 0
 }

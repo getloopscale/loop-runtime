@@ -15,6 +15,7 @@ import (
 
 	"github.com/go-chi/chi/v5"
 
+	"github.com/loopzero/loopzero/api/internal/correlation"
 	"github.com/loopzero/loopzero/api/internal/domain"
 	"github.com/loopzero/loopzero/api/internal/middleware"
 	loopzeroerrors "github.com/loopzero/loopzero/pkg/errors"
@@ -219,7 +220,7 @@ func (h *ProjectHandler) Delete(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	correlationID := r.Header.Get("Correlation-ID")
+	correlationID := correlation.Read(r) // T6.1 uniform read via helper
 
 	result, err := h.deleter.Delete(ctx, ProjectDeleteInput{
 		TenantID:      uc.TenantID,
@@ -275,7 +276,7 @@ func (h *ProjectHandler) DeleteEnvironment(w http.ResponseWriter, r *http.Reques
 		return
 	}
 
-	correlationID := r.Header.Get("Correlation-ID")
+	correlationID := correlation.Read(r) // T6.1 uniform read via helper
 
 	result, err := h.deleter.Delete(ctx, ProjectDeleteInput{
 		TenantID:      uc.TenantID,
