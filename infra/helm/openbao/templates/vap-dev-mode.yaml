@@ -1,0 +1,62 @@
+{{/*
+SPDX-License-Identifier: Apache-2.0
+F1.9 — ValidatingAdmissionPolicy blocking devMode.enabled=true on
+BaoConfiguration CRs in prod namespace (Q9-F1 + EC-04).
+
+EC-04 (MUST FIX P1): VAP MUST include matchConditions excluding
+system controllers per B33 pattern documented in CLAUDE.md:
+- system:serviceaccount:kube-system:namespace-controller
+- system:kube-controller-manager
+- system:masters group
+
+Without matchConditions, kubectl delete ns vault-system triggers
+namespace-controller UPDATE on BaoConfiguration finalizer removal;
+VAP would block UPDATE → namespace stuck Terminating forever.
+
+failurePolicy: Fail (strict — reject on policy violation)
+*/}}
+apiVersion: admissionregistration.k8s.io/v1
+kind: ValidatingAdmissionPolicy
+metadata:
+  name: openbao-no-devmode-in-prod
+  labels:
+    {{- include "openbao.labels" . | nindent 4 }}
+  annotations:
+    plan.loopzero.io/ref: "F1.9 (EC-04 B33 pattern) of plan 2026-06-02-openbao-adoption v1.2"
+spec:
+  failurePolicy: Fail
+  matchConstraints:
+    resourceRules:
+      - apiGroups: ["bao.banzaicloud.io"]
+        apiVersions: ["v1alpha1"]
+        resources: ["baoconfigurations"]
+        operations: ["CREATE", "UPDATE"]
+  matchConditions:
+    - name: exclude-system-controllers
+      expression: |
+        !('system:masters' in (request.userInfo.groups | default([]))) &&
+        request.userInfo.username != 'system:serviceaccount:kube-system:namespace-controller' &&
+        request.userInfo.username != 'system:kube-controller-manager'
+  validations:
+    - expression: |
+        object.spec.devMode == null ||
+        object.spec.devMode.enabled == false ||
+        object.metadata.namespace != 'vault-system' ||
+        !('loopzero.io/env' in (object.metadata.labels | default({}))) ||
+        object.metadata.labels['loopzero.io/env'] != 'prod'
+      message: "BaoConfiguration with devMode.enabled=true is forbidden in vault-system namespace labeled loopzero.io/env=prod (Q9-F1 + F1.9 EC-04). Use values-standalone.yaml profile for local k3d development only."
+      reason: Forbidden
+---
+apiVersion: admissionregistration.k8s.io/v1
+kind: ValidatingAdmissionPolicyBinding
+metadata:
+  name: openbao-no-devmode-in-prod-binding
+  labels:
+    {{- include "openbao.labels" . | nindent 4 }}
+spec:
+  policyName: openbao-no-devmode-in-prod
+  validationActions: [Deny, Audit]
+  matchResources:
+    namespaceSelector:
+      matchLabels:
+        loopzero.io/env: prod
