@@ -137,3 +137,53 @@ func TestCheck_AllowsMarkdown(t *testing.T) {
 		t.Fatalf("Markdown files must PASS: %+v", out)
 	}
 }
+
+// T2.1 of plan 2026-06-01-p3-infra-observability-test-debt-plan v1.1
+// (BONUS-simplified: code already correct; tests lock the invariant).
+//
+// The canonical k3d build-cluster.yaml is the ONE production-bound file that
+// declares anonymous-auth=true (LOCAL-only per ADR 2026-05-28-T1.4). This test
+// locks the literal path against future drift: if anyone renames the file or
+// removes the allowlist entry, the gate MUST still pass for the canonical use.
+func TestAnonymousAuthGate_K3dBuildAllowlisted(t *testing.T) {
+	root := t.TempDir()
+	// EXACT file the canonical allowlist anchors on; do NOT change without
+	// updating allowedPrefixes simultaneously (governance: ADR amendment).
+	write(t, root, "infra/k3d/build-cluster.yaml",
+		"servers: 1\nagents: 0\noptions:\n  k3s:\n    extraArgs:\n      - arg: \"--kube-apiserver-arg=anonymous-auth=true\"\n        nodeFilters: [\"server:*\"]\n")
+	out, err := Check(Config{RepoRoot: root})
+	if err != nil {
+		t.Fatalf("Check error: %v", err)
+	}
+	if !out.Pass {
+		t.Fatalf("canonical infra/k3d/build-cluster.yaml must PASS (allowlist anchor): %+v", out)
+	}
+	if len(out.Violations) != 0 {
+		t.Fatalf("zero violations expected for allowlisted file; got: %v", out.Violations)
+	}
+}
+
+// T2.1 companion test: a synthetic file OUTSIDE every allowlist entry that
+// nevertheless contains the literal MUST trip the gate. Uses a neutral path
+// (`api/internal/somewhere.go`) instead of a specific known directory so the
+// test does NOT silently weaken if a new allowlist entry is added that happens
+// to match infra/helm or infra/pulumi.
+func TestAnonymousAuthGate_NonAllowlistedFileFails(t *testing.T) {
+	root := t.TempDir()
+	// Neutral path: api/internal/ is NOT in allowedPrefixes; should never be.
+	write(t, root, "api/internal/server/setup.go",
+		"// extraArgs configures the apiserver\nconst k3sArg = \"--kube-apiserver-arg=anonymous-auth=true\"\n")
+	out, err := Check(Config{RepoRoot: root})
+	if err != nil {
+		t.Fatalf("Check error: %v", err)
+	}
+	if out.Pass {
+		t.Fatalf("non-allowlisted path with literal must FAIL")
+	}
+	if len(out.Violations) != 1 {
+		t.Fatalf("expected exactly 1 violation, got %d: %v", len(out.Violations), out.Violations)
+	}
+	if !strings.Contains(out.Violations[0], "api/internal/server/setup.go") {
+		t.Fatalf("violation must name the offending file path; got: %v", out.Violations[0])
+	}
+}
