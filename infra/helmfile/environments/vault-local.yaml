@@ -1,0 +1,37 @@
+# Helmfile environment: vault-local
+# Per VK.4 of sponsor-direct decision 2026-06-02 — k3d loopzero-vault cluster
+# for validating vault cluster isolation topology before DOKS prod.
+#
+# Used ONLY by infra/helmfile/vault.helmfile.yaml.gotmpl.
+# Not consumed by mgmt/runtime/build helmfiles (vault cluster is isolated).
+
+domain: vault.loopzero.local
+dnsZone: loopzero.local
+
+clusterRole: vault
+clusterTopology: single-cluster
+
+# self-signed CA for TLS (no public DNS, no Let's Encrypt for local).
+# Name must match openbao values-standalone.yaml tls.certManager.issuerRef.name
+certIssuer:
+  kind: ClusterIssuer
+  name: self-signed-issuer
+
+# cluster-issuer chart values (creates ClusterIssuer self-signed-issuer).
+loopzeroCaIssuerName: self-signed-issuer
+issuerKind: selfsigned
+
+# Trigger flag — vault.helmfile reads .Values.openbaoEnabled to gate
+# openbao + bank-vaults-operator releases. ON by default for vault-local
+# (single-purpose env).
+openbaoEnabled: true
+
+# Resource sizing — k3d single-node, conservative
+resources:
+  default:
+    requests:
+      cpu: 50m
+      memory: 64Mi
+    limits:
+      cpu: 250m
+      memory: 256Mi

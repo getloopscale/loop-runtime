@@ -1,0 +1,181 @@
+# Vault Cluster — Helmfile (L2 Bootstrap, ISOLATED from mgmt)
+#
+# VK.4 of sponsor-direct decision 2026-06-02 (vault cluster isolation T3).
+# This Helmfile targets the k3d loopzero-vault cluster (or DOKS loopzero-vault-prod
+# in future). Lifecycle 100% independent of mgmt cluster — same principle
+# as DOxAWS lifecycle independence (per-cloud tooling for different blast
+# radius).
+#
+# Releases (5):
+#   - cert-manager           — TLS certificates for Vault HTTPS
+#   - cluster-issuer         — self-signed-issuer ClusterIssuer
+#   - bank-vaults-operator   — controller reconciling BaoConfiguration CRD
+#   - openbao                — OpenBao StatefulSet (standalone in local, HA in prod)
+#
+# Invocation:
+#   helmfile -f infra/helmfile/vault.helmfile.yaml.gotmpl -e vault-local \
+#     --kube-context k3d-loopzero-vault sync
+#
+# Or via Taskfile:
+#   task k3d:vault:bootstrap
+
+environments:
+  vault-local:
+    # k3d single-node validation env per VK scope.
+    values:
+      - environments/vault-local.yaml
+  prod:
+    # Future: DOKS loopzero-vault-prod (3 nodes, AWS KMS unseal, HA Raft).
+    # Reuses existing prod.yaml + overrides via openbao values-prod.yaml.
+    values:
+      - environments/prod.yaml
+
+---
+helmDefaults:
+  wait: true
+  waitForJobs: true
+  timeout: 600
+  atomic: false
+  createNamespace: true
+
+repositories:
+  - name: jetstack
+    url: https://charts.jetstack.io
+
+releases:
+  # ---------------------------------------------------------------------------
+  # cert-manager — TLS certs for OpenBao HTTPS API
+  # Same image+version as mgmt cluster (Rule 10 local-equals-prod parity).
+  # ---------------------------------------------------------------------------
+  - name: cert-manager
+    namespace: cert-manager
+    chart: jetstack/cert-manager
+    version: v1.15.3
+    values:
+      - installCRDs: true
+      - resources:
+          requests:
+            cpu: 10m
+            memory: 32Mi
+          limits:
+            cpu: 100m
+            memory: 128Mi
+
+  # ---------------------------------------------------------------------------
+  # cluster-issuer — self-signed-issuer ClusterIssuer
+  # OpenBao chart's tls.certManager.issuerRef points at "self-signed-issuer".
+  # ---------------------------------------------------------------------------
+  - name: cluster-issuer
+    namespace: cert-manager
+    chart: ../helm/cluster-issuer
+    needs:
+      - cert-manager/cert-manager
+    values:
+      - issuerKind: selfsigned
+      - loopzeroCaIssuerName: self-signed-issuer
+
+  # ---------------------------------------------------------------------------
+  # Bank-Vaults operator — controller reconciles BaoConfiguration CRD
+  # Co-located with OpenBao in the same cluster (simpler than cross-cluster
+  # operator pattern).
+  #
+  # VK.6 LIVE fix 2026-06-02: switched from wrapper chart (`../helm/bank-
+  # vaults-operator`) to OCI direct. Wrapper was causing helm-dep-build
+  # loop ("Deleting outdated charts" every operation) due to OCI dep
+  # resolution bug. Values are now inline (was values.yaml in wrapper).
+  # ---------------------------------------------------------------------------
+  - name: bank-vaults-operator
+    namespace: bank-vaults-operator
+    chart: oci://ghcr.io/bank-vaults/helm-charts/vault-operator
+    version: 1.24.0
+    installed: {{ .Values | get "openbaoEnabled" false }}
+    needs:
+      - cert-manager/cert-manager
+    values:
+      # VK.6 LIVE fix 2026-06-02: image is `vault-operator` (not
+      # `bank-vaults-operator`) and tag has `v` prefix (`v1.24.0`).
+      # Verified via `docker manifest inspect`.
+      - image:
+          repository: ghcr.io/bank-vaults/vault-operator
+          tag: "v1.24.0"
+          pullPolicy: IfNotPresent
+        resources:
+          requests:
+            cpu: 100m
+            memory: 256Mi
+          limits:
+            cpu: 500m
+            memory: 512Mi
+        podSecurityContext:
+          runAsNonRoot: true
+          runAsUser: 65534
+          fsGroup: 65534
+        containerSecurityContext:
+          allowPrivilegeEscalation: false
+          readOnlyRootFilesystem: true
+          capabilities:
+            drop: ["ALL"]
+        serviceMonitor:
+          enabled: false  # vault cluster doesn't have Prometheus yet (VK scope)
+        rbac:
+          create: true
+        replicaCount: 1
+        podAnnotations:
+          plan.loopzero.io/ref: "VK.6 of vault cluster isolation T3 2026-06-02"
+        webhook:
+          enabled: false  # using BaoConfiguration CR pattern, no vault-injector
+
+  # ---------------------------------------------------------------------------
+  # OpenBao — StatefulSet, standalone devMode locally / HA Raft in prod
+  # Uses values-standalone.yaml (devMode, in-memory, root token well-known)
+  # for vault-local. Prod will use values-prod.yaml when DOKS provisioned.
+  # ---------------------------------------------------------------------------
+  - name: openbao
+    namespace: vault-system
+    chart: ../helm/openbao
+    installed: {{ .Values | get "openbaoEnabled" false }}
+    needs:
+      - bank-vaults-operator/bank-vaults-operator
+      - cert-manager/cluster-issuer
+    values:
+      - ../helm/openbao/values.yaml
+      {{- if eq .Environment.Name "vault-local" }}
+      - ../helm/openbao/values-standalone.yaml
+      # VK.6 LIVE override 2026-06-02: vault-local k3d doesn't have
+      # Prometheus Operator CRDs (ServiceMonitor + PrometheusRule), so
+      # we force-disable both monitoring resources for the standalone env.
+      # values-standalone.yaml has them ON to validate templates render —
+      # this override flips them OFF only for the actual k8s apply step.
+      - serviceMonitor:
+          enabled: false
+        prometheusRule:
+          enabled: false
+      {{- else }}
+      - ../helm/openbao/values-prod.yaml
+      {{- end }}
+    {{- if eq .Environment.Name "prod" }}
+    set:
+      # Per VK design (and DOxAWS lifecycle independence): prod injects KMS
+      # + Spaces creds from operator-sourced ~/.openbao-prod-resources.env
+      # before `helmfile sync`. Same 9-key contract as mgmt.helmfile (until
+      # vault cluster cutover). See:
+      #   docs/operations/openbao-aws-resources-runbook.md
+      - name: unseal.awskms.kmsKeyId
+        value: {{ requiredEnv "OPENBAO_AWS_KMS_KEY_ID" | quote }}
+      - name: unseal.awskms.region
+        value: {{ env "OPENBAO_AWS_REGION" | default "us-east-1" | quote }}
+      - name: unseal.awskms.accessKeyId
+        value: {{ requiredEnv "OPENBAO_AWS_ACCESS_KEY_ID" | quote }}
+      - name: unseal.awskms.secretAccessKey
+        value: {{ requiredEnv "OPENBAO_AWS_SECRET_ACCESS_KEY" | quote }}
+      - name: backup.storage.endpoint
+        value: {{ requiredEnv "OPENBAO_BACKUP_ENDPOINT" | quote }}
+      - name: backup.storage.bucket
+        value: {{ requiredEnv "OPENBAO_BACKUP_BUCKET" | quote }}
+      - name: backup.storage.region
+        value: {{ requiredEnv "OPENBAO_BACKUP_REGION" | quote }}
+      - name: backup.storage.accessKeyId
+        value: {{ requiredEnv "OPENBAO_BACKUP_ACCESS_KEY_ID" | quote }}
+      - name: backup.storage.secretAccessKey
+        value: {{ requiredEnv "OPENBAO_BACKUP_SECRET_ACCESS_KEY" | quote }}
+    {{- end }}

@@ -1,0 +1,76 @@
+# LoopZero Vault Cluster (k3d local, single-node)
+#
+# Cluster K8s dedicado para OpenBao (Bank-Vaults operator + OpenBao StatefulSet).
+# Validação local da topology que irá para DOKS prod (loopzero-vault-prod) per
+# decisão arquitetural T3 2026-06-02 (vault cluster isolation, sponsor-direct).
+#
+# Pin K8s version to match production DOKS 1.32.13 (Rule 10: local equals
+# production). Single server (no agents) — k3d host already roda 3-4 clusters;
+# Vault local não precisa HA real (host process não sobrevive crash do laptop
+# mesmo com HA pods). Production (DOKS loopzero-vault-prod) terá 3 nodes
+# s-2vcpu-4gb (anti-affinity hard, Raft 2/3 quorum).
+#
+# kubeAPI hostPort 6447 (próximo livre após mgmt=6443, workload=6444,
+#   build=6445, runtime-2=6446)
+#
+# Network: k3d-loopzero (compartilhada com outros 4 clusters → cross-cluster
+#   lookup nativo via container DNS k3d-loopzero-vault-server-0).
+#
+# Registry: k3d-loopzero-registry pull-through (mesma cache compartilhada).
+#
+# Exposed ports:
+#   - 8200 (HTTPS Vault API) → host:8200 para validação local via bao CLI
+#   - 30095 NodePort para cross-cluster scraping (Prometheus federation futura)
+apiVersion: k3d.io/v1alpha5
+kind: Simple
+metadata:
+  name: loopzero-vault
+
+image: rancher/k3s:v1.32.13-k3s1
+servers: 1
+agents: 0
+kubeAPI:
+  hostPort: "6447"
+
+ports:
+  # Vault HTTPS API → host:8200 (cli local: bao status -address=https://localhost:8200)
+  - port: 8200:30200
+    nodeFilters:
+      - loadbalancer
+  # OpenBao metrics NodePort (Prometheus federation cross-cluster)
+  - port: 30095:30095
+    nodeFilters:
+      - loadbalancer
+
+network: k3d-loopzero
+
+registries:
+  use:
+    - k3d-loopzero-registry:5000
+  # B6 fix (cleanroom iter 6) — mirror docker.io via gcr.io cache.
+  # Same rationale as outros clusters (see mgmt-cluster.yaml).
+  config: |
+    mirrors:
+      "docker.io":
+        endpoint:
+          - https://mirror.gcr.io
+      "registry-1.docker.io":
+        endpoint:
+          - https://mirror.gcr.io
+
+options:
+  k3d:
+    wait: true
+    timeout: "120s"
+  k3s:
+    extraArgs:
+      # Disable traefik default (we install our own via Helmfile if needed —
+      # Vault doesn't need ingress, accessible via Service ClusterIP +
+      # NodePort 30200).
+      - arg: "--disable=traefik"
+        nodeFilters:
+          - server:*
+      # Disable servicelb (Klipper) — Vault uses ClusterIP, no LB needed.
+      - arg: "--disable=servicelb"
+        nodeFilters:
+          - server:*
