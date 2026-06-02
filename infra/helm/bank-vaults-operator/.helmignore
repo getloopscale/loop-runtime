@@ -1,0 +1,20 @@
+# Patterns to ignore when packaging Helm charts.
+# Common backups, OS metadata, version control.
+.DS_Store
+.git/
+.gitignore
+.bzr/
+.bzrignore
+.hg/
+.hgignore
+.svn/
+*.swp
+*.bak
+*.tmp
+*.orig
+*~
+# Helm metadata
+.helmignore
+# Local development
+charts/
+README.md.gotmpl

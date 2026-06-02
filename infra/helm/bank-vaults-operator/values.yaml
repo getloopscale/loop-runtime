@@ -1,0 +1,82 @@
+# SPDX-License-Identifier: Apache-2.0
+# F1.3 — Bank-Vaults operator wrapper values.
+#
+# Per MEET-ASYNC-AMENDMENT-2026-06-02-001-openbao-f1-execution.md:
+#   Q3-F1: latest stable + cluster default storage + existing "helm"
+#          Renovate group; quality gate F1.9 rejects :latest/:main/:edge.
+#   Q4 (architecture): resource limits req 100m/256Mi, lim 500m/512Mi.
+#
+# Image digest pinning: managed by Renovate weekly per
+# .github/renovate.json (matchManagers helmv3/helm-values/helmfile +
+# groupName "helm"). Initial tag below; SHA digest added by Renovate
+# on first PR.
+#
+# Quality gate `task quality:openbao-prod-safe` (F1.9) enforces:
+#   - image.tag NOT in [:latest, :main, :edge]
+#   - image.tag matches semver pattern X.Y.Z[-suffix]
+
+bank-vaults:
+  # Operator deployment
+  image:
+    repository: ghcr.io/bank-vaults/bank-vaults-operator
+    tag: "1.23.0"
+    # digest: sha256:<filled-by-renovate-on-first-bump>
+    pullPolicy: IfNotPresent
+
+  # Per Q4 resource limits — sufficient for operator reconcile loops
+  # across ~5 engines + ~20 roles. Bumping to 1Gi RAM only if metric
+  # `controller_runtime_reconcile_total` shows backlog growth (F8 alert).
+  resources:
+    requests:
+      cpu: 100m
+      memory: 256Mi
+    limits:
+      cpu: 500m
+      memory: 512Mi
+
+  # Pod-level security context — non-root by default per
+  # LoopZero platform security baseline.
+  podSecurityContext:
+    runAsNonRoot: true
+    runAsUser: 65534
+    fsGroup: 65534
+
+  containerSecurityContext:
+    allowPrivilegeEscalation: false
+    readOnlyRootFilesystem: true
+    capabilities:
+      drop: ["ALL"]
+
+  # Monitoring — ServiceMonitor scraped by mgmt-cluster Prometheus
+  # (already configured via infra/helm/monitoring/).
+  serviceMonitor:
+    enabled: true
+    namespace: monitoring
+    interval: 30s
+    scrapeTimeout: 10s
+
+  # RBAC — operator needs cluster-wide access to manage BaoConfiguration
+  # CRs + secondary resources (Services, StatefulSets, Secrets in
+  # vault-system, etc). Default upstream RBAC is sufficient.
+  rbac:
+    create: true
+
+  # Pod placement
+  # NO PodAntiAffinity — operator is single-replica by design
+  # (Bank-Vaults uses leader election for HA in OpenBao instance, not
+  # operator replicas).
+  replicaCount: 1
+
+  # Toleration: schedule on any mgmt node
+  # (operator is light enough to share with platform services).
+
+  # Annotations for argocd sync hooks (not used in Helmfile L2 path
+  # but harmless if chart applied via ArgoCD later).
+  podAnnotations:
+    plan.loopzero.io/ref: "F1.3 of 2026-06-02-openbao-adoption v1.2"
+
+  # Disable webhook for now — Bank-Vaults webhook (mutating admission)
+  # is for legacy vault-injector pattern; we use BaoConfiguration CR
+  # exclusively for OpenBao management.
+  webhook:
+    enabled: false

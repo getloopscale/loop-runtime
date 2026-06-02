@@ -1,0 +1,34 @@
+# SPDX-License-Identifier: Apache-2.0
+# Bank-Vaults operator wrapper for LoopZero platform OpenBao management.
+#
+# F1.3 of plan 2026-06-02-openbao-adoption v1.2.
+# ADR: decisions/2026-06-02-openbao-adoption.md (Q7 = Bank-Vaults
+# operator + BaoConfiguration CRD as deploy+config tool).
+# MEET-ASYNC: meetings/MEET-ASYNC-AMENDMENT-2026-06-02-001-openbao-f1-execution.md
+# (Q3-F1 = latest stable + cluster default + helm Renovate group).
+#
+# Bank-Vaults v1.21+ supports OpenBao natively (2024 release notes).
+# Pinned to a specific stable version below; Renovate weekly bumps
+# under the "helm" group per existing .github/renovate.json policy.
+#
+# Deployed to mgmt cluster only via
+# infra/helmfile/mgmt.helmfile.yaml.gotmpl (Wave 0 — needs cert-manager).
+# Manages OpenBao instances via BaoConfiguration CRs (instance config
+# lives in infra/helm/openbao/templates/baoconfiguration.yaml — F1.4).
+#
+# Operator namespace: bank-vaults-operator (separate from vault-system
+# where OpenBao StatefulSet lives — operator/instance separation per
+# K8s operator pattern best practices).
+
+apiVersion: v2
+name: loopzero-bank-vaults-operator
+description: Bank-Vaults operator wrapper for LoopZero platform OpenBao management
+type: application
+version: 0.1.0
+appVersion: "1.23.0"
+
+dependencies:
+  - name: vault-operator
+    version: 1.23.0
+    repository: oci://ghcr.io/bank-vaults/charts
+    alias: bank-vaults
