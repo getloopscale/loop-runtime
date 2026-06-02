@@ -54,6 +54,23 @@ type fakeArgoCD struct {
 	mintHandler http.HandlerFunc // override for error injection
 }
 
+// mints returns the mint-endpoint hit count safely (read under mutex).
+// Sprint B T4.1: existing tests read f.mintCount without locking, racing
+// against the handler that increments under f.mu. T4.1 widened the
+// timing window via firstMint blocking and surfaced the latent race.
+// Fix is test-side: route all external reads through this helper.
+func (f *fakeArgoCD) mints() int {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	return f.mintCount
+}
+
+func (f *fakeArgoCD) logins() int {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	return f.loginCount
+}
+
 func (f *fakeArgoCD) handler() http.Handler {
 	mux := http.NewServeMux()
 	mux.HandleFunc("/api/v1/session", func(w http.ResponseWriter, r *http.Request) {
@@ -200,11 +217,11 @@ func TestProvider_StartMintsWhenNoToken(t *testing.T) {
 	for {
 		select {
 		case <-deadline:
-			t.Fatalf("timeout: provider did not mint on startup; mintCount=%d token=%q", fa.mintCount, p.Token())
+			t.Fatalf("timeout: provider did not mint on startup; mintCount=%d token=%q", fa.mints(), p.Token())
 		default:
 			if p.Token() != "" {
-				if fa.mintCount < 1 {
-					t.Fatalf("expected at least 1 mint, got %d", fa.mintCount)
+				if fa.mints() < 1 {
+					t.Fatalf("expected at least 1 mint, got %d", fa.mints())
 				}
 				return
 			}
@@ -224,7 +241,7 @@ func TestProvider_OnAuthFailure_TriggersReactiveMint(t *testing.T) {
 	// Don't start the proactive loop in this test — we only want to
 	// observe the reactive path. mintsBefore captures any incidental
 	// activity (none expected since Start is not called).
-	mintsBefore := fa.mintCount
+	mintsBefore := fa.mints()
 
 	p.OnAuthFailure()
 
@@ -233,8 +250,8 @@ func TestProvider_OnAuthFailure_TriggersReactiveMint(t *testing.T) {
 	if err := p.Refresh(); err != nil {
 		t.Fatalf("reactive Refresh: %v", err)
 	}
-	if fa.mintCount <= mintsBefore {
-		t.Fatalf("reactive mint did not happen; mintCount=%d", fa.mintCount)
+	if fa.mints() <= mintsBefore {
+		t.Fatalf("reactive mint did not happen; mintCount=%d", fa.mints())
 	}
 	// Token swapped to the freshly-minted one.
 	if p.Token() == expiring {
@@ -257,9 +274,9 @@ func TestProvider_ProactiveRefresh_WhenTokenNearExpiry(t *testing.T) {
 	for {
 		select {
 		case <-deadline:
-			t.Fatalf("proactive mint did not happen; mintCount=%d", fa.mintCount)
+			t.Fatalf("proactive mint did not happen; mintCount=%d", fa.mints())
 		default:
-			if fa.mintCount > 0 && p.Token() != expiring {
+			if fa.mints() > 0 && p.Token() != expiring {
 				return
 			}
 			time.Sleep(20 * time.Millisecond)
@@ -313,8 +330,8 @@ func TestProvider_LoginFlow_WhenNoBearer(t *testing.T) {
 			time.Sleep(20 * time.Millisecond)
 		}
 	}
-	if fa.loginCount < 1 {
-		t.Fatalf("expected /api/v1/session call, got %d", fa.loginCount)
+	if fa.logins() < 1 {
+		t.Fatalf("expected /api/v1/session call, got %d", fa.logins())
 	}
 }
 
@@ -344,8 +361,8 @@ func TestProvider_SingleFlight_ConcurrentRefreshes(t *testing.T) {
 	// mints once and subsequent calls observe a fresh-enough token via the
 	// double-check guard inside mintAndPersist (success path stores a non-
 	// expiring token, so jwtIsValid returns true for the rest).
-	if fa.mintCount > 3 {
-		t.Fatalf("single-flight not effective: mintCount=%d (expected ≤3)", fa.mintCount)
+	if fa.mints() > 3 {
+		t.Fatalf("single-flight not effective: mintCount=%d (expected ≤3)", fa.mints())
 	}
 }
 
@@ -367,5 +384,146 @@ func TestProvider_ServerErrorPropagates(t *testing.T) {
 	err := p.Refresh()
 	if err == nil || !strings.Contains(err.Error(), "mint http 500") {
 		t.Fatalf("expected mint http 500 error, got %v", err)
+	}
+}
+
+// =============================================================================
+// Sprint B T4.1 — Block-on-first-mint (ADR D5)
+// =============================================================================
+// Four tests prove the new contract:
+//   - Token() called before first mint BLOCKS until first mint signals
+//   - Timeout (mint never completes) returns empty + logs ERROR
+//   - After first mint, subsequent calls return immediately (fast path)
+//   - Token() called before Start() does NOT panic (EC-10)
+//
+// Test isolation: each test starts with a fresh provider (no shared state).
+// firstMintTimeout is overridden to a small value (100ms-1s) so tests
+// stay fast — the production 30s is correctness, not performance.
+
+// TestKubeMintingProvider_BlocksBeforeFirstMint — fundamental T4.1
+// invariant. Provider Start()ed against a slow ArgoCD mint endpoint;
+// Token() called immediately must block until the mint completes.
+// Pre-T4.1 it returned "" immediately; T4.1 makes it block 30s
+// max OR until firstMint closes.
+func TestKubeMintingProvider_BlocksBeforeFirstMint(t *testing.T) {
+	// Save + restore firstMintTimeout so other tests aren't affected.
+	// (placeholder — replaced per-test via p.firstMintTimeout = ...)
+
+	// Build a slow ArgoCD whose mint endpoint sleeps 150ms — long
+	// enough that Token() called immediately will hit the slow path
+	// but short enough to keep the test fast.
+	fa, srv := newFakeArgoCD(t)
+	slow := fa.handler()
+	srv.Config.Handler = http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if strings.HasSuffix(r.URL.Path, "/token") {
+			time.Sleep(150 * time.Millisecond)
+		}
+		slow.ServeHTTP(w, r)
+	})
+
+	p := newProvider(t, srv.URL, credsSecret("static-bearer", "", ""))
+	p.firstMintTimeout = 2 * time.Second
+	ctx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
+	defer cancel()
+	p.Start(ctx)
+	defer p.Stop()
+
+	start := time.Now()
+	tok := p.Token()
+	dur := time.Since(start)
+
+	if tok == "" {
+		t.Fatalf("Token() returned empty after blocking; mintCount=%d", fa.mints())
+	}
+	if dur < 100*time.Millisecond {
+		t.Errorf("Token() returned in %v — too fast; expected >=100ms (mint endpoint sleeps 150ms)", dur)
+	}
+	if dur > 2*time.Second {
+		t.Errorf("Token() took %v — exceeds firstMintTimeout override 2s", dur)
+	}
+}
+
+// TestKubeMintingProvider_TimeoutReturnsEmpty — failure-mode invariant.
+// Provider Start()ed but mint endpoint always returns 500. After
+// firstMintTimeout elapses, Token() returns empty (no panic, no hang
+// past timeout). Production callers observe "" + ERROR log + 401 from
+// upstream — explicit failure signal rather than silent cascade.
+func TestKubeMintingProvider_TimeoutReturnsEmpty(t *testing.T) {
+	// (placeholder — replaced per-test via p.firstMintTimeout = ...)
+
+	fa, srv := newFakeArgoCD(t)
+	fa.mintHandler = func(w http.ResponseWriter, r *http.Request) {
+		http.Error(w, "always 500", http.StatusInternalServerError)
+	}
+
+	p := newProvider(t, srv.URL, credsSecret("bearer-x", "", ""))
+	p.firstMintTimeout = 200 * time.Millisecond
+	// IMPORTANT: do NOT call Start() — without it, no mint goroutine
+	// runs and firstMint will never close until the timeout fires.
+	// This isolates the timeout path from the Start()/mint race.
+	start := time.Now()
+	tok := p.Token()
+	dur := time.Since(start)
+
+	if tok != "" {
+		t.Errorf("Token() returned %q after timeout; expected empty", tok)
+	}
+	if dur < 150*time.Millisecond {
+		t.Errorf("Token() returned in %v — too fast; expected >=150ms (timeout override 200ms)", dur)
+	}
+	if dur > 500*time.Millisecond {
+		t.Errorf("Token() took %v — exceeds firstMintTimeout override 200ms by too wide a margin", dur)
+	}
+}
+
+// TestKubeMintingProvider_PostMint_NonBlocking — performance invariant.
+// After the first mint completes (firstMint closed), every subsequent
+// Token() call goes through the fast path (atomic load) without
+// touching the channel. Critical: production token retrieval happens
+// on every sync call; if T4.1 added a channel-recv on every call the
+// cost would compound under load.
+func TestKubeMintingProvider_PostMint_NonBlocking(t *testing.T) {
+	_, srv := newFakeArgoCD(t)
+	existing := mintTokenJWT(t, "loopzero-api:apiKey", 0, time.Now().Unix())
+	p := newProvider(t, srv.URL, tokenSecret(existing), credsSecret("bearer-x", "", ""))
+	// Seeded token short-circuits firstMint at constructor time.
+
+	for i := 0; i < 100; i++ {
+		start := time.Now()
+		tok := p.Token()
+		dur := time.Since(start)
+		if tok != existing {
+			t.Fatalf("iter %d: got %q want %q", i, tok, existing)
+		}
+		if dur > 1*time.Millisecond {
+			t.Errorf("iter %d: Token() took %v — fast path should be <1ms after first mint", i, dur)
+		}
+	}
+}
+
+// TestKubeMintingProvider_TokenBeforeStart_DoesNotPanic — EC-10 of the
+// plan. Some unit-test patterns construct a provider without calling
+// Start() (e.g. tests of paths that don't need the background loop).
+// Pre-T4.1 Token() returned "" immediately; T4.1 must NOT panic on
+// the channel-recv path even if firstMint was never closed.
+// Achieved by initializing firstMint in NewKubeMintingTokenProvider
+// (constructor), not lazily in Start().
+func TestKubeMintingProvider_TokenBeforeStart_DoesNotPanic(t *testing.T) {
+	// (placeholder — replaced per-test via p.firstMintTimeout = ...)
+
+	_, srv := newFakeArgoCD(t)
+	p := newProvider(t, srv.URL, credsSecret("bearer-x", "", ""))
+	p.firstMintTimeout = 100 * time.Millisecond
+	// NO Start(), NO Stop() — provider is fresh-constructed.
+
+	defer func() {
+		if r := recover(); r != nil {
+			t.Fatalf("Token() panicked before Start(): %v", r)
+		}
+	}()
+
+	tok := p.Token()
+	if tok != "" {
+		t.Errorf("Token() returned %q on un-started provider; expected empty after timeout", tok)
 	}
 }

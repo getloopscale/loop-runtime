@@ -63,7 +63,35 @@ type KubeMintingTokenProvider struct {
 	stopCh       chan struct{}
 	httpClient   *http.Client
 	stopOnce     sync.Once
+
+	// Sprint B T4.1 (plan 2026-06-01-p2-interface-contracts-robustness,
+	// ADR D5): block-on-first-mint signal. Pre-T4.1, Token() returned
+	// the empty cached value when called before the background goroutine
+	// minted its first token — every caller (sync_client.go, convergence
+	// loop) immediately hit a cascade of 401s during the 5-30s startup
+	// window. With firstMint, Token() blocks (bounded 30s) until the
+	// first successful mint closes the channel.
+	//
+	// EC-10 (plan v1.1): initialized in NewKubeMintingTokenProvider, NOT
+	// lazily in Start(). This prevents nil-channel panic if Token() is
+	// called before Start() (some unit-test patterns do exactly that).
+	//
+	// firstMintOnce ensures the channel is closed exactly once even
+	// though mintAndPersist can be invoked from multiple paths
+	// (startup, ticker, Refresh, OnAuthFailure).
+	firstMint     chan struct{}
+	firstMintOnce sync.Once
+	// firstMintTimeout bounds how long Token() blocks waiting for the
+	// first mint. 30s mirrors the order-of-magnitude time for ArgoCD
+	// pod readiness in cleanroom-fresh setups; anything past this is a
+	// config / connectivity issue worth surfacing rather than masking.
+	// Per-provider field (not package-level) so tests can shorten it
+	// without racing on a global.
+	firstMintTimeout time.Duration
 }
+
+// defaultFirstMintTimeout is the production-default token-block timeout.
+const defaultFirstMintTimeout = 30 * time.Second
 
 // KubeMintingConfig wires the dependencies for KubeMintingTokenProvider.
 type KubeMintingConfig struct {
@@ -165,8 +193,10 @@ func NewKubeMintingTokenProvider(cfg KubeMintingConfig) (*KubeMintingTokenProvid
 	p := &KubeMintingTokenProvider{
 		cfg:        cfg,
 		log:        cfg.Logger.With("component", "argocd-token-provider"),
-		refreshSig: make(chan struct{}, 1),
-		stopCh:     make(chan struct{}),
+		refreshSig:       make(chan struct{}, 1),
+		stopCh:           make(chan struct{}),
+		firstMint:        make(chan struct{}),
+		firstMintTimeout: defaultFirstMintTimeout,
 		httpClient: httpClient,
 	}
 
@@ -178,18 +208,82 @@ func NewKubeMintingTokenProvider(cfg KubeMintingConfig) (*KubeMintingTokenProvid
 		updateAgeMetric(issuedAt)
 		p.log.Info("seeded argocd token from K8s Secret",
 			"secret", cfg.TokenSecretName, "issued_at_unix", issuedAt)
+		// Sprint B T4.1 (ADR D5): a seeded token already provides a
+		// valid Bearer for callers — close firstMint so Token() callers
+		// during startup don't block waiting for a redundant fresh mint.
+		// firstMintOnce is idempotent with mintAndPersist's close call,
+		// so a future mint won't double-close.
+		p.firstMintOnce.Do(func() { close(p.firstMint) })
 	}
 
 	return p, nil
 }
 
-// Token returns the current cached token (lock-free atomic read).
-func (p *KubeMintingTokenProvider) Token() string {
+// loadCachedToken returns the current cached token without blocking.
+// Internal helper used by the background mint loop (checkAndMaybeRefresh,
+// mintAndPersist double-check) to inspect cache state WITHOUT triggering
+// the block-on-first-mint slow path — calling p.Token() from inside the
+// mint goroutine would deadlock (the goroutine would wait for firstMint
+// to close, but firstMint only closes after this very goroutine completes
+// the first mint).
+//
+// External callers MUST use Token() to get the block-on-first-mint
+// guarantee.
+func (p *KubeMintingTokenProvider) loadCachedToken() string {
 	v := p.token.Load()
 	if v == nil {
 		return ""
 	}
-	return v.(string)
+	if s, ok := v.(string); ok {
+		return s
+	}
+	return ""
+}
+
+// Token returns the current cached token (lock-free atomic read).
+//
+// Sprint B T4.1 (ADR D5): on the FIRST call before the background mint
+// goroutine has completed, Token() blocks for up to firstMintTimeout
+// waiting for the firstMint channel to close (signaled inside
+// mintAndPersist after a successful mint via firstMintOnce). Subsequent
+// calls return immediately (closed channels never block on receive).
+//
+// On timeout (mint failed N times OR ArgoCD pod not Ready in 30s), the
+// method returns empty string + logs ERROR. Callers that previously
+// hit the empty-Bearer 401 cascade now either get a valid token OR a
+// loud failure signal — no silent path.
+//
+// If the seed Secret in the constructor populated p.token with a valid
+// token, the fast-path skips the channel entirely (token already
+// available). This preserves restart performance on healthy systems.
+//
+// INTERNAL CALLERS: do NOT call Token() from inside the mint goroutine
+// (checkAndMaybeRefresh, mintAndPersist) — it would self-deadlock.
+// Use loadCachedToken() instead.
+func (p *KubeMintingTokenProvider) Token() string {
+	// Fast path: token already loaded (either seeded from Secret in
+	// constructor OR a previous mint completed). Avoid touching the
+	// channel — closed channels still incur a select cost.
+	if s := p.loadCachedToken(); s != "" {
+		return s
+	}
+
+	// Slow path: block until first mint or timeout.
+	select {
+	case <-p.firstMint:
+		// First mint completed (success). Re-read the atomic value.
+		return p.loadCachedToken()
+	case <-p.stopCh:
+		// Provider stopped before first mint — system is shutting down.
+		return ""
+	case <-time.After(p.firstMintTimeout):
+		// Timed out waiting for first mint. Log loudly so operators
+		// see the failure rather than guessing why callers see 401s.
+		p.log.Error("kube_minting_token_provider: first mint timed out",
+			"timeout", p.firstMintTimeout,
+			"hint", "ArgoCD pod likely not Ready OR credentials Secret missing — check argocd-server pod + argocd-credentials secret")
+		return ""
+	}
 }
 
 // Refresh implements TokenProvider.Refresh — synchronous mint + persist.
@@ -247,7 +341,10 @@ func (p *KubeMintingTokenProvider) Stop() {
 
 // checkAndMaybeRefresh inspects the JWT exp; mints if expired or near expiry.
 func (p *KubeMintingTokenProvider) checkAndMaybeRefresh(ctx context.Context, trigger string) {
-	tok := p.Token()
+	// IMPORTANT (Sprint B T4.1): we are inside the mint goroutine; using
+	// p.Token() would self-deadlock (Token blocks on firstMint which only
+	// closes after this very function's mintAndPersist call succeeds).
+	tok := p.loadCachedToken()
 	if tok == "" {
 		// No token at all — must mint to bootstrap.
 		if err := p.mintAndPersist(ctx, trigger+"_empty"); err != nil {
@@ -285,9 +382,16 @@ func (p *KubeMintingTokenProvider) mintAndPersist(ctx context.Context, trigger s
 
 	// Double-check after acquiring the lock: another goroutine may have
 	// already minted while we were waiting.
-	if cur := p.Token(); cur != "" && jwtIsValid(cur, p.cfg.ProactiveRefreshThreshold) {
+	// Sprint B T4.1: use loadCachedToken (NOT Token) — we're inside the
+	// mint path; Token would self-deadlock waiting for firstMint.
+	if cur := p.loadCachedToken(); cur != "" && jwtIsValid(cur, p.cfg.ProactiveRefreshThreshold) {
 		// Skip — refreshed by a concurrent caller while we waited.
 		metrics.ArgoCDTokenRefreshesTotal.WithLabelValues(trigger, "skipped").Inc()
+		// EC-side-effect: even if we skipped the mint (because another
+		// caller already minted), the cached token is valid — close
+		// firstMint so any external Token() callers blocked in the
+		// slow path can proceed. firstMintOnce makes this idempotent.
+		p.firstMintOnce.Do(func() { close(p.firstMint) })
 		return nil
 	}
 
@@ -323,6 +427,11 @@ func (p *KubeMintingTokenProvider) mintAndPersist(ctx context.Context, trigger s
 		"trigger", trigger,
 		"prefix", safePrefix(newToken),
 		"persisted_to_secret", p.cfg.TokenSecretName)
+	// Sprint B T4.1 (ADR D5): signal that the first mint completed so
+	// any Token() callers blocked in the slow path can proceed.
+	// firstMintOnce ensures close is called at most once across all
+	// mint paths (startup, ticker, OnAuthFailure refresh).
+	p.firstMintOnce.Do(func() { close(p.firstMint) })
 	return nil
 }
 
