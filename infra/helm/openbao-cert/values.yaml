@@ -29,6 +29,11 @@ dnsNames:
   - openbao-2.openbao-internal
   - openbao-2.openbao-internal.vault-system.svc.cluster.local
   - localhost
+  # VK.5 LIVE 2026-06-02: cross-cluster access from loopzero-mgmt via
+  # kubectl port-forward exposed on host.k3d.internal hostname (k3d
+  # injects this as hostAlias for the host machine IP).
+  - host.k3d.internal
+  - host.docker.internal
 
 # IPs for SAN (cover ClusterIP + pod IP fallback paths)
 ipAddresses:

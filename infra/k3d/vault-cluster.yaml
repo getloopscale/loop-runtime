@@ -70,7 +70,9 @@ options:
       - arg: "--disable=traefik"
         nodeFilters:
           - server:*
-      # Disable servicelb (Klipper) — Vault uses ClusterIP, no LB needed.
-      - arg: "--disable=servicelb"
-        nodeFilters:
-          - server:*
+      # VK5.1 LIVE 2026-06-02: re-enabled servicelb (Klipper).
+      # Originally disabled because Vault uses only ClusterIP intra-cluster,
+      # but VK.5 cross-cluster auth requires NodePort routing host:30200 →
+      # pod. Without servicelb, k3d port mapping 8200:30200 has no fabric
+      # to forward traffic from the k3d serverlb container to the pod.
+      # Klipper adds ~5MB and runs as one DaemonSet pod — accepted cost.
