@@ -1,5 +1,7 @@
 # Plan: OpenBao Adoption — Platform Secrets Posture Uplift
 
+> **Version 1.1** (2026-06-02 post `/edge-case-plan`) — Edge case review found 22 edge cases (12 MUST FIX + 6 SHOULD TEST + 4 DOCUMENT) incorporated. **Full amendments table + code snippets em [`.claude/knowledge-base/plans/2026-06-02-openbao-adoption-plan.md` § Amendments](../../.claude/knowledge-base/plans/2026-06-02-openbao-adoption-plan.md#amendments)** (skill-compliant wiki version is canonical). See [`.claude/knowledge-base/plans/2026-06-02-openbao-adoption-edge-review.md`](../../.claude/knowledge-base/plans/2026-06-02-openbao-adoption-edge-review.md) for full rationale per item.
+>
 > **Version 1.0** (2026-06-02) — Ratified via sponsor-direct-approval (`MEET-2026-06-02-vault-adoption-reversal.md`). Implements the 16 architectural decisions consolidated in `ADR-2026-06-02-openbao-adoption.md`. Closes 7 🔴 bugs surfaced by deep review infra Categoria A 2026-06-02 (loopzero-api SA cluster-wide secrets RBAC, master encryption key blast radius, plaintext fallback default, hardcoded Ory defaults, Pulumi.prod.yaml empty post-GHA-removal, cosign without rotation, GitHub App PEM as env var, scoped kubeconfigs legacy SA tokens). Replaces ADR-2026-05-20-D6 partially (SOPS+age retained for at-rest-in-git E1; OpenBao takes E2-E5).
 
 ## Context
