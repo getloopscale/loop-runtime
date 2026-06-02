@@ -6,11 +6,21 @@
 # as DOxAWS lifecycle independence (per-cloud tooling for different blast
 # radius).
 #
-# Releases (5):
-#   - cert-manager           — TLS certificates for Vault HTTPS
-#   - cluster-issuer         — self-signed-issuer ClusterIssuer
-#   - bank-vaults-operator   — controller reconciling BaoConfiguration CRD
-#   - openbao                — OpenBao StatefulSet (standalone in local, HA in prod)
+# BUG8.E LIVE pivot 2026-06-02: ABANDONED Bank-Vaults operator pattern
+# (caused bug #8: reconciler reports "vaults openbao not found" with valid
+# CR + RBAC + CRD discovery — confirmed in BOTH v1.24.0 AND v1.23.4
+# downgrade; not version regression). Pivoted to OFFICIAL openbao-helm chart
+# maintained by OpenBao org (LinuxFoundation/OpenSSF). Trade-offs:
+#   GAINS: zero operator layer; zero CRD bugs; source canonical; alignment
+#          with upstream OpenBao roadmap; simpler lifecycle (Helm direct).
+#   LOSSES: BaoConfiguration CR declarative engine/auth config. Will be
+#           replaced by init Job that runs `bao secrets enable` +
+#           `bao auth enable` post-startup (standard OpenBao pattern).
+#
+# Releases (3):
+#   - cert-manager      — TLS certificates for OpenBao HTTPS
+#   - cluster-issuer    — self-signed-issuer ClusterIssuer
+#   - openbao           — Official OpenBao chart v0.28.3 (appVersion v2.5.4)
 #
 # Invocation:
 #   helmfile -f infra/helmfile/vault.helmfile.yaml.gotmpl -e vault-local \
@@ -26,7 +36,6 @@ environments:
       - environments/vault-local.yaml
   prod:
     # Future: DOKS loopzero-vault-prod (3 nodes, AWS KMS unseal, HA Raft).
-    # Reuses existing prod.yaml + overrides via openbao values-prod.yaml.
     values:
       - environments/prod.yaml
 
@@ -41,11 +50,13 @@ helmDefaults:
 repositories:
   - name: jetstack
     url: https://charts.jetstack.io
+  - name: openbao
+    url: https://openbao.github.io/openbao-helm
 
 releases:
   # ---------------------------------------------------------------------------
-  # cert-manager — TLS certs for OpenBao HTTPS API
-  # Same image+version as mgmt cluster (Rule 10 local-equals-prod parity).
+  # cert-manager — TLS certs for OpenBao HTTPS API (prod only; vault-local
+  # uses TLS-disabled devMode per chart default)
   # ---------------------------------------------------------------------------
   - name: cert-manager
     namespace: cert-manager
@@ -63,7 +74,8 @@ releases:
 
   # ---------------------------------------------------------------------------
   # cluster-issuer — self-signed-issuer ClusterIssuer
-  # OpenBao chart's tls.certManager.issuerRef points at "self-signed-issuer".
+  # OpenBao chart's server.extraSecretEnvironmentVars can reference TLS
+  # certs created by cert-manager (prod env only — vault-local skips TLS).
   # ---------------------------------------------------------------------------
   - name: cluster-issuer
     namespace: cert-manager
@@ -75,107 +87,113 @@ releases:
       - loopzeroCaIssuerName: self-signed-issuer
 
   # ---------------------------------------------------------------------------
-  # Bank-Vaults operator — controller reconciles BaoConfiguration CRD
-  # Co-located with OpenBao in the same cluster (simpler than cross-cluster
-  # operator pattern).
-  #
-  # VK.6 LIVE fix 2026-06-02: switched from wrapper chart (`../helm/bank-
-  # vaults-operator`) to OCI direct. Wrapper was causing helm-dep-build
-  # loop ("Deleting outdated charts" every operation) due to OCI dep
-  # resolution bug. Values are now inline (was values.yaml in wrapper).
-  # ---------------------------------------------------------------------------
-  - name: bank-vaults-operator
-    namespace: bank-vaults-operator
-    chart: oci://ghcr.io/bank-vaults/helm-charts/vault-operator
-    version: 1.24.0
-    installed: {{ .Values | get "openbaoEnabled" false }}
-    needs:
-      - cert-manager/cert-manager
-    values:
-      # VK.6 LIVE fix 2026-06-02: image is `vault-operator` (not
-      # `bank-vaults-operator`) and tag has `v` prefix (`v1.24.0`).
-      # Verified via `docker manifest inspect`.
-      - image:
-          repository: ghcr.io/bank-vaults/vault-operator
-          tag: "v1.24.0"
-          pullPolicy: IfNotPresent
-        resources:
-          requests:
-            cpu: 100m
-            memory: 256Mi
-          limits:
-            cpu: 500m
-            memory: 512Mi
-        podSecurityContext:
-          runAsNonRoot: true
-          runAsUser: 65534
-          fsGroup: 65534
-        containerSecurityContext:
-          allowPrivilegeEscalation: false
-          readOnlyRootFilesystem: true
-          capabilities:
-            drop: ["ALL"]
-        serviceMonitor:
-          enabled: false  # vault cluster doesn't have Prometheus yet (VK scope)
-        rbac:
-          create: true
-        replicaCount: 1
-        podAnnotations:
-          plan.loopzero.io/ref: "VK.6 of vault cluster isolation T3 2026-06-02"
-        webhook:
-          enabled: false  # using BaoConfiguration CR pattern, no vault-injector
-
-  # ---------------------------------------------------------------------------
-  # OpenBao — StatefulSet, standalone devMode locally / HA Raft in prod
-  # Uses values-standalone.yaml (devMode, in-memory, root token well-known)
-  # for vault-local. Prod will use values-prod.yaml when DOKS provisioned.
+  # OpenBao — official chart, deploy direct (no operator).
+  # vault-local: server.dev.enabled=true (in-memory, root token well-known).
+  # prod: standalone mode with file/raft storage + AWS KMS auto-unseal.
   # ---------------------------------------------------------------------------
   - name: openbao
     namespace: vault-system
-    chart: ../helm/openbao
+    chart: openbao/openbao
+    version: 0.28.3
     installed: {{ .Values | get "openbaoEnabled" false }}
     needs:
-      - bank-vaults-operator/bank-vaults-operator
       - cert-manager/cluster-issuer
     values:
-      - ../helm/openbao/values.yaml
+      # Common across all envs
+      - global:
+          enabled: true
+          tlsDisable: true  # vault-local k3d; prod overrides below
+        injector:
+          enabled: false  # not using vault-agent sidecar pattern (yet)
+        csi:
+          enabled: false  # not using CSI driver (yet)
+        server:
+          enabled: true
+          # Logging
+          logLevel: "info"
+          # Resources for single-node OpenBao server
+          resources:
+            requests:
+              cpu: 100m
+              memory: 256Mi
+            limits:
+              cpu: 500m
+              memory: 512Mi
+          # Liveness/readiness against bao API
+          readinessProbe:
+            enabled: true
+          livenessProbe:
+            enabled: true
+
+      # vault-local: dev mode (in-memory, no unseal, root token fixed)
       {{- if eq .Environment.Name "vault-local" }}
-      - ../helm/openbao/values-standalone.yaml
-      # VK.6 LIVE override 2026-06-02: vault-local k3d doesn't have
-      # Prometheus Operator CRDs (ServiceMonitor + PrometheusRule), so
-      # we force-disable both monitoring resources for the standalone env.
-      # values-standalone.yaml has them ON to validate templates render —
-      # this override flips them OFF only for the actual k8s apply step.
-      - serviceMonitor:
-          enabled: false
-        prometheusRule:
-          enabled: false
-      {{- else }}
-      - ../helm/openbao/values-prod.yaml
+      - server:
+          dev:
+            enabled: true
+            # VK.6 LIVE: matches values-standalone.yaml convention
+            # ("loopzero-dev-vault-root"). Pre-seed jobs reference this token.
+            devRootToken: "loopzero-dev-vault-root"
+          # NetworkPolicy ON even in standalone — validates policy templates
+          networkPolicy:
+            enabled: true
       {{- end }}
-    {{- if eq .Environment.Name "prod" }}
-    set:
-      # Per VK design (and DOxAWS lifecycle independence): prod injects KMS
-      # + Spaces creds from operator-sourced ~/.openbao-prod-resources.env
-      # before `helmfile sync`. Same 9-key contract as mgmt.helmfile (until
-      # vault cluster cutover). See:
-      #   docs/operations/openbao-aws-resources-runbook.md
-      - name: unseal.awskms.kmsKeyId
-        value: {{ requiredEnv "OPENBAO_AWS_KMS_KEY_ID" | quote }}
-      - name: unseal.awskms.region
-        value: {{ env "OPENBAO_AWS_REGION" | default "us-east-1" | quote }}
-      - name: unseal.awskms.accessKeyId
-        value: {{ requiredEnv "OPENBAO_AWS_ACCESS_KEY_ID" | quote }}
-      - name: unseal.awskms.secretAccessKey
-        value: {{ requiredEnv "OPENBAO_AWS_SECRET_ACCESS_KEY" | quote }}
-      - name: backup.storage.endpoint
-        value: {{ requiredEnv "OPENBAO_BACKUP_ENDPOINT" | quote }}
-      - name: backup.storage.bucket
-        value: {{ requiredEnv "OPENBAO_BACKUP_BUCKET" | quote }}
-      - name: backup.storage.region
-        value: {{ requiredEnv "OPENBAO_BACKUP_REGION" | quote }}
-      - name: backup.storage.accessKeyId
-        value: {{ requiredEnv "OPENBAO_BACKUP_ACCESS_KEY_ID" | quote }}
-      - name: backup.storage.secretAccessKey
-        value: {{ requiredEnv "OPENBAO_BACKUP_SECRET_ACCESS_KEY" | quote }}
-    {{- end }}
+
+      # prod: file/raft storage + AWS KMS unseal
+      {{- if eq .Environment.Name "prod" }}
+      - server:
+          dev:
+            enabled: false
+          # 3-replica HA via Raft (Q4)
+          ha:
+            enabled: true
+            replicas: 3
+            raft:
+              enabled: true
+              setNodeId: true
+              config: |
+                ui = true
+                listener "tcp" {
+                  tls_disable = 0
+                  address = "[::]:8200"
+                  cluster_address = "[::]:8201"
+                  tls_cert_file = "/vault/userconfig/openbao-tls/tls.crt"
+                  tls_key_file = "/vault/userconfig/openbao-tls/tls.key"
+                }
+                storage "raft" {
+                  path = "/vault/data"
+                }
+                seal "awskms" {
+                  region = "{{ env "OPENBAO_AWS_REGION" | default "us-east-1" }}"
+                  kms_key_id = "{{ requiredEnv "OPENBAO_AWS_KMS_KEY_ID" }}"
+                }
+                service_registration "kubernetes" {}
+          # AWS creds for KMS unseal via env vars (operator sources
+          # ~/.openbao-prod-resources.env before helmfile sync)
+          extraEnvironmentVars:
+            AWS_REGION: "{{ env "OPENBAO_AWS_REGION" | default "us-east-1" }}"
+          extraSecretEnvironmentVars:
+            - envName: AWS_ACCESS_KEY_ID
+              secretName: openbao-aws-creds
+              secretKey: access_key_id
+            - envName: AWS_SECRET_ACCESS_KEY
+              secretName: openbao-aws-creds
+              secretKey: secret_access_key
+          # PodAntiAffinity hard (Q4)
+          affinity: |
+            podAntiAffinity:
+              requiredDuringSchedulingIgnoredDuringExecution:
+                - labelSelector:
+                    matchLabels:
+                      app.kubernetes.io/name: openbao
+                  topologyKey: kubernetes.io/hostname
+          priorityClassName: system-cluster-critical
+          # PDB minAvailable=2 (Q4 Raft quorum during drain)
+          podDisruptionBudget:
+            enabled: true
+            minAvailable: 2
+          # NetworkPolicy strict (Q4-F1 T8.5b)
+          networkPolicy:
+            enabled: true
+        global:
+          tlsDisable: false  # prod uses cert-manager TLS
+      {{- end }}

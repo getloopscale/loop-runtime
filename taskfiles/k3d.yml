@@ -189,8 +189,11 @@ tasks:
   k3d:vault:bootstrap:
     desc: |
       Bootstrap OpenBao on loopzero-vault cluster: cert-manager + cluster-issuer +
-      bank-vaults-operator + openbao (standalone devMode). Idempotent.
+      openbao (official chart, devMode). Idempotent.
       Pre-requisite:- task k3d:vault:create.
+
+      BUG8.E LIVE pivot 2026-06-02: removed bank-vaults-operator step.
+      Now using openbao/openbao official chart direct (zero operator layer).
     cmds:
       - |
         kubectl --context k3d-loopzero-vault get nodes >/dev/null 2>&1 || {
@@ -200,8 +203,6 @@ tasks:
       - helmfile -f infra/helmfile/vault.helmfile.yaml.gotmpl -e vault-local --kube-context k3d-loopzero-vault --selector name=cert-manager sync
       - kubectl --context k3d-loopzero-vault -n cert-manager wait --for=condition=Available deployment --all --timeout=180s
       - helmfile -f infra/helmfile/vault.helmfile.yaml.gotmpl -e vault-local --kube-context k3d-loopzero-vault --selector name=cluster-issuer sync
-      - helmfile -f infra/helmfile/vault.helmfile.yaml.gotmpl -e vault-local --kube-context k3d-loopzero-vault --selector name=bank-vaults-operator sync
-      - kubectl --context k3d-loopzero-vault -n bank-vaults-operator wait --for=condition=Available deployment --all --timeout=120s
       - helmfile -f infra/helmfile/vault.helmfile.yaml.gotmpl -e vault-local --kube-context k3d-loopzero-vault --selector name=openbao sync
       - echo "[OK] OpenBao bootstrapped. Validate:- task k3d:vault:status"
 
@@ -209,7 +210,7 @@ tasks:
     desc: |
       Show loopzero-vault cluster status: pods, services, OpenBao seal state.
     cmds:
-      - kubectl --context k3d-loopzero-vault get pods -A | grep -E 'NAMESPACE|vault|bank-vaults|cert-manager' || true
+      - kubectl --context k3d-loopzero-vault get pods -A | grep -E 'NAMESPACE|vault|cert-manager' || true
       - kubectl --context k3d-loopzero-vault -n vault-system get svc 2>/dev/null || echo "vault-system namespace not present yet"
       - |
         if kubectl --context k3d-loopzero-vault -n vault-system get pod openbao-0 >/dev/null 2>&1; then

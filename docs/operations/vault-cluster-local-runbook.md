@@ -50,35 +50,51 @@ task k3d:vault:bootstrap
 
 ## Releases deployed
 
+**BUG8.E pivot 2026-06-02**: Bank-Vaults removed (operator bug #8 — see below).
+Pivoted to official `openbao/openbao` chart maintained by OpenBao org. Zero
+operator layer; deploys OpenBao StatefulSet via Helm direct.
+
 | Release | Namespace | Source | Purpose |
 |---------|-----------|--------|---------|
-| cert-manager | cert-manager | jetstack v1.15.3 | TLS certificate issuance |
+| cert-manager | cert-manager | jetstack v1.15.3 | TLS certificate issuance (prod only) |
 | cluster-issuer | cert-manager | infra/helm/cluster-issuer | self-signed ClusterIssuer |
-| bank-vaults-operator | bank-vaults-operator | oci://ghcr.io/bank-vaults/helm-charts/vault-operator 1.24.0 | Controller reconciling Vault CRs |
-| openbao | vault-system | infra/helm/openbao | Vault CR (devMode in local; HA Raft in prod) |
+| openbao | vault-system | openbao/openbao v0.28.3 (appVersion v2.5.4) | OpenBao StatefulSet (devMode local; HA Raft + KMS unseal prod) |
 
 ## Validation outcome (2026-06-02 LIVE session)
 
-**Validated (✅)**:
+**Validated (✅) — post-pivot BUG8.E (2026-06-02)**:
 - k3d cluster creation + networking
 - Helmfile vault-local environment
 - cert-manager + cluster-issuer installation
-- Bank-Vaults operator pod Running
-- Vault CRD discovery (`kubectl api-resources --api-group=vault.banzaicloud.com`)
-- Vault CR Helm-applied with correct schema (devMode + inmemory storage)
-- cert-manager Certificate emission
-- ServiceAccount + RBAC for operator
+- OpenBao StatefulSet (openbao/openbao v0.28.3) — pod Running 1/1 in 25s
+- Initialized=true, Sealed=false (dev-mode auto-unseal)
+- kv-v2 engine functional (`bao kv put secret/test foo=bar` + get retorna data)
+- Service ClusterIP routing port 8200
+- Root token `loopzero-dev-vault-root` reconhecido
 
-**Pending (⏳ — operator-time bug investigation)**:
-- Bank-Vaults operator 1.24.0 reconciler reports `vaults.vault.banzaicloud.com "openbao" not found`
-  even though the CR exists with all proper labels + RBAC grants are correct.
-  Suspected root cause: informer cache sync timing OR Bank-Vaults 1.24.0 upstream bug
-  triggered when CRD is applied after the operator pod is already running.
+**BUG #8 Resolution (via PIVOT)**:
+Investigation confirmed Bank-Vaults reconciler bug in BOTH v1.24.0 AND v1.23.4
+downgrade — NOT a version regression. Root cause: controller-runtime informer
+cache desync (operator receives reconcile event but `client.Get()` returns
+NotFound; impersonating operator SA via kubectl GET returns the object —
+so RBAC is fine, informer cache is the issue).
 
-  Workarounds to try when investigating:
-  1. Restart operator AFTER CRD applied + Vault CR created (instead of before)
-  2. Use Bank-Vaults 1.23.4 (previous stable) to see if regression
-  3. Open issue at github.com/bank-vaults/vault-operator with the LIVE log dump
+**Hypotheses tested and rejected**:
+- Hypothesis A (CRD-first): apply CRD 90s before operator startup — still fails
+- Hypothesis B (downgrade 1.23.4): same NotFound error with older version
+- Hypothesis C-E (schema, RBAC, namespace filter): all eliminated via probes
+
+**Pivot decision (BUG8.E)**: replaced Bank-Vaults with official `openbao/openbao`
+chart from OpenBao org (LinuxFoundation/OpenSSF). Trade-offs:
+- GAINS: zero operator layer (eliminates entire bug class); source canonical;
+  alignment with upstream OpenBao roadmap; simpler lifecycle (Helm direct).
+- LOSSES: BaoConfiguration CR for declarative engine/auth config — will be
+  replaced by init Job running `bao secrets enable` + `bao auth enable`
+  post-startup (standard OpenBao pattern).
+
+For F2+ secrets engine config: see future PR adding `infra/helm/openbao-init/`
+chart with Job that runs `bao` CLI post-startup. F1 scope considered complete
+with kv-v2 functional (LIVE validated).
 
 ## Bugs caught LIVE (with fixes)
 
