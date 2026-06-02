@@ -25,6 +25,10 @@ import {
   createServiceAuthEd25519,
   ServiceAuthEd25519Outputs,
 } from "./components/service-auth-ed25519";
+import {
+  createAwsKmsOpenbao,
+  AwsKmsOpenbaoOutputs,
+} from "./components/aws-kms-openbao";
 
 // --- Configuration ---
 const config = loadStackConfig();
@@ -200,6 +204,33 @@ export const serviceAuthEd25519GenerationMarker = serviceAuthEd25519
   : undefined;
 export const serviceAuthEd25519ManifestsYaml = serviceAuthEd25519
   ? serviceAuthEd25519.manifests
+  : undefined;
+
+// OpenBao AWS KMS auto-unseal (F1.1 of plan 2026-06-02-openbao-adoption v1.2).
+// Opt-in via `pulumi config set openbaoEnabled true`. Default false keeps
+// the stack inert until operator is ready. When true, creates:
+//   - aws.kms.Key (with protect:true per EC-02)
+//   - aws.iam.User openbao-unseal + inline policy (kms:Encrypt+Decrypt+DescribeKey)
+//   - aws.iam.AccessKey (programmatic creds consumed by OpenBao pods via Helmfile L2)
+// Exports awsKmsKeyArn (public) + awsUnsealAccessKeyId/SecretKey (secret).
+let openbaoKms: AwsKmsOpenbaoOutputs | undefined;
+const openbaoCfg = new pulumi.Config();
+if (openbaoCfg.getBoolean("openbaoEnabled") === true) {
+  openbaoKms = createAwsKmsOpenbao({
+    stackName: pulumi.getStack(),
+    region: openbaoCfg.get("openbaoAwsRegion") ?? "us-east-1",
+  });
+}
+export const awsKmsKeyArn = openbaoKms?.kmsKeyArn;
+export const awsKmsKeyId = openbaoKms?.kmsKeyId;
+export const awsKmsKeyAlias = openbaoKms?.kmsKeyAlias;
+export const awsUnsealUserName = openbaoKms?.unsealUserName;
+export const awsUnsealUserArn = openbaoKms?.unsealUserArn;
+export const awsUnsealAccessKeyId = openbaoKms
+  ? pulumi.secret(openbaoKms.unsealAccessKeyId)
+  : undefined;
+export const awsUnsealSecretKey = openbaoKms
+  ? pulumi.secret(openbaoKms.unsealSecretKey)
   : undefined;
 
 // Cross-cluster Loki push URL (audit M08 #18 / §6.C.4b step 6).

@@ -36,3 +36,17 @@ config:
   #   pulumi config set --secret cfApiToken <value> --stack prod
   #   pulumi config set cfAccountId <value> --stack prod
   #   pulumi config set cfZoneId <value> --stack prod
+  #
+  # OpenBao auto-unseal (F1.1 of plan 2026-06-02-openbao-adoption v1.2).
+  # Opt-in. When enabled, creates AWS KMS key + IAM user openbao-unseal in
+  # the AWS profile configured for this Pulumi run. Operator must have
+  # AWS_PROFILE=loopzero-openbao OR equivalent active. See:
+  #   MEET-ASYNC-AMENDMENT-2026-06-02-001-openbao-f1-execution.md (Q2-F1)
+  # The bootstrap user openbao-pulumi-bootstrap (perms to create the
+  # resources) is operator-time, NOT Pulumi-managed.
+  #
+  # Enable (when ready for F1.1):
+  #   pulumi config set openbaoEnabled true --stack prod
+  # Optional region override (default us-east-1):
+  #   pulumi config set openbaoAwsRegion us-east-1 --stack prod
+  # openbaoEnabled: false  # default — set via CLI when ready

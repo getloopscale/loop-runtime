@@ -38,6 +38,10 @@ config:
   loopzero-infra:stripePriceTeamId: price_1TJGJ5A0ZwssSKrVy3mjsal6
   loopzero-infra:cfAccountId: 362767409c4de7fda7990c10103efdd9
   loopzero-infra:cfZoneId: 9f9a41bef0bcb7adf15969c81c303bef
+  # OpenBao auto-unseal (F1.1 plan 2026-06-02-openbao-adoption v1.2).
+  # Opt-in via CLI: pulumi config set openbaoEnabled true --stack dev
+  # loopzero-infra:openbaoEnabled: "false"  # default
+  # loopzero-infra:openbaoAwsRegion: "us-east-1"
   loopzero-infra:lokiPushUrl: http://10.20.0.26:30100
   loopzero-infra:harborExternalUrl: harbor.dev.loopzero.example
   loopzero-infra:vpcCidr: 10.20.0.0/16
