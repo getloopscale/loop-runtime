@@ -72,6 +72,20 @@ tasks:
       - bash infra/tests/check-rotation-table-parity_test.sh    # vault-INT parity gate: rotate-secret.sh ROTATION_TABLE vs loopzero-external-secrets/values.yaml inventory (plan 2026-06-02 v1.8 iter 17)
       - bash infra/tests/check-loopzero-external-secrets-creation-policy_test.sh   # vault-INT iter 20 P0 regression: creationPolicy=Orphan (NOT Owner) — prevents K8s GC cascade-delete on rollback
       - bash infra/tests/check-loopzero-external-secrets-chart-sanity_test.sh      # vault-INT iter 23: comprehensive chart sanity (13 CRs + unique names + refresh intervals + per-env renders + vaultBinaryOverride positive/negative)
+      # openbao-adoption v1.5 hermetic tests (iter 28-34) — wired iter 35
+      - bash infra/tests/check-loopzero-api-no-cluster-secrets_test.sh             # openbao-adoption T5.13: legacyClusterWideSecrets backward-compat flag (deep review finding #1)
+      - bash infra/tests/check-openbao-init-auth-mounts_test.sh                # openbao-adoption T5.1-T5.9: 6 K8s auth mounts + per-binary roles + isolation invariants
+      - bash infra/tests/check-loopzero-api-vault-projected-token_test.sh          # openbao-adoption T5.11: projected SA token audience=vault.loopzero.io + dual-chart parity
+      - bash infra/tests/check-vault-prom-alerts_test.sh                       # openbao-adoption T8.4: 4 P1 alerts severity=critical + runbook_url + audit-log-must-flow invariant
+      - bash infra/tests/check-day30-day60-cronjobs_test.sh                    # openbao-adoption T10.1+T10.3: Day 30 + Day 60 CronJobs safety defaults + EC-12 filter
+      - bash infra/tests/check-scoped-kubeconfig-vault_test.sh                 # openbao-adoption T7.3: Vault kubernetes engine SA token fetch + legacy fallback
+      - bash infra/tests/check-loki-vault-retention_test.sh                    # openbao-adoption T8.2+T8.5: Loki per-NS retention 90d + DO Spaces archive cron
+      - bash infra/tests/check-promtail-vault-scrape_test.sh                   # openbao-adoption T8.1+T8.3: Promtail vault-system scrape + Grafana dashboard
+      # iter 34 trio compatibility regression tests (4 defensive-path locks)
+      - bash infra/tests/check-generate-secrets-vault-fallback_test.sh         # openbao-adoption iter 34: T6.5 cold-bootstrap fallback Vault-skipped path (cleanroom)
+      - bash infra/tests/check-scoped-kubeconfig-cold-bootstrap_test.sh        # openbao-adoption iter 34: T7.3 cold-bootstrap legacy SA-token Secret block (cell wiring)
+      - bash infra/tests/check-promtail-vault-empty-targets_test.sh            # openbao-adoption iter 34: T8.1 promtail filter when vault-system NS absent (dogfood compat)
+      - bash infra/tests/check-loki-retention-schema_test.sh                   # openbao-adoption iter 34: T8.2 Loki retention_stream schema valid (cleanroom Loki bootstrap)
       - bash infra/tests/docs/credentials-sot_test.sh           # doc-sync: credentials-required.md enumerates bootstrap Secrets
 
   diff:
