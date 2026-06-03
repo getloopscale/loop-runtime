@@ -78,6 +78,15 @@ task k3d:vault:bootstrap   # cert-manager + cluster-issuer + openbao-cert + open
 helmfile -f infra/helmfile/vault.helmfile.yaml.gotmpl -e vault-local \
   --kube-context k3d-loopzero-vault --selector name=openbao-init sync
 
+# 2-4. Canonical (recommended) — codified P1 steps 2-4 via vault-bootstrap-eso.sh:
+bash infra/scripts/openbao/vault-bootstrap-eso.sh \
+  --mgmt-context k3d-loopzero-mgmt \
+  --vault-context k3d-loopzero-vault
+# Applies SA + ClusterRoleBinding + extracts CA + creates ConfigMap +
+# applies ClusterSecretStore + waits for Ready=True. Exit codes:
+#   0=Ready, 2=apply failure, 3=Ready timeout.
+
+# Manual fallback (legacy — use for debugging or non-standard envs):
 # 2. Phase 3.1 — apply ClusterSecretStore + SA on mgmt cluster
 kubectl --context k3d-loopzero-mgmt apply \
   -f infra/manifests/cluster-secret-stores/eso-vault-reader-sa.yaml
