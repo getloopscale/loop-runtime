@@ -137,13 +137,17 @@ externalSecrets:
 
   # === loopzero-cloud binary (3 secrets) ===
 
-  - targetSecret: loopzero-cloud-signing
+  # Phase 3.3 ALIGN: loopzero-cloud Deployment already references Secret
+  # `loopzero-service-auth-ed25519` (singular, no `-signing` suffix).
+  # ESO target name MUST match existing reference — chose to align ESO →
+  # existing name (KISS: zero Deployment diff) rather than refactor cloud.
+  - targetSecret: loopzero-service-auth-ed25519
     targetNamespace: loopzero-system
     vaultBinary: cloud
     vaultCategory: secrets
     refreshInterval: 24h  # Ed25519 private key — rare rotation
     data:
-      - secretKey: REDACTED_SECRET_053
+      - secretKey: private  # matches existing secretKeyRef key naming pattern
         vaultKey: service_auth/ed25519_private_key
 
   - targetSecret: loopzero-cloud-stripe
@@ -157,24 +161,37 @@ externalSecrets:
       - secretKey: webhook-secret
         vaultKey: stripe/webhook_secret
 
-  # === tenant-operator binary (4 secrets) ===
+  # === tenant-operator binary (4 secrets + GITEA_TOKEN shared) ===
+  # Phase 3.3 finding: operators use envFrom.secretRef pattern (não
+  # per-key secretKeyRef como loopzero-api). Keys MUST be UPPER_SNAKE
+  # matching env var names exatamente (kubelet expoe Secret data keys
+  # como env var names diretamente via envFrom).
+  #
+  # ALIGN: target Secret name precisa match
+  # `.Values.secrets.existingSecret` (default "loopzero-tenant-operator"
+  # per `loopzero-common.fullname` helper). Operator chart já tem Secret
+  # template para esses; ESO substitui creation com sync from Vault.
 
-  - targetSecret: tenant-operator-do
+  - targetSecret: loopzero-tenant-operator  # matches charts/loopzero-tenant-operator/templates/secret.yaml
     targetNamespace: loopzero-system
     vaultBinary: operators
     vaultCategory: secrets
     data:
-      - secretKey: digitalocean-token
+      # ENV VAR NAMES (UPPER_SNAKE) — envFrom maps Secret keys → env vars 1:1
+      - secretKey: GITEA_TOKEN  # shared com loopzero-api (D6 path: api/secrets/gitea/token)
+        vaultKey: gitea/token
+        vaultBinaryOverride: api  # explicit override: usa path api/secrets/gitea/token
+      - secretKey: MINIO_ACCESS_KEY
+        vaultKey: minio/access_key
+        vaultBinaryOverride: api
+      - secretKey: MINIO_SECRET_KEY
+        vaultKey: minio/secret_key
+        vaultBinaryOverride: api
+      - secretKey: DIGITALOCEAN_TOKEN
         vaultKey: digitalocean/token
-      - secretKey: spaces-access-key-id
+      - secretKey: SPACES_ACCESS_KEY_ID
         vaultKey: spaces/access_key_id
-      - secretKey: spaces-secret-access-key
+      - secretKey: SPACES_SECRET_ACCESS_KEY
         vaultKey: spaces/secret_access_key
-
-  - targetSecret: tenant-operator-harbor
-    targetNamespace: loopzero-system
-    vaultBinary: operators
-    vaultCategory: secrets
-    data:
-      - secretKey: admin-password
+      - secretKey: HARBOR_ADMIN_PASSWORD
         vaultKey: harbor/admin_password
