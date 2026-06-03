@@ -5,8 +5,9 @@
 #   targetSecret:   string  K8s Secret name (matches existing secretKeyRef in Deployments)
 #   targetNamespace: string K8s namespace (default loopzero-system)
 #   refreshInterval: string ESO pull interval (default 1h; faster for rotated secrets)
-#   vaultBinary:    string  binary owning the secret (api|cloud|operators|build) for D6 path
-#                           (build added iter 26 per openbao-adoption T2.3 cosign-passphrase migration)
+#   vaultBinary:    string  binary owning the secret (api|cloud|operators|build|platform) for D6 path
+#                           (build added iter 26 per openbao-adoption T2.3 cosign-passphrase migration;
+#                            platform added iter 27 per openbao-adoption T2.5 SPKI pin extractor)
 #   vaultCategory:  string  secrets|config (D6 path)
 #   data:           []      list of {secretKey, vaultKey} pairs (multiple keys per Secret)
 #
@@ -205,6 +206,21 @@ externalSecrets:
         vaultKey: spaces/secret_access_key
       - secretKey: HARBOR_ADMIN_PASSWORD
         vaultKey: harbor/admin_password
+
+  # === platform binary — Vault SPKI cert pin (T2.5 of openbao-adoption v1.3) ===
+  # Written by openbao-init/templates/spki-extractor-cronjob.yaml every 5 min.
+  # loopzero-api consumes via env LOOPZERO_VAULT_SPKI_PIN, validates Vault server cert
+  # against pinned hash in pkg/vault VerifyPeerCertificate callback.
+  # Per EC-09 v1.1: 5m ESO refresh matches CronJob schedule — pin propagates
+  # to K8s Secret quickly after cert-manager renewal.
+  - targetSecret: vault-spki-pin
+    targetNamespace: loopzero-system
+    vaultBinary: platform
+    vaultCategory: secrets
+    refreshInterval: 5m  # matches CronJob schedule per EC-09
+    data:
+      - secretKey: LOOPZERO_VAULT_SPKI_PIN
+        vaultKey: vault-spki-pin/spki_hash
 
   # === build binary — cosign signing passphrase (T2.3 of openbao-adoption v1.3) ===
   # Migrated from co-located K8s Secret (cosign-signing-key.cosign.password)

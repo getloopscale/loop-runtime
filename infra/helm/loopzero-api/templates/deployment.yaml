@@ -156,6 +156,19 @@ spec:
                   name: loopzero-api-tokens
                   key: cf-api-token
                   optional: true
+            # T2.5 of openbao-adoption v1.3 — Vault TLS SPKI cert pin.
+            # Written by openbao-init spki-extractor CronJob every 5min;
+            # ESO syncs to K8s Secret vault-spki-pin (refreshInterval: 5m).
+            # pkg/vault VerifyPeerCertificate callback validates Vault server
+            # cert against this pinned hash (defense against MITM via
+            # compromised CA per Q8/D8). optional=true: when empty, loopzero-api
+            # falls back to standard TLS verification (no pin enforcement).
+            - name: LOOPZERO_VAULT_SPKI_PIN
+              valueFrom:
+                secretKeyRef:
+                  name: vault-spki-pin
+                  key: LOOPZERO_VAULT_SPKI_PIN
+                  optional: true
             # Ed25519 dual-control public keys (ADR 2026-05-13-service-auth-
             # ed25519-adoption). Materialized by ESO from the Pulumi
             # ServiceAuthEd25519 component into Secret

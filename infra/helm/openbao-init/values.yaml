@@ -106,6 +106,17 @@ policies:
       path "sys/storage/raft/snapshot" {
         capabilities = ["read"]
       }
+  # T2.5 of openbao-adoption v1.3 — SPKI extractor write-only policy.
+  # Allows writing SPKI pin hash to platform path; cannot read other secrets.
+  # Scoped intentionally narrow: only the SPKI pin key.
+  - name: spki-extractor-write
+    ruleHcl: |
+      path "secret/data/loopzero/+/platform/secrets/vault-spki-pin/+" {
+        capabilities = ["create", "update"]
+      }
+      path "secret/metadata/loopzero/+/platform/secrets/vault-spki-pin/+" {
+        capabilities = ["read"]
+      }
 
 # Kubernetes auth roles (Phase 3.1 — D11).
 # Maps Vault role name → SA(s) allowed to login.
@@ -129,3 +140,38 @@ authRoles:
       - snapshot
     ttl: "1h"
     description: "openbao-snapshot-agent CronJob (intra-cluster)"
+  # T2.5 of openbao-adoption v1.3 (EC-09 amendment) — SPKI extractor role.
+  - name: spki-extractor
+    boundServiceAccountNames:
+      - vault-spki-extractor
+    boundServiceAccountNamespaces:
+      - vault-system
+    policies:
+      - spki-extractor-write
+    ttl: "1h"
+    description: "SPKI extractor CronJob (intra-cluster; pins Vault TLS SPKI every 5min)"
+
+# T2.5 SPKI extractor config — CronJob runs in vault-system NS, extracts SPKI
+# hash from openbao-tls Secret tls.crt, writes to KV path
+# secret/data/loopzero/<env>/platform/secrets/vault-spki-pin/spki_hash.
+# ESO mgmt-side reads this path → materializes K8s Secret vault-spki-pin in
+# loopzero-system NS → loopzero-api consumes via env var LOOPZERO_VAULT_SPKI_PIN.
+# Per EC-09 v1.1: CronJob (NOT one-shot Job) because cert-manager auto-renews
+# Vault cert every 60-90d independently of ArgoCD sync-waves; without periodic
+# re-extraction, loopzero-api pins stale SPKI and Vault auth fails periodically.
+spkiExtractor:
+  enabled: false  # opt-in per env; flip to true when loopzero-vault TLS active
+  schedule: "*/5 * * * *"
+  image:
+    repository: alpine
+    tag: "3.20"
+  vaultTlsSecret: openbao-tls
+  vaultTlsSecretKey: tls.crt
+  envName: "vault-local"  # injected per env via Helmfile values
+  resources:
+    requests:
+      cpu: 25m
+      memory: 32Mi
+    limits:
+      cpu: 100m
+      memory: 64Mi

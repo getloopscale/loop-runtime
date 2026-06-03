@@ -69,6 +69,7 @@ operators/secrets/spaces/access_key_id|loopzero-tenant-operator|loopzero-tenant-
 operators/secrets/spaces/secret_access_key|loopzero-tenant-operator|loopzero-tenant-operator
 operators/secrets/harbor/admin_password|loopzero-tenant-operator|loopzero-tenant-operator
 build/secrets/cosign/passphrase|argo-workflows-controller|cosign-passphrase
+platform/secrets/vault-spki-pin/spki_hash|loopzero-api|vault-spki-pin
 EOF
 )
 
