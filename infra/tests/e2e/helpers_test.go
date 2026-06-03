@@ -503,6 +503,12 @@ func waitAppHealthyViaKubectl(project, app, env, path string, timeout time.Durat
 
 // httpGetWithHost performs an HTTP GET to a host via local Traefik and returns
 // status code and body.
+//
+// KEDA cold-start handling: when the target Service has 0 replicas, the KEDA
+// HTTP Add-on interceptor returns the literal body "no available server" while
+// it triggers scale-up. The test assertion expects real app content, so this
+// helper retries up to 6 attempts (~30s) when it detects the KEDA placeholder
+// to cover scale-from-zero latency.
 func httpGetWithHost(host, path string) (int, string, error) {
 	port := resolveTraefikPort(e2eTenantID)
 	if !strings.HasPrefix(path, "/") {
@@ -532,17 +538,36 @@ func httpGetWithHost(host, path string) (int, string, error) {
 		Timeout:   10 * time.Second,
 	}
 
-	resp, err := client.Get(targetURL)
-	if err != nil {
-		return 0, "", err
+	const kedaColdStartPlaceholder = "no available server"
+	var (
+		lastStatus int
+		lastBody   string
+		lastErr    error
+	)
+	for attempt := 0; attempt < 6; attempt++ {
+		resp, err := client.Get(targetURL)
+		if err != nil {
+			lastErr = err
+			time.Sleep(5 * time.Second)
+			continue
+		}
+		body, readErr := io.ReadAll(resp.Body)
+		_ = resp.Body.Close()
+		if readErr != nil {
+			lastStatus = resp.StatusCode
+			lastErr = readErr
+			time.Sleep(5 * time.Second)
+			continue
+		}
+		lastStatus = resp.StatusCode
+		lastBody = string(body)
+		lastErr = nil
+		if !strings.Contains(lastBody, kedaColdStartPlaceholder) {
+			return lastStatus, lastBody, nil
+		}
+		time.Sleep(5 * time.Second)
 	}
-	defer resp.Body.Close()
-
-	body, err := io.ReadAll(resp.Body)
-	if err != nil {
-		return resp.StatusCode, "", err
-	}
-	return resp.StatusCode, string(body), nil
+	return lastStatus, lastBody, lastErr
 }
 
 // deployAndWaitSuccess runs loopzero deploy --json in the given directory, waits for

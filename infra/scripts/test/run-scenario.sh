@@ -235,14 +235,23 @@ log "=== Etapa 8: Verdict ==="
 # RESTART_DELTA is still computed here (report.sh + log line consume it).
 RESTART_DELTA=$((POST_LOOPZERO_API_RESTARTS - PRE_LOOPZERO_API_RESTARTS))
 
+# `go run` collapses any non-zero subprocess exit to 1, which destroys the
+# 0/2/5 PASS/FAIL/INCONCLUSIVE semantics chaosslo.ExitCode() defines and turns
+# every real FAIL into a spurious INCONCLUSIVE. Prefer compiled binaries so
+# the exit code propagates verbatim. Canonical build path is bin/loopzero-ops
+# (Taskfile `ops:build` D6 — same path used by `task quality:gates`).
+LOOPZERO_OPS_BIN=""
+if command -v loopzero-ops >/dev/null 2>&1; then
+  LOOPZERO_OPS_BIN="$(command -v loopzero-ops)"
+elif [[ -x "$REPO_ROOT/bin/loopzero-ops" ]]; then
+  LOOPZERO_OPS_BIN="$REPO_ROOT/bin/loopzero-ops"
+else
+  ( cd "$REPO_ROOT" && go build -o bin/loopzero-ops ./cmd/loopzero-ops ) >/dev/null 2>&1
+  LOOPZERO_OPS_BIN="$REPO_ROOT/bin/loopzero-ops"
+fi
+
 set +e
-SLO_OUT=$(
-  if command -v loopzero-ops >/dev/null 2>&1; then
-    loopzero-ops chaos slo-compare "$RUN_DIR/baseline.json" "$RUN_DIR/during.json" "$RUN_DIR/post.json"
-  else
-    ( cd "$REPO_ROOT/cmd/loopzero-ops" && go run . chaos slo-compare "$RUN_DIR/baseline.json" "$RUN_DIR/during.json" "$RUN_DIR/post.json" )
-  fi
-)
+SLO_OUT=$("$LOOPZERO_OPS_BIN" chaos slo-compare "$RUN_DIR/baseline.json" "$RUN_DIR/during.json" "$RUN_DIR/post.json")
 SLO_RC=$?
 set -e
 
