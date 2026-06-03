@@ -16,6 +16,7 @@ import (
 	"time"
 
 	"github.com/loopzero/loopzero/pkg/quality/advisorylock"
+	"github.com/loopzero/loopzero/pkg/quality/noenvvaultsecrets"
 	"github.com/loopzero/loopzero/pkg/quality/correlationheader"
 	"github.com/loopzero/loopzero/pkg/quality/anonymousauth"
 	"github.com/loopzero/loopzero/pkg/quality/sqlcsync"
@@ -310,6 +311,8 @@ func runQuality(args []string) int {
 		return runPostgresqlPDBConfig(args[1:])
 	case "dockerfile-no-docker-hub":
 		return runDockerfileNoDockerHub(args[1:])
+	case "no-env-vault-secrets":
+		return runNoEnvVaultSecrets(args[1:])
 	case "advisory-lock-scope":
 		return runAdvisoryLockScope(args[1:])
 	case "anonymous-auth":
@@ -569,6 +572,43 @@ func runDockerfileNoDockerHub(args []string) int {
 		return 1
 	}
 	fmt.Println("dockerfile-no-docker-hub: PASS — all FROMs use a mirror/private registry")
+	return 0
+}
+
+// runNoEnvVaultSecrets is the Go home for the no-env-vault-secrets gate
+// (originally T2.7 of plan 2026-06-02-openbao-adoption v1.3). Forbids env
+// vars carrying secrets that should live in Vault under D11 ESO pattern.
+func runNoEnvVaultSecrets(args []string) int {
+	fs := flag.NewFlagSet("no-env-vault-secrets", flag.ContinueOnError)
+	root := fs.String("root", ".", "repo root directory")
+	warnOnly := fs.Bool("warn-only", false, "treat pattern matches as WARN instead of FAIL (FORBIDDEN still FAIL)")
+	allowlist := fs.String("allowlist", "", "comma-separated extra allowlisted env names")
+	if err := fs.Parse(args); err != nil {
+		return 1
+	}
+	if absRoot, err := os.Getwd(); err == nil && *root == "." {
+		*root = absRoot
+	}
+
+	cfg := noenvvaultsecrets.Config{
+		RepoRoot: *root,
+		WarnOnly: *warnOnly,
+	}
+	if *allowlist != "" {
+		for _, n := range strings.Split(*allowlist, ",") {
+			cfg.Allowlist = append(cfg.Allowlist, strings.TrimSpace(n))
+		}
+	}
+
+	outcome, err := noenvvaultsecrets.Check(cfg)
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "no-env-vault-secrets: %v\n", err)
+		return 5
+	}
+	fmt.Fprint(os.Stderr, outcome.FormatReport())
+	if !outcome.Pass {
+		return 1
+	}
 	return 0
 }
 
