@@ -17,6 +17,7 @@ import (
 
 	"github.com/loopzero/loopzero/pkg/quality/advisorylock"
 	"github.com/loopzero/loopzero/pkg/quality/noenvvaultsecrets"
+	"github.com/loopzero/loopzero/pkg/quality/transitcoverage"
 	"github.com/loopzero/loopzero/pkg/quality/correlationheader"
 	"github.com/loopzero/loopzero/pkg/quality/anonymousauth"
 	"github.com/loopzero/loopzero/pkg/quality/sqlcsync"
@@ -313,6 +314,8 @@ func runQuality(args []string) int {
 		return runDockerfileNoDockerHub(args[1:])
 	case "no-env-vault-secrets":
 		return runNoEnvVaultSecrets(args[1:])
+	case "transit-coverage":
+		return runTransitCoverage(args[1:])
 	case "advisory-lock-scope":
 		return runAdvisoryLockScope(args[1:])
 	case "anonymous-auth":
@@ -572,6 +575,31 @@ func runDockerfileNoDockerHub(args []string) int {
 		return 1
 	}
 	fmt.Println("dockerfile-no-docker-hub: PASS — all FROMs use a mirror/private registry")
+	return 0
+}
+
+// runTransitCoverage is the Go home for the vault-prefix-format / transit-
+// coverage gate (T3.7 of plan 2026-06-02-openbao-adoption v1.3). Enforces
+// the FAANG dual-path invariant: Set/ListForResync MUST use the dispatcher
+// (encryptForStore/decryptFromStore), never bypass to raw s.encrypt/decrypt.
+func runTransitCoverage(args []string) int {
+	fs := flag.NewFlagSet("transit-coverage", flag.ContinueOnError)
+	root := fs.String("root", ".", "repo root directory")
+	if err := fs.Parse(args); err != nil {
+		return 1
+	}
+	if absRoot, err := os.Getwd(); err == nil && *root == "." {
+		*root = absRoot
+	}
+	outcome, err := transitcoverage.Check(transitcoverage.Config{RepoRoot: *root})
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "transit-coverage: %v\n", err)
+		return 5
+	}
+	fmt.Fprint(os.Stderr, outcome.FormatReport())
+	if !outcome.Pass {
+		return 1
+	}
 	return 0
 }
 
