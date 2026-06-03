@@ -88,3 +88,27 @@ policies:
       path "transit/decrypt/+" {
         capabilities = ["update"]
       }
+  # Phase 3.1 of plan 2026-06-02-loopzero-api-vault-integration v1.7 (D11):
+  # ESO reads ALL LoopZero paths to populate K8s Secrets via ExternalSecret CRs.
+  # Recursive read on secret/data/loopzero/* covers api/cloud/operators per D6.
+  - name: eso-read
+    ruleHcl: |
+      path "secret/data/loopzero/*" {
+        capabilities = ["read"]
+      }
+      path "secret/metadata/loopzero/*" {
+        capabilities = ["list"]
+      }
+
+# Kubernetes auth roles (Phase 3.1 — D11).
+# Maps Vault role name → SA(s) allowed to login.
+authRoles:
+  - name: eso
+    boundServiceAccountNames:
+      - eso-vault-reader
+    boundServiceAccountNamespaces:
+      - loopzero-system
+    policies:
+      - eso-read
+    ttl: "24h"
+    description: "External Secrets Operator role (cross-cluster mgmt→vault)"

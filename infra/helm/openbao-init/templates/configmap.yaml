@@ -88,6 +88,30 @@ data:
     write_policy "{{ .name }}" "/tmp/policy-{{ .name }}.hcl"
     {{- end }}
 
+    # ---- Helper: idempotent auth/kubernetes/role write (D11 Phase 3.1) ----
+    write_auth_role() {
+      role="$1"
+      bound_sas="$2"
+      bound_ns="$3"
+      policies="$4"
+      ttl="$5"
+      echo "[INIT] Writing auth/kubernetes/role/${role}"
+      bao write "auth/kubernetes/role/${role}" \
+        bound_service_account_names="${bound_sas}" \
+        bound_service_account_namespaces="${bound_ns}" \
+        policies="${policies}" \
+        ttl="${ttl}"
+    }
+
+    # ---- Provision auth/kubernetes roles ----
+    {{- range .Values.authRoles }}
+    write_auth_role "{{ .name }}" \
+      "{{ join "," .boundServiceAccountNames }}" \
+      "{{ join "," .boundServiceAccountNamespaces }}" \
+      "{{ join "," .policies }}" \
+      "{{ .ttl }}"
+    {{- end }}
+
     echo "[INIT] Done. Final state:"
     echo "--- secrets engines ---"
     bao secrets list
@@ -95,3 +119,5 @@ data:
     bao auth list
     echo "--- policies ---"
     bao policy list
+    echo "--- auth/kubernetes roles ---"
+    bao list auth/kubernetes/role 2>/dev/null || echo "(no roles or kubernetes auth not configured)"
