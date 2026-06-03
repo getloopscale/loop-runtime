@@ -88,24 +88,32 @@ data:
     write_policy "{{ .name }}" "/tmp/policy-{{ .name }}.hcl"
     {{- end }}
 
-    # ---- Helper: idempotent auth/kubernetes/role write (D11 Phase 3.1) ----
+    # ---- Helper: idempotent auth/<mount>/role write (D11 Phase 3.1 + T5.1-T5.9
+    # of plan 2026-06-02-openbao-adoption v1.3). The mount argument enables
+    # per-cluster auth isolation: auth/k8s-mgmt, auth/k8s-build, auth/k8s-cell-X
+    # each have their own role namespace + tokenReviewer JWT so a compromised
+    # cell-1 cluster cannot forge tokens valid against cell-2's auth/login. ----
     write_auth_role() {
-      role="$1"
-      bound_sas="$2"
-      bound_ns="$3"
-      policies="$4"
-      ttl="$5"
-      echo "[INIT] Writing auth/kubernetes/role/${role}"
-      bao write "auth/kubernetes/role/${role}" \
+      mount="$1"
+      role="$2"
+      bound_sas="$3"
+      bound_ns="$4"
+      policies="$5"
+      ttl="$6"
+      echo "[INIT] Writing auth/${mount}/role/${role}"
+      bao write "auth/${mount}/role/${role}" \
         bound_service_account_names="${bound_sas}" \
         bound_service_account_namespaces="${bound_ns}" \
         policies="${policies}" \
         ttl="${ttl}"
     }
 
-    # ---- Provision auth/kubernetes roles ----
+    # ---- Provision per-mount kubernetes auth roles ----
+    # When .mount is unset, defaults to "kubernetes" for backward compat with
+    # pre-T5 single-cluster bootstraps. New roles SHOULD specify .mount
+    # explicitly so multi-cluster auth isolation is auditable.
     {{- range .Values.authRoles }}
-    write_auth_role "{{ .name }}" \
+    write_auth_role "{{ .mount | default "kubernetes" }}" "{{ .name }}" \
       "{{ join "," .boundServiceAccountNames }}" \
       "{{ join "," .boundServiceAccountNamespaces }}" \
       "{{ join "," .policies }}" \
@@ -140,7 +148,13 @@ data:
     bao auth list
     echo "--- policies ---"
     bao policy list
-    echo "--- auth/kubernetes roles ---"
-    bao list auth/kubernetes/role 2>/dev/null || echo "(no roles or kubernetes auth not configured)"
+    # T5.1-T5.4 of openbao-adoption v1.3: list roles per-mount so multi-cluster
+    # provisioning is auditable in init Job logs.
+    {{- range .Values.authMethods }}
+    {{- if eq .type "kubernetes" }}
+    echo "--- auth/{{ .path }}/role ---"
+    bao list "auth/{{ .path }}/role" 2>/dev/null || echo "(no roles or {{ .path }} auth not configured)"
+    {{- end }}
+    {{- end }}
     echo "--- transit keys ---"
     bao list transit/keys 2>/dev/null || echo "(no transit keys or transit engine not configured)"
