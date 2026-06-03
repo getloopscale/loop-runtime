@@ -1,0 +1,51 @@
+# SPDX-License-Identifier: Apache-2.0
+# Phase 8 D12 — openbao-snapshot-agent CronJob values.
+
+# Image (matches Chart.appVersion).
+image:
+  repository: ghcr.io/openbao/openbao-snapshot-agent
+  tag: "v0.3.0"
+  pullPolicy: IfNotPresent
+
+# CronJob schedule (default hourly per pattern Vault HA snapshot best
+# practice). Override per-env (drill = less frequent; prod = hourly).
+schedule: "0 * * * *"
+
+# CronJob behavior
+successfulJobsHistoryLimit: 3
+failedJobsHistoryLimit: 5
+concurrencyPolicy: Forbid  # avoid overlapping snapshots if previous still running
+
+# Vault endpoint reached from snapshot pod (intra-cluster).
+vault:
+  addr: "https://openbao.vault-system.svc.cluster.local:8200"
+  authPath: "kubernetes"
+  role: "bao-snapshot"  # Vault role provisioned via openbao-init authRoles (Phase 8 follow-up)
+  # CA cert for Vault TLS verify (from openbao-cert chart). Mounted via
+  # extraVolumes — Secret openbao-tls already in vault-system NS.
+  caSecretName: "openbao-tls"
+  caSecretKey: "ca.crt"
+
+# S3-compatible storage (DO Spaces in prod; minio standalone for vault-local).
+s3:
+  host: "sfo3.digitaloceanspaces.com"  # override per env (nyc3 for staging)
+  bucket: "loopzero-openbao-backups-prod"   # override per env (SCRIPT.5 created buckets)
+  uri: "s3://loopzero-openbao-backups-prod"
+  expireDays: "90"  # snapshot retention (Q12 of openbao-adoption ADR)
+  # Existing Secret with AWS_ACCESS_KEY_ID + AWS_SECRET_ACCESS_KEY
+  # (operator provisions per env from ~/.openbao-<env>-resources.env).
+  credsSecretName: "openbao-snapshot-s3-creds"
+
+# Resources (small — 1 minute snapshot job, mostly I/O)
+resources:
+  requests:
+    cpu: 50m
+    memory: 64Mi
+  limits:
+    cpu: 200m
+    memory: 256Mi
+
+# ServiceAccount + RBAC
+serviceAccount:
+  create: true
+  name: bao-snapshot

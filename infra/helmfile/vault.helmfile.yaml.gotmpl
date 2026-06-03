@@ -310,3 +310,29 @@ releases:
           existingSecret: openbao-init-token
           existingSecretKey: BAO_TOKEN
       {{- end }}
+
+  # ---------------------------------------------------------------------------
+  # Phase 8 D12 of plan 2026-06-02-loopzero-api-vault-integration v1.8.
+  # openbao-snapshot-agent — Raft snapshot CronJob → DO Spaces (S3-compatible).
+  # Opt-in via `snapshotAgentEnabled` env value (default false in vault-local,
+  # true em prod). Pre-req: Secret openbao-snapshot-s3-creds em vault-system
+  # NS (operator provisiona from ~/.openbao-<env>-resources.env).
+  # ---------------------------------------------------------------------------
+  - name: openbao-snapshot-agent
+    namespace: vault-system
+    chart: ../helm/openbao-snapshot-agent
+    installed: {{ .Values | get "snapshotAgentEnabled" false }}
+    needs:
+      - vault-system/openbao
+      - vault-system/openbao-init
+    values:
+      - ../helm/openbao-snapshot-agent/values.yaml
+      {{- if eq .Environment.Name "vault-local" }}
+      # Vault-local: use MinIO local OR skip (default false in env values).
+      - s3:
+          host: "localhost:9000"
+          bucket: "openbao-snapshots-local"
+          uri: "s3://openbao-snapshots-local"
+          expireDays: "7"
+        schedule: "*/30 * * * *"  # every 30min in local for fast iteration
+      {{- end }}

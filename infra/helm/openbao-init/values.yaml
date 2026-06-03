@@ -99,6 +99,13 @@ policies:
       path "secret/metadata/loopzero/*" {
         capabilities = ["list"]
       }
+  # Phase 8 D12 — snapshot-agent capability per
+  # openbao-snapshot-agent k8s-configuration.md.
+  - name: snapshot
+    ruleHcl: |
+      path "sys/storage/raft/snapshot" {
+        capabilities = ["read"]
+      }
 
 # Kubernetes auth roles (Phase 3.1 — D11).
 # Maps Vault role name → SA(s) allowed to login.
@@ -112,3 +119,13 @@ authRoles:
       - eso-read
     ttl: "24h"
     description: "External Secrets Operator role (cross-cluster mgmt→vault)"
+  # Phase 8 D12 — snapshot-agent intra-cluster role.
+  - name: bao-snapshot
+    boundServiceAccountNames:
+      - bao-snapshot
+    boundServiceAccountNamespaces:
+      - vault-system
+    policies:
+      - snapshot
+    ttl: "1h"
+    description: "openbao-snapshot-agent CronJob (intra-cluster)"
