@@ -262,6 +262,36 @@ kubectl --context k3d-loopzero-vault -n vault-system logs <pod-name>
 
 ## P5 — Disaster recovery (restore from snapshot)
 
+**Canonical (recommended):** use `restore-vault-snapshot.sh`. CRITICAL
+safety pattern: **dry-run is DEFAULT**; `--execute` MUST be explicitly passed
+for the destructive `bao operator raft snapshot restore`.
+
+```bash
+# Step 1 — List available snapshots:
+export AWS_ACCESS_KEY_ID=... AWS_SECRET_ACCESS_KEY=...
+bash infra/scripts/openbao/restore-vault-snapshot.sh --env vault-local --list
+
+# Step 2 — Dry-run inspection (default — no destructive op):
+bash infra/scripts/openbao/restore-vault-snapshot.sh \
+  --env vault-local \
+  --snapshot-key 2026-06-01T00-00-00Z.snap
+# Prints planned actions for 4 steps; ZERO kubectl cp/exec calls.
+
+# Step 3 — Actually restore (explicit --execute required):
+bash infra/scripts/openbao/restore-vault-snapshot.sh \
+  --env vault-local \
+  --snapshot-key 2026-06-01T00-00-00Z.snap \
+  --execute
+# 3-second sleep window before destructive exec (Ctrl-C to abort).
+```
+
+**POST-RESTORE (MANDATORY operator-time):**
+1. Vault will likely be RE-SEALED. Verify: `bao status`.
+2. Re-run Shamir unseal ceremony per `docs/operations/vault-cluster-local-runbook.md` P3.
+3. Verify KV data integrity: `bash infra/scripts/openbao/vault-sync-check.sh --threshold 10`.
+
+**Manual procedure** (legacy — use for debugging or non-standard envs):
+
 ```bash
 # 1. Identify snapshot
 aws --endpoint-url https://sfo3.digitaloceanspaces.com s3 ls \
