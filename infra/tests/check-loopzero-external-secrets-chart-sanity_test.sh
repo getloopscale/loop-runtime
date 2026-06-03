@@ -56,19 +56,23 @@ render_chart() {
 }
 
 # ----------------------------------------------------------------------------
-# Test 1: 13 ExternalSecret CRs rendered for vault-local
+# Test 1: ExternalSecret CRs rendered for vault-local (dynamic count from inventory)
 # ----------------------------------------------------------------------------
+# Per openbao-adoption T2.3 (iter 26): inventory grew 13→14 (cosign-passphrase).
+# Test now reads inventory count dynamically to avoid hardcoded brittleness.
+INVENTORY="$REPO_ROOT/helm/loopzero-external-secrets/values.yaml"
+EXPECTED=$(grep -c "^  - targetSecret:" "$INVENTORY")
 out=$(render_chart "vault-local")
 if [ $? -eq 0 ]; then
   count=$(grep -c "^kind: ExternalSecret" "$out" || true)
-  if [ "$count" = "13" ]; then
-    printf '  PASS: test_renders_13_external_secrets (count=13)\n'; PASS=$((PASS+1))
+  if [ "$count" = "$EXPECTED" ]; then
+    printf '  PASS: test_renders_external_secrets (count=%d matches inventory)\n' "$count"; PASS=$((PASS+1))
   else
-    printf '  FAIL: test_renders_13_external_secrets (count=%s expected 13)\n' "$count"
+    printf '  FAIL: test_renders_external_secrets (count=%s expected %s)\n' "$count" "$EXPECTED"
     FAIL=$((FAIL+1))
   fi
 else
-  printf '  FAIL: test_renders_13_external_secrets (render failed)\n'
+  printf '  FAIL: test_renders_external_secrets (render failed)\n'
   FAIL=$((FAIL+1))
 fi
 
@@ -79,7 +83,7 @@ out=$(render_chart "vault-local")
 if [ $? -eq 0 ]; then
   total_names=$(grep "^  name:" "$out" | wc -l)
   unique_names=$(grep "^  name:" "$out" | sort -u | wc -l)
-  if [ "$total_names" -ge 13 ] && [ "$unique_names" = "$total_names" ]; then
+  if [ "$total_names" -ge "$EXPECTED" ] && [ "$unique_names" = "$total_names" ]; then
     printf '  PASS: test_all_target_names_unique (total=%d unique=%d)\n' "$total_names" "$unique_names"; PASS=$((PASS+1))
   else
     printf '  FAIL: test_all_target_names_unique (total=%d unique=%d — duplicates exist)\n' "$total_names" "$unique_names"
@@ -93,10 +97,10 @@ fi
 out=$(render_chart "vault-local")
 if [ $? -eq 0 ]; then
   refresh_count=$(grep -c "^  refreshInterval:" "$out" || true)
-  if [ "$refresh_count" = "13" ]; then
-    printf '  PASS: test_all_have_refresh_interval (count=13)\n'; PASS=$((PASS+1))
+  if [ "$refresh_count" = "$EXPECTED" ]; then
+    printf '  PASS: test_all_have_refresh_interval (count=%d)\n' "$refresh_count"; PASS=$((PASS+1))
   else
-    printf '  FAIL: test_all_have_refresh_interval (count=%s expected 13)\n' "$refresh_count"
+    printf '  FAIL: test_all_have_refresh_interval (count=%s expected %s)\n' "$refresh_count" "$EXPECTED"
     FAIL=$((FAIL+1))
   fi
 fi
@@ -107,10 +111,10 @@ fi
 out=$(render_chart "vault-local")
 if [ $? -eq 0 ]; then
   css_refs=$(grep -c "name: loopzero-vault-secrets" "$out" || true)
-  if [ "$css_refs" = "13" ]; then
-    printf '  PASS: test_all_reference_clustersecretstore (count=13)\n'; PASS=$((PASS+1))
+  if [ "$css_refs" = "$EXPECTED" ]; then
+    printf '  PASS: test_all_reference_clustersecretstore (count=%d)\n' "$css_refs"; PASS=$((PASS+1))
   else
-    printf '  FAIL: test_all_reference_clustersecretstore (count=%s expected 13)\n' "$css_refs"
+    printf '  FAIL: test_all_reference_clustersecretstore (count=%s expected %s)\n' "$css_refs" "$EXPECTED"
     FAIL=$((FAIL+1))
   fi
 fi

@@ -68,6 +68,7 @@ operators/secrets/digitalocean/token|loopzero-tenant-operator|loopzero-tenant-op
 operators/secrets/spaces/access_key_id|loopzero-tenant-operator|loopzero-tenant-operator
 operators/secrets/spaces/secret_access_key|loopzero-tenant-operator|loopzero-tenant-operator
 operators/secrets/harbor/admin_password|loopzero-tenant-operator|loopzero-tenant-operator
+build/secrets/cosign/passphrase|argo-workflows-controller|cosign-passphrase
 EOF
 )
 

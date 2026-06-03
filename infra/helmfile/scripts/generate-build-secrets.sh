@@ -90,6 +90,29 @@ else
     --from-literal=cosign.password="${COSIGN_PASSWORD}" \
     --dry-run=client -o yaml | kubectl apply -f - >/dev/null
   log "cosign-signing-key generated and applied (B1 fixed permanently)"
+
+  # T2.3 of openbao-adoption v1.3 (iter 26): also write cosign passphrase to
+  # Vault path secret/loopzero/<env>/build/secrets/cosign/passphrase. Dual-write
+  # during migration window (Day 30 verify per T10; Day 60 removes K8s
+  # cosign.password key). When BAO_ADDR + BAO_TOKEN are set, mirror passphrase
+  # to Vault so ESO ExternalSecret CR `cosign-passphrase` (per
+  # infra/helm/loopzero-external-secrets/values.yaml) materializes it independently.
+  # FAANG defense-in-depth: passphrase + key separately rotatable.
+  if [[ -n "${BAO_ADDR:-}" && -n "${BAO_TOKEN:-}" ]]; then
+    if command -v bao >/dev/null 2>&1; then
+      log "T2.3: writing cosign passphrase to Vault secret/loopzero/${ENV}/build/secrets/cosign/passphrase"
+      if bao kv put "secret/loopzero/${ENV}/build/secrets/cosign/passphrase" \
+          "cosign.password=${COSIGN_PASSWORD}" >/dev/null 2>&1; then
+        log "T2.3: Vault write OK (dual-write active; canonical SoT post Day-30 verify)"
+      else
+        log "[WARN] T2.3: bao kv put returned non-zero — K8s Secret remains canonical"
+      fi
+    else
+      log "[INFO] T2.3: bao CLI not available — skipping Vault dual-write (BAO_ADDR set but no bao)"
+    fi
+  else
+    log "[INFO] T2.3: BAO_ADDR/BAO_TOKEN not set — K8s Secret remains canonical (set both to dual-write)"
+  fi
 fi
 
 # 2) Registry credentials for BuildKit (host-scoped — B12 fix).

@@ -5,7 +5,8 @@
 #   targetSecret:   string  K8s Secret name (matches existing secretKeyRef in Deployments)
 #   targetNamespace: string K8s namespace (default loopzero-system)
 #   refreshInterval: string ESO pull interval (default 1h; faster for rotated secrets)
-#   vaultBinary:    string  binary owning the secret (api|cloud|operators) for D6 path
+#   vaultBinary:    string  binary owning the secret (api|cloud|operators|build) for D6 path
+#                           (build added iter 26 per openbao-adoption T2.3 cosign-passphrase migration)
 #   vaultCategory:  string  secrets|config (D6 path)
 #   data:           []      list of {secretKey, vaultKey} pairs (multiple keys per Secret)
 #
@@ -204,3 +205,21 @@ externalSecrets:
         vaultKey: spaces/secret_access_key
       - secretKey: HARBOR_ADMIN_PASSWORD
         vaultKey: harbor/admin_password
+
+  # === build binary — cosign signing passphrase (T2.3 of openbao-adoption v1.3) ===
+  # Migrated from co-located K8s Secret (cosign-signing-key.cosign.password)
+  # to Vault path secret/loopzero/<env>/build/secrets/cosign/passphrase. cosign.key
+  # keypair stays in K8s Secret (until Fulcio keyless cutover); only the
+  # passphrase moves. Defense-in-depth: passphrase + key separately rotatable.
+  #
+  # NOTE: Build cluster NS = loopzero-build (not loopzero-system). Requires ESO operator
+  # install em build cluster (separate helmfile release; tracked iter T2.3.bis).
+  # Argo Workflows cosign-sign template reads via secretKeyRef from this Secret.
+  - targetSecret: cosign-passphrase
+    targetNamespace: loopzero-build
+    vaultBinary: build
+    vaultCategory: secrets
+    refreshInterval: 24h  # cosign key rotation cadence = quarterly drill (rare)
+    data:
+      - secretKey: cosign.password  # matches generate-build-secrets.sh existing key name
+        vaultKey: cosign/passphrase
