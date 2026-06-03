@@ -204,7 +204,16 @@ helmfile -f infra/helmfile/mgmt.helmfile.yaml.gotmpl -e <env> \
   --state-values-set vaultEnabled=false sync
 
 # This stops ESO from updating Secrets; existing Secret values persist
-# (deletionPolicy=Retain — pods keep last-known good).
+# with last-known-good (creationPolicy: Orphan — Secrets have NO
+# ownerReference to ExternalSecret CR, so K8s GC does NOT cascade-delete
+# when chart uninstalled).
+#
+# ⚠️ LIVE-validated 2026-06-03 iter 20: creationPolicy=Owner (previous
+# default) caused cascade-delete despite deletionPolicy=Retain because K8s
+# garbage collector runs BEFORE ESO reconcile. Audit:
+# `.claude/knowledge-base/audits/2026-06-03-vault-INT-LIVE-evidence.md`.
+# Chart fixed in same iter — verify `kubectl get externalsecret -o yaml`
+# shows `creationPolicy: Orphan` before relying on Retain semantics.
 
 # Option B — Operator emergency env var override
 # In Helm Deployment, add explicit env (overrides secretKeyRef if both set):
