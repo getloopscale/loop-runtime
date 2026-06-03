@@ -56,6 +56,7 @@ task doctor             # gate 38/0
 tilt up                 # em outra terminal/sessão
 /dogfood full           # ~45min — validar journeys end-to-end
 /chaos-test full        # ~60min — validar SLO holds under chaos
+/contra-prova           # ~10-15min — verificação independente (byte-grep + LIVE deploy + Prova de Vida/Morte)
 ```
 
 **Memory checkpoint:** Para reabrir contexto rapidamente, ler estas 3 seções desta CLAUDE.md (status + Next session + 9 pending items) + ler frontmatter do plano v1.5 + abrir LIVE evidence audit.
