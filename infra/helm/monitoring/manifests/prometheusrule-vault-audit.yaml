@@ -21,7 +21,9 @@ metadata:
   labels:
     app.kubernetes.io/managed-by: helm
     app.kubernetes.io/part-of: loopzero-platform
-    loopzero.io/related-plan: "2026-06-02-openbao-adoption v1.3 T8.4"
+    loopzero.io/related-plan: "openbao-adoption-v1.4-T8.4"
+  annotations:
+    loopzero.io/related-plan-full: "2026-06-02-openbao-adoption v1.4 T8.4"
 spec:
   groups:
     - name: vault-audit-p1

@@ -24,7 +24,9 @@ metadata:
   labels:
     app.kubernetes.io/name: loki-archive
     app.kubernetes.io/managed-by: helm
-    loopzero.io/related-plan: "2026-06-02-openbao-adoption v1.4 T8.5"
+    loopzero.io/related-plan: "openbao-adoption-v1.4-T8.5"
+  annotations:
+    loopzero.io/related-plan-full: "2026-06-02-openbao-adoption v1.4 T8.5"
 spec:
   schedule: "0 4 1 * *"
   concurrencyPolicy: Forbid
