@@ -221,6 +221,26 @@ else
 fi
 rm -f "$out" "$err"
 
+# --- Test 10 (SECURITY INVARIANT): dry-run does NOT leak raw --value secret ---
+# Per plan v1.4 EC-7 + pkg/quality/secretsnologs: scripts handling secrets MUST
+# NEVER print raw values. rotate-secret.sh dry-run emits `<${#VALUE} chars>`
+# instead of literal — this test asserts the --value content NEVER appears in
+# stdout/stderr (regression protection against debug-print additions).
+SECRET_PROBE="REDACTED_SECRET_038"
+out=$(mktemp); err=$(mktemp)
+env -u BAO_ADDR -u BAO_TOKEN PATH="$MOCK_BIN:$PATH" \
+  bash "$TARGET_SCRIPT" --env vault-local --path api/secrets/gitea/token \
+  --value "$SECRET_PROBE" --dry-run >"$out" 2>"$err"; rc=$?
+if [[ "$rc" == "0" ]] && ! grep -qF "$SECRET_PROBE" "$out" "$err"; then
+  printf '  PASS: test_dry_run_no_raw_secret_leak\n'; PASS=$((PASS+1))
+else
+  printf '  FAIL: test_dry_run_no_raw_secret_leak — RAW SECRET VALUE LEAKED IN OUTPUT\n'
+  printf '  rc=%d; probe=%s\n' "$rc" "$SECRET_PROBE"
+  sed 's/^/    [stdout] /' "$out"; sed 's/^/    [stderr] /' "$err"
+  FAIL=$((FAIL+1))
+fi
+rm -f "$out" "$err"
+
 echo
 echo "═══════════════════════════════════════════════════════════"
 printf "  Results: %d PASS / %d FAIL\n" "$PASS" "$FAIL"

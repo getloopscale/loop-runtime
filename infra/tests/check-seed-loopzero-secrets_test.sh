@@ -284,6 +284,35 @@ else
 fi
 rm -f "$out" "$err"
 
+# --- Test 9 (SECURITY INVARIANT): dry-run does NOT leak raw secret values ---
+# Per plan v1.4 EC-7 + pkg/quality/secretsnologs: scripts handling secrets MUST
+# NEVER print raw values to stdout/stderr. seed-loopzero-secrets.sh dry-run emits
+# `<${#secret_value} chars>` instead of literal value — this test asserts the
+# values defined in fixture (e.g. "ghp_test_gitea_token") NEVER appear.
+BAO_LOG="$WORKDIR/bao_noleak.log"
+: > "$BAO_LOG"
+out=$(mktemp); err=$(mktemp)
+env -u BAO_ADDR -u BAO_TOKEN BAO_LOG="$BAO_LOG" PATH="$MOCK_BIN:$PATH" bash "$TARGET_SCRIPT" \
+  --env vault-local \
+  --secret-values-file "$WORKDIR/values_full.yaml" \
+  --inventory "$WORKDIR/inventory.yaml" \
+  --dry-run >"$out" 2>"$err"; rc=$?
+# Fixture secrets that MUST NOT appear in script output
+leaked=0
+for secret in "ghp_test_gitea_token" "sk_test_stripe" "dop_v1_test" "harbor_test_pass"; do
+  if grep -qF "$secret" "$out" "$err"; then
+    leaked=1
+    printf '    LEAK: %s appeared in script output\n' "$secret"
+  fi
+done
+if [[ "$rc" == "0" ]] && [[ "$leaked" == "0" ]]; then
+  printf '  PASS: test_dry_run_no_raw_secret_leak (4 fixtures verified absent)\n'; PASS=$((PASS+1))
+else
+  printf '  FAIL: test_dry_run_no_raw_secret_leak (rc=%d leaked=%s)\n' "$rc" "$leaked"
+  FAIL=$((FAIL+1))
+fi
+rm -f "$out" "$err"
+
 echo
 echo "═══════════════════════════════════════════════════════════"
 printf "  Results: %d PASS / %d FAIL\n" "$PASS" "$FAIL"
