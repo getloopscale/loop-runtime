@@ -189,11 +189,25 @@ tasks:
   k3d:vault:bootstrap:
     desc: |
       Bootstrap OpenBao on loopzero-vault cluster: cert-manager + cluster-issuer +
-      openbao (official chart, devMode). Idempotent.
+      openbao-cert + openbao (official chart, HA Raft PRODLIKE.2). Idempotent.
       Pre-requisite:- task k3d:vault:create.
 
       BUG8.E LIVE pivot 2026-06-02: removed bank-vaults-operator step.
       Now using openbao/openbao official chart direct (zero operator layer).
+
+      Phase A revalidation 2026-06-03 (post k3d-loopzero-vault destruction during
+      trio clean:deep): added openbao-cert step — without it the Secret
+      openbao-tls is never created and openbao-0 pod is stuck in
+      ContainerCreating with FailedMount. Description updated from "devMode"
+      to PRODLIKE.2 (HA Raft + Shamir 5/3 manual init via bao operator init —
+      no auto-unseal) matching the actual chart values.
+
+      Post-bootstrap manual operator steps (NOT in this task, follow
+      docs/operations/openbao-init-runbook.md):
+        bao operator init -key-shares=5 -key-threshold=3 -format=json
+        bao operator unseal <shard1> <shard2> <shard3>
+        kubectl create secret generic openbao-init-token --from-literal=BAO_TOKEN=<root>
+        helmfile sync --selector name=openbao-init  # T5.1-T5.9 provisioning
     cmds:
       - |
         kubectl --context k3d-loopzero-vault get nodes >/dev/null 2>&1 || {
@@ -203,8 +217,10 @@ tasks:
       - helmfile -f infra/helmfile/vault.helmfile.yaml.gotmpl -e vault-local --kube-context k3d-loopzero-vault --selector name=cert-manager sync
       - kubectl --context k3d-loopzero-vault -n cert-manager wait --for=condition=Available deployment --all --timeout=180s
       - helmfile -f infra/helmfile/vault.helmfile.yaml.gotmpl -e vault-local --kube-context k3d-loopzero-vault --selector name=cluster-issuer sync
+      - helmfile -f infra/helmfile/vault.helmfile.yaml.gotmpl -e vault-local --kube-context k3d-loopzero-vault --selector name=openbao-cert sync
+      - kubectl --context k3d-loopzero-vault -n vault-system wait --for=condition=Ready certificate/openbao --timeout=120s
       - helmfile -f infra/helmfile/vault.helmfile.yaml.gotmpl -e vault-local --kube-context k3d-loopzero-vault --selector name=openbao sync
-      - echo "[OK] OpenBao bootstrapped. Validate:- task k3d:vault:status"
+      - echo "[OK] OpenBao bootstrapped (HA Raft PRODLIKE.2, sealed). Next:- bao operator init + unseal (see docs/operations/openbao-init-runbook.md). Validate:- task k3d:vault:status"
 
   k3d:vault:status:
     desc: |
