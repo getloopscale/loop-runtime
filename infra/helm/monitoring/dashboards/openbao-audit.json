@@ -1,0 +1,181 @@
+{
+  "$schema": "https://grafana.com/schema/grafana-dashboard-v10.json",
+  "annotations": {
+    "list": []
+  },
+  "description": "T8.3 of plan 2026-06-02-openbao-adoption v1.4 — Vault audit panel: top accessors, policy denials, auth failures, anomaly heatmap. Backed by vault.audit.* counters (Prom scrape) + Loki vault-audit job streams.",
+  "editable": true,
+  "fiscalYearStartMonth": 0,
+  "graphTooltip": 1,
+  "id": null,
+  "links": [
+    {
+      "title": "OpenBao Audit Runbook",
+      "url": "https://docs.loopzero.example/runbooks/vault-audit-stalled",
+      "type": "link"
+    }
+  ],
+  "panels": [
+    {
+      "title": "Auth Request Rate (5m)",
+      "type": "timeseries",
+      "datasource": {"type": "prometheus", "uid": "prometheus"},
+      "gridPos": {"h": 8, "w": 12, "x": 0, "y": 0},
+      "id": 1,
+      "targets": [
+        {
+          "expr": "sum(rate(vault_audit_log_request_count{type=\"success\"}[5m])) by (path)",
+          "legendFormat": "{{path}} (success)",
+          "refId": "A"
+        },
+        {
+          "expr": "sum(rate(vault_audit_log_request_count{type=\"failure\"}[5m])) by (path)",
+          "legendFormat": "{{path}} (failure)",
+          "refId": "B"
+        }
+      ]
+    },
+    {
+      "title": "Policy Denials by Path (P1 alert source)",
+      "type": "timeseries",
+      "datasource": {"type": "prometheus", "uid": "prometheus"},
+      "gridPos": {"h": 8, "w": 12, "x": 12, "y": 0},
+      "id": 2,
+      "alert": null,
+      "targets": [
+        {
+          "expr": "sum(rate(vault_audit_log_response_count{response_type=~\"permission.denied\"}[5m])) by (request_path)",
+          "legendFormat": "{{request_path}}",
+          "refId": "A"
+        }
+      ]
+    },
+    {
+      "title": "Vault Seal Status (P1 alert source)",
+      "type": "stat",
+      "datasource": {"type": "prometheus", "uid": "prometheus"},
+      "gridPos": {"h": 6, "w": 6, "x": 0, "y": 8},
+      "id": 3,
+      "options": {
+        "colorMode": "background",
+        "graphMode": "none"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "mappings": [
+            {"options": {"0": {"text": "SEALED", "color": "red"}, "1": {"text": "UNSEALED", "color": "green"}}, "type": "value"}
+          ]
+        }
+      },
+      "targets": [
+        {
+          "expr": "vault_core_unsealed{job=\"openbao\"}",
+          "refId": "A"
+        }
+      ]
+    },
+    {
+      "title": "Audit Log Entry Timestamp Lag (P1 alert source)",
+      "type": "stat",
+      "datasource": {"type": "prometheus", "uid": "prometheus"},
+      "gridPos": {"h": 6, "w": 6, "x": 6, "y": 8},
+      "id": 4,
+      "options": {
+        "colorMode": "background",
+        "graphMode": "area"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "s",
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {"color": "green", "value": null},
+              {"color": "yellow", "value": 300},
+              {"color": "red", "value": 600}
+            ]
+          }
+        }
+      },
+      "targets": [
+        {
+          "expr": "time() - vault_audit_log_entry_timestamp_seconds",
+          "refId": "A"
+        }
+      ]
+    },
+    {
+      "title": "Top Accessors (last 1h)",
+      "type": "table",
+      "datasource": {"type": "prometheus", "uid": "prometheus"},
+      "gridPos": {"h": 8, "w": 12, "x": 12, "y": 8},
+      "id": 5,
+      "targets": [
+        {
+          "expr": "topk(20, sum(rate(vault_audit_log_request_count[1h])) by (accessor, path))",
+          "instant": true,
+          "format": "table",
+          "refId": "A"
+        }
+      ]
+    },
+    {
+      "title": "Vault Audit Log (Loki — vault-system NS)",
+      "type": "logs",
+      "datasource": {"type": "loki", "uid": "loki"},
+      "gridPos": {"h": 14, "w": 24, "x": 0, "y": 14},
+      "id": 6,
+      "options": {
+        "showTime": true,
+        "wrapLogMessage": true,
+        "enableLogDetails": true
+      },
+      "targets": [
+        {
+          "expr": "{namespace=\"vault-system\", loopzero_component=\"vault-audit\"}",
+          "refId": "A"
+        }
+      ]
+    },
+    {
+      "title": "Denial Heatmap (15m bins)",
+      "type": "heatmap",
+      "datasource": {"type": "prometheus", "uid": "prometheus"},
+      "gridPos": {"h": 8, "w": 24, "x": 0, "y": 28},
+      "id": 7,
+      "targets": [
+        {
+          "expr": "sum(rate(vault_audit_log_response_count{response_type=~\"permission.denied\"}[15m])) by (request_path)",
+          "refId": "A"
+        }
+      ]
+    }
+  ],
+  "refresh": "30s",
+  "schemaVersion": 38,
+  "tags": [
+    "vault",
+    "openbao",
+    "security",
+    "audit",
+    "platform-security"
+  ],
+  "templating": {
+    "list": [
+      {
+        "name": "datasource",
+        "type": "datasource",
+        "query": "prometheus"
+      }
+    ]
+  },
+  "time": {
+    "from": "now-6h",
+    "to": "now"
+  },
+  "timepicker": {},
+  "timezone": "utc",
+  "title": "OpenBao Audit",
+  "uid": "openbao-audit",
+  "version": 1
+}

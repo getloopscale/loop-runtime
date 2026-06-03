@@ -149,6 +149,43 @@ config:
             regex: ".+"
             target_label: loopzero_component
 
+      # ────────────────────────────────────────────────────────────────
+      # T8.1 of plan 2026-06-02-openbao-adoption v1.4 — Vault audit log
+      # scrape. Targets vault-system NS specifically; tags namespace +
+      # pod so VaultAuditLogStalled + VaultPolicyDenialRateHigh alerts
+      # can correlate by labels.
+      # ────────────────────────────────────────────────────────────────
+      - job_name: vault-audit
+        kubernetes_sd_configs:
+          - role: pod
+            namespaces:
+              names:
+                - vault-system
+        pipeline_stages:
+          - cri: {}
+          - json:
+              expressions:
+                request_path: request.path
+                request_id: request.id
+                error: error
+                type: type
+        relabel_configs:
+          # __path__ for log file tailing
+          - source_labels: [__meta_kubernetes_pod_uid, __meta_kubernetes_pod_container_name]
+            target_label: __path__
+            separator: /
+            replacement: /var/log/pods/*$1/$2/*.log
+          - source_labels: [__meta_kubernetes_namespace]
+            target_label: namespace
+          - source_labels: [__meta_kubernetes_pod_container_name]
+            target_label: container
+          - source_labels: [__meta_kubernetes_pod_label_app_kubernetes_io_name]
+            regex: ".+"
+            target_label: app
+          # Fixed component label so Grafana dashboards can filter
+          - target_label: loopzero_component
+            replacement: vault-audit
+
 resources:
   requests:
     cpu: 50m
