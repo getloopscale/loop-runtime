@@ -32,6 +32,16 @@
 domain: loopzero-drill.example
 dnsZone: loopzero-drill.example
 
+# Phase 3.4 of plan 2026-06-02-loopzero-api-vault-integration v1.8 (D11 ESO).
+# Opt-in flag: when true, mgmt.helmfile installs ESO operator +
+# loopzero-external-secrets CRs (pulls secrets from loopzero-vault cluster).
+# Default false → drill uses ephemeral env-var secrets (consistent com
+# drill ephemeral lifecycle); flip to true APENAS quando drill scenario
+# explicitly testar Vault integration prod-identical (T9.2 Dogfood QA).
+# Requires: loopzero-vault drill cluster up (separate ephemeral DOKS) +
+# ClusterSecretStore + seed-loopzero-secrets.sh ran for env=drill.
+vaultEnabled: false
+
 # Per D1: drill IS prod-identical topology. The marker `clusterTopology:
 # multi-cluster` is now MEANINGFUL — bootstrap iterates over 4 DOKS
 # clusters via per-cluster kubeconfig (Pulumi outputs).

@@ -12,6 +12,15 @@
 domain: dev.loopzero.example
 dnsZone: loopzero.example
 
+# Phase 3.4 of plan 2026-06-02-loopzero-api-vault-integration v1.8 (D11 ESO).
+# Opt-in flag: when true, mgmt.helmfile installs ESO operator +
+# loopzero-external-secrets CRs (pulls secrets from loopzero-vault cluster).
+# Default false → secrets continue via legacy env var / K8s Secret pattern.
+# Set to true ONLY after DOKS loopzero-vault-dev cluster up + openbao-init Job ran +
+# ClusterSecretStore loopzero-vault-secrets applied (Phase 3.1 manifests) +
+# seed-loopzero-secrets.sh ran for env=dev (T8.1 EC-21).
+vaultEnabled: false
+
 # Cluster role identity (used by templates / tests).
 clusterRole: dev
 
