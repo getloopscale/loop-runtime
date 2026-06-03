@@ -84,6 +84,12 @@ repositories:
     url: https://kubernetes-sigs.github.io/nfs-ganesha-server-and-external-provisioner/
   - name: metrics-server
     url: https://kubernetes-sigs.github.io/metrics-server/
+  # Phase 3.4 of plan 2026-06-02-loopzero-api-vault-integration v1.8 (D11 ESO).
+  # ESO deployed em MGMT cluster (não só runtime) — LoopZero secrets vivem aqui
+  # em loopzero-system NS. ESO faz pull do Vault (loopzero-vault cluster via
+  # ClusterSecretStore loopzero-vault-secrets) → cria K8s Secrets em loopzero-system.
+  - name: external-secrets
+    url: https://charts.external-secrets.io
   - name: bitnami
     url: https://charts.bitnami.com/bitnami
   - name: chaos-mesh
@@ -474,6 +480,30 @@ releases:
       - ../helm/ory-hydra/values.yaml.gotmpl
       # Layered values per env (T2.2). Drill env DSN override → managed PG.
       - values/{{ .Environment.Name }}/ory-hydra.yaml.gotmpl
+
+  # Phase 3.4 of plan 2026-06-02-loopzero-api-vault-integration v1.8 (D11 ESO).
+  # ESO deployed em MGMT cluster — opera secret distribution Vault → K8s
+  # Secret em loopzero-system NS. Two releases:
+  #   1. external-secrets (operator) — Wave 1.8 (antes de loopzero-api Wave 2)
+  #   2. loopzero-external-secrets (CRs) — Wave 1.9 (after operator ready)
+  # Opt-in per env via vaultEnabled value (default false = skip ambas).
+  - name: external-secrets
+    namespace: external-secrets
+    chart: external-secrets/external-secrets
+    version: 0.14.3
+    installed: {{ .Values | get "vaultEnabled" false }}
+    values:
+      - ../helm/external-secrets/values.yaml
+
+  - name: loopzero-external-secrets
+    namespace: loopzero-system
+    chart: ../helm/loopzero-external-secrets
+    installed: {{ .Values | get "vaultEnabled" false }}
+    needs:
+      - external-secrets/external-secrets
+    values:
+      - ../helm/loopzero-external-secrets/values.yaml
+      - envName: {{ .Environment.Name | quote }}
 
   # Wave 2: LoopZero platform
   - name: loopzero-api

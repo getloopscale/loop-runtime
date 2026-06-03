@@ -13,6 +13,14 @@
 #   - cf-tunnel-credentials in workload cluster with replicas:0 (no real CF)
 
 domain: loopzero.local
+
+# Phase 3.4 of plan 2026-06-02-loopzero-api-vault-integration v1.8 (D11 ESO).
+# Opt-in flag: when true, mgmt.helmfile installs ESO operator +
+# loopzero-external-secrets CRs (pulls secrets from loopzero-vault cluster).
+# Default false → secrets continue via legacy env var / K8s Secret pattern.
+# Set to true ONLY after loopzero-vault cluster up + openbao-init Job ran +
+# ClusterSecretStore loopzero-vault-secrets applied (Phase 3.1 manifests).
+vaultEnabled: false
 dnsZone: loopzero.local
 
 clusterRole: standalone
