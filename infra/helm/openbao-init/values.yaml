@@ -66,6 +66,20 @@ secretsEngines:
     type: transit
     description: "Per-tenant encryption keys (crypto-shredding pattern)"
     options: {}
+  # T6.1 of openbao-adoption v1.3 — Vault database secrets engine for
+  # dynamic PG credentials with TTL 1h max 24h. Replaces static
+  # loopzero-dev-password (T6.5) + generate-secrets.sh:149 placeholder.
+  - path: database
+    type: database
+    description: "T6.1 dynamic PG creds — v-k8s-loopzero-api-* short-lived"
+    options: {}
+  # T7.1 of openbao-adoption v1.3 — Vault kubernetes secrets engine for
+  # dynamic SA tokens with TTL 24h audience kubernetes.default.svc.
+  # Replaces scoped-kubeconfig.sh legacy SA-Secret-token pattern (T7.4).
+  - path: kubernetes
+    type: kubernetes
+    description: "T7.1 dynamic SA tokens per cluster"
+    options: {}
 
 # Auth methods to enable (idempotent).
 #
@@ -402,6 +416,58 @@ transitKeys:
 # Per EC-09 v1.1: CronJob (NOT one-shot Job) because cert-manager auto-renews
 # Vault cert every 60-90d independently of ArgoCD sync-waves; without periodic
 # re-extraction, loopzero-api pins stale SPKI and Vault auth fails periodically.
+# T6.1-T6.3 of openbao-adoption v1.3 — database engine connections + roles.
+# Each connection: { name, plugin, connectionUrl, allowedRoles, username, password }.
+# Operator-time: connectionUrl + username + password come from K8s Secret
+# referenced by the init Job (not templated at helm-time — see runbook
+# docs/operations/vault-database-engine-runbook.md).
+#
+# Each role: { name, dbName, creationStatements, defaultTtl, maxTtl, revocationStatements }.
+# loopzero-api role: TTL 1h / max 24h per plan T6.3.
+databaseConnections: []
+  # Example (operator fills via overlay):
+  # - name: postgres-loopzero-api
+  #   plugin: postgresql-database-plugin
+  #   connectionUrl: "postgresql://{{username}}:{{password}}@loopzero-pg.loopzero-system:5432/loopzero?sslmode=require"
+  #   allowedRoles: loopzero-api
+  #   usernameSecretRef: loopzero-pg-vault-admin-username  # NOT templated — operator provides
+  #   passwordSecretRef: loopzero-pg-vault-admin-password
+databaseRoles:
+  - name: loopzero-api
+    dbName: postgres-loopzero-api
+    creationStatements: |
+      CREATE ROLE "{{name}}" WITH LOGIN PASSWORD '{{password}}' VALID UNTIL '{{expiration}}';
+      GRANT loopzero_api_app TO "{{name}}";
+    defaultTtl: "1h"
+    maxTtl: "24h"
+    revocationStatements: |
+      REVOKE ALL PRIVILEGES ON ALL TABLES IN SCHEMA public FROM "{{name}}";
+      DROP ROLE IF EXISTS "{{name}}";
+
+# T7.1-T7.2 of openbao-adoption v1.3 — kubernetes engine roles.
+# Each role: { name, allowedKubernetesNamespaces, serviceAccountName, tokenDefaultTtl, tokenMaxTtl }.
+kubernetesRoles:
+  - name: loopzero-runtime-mgmt
+    allowedKubernetesNamespaces:
+      - loopzero-system
+      - argocd
+      - external-secrets
+    serviceAccountName: loopzero-runtime
+    tokenDefaultTtl: "1h"
+    tokenMaxTtl: "24h"
+  - name: loopzero-runtime-build
+    allowedKubernetesNamespaces:
+      - argo
+    serviceAccountName: loopzero-build
+    tokenDefaultTtl: "1h"
+    tokenMaxTtl: "24h"
+  - name: loopzero-runtime-workload
+    allowedKubernetesNamespaces:
+      - loopzero-system
+    serviceAccountName: loopzero-runtime
+    tokenDefaultTtl: "1h"
+    tokenMaxTtl: "24h"
+
 spkiExtractor:
   enabled: false  # opt-in per env; flip to true when loopzero-vault TLS active
   schedule: "*/5 * * * *"

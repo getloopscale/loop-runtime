@@ -35,6 +35,12 @@ tasks:
       - /tmp/loopzero-ops quality no-env-vault-secrets   # openbao-adoption T2.7 — forbid secrets-as-env-var regression (post D11 ESO migration)
       - /tmp/loopzero-ops quality transit-coverage       # openbao-adoption T3.7 — enforce dispatcher invariant (Set/ListForResync use encryptForStore/decryptFromStore)
       - /tmp/loopzero-ops quality cluster-role-no-secrets-star  # openbao-adoption T5.15 — forbid unconditional cluster-wide secrets/configmaps grants (deep review finding #1)
+      - /tmp/loopzero-ops quality no-legacy-sa-token-secret    # openbao-adoption T7.6 — forbid `type: kubernetes.io/service-account-token` Secret (post T7 dynamic SA tokens)
+      # T9.6 no-pulumi-inline-secrets — operator-gated; do NOT add to task quality:gates
+      # until T9 Vault provider migration runs. Gate is wired in loopzero-ops and can be
+      # invoked manually: `/tmp/loopzero-ops quality no-pulumi-inline-secrets`.
+      # Pre-migration FAIL is INTENTIONAL forcing-function (operator visibility).
+      - /tmp/loopzero-ops quality no-aes-remaining             # openbao-adoption T10.2 — calendar-gated; WARN until T+60d then FAIL on remaining AES code paths
       - /tmp/loopzero-ops quality anonymous-auth
       - /tmp/loopzero-ops quality correlation-header   # T6.1 of plan 2026-06-01-p3-infra-observability-test-debt
       - /tmp/loopzero-ops quality helm-overlap-parity

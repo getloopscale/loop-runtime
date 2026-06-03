@@ -141,6 +141,54 @@ data:
     create_transit_key "{{ .name }}" "{{ .type | default "aes256-gcm96" }}" "{{ .mount | default "transit" }}"
     {{- end }}
 
+    # ---- T6.3 of openbao-adoption v1.3 — database engine roles ----
+    # Connections (T6.2) are operator-time (require PG admin creds).
+    # Roles can be templated since they only reference connection name + SQL.
+    write_db_role() {
+      role="$1"
+      db_name="$2"
+      creation="$3"
+      revocation="$4"
+      default_ttl="$5"
+      max_ttl="$6"
+      echo "[INIT] Writing database/roles/${role}"
+      bao write "database/roles/${role}" \
+        db_name="${db_name}" \
+        creation_statements="${creation}" \
+        revocation_statements="${revocation}" \
+        default_ttl="${default_ttl}" \
+        max_ttl="${max_ttl}"
+    }
+    {{- range .Values.databaseRoles }}
+    write_db_role "{{ .name }}" "{{ .dbName }}" \
+      {{ .creationStatements | quote }} \
+      {{ .revocationStatements | quote }} \
+      "{{ .defaultTtl }}" "{{ .maxTtl }}"
+    {{- end }}
+
+    # ---- T7.2 of openbao-adoption v1.3 — kubernetes engine roles ----
+    # Engine config (kubernetes_host + ca + JWT) is operator-time.
+    write_k8s_role() {
+      role="$1"
+      namespaces="$2"
+      sa_name="$3"
+      default_ttl="$4"
+      max_ttl="$5"
+      echo "[INIT] Writing kubernetes/roles/${role}"
+      bao write "kubernetes/roles/${role}" \
+        allowed_kubernetes_namespaces="${namespaces}" \
+        service_account_name="${sa_name}" \
+        token_default_ttl="${default_ttl}" \
+        token_max_ttl="${max_ttl}"
+    }
+    {{- range .Values.kubernetesRoles }}
+    write_k8s_role "{{ .name }}" \
+      "{{ join "," .allowedKubernetesNamespaces }}" \
+      "{{ .serviceAccountName }}" \
+      "{{ .tokenDefaultTtl }}" \
+      "{{ .tokenMaxTtl }}"
+    {{- end }}
+
     echo "[INIT] Done. Final state:"
     echo "--- secrets engines ---"
     bao secrets list

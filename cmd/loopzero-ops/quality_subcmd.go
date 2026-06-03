@@ -17,7 +17,10 @@ import (
 
 	"github.com/loopzero/loopzero/pkg/quality/advisorylock"
 	"github.com/loopzero/loopzero/pkg/quality/clusterrolenosecretsstar"
+	"github.com/loopzero/loopzero/pkg/quality/noaesremaining"
 	"github.com/loopzero/loopzero/pkg/quality/noenvvaultsecrets"
+	"github.com/loopzero/loopzero/pkg/quality/nolegacysatoken"
+	"github.com/loopzero/loopzero/pkg/quality/nopulumiinlinesecrets"
 	"github.com/loopzero/loopzero/pkg/quality/transitcoverage"
 	"github.com/loopzero/loopzero/pkg/quality/correlationheader"
 	"github.com/loopzero/loopzero/pkg/quality/anonymousauth"
@@ -317,6 +320,12 @@ func runQuality(args []string) int {
 		return runNoEnvVaultSecrets(args[1:])
 	case "cluster-role-no-secrets-star":
 		return runClusterRoleNoSecretsStar(args[1:])
+	case "no-legacy-sa-token-secret":
+		return runNoLegacySATokenSecret(args[1:])
+	case "no-pulumi-inline-secrets":
+		return runNoPulumiInlineSecrets(args[1:])
+	case "no-aes-remaining":
+		return runNoAESRemaining(args[1:])
 	case "transit-coverage":
 		return runTransitCoverage(args[1:])
 	case "advisory-lock-scope":
@@ -673,6 +682,97 @@ func runClusterRoleNoSecretsStar(args []string) int {
 		return 5
 	}
 	fmt.Fprint(os.Stderr, clusterrolenosecretsstar.FormatOutcome(outcome))
+	if !outcome.Pass {
+		return 1
+	}
+	return 0
+}
+
+// runNoLegacySATokenSecret is the Go home for the no-legacy-sa-token-secret
+// gate (T7.6 of plan 2026-06-02-openbao-adoption v1.3).
+func runNoLegacySATokenSecret(args []string) int {
+	fs := flag.NewFlagSet("no-legacy-sa-token-secret", flag.ContinueOnError)
+	root := fs.String("root", ".", "repo root directory")
+	allowlist := fs.String("allowlist", "", "comma-separated allowlisted paths")
+	if err := fs.Parse(args); err != nil {
+		return 1
+	}
+	if absRoot, err := os.Getwd(); err == nil && *root == "." {
+		*root = absRoot
+	}
+	cfg := nolegacysatoken.Config{RepoRoot: *root}
+	if *allowlist != "" {
+		for _, p := range strings.Split(*allowlist, ",") {
+			cfg.AllowlistPaths = append(cfg.AllowlistPaths, strings.TrimSpace(p))
+		}
+	}
+	outcome, err := nolegacysatoken.Check(cfg)
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "no-legacy-sa-token-secret: %v\n", err)
+		return 5
+	}
+	fmt.Fprint(os.Stderr, nolegacysatoken.FormatOutcome(outcome))
+	if !outcome.Pass {
+		return 1
+	}
+	return 0
+}
+
+// runNoPulumiInlineSecrets is the Go home for the no-pulumi-inline-secrets
+// gate (T9.6 of plan 2026-06-02-openbao-adoption v1.3).
+func runNoPulumiInlineSecrets(args []string) int {
+	fs := flag.NewFlagSet("no-pulumi-inline-secrets", flag.ContinueOnError)
+	root := fs.String("root", ".", "repo root directory")
+	allowlist := fs.String("allowlist", "", "comma-separated allowlisted paths")
+	if err := fs.Parse(args); err != nil {
+		return 1
+	}
+	if absRoot, err := os.Getwd(); err == nil && *root == "." {
+		*root = absRoot
+	}
+	cfg := nopulumiinlinesecrets.Config{RepoRoot: *root}
+	if *allowlist != "" {
+		for _, p := range strings.Split(*allowlist, ",") {
+			cfg.AllowlistPaths = append(cfg.AllowlistPaths, strings.TrimSpace(p))
+		}
+	}
+	outcome, err := nopulumiinlinesecrets.Check(cfg)
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "no-pulumi-inline-secrets: %v\n", err)
+		return 5
+	}
+	fmt.Fprint(os.Stderr, nopulumiinlinesecrets.FormatOutcome(outcome))
+	if !outcome.Pass {
+		return 1
+	}
+	return 0
+}
+
+// runNoAESRemaining is the Go home for the no-aes-remaining gate (T10.2 of
+// plan 2026-06-02-openbao-adoption v1.3). Calendar-gated — enforces only
+// after T+60d from CutoverDay.
+func runNoAESRemaining(args []string) int {
+	fs := flag.NewFlagSet("no-aes-remaining", flag.ContinueOnError)
+	root := fs.String("root", ".", "repo root directory")
+	allowlist := fs.String("allowlist", "", "comma-separated allowlisted paths")
+	if err := fs.Parse(args); err != nil {
+		return 1
+	}
+	if absRoot, err := os.Getwd(); err == nil && *root == "." {
+		*root = absRoot
+	}
+	cfg := noaesremaining.Config{RepoRoot: *root}
+	if *allowlist != "" {
+		for _, p := range strings.Split(*allowlist, ",") {
+			cfg.AllowlistPaths = append(cfg.AllowlistPaths, strings.TrimSpace(p))
+		}
+	}
+	outcome, err := noaesremaining.Check(cfg)
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "no-aes-remaining: %v\n", err)
+		return 5
+	}
+	fmt.Fprint(os.Stderr, noaesremaining.FormatOutcome(outcome))
 	if !outcome.Pass {
 		return 1
 	}
