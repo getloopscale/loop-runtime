@@ -145,6 +145,17 @@ spec:
                   name: loopzero-api-tokens
                   key: argocd-token
                   optional: true
+            # Phase 3.3 closure of plan 2026-06-02-loopzero-api-vault-integration v1.8.
+            # CF_API_TOKEN previously read via os.Getenv only (config.go:417);
+            # now sourced from loopzero-api-tokens Secret (key=cf-api-token) so ESO
+            # ExternalSecret CR can sync from Vault path api/secrets/cf/api_token.
+            # optional=true → graceful fallback to env var legacy when ESO disabled.
+            - name: CF_API_TOKEN
+              valueFrom:
+                secretKeyRef:
+                  name: loopzero-api-tokens
+                  key: cf-api-token
+                  optional: true
             # Ed25519 dual-control public keys (ADR 2026-05-13-service-auth-
             # ed25519-adoption). Materialized by ESO from the Pulumi
             # ServiceAuthEd25519 component into Secret

@@ -44,10 +44,10 @@ externalSecrets:
     vaultBinary: api
     vaultCategory: secrets
     data:
-      # NOTE: loopzero-api Deployment reads argocd-token via per-key
-      # secretKeyRef (kebab-case OK). cf-api-token added v1.8 — needs
-      # corresponding secretKeyRef block em deployment.yaml OR migrate
-      # para envFrom pattern como loopzero-api-internal/etc.
+      # NOTE: loopzero-api Deployment reads argocd-token + cf-api-token via
+      # per-key secretKeyRef (kebab-case OK). cf-api-token block added em
+      # deployment.yaml iter 10 (Phase 3.3 closure follow-up); previously
+      # config.go:417 lia via os.Getenv only.
       - secretKey: argocd-token
         vaultKey: argocd/token
       - secretKey: cf-api-token
