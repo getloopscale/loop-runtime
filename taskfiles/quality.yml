@@ -58,6 +58,7 @@ tasks:
       - bash infra/tests/check-rotate-secret_test.sh            # vault-INT T8.1 EC-22: cross-binary atomic rotation script (plan 2026-06-02 v1.8)
       - bash infra/tests/check-vault-sync_test.sh               # vault-INT Phase 9 T9.1: ESO sync status check (replaces loopzero_config_secret_source metric, plan 2026-06-02 v1.8 D11)
       - bash infra/tests/check-vault-bootstrap-eso_test.sh      # vault-INT Runbook P1 codification: ESO ClusterSecretStore bootstrap (plan 2026-06-02 v1.8)
+      - bash infra/tests/check-enable-vault-backup_test.sh      # vault-INT Runbook P4 codification: enable snapshot-agent backup (plan 2026-06-02 v1.8)
       - bash infra/tests/docs/credentials-sot_test.sh           # doc-sync: credentials-required.md enumerates bootstrap Secrets
 
   diff:

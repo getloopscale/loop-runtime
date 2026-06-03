@@ -215,6 +215,27 @@ GITEA_TOKEN=<emergency-token>
 
 ## P4 — Backup (D12 openbao-snapshot-agent)
 
+**Canonical (recommended):** use `enable-vault-backup.sh` (Runbook P4 codification).
+
+```bash
+# Step 1 (manual) — enable in env values (vault-local default: false):
+# Edit infra/helmfile/environments/<env>.yaml:
+#   snapshotAgentEnabled: true
+
+# Step 2-4 (codified) — Secret + helmfile sync + verify:
+bash infra/scripts/openbao/enable-vault-backup.sh --env <env>
+# Reads ~/.openbao-<env>-resources.env (provisioned via
+# provision-aws-resources.sh) → creates Secret idempotent → helmfile sync
+# openbao-snapshot-agent → verifies CronJob registered. Dry-run prints
+# ONLY char counts (security invariant: never raw values).
+
+# Inspect logs after first run:
+kubectl --context k3d-loopzero-vault -n vault-system logs \
+  -l app=openbao-snapshot-agent --tail=50
+```
+
+**Manual procedure** (legacy — use for debugging or unsupported envs):
+
 ```bash
 # Enable snapshot-agent in env values (vault-local default: false)
 # Edit infra/helmfile/environments/<env>.yaml:
