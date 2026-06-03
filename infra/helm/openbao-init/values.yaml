@@ -106,6 +106,21 @@ policies:
       path "sys/storage/raft/snapshot" {
         capabilities = ["read"]
       }
+  # T3.3 of openbao-adoption v1.3 — tenant-controller transit key management policy.
+  # Allows creating, reading, rotating, and DELETING per-tenant transit keys
+  # (crypto-shredding pattern: deleting key permanently un-decryptable per-tenant
+  # ciphertexts). Scope intentionally tenant-prefix to prevent cross-tenant key ops.
+  - name: tenant-controller-transit
+    ruleHcl: |
+      path "transit/keys/tenant-+" {
+        capabilities = ["create", "read", "update", "delete"]
+      }
+      path "transit/keys/tenant-+/rotate" {
+        capabilities = ["update"]
+      }
+      path "transit/keys/tenant-+/config" {
+        capabilities = ["update"]
+      }
   # T2.5 of openbao-adoption v1.3 — SPKI extractor write-only policy.
   # Allows writing SPKI pin hash to platform path; cannot read other secrets.
   # Scoped intentionally narrow: only the SPKI pin key.
@@ -140,6 +155,16 @@ authRoles:
       - snapshot
     ttl: "1h"
     description: "openbao-snapshot-agent CronJob (intra-cluster)"
+  # T3.3 of openbao-adoption v1.3 — tenant-controller per-tenant transit key role.
+  - name: tenant-controller-transit
+    boundServiceAccountNames:
+      - loopzero-tenant-operator
+    boundServiceAccountNamespaces:
+      - loopzero-system
+    policies:
+      - tenant-controller-transit
+    ttl: "1h"
+    description: "tenant-controller role: create transit/keys/tenant-<id> on Tenant reconcile"
   # T2.5 of openbao-adoption v1.3 (EC-09 amendment) — SPKI extractor role.
   - name: spki-extractor
     boundServiceAccountNames:
@@ -150,6 +175,22 @@ authRoles:
       - spki-extractor-write
     ttl: "1h"
     description: "SPKI extractor CronJob (intra-cluster; pins Vault TLS SPKI every 5min)"
+
+# T3.2 of openbao-adoption v1.3 — Transit keys provisioned at init time.
+# Per-tenant keys (tenant-<id>) are created on-demand by tenant-controller
+# reconcile (T3.3) via dedicated `tenant-controller-transit` role above —
+# NOT bootstrapped here.
+#
+# Master = platform-level envelope encryption (legacy AES key wrap for
+# coexistence; will be canonical post-F10 AES code deletion per T10.2).
+# Bootstrap = used for initial provisioning encryption (one-time per env).
+transitKeys:
+  - name: master
+    type: aes256-gcm96
+    mount: transit
+  - name: bootstrap
+    type: aes256-gcm96
+    mount: transit
 
 # T2.5 SPKI extractor config — CronJob runs in vault-system NS, extracts SPKI
 # hash from openbao-tls Secret tls.crt, writes to KV path

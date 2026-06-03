@@ -112,6 +112,27 @@ data:
       "{{ .ttl }}"
     {{- end }}
 
+    # ---- Helper: idempotent transit key create (T3.2 of openbao-adoption v1.3) ----
+    # Master + bootstrap transit keys for platform-level envelope encryption.
+    # Per-tenant keys are created on-demand by tenant-controller reconcile (T3.3).
+    # Idempotent: skip if key already exists (bao returns 400 on duplicate create).
+    create_transit_key() {
+      name="$1"
+      type="${2:-aes256-gcm96}"
+      mount="${3:-transit}"
+      if bao read "${mount}/keys/${name}" >/dev/null 2>&1; then
+        echo "[INIT] Transit key ${mount}/keys/${name} already exists — skip"
+      else
+        echo "[INIT] Creating transit key ${mount}/keys/${name} (type=${type})"
+        bao write -f "${mount}/keys/${name}" type="${type}"
+      fi
+    }
+
+    # ---- Provision transit keys ----
+    {{- range .Values.transitKeys }}
+    create_transit_key "{{ .name }}" "{{ .type | default "aes256-gcm96" }}" "{{ .mount | default "transit" }}"
+    {{- end }}
+
     echo "[INIT] Done. Final state:"
     echo "--- secrets engines ---"
     bao secrets list
@@ -121,3 +142,5 @@ data:
     bao policy list
     echo "--- auth/kubernetes roles ---"
     bao list auth/kubernetes/role 2>/dev/null || echo "(no roles or kubernetes auth not configured)"
+    echo "--- transit keys ---"
+    bao list transit/keys 2>/dev/null || echo "(no transit keys or transit engine not configured)"
