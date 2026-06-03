@@ -34,6 +34,7 @@ tasks:
       - /tmp/loopzero-ops quality advisory-lock-scope
       - /tmp/loopzero-ops quality no-env-vault-secrets   # openbao-adoption T2.7 — forbid secrets-as-env-var regression (post D11 ESO migration)
       - /tmp/loopzero-ops quality transit-coverage       # openbao-adoption T3.7 — enforce dispatcher invariant (Set/ListForResync use encryptForStore/decryptFromStore)
+      - /tmp/loopzero-ops quality cluster-role-no-secrets-star  # openbao-adoption T5.15 — forbid unconditional cluster-wide secrets/configmaps grants (deep review finding #1)
       - /tmp/loopzero-ops quality anonymous-auth
       - /tmp/loopzero-ops quality correlation-header   # T6.1 of plan 2026-06-01-p3-infra-observability-test-debt
       - /tmp/loopzero-ops quality helm-overlap-parity

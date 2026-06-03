@@ -16,6 +16,7 @@ import (
 	"time"
 
 	"github.com/loopzero/loopzero/pkg/quality/advisorylock"
+	"github.com/loopzero/loopzero/pkg/quality/clusterrolenosecretsstar"
 	"github.com/loopzero/loopzero/pkg/quality/noenvvaultsecrets"
 	"github.com/loopzero/loopzero/pkg/quality/transitcoverage"
 	"github.com/loopzero/loopzero/pkg/quality/correlationheader"
@@ -314,6 +315,8 @@ func runQuality(args []string) int {
 		return runDockerfileNoDockerHub(args[1:])
 	case "no-env-vault-secrets":
 		return runNoEnvVaultSecrets(args[1:])
+	case "cluster-role-no-secrets-star":
+		return runClusterRoleNoSecretsStar(args[1:])
 	case "transit-coverage":
 		return runTransitCoverage(args[1:])
 	case "advisory-lock-scope":
@@ -634,6 +637,42 @@ func runNoEnvVaultSecrets(args []string) int {
 		return 5
 	}
 	fmt.Fprint(os.Stderr, outcome.FormatReport())
+	if !outcome.Pass {
+		return 1
+	}
+	return 0
+}
+
+// runClusterRoleNoSecretsStar is the Go home for the
+// cluster-role-no-secrets-star gate (T5.15 of plan 2026-06-02-openbao-adoption
+// v1.3). Walks templates/clusterrole.yaml in charts/ + infra/helm/ and FAILs
+// if any unconditional secrets/configmaps cluster-wide grant is found.
+func runClusterRoleNoSecretsStar(args []string) int {
+	fs := flag.NewFlagSet("cluster-role-no-secrets-star", flag.ContinueOnError)
+	root := fs.String("root", ".", "repo root directory")
+	allowlist := fs.String("allowlist", "", "comma-separated extra allowlisted chart paths (relative to root)")
+	if err := fs.Parse(args); err != nil {
+		return 1
+	}
+	if absRoot, err := os.Getwd(); err == nil && *root == "." {
+		*root = absRoot
+	}
+
+	cfg := clusterrolenosecretsstar.Config{
+		RepoRoot: *root,
+	}
+	if *allowlist != "" {
+		for _, p := range strings.Split(*allowlist, ",") {
+			cfg.AllowlistPaths = append(cfg.AllowlistPaths, strings.TrimSpace(p))
+		}
+	}
+
+	outcome, err := clusterrolenosecretsstar.Check(cfg)
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "cluster-role-no-secrets-star: %v\n", err)
+		return 5
+	}
+	fmt.Fprint(os.Stderr, clusterrolenosecretsstar.FormatOutcome(outcome))
 	if !outcome.Pass {
 		return 1
 	}
