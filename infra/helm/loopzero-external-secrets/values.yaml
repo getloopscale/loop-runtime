@@ -1,0 +1,180 @@
+# SPDX-License-Identifier: Apache-2.0
+# Phase 3.2 inventory — single source of truth para Vault → K8s Secret mapping.
+#
+# Schema per entry:
+#   targetSecret:   string  K8s Secret name (matches existing secretKeyRef in Deployments)
+#   targetNamespace: string K8s namespace (default loopzero-system)
+#   refreshInterval: string ESO pull interval (default 1h; faster for rotated secrets)
+#   vaultBinary:    string  binary owning the secret (api|cloud|operators) for D6 path
+#   vaultCategory:  string  secrets|config (D6 path)
+#   data:           []      list of {secretKey, vaultKey} pairs (multiple keys per Secret)
+#
+# Path constructed: secret/data/loopzero/<env>/<vaultBinary>/<vaultCategory>/<vaultKey>
+# where <env> comes from Helmfile environment values (envName).
+
+# Environment name — injected via Helmfile per-env values (D5 + D6).
+# Required for all path constructions.
+envName: ""
+
+# ClusterSecretStore name (Phase 3.1 — loopzero-vault-secrets).
+secretStoreRef:
+  kind: ClusterSecretStore
+  name: loopzero-vault-secrets
+
+# Default refresh interval (override per-secret for high-rotation cases).
+defaultRefreshInterval: 1h
+
+# Inventory canonical of ExternalSecret → Vault mapping.
+# Each item creates 1 ExternalSecret CR + 1 K8s Secret. Group keys per
+# target Secret name to match existing Deployment secretKeyRef conventions.
+externalSecrets:
+
+  # === loopzero-api binary (16 secrets total, grouped per existing K8s Secret name) ===
+
+  - targetSecret: gitea-admin
+    targetNamespace: loopzero-system
+    vaultBinary: api
+    vaultCategory: secrets
+    data:
+      - secretKey: token
+        vaultKey: gitea/token
+
+  - targetSecret: loopzero-api-tokens
+    targetNamespace: loopzero-system
+    vaultBinary: api
+    vaultCategory: secrets
+    data:
+      - secretKey: argocd-token
+        vaultKey: argocd/token
+      - secretKey: cf-api-token
+        vaultKey: cf/api_token
+
+  - targetSecret: loopzero-api-minio
+    targetNamespace: loopzero-system
+    vaultBinary: api
+    vaultCategory: secrets
+    data:
+      - secretKey: access-key
+        vaultKey: minio/access_key
+      - secretKey: secret-key
+        vaultKey: minio/secret_key
+
+  - targetSecret: loopzero-api-internal
+    targetNamespace: loopzero-system
+    vaultBinary: api
+    vaultCategory: secrets
+    refreshInterval: 24h  # rarely rotated; longer interval reduces Vault load
+    data:
+      - secretKey: argo-callback-secret
+        vaultKey: argo/callback_secret
+      - secretKey: bootstrap-secret
+        vaultKey: bootstrap_secret
+      - secretKey: secret-encryption-key
+        vaultKey: secret_encryption_key
+
+  - targetSecret: loopzero-api-github
+    targetNamespace: loopzero-system
+    vaultBinary: api
+    vaultCategory: secrets
+    data:
+      - secretKey: app-private-key  # RSA PEM
+        vaultKey: github/app_private_key
+      - secretKey: webhook-secret
+        vaultKey: github/webhook_secret
+
+  - targetSecret: loopzero-api-stripe
+    targetNamespace: loopzero-system
+    vaultBinary: api
+    vaultCategory: secrets
+    refreshInterval: 6h  # billing — moderate cadence
+    data:
+      - secretKey: secret-key
+        vaultKey: stripe/secret_key
+
+  - targetSecret: loopzero-service-auth
+    targetNamespace: loopzero-system
+    vaultBinary: api
+    vaultCategory: secrets
+    refreshInterval: 5m  # frequently rotated (cross-binary shared per EC-22)
+    data:
+      - secretKey: secret
+        vaultKey: service_auth/secret
+      - secretKey: secret-previous
+        vaultKey: service_auth/secret_previous
+
+  - targetSecret: loopzero-service-auth-ed25519-pub
+    targetNamespace: loopzero-system
+    vaultBinary: api
+    vaultCategory: secrets
+    data:
+      - secretKey: current
+        vaultKey: service_auth/ed25519_public_current
+      - secretKey: previous
+        vaultKey: service_auth/ed25519_public_previous
+
+  - targetSecret: loopzero-api-admin
+    targetNamespace: loopzero-system
+    vaultBinary: api
+    vaultCategory: secrets
+    refreshInterval: 5m  # admin keys — fast rotation needed
+    data:
+      - secretKey: api-key
+        vaultKey: admin/api_key
+      - secretKey: api-key-previous
+        vaultKey: admin/api_key_previous
+      - secretKey: service-auth-secret
+        vaultKey: admin/service_auth_secret
+      - secretKey: service-auth-secret-previous
+        vaultKey: admin/service_auth_secret_previous
+
+  - targetSecret: loopzero-service-auth-redis
+    targetNamespace: loopzero-system
+    vaultBinary: api
+    vaultCategory: secrets
+    data:
+      - secretKey: password
+        vaultKey: nonce_redis/password
+
+  # === loopzero-cloud binary (3 secrets) ===
+
+  - targetSecret: loopzero-cloud-signing
+    targetNamespace: loopzero-system
+    vaultBinary: cloud
+    vaultCategory: secrets
+    refreshInterval: 24h  # Ed25519 private key — rare rotation
+    data:
+      - secretKey: REDACTED_SECRET_053
+        vaultKey: service_auth/ed25519_private_key
+
+  - targetSecret: loopzero-cloud-stripe
+    targetNamespace: loopzero-system
+    vaultBinary: cloud
+    vaultCategory: secrets
+    refreshInterval: 6h
+    data:
+      - secretKey: api-key
+        vaultKey: stripe/api_key
+      - secretKey: webhook-secret
+        vaultKey: stripe/webhook_secret
+
+  # === tenant-operator binary (4 secrets) ===
+
+  - targetSecret: tenant-operator-do
+    targetNamespace: loopzero-system
+    vaultBinary: operators
+    vaultCategory: secrets
+    data:
+      - secretKey: digitalocean-token
+        vaultKey: digitalocean/token
+      - secretKey: spaces-access-key-id
+        vaultKey: spaces/access_key_id
+      - secretKey: spaces-secret-access-key
+        vaultKey: spaces/secret_access_key
+
+  - targetSecret: tenant-operator-harbor
+    targetNamespace: loopzero-system
+    vaultBinary: operators
+    vaultCategory: secrets
+    data:
+      - secretKey: admin-password
+        vaultKey: harbor/admin_password
