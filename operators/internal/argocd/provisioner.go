@@ -40,6 +40,16 @@ type ApplicationSpec struct {
 	// ADR-0008 Phase 1: The provisioner resolves CellID to the correct ArgoCD instance.
 	// Phase 0: empty or "cell-default" — uses the single ArgoCD instance.
 	CellID string
+
+	// Environment is the env name (e.g., "production", "staging", "j-rollout-a").
+	// Sprint B B3 prep (code-005 architectural follow-up): populating this enables
+	// adding the `loopzero.io/environment` label to the rendered ArgoCD Application.
+	// Future activator iteration can switch from ParseArgoAppName(LastIndex("-"))
+	// to label-based lookup, closing the hyphen-ambiguity finding without breaking
+	// existing fixtures (MEET-ASYNC-AMENDMENT-2026-06-02-002 documented why the
+	// regex tightening path was reverted). Empty string is tolerated for backward
+	// compat — the label is only emitted when this field is non-empty.
+	Environment string
 }
 
 // AppProjectSpec defines the desired state of an ArgoCD AppProject for tenant RBAC isolation.

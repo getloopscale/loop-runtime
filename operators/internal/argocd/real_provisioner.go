@@ -175,10 +175,21 @@ func buildApplicationObject(spec ApplicationSpec) *unstructured.Unstructured {
 			"kind":       "Application",
 			"metadata": map[string]interface{}{
 				"name": spec.Name,
-				"labels": map[string]interface{}{
-					constants.LabelTenant:    spec.TenantID,
-					constants.LabelManagedBy: constants.ManagedByTenantController,
-				},
+				"labels": func() map[string]interface{} {
+					// Sprint B B3 prep (code-005): emit loopzero.io/environment label
+					// when spec.Environment is non-empty so the label-based
+					// parser path (future activator iteration) can disambiguate
+					// hyphenated env names. Backward-compat: empty Environment
+					// → label omitted, no behavior change.
+					labels := map[string]interface{}{
+						constants.LabelTenant:    spec.TenantID,
+						constants.LabelManagedBy: constants.ManagedByTenantController,
+					}
+					if spec.Environment != "" {
+						labels[constants.LabelEnvironment] = spec.Environment
+					}
+					return labels
+				}(),
 				"annotations": map[string]interface{}{
 					// ArgoCD Notifications: subscribe to sync-completed trigger.
 					// When Synced + Healthy, ArgoCD calls POST /internal/argocd-callback

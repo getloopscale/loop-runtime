@@ -150,6 +150,10 @@ func (r *TenantReconciler) reconcileArgoCDApp(ctx context.Context, tenant *loopz
 			DestinationNS:  destNS,
 			DestinationURL: r.WorkloadClusterURL,
 			CellID:         cellID,
+			// Sprint B B3 prep (code-005): populate env so real_provisioner can
+			// label the ArgoCD Application with loopzero.io/environment. Future
+			// activator iteration uses this label instead of LastIndex parser.
+			Environment: env.Name,
 		}
 
 		if err := r.ArgoCDProvisioner.EnsureApplication(ctx, spec); err != nil {
