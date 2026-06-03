@@ -58,6 +58,20 @@ spec:
         - name: tmp
           emptyDir:
             sizeLimit: 1Gi
+        {{- if .Values.vault.enabled }}
+        # T5.11 of plan 2026-06-02-openbao-adoption v1.3 — projected SA
+        # token with bounded audience + expiration. Read by pkg/vault.Client
+        # at /var/run/secrets/vault.loopzero.io/token; sent to auth/k8s-mgmt/login.
+        # Vault TokenReview validates audience claim cryptographically,
+        # preventing token re-use against K8s API or other audiences.
+        - name: vault-sa-token
+          projected:
+            sources:
+              - serviceAccountToken:
+                  path: token
+                  audience: {{ .Values.vault.audience | default "vault.loopzero.io" }}
+                  expirationSeconds: {{ .Values.vault.tokenExpirationSeconds | default 3600 }}
+        {{- end }}
       containers:
         - name: loopzero-api
           image: "{{ .Values.image.repository }}:{{ .Values.image.tag }}"
@@ -80,6 +94,13 @@ spec:
               readOnly: true
             - name: tmp
               mountPath: /tmp
+            {{- if .Values.vault.enabled }}
+            # T5.11 of plan 2026-06-02-openbao-adoption v1.3 — Vault projected
+            # token mount. pkg/vault.Client reads /var/run/secrets/vault.loopzero.io/token.
+            - name: vault-sa-token
+              mountPath: /var/run/secrets/vault.loopzero.io
+              readOnly: true
+            {{- end }}
           env:
             - name: MGMT_KUBECONFIG
               value: /etc/loopzero/kubeconfigs/mgmt.kubeconfig
@@ -205,6 +226,20 @@ spec:
                   name: loopzero-service-auth-redis
                   key: password
                   optional: true
+            {{- if .Values.vault.enabled }}
+            # T5.11-T5.12 of plan 2026-06-02-openbao-adoption v1.3 — Vault
+            # K8s auth login config. pkg/vault.Client reads these env vars
+            # at startup; performs auth/<mount>/login with SA JWT from
+            # /var/run/secrets/vault.loopzero.io/token.
+            - name: LOOPZERO_VAULT_ADDR
+              value: {{ .Values.vault.addr | quote }}
+            - name: LOOPZERO_VAULT_K8S_AUTH_PATH
+              value: {{ .Values.vault.authMount | quote }}
+            - name: LOOPZERO_VAULT_ROLE
+              value: {{ .Values.vault.role | quote }}
+            - name: LOOPZERO_VAULT_SA_JWT_PATH
+              value: "/var/run/secrets/vault.loopzero.io/token"
+            {{- end }}
           envFrom:
             - configMapRef:
                 name: {{ .Values.wiringConfigMap | quote }}

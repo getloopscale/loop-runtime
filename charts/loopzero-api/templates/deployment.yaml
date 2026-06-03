@@ -107,6 +107,16 @@ spec:
               subPath: config
               readOnly: true
             {{- end }}
+            {{- if .Values.vault.enabled }}
+            # T5.11 of plan 2026-06-02-openbao-adoption v1.3 — projected SA
+            # token with bounded audience + expiration. Read by pkg/vault.Client
+            # at this path; sent to auth/k8s-mgmt/login as JWT. TokenReview on
+            # Vault side validates audience claim matches `vault.loopzero.io`,
+            # preventing token re-use against the K8s API or other audiences.
+            - name: vault-sa-token
+              mountPath: /var/run/secrets/vault.loopzero.io
+              readOnly: true
+            {{- end }}
       volumes:
         - name: tmp
           emptyDir:
@@ -126,4 +136,18 @@ spec:
             items:
               - key: config
                 path: config
+        {{- end }}
+        {{- if .Values.vault.enabled }}
+        # T5.11 of plan 2026-06-02-openbao-adoption v1.3 — projected token.
+        # audience=vault.loopzero.io binds the token cryptographically to the
+        # Vault TokenReview check; REDACTED_SECRET_043 (1h) caps blast
+        # radius if pod compromised + token exfiltrated. Kubelet auto-rotates
+        # token before expiry — pkg/vault.Client re-reads at Login() time.
+        - name: vault-sa-token
+          projected:
+            sources:
+              - serviceAccountToken:
+                  path: token
+                  audience: {{ .Values.vault.audience | default "vault.loopzero.io" }}
+                  expirationSeconds: {{ .Values.vault.tokenExpirationSeconds | default 3600 }}
         {{- end }}

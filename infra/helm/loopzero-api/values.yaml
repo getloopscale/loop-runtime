@@ -93,6 +93,18 @@ kubeContexts:
 # without this flag the API spam-logs `traces export: rpc error` every 5s.
 # templates/deployment.yaml gates `LOOPZERO_TRACING_ENABLED` env on this toggle.
 # Production stack (charts/loopzero-api) is unchanged.
+# T5.11 of plan 2026-06-02-openbao-adoption v1.3 — Vault K8s auth config.
+# When enabled, the Deployment mounts a projected SA token with bounded
+# audience + expiration, and pkg/vault.Client uses K8s auth login instead
+# of static token env var. Disabled by default (vault stack opt-in per env).
+vault:
+  enabled: false
+  addr: "https://openbao.vault-system.svc.cluster.local:8200"
+  authMount: "k8s-mgmt"
+  role: "loopzero-api"
+  audience: "vault.loopzero.io"
+  tokenExpirationSeconds: 3600
+
 tracing:
   enabled: false
   # CHG-2026-04-30-INFRA-NORMALIZE / Phase 5 T5.4 — DynamicRouter
