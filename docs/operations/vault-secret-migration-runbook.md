@@ -118,7 +118,27 @@ kubectl --context k3d-loopzero-mgmt -n loopzero-system get externalsecrets
 
 ## P2 — Secret rotation procedure
 
-**Rotate single secret** (e.g. `GITEA_TOKEN`):
+**Canonical (recommended):** use `rotate-secret.sh` (T8.1 EC-22 atomic rotation).
+The script wraps all 4 steps below + cross-binary restart with rollout status wait.
+
+```bash
+export BAO_ADDR=https://127.0.0.1:8210 BAO_SKIP_VERIFY=true
+export BAO_TOKEN=$(jq -r .root_token /tmp/openbao-init.json)
+bash infra/scripts/openbao/rotate-secret.sh \
+  --env vault-local \
+  --path api/secrets/gitea/token \
+  --value "$NEW_TOKEN"
+# [STEP 1/4] bao kv put → [STEP 2/4] ESO force-refresh → [STEP 3/4] poll
+# Ready → [STEP 4/4] rolling restart loopzero-api + loopzero-tenant-operator
+# Exit 0 = complete; exit 2 = PARTIAL (Vault updated, restart failed)
+```
+
+The script reads the embedded rotation table to know which deployments + which
+ExternalSecret CRs are affected by a given Vault path. Unknown paths fail-fast
+(EC-22 typo guard). For PARTIAL exit codes, follow recovery hints in script
+stderr output.
+
+**Manual procedure** (legacy — use only for debugging or unsupported paths):
 
 ```bash
 # Step 1: Update Vault (single SoT — Vault is canonical)
