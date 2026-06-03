@@ -137,15 +137,33 @@ if [[ -z "${LOOPZERO_DB_HOST:-}" ]]; then
   LOOPZERO_DB_PORT="5432"
   LOOPZERO_DB_USER="${LOOPZERO_DB_USER:-loopzero}"
   LOOPZERO_DB_NAME="${LOOPZERO_DB_NAME:-loopzero}"
-  # STANDALONE (local k3d) DB password is the DETERMINISTIC well-known dev
-  # password `loopzero-dev-password`. This is NOT a hardcoded production credential
-  # (T1.3 correctly removed those from the CHARTS, which default "" so prod
-  # fails fast). It is the single local-dev contract that the ENTIRE local
-  # toolchain depends on: api/internal/config/config.go, Tiltfile (db-migrate),
-  # Taskfile, infra/tests/seed/seed.go, parity tests, etc. (58 refs). Making it
-  # random broke all of them (e.g. Tiltfile db-migrate SASL auth failure).
-  # Env override (LOOPZERO_DB_PASSWORD) still wins for cloud/drill. Root cause:
-  # finding-2026-05-22-pg-password-divergence § local-dev-password.
+  # T6.5 of plan 2026-06-02-openbao-adoption v1.4 — standalone local k3d
+  # DB password is now sourced from Vault database engine when available
+  # (database/creds/loopzero-api), falling back to the legacy deterministic
+  # well-known dev password `loopzero-dev-password` ONLY when Vault is not
+  # reachable (cold-bootstrap before openbao-init runs).
+  #
+  # Phased cutover semantics: when BAO_ADDR + BAO_TOKEN are set + the
+  # database engine is mounted + role `loopzero-api` exists, we mint a fresh
+  # 1h-TTL credential. Otherwise we fall back to the legacy password so
+  # cold-bootstrap (chicken-and-egg) still works.
+  #
+  # Long-term (post T+60d): the fallback path is removed (T10.3) and
+  # Vault becomes the only path. The pkg/quality/noaesremaining gate
+  # tracks this transition.
+  if [[ -n "${BAO_ADDR:-}" ]] && [[ -n "${BAO_TOKEN:-}" ]] && command -v bao >/dev/null 2>&1; then
+    VAULT_DB_RESP="$(BAO_ADDR="${BAO_ADDR}" BAO_TOKEN="${BAO_TOKEN}" bao read -format=json database/creds/loopzero-api 2>/dev/null || true)"
+    if [[ -n "${VAULT_DB_RESP}" ]]; then
+      VAULT_DB_USER="$(echo "${VAULT_DB_RESP}" | jq -r '.data.username // empty')"
+      VAULT_DB_PASS="$(echo "${VAULT_DB_RESP}" | jq -r '.data.password // empty')"
+      if [[ -n "${VAULT_DB_USER}" ]] && [[ -n "${VAULT_DB_PASS}" ]]; then
+        LOOPZERO_DB_USER="${VAULT_DB_USER}"
+        LOOPZERO_DB_PASSWORD="${VAULT_DB_PASS}"
+        log "T6.5: standalone DB creds from Vault engine — user=${VAULT_DB_USER} (TTL 1h)"
+      fi
+    fi
+  fi
+  # Legacy fallback — only when Vault path did NOT succeed.
   LOOPZERO_DB_PASSWORD="${LOOPZERO_DB_PASSWORD:-loopzero-dev-password}"
   DB_SSLMODE="disable"
   log "B33: standalone fallback — DB at $LOOPZERO_DB_HOST (sslmode=disable)"
