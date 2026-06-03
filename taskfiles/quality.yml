@@ -60,6 +60,7 @@ tasks:
       - bash infra/tests/check-vault-bootstrap-eso_test.sh      # vault-INT Runbook P1 codification: ESO ClusterSecretStore bootstrap (plan 2026-06-02 v1.8)
       - bash infra/tests/check-enable-vault-backup_test.sh      # vault-INT Runbook P4 codification: enable snapshot-agent backup (plan 2026-06-02 v1.8)
       - bash infra/tests/check-restore-vault-snapshot_test.sh   # vault-INT Runbook P5 DR codification: dry-run by default + --execute opt-in (plan 2026-06-02 v1.8)
+      - bash infra/tests/check-rotation-table-parity_test.sh    # vault-INT parity gate: rotate-secret.sh ROTATION_TABLE vs loopzero-external-secrets/values.yaml inventory (plan 2026-06-02 v1.8 iter 17)
       - bash infra/tests/docs/credentials-sot_test.sh           # doc-sync: credentials-required.md enumerates bootstrap Secrets
 
   diff:
