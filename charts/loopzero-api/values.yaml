@@ -77,6 +77,14 @@ serviceAccount:
 
 rbac:
   create: true
+  # T5.13 of plan 2026-06-02-openbao-adoption v1.3 — closes deep review
+  # finding #1 (cluster-wide secrets/configmaps grant = catastrophic blast
+  # radius). When true (default backward compat for unreleased clusters),
+  # loopzero-api retains cluster-wide secrets/configmaps RBAC for existing
+  # deploys. Flip to false only AFTER per-tenant Role rollout via
+  # tenant-controller reconcile (see operators/internal/tenant/tenant_rbac.go).
+  # Phased cutover: Day 0 deploy keeps current behavior; Day N flip to false.
+  legacyClusterWideSecrets: true
 
 startupProbe:
   enabled: true
