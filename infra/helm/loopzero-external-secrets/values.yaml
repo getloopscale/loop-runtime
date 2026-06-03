@@ -44,19 +44,28 @@ externalSecrets:
     vaultBinary: api
     vaultCategory: secrets
     data:
+      # NOTE: loopzero-api Deployment reads argocd-token via per-key
+      # secretKeyRef (kebab-case OK). cf-api-token added v1.8 — needs
+      # corresponding secretKeyRef block em deployment.yaml OR migrate
+      # para envFrom pattern como loopzero-api-internal/etc.
       - secretKey: argocd-token
         vaultKey: argocd/token
       - secretKey: cf-api-token
         vaultKey: cf/api_token
 
+  # Phase 3.3 finding: loopzero-api Deployment uses envFrom.secretRef pattern
+  # for bulk Secret consumption (existing: dbCredentialsSecret +
+  # loopzero-service-auth). For the 5 NEW Secrets below (não existentes pre-v1.8),
+  # we use UPPER_SNAKE keys matching env var names exatamente — pods consume
+  # via NEW envFrom.secretRef block em deployment.yaml (added Phase 3.3 closure).
   - targetSecret: loopzero-api-minio
     targetNamespace: loopzero-system
     vaultBinary: api
     vaultCategory: secrets
     data:
-      - secretKey: access-key
+      - secretKey: MINIO_ACCESS_KEY
         vaultKey: minio/access_key
-      - secretKey: secret-key
+      - secretKey: MINIO_SECRET_KEY
         vaultKey: minio/secret_key
 
   - targetSecret: loopzero-api-internal
@@ -65,11 +74,11 @@ externalSecrets:
     vaultCategory: secrets
     refreshInterval: 24h  # rarely rotated; longer interval reduces Vault load
     data:
-      - secretKey: argo-callback-secret
+      - secretKey: LOOPZERO_ARGO_CALLBACK_SECRET
         vaultKey: argo/callback_secret
-      - secretKey: bootstrap-secret
+      - secretKey: LOOPZERO_BOOTSTRAP_SECRET
         vaultKey: bootstrap_secret
-      - secretKey: secret-encryption-key
+      - secretKey: LOOPZERO_SECRET_ENCRYPTION_KEY
         vaultKey: secret_encryption_key
 
   - targetSecret: loopzero-api-github
@@ -77,9 +86,9 @@ externalSecrets:
     vaultBinary: api
     vaultCategory: secrets
     data:
-      - secretKey: app-private-key  # RSA PEM
+      - secretKey: GITHUB_APP_PRIVATE_KEY  # RSA PEM
         vaultKey: github/app_private_key
-      - secretKey: webhook-secret
+      - secretKey: GITHUB_WEBHOOK_SECRET
         vaultKey: github/webhook_secret
 
   - targetSecret: loopzero-api-stripe
@@ -88,7 +97,7 @@ externalSecrets:
     vaultCategory: secrets
     refreshInterval: 6h  # billing — moderate cadence
     data:
-      - secretKey: secret-key
+      - secretKey: STRIPE_SECRET_KEY
         vaultKey: stripe/secret_key
 
   - targetSecret: loopzero-service-auth
@@ -118,13 +127,13 @@ externalSecrets:
     vaultCategory: secrets
     refreshInterval: 5m  # admin keys — fast rotation needed
     data:
-      - secretKey: api-key
+      - secretKey: LOOPZERO_ADMIN_API_KEY
         vaultKey: admin/api_key
-      - secretKey: api-key-previous
+      - secretKey: LOOPZERO_ADMIN_API_KEY_PREVIOUS
         vaultKey: admin/api_key_previous
-      - secretKey: service-auth-secret
+      - secretKey: LOOPZERO_ADMIN_SERVICE_AUTH_SECRET
         vaultKey: admin/service_auth_secret
-      - secretKey: service-auth-secret-previous
+      - secretKey: LOOPZERO_ADMIN_SERVICE_AUTH_SECRET_PREVIOUS
         vaultKey: admin/service_auth_secret_previous
 
   - targetSecret: loopzero-service-auth-redis
