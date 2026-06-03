@@ -38,6 +38,16 @@ const (
 	TypePriorityClassReady  = "PriorityClassReady"
 	TypeArgoCDAppReady      = "ArgoCDAppReady"
 	TypeHarborProjectReady  = "HarborProjectReady"
+	// T3.3 of openbao-adoption v1.3 — per-tenant Vault Transit key.
+	// EC-15 amendment: when False with reason VaultQuotaExceeded, alarm fires.
+	TypeTransitKeyAvailable = "TransitKeyAvailable"
+)
+
+// --- Tenant condition reasons (T3.3 EC-15) ---
+const (
+	ReasonVaultQuotaExceeded    = "VaultQuotaExceeded"    // Vault rejected key create due to quota
+	ReasonVaultUnreachable      = "VaultUnreachable"      // network/timeout/5xx
+	ReasonTransitKeyProvisioned = "TransitKeyProvisioned" // success state
 )
 
 // --- PlatformBootstrap conditions ---

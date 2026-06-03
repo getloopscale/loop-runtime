@@ -30,6 +30,7 @@ import (
 	"github.com/loopzero/loopzero/operators/internal/constants"
 	"github.com/loopzero/loopzero/operators/internal/gitea"
 	"github.com/loopzero/loopzero/operators/internal/harbor"
+	"github.com/loopzero/loopzero/operators/internal/vault"
 	miniop "github.com/loopzero/loopzero/operators/internal/minio"
 	"github.com/loopzero/loopzero/operators/internal/shared"
 	"github.com/loopzero/loopzero/pkg/correlation"
@@ -93,6 +94,9 @@ type TenantReconciler struct {
 	MinIOProvisioner   miniop.CredentialProvisioner // nil disables per-tenant MinIO credential isolation
 	HarborClient       harbor.Provisioner           // nil disables Harbor integration (backward compat with DOCR)
 	HarborRegistryHost string                       // e.g. "harbor.dev.loopzero.example" — used in Docker config.json
+	// T3.3 of openbao-adoption v1.3: per-tenant Vault Transit key management.
+	// nil disables (vault disabled mode); reconcileTransitKey skips step + sets no condition.
+	VaultClient        vault.TenantTransitClient
 	GiteaURL           string
 	WorkloadClusterURL string           // URL of the workload cluster API server
 	Credentials        BuildCredentials // storage + registry credentials for build namespace secrets
@@ -211,6 +215,10 @@ func (r *TenantReconciler) Reconcile(ctx context.Context, req ctrl.Request) (res
 		{conditions.TypePriorityClassReady, func() error { return r.reconcilePriorityClass(ctx, &tenant) }},
 		{conditions.TypeHarborProjectReady, func() error { return r.ensureHarborProject(ctx, &tenant) }},
 		{"", func() error { return r.ensureHarborRobotAccounts(ctx, &tenant) }},
+		// T3.3 of openbao-adoption v1.3 — per-tenant Vault Transit key.
+		// No-op when VaultClient == nil (vault disabled). EC-15 wires
+		// distinct condition reasons for quota vs unreachable errors.
+		{conditions.TypeTransitKeyAvailable, func() error { return r.reconcileTransitKey(ctx, &tenant) }},
 		{"", func() error { return r.reconcileEnvironmentCRs(ctx, &tenant) }},
 	}
 	if err := r.runSteps(ctx, req, &tenant, steps); err != nil {
@@ -292,6 +300,11 @@ func (r *TenantReconciler) requiredProvisioningConditions() []string {
 	}
 	if r.HarborClient != nil {
 		required = append(required, conditions.TypeHarborProjectReady)
+	}
+	// T3.3 of openbao-adoption v1.3: when VaultClient configured, transit
+	// key must be available before Tenant transitions to ACTIVE.
+	if r.VaultClient != nil {
+		required = append(required, conditions.TypeTransitKeyAvailable)
 	}
 	return required
 }
