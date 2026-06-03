@@ -26,7 +26,17 @@ loki:
       s3ForcePathStyle: true
       insecure: true                         # LOCAL DEV ONLY — MinIO without TLS
   limits_config:
-    retention_period: 168h                   # 7 days
+    retention_period: 168h                   # 7 days (default)
+    # T8.2 of plan 2026-06-02-openbao-adoption v1.4 — Vault audit log
+    # streams require 90-day retention for forensic + compliance review.
+    # Selector matches Vault server pod (vault-system NS). Higher priority
+    # overrides the default 168h. Other audit-bearing namespaces can be
+    # added here (e.g., argocd, loopzero-system) as separate retention_stream
+    # entries.
+    retention_stream:
+      - selector: '{namespace="vault-system"}'
+        priority: 1
+        period: 2160h                        # 90 days
     max_query_series: 500
     max_query_length: 721h
     # CHG-002b 2026-04-27 — L3 stream cap fix.

@@ -111,8 +111,36 @@ subjects:
     namespace: ${NAMESPACE}
 EOF
 
-# 5) Token secret
-cat <<EOF | kubectl apply -f - >/dev/null
+# T7.3 of openbao-adoption v1.4: try Vault kubernetes engine FIRST. When
+# Vault is available + the engine + role exist, fetch a short-lived (TTL 1h)
+# SA token instead of creating the legacy type=kubernetes.io/service-account-token
+# Secret (long-lived static token). Legacy path remains as fallback for cold-
+# bootstrap (chicken-and-egg before openbao-init runs) and for environments
+# without Vault stack.
+SCRIPT_LIB_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+# shellcheck source=./vault-k8s-engine-token.sh
+[ -f "${SCRIPT_LIB_DIR}/vault-k8s-engine-token.sh" ] && source "${SCRIPT_LIB_DIR}/vault-k8s-engine-token.sh"
+
+TOKEN=""
+if declare -f mint_vault_k8s_token >/dev/null 2>&1; then
+  # Vault role naming convention (T7.2): loopzero-runtime-<cluster-type>.
+  # Map CLUSTER_ID prefix to role name; default to loopzero-runtime-mgmt.
+  case "${CLUSTER_ID:-}" in
+    build*) VAULT_ROLE="loopzero-runtime-build" ;;
+    cell*|workload*) VAULT_ROLE="loopzero-runtime-workload" ;;
+    *)       VAULT_ROLE="loopzero-runtime-mgmt" ;;
+  esac
+  if TOKEN=$(mint_vault_k8s_token "${VAULT_ROLE}" "${NAMESPACE}" 2>/dev/null) && [[ -n "${TOKEN}" ]]; then
+    log "T7.3: SA token fetched via Vault kubernetes engine role=${VAULT_ROLE} (TTL 1h)"
+  else
+    log "T7.3: Vault kubernetes engine unavailable — falling back to legacy SA-token Secret"
+    TOKEN=""
+  fi
+fi
+
+# Legacy path (T7.3 fallback) — only when Vault engine did NOT return a token.
+if [[ -z "${TOKEN}" ]]; then
+  cat <<EOF | kubectl apply -f - >/dev/null
 apiVersion: v1
 kind: Secret
 metadata:
@@ -123,18 +151,27 @@ metadata:
 type: kubernetes.io/service-account-token
 EOF
 
-# 6) Wait for token to be populated
-for _ in 1 2 3 4 5 6 7 8 9 10; do
-  TOKEN=$(kubectl get secret "${SA_NAME}-token" -n "$NAMESPACE" -o jsonpath='{.data.token}' 2>/dev/null | base64 -d 2>/dev/null || true)
-  if [[ -n "$TOKEN" ]]; then break; fi
-  sleep 1
-done
-if [[ -z "${TOKEN:-}" ]]; then
-  log "ERROR: SA token not populated after 10s"
-  exit 1
+  # 6) Wait for token to be populated
+  for _ in 1 2 3 4 5 6 7 8 9 10; do
+    TOKEN=$(kubectl get secret "${SA_NAME}-token" -n "$NAMESPACE" -o jsonpath='{.data.token}' 2>/dev/null | base64 -d 2>/dev/null || true)
+    if [[ -n "$TOKEN" ]]; then break; fi
+    sleep 1
+  done
+  if [[ -z "${TOKEN:-}" ]]; then
+    log "ERROR: SA token not populated after 10s"
+    exit 1
+  fi
 fi
 
-CA_DATA=$(kubectl get secret "${SA_NAME}-token" -n "$NAMESPACE" -o jsonpath='{.data.ca\.crt}')
+# CA cert is always read from K8s API (per pattern; not from Vault) since
+# the kube-root-ca.crt ConfigMap is the canonical CA source (also see plan
+# 2026-05-25-live-ca-fetch-clustercredential).
+CA_DATA=$(kubectl get secret "${SA_NAME}-token" -n "$NAMESPACE" -o jsonpath='{.data.ca\.crt}' 2>/dev/null || true)
+if [[ -z "${CA_DATA}" ]]; then
+  # When Vault path is used + no legacy Secret was created, fall back to
+  # the kube-root-ca.crt ConfigMap (canonical CA source per ADR).
+  CA_DATA=$(kubectl get cm kube-root-ca.crt -n "$NAMESPACE" -o jsonpath='{.data.ca\.crt}' 2>/dev/null | base64 -w0)
+fi
 SERVER=$(kubectl config view --minify -o jsonpath='{.clusters[0].cluster.server}')
 
 # B82 (end-to-end-deploy-validation-plan iter 12 / 2026-04-29): in k3d local
