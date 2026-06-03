@@ -9,6 +9,59 @@ LoopZero is a **CLI-first managed cloud (Kubernetes-backed)** for monorepo deplo
 The authoritative spec is the code itself + `CHANGELOG.md` + relevant ADRs. If this file and the codebase conflict, the codebase wins.
 
 **Status:** Pre-release. Latest snapshot: `.claude/knowledge-base/audits/2026-05-28-keyless-GREEN/07-build-pipeline.md` (M07 fourth re-audit, M07 3.80→**3.85** +0.05 pós LIVE keyless end-to-end GREEN: sign-image + attest-image Phase=Succeeded, Rekor tlog index 1+2, DB rel-da90a317114862f2 image_signature persisted). Anteriores: M07 3.4→3.7→3.75→3.80 (M1+M2 deste plan derivado). Aggregate baseline: `.claude/knowledge-base/audits/2026-05-26/SUMMARY.md` (12 módulos 3.62/4.0). Active uplift plans: `docs/plans/completed/2026-05-26-maturity-3-62-to-4-0-roadmap-plan.md` v1.1 (target portfolio 3.95+, ceiling 3.983 per ADR D3 cap) + `docs/plans/2026-05-28-M07-fulcio-cacert-keyless-LIVE-plan.md` v1.5 (M07 3.85 registered LIVE; 3.90+ gated em operator prod DNS for Sigstore + TUF root pinning). Total Δ session: 3.4 → 3.85 (+0.45). H1-H7 hardening themes complete. Sprint 9 (Polish + Launch) pending gates: (a) operator-run prod-identical drill GREEN; (b) 1 prod customer day-trial with no incidents. **M07 production cutover BLOCKED 2026-05-28** per MEET-2026-05-28-001 (4 absolute vetoes + 11 CRITICAL findings + 24 mandatory actions) — sponsor accepted veredict same day. Engineering side 3.85 LIVE-validated for LOCAL; prod-readiness gated on TUF ceremony + Pulumi sigstore.ts up + drill iter ≥56 + customer trial + 15 engineering actions. **MEET-2026-05-28-001 engineering closure COMPLETED 2026-05-29** per plan `docs/plans/2026-05-28-meet-001-engineering-closure-plan.md` v1.1 — 18 tasks (T0.1 → T4.6) + 27 commits durável, all CR-1..CR-11 fechados, plus T1.3 follow-up regression caught + fixed mid-Final-Phase (`b3168cce` + `b3933d7b`: empty-apps build now returns 400 MISSING_FIELD instead of 500). Final Phase Dogfood QA on cleanroom-fresh infra fully validated `.claude/knowledge-base/audits/2026-05-29-dogfood-cleanroom-fresh-evidence.md` (103 RUNNABLE specs PASS / 0 functional FAIL — 102 main run + 1 focused TIMEDOUT re-run / 29 precondition-skipped) + `.claude/knowledge-base/audits/2026-05-29-chaos-test-full-cleanroom-fresh-evidence.md` (chaos-test --full 10/10 PASS in 52min on cleanroom-fresh 4-cluster k3d, SLO held entire chaos window, C03 random-tenant-pod-kill executed — was SKIP on warm). Engineering signal canonical; operator gates (TUF ceremony + prod Sigstore stack + customer trial + drill prod-identical re-run) remain HARD STOP for prod cutover.
+**OPENBAO-ADOPTION ENGINEERING COMPLETE 2026-06-03/04 (plan v1.5)** per Ralph loop session iter 28-35 (14 commits `3f97366d..a0ac21ea` pushed to origin/develop). Migrou platform secrets posture de inline/env-var/AES para OpenBao Vault como cryptographic root: T2 kv-v2 (3 critical secrets), T3 Transit (per-tenant DEK + crypto-shred + dispatcher), T4 ESO broker, T5 6 K8s auth mounts (k8s-mgmt/build/cell-{default,1,2} + legacy) + per-binary roles + projected SA token (audience=vault.loopzero.io expiration=3600s) + ClusterRole legacyClusterWideSecrets flag, T6 database engine (dynamic PG creds TTL 1h/24h) + loopzero-api role + CachingDatabaseClient SDK, T7 kubernetes engine (3 cluster roles) + CachingK8sEngineClient SDK + scoped-kubeconfig.sh Vault-first refactor (legacy fallback for cold-bootstrap), T8 4 P1 alerts (VaultAuthFailureRateHigh/PolicyDenialRateHigh/SealedOrDown/AuditLogStalled invariant=audit-log-must-flow) + Promtail vault-system scrape + Loki retention_stream 90d + DO Spaces archive cron + Grafana dashboard (7 panels uid=openbao-audit), T9 @pulumi/vault dep + VaultSecretReader component + migrate-pulumi-secrets-to-vault.sh + prod-pulumi-bootstrap.md runbook, T10 Day 30 verify + Day 60 AES delete CronJobs (safety defaults dryRun=true) + calendar-gated noaesremaining quality gate (WARN until 2026-08-01). **LIVE evidence iter 32 against k3d-loopzero-vault**: 7/7 Go LIVE tests PASS (auth mounts + secrets engines + Transit round-trip + policy denial 403 + database role TTL + K8s engine roles + cross-cluster isolation). **Test aggregate**: 51 Go unit + 7 Go LIVE + 13 TS contract + 12 hermetic shell tests PASS (138 assertions agregadas). **5 new quality gates wired**: cluster-role-no-secrets-star (T5.15), no-legacy-sa-token-secret (T7.6), no-pulumi-inline-secrets (T9.6 — operator-gated until migration), no-aes-remaining (T10.2 calendar-gated), no-env-vault-secrets (T2.7). Engineering closure: [[MEET-ASYNC-AMENDMENT-2026-06-03-002-openbao-adoption-engineering-closure]] + LIVE evidence audit `.claude/knowledge-base/audits/2026-06-03-openbao-adoption-LIVE-evidence.md`. **Operator-time gates pending** (9 items, see runbook below).
+
+### 🔧 Next session: resume openbao-adoption operator handoff
+
+**Estado atual (2026-06-04):** Engineering 100% completo, todos commits pushed, working tree limpo. Operator-time gates documentados + runbook + scripts prontos para execução LIVE quando recursos disponíveis.
+
+**Pendências reais (9 operator-gated):**
+
+1. **T5.1-T5.4 LIVE per-mount auth/<X>/config writes** — Execute `docs/operations/openbao-multi-cluster-auth-runbook.md` para cada 5 clusters (mgmt + build + cell-default + cell-1 + cell-2). Precisa: credenciais LIVE de cada cluster (kubectl access). Tempo: 30min operator.
+2. **T6.2 LIVE database/config/postgres-loopzero-api** — Provisionar PG admin role no DOKS managed PG + `bao write database/config/postgres-loopzero-api ...`. Precisa: DOKS PG admin creds. Tempo: 15min operator.
+3. **T6.6 LIVE PG audit log validation** (`v-k8s-loopzero-api-*` user visible). Depende de #2. Tempo: 5min após #2.
+4. **T7.4 LIVE delete legacy SA-token Secrets** — Operator action pós-T7.3 refactor verify. Tempo: 10min.
+5. **T7.5 LIVE cell access via Vault SA token**. Depende de T7.1 config done. Tempo: 15min.
+6. **T8.6 LIVE alert fire** com Prometheus rodando — kube-prometheus-stack precisa estar instalado em loopzero-mgmt. Tempo: 30min (install + trigger).
+7. **T9.2-T9.5 LIVE production secret migration** — **9 inline secrets restantes** (4 prod + 5 dev em `Pulumi.{dev,prod}.yaml`). Execute `infra/scripts/openbao/migrate-pulumi-secrets-to-vault.sh --execute --stack <dev|prod>` per runbook `docs/operations/prod-pulumi-bootstrap.md` (8 passos). Precisa: `PULUMI_CONFIG_PASSPHRASE`. Tempo: 1h operator.
+8. **T10.x calendar fires** — Day 30 (2026-07-01) habilita `vault.day30VerifyCron.enabled=true` em loopzero-api overlay; Day 60 (2026-08-01) habilita `vault.day60AesDeleteCron.enabled=true` com `dryRun=false + shredAesKey=true` após sponsor sign-off. Calendar-gated.
+9. **Final Phase Dogfood QA** — `/dogfood full` vault-enabled. Precisa: trio LIVE (cleanroom + dogfood + chaos-test). Pendente recursos: swap saturado + 6 Claude sessions impedem rodar agora; estado limpo com ~7.4GB RAM available + 51GB disco free; idealmente fechar Claude sessions extras OU reboot host antes de tentar trio.
+
+**Arquivos canonicais para continuar:**
+- Plano: `.claude/knowledge-base/plans/2026-06-02-openbao-adoption-plan.md` v1.5
+- LIVE evidence: `.claude/knowledge-base/audits/2026-06-03-openbao-adoption-LIVE-evidence.md`
+- Operator handoff: `.claude/knowledge-base/meetings/MEET-ASYNC-AMENDMENT-2026-06-03-002-openbao-adoption-engineering-closure.md`
+- Runbooks: `docs/operations/openbao-multi-cluster-auth-runbook.md` (T5.1-T5.4) + `docs/operations/prod-pulumi-bootstrap.md` (T9.2-T9.5)
+- Migrate script: `infra/scripts/openbao/migrate-pulumi-secrets-to-vault.sh` (default --dry-run)
+- Vault state: `k3d-loopzero-vault` cluster running mas SEALED (PVC re-init iter 34 destruiu fixture secrets); precisará `bao operator init` + 3-shard unseal para retomar (`docs/operations/vault-cluster-local-runbook.md` + `infra/scripts/openbao/init-ceremony.sh`)
+- LIVE artifacts ANTES desta sessão (já removidos em iter 34 cleanup): nenhum mais em loopzero-mgmt
+
+**Para validar engineering side rapidamente em nova sessão:**
+```bash
+cd /home/paulo/Projetos/loopzero/loopzero
+git pull --ff-only
+task quality:gates 2>&1 | tail -20   # 18 gates openbao-adoption devem PASS
+go test ./pkg/vault/... ./pkg/quality/{clusterrolenosecretsstar,nolegacysatoken,nopulumiinlinesecrets,noaesremaining,noenvvaultsecrets}/...
+```
+
+**Trio LIVE quando recursos OK:**
+```bash
+# Pré-requisitos:
+#   - Fechar Claude sessions extras (libera ~2GB RAM)
+#   - Opcional: reboot host (libera swap pressure)
+#   - Disk ≥ 50GB free (verificar via df -h /)
+task clean:deep         # ~15GB recovered + page cache drop + 4 k3d clusters destroyed
+task setup              # ~30min, 4 k3d clusters + 32 helmfile releases
+task doctor             # gate 38/0
+tilt up                 # em outra terminal/sessão
+/dogfood full           # ~45min — validar journeys end-to-end
+/chaos-test full        # ~60min — validar SLO holds under chaos
+```
+
+**Memory checkpoint:** Para reabrir contexto rapidamente, ler estas 3 seções desta CLAUDE.md (status + Next session + 9 pending items) + ler frontmatter do plano v1.5 + abrir LIVE evidence audit.
+
+---
+
 **VAULT-INT SUBSTANTIVELY COMPLETE 2026-06-03 (plan v1.9)** per Ralph loop session iter 9-26 + sponsor ratification MEET-ASYNC-AMENDMENT-2026-06-03-001 (ACCEPT). Migrou loopzero-api/cloud/tenant-operator de env-var-as-secret para OpenBao Vault como canonical Source of Truth via ESO v0.14.3 D11. Artefatos: (a) **6 canonical operator scripts** em `infra/scripts/openbao/` (vault-bootstrap-eso.sh + seed-loopzero-secrets.sh + vault-sync-check.sh + rotate-secret.sh + enable-vault-backup.sh + restore-vault-snapshot.sh, ~1450 LOC) cobrindo Runbook P1-P5; (b) **9 hermetic test suites = 68 PASS aggregate** (6 script tests + 3 invariant gates: rotation-table-parity, creation-policy regression, chart-sanity 8 invariants); (c) **chart `loopzero-external-secrets`** com 13 ExternalSecret CRs inventory canonical + vaultBinaryOverride per-key cross-binary D6 shared paths; (d) **4 helmfile envs wired** (standalone-multi + dev + drill + prod) com `vaultEnabled` opt-in flag default false; (e) **Phase 9 T9.1 LIVE comprehensive** validation (iter 18-22): full inventory 13/13 ExternalSecret CRs SecretSynced=True + cross-binary D6 + drift recovery <1s + idempotency KV-v2 + rollback drill preserves 13/13 Secrets + rotation HAPPY PATH 4-steps-GREEN + rotation PARTIAL semantics + Vault outage graceful degradation (K8s preserved + Error status). **P0 cascade-delete bug found+fixed via LIVE iter 20**: `creationPolicy: Owner` set `blockOwnerDeletion=true` ownerReference → K8s GC cascade-deleted ALL 13 Secrets on `helm uninstall` BEFORE ESO could honor `deletionPolicy: Retain` → fix `Owner → Orphan` (decoupled lifecycle, no ownerReference); regression test prevents future Owner reintroduction. **Operator handoff** doc `docs/operations/vault-INT-operator-handoff.md` + runbook `docs/operations/vault-secret-migration-runbook.md` P1-P6 procedures (P1+P2+P4+P5 sections refactored com canonical scripts). LIVE evidence: `.claude/knowledge-base/audits/2026-06-03-vault-INT-LIVE-evidence.md`. **T9.2 DOKS drill + T9.3 prod-like smoke deferred to operator-time** (cost authorization gate ~$0.51/run) per sponsor amendment ACCEPT — plan substantively complete pending operator-time DOKS execution when budget available.
 
 
