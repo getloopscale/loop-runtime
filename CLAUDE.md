@@ -460,16 +460,16 @@ Skills/slash commands (subset): `/sprint`, `/implement`, `/test`, `/review`, `/d
 
 > **Source**: Deep Review Loop completo `/home/paulo/loopzero/api/review-output/final_report.md` — 83 findings (2 critical + 9 high + 36 medium + 36 low), 10 threat models, 7 invariants validated, C4 composite **3.15 / 4.0**. Ordem por impacto×esforço×blast-radius. Cada sprint termina com trio FULL re-validation (cleanroom + dogfood --full + chaos-test --full) — padrão V9 L17-L22 + L22-FAANG `098b6846`. Memory: `reference_deep_review_roadmap_2026_06_01.md`.
 
-### 🔴 Sprint A — P1 HOTFIXES (~1 dia eng)
+### ✅ Sprint A — P1 HOTFIXES — CLOSED 2026-06-03 (todos 4 itens já LIVE-shipped antes desta sessão; verified via git log + unit tests PASS)
 
 Fecha 3 dos CR ainda abertos de MEET-2026-05-28-001 (CR-1/CR-6/CR-7) + 1 CRITICAL ativo.
 
 | # | Finding | Esforço | File |
 |---|---------|---------|------|
-| A1 | `comp-001` Wire `SecretEnvLocker` em setup_server.go (CRITICAL — mutation lock missing AGORA) | **1 linha** | `api/cmd/setup_server.go` |
-| A2 | `sec-008` `strings.EqualFold` em `IsProduction()` — `LOOPZERO_ENV=Production` bypassa SCT guard | **2 linhas** | `api/internal/config/config.go:547` |
-| A3 | `sec-009` DB trigger BEFORE UPDATE em `rekor_url` (write-once enforcement) | migration 000022 | `api/internal/db/migrations/` |
-| A4 | `sec-010` Per-tenant Fulcio SA audience (CR-7 cross-tenant signing forgery) | L effort | `api/internal/argo/workflow_builder.go:568` |
+| ~~A1~~ | ✅ `comp-001` Wire `SecretEnvLocker` em setup_server.go — **SHIPPED commit `5e777c39`** (test: TestSecretSet_AcquiresEnvLock PASS) | 1 linha | `api/cmd/setup_server.go:82` + `api/internal/server/router.go:298` |
+| ~~A2~~ | ✅ `sec-008` LOOPZERO_ENV allowlist em `Validate()` — **SHIPPED commit `6f35bdcb`** (rejects `Production`/`prod`/case-variants AT STARTUP via `isValidEnv()`; IsProduction() pode manter strict equality porque Validate() é EARLY gate; tests PASS) | — | `api/internal/config/config.go:462+482` |
+| ~~A3~~ | ✅ `sec-009` BEFORE UPDATE trigger em `image_attestation_rekor_url` write-once + AFTER INSERT audit trigger — **SHIPPED commit `87ab3de4`** (migration 000020, NOT 000022 as roadmap predicted; 6 integration tests covering raise EXCEPTION + idempotent retry + first-set-from-null + audit_log + tx rollback) | migration 000020 | `api/internal/db/migrations/000020_attestation_rekor_url_write_once.up.sql` |
+| ~~A4~~ | ✅ `sec-010` Per-tenant Fulcio SA audience `sigstore-<tenantID>` em production/staging (legacy `sigstore` em dev) + fail-closed sentinel `sigstore-MISSING-TENANT` — **SHIPPED commit `3bcad85f`** (audience_test.go PASS, wired at workflow_builder.go:550) | L effort | `api/internal/argo/workflow_builder.go:575` (`audienceFor`) |
 
 ### 🟠 Sprint B — P2 ARCH/CODE (~3-5 dias)
 
@@ -506,7 +506,7 @@ Fecha 3 dos CR ainda abertos de MEET-2026-05-28-001 (CR-1/CR-6/CR-7) + 1 CRITICA
 
 ### Path to Sprint 9 (Polish + Launch)
 
-- Sprint A fecha CR-1/CR-6/CR-7 (3 dos 11 originais de MEET-2026-05-28-001).
+- ✅ Sprint A FECHADO 2026-06-03 — fechou CR-1/CR-6/CR-7 (3 dos 11 originais de MEET-2026-05-28-001). Verified via git log + unit tests this session. Final_report.md (Jun 1) está stale relativo ao código LIVE — todos os 4 itens já foram shipped por iterations anteriores do Plano A P1 security hardening (commits `5e777c39` + `6f35bdcb` + `87ab3de4` + `3bcad85f`).
 - Pós-Sprint A: **8/11 CRs fechados**; remaining 3 são operator HARD STOPs (TUF ceremony + Sigstore Pulumi stack + customer trial).
 - C4 Health pós-Sprint D estimado **3.65+** (alinhado com aggregate baseline 2026-05-27).
 - Trio re-run mandatório entre Sprint A→B→C→D.
