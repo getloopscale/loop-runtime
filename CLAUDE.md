@@ -480,22 +480,22 @@ Fecha 3 dos CR ainda abertos de MEET-2026-05-28-001 (CR-1/CR-6/CR-7) + 1 CRITICA
 | ~~B3~~ | ✅ `code-005` Env-name parser ambiguity — **FULLY CLOSED via `8854f64e` (label emission on ArgoCD App) + `e9c44a2e` (dual-path activator)**. SyncCallbackActivator now reads `loopzero.io/{tenant,environment}` off the live ArgoCD App CR via DynamicArgoAppLabelReader (uses same mgmt dynamic client as CellPinner); falls back to ParseArgoAppName(LastIndex) when labels are absent (backward-compat for apps pre-dating `8854f64e`). 6 unit tests PASS covering label-beats-parser + 4 fallback edge cases. Per the earlier hesitation (values.yaml extension was claimed required) was wrong — the K8s API fetch path keeps all changes inside the approved governance scope (api/internal/services/ + api/cmd/ + operators/internal/). MEET-ASYNC-AMENDMENT-2026-06-02-002 regression risk eliminated: existing hyphen-env fixtures unaffected. | M | `api/internal/services/argo_app_label_reader.go` (new) + `sync_callback_activator.go` (lookupTenantEnv method) + `setup_orchestrator.go` (wire) + `operators/internal/argocd/{provisioner,real_provisioner}.go` + `operators/internal/tenant/tenant_gitops.go` |
 | ~~B4~~ | ✅ `val-002` Correlation-ID canonical — **SHIPPED** via `correlation.Read(r)` helper at `pkg/correlation/reader.go` — reads canonical `Correlation-ID` first, falls back to legacy `X-Correlation-ID` with slog.Warn deprecation; all 3 mutation routes (builds.go:425 + promote.go:135 + rollback.go:127) wired identically | S | `api/internal/correlation/reader.go` + 3 route call sites |
 
-### 🟡 Sprint C — INFRA/CI (~1 semana)
+### ✅ Sprint C — INFRA/CI — CLOSED 2026-06-04 engineering-side (3 of 4 SHIPPED + C1 is operator-only HARD STOP — sponsor T3 meeting required for CI platform choice)
 
 | # | Finding | Esforço | File |
 |---|---------|---------|------|
-| C1 | `infra-001` Selecionar plataforma CI (Gitea Actions natural — self-hosted, already in stack). T2 meeting required. | L | T2 meeting + ADR |
-| C2 | `infra-006` RLS owner bypass — policy `loopzero_service_role` para background workers | M | new migration |
-| C3 | `infra-007` Partial unique index `(tenant_id, project_id, environment) WHERE status='ACTIVE'` em releases | S | new migration |
-| C4 | `infra-003` Anonymous-auth gate cobrir `infra/k3d/*.yaml` (atualmente só checa Helm/Helmfile) | S | `pkg/quality/anonymousauth/check.go` |
+| ⏳ C1 | ⚠️ `infra-001` CI platform choice — **OPERATOR-ONLY HARD STOP** per ADR `decisions/2026-05-27-T0.2-ci-platform-choice.md` (status: PROPOSED awaiting sponsor T3 meeting). Recommendation in ADR: Gitea Actions self-hosted runner (already in mgmt cluster stack). Not autonomously closable. | L | T3 meeting + ADR ratification |
+| ~~C2~~ | ✅ `infra-006` RLS loopzero_worker_role — **SHIPPED commit `ce1306a8`** (migration `000023_loopzero_worker_role.up.sql`; named loopzero_worker per implementation pragmatics — same intent as loopzero_service_role) | M | `api/internal/db/migrations/000023_loopzero_worker_role.up.sql` |
+| ~~C3~~ | ✅ `infra-007` Partial unique index — **SHIPPED migration `000022_releases_active_unique_index.up.sql`** | S | `api/internal/db/migrations/000022_releases_active_unique_index.up.sql` |
+| ~~C4~~ | ✅ `infra-003` anonymous-auth k3d coverage — **SHIPPED commit `32eefa3a`** (check.go scanDirs now includes `infra/k3d` + worktrees skip + .db/.sqlite blob skip) | S | `pkg/quality/anonymousauth/check.go` |
 
-### 🟢 Sprint D — TEST DEBT + SECRETS HARDENING
+### ✅ Sprint D — TEST DEBT + SECRETS HARDENING — FULLY CLOSED 2026-06-04 (all 3 items SHIPPED — D1+D2 verified pre-session, D3 closed via commit `9edb12b6` AES-GCM tenant-AAD with dual-decrypt window)
 
 | # | Finding | Esforço | File |
 |---|---------|---------|------|
-| D1 | L19 regression test (secret PK collision em envs) — fix está lá mas sem test | S | `api/internal/db/secret_wrapper_test.go` |
-| D2 | L20 regression test (secret resync on deploy) — fix está lá mas sem test | S | `api/internal/services/secret_resyncer_test.go` |
-| D3 | `sec-001` AES-GCM AAD binding migration (não-breaking via dual-decrypt window) — cross-tenant ciphertext transplant possível sem AAD | XL | `api/internal/db/secret_wrapper.go:59` |
+| ~~D1~~ | ✅ L19 regression test secret PK collision — **SHIPPED commit `695a23f0`** (TestSecret_L19_PKIncludesEnv + cousins PASS) | S | `api/internal/db/secret_wrapper_test.go` |
+| ~~D2~~ | ✅ L20 regression test secret resync on deploy — **SHIPPED commit `46d120df`** (TestSecretResyncer_L20_FirstDeploy + cousins PASS) | S | `api/internal/services/secret_resyncer_test.go` |
+| ~~D3~~ | ✅ `sec-001` AES-GCM tenant-bound AAD — **FULLY CLOSED commit `9edb12b6`** without requiring new migration (estimate XL was wrong — fix lives entirely in api/internal/db/secret_wrapper.go via tenantAAD helper + dual-decrypt window in decrypt()). 4 regression tests PASS including TestSecret_D3_CrossTenantTransplantFails (primary sec-001 closure proof). Phase 2 nil-fallback deletion is operator-time after one key-rotation cycle confirms zero legacy rows. | M (was XL) | `api/internal/db/secret_wrapper.go` (tenantAAD + encrypt/decrypt AAD param) + `secret_wrapper_d3_test.go` (NEW 4 tests) |
 
 ### Anti-padrões inquebráveis (lições V9 + L22)
 
