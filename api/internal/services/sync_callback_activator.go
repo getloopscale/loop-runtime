@@ -12,6 +12,7 @@ import (
 	"time"
 
 	"github.com/loopzero/loopzero/api/internal/db"
+	"github.com/loopzero/loopzero/pkg/naming"
 )
 
 // SyncCallbackActivator processes ArgoCD sync completion callbacks.
@@ -29,6 +30,60 @@ type SyncCallbackActivator struct {
 	}
 	baseDomain string
 	logger     *slog.Logger
+	// Sprint B B3 (closes code-005): optional label-based lookup. When wired,
+	// OnSyncCompleted reads `loopzero.io/tenant` + `loopzero.io/environment` labels off
+	// the ArgoCD App CR instead of LastIndex-parsing the app name. Falls back
+	// to ParseArgoAppName when reader is nil OR labels are absent/empty.
+	appLabelReader ArgoAppLabelReader
+}
+
+// WithAppLabelReader wires a label-based tenant/env lookup that bypasses the
+// legacy LastIndex parser. Production code passes
+// NewDynamicArgoAppLabelReader(mgmtDynamic, "argocd") in setup_orchestrator.go.
+// Tests pass an in-memory fake.
+//
+// Backward-compat: if reader is nil OR returns no labels OR returns a label
+// pair with empty tenant/env, OnSyncCompleted falls through to
+// ParseArgoAppName. This means existing apps that pre-date commit `8854f64e`
+// (which started emitting loopzero.io/environment on rendered Apps) keep working
+// unchanged. Closure of code-005 lands progressively as old apps re-render.
+func (a *SyncCallbackActivator) WithAppLabelReader(r ArgoAppLabelReader) *SyncCallbackActivator {
+	a.appLabelReader = r
+	return a
+}
+
+// lookupTenantEnv tries the label-based path first, falls back to the
+// LastIndex parser for backward compat. Returns ok=false only when BOTH
+// paths fail (label reader missing AND parser ambiguous).
+//
+// The label path is preferred because LastIndex-parse is structurally
+// ambiguous when tenant ID and env name both contain hyphens (e.g.
+// `tn-loopzero-j-rollout-a` → tenant=tn-loopzero-j-rollout, env=a — WRONG).
+// The labels are populated authoritatively by the operator that creates
+// the ArgoCD App CR (commit `8854f64e` plumbing in real_provisioner.go).
+func (a *SyncCallbackActivator) lookupTenantEnv(ctx context.Context, appName string) (tenantID, env string, ok bool) {
+	if a.appLabelReader != nil {
+		labels, err := a.appLabelReader.GetAppLabels(ctx, appName)
+		if err == nil && labels != nil {
+			tenantID = labels[naming.LabelTenant]
+			env = labels[naming.LabelEnvironment]
+			if tenantID != "" && env != "" {
+				return tenantID, env, true
+			}
+		}
+		// Label reader configured but App has no labels OR fetch failed —
+		// fall through to legacy parser silently. The failure is non-fatal
+		// because legacy apps without labels are still served correctly by
+		// LastIndex when env doesn't contain hyphens. Log at INFO so the
+		// fall-through is observable when debugging.
+		if a.logger != nil {
+			a.logger.Info("sync callback: label-based lookup miss, falling back to LastIndex parser",
+				"app", appName,
+				"err", err,
+			)
+		}
+	}
+	return ParseArgoAppName(appName)
 }
 
 // NewSyncCallbackActivator creates a new SyncCallbackActivator.
@@ -77,10 +132,13 @@ func (a *SyncCallbackActivator) OnSyncCompleted(appName, revision string) error 
 	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 	defer cancel()
 
-	// Parse tenantID and environment from app name: "{tenant}-{env}"
-	tenantID, env, ok := ParseArgoAppName(appName)
+	// Sprint B B3 (closes code-005): prefer label-based lookup on the live
+	// ArgoCD App CR; fall back to LastIndex parser when labels are absent.
+	// The label path eliminates the hyphen ambiguity that the parser exhibits
+	// when tenant+env both contain hyphens (e.g. `tn-loopzero-j-rollout-a`).
+	tenantID, env, ok := a.lookupTenantEnv(ctx, appName)
 	if !ok {
-		return fmt.Errorf("sync callback: invalid app name %q (expected {tenant}-{env})", appName)
+		return fmt.Errorf("sync callback: invalid app name %q (expected {tenant}-{env} or labeled App CR)", appName)
 	}
 
 	// CODE-SCAN-001 fix: Use tenant+env-filtered query when available,

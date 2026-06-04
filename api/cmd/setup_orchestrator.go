@@ -214,6 +214,23 @@ func setupOrchestrator(
 	syncCallbackActivator := services.NewSyncCallbackActivator(
 		stores.ReleaseStore, stores.EnvTargetStore, stores.Locker, stores.EventStore, cfg.BaseDomain, logger,
 	)
+	// Sprint B B3 (closes code-005): wire label-based lookup so the activator
+	// reads `loopzero.io/{tenant,environment}` off the live ArgoCD App CR instead
+	// of LastIndex-parsing the app name (which is structurally ambiguous when
+	// both tenant and env contain hyphens, e.g. `tn-loopzero-j-rollout-a`).
+	// Reader uses the same mgmt dynamic client as CellPinner. Backward-compat:
+	// when an App has no labels (apps pre-dating commit `8854f64e`), the
+	// activator falls back to ParseArgoAppName, so existing fixtures continue
+	// to work unchanged. Closure of code-005 lands progressively as old apps
+	// re-render with the new label.
+	if mgmtDynamic := buildMgmtDynamicClient(logger); mgmtDynamic != nil {
+		syncCallbackActivator = syncCallbackActivator.WithAppLabelReader(
+			services.NewDynamicArgoAppLabelReader(mgmtDynamic, "argocd"),
+		)
+		logger.Info("sync callback activator: label-based lookup wired (code-005 closure)")
+	} else {
+		logger.Warn("sync callback activator: dynamic client unavailable; falling back to LastIndex parser (code-005 hyphen ambiguity remains)")
+	}
 	argoCallbackHandler := routes.NewArgoCallbackHandler(syncCallbackActivator, logger, cfg.ArgoCallbackSecret)
 
 	return &OrchestratorDeps{
