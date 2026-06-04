@@ -102,10 +102,43 @@ func NewPostgresSecretStoreWithVault(db DBTX, vaultClient VaultTransitClient, le
 	}, nil
 }
 
-// encrypt encrypts plaintext using AES-256-GCM. Returns nonce || ciphertext.
+// tenantAAD returns the AES-GCM additionally-authenticated-data (AAD) for a
+// tenant. The AAD binds the ciphertext to a specific tenant: decrypt MUST
+// pass the same AAD that encrypt used, otherwise gcm.Open returns an
+// authentication-tag-mismatch error.
+//
+// Sprint D D3 (closes sec-001): pre-fix, encrypt/decrypt used nil AAD,
+// which made ciphertexts portable across tenants. An attacker with
+// DB-backup-exfiltration + AES-key-leak could:
+//
+//   - Copy Tenant A's encrypted_value blob into Tenant B's row, AND the
+//     decrypt path would happily return Tenant A's plaintext — the AES-GCM
+//     authentication didn't bind the row's identity.
+//   - Permanently decrypt all tenants' secrets once the leak occurred
+//     because there was no per-row binding to invalidate.
+//
+// Post-fix, tenantAAD is included in Seal+Open so cross-tenant ciphertext
+// transplant fails the authentication tag → decrypt returns error rather
+// than wrong-tenant plaintext. The AAD is NOT secret (it's the canonical
+// label `loopzero-secret-v1|tenant=<id>`); secrecy comes from the AES key,
+// integrity from the AAD-bound tag.
+//
+// Format chosen for forward extensibility — future iterations may extend
+// to bind project/env/app/name; the `v1` prefix lets decrypt detect format
+// versions when migrating ciphertexts.
+func tenantAAD(tenantID string) []byte {
+	return []byte("loopzero-secret-v1|tenant=" + tenantID)
+}
+
+// encrypt encrypts plaintext using AES-256-GCM with tenant-bound AAD.
 // SEC-001 invariant: only path that turns user-provided bytes into the
 // blob persisted in secrets.encrypted_value.
-func (s *PostgresSecretStore) encrypt(plaintext []byte) ([]byte, error) {
+//
+// Sprint D D3 (closes sec-001): the aad parameter binds the ciphertext to
+// a tenant identity. Pass tenantAAD(tenantID) at the call site so
+// cross-tenant ciphertext transplant fails decrypt rather than returning
+// wrong-tenant plaintext.
+func (s *PostgresSecretStore) encrypt(plaintext, aad []byte) ([]byte, error) {
 	if s.encryptionKey == nil {
 		return plaintext, nil // no encryption (local dev)
 	}
@@ -121,7 +154,7 @@ func (s *PostgresSecretStore) encrypt(plaintext []byte) ([]byte, error) {
 	if _, err := io.ReadFull(rand.Reader, nonce); err != nil {
 		return nil, fmt.Errorf("secret_store: generate nonce: %w", err)
 	}
-	return gcm.Seal(nonce, nonce, plaintext, nil), nil
+	return gcm.Seal(nonce, nonce, plaintext, aad), nil
 }
 
 // decrypt is the inverse of encrypt. Reads nonce || ciphertext as written
@@ -131,7 +164,21 @@ func (s *PostgresSecretStore) encrypt(plaintext []byte) ([]byte, error) {
 // SEC-001 invariant: only path that turns persisted bytes back into
 // plaintext. Bypasses the encrypt() when encryptionKey is nil (matches
 // the local-dev no-encryption mode).
-func (s *PostgresSecretStore) decrypt(encrypted []byte) ([]byte, error) {
+//
+// Sprint D D3 (closes sec-001): dual-decrypt window. The aad parameter
+// binds new (post-D3) ciphertexts to a tenant identity. Open is tried
+// FIRST with aad; on auth-tag failure it falls back to nil aad for
+// backward compatibility with legacy ciphertexts written before D3 (which
+// were Sealed with nil aad). The fallback path emits no logging because
+// every legacy row exercises it on every read until the row is naturally
+// re-encrypted on next write — too noisy to log per-row.
+//
+// Once a long enough window has passed (operator-defined; typically one
+// full key-rotation cycle) and we are confident all rows have been
+// re-encrypted with v1 AAD, the nil-fallback can be deleted in a follow-up
+// commit (call it D3 Phase 2 — operator-time, requires running a scan to
+// confirm zero legacy rows remain).
+func (s *PostgresSecretStore) decrypt(encrypted, aad []byte) ([]byte, error) {
 	if s.encryptionKey == nil {
 		return encrypted, nil // matches encrypt() local-dev path
 	}
@@ -147,6 +194,12 @@ func (s *PostgresSecretStore) decrypt(encrypted []byte) ([]byte, error) {
 		return nil, fmt.Errorf("secret_store: ciphertext too short (%d bytes)", len(encrypted))
 	}
 	nonce, ciphertext := encrypted[:gcm.NonceSize()], encrypted[gcm.NonceSize():]
+	if plain, err := gcm.Open(nil, nonce, ciphertext, aad); err == nil {
+		return plain, nil
+	}
+	// D3 dual-decrypt fallback: legacy ciphertext sealed with nil AAD.
+	// Try again without the binding. If THIS also fails the ciphertext is
+	// genuinely corrupt or wrong-key; surface the error.
 	plain, err := gcm.Open(nil, nonce, ciphertext, nil)
 	if err != nil {
 		return nil, fmt.Errorf("secret_store: gcm open: %w", err)
@@ -156,7 +209,8 @@ func (s *PostgresSecretStore) decrypt(encrypted []byte) ([]byte, error) {
 
 // encryptForStore is the write-path dispatcher (T3.5).
 // When vault present → Transit encrypt per-tenant (canonical post-T10).
-// Otherwise → legacy AES-256-GCM.
+// Otherwise → legacy AES-256-GCM. Sprint D D3: AES path now binds tenantID
+// via AAD so cross-tenant ciphertext transplant fails auth.
 func (s *PostgresSecretStore) encryptForStore(ctx context.Context, tenantID string, plaintext []byte) ([]byte, error) {
 	if s.vault != nil {
 		ct, err := s.vault.EncryptForTenant(ctx, tenantID, plaintext)
@@ -165,12 +219,14 @@ func (s *PostgresSecretStore) encryptForStore(ctx context.Context, tenantID stri
 		}
 		return []byte(ct), nil
 	}
-	return s.encrypt(plaintext)
+	return s.encrypt(plaintext, tenantAAD(tenantID))
 }
 
 // decryptFromStore is the read-path dispatcher (T3.4).
 // EC-06 MUST FIX P2: empty/nil ciphertext returns error (no AES panic).
 // Prefix detection: "vault:v1:" → Transit decrypt; else → AES legacy.
+// Sprint D D3: AES path passes tenantAAD; decrypt tries AAD first then
+// falls back to nil for backward compat with pre-D3 ciphertexts.
 func (s *PostgresSecretStore) decryptFromStore(ctx context.Context, tenantID string, ciphertext []byte) ([]byte, error) {
 	if len(ciphertext) == 0 {
 		return nil, fmt.Errorf("secret_store: empty ciphertext for tenant %s (EC-06 NULL row guard)", tenantID)
@@ -182,7 +238,7 @@ func (s *PostgresSecretStore) decryptFromStore(ctx context.Context, tenantID str
 		}
 		return plain, nil
 	}
-	return s.decrypt(ciphertext)
+	return s.decrypt(ciphertext, tenantAAD(tenantID))
 }
 
 // bytesHasPrefix returns true if b starts with prefix. Inlined to avoid

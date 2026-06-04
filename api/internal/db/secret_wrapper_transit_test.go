@@ -143,8 +143,11 @@ func TestDecryptFromStore_FallsBackToAESForLegacyCiphertext(t *testing.T) {
 	mv := &mockVault{}
 	s := &PostgresSecretStore{vault: mv, encryptionKey: key}
 
-	// Round-trip via AES
-	encrypted, err := s.encrypt([]byte("legacydata"))
+	// Round-trip via AES with NIL AAD — simulates legacy ciphertext written
+	// before Sprint D D3 (sec-001 closure) added tenant-bound AAD. The
+	// dual-decrypt window in decryptFromStore should still recover it via
+	// the nil-fallback path (try with tenantAAD first, fall back to nil).
+	encrypted, err := s.encrypt([]byte("legacydata"), nil)
 	if err != nil {
 		t.Fatal(err)
 	}
