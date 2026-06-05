@@ -129,8 +129,20 @@ func CreateBuildPlan(units []AppUnit, tenantID, projectID, commitSHA, registryUR
 		buildArgs["COMMIT_SHA"] = commitSHA
 		buildArgs["APP_NAME"] = unit.Name
 
-		// Resolve language strategy from framework
-		strategy := resolveLanguageStrategy(unit.Framework)
+		// Plan B v3.1 T-B.5 (2026-06-05) — strategy dispatch via services.json
+		// `runtime` first, with legacy `framework` fallback (ADR D7 transition
+		// window). EC-B3-2: warn when both empty (likely partial migration or
+		// data corruption) and fall through to "custom" via the default branch.
+		runtimeOrFramework := unit.Runtime
+		if runtimeOrFramework == "" {
+			runtimeOrFramework = unit.Framework
+		}
+		if runtimeOrFramework == "" {
+			slog.Warn("build plan: E-010 missing runtime+framework",
+				"app", unit.Name,
+				"hint", "likely partial migration or data corruption — falling back to custom strategy")
+		}
+		strategy := resolveLanguageStrategy(runtimeOrFramework)
 
 		// Resolve delivery model from rendering (MEET-009)
 		deliveryModel := "container"
@@ -160,16 +172,28 @@ func CreateBuildPlan(units []AppUnit, tenantID, projectID, commitSHA, registryUR
 	return BuildPlan{Apps: plans}
 }
 
-// resolveLanguageStrategy maps framework name to language strategy name.
-// This is the single source of truth for framework→strategy mapping.
-func resolveLanguageStrategy(framework string) string {
-	switch framework {
-	case "nextjs", "next", "vite", "remix", "nestjs", "express", "node",
+// resolveLanguageStrategy maps a runtime/framework string to a language
+// strategy name. Single source of truth for the dispatch.
+//
+// Plan B v3.1 T-B.5 (2026-06-05) — accepts both the new services.json
+// `runtime` values ("python", "node") and the legacy loopzero.yaml `framework`
+// values (everything else). EC-B3-3 explicit cases ship at the top so the
+// runtime contract is unmistakable in code review; the legacy framework
+// cases follow during the transition window per ADR D7.
+func resolveLanguageStrategy(runtimeOrFramework string) string {
+	switch runtimeOrFramework {
+	// services.json runtime values (Plan B v3.1 T-B.5 EC-B3-3).
+	case "node":
+		return "node"
+	case "python":
+		return "python"
+	// Legacy loopzero.yaml framework values — kept during transition (ADR D7).
+	case "nextjs", "next", "vite", "remix", "nestjs", "express",
 		"react", "vue", "svelte", "astro", "angular", "fastify":
 		return "node"
 	case "gin", "go":
 		return "go"
-	case "fastapi", "django", "python":
+	case "fastapi", "django":
 		return "python"
 	case "sinatra", "rails", "ruby":
 		return "ruby"

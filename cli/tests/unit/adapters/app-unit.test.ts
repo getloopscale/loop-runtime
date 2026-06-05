@@ -17,9 +17,11 @@ describe('normalizeApp', () => {
     expect(unit.secrets).toEqual([]);
   });
 
-  it('should auto-detect frontend from nextjs framework', () => {
+  // Plan B v3.1 T-B.1 (2026-06-05) — framework-string auto-detect removed;
+  // explicit `type: "frontend"` is now the only path to frontend rendering.
+  it('respects explicit type: frontend on nextjs framework', () => {
     const unit = normalizeApp('web', {
-      path: 'apps/web', framework: 'nextjs', port: null,
+      path: 'apps/web', framework: 'nextjs', type: 'frontend', port: null,
     });
     expect(unit.type).toBe('frontend');
     expect(unit.build).toBe('buildpack');
@@ -84,12 +86,15 @@ describe('normalizeApp', () => {
     expect(unit.rendering).toBe('static');
   });
 
-  it('should auto-infer render: static even without explicit type (detected from framework)', () => {
+  // Plan B v3.1 T-B.1 — framework-string auto-detect removed; explicit type
+  // is required for frontend rendering. The previous "detected from framework"
+  // path no longer fires (defaults to "server" now).
+  it('without explicit type, defaults to server even when framework is "react"', () => {
     const unit = normalizeApp('web', {
-      path: 'web', framework: 'react', port: null,
+      path: 'web', framework: 'react', port: 3000,
     });
-    expect(unit.type).toBe('frontend');
-    expect(unit.rendering).toBe('static');
+    expect(unit.type).toBe('server');
+    expect(unit.rendering).toBe('server');
   });
 
   it('should force render: server for server type regardless of user input', () => {
@@ -106,13 +111,25 @@ describe('normalizeApp', () => {
     expect(unit.rendering).toBe('server');
   });
 
-  it('should detect all frontend frameworks as type: frontend', () => {
-    const frontendFrameworks = ['nextjs', 'next', 'vite', 'remix', 'react', 'vue', 'svelte', 'astro', 'angular'];
-    for (const fw of frontendFrameworks) {
-      const unit = normalizeApp('web', { path: '.', framework: fw, port: null });
-      expect(unit.type).toBe('frontend');
-      expect(unit.rendering).toBe('static');
-    }
+  // Plan B v3.1 T-B.1 (2026-06-05) — framework-string heuristic removed post
+  // LoopZeroKit-only cutover. Frontends now declare `type: "frontend"` explicitly
+  // em `.loopzero/services.json` (or em the AppSpec migration path). Test
+  // updated to assert the explicit-type contract: absent `type` defaults
+  // to "server"; explicit `type: "frontend"` still resolves to frontend.
+  it('defaults to type: server when type and framework are unspecified', () => {
+    const unit = normalizeApp('web', { path: '.', framework: 'nextjs', port: 3000 });
+    expect(unit.type).toBe('server');
+  });
+
+  it('honors explicit type: frontend regardless of framework string', () => {
+    const unit = normalizeApp('web', {
+      path: '.',
+      framework: 'nextjs',
+      type: 'frontend',
+      port: null,
+    });
+    expect(unit.type).toBe('frontend');
+    expect(unit.rendering).toBe('static');
   });
 
   // ---------------------------------------------------------------------------

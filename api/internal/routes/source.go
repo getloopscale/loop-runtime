@@ -70,7 +70,9 @@ func WithObjectUploader(u ObjectUploader) func(*SourceHandler) {
 }
 
 // Upload handles POST /api/v1/source/upload.
-// Accepts multipart form with "bundle" (file) and "loopzero_yaml" (text field).
+// Plan B v3.1 T-B.3 (2026-06-05): accepts multipart form with "bundle" (file)
+// and "services_json" (file or text field). The legacy "loopzero_yaml" field is
+// rejected with actionable E-009 error per ADR D4 + blueprint D8.
 func (h *SourceHandler) Upload(w http.ResponseWriter, r *http.Request) {
 	// C-02: Enforce request deadline so handlers don't hang indefinitely.
 	ctx, cancel := context.WithTimeout(r.Context(), 150*time.Second)
@@ -107,31 +109,47 @@ func (h *SourceHandler) Upload(w http.ResponseWriter, r *http.Request) {
 		}
 	}()
 
-	// Extract loopzero_yaml — accept both text field (FormValue) and file upload (FormFile).
-	// The CLI sends it as a file upload (Blob with filename), while curl/tests may
-	// send it as a text field. Both are valid multipart encodings.
-	loopzeroYAMLContent := r.FormValue("loopzero_yaml")
-	if loopzeroYAMLContent == "" {
+	// Plan B v3.1 T-B.3 (2026-06-05) — services_json is the canonical wire
+	// field post LoopZeroKit-only cutover. Accept both text field (FormValue)
+	// and file upload (FormFile). Legacy loopzero_yaml field is rejected with
+	// actionable E-009 error per ADR D4 + blueprint D8.
+	servicesJSONContent := r.FormValue("services_json")
+	if servicesJSONContent == "" {
 		// Fallback: try reading as file upload (how the CLI sends it)
-		if yamlFile, _, err := r.FormFile("loopzero_yaml"); err == nil {
-			defer func() { _ = yamlFile.Close() }()
-			yamlBytes, readErr := io.ReadAll(yamlFile)
+		if jsonFile, _, err := r.FormFile("services_json"); err == nil {
+			defer func() { _ = jsonFile.Close() }()
+			jsonBytes, readErr := io.ReadAll(jsonFile)
 			if readErr == nil {
-				loopzeroYAMLContent = string(yamlBytes)
+				servicesJSONContent = string(jsonBytes)
 			}
 		}
 	}
-	if loopzeroYAMLContent == "" {
+
+	// EC-B3-7 (v3.1): legacy loopzero_yaml rejection with actionable migration hint.
+	// Uses VALIDATION_FAILED code so HTTP transport maps to 422 (E-009 + E-008
+	// codes from the plan are surfaced em the message body — the registry-
+	// driven status registry in pkg/errors/http only knows registered codes).
+	if servicesJSONContent == "" {
+		if legacy := r.FormValue("loopzero_yaml"); legacy != "" {
+			writeLoopZeroError(w, loopzeroerrors.NewLoopZeroError(
+				"VALIDATION_FAILED",
+				"E-009: legacy loopzero_yaml not supported. This API version requires `.loopzero/services.json` emitted by LoopZeroKit ≥0.5.0. "+
+					"Upgrade LoopZeroKit and re-run `loopzerokit build --target loopzero-cloud` to regenerate the bundle.",
+				422,
+			))
+			return
+		}
+		// EC-B3-7 (v3.1) — truncated/missing payload returns 422 with E-008 hint.
 		writeLoopZeroError(w, loopzeroerrors.NewLoopZeroError(
 			"VALIDATION_FAILED",
-			"loopzero.yaml is required",
+			"E-008: services.json is required (multipart form field `services_json`).",
 			422,
 		))
 		return
 	}
 
-	// Validate loopzero.yaml
-	cfg, appNames, err := source.ValidateLoopZeroYAML(loopzeroYAMLContent)
+	// Validate services.json via embedded JSON Schema 7 validator.
+	cfg, appNames, err := source.ValidateServicesJSON(servicesJSONContent)
 	if err != nil {
 		var ve *source.ValidationError
 		if errors.As(err, &ve) {

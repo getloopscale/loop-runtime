@@ -85,7 +85,7 @@ export interface DeployDeps {
   getSourceIdentifier: () => string;
   createSourceBundle: () => Promise<string>;
   checkSensitiveFiles?: () => string[];
-  uploadSource: (bundlePath: string, loopzeroYamlPath: string) => Promise<UploadResult>;
+  uploadSource: (bundlePath: string, servicesJsonPath: string) => Promise<UploadResult>;
   submitBuild: (input: SubmitBuildInput) => Promise<SubmitBuildResult>;
   connectSSE: (buildId: string, onEvent: (event: SSEEvent) => void) => SSEConnection;
   getSecrets: (project: string, environment: string) => Promise<string[]>;

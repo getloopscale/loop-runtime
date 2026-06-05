@@ -58,11 +58,11 @@ export function registerDeployCommands(deps: CommandDeps): void {
         getSourceIdentifier,
         createSourceBundle,
         checkSensitiveFiles,
-        uploadSource: (bundlePath: string, loopzeroYamlPath: string) =>
+        uploadSource: (bundlePath: string, servicesJsonPath: string) =>
           // configStore.getToken() honors the LOOPZERO_TOKEN env var; the older
           // getConfig()?.token path silently ignored env-only auth (CI mode),
           // which broke `loopzero deploy` whenever no config file was written.
-          uploadSource(apiUrl, configStore.getToken(), bundlePath, loopzeroYamlPath),
+          uploadSource(apiUrl, configStore.getToken(), bundlePath, servicesJsonPath),
         submitBuild: async (input) => {
           const headers: Record<string, string> = {
             'Idempotency-Key': input.idempotencyKey,

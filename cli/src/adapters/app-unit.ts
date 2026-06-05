@@ -31,13 +31,12 @@ export interface AppUnit {
   autoscaling: AppAutoscaling | null; // HPA configuration (null = no autoscaling)
 }
 
-export const FRONTEND_FRAMEWORKS = ['nextjs', 'next', 'vite', 'remix', 'react', 'vue', 'svelte', 'astro', 'angular'];
-
-// NOTE: Framework lists for auto-detection of rendering mode (MEET-009):
-// Static-default: vite, react, vue, svelte
-// SSR-default: nextjs, next, remix, astro
-// Currently, rendering mode is explicit in loopzero.yaml (render: "static" | "server").
-// Auto-detection from framework will be added when needed.
+// Plan B v3.1 T-B.1 (2026-06-05) — `FRONTEND_FRAMEWORKS` array removed
+// post LoopZeroKit-only cutover. Apps now declare `type` explicitly em
+// `.loopzero/services.json` (or via the legacy `services_json` form-field
+// path during transition). The framework-string heuristic no longer
+// participates em type inference; absent type defaults to "server"
+// (frontends are explicit em services manifest per ADR D5).
 
 /**
  * normalizeApp resolves a raw LoopZeroYamlApp into a fully populated AppUnit.
@@ -55,9 +54,9 @@ export function normalizeApp(name: string, raw: LoopZeroYamlApp): AppUnit {
   let type: AppUnit['type'];
   if (raw.type === 'worker' || raw.type === 'frontend' || raw.type === 'server') {
     type = raw.type;
-  } else if (FRONTEND_FRAMEWORKS.includes(raw.framework)) {
-    type = 'frontend';
   } else {
+    // Plan B v3.1 T-B.1 — framework-string heuristic removed; default "server"
+    // (frontends declared explicitly em services.json post LoopZeroKit-only cutover).
     type = 'server';
   }
 

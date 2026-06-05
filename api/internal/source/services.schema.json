@@ -1,0 +1,60 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "https://loopzerocloud.dev/schemas/services.json",
+  "title": "LoopZeroKit services.json (v1)",
+  "description": "Platform-neutral services manifest emitted by `loopzerokit build`. Mirror of loopzerokit/packages/loopzero/src/services/adapters-bridge/manifest.ts ServicesManifest interface. Plan B v3.1 T-B.3 + ADR-0015 (platform-neutral).",
+  "type": "object",
+  "required": ["version", "services"],
+  "additionalProperties": false,
+  "properties": {
+    "version": { "type": "integer", "const": 1 },
+    "services": {
+      "type": "array",
+      "items": { "$ref": "#/definitions/Service" }
+    }
+  },
+  "definitions": {
+    "Service": {
+      "type": "object",
+      "required": ["name", "runtime", "port", "proxy", "dev", "start", "healthcheck", "cors", "passSetCookie"],
+      "additionalProperties": false,
+      "properties": {
+        "name": {
+          "type": "string",
+          "pattern": "^[a-z0-9][a-z0-9-]{0,62}$",
+          "description": "DNS-1123 subdomain compatible service name."
+        },
+        "runtime": {
+          "type": "string",
+          "enum": ["python", "node"],
+          "description": "Runtime that owns the service process. Maps to LanguageStrategy via Plan B v3.1 T-B.4 runtimeToStrategy table."
+        },
+        "port": {
+          "type": "integer",
+          "minimum": 1024,
+          "maximum": 65535
+        },
+        "proxy": {
+          "type": "string",
+          "pattern": "^/[^\\s/][^\\s]*$",
+          "description": "Non-empty path segment after `/`; cannot be `/` (would catch-all and conflict with LoopZeroKit routing)."
+        },
+        "dev": { "type": "string", "minLength": 1 },
+        "build": { "type": "string" },
+        "start": { "type": "string", "minLength": 1 },
+        "openapi": { "type": "string" },
+        "healthcheck": { "type": "string", "pattern": "^/" },
+        "cors": { "type": "boolean" },
+        "env": {
+          "type": "object",
+          "additionalProperties": { "type": "string" }
+        },
+        "dependsOn": {
+          "type": "array",
+          "items": { "type": "string" }
+        },
+        "passSetCookie": { "type": "boolean" }
+      }
+    }
+  }
+}
