@@ -38,6 +38,13 @@ environments:
     # Used by `task infra:install:mgmt-dashboard-only ENV=standalone-public`.
     values:
       - environments/standalone-public.yaml
+  dev-public:
+    # T2.1 of plan 2026-06-04-dev-public-domain-canonicalization.
+    # Variant of standalone-public using *-dev.loopzero.example hostnames so
+    # dev infra can coexist with future prod *.loopzero.example cutover.
+    # Used by `task dev-public:bootstrap` + `LOOPZERO_HELMFILE_ENV=dev-public task setup`.
+    values:
+      - environments/dev-public.yaml
   drill:
     # MEET-ASYNC-AMENDMENT-2026-05-12-003 + active-execution-plan §2.2 —
     # pre-prod chaos + maturity validation on DOKS cluster provisioned by
@@ -84,12 +91,6 @@ repositories:
     url: https://kubernetes-sigs.github.io/nfs-ganesha-server-and-external-provisioner/
   - name: metrics-server
     url: https://kubernetes-sigs.github.io/metrics-server/
-  # Phase 3.4 of plan 2026-06-02-loopzero-api-vault-integration v1.8 (D11 ESO).
-  # ESO deployed em MGMT cluster (não só runtime) — LoopZero secrets vivem aqui
-  # em loopzero-system NS. ESO faz pull do Vault (loopzero-vault cluster via
-  # ClusterSecretStore loopzero-vault-secrets) → cria K8s Secrets em loopzero-system.
-  - name: external-secrets
-    url: https://charts.external-secrets.io
   - name: bitnami
     url: https://charts.bitnami.com/bitnami
   - name: chaos-mesh
@@ -344,19 +345,6 @@ releases:
     values:
       - ../helm/argocd/values.yaml
 
-  # OpenBao MOVED to dedicated vault cluster (T3 vault cluster isolation
-  # decision 2026-06-02, sponsor-direct D1-D5 ratified). OpenBao no longer
-  # lives in the mgmt cluster — it has its own DOKS cluster (loopzero-vault-prod)
-  # provisioned via separate Pulumi stack + bootstrapped via:
-  #   infra/helmfile/vault.helmfile.yaml.gotmpl (-e vault-local for k3d
-  #   validation; -e prod for DOKS HA Raft + AWS KMS unseal).
-  # See: docs/operations/vault-cluster-local-runbook.md
-  #      docs/operations/openbao-aws-resources-runbook.md
-  #
-  # BUG8.E pivot 2026-06-02: also dropped Bank-Vaults operator (informer
-  # cache bug in 1.24.0 AND 1.23.4; impersonating SA worked but operator
-  # itself reported NotFound). Replaced by official openbao/openbao chart.
-
   - name: prometheus
     namespace: monitoring
     chart: prometheus-community/prometheus
@@ -480,30 +468,6 @@ releases:
       - ../helm/ory-hydra/values.yaml.gotmpl
       # Layered values per env (T2.2). Drill env DSN override → managed PG.
       - values/{{ .Environment.Name }}/ory-hydra.yaml.gotmpl
-
-  # Phase 3.4 of plan 2026-06-02-loopzero-api-vault-integration v1.8 (D11 ESO).
-  # ESO deployed em MGMT cluster — opera secret distribution Vault → K8s
-  # Secret em loopzero-system NS. Two releases:
-  #   1. external-secrets (operator) — Wave 1.8 (antes de loopzero-api Wave 2)
-  #   2. loopzero-external-secrets (CRs) — Wave 1.9 (after operator ready)
-  # Opt-in per env via vaultEnabled value (default false = skip ambas).
-  - name: external-secrets
-    namespace: external-secrets
-    chart: external-secrets/external-secrets
-    version: 0.14.3
-    installed: {{ .Values | get "vaultEnabled" false }}
-    values:
-      - ../helm/external-secrets/values.yaml
-
-  - name: loopzero-external-secrets
-    namespace: loopzero-system
-    chart: ../helm/loopzero-external-secrets
-    installed: {{ .Values | get "vaultEnabled" false }}
-    needs:
-      - external-secrets/external-secrets
-    values:
-      - ../helm/loopzero-external-secrets/values.yaml
-      - envName: {{ .Environment.Name | quote }}
 
   # Wave 2: LoopZero platform
   - name: loopzero-api
@@ -652,6 +616,9 @@ releases:
 {{- if eq (.Values | get "clusterRole" "dev") "standalone" }}
       - ../helm/loopzero-cloud/values-standalone-multi.yaml
 {{- end }}
+      # Plan 2026-06-04-dev-public-docr-fix-forward T2.1 — env-specific
+      # overlay (DOCR :dev + do-registry pullSecret for cloud-local envs).
+      - values/{{ .Environment.Name }}/loopzero-cloud.yaml.gotmpl
       # T3.1 of plan 2026-05-29-dashboard-public-integration-canonicalization.
       # Inline values overlay: when env yaml provides publicAuthUrl (the
       # browser-facing Kratos host), override loopzero-cloud's KRATOS_PUBLIC_URL

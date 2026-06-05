@@ -1,9 +1,26 @@
 # Local-Public Dashboard Demo (Caddy + k3d)
 
 > T7.4 of plan `2026-05-29-dashboard-public-integration-canonicalization`.
+>
+> **2026-06-04 — dev-public canonicalization update** (plan
+> `2026-06-04-dev-public-domain-canonicalization`): legacy
+> `app/cloud/auth.loopzero.example` continue to work and are reserved for future
+> prod cutover. The CANONICAL dev infra for this droplet now uses the
+> `-dev` subdomain pattern (`app-dev/cloud-dev/auth-dev.loopzero.example`).
+> Run `task dev-public:bootstrap` (instead of the multi-step manual sequence
+> below) for the dev-public flow.
+>
+> **2026-06-04 — task setup:local soft-deprecation** (D2 of plan
+> 2026-06-04): provisioning a local k3d cluster on the developer's personal
+> laptop produces too much divergence vs production (no public DNS, no LE
+> TLS, no Stripe webhook delivery, OAuth callbacks broken). The canonical
+> dev workflow is now `ssh` into the dev droplet + `task dev-public:bootstrap`.
+> The legacy `task setup` continues to work for component-isolated debug but
+> is no longer the documented dev entry point.
 
 This runbook documents how to bring up a fully functional LoopZero dashboard on a
-public-DNS hostname (`app/cloud/auth.loopzero.example`) backed by local k3d
+public-DNS hostname (`app/cloud/auth.loopzero.example` legacy or
+`app-dev/cloud-dev/auth-dev.loopzero.example` canonical) backed by local k3d
 clusters and a Caddy edge providing Let's Encrypt TLS. Use this for:
 
 - **End-to-end product demos** without DOKS provisioning costs.
@@ -11,7 +28,8 @@ clusters and a Caddy edge providing Let's Encrypt TLS. Use this for:
 - **OIDC dev** with browser-real cookie flow (cookie scoped to `loopzero.example`).
 - **Audit-trail and onboarding rehearsals** with seeded data visible across all dashboard pages.
 
-For ephemeral local dev (no public DNS), use `task setup` + `tilt up` instead.
+For component-isolated debug (no public DNS needed), legacy `task setup` +
+`tilt up` still works but is no longer the canonical dev flow.
 
 ---
 
@@ -149,9 +167,95 @@ See [service-auth-rotation.md](./service-auth-rotation.md). Zero-downtime via
 
 ## Cross-references
 
-- Plan: `.claude/knowledge-base/plans/2026-05-29-dashboard-public-integration-canonicalization-plan.md`
-- Helmfile env: `infra/helmfile/environments/standalone-public.yaml`
+- Plan (parent): `.claude/knowledge-base/plans/2026-05-29-dashboard-public-integration-canonicalization-plan.md`
+- Plan (dev-public): `.claude/knowledge-base/plans/2026-06-04-dev-public-domain-canonicalization-plan.md`
+- Helmfile env (legacy): `infra/helmfile/environments/standalone-public.yaml`
+- Helmfile env (dev-public): `infra/helmfile/environments/dev-public.yaml`
 - Caddy config: `infra/local/Caddyfile`
+- DNS bootstrap: `infra/scripts/local/setup-dev-public-dns.sh`
+- Caddy bootstrap: `infra/scripts/local/caddy-up-dev-public.sh`
 - Port-forward script: `infra/scripts/local/port-forward-public-dashboard.sh`
 - Seed script: `infra/scripts/local/seed-demo-data.sh`
 - Recovery script: `infra/scripts/local/recover-mgmt-degraded.sh`
+
+---
+
+## Dev-public quick start (2026-06-04 canonical)
+
+For the operator droplet (`loopzero-e2e-runner`), the canonical bootstrap
+sequence is:
+
+```bash
+# 1. Populate env (one-time on droplet — copy .env from secure source)
+export $(grep -E '^LOOPZERO_|^CLOUDFLARE_|^DROPLET_IP' /home/paulo/loopzero/.env | xargs)
+export DROPLET_IP=165.227.121.20
+
+# 2. Provision DNS + Caddy + (next) helmfile env=dev-public
+task dev-public:bootstrap
+
+# 3. Verify TLS + DNS green
+infra/scripts/local/caddy-up-dev-public.sh --verify
+
+# 4. Wait for k3d clusters + run platform sync
+LOOPZERO_HELMFILE_ENV=dev-public task setup
+
+# 5. Visit https://app-dev.loopzero.example/login
+```
+
+## Pending operator actions (Phase 3+4 of plan 2026-06-04)
+
+These cannot be automated; they require browser access to provider consoles.
+Operator action ledger:
+
+### Phase 3 — Dev OAuth apps
+
+1. **GitHub**: https://github.com/settings/developers → New OAuth App
+   - Application name: `LoopZero (dev)`
+   - Homepage URL: `https://app-dev.loopzero.example`
+   - Callback URL: `https://auth-dev.loopzero.example/self-service/methods/oidc/callback/github`
+   - Save Client ID + Client Secret in `.env` as `LOOPZERO_GITHUB_CLIENT_ID_DEV`
+     + `LOOPZERO_GITHUB_CLIENT_SECRET_DEV`.
+
+2. **Google**: https://console.cloud.google.com/apis/credentials
+   - Create new OAuth client (Web application)
+   - JS origins: `https://auth-dev.loopzero.example`, `https://app-dev.loopzero.example`
+   - Redirect URI: `https://auth-dev.loopzero.example/self-service/methods/oidc/callback/google`
+   - Save Client ID + Client Secret as `LOOPZERO_GOOGLE_CLIENT_ID_DEV`
+     + `LOOPZERO_GOOGLE_CLIENT_SECRET_DEV`.
+
+3. Re-run `LOOPZERO_HELMFILE_ENV=dev-public task setup` so helmfile sync renders
+   the ConfigMap with the new `*_DEV` env vars. `dev-public.yaml` already
+   wires these via env interp.
+
+### Phase 4 — Dev Stripe webhook endpoint
+
+1. **Stripe Dashboard** (Test mode): https://dashboard.stripe.com/test/webhooks
+   - Add endpoint URL: `https://cloud-dev.loopzero.example/v1/webhooks/stripe`
+   - Events: `checkout.session.completed`, `customer.subscription.created`,
+     `customer.subscription.updated`, `customer.subscription.deleted`,
+     `invoice.paid`
+   - Save webhook secret as `LOOPZERO_STRIPE_WEBHOOK_SECRET_DEV` in `.env`.
+
+2. Create K8s Secret:
+   ```bash
+   kubectl --context k3d-loopzero-mgmt -n loopzero-system create secret generic loopzero-stripe-webhook-dev \
+     --from-literal=STRIPE_WEBHOOK_SECRET="$LOOPZERO_STRIPE_WEBHOOK_SECRET_DEV" \
+     --dry-run=client -o yaml | kubectl apply -f -
+   ```
+
+3. Verify with `stripe trigger checkout.session.completed
+   --webhook-endpoint we_xxx` and tail `kubectl logs -n loopzero-system
+   deployment/loopzero-cloud` for `webhook event processed`.
+
+### Phase 8 — LIVE end-to-end smoke
+
+After Phase 3+4 above:
+
+1. Browser: `https://app-dev.loopzero.example/login` → Continue with Google → autoriza
+   → redirect ao dashboard com sessão válida.
+2. Browser: `https://app-dev.loopzero.example/billing` → Upgrade to Pro → checkout
+   → DB row em `subscriptions` muda para `plan=pro`.
+3. Browser: `https://app-dev.loopzero.example/verification` → Resend → email chega
+   na inbox via Resend.
+4. Trio LIVE: `/cleanroom --env=dev-public` + `/dogfood --env=dev-public` +
+   `/chaos-test --env=dev-public` + `/live-proof --env=dev-public` all GREEN.

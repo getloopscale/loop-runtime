@@ -67,12 +67,14 @@ func (h *BillingHandler) GetBilling(w http.ResponseWriter, r *http.Request) {
 	// Determine plan from DB (fallback to starter)
 	plan := "starter"
 	var periodStart, periodEnd *time.Time
+	var subscriptionID string
 	if h.db != nil {
 		var ps, pe sql.NullTime
+		var sid sql.NullString
 		err := h.db.QueryRowContext(r.Context(),
-			"SELECT plan, current_period_start, current_period_end FROM subscriptions WHERE tenant_id = $1 AND status = 'active' LIMIT 1",
+			"SELECT plan, current_period_start, current_period_end, stripe_subscription_id FROM subscriptions WHERE tenant_id = $1 AND status = 'active' LIMIT 1",
 			tenantID,
-		).Scan(&plan, &ps, &pe)
+		).Scan(&plan, &ps, &pe, &sid)
 		if err != nil {
 			plan = "starter"
 		}
@@ -81,6 +83,9 @@ func (h *BillingHandler) GetBilling(w http.ResponseWriter, r *http.Request) {
 		}
 		if pe.Valid {
 			periodEnd = &pe.Time
+		}
+		if sid.Valid {
+			subscriptionID = sid.String
 		}
 	}
 
@@ -109,6 +114,9 @@ func (h *BillingHandler) GetBilling(w http.ResponseWriter, r *http.Request) {
 	}
 	if periodEnd != nil {
 		resp["period_end"] = periodEnd.Format(time.RFC3339)
+	}
+	if subscriptionID != "" {
+		resp["subscription_id"] = subscriptionID
 	}
 
 	writeJSON(w, http.StatusOK, resp)

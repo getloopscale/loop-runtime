@@ -270,6 +270,76 @@ describe('LoginCommand', () => {
     });
   });
 
+  // Plan J-05 — explicit --device-flow flag. Sponsor caught LIVE 2026-06-05:
+  // running `loopzero login --device-flow` returned `error: unknown option`. The
+  // DoD references that exact invocation. The implicit "no --token + non-CI"
+  // device-flow path is preserved; the explicit flag adds discoverability
+  // and works in CI when an operator deliberately opts in.
+  describe('--device-flow flag (Plan J-05)', () => {
+    it('should run device flow when --device-flow is passed (non-CI)', async () => {
+      const executeDeviceFlow = jest.fn().mockResolvedValue({
+        access_token: 'dvc_access_jwt',
+        refresh_token: 'dvc_refresh_jwt',
+        expires_in: 3600,
+      });
+      const deps = createMockDeps({ executeDeviceFlow });
+      const cmd = new LoginCommand(deps);
+
+      const exitCode = await cmd.execute({ deviceFlow: true, team: undefined });
+
+      expect(executeDeviceFlow).toHaveBeenCalledTimes(1);
+      expect(deps.saveToken).toHaveBeenCalledWith(
+        'dvc_access_jwt',
+        'user@example.com',
+        'acme',
+        'dvc_refresh_jwt',
+        3600,
+      );
+      expect(exitCode).toBe(0);
+    });
+
+    it('should run device flow with --device-flow even in CI mode (explicit opt-in)', async () => {
+      const executeDeviceFlow = jest.fn().mockResolvedValue({
+        access_token: 'dvc_access_jwt',
+        refresh_token: 'dvc_refresh_jwt',
+        expires_in: 3600,
+      });
+      const deps = createMockDeps({ isCI: true, executeDeviceFlow });
+      const cmd = new LoginCommand(deps);
+
+      const exitCode = await cmd.execute({ deviceFlow: true, team: undefined });
+
+      expect(executeDeviceFlow).toHaveBeenCalledTimes(1);
+      expect(exitCode).toBe(0);
+    });
+
+    it('should exit 4 with actionable error if --device-flow is set but executeDeviceFlow is missing', async () => {
+      const deps = createMockDeps({ executeDeviceFlow: undefined });
+      const cmd = new LoginCommand(deps);
+
+      const exitCode = await cmd.execute({ deviceFlow: true, team: undefined });
+
+      expect(exitCode).toBe(4);
+      const errOutput = (deps.writeError as jest.Mock).mock.calls.map((c: string[]) => c[0]).join(' ');
+      expect(errOutput.toLowerCase()).toContain('device');
+    });
+
+    it('should preserve legacy behavior: no --token + non-CI auto-runs device flow', async () => {
+      const executeDeviceFlow = jest.fn().mockResolvedValue({
+        access_token: 'dvc_access_jwt',
+        refresh_token: 'dvc_refresh_jwt',
+        expires_in: 3600,
+      });
+      const deps = createMockDeps({ executeDeviceFlow });
+      const cmd = new LoginCommand(deps);
+
+      const exitCode = await cmd.execute({ team: undefined });
+
+      expect(executeDeviceFlow).toHaveBeenCalledTimes(1);
+      expect(exitCode).toBe(0);
+    });
+  });
+
   describe('server unreachable (F-12)', () => {
     it('should show service unavailable when server is unreachable (serverError flag)', async () => {
       const deps = createMockDeps({

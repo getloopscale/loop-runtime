@@ -33,7 +33,13 @@ export function RegisterPage() {
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [submitting, setSubmitting] = useState(false);
-  const [registered, setRegistered] = useState(false);
+  // `registered` was set by the deprecated XHR submit path which received
+  // data.session inline. The new form.submit() path navigates immediately
+  // on success, so the "registered" intermediate UI block is unreachable.
+  // Kept the state read for backward-compat with the success card render
+  // (line ~138); setter no longer fires.
+  // eslint-disable-next-line @typescript-eslint/no-unused-vars
+  const [registered, _setRegistered] = useState(false);
 
   useEffect(() => {
     getSession().then((s) => {
@@ -85,39 +91,45 @@ export function RegisterPage() {
     form.submit();
   };
 
-  const submitPassword = async (e: React.FormEvent) => {
+  // SECURITY: submit password registration via top-level HTML form POST
+  // instead of XHR fetch. Top-level navigation sends SameSite=Lax cookies
+  // (including the anti-CSRF cookie Kratos requires), whereas cross-origin
+  // XHR drops Lax cookies even between same-site subdomains. Same pattern
+  // as submitOIDC above. Without this, Kratos returns 403 CSRF violation.
+  // Fix 2026-06-01 — "configuração mais segura possível" mandate; avoids
+  // weakening to SameSite=None which would expose the flow to cross-site
+  // CSRF from third-party sites.
+  const submitPassword = (e: React.FormEvent) => {
     e.preventDefault();
     if (!flow) return;
     setSubmitting(true);
     const csrfNode = flow.ui.nodes.find((n) => n.attributes.name === 'csrf_token');
     try {
-      const resp = await fetch(flow.ui.action, {
-        method: 'POST',
-        credentials: 'include',
-        headers: { 'Content-Type': 'application/json', Accept: 'application/json' },
-        body: JSON.stringify({
-          csrf_token: csrfNode?.attributes.value || '',
-          method: 'password',
-          'traits.email': email,
-          'traits.name': name,
-          password,
-        }),
-      });
-      const data = await resp.json();
-      if (data.redirect_browser_to) {
-        window.location.href = data.redirect_browser_to;
-        return;
+      const form = document.createElement('form');
+      form.method = 'POST';
+      form.action = flow.ui.action;
+      for (const [k, v] of [
+        ['csrf_token', csrfNode?.attributes.value || ''],
+        ['method', 'password'],
+        ['traits.email', email],
+        ['traits.name', name],
+        ['password', password],
+      ]) {
+        const input = document.createElement('input');
+        input.type = 'hidden';
+        input.name = k;
+        input.value = v;
+        form.appendChild(input);
       }
-      if (data.session) {
-        setRegistered(true);
-        setTimeout(() => navigate('/', { replace: true }), 3000);
-        return;
-      }
-      if (data.ui) setFlow(data);
+      document.body.appendChild(form);
+      form.submit();
+      return;
     } catch {
       /* network error */
     } finally {
-      setSubmitting(false);
+      // submitting state remains true until the navigation lands on a new
+      // page (success → /, failure → /register?flow=X re-rendered).
+      // We don't clear it here because form.submit() doesn't return synchronously.
     }
   };
 

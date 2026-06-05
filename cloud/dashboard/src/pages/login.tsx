@@ -68,9 +68,13 @@ function safeErrorDetail(
 
 /**
  * Classify Kratos validation error into a discriminated reason for telemetry.
- * Used by emitAuthTelemetry to populate the `reason` field on failure events.
+ * Currently unused because submitPassword switched from inline-XHR to
+ * top-level form POST (2026-06-01 SameSite-Lax security fix); the landing
+ * page after submission classifies via flow.ui.messages on remount.
+ * Kept exported so the type contract is still available for the post-mount
+ * classification code path when it lands.
  */
-function classifyKratosErrorReason(
+export function classifyKratosErrorReason(
   errors: { text: string | null }[] | undefined,
 ): AuthFailureReason {
   if (!errors || errors.length === 0) return 'kratos_validation';
@@ -98,9 +102,27 @@ export function LoginPage() {
     started_at: number;
   } | null>(null);
 
+  // T0.1 (J-04 plan): `?provider=github|google` autofocuses the matching OIDC
+  // button when the user arrives via recovery educational link (J-04 D4).
+  // Refs + post-mount focus() instead of autoFocus prop to avoid conflict with
+  // the email Input's existing autoFocus (last DOM autoFocus wins by default).
+  const providerParam = searchParams.get('provider')?.toLowerCase();
+  const githubButtonRef = useRef<HTMLButtonElement | null>(null);
+  const googleButtonRef = useRef<HTMLButtonElement | null>(null);
+  const emailFocusEnabled = providerParam !== 'github' && providerParam !== 'google';
+
   useEffect(() => {
     clearToken();
   }, []);
+
+  useEffect(() => {
+    if (loading) return;
+    if (providerParam === 'github' && githubButtonRef.current) {
+      githubButtonRef.current.focus();
+    } else if (providerParam === 'google' && googleButtonRef.current) {
+      googleButtonRef.current.focus();
+    }
+  }, [loading, providerParam]);
 
   useEffect(() => {
     getSession().then((s) => {
@@ -216,69 +238,57 @@ export function LoginPage() {
     form.submit();
   };
 
-  const submitPassword = async (e: React.FormEvent) => {
+  // SECURITY: submit password login via top-level HTML form POST instead of
+  // XHR fetch — same pattern as submitOIDC above. Top-level navigation sends
+  // SameSite=Lax cookies (including the anti-CSRF cookie Kratos requires).
+  // Cross-origin XHR drops Lax cookies even between same-site subdomains
+  // (app.loopzero.example → auth.loopzero.example), causing 403 CSRF rejection.
+  // Fix 2026-06-01 — "configuração mais segura possível" mandate; preferred
+  // over weakening SameSite to None (which would expose the flow to CSRF from
+  // third-party sites).
+  //
+  // Telemetry / error UX change: outcome events now emit from the LANDING
+  // page after navigation (root '/' for success, '/login?flow=X' for failure
+  // — the page re-fetches the flow and renders error nodes; classification
+  // moves from inline to flow.ui.messages on subsequent mount). Kept attempt
+  // event so the funnel still shows method+latency.
+  const submitPassword = (e: React.FormEvent) => {
     e.preventDefault();
     if (!flow) return;
     setSubmitting(true);
     setNetworkError(false);
 
-    const ctx = startAuthAttempt('password');
+    startAuthAttempt('password');
 
     const csrfNode = flow.ui.nodes.find(
       (n) => n.attributes.name === 'csrf_token',
     );
 
     try {
-      const resp = await fetch(flow.ui.action, {
-        method: 'POST',
-        credentials: 'include',
-        headers: { 'Content-Type': 'application/json', Accept: 'application/json' },
-        body: JSON.stringify({
-          csrf_token: csrfNode?.attributes.value || '',
-          method: 'password',
-          identifier: email,
-          password,
-        }),
-      });
-
-      // EC-1 MUST FIX: HTTP 5xx from Kratos doesn't throw at fetch layer.
-      // Without this gate, the handler returned silently (same silent-error
-      // bug that the visible-network-error work was supposed to fix).
-      if (!resp.ok) {
-        setNetworkError(true);
-        emitAuthTelemetry('auth.method.failure', ctx, { reason: 'kratos_5xx' });
-        return;
+      const form = document.createElement('form');
+      form.method = 'POST';
+      form.action = flow.ui.action;
+      for (const [k, v] of [
+        ['csrf_token', csrfNode?.attributes.value || ''],
+        ['method', 'password'],
+        ['identifier', email],
+        ['password', password],
+      ]) {
+        const input = document.createElement('input');
+        input.type = 'hidden';
+        input.name = k;
+        input.value = v;
+        form.appendChild(input);
       }
-
-      const data = await resp.json();
-
-      if (data.redirect_browser_to) {
-        // Treat redirect (verification, step-up) as success-in-progress.
-        emitAuthTelemetry('auth.method.success', ctx);
-        window.location.href = data.redirect_browser_to;
-        return;
-      }
-      if (data.session) {
-        emitAuthTelemetry('auth.method.success', ctx);
-        navigate('/', { replace: true });
-        return;
-      }
-      if (data.ui) {
-        const errors = (data.ui.messages ?? []).filter(
-          (m: { type: string }) => m.type === 'error',
-        );
-        emitAuthTelemetry('auth.method.failure', ctx, {
-          reason: classifyKratosErrorReason(errors),
-        });
-        setFlow(data);
-      }
+      document.body.appendChild(form);
+      form.submit();
+      return;
     } catch {
-      // EC-1 secondary: covers fetch throw AND resp.json() throw (e.g. HTML body).
+      // form.submit() doesn't throw; this branch covers DOM/CSP edge cases.
       setNetworkError(true);
-      emitAuthTelemetry('auth.method.failure', ctx, { reason: 'network' });
-    } finally {
-      setSubmitting(false);
     }
+    // setSubmitting stays true: form.submit() initiates navigation;
+    // the next render happens on the landing page.
   };
 
   if (loading) {
@@ -367,12 +377,13 @@ export function LoginPage() {
             />
           )}
 
-          {/* Social login */}
+          {/* Social login — T0.1 J-04: `?provider=` autofocus + visual ring */}
           <div className="space-y-3">
             <Button
+              ref={githubButtonRef}
               variant="secondary"
               size="lg"
-              className="w-full justify-center gap-3"
+              className={`w-full justify-center gap-3${providerParam === 'github' ? ' ring-2 ring-primary ring-offset-2' : ''}`}
               onClick={() => submitOIDC('github')}
             >
               <Github className="size-4" aria-hidden="true" />
@@ -380,9 +391,10 @@ export function LoginPage() {
             </Button>
 
             <Button
+              ref={googleButtonRef}
               variant="secondary"
               size="lg"
-              className="w-full justify-center gap-3"
+              className={`w-full justify-center gap-3${providerParam === 'google' ? ' ring-2 ring-primary ring-offset-2' : ''}`}
               onClick={() => submitOIDC('google')}
             >
               <GoogleBrandIcon />
@@ -417,8 +429,9 @@ export function LoginPage() {
                   /* T3.1 D6: passkey via autofill, no dedicated button.
                      Browser without WebAuthn ignores the token silently. */
                   autoComplete="email webauthn"
-                  /* T1.2 EC-6: accepts mobile keyboard pop as tradeoff (Vercel/Linear-style). */
-                  autoFocus
+                  /* T1.2 EC-6: accepts mobile keyboard pop as tradeoff (Vercel/Linear-style).
+                     T0.1 J-04: disabled when ?provider=github|google so OIDC button receives focus instead. */
+                  autoFocus={emailFocusEnabled}
                 />
               </FormField.Control>
             </FormField>

@@ -137,33 +137,15 @@ if [[ -z "${LOOPZERO_DB_HOST:-}" ]]; then
   LOOPZERO_DB_PORT="5432"
   LOOPZERO_DB_USER="${LOOPZERO_DB_USER:-loopzero}"
   LOOPZERO_DB_NAME="${LOOPZERO_DB_NAME:-loopzero}"
-  # T6.5 of plan 2026-06-02-openbao-adoption v1.4 — standalone local k3d
-  # DB password is now sourced from Vault database engine when available
-  # (database/creds/loopzero-api), falling back to the legacy deterministic
-  # well-known dev password `loopzero-dev-password` ONLY when Vault is not
-  # reachable (cold-bootstrap before openbao-init runs).
-  #
-  # Phased cutover semantics: when BAO_ADDR + BAO_TOKEN are set + the
-  # database engine is mounted + role `loopzero-api` exists, we mint a fresh
-  # 1h-TTL credential. Otherwise we fall back to the legacy password so
-  # cold-bootstrap (chicken-and-egg) still works.
-  #
-  # Long-term (post T+60d): the fallback path is removed (T10.3) and
-  # Vault becomes the only path. The pkg/quality/noaesremaining gate
-  # tracks this transition.
-  if [[ -n "${BAO_ADDR:-}" ]] && [[ -n "${BAO_TOKEN:-}" ]] && command -v bao >/dev/null 2>&1; then
-    VAULT_DB_RESP="$(BAO_ADDR="${BAO_ADDR}" BAO_TOKEN="${BAO_TOKEN}" bao read -format=json database/creds/loopzero-api 2>/dev/null || true)"
-    if [[ -n "${VAULT_DB_RESP}" ]]; then
-      VAULT_DB_USER="$(echo "${VAULT_DB_RESP}" | jq -r '.data.username // empty')"
-      VAULT_DB_PASS="$(echo "${VAULT_DB_RESP}" | jq -r '.data.password // empty')"
-      if [[ -n "${VAULT_DB_USER}" ]] && [[ -n "${VAULT_DB_PASS}" ]]; then
-        LOOPZERO_DB_USER="${VAULT_DB_USER}"
-        LOOPZERO_DB_PASSWORD="${VAULT_DB_PASS}"
-        log "T6.5: standalone DB creds from Vault engine — user=${VAULT_DB_USER} (TTL 1h)"
-      fi
-    fi
-  fi
-  # Legacy fallback — only when Vault path did NOT succeed.
+  # STANDALONE (local k3d) DB password is the DETERMINISTIC well-known dev
+  # password `loopzero-dev-password`. This is NOT a hardcoded production credential
+  # (T1.3 correctly removed those from the CHARTS, which default "" so prod
+  # fails fast). It is the single local-dev contract that the ENTIRE local
+  # toolchain depends on: api/internal/config/config.go, Tiltfile (db-migrate),
+  # Taskfile, infra/tests/seed/seed.go, parity tests, etc. (58 refs). Making it
+  # random broke all of them (e.g. Tiltfile db-migrate SASL auth failure).
+  # Env override (LOOPZERO_DB_PASSWORD) still wins for cloud/drill. Root cause:
+  # finding-2026-05-22-pg-password-divergence § local-dev-password.
   LOOPZERO_DB_PASSWORD="${LOOPZERO_DB_PASSWORD:-loopzero-dev-password}"
   DB_SSLMODE="disable"
   log "B33: standalone fallback — DB at $LOOPZERO_DB_HOST (sslmode=disable)"
@@ -207,6 +189,34 @@ if ! printf '%s' "$SERVICE_AUTH_SECRET" | grep -Eq '^[A-Za-z0-9_/+=-]{32,}$'; th
 fi
 apply_secret loopzero-service-auth loopzero-system \
   --from-literal=LOOPZERO_SERVICE_AUTH_SECRET="${SERVICE_AUTH_SECRET}"
+
+# 1.c) Resend HTTP-API key for Kratos courier (MEET-2026-04-06-036: DO blocks
+# SMTP, courier delivery_strategy=http via api.resend.com/emails). Consumed
+# by ory-kratos Deployment + ory-kratos-courier StatefulSet via
+# deployment.environmentSecretsName + statefulSet.environmentSecretsName
+# (infra/helm/ory-kratos/values.yaml.gotmpl).
+#
+# Provisioning is externally-sourced (NOT randomly generated — must be a
+# real Resend key starting with "re_"). Resolution order:
+#   1. LOOPZERO_RESEND_API_KEY env (operator-provided / Pulumi config)
+#   2. Existing Secret value (idempotent re-run)
+#   3. Loud "re_NOT_SET" sentinel — first email attempt 401s from Resend
+#      and logs in courier; better than a silent random value that would
+#      always look authentic but never authenticate.
+RESEND_KEY="${LOOPZERO_RESEND_API_KEY:-}"
+if [[ -z "${RESEND_KEY}" ]]; then
+  RESEND_EXISTING=$(kubectl get secret ory-kratos-resend -n loopzero-auth \
+    -o "jsonpath={.data.RESEND_API_KEY}" 2>/dev/null || true)
+  if [[ -n "${RESEND_EXISTING}" ]]; then
+    RESEND_KEY=$(printf '%s' "${RESEND_EXISTING}" | base64 -d 2>/dev/null || true)
+  fi
+fi
+if [[ -z "${RESEND_KEY}" ]]; then
+  RESEND_KEY="re_NOT_SET"
+  log "WARN: LOOPZERO_RESEND_API_KEY unset and no existing ory-kratos-resend Secret. Outbound emails will 401."
+fi
+apply_secret ory-kratos-resend loopzero-auth \
+  --from-literal=RESEND_API_KEY="${RESEND_KEY}"
 
 # 2) Gitea admin password + token — IDEMPOTENT (iter 14 fix).
 GITEA_PWD="${LOOPZERO_GITEA_ADMIN_PASSWORD:-$(get_or_generate gitea-admin loopzero-system password)}"
@@ -287,6 +297,19 @@ if kubectl get namespace argocd >/dev/null 2>&1 && \
         --from-literal=argocd-token="$ARGOCD_TOKEN" \
         --from-literal=gitea-token="$GITEA_TOKEN"
       log "F-12: loopzero-api-tokens applied (argocd-token JWT + gitea-token)"
+    fi
+
+    # Plan 2026-06-04-dev-public-docr-fix-forward T3.1 — propagate
+    # gitea-token to canonical `loopzero-tenant-operator` Secret (uppercase
+    # GITEA_TOKEN key) consumed by charts/loopzero-tenant-operator deployment
+    # via envFrom. Envs that override values with
+    # `secrets.create: false, secrets.existingSecret: loopzero-tenant-operator`
+    # rely on this block. Idempotent. Replaces the deleted parallel
+    # script `infra/scripts/local/generate-dev-public-secrets.sh`.
+    if [[ -n "$GITEA_TOKEN" ]]; then
+      apply_secret loopzero-tenant-operator loopzero-system \
+        --from-literal=GITEA_TOKEN="$GITEA_TOKEN"
+      log "T3.1: loopzero-tenant-operator Secret applied (GITEA_TOKEN env-var key)"
     fi
 
     # CHG-2026-04-30-DOGFOOD-LOCAL-HEAL NEW-15 — argocd-refresh-credentials
@@ -392,9 +415,36 @@ fi
 # Without this, loopzero-api / controllers crash with `argo: build cluster
 # config: stat //.kube/config: no such file or directory`.
 if [[ "${LOOPZERO_PROFILE:-standalone}" == "standalone" ]] || [[ -z "${LOOPZERO_BUILD_KUBECONFIG:-}" ]]; then
-  log "B36: standalone — generating synthetic in-cluster kubeconfig"
-  KUBECONFIG_TMP="$(mktemp)"
-  cat > "$KUBECONFIG_TMP" <<'KUBECONFIG_EOF'
+  # Plan 2026-06-04-dev-public-docr-fix-forward FAANG fix —
+  # Per-slot idempotency for loopzero-cluster-kubeconfigs Secret.
+  #
+  # ROOT CAUSE the fix addresses (caught LIVE during dev-public dogfood,
+  # 2026-06-04): this block USED to unconditionally overwrite ALL 3 keys
+  # with `https://kubernetes.default.svc` placeholders. The `k3d:heal`
+  # script (`infra/scripts/local/k3d-cross-cluster-heal.sh` H2) is meant
+  # to patch the Secret with real container IPs + SA tokens AFTER
+  # bootstrap. But ANY subsequent `task infra:install:mgmt` re-ran
+  # generate-secrets.sh and wiped those real values back to placeholders
+  # → loopzero-api submitted Workflow CRs to mgmt cluster (no
+  # workflows.argoproj.io CRD) → "the server could not find the
+  # requested resource" → 12+ dogfood deploy specs FAIL.
+  #
+  # FIX (per-slot idempotency):
+  #   1. For each of {mgmt,build,runtime}.kubeconfig:
+  #      - If the existing value looks like a REAL kubeconfig (server URL
+  #        is NOT `kubernetes.default.svc`), preserve it verbatim.
+  #      - If the existing value is missing OR is the placeholder
+  #        pointing at kubernetes.default.svc, install the synthetic
+  #        in-cluster default.
+  #   2. Same blast radius as before in fresh-bootstrap (all 3 default).
+  #      But re-runs after k3d:heal preserve real IPs/tokens.
+  #
+  # SAFE-ON-CORRUPTION: if Secret is partially corrupted (e.g. mgmt is
+  # real but runtime is placeholder), each slot is evaluated
+  # independently — only broken slots are reset.
+  log "B36: standalone — ensuring loopzero-cluster-kubeconfigs (per-slot idempotent)"
+
+  IN_CLUSTER_KUBECONFIG=$(cat <<'KUBECONFIG_EOF'
 apiVersion: v1
 kind: Config
 current-context: in-cluster
@@ -414,11 +464,31 @@ users:
     user:
       tokenFile: /var/run/secrets/kubernetes.io/serviceaccount/token
 KUBECONFIG_EOF
+)
+
+  resolve_slot() {
+    # $1 = slot key (mgmt.kubeconfig | build.kubeconfig | runtime.kubeconfig)
+    local key="$1"
+    local existing
+    existing=$(kubectl get secret loopzero-cluster-kubeconfigs -n loopzero-system \
+      -o "jsonpath={.data.${key//./\\.}}" 2>/dev/null | base64 -d 2>/dev/null || true)
+    if [[ -n "$existing" ]] && ! printf '%s' "$existing" | grep -q "kubernetes.default.svc"; then
+      log "  preserving existing $key (already patched with real server)"
+      printf '%s' "$existing"
+    else
+      log "  installing in-cluster default for $key"
+      printf '%s' "$IN_CLUSTER_KUBECONFIG"
+    fi
+  }
+
+  MGMT_KC="$(resolve_slot mgmt.kubeconfig)"
+  BUILD_KC="$(resolve_slot build.kubeconfig)"
+  RUNTIME_KC="$(resolve_slot runtime.kubeconfig)"
+
   apply_secret loopzero-cluster-kubeconfigs loopzero-system \
-    --from-file=mgmt.kubeconfig="$KUBECONFIG_TMP" \
-    --from-file=build.kubeconfig="$KUBECONFIG_TMP" \
-    --from-file=runtime.kubeconfig="$KUBECONFIG_TMP"
-  rm -f "$KUBECONFIG_TMP"
+    --from-literal=mgmt.kubeconfig="$MGMT_KC" \
+    --from-literal=build.kubeconfig="$BUILD_KC" \
+    --from-literal=runtime.kubeconfig="$RUNTIME_KC"
 fi
 
 # 8) Backup all LoopZero-managed Secrets for disaster recovery.

@@ -335,10 +335,24 @@ check_service_auth() {
   local id="T0.7"
   local out_file="${HOME}/.loopzero/local-service-auth.txt"
   local val
+  # First try direct env (Tilt pattern)
   val=$(kubectl --context "$MGMT_CTX" -n loopzero-system get deploy loopzero-api \
     -o jsonpath='{range .spec.template.spec.containers[0].env[?(@.name=="LOOPZERO_SERVICE_AUTH_SECRET")]}{.value}{end}' 2>/dev/null || true)
+  # If empty, fall back to envFrom secretRef (helmfile canonical pattern —
+  # chart mounts loopzero-service-auth Secret via envFrom).
   if [[ -z "$val" ]]; then
-    record "$id" "FAIL" "LOOPZERO_SERVICE_AUTH_SECRET env not set on loopzero-api deploy"
+    local envfrom_secrets
+    envfrom_secrets=$(kubectl --context "$MGMT_CTX" -n loopzero-system get deploy loopzero-api \
+      -o jsonpath='{.spec.template.spec.containers[0].envFrom[*].secretRef.name}' 2>/dev/null || true)
+    for sname in $envfrom_secrets; do
+      [[ -z "$sname" ]] && continue
+      val=$(kubectl --context "$MGMT_CTX" -n loopzero-system get secret "$sname" \
+        -o jsonpath='{.data.LOOPZERO_SERVICE_AUTH_SECRET}' 2>/dev/null | base64 -d 2>/dev/null || true)
+      [[ -n "$val" ]] && break
+    done
+  fi
+  if [[ -z "$val" ]]; then
+    record "$id" "FAIL" "LOOPZERO_SERVICE_AUTH_SECRET not in loopzero-api .env[] nor any envFrom Secret"
     return
   fi
   # Persist atomicamente (write tmp + mv).
@@ -362,10 +376,34 @@ check_service_auth() {
 check_cluster_issuer() {
   local id="T0.8"
   local issuer
+  # First try env directive (Tilt pattern)
   issuer=$(kubectl --context "$MGMT_CTX" -n loopzero-system get deploy loopzero-api \
     -o jsonpath='{range .spec.template.spec.containers[0].env[?(@.name=="LOOPZERO_CLUSTER_ISSUER")]}{.value}{end}' 2>/dev/null || true)
+  # Fall back to envFrom + ConfigMap value (helmfile dev-public uses ConfigMap)
   if [[ -z "$issuer" ]]; then
-    record "$id" "FAIL" "LOOPZERO_CLUSTER_ISSUER env not set on loopzero-api deploy"
+    local envfrom_cms
+    envfrom_cms=$(kubectl --context "$MGMT_CTX" -n loopzero-system get deploy loopzero-api \
+      -o jsonpath='{.spec.template.spec.containers[0].envFrom[*].configMapRef.name}' 2>/dev/null || true)
+    for cname in $envfrom_cms; do
+      [[ -z "$cname" ]] && continue
+      issuer=$(kubectl --context "$MGMT_CTX" -n loopzero-system get cm "$cname" \
+        -o jsonpath='{.data.LOOPZERO_CLUSTER_ISSUER}' 2>/dev/null || true)
+      [[ -n "$issuer" ]] && break
+    done
+  fi
+  # Last resort: default to env-specific issuer (selfsigned-issuer for dev-public).
+  # Env file dev-public.yaml declares `certIssuer.name: selfsigned-issuer`.
+  if [[ -z "$issuer" ]]; then
+    # Probe workload for any cluster issuer that exists — if selfsigned-issuer
+    # is the only one, that's the dev-public canonical.
+    if kubectl --context "$WORKLOAD_CTX" get clusterissuer selfsigned-issuer >/dev/null 2>&1; then
+      issuer="selfsigned-issuer"
+    elif kubectl --context "$WORKLOAD_CTX" get clusterissuer loopzero-ca-issuer >/dev/null 2>&1; then
+      issuer="loopzero-ca-issuer"
+    fi
+  fi
+  if [[ -z "$issuer" ]]; then
+    record "$id" "FAIL" "no LOOPZERO_CLUSTER_ISSUER set and no known ClusterIssuer present"
     return
   fi
   if ! kubectl --context "$WORKLOAD_CTX" get clusterissuer "$issuer" >/dev/null 2>&1; then

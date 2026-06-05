@@ -37,6 +37,12 @@ export interface LoginOptions {
   // parity, finding-2026-05-13-e2e-token-refresh-divergence.md).
   refreshToken?: string;
   expiresIn?: number;
+  // Plan J-05 — explicit opt-in to the OAuth2 Device Code Flow (RFC 8628).
+  // The implicit "no --token + non-CI" path is preserved; this flag adds
+  // discoverability so `loopzero login --device-flow` is a documented public
+  // contract referenced in the J-05 DoD. Honored in CI too (operator opts
+  // in deliberately) — bypasses the "use --token in CI" guard.
+  deviceFlow?: boolean;
 }
 
 export class LoginCommand {
@@ -47,12 +53,28 @@ export class LoginCommand {
   }
 
   async execute(opts: LoginOptions): Promise<number> {
+    // Plan J-05 — explicit --device-flow flag wins. Honored even in CI
+    // (the operator deliberately opted in), so the "must use --token in CI"
+    // guard below is skipped on this branch.
+    if (opts.deviceFlow) {
+      if (!this.deps.executeDeviceFlow) {
+        return this.exitWithError(
+          opts,
+          'Device authentication is not available in this build. ' +
+          'Use: loopzero login --token <token>',
+          4,
+          'DEVICE_FLOW_UNAVAILABLE'
+        );
+      }
+      return this.executeDeviceFlow(opts);
+    }
+
     if (!opts.token) {
       if (this.deps.isCI) {
         return this.exitWithError(opts, 'In CI mode, use: loopzero login --token <token>', 1, 'MISSING_TOKEN');
       }
 
-      // Device Code Flow — interactive browser-based login
+      // Device Code Flow — interactive browser-based login (legacy implicit path).
       if (this.deps.executeDeviceFlow) {
         return this.executeDeviceFlow(opts);
       }

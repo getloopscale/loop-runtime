@@ -8,6 +8,8 @@ import (
 	"errors"
 	"log/slog"
 	"net/http"
+
+	"github.com/loopzero/loopzero/cloud/internal/metrics"
 )
 
 // TelemetryHandler accepts beacon-style POSTs from the dashboard and emits
@@ -53,6 +55,13 @@ const telemetryMaxBodyBytes = 64 * 1024
 // `category=<eventCategory>`. Always responds 202 Accepted — telemetry
 // is fire-and-forget on the wire; an error from the logger is a server
 // problem the client cannot help with.
+//
+// Plan 2026-06-05-dashboard-journey-j05-device-success T3.1 D4:
+// for `events` category, the payload is inspected for
+// `event=device_success_viewed` to increment
+// `loopzero_device_flow_browser_success_total`. The increment is the LAST
+// step before 202 — rejected requests (oversize / bad JSON) NEVER
+// increment (EC-3 ordering invariant).
 func (h *TelemetryHandler) makeHandler(eventCategory string) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		r.Body = http.MaxBytesReader(w, r.Body, telemetryMaxBodyBytes)
@@ -72,6 +81,14 @@ func (h *TelemetryHandler) makeHandler(eventCategory string) http.HandlerFunc {
 			"category", eventCategory,
 			"payload", payload,
 		)
+		// EC-3: increment AFTER decode succeeds. Rejected paths return early
+		// above without touching the counter, so the metric reflects only
+		// real browser-success signals (not size-bombed spam).
+		if eventCategory == "events" {
+			if evt, ok := payload["event"].(string); ok && evt == "device_success_viewed" {
+				metrics.IncDeviceFlowBrowserSuccess()
+			}
+		}
 		w.WriteHeader(http.StatusAccepted)
 	}
 }

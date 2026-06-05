@@ -28,6 +28,16 @@ var (
 		Help: "Device flow completions.",
 	}, []string{"result"})
 
+	// Plan 2026-06-05-dashboard-journey-j05-device-success T3.1 D4:
+	// Browser-side success signal — incremented when /v1/telemetry/events
+	// receives event=device_success_viewed from the dashboard beacon.
+	// Powers SLO "CLI auth completion rate" (ratio against successful
+	// device-flow token grants in `loopzero_auth_device_flow_total{result=success}`).
+	deviceFlowBrowserSuccess = prometheus.NewCounter(prometheus.CounterOpts{
+		Name: "loopzero_device_flow_browser_success_total",
+		Help: "Device-flow consent confirmations rendered in the dashboard.",
+	})
+
 	tenantProvisioning = prometheus.NewCounterVec(prometheus.CounterOpts{
 		Name: "loopzero_tenant_provisioning_total",
 		Help: "Tenant provisioning operations.",
@@ -77,6 +87,7 @@ func init() {
 	prometheus.MustRegister(
 		tokenExchanges,
 		deviceFlows,
+		deviceFlowBrowserSuccess,
 		tenantProvisioning,
 		tenantProvisioningDuration,
 		authRejections,
@@ -104,6 +115,14 @@ func IncDeviceFlow(success bool) {
 	} else {
 		deviceFlows.WithLabelValues("error").Inc()
 	}
+}
+
+// IncDeviceFlowBrowserSuccess increments when the dashboard renders the
+// /device-success confirmation page (Plan J-05 T3.1 D4). Caller MUST gate
+// this on the parsed event being `device_success_viewed` (EC-3 ordering
+// invariant: never increment on rejected payloads).
+func IncDeviceFlowBrowserSuccess() {
+	deviceFlowBrowserSuccess.Inc()
 }
 
 // ObserveTenantProvisioning records a tenant provisioning operation.

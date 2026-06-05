@@ -52,6 +52,11 @@ hydra:
       login: "{{ .Values.uiBaseUrl | default "http://localhost:4455" }}/login"
       consent: "{{ .Values.uiBaseUrl | default "http://localhost:4455" }}/consent"
       logout: "{{ .Values.uiBaseUrl | default "http://localhost:4455" }}/logout"
+      # Plan 2026-06-05-dashboard-journey-j05-device-success T2.1 D1:
+      # Device flow consent redirect — browser termina em dashboard custom
+      # (NOT Hydra default). Override per-env via uiBaseUrl. trimSuffix "/"
+      # defends contra trailing-slash em uiBaseUrl (EC-8).
+      post_device_done_url: "{{ trimSuffix "/" (.Values.uiBaseUrl | default "http://localhost:4455") }}/device-success"
 
     # --- OAuth2 ---
     oauth2:

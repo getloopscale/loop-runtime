@@ -83,24 +83,65 @@ var _ = Describe("Parity: Cell-2 Activation", Ordered, Label("parity"), func() {
 		Expect(discovery).To(BeNumerically(">=", 3), "loopzero_cell_discovery_count must be >= 3")
 	})
 
-	It("C2: routing determinism (covered by go test -race ./internal/placement)", func() {
-		Skip("pointer gate — real check is `cd api && go test -race ./internal/placement/...` (unit-tested, not a LIVE invariant)")
+	It("C2: routing determinism (go test -race ./internal/placement)", func() {
+		// Faithful port (TB1.1 of plan 2026-05-24-parity-to-ginkgo): invoke the
+		// Go race-test suite that this gate exists to assert. Path is rooted at
+		// the repo's api module; we cd into it so go.mod resolution works.
+		repoRoot, err := exec.Command("git", "rev-parse", "--show-toplevel").Output()
+		Expect(err).NotTo(HaveOccurred())
+		cmd := exec.Command("go", "test", "-race", "-count=1",
+			"-run", "TestPlacement|TestRoundRobin|TestRouter",
+			"./internal/placement/...")
+		cmd.Dir = strings.TrimSpace(string(repoRoot)) + "/api"
+		out, err := cmd.CombinedOutput()
+		Expect(err).NotTo(HaveOccurred(),
+			"placement race tests failed:\n%s", string(out))
+		Expect(string(out)).To(ContainSubstring("ok"),
+			"expected race-clean ok output, got:\n%s", string(out))
 	})
 
 	It("C3: Stage-5a tenant-count pre-step (production-only)", func() {
 		Skip("production-only (Stage 5a per ADR D6) — N/A on local k3d")
 	})
 
-	It("C4: rollback-SLO budget (operator measures LIVE before Stage 4)", func() {
-		Skip("provisional/operator — rollback-slo measurement is operator-run before prod Stage 4")
+	It("C4: rollback-SLO --dry-run validates mechanism (LIVE measurement is operator-run)", func() {
+		// LIVE rollback-SLO measurement (10 iterations × pin+probe+rollback) is
+		// operator-run before prod Stage 4 per MEET-ASYNC-AMENDMENT-2026-05-24-001
+		// (ratified). Ginkgo port invokes --dry-run: validates preflight,
+		// dependency presence, iteration loop structure, percentile-compute
+		// path. No tenant placement mutation. Stub SYNTH_TENANT_ID satisfies
+		// the env-var gate without touching real state.
+		repoRoot, err := exec.Command("git", "rev-parse", "--show-toplevel").Output()
+		Expect(err).NotTo(HaveOccurred())
+		cmd := exec.Command("bash",
+			strings.TrimSpace(string(repoRoot))+"/infra/tests/parity/cell2-rollback-slo.sh",
+			"--dry-run")
+		cmd.Env = append(cmd.Environ(), "SYNTH_TENANT_ID=tn-ginkgo-dryrun")
+		out, err := cmd.CombinedOutput()
+		Expect(err).NotTo(HaveOccurred(),
+			"cell2-rollback-slo.sh --dry-run exit non-zero:\n%s", string(out))
+		Expect(string(out)).To(ContainSubstring("[dry-run]"),
+			"expected --dry-run mode markers in output:\n%s", string(out))
 	})
 
 	It("C5: PVC/stateful guidance (runbook consolidated — no-op)", func() {
 		Skip("no-op gate — docs consolidated; nothing to assert at runtime")
 	})
 
-	It("C6: cell_pinner mgmt-only rollback path (covered by Go unit test)", func() {
-		Skip("static code-grep — covered by api/internal/services cell_pinner unit tests")
+	It("C6: cell_pinner mgmt-only rollback path (go test cell_pinner)", func() {
+		// Faithful port: invoke the cell_pinner unit tests that exercise the
+		// mgmt-only rollback path (covers `Test.*CellPinner` family).
+		repoRoot, err := exec.Command("git", "rev-parse", "--show-toplevel").Output()
+		Expect(err).NotTo(HaveOccurred())
+		cmd := exec.Command("go", "test", "-count=1",
+			"-run", "Test.*CellPinner",
+			"./internal/services/...")
+		cmd.Dir = strings.TrimSpace(string(repoRoot)) + "/api"
+		out, err := cmd.CombinedOutput()
+		Expect(err).NotTo(HaveOccurred(),
+			"cell_pinner tests failed:\n%s", string(out))
+		Expect(string(out)).To(ContainSubstring("ok"),
+			"expected ok output, got:\n%s", string(out))
 	})
 
 	// C7 — cell-1 and cell-2 share the ingress-domain label (rollback needs no DNS change).
@@ -143,8 +184,20 @@ var _ = Describe("Parity: Cell-2 Activation", Ordered, Label("parity"), func() {
 		Expect(onCell1).To(BeFalse(), "tenant %s pinned to cell-2 but ns %s also on cell-1 (isolation breach)", tenant, ns)
 	})
 
-	It("C11: admin-pin authz invariant (covered by TestAdminPinCell_AuthzInvariantC11)", func() {
-		Skip("static code-grep — covered by api Go test TestAdminPinCell_AuthzInvariantC11")
+	It("C11: admin-pin authz invariant (go test TestAdminPinCell_AuthzInvariantC11)", func() {
+		// Faithful port: invoke the dedicated authz-invariant test that this
+		// gate exists to assert.
+		repoRoot, err := exec.Command("git", "rev-parse", "--show-toplevel").Output()
+		Expect(err).NotTo(HaveOccurred())
+		cmd := exec.Command("go", "test", "-count=1",
+			"-run", "TestAdminPinCell_AuthzInvariantC11",
+			"./internal/routes/...")
+		cmd.Dir = strings.TrimSpace(string(repoRoot)) + "/api"
+		out, err := cmd.CombinedOutput()
+		Expect(err).NotTo(HaveOccurred(),
+			"TestAdminPinCell_AuthzInvariantC11 failed:\n%s", string(out))
+		Expect(string(out)).To(ContainSubstring("ok"),
+			"expected ok output, got:\n%s", string(out))
 	})
 
 	// C12 — every ClusterCredential Secret has base64(PEM) CA data (or insecure-skip-tls).

@@ -96,12 +96,15 @@ describe('RegisterPage', () => {
   });
 
   it('test_register_submit_password_posts_traits', async () => {
-    mockFetch
-      .mockResolvedValueOnce({ ok: true, json: async () => flowFixture() })
-      .mockResolvedValueOnce({
-        ok: true,
-        json: async () => ({ session: { id: 'sess-1' } }),
-      });
+    // Rewritten 2026-06-05 (Ralph J-04 loop): same root cause as login —
+    // submitPassword migrated to form.submit() top-level POST per SameSite-Lax
+    // security fix 2026-06-01. Asserts form construction + hidden inputs.
+    mockFetch.mockResolvedValueOnce({ ok: true, json: async () => flowFixture() });
+
+    const createElementSpy = vi.spyOn(document, 'createElement');
+    const submitStub = vi
+      .spyOn(HTMLFormElement.prototype, 'submit')
+      .mockImplementation(() => undefined);
 
     const user = userEvent.setup();
     render(<RegisterPage />);
@@ -115,16 +118,34 @@ describe('RegisterPage', () => {
     await user.click(screen.getByRole('button', { name: /create account/i }));
 
     await waitFor(() => {
-      expect(mockFetch).toHaveBeenCalledTimes(2);
+      expect(submitStub).toHaveBeenCalled();
     });
-    const [submitUrl, submitOpts] = mockFetch.mock.calls[1];
-    expect(submitUrl).toBe('http://kratos.local/self-service/registration?flow=reg-flow-1');
-    const body = JSON.parse(submitOpts.body);
-    expect(body.method).toBe('password');
-    expect(body['traits.email']).toBe('alice@x.com');
-    expect(body['traits.name']).toBe('Alice');
-    expect(body.password).toBe('longpassword123');
-    expect(body.csrf_token).toBe('csrf-reg');
+
+    const formCalls = createElementSpy.mock.calls.filter((c) => c[0] === 'form');
+    expect(formCalls.length).toBeGreaterThanOrEqual(1);
+
+    const forms = Array.from(document.querySelectorAll('form'));
+    const regForm = forms
+      .filter((f) => f.action.includes('self-service/registration'))
+      .find((f) => {
+        const methodInput = Array.from(
+          f.querySelectorAll('input[type=hidden][name=method]'),
+        )[0] as HTMLInputElement | undefined;
+        return methodInput?.value === 'password';
+      });
+    expect(regForm).toBeTruthy();
+    if (regForm) {
+      const inputs = Array.from(regForm.querySelectorAll('input[type=hidden]')) as HTMLInputElement[];
+      const bag = Object.fromEntries(inputs.map((i) => [i.name, i.value]));
+      expect(bag.method).toBe('password');
+      expect(bag['traits.email']).toBe('alice@x.com');
+      expect(bag['traits.name']).toBe('Alice');
+      expect(bag.password).toBe('longpassword123');
+      expect(bag.csrf_token).toBe('csrf-reg');
+    }
+
+    createElementSpy.mockRestore();
+    submitStub.mockRestore();
   });
 
   it('test_register_displays_kratos_errors', async () => {

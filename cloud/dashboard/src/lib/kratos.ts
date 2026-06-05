@@ -89,14 +89,15 @@ export function getCsrfToken(flow: Flow): string {
   return node?.attributes.value || '';
 }
 
-/** Extract flow-level error messages. */
+/** Extract flow-level error messages. Tolerates Kratos error responses
+ * that don't have a `ui` field (e.g., 422 with redirect_browser_to). */
 export function getFlowMessages(flow: Flow): string[] {
-  return (flow.ui.messages || []).map(m => m.text);
+  return (flow?.ui?.messages || []).map(m => m.text);
 }
 
-/** Extract field-level error messages for a specific input. */
+/** Extract field-level error messages for a specific input. Null-safe. */
 export function getFieldErrors(flow: Flow, fieldName: string): string[] {
-  const node = flow.ui.nodes.find(n => n.attributes.name === fieldName);
+  const node = flow?.ui?.nodes?.find(n => n.attributes.name === fieldName);
   return (node?.messages || []).filter(m => m.type === 'error').map(m => m.text);
 }
 
@@ -128,6 +129,15 @@ const ACTION_BY_CONTEXT: Record<KratosErrorContext, string> = {
 export function enrichKratosError(rawMessage: string, context: KratosErrorContext): string {
   if (!rawMessage) return rawMessage;
   const lower = rawMessage.toLowerCase();
+
+  // EC-2 / D8 (J-04 plan 2026-06-05): Kratos `identifier_similarity_check_enabled`
+  // produces messages like "the password is too similar to the user identifier".
+  // Replace with product-language WITHOUT leaking "identifier similarity" /
+  // "Kratos" / "credential" to UI (Rule 3).
+  if (lower.includes('similar to the user identifier') || lower.includes('identifier similarity')) {
+    return "Choose a password that doesn't contain your email or username.";
+  }
+
   const isGeneric = GENERIC_KRATOS_PHRASES.some((p) => lower.includes(p));
   if (!isGeneric) return rawMessage;
   return `${rawMessage}. ${ACTION_BY_CONTEXT[context]}`;

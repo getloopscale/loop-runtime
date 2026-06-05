@@ -23,7 +23,29 @@
       - frame-ancestors NOT enforced via meta — only via response header.
       - data:/blob:/https: in img-src cover avatars, base64 favicons, S3 assets.
     -->
-    <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' 'unsafe-inline'; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src 'self' data: https://fonts.gstatic.com; img-src 'self' data: blob: https:; connect-src 'self' ws: wss: https://checkout.stripe.com https://*.stripe.com; form-action 'self'; base-uri 'self'; object-src 'none'" />
+    <!-- CSP: form-action must allow the Kratos public host so the dashboard's
+         login/registration forms can POST cross-origin to auth.loopzero.example
+         (the canonical session-cookie issuer per cookieDomain=loopzero.example).
+         connect-src likewise extended for XHR flow lookups + cloud's session-
+         token exchange. Per plan 2026-05-29-dashboard-public-integration-
+         canonicalization Phase 8 LIVE fix 2026-06-01. -->
+    <!-- CSP form-action applies to the initial POST URL AND every redirect
+         target during the form submission. Google OAuth flow is: POST
+         auth.loopzero.example → 303 → accounts.google.com. GitHub OAuth: POST
+         auth.loopzero.example → 303 → github.com. Both providers must be allowed,
+         otherwise CSP rejects the OIDC redirect chain mid-flight. -->
+    <!-- connect-src includes auth.loopzero.example because the init flow GET XHR
+         (fetch /self-service/registration/flows?id=...) reads the flow JSON
+         before the user submits. The SUBMIT itself is top-level form POST
+         (SameSite-Lax safe path — see submitPassword/submitOIDC), so the
+         CSRF cookie travels with the navigation. cloud.loopzero.example needed
+         for post-login /v1/auth/session/token JWT exchange. -->
+    <!-- Plan 2026-06-04-dev-public-domain-canonicalization: CSP extended to
+         allow auth-dev.loopzero.example + cloud-dev.loopzero.example so the dashboard
+         hosted at app-dev.loopzero.example can complete the same flows against
+         the dev-public Kratos/cloud. Stripe + Google + GitHub allowlists
+         unchanged (same OAuth/Stripe apps shared between envs per D5). -->
+    <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' 'unsafe-inline'; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src 'self' data: https://fonts.gstatic.com; img-src 'self' data: blob: https:; connect-src 'self' ws: wss: https://checkout.stripe.com https://*.stripe.com https://auth.loopzero.example https://auth-dev.loopzero.example https://cloud.loopzero.example https://cloud-dev.loopzero.example; form-action 'self' https://auth.loopzero.example https://auth-dev.loopzero.example https://accounts.google.com https://github.com; base-uri 'self'; object-src 'none'" />
     <!-- LoopZero brand favicons. The PNG assets in public/ are the canonical
          LoopZero mascot (committed 2026-05-19); these <link> tags re-wire them
          after the previous inline-SVG placeholder (#3ecf8e raio) shadowed

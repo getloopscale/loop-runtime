@@ -115,10 +115,16 @@ func (c *StripeClient) CreateCheckoutSession(customerID, priceID, successURL, ca
 		"cancel_url":               {cancelURL},
 	}
 
-	// Scoped to a 1-hour window: prevents duplicate sessions from rapid double-clicks
-	// but allows retry after a canceled/expired session (new hour = new key).
-	hourBucket := time.Now().UTC().Truncate(time.Hour).Unix()
-	idempotencyKey := fmt.Sprintf("checkout-%s-%s-%d", tenantID, priceID, hourBucket)
+	// Scoped to a 60-second window: protects double-click (sequential POST latency
+	// is sub-second) without trapping retries after a session is paid/canceled/
+	// expired. A 1-hour bucket would silently return the cached URL for an entire
+	// hour after first creation — Stripe Idempotency-Key responses are cached for
+	// 24h, so the first call's response is replayed even if the user already paid
+	// or canceled that session in the meantime. Multiple Checkout sessions never
+	// generate duplicate charges (Stripe only charges on payment), so coarser
+	// windows offer no protection in exchange for blocking legitimate retries.
+	minuteBucket := time.Now().UTC().Truncate(time.Minute).Unix()
+	idempotencyKey := fmt.Sprintf("checkout-%s-%s-%d", tenantID, priceID, minuteBucket)
 
 	var session CheckoutSession
 	if err := c.post("/checkout/sessions", data, &session, idempotencyKey); err != nil {

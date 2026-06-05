@@ -29,6 +29,11 @@ export function registerAuthCommands(deps: CommandDeps): void {
     // legacy --token-only behavior (access-only, no auto-refresh).
     .option('--refresh-token <token>', 'OAuth2 refresh_token paired with --token (enables auto-refresh)')
     .option('--expires-in <seconds>', 'Lifetime in seconds of the --token value (informs auto-refresh timing)', (v) => parseInt(v, 10))
+    // Plan J-05 — explicit Device Code Flow opt-in. The implicit "no --token
+    // + non-CI" path keeps working; this flag makes the intent discoverable
+    // and works in CI too (sponsor caught LIVE 2026-06-05 that the flag was
+    // unknown — DoD references `loopzero login --device-flow` directly).
+    .option('--device-flow', 'Authenticate via OAuth2 Device Code Flow (RFC 8628) — browser-based')
     .action(async (cmdOpts) => {
       const globalOpts = getGlobalOpts();
 
@@ -102,6 +107,7 @@ export function registerAuthCommands(deps: CommandDeps): void {
         json: globalOpts.json,
         refreshToken: cmdOpts.refreshToken,
         expiresIn: cmdOpts.expiresIn,
+        deviceFlow: Boolean(cmdOpts.deviceFlow),
       });
       process.exitCode = exitCode;
     });

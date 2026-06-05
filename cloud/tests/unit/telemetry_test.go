@@ -8,17 +8,66 @@
 package unit
 
 import (
+	"bufio"
 	"bytes"
 	"encoding/json"
+	"fmt"
 	"io"
 	"log/slog"
 	"net/http"
 	"net/http/httptest"
+	"strconv"
 	"strings"
 	"testing"
 
+	"github.com/loopzero/loopzero/cloud/internal/metrics"
 	"github.com/loopzero/loopzero/cloud/internal/routes"
 )
+
+// scrapeMetricCounter renders the /metrics output via metrics.Handler()
+// and returns the float64 value of the counter named `metricName`.
+// Returns 0 if the metric is absent from the output (Prometheus emits
+// counters only after first increment OR after init() registration).
+// Lines without labels follow `<name> <value>`.
+func scrapeMetricCounter(metricName string) (float64, error) {
+	h := metrics.Handler()
+	req := httptest.NewRequest(http.MethodGet, "/metrics", nil)
+	rec := httptest.NewRecorder()
+	h.ServeHTTP(rec, req)
+	if rec.Code != http.StatusOK {
+		return 0, fmt.Errorf("metrics handler returned %d", rec.Code)
+	}
+	scanner := bufio.NewScanner(strings.NewReader(rec.Body.String()))
+	scanner.Buffer(make([]byte, 0, 64*1024), 1024*1024)
+	for scanner.Scan() {
+		line := scanner.Text()
+		if strings.HasPrefix(line, "#") {
+			continue
+		}
+		// Expect either `<name> <value>` (no labels) OR `<name>{<labels>} <value>`.
+		// We need exact match on the name segment before any '{' or space.
+		fields := strings.Fields(line)
+		if len(fields) != 2 {
+			continue
+		}
+		nameSeg := fields[0]
+		if idx := strings.Index(nameSeg, "{"); idx >= 0 {
+			nameSeg = nameSeg[:idx]
+		}
+		if nameSeg != metricName {
+			continue
+		}
+		v, err := strconv.ParseFloat(fields[1], 64)
+		if err != nil {
+			return 0, fmt.Errorf("parse value %q: %w", fields[1], err)
+		}
+		return v, nil
+	}
+	if err := scanner.Err(); err != nil {
+		return 0, err
+	}
+	return 0, nil // not present yet — counter starts at 0
+}
 
 // captureLogger returns a slog.Logger that writes JSON records into a
 // bytes.Buffer the test can inspect. Each test gets its own buffer so
@@ -154,6 +203,90 @@ func TestTelemetry_Limit64KB_BoundaryExact(t *testing.T) {
 	if w2.Code != http.StatusRequestEntityTooLarge {
 		t.Fatalf("+1 byte payload accepted; want 413 got %d", w2.Code)
 	}
+}
+
+// Plan J-05 T3.1 D4 + EC-3 — counter increment is the LAST step before
+// 202, gated on `event=device_success_viewed`. The next three tests pin
+// that contract.
+
+func TestTelemetry_Events_DeviceSuccessViewed_IncrementsCounter(t *testing.T) {
+	logger, _ := captureLogger()
+	h := routes.NewTelemetryHandler(logger)
+
+	before := readBrowserSuccessCounter(t)
+	body, _ := json.Marshal(map[string]any{
+		"event":     "device_success_viewed",
+		"timestamp": 1700000000,
+		"origin":    "https://app-dev.loopzero.example",
+	})
+	w := postTelemetry(t, h.Events, body)
+	if w.Code != http.StatusAccepted {
+		t.Fatalf("want 202, got %d body=%s", w.Code, w.Body.String())
+	}
+	after := readBrowserSuccessCounter(t)
+	if after-before != 1 {
+		t.Fatalf("expected counter +1, got delta=%v (before=%v after=%v)",
+			after-before, before, after)
+	}
+}
+
+func TestTelemetry_Events_OtherEvent_DoesNotIncrement(t *testing.T) {
+	logger, _ := captureLogger()
+	h := routes.NewTelemetryHandler(logger)
+
+	before := readBrowserSuccessCounter(t)
+	body, _ := json.Marshal(map[string]any{
+		"event": "deploy_clicked",
+	})
+	w := postTelemetry(t, h.Events, body)
+	if w.Code != http.StatusAccepted {
+		t.Fatalf("want 202, got %d", w.Code)
+	}
+	after := readBrowserSuccessCounter(t)
+	if after != before {
+		t.Fatalf("expected counter unchanged, got delta=%v", after-before)
+	}
+}
+
+func TestTelemetry_Events_RejectedPayload_DoesNotIncrement(t *testing.T) {
+	// EC-3 ordering invariant: bad-JSON and oversize bodies MUST NOT
+	// increment the success counter. Rejected path returns before the
+	// increment, which we assert by tracking the counter delta.
+	logger, _ := captureLogger()
+	h := routes.NewTelemetryHandler(logger)
+
+	before := readBrowserSuccessCounter(t)
+	// 1) Malformed JSON path → 400, no increment.
+	w1 := postTelemetry(t, h.Events, []byte("{not valid"))
+	if w1.Code != http.StatusBadRequest {
+		t.Fatalf("malformed: want 400, got %d", w1.Code)
+	}
+	// 2) Oversize body path → 413, no increment.
+	big := strings.Repeat("a", 100*1024)
+	w2 := postTelemetry(t, h.Events, []byte(`{"event":"device_success_viewed","x":"`+big+`"}`))
+	if w2.Code != http.StatusRequestEntityTooLarge {
+		t.Fatalf("oversize: want 413, got %d", w2.Code)
+	}
+	after := readBrowserSuccessCounter(t)
+	if after != before {
+		t.Fatalf("rejected paths must not increment counter; delta=%v", after-before)
+	}
+}
+
+// readBrowserSuccessCounter scrapes the /metrics endpoint and returns
+// the current value of loopzero_device_flow_browser_success_total. Returns
+// 0 if the metric is not yet registered (counter starts at 0 by spec).
+func readBrowserSuccessCounter(t *testing.T) float64 {
+	t.Helper()
+	// Cross-package: import metrics with its Handler.
+	const metricName = "loopzero_device_flow_browser_success_total"
+	// We can't read the registered counter directly without importing
+	// prometheus/testutil — instead scrape the exposition and parse.
+	value, err := scrapeMetricCounter(metricName)
+	if err != nil {
+		t.Fatalf("scrape %s: %v", metricName, err)
+	}
+	return value
 }
 
 func TestTelemetry_NilLoggerFallsBackToDefault(t *testing.T) {

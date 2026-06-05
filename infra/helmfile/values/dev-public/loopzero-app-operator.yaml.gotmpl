@@ -1,0 +1,55 @@
+# Plan 2026-06-04-dev-public-docr-fix-forward T2.2.
+# Minimal override for env dev-public.
+# Chart defaults canonical (DOCR + dev tag + IfNotPresent + HA).
+
+global:
+  imagePullSecrets:
+    - name: do-registry
+
+image:
+  pullPolicy: Always
+
+config:
+  # Chart requires explicit baseDomain (no env-helmfile auto-injection).
+  baseDomain: "{{ .Values.domain }}"
+
+# dev-public NetworkPolicy override: gitea is in loopzero-system ns (not the
+# chart-default `gitea` ns). Same fix as loopzero-tenant-operator. Without
+# this, operator egress to gitea API is blocked → reconcile loops fail.
+networkPolicy:
+  enabled: true
+  ingress:
+    - from:
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: monitoring
+      ports:
+        - protocol: TCP
+          port: 8443
+  extraEgress:
+    - ports:
+        - protocol: TCP
+          port: 6443
+        - protocol: TCP
+          port: 443
+    - ports:
+        - protocol: TCP
+          port: 3000
+      to:
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: loopzero-system
+    - ports:
+        - protocol: TCP
+          port: 8080
+      to:
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: argocd
+    - ports:
+        - protocol: TCP
+          port: 9000
+      to:
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: loopzero-system

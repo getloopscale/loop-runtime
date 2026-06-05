@@ -90,8 +90,12 @@ DELETE FROM builds   WHERE tenant_id = '$TENANT_ID'
   AND project_id IN ('api-gateway', 'web-app');
 DELETE FROM projects WHERE tenant_id = '$TENANT_ID'
   AND name IN ('api-gateway', 'web-app');
-DELETE FROM audit_log WHERE tenant_id = '$TENANT_ID'
-  AND resource_type IN ('project', 'build', 'release', 'subscription');
+-- audit_log is append-only (PG trigger audit_log_prevent_mutation): we
+-- intentionally do NOT delete here. Re-running seed APPENDS another set of
+-- audit rows (with new timestamps) — that's correct semantically (every
+-- "seed" event IS a real audit-worthy action). The dashboard's /audit page
+-- shows the most recent N entries, so duplicates from re-seeds are visible
+-- but harmless. v1.1 EC-08 + 2026-06-01 hardening fix.
 
 -- Plan: Pro (so dashboard limits don't hide the seeded data)
 UPDATE subscriptions SET plan = 'pro', updated_at = now() WHERE tenant_id = '$TENANT_ID';

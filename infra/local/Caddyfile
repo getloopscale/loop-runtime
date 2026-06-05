@@ -25,7 +25,18 @@
   email admin@loopzero.example
 }
 
-# Dashboard (vite dev server with HMR)
+# Dashboard (vite dev server with HMR) + same-origin Kratos proxy
+# Per 2026-06-01 security-first mandate: Kratos session endpoints (/sessions/*,
+# /self-service/*) reverse-proxied via app.loopzero.example so XHR from the dashboard
+# is SAME-ORIGIN — eliminates SameSite=Lax cross-subdomain cookie ambiguity
+# entirely. Cookies travel unconditionally on same-origin XHR.
+#
+# Host header REWRITTEN to auth.loopzero.example so Kratos sees its expected host
+# (matching serve.public.base_url and CORS allowed_origins). Flow.ui.action
+# still emits auth.loopzero.example absolute URLs — those are submitted via top-level
+# form POST (which carries Lax cookies on cross-origin top-level navigation
+# without issue), and the OIDC callbacks land on auth.loopzero.example (matching
+# GitHub/Google OAuth Client redirect_uri registration).
 app.loopzero.example {
   # WebSocket route MUST come first to win the match priority
   @ws {
@@ -33,6 +44,20 @@ app.loopzero.example {
     header Upgrade websocket
   }
   reverse_proxy @ws localhost:5173
+
+  # Kratos session endpoints — same-origin proxy
+  handle /sessions/* {
+    reverse_proxy localhost:14433 {
+      header_up Host auth.loopzero.example
+    }
+  }
+  handle /self-service/* {
+    reverse_proxy localhost:14433 {
+      header_up Host auth.loopzero.example
+    }
+  }
+
+  # Dashboard SPA (everything else → vite)
   reverse_proxy localhost:5173
   encode gzip
 }
@@ -51,6 +76,50 @@ cloud.loopzero.example {
 
 # Kratos public (browser-facing login/registration flows)
 auth.loopzero.example {
+  reverse_proxy localhost:14433
+  encode gzip
+}
+
+# ============================================================================
+# DEV-PUBLIC env (plan 2026-06-04-dev-public-domain-canonicalization, T1.1)
+# ============================================================================
+# Mirrors the auth/app/cloud blocks above on *-dev.loopzero.example so dev test
+# infra can coexist with the legacy *.loopzero.example (reserved for prod cutover).
+# Cookie domain = loopzero.example — shared by both env so dashboard cross-host
+# session works identically. OAuth callbacks for the dev OAuth apps go to
+# https://auth-dev.loopzero.example/self-service/methods/oidc/callback/{provider}.
+
+app-dev.loopzero.example {
+  @ws {
+    header Connection *Upgrade*
+    header Upgrade websocket
+  }
+  reverse_proxy @ws localhost:5173
+
+  handle /sessions/* {
+    reverse_proxy localhost:14433 {
+      header_up Host auth-dev.loopzero.example
+    }
+  }
+  handle /self-service/* {
+    reverse_proxy localhost:14433 {
+      header_up Host auth-dev.loopzero.example
+    }
+  }
+
+  reverse_proxy localhost:5173
+  encode gzip
+}
+
+cloud-dev.loopzero.example {
+  reverse_proxy localhost:13002
+  encode gzip
+  request_body {
+    max_size 1MB
+  }
+}
+
+auth-dev.loopzero.example {
   reverse_proxy localhost:14433
   encode gzip
 }

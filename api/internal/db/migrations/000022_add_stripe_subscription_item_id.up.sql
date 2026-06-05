@@ -1,0 +1,14 @@
+-- Add the Stripe subscription ITEM id (si_xxx) to subscriptions.
+--
+-- Metered usage is reported to Stripe at /v1/subscription_items/{id}/usage_records,
+-- which requires a subscription ITEM id (si_xxx), NOT a subscription id (sub_xxx).
+-- The metering reporter previously sent stripe_subscription_id, so every usage
+-- report was rejected and metered revenue was silently lost (find_data_001).
+--
+-- This column is populated from the customer.subscription.updated webhook
+-- (items[0].id). It is nullable: existing subscriptions backfill on their next
+-- subscription.updated event, and the reporter skips (with a WARN) any row whose
+-- item id is still null rather than reporting against the wrong identifier.
+--
+-- Forward-only, additive, idempotent. No DROP.
+ALTER TABLE subscriptions ADD COLUMN IF NOT EXISTS stripe_subscription_item_id TEXT;

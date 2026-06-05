@@ -75,7 +75,17 @@ export function isEmailVerified(session: Session): boolean {
   return false;
 }
 
-/** Check if user has an active session. Returns session or null. */
+/** Check if user has an active session. Returns session or null.
+ *
+ * SECURITY (2026-06-01): Calls Kratos directly via cross-subdomain XHR with
+ * credentials:include. Cookie is scoped Domain=loopzero.example so it travels on
+ * same-site (eTLD+1) requests; SameSite=Lax allows this per RFC6265bis §5.5.7.
+ * CORS Access-Control-Allow-Origin includes the dashboard origin.
+ *
+ * If 401 with a stale cookie or missing cookie, returns null and caller
+ * (useRequireAuth) routes to /login. Console diagnostics emitted to make
+ * "why am I being kicked to /login" actionable in DevTools.
+ */
 export async function getSession(): Promise<Session | null> {
   // Visual-validation mock layer (dev-only, gated by VITE_USE_MOCKS env var,
   // dead-code-eliminated in production builds). See lib/dev-mocks.ts.
@@ -86,10 +96,26 @@ export async function getSession(): Promise<Session | null> {
       credentials: 'include',
       headers: { Accept: 'application/json' },
     });
-    if (!resp.ok) return null;
+    if (!resp.ok) {
+      // eslint-disable-next-line no-console
+      console.warn(
+        `[auth] getSession: Kratos returned HTTP ${resp.status} (no active session). ` +
+          `If you just registered/logged in but see this, the session cookie may not have been ` +
+          `set (open DevTools → Application → Cookies → loopzero.example and look for ory_kratos_session). ` +
+          `Clear cookies and re-login to reset.`,
+      );
+      return null;
+    }
     const session = await resp.json();
-    return session.active ? session : null;
-  } catch {
+    if (!session.active) {
+      // eslint-disable-next-line no-console
+      console.warn('[auth] getSession: Kratos returned session but active=false', session);
+      return null;
+    }
+    return session;
+  } catch (err) {
+    // eslint-disable-next-line no-console
+    console.error('[auth] getSession: network/parse error', err);
     return null;
   }
 }

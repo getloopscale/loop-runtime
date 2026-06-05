@@ -48,12 +48,14 @@ var _ = Describe("Journey: Platform Upgrade", Ordered, Label("journey"), func() 
 		stdout, stderr, exitCode := runLoopZero("platform", "status", "--json")
 
 		// platform status invokes kubectl probes against the local cluster.
-		// Valid contract paths:
-		//   - exit 0: cluster reachable, status emitted as JSON.
+		// Valid contract paths per `cli/src/commands/platform.ts` platformStatus
+		// doc-comment (ADR D3):
+		//   - exit 0: cluster reachable, no drift.
 		//   - exit 1: cluster unreachable / kubectl probe failed.
 		//   - exit 4: auth required (no service-auth secret).
-		// All three are stable user-facing contracts.
-		Expect(exitCode).To(Or(Equal(0), Equal(1), Equal(4)),
+		//   - exit 5: cluster reachable, drift detected (runtime ≠ Git).
+		// All four are stable user-facing contracts.
+		Expect(exitCode).To(Or(Equal(0), Equal(1), Equal(4), Equal(5)),
 			"loopzero platform status: unexpected exit %d\nstdout: %s\nstderr: %s", exitCode, stdout, stderr)
 
 		assertNoForbiddenTermsInAll(map[string]string{
@@ -61,10 +63,12 @@ var _ = Describe("Journey: Platform Upgrade", Ordered, Label("journey"), func() 
 			"platform status stderr": stderr,
 		})
 
-		if exitCode == 0 {
+		// Exit 0 (no drift) AND exit 5 (drift detected) BOTH emit valid JSON
+		// per the CLI contract. Validate shape in both cases.
+		if exitCode == 0 || exitCode == 5 {
 			s := strings.TrimSpace(stdout)
 			Expect(s[0:1]).To(Or(Equal("{"), Equal("[")),
-				"--json output must be valid JSON when exit==0")
+				"--json output must be valid JSON when exit=%d", exitCode)
 		}
 	})
 

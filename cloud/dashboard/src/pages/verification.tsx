@@ -22,7 +22,11 @@ export function VerificationPage() {
     if (flowId && urlCode) {
       submitCode(flowId, urlCode);
     } else if (flowId) {
-      setStatus('input');
+      // Browser-created flow is empty: Kratos hasn't queued an email yet
+      // because nobody submitted the email field. If the user has an active
+      // session, look up their email and submit it automatically so the
+      // courier dispatches a code BEFORE we show PinInput.
+      ensureCodeRequested(flowId).finally(() => setStatus('input'));
     } else {
       window.location.href = `${KRATOS_URL}/self-service/verification/browser`;
     }
@@ -31,6 +35,64 @@ export function VerificationPage() {
     // flowId + searchParams are the actual change triggers per D-9 v1.2.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [flowId, searchParams]);
+
+  /**
+   * Ensure Kratos has queued a verification email for this flow.
+   *
+   * Kratos browser-mode creates an empty flow on GET; it only enqueues a
+   * mail after a POST that includes the `email` field. The dashboard UI
+   * surfaces PinInput directly (no email-prompt screen), so without this
+   * auto-POST users see an input box waiting for a code that was never
+   * sent. We pull the email from /sessions/whoami (set when the user is
+   * logged in) and submit it. If there is no session, we fall through
+   * silently — there is nothing to send the code to.
+   *
+   * Idempotent: re-POSTing the same email on a flow that already has a
+   * code pending is a no-op on Kratos's side (it returns the same flow
+   * with the code-input node).
+   */
+  const ensureCodeRequested = async (flow: string) => {
+    try {
+      const sessionResp = await fetch(`${KRATOS_URL}/sessions/whoami`, {
+        credentials: 'include',
+        headers: { Accept: 'application/json' },
+      });
+      if (!sessionResp.ok) return;
+      const session = await sessionResp.json();
+      const email: string | undefined = session?.identity?.traits?.email;
+      if (!email) return;
+
+      const flowResp = await fetch(
+        `${KRATOS_URL}/self-service/verification/flows?id=${flow}`,
+        { credentials: 'include', headers: { Accept: 'application/json' } },
+      );
+      if (!flowResp.ok) return;
+      const flowData = await flowResp.json();
+
+      // Skip if the flow is already past the email step (has a `code` node).
+      const hasCodeNode = flowData.ui?.nodes?.some(
+        (n: { attributes: { name?: string } }) => n.attributes.name === 'code',
+      );
+      if (hasCodeNode) return;
+
+      const csrfNode = flowData.ui?.nodes?.find(
+        (n: { attributes: { name?: string } }) => n.attributes.name === 'csrf_token',
+      );
+      await fetch(flowData.ui.action, {
+        method: 'POST',
+        credentials: 'include',
+        headers: { 'Content-Type': 'application/json', Accept: 'application/json' },
+        body: JSON.stringify({
+          csrf_token: csrfNode?.attributes?.value || '',
+          method: 'code',
+          email,
+        }),
+      });
+    } catch {
+      // Non-fatal: PinInput still renders, user can manually re-request via
+      // the "Resend" link below the submit button.
+    }
+  };
 
   const submitCode = async (flow: string, verificationCode: string) => {
     setStatus('loading');
@@ -143,8 +205,17 @@ export function VerificationPage() {
                 </h1>
                 <p className="text-body-sm text-muted-foreground">{error}</p>
               </div>
-              <Button asChild variant="primary" size="lg"
- className="w-full justify-center">
+              <Button
+                variant="primary"
+                size="lg"
+                className="w-full justify-center"
+                onClick={() => {
+                  window.location.href = `${KRATOS_URL}/self-service/verification/browser`;
+                }}
+              >
+                Resend verification email
+              </Button>
+              <Button asChild variant="secondary" size="lg" className="w-full justify-center">
                 <a href="/">Go to dashboard</a>
               </Button>
             </>
@@ -186,6 +257,15 @@ export function VerificationPage() {
                   Verify
                 </Button>
               </form>
+              <button
+                type="button"
+                onClick={() => {
+                  window.location.href = `${KRATOS_URL}/self-service/verification/browser`;
+                }}
+                className="text-label text-muted-foreground hover:text-foreground underline-offset-2 hover:underline mt-2"
+              >
+                Didn't receive the email? Resend
+              </button>
             </>
           )}
         </Card.Body>

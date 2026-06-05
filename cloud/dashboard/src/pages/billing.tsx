@@ -29,10 +29,19 @@ interface BillingResponse {
   usage: Record<string, UsageMetric>;
   period_start?: string;
   period_end?: string;
+  subscription_id?: string;
 }
 
-/** §3.4: Post-checkout activation polling. Preserves prior behavior. */
-function useCheckoutActivation(currentPlan: string | undefined) {
+/**
+ * §3.4: Post-checkout activation polling.
+ *
+ * Detects activation via `subscription_id` transition rather than `plan` label
+ * change. Plan-label comparison fails when baseline equals target (e.g. user
+ * already on "Pro" upgrades again after a cancellation): the new
+ * subscription_id is unique per Stripe checkout session, so any signup or
+ * re-purchase produces a diff regardless of the resulting plan name.
+ */
+function useCheckoutActivation(initialBilling: BillingResponse | null | undefined) {
   const [searchParams, setSearchParams] = useSearchParams();
   const [activating, setActivating] = useState(false);
   const [activationResult, setActivationResult] = useState<'success' | 'timeout' | null>(null);
@@ -40,18 +49,23 @@ function useCheckoutActivation(currentPlan: string | undefined) {
 
   useEffect(() => {
     if (searchParams.get('success') !== 'true') return;
-    if (currentPlan === undefined) return;
+    if (initialBilling === undefined) return;
 
     setActivating(true);
     let attempts = 0;
     const maxAttempts = 15;
-    const baselinePlan = currentPlan;
+    const baselineSubscriptionID = initialBilling?.subscription_id ?? '';
+    const baselinePlan = initialBilling?.plan ?? '';
 
     const poll = setInterval(async () => {
       attempts++;
       try {
         const result = await cloudFetch<BillingResponse>('/v1/billing');
-        if (result && result.plan !== baselinePlan) {
+        const currentSubscriptionID = result?.subscription_id ?? '';
+        const subscriptionChanged =
+          currentSubscriptionID !== '' && currentSubscriptionID !== baselineSubscriptionID;
+        const planChanged = result?.plan && result.plan !== baselinePlan;
+        if (result && (subscriptionChanged || planChanged)) {
           clearInterval(poll);
           setActivating(false);
           setActivatedBilling(result);
@@ -70,7 +84,7 @@ function useCheckoutActivation(currentPlan: string | undefined) {
     }, 2000);
 
     return () => clearInterval(poll);
-  }, [searchParams, setSearchParams, currentPlan]);
+  }, [searchParams, setSearchParams, initialBilling]);
 
   return { activating, activationResult, setActivationResult, activatedBilling };
 }
@@ -101,7 +115,7 @@ export function BillingPage() {
     activationResult,
     setActivationResult,
     activatedBilling,
-  } = useCheckoutActivation(initialBilling?.plan);
+  } = useCheckoutActivation(initialBilling);
 
   const billing = activatedBilling ?? initialBilling;
 
@@ -163,7 +177,12 @@ export function BillingPage() {
       }))
     : [];
 
-  const planTier: PlanTier = PLAN_TIER_MAP[billing?.plan ?? 'starter'] ?? 'free';
+  // Normalize plan to lowercase: backend returns display-cased values via
+  // PlanDisplayName ("Pro" / "Team") while PLAN_TIER_MAP keys are slug-cased.
+  // Without toLowerCase, lookup("Pro") returned undefined, fell through to
+  // 'free', and a Pro user saw the Starter UI (Free badge + Pro upgrade CTA).
+  const planTier: PlanTier =
+    PLAN_TIER_MAP[(billing?.plan ?? 'starter').toLowerCase()] ?? 'free';
   const planLabel = billing?.plan
     ? billing.plan.charAt(0).toUpperCase() + billing.plan.slice(1)
     : 'Starter';
@@ -256,23 +275,48 @@ export function BillingPage() {
           </Card.Body>
         </Card>
 
-        {/* Right: Upgrade CTA (only show if not on top tier) */}
-        {planTier !== 'enterprise' && planTier !== 'team' && (
+        {/* Right: Upgrade / Contact CTA — varies by current plan.
+            free (starter):       Upgrade to Pro via Stripe checkout
+            pro:                  Contact sales for Team / Enterprise (Team is
+                                  Early Access, no public signup; Enterprise is
+                                  Contact-only — see CLAUDE.md § Pricing)
+            team / enterprise:    no card (already on a top tier)
+        */}
+        {planTier === 'free' && (
           <Card
             className="cursor-pointer hover:border-primary/30 transition-colors"
             onClick={() => upgradePlan('pro')}
           >
             <Card.Body className="p-6">
-              <Sparkles
-                className="size-5 text-primary mb-3"
-                aria-hidden="true"
-              />
+              <Sparkles className="size-5 text-primary mb-3" aria-hidden="true" />
               <p className="text-body-sm font-semibold text-foreground">
                 Upgrade to Pro — $29/mo
               </p>
               <p className="text-label text-muted-foreground mt-1">
                 10 projects, 3 environments, 1000 builds/month
               </p>
+            </Card.Body>
+          </Card>
+        )}
+        {planTier === 'pro' && (
+          <Card
+            className="cursor-pointer hover:border-primary/30 transition-colors"
+            onClick={() => upgradePlan('team')}
+          >
+            <Card.Body className="p-6">
+              <Sparkles className="size-5 text-primary mb-3" aria-hidden="true" />
+              <p className="text-body-sm font-semibold text-foreground">
+                Upgrade to Team — $99/mo
+              </p>
+              <p className="text-label text-muted-foreground mt-1">
+                A whole team or department
+              </p>
+              <ul className="text-label text-muted-foreground mt-3 space-y-1.5">
+                <li>Unlimited projects · unlimited environments · metered builds/mo (no agent quota)</li>
+                <li>Per-role permissions: Admin · Deploy · View</li>
+                <li>Compliance report per build (SBOM)</li>
+                <li>Priority support</li>
+              </ul>
             </Card.Body>
           </Card>
         )}

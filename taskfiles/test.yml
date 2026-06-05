@@ -796,6 +796,34 @@ tasks:
     cmds:
       - bash infra/tests/dogfood/repro-findings.sh
 
+  test:dogfood:recovery:
+    desc: |
+      T5.4 of plan 2026-06-05-dashboard-journey-j04-recovery — aggregate
+      dogfood wrapper for Journey J-04 Recovery. Invokes:
+        1. T5.2 hermetic syntax check (allowlist + structure regression gate)
+        2. vitest hermetic suite (recovery.test.tsx + login.test.tsx — covers
+           Cenários B + F via DOM-state mocks, ~10s)
+        3. T5.1 LIVE bash (5 cenários A/C/C2/D/E against dev-public DNS,
+           skipped via --hermetic-only)
+      Flags forwarded to wrapper: --hermetic-only --live-only --json.
+    cmds:
+      - bash infra/scripts/local/dogfood-recovery.sh {{.CLI_ARGS}}
+
+  test:dogfood:device:
+    desc: |
+      T5.1 of plan 2026-06-05-dashboard-journey-j05-device-success — aggregate
+      dogfood wrapper for Journey J-05 Device Success. Invokes:
+        1. T4.2 hermetic syntax check (LIVE bash structure regression gate)
+        2. T2.1 hermetic helm-values check (Hydra post_device_done_url contract)
+        3. vitest hermetic suite (device-success.test.tsx — 9 tests)
+        4. Playwright headless (e2e/device-success.spec.ts — 2 cenários,
+           SKIP=FAIL by default per EC-5; override with --allow-skip)
+        5. T4.2 LIVE bash (3 cenários A/B/C against dev-public DNS,
+           skipped via --hermetic-only)
+      Flags forwarded to wrapper: --hermetic-only --live-only --json --allow-skip.
+    cmds:
+      - bash infra/scripts/local/dogfood-device.sh {{.CLI_ARGS}}
+
   validate:slos:
     desc: |
       Validates Sloth SLO files in infra/sloth/ (Coverage Matrix #8 — closes

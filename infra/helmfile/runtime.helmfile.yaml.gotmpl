@@ -184,6 +184,16 @@ releases:
         value: "{{ .Values.policyMode }}"
       - name: domain
         value: "{{ .Values.domain }}"
+{{- if has .Environment.Name (list "standalone-multi" "dev-public" "standalone-public") }}
+      # Plan 2026-06-04 dev-public-domain-canonicalization — local envs run
+      # BuildKit pipelines that push to k3d-loopzero-registry:5000. Without this
+      # allowlist entry the tenant pods are rejected by VAP
+      # loopzero-restrict-image-registries on admission. Production envs (drill/prod)
+      # leave it empty so DOCR/Harbor remain the only acceptable prefixes
+      # (defense-in-depth supply-chain).
+      - name: registries.additionalPrefixes[0]
+        value: "k3d-loopzero-registry:5000/"
+{{- end }}
 
   # T2.2 Sigstore Scaffolding REMOVED from Helmfile per ADR-2026-05-27-T2.2-OFFLINE-TUF
   # § "Engineering deliverables" #8: GitOps two-writers veto applied —

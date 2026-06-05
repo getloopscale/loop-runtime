@@ -116,7 +116,13 @@ func (h *WebhookHandler) dispatch(exec dbExecer, event StripeEvent) error {
 	switch event.Type {
 	case "checkout.session.completed":
 		return h.handleCheckoutCompleted(exec, event)
-	case "customer.subscription.updated":
+	// 2026-06-01 fix: NEW subscriptions emit customer.subscription.created,
+	// not .updated. Without handling .created, plan stays "pending" forever
+	// on first-time signup (dashboard polls /v1/billing showing
+	// "Activating your subscription..." in a loop). Reuses the .updated
+	// handler since both carry the same Subscription object shape with
+	// items[0].price.id.
+	case "customer.subscription.created", "customer.subscription.updated":
 		return h.handleSubscriptionUpdated(exec, event)
 	case "customer.subscription.deleted":
 		return h.handleSubscriptionDeleted(exec, event)
@@ -132,8 +138,11 @@ func (h *WebhookHandler) dispatch(exec dbExecer, event StripeEvent) error {
 // isHandledEvent reports whether the event type has a business handler.
 func isHandledEvent(t string) bool {
 	switch t {
-	case "checkout.session.completed", "customer.subscription.updated",
-		"customer.subscription.deleted", "invoice.paid", "invoice.payment_failed":
+	case "checkout.session.completed",
+		"customer.subscription.created",
+		"customer.subscription.updated",
+		"customer.subscription.deleted",
+		"invoice.paid", "invoice.payment_failed":
 		return true
 	default:
 		return false
@@ -246,19 +255,28 @@ func (h *WebhookHandler) handleSubscriptionUpdated(exec dbExecer, event StripeEv
 		itemID = sub.Items.Data[0].ID // si_xxx — used by the metering reporter (find_data_001)
 	}
 
-	// COALESCE(NULLIF($,''), col) only overwrites stripe_subscription_item_id when
-	// the event actually carries an item id; otherwise the existing value is kept.
+	// WHERE matches by stripe_subscription_id OR stripe_customer_id. Stripe does
+	// NOT guarantee ordering of webhook delivery: customer.subscription.created
+	// can arrive BEFORE checkout.session.completed has had a chance to link
+	// stripe_subscription_id onto the row. Matching by customer_id (which the
+	// row already has from EnsureStripeCustomer at checkout creation time) makes
+	// this handler idempotent across both arrival orders. We also SET
+	// stripe_subscription_id so a .created arriving first links the id; a later
+	// .updated remains a no-op for that column.
+	//
+	// COALESCE(NULLIF($,''), col) only overwrites stripe_subscription_item_id
+	// when the event carries an item id; otherwise the existing value is kept.
 	if plan != "" {
-		// Sync status AND plan
 		_, err := exec.Exec(
 			`UPDATE subscriptions SET status = $1, plan = $2,
-			        stripe_subscription_item_id = COALESCE(NULLIF($3, ''), stripe_subscription_item_id),
-			        current_period_start = $4, current_period_end = $5, updated_at = now()
-			 WHERE stripe_subscription_id = $6`,
-			sub.Status, plan, itemID,
+			        stripe_subscription_id = $3,
+			        stripe_subscription_item_id = COALESCE(NULLIF($4, ''), stripe_subscription_item_id),
+			        current_period_start = $5, current_period_end = $6, updated_at = now()
+			 WHERE stripe_subscription_id = $3 OR stripe_customer_id = $7`,
+			sub.Status, plan, sub.ID, itemID,
 			time.Unix(sub.CurrentPeriodStart, 0),
 			time.Unix(sub.CurrentPeriodEnd, 0),
-			sub.ID,
+			sub.Customer,
 		)
 		return err
 	}
@@ -266,13 +284,14 @@ func (h *WebhookHandler) handleSubscriptionUpdated(exec dbExecer, event StripeEv
 	// No price mapping — sync status (and item id) only
 	_, err := exec.Exec(
 		`UPDATE subscriptions SET status = $1,
-		        stripe_subscription_item_id = COALESCE(NULLIF($2, ''), stripe_subscription_item_id),
-		        current_period_start = $3, current_period_end = $4, updated_at = now()
-		 WHERE stripe_subscription_id = $5`,
-		sub.Status, itemID,
+		        stripe_subscription_id = $2,
+		        stripe_subscription_item_id = COALESCE(NULLIF($3, ''), stripe_subscription_item_id),
+		        current_period_start = $4, current_period_end = $5, updated_at = now()
+		 WHERE stripe_subscription_id = $2 OR stripe_customer_id = $6`,
+		sub.Status, sub.ID, itemID,
 		time.Unix(sub.CurrentPeriodStart, 0),
 		time.Unix(sub.CurrentPeriodEnd, 0),
-		sub.ID,
+		sub.Customer,
 	)
 	return err
 }
