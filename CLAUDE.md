@@ -19,6 +19,55 @@ Claude MUST consult that doc BEFORE editing:
 
 The doc is mirrored at `loopzerokit-tools/loopzerokit/docs/architecture/loopzerokit-loopzerocloud-integration.md` — keep both copies in sync (edit one, copy the diff to the other in the same commit).
 
+## GO-TO CTO mandate: Dashboard Memory Section expansion (locked 2026-06-06)
+
+> **Read this BEFORE any commit touching `cloud/dashboard/src/pages/memory/`, `cloud/dashboard/src/pages/api-keys.tsx`, `cloud/internal/routes/memory_*.go`, `cloud/internal/routes/api_keys.go`, `cloud/internal/auth/scope.go`, or migrations creating `loopzero_api_keys` / `webhooks` / `memory_exports` tables.**
+
+**Authorization:** project-owner mandate via `/grill-me` session 2026-06-06 (8 strategic + 2 housekeeping decisions resolved sequentially). The mandate authorizes a 5-plan sequential journey adding a unified Memory section to LoopZeroCloud Dashboard, integrating the OSS `@loopzero/memory` REST server as a managed-runtime consumer through a Go proxy.
+
+**Source of truth (DO NOT re-derive these decisions ad-hoc — every PR cites the doc that locks them):**
+
+- **Strategic decisions** (8 A1-A8): [`.claude/knowledge-base/architecture/dashboard/memory-section-prior-art-2026-06-06.md`](.claude/knowledge-base/architecture/dashboard/memory-section-prior-art-2026-06-06.md)
+- **Plan 0 (first in chain — Platform API Keys with scopes)**: [`.claude/knowledge-base/plans/2026-06-06-platform-api-keys-with-scopes-plan.md`](.claude/knowledge-base/plans/2026-06-06-platform-api-keys-with-scopes-plan.md)
+
+**Inviolable architectural invariants (any commit violating these must be reverted OR re-classified via new ADR with project-owner sign-off):**
+
+1. **Memory section lives in `cloud/dashboard/src/pages/memory/`** — NOT a microservice, NOT a separate sibling app, NOT in any OSS repo. The dashboard is the closed-source commercial differentiator (lock-in posture is intentional + declared).
+2. **Multi-tenancy = M1 shared cluster + `owner_user_id` discriminator on every row of every memory-touching query.** Per-tenant isolation (M2) is OUT OF SCOPE at v0.1. Cross-tenant DELETE returns **404 NOT 403** (existence-leak prevention).
+3. **Auth = B1 Go proxy.** `cloud/internal/routes/memory_*.go` holds the master `THEMEMORY_API_KEY` env var. Customer NEVER sees TheMemory key. Customer auth at the public surface is the unified `loopzero_live_*` API key (Plan 0) with scopes. At v0.1, the OSS TheMemory remains tenant-unaware in schema — Go injects `WHERE owner_user_id = $1` via `X-LoopZero-User-Id` header propagation.
+4. **API key = unified `loopzero_live_{base64url(32)}` WITH scopes.** Industry-canonical (Stripe/GitHub fine-grained PAT/Slack/OpenAI convergence). SHA-256 hash NOT bcrypt. Scope enum v0.1: `memory:read|write|delete|admin`; reserved (returns 503 if attempted) `rag:*|traces:*|agents:*|deploys:*`. Per-service keys + OAuth client_credentials = REJECTED at v0.1 (YAGNI).
+5. **Surface overlap = HYBRID γ.** 6 NEW pages under `/memory/`, 3 PROMOTIONS to existing `/billing` + `/audit` + `/settings` (memory section/tab/filter), 1 DROP (Install — `loopzero init` CLI + docs cover this), 1 SEPARATE platform `/api-keys` (NOT memory-scoped — covers all future verticals).
+6. **OSS demo at `examples/chat-with-memory/`** stays as standalone LoopZeroKit-native single-tenant demo. NOT the production dashboard. OSS consumer's UI story = CLI + REST + that demo. Production dashboard = PaaS-only differentiator.
+7. **DESIGN.md v1.0 compliance is mandatory per memory page.** 5Q-3s rule + production-vs-staging badge + danger zone choreography (`<DangerZone>` + `<ConfirmDialog>` with impact paragraph + reversibility + typed confirmation phrase). NO `variant="primary"` on destructive memory actions (forget / API key revoke / webhook delete / export delete).
+8. **No literal "Mem0" / "mem0" / `app.mem0.ai` mentions in src/ or test/** — `loopzero-cloud/loopzero/cloud/dashboard/` honors the same paper/marketing-name policy that OSS sibling honors. Branding stays "TheMemory" everywhere customer-facing.
+
+**Chain order (DO NOT ship out of order without explicit re-prioritization ADR):**
+
+```
+Plan 0 — Platform API Keys with scopes  [ships FIRST — auth substrate for all]
+  ↓
+Plan 1 — Memory Shell  [sidebar nav + /memory landing + /memory/memories + Go proxy handlers]
+  ↓
+Plan 2 — Memory Insights  [/memory/entities + Explore cards]  } ship in parallel after Plan 1
+Plan 3 — Memory Operations  [/memory/exports + /memory/webhooks + migrations]  } 
+  ↓
+Plan 4 — Cross-cuts (promotions)  [memory section in /billing + filter in /audit + tab in /settings]
+```
+
+**Edge-case absorptions locked across all 5 plans** (every PR must respect; see prior-art doc § Edge case absorptions for canonical wording):
+
+- Empirical pre-flight on every new surface (e.g., `curl /v1/api-keys/list` BEFORE authoring CRUD UI to validate Go route exists)
+- Async middleware writers via `go func() { ... }()` AFTER response write — NEVER block hot-path; p95 delta ≤ 5ms with/without
+- API key generation: `crypto/rand.Read(32)` NEVER `math/rand`; SHA-256 hash NEVER bcrypt
+- Create API Key dialog: Close button DISABLED until checkbox "I've copied my key safely" checked
+- Webhook page renders persistent `<Alert intent="warning" title="Demo only">` at TOP of page (NOT footer)
+- Memory export filename = `export-${randomUUID()}.json` server-generated — NEVER trust client-supplied filename
+- Every listing query filters by `WHERE owner_user_id = ctx.session.userId`
+
+**OSS sibling P0 freeze posture (informational; honest disclosure):** The OSS `@loopzero/memory` repository has its own PRIORITY 0 hardening lock (locked there 2026-06-04) scoped to its 3 sub-goals (APIs correct / SDK functional / MCP available). Adding LoopZeroCloud Dashboard's Memory section does NOT change OSS TheMemory's P0 closure criteria — the dashboard ship is **parallel work** that empirically validates the public REST + scopes + Bearer auth surface at customer scale. Engineering teams coordinating across the two repos must treat the dashboard as a high-fidelity SDK consumer, NOT as a substitute for OSS `/dogfood` evidence collection.
+
+**When this mandate may change:** Only via explicit ADR signed by project owner. Any PR that softens an invariant above (renames a scope, lifts the M1 shared-tenancy model, exposes TheMemory key to customer, etc.) MUST cite the ADR. The grill-me session of 2026-06-06 is the foundational record; any subsequent change layers ADRs on top — never erases the original mandate.
+
 ## What This Project Is
 
 LoopZero is a **CLI-first managed cloud (Kubernetes-backed)** for monorepo deployments. Vercel-quality DX for backends — `loopzero login`, `loopzero init`, `loopzero deploy`, and in under 5 minutes every service is live with TLS, preview environments on every PR, and rollback with one command. No Kubernetes. No infrastructure YAML.
