@@ -88,26 +88,37 @@ type ServicesManifest struct {
 	Services []ServiceEntry
 }
 
-// runtimeToStrategy maps services.json `runtime` field values to the
-// existing LanguageStrategy strings consumed by argo/languages.go and
-// the manifests emitter. Acts as a compat layer during the transition
-// window per ADR D7. Future v3.x: pure runtime-based dispatch once
-// legacy framework fallback is removed.
-//
-// EC-B3-1 (v3.1) — explicit mapping table (not heuristic).
-var runtimeToStrategy = map[string]string{
-	"python": "python-fastapi", // Wave 2 canonical Python strategy
-	"node":   "node-hono",      // Wave 2 canonical Node strategy
+// runtimeToStrategyEntry is one row in the immutable runtime→strategy lookup
+// table. Plan v1.2 T4.2 (M2): the previous implementation used a package-level
+// var map which is NOT safe for concurrent write+read; even though the table
+// is read-only at runtime, leaving it as a map risks accidental mutation
+// (e.g. from tests) and the Go runtime will not warn until the race detector
+// is enabled. A length-2 immutable slice scanned linearly is O(N) but N=2 in
+// practice — the perf delta is negligible while the safety guarantee is
+// total.
+type runtimeToStrategyEntry struct {
+	Runtime  string
+	Strategy string
+}
+
+// runtimeToStrategyTable is the canonical compat table. EC-B3-1 (v3.1).
+// Future v3.x: pure runtime-based dispatch once legacy framework fallback
+// is removed.
+var runtimeToStrategyTable = [...]runtimeToStrategyEntry{
+	{Runtime: "python", Strategy: "python-fastapi"}, // Wave 2 canonical Python strategy
+	{Runtime: "node", Strategy: "node-hono"},        // Wave 2 canonical Node strategy
 }
 
 // mapRuntimeToStrategy resolves a services.json runtime value to the
 // LanguageStrategy string. Returns an error for unknown runtimes.
 func mapRuntimeToStrategy(runtime string) (string, error) {
-	strategy, ok := runtimeToStrategy[strings.ToLower(runtime)]
-	if !ok {
-		return "", fmt.Errorf("unknown runtime %q (expected one of: python, node)", runtime)
+	key := strings.ToLower(runtime)
+	for i := range runtimeToStrategyTable {
+		if runtimeToStrategyTable[i].Runtime == key {
+			return runtimeToStrategyTable[i].Strategy, nil
+		}
 	}
-	return strategy, nil
+	return "", fmt.Errorf("unknown runtime %q (expected one of: python, node)", runtime)
 }
 
 // mapServicesToRenderInput translates a `ServicesManifest` (the platform-

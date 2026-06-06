@@ -28,6 +28,78 @@ import (
 	"strings"
 )
 
+// K8sDoc is a single Kubernetes manifest document with metadata extracted
+// from the YAML header. Plan v1.2 T4.1 — typed output so downstream
+// consumers (kubeconform, drift detection, dispatch by Kind) can act on
+// structured fields instead of re-parsing the joined string.
+type K8sDoc struct {
+	Kind      string
+	Name      string
+	Namespace string
+	YAML      string
+}
+
+// kindFromYAML is a best-effort one-pass scanner that extracts `kind: X`
+// from the first 8 lines of a manifest body. K8sDoc carries the result so
+// downstream filters can skip the doc-parse round trip.
+func kindFromYAML(doc string) string {
+	return scanField(doc, "kind:")
+}
+
+func nameFromYAML(doc string) string {
+	return scanField(doc, "  name:")
+}
+
+func namespaceFromYAML(doc string) string {
+	return scanField(doc, "  namespace:")
+}
+
+func scanField(doc, prefix string) string {
+	// Scan up to the first 16 lines (covers apiVersion/kind/metadata block).
+	limit := 16
+	rest := doc
+	for i := 0; i < limit && rest != ""; i++ {
+		idx := strings.IndexByte(rest, '\n')
+		var line string
+		if idx < 0 {
+			line = rest
+			rest = ""
+		} else {
+			line = rest[:idx]
+			rest = rest[idx+1:]
+		}
+		if strings.HasPrefix(line, prefix) {
+			return strings.TrimSpace(line[len(prefix):])
+		}
+	}
+	return ""
+}
+
+// Concat joins K8sDoc.YAML payloads into a single multi-document YAML
+// string. Plan v1.2 T4.1 + EC-10 (v1.1): each doc's trailing newline is
+// trimmed before joining so the separator does not produce "\n\n---\n".
+// Plan v1.2 T4.3 (O2): uses strings.Builder with a size hint to avoid the
+// quadratic copy cost of repeated strings.Join calls.
+func Concat(docs []K8sDoc) string {
+	if len(docs) == 0 {
+		return ""
+	}
+	estimate := 0
+	for i := range docs {
+		estimate += len(docs[i].YAML) + len("\n---\n")
+	}
+	var b strings.Builder
+	b.Grow(estimate)
+	for i := range docs {
+		body := strings.TrimRight(docs[i].YAML, "\n")
+		if i > 0 {
+			b.WriteString("\n---\n")
+		}
+		b.WriteString(body)
+	}
+	return b.String()
+}
+
 // --- Public API ---
 
 // CustomDomainInput represents a verified custom domain to include in manifests.
@@ -125,42 +197,57 @@ func ProgressiveDeliveryEnabled() bool {
 	return true
 }
 
-// Render generates Kubernetes manifests (Deployment, Service, IngressRoute) for all apps.
-// Returns the combined YAML as a single string with documents separated by "---".
+// RenderDocs generates Kubernetes manifests (Deployment, Service,
+// IngressRoute, Rollout, …) for every app in the input as typed K8sDoc
+// values. Plan v1.2 T4.1 — new authoritative API. Existing callers may
+// keep using Render() (which delegates here + Concat).
 //
-// B14 (MEET-2026-04-23-058): ClusterIssuerName is required. Callers MUST populate
-// it from Config.ClusterIssuer (env LOOPZERO_CLUSTER_ISSUER).
-//
-// Plan v1.2 T3.1 (cutover-deep-review-hardening): the previous behavior
-// (panic on empty ClusterIssuerName) opened a process-wide DoS vector — an
-// upstream config mistake would crash the reconcile loop instead of
-// surfacing a recoverable error. Render now returns (string, error). All
-// 5 production callers + tests updated in lockstep.
-func Render(input RenderInput) (string, error) {
+// B14 (MEET-2026-04-23-058): ClusterIssuerName is required. Callers MUST
+// populate it from Config.ClusterIssuer (env LOOPZERO_CLUSTER_ISSUER).
+func RenderDocs(input RenderInput) ([]K8sDoc, error) {
 	if input.ClusterIssuerName == "" {
-		return "", fmt.Errorf("manifests.Render: ClusterIssuerName is required (B14 — wire from Config.ClusterIssuer)")
+		return nil, fmt.Errorf("manifests.Render: ClusterIssuerName is required (B14 — wire from Config.ClusterIssuer)")
 	}
-	var docs []string
-
+	var raw []string
 	for _, app := range input.Apps {
-		// Static frontends get S3 proxy instead of Deployment+Service (MEET-009)
+		// Static frontends get S3 proxy instead of Deployment+Service (MEET-009).
 		if app.Type == "frontend" && app.Rendering == "static" {
-			docs = append(docs, renderStaticFrontendApp(input, app)...)
+			raw = append(raw, renderStaticFrontendApp(input, app)...)
 			continue
 		}
 		switch app.Type {
 		case "server":
-			docs = append(docs, renderServerApp(input, app)...)
+			raw = append(raw, renderServerApp(input, app)...)
 		case "worker":
-			docs = append(docs, renderWorkerApp(input, app)...)
+			raw = append(raw, renderWorkerApp(input, app)...)
 		case "frontend":
-			docs = append(docs, renderFrontendApp(input, app)...)
+			raw = append(raw, renderFrontendApp(input, app)...)
 		default:
-			docs = append(docs, renderServerApp(input, app)...)
+			raw = append(raw, renderServerApp(input, app)...)
 		}
 	}
+	docs := make([]K8sDoc, 0, len(raw))
+	for _, body := range raw {
+		docs = append(docs, K8sDoc{
+			Kind:      kindFromYAML(body),
+			Name:      nameFromYAML(body),
+			Namespace: namespaceFromYAML(body),
+			YAML:      body,
+		})
+	}
+	return docs, nil
+}
 
-	return strings.Join(docs, "\n---\n"), nil
+// Render generates Kubernetes manifests (Deployment, Service, IngressRoute)
+// for all apps. Returns the combined YAML as a single string with
+// documents separated by "---". Plan v1.2 T4.1: thin wrapper over
+// RenderDocs + Concat. Plan v1.2 T3.1: returns error instead of panicking.
+func Render(input RenderInput) (string, error) {
+	docs, err := RenderDocs(input)
+	if err != nil {
+		return "", err
+	}
+	return Concat(docs), nil
 }
 
 // --- Default resolution helpers (arch-cp-006) ---
