@@ -36,7 +36,7 @@ export type { DeployDeps, DeployOptions } from './deploy-types';
 /** Result of validatePrerequisites — carries validated state needed by subsequent phases. */
 interface PrerequisiteResult {
   config: { project: string; apps: Record<string, unknown> };
-  yamlPath: string;
+  servicesJsonPath: string;
   environment: string;
   selectedApps: string[];
   appUnits: ReturnType<typeof normalizeApps>;
@@ -60,12 +60,12 @@ export class DeployCommand {
       return prereqResult;
     }
 
-    const { config, yamlPath, selectedApps, appUnits } = prereqResult;
+    const { config, servicesJsonPath, selectedApps, appUnits } = prereqResult;
 
     // Phase 2: Create source bundle and upload (traced)
     const uploadResult = await tracer.startActiveSpan('loopzero.cli.deploy.bundle', async (span) => {
       try {
-        const result = await this.createAndUploadBundle(opts, config, yamlPath);
+        const result = await this.createAndUploadBundle(opts, config, servicesJsonPath);
         if (typeof result === 'number') {
           span.setStatus({ code: SpanStatusCode.ERROR, message: `exit ${result}` });
         }
@@ -172,7 +172,68 @@ export class DeployCommand {
       return secretsError;
     }
 
-    return { config, yamlPath: yamlResult.path, environment, selectedApps, appUnits };
+    // Plan v1.1 T1.2 — discover `.loopzero/services.json` for the upload payload.
+    // Pre-v1.1 the code passed `yamlResult.path` here, so the adapter was
+    // shipping YAML bytes inside the `services_json` form field — Plan B v3.1
+    // cutover gap. T3.1 wires auto-build into the null branch; for now we
+    // surface an actionable error.
+    if (!this.deps.findServicesJson) {
+      return exitWithError(
+        this.deps,
+        opts,
+        'Internal: findServicesJson dep missing (deploy registration regression).',
+        2,
+        'INTERNAL_DEPENDENCY_MISSING',
+      );
+    }
+    let servicesJsonResult: { path: string } | null;
+    try {
+      servicesJsonResult = this.deps.findServicesJson(opts.servicesJson);
+    } catch (err) {
+      return exitWithError(this.deps, opts, (err as Error).message, 1, 'SERVICES_JSON_OVERRIDE_INVALID');
+    }
+    // Plan v1.1 T3.1 — auto-build branch. When services.json is missing AND
+    // --skip-build / --prebuilt was NOT passed AND a runLoopZerokitBuild dep was
+    // injected (deploy registration site), invoke it and re-discover.
+    if (servicesJsonResult === null && opts.skipBuild !== true && this.deps.runLoopZerokitBuild) {
+      if (!opts.json) {
+        this.deps.writeTo('Building project with loopzerokit...');
+      }
+      try {
+        await this.deps.runLoopZerokitBuild({ cwd: process.cwd(), target: 'loopzero-cloud' });
+      } catch (err) {
+        return handleError(this.deps, opts, err, 'loopzerokit build failed');
+      }
+      try {
+        servicesJsonResult = this.deps.findServicesJson(opts.servicesJson);
+      } catch (err) {
+        return exitWithError(this.deps, opts, (err as Error).message, 1, 'SERVICES_JSON_OVERRIDE_INVALID');
+      }
+      // EC-10 absorbed — loopzerokit build returned 0 but emitted nothing.
+      if (servicesJsonResult === null) {
+        return exitWithError(
+          this.deps,
+          opts,
+          'loopzerokit build exit 0 but no .loopzero/services.json was written. This is a bug in loopzerokit — file with output of: loopzerokit doctor',
+          1,
+          'LOOPZEROKIT_BUILD_EMPTY',
+        );
+      }
+    }
+    if (servicesJsonResult === null) {
+      const hint = opts.skipBuild === true
+        ? 'No `.loopzero/services.json` found and --skip-build/--prebuilt was passed. Run `loopzerokit build --target loopzero-cloud` first.'
+        : 'No `.loopzero/services.json` found. Run `loopzerokit build --target loopzero-cloud` first.';
+      return exitWithError(this.deps, opts, hint, 1, 'SERVICES_JSON_NOT_FOUND');
+    }
+
+    return {
+      config,
+      servicesJsonPath: servicesJsonResult.path,
+      environment,
+      selectedApps,
+      appUnits,
+    };
   }
 
   /**
@@ -222,7 +283,7 @@ export class DeployCommand {
   private async createAndUploadBundle(
     opts: import('./deploy-types').DeployOptions,
     config: { apps: Record<string, unknown> },
-    yamlPath: string,
+    servicesJsonPath: string,
   ): Promise<import('./deploy-types').UploadResult | number> {
     // 8. Warn about uncommitted changes (only relevant for git projects)
     if (this.deps.hasGitRepo() && this.deps.hasUncommittedChanges()) {
@@ -295,7 +356,7 @@ export class DeployCommand {
     // 11. Upload source
     let uploadResult: import('./deploy-types').UploadResult;
     try {
-      uploadResult = await this.deps.uploadSource(bundlePath, yamlPath);
+      uploadResult = await this.deps.uploadSource(bundlePath, servicesJsonPath);
     } catch (err) {
       this.deps.cleanupFile(bundlePath);
       return handleError(this.deps, opts, err, 'Upload rejected');

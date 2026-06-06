@@ -14,6 +14,9 @@ import { CancelCommand } from '../commands/cancel';
 import { API_REQUEST_TIMEOUT_MS, DEPLOY_TIMEOUT_MS } from '../config/constants';
 import { hasGitRepo, hasUncommittedChanges, hasLockfile, getSourceIdentifier, getGitRoot, createSourceBundle, checkSensitiveFiles } from '../adapters/git';
 import { findLoopZeroYaml } from '../adapters/loopzero-yaml';
+import { findServicesJson } from '../adapters/services-json';
+import { resolveLoopZerokitBin } from '../lib/resolve-loopzerokit-bin';
+import { runLoopZerokitBuild } from '../lib/run-loopzerokit-build';
 import { cleanupFile } from '../adapters/source-bundle';
 import { uploadSource } from '../adapters/source-upload';
 import { CommandDeps } from './types';
@@ -31,6 +34,18 @@ export function registerDeployCommands(deps: CommandDeps): void {
     .option('--no-wait', 'Return immediately after submit')
     .option('--no-cache', 'Build without layer cache (full rebuild)')
     .option('--json', 'Output in JSON format')
+    .option(
+      '--services-json <path>',
+      'Path to .loopzero/services.json artifact (override for custom distDir; Plan v1.1 EC-4)',
+    )
+    .option(
+      '--skip-build',
+      'Skip auto-build of .loopzero/services.json (CI prebuilt artifact mode)',
+    )
+    .option(
+      '--prebuilt',
+      'Alias for --skip-build (Vercel parity; Plan v1.1 T5.1)',
+    )
     .action(async (cmdOpts) => {
       const globalOpts = getGlobalOpts();
       const jsonMode = Boolean(cmdOpts.json || globalOpts.json);
@@ -51,6 +66,19 @@ export function registerDeployCommands(deps: CommandDeps): void {
         findLoopZeroYaml: () => {
           const gitRoot = getGitRoot() ?? process.cwd();
           return findLoopZeroYaml(process.cwd(), gitRoot);
+        },
+        // Plan v1.1 T1.2 — services.json discovery for upload payload.
+        // EC-4 absorbed: `--services-json <path>` override threaded via opts.
+        findServicesJson: (overridePath?: string) => {
+          const gitRoot = getGitRoot() ?? process.cwd();
+          return findServicesJson(process.cwd(), gitRoot, overridePath);
+        },
+        // Plan v1.1 T3.1 — auto-build subprocess. resolveLoopZerokitBin throws
+        // LoopZerokitBinaryNotFoundError when no binary found; handleError in
+        // deploy.ts routes the typed error to a friendly install hint.
+        runLoopZerokitBuild: async (buildOpts) => {
+          const bin = resolveLoopZerokitBin(buildOpts.cwd);
+          await runLoopZerokitBuild({ loopzerokitBin: bin, cwd: buildOpts.cwd, target: buildOpts.target });
         },
         hasGitRepo,
         hasUncommittedChanges,
@@ -170,6 +198,9 @@ export function registerDeployCommands(deps: CommandDeps): void {
           wait: cmdOpts.wait,
           json: jsonMode,
           noCache: cmdOpts.noCache ?? false,
+          // Plan v1.1 T1.1 + T5.1 — forward new opts to deploy command.
+          servicesJson: cmdOpts.servicesJson,
+          skipBuild: Boolean(cmdOpts.skipBuild || cmdOpts.prebuilt),
         }),
         DEPLOY_TIMEOUT_MS + 30_000,
         'Deploy command timed out waiting for completion.',

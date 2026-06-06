@@ -24,6 +24,8 @@ function createMockDeps(overrides: Partial<DeployDeps> = {}): DeployDeps {
         },
       },
     }),
+    // Plan v1.1 T1.2 — services.json discovery for upload payload.
+    findServicesJson: jest.fn().mockReturnValue({ path: '/project/.loopzero/services.json' }),
     hasGitRepo: jest.fn().mockReturnValue(true),
     hasLockfile: jest.fn().mockReturnValue(true),
     getSourceIdentifier: jest.fn().mockReturnValue('abc1234'),
