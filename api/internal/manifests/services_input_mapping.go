@@ -33,9 +33,13 @@ import (
 // local to avoid an import cycle through `internal/source`. Validators
 // produce instances with the same field shape; this struct simply
 // re-declares the wire contract at the mapping boundary.
+//
+// Plan v1.2 T2.2: `Type` enum added (server | worker | frontend). Defaults
+// to ServiceTypeServer when empty (Go-side fallback).
 type ServiceEntry struct {
 	Name          string
 	Runtime       string
+	Type          string
 	Port          int
 	Proxy         string
 	Dev           string
@@ -47,6 +51,35 @@ type ServiceEntry struct {
 	Env           map[string]string
 	DependsOn     []string
 	PassSetCookie bool
+
+	// Rendering bundles frontend-specific rendering options. EC-9 (v1.1):
+	// when Type=ServiceTypeFrontend, Rendering MUST be populated or the
+	// mapping returns an error.
+	Rendering *FrontendRendering
+}
+
+// FrontendRendering describes how a frontend service is delivered. v4.1 ships
+// the `static` path only — SSR / hybrid are reserved for later versions.
+type FrontendRendering struct {
+	Mode      string // "static" (v4.1) — required when Type=frontend
+	AssetsDir string // optional override; defaults to "dist" downstream
+}
+
+// Service type enum values mirror services.schema.json.
+const (
+	ServiceTypeServer   = "server"
+	ServiceTypeWorker   = "worker"
+	ServiceTypeFrontend = "frontend"
+)
+
+// resolveServiceType applies the Go-side fallback to ServiceTypeServer when
+// the wire field is empty (JSON Schema 7 does not apply `default`
+// automatically).
+func resolveServiceType(t string) string {
+	if t == "" {
+		return ServiceTypeServer
+	}
+	return t
 }
 
 // ServicesManifest mirrors loopzerokit's `ServicesManifest` interface.
@@ -96,15 +129,29 @@ func mapServicesToRenderInput(svc ServicesManifest, opts RenderOpts) (RenderInpu
 		if err != nil {
 			return RenderInput{}, fmt.Errorf("service %q: %w", s.Name, err)
 		}
+
+		// Plan v1.2 T2.2 — propagate `type`; default to server when absent.
+		// EC-9 (v1.1): frontend services without rendering metadata are
+		// rejected with an actionable error so consumers can't silently
+		// fall through to the server emit path.
+		svcType := resolveServiceType(s.Type)
+		if svcType == ServiceTypeFrontend && s.Rendering == nil {
+			return RenderInput{}, fmt.Errorf(
+				"service %q: frontend services require `rendering` metadata (v4.1: static path only)",
+				s.Name,
+			)
+		}
+
 		slog.Debug("manifests.mapServicesToRenderInput: service",
 			"name", s.Name,
 			"runtime", s.Runtime,
 			"strategy", strategy,
-			"port", s.Port)
+			"port", s.Port,
+			"type", svcType)
 
 		apps = append(apps, AppManifestInput{
 			Name:     s.Name,
-			Type:     "server", // services.json shape is server-only (frontends use static path elsewhere)
+			Type:     svcType,
 			Port:     s.Port,
 			ImageRef: opts.ImageRefFor(s.Name),
 			Secrets:  nil, // Reserved for future services.json `secrets` field
@@ -192,4 +239,12 @@ func RenderFromServicesManifest(svc ServicesManifest, opts RenderOpts) (string, 
 		return "", fmt.Errorf("services.json → RenderInput: %w", err)
 	}
 	return Render(input), nil
+}
+
+// RenderFromServicesManifestInput is the same bridge as
+// RenderFromServicesManifest but stops at the `RenderInput` boundary so
+// integration tests can inspect the structured value without invoking the
+// emitter. Plan v1.2 T2.4.
+func RenderFromServicesManifestInput(svc ServicesManifest, opts RenderOpts) (RenderInput, error) {
+	return mapServicesToRenderInput(svc, opts)
 }

@@ -8,12 +8,19 @@ import (
 	_ "embed"
 	"encoding/json"
 	"fmt"
+	"log/slog"
 	"sort"
 	"strings"
 	"sync"
 
 	"github.com/santhosh-tekuri/jsonschema/v5"
 )
+
+// servicesJSONV1LegacyProject is the project name used when a v1 services.json
+// payload arrives without an explicit project field. Plan v1.2 T2.1 + ADR D10:
+// MUST remain "services-bundle" (NOT "default") to keep existing Gitea repos
+// loopzero-source-{tenant}-services-bundle and their ArgoCD App lineage intact.
+const servicesJSONV1LegacyProject = "services-bundle"
 
 // Plan B v3.1 T-B.3 (2026-06-05) — services.json validator.
 //
@@ -35,9 +42,13 @@ var (
 )
 
 // ServiceEntry mirrors loopzerokit's `ManifestServiceEntry` interface.
+// Plan v1.2 T2.2: `Type` enum field added (server | worker | frontend) with
+// Go-side fallback to "server" (JSON Schema 7 does not apply default
+// automatically).
 type ServiceEntry struct {
 	Name          string            `json:"name"`
 	Runtime       string            `json:"runtime"`
+	Type          string            `json:"type,omitempty"`
 	Port          int               `json:"port"`
 	Proxy         string            `json:"proxy"`
 	Dev           string            `json:"dev"`
@@ -52,8 +63,13 @@ type ServiceEntry struct {
 }
 
 // ServicesManifest mirrors loopzerokit's `ServicesManifest` interface.
+// Plan v1.2 T2.1: `Project` added as top-level identifier. Required from
+// v2; v1 emit omits the field and the validator falls back to
+// "services-bundle" (NOT "default") per ADR D10 — preserves Gitea repo
+// lineage for tenants who shipped under Plan B v3.1.
 type ServicesManifest struct {
 	Version  int            `json:"version"`
+	Project  string         `json:"project,omitempty"`
 	Services []ServiceEntry `json:"services"`
 }
 
@@ -144,6 +160,23 @@ func ValidateServicesJSON(content string) (*LoopZeroYAML, []string, error) {
 		return nil, nil, envErr
 	}
 
+	// Plan v1.2 T2.1 — derive project name from manifest.
+	//   v2: project field is REQUIRED + DNS-1123 validated by schema.
+	//   v1: project field absent; fall back to "services-bundle" per ADR D10
+	//        and emit a structured deprecation warning so operators can plan
+	//        the cutover (sunset loopzerokit 0.6.0).
+	projectName := manifest.Project
+	if projectName == "" {
+		projectName = servicesJSONV1LegacyProject
+		if manifest.Version == 1 {
+			slog.Warn("services.json v1 missing project — applying legacy fallback (deprecated)",
+				"code", "SERVICES_JSON_V1_DEPRECATED",
+				"fallback_project", servicesJSONV1LegacyProject,
+				"sunset", "loopzerokit 0.6.0",
+				"action", "Upgrade emit to services.json v2 and set `project` from loopzero.config.ts name")
+		}
+	}
+
 	// Translate to LoopZeroYAML struct shape for downstream compatibility.
 	// services.json `services[]` → LoopZeroYAML.Apps map (keyed by service.name).
 	// The `runtime` field surfaces via the `framework` slot (ADR D7 transition);
@@ -151,11 +184,8 @@ func ValidateServicesJSON(content string) (*LoopZeroYAML, []string, error) {
 	// framework values explicitly.
 	cfg := &LoopZeroYAML{
 		Version: manifest.Version,
-		// services.json does not carry a top-level project name (loopzerokit emits
-		// platform-neutral manifest); downstream callers source the name from
-		// the build context (project ID / git remote) per ADR-0015.
-		Name:    "services-bundle",
-		Project: "services-bundle",
+		Name:    projectName,
+		Project: projectName,
 		Apps:    make(map[string]AppConfig, len(manifest.Services)),
 	}
 

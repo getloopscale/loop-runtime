@@ -1,13 +1,43 @@
 {
   "$schema": "http://json-schema.org/draft-07/schema#",
   "$id": "https://loopzerocloud.dev/schemas/services.json",
-  "title": "LoopZeroKit services.json (v1)",
-  "description": "Platform-neutral services manifest emitted by `loopzerokit build`. Mirror of loopzerokit/packages/loopzero/src/services/adapters-bridge/manifest.ts ServicesManifest interface. Plan B v3.1 T-B.3 + ADR-0015 (platform-neutral).",
+  "title": "LoopZeroKit services.json (v1 + v2)",
+  "description": "Platform-neutral services manifest emitted by `loopzerokit build`. Mirror of loopzerokit/packages/loopzero/src/services/adapters-bridge/manifest.ts ServicesManifest interface. Plan B v3.1 T-B.3 + ADR-0015 (platform-neutral). Plan v1.2 T2.1: v2 carries top-level `project` field (DNS-1123); v1 retained for backward compat with deprecation warning, falls back to `services-bundle` per ADR D10 (preserves Gitea repo lineage).",
   "type": "object",
-  "required": ["version", "services"],
-  "additionalProperties": false,
+  "oneOf": [
+    {
+      "title": "services.json v1 (deprecated, sunset loopzerokit 0.6.0)",
+      "required": ["version", "services"],
+      "additionalProperties": false,
+      "properties": {
+        "version": { "type": "integer", "const": 1 },
+        "services": {
+          "type": "array",
+          "items": { "$ref": "#/definitions/Service" }
+        }
+      }
+    },
+    {
+      "title": "services.json v2 — project field required",
+      "required": ["version", "project", "services"],
+      "additionalProperties": false,
+      "properties": {
+        "version": { "type": "integer", "const": 2 },
+        "project": {
+          "type": "string",
+          "pattern": "^[a-z0-9]([a-z0-9-]{0,61}[a-z0-9])?$",
+          "description": "DNS-1123 subdomain compatible project name. Required from v2. Drives Gitea repo (loopzero-source-{tenant}-{project}) and ArgoCD App naming."
+        },
+        "services": {
+          "type": "array",
+          "items": { "$ref": "#/definitions/Service" }
+        }
+      }
+    }
+  ],
   "properties": {
-    "version": { "type": "integer", "const": 1 },
+    "version": { "type": "integer", "enum": [1, 2] },
+    "project": { "type": "string" },
     "services": {
       "type": "array",
       "items": { "$ref": "#/definitions/Service" }
@@ -28,6 +58,11 @@
           "type": "string",
           "enum": ["python", "node"],
           "description": "Runtime that owns the service process. Maps to LanguageStrategy via Plan B v3.1 T-B.4 runtimeToStrategy table."
+        },
+        "type": {
+          "type": "string",
+          "enum": ["server", "worker", "frontend"],
+          "description": "Service shape. Plan v1.2 T2.2. Defaults to `server` when omitted (Go-side fallback — JSON Schema 7 doesn't apply default automatically)."
         },
         "port": {
           "type": "integer",
