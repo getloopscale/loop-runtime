@@ -2,6 +2,23 @@
 
 Contract between Claude and the LoopZero codebase. Read before touching any file.
 
+## How LoopZeroCloud connects to LoopZeroKit (read this BEFORE editing any seam code)
+
+LoopZeroCloud (this repo) consumes `.loopzero/services.json` v2 emitted by the **LoopZeroKit OSS framework** (`loopzerokit-tools/loopzerokit`). The two systems are deliberately decoupled per CLAUDE.md `LoopZeroCloud-first re-lock (2026-05-27)` — neither imports the other; the only contract is a single JSON file on disk.
+
+**Canonical integration doc:** [`docs/architecture/loopzerokit-loopzerocloud-integration.md`](docs/architecture/loopzerokit-loopzerocloud-integration.md). It contains the end-to-end flow diagram, the wire-protocol contract, the typed-error cause chain, the services.json schema-version table, and the hardening invariants from Plan v1.2 (the 22 findings closed on the integration seam).
+
+Claude MUST consult that doc BEFORE editing:
+
+- `api/internal/routes/source.go` (the upload handler)
+- `api/internal/source/services.schema.json` (the wire schema)
+- `api/internal/source/validator_*.go` (the validators)
+- `api/internal/manifests/renderer.go` + `services_input_mapping.go` (the emitter)
+- `cli/src/adapters/source-upload.ts` (the producer side of the wire)
+- any new code that touches `services_json`, `loopzerokit build`, the multipart upload contract, or the K8s manifest emit path
+
+The doc is mirrored at `loopzerokit-tools/loopzerokit/docs/architecture/loopzerokit-loopzerocloud-integration.md` — keep both copies in sync (edit one, copy the diff to the other in the same commit).
+
 ## What This Project Is
 
 LoopZero is a **CLI-first managed cloud (Kubernetes-backed)** for monorepo deployments. Vercel-quality DX for backends — `loopzero login`, `loopzero init`, `loopzero deploy`, and in under 5 minutes every service is live with TLS, preview environments on every PR, and rollback with one command. No Kubernetes. No infrastructure YAML.
