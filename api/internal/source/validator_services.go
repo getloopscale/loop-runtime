@@ -90,15 +90,14 @@ func compileSchema() (*jsonschema.Schema, error) {
 	return servicesSchema, servicesSchemaErr
 }
 
-// ValidateServicesJSON parses + validates a services.json payload against the
-// embedded JSON Schema 7 contract, then translates into the existing
-// `LoopZeroYAML` struct shape so downstream code paths stay unchanged during
-// the transition window (per ADR D7 framework field deprecation strategy).
-// EC-B3-7 (v3.1): truncated/empty payload returns E-008.
-// EC-B3-8 (v3.1): schema violations include field path em error message.
-func ValidateServicesJSON(content string) (*LoopZeroYAML, []string, error) {
+// ValidateServicesJSONNative parses + validates a services.json payload and
+// returns the native *ServicesManifest. Plan v1.2 T3.3 (M6): preferred
+// callsites should consume the native shape (carries dependsOn, openapi,
+// type, env fully typed). ValidateServicesJSON remains for legacy callers
+// that still need the *LoopZeroYAML adapter; it now delegates here.
+func ValidateServicesJSONNative(content string) (*ServicesManifest, error) {
 	if strings.TrimSpace(content) == "" {
-		return nil, nil, &ValidationError{
+		return nil, &ValidationError{
 			Field:   "services_json",
 			Message: "E-008: missing payload (services.json content is empty)",
 		}
@@ -106,58 +105,67 @@ func ValidateServicesJSON(content string) (*LoopZeroYAML, []string, error) {
 
 	schema, err := compileSchema()
 	if err != nil {
-		// Internal error — schema compile should never fail at runtime
-		// (embedded artifact); surface as 500 via ValidationError boundary.
-		return nil, nil, &ValidationError{
+		return nil, &ValidationError{
 			Field:   "_internal",
 			Message: fmt.Sprintf("schema compile failed: %s", err.Error()),
 		}
 	}
 
-	// Unmarshal to interface{} for schema validation
 	var raw interface{}
 	if err := json.Unmarshal([]byte(content), &raw); err != nil {
-		return nil, nil, &ValidationError{
+		return nil, &ValidationError{
 			Field:   "services_json",
 			Message: fmt.Sprintf("E-008: invalid JSON payload: %s", err.Error()),
 		}
 	}
 
 	if err := schema.Validate(raw); err != nil {
-		// EC-B3-8: include field path em validation error
 		var ve *jsonschema.ValidationError
 		msg := err.Error()
 		if asValidErr, ok := err.(*jsonschema.ValidationError); ok {
 			ve = asValidErr
-			// Surface the deepest field path in the error chain
 			leaf := ve
 			for len(leaf.Causes) > 0 {
 				leaf = leaf.Causes[0]
 			}
 			msg = fmt.Sprintf("%s: %s", leaf.InstanceLocation, leaf.Message)
 		}
-		return nil, nil, &ValidationError{
-			Field:   "services_json",
-			Message: msg,
-		}
+		return nil, &ValidationError{Field: "services_json", Message: msg}
 	}
 
-	// Now decode strongly-typed into ServicesManifest
 	var manifest ServicesManifest
 	if err := json.Unmarshal([]byte(content), &manifest); err != nil {
-		return nil, nil, &ValidationError{
+		return nil, &ValidationError{
 			Field:   "services_json",
 			Message: fmt.Sprintf("decode manifest: %s", err.Error()),
 		}
 	}
 
-	// Plan v1.2 T1.3 — post-schema reserved env key check. patternProperties
-	// in the JSON Schema 7 contract already enforces POSIX key shape +
-	// maxLength + maxProperties; this rejects keys whose presence would
-	// compromise the runtime container (PATH, LD_PRELOAD, KUBERNETES_*,
-	// LOOPZERO_*, …). EC-8: warn-only mode gated by LOOPZERO_ENV_BLOCKLIST_MODE.
 	if envErr := validateReservedEnvKeys(&manifest, nil); envErr != nil {
-		return nil, nil, envErr
+		return nil, envErr
+	}
+
+	return &manifest, nil
+}
+
+// ValidateServicesJSON parses + validates a services.json payload against the
+// embedded JSON Schema 7 contract, then translates into the existing
+// `LoopZeroYAML` struct shape so downstream code paths stay unchanged during
+// the transition window (per ADR D7 framework field deprecation strategy).
+//
+// Plan v1.2 T3.3 (M6) — DEPRECATED legacy adapter. New callers should
+// consume ValidateServicesJSONNative() instead and read native fields
+// (dependsOn, openapi, type, env) directly. This wrapper stays GREEN for
+// existing routes/source.go callers during the migration window.
+//
+// EC-B3-7 (v3.1): truncated/empty payload returns E-008.
+// EC-B3-8 (v3.1): schema violations include field path em error message.
+//
+// Deprecated: use ValidateServicesJSONNative.
+func ValidateServicesJSON(content string) (*LoopZeroYAML, []string, error) {
+	manifest, err := ValidateServicesJSONNative(content)
+	if err != nil {
+		return nil, nil, err
 	}
 
 	// Plan v1.2 T2.1 — derive project name from manifest.
@@ -177,11 +185,6 @@ func ValidateServicesJSON(content string) (*LoopZeroYAML, []string, error) {
 		}
 	}
 
-	// Translate to LoopZeroYAML struct shape for downstream compatibility.
-	// services.json `services[]` → LoopZeroYAML.Apps map (keyed by service.name).
-	// The `runtime` field surfaces via the `framework` slot (ADR D7 transition);
-	// Plan B v3.1 T-B.5 ResolveStrategy() switch covers both runtime + legacy
-	// framework values explicitly.
 	cfg := &LoopZeroYAML{
 		Version: manifest.Version,
 		Name:    projectName,
@@ -195,15 +198,13 @@ func ValidateServicesJSON(content string) (*LoopZeroYAML, []string, error) {
 			Type:      "server",
 			Port:      svc.Port,
 			Path:      ".",
-			Framework: svc.Runtime, // "python" | "node" — Plan B v3.1 T-B.5 dispatches via runtime + legacy fallback
+			Framework: svc.Runtime,
 			Build:     "buildpack",
 			Env:       svc.Env,
 		}
 		appNames = append(appNames, svc.Name)
 	}
 
-	// Deterministic order — matches loopzerokit's topological sort output
-	// + provides stable downstream behavior.
 	sort.Strings(appNames)
 	return cfg, appNames, nil
 }

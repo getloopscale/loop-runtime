@@ -149,11 +149,17 @@ func mapServicesToRenderInput(svc ServicesManifest, opts RenderOpts) (RenderInpu
 			"port", s.Port,
 			"type", svcType)
 
+		// Plan v1.2 T3.2 — propagate missing-image errors (no silent "").
+		imageRef, imageErr := opts.ImageRefFor(s.Name)
+		if imageErr != nil {
+			return RenderInput{}, fmt.Errorf("service %q: %w", s.Name, imageErr)
+		}
+
 		apps = append(apps, AppManifestInput{
 			Name:     s.Name,
 			Type:     svcType,
 			Port:     s.Port,
-			ImageRef: opts.ImageRefFor(s.Name),
+			ImageRef: imageRef,
 			Secrets:  nil, // Reserved for future services.json `secrets` field
 			Env:      s.Env,
 			Replicas: opts.DefaultReplicas,
@@ -217,28 +223,53 @@ type RenderOpts struct {
 	Plan                string
 	PrometheusAddress   string
 	ProgressiveDelivery bool
+
+	// Plan v1.2 T3.2 (EC-11 absorbed) — AllowMissingImage relaxes the
+	// strict ImageRefFor() check used during fixture/dogfood rendering.
+	// Production callers leave this false so missing image refs surface
+	// as an actionable error instead of producing a manifest with an
+	// empty container image (which K8s rejects in CreateContainerError).
+	AllowMissingImage bool
 }
 
-// ImageRefFor returns the image ref for a given service name. Falls
-// back to ImageRefDefault when no per-service ref is registered.
-func (o RenderOpts) ImageRefFor(serviceName string) string {
-	if ref, ok := o.ImageRefByName[serviceName]; ok {
-		return ref
+// ImageRefFor returns the image ref for a given service name. Falls back
+// to ImageRefDefault when no per-service ref is registered.
+//
+// Plan v1.2 T3.2 (M3 + EC-11): when no ref is registered AND ImageRefDefault
+// is empty AND AllowMissingImage is false, returns an actionable error so
+// callers can fail-fast instead of silently emitting `image: ""`.
+func (o RenderOpts) ImageRefFor(serviceName string) (string, error) {
+	if ref, ok := o.ImageRefByName[serviceName]; ok && ref != "" {
+		return ref, nil
 	}
-	return o.ImageRefDefault
+	if o.ImageRefDefault != "" {
+		return o.ImageRefDefault, nil
+	}
+	if o.AllowMissingImage {
+		return "", nil
+	}
+	return "", fmt.Errorf(
+		"image ref missing for service %q: no per-service ref registered and ImageRefDefault is empty (set AllowMissingImage=true only for fixture rendering)",
+		serviceName,
+	)
 }
 
 // RenderFromServicesManifest is the public entry point for the new
 // services.json → K8s manifests path. Wraps existing `Render()` after
 // mapping the platform-neutral payload into `RenderInput`. Per ADR D1:
 // emission logic (Deployment, Service, IngressRoute, Rollout) is
-// UNCHANGED — only the input shape is bridged.
+// UNCHANGED — only the input shape is bridged. Plan v1.2 T3.1: Render
+// is now (string, error); propagates downstream.
 func RenderFromServicesManifest(svc ServicesManifest, opts RenderOpts) (string, error) {
 	input, err := mapServicesToRenderInput(svc, opts)
 	if err != nil {
 		return "", fmt.Errorf("services.json → RenderInput: %w", err)
 	}
-	return Render(input), nil
+	yaml, err := Render(input)
+	if err != nil {
+		return "", fmt.Errorf("services.json → manifests.Render: %w", err)
+	}
+	return yaml, nil
 }
 
 // RenderFromServicesManifestInput is the same bridge as

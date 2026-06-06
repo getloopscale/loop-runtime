@@ -28,7 +28,7 @@ func TestRender_ServerApp_ProducesFiveDocuments(t *testing.T) {
 		{Name: "api", Type: "server", Port: 8080, ImageRef: "reg:5000/acme/webapp:abc123"},
 	}
 
-	result := Render(input)
+	result, _ := Render(input)
 	docs := strings.Split(result, "\n---\n")
 
 	// Deployment + PDB + Service + Certificate + IngressRoute = 5
@@ -43,7 +43,7 @@ func TestRender_WorkerApp_ProducesTwoDocuments(t *testing.T) {
 		{Name: "processor", Type: "worker", ImageRef: "reg:5000/acme/webapp:abc123"},
 	}
 
-	result := Render(input)
+	result, _ := Render(input)
 	docs := strings.Split(result, "\n---\n")
 
 	// Deployment + PDB = 2 (F1-C2: workers MUST get PDB)
@@ -58,7 +58,7 @@ func TestRender_FrontendApp_ProducesFiveDocuments(t *testing.T) {
 		{Name: "dashboard", Type: "frontend", Port: 80, ImageRef: "reg:5000/acme/webapp:abc123"},
 	}
 
-	result := Render(input)
+	result, _ := Render(input)
 	docs := strings.Split(result, "\n---\n")
 
 	// Deployment + PDB + Service + Certificate + IngressRoute = 5
@@ -86,7 +86,7 @@ func TestRender_MOD1_SpecialCharsInEnvValues_ProducesValidYAML(t *testing.T) {
 		},
 	}
 
-	result := Render(input)
+	result, _ := Render(input)
 
 	// Every document must be valid YAML
 	docs := strings.Split(result, "\n---\n")
@@ -116,9 +116,9 @@ func TestRender_MOD5_DeterministicOutput(t *testing.T) {
 	}
 
 	// Render 50 times and verify all outputs are identical.
-	first := Render(input)
+	first, _ := Render(input)
 	for i := 0; i < 50; i++ {
-		got := Render(input)
+		got, _ := Render(input)
 		if got != first {
 			t.Fatalf("non-deterministic output detected on iteration %d", i)
 		}
@@ -132,7 +132,7 @@ func TestRender_IngressRouteTLS_UsesSecretName(t *testing.T) {
 		{Name: "api", Type: "server", Port: 8080, ImageRef: "reg:5000/acme/webapp:abc123"},
 	}
 
-	result := Render(input)
+	result, _ := Render(input)
 
 	if strings.Contains(result, "certResolver") {
 		t.Error("IngressRoute must not contain certResolver — should use tls.secretName")
@@ -156,9 +156,10 @@ func TestRender_IngressRouteTLS_UsesSecretName(t *testing.T) {
 }
 
 // B14 (MEET-2026-04-23-058): empty ClusterIssuerName is a programmer error.
-// Render must panic; Validate() at startup catches it operationally. This
-// prevents the "invisible default" pattern that produced B14.
-func TestRender_PanicsOnEmptyClusterIssuerName(t *testing.T) {
+// Plan v1.2 T3.1 — Render now returns (string, error) instead of panicking.
+// The contract is unchanged at the boundary (caller MUST surface this); the
+// failure mode is just recoverable now.
+func TestRender_ReturnsErrorOnEmptyClusterIssuerName(t *testing.T) {
 	input := RenderInput{
 		TenantID:    "acme",
 		ProjectID:   "webapp",
@@ -171,12 +172,16 @@ func TestRender_PanicsOnEmptyClusterIssuerName(t *testing.T) {
 			{Name: "api", Type: "server", Port: 8080, ImageRef: "reg:5000/a/b:c"},
 		},
 	}
-	defer func() {
-		if r := recover(); r == nil {
-			t.Error("Render must panic when ClusterIssuerName is empty; got no panic")
-		}
-	}()
-	_ = Render(input)
+	out, err := Render(input)
+	if err == nil {
+		t.Fatal("Render must return error when ClusterIssuerName is empty; got nil")
+	}
+	if out != "" {
+		t.Errorf("Render must return empty string on error, got %q", out)
+	}
+	if !strings.Contains(err.Error(), "ClusterIssuerName") {
+		t.Errorf("error message must mention ClusterIssuerName, got: %v", err)
+	}
 }
 
 func TestRender_WorkerApp_HasNoPortsOrProbes(t *testing.T) {
@@ -185,7 +190,7 @@ func TestRender_WorkerApp_HasNoPortsOrProbes(t *testing.T) {
 		{Name: "worker", Type: "worker", ImageRef: "reg:5000/acme/webapp:abc123"},
 	}
 
-	result := Render(input)
+	result, _ := Render(input)
 
 	if strings.Contains(result, "containerPort") {
 		t.Error("worker app should not have container ports")
@@ -207,7 +212,7 @@ func TestRender_ServerApp_DefaultPort3000(t *testing.T) {
 		{Name: "api", Type: "server", Port: 0, ImageRef: "reg:5000/acme/webapp:abc123"},
 	}
 
-	result := Render(input)
+	result, _ := Render(input)
 
 	if !strings.Contains(result, "containerPort: 3000") {
 		t.Error("server app with port=0 should default to 3000")
@@ -220,7 +225,7 @@ func TestRender_FrontendApp_DefaultPort80(t *testing.T) {
 		{Name: "dashboard", Type: "frontend", Port: 0, ImageRef: "reg:5000/acme/webapp:abc123"},
 	}
 
-	result := Render(input)
+	result, _ := Render(input)
 
 	if !strings.Contains(result, "containerPort: 80") {
 		t.Error("frontend app with port=0 should default to 80")
@@ -239,7 +244,7 @@ func TestRender_SecretsGenerateEnvFrom(t *testing.T) {
 		},
 	}
 
-	result := Render(input)
+	result, _ := Render(input)
 
 	expectedSecretRef := "user-secrets-acme-webapp-production-api"
 	if !strings.Contains(result, expectedSecretRef) {
@@ -253,7 +258,7 @@ func TestRender_Namespace(t *testing.T) {
 		{Name: "api", Type: "server", Port: 8080, ImageRef: "reg:5000/acme/webapp:abc123"},
 	}
 
-	result := Render(input)
+	result, _ := Render(input)
 
 	if !strings.Contains(result, "namespace: loopzero-acme-production") {
 		t.Error("namespace should be loopzero-{tenantID}-{environment}")
@@ -266,7 +271,7 @@ func TestRender_Hostname(t *testing.T) {
 		{Name: "api", Type: "server", Port: 8080, ImageRef: "reg:5000/acme/webapp:abc123"},
 	}
 
-	result := Render(input)
+	result, _ := Render(input)
 
 	expectedHost := "acme-webapp-api-production.loopzero.example.com"
 	if !strings.Contains(result, expectedHost) {
@@ -282,7 +287,7 @@ func TestRender_MultipleApps(t *testing.T) {
 		{Name: "dashboard", Type: "frontend", Port: 80, ImageRef: "reg:5000/acme/webapp:abc123"},
 	}
 
-	result := Render(input)
+	result, _ := Render(input)
 	docs := strings.Split(result, "\n---\n")
 
 	// server=5 + worker=2 + frontend=5 = 12
@@ -314,7 +319,7 @@ func TestRender_EnvVarsSortedByKey(t *testing.T) {
 		},
 	}
 
-	result := Render(input)
+	result, _ := Render(input)
 
 	alphaIdx := strings.Index(result, "ALPHA")
 	middleIdx := strings.Index(result, "MIDDLE")
@@ -343,7 +348,7 @@ func TestRender_AllDocumentsAreValidYAML(t *testing.T) {
 		},
 	}
 
-	result := Render(input)
+	result, _ := Render(input)
 	docs := strings.Split(result, "\n---\n")
 
 	for i, doc := range docs {
@@ -420,7 +425,7 @@ func TestRender_ServerApp_StartupProbe(t *testing.T) {
 		{Name: "api", Type: "server", Port: 8080, ImageRef: "reg:5000/acme/webapp:abc123"},
 	}
 
-	dep := parseDeployment(t, Render(input))
+	dep := parseDeployment(t, mustRender(t, input))
 	container := dep.Spec.Template.Spec.Containers[0]
 
 	if container.StartupProbe == nil {
@@ -447,7 +452,7 @@ func TestRender_ServerApp_ReadinessProbeThresholds(t *testing.T) {
 		{Name: "api", Type: "server", Port: 8080, ImageRef: "reg:5000/acme/webapp:abc123"},
 	}
 
-	dep := parseDeployment(t, Render(input))
+	dep := parseDeployment(t, mustRender(t, input))
 	container := dep.Spec.Template.Spec.Containers[0]
 
 	if container.ReadinessProbe == nil {
@@ -474,7 +479,7 @@ func TestRender_ServerApp_LivenessProbeThresholds(t *testing.T) {
 		{Name: "api", Type: "server", Port: 8080, ImageRef: "reg:5000/acme/webapp:abc123"},
 	}
 
-	dep := parseDeployment(t, Render(input))
+	dep := parseDeployment(t, mustRender(t, input))
 	container := dep.Spec.Template.Spec.Containers[0]
 
 	if container.LivenessProbe == nil {
@@ -501,7 +506,7 @@ func TestRender_Deployment_ProgressDeadlineAndMinReady(t *testing.T) {
 		{Name: "api", Type: "server", Port: 8080, ImageRef: "reg:5000/acme/webapp:abc123"},
 	}
 
-	dep := parseDeployment(t, Render(input))
+	dep := parseDeployment(t, mustRender(t, input))
 
 	// F1-C1: progressDeadlineSeconds = 210 (not 180)
 	if dep.Spec.ProgressDeadlineSeconds != 210 {
@@ -518,7 +523,7 @@ func TestRender_Deployment_ZeroDowntimeRollingStrategy(t *testing.T) {
 		{Name: "api", Type: "server", Port: 8080, ImageRef: "reg:5000/acme/webapp:abc123"},
 	}
 
-	dep := parseDeployment(t, Render(input))
+	dep := parseDeployment(t, mustRender(t, input))
 
 	if dep.Spec.Strategy == nil {
 		t.Fatal("deployment must have strategy defined")
@@ -543,7 +548,7 @@ func TestRender_Deployment_GracefulShutdown(t *testing.T) {
 		{Name: "api", Type: "server", Port: 8080, ImageRef: "reg:5000/acme/webapp:abc123"},
 	}
 
-	dep := parseDeployment(t, Render(input))
+	dep := parseDeployment(t, mustRender(t, input))
 
 	if dep.Spec.Template.Spec.TerminationGracePeriodSeconds != 30 {
 		t.Errorf("terminationGracePeriodSeconds: got %d, want 30", dep.Spec.Template.Spec.TerminationGracePeriodSeconds)
@@ -556,7 +561,7 @@ func TestRender_ServerApp_PDB(t *testing.T) {
 		{Name: "api", Type: "server", Port: 8080, ImageRef: "reg:5000/acme/webapp:abc123"},
 	}
 
-	pdb := parsePDB(t, Render(input))
+	pdb := parsePDB(t, mustRender(t, input))
 
 	if pdb.APIVersion != "policy/v1" {
 		t.Errorf("PDB apiVersion: got %q, want policy/v1", pdb.APIVersion)
@@ -580,7 +585,7 @@ func TestRender_WorkerApp_HasPDB(t *testing.T) {
 		{Name: "processor", Type: "worker", ImageRef: "reg:5000/acme/webapp:abc123"},
 	}
 
-	pdb := parsePDB(t, Render(input))
+	pdb := parsePDB(t, mustRender(t, input))
 
 	if pdb.Spec.UnhealthyPodEvictionPolicy != "AlwaysAllow" {
 		t.Errorf("worker PDB unhealthyPodEvictionPolicy: got %q, want AlwaysAllow", pdb.Spec.UnhealthyPodEvictionPolicy)
@@ -594,7 +599,7 @@ func TestRender_WorkerApp_DeploymentProtection(t *testing.T) {
 		{Name: "processor", Type: "worker", ImageRef: "reg:5000/acme/webapp:abc123"},
 	}
 
-	dep := parseDeployment(t, Render(input))
+	dep := parseDeployment(t, mustRender(t, input))
 
 	if dep.Spec.ProgressDeadlineSeconds != 210 {
 		t.Errorf("worker progressDeadlineSeconds: got %d, want 210", dep.Spec.ProgressDeadlineSeconds)
@@ -619,7 +624,7 @@ func TestRender_SecurityContext_PodRunsAsNonRoot(t *testing.T) {
 		{Name: "api", Type: "server", Port: 8080, ImageRef: "reg:5000/acme/webapp:abc123"},
 	}
 
-	dep := parseDeployment(t, Render(input))
+	dep := parseDeployment(t, mustRender(t, input))
 	podSec := dep.Spec.Template.Spec.SecurityContext
 	if podSec == nil {
 		t.Fatal("pod must have securityContext")
@@ -645,7 +650,7 @@ func TestRender_SecurityContext_ContainerRestricted(t *testing.T) {
 		{Name: "api", Type: "server", Port: 8080, ImageRef: "reg:5000/acme/webapp:abc123"},
 	}
 
-	dep := parseDeployment(t, Render(input))
+	dep := parseDeployment(t, mustRender(t, input))
 	cSec := dep.Spec.Template.Spec.Containers[0].SecurityContext
 	if cSec == nil {
 		t.Fatal("container must have securityContext")
@@ -668,7 +673,7 @@ func TestRender_SecurityContext_WorkerAlsoSecured(t *testing.T) {
 		{Name: "worker", Type: "worker", ImageRef: "reg:5000/acme/webapp:abc123"},
 	}
 
-	dep := parseDeployment(t, Render(input))
+	dep := parseDeployment(t, mustRender(t, input))
 	if dep.Spec.Template.Spec.SecurityContext == nil {
 		t.Fatal("worker pod must also have securityContext")
 	}
@@ -684,7 +689,7 @@ func TestRender_ServiceAccount_Dedicated(t *testing.T) {
 		{Name: "api", Type: "server", Port: 8080, ImageRef: "reg:5000/acme/webapp:abc123"},
 	}
 
-	dep := parseDeployment(t, Render(input))
+	dep := parseDeployment(t, mustRender(t, input))
 	if dep.Spec.Template.Spec.ServiceAccountName != "loopzero-app" {
 		t.Errorf("serviceAccountName: got %q, want loopzero-app", dep.Spec.Template.Spec.ServiceAccountName)
 	}
@@ -700,7 +705,7 @@ func TestRender_BackwardCompat_DefaultsApplied(t *testing.T) {
 		{Name: "api", Type: "server", Port: 8080, ImageRef: "reg:5000/acme/webapp:abc123"},
 	}
 
-	result := Render(input)
+	result, _ := Render(input)
 	docs := strings.Split(result, "\n---\n")
 
 	// Must produce exactly 5 documents (Deployment + PDB + Service + Certificate + IngressRoute)
@@ -742,7 +747,7 @@ func TestRender_CustomDomain_AddsExtraIngressAndCert(t *testing.T) {
 		},
 	}
 
-	result := Render(input)
+	result, _ := Render(input)
 	docs := strings.Split(result, "\n---\n")
 
 	// Base: Deployment + PDB + Service + Certificate + IngressRoute = 5
@@ -788,7 +793,7 @@ func TestRender_CustomDomain_IngressRouteHostMatch(t *testing.T) {
 		},
 	}
 
-	result := Render(input)
+	result, _ := Render(input)
 
 	if !strings.Contains(result, "Host(`www.example.io`)") {
 		t.Error("custom domain IngressRoute missing Host() match for www.example.io")
@@ -811,7 +816,7 @@ func TestRender_CustomDomain_NamingIsDomainDerived(t *testing.T) {
 		},
 	}
 
-	result := Render(input)
+	result, _ := Render(input)
 
 	// Domain-derived names should be stable regardless of order
 	if !strings.Contains(result, "cd-api-mycompany-com") {
@@ -832,7 +837,7 @@ func TestRender_CustomDomain_NoCustomDomains_NoExtraDocs(t *testing.T) {
 		{Name: "api", Type: "server", Port: 8080, ImageRef: "reg:5000/acme/webapp:abc123"},
 	}
 
-	result := Render(input)
+	result, _ := Render(input)
 	docs := strings.Split(result, "\n---\n")
 
 	// No custom domains → 5 docs as before

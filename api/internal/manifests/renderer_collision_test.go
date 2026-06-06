@@ -33,8 +33,8 @@ func TestRender_NoCollisionBetweenProjectsWithSameAppName(t *testing.T) {
 		}
 	}
 
-	out1 := Render(base("alpha"))
-	out2 := Render(base("bravo"))
+	out1, _ := Render(base("alpha"))
+	out2, _ := Render(base("bravo"))
 
 	// Deployment names must differ.
 	if !strings.Contains(out1, "name: alpha-api") {

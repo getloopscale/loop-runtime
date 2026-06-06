@@ -23,6 +23,7 @@
 package manifests
 
 import (
+	"fmt"
 	"os"
 	"strings"
 )
@@ -128,11 +129,16 @@ func ProgressiveDeliveryEnabled() bool {
 // Returns the combined YAML as a single string with documents separated by "---".
 //
 // B14 (MEET-2026-04-23-058): ClusterIssuerName is required. Callers MUST populate
-// it from Config.ClusterIssuer (env LOOPZERO_CLUSTER_ISSUER). Panics on empty because
-// this is a programmer error (missing wiring), not a runtime condition.
-func Render(input RenderInput) string {
+// it from Config.ClusterIssuer (env LOOPZERO_CLUSTER_ISSUER).
+//
+// Plan v1.2 T3.1 (cutover-deep-review-hardening): the previous behavior
+// (panic on empty ClusterIssuerName) opened a process-wide DoS vector — an
+// upstream config mistake would crash the reconcile loop instead of
+// surfacing a recoverable error. Render now returns (string, error). All
+// 5 production callers + tests updated in lockstep.
+func Render(input RenderInput) (string, error) {
 	if input.ClusterIssuerName == "" {
-		panic("manifests.Render: ClusterIssuerName is required (B14 — wire from Config.ClusterIssuer)")
+		return "", fmt.Errorf("manifests.Render: ClusterIssuerName is required (B14 — wire from Config.ClusterIssuer)")
 	}
 	var docs []string
 
@@ -154,7 +160,7 @@ func Render(input RenderInput) string {
 		}
 	}
 
-	return strings.Join(docs, "\n---\n")
+	return strings.Join(docs, "\n---\n"), nil
 }
 
 // --- Default resolution helpers (arch-cp-006) ---

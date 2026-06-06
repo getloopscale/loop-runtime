@@ -92,7 +92,10 @@ func (r *BuildReconcileLoop) onWorkflowSucceeded(ctx context.Context, build *db.
 	}
 
 	// Generate manifests in the API (C-02 fix: control plane generates manifests)
-	renderedManifests := manifests.Render(manifests.RenderInput{
+	// Plan v1.2 T3.1 — Render now returns (string, error). Empty ClusterIssuerName
+	// (config wiring bug) used to panic the reconcile loop; now we fail the build
+	// gracefully so the platform can recover.
+	renderedManifests, renderErr := manifests.Render(manifests.RenderInput{
 		TenantID:          build.TenantID,
 		ProjectID:         build.ProjectID,
 		Environment:       build.Environment,
@@ -109,6 +112,11 @@ func (r *BuildReconcileLoop) onWorkflowSucceeded(ctx context.Context, build *db.
 		PrometheusAddress:   r.cfg.PrometheusAddress,
 		ProgressiveDelivery: manifests.ProgressiveDeliveryEnabled(),
 	})
+	if renderErr != nil {
+		r.logger.Error("reconcile loop: manifests.Render failed", "build_id", build.ID, "error", renderErr)
+		r.failBuild(ctx, build, "Failed to render manifests — platform configuration error")
+		return
+	}
 
 	// Ensure LoopZeroApplication CRs exist on mgmt cluster (non-fatal).
 	// Enables hostname assignment, ExposedRoute creation, TLS monitoring, reachability probes.

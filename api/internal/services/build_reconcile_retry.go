@@ -146,7 +146,8 @@ func (r *BuildReconcileLoop) retryReleaseActivation(ctx context.Context, build *
 		return
 	}
 
-	renderedManifests := manifests.Render(manifests.RenderInput{
+	// Plan v1.2 T3.1 — propagate Render error instead of panicking the retry loop.
+	renderedManifests, renderErr := manifests.Render(manifests.RenderInput{
 		TenantID:          build.TenantID,
 		ProjectID:         build.ProjectID,
 		Environment:       build.Environment,
@@ -164,6 +165,11 @@ func (r *BuildReconcileLoop) retryReleaseActivation(ctx context.Context, build *
 		// Starter canary (50/100 setWeight, no AnalysisRun).
 		Plan: r.resolvePlan(ctx, build.TenantID),
 	})
+	if renderErr != nil {
+		r.logger.Error("reconcile loop: manifests.Render failed on retry", "build_id", build.ID, "error", renderErr)
+		r.failBuild(ctx, build, "Failed to render manifests on retry — platform configuration error")
+		return
+	}
 
 	result := BuildCallbackRequest{
 		Status:    "succeeded",

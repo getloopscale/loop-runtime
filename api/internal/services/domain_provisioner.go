@@ -341,7 +341,9 @@ func (p *DomainProvisioner) provisionDomain(ctx context.Context, d domain.Custom
 			return err
 		}
 
-		rendered = manifests.Render(manifests.RenderInput{
+		// Plan v1.2 T3.1 — propagate Render error inside the lock so the
+		// caller can fail the domain provisioning gracefully.
+		renderedYAML, renderErr := manifests.Render(manifests.RenderInput{
 			TenantID:          d.TenantID,
 			ProjectID:         d.ProjectName,
 			Environment:       d.Environment,
@@ -354,6 +356,10 @@ func (p *DomainProvisioner) provisionDomain(ctx context.Context, d domain.Custom
 			PrometheusAddress:   p.prometheusAddr,
 			ProgressiveDelivery: manifests.ProgressiveDeliveryEnabled(),
 		})
+		if renderErr != nil {
+			return fmt.Errorf("manifests.Render: %w", renderErr)
+		}
+		rendered = renderedYAML
 
 		pushOpts = GitOpsPushOpts{
 			TenantID:      d.TenantID,
@@ -482,7 +488,8 @@ func (p *DomainProvisioner) removeDomain(ctx context.Context, d domain.CustomDom
 			return err
 		}
 
-		rendered := manifests.Render(manifests.RenderInput{
+		// Plan v1.2 T3.1 — propagate Render error from the domain-removal path.
+		rendered, renderErr := manifests.Render(manifests.RenderInput{
 			TenantID:          d.TenantID,
 			ProjectID:         d.ProjectName,
 			Environment:       d.Environment,
@@ -495,6 +502,9 @@ func (p *DomainProvisioner) removeDomain(ctx context.Context, d domain.CustomDom
 			PrometheusAddress:   p.prometheusAddr,
 			ProgressiveDelivery: manifests.ProgressiveDeliveryEnabled(),
 		})
+		if renderErr != nil {
+			return fmt.Errorf("manifests.Render (domain remove): %w", renderErr)
+		}
 
 		pushOpts = GitOpsPushOpts{
 			TenantID:      d.TenantID,
