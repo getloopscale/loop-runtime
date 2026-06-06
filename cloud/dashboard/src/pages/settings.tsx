@@ -1,5 +1,6 @@
 import { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
+import { ArrowUpRight, Brain } from 'lucide-react';
 import { Card, CodeBlock, ConfirmDialog, DangerZone, Button, PageShell, StatusDot } from '@loopzero/ui';
 import { usePageMeta } from '@/hooks/use-page-meta';
 import { useRequireAuth } from '@/hooks/use-auth';
@@ -98,6 +99,44 @@ loopzero env create staging`}
               <p className="text-label text-muted-foreground">Managed runtime for your services.</p>
             </div>
             <StatusDot status="live" label="Active" />
+          </div>
+        </Card.Body>
+      </Card>
+
+      {/* Plan 4 of dashboard-memory-section-roadmap.md, T4.4 — Memory promotion.
+          Roadmap §P4 mandated "Memory tab"; the existing /settings page is a
+          flat Card layout with no Tabs container. Promoting to Tabs would
+          restructure all existing cards, violating Plan 4 D2 ZERO regression
+          invariant. Implemented as additive Card matching the existing
+          CLI-First / Connected integrations / Danger Zone pattern. */}
+      <Card data-testid="settings-memory-card">
+        <Card.Header>
+          <Card.Title>
+            <div className="flex items-center gap-2">
+              <Brain className="size-5 text-primary" aria-hidden="true" />
+              Memory
+            </div>
+          </Card.Title>
+          <Card.Description>
+            Your agent&apos;s persistent memory — browse what it knows, manage
+            entities, configure exports + webhooks.
+          </Card.Description>
+        </Card.Header>
+        <Card.Body>
+          <div className="flex items-center justify-between">
+            <p className="text-body-sm text-muted-foreground max-w-md">
+              Manage memories, entities, exports, and webhooks. Configure scopes
+              via API Keys.
+            </p>
+            <Button
+              variant="secondary"
+              size="sm"
+              onClick={() => navigate('/memory')}
+              className="gap-1.5"
+            >
+              Open Memory
+              <ArrowUpRight className="size-3.5" aria-hidden="true" />
+            </Button>
           </div>
         </Card.Body>
       </Card>

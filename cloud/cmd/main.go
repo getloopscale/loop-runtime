@@ -34,6 +34,7 @@ import (
 	cloudmetrics "github.com/loopzero/loopzero/cloud/internal/metrics"
 	"github.com/loopzero/loopzero/cloud/internal/ratelimit"
 	"github.com/loopzero/loopzero/cloud/internal/routes"
+	"github.com/loopzero/loopzero/cloud/internal/themory"
 	"github.com/loopzero/loopzero/cloud/internal/tracing"
 )
 
@@ -154,6 +155,50 @@ func main() {
 	meHandler := routes.NewMeHandler()
 	consentHandler := consent.NewHandler(hydra, tenantProvisioner, cfg.KratosPublicURL, cfg.KratosInternalURL, cfg.KratosAdminURL, logger)
 
+	// Plan 0 of dashboard-memory-section-roadmap.md: unified loopzero_live_* API keys.
+	// D8 dispatch: /v1/api-keys/* uses RequireJWT (PaaS session cookie), NOT
+	// RequireScope. The scope-checked Bearer surface is the consumer side
+	// (memory + future verticals), registered in subsequent plans.
+	apiKeysHandler := routes.NewAPIKeysHandler(db, logger)
+
+	// Plan 1 of dashboard-memory-section-roadmap.md: Memory Shell — Go proxy to
+	// OSS TheMemory. Only instantiated when THEMORY_BASE_URL is configured,
+	// matching the same opt-in pattern as billing (BillingHandler is nil when
+	// Stripe is not configured). Operators must set THEMORY_BASE_URL +
+	// THEMORY_API_KEY before /v1/memory/* routes are usable.
+	var memoryHandler *routes.MemoryHandler
+	var memoryWebhooksHandler *routes.MemoryWebhooksHandler
+	var memoryExportsHandler *routes.MemoryExportsHandler
+	if cfg.ThemoryBaseURL != "" {
+		themoryHTTP := &http.Client{
+			Timeout:   30 * time.Second,
+			Transport: otelhttp.NewTransport(http.DefaultTransport), // D4 W3C trace propagation
+		}
+		themoryClient := themory.NewClient(cfg.ThemoryBaseURL, cfg.ThemoryAPIKey.Value(), themoryHTTP)
+		memoryHandler = routes.NewMemoryHandler(themoryClient, logger)
+		logger.Info("memory proxy enabled", "themory_base_url", cfg.ThemoryBaseURL)
+
+		// Plan 3 — Memory Operations (exports + webhooks).
+		// Webhooks need only the DB; exports need DB + TheMemory client +
+		// a worker-output directory. Both stay nil if Memory itself is
+		// disabled, so the /v1/memory/exports/* and /v1/memory/webhooks/*
+		// blocks below also remain unregistered when off.
+		exportDir := os.Getenv("LOOPZERO_EXPORT_DIR")
+		if exportDir == "" {
+			exportDir = "/tmp/loopzero-exports"
+		}
+		workerDelay := 3 * time.Second
+		if d := os.Getenv("EXPORT_WORKER_DELAY_MS"); d != "" {
+			if parsed, perr := time.ParseDuration(d + "ms"); perr == nil {
+				workerDelay = parsed
+			}
+		}
+		memoryWebhooksHandler = routes.NewMemoryWebhooksHandler(db, logger)
+		memoryExportsHandler = routes.NewMemoryExportsHandler(db, themoryClient, logger, exportDir, workerDelay)
+	} else {
+		logger.Warn("THEMORY_BASE_URL not set — /v1/memory/* endpoints disabled")
+	}
+
 	// Router
 	r := chi.NewRouter()
 	r.Use(chimw.RequestID)
@@ -250,6 +295,54 @@ func main() {
 	r.Get("/auth/login/complete", consentHandler.LoginComplete)
 	r.Get("/auth/consent", consentHandler.Consent)
 	r.Get("/auth/device", consentHandler.DeviceVerify)
+
+	// Plan 0 — Platform API Keys (/v1/api-keys/*).
+	// D8 dispatch lockdown: this route group uses requireJWT (session cookie
+	// from Ory Hydra OIDC). It does NOT use RequireScope — that middleware
+	// gates SDK-consumer routes (/v1/memory/* in Plan 1, future verticals
+	// thereafter). Mixing the two on the same route would either create a
+	// bootstrap loop (Bearer key needs CRUD via Bearer key) or leak the key-
+	// management surface to production agents.
+	r.Route("/v1/api-keys", func(r chi.Router) {
+		r.Use(requireJWT)
+		// Per-user rate limit reuses the billingLimiter pool (30 rpm).
+		// API key CRUD is a low-volume operation by definition.
+		r.Use(ratelimit.Middleware(billingLimiter, 30, userKey))
+		r.Get("/list", apiKeysHandler.ListKeys)
+		r.Post("/", apiKeysHandler.CreateKey)
+		r.Delete("/{id}", apiKeysHandler.RevokeKey)
+	})
+
+	// Plan 1 — Memory Shell (/v1/memory/*).
+	// D8 dispatch + D2 scope mapping: each route uses RequireScope(db, scope)
+	// — the SDK-consumer surface authenticated by loopzero_live_* Bearer keys.
+	// /v1/api-keys/* (above) and /v1/memory/* (here) intentionally use
+	// distinct middleware so a customer can never CRUD keys via Bearer or
+	// query memory via session cookie (closes both directions of the loop).
+	if memoryHandler != nil {
+		r.Route("/v1/memory", func(r chi.Router) {
+			r.With(auth.RequireScope(db, "memory:read")).Get("/list", memoryHandler.List)
+			r.With(auth.RequireScope(db, "memory:read")).Get("/metrics", memoryHandler.Metrics)
+			r.With(auth.RequireScope(db, "memory:delete")).Delete("/forget/{memoryID}", memoryHandler.Forget)
+			// Plan 2 (Memory Insights) — entities aggregated by scope.
+			// Same scope as List + Metrics per D2 (no per-feature scope explosion).
+			r.With(auth.RequireScope(db, "memory:read")).Get("/entities", memoryHandler.Entities)
+
+			// Plan 3 (Memory Operations) — webhooks + exports.
+			// All gated by memory:admin per least-privilege (these affect
+			// downstream consumers + can exfiltrate data).
+			if memoryWebhooksHandler != nil {
+				r.With(auth.RequireScope(db, "memory:admin")).Post("/webhooks", memoryWebhooksHandler.Create)
+				r.With(auth.RequireScope(db, "memory:admin")).Get("/webhooks/list", memoryWebhooksHandler.List)
+				r.With(auth.RequireScope(db, "memory:admin")).Delete("/webhooks/{id}", memoryWebhooksHandler.Delete)
+			}
+			if memoryExportsHandler != nil {
+				r.With(auth.RequireScope(db, "memory:admin")).Post("/exports", memoryExportsHandler.Create)
+				r.With(auth.RequireScope(db, "memory:admin")).Get("/exports/{id}/status", memoryExportsHandler.Status)
+				r.With(auth.RequireScope(db, "memory:admin")).Get("/exports/{id}/download", memoryExportsHandler.Download)
+			}
+		})
+	}
 
 	// Billing endpoints (JWT required via middleware, except webhook)
 	if billingHandler != nil {

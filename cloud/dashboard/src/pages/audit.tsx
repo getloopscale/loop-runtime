@@ -1,7 +1,7 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { useQueryState, parseAsString } from 'nuqs';
-import { History, ShieldAlert } from 'lucide-react';
-import { Badge, Card, PageShell, Table } from '@loopzero/ui';
+import { Brain, History, ShieldAlert, X } from 'lucide-react';
+import { Badge, Button, Card, PageShell, Table } from '@loopzero/ui';
 import { useSetPageTitle } from '@/hooks/use-page-meta';
 import { useRequireAuth } from '@/hooks/use-auth';
 import { engineFetch } from '@/lib/api';
@@ -38,6 +38,15 @@ export function AuditPage() {
     'actor',
     parseAsString.withDefault(''),
   );
+  // Plan 4 of dashboard-memory-section-roadmap.md, T4.3 (ADR D3) —
+  // client-side source filter. Independent URL state from action/actor so
+  // bookmarks work. Backend `?source=memory` is owned by the engine API
+  // and is intentionally OUT OF SCOPE for this loop; when a future plan
+  // ships it, this component can swap to URL/backend without API change.
+  const [sourceFilter, setSourceFilter] = useQueryState(
+    'source',
+    parseAsString.withDefault(''),
+  );
 
   useEffect(() => {
     let cancelled = false;
@@ -58,6 +67,16 @@ export function AuditPage() {
     };
   }, [actionFilter, actorFilter]);
 
+  // T4.3 — client-side memory filter. Matches resource_type beginning
+  // with 'memory' (covers memory + memory_export + memory_webhook). When
+  // source filter is inactive (empty), passes all entries through.
+  const visibleEntries = useMemo(() => {
+    if (sourceFilter !== 'memory') return entries;
+    return entries.filter((e) =>
+      typeof e.resource_type === 'string' && e.resource_type.toLowerCase().startsWith('memory'),
+    );
+  }, [entries, sourceFilter]);
+
   return (
     <PageShell
       title="Audit log"
@@ -69,16 +88,50 @@ export function AuditPage() {
       }}
       loading={loading}
       empty={
-        !loading && entries.length === 0
+        !loading && visibleEntries.length === 0
           ? {
               icon: History,
-              title: 'No audit entries',
+              title: sourceFilter === 'memory' ? 'No memory activity in this period' : 'No audit entries',
               description:
-                'Activity will appear here as your team uses the workspace.',
+                sourceFilter === 'memory'
+                  ? 'Memory-related entries will appear here as your agent records or recalls memories.'
+                  : 'Activity will appear here as your team uses the workspace.',
             }
           : undefined
       }
     >
+      {/* Plan 4 of dashboard-memory-section-roadmap.md, T4.3 — Memory source filter chip.
+          Client-side (D3); backend `?source=memory` is OUT OF SCOPE for this loop. */}
+      <div className="flex items-center gap-2 mb-4" data-testid="audit-source-filter">
+        <span className="text-label-caps text-muted-foreground uppercase tracking-wider">
+          Source:
+        </span>
+        {sourceFilter === 'memory' ? (
+          <Badge variant="default" className="gap-1">
+            <Brain className="size-3" aria-hidden="true" />
+            Memory
+            <button
+              type="button"
+              aria-label="Clear memory source filter"
+              onClick={() => setSourceFilter('')}
+              className="ml-1 hover:opacity-70"
+            >
+              <X className="size-3" />
+            </button>
+          </Badge>
+        ) : (
+          <Button
+            variant="ghost"
+            size="sm"
+            onClick={() => setSourceFilter('memory')}
+            className="gap-1"
+          >
+            <Brain className="size-3.5" aria-hidden="true" />
+            Filter by Memory
+          </Button>
+        )}
+      </div>
+
       <Card>
         <Card.Body className="p-0">
           <Table>
@@ -94,7 +147,7 @@ export function AuditPage() {
               </Table.Row>
             </Table.Header>
             <Table.Body>
-              {entries.map((e) => (
+              {visibleEntries.map((e) => (
                 <Table.Row key={e.id}>
                   <Table.Cell>
                     <span className="font-mono text-label text-muted-foreground tabular-nums">

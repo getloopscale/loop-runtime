@@ -6,6 +6,7 @@ import {
   Bell,
   Box,
   BookOpen,
+  Brain,
   ChevronRight,
   FolderKanban,
   Github,
@@ -16,6 +17,7 @@ import {
   KeyRound,
   LayoutGrid,
   Link2,
+  ListChecks,
   Lock,
   Receipt,
   Rocket,
@@ -102,6 +104,13 @@ const MENUS: Record<string, MenuDefinition> = {
         ],
       },
       {
+        // Plan 1 of dashboard-memory-section-roadmap.md — Memory section.
+        // Drills into a submenu so future plans (P2 entities, P3 exports/webhooks)
+        // can add items without reflowing the root nav.
+        title: 'Memory',
+        items: [{ label: 'Memory', path: '/memory', icon: Brain, drillsInto: 'memory' }],
+      },
+      {
         title: 'Billing',
         items: [{ label: 'Billing', path: '/billing', icon: Receipt }],
       },
@@ -165,6 +174,28 @@ const MENUS: Record<string, MenuDefinition> = {
       },
     ],
   },
+  // Memory drill-down — Plan 1 ships Overview + Memories; Plan 2 will add
+  // Entities; Plan 3 will add Exports + Webhooks. Items added to this menu in
+  // subsequent plans do NOT reflow the root sidebar — that's why we drill.
+  memory: {
+    id: 'memory',
+    title: 'Memory',
+    parent: 'main',
+    groups: [
+      {
+        items: [
+          { label: 'Overview', path: '/memory', icon: LayoutGrid },
+          { label: 'Memories', path: '/memory/memories', icon: ListChecks },
+          // Plan 2 — Memory Insights. Plan 3 will add Exports + Webhooks
+          // here without reflowing the root sidebar.
+          { label: 'Entities', path: '/memory/entities', icon: Users },
+          // Plan 3 — Memory Operations.
+          { label: 'Exports', path: '/memory/exports', icon: BookOpen },
+          { label: 'Webhooks', path: '/memory/webhooks', icon: Webhook },
+        ],
+      },
+    ],
+  },
   // Project drill-down — Vercel/Linear pattern. When user enters /projects/<name>
   // (or any /projects/<name>/* sub-route), sidebar swaps to this menu. Items use
   // {project} placeholder, resolved at render time to the active project name
@@ -216,6 +247,7 @@ function resolveActiveMenu(pathname: string): ResolvedMenu {
   }
   if (pathname.startsWith('/settings')) return { id: 'settings' };
   if (pathname.startsWith('/profile')) return { id: 'profile' };
+  if (pathname.startsWith('/memory')) return { id: 'memory' };
   return { id: 'main' };
 }
 

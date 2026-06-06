@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react';
 import { useSearchParams } from 'react-router-dom';
-import { ArrowUpRight, Loader2, Sparkles } from 'lucide-react';
+import { ArrowUpRight, Brain, Loader2, Sparkles } from 'lucide-react';
 import {
   Alert,
   Button,
@@ -338,6 +338,85 @@ export function BillingPage() {
           />
         </section>
       )}
+
+      {/* Plan 4 of dashboard-memory-section-roadmap.md, T4.2 — Memory promotion.
+          ADR D1: rendered always; graceful empty state when no memory activity.
+          NOT a regression to existing billing flow — purely additive. */}
+      <MemoryUsageCard />
     </PageShell>
+  );
+}
+
+interface MemoryMetricsResponse {
+  total_memories: number;
+  retrieval_api_usage: number;
+  add_events: number;
+  entity_count: number;
+}
+
+/**
+ * MemoryUsageCard — Plan 4 cross-cut from dashboard-memory-section-roadmap.md.
+ *
+ * Reads `/v1/memory/metrics` (Plan 1 endpoint). On error OR all-zero, renders
+ * a "no activity yet" state with a Get-started link. On populated, renders 2
+ * figures (Total memories + Retrieval API calls) + a link to /memory.
+ *
+ * D1 invariant: this card is the OPT-IN signal — the gracefulness of the empty
+ * state is what avoids surfacing Memory to customers who don't use it.
+ */
+function MemoryUsageCard() {
+  const { data, error } = useCloudApi<MemoryMetricsResponse>('/v1/memory/metrics');
+  const empty = error || !data || (data.total_memories === 0 && data.retrieval_api_usage === 0);
+
+  return (
+    <section className="mt-6" data-testid="billing-memory-card">
+      <p className="text-label-caps text-muted-foreground uppercase mb-3 tracking-wider">
+        Memory
+      </p>
+      <Card>
+        <Card.Body className="p-6">
+          <div className="flex items-start justify-between gap-4">
+            <div className="space-y-2">
+              <div className="flex items-center gap-2">
+                <Brain className="size-5 text-primary" aria-hidden="true" />
+                <h3 className="text-body font-semibold text-foreground">
+                  {empty ? 'No memory activity yet' : 'Memory usage'}
+                </h3>
+              </div>
+              {empty ? (
+                <p className="text-body-sm text-muted-foreground max-w-md">
+                  Once your agent starts remembering, you&apos;ll see counts here.
+                  Use the SDK to record your first memory.
+                </p>
+              ) : (
+                <div className="flex gap-6 pt-2">
+                  <div>
+                    <p className="text-label-caps text-muted-foreground uppercase tracking-wider">
+                      Total memories
+                    </p>
+                    <p className="font-display text-display-md tabular-nums">{data!.total_memories}</p>
+                  </div>
+                  <div>
+                    <p className="text-label-caps text-muted-foreground uppercase tracking-wider">
+                      Retrieval calls
+                    </p>
+                    <p className="font-display text-display-md tabular-nums">{data!.retrieval_api_usage}</p>
+                  </div>
+                </div>
+              )}
+            </div>
+            <Button
+              variant="secondary"
+              size="sm"
+              onClick={() => (window.location.href = '/memory')}
+              className="gap-1.5 shrink-0"
+            >
+              {empty ? 'Get started' : 'Open Memory'}
+              <ArrowUpRight className="size-3.5" aria-hidden="true" />
+            </Button>
+          </div>
+        </Card.Body>
+      </Card>
+    </section>
   );
 }

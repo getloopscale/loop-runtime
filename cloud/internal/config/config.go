@@ -92,6 +92,15 @@ type Config struct {
 	// Env: LOOPZERO_SERVICE_AUTH_SECRET (must match the engine's value)
 	ServiceAuthSecret Secret
 
+	// ThemoryBaseURL is the OSS TheMemory REST URL (Plan 1 of dashboard-memory-section).
+	// Env: THEMORY_BASE_URL (default: "http://themory:3000" — operator overrides in prod)
+	ThemoryBaseURL string
+
+	// ThemoryAPIKey is the master Bearer the Go proxy uses to authenticate
+	// against TheMemory. NEVER returned to the customer (Plan 1 D1 + CLAUDE.md Invariant 3).
+	// Env: THEMORY_API_KEY (required when ThemoryBaseURL is set in prod)
+	ThemoryAPIKey Secret
+
 	// SessionTokenSecretPrevious is the previous HMAC key for zero-downtime rotation (§2.2).
 	// Tokens signed with this key are accepted during the rotation window.
 	// Env: SESSION_TOKEN_SECRET_PREVIOUS (optional)
@@ -122,6 +131,8 @@ func Load() Config {
 	cfg.SessionTokenSecret = Secret(envOr("SESSION_TOKEN_SECRET", devSecretFor(cfg.Environment)))
 	cfg.SessionTokenSecretPrevious = Secret(envOr("SESSION_TOKEN_SECRET_PREVIOUS", ""))
 	cfg.ServiceAuthSecret = Secret(envOr("LOOPZERO_SERVICE_AUTH_SECRET", devSecretFor(cfg.Environment)))
+	cfg.ThemoryBaseURL = envOr("THEMORY_BASE_URL", "")
+	cfg.ThemoryAPIKey = Secret(envOr("THEMORY_API_KEY", ""))
 	return cfg
 }
 

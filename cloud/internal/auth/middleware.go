@@ -35,6 +35,14 @@ func GetUser(ctx context.Context) *UserContext {
 	return uc
 }
 
+// WithUser returns a copy of ctx with the given UserContext attached, using the
+// same key that RequireJWT + RequireScope populate. Tests in other packages
+// (cloud/tests/unit/) use this to construct authenticated requests without
+// reaching for the unexported userCtxKey. Plan 0 / T0.3-T0.6 test support.
+func WithUser(ctx context.Context, u *UserContext) context.Context {
+	return context.WithValue(ctx, userCtxKey, u)
+}
+
 // RequireJWT returns chi middleware that validates JWT Bearer tokens.
 // Accepts Hydra RSA JWTs (CLI) and HMAC session JWTs (dashboard).
 // Uses pkg/jwt — single source of truth for JWT validation.

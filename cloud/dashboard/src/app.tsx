@@ -62,6 +62,24 @@ const ProfilePage = lazy(() =>
 const DomainsPage = lazy(() =>
   import('@/pages/domains').then((m) => ({ default: m.DomainsPage })),
 );
+const ApiKeysPage = lazy(() =>
+  import('@/pages/api-keys').then((m) => ({ default: m.ApiKeysPage })),
+);
+const MemoryPage = lazy(() =>
+  import('@/pages/memory').then((m) => ({ default: m.MemoryPage })),
+);
+const MemoryListPage = lazy(() =>
+  import('@/pages/memory/memories').then((m) => ({ default: m.MemoryListPage })),
+);
+const EntitiesPage = lazy(() =>
+  import('@/pages/memory/entities').then((m) => ({ default: m.EntitiesPage })),
+);
+const ExportsPage = lazy(() =>
+  import('@/pages/memory/exports').then((m) => ({ default: m.ExportsPage })),
+);
+const WebhooksPage = lazy(() =>
+  import('@/pages/memory/webhooks').then((m) => ({ default: m.WebhooksPage })),
+);
 const LoginPage = lazy(() =>
   import('@/pages/login').then((m) => ({ default: m.LoginPage })),
 );
@@ -207,6 +225,12 @@ export default function App() {
                     <Route path="/team" element={<Boundaried path="/team"><TeamPage /></Boundaried>} />
                     <Route path="/billing" element={<Boundaried path="/billing"><BillingPage /></Boundaried>} />
                     <Route path="/domains" element={<Boundaried path="/domains"><DomainsPage /></Boundaried>} />
+                    <Route path="/api-keys" element={<Boundaried path="/api-keys"><ApiKeysPage /></Boundaried>} />
+                    <Route path="/memory" element={<Boundaried path="/memory"><MemoryPage /></Boundaried>} />
+                    <Route path="/memory/memories" element={<Boundaried path="/memory/memories"><MemoryListPage /></Boundaried>} />
+                    <Route path="/memory/entities" element={<Boundaried path="/memory/entities"><EntitiesPage /></Boundaried>} />
+                    <Route path="/memory/exports" element={<Boundaried path="/memory/exports"><ExportsPage /></Boundaried>} />
+                    <Route path="/memory/webhooks" element={<Boundaried path="/memory/webhooks"><WebhooksPage /></Boundaried>} />
                     <Route path="/settings" element={<Boundaried path="/settings"><SettingsPage /></Boundaried>} />
                     <Route
                       path="/settings/members"
