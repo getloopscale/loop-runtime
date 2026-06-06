@@ -11,6 +11,7 @@ package unit
 
 import (
 	"context"
+	"encoding/json"
 	"net/http"
 	"net/http/httptest"
 	"strings"
@@ -51,6 +52,7 @@ func TestMemoryWebhooks_CreateHappyPath(t *testing.T) {
 			"https://hook.example.com/foo",
 			"prod-events",
 			sqlmock.AnyArg(), // events jsonb
+			sqlmock.AnyArg(), // secret (Memory Webhook Delivery plan D1)
 		).
 		WillReturnResult(sqlmock.NewResult(1, 1))
 
@@ -142,6 +144,80 @@ func TestMemoryWebhooks_CrossTenantDeleteReturns404(t *testing.T) {
 	}
 	if rec.Code != http.StatusNotFound {
 		t.Fatalf("expected 404 for cross-tenant, got %d", rec.Code)
+	}
+}
+
+// =============================================================================
+// Memory Webhook Delivery plan — T5.4
+// =============================================================================
+
+// T5.4 — Create handler MUST generate a per-webhook secret, persist it raw
+// via INSERT, and return it ONCE in the response (Stripe show-once pattern).
+// Tests: format regex (whsec_<43 base64url>); persisted via INSERT; unique.
+func TestMemoryWebhooks_CreateGeneratesAndReturnsSecret(t *testing.T) {
+	h, mock := newWebhooksHandler(t)
+	mock.ExpectExec("INSERT INTO memory_webhooks").
+		WithArgs(
+			sqlmock.AnyArg(), "user-A", "tenant-A",
+			"https://hook.example.com/foo",
+			"prod-events",
+			sqlmock.AnyArg(), // events jsonb
+			sqlmock.AnyArg(), // secret — must be the persisted raw secret
+		).
+		WillReturnResult(sqlmock.NewResult(1, 1))
+
+	body := `{"url":"https://hook.example.com/foo","label":"prod-events","events":["memory.forgotten"]}`
+	req := httptest.NewRequest("POST", "/v1/memory/webhooks", strings.NewReader(body))
+	req.Header.Set("Content-Type", "application/json")
+	req = req.WithContext(auth.WithUser(req.Context(), &auth.UserContext{Subject: "user-A", TenantID: "tenant-A"}))
+	rec := httptest.NewRecorder()
+	h.Create(rec, req)
+
+	if rec.Code != http.StatusOK {
+		t.Fatalf("expected 200, got %d body=%s", rec.Code, rec.Body.String())
+	}
+	var resp struct {
+		ID     string `json:"id"`
+		Secret string `json:"secret"`
+	}
+	if err := json.Unmarshal(rec.Body.Bytes(), &resp); err != nil {
+		t.Fatalf("invalid JSON: %v body=%s", err, rec.Body.String())
+	}
+	// D1 invariant: secret format whsec_<43 base64url chars>
+	if !strings.HasPrefix(resp.Secret, "whsec_") {
+		t.Errorf("secret must start with whsec_, got %q", resp.Secret)
+	}
+	// 32 bytes base64url RawURLEncoding = 43 chars; whsec_ (6) + 43 = 49 total.
+	if len(resp.Secret) != 49 {
+		t.Errorf("secret total length must be 49 (whsec_ + 43 base64url), got %d", len(resp.Secret))
+	}
+}
+
+// T5.4 — two consecutive creates produce DIFFERENT secrets (random, not constant).
+func TestMemoryWebhooks_CreateProducesUniqueSecrets(t *testing.T) {
+	h, mock := newWebhooksHandler(t)
+	mock.ExpectExec("INSERT INTO memory_webhooks").
+		WithArgs(sqlmock.AnyArg(), "u", "t", "https://x", "a", sqlmock.AnyArg(), sqlmock.AnyArg()).
+		WillReturnResult(sqlmock.NewResult(1, 1))
+	mock.ExpectExec("INSERT INTO memory_webhooks").
+		WithArgs(sqlmock.AnyArg(), "u", "t", "https://x", "b", sqlmock.AnyArg(), sqlmock.AnyArg()).
+		WillReturnResult(sqlmock.NewResult(1, 1))
+
+	doCreate := func(label string) string {
+		body := `{"url":"https://x","label":"` + label + `","events":["memory.forgotten"]}`
+		req := httptest.NewRequest("POST", "/v1/memory/webhooks", strings.NewReader(body))
+		req.Header.Set("Content-Type", "application/json")
+		req = req.WithContext(auth.WithUser(req.Context(), &auth.UserContext{Subject: "u", TenantID: "t"}))
+		rec := httptest.NewRecorder()
+		h.Create(rec, req)
+		var resp struct{ Secret string `json:"secret"` }
+		_ = json.Unmarshal(rec.Body.Bytes(), &resp)
+		return resp.Secret
+	}
+	s1 := doCreate("a")
+	s2 := doCreate("b")
+	if s1 == s2 {
+		t.Errorf("two creates produced identical secrets (RNG broken or hardcoded): %q == %q", s1, s2)
 	}
 }
 

@@ -7,6 +7,109 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+### Added (2026-06-06 — Delivery Replay — closes Memory Webhook Delivery OOS #5)
+
+Per `.claude/knowledge-base/plans/2026-06-06-delivery-replay-plan.md` v1.0. Single-session standalone plan that closes the explicit Out of Scope #5 of the Memory Webhook Delivery plan ("Customer-triggered manual replay of failed deliveries"). Manual re-trigger endpoint + per-row Replay button surfaced inside the recently-promoted DeliveriesSheet. Composition: builds on the worker + state machine + deliveries-listing shipped by Memory Webhook Delivery.
+
+- **`POST /v1/memory/webhooks/{webhook_id}/deliveries/{delivery_id}/replay` handler** at `cloud/internal/routes/memory_webhook_deliveries.go::Replay` (NEW receiver) — branches on the delivery's current `status`: `delivered` → 400 `ALREADY_DELIVERED` (prevent duplicate dispatch to subscriber); `pending|delivering` → 200 idempotent no-op (worker already has it queued); `failed|dead_letter` → 200 with state reset (`status='pending'`, `attempt_count=0`, `next_attempt_at=NOW()`, `last_response_status=NULL`, `last_error_message=NULL`) re-arming the worker's full retry budget. Tenant-scoped via SQL JOIN to `memory_webhooks` (`subject = $2 AND tenant_id = $3`) — cross-tenant + nonexistent both collapse to 404 (P0 D5 existence-leak invariant). Path-param `webhook_id` cross-checked against `deliveries.webhook_id` to defeat URL fishing.
+- **Route registered** at `cloud/cmd/main.go` — `r.Post("/webhooks/{webhook_id}/deliveries/{delivery_id}/replay", ...)` inside the existing `/v1/memory` block under `RequireScope("memory:admin")`. Distinct chi param names (`webhook_id` / `delivery_id`) match the handler's `chi.URLParam` reads.
+- **Dashboard Replay button + ConfirmDialog** at `cloud/dashboard/src/pages/memory/webhooks.tsx` (EDIT) — `RecentDeliveriesBadge` Badge becomes a clickable trigger for the new `DeliveriesSheet` right-side drawer; the sheet lazy-fetches `/v1/memory/webhooks/{id}/deliveries` and renders each as a `DeliveryCard`. Cards with `status ∈ {failed, dead_letter}` get a "Replay" Button (RotateCw icon). Click → `ConfirmDialog` with `confirmationPhrase="replay"` typed-verification + description showing event_type + last error context. On confirm POST → success toast (distinguishes "Replay queued" from "Delivery already queued" via the `noop` field in the response) → invalidate `deliveries` query. Toast on failure.
+- **Tests** — 8 new Go handler test groups (17 sub-cases total) covering: unauthenticated 401; malformed `webhook_id` 400 BEFORE DB (5-input sub-table); malformed `delivery_id` 400 BEFORE DB (6-input sub-table including `mwh-` prefix as wrong family); cross-tenant 404 NOT 403 (D5); webhook_id mismatch 404; `delivered` 400 `ALREADY_DELIVERED`; `pending|delivering` 200 no-op (sub-table; UPDATE NOT executed); `failed|dead_letter` 200 reset (sub-table; UPDATE executed with the 5-column reset signature).
+- **Invariants verified:** Invariant 8 (grep paper-names in changed files → 0 hits); Invariant 6 (this loop did not modify OSS sibling `loopzero-memory/examples/chat-with-memory/`); Rule 3 (no internal terms in customer-facing strings — uses `delivery`, `replay`, `re-queue`, `subscriber`).
+- **Governance gate** at `.claude/governance-gate.local.md` — appended `## Approved Scope Extension — Delivery Replay (sponsor-direct 2026-06-06)`. No migration scope needed (reuses existing `memory_webhook_deliveries` columns from `000028`).
+
+**Honest disclosures (Out of Scope at v0.1):**
+- Bulk replay (replay ALL failed deliveries for a webhook in one click) — defer until customer asks
+- Replay history audit log entry — defer; current invariant is the dashboard `deliveries` list itself reflects the new state
+- Per-delivery exponential-backoff override (e.g., "replay now, ignore the next_attempt_at delay") — current implementation sets `next_attempt_at=NOW()` so worker picks it up on the very next poll
+
+### Added (2026-06-06 — API Key Lineage View — closes API Key Rotation OOS #4)
+
+Per `.claude/knowledge-base/plans/2026-06-06-api-key-lineage-view-plan.md` v1.0. Single-session standalone plan that closes the explicit Out of Scope #4 of the API Key Rotation plan ("Customer-facing rotation history view (`GET /v1/api-keys/{id}/lineage`)"). Pure-read endpoint + Sheet drawer UI showing the full rotation chain as a vertical timeline. Composition: requires the `rotated_from` column shipped in API Key Rotation (000029) — impossible without it.
+
+- **`GET /v1/api-keys/{id}/lineage` handler** at `cloud/internal/routes/api_keys.go::LineageKey` (EDIT) — single recursive CTE walks both ancestors (via `rotated_from` backward) and descendants (via reverse FK forward), UNION-ed and ORDER BY created_at ASC (D1: root first → current last). Each item carries `{id, name, key_prefix, created_at, revoked_at, expires_at, is_current}`. `is_current` computed server-side: `revoked_at IS NULL AND (expires_at IS NULL OR expires_at > NOW())`. D2 defensive LIMIT 100 caps pathological chains. D3 cross-tenant via `WHERE subject = $2 AND tenant_id = $3` on every recursive arm + the empty-result→404 collapse (preserves P0 D5 existence-leak invariant). EC-2-style malformed id rejected with 400 BEFORE DB query.
+- **Route registered** at `cloud/cmd/main.go` — `r.Get("/{id}/lineage", ...)` inside the existing `/v1/api-keys` block under `requireJWT` (D5 / D8 P0 dispatch). No new scope needed; dashboard-only consumer.
+- **Dashboard Lineage button + Sheet drawer** at `cloud/dashboard/src/pages/api-keys.tsx` (EDIT) — `History` icon button per row between Rotate + Trash. Click → opens right-side `<Sheet>` drawer (no z-index collision with the centered Rotate/Delete confirm dialogs). Sheet body lazy-fetches `/v1/api-keys/{id}/lineage` via TanStack `useQuery` + renders a vertical timeline of `<LineageRow>` cards. Each row: key_prefix mask + name + relative created_at + status `Badge` (Active=success / Expired=warning / Revoked=destructive) + an additional "Current" Badge highlighting the row where `is_current=true`. The current row also gets a colored border via `border-primary`. New helper functions `LineageSheet`, `LineageRow` defined inline (Rule of 3 — single consumer).
+- **Tests** — 6 new Go handler tests + 1 new vitest case:
+  - Unauthenticated → 401
+  - 6-input malformed id → 400 BEFORE DB (sub-table)
+  - Cross-tenant → 404 NOT 403 (D5)
+  - Single-key (no rotation) → 1 item with `is_current=true`
+  - 4-rotation chain → 4 items root-first, current-last, exactly one `is_current=true`
+  - DB error → 500
+  - Vitest: Lineage button opens Sheet; timeline renders both items; `is_current=true` row has the Current badge; `is_current=false` row does NOT
+- **Invariants verified:** Invariant 8 (grep paper-names → 0 hits); Invariant 6 (this loop did not modify OSS sibling); Rule 3 (no internal terms in customer-facing strings).
+- **Governance gate** at `.claude/governance-gate.local.md` — appended `## Approved Scope Extension — API Key Lineage View (sponsor-direct 2026-06-06)`. No migration scope needed (uses existing 000029 column).
+
+**Honest disclosures (Out of Scope at v0.1):**
+- Operator/admin "lineage across all customers" view — would need new admin scope
+- Lineage export (CSV/JSON download) — defer until customer asks
+- Lineage rotation reasons / notes column — would need new schema migration
+
+### Added (2026-06-06 — API Key Rotation — closes Plan 0 D6 deferral)
+
+Per `.claude/knowledge-base/plans/2026-06-06-api-key-rotation-plan.md` v1.0. Standalone plan AFTER Memory Webhook Delivery, closing the explicit honesty debt registered in Plan 0 ADR D6: "Rotation flow (overlap window) is DEFERRED to v1.x after telemetry shows customer pain". Customer can now rotate an API key with zero-downtime overlap, get RFC 8594 Sunset/Deprecation/Link headers on responses authenticated by an expiring key, and audit which key replaced which via the new `rotated_from` column.
+
+- **Migration 000029_loopzero_api_keys_rotated_from** — `ALTER TABLE loopzero_api_keys ADD COLUMN rotated_from TEXT REFERENCES loopzero_api_keys(id)` (nullable). Populated when a key is created via `POST /v1/api-keys/{id}/rotate`; NULL when created directly via `POST /v1/api-keys`. Self-FK ensures the audit chain cannot dangle. COMMENT ON COLUMN documents the semantics for the next operator reading the schema.
+- **`POST /v1/api-keys/{id}/rotate` handler** at `cloud/internal/routes/api_keys.go::RotateKey` — single-transaction rotation per ADR D1: SELECT FOR UPDATE the old row (must exist, belong to authenticated subject+tenant, not revoked, not already-expired), INSERT a new row with `rotated_from = old.id` + same scopes + fresh `loopzero_live_*` secret + apk-{16hex} id + name suffixed `(rotated YYYY-MM-DD)`, UPDATE the old row's `expires_at = NOW() + grace_window`, COMMIT. Returns 200 with new key id + secret (shown ONCE per Plan 0 D3) + `old_expires_at` + `grace_window_hours` for the dashboard to display. Optional body `{"grace_window_hours": N}` per D2: range 1-168 (default 24); out-of-range → 400 `INVALID_GRACE_WINDOW`. Uses `*int` for the body field so an explicit `0` is distinguishable from absent (Go zero-value gotcha). Cross-tenant rotation, revoked-key rotation, already-expired-key rotation all collapse to 404 NOT 403 (D5 P0 existence-leak invariant). Malformed id format → 400 BEFORE DB query (EC-2 pattern from P0).
+- **Auth middleware Sunset+Deprecation+Link headers** at `cloud/internal/auth/scope.go::RequireScope` — when an authenticated key's `expires_at IS NOT NULL` AND `expires_at < NOW() + 7 days`, the response carries: `Sunset: <RFC 1123 timestamp>` + `Deprecation: true` + `Link: </docs/api-keys#rotation>; rel="deprecation"`. RFC 8594 standard. Well-written consumer SDKs (Stripe, OpenAI, Anthropic patterns) can subscribe and auto-migrate. Threshold constant `sunsetWarningThreshold = 7 * 24 * time.Hour`. Headers absent when `expires_at IS NULL` OR `expires_at > NOW() + 7d`. ZERO extra DB queries — the existing key lookup now SELECTs `expires_at` alongside the other columns; threshold check is in-memory time arithmetic.
+- **D5 invariant honored — no new dispatcher needed** for post-grace cleanup. The existing RequireScope middleware already filters `expires_at IS NULL OR expires_at > NOW()` in the lookup query (per Plan 0 D6). After the grace window passes, the old key naturally 401s. Audit history preserved as a row in the DB (revoked_at remains NULL; expires_at went into the past).
+- **Dashboard Rotate button** at `cloud/dashboard/src/pages/api-keys.tsx` (EDIT) — Recycle icon per row alongside the existing Trash icon. Click → `ConfirmRotateDialog` with title `Rotate API key "<name>"?` + body explaining the 24h grace window + `confirmationPhrase={key.name}` typed verification + `intent="destructive"` (rotation IS a destructive operation per design system). On success: reuse the existing `RevealedSecretDialog` (P0 show-once contract) to display the NEW key's secret. Zero new component needed; full reuse of the P0 reveal pattern with its Checkbox-gated Close.
+- **Routes registered** in `cloud/cmd/main.go` — `POST /v1/api-keys/{id}/rotate` wired into the existing `/v1/api-keys/*` route group under `requireJWT` (D8 dispatch from Plan 0).
+- **Tests** — 11 new Go tests (sub-tables push effective count higher) + 5 vitest aggregate (3 P0 baseline + 2 new Rotate):
+  - 5 migration 000029 structural tests (ALTER + ADD COLUMN + REFERENCES + COMMENT + forward-only)
+  - 8 RotateKey handler tests: unauthenticated → 401; happy path default grace; happy path grace 1/24/72/168 (sub-table); out-of-range grace (0/-1/169/9999) → 400; cross-tenant → 404; revoked → 404; already-expired → 404; 6-input malformed id → 400 BEFORE DB
+  - 3 new RequireScope middleware tests: Sunset header absent when expires_at NULL; absent when expires_at > 7d future; present + RFC 1123 parseable when expires_at within 7d (+ Deprecation: true + Link rel="deprecation")
+  - 2 new vitest cases: Rotate button opens ConfirmDialog with grace-window copy; successful rotation triggers show-once secret reveal in the existing P0 RevealedSecretDialog
+- **Invariants verified:** Invariant 8 (grep paper-names over P6 new/edited files → 0 hits); Invariant 6 (this loop did not modify OSS sibling); Rule 3 (no internal terms in customer-facing strings).
+- **Governance gate** at `.claude/governance-gate.local.md` — appended `## Approved Scope Extension — API Key Rotation (sponsor-direct 2026-06-06)`. Migration path included from the start.
+
+**Honest disclosures (Out of Scope at v0.1):**
+
+- Bulk rotate (admin "rotate all team keys") — future plan
+- Auto-rotation policy (rotate every 90d) — future plan; requires opt-in tier
+- `apikey.rotation.scheduled` webhook event — future plan (would compose with the Webhook Delivery dispatcher just shipped)
+- Customer-facing rotation history view (`GET /v1/api-keys/{id}/lineage` listing all keys in the rotation chain) — future plan
+- Per-plan-tier max grace_window cap — future plan
+- The `pages.smoke.test.ts` flake (test timed out in 5000ms cold-importing `overview.tsx` when run in full aggregate) is **pre-existing** — passes when the file is run in isolation. NOT a regression introduced by this plan; will be addressed by a separate "raise testTimeout for the smoke test" plan.
+
+### Added (2026-06-06 — Memory Webhook Delivery — closes Plan 3 D2 honesty debt)
+
+Per `.claude/knowledge-base/plans/2026-06-06-memory-webhook-delivery-plan.md` v1.0. Standalone plan AFTER the Dashboard Memory section chain (P0-P4) TERMINAL. Ships the dispatcher + signing + retry + dead-letter path that lets registered memory webhooks actually fire. With this entry, the explicit "Demo only" Alert disclosure registered as Plan 3 ADR D2 is honestly retired.
+
+- **Migration 000027_memory_webhooks_add_secret** — ALTER TABLE `memory_webhooks` ADD COLUMN `secret TEXT` (nullable). Pre-this-plan webhooks (Plan 3 era) keep NULL; the dispatcher logs a warning and skips signing for those. Future migration NOT-NULL once telemetry shows all pre-plan webhooks revoked. COMMENT ON COLUMN documents the v0.1 semantics for the next operator who reads the schema.
+- **Migration 000028_memory_webhook_deliveries** — NEW table per Plan D3: id PK + webhook_id FK CASCADE + event_type + payload jsonb + status CHECK 5 literals (`pending|delivering|delivered|failed|dead_letter`) + attempt_count + next_attempt_at + last_response_status/body/error + timestamps. Partial index `(next_attempt_at) WHERE status IN ('pending','failed')` for the dispatcher hot path; composite `(webhook_id, created_at DESC)` for the dashboard history view.
+- **`POST /v1/memory/webhooks` returns `secret` per D1** at `cloud/internal/routes/memory_webhooks.go` (EDIT) — Create handler now generates 32 random bytes via `crypto/rand`, base64url-encodes them (RawURLEncoding), prepends `whsec_` → 49-char total secret. Persisted raw via the 7th `INSERT` arg. Returned ONCE in the create response (Stripe show-once pattern; parallel to Plan 0 D3 API key reveal). Customer is responsible for storing it to verify HMAC signatures.
+- **HMAC-SHA256 signing** at `cloud/internal/memory_webhook_worker/signing.go` (NEW) — `Sign(secret, ts, body) string` returns hex; `HeaderValue(ts, hmac) string` returns Stripe-pattern `t={ts},v1={hex}`. Plan D1 invariant: HMAC covers `{ts}.{body}` — bound to both the content AND a specific moment in time (replay defense when the consumer enforces a window). 5 signing-vector tests prove Stripe-compatibility + key-binding + body-binding + timestamp-binding.
+- **Exponential backoff retry** at `cloud/internal/memory_webhook_worker/retry.go` (NEW) — `NextBackoff(attempt) Duration` returns `60s * 2^(attempt-1)` with ±20% jitter; `MaxAttempts=9`. Total worst-case window without jitter: 60+120+240+480+960+1920+3840+7680 = 15300s ≈ 4.25h. After 9th attempt the row terminal-transitions to `dead_letter`. 6 retry tests cover all 8 backoff windows + jitter bounds + invalid-attempt defensive return + IsTerminalAttempt sanity + total-window math + poll-interval cadence guard.
+- **Dispatcher + worker** at `cloud/internal/memory_webhook_worker/dispatcher.go` + `worker.go` (NEW) — `Worker` struct with `Run(ctx)` poll loop every 5 seconds + `MaxInFlight=10` semaphore-bounded concurrency + graceful shutdown via context. `Dispatch(ctx, httpClient, logger, delivery)` does ONE HTTP attempt: signs (when secret non-NULL), sets `Idempotency-Key: delivery-{id}` per D5, sets `X-LoopZero-Event: {event_type}` for fast consumer routing, captures the response status + body (truncated 4 KiB) for audit, and returns a DispatchResult that the worker persists. `claimDue()` uses `FOR UPDATE SKIP LOCKED` so a future multi-replica deployment can naturally race-safely (v0.1 is single-replica per D4 — multi-replica leader election deferred). 8 dispatcher tests cover: 2xx → delivered; 5xx → failed + ErrorMessage; Idempotency-Key stable across retries (D5 critical); X-LoopZero-Signature HMAC verified via independent re-computation; NULL secret → signature OMITTED (D1 consequence); X-LoopZero-Event header; 4 KiB body truncation; Idempotency-Key stability across multiple Dispatch invocations of the same delivery_id.
+- **Event-publishing hook** at `cloud/internal/routes/memory.go` (EDIT) — successful `Forget` now invokes `eventPublisher.Publish(ctx, subject, tenantID, "memory.forgotten", {memory_id})` for fan-out. New `WebhookEventPublisher` interface in routes package + production implementation `MemoryWebhookEventPublisher` at `cloud/internal/routes/memory_webhook_deliveries.go` (NEW) that finds matching active webhooks via `events ?| jsonb` containment + INSERTs one delivery row each. Failures are logged but NOT propagated — the cross-cut fan-out must NEVER regress the primary mutation's success/failure status. 3 forget-event tests: emit on success; no emit on NotFound (mutation didn't happen); no panic when publisher nil (dev mode).
+- **`GET /v1/memory/webhooks/{id}/deliveries`** at `cloud/internal/routes/memory_webhook_deliveries.go::List` — dashboard history endpoint. Returns last 10 deliveries scoped to authenticated `(subject, tenant_id)` via JOIN on `memory_webhooks`. Cross-tenant attempts yield empty result (D5 inheritance from Plan 0 — never 403). Registered in `cloud/cmd/main.go` under `auth.RequireScope("memory:admin")`. ID validated against `^mwh-[0-9a-f]{16}$` regex BEFORE DB query. Error message truncated + control-char-stripped before serialization to the wire.
+- **Dispatcher worker started in `cloud/cmd/main.go`** alongside the existing metering scheduler — shares `schedulerCtx` for graceful shutdown on SIGTERM (worker drains in-flight dispatches before exiting Run).
+- **Dashboard `/memory/webhooks` page** at `cloud/dashboard/src/pages/memory/webhooks.tsx` (EDIT):
+  - **REMOVED** the persistent `<Alert intent="warning" title="Demo only">` block from Plan 3 D2 (EC-14). Comment in source documents that the honesty debt is closed.
+  - **ADDED** `<RecentDeliveriesBadge webhookId={row.id}>` column rendered FIRST in the DataTable — lazy-fetches `/v1/memory/webhooks/{id}/deliveries` on mount and shows count + latest status as a color-coded Badge (delivered=success, dead_letter=destructive, pending/delivering=warning, failed=default). Empty state shows "No deliveries" muted text.
+  - 4 vitest cases including the **regression guard**: queryByTestId('webhook-demo-alert') MUST return null + queryByText('Demo only') MUST return null + queryByText(/delivery is not yet implemented/i) MUST return null. If a future refactor accidentally re-adds the Demo-only Alert, this test catches it.
+- **Tests** — 30+ new Go tests + 4 vitest cases. Full breakdown:
+  - 11 migration structural tests (3 for 000027 + 7 for 000028 + 1 forward-only)
+  - 2 new webhook-create tests for the secret (format regex + uniqueness)
+  - 3 new forget-event tests
+  - 5 signing vector tests
+  - 6 retry tests
+  - 8 dispatcher tests
+  - 4 webhooks UI tests (Demo-only Alert absence regression guard + Recent deliveries column + empty state + Add dialog still works)
+- **Invariants verified:** Invariant 8 (grep paper-names → 0 hits over 6 P5 new/edited files); Invariant 6 (this loop did not modify OSS sibling — mtimes predate); Rule 3 (no internal terms in customer-facing strings).
+- **Governance gate** at `.claude/governance-gate.local.md` — appended `## Approved Scope Extension — Memory Webhook Delivery (sponsor-direct 2026-06-06)`. Migration paths included from the start (lesson from P0 — migrations are gated production paths).
+
+**Honest disclosures (Out of Scope at v0.1):**
+
+- Multi-replica leader election (single-replica deployment exists today — `FOR UPDATE SKIP LOCKED` claims protect against future races but no scale-out yet).
+- Consumer-side signature verification SDK (cross-repo `loopzerokit-tools/loopzerokit-sdk` concern).
+- `memory.remembered` event hook (requires OSS sibling integration — out of this repo's scope).
+- Customer-configurable retry policy (v0.1 ships fixed 8-retry schedule).
+- Dashboard delivery-replay button (future v1.x).
+- Per-webhook outbound rate limiting (use existing infra rate-limit; per-customer not v0.1).
+
 ### Added (2026-06-06 — Plan 4 implementation: Memory Cross-cuts — Memory promotions to /billing + /audit + /settings — TERMINAL plan in chain)
 
 Per Plan 4 of dashboard-memory-section-roadmap.md (`.claude/knowledge-base/plans/2026-06-06-memory-cross-cuts-plan.md` v1.0). Fourth and last plan in the Dashboard Memory section chain. Promotes the Memory product into 3 existing pages with ZERO regression to those pages. **With this entry, the full chain P0 → P1 → P2 → P3 → P4 is shipped end-to-end.**

@@ -50,10 +50,19 @@ var validEntityScopes = map[string]bool{
 	"repo":    true,
 }
 
+// WebhookEventPublisher is the interface MemoryHandler uses to fan out
+// memory events as webhook delivery rows. Implementation lives in
+// cloud/internal/routes/memory_webhook_deliveries.go. Optional — when nil,
+// memory mutations don't trigger webhook deliveries.
+type WebhookEventPublisher interface {
+	Publish(ctx context.Context, subject, tenantID, eventType string, payload map[string]any)
+}
+
 // MemoryHandler is the receiver for /v1/memory/* routes.
 type MemoryHandler struct {
-	client TheMemoryClient
-	logger *slog.Logger
+	client         TheMemoryClient
+	logger         *slog.Logger
+	eventPublisher WebhookEventPublisher
 }
 
 // NewMemoryHandler creates the handler.
@@ -62,6 +71,15 @@ func NewMemoryHandler(client TheMemoryClient, logger *slog.Logger) *MemoryHandle
 		logger = slog.Default()
 	}
 	return &MemoryHandler{client: client, logger: logger}
+}
+
+// WithEventPublisher returns a MemoryHandler that emits webhook delivery
+// rows on memory mutations. Builder pattern keeps backward compatibility
+// with main.go that doesn't always have a publisher (e.g., when webhooks
+// table doesn't exist in a test bench).
+func (h *MemoryHandler) WithEventPublisher(p WebhookEventPublisher) *MemoryHandler {
+	h.eventPublisher = p
+	return h
 }
 
 // memoryIDPattern accepts memory IDs the OSS TheMemory may emit. Liberal
@@ -157,6 +175,13 @@ func (h *MemoryHandler) Metrics(w http.ResponseWriter, r *http.Request) {
 // Forget soft-deletes the given memory from TheMemory. Cross-tenant
 // attempts surface as 404 (D5 inheritance from Plan 0 — TheMemory
 // returns 404 because the (memoryID, X-LoopZero-User-Id) tuple doesn't match).
+//
+// Memory Webhook Delivery plan T5.6: on successful forget, emit a
+// `memory.forgotten` delivery row for each ACTIVE webhook of the
+// authenticated subject that includes `memory.forgotten` in its events
+// array. The dispatcher worker (cloud/internal/memory_webhook_worker)
+// picks up due rows asynchronously — this handler does NOT block on
+// HTTP delivery.
 func (h *MemoryHandler) Forget(w http.ResponseWriter, r *http.Request) {
 	user := auth.GetUser(r.Context())
 	if user == nil {
@@ -175,6 +200,14 @@ func (h *MemoryHandler) Forget(w http.ResponseWriter, r *http.Request) {
 
 	err := h.client.Forget(r.Context(), user.Subject, memoryID)
 	if err == nil {
+		// T5.6 — emit webhook delivery rows for the memory.forgotten event.
+		// Best-effort: if the webhook fanout fails, the forget itself
+		// still succeeded for the customer — we MUST NOT regress the
+		// handler's response to mask the upstream success.
+		if h.eventPublisher != nil {
+			h.eventPublisher.Publish(r.Context(), user.Subject, user.TenantID, "memory.forgotten",
+				map[string]any{"memory_id": memoryID})
+		}
 		w.WriteHeader(http.StatusNoContent)
 		return
 	}

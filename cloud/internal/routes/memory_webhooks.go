@@ -6,6 +6,7 @@ package routes
 import (
 	"crypto/rand"
 	"database/sql"
+	"encoding/base64"
 	"encoding/hex"
 	"encoding/json"
 	"fmt"
@@ -113,10 +114,22 @@ func (h *MemoryWebhooksHandler) Create(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	const q = `INSERT INTO memory_webhooks (id, subject, tenant_id, url, label, events)
-		VALUES ($1, $2, $3, $4, $5, $6)`
+	// Memory Webhook Delivery plan D1: generate per-webhook HMAC-SHA256 secret.
+	// Format: whsec_<43 base64url chars> = 48 chars total. Persisted RAW —
+	// the dispatcher needs to sign at delivery time. Customer receives it
+	// ONCE in this response (Stripe show-once pattern; parallel to P0 D3).
+	rawSecret := make([]byte, 32)
+	if _, err := rand.Read(rawSecret); err != nil {
+		h.logger.Error("webhooks create: crypto/rand failed", "error", err)
+		writeError(w, http.StatusInternalServerError, "INTERNAL", "Could not create webhook. Try again.")
+		return
+	}
+	secret := "whsec_" + base64.RawURLEncoding.EncodeToString(rawSecret)
+
+	const q = `INSERT INTO memory_webhooks (id, subject, tenant_id, url, label, events, secret)
+		VALUES ($1, $2, $3, $4, $5, $6, $7)`
 	if _, err := h.db.ExecContext(r.Context(), q,
-		id, user.Subject, user.TenantID, req.URL, trimmed, eventsJSON,
+		id, user.Subject, user.TenantID, req.URL, trimmed, eventsJSON, secret,
 	); err != nil {
 		h.logger.Warn("webhooks create: insert failed", "error", err, "id", id)
 		writeError(w, http.StatusInternalServerError, "INTERNAL", "Could not create webhook. Try again.")
@@ -128,6 +141,7 @@ func (h *MemoryWebhooksHandler) Create(w http.ResponseWriter, r *http.Request) {
 		"url":    req.URL,
 		"label":  trimmed,
 		"events": req.Events,
+		"secret": secret, // RAW — shown ONCE per D1; customer stores to verify HMAC signatures
 	})
 }
 

@@ -44,6 +44,10 @@ const (
 	tracerInstName  = "loopzero.auth"
 	spanName        = "auth.scope_check"
 	asyncWriteBudgt = 5 * time.Second
+
+	// API Key Rotation plan D3 — emit Sunset + Deprecation headers when a
+	// key's expiry is within this window (RFC 8594 deprecation pattern).
+	sunsetWarningThreshold = 7 * 24 * time.Hour
 )
 
 // RequireScope returns chi middleware that authenticates with a loopzero_live_*
@@ -77,7 +81,10 @@ func RequireScope(db *sql.DB, required string) func(http.Handler) http.Handler {
 			sum := sha256.Sum256([]byte(secret))
 			keyHash := hex.EncodeToString(sum[:])
 
-			const q = `SELECT id, subject, tenant_id, scopes
+			// API Key Rotation plan D3: also fetch expires_at so we can
+			// emit Sunset + Deprecation headers when the key is in its
+			// rotation grace window (expiry within 7 days from now).
+			const q = `SELECT id, subject, tenant_id, scopes, expires_at
 				FROM loopzero_api_keys
 				WHERE key_hash = $1
 				  AND revoked_at IS NULL
@@ -86,8 +93,9 @@ func RequireScope(db *sql.DB, required string) func(http.Handler) http.Handler {
 			var (
 				keyID, subject, tenantID string
 				scopesRaw                []byte
+				expiresAt                sql.NullTime
 			)
-			err := db.QueryRowContext(ctx, q, keyHash).Scan(&keyID, &subject, &tenantID, &scopesRaw)
+			err := db.QueryRowContext(ctx, q, keyHash).Scan(&keyID, &subject, &tenantID, &scopesRaw, &expiresAt)
 			if errors.Is(err, sql.ErrNoRows) {
 				// Three possibilities collapse into one response — by design:
 				//   (a) key never existed
@@ -116,6 +124,18 @@ func RequireScope(db *sql.DB, required string) func(http.Handler) http.Handler {
 				span.SetAttributes(attribute.String("scope.reject_reason", "scopes_jsonb_corruption"))
 				writeScopeInternalError(w)
 				return
+			}
+
+			// API Key Rotation plan D3 (RFC 8594) — when this key is within
+			// its grace window (expiry approaching), set Sunset + Deprecation
+			// + Link headers so well-written consumer SDKs can auto-migrate.
+			// Triggered only when expires_at is NOT NULL AND within 7 days.
+			if expiresAt.Valid {
+				if delta := time.Until(expiresAt.Time); delta > 0 && delta <= sunsetWarningThreshold {
+					w.Header().Set("Sunset", expiresAt.Time.UTC().Format(time.RFC1123))
+					w.Header().Set("Deprecation", "true")
+					w.Header().Set("Link", `</docs/api-keys#rotation>; rel="deprecation"`)
+				}
 			}
 
 			if !sliceContains(scopes, required) {

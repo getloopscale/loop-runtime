@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
-import { Key, Plus, Trash2 } from 'lucide-react';
+import { History, Key, Plus, Recycle, Trash2 } from 'lucide-react';
 import {
   Alert,
   Badge,
@@ -16,6 +16,7 @@ import {
   EmptyState,
   Input,
   PageShell,
+  Sheet,
   Timestamp,
   Tooltip,
 } from '@loopzero/ui';
@@ -92,6 +93,10 @@ export function ApiKeysPage() {
   const [createOpen, setCreateOpen] = useState(false);
   const [revealed, setRevealed] = useState<CreateKeyResponse | null>(null);
   const [pendingDelete, setPendingDelete] = useState<APIKeyView | null>(null);
+  // API Key Rotation plan T6.5 — pendingRotate mirrors pendingDelete pattern.
+  const [pendingRotate, setPendingRotate] = useState<APIKeyView | null>(null);
+  // API Key Lineage View plan T7.4 — pendingLineage opens the Sheet.
+  const [pendingLineage, setPendingLineage] = useState<APIKeyView | null>(null);
 
   const invalidate = () => queryClient.invalidateQueries({ queryKey: ['cloud', '/v1/api-keys/list'] });
 
@@ -114,6 +119,22 @@ export function ApiKeysPage() {
       cloudFetch<null>(`/v1/api-keys/${id}`, { method: 'DELETE' }),
     onSuccess: () => {
       setPendingDelete(null);
+      invalidate();
+    },
+  });
+
+  // API Key Rotation plan T6.5 — POST /v1/api-keys/{id}/rotate.
+  // On success, reuse the existing RevealedSecretDialog for show-once secret.
+  const rotateMutation = useMutation({
+    mutationFn: async (id: string) =>
+      cloudFetch<CreateKeyResponse>(`/v1/api-keys/${id}/rotate`, {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({}),
+      }),
+    onSuccess: (resp) => {
+      setRevealed(resp);
+      setPendingRotate(null);
       invalidate();
     },
   });
@@ -166,14 +187,34 @@ export function ApiKeysPage() {
       label: '',
       align: 'right',
       render: (row) => (
-        <Button
-          variant="ghost"
-          size="sm"
-          aria-label={`Delete API key ${row.name}`}
-          onClick={() => setPendingDelete(row)}
-        >
-          <Trash2 className="size-4 text-destructive" />
-        </Button>
+        <div className="flex gap-1 justify-end">
+          {/* API Key Lineage View plan T7.4 — Lineage button per row. */}
+          <Button
+            variant="ghost"
+            size="sm"
+            aria-label={`View lineage for API key ${row.name}`}
+            onClick={() => setPendingLineage(row)}
+          >
+            <History className="size-4" />
+          </Button>
+          {/* API Key Rotation plan T6.5 — Rotate button per row. */}
+          <Button
+            variant="ghost"
+            size="sm"
+            aria-label={`Rotate API key ${row.name}`}
+            onClick={() => setPendingRotate(row)}
+          >
+            <Recycle className="size-4" />
+          </Button>
+          <Button
+            variant="ghost"
+            size="sm"
+            aria-label={`Delete API key ${row.name}`}
+            onClick={() => setPendingDelete(row)}
+          >
+            <Trash2 className="size-4 text-destructive" />
+          </Button>
+        </div>
       ),
     },
   ];
@@ -233,7 +274,160 @@ export function ApiKeysPage() {
         onConfirm={() => pendingDelete && revokeMutation.mutate(pendingDelete.id)}
         submitting={revokeMutation.isPending}
       />
+
+      <ConfirmRotateDialog
+        target={pendingRotate}
+        onCancel={() => setPendingRotate(null)}
+        onConfirm={() => pendingRotate && rotateMutation.mutate(pendingRotate.id)}
+        submitting={rotateMutation.isPending}
+      />
+
+      <LineageSheet
+        target={pendingLineage}
+        onClose={() => setPendingLineage(null)}
+      />
     </>
+  );
+}
+
+interface LineageItem {
+  id: string;
+  name: string;
+  key_prefix: string;
+  created_at: string;
+  revoked_at?: string | null;
+  expires_at?: string | null;
+  is_current: boolean;
+}
+
+interface LineageResult {
+  lineage: LineageItem[];
+}
+
+interface LineageSheetProps {
+  target: APIKeyView | null;
+  onClose: () => void;
+}
+
+/**
+ * API Key Lineage View plan T7.4 — Sheet drawer showing the rotation chain
+ * as a vertical timeline. Each item: prefix + name + status badge.
+ * Current key highlighted with a "Current" badge.
+ */
+function LineageSheet({ target, onClose }: LineageSheetProps) {
+  const open = target !== null;
+  const query = useQuery({
+    queryKey: ['cloud', `/v1/api-keys/${target?.id ?? ''}/lineage`] as const,
+    queryFn: () => cloudFetch<LineageResult>(`/v1/api-keys/${target!.id}/lineage`),
+    enabled: open && !!target,
+  });
+
+  return (
+    <Sheet open={open} onOpenChange={(o) => !o && onClose()}>
+      <Sheet.Content side="right">
+        <Sheet.Header>
+          <Sheet.Title>Rotation history</Sheet.Title>
+          <Sheet.Description>
+            {target ? `Lineage of "${target.name}" — root key first, current key last.` : null}
+          </Sheet.Description>
+        </Sheet.Header>
+        <div className="p-4 space-y-3" data-testid="lineage-timeline">
+          {query.isLoading ? (
+            <p className="text-sm text-muted-foreground">Loading lineage…</p>
+          ) : query.isError ? (
+            <Alert intent="warning" title="Could not load lineage" description="Try again in a moment." />
+          ) : (
+            (query.data?.lineage ?? []).map((item) => (
+              <LineageRow key={item.id} item={item} />
+            ))
+          )}
+        </div>
+      </Sheet.Content>
+    </Sheet>
+  );
+}
+
+function LineageRow({ item }: { item: LineageItem }) {
+  let statusLabel = 'Active';
+  let statusVariant: 'default' | 'success' | 'warning' | 'destructive' = 'default';
+  if (item.revoked_at) {
+    statusLabel = 'Revoked';
+    statusVariant = 'destructive';
+  } else if (item.expires_at && new Date(item.expires_at) < new Date()) {
+    statusLabel = 'Expired';
+    statusVariant = 'warning';
+  } else if (item.is_current) {
+    statusLabel = 'Active';
+    statusVariant = 'success';
+  }
+
+  return (
+    <Card
+      className={item.is_current ? 'border-primary' : undefined}
+      data-testid={`lineage-row-${item.id}`}
+    >
+      <div className="p-3 space-y-1">
+        <div className="flex items-center justify-between gap-2">
+          <code className="font-mono text-xs text-muted-foreground">{item.key_prefix}…</code>
+          <div className="flex gap-1">
+            {item.is_current ? (
+              <Badge variant="success" data-testid={`lineage-current-${item.id}`}>
+                Current
+              </Badge>
+            ) : null}
+            <Badge variant={statusVariant}>{statusLabel}</Badge>
+          </div>
+        </div>
+        <p className="text-sm font-medium">{item.name}</p>
+        <p className="text-xs text-muted-foreground">
+          Created <Timestamp value={item.created_at} />
+        </p>
+      </div>
+    </Card>
+  );
+}
+
+interface ConfirmRotateDialogProps {
+  target: APIKeyView | null;
+  onCancel: () => void;
+  onConfirm: () => void;
+  submitting: boolean;
+}
+
+/**
+ * API Key Rotation plan T6.5 — ConfirmDialog for the rotate flow.
+ * Uses the same typed-verification pattern as ConfirmDeleteDialog.
+ * Body copy explains the 24h default grace window so the customer
+ * understands BOTH keys will work during the overlap.
+ */
+function ConfirmRotateDialog({ target, onCancel, onConfirm, submitting }: ConfirmRotateDialogProps) {
+  if (!target) return null;
+
+  return (
+    <ConfirmDialog
+      open={target !== null}
+      onOpenChange={(o) => !o && onCancel()}
+      title={`Rotate API key "${target.name}"?`}
+      description={
+        <div className="space-y-2 text-sm">
+          <p>
+            A new API key will be generated immediately. The old key will keep
+            working for 24 hours, then expire automatically. Both keys overlap
+            during the grace window so you can update your code without
+            downtime.
+          </p>
+          <p className="text-muted-foreground">
+            Type the key name to confirm. You will see the new secret only once.
+          </p>
+        </div>
+      }
+      confirmLabel={submitting ? 'Rotating…' : 'Rotate key'}
+      cancelLabel="Cancel"
+      intent="destructive"
+      confirmationPhrase={target.name}
+      loading={submitting}
+      onConfirm={onConfirm}
+    />
   );
 }
 

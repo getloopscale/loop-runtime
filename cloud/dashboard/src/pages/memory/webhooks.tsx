@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { Plus, Trash2 } from 'lucide-react';
+import { Plus, RotateCw, Trash2 } from 'lucide-react';
 import {
   Alert,
   Badge,
@@ -14,7 +14,9 @@ import {
   EmptyState,
   Input,
   PageShell,
+  Sheet,
   Timestamp,
+  useToast,
 } from '@loopzero/ui';
 import { usePageMeta } from '@/hooks/use-page-meta';
 import { useRequireAuth } from '@/hooks/use-auth';
@@ -22,13 +24,10 @@ import { cloudFetch } from '@/lib/api';
 
 /**
  * Plan 3 of dashboard-memory-section-roadmap.md, T3.7.
+ * Delivery Replay plan, T8.4 — adds per-delivery Replay button to a Sheet
+ * listing all 10 recent deliveries per webhook.
  *
- * /memory/webhooks — webhook registration UI.
- *
- * D2 invariant (EC-14): a persistent <Alert intent="warning"> renders at
- * the TOP of the page (NOT footer, NOT dismissible) disclosing that
- * webhook DELIVERY is not yet implemented. Half-shipped features lie by
- * omission; the banner is honest.
+ * /memory/webhooks — webhook registration + delivery inspection UI.
  */
 
 interface Webhook {
@@ -41,6 +40,48 @@ interface Webhook {
 
 interface ListResult {
   webhooks: Webhook[];
+}
+
+interface Delivery {
+  id: string;
+  event_type: string;
+  status: 'pending' | 'delivering' | 'delivered' | 'failed' | 'dead_letter';
+  attempt_count: number;
+  last_response_status?: number;
+  last_error_message?: string;
+  created_at: string;
+  completed_at?: string;
+}
+
+interface DeliveriesResult {
+  deliveries: Delivery[];
+}
+
+interface ReplayResult {
+  id: string;
+  status: 'pending' | 'delivering';
+  noop: boolean;
+}
+
+function deliveryStatusVariant(s: Delivery['status']): 'default' | 'success' | 'warning' | 'destructive' {
+  switch (s) {
+    case 'pending':
+    case 'delivering':
+      return 'warning';
+    case 'delivered':
+      return 'success';
+    case 'failed':
+      return 'default';
+    case 'dead_letter':
+      return 'destructive';
+  }
+}
+
+// Replay button is visible ONLY for these statuses (D5 of the plan).
+// `delivered` would create a duplicate; `pending|delivering` would be a no-op
+// the customer doesn't need to trigger manually.
+function canReplay(s: Delivery['status']): boolean {
+  return s === 'failed' || s === 'dead_letter';
 }
 
 const AVAILABLE_EVENTS = [
@@ -62,6 +103,7 @@ export function WebhooksPage() {
 
   const [createOpen, setCreateOpen] = useState(false);
   const [pendingDelete, setPendingDelete] = useState<Webhook | null>(null);
+  const [viewingFor, setViewingFor] = useState<Webhook | null>(null);
 
   const create = useMutation({
     mutationFn: (input: { url: string; label: string; events: string[] }) =>
@@ -87,6 +129,13 @@ export function WebhooksPage() {
   const webhooks = list.data?.webhooks ?? [];
 
   const columns: DataTableColumn<Webhook>[] = [
+    {
+      key: 'recent',
+      label: '',
+      render: (row) => (
+        <RecentDeliveriesBadge webhookId={row.id} onClick={() => setViewingFor(row)} />
+      ),
+    },
     { key: 'label', label: 'Label', render: (row) => <span className="font-medium">{row.label}</span> },
     {
       key: 'url',
@@ -141,15 +190,6 @@ export function WebhooksPage() {
           onClick: () => setCreateOpen(true),
         }}
       >
-        {/* D2 / EC-14 — persistent demo-only Alert at TOP. Never dismissible.
-            Use the `description` prop (children are ignored by @loopzero/ui Alert). */}
-        <Alert
-          intent="warning"
-          title="Demo only"
-          description="Webhook delivery is not yet implemented. You can register and view webhooks; events will not fire until we ship delivery in a future release."
-          data-testid="webhook-demo-alert"
-        />
-
         {list.isError ? (
           <Alert intent="warning" title="Could not load webhooks">
             Try again in a moment.
@@ -197,7 +237,218 @@ export function WebhooksPage() {
           onConfirm={() => revoke.mutate(pendingDelete.id)}
         />
       ) : null}
+
+      {viewingFor ? (
+        <DeliveriesSheet
+          webhook={viewingFor}
+          open={viewingFor !== null}
+          onOpenChange={(o) => !o && setViewingFor(null)}
+        />
+      ) : null}
     </>
+  );
+}
+
+/**
+ * Memory Webhook Delivery plan T5.7 — per-row Recent deliveries chip.
+ * Delivery Replay plan T8.4 — chip becomes a click trigger for the
+ * DeliveriesSheet (lifting state to the page).
+ */
+function RecentDeliveriesBadge({
+  webhookId,
+  onClick,
+}: {
+  webhookId: string;
+  onClick: () => void;
+}) {
+  const query = useQuery({
+    queryKey: ['cloud', `/v1/memory/webhooks/${webhookId}/deliveries`] as const,
+    queryFn: () => cloudFetch<DeliveriesResult>(`/v1/memory/webhooks/${webhookId}/deliveries`),
+  });
+  const deliveries = query.data?.deliveries ?? [];
+  if (query.isLoading) {
+    return <span className="text-xs text-muted-foreground">…</span>;
+  }
+  if (deliveries.length === 0) {
+    return (
+      <span className="text-xs text-muted-foreground" data-testid={`deliveries-empty-${webhookId}`}>
+        No deliveries
+      </span>
+    );
+  }
+  const latest = deliveries[0];
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      className="cursor-pointer"
+      aria-label={`View deliveries for webhook ${webhookId}`}
+    >
+      <Badge variant={deliveryStatusVariant(latest.status)} data-testid={`deliveries-latest-${webhookId}`}>
+        {deliveries.length} · {latest.status}
+      </Badge>
+    </button>
+  );
+}
+
+/**
+ * Delivery Replay plan T8.4 — Sheet listing all recent deliveries with a
+ * per-row Replay button gated on status (failed | dead_letter only).
+ */
+interface DeliveriesSheetProps {
+  webhook: Webhook;
+  open: boolean;
+  onOpenChange: (open: boolean) => void;
+}
+
+function DeliveriesSheet({ webhook, open, onOpenChange }: DeliveriesSheetProps) {
+  const queryClient = useQueryClient();
+  const { toast } = useToast();
+  const [pendingReplay, setPendingReplay] = useState<Delivery | null>(null);
+
+  const query = useQuery({
+    queryKey: ['cloud', `/v1/memory/webhooks/${webhook.id}/deliveries`] as const,
+    queryFn: () => cloudFetch<DeliveriesResult>(`/v1/memory/webhooks/${webhook.id}/deliveries`),
+    enabled: open,
+  });
+
+  const replay = useMutation({
+    mutationFn: (deliveryId: string) =>
+      cloudFetch<ReplayResult>(
+        `/v1/memory/webhooks/${webhook.id}/deliveries/${deliveryId}/replay`,
+        { method: 'POST' },
+      ),
+    onSuccess: (data) => {
+      setPendingReplay(null);
+      // cloudFetch returns T | null on empty response; on success we expect
+      // the JSON body with status + noop. Default to noop=false when null
+      // so the toast still surfaces — failure-mode is the destructive toast.
+      const noop = data?.noop ?? false;
+      toast({
+        title: noop ? 'Delivery already queued' : 'Replay queued',
+        description: noop
+          ? 'This delivery is already pending. No action taken.'
+          : 'The delivery has been re-queued and will be dispatched shortly.',
+        variant: 'default',
+      });
+      void queryClient.invalidateQueries({
+        queryKey: ['cloud', `/v1/memory/webhooks/${webhook.id}/deliveries`],
+      });
+    },
+    onError: () => {
+      toast({
+        title: 'Could not replay delivery',
+        description: 'Please try again. If the problem persists, contact support.',
+        variant: 'destructive',
+      });
+    },
+  });
+
+  const deliveries = query.data?.deliveries ?? [];
+
+  return (
+    <>
+      <Sheet open={open} onOpenChange={onOpenChange}>
+        <Sheet.Content side="right">
+          <Sheet.Header>
+            <Sheet.Title>Recent deliveries</Sheet.Title>
+            <Sheet.Description>
+              {webhook.label} · last {deliveries.length} {deliveries.length === 1 ? 'delivery' : 'deliveries'}
+            </Sheet.Description>
+          </Sheet.Header>
+          <Sheet.Body className="space-y-3">
+            {query.isLoading ? (
+              <p className="text-sm text-muted-foreground">Loading deliveries…</p>
+            ) : deliveries.length === 0 ? (
+              <p className="text-sm text-muted-foreground">No deliveries yet.</p>
+            ) : (
+              deliveries.map((d) => (
+                <DeliveryCard
+                  key={d.id}
+                  delivery={d}
+                  onReplayClick={() => setPendingReplay(d)}
+                />
+              ))
+            )}
+          </Sheet.Body>
+        </Sheet.Content>
+      </Sheet>
+
+      {pendingReplay ? (
+        <ConfirmDialog
+          open={pendingReplay !== null}
+          onOpenChange={(o) => !o && setPendingReplay(null)}
+          title={`Replay delivery ${pendingReplay.id}?`}
+          description={
+            <div className="space-y-2 text-sm">
+              <p>
+                This will re-queue the delivery for dispatch. The subscriber
+                URL will receive the same event payload again.
+              </p>
+              <p>
+                <span className="font-medium">Event:</span> {pendingReplay.event_type}
+              </p>
+              {pendingReplay.last_error_message ? (
+                <p className="text-muted-foreground">
+                  Last error: <code className="font-mono text-xs">{pendingReplay.last_error_message}</code>
+                </p>
+              ) : null}
+              <p className="text-muted-foreground">
+                Retry budget will be reset. Idempotent — safe to retry.
+              </p>
+            </div>
+          }
+          confirmLabel={replay.isPending ? 'Replaying…' : 'Replay delivery'}
+          cancelLabel="Cancel"
+          intent="default"
+          confirmationPhrase="replay"
+          loading={replay.isPending}
+          onConfirm={() => replay.mutate(pendingReplay.id)}
+        />
+      ) : null}
+    </>
+  );
+}
+
+function DeliveryCard({
+  delivery,
+  onReplayClick,
+}: {
+  delivery: Delivery;
+  onReplayClick: () => void;
+}) {
+  return (
+    <Card data-testid={`delivery-card-${delivery.id}`} className="p-4">
+      <div className="flex items-start justify-between gap-3">
+        <div className="space-y-1 min-w-0 flex-1">
+          <div className="flex items-center gap-2">
+            <Badge variant={deliveryStatusVariant(delivery.status)}>{delivery.status}</Badge>
+            <code className="font-mono text-xs text-muted-foreground truncate">{delivery.id}</code>
+          </div>
+          <p className="text-sm font-medium">{delivery.event_type}</p>
+          <p className="text-xs text-muted-foreground">
+            <Timestamp value={delivery.created_at} /> · attempt {delivery.attempt_count}
+          </p>
+          {delivery.last_error_message ? (
+            <p className="text-xs text-destructive truncate" title={delivery.last_error_message}>
+              {delivery.last_error_message}
+            </p>
+          ) : null}
+        </div>
+        {canReplay(delivery.status) ? (
+          <Button
+            variant="secondary"
+            size="sm"
+            onClick={onReplayClick}
+            aria-label={`Replay delivery ${delivery.id}`}
+            data-testid={`replay-button-${delivery.id}`}
+          >
+            <RotateCw className="size-3.5 mr-1" />
+            Replay
+          </Button>
+        ) : null}
+      </div>
+    </Card>
   );
 }
 

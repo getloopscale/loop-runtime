@@ -13,6 +13,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"io/ioutil"
 	"log/slog"
 	"net/http"
 	"regexp"
@@ -23,6 +24,16 @@ import (
 
 	"github.com/loopzero/loopzero/cloud/internal/auth"
 )
+
+// API Key Rotation plan defaults.
+const (
+	defaultGraceWindowHours = 24
+	minGraceWindowHours     = 1
+	maxGraceWindowHours     = 168 // 7 days
+)
+
+// suppress unused import — io/ioutil is reserved for future doc snippet generators.
+var _ = ioutil.Discard
 
 // Plan 0 of dashboard-memory-section-roadmap.md (T0.3-T0.5).
 // Platform unified API keys with scopes — single table, single key shape
@@ -369,6 +380,309 @@ func (h *APIKeysHandler) CreateKey(w http.ResponseWriter, r *http.Request) {
 		"scopes":     req.Scopes,
 		"secret":     secret, // raw — shown ONCE; never persisted plain
 	})
+}
+
+// RotateKey rotates an existing key per API Key Rotation plan v1.0.
+// POST /v1/api-keys/{id}/rotate
+//
+// Closes Plan 0 ADR D6 deferral.
+//
+// Body (optional): {"grace_window_hours": <int 1-168>} — default 24.
+//
+// Atomic single-tx:
+//   1. SELECT FOR UPDATE old row (must exist, belong to authenticated
+//      subject+tenant, not revoked, not already-expired). 404 otherwise.
+//   2. INSERT new row with rotated_from = old.id, same scopes, fresh
+//      `loopzero_live_*` secret + apk-{16hex} id, name suffixed with rotation date.
+//   3. UPDATE old row's expires_at = NOW() + grace_window.
+//   4. COMMIT.
+//   5. Return 200 with new id + secret (shown ONCE per Plan 0 D3).
+//
+// D5: after grace, the existing RequireScope middleware naturally 401s
+// the old key — no new dispatcher needed.
+func (h *APIKeysHandler) RotateKey(w http.ResponseWriter, r *http.Request) {
+	user := auth.GetUser(r.Context())
+	if user == nil {
+		writeError(w, http.StatusUnauthorized, "AUTH_REQUIRED", "Not authenticated. Run: loopzero login")
+		return
+	}
+
+	oldID := chi.URLParam(r, "id")
+	if !IsValidAPIKeyID(oldID) {
+		writeError(w, http.StatusBadRequest, "INVALID_ID", "API key id must match apk-{16hex}.")
+		return
+	}
+
+	// Optional body — body absence is permitted (default 24h grace).
+	// Use *int so we can distinguish "absent" from "explicitly 0" — Go's
+	// zero-value semantic would silently swallow an explicit 0 with omitempty.
+	bodyBytes, _ := io.ReadAll(io.LimitReader(r.Body, 1024))
+	var req struct {
+		GraceWindowHours *int `json:"grace_window_hours,omitempty"`
+	}
+	if len(bodyBytes) > 0 {
+		if err := json.Unmarshal(bodyBytes, &req); err != nil {
+			writeError(w, http.StatusBadRequest, "INVALID_REQUEST", "Invalid JSON body.")
+			return
+		}
+	}
+	graceHours := defaultGraceWindowHours
+	if req.GraceWindowHours != nil {
+		graceHours = *req.GraceWindowHours
+	}
+	if graceHours < minGraceWindowHours || graceHours > maxGraceWindowHours {
+		writeError(w, http.StatusBadRequest, "INVALID_GRACE_WINDOW",
+			fmt.Sprintf("grace_window_hours must be between %d and %d.", minGraceWindowHours, maxGraceWindowHours))
+		return
+	}
+	graceWindow := time.Duration(graceHours) * time.Hour
+
+	tx, err := h.db.BeginTx(r.Context(), nil)
+	if err != nil {
+		h.logger.Warn("rotate api key: begin tx failed", "error", err)
+		writeError(w, http.StatusInternalServerError, "INTERNAL", "Could not rotate API key. Try again.")
+		return
+	}
+	rollback := true
+	defer func() {
+		if rollback {
+			_ = tx.Rollback()
+		}
+	}()
+
+	// SELECT FOR UPDATE the old row, scoped to authenticated tenant.
+	const sel = `SELECT key_name, scopes, revoked_at, expires_at
+		FROM loopzero_api_keys
+		WHERE id = $1 AND subject = $2 AND tenant_id = $3
+		FOR UPDATE`
+	var (
+		oldName    string
+		scopesRaw  []byte
+		revokedAt  sql.NullTime
+		expiresAt  sql.NullTime
+	)
+	if err := tx.QueryRowContext(r.Context(), sel, oldID, user.Subject, user.TenantID).
+		Scan(&oldName, &scopesRaw, &revokedAt, &expiresAt); err != nil {
+		if errors.Is(err, sql.ErrNoRows) {
+			// D5 — cross-tenant + nonexistent collapse to 404.
+			writeError(w, http.StatusNotFound, "NOT_FOUND", "API key not found.")
+			return
+		}
+		h.logger.Warn("rotate api key: select failed", "error", err, "id", oldID)
+		writeError(w, http.StatusInternalServerError, "INTERNAL", "Could not rotate API key. Try again.")
+		return
+	}
+	// Revoked + already-expired collapse to 404 (refuses to extend an
+	// already-terminal key).
+	if revokedAt.Valid {
+		writeError(w, http.StatusNotFound, "NOT_FOUND", "API key not found.")
+		return
+	}
+	if expiresAt.Valid && expiresAt.Time.Before(time.Now()) {
+		writeError(w, http.StatusNotFound, "NOT_FOUND", "API key not found.")
+		return
+	}
+
+	// Generate new secret per Plan 0 D3.
+	raw := make([]byte, SecretRandomBytes)
+	if _, err := rand.Read(raw); err != nil {
+		h.logger.Error("rotate api key: crypto/rand failed", "error", err)
+		writeError(w, http.StatusInternalServerError, "INTERNAL", "Could not rotate API key. Try again.")
+		return
+	}
+	newSecret := SecretPrefix + base64.RawURLEncoding.EncodeToString(raw)
+	sum := sha256.Sum256([]byte(newSecret))
+	newKeyHash := hex.EncodeToString(sum[:])
+	newKeyPrefix := newSecret[:12]
+	newID := generateAPIKeyRowID()
+	newName := oldName + " (rotated " + time.Now().UTC().Format("2006-01-02") + ")"
+	// Length guard mirrors Plan 0 EC-4 — names > 64 chars would surface
+	// as a CHECK violation. Truncate the rotated-name silently rather than
+	// reject the whole flow.
+	if len(newName) > keyNameMaxLength {
+		newName = newName[:keyNameMaxLength]
+	}
+
+	const ins = `INSERT INTO loopzero_api_keys
+		(id, subject, tenant_id, key_name, key_hash, key_prefix, scopes, expires_at, rotated_from)
+		VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)`
+	if _, err := tx.ExecContext(r.Context(), ins,
+		newID, user.Subject, user.TenantID, newName, newKeyHash, newKeyPrefix,
+		scopesRaw, nil, oldID,
+	); err != nil {
+		h.logger.Warn("rotate api key: insert failed", "error", err, "old_id", oldID)
+		writeError(w, http.StatusInternalServerError, "INTERNAL", "Could not rotate API key. Try again.")
+		return
+	}
+
+	// UPDATE the old key's expires_at to NOW() + grace_window.
+	newExpiry := time.Now().Add(graceWindow)
+	if _, err := tx.ExecContext(r.Context(),
+		`UPDATE loopzero_api_keys SET expires_at = $1 WHERE id = $2`,
+		newExpiry, oldID,
+	); err != nil {
+		h.logger.Warn("rotate api key: update old expires_at failed", "error", err, "id", oldID)
+		writeError(w, http.StatusInternalServerError, "INTERNAL", "Could not rotate API key. Try again.")
+		return
+	}
+
+	if err := tx.Commit(); err != nil {
+		h.logger.Warn("rotate api key: commit failed", "error", err)
+		writeError(w, http.StatusInternalServerError, "INTERNAL", "Could not rotate API key. Try again.")
+		return
+	}
+	rollback = false
+
+	writeJSON(w, http.StatusOK, map[string]any{
+		"id":         newID,
+		"name":       newName,
+		"key_prefix": newKeyPrefix,
+		"secret":     newSecret,
+		"old_id":     oldID,
+		"old_expires_at": newExpiry.UTC().Format(time.RFC3339),
+		"grace_window_hours": graceHours,
+	})
+}
+
+// LineageKey returns the full rotation chain for the given key per API
+// Key Lineage View plan v1.0 (closes API Key Rotation OOS #4).
+// GET /v1/api-keys/{id}/lineage
+//
+// Walk strategy (D2): recursive CTE that traverses both directions
+//
+//   ancestors:   walk rotated_from backward from {id}
+//   descendants: walk rows whose rotated_from points to any ancestor
+//
+// All filtered by the authenticated (subject, tenant_id) — defense in
+// depth on top of the FK guarantee that rotations never cross tenants.
+// Cross-tenant id → empty result → 404 (D3 + P0 D5 invariant).
+//
+// Response per D1: {"lineage": [Item, ...]} ordered ROOT FIRST → CURRENT LAST.
+// Each Item carries {id, name, key_prefix, created_at, revoked_at,
+// expires_at, is_current}.
+//
+// is_current per row: revoked_at IS NULL AND (expires_at IS NULL OR
+// expires_at > NOW()).
+func (h *APIKeysHandler) LineageKey(w http.ResponseWriter, r *http.Request) {
+	user := auth.GetUser(r.Context())
+	if user == nil {
+		writeError(w, http.StatusUnauthorized, "AUTH_REQUIRED", "Not authenticated. Run: loopzero login")
+		return
+	}
+
+	keyID := chi.URLParam(r, "id")
+	if !IsValidAPIKeyID(keyID) {
+		writeError(w, http.StatusBadRequest, "INVALID_ID", "API key id must match apk-{16hex}.")
+		return
+	}
+
+	// Recursive CTE walks both directions. Anchor = the requested key;
+	// recursive arms walk ancestors (via rotated_from) and descendants
+	// (via reverse FK). LIMIT 100 per D2 defensive cap.
+	const q = `
+		WITH RECURSIVE
+		ancestors AS (
+		    SELECT id, key_name, key_prefix, created_at, revoked_at, expires_at, rotated_from
+		    FROM loopzero_api_keys
+		    WHERE id = $1 AND subject = $2 AND tenant_id = $3
+		    UNION
+		    SELECT k.id, k.key_name, k.key_prefix, k.created_at, k.revoked_at, k.expires_at, k.rotated_from
+		    FROM loopzero_api_keys k
+		    JOIN ancestors a ON a.rotated_from = k.id
+		    WHERE k.subject = $2 AND k.tenant_id = $3
+		),
+		descendants AS (
+		    SELECT id, key_name, key_prefix, created_at, revoked_at, expires_at, rotated_from
+		    FROM loopzero_api_keys
+		    WHERE id = $1 AND subject = $2 AND tenant_id = $3
+		    UNION
+		    SELECT k.id, k.key_name, k.key_prefix, k.created_at, k.revoked_at, k.expires_at, k.rotated_from
+		    FROM loopzero_api_keys k
+		    JOIN descendants d ON k.rotated_from = d.id
+		    WHERE k.subject = $2 AND k.tenant_id = $3
+		),
+		full_chain AS (
+		    SELECT id, key_name, key_prefix, created_at, revoked_at, expires_at FROM ancestors
+		    UNION
+		    SELECT id, key_name, key_prefix, created_at, revoked_at, expires_at FROM descendants
+		)
+		SELECT id, key_name, key_prefix, created_at, revoked_at, expires_at
+		FROM full_chain
+		ORDER BY created_at ASC
+		LIMIT 100
+	`
+	rows, err := h.db.QueryContext(r.Context(), q, keyID, user.Subject, user.TenantID)
+	if err != nil {
+		h.logger.Warn("lineage api key: query failed", "error", err, "id", keyID)
+		writeError(w, http.StatusInternalServerError, "INTERNAL", "Could not load lineage. Try again.")
+		return
+	}
+	defer func() { _ = rows.Close() }()
+
+	type lineageItem struct {
+		ID        string     `json:"id"`
+		Name      string     `json:"name"`
+		KeyPrefix string     `json:"key_prefix"`
+		CreatedAt time.Time  `json:"created_at"`
+		RevokedAt *time.Time `json:"revoked_at,omitempty"`
+		ExpiresAt *time.Time `json:"expires_at,omitempty"`
+		IsCurrent bool       `json:"is_current"`
+	}
+
+	out := make([]lineageItem, 0, 8)
+	now := time.Now()
+	for rows.Next() {
+		var (
+			item    lineageItem
+			revoked sql.NullTime
+			expires sql.NullTime
+		)
+		if err := rows.Scan(&item.ID, &item.Name, &item.KeyPrefix, &item.CreatedAt, &revoked, &expires); err != nil {
+			h.logger.Warn("lineage api key: scan failed", "error", err)
+			continue
+		}
+		if revoked.Valid {
+			t := revoked.Time
+			item.RevokedAt = &t
+		}
+		if expires.Valid {
+			t := expires.Time
+			item.ExpiresAt = &t
+		}
+		// D1 is_current: not revoked AND (no expiry OR expiry future).
+		item.IsCurrent = !revoked.Valid && (!expires.Valid || expires.Time.After(now))
+		out = append(out, item)
+	}
+	if err := rows.Err(); err != nil {
+		h.logger.Warn("lineage api key: rows error", "error", err)
+		writeError(w, http.StatusInternalServerError, "INTERNAL", "Could not load lineage. Try again.")
+		return
+	}
+
+	// D3 — empty result means the requested id doesn't belong to this
+	// (subject, tenant_id) tuple. Surface as 404 to preserve the P0 D5
+	// existence-leak invariant.
+	if len(out) == 0 {
+		writeError(w, http.StatusNotFound, "NOT_FOUND", "API key not found.")
+		return
+	}
+
+	// Multiple is_current=true items would indicate a data invariant
+	// violation (two active keys in a single chain). The dashboard expects
+	// exactly one; if the data violates this we still return the rows but
+	// log for ops to investigate.
+	currents := 0
+	for _, it := range out {
+		if it.IsCurrent {
+			currents++
+		}
+	}
+	if currents > 1 {
+		h.logger.Warn("lineage api key: data invariant violation — multiple active in chain",
+			"id", keyID, "active_count", currents)
+	}
+
+	writeJSON(w, http.StatusOK, map[string]any{"lineage": out})
 }
 
 // generateAPIKeyRowID returns an `apk-{16hex}` identifier per pkg/id

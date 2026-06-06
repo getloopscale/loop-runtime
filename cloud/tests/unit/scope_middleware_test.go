@@ -58,10 +58,10 @@ func TestRequireScope_ValidBearerScopeMatchProceeds(t *testing.T) {
 	mw := auth.RequireScope(db, "memory:read")
 
 	secret := "REDACTED_SECRET_015"
-	mock.ExpectQuery("SELECT id, subject, tenant_id, scopes FROM loopzero_api_keys").
+	mock.ExpectQuery("SELECT id, subject, tenant_id, scopes, expires_at FROM loopzero_api_keys").
 		WithArgs(hashOf(secret)).
-		WillReturnRows(sqlmock.NewRows([]string{"id", "subject", "tenant_id", "scopes"}).
-			AddRow("apk-aaaa111122223333", "user-A", "tenant-A", []byte(`["memory:read","memory:write"]`)))
+		WillReturnRows(sqlmock.NewRows([]string{"id", "subject", "tenant_id", "scopes", "expires_at"}).
+			AddRow("apk-aaaa111122223333", "user-A", "tenant-A", []byte(`["memory:read","memory:write"]`), nil))
 	// The async last_used_at update fires in a goroutine; allow it.
 	mock.ExpectExec("UPDATE loopzero_api_keys SET last_used_at").
 		WithArgs("apk-aaaa111122223333").
@@ -131,7 +131,7 @@ func TestRequireScope_HashNotFoundRejected(t *testing.T) {
 	mw := auth.RequireScope(db, "memory:read")
 
 	secret := "REDACTED_SECRET_062xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx"
-	mock.ExpectQuery("SELECT id, subject, tenant_id, scopes FROM loopzero_api_keys").
+	mock.ExpectQuery("SELECT id, subject, tenant_id, scopes, expires_at FROM loopzero_api_keys").
 		WithArgs(hashOf(secret)).
 		WillReturnError(sqlmockErrNoRows())
 
@@ -154,10 +154,10 @@ func TestRequireScope_InsufficientScopeReturns403WithMissing(t *testing.T) {
 	mw := auth.RequireScope(db, "memory:write")
 
 	secret := "REDACTED_SECRET_015"
-	mock.ExpectQuery("SELECT id, subject, tenant_id, scopes FROM loopzero_api_keys").
+	mock.ExpectQuery("SELECT id, subject, tenant_id, scopes, expires_at FROM loopzero_api_keys").
 		WithArgs(hashOf(secret)).
-		WillReturnRows(sqlmock.NewRows([]string{"id", "subject", "tenant_id", "scopes"}).
-			AddRow("apk-aaaa111122223333", "u", "t", []byte(`["memory:read"]`))) // missing memory:write
+		WillReturnRows(sqlmock.NewRows([]string{"id", "subject", "tenant_id", "scopes", "expires_at"}).
+			AddRow("apk-aaaa111122223333", "u", "t", []byte(`["memory:read"]`), nil)) // missing memory:write
 
 	final := http.HandlerFunc(func(http.ResponseWriter, *http.Request) {
 		t.Fatal("downstream handler must not run on scope failure")
@@ -189,10 +189,10 @@ func TestRequireScope_CorruptScopesReturns500NotSilent403(t *testing.T) {
 	mw := auth.RequireScope(db, "memory:read")
 
 	secret := "REDACTED_SECRET_015"
-	mock.ExpectQuery("SELECT id, subject, tenant_id, scopes FROM loopzero_api_keys").
+	mock.ExpectQuery("SELECT id, subject, tenant_id, scopes, expires_at FROM loopzero_api_keys").
 		WithArgs(hashOf(secret)).
-		WillReturnRows(sqlmock.NewRows([]string{"id", "subject", "tenant_id", "scopes"}).
-			AddRow("apk-aaaa111122223333", "u", "t", []byte(`{"not":"an array"}`)))
+		WillReturnRows(sqlmock.NewRows([]string{"id", "subject", "tenant_id", "scopes", "expires_at"}).
+			AddRow("apk-aaaa111122223333", "u", "t", []byte(`{"not":"an array"}`), nil))
 
 	req := httptest.NewRequest("GET", "/v1/memory/list", nil)
 	req.Header.Set("Authorization", "Bearer "+secret)
@@ -213,10 +213,10 @@ func TestRequireScope_AsyncLastUsedDoesNotBlockHotPath(t *testing.T) {
 	mw := auth.RequireScope(db, "memory:read")
 
 	secret := "REDACTED_SECRET_015"
-	mock.ExpectQuery("SELECT id, subject, tenant_id, scopes FROM loopzero_api_keys").
+	mock.ExpectQuery("SELECT id, subject, tenant_id, scopes, expires_at FROM loopzero_api_keys").
 		WithArgs(hashOf(secret)).
-		WillReturnRows(sqlmock.NewRows([]string{"id", "subject", "tenant_id", "scopes"}).
-			AddRow("apk-aaaa111122223333", "u", "t", []byte(`["memory:read"]`)))
+		WillReturnRows(sqlmock.NewRows([]string{"id", "subject", "tenant_id", "scopes", "expires_at"}).
+			AddRow("apk-aaaa111122223333", "u", "t", []byte(`["memory:read"]`), nil))
 	// Simulate a slow async write — the middleware must NOT await this.
 	mock.ExpectExec("UPDATE loopzero_api_keys SET last_used_at").
 		WithArgs("apk-aaaa111122223333").
@@ -248,5 +248,93 @@ func TestRequireScope_AsyncLastUsedDoesNotBlockHotPath(t *testing.T) {
 		t.Errorf("hot path took %s — async last_used_at MUST not block (budget 100ms)", elapsed)
 	}
 	asyncDone.Wait()
+}
+
+// =============================================================================
+// API Key Rotation plan T6.4 — Sunset + Deprecation + Link headers (D3 / RFC 8594)
+// =============================================================================
+
+// runScopeMiddlewareWithExpiry is a focused helper that arranges the
+// middleware path, sets up the SELECT mock with a pinned expires_at, and
+// returns the response recorder for assertion.
+func runScopeMiddlewareWithExpiry(t *testing.T, expiresAt any) *httptest.ResponseRecorder {
+	t.Helper()
+	db, mock := sqlmockSetup(t)
+	mw := auth.RequireScope(db, "memory:read")
+
+	secret := "REDACTED_SECRET_015"
+	mock.ExpectQuery("SELECT id, subject, tenant_id, scopes, expires_at FROM loopzero_api_keys").
+		WithArgs(hashOf(secret)).
+		WillReturnRows(sqlmock.NewRows([]string{"id", "subject", "tenant_id", "scopes", "expires_at"}).
+			AddRow("apk-aaaa111122223333", "u", "t", []byte(`["memory:read"]`), expiresAt))
+	mock.ExpectExec("UPDATE loopzero_api_keys SET last_used_at").
+		WithArgs("apk-aaaa111122223333").
+		WillReturnResult(sqlmock.NewResult(0, 1))
+
+	final := http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) { w.WriteHeader(http.StatusOK) })
+	req := httptest.NewRequest("GET", "/v1/memory/list", nil)
+	req.Header.Set("Authorization", "Bearer "+secret)
+	rec := httptest.NewRecorder()
+	mw(final).ServeHTTP(rec, req)
+	// Allow the async last_used_at write to drain so its mock is consumed.
+	time.Sleep(20 * time.Millisecond)
+	return rec
+}
+
+// T6.4 — expires_at NULL → NO Sunset/Deprecation/Link headers.
+func TestRequireScope_NoSunsetHeaderWhenExpiresAtNull(t *testing.T) {
+	rec := runScopeMiddlewareWithExpiry(t, nil)
+	if rec.Code != http.StatusOK {
+		t.Fatalf("expected 200, got %d", rec.Code)
+	}
+	if rec.Header().Get("Sunset") != "" {
+		t.Errorf("Sunset header MUST be absent when expires_at is NULL, got %q", rec.Header().Get("Sunset"))
+	}
+	if rec.Header().Get("Deprecation") != "" {
+		t.Errorf("Deprecation header MUST be absent, got %q", rec.Header().Get("Deprecation"))
+	}
+}
+
+// T6.4 — expires_at > 7d in the future → NO Sunset headers (only signal
+// when grace window is approaching).
+func TestRequireScope_NoSunsetHeaderWhenExpiresAtFarFuture(t *testing.T) {
+	far := time.Now().Add(30 * 24 * time.Hour)
+	rec := runScopeMiddlewareWithExpiry(t, far)
+	if rec.Code != http.StatusOK {
+		t.Fatalf("expected 200, got %d", rec.Code)
+	}
+	if got := rec.Header().Get("Sunset"); got != "" {
+		t.Errorf("Sunset header MUST be absent when expiry > 7d away, got %q", got)
+	}
+}
+
+// T6.4 — expires_at within 7d → Sunset/Deprecation/Link headers all present.
+// Sunset format MUST be RFC 1123 parseable.
+func TestRequireScope_SunsetHeaderWhenExpiresAtWithinThreshold(t *testing.T) {
+	expiry := time.Now().Add(2 * 24 * time.Hour) // 2 days
+	rec := runScopeMiddlewareWithExpiry(t, expiry)
+	if rec.Code != http.StatusOK {
+		t.Fatalf("expected 200, got %d body=%s", rec.Code, rec.Body.String())
+	}
+
+	sunset := rec.Header().Get("Sunset")
+	if sunset == "" {
+		t.Fatal("Sunset header missing when expiry is within 7d")
+	}
+	if _, err := time.Parse(time.RFC1123, sunset); err != nil {
+		t.Errorf("Sunset header %q must parse as RFC 1123: %v", sunset, err)
+	}
+
+	if got := rec.Header().Get("Deprecation"); got != "true" {
+		t.Errorf("Deprecation header must be 'true', got %q", got)
+	}
+
+	link := rec.Header().Get("Link")
+	if !strings.Contains(link, `rel="deprecation"`) {
+		t.Errorf("Link header must include rel=\"deprecation\", got %q", link)
+	}
+	if !strings.Contains(link, "/docs/api-keys") {
+		t.Errorf("Link header must point at docs, got %q", link)
+	}
 }
 

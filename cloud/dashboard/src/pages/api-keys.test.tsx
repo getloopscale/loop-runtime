@@ -56,6 +56,125 @@ describe('ApiKeysPage', () => {
     expect(screen.getByText('memory:write')).toBeInTheDocument();
   });
 
+  // =============================================================================
+  // API Key Rotation plan T6.5 — Rotate button + ConfirmDialog + show-once reveal
+  // =============================================================================
+
+  it('T6.5 — Rotate button per row opens ConfirmDialog with grace-window copy', async () => {
+    mockCloudFetch.mockResolvedValueOnce({
+      keys: [
+        {
+          id: 'apk-1111111111111111',
+          name: 'prod-agent',
+          key_prefix: 'loopzero_live_Ab',
+          scopes: ['memory:read', 'memory:write'],
+          created_at: new Date().toISOString(),
+        },
+      ],
+    });
+    const user = userEvent.setup();
+    render(<ApiKeysPage />);
+    expect(await screen.findByText('prod-agent')).toBeInTheDocument();
+
+    await user.click(screen.getByRole('button', { name: /rotate api key prod-agent/i }));
+    // ConfirmDialog body explains the grace window per D2.
+    expect(await screen.findByText(/keep working for 24 hours/i)).toBeInTheDocument();
+    expect(screen.getByText(/overlap during the grace window/i)).toBeInTheDocument();
+  });
+
+  it('T6.5 — successful rotation triggers the show-once secret reveal', async () => {
+    mockCloudFetch.mockResolvedValueOnce({
+      keys: [
+        {
+          id: 'apk-1111111111111111',
+          name: 'prod-agent',
+          key_prefix: 'loopzero_live_Ab',
+          scopes: ['memory:read'],
+          created_at: new Date().toISOString(),
+        },
+      ],
+    });
+    // Second mock = the POST /v1/api-keys/{id}/rotate response.
+    mockCloudFetch.mockResolvedValueOnce({
+      id: 'apk-2222222222222222',
+      name: 'prod-agent (rotated 2026-06-06)',
+      key_prefix: 'loopzero_live_Xy',
+      scopes: ['memory:read'],
+      secret: 'REDACTED_SECRET_017',
+    });
+
+    const user = userEvent.setup();
+    render(<ApiKeysPage />);
+    expect(await screen.findByText('prod-agent')).toBeInTheDocument();
+
+    // Open rotate dialog → type confirmation → confirm.
+    await user.click(screen.getByRole('button', { name: /rotate api key prod-agent/i }));
+    const confirmInput = await screen.findByRole('textbox');
+    await user.type(confirmInput, 'prod-agent');
+    await user.click(screen.getByRole('button', { name: /rotate key/i }));
+
+    // The new secret MUST appear in the show-once reveal dialog.
+    expect(await screen.findByText(/loopzero_live_rotatedNEWsecret/)).toBeInTheDocument();
+  });
+
+  // =============================================================================
+  // API Key Lineage View plan T7.4 — Lineage button + Sheet timeline
+  // =============================================================================
+
+  it('T7.4 — Lineage button per row opens Sheet with timeline + current highlight', async () => {
+    mockCloudFetch.mockImplementation((path: string) => {
+      if (String(path).includes('/v1/api-keys/apk-1111111111111111/lineage')) {
+        return Promise.resolve({
+          lineage: [
+            {
+              id: 'apk-1111111111111111',
+              name: 'prod-agent (root)',
+              key_prefix: 'loopzero_live_Aa',
+              created_at: new Date(Date.now() - 86400000).toISOString(),
+              revoked_at: null,
+              expires_at: null,
+              is_current: false,
+            },
+            {
+              id: 'apk-2222222222222222',
+              name: 'prod-agent (rotated 2026-06-06)',
+              key_prefix: 'loopzero_live_Bb',
+              created_at: new Date().toISOString(),
+              revoked_at: null,
+              expires_at: null,
+              is_current: true,
+            },
+          ],
+        });
+      }
+      return Promise.resolve({
+        keys: [
+          {
+            id: 'apk-1111111111111111',
+            name: 'prod-agent',
+            key_prefix: 'loopzero_live_Aa',
+            scopes: ['memory:read'],
+            created_at: new Date().toISOString(),
+          },
+        ],
+      });
+    });
+
+    const user = userEvent.setup();
+    render(<ApiKeysPage />);
+    expect(await screen.findByText('prod-agent')).toBeInTheDocument();
+
+    await user.click(screen.getByRole('button', { name: /view lineage for api key prod-agent/i }));
+
+    // Sheet renders timeline with both lineage rows.
+    expect(await screen.findByTestId('lineage-row-apk-1111111111111111')).toBeInTheDocument();
+    expect(screen.getByTestId('lineage-row-apk-2222222222222222')).toBeInTheDocument();
+    // The is_current row has the Current badge.
+    expect(screen.getByTestId('lineage-current-apk-2222222222222222')).toBeInTheDocument();
+    // The non-current row does NOT have the Current badge.
+    expect(screen.queryByTestId('lineage-current-apk-1111111111111111')).not.toBeInTheDocument();
+  });
+
   it('EC-13: Close button is disabled until "I\'ve copied" checkbox is checked', async () => {
     // Empty list so the page renders without table noise.
     mockCloudFetch.mockResolvedValueOnce({ keys: [] });

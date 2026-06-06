@@ -33,6 +33,7 @@ import (
 	"github.com/loopzero/loopzero/cloud/internal/metering"
 	cloudmetrics "github.com/loopzero/loopzero/cloud/internal/metrics"
 	"github.com/loopzero/loopzero/cloud/internal/ratelimit"
+	"github.com/loopzero/loopzero/cloud/internal/memory_webhook_worker"
 	"github.com/loopzero/loopzero/cloud/internal/routes"
 	"github.com/loopzero/loopzero/cloud/internal/themory"
 	"github.com/loopzero/loopzero/cloud/internal/tracing"
@@ -175,7 +176,10 @@ func main() {
 			Transport: otelhttp.NewTransport(http.DefaultTransport), // D4 W3C trace propagation
 		}
 		themoryClient := themory.NewClient(cfg.ThemoryBaseURL, cfg.ThemoryAPIKey.Value(), themoryHTTP)
-		memoryHandler = routes.NewMemoryHandler(themoryClient, logger)
+		// Memory Webhook Delivery plan T5.6: wire the event publisher so
+		// `memory.forgotten` mutations fan out to active webhooks.
+		webhookEventPublisher := routes.NewMemoryWebhookEventPublisher(db, logger)
+		memoryHandler = routes.NewMemoryHandler(themoryClient, logger).WithEventPublisher(webhookEventPublisher)
 		logger.Info("memory proxy enabled", "themory_base_url", cfg.ThemoryBaseURL)
 
 		// Plan 3 — Memory Operations (exports + webhooks).
@@ -197,6 +201,14 @@ func main() {
 		memoryExportsHandler = routes.NewMemoryExportsHandler(db, themoryClient, logger, exportDir, workerDelay)
 	} else {
 		logger.Warn("THEMORY_BASE_URL not set — /v1/memory/* endpoints disabled")
+	}
+
+	// Memory Webhook Delivery plan T5.5 — background dispatcher worker.
+	// Only started when both memory proxy AND DB are configured (worker
+	// needs both to poll + dispatch).
+	var memoryWebhookDeliveriesHandler *routes.MemoryWebhookDeliveriesHandler
+	if memoryHandler != nil && db != nil {
+		memoryWebhookDeliveriesHandler = routes.NewMemoryWebhookDeliveriesHandler(db, logger)
 	}
 
 	// Router
@@ -311,6 +323,10 @@ func main() {
 		r.Get("/list", apiKeysHandler.ListKeys)
 		r.Post("/", apiKeysHandler.CreateKey)
 		r.Delete("/{id}", apiKeysHandler.RevokeKey)
+		// API Key Rotation plan T6.3 (closes Plan 0 D6 deferral).
+		r.Post("/{id}/rotate", apiKeysHandler.RotateKey)
+		// API Key Lineage View plan T7.3 (closes API Key Rotation OOS #4).
+		r.Get("/{id}/lineage", apiKeysHandler.LineageKey)
 	})
 
 	// Plan 1 — Memory Shell (/v1/memory/*).
@@ -341,8 +357,25 @@ func main() {
 				r.With(auth.RequireScope(db, "memory:admin")).Get("/exports/{id}/status", memoryExportsHandler.Status)
 				r.With(auth.RequireScope(db, "memory:admin")).Get("/exports/{id}/download", memoryExportsHandler.Download)
 			}
+
+			// Memory Webhook Delivery plan T5.7 — deliveries history per webhook.
+			if memoryWebhookDeliveriesHandler != nil {
+				r.With(auth.RequireScope(db, "memory:admin")).Get("/webhooks/{id}/deliveries", memoryWebhookDeliveriesHandler.List)
+				// Delivery Replay plan T8.3 — manual re-trigger for a failed delivery.
+				// Distinct path-param names ({webhook_id}, {delivery_id}) match the
+				// handler's chi.URLParam reads.
+				r.With(auth.RequireScope(db, "memory:admin")).Post(
+					"/webhooks/{webhook_id}/deliveries/{delivery_id}/replay",
+					memoryWebhookDeliveriesHandler.Replay,
+				)
+			}
 		})
 	}
+
+	// Memory Webhook Delivery plan T5.5: the dispatcher worker is started
+	// below alongside the metering scheduler, sharing the schedulerCtx for
+	// graceful shutdown. See the `if db != nil && stripeClient != nil`
+	// block + adjacent worker spawn.
 
 	// Billing endpoints (JWT required via middleware, except webhook)
 	if billingHandler != nil {
@@ -475,6 +508,15 @@ func main() {
 		reporter := metering.NewReporter(db, stripeClient, logger)
 		reconciler := metering.NewReconciler(db, logger)
 		go metering.StartScheduler(schedulerCtx, reporter, reconciler, logger)
+	}
+
+	// Memory Webhook Delivery plan T5.5 — dispatcher worker goroutine.
+	// Sharing schedulerCtx ensures graceful shutdown on SIGTERM. The
+	// worker drains in-flight dispatches before exiting Run().
+	if memoryHandler != nil && db != nil {
+		webhookWorker := memory_webhook_worker.New(db, logger, nil)
+		go webhookWorker.Run(schedulerCtx)
+		logger.Info("memory webhook dispatcher started")
 	}
 
 	// T1.9 production deployment: start cost aggregator if Prometheus

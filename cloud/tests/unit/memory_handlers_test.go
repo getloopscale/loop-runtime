@@ -308,6 +308,88 @@ func TestMemoryForget_MalformedIDRejectedBeforeClient(t *testing.T) {
 	}
 }
 
+// =============================================================================
+// Memory Webhook Delivery plan T5.6 — Forget emits delivery rows
+// =============================================================================
+
+// fakePublisher captures inbound Publish calls. Implements
+// routes.WebhookEventPublisher.
+type fakePublisher struct {
+	calls []publishCall
+}
+
+type publishCall struct {
+	subject, tenantID, eventType string
+	payload                      map[string]any
+}
+
+func (p *fakePublisher) Publish(_ context.Context, subject, tenantID, eventType string, payload map[string]any) {
+	p.calls = append(p.calls, publishCall{subject, tenantID, eventType, payload})
+}
+
+// T5.6 — successful forget emits a memory.forgotten event with the
+// authenticated subject + tenant_id + memory_id in the payload.
+func TestMemoryForget_PublishesEventOnSuccess(t *testing.T) {
+	h, fake := newMemoryHandler(t)
+	pub := &fakePublisher{}
+	h.WithEventPublisher(pub)
+	fake.forgetErr = nil
+
+	rec := httptest.NewRecorder()
+	h.Forget(rec, memoryForgetReq(t, "mem-aaaa1111bbbb2222", &auth.UserContext{Subject: "user-A", TenantID: "tenant-A"}))
+
+	if rec.Code != http.StatusNoContent {
+		t.Fatalf("expected 204, got %d", rec.Code)
+	}
+	if len(pub.calls) != 1 {
+		t.Fatalf("expected 1 Publish call, got %d", len(pub.calls))
+	}
+	c := pub.calls[0]
+	if c.subject != "user-A" || c.tenantID != "tenant-A" {
+		t.Errorf("Publish subject/tenant mismatch: %+v", c)
+	}
+	if c.eventType != "memory.forgotten" {
+		t.Errorf("event type = %q, want memory.forgotten", c.eventType)
+	}
+	if c.payload["memory_id"] != "mem-aaaa1111bbbb2222" {
+		t.Errorf("payload.memory_id = %v, want mem-aaaa1111bbbb2222", c.payload["memory_id"])
+	}
+}
+
+// T5.6 — Forget failure (NotFound) → NO event published. The fanout
+// reflects the actual mutation outcome, not the request intent.
+func TestMemoryForget_NoEventOnNotFound(t *testing.T) {
+	h, fake := newMemoryHandler(t)
+	pub := &fakePublisher{}
+	h.WithEventPublisher(pub)
+	fake.forgetErr = themory.ErrNotFound
+
+	rec := httptest.NewRecorder()
+	h.Forget(rec, memoryForgetReq(t, "mem-aaaa1111bbbb2222", &auth.UserContext{Subject: "user-A", TenantID: "tenant-A"}))
+
+	if rec.Code != http.StatusNotFound {
+		t.Fatalf("expected 404, got %d", rec.Code)
+	}
+	if len(pub.calls) != 0 {
+		t.Errorf("expected zero Publish on NotFound, got %d", len(pub.calls))
+	}
+}
+
+// T5.6 — when handler has no publisher wired (e.g. dev mode), Forget
+// still succeeds; no nil dereference panic.
+func TestMemoryForget_NoPanicWithoutPublisher(t *testing.T) {
+	h, fake := newMemoryHandler(t)
+	// h.eventPublisher stays nil
+	fake.forgetErr = nil
+
+	rec := httptest.NewRecorder()
+	h.Forget(rec, memoryForgetReq(t, "mem-aaaa1111bbbb2222", &auth.UserContext{Subject: "u", TenantID: "t"}))
+
+	if rec.Code != http.StatusNoContent {
+		t.Fatalf("expected 204, got %d", rec.Code)
+	}
+}
+
 func TestMemoryForget_UpstreamErrorReturns502(t *testing.T) {
 	h, fake := newMemoryHandler(t)
 	fake.forgetErr = errors.New("connection refused")
