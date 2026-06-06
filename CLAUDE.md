@@ -27,6 +27,7 @@ The doc is mirrored at `loopzerokit-tools/loopzerokit/docs/architecture/loopzero
 
 **Source of truth (DO NOT re-derive these decisions ad-hoc — every PR cites the doc that locks them):**
 
+- **ROADMAP (single source of truth for chain + cadence + per-plan scope/DoD/time-window)**: [`.claude/knowledge-base/plans/2026-06-06-dashboard-memory-section-roadmap.md`](.claude/knowledge-base/plans/2026-06-06-dashboard-memory-section-roadmap.md)
 - **Strategic decisions** (8 A1-A8): [`.claude/knowledge-base/architecture/dashboard/memory-section-prior-art-2026-06-06.md`](.claude/knowledge-base/architecture/dashboard/memory-section-prior-art-2026-06-06.md)
 - **Plan 0 (first in chain — Platform API Keys with scopes)**: [`.claude/knowledge-base/plans/2026-06-06-platform-api-keys-with-scopes-plan.md`](.claude/knowledge-base/plans/2026-06-06-platform-api-keys-with-scopes-plan.md)
 
@@ -43,16 +44,8 @@ The doc is mirrored at `loopzerokit-tools/loopzerokit/docs/architecture/loopzero
 
 **Chain order (DO NOT ship out of order without explicit re-prioritization ADR):**
 
-```
-Plan 0 — Platform API Keys with scopes  [ships FIRST — auth substrate for all]
-  ↓
-Plan 1 — Memory Shell  [sidebar nav + /memory landing + /memory/memories + Go proxy handlers]
-  ↓
-Plan 2 — Memory Insights  [/memory/entities + Explore cards]  } ship in parallel after Plan 1
-Plan 3 — Memory Operations  [/memory/exports + /memory/webhooks + migrations]  } 
-  ↓
-Plan 4 — Cross-cuts (promotions)  [memory section in /billing + filter in /audit + tab in /settings]
-```
+See the ROADMAP doc § "Chain at a glance" for the visual chain. Summary:
+`P0 (foundation) → P1 (shell) → (P2 + P3 parallel) → P4 (cross-cuts)`. Per-plan scope + DoD + time-window + cadence live ONLY in the roadmap; this CLAUDE.md section locks the INVARIANTS only, not the scope detail (single source of truth — anti-drift).
 
 **Edge-case absorptions locked across all 5 plans** (every PR must respect; see prior-art doc § Edge case absorptions for canonical wording):
 
