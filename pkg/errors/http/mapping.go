@@ -63,6 +63,8 @@ var statusByCode = map[string]int{
 	"MISSING_FIELD":              http.StatusBadRequest, // 400
 	"SAME_ENVIRONMENT":           http.StatusBadRequest, // 400
 	"INVALID_TENANT_OR_PROJECT":  http.StatusBadRequest, // 400 (Plan v1.2 T1.2 — DNS-1123 validation)
+	"MULTIPART_FIELD_ORDER":      http.StatusBadRequest, // 400 (Plan v1.2 T6.1 — services_json must precede bundle)
+	"SERVICES_JSON_TOO_LARGE":    http.StatusRequestEntityTooLarge, // 413 (Plan v1.2 T6.1 — 256 KB cap)
 
 	"UNAUTHORIZED": http.StatusUnauthorized, // 401
 	"FORBIDDEN":    http.StatusForbidden,    // 403

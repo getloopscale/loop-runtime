@@ -25,6 +25,22 @@ import (
 // maxBundleSize is the maximum allowed bundle size (500MB).
 const maxBundleSize int64 = 500 * 1024 * 1024
 
+// Plan v1.2 T6.1 (H2 mitigation, EC-4 v1.1) — per-field size budgets.
+// The legacy ParseMultipartForm path buffers 32MB in memory regardless of
+// whether the payload is a tiny services.json or a multi-hundred-MB bundle;
+// adding explicit per-field caps prevents a malicious or buggy client from
+// driving the API into OOM territory while we ship the proper two-phase
+// upload protocol (deferred to v4.1 per ADR D4).
+const (
+	maxServicesJSONSize int64 = 256 * 1024 // 256 KB — realistic for 20+ services × 50 env vars
+	// Plan v1.2 T7.1 (L2) — extracted from the in-line `32 << 20` literal that
+	// ParseMultipartForm used to receive. 32 MB is the in-memory threshold:
+	// anything larger (up to maxBundleSize) is spooled to a temp file. The
+	// value is a compromise between request latency (in-memory parsing is
+	// faster) and heap pressure (large bundles must not stay in memory).
+	maxInMemoryMultipart int64 = 32 << 20
+)
+
 // SourceUploadResponse is the JSON response for a successful source upload.
 type SourceUploadResponse struct {
 	CommitSHA string   `json:"commit_sha"`
@@ -93,8 +109,24 @@ func (h *SourceHandler) Upload(w http.ResponseWriter, r *http.Request) {
 	// Limit the request body to maxBundleSize to prevent reading oversized payloads.
 	r.Body = http.MaxBytesReader(w, r.Body, maxBundleSize)
 
-	// Parse multipart form (up to 32MB in memory, rest goes to temp files).
-	if err := r.ParseMultipartForm(32 << 20); err != nil {
+	// Plan v1.2 T6.1 (EC-5) — wire-protocol contract: the first multipart
+	// part MUST be `services_json` so the server can validate the manifest
+	// before accepting the (potentially huge) bundle stream. We peek the
+	// header via MultipartReader without consuming the body — ParseMultipartForm
+	// below re-reads from the same request.
+	if firstPartName, peekErr := peekFirstMultipartFieldName(r); peekErr == nil && firstPartName != "" {
+		if firstPartName != "services_json" {
+			writeLoopZeroError(w, &loopzeroerrors.LoopZeroError{
+				Code: "MULTIPART_FIELD_ORDER",
+				Message: "multipart field order violation: expected `services_json` first, got `" + firstPartName +
+					"`. Upgrade your LoopZeroKit CLI (≥0.5.0) — see https://loopzerocloud.dev/docs/api/source-upload-wire-protocol",
+			})
+			return
+		}
+	}
+
+	// Parse multipart form (up to maxInMemoryMultipart, rest goes to temp files).
+	if err := r.ParseMultipartForm(maxInMemoryMultipart); err != nil {
 		// MaxBytesReader returns a specific error when the body is too large.
 		if err.Error() == "http: request body too large" {
 			writeLoopZeroError(w, loopzeroerrors.ErrPayloadTooLarge)
@@ -118,11 +150,29 @@ func (h *SourceHandler) Upload(w http.ResponseWriter, r *http.Request) {
 		// Fallback: try reading as file upload (how the CLI sends it)
 		if jsonFile, _, err := r.FormFile("services_json"); err == nil {
 			defer func() { _ = jsonFile.Close() }()
-			jsonBytes, readErr := io.ReadAll(jsonFile)
+			// Plan v1.2 T6.1 — apply per-field 256KB cap on the file-upload
+			// path. The text-field path is already bounded by 32MB form parse
+			// + the explicit size check that follows. Read +1 to detect
+			// truncation past the cap.
+			jsonBytes, readErr := io.ReadAll(io.LimitReader(jsonFile, maxServicesJSONSize+1))
 			if readErr == nil {
 				servicesJSONContent = string(jsonBytes)
 			}
 		}
+	}
+
+	// Plan v1.2 T6.1 (EC-4) — explicit per-field size check on services_json.
+	// Rejects payloads that would survive the form-level 32MB cap but blow up
+	// downstream validators / log lines / DB columns.
+	if int64(len(servicesJSONContent)) > maxServicesJSONSize {
+		writeLoopZeroError(w, &loopzeroerrors.LoopZeroError{
+			Code: "SERVICES_JSON_TOO_LARGE",
+			Message: fmt.Sprintf(
+				"services.json field exceeds the %d KB cap. Reduce env var count / value length per `loopzerokit migrate services-json-v1-to-v2`.",
+				maxServicesJSONSize/1024,
+			),
+		})
+		return
 	}
 
 	// EC-B3-7 (v3.1): legacy loopzero_yaml rejection with actionable migration hint.
@@ -301,5 +351,46 @@ func (h *SourceHandler) Upload(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(http.StatusOK)
 	_ = json.NewEncoder(w).Encode(resp)
+}
+
+// peekFirstMultipartFieldName clones the request body via http.Request.GetBody
+// (set by net/http when the body is repeatable) and walks the first multipart
+// part's header to retrieve the field name. When the body cannot be cloned
+// (the typical streaming case), the function returns an empty string and a
+// nil error — the contract is best-effort and silent failures are acceptable
+// because ParseMultipartForm will still process the original stream.
+//
+// Plan v1.2 T6.1 (EC-5) — used to enforce the services_json-first wire
+// contract documented in docs/api/source-upload-wire-protocol.md.
+func peekFirstMultipartFieldName(r *http.Request) (string, error) {
+	if r.GetBody == nil {
+		// Request body isn't repeatable — accept the order silently and
+		// rely on downstream validation. Returning ("", nil) means the
+		// handler will treat the order as conformant.
+		return "", nil
+	}
+	clone, err := r.GetBody()
+	if err != nil {
+		return "", err
+	}
+	defer func() { _ = clone.Close() }()
+
+	// Cap the peek read at 16KB so a malicious client cannot drag the
+	// process into reading the whole body twice.
+	peekReader := io.LimitReader(clone, 16*1024)
+	tmpReq := &http.Request{
+		Header: r.Header.Clone(),
+		Body:   io.NopCloser(peekReader),
+	}
+	multipartReader, mrErr := tmpReq.MultipartReader()
+	if mrErr != nil {
+		return "", nil
+	}
+	part, partErr := multipartReader.NextPart()
+	if partErr != nil {
+		return "", nil
+	}
+	defer func() { _ = part.Close() }()
+	return part.FormName(), nil
 }
 

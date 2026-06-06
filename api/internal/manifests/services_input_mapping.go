@@ -130,7 +130,10 @@ func mapRuntimeToStrategy(runtime string) (string, error) {
 // EC-B3-9 — array order from services.json is preserved (loopzerokit
 // guarantees Kahn topological order).
 func mapServicesToRenderInput(svc ServicesManifest, opts RenderOpts) (RenderInput, error) {
-	slog.Info("manifests.mapServicesToRenderInput: start",
+	// Plan v1.2 T7.3 — boundary log at INFO with summary; per-service detail
+	// stays at DEBUG so production INFO logs aren't flooded when each tenant
+	// ships 10+ services.
+	slog.Debug("manifests.mapServicesToRenderInput: start",
 		"version", svc.Version,
 		"service_count", len(svc.Services))
 
@@ -176,6 +179,13 @@ func mapServicesToRenderInput(svc ServicesManifest, opts RenderOpts) (RenderInpu
 			Replicas: opts.DefaultReplicas,
 		})
 	}
+
+	// Plan v1.2 T7.3 — boundary INFO with a single summary line per call.
+	slog.Info("manifests.mapServicesToRenderInput: done",
+		"tenant", opts.TenantID,
+		"project", opts.ProjectID,
+		"environment", opts.Environment,
+		"app_count", len(apps))
 
 	return RenderInput{
 		TenantID:             opts.TenantID,

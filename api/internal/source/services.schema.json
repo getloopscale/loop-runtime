@@ -67,7 +67,8 @@
         "port": {
           "type": "integer",
           "minimum": 1024,
-          "maximum": 65535
+          "maximum": 65535,
+          "description": "TCP port the service binds to inside its container. Range 1024-65535 — ports below 1024 are reserved (require CAP_NET_BIND_SERVICE which the runtime does NOT grant, and ARE collision-prone with kubelet / kube-proxy on host networking)."
         },
         "proxy": {
           "type": "string",

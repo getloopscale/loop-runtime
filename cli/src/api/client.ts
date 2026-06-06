@@ -50,8 +50,13 @@ export class ApiError extends Error {
   public readonly statusCode: number;
   public readonly code: string;
 
-  constructor(message: string, exitCode: number, statusCode: number, code?: string) {
-    super(message);
+  /**
+   * Plan v1.2 T5.1 (M4) — preserve the underlying error chain so verbose
+   * mode (`LOOPZERO_DEBUG=1`) can render the root cause without losing
+   * stack/context. Mirrors the Error.cause shape introduced in Node 16.9.
+   */
+  constructor(message: string, exitCode: number, statusCode: number, code?: string, cause?: unknown) {
+    super(message, cause !== undefined ? { cause } : undefined);
     this.name = 'ApiError';
     this.exitCode = exitCode;
     this.statusCode = statusCode;

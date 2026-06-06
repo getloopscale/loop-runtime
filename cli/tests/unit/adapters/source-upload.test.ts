@@ -5,16 +5,39 @@ import { uploadSource } from '../../../src/adapters/source-upload';
 import { ApiError } from '../../../src/api/client';
 import * as fs from 'fs';
 
-jest.mock('fs');
+jest.mock('fs', () => {
+  const actual = jest.requireActual('fs') as typeof import('fs');
+  return {
+    ...actual,
+    readFileSync: jest.fn(),
+    promises: {
+      ...actual.promises,
+      readFile: jest.fn(),
+    },
+  };
+});
 
 const mockFs = fs as jest.Mocked<typeof fs>;
+const mockFsPromisesReadFile = fs.promises.readFile as jest.MockedFunction<typeof fs.promises.readFile>;
 
+// Plan v1.2 T5.2 — the implementation now uses fs.promises.readFile; the
+// legacy mock targeted readFileSync. Set both so any caller path is covered.
 function mockFsReads(): void {
-  mockFs.readFileSync.mockImplementation((path: fs.PathOrFileDescriptor) => {
-    const p = String(path);
-    if (p.endsWith('.bundle')) return Buffer.from('bundle-data');
-    if (p.endsWith('loopzero.yaml')) return 'project: my-saas\napps: {}';
+  mockFs.readFileSync.mockImplementation((p: fs.PathOrFileDescriptor) => {
+    const sp = String(p);
+    if (sp.endsWith('.bundle')) return Buffer.from('bundle-data');
+    if (sp.endsWith('loopzero.yaml') || sp.endsWith('services.json')) {
+      return 'project: my-saas\napps: {}';
+    }
     return '';
+  });
+  mockFsPromisesReadFile.mockImplementation(async (p: fs.PathLike | fs.promises.FileHandle) => {
+    const sp = String(p);
+    if (sp.endsWith('.bundle')) return Buffer.from('bundle-data');
+    if (sp.endsWith('loopzero.yaml') || sp.endsWith('services.json')) {
+      return 'project: my-saas\napps: {}';
+    }
+    return Buffer.from('');
   });
 }
 
@@ -238,6 +261,51 @@ describe('uploadSource', () => {
       );
 
       expect(result).toEqual({ commit_sha: 'abc123', apps: ['api', 'web'] });
+    });
+  });
+
+  // Plan v1.2 T5.1 (M4) — verify each catch branch preserves the underlying
+  // error via the Error.cause chain so verbose mode can surface root cause.
+  describe('Plan v1.2 T5.1 — preserves error cause', () => {
+    it('uploadSource timeout preserves cause', async () => {
+      const originalErr = Object.assign(new Error('aborted'), { name: 'TimeoutError' });
+      jest.spyOn(globalThis, 'fetch').mockRejectedValue(originalErr);
+      try {
+        await uploadSource('http://x', 't', '/tmp/b.bundle', '/proj/loopzero.yaml');
+        fail('expected throw');
+      } catch (err) {
+        expect(err).toBeInstanceOf(ApiError);
+        expect((err as ApiError).code).toBe('UPLOAD_TIMEOUT');
+        expect((err as ApiError).cause).toBe(originalErr);
+      }
+    });
+
+    it('uploadSource ECONNREFUSED preserves cause', async () => {
+      const originalErr = Object.assign(new Error('fetch failed'), {
+        cause: { code: 'ECONNREFUSED' },
+      });
+      jest.spyOn(globalThis, 'fetch').mockRejectedValue(originalErr);
+      try {
+        await uploadSource('http://x', 't', '/tmp/b.bundle', '/proj/loopzero.yaml');
+        fail('expected throw');
+      } catch (err) {
+        expect(err).toBeInstanceOf(ApiError);
+        expect((err as ApiError).code).toBe('CONNECTION_REFUSED');
+        expect((err as ApiError).cause).toBe(originalErr);
+      }
+    });
+
+    it('uploadSource generic failure preserves cause', async () => {
+      const originalErr = new Error('something exploded');
+      jest.spyOn(globalThis, 'fetch').mockRejectedValue(originalErr);
+      try {
+        await uploadSource('http://x', 't', '/tmp/b.bundle', '/proj/loopzero.yaml');
+        fail('expected throw');
+      } catch (err) {
+        expect(err).toBeInstanceOf(ApiError);
+        expect((err as ApiError).code).toBe('UPLOAD_FAILED');
+        expect((err as ApiError).cause).toBe(originalErr);
+      }
     });
   });
 });
