@@ -210,6 +210,19 @@ func (h *SourceHandler) Upload(w http.ResponseWriter, r *http.Request) {
 	// Push bundle to source store (Gitea) — repo: loopzero-source-{tenant}-{project}
 	result, err := h.store.PushBundle(ctx, uc.TenantID, projectName, tmpFile)
 	if err != nil {
+		// Plan v1.2 T1.2 (cutover-deep-review-hardening): DNS-1123 violation
+		// on tenantID/projectID — surface as 400 with field-specific message
+		// so the user can correct the input. Detected via errors.Is on the
+		// sentinel exported by internal/source.
+		if errors.Is(err, source.ErrInvalidTenantOrProject) {
+			slog.Info("source upload rejected: invalid tenant or project ID",
+				"team_id", uc.TenantID, "project", projectName, "error", err.Error())
+			writeLoopZeroError(w, &loopzeroerrors.LoopZeroError{
+				Code:    "INVALID_TENANT_OR_PROJECT",
+				Message: err.Error(),
+			})
+			return
+		}
 		// Plan T2.1 (2026-05-14, F-03 fix): when concurrent deploys race on
 		// the same project's source repo, gitea rejects the second push with
 		// "cannot lock ref" / "remote rejected" / "failed to update ref".

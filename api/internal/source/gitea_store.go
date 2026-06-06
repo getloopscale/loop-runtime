@@ -7,10 +7,12 @@ import (
 	"context"
 	"crypto/sha256"
 	"encoding/hex"
+	"errors"
 	"fmt"
 	"io"
 	"os"
 	"path/filepath"
+	"regexp"
 	"sort"
 	"strings"
 
@@ -20,6 +22,25 @@ import (
 
 	"github.com/loopzero/loopzero/api/internal/gitclient"
 )
+
+// Plan v1.2 T1.2 (cutover-deep-review-hardening): DNS-1123 validation for
+// tenantID/projectID before flowing into git repo names. Prevents path
+// traversal, null-byte injection, Unicode/uppercase repo name collision,
+// and length overflow. Pattern matches K8s namespace + label + Gitea repo
+// + ArgoCD App name conventions (single canonical regex across stack).
+//
+// EC-1 (v1.1): legacy IDs in test fixtures audited via T1.2.0 pre-flight;
+// any non-conforming names renamed before this regex shipped.
+var (
+	tenantIDRE  = regexp.MustCompile(`^[a-z0-9]([a-z0-9-]{0,61}[a-z0-9])?$`)
+	projectIDRE = regexp.MustCompile(`^[a-z0-9]([a-z0-9-]{0,61}[a-z0-9])?$`)
+)
+
+// ErrInvalidTenantOrProject is the sentinel returned by sourceRepoName when
+// tenantID or projectID fails DNS-1123 validation. Route handlers in
+// internal/routes/source.go use errors.Is to map this to HTTP 400 with code
+// INVALID_TENANT_OR_PROJECT (Plan v1.2 T1.2).
+var ErrInvalidTenantOrProject = errors.New("invalid tenant or project ID")
 
 // GiteaSourceStoreConfig holds configuration for connecting to Gitea.
 type GiteaSourceStoreConfig struct {
@@ -49,11 +70,22 @@ func NewGiteaSourceStore(cfg GiteaSourceStoreConfig) (*GiteaSourceStore, error) 
 }
 
 // sourceRepoName returns the deterministic Gitea repo name per spec §7.5.
-func sourceRepoName(tenantID, projectID string) string {
-	if projectID != "" {
-		return fmt.Sprintf("loopzero-source-%s-%s", tenantID, projectID)
+//
+// Plan v1.2 T1.2: tenantID and projectID MUST match DNS-1123 (1-63 chars,
+// lowercase alphanumeric + hyphens, no leading/trailing hyphen). Returns
+// error on invalid input — caller in routes/source.go maps to HTTP 400
+// with code INVALID_TENANT_OR_PROJECT.
+func sourceRepoName(tenantID, projectID string) (string, error) {
+	if !tenantIDRE.MatchString(tenantID) {
+		return "", fmt.Errorf("%w: tenantID must match DNS-1123 lowercase alphanumeric+hyphens, 1-63 chars (got %q)", ErrInvalidTenantOrProject, tenantID)
 	}
-	return fmt.Sprintf("loopzero-source-%s", tenantID)
+	if projectID != "" {
+		if !projectIDRE.MatchString(projectID) {
+			return "", fmt.Errorf("%w: projectID must match DNS-1123 lowercase alphanumeric+hyphens, 1-63 chars (got %q)", ErrInvalidTenantOrProject, projectID)
+		}
+		return fmt.Sprintf("loopzero-source-%s-%s", tenantID, projectID), nil
+	}
+	return fmt.Sprintf("loopzero-source-%s", tenantID), nil
 }
 
 // PushBundle receives a source bundle from the CLI (git bundle or tar.gz),
@@ -104,7 +136,10 @@ func (s *GiteaSourceStore) pushGitBundle(ctx context.Context, tenantID, projectI
 	}
 
 	repoDir := filepath.Join(tmpDir, "repo")
-	repoName := sourceRepoName(tenantID, projectID)
+	repoName, err := sourceRepoName(tenantID, projectID)
+	if err != nil {
+		return "", fmt.Errorf("gitea source: %w", err)
+	}
 	remoteURL := s.repo.RepoURL(repoName)
 
 	if err := s.repo.EnsureRepo(ctx, repoName, false); err != nil {
@@ -193,7 +228,11 @@ func (s *GiteaSourceStore) pushTarBundle(ctx context.Context, tenantID, projectI
 		return PushResult{}, fmt.Errorf("gitea source: content hash: %w", err)
 	}
 
-	repoName := sourceRepoName(tenantID, projectID)
+	repoName, err := sourceRepoName(tenantID, projectID)
+	if err != nil {
+		_ = os.RemoveAll(tmpDir)
+		return PushResult{}, fmt.Errorf("gitea source: %w", err)
+	}
 	remoteURL := s.repo.RepoURL(repoName)
 
 	if err := s.repo.EnsureRepo(ctx, repoName, false); err != nil {

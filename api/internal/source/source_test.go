@@ -6,6 +6,7 @@ package source
 import (
 	"bytes"
 	"context"
+	"errors"
 	"path/filepath"
 	"strings"
 	"testing"
@@ -206,14 +207,90 @@ func TestValidationError_Error(t *testing.T) {
 // --- sourceRepoName ---
 
 func TestSourceRepoName(t *testing.T) {
-	got := sourceRepoName("tn-acme", "my-app")
+	got, err := sourceRepoName("tn-acme", "my-app")
+	if err != nil {
+		t.Fatalf("sourceRepoName unexpected error: %v", err)
+	}
 	if got != "loopzero-source-tn-acme-my-app" {
 		t.Errorf("sourceRepoName = %q, want loopzero-source-tn-acme-my-app", got)
 	}
 
-	got2 := sourceRepoName("tn-acme", "")
+	got2, err := sourceRepoName("tn-acme", "")
+	if err != nil {
+		t.Fatalf("sourceRepoName (no project) unexpected error: %v", err)
+	}
 	if got2 != "loopzero-source-tn-acme" {
 		t.Errorf("sourceRepoName (no project) = %q, want loopzero-source-tn-acme", got2)
+	}
+}
+
+// Plan v1.2 T1.2 (cutover-deep-review-hardening): DNS-1123 validation tests.
+// Covers path traversal, null byte, Unicode, length overflow, uppercase.
+
+func TestSourceRepoName_PathTraversal_TenantID(t *testing.T) {
+	_, err := sourceRepoName("acme/../../etc/passwd", "valid")
+	if err == nil {
+		t.Fatal("expected error for path-traversal tenantID, got nil")
+	}
+	if !errors.Is(err, ErrInvalidTenantOrProject) {
+		t.Errorf("error must wrap ErrInvalidTenantOrProject, got: %v", err)
+	}
+	if !strings.Contains(err.Error(), "tenantID") {
+		t.Errorf("error must mention 'tenantID' field, got: %v", err)
+	}
+}
+
+func TestSourceRepoName_NullByte_ProjectID(t *testing.T) {
+	_, err := sourceRepoName("tn-acme", "proj\x00name")
+	if err == nil {
+		t.Fatal("expected error for null-byte projectID, got nil")
+	}
+	if !errors.Is(err, ErrInvalidTenantOrProject) {
+		t.Errorf("error must wrap ErrInvalidTenantOrProject, got: %v", err)
+	}
+	if !strings.Contains(err.Error(), "projectID") {
+		t.Errorf("error must mention 'projectID' field, got: %v", err)
+	}
+}
+
+func TestSourceRepoName_Unicode_TenantID(t *testing.T) {
+	_, err := sourceRepoName("ácme", "valid")
+	if err == nil {
+		t.Fatal("expected error for non-ASCII tenantID, got nil")
+	}
+}
+
+func TestSourceRepoName_UppercaseRejected_TenantID(t *testing.T) {
+	_, err := sourceRepoName("Acme", "valid")
+	if err == nil {
+		t.Fatal("expected error for uppercase tenantID, got nil")
+	}
+}
+
+func TestSourceRepoName_LengthExceeds_TenantID(t *testing.T) {
+	tenantID := strings.Repeat("a", 64) // 64 chars = over limit
+	_, err := sourceRepoName(tenantID, "valid")
+	if err == nil {
+		t.Fatalf("expected error for tenantID length=%d > 63, got nil", len(tenantID))
+	}
+}
+
+func TestSourceRepoName_ValidNames_OK(t *testing.T) {
+	cases := []struct{ tenant, project, want string }{
+		{"acme", "app1", "loopzero-source-acme-app1"},
+		{"tn-1", "p", "loopzero-source-tn-1-p"},
+		{"a", "b", "loopzero-source-a-b"},
+		{strings.Repeat("a", 63), "p", "loopzero-source-" + strings.Repeat("a", 63) + "-p"},
+	}
+	for _, c := range cases {
+		got, err := sourceRepoName(c.tenant, c.project)
+		if err != nil {
+			t.Errorf("sourceRepoName(%q, %q) unexpected error: %v", c.tenant, c.project, err)
+			continue
+		}
+		if got != c.want {
+			t.Errorf("sourceRepoName(%q, %q) = %q, want %q", c.tenant, c.project, got, c.want)
+		}
 	}
 }
 

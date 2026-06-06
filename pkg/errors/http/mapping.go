@@ -62,6 +62,7 @@ var statusByCode = map[string]int{
 	"VALIDATION_ERROR":           http.StatusBadRequest, // 400 (db/scaling_store.go)
 	"MISSING_FIELD":              http.StatusBadRequest, // 400
 	"SAME_ENVIRONMENT":           http.StatusBadRequest, // 400
+	"INVALID_TENANT_OR_PROJECT":  http.StatusBadRequest, // 400 (Plan v1.2 T1.2 — DNS-1123 validation)
 
 	"UNAUTHORIZED": http.StatusUnauthorized, // 401
 	"FORBIDDEN":    http.StatusForbidden,    // 403

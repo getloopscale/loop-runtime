@@ -135,6 +135,15 @@ func ValidateServicesJSON(content string) (*LoopZeroYAML, []string, error) {
 		}
 	}
 
+	// Plan v1.2 T1.3 — post-schema reserved env key check. patternProperties
+	// in the JSON Schema 7 contract already enforces POSIX key shape +
+	// maxLength + maxProperties; this rejects keys whose presence would
+	// compromise the runtime container (PATH, LD_PRELOAD, KUBERNETES_*,
+	// LOOPZERO_*, …). EC-8: warn-only mode gated by LOOPZERO_ENV_BLOCKLIST_MODE.
+	if envErr := validateReservedEnvKeys(&manifest, nil); envErr != nil {
+		return nil, nil, envErr
+	}
+
 	// Translate to LoopZeroYAML struct shape for downstream compatibility.
 	// services.json `services[]` → LoopZeroYAML.Apps map (keyed by service.name).
 	// The `runtime` field surfaces via the `framework` slot (ADR D7 transition);

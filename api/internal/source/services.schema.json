@@ -47,7 +47,15 @@
         "cors": { "type": "boolean" },
         "env": {
           "type": "object",
-          "additionalProperties": { "type": "string" }
+          "description": "Process environment variables passed to the running service. Keys MUST be POSIX-compliant (^[A-Z_][A-Z0-9_]*$); values are bounded to 4096 chars. Total entries capped at 64 to prevent manifest-bomb DoS. Plan v1.2 T1.3 — additional Go-side blocklist rejects reserved keys (PATH, HOME, LD_PRELOAD, LD_LIBRARY_PATH, KUBERNETES_*, LOOPZERO_*).",
+          "maxProperties": 64,
+          "patternProperties": {
+            "^[A-Z_][A-Z0-9_]*$": {
+              "type": "string",
+              "maxLength": 4096
+            }
+          },
+          "additionalProperties": false
         },
         "dependsOn": {
           "type": "array",

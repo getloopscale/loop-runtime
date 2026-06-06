@@ -321,6 +321,14 @@ var (
 		Message:    "Failed to upload source code. Ensure your git history is clean and try again.",
 	}
 
+	// ErrInvalidTenantOrProject is returned when tenantID or projectID fails
+	// DNS-1123 validation (Plan v1.2 T1.2). The detailed message is filled in
+	// at the call site via NewLoopZeroError to surface which field + why.
+	ErrInvalidTenantOrProject = &LoopZeroError{
+		Code:    "INVALID_TENANT_OR_PROJECT",
+		Message: "tenant or project ID must match DNS-1123 (1-63 chars, lowercase alphanumeric + hyphens, no leading/trailing hyphen)",
+	}
+
 	// ErrPlatformDegraded is returned when the deploy service circuit breaker is open.
 	// The platform is temporarily unable to process sync requests (DA-7).
 	ErrPlatformDegraded = &LoopZeroError{
