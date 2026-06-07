@@ -1,9 +1,8 @@
 import { lazy, Suspense, type ReactNode } from 'react';
-import { BrowserRouter, Routes, Route } from 'react-router-dom';
+import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom';
 import { NuqsAdapter } from 'nuqs/adapters/react-router/v7';
 import {
   Bell,
-  Key,
   Link2,
   Loader2,
   Lock,
@@ -225,7 +224,10 @@ export default function App() {
                     <Route path="/team" element={<Boundaried path="/team"><TeamPage /></Boundaried>} />
                     <Route path="/billing" element={<Boundaried path="/billing"><BillingPage /></Boundaried>} />
                     <Route path="/domains" element={<Boundaried path="/domains"><DomainsPage /></Boundaried>} />
-                    <Route path="/api-keys" element={<Boundaried path="/api-keys"><ApiKeysPage /></Boundaried>} />
+                    {/* Canonical API token URL is /settings/tokens (sidebar → Settings → Developer
+                        → API Tokens). /api-keys kept as redirect for backward compat with bookmarks
+                        and any external link issued before the consolidation. */}
+                    <Route path="/api-keys" element={<Navigate to="/settings/tokens" replace />} />
                     <Route path="/memory" element={<Boundaried path="/memory"><MemoryPage /></Boundaried>} />
                     <Route path="/memory/memories" element={<Boundaried path="/memory/memories"><MemoryListPage /></Boundaried>} />
                     <Route path="/memory/entities" element={<Boundaried path="/memory/entities"><EntitiesPage /></Boundaried>} />
@@ -258,18 +260,18 @@ export default function App() {
                         </Boundaried>
                       }
                     />
+                    {/* API Tokens — canonical surface. Backed by ApiKeysPage which already
+                        ships the full Stripe-shape lifecycle: List + Create (typed scopes +
+                        optional expiration) + Revoke (typed confirmation) + Rotate (grace
+                        window) + Lineage (rotation timeline) + show-once secret reveal
+                        with EC-13 "I've copied my key safely" acknowledgement gate.
+                        Pre-fix the sidebar pointed here but the route was a placeholder
+                        suggesting a non-existent `loopzero token create` CLI. The canonical
+                        page was orphaned at /api-keys with no nav entry — consolidated
+                        to the sidebar-shaped Settings → Developer → API Tokens hierarchy. */}
                     <Route
                       path="/settings/tokens"
-                      element={
-                        <Boundaried path="/settings/tokens">
-                          <SubPagePlaceholder
-                            title="API Tokens"
-                            description="Personal access tokens for the API + CLI."
-                            icon={Key}
-                            cliCommand="loopzero token create --name my-token"
-                          />
-                        </Boundaried>
-                      }
+                      element={<Boundaried path="/settings/tokens"><ApiKeysPage /></Boundaried>}
                     />
                     <Route
                       path="/settings/webhooks"
