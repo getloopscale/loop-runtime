@@ -20,7 +20,7 @@
 set -euo pipefail
 
 readonly PGURL="${PGURL:-postgresql://localhost:5432/postgres}"
-readonly THEMORY_CLI="${THEMORY_CLI:-$(cd "$(dirname "${BASH_SOURCE[0]}")/../../../" && realpath ../loopzero-memory)/dist/agent-tools/cli.js}"
+readonly THEMORY_CLI="${THEMORY_CLI:-$(realpath -m "$(dirname "${BASH_SOURCE[0]}")/../../../../../loopzero-memory/dist/agent-tools/cli.js")}"
 
 # Color codes for human-readable output
 readonly C_RED='\033[0;31m'

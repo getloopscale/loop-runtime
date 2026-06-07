@@ -39,6 +39,17 @@ cloud/dashboard/referencia/
 
 # Composio plugin cache (per-machine, never tracked)
 .od/
+
+# TheMemory native-process dev-loop artifacts (per plan loopzero-cloud-themory-e2e-finalize T1.1)
+# .themory.pid          — PID of running themory server (start-themory.sh writes; stop-themory.sh removes)
+# .themory.log          — stdout/stderr of themory server process
+# .themory-bootstrap-token — random admin bootstrap token (chmod 600); consumed by bootstrap-themory-key.sh
+# .themory-master-key   — bootstrapped loopzero_live_* admin key (NEVER commit; cloud-side master, GO-TO CTO Invariant 3)
+infra/scripts/local/.themory.pid
+infra/scripts/local/.themory.log
+infra/scripts/local/.themory-bootstrap-token
+infra/scripts/local/.themory-master-key
+infra/scripts/local/.themory.env
 # Exempt the script module infra/scripts/build/ — it is hand-written sources,
 # not Node build output. Without this negation any NEW file added there would
 # be silently ignored (catastrophic — see line ~68).
