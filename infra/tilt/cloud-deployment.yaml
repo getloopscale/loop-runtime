@@ -26,14 +26,23 @@ spec:
           env:
             - name: CLOUD_LISTEN_ADDR
               value: ":13002"
+            # FIX 2026-06-07: Ory services live in loopzero-auth ns (per helmfile),
+            # not loopzero-system. URLs corrected so cmd can reach Hydra/Kratos.
             - name: KRATOS_PUBLIC_URL
-              value: "http://ory-kratos-public.loopzero-system.svc.cluster.local:80"
+              value: "http://ory-kratos-public.loopzero-auth.svc.cluster.local:80"
             - name: KRATOS_ADMIN_URL
-              value: "http://ory-kratos-admin.loopzero-system.svc.cluster.local:80"
+              value: "http://ory-kratos-admin.loopzero-auth.svc.cluster.local:80"
             - name: HYDRA_PUBLIC_URL
-              value: "http://ory-hydra-public.loopzero-system.svc.cluster.local:4444"
+              value: "http://ory-hydra-public.loopzero-auth.svc.cluster.local:4444"
             - name: HYDRA_ADMIN_URL
-              value: "http://ory-hydra-admin.loopzero-system.svc.cluster.local:4445"
+              value: "http://ory-hydra-admin.loopzero-auth.svc.cluster.local:4445"
+            # NEW 2026-06-07: Memory section proxy target.
+            # Host TheMemory native process at 0.0.0.0:8080 (bound to all interfaces).
+            # From inside k3d pod, reach host via docker bridge 10.0.5.1.
+            - name: THEMORY_BASE_URL
+              value: "http://10.0.5.1:8080"
+            - name: THEMORY_API_KEY
+              value: ""
             - name: HYDRA_CLIENT_ID
               value: "loopzero-cli"
             - name: ENGINE_API_URL
