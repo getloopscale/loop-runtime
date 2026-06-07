@@ -132,7 +132,7 @@ spec:
             - name: MINIO_ENDPOINT
               value: "http://minio.loopzero-system.svc.cluster.local:9000"
             - name: MINIO_CROSS_CLUSTER_ENDPOINT
-              value: "http://172.18.0.3:32000"
+              value: "http://10.0.5.2:32000"
             - name: MINIO_ACCESS_KEY
               value: "loopzero-admin"
             - name: MINIO_SECRET_KEY
@@ -140,9 +140,9 @@ spec:
             - name: GITEA_URL
               value: "http://gitea-http.loopzero-system.svc.cluster.local:3000"
             - name: GITEA_CROSS_CLUSTER_URL
-              value: "http://172.18.0.3:30000"
+              value: "http://10.0.5.2:30000"
             - name: API_CROSS_CLUSTER_URL
-              value: "http://172.18.0.3:30001"
+              value: "http://10.0.5.2:30001"
             - name: GITEA_TOKEN
               valueFrom:
                 secretKeyRef:
@@ -227,7 +227,7 @@ spec:
             - name: LOOPZERO_ADMIN_API
               value: "true"
             - name: WORKLOAD_INGRESS_URL
-              value: "http://172.18.0.12:80"
+              value: "http://10.0.5.11:80"
             - name: BASE_DOMAIN
               value: "loopzero.local"
             - name: JWKS_URL
