@@ -42,7 +42,10 @@ spec:
             - name: THEMORY_BASE_URL
               value: "http://10.0.5.1:8080"
             - name: THEMORY_API_KEY
-              value: ""
+              valueFrom:
+                secretKeyRef:
+                  name: themory-dev-key
+                  key: api-key
             - name: HYDRA_CLIENT_ID
               value: "loopzero-cli"
             - name: ENGINE_API_URL
