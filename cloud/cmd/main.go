@@ -211,6 +211,21 @@ func main() {
 		memoryWebhookDeliveriesHandler = routes.NewMemoryWebhookDeliveriesHandler(db, logger)
 	}
 
+	// Plan dashboard-memory-bff-server-side-key-vault v1.2 § T3.1.
+	// BFFKeyVault + DashboardMemoryHandler: browser-trust route family
+	// /v1/dashboard/memory/* — JWT-auth then internally mints server-side
+	// loopzero_live_* (NEVER touches browser per ADR D1).
+	var dashboardMemoryHandler *routes.DashboardMemoryHandler
+	if memoryHandler != nil && db != nil {
+		bffVault, vErr := auth.NewBFFKeyVault(db, cfg.BFFKeyTTLHours)
+		if vErr != nil {
+			logger.Error("BFFKeyVault init failed", "error", vErr)
+			os.Exit(1)
+		}
+		dashboardMemoryHandler = routes.NewDashboardMemoryHandler(bffVault, memoryHandler, logger)
+		logger.Info("BFF memory dashboard enabled", "ttl_hours", cfg.BFFKeyTTLHours)
+	}
+
 	// Router
 	r := chi.NewRouter()
 	r.Use(chimw.RequestID)
@@ -369,6 +384,19 @@ func main() {
 					memoryWebhookDeliveriesHandler.Replay,
 				)
 			}
+		})
+	}
+
+	// Plan dashboard-memory-bff-server-side-key-vault v1.2 § T3.1.
+	// Browser-trust BFF route family — JWT-auth (not loopzero_live_*).
+	if dashboardMemoryHandler != nil {
+		r.Route("/v1/dashboard/memory", func(r chi.Router) {
+			r.Use(requireJWT)
+			r.Get("/list", dashboardMemoryHandler.List)
+			r.Get("/metrics", dashboardMemoryHandler.Metrics)
+			r.Delete("/forget/{memoryID}", dashboardMemoryHandler.Forget)
+			r.Get("/entities", dashboardMemoryHandler.Entities)
+			r.Post("/revoke-on-logout", dashboardMemoryHandler.RevokeOnLogout)
 		})
 	}
 

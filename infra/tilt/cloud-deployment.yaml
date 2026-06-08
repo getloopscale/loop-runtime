@@ -46,6 +46,10 @@ spec:
                 secretKeyRef:
                   name: themory-dev-key
                   key: api-key
+            # Plan dashboard-memory-bff-server-side-key-vault v1.2 § T3.1.
+            # BFF-minted loopzero_live_* keys expire after this window. Range [1, 168].
+            - name: LOOPZEROCLOUD_BFF_KEY_TTL_HOURS
+              value: "24"
             - name: HYDRA_CLIENT_ID
               value: "loopzero-cli"
             - name: ENGINE_API_URL
