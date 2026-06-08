@@ -7,6 +7,43 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+### Added (2026-06-07 — TheMemory E2E operator wire-up — closes Dashboard Memory Section roadmap §"Open items" #6)
+
+Per `.claude/knowledge-base/plans/loopzero-cloud-themory-e2e-finalize-plan.md` v1.3 (SHIPPABLE_WITH_CAVEATS 70.0). 10 tasks across 7 commits (`61ec6531`..`5a3b5fa3`) close the operational gap between the engineering-TERMINAL Dashboard Memory Section (5-plan chain) and a runnable dev-loop where the chain Dashboard → Go proxy → TheMemory actually returns 200.
+
+- **7 new bash scripts under `infra/scripts/local/`** (all gitignored runtime artifacts under same directory):
+  - `preflight-themory.sh` — 5-check validator (task doctor ≥ 30 PASS, PostgreSQL via libpq URL, pgvector extension available, TheMemory CLI dist freshness, loopzero-system ns).
+  - `start-themory.sh` — idempotent native-process launcher: ensures themory_dev DB, runs migrations, generates random `THEMORY_ADMIN_BOOTSTRAP_TOKEN`, exec via nohup + disown.
+  - `stop-themory.sh` — SIGTERM with 5s grace + fallback SIGKILL.
+  - `bootstrap-themory-key.sh` — mints master `loopzero_live_*` admin key via `themory keys create`, materializes K8s Secret `themory-dev-key` in `loopzero-system` ns. Supports `--rotate`.
+  - `validate-themory-wireup.sh` — kubectl wait + logs --since=2m asserting `"memory proxy enabled"` from `cloud/cmd/main.go:185`.
+  - `create-test-api-key.sh` — mints scoped (`memory:read|write|delete`) `loopzero_live_*` via cloud `/v1/api-keys` for the smoke-test bearer.
+  - `smoke-themory-e2e.sh` — 5-step full-chain assertion (remember → proxy list → forget → proxy list absent) with trap-EXIT cleanup.
+- **`infra/tilt/cloud-deployment.yaml`** (CHANGED) — replaced inline `THEMORY_API_KEY value: ""` with `valueFrom.secretKeyRef.{name: themory-dev-key, key: api-key}` per GO-TO CTO Invariant 3 (master key lives in K8s Secret, customer never sees it).
+- **`taskfiles/test.yml`** (CHANGED) — new `e2e:themory` target wraps `smoke-themory-e2e.sh`.
+- **`docs/operations/dev-loop.md`** (CHANGED) — new § "TheMemory native-process lifecycle" with 8-step operator runbook + docker-bridge `10.0.5.1` pattern documentation.
+- **`.claude/knowledge-base/plans/2026-06-06-dashboard-memory-section-roadmap.md`** (CHANGED) — Open item #6 CLOSED 2026-06-07 with commit-range reference.
+
+**Plan-vs-reality contradictions surfaced + fixed inline** (T0.2 EC-4 absorption + 3 more discovered during /implement):
+- Plan v1.1 assumed `themory keys create --scope admin --json` — neither flag exists. Real CLI: `--name X --scope memory:read|write|delete` with stdout text parsing via `grep -oE "loopzero_live_[a-zA-Z0-9_-]+"`. Absorbed in plan v1.2.
+- Plan v1.2 documented env var `THEMEMORY_ADMIN_BOOTSTRAP_TOKEN` (double M); actual server reads `THEMORY_ADMIN_BOOTSTRAP_TOKEN` (single M, per `oidc-cli-resolver.ts`). Fixed in `start-themory.sh`.
+- Cloud `POST /v1/api-keys` response field is `.secret` (plan documented `.token`). Fixed in `create-test-api-key.sh`.
+- Initial script log mixed stderr/stdout: `log_info` wrote to stdout, polluting command-substitution captures of bootstrap token. ALL 4 scripts updated to send log lines to stderr.
+- `task doctor` summary format is `PASS: N` (colon), not `PASS=N`. Preflight regex hotfixed (`5a3b5fa3`).
+- `pgvector` probe via `createdb` fails on container-managed PG without CREATEDB privilege; replaced with read-only `pg_available_extensions` query (`5a3b5fa3`).
+
+**Empirical validation status (honest):**
+- T0.1 preflight: 5/5 PASS against themem_pgvector container.
+- T1.1 start/stop: full round-trip against themem_pgvector + loopzero-memory dist.
+- T2.1 bootstrap-key: idempotent skip + --rotate replace, loopzero_live_* regex match.
+- T3.1 YAML: yq parse + grep-asserted secretKeyRef structure.
+- T4.1 validate-wireup: static TDD 5/5; runtime defers to operator `tilt up`.
+- T5.1 smoke-e2e: static TDD 5/5; hybrid empirical via TheMemory direct verified remember + forget round-trip against bootstrap-token Bearer.
+- T5.2 create-test-api-key: static TDD; requires cloud Pod live for runtime.
+- T6.1 dev-loop.md + T6.2 roadmap close: shipped.
+
+**Honest BLOCKED at Integration Validation phase:** full chain (step 4 `tilt up` + step 5 `task test:e2e:themory` through proxy) requires operator runtime — cannot be executed in plan-author's session without extended cluster bringup. Per cycle-implement § Stop Conditions, the operator runs the full chain on first dev-loop invocation; script logic is complete and TDD-verified.
+
 ### Added (2026-06-06 — Delivery Replay — closes Memory Webhook Delivery OOS #5)
 
 Per `.claude/knowledge-base/plans/2026-06-06-delivery-replay-plan.md` v1.0. Single-session standalone plan that closes the explicit Out of Scope #5 of the Memory Webhook Delivery plan ("Customer-triggered manual replay of failed deliveries"). Manual re-trigger endpoint + per-row Replay button surfaced inside the recently-promoted DeliveriesSheet. Composition: builds on the worker + state machine + deliveries-listing shipped by Memory Webhook Delivery.
