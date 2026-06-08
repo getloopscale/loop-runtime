@@ -392,11 +392,21 @@ func main() {
 	if dashboardMemoryHandler != nil {
 		r.Route("/v1/dashboard/memory", func(r chi.Router) {
 			r.Use(requireJWT)
+			// F-rev-7 (fix-cycle 2026-06-08): per-user rate-limit on BFF surface.
+			// Same pool + window as /v1/billing siblings (30 rpm). BFF is higher
+			// risk than billing (mint-or-fetch + TheMemory upstream per call), so
+			// matching the sibling limiter is the floor not ceiling.
+			r.Use(ratelimit.Middleware(billingLimiter, 30, userKey))
 			r.Get("/list", dashboardMemoryHandler.List)
 			r.Get("/metrics", dashboardMemoryHandler.Metrics)
 			r.Delete("/forget/{memoryID}", dashboardMemoryHandler.Forget)
 			r.Get("/entities", dashboardMemoryHandler.Entities)
-			r.Post("/revoke-on-logout", dashboardMemoryHandler.RevokeOnLogout)
+			// F-rev-8 (fix-cycle 2026-06-08): canonical RESTful verb is DELETE
+			// /session (Stripe / AWS Console pattern). Handler is idempotent +
+			// returns 204. Kept old POST /revoke-on-logout for one release as
+			// deprecation alias — remove in v0.next.
+			r.Delete("/session", dashboardMemoryHandler.RevokeOnLogout)
+			r.Post("/revoke-on-logout", dashboardMemoryHandler.RevokeOnLogout) // DEPRECATED, remove next release
 		})
 	}
 
@@ -545,6 +555,37 @@ func main() {
 		webhookWorker := memory_webhook_worker.New(db, logger, nil)
 		go webhookWorker.Run(schedulerCtx)
 		logger.Info("memory webhook dispatcher started")
+	}
+
+	// F-rev-4 (fix-cycle 2026-06-08): BFF cleanup ticker — wires the
+	// CleanupExpired path (orphan PG rows + TTL-expired keys) into the
+	// background scheduler so Sub-goal 6 of plan v1.2 is empirically met.
+	// Cadence: hourly (matches ADR D3); shares schedulerCtx for graceful
+	// SIGTERM shutdown. Pattern matches sibling memory_webhook_worker.
+	if dashboardMemoryHandler != nil && db != nil {
+		bffVault, _ := auth.NewBFFKeyVault(db, cfg.BFFKeyTTLHours)
+		if bffVault != nil {
+			go func() {
+				ticker := time.NewTicker(1 * time.Hour)
+				defer ticker.Stop()
+				for {
+					select {
+					case <-schedulerCtx.Done():
+						return
+					case <-ticker.C:
+						n, err := bffVault.CleanupExpired(schedulerCtx)
+						if err != nil {
+							logger.Warn("BFF cleanup: cron sweep failed", "error", err)
+							continue
+						}
+						if n > 0 {
+							logger.Info("BFF cleanup: swept expired keys", "count", n)
+						}
+					}
+				}
+			}()
+			logger.Info("BFF cleanup cron started", "interval", "1h")
+		}
 	}
 
 	// T1.9 production deployment: start cost aggregator if Prometheus
