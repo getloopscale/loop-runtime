@@ -7,6 +7,41 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+### Added (2026-06-08 — Dashboard Memory BFF Server-Side Key Vault — closes architectural mismatch discovered during 2026-06-07 dogfood)
+
+Per `.claude/knowledge-base/plans/dashboard-memory-bff-server-side-key-vault-plan.md` v1.2 (SHIPPABLE_WITH_CAVEATS 70.0). 9 commits across 2 days (`3212b89d`..`<latest>`) close the Dashboard ↔ `/v1/memory/*` auth mismatch via FAANG-canonical Backend-For-Frontend pattern. The `loopzero_live_*` API key NEVER touches the browser. Pattern matches Google Cloud Console, AWS Console, Stripe Dashboard.
+
+- **New `/v1/dashboard/memory/*` route family** (`cloud/internal/routes/dashboard_memory.go`, 124 LoC) — JWT-authenticated browser-trust BFF. Endpoints: `GET /list`, `GET /metrics`, `DELETE /forget/{memoryID}`, `GET /entities`, `DELETE /session` (canonical RESTful logout-revoke; `POST /revoke-on-logout` kept ONE release as deprecation alias). Per-user rate limit (30 rpm via `ratelimit.Middleware(billingLimiter, 30, userKey)`).
+- **`BFFKeyVault`** (`cloud/internal/auth/bff_key_vault.go`, 209 LoC) — server-side `loopzero_live_*` mint + cache (in-memory LRU 256 entries via `hashicorp/golang-lru/v2` v2.0.7) + PG persistence (`loopzero_api_keys.bff_minted=true`). EC absorptions: EC-1 `INSERT ... ON CONFLICT (id) DO NOTHING`, EC-3+EC-8 always-revoke-before-INSERT, EC-10 input validation (empty subject/tenantID), EC-14 `BFFVaultError` typed error NEVER serializes the secret. Mint flow steps 0-8 ordered + documented.
+- **`DashboardMemoryHandler`** — delegates to existing `MemoryHandler` after vault mint. SECURITY INVARIANT: `MintOrFetch` return value DISCARDED immediately; secret NEVER written to response body, log, cookie, or OTel span. Audit trail via OTel span `bff.memory.{list,metrics,forget,entities}` with attribute `bff.minted=true`.
+- **Hourly BFF cleanup ticker** (`cloud/cmd/main.go` goroutine) — wires `BFFKeyVault.CleanupExpired` into background scheduler with `schedulerCtx` graceful SIGTERM. Cadence 1h per ADR D3.
+- **PG migration 000030** (`api/internal/db/migrations/000030_bff_minted_column.{up,down}.sql`) — adds `bff_minted BOOLEAN NOT NULL DEFAULT FALSE` + partial index `idx_loopzero_api_keys_bff_minted_expires WHERE bff_minted = true`. Backward-compatible (DEFAULT FALSE; existing rows unaffected). Down migration includes EC-12 warning: production rollback requires `DELETE FROM loopzero_api_keys WHERE key_name='bff-dashboard'` BEFORE column drop.
+- **Dashboard client path-rewrite** (`cloud/dashboard/src/lib/api.ts::cloudFetch`) — transparently rewrites `/v1/memory/*` → `/v1/dashboard/memory/*` for browser calls. EC-6 path-traversal defense: `path.startsWith('/v1/memory/') && !path.includes('..')` blocks rewrite if any `..` segment present. Backward-compat: SDK consumers (CLI, future Mobile) continue hitting `/v1/memory/*` directly with their own keys.
+- **Config**: `BFFKeyTTLHours` field (`LOOPZEROCLOUD_BFF_KEY_TTL_HOURS`, default 24, range [1, 168]) — validation deferred to vault constructor (fail-loud per `.claude/rules/loopzero-design.md § Error Philosophy`).
+- **E2E smoke script** (`infra/scripts/local/smoke-dashboard-memory-bff-e2e.sh`, 182 LoC) — 6-step chain: Kratos browser-flow login (real Set-Cookie) → JWT exchange → POST `/v1/remember` direct → GET `/v1/dashboard/memory/list` via BFF → SECURITY GATE substring scan for `loopzero_live_` → 0 hits → DELETE `/forget/{id}` → list confirms absent. Wrapped by `task test:e2e:dashboard-memory-bff`.
+- **Tilt env**: `LOOPZEROCLOUD_BFF_KEY_TTL_HOURS=24` declared in `infra/tilt/cloud-deployment.yaml`.
+
+**Test surface** (43 unit tests + 11 dashboard tests + 1 E2E smoke):
+- `cloud/tests/unit/bff_key_vault_test.go` — 20 tests (10 original + 8 EC absorption + 2 constructor)
+- `cloud/tests/unit/dashboard_memory_test.go` — 10 tests (9 plan v1.2 T2.1 + 1 OTel span attribute)
+- `cloud/internal/config/config_test.go` — 4 tests (`envOrInt` validation, T3.1 absorption)
+- `cloud/dashboard/src/lib/api.test.ts` — 11 tests (5 original + 6 BFF: 3 path-rewrite + JWT-unchanged + EC-18 retry-invariant + EC-20 raw-fetch sentinel)
+
+**Plan-vs-reality fixes discovered + closed inline:**
+- Path resolution `THEMORY_CLI` (5 levels up) — fixed in start-themory.sh + preflight-themory.sh
+- task doctor regex `PASS:` (colon, not equals) — fixed in preflight
+- pgvector probe via `pg_available_extensions` (read-only) — fixed in preflight
+- env name `THEMORY_ADMIN_BOOTSTRAP_TOKEN` (single M, not double M) — fixed in start-themory.sh
+- `themory keys create` real signature: `--scope memory:read --scope memory:write --scope memory:delete` (no `--scope admin`, no `--json`) — absorbed in plan v1.2
+- DashboardMemoryHandler container name in `cloud-deployment.yaml` clarified
+
+**Review summary** (per `.claude/knowledge-base/reviews/dashboard-memory-bff-server-side-key-vault-review-2026-06-08.md`):
+- /code-quality: PASS_WITH_CAVEATS (0 BLOCKER, 0 lint in BFF files)
+- /review initial: NEEDS_FIXES (8 HIGH/MAJOR findings)
+- /review fix-cycle absorbed all 8: F-rev-1 (3 missing T4.1 tests), F-rev-2 (OTel span test), F-rev-3 (smoke Kratos browser-flow rewrite), F-rev-4 (cleanup ticker), F-rev-5 (4 config tests), F-rev-6 (this CHANGELOG entry), F-rev-7 (rate-limit), F-rev-8 (DELETE /session canonical verb)
+
+**Honest BLOCKED**: full E2E smoke chain (`task test:e2e:dashboard-memory-bff`) requires operator runtime (port-forwards 13002 + 14433 + Tilt cluster active). First operator invocation closes the runtime gate.
+
 ### Added (2026-06-07 — TheMemory E2E operator wire-up — closes Dashboard Memory Section roadmap §"Open items" #6)
 
 Per `.claude/knowledge-base/plans/loopzero-cloud-themory-e2e-finalize-plan.md` v1.3 (SHIPPABLE_WITH_CAVEATS 70.0). 10 tasks across 7 commits (`61ec6531`..`5a3b5fa3`) close the operational gap between the engineering-TERMINAL Dashboard Memory Section (5-plan chain) and a runnable dev-loop where the chain Dashboard → Go proxy → TheMemory actually returns 200.

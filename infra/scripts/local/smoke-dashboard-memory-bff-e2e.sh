@@ -70,40 +70,39 @@ ensure_port_forwards() {
 }
 
 kratos_login_browser_flow() {
-  log_step 2 "Kratos browser-flow login (cookie capture)"
-  # Browser flow → emits Set-Cookie ory_kratos_session
-  local flow_resp flow_id action_url csrf
-  flow_resp=$(curl -fsS -c "$COOKIE_JAR" -b "$COOKIE_JAR" \
+  log_step 2 "Kratos browser-flow login (real Set-Cookie capture)"
+  # F-rev-3 fix-cycle 2026-06-08: use real BROWSER flow (not api-mode) so
+  # Kratos emits Set-Cookie ory_kratos_session which the cloud
+  # /v1/auth/session/token endpoint validates via /sessions/whoami.
+  # Pattern matches infra/scripts/local/live-proof-dev-public.sh:get_jwt.
+  local flow
+  flow=$(curl -fsS -c "$COOKIE_JAR" -b "$COOKIE_JAR" \
     --max-time "$CURL_TIMEOUT" \
-    "${KRATOS_URL}/self-service/login/browser?return_to=${CLOUD_URL}" 2>&1) \
-    || log_fatal "browser flow init failed"
-  flow_id=$(echo "$flow_resp" | jq -r '.id // empty' 2>/dev/null) || flow_id=""
-  # Kratos may redirect; use API mode instead which returns session_token directly
-  # then translate to cookie via login/api → session_token → use Kratos admin to
-  # set cookie. Simpler: use the api-login path and let cloud accept the cookie
-  # set via the browser flow OR directly inject session_token-as-cookie.
-  #
-  # For dev simplicity: use api-mode login which gives us session_token. Then
-  # POST /v1/auth/session/token can accept the session_token as a cookie OR
-  # as the Authorization header — depending on cloud session_token.go's accept
-  # logic. Most likely uses cookie. Let's mimic by setting Cookie manually.
-  flow_resp=$(curl -fsS "${KRATOS_URL}/self-service/login/api" --max-time "$CURL_TIMEOUT")
-  flow_id=$(echo "$flow_resp" | jq -r '.id')
-  local login_resp
-  login_resp=$(curl -fsS -X POST "${KRATOS_URL}/self-service/login?flow=${flow_id}" \
+    "${KRATOS_URL}/self-service/login/browser" -H "Accept: application/json" 2>&1) \
+    || log_fatal "browser flow init failed: $flow"
+  local fid csrf
+  fid=$(echo "$flow" | jq -r '.id // empty')
+  [ -n "$fid" ] || log_fatal "browser flow returned no id; raw: $flow"
+  csrf=$(echo "$flow" | python3 -c "
+import sys, json
+d = json.load(sys.stdin)
+for n in d.get('ui',{}).get('nodes',[]):
+    if n.get('attributes',{}).get('name')=='csrf_token':
+        print(n['attributes'].get('value','')); break
+" 2>/dev/null) || csrf=""
+  # Submit credentials WITH csrf_token; flow=<fid> binds to cookie-jar's
+  # session — cookie jar accumulates the ory_kratos_session set by Kratos.
+  curl -fsS -b "$COOKIE_JAR" -c "$COOKIE_JAR" -X POST \
+    "${KRATOS_URL}/self-service/login?flow=${fid}" \
     -H "Content-Type: application/json" \
-    -d "{\"method\":\"password\",\"identifier\":\"${DEV_EMAIL}\",\"password\":\"${DEV_PASSWORD}\"}" \
-    --max-time "$CURL_TIMEOUT") \
-    || log_fatal "kratos login failed"
-  local session_token
-  session_token=$(echo "$login_resp" | jq -r '.session_token // empty')
-  [ -n "$session_token" ] || log_fatal "kratos returned no session_token"
-  # Store session_token as cookie file entry that cloud session/token will read.
-  # Kratos cookie name: ory_kratos_session (dev default). Domain: localhost.
-  printf 'localhost\tFALSE\t/\tFALSE\t0\tory_kratos_session\t%s\n' "$session_token" >> "$COOKIE_JAR"
-  log_info "Kratos login OK (session_token len=${#session_token})"
-  # silence unused-var warnings (vars staged for future browser-flow CSRF path)
-  : "${csrf:-}" "${action_url:-}"
+    -d "{\"method\":\"password\",\"identifier\":\"${DEV_EMAIL}\",\"password\":\"${DEV_PASSWORD}\",\"csrf_token\":\"${csrf}\"}" \
+    --max-time "$CURL_TIMEOUT" >/dev/null \
+    || log_fatal "kratos login POST failed"
+  # Verify cookie jar now has ory_kratos_session
+  if ! grep -q "ory_kratos_session" "$COOKIE_JAR"; then
+    log_fatal "Kratos did not set ory_kratos_session cookie (jar contents: $(cat "$COOKIE_JAR" | grep -v '^#'))"
+  fi
+  log_info "Kratos browser-flow login OK (session cookie set)"
 }
 
 exchange_for_jwt() {
