@@ -22,6 +22,9 @@ import (
 	"testing"
 
 	sqlmock "github.com/DATA-DOG/go-sqlmock"
+	"go.opentelemetry.io/otel"
+	sdktrace "go.opentelemetry.io/otel/sdk/trace"
+	"go.opentelemetry.io/otel/sdk/trace/tracetest"
 
 	"github.com/loopzero/loopzero/cloud/internal/auth"
 	"github.com/loopzero/loopzero/cloud/internal/routes"
@@ -257,3 +260,69 @@ func errFake(m string) error      { return fakeError{m} }
 
 // Silence unused-imports — bytes only needed if test inspection grows
 var _ = bytes.NewReader
+
+// =========================================================================
+// F-rev-2 (fix-cycle 2026-06-08): OTel span attribute test
+// Plan v1.2 T2.1 TDD promised `test_otel_span_attribute_bff_minted_set`
+// =========================================================================
+
+func TestDashboardMemory_OTelSpanAttributeBffMintedSet(t *testing.T) {
+	// Setup an in-memory tracer-provider so we can capture spans emitted
+	// during the handler execution. SpanRecorder collects every span end.
+	exporter := tracetest.NewInMemoryExporter()
+	tp := sdktrace.NewTracerProvider(
+		sdktrace.WithSyncer(exporter),
+	)
+	prev := otel.GetTracerProvider()
+	otel.SetTracerProvider(tp)
+	t.Cleanup(func() {
+		otel.SetTracerProvider(prev)
+	})
+
+	dash, _, mock := newDashHandler(t)
+	mock.ExpectExec(`UPDATE loopzero_api_keys`).WillReturnResult(sqlmock.NewResult(0, 0))
+	mock.ExpectQuery(`INSERT INTO loopzero_api_keys`).
+		WillReturnRows(sqlmock.NewRows([]string{"id"}).AddRow("bff-mocked-id"))
+
+	r := httptest.NewRequest("GET", "/v1/dashboard/memory/list", nil)
+	r = r.WithContext(jwtCtx(r.Context(), "user-A", "tenant-1"))
+	w := httptest.NewRecorder()
+	dash.List(w, r)
+	if w.Code != http.StatusOK {
+		t.Fatalf("expected 200; got %d", w.Code)
+	}
+
+	spans := exporter.GetSpans()
+	if len(spans) == 0 {
+		t.Fatalf("expected at least one OTel span; got none")
+	}
+	var bffSpan *tracetest.SpanStub
+	for i := range spans {
+		s := &spans[i]
+		if strings.HasPrefix(s.Name, "bff.memory.") {
+			bffSpan = s
+			break
+		}
+	}
+	if bffSpan == nil {
+		names := make([]string, len(spans))
+		for i, s := range spans {
+			names[i] = s.Name
+		}
+		t.Fatalf("expected span with name prefix `bff.memory.`; saw %v", names)
+	}
+	if bffSpan.Name != "bff.memory.list" {
+		t.Fatalf("expected span name `bff.memory.list`; got %q", bffSpan.Name)
+	}
+	// Assert bff.minted=true attribute present (audit trail proof)
+	var found bool
+	for _, kv := range bffSpan.Attributes {
+		if string(kv.Key) == "bff.minted" && kv.Value.AsString() == "true" {
+			found = true
+			break
+		}
+	}
+	if !found {
+		t.Fatalf("expected attribute bff.minted=true on span; got %v", bffSpan.Attributes)
+	}
+}
