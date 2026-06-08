@@ -215,9 +215,14 @@ func main() {
 	// BFFKeyVault + DashboardMemoryHandler: browser-trust route family
 	// /v1/dashboard/memory/* — JWT-auth then internally mints server-side
 	// loopzero_live_* (NEVER touches browser per ADR D1).
+	// F-rearch-1 absorbed (2026-06-08): single vault instance shared between
+	// handler + cleanup cron (was: two independent vaults with separate
+	// in-memory caches — wasteful + cohesion smell).
 	var dashboardMemoryHandler *routes.DashboardMemoryHandler
+	var bffVault *auth.BFFKeyVault
 	if memoryHandler != nil && db != nil {
-		bffVault, vErr := auth.NewBFFKeyVault(db, cfg.BFFKeyTTLHours)
+		var vErr error
+		bffVault, vErr = auth.NewBFFKeyVault(db, cfg.BFFKeyTTLHours)
 		if vErr != nil {
 			logger.Error("BFFKeyVault init failed", "error", vErr)
 			os.Exit(1)
@@ -562,30 +567,29 @@ func main() {
 	// background scheduler so Sub-goal 6 of plan v1.2 is empirically met.
 	// Cadence: hourly (matches ADR D3); shares schedulerCtx for graceful
 	// SIGTERM shutdown. Pattern matches sibling memory_webhook_worker.
-	if dashboardMemoryHandler != nil && db != nil {
-		bffVault, _ := auth.NewBFFKeyVault(db, cfg.BFFKeyTTLHours)
-		if bffVault != nil {
-			go func() {
-				ticker := time.NewTicker(1 * time.Hour)
-				defer ticker.Stop()
-				for {
-					select {
-					case <-schedulerCtx.Done():
-						return
-					case <-ticker.C:
-						n, err := bffVault.CleanupExpired(schedulerCtx)
-						if err != nil {
-							logger.Warn("BFF cleanup: cron sweep failed", "error", err)
-							continue
-						}
-						if n > 0 {
-							logger.Info("BFF cleanup: swept expired keys", "count", n)
-						}
+	// F-rearch-1 absorbed: reuses the single bffVault instance instead of
+	// allocating a second one (was wasteful — separate LRU caches).
+	if bffVault != nil {
+		go func() {
+			ticker := time.NewTicker(1 * time.Hour)
+			defer ticker.Stop()
+			for {
+				select {
+				case <-schedulerCtx.Done():
+					return
+				case <-ticker.C:
+					n, err := bffVault.CleanupExpired(schedulerCtx)
+					if err != nil {
+						logger.Warn("BFF cleanup: cron sweep failed", "error", err)
+						continue
+					}
+					if n > 0 {
+						logger.Info("BFF cleanup: swept expired keys", "count", n)
 					}
 				}
-			}()
-			logger.Info("BFF cleanup cron started", "interval", "1h")
-		}
+			}
+		}()
+		logger.Info("BFF cleanup cron started", "interval", "1h")
 	}
 
 	// T1.9 production deployment: start cost aggregator if Prometheus
