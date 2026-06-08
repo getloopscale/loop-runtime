@@ -53,6 +53,9 @@ require (
 	google.golang.org/protobuf v1.36.12-0.20260120151049-f2248ac996af // indirect
 )
 
-require github.com/golang-jwt/jwt/v5 v5.3.1 // indirect
+require (
+	github.com/golang-jwt/jwt/v5 v5.3.1 // indirect
+	github.com/hashicorp/golang-lru/v2 v2.0.7 // indirect
+)
 
 replace github.com/loopzero/loopzero/pkg => ../pkg
