@@ -286,6 +286,26 @@ kubectl -n loopzero-system port-forward deployment/loopzero-cloud 13002:13002 &
 
 Sessão Kratos não estabelecida. Limpar cookies de `loopzero.example` + relogar OR usar **Caminho 1 (API curl)** que não depende de UI.
 
+### Login Dashboard → 502 `AUTH_SERVICE_UNAVAILABLE` em `/v1/auth/session/token`
+
+Cluster está em rev anterior à última `kubectl apply -f infra/tilt/cloud-deployment.yaml` (env Kratos URLs apontando para `localhost:4455` ao invés do svc cluster). Force re-apply do env block:
+
+```bash
+python3 -c "
+import yaml, json
+docs = list(yaml.safe_load_all(open('infra/tilt/cloud-deployment.yaml')))
+for d in docs:
+    if d and d.get('kind') == 'Deployment':
+        envs = d['spec']['template']['spec']['containers'][0]['env']
+        print(json.dumps({'spec':{'template':{'spec':{'containers':[{'name':'loopzero-cloud','env':envs}]}}}}))
+        break
+" | kubectl -n loopzero-system patch deployment loopzero-cloud --patch="$(cat /dev/stdin)"
+kubectl -n loopzero-system rollout status deployment loopzero-cloud --timeout=90s
+# Re-establish port-forward (Pod was recreated):
+pkill -f "port-forward.*loopzero-cloud"; sleep 2
+kubectl -n loopzero-system port-forward deployment/loopzero-cloud 13002:13002 &
+```
+
 ### `bootstrap-themory-key.sh` HTTP 401
 
 Server foi reinicializado e o bootstrap-token foi regenerado. Re-bootstrap:
