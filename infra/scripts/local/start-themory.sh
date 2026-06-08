@@ -47,8 +47,10 @@ readonly C_GREEN='\033[0;32m'
 readonly C_YELLOW='\033[0;33m'
 readonly C_RESET='\033[0m'
 
-log_info()  { printf "%b[INFO]%b  %s\n" "$C_GREEN" "$C_RESET" "$1"; }
-log_warn()  { printf "%b[WARN]%b  %s\n" "$C_YELLOW" "$C_RESET" "$1"; }
+# Logs go to stderr so functions returning data via stdout are not contaminated
+# by command substitution `$(...)` swallowing log lines as data.
+log_info()  { printf "%b[INFO]%b  %s\n" "$C_GREEN" "$C_RESET" "$1" >&2; }
+log_warn()  { printf "%b[WARN]%b  %s\n" "$C_YELLOW" "$C_RESET" "$1" >&2; }
 log_fatal() { printf "%b[FATAL]%b %s\n" "$C_RED" "$C_RESET" "$1" >&2; exit 1; }
 
 check_idempotent_pid() {
@@ -103,7 +105,7 @@ start_server() {
   LOOPZEROMEM_PG_URI="${PGURL_BASE}/themory_dev" \
   LOOPZEROMEM_PORT="$THEMORY_PORT" \
   LOOPZEROMEM_HOST="$THEMORY_HOST" \
-  THEMEMORY_ADMIN_BOOTSTRAP_TOKEN="$bootstrap_token" \
+  THEMORY_ADMIN_BOOTSTRAP_TOKEN="$bootstrap_token" \
     nohup node "$THEMORY_CLI" server >"$LOG_FILE" 2>&1 &
   echo "$!" > "$PID_FILE"
   disown
