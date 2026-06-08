@@ -25,7 +25,13 @@ readonly THEMORY_URL="${THEMORY_URL:-http://localhost:8080}"
 readonly CLOUD_URL="${CLOUD_URL:-http://localhost:13002}"
 readonly BEARER_FILE="${BEARER_FILE:-${HOME}/.loopzero/local-test-memory-bearer.txt}"
 
-readonly TEST_USER="smoke-user-${RANDOM}"
+# TEST_USER MUST match the `subject` field of the loopzero_api_keys row backing
+# LOOPZERO_TEST_BEARER. Cloud proxy enforces D1 invariant: userID upstream comes
+# from authenticated subject, NOT from any query param. Override via env to
+# match your bearer's subject (defaults to smoke-user-${RANDOM} for
+# operator-minted bearers via create-test-api-key.sh whose subject is the
+# session's authenticated user).
+readonly TEST_USER="${TEST_USER:-smoke-user-${RANDOM}}"
 readonly TEST_FACT="Smoke test fact at $(date -Iseconds)"
 readonly CURL_TIMEOUT="${CURL_TIMEOUT:-10}"
 readonly POLL_TIMEOUT="${POLL_TIMEOUT:-10}"
@@ -47,7 +53,7 @@ cleanup() {
   # EC-10: guard empty memoryID (no curl noise + no false 404 log)
   if [ -n "$MEMORY_ID" ] && [ -n "${LOOPZERO_TEST_BEARER:-}" ]; then
     log_warn "Cleanup: best-effort forget of $MEMORY_ID"
-    curl -fsS -X POST "${CLOUD_URL}/v1/memory/forget/${MEMORY_ID}?owner_user_id=${TEST_USER}" \
+    curl -fsS -X DELETE "${CLOUD_URL}/v1/memory/forget/${MEMORY_ID}" \
       -H "Authorization: Bearer ${LOOPZERO_TEST_BEARER}" \
       --max-time "$CURL_TIMEOUT" >/dev/null 2>&1 || true
   fi
@@ -110,7 +116,7 @@ step2_3_list_via_proxy() {
 
 step4_forget_via_proxy() {
   log_step 4 "POST /v1/memory/forget/{id} via Go proxy"
-  curl -fsS -X POST "${CLOUD_URL}/v1/memory/forget/${MEMORY_ID}?owner_user_id=${TEST_USER}" \
+  curl -fsS -X DELETE "${CLOUD_URL}/v1/memory/forget/${MEMORY_ID}" \
     -H "Authorization: Bearer ${LOOPZERO_TEST_BEARER}" \
     --max-time "$CURL_TIMEOUT" >/dev/null 2>&1 \
     || log_fatal "step 4: proxy forget FAILED for memoryID=$MEMORY_ID"
