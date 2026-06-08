@@ -113,6 +113,65 @@ task db:migrate
 # loopzero-api auto-restarts (Tilt picks up DB connection refresh)
 ```
 
+### TheMemory native-process lifecycle (Dashboard memory section)
+
+The Dashboard `/memory/*` pages → Go proxy `/v1/memory/*` → TheMemory chain
+requires a TheMemory binary running as a host-native process bound to
+`0.0.0.0:8080`. Pattern per ADR D1 of `loopzero-cloud-themory-e2e-finalize-plan v1.3`.
+
+Sequence (one-time per dev machine + each session):
+
+```bash
+# 0. One-time per machine — copy template + fill secrets (gitignored)
+cp infra/scripts/local/.themory.env.example infra/scripts/local/.themory.env
+# Edit .themory.env with your PGURL + OPENAI_API_KEY
+
+# 1. Pre-flight (verify task doctor + PG + pgvector + loopzero-memory dist + loopzero-system ns)
+bash infra/scripts/local/preflight-themory.sh
+
+# 2. Start TheMemory (idempotent; spawns nohup-detached server, writes .themory.pid)
+bash infra/scripts/local/start-themory.sh
+
+# 3. Bootstrap master API key into K8s Secret loopzero-system/themory-dev-key
+bash infra/scripts/local/bootstrap-themory-key.sh         # --rotate to mint fresh
+# Secret is now consumed by infra/tilt/cloud-deployment.yaml via valueFrom.secretKeyRef
+
+# 4. tilt up (reload loopzero-cloud Pod against the new Secret)
+tilt up
+
+# 5. Validate cloud Pod sees memoryHandler
+bash infra/scripts/local/validate-themory-wireup.sh
+# Asserts kubectl logs --since=2m loopzero-cloud | grep "memory proxy enabled"
+
+# 6. (Optional, for smoke-test bearer) Mint a memory-scoped loopzero_live_* key
+bash infra/scripts/local/create-test-api-key.sh
+# Saves to ~/.loopzero/local-test-memory-bearer.txt (chmod 600)
+
+# 7. E2E smoke (Dashboard → Go proxy → TheMemory full chain)
+task test:e2e:themory
+# OR directly: bash infra/scripts/local/smoke-themory-e2e.sh
+
+# 8. Stop TheMemory at end of session (SIGTERM with 5s grace)
+bash infra/scripts/local/stop-themory.sh
+```
+
+Reach-host pattern: the cloud Pod inside k3d reaches the host's `localhost:8080`
+via docker bridge `10.0.5.1` (set in `infra/tilt/cloud-deployment.yaml`:
+`THEMORY_BASE_URL=http://10.0.5.1:8080`).
+
+Logs: `tail -f infra/scripts/local/.themory.log`
+
+Gitignored runtime artifacts (per `loopzero-cloud-themory-e2e-finalize-plan v1.3 § Baseline Context`):
+- `.themory.pid` — server PID
+- `.themory.log` — server stdout/stderr
+- `.themory-bootstrap-token` — random admin token (chmod 600)
+- `.themory-master-key` — optional loopzero_live_* backup (chmod 600)
+- `.themory.env` — operator secrets (chmod 600)
+
+Script names verified 2026-06-07. If any script is absent, the plan addressed
+in commit `61ec6531..b7101828` may have been reorganized — check
+`ls infra/scripts/local/themory* infra/scripts/local/*themory*`.
+
 ---
 
 ## When NOT to use `task setup`

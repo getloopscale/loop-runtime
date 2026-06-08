@@ -964,6 +964,15 @@ tasks:
     cmds:
       - ginkgo -v --focus="${FOCUS}" --timeout=60m ./infra/tests/e2e/
 
+  e2e:themory:
+    desc: |
+      Run the TheMemory E2E smoke (Dashboard → Go proxy → TheMemory chain).
+      Pre-requisites: bash infra/scripts/local/{start-themory,bootstrap-themory-key,create-test-api-key}.sh
+      AND `tilt up` brought the loopzero-cloud Pod to Ready (per
+      loopzero-cloud-themory-e2e-finalize-plan v1.3 § Phase 5 / T5.1).
+    cmds:
+      - bash infra/scripts/local/smoke-themory-e2e.sh
+
   e2e:report:
     desc: Run ALL E2E tests with JUnit XML report
     env:
