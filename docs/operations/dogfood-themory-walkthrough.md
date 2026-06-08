@@ -123,6 +123,27 @@ bash infra/scripts/local/smoke-themory-e2e.sh
 task test:e2e:themory
 ```
 
+### 1.6 — One-shot Dashboard-BFF smoke (NEW per plan dashboard-memory-bff v1.2)
+
+After shipping the BFF route family (`/v1/dashboard/memory/*`), the Dashboard
+browser auth path (JWT → BFF → server-side `loopzero_live_*` mint) gets its own
+E2E smoke:
+
+```bash
+bash infra/scripts/local/smoke-dashboard-memory-bff-e2e.sh
+# OU via Taskfile:
+task test:e2e:dashboard-memory-bff
+```
+
+Pre-requisites:
+- `kubectl -n loopzero-system port-forward deployment/loopzero-cloud 13002:13002 &`
+- `kubectl -n loopzero-auth port-forward svc/ory-kratos-public 14433:80 &`
+- Dev user `test@loopzero.dev / LoopZeroDev2026!` exists in Kratos (see § 3.2 password-reset recipe)
+
+**SECURITY GATE** built into the script: scans every BFF response body for
+`loopzero_live_` substring → must be 0 hits. If ever present, the BFF leaked the
+server-side key into the browser-facing response — script exits 1.
+
 **Output:**
 ```
 STEP 1/5: POST /v1/remember to TheMemory direct → memoryId=<uuid>

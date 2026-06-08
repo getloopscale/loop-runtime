@@ -973,6 +973,15 @@ tasks:
     cmds:
       - bash infra/scripts/local/smoke-themory-e2e.sh
 
+  e2e:dashboard-memory-bff:
+    desc: |
+      Run the Dashboard JWT → BFF → TheMemory E2E smoke (per plan
+      dashboard-memory-bff-server-side-key-vault v1.2 § T5.1).
+      Pre-requisites: tilt up + port-forwards 13002 (cloud) + 14433 (kratos).
+      SECURITY GATE: response body scan for "loopzero_live_" substring → 0 hits.
+    cmds:
+      - bash infra/scripts/local/smoke-dashboard-memory-bff-e2e.sh
+
   e2e:report:
     desc: Run ALL E2E tests with JUnit XML report
     env:
