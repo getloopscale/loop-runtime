@@ -226,6 +226,32 @@ Caddy mapeia `app.loopzero.example` → `localhost:5174` (Vite proxies já rotea
 
 ### 3.2 — Login
 
+**Caminho A: Dev-loop simples (Vite + port-forward Kratos, sem Caddy)**
+
+```bash
+# Kratos port-forward (já feito por dogfood walkthrough):
+kubectl -n loopzero-auth port-forward svc/ory-kratos-public 14433:80 &
+```
+
+Vite proxy roteia `/self-service` → `localhost:14433` automaticamente. Browser:
+
+```
+URL:    http://localhost:5174
+Email:  test@loopzero.dev
+Senha:  LoopZeroDev2026!
+```
+
+> **Reset de senha dev** (se a hash atual não coincidir): execute no host
+> ```bash
+> kubectl -n loopzero-system exec postgresql-0 -- env PGPASSWORD=loopzero-dev-password psql -U loopzero -d kratos -c "
+>   UPDATE identity_credentials
+>   SET config = jsonb_build_object('hashed_password', '$(python3 -c "import bcrypt; print(bcrypt.hashpw(b'LoopZeroDev2026!', bcrypt.gensalt(12)).decode())")')
+>   WHERE identity_credential_type_id = (SELECT id FROM identity_credential_types WHERE name='password');
+> "
+> ```
+
+**Caminho B: Production-like (Caddy + DNS + OAuth)**
+
 1. Browser → `https://app.loopzero.example`
 2. Caddy redireciona para Kratos selfservice (GitHub OAuth ou Google)
 3. Após login, retorna para Dashboard
