@@ -127,3 +127,62 @@ describe('fetchWithAuth — Idempotency-Key auto-gen (T5.0 / EC-09)', () => {
     expect(headers['Idempotency-Key']).toBe('caller-deliberate-replay-key-001');
   });
 });
+
+// ---------------------------------------------------------------------------
+// Plan dashboard-memory-bff-server-side-key-vault v1.2 § T4.1.
+// cloudFetch must rewrite /v1/memory/* → /v1/dashboard/memory/* transparently
+// AND reject `..` path-traversal attempts (EC-6).
+// ---------------------------------------------------------------------------
+
+describe('cloudFetch BFF path-rewrite (T4.1)', () => {
+  beforeEach(() => {
+    vi.restoreAllMocks();
+  });
+
+  async function captureFetchURL(path: string): Promise<string> {
+    let callCount = 0;
+    let captured = '';
+    vi.spyOn(globalThis, 'fetch').mockImplementation(async (url, _init) => {
+      callCount++;
+      if (callCount === 1) {
+        return new Response(JSON.stringify({ access_token: 'tk', expires_in: 3600 }), { status: 200 });
+      }
+      captured = String(url);
+      return new Response(JSON.stringify({ ok: true }), { status: 200 });
+    });
+    await exchangeSessionToken();
+    const api = await import('./api');
+    await api.cloudFetch(path);
+    return captured;
+  }
+
+  it('test_cloud_fetch_rewrites_v1_memory_list_to_dashboard_memory_list', async () => {
+    const url = await captureFetchURL('/v1/memory/list');
+    expect(url).toContain('/v1/dashboard/memory/list');
+    expect(url).not.toContain('/v1/memory/list');
+  });
+
+  it('test_cloud_fetch_rewrites_complex_paths', async () => {
+    const url = await captureFetchURL('/v1/memory/forget/abc-123');
+    expect(url).toContain('/v1/dashboard/memory/forget/abc-123');
+  });
+
+  it('test_cloud_fetch_does_not_rewrite_non_memory_paths', async () => {
+    const url = await captureFetchURL('/v1/billing');
+    expect(url).toContain('/v1/billing');
+    expect(url).not.toContain('/v1/dashboard/');
+  });
+
+  it('test_cloud_fetch_rejects_path_traversal_per_EC6', async () => {
+    // '..' MUST block the rewrite — falls through to original path so downstream
+    // chi-router 404s (fail-fast). Verifies the predicate's defense-in-depth.
+    const url = await captureFetchURL('/v1/memory/../admin/something');
+    expect(url).not.toContain('/v1/dashboard/memory');
+    expect(url).toContain('/v1/memory/../admin/something');
+  });
+
+  it('test_cloud_fetch_rejects_dot_dot_anywhere_in_path_per_EC6', async () => {
+    const url = await captureFetchURL('/v1/memory/foo/../bar');
+    expect(url).not.toContain('/v1/dashboard/memory');
+  });
+});

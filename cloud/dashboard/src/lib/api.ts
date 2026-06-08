@@ -150,6 +150,20 @@ export async function cloudFetch<T>(path: string, options: RequestInit = {}): Pr
   // /api/v1/* paths transparently — covering 47+ endpoints vs the old 5.
   // The cloudFetch flow stays identical in mock + prod modes; the difference
   // is purely WHO answers the network call.
+  //
+  // Plan dashboard-memory-bff-server-side-key-vault v1.2 § ADR D5 + T4.1:
+  // Browser-trust calls to /v1/memory/* are transparently rewritten to
+  // /v1/dashboard/memory/* where the cloud BFF layer mints a server-side
+  // loopzero_live_* key — the browser NEVER sees that key.
+  // SDK consumers (non-browser) still hit /v1/memory/* directly with their own key.
+  //
+  // EC-6 path traversal defense: reject paths containing '..' to prevent
+  // /v1/memory/../admin/something escaping the rewrite intent. The predicate
+  // is conservative — any '..' substring blocks the rewrite AND falls through
+  // to the original path which downstream chi-router will 404 (correct fail-fast).
+  if (path.startsWith('/v1/memory/') && !path.includes('..')) {
+    path = '/v1/dashboard/memory/' + path.slice('/v1/memory/'.length);
+  }
   const token = await ensureToken();
   if (!token) {
     redirectToLogin('expired');
