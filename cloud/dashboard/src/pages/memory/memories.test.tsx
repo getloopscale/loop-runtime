@@ -26,18 +26,54 @@ describe('MemoryListPage (/memory/memories)', () => {
     vi.clearAllMocks();
   });
 
-  it('renders memories returned by the backend', async () => {
+  // T3.2 — 4 scope tabs matching entities.tsx canonical pattern.
+  it('renders 4 scope tabs (USER/SESSION/AGENT/REPO) matching entities pattern', async () => {
+    mockCloudFetch.mockResolvedValue({ memories: [] });
+    render(<MemoryListPage />);
+    expect(await screen.findByRole('tab', { name: /USER/i })).toBeInTheDocument();
+    expect(screen.getByRole('tab', { name: /SESSION/i })).toBeInTheDocument();
+    expect(screen.getByRole('tab', { name: /AGENT/i })).toBeInTheDocument();
+    expect(screen.getByRole('tab', { name: /REPO/i })).toBeInTheDocument();
+  });
+
+  // T3.2 — default scope is `user` (matches entities.tsx default).
+  it('defaults to user scope and passes scope=user in the BFF query', async () => {
+    mockCloudFetch.mockResolvedValue({ memories: [] });
+    render(<MemoryListPage />);
+    await screen.findByText(/No memories yet/i);
+    const calls = mockCloudFetch.mock.calls;
+    const url = String(calls[calls.length - 1]?.[0] ?? '');
+    expect(url).toContain('scope=user');
+  });
+
+  // T3.2 EC-8 — invalid ?scope=garbage defensively coerces to 'user'.
+  it('EC-8: invalid ?scope=garbage defaults to user (no crash)', async () => {
+    mockCloudFetch.mockResolvedValue({ memories: [] });
+    // Stub URL to include the garbage scope param.
+    window.history.pushState({}, '', '/memory/memories?scope=garbage');
+    render(<MemoryListPage />);
+    await screen.findByText(/No memories yet/i);
+    // BFF call still uses user scope (defensive coerce), NOT the garbage value.
+    const calls = mockCloudFetch.mock.calls;
+    const url = String(calls[calls.length - 1]?.[0] ?? '');
+    expect(url).toContain('scope=user');
+    expect(url).not.toContain('scope=garbage');
+  });
+
+  it('renders memories returned by the backend with scope_type Badge per row (T3.3 EC-9)', async () => {
     mockCloudFetch.mockResolvedValueOnce({
       memories: [
-        { id: 'mem-aaaa1111bbbb2222', content: 'prefers TypeScript', category: 'preferences', created_at: new Date().toISOString() },
-        { id: 'mem-cccc3333dddd4444', content: 'lives in Lisbon', category: 'facts', created_at: new Date().toISOString() },
+        { id: 'mem-aaaa1111bbbb2222', content: 'prefers TypeScript', created_at: new Date().toISOString() },
+        { id: 'mem-cccc3333dddd4444', content: 'lives in Lisbon', created_at: new Date().toISOString() },
       ],
     });
     render(<MemoryListPage />);
     expect(await screen.findByText('prefers TypeScript')).toBeInTheDocument();
     expect(screen.getByText('lives in Lisbon')).toBeInTheDocument();
-    expect(screen.getByText('preferences')).toBeInTheDocument();
-    expect(screen.getByText('facts')).toBeInTheDocument();
+    // EC-9: scope_type Badge per row (derived client-side from active URL scope).
+    // Default scope is 'user' → Badge text 'USER'. Multiple rows → multiple Badges.
+    const userBadges = screen.getAllByText('USER');
+    expect(userBadges.length).toBeGreaterThanOrEqual(2);
   });
 
   it('empty result renders a friendly EmptyState (D3 — no broken UI on first run)', async () => {

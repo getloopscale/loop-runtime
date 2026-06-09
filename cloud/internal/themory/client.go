@@ -68,6 +68,14 @@ type ListOptions struct {
 	Category string // optional filter; empty means no filter
 	From     string // RFC3339; empty means no lower bound
 	To       string // RFC3339; empty means no upper bound
+	// Scope routes the upstream call to `/v1/scopes/{scope}/{userID}/memories`.
+	// Accepted values: "user" | "session" | "agent" | "repo". Empty defaults
+	// to "user" for backward-compatibility with all callers that pre-date
+	// the dashboard-memories-tab-standardization T3.2 BFF extension.
+	// Per plan v1.5 — TheMemory REST already supports all 4 scope types
+	// (T1.1/T2.1/T2.2 backend work); this field plumbs the dashboard's
+	// 4-tab UI through to the upstream contract.
+	Scope string
 }
 
 // MemoryRow is one entry in the List response. Field shape is a subset
@@ -140,7 +148,16 @@ func (c *Client) List(ctx context.Context, userID string, opts ListOptions) (*Li
 	}
 	// TheMemory uses cursor-based pagination; Offset is not supported.
 	// Category/From/To are dropped silently — upstream lacks these filters.
-	path := "/v1/scopes/user/" + url.PathEscape(userID) + "/memories"
+	// Scope routes to the matching /v1/scopes/{scope}/{userID}/memories path.
+	// Empty/invalid scope falls back to "user" (backward-compat + safe default).
+	scope := opts.Scope
+	switch scope {
+	case "user", "session", "agent", "repo":
+		// allowed values; pass through
+	default:
+		scope = "user"
+	}
+	path := "/v1/scopes/" + scope + "/" + url.PathEscape(userID) + "/memories"
 	var upstream scopeMemoriesResponse
 	if err := c.do(ctx, http.MethodGet, path, userID, q, nil, &upstream); err != nil {
 		return nil, err

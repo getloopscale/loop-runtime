@@ -116,6 +116,9 @@ func (h *MemoryHandler) List(w http.ResponseWriter, r *http.Request) {
 		Category: q.Get("category"),
 		From:     q.Get("from"),
 		To:       q.Get("to"),
+		// dashboard-memories-tab-standardization T3.2 — plumb `?scope=` to BFF.
+		// Empty/invalid falls back to "user" inside Client.List for backward-compat.
+		Scope: q.Get("scope"),
 	}
 	if v := q.Get("limit"); v != "" {
 		if n, err := strconv.Atoi(v); err == nil && n > 0 && n <= 200 {

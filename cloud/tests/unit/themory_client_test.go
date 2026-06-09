@@ -129,6 +129,37 @@ func TestTheMemoryClient_PropagatesPaginationParams(t *testing.T) {
 	}
 }
 
+// dashboard-memories-tab-standardization T3.2 — List() with Scope option
+// routes to /v1/scopes/{scope}/{userID}/memories (was hardcoded to "user").
+// Closes Plan v1.5 BFF reality-check: 4-tab Memories dashboard requires
+// BFF to pass through SESSION/AGENT/REPO scopes (TheMemory REST already
+// supports all 4 at /v1/scopes/{type}/{id}/memories).
+func TestTheMemoryClient_ListWithScopeRoutesToCorrectPath(t *testing.T) {
+	cases := []struct {
+		scope    string
+		wantPath string
+	}{
+		{"", "/v1/scopes/user/u/memories"},        // empty defaults to user (backward-compat)
+		{"user", "/v1/scopes/user/u/memories"},
+		{"session", "/v1/scopes/session/u/memories"},
+		{"agent", "/v1/scopes/agent/u/memories"},
+		{"repo", "/v1/scopes/repo/u/memories"},
+	}
+	for _, tc := range cases {
+		t.Run("scope="+tc.scope, func(t *testing.T) {
+			stub := newStubMemoryServer(t)
+			stub.respBody = `{"items": []}`
+			client := themory.NewClient(stub.URL, "k", nil)
+			if _, err := client.List(context.Background(), "u", themory.ListOptions{Scope: tc.scope}); err != nil {
+				t.Fatalf("List: %v", err)
+			}
+			if got := stub.lastRequest.URL.Path; got != tc.wantPath {
+				t.Errorf("scope=%q routed to %q, want %q", tc.scope, got, tc.wantPath)
+			}
+		})
+	}
+}
+
 // T1.2 invariant 5 (D4): traceparent W3C header propagates from request
 // context into the outbound HTTP call so a single trace ID traverses
 // browser → Go → TheMemory. The otelhttp.NewTransport wrapping handles
