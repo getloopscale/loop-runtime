@@ -249,7 +249,18 @@ export function MemoryListPage() {
               title="No memories match the current filters"
               description="Try widening the date range or clearing the category filter to see all memories under this scope."
               action={
-                <Button variant="ghost" onClick={() => { updateParam('category', ''); updateParam('from', ''); updateParam('to', ''); }}>
+                <Button variant="ghost" onClick={() => {
+                  // RED TEAM F7 fix: batch all 3 deletions into ONE setSearchParams
+                  // call. Sequential updateParam() calls each read from the same
+                  // React render snapshot (stale closure) — only the LAST call's
+                  // URLSearchParams mutation survives. Batching avoids the race.
+                  const next = new URLSearchParams(searchParams);
+                  next.delete('category');
+                  next.delete('from');
+                  next.delete('to');
+                  next.delete('offset');
+                  setSearchParams(next, { replace: true });
+                }}>
                   Clear filters
                 </Button>
               }
