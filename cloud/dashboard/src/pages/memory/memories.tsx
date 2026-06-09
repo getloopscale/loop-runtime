@@ -7,6 +7,7 @@ import {
   Badge,
   Button,
   Card,
+  CodeBlock,
   ConfirmDialog,
   DataTable,
   type DataTableColumn,
@@ -18,6 +19,7 @@ import {
 } from '@loopzerokit/ui';
 import { usePageMeta } from '@/hooks/use-page-meta';
 import { useRequireAuth } from '@/hooks/use-auth';
+import { TableSkeleton } from '@/components/data/table-skeleton';
 import { cloudFetch } from '@/lib/api';
 
 /**
@@ -235,18 +237,42 @@ export function MemoryListPage() {
             The Memory service is not reachable right now. Try refreshing in a moment.
           </Alert>
         ) : query.isLoading ? (
-          <Card>Loading…</Card>
+          <Card><TableSkeleton rows={6} columns={4} /></Card>
         ) : memories.length === 0 ? (
-          <EmptyState
-            title={activeScope === 'repo' ? 'Skill scope — programmatic access only' : 'No memories yet'}
-            description={
-              activeScope === 'repo'
-                ? "Skill (repo) scope is exposed only via the SDK Memory.skills(repoId).recall(query). Listing is intentionally not surfaced over REST per ADR-0010 — skills are queried by semantic search, not browsed as inventory."
-                : category || from || to
-                  ? 'No memories match the current filters. Try clearing them.'
-                  : `Your agent hasn't stored any ${activeScope} memories yet. Use the SDK to call memory.${activeScope}(id).remember().`
-            }
-          />
+          activeScope === 'repo' ? (
+            <EmptyState
+              title="Skills are queried, not browsed"
+              description="Repo-scope memories (skills) are exposed only via semantic search through the SDK. They are intentionally not listable over REST — your agent retrieves them by relevance, not as an inventory. See ADR-0010 for the rationale."
+            />
+          ) : category || from || to ? (
+            <EmptyState
+              title="No memories match the current filters"
+              description="Try widening the date range or clearing the category filter to see all memories under this scope."
+              action={
+                <Button variant="ghost" onClick={() => { updateParam('category', ''); updateParam('from', ''); updateParam('to', ''); }}>
+                  Clear filters
+                </Button>
+              }
+            />
+          ) : (
+            <EmptyState
+              title={`Your agent has not stored ${activeScope} memories yet`}
+              description={
+                <div className="flex flex-col items-center gap-3">
+                  <span>
+                    Memories appear here as soon as your code calls{' '}
+                    <code className="font-mono text-xs">.remember()</code> on
+                    the {activeScope} scope. They become recallable by semantic
+                    search across future agent turns.
+                  </span>
+                  <CodeBlock
+                    language="typescript"
+                    code={`await memory.${activeScope}("${activeScope}_id").remember("Paulo prefers terse responses.");`}
+                  />
+                </div>
+              }
+            />
+          )
         ) : (
           <Card>
             <DataTable columns={columns} data={memories} rowKey={(row) => row.id} />

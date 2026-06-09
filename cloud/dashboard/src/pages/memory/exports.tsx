@@ -197,14 +197,21 @@ export function ExportsPage() {
     >
       {createMutation.isError ? (
         <Alert intent="warning" title="Could not start export">
-          Try again in a moment.
+          The Memory service rejected the export request. Existing exports keep
+          downloading — only new exports are paused.
         </Alert>
       ) : null}
       {exports.length === 0 ? (
         <EmptyState
           icon={Download}
-          title="No exports yet"
-          description="Click Create export to dump your memories as JSON."
+          title="Export your memories as a portable JSON file"
+          description="Useful for backup, migration to another workspace, or sharing context with another LoopZero agent. Exports run as background jobs; you can leave the page and come back when ready."
+          action={
+            <Button onClick={() => createMutation.mutate()} disabled={createMutation.isPending}>
+              <Plus className="size-4 mr-1" aria-hidden="true" />
+              Create export
+            </Button>
+          }
         />
       ) : (
         <Card>

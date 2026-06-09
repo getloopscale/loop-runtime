@@ -5,6 +5,7 @@ import { usePageMeta } from '@/hooks/use-page-meta';
 import { useEngineApi } from '@/hooks/use-api';
 import { useRequireAuth } from '@/hooks/use-auth';
 import { CreateEnvironmentSheet } from "@/components/sheets/create-environment-sheet";
+import { TableSkeleton } from '@/components/data/table-skeleton';
 import { useDeleteEnvironment } from '@/hooks/mutations/use-environments';
 
 interface Environment {
@@ -86,15 +87,22 @@ export function EnvironmentsPage() {
         onClick: () => setCreateOpen(true),
       }}
       loading={loading}
+      loadingNode={<Card><TableSkeleton rows={5} columns={5} /></Card>}
       empty={
         !loading && filtered.length === 0
-          ? {
-              icon: Box,
-              title: searchQuery ? 'No matching environments' : 'No environments yet',
-              description: searchQuery
-                ? 'Try a different search term.'
-                : 'Environments are created automatically per project on first deploy.',
-            }
+          ? searchQuery
+            ? {
+                icon: Box,
+                title: 'No environments match your search',
+                description: `No environment name or domain contains "${searchQuery}". Try a different term or clear the search.`,
+                action: { label: 'Clear search', onClick: () => setSearchQuery('') },
+              }
+            : {
+                icon: Box,
+                title: 'Create your first environment',
+                description: 'Environments are isolated runtime spaces (production, staging, preview). LoopZero provisions DNS, certs, secrets store and rollback windows per environment. The first one is usually "production".',
+                action: { label: 'New environment', onClick: () => setCreateOpen(true) },
+              }
           : undefined
       }
     >

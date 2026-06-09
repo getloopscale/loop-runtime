@@ -1,6 +1,7 @@
 /// <reference types="vitest/config" />
 import { defineConfig } from 'vite';
 import react from '@vitejs/plugin-react';
+import tailwindcss from '@tailwindcss/vite';
 import { VitePWA } from 'vite-plugin-pwa';
 import { visualizer } from 'rollup-plugin-visualizer';
 import path from 'path';
@@ -28,6 +29,17 @@ export default defineConfig({
         ],
       },
     }),
+    // Tailwind v4 — official Vite plugin. Replaces the legacy postcss.config.js
+    // chain (`@tailwindcss/postcss` + autoprefixer) because v4's compile model
+    // is built around CSS-first @theme directives that the Vite plugin handles
+    // natively, including HMR for token edits. Removed `postcss.config.js`
+    // as part of this migration — the old config tried to load
+    // `@tailwindcss/postcss/dist/index.js` (CJS) directly, but the package
+    // ships `"exports"` with conditional `import`/`require` only, and Vite's
+    // PostCSS loader in `type: module` projects ignored the conditional
+    // resolution path. The official `@tailwindcss/vite` plugin sidesteps
+    // PostCSS entirely.
+    tailwindcss(),
     // T-DR-5.5 v1.2 (Phase 5) — Bundle analyzer per-route attribution.
     // Outputs dist/bundle-stats.html on every build (open via npm run bundle:analyze).
     // Resolves G5 FAANG gap (Vercel bundle analyzer parity).
@@ -138,6 +150,20 @@ export default defineConfig({
     alias: {
       '@': path.resolve(__dirname, './src'),
     },
+    // Force a single React instance across the dependency graph.
+    // Without this, pnpm's content-addressable store can resolve `react` and
+    // `react-dom` from `@loopzerokit/ui`'s own pkg dir (via its peer entry) while
+    // the app code resolves from the workspace root — producing two distinct
+    // module identities and the "Invalid hook call" runtime error from
+    // useContext returning null.
+    dedupe: ['react', 'react-dom'],
+  },
+  optimizeDeps: {
+    // Pre-bundle @loopzerokit/ui to a single optimized artifact so Vite doesn't
+    // re-discover it on every page (the heavy library was triggering serial
+    // re-optimizations and 504s on outdated optimize-dep). Listing it here
+    // pins the entry to the app's React, not @loopzerokit/ui's peer copy.
+    include: ['@loopzerokit/ui', 'react', 'react-dom', 'react-dom/client'],
   },
   // Dev-only: same-origin against the local loopzero-cloud + Kratos port-forwards
   // via vite proxy (avoids browser CORS). In prod, the dashboard is served

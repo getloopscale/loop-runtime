@@ -12,6 +12,7 @@ import {
   XCircle,
 } from 'lucide-react';
 import {
+  Alert,
   Badge,
   Button,
   Card,
@@ -27,6 +28,7 @@ import { useCancelBuild } from '@/hooks/mutations/use-cancel-build';
 import { BuildTimeline } from '@/components/deploy/build-timeline';
 import { RollbackDialog } from '@/components/dialogs/rollback-dialog';
 import { PromoteDialog } from '@/components/dialogs/promote-dialog';
+import { CardSkeleton } from '@/components/data/card-skeleton';
 import { formatDate } from '@/lib/format';
 import type { BuildStatus } from '@/lib/api/types';
 
@@ -82,14 +84,19 @@ export function DeploymentDetailPage() {
 
   if (loading) {
     return (
-      <PageShell title="Deployment">
-        <div className="flex items-center justify-center py-12">
-          <Loader2
-            className="size-6 animate-spin text-muted-foreground"
-            aria-label="Loading deployment"
-          />
-        </div>
-      </PageShell>
+      <PageShell
+        title={`Deployment · ${id.slice(0, 7)}`}
+        loading
+        loadingNode={
+          <div className="grid grid-cols-1 gap-6 lg:grid-cols-[1.5fr_1fr]">
+            <div className="flex flex-col gap-6">
+              <CardSkeleton withFooter />
+              <CardSkeleton />
+            </div>
+            <CardSkeleton />
+          </div>
+        }
+      />
     );
   }
 
@@ -99,12 +106,12 @@ export function DeploymentDetailPage() {
         <EmptyState
           icon={XCircle}
           title={`No build with id "${id}"`}
-          description="It may have been pruned, or the URL is wrong."
+          description="The build may have been pruned (builds older than 90 days are deleted automatically), or the URL is wrong. Older deployments remain visible in the deployments list until prune."
           action={
             <Button asChild variant="secondary">
               <Link
                 to={`/projects/${encodeURIComponent(name)}/deployments`}
-                className="inline-flex items-center gap-2"
+                className="inline-flex items-center gap-1"
               >
                 <ArrowLeft className="size-4" aria-hidden="true" />
                 Back to deployments
@@ -184,12 +191,11 @@ export function DeploymentDetailPage() {
               </dl>
 
               {build.error && (
-                <div className="mt-4 rounded-md border border-destructive/40 bg-destructive/10 p-3">
-                  <p className="text-label uppercase text-destructive">Error</p>
-                  <p className="mt-1 font-mono text-label text-destructive">
+                <Alert intent="destructive" title="Build failed" className="mt-4">
+                  <pre className="font-mono text-label whitespace-pre-wrap break-words">
                     {build.error}
-                  </p>
-                </div>
+                  </pre>
+                </Alert>
               )}
 
               {build.apps && build.apps.length > 0 && (

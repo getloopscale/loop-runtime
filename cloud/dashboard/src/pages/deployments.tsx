@@ -14,6 +14,7 @@ import {
 import { useSetPageTitle } from '@/hooks/use-page-meta';
 import { useRequireAuth } from '@/hooks/use-auth';
 import { useDeployments } from '@/hooks/use-deployments';
+import { TableSkeleton } from '@/components/data/table-skeleton';
 import { formatDate } from '@/lib/format';
 import type { Build, BuildStatus } from '@/lib/api/types';
 
@@ -93,12 +94,13 @@ export function DeploymentsPage() {
       title={name || 'Deployments'}
       description={`Build and release history for ${name}.`}
       loading={loading}
+      loadingNode={<Card><TableSkeleton rows={6} columns={5} /></Card>}
       empty={
         !loading && builds.length === 0
           ? {
               icon: Rocket,
-              title: 'No deployments yet',
-              description: `Run loopzero deploy --project ${name} to ship your first build.`,
+              title: 'Ship your first build',
+              description: `LoopZero builds your code into a signed image, runs the SBOM + cosign signing steps, and rolls it out behind a canary. From your project directory, run "loopzero deploy --project ${name}" — or connect a GitHub repo on the Repository tab to deploy on every push.`,
             }
           : undefined
       }

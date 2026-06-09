@@ -4,6 +4,7 @@ import { Brain, History, ShieldAlert, X } from 'lucide-react';
 import { Badge, Button, Card, PageShell, Table } from '@loopzerokit/ui';
 import { useSetPageTitle } from '@/hooks/use-page-meta';
 import { useRequireAuth } from '@/hooks/use-auth';
+import { TableSkeleton } from '@/components/data/table-skeleton';
 import { engineFetch } from '@/lib/api';
 import { formatDate } from '@/lib/format';
 import type { AuditEntry, AuditListResponse, AuditSeverity } from '@/lib/api/types';
@@ -87,15 +88,27 @@ export function AuditPage() {
         onChange: setActionFilter,
       }}
       loading={loading}
+      loadingNode={<Card><TableSkeleton rows={8} columns={5} /></Card>}
       empty={
         !loading && visibleEntries.length === 0
           ? {
               icon: History,
-              title: sourceFilter === 'memory' ? 'No memory activity in this period' : 'No audit entries',
+              title:
+                sourceFilter === 'memory'
+                  ? 'No memory activity recorded yet'
+                  : actionFilter || actorFilter
+                    ? 'No entries match the current filters'
+                    : 'Workspace activity will appear here',
               description:
                 sourceFilter === 'memory'
-                  ? 'Memory-related entries will appear here as your agent records or recalls memories.'
-                  : 'Activity will appear here as your team uses the workspace.',
+                  ? 'Memory-related entries appear here as your agent calls .remember(), .recall() or .forget(). The audit trail covers every memory mutation with actor, scope and entity id for incident response.'
+                  : actionFilter || actorFilter
+                    ? 'Try a different action prefix or actor email, or clear the filters to see all activity.'
+                    : 'Every change a team member makes (deploys, secret edits, role changes, billing actions) is captured here with actor, IP, target and result for incident response and compliance.',
+              action:
+                (actionFilter || actorFilter)
+                  ? { label: 'Clear filters', onClick: () => { setActionFilter(''); setActorFilter(''); } }
+                  : undefined,
             }
           : undefined
       }

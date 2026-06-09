@@ -36,7 +36,7 @@ describe('ExportsPage (/memory/exports)', () => {
 
   it('renders empty state and Create button', async () => {
     render(<ExportsPage />);
-    expect(await screen.findByText(/no exports yet/i)).toBeInTheDocument();
+    expect(await screen.findByText(/export your memories as a portable json file/i)).toBeInTheDocument();
     expect(screen.getAllByRole('button', { name: /create export/i }).length).toBeGreaterThanOrEqual(1);
   });
 

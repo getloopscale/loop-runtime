@@ -20,10 +20,10 @@ export function NotFoundPage() {
       <EmptyState
         icon={SearchX}
         title="That page doesn't exist"
-        description="Check the URL or head back to your dashboard."
+        description="Either the URL is wrong, or the page was moved or removed. The dashboard sections in the sidebar all work — head there to keep going."
         action={
           <Button asChild>
-            <Link to="/">Go home</Link>
+            <Link to="/">Go to Overview</Link>
           </Button>
         }
       />

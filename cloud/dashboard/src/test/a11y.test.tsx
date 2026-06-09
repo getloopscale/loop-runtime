@@ -83,15 +83,20 @@ describe('A11y semantic skeleton — every page', () => {
 
   it('secrets_page_add_button_has_aria_label_via_text', () => {
     render(<SecretsPage />, { initialEntries: ['/projects/acme-web/secrets'] });
-    const addButton = screen.getByRole('button', { name: /add secret/i });
-    expect(addButton.tagName).toBe('BUTTON');
+    // PageShell primary + EmptyState CTA both surface Add Secret on empty list.
+    const addButtons = screen.getAllByRole('button', { name: /add secret/i });
+    expect(addButtons.length).toBeGreaterThanOrEqual(1);
+    expect(addButtons[0].tagName).toBe('BUTTON');
   });
 
   it('team_page_invite_button_keyboard_reachable', () => {
     render(<TeamPage />);
-    const invite = screen.getByRole('button', { name: /invite/i });
-    expect(invite).not.toHaveAttribute('disabled');
-    // tabindex should not be -1 (would remove from keyboard nav)
-    expect(invite.getAttribute('tabindex')).not.toBe('-1');
+    // PageShell primary + EmptyState CTA both surface an Invite button.
+    const inviteButtons = screen.getAllByRole('button', { name: /invite/i });
+    expect(inviteButtons.length).toBeGreaterThanOrEqual(1);
+    inviteButtons.forEach((invite) => {
+      expect(invite).not.toHaveAttribute('disabled');
+      expect(invite.getAttribute('tabindex')).not.toBe('-1');
+    });
   });
 });

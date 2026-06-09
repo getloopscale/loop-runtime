@@ -1,9 +1,10 @@
 import { useEffect, useState } from 'react';
 import { Link, useParams } from 'react-router-dom';
-import { ArrowLeft, Download, Loader2, ShieldCheck } from 'lucide-react';
+import { ArrowLeft, Download, ShieldCheck } from 'lucide-react';
 import { Button, Card, CodeBlock, EmptyState, PageShell } from '@loopzerokit/ui';
 import { useSetPageTitle } from '@/hooks/use-page-meta';
 import { useRequireAuth } from '@/hooks/use-auth';
+import { CardSkeleton } from '@/components/data/card-skeleton';
 import { engineFetch } from '@/lib/api';
 import type { BuildAttestation } from '@/lib/api/types';
 
@@ -67,14 +68,16 @@ export function BuildAttestationPage() {
 
   if (loading) {
     return (
-      <PageShell title="Attestation">
-        <div className="flex items-center justify-center py-12">
-          <Loader2
-            className="size-6 animate-spin text-muted-foreground"
-            aria-label="Loading attestation"
-          />
-        </div>
-      </PageShell>
+      <PageShell
+        title={`Attestation · ${id.slice(0, 7)}`}
+        loading
+        loadingNode={
+          <div className="grid grid-cols-1 gap-4 lg:grid-cols-[1fr_2fr]">
+            <CardSkeleton />
+            <CardSkeleton withFooter />
+          </div>
+        }
+      />
     );
   }
 
@@ -84,7 +87,18 @@ export function BuildAttestationPage() {
         <EmptyState
           icon={ShieldCheck}
           title="No attestation for this build"
-          description="Cosign signs succeeded builds. Failed or cancelled builds don't have an attestation."
+          description="Cosign signs every image at the end of a successful build. This build either failed, was cancelled before the signing step, or pre-dates the attestation pipeline (rolled out 2026-03). Trigger a new build to get an attestation."
+          action={
+            <Button asChild variant="secondary">
+              <Link
+                to={`/projects/${encodeURIComponent(name)}/deployments/${id}`}
+                className="inline-flex items-center gap-1"
+              >
+                <ArrowLeft className="size-4" aria-hidden="true" />
+                Back to deployment
+              </Link>
+            </Button>
+          }
         />
       </PageShell>
     );

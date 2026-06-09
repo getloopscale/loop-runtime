@@ -4,13 +4,13 @@ import {
   ArrowRight,
   FolderKanban,
   Globe,
-  Loader2,
   Plus,
   Rocket,
   Users,
 } from 'lucide-react';
 import {
   Badge,
+  Button,
   Card,
   EmptyState,
   PageShell,
@@ -22,6 +22,7 @@ import { usePageMeta } from '@/hooks/use-page-meta';
 import { useRequireAuth } from '@/hooks/use-auth';
 import { useProjects } from '@/hooks/use-projects';
 import { useCloudApi } from '@/hooks/use-api';
+import { CardSkeleton } from '@/components/data/card-skeleton';
 import { formatNumber } from '@/lib/format';
 
 interface UsageMetricShape {
@@ -171,29 +172,38 @@ export function OverviewPage() {
               Projects
             </p>
             {loading ? (
-              <Card>
-                <Card.Body className="py-8 text-center">
-                  <Loader2
-                    className="mx-auto size-5 text-muted-foreground animate-spin"
-                    aria-label="Loading projects"
-                  />
-                </Card.Body>
-              </Card>
+              <div className="flex flex-col gap-3">
+                <CardSkeleton />
+                <CardSkeleton />
+                <CardSkeleton />
+              </div>
             ) : filteredProjects.length === 0 ? (
               <EmptyState
                 icon={FolderKanban}
-                title={searchQuery ? 'No matching projects' : 'Deploy your first project'}
+                title={searchQuery ? 'No projects match your search' : 'Deploy your first project'}
                 description={
                   searchQuery ? (
-                    <>Try a different search term.</>
+                    <>No project name contains "{searchQuery}". Try a different term or clear the search.</>
                   ) : (
                     <>
                       Run{' '}
                       <code className="bg-muted px-2 py-0.5 rounded font-mono">
                         loopzero init
                       </code>{' '}
-                      in your terminal to connect a repo and ship.
+                      in your terminal to connect a repo, or use the dashboard to create one. LoopZero auto-detects your framework and ships to a live URL in minutes.
                     </>
+                  )
+                }
+                action={
+                  searchQuery ? (
+                    <Button variant="ghost" onClick={() => setSearchQuery('')}>
+                      Clear search
+                    </Button>
+                  ) : (
+                    <Button onClick={() => navigate('/projects')}>
+                      <Plus className="size-4 mr-1" aria-hidden="true" />
+                      New project
+                    </Button>
                   )
                 }
               />

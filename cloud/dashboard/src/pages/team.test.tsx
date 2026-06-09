@@ -49,7 +49,10 @@ describe('TeamPage', () => {
       error: false,
     });
     render(<TeamPage />);
-    expect(screen.getByRole('button', { name: /invite/i })).toBeInTheDocument();
+    // PageShell primary + EmptyState CTA both surface an Invite button.
+    expect(
+      screen.getAllByRole('button', { name: /invite/i }).length,
+    ).toBeGreaterThanOrEqual(1);
   });
 
   it('test_team_remove_member_requires_confirmation', () => {

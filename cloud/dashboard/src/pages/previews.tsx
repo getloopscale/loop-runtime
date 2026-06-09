@@ -1,18 +1,21 @@
+import { useState } from 'react';
 import { Link, useParams } from 'react-router-dom';
 import { ArrowLeft, ExternalLink, GitPullRequest, Trash2 } from 'lucide-react';
 import {
   Badge,
   Button,
   Card,
+  ConfirmDialog,
   PageShell,
   Table,
 } from '@loopzerokit/ui';
 import { useSetPageTitle } from '@/hooks/use-page-meta';
 import { useRequireAuth } from '@/hooks/use-auth';
 import { usePreviews } from '@/hooks/use-previews';
+import { TableSkeleton } from '@/components/data/table-skeleton';
 import { engineFetch } from '@/lib/api';
 import { formatDate } from '@/lib/format';
-import type { PreviewStatus } from '@/lib/api/types';
+import type { Preview, PreviewStatus } from '@/lib/api/types';
 
 const STATUS_BADGE: Record<
   PreviewStatus,
@@ -40,19 +43,32 @@ function expiresIn(iso: string): string {
  *
  * Lists active preview environments for the project. Each row: PR title +
  * branch + URL + expires countdown + delete action.
+ *
+ * DESIGN.md §16 (danger zone choreography): delete now goes through a
+ * ConfirmDialog with typed confirmation phrase. The previous silent delete
+ * could nuke a teammate's PR preview by accident on a misclick.
  */
 export function PreviewsPage() {
   useRequireAuth();
   const { name = '' } = useParams<{ name: string }>();
   useSetPageTitle(`${name} · Previews`);
-  const { previews, loading, refetch } = usePreviews(name);
+  const { previews, loading, error, refetch } = usePreviews(name);
+  const [pendingDelete, setPendingDelete] = useState<Preview | null>(null);
+  const [deleting, setDeleting] = useState(false);
 
-  const handleDelete = async (id: string) => {
-    await engineFetch(
-      `/api/v1/projects/${encodeURIComponent(name)}/previews/${encodeURIComponent(id)}`,
-      { method: 'DELETE' },
-    );
-    refetch();
+  const handleConfirmDelete = async () => {
+    if (!pendingDelete) return;
+    setDeleting(true);
+    try {
+      await engineFetch(
+        `/api/v1/projects/${encodeURIComponent(name)}/previews/${encodeURIComponent(pendingDelete.id)}`,
+        { method: 'DELETE' },
+      );
+      refetch();
+      setPendingDelete(null);
+    } finally {
+      setDeleting(false);
+    }
   };
 
   return (
@@ -60,13 +76,23 @@ export function PreviewsPage() {
       title="Preview environments"
       description={`Per-PR deploys for ${name}.`}
       loading={loading}
+      loadingNode={<Card><TableSkeleton rows={4} columns={5} /></Card>}
+      error={
+        error
+          ? {
+              message:
+                'Could not load preview environments. The build service may be temporarily unreachable.',
+              onRetry: refetch,
+            }
+          : undefined
+      }
       empty={
-        !loading && previews.length === 0
+        !loading && !error && previews.length === 0
           ? {
               icon: GitPullRequest,
-              title: 'No preview environments yet',
+              title: 'Open a pull request to spin up a preview',
               description:
-                'Open a pull request and LoopZero will deploy a preview automatically.',
+                'LoopZero deploys an isolated environment per PR so reviewers can click a live URL instead of pulling the branch. Connect GitHub on the Repository tab if you haven\'t already.',
             }
           : undefined
       }
@@ -141,8 +167,8 @@ export function PreviewsPage() {
                       <Button
                         variant="ghost"
                         size="sm"
-                        onClick={() => handleDelete(p.id)}
-                        aria-label={`Delete preview ${p.id}`}
+                        onClick={() => setPendingDelete(p)}
+                        aria-label={`Delete preview ${p.pr_title ?? p.branch}`}
                       >
                         <Trash2 className="size-4 text-destructive" aria-hidden="true" />
                       </Button>
@@ -154,6 +180,34 @@ export function PreviewsPage() {
           </Table>
         </Card.Body>
       </Card>
+
+      {pendingDelete ? (
+        <ConfirmDialog
+          open={pendingDelete !== null}
+          onOpenChange={(o) => !o && setPendingDelete(null)}
+          title={`Delete preview "${pendingDelete.pr_title ?? pendingDelete.branch}"?`}
+          description={
+            <div className="space-y-2 text-sm">
+              <p>
+                The preview URL{' '}
+                <code className="font-mono text-xs">{pendingDelete.url}</code>{' '}
+                stops responding immediately. Reviewers and the PR comment link
+                will receive a 404.
+              </p>
+              <p className="text-muted-foreground">
+                A new preview will be created on the next push to this branch.
+                Type the branch name to confirm.
+              </p>
+            </div>
+          }
+          confirmLabel={deleting ? 'Deleting…' : 'Delete preview'}
+          cancelLabel="Cancel"
+          intent="destructive"
+          confirmationPhrase={pendingDelete.branch}
+          loading={deleting}
+          onConfirm={handleConfirmDelete}
+        />
+      ) : null}
     </PageShell>
   );
 }

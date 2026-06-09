@@ -33,7 +33,7 @@ describe('WebhooksPage (/memory/webhooks)', () => {
     mockCloudFetch.mockResolvedValueOnce({ webhooks: [] });
     render(<WebhooksPage />);
     // Settle the page mount; sometimes the EmptyState arrives before assertions.
-    expect(await screen.findByText(/no webhooks yet/i)).toBeInTheDocument();
+    expect(await screen.findByText(/register your first webhook/i)).toBeInTheDocument();
     // The data-testid + the "Demo only" copy MUST be absent now.
     expect(screen.queryByTestId('webhook-demo-alert')).not.toBeInTheDocument();
     expect(screen.queryByText('Demo only')).not.toBeInTheDocument();
@@ -67,7 +67,7 @@ describe('WebhooksPage (/memory/webhooks)', () => {
   it('shows empty state when no webhooks exist', async () => {
     mockCloudFetch.mockResolvedValueOnce({ webhooks: [] });
     render(<WebhooksPage />);
-    expect(await screen.findByText(/no webhooks yet/i)).toBeInTheDocument();
+    expect(await screen.findByText(/register your first webhook/i)).toBeInTheDocument();
   });
 
   it('Add webhook dialog opens + form fields render', async () => {

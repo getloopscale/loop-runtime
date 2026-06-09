@@ -13,6 +13,7 @@ import {
 } from '@loopzerokit/ui';
 import { useSetPageTitle } from '@/hooks/use-page-meta';
 import { useRequireAuth } from '@/hooks/use-auth';
+import { CardSkeleton } from '@/components/data/card-skeleton';
 import { engineFetch } from '@/lib/api';
 import type { ProjectConnection } from '@/lib/api/types';
 
@@ -106,14 +107,12 @@ export function ProjectConnectPage() {
 
   if (loading) {
     return (
-      <PageShell title="Connect">
-        <div className="flex items-center justify-center py-12">
-          <Loader2
-            className="size-6 animate-spin text-muted-foreground"
-            aria-label="Loading connection state"
-          />
-        </div>
-      </PageShell>
+      <PageShell
+        title="Repository connection"
+        description={`GitHub link for ${name}.`}
+        loading
+        loadingNode={<CardSkeleton withFooter />}
+      />
     );
   }
 

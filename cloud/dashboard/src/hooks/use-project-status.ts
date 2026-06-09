@@ -20,6 +20,7 @@ export function useProjectStatus(
   status: ProjectStatusDetail | null;
   loading: boolean;
   error: boolean;
+  refetch: () => void;
 } {
   const { intervalMs = 5000 } = options;
   const query = useQuery({
@@ -36,5 +37,8 @@ export function useProjectStatus(
     status: query.data ?? null,
     loading: query.isLoading,
     error: query.isError || (query.isFetched && query.data === null),
+    refetch: () => {
+      void query.refetch();
+    },
   };
 }

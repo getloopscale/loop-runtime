@@ -5,6 +5,7 @@ import {
   Badge,
   Button,
   Card,
+  ConfirmDialog,
   PageShell,
   StatusDot,
   Table,
@@ -13,33 +14,41 @@ import { useSetPageTitle } from '@/hooks/use-page-meta';
 import { useRequireAuth } from '@/hooks/use-auth';
 import { useSecrets } from '@/hooks/use-secrets';
 import { AddSecretSheet } from "@/components/sheets/add-secret-sheet";
+import { TableSkeleton } from '@/components/data/table-skeleton';
 import { engineFetch } from '@/lib/api';
 import { formatDate } from '@/lib/format';
+import type { Secret } from '@/lib/api/types';
 
 /**
  * SecretsPage — Plan v1.0 T3.1.
  *
  * Lists secrets (values never returned — name + metadata + ESO sync only).
- * Add via dialog, delete via per-row Trash button (no confirm dialog for now;
- * follow-up T4.x adds destructive confirm pattern).
+ * Add via dialog, delete via per-row Trash button.
+ *
+ * DESIGN.md §16 (danger zone choreography): destructive actions now go
+ * through ConfirmDialog with typed confirmation phrase. Replacing a silent
+ * delete that could break production at runtime on a misclick.
  */
 export function SecretsPage() {
   useRequireAuth();
   const { name = '' } = useParams<{ name: string }>();
   useSetPageTitle(`${name} · Secrets`);
-  const { secrets, loading, refetch } = useSecrets();
+  const { secrets, loading, error, refetch } = useSecrets();
   const [addOpen, setAddOpen] = useState(false);
-  const [deleting, setDeleting] = useState<string | null>(null);
+  const [pendingDelete, setPendingDelete] = useState<Secret | null>(null);
+  const [deleting, setDeleting] = useState(false);
 
-  const handleDelete = async (secretName: string) => {
-    setDeleting(secretName);
+  const handleConfirmDelete = async () => {
+    if (!pendingDelete) return;
+    setDeleting(true);
     try {
-      await engineFetch(`/api/v1/secrets/${encodeURIComponent(secretName)}`, {
+      await engineFetch(`/api/v1/secrets/${encodeURIComponent(pendingDelete.name)}`, {
         method: 'DELETE',
       });
       refetch();
+      setPendingDelete(null);
     } finally {
-      setDeleting(null);
+      setDeleting(false);
     }
   };
 
@@ -53,13 +62,27 @@ export function SecretsPage() {
         onClick: () => setAddOpen(true),
       }}
       loading={loading}
+      loadingNode={<Card><TableSkeleton rows={5} columns={5} /></Card>}
+      error={
+        error
+          ? {
+              message:
+                'Could not load secrets. The secrets service may be temporarily unreachable.',
+              onRetry: refetch,
+            }
+          : undefined
+      }
       empty={
-        !loading && secrets.length === 0
+        !loading && !error && secrets.length === 0
           ? {
               icon: KeyRound,
-              title: 'No secrets yet',
+              title: 'Add your first secret',
               description:
-                'Add a secret to make it available to your apps at runtime.',
+                'Secrets are encrypted at rest and exposed to your app as environment variables at runtime. Common uses: database URLs, third-party API keys, OAuth client secrets.',
+              action: {
+                label: 'Add secret',
+                onClick: () => setAddOpen(true),
+              },
             }
           : undefined
       }
@@ -140,9 +163,8 @@ export function SecretsPage() {
                     <Button
                       variant="ghost"
                       size="sm"
-                      disabled={deleting === s.name}
-                      onClick={() => handleDelete(s.name)}
-                      aria-label={`Delete ${s.name}`}
+                      onClick={() => setPendingDelete(s)}
+                      aria-label={`Delete secret ${s.name}`}
                     >
                       <Trash2 className="size-4 text-destructive" aria-hidden="true" />
                     </Button>
@@ -159,6 +181,35 @@ export function SecretsPage() {
         onOpenChange={setAddOpen}
         onCreated={() => refetch()}
       />
+
+      {pendingDelete ? (
+        <ConfirmDialog
+          open={pendingDelete !== null}
+          onOpenChange={(o) => !o && setPendingDelete(null)}
+          title={`Delete secret "${pendingDelete.name}"?`}
+          description={
+            <div className="space-y-2 text-sm">
+              <p>
+                Apps that read{' '}
+                <code className="font-mono text-xs">{pendingDelete.name}</code>{' '}
+                at runtime will get an empty value on their next deploy. If a
+                running container holds this value in memory, it keeps working
+                until the next restart.
+              </p>
+              <p className="text-muted-foreground">
+                The value is gone forever — re-creation requires the original
+                secret material. Type the key name to confirm.
+              </p>
+            </div>
+          }
+          confirmLabel={deleting ? 'Deleting…' : 'Delete secret'}
+          cancelLabel="Cancel"
+          intent="destructive"
+          confirmationPhrase={pendingDelete.name}
+          loading={deleting}
+          onConfirm={handleConfirmDelete}
+        />
+      ) : null}
     </PageShell>
   );
 }

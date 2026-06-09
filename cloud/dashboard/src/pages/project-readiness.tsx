@@ -1,11 +1,12 @@
-import { useParams } from 'react-router-dom';
-import { ShieldCheck } from 'lucide-react';
-import { EmptyState, PageShell } from '@loopzerokit/ui';
+import { Link, useParams } from 'react-router-dom';
+import { ArrowLeft, ShieldCheck } from 'lucide-react';
+import { Button, EmptyState, PageShell } from '@loopzerokit/ui';
 import { useRequireAuth } from '@/hooks/use-auth';
 import { useDocumentTitle } from '@/hooks/use-page-meta';
 import { useProjects } from '@/hooks/use-projects';
 import { useReadinessSignals } from '@/hooks/use-readiness-signals';
 import { ReadinessChecklist } from '@/components/project/readiness-checklist';
+import { CardSkeleton } from '@/components/data/card-skeleton';
 
 /**
  * ProjectReadinessPage (Sprint 1 T1.1) — production-fitness signals per project.
@@ -35,8 +36,16 @@ export function ProjectReadinessPage() {
       <PageShell title="Production readiness">
         <EmptyState
           icon={ShieldCheck}
-          title="Project not found"
-          description={`No project named "${name}" exists in this team.`}
+          title={`No project named "${name}"`}
+          description="The project may have been deleted or the URL is wrong. Other projects in your workspace are still available."
+          action={
+            <Button asChild variant="secondary">
+              <Link to="/projects" className="inline-flex items-center gap-1">
+                <ArrowLeft className="size-4" aria-hidden="true" />
+                Back to projects
+              </Link>
+            </Button>
+          }
         />
       </PageShell>
     );
@@ -47,6 +56,13 @@ export function ProjectReadinessPage() {
       title="Production readiness"
       description="Signals that indicate how production-ready this project is."
       loading={projectsLoading || signalsLoading}
+      loadingNode={
+        <div className="flex flex-col gap-4">
+          <CardSkeleton />
+          <CardSkeleton />
+          <CardSkeleton />
+        </div>
+      }
     >
       <ReadinessChecklist signals={signals} />
     </PageShell>

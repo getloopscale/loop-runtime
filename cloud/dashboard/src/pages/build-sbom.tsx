@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react';
 import { Link, useParams } from 'react-router-dom';
-import { ArrowLeft, Download, FileText, Loader2 } from 'lucide-react';
+import { ArrowLeft, Download, FileText } from 'lucide-react';
 import {
   Badge,
   Button,
@@ -11,6 +11,8 @@ import {
 } from '@loopzerokit/ui';
 import { useSetPageTitle } from '@/hooks/use-page-meta';
 import { useRequireAuth } from '@/hooks/use-auth';
+import { CardSkeleton } from '@/components/data/card-skeleton';
+import { TableSkeleton } from '@/components/data/table-skeleton';
 import { engineFetch } from '@/lib/api';
 import type { BuildSBOM } from '@/lib/api/types';
 
@@ -62,14 +64,16 @@ export function BuildSBOMPage() {
 
   if (loading) {
     return (
-      <PageShell title="SBOM">
-        <div className="flex items-center justify-center py-12">
-          <Loader2
-            className="size-6 animate-spin text-muted-foreground"
-            aria-label="Loading SBOM"
-          />
-        </div>
-      </PageShell>
+      <PageShell
+        title={`SBOM · ${id.slice(0, 7)}`}
+        loading
+        loadingNode={
+          <div className="flex flex-col gap-6">
+            <CardSkeleton />
+            <Card><TableSkeleton rows={8} columns={4} /></Card>
+          </div>
+        }
+      />
     );
   }
 
@@ -79,7 +83,18 @@ export function BuildSBOMPage() {
         <EmptyState
           icon={FileText}
           title="No SBOM for this build"
-          description="SBOM is generated for succeeded builds. This build may have failed before the SBOM step."
+          description="The Software Bill of Materials is generated as part of the post-build step. This build either failed before that step ran, or the build pre-dates the SBOM pipeline (rolled out 2026-04). Trigger a new build to get an SBOM."
+          action={
+            <Button asChild variant="secondary">
+              <Link
+                to={`/projects/${encodeURIComponent(name)}/deployments/${id}`}
+                className="inline-flex items-center gap-1"
+              >
+                <ArrowLeft className="size-4" aria-hidden="true" />
+                Back to deployment
+              </Link>
+            </Button>
+          }
         />
       </PageShell>
     );

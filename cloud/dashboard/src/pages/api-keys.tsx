@@ -22,6 +22,7 @@ import {
 } from '@loopzerokit/ui';
 import { usePageMeta } from '@/hooks/use-page-meta';
 import { useRequireAuth } from '@/hooks/use-auth';
+import { TableSkeleton } from '@/components/data/table-skeleton';
 import { cloudFetch } from '@/lib/api';
 
 /**
@@ -231,10 +232,11 @@ export function ApiKeysPage() {
         }}
       >
         {listQuery.isLoading ? (
-          <Card>Loading…</Card>
+          <Card><TableSkeleton rows={4} columns={5} /></Card>
         ) : listQuery.isError ? (
           <Alert intent="warning" title="Could not load API keys">
-            Something went wrong. Try refreshing the page.
+            The platform service is not reachable right now. Existing keys keep
+            working at the edge — only this listing is affected.
           </Alert>
         ) : keys.length === 0 ? (
           <EmptyState

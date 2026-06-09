@@ -18,6 +18,7 @@ import { useSetPageTitle } from '@/hooks/use-page-meta';
 import { useEngineApi } from '@/hooks/use-api';
 import { useRequireAuth } from '@/hooks/use-auth';
 import { useDeleteDomain, useVerifyDomain } from '@/hooks/mutations/use-domains';
+import { TableSkeleton } from '@/components/data/table-skeleton';
 import { formatDate } from '@/lib/format';
 
 interface Domain {
@@ -183,15 +184,22 @@ export function DomainsPage() {
         onClick: () => setAddOpen(true),
       }}
       loading={loading}
+      loadingNode={<Card><TableSkeleton rows={5} columns={5} /></Card>}
       empty={
         !loading && filtered.length === 0
-          ? {
-              icon: Globe,
-              title: searchQuery ? 'No matching domains' : 'No custom domains yet',
-              description: searchQuery
-                ? 'Try a different search term.'
-                : 'Run loopzero domain add <domain> to attach a custom domain.',
-            }
+          ? searchQuery
+            ? {
+                icon: Globe,
+                title: 'No domains match your search',
+                description: `No domain contains "${searchQuery}". Try a different term or clear the search.`,
+                action: { label: 'Clear search', onClick: () => setSearchQuery('') },
+              }
+            : {
+                icon: Globe,
+                title: 'Attach your first custom domain',
+                description: 'LoopZero provisions and renews TLS certificates automatically, including SAN entries and DNS-01 validation. Add a domain, point your DNS to the verification record we show, and your app serves traffic at the new URL within minutes.',
+                action: { label: 'Add domain', onClick: () => setAddOpen(true) },
+              }
           : undefined
       }
     >

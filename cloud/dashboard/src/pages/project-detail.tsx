@@ -1,5 +1,6 @@
+import { useState } from 'react';
 import { useParams, Link, useNavigate } from 'react-router-dom';
-import { ArrowLeft, Box, FolderKanban, Loader2, Rocket } from 'lucide-react';
+import { ArrowLeft, Box, FolderKanban, Rocket } from 'lucide-react';
 import { Badge, Button, Card, CodeBlock, ConfirmDialog, DangerZone, EmptyState, PageShell } from '@loopzerokit/ui';
 import { useSetPageTitle } from '@/hooks/use-page-meta';
 import { useRequireAuth } from '@/hooks/use-auth';
@@ -7,9 +8,9 @@ import { useProjects } from '@/hooks/use-projects';
 import { useProjectStatus } from '@/hooks/use-project-status';
 import { useDeployments } from '@/hooks/use-deployments';
 import { ProjectHealthCard } from '@/components/project/project-health-card';
+import { CardSkeleton } from '@/components/data/card-skeleton';
 import { engineFetch } from '@/lib/api';
 import { formatDate } from '@/lib/format';
-import { useState } from 'react';
 
 /**
  * ProjectDetailPage — entry overview for a single project.
@@ -50,11 +51,17 @@ export function ProjectDetailPage() {
 
   if (loading) {
     return (
-      <PageShell title={name}>
-        <div className="flex items-center justify-center py-12">
-          <Loader2 className="size-6 animate-spin text-muted-foreground" aria-label="Loading project" />
-        </div>
-      </PageShell>
+      <PageShell
+        title={name}
+        loading
+        loadingNode={
+          <div className="flex flex-col gap-6">
+            <CardSkeleton />
+            <CardSkeleton withFooter />
+            <CardSkeleton />
+          </div>
+        }
+      />
     );
   }
 
@@ -66,10 +73,10 @@ export function ProjectDetailPage() {
         <EmptyState
           icon={FolderKanban}
           title={`No project named "${name}"`}
-          description="It may have been deleted, or the URL is wrong."
+          description="The project may have been deleted, or the URL is wrong. Other projects in your workspace are still available."
           action={
             <Button asChild variant="secondary">
-              <Link to="/projects">
+              <Link to="/projects" className="inline-flex items-center gap-1">
                 <ArrowLeft className="size-4" aria-hidden="true" />
                 Back to projects
               </Link>

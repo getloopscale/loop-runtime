@@ -7,6 +7,7 @@ import { useRequireAuth } from '@/hooks/use-auth';
 import { useProjects } from '@/hooks/use-projects';
 import { CreateProjectSheet } from "@/components/sheets/create-project-sheet";
 import { EmptyProjectsHero } from '@/components/onboarding/empty-projects-hero';
+import { TableSkeleton } from '@/components/data/table-skeleton';
 import { formatDate } from '@/lib/format';
 
 /**
@@ -71,6 +72,7 @@ export function ProjectsPage() {
         onClick: () => setCreateOpen(true),
       }}
       loading={loading}
+      loadingNode={<Card><TableSkeleton rows={6} columns={5} /></Card>}
       empty={
         // Only PageShell empty state for SEARCH no-match. For "no projects at all"
         // (Sprint 3 T3.3), render EmptyProjectsHero inline below — empty-state-as-
@@ -78,8 +80,9 @@ export function ProjectsPage() {
         !loading && searchQuery && filteredProjects.length === 0
           ? {
               icon: FolderKanban,
-              title: 'No matching projects',
-              description: 'Try a different search term.',
+              title: 'No projects match your search',
+              description: `No project name contains "${searchQuery}". Try a different term or clear the search to see all projects.`,
+              action: { label: 'Clear search', onClick: () => setSearchQuery('') },
             }
           : undefined
       }
