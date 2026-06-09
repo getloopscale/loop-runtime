@@ -24,6 +24,8 @@ import { MemoryListPage } from './memories';
 describe('MemoryListPage (/memory/memories)', () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    // Reset URL between tests — pushState leaks across tests in vitest.
+    window.history.pushState({}, '', '/memory/memories');
   });
 
   // T3.2 — 4 scope tabs matching entities.tsx canonical pattern.
@@ -49,9 +51,9 @@ describe('MemoryListPage (/memory/memories)', () => {
   // T3.2 EC-8 — invalid ?scope=garbage defensively coerces to 'user'.
   it('EC-8: invalid ?scope=garbage defaults to user (no crash)', async () => {
     mockCloudFetch.mockResolvedValue({ memories: [] });
-    // Stub URL to include the garbage scope param.
-    window.history.pushState({}, '', '/memory/memories?scope=garbage');
-    render(<MemoryListPage />);
+    // MemoryRouter consumes initialEntries via the test render helper —
+    // window.history.pushState does NOT propagate to router context.
+    render(<MemoryListPage />, { initialEntries: ['/memory/memories?scope=garbage'] });
     await screen.findByText(/No memories yet/i);
     // BFF call still uses user scope (defensive coerce), NOT the garbage value.
     const calls = mockCloudFetch.mock.calls;
@@ -74,6 +76,16 @@ describe('MemoryListPage (/memory/memories)', () => {
     // Default scope is 'user' → Badge text 'USER'. Multiple rows → multiple Badges.
     const userBadges = screen.getAllByText('USER');
     expect(userBadges.length).toBeGreaterThanOrEqual(2);
+  });
+
+  // v1.5 follow-up (Path A — ADR-0010 honest disclosure):
+  // REPO tab EmptyState explains skill scope is SDK-only per ADR-0010.
+  it('REPO scope empty state explains skill SDK access (ADR-0010 honest disclosure)', async () => {
+    mockCloudFetch.mockResolvedValue({ memories: [] });
+    render(<MemoryListPage />, { initialEntries: ['/memory/memories?scope=repo'] });
+    expect(await screen.findByText(/Skill scope — programmatic access only/i)).toBeInTheDocument();
+    expect(screen.getByText(/Memory\.skills\(repoId\)\.recall\(query\)/i)).toBeInTheDocument();
+    expect(screen.getByText(/ADR-0010/i)).toBeInTheDocument();
   });
 
   it('empty result renders a friendly EmptyState (D3 — no broken UI on first run)', async () => {

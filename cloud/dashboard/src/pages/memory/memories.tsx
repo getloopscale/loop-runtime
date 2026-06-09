@@ -238,11 +238,13 @@ export function MemoryListPage() {
           <Card>Loading…</Card>
         ) : memories.length === 0 ? (
           <EmptyState
-            title="No memories yet"
+            title={activeScope === 'repo' ? 'Skill scope — programmatic access only' : 'No memories yet'}
             description={
-              category || from || to
-                ? 'No memories match the current filters. Try clearing them.'
-                : "Your agent hasn't stored any memories yet. Use the SDK to call remember()."
+              activeScope === 'repo'
+                ? "Skill (repo) scope is exposed only via the SDK Memory.skills(repoId).recall(query). Listing is intentionally not surfaced over REST per ADR-0010 — skills are queried by semantic search, not browsed as inventory."
+                : category || from || to
+                  ? 'No memories match the current filters. Try clearing them.'
+                  : `Your agent hasn't stored any ${activeScope} memories yet. Use the SDK to call memory.${activeScope}(id).remember().`
             }
           />
         ) : (
