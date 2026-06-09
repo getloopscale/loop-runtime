@@ -143,7 +143,9 @@ func TestTheMemoryClient_ListWithScopeRoutesToCorrectPath(t *testing.T) {
 		{"user", "/v1/scopes/user/u/memories"},
 		{"session", "/v1/scopes/session/u/memories"},
 		{"agent", "/v1/scopes/agent/u/memories"},
-		{"repo", "/v1/scopes/repo/u/memories"},
+		// v1.5 (T3.2 patch): repo → skill per ADR-0010 (RepoScope exposed via Memory.skills(repoId)).
+		{"repo", "/v1/scopes/skill/u/memories"},
+		{"skill", "/v1/scopes/skill/u/memories"},
 	}
 	for _, tc := range cases {
 		t.Run("scope="+tc.scope, func(t *testing.T) {
@@ -157,6 +159,30 @@ func TestTheMemoryClient_ListWithScopeRoutesToCorrectPath(t *testing.T) {
 				t.Errorf("scope=%q routed to %q, want %q", tc.scope, got, tc.wantPath)
 			}
 		})
+	}
+}
+
+// dashboard-memories-tab-standardization v1.5 (T3.2 patch) — graceful degrade.
+// When scope=repo (mapped to skill) and TheMemory REST returns 501
+// SKILL_LISTING_NOT_IMPLEMENTED (ADR-0010 — ScopedSkillMemory has no
+// getAll() exposed via REST), Client.List MUST return an empty list (200)
+// instead of propagating the error as 502 to the Dashboard. The Dashboard
+// REPO tab then renders EmptyState (honest, friendly) instead of a 502.
+func TestTheMemoryClient_RepoScopeDegradesGracefullyOn501(t *testing.T) {
+	stub := newStubMemoryServer(t)
+	stub.respStatus = 501
+	stub.respBody = `{"code":"SKILL_LISTING_NOT_IMPLEMENTED","message":"Skill scope listing is not exposed via REST at v0.1.0-alpha."}`
+
+	client := themory.NewClient(stub.URL, "k", nil)
+	result, err := client.List(context.Background(), "u", themory.ListOptions{Scope: "repo"})
+	if err != nil {
+		t.Fatalf("expected nil error on 501 SKILL_LISTING_NOT_IMPLEMENTED (graceful degrade), got %v", err)
+	}
+	if result == nil {
+		t.Fatal("expected non-nil result with empty Memories slice, got nil")
+	}
+	if len(result.Memories) != 0 {
+		t.Errorf("expected empty Memories slice, got %d items", len(result.Memories))
 	}
 }
 

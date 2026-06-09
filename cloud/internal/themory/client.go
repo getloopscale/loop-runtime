@@ -150,16 +150,29 @@ func (c *Client) List(ctx context.Context, userID string, opts ListOptions) (*Li
 	// Category/From/To are dropped silently — upstream lacks these filters.
 	// Scope routes to the matching /v1/scopes/{scope}/{userID}/memories path.
 	// Empty/invalid scope falls back to "user" (backward-compat + safe default).
+	// dashboard-memories-tab-standardization v1.5 (T3.2): "repo" maps to "skill"
+	// per ADR-0010 (RepoScope exposed via Memory.skills(repoId), maps internally
+	// to skill scope). TheMemory REST returns 501 SKILL_LISTING_NOT_IMPLEMENTED
+	// for skill scope listing — Client.List degrades gracefully to empty list
+	// (200) instead of propagating 502 to Dashboard. The empty response is
+	// honest: the backend simply doesn't expose the listing primitive yet.
 	scope := opts.Scope
 	switch scope {
-	case "user", "session", "agent", "repo":
+	case "user", "session", "agent":
 		// allowed values; pass through
+	case "repo", "skill":
+		scope = "skill"
 	default:
 		scope = "user"
 	}
 	path := "/v1/scopes/" + scope + "/" + url.PathEscape(userID) + "/memories"
 	var upstream scopeMemoriesResponse
 	if err := c.do(ctx, http.MethodGet, path, userID, q, nil, &upstream); err != nil {
+		// Graceful degrade: when scope=skill returns 501 (not implemented per
+		// ADR-0010), surface empty list. Dashboard EmptyState handles the UI.
+		if scope == "skill" && (IsSkillListingNotImplemented(err) || IsNotFound(err)) {
+			return &ListResult{Memories: []MemoryRow{}}, nil
+		}
 		return nil, err
 	}
 	out := &ListResult{Memories: make([]MemoryRow, 0, len(upstream.Items))}
@@ -303,6 +316,23 @@ var ErrNotFound = errors.New("themory: not found")
 
 // IsNotFound reports whether err is or wraps ErrNotFound.
 func IsNotFound(err error) bool { return errors.Is(err, ErrNotFound) }
+
+// IsSkillListingNotImplemented reports whether err is a 501 from TheMemory's
+// scopes handler indicating skill scope listing is not exposed via REST
+// (ADR-0010 — `ScopedSkillMemory` has no `getAll()`; consumers use SDK
+// `Memory.skills(repoId).recall(...)` directly). Used by Client.List to
+// degrade scope=repo gracefully to an empty list instead of propagating 502
+// to the Dashboard. See dashboard-memories-tab-standardization v1.5 T3.2.
+func IsSkillListingNotImplemented(err error) bool {
+	var apiErr *Error
+	if !errors.As(err, &apiErr) {
+		return false
+	}
+	if apiErr.StatusCode != http.StatusNotImplemented {
+		return false
+	}
+	return strings.Contains(apiErr.Body, "SKILL_LISTING_NOT_IMPLEMENTED")
+}
 
 // Error is a typed wrapper for non-2xx responses other than 404.
 // Exposes the upstream status + body for slog without leaking secrets
