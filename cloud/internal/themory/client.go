@@ -146,8 +146,15 @@ func (c *Client) List(ctx context.Context, userID string, opts ListOptions) (*Li
 	if opts.Limit > 0 {
 		q.Set("limit", strconv.Itoa(opts.Limit))
 	}
+	// themory-category-filter-server-side T5.1 — forward Category to upstream
+	// REST `?category=` per the contract shipped in TheMemory T4.1. Empty
+	// strings are NOT forwarded (upstream's zod min(1) would 422; suppress here
+	// to keep the no-filter path clean).
+	if opts.Category != "" {
+		q.Set("category", opts.Category)
+	}
 	// TheMemory uses cursor-based pagination; Offset is not supported.
-	// Category/From/To are dropped silently — upstream lacks these filters.
+	// From/To are dropped silently — upstream lacks these filters.
 	// Scope routes to the matching /v1/scopes/{scope}/{userID}/memories path.
 	// Empty/invalid scope falls back to "user" (backward-compat + safe default).
 	// dashboard-memories-tab-standardization v1.5 (T3.2): "repo" maps to "skill"

@@ -129,6 +129,70 @@ func TestTheMemoryClient_PropagatesPaginationParams(t *testing.T) {
 	}
 }
 
+// themory-category-filter-server-side T5.1 — List() forwards Category as
+// the upstream `?category=` query param so TheMemory's QuerySchema (T4.1)
+// can apply the SQL filter at the pgvector adapter (T3.2). Mirrors the
+// shape of the attributed_to forwarding precedent from v1.1.
+func TestTheMemoryClient_ListForwardsCategoryParam(t *testing.T) {
+	stub := newStubMemoryServer(t)
+	stub.respBody = `{"items": []}`
+
+	client := themory.NewClient(stub.URL, "k", nil)
+	if _, err := client.List(context.Background(), "u", themory.ListOptions{Category: "preferences"}); err != nil {
+		t.Fatalf("List: %v", err)
+	}
+
+	if got := stub.lastRequest.URL.Query().Get("category"); got != "preferences" {
+		t.Errorf("category query = %q, want preferences", got)
+	}
+}
+
+// themory-category-filter-server-side T5.1 — empty Category MUST NOT be
+// forwarded. TheMemory REST QuerySchema rejects `?category=` (empty) with
+// 422; suppressing the param at the BFF keeps the no-filter path clean
+// (mirrors EC-3 normalization at the SDK boundary in T3.1 + T3.2).
+func TestTheMemoryClient_ListEmptyCategoryNotForwarded(t *testing.T) {
+	stub := newStubMemoryServer(t)
+	stub.respBody = `{"items": []}`
+
+	client := themory.NewClient(stub.URL, "k", nil)
+	if _, err := client.List(context.Background(), "u", themory.ListOptions{Category: ""}); err != nil {
+		t.Fatalf("List: %v", err)
+	}
+
+	q := stub.lastRequest.URL.Query()
+	if q.Has("category") {
+		t.Errorf("category query was set to %q; empty Category MUST NOT be forwarded", q.Get("category"))
+	}
+}
+
+// themory-category-filter-server-side T5.1 / EC-8 — BFF reads Category from
+// the projected payload field per the dual-pathway projection contract
+// (TheMemory's pgvector adapter T3.2 SELECT-side projects category column
+// INTO payload['category'] AND the top-level field). The BFF already reads
+// the payload pathway at line 186; this test pins that contract.
+func TestTheMemoryClient_BFFReadsCategoryFromProjectedPayload(t *testing.T) {
+	stub := newStubMemoryServer(t)
+	// Upstream response shape: payload.category is the projected column value.
+	stub.respBody = `{
+		"items": [
+			{"id":"00000000-0000-0000-0000-000000000001","text":"fact","hash":"h","scope":{},"payload":{"category":"preferences"},"createdAt":"2026-06-09T10:00:00Z","updatedAt":"2026-06-09T10:00:00Z"}
+		]
+	}`
+
+	client := themory.NewClient(stub.URL, "k", nil)
+	res, err := client.List(context.Background(), "u", themory.ListOptions{})
+	if err != nil {
+		t.Fatalf("List: %v", err)
+	}
+	if len(res.Memories) != 1 {
+		t.Fatalf("got %d memories, want 1", len(res.Memories))
+	}
+	if got := res.Memories[0].Category; got != "preferences" {
+		t.Errorf("MemoryRow.Category = %q, want preferences (payload-projection pathway)", got)
+	}
+}
+
 // dashboard-memories-tab-standardization T3.2 — List() with Scope option
 // routes to /v1/scopes/{scope}/{userID}/memories (was hardcoded to "user").
 // Closes Plan v1.5 BFF reality-check: 4-tab Memories dashboard requires
