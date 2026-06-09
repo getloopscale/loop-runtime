@@ -45,7 +45,11 @@
          hosted at app-dev.loopzero.example can complete the same flows against
          the dev-public Kratos/cloud. Stripe + Google + GitHub allowlists
          unchanged (same OAuth/Stripe apps shared between envs per D5). -->
-    <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' 'unsafe-inline'; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src 'self' data: https://fonts.gstatic.com; img-src 'self' data: blob: https:; connect-src 'self' ws: wss: https://checkout.stripe.com https://*.stripe.com https://auth.loopzero.example https://auth-dev.loopzero.example https://cloud.loopzero.example https://cloud-dev.loopzero.example; form-action 'self' https://auth.loopzero.example https://auth-dev.loopzero.example https://accounts.google.com https://github.com; base-uri 'self'; object-src 'none'" />
+    <!-- dev-local: http://localhost:14433 added to connect-src + form-action so
+         Kratos login via port-forward works without CSP violation. Safe: only
+         reachable on the operator's machine; production builds override via
+         env-injected CSP or remove the localhost entry. -->
+    <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' 'unsafe-inline'; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src 'self' data: https://fonts.gstatic.com; img-src 'self' data: blob: https:; connect-src 'self' ws: wss: https://checkout.stripe.com https://*.stripe.com https://auth.loopzero.example https://auth-dev.loopzero.example https://cloud.loopzero.example https://cloud-dev.loopzero.example http://localhost:14433; form-action 'self' https://auth.loopzero.example https://auth-dev.loopzero.example https://accounts.google.com https://github.com http://localhost:14433; base-uri 'self'; object-src 'none'" />
     <!-- LoopZero brand favicons. The PNG assets in public/ are the canonical
          LoopZero mascot (committed 2026-05-19); these <link> tags re-wire them
          after the previous inline-SVG placeholder (#3ecf8e raio) shadowed
