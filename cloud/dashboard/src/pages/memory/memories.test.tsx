@@ -42,7 +42,7 @@ describe('MemoryListPage (/memory/memories)', () => {
   it('defaults to user scope and passes scope=user in the BFF query', async () => {
     mockCloudFetch.mockResolvedValue({ memories: [] });
     render(<MemoryListPage />);
-    await screen.findByText(/No memories yet/i);
+    await screen.findByText(/has not stored user memories yet/i);
     const calls = mockCloudFetch.mock.calls;
     const url = String(calls[calls.length - 1]?.[0] ?? '');
     expect(url).toContain('scope=user');
@@ -54,7 +54,7 @@ describe('MemoryListPage (/memory/memories)', () => {
     // MemoryRouter consumes initialEntries via the test render helper —
     // window.history.pushState does NOT propagate to router context.
     render(<MemoryListPage />, { initialEntries: ['/memory/memories?scope=garbage'] });
-    await screen.findByText(/No memories yet/i);
+    await screen.findByText(/has not stored user memories yet/i);
     // BFF call still uses user scope (defensive coerce), NOT the garbage value.
     const calls = mockCloudFetch.mock.calls;
     const url = String(calls[calls.length - 1]?.[0] ?? '');
@@ -83,15 +83,31 @@ describe('MemoryListPage (/memory/memories)', () => {
   it('REPO scope empty state explains skill SDK access (ADR-0010 honest disclosure)', async () => {
     mockCloudFetch.mockResolvedValue({ memories: [] });
     render(<MemoryListPage />, { initialEntries: ['/memory/memories?scope=repo'] });
-    expect(await screen.findByText(/Skill scope — programmatic access only/i)).toBeInTheDocument();
-    expect(screen.getByText(/Memory\.skills\(repoId\)\.recall\(query\)/i)).toBeInTheDocument();
+    expect(await screen.findByText(/skills are queried, not browsed/i)).toBeInTheDocument();
     expect(screen.getByText(/ADR-0010/i)).toBeInTheDocument();
   });
 
   it('empty result renders a friendly EmptyState (D3 — no broken UI on first run)', async () => {
     mockCloudFetch.mockResolvedValueOnce({ memories: [] });
     render(<MemoryListPage />);
-    expect(await screen.findByText(/No memories yet/i)).toBeInTheDocument();
+    expect(await screen.findByText(/has not stored user memories yet/i)).toBeInTheDocument();
+  });
+
+  // themory-category-filter-server-side T5.2 — when a category filter is set
+  // AND the BFF returns 0 rows, the UI shows the "filtered" empty-state
+  // (NOT the "no memories yet" first-run text). Pins the contract so a future
+  // regression cannot silently re-introduce the RED TEAM F3 unfiltered-list
+  // behavior. EC-3 + EC-9 honest UX: legacy NULL rows are NOT findable via
+  // the filter, so the "filtered empty" path is the canonical operator
+  // experience until the category column is populated.
+  it('shows filtered empty-state when category filter is set and BFF returns zero rows', async () => {
+    mockCloudFetch.mockResolvedValue({ memories: [] });
+    render(<MemoryListPage />, {
+      initialEntries: ['/memory/memories?category=does-not-exist'],
+    });
+    expect(
+      await screen.findByText(/No memories match the current filters/i),
+    ).toBeInTheDocument();
   });
 
   it('typing in the category filter triggers a refetch with the new query', async () => {
@@ -100,7 +116,7 @@ describe('MemoryListPage (/memory/memories)', () => {
     render(<MemoryListPage />);
 
     // Wait for the first load to settle.
-    expect(await screen.findByText(/No memories yet/i)).toBeInTheDocument();
+    expect(await screen.findByText(/has not stored user memories yet/i)).toBeInTheDocument();
 
     mockCloudFetch.mockResolvedValueOnce({ memories: [] });
     await user.type(screen.getByLabelText(/category/i), 'preferences');
