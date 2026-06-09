@@ -160,6 +160,52 @@ func TestTheMemoryClient_ListWithScopeRoutesToCorrectPath(t *testing.T) {
 	}
 }
 
+// dashboard-memories-tab-standardization T4.1 — BFF pass-through smoke.
+// Asserts the BFF List() surfaces the EXACT createdAt string returned by
+// upstream TheMemory without overwriting, reformatting, OR re-stamping.
+// This is the load-bearing contract that closes Sub-goal 6 of the plan —
+// if BFF time-stamps client-side, the Dashboard sees lies even though the
+// backend (T2.1+T2.2) projects real DB timestamps.
+func TestTheMemoryClient_ListPassesThroughUpstreamCreatedAt(t *testing.T) {
+	cases := []struct {
+		name        string
+		scope       string
+		upstreamISO string
+	}{
+		{"user_scope_recent", "user", "2026-06-09T15:00:00.000Z"},
+		{"user_scope_historical", "user", "2024-01-15T10:30:00.000Z"},
+		{"session_scope_recent", "session", "2026-06-09T16:00:00.000Z"},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			stub := newStubMemoryServer(t)
+			// Upstream returns one row with the controlled createdAt — the
+			// BFF MUST surface this string verbatim through to the client.
+			stub.respBody = `{"items": [{
+				"id": "mem-abc123",
+				"text": "test fact",
+				"hash": "h1",
+				"scope": {"user_id": "alice"},
+				"payload": {},
+				"createdAt": "` + tc.upstreamISO + `",
+				"updatedAt": "` + tc.upstreamISO + `"
+			}]}`
+
+			client := themory.NewClient(stub.URL, "k", nil)
+			result, err := client.List(context.Background(), "alice", themory.ListOptions{Scope: tc.scope})
+			if err != nil {
+				t.Fatalf("List: %v", err)
+			}
+			if len(result.Memories) != 1 {
+				t.Fatalf("expected 1 row, got %d", len(result.Memories))
+			}
+			if got := result.Memories[0].CreatedAt; got != tc.upstreamISO {
+				t.Errorf("CreatedAt pass-through broken: got %q, want %q (BFF must NOT rewrite upstream timestamps)", got, tc.upstreamISO)
+			}
+		})
+	}
+}
+
 // T1.2 invariant 5 (D4): traceparent W3C header propagates from request
 // context into the outbound HTTP call so a single trace ID traverses
 // browser → Go → TheMemory. The otelhttp.NewTransport wrapping handles
