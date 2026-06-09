@@ -9,7 +9,7 @@
  * Extracted to share between LoginPage + RegisterPage (was duplicated
  * 30 LOC each pre-extraction).
  *
- * Future: replace with @loopzero/ui SocialAuthButton primitive when
+ * Future: replace with @loopzerokit/ui SocialAuthButton primitive when
  * upstream ships brand-aware OIDC button (Brief #4 ask).
  */
 export function GoogleBrandIcon({ className = 'size-4' }: { className?: string }) {

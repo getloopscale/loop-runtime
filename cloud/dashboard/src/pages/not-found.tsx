@@ -1,6 +1,6 @@
 import { Link } from 'react-router-dom';
 import { SearchX } from 'lucide-react';
-import { Button, EmptyState, PageShell } from '@loopzero/ui';
+import { Button, EmptyState, PageShell } from '@loopzerokit/ui';
 import { useSetPageTitle } from '@/hooks/use-page-meta';
 
 /**

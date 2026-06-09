@@ -10,7 +10,7 @@ import {
   PageShell,
   Select,
   Table,
-} from '@loopzero/ui';
+} from '@loopzerokit/ui';
 import { usePageMeta } from '@/hooks/use-page-meta';
 import { useEngineApi } from '@/hooks/use-api';
 import { useRequireAuth } from '@/hooks/use-auth';

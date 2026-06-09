@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react';
 import { Link, useSearchParams, useNavigate } from 'react-router-dom';
 import { ExternalLink, FolderKanban, Plus } from 'lucide-react';
-import { Badge, Button, Card, PageShell, StatusDot, Table } from '@loopzero/ui';
+import { Badge, Button, Card, PageShell, StatusDot, Table } from '@loopzerokit/ui';
 import { useSetPageTitle } from '@/hooks/use-page-meta';
 import { useRequireAuth } from '@/hooks/use-auth';
 import { useProjects } from '@/hooks/use-projects';

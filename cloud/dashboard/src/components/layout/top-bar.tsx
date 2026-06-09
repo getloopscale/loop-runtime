@@ -1,6 +1,6 @@
 import { useLocation, useNavigate, useParams } from 'react-router-dom';
 import { FolderKanban, Search } from 'lucide-react';
-import { Select } from '@loopzero/ui';
+import { Select } from '@loopzerokit/ui';
 import { useProjects } from '@/hooks/use-projects';
 
 interface TopBarProps {

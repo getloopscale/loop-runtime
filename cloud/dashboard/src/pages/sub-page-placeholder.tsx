@@ -1,9 +1,9 @@
 import { type ComponentType, type SVGProps } from 'react';
-import { Card, CodeBlock, EmptyState, PageShell } from '@loopzero/ui';
+import { Card, CodeBlock, EmptyState, PageShell } from '@loopzerokit/ui';
 import { useSetPageTitle } from '@/hooks/use-page-meta';
 import { useRequireAuth } from '@/hooks/use-auth';
 
-/** Matches @loopzero/ui `IconComponent` type (re-declared to avoid coupling
+/** Matches @loopzerokit/ui `IconComponent` type (re-declared to avoid coupling
  * to the library's non-exported alias). Compatible with all lucide-react icons. */
 type IconComponent = ComponentType<SVGProps<SVGSVGElement> & { className?: string }>;
 

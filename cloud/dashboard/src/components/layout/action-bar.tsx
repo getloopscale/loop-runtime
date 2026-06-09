@@ -1,6 +1,6 @@
 import { Filter, Search, type LucideIcon } from 'lucide-react';
 import type { ReactNode } from 'react';
-import { Button, Input, cn } from '@loopzero/ui';
+import { Button, Input, cn } from '@loopzerokit/ui';
 
 interface PrimaryAction {
   label: ReactNode;

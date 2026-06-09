@@ -1,7 +1,7 @@
-# Brief #2: Add 8 cross-cutting primitives to @loopzero/ui
+# Brief #2: Add 8 cross-cutting primitives to @loopzerokit/ui
 
-> **Audience:** the `@loopzero/ui` maintainer team (or a Claude/Codex agent running in the `loopzero-ui` repo).
-> **Output:** 8 new primitives + tests + stories + barrel exports, following existing `@loopzero/ui` conventions.
+> **Audience:** the `@loopzerokit/ui` maintainer team (or a Claude/Codex agent running in the `loopzero-ui` repo).
+> **Output:** 8 new primitives + tests + stories + barrel exports, following existing `@loopzerokit/ui` conventions.
 > **Issued by:** LoopZeroCloud dashboard team (consumer), 2026-05-23.
 > **Companion to:** `loopzero/docs/handoff/2026-05-23-loopzero-ui-cloud-dashboard-gaps-brief.md` (Brief #1 — PaaS-shape gaps: UsageMeter, Progress, PlanBadge, AccountMenu).
 > **Consumer plan:** `loopzero/docs/plans/completed/2026-05-23-dashboard-loopzero-ui-migration-plan.md` v1.1.
@@ -39,7 +39,7 @@ Every new primitive MUST:
 
 ### Why
 
-PaaS dashboards routinely display tabular data: invoice histories, team members, audit logs, environment variables grid views. Currently `@loopzero/ui` has only row-shaped primitives (`DeploymentRow`, `audit-log-entry`, `session-list-item`) — great for card-list density, insufficient for **sortable comparative data** with column headers and aligned numerics.
+PaaS dashboards routinely display tabular data: invoice histories, team members, audit logs, environment variables grid views. Currently `@loopzerokit/ui` has only row-shaped primitives (`DeploymentRow`, `audit-log-entry`, `session-list-item`) — great for card-list density, insufficient for **sortable comparative data** with column headers and aligned numerics.
 
 Consumer use cases in `cloud/dashboard`:
 - **BillingPage** — invoice history (Date / Description / Amount / Status / PDF download)
@@ -885,7 +885,7 @@ Update `package.json` `"exports"` map with 8 new subpaths (mirroring existing pa
 
 After implementation, `cloud/dashboard` will:
 
-1. Install new version (`npm install @loopzero/ui@<next-version>`)
+1. Install new version (`npm install @loopzerokit/ui@<next-version>`)
 2. Refactor `BillingPage` invoice history using `<Table>` (T4.4 of consumer plan)
 3. Refactor `TeamPage` member list using `<Table>` (T5.1)
 4. Replace all `<span className="w-2 h-2 rounded-full bg-*">` with `<StatusDot>` (~7 sites)
@@ -905,7 +905,7 @@ The following were considered but **NOT included** — open separate briefs if u
 - **`AvatarUploader`** — only 1 page (Profile), composable with Avatar + Input file in ~30 LOC
 - **`PaymentMethodCard`** — only 1 page (Billing), too specific to Stripe shape
 - **`Pagination`** — Table v1 ships without; consumer slices array. Re-evaluate at >100 rows
-- **`Tabs`** — already in `@loopzero/ui` inventory ✓
+- **`Tabs`** — already in `@loopzerokit/ui` inventory ✓
 - **`Pagination`** primitive — defer until Table consumer demands
 - **`KeyValueList`** — composable trivially: `<dl>...</dl>` in 3 lines
 - **`StepIndicator`** / wizard — no wizard flow in current 12 pages

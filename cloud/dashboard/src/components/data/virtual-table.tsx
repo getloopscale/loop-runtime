@@ -6,7 +6,7 @@ import { useVirtualizer } from '@tanstack/react-virtual';
  * @tanstack/react-virtual. Required for >500-row tables (audit log can grow
  * unbounded). Below threshold, regular Table primitive is simpler.
  *
- * Design tradeoffs (vs @loopzero/ui Table):
+ * Design tradeoffs (vs @loopzerokit/ui Table):
  * - Table's sticky header is replicated as a separate non-virtualized
  *   element at top (kept outside scroll container).
  * - Row height is FIXED (default 56px) — required by virtualizer for

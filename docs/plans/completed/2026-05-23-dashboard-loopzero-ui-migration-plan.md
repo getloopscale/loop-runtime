@@ -1,6 +1,6 @@
-# Plan: Dashboard LoopZeroCloud → @loopzero/ui Migration
+# Plan: Dashboard LoopZeroCloud → @loopzerokit/ui Migration
 
-> **Version 1.3** — Refactor completo do `cloud/dashboard/` (SPA React 19 + Vite 6) para consumir `@loopzero/ui@0.9.0-next.0` (Violet Forge dark) como design system canônico, **incluindo upgrade inline de Tailwind v3 → v4** (T0.0.bis). Substitui ~70% do código UI hand-rolled por composites/primitives testados + moderniza stack CSS para CSS-first config canônica de Tailwind v4. Preserva camadas críticas (auth Kratos→JWT, BroadcastChannel cross-tab, runtime config Twelve-Factor, mesma origem MEET-040). Resultado esperado: UX consistente, **~1.500 LOC eliminadas (-49%)**, stack moderna sem dívida técnica, identidade visual coerente com ecossistema LoopZero, gate "polish visual GA-ready" do Sprint 9 destravado.
+> **Version 1.3** — Refactor completo do `cloud/dashboard/` (SPA React 19 + Vite 6) para consumir `@loopzerokit/ui@0.9.0-next.0` (Violet Forge dark) como design system canônico, **incluindo upgrade inline de Tailwind v3 → v4** (T0.0.bis). Substitui ~70% do código UI hand-rolled por composites/primitives testados + moderniza stack CSS para CSS-first config canônica de Tailwind v4. Preserva camadas críticas (auth Kratos→JWT, BroadcastChannel cross-tab, runtime config Twelve-Factor, mesma origem MEET-040). Resultado esperado: UX consistente, **~1.500 LOC eliminadas (-49%)**, stack moderna sem dívida técnica, identidade visual coerente com ecossistema LoopZero, gate "polish visual GA-ready" do Sprint 9 destravado.
 
 ## Prerequisite (RESOLVIDO 2026-05-23 — Opção A ratificada pelo sponsor)
 
@@ -28,28 +28,28 @@ Alternativas rejeitadas e por quê:
 - **v1.3 (2026-05-23 23:55 UTC)** — Sponsor ratificou Opção A do prerequisite (Tailwind v4 inline). Mudanças:
   - **Prerequisite RESOLVIDO** — seção atualizada, opções B/C documentadas como rejeitadas com razão
   - **Nova T0.0.bis**: Tailwind v3 → v4 upgrade (entre T0.0 e T0.1). Inclui codemod oficial `@tailwindcss/upgrade`, nova dep `@tailwindcss/vite`, reescrita `tailwind.config.ts` → CSS-first `@theme {}` em `index.css`, migração `darkMode: 'class'` strategy
-  - **T0.1 ajustada**: removida nota "PREREQUISITE BLOQUEADOR" (agora resolvido por T0.0.bis); install command segue `@loopzero/ui@0.9.0-next.0`
-  - **T0.3 simplificada**: removida menção a `preset-v3-legacy` (não usamos); design system flui via `@loopzero/ui/preset` (Tailwind v4 canônico)
+  - **T0.1 ajustada**: removida nota "PREREQUISITE BLOQUEADOR" (agora resolvido por T0.0.bis); install command segue `@loopzerokit/ui@0.9.0-next.0`
+  - **T0.3 simplificada**: removida menção a `preset-v3-legacy` (não usamos); design system flui via `@loopzerokit/ui/preset` (Tailwind v4 canônico)
   - **Nova ADR D8**: Tailwind v4 inline upgrade — rationale + consequences documentadas
   - **Edge-Case-Review status**: re-run RECOMENDADO antes de implementação (v1.3 introduz nova task funcional T0.0.bis; v1.1 EC review não cobre)
 
-- **v1.2 (2026-05-23 23:50 UTC)** — Bump para refletir delivery completa upstream de `@loopzero/ui`:
+- **v1.2 (2026-05-23 23:50 UTC)** — Bump para refletir delivery completa upstream de `@loopzerokit/ui`:
   - **Versão pinned**: `0.6.3-next.0` → `0.9.0-next.0` (3 minor releases shipados no mesmo dia: 0.7.0 Brief #1 + 0.8.0 Brief #2 + 0.9.0 Brief #3 = 14 primitives novos, 116 componentes totais)
   - **ThemeProvider API**: corrigida de `<ThemeProvider defaultTheme="violet-forge" defaultMode="dark">` (que NÃO existe) para `<ThemeProvider initial="violet-forge">` (canônica per llms.txt — temas encodam mode internamente)
   - **Taxonomy nota**: 4 de 12 specced "primitives" viraram composites upstream (UsageMeter, AccountMenu, CodeBlock, ConfirmDialog) — taxonomy gate hard-fail correto (importam outros componentes). Zero impacto consumer-side; barrel import unchanged
   - **Prerequisite Tailwind v4**: adicionada seção bloqueadora acima — peer-dep obrigatório descoberto via llms.txt
   - **LOC target revisado**: 1.800 → 1.500 (-49% vs -37% original) porque StatusDot/Timestamp/Table/DangerZone/CopyButton/CodeBlock/Alert deletam mais boilerplate que estimado
-  - **Fontes mudam**: dashboard atual usa DM Sans + JetBrains Mono + Cabinet Grotesk; `@loopzero/ui` locked em Geist Sans + Geist Mono. Adoção implica mudança visual real (não cosmética)
+  - **Fontes mudam**: dashboard atual usa DM Sans + JetBrains Mono + Cabinet Grotesk; `@loopzerokit/ui` locked em Geist Sans + Geist Mono. Adoção implica mudança visual real (não cosmética)
 
 - **v1.1 (2026-05-23)** — Incorpora 8 MUST FIX do `/edge-case-plan` review (`docs/plans/2026-05-23-dashboard-loopzero-ui-migration-edge-cases.md`):
-  - **EC-1**: T0.3 reescrita — `@loopzero/ui` não exporta JS preset; design system flui via CSS imports
+  - **EC-1**: T0.3 reescrita — `@loopzerokit/ui` não exporta JS preset; design system flui via CSS imports
   - **EC-2**: T0.2 reescrita — remover `class="dark"` dos 3 sites (html + 2 divs em app.tsx), validar estratégia do ThemeProvider × Tailwind `darkMode: 'class'`
   - **EC-3**: Nova T0.0 (pre-step) — capturar baseline bundle ANTES de qualquer mudança
   - **EC-4**: Nota explícita em T3.1 — preservar OIDC vanilla DOM `form.submit` verbatim
   - **EC-5**: T4.2 — ler `ProjectCardProps`, adapter com defaults para fields opcionais
   - **EC-6**: T6.2 — pre-validar grep zero matches antes de remover tokens locais
   - **EC-7**: T6.5 — smoke test grep estendido para termos "agent-shaped" fora de contexto
-  - **EC-8**: T0.1 — pinar versão exata `@loopzero/ui@0.6.3-next.0 --save-exact`
+  - **EC-8**: T0.1 — pinar versão exata `@loopzerokit/ui@0.6.3-next.0 --save-exact`
 
 ## Context
 
@@ -64,19 +64,19 @@ Alternativas rejeitadas e por quê:
 
 ### O que motiva o trabalho
 
-- **Violação Regra 9 (Não Reinvente a Roda)**: `@loopzero/ui` foi criado precisamente para servir surfaces como esta. Composites diretamente aplicáveis: `DeploymentRow`, `ProjectCard`, `EnvVarEditor`, `DomainConfig`, `PreviewEnvCard`, `RollbackUI`, `CommandPalette`, `PermissionModal`. Primitives: `Avatar`, `Badge`, `Button`, `Card`, `Dialog`, `EmptyState`, `FormField`, `Input`, `Checkbox`, `AuditLogEntry`, `BuildLogStream`, `CostMeter`.
+- **Violação Regra 9 (Não Reinvente a Roda)**: `@loopzerokit/ui` foi criado precisamente para servir surfaces como esta. Composites diretamente aplicáveis: `DeploymentRow`, `ProjectCard`, `EnvVarEditor`, `DomainConfig`, `PreviewEnvCard`, `RollbackUI`, `CommandPalette`, `PermissionModal`. Primitives: `Avatar`, `Badge`, `Button`, `Card`, `Dialog`, `EmptyState`, `FormField`, `Input`, `Checkbox`, `AuditLogEntry`, `BuildLogStream`, `CostMeter`.
 - **Sprint 9 (Polish + Launch)**: gate (a) requer "polish visual GA-ready". Dashboard atual tem inconsistências visuais entre páginas (cada uma com Tailwind ad-hoc).
-- **`@loopzero/ui@next` já publicado**: `0.9.0-next.0` em npm, install limpo. **116 componentes** (89 primitives + 27 composites — todos os 14 specced via Briefs #1/#2/#3 incorporados), **1.577 testes** passando, **237 stories** axe-validadas, peer-deps `react` + `react-dom` + `tailwindcss ^4.0.0`.
-- **Coerência de ecossistema**: LoopZeroCloud é o consumidor-alvo da auxiliary "Build" (UI) descrita em `loopzero-ui/PITCH.md`. Fechar esse loop estratégico foi planejado desde a criação de `@loopzero/ui`.
+- **`@loopzerokit/ui@next` já publicado**: `0.9.0-next.0` em npm, install limpo. **116 componentes** (89 primitives + 27 composites — todos os 14 specced via Briefs #1/#2/#3 incorporados), **1.577 testes** passando, **237 stories** axe-validadas, peer-deps `react` + `react-dom` + `tailwindcss ^4.0.0`.
+- **Coerência de ecossistema**: LoopZeroCloud é o consumidor-alvo da auxiliary "Build" (UI) descrita em `loopzero-ui/PITCH.md`. Fechar esse loop estratégico foi planejado desde a criação de `@loopzerokit/ui`.
 
 ### Evidência concreta
 
-- `cloud/dashboard/src/pages/overview.tsx:47-67` — 21 linhas de classes Tailwind hand-rolled para 1 stat card; `StatsTile` em `@loopzero/ui` faz em 3
-- `cloud/dashboard/src/pages/login.tsx:200` — SVG do Google logo inline com 4 paths; `@loopzero/ui` tem `<SocialAuthButton provider="google">` (parte de `screens/login`)
+- `cloud/dashboard/src/pages/overview.tsx:47-67` — 21 linhas de classes Tailwind hand-rolled para 1 stat card; `StatsTile` em `@loopzerokit/ui` faz em 3
+- `cloud/dashboard/src/pages/login.tsx:200` — SVG do Google logo inline com 4 paths; `@loopzerokit/ui` tem `<SocialAuthButton provider="google">` (parte de `screens/login`)
 - `cloud/dashboard/src/pages/projects.tsx:51-88` — 38 linhas de motion + card + badge ad-hoc por projeto; `ProjectCard` composite faz em 1 linha
-- `cloud/dashboard/src/components/ui/{badge,button,card}.tsx` — 115 LOC reescrevendo o que `@loopzero/ui` já expõe via barrel
+- `cloud/dashboard/src/components/ui/{badge,button,card}.tsx` — 115 LOC reescrevendo o que `@loopzerokit/ui` já expõe via barrel
 
-### Inventário de @loopzero/ui (verificado via `ls loopzero-ui/src/components/{primitives,composites}`)
+### Inventário de @loopzerokit/ui (verificado via `ls loopzero-ui/src/components/{primitives,composites}`)
 
 ```
 primitives/ (81): agent-error-card, agent-event, agent-handoff, agent-profile, agent-starting-state,
@@ -99,16 +99,16 @@ screens/: login.stories.tsx, chat-home.stories.tsx, task-completed.stories.tsx,
 
 ## Objective
 
-**Done = todas as 12 páginas roteadas do dashboard renderizam usando primitives/composites de `@loopzero/ui` no tema Violet Forge dark, com auth flow intacto, build de produção verde, vitest verde, smoke test manual nas 12 páginas sem regressão visual percebida, bundle size dentro de ±10% do atual, e zero termos internos na UI (Rule 3).**
+**Done = todas as 12 páginas roteadas do dashboard renderizam usando primitives/composites de `@loopzerokit/ui` no tema Violet Forge dark, com auth flow intacto, build de produção verde, vitest verde, smoke test manual nas 12 páginas sem regressão visual percebida, bundle size dentro de ±10% do atual, e zero termos internos na UI (Rule 3).**
 
 Metas mensuráveis:
 
 1. **LOC reduzidas**: `cloud/dashboard/src/` cai de ~2.914 para ≤1.800 LOC (corte ≥37%)
-2. **Dependências consolidadas**: 5 pacotes Radix individuais → 1 dependência `@loopzero/ui`
+2. **Dependências consolidadas**: 5 pacotes Radix individuais → 1 dependência `@loopzerokit/ui`
 3. **Primitivas locais eliminadas**: `src/components/ui/` deletado (3 arquivos)
 4. **Coerência visual**: 12 páginas compartilham mesmas primitives (StatsTile, Card, Button, FormField, EmptyState, Badge, Avatar)
 5. **Tema único**: Violet Forge dark via `<ThemeProvider defaultTheme="violet-forge" defaultMode="dark">` em `main.tsx`, sem toggle
-6. **Acessibilidade**: vitest-axe passa para cada página (mirror do gate `@loopzero/ui`)
+6. **Acessibilidade**: vitest-axe passa para cada página (mirror do gate `@loopzerokit/ui`)
 7. **Bug bonus**: rota `/recovery` adicionada ao `app.tsx` (corrige link quebrado em `login.tsx:227`)
 
 ## ADRs
@@ -123,9 +123,9 @@ Metas mensuráveis:
   - ❌ Usuários light-mode-only ficam sem alternativa (aceito; pode ser adicionado em sprint futuro via T-NEW)
   - 🔒 Trava: adicionar segundo tema requer novo plano T2
 
-### D2 — Install via `npm install @loopzero/ui@next` (não copy-paste shadcn)
+### D2 — Install via `npm install @loopzerokit/ui@next` (não copy-paste shadcn)
 
-- **Decisão**: Pacote npm completo, importações via barrel `@loopzero/ui`. Sem `npx shadcn add` por componente.
+- **Decisão**: Pacote npm completo, importações via barrel `@loopzerokit/ui`. Sem `npx shadcn add` por componente.
 - **Rationale**: Atualizações automáticas via Renovate; tree-shake nativo; alinhamento com peer-deps React 19; Apache-2.0 compatível com LoopZero. Copy-paste só faz sentido se quisermos modificar componentes localmente — não é o caso.
 - **Consequences**:
   - ✅ Atualizações sob Renovate (CLAUDE.md INF-G18)
@@ -140,22 +140,22 @@ Metas mensuráveis:
 - **Consequences**:
   - ✅ Zero regressão em auth/JWT/cross-tab/runtime config
   - ✅ Testes `auth.test.ts` (131 LOC) seguem verdes sem mudança
-  - ❌ Limitação: se `@loopzero/ui` espera shape de Form X e nosso `kratos.ts` retorna Y, temos adaptador entre eles (aceito)
+  - ❌ Limitação: se `@loopzerokit/ui` espera shape de Form X e nosso `kratos.ts` retorna Y, temos adaptador entre eles (aceito)
 
 ### D4 — Manter `framer-motion` e `lucide-react` como dependências diretas
 
-- **Decisão**: Não remover Framer Motion nem Lucide React mesmo após migração. `@loopzero/ui` usa-os internamente como peer-deps; usamos para customização local quando primitiva não atende.
-- **Rationale**: `@loopzero/ui` exporta primitives mas pode não cobrir TODOS os micro-momentos visuais (transição de página, ícone custom raro). Manter as duas libs reduz cantos vivos. Lucide é leve (~250KB tree-shaken para ~20 ícones).
+- **Decisão**: Não remover Framer Motion nem Lucide React mesmo após migração. `@loopzerokit/ui` usa-os internamente como peer-deps; usamos para customização local quando primitiva não atende.
+- **Rationale**: `@loopzerokit/ui` exporta primitives mas pode não cobrir TODOS os micro-momentos visuais (transição de página, ícone custom raro). Manter as duas libs reduz cantos vivos. Lucide é leve (~250KB tree-shaken para ~20 ícones).
 - **Consequences**:
   - ✅ Flexibilidade preservada
   - ❌ Duas formas de motion (Framer direto + animations expostas via primitives) — mitigação: usar Framer só em telas não-cobertas
 
-### D5 — Tailwind: usar preset de `@loopzero/ui`, manter `tailwind.config.ts` local mínimo
+### D5 — Tailwind: usar preset de `@loopzerokit/ui`, manter `tailwind.config.ts` local mínimo
 
-- **Decisão**: `@import "@loopzero/ui/tokens.css"` + `@import "@loopzero/ui/styles.css"` em `src/index.css`. `tailwind.config.ts` local mantém só extensões específicas do dashboard (se houver).
+- **Decisão**: `@import "@loopzerokit/ui/tokens.css"` + `@import "@loopzerokit/ui/styles.css"` em `src/index.css`. `tailwind.config.ts` local mantém só extensões específicas do dashboard (se houver).
 - **Rationale**: Tokens (cores `loopzero.*`, `surface.*`, `accent`, fontes display) ficam centralizados no design system. Mudanças de marca propagam sem edit local. Coerência cross-projeto.
 - **Consequences**:
-  - ✅ Branding mudou em `@loopzero/ui` → propaga
+  - ✅ Branding mudou em `@loopzerokit/ui` → propaga
   - ❌ Tokens custom do dashboard (se necessário) precisam ser nomeados defensivamente para não colidir
 
 ### D6 — Não migrar `account.tsx`, `error.tsx`, `recovery.tsx` (páginas órfãs)
@@ -168,8 +168,8 @@ Metas mensuráveis:
 
 ### D8 — Tailwind v3 → v4 upgrade INLINE neste plano (Opção A do Prerequisite)
 
-- **Decisão**: Phase 0 inclui task T0.0.bis que migra dashboard de Tailwind v3 para v4 ANTES de instalar `@loopzero/ui`. Sem bridge `preset-v3-legacy`, sem `--legacy-peer-deps`.
-- **Rationale**: `@loopzero/ui@0.9.0-next.0` requer `tailwindcss ^4.0.0` como peer-dep. Pre-release bias do `.claude/rules/pre-release-governance.md` favorece redesign limpo sobre patches. Sponsor (paulo, 2026-05-23) ratificou explicitamente: "não precisamos de retrocompatibilidade, faça o que for mais FAANG".
+- **Decisão**: Phase 0 inclui task T0.0.bis que migra dashboard de Tailwind v3 para v4 ANTES de instalar `@loopzerokit/ui`. Sem bridge `preset-v3-legacy`, sem `--legacy-peer-deps`.
+- **Rationale**: `@loopzerokit/ui@0.9.0-next.0` requer `tailwindcss ^4.0.0` como peer-dep. Pre-release bias do `.claude/rules/pre-release-governance.md` favorece redesign limpo sobre patches. Sponsor (paulo, 2026-05-23) ratificou explicitamente: "não precisamos de retrocompatibilidade, faça o que for mais FAANG".
 - **Consequences**:
   - ✅ Stack moderna desde início (CSS-first config, Lightning CSS, container queries built-in, source detection automática)
   - ✅ Sem dívida técnica acumulada por bridge
@@ -179,9 +179,9 @@ Metas mensuráveis:
   - ❌ Risco de quebras visuais sutis (defaults mudam entre v3/v4 — line-height, ring-offset, etc.)
   - 🔒 Após upgrade, NÃO há caminho de volta sem refazer trabalho
 
-### D7 — Testes: vitest + @testing-library/react para wiring; NÃO duplicar a11y/visual de `@loopzero/ui`
+### D7 — Testes: vitest + @testing-library/react para wiring; NÃO duplicar a11y/visual de `@loopzerokit/ui`
 
-- **Decisão**: Cada página ganha um teste de wiring (renderiza, dispara fetch correto, mostra loading/empty/error states). NÃO testamos a11y das primitivas (`@loopzero/ui` já tem 126 stories axe-validadas) nem snapshots visuais (volatilidade alta).
+- **Decisão**: Cada página ganha um teste de wiring (renderiza, dispara fetch correto, mostra loading/empty/error states). NÃO testamos a11y das primitivas (`@loopzerokit/ui` já tem 126 stories axe-validadas) nem snapshots visuais (volatilidade alta).
 - **Rationale**: KISS + Não Reinvente. Nossos testes asseguram que ligamos os tubos corretamente; o design system garante que os tubos funcionam.
 - **Consequences**:
   - ✅ Suite de testes pequena e focada
@@ -193,9 +193,9 @@ Metas mensuráveis:
 Phase 0: Setup
    │ T0.0      capture bundle baseline
    │ T0.0.bis  Tailwind v3 → v4 upgrade (NEW v1.3)
-   │ T0.1      install @loopzero/ui@0.9.0-next.0
+   │ T0.1      install @loopzerokit/ui@0.9.0-next.0
    │ T0.2      ThemeProvider initial="violet-forge" + CSS imports
-   │ T0.3      validate Tailwind v4 + @loopzero/ui co-existence
+   │ T0.3      validate Tailwind v4 + @loopzerokit/ui co-existence
    │
    ▼
 Phase 1: UI Primitives Swap                ◄── desbloqueia tudo abaixo
@@ -225,7 +225,7 @@ Shell       (4 pages)       (5 pages)      (3 pages)
 
 ## Phase 0: Setup
 
-**Objective:** Trazer `@loopzero/ui` para o projeto, configurar `ThemeProvider`, importar tokens/styles, ajustar Tailwind, sem quebrar build atual.
+**Objective:** Trazer `@loopzerokit/ui` para o projeto, configurar `ThemeProvider`, importar tokens/styles, ajustar Tailwind, sem quebrar build atual.
 
 ### T0.0 — Capture bundle baseline (NEW pre-step, addresses EC-3)
 
@@ -251,17 +251,17 @@ docs/reviews/2026-05-23-dashboard-bundle-baseline.txt (NEW) — output do build 
 - [ ] Build verde
 
 #### DoD
-- [ ] Commit `chore(dashboard): capture bundle baseline before @loopzero/ui migration`
+- [ ] Commit `chore(dashboard): capture bundle baseline before @loopzerokit/ui migration`
 
 ---
 
 ### T0.0.bis — Tailwind v3 → v4 upgrade (NEW v1.3, addresses Prerequisite Opção A, depends on T0.0)
 
 #### Objective
-Migrar dashboard de Tailwind v3.4 para v4.0 ANTES de instalar `@loopzero/ui@0.9.0-next.0`. Sem esta task, T0.1 falha com `EPEERINVALID` (peer-dep `tailwindcss ^4.0.0` requerido). Usa codemod oficial `@tailwindcss/upgrade` para automatizar ~80% do trabalho; resto é manual (estratégia darkMode, validação visual).
+Migrar dashboard de Tailwind v3.4 para v4.0 ANTES de instalar `@loopzerokit/ui@0.9.0-next.0`. Sem esta task, T0.1 falha com `EPEERINVALID` (peer-dep `tailwindcss ^4.0.0` requerido). Usa codemod oficial `@tailwindcss/upgrade` para automatizar ~80% do trabalho; resto é manual (estratégia darkMode, validação visual).
 
 #### Evidence
-- `@loopzero/ui@0.9.0-next.0` peerDependencies: `"tailwindcss": "^4.0.0"` (confirmado em llms.txt § Peer dependencies)
+- `@loopzerokit/ui@0.9.0-next.0` peerDependencies: `"tailwindcss": "^4.0.0"` (confirmado em llms.txt § Peer dependencies)
 - Dashboard `package.json`: `"tailwindcss": "^3.4.0"` (atual)
 - Sponsor ratificou Opção A em 2026-05-23: "não precisamos de retrocompatibilidade, faça o que for mais FAANG" → ADR D8
 - Pre-release bias do `.claude/rules/pre-release-governance.md` § "Pre-Release Bias" favorece redesign limpo sobre patches incrementais
@@ -277,11 +277,11 @@ cloud/dashboard/src/index.css      — substituir @tailwind directives por @impo
 
 #### Deep file dependency analysis
 
-- **`package.json`**: bump `"tailwindcss": "^3.4.0"` → `"tailwindcss": "^4.0.0"`. Adicionar `"@tailwindcss/vite": "^4.0.0"` em devDependencies (peer-dep opcional listado em `@loopzero/ui` per llms.txt).
+- **`package.json`**: bump `"tailwindcss": "^3.4.0"` → `"tailwindcss": "^4.0.0"`. Adicionar `"@tailwindcss/vite": "^4.0.0"` em devDependencies (peer-dep opcional listado em `@loopzerokit/ui` per llms.txt).
 - **`vite.config.ts`** (16 LOC atual): adicionar `import tailwindcss from '@tailwindcss/vite';` e incluir em `plugins`. Esse plugin substitui o PostCSS-based pipeline com Lightning CSS (~5x faster, native autoprefixing).
 - **`tailwind.config.ts`** (62 LOC atual): Tailwind v4 é CSS-first. `theme.extend.colors` (paleta `loopzero.*`/`surface.*`) → `@theme {}` em `index.css`. Keyframes/animations idem para CSS. **Arquivo TS pode ser deletado** se `@tailwindcss/vite` auto-detecta content (default). Conservar apenas se houver content paths customizados.
 - **`postcss.config.js`** (atual `module.exports = { plugins: { tailwindcss: {}, autoprefixer: {} } }`): plugin `tailwindcss` removido (agora via Vite plugin). Lightning CSS handle autoprefixing — `autoprefixer` redundante. **Arquivo provavelmente deletável**.
-- **`src/index.css`**: substituir `@tailwind base/components/utilities` por `@import "tailwindcss";`. Em T0.2, este arquivo recebe `@import "@loopzero/ui/tokens.css"` + `@import "@loopzero/ui/styles.css"` adicionais. Tokens locais migram para `@theme {}` block (a serem prunados em T6.2 quando confirmado uso zero).
+- **`src/index.css`**: substituir `@tailwind base/components/utilities` por `@import "tailwindcss";`. Em T0.2, este arquivo recebe `@import "@loopzerokit/ui/tokens.css"` + `@import "@loopzerokit/ui/styles.css"` adicionais. Tokens locais migram para `@theme {}` block (a serem prunados em T6.2 quando confirmado uso zero).
 
 #### Deep Dives
 
@@ -357,35 +357,35 @@ VERIFY: npm run build && diff -r <baseline-screenshots> <new>  (diferenças apen
 
 ---
 
-### T0.1 — Install `@loopzero/ui` (PINNED version, addresses EC-8)
+### T0.1 — Install `@loopzerokit/ui` (PINNED version, addresses EC-8)
 
 #### Objective
-Adicionar `@loopzero/ui@next` ao `package.json`, verificar peer-deps, atualizar `package-lock.json`.
+Adicionar `@loopzerokit/ui@next` ao `package.json`, verificar peer-deps, atualizar `package-lock.json`.
 
 #### Evidence
-- `npm view @loopzero/ui version` retorna `0.1.0-next.0` (latest), `0.9.0-next.0` (next) — verificado em 2026-05-23 23:37 UTC
+- `npm view @loopzerokit/ui version` retorna `0.1.0-next.0` (latest), `0.9.0-next.0` (next) — verificado em 2026-05-23 23:37 UTC
 - `loopzero-ui/package.json` declara peer-deps apenas em `react ^19 || ^18` (compatível com nosso `^19.0.0`)
 
 #### Files to edit
 ```
-cloud/dashboard/package.json       — adicionar @loopzero/ui ao dependencies, remover Radix individuais
+cloud/dashboard/package.json       — adicionar @loopzerokit/ui ao dependencies, remover Radix individuais
 cloud/dashboard/package-lock.json  — regenerar via npm install
 ```
 
 #### Deep file dependency analysis
-- `package.json`: dependencies hoje tem 5 entries Radix + framer-motion + lucide-react + clsx + class-variance-authority + tailwind-merge. As Radix individuais e CVA podem ser removidas se `@loopzero/ui` re-exporta o equivalente. `clsx` + `tailwind-merge` ficam (usados localmente para classnames condicionais).
+- `package.json`: dependencies hoje tem 5 entries Radix + framer-motion + lucide-react + clsx + class-variance-authority + tailwind-merge. As Radix individuais e CVA podem ser removidas se `@loopzerokit/ui` re-exporta o equivalente. `clsx` + `tailwind-merge` ficam (usados localmente para classnames condicionais).
 - `package-lock.json`: regen automático
 
 #### Deep Dives
-- **Peer-dep mismatch**: Se `@loopzero/ui` exigir React 18 e dashboard usa 19, npm warning. Verificar com `npm install --dry-run` antes de commit.
+- **Peer-dep mismatch**: Se `@loopzerokit/ui` exigir React 18 e dashboard usa 19, npm warning. Verificar com `npm install --dry-run` antes de commit.
 - **Dist-tag escolhido**: `@next` (não `@latest`) — `0.9.0-next.0` contém os 14 primitives entregues via Briefs #1/#2/#3 + os 102 originais; `latest=0.1.0-next.0` é stub pré-release
-- **Tamanho**: `@loopzero/ui` declara bundle size budget ±5%; tree-shake via barrel deve manter delta razoável
+- **Tamanho**: `@loopzerokit/ui` declara bundle size budget ±5%; tree-shake via barrel deve manter delta razoável
 
 #### Tasks
-1. **PREREQUISITE**: T0.0.bis (Tailwind v4 upgrade) DEVE estar completa. Sem isso, `npm install @loopzero/ui` falha com `EPEERINVALID` (peer-dep `tailwindcss ^4.0.0` requerido).
-2. `cd cloud/dashboard && npm install @loopzero/ui@0.9.0-next.0 --save-exact` (PINNED — EC-8). Tag `@next` é móvel; novas versões podem ser publicadas mid-plano.
-3. Validar que `package.json` tem `"@loopzero/ui": "0.9.0-next.0"` (sem `^` nem `~`)
-4. Auditar `package.json` para remover deps redundantes que `@loopzero/ui` traz transitivamente (manter `framer-motion`, `lucide-react`, `clsx`, `tailwind-merge` per D4). Confirmar via llms.txt § "Already bundled (do NOT install separately)" que Radix individuais (`@radix-ui/react-{avatar,dropdown-menu,separator,slot,tooltip}`) podem ser removidos — são bundled deps em `@loopzero/ui`
+1. **PREREQUISITE**: T0.0.bis (Tailwind v4 upgrade) DEVE estar completa. Sem isso, `npm install @loopzerokit/ui` falha com `EPEERINVALID` (peer-dep `tailwindcss ^4.0.0` requerido).
+2. `cd cloud/dashboard && npm install @loopzerokit/ui@0.9.0-next.0 --save-exact` (PINNED — EC-8). Tag `@next` é móvel; novas versões podem ser publicadas mid-plano.
+3. Validar que `package.json` tem `"@loopzerokit/ui": "0.9.0-next.0"` (sem `^` nem `~`)
+4. Auditar `package.json` para remover deps redundantes que `@loopzerokit/ui` traz transitivamente (manter `framer-motion`, `lucide-react`, `clsx`, `tailwind-merge` per D4). Confirmar via llms.txt § "Already bundled (do NOT install separately)" que Radix individuais (`@radix-ui/react-{avatar,dropdown-menu,separator,slot,tooltip}`) podem ser removidos — são bundled deps em `@loopzerokit/ui`
 5. Rodar `npm install` para atualizar lock
 6. Validar com `npm run build` que ainda compila (sem mudança de código ainda)
 7. **Em Phase 6 (T6.1 ou nova T6.7)**: trocar para `^0.9.0-next.0` permitindo Renovate atualizações
@@ -399,7 +399,7 @@ VERIFY:  cd cloud/dashboard && npm install && npm run build && npm test
 ```
 
 #### Acceptance Criteria
-- [ ] `package.json` lista `@loopzero/ui: 0.9.0-next.0` (pinned exato — sem `^`) em dependencies
+- [ ] `package.json` lista `@loopzerokit/ui: 0.9.0-next.0` (pinned exato — sem `^`) em dependencies
 - [ ] `npm install` exits 0 sem ERR
 - [ ] `npm run build` exits 0 (bundle ainda funciona, deps não-conflitantes)
 - [ ] `npm test` (vitest) verde — `auth.test.ts` continua passando
@@ -408,7 +408,7 @@ VERIFY:  cd cloud/dashboard && npm install && npm run build && npm test
 #### DoD
 - [ ] Tasks 1-4 completas
 - [ ] Build verde
-- [ ] Commit `feat(dashboard): install @loopzero/ui@next as design system foundation`
+- [ ] Commit `feat(dashboard): install @loopzerokit/ui@next as design system foundation`
 
 ---
 
@@ -427,7 +427,7 @@ Envolver `<App />` com `<ThemeProvider defaultTheme="violet-forge" defaultMode="
 #### Files to edit
 ```
 cloud/dashboard/src/main.tsx       — envolver <App /> com <ThemeProvider>
-cloud/dashboard/src/index.css      — importar tokens.css + styles.css de @loopzero/ui
+cloud/dashboard/src/index.css      — importar tokens.css + styles.css de @loopzerokit/ui
 cloud/dashboard/src/app.tsx        — remover className="dark" dos 2 divs (linhas 25 e 34)
 cloud/dashboard/index.html         — remover class="dark" do <html>
 cloud/dashboard/tailwind.config.ts — possivelmente ajustar darkMode para reconhecer estratégia do ThemeProvider
@@ -435,13 +435,13 @@ cloud/dashboard/tailwind.config.ts — possivelmente ajustar darkMode para recon
 
 #### Deep file dependency analysis
 - `main.tsx` (10 LOC) recebe wrapping; mudança trivial
-- `index.css`: vai receber dois `@import` de `@loopzero/ui` no topo
+- `index.css`: vai receber dois `@import` de `@loopzerokit/ui` no topo
 - `app.tsx`: dois divs com `className="dark bg-surface-0 ..."` — manter classes funcionais (`bg-surface-0`, etc.) e remover `dark` apenas se ThemeProvider compensar
 - `index.html`: remover `class="dark"` do `<html lang="en" class="dark">`
 - `tailwind.config.ts`: se ThemeProvider usa `data-theme="violet-forge"` em vez de class, atualizar `darkMode: ['class', '[data-theme*="dark"]']` para Tailwind reconhecer ambos
 
 #### Deep Dives
-- **Critical pre-flight**: ANTES de executar tasks, ler `node_modules/@loopzero/ui/dist/themes/theme-provider.*` (após T0.1 install) para confirmar a estratégia exata. Três cenários possíveis:
+- **Critical pre-flight**: ANTES de executar tasks, ler `node_modules/@loopzerokit/ui/dist/themes/theme-provider.*` (após T0.1 install) para confirmar a estratégia exata. Três cenários possíveis:
   - **(A)** ThemeProvider adiciona `.dark` class ao `<html>` quando `defaultMode="dark"` → **nenhuma mudança no Tailwind config necessária**, só remover os 3 sites manuais
   - **(B)** ThemeProvider seta `data-theme="violet-forge"` E adiciona `.dark` class → mesmo caminho (A)
   - **(C)** ThemeProvider seta APENAS `data-theme` sem class → ajustar Tailwind para `darkMode: ['class', '[data-theme*="dark"]']`
@@ -451,20 +451,20 @@ cloud/dashboard/tailwind.config.ts — possivelmente ajustar darkMode para recon
 #### Tasks
 1. Em `index.css`, adicionar como primeiras linhas:
    ```css
-   @import "@loopzero/ui/tokens.css";
-   @import "@loopzero/ui/styles.css";
+   @import "@loopzerokit/ui/tokens.css";
+   @import "@loopzerokit/ui/styles.css";
    ```
-2. Em `main.tsx`, importar `ThemeProvider` de `@loopzero/ui` e envolver. **API CORRIGIDA v1.2** per llms.txt: usa `initial="violet-forge"` (tema encode mode internamente — `violet-forge` JÁ é dark), NÃO `defaultTheme + defaultMode` (que não existe):
+2. Em `main.tsx`, importar `ThemeProvider` de `@loopzerokit/ui` e envolver. **API CORRIGIDA v1.2** per llms.txt: usa `initial="violet-forge"` (tema encode mode internamente — `violet-forge` JÁ é dark), NÃO `defaultTheme + defaultMode` (que não existe):
    ```tsx
-   import { ThemeProvider } from '@loopzero/ui';
+   import { ThemeProvider } from '@loopzerokit/ui';
    <StrictMode>
      <ThemeProvider initial="violet-forge">
        <App />
      </ThemeProvider>
    </StrictMode>
    ```
-   Considerar também adicionar `<Toaster />` no mesmo nível (já que `@loopzero/ui` exporta `Toast + Toaster + useToast` per inspeção de `primitives/toast/`) para substituir o hack inline em `lib/api.ts:108-111` que cria `<div>` manualmente para notificação de session expired.
-3. **Pre-flight**: ler `node_modules/@loopzero/ui/dist/themes/theme-provider.*` (TS declaration ou JS source) para identificar qual cenário (A/B/C) aplica
+   Considerar também adicionar `<Toaster />` no mesmo nível (já que `@loopzerokit/ui` exporta `Toast + Toaster + useToast` per inspeção de `primitives/toast/`) para substituir o hack inline em `lib/api.ts:108-111` que cria `<div>` manualmente para notificação de session expired.
+3. **Pre-flight**: ler `node_modules/@loopzerokit/ui/dist/themes/theme-provider.*` (TS declaration ou JS source) para identificar qual cenário (A/B/C) aplica
 4. Remover `class="dark"` de `<html>` em `index.html`
 5. Remover `className="dark"` dos 2 divs em `app.tsx` (linhas 25 e 34) — manter outras classes
 6. Se cenário (C): atualizar `tailwind.config.ts` para `darkMode: ['class', '[data-theme*="dark"]']`
@@ -483,7 +483,7 @@ VERIFY:  npm test -- main
 ```
 
 #### Acceptance Criteria
-- [ ] `index.css` importa tokens.css + styles.css de `@loopzero/ui`
+- [ ] `index.css` importa tokens.css + styles.css de `@loopzerokit/ui`
 - [ ] `main.tsx` envolve `<App />` com `<ThemeProvider defaultTheme="violet-forge" defaultMode="dark">`
 - [ ] `index.html` não tem mais `class="dark"` no `<html>` (delegado a ThemeProvider)
 - [ ] `npm run dev` abre sem erro de console
@@ -493,14 +493,14 @@ VERIFY:  npm test -- main
 #### DoD
 - [ ] Tasks 1-4 completas
 - [ ] Build verde
-- [ ] Commit `feat(dashboard): wire @loopzero/ui ThemeProvider with Violet Forge dark`
+- [ ] Commit `feat(dashboard): wire @loopzerokit/ui ThemeProvider with Violet Forge dark`
 
 ---
 
-### T0.3 — Validate Tailwind co-existence with `@loopzero/ui` CSS tokens (REWRITTEN, addresses EC-1)
+### T0.3 — Validate Tailwind co-existence with `@loopzerokit/ui` CSS tokens (REWRITTEN, addresses EC-1)
 
 #### Objective
-Garantir que `tailwind.config.ts` local **coexiste** corretamente com tokens CSS importados em T0.2. **Não há JS preset para importar** — descoberta da revisão EC-1: `@loopzero/ui/package.json` exports apenas CSS files (`./preset.css`, `./tokens.css`, `./styles.css`). Tailwind v3 `presets: []` config exige objeto JS que não existe.
+Garantir que `tailwind.config.ts` local **coexiste** corretamente com tokens CSS importados em T0.2. **Não há JS preset para importar** — descoberta da revisão EC-1: `@loopzerokit/ui/package.json` exports apenas CSS files (`./preset.css`, `./tokens.css`, `./styles.css`). Tailwind v3 `presets: []` config exige objeto JS que não existe.
 
 #### Evidence
 - `grep -E '"./preset"' loopzero-ui/package.json` → vazio (EC-1)
@@ -515,24 +515,24 @@ cloud/dashboard/tailwind.config.ts — manter mínimo: content paths + dark mode
 
 #### Deep file dependency analysis
 - `tailwind.config.ts` (62 LOC): contém `theme.extend.colors` (paleta `loopzero`/`surface`/`accent`/`danger`/`warning`), fontes, keyframes/animations
-- Estratégia correta: T0.2 traz CSS vars de `@loopzero/ui`; T0.3 mantém config local como está (sem adicionar preset inexistente); T6.2 valida quais tokens locais ainda são necessários e remove os duplicados
+- Estratégia correta: T0.2 traz CSS vars de `@loopzerokit/ui`; T0.3 mantém config local como está (sem adicionar preset inexistente); T6.2 valida quais tokens locais ainda são necessários e remove os duplicados
 - **Não há mudança ativa em T0.3** — é uma task de validação que documenta o que NÃO fazer
 
 #### Deep Dives
-- **Por que não há preset JS?**: `@loopzero/ui` é design system primariamente CSS-first (tokens via CSS variables `--color-*`, utilities em `styles.css`). Tailwind config local lida com `content` paths e extensões locais; design tokens vêm via CSS, não via JS merge.
+- **Por que não há preset JS?**: `@loopzerokit/ui` é design system primariamente CSS-first (tokens via CSS variables `--color-*`, utilities em `styles.css`). Tailwind config local lida com `content` paths e extensões locais; design tokens vêm via CSS, não via JS merge.
 - **Tailwind v4 migration future**: `loopzero-ui` exporta `./tokens-v4.css` para v4 (que usa `@theme {}` no CSS). Quando dashboard upgradar para Tailwind v4, esta task vira "migrate from extend.colors para @theme in CSS".
-- **Coexistência**: classes `bg-surface-0` (local Tailwind) e `bg-[var(--surface-0)]` (CSS var de @loopzero/ui) podem coexistir durante migração. T6.2 reconcilia.
+- **Coexistência**: classes `bg-surface-0` (local Tailwind) e `bg-[var(--surface-0)]` (CSS var de @loopzerokit/ui) podem coexistir durante migração. T6.2 reconcilia.
 
 #### Tasks
 1. **Não modificar `tailwind.config.ts`** — preserve as is. T0.2 já traz design system via CSS imports.
 2. Validar com `npm run build` que classes Tailwind ainda resolvem APÓS T0.2 ter rodado
-3. Inspecionar `dist/assets/*.css` para confirmar que CSS vars de `@loopzero/ui` estão presentes (não removidas por PurgeCSS)
-4. Documentar em comentário no topo de `tailwind.config.ts`: `// Design tokens vêm de @loopzero/ui via src/index.css. Local extend cobre apenas tokens transitórios até T6.2 cleanup.`
+3. Inspecionar `dist/assets/*.css` para confirmar que CSS vars de `@loopzerokit/ui` estão presentes (não removidas por PurgeCSS)
+4. Documentar em comentário no topo de `tailwind.config.ts`: `// Design tokens vêm de @loopzerokit/ui via src/index.css. Local extend cobre apenas tokens transitórios até T6.2 cleanup.`
 
 #### TDD
 ```
 RED:     N/A — validation task, no behavior change
-GREEN:   npm run build exits 0 após T0.2 + T0.3; dist CSS contém AMBOS classes locais E CSS vars de @loopzero/ui
+GREEN:   npm run build exits 0 após T0.2 + T0.3; dist CSS contém AMBOS classes locais E CSS vars de @loopzerokit/ui
 REFACTOR: T6.2 fará cleanup
 VERIFY:  npm run build && grep -E 'surface-0|--color-' cloud/dashboard/dist/assets/*.css
 ```
@@ -540,28 +540,28 @@ VERIFY:  npm run build && grep -E 'surface-0|--color-' cloud/dashboard/dist/asse
 #### Acceptance Criteria
 - [ ] `tailwind.config.ts` preservado (com comentário documentando estratégia CSS-first)
 - [ ] `npm run build` exits 0
-- [ ] CSS bundle contém CSS vars de `@loopzero/ui` (não purgadas)
+- [ ] CSS bundle contém CSS vars de `@loopzerokit/ui` (não purgadas)
 - [ ] Sem import de preset JS inexistente
 
 #### DoD
 - [ ] Tasks 1-4 completas
 - [ ] Build verde
-- [ ] Commit `docs(dashboard): document tailwind.config strategy (CSS-first via @loopzero/ui)`
+- [ ] Commit `docs(dashboard): document tailwind.config strategy (CSS-first via @loopzerokit/ui)`
 
 ---
 
 ## Phase 1: UI Primitives Swap
 
-**Objective:** Eliminar `src/components/ui/{badge,button,card}.tsx`. Substituir 30+ imports `@/components/ui/*` por `@loopzero/ui`.
+**Objective:** Eliminar `src/components/ui/{badge,button,card}.tsx`. Substituir 30+ imports `@/components/ui/*` por `@loopzerokit/ui`.
 
 ### T1.1 — Replace `Button`
 
 #### Objective
-Trocar `import { Button } from '@/components/ui/button'` por `import { Button } from '@loopzero/ui'` em todos os arquivos. Validar API compatível.
+Trocar `import { Button } from '@/components/ui/button'` por `import { Button } from '@loopzerokit/ui'` em todos os arquivos. Validar API compatível.
 
 #### Evidence
 - `cloud/dashboard/src/components/ui/button.tsx` (42 LOC) implementa Button com variantes `primary | secondary | ghost | outline` e sizes `default | sm | lg | icon`
-- `@loopzero/ui` exporta `Button` com API shadcn-compatible (mesmas variantes)
+- `@loopzerokit/ui` exporta `Button` com API shadcn-compatible (mesmas variantes)
 - Consumidores: `login.tsx`, `register.tsx`, `verification.tsx`, `recovery.tsx`, `device-success.tsx`, `team.tsx`, `billing.tsx`, `settings.tsx`, `profile.tsx`, e componentes — total ~25 sites
 
 #### Files to edit
@@ -582,15 +582,15 @@ cloud/dashboard/src/components/sidebar.tsx       — update import (se usa Butto
 
 #### Deep file dependency analysis
 - `button.tsx` local: deletar
-- Cada consumer: trocar `'@/components/ui/button'` → `'@loopzero/ui'`. Se props divergirem, ajustar (ex: `variant="secondary"` pode virar `variant="outline"` se nomes diferentes).
+- Cada consumer: trocar `'@/components/ui/button'` → `'@loopzerokit/ui'`. Se props divergirem, ajustar (ex: `variant="secondary"` pode virar `variant="outline"` se nomes diferentes).
 - `recovery.tsx`: precisa também ser roteada em `app.tsx` (T1.4) — bug fix oportunístico
 
 #### Deep Dives
-- **API divergence**: Se `@loopzero/ui` Button não aceitar `size="icon"` ou `variant="ghost"`, precisamos adaptar. Mapear divergências antes de delete: ler `loopzero-ui/src/components/primitives/button/button.tsx` API.
+- **API divergence**: Se `@loopzerokit/ui` Button não aceitar `size="icon"` ou `variant="ghost"`, precisamos adaptar. Mapear divergências antes de delete: ler `loopzero-ui/src/components/primitives/button/button.tsx` API.
 - **className prop**: Deve continuar funcionando — Radix-based Buttons sempre aceitam className.
 
 #### Tasks
-1. Ler API de `Button` em `@loopzero/ui` (via `node_modules/@loopzero/ui/dist/index.d.ts` após install)
+1. Ler API de `Button` em `@loopzerokit/ui` (via `node_modules/@loopzerokit/ui/dist/index.d.ts` após install)
 2. Mapear divergências de variant/size names (criar tabela na PR)
 3. Replace-all import path em todos os consumers
 4. Ajustar variant/size props se divergirem
@@ -616,14 +616,14 @@ VERIFY:  npm test && npm run build
 
 #### DoD
 - [ ] Tasks 1-6 completas
-- [ ] Commit `refactor(dashboard): swap local Button for @loopzero/ui Button`
+- [ ] Commit `refactor(dashboard): swap local Button for @loopzerokit/ui Button`
 
 ---
 
 ### T1.2 — Replace `Badge`
 
 #### Objective
-Trocar `Badge` local por `Badge` de `@loopzero/ui`. Mesmo procedimento de T1.1.
+Trocar `Badge` local por `Badge` de `@loopzerokit/ui`. Mesmo procedimento de T1.1.
 
 #### Evidence
 - `src/components/ui/badge.tsx` (26 LOC) implementa variantes `default | success | danger | warning | outline`
@@ -636,7 +636,7 @@ cloud/dashboard/src/pages/{overview,projects,environments,billing,domains,team,s
 ```
 
 #### Tasks
-1. Ler API de Badge em `@loopzero/ui`
+1. Ler API de Badge em `@loopzerokit/ui`
 2. Mapear variantes (provável compat total)
 3. Replace-all imports
 4. Deletar badge local
@@ -656,14 +656,14 @@ VERIFY:  npm test
 - [ ] Build + test verdes
 
 #### DoD
-- [ ] Commit `refactor(dashboard): swap local Badge for @loopzero/ui Badge`
+- [ ] Commit `refactor(dashboard): swap local Badge for @loopzerokit/ui Badge`
 
 ---
 
 ### T1.3 — Replace `Card`
 
 #### Objective
-Trocar `Card`, `CardContent`, `CardHeader`, `CardTitle` locais por equivalentes de `@loopzero/ui`.
+Trocar `Card`, `CardContent`, `CardHeader`, `CardTitle` locais por equivalentes de `@loopzerokit/ui`.
 
 #### Evidence
 - `src/components/ui/card.tsx` (47 LOC) com subcomponentes
@@ -678,7 +678,7 @@ cloud/dashboard/src/components/page-wrapper.tsx — update se usa
 ```
 
 #### Tasks
-1. Ler API de Card de `@loopzero/ui`
+1. Ler API de Card de `@loopzerokit/ui`
 2. Replace-all imports
 3. Deletar card local
 4. Build + test
@@ -698,7 +698,7 @@ VERIFY:  npm test
 - [ ] Build + test verdes
 
 #### DoD
-- [ ] Commit `refactor(dashboard): swap local Card primitives for @loopzero/ui; delete src/components/ui/`
+- [ ] Commit `refactor(dashboard): swap local Card primitives for @loopzerokit/ui; delete src/components/ui/`
 
 ---
 
@@ -743,20 +743,20 @@ VERIFY:  npm test -- app
 
 ## Phase 2: Layout Shell
 
-**Objective:** Refatorar `sidebar`, `page-wrapper`, `verification-banner` usando primitives de `@loopzero/ui`. Layout consistente é prerequisite para todas as páginas internas parecerem coerentes.
+**Objective:** Refatorar `sidebar`, `page-wrapper`, `verification-banner` usando primitives de `@loopzerokit/ui`. Layout consistente é prerequisite para todas as páginas internas parecerem coerentes.
 
 ### T2.1 — Refactor `Sidebar`
 
 #### Objective
-Substituir `components/sidebar.tsx` (109 LOC, hand-rolled nav + Radix DropdownMenu) por composição de primitives `@loopzero/ui` (`Sidebar` / `SidebarNav` / `Avatar` / `Tooltip` / `DropdownMenu`).
+Substituir `components/sidebar.tsx` (109 LOC, hand-rolled nav + Radix DropdownMenu) por composição de primitives `@loopzerokit/ui` (`Sidebar` / `SidebarNav` / `Avatar` / `Tooltip` / `DropdownMenu`).
 
 #### Evidence
 - `sidebar.tsx` atual: 109 LOC, layout fixed-left 220px, items hard-coded, avatar user via Radix
-- `@loopzero/ui` tem `Avatar`, `Tooltip`, `DropdownMenu` primitives (Radix-based); pode ter `Sidebar` composite ou montamos com `Card`/`Stack`
+- `@loopzerokit/ui` tem `Avatar`, `Tooltip`, `DropdownMenu` primitives (Radix-based); pode ter `Sidebar` composite ou montamos com `Card`/`Stack`
 
 #### Files to edit
 ```
-cloud/dashboard/src/components/sidebar.tsx — rewrite usando @loopzero/ui primitives
+cloud/dashboard/src/components/sidebar.tsx — rewrite usando @loopzerokit/ui primitives
 ```
 
 #### Deep file dependency analysis
@@ -765,11 +765,11 @@ cloud/dashboard/src/components/sidebar.tsx — rewrite usando @loopzero/ui primi
 - `useRequireAuth` hook continua emitindo session para avatar/email
 
 #### Deep Dives
-- **Composite ausente?**: Se `@loopzero/ui` não exportar `<Sidebar>` composite, construímos com `<aside>` + nossas primitives. Aceitável — é wiring, não reinvenção.
-- **Logout dropdown**: usar `DropdownMenu` de `@loopzero/ui` (Radix-based, mesma API do Radix direto)
+- **Composite ausente?**: Se `@loopzerokit/ui` não exportar `<Sidebar>` composite, construímos com `<aside>` + nossas primitives. Aceitável — é wiring, não reinvenção.
+- **Logout dropdown**: usar `DropdownMenu` de `@loopzerokit/ui` (Radix-based, mesma API do Radix direto)
 
 #### Tasks
-1. Auditar exports de `@loopzero/ui` para `Sidebar`-related composites
+1. Auditar exports de `@loopzerokit/ui` para `Sidebar`-related composites
 2. Rewrite sidebar usando primitives apropriadas (manter rotas e logout)
 3. Smoke test visual
 
@@ -779,34 +779,34 @@ RED:     test_sidebar_renders_nav() — asserta links 'Overview', 'Projects', 'E
          'Team', 'Billing', 'Domains', 'Settings' presentes
 RED:     test_sidebar_logout_dispatches() — click no avatar → dropdown → 'Logout'
          dispara fetch(/self-service/logout/browser)
-GREEN:   Rewrite usando @loopzero/ui
+GREEN:   Rewrite usando @loopzerokit/ui
 REFACTOR: None
 VERIFY:  npm test -- sidebar
 ```
 
 #### Acceptance Criteria
-- [ ] Sidebar usa primitives `@loopzero/ui`
+- [ ] Sidebar usa primitives `@loopzerokit/ui`
 - [ ] LOC reduzidas (target ≤60)
 - [ ] Testes verdes
 - [ ] Smoke test: navegar entre páginas funciona
 
 #### DoD
-- [ ] Commit `refactor(dashboard): rebuild Sidebar on @loopzero/ui primitives`
+- [ ] Commit `refactor(dashboard): rebuild Sidebar on @loopzerokit/ui primitives`
 
 ---
 
 ### T2.2 — Refactor `PageWrapper`
 
 #### Objective
-Substituir `components/page-wrapper.tsx` (30 LOC) por uso direto de primitive `PageHeader` de `@loopzero/ui` (ou Stack + Heading + Text).
+Substituir `components/page-wrapper.tsx` (30 LOC) por uso direto de primitive `PageHeader` de `@loopzerokit/ui` (ou Stack + Heading + Text).
 
 #### Files to edit
 ```
-cloud/dashboard/src/components/page-wrapper.tsx — rewrite/delete dependendo do que @loopzero/ui oferece
+cloud/dashboard/src/components/page-wrapper.tsx — rewrite/delete dependendo do que @loopzerokit/ui oferece
 ```
 
 #### Tasks
-1. Verificar se `@loopzero/ui` expõe `PageHeader` ou equivalente
+1. Verificar se `@loopzerokit/ui` expõe `PageHeader` ou equivalente
 2. Se sim: deletar wrapper local, atualizar imports nas 12 páginas
 3. Se não: simplificar wrapper local usando `Heading` + `Text` primitives
 
@@ -824,14 +824,14 @@ VERIFY:  npm test -- page-wrapper
 - [ ] Testes verdes
 
 #### DoD
-- [ ] Commit `refactor(dashboard): simplify PageWrapper using @loopzero/ui primitives`
+- [ ] Commit `refactor(dashboard): simplify PageWrapper using @loopzerokit/ui primitives`
 
 ---
 
 ### T2.3 — Refactor `VerificationBanner`
 
 #### Objective
-Substituir `components/verification-banner.tsx` (27 LOC) usando `Alert` ou `Banner` primitive de `@loopzero/ui`.
+Substituir `components/verification-banner.tsx` (27 LOC) usando `Alert` ou `Banner` primitive de `@loopzerokit/ui`.
 
 #### Files to edit
 ```
@@ -839,24 +839,24 @@ cloud/dashboard/src/components/verification-banner.tsx — rewrite
 ```
 
 #### Tasks
-1. Localizar primitive equivalente em `@loopzero/ui`
+1. Localizar primitive equivalente em `@loopzerokit/ui`
 2. Rewrite mantendo lógica (CTA "Verify now" → `/verification`)
 
 #### TDD
 ```
 RED:     test_verification_banner_renders_when_unverified() — asserta banner visível
 RED:     test_verification_banner_cta_navigates() — click no CTA navega para /verification
-GREEN:   Rewrite usando @loopzero/ui Alert
+GREEN:   Rewrite usando @loopzerokit/ui Alert
 REFACTOR: None
 VERIFY:  npm test -- verification-banner
 ```
 
 #### Acceptance Criteria
-- [ ] Banner usa primitive `@loopzero/ui`
+- [ ] Banner usa primitive `@loopzerokit/ui`
 - [ ] Testes verdes
 
 #### DoD
-- [ ] Commit `refactor(dashboard): rebuild VerificationBanner on @loopzero/ui Alert`
+- [ ] Commit `refactor(dashboard): rebuild VerificationBanner on @loopzerokit/ui Alert`
 
 ---
 
@@ -867,7 +867,7 @@ VERIFY:  npm test -- verification-banner
 ### T3.1 — Refactor `LoginPage`
 
 #### Objective
-Reescrever `pages/login.tsx` (244 LOC) usando `FormField`, `Button`, `Alert` de `@loopzero/ui`. Eliminar SVG inline do Google, blur background ad-hoc, divider manual. Manter fluxo Kratos intacto.
+Reescrever `pages/login.tsx` (244 LOC) usando `FormField`, `Button`, `Alert` de `@loopzerokit/ui`. Eliminar SVG inline do Google, blur background ad-hoc, divider manual. Manter fluxo Kratos intacto.
 
 #### Evidence
 - `login.tsx` atual: 244 LOC; ~80 LOC são pure visual scaffolding eliminável
@@ -884,9 +884,9 @@ cloud/dashboard/src/pages/login.tsx — rewrite
 
 #### Tasks
 1. Identificar primitivas: `FormField` (email/password), `Button` (variantes social + primary), `Alert` (errors + session expired notice)
-2. **CRITICAL (EC-4)**: Preservar `submitOIDC` handler VERBATIM — `document.createElement('form')` + `form.submit()` é um browser-level form POST que Kratos exige para seguir o redirect OAuth. Substituir por `fetch(action, {method:'POST'})` quebra silenciosamente: fetch retorna 302 mas browser nunca navega para GitHub/Google. Apenas o `<Button>` que dispara o handler é substituído por `@loopzero/ui` Button; o handler em si fica vanilla DOM.
+2. **CRITICAL (EC-4)**: Preservar `submitOIDC` handler VERBATIM — `document.createElement('form')` + `form.submit()` é um browser-level form POST que Kratos exige para seguir o redirect OAuth. Substituir por `fetch(action, {method:'POST'})` quebra silenciosamente: fetch retorna 302 mas browser nunca navega para GitHub/Google. Apenas o `<Button>` que dispara o handler é substituído por `@loopzerokit/ui` Button; o handler em si fica vanilla DOM.
 3. Rewrite preservando: state, useEffects, submitPassword, navigation. submitOIDC permanece inalterado conforme task 2.
-4. Eliminar: motion variants ad-hoc (usar transição padrão de `@loopzero/ui` se houver), blur div, classes Tailwind hand-rolled
+4. Eliminar: motion variants ad-hoc (usar transição padrão de `@loopzerokit/ui` se houver), blur div, classes Tailwind hand-rolled
 5. Smoke test: login com email/senha + login GitHub OAuth (asserta que GitHub redirect funciona)
 
 #### TDD
@@ -898,7 +898,7 @@ RED:     test_login_oidc_submits_form() — click 'Continue with GitHub' → ass
          com provider='github'
 RED:     test_login_session_expired_notice() — searchParams=reason=expired → asserta notice visível
 RED:     test_login_displays_flow_errors() — flow.ui.messages com error → asserta error visível
-GREEN:   Rewrite usando @loopzero/ui
+GREEN:   Rewrite usando @loopzerokit/ui
 REFACTOR: None
 VERIFY:  npm test -- login
 ```
@@ -910,7 +910,7 @@ VERIFY:  npm test -- login
 - [ ] Smoke test: login GitHub OAuth funciona
 
 #### DoD
-- [ ] Commit `refactor(dashboard): rebuild LoginPage on @loopzero/ui FormField+Button+Alert`
+- [ ] Commit `refactor(dashboard): rebuild LoginPage on @loopzerokit/ui FormField+Button+Alert`
 
 ---
 
@@ -942,7 +942,7 @@ VERIFY:  npm test -- register
 - [ ] Testes verdes
 
 #### DoD
-- [ ] Commit `refactor(dashboard): rebuild RegisterPage on @loopzero/ui`
+- [ ] Commit `refactor(dashboard): rebuild RegisterPage on @loopzerokit/ui`
 
 ---
 
@@ -970,7 +970,7 @@ VERIFY:  npm test -- verification
 - [ ] Testes verdes
 
 #### DoD
-- [ ] Commit `refactor(dashboard): rebuild VerificationPage on @loopzero/ui`
+- [ ] Commit `refactor(dashboard): rebuild VerificationPage on @loopzerokit/ui`
 
 ---
 
@@ -999,14 +999,14 @@ VERIFY:  npm test -- recovery
 - [ ] Smoke test: fluxo completo recovery funciona contra Kratos
 
 #### DoD
-- [ ] Commit `refactor(dashboard): rebuild RecoveryPage on @loopzero/ui`
+- [ ] Commit `refactor(dashboard): rebuild RecoveryPage on @loopzerokit/ui`
 
 ---
 
 ### T3.5 — Refactor `DeviceSuccessPage`
 
 #### Objective
-Refatorar `pages/device-success.tsx` (21 LOC — já pequena) usando `EmptyState` de `@loopzero/ui` com variant success.
+Refatorar `pages/device-success.tsx` (21 LOC — já pequena) usando `EmptyState` de `@loopzerokit/ui` com variant success.
 
 #### Files to edit
 ```
@@ -1025,13 +1025,13 @@ VERIFY:  npm test -- device-success
 - [ ] Teste verde
 
 #### DoD
-- [ ] Commit `refactor(dashboard): rebuild DeviceSuccessPage on @loopzero/ui EmptyState`
+- [ ] Commit `refactor(dashboard): rebuild DeviceSuccessPage on @loopzerokit/ui EmptyState`
 
 ---
 
 ## Phase 4: Core Pages (overview, projects, environments, billing, domains)
 
-**Objective:** Refatorar as 5 páginas centrais usando **composites** de `@loopzero/ui` (`ProjectCard`, `DeploymentRow`, `EnvVarEditor`, `DomainConfig`, `CostMeter`).
+**Objective:** Refatorar as 5 páginas centrais usando **composites** de `@loopzerokit/ui` (`ProjectCard`, `DeploymentRow`, `EnvVarEditor`, `DomainConfig`, `CostMeter`).
 
 ### T4.1 — Refactor `OverviewPage`
 
@@ -1049,10 +1049,10 @@ cloud/dashboard/src/pages/overview.tsx — rewrite
 
 #### Deep Dives
 - **Endpoint actual**: `/api/v1/projects` via `useEngineApi`. Sem mudança.
-- **Recent deploys**: hoje array vazio (comentário no código diz "Build history is per-project"). Manter empty state mas usar `EmptyState` primitive de `@loopzero/ui`.
+- **Recent deploys**: hoje array vazio (comentário no código diz "Build history is per-project"). Manter empty state mas usar `EmptyState` primitive de `@loopzerokit/ui`.
 
 #### Tasks
-1. Identificar primitive equivalente a "stat tile" em `@loopzero/ui` (provável `Card` + `Stat`)
+1. Identificar primitive equivalente a "stat tile" em `@loopzerokit/ui` (provável `Card` + `Stat`)
 2. Usar `EmptyState` para "No deploys yet"
 3. Rewrite preservando `useEngineApi` calls
 
@@ -1070,7 +1070,7 @@ VERIFY:  npm test -- overview
 - [ ] Testes verdes
 
 #### DoD
-- [ ] Commit `refactor(dashboard): rebuild OverviewPage with @loopzero/ui composites`
+- [ ] Commit `refactor(dashboard): rebuild OverviewPage with @loopzerokit/ui composites`
 
 ---
 
@@ -1089,7 +1089,7 @@ cloud/dashboard/src/pages/projects.tsx — rewrite
 ```
 
 #### Tasks
-1. **CRITICAL (EC-5)**: Ler `ProjectCardProps` em `node_modules/@loopzero/ui/dist/index.d.ts`. Interface local `Project` (projects.tsx:9-15) tem `apps?`, `last_deploy?`, `environment?`, `created_at?` TODOS opcionais. Se `ProjectCard` requer algum, construir adapter com defaults sensatos:
+1. **CRITICAL (EC-5)**: Ler `ProjectCardProps` em `node_modules/@loopzerokit/ui/dist/index.d.ts`. Interface local `Project` (projects.tsx:9-15) tem `apps?`, `last_deploy?`, `environment?`, `created_at?` TODOS opcionais. Se `ProjectCard` requer algum, construir adapter com defaults sensatos:
    ```ts
    const cardProps = {
      name: project.name,
@@ -1236,7 +1236,7 @@ VERIFY:  npm test -- team
 - [ ] LOC ≤50
 
 #### DoD
-- [ ] Commit `refactor(dashboard): rebuild TeamPage on @loopzero/ui`
+- [ ] Commit `refactor(dashboard): rebuild TeamPage on @loopzerokit/ui`
 
 ---
 
@@ -1259,7 +1259,7 @@ VERIFY:  npm test -- settings
 - [ ] LOC ≤40
 
 #### DoD
-- [ ] Commit `refactor(dashboard): rebuild SettingsPage on @loopzero/ui`
+- [ ] Commit `refactor(dashboard): rebuild SettingsPage on @loopzerokit/ui`
 
 ---
 
@@ -1282,7 +1282,7 @@ VERIFY:  npm test -- profile
 - [ ] LOC ≤50
 
 #### DoD
-- [ ] Commit `refactor(dashboard): rebuild ProfilePage on @loopzero/ui`
+- [ ] Commit `refactor(dashboard): rebuild ProfilePage on @loopzerokit/ui`
 
 ---
 
@@ -1293,7 +1293,7 @@ VERIFY:  npm test -- profile
 ### T6.1 — Remove obsolete dependencies
 
 #### Objective
-Auditar `package.json` removendo deps que `@loopzero/ui` traz transitivamente.
+Auditar `package.json` removendo deps que `@loopzerokit/ui` traz transitivamente.
 
 #### Files to edit
 ```
@@ -1302,16 +1302,16 @@ cloud/dashboard/package-lock.json — regen
 ```
 
 #### Tasks
-1. `npm ls @radix-ui/react-avatar` etc. — se aparece como dep transitiva de `@loopzero/ui`, remover do package.json local
+1. `npm ls @radix-ui/react-avatar` etc. — se aparece como dep transitiva de `@loopzerokit/ui`, remover do package.json local
 2. Manter `framer-motion`, `lucide-react`, `clsx`, `tailwind-merge` (D4)
 3. `npm install` para atualizar lock
 
 #### Acceptance Criteria
-- [ ] `package.json` dependencies tem apenas: `@loopzero/ui`, `react`, `react-dom`, `react-router-dom`, `framer-motion`, `lucide-react`, `clsx`, `tailwind-merge`
+- [ ] `package.json` dependencies tem apenas: `@loopzerokit/ui`, `react`, `react-dom`, `react-router-dom`, `framer-motion`, `lucide-react`, `clsx`, `tailwind-merge`
 - [ ] `npm install` exits 0
 
 #### DoD
-- [ ] Commit `chore(dashboard): remove redundant deps now provided by @loopzero/ui`
+- [ ] Commit `chore(dashboard): remove redundant deps now provided by @loopzerokit/ui`
 
 ---
 
@@ -1331,7 +1331,7 @@ cloud/dashboard/tailwind.config.ts — remove theme.extend.colors duplicado
    cd cloud/dashboard && grep -rE 'loopzero-[0-9]+|surface-[0-4]' src/ --include='*.tsx' --include='*.ts' | grep -v node_modules
    ```
    Resultado **DEVE ser zero matches**. Se retornar matches:
-   - Mapear cada ocorrência para token equivalente em `@loopzero/ui` (CSS var ou classe)
+   - Mapear cada ocorrência para token equivalente em `@loopzerokit/ui` (CSS var ou classe)
    - Fixar nas páginas ANTES de prosseguir
    - Re-rodar grep até zero
 2. Validar que páginas usam classes do preset/CSS vars (não tokens locais)
@@ -1343,7 +1343,7 @@ cloud/dashboard/tailwind.config.ts — remove theme.extend.colors duplicado
 - [ ] `npm run build` verde
 
 #### DoD
-- [ ] Commit `chore(dashboard): remove tailwind tokens duplicated by @loopzero/ui preset`
+- [ ] Commit `chore(dashboard): remove tailwind tokens duplicated by @loopzerokit/ui preset`
 
 ---
 
@@ -1396,7 +1396,7 @@ Validar que `dist/assets/*.js` está dentro de ±10% do baseline pré-refactor.
    document.body.innerText.match(/Kubernetes|ArgoCD|Gitea|MinIO|Cosign|Pulumi|Helmfile|Tilt|Hydra|Kratos|pgvector|cell-\d/gi)
    ```
    Resultado **DEVE ser null**. Notar que `body.innerText` ignora href/src attributes (correto — URLs Kratos em `/self-service/login/browser` não são UI text).
-5. **CRITICAL (EC-7)**: Validar zero termos "agent-shaped" out-of-context — `@loopzero/ui` é agent-first design system; componentes importados podem trazer microcopy default como "Mem0", "MCP", "agent runtime", "tool call", "skill". Rodar:
+5. **CRITICAL (EC-7)**: Validar zero termos "agent-shaped" out-of-context — `@loopzerokit/ui` é agent-first design system; componentes importados podem trazer microcopy default como "Mem0", "MCP", "agent runtime", "tool call", "skill". Rodar:
    ```js
    document.body.innerText.match(/Mem0|\bMCP\b|agent runtime|tool call|skill manager|sub-agent/gi)
    ```
@@ -1438,12 +1438,12 @@ Validar que `cloud/dashboard/Dockerfile` ainda produz imagem funcional.
 
 | # | Gap / Requirement | Task(s) | Resolution |
 |---|---|---|---|
-| 1 | @loopzero/ui não instalado | T0.1 | npm install @loopzero/ui@next |
+| 1 | @loopzerokit/ui não instalado | T0.1 | npm install @loopzerokit/ui@next |
 | 2 | Sem ThemeProvider | T0.2 | Wire em main.tsx com Violet Forge dark |
-| 3 | Tailwind sem preset | T0.3 | Importa @loopzero/ui/preset |
-| 4 | Button hand-rolled | T1.1 | Swap por @loopzero/ui Button |
-| 5 | Badge hand-rolled | T1.2 | Swap por @loopzero/ui Badge |
-| 6 | Card hand-rolled | T1.3 | Swap por @loopzero/ui Card; deletar src/components/ui/ |
+| 3 | Tailwind sem preset | T0.3 | Importa @loopzerokit/ui/preset |
+| 4 | Button hand-rolled | T1.1 | Swap por @loopzerokit/ui Button |
+| 5 | Badge hand-rolled | T1.2 | Swap por @loopzerokit/ui Badge |
+| 6 | Card hand-rolled | T1.3 | Swap por @loopzerokit/ui Card; deletar src/components/ui/ |
 | 7 | Bug /recovery sem rota | T1.4 | Adicionar rota em app.tsx |
 | 8 | Sidebar hand-rolled | T2.1 | Rebuild com primitives |
 | 9 | PageWrapper hand-rolled | T2.2 | Simplificar ou substituir |
@@ -1527,11 +1527,11 @@ S0/S1 findings → fix → re-run smoke test. S2-S4 documentados em `docs/review
 
 | Risco | Mitigação |
 |---|---|
-| API de primitive `@loopzero/ui` divergir do esperado | T0.1 audit + ler `.d.ts` antes de cada substituição |
+| API de primitive `@loopzerokit/ui` divergir do esperado | T0.1 audit + ler `.d.ts` antes de cada substituição |
 | ThemeProvider conflita com `class="dark"` manual no `<html>` | T0.2 remove o class manual |
 | Bundle size cresce >10% | T6.3 valida; mitigação: tree-shake check, lazy-load composites pesados |
 | Smoke test descobre regressão visual grave | Aceitar reverter para baseline + iterar; pre-release bias permite redesign |
-| `@loopzero/ui@next` recebe breaking change durante migração | Pin exata versão em package.json até completar; depois liberar Renovate |
+| `@loopzerokit/ui@next` recebe breaking change durante migração | Pin exata versão em package.json até completar; depois liberar Renovate |
 | `@loopzero/memory` integration requested mid-plan | Recusar — fora de escopo (D6); abrir novo plano |
 | Páginas órfãs (account, error) confundem usuário | Marcar para revisão pós-plano em backlog |
 
@@ -1553,16 +1553,16 @@ Estes serão expandidos via `/edge-case-plan` após save do plano:
 
 1. **Hidratação React 19 com ThemeProvider**: se ThemeProvider lê `localStorage` em SSR-mismatched, hydration warning. Mitigation: `<ThemeScript>` se necessário.
 2. **CSS variable cascade**: `tokens.css` → `styles.css` → `tailwind.config.ts` preset → utility classes. Verificar ordem em `index.css`.
-3. **Form CSRF token**: `FormField` de `@loopzero/ui` pode não aceitar `hidden type=text` — verificar.
-4. **Loading states cross-page**: `Loader2` (lucide) usado em 5+ páginas. `@loopzero/ui` pode ter Skeleton/Spinner próprio; usar para coerência.
+3. **Form CSRF token**: `FormField` de `@loopzerokit/ui` pode não aceitar `hidden type=text` — verificar.
+4. **Loading states cross-page**: `Loader2` (lucide) usado em 5+ páginas. `@loopzerokit/ui` pode ter Skeleton/Spinner próprio; usar para coerência.
 5. **Recovery page sem testes hoje**: novo arquivo de teste; covered por T3.4 TDD.
 6. **Bundle delta inesperado**: capturar baseline ANTES de T0.1 (commit hash); comparar ao final.
-7. **i18n**: dashboard hoje é EN-only. `@loopzero/ui` pode ter strings hard-coded. Verificar se quebra UX em locale PT-BR.
+7. **i18n**: dashboard hoje é EN-only. `@loopzerokit/ui` pode ter strings hard-coded. Verificar se quebra UX em locale PT-BR.
 8. **Print/responsive**: dashboard hoje assume desktop. Mobile não está em escopo deste plano (próximo plano se cliente pedir).
 
 ### Architecture Docs (post-plan)
 
-> Este refactor é UI-only e não muda boundaries de Container/Componente entre cloud/, api/, operators/. A C4 documentação de `docs/architecture/` para `cloud/dashboard` é minimal e seria gerada via `/architecture-docs` em Mode 2 (AS-IS) e Mode 3 (PROPOSED). Para este plano, considera-se que o impacto arquitetural é encapsulado em (a) nova dependência externa `@loopzero/ui` no container `loopzero-dashboard` e (b) deleção do submódulo `src/components/ui/`. Skip pragmatic do `/architecture-docs` invocation registrado aqui.
+> Este refactor é UI-only e não muda boundaries de Container/Componente entre cloud/, api/, operators/. A C4 documentação de `docs/architecture/` para `cloud/dashboard` é minimal e seria gerada via `/architecture-docs` em Mode 2 (AS-IS) e Mode 3 (PROPOSED). Para este plano, considera-se que o impacto arquitetural é encapsulado em (a) nova dependência externa `@loopzerokit/ui` no container `loopzero-dashboard` e (b) deleção do submódulo `src/components/ui/`. Skip pragmatic do `/architecture-docs` invocation registrado aqui.
 
 ### Voice anchors (Locked Narrative)
 
@@ -1584,9 +1584,9 @@ Internal terms baniidos (re-statment de Rule 3 + CR-9): `Kubernetes`, `cluster`,
 **Updated**: 2026-05-23 23:55 UTC (v1.3 — Opção A Tailwind v4 inline ratificada; T0.0.bis adicionada; ADR D8; T0.1+T0.3 ajustadas)
 **Author**: claude-opus-4-7 via `/to-plan`
 **Sponsor**: paulo (paulohenriquevn@gmail.com) — ratificou Opção A 2026-05-23
-**Tier**: T3 (refactor stack frontend + nova dep `@loopzero/ui` + dep upgrade Tailwind v3→v4)
+**Tier**: T3 (refactor stack frontend + nova dep `@loopzerokit/ui` + dep upgrade Tailwind v3→v4)
 **Estimated effort**: 4-7 sessões de trabalho (Phase 0 cresce 1 task com T0.0.bis; Phases 3/4/5 paralelizáveis)
 **Edge-Case-Review**: PASSED v1.1 (`docs/plans/2026-05-23-dashboard-loopzero-ui-migration-edge-cases.md`, 18 edges: 8 MUST FIX incorporados, 7 SHOULD TEST, 3 DOCUMENT). v1.2 não exigiu re-review (mecânico). **v1.3 RECOMENDA re-run** — T0.0.bis é nova task funcional com risk surface próprio (codemod outputs, breaking changes Tailwind v3→v4, darkMode strategy migration). Sponsor pode pular se aceitar smoke test em T0.0.bis task 9 como compensação.
-**Upstream dependency status**: ✅ COMPLETO — 14 primitives requested entregues em `@loopzero/ui@0.9.0-next.0` (Briefs #1+#2+#3 shipados 2026-05-23). 116 componentes totais, 1.577 testes, 237 axe stories.
+**Upstream dependency status**: ✅ COMPLETO — 14 primitives requested entregues em `@loopzerokit/ui@0.9.0-next.0` (Briefs #1+#2+#3 shipados 2026-05-23). 116 componentes totais, 1.577 testes, 237 axe stories.
 **Próximo gate**: governança T3 meeting (ou sponsor-direct-approval pattern conforme MEET-2026-05-13-ed25519-sponsor-approval.md precedent) → implementação Phase 0→6 (começando com T0.0 baseline + T0.0.bis Tailwind v4 upgrade) → `/cross-validation` → `/dogfood`
 **Bloqueador atual**: nenhum técnico — pronto para iniciar Phase 0. Falta apenas autorização formal do sponsor para começar implementação.

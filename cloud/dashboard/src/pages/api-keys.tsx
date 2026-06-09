@@ -19,7 +19,7 @@ import {
   Sheet,
   Timestamp,
   Tooltip,
-} from '@loopzero/ui';
+} from '@loopzerokit/ui';
 import { usePageMeta } from '@/hooks/use-page-meta';
 import { useRequireAuth } from '@/hooks/use-auth';
 import { cloudFetch } from '@/lib/api';
@@ -668,7 +668,7 @@ interface ConfirmDeleteDialogProps {
 
 /**
  * DESIGN.md danger zone choreography per Memory Section mandate.
- * Uses @loopzero/ui's built-in `confirmationPhrase` (typed verification)
+ * Uses @loopzerokit/ui's built-in `confirmationPhrase` (typed verification)
  * + `intent="destructive"` (NOT primary).
  */
 function ConfirmDeleteDialog({ target, onCancel, onConfirm, submitting }: ConfirmDeleteDialogProps) {

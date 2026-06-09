@@ -19,47 +19,47 @@
   },
   "size-limit": [
     {
-      "name": "01 — react-vendor (React 19 runtime)",
+      "name": "01 \u2014 react-vendor (React 19 runtime)",
       "path": "dist/assets/react-vendor-*.js",
       "limit": "55 KB"
     },
     {
-      "name": "02 — @loopzero/ui (design system, post-0.10 per-component dist)",
+      "name": "02 \u2014 @loopzerokit/ui (design system, post-0.10 per-component dist)",
       "path": "dist/assets/loopzero-ui-*.js",
       "limit": "18 KB"
     },
     {
-      "name": "03 — radix (transitive via @loopzero/ui)",
+      "name": "03 \u2014 radix (transitive via @loopzerokit/ui)",
       "path": "dist/assets/radix-*.js",
       "limit": "26 KB"
     },
     {
-      "name": "04 — vendor (misc transitive deps)",
+      "name": "04 \u2014 vendor (misc transitive deps)",
       "path": "dist/assets/vendor-*.js",
       "limit": "25 KB"
     },
     {
-      "name": "05 — router (react-router-dom)",
+      "name": "05 \u2014 router (react-router-dom)",
       "path": "dist/assets/router-*.js",
       "limit": "15 KB"
     },
     {
-      "name": "06 — lucide (icon set)",
+      "name": "06 \u2014 lucide (icon set)",
       "path": "dist/assets/lucide-*.js",
       "limit": "5 KB"
     },
     {
-      "name": "07 — app entry (index)",
+      "name": "07 \u2014 app entry (index)",
       "path": "dist/assets/index-*.js",
       "limit": "12 KB"
     },
     {
-      "name": "08 — per-route chunk hard cap (worst-case)",
+      "name": "08 \u2014 per-route chunk hard cap (worst-case)",
       "path": "dist/assets/register-*.js",
       "limit": "10 KB"
     },
     {
-      "name": "TOTAL initial JS — HARD GATE (Sprint 2 CommandPalette cmdk bump, brotli)",
+      "name": "TOTAL initial JS \u2014 HARD GATE (Sprint 2 CommandPalette cmdk bump, brotli)",
       "path": "dist/assets/*.js",
       "limit": "225 KB"
     }
@@ -69,7 +69,7 @@
     "@tanstack/react-query-devtools": "^5.100.14",
     "@tanstack/react-virtual": "^3.13.26",
     "@types/canvas-confetti": "^1.9.0",
-    "@loopzero/ui": "0.12.0-next.0",
+    "@loopzerokit/ui": "^0.14.2",
     "canvas-confetti": "^1.9.4",
     "cmdk": "^1.1.1",
     "lucide-react": "^0.460.0",
@@ -86,11 +86,13 @@
     "@size-limit/preset-app": "^12.1.0",
     "@storybook/addon-essentials": "^8.6.14",
     "@storybook/blocks": "^8.6.14",
+    "@storybook/react": "^8.6.18",
     "@storybook/react-vite": "^8.6.18",
     "@tailwindcss/postcss": "^4.3.0",
     "@testing-library/jest-dom": "^6.9.1",
     "@testing-library/react": "^16.3.2",
     "@testing-library/user-event": "^14.6.1",
+    "@types/node": "^22.10.5",
     "@types/react": "^19.0.0",
     "@types/react-dom": "^19.0.0",
     "@vitejs/plugin-react": "^4.3.0",

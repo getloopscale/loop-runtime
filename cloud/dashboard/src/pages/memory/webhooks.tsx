@@ -17,7 +17,7 @@ import {
   Sheet,
   Timestamp,
   useToast,
-} from '@loopzero/ui';
+} from '@loopzerokit/ui';
 import { usePageMeta } from '@/hooks/use-page-meta';
 import { useRequireAuth } from '@/hooks/use-auth';
 import { cloudFetch } from '@/lib/api';

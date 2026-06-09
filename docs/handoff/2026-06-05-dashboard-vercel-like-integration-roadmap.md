@@ -300,7 +300,7 @@ Estes itens NÃO viram planos próprios — atravessam todas as jornadas e devem
 
 ### CC-07 — i18n (deferred)
 
-- Vercel suporta multi-idioma — LoopZero manda em pt+en por padrão. Estrutura `@loopzero/ui` precisa suportar string overrides. **P2** post-GA.
+- Vercel suporta multi-idioma — LoopZero manda em pt+en por padrão. Estrutura `@loopzerokit/ui` precisa suportar string overrides. **P2** post-GA.
 
 ### CC-08 — Playwright headless MANDATÓRIO para journeys via Kratos OIDC (LESSON 2026-06-05)
 

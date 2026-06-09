@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useState } from 'react';
 import { useQueryState, parseAsString } from 'nuqs';
 import { Brain, History, ShieldAlert, X } from 'lucide-react';
-import { Badge, Button, Card, PageShell, Table } from '@loopzero/ui';
+import { Badge, Button, Card, PageShell, Table } from '@loopzerokit/ui';
 import { useSetPageTitle } from '@/hooks/use-page-meta';
 import { useRequireAuth } from '@/hooks/use-auth';
 import { engineFetch } from '@/lib/api';

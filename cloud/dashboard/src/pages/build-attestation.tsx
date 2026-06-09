@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react';
 import { Link, useParams } from 'react-router-dom';
 import { ArrowLeft, Download, Loader2, ShieldCheck } from 'lucide-react';
-import { Button, Card, CodeBlock, EmptyState, PageShell } from '@loopzero/ui';
+import { Button, Card, CodeBlock, EmptyState, PageShell } from '@loopzerokit/ui';
 import { useSetPageTitle } from '@/hooks/use-page-meta';
 import { useRequireAuth } from '@/hooks/use-auth';
 import { engineFetch } from '@/lib/api';

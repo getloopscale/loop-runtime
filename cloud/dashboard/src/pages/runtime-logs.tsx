@@ -1,7 +1,7 @@
 import { useState } from 'react';
 import { Link, useParams } from 'react-router-dom';
 import { ArrowLeft } from 'lucide-react';
-import { Button, Card, PageShell } from '@loopzero/ui';
+import { Button, Card, PageShell } from '@loopzerokit/ui';
 import { useSetPageTitle } from '@/hooks/use-page-meta';
 import { useRequireAuth } from '@/hooks/use-auth';
 import { useLogStream } from '@/hooks/use-log-stream';

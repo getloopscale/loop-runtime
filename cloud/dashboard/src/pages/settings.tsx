@@ -1,7 +1,7 @@
 import { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { ArrowUpRight, Brain } from 'lucide-react';
-import { Card, CodeBlock, ConfirmDialog, DangerZone, Button, PageShell, StatusDot } from '@loopzero/ui';
+import { Card, CodeBlock, ConfirmDialog, DangerZone, Button, PageShell, StatusDot } from '@loopzerokit/ui';
 import { usePageMeta } from '@/hooks/use-page-meta';
 import { useRequireAuth } from '@/hooks/use-auth';
 import { useWhoami } from '@/hooks/use-whoami';

@@ -1,5 +1,5 @@
 import { AlertTriangle, Cpu, Rocket, TrendingUp } from 'lucide-react';
-import { Card } from '@loopzero/ui';
+import { Card } from '@loopzerokit/ui';
 import type { ProjectStatusDetail } from '@/lib/api/types';
 
 interface ProjectHealthCardProps {

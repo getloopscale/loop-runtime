@@ -11,7 +11,7 @@ import {
   EmptyState,
   PageShell,
   Timestamp,
-} from '@loopzero/ui';
+} from '@loopzerokit/ui';
 import { usePageMeta } from '@/hooks/use-page-meta';
 import { useRequireAuth } from '@/hooks/use-auth';
 import { cloudFetch, getApiBase } from '@/lib/api';

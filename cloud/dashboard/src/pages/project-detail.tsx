@@ -1,6 +1,6 @@
 import { useParams, Link, useNavigate } from 'react-router-dom';
 import { ArrowLeft, Box, FolderKanban, Loader2, Rocket } from 'lucide-react';
-import { Badge, Button, Card, CodeBlock, ConfirmDialog, DangerZone, EmptyState, PageShell } from '@loopzero/ui';
+import { Badge, Button, Card, CodeBlock, ConfirmDialog, DangerZone, EmptyState, PageShell } from '@loopzerokit/ui';
 import { useSetPageTitle } from '@/hooks/use-page-meta';
 import { useRequireAuth } from '@/hooks/use-auth';
 import { useProjects } from '@/hooks/use-projects';

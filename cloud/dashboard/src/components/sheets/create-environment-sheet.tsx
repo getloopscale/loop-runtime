@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import { Loader2 } from 'lucide-react';
-import { Alert, Button, Checkbox, Input, Label, Sheet } from '@loopzero/ui';
+import { Alert, Button, Checkbox, Input, Label, Sheet } from '@loopzerokit/ui';
 import { engineFetch } from '@/lib/api';
 import type { Environment } from '@/lib/api/types';
 

@@ -129,7 +129,7 @@ describe('MemoryListPage (/memory/memories)', () => {
     // The ConfirmDialog opens — Forget button is rendered but disabled
     // until the typed phrase equals the memory id. We only assert that
     // the dialog renders the warning copy; the typed-verification logic
-    // itself is owned by @loopzero/ui ConfirmDialog (covered there).
+    // itself is owned by @loopzerokit/ui ConfirmDialog (covered there).
     expect(await screen.findByText(/permanently forgotten/i)).toBeInTheDocument();
     expect(screen.getByText(/this cannot be undone/i)).toBeInTheDocument();
   });

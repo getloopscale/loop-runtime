@@ -20,7 +20,7 @@
 
 For each of 13 routes I evaluate against **5 dimensions**:
 
-1. **Token compliance** — does the page use @loopzero/ui tokens (vs hex/arbitrary)?
+1. **Token compliance** — does the page use @loopzerokit/ui tokens (vs hex/arbitrary)?
 2. **Density** — does it meet the targets in DESIGN.md § 6.1?
 3. **Hierarchy** — Refactoring UI § Hierarchy (size > weight > color; never weight > size)?
 4. **UX laws** — Hick's (decision count), Fitts's (target size), Miller's (chunking), Aesthetic-Usability?
@@ -71,7 +71,7 @@ primary buttons.
 **Verification:** `grep -rn "toLocaleDateString" src/pages/` returns
 zero matches ✓.
 
-**Residual:** ProjectCard primitive (from @loopzero/ui) renders
+**Residual:** ProjectCard primitive (from @loopzerokit/ui) renders
 `lastDeployedAt` with its own internal formatter — not in our control.
 If primitive formatter diverges from `formatDate`, file Brief #5.
 
@@ -134,14 +134,14 @@ matches in some pages. These break the 4/8/12/16/24/32 scale.
 
 ### CC-7 🟢 Focus ring inconsistent
 
-**Observation:** @loopzero/ui primitives ship focus rings by default,
+**Observation:** @loopzerokit/ui primitives ship focus rings by default,
 but custom elements (e.g., the sidebar nav items if they're rolled
 custom) may not get them.
 
 **DSS rule:** § 2.5 — `ring-ring` + `focus-visible:ring-2`.
 **Fix direction:** audit custom interactive elements + add
 `focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2`
-to any plain `<button>` / `<a>` that's not from @loopzero/ui.
+to any plain `<button>` / `<a>` that's not from @loopzerokit/ui.
 
 ---
 

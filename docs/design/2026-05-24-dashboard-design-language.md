@@ -2,13 +2,13 @@
 
 > **Status**: canonical reference for `cloud/dashboard/` visual redesign per plan `2026-05-24-dashboard-visual-redesign-mockup-aligned-plan.md v1.2`.
 > **Mockup reference**: `cloud/dashboard/design/loopzero_overview_dashboard_mockup.html` (Vercel-style overview page).
-> **Library reference**: `cloud/dashboard/.llms.txt` (`@loopzero/ui@0.9.0-next.0`, sync 2026-05-24).
+> **Library reference**: `cloud/dashboard/.llms.txt` (`@loopzerokit/ui@0.9.0-next.0`, sync 2026-05-24).
 > **Authority**: any divergence from this doc requires RFC + sponsor approval.
 
 ## Principles
 
 1. **Geist + Violet Forge** — typography Geist Sans + Geist Mono, palette Violet Forge dark theme. No DM Sans/JetBrains Mono/Cabinet Grotesk (retired).
-2. **Token-only styling** — never raw hex/rgb in JSX. Tokens from `@loopzero/ui` (`bg-card`, `text-foreground`, `border-border/40`, `bg-primary/10`, etc.).
+2. **Token-only styling** — never raw hex/rgb in JSX. Tokens from `@loopzerokit/ui` (`bg-card`, `text-foreground`, `border-border/40`, `bg-primary/10`, etc.).
 3. **Compose primitives** — never reinvent Button/Badge/Card; never inline SVG (use Lucide). Per `.llms.txt` line 118.
 4. **Layouts via DashboardLayout + ActionBar + ContentGrid** — never roll layout per page.
 5. **Sub-component pattern** — `<Card.Header>`, `<Card.Body>`, `<Sidebar.Item>`, `<Table.Row>` (not `CardHeader`/`SidebarItem`).
@@ -43,7 +43,7 @@ Composition:
 
 ## Pattern 2 — Sidebar
 
-`<AppSidebar>` wraps `@loopzero/ui` `<Sidebar>` primitive.
+`<AppSidebar>` wraps `@loopzerokit/ui` `<Sidebar>` primitive.
 
 ```
 ┌─────────────────────┐
@@ -145,7 +145,7 @@ Mobile-first: always single col below `lg` breakpoint.
 
 ## Pattern 6 — Card
 
-Use `<Card>` primitive from `@loopzero/ui` with sub-components:
+Use `<Card>` primitive from `@loopzerokit/ui` with sub-components:
 
 ```tsx
 <Card>
@@ -159,7 +159,7 @@ Use `<Card>` primitive from `@loopzero/ui` with sub-components:
 </Card>
 ```
 
-Sub-component naming: `Card.Body` (NOT `Card.Content`) per `@loopzero/ui` Card.tsx.
+Sub-component naming: `Card.Body` (NOT `Card.Content`) per `@loopzerokit/ui` Card.tsx.
 
 Token defaults: `rounded-xl border bg-card border-border/40 p-4`. Override via `className` only when justified.
 
@@ -185,7 +185,7 @@ For visual indicators (deploy state, env health, domain verification).
 
 ## Pattern 8 — Typography
 
-Geist Sans + Geist Mono via `@loopzero/ui/fonts-cdn.css`. Tokens:
+Geist Sans + Geist Mono via `@loopzerokit/ui/fonts-cdn.css`. Tokens:
 
 | Use | Token |
 |---|---|
@@ -243,7 +243,7 @@ Centered, `py-8`, optional CTA. Lucide icon (`aria-hidden="true"`). NEVER inline
 1. All 8 dashboard pages MUST use `<DashboardLayout>` shell.
 2. All pages MUST call `useSetPageTitle(...)` in mount.
 3. Section labels (uppercase) precede each card group.
-4. Tokens-only color/spacing. Tailwind utilities from `@loopzero/ui` preset.
+4. Tokens-only color/spacing. Tailwind utilities from `@loopzerokit/ui` preset.
 5. Status uses `StatusDot` primitive. Timestamps use `Timestamp` primitive (relative format default).
 6. Destructive actions ALWAYS confirm via `ConfirmDialog` with `confirmationPhrase` for irreversible cases.
 7. Tables use `<Table>` with `numeric` prop on amount/date columns for alignment.
@@ -261,7 +261,7 @@ Per `.llms.txt` lines 125-138 + this dashboard scope:
 - ❌ Hand-rolled card layout (`<div className="rounded-xl border ...">`)
 - ❌ Hand-rolled relative timestamps (`{getRelativeTime(date)}`)
 - ❌ Hand-rolled clipboard buttons
-- ❌ Manual Portal/Dialog from Radix without using `@loopzero/ui` Dialog
+- ❌ Manual Portal/Dialog from Radix without using `@loopzerokit/ui` Dialog
 - ❌ Tailwind raw `text-xs|sm|base|lg|xl` (use semantic scale `text-body-sm|label|label-caps|title-sm|display-md`)
 - ❌ Disabling lint rules without WAI-ARIA justification
 
@@ -276,7 +276,7 @@ Changes to this doc require:
 3. Update this doc + commit message references the RFC
 4. Re-validate all 8 pages for compliance via T-H.2 grep
 
-Per `.llms.txt` line 268: when consumer docs (this) disagree with `@loopzero/ui` source files, source files win — update doc, not code.
+Per `.llms.txt` line 268: when consumer docs (this) disagree with `@loopzerokit/ui` source files, source files win — update doc, not code.
 
 ---
 

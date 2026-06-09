@@ -5,25 +5,25 @@
 **Tasks analisadas:** 23 (T0.1-T0.3, T1.1-T1.4, T2.1-T2.3, T3.1-T3.5, T4.1-T4.5, T5.1-T5.3, T6.1-T6.6)
 **Edge cases encontrados:** 18 (MUST FIX: 8, SHOULD TEST: 7, DOCUMENT: 3)
 
-> **Disclaimer honesto**: Os 3 primeiros MUST FIX (EC-1, EC-2, EC-3) são bugs que eu mesmo introduzi ao escrever o plano. A revisão verificou os exports reais de `@loopzero/ui` e a presença de `dark` class no DOM via grep, confirmando que assumi APIs que não existem ou estratégia de tema que não funciona como descrito.
+> **Disclaimer honesto**: Os 3 primeiros MUST FIX (EC-1, EC-2, EC-3) são bugs que eu mesmo introduzi ao escrever o plano. A revisão verificou os exports reais de `@loopzerokit/ui` e a presença de `dark` class no DOM via grep, confirmando que assumi APIs que não existem ou estratégia de tema que não funciona como descrito.
 
 ---
 
 ## MUST FIX (8)
 
-### EC-1: `@loopzero/ui` não exporta JS preset para Tailwind v3
+### EC-1: `@loopzerokit/ui` não exporta JS preset para Tailwind v3
 
 - **Task afetada:** T0.3
 - **Família:** Integration / Format
-- **Cenário:** T0.3 propõe `import preset from '@loopzero/ui/preset'` e `presets: [preset]` em `tailwind.config.ts`. Verificação via `grep -E '"./preset"' loopzero-ui/package.json` retornou **vazio**. Os únicos exports `preset` são CSS files (`./preset.css` mapeado para `./dist/preset.css`). Tailwind v3 `presets: []` espera **objeto JS**, não CSS file.
-- **Impacto:** `npm run build` quebra com erro `Cannot find module '@loopzero/ui/preset'` ou TypeScript error de import.
+- **Cenário:** T0.3 propõe `import preset from '@loopzerokit/ui/preset'` e `presets: [preset]` em `tailwind.config.ts`. Verificação via `grep -E '"./preset"' loopzero-ui/package.json` retornou **vazio**. Os únicos exports `preset` são CSS files (`./preset.css` mapeado para `./dist/preset.css`). Tailwind v3 `presets: []` espera **objeto JS**, não CSS file.
+- **Impacto:** `npm run build` quebra com erro `Cannot find module '@loopzerokit/ui/preset'` ou TypeScript error de import.
 - **Fix sugerido:** Reescrever T0.3 — remover tentativa de Tailwind JS preset. O design system flui via CSS variables de `tokens.css` + `styles.css` (importados em T0.2). Manter `tailwind.config.ts` local mínimo com `content` paths + `theme.extend.colors` cobrindo tokens não-cobertos pelas CSS vars. Em Phase 6 (T6.2), remover tokens duplicados pelas CSS vars.
 
 ### EC-2: `darkMode: 'class'` + remoção parcial do `dark` class quebra Tailwind dark utilities
 
 - **Task afetada:** T0.2
 - **Família:** State / Integration
-- **Cenário:** T0.2 task 3 remove `class="dark"` apenas de `<html>` (index.html), mas grep mostrou que o class também está em 2 `<div>`s do `app.tsx` (linhas 25 e 34). Tailwind config tem `darkMode: 'class'` — depende de algum ancestor ter `.dark` class para utilities `dark:*` funcionarem. Se `ThemeProvider` de `@loopzero/ui` setar tema via `data-theme="..."` em vez de adicionar `.dark` class, todas as utilities `dark:bg-surface-0` etc. param de funcionar mesmo com tema "dark" ativo.
+- **Cenário:** T0.2 task 3 remove `class="dark"` apenas de `<html>` (index.html), mas grep mostrou que o class também está em 2 `<div>`s do `app.tsx` (linhas 25 e 34). Tailwind config tem `darkMode: 'class'` — depende de algum ancestor ter `.dark` class para utilities `dark:*` funcionarem. Se `ThemeProvider` de `@loopzerokit/ui` setar tema via `data-theme="..."` em vez de adicionar `.dark` class, todas as utilities `dark:bg-surface-0` etc. param de funcionar mesmo com tema "dark" ativo.
 - **Impacto:** UI carrega sem cores corretas (text-white some, backgrounds ficam transparentes). Quebra visual silenciosa.
 - **Fix sugerido:** ANTES de T0.2, ler `loopzero-ui/src/themes/theme-provider.tsx` para confirmar a estratégia. Duas opções compatíveis: (a) configurar `darkMode: ['class', '[data-theme*="dark"]']` para Tailwind reconhecer ambos OU (b) garantir que ThemeProvider adiciona `.dark` class no mode dark. Atualizar T0.2 task 3 para remover `class="dark"` dos 3 sites (html + 2 divs em app.tsx) E adicionar verificação de que ThemeProvider seta class compatível.
 
@@ -47,9 +47,9 @@
 
 - **Task afetada:** T4.2
 - **Família:** Format / Integration
-- **Cenário:** Interface local `Project` (projects.tsx:9-15) tem fields `apps?`, `last_deploy?`, `environment?`, `created_at?` — todos opcionais. `ProjectCard` em `@loopzero/ui` pode exigi-los como required (status, deployedAt, branch, env). Se requerido e endpoint retornar undefined, ProjectCard pode renderizar "undefined" visivelmente ou crashar via TypeScript type error em build.
+- **Cenário:** Interface local `Project` (projects.tsx:9-15) tem fields `apps?`, `last_deploy?`, `environment?`, `created_at?` — todos opcionais. `ProjectCard` em `@loopzerokit/ui` pode exigi-los como required (status, deployedAt, branch, env). Se requerido e endpoint retornar undefined, ProjectCard pode renderizar "undefined" visivelmente ou crashar via TypeScript type error em build.
 - **Impacto:** Página `/projects` quebra em build OR renderiza "undefined" para projetos sem apps/last_deploy.
-- **Fix sugerido:** T4.2 task 1 atualizar para "Ler tipo `ProjectCardProps` em `node_modules/@loopzero/ui/dist/index.d.ts`. Para cada field obrigatório que o backend não retorna, definir default no adapter (ex: `last_deploy ?? 'never'`, `environment ?? 'production'`)."
+- **Fix sugerido:** T4.2 task 1 atualizar para "Ler tipo `ProjectCardProps` em `node_modules/@loopzerokit/ui/dist/index.d.ts`. Para cada field obrigatório que o backend não retorna, definir default no adapter (ex: `last_deploy ?? 'never'`, `environment ?? 'production'`)."
 
 ### EC-6: Remoção de tokens Tailwind locais (T6.2) sem validação que ninguém os usa
 
@@ -57,23 +57,23 @@
 - **Família:** Boundary / State
 - **Cenário:** T6.2 remove `theme.extend.colors.loopzero`/`surface` de `tailwind.config.ts`. Se qualquer página/componente ainda tiver `className="bg-loopzero-500"` ou `className="bg-surface-2"`, a class fica inválida (Tailwind a remove do bundle) e elemento perde a cor — visual regression silenciosa.
 - **Impacto:** Páginas perdem cor de fundo/borda; aparência quebrada sem erro de build.
-- **Fix sugerido:** T6.2 task 1 reescrever para "ANTES de remover tokens, `grep -rE 'loopzero-[0-9]|surface-[0-4]' cloud/dashboard/src/ --include='*.tsx'` DEVE retornar zero matches. Se retornar, mapear cada ocorrência para token equivalente em `@loopzero/ui` (ex: `surface-0` → token-do-design-system) e fixar nas páginas ANTES de deletar."
+- **Fix sugerido:** T6.2 task 1 reescrever para "ANTES de remover tokens, `grep -rE 'loopzero-[0-9]|surface-[0-4]' cloud/dashboard/src/ --include='*.tsx'` DEVE retornar zero matches. Se retornar, mapear cada ocorrência para token equivalente em `@loopzerokit/ui` (ex: `surface-0` → token-do-design-system) e fixar nas páginas ANTES de deletar."
 
-### EC-7: Screens importados de `@loopzero/ui` podem conter termos internos (Rule 3 violation)
+### EC-7: Screens importados de `@loopzerokit/ui` podem conter termos internos (Rule 3 violation)
 
-- **Task afetada:** T3.1, T3.2, T3.3, T3.4 (todas que importam patterns de `@loopzero/ui/screens`)
+- **Task afetada:** T3.1, T3.2, T3.3, T3.4 (todas que importam patterns de `@loopzerokit/ui/screens`)
 - **Família:** Integration / Format
-- **Cenário:** `@loopzero/ui` é framework-agnostic e seus `screens/login.stories.tsx`, `chat-home.stories.tsx`, etc. podem incluir microcopy genérica ("Sign in with your provider") ou até mesmo references a "Mem0", "agent runtime", "MCP" — termos do mundo agent que NÃO são apropriados para um dashboard de PaaS. Rule 3 do CLAUDE.md proíbe vocabulário interno.
+- **Cenário:** `@loopzerokit/ui` é framework-agnostic e seus `screens/login.stories.tsx`, `chat-home.stories.tsx`, etc. podem incluir microcopy genérica ("Sign in with your provider") ou até mesmo references a "Mem0", "agent runtime", "MCP" — termos do mundo agent que NÃO são apropriados para um dashboard de PaaS. Rule 3 do CLAUDE.md proíbe vocabulário interno.
 - **Impacto:** Smoke test T6.5 pode passar (não detecta `Kubernetes|ArgoCD|cell`), mas dashboard fica com strings "agent-shaped" inadequadas ao contexto LoopZeroCloud PaaS.
 - **Fix sugerido:** Adicionar ao T6.5 nota: "Smoke test estende grep para incluir termos out-of-context: `grep -E 'Mem0|MCP|agent runtime|tool call|skill'` no DOM rendered. Se aparecer, customizar children/labels nos componentes importados (eles aceitam props customizáveis)."
 
-### EC-8: Plano marca `@loopzero/ui@next` mas T0.1 task 1 usa tag móvel
+### EC-8: Plano marca `@loopzerokit/ui@next` mas T0.1 task 1 usa tag móvel
 
 - **Task afetada:** T0.1
 - **Família:** State / Timing
-- **Cenário:** T0.1 task 1 prescreve `npm install @loopzero/ui@next` — tag `@next` é móvel, novas versões podem ser publicadas durante o plano (a versão atual `0.6.3-next.0` pode virar `0.6.4-next.0` mid-implementation). Diferença de minor em pre-release pode trazer breaking change não-anunciado. Notas operacionais do plano mencionam "Pin exata versão em package.json até completar" mas T0.1 task 1 não enforce.
+- **Cenário:** T0.1 task 1 prescreve `npm install @loopzerokit/ui@next` — tag `@next` é móvel, novas versões podem ser publicadas durante o plano (a versão atual `0.6.3-next.0` pode virar `0.6.4-next.0` mid-implementation). Diferença de minor em pre-release pode trazer breaking change não-anunciado. Notas operacionais do plano mencionam "Pin exata versão em package.json até completar" mas T0.1 task 1 não enforce.
 - **Impacto:** Mid-plan, alguém roda `npm install` e pega versão diferente do que outros devs têm. Dashboard renderiza inconsistentemente entre devs.
-- **Fix sugerido:** T0.1 task 1 reescrever para `npm install @loopzero/ui@0.6.3-next.0 --save-exact` (pin exato). Em Phase 6 (T6.1 ou nova T6.7), trocar para `^` permitindo atualizações.
+- **Fix sugerido:** T0.1 task 1 reescrever para `npm install @loopzerokit/ui@0.6.3-next.0 --save-exact` (pin exato). Em Phase 6 (T6.1 ou nova T6.7), trocar para `^` permitindo atualizações.
 
 ---
 
@@ -87,7 +87,7 @@
 ### EC-10: Focus rings + keyboard navigation preservation após Button swap
 
 - **Task afetada:** T1.1
-- **Teste sugerido:** `test_button_keyboard_focusable` — renderiza `<Button>`, dispatcha `Tab` keyboard event, asserta `document.activeElement === button`. Se `@loopzero/ui` Button não tiver focus ring visível, a11y regression.
+- **Teste sugerido:** `test_button_keyboard_focusable` — renderiza `<Button>`, dispatcha `Tab` keyboard event, asserta `document.activeElement === button`. Se `@loopzerokit/ui` Button não tiver focus ring visível, a11y regression.
 
 ### EC-11: Multi-source error merging em LoginPage
 
@@ -112,7 +112,7 @@
 ### EC-15: Bundle bloat por duplicação Radix após remoção de deps locais
 
 - **Task afetada:** T6.1
-- **Teste sugerido:** `test_no_duplicate_radix_in_bundle` — após `npm install`, `npm ls @radix-ui/react-slot` deve retornar UMA versão (não duas). Se duas versões coexistirem (uma via `@loopzero/ui`, outra residual local), bundle infla. Ou usar `npm dedupe` como parte da task.
+- **Teste sugerido:** `test_no_duplicate_radix_in_bundle` — após `npm install`, `npm ls @radix-ui/react-slot` deve retornar UMA versão (não duas). Se duas versões coexistirem (uma via `@loopzerokit/ui`, outra residual local), bundle infla. Ou usar `npm dedupe` como parte da task.
 
 ---
 
@@ -124,7 +124,7 @@
 
 ### EC-17: Decorações da LoginPage atual (blur background) podem ser perdidas
 
-- **Risco aceito:** `login.tsx:161` tem `<div className="absolute top-1/4 -left-32 w-96 h-96 bg-accent/[0.04] rounded-full blur-[120px]" />` — efeito decorativo puramente visual. Refactor para usar `screens/login` pattern de `@loopzero/ui` pode não incluir esse blur. Sem perda funcional. Se desejarmos restaurar, é trivial (1 div). Documentar como "intencionalmente simplificado" em commit message de T3.1.
+- **Risco aceito:** `login.tsx:161` tem `<div className="absolute top-1/4 -left-32 w-96 h-96 bg-accent/[0.04] rounded-full blur-[120px]" />` — efeito decorativo puramente visual. Refactor para usar `screens/login` pattern de `@loopzerokit/ui` pode não incluir esse blur. Sem perda funcional. Se desejarmos restaurar, é trivial (1 div). Documentar como "intencionalmente simplificado" em commit message de T3.1.
 
 ### EC-18: Páginas órfãs `account.tsx`, `error.tsx` permanecem com visual antigo
 
@@ -142,7 +142,7 @@
 | ArgoCD notifiers not services | N/A | Plano não toca ArgoCD |
 | Single ArgoCD App per tenant | N/A | Plano não toca ArgoCD |
 | CF scan imports conflicting apex | N/A | Plano não toca CF |
-| External lib API drift | Sim | EC-5 (ProjectCard), EC-14 (DeploymentRow), EC-12 (FormField CSRF) — `@loopzero/ui` é dependência externa pré-release |
+| External lib API drift | Sim | EC-5 (ProjectCard), EC-14 (DeploymentRow), EC-12 (FormField CSRF) — `@loopzerokit/ui` é dependência externa pré-release |
 | Cache invalidation timing | Não | Tailwind preset não tem cache layer relevante |
 
 ---
@@ -186,7 +186,7 @@
 ### Ajustes obrigatórios no plano
 
 1. **Adicionar T0.0 (NEW pre-step)**: capturar baseline bundle ANTES de T0.1 (EC-3)
-2. **Reescrever T0.1 task 1**: pinar versão exata `@loopzero/ui@0.6.3-next.0 --save-exact` (EC-8)
+2. **Reescrever T0.1 task 1**: pinar versão exata `@loopzerokit/ui@0.6.3-next.0 --save-exact` (EC-8)
 3. **Reescrever T0.2 task 3**: validar estratégia do ThemeProvider + Tailwind `darkMode: 'class'`, remover `class="dark"` dos 3 sites (html + 2 divs em app.tsx), não apenas html (EC-2)
 4. **Reescrever T0.3 inteira**: remover tentativa de Tailwind JS preset (não existe); design system flui via CSS imports de T0.2 + tokens locais reduzidos em T6.2 (EC-1)
 5. **Adicionar à T3.1 task 2**: nota explícita "preservar OIDC vanilla DOM `form.submit` verbatim" (EC-4)

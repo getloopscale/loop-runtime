@@ -10,7 +10,7 @@ import {
   UsageMeter,
   type PlanTier,
   type UsageMetric as UsageMeterMetric,
-} from '@loopzero/ui';
+} from '@loopzerokit/ui';
 import { ContentGrid } from '@/components/layout';
 import { usePageMeta } from '@/hooks/use-page-meta';
 import { useCloudApi } from '@/hooks/use-api';

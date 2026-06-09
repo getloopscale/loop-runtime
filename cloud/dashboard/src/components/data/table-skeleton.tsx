@@ -1,7 +1,7 @@
-import { Skeleton } from '@loopzero/ui';
+import { Skeleton } from '@loopzerokit/ui';
 
 /**
- * TableSkeleton (T0.3) — table-shaped skeleton composite atop @loopzero/ui
+ * TableSkeleton (T0.3) — table-shaped skeleton composite atop @loopzerokit/ui
  * Skeleton primitive. Substitui spinner genérico em PageShell.loading com
  * layout-matching skeleton per sponsor critério #14 ("skeletons devem
  * representar o layout real").

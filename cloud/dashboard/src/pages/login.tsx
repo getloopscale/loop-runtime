@@ -8,7 +8,7 @@ import {
   CodeBlock,
   FormField,
   Input,
-} from '@loopzero/ui';
+} from '@loopzerokit/ui';
 import { GoogleBrandIcon } from '@/components/google-brand-icon';
 import { getSession, startLogin } from '@/lib/auth';
 import { clearToken } from '@/lib/api';

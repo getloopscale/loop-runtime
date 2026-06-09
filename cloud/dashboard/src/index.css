@@ -1,4 +1,4 @@
-/* @loopzero/ui canonical consumer entry (T-A.0 v1.2 + 2026-05-26 visual fix).
+/* @loopzerokit/ui canonical consumer entry (T-A.0 v1.2 + 2026-05-26 visual fix).
  *
  * Imports ordered per CSS spec (@import MUST precede non-import rules):
  *   1. tailwindcss         — v4 core (preflight + utilities generator)
@@ -28,9 +28,9 @@
  *   - Scrollbar styled with theme --primary.
  */
 @import 'tailwindcss';
-@import '@loopzero/ui/preset.css';
-@import '@loopzero/ui/components.css';
-@import '@loopzero/ui/fonts-cdn.css';
+@import '@loopzerokit/ui/preset.css';
+@import '@loopzerokit/ui/components.css';
+@import '@loopzerokit/ui/fonts-cdn.css';
 
 @custom-variant dark (&:is(.dark *));
 
@@ -106,7 +106,7 @@
   }
 }
 
-/* CRITICAL base layer — replicates @loopzero/ui/styles.css @layer base so we
+/* CRITICAL base layer — replicates @loopzerokit/ui/styles.css @layer base so we
  * inherit the same visual baseline as upstream consumers without taking the
  * full styles.css (which also pulls self-hosted fonts.css → font path resolve
  * issue per original comment). */

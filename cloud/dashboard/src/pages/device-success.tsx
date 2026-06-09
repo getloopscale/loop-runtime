@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { CheckCircle2 } from 'lucide-react';
-import { Card } from '@loopzero/ui';
+import { Card } from '@loopzerokit/ui';
 
 // Plan 2026-06-05-dashboard-journey-j05-device-success T1.2 D4:
 // Telemetry endpoint path — reuses the canonical /v1/telemetry/events handler

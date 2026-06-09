@@ -1,6 +1,6 @@
 import { useParams } from 'react-router-dom';
 import { ShieldCheck } from 'lucide-react';
-import { EmptyState, PageShell } from '@loopzero/ui';
+import { EmptyState, PageShell } from '@loopzerokit/ui';
 import { useRequireAuth } from '@/hooks/use-auth';
 import { useDocumentTitle } from '@/hooks/use-page-meta';
 import { useProjects } from '@/hooks/use-projects';

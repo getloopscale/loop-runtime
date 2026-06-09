@@ -1,6 +1,6 @@
-# Brief #3: Add 2 deferred primitives to @loopzero/ui (Alert + Pagination)
+# Brief #3: Add 2 deferred primitives to @loopzerokit/ui (Alert + Pagination)
 
-> **Audience:** the `@loopzero/ui` maintainer team (or a Claude/Codex agent in the `loopzero-ui` repo).
+> **Audience:** the `@loopzerokit/ui` maintainer team (or a Claude/Codex agent in the `loopzero-ui` repo).
 > **Output:** 2 new primitives + tests + stories + barrel exports.
 > **Issued by:** LoopZeroCloud dashboard team (consumer), 2026-05-23.
 > **Priority:** LOWER than Briefs #1/#2 — **not blocking** Phase 0 of consumer plan. Ship when convenient OR defer until consumer demands empirically.
@@ -10,7 +10,7 @@
 
 ## Why this brief exists (and why it's lower priority)
 
-After Briefs #1 + #2 shipped in `@loopzero/ui@0.8.0-next.0` (114 components total), a systematic walkthrough of the LoopZeroCloud dashboard's 12 pages revealed **100% coverage of in-scope needs**. The 2 components below are **future-facing gaps** for PaaS dashboards at scale, not blockers for the initial migration.
+After Briefs #1 + #2 shipped in `@loopzerokit/ui@0.8.0-next.0` (114 components total), a systematic walkthrough of the LoopZeroCloud dashboard's 12 pages revealed **100% coverage of in-scope needs**. The 2 components below are **future-facing gaps** for PaaS dashboards at scale, not blockers for the initial migration.
 
 Honest framing:
 
@@ -350,7 +350,7 @@ After implementation, `cloud/dashboard`:
 
 ## Release strategy recommendation
 
-This brief should ship as **`@loopzero/ui@0.9.0-next.0`** (minor bump from 0.8.0-next.0). Both primitives are additive, zero breaking change. Consider including in a "PaaS polish release" with any other deferred-from-Brief-#2 items if backlog has accumulated.
+This brief should ship as **`@loopzerokit/ui@0.9.0-next.0`** (minor bump from 0.8.0-next.0). Both primitives are additive, zero breaking change. Consider including in a "PaaS polish release" with any other deferred-from-Brief-#2 items if backlog has accumulated.
 
 ## Cross-reference
 

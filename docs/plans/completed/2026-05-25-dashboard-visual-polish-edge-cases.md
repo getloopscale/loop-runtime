@@ -90,7 +90,7 @@
 
 ### EC-12: Long project name visual overflow (≥40 chars)
 
-- **Risco aceito:** Project names ≤63 chars (K8s limit) podem ser longos. @loopzero/ui Select usa CSS truncation; visual fica `acme-very-long-project-...` em vez de quebrar layout. Não é bug, é design choice já handled pelo primitive. Adicionar nota em T-A.1 referenciando.
+- **Risco aceito:** Project names ≤63 chars (K8s limit) podem ser longos. @loopzerokit/ui Select usa CSS truncation; visual fica `acme-very-long-project-...` em vez de quebrar layout. Não é bug, é design choice já handled pelo primitive. Adicionar nota em T-A.1 referenciando.
 
 ### EC-13: `formatNumber(value, 'bytes')` — 1024 vs 1000 convention
 

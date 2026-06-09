@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from 'react';
 import { Pause, Play, Trash2 } from 'lucide-react';
-import { Badge, Button, Input } from '@loopzero/ui';
+import { Badge, Button, Input } from '@loopzerokit/ui';
 import type { LogLine, LogLevel } from '@/lib/api/types';
 
 interface LogViewerProps {

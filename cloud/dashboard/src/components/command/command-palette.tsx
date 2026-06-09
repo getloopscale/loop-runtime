@@ -1,5 +1,5 @@
 import { Command } from 'cmdk';
-import { Dialog } from '@loopzero/ui';
+import { Dialog } from '@loopzerokit/ui';
 import type { ComponentType } from 'react';
 import { reportError } from '@/lib/error-reporter';
 
@@ -7,7 +7,7 @@ import { reportError } from '@/lib/error-reporter';
  * CommandPalette (Sprint 2 T2.1) — global ⌘K command surface.
  *
  * Wraps `cmdk` v1 (industry-standard primitive used by Vercel + Linear +
- * Raycast clones) com Dialog from @loopzero/ui. Categories rendered as cmdk
+ * Raycast clones) com Dialog from @loopzerokit/ui. Categories rendered as cmdk
  * Groups; commands as cmdk Items.
  *
  * EC-09: cmdk uses refs + imperative state internally. If React Compiler

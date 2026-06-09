@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { useSearchParams, Link } from 'react-router-dom';
 import { CheckCircle2, Github, KeyRound } from 'lucide-react';
-import { Alert, Button, Card, Input } from '@loopzero/ui';
+import { Alert, Button, Card, Input } from '@loopzerokit/ui';
 import { GoogleBrandIcon } from '@/components/google-brand-icon';
 import {
   type Flow,

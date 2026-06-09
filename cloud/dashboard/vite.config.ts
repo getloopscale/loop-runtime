@@ -8,7 +8,7 @@ import path from 'path';
 /**
  * Vite config with manualChunks vendor split (T-H.3 final optimization).
  *
- * Splits @loopzero/ui + Radix + Lucide into dedicated vendor chunk so the
+ * Splits @loopzerokit/ui + Radix + Lucide into dedicated vendor chunk so the
  * browser caches it independently of app code. Reduces re-download cost
  * on subsequent visits + parallelizes parsing.
  *
@@ -161,7 +161,7 @@ export default defineConfig({
     rollupOptions: {
       output: {
         manualChunks(id) {
-          if (id.includes('node_modules/@loopzero/ui')) return 'loopzero-ui';
+          if (id.includes('node_modules/@loopzerokit/ui')) return 'loopzero-ui';
           if (id.includes('node_modules/@radix-ui')) return 'radix';
           if (id.includes('node_modules/lucide-react')) return 'lucide';
           if (id.includes('node_modules/react/') || id.includes('node_modules/react-dom/')) return 'react-vendor';

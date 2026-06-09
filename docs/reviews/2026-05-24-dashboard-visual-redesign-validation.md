@@ -14,7 +14,7 @@ Per plan v1.2 T-H.2 acceptance criteria.
 | EC-7 agent-shaped (`Mem0|MCP|agent runtime|tool call|skill manager|sub-agent`) | ✅ ZERO hits | |
 | EC-6 legacy tokens (`text-white|bg-surface-[0-4]`) | ✅ ZERO hits | Full migration successful |
 | D-9 raw hex/rgb (non-SVG context) | ✅ ZERO hits | Only Google logo brand SVG retains hex |
-| D-7 inline `<svg>` | ⚠️ 2 hits (login + register Google logo) | Documented WAI-ARIA `role="img" aria-hidden="true"` + inline comment justifying retention (no Lucide Google icon exists; future @loopzero/ui SocialAuthButton primitive ask) |
+| D-7 inline `<svg>` | ⚠️ 2 hits (login + register Google logo) | Documented WAI-ARIA `role="img" aria-hidden="true"` + inline comment justifying retention (no Lucide Google icon exists; future @loopzerokit/ui SocialAuthButton primitive ask) |
 | D-9 manual Portal (`createPortal`) | ✅ ZERO hits | |
 | D-9 eslint-disable without justification | ✅ FIXED (1 hit in verification.tsx — added WAI-ARIA-equivalent justification comment) | |
 
@@ -40,7 +40,7 @@ D8 optimization (swap LoopZeroUIProvider → single-theme ThemeProvider) applied
 
 The +47% gzip overshoot is structural, not accidental:
 
-- @loopzero/ui consumed primitives (≥30 actively used): Card sub-components, Sidebar full tree, AccountMenu, PlanBadge, ProjectCard, UsageMeter, ActionBar, ContentGrid, Alert (4 intents), Button (8 variants), Input, Table (5 sub-components), EmptyState, ConfirmDialog, DangerZone, CodeBlock, CopyButton, StatusDot, Loader2 + Lucide icons (15+), Toaster, Select.
+- @loopzerokit/ui consumed primitives (≥30 actively used): Card sub-components, Sidebar full tree, AccountMenu, PlanBadge, ProjectCard, UsageMeter, ActionBar, ContentGrid, Alert (4 intents), Button (8 variants), Input, Table (5 sub-components), EmptyState, ConfirmDialog, DangerZone, CodeBlock, CopyButton, StatusDot, Loader2 + Lucide icons (15+), Toaster, Select.
 - Each primitive ships own styles + Radix dep + variants. Tree-shake works but functional primitives all consumed.
 - Local helpers: ActionBar/ContentGrid/DashboardLayout/AppSidebar/TopBar — additional ~5 KB
 - Form Motion still in tree for pages that haven't dropped it yet (Phase 6 cleanup of v1.3 may drop further)
@@ -51,7 +51,7 @@ The +47% gzip overshoot is structural, not accidental:
 |---|---|---|
 | Remove framer-motion entirely (audit usage) | ~30-50 KB gzip | Some animation polish lost |
 | Route-level code-split (lazy load Pages) | ~80-120 KB initial | Build complexity +; PR-able |
-| Drop unused @loopzero/ui primitives (if any) | ~10-20 KB | Need usage audit per primitive |
+| Drop unused @loopzerokit/ui primitives (if any) | ~10-20 KB | Need usage audit per primitive |
 | Accept overshoot + document | 0 KB | Honest UX-richness trade-off |
 
 **Recommendation**: option D (accept) for this plan; defer route-level code-split to v1.3 T6.x cleanup or successor plan if bundle becomes prod blocker.
@@ -173,7 +173,7 @@ Optimizations attempted (all committed):
 
 Conclusion: bundle floor is structural at ~188 KB gzip (= +41% vs 134 KB baseline) given:
 - React 19: ~60 KB gzip
-- @loopzero/ui foundation + consumed primitives: ~52 KB gzip
+- @loopzerokit/ui foundation + consumed primitives: ~52 KB gzip
 - Radix peer-deps: ~35 KB gzip
 - Router: ~13 KB gzip
 - Lucide icons: ~3 KB gzip
@@ -181,7 +181,7 @@ Conclusion: bundle floor is structural at ~188 KB gzip (= +41% vs 134 KB baselin
 
 D7 target ≤+30% was set BEFORE consumer measurement. Going below current
 +41% gzip would require:
-- Drop @loopzero/ui composites (UX loss, anula 30 commits of work)
+- Drop @loopzerokit/ui composites (UX loss, anula 30 commits of work)
 - Rewrite against shadcn copy-paste (anula library adoption)
 - Service Worker with HTTP push for vendor caching (significant new infra)
 

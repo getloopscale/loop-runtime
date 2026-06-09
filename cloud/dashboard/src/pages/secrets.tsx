@@ -8,7 +8,7 @@ import {
   PageShell,
   StatusDot,
   Table,
-} from '@loopzero/ui';
+} from '@loopzerokit/ui';
 import { useSetPageTitle } from '@/hooks/use-page-meta';
 import { useRequireAuth } from '@/hooks/use-auth';
 import { useSecrets } from '@/hooks/use-secrets';

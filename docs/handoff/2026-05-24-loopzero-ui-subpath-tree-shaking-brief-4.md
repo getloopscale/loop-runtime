@@ -1,6 +1,6 @@
 # Brief #4: Fix subpath exports so tree-shaking actually works (build pipeline defect)
 
-> **Audience:** the `@loopzero/ui` maintainer team (or a Claude/Codex agent in the `loopzero-ui` repo).
+> **Audience:** the `@loopzerokit/ui` maintainer team (or a Claude/Codex agent in the `loopzero-ui` repo).
 > **Output:** tsup config update + `package.json#exports` migration + 1 ADR + bundle-delta evidence.
 > **Issued by:** LoopZeroCloud dashboard team (consumer), 2026-05-24.
 > **Priority:** MEDIUM — not blocking Phase 0 (already shipped via MEET-ASYNC-AMENDMENT-002 with a 240 KB brotli hard gate that current 178 KB brotli passes). Ship before LoopZeroCloud scales past **6-8 more pages** OR when any other consumer hits the same wall.
@@ -11,12 +11,12 @@
 
 ## TL;DR for the impatient
 
-`@loopzero/ui@0.9.0-next.0` declares dozens of subpath exports (`./alert`, `./button`, `./card`, …) in `package.json#exports`, BUT they ALL resolve to the same `./dist/index.js` (the full barrel). Result: `import { Alert } from '@loopzero/ui/alert'` is **identical** to `import { Alert } from '@loopzero/ui'` for the bundler — both pull in the entire 240 KB minified barrel and rely on tree-shaking to drop unused code, which fails because of barrel re-exports + `sideEffects: ["**/*.css"]`.
+`@loopzerokit/ui@0.9.0-next.0` declares dozens of subpath exports (`./alert`, `./button`, `./card`, …) in `package.json#exports`, BUT they ALL resolve to the same `./dist/index.js` (the full barrel). Result: `import { Alert } from '@loopzerokit/ui/alert'` is **identical** to `import { Alert } from '@loopzerokit/ui'` for the bundler — both pull in the entire 240 KB minified barrel and rely on tree-shaking to drop unused code, which fails because of barrel re-exports + `sideEffects: ["**/*.css"]`.
 
 Empirical impact on LoopZeroCloud dashboard (consumer using ~30 of 116 components):
 
 ```
-Current  @loopzero/ui chunk:  43.05 KB brotli (240.56 KB minified)
+Current  @loopzerokit/ui chunk:  43.05 KB brotli (240.56 KB minified)
 Expected with real subpath:  ~28-33 KB brotli (~150-180 KB minified)
 Savings:                     10-15 KB brotli per consumer
 ```
@@ -29,7 +29,7 @@ The fix is structural — it requires adding tsup `entry` map entries per primit
 
 This brief does NOT add new components. It changes the **publishing pipeline**. Constraints:
 
-- Zero breaking changes to the barrel API — `import { X } from '@loopzero/ui'` keeps working
+- Zero breaking changes to the barrel API — `import { X } from '@loopzerokit/ui'` keeps working
 - Subpath imports must be **smaller**, not just "exist" — verify with bundle-delta evidence
 - Per-component dist files must NOT import each other through the barrel (would defeat tree-shaking)
 - CSS bundling unchanged — `dist/styles.css` + `dist/components.css` remain barrel-level (per-component CSS would explode the network waterfall)
@@ -49,7 +49,7 @@ This brief does NOT add new components. It changes the **publishing pipeline**. 
 import { Card, Button, Avatar, Badge, Alert, ConfirmDialog, DangerZone,
          EmptyState, Input, Select, Table, Toaster, ThemeProvider,
          PlanBadge, UsageMeter, StatusDot, CopyButton, CodeBlock,
-         ProjectCard, violetForge } from '@loopzero/ui';
+         ProjectCard, violetForge } from '@loopzerokit/ui';
 ```
 
 After running `vite build` with manual chunk splitting:
@@ -62,7 +62,7 @@ This 240 KB minified contains **all 116 components**, not just the ~30 the dashb
 
 ### Proof the subpath exports are cosmetic
 
-Inspecting `node_modules/@loopzero/ui/package.json` (relevant excerpt):
+Inspecting `node_modules/@loopzerokit/ui/package.json` (relevant excerpt):
 
 ```json
 {
@@ -77,7 +77,7 @@ Inspecting `node_modules/@loopzero/ui/package.json` (relevant excerpt):
 }
 ```
 
-All subpath entries point to **the same** `./dist/index.js`. There is no per-component dist file. Switching the consumer to `import { Alert } from '@loopzero/ui/alert'` would change the import specifier but produce **byte-identical** bundle output.
+All subpath entries point to **the same** `./dist/index.js`. There is no per-component dist file. Switching the consumer to `import { Alert } from '@loopzerokit/ui/alert'` would change the import specifier but produce **byte-identical** bundle output.
 
 Confirmed by inspecting `dist/`:
 
@@ -113,14 +113,14 @@ export * from './components/primitives/button/index.js';
 // ... 100+ more
 ```
 
-When Vite/Rollup analyzes the consumer's `import { Alert } from '@loopzero/ui'`, it must trace through the entire barrel chain to determine which leaves are actually used. This works **in loopzerory** but breaks in practice because:
+When Vite/Rollup analyzes the consumer's `import { Alert } from '@loopzerokit/ui'`, it must trace through the entire barrel chain to determine which leaves are actually used. This works **in loopzerory** but breaks in practice because:
 
 - `forwardRef<HTMLDivElement, AlertProps>(...)` is treated as a side-effectful call expression by Rollup's conservative analysis
 - Compound components attached via `Object.assign` (`Card.Header = ...`) trigger the bailout
 - Even one `console.log` or `if (process.env...)` inside the barrel chain disables shaking for entire subtrees
 - CSS-in-JS or theme-token imports cascade through the barrel
 
-Empirically: **0 KB** is dropped from the @loopzero/ui chunk regardless of how few components LoopZeroCloud imports.
+Empirically: **0 KB** is dropped from the @loopzerokit/ui chunk regardless of how few components LoopZeroCloud imports.
 
 ---
 
@@ -283,7 +283,7 @@ cd loopzero-ui && pnpm build
 cd ../loopzero/cloud/dashboard && pnpm link ../../../loopzero-ui
 
 # Switch top 10 imports to subpath (manual edit in 13 page files)
-sed -i 's|import { Alert } from "@loopzero/ui"|import { Alert } from "@loopzero/ui/alert"|g' src/**/*.tsx
+sed -i 's|import { Alert } from "@loopzerokit/ui"|import { Alert } from "@loopzerokit/ui/alert"|g' src/**/*.tsx
 # ... repeat for top 10 ...
 
 # Measure
@@ -311,8 +311,8 @@ If savings < 8 KB brotli, the migration is **not worth shipping** — investigat
 - [ ] `dist/primitives/<name>/index.js` exists for every primitive folder in `src/components/primitives/`
 - [ ] `dist/composites/<name>/index.js` exists for every composite folder in `src/components/composites/`
 - [ ] `package.json#exports` entries point to per-component dist files (NO duplicates pointing to `./dist/index.js`)
-- [ ] `import { X } from '@loopzero/ui'` (barrel) still works identically
-- [ ] `import { X } from '@loopzero/ui/<x>'` (subpath) works and resolves to smaller dist file
+- [ ] `import { X } from '@loopzerokit/ui'` (barrel) still works identically
+- [ ] `import { X } from '@loopzerokit/ui/<x>'` (subpath) works and resolves to smaller dist file
 - [ ] **Bundle-delta evidence**: LoopZeroCloud `loopzero-ui` chunk drops ≥10 KB brotli after switching its top 10 imports to subpath
 - [ ] `pnpm test` passes — no test regressions
 - [ ] `pnpm typecheck` passes — types still resolve via subpath
@@ -332,7 +332,7 @@ Based on Brief #1/#2/#3 quality bar:
 
 - ❌ Adding new subpath entries to `package.json#exports` WITHOUT corresponding dist files (the current defect — exports pretending to work)
 - ❌ Per-component CSS bundles (explodes network waterfall; CSS stays barrel)
-- ❌ Removing the main barrel `import { X } from '@loopzero/ui'` (breaking change; many consumers, including LoopZeroCloud, use it)
+- ❌ Removing the main barrel `import { X } from '@loopzerokit/ui'` (breaking change; many consumers, including LoopZeroCloud, use it)
 - ❌ Vendoring `react` / `react-dom` / `jsx-runtime` into per-component bundles (must stay `external`)
 - ❌ Per-component re-export back through the barrel inside primitive `index.ts` (e.g., `export * from '../../../index.js'`) — defeats the purpose
 - ❌ Shipping without bundle-delta evidence — "subpath works" is not the goal; "subpath measurably reduces consumer bundle" is
@@ -347,15 +347,15 @@ LoopZeroCloud's current state per `MEET-ASYNC-AMENDMENT-2026-05-24-002`:
 ```
 Current TOTAL initial JS:  178.28 KB brotli
 Hard gate (CI):            240.00 KB brotli  (26% headroom)
-Per-chunk @loopzero/ui:      43.05 KB brotli  / cap 50 KB  (14% headroom)
+Per-chunk @loopzerokit/ui:      43.05 KB brotli  / cap 50 KB  (14% headroom)
 ```
 
 We have **enough headroom** to ship Phase 0 of the consumer migration WITHOUT the subpath fix. The fix becomes a hard requirement when:
 
 - LoopZeroCloud adds **6-8 more pages** (each ~2-5 KB brotli of incremental loopzero-ui surface) → approaches the per-chunk cap
-- A second consumer adopts @loopzero/ui and asks the same question
+- A second consumer adopts @loopzerokit/ui and asks the same question
 - Any consumer reports `pnpm install` time complaints (per-component subpaths SHRINK `node_modules` a bit)
-- @loopzero/ui itself adds Tier 2 components (charts, code editor, rich text) that would bloat the barrel beyond reasonable per-route inclusion
+- @loopzerokit/ui itself adds Tier 2 components (charts, code editor, rich text) that would bloat the barrel beyond reasonable per-route inclusion
 
 Until then, the existing 240 KB hard gate at the consumer side catches regressions.
 
@@ -364,7 +364,7 @@ Until then, the existing 240 KB hard gate at the consumer side catches regressio
 ## Related work + references
 
 - LoopZeroCloud MEET amendment: `MEET-ASYNC-AMENDMENT-2026-05-24-002-dashboard-bundle-gate-redefinition.md` § Follow-up #2 (this brief is the named follow-up)
-- LoopZeroCloud size-limit config: `cloud/dashboard/package.json#size-limit` (9-entry gate including `@loopzero/ui` cap)
+- LoopZeroCloud size-limit config: `cloud/dashboard/package.json#size-limit` (9-entry gate including `@loopzerokit/ui` cap)
 - Existing correct pattern in `tsup.config.ts`: `whiteboard/index`, `slide/index`, `slide/plugins/*`, `slide-deck/index`
 - Industry precedents for per-component subpath:
   - `@radix-ui/react-*` — each primitive is its own published package
@@ -383,7 +383,7 @@ Used:  Avatar, Badge, Alert, Button, Card, CodeBlock, ConfirmDialog,
        type PlanTier, type UsageMetric, type StatusKind
        (~30 distinct exports across 13 dashboard pages)
 
-NOT used (86+ components in the @loopzero/ui catalog):
+NOT used (86+ components in the @loopzerokit/ui catalog):
        Whiteboard, Slide*, AgentComposer, AgentEditor, ChatComposer,
        all other AI-agent primitives + composites — these are pulled
        INTO the barrel for nothing.
@@ -395,10 +395,10 @@ The savings come from the 86+ unused components being correctly dropped, not fro
 
 ## What sponsor (LoopZero team) ratifying this brief would mean
 
-If the @loopzero/ui maintainer accepts this brief and ships a `0.10.0-next.0` (or `0.9.1`) release with the fix:
+If the @loopzerokit/ui maintainer accepts this brief and ships a `0.10.0-next.0` (or `0.9.1`) release with the fix:
 
 1. LoopZeroCloud opens a follow-up plan to migrate its 30 imports to subpath form
-2. Bundle gate `cap 50 KB → cap 35 KB` for the @loopzero/ui chunk in `cloud/dashboard/package.json#size-limit`
+2. Bundle gate `cap 50 KB → cap 35 KB` for the @loopzerokit/ui chunk in `cloud/dashboard/package.json#size-limit`
 3. Total hard gate `240 KB → 220 KB` (matching the original Sponsor "ideal" before MEET-001 / MEET-002 floor)
 4. CHANGELOG entry crediting the upstream fix
 5. Closes follow-up #2 in MEET-002 + closes the only remaining LOC-style "wish I could shrink this" gap from MEET-001
@@ -411,9 +411,9 @@ If the maintainer pushes back on the migration cost ("100+ primitives = lots of 
 
 | Brief | Subject | Status |
 |-------|---------|--------|
-| #1 (2026-05-23) | 8 missing primitives | ✅ shipped in `@loopzero/ui@0.7.0` |
-| #2 (2026-05-23) | 4 more primitives (Table, Topnav, CodeBlock, …) | ✅ shipped in `@loopzero/ui@0.8.0-next.0` |
-| #3 (2026-05-23) | 2 deferred primitives (Alert, Pagination) | ✅ shipped in `@loopzero/ui@0.9.0-next.0` |
+| #1 (2026-05-23) | 8 missing primitives | ✅ shipped in `@loopzerokit/ui@0.7.0` |
+| #2 (2026-05-23) | 4 more primitives (Table, Topnav, CodeBlock, …) | ✅ shipped in `@loopzerokit/ui@0.8.0-next.0` |
+| #3 (2026-05-23) | 2 deferred primitives (Alert, Pagination) | ✅ shipped in `@loopzerokit/ui@0.9.0-next.0` |
 | #4 (this brief, 2026-05-24) | Subpath exports tree-shaking fix | ⏳ proposed |
 
 The previous 3 briefs added **features** to fill LoopZeroCloud's component gaps. This brief fixes a **publishing pipeline defect** that becomes visible once a consumer integrates and measures bundles. Same quality bar, different surface.
@@ -432,7 +432,7 @@ fix(build): emit per-component dist files so subpath exports actually tree-shake
   point at per-component dist files instead of all aliasing the barrel
 - Bundle-delta evidence: LoopZeroCloud dashboard loopzero-ui chunk drops X KB brotli
   after migrating top 10 imports to subpath form
-- Barrel `import { X } from '@loopzero/ui'` remains for back-compat
+- Barrel `import { X } from '@loopzerokit/ui'` remains for back-compat
 - See @loopzero/loopzero/docs/handoff/2026-05-24-loopzero-ui-subpath-tree-shaking-brief-4.md
 ```
 
@@ -450,7 +450,7 @@ If split (recommended for review):
 ## Questions for the maintainer to answer in the PR description
 
 - Did `splitting: true` cause any new chunks to leak React internals? (Should not — `external: ["react"]` prevents)
-- How does `dts: true` interact with per-component entries? (tsup should emit per-component `.d.ts` automatically; verify type resolution from `'@loopzero/ui/alert'` works)
+- How does `dts: true` interact with per-component entries? (tsup should emit per-component `.d.ts` automatically; verify type resolution from `'@loopzerokit/ui/alert'` works)
 - Any primitives whose `index.ts` does cross-primitive imports (e.g., `card/index.ts` importing from `button/index.ts`)? Those need to be cleaned up OR resolved via shared chunk
 - Did `pnpm pack` size of the published `.tgz` grow significantly? (Acceptable trade-off but worth measuring)
 - Any consumers other than LoopZeroCloud + LoopZeroKit that need to be told about the new subpath structure?

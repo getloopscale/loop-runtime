@@ -1,6 +1,6 @@
 import { Link, useParams } from 'react-router-dom';
 import { Activity, ArrowLeft, Loader2 } from 'lucide-react';
-import { Button, EmptyState, PageShell } from '@loopzero/ui';
+import { Button, EmptyState, PageShell } from '@loopzerokit/ui';
 import { useSetPageTitle } from '@/hooks/use-page-meta';
 import { useRequireAuth } from '@/hooks/use-auth';
 import { useProjectStatus } from '@/hooks/use-project-status';
