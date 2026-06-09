@@ -131,6 +131,13 @@ func (h *MemoryHandler) List(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 
+	// red-team-full-system-fixes-cycle-1 T4.1 / F5 (LOW): validate from <= to
+	// when both are present. Strict > so same-day (from == to) is valid (EC-6).
+	if opts.From != "" && opts.To != "" && opts.From > opts.To {
+		writeError(w, http.StatusUnprocessableEntity, "INVALID_DATE_RANGE", `"from" must not be after "to"`)
+		return
+	}
+
 	result, err := h.client.List(r.Context(), user.Subject, opts)
 	if err != nil {
 		h.logger.Warn("memory list: upstream failed", "error", err, "subject", user.Subject)
