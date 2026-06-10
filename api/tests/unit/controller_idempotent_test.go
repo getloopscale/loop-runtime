@@ -32,7 +32,7 @@ func TestController_IdempotentTransitions(t *testing.T) {
 			TenantID:    "tn-idem",
 			ProjectID:   "proj-idem",
 			Environment: "production",
-			Status:      string(statemachine.BuildQueued),
+			Status:      string(statemachine.BPhQueued),
 		},
 	}
 
@@ -40,8 +40,8 @@ func TestController_IdempotentTransitions(t *testing.T) {
 		builds: []services.StaleBuild{
 			{
 				ID:    "build-idem-1",
-				State: statemachine.BuildQueued,
-				Event: statemachine.BuildQueueTimeout,
+				State: statemachine.BPhQueued,
+				Event: statemachine.BPEventQueueTimeout,
 			},
 		},
 	}
@@ -62,7 +62,7 @@ func TestController_IdempotentTransitions(t *testing.T) {
 	if reaped1 != 1 {
 		t.Fatalf("first reap: expected 1 reaped, got %d", reaped1)
 	}
-	if buildStore.builds["build-idem-1"].Status != string(statemachine.BuildFailed) {
+	if buildStore.builds["build-idem-1"].Status != string(statemachine.BPhFailed) {
 		t.Fatalf("first reap: expected FAILED, got %s", buildStore.builds["build-idem-1"].Status)
 	}
 
@@ -76,7 +76,7 @@ func TestController_IdempotentTransitions(t *testing.T) {
 
 	// Assert: state is still FAILED, not double-transitioned
 	finalStatus := buildStore.builds["build-idem-1"].Status
-	if finalStatus != string(statemachine.BuildFailed) {
+	if finalStatus != string(statemachine.BPhFailed) {
 		t.Errorf("after double reap: expected FAILED, got %s", finalStatus)
 	}
 }

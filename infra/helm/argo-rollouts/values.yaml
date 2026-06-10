@@ -1,0 +1,91 @@
+# SPDX-License-Identifier: Apache-2.0
+# Argo Rollouts hardened values per
+# docs/plans/argo-rollouts-progressive-delivery-plan.md T0.1.
+#
+# Hardening:
+#   - Dashboard DISABLED (attack surface — same policy as Chaos Mesh)
+#   - PSA restricted (runAsNonRoot, drop ALL caps, seccomp RuntimeDefault)
+#   - Resource limits set to be conservative (controller is lightweight)
+#   - Traefik traffic router plugin enabled (D1+D5 of plan)
+
+argo-rollouts:
+  # Controller deployment — manages Rollout/AnalysisRun/Experiment lifecycle.
+  controller:
+    # Replicas: 1 is enough for local dev; production tunes via separate values.
+    replicas: 1
+
+    # F-16 (2026-05-07): Argo Rollouts 1.7.2 defaults the Traefik traffic
+    # router queries to the LEGACY traefik.containo.us API group despite
+    # docs/features/traffic-management/traefik.md claiming v3/traefik.io
+    # is the default (the docs describe the LATEST master, not 1.7.x).
+    # LoopZero runs Traefik v3 which only serves traefik.io. Without these
+    # flags the controller fails with 'the server could not find the
+    # requested resource' on TrafficRouting reconcile.
+    extraArgs:
+      - --traefik-api-group=traefik.io
+      - --traefik-api-version=v1alpha1
+
+    # Resource limits — controller is lightweight unless many concurrent
+    # rollouts. With ~50 tenants × 5 apps = 250 rollouts max, 250m CPU
+    # / 256Mi memory is plenty.
+    resources:
+      requests:
+        cpu: 25m
+        memory: 64Mi
+      limits:
+        cpu: 250m
+        memory: 256Mi
+
+    # Traffic router plugins — D1+D5 of plan.
+    #
+    # F-16 reverted (2026-05-07): Argo Rollouts 1.7+ has NATIVE Traefik
+    # integration that supports the modern traefik.io API group BY
+    # DEFAULT (per official docs/features/traffic-management/traefik.md).
+    # Traefik v3 works out of the box; only Traefik v2 (legacy
+    # traefik.containo.us) requires explicit controller flags.
+    # No external plugin needed for our deployment (Traefik v3).
+    #
+    # trafficRouterPlugins is reserved for OTHER external plugins in
+    # the future (custom router implementations, third-party services).
+    trafficRouterPlugins: []
+
+    # Hardened pod security (PSA restricted compliance).
+    podSecurityContext:
+      runAsNonRoot: true
+      runAsUser: 999
+      seccompProfile:
+        type: RuntimeDefault
+
+    securityContext:
+      allowPrivilegeEscalation: false
+      capabilities:
+        drop: ["ALL"]
+      readOnlyRootFilesystem: true
+
+  # Dashboard DISABLED (same policy as Chaos Mesh: attack surface
+  # not justified for LoopZero's deployment model). All status/info accessed
+  # via kubectl + loopzero CLI, never via dashboard.
+  dashboard:
+    enabled: false
+
+  # InstallCRDs — chart manages its own CRDs. Workload cluster has them.
+  installCRDs: true
+
+  # CRDs in chart (cleaner than separate CRDs install).
+  crds:
+    install: true
+
+  # Notifications — disabled. LoopZero SSE pipeline emits canary events
+  # (rollout.step / rollout.aborted) via API, not Argo notifications.
+  notifications:
+    enabled: false
+
+  # ServiceMonitor for Prometheus scraping the controller metrics.
+  # The plan uses Prometheus for canary AnalysisTemplate; controller
+  # metrics enable observability of rollout outcomes.
+  controllerMetrics:
+    enabled: true
+    serviceMonitor:
+      enabled: false  # ServiceMonitor created separately in monitoring layer
+
+  # Keep image pinned via chart version. No imageOverride.

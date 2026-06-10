@@ -1,0 +1,123 @@
+# T0.2 Cenário B POC — quality-gate WorkflowTemplate.
+# Per ADR-2026-05-27-T0.2-RATIFIED D2: ONE parametrized template,
+# NOT per-gate proliferation.
+#
+# Triggered by Sensor (sensor-pr-trigger.yaml) on Gitea PR webhook.
+# Each gate runs in parallel where independent: true; sequential
+# gates depend on `all-independent-gates-complete` aggregator.
+#
+# Exit handler posts Gitea PR status check name = "quality" (D4).
+apiVersion: argoproj.io/v1alpha1
+kind: WorkflowTemplate
+metadata:
+  name: quality-gate
+  namespace: {{ .Values.namespace }}
+  labels:
+    app.kubernetes.io/name: loopzero-ci-workflows
+    app.kubernetes.io/managed-by: {{ .Release.Service | quote }}
+    loopzero.io/component: ci
+spec:
+  serviceAccountName: {{ .Values.serviceAccountName }}
+  entrypoint: run-gates
+  activeDeadlineSeconds: {{ .Values.timeouts.workflowTotalSeconds }}
+  # Per-Workflow params populated by Sensor from PR event payload.
+  arguments:
+    parameters:
+      - name: pr-number
+        value: ""
+      - name: commit-sha
+        value: ""
+      - name: head-branch
+        value: ""
+      - name: base-branch
+        value: "main"
+  # Exit handler runs ALWAYS (success or failure) — posts Gitea PR
+  # status check (Phase 4, T4.1, EC-3 absorbed). Mounted ConfigMap
+  # provides the posting script.
+  onExit: post-status
+  templates:
+    # DAG entrypoint — runs all independent gates in parallel
+    - name: run-gates
+      dag:
+        tasks:
+          {{- range $i, $gate := .Values.gates }}
+          - name: gate-{{ $gate.gateName }}
+            template: run-single-gate
+            arguments:
+              parameters:
+                - name: gate-name
+                  value: {{ $gate.gateName | quote }}
+                {{- if $gate.extraArgs }}
+                - name: extra-args
+                  value: {{ join " " $gate.extraArgs | quote }}
+                {{- else }}
+                - name: extra-args
+                  value: ""
+                {{- end }}
+          {{- end }}
+
+    # Individual gate runner — invoked per gate
+    - name: run-single-gate
+      inputs:
+        parameters:
+          - name: gate-name
+          - name: extra-args
+      activeDeadlineSeconds: {{ .Values.timeouts.gateStepSeconds }}
+      # continueOn.failed allows the aggregator to see ALL gate results
+      # rather than short-circuiting on first failure (EC-2 + EC-3 of plan).
+      # Final post-status step decides overall PASS/FAIL from results.
+      container:
+        image: "{{ .Values.loopzeroOpsImage.repository }}:{{ .Values.loopzeroOpsImage.tag }}"
+        imagePullPolicy: {{ .Values.loopzeroOpsImage.pullPolicy }}
+        command: ["/usr/local/bin/loopzero-ops"]
+        args:
+          - quality
+          - "{{ "{{inputs.parameters.gate-name}}" }}"
+        resources:
+          {{- toYaml .Values.resources | nindent 10 }}
+        env:
+          - name: HOME
+            value: /tmp
+          - name: GATE_NAME
+            value: "{{ "{{inputs.parameters.gate-name}}" }}"
+          - name: EXTRA_ARGS
+            value: "{{ "{{inputs.parameters.extra-args}}" }}"
+
+    # Exit handler — posts Gitea PR status check.
+    # Reads Workflow status + posts to Gitea Checks API.
+    - name: post-status
+      container:
+        image: alpine/curl:latest
+        command: ["/bin/sh", "-c"]
+        args:
+          - |
+            # Source: ConfigMap-mounted script (configmap-status-script.yaml)
+            bash /scripts/post-status.sh
+        env:
+          - name: GITEA_API_BASE
+            value: "http://gitea-http.loopzero-system.svc.cluster.local:3000"
+          - name: GITEA_TOKEN
+            valueFrom:
+              secretKeyRef:
+                name: {{ .Values.gitea.apiTokenSecretRef }}
+                key: {{ .Values.gitea.apiTokenSecretKey }}
+          - name: PR_COMMIT_SHA
+            value: "{{ "{{workflow.parameters.commit-sha}}" }}"
+          - name: PR_NUMBER
+            value: "{{ "{{workflow.parameters.pr-number}}" }}"
+          - name: WORKFLOW_STATUS
+            value: "{{ "{{workflow.status}}" }}"
+          - name: STATUS_CONTEXT
+            value: {{ .Values.prStatusContext | quote }}
+          - name: ARGO_UI_URL
+            # Used in PR status "details" link. Operator configures domain
+            # via Helm values override (.Values.argoUiDomain) post-deployment.
+            value: {{ printf "https://argo-workflows.%s" (.Values.argoUiDomain | default "loopzero.local") | quote }}
+        volumeMounts:
+          - name: status-script
+            mountPath: /scripts
+      volumes:
+        - name: status-script
+          configMap:
+            name: ci-status-script
+            defaultMode: 0755

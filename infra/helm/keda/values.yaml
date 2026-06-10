@@ -69,14 +69,48 @@ keda:
 
   # ---------------------------------------------------------------------------
   # Security context (non-root, read-only filesystem)
+  # INF-G08 + plan ADR D7: hardened defaults uniformly across pod-bearing charts.
   # ---------------------------------------------------------------------------
   podSecurityContext:
     operator:
       runAsNonRoot: true
+      runAsUser: 1000
+      runAsGroup: 1000
+      seccompProfile:
+        type: RuntimeDefault
     metricServer:
       runAsNonRoot: true
+      runAsUser: 1000
+      seccompProfile:
+        type: RuntimeDefault
     webhooks:
       runAsNonRoot: true
+      runAsUser: 1000
+      seccompProfile:
+        type: RuntimeDefault
+
+  securityContext:
+    operator:
+      readOnlyRootFilesystem: true
+      allowPrivilegeEscalation: false
+      runAsNonRoot: true
+      capabilities:
+        drop:
+          - ALL
+    metricServer:
+      readOnlyRootFilesystem: true
+      allowPrivilegeEscalation: false
+      runAsNonRoot: true
+      capabilities:
+        drop:
+          - ALL
+    webhooks:
+      readOnlyRootFilesystem: true
+      allowPrivilegeEscalation: false
+      runAsNonRoot: true
+      capabilities:
+        drop:
+          - ALL
 
   # ---------------------------------------------------------------------------
   # Prometheus metrics

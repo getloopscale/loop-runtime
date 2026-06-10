@@ -4,6 +4,7 @@
 package circuitbreaker
 
 import (
+	"context"
 	"errors"
 	"testing"
 	"time"
@@ -136,5 +137,129 @@ func TestBreaker_StateString(t *testing.T) {
 		if got := tt.state.String(); got != tt.expected {
 			t.Errorf("State(%d).String() = %q, want %q", tt.state, got, tt.expected)
 		}
+	}
+}
+
+// ---------------------------------------------------------------------------
+// T2.1 — Execute[T] generic + context-aware (ADR-0031 amended).
+// ---------------------------------------------------------------------------
+
+func TestExecute_ReturnsTypedResultOnSuccess(t *testing.T) {
+	cb := New(Config{Name: "exec-typed", OpenThreshold: 3, RetryInterval: time.Second}, nil)
+	got, err := Execute(t.Context(), cb, func(ctx context.Context) (int, error) {
+		return 42, nil
+	})
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if got != 42 {
+		t.Errorf("Execute returned %d, want 42", got)
+	}
+	if cb.State() != Closed {
+		t.Errorf("CB should remain Closed after success; got %v", cb.State())
+	}
+}
+
+func TestExecute_PropagatesContextCancellation(t *testing.T) {
+	cb := New(Config{Name: "exec-ctx", OpenThreshold: 3, RetryInterval: time.Second}, nil)
+	ctx, cancel := context.WithCancel(t.Context())
+	cancel() // pre-cancel before Execute
+
+	var fnRanWithCancelledCtx bool
+	_, err := Execute(ctx, cb, func(ctx context.Context) (string, error) {
+		if ctx.Err() != nil {
+			fnRanWithCancelledCtx = true
+			return "", ctx.Err()
+		}
+		return "ok", nil
+	})
+	if err == nil {
+		t.Fatal("expected context.Canceled error")
+	}
+	if !errors.Is(err, context.Canceled) {
+		t.Errorf("expected context.Canceled, got %v", err)
+	}
+	if !fnRanWithCancelledCtx {
+		t.Error("fn should observe cancelled ctx")
+	}
+}
+
+func TestExecute_DefaultExcludesContextCanceledFromFailures(t *testing.T) {
+	cb := New(Config{Name: "exec-iexc", OpenThreshold: 2, RetryInterval: time.Second}, nil)
+
+	// Simulate 5 cancellations (would saturate w/o exclusion).
+	for i := 0; i < 5; i++ {
+		ctx, cancel := context.WithCancel(t.Context())
+		cancel()
+		_, _ = Execute(ctx, cb, func(ctx context.Context) (struct{}, error) {
+			return struct{}{}, ctx.Err()
+		})
+	}
+	if cb.State() != Closed {
+		t.Errorf("default IsExcluded must drop context.Canceled; CB state=%v", cb.State())
+	}
+}
+
+func TestExecute_DefaultExcludesDeadlineExceeded(t *testing.T) {
+	cb := New(Config{Name: "exec-deadline", OpenThreshold: 2, RetryInterval: time.Second}, nil)
+	for i := 0; i < 5; i++ {
+		ctx, cancel := context.WithDeadline(t.Context(), time.Now())
+		_, _ = Execute(ctx, cb, func(ctx context.Context) (struct{}, error) {
+			return struct{}{}, context.DeadlineExceeded
+		})
+		cancel()
+	}
+	if cb.State() != Closed {
+		t.Errorf("default IsExcluded must drop context.DeadlineExceeded; CB state=%v", cb.State())
+	}
+}
+
+func TestExecute_GenuineFailuresStillOpenCircuit(t *testing.T) {
+	cb := New(Config{Name: "exec-fails", OpenThreshold: 3, RetryInterval: time.Second}, nil)
+	for i := 0; i < 3; i++ {
+		_, _ = Execute(t.Context(), cb, func(ctx context.Context) (int, error) {
+			return 0, errTest
+		})
+	}
+	if cb.State() != Open {
+		t.Errorf("3 genuine failures should open CB; got %v", cb.State())
+	}
+}
+
+func TestExecute_RejectsWhenCircuitIsOpen(t *testing.T) {
+	cb := New(Config{Name: "exec-reject", OpenThreshold: 1, RetryInterval: time.Hour}, nil)
+	// Force open
+	_, _ = Execute(t.Context(), cb, func(ctx context.Context) (int, error) { return 0, errTest })
+	if cb.State() != Open {
+		t.Fatalf("CB must be Open before next Execute, got %v", cb.State())
+	}
+
+	called := false
+	_, err := Execute(t.Context(), cb, func(ctx context.Context) (int, error) {
+		called = true
+		return 1, nil
+	})
+	if err == nil || !errors.Is(err, ErrCircuitOpen) {
+		t.Fatalf("expected ErrCircuitOpen, got %v", err)
+	}
+	if called {
+		t.Error("fn must NOT run when CB is Open")
+	}
+}
+
+func TestExecute_HonorsCustomIsExcluded(t *testing.T) {
+	custom := errors.New("custom-soft-error")
+	cb := New(Config{
+		Name:          "exec-custom",
+		OpenThreshold: 2,
+		RetryInterval: time.Second,
+		IsExcluded:    func(err error) bool { return errors.Is(err, custom) },
+	}, nil)
+
+	for i := 0; i < 5; i++ {
+		_, _ = Execute(t.Context(), cb, func(ctx context.Context) (int, error) { return 0, custom })
+	}
+	if cb.State() != Closed {
+		t.Errorf("custom IsExcluded must drop the error; CB state=%v", cb.State())
 	}
 }

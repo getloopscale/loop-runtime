@@ -8,6 +8,7 @@ import (
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
+	"strings"
 	"sync/atomic"
 	"testing"
 	"time"
@@ -179,6 +180,10 @@ func TestEnsureRobotAccount_CreatesNewRobot(t *testing.T) {
 	var postCalled atomic.Int32
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		switch {
+		case r.Method == http.MethodGet && strings.HasPrefix(r.URL.Path, "/api/v2.0/projects/") && strings.HasSuffix(r.URL.Path, "/robots"):
+			w.Header().Set("Content-Type", "application/json")
+			_, _ = w.Write([]byte(`[]`))
+
 		case r.Method == http.MethodGet && r.URL.Path == "/api/v2.0/robots":
 			// No existing robot.
 			w.Header().Set("Content-Type", "application/json")
@@ -202,7 +207,7 @@ func TestEnsureRobotAccount_CreatesNewRobot(t *testing.T) {
 				"name":        "robot$build-acme",
 				"secret":      "robot-secret-token",
 				"creation_time": time.Now().Format(time.RFC3339),
-				"expires_at":   int64(time.Now().Add(24 * time.Hour).Unix()),
+				"expires_at":   time.Now().Add(24 * time.Hour).Unix(),
 			}
 			_ = json.NewEncoder(w).Encode(resp)
 
@@ -238,6 +243,10 @@ func TestEnsureRobotAccount_ReturnsExistingIfNotExpired(t *testing.T) {
 	expiresAt := time.Now().Add(12 * time.Hour).Unix()
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		switch {
+		case r.Method == http.MethodGet && strings.HasPrefix(r.URL.Path, "/api/v2.0/projects/") && strings.HasSuffix(r.URL.Path, "/robots"):
+			w.Header().Set("Content-Type", "application/json")
+			_, _ = w.Write([]byte(`[]`))
+
 		case r.Method == http.MethodGet && r.URL.Path == "/api/v2.0/robots":
 			// Existing robot, not expired.
 			w.Header().Set("Content-Type", "application/json")
@@ -290,6 +299,10 @@ func TestEnsureRobotAccount_RecreatesWhenNearExpiry(t *testing.T) {
 	expiresAt := time.Now().Add(30 * time.Minute).Unix()
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		switch {
+		case r.Method == http.MethodGet && strings.HasPrefix(r.URL.Path, "/api/v2.0/projects/") && strings.HasSuffix(r.URL.Path, "/robots"):
+			w.Header().Set("Content-Type", "application/json")
+			_, _ = w.Write([]byte(`[]`))
+
 		case r.Method == http.MethodGet && r.URL.Path == "/api/v2.0/robots":
 			w.Header().Set("Content-Type", "application/json")
 			resp := []map[string]interface{}{
@@ -313,7 +326,7 @@ func TestEnsureRobotAccount_RecreatesWhenNearExpiry(t *testing.T) {
 				"id":         10,
 				"name":       "robot$build-acme",
 				"secret":     "refreshed-secret",
-				"expires_at": int64(time.Now().Add(24 * time.Hour).Unix()),
+				"expires_at": time.Now().Add(24 * time.Hour).Unix(),
 			}
 			_ = json.NewEncoder(w).Encode(resp)
 
@@ -350,6 +363,10 @@ func TestDeleteRobotAccount_SendsDeleteRequest(t *testing.T) {
 	var deleteCalled atomic.Int32
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		switch {
+		case r.Method == http.MethodGet && strings.HasPrefix(r.URL.Path, "/api/v2.0/projects/") && strings.HasSuffix(r.URL.Path, "/robots"):
+			w.Header().Set("Content-Type", "application/json")
+			_, _ = w.Write([]byte(`[]`))
+
 		case r.Method == http.MethodGet && r.URL.Path == "/api/v2.0/robots":
 			w.Header().Set("Content-Type", "application/json")
 			resp := []map[string]interface{}{
@@ -381,6 +398,10 @@ func TestDeleteRobotAccount_SendsDeleteRequest(t *testing.T) {
 func TestDeleteRobotAccount_NotFoundIsIdempotent(t *testing.T) {
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		switch {
+		case r.Method == http.MethodGet && strings.HasPrefix(r.URL.Path, "/api/v2.0/projects/") && strings.HasSuffix(r.URL.Path, "/robots"):
+			w.Header().Set("Content-Type", "application/json")
+			_, _ = w.Write([]byte(`[]`))
+
 		case r.Method == http.MethodGet && r.URL.Path == "/api/v2.0/robots":
 			w.Header().Set("Content-Type", "application/json")
 			_, _ = w.Write([]byte(`[]`))
@@ -483,6 +504,11 @@ func TestEnsureProject_RespectsContextCancellation(t *testing.T) {
 func TestEnsureRobotAccount_PullOnlyPermissions(t *testing.T) {
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		switch {
+		// CHG-002b 2026-04-28 — project-scoped robot list (preferred path).
+		case r.Method == http.MethodGet && strings.HasPrefix(r.URL.Path, "/api/v2.0/projects/") && strings.HasSuffix(r.URL.Path, "/robots"):
+			w.Header().Set("Content-Type", "application/json")
+			_, _ = w.Write([]byte(`[]`))
+
 		case r.Method == http.MethodGet && r.URL.Path == "/api/v2.0/robots":
 			w.Header().Set("Content-Type", "application/json")
 			_, _ = w.Write([]byte(`[]`))
@@ -516,7 +542,7 @@ func TestEnsureRobotAccount_PullOnlyPermissions(t *testing.T) {
 				"id":         1,
 				"name":       "robot$pull-acme",
 				"secret":     "pull-secret",
-				"expires_at": int64(time.Now().Add(24 * time.Hour).Unix()),
+				"expires_at": time.Now().Add(24 * time.Hour).Unix(),
 			})
 
 		default:

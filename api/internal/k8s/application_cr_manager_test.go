@@ -75,6 +75,56 @@ func TestBuildLoopZeroApplicationCR(t *testing.T) {
 	}
 }
 
+// Audit gap M08 #10 / §6.C.1 regression: when the caller supplies a
+// CorrelationID, the builder must emit it as the `loopzero.io/correlation-id`
+// metadata annotation. The operator reconcile reads this back into the
+// reconcile ctx so audit_log rows + structured logs trace back to the
+// originating HTTP request.
+func TestBuildLoopZeroApplicationCR_PropagatesCorrelationID(t *testing.T) {
+	const wantID = "11111111-2222-3333-4444-555555555555"
+	cr := buildLoopZeroApplicationCR("loopzero-system", LoopZeroApplicationInput{
+		TenantID:      "tn-loopzero",
+		Project:       "my-project",
+		Environment:   "production",
+		AppName:       "api",
+		ServiceName:   "api",
+		ServicePort:   3001,
+		CorrelationID: wantID,
+	})
+
+	annotations := cr.GetAnnotations()
+	if annotations == nil {
+		t.Fatal("expected annotations map populated when CorrelationID is supplied")
+	}
+	got, ok := annotations["loopzero.io/correlation-id"]
+	if !ok {
+		t.Errorf("expected annotation loopzero.io/correlation-id to be set; got keys=%v", annotations)
+	}
+	if got != wantID {
+		t.Errorf("annotation loopzero.io/correlation-id = %q, want %q", got, wantID)
+	}
+}
+
+// Inverse: an empty CorrelationID must NOT emit the annotation. Storing
+// "loopzero.io/correlation-id: ''" would pollute the CR + confuse operator-side
+// readers that interpret presence-of-annotation as "I have a trace context".
+func TestBuildLoopZeroApplicationCR_OmitsAnnotationWhenCorrelationEmpty(t *testing.T) {
+	cr := buildLoopZeroApplicationCR("loopzero-system", LoopZeroApplicationInput{
+		TenantID:      "tn-loopzero",
+		Project:       "my-project",
+		Environment:   "production",
+		AppName:       "api",
+		ServiceName:   "api",
+		ServicePort:   3001,
+		CorrelationID: "", // explicit empty
+	})
+
+	annotations := cr.GetAnnotations()
+	if _, has := annotations["loopzero.io/correlation-id"]; has {
+		t.Errorf("expected NO loopzero.io/correlation-id annotation when CorrelationID is empty; got annotations=%v", annotations)
+	}
+}
+
 func TestBuildLoopZeroApplicationCR_DefaultPort(t *testing.T) {
 	cr := buildLoopZeroApplicationCR("loopzero-system", LoopZeroApplicationInput{
 		TenantID:    "tn-loopzero",

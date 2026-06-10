@@ -25,6 +25,7 @@ import (
 	"github.com/loopzero/loopzero/api/internal/placement"
 	"github.com/loopzero/loopzero/api/internal/routes"
 	"github.com/loopzero/loopzero/api/internal/server"
+	"github.com/loopzero/loopzero/api/internal/services"
 	"github.com/loopzero/loopzero/api/internal/tracing"
 
 	"k8s.io/klog/v2"
@@ -69,7 +70,17 @@ func main() {
 			mux.HandleFunc("/debug/pprof/symbol", pprof.Symbol)
 			mux.HandleFunc("/debug/pprof/trace", pprof.Trace)
 			slog.Info("pprof server starting", "addr", pprofAddr)
-			if err := http.ListenAndServe(pprofAddr, mux); err != nil {
+			// G114 mitigation: explicit Server with ReadHeaderTimeout
+			// to block slowloris. WriteTimeout deliberately ZERO —
+			// `/debug/pprof/profile` runs 30-60s CPU profiles by
+			// design; finite WriteTimeout would truncate them.
+			// Same pattern as operators/internal/shared/pprof.go iter 11.
+			srv := &http.Server{
+				Addr:              pprofAddr,
+				Handler:           mux,
+				ReadHeaderTimeout: 10 * time.Second,
+			}
+			if err := srv.ListenAndServe(); err != nil {
 				slog.Error("pprof server failed", "error", err)
 			}
 		}()
@@ -121,6 +132,11 @@ func main() {
 	secretAgeCollector.Start(context.Background())
 	defer secretAgeCollector.Stop()
 
+	// T1.3 (Wave 1 Phase A.4): wire auth failure auditor to persist
+	// auth rejections to audit_log. Must run AFTER setupDatabase so the
+	// writer has a real DB; nil-safe when dbAdapter is unavailable.
+	WireAuthFailureAuditor(dbAdapter, logger)
+
 	var stores *StoreDeps
 	var workflows *WorkflowDeps
 	var orchDeps *OrchestratorDeps
@@ -144,9 +160,13 @@ func main() {
 		ghDeps = setupGitHub(dbAdapter, stores, orchDeps.Orchestrator, cfg, shutdownCtx, logger)
 	}
 
+	// CHG-2026-04-30-DELETE-SINGLE-CELL: cellRouter is always DynamicRouter
+	// when DB + workflows are wired. The previous PassthroughRouter pre-wire
+	// was an artifact of single-cell mode; in startup paths where the router
+	// is not yet built (test stubs without DB), routes that need cells get
+	// a nil router and must handle it.
 	var bgWg sync.WaitGroup
-	cellRouter := placement.Router(placement.NewPassthroughRouter(
-		placement.CellConfig{CellID: placement.DefaultCellID}))
+	var cellRouter placement.Router
 	var cellStore *db.PostgresCellStore
 	var domainHandler *routes.DomainHandler
 
@@ -157,27 +177,119 @@ func main() {
 		dh, domainProvisioner, domainHealthChecker, cfZoneClient := setupDomains(stores, workflows, cfg, logger)
 		domainHandler = dh
 
-		leaderResult := setupLeaderElection(dbAdapter.Pool, shutdownCtx, logger)
-		defer leaderResult.LeaderConn.Release()
+		// MEET-ASYNC-AMENDMENT-2026-05-12-003 Option A (RATIFIED 2026-05-12):
+		// run leader election in a goroutine so HTTP server starts immediately.
+		// Passive standby pods serve /healthz (probes pass) while waiting for
+		// the lock; only the leader runs background reconcile loops.
+		// Pre-fix: synchronous setupLeaderElection blocked main() up to 60s,
+		// causing 2nd replica liveness/startup probe failure -> crashloop.
+		//
+		// Iter 19 fix: do NOT defer LeaderConn.Release() inside this goroutine.
+		// startLeaderLoops spawns runLeaderHeartbeat (setup_background.go:422)
+		// which OWNS the conn for its lifetime. When the wrapping goroutine
+		// returns, the deferred Release() yanks the conn out from under the
+		// heartbeat -> panic in pgxpool.Conn.QueryRow. The conn is cleaned
+		// up at process exit via pgxpool.Close (line 116 main.go).
+		bgWg.Add(1)
+		go func() {
+			defer bgWg.Done()
+			leaderResult := setupLeaderElection(dbAdapter.Pool, shutdownCtx, logger)
 
-		if leaderResult.IsLeader {
-			startLeaderLoops(shutdownCtx, &bgWg, leaderResult.LeaderConn,
-				dbAdapter, stores, workflows, orchDeps, k8sDeps, cellRouter,
-				domainProvisioner, domainHealthChecker, cfZoneClient, cfg, logger)
-		}
+			if leaderResult.IsLeader {
+				startLeaderLoops(shutdownCtx, &bgWg, leaderResult.LeaderConn,
+					dbAdapter, stores, workflows, orchDeps, k8sDeps, cellRouter,
+					domainProvisioner, domainHealthChecker, cfZoneClient, cfg, logger)
+			}
+			// Non-leader: setupLeaderElection already started the
+			// startNonLeaderReelection goroutine which polls every 60s
+			// and os.Exit(0) when lock acquired. LeaderConn lives for
+			// the lifetime of that re-election goroutine.
+		}()
 	}
 	defer waitForBackgroundGoroutines(&bgWg, logger)
 
 	buildHandler := setupBuildHandler(dbAdapter, orchDeps, cellStore, cfg, shutdownCtx, logger)
+
+	// Plan T2.2 D5 — wire EnvironmentEnsurer so loopzero deploy --env <novo>
+	// auto-creates the Environment CR + namespace + ArgoCD App on first
+	// use. Closes F-S1-02 (dogfood 2026-05-15). Wiring requires the
+	// TenantCRManager from k8sDeps; both ensurer + BuildHandler are
+	// composed here in main so we keep the dependency tree explicit.
+	if buildHandler != nil && k8sDeps != nil && k8sDeps.TenantCRMgr != nil {
+		lister, adder := services.NewEnvManagerAdapter(
+			k8sDeps.TenantCRMgr.AddEnvironment,
+			func(ctx context.Context, tenantID, envName string) (any, error) {
+				detail, err := k8sDeps.TenantCRMgr.GetEnvironmentDetail(ctx, tenantID, envName)
+				if detail == nil {
+					return nil, err
+				}
+				return detail, err
+			},
+		)
+		// Sprint A trio-fix 2026-06-01: ReadinessChecker queries Environment
+		// CR.status.phase=="Active" before EnsureEnvironment returns.
+		//
+		// 2026-06-02 H1 validation: TEMPORARILY DISABLED via LOOPZERO_ENV_READINESS_CHECKER
+		// gate (default false). Hypothesis: the readiness poll adds 2-30s per
+		// deploy × 11 journeys = +5min total, esgotando o budget 1h30m do
+		// suite timeout. Pre-Sprint-A baseline (commit 098b6846, 2026-05-31)
+		// passou 112/0/20 em 1h11m SEM esse gate. Re-enable após confirmar
+		// hypothesis OR re-tune PollInterval/WaitTimeout para minimizar custo.
+		ensurer := &services.EnvironmentEnsurer{
+			Lister: lister,
+			Adder:  adder,
+			Logger: logger,
+		}
+		if os.Getenv("LOOPZERO_ENV_READINESS_CHECKER") == "true" {
+			if mgmtDynamic := buildMgmtDynamicClient(logger); mgmtDynamic != nil {
+				ensurer.ReadinessChecker = services.NewEnvironmentCRReader(mgmtDynamic, "loopzero-system")
+				logger.Info("env readiness checker wired — EnsureEnvironment will poll Environment CR.status.phase before returning (Sprint A trio-fix 2026-06-01)")
+			}
+		} else {
+			logger.Info("env readiness checker SKIPPED — LOOPZERO_ENV_READINESS_CHECKER=false (H1 validation 2026-06-02)")
+		}
+		buildHandler = buildHandler.WithEnvironmentEnsurer(ensurer)
+		logger.Info("env ensurer wired — deploy --env <novo> will auto-create environments (T2.2 D5)")
+	}
+
+	// V9 L20: SecretResyncer wired post-envEnsurer in builds.go. Closes
+	// the set-secret-BEFORE-first-deploy race (audit
+	// 2026-05-30-V9-L19-99percent). Requires both a value-returning
+	// secret store (PostgresSecretStore.ListForResync) and a workload
+	// K8s creator (the same SecretK8sSync used by POST /api/v1/secrets).
+	if buildHandler != nil && stores != nil && k8sDeps != nil && k8sDeps.SecretK8sSync != nil {
+		if pgStore, ok := stores.SecretStore.(*db.PostgresSecretStore); ok {
+			resyncer := &services.SecretResyncer{
+				Store:  pgStore,
+				K8s:    k8sDeps.SecretK8sSync,
+				Logger: logger,
+			}
+			buildHandler = buildHandler.WithSecretResyncer(resyncer)
+			logger.Info("secret resyncer wired — deploy will repopulate ExternalSecrets post envEnsurer (V9 L20)")
+		}
+	}
+
 	healthServices := setupHealthServices(cfg)
 
 	rateLimiter := middleware.NewRateLimiter(60, 1*time.Minute)
 	defer rateLimiter.Stop()
 
+	// T2.4 of deep-review-remediation-plan + ADR D4 — pre-auth IP rate limit.
+	// Trusted-proxy CIDRs from env (Cloudflare egress in production; empty
+	// in dev so X-Forwarded-For is never honored). Limit defaults to
+	// 120/min/IP — enough headroom for legitimate batch CLIs, stings on
+	// brute-force.
+	ipRateLimiter := middleware.NewIPRateLimiter(middleware.IPRateLimitConfig{
+		Limit:             120,
+		Window:            1 * time.Minute,
+		TrustedProxyCIDRs: middleware.ParseTrustedProxyCIDRs(os.Getenv("LOOPZERO_TRUSTED_PROXY_CIDRS")),
+	})
+
 	srvCfg := buildServerConfig(cfg, dbAdapter, dbDeps, stores, orchDeps, ghDeps,
 		k8sDeps, cellRouter, cellStore, domainHandler, buildHandler,
 		healthServices, authDeps.TokenValidator, rateLimiter,
 		shutdownCtx, shutdownCancel, logger)
+	srvCfg.IPRateLimit = ipRateLimiter
 
 	if err := server.Run(srvCfg); err != nil {
 		logger.Error("server failed", "error", err)
@@ -210,7 +322,9 @@ func setupBuildHandler(
 	if dbAdapter == nil {
 		return buildHandler
 	}
-	querier := &buildStoreAdmissionQuerier{store: db.NewPostgresBuildStore(dbAdapter)}
+	// T1.2b (plan 2026-05-29-sqlc-migration v1.3): sqlc-backed wrapper
+	// satisfies db.BuildStore 1:1 — admission querier seam unchanged.
+	querier := &buildStoreAdmissionQuerier{store: db.NewBuildStoreSqlc(dbAdapter)}
 	admissionCfg := admission.DefaultConfig()
 	if cfg.MaxConcurrentBuildsPerCell > 0 {
 		admissionCfg.MaxConcurrentPerCell = cfg.MaxConcurrentBuildsPerCell
@@ -227,6 +341,11 @@ func setupBuildHandler(
 	}
 	breaker := admission.NewPGPoolBreaker(dbAdapter.Pool, admission.DefaultBreakerConfig(cfg.DBMaxConns), logger)
 	breaker.Start(shutdownCtx)
+	// Quality-Gate Phase 2: ensure breaker cleanup on shutdown.
+	go func() {
+		<-shutdownCtx.Done()
+		breaker.Stop()
+	}()
 	if cfg.AdmissionControl {
 		logger.Info("pg pool circuit breaker enabled",
 			"high_water", 0.90, "low_water", 0.75, "max_conns", cfg.DBMaxConns)

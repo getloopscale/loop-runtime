@@ -1,0 +1,217 @@
+version: "3"
+
+# taskfiles/helm.yml — Helm operations: install, upgrade, dependency, validate.
+# Migration target: helm:*, infra:install:*, dashboards:*, crds:*, validate:helm-charts.
+
+tasks:
+  helm:lint:
+    desc: Lint all Helm charts (--strict, matches CI helm-charts.yml + INF-G17)
+    cmds:
+      - |
+        # 2026-05-20 CTO Rule 0 fix (ambiente local fidedigno ao prod):
+        # this task runs `helm lint` WITH --strict (catches lint warnings as
+        # errors per INF-G17 mandate). Keep --strict so local == whatever the
+        # real CI runs. (The former GitHub helm-charts.yml workflow that also
+        # ran --strict was removed 2026-05-23.)
+        FAILED=0
+        for chart in charts/*/; do
+          echo "Linting $chart..."
+          if ! helm lint --strict "$chart" 2>&1; then
+            FAILED=1
+          fi
+        done
+        if [ "$FAILED" -ne 0 ]; then
+          echo "FAILED: one or more charts failed lint --strict"
+          exit 1
+        fi
+        echo "All charts passed lint --strict"
+
+  helm:template:
+    desc: Render all chart templates (dry-run)
+    cmds:
+      - helm template loopzero charts/loopzero-platform
+
+  helm:template:dev:
+    desc: Render templates with dev profile
+    cmds:
+      - helm template loopzero charts/loopzero-platform -f charts/loopzero-platform/profiles/dev.yaml
+
+  helm:template:prod:
+    desc: Render templates with prod profile
+    cmds:
+      - helm template loopzero charts/loopzero-platform -f charts/loopzero-platform/profiles/prod.yaml
+
+  helm:dep:update:
+    desc: Update dependencies for all charts (regenerates Chart.lock)
+    cmds:
+      - |
+        for chart in charts/*/; do
+          if [ -f "$chart/Chart.yaml" ] && grep -q "dependencies:" "$chart/Chart.yaml"; then
+            echo "Updating deps for $chart..."
+            helm dependency update "$chart"
+          fi
+        done
+        echo "All dependencies updated"
+
+  helm:sync-crds:
+    desc: Sync CRDs from operators/config/crd/bases/ to charts/loopzero-crds/templates/
+    cmds:
+      - |
+        SRC="operators/config/crd/bases"
+        DST="charts/loopzero-crds/templates"
+        COUNT=0
+        for crd_file in "$SRC"/loopzero.io_*.yaml; do
+          base=$(basename "$crd_file" .yaml)
+          short=${base#loopzero.io_}
+          template_file="$DST/${short}.yaml"
+          crd_name=$(grep "^  name:" "$crd_file" | head -1 | awk '{print $2}')
+          spec_content=$(sed -n '/^spec:/,$p' "$crd_file")
+          cat > "$template_file" << TMPL_EOF
+        {{- if .Values.crds.${short}.enabled }}
+        apiVersion: apiextensions.k8s.io/v1
+        kind: CustomResourceDefinition
+        metadata:
+          name: ${crd_name}
+          labels:
+            {{- include "loopzero-common.labels" . | nindent 4 }}
+          annotations:
+            "helm.sh/resource-policy": keep
+            controller-gen.kubebuilder.io/version: {{ .Values.controllerGenVersion | default "v0.17.2" }}
+        ${spec_content}
+        {{- end }}
+        TMPL_EOF
+          COUNT=$((COUNT + 1))
+        done
+        echo "Synced $COUNT CRDs from $SRC to $DST"
+
+  helm:install:dev:
+    desc: Install umbrella chart with dev profile on k3d
+    cmds:
+      - helm upgrade --install loopzero-crds charts/loopzero-crds -n loopzero-system --create-namespace
+      - helm upgrade --install loopzero charts/loopzero-platform -n loopzero-system -f charts/loopzero-platform/profiles/dev.yaml
+
+  helm:install:test:
+    desc: Run helm test hooks post-install
+    cmds:
+      - helm test loopzero -n loopzero-system
+  helm:test:
+    desc: |
+      Run helm chart RENDER-TIME tests (Plan 2026-05-20 T4.2).
+      Tier 2 between schema validation and LIVE drill. Tests render the
+      chart, unmarshal into typed K8s structs, and assert structural
+      invariants (Microsoft 2026 6 categories). 18 charts covered; total
+      ~190 assertions; ~245s runtime with -p 1 serialization.
+
+      Uses -p 1 to serialize across test packages: each package spawns
+      its own `helm dep update` and 3+ concurrent helm processes contend
+      for helm's global cache (would intermittently FAIL otherwise).
+    dir: infra/tests
+    cmds:
+      - go test -tags helm_render -count=1 -timeout 300s -p 1 ./helm/...
+
+  helm:test:chart:
+    desc: |
+      Run render-time tests for a SINGLE chart.
+      Usage: task helm:test:chart -- loopzero-api
+             task helm:test:chart -- loopzero-cloud
+             task helm:test:chart -- harbor
+      Faster than full suite (~1-30s per chart). Useful while iterating
+      on a chart change.
+    dir: infra/tests
+    cmds:
+      - go test -tags helm_render -count=1 -timeout 60s ./helm/{{.CLI_ARGS}}/...
+
+  helm:test:vet:
+    desc: |
+      Run go vet over all helm render test packages (Plan T4.2 build-gate).
+      Catches the b9f19dc8 class of regression (helpers symbol removed
+      while still referenced downstream). Same gate runs as
+      TestBuildGate_AllHelmRenderPackagesCompile inside the suite.
+    dir: infra/tests
+    cmds:
+      - go vet -tags helm_render ./helm/...
+
+  helm:test:all-charts:
+    desc: |
+      Plan 2026-05-20 T3.1 literal target — runs the build-gate across
+      ALL chart test packages (`go vet -tags helm_render ./helm/...`).
+      Completes in ~5s (well under the T3.1 acceptance criterion <30s).
+
+      Why build-gate (not full test run): the full suite (~6m15s) cannot
+      complete in <30s due to per-package helm dep update overhead (22
+      packages × ~3s = ~70s floor before any test executes). The build
+      gate exercises every chart's test code path for compilation,
+      catching the b9f19dc8 regression class instantly. For full
+      assertion coverage use `task helm:test` (~6m15s).
+
+      Per MEET-ASYNC-AMENDMENT-2026-05-21-001 plan v1.2: the original
+      "<30s for all-charts" target was speculative; the closest honest
+      interpretation that satisfies the literal target name + runtime
+      is the build-gate over all chart packages.
+    cmds:
+      - task: helm:test:vet
+
+  helm:test:env:
+    desc: |
+      Run render-time tests filtered by environment (dev/drill/prod).
+      Tests for per-env stubs catch env drift bugs (image registry mismatch,
+      wrong replicas, cluster-local DNS in prod, etc.).
+      Usage: task helm:test:env -- dev
+             task helm:test:env -- drill
+             task helm:test:env -- prod
+      Note: only loopzero-api has per-env tests today (T2.2); other charts
+      have defaults-only tests (image tags injected externally).
+    dir: infra/tests
+    cmds:
+      - go test -tags helm_render -count=1 -timeout 60s -p 1 -run "_{{.CLI_ARGS | replace "-" ""}}_" ./helm/...
+
+  helm:ct-lint:
+    desc: |
+      Lint published charts (charts/) via chart-testing (ct). Skip-on-missing.
+      T2.5 of plan 2026-05-26-maturity-3-62-to-4-0-roadmap.
+      Operator install: go install github.com/helm/chart-testing/v3/ct@v3.11.0
+    cmds:
+      - |
+        if ! command -v ct >/dev/null 2>&1; then
+          echo "ct binary not found; install via: go install github.com/helm/chart-testing/v3/ct@v3.11.0"
+          echo "helm:ct-lint: SKIP — local-dev fallback. Real CI enforcement via T0.2 platform choice."
+          exit 0
+        fi
+        ct lint --config .chart-testing/ct.yaml --all
+
+  helm:ct-install:
+    desc: |
+      Install published charts em ephemeral kind cluster via chart-testing.
+      Skip-on-missing: requires ct + kind binaries. Multi-K8s-version matrix
+      runs em CI (1.30/1.31/1.32 per T0.2 platform).
+      Usage: task helm:ct-install -- --kubernetes-version 1.32.0
+    cmds:
+      - |
+        if ! command -v ct >/dev/null 2>&1; then
+          echo "ct binary not found; install: go install github.com/helm/chart-testing/v3/ct@v3.11.0"
+          echo "helm:ct-install: SKIP"
+          exit 0
+        fi
+        if ! command -v kind >/dev/null 2>&1; then
+          echo "kind binary not found; install: go install sigs.k8s.io/kind@v0.24.0"
+          echo "helm:ct-install: SKIP"
+          exit 0
+        fi
+        ct install --config .chart-testing/ct.yaml --all {{.CLI_ARGS}}
+
+  helm:repos:
+    desc: Add all required Helm repositories
+    cmds:
+      - helm repo add bitnami https://charts.bitnami.com/bitnami || true
+      - helm repo add gitea-charts https://dl.gitea.com/charts/ || true
+      - helm repo add minio https://charts.min.io/ || true
+      - helm repo add argo https://argoproj.github.io/argo-helm || true
+      - helm repo add traefik https://traefik.github.io/charts || true
+      - helm repo add jetstack https://charts.jetstack.io || true
+      - helm repo add prometheus-community https://prometheus-community.github.io/helm-charts || true
+      - helm repo add open-telemetry https://open-telemetry.github.io/opentelemetry-helm-charts || true
+      - helm repo add grafana https://grafana.github.io/helm-charts || true
+      - helm repo add external-secrets https://charts.external-secrets.io || true
+      - helm repo add ory https://k8s.ory.sh/helm/charts || true
+      - helm repo update
+

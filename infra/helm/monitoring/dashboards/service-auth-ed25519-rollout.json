@@ -1,0 +1,230 @@
+{
+  "annotations": { "list": [] },
+  "description": "Service-auth Ed25519 dual-control rollout dashboard. Operator uses this to time the Phase 1 → Phase 2 cutover per ADR 2026-05-13-service-auth-ed25519-adoption Q3. The LoopZeroServiceAuthSignaturePhase1Ready stat lights up when the 7-day soak at 100% present rate is satisfied.",
+  "editable": false,
+  "graphTooltip": 1,
+  "panels": [
+    {
+      "id": 1,
+      "type": "stat",
+      "title": "Phase 1 Ready (7d 100% present)",
+      "gridPos": { "x": 0, "y": 0, "w": 6, "h": 4 },
+      "datasource": { "type": "prometheus", "uid": "prometheus" },
+      "targets": [
+        {
+          "expr": "max(loopzero_service_auth_signature_phase1_ready)",
+          "refId": "A"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "mappings": [
+            { "type": "value", "value": "0", "text": "NOT READY" },
+            { "type": "value", "value": "1", "text": "READY — flip Phase 2" }
+          ],
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              { "color": "red", "value": null },
+              { "color": "green", "value": 1 }
+            ]
+          }
+        }
+      },
+      "options": {
+        "colorMode": "background",
+        "graphMode": "none",
+        "textMode": "value_and_name"
+      }
+    },
+    {
+      "id": 2,
+      "type": "stat",
+      "title": "Last-1h signature adoption rate",
+      "gridPos": { "x": 6, "y": 0, "w": 6, "h": 4 },
+      "datasource": { "type": "prometheus", "uid": "prometheus" },
+      "targets": [
+        {
+          "expr": "max(loopzero_service_auth_signature_adoption_1h) * 100",
+          "refId": "A"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "percent",
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              { "color": "red", "value": null },
+              { "color": "orange", "value": 80 },
+              { "color": "yellow", "value": 95 },
+              { "color": "green", "value": 99.5 }
+            ]
+          }
+        }
+      }
+    },
+    {
+      "id": 3,
+      "type": "timeseries",
+      "title": "Signed vs unsigned traffic (cutover progress)",
+      "gridPos": { "x": 12, "y": 0, "w": 12, "h": 8 },
+      "datasource": { "type": "prometheus", "uid": "prometheus" },
+      "targets": [
+        {
+          "expr": "sum(rate(loopzero_service_auth_signature_present_total{outcome=\"present\"}[5m]))",
+          "legendFormat": "signed",
+          "refId": "A"
+        },
+        {
+          "expr": "sum(rate(loopzero_service_auth_signature_present_total{outcome=\"absent\"}[5m]))",
+          "legendFormat": "unsigned",
+          "refId": "B"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "reqps",
+          "custom": {
+            "drawStyle": "line",
+            "lineWidth": 2,
+            "fillOpacity": 25,
+            "stacking": { "mode": "normal", "group": "A" }
+          }
+        }
+      }
+    },
+    {
+      "id": 4,
+      "type": "stat",
+      "title": "Phase 2 flag (operator-controlled)",
+      "gridPos": { "x": 0, "y": 4, "w": 6, "h": 4 },
+      "datasource": { "type": "prometheus", "uid": "prometheus" },
+      "targets": [
+        {
+          "expr": "max(loopzero_service_auth_signature_rejected_total{reason=\"signature_missing\"}) > bool 0",
+          "refId": "A"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "mappings": [
+            { "type": "value", "value": "0", "text": "Phase 1 (accept-both)" },
+            { "type": "value", "value": "1", "text": "Phase 2 (require-signed)" }
+          ],
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              { "color": "yellow", "value": null },
+              { "color": "green", "value": 1 }
+            ]
+          }
+        }
+      },
+      "options": {
+        "colorMode": "background",
+        "graphMode": "none",
+        "textMode": "value_and_name"
+      }
+    },
+    {
+      "id": 5,
+      "type": "stat",
+      "title": "Active rejections (5m, all reasons)",
+      "gridPos": { "x": 6, "y": 4, "w": 6, "h": 4 },
+      "datasource": { "type": "prometheus", "uid": "prometheus" },
+      "targets": [
+        {
+          "expr": "sum(rate(loopzero_service_auth_signature_rejected_total[5m]))",
+          "refId": "A"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "reqps",
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              { "color": "green", "value": null },
+              { "color": "orange", "value": 0.01 },
+              { "color": "red", "value": 0.1 }
+            ]
+          }
+        }
+      }
+    },
+    {
+      "id": 6,
+      "type": "timeseries",
+      "title": "Signature rejection reasons (forensic breakdown)",
+      "gridPos": { "x": 0, "y": 8, "w": 12, "h": 8 },
+      "datasource": { "type": "prometheus", "uid": "prometheus" },
+      "targets": [
+        {
+          "expr": "sum by (reason) (rate(loopzero_service_auth_signature_rejected_total[5m]))",
+          "legendFormat": "{{ reason }}",
+          "refId": "A"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "reqps",
+          "custom": {
+            "drawStyle": "line",
+            "lineWidth": 2,
+            "fillOpacity": 10,
+            "stacking": { "mode": "normal", "group": "A" }
+          }
+        }
+      },
+      "options": {
+        "legend": {
+          "displayMode": "table",
+          "placement": "right",
+          "values": ["last", "max"]
+        }
+      }
+    },
+    {
+      "id": 7,
+      "type": "bargauge",
+      "title": "Rejection reasons (last 1h)",
+      "gridPos": { "x": 12, "y": 8, "w": 12, "h": 8 },
+      "datasource": { "type": "prometheus", "uid": "prometheus" },
+      "targets": [
+        {
+          "expr": "sum by (reason) (increase(loopzero_service_auth_signature_rejected_total[1h]))",
+          "legendFormat": "{{ reason }}",
+          "refId": "A"
+        }
+      ],
+      "options": {
+        "orientation": "horizontal",
+        "displayMode": "gradient"
+      }
+    },
+    {
+      "id": 8,
+      "type": "row",
+      "title": "Operator decision tree",
+      "gridPos": { "x": 0, "y": 16, "w": 24, "h": 1 }
+    },
+    {
+      "id": 9,
+      "type": "text",
+      "title": "Cutover protocol (per ADR Q3)",
+      "gridPos": { "x": 0, "y": 17, "w": 24, "h": 10 },
+      "options": {
+        "mode": "markdown",
+        "content": "## Phase 1 → Phase 2 cutover (operator decision tree)\n\n1. **Watch panel 1 (Phase 1 Ready stat).** Wait until it lights GREEN — 7 consecutive days at 100% present rate over the trailing window.\n2. **Confirm panel 4 still says Phase 1 (accept-both).** The flag is operator-controlled via env var `LOOPZERO_SERVICE_AUTH_REQUIRE_SIGNATURE=true`.\n3. **Verify panel 5 shows 0 active rejections.** If non-zero, panel 6 breakdown identifies the cause — do NOT flip Phase 2 until panel 6 is clean.\n4. **Flip Phase 2:** `kubectl set env deploy/loopzero-api -n loopzero-system LOOPZERO_SERVICE_AUTH_REQUIRE_SIGNATURE=true` then `kubectl rollout restart deploy/loopzero-api -n loopzero-system && kubectl rollout status deploy/loopzero-api -n loopzero-system`.\n5. **7-day Phase 2 soak.** Watch panel 6 for `reason=\"signature_missing\"` — indicates a caller that never adopted the signer (forgotten replica, third-party probe). Each non-zero reading is an operator action item.\n6. **Phase 3 marker:** once Phase 2 has soaked 7 days with `signature_missing` rate at 0, the dual-control is steady-state. No further toggles.\n\n## Rollback (per ADR Reversibility)\n\nIf panel 5 shows sustained rejections in Phase 2 from a legitimate caller:\n\n```\nkubectl set env deploy/loopzero-api -n loopzero-system LOOPZERO_SERVICE_AUTH_REQUIRE_SIGNATURE=false\nkubectl rollout restart deploy/loopzero-api -n loopzero-system\n```\n\nThis reverts to Phase 1 accept-both within ~30s. The Ed25519 verification still happens for signed requests; only the require-signed gate is dropped."
+      }
+    }
+  ],
+  "refresh": "1m",
+  "schemaVersion": 38,
+  "tags": ["loopzero", "service-auth", "ed25519", "security", "audit-M10-G1"],
+  "time": { "from": "now-24h", "to": "now" },
+  "title": "Service-Auth Ed25519 Rollout",
+  "uid": "loopzero-service-auth-ed25519",
+  "version": 1
+}

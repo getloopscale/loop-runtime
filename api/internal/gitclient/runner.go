@@ -49,7 +49,7 @@ func NewGitRunner(token string, opts ...RunnerOption) *GitRunner {
 // Run executes a git command in the specified directory.
 // SEC-002: Output and args are sanitized to prevent token leakage in error logs.
 func (r *GitRunner) Run(ctx context.Context, dir string, args ...string) error {
-	cmd := exec.CommandContext(ctx, "git", args...)
+	cmd := exec.CommandContext(ctx, "git", args...) //nolint:gosec // G204 false positive: binary literal "git"; args from trusted internal callers; SEC-002 sanitizes output
 	cmd.Dir = dir
 	cmd.Env = r.buildEnv()
 	output, err := cmd.CombinedOutput()
@@ -64,7 +64,7 @@ func (r *GitRunner) Run(ctx context.Context, dir string, args ...string) error {
 // Output executes a git command and returns stdout trimmed.
 // SEC-002: Args are sanitized in error messages.
 func (r *GitRunner) Output(ctx context.Context, dir string, args ...string) (string, error) {
-	cmd := exec.CommandContext(ctx, "git", args...)
+	cmd := exec.CommandContext(ctx, "git", args...) //nolint:gosec // G204 false positive: binary literal "git"; args from trusted internal callers; SEC-002 sanitizes output
 	cmd.Dir = dir
 	cmd.Env = r.buildEnv()
 	output, err := cmd.Output()

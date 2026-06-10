@@ -11,14 +11,13 @@ import (
 	"github.com/loopzero/loopzero/api/internal/db"
 	"github.com/loopzero/loopzero/api/internal/domain"
 	"github.com/loopzero/loopzero/api/internal/github/webhook"
-	"github.com/loopzero/loopzero/api/internal/routes"
 )
 
 // PreviewLifecycleService is the slice of services.PreviewService that the
 // PR webhook handler needs. Defined narrowly per ISP so the deployer can
 // be tested without standing up the full service.
 type PreviewLifecycleService interface {
-	CreatePreview(ctx context.Context, req routes.CreatePreviewRequest) (*domain.Preview, error)
+	CreatePreview(ctx context.Context, req domain.CreatePreviewRequest) (*domain.Preview, error)
 	DeletePreviewByPR(ctx context.Context, tenantID, projectID string, prNumber int) error
 }
 
@@ -146,7 +145,7 @@ func (d *PreviewDeployer) handleCreate(
 		return nil
 	}
 
-	req := routes.CreatePreviewRequest{
+	req := domain.CreatePreviewRequest{
 		ProjectID:      repo.ProjectName,
 		PRNumber:       event.Number,
 		Branch:         branch,

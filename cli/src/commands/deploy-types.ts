@@ -79,13 +79,32 @@ export interface BuildStatus {
 export interface DeployDeps {
   getToken: () => string | null;
   findLoopZeroYaml: () => LoopZeroYamlResult | null;
+  /**
+   * Plan v1.1 T1.2 (loopzero-cli-vercel-like-ux) — locates the
+   * `.loopzero/services.json` artifact for the upload payload. Optional in the
+   * interface so `register/promote.ts`, `register/rollback.ts`, and
+   * `register/validate.ts` keep compiling without injecting this dep (EC-9
+   * absorbed — they don't upload bundles). The deploy command runtime-checks
+   * presence and throws `IllegalStateError` when missing from the deploy
+   * registration site. `overridePath` is the value of the `--services-json`
+   * CLI flag (EC-4 absorbed).
+   */
+  findServicesJson?: (overridePath?: string) => { path: string } | null;
+  /**
+   * Plan v1.1 T3.1 — auto-build trigger. When `.loopzero/services.json` is
+   * missing AND `skipBuild` is false, the deploy command invokes this to run
+   * `loopzerokit build --target loopzero-cloud` as a subprocess. Optional in the
+   * interface so promote/rollback/validate registrations continue to compile
+   * without injecting it.
+   */
+  runLoopZerokitBuild?: (opts: { cwd: string; target?: string }) => Promise<void>;
   hasGitRepo: () => boolean;
   hasUncommittedChanges: () => boolean;
   hasLockfile: () => boolean;
   getSourceIdentifier: () => string;
   createSourceBundle: () => Promise<string>;
   checkSensitiveFiles?: () => string[];
-  uploadSource: (bundlePath: string, loopzeroYamlPath: string) => Promise<UploadResult>;
+  uploadSource: (bundlePath: string, servicesJsonPath: string) => Promise<UploadResult>;
   submitBuild: (input: SubmitBuildInput) => Promise<SubmitBuildResult>;
   connectSSE: (buildId: string, onEvent: (event: SSEEvent) => void) => SSEConnection;
   getSecrets: (project: string, environment: string) => Promise<string[]>;
@@ -93,6 +112,22 @@ export interface DeployDeps {
   generateIdempotencyKey: (commitSha: string, project: string, environment: string, apps: string[]) => string;
   /** Check build state as fallback when SSE stream breaks. */
   getBuildStatus?: (buildId: string) => Promise<BuildStatus>;
+  /**
+   * Beta Logs Gate Criterion 4 (UX) — best-effort auto-tail of the
+   * last ~20 log lines when a deploy fails. The CLI invokes this in
+   * the build.failed / deploy.sync_failed / deploy.delivery_failed
+   * SSE branches BEFORE exiting, so the operator sees recent context
+   * inline instead of having to run `loopzero logs --build <id>` as a
+   * second step.
+   *
+   * Implementation MUST swallow errors and return null on failure —
+   * auto-tail is opportunistic; the deploy command still exits with
+   * the canonical reason + hint when the tail is unavailable.
+   *
+   * Optional: when undefined, the deploy command falls back to the
+   * pre-Beta hint-only behavior.
+   */
+  fetchRecentBuildLogs?: (buildId: string) => Promise<import('./logs').LogsApiResponse | null>;
   writeTo: (msg: string) => void;
   writeError: (msg: string) => void;
   isCI: boolean;
@@ -105,4 +140,15 @@ export interface DeployOptions {
   wait?: boolean;
   json?: boolean;
   noCache?: boolean;
+  /**
+   * Plan v1.1 T1.1 (EC-4) — explicit path to `.loopzero/services.json`. When set,
+   * bypasses the walk-up discovery. Required when `loopzero.config.ts` declares
+   * a custom `distDir` (e.g. emit lands at `out/services.json`).
+   */
+  servicesJson?: string;
+  /**
+   * Plan v1.1 T3.1 (and Phase 5 `--prebuilt` alias). Skip the auto-build
+   * branch. Used by CI pipelines that produce the artifact in a prior stage.
+   */
+  skipBuild?: boolean;
 }

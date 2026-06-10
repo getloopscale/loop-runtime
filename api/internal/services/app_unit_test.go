@@ -26,10 +26,15 @@ func TestNormalizeApp_ServerExpress(t *testing.T) {
 	}
 }
 
+// Plan B v3.1 T-B.1 (2026-06-05) — framework-string heuristic removed
+// post LoopZeroKit-only cutover. Frontends now declare `type: "frontend"`
+// explicitly em services.json (or em the legacy AppSpec). Tests below
+// updated to assert the explicit-type contract.
 func TestNormalizeApp_FrontendNextjsStatic(t *testing.T) {
-	// MEET-2026-03-29-016: Frontend MUST have render: static
+	// MEET-2026-03-29-016 (updated 2026-06-05): Frontend MUST have render: static
+	// AND explicit type: frontend (no more framework-string auto-detect).
 	unit, err := NormalizeApp("web", AppSpec{
-		Path: "apps/web", Framework: "nextjs", Rendering: "static",
+		Path: "apps/web", Framework: "nextjs", Type: "frontend", Rendering: "static",
 	})
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
@@ -43,12 +48,28 @@ func TestNormalizeApp_FrontendNextjsStatic(t *testing.T) {
 }
 
 func TestNormalizeApp_FrontendWithoutStaticRejected(t *testing.T) {
-	// MEET-2026-03-29-016: Frontend without render: static must be rejected
+	// MEET-2026-03-29-016 (updated 2026-06-05): Frontend type WITHOUT
+	// render: static must be rejected. Type must be explicit post T-B.1.
 	_, err := NormalizeApp("web", AppSpec{
-		Path: "apps/web", Framework: "nextjs",
+		Path: "apps/web", Framework: "nextjs", Type: "frontend",
 	})
 	if err == nil {
 		t.Fatal("expected error for frontend without render: static")
+	}
+}
+
+// Plan B v3.1 T-B.1 — when neither Type nor Framework auto-detect applies,
+// the default falls through to "server" (safe default for the polyglot
+// services flow). Frontends must be opt-in via explicit Type.
+func TestNormalizeApp_NextjsWithoutExplicitType_DefaultsServer(t *testing.T) {
+	unit, err := NormalizeApp("web", AppSpec{
+		Path: "apps/web", Framework: "nextjs", Port: 3000,
+	})
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if unit.Type != "server" {
+		t.Errorf("Type = %q, want server (T-B.1 explicit-type contract)", unit.Type)
 	}
 }
 

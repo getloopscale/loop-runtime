@@ -1,0 +1,208 @@
+{{/* SPDX-License-Identifier: Apache-2.0 */}}
+{{/* ConfigMap with bao CLI init script — idempotent (skip-on-exists). */}}
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: openbao-init-script
+  namespace: {{ .Release.Namespace }}
+  labels:
+    app.kubernetes.io/name: openbao-init
+    app.kubernetes.io/managed-by: {{ .Release.Service }}
+data:
+  init.sh: |
+    #!/bin/sh
+    set -eu
+
+    # Wait for OpenBao to be reachable + unsealed.
+    # The Helmfile `needs:` ordering ensures the Vault release reports
+    # Ready before this Job is created, but bao API may need a few seconds
+    # extra for the auto-unseal to complete.
+    echo "[INIT] Waiting for OpenBao API readiness..."
+    for i in $(seq 1 30); do
+      if bao status > /dev/null 2>&1; then
+        echo "[INIT] OpenBao reachable + unsealed."
+        break
+      fi
+      sleep 2
+    done
+    bao status || { echo "[INIT] OpenBao not reachable after 60s"; exit 1; }
+
+    # ---- Helper: idempotent secrets enable ----
+    enable_engine() {
+      path="$1"
+      type="$2"
+      description="$3"
+      opts="$4"
+      if bao secrets list -format=json | grep -q "\"${path}/\":"; then
+        echo "[INIT] Engine already mounted at path=${path} — skip"
+      else
+        echo "[INIT] Enabling engine path=${path} type=${type}"
+        if [ -n "$opts" ]; then
+          # shellcheck disable=SC2086
+          bao secrets enable -path="${path}" -description="${description}" $opts "${type}"
+        else
+          bao secrets enable -path="${path}" -description="${description}" "${type}"
+        fi
+      fi
+    }
+
+    # ---- Helper: idempotent auth enable ----
+    enable_auth() {
+      path="$1"
+      type="$2"
+      description="$3"
+      if bao auth list -format=json | grep -q "\"${path}/\":"; then
+        echo "[INIT] Auth method already enabled at path=${path} — skip"
+      else
+        echo "[INIT] Enabling auth method path=${path} type=${type}"
+        bao auth enable -path="${path}" -description="${description}" "${type}"
+      fi
+    }
+
+    # ---- Helper: idempotent policy write (always overwrite — policies are
+    # tracked by name, no diff overhead) ----
+    write_policy() {
+      name="$1"
+      file="$2"
+      echo "[INIT] Writing policy name=${name}"
+      bao policy write "${name}" "${file}"
+    }
+
+    # ---- Provision secrets engines ----
+    {{- range .Values.secretsEngines }}
+    {{- $opts := "" }}
+    {{- if eq .type "kv-v2" }}{{- $opts = "" }}{{- end }}
+    enable_engine "{{ .path }}" "{{ .type }}" "{{ .description }}" "{{ $opts }}"
+    {{- end }}
+
+    # ---- Provision auth methods ----
+    {{- range .Values.authMethods }}
+    enable_auth "{{ .path }}" "{{ .type }}" "{{ .description }}"
+    {{- end }}
+
+    # ---- Provision policies (HCL files written to disk first) ----
+    {{- range .Values.policies }}
+    cat > /tmp/policy-{{ .name }}.hcl <<'POLICY_EOF'
+    {{ .ruleHcl | nindent 4 }}
+    POLICY_EOF
+    write_policy "{{ .name }}" "/tmp/policy-{{ .name }}.hcl"
+    {{- end }}
+
+    # ---- Helper: idempotent auth/<mount>/role write (D11 Phase 3.1 + T5.1-T5.9
+    # of plan 2026-06-02-openbao-adoption v1.3). The mount argument enables
+    # per-cluster auth isolation: auth/k8s-mgmt, auth/k8s-build, auth/k8s-cell-X
+    # each have their own role namespace + tokenReviewer JWT so a compromised
+    # cell-1 cluster cannot forge tokens valid against cell-2's auth/login. ----
+    write_auth_role() {
+      mount="$1"
+      role="$2"
+      bound_sas="$3"
+      bound_ns="$4"
+      policies="$5"
+      ttl="$6"
+      echo "[INIT] Writing auth/${mount}/role/${role}"
+      bao write "auth/${mount}/role/${role}" \
+        bound_service_account_names="${bound_sas}" \
+        bound_service_account_namespaces="${bound_ns}" \
+        policies="${policies}" \
+        ttl="${ttl}"
+    }
+
+    # ---- Provision per-mount kubernetes auth roles ----
+    # When .mount is unset, defaults to "kubernetes" for backward compat with
+    # pre-T5 single-cluster bootstraps. New roles SHOULD specify .mount
+    # explicitly so multi-cluster auth isolation is auditable.
+    {{- range .Values.authRoles }}
+    write_auth_role "{{ .mount | default "kubernetes" }}" "{{ .name }}" \
+      "{{ join "," .boundServiceAccountNames }}" \
+      "{{ join "," .boundServiceAccountNamespaces }}" \
+      "{{ join "," .policies }}" \
+      "{{ .ttl }}"
+    {{- end }}
+
+    # ---- Helper: idempotent transit key create (T3.2 of openbao-adoption v1.3) ----
+    # Master + bootstrap transit keys for platform-level envelope encryption.
+    # Per-tenant keys are created on-demand by tenant-controller reconcile (T3.3).
+    # Idempotent: skip if key already exists (bao returns 400 on duplicate create).
+    create_transit_key() {
+      name="$1"
+      type="${2:-aes256-gcm96}"
+      mount="${3:-transit}"
+      if bao read "${mount}/keys/${name}" >/dev/null 2>&1; then
+        echo "[INIT] Transit key ${mount}/keys/${name} already exists — skip"
+      else
+        echo "[INIT] Creating transit key ${mount}/keys/${name} (type=${type})"
+        bao write -f "${mount}/keys/${name}" type="${type}"
+      fi
+    }
+
+    # ---- Provision transit keys ----
+    {{- range .Values.transitKeys }}
+    create_transit_key "{{ .name }}" "{{ .type | default "aes256-gcm96" }}" "{{ .mount | default "transit" }}"
+    {{- end }}
+
+    # ---- T6.3 of openbao-adoption v1.3 — database engine roles ----
+    # Connections (T6.2) are operator-time (require PG admin creds).
+    # Roles can be templated since they only reference connection name + SQL.
+    write_db_role() {
+      role="$1"
+      db_name="$2"
+      creation="$3"
+      revocation="$4"
+      default_ttl="$5"
+      max_ttl="$6"
+      echo "[INIT] Writing database/roles/${role}"
+      bao write "database/roles/${role}" \
+        db_name="${db_name}" \
+        creation_statements="${creation}" \
+        revocation_statements="${revocation}" \
+        default_ttl="${default_ttl}" \
+        max_ttl="${max_ttl}"
+    }
+    {{- range .Values.databaseRoles }}
+    write_db_role "{{ .name }}" "{{ .dbName }}" \
+      {{ .creationStatements | quote }} \
+      {{ .revocationStatements | quote }} \
+      "{{ .defaultTtl }}" "{{ .maxTtl }}"
+    {{- end }}
+
+    # ---- T7.2 of openbao-adoption v1.3 — kubernetes engine roles ----
+    # Engine config (kubernetes_host + ca + JWT) is operator-time.
+    write_k8s_role() {
+      role="$1"
+      namespaces="$2"
+      sa_name="$3"
+      default_ttl="$4"
+      max_ttl="$5"
+      echo "[INIT] Writing kubernetes/roles/${role}"
+      bao write "kubernetes/roles/${role}" \
+        allowed_kubernetes_namespaces="${namespaces}" \
+        service_account_name="${sa_name}" \
+        token_default_ttl="${default_ttl}" \
+        token_max_ttl="${max_ttl}"
+    }
+    {{- range .Values.kubernetesRoles }}
+    write_k8s_role "{{ .name }}" \
+      "{{ join "," .allowedKubernetesNamespaces }}" \
+      "{{ .serviceAccountName }}" \
+      "{{ .tokenDefaultTtl }}" \
+      "{{ .tokenMaxTtl }}"
+    {{- end }}
+
+    echo "[INIT] Done. Final state:"
+    echo "--- secrets engines ---"
+    bao secrets list
+    echo "--- auth methods ---"
+    bao auth list
+    echo "--- policies ---"
+    bao policy list
+    # T5.1-T5.4 of openbao-adoption v1.3: list roles per-mount so multi-cluster
+    # provisioning is auditable in init Job logs.
+    {{- range .Values.authMethods }}
+    {{- if eq .type "kubernetes" }}
+    echo "--- auth/{{ .path }}/role ---"
+    bao list "auth/{{ .path }}/role" 2>/dev/null || echo "(no roles or {{ .path }} auth not configured)"
+    {{- end }}
+    {{- end }}
+    echo "--- transit keys ---"
+    bao list transit/keys 2>/dev/null || echo "(no transit keys or transit engine not configured)"

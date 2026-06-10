@@ -1,0 +1,7 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$comment": "T3.1 (plan 2026-05-21-deep-review-remediation): permissive minimal schema. TODO: tighten in T3.2 follow-up by enumerating known values from upstream chart values.yaml.",
+  "title": "Policy-controller chart values",
+  "type": "object",
+  "additionalProperties": true
+}

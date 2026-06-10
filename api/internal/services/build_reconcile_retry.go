@@ -16,9 +16,20 @@ import (
 
 // maxActivationAttempts is the maximum number of times the reconcile loop will
 // retry release activation before failing the build outright.
-// BRC-003 fix: prevents a RELEASING build with persistent failures (e.g., Gitea down)
-// from blocking the environment for the full 10-minute reaper timeout.
-const maxActivationAttempts = 3
+//
+// BRC-003 fix (original): prevents a RELEASING build with persistent failures
+// (e.g., Gitea down) from blocking the environment for the full 10-minute
+// reaper timeout. Original value: 3.
+//
+// V9 dogfood 2026-05-30 final tuning: increased 3 → 10. Pre-fix
+// 3 retries × reaper Interval=30s = 90s budget exhausted under
+// dogfood concurrency (5+ journeys racing on shared
+// `e2e-tenant-production` ArgoCD app); ArgoCD app-level lock
+// queue legitimately takes 3-5 minutes to drain. 10 retries =
+// 5min budget — covers worst-case queue drain while keeping
+// fast-fail on real infra failure (Gitea down etc still fails
+// within 5min, not 90s).
+const maxActivationAttempts = 10
 
 // retryReleaseActivation handles builds in RELEASING state (MEET-2026-03-26-008).
 // These are builds where Phase 1 (image build) completed but Phase 2 (release
@@ -61,11 +72,14 @@ func (r *BuildReconcileLoop) retryReleaseActivation(ctx context.Context, build *
 			r.completeBuild(ctx, build)
 			return
 		case "SYNC_FAILED", "GIT_MIRROR_FAILED":
-			// Release permanently failed — fail the build
+			// Release permanently failed — fail the build.
+			// Plan T2.1 D4: propagate reaper_reason (WHAT/CAUSE/NEXT) into build
+			// error_message instead of the legacy technical "Release X failed: Y"
+			// string. CLI surfaces this to user with actionable next-step text.
 			r.logger.Warn("reconcile loop: release in failed state, failing build",
 				"build_id", build.ID, "release_id", existingRelease.ID,
 				"release_status", existingRelease.Status)
-			r.failBuild(ctx, build, fmt.Sprintf("Release %s failed: %s", existingRelease.ID, existingRelease.Status))
+			r.failBuild(ctx, build, FormatBuildFailureReason(existingRelease))
 			return
 		default:
 			// Release in transient state (READY, PENDING) — wait for it to resolve
@@ -98,6 +112,23 @@ func (r *BuildReconcileLoop) retryReleaseActivation(ctx context.Context, build *
 		))
 	}
 
+	// CHG-2026-04-29-DOGFOOD iter 8 — re-enrich attestation outputs from
+	// the workflow status before manifest building. The retry path was
+	// previously rendering manifests with empty digests; with the
+	// supply-chain VAP active that produces pods Forbidden at admission.
+	// Re-fetching status is cheap (Argo Workflow CR read) and idempotent.
+	if r.workflow != nil && build.WorkflowID != "" {
+		if status, sErr := r.workflow.GetStatus(ctx, "argo", build.WorkflowID); sErr == nil && status != nil {
+			enrichAppReleasesWithAttestation(buildApps, status)
+		}
+	}
+	digests := make(map[string]string, len(buildApps))
+	for _, ar := range buildApps {
+		if ar.ImageDigestSHA256 != "" {
+			digests[ar.Name] = ar.ImageDigestSHA256
+		}
+	}
+
 	// F-010: shared manifest building (retry path)
 	manifestApps, err := BuildManifestApps(ctx, BuildManifestAppsInput{
 		RegistryURL: r.cfg.RegistryURL,
@@ -106,6 +137,7 @@ func (r *BuildReconcileLoop) retryReleaseActivation(ctx context.Context, build *
 		Environment: build.Environment,
 		CommitSHA:   build.CommitSHA,
 		Apps:        apps,
+		AppDigests:  digests,
 		DomainStore: r.domainStore,
 	})
 	if err != nil {
@@ -114,7 +146,8 @@ func (r *BuildReconcileLoop) retryReleaseActivation(ctx context.Context, build *
 		return
 	}
 
-	renderedManifests := manifests.Render(manifests.RenderInput{
+	// Plan v1.2 T3.1 — propagate Render error instead of panicking the retry loop.
+	renderedManifests, renderErr := manifests.Render(manifests.RenderInput{
 		TenantID:          build.TenantID,
 		ProjectID:         build.ProjectID,
 		Environment:       build.Environment,
@@ -123,7 +156,20 @@ func (r *BuildReconcileLoop) retryReleaseActivation(ctx context.Context, build *
 		BaseDomain:        r.cfg.BaseDomain,
 		ClusterIssuerName: r.cfg.ClusterIssuer, // B14
 		Apps:              manifestApps,
+		// argo-rollouts-progressive-delivery-plan T1.2.
+		PrometheusAddress:   r.cfg.PrometheusAddress,
+		ProgressiveDelivery: manifests.ProgressiveDeliveryEnabled(),
+		// T6.2 of deep-review-remediation-plan (closes find_code_006 / CODE-006 MEDIUM):
+		// populate tenant plan so canary steps match subscription tier.
+		// Pre-T6.2 every Pro/Team/Enterprise tenant silently received
+		// Starter canary (50/100 setWeight, no AnalysisRun).
+		Plan: r.resolvePlan(ctx, build.TenantID),
 	})
+	if renderErr != nil {
+		r.logger.Error("reconcile loop: manifests.Render failed on retry", "build_id", build.ID, "error", renderErr)
+		r.failBuild(ctx, build, "Failed to render manifests on retry — platform configuration error")
+		return
+	}
 
 	result := BuildCallbackRequest{
 		Status:    "succeeded",
@@ -149,27 +195,27 @@ func (r *BuildReconcileLoop) failBuild(ctx context.Context, build *db.Build, rea
 		if err != nil {
 			return err
 		}
-		if statemachine.IsBuildTerminal(statemachine.State(current.Status)) {
+		if statemachine.IsBuildPhaseTerminal(statemachine.BuildPhase(current.Status)) {
 			return nil // Already finalized
 		}
 
 		// Route to the correct failure event based on current state
-		switch statemachine.State(current.Status) {
-		case statemachine.BuildQueued:
+		switch statemachine.BuildPhase(current.Status) {
+		case statemachine.BPhQueued:
 			// QUEUED → RUNNING first (state machine requires it), then RUNNING → FAILED
-			if _, err := r.buildStore.UpdateStatus(ctx, tx, build.ID, string(statemachine.BuildStarted)); err != nil {
+			if _, err := r.buildStore.UpdateStatus(ctx, tx, build.ID, string(statemachine.BPEventStarted)); err != nil {
 				return fmt.Errorf("transition to RUNNING: %w", err)
 			}
-			if _, err := r.buildStore.UpdateStatus(ctx, tx, build.ID, string(statemachine.BuildFailedEvent)); err != nil {
+			if _, err := r.buildStore.UpdateStatus(ctx, tx, build.ID, string(statemachine.BPEventFailed)); err != nil {
 				return fmt.Errorf("transition to FAILED: %w", err)
 			}
-		case statemachine.BuildRunning:
-			if _, err := r.buildStore.UpdateStatus(ctx, tx, build.ID, string(statemachine.BuildFailedEvent)); err != nil {
+		case statemachine.BPhRunning:
+			if _, err := r.buildStore.UpdateStatus(ctx, tx, build.ID, string(statemachine.BPEventFailed)); err != nil {
 				return fmt.Errorf("transition to FAILED: %w", err)
 			}
-		case statemachine.BuildReleasing:
+		case statemachine.BPhReleasing:
 			// MEET-008: RELEASING → FAILED via release-specific event
-			if _, err := r.buildStore.UpdateStatus(ctx, tx, build.ID, string(statemachine.BuildReleaseFailedEvent)); err != nil {
+			if _, err := r.buildStore.UpdateStatus(ctx, tx, build.ID, string(statemachine.BPEventReleaseFailed)); err != nil {
 				return fmt.Errorf("transition RELEASING to FAILED: %w", err)
 			}
 		default:
@@ -205,8 +251,16 @@ func (r *BuildReconcileLoop) failBuild(ctx context.Context, build *db.Build, rea
 		"build_id", build.ID, "reason", reason)
 
 	if onBuildFailed != nil {
+		// T6.4 of deep-review-remediation-plan (closes find_code_004 / CODE-004 MEDIUM).
+		// Use context.WithoutCancel(ctx) instead of context.Background():
+		// preserves request-scoped values (correlation ID, OTel trace span)
+		// across the goroutine boundary, but does NOT propagate cancellation
+		// from the inbound request (the callback must survive request close).
+		// Then add a 30s timeout cap. Pre-fix: trace context lost, OTel span
+		// for the callback was orphaned.
+		parentCtx := context.WithoutCancel(ctx)
 		go func() {
-			cbCtx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+			cbCtx, cancel := context.WithTimeout(parentCtx, 30*time.Second)
 			defer cancel()
 			onBuildFailed(cbCtx, build.TenantID, build.ProjectID, build.CommitSHA, build.ID)
 		}()

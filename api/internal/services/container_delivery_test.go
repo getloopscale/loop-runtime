@@ -14,6 +14,16 @@ import (
 	"github.com/loopzero/loopzero/pkg/statemachine"
 )
 
+// contains checks if a string slice contains a value.
+func contains(ss []string, s string) bool {
+	for _, v := range ss {
+		if v == s {
+			return true
+		}
+	}
+	return false
+}
+
 // --- Test doubles for ContainerDeliveryActivator ---
 
 type fakeReleaseStoreContainer struct {
@@ -76,6 +86,9 @@ func (f *fakeReleaseStoreContainer) FindActiveReleases(_ context.Context, _ stri
 func (f *fakeReleaseStoreContainer) GetByIDTx(_ context.Context, _ db.DBTX, id string) (*db.Release, error) {
 	return f.releases[id], nil
 }
+func (f *fakeReleaseStoreContainer) CancelAllByEnv(_ context.Context, _ db.DBTX, _, _, _ string) (int, error) {
+	return 0, nil
+}
 
 type fakeEnvTargetStoreContainer struct {
 	desired map[string]string
@@ -136,6 +149,22 @@ func (f *fakeSyncContainer) TriggerSync(_ context.Context, _ string) error {
 }
 func (f *fakeSyncContainer) WaitForSync(_ context.Context, _ string, _ time.Duration, _ []string) error {
 	return nil
+}
+
+// Sprint B T1.1 (ADR D1): stub methods to satisfy the widened SyncClient
+// interface. Container-delivery tests exercise only the TriggerSync /
+// WaitForSync paths; ArgoCD recovery methods are noop.
+func (f *fakeSyncContainer) ForceReconcile(_ context.Context, _ string) error {
+	return nil
+}
+func (f *fakeSyncContainer) GetSyncRevision(_ context.Context, _ string) (string, error) {
+	return "", nil
+}
+func (f *fakeSyncContainer) TerminateOperation(_ context.Context, _ string) error {
+	return nil
+}
+func (f *fakeSyncContainer) GetAppStatus(_ context.Context, _ string, _ []string) (bool, bool, error) {
+	return true, true, nil
 }
 
 type fakeGitOpsContainer struct {
@@ -621,4 +650,9 @@ func TestPhaseACreateRelease_MultiApp_PrimaryOnly(t *testing.T) {
 	if rel.ImageDigest == nil || *rel.ImageDigest != "sha256:apidigest" {
 		t.Errorf("expected primary (Apps[0]) digest, got %v", rel.ImageDigest)
 	}
+}
+
+// AppendSideEffect — fix-all-platform-issues-plan T4.1 stub.
+func (f *fakeReleaseStoreContainer) AppendSideEffect(_ context.Context, _ db.DBTX, _ string, _ map[string]any) error {
+	return nil
 }

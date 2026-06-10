@@ -138,6 +138,26 @@ describe('RollbackCommand', () => {
       expect(errorOutput).toContain('Another operation is in progress');
     });
 
+    // T5.1 CV-M-1 of plan 2026-06-01-p3-infra-observability-test-debt:
+    // 409 with code CONCURRENT_ACTIVATION (partial unique index rejected
+    // a second ACTIVE release) MUST surface a specific message + code
+    // distinct from the generic DEPLOY_IN_PROGRESS collapse.
+    it('should surface CONCURRENT_ACTIVATION as distinct from generic 409', async () => {
+      const deps = createMockDeps({
+        rollback: jest.fn().mockRejectedValue(
+          new ApiError('Conflict', 3, 409, 'CONCURRENT_ACTIVATION'),
+        ),
+      });
+      const cmd = new RollbackCommand(deps);
+
+      const exitCode = await cmd.execute({});
+
+      expect(exitCode).toBe(3);
+      const errorOutput = (deps.writeError as jest.Mock).mock.calls.map((c: string[]) => c[0]).join('\n');
+      expect(errorOutput).toContain('previous release activation is still in progress');
+      expect(errorOutput).not.toContain('Another operation is in progress');
+    });
+
     it('should return exit code 3 for 404 no previous release', async () => {
       const deps = createMockDeps({
         rollback: jest.fn().mockRejectedValue(new ApiError('No previous release', 3, 404, 'NO_PREVIOUS_RELEASE')),

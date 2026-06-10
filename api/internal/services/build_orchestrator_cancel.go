@@ -34,7 +34,7 @@ func (o *BuildOrchestrator) CancelBuild(ctx context.Context, buildID string) err
 	}
 
 	// Check if already terminal before acquiring lock (fast path, no race risk)
-	if statemachine.IsBuildTerminal(statemachine.State(build.Status)) {
+	if statemachine.IsBuildPhaseTerminal(statemachine.BuildPhase(build.Status)) {
 		return loopzeroerrors.ErrBuildAlreadyCompleted
 	}
 
@@ -47,13 +47,13 @@ func (o *BuildOrchestrator) CancelBuild(ctx context.Context, buildID string) err
 		}
 
 		// Step 4: re-check terminal state inside lock
-		if statemachine.IsBuildTerminal(statemachine.State(build.Status)) {
+		if statemachine.IsBuildPhaseTerminal(statemachine.BuildPhase(build.Status)) {
 			return loopzeroerrors.ErrBuildAlreadyCompleted
 		}
 
 		// Step 5: transition via state machine: BuildCancelRequested
 		// QUEUED -> CANCELLED (direct), RUNNING -> CANCELLING
-		updatedBuild, err := o.buildStore.UpdateStatus(ctx, tx, buildID, string(statemachine.BuildCancelRequested))
+		updatedBuild, err := o.buildStore.UpdateStatus(ctx, tx, buildID, string(statemachine.BPEventCancelRequested))
 		if err != nil {
 			return fmt.Errorf("cancel build: transition cancel requested: %w", err)
 		}
@@ -66,8 +66,8 @@ func (o *BuildOrchestrator) CancelBuild(ctx context.Context, buildID string) err
 		}
 
 		// Step 7: if transitioned to CANCELLING (was RUNNING), confirm cancellation
-		if statemachine.State(updatedBuild.Status) == statemachine.BuildCancelling {
-			if _, err := o.buildStore.UpdateStatus(ctx, tx, buildID, string(statemachine.BuildCancelConfirmed)); err != nil {
+		if statemachine.BuildPhase(updatedBuild.Status) == statemachine.BPhCancelling {
+			if _, err := o.buildStore.UpdateStatus(ctx, tx, buildID, string(statemachine.BPEventCancelConfirmed)); err != nil {
 				return fmt.Errorf("cancel build: confirm cancellation: %w", err)
 			}
 		}

@@ -1,4 +1,4 @@
-{{- if .Values.policies.disallowLatestTag.enabled }}
+{{- if .Values.vaps.disallowLatestTag }}
 apiVersion: admissionregistration.k8s.io/v1
 kind: ValidatingAdmissionPolicy
 metadata:

@@ -56,12 +56,28 @@ func NewRealProvisioner(namespace string, client dynamic.Interface) *RealProvisi
 }
 
 // EnsureAppProject creates or updates an ArgoCD AppProject CR for tenant RBAC isolation (MOD-5).
+//
+// CHG-2026-04-30-DELETE-SINGLE-CELL: when CellID is non-empty AND not the
+// "cell-default" sentinel, AppProject destinations use `name: <cellID>`
+// (matches cluster Secret label) instead of `server: <URL>`. This keeps
+// AppProject + Application destinations consistent — both resolve via
+// ArgoCD's cluster name registry instead of pinning to an apiServer URL
+// that may rotate (k3d) or be inaccurate (multi-cell).
 func (p *RealProvisioner) EnsureAppProject(ctx context.Context, spec AppProjectSpec) error {
 	// Build destination list scoped to tenant namespaces only.
 	// Each destination restricts to the tenant's environment namespaces,
 	// preventing cross-tenant deployment via ArgoCD.
 	// SEC-007: Use explicit destination server instead of wildcard to prevent
 	// cross-cluster deployment when multiple clusters are registered in ArgoCD.
+	//
+	// F-08 fix (2026-05-07 cleanroom dogfood): the previous cell-default
+	// sentinel exclusion forced `server: <URL>` resolution, which broke
+	// when the operator's WORKLOAD_CLUSTER_URL env (DNS hostname) didn't
+	// match the cluster Secret's `data.server` (IP). Now ALL non-empty
+	// cellIDs use name-based lookup. ClusterCredential.spec.clusterName
+	// is required to equal cellID for cell-default deploys (enforced
+	// canonically by infra/scripts/bootstrap-cell-default-cc.sh).
+	useName := spec.CellID != ""
 	destServer := spec.DestinationServer
 	if destServer == "" {
 		destServer = "*"
@@ -69,10 +85,13 @@ func (p *RealProvisioner) EnsureAppProject(ctx context.Context, spec AppProjectS
 
 	destinations := make([]interface{}, 0, len(spec.DestinationNamespaces))
 	for _, ns := range spec.DestinationNamespaces {
-		destinations = append(destinations, map[string]interface{}{
-			"namespace": ns,
-			"server":    destServer,
-		})
+		dest := map[string]interface{}{"namespace": ns}
+		if useName {
+			dest["name"] = spec.CellID
+		} else {
+			dest["server"] = destServer
+		}
+		destinations = append(destinations, dest)
 	}
 	// SEC-007: No glob fallback. If no namespaces are provided, the AppProject
 	// will have an empty destinations list, blocking all deployments until the
@@ -156,10 +175,21 @@ func buildApplicationObject(spec ApplicationSpec) *unstructured.Unstructured {
 			"kind":       "Application",
 			"metadata": map[string]interface{}{
 				"name": spec.Name,
-				"labels": map[string]interface{}{
-					constants.LabelTenant:    spec.TenantID,
-					constants.LabelManagedBy: constants.ManagedByTenantController,
-				},
+				"labels": func() map[string]interface{} {
+					// Sprint B B3 prep (code-005): emit loopzero.io/environment label
+					// when spec.Environment is non-empty so the label-based
+					// parser path (future activator iteration) can disambiguate
+					// hyphenated env names. Backward-compat: empty Environment
+					// → label omitted, no behavior change.
+					labels := map[string]interface{}{
+						constants.LabelTenant:    spec.TenantID,
+						constants.LabelManagedBy: constants.ManagedByTenantController,
+					}
+					if spec.Environment != "" {
+						labels[constants.LabelEnvironment] = spec.Environment
+					}
+					return labels
+				}(),
 				"annotations": map[string]interface{}{
 					// ArgoCD Notifications: subscribe to sync-completed trigger.
 					// When Synced + Healthy, ArgoCD calls POST /internal/argocd-callback
@@ -185,16 +215,58 @@ func buildApplicationObject(spec ApplicationSpec) *unstructured.Unstructured {
 						"recurse": true,
 					},
 				},
-				"destination": map[string]interface{}{
-					"server":    spec.DestinationURL,
-					"namespace": spec.DestinationNS,
-				},
+				"destination": buildDestination(spec),
 				"syncPolicy": map[string]interface{}{
 					"automated": nil,
 					"syncOptions": []interface{}{
 						"CreateNamespace=false",
 						"PrunePropagationPolicy=foreground",
 						"PruneLast=true",
+					},
+				},
+				// argo-rollouts-progressive-delivery-plan T2.1 — ArgoCD must
+				// ignore fields modified at runtime by Argo Rollouts and the
+				// scaler (HPA/KEDA), otherwise every reconcile would show
+				// drift and OutOfSync state, blocking notifications and
+				// potentially overwriting canary progress on auto-sync.
+				"ignoreDifferences": []interface{}{
+					// Rollout replicas — KEDA/HPA modifies at runtime.
+					map[string]interface{}{
+						"group": "argoproj.io",
+						"kind":  "Rollout",
+						"jsonPointers": []interface{}{
+							"/spec/replicas",
+						},
+					},
+					// Legacy Deployment replicas (D8 fallback path).
+					map[string]interface{}{
+						"group": "apps",
+						"kind":  "Deployment",
+						"jsonPointers": []interface{}{
+							"/spec/replicas",
+						},
+					},
+					// TraefikService weights — Argo Rollouts shifts at runtime
+					// during canary steps. Both indices listed because the
+					// renderer always emits stable+canary in fixed order.
+					map[string]interface{}{
+						"group": "traefik.io",
+						"kind":  "TraefikService",
+						"jsonPointers": []interface{}{
+							"/spec/weighted/services/0/weight",
+							"/spec/weighted/services/1/weight",
+						},
+					},
+					// EC-13: Service selectors — Argo Rollouts injects
+					// rollouts-pod-template-hash to scope selectors to
+					// stable/canary revision. The renderer doesn't emit this
+					// field; Rollouts adds it at runtime.
+					map[string]interface{}{
+						"group": "",
+						"kind":  "Service",
+						"jsonPointers": []interface{}{
+							"/spec/selector/rollouts-pod-template-hash",
+						},
 					},
 				},
 			},
@@ -327,4 +399,35 @@ func (p *RealProvisioner) DeleteAppProject(ctx context.Context, tenantID string)
 		return fmt.Errorf("argocd: delete appproject %s: %w", tenantID, err)
 	}
 	return nil
+}
+
+// buildDestination resolves the ArgoCD Application destination block.
+//
+// CHG-2026-04-30-DELETE-SINGLE-CELL: when CellID is non-empty AND not
+// the legacy "cell-default" sentinel, ArgoCD destination uses `name:`
+// pointing to the cluster Secret labeled `argocd.argoproj.io/secret-type=cluster`
+// with `name=<cellID>` (eg. "cell-2-argocd-cluster" → name=cell-2).
+// ArgoCD application-controller resolves this at sync time, picking up
+// IP rotations / token refreshes without operator awareness.
+//
+// For "cell-default" or empty cellID we keep the explicit `server:` URL
+// to preserve compatibility with the existing single-runtime-cluster
+// installs whose argocd-cluster Secret may be named differently
+// (eg. "runtime-argocd-cluster") OR who use the in-cluster API server
+// directly.
+//
+// SEC-007 invariant preserved: destination is explicit, never wildcard.
+func buildDestination(spec ApplicationSpec) map[string]interface{} {
+	dest := map[string]interface{}{
+		"namespace": spec.DestinationNS,
+	}
+	// F-08 fix (2026-05-07): cell-default is no longer a sentinel.
+	// All non-empty cellIDs use name-based lookup. See EnsureAppProject
+	// for full rationale.
+	if spec.CellID != "" {
+		dest["name"] = spec.CellID
+	} else {
+		dest["server"] = spec.DestinationURL
+	}
+	return dest
 }

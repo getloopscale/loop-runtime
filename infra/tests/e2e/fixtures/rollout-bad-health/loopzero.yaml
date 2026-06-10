@@ -1,0 +1,21 @@
+version: 1
+project: rollout-bad-health
+
+# argo-rollouts-progressive-delivery-plan T5.2 fixture.
+# This app intentionally returns HTTP 500 from /health AND from / so
+# the Argo Rollouts canary AnalysisTemplate (Prometheus success-rate
+# query) detects a degraded canary and auto-aborts. The expected outcome
+# is a rollout.aborted SSE event after the first canary step.
+#
+# The pod itself is HEALTHY for kubelet (the readinessProbe path is
+# /readiness which returns 200), but Traefik traffic to / and /health
+# returns 500. This isolates the abort cause to canary analysis (not
+# pod health), validating the success-rate query path.
+
+apps:
+  api:
+    path: .
+    framework: express
+    type: server
+    build: dockerfile
+    port: 3000

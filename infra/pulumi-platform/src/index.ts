@@ -113,7 +113,17 @@ const argocd = new ArgoCD("argocd", {
 // on the `public` schema — custom users can't CREATE tables without GRANT.
 // The doadmin user has full privileges, which is required for Gitea's migrations.
 // Role separation for Gitea is documented as follow-up (requires GRANT job).
-const giteaPassword = config.giteaAdminPassword ?? pulumi.output("loopzero-gitea-dev-2026");
+// T1.4 (plan 2026-05-21-deep-review-remediation): no hardcoded fallback.
+// Pulumi up fails fast if config not set, with named error directing operator
+// to set the secret config.
+if (!config.giteaAdminPassword) {
+  throw new Error(
+    "giteaAdminPassword Pulumi config secret is required — set via: " +
+      "`pulumi config set --secret giteaAdminPassword <value>`. " +
+      "See docs/operations/credentials-required.md.",
+  );
+}
+const giteaPassword = config.giteaAdminPassword;
 const gitea = new Gitea("gitea", {
   provider: mgmtProvider,
   namespace: NAMESPACE,

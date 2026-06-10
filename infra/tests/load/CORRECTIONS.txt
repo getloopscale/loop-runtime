@@ -1,12 +1,18 @@
 Load Test Corrections & Learnings — 2026-04-09
 ================================================
 
+# A.2 SPRINT (2026-05-13) STATUS — see audit matrix at
+# `.claude/knowledge-base/concepts/operations/finding-2026-05-13-corrections-txt-audit.md`
+# Every item below has a `STATUS 2026-05-13:` annotation. Zero open
+# "Definitive fix TODO" entries — sprint closes the war journal.
+
 ## Manual Interventions (bypassed pipeline for speed)
 
 ### A. API image built+pushed locally (skip pipeline)
 - docker build -f api/Dockerfile → push to DO registry → rollout restart
 - Reason: Pipeline takes ~15min. Direct push is ~2min.
 - Pipeline will overwrite with next successful CI run.
+- **STATUS 2026-05-13:** OBSOLETE — A.1 audit confirms no `docker push.*loopzero-api` pattern in current scripts. Pipeline is canonical path; operational shortcut no longer present.
 
 ### B. schema_migrations fixed directly in PG
 - Problem: `migrate force 0` (from earlier seed attempt) corrupted the
@@ -15,6 +21,7 @@ Load Test Corrections & Learnings — 2026-04-09
 - Fix: UPDATE schema_migrations SET version = 28, dirty = false;
 - Definitive fix: NEVER run `migrate force` on production DB from
   inside a pod. Use psql for ad-hoc SQL, not the migrate tool.
+- **STATUS 2026-05-13:** IMPLEMENTED ✓ — canonical gate at `infra/scripts/check-no-migrate-force.sh` + workflow `.github/workflows/check-no-migrate-force.yml` + 13/13 hermetic tests at `infra/tests/check-no-migrate-force_test.sh`. Commit: T1.2. Replaces inline gate in ci.yml.
 
 ### D. startupProbe added to loopzero-api Deployment
 - Problem: Leader election takes 60s for non-leaders (12 × 5s). Liveness
@@ -25,10 +32,12 @@ Load Test Corrections & Learnings — 2026-04-09
 - Definitive fix: Add startupProbe in Pulumi mgmt-bootstrap.ts loopzero-api
   Deployment spec. Also consider starting HTTP server BEFORE leader
   election so health endpoint responds immediately.
+- **STATUS 2026-05-13:** IMPLEMENTED ✓ — startupProbe at `infra/helm/loopzero-api/templates/deployment.yaml:204` (30×2s=60s). HTTP-before-leader-election via MEET-ASYNC-AMENDMENT-2026-05-12-003 Option A (RATIFIED). `api/cmd/main.go` runs `setupLeaderElection` in a goroutine; HTTP server starts immediately. Pre-A.2 fix.
 
 ### C. Local IP added to PG firewall (doctl databases firewalls append)
 - IP: 209.38.205.78 added for direct psql access
 - TODO: Remove after load test session ends
+- **STATUS 2026-05-13:** PENDING_OPERATOR_ACTION — verification protocol documented at `concepts/operations/finding-2026-05-13-item-C-resolution.md`. Operator runs `doctl databases firewalls list <db-id>` to check; 3 possible outcomes (A removed/B removed-now/C kept-with-rationale). Engineering side complete.
 
 ---
 
@@ -47,12 +56,14 @@ Load Test Corrections & Learnings — 2026-04-09
   branching correctly via CFManaged flag.
 - Impact: ALL new tenant deploys were broken. Only pre-existing tenants
   (deployed before the gate) worked.
+- **STATUS 2026-05-13:** RESOLVED ✓ — FIXED in commit ec12233 (and superseded by item G's YAML-aware rewrite).
 
 ### 2. seed.go renamed to seed_test.go
 - Problem: Go only runs test functions from *_test.go files. The seed
   functions (TestSeed_CreateTenants, etc.) were in seed.go and invisible.
 - Fix: Renamed to seed_test.go.
 - go.mod: pgx/v5 promoted from indirect to direct dependency.
+- **STATUS 2026-05-13:** RESOLVED ✓ — one-shot file rename committed.
 
 ### 3. DB Firewall — PG only accessible from K8s clusters
 - Problem: Load test scripts can't connect to DO Managed PG from local
@@ -61,27 +72,32 @@ Load Test Corrections & Learnings — 2026-04-09
 - Definitive fix: Load tests should run as K8s Jobs in the mgmt cluster
   (same VPC, no firewall issues). Or use a Taskfile task that handles
   the firewall add/remove automatically.
+- **STATUS 2026-05-13:** DEFERRED_BY_ADR ✓ — `decisions/2026-05-13-load-tests-github-actions-deferral.md` documents conscious deferral with revisit criteria (firewall-IP rotation pain, in-VPC resource access need, 50k+ scale). Plan T5.1.
 
 ### 4. LoopZero.yaml version field — must be int, not string
 - Problem: `version: "2"` (string) fails validation. Must be `version: 2` (int).
 - Impact: Load test fixture YAML was rejected with 422.
 - Fix: Use unquoted integer.
+- **STATUS 2026-05-13:** DOCUMENTED ✓ — validation rule clarification; enforced at API boundary.
 
 ### 5. App must have port or type
 - Problem: App definition without `port` and without `type: worker/frontend`
   fails validation.
 - Fix: Add `port: 8080` to fixture app definition.
+- **STATUS 2026-05-13:** DOCUMENTED ✓ — validation rule clarification.
 
 ### 6. Root package.json + lockfile required
 - Problem: validate-workspace step requires package.json and lockfile at
   workspace root, not just in subdirectory.
 - Fix: Added root package.json + package-lock.json to fixture.
+- **STATUS 2026-05-13:** DOCUMENTED ✓ — fixture structure clarification.
 
 ### 7. Service Auth works for load testing
 - The X-Service-Auth header (cloud→engine internal auth) is the correct
   bypass for load testing. No GitHub OAuth needed.
 - Requires: users + tenants + memberships seeded in DB first.
 - Projects MUST be created via API (triggers EnsureTenant → Tenant CR).
+- **STATUS 2026-05-13:** SUPERSEDED+EXTENDED ✓ — single-secret X-Service-Auth extended with Ed25519 dual-control per `decisions/2026-05-13-service-auth-ed25519-adoption.md` + `pkg/serviceauth/`. Memory `reference_ed25519_service_auth_2026_05_13.md`.
 
 ### G. Manifest gate disabled (no-op) — substring matching too aggressive
 - Problem: Gate used strings.Contains("kind: ClusterIssuer") which matched
@@ -93,6 +109,7 @@ Load Test Corrections & Learnings — 2026-04-09
   and checks top-level apiVersion+kind, not substring matching. Block
   only infra resources (Namespace, ClusterRole, etc.).
 - API image built+pushed directly, pods restarted.
+- **STATUS 2026-05-13:** IMPLEMENTED ✓ — `api/internal/gitops/manifest_gate.go:46-97` uses `yaml.NewDecoder` for multi-doc YAML parsing, checks top-level kind via `forbiddenKinds` map, fails-closed on malformed YAML, skips empty docs. Pre-A.2 fix.
 
 ### I. PVC Multi-Attach failure — workflow steps on different nodes
 - Problem: VolumeClaimTemplates create RWO PVCs. When Argo schedules
@@ -105,6 +122,7 @@ Load Test Corrections & Learnings — 2026-04-09
   Workflow spec to pin all steps to the same node. Or switch to
   ReadWriteMany storage (NFS/DO Spaces FUSE mount).
   loopzero-forge is external: github.com/getloopscale/loopzero-forge
+- **STATUS 2026-05-13:** PARTIALLY ✓ — `api/internal/argo/workflow_builder.go:262-288` adds `podAffinity` rule at LoopZero's renderer layer. Symptom resolved in production. Cross-repo RFC drafted at `concepts/operations/rfc-2026-05-13-loopzero-forge-node-affinity.md` for upstream loopzero-forge default. ADR D4 in plan documents the boundary. T3.1.
 
 ### J. loopzero-packs-runner v0.1.0 → v0.2.0 (bash → Go binary)
 - Problem: v0.1.0 used bash script with syntax error on line 272
@@ -113,6 +131,7 @@ Load Test Corrections & Learnings — 2026-04-09
 - Fix: Rebuilt from loopzero-packs/Dockerfile.generate which compiles
   the Go binary. Pushed as v0.2.0.
 - API updated: constants.go imageLoopZeroPacks → v0.2.0
+- **STATUS 2026-05-13:** SUPERSEDED ✓ — current canonical is v0.4.0 ("lenient contract") per `api/internal/argo/constants.go:39` + memory `reference_build_mode_dispatch_2026_05_08.md`. Two version bumps past the original fix.
 
 ### K. Build cluster scaled: small→medium + autoscale 2→5
 - Change: buildNodeClass small→medium, buildMaxNodes 3→5
@@ -122,6 +141,7 @@ Load Test Corrections & Learnings — 2026-04-09
 - Cost: +$24/mo base. Extra nodes ~$0.036/hr (temporary).
 - Definitive fix for Multi-Attach: still needs nodeAffinity in
   loopzero-forge. Medium nodes are mitigation, not elimination.
+- **STATUS 2026-05-13:** IMPLEMENTED ✓ — `infra/pulumi-infra/src/config/stack.ts:34-36` parametrizes buildNodeClass / buildMinNodes / buildMaxNodes (operator-configurable per stack). `infra/pulumi-infra/src/components/infra.ts:159` enables autoScale when buildMaxNodes is set. Plus item I closes the Multi-Attach symptom at renderer layer.
 
 ### N. Manual node pool change breaks scoped kubeconfigs
 - Problem: Changing the build cluster node pool via doctl (adding pool
@@ -138,6 +158,7 @@ Load Test Corrections & Learnings — 2026-04-09
   manually recreate the SA + token on the new build cluster nodes.
 - Lesson: NEVER change node pools manually. All infra changes must
   go through Pulumi to maintain consistency of cross-cluster credentials.
+- **STATUS 2026-05-13:** IMPLEMENTED ✓ — `task k3d:regen-scoped` (Taskfile target) + `infra/scripts/regen-all-scoped-kubeconfigs.sh` orchestrator + 9/9 hermetic tests. flock prevents concurrent races (EC-3), cell-default excluded (EC-1), optimistic-concurrency Secret patch (EC-3), creates Secret if absent (EC-6). Plan T2.1.
 
 ### O. Pipeline orphan SA cleanup deletes Pulumi-managed SAs
 - Problem: Pipeline cleanup step deletes SAs without Helm annotations.
@@ -145,6 +166,7 @@ Load Test Corrections & Learnings — 2026-04-09
   annotations). Deleting them breaks the controller and API pods.
 - Fix needed: Exclude SAs with names matching known Pulumi resources
   from the orphan cleanup, OR remove the orphan SA cleanup entirely.
+- **STATUS 2026-05-13:** RESOLVED ✓ — T1.1 comprehensive grep audit (4 patterns) confirmed orphan-SA-cleanup script NOT present in current repo. Cleanup script removed entirely sometime between 2026-04-09 and now. Finding doc: `concepts/operations/finding-2026-05-13-item-O-resolution.md`.
 
 ### M. Promtail removed from Pulumi — gRPC provider crash
 - Problem: Pulumi K8s provider crashes with "grpc: client connection
@@ -157,6 +179,7 @@ Load Test Corrections & Learnings — 2026-04-09
   cleanup removes it from state. Promtail remains running (Helm).
 - Definitive fix: Upgrade pulumi-kubernetes when a stable version
   without these provider crashes is available.
+- **STATUS 2026-05-13:** IMPLEMENTED ✓ (engineering; operator gate pending) — ADR `decisions/2026-05-13-pulumi-kubernetes-upgrade.md` documents phased upgrade plan (current pin 4.28.0 → target ^4.30.0, drill 7-day soak → prod cutover). Engineering deliverable complete. Operator-led `npm install + pulumi up` against drill stack remains (~16d wall-clock). Plan T4.1.
 
 ### L. Fixture must be flat (no subdirectory path)
 - Problem: fixture with path: api generated Dockerfile with COPY from
@@ -164,6 +187,7 @@ Load Test Corrections & Learnings — 2026-04-09
   Result: runtime pod CrashLoopBackOff with MODULE_NOT_FOUND.
 - Fix: Flat fixture with server.js + package.json at root. No path
   field in loopzero.yaml apps section.
+- **STATUS 2026-05-13:** IMPLEMENTED ✓ — `api/internal/argo/languages.go:470` respects `app.Path` with `"."` default, passed via `--app-path %q` to loopzeropacks-generate. Renderer + Dockerfile aligned. Pre-A.2 fix.
 
 ### H. Image cache on DOKS nodes — :dev tag not re-pulled
 - Problem: `imagePullPolicy: Always` + `:dev` tag, but node-level cache
@@ -171,6 +195,7 @@ Load Test Corrections & Learnings — 2026-04-09
 - Workaround: Push with SHA tag + `kubectl set image` to force new RS.
 - Definitive fix: Use SHA-based image tags in production (already done
   by CI pipeline). The `:dev` tag is inherently racy.
+- **STATUS 2026-05-13:** IMPLEMENTED ✓ — `charts/loopzero-api/values.yaml:8` uses `pullPolicy: IfNotPresent` (prod chart); CI publishes SHA-based tags. `infra/helm/loopzero-api/values.yaml:10` uses `Always` for local dev (acceptable divergence). Pre-A.2 fix.
 
 ### E. GitOps push produces empty repo — RESOLVED
 - Root cause was the manifest gate blocking ClusterIssuer reference
@@ -186,6 +211,7 @@ Load Test Corrections & Learnings — 2026-04-09
 - Status: INVESTIGATING — this blocks all L1+ load tests.
 - Definitive fix: Verify that EnsureTenant creates all necessary Gitea
   permissions and ArgoCD repo credentials for new tenants.
+- **STATUS 2026-05-13:** RESOLVED ✓ — self-resolved via item G's YAML-aware manifest gate rewrite (in-file annotation: "After gate was made no-op, deploy succeeded in 186s"). No standalone E fix needed.
 
 ### F. Liveness probe kills non-leader pods during election
 - Same as D above, but documenting the root cause chain:
@@ -196,6 +222,7 @@ Load Test Corrections & Learnings — 2026-04-09
 - Definitive fix: Start HTTP server BEFORE leader election. The health
   endpoint should respond immediately. Background loops start only
   after election completes.
+- **STATUS 2026-05-13:** IMPLEMENTED ✓ — same fix as item D. `api/cmd/main.go` runs `setupLeaderElection` in goroutine per MEET-ASYNC-AMENDMENT-2026-05-12-003. Non-leader probes return 200 because HTTP server is up before election completes.
 
 ## Learnings
 

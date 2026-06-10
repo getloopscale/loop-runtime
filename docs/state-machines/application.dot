@@ -1,0 +1,33 @@
+digraph LoopZeroApplication {
+	rankdir=LR;
+	node [shape=circle, fontsize=10];
+	edge [fontsize=8];
+
+	"" [shape=circle];
+	"Cleaned" [shape=doublecircle];
+	"Degraded" [shape=circle];
+	"Down" [shape=circle];
+	"Progressing" [shape=circle];
+	"Reachable" [shape=circle];
+	"Serving" [shape=circle];
+
+	"" -> "Progressing" [label="Create"];
+	"Degraded" -> "Down" [label="EndpointsLost"];
+	"Degraded" -> "Cleaned" [label="Orphaned"];
+	"Degraded" -> "Reachable" [label="RouteOK"];
+	"Degraded" -> "Progressing" [label="Update"];
+	"Down" -> "Progressing" [label="EndpointsReady"];
+	"Down" -> "Cleaned" [label="Orphaned"];
+	"Down" -> "Progressing" [label="Update"];
+	"Progressing" -> "Down" [label="EndpointsLost"];
+	"Progressing" -> "Serving" [label="EndpointsReady"];
+	"Progressing" -> "Cleaned" [label="Orphaned"];
+	"Reachable" -> "Down" [label="EndpointsLost"];
+	"Reachable" -> "Cleaned" [label="Orphaned"];
+	"Reachable" -> "Degraded" [label="RouteFail"];
+	"Reachable" -> "Progressing" [label="Update"];
+	"Serving" -> "Down" [label="EndpointsLost"];
+	"Serving" -> "Cleaned" [label="Orphaned"];
+	"Serving" -> "Reachable" [label="RouteOK"];
+	"Serving" -> "Progressing" [label="Update"];
+}

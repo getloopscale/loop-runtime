@@ -4,6 +4,7 @@
 package main
 
 import (
+	"context"
 	"log/slog"
 	"net/http"
 	"time"
@@ -65,6 +66,14 @@ func setupOrchestrator(
 	if planLimiter != nil {
 		planCap = &planLimiterCapAdapter{limiter: planLimiter}
 	}
+
+	// B40 (CHG-2026-05-05-DOGFOOD-B40): instantiated BEFORE BuildOrchestrator
+	// because the orchestrator depends on it via Deps.ScalingResolver. The
+	// `scaleApply` closure below reuses the same scalingStore (single source
+	// of truth for app_scaling_config IO).
+	scalingStore := db.NewPostgresScalingStore(dbAdapter)
+	scalingResolver := services.NewDBScalingResolver(scalingStore)
+
 	orch := services.NewBuildOrchestrator(services.BuildOrchestratorDeps{
 		BuildStore:        stores.BuildStore,
 		ReleaseStore:      stores.ReleaseStore,
@@ -80,8 +89,16 @@ func setupOrchestrator(
 		KVClient:          workflows.KVClient,
 		BaseDomain:        cfg.BaseDomain,
 		PlanCap:           planCap,
+		ScalingResolver:   scalingResolver, // B40
 		// Sprint 6 / T3.1: per-app attestation persistence (signature + SBOM).
-		AppAttestationStore: db.NewPostgresAppAttestationStore(dbAdapter),
+		// T1.3b (plan 2026-05-29-sqlc-migration v1.3): sqlc-backed wrapper
+		// satisfies db.AppAttestationStore 1:1 — preserves ALL-signed
+		// atomicity invariant + F-S2-01 FK race closure (SaveAppAttestations
+		// Tx requires non-nil tx for atomic release+attestation commit).
+		AppAttestationStore: db.NewAppAttestationStoreSqlc(dbAdapter),
+		// T1.2 mitigation #3 of MEET-2026-05-12: per-sign cosign audit
+		// log. AuditLogger reuses WriteAuditLog as the canonical SQL.
+		AuditLogger: &db.AuditLogger{DB: dbAdapter},
 	})
 
 	buildOrchestrator := &adapters.BuildOrchestratorAdapter{
@@ -137,8 +154,43 @@ func setupOrchestrator(
 	statusReleaseStore := &adapters.StatusReleaseStoreAdapter{Store: stores.ReleaseStore}
 	statusHandler := routes.NewStatusHandler(projectStore, statusBuildStore, statusReleaseStore, cfg.BaseDomain)
 
-	// Scale handler — scaling configuration for apps (KEDA scale-to-zero gate)
-	scaleHandler := routes.NewScaleHandler(projectStore, cfg.KEDAEnabled)
+	// Scale handler — scaling configuration for apps (KEDA scale-to-zero gate).
+	// Plan T2.2: real persistence via PostgresScalingStore (was: stub-202 returning acknowledged).
+	// The closure adapts routes.ScaleConfigInput ↔ db.ScalingConfig (avoids circular import).
+	// scalingStore declared above (before BuildOrchestrator) — single instance
+	// shared by scaleApply (write path) and ScalingResolver (read path).
+	// T7.1 of deep-review-remediation-plan (closes find_data_003 HIGH).
+	// CLAUDE.md Rule 6 requires every (tenant, project, environment) mutation
+	// to acquire withEnvironmentLock. Previously, scaleApply called
+	// scalingStore.Upsert(dbAdapter, ...) directly, bypassing the lock.
+	// Two concurrent `loopzero scale` calls on the same env could TOCTOU-race the
+	// read-current/write-new sequence inside Upsert. Now wrapped in WithLock
+	// so concurrent attempts serialize via pg_advisory_xact_lock.
+	scaleApply := func(ctx context.Context, in routes.ScaleConfigInput) (bool, error) {
+		var changed bool
+		err := stores.Locker.WithLock(ctx, in.TenantID, in.ProjectID, in.Environment, func(tx db.DBTX) error {
+			c := &db.ScalingConfig{
+				TenantID:     in.TenantID,
+				ProjectID:    in.ProjectID,
+				Environment:  in.Environment,
+				AppName:      in.AppName,
+				MinReplicas:  in.MinReplicas,
+				MaxReplicas:  in.MaxReplicas,
+				TargetCPUPct: in.TargetCPUPct,
+				ScaleToZero:  in.ScaleToZero,
+				UpdatedBy:    in.UpdatedBy,
+			}
+			_, ch, upErr := scalingStore.Upsert(ctx, tx, c)
+			if upErr != nil {
+				return upErr
+			}
+			changed = ch
+			return nil
+		})
+		return changed, err
+	}
+	scaleHandler := routes.NewScaleHandler(projectStore, scaleApply, cfg.KEDAEnabled)
+	scaleHandler.EnsureProductionWired() // audit M02 #14: panic-on-regression guard
 
 	// Build list handler — lists builds for a project with optional env filter
 	buildListHandler := routes.NewBuildListHandler(&adapters.BuildListStoreAdapter{Store: stores.BuildStore})
@@ -148,7 +200,9 @@ func setupOrchestrator(
 	projectDeleter := services.NewProjectDeleter(services.ProjectDeleterDeps{
 		BuildStore:        stores.BuildStore,
 		EnvTargetStore:    stores.EnvTargetStore,
+		ReleaseStore:      stores.ReleaseStore,
 		ProjectStore:      &db.PostgresProjectStore{DB: dbAdapter},
+		ScalingStore:      scalingStore,
 		Locker:            stores.Locker,
 		GitOps:            workflows.GitOpsPusher,
 		WorkflowCanceller: workflows.WorkflowSubmitter,
@@ -160,6 +214,23 @@ func setupOrchestrator(
 	syncCallbackActivator := services.NewSyncCallbackActivator(
 		stores.ReleaseStore, stores.EnvTargetStore, stores.Locker, stores.EventStore, cfg.BaseDomain, logger,
 	)
+	// Sprint B B3 (closes code-005): wire label-based lookup so the activator
+	// reads `loopzero.io/{tenant,environment}` off the live ArgoCD App CR instead
+	// of LastIndex-parsing the app name (which is structurally ambiguous when
+	// both tenant and env contain hyphens, e.g. `tn-loopzero-j-rollout-a`).
+	// Reader uses the same mgmt dynamic client as CellPinner. Backward-compat:
+	// when an App has no labels (apps pre-dating commit `8854f64e`), the
+	// activator falls back to ParseArgoAppName, so existing fixtures continue
+	// to work unchanged. Closure of code-005 lands progressively as old apps
+	// re-render with the new label.
+	if mgmtDynamic := buildMgmtDynamicClient(logger); mgmtDynamic != nil {
+		syncCallbackActivator = syncCallbackActivator.WithAppLabelReader(
+			services.NewDynamicArgoAppLabelReader(mgmtDynamic, "argocd"),
+		)
+		logger.Info("sync callback activator: label-based lookup wired (code-005 closure)")
+	} else {
+		logger.Warn("sync callback activator: dynamic client unavailable; falling back to LastIndex parser (code-005 hyphen ambiguity remains)")
+	}
 	argoCallbackHandler := routes.NewArgoCallbackHandler(syncCallbackActivator, logger, cfg.ArgoCallbackSecret)
 
 	return &OrchestratorDeps{

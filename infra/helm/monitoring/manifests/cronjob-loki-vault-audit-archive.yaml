@@ -1,0 +1,111 @@
+# SPDX-License-Identifier: Apache-2.0
+# T8.5 of plan 2026-06-02-openbao-adoption v1.4 — monthly archival cron
+# that exports Loki Vault audit log to DO Spaces for compliance retention.
+#
+# Schedule: 0 4 1 * * (04:00 UTC day 1 monthly — runs AFTER the Loki retention
+# stream period (90d) but BEFORE expiry, so the most recent 30 days
+# overlap between Loki + Spaces (defense in depth).
+#
+# Workflow:
+#   1. logcli query '{namespace="vault-system"}' --since=720h (last 30d)
+#   2. compress via gzip
+#   3. upload to s3://loopzero-audit-logs-${env}/vault/${YYYY-MM}.jsonl.gz via
+#      mc (mc is installed in the container image; AWS_ACCESS_KEY_ID +
+#      AWS_SECRET_ACCESS_KEY mounted from K8s Secret)
+#   4. emit metric loopzero_loki_archive_success / loopzero_loki_archive_bytes
+#
+# Disabled by default (env opt-in via overlay). Operator enables when DO
+# Spaces bucket exists + creds K8s Secret is present.
+apiVersion: batch/v1
+kind: CronJob
+metadata:
+  name: loki-vault-audit-archive
+  namespace: monitoring
+  labels:
+    app.kubernetes.io/name: loki-archive
+    app.kubernetes.io/managed-by: helm
+    loopzero.io/related-plan: "openbao-adoption-v1.4-T8.5"
+  annotations:
+    loopzero.io/related-plan-full: "2026-06-02-openbao-adoption v1.4 T8.5"
+spec:
+  schedule: "0 4 1 * *"
+  concurrencyPolicy: Forbid
+  successfulJobsHistoryLimit: 3
+  failedJobsHistoryLimit: 7
+  startingDeadlineSeconds: 600
+  jobTemplate:
+    spec:
+      backoffLimit: 1
+      activeDeadlineSeconds: 7200
+      template:
+        spec:
+          restartPolicy: Never
+          securityContext:
+            runAsNonRoot: true
+            runAsUser: 1000
+            fsGroup: 1000
+            seccompProfile:
+              type: RuntimeDefault
+          containers:
+            - name: archive
+              image: grafana/logcli:3.5.5
+              imagePullPolicy: IfNotPresent
+              command:
+                - sh
+                - -c
+                - |
+                  set -euo pipefail
+                  TS=$(date -u +%Y-%m)
+                  ARCHIVE="/tmp/vault-audit-${TS}.jsonl"
+                  echo "[archive] querying Loki for {namespace=vault-system} last 720h..."
+                  logcli query \
+                    --addr="http://loki:3100" \
+                    --since=720h \
+                    --output=jsonl \
+                    --limit=1000000 \
+                    '{namespace="vault-system"}' \
+                    > "${ARCHIVE}"
+                  echo "[archive] $(wc -c < "${ARCHIVE}") bytes captured"
+                  gzip "${ARCHIVE}"
+                  echo "[archive] uploading to DO Spaces..."
+                  mc alias set loopzero "${DO_SPACES_ENDPOINT}" \
+                    "${AWS_ACCESS_KEY_ID}" "${AWS_SECRET_ACCESS_KEY}"
+                  mc cp "${ARCHIVE}.gz" \
+                    "loopzero/loopzero-audit-logs-${LOOPZERO_ENV}/vault/${TS}.jsonl.gz"
+                  echo "[archive] upload complete"
+              env:
+                - name: LOOPZERO_ENV
+                  value: "prod"  # overlay per env (dev/staging/prod)
+                - name: DO_SPACES_ENDPOINT
+                  value: "https://sfo3.digitaloceanspaces.com"
+                - name: AWS_ACCESS_KEY_ID
+                  valueFrom:
+                    secretKeyRef:
+                      name: loki-archive-s3-creds
+                      key: AWS_ACCESS_KEY_ID
+                      optional: false
+                - name: AWS_SECRET_ACCESS_KEY
+                  valueFrom:
+                    secretKeyRef:
+                      name: loki-archive-s3-creds
+                      key: AWS_SECRET_ACCESS_KEY
+                      optional: false
+              resources:
+                requests:
+                  cpu: 100m
+                  memory: 256Mi
+                limits:
+                  cpu: 500m
+                  memory: 1Gi
+              securityContext:
+                allowPrivilegeEscalation: false
+                readOnlyRootFilesystem: false  # logcli + mc write to /tmp
+                capabilities:
+                  drop: ["ALL"]
+              volumeMounts:
+                - name: tmp
+                  mountPath: /tmp
+          volumes:
+            - name: tmp
+              emptyDir:
+                sizeLimit: 4Gi

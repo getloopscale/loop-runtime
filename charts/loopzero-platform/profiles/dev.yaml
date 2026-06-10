@@ -23,7 +23,7 @@ loopzero-controller:
     serviceMonitor:
       enabled: false
 
-loopzero-tenant-controller:
+loopzero-tenant-operator:
   replicaCount: 1
   metrics:
     serviceMonitor:

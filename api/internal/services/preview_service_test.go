@@ -11,7 +11,6 @@ import (
 
 	"github.com/loopzero/loopzero/api/internal/db"
 	"github.com/loopzero/loopzero/api/internal/domain"
-	"github.com/loopzero/loopzero/api/internal/routes"
 	loopzeroerrors "github.com/loopzero/loopzero/pkg/errors"
 )
 
@@ -102,8 +101,8 @@ func (f *previewFakeCR) DeletePreviewCR(ctx context.Context, tenantID, projectID
 	return nil
 }
 
-func newRequest() routes.CreatePreviewRequest {
-	r := routes.CreatePreviewRequest{
+func newRequest() domain.CreatePreviewRequest {
+	r := domain.CreatePreviewRequest{
 		ProjectID: "api",
 		PRNumber:  42,
 		Branch:    "feature/x",
@@ -209,16 +208,16 @@ func TestPreviewService_CreatePreview_HappyPath(t *testing.T) {
 func TestPreviewService_CreatePreview_ValidationFailures(t *testing.T) {
 	cases := []struct {
 		name string
-		mod  func(*routes.CreatePreviewRequest)
+		mod  func(*domain.CreatePreviewRequest)
 	}{
-		{"empty tenant", func(r *routes.CreatePreviewRequest) { r.SetTenantID("") }},
-		{"empty project", func(r *routes.CreatePreviewRequest) { r.ProjectID = "" }},
-		{"non-positive PR", func(r *routes.CreatePreviewRequest) { r.PRNumber = 0 }},
-		{"empty branch", func(r *routes.CreatePreviewRequest) { r.Branch = "" }},
-		{"empty commit", func(r *routes.CreatePreviewRequest) { r.CommitSHA = "" }},
+		{"empty tenant", func(r *domain.CreatePreviewRequest) { r.SetTenantID("") }},
+		{"empty project", func(r *domain.CreatePreviewRequest) { r.ProjectID = "" }},
+		{"non-positive PR", func(r *domain.CreatePreviewRequest) { r.PRNumber = 0 }},
+		{"empty branch", func(r *domain.CreatePreviewRequest) { r.Branch = "" }},
+		{"empty commit", func(r *domain.CreatePreviewRequest) { r.CommitSHA = "" }},
 	}
 	for _, tc := range cases {
-		tc := tc
+		// Go 1.22+: per-iteration loop variable; no shadow needed.
 		t.Run(tc.name, func(t *testing.T) {
 			svc, _ := NewPreviewService(PreviewServiceDeps{Store: &previewFakeStore{}})
 			req := newRequest()
@@ -400,6 +399,6 @@ func TestPreviewService_OnBuildCompleted_UnknownStatus_Errors(t *testing.T) {
 // =============================================================================
 
 func TestPreviewService_Implements_RoutesInterface(t *testing.T) {
-	// Verifies routes.PreviewService is implemented (compile-time check).
-	var _ routes.PreviewService = (*PreviewService)(nil)
+	// Verifies domain.PreviewService is implemented (compile-time check).
+	var _ domain.PreviewService = (*PreviewService)(nil)
 }

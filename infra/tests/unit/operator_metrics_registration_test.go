@@ -1,0 +1,66 @@
+// SPDX-License-Identifier: Apache-2.0
+// Copyright 2025-2026 The LoopZero Authors
+//
+// CHG-2026-04-30-INFRA-NORMALIZE / Phase 2 condition C17.
+// Source: docs/decisions/MEET-INFRA-NORMALIZE-T3-operator-split.md
+//
+// Audit that all 4 split operator main.go files register the
+// `operators/internal/metrics` package via blank-import side-effect.
+// Without this, controller-runtime metrics registry stays empty in the
+// split binary, breaking observability dashboards/alerts that pre-date
+// the split (e.g., loopzero_misplaced_tenant_total from ADR-0018).
+//
+// Lives in infra/tests/unit because each operators/cmd/{op}-operator
+// is its own `package main` and can't host a test file from a
+// different package; reading source as a string is the cleanest gate.
+
+package unit
+
+import (
+	"os"
+	"path/filepath"
+	"runtime"
+	"strings"
+	"testing"
+)
+
+func operatorsCmdDir() string {
+	_, thisFile, _, _ := runtime.Caller(0)
+	return filepath.Join(filepath.Dir(thisFile), "..", "..", "..", "operators", "cmd")
+}
+
+func TestOperatorMetricsRegistration_AllSplitBinariesBlankImportMetrics(t *testing.T) {
+	cmdDir := operatorsCmdDir()
+
+	binaries := []string{
+		"app-operator",
+		"platform-operator",
+		"preview-operator",
+		"tenant-operator",
+	}
+
+	expected := `_ "github.com/loopzero/loopzero/operators/internal/metrics"`
+
+	for _, b := range binaries {
+		path := filepath.Join(cmdDir, b, "main.go")
+		data, err := os.ReadFile(path)
+		if err != nil {
+			t.Fatalf("read %s: %v", path, err)
+		}
+		if !strings.Contains(string(data), expected) {
+			t.Errorf("%s missing blank-import for metrics package: %s", b, expected)
+		}
+	}
+}
+
+func TestOperatorMetricsRegistration_MonolithStillImports(t *testing.T) {
+	// The monolith `operators/cmd/main.go` was DELETED in T1.4 (ADR-0023
+	// operator-split, commit 27cfe6cd 2026-05-04 LOCAL cutover complete).
+	// The 4 split-binary main.go files (app/platform/preview/tenant-operator)
+	// each register their own metrics independently — verified by the
+	// per-binary test ABOVE this one. This "monolith still imports"
+	// pinning was migration-window safety, now structurally impossible
+	// to regress (no monolith binary exists). See finding
+	// `concepts/operations/finding-2026-05-15-infra-tests-load-regression-obsolete.md`.
+	t.Skip("monolith binary deleted T1.4 (commit 27cfe6cd) — 4 splits verified individually above")
+}

@@ -1,49 +1,47 @@
+encryptionsalt: v1:6Hb/r7BROOo=:v1:aX4LORfGhAeWlYK5:fpCLPditmDKjNGDBtc6J+OfgTdv9hA==
 config:
+  loopzero-infra:digitaloceanToken:
+    secure: v1:RBI7xFTZE0kPVAnr:tYS3nQkhurXxfHqppxZRWZymGLfEftRcP43MsA+4Zzgj1f7DTyWMRlC/p0RSSYBN1rpVJMsNsbX0vYIzPFlVyipAfg7dY3liVtBO1lQFvD6/CDnNMUcl
+  loopzero-infra:cfApiToken:
+    secure: v1:1diskOSkelmh9jIS:WTH4XsJ+t55xB62Cu1GJIdW2ygy6LmyVaDQEL52ajceAOzphRwuj7zucH0FbiDINlUSuaHEFYZ5+CpWAEMAHzjfBITCP
+  loopzero-infra:spacesAccessKeyId:
+    secure: v1:ScWHqHGdFyQ3CDHh:Dmsg/NvUF0qMCqPkQTfafZHGeMvCaTsZ45eTed7VLPPl5xru
+  loopzero-infra:spacesSecretAccessKey:
+    secure: v1:lig05g+/b5hjSCMW:rfFRbFJHg8KIFwXEqAgGSkYx7S+Q7VtaP+sV1kjPnd/SMEmYuYux3qZEZdct10yA2A01iU/Xuak/2V8=
+  loopzero-infra:tunnelSecret:
+    secure: v1:RF9FwLglwf8MGRdr:Ep+ILIQIp/dlIWN1t1qTzloKrR2g2R/5m4WJfzJok5ISsF3FBrjjs/vKZtQWBLI+Bcm+H+Rqf+ZVcxbY
   loopzero-infra:environment: dev
   loopzero-infra:provider: digitalocean
   loopzero-infra:region: sfo3
   loopzero-infra:domain: dev.loopzero.example
   loopzero-infra:dnsZone: loopzero.example
   loopzero-infra:infraVersion: v3
-  # Management cluster
-  loopzero-infra:mgmtK8sVersion: "1.33.9-do.2"
-  loopzero-infra:mgmtNodeClass: small
+  loopzero-infra:mgmtK8sVersion: 1.33.9-do.4
+  loopzero-infra:mgmtNodeClass: medium
   loopzero-infra:mgmtMinNodes: "3"
-  loopzero-infra:mgmtMaxNodes: "3"
-  # Runtime cluster
-  loopzero-infra:runtimeK8sVersion: "1.33.9-do.2"
+  loopzero-infra:mgmtMaxNodes: "5"
+  loopzero-infra:runtimeK8sVersion: 1.33.9-do.4
   loopzero-infra:runtimeNodeClass: small
   loopzero-infra:runtimeMinNodes: "2"
-  loopzero-infra:runtimeMaxNodes: "3"
-  # Build cluster
-  loopzero-infra:buildK8sVersion: "1.33.9-do.2"
+  # CHG-2026-04-28-LAYERED-BOOTSTRAP T0.2 + B18 — runtime burst capacity for L3-100.
+  # 3 nodes was insufficient (50 vCPU L3 deploy left tail tenants pending).
+  # 8 nodes covers worst-case scheduling pressure during L3 burst.
+  loopzero-infra:runtimeMaxNodes: "8"
+  loopzero-infra:buildK8sVersion: 1.33.9-do.4
   loopzero-infra:buildNodeClass: medium
   loopzero-infra:buildMinNodes: "2"
   loopzero-infra:buildMaxNodes: "5"
-  # Database
-  loopzero-infra:dbNodeClass: small
+  loopzero-infra:dbNodeClass: medium
   loopzero-infra:dbVersion: "16"
   loopzero-infra:dbNodeCount: "3"
-  loopzero-infra:spacesAccessKeyId:
-    secure: v1:xvantuWgXZNnNRF8:0pRKV0fidI2ECxMjrt2Jrdz1FqzH4qsnNhULr93M5UsiSJHW
-  loopzero-infra:spacesSecretAccessKey:
-    secure: v1:5Wtkn9ZWFsSBam1P:9FNihxTglE7DmIE5dRllJHIs5QF0KaLxsZWzlVgFagcD8HEIu+91yTYb/VpYQjQxsSVMiWahDfAGkCg=
-  loopzero-infra:digitaloceanToken:
-    secure: v1:2ocnuWKI6ijgkkdV:NleIPve1bDGSFFCTdlDfEv3rUytvF/eFO6K4Stp/wz2aq8T3Da2jjIjA7bLoVi7Cog0B5cnMuGKJ0y8j6deh8YtZIWG6bx6OcrYF2e5d2dVwJObbHjep
-  # Stripe Billing (MEET-038)
-  loopzero-infra:stripePriceProId: "price_1TJGIuA0ZwssSKrVEMKZsiMj"
-  loopzero-infra:stripePriceTeamId: "price_1TJGJ5A0ZwssSKrVy3mjsal6"
-  # Cloudflare — static frontend delivery (Sprint 10)
-  # cfApiToken must be set via: pulumi config set --secret cfApiToken <token>
-  loopzero-infra:cfAccountId: "362767409c4de7fda7990c10103efdd9"
-  loopzero-infra:cfZoneId: "9f9a41bef0bcb7adf15969c81c303bef"
-  # Cross-cluster observability — Loki push URL (build cluster NodePort)
-  # NOTE: This IP must match a build cluster default-pool node. Update after cluster recreate.
-  loopzero-infra:lokiPushUrl: "http://10.20.0.26:30100"
+  loopzero-infra:stripePriceProId: price_1TJGIuA0ZwssSKrVEMKZsiMj
+  loopzero-infra:stripePriceTeamId: price_1TJGJ5A0ZwssSKrVy3mjsal6
+  loopzero-infra:cfAccountId: 362767409c4de7fda7990c10103efdd9
+  loopzero-infra:cfZoneId: 9f9a41bef0bcb7adf15969c81c303bef
+  # OpenBao auto-unseal (F1.1 plan 2026-06-02-openbao-adoption v1.2).
+  # Opt-in via CLI: pulumi config set openbaoEnabled true --stack dev
+  # loopzero-infra:openbaoEnabled: "false"  # default
+  # loopzero-infra:openbaoAwsRegion: "us-east-1"
+  loopzero-infra:lokiPushUrl: http://10.20.0.26:30100
   loopzero-infra:harborExternalUrl: harbor.dev.loopzero.example
   loopzero-infra:vpcCidr: 10.20.0.0/16
-  loopzero-infra:cfApiToken:
-    secure: v1:w+Mbr+SN35lZDCzd:nJi90/ewMuDR3q4XkSc46bNSSO27bli8TRm8nzSg85aJ8x7w0Jbg6mXpQpNeJ/2N+kCTIfNmQJvjeigPSQGhT9ru7lbz
-  loopzero-infra:tunnelSecret:
-    secure: v1:2YYApJSYd3ECuuMw:K2D6Fp7IzYhxSb7nGjIra0+rLvhMNNdTSfHh+PXarJpWEw7ymLJ4OBQZZupdeNCGHz6kBNK/1YFMyPZs
-encryptionsalt: v1:j93WRa9itPU=:v1:5tiFr51FInRCcoEU:p2jAoOqdhiX9DXQ9eY5Zj5OFmC4RtA==

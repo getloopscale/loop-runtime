@@ -1,0 +1,43 @@
+{
+  "$schema": "https://raw.githubusercontent.com/GoogleChrome/lighthouse-ci/main/docs/configuration.md",
+  "_comment": "Lighthouse CI config — Plan v1.0 Final Phase Dogfood QA. Run via `npx @lhci/cli@latest autorun` against the dev server with VITE_USE_MOCKS=true.",
+  "ci": {
+    "collect": {
+      "url": [
+        "http://localhost:5174/",
+        "http://localhost:5174/projects",
+        "http://localhost:5174/projects/acme-web",
+        "http://localhost:5174/projects/acme-web/deployments",
+        "http://localhost:5174/projects/acme-web/secrets",
+        "http://localhost:5174/billing",
+        "http://localhost:5174/team",
+        "http://localhost:5174/domains",
+        "http://localhost:5174/audit",
+        "http://localhost:5174/settings"
+      ],
+      "numberOfRuns": 3,
+      "settings": {
+        "preset": "desktop"
+      }
+    },
+    "assert": {
+      "preset": "lighthouse:recommended",
+      "assertions": {
+        "categories:performance": ["error", { "minScore": 0.85 }],
+        "categories:accessibility": ["error", { "minScore": 0.95 }],
+        "categories:best-practices": ["error", { "minScore": 0.95 }],
+        "categories:seo": ["warn", { "minScore": 0.85 }],
+        "first-contentful-paint": ["warn", { "maxNumericValue": 2000 }],
+        "largest-contentful-paint": ["error", { "maxNumericValue": 2500 }],
+        "cumulative-layout-shift": ["error", { "maxNumericValue": 0.1 }],
+        "total-blocking-time": ["warn", { "maxNumericValue": 200 }],
+        "uses-responsive-images": "off",
+        "uses-rel-preconnect": "off",
+        "csp-xss": "off"
+      }
+    },
+    "upload": {
+      "target": "temporary-public-storage"
+    }
+  }
+}

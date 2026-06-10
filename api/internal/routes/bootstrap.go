@@ -67,7 +67,6 @@ func (h *BootstrapHandler) Bootstrap(w http.ResponseWriter, r *http.Request) {
 			writeLoopZeroError(w, &loopzeroerrors.LoopZeroError{
 				Code:       "UNAUTHORIZED",
 				Message:    "Invalid or missing bootstrap secret",
-				HTTPStatus: http.StatusUnauthorized,
 			})
 			return
 		}
@@ -84,7 +83,6 @@ func (h *BootstrapHandler) Bootstrap(w http.ResponseWriter, r *http.Request) {
 		writeLoopZeroError(w, &loopzeroerrors.LoopZeroError{
 			Code:       "MISSING_FIELD",
 			Message:    "admin_github_id is required",
-			HTTPStatus: http.StatusBadRequest,
 		})
 		return
 	}
@@ -92,7 +90,6 @@ func (h *BootstrapHandler) Bootstrap(w http.ResponseWriter, r *http.Request) {
 		writeLoopZeroError(w, &loopzeroerrors.LoopZeroError{
 			Code:       "MISSING_FIELD",
 			Message:    "admin_login is required",
-			HTTPStatus: http.StatusBadRequest,
 		})
 		return
 	}
@@ -100,7 +97,6 @@ func (h *BootstrapHandler) Bootstrap(w http.ResponseWriter, r *http.Request) {
 		writeLoopZeroError(w, &loopzeroerrors.LoopZeroError{
 			Code:       "MISSING_FIELD",
 			Message:    "tenant_slug is required",
-			HTTPStatus: http.StatusBadRequest,
 		})
 		return
 	}

@@ -61,7 +61,7 @@ func (f *fakeSyncReleaseStore) FindPendingReleases(_ context.Context, _ string) 
 		if status == "" {
 			status = r.Status
 		}
-		if status == string(statemachine.ReleasePending) {
+		if status == string(statemachine.RPhPending) {
 			result = append(result, r)
 		}
 	}
@@ -72,7 +72,7 @@ func (f *fakeSyncReleaseStore) UpdateStatus(_ context.Context, _ db.DBTX, id str
 	m := statemachine.NewReleaseMachine()
 	current := f.statuses[id]
 	if current == "" {
-		current = string(statemachine.ReleasePending)
+		current = string(statemachine.RPhPending)
 	}
 	newState, err := safeTransition(m, statemachine.State(current), statemachine.Event(event))
 	if err != nil {
@@ -98,6 +98,10 @@ func (f *fakeSyncReleaseStore) GetByIDTx(_ context.Context, _ db.DBTX, id string
 		}
 	}
 	return nil, fmt.Errorf("release %s not found", id)
+}
+
+func (f *fakeSyncReleaseStore) CancelAllByEnv(_ context.Context, _ db.DBTX, _, _, _ string) (int, error) {
+	return 0, nil
 }
 
 func safeTransition(m *statemachine.Machine, current statemachine.State, event statemachine.Event) (statemachine.State, error) {
@@ -291,7 +295,7 @@ func makePendingRelease(id, tenantID, projectID, env, gitCommit string) db.Relea
 		TenantID:    tenantID,
 		ProjectID:   projectID,
 		Environment: env,
-		Status:      string(statemachine.ReleasePending),
+		Status:      string(statemachine.RPhPending),
 		GitCommit:   gitCommit,
 		CreatedAt:   time.Now().Add(-10 * time.Second),
 		Apps:        json.RawMessage(`[{"name":"api","image":"reg/api:v1"}]`),
@@ -311,7 +315,7 @@ func TestOnSyncCompleted_HappyPath_ActivatesPendingRelease(t *testing.T) {
 	f := newSyncCallbackFixture()
 	release := makePendingRelease("rel-001", "tn-loopzero", "myproject", "production", "abc123")
 	f.releaseStore.pending = []db.Release{release}
-	f.releaseStore.statuses[release.ID] = string(statemachine.ReleasePending)
+	f.releaseStore.statuses[release.ID] = string(statemachine.RPhPending)
 
 	// Act — ArgoCD reports tn-loopzero-production as Synced+Healthy with matching revision
 	err := f.activator.OnSyncCompleted("tn-loopzero-production", "abc123")
@@ -323,8 +327,8 @@ func TestOnSyncCompleted_HappyPath_ActivatesPendingRelease(t *testing.T) {
 
 	// Release should have transitioned to ACTIVE
 	status := f.releaseStore.statuses[release.ID]
-	if status != string(statemachine.ReleaseActive) {
-		t.Errorf("release status = %q, want %q", status, statemachine.ReleaseActive)
+	if status != string(statemachine.RPhActive) {
+		t.Errorf("release status = %q, want %q", status, statemachine.RPhActive)
 	}
 
 	// Environment target should have been updated
@@ -351,7 +355,7 @@ func TestOnSyncCompleted_WrongTenant_ReleaseNotActivated(t *testing.T) {
 	f := newSyncCallbackFixture()
 	release := makePendingRelease("rel-002", "tn-other", "myproject", "production", "abc123")
 	f.releaseStore.pending = []db.Release{release}
-	f.releaseStore.statuses[release.ID] = string(statemachine.ReleasePending)
+	f.releaseStore.statuses[release.ID] = string(statemachine.RPhPending)
 
 	// Act
 	err := f.activator.OnSyncCompleted("tn-loopzero-production", "abc123")
@@ -362,7 +366,7 @@ func TestOnSyncCompleted_WrongTenant_ReleaseNotActivated(t *testing.T) {
 	}
 
 	status := f.releaseStore.statuses[release.ID]
-	if status != string(statemachine.ReleasePending) {
+	if status != string(statemachine.RPhPending) {
 		t.Errorf("release should remain PENDING, got %q", status)
 	}
 
@@ -384,7 +388,7 @@ func TestOnSyncCompleted_RevisionMismatch_ReleaseSkipped(t *testing.T) {
 	f := newSyncCallbackFixture()
 	release := makePendingRelease("rel-003", "tn-loopzero", "myproject", "production", "abc123")
 	f.releaseStore.pending = []db.Release{release}
-	f.releaseStore.statuses[release.ID] = string(statemachine.ReleasePending)
+	f.releaseStore.statuses[release.ID] = string(statemachine.RPhPending)
 
 	// Act
 	err := f.activator.OnSyncCompleted("tn-loopzero-production", "def456")
@@ -395,7 +399,7 @@ func TestOnSyncCompleted_RevisionMismatch_ReleaseSkipped(t *testing.T) {
 	}
 
 	status := f.releaseStore.statuses[release.ID]
-	if status != string(statemachine.ReleasePending) {
+	if status != string(statemachine.RPhPending) {
 		t.Errorf("release should remain PENDING on revision mismatch, got %q", status)
 	}
 
@@ -487,7 +491,7 @@ func TestOnSyncCompleted_Idempotent_SecondCallIsNoOp(t *testing.T) {
 	f := newSyncCallbackFixture()
 	release := makePendingRelease("rel-004", "tn-loopzero", "myproject", "production", "abc123")
 	f.releaseStore.pending = []db.Release{release}
-	f.releaseStore.statuses[release.ID] = string(statemachine.ReleasePending)
+	f.releaseStore.statuses[release.ID] = string(statemachine.RPhPending)
 
 	// Act — first call activates the release
 	err := f.activator.OnSyncCompleted("tn-loopzero-production", "abc123")
@@ -497,7 +501,7 @@ func TestOnSyncCompleted_Idempotent_SecondCallIsNoOp(t *testing.T) {
 
 	// Verify first call activated it
 	status := f.releaseStore.statuses[release.ID]
-	if status != string(statemachine.ReleaseActive) {
+	if status != string(statemachine.RPhActive) {
 		t.Fatalf("after first call: release status = %q, want ACTIVE", status)
 	}
 

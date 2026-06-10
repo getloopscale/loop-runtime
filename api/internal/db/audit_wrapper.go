@@ -1,0 +1,192 @@
+// SPDX-License-Identifier: Apache-2.0
+// Copyright 2025-2026 The LoopZero Authors
+
+package db
+
+// audit_wrapper.go — sqlc-backed implementation of WriteAuditLog +
+// PostgresAuditStore.ListAuditEntries.
+//
+// T1.5 of plan docs/plans/2026-05-29-sqlc-migration-plan.md v1.3
+// (Phase 1 pilot — SENSITIVE store; M-3 audit-callsite-diff +
+// M-4 pair-review per MEET-2026-05-29-001).
+//
+// The 6 prod callsites that write or list audit entries (api/cmd/
+// setup_server.go × 3, api/cmd/setup_orchestrator.go × 1,
+// api/cmd/setup_auth.go × 1, api/internal/adapters/audit_adapter.go ×
+// 1) continue to use the SAME public symbols (WriteAuditLog,
+// AuditLogger, PostgresAuditStore) declared in audit_types.go — ONLY
+// the implementation changes. The M-3 audit-callsite-diff passes
+// structurally because no callsite shape changes:
+//
+//   - 2 sites `&db.PostgresAuditStore{DB: dbAdapter}` compile
+//     unchanged — PostgresAuditStore struct has the same `DB`
+//     field (widened to db.DBTX so the sqlc dispatch works); the
+//     struct-literal compiles with the same syntax
+//   - 1 site `&db.AuditLogger{DB: dbAdapter}` compile unchanged —
+//     AuditLogger.DB widened similarly
+//   - 3 sites `db.WriteAuditLog(ctx, dbAdapter, entry)` compile
+//     unchanged — function signature widened from ExecQueryExecutor
+//     to db.DBTX (dbAdapter satisfies both)
+//
+// Invariants preserved:
+//   - Single INSERT shape (audit_log columns unchanged in
+//     queries/audit.sql)
+//   - Multi-tenant: tenant_id always present (tenantpredicate gate
+//     enforces; audit_log is in TenantOwnedTables)
+//   - achado #26 fix: COALESCE(correlation_id, '') preserved in
+//     ListAuditLogForTenant so NULL correlation_id scans as empty
+//     string into domain.AuditEntryResult.CorrelationID
+//   - fail-loud row-scan: legacy `return err` instead of silent
+//     `continue` preserved verbatim
+//   - nil-pool fallback: PostgresAuditStore with nil DB returns
+//     empty + zero, matching legacy `if s.DB == nil` guard
+
+import (
+	"context"
+	"encoding/json"
+	"fmt"
+	"time"
+
+	"github.com/jackc/pgx/v5/pgtype"
+
+	"github.com/loopzero/loopzero/api/internal/db/generated"
+	"github.com/loopzero/loopzero/api/internal/domain"
+)
+
+// ListAuditEntries returns paginated audit entries for a tenant with
+// optional filters. Method on PostgresAuditStore (declared in
+// audit_types.go) — implementation here uses sqlc-generated
+// CountAuditLogForTenant + ListAuditLogForTenant.
+//
+// Nil-pool fallback (legacy: `if s.DB == nil { return nil, 0, nil }`)
+// preserved.
+func (s *PostgresAuditStore) ListAuditEntries(ctx context.Context, tenantID string, filter domain.AuditFilter) ([]domain.AuditEntryResult, int, error) {
+	if s.DB == nil {
+		return nil, 0, nil
+	}
+
+	bridge, ok := s.DB.(SqlcBridge)
+	if !ok {
+		return nil, 0, fmt.Errorf("audit: ListAuditEntries: DBTX %T does not implement SqlcBridge — caller must pass *PgxAdapter / *PgxTxAdapter (per T0.6 reshape matrix)", s.DB)
+	}
+	dbtx := bridge.GeneratedDB()
+	q := generated.New()
+
+	// Nullable args via sqlc.narg form: nil/Valid=false → predicate
+	// short-circuits to TRUE (no filter applied).
+	actionArg := nullableString(filter.Action)
+	resourceTypeArg := nullableString(filter.ResourceType)
+	sinceArg := optionalTimestamptz(filter.Since)
+
+	total, err := q.CountAuditLogForTenant(ctx, dbtx, generated.CountAuditLogForTenantParams{
+		TenantID:     tenantID,
+		Action:       actionArg,
+		ResourceType: resourceTypeArg,
+		Since:        sinceArg,
+	})
+	if err != nil {
+		return nil, 0, fmt.Errorf("audit: count: %w", err)
+	}
+
+	rows, err := q.ListAuditLogForTenant(ctx, dbtx, generated.ListAuditLogForTenantParams{
+		TenantID:     tenantID,
+		Action:       actionArg,
+		ResourceType: resourceTypeArg,
+		Since:        sinceArg,
+		Lim:          int32(filter.Limit),
+		Off:          int32(filter.Offset),
+	})
+	if err != nil {
+		return nil, 0, fmt.Errorf("audit: query: %w", err)
+	}
+
+	entries := make([]domain.AuditEntryResult, 0, len(rows))
+	for _, r := range rows {
+		e := domain.AuditEntryResult{
+			Action:        r.Action,
+			ResourceType:  r.ResourceType,
+			ResourceID:    r.ResourceID,
+			Actor:         r.Actor,
+			CorrelationID: r.CorrelationID, // already COALESCE'd to '' in SQL
+		}
+		if r.CreatedAt.Valid {
+			e.CreatedAt = r.CreatedAt.Time
+		}
+		if len(r.Metadata) > 0 {
+			// Match legacy: ignore unmarshal errors silently —
+			// metadata is best-effort enrichment, not load-bearing.
+			_ = json.Unmarshal(r.Metadata, &e.Metadata)
+		}
+		entries = append(entries, e)
+	}
+
+	return entries, int(total), nil
+}
+
+// WriteAuditLog inserts an audit entry into the audit_log table.
+// Application-level audit trail (MEET-2026-03-31-024 A.13). Database-
+// level triggers provide defense-in-depth (migration 000009).
+//
+// Signature: takes db.DBTX so the body can dispatch through
+// SqlcBridge to the sqlc-generated InsertAuditLog. All 6 prod call
+// sites pass *PgxAdapter (which implements both ExecQueryExecutor
+// AND db.DBTX AND SqlcBridge), so the signature widening from the
+// legacy ExecQueryExecutor → DBTX is invisible at the seam.
+//
+// Per M-3 (audit-callsite-diff) of MEET-2026-05-29-001, the SQL
+// shape (table columns, parameter order, INSERT semantic) is
+// identical to the legacy raw INSERT — verified by sqlc-emitting
+// the same VALUES tuple from queries/audit.sql InsertAuditLog.
+func WriteAuditLog(ctx context.Context, db DBTX, entry AuditEntry) error {
+	var metadataJSON []byte
+	if entry.Metadata != nil {
+		var err error
+		metadataJSON, err = json.Marshal(entry.Metadata)
+		if err != nil {
+			return fmt.Errorf("audit: marshal metadata: %w", err)
+		}
+	}
+
+	bridge, ok := db.(SqlcBridge)
+	if !ok {
+		return fmt.Errorf("audit: WriteAuditLog: DBTX %T does not implement SqlcBridge — caller must pass *PgxAdapter / *PgxTxAdapter (per T0.6 reshape matrix)", db)
+	}
+
+	q := generated.New()
+	if err := q.InsertAuditLog(ctx, bridge.GeneratedDB(), generated.InsertAuditLogParams{
+		TenantID:      entry.TenantID,
+		Action:        entry.Action,
+		Actor:         entry.Actor,
+		ResourceType:  entry.ResourceType,
+		ResourceID:    entry.ResourceID,
+		CorrelationID: stringEmptyToNilPtr(entry.CorrelationID),
+		Metadata:      metadataJSON,
+	}); err != nil {
+		return fmt.Errorf("audit: insert: %w", err)
+	}
+	return nil
+}
+
+// =========================================================================
+// Conversion helpers (audit-specific; shared with other wrappers via
+// release_wrapper.go for stringEmptyToNilPtr + timePtrToTimestamptz)
+// =========================================================================
+
+// nullableString maps an empty string to nil (NULL semantics for the
+// nullable sqlc.narg('action')::text + sqlc.narg('resource_type')::text
+// predicates).
+func nullableString(s string) *string {
+	if s == "" {
+		return nil
+	}
+	return &s
+}
+
+// optionalTimestamptz maps a zero time.Time to Valid=false (NULL
+// semantics for the nullable sqlc.narg('since')::timestamptz predicate).
+func optionalTimestamptz(t time.Time) pgtype.Timestamptz {
+	if t.IsZero() {
+		return pgtype.Timestamptz{}
+	}
+	return pgtype.Timestamptz{Time: t, Valid: true}
+}

@@ -1,7 +1,0 @@
-project: python-api
-
-apps:
-  python-api:
-    path: .
-    framework: fastapi
-    port: 8000

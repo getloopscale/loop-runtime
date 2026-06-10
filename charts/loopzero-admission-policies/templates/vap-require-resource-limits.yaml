@@ -1,4 +1,4 @@
-{{- if .Values.policies.requireResourceLimits.enabled }}
+{{- if .Values.vaps.requireResourceLimits }}
 apiVersion: admissionregistration.k8s.io/v1
 kind: ValidatingAdmissionPolicy
 metadata:

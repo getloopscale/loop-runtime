@@ -1,0 +1,101 @@
+# Quality-Gate Phase 4 — unified golangci-lint config for api/, pkg/, operators/.
+#
+# Rationale: pre-Phase-4 each component ran golangci-lint with default linters
+# only (errcheck, gosimple, govet, ineffassign, staticcheck, unused). This file
+# adds the stricter linters covering the Phase 4 gap items (deprecation, code
+# smells, error-wrapping, etc.) while keeping aggressive style linters off to
+# avoid noise on legitimate Go idioms.
+#
+# Per .claude/rules/pre-release-governance.md this would normally be a T2
+# change requiring meeting. User issued explicit "ignorar regra de meeting
+# para este caso" override on 2026-05-13 thread.
+
+version: "2"
+
+run:
+  timeout: 5m
+  modules-download-mode: readonly
+  tests: true
+
+linters:
+  default: none
+  enable:
+    # === Default set (already active, kept explicit) ===
+    - errcheck     # unchecked errors
+    - govet        # go vet
+    - ineffassign  # inefficient assignments
+    - staticcheck  # incl. SA1019 deprecated API usage (Phase 4 deprecation gate)
+    - unused       # unused package-level symbols
+
+    # === Phase 4 additions ===
+    - gosec        # security issues (G-series)
+    - errorlint    # errors.Is/As + %w correctness
+    - bodyclose    # http.Response.Body.Close()
+    - rowserrcheck # sql.Rows.Err() checks
+    - sqlclosecheck # sql.Rows/Stmt close
+    - unconvert    # unnecessary type conversions
+    - copyloopvar  # Go 1.22+ loop-var capture
+    # === Close-all-gaps T6.1 (audit M11) — exhaustive linter EVALUATED + REJECTED ===
+    # Tried adding `exhaustive` to enforce state machine switch coverage.
+    # LIVE result against pkg/statemachine: linter fires on EVERY switch
+    # because the 70+ states across 11 state machines share a single
+    # `type State string` — any switch that filters one machine's states
+    # produces missing-case warnings for the other 10 machines' states.
+    # Fix would require refactoring to per-machine typed states
+    # (BuildState, ReleaseState, ...) — large surface, low value at
+    # 3.8/4.0. M11 gap is documented (machine.go:18-21 comment) and
+    # remains BAIXA severity per audit. Re-add when typed-per-machine
+    # refactor lands.
+    # === Disabled, with rationale (re-enable in dedicated PRs) ===
+    # - nilerr: LoopZero has intentional fail-open paths in cost_cap.go and
+    #   admission middleware. Enabling triggers false positives.
+    # - misspell: LoopZero state machines use CANCELLED (British) per CLAUDE.md
+    #   state-machine table. Misspell flags it as misspell of CANCELED.
+
+  settings:
+    errcheck:
+      exclude-functions:
+        - (io.Closer).Close
+        - (*os.File).Close
+        - (net/http.ResponseWriter).Write
+
+    gosec:
+      excludes:
+        # G404 (weak random) — handled with crypto/rand where it matters;
+        # math/rand for backoff jitter is fine.
+        - G404
+        # G115 (integer overflow conversion) — too many false positives on
+        # well-bounded uint→int casts at protocol boundaries.
+        - G115
+
+    staticcheck:
+      # SA1019 = deprecated API usage (THE Phase 4 deprecation gate)
+      # SA9003 = empty branch (legitimate in error-handling defer paths)
+      # All other staticcheck checks active.
+      checks:
+        - all
+        - -SA9003
+
+    misspell:
+      locale: US
+
+    # exhaustive: evaluated 2026-05-15 (T6.1) — rejected, see linters
+    # block comment above. Re-add when per-machine typed states ship.
+
+  exclusions:
+    rules:
+      # Tests can be looser on errcheck/gosec for setup/teardown, and
+      # errorlint false-positives on tests that explicitly verify Unwrap
+      # behavior (e.g. pkg/errors/errors_test.go).
+      - path: _test\.go
+        linters:
+          - errcheck
+          - gosec
+          - errorlint
+      # Generated files
+      - path: zz_generated\..*\.go
+        linters: [all]
+
+issues:
+  max-issues-per-linter: 0
+  max-same-issues: 0

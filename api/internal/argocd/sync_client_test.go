@@ -64,6 +64,93 @@ func TestSyncClient_WaitForSyncTimeout(t *testing.T) {
 	t.Logf("expected error: %v", err)
 }
 
+// CHG-2026-05-05-DOGFOOD-B32: TriggerSync must hard-refresh the Application
+// before POST /sync. ArgoCD repo-server caches manifest errors for ~5min;
+// without hard-refresh, the first sync after an empty bootstrap commit fails
+// with the misleading "InvalidSpecError: project does not exist".
+//
+// Verifies the request sequence: GET ?refresh=hard → POST /sync.
+func TestSyncClient_TriggerSync_HardRefreshesBeforeSync(t *testing.T) {
+	type call struct {
+		method string
+		path   string
+		query  string
+	}
+	var calls []call
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		calls = append(calls, call{
+			method: r.Method,
+			path:   r.URL.Path,
+			query:  r.URL.RawQuery,
+		})
+		w.WriteHeader(http.StatusOK)
+		_, _ = w.Write([]byte("{}"))
+	}))
+	defer server.Close()
+
+	client := NewSyncClient(SyncClientConfig{
+		BaseURL: server.URL,
+		Token:   "test-token",
+	})
+	if err := client.TriggerSync(context.Background(), "tn-foo-production"); err != nil {
+		t.Fatalf("TriggerSync: %v", err)
+	}
+
+	if len(calls) != 2 {
+		t.Fatalf("expected 2 HTTP calls (refresh + sync), got %d: %+v", len(calls), calls)
+	}
+	// Call 1: GET /api/v1/applications/{name}?refresh=hard
+	if calls[0].method != http.MethodGet {
+		t.Errorf("call[0] method: got %q, want GET", calls[0].method)
+	}
+	if calls[0].path != "/api/v1/applications/tn-foo-production" {
+		t.Errorf("call[0] path: got %q", calls[0].path)
+	}
+	if calls[0].query != "refresh=hard" {
+		t.Errorf("call[0] query: got %q, want refresh=hard", calls[0].query)
+	}
+	// Call 2: POST /api/v1/applications/{name}/sync
+	if calls[1].method != http.MethodPost {
+		t.Errorf("call[1] method: got %q, want POST", calls[1].method)
+	}
+	if calls[1].path != "/api/v1/applications/tn-foo-production/sync" {
+		t.Errorf("call[1] path: got %q", calls[1].path)
+	}
+}
+
+// CHG-2026-05-05-DOGFOOD-B32: hard-refresh failure must NOT block sync.
+// If repo-server is slow or the refresh endpoint is broken, the sync POST
+// should still proceed — the controller's own refresh interval may have
+// already invalidated the cache.
+func TestSyncClient_TriggerSync_HardRefreshFailureDoesNotBlockSync(t *testing.T) {
+	var syncCalled bool
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		// GET refresh=hard returns 500; POST sync returns 200.
+		if r.Method == http.MethodGet {
+			w.WriteHeader(http.StatusInternalServerError)
+			_, _ = w.Write([]byte("{}"))
+			return
+		}
+		if r.Method == http.MethodPost {
+			syncCalled = true
+		}
+		w.WriteHeader(http.StatusOK)
+		_, _ = w.Write([]byte("{}"))
+	}))
+	defer server.Close()
+
+	client := NewSyncClient(SyncClientConfig{
+		BaseURL: server.URL,
+		Token:   "test-token",
+	})
+	if err := client.TriggerSync(context.Background(), "tn-foo-production"); err != nil {
+		t.Fatalf("TriggerSync should not return error when refresh fails: %v", err)
+	}
+	if !syncCalled {
+		t.Error("expected POST /sync to be called even when hard-refresh fails")
+	}
+}
+
 // B11 (CHG-2026-04-23): TerminateOperation must send Content-Type: application/json.
 // ArgoCD rejects DELETE /applications/{name}/operation with HTTP 415
 // "Invalid content type" when the header is missing. Without this, stuck

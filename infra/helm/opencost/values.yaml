@@ -1,0 +1,69 @@
+# OpenCost LoopZero wrapper — defaults for cost attribution per tenant.
+#
+# Plan T7.2 of 2026-05-22-shell-script-strategic-plan.md v1.3.
+#
+# Deployment topology (per plan deep-dive):
+#   - Installed in mgmt cluster (Prometheus federation already there)
+#   - One central instance covers all cells via Prometheus federation
+#     (NOT per-cell — that would multiply cost without ROI)
+#   - Cost source: DigitalOcean on-demand pricing (free, public)
+#   - Attribution: via namespace label `loopzero.io/tenant` (LoopZero already emits)
+
+opencost:
+  # Use the existing Prometheus deployed at monitoring/prometheus
+  opencost:
+    prometheus:
+      external:
+        enabled: true
+        url: http://prometheus-server.monitoring.svc.cluster.local
+      # We use LoopZero's existing Prometheus — disable internal
+      internal:
+        enabled: false
+
+    # Pricing source — DigitalOcean on-demand (override defaults that assume AWS)
+    customPricing:
+      enabled: true
+      # CSV-style overrides per node SKU; populated by operator per region
+      # (see docs/operations/cost-attribution.md for canonical DO pricing
+      # values). Defaults below are placeholders; operator MUST update before
+      # production attribution becomes meaningful.
+      configmapName: opencost-pricing-do
+      createConfigmap: true
+      provider: custom
+
+    # Emit namespace labels as Prometheus labels (enables per-tenant queries)
+    metrics:
+      kubeStateMetrics:
+        emitNamespaceLabels: true
+      # Emit standard cost metrics (CPU, RAM, GPU, network)
+      collectionInterval: 60s
+
+  # Resource limits — modest; OpenCost is observability-side
+  resources:
+    requests:
+      cpu: 100m
+      memory: 256Mi
+    limits:
+      cpu: 500m
+      memory: 1Gi
+
+  # Service exposes :9003 (metrics) + :9090 (UI proxy)
+  service:
+    enabled: true
+    type: ClusterIP
+
+  # ServiceAccount — uses default; no special RBAC beyond namespace read
+  serviceAccount:
+    create: true
+
+  # Security: non-root, drop ALL caps (LoopZero platform standard)
+  podSecurityContext:
+    runAsNonRoot: true
+    runAsUser: 1001
+    fsGroup: 1001
+  securityContext:
+    allowPrivilegeEscalation: false
+    capabilities:
+      drop:
+        - ALL
+    readOnlyRootFilesystem: true

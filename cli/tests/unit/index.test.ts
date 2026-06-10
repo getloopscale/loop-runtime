@@ -131,7 +131,13 @@ describe('CLI entrypoint', () => {
 describe('loopzero --json with no command', () => {
   const binPath = path.resolve(__dirname, '../../bin/loopzero');
 
-  it('should output structured JSON when --json is passed without a command', () => {
+  // Plan v1.1 T4.1 + EC-12 — BREAKING change (intentional): `loopzero --json`
+  // (without a positional subcommand) now delegates to `loopzero deploy --json`
+  // per Vercel-parity zero-config. The pre-v1.1 "No command specified"
+  // envelope was replaced. New behavior is exercised by tests in
+  // cli-zero-config.test.ts; here we just confirm the legacy "No command
+  // specified" envelope is GONE.
+  it('should NOT emit pre-v1.1 "No command specified" envelope (EC-12 breaking change)', () => {
     let output: string;
     let exitCode: number;
     try {
@@ -143,15 +149,10 @@ describe('loopzero --json with no command', () => {
       exitCode = e.status;
     }
 
-    expect(exitCode).toBe(1);
-    const parsed = JSON.parse(output.trim());
-    expect(parsed).toHaveProperty('error');
-    expect(parsed.error).toContain('No command specified');
-    expect(parsed).toHaveProperty('commands');
-    expect(Array.isArray(parsed.commands)).toBe(true);
-    expect(parsed.commands).toContain('login');
-    expect(parsed.commands).toContain('deploy');
-    expect(parsed).toHaveProperty('exit_code', 1);
+    expect(exitCode).not.toBe(0);
+    // The new envelope MAY differ (deploy's error shape) — only invariant
+    // is the OLD "No command specified" copy is no longer present.
+    expect(output).not.toContain('No command specified');
   });
 
   it('should return exit code 1 and error message for unknown command', () => {
@@ -212,19 +213,26 @@ describe('loopzero --json with no command', () => {
     expect(parsed).toHaveProperty('exit_code', 1);
   });
 
-  it('should still show text help when --json is NOT passed and no command is given', () => {
+  // Plan v1.1 T4.1 + EC-12 — BREAKING change (intentional): `loopzero` (no args)
+  // now delegates to `loopzero deploy` per Vercel-parity zero-config. Operators
+  // discover commands via `loopzero --help` (still works, see EC-8 tests in
+  // cli-zero-config.test.ts). Here we just confirm the legacy auto-help is
+  // GONE — `loopzero` without args attempts deploy, which exits non-zero in CI.
+  it('`loopzero` (no args) no longer auto-shows help — delegates to deploy (EC-12)', () => {
     let stdout = '';
     let stderr = '';
+    let exitCode = 0;
     try {
       stdout = execSync(`node ${binPath}`, { encoding: 'utf-8', stdio: ['pipe', 'pipe', 'pipe'] });
     } catch (err: unknown) {
-      const e = err as { stdout?: string; stderr?: string };
+      const e = err as { stdout?: string; stderr?: string; status: number };
       stdout = e.stdout || '';
       stderr = e.stderr || '';
+      exitCode = e.status;
     }
+    expect(exitCode).not.toBe(0);
+    // Should NOT have printed the full `Usage:` block — deploy ran instead.
     const combined = stdout + stderr;
-
-    expect(combined).toContain('Usage:');
-    expect(combined).toContain('Commands:');
+    expect(combined).not.toContain('Usage: loopzero');
   });
 });

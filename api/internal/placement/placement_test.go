@@ -13,49 +13,14 @@ import (
 	"time"
 )
 
-// --- DefaultEngine tests ---
-
-func TestDefaultEngine_AssignCell(t *testing.T) {
-	engine := NewDefaultEngine()
-	cellID, err := engine.AssignCell(context.Background())
-	if err != nil {
-		t.Fatalf("expected no error, got %v", err)
-	}
-	if cellID != DefaultCellID {
-		t.Errorf("expected %q, got %q", DefaultCellID, cellID)
-	}
-}
-
-func TestDefaultEngine_GetCell(t *testing.T) {
-	engine := NewDefaultEngine()
-	cellID, err := engine.GetCell(context.Background(), "tn-acme")
-	if err != nil {
-		t.Fatalf("expected no error, got %v", err)
-	}
-	if cellID != DefaultCellID {
-		t.Errorf("expected %q, got %q", DefaultCellID, cellID)
-	}
-}
-
-func TestDefaultEngine_GetCell_AnyTenantReturnsSameCell(t *testing.T) {
-	engine := NewDefaultEngine()
-	tenants := []string{"tn-acme", "tn-globex", "tn-initech"}
-	for _, tenant := range tenants {
-		cellID, err := engine.GetCell(context.Background(), tenant)
-		if err != nil {
-			t.Fatalf("tenant %s: expected no error, got %v", tenant, err)
-		}
-		if cellID != DefaultCellID {
-			t.Errorf("tenant %s: expected %q, got %q", tenant, DefaultCellID, cellID)
-		}
-	}
-}
+// CHG-2026-04-30-DELETE-SINGLE-CELL: DefaultEngine tests deleted with the
+// type. Multi-cell is the only architecture.
 
 // --- PassthroughRouter tests ---
 
 func TestPassthroughRouter_Resolve(t *testing.T) {
 	router := NewPassthroughRouter(CellConfig{
-		CellID:        DefaultCellID,
+		CellID:        "cell-default",
 		KubeConfig:    "/path/to/kubeconfig",
 		KubeContext:   "k3d-loopzero-workload",
 		ArgocdURL:     "http://argocd:80",
@@ -77,7 +42,7 @@ func TestPassthroughRouter_Resolve(t *testing.T) {
 
 func TestPassthroughRouter_Resolve_AnyCellID(t *testing.T) {
 	router := NewPassthroughRouter(CellConfig{
-		CellID:      DefaultCellID,
+		CellID:      "cell-default",
 		KubeContext: "default-context",
 	})
 
@@ -95,7 +60,7 @@ func TestPassthroughRouter_Resolve_AnyCellID(t *testing.T) {
 }
 
 func TestPassthroughRouter_Resolve_EmptyCellID(t *testing.T) {
-	router := NewPassthroughRouter(CellConfig{CellID: DefaultCellID})
+	router := NewPassthroughRouter(CellConfig{CellID: "cell-default"})
 
 	_, err := router.Resolve(context.Background(), "")
 	if err == nil {
@@ -105,7 +70,7 @@ func TestPassthroughRouter_Resolve_EmptyCellID(t *testing.T) {
 
 func TestPassthroughRouter_ListCells(t *testing.T) {
 	router := NewPassthroughRouter(CellConfig{
-		CellID:      DefaultCellID,
+		CellID:      "cell-default",
 		KubeContext: "k3d-loopzero-workload",
 	})
 
@@ -116,8 +81,8 @@ func TestPassthroughRouter_ListCells(t *testing.T) {
 	if len(cells) != 1 {
 		t.Fatalf("expected 1 cell, got %d", len(cells))
 	}
-	if cells[0].CellID != DefaultCellID {
-		t.Errorf("expected %q, got %q", DefaultCellID, cells[0].CellID)
+	if cells[0].CellID != "cell-default" {
+		t.Errorf("expected %q, got %q", "cell-default", cells[0].CellID)
 	}
 }
 
@@ -265,14 +230,8 @@ func TestRoundRobinEngine_BalancedDistribution(t *testing.T) {
 }
 
 // --- Interface compliance ---
-
-func TestDefaultEngine_ImplementsEngine(t *testing.T) {
-	var _ Engine = (*DefaultEngine)(nil)
-}
-
-func TestRoundRobinEngine_ImplementsEngine(t *testing.T) {
-	var _ Engine = (*RoundRobinEngine)(nil)
-}
+// CHG-2026-04-30-DELETE-SINGLE-CELL: Engine interface deleted. Compliance
+// test for RoundRobinEngine implementing Engine no longer applies.
 
 func TestPassthroughRouter_ImplementsRouter(t *testing.T) {
 	var _ Router = (*PassthroughRouter)(nil)
@@ -551,7 +510,7 @@ func TestPlacement_ConcurrentCreation_WithoutSerializerHotSpots(t *testing.T) {
 func TestRouting_CellDefault_BackwardCompat(t *testing.T) {
 	router, err := NewStaticRouter([]CellConfig{
 		{
-			CellID:        DefaultCellID,
+			CellID:        "cell-default",
 			KubeConfig:    "/legacy/kubeconfig",
 			KubeContext:   "cell-default",
 			ArgocdURL:     "http://argocd-legacy.argocd.svc",
@@ -573,12 +532,12 @@ func TestRouting_CellDefault_BackwardCompat(t *testing.T) {
 
 	// Legacy tenant lookup: cell-default must resolve to the legacy
 	// cluster, not the new one.
-	cfg, err := router.Resolve(context.Background(), DefaultCellID)
+	cfg, err := router.Resolve(context.Background(), "cell-default")
 	if err != nil {
 		t.Fatalf("Resolve(cell-default): %v", err)
 	}
-	if cfg.CellID != DefaultCellID {
-		t.Errorf("expected CellID=%q, got %q", DefaultCellID, cfg.CellID)
+	if cfg.CellID != "cell-default" {
+		t.Errorf("expected CellID=%q, got %q", "cell-default", cfg.CellID)
 	}
 	if cfg.KubeContext != "cell-default" {
 		t.Errorf("expected KubeContext=cell-default, got %q", cfg.KubeContext)
@@ -612,8 +571,8 @@ func TestRouting_CellDefault_BackwardCompat(t *testing.T) {
 // --- ExtractRegion tests ---
 
 func TestExtractRegion_Default(t *testing.T) {
-	if got := ExtractRegion(DefaultCellID); got != "default" {
-		t.Errorf("ExtractRegion(%q) = %q, want default", DefaultCellID, got)
+	if got := ExtractRegion("cell-default"); got != "default" {
+		t.Errorf("ExtractRegion(%q) = %q, want default", "cell-default", got)
 	}
 }
 
@@ -791,14 +750,14 @@ func TestDynamicRouter_SkipsEmptyCellID(t *testing.T) {
 // --- PassthroughRouter additional ---
 
 func TestPassthroughRouter_DiscoveredCellCount(t *testing.T) {
-	r := NewPassthroughRouter(CellConfig{CellID: DefaultCellID})
+	r := NewPassthroughRouter(CellConfig{CellID: "cell-default"})
 	if got := r.DiscoveredCellCount(); got != 1 {
 		t.Errorf("DiscoveredCellCount = %d, want 1", got)
 	}
 }
 
 func TestPassthroughRouter_IsDynamic(t *testing.T) {
-	r := NewPassthroughRouter(CellConfig{CellID: DefaultCellID})
+	r := NewPassthroughRouter(CellConfig{CellID: "cell-default"})
 	if r.IsDynamic() {
 		t.Error("PassthroughRouter.IsDynamic should return false")
 	}
@@ -873,20 +832,9 @@ func TestRoundRobinEngine_AssignAndExecute_WithSerializer(t *testing.T) {
 	}
 }
 
-func TestDefaultEngine_AssignAndExecute(t *testing.T) {
-	engine := NewDefaultEngine()
-	var assignedCell string
-	err := engine.AssignAndExecute(context.Background(), func(ctx context.Context, cellID string) error {
-		assignedCell = cellID
-		return nil
-	})
-	if err != nil {
-		t.Fatalf("AssignAndExecute: %v", err)
-	}
-	if assignedCell != DefaultCellID {
-		t.Errorf("expected %q, got %q", DefaultCellID, assignedCell)
-	}
-}
+// CHG-2026-04-30-DELETE-SINGLE-CELL: TestDefaultEngine_AssignAndExecute
+// removed — DefaultEngine deleted. RoundRobinEngine.AssignAndExecute is
+// covered by TestPlacement_ConcurrentCreation_NoTOCTOU above.
 
 // --- NewAdvisoryLockSerializer(nil) ---
 
@@ -922,5 +870,118 @@ func TestRoundRobinEngine_WithSerializer_PropagatesError(t *testing.T) {
 	}
 	if !sawFn {
 		t.Error("serializer was not invoked")
+	}
+}
+
+// --- cell-2-activation-plan T1.1 / ADR C2 routing determinism ---
+//
+// These tests cement the INVARIANT documented on DynamicRouter.Resolve:
+// for a fixed cell_id, every call between two refreshes returns a
+// CellConfig that DeepEquals the previous call. Use a 24h refresh
+// interval so the background ticker (if Start were called, which we
+// don't) cannot fire and mask non-determinism.
+
+// TestDynamicRouter_Resolve_DeterministicAcrossCalls — sequential 100x.
+// Catches any introduced randomness or cache-invalidation drift in the
+// hot path between refreshes. Failure here means MEET-INFRA-NORMALIZE-T3
+// distributed-systems veto criterion is violated.
+func TestDynamicRouter_Resolve_DeterministicAcrossCalls(t *testing.T) {
+	store := &fakeCellStore{
+		cells: []CellConfig{
+			{CellID: "cell-default", APIServer: "https://default.example", IngressDomain: "loopzero.local"},
+			{CellID: "cell-1", APIServer: "https://cell-1.example", IngressDomain: "loopzero.local", SecretRefName: "cell-1-kubeconfig", SecretRefNamespace: "loopzero-system"},
+			{CellID: "cell-2", APIServer: "https://cell-2.example", IngressDomain: "loopzero.local", SecretRefName: "cell-2-kubeconfig", SecretRefNamespace: "loopzero-system"},
+		},
+	}
+	// 24h interval so the ticker cannot fire during the test (we never
+	// call Start; only refresh once manually).
+	router := NewDynamicRouter(store, 24*time.Hour, slog.Default())
+	if err := router.refresh(context.Background()); err != nil {
+		t.Fatalf("refresh: %v", err)
+	}
+
+	const N = 100
+	for _, cellID := range []string{"cell-default", "cell-1", "cell-2"} {
+		first, err := router.Resolve(context.Background(), cellID)
+		if err != nil {
+			t.Fatalf("Resolve(%q) initial: %v", cellID, err)
+		}
+		for i := 1; i < N; i++ {
+			cur, err := router.Resolve(context.Background(), cellID)
+			if err != nil {
+				t.Fatalf("Resolve(%q) call %d: %v", cellID, i, err)
+			}
+			// CellConfig is a value type; DeepEqual compares all fields.
+			// Field-level comparison is more informative than reflect.DeepEqual
+			// when failure occurs, so we check the load-bearing fields:
+			if cur.CellID != first.CellID ||
+				cur.APIServer != first.APIServer ||
+				cur.IngressDomain != first.IngressDomain ||
+				cur.SecretRefName != first.SecretRefName ||
+				cur.SecretRefNamespace != first.SecretRefNamespace {
+				t.Fatalf("Resolve(%q) drift on call %d: first=%+v cur=%+v",
+					cellID, i, first, cur)
+			}
+		}
+	}
+}
+
+// TestDynamicRouter_Resolve_DeterministicConcurrent — 100 goroutines × 10
+// calls each = 1000 concurrent Resolves. With go test -race, also asserts
+// no data race in the RWMutex-protected map read. Failure shape: race
+// detector fires OR any goroutine sees a CellConfig that differs from
+// the canonical first lookup.
+func TestDynamicRouter_Resolve_DeterministicConcurrent(t *testing.T) {
+	store := &fakeCellStore{
+		cells: []CellConfig{
+			{CellID: "cell-2", APIServer: "https://cell-2.example", IngressDomain: "loopzero.local", SecretRefName: "cell-2-kubeconfig", SecretRefNamespace: "loopzero-system"},
+		},
+	}
+	router := NewDynamicRouter(store, 24*time.Hour, slog.Default())
+	if err := router.refresh(context.Background()); err != nil {
+		t.Fatalf("refresh: %v", err)
+	}
+
+	canonical, err := router.Resolve(context.Background(), "cell-2")
+	if err != nil {
+		t.Fatalf("canonical Resolve: %v", err)
+	}
+
+	const goroutines = 100
+	const callsPerG = 10
+	var wg sync.WaitGroup
+	wg.Add(goroutines)
+
+	var drifts atomic.Int64
+	var errs atomic.Int64
+
+	for g := 0; g < goroutines; g++ {
+		go func() {
+			defer wg.Done()
+			for i := 0; i < callsPerG; i++ {
+				cur, err := router.Resolve(context.Background(), "cell-2")
+				if err != nil {
+					errs.Add(1)
+					return
+				}
+				if cur.CellID != canonical.CellID ||
+					cur.APIServer != canonical.APIServer ||
+					cur.IngressDomain != canonical.IngressDomain ||
+					cur.SecretRefName != canonical.SecretRefName ||
+					cur.SecretRefNamespace != canonical.SecretRefNamespace {
+					drifts.Add(1)
+				}
+			}
+		}()
+	}
+	wg.Wait()
+
+	if errs.Load() != 0 {
+		t.Fatalf("expected 0 errors across %d concurrent calls, got %d",
+			goroutines*callsPerG, errs.Load())
+	}
+	if drifts.Load() != 0 {
+		t.Fatalf("expected 0 drifts (deterministic) across %d concurrent calls, got %d",
+			goroutines*callsPerG, drifts.Load())
 	}
 }

@@ -25,13 +25,39 @@ func appHostname(tenantID, projectID, appName, environment, baseDomain string) s
 	return fmt.Sprintf("%s.%s", subdomain, baseDomain)
 }
 
+// resourceName returns the namespace-unique name to use for K8s resources
+// (Deployment, Service, IngressRoute, Certificate, HPA, ScaledObject, PDB)
+// generated for an app inside a tenant environment namespace.
+//
+// **Why `<project>-<app>` instead of `<app>`**: tenant environment namespaces
+// are SHARED across projects (`loopzero-{tenant}-{env}`), so two projects with an
+// app of the same name (very common: `api`, `web`, `worker`) would generate
+// colliding `Deployment/api` + `Service/api` — the second deploy silently
+// overwrites the first, and Service.spec.selector matches pods from BOTH
+// projects (label-based). Discovered live during dogfood Phase 3 / journey-01:
+// `solo-server` deploy returned the body of a previous `dogfood-fb` pod
+// because Service `api` was shared.
+//
+// **User-facing impact**: zero. Hosts already include the project segment
+// (`<tenant>-<project>-<app>-<env>.<base>`); CLI commands accept `--app <name>`
+// and resolve via the `loopzero.io/app-name` label (still populated). Internal
+// K8s names are an implementation detail of the PaaS, never surfaced.
+func resourceName(projectID, appName string) string {
+	return fmt.Sprintf("%s-%s", projectID, appName)
+}
+
 // commonLabels returns the standard labels for all resources.
+//
+// `app` carries the namespace-unique resource name (project-app) so Service
+// selectors don't cross project boundaries. `loopzero.io/app-name` keeps the
+// raw user-declared app name for CLI queries (logs, status, scale, etc.).
 func commonLabels(ri RenderInput, app AppManifestInput) map[string]string {
 	return map[string]string{
-		"app":                          app.Name,
+		"app":                          resourceName(ri.ProjectID, app.Name),
 		"app.kubernetes.io/managed-by": "loopzero",
 		"loopzero.io/tenant":               ri.TenantID,
 		"loopzero.io/project":              ri.ProjectID,
+		"loopzero.io/app-name":             app.Name,
 		"loopzero.io/environment":          ri.Environment,
 		"loopzero.io/app-type":             app.Type,
 	}
@@ -85,31 +111,65 @@ func isScaleToZero(as *AutoscalingConfig) bool {
 }
 
 // renderServerApp generates Deployment + Service + IngressRoute for a server app.
+//
+// argo-rollouts-progressive-delivery-plan T1.4: when ProgressiveDelivery=true,
+// emits Rollout + 2 Services (stable+canary) + TraefikService + AnalysisTemplate
+// (when PrometheusAddress configured). IngressRoute points to the TraefikService
+// for weighted routing. Legacy path (Deployment + Service) preserved when flag false.
 func renderServerApp(ri RenderInput, app AppManifestInput) []string {
 	port := app.Port
 	if port == 0 {
 		port = 3000 // sensible default
 	}
 
-	deployment := buildDeployment(ri, app, port)
 	pdb := buildPDB(ri, app)
-	service := buildService(ri, app, port)
 	ingressResources := buildIngressResources(ri, app, port)
 
-	docs := []string{
-		marshalResource(deployment),
-		marshalResource(pdb),
-		marshalResource(service),
+	var docs []string
+	if ri.ProgressiveDelivery {
+		// Rollout + 2 Services (stable/canary) + TraefikService.
+		rollout := buildRollout(ri, app, port)
+		stableSvc := buildStableService(ri, app, port)
+		canarySvc := buildCanaryService(ri, app, port)
+		traefikSvc := buildTraefikService(ri, app, port)
+		docs = []string{
+			marshalResource(rollout),
+			marshalResource(pdb),
+			marshalResource(stableSvc),
+			marshalResource(canarySvc),
+			marshalResource(traefikSvc),
+		}
+		// AnalysisTemplate is only emitted when Prometheus is configured.
+		if ri.PrometheusAddress != "" {
+			docs = append(docs, marshalResource(buildAnalysisTemplate(ri, app)))
+		}
+	} else {
+		// Legacy path (D8 fallback).
+		deployment := buildDeployment(ri, app, port)
+		service := buildService(ri, app, port)
+		docs = []string{
+			marshalResource(deployment),
+			marshalResource(pdb),
+			marshalResource(service),
+		}
 	}
 	docs = append(docs, ingressResources...)
 	docs = maybeAutoscaler(docs, ri, app)
 	return docs
 }
 
-// renderWorkerApp generates Deployment + PDB (no Service/Ingress — workers don't receive traffic).
+// renderWorkerApp generates Deployment+PDB (legacy) or Rollout+PDB (progressive).
+// Workers receive no traffic — no Service/IngressRoute/TraefikService.
+// In progressive mode, Rollout uses pause-only steps (workerCanarySteps).
 func renderWorkerApp(ri RenderInput, app AppManifestInput) []string {
-	deployment := buildDeployment(ri, app, 0)
 	pdb := buildPDB(ri, app)
+	if ri.ProgressiveDelivery {
+		rollout := buildRollout(ri, app, 0)
+		docs := []string{marshalResource(rollout), marshalResource(pdb)}
+		docs = maybeAutoscaler(docs, ri, app)
+		return docs
+	}
+	deployment := buildDeployment(ri, app, 0)
 	docs := []string{marshalResource(deployment), marshalResource(pdb)}
 	docs = maybeAutoscaler(docs, ri, app)
 	return docs
@@ -117,21 +177,42 @@ func renderWorkerApp(ri RenderInput, app AppManifestInput) []string {
 
 // renderFrontendApp generates Deployment + PDB + Service + IngressRoute for a frontend app.
 // The container serves static assets via a lightweight HTTP server.
+//
+// Progressive delivery: same shape as renderServerApp (Rollout + 2 Services
+// + TraefikService + AnalysisTemplate).
 func renderFrontendApp(ri RenderInput, app AppManifestInput) []string {
 	port := app.Port
 	if port == 0 {
 		port = 80 // typical for frontend static servers
 	}
 
-	deployment := buildDeployment(ri, app, port)
 	pdb := buildPDB(ri, app)
-	service := buildService(ri, app, port)
 	ingressResources := buildIngressResources(ri, app, port)
 
-	docs := []string{
-		marshalResource(deployment),
-		marshalResource(pdb),
-		marshalResource(service),
+	var docs []string
+	if ri.ProgressiveDelivery {
+		rollout := buildRollout(ri, app, port)
+		stableSvc := buildStableService(ri, app, port)
+		canarySvc := buildCanaryService(ri, app, port)
+		traefikSvc := buildTraefikService(ri, app, port)
+		docs = []string{
+			marshalResource(rollout),
+			marshalResource(pdb),
+			marshalResource(stableSvc),
+			marshalResource(canarySvc),
+			marshalResource(traefikSvc),
+		}
+		if ri.PrometheusAddress != "" {
+			docs = append(docs, marshalResource(buildAnalysisTemplate(ri, app)))
+		}
+	} else {
+		deployment := buildDeployment(ri, app, port)
+		service := buildService(ri, app, port)
+		docs = []string{
+			marshalResource(deployment),
+			marshalResource(pdb),
+			marshalResource(service),
+		}
 	}
 	docs = append(docs, ingressResources...)
 	docs = maybeAutoscaler(docs, ri, app)

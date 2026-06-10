@@ -97,7 +97,7 @@ spec:
             - name: MINIO_ROOT_USER
               value: "loopzero-admin"
             - name: MINIO_ROOT_PASSWORD
-              value: "loopzero-dev-password"
+              value: ""  # T1.3: see docs/operations/credentials-required.md
           resources:
             requests:
               cpu: "50m"

@@ -61,19 +61,29 @@ func TestSyftScanTemplate_OutputsOnLocalTmp(t *testing.T) {
 
 // TestSyftScanTemplate_Insecure_EmitsFlag — when RegistryInsecure=true,
 // syft must accept HTTP / self-signed certs against local k3d registry.
+//
+// Plan T6.1 dogfood unblock: syft v1.x removed `--source-registry-insecure`
+// CLI flag. Now must use SYFT_REGISTRY_INSECURE_USE_HTTP env var.
 func TestSyftScanTemplate_Insecure_EmitsFlag(t *testing.T) {
 	c := syftScanTemplate("tn-1", "proj-1", "abc1234", "api",
 		"k3d-loopzero-registry:5000/tn-1/proj-1/api:abc", true)
-	script := c.Command[len(c.Command)-1]
-	if !strings.Contains(script, "--source-registry-insecure") {
-		t.Errorf("insecure registry MUST emit --source-registry-insecure:\n%s", script)
+	script := c.Source
+	if !strings.Contains(script, "SYFT_REGISTRY_INSECURE_USE_HTTP=true") {
+		t.Errorf("insecure registry MUST export SYFT_REGISTRY_INSECURE_USE_HTTP=true:\n%s", script)
+	}
+	if !strings.Contains(script, "SYFT_REGISTRY_INSECURE_SKIP_TLS_VERIFY=true") {
+		t.Errorf("insecure registry MUST export SYFT_REGISTRY_INSECURE_SKIP_TLS_VERIFY=true:\n%s", script)
+	}
+	// Old flag must NOT appear (regression guard).
+	if strings.Contains(script, "--source-registry-insecure") {
+		t.Errorf("OBSOLETE flag --source-registry-insecure must not appear (syft v1.x removed it):\n%s", script)
 	}
 }
 
 func TestSyftScanTemplate_Secure_NoInsecureFlag(t *testing.T) {
 	c := syftScanTemplate("tn-1", "proj-1", "abc1234", "api",
 		"registry.digitalocean.com/loopzero/api:abc", false)
-	script := c.Command[len(c.Command)-1]
+	script := c.Source
 	if strings.Contains(script, "--source-registry-insecure") {
 		t.Errorf("secure registry must NOT emit --source-registry-insecure:\n%s", script)
 	}
@@ -99,7 +109,7 @@ func TestSyftScanTemplate_SecurityContext_NonRoot(t *testing.T) {
 func TestSyftScanTemplate_UploadsToS3(t *testing.T) {
 	c := syftScanTemplate("tn-acme", "proj-shop", "deadbeef", "api",
 		"registry.example.com/org/app:abc", false)
-	script := c.Command[len(c.Command)-1]
+	script := c.Source
 	if !strings.Contains(script, "aws s3 cp") {
 		t.Errorf("script must contain aws s3 cp:\n%s", script)
 	}
@@ -126,7 +136,7 @@ func TestSyftScanTemplate_UsesPreBuiltImage(t *testing.T) {
 func TestSyftScanTemplate_ReadsDigestFromMetadata(t *testing.T) {
 	c := syftScanTemplate("tn-1", "proj-1", "abc1234", "api",
 		"registry.example.com/org/app:abc", false)
-	script := c.Command[len(c.Command)-1]
+	script := c.Source
 	if !strings.Contains(script, "metadata-api.json") {
 		t.Errorf("script must read BuildKit metadata-api.json:\n%s", script)
 	}
@@ -139,7 +149,7 @@ func TestSyftScanTemplate_ReadsDigestFromMetadata(t *testing.T) {
 func TestSyftScanTemplate_OutputFormatIsCycloneDX(t *testing.T) {
 	c := syftScanTemplate("tn-1", "proj-1", "abc1234", "api",
 		"registry.example.com/org/app:abc", false)
-	script := c.Command[len(c.Command)-1]
+	script := c.Source
 	if !strings.Contains(script, "cyclonedx-json=") {
 		t.Errorf("default SBOM format must be cyclonedx-json:\n%s", script)
 	}

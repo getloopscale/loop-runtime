@@ -204,3 +204,135 @@ func TestMachine_TryTransition_DoesNotPanic(t *testing.T) {
 		}()
 	}
 }
+
+// =============================================================================
+// MustParseState / MustParseEvent / IsKnownState / IsKnownEvent — audit M11 #25
+// =============================================================================
+
+// fixtureMachine is a small machine used across the validation helpers below.
+// Transitions: A -> B (go), B -> C (go), C terminal.
+func fixtureMachine() *Machine {
+	return NewMachine(MachineConfig{
+		Name: "fixture",
+		Transitions: []transition{
+			{From: "A", Event: "go", To: "B"},
+			{From: "B", Event: "go", To: "C"},
+		},
+		Terminal: []State{"C"},
+	})
+}
+
+func TestIsKnownState_CoversSourceDestinationTerminal(t *testing.T) {
+	m := fixtureMachine()
+
+	// Source state appears in transitions.From.
+	if !m.IsKnownState("A") {
+		t.Error("expected A to be known (source of A->B)")
+	}
+	// Destination-only state appears in transitions.To.
+	if !m.IsKnownState("B") {
+		t.Error("expected B to be known (destination of A->B and source of B->C)")
+	}
+	// Terminal state is explicitly registered.
+	if !m.IsKnownState("C") {
+		t.Error("expected C to be known (terminal)")
+	}
+	// Unknown state must NOT be reported as known.
+	if m.IsKnownState("UNKNOWN") {
+		t.Error("expected UNKNOWN to NOT be known")
+	}
+}
+
+func TestIsKnownEvent(t *testing.T) {
+	m := fixtureMachine()
+
+	if !m.IsKnownEvent("go") {
+		t.Error("expected 'go' to be a known event")
+	}
+	if m.IsKnownEvent("not-an-event") {
+		t.Error("expected unknown event to NOT be known")
+	}
+}
+
+func TestMustParseState_AcceptsKnown(t *testing.T) {
+	m := fixtureMachine()
+
+	defer func() {
+		if r := recover(); r != nil {
+			t.Errorf("MustParseState must not panic for known state; got panic=%v", r)
+		}
+	}()
+
+	got := m.MustParseState("B")
+	if got != "B" {
+		t.Errorf("MustParseState returned %q, want %q", got, "B")
+	}
+}
+
+func TestMustParseState_PanicsOnUnknown(t *testing.T) {
+	m := fixtureMachine()
+
+	defer func() {
+		r := recover()
+		if r == nil {
+			t.Fatal("MustParseState must panic for unknown state")
+		}
+		msg, ok := r.(string)
+		if !ok {
+			t.Fatalf("panic payload not a string: %T = %v", r, r)
+		}
+		// The panic message must reference the audit gap so log search can
+		// correlate this to the state-machine string-alias mitigation.
+		if !contains(msg, "audit M11 #25") {
+			t.Errorf("panic missing audit ref; got %q", msg)
+		}
+		if !contains(msg, "UNKNOWN") {
+			t.Errorf("panic must include the offending value; got %q", msg)
+		}
+	}()
+
+	_ = m.MustParseState("UNKNOWN")
+}
+
+func TestMustParseEvent_AcceptsKnown(t *testing.T) {
+	m := fixtureMachine()
+
+	defer func() {
+		if r := recover(); r != nil {
+			t.Errorf("MustParseEvent must not panic for known event; got panic=%v", r)
+		}
+	}()
+
+	got := m.MustParseEvent("go")
+	if got != "go" {
+		t.Errorf("MustParseEvent returned %q, want %q", got, "go")
+	}
+}
+
+func TestMustParseEvent_PanicsOnUnknown(t *testing.T) {
+	m := fixtureMachine()
+
+	defer func() {
+		r := recover()
+		if r == nil {
+			t.Fatal("MustParseEvent must panic for unknown event")
+		}
+		msg, _ := r.(string)
+		if !contains(msg, "audit M11 #25") {
+			t.Errorf("panic missing audit ref; got %q", msg)
+		}
+	}()
+
+	_ = m.MustParseEvent("invalid-event")
+}
+
+// Local contains helper to avoid bringing in strings just for one call site.
+// (machine_test.go already uses fmt only; keeping this minimal.)
+func contains(s, substr string) bool {
+	for i := 0; i+len(substr) <= len(s); i++ {
+		if s[i:i+len(substr)] == substr {
+			return true
+		}
+	}
+	return false
+}

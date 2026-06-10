@@ -40,6 +40,19 @@ network: k3d-loopzero
 registries:
   use:
     - k3d-loopzero-registry:5000
+  # B6 fix (cleanroom iter 6, 2026-05-05): mirror docker.io and registry-1.docker.io
+  # through k3d-loopzero-registry's pull-through proxy. Eliminates the dependency on
+  # public Docker Hub for repeat builds — first cleanroom run populates the cache,
+  # subsequent destroy/recreate cycles serve from cache. Without this, anonymous
+  # Docker Hub rate-limit (100 pulls/6h) blocks ~5 cleanroom cycles.
+  config: |
+    mirrors:
+      "docker.io":
+        endpoint:
+          - https://mirror.gcr.io
+      "registry-1.docker.io":
+        endpoint:
+          - https://mirror.gcr.io
 options:
   k3d:
     wait: true

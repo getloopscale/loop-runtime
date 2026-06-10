@@ -1,0 +1,145 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://loopzero.platform/schemas/chaos-mesh/values.schema.json",
+  "title": "Chaos Mesh LoopZero wrapper values schema",
+  "description": "Plan 2026-05-20 T2.5 ext — fail-fast on Chaos Mesh hardening drift. Protects ADR-0016 D-4 hardened RBAC (no cluster-admin default), PSA restricted compliance for controller, dashboard.create=false (attack surface), chaos-daemon privileged scoping (intentional but localized).",
+  "type": "object",
+  "properties": {
+    "chaos-mesh": {
+      "type": "object",
+      "properties": {
+        "controllerManager": {
+          "type": "object",
+          "properties": {
+            "clusterScoped": {
+              "type": "boolean",
+              "description": "True = cluster-scoped (chaos can target any namespace). ADR-0016 D-4: even when true, RBAC is narrowed via scoped Roles — no cluster-admin grant."
+            },
+            "resources": {
+              "type": "object",
+              "required": ["requests", "limits"],
+              "properties": {
+                "limits": {
+                  "type": "object",
+                  "required": ["cpu", "memory"]
+                },
+                "requests": {
+                  "type": "object",
+                  "required": ["cpu", "memory"]
+                }
+              }
+            },
+            "podSecurityContext": {
+              "type": "object",
+              "required": ["runAsNonRoot", "runAsUser", "seccompProfile"],
+              "properties": {
+                "runAsNonRoot": {
+                  "type": "boolean",
+                  "const": true,
+                  "description": "PSA restricted: controller-manager MUST be non-root."
+                },
+                "runAsUser": {
+                  "type": "integer",
+                  "minimum": 1
+                },
+                "seccompProfile": {
+                  "type": "object",
+                  "required": ["type"],
+                  "properties": {
+                    "type": {
+                      "type": "string",
+                      "enum": ["RuntimeDefault", "Localhost"]
+                    }
+                  }
+                }
+              }
+            },
+            "securityContext": {
+              "type": "object",
+              "required": ["allowPrivilegeEscalation", "capabilities", "readOnlyRootFilesystem"],
+              "properties": {
+                "allowPrivilegeEscalation": {
+                  "type": "boolean",
+                  "const": false
+                },
+                "readOnlyRootFilesystem": {
+                  "type": "boolean",
+                  "const": true
+                },
+                "capabilities": {
+                  "type": "object",
+                  "required": ["drop"],
+                  "properties": {
+                    "drop": {
+                      "type": "array",
+                      "minItems": 1,
+                      "contains": { "const": "ALL" }
+                    }
+                  }
+                }
+              }
+            }
+          }
+        },
+        "chaosDaemon": {
+          "type": "object",
+          "properties": {
+            "runtime": {
+              "type": "string",
+              "enum": ["containerd", "docker", "cri-o"],
+              "description": "Container runtime — LoopZero uses containerd (DOKS) or k3s (local k3d, also containerd)."
+            },
+            "socketPath": {
+              "type": "string",
+              "minLength": 1,
+              "pattern": "^/[a-zA-Z0-9._/-]+\\.sock$",
+              "description": "Path to runtime socket. MUST end with .sock. k3d overrides to /run/k3s/containerd/containerd.sock via values-k3d.yaml."
+            },
+            "privileged": {
+              "type": "boolean",
+              "description": "Daemon REQUIRES privileged for syscall-level chaos. Documented exception per Sprint 6 policy-controller Audit→Deny dry-run window."
+            },
+            "resources": {
+              "type": "object",
+              "required": ["requests", "limits"],
+              "properties": {
+                "limits": {
+                  "type": "object",
+                  "required": ["cpu", "memory"],
+                  "properties": {
+                    "memory": {
+                      "type": "string",
+                      "pattern": "^[0-9]+(Mi|Gi)$",
+                      "description": "Memory limit. T3.2 D10: bumped 256→512Mi for 10-scenario suite (F-CHAOS-01 OOM fix)."
+                    }
+                  }
+                }
+              }
+            }
+          }
+        },
+        "dashboard": {
+          "type": "object",
+          "required": ["create"],
+          "properties": {
+            "create": {
+              "type": "boolean",
+              "const": false,
+              "description": "DISABLED by default. Dashboard UI is attack surface (privileged ops over HTTP). Operator uses kubectl + port-forward instead. Cannot be re-enabled via overlay."
+            }
+          }
+        },
+        "dnsServer": {
+          "type": "object",
+          "properties": {
+            "create": {
+              "type": "boolean",
+              "description": "DNS chaos webhook — disabled, not used by current 10 scenarios."
+            }
+          }
+        }
+      }
+    }
+  },
+  "additionalProperties": true
+}

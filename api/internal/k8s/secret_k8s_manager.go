@@ -3,6 +3,7 @@ package k8s
 import (
 	"context"
 	"fmt"
+	"log/slog"
 	"strings"
 
 	corev1 "k8s.io/api/core/v1"
@@ -12,7 +13,10 @@ import (
 	"k8s.io/apimachinery/pkg/runtime/schema"
 	"k8s.io/client-go/dynamic"
 	"k8s.io/client-go/kubernetes"
+	"k8s.io/client-go/rest"
 	"k8s.io/client-go/tools/clientcmd"
+
+	"github.com/loopzero/loopzero/api/internal/metrics"
 )
 
 // SecretK8sManager creates K8s Secrets on mgmt cluster and ExternalSecret CRs
@@ -31,14 +35,27 @@ var externalSecretGVR = schema.GroupVersionResource{
 
 // NewSecretK8sManager creates a manager that can create K8s Secrets on mgmt
 // and ExternalSecret CRs on runtime cluster.
+//
+// CHG-2026-04-30-DOGFOOD-LOCAL-HEAL NEW-15 follow-up: prefer in-cluster
+// rest config for the mgmt client so loopzero-api SA RBAC applies (Secret
+// read/write granted via clusterrolebinding/loopzero-api). The previous
+// out-of-cluster path used a kubeconfig with kube-system:default SA token
+// which doesn't have those permissions, producing 403 on every loopzero
+// secret set call.
 func NewSecretK8sManager(mgmtKubeconfig, mgmtContext, runtimeKubeconfig, runtimeContext string) (*SecretK8sManager, error) {
-	// Mgmt cluster — typed client for Secret creation
-	mgmtConfig, err := clientcmd.NewNonInteractiveDeferredLoadingClientConfig(
-		&clientcmd.ClientConfigLoadingRules{ExplicitPath: mgmtKubeconfig},
-		&clientcmd.ConfigOverrides{CurrentContext: mgmtContext},
-	).ClientConfig()
-	if err != nil {
-		return nil, fmt.Errorf("secret k8s manager: mgmt config: %w", err)
+	// Mgmt cluster — typed client for Secret creation. In-cluster preferred.
+	var mgmtConfig *rest.Config
+	if inCfg, inErr := rest.InClusterConfig(); inErr == nil {
+		mgmtConfig = inCfg
+	} else {
+		var err error
+		mgmtConfig, err = clientcmd.NewNonInteractiveDeferredLoadingClientConfig(
+			&clientcmd.ClientConfigLoadingRules{ExplicitPath: mgmtKubeconfig},
+			&clientcmd.ConfigOverrides{CurrentContext: mgmtContext},
+		).ClientConfig()
+		if err != nil {
+			return nil, fmt.Errorf("secret k8s manager: mgmt config: %w", err)
+		}
 	}
 	mgmtClient, err := kubernetes.NewForConfig(mgmtConfig)
 	if err != nil {
@@ -158,18 +175,49 @@ func (m *SecretK8sManager) CreateSecret(ctx context.Context, tenantID, projectID
 		},
 	}
 
-	_, err = m.runtimeDynamic.Resource(externalSecretGVR).Namespace(targetNamespace).Get(ctx, esName, metav1.GetOptions{})
+	existing, err := m.runtimeDynamic.Resource(externalSecretGVR).Namespace(targetNamespace).Get(ctx, esName, metav1.GetOptions{})
 	if err != nil {
 		if k8serrors.IsNotFound(err) {
 			_, err = m.runtimeDynamic.Resource(externalSecretGVR).Namespace(targetNamespace).Create(ctx, externalSecret, metav1.CreateOptions{})
 		}
 	} else {
+		// V9 dogfood 2026-05-29 cleanroom-fresh retry surfaced this bug:
+		// K8s Update is optimistic-concurrency by resourceVersion. The
+		// freshly-built `externalSecret` unstructured object has no
+		// resourceVersion → K8s rejects the Update with:
+		//   "metadata.resourceVersion: Invalid value: 0x0: must be
+		//    specified for an update"
+		// Fix: carry the existing object's resourceVersion forward so
+		// the Update commits against the same row the Get observed.
+		// This was THE V9-blocker — 13 dogfood specs failed on this
+		// path. Sponsor goal-directive 2026-05-29 unblocks via this fix.
+		externalSecret.SetResourceVersion(existing.GetResourceVersion())
 		_, err = m.runtimeDynamic.Resource(externalSecretGVR).Namespace(targetNamespace).Update(ctx, externalSecret, metav1.UpdateOptions{})
 	}
 	if err != nil {
+		// dogfood-2026-05-08-fixes T2.3: emit fail metric so silent skip
+		// can be observed via Prometheus. Secret VALUE is NEVER logged.
+		metrics.SecretExternalSecretTotal.WithLabelValues("fail").Inc()
+		slog.Error("ExternalSecret create/update failed",
+			"namespace", targetNamespace,
+			"name", esName,
+			"tenant", tenantID,
+			"app", app,
+			"secret_name", name,
+			"error", err)
 		return fmt.Errorf("create external secret on runtime: %w", err)
 	}
 
+	// dogfood-2026-05-08-fixes T2.3: emit success metric + structured log.
+	// Secret VALUE NEVER appears in metric label or log field — only the
+	// secret NAME (e.g. "API_KEY") is logged for traceability.
+	metrics.SecretExternalSecretTotal.WithLabelValues("success").Inc()
+	slog.Info("ExternalSecret created",
+		"namespace", targetNamespace,
+		"name", esName,
+		"tenant", tenantID,
+		"app", app,
+		"secret_name", name)
 	return nil
 }
 

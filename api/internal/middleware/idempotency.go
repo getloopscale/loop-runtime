@@ -117,7 +117,10 @@ func Idempotency(store IdempotencyStore) func(http.Handler) http.Handler {
 				metrics.IdempotencyHits.WithLabelValues(r.URL.Path).Inc()
 				w.Header().Set("Content-Type", "application/json")
 				w.WriteHeader(existing.ResponseStatus)
-				_, _ = w.Write(existing.ResponseBody)
+				// G705 false positive: existing.ResponseBody is the API's
+				// OWN previous response replayed verbatim (idempotency
+				// cache hit). Never user-input-derived.
+				_, _ = w.Write(existing.ResponseBody) //nolint:gosec // G705 false positive: cached API response replay
 				return
 			}
 

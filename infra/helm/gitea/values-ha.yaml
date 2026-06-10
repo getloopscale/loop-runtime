@@ -111,8 +111,45 @@ resources:
 # ── Persistence ──
 # Bumped from 1Gi to 10Gi. At 200 repos × ~5MB avg = ~1GB of git
 # data, 10Gi gives 10x headroom for growth + temporary files.
+#
+# Sprint 8 v3.2 / CHG-002a / T2.1 — switch to ReadWriteMany via NFS
+# provisioner (D-5 namespace-scoped StorageClass `gitea-nfs`). 2 gitea
+# replicas mount the same backing PV. Falls back to default RWO when
+# nfs-server-provisioner not yet deployed (operator runs
+# `task gitea:nfs-install` before scaling replicas).
 persistence:
   size: 10Gi
+  accessModes:
+    - ReadWriteMany
+  # Sprint 8 v3.2 / CHG-002a / T2.1 — actual StorageClass on mgmt cluster is
+  # `nfs` (provisioner cluster.local/nfs-provisioner). Original ADR-0016 D-5
+  # mentioned namespace-scoped `gitea-nfs` — deferred (renaming the existing
+  # class would require migrating all 3 PVs that already use it).
+  storageClass: nfs
+
+# ── HA replica count ──
+# Sprint 8 v3.2 / CHG-002a / T2.1 — 2 replicas + RWX shared storage above
+# enables Gitea HA per ADR-0010 deliverable #3. Bumps unblock 200
+# concurrent clones load test (Phase 1 / CHG-002b T1.x prerequisite).
+# Gitea Community 1.22+ supports multi-replica with shared filesystem
+# (Bleve indexer on RWX, Redis sessions, S3 LFS — all already configured
+# above). NOT bumped to >2 because NFS write contention scales poorly.
+replicaCount: 2
+
+# Anti-affinity: enforce that the 2 replicas land on distinct mgmt nodes.
+# With mgmtMaxNodes: 5 (T0.2), 2 replicas have headroom.
+strategy:
+  type: RollingUpdate
+  rollingUpdate:
+    maxSurge: 1
+    maxUnavailable: 0
+affinity:
+  podAntiAffinity:
+    requiredDuringSchedulingIgnoredDuringExecution:
+      - labelSelector:
+          matchLabels:
+            app.kubernetes.io/name: gitea
+        topologyKey: kubernetes.io/hostname
 
 # ── Pod security ──
 podSecurityContext:

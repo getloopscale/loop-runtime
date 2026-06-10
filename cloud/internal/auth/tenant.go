@@ -13,7 +13,7 @@ import (
 	"regexp"
 	"strings"
 
-	"github.com/lib/pq"
+	"github.com/jackc/pgx/v5/pgconn"
 )
 
 // TenantProvisioner automatically creates a tenant for new users on first signup.
@@ -46,7 +46,7 @@ func (p *TenantProvisioner) EnsureTenant(ctx context.Context, userID, email stri
 	if err == nil {
 		return tenantID, role, nil // Already has a tenant
 	}
-	if err != sql.ErrNoRows {
+	if !errors.Is(err, sql.ErrNoRows) {
 		return "", "", fmt.Errorf("query tenant membership: %w", err)
 	}
 
@@ -57,7 +57,7 @@ func (p *TenantProvisioner) EnsureTenant(ctx context.Context, userID, email stri
 	if err != nil {
 		return "", "", fmt.Errorf("begin tx: %w", err)
 	}
-	defer tx.Rollback()
+	defer func() { _ = tx.Rollback() }()
 
 	// Serialize concurrent tenant creation for the same user using an advisory lock.
 	// pg_advisory_xact_lock(hashtext(userID)) ensures only one transaction at a time
@@ -76,7 +76,7 @@ func (p *TenantProvisioner) EnsureTenant(ctx context.Context, userID, email stri
 	if err == nil {
 		return tenantID, role, nil
 	}
-	if err != sql.ErrNoRows {
+	if !errors.Is(err, sql.ErrNoRows) {
 		return "", "", fmt.Errorf("re-check tenant membership: %w", err)
 	}
 
@@ -87,11 +87,12 @@ func (p *TenantProvisioner) EnsureTenant(ctx context.Context, userID, email stri
 	// 1. Ensure user record exists (Kratos UUID → users table).
 	// Without this, tenant_members FK on user_id fails.
 	// github_id is NULL for Kratos users (only set for legacy GitHub-auth users).
+	// username uses the Kratos UUID for guaranteed uniqueness (slug collides on common locals).
 	_, err = tx.ExecContext(ctx,
-		`INSERT INTO users (id, email, display_name, created_at, updated_at)
-		 VALUES ($1, $2, $3, now(), now())
+		`INSERT INTO users (id, email, display_name, username, created_at, updated_at)
+		 VALUES ($1, $2, $3, $4, now(), now())
 		 ON CONFLICT (id) DO UPDATE SET email = EXCLUDED.email, updated_at = now()`,
-		userID, email, slug,
+		userID, email, slug, userID,
 	)
 	if err != nil {
 		return "", "", fmt.Errorf("ensure user record: %w", err)
@@ -167,6 +168,28 @@ func (p *TenantProvisioner) EnsureTenant(ctx context.Context, userID, email stri
 	return tenantID, "owner", nil
 }
 
+// GetRole resolves the authoritative role for a user from tenant_members.
+// Returns "" (no role → access denied by RequireRole) when the user has no
+// membership. In dev mode (no DB) it returns "owner" to mirror EnsureTenant.
+// Per S2.3 this is the single source of truth for authorization — never the token.
+func (p *TenantProvisioner) GetRole(ctx context.Context, userID string) (string, error) {
+	if p.db == nil {
+		return "owner", nil // Dev mode without DB
+	}
+	var role string
+	err := p.db.QueryRowContext(ctx,
+		"SELECT role FROM tenant_members WHERE user_id = $1 LIMIT 1",
+		userID,
+	).Scan(&role)
+	if errors.Is(err, sql.ErrNoRows) {
+		return "", nil // No membership — no role, RequireRole will deny
+	}
+	if err != nil {
+		return "", fmt.Errorf("resolve role: %w", err)
+	}
+	return role, nil
+}
+
 // DeriveTenantSlug creates a URL-safe slug from an email address.
 // Used for human-readable display only — NOT for tenant identity.
 // "paulo@example.com" → "paulo"
@@ -212,18 +235,22 @@ func generateTenantID() string {
 // generateSubscriptionID creates a unique subscription ID.
 func generateSubscriptionID() string {
 	b := make([]byte, 12)
-	rand.Read(b)
+	// Mirror generateTenantID: a crypto/rand failure must NOT silently produce a
+	// zeroed (collision-prone) ID (MEDIUM-001). It should never happen in practice.
+	if _, err := rand.Read(b); err != nil {
+		panic(fmt.Sprintf("crypto/rand failed: %v", err))
+	}
 	return fmt.Sprintf("sub_%x", b)
 }
 
 // isUniqueViolation checks if a PostgreSQL error is a unique constraint violation.
-// Uses lib/pq typed error — string matching does NOT work because lib/pq does not
-// include the SQLSTATE code in the error message.
+// Uses the pgx typed error (SQLSTATE 23505). String matching alone is unreliable,
+// so the typed check is preferred with a message-content fallback.
 func isUniqueViolation(err error) bool {
-	var pqErr *pq.Error
-	if errors.As(err, &pqErr) {
-		return pqErr.Code == "23505" // unique_violation
+	var pgErr *pgconn.PgError
+	if errors.As(err, &pgErr) {
+		return pgErr.Code == "23505" // unique_violation
 	}
-	// Fallback for non-pq drivers (e.g., pgx): check message content
+	// Fallback for drivers that don't surface a typed error: check message content.
 	return err != nil && strings.Contains(err.Error(), "unique constraint")
 }

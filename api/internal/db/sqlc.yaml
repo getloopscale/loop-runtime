@@ -1,0 +1,40 @@
+# sqlc v2 config — locked by ADR-1 (D2 pgx/v5, D3 emit_methods_with_db_argument,
+# D6 schema=schema.gen.sql) + plan v1.2 EC-3 fold (emit_json_tags + snake_case)
+# + plan v1.2 D1 (sqlc CLI pinned at v1.31.1).
+#
+# Authoritative references:
+#   - docs/decisions/2026-05-29-sqlc-adoption.md (ADR-1)
+#   - docs/decisions/2026-05-29-schema-gen-sql-render.md (ADR-2)
+#   - docs/plans/2026-05-29-sqlc-migration-plan.md v1.2 § "ADRs" + T0.1
+#
+# CHANGE CONTROL: this file is the canonical source of sqlc codegen behavior.
+# Any modification requires re-running `task db:generate` + verifying CI green
+# on the substantive commit (per D8' develop-direct workflow).
+#
+# Locked decisions encoded below:
+#   sql.[0].engine: postgresql                       ← D2 (PostgreSQL only; no other DBs)
+#   sql.[0].schema: "schema.gen.sql"                 ← D6 (rendered file, NOT migrations/)
+#   sql.[0].queries: "queries"                       ← canonical query directory
+#   sql.[0].gen.go.out: "generated"                  ← canonical generated output
+#   sql.[0].gen.go.package: "generated"              ← Go package name
+#   sql.[0].gen.go.sql_package: "pgx/v5"             ← D2 (pgx/v5; sqlc dropped pgx/v4 in v1.25.0)
+#   sql.[0].gen.go.emit_methods_with_db_argument: true  ← D3 (tx-required form; pool-bound disabled)
+#   sql.[0].gen.go.emit_pointers_for_null_types: true   ← nullable columns → *T
+#   sql.[0].gen.go.emit_json_tags: true              ← EC-3 (Rule 5 contract preservation)
+#   sql.[0].gen.go.json_tags_case_style: "snake"     ← EC-3 (preserves current CLI/API snake_case)
+
+version: "2"
+
+sql:
+  - engine: postgresql
+    schema: "schema.gen.sql"
+    queries: "queries"
+    gen:
+      go:
+        out: "generated"
+        package: "generated"
+        sql_package: "pgx/v5"
+        emit_methods_with_db_argument: true
+        emit_pointers_for_null_types: true
+        emit_json_tags: true
+        json_tags_case_style: "snake"

@@ -74,6 +74,9 @@ func (f *fakeReleaseStoreReaper) FindActiveReleases(_ context.Context, _ string)
 func (f *fakeReleaseStoreReaper) GetByIDTx(_ context.Context, _ db.DBTX, id string) (*db.Release, error) {
 	return f.releases[id], nil
 }
+func (f *fakeReleaseStoreReaper) CancelAllByEnv(_ context.Context, _ db.DBTX, _, _, _ string) (int, error) {
+	return 0, nil
+}
 
 type fakeStaleReleaseChecker struct {
 	result []StaleRelease
@@ -120,7 +123,7 @@ func TestReleaseReaper_ReapsStaleReadyRelease(t *testing.T) {
 
 	checker := &fakeStaleReleaseChecker{
 		result: []StaleRelease{
-			{ID: "rel-1", State: statemachine.ReleaseReady, Event: statemachine.ReleaseGitPushTimeout,
+			{ID: "rel-1", State: statemachine.RPhReady, Event: statemachine.RPEventGitPushTimeout,
 				TenantID: "tn-1", ProjectID: "proj-1", Environment: "production", BuildID: "build-1"},
 		},
 	}
@@ -134,8 +137,8 @@ func TestReleaseReaper_ReapsStaleReadyRelease(t *testing.T) {
 	if reaped != 1 {
 		t.Fatalf("expected 1 reaped, got %d", reaped)
 	}
-	if rs.lastStatus["rel-1"] != string(statemachine.ReleaseGitPushTimeout) {
-		t.Errorf("expected event %s, got %s", statemachine.ReleaseGitPushTimeout, rs.lastStatus["rel-1"])
+	if rs.lastStatus["rel-1"] != string(statemachine.RPEventGitPushTimeout) {
+		t.Errorf("expected event %s, got %s", statemachine.RPEventGitPushTimeout, rs.lastStatus["rel-1"])
 	}
 	if len(es.events) != 1 || es.events[0].EventType != "deploy.git_push_failed" {
 		t.Errorf("expected deploy.git_push_failed SSE event, got %v", es.events)
@@ -151,7 +154,7 @@ func TestReleaseReaper_ReapsStalePendingRelease(t *testing.T) {
 
 	checker := &fakeStaleReleaseChecker{
 		result: []StaleRelease{
-			{ID: "rel-2", State: statemachine.ReleasePending, Event: statemachine.ReleaseSyncTimeout,
+			{ID: "rel-2", State: statemachine.RPhPending, Event: statemachine.RPEventSyncTimeout,
 				TenantID: "tn-1", ProjectID: "proj-1", Environment: "staging", BuildID: "build-2"},
 		},
 	}
@@ -178,7 +181,7 @@ func TestReleaseReaper_SkipsAlreadyTransitioned(t *testing.T) {
 
 	checker := &fakeStaleReleaseChecker{
 		result: []StaleRelease{
-			{ID: "rel-3", State: statemachine.ReleaseReady, Event: statemachine.ReleaseGitPushTimeout,
+			{ID: "rel-3", State: statemachine.RPhReady, Event: statemachine.RPEventGitPushTimeout,
 				TenantID: "tn-1", ProjectID: "proj-1", Environment: "production", BuildID: "build-3"},
 		},
 	}
@@ -213,4 +216,9 @@ func TestReleaseReaper_CheckerError_ReturnsZero(t *testing.T) {
 	if reaped != 0 {
 		t.Fatalf("expected 0, got %d", reaped)
 	}
+}
+
+// AppendSideEffect — fix-all-platform-issues-plan T4.1 stub.
+func (f *fakeReleaseStoreReaper) AppendSideEffect(_ context.Context, _ db.DBTX, _ string, _ map[string]any) error {
+	return nil
 }

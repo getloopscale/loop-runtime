@@ -61,10 +61,15 @@ func TestRenderDeployment_DefaultReplicas(t *testing.T) {
 		{Name: "api", Type: "server", Port: 8080, ImageRef: "reg:5000/acme/webapp:abc123"},
 	}
 
-	dep := parseDeployment(t, Render(input))
+	dep := parseDeployment(t, mustRender(t, input))
 
-	if dep.Spec.Replicas != 1 {
-		t.Errorf("default replicas: got %d, want 1", dep.Spec.Replicas)
+	// Default is 2 (HA) per renderer_deployment.go:104 — chaos C03 fix
+	// 2026-05-14 raised the default from 1 to 2 so pod-kill chaos
+	// produces 50% (not 0%) availability during the kill window. To
+	// opt out set replicas: 1 in loopzero.yaml — see TestRenderDeployment_
+	// CustomReplicas for the explicit-override case.
+	if dep.Spec.Replicas != 2 {
+		t.Errorf("default replicas (HA): got %d, want 2", dep.Spec.Replicas)
 	}
 }
 
@@ -80,7 +85,7 @@ func TestRenderDeployment_CustomReplicas(t *testing.T) {
 		},
 	}
 
-	dep := parseDeployment(t, Render(input))
+	dep := parseDeployment(t, mustRender(t, input))
 
 	if dep.Spec.Replicas != 3 {
 		t.Errorf("custom replicas: got %d, want 3", dep.Spec.Replicas)
@@ -103,7 +108,7 @@ func TestRenderDeployment_WithHPA(t *testing.T) {
 		},
 	}
 
-	result := Render(input)
+	result, _ := Render(input)
 
 	if !hasHPA(result) {
 		t.Fatal("expected HPA to be generated when autoscaling is configured")
@@ -117,8 +122,10 @@ func TestRenderDeployment_WithHPA(t *testing.T) {
 	if hpa.Kind != "HorizontalPodAutoscaler" {
 		t.Errorf("HPA kind: got %q, want HorizontalPodAutoscaler", hpa.Kind)
 	}
-	if hpa.Metadata.Name != "api" {
-		t.Errorf("HPA name: got %q, want api", hpa.Metadata.Name)
+	// Achado #17 fix: HPA name + scaleTargetRef are project-scoped to avoid
+	// collisions when two projects in the same tenant env share an app name.
+	if hpa.Metadata.Name != "webapp-api" {
+		t.Errorf("HPA name: got %q, want webapp-api", hpa.Metadata.Name)
 	}
 	if hpa.Metadata.Namespace != "loopzero-acme-production" {
 		t.Errorf("HPA namespace: got %q, want loopzero-acme-production", hpa.Metadata.Namespace)
@@ -135,8 +142,8 @@ func TestRenderDeployment_WithHPA(t *testing.T) {
 	if hpa.Spec.ScaleTargetRef.Kind != "Deployment" {
 		t.Errorf("HPA scaleTargetRef.kind: got %q, want Deployment", hpa.Spec.ScaleTargetRef.Kind)
 	}
-	if hpa.Spec.ScaleTargetRef.Name != "api" {
-		t.Errorf("HPA scaleTargetRef.name: got %q, want api", hpa.Spec.ScaleTargetRef.Name)
+	if hpa.Spec.ScaleTargetRef.Name != "webapp-api" {
+		t.Errorf("HPA scaleTargetRef.name: got %q, want webapp-api", hpa.Spec.ScaleTargetRef.Name)
 	}
 
 	// Verify metrics
@@ -164,7 +171,7 @@ func TestRenderDeployment_NoHPA_WithoutAutoscaling(t *testing.T) {
 		{Name: "api", Type: "server", Port: 8080, ImageRef: "reg:5000/acme/webapp:abc123"},
 	}
 
-	result := Render(input)
+	result, _ := Render(input)
 
 	if hasHPA(result) {
 		t.Error("HPA should not be generated when autoscaling is not configured")
@@ -184,7 +191,7 @@ func TestRenderDeployment_HPA_DefaultValues(t *testing.T) {
 		},
 	}
 
-	result := Render(input)
+	result, _ := Render(input)
 	hpa := parseHPA(t, result)
 
 	if hpa.Spec.MinReplicas != 1 {
@@ -216,7 +223,7 @@ func TestRenderDeployment_HPA_SetsReplicasToMin(t *testing.T) {
 		},
 	}
 
-	dep := parseDeployment(t, Render(input))
+	dep := parseDeployment(t, mustRender(t, input))
 
 	if dep.Spec.Replicas != 2 {
 		t.Errorf("with autoscaling, deployment replicas should equal minReplicas: got %d, want 2", dep.Spec.Replicas)
@@ -239,7 +246,7 @@ func TestRenderDeployment_HPA_ValidYAML(t *testing.T) {
 		},
 	}
 
-	result := Render(input)
+	result, _ := Render(input)
 	docs := splitDocs(result)
 	for i, doc := range docs {
 		var parsed interface{}
@@ -265,7 +272,7 @@ func TestRenderDeployment_ServerWithHPA_ProducesSixDocuments(t *testing.T) {
 		},
 	}
 
-	result := Render(input)
+	result, _ := Render(input)
 	docs := splitDocs(result)
 
 	// Deployment + PDB + Service + Certificate + IngressRoute + HPA = 6
@@ -289,7 +296,7 @@ func TestRenderDeployment_WorkerWithHPA(t *testing.T) {
 		},
 	}
 
-	result := Render(input)
+	result, _ := Render(input)
 	docs := splitDocs(result)
 
 	// Deployment + PDB + HPA = 3
@@ -298,8 +305,8 @@ func TestRenderDeployment_WorkerWithHPA(t *testing.T) {
 	}
 
 	hpa := parseHPA(t, result)
-	if hpa.Spec.ScaleTargetRef.Name != "processor" {
-		t.Errorf("HPA scaleTargetRef.name: got %q, want processor", hpa.Spec.ScaleTargetRef.Name)
+	if hpa.Spec.ScaleTargetRef.Name != "webapp-processor" {
+		t.Errorf("HPA scaleTargetRef.name: got %q, want webapp-processor (project-scoped)", hpa.Spec.ScaleTargetRef.Name)
 	}
 }
 
@@ -319,10 +326,16 @@ func TestRenderDeployment_HPA_HasLabels(t *testing.T) {
 		},
 	}
 
-	hpa := parseHPA(t, Render(input))
+	hpa := parseHPA(t, mustRender(t, input))
 
-	if hpa.Metadata.Labels["app"] != "api" {
-		t.Errorf("HPA label 'app': got %q, want api", hpa.Metadata.Labels["app"])
+	// Achado #17: `app` label carries the project-scoped resource name so
+	// Service.spec.selector matches only this project's pods. The raw app
+	// name remains available via `loopzero.io/app-name`.
+	if hpa.Metadata.Labels["app"] != "webapp-api" {
+		t.Errorf("HPA label 'app': got %q, want webapp-api", hpa.Metadata.Labels["app"])
+	}
+	if hpa.Metadata.Labels["loopzero.io/app-name"] != "api" {
+		t.Errorf("HPA label 'loopzero.io/app-name': got %q, want api", hpa.Metadata.Labels["loopzero.io/app-name"])
 	}
 	if hpa.Metadata.Labels["loopzero.io/tenant"] != "acme" {
 		t.Errorf("HPA label 'loopzero.io/tenant': got %q, want acme", hpa.Metadata.Labels["loopzero.io/tenant"])
@@ -427,7 +440,7 @@ func TestRenderDeployment_ScaleToZero_GeneratesScaledObject(t *testing.T) {
 		},
 	}
 
-	result := Render(input)
+	result, _ := Render(input)
 
 	if !hasScaledObject(result) {
 		t.Fatal("expected ScaledObject to be generated when MinReplicas == 0")
@@ -446,8 +459,8 @@ func TestRenderDeployment_ScaleToZero_GeneratesScaledObject(t *testing.T) {
 	if so.Spec.MaxReplicaCount != 5 {
 		t.Errorf("ScaledObject maxReplicaCount: got %d, want 5", so.Spec.MaxReplicaCount)
 	}
-	if so.Spec.ScaleTargetRef.Name != "api" {
-		t.Errorf("ScaledObject scaleTargetRef.name: got %q, want api", so.Spec.ScaleTargetRef.Name)
+	if so.Spec.ScaleTargetRef.Name != "webapp-api" {
+		t.Errorf("ScaledObject scaleTargetRef.name: got %q, want webapp-api (project-scoped)", so.Spec.ScaleTargetRef.Name)
 	}
 }
 
@@ -467,7 +480,7 @@ func TestRenderDeployment_ScaleToZero_GeneratesHTTPScaledObject(t *testing.T) {
 		},
 	}
 
-	result := Render(input)
+	result, _ := Render(input)
 
 	if !hasHTTPScaledObject(result) {
 		t.Fatal("expected HTTPScaledObject for server app with MinReplicas == 0")
@@ -482,8 +495,8 @@ func TestRenderDeployment_ScaleToZero_GeneratesHTTPScaledObject(t *testing.T) {
 	if len(hso.Spec.Hosts) == 0 || hso.Spec.Hosts[0] != expectedHost {
 		t.Errorf("HTTPScaledObject hosts: got %v, want [%s]", hso.Spec.Hosts, expectedHost)
 	}
-	if hso.Spec.ScaleTargetRef.Name != "api" {
-		t.Errorf("HTTPScaledObject scaleTargetRef.name: got %q, want api", hso.Spec.ScaleTargetRef.Name)
+	if hso.Spec.ScaleTargetRef.Name != "webapp-api" {
+		t.Errorf("HTTPScaledObject scaleTargetRef.name: got %q, want webapp-api (project-scoped)", hso.Spec.ScaleTargetRef.Name)
 	}
 	if hso.Spec.ScaleTargetRef.Port != 8080 {
 		t.Errorf("HTTPScaledObject scaleTargetRef.port: got %d, want 8080", hso.Spec.ScaleTargetRef.Port)
@@ -514,7 +527,7 @@ func TestRenderDeployment_ScaleToZero_WorkerNoHTTPScaledObject(t *testing.T) {
 		},
 	}
 
-	result := Render(input)
+	result, _ := Render(input)
 
 	if !hasScaledObject(result) {
 		t.Error("expected ScaledObject for worker with MinReplicas == 0")
@@ -540,7 +553,7 @@ func TestRenderDeployment_ScaleToZero_DeploymentReplicasZero(t *testing.T) {
 		},
 	}
 
-	dep := parseDeployment(t, Render(input))
+	dep := parseDeployment(t, mustRender(t, input))
 
 	if dep.Spec.Replicas != 0 {
 		t.Errorf("with scale-to-zero, deployment replicas should be 0: got %d", dep.Spec.Replicas)
@@ -563,7 +576,7 @@ func TestRenderDeployment_ScaleToZero_ServerDocCount(t *testing.T) {
 		},
 	}
 
-	result := Render(input)
+	result, _ := Render(input)
 	docs := splitDocs(result)
 
 	// Deployment + PDB + Service + Certificate + IngressRoute + ScaledObject + HTTPScaledObject = 7
@@ -589,7 +602,7 @@ func TestRenderDeployment_MinOne_StillGeneratesHPA(t *testing.T) {
 		},
 	}
 
-	result := Render(input)
+	result, _ := Render(input)
 
 	if !hasHPA(result) {
 		t.Error("expected HPA for MinReplicas >= 1")
@@ -619,7 +632,7 @@ func TestRenderDeployment_ScaleToZero_CooldownDefault(t *testing.T) {
 		},
 	}
 
-	so := parseScaledObject(t, Render(input))
+	so := parseScaledObject(t, mustRender(t, input))
 
 	if so.Spec.CooldownPeriod != 300 {
 		t.Errorf("ScaledObject default cooldownPeriod: got %d, want 300", so.Spec.CooldownPeriod)
@@ -643,7 +656,7 @@ func TestRenderDeployment_ScaleToZero_CooldownCustom(t *testing.T) {
 		},
 	}
 
-	so := parseScaledObject(t, Render(input))
+	so := parseScaledObject(t, mustRender(t, input))
 
 	if so.Spec.CooldownPeriod != 600 {
 		t.Errorf("ScaledObject custom cooldownPeriod: got %d, want 600", so.Spec.CooldownPeriod)
@@ -669,7 +682,7 @@ func TestRenderDeployment_ScaleToZero_CustomDomains(t *testing.T) {
 		},
 	}
 
-	hso := parseHTTPScaledObject(t, Render(input))
+	hso := parseHTTPScaledObject(t, mustRender(t, input))
 
 	expectedHost := "acme-webapp-api-production.loopzero.example.com"
 	customHost := "api.mycompany.com"

@@ -146,33 +146,35 @@ func TestOryKratosAccountLinking(t *testing.T) {
 	}
 }
 
-// TestUserIdentityMapMigrationExists ensures the migration for
-// lazy identity migration exists.
+// TestUserIdentityMapMigrationExists ensures the lazy-identity-migration
+// schema for `user_identity_map` is present in the canonical migrations
+// directory.
+//
+// History note: this used to be migration `000014_user_identity_map.up.sql`
+// (added in 2026-04-01 commit `ddac9ec`). On 2026-04-24, commit `632ce1e5`
+// consolidated 37 development migrations into 2 (`000001_initial_schema.up.sql`
+// for DDL + `000002_seed_data.up.sql` for plan_limits) per pre-release
+// policy. The old per-feature migrations were preserved in
+// `api/internal/db/migrations-archive/` for reference. This test now
+// asserts the consolidated schema still defines the table, columns, and
+// FK that the lazy migration depends on. Forward-only is no longer
+// per-file enforceable since the consolidated schema is allowed to drop
+// no-longer-needed objects between consolidations.
 func TestUserIdentityMapMigrationExists(t *testing.T) {
-	migrationPath := filepath.Join(helmDir(), "..", "..", "api", "internal", "db", "migrations", "000014_user_identity_map.up.sql")
+	migrationPath := filepath.Join(helmDir(), "..", "..", "api", "internal", "db", "migrations", "000001_initial_schema.up.sql")
 	data, err := os.ReadFile(migrationPath)
 	if err != nil {
-		t.Fatalf("migration 000014 missing: %v", err)
+		t.Fatalf("consolidated initial schema missing: %v", err)
 	}
 
 	content := string(data)
 	if !strings.Contains(content, "user_identity_map") {
-		t.Error("migration must create user_identity_map table")
+		t.Error("schema must create user_identity_map table")
 	}
 	if !strings.Contains(content, "kratos_identity_id") {
-		t.Error("migration must have kratos_identity_id column")
+		t.Error("schema must have kratos_identity_id column")
 	}
 	if !strings.Contains(content, "REFERENCES users(id)") {
-		t.Error("migration must reference users table")
-	}
-	// Forward-only: no DROP statements (comments excluded)
-	for _, line := range strings.Split(content, "\n") {
-		trimmed := strings.TrimSpace(line)
-		if strings.HasPrefix(trimmed, "--") {
-			continue // Skip SQL comments
-		}
-		if strings.Contains(strings.ToUpper(trimmed), "DROP") {
-			t.Errorf("migration must be forward-only (no DROP): %s", trimmed)
-		}
+		t.Error("schema must reference users table")
 	}
 }

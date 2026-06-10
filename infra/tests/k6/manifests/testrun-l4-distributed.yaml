@@ -1,0 +1,59 @@
+# Distributed L4 test using k6 Operator.
+# Requires k6-operator installed (infra/helm/k6-operator/).
+# Splits the test across 8 pods for 500-tenant simulation.
+apiVersion: k6.io/v1alpha1
+kind: TestRun
+metadata:
+  name: k6-l4-distributed
+  namespace: loopzero-system
+  labels:
+    app.kubernetes.io/name: k6-load-test
+    app.kubernetes.io/part-of: loopzero
+spec:
+  parallelism: 8
+  script:
+    configMap:
+      name: k6-scripts
+      file: scripts/l4-500-tenants.js
+  runner:
+    image: grafana/k6:0.52.0
+    env:
+      - name: K6_API_URL
+        value: "http://loopzero-api.loopzero-system.svc.cluster.local:8080"
+      - name: K6_SVC_AUTH
+        valueFrom:
+          secretKeyRef:
+            name: loopzero-api-secrets
+            key: LOOPZERO_SERVICE_AUTH_SECRET
+      - name: K6_BUNDLE_PATH
+        value: "/fixtures/bundle.bin"
+      - name: K6_PROMETHEUS_RW_SERVER_URL
+        value: "http://prometheus-server.loopzero-system.svc.cluster.local/api/v1/write"
+    resources:
+      limits:
+        cpu: "2"
+        memory: "2Gi"
+      requests:
+        cpu: "500m"
+        memory: "512Mi"
+    volumeMounts:
+      - name: fixtures
+        mountPath: /fixtures
+        readOnly: true
+    volumes:
+      - name: fixtures
+        emptyDir: {}
+    initContainers:
+      - name: build-fixture
+        image: alpine:3.21
+        command: ["sh", "/scripts/build-bundle.sh"]
+        volumeMounts:
+          - name: fixture-builder
+            mountPath: /scripts
+          - name: fixtures
+            mountPath: /fixtures
+        volumes:
+          - name: fixture-builder
+            configMap:
+              name: k6-fixture-builder
+              defaultMode: 0755

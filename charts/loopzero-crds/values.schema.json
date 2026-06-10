@@ -1,0 +1,31 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "loopzero-crds values",
+  "description": "Schema for loopzero-crds chart. Mostly toggles for which CRDs to install. Per INF-G17.",
+  "type": "object",
+  "additionalProperties": true,
+  "properties": {
+    "crds": {
+      "type": "object",
+      "description": "Per-CRD enable toggles",
+      "properties": {
+        "tenant": { "type": "object", "properties": { "enabled": { "type": "boolean" } } },
+        "environment": { "type": "object", "properties": { "enabled": { "type": "boolean" } } },
+        "loopzeroApplication": { "type": "object", "properties": { "enabled": { "type": "boolean" } } },
+        "exposedRoute": { "type": "object", "properties": { "enabled": { "type": "boolean" } } },
+        "platformBootstrap": { "type": "object", "properties": { "enabled": { "type": "boolean" } } },
+        "previewEnvironment": { "type": "object", "properties": { "enabled": { "type": "boolean" } } },
+        "gitRepositoryBinding": { "type": "object", "properties": { "enabled": { "type": "boolean" } } },
+        "clusterCredential": { "type": "object", "properties": { "enabled": { "type": "boolean" } } },
+        "appSecret": { "type": "object", "properties": { "enabled": { "type": "boolean" } } },
+        "reconciliationReport": { "type": "object", "properties": { "enabled": { "type": "boolean" } } }
+      }
+    },
+    "annotations": { "type": "object" },
+    "labels": { "type": "object" },
+    "keep": {
+      "type": "boolean",
+      "description": "Whether to retain CRDs on chart uninstall (helm.sh/resource-policy: keep)"
+    }
+  }
+}

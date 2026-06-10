@@ -173,7 +173,7 @@ func TestBuildsRoute(t *testing.T) {
 		orch := &fakeBuildOrchestrator{}
 		handler := newBuildHandler(orch, "test-secret")
 
-		body := `{"project_id":"proj-xxx","environment":"production"}`
+		body := `{"project_id":"proj-xxx","environment":"production","apps":[{"name":"api","type":"server"}]}`
 		req := httptest.NewRequest(http.MethodPost, "/api/v1/builds", bytes.NewBufferString(body))
 		req.Header.Set("Content-Type", "application/json")
 		rec := httptest.NewRecorder()
@@ -214,7 +214,7 @@ func TestBuildsRoute(t *testing.T) {
 		}
 		handler := newBuildHandler(orch, "test-secret")
 
-		body := `{"project_id":"proj-xxx","environment":"production"}`
+		body := `{"project_id":"proj-xxx","environment":"production","apps":[{"name":"api","type":"server"}]}`
 		req := httptest.NewRequest(http.MethodPost, "/api/v1/builds", bytes.NewBufferString(body)).
 			WithContext(makeAuthCtx("github-lucas", "acme", "owner"))
 		req.Header.Set("Content-Type", "application/json")
@@ -244,7 +244,7 @@ func TestBuildsRoute(t *testing.T) {
 		orch := &fakeBuildOrchestrator{}
 		handler := newBuildHandler(orch, "test-secret")
 
-		body := `{"project_id":"proj-xxx","environment":"PRODUCTION"}`
+		body := `{"project_id":"proj-xxx","environment":"PRODUCTION","apps":[{"name":"api","type":"server"}]}`
 		req := httptest.NewRequest(http.MethodPost, "/api/v1/builds", bytes.NewBufferString(body)).
 			WithContext(makeAuthCtx("github-lucas", "acme", "owner"))
 		req.Header.Set("Content-Type", "application/json")
@@ -278,7 +278,7 @@ func TestBuildsRoute(t *testing.T) {
 		}
 		handler := newBuildHandler(orch, "test-secret")
 
-		body := `{"project_id":"proj-xxx","environment":"staging"}`
+		body := `{"project_id":"proj-xxx","environment":"staging","apps":[{"name":"api","type":"server"}]}`
 		req := httptest.NewRequest(http.MethodPost, "/api/v1/builds", bytes.NewBufferString(body)).
 			WithContext(makeAuthCtx("github-lucas", "acme", "owner"))
 		req.Header.Set("Content-Type", "application/json")
@@ -368,7 +368,7 @@ func TestBuildsRoute(t *testing.T) {
 		}
 		handler := newBuildHandler(orch, "test-secret")
 
-		body := `{"project_id":"proj-xxx","environment":"production"}`
+		body := `{"project_id":"proj-xxx","environment":"production","apps":[{"name":"api","type":"server"}]}`
 		req := httptest.NewRequest(http.MethodPost, "/api/v1/builds", bytes.NewBufferString(body)).
 			WithContext(makeAuthCtx("github-lucas", "acme", "owner"))
 		req.Header.Set("Content-Type", "application/json")
@@ -461,7 +461,7 @@ func TestBuildsNoInternalTerms(t *testing.T) {
 		}
 		handler := newBuildHandler(orch, "test-secret")
 
-		body := `{"project_id":"proj-xxx","environment":"production"}`
+		body := `{"project_id":"proj-xxx","environment":"production","apps":[{"name":"api","type":"server"}]}`
 		req := httptest.NewRequest(http.MethodPost, "/api/v1/builds", bytes.NewBufferString(body)).
 			WithContext(makeAuthCtx("github-lucas", "acme", "owner"))
 		req.Header.Set("Content-Type", "application/json")
@@ -482,7 +482,7 @@ func TestBuildsNoInternalTerms(t *testing.T) {
 		orch := &fakeBuildOrchestrator{}
 		handler := newBuildHandler(orch, "test-secret")
 
-		body := `{"project_id":"proj-xxx","environment":"PRODUCTION"}`
+		body := `{"project_id":"proj-xxx","environment":"PRODUCTION","apps":[{"name":"api","type":"server"}]}`
 		req := httptest.NewRequest(http.MethodPost, "/api/v1/builds", bytes.NewBufferString(body)).
 			WithContext(makeAuthCtx("github-lucas", "acme", "owner"))
 		req.Header.Set("Content-Type", "application/json")
@@ -514,7 +514,7 @@ func TestEnvironmentValidation(t *testing.T) {
 			}
 			handler := newBuildHandler(orch, "test-secret")
 
-			body := `{"project_id":"proj-xxx","environment":"` + env + `"}`
+			body := `{"project_id":"proj-xxx","environment":"` + env + `","apps":[{"name":"api","type":"server"}]}`
 			req := httptest.NewRequest(http.MethodPost, "/api/v1/builds", bytes.NewBufferString(body)).
 				WithContext(makeAuthCtx("github-lucas", "acme", "owner"))
 			req.Header.Set("Content-Type", "application/json")
@@ -533,7 +533,7 @@ func TestEnvironmentValidation(t *testing.T) {
 			orch := &fakeBuildOrchestrator{}
 			handler := newBuildHandler(orch, "test-secret")
 
-			body := `{"project_id":"proj-xxx","environment":"` + env + `"}`
+			body := `{"project_id":"proj-xxx","environment":"` + env + `","apps":[{"name":"api","type":"server"}]}`
 			req := httptest.NewRequest(http.MethodPost, "/api/v1/builds", bytes.NewBufferString(body)).
 				WithContext(makeAuthCtx("github-lucas", "acme", "owner"))
 			req.Header.Set("Content-Type", "application/json")

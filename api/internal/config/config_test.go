@@ -130,6 +130,7 @@ func TestLoad_DisableLegacyLoops_NonTrueRejected(t *testing.T) {
 
 func TestValidate_RejectsMaxConnsLessThanMinConns(t *testing.T) {
 	cfg := Config{
+		Env:           "development", // Sprint A T2.1: allowlist requires canonical value
 		DBMaxConns:    5,
 		DBMinConns:    10,
 		ClusterIssuer: "test-issuer", // B14
@@ -145,6 +146,7 @@ func TestValidate_RejectsMaxConnsLessThanMinConns(t *testing.T) {
 
 func TestValidate_AcceptsValidPoolConfig(t *testing.T) {
 	cfg := Config{
+		Env:           "development", // Sprint A T2.1: allowlist requires canonical value
 		DBMaxConns:    25,
 		DBMinConns:    5,
 		ClusterIssuer: "test-issuer", // B14
@@ -157,6 +159,7 @@ func TestValidate_AcceptsValidPoolConfig(t *testing.T) {
 
 func TestValidate_AcceptsEqualPoolConfig(t *testing.T) {
 	cfg := Config{
+		Env:           "development", // Sprint A T2.1: allowlist requires canonical value
 		DBMaxConns:    10,
 		DBMinConns:    10,
 		ClusterIssuer: "test-issuer", // B14
@@ -169,7 +172,8 @@ func TestValidate_AcceptsEqualPoolConfig(t *testing.T) {
 
 func TestValidate_AcceptsZeroPoolConfig(t *testing.T) {
 	// Zero values should not trigger validation (unset config) — EXCEPT ClusterIssuer (B14)
-	cfg := Config{ClusterIssuer: "test-issuer"}
+	// + Env (Sprint A T2.1 allowlist).
+	cfg := Config{Env: "development", ClusterIssuer: "test-issuer"}
 	err := cfg.Validate()
 	if err != nil {
 		t.Fatalf("expected no error for zero config, got %v", err)
@@ -201,6 +205,7 @@ func TestValidate_ProductionRejectsInsecureRegistry(t *testing.T) {
 func TestValidate_WarnsReleasePendingLessThanSyncTimeout(t *testing.T) {
 	// This should warn but not error (cross-field validation)
 	cfg := Config{
+		Env:                   "development", // Sprint A T2.1: allowlist requires canonical value
 		ReleasePendingTimeout: 1 * time.Minute,
 		ArgocdSyncTimeout:     5 * time.Minute,
 		ClusterIssuer:         "test-issuer", // B14
@@ -252,5 +257,333 @@ func TestLoad_ServiceAuthSecretCreatedAt_DefaultsToZero(t *testing.T) {
 	cfg := Load()
 	if !cfg.ServiceAuthSecretCreatedAt.IsZero() {
 		t.Errorf("ServiceAuthSecretCreatedAt should be zero when unset, got %v", cfg.ServiceAuthSecretCreatedAt)
+	}
+}
+
+// --- Cosign Keyless config (M2 T8.0, v1.1 EC-3 of plan 2026-05-27-M07-to-3-85) ---
+
+func TestLoad_CosignKeyless_DefaultsFalse(t *testing.T) {
+	// Per v1.1 EC-3: default MUST be false (safe regression — keyed mode preserved).
+	for _, k := range []string{"LOOPZERO_COSIGN_KEYLESS", "LOOPZERO_COSIGN_ATTEST_ENABLED", "LOOPZERO_FULCIO_URL", "LOOPZERO_REKOR_URL"} {
+		_ = os.Unsetenv(k)
+	}
+	cfg := Load()
+	if cfg.CosignKeyless {
+		t.Error("CosignKeyless must default to false when env unset")
+	}
+	if cfg.CosignAttestEnabled {
+		t.Error("CosignAttestEnabled must default to false when env unset")
+	}
+	if cfg.CosignFulcioURL != "" {
+		t.Errorf("CosignFulcioURL must default to empty, got %q", cfg.CosignFulcioURL)
+	}
+	if cfg.CosignRekorURL != "" {
+		t.Errorf("CosignRekorURL must default to empty, got %q", cfg.CosignRekorURL)
+	}
+}
+
+func TestLoad_CosignKeyless_TrueActivates(t *testing.T) {
+	t.Setenv("LOOPZERO_COSIGN_KEYLESS", "true")
+	cfg := Load()
+	if !cfg.CosignKeyless {
+		t.Error(`CosignKeyless must be true when env = "true"`)
+	}
+}
+
+func TestLoad_CosignAttestEnabled_TrueActivates(t *testing.T) {
+	t.Setenv("LOOPZERO_COSIGN_ATTEST_ENABLED", "true")
+	cfg := Load()
+	if !cfg.CosignAttestEnabled {
+		t.Error(`CosignAttestEnabled must be true when env = "true"`)
+	}
+}
+
+func TestLoad_CosignFulcioURL_PropagatesFromEnv(t *testing.T) {
+	t.Setenv("LOOPZERO_FULCIO_URL", "http://fulcio.sigstore-system.svc.cluster.local:80")
+	cfg := Load()
+	if cfg.CosignFulcioURL != "http://fulcio.sigstore-system.svc.cluster.local:80" {
+		t.Errorf("CosignFulcioURL not propagated, got %q", cfg.CosignFulcioURL)
+	}
+}
+
+func TestLoad_CosignRekorURL_PropagatesFromEnv(t *testing.T) {
+	t.Setenv("LOOPZERO_REKOR_URL", "http://rekor-server.sigstore-system.svc.cluster.local:80")
+	cfg := Load()
+	if cfg.CosignRekorURL != "http://rekor-server.sigstore-system.svc.cluster.local:80" {
+		t.Errorf("CosignRekorURL not propagated, got %q", cfg.CosignRekorURL)
+	}
+}
+
+func TestLoad_CosignKeyless_InvalidBoolDefaultsFalse(t *testing.T) {
+	// envBool helper falls back to default on parse error (logs warning).
+	t.Setenv("LOOPZERO_COSIGN_KEYLESS", "garbage")
+	cfg := Load()
+	if cfg.CosignKeyless {
+		t.Error("CosignKeyless must remain false when env is unparseable bool")
+	}
+}
+
+// T1.2 of plan 2026-05-28-meet-001-engineering-closure v1.1.
+// CR-1 fix from MEET-2026-05-28-001: gate `--insecure-skip-verify` flag.
+
+func TestValidate_RejectsInsecureSkipSCT_InProd_WithoutTUF(t *testing.T) {
+	t.Setenv("LOOPZERO_CLUSTER_ISSUER", "letsencrypt-prod")
+	t.Setenv("LOOPZERO_ENV", "production")
+	t.Setenv("LOOPZERO_COSIGN_INSECURE_SKIP_SCT_VERIFY", "true")
+	t.Setenv("LOOPZERO_COSIGN_TUF_ROOT_PINNED", "false")
+	t.Setenv("LOOPZERO_SECRET_ENCRYPTION_KEY", "test-key")
+	cfg := Load()
+	err := cfg.Validate()
+	if err == nil {
+		t.Fatal("expected Validate error when INSECURE_SKIP_SCT=true && prod && !TUF_ROOT_PINNED")
+	}
+	if !contains(err.Error(), "INSECURE_SKIP_SCT_VERIFY") {
+		t.Errorf("error must mention INSECURE_SKIP_SCT_VERIFY, got: %v", err)
+	}
+}
+
+func TestValidate_AcceptsInsecureSkipSCT_InDevelopment(t *testing.T) {
+	// Sprint A T2.1 (2026-06-01): renamed from _InLocal — LOOPZERO_ENV
+	// allowlist now strict {development, staging, production}. "local"
+	// was never canonical; "development" is the canonical non-prod env.
+	t.Setenv("LOOPZERO_CLUSTER_ISSUER", "loopzero-ca-issuer")
+	t.Setenv("LOOPZERO_ENV", "development")
+	t.Setenv("LOOPZERO_COSIGN_INSECURE_SKIP_SCT_VERIFY", "true")
+	t.Setenv("LOOPZERO_COSIGN_TUF_ROOT_PINNED", "false")
+	cfg := Load()
+	if err := cfg.Validate(); err != nil {
+		t.Fatalf("Validate should accept INSECURE_SKIP_SCT in DEVELOPMENT: %v", err)
+	}
+}
+
+func TestValidate_AcceptsInsecureSkipSCT_InProd_WithTUF(t *testing.T) {
+	// Asserts: when TUF is pinned, Validate() does NOT raise the
+	// INSECURE_SKIP_SCT error. Other unrelated prod gates may still error
+	// (CORS, MINIO, etc.), but the SCT-specific gate must pass.
+	cfg := Config{
+		Env:                   "production",
+		CosignInsecureSkipSCT: true,
+		CosignTUFRootPinned:   true,
+	}
+	err := cfg.Validate()
+	if err != nil && contains(err.Error(), "INSECURE_SKIP_SCT_VERIFY") {
+		t.Fatalf("Validate must NOT raise INSECURE_SKIP_SCT_VERIFY error when TUF pinned: %v", err)
+	}
+}
+
+func TestLoad_CosignInsecureSkipSCT_DefaultsFalse(t *testing.T) {
+	// Default = false (safe by default)
+	cfg := Load()
+	if cfg.CosignInsecureSkipSCT {
+		t.Error("CosignInsecureSkipSCT default must be false (safe by default)")
+	}
+	if cfg.CosignTUFRootPinned {
+		t.Error("CosignTUFRootPinned default must be false (no ceremony performed)")
+	}
+}
+
+// =============================================================================
+// Sprint A T2.1 — LOOPZERO_ENV allowlist (closes sec-008 / CR-1 partial)
+// =============================================================================
+
+func TestValidate_AcceptsCanonicalDevelopment(t *testing.T) {
+	cfg := Config{Env: "development", ClusterIssuer: "test-issuer"}
+	if err := cfg.Validate(); err != nil {
+		t.Fatalf("expected nil for canonical development, got %v", err)
+	}
+}
+
+func TestValidate_AcceptsCanonicalStaging(t *testing.T) {
+	cfg := Config{Env: "staging", ClusterIssuer: "test-issuer"}
+	if err := cfg.Validate(); err != nil {
+		t.Fatalf("expected nil for canonical staging, got %v", err)
+	}
+}
+
+func TestValidate_AcceptsCanonicalProduction(t *testing.T) {
+	// production requires many additional gates to pass — we ONLY assert
+	// the LOOPZERO_ENV allowlist gate does NOT raise. Any error returned MUST
+	// NOT mention "LOOPZERO_ENV" (other prod gates may still fire — that's fine).
+	cfg := Config{
+		Env:           "production",
+		ClusterIssuer: "letsencrypt-prod",
+	}
+	err := cfg.Validate()
+	if err != nil && contains(err.Error(), "LOOPZERO_ENV=") {
+		t.Errorf("Validate raised LOOPZERO_ENV allowlist error for canonical production: %v", err)
+	}
+}
+
+func TestValidate_RejectsCaseSensitiveProduction(t *testing.T) {
+	cfg := Config{Env: "Production", ClusterIssuer: "test-issuer"}
+	err := cfg.Validate()
+	if err == nil {
+		t.Fatal("expected error for LOOPZERO_ENV=Production (case bypass), got nil")
+	}
+	if !contains(err.Error(), `LOOPZERO_ENV="Production"`) {
+		t.Errorf("error should mention the rejected value, got: %v", err)
+	}
+	if !contains(err.Error(), "development, staging, production") {
+		t.Errorf("error should mention allowed set, got: %v", err)
+	}
+}
+
+func TestValidate_RejectsAbbreviatedProd(t *testing.T) {
+	cfg := Config{Env: "prod", ClusterIssuer: "test-issuer"}
+	err := cfg.Validate()
+	if err == nil {
+		t.Fatal("expected error for LOOPZERO_ENV=prod (abbreviated), got nil")
+	}
+	if !contains(err.Error(), `LOOPZERO_ENV="prod"`) {
+		t.Errorf("error should mention the rejected value, got: %v", err)
+	}
+}
+
+func TestValidate_RejectsLeadingWhitespace(t *testing.T) {
+	cfg := Config{Env: " production", ClusterIssuer: "test-issuer"}
+	err := cfg.Validate()
+	if err == nil {
+		t.Fatal("expected error for LOOPZERO_ENV with leading whitespace, got nil")
+	}
+}
+
+// =============================================================================
+// T3.1 of plan 2026-06-01-p3-infra-observability-test-debt v1.1 ADR D3 —
+// WorkerDatabaseURL / EffectiveWorkerDatabaseURL / WorkerRoleEnabled
+// =============================================================================
+
+// TestLoad_WorkerDatabaseURL_DefaultsEmpty: when LOOPZERO_WORKER_DATABASE_URL
+// is unset, Load() returns Config.WorkerDatabaseURL=="" — caller falls
+// back to DatabaseURL (legacy behavior, RLS bypass via owner).
+func TestLoad_WorkerDatabaseURL_DefaultsEmpty(t *testing.T) {
+	_ = os.Unsetenv("LOOPZERO_WORKER_DATABASE_URL")
+	cfg := Load()
+	if cfg.WorkerDatabaseURL != "" {
+		t.Errorf("expected empty, got %q", cfg.WorkerDatabaseURL)
+	}
+}
+
+// TestLoad_WorkerDatabaseURL_PopulatesFromEnv: env set → field set.
+func TestLoad_WorkerDatabaseURL_PopulatesFromEnv(t *testing.T) {
+	t.Setenv("LOOPZERO_WORKER_DATABASE_URL", "postgres://loopzero_worker:secret@db:5432/loopzero?sslmode=require")
+	cfg := Load()
+	if cfg.WorkerDatabaseURL != "postgres://loopzero_worker:secret@db:5432/loopzero?sslmode=require" {
+		t.Errorf("WorkerDatabaseURL drift: %q", cfg.WorkerDatabaseURL)
+	}
+}
+
+// TestEffectiveWorkerDatabaseURL_FallsBackToDatabaseURL: helper returns
+// DatabaseURL when WorkerDatabaseURL is empty — operator-controlled
+// rollout via env var; works in either state.
+func TestEffectiveWorkerDatabaseURL_FallsBackToDatabaseURL(t *testing.T) {
+	cfg := Config{
+		DatabaseURL:       "postgres://loopzero:pass@db:5432/loopzero",
+		WorkerDatabaseURL: "",
+	}
+	if got := cfg.EffectiveWorkerDatabaseURL(); got != cfg.DatabaseURL {
+		t.Errorf("expected fallback to DatabaseURL, got %q", got)
+	}
+}
+
+// TestEffectiveWorkerDatabaseURL_PrefersWorkerURL: when set, the helper
+// returns the worker URL.
+func TestEffectiveWorkerDatabaseURL_PrefersWorkerURL(t *testing.T) {
+	cfg := Config{
+		DatabaseURL:       "postgres://loopzero:pass@db:5432/loopzero",
+		WorkerDatabaseURL: "postgres://loopzero_worker:other@db:5432/loopzero",
+	}
+	if got := cfg.EffectiveWorkerDatabaseURL(); got != cfg.WorkerDatabaseURL {
+		t.Errorf("expected worker URL, got %q", got)
+	}
+}
+
+// TestWorkerRoleEnabled_FalseWhenEmpty: legacy mode reports false.
+func TestWorkerRoleEnabled_FalseWhenEmpty(t *testing.T) {
+	cfg := Config{
+		DatabaseURL:       "postgres://loopzero:pass@db:5432/loopzero",
+		WorkerDatabaseURL: "",
+	}
+	if cfg.WorkerRoleEnabled() {
+		t.Error("WorkerRoleEnabled MUST be false when WorkerDatabaseURL is empty")
+	}
+}
+
+// TestWorkerRoleEnabled_TrueWhenDistinct: worker URL distinct from main
+// → reports true (the operator has activated the role split).
+func TestWorkerRoleEnabled_TrueWhenDistinct(t *testing.T) {
+	cfg := Config{
+		DatabaseURL:       "postgres://loopzero:pass@db:5432/loopzero",
+		WorkerDatabaseURL: "postgres://loopzero_worker:other@db:5432/loopzero",
+	}
+	if !cfg.WorkerRoleEnabled() {
+		t.Error("WorkerRoleEnabled MUST be true when WorkerDatabaseURL distinct from DatabaseURL")
+	}
+}
+
+// TestWorkerRoleEnabled_FalseWhenSame: if operator accidentally points
+// both to the same URL, the role split is NOT active — defense-in-depth
+// signal that the worker role is not being exercised.
+func TestWorkerRoleEnabled_FalseWhenSame(t *testing.T) {
+	url := "postgres://loopzero:pass@db:5432/loopzero"
+	cfg := Config{
+		DatabaseURL:       url,
+		WorkerDatabaseURL: url,
+	}
+	if cfg.WorkerRoleEnabled() {
+		t.Error("WorkerRoleEnabled MUST be false when both URLs point to the same connection (no split)")
+	}
+}
+
+// TestValidate_WorkerDatabaseURL_RejectsSSLModeDisableInProd: the SSL-
+// mode-disable check is symmetric to the DatabaseURL one (same H1
+// reasoning: plaintext credentials in transit). Verified by constructing
+// Config directly with the minimum production fields required to REACH
+// the new check (skips the full env-loading cascade that needs 15+
+// env vars). The error message naming the env var is the consumer
+// contract — operators reading from CrashLoopBackOff logs see exactly
+// which URL is wrong.
+func TestValidate_WorkerDatabaseURL_RejectsSSLModeDisableInProd(t *testing.T) {
+	cfg := minProdConfig(t)
+	cfg.WorkerDatabaseURL = "postgres://loopzero_worker:pass@db:5432/loopzero?sslmode=disable"
+	err := cfg.Validate()
+	if err == nil {
+		t.Fatal("expected Validate() to reject WorkerDatabaseURL with sslmode=disable in production")
+	}
+	if !contains(err.Error(), "LOOPZERO_WORKER_DATABASE_URL") {
+		t.Errorf("error must name the env var; got: %v", err)
+	}
+	if !contains(err.Error(), "sslmode=disable") {
+		t.Errorf("error must explain the problem; got: %v", err)
+	}
+}
+
+// TestValidate_WorkerDatabaseURL_AcceptsSSLModeRequireInProd: the
+// canonical production form passes (or fails downstream — we only
+// require the WorkerDatabaseURL check NOT to be the failing branch).
+func TestValidate_WorkerDatabaseURL_AcceptsSSLModeRequireInProd(t *testing.T) {
+	cfg := minProdConfig(t)
+	cfg.WorkerDatabaseURL = "postgres://loopzero_worker:pass@db:5432/loopzero?sslmode=require"
+	if err := cfg.Validate(); err != nil && contains(err.Error(), "LOOPZERO_WORKER_DATABASE_URL") {
+		t.Errorf("Validate MUST NOT reject sslmode=require for WorkerDatabaseURL; got: %v", err)
+	}
+}
+
+// minProdConfig returns a Config{} populated with the MINIMUM set of
+// fields required for Validate() to reach the WorkerDatabaseURL check
+// in production mode. Other prod-validations (CORS, secret encryption,
+// argo callback, etc.) are pre-satisfied with safe non-default values.
+// Tests that need a different production-failure path should override
+// the relevant field BEFORE calling Validate.
+func minProdConfig(t *testing.T) Config {
+	t.Helper()
+	return Config{
+		Env:                 "production",
+		ClusterIssuer:       "letsencrypt-prod",
+		ArgoCallbackSecret:  "non-default-secret-value",
+		SecretEncryptionKey: "REDACTED_SECRET_010",
+		CORSAllowedOrigin:   "https://app.loopzero.dev",
+		DatabaseURL:         "postgres://loopzero:pass@db:5432/loopzero?sslmode=require",
+		MinIOAccessKey:      "non-default-minio-access",
+		MinIOSecretKey:      "non-default-minio-secret",
 	}
 }

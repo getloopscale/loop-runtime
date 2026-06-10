@@ -1,0 +1,25 @@
+version: 1
+project: rollout-canary-app
+
+# argo-rollouts-progressive-delivery-plan T5.1 fixture.
+#
+# Dedicated fixture for the canary happy-path E2E spec. Mirrors
+# `solo-server` but with a distinct project name so the journey 13
+# Describe block does not collide with the journey 01 solo deploy
+# (project=solo-server). Both run inside the same E2E tenant
+# (loopzero-e2e-tenant-production) and ensureProjectDeleted scopes by name.
+#
+# A successful deploy of this fixture should produce:
+#   - Rollout/rollout-canary-app-api with canary strategy (steps[])
+#   - Service/rollout-canary-app-api-stable
+#   - Service/rollout-canary-app-api-canary
+#   - TraefikService/rollout-canary-app-api with weighted services
+#   - status.phase=Healthy after canary promotion completes
+
+apps:
+  api:
+    path: .
+    framework: express
+    type: server
+    build: dockerfile
+    port: 3001

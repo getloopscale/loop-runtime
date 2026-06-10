@@ -13,10 +13,6 @@ import (
 	"github.com/loopzero/loopzero/api/internal/services"
 )
 
-// ptr returns a pointer to the given value. Generic helper used throughout
-// the package to satisfy pointer fields in forge/model structs.
-func ptr[T any](v T) *T { return &v }
-
 // ---------------------------------------------------------------------------
 // DAG task factories
 // ---------------------------------------------------------------------------

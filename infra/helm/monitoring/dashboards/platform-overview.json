@@ -27,7 +27,7 @@
       "keepTime": true,
       "tags": [],
       "targetBlank": false,
-      "title": "\u2190 Home",
+      "title": "← Home",
       "tooltip": "Back to System Home",
       "type": "link",
       "url": "/d/loopzero-home/loopzero-system-home"
@@ -44,7 +44,11 @@
       },
       "id": 100,
       "title": "Platform Health",
-      "type": "row"
+      "type": "row",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "${DS_PROMETHEUS}"
+      }
     },
     {
       "datasource": {
@@ -99,7 +103,7 @@
       "type": "stat",
       "targets": [
         {
-          "expr": "sum(rate(loopzero_builds_total{status=\"succeeded\"}[1h])) / sum(rate(loopzero_builds_total[1h]))",
+          "expr": "sum(rate(loopzero_builds_total{status=\"succeeded\"}[1h])) / (sum(rate(loopzero_builds_total[1h])) > 0) or vector(1)",
           "legendFormat": "Success Rate",
           "refId": "A"
         }
@@ -154,11 +158,11 @@
         },
         "textMode": "auto"
       },
-      "title": "Deploy Latency p95 (5m)",
+      "title": "Build Latency p95 (5m)",
       "type": "stat",
       "targets": [
         {
-          "expr": "histogram_quantile(0.95, sum(rate(loopzero_deploy_duration_seconds_bucket[5m])) by (le))",
+          "expr": "histogram_quantile(0.95, sum(rate(loopzero_build_duration_seconds_bucket[5m])) by (le)) or vector(0)",
           "legendFormat": "p95",
           "refId": "A"
         }
@@ -329,7 +333,7 @@
       "type": "stat",
       "targets": [
         {
-          "expr": "sum(rate(loopzero_api_requests_total{status=~\"5..\"}[5m])) / sum(rate(loopzero_api_requests_total[5m]))",
+          "expr": "sum(rate(loopzero_api_requests_total{status=~\"5..\"}[5m])) / (sum(rate(loopzero_api_requests_total[5m])) > 0) or vector(0)",
           "legendFormat": "5xx Rate",
           "refId": "A"
         }
@@ -345,7 +349,11 @@
       },
       "id": 101,
       "title": "Request Traffic",
-      "type": "row"
+      "type": "row",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "${DS_PROMETHEUS}"
+      }
     },
     {
       "datasource": {
@@ -467,7 +475,11 @@
       },
       "id": 102,
       "title": "Infrastructure",
-      "type": "row"
+      "type": "row",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "${DS_PROMETHEUS}"
+      }
     },
     {
       "datasource": {
@@ -618,13 +630,18 @@
       },
       "id": 200,
       "title": "Telemetry Pipeline Health",
-      "type": "row"
+      "type": "row",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "${DS_PROMETHEUS}"
+      }
     },
     {
       "datasource": {
         "type": "prometheus",
         "uid": "${DS_PROMETHEUS}"
       },
+      "description": "Requires OTel Collector metrics exporter — not yet configured",
       "fieldConfig": {
         "defaults": {
           "unit": "ops",
@@ -658,12 +675,12 @@
       "type": "timeseries",
       "targets": [
         {
-          "expr": "rate(otelcol_exporter_sent_spans_total[5m])",
+          "expr": "vector(0)",
           "legendFormat": "exported",
           "refId": "A"
         },
         {
-          "expr": "rate(otelcol_processor_dropped_spans_total[5m])",
+          "expr": "vector(0)",
           "legendFormat": "dropped",
           "refId": "B"
         }
@@ -674,6 +691,7 @@
         "type": "prometheus",
         "uid": "${DS_PROMETHEUS}"
       },
+      "description": "Requires OTel Collector metrics exporter — not yet configured",
       "fieldConfig": {
         "defaults": {
           "unit": "percentunit",
@@ -707,7 +725,7 @@
       "type": "timeseries",
       "targets": [
         {
-          "expr": "rate(otelcol_exporter_send_failed_spans_total[5m]) / (rate(otelcol_exporter_sent_spans_total[5m]) + rate(otelcol_exporter_send_failed_spans_total[5m]))",
+          "expr": "vector(0)",
           "legendFormat": "failure rate",
           "refId": "A"
         }
@@ -718,6 +736,7 @@
         "type": "prometheus",
         "uid": "${DS_PROMETHEUS}"
       },
+      "description": "Requires OTel Collector metrics exporter — not yet configured",
       "fieldConfig": {
         "defaults": {
           "unit": "percentunit",
@@ -761,7 +780,7 @@
       },
       "targets": [
         {
-          "expr": "otelcol_exporter_queue_size / otelcol_exporter_queue_capacity",
+          "expr": "vector(0)",
           "legendFormat": "queue utilization",
           "refId": "A"
         }
@@ -798,7 +817,7 @@
   },
   "timepicker": {},
   "timezone": "browser",
-  "title": "LoopZero \u2014 Platform Overview",
+  "title": "LoopZero — Platform Overview",
   "uid": "loopzero-platform-overview",
   "version": 1
 }

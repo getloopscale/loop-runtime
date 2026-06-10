@@ -18,7 +18,22 @@ import {
 type InfraOutputs = any;
 type PlatformStackConfig = any;
 
-const GITEA_ADMIN_PASSWORD_DEFAULT = "loopzero-gitea-dev-2026";
+// T1.4 (plan 2026-05-21-deep-review-remediation): hardcoded fallback removed.
+// Per ADR D2: no dev-default literals in code that could leak to production.
+// Operators MUST set `giteaAdminPassword` via `pulumi config set --secret
+// giteaAdminPassword <value>` for any environment where Gitea is enabled.
+// `mustGetGiteaAdminPassword()` throws at runtime if config is missing,
+// failing the Pulumi up with a named error.
+function mustGetGiteaAdminPassword(config: PlatformStackConfig): pulumi.Output<string> {
+  if (!config.giteaAdminPassword) {
+    throw new Error(
+      "giteaAdminPassword Pulumi config secret is required — set via: " +
+        "`pulumi config set --secret giteaAdminPassword <value>`. " +
+        "See docs/operations/credentials-required.md.",
+    );
+  }
+  return config.giteaAdminPassword;
+}
 
 // --- Platform Services ---
 
@@ -237,7 +252,7 @@ export function installGitea(
         gitea: {
           admin: {
             username: "gitea_admin",
-            password: config.giteaAdminPassword ?? GITEA_ADMIN_PASSWORD_DEFAULT,
+            password: mustGetGiteaAdminPassword(config),
             email: "admin@loopzero.internal",
           },
           config: {

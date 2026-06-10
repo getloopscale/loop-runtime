@@ -1,0 +1,133 @@
+# Helmfile environment: prod
+# CHG-2026-04-28-LAYERED-BOOTSTRAP — Phase 2 (T2.1/T2.2/T2.3)
+#
+# HA replicas, ACME production TLS, secrets injected from external store.
+
+domain: loopzero.example
+dnsZone: loopzero.example
+
+# Phase 3.4 of plan 2026-06-02-loopzero-api-vault-integration v1.8 (D11 ESO).
+# Prod placeholder per T8.2 acceptance criteria: enable ONLY após
+# (a) DOKS loopzero-vault-prod cluster up (separate cluster, Shamir 5/3 + Raft +
+#     HTTPS + Kubernetes auth via cross-cluster CA chain);
+# (b) openbao-init Job ran (engines + auth + policies bootstrapped);
+# (c) ClusterSecretStore loopzero-vault-secrets applied (Phase 3.1 manifests);
+# (d) seed-loopzero-secrets.sh ran for env=prod with real prod secret values
+#     (operator-provided file gitignored, ~$HOME/.loopzero-secrets-prod.yaml);
+# (e) T9.3 prod-like smoke validated (loopzero-api boot + 1 KvGet success +
+#     metric vault source non-zero in staging-like env).
+#
+# Flipping to true requires sponsor + security guardian sign-off (T2 meeting
+# per pre-release-governance.md — credential handling = automatic T2 trigger).
+# vaultEnabled: true
+vaultEnabled: false
+
+clusterRole: prod
+
+replicas:
+  api: 3
+  controller: 2
+  argocd: 2
+  gitea: 2
+  harbor: 2
+
+resources:
+  default:
+    requests:
+      cpu: 200m
+      memory: 256Mi
+    limits:
+      cpu: 1000m
+      memory: 1Gi
+
+certIssuer:
+  kind: ClusterIssuer
+  name: letsencrypt-prod
+
+registries:
+  docrPrefix: "registry.digitalocean.com/loopzero-system/"
+  harborPrefix: "harbor.loopzero.example/loopzero-platform/"
+
+loki:
+  maxGlobalStreamsPerUser: 200000
+  # Audit M08 #18 / §6.C.4b — promtail cross-cluster push target (env-specific).
+  pushUrl: http://loki.loopzero-platform.internal:3100/loki/api/v1/push
+
+# Policy mode — `enforce` per MEET-2026-05-12 D2 mitigation #4 (T1.2 #4)
+# and T1.12 pre-flight protocol. Engineering side authorized by
+# MEET-ASYNC-AMENDMENT-2026-05-12-002 (sponsor ratified 2026-05-12).
+#
+# OPERATIONAL GATE before `helmfile -e prod sync` applies these values:
+#   1. Run pre-flight: KUBECONFIG=~/.kube/prod \
+#        infra/scripts/production/check-prod-vap-readiness.sh
+#      Must return exit 0 (all 4 checks PASS):
+#        - All prod pods have valid cosign signatures
+#        - No `kubectl set image` cron exists in any prod workflow
+#        - ArgoCD apps all Synced
+#        - Zero VAP Warn events in last 7 days
+#   2. Maintenance window scheduled (prefer low-traffic period)
+#   3. Watch terminal ready: kubectl get events -A \
+#        --field-selector=reason=ValidationFailure --watch
+#
+# Runbook: .claude/knowledge-base/concepts/operations/admission-deny-mode-cutover.md
+#
+# Rollback path (recovery < 2 min): revert this commit + helmfile sync.
+#
+# Post-flip: monitor `loopzero_admission_denied_total` for 24h. Zero unexpected
+# denials = mitigation #4 closed; Platform-Security D2 veto fully lifted.
+policyMode: enforce  # MEET-ASYNC-AMENDMENT-2026-05-12-002 ratified
+noRuntimeImageMutations: true  # VAP active in prod (was implicit; now explicit)
+noRuntimeImageMutationsAction: Deny  # MEET-ASYNC-AMENDMENT-2026-05-12-002 ratified
+noRuntimeImageMutationsFailurePolicy: Fail  # MEET-ASYNC-AMENDMENT-2026-05-12-002 ratified
+
+# In-cluster Postgres — DISABLED for LoopZero Cloud prod (uses DO Managed HA PG cluster).
+inClusterPostgres: false
+
+# B20: NFS server provisioner underlying storage class. DOKS default.
+underlyingStorageClass: do-block-storage
+
+# CHG-2026-04-30-INFRA-NORMALIZE / Phase 5 T5.2 — multi-cell metadata.
+# Production: runtime → cell-1, runtime-2 → cell-2. Seeded in cells
+# table (migration 000006). cell-2 in 'maintenance' until canary
+# stage 4 (T7.1) flips it 'active' with explicit customer opt-in.
+runtimeCellId: cell-1
+runtime2CellId: cell-2
+
+# DynamicRouter enabled in production — but cell-2 admission gated by
+# cells.status, so production traffic routes to cell-1 only until
+# canary promotion.
+dynamicRouter: true
+
+# velero-backup-dr-plan v1.0 / T0.2 — Velero BSL config. Bucket name comes
+# from Pulumi L1 (InfraOutputs.veleroBackupsBucketName) and is protected
+# from accidental destroy in prod (T0.1 protect:isProd).
+velero:
+  bucket: loopzero-infra-sfo3-velero-backups
+  region: sfo3
+  s3Url: https://sfo3.digitaloceanspaces.com
+
+# Plan v1.2 T2.3 / D4 — kratos+hydra UI base URL placeholder (prod DOKS)
+uiBaseUrl: "https://app.loopzero.example"
+dashboardOrigin: "https://cloud.loopzero.example"
+
+# T2.2 of plan 2026-05-29-dashboard-public-integration-canonicalization.
+# Public-facing Kratos hostname + session cookie scope + CORS origins +
+# allowed return URLs for the prod dashboard flow.
+publicAuthUrl: "https://auth.loopzero.example"
+publicCloudUrl: "https://cloud.loopzero.example"
+cookieDomain: "loopzero.example"
+corsAllowedOrigins:
+  - "https://app.loopzero.example"
+  - "https://cloud.loopzero.example"
+allowedReturnUrls:
+  - "https://app.loopzero.example"
+  - "https://app.loopzero.example/"
+  - "https://cloud.loopzero.example"
+  - "https://cloud.loopzero.example/"
+dashboardRoute:
+  login: /login
+  register: /register
+  recovery: /recovery
+  verification: /verification
+  settings: /settings
+  error: /login

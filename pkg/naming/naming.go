@@ -60,48 +60,48 @@ func ValidateKubernetesName(name string) error {
 	return nil
 }
 
+// composeName builds a Kubernetes resource name using the given format
+// + args, then validates it as RFC 1123. resourceKind is the human-readable
+// kind used in error messages (e.g., "tenant namespace"). All variadic
+// string args must be non-empty — emits a single canonical "argument must
+// not be empty" error if any are. Phase 3 helper: eliminated ~10 inline
+// copies of the "validate inputs → sprintf → validate name → wrap error"
+// scaffold from the 8 *Namespace/*Name composers below.
+func composeName(resourceKind, format string, args ...string) (string, error) {
+	for _, a := range args {
+		if a == "" {
+			return "", fmt.Errorf("%s: argument must not be empty", resourceKind)
+		}
+	}
+	ifaceArgs := make([]interface{}, len(args))
+	for i, a := range args {
+		ifaceArgs[i] = a
+	}
+	name := fmt.Sprintf(format, ifaceArgs...)
+	if err := ValidateKubernetesName(name); err != nil {
+		return "", fmt.Errorf("%s %q: %w", resourceKind, name, err)
+	}
+	return name, nil
+}
+
 // TenantNamespace returns the namespace name for a tenant.
 // tenantName is the K8s CRD resource name (e.g., "tn-loopzero").
 // Format: "loopzero-{tenantName}" — maintains compatibility with deployed resources.
 func TenantNamespace(tenantName string) (string, error) {
-	if tenantName == "" {
-		return "", fmt.Errorf("tenant name must not be empty")
-	}
-	name := fmt.Sprintf("loopzero-%s", tenantName)
-	if err := ValidateKubernetesName(name); err != nil {
-		return "", fmt.Errorf("tenant namespace %q: %w", name, err)
-	}
-	return name, nil
+	return composeName("tenant namespace", "loopzero-%s", tenantName)
 }
 
 // EnvironmentNamespace returns the namespace name for a tenant's environment.
 // tenantName is the K8s CRD resource name (e.g., "tn-loopzero").
 // Format: "loopzero-{tenantName}-{envName}" — maintains compatibility with deployed resources.
 func EnvironmentNamespace(tenantName, envName string) (string, error) {
-	if tenantName == "" {
-		return "", fmt.Errorf("tenant name must not be empty")
-	}
-	if envName == "" {
-		return "", fmt.Errorf("environment name must not be empty")
-	}
-	name := fmt.Sprintf("loopzero-%s-%s", tenantName, envName)
-	if err := ValidateKubernetesName(name); err != nil {
-		return "", fmt.Errorf("environment namespace %q: %w", name, err)
-	}
-	return name, nil
+	return composeName("environment namespace", "loopzero-%s-%s", tenantName, envName)
 }
 
 // BuildNamespace returns the build namespace name for a tenant.
 // Format: "build-{tenantSlug}"
 func BuildNamespace(tenantSlug string) (string, error) {
-	if tenantSlug == "" {
-		return "", fmt.Errorf("tenant slug must not be empty")
-	}
-	name := fmt.Sprintf("build-%s", tenantSlug)
-	if err := ValidateKubernetesName(name); err != nil {
-		return "", fmt.Errorf("build namespace %q: %w", name, err)
-	}
-	return name, nil
+	return composeName("build namespace", "build-%s", tenantSlug)
 }
 
 // PreviewNamespace returns the namespace name for a preview environment.
@@ -126,36 +126,13 @@ func PreviewNamespace(tenantSlug, projectSlug string, prNumber int) (string, err
 // RepoName returns the source code repository name.
 // Format: "{teamSlug}-{projectSlug}"
 func RepoName(teamSlug, projectSlug string) (string, error) {
-	if teamSlug == "" {
-		return "", fmt.Errorf("team slug must not be empty")
-	}
-	if projectSlug == "" {
-		return "", fmt.Errorf("project slug must not be empty")
-	}
-	name := fmt.Sprintf("%s-%s", teamSlug, projectSlug)
-	if err := ValidateKubernetesName(name); err != nil {
-		return "", fmt.Errorf("repo name %q: %w", name, err)
-	}
-	return name, nil
+	return composeName("repo name", "%s-%s", teamSlug, projectSlug)
 }
 
 // GitOpsRepoName returns the GitOps repository name for a specific environment.
 // Format: "{teamSlug}-{projectSlug}-{envName}"
 func GitOpsRepoName(teamSlug, projectSlug, envName string) (string, error) {
-	if teamSlug == "" {
-		return "", fmt.Errorf("team slug must not be empty")
-	}
-	if projectSlug == "" {
-		return "", fmt.Errorf("project slug must not be empty")
-	}
-	if envName == "" {
-		return "", fmt.Errorf("environment name must not be empty")
-	}
-	name := fmt.Sprintf("%s-%s-%s", teamSlug, projectSlug, envName)
-	if err := ValidateKubernetesName(name); err != nil {
-		return "", fmt.Errorf("gitops repo name %q: %w", name, err)
-	}
-	return name, nil
+	return composeName("gitops repo name", "%s-%s-%s", teamSlug, projectSlug, envName)
 }
 
 // Hostname returns the hostname for a service in an environment.
@@ -173,20 +150,7 @@ func Hostname(projectSlug, envName, baseDomain string) (string, error) {
 // ArgoAppName returns the ArgoCD Application resource name.
 // Format: "{teamSlug}-{projectSlug}-{envName}"
 func ArgoAppName(teamSlug, projectSlug, envName string) (string, error) {
-	if teamSlug == "" {
-		return "", fmt.Errorf("team slug must not be empty")
-	}
-	if projectSlug == "" {
-		return "", fmt.Errorf("project slug must not be empty")
-	}
-	if envName == "" {
-		return "", fmt.Errorf("environment name must not be empty")
-	}
-	name := fmt.Sprintf("%s-%s-%s", teamSlug, projectSlug, envName)
-	if err := ValidateKubernetesName(name); err != nil {
-		return "", fmt.Errorf("argo app name %q: %w", name, err)
-	}
-	return name, nil
+	return composeName("argo app name", "%s-%s-%s", teamSlug, projectSlug, envName)
 }
 
 // CertSecretName returns the TLS certificate secret name for a hostname.
@@ -211,40 +175,57 @@ func CertSecretName(hostname string) (string, error) {
 // GitRepoBindingName returns the GitRepositoryBinding CR name for a tenant's environment.
 // Format: "{tenantName}-{envName}"
 func GitRepoBindingName(tenantName, envName string) (string, error) {
-	if tenantName == "" {
-		return "", fmt.Errorf("tenant name must not be empty")
-	}
-	if envName == "" {
-		return "", fmt.Errorf("environment name must not be empty")
-	}
-	name := fmt.Sprintf("%s-%s", tenantName, envName)
-	if err := ValidateKubernetesName(name); err != nil {
-		return "", fmt.Errorf("git repo binding name %q: %w", name, err)
-	}
-	return name, nil
+	return composeName("git repo binding name", "%s-%s", tenantName, envName)
 }
 
 // ArgoRepoSecretName returns the ArgoCD repository Secret name for a tenant.
 // Format: "repo-{tenantName}-gitops"
 func ArgoRepoSecretName(tenantName string) (string, error) {
-	if tenantName == "" {
-		return "", fmt.Errorf("tenant name must not be empty")
-	}
-	name := fmt.Sprintf("repo-%s-gitops", tenantName)
-	if err := ValidateKubernetesName(name); err != nil {
-		return "", fmt.Errorf("argo repo secret name %q: %w", name, err)
-	}
-	return name, nil
+	return composeName("argo repo secret name", "repo-%s-gitops", tenantName)
 }
 
-// Labels returns the standard LoopZero labels for a Kubernetes resource.
-// All labels use the "loopzero.io/" prefix.
-func Labels(tenant, project, env string) map[string]string {
+// Standard label keys for LoopZero Kubernetes resources. All use the
+// "loopzero.io/" prefix. Use these constants instead of string literals so
+// typos are caught at compile time and grep/audit is straightforward.
+//
+// Per pkg-sota-faang-grade-plan T1.5 + gate PKG-G02 (Minimal Public Surface).
+const (
+	LabelTenant      = "loopzero.io/tenant"
+	LabelProject     = "loopzero.io/project"
+	LabelEnvironment = "loopzero.io/environment"
+	LabelManagedBy   = "loopzero.io/managed-by"
+
+	// ManagedByValue is the canonical value for the LabelManagedBy key,
+	// stable across all LoopZero-owned resources.
+	ManagedByValue = "loopzero"
+)
+
+// StandardLabels is the typed representation of the four canonical LoopZero
+// labels applied to every owned Kubernetes resource. Use this struct
+// instead of the deprecated Labels() function so consumers get
+// compile-time safety against typos.
+//
+// Example:
+//
+//	sl := naming.StandardLabels{Tenant: tenantName, Project: projectName, Environment: envName}
+//	deployment.SetLabels(sl.AsMap())
+//
+// Per pkg-sota-faang-grade-plan T1.5 + gate PKG-G02.
+type StandardLabels struct {
+	Tenant      string
+	Project     string
+	Environment string
+}
+
+// AsMap returns the canonical label map for use in Kubernetes resource
+// metadata. The returned map is fresh on each call — mutating it does
+// not affect future invocations or other StandardLabels instances.
+func (l StandardLabels) AsMap() map[string]string {
 	return map[string]string{
-		"loopzero.io/tenant":      tenant,
-		"loopzero.io/project":     project,
-		"loopzero.io/environment": env,
-		"loopzero.io/managed-by":  "loopzero",
+		LabelTenant:      l.Tenant,
+		LabelProject:     l.Project,
+		LabelEnvironment: l.Environment,
+		LabelManagedBy:   ManagedByValue,
 	}
 }
 
@@ -254,6 +235,36 @@ func Labels(tenant, project, env string) map[string]string {
 // ARCH-001 fix: This was duplicated in 4 independent sites (buildkit.go,
 // build_plan.go, build_reconcile_loop.go x2). A format change in one site
 // would cause image mismatch → RELEASING deadlock. Now there is ONE function.
+//
+// **Supply-chain note (CHG-2026-04-29-DOGFOOD iter 8)**: callers that
+// render Pod manifests MUST prefer `ImageDigestRef` when the build pipeline
+// emitted a sha256 digest. The `loopzero-require-image-signature` VAP rejects
+// any container image reference using a mutable tag — using ImageTag here
+// is correct only for: (a) build-time pull/push (BuildKit), (b) registry
+// path debugging, (c) fallback when digest is not available. For deploy
+// manifests, see ImageDigestRef.
 func ImageTag(registry, tenant, project, app, commitSHA string) string {
 	return fmt.Sprintf("%s/%s/%s-%s:%s", registry, tenant, project, app, commitSHA)
+}
+
+// ImageDigestRef returns the container image reference pinned to a
+// cryptographic digest. Format: "{registry}/{tenant}/{project}-{app}@sha256:..."
+//
+// This is the form REQUIRED by the supply-chain VAP `loopzero-require-image-signature`
+// (admission denies mutable tag references in tenant namespaces). The build
+// pipeline captures the digest in cosign's "digest" output parameter (see
+// api/internal/services/build_reconcile_complete.go::enrichAppReleasesWithAttestation);
+// `digest` may arrive bare ("8f0a...") or already prefixed ("sha256:8f0a...");
+// this function normalizes to the prefixed form expected by container runtimes.
+func ImageDigestRef(registry, tenant, project, app, digest string) string {
+	if digest == "" {
+		// Caller error: empty digest. Return tag-style fallback so the
+		// resulting reference is at least syntactically valid; admission
+		// will reject it (which is the correct fail-loud behavior).
+		return fmt.Sprintf("%s/%s/%s-%s@sha256:", registry, tenant, project, app)
+	}
+	if !strings.HasPrefix(digest, "sha256:") {
+		digest = "sha256:" + digest
+	}
+	return fmt.Sprintf("%s/%s/%s-%s@%s", registry, tenant, project, app, digest)
 }

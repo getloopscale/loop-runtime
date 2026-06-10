@@ -1,0 +1,41 @@
+# Drill environment override for gitea chart.
+# Plan: 2026-05-16-drill-l2-unlock-phase2 T3.3 + T3.0 (EC-3 resolution).
+#
+# Gitea chart uses 4 separate fields (HOST, NAME, USER, PASSWD) NOT a
+# single DSN — different from kratos/hydra. drill-helmfile-bootstrap.sh
+# parses GITEA_DSN into 5 split env vars (HOST/PORT/USER/PASSWORD/DB)
+# for gitea consumption.
+#
+# `required` directive (EC-4 fail-fast) per kratos/hydra precedent.
+# Drill uses managed PG with sslmode=require (T2.1.bis EC-02).
+#
+# Bug #15 LIVE FIX (caught 2026-05-17 iter 5-6):
+# Default values.yaml points cache/session/queue at `gitea-redis:6379`
+# (in-cluster bitnami chart). Drill uses DO Managed Valkey instead
+# (mirror prod ADR-0016 D-6, CTO Golden Rule #0). DO Managed Valkey
+# requires TLS — use `rediss://` URL format (mirror values-ha.yaml prod
+# pattern). go-chi/session redis adapter auto-detects scheme.
+
+gitea:
+  config:
+    database:
+      DB_TYPE: postgres
+      # Required env: GITEA_HOST + GITEA_PORT (set by drill-helmfile-bootstrap.sh)
+      HOST: '{{ requiredEnv "GITEA_HOST" }}:{{ requiredEnv "GITEA_PORT" }}'
+      NAME: {{ requiredEnv "GITEA_DB" | quote }}
+      USER: {{ requiredEnv "GITEA_USER" | quote }}
+      PASSWD: {{ requiredEnv "GITEA_PASSWORD" | quote }}
+      SSL_MODE: require
+    # Managed Valkey (DO non-prod tier) with TLS — rediss:// URL format.
+    # Mirrors values-ha.yaml prod pattern: URL scheme, NOT k=v format.
+    # go-chi/session redis adapter parses URL via go-redis Options.
+    # User "default" + password from Pulumi redisPassword output.
+    session:
+      PROVIDER: redis
+      PROVIDER_CONFIG: 'rediss://default:{{ requiredEnv "GITEA_REDIS_PASSWORD" }}@{{ requiredEnv "GITEA_REDIS_HOST" }}:{{ requiredEnv "GITEA_REDIS_PORT" }}/0?pool_size=100&idle_timeout=180s'
+    cache:
+      ADAPTER: redis
+      HOST: 'rediss://default:{{ requiredEnv "GITEA_REDIS_PASSWORD" }}@{{ requiredEnv "GITEA_REDIS_HOST" }}:{{ requiredEnv "GITEA_REDIS_PORT" }}/1?pool_size=100&idle_timeout=180s'
+    queue:
+      TYPE: redis
+      CONN_STR: 'rediss://default:{{ requiredEnv "GITEA_REDIS_PASSWORD" }}@{{ requiredEnv "GITEA_REDIS_HOST" }}:{{ requiredEnv "GITEA_REDIS_PORT" }}/2?pool_size=100&idle_timeout=180s'

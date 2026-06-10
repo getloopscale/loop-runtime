@@ -16,6 +16,7 @@ import (
 	"time"
 
 	goJWT "github.com/golang-jwt/jwt/v5"
+	"github.com/loopzero/loopzero/pkg/circuitbreaker"
 )
 
 // ---------------------------------------------------------------------------
@@ -911,5 +912,469 @@ func TestFetchJWKS_SkipsNonRSAKeys(t *testing.T) {
 	}
 	if len(v.keys) != 0 {
 		t.Errorf("expected 0 RSA keys, got %d", len(v.keys))
+	}
+}
+
+// ---------------------------------------------------------------------------
+// T1.2 — RFC 8725bis hardening per ADR-0029.
+// ---------------------------------------------------------------------------
+
+// TestValidate_RejectsNoneAlgorithm covers the classic "none" bypass.
+// An attacker submits a token with alg=none and no signature; the
+// validator MUST reject it because RS256 is the only allowed access alg.
+func TestValidate_RejectsNoneAlgorithm(t *testing.T) {
+	key := generateRSAKey(t)
+	srv := serveJWKS(t, jwksJSON(map[string]*rsa.PublicKey{"k1": &key.PublicKey}))
+
+	// Build an unsigned JWT manually: header.payload.''
+	header := base64.RawURLEncoding.EncodeToString([]byte(`{"alg":"none","typ":"JWT","kid":"k1"}`))
+	payload := base64.RawURLEncoding.EncodeToString([]byte(`{"iss":"test-issuer","aud":"test-audience","exp":99999999999}`))
+	tokenStr := header + "." + payload + "."
+
+	v := NewValidator(srv.URL, "test-issuer", "test-audience")
+	if _, err := v.Validate(tokenStr); err == nil {
+		t.Fatal("expected validator to reject alg=none, got nil error")
+	}
+}
+
+// TestValidate_RejectsHS256WithPublicKeyAsSecret covers the algorithm
+// confusion attack: attacker signs with HS256 using the RS256 public key
+// as the HMAC secret. The validator MUST reject because access tokens
+// are restricted to RS256.
+func TestValidate_RejectsHS256WithPublicKeyAsSecret(t *testing.T) {
+	key := generateRSAKey(t)
+	pubKeyBytes := jwksJSON(map[string]*rsa.PublicKey{"k1": &key.PublicKey})
+	srv := serveJWKS(t, pubKeyBytes)
+
+	// Sign HS256 with the JWKS payload as the HMAC secret. Real attacks
+	// use the public key bytes; using the JWKS payload is a stable proxy.
+	claims := goJWT.MapClaims{
+		"iss": "test-issuer",
+		"aud": "test-audience",
+		"exp": time.Now().Add(time.Hour).Unix(),
+	}
+	tk := goJWT.NewWithClaims(goJWT.SigningMethodHS256, claims)
+	tk.Header["kid"] = "k1"
+	signed, err := tk.SignedString(pubKeyBytes)
+	if err != nil {
+		t.Fatalf("sign HS256: %v", err)
+	}
+
+	v := NewValidator(srv.URL, "test-issuer", "test-audience")
+	if _, err := v.Validate(signed); err == nil {
+		t.Fatal("expected validator to reject HS256 access token, got nil error")
+	}
+}
+
+// TestValidate_RejectsUnexpectedTypHeader covers cross-JWT confusion
+// (RFC 8725bis §2.6). A token with typ="evil" MUST be rejected.
+func TestValidate_RejectsUnexpectedTypHeader(t *testing.T) {
+	key := generateRSAKey(t)
+	srv := serveJWKS(t, jwksJSON(map[string]*rsa.PublicKey{"k1": &key.PublicKey}))
+
+	tk := goJWT.NewWithClaims(goJWT.SigningMethodRS256, goJWT.MapClaims{
+		"iss": "test-issuer",
+		"aud": "test-audience",
+		"exp": time.Now().Add(time.Hour).Unix(),
+	})
+	tk.Header["kid"] = "k1"
+	tk.Header["typ"] = "evil"
+	signed, err := tk.SignedString(key)
+	if err != nil {
+		t.Fatalf("sign: %v", err)
+	}
+
+	v := NewValidator(srv.URL, "test-issuer", "test-audience")
+	if _, err := v.Validate(signed); err == nil {
+		t.Fatal("expected validator to reject typ=evil, got nil error")
+	}
+}
+
+// TestValidate_AcceptsCanonicalTypValues confirms backward compat —
+// "JWT" and "at+jwt" remain accepted.
+func TestValidate_AcceptsCanonicalTypValues(t *testing.T) {
+	for _, typ := range []string{"JWT", "at+jwt"} {
+		t.Run(typ, func(t *testing.T) {
+			key := generateRSAKey(t)
+			srv := serveJWKS(t, jwksJSON(map[string]*rsa.PublicKey{"k1": &key.PublicKey}))
+
+			tk := goJWT.NewWithClaims(goJWT.SigningMethodRS256, goJWT.MapClaims{
+				"iss": "test-issuer",
+				"aud": "test-audience",
+				"exp": time.Now().Add(time.Hour).Unix(),
+			})
+			tk.Header["kid"] = "k1"
+			tk.Header["typ"] = typ
+			signed, err := tk.SignedString(key)
+			if err != nil {
+				t.Fatalf("sign: %v", err)
+			}
+
+			v := NewValidator(srv.URL, "test-issuer", "test-audience")
+			if _, err := v.Validate(signed); err != nil {
+				t.Errorf("expected typ=%q to be accepted, got error: %v", typ, err)
+			}
+		})
+	}
+}
+
+// TestValidate_AcceptsTokenWithoutTypHeader covers backward compat —
+// RFC 7519 doesn't require typ; absent header MUST be accepted.
+func TestValidate_AcceptsTokenWithoutTypHeader(t *testing.T) {
+	key := generateRSAKey(t)
+	srv := serveJWKS(t, jwksJSON(map[string]*rsa.PublicKey{"k1": &key.PublicKey}))
+
+	tk := goJWT.NewWithClaims(goJWT.SigningMethodRS256, goJWT.MapClaims{
+		"iss": "test-issuer",
+		"aud": "test-audience",
+		"exp": time.Now().Add(time.Hour).Unix(),
+	})
+	tk.Header["kid"] = "k1"
+	delete(tk.Header, "typ")
+	signed, err := tk.SignedString(key)
+	if err != nil {
+		t.Fatalf("sign: %v", err)
+	}
+
+	v := NewValidator(srv.URL, "test-issuer", "test-audience")
+	if _, err := v.Validate(signed); err != nil {
+		t.Errorf("expected token without typ to be accepted, got: %v", err)
+	}
+}
+
+// TestValidateSession_RejectsRS256Token confirms session validator
+// (HS256-only) rejects access tokens (RS256). Defense against
+// substitution attack.
+func TestValidateSession_RejectsRS256Token(t *testing.T) {
+	rsaKey := generateRSAKey(t)
+	tk := goJWT.NewWithClaims(goJWT.SigningMethodRS256, goJWT.MapClaims{
+		"sub": "user-1",
+		"iss": "test-issuer",
+		"aud": "test-audience",
+		"exp": time.Now().Add(time.Hour).Unix(),
+	})
+	signed, err := tk.SignedString(rsaKey)
+	if err != nil {
+		t.Fatalf("sign RS256: %v", err)
+	}
+
+	issuer := NewSessionTokenIssuer("hmac-secret-32-bytes-padding-here", "test-issuer", "test-audience", time.Hour)
+	if _, err := issuer.ValidateSession(signed); err == nil {
+		t.Fatal("expected session validator to reject RS256 token, got nil error")
+	}
+}
+
+// ---------------------------------------------------------------------------
+// T1.4 — JWKS via pkg/circuitbreaker per ADR-0029 + PKG-G16.
+// ---------------------------------------------------------------------------
+
+func TestValidator_WithCircuitBreaker_AcceptsTokenWhenHealthy(t *testing.T) {
+	key := generateRSAKey(t)
+	srv := serveJWKS(t, jwksJSON(map[string]*rsa.PublicKey{"k1": &key.PublicKey}))
+
+	cb := circuitbreaker.New(circuitbreaker.Config{
+		Name:          "jwks-test",
+		OpenThreshold: 3,
+		RetryInterval: time.Second,
+	}, nil)
+
+	v := NewValidator(srv.URL, "test-issuer", "test-audience").WithCircuitBreaker(cb)
+	tk := goJWT.NewWithClaims(goJWT.SigningMethodRS256, goJWT.MapClaims{
+		"iss": "test-issuer",
+		"aud": "test-audience",
+		"exp": time.Now().Add(time.Hour).Unix(),
+	})
+	tk.Header["kid"] = "k1"
+	signed, err := tk.SignedString(key)
+	if err != nil {
+		t.Fatalf("sign: %v", err)
+	}
+	if _, err := v.Validate(signed); err != nil {
+		t.Errorf("validation should succeed in healthy CB state, got: %v", err)
+	}
+}
+
+func TestValidator_WithCircuitBreaker_OpensAfterRepeatedFetchFailures(t *testing.T) {
+	failingSrv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		http.Error(w, "down", http.StatusServiceUnavailable)
+	}))
+	t.Cleanup(failingSrv.Close)
+
+	cb := circuitbreaker.New(circuitbreaker.Config{
+		Name:          "jwks-fail",
+		OpenThreshold: 2,
+		RetryInterval: time.Hour,
+	}, nil)
+
+	v := NewValidator(failingSrv.URL, "test-issuer", "test-audience").WithCircuitBreaker(cb)
+	for i := 0; i < 3; i++ {
+		_ = v.fetchJWKS() // exercises CB
+	}
+	if cb.State() != circuitbreaker.Open {
+		t.Errorf("expected CB Open after repeated 503; got %v", cb.State())
+	}
+}
+
+func TestValidator_WithCircuitBreaker_ServesCachedKeysWhenOpen(t *testing.T) {
+	key := generateRSAKey(t)
+	calls := 0
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		calls++
+		if calls > 1 {
+			http.Error(w, "down", http.StatusServiceUnavailable)
+			return
+		}
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = w.Write(jwksJSON(map[string]*rsa.PublicKey{"k1": &key.PublicKey}))
+	}))
+	t.Cleanup(srv.Close)
+
+	cb := circuitbreaker.New(circuitbreaker.Config{
+		Name:          "jwks-stale",
+		OpenThreshold: 1,
+		RetryInterval: time.Hour,
+	}, nil)
+
+	v := NewValidator(srv.URL, "test-issuer", "test-audience").WithCircuitBreaker(cb)
+	v.ttl = 50 * time.Millisecond // fast TTL to force re-fetch attempt
+	// First fetch warms cache.
+	if err := v.fetchJWKS(); err != nil {
+		t.Fatalf("warm fetch failed: %v", err)
+	}
+	// Trip the CB.
+	time.Sleep(100 * time.Millisecond)
+	for i := 0; i < 3; i++ {
+		_ = v.fetchJWKS()
+	}
+	if cb.State() != circuitbreaker.Open {
+		t.Fatalf("expected CB Open; got %v", cb.State())
+	}
+
+	// Now build a token; getKey MUST serve cached key despite CB open.
+	tk := goJWT.NewWithClaims(goJWT.SigningMethodRS256, goJWT.MapClaims{
+		"iss": "test-issuer",
+		"aud": "test-audience",
+		"exp": time.Now().Add(time.Hour).Unix(),
+	})
+	tk.Header["kid"] = "k1"
+	signed, err := tk.SignedString(key)
+	if err != nil {
+		t.Fatalf("sign: %v", err)
+	}
+	if _, err := v.Validate(signed); err != nil {
+		t.Errorf("expected stale-cache fallback to validate token; got: %v", err)
+	}
+}
+
+// Coverage push (Plan 2026-05-21 v1.1 T4.2): close validateWithSecret
+// "unexpected signing method" branch.
+//
+// TestSessionTokenIssuer_RejectsNonHMACSignedToken — tokens signed with
+// a non-HMAC algorithm (e.g., RSA) must be rejected by the keyfunc
+// type-assertion check. Closes validateWithSecret coverage gap.
+func TestSessionTokenIssuer_RejectsNonHMACSignedToken(t *testing.T) {
+	rsaKey, err := rsa.GenerateKey(rand.Reader, 2048)
+	if err != nil {
+		t.Fatalf("generate RSA key: %v", err)
+	}
+	now := time.Now()
+	token := goJWT.NewWithClaims(goJWT.SigningMethodRS256, &SessionClaims{
+		Email: "test@example.com",
+		RegisteredClaims: goJWT.RegisteredClaims{
+			Subject:   "test-user",
+			Issuer:    "test-issuer",
+			Audience:  goJWT.ClaimStrings{"test-audience"},
+			ExpiresAt: goJWT.NewNumericDate(now.Add(1 * time.Hour)),
+		},
+	})
+	rsaSigned, err := token.SignedString(rsaKey)
+	if err != nil {
+		t.Fatalf("sign RSA: %v", err)
+	}
+
+	issuer := NewSessionTokenIssuer("hmac-secret-bytes-bytes-bytes-32!", "test-issuer", "test-audience", time.Hour)
+	_, err = issuer.ValidateSession(rsaSigned)
+	if err == nil {
+		t.Fatal("expected validation to fail for RSA-signed token against HMAC issuer")
+	}
+}
+
+// TestSessionTokenIssuer_RejectsMalformedToken — garbage token triggers
+// ParseWithClaims error path before keyfunc runs, covering error branch
+// in validateWithSecret.
+func TestSessionTokenIssuer_RejectsMalformedToken(t *testing.T) {
+	issuer := NewSessionTokenIssuer("hmac-secret-bytes-bytes-bytes-32!", "test-issuer", "test-audience", time.Hour)
+	_, err := issuer.ValidateSession("not.a.valid.jwt.at.all")
+	if err == nil {
+		t.Fatal("expected malformed token to fail validation")
+	}
+}
+
+// ---------------------------------------------------------------------------
+// Coverage push: reachable branches that landed below 100% in 2026-05-21
+// Quality Gates baseline. Each test is paired with the validator.go line
+// range it exercises.
+// ---------------------------------------------------------------------------
+
+// TestValidate_RejectsNonStringTypHeader covers validator.go:61-63 —
+// the "typ header must be a string" branch in validateTypHeader.
+// A forged token whose typ header is a number (not a string) hits the
+// type-assertion failure path that string-typed bad values miss.
+func TestValidate_RejectsNonStringTypHeader(t *testing.T) {
+	key := generateRSAKey(t)
+	srv := serveJWKS(t, jwksJSON(map[string]*rsa.PublicKey{"k1": &key.PublicKey}))
+
+	tk := goJWT.NewWithClaims(goJWT.SigningMethodRS256, goJWT.MapClaims{
+		"iss": "test-issuer",
+		"aud": "test-audience",
+		"exp": time.Now().Add(time.Hour).Unix(),
+	})
+	tk.Header["kid"] = "k1"
+	tk.Header["typ"] = 12345 // intentionally not a string
+	signed, err := tk.SignedString(key)
+	if err != nil {
+		t.Fatalf("sign: %v", err)
+	}
+
+	v := NewValidator(srv.URL, "test-issuer", "test-audience")
+	if _, err := v.Validate(signed); err == nil {
+		t.Fatal("expected non-string typ header to be rejected")
+	}
+}
+
+// TestValidator_MissingKidHeader_ReturnsError covers validator.go:172-174 —
+// the "missing kid in token header" branch in Validate's keyfunc.
+// TestValidator_UnknownKid covers a kid that's present but unknown; this
+// covers a kid that's absent (or not a string).
+func TestValidator_MissingKidHeader_ReturnsError(t *testing.T) {
+	key := generateRSAKey(t)
+	srv := serveJWKS(t, jwksJSON(map[string]*rsa.PublicKey{"k1": &key.PublicKey}))
+
+	tk := goJWT.NewWithClaims(goJWT.SigningMethodRS256, goJWT.MapClaims{
+		"iss": "test-issuer",
+		"aud": "test-audience",
+		"exp": time.Now().Add(time.Hour).Unix(),
+	})
+	// no kid header set at all
+	signed, err := tk.SignedString(key)
+	if err != nil {
+		t.Fatalf("sign: %v", err)
+	}
+
+	v := NewValidator(srv.URL, "test-issuer", "test-audience")
+	if _, err := v.Validate(signed); err == nil {
+		t.Fatal("expected token without kid header to be rejected")
+	}
+}
+
+// TestValidateSession_RejectsUnexpectedTypHeader covers validator.go:293-295
+// — the session-validator counterpart to TestValidate_RejectsUnexpectedTypHeader.
+// Symmetric defense against cross-JWT confusion.
+func TestValidateSession_RejectsUnexpectedTypHeader(t *testing.T) {
+	secret := []byte("hmac-secret-bytes-bytes-bytes-32!")
+	issuer := NewSessionTokenIssuer(string(secret), "test-issuer", "test-audience", time.Hour)
+
+	tk := goJWT.NewWithClaims(goJWT.SigningMethodHS256, goJWT.MapClaims{
+		"iss": "test-issuer",
+		"aud": "test-audience",
+		"exp": time.Now().Add(time.Hour).Unix(),
+	})
+	tk.Header["typ"] = "evil-session-type"
+	signed, err := tk.SignedString(secret)
+	if err != nil {
+		t.Fatalf("sign: %v", err)
+	}
+
+	if _, err := issuer.ValidateSession(signed); err == nil {
+		t.Fatal("expected session token with typ=evil to be rejected")
+	}
+}
+
+// TestFetchJWKS_FastPathEarlyReturn covers validator.go:360-363 — the
+// fast-path "cache warm + TTL not expired" early return in fetchJWKS.
+// Existing TestValidator_JWKSCaching only exercises getKey-on-warm-cache;
+// this drives fetchJWKS itself twice in succession with TTL > 0.
+func TestFetchJWKS_FastPathEarlyReturn(t *testing.T) {
+	key := generateRSAKey(t)
+	fetchCount := 0
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		fetchCount++
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = w.Write(jwksJSON(map[string]*rsa.PublicKey{"k-warm": &key.PublicKey}))
+	}))
+	t.Cleanup(srv.Close)
+
+	v := NewValidator(srv.URL, "test-issuer", "test-audience")
+	v.ttl = 1 * time.Hour // long TTL so second call MUST hit fast path
+
+	// First call: cache cold → slow path → populates v.keys + v.fetched
+	if err := v.fetchJWKS(); err != nil {
+		t.Fatalf("first fetchJWKS: %v", err)
+	}
+	if fetchCount != 1 {
+		t.Fatalf("after first fetch, fetchCount=%d want 1", fetchCount)
+	}
+
+	// Second call: cache warm + TTL not expired → fast path early return
+	if err := v.fetchJWKS(); err != nil {
+		t.Fatalf("second fetchJWKS: %v", err)
+	}
+	if fetchCount != 1 {
+		t.Errorf("fast-path early return failed: fetchCount=%d want 1 (no extra HTTP call)", fetchCount)
+	}
+}
+
+// TestFetchJWKS_HTTPClientError covers validator.go:402-404 — the
+// "JWKS fetch failed" branch when httpClient.Do itself errors (distinct
+// from the 500-status branch already covered by TestValidator_JWKSFetchError).
+// Achieved by pointing the validator at a server that closes the connection
+// immediately, forcing http.Client.Do to return a transport error.
+func TestFetchJWKS_HTTPClientError(t *testing.T) {
+	// Start a server, immediately close it. v.httpClient.Do will get a
+	// connection-refused / EOF error.
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {}))
+	srv.Close()
+
+	v := NewValidator(srv.URL, "test-issuer", "test-audience")
+	v.ttl = 0
+
+	err := v.fetchJWKS()
+	if err == nil {
+		t.Fatal("expected fetchJWKS to fail when transport errors")
+	}
+}
+
+// TestFetchJWKS_SkipsKeyWithInvalidRSAComponents covers validator.go:422-423
+// — the "parseRSAPublicKey err → continue" branch inside fetchJWKSLocked.
+// The JWKS contains one valid RSA key and one with corrupt base64 N; the
+// loop must skip the bad one and accept the good one rather than abort.
+func TestFetchJWKS_SkipsKeyWithInvalidRSAComponents(t *testing.T) {
+	goodKey := generateRSAKey(t)
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		// Hand-rolled JWKS so we can inject a bad N (not valid base64url).
+		_, _ = w.Write([]byte(fmt.Sprintf(`{
+		  "keys": [
+		    {"kid":"good","kty":"RSA","use":"sig","n":"%s","e":"%s"},
+		    {"kid":"bad-n","kty":"RSA","use":"sig","n":"!!!not-valid-base64!!!","e":"AQAB"}
+		  ]
+		}`,
+			base64.RawURLEncoding.EncodeToString(goodKey.N.Bytes()),
+			base64.RawURLEncoding.EncodeToString(big.NewInt(int64(goodKey.E)).Bytes()),
+		)))
+	}))
+	t.Cleanup(srv.Close)
+
+	v := NewValidator(srv.URL, "test-issuer", "test-audience")
+	v.ttl = 0
+
+	if err := v.fetchJWKS(); err != nil {
+		t.Fatalf("fetchJWKS should succeed despite bad key: %v", err)
+	}
+	if _, err := v.getKey("good"); err != nil {
+		t.Errorf("good key should be loaded: %v", err)
+	}
+	if _, err := v.getKey("bad-n"); err == nil {
+		t.Error("bad-n key should NOT have been loaded into cache")
 	}
 }

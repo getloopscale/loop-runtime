@@ -6,6 +6,7 @@ package routes
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"net/http"
 
 	"github.com/go-chi/chi/v5"
@@ -19,17 +20,60 @@ type ScaleProjectStore interface {
 	GetByName(ctx context.Context, tenantID, name string) (*ProjectResult, error)
 }
 
+// ScaleConfigInput is the routes-local mirror of db.ScalingConfig fields the
+// handler emits. Defined here to avoid circular import (db package already
+// imports routes for attestation_store wiring; routes cannot import db back).
+type ScaleConfigInput struct {
+	TenantID     string
+	ProjectID    string
+	Environment  string
+	AppName      string
+	MinReplicas  int32
+	MaxReplicas  int32
+	TargetCPUPct *int32
+	ScaleToZero  bool
+	UpdatedBy    string
+}
+
+// ScaleApplyFunc upserts the scaling config, returning (changed, error).
+// Bootstrap (api/cmd/setup_orchestrator.go) provides the closure that converts
+// ScaleConfigInput to db.ScalingConfig and calls db.PostgresScalingStore.Upsert.
+type ScaleApplyFunc func(ctx context.Context, cfg ScaleConfigInput) (changed bool, err error)
+
 // ScaleHandler provides the HTTP handler for scaling operations.
 type ScaleHandler struct {
 	projects    ScaleProjectStore
+	apply       ScaleApplyFunc // optional — when nil, falls back to stub-202 (legacy)
 	kedaEnabled bool
 }
 
 // NewScaleHandler creates a new ScaleHandler.
-func NewScaleHandler(projects ScaleProjectStore, kedaEnabled bool) *ScaleHandler {
+//
+// `apply` MAY be nil for unit tests that exercise validation paths
+// without exercising persistence. Production wiring (api/cmd/setup_orchestrator.go)
+// MUST pass a non-nil ScaleApplyFunc — call `EnsureProductionWired` at
+// boot to assert this loudly (audit gap M02 #14 fix).
+func NewScaleHandler(projects ScaleProjectStore, apply ScaleApplyFunc, kedaEnabled bool) *ScaleHandler {
 	return &ScaleHandler{
 		projects:    projects,
+		apply:       apply,
 		kedaEnabled: kedaEnabled,
+	}
+}
+
+// EnsureProductionWired panics if the handler was constructed without a
+// non-nil ScaleApplyFunc. Call this from production boot (after wiring
+// everything) so a regression that drops the apply closure crashes the
+// process loudly at startup instead of silently degrading prod scaling
+// to a stub-202 no-op. Tests intentionally pass nil and must not call
+// this method.
+//
+// Audit gap M02 #14: previous code path could regress to stub silently
+// if a refactor dropped the apply closure. This guard makes such a
+// regression a fail-fast boot panic with a clear message.
+func (h *ScaleHandler) EnsureProductionWired() {
+	if h.apply == nil {
+		panic("ScaleHandler.apply is nil — production must wire a ScaleApplyFunc; scaling would silently no-op (audit M02 #14)")
 	}
 }
 
@@ -61,12 +105,18 @@ type scaleAutoscaling struct {
 
 // Scale handles POST /api/v1/projects/{name}/scale.
 //
-// STUB (pre-release): validates the scaling config and returns 202 Accepted with
-// status "acknowledged". Config is NOT persisted to DB — the user must also set
-// autoscaling in loopzero.yaml, and the config takes effect on the next `loopzero deploy`.
+// Audit gap M02 #14 closure (active-execution-plan §6.C.3): the comment
+// that previously described this handler as a "STUB" was outdated —
+// since plan T2.2 + B40 (commit `scale-b40-converged-20260506`), the
+// handler persists scaling config via the `apply` closure injected by
+// `api/cmd/setup_orchestrator.go::buildServerConfig`. The closure
+// wraps `db.PostgresScalingStore.Upsert` inside a withEnvironmentLock
+// transaction (Rule 6 satisfied).
 //
-// When DB persistence lands (environment_targets or scaling_config table), this
-// handler MUST acquire withEnvironmentLock (Rule 6) before writing.
+// The `apply == nil` fallback at the end exists ONLY for unit tests in
+// `scale_test.go` that exercise validation paths and don't need real
+// persistence. Production must wire a non-nil `apply` — see the
+// `EnsureProductionWired` panic on misconfiguration below.
 func (h *ScaleHandler) Scale(w http.ResponseWriter, r *http.Request) {
 	uc := middleware.GetUserContext(r.Context())
 	if uc == nil {
@@ -126,16 +176,20 @@ func (h *ScaleHandler) Scale(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// Build response — config acknowledged but NOT persisted (stub).
-	// The user must also configure autoscaling in loopzero.yaml for the next deploy.
-	// TODO: persist to DB + withEnvironmentLock when scaling_config table lands.
+	// Build response — defaults computed before persistence.
 	resp := scaleResponse{
 		App:         req.App,
 		Environment: req.Environment,
 		Status:      "acknowledged",
 	}
 
+	var minR, maxR int32
+	var cpuPtr *int32
+	scaleToZero := false
+
 	if hasFixed {
+		minR = int32(*req.Replicas)
+		maxR = int32(*req.Replicas)
 		resp.Replicas = req.Replicas
 	} else {
 		as := &scaleAutoscaling{}
@@ -155,9 +209,56 @@ func (h *ScaleHandler) Scale(w http.ResponseWriter, r *http.Request) {
 		if as.Min == 0 {
 			defaultCooldown := 300
 			as.Cooldown = &defaultCooldown
+			scaleToZero = true
 		}
 		resp.Autoscaling = as
+		minR = int32(as.Min)
+		maxR = int32(as.Max)
+		c := int32(as.CPUTarget)
+		cpuPtr = &c
 	}
 
-	writeJSON(w, http.StatusAccepted, resp)
+	// Plan T2.2: persist via apply closure when available; otherwise return
+	// stub-202 (legacy, transitional). Once all bootstrap call sites pass a
+	// real ScaleApplyFunc, this fallback can be removed.
+	if h.apply == nil {
+		resp.Status = "acknowledged"
+		writeJSON(w, http.StatusAccepted, resp)
+		return
+	}
+
+	cfg := ScaleConfigInput{
+		TenantID:     uc.TenantID,
+		// B40 (CHG-2026-05-05-DOGFOOD-B40): persist with project NAME, not UUID.
+		// CLAUDE.md "Project name vs project ID": CLI sends name as project_id
+		// in builds; ScalingResolver consults app_scaling_config using
+		// req.ProjectID which IS the name. Storing UUID here breaks the chain.
+		ProjectID:    name,
+		Environment:  req.Environment,
+		AppName:      req.App,
+		MinReplicas:  minR,
+		MaxReplicas:  maxR,
+		TargetCPUPct: cpuPtr,
+		ScaleToZero:  scaleToZero,
+		UpdatedBy:    uc.UserID,
+	}
+
+	changed, err := h.apply(r.Context(), cfg)
+	if err != nil {
+		var te *loopzeroerrors.LoopZeroError
+		if errors.As(err, &te) {
+			writeLoopZeroError(w, te)
+			return
+		}
+		writeLoopZeroError(w, loopzeroerrors.ErrInternalError)
+		return
+	}
+
+	if changed {
+		resp.Status = "applied"
+	} else {
+		resp.Status = "no_change"
+	}
+
+	writeJSON(w, http.StatusOK, resp)
 }

@@ -8,126 +8,115 @@ import (
 	"time"
 )
 
-func TestBuildMachine_HappyPath(t *testing.T) {
-	m := NewBuildMachine()
-
-	// QUEUED → RUNNING → RELEASING → SUCCEEDED
-	state := m.Transition(BuildQueued, BuildStarted)
-	assertState(t, state, BuildRunning)
-
-	state = m.Transition(state, BuildSucceededEvent)
-	assertState(t, state, BuildReleasing)
-
-	state = m.Transition(state, BuildReleaseCompleted)
-	assertState(t, state, BuildSucceeded)
-}
-
-func TestBuildMachine_BuildFails(t *testing.T) {
-	m := NewBuildMachine()
-
-	state := m.Transition(BuildQueued, BuildStarted)
-	assertState(t, state, BuildRunning)
-
-	state = m.Transition(state, BuildFailedEvent)
-	assertState(t, state, BuildFailed)
-}
-
-func TestBuildMachine_QueuedBuildFails_SubmitError(t *testing.T) {
-	// REVIEW-BLOCKER-1: A QUEUED build can fail immediately if workflow
-	// submission fails. This transition allows the orchestrator to mark
-	// the build as FAILED without waiting for the 5min queue timeout.
-	m := NewBuildMachine()
-
-	state := m.Transition(BuildQueued, BuildFailedEvent)
-	assertState(t, state, BuildFailed)
-}
-
-func TestBuildMachine_CancelWhileQueued(t *testing.T) {
-	m := NewBuildMachine()
-
-	state := m.Transition(BuildQueued, BuildCancelRequested)
-	assertState(t, state, BuildCancelled)
-}
-
-func TestBuildMachine_CancelWhileRunning(t *testing.T) {
-	m := NewBuildMachine()
-
-	state := m.Transition(BuildQueued, BuildStarted)
-	state = m.Transition(state, BuildCancelRequested)
-	assertState(t, state, BuildCancelling)
-
-	state = m.Transition(state, BuildCancelConfirmed)
-	assertState(t, state, BuildCancelled)
-}
-
-func TestBuildMachine_CancelTimeout(t *testing.T) {
-	m := NewBuildMachine()
-
-	state := m.Transition(BuildQueued, BuildStarted)
-	state = m.Transition(state, BuildCancelRequested)
-	assertState(t, state, BuildCancelling)
-
-	state = m.Transition(state, BuildCancelTimeout)
-	assertState(t, state, BuildCancelled)
-}
-
-func TestBuildMachine_QueueTimeout(t *testing.T) {
-	m := NewBuildMachine()
-
-	state := m.Transition(BuildQueued, BuildQueueTimeout)
-	assertState(t, state, BuildFailed)
-}
-
-func TestBuildMachine_BuildTimeout(t *testing.T) {
-	m := NewBuildMachine()
-
-	state := m.Transition(BuildQueued, BuildStarted)
-	state = m.Transition(state, BuildTimeout)
-	assertState(t, state, BuildFailed)
-}
-
-func TestBuildMachine_ReleasingToSucceeded(t *testing.T) {
-	m := NewBuildMachine()
-
-	state := m.Transition(BuildQueued, BuildStarted)
-	state = m.Transition(state, BuildSucceededEvent)
-	assertState(t, state, BuildReleasing)
-
-	state = m.Transition(state, BuildReleaseCompleted)
-	assertState(t, state, BuildSucceeded)
-}
-
-func TestBuildMachine_ReleasingToFailed_ActivationError(t *testing.T) {
-	m := NewBuildMachine()
-
-	state := m.Transition(BuildQueued, BuildStarted)
-	state = m.Transition(state, BuildSucceededEvent)
-	assertState(t, state, BuildReleasing)
-
-	state = m.Transition(state, BuildReleaseFailedEvent)
-	assertState(t, state, BuildFailed)
-}
-
-func TestBuildMachine_ReleasingTimeout(t *testing.T) {
-	m := NewBuildMachine()
-
-	state := m.Transition(BuildQueued, BuildStarted)
-	state = m.Transition(state, BuildSucceededEvent)
-	assertState(t, state, BuildReleasing)
-
-	state = m.Transition(state, BuildReleaseTimeoutEvent)
-	assertState(t, state, BuildFailed)
-}
-
-func TestBuildMachine_ReleasingCancel(t *testing.T) {
-	m := NewBuildMachine()
-
-	state := m.Transition(BuildQueued, BuildStarted)
-	state = m.Transition(state, BuildSucceededEvent)
-	assertState(t, state, BuildReleasing)
-
-	state = m.Transition(state, BuildCancelRequested)
-	assertState(t, state, BuildCancelled)
+// TestBuildMachine_TransitionSequences exercises every valid BuildMachine
+// transition chain starting from BuildQueued. Phase 3 helper: collapses 12
+// near-clone test functions (HappyPath, BuildFails, QueuedBuildFails,
+// CancelWhileQueued/Running, CancelTimeout, QueueTimeout, BuildTimeout,
+// 4× Releasing*) each running the same Create+Transition+AssertState
+// scaffold with different event sequences.
+func TestBuildMachine_TransitionSequences(t *testing.T) {
+	type step struct {
+		event    Event
+		expected State
+	}
+	cases := []struct {
+		name  string
+		steps []step // applied in order, starting from BuildQueued
+	}{
+		{
+			name: "HappyPath_QueuedToSucceeded",
+			steps: []step{
+				{BuildStarted, BuildRunning},
+				{BuildSucceededEvent, BuildReleasing},
+				{BuildReleaseCompleted, BuildSucceeded},
+			},
+		},
+		{
+			name: "BuildFails_RunningToFailed",
+			steps: []step{
+				{BuildStarted, BuildRunning},
+				{BuildFailedEvent, BuildFailed},
+			},
+		},
+		{
+			// REVIEW-BLOCKER-1: QUEUED → FAILED on submit error (no 5min wait).
+			name:  "QueuedBuildFails_SubmitError",
+			steps: []step{{BuildFailedEvent, BuildFailed}},
+		},
+		{
+			name:  "CancelWhileQueued",
+			steps: []step{{BuildCancelRequested, BuildCancelled}},
+		},
+		{
+			name: "CancelWhileRunning",
+			steps: []step{
+				{BuildStarted, BuildRunning},
+				{BuildCancelRequested, BuildCancelling},
+				{BuildCancelConfirmed, BuildCancelled},
+			},
+		},
+		{
+			name: "CancelTimeout",
+			steps: []step{
+				{BuildStarted, BuildRunning},
+				{BuildCancelRequested, BuildCancelling},
+				{BuildCancelTimeout, BuildCancelled},
+			},
+		},
+		{
+			name:  "QueueTimeout",
+			steps: []step{{BuildQueueTimeout, BuildFailed}},
+		},
+		{
+			name: "BuildTimeout",
+			steps: []step{
+				{BuildStarted, BuildRunning},
+				{BuildTimeout, BuildFailed},
+			},
+		},
+		{
+			name: "ReleasingToSucceeded",
+			steps: []step{
+				{BuildStarted, BuildRunning},
+				{BuildSucceededEvent, BuildReleasing},
+				{BuildReleaseCompleted, BuildSucceeded},
+			},
+		},
+		{
+			name: "ReleasingToFailed_ActivationError",
+			steps: []step{
+				{BuildStarted, BuildRunning},
+				{BuildSucceededEvent, BuildReleasing},
+				{BuildReleaseFailedEvent, BuildFailed},
+			},
+		},
+		{
+			name: "ReleasingTimeout",
+			steps: []step{
+				{BuildStarted, BuildRunning},
+				{BuildSucceededEvent, BuildReleasing},
+				{BuildReleaseTimeoutEvent, BuildFailed},
+			},
+		},
+		{
+			name: "ReleasingCancel",
+			steps: []step{
+				{BuildStarted, BuildRunning},
+				{BuildSucceededEvent, BuildReleasing},
+				{BuildCancelRequested, BuildCancelled},
+			},
+		},
+	}
+	for _, c := range cases {
+		t.Run(c.name, func(t *testing.T) {
+			m := NewBuildMachine()
+			state := BuildQueued
+			for _, s := range c.steps {
+				state = m.Transition(state, s.event)
+				assertState(t, state, s.expected)
+			}
+		})
+	}
 }
 
 func TestBuildMachine_TerminalStatesRejectAllEvents(t *testing.T) {

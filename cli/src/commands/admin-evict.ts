@@ -55,23 +55,45 @@ export async function runAdminEvict(
   opts: AdminEvictOptions,
   deps: AdminEvictDeps,
 ): Promise<number> {
+  // Rule 5: when --json is set, validation errors must also emit structured
+  // JSON to stdout (not plain text to stderr). Without this, callers piping
+  // into `jq` see an empty payload + non-zero exit and have to fall back to
+  // text scraping. F-CLI-1 (CHG-2026-04-29-DOGFOOD iter 13).
+  const emitJsonError = (message: string, code: string, exitCode: number): number => {
+    if (opts.json) {
+      deps.writeTo(JSON.stringify({ error: message, exit_code: exitCode, code }));
+    } else {
+      deps.writeError(message);
+    }
+    return exitCode;
+  };
+
   const auth = deps.getServiceAuth();
   if (!auth) {
-    deps.writeError('LOOPZERO_SERVICE_AUTH env var required for admin commands.');
-    return 4;
+    return emitJsonError(
+      'LOOPZERO_SERVICE_AUTH env var required for admin commands.',
+      'AUTH_REQUIRED',
+      4,
+    );
   }
 
   const pattern = opts.pattern?.trim();
   const ids = opts.ids?.split(',').map((s) => s.trim()).filter(Boolean) ?? [];
 
   if (!pattern && ids.length === 0) {
-    deps.writeError('Either --pattern or --ids must be provided.');
-    return 1;
+    return emitJsonError(
+      'Either --pattern or --ids must be provided.',
+      'MISSING_FILTER',
+      1,
+    );
   }
 
   if (pattern === '%' || pattern === 'tn-%') {
-    deps.writeError("Pattern '%' or 'tn-%' is too broad — enumerate explicitly.");
-    return 1;
+    return emitJsonError(
+      "Pattern '%' or 'tn-%' is too broad — enumerate explicitly.",
+      'PATTERN_TOO_BROAD',
+      1,
+    );
   }
 
   // 1. Always dry-run first to show what would be evicted.

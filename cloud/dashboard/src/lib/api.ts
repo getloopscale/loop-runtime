@@ -11,6 +11,7 @@
 // MEET-040: Single origin. Dashboard served at cloud.{domain} — all API calls are relative.
 // Runtime config via /__config.js (empty in prod = same-origin, set per-env in container).
 import { API_URL } from './config';
+import { mocksEnabled } from './dev-mocks';
 const API_BASE = API_URL;
 
 export function getApiBase() { return API_BASE; }
@@ -20,22 +21,21 @@ let accessToken: string | null = null;
 let tokenExpiresAt = 0;
 let refreshPromise: Promise<boolean> | null = null; // Dedup concurrent refreshes
 
-// §3.3: BroadcastChannel for cross-tab coordination
-type AuthMessage =
-  | { type: 'token-refreshed'; token: string; expiresAt: number }
-  | { type: 'logged-out' };
+// §3.3: BroadcastChannel for cross-tab coordination.
+// SECURITY: the JWT is NEVER broadcast. The token lives only in this tab's
+// memory; broadcasting it would let any same-origin XSS subscribe to the channel
+// and exfiltrate tokens from every open tab. Each tab mints its own token from
+// its own Kratos session cookie via exchangeSessionToken(). Only logout (which
+// carries no secret) is coordinated across tabs.
+type AuthMessage = { type: 'logged-out' };
 
 let authChannel: BroadcastChannel | null = null;
 try {
   authChannel = new BroadcastChannel('loopzero-auth');
   authChannel.onmessage = (event: MessageEvent<AuthMessage>) => {
     const msg = event.data;
-    if (msg.type === 'token-refreshed') {
-      // Another tab refreshed the token — use it without redundant exchange
-      accessToken = msg.token;
-      tokenExpiresAt = msg.expiresAt;
-    } else if (msg.type === 'logged-out') {
-      // Another tab logged out — redirect this tab
+    if (msg.type === 'logged-out') {
+      // Another tab logged out — clear this tab's token and redirect.
       accessToken = null;
       tokenExpiresAt = 0;
       redirectToLogin('expired');
@@ -47,6 +47,15 @@ try {
 
 /** Exchange Kratos session cookie for a JWT. Called after login. */
 export async function exchangeSessionToken(): Promise<boolean> {
+  // Visual-validation mock layer (dev-only, gated by VITE_USE_MOCKS).
+  // Set a fake token so hasValidToken() returns true and the dashboard
+  // proceeds without trying to hit the real BFF endpoint.
+  if (mocksEnabled()) {
+    accessToken = 'mock-jwt-for-visual-validation';
+    tokenExpiresAt = Date.now() + 3600 * 1000;
+    return true;
+  }
+
   // Dedup: if a refresh is already in flight, reuse it
   if (refreshPromise) return refreshPromise;
 
@@ -63,13 +72,8 @@ export async function exchangeSessionToken(): Promise<boolean> {
       accessToken = data.access_token;
       tokenExpiresAt = Date.now() + (data.expires_in * 1000) - 60000; // 60s buffer
 
-      // §3.3: Broadcast to other tabs
-      authChannel?.postMessage({
-        type: 'token-refreshed',
-        token: accessToken,
-        expiresAt: tokenExpiresAt,
-      } satisfies AuthMessage);
-
+      // SECURITY: do NOT broadcast the token. Each tab exchanges its own token
+      // from its Kratos session cookie on demand (see ensureToken).
       return true;
     } catch {
       return false;
@@ -91,6 +95,15 @@ async function ensureToken(): Promise<string | null> {
   if (hasValidToken()) return accessToken;
   const ok = await exchangeSessionToken();
   return ok ? accessToken : null;
+}
+
+/**
+ * Exposed for SSE consumers (use-log-stream) that need the JWT inline in
+ * the URL query string because EventSource cannot set headers.
+ * T6.0 of plan 2026-05-27-backend-frontend-integration v1.1 (EC-04).
+ */
+export async function ensureSSEToken(): Promise<string | null> {
+  return ensureToken();
 }
 
 let redirecting = false;
@@ -132,6 +145,25 @@ export function logout(): void {
 // /v1/billing, /v1/auth/* → cloud service (direct, same origin)
 // /engine/api/v1/* → cloud service proxy → engine API (BFF pattern)
 export async function cloudFetch<T>(path: string, options: RequestInit = {}): Promise<T | null> {
+  // Plan v1.0 (2026-05-26): mock mode no longer short-circuits via FIXTURES
+  // map. Instead, lib/mocks/server.ts wraps window.fetch and intercepts all
+  // /api/v1/* paths transparently — covering 47+ endpoints vs the old 5.
+  // The cloudFetch flow stays identical in mock + prod modes; the difference
+  // is purely WHO answers the network call.
+  //
+  // Plan dashboard-memory-bff-server-side-key-vault v1.2 § ADR D5 + T4.1:
+  // Browser-trust calls to /v1/memory/* are transparently rewritten to
+  // /v1/dashboard/memory/* where the cloud BFF layer mints a server-side
+  // loopzero_live_* key — the browser NEVER sees that key.
+  // SDK consumers (non-browser) still hit /v1/memory/* directly with their own key.
+  //
+  // EC-6 path traversal defense: reject paths containing '..' to prevent
+  // /v1/memory/../admin/something escaping the rewrite intent. The predicate
+  // is conservative — any '..' substring blocks the rewrite AND falls through
+  // to the original path which downstream chi-router will 404 (correct fail-fast).
+  if (path.startsWith('/v1/memory/') && !path.includes('..')) {
+    path = '/v1/dashboard/memory/' + path.slice('/v1/memory/'.length);
+  }
   const token = await ensureToken();
   if (!token) {
     redirectToLogin('expired');
@@ -154,6 +186,16 @@ async function fetchWithAuth<T>(base: string, path: string, token: string, optio
     'Authorization': `Bearer ${token}`,
     ...(options.headers as Record<string, string> || {}),
   };
+
+  // T5.0 of plan 2026-05-27-backend-frontend-integration v1.1 (EC-09).
+  // Auto-generate Idempotency-Key for every mutating verb so retries on
+  // network blips do not duplicate state. Caller can override with an
+  // explicit `headers['Idempotency-Key']` to make a deliberate replay
+  // (e.g., resume across reload).
+  const method = (options.method || 'GET').toUpperCase();
+  if (['POST', 'PATCH', 'PUT', 'DELETE'].includes(method) && !headers['Idempotency-Key']) {
+    headers['Idempotency-Key'] = crypto.randomUUID();
+  }
 
   try {
     const resp = await fetch(`${base}${path}`, { ...options, headers });

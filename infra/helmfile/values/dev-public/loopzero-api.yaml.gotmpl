@@ -1,0 +1,54 @@
+# Plan 2026-06-04-dev-public-docr-fix-forward T2.1.
+# Minimal override for env dev-public (clusterRole=cloud-local).
+#
+# NOTE: helmfile mgmt references `../helm/loopzero-api` (bootstrap chart),
+# not `../../charts/loopzero-api` (published OCI). The bootstrap chart's
+# template uses `.Values.imagePullSecrets` (root-level, NOT `.global`)
+# and hardcodes `.Values.image.tag: latest` as default — so we must
+# override both explicitly here.
+
+image:
+  repository: registry.digitalocean.com/loopzero-system/loopzero-api
+  tag: dev
+  # Always so each rollout pulls the latest :dev push from DOCR.
+  pullPolicy: Always
+
+imagePullSecrets:
+  - name: do-registry
+
+# k3d-loopzero-mgmt LB has host port mapping 30001 → 13001. Exposing loopzero-api
+# as NodePort 30001 lets `curl localhost:13001/api/...` hit the cluster
+# loopzero-api Service directly — canonical pattern for CLI/dogfood from host.
+# See `k3d cluster list loopzero-mgmt -o json` portMappings.
+service:
+  type: NodePort
+  port: 3001
+  nodePort: 30001
+
+env:
+  # Local Hydra in loopzero-auth ns serves the JWKS for loopzero-api JWT verification.
+  JWKS_URL: "http://ory-hydra-public.loopzero-auth.svc.cluster.local:4444/.well-known/jwks.json"
+  JWT_ISSUER: "http://ory-hydra-public.loopzero-auth.svc.cluster.local:4444/"
+  # BuildKit (in k3d-loopzero-build) pushes tenant images to k3d-loopzero-registry
+  # via plain HTTP — canonical for local dev k3d topology. loopzero-api
+  # configures BuildKit submitter with this hint so registry-config
+  # writes `[registry."k3d-loopzero-registry:5000"] http = true insecure = true`.
+  REGISTRY_INSECURE: "true"
+  # Workload cluster has `loopzero-ca-issuer` (self-signed CA bootstrap) for
+  # tenant `*.loopzero.local` hostnames — no public LE for internal domains.
+  # Override the chart default `letsencrypt-prod` so tenant manifests
+  # reference an issuer that actually exists in the workload cluster.
+  LOOPZERO_CLUSTER_ISSUER: "loopzero-ca-issuer"
+  # Gitea is in `loopzero-system` ns (not chart-default `gitea` ns). Override
+  # so loopzero-api connects to the right service for health checks + repo ops.
+  GITEA_URL: "http://gitea-http.loopzero-system.svc.cluster.local:3000"
+  # `task k3d:heal` H16 publishes loopzero-dockerfile-lint to k3d-loopzero-registry
+  # (local DOCR proxy in build cluster). Without this override loopzero-api
+  # uses the prod default `registry.digitalocean.com/loopzero-system/
+  # loopzero-dockerfile-lint:v0.1.0` which is unreachable from build cluster.
+  LOOPZERO_DOCKERFILE_LINT_IMAGE: "k3d-loopzero-registry:5000/loopzero-dockerfile-lint:v0.1.0"
+  # Admin endpoints (POST /admin/tenants/evict, POST /admin/tenants/pin, etc.)
+  # are gated by defense-in-depth flag. Production sets this via Pulumi; local
+  # dev-public must set it explicitly. Without it the admin journeys (B38)
+  # get HTTP 404 "Endpoint not available." for any /admin/* call.
+  LOOPZERO_ADMIN_API: "true"

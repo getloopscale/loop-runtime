@@ -1,0 +1,97 @@
+# Helmfile environment: dev
+# CHG-2026-04-28-LAYERED-BOOTSTRAP — Phase 2 (T2.1/T2.2/T2.3)
+#
+# Overrides for the dev environment. Used by mgmt/build/runtime helmfiles
+# when invoked with `-e dev`.
+#
+# Convention: env vars from `pulumi stack output --stack dev` are injected
+# at runtime by `loopzero platform install --provider digitalocean` or directly
+# by the developer when running helmfile manually.
+
+# Domain
+domain: dev.loopzero.example
+dnsZone: loopzero.example
+
+# Phase 3.4 of plan 2026-06-02-loopzero-api-vault-integration v1.8 (D11 ESO).
+# Opt-in flag: when true, mgmt.helmfile installs ESO operator +
+# loopzero-external-secrets CRs (pulls secrets from loopzero-vault cluster).
+# Default false → secrets continue via legacy env var / K8s Secret pattern.
+# Set to true ONLY after DOKS loopzero-vault-dev cluster up + openbao-init Job ran +
+# ClusterSecretStore loopzero-vault-secrets applied (Phase 3.1 manifests) +
+# seed-loopzero-secrets.sh ran for env=dev (T8.1 EC-21).
+vaultEnabled: false
+
+# Cluster role identity (used by templates / tests).
+clusterRole: dev
+
+# Replica counts (small for dev — HA values go in prod overlay).
+replicas:
+  api: 1
+  controller: 1
+  argocd: 1
+  gitea: 1
+  harbor: 1
+
+# Resource sizing
+resources:
+  default:
+    requests:
+      cpu: 100m
+      memory: 128Mi
+    limits:
+      cpu: 500m
+      memory: 512Mi
+
+# TLS issuer
+certIssuer:
+  kind: ClusterIssuer
+  name: letsencrypt-staging
+
+# Image registries (must match Pulumi outputs).
+registries:
+  docrPrefix: "registry.digitalocean.com/loopzero-system/"
+  harborPrefix: "harbor.dev.loopzero.example/loopzero-platform/"
+
+# Loki capacity (B5)
+loki:
+  maxGlobalStreamsPerUser: 100000
+  # Audit M08 #18 / §6.C.4b — promtail cross-cluster push target (env-specific).
+  pushUrl: http://172.18.0.3:30094/loki/api/v1/push
+
+# Policy mode (B16) — `warn` for dev so test workloads are not blocked.
+policyMode: warn
+
+# In-cluster Postgres — DISABLED for LoopZero Cloud (uses DO Managed PG via Pulumi L1).
+# iter 20: explicit toggle so the postgresql release is only rendered in standalone.
+inClusterPostgres: false
+
+# B20: NFS server provisioner underlying storage class. DOKS default.
+underlyingStorageClass: do-block-storage
+
+# CHG-2026-04-30-INFRA-NORMALIZE / Phase 5 T5.2 — multi-cell metadata.
+# cellId names the cell that runtime cluster X belongs to. Per T0.1
+# audit Gap 3: cell-id is K8s/ArgoCD metadata, NOT cloud infra — so it
+# lives in helmfile env (not Pulumi.dev.yaml).
+#
+# In dev: runtime cluster maps to cell-1; runtime-2 to cell-2. Both
+# seeded in cells SQL table (migration 000006); cell-2 starts in
+# 'maintenance' status (no traffic until canary stage 1 flips it).
+runtimeCellId: cell-1
+runtime2CellId: cell-2
+
+# CHG-2026-04-30-INFRA-NORMALIZE / Phase 5 T5.4 — enable DynamicRouter
+# in loopzero-api so it consumes ClusterCredential CRs and routes per-tenant
+# to cell-1 or cell-2. Audit T0.1 Gap 4 (was: silently single-cell).
+dynamicRouter: true
+
+# velero-backup-dr-plan v1.0 / T0.2 — Velero BSL config. Bucket name comes
+# from Pulumi L1 (InfraOutputs.veleroBackupsBucketName). Region matches the
+# cloud region. s3Url targets the regional Spaces endpoint.
+velero:
+  bucket: loopzero-infra-sfo3-velero-backups
+  region: sfo3
+  s3Url: https://sfo3.digitaloceanspaces.com
+
+# Plan v1.2 T2.3 / D4 — kratos+hydra UI base URL placeholder
+uiBaseUrl: "http://localhost:4455"
+dashboardOrigin: "http://localhost:3000"

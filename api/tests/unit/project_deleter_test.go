@@ -43,6 +43,9 @@ func (f *fakeDeleteBuildStore) CancelActiveBuilds(_ context.Context, _ db.DBTX, 
 // Unused methods — satisfy the interface.
 func (f *fakeDeleteBuildStore) Create(context.Context, db.DBTX, *db.Build) error        { return nil }
 func (f *fakeDeleteBuildStore) GetByID(context.Context, string) (*db.Build, error)       { return nil, nil }
+func (f *fakeDeleteBuildStore) GetByIDForTenant(context.Context, string, string) (*db.Build, error) {
+	return nil, nil
+}
 func (f *fakeDeleteBuildStore) HasActiveBuild(context.Context, db.DBTX, string, string, string) (bool, error) {
 	return false, nil
 }

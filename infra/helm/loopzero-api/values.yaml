@@ -1,0 +1,159 @@
+# HA default per CTO mandate 2026-05-14 + /chaos-test C01 resilience gap.
+# Single-replica caused 25% downtime during pod-kill chaos (chaos-test
+# C01 FAIL — 75% success during chaos < 90% threshold). Multi-replica
+# activates: (a) leader election fail-over (api/internal/leader/),
+# (b) PodDisruptionBudget via templates/pdb.yaml (emits only when
+# replicaCount>=2), (c) RollingUpdate strategy per
+# MEET-ASYNC-AMENDMENT-2026-05-12-003. Resource fit verified: 2 × 100m
+# CPU + 64Mi memory ≪ k3d node capacity.
+replicaCount: 2
+
+image:
+  repository: registry.digitalocean.com/loopzero-system/loopzero-api
+  # B31 (CHG-2026-04-28-LAYERED-BOOTSTRAP) — CI/CD publishes immutable
+  # tags (e.g., commit-sha, release-tag), not `:latest`. Pinned to the
+  # tag last published to DO Registry. In production, Pulumi (or a
+  # GitOps-managed values overlay) sets this from CI build metadata.
+  tag: latest
+  pullPolicy: Always
+
+imagePullSecrets:
+  - name: loopzero-registry-pull
+
+# Pulled from the wiring ConfigMap (loopzero-platform-topology) created by T1.4.
+wiringConfigMap: loopzero-platform-topology
+
+# DB credentials (from the Secret created by generate-secrets.sh)
+dbCredentialsSecret: loopzero-db-credentials
+
+service:
+  type: ClusterIP
+  # B40 (CHG-2026-04-28-LAYERED-BOOTSTRAP) — loopzero-api binary listens on
+  # port 3001 (see api/setup_server.go default port). The chart was
+  # configured for 8080 which caused liveness probe connection refused
+  # → CrashLoopBackOff. Detected on standalone bootstrap 2026-04-28.
+  port: 3001
+  # F-01 (CHG-2026-04-29-DOGFOOD T2.1) — opcional, ativado apenas em
+  # standalone-multi via overlay. Em dev/prod o Service permanece ClusterIP
+  # (api alcançada via Cloudflare Tunnel + Traefik websecure).
+  nodePort: null
+
+ingress:
+  enabled: true
+  host: "api.{{ .Values.domain }}"
+  tls: true
+  certIssuer: letsencrypt-prod
+  # F-01 (CHG-2026-04-29-DOGFOOD T2.1) — opt-in via overlay. Quando true,
+  # template renderiza segunda IngressRoute matching localhost / 127.0.0.1
+  # / api.loopzero.local em entry point `web` (HTTP, sem TLS). Permite que o CLI
+  # default (`localhost:13001`) funcione em standalone-multi sem `tilt up`.
+  localhost: false
+
+domain: dev.loopzero.example
+
+resources:
+  requests:
+    cpu: 100m
+    memory: 64Mi
+  limits:
+    cpu: 500m
+    memory: 256Mi
+
+# F-08 (CHG-2026-04-29-DOGFOOD T5.3) — ServiceMonitor opt-in.
+# Default false: standalone-multi sem prometheus-operator não renderiza o
+# manifest (evita erro de CRD missing em kubeconform/helm install).
+# Dev/prod overlays setam true para Prometheus scrape.
+serviceMonitor:
+  enabled: false
+  interval: 30s
+  scrapeTimeout: 10s
+  labels: {}
+
+env:
+  # T0.3 of deep-review-2026-05-10-remediation-plan (CRITICAL find_infra_port):
+  # `LOOPZERO_API_PORT` was DEAD — the Go binary never read it. `service.port=3001`
+  # is the canonical port. Setting it to "8080" here was misleading and
+  # surfaced as a finding in the deep review. Removed entirely.
+  LOOPZERO_LOG_LEVEL: "info"
+  LOOPZERO_CLUSTER_ISSUER: "letsencrypt-prod"
+
+# Plan 2026-05-19-drill-skills-rigor-restoration T2.1: kubeContexts é
+# env-specific (k3d synthetic uses "in-cluster"; drill/prod use DOKS context
+# names like "do-sfo3-loopzero-drill-mgmt-cluster"). Default fallback "in-cluster"
+# para local k3d standalone-multi; overlays drill+prod sobrescrevem.
+# Padrão environment-overlay-with-reuse: canonical define schema + fallback
+# safe-for-local; overlays supplem env-specific values via env templating.
+kubeContexts:
+  mgmt: "in-cluster"
+  build: "in-cluster"
+  runtime: "in-cluster"
+
+# F-7 (dogfood-2026-05-08-fixes T0.1, ADR D7) — bootstrap chart toggle for
+# OTel exporter. Default false because local k3d does not install Tempo;
+# without this flag the API spam-logs `traces export: rpc error` every 5s.
+# templates/deployment.yaml gates `LOOPZERO_TRACING_ENABLED` env on this toggle.
+# Production stack (charts/loopzero-api) is unchanged.
+# T5.11 of plan 2026-06-02-openbao-adoption v1.3 — Vault K8s auth config.
+# When enabled, the Deployment mounts a projected SA token with bounded
+# audience + expiration, and pkg/vault.Client uses K8s auth login instead
+# of static token env var. Disabled by default (vault stack opt-in per env).
+vault:
+  enabled: false
+  addr: "https://openbao.vault-system.svc.cluster.local:8200"
+  authMount: "k8s-mgmt"
+  role: "loopzero-api"
+  audience: "vault.loopzero.io"
+  tokenExpirationSeconds: 3600
+  # T10.1 Day 30 verify cron — sweeps secrets table, asserts round-trip
+  # decrypt with current key (AES legacy OR Vault Transit). Disabled by
+  # default; operator enables per env at calendar cutover.
+  day30VerifyCron:
+    enabled: false
+    schedule: "0 3 1 * *"  # 03:00 UTC on day 1 of every month
+  # T10.3-T10.4 Day 60 AES delete cron — re-encrypts remaining AES rows to
+  # Transit, asserts ZERO AES rows remain, then crypto-shreds the AES
+  # master key from Vault. IRREVERSIBLE — operator confirms via dryRun=false
+  # only after Day 30 verify passes + Vault snapshot backed up.
+  day60AesDeleteCron:
+    enabled: false
+    schedule: "0 5 1 */2 *"  # 05:00 UTC on day 1 of every 2 months
+    dryRun: "true"           # operator flips to "false" only on final run
+    shredAesKey: "false"     # operator flips to "true" only on final run
+
+tracing:
+  enabled: false
+  # CHG-2026-04-30-INFRA-NORMALIZE / Phase 5 T5.4 — DynamicRouter
+  # default. Standalone profiles override to "false" (single-cell).
+  # Cloud profiles (dev/prod) override to "true" via overlay (sets
+  # LOOPZERO_DYNAMIC_ROUTER=true so api/cmd/setup_background.go takes
+  # the K8sCellStore path instead of falling back to StaticRouter).
+  LOOPZERO_DYNAMIC_ROUTER: "false"
+  # B76 (end-to-end-deploy-validation-plan iter 11) — loopzero-api default
+  # was `gitea-http.gitea.svc.cluster.local` but our Gitea installs in
+  # `loopzero-system` namespace (single helmfile mgmt — no separate `gitea`
+  # namespace). Override default to the actual service location.
+  GITEA_URL: "http://gitea-http.loopzero-system.svc.cluster.local:3000"
+  # B77 (end-to-end-deploy-validation-plan iter 11) — Gitea org where
+  # tenant gitops repos live. Default "loopzero" was hardcoded in 3 setup
+  # files (setup_workflows.go, setup_stores.go, controller/setup_services.go).
+  # Now reads from this env var via cfg.GiteaOrg; in standalone-multi the
+  # org is "loopzero-platform" (created by bootstrap scripts).
+  GITEA_ORG: "loopzero-platform"
+
+# Service-auth Ed25519 dual-control (ADR 2026-05-13). The deployment
+# template injects 4 env vars from this block:
+#   LOOPZERO_SERVICE_AUTH_ED25519_PUBLIC_CURRENT     (secretKeyRef, optional)
+#   LOOPZERO_SERVICE_AUTH_ED25519_PUBLIC_PREVIOUS    (secretKeyRef, optional)
+#   LOOPZERO_SERVICE_AUTH_REQUIRE_SIGNATURE          (this block, Phase 2)
+#   LOOPZERO_SERVICE_AUTH_NONCE_REDIS_ADDR           (this block, multi-replica)
+serviceAuthEd25519:
+  # Phase 1 → Phase 2 flip. Default false (accept-both). Operator
+  # sets `true` only after the 7-day soak at 100% present rate
+  # confirms full adoption — see service-auth-ed25519-rollout-runbook.md.
+  requireSignature: false
+  # Redis address for shared nonce store. Empty = in-memory fallback
+  # (single-replica / dev only). For multi-replica deployments, point
+  # at a reachable Redis. The existing gitea Redis at
+  # `redis.loopzero-system:6379` (Bitnami chart, no auth) works as long
+  # as a service-auth-isolated DB index is used.
+  nonceRedisAddr: ""

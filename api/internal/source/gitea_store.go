@@ -7,10 +7,12 @@ import (
 	"context"
 	"crypto/sha256"
 	"encoding/hex"
+	"errors"
 	"fmt"
 	"io"
 	"os"
 	"path/filepath"
+	"regexp"
 	"sort"
 	"strings"
 
@@ -20,6 +22,25 @@ import (
 
 	"github.com/loopzero/loopzero/api/internal/gitclient"
 )
+
+// Plan v1.2 T1.2 (cutover-deep-review-hardening): DNS-1123 validation for
+// tenantID/projectID before flowing into git repo names. Prevents path
+// traversal, null-byte injection, Unicode/uppercase repo name collision,
+// and length overflow. Pattern matches K8s namespace + label + Gitea repo
+// + ArgoCD App name conventions (single canonical regex across stack).
+//
+// EC-1 (v1.1): legacy IDs in test fixtures audited via T1.2.0 pre-flight;
+// any non-conforming names renamed before this regex shipped.
+var (
+	tenantIDRE  = regexp.MustCompile(`^[a-z0-9]([a-z0-9-]{0,61}[a-z0-9])?$`)
+	projectIDRE = regexp.MustCompile(`^[a-z0-9]([a-z0-9-]{0,61}[a-z0-9])?$`)
+)
+
+// ErrInvalidTenantOrProject is the sentinel returned by sourceRepoName when
+// tenantID or projectID fails DNS-1123 validation. Route handlers in
+// internal/routes/source.go use errors.Is to map this to HTTP 400 with code
+// INVALID_TENANT_OR_PROJECT (Plan v1.2 T1.2).
+var ErrInvalidTenantOrProject = errors.New("invalid tenant or project ID")
 
 // GiteaSourceStoreConfig holds configuration for connecting to Gitea.
 type GiteaSourceStoreConfig struct {
@@ -49,11 +70,22 @@ func NewGiteaSourceStore(cfg GiteaSourceStoreConfig) (*GiteaSourceStore, error) 
 }
 
 // sourceRepoName returns the deterministic Gitea repo name per spec §7.5.
-func sourceRepoName(tenantID, projectID string) string {
-	if projectID != "" {
-		return fmt.Sprintf("loopzero-source-%s-%s", tenantID, projectID)
+//
+// Plan v1.2 T1.2: tenantID and projectID MUST match DNS-1123 (1-63 chars,
+// lowercase alphanumeric + hyphens, no leading/trailing hyphen). Returns
+// error on invalid input — caller in routes/source.go maps to HTTP 400
+// with code INVALID_TENANT_OR_PROJECT.
+func sourceRepoName(tenantID, projectID string) (string, error) {
+	if !tenantIDRE.MatchString(tenantID) {
+		return "", fmt.Errorf("%w: tenantID must match DNS-1123 lowercase alphanumeric+hyphens, 1-63 chars (got %q)", ErrInvalidTenantOrProject, tenantID)
 	}
-	return fmt.Sprintf("loopzero-source-%s", tenantID)
+	if projectID != "" {
+		if !projectIDRE.MatchString(projectID) {
+			return "", fmt.Errorf("%w: projectID must match DNS-1123 lowercase alphanumeric+hyphens, 1-63 chars (got %q)", ErrInvalidTenantOrProject, projectID)
+		}
+		return fmt.Sprintf("loopzero-source-%s-%s", tenantID, projectID), nil
+	}
+	return fmt.Sprintf("loopzero-source-%s", tenantID), nil
 }
 
 // PushBundle receives a source bundle from the CLI (git bundle or tar.gz),
@@ -97,12 +129,17 @@ func (s *GiteaSourceStore) pushGitBundle(ctx context.Context, tenantID, projectI
 	defer func() { _ = os.RemoveAll(tmpDir) }()
 
 	bundlePath := filepath.Join(tmpDir, "source.bundle")
-	if err := os.WriteFile(bundlePath, data, 0644); err != nil {
+	// G703 false positive: bundlePath is tmpdir + literal filename "source.bundle",
+	// no user input flows into the path.
+	if err := os.WriteFile(bundlePath, data, 0o600); err != nil { //nolint:gosec // G703 false positive: tmpdir-internal path
 		return "", fmt.Errorf("gitea source: write bundle: %w", err)
 	}
 
 	repoDir := filepath.Join(tmpDir, "repo")
-	repoName := sourceRepoName(tenantID, projectID)
+	repoName, err := sourceRepoName(tenantID, projectID)
+	if err != nil {
+		return "", fmt.Errorf("gitea source: %w", err)
+	}
 	remoteURL := s.repo.RepoURL(repoName)
 
 	if err := s.repo.EnsureRepo(ctx, repoName, false); err != nil {
@@ -119,7 +156,7 @@ func (s *GiteaSourceStore) pushGitBundle(ctx context.Context, tenantID, projectI
 	// Pull from bundle
 	if err := s.git.Run(ctx, repoDir, "pull", bundlePath, "HEAD"); err != nil {
 		if err2 := s.git.Run(ctx, repoDir, "fetch", bundlePath, "HEAD"); err2 != nil {
-			return "", fmt.Errorf("gitea source: git fetch from bundle: %w (pull error: %v)", err2, err)
+			return "", fmt.Errorf("gitea source: git fetch from bundle: %w (pull error: %w)", err2, err)
 		}
 		if err2 := s.git.Run(ctx, repoDir, "checkout", "FETCH_HEAD"); err2 != nil {
 			return "", fmt.Errorf("gitea source: git checkout FETCH_HEAD: %w", err2)
@@ -165,7 +202,7 @@ func (s *GiteaSourceStore) pushTarBundle(ctx context.Context, tenantID, projectI
 	}
 
 	repoDir := filepath.Join(tmpDir, "repo")
-	if err := os.MkdirAll(repoDir, 0755); err != nil {
+	if err := os.MkdirAll(repoDir, 0o750); err != nil {
 		_ = os.RemoveAll(tmpDir)
 		return PushResult{}, fmt.Errorf("gitea source: mkdir repo: %w", err)
 	}
@@ -173,7 +210,9 @@ func (s *GiteaSourceStore) pushTarBundle(ctx context.Context, tenantID, projectI
 	// SEC: Extract tar.gz with strict validation — no symlinks, no path traversal,
 	// no absolute paths, decompressed size limit, file count limit.
 	tarPath := filepath.Join(tmpDir, "source.tar.gz")
-	if err := os.WriteFile(tarPath, data, 0644); err != nil {
+	// G703 false positive: tarPath is tmpdir + literal filename "source.tar.gz",
+	// no user input flows into the path.
+	if err := os.WriteFile(tarPath, data, 0o600); err != nil { //nolint:gosec // G703 false positive: tmpdir-internal path
 		_ = os.RemoveAll(tmpDir)
 		return PushResult{}, fmt.Errorf("gitea source: write tar: %w", err)
 	}
@@ -189,7 +228,11 @@ func (s *GiteaSourceStore) pushTarBundle(ctx context.Context, tenantID, projectI
 		return PushResult{}, fmt.Errorf("gitea source: content hash: %w", err)
 	}
 
-	repoName := sourceRepoName(tenantID, projectID)
+	repoName, err := sourceRepoName(tenantID, projectID)
+	if err != nil {
+		_ = os.RemoveAll(tmpDir)
+		return PushResult{}, fmt.Errorf("gitea source: %w", err)
+	}
 	remoteURL := s.repo.RepoURL(repoName)
 
 	if err := s.repo.EnsureRepo(ctx, repoName, false); err != nil {
@@ -267,7 +310,10 @@ func computeDirHash(dir string) (string, error) {
 	h := sha256.New()
 	for _, rel := range paths {
 		h.Write([]byte(rel))
-		data, err := os.ReadFile(filepath.Join(dir, rel))
+		// G304 false positive: `rel` came from filepath.Walk(dir) +
+		// filepath.Rel(dir, p), so the resolved path is always within
+		// `dir`. Caller passes a tmpdir, never user input.
+		data, err := os.ReadFile(filepath.Join(dir, rel)) //nolint:gosec // G304 false positive: rel originated from filepath.Walk(dir)
 		if err != nil {
 			return "", err
 		}

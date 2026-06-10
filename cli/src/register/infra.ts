@@ -8,8 +8,9 @@ import { BuildInspectCommand } from '../commands/build-inspect';
 import { CancelCommand } from '../commands/cancel';
 import { SecretSetCommand, SecretListCommand, SecretDeleteCommand } from '../commands/secret';
 import { BillingCommand } from '../commands/billing';
-import { ConnectCommand, DisconnectCommand } from '../commands/connect';
+import { ConnectCommand, DisconnectCommand, type ConnectionInfo } from '../commands/connect';
 import { runAdminEvict, AdminEvictInput, AdminEvictResponse } from '../commands/admin-evict';
+import { runAdminReleaseInspect, AdminReleaseInspectResponse } from '../commands/admin-release';
 import { API_REQUEST_TIMEOUT_MS } from '../config/constants';
 import { getGitRoot } from '../adapters/git';
 import { findLoopZeroYaml } from '../adapters/loopzero-yaml';
@@ -29,7 +30,8 @@ export function registerInfraCommands(deps: CommandDeps): void {
     .description('List recent builds')
     .option('--env <name>', 'Filter by environment')
     .option('--limit <n>', 'Max builds to show')
-    .action(async (cmdOpts: { env?: string; limit?: string }) => {
+    .option('--project <name>', 'Project name (overrides loopzero.yaml lookup; plan T2.3 D6)')
+    .action(async (cmdOpts: { env?: string; limit?: string; project?: string }) => {
       const globalOpts = getGlobalOpts();
       const apiClient = new ApiClient({ baseURL: apiUrl, token: configStore.getToken() ?? undefined, onUnauthorized: handleUnauthorized });
 
@@ -53,7 +55,7 @@ export function registerInfraCommands(deps: CommandDeps): void {
 
       const limit = cmdOpts.limit ? parseInt(cmdOpts.limit, 10) : undefined;
       const exitCode = await withTimeout(
-        buildListCmd.execute({ env: cmdOpts.env, limit, json: globalOpts.json }),
+        buildListCmd.execute({ env: cmdOpts.env, limit, project: cmdOpts.project, json: globalOpts.json }),
         API_REQUEST_TIMEOUT_MS + 10_000,
         'Build list request timed out. Check your connection and try again.',
       ).catch((err: Error) => {
@@ -296,7 +298,7 @@ export function registerInfraCommands(deps: CommandDeps): void {
         },
         connectRepo: async (project, body) => apiClient.post(`/api/v1/projects/${encodeURIComponent(project)}/connect`, body),
         disconnectRepo: async (project) => apiClient.del(`/api/v1/projects/${encodeURIComponent(project)}/connect`),
-        getConnection: async (project) => apiClient.get<any>(`/api/v1/projects/${encodeURIComponent(project)}/connect`).catch(() => null),
+        getConnection: async (project) => apiClient.get<ConnectionInfo>(`/api/v1/projects/${encodeURIComponent(project)}/connect`).catch(() => null),
         writeTo,
         writeError,
       });
@@ -345,8 +347,11 @@ export function registerInfraCommands(deps: CommandDeps): void {
       const apiClient = new ApiClient({ baseURL: cloudUrl, token: configStore.getToken() ?? undefined, onUnauthorized: handleUnauthorized });
 
       const cmd = new BillingCommand({
-        getBilling: async () => apiClient.get('/v1/billing'),
-        getPortalURL: async () => apiClient.get('/v1/billing/portal'),
+        getBilling: async () => apiClient.get('/api/v1/billing'),
+        // Plan T1.1: portal is POST per api/internal/server/router.go (Stripe
+        // Customer Portal session creation has side effects). Pre-fix CLI
+        // used GET → 405 → wrapped as BILLING_TIMEOUT.
+        getPortalURL: async () => apiClient.post('/api/v1/billing/portal', {}),
         openBrowser,
         writeTo,
         writeError,
@@ -357,8 +362,24 @@ export function registerInfraCommands(deps: CommandDeps): void {
         API_REQUEST_TIMEOUT_MS + 10_000,
         'Billing portal request timed out. Check your connection and try again.',
       ).catch((err: Error) => {
-        if (globalOpts.json) { writeTo(JSON.stringify({ code: 'BILLING_TIMEOUT', error: err.message, exit_code: 3 })); }
-        else { writeError(err.message); }
+        // Plan T1.1 (2026-05-14): distinguish endpoint-missing /
+        // billing-not-configured (404, 405, 501, NO_STRIPE_CUSTOMER,
+        // "payment method on file") from real timeout. All map to
+        // BILLING_NOT_AVAILABLE exit 1 with an actionable message instead
+        // of the misleading BILLING_TIMEOUT exit 3.
+        const msg = err.message;
+        const isBillingMissing = /\b(404|405|501)\b/.test(msg)
+          || /endpoint does not exist|not implemented|not available/i.test(msg)
+          || /HTTP method is not supported/i.test(msg)
+          || /NO_STRIPE_CUSTOMER|payment method on file/i.test(msg);
+        if (isBillingMissing) {
+          const friendly = 'Billing portal is not available in self-hosted mode. Run `loopzero platform secrets backup` for license info.';
+          if (globalOpts.json) { writeTo(JSON.stringify({ code: 'BILLING_NOT_AVAILABLE', error: friendly, exit_code: 1 })); }
+          else { writeError(friendly); }
+          return 1;
+        }
+        if (globalOpts.json) { writeTo(JSON.stringify({ code: 'BILLING_TIMEOUT', error: msg, exit_code: 3 })); }
+        else { writeError(msg); }
         return 3;
       });
     });
@@ -369,8 +390,11 @@ export function registerInfraCommands(deps: CommandDeps): void {
       const apiClient = new ApiClient({ baseURL: cloudUrl, token: configStore.getToken() ?? undefined, onUnauthorized: handleUnauthorized });
 
       const cmd = new BillingCommand({
-        getBilling: async () => apiClient.get('/v1/billing'),
-        getPortalURL: async () => apiClient.get('/v1/billing/portal'),
+        getBilling: async () => apiClient.get('/api/v1/billing'),
+        // Plan T1.1: portal is POST per api/internal/server/router.go (Stripe
+        // Customer Portal session creation has side effects). Pre-fix CLI
+        // used GET → 405 → wrapped as BILLING_TIMEOUT.
+        getPortalURL: async () => apiClient.post('/api/v1/billing/portal', {}),
         openBrowser,
         writeTo,
         writeError,
@@ -381,8 +405,21 @@ export function registerInfraCommands(deps: CommandDeps): void {
         API_REQUEST_TIMEOUT_MS + 10_000,
         'Billing request timed out. Check your connection and try again.',
       ).catch((err: Error) => {
-        if (globalOpts.json) { writeTo(JSON.stringify({ code: 'BILLING_TIMEOUT', error: err.message, exit_code: 3 })); }
-        else { writeError(err.message); }
+        // Plan T1.1 (2026-05-14): same logic as portal — endpoint-missing
+        // (404/405/501) → BILLING_NOT_AVAILABLE exit 1, not BILLING_TIMEOUT
+        // exit 3.
+        const msg = err.message;
+        const isBillingMissing = /\b(404|405|501)\b/.test(msg)
+          || /endpoint does not exist|not implemented|not available/i.test(msg)
+          || /HTTP method is not supported/i.test(msg);
+        if (isBillingMissing) {
+          const friendly = 'Billing is not available in self-hosted mode. Run `loopzero platform secrets backup` for license info.';
+          if (globalOpts.json) { writeTo(JSON.stringify({ code: 'BILLING_NOT_AVAILABLE', error: friendly, exit_code: 1 })); }
+          else { writeError(friendly); }
+          return 1;
+        }
+        if (globalOpts.json) { writeTo(JSON.stringify({ code: 'BILLING_TIMEOUT', error: msg, exit_code: 3 })); }
+        else { writeError(msg); }
         return 3;
       });
     });
@@ -484,6 +521,140 @@ export function registerInfraCommands(deps: CommandDeps): void {
           writeTo,
           writeError,
           prompt: ask,
+        },
+      );
+      process.exitCode = exitCode;
+    });
+
+  // CHG-2026-04-30-INFRA-NORMALIZE / Phase 5 T5.5 — pin tenant to cell.
+  // Wraps POST /api/v1/admin/tenants/pin (admin_pin_cell.go).
+  // Mirrors the evict command's auth pattern: X-Service-Auth required;
+  // user-bearer-token NOT used (this is operator-only per
+  // MEET-INFRA-NORMALIZE-T3-multi-cell C8).
+  adminTenantsCmd
+    .command('pin')
+    .description('Pin a tenant to a specific cell (operator-only)')
+    .requiredOption('--tenant <id>', 'Tenant ID to pin')
+    .requiredOption('--cell <cellId>', "Cell ID (must match ^cell-[a-z0-9-]+$)")
+    .action(async (cmdOpts: { tenant: string; cell: string }) => {
+      const globalOpts = getGlobalOpts();
+      const isJson = globalOpts.json === true || process.argv.includes('--json');
+      const serviceAuth = process.env.LOOPZERO_SERVICE_AUTH ?? '';
+
+      if (!serviceAuth) {
+        if (isJson) {
+          writeTo(JSON.stringify({ code: 'forbidden', message: 'LOOPZERO_SERVICE_AUTH env var required for admin commands' }));
+        } else {
+          writeError('LOOPZERO_SERVICE_AUTH env var required for admin commands.');
+        }
+        process.exitCode = 4;
+        return;
+      }
+
+      try {
+        const res = await fetch(`${apiUrl}/api/v1/admin/tenants/pin`, {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            'X-Service-Auth': serviceAuth,
+          },
+          body: JSON.stringify({ tenant_id: cmdOpts.tenant, cell_id: cmdOpts.cell }),
+        });
+
+        const body = await res.text();
+        let parsed: unknown = null;
+        try {
+          parsed = JSON.parse(body);
+        } catch {
+          // tolerate non-JSON error bodies
+        }
+
+        if (res.ok) {
+          if (isJson) {
+            writeTo(body);
+          } else {
+            const r = parsed as { tenant_id: string; previous_cell: string; new_cell: string; updated: boolean } | null;
+            if (r) {
+              writeTo(`Tenant ${r.tenant_id}: ${r.previous_cell} → ${r.new_cell}${r.updated ? '' : ' (no change)'}`);
+            } else {
+              writeTo(body);
+            }
+          }
+          process.exitCode = 0;
+          return;
+        }
+
+        // Map HTTP status → CLI exit code (Rule 4):
+        //   400/404 → 1 (usage / not found)
+        //   403/401 → 4 (auth)
+        //   409     → 5 (partial — cell at capacity / not pinnable)
+        //   5xx     → 3 (deploy-class failure)
+        if (isJson) {
+          writeTo(body || JSON.stringify({ code: 'http_error', status: res.status }));
+        } else {
+          writeError(`pin failed (HTTP ${res.status}): ${body}`);
+        }
+        if (res.status === 401 || res.status === 403) {
+          process.exitCode = 4;
+        } else if (res.status === 409) {
+          process.exitCode = 5;
+        } else if (res.status >= 500) {
+          process.exitCode = 3;
+        } else {
+          process.exitCode = 1;
+        }
+      } catch (err) {
+        const msg = err instanceof Error ? err.message : String(err);
+        if (isJson) {
+          writeTo(JSON.stringify({ code: 'network', message: msg }));
+        } else {
+          writeError(`pin failed: ${msg}`);
+        }
+        process.exitCode = 5;
+      }
+    });
+
+  // T4.4 of plan 2026-05-28-meet-001-engineering-closure-plan.md.
+  // `loopzero admin release inspect <id>` — diagnostic CLI for the
+  // signing + attestation chain of a release. Wraps GET
+  // /api/v1/admin/releases/{id}/inspect.
+  const adminReleaseCmd = adminCmd
+    .command('release')
+    .description('Inspect release state (operator-only)');
+  adminReleaseCmd
+    .command('inspect <releaseId>')
+    .description('Show signing + attestation chain + audit trail for a release')
+    .action(async (releaseId: string) => {
+      const globalOpts = getGlobalOpts();
+      const serviceAuth = process.env.LOOPZERO_SERVICE_AUTH ?? '';
+
+      const getRelease = async (id: string): Promise<{
+        status: number;
+        body: AdminReleaseInspectResponse | { error: string; code: string };
+      }> => {
+        const res = await fetch(`${apiUrl}/api/v1/admin/releases/${encodeURIComponent(id)}/inspect`, {
+          method: 'GET',
+          headers: { 'X-Service-Auth': serviceAuth },
+        });
+        let body: unknown;
+        try {
+          body = await res.json();
+        } catch {
+          body = { error: 'response was not JSON', code: 'BAD_RESPONSE' };
+        }
+        return {
+          status: res.status,
+          body: body as AdminReleaseInspectResponse | { error: string; code: string },
+        };
+      };
+
+      const exitCode = await runAdminReleaseInspect(
+        { releaseId, json: globalOpts.json },
+        {
+          getServiceAuth: () => (serviceAuth ? serviceAuth : null),
+          getRelease,
+          writeTo,
+          writeError,
         },
       );
       process.exitCode = exitCode;

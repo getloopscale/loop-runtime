@@ -1,0 +1,273 @@
+---
+# Taskfile for pulumi-drill cluster operations (PROD-IDENTICAL 4-CLUSTER).
+#
+# Plan: 2026-05-16-drill-prod-identical-multicluster-plan.md v1.1
+# MEET-ASYNC-AMENDMENT-2026-05-16-001 (pending ratification)
+#
+# Drill = isolated DOKS prod-identical environment (mgmt + build + runtime +
+# runtime-2 per D1). Separate Pulumi state (`pulumi-drill` stack) + separate
+# credentials per D7 (DRILL_DO_TOKEN, DRILL_PULUMI_TOKEN, DRILL_CF_TOKEN).
+# NEVER provisioned against prod cloud account.
+#
+# Cost (revised 2026-05-16 from DO pricing API):
+#   - Hourly: ~$0.32/hr drill stack active (4 DOKS clusters + managed PG)
+#   - L0 quick smoke (~40min): ~$0.21/run
+#   - L2 scale (~65min):       ~$0.35/run
+#   - L3 100-tenant (~95min):  ~$0.51/run
+#   - Stage 2 24h soak:        ~$7.84/run
+#   - DR drill (~3h):          ~$1.15/run
+#
+# Mandatory teardown after every session (T4.1 watchdog is safety net only).
+#
+# Used by (operator-run — GitHub Actions removed 2026-05-23; the cron cadences
+# below are now operator/real-CI responsibilities, not GitHub workflows):
+#   - task drill:l2-scale     (was bi-weekly L2 cron)
+#   - drill soaks             (was Sunday cron + manual dispatch)
+#   - task drill:watchdog     (was cron every 6h — run periodically)
+#   - DR reconstruction drill (was quarterly cron)
+#   - .claude/skills/drill-test/SKILL.md (operator-friendly invocation)
+
+version: '3'
+
+# NOTE: dotenv declaration MUST be in root Taskfile.yml (Task v3 constraint).
+# Drill credentials (D7' single-token model) sourced from .env at repo root —
+# see root Taskfile.yml `dotenv:` directive (iter 10).
+# Operator reference: concepts/operations/operator-handoff-2026-05-16-drill-l2-phase4.md.
+
+tasks:
+  up:
+    desc: "Provision drill prod-identical stack (4 clusters, cost: ~$0.32/hr until teardown)"
+    summary: |
+      Provisions infra/pulumi-drill/ stack: mgmt + build + runtime + runtime-2 DOKS
+      clusters, managed PG mgmt-tier, 3 Spaces buckets, CF Zone.
+
+      Expiration tag (T3.4.bis EC-01): default 8h. Override via:
+        EXPIRES_IN=26 task drill:up   # Stage 2 24h soak
+        EXPIRES_IN=4 task drill:up    # quick smoke
+      Max 48h enforced in src/index.ts.
+    cmds:
+      - |
+        cd infra/pulumi-drill
+        EXPIRES_IN="${EXPIRES_IN:-8}"
+        # Iter 11 LIVE bug fix: pulumi login MUST happen before stack ops.
+        # Backend URL pattern mirrors prod bootstrap.
+        # DO Spaces requires region=us-east-1 (sigil) + endpoint=<region>.digitaloceanspaces.com
+        # + s3ForcePathStyle=true. Idempotent (pulumi login on already-logged-in is no-op).
+        DRILL_BACKEND="${DRILL_BACKEND_URL:-s3://loopzero-drill-pulumi-state?endpoint=sfo3.digitaloceanspaces.com&region=us-east-1&s3ForcePathStyle=true}"
+        echo "Logging in to Pulumi backend: $DRILL_BACKEND"
+        npx pulumi login "$DRILL_BACKEND"
+        npx pulumi stack select drill --create
+        npx pulumi config set loopzero-drill:expiresInHours "$EXPIRES_IN"
+        npx pulumi up --stack drill --yes --skip-preview
+        echo ""
+        echo "Drill stack provisioned (4 clusters). Expires in ${EXPIRES_IN}h."
+        echo "Per-cluster endpoints (v2 named exports per L2-unlock T1.2 D1):"
+        echo "  mgmt:      $(npx pulumi stack output --stack drill mgmtClusterEndpoint 2>/dev/null)"
+        echo "  build:     $(npx pulumi stack output --stack drill buildClusterEndpoint 2>/dev/null)"
+        echo "  runtime:   $(npx pulumi stack output --stack drill runtimeClusterEndpoint 2>/dev/null)"
+        echo "  runtime-2: $(npx pulumi stack output --stack drill runtimeCluster2Endpoint 2>/dev/null)"
+        echo "  pg:        $(npx pulumi stack output --stack drill pgHost 2>/dev/null)"
+        echo ""
+        echo "WARNING: drill stack is ACTIVE (~\$0.32/hr). Run 'task drill:down' when finished."
+        echo "Watchdog will auto-destroy at: $(date -u -d "+${EXPIRES_IN} hours" +%Y-%m-%dT%H:%M:%SZ)"
+    env:
+      PULUMI_ACCESS_TOKEN: '{{.PULUMI_ACCESS_TOKEN}}'
+      DIGITALOCEAN_TOKEN: '{{.DIGITALOCEAN_TOKEN}}'
+      CLOUDFLARE_API_TOKEN: '{{.CLOUDFLARE_API_TOKEN}}'
+      PULUMI_CONFIG_PASSPHRASE: '{{.PULUMI_CONFIG_PASSPHRASE}}'
+
+  down:
+    desc: "Destroy drill stack (MANDATORY after every session) + validator (T4.1.bis)"
+    cmds:
+      - |
+        cd infra/pulumi-drill
+        npx pulumi destroy --stack drill --yes --skip-preview || true
+        echo "Pulumi destroy returned. Running validator (T4.1.bis EC-05 fallback)..."
+      - bash infra/scripts/drill/teardown-validator.sh
+      - echo "Drill stack destroyed + validated. Cost stopped."
+    env:
+      PULUMI_ACCESS_TOKEN: '{{.PULUMI_ACCESS_TOKEN}}'
+      DIGITALOCEAN_TOKEN: '{{.DIGITALOCEAN_TOKEN}}'
+      CLOUDFLARE_API_TOKEN: '{{.CLOUDFLARE_API_TOKEN}}'
+      PULUMI_CONFIG_PASSPHRASE: '{{.PULUMI_CONFIG_PASSPHRASE}}'
+
+  status:
+    desc: "Show drill stack status without modifying it"
+    cmds:
+      - cd infra/pulumi-drill && npx pulumi stack --stack drill || echo "Stack not initialized"
+    env:
+      PULUMI_ACCESS_TOKEN: '{{.PULUMI_ACCESS_TOKEN}}'
+
+  validator:
+    desc: "Run drill-teardown-validator.sh standalone (doctl scan + force-delete leftovers)"
+    cmds:
+      - bash infra/scripts/drill/teardown-validator.sh
+    env:
+      DIGITALOCEAN_TOKEN: '{{.DIGITALOCEAN_TOKEN}}'
+
+  watchdog:
+    desc: "Run drill-watchdog.sh standalone (scan + destroy if expired)"
+    summary: |
+      For local testing of watchdog logic. Operator runs periodically
+      (every ~6h while a drill stack is active; GitHub cron removed 2026-05-23).
+    cmds:
+      - bash infra/scripts/drill/watchdog.sh
+    env:
+      DIGITALOCEAN_TOKEN: '{{.DIGITALOCEAN_TOKEN}}'
+      PULUMI_ACCESS_TOKEN: '{{.PULUMI_ACCESS_TOKEN}}'
+      PULUMI_CONFIG_PASSPHRASE: '{{.PULUMI_CONFIG_PASSPHRASE}}'
+
+  preflight:
+    desc: "Operator pre-flight gate (5 exit codes; required before drill:l2-scale)"
+    summary: |
+      Consolidates 4 pre-flight checks into 1 command:
+        1. D7' credentials (4 tokens: DO + Pulumi + CF + passphrase)
+        2. 5 L2-unlock scripts present + executable
+        3. Advisory mode active (no credentials collision)
+        4. No leftover drill stack from previous session
+
+      Exit codes:
+        0 = all PASS, proceed with task drill:l2-scale
+        1 = missing credentials
+        2 = missing scripts
+        3 = isolation/collision detected
+        4 = leftover drill stack (run task drill:down first)
+        5 = argument error
+
+      For machine-readable output: bash infra/scripts/drill/preflight.sh --json
+    cmds:
+      - bash infra/scripts/drill/preflight.sh
+    env:
+      DIGITALOCEAN_TOKEN: '{{.DIGITALOCEAN_TOKEN}}'
+      PULUMI_ACCESS_TOKEN: '{{.PULUMI_ACCESS_TOKEN}}'
+      CLOUDFLARE_API_TOKEN: '{{.CLOUDFLARE_API_TOKEN}}'
+      PULUMI_CONFIG_PASSPHRASE: '{{.PULUMI_CONFIG_PASSPHRASE}}'
+
+  l2-scale:
+    desc: "Full L2 scale test cycle: up + 50-concurrent test + down (~$0.35/run, ~65min)"
+    summary: |
+      End-to-end drill L2 test:
+        0. Pre-flight gate (preconditions — drill:preflight automatic)
+        1. Provision drill stack (4 clusters, ~25min)
+        2. Mint JWT (drill-mint-jwt.sh)
+        3. Bootstrap cell wiring (3 cells per D3)
+        4. Run TestL2_1_FiftyConcurrentDeploys against drill API
+        5. Mandatory teardown + validator
+
+      Pass criteria: success >= 90%, p95 <= 10min.
+    preconditions:
+      - sh: bash infra/scripts/drill/preflight.sh
+        msg: "Pre-flight gate failed — see exit code + run 'task drill:preflight' for diagnosis"
+    cmds:
+      - |
+        set -euo pipefail
+        echo "=== Phase 1: Provision drill stack ==="
+        task drill:up
+
+        echo ""
+        echo "=== Phase 2: Export drill mgmt kubeconfig + API URL ==="
+        # v2 flat named exports per L2-unlock T1.2 D1
+        DRILL_KC=/tmp/drill-mgmt-kc.yaml
+        cd infra/pulumi-drill && npx pulumi stack output --stack drill mgmtClusterKubeconfig --show-secrets > "$DRILL_KC"
+        chmod 600 "$DRILL_KC"
+        cd - > /dev/null
+        # API URL is per drill domain (Pulumi sets up DNS post-bootstrap)
+        API_URL="https://api.loopzero-drill.example"
+
+        echo ""
+        echo "=== Phase 3: Populate per-cluster kubeconfigs (L2-unlock T2.1 D2) ==="
+        # drill-helmfile-bootstrap.sh requires DRILL_KUBECONFIG_DIR with 4 files.
+        mkdir -p /tmp/drill-kc
+        cd infra/pulumi-drill
+        for c in mgmt build runtime runtime-2; do
+          case "$c" in
+            runtime-2) KEY="runtimeCluster2Kubeconfig" ;;
+            mgmt)      KEY="mgmtClusterKubeconfig" ;;
+            build)     KEY="buildClusterKubeconfig" ;;
+            runtime)   KEY="runtimeClusterKubeconfig" ;;
+          esac
+          npx pulumi stack output --stack drill "$KEY" --show-secrets > /tmp/drill-kc/$c.yaml
+          chmod 600 /tmp/drill-kc/$c.yaml
+        done
+        cd - > /dev/null
+
+        echo ""
+        echo "=== Phase 4a: Bootstrap LoopZero platform (L2-unlock T2.1 + T2.1.bis) ==="
+        # Single wrapper replaces 6+ manual helmfile sync steps.
+        # STRICT_BOOTSTRAP=true: fail-fast on any helmfile partial sync.
+        # Sets PG_SSLMODE=require automatically (T2.1.bis EC-02 for managed PG).
+        BOOTSTRAP_EXIT=0
+        # Plan v1.2 T5.1: LOOPZERO_TEST_ENV=drill is canonical (DRILL_KUBECONFIG_DIR
+        # retained as path source; removal of dual-var pending T5.2 deprecation window).
+        LOOPZERO_TEST_ENV=drill DRILL_KUBECONFIG_DIR=/tmp/drill-kc STRICT_BOOTSTRAP=true \
+          bash infra/scripts/drill/drill-helmfile-bootstrap.sh || BOOTSTRAP_EXIT=$?
+        if [ "$BOOTSTRAP_EXIT" -ne 0 ]; then
+          echo "ERROR: drill-helmfile-bootstrap.sh failed (exit $BOOTSTRAP_EXIT)"
+          echo "  Resume via: bash infra/scripts/drill/drill-helmfile-bootstrap.sh --from-cluster <name>"
+          task drill:down
+          exit "$BOOTSTRAP_EXIT"
+        fi
+
+        echo ""
+        echo "=== Phase 4b: Wait for API health (60 × 10s) ==="
+        for i in $(seq 1 60); do
+          if curl -sf -m 5 "$API_URL/api/v1/health" > /dev/null; then
+            echo "API healthy after attempt $i"
+            break
+          fi
+          sleep 10
+        done
+
+        echo ""
+        echo "=== Phase 4c: Mint JWT for L2 test (T2.2) ==="
+        if [ ! -x infra/scripts/drill/drill-mint-jwt.sh ]; then
+          echo "ERROR: drill-mint-jwt.sh missing"
+          task drill:down
+          exit 1
+        fi
+        export DRILL_KUBECONFIG="$DRILL_KC"
+        JWT=$(bash infra/scripts/drill/drill-mint-jwt.sh)
+
+        echo ""
+        echo "=== Phase 5: Bootstrap cell wiring (T2.3 D3 mapping) ==="
+        # Plan v1.2 T4.2: consolidated bootstrap-cell-cc.sh --cell --env
+        bash infra/helmfile/scripts/bootstrap-cell-cc.sh --cell default --env drill
+        bash infra/helmfile/scripts/bootstrap-cell-cc.sh --cell 1 --env drill
+        bash infra/helmfile/scripts/bootstrap-cell-cc.sh --cell 2 --env drill
+
+        echo ""
+        echo "=== Phase 6: Run L2 scale (50 concurrent) ==="
+        # Pass criteria: success_rate >= 90% + p95 <= 10min
+        L2_EXIT=0
+        LOOPZERO_E2E=1 LOOPZERO_REAL_DEPLOY=1 LOOPZERO_LOAD_LEVEL=l2 \
+        LOOPZERO_L2_CONCURRENCY='{{.L2_CONCURRENCY | default "50"}}' \
+        LOOPZERO_DRILL_API_URL="$API_URL" \
+        LOOPZERO_TOKEN="$JWT" \
+          go test -timeout 120m -v \
+            -run TestL2_1_FiftyConcurrentDeploys \
+            ./infra/tests/load/... || L2_EXIT=$?
+
+        echo ""
+        echo "=== Phase 7: Teardown (MANDATORY) ==="
+        task drill:down
+
+        if [ "$L2_EXIT" -ne 0 ]; then
+          echo "L2 scale test FAILED (exit $L2_EXIT)"
+          exit "$L2_EXIT"
+        fi
+        echo "L2 scale test PASSED"
+    env:
+      PULUMI_ACCESS_TOKEN: '{{.PULUMI_ACCESS_TOKEN}}'
+      DIGITALOCEAN_TOKEN: '{{.DIGITALOCEAN_TOKEN}}'
+      CLOUDFLARE_API_TOKEN: '{{.CLOUDFLARE_API_TOKEN}}'
+      PULUMI_CONFIG_PASSPHRASE: '{{.PULUMI_CONFIG_PASSPHRASE}}'
+
+  dr-drill:
+    desc: "Full disaster recovery drill (alias for pulumi-reconstruction-drill.yml local equivalent)"
+    cmds:
+      - bash infra/scripts/drill/dr-drill.sh "{{.STAGE | default \"all\"}}"
+    env:
+      PULUMI_ACCESS_TOKEN: '{{.PULUMI_ACCESS_TOKEN}}'
+      DIGITALOCEAN_TOKEN: '{{.DIGITALOCEAN_TOKEN}}'
+      CLOUDFLARE_API_TOKEN: '{{.CLOUDFLARE_API_TOKEN}}'
+      PULUMI_CONFIG_PASSPHRASE: '{{.PULUMI_CONFIG_PASSPHRASE}}'

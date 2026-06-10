@@ -120,7 +120,7 @@ func ActivateReleaseKernel(
 		span.SetStatus(codes.Error, err.Error())
 		return fmt.Errorf("activate release: re-fetch inside lock: %w", err)
 	}
-	if current.Status != string(statemachine.ReleasePending) {
+	if current.Status != string(statemachine.RPhPending) {
 		logger.Info("activate release: already transitioned, skipping",
 			"release_id", release.ID, "current_status", current.Status)
 		return nil
@@ -132,8 +132,46 @@ func ActivateReleaseKernel(
 		return fmt.Errorf("activate release: get previous active: %w", err)
 	}
 
-	// Step 2: Transition PENDING → ACTIVE.
-	if _, err := releaseStore.UpdateStatus(ctx, tx, release.ID, string(statemachine.ReleaseSyncCompleted)); err != nil {
+	// Step 2: Supersede previous active release BEFORE activating the new one.
+	// T5.1 CV-M-1 dogfood regression fix (2026-06-02): partial unique index
+	// `idx_releases_active_unique` (migration 000022) enforces at-most-one-
+	// ACTIVE-per-env at the DB layer. Pre-fix order (UPDATE new ACTIVE first,
+	// then UPDATE prev SUPERSEDED) hit SQLSTATE 23505 because for an instant
+	// inside the tx, two rows were ACTIVE for the same (tenant, project, env)
+	// — which is precisely what the index now forbids. By superseding the
+	// previous release FIRST, we never have two ACTIVE rows simultaneously.
+	// Both UPDATEs run inside the same tx (withEnvironmentLock), so they
+	// remain atomic from any external observer's perspective: either both
+	// succeed (prev SUPERSEDED + new ACTIVE) or both rollback (prev stays
+	// ACTIVE + new stays PENDING).
+	//
+	// State machine validity:
+	//   - prev: ACTIVE --(RPEventNewActivated)--> SUPERSEDED  ✓
+	//   - new:  PENDING --(RPEventSyncCompleted)--> ACTIVE   ✓
+	// Both transitions are independent — order swap is safe.
+	//
+	// LIVE-caught regression: Journey 06 Rollback "v2 release is ACTIVE"
+	// timed out at 6m because convergence loop retried indefinitely with
+	// CONCURRENT_ACTIVATION errors until release reaper killed at sync
+	// timeout. Pre-T5.1 partial index, this bug was silent (2 ACTIVE rows
+	// coexisted briefly); post-T5.1 the index surfaces it, and the
+	// CONCURRENT_ACTIVATION typed error (CV-M-1, commit d8dbeaf4) made
+	// the loop fail-fast instead of silently retrying. The proper fix is
+	// at the activation kernel: invert the order.
+	if prevRelease != nil && prevRelease.ID != release.ID {
+		if _, supersedeErr := releaseStore.UpdateStatus(ctx, tx, prevRelease.ID, string(statemachine.RPEventNewActivated)); supersedeErr != nil {
+			logger.Error("activate release: failed to supersede previous",
+				"prev_id", prevRelease.ID, "new_id", release.ID, "error", supersedeErr)
+			return fmt.Errorf("activate release: supersede previous %s: %w", prevRelease.ID, supersedeErr)
+		}
+		logger.Info("activate release: superseded previous",
+			"prev_id", prevRelease.ID, "new_id", release.ID)
+	}
+
+	// Step 3: Transition PENDING → ACTIVE. With the previous release now
+	// SUPERSEDED (Step 2), the partial unique index allows this transition
+	// without violating the at-most-one-ACTIVE-per-env invariant.
+	if _, err := releaseStore.UpdateStatus(ctx, tx, release.ID, string(statemachine.RPEventSyncCompleted)); err != nil {
 		return fmt.Errorf("activate release: transition to ACTIVE: %w", err)
 	}
 
@@ -148,7 +186,7 @@ func ActivateReleaseKernel(
 	// Phase 4A: Deploy lead time — same value, separate histogram for executive SLO tracking.
 	metrics.DeployLeadTime.WithLabelValues(release.TenantID, release.Environment).Observe(float64(durationSecs))
 
-	// Step 3: Emit deploy.live SSE event.
+	// Step 4: Emit deploy.live SSE event.
 	liveData := safeJSONMarshal(map[string]interface{}{
 		"deploy_id": deriveDeployID(release.ID),
 		"status":    "live",
@@ -157,20 +195,9 @@ func ActivateReleaseKernel(
 		logger.Error("activate release: failed to emit deploy.live", "release_id", release.ID, "error", err)
 	}
 
-	// Step 4: Update environment target pointer.
+	// Step 5: Update environment target pointer.
 	if err := envTargetStore.SetActive(ctx, tx, release.TenantID, release.ProjectID, release.Environment, release.ID); err != nil {
 		return fmt.Errorf("activate release: set active: %w", err)
-	}
-
-	// Step 5: Supersede previous active release (queried in Step 1, before activation).
-	if prevRelease != nil && prevRelease.ID != release.ID {
-		if _, supersedeErr := releaseStore.UpdateStatus(ctx, tx, prevRelease.ID, string(statemachine.ReleaseNewActivated)); supersedeErr != nil {
-			logger.Error("activate release: failed to supersede previous",
-				"prev_id", prevRelease.ID, "new_id", release.ID, "error", supersedeErr)
-		} else {
-			logger.Info("activate release: superseded previous",
-				"prev_id", prevRelease.ID, "new_id", release.ID)
-		}
 	}
 
 	// Step 6: Emit deploy.completed SSE event — CLI waits for this to exit.
@@ -192,14 +219,35 @@ func ActivateReleaseKernel(
 		"duration_seconds": durationSecs,
 		"apps":             appResults,
 	})
-	if _, err := eventStore.Append(ctx, release.BuildID, "deploy.completed", completedData); err != nil {
-		logger.Error("activate release: failed to emit deploy.completed", "release_id", release.ID, "error", err)
+	// T5.6 of deep-review-2026-05-10-remediation-plan (find_event_completed_swallowed MEDIUM):
+	// `deploy.completed` is the event the CLI waits on — a single emit
+	// failure means the CLI hangs until the deploy timeout. 3 attempts
+	// with 100ms backoff covers the typical "transient lock contention"
+	// failure mode without adding meaningful tail latency.
+	for attempt := 1; attempt <= 3; attempt++ {
+		_, err := eventStore.Append(ctx, release.BuildID, "deploy.completed", completedData)
+		if err == nil {
+			break
+		}
+		logger.Error("activate release: failed to emit deploy.completed",
+			"release_id", release.ID, "attempt", attempt, "error", err)
+		if attempt < 3 {
+			select {
+			case <-ctx.Done():
+				return ctx.Err()
+			case <-time.After(100 * time.Millisecond):
+			}
+		}
 	}
 
 	// Step 7: Notify external systems (GitHub commit status, etc.)
+	// T6.4 of deep-review-remediation-plan (closes find_code_004 / CODE-004 MEDIUM).
+	// context.WithoutCancel preserves trace + correlation ID values but
+	// detaches cancellation so the callback survives request close.
 	if onReleaseActivated != nil {
+		parentCtx := context.WithoutCancel(ctx)
 		go func() {
-			cbCtx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+			cbCtx, cancel := context.WithTimeout(parentCtx, 30*time.Second)
 			defer cancel()
 			onReleaseActivated(cbCtx, release.TenantID, release.ProjectID, release.BuildID, release.Environment)
 		}()
@@ -266,7 +314,7 @@ func (o *BuildOrchestrator) RetryRelease(ctx context.Context, releaseID string) 
 		return fmt.Errorf("retry release: get release: %w", err)
 	}
 
-	if release.Status != string(statemachine.ReleaseGitMirrorFailed) {
+	if release.Status != string(statemachine.RPhGitMirrorFailed) {
 		return fmt.Errorf("retry release: release %s is in %s state, not GIT_MIRROR_FAILED — cannot retry", releaseID, release.Status)
 	}
 
@@ -301,7 +349,7 @@ func (o *BuildOrchestrator) RetryRelease(ctx context.Context, releaseID string) 
 
 	// Record success inside lock
 	return o.locker.WithLock(ctx, release.TenantID, release.ProjectID, release.Environment, func(tx db.DBTX) error {
-		if _, err := o.releaseStore.UpdateStatus(ctx, tx, releaseID, string(statemachine.ReleaseGitMirrorRetried)); err != nil {
+		if _, err := o.releaseStore.UpdateStatus(ctx, tx, releaseID, string(statemachine.RPEventGitMirrorRetried)); err != nil {
 			return fmt.Errorf("retry release: transition to PENDING: %w", err)
 		}
 

@@ -1,0 +1,61 @@
+# Polaris config for LoopZero Helm chart audits.
+# Reference: https://polaris.docs.fairwinds.com/checks/
+# Plan T1.2: baseline-first; severity=warning until Phase 3.3 promotes to danger.
+#
+# Severity levels: ignore | warning | danger
+# - warning: emit in report, do not fail CI
+# - danger:  fail CI when --set-exit-code-on-danger is passed
+
+checks:
+  # === Security context ===
+  runAsRootAllowed: warning
+  runAsPrivileged: danger
+  notReadOnlyRootFilesystem: warning
+  privilegeEscalationAllowed: danger
+  dangerousCapabilities: danger
+  insecureCapabilities: warning
+  hostIPCSet: danger
+  hostPIDSet: danger
+  hostNetworkSet: warning
+  hostPortSet: warning
+
+  # === Resource limits ===
+  cpuLimitsMissing: ignore        # KEDA scale-to-zero conflicts; revisit separately
+  cpuRequestsMissing: warning
+  memoryLimitsMissing: warning
+  memoryRequestsMissing: warning
+
+  # === Probes ===
+  livenessProbeMissing: danger
+  readinessProbeMissing: danger
+
+  # === Image ===
+  tagNotSpecified: danger
+  pullPolicyNotAlways: ignore     # IfNotPresent is preferred for cache hits
+
+  # === Networking ===
+  hostAliasSet: warning
+  missingNetworkPolicy: ignore    # NetworkPolicies are managed in separate chart
+
+  # === Misc ===
+  deploymentMissingReplicas: warning
+  priorityClassNotSet: ignore     # Set selectively per chart
+
+# Exemptions: charts/components that legitimately need elevated privilege.
+# Per Plan ADR D7 + ADR-of-exception files in infra/helm/<chart>/.
+# Polaris uses controllerNames; these are wildcards.
+exemptions:
+  - controllerNames:
+      - promtail
+    rules:
+      - runAsRootAllowed
+      - notReadOnlyRootFilesystem
+      - hostNetworkSet
+  - controllerNames:
+      - nfs-server-provisioner
+    rules:
+      - runAsRootAllowed
+      - runAsPrivileged
+      - notReadOnlyRootFilesystem
+      - dangerousCapabilities
+      - insecureCapabilities

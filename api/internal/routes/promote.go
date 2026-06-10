@@ -15,6 +15,7 @@ import (
 
 	"github.com/go-chi/chi/v5"
 
+	"github.com/loopzero/loopzero/api/internal/correlation"
 	"github.com/loopzero/loopzero/api/internal/middleware"
 	loopzeroerrors "github.com/loopzero/loopzero/pkg/errors"
 )
@@ -127,7 +128,11 @@ func (h *PromoteHandler) Create(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	correlationID := r.Header.Get("X-Correlation-ID")
+	// T6.1 of plan 2026-06-01-p3-infra-observability-test-debt — use the
+	// canonical `Correlation-ID` reader with backward-compat fallback to
+	// `X-Correlation-ID` so existing CLI clients keep working through
+	// one release cycle (helper emits a deprecation WARN on legacy hits).
+	correlationID := correlation.Read(r)
 
 	// Execute promotion
 	result, err := h.service.Promote(ctx, PromoteInput{

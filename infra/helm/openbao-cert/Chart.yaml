@@ -1,0 +1,15 @@
+# SPDX-License-Identifier: Apache-2.0
+# PRODLIKE.3 — cert-manager Certificate for OpenBao HTTPS listener.
+#
+# Small standalone chart so Helmfile can sequence: cluster-issuer →
+# openbao-cert → openbao (which mounts the resulting Secret).
+#
+# Per VK validation (vault-local k3d): self-signed CA from issuer
+# `self-signed-issuer` (cluster-issuer chart). Per prod: same pattern.
+
+apiVersion: v2
+name: openbao-cert
+description: cert-manager Certificate CR for OpenBao HTTPS listener (mounted by openbao chart)
+type: application
+version: 0.1.0
+appVersion: "1.0.0"

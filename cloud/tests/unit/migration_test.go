@@ -4,6 +4,7 @@
 package unit
 
 import (
+	"context"
 	"testing"
 
 	"github.com/loopzero/loopzero/cloud/internal/auth"
@@ -12,11 +13,11 @@ import (
 func TestIdentityMigratorNilDB(t *testing.T) {
 	// When DB is nil (dev mode), migration should be a no-op
 	migrator := auth.NewIdentityMigrator(nil, nil)
-	if err := migrator.EnsureMigration(nil, "kratos-id-123", "test@example.com"); err != nil {
+	if err := migrator.EnsureMigration(context.TODO(), "kratos-id-123", "test@example.com"); err != nil {
 		t.Errorf("EnsureMigration with nil DB should not error: %v", err)
 	}
 
-	userID, err := migrator.GetLegacyUserID(nil, "kratos-id-123")
+	userID, err := migrator.GetLegacyUserID(context.TODO(), "kratos-id-123")
 	if err != nil {
 		t.Errorf("GetLegacyUserID with nil DB should not error: %v", err)
 	}

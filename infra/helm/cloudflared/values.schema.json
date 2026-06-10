@@ -1,0 +1,76 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://loopzero.platform/schemas/cloudflared/values.schema.json",
+  "title": "Cloudflared Tunnel LoopZero wrapper values schema",
+  "description": "Plan 2026-05-20 T2.5 ext — fail-fast on CF Tunnel deployment drift. Catches: empty tokenSecret refs (silent tunnel-doesn't-register), replicaCount=0 (no HA), image.tag=latest (drift), metricsPort outside non-privileged range (would conflict with runAsNonRoot).",
+  "type": "object",
+  "properties": {
+    "replicaCount": {
+      "type": "integer",
+      "minimum": 0,
+      "maximum": 10,
+      "description": "Cloudflared replicas. Default 2 for HA (CF Tunnel handles connection multiplexing). 0 is a legitimate DISABLED state used by runtime.helmfile for multi-cluster LOCAL topology (standalone-multi: 4 separate k3d clusters use direct cross-cluster networking, no CF Tunnel). >10 = diminishing returns + CF tunnel session overhead."
+    },
+    "image": {
+      "type": "object",
+      "required": ["repository", "tag"],
+      "properties": {
+        "repository": {
+          "type": "string",
+          "minLength": 1,
+          "pattern": "^[a-z0-9][a-z0-9.-]*(/[a-z0-9._-]+)*$",
+          "description": "Container image repository. Default cloudflare/cloudflared (Docker Hub official)."
+        },
+        "tag": {
+          "type": "string",
+          "minLength": 1,
+          "not": { "const": "latest" },
+          "description": "Image tag. 'latest' explicitly REJECTED (Bug #16 pattern: drill DOCR rejects, prod has supply chain risk). Use date-stamped or SemVer release."
+        },
+        "pullPolicy": {
+          "type": "string",
+          "enum": ["Always", "IfNotPresent", "Never"]
+        }
+      }
+    },
+    "tokenSecret": {
+      "type": "object",
+      "required": ["name", "key"],
+      "properties": {
+        "name": {
+          "type": "string",
+          "minLength": 1,
+          "pattern": "^[a-z0-9]([-a-z0-9]*[a-z0-9])?$",
+          "description": "Secret resource name (RFC 1123 DNS label). MUST match Secret created by generate-runtime-secrets.sh. Mismatch = tunnel pod CrashLoopBackOff with 'CLOUDFLARED_TOKEN env not found'."
+        },
+        "key": {
+          "type": "string",
+          "minLength": 1,
+          "description": "Secret data key holding the actual tunnel token value (default 'token')."
+        }
+      }
+    },
+    "resources": {
+      "type": "object",
+      "required": ["requests", "limits"],
+      "properties": {
+        "limits": {
+          "type": "object",
+          "required": ["cpu", "memory"]
+        },
+        "requests": {
+          "type": "object",
+          "required": ["cpu", "memory"]
+        }
+      }
+    },
+    "metricsPort": {
+      "type": "integer",
+      "minimum": 1024,
+      "maximum": 65535,
+      "description": "Cloudflared metrics + liveness/readiness port. <1024 = privileged port (would require root; conflicts with non-root pod). Default 2000."
+    }
+  },
+  "required": ["replicaCount", "image", "tokenSecret", "resources"],
+  "additionalProperties": true
+}

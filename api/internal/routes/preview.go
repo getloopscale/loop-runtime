@@ -30,31 +30,13 @@ type PreviewStore interface {
 	RequestDeletion(ctx context.Context, tenantID, previewID string) error
 }
 
-// PreviewService is the optional service used by the Create handler. When
-// nil, POST routes are not registered (the GitHub PR webhook is the
-// primary creation path; manual POST is mostly for tests/admin).
-type PreviewService interface {
-	CreatePreview(ctx context.Context, req CreatePreviewRequest) (*domain.Preview, error)
-}
-
-// CreatePreviewRequest is the JSON payload accepted by the Create handler.
-// Field names match the CLI's preview shape and the github.PullRequestEvent
-// fields used by the webhook handler (T3.1).
-//
-// tenantID is private and never read from the request body — it is injected
-// by the handler from the authenticated user context to prevent
-// cross-tenant creations.
-type CreatePreviewRequest struct {
-	ProjectID      string `json:"project_id"`
-	PRNumber       int    `json:"pr_number"`
-	Branch         string `json:"branch"`
-	CommitSHA      string `json:"commit_sha"`
-	RepoFullName   string `json:"repo_full_name,omitempty"`
-	InstallationID int64  `json:"installation_id,omitempty"`
-	TTLHours       int    `json:"ttl_hours,omitempty"` // 0 = use default (72h)
-
-	tenantID string // injected from middleware; never deserialized
-}
+// PreviewService + CreatePreviewRequest live in domain/ (T1.3 of
+// deep-review-remediation-plan, closes find_arch_001 partial). Aliases keep
+// existing handler call sites working without churn.
+type (
+	PreviewService       = domain.PreviewService
+	CreatePreviewRequest = domain.CreatePreviewRequest
+)
 
 // PreviewHandler handles preview environment API endpoints.
 type PreviewHandler struct {
@@ -254,7 +236,7 @@ func (h *PreviewHandler) Create(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// Inject tenant from authenticated context — never trust client.
-	body.tenantID = tenantID
+	body.SetTenantID(tenantID)
 
 	preview, err := h.service.CreatePreview(ctx, body)
 	if err != nil {
@@ -271,10 +253,5 @@ func (h *PreviewHandler) Create(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusAccepted, preview)
 }
 
-// tenantID accessor — kept private so the API surface for outside callers
-// stays JSON-driven; PreviewService consumes it via the same struct in-package.
-func (req *CreatePreviewRequest) TenantID() string { return req.tenantID }
-
-// SetTenantID allows trusted internal callers (webhook handler) to inject
-// the resolved tenant before forwarding to the service.
-func (req *CreatePreviewRequest) SetTenantID(t string) { req.tenantID = t }
+// TenantID + SetTenantID methods now live in domain/preview_request.go alongside
+// the canonical CreatePreviewRequest type (T1.3).

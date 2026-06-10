@@ -5,12 +5,14 @@ package services
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"log/slog"
 	"time"
 
 	"github.com/loopzero/loopzero/api/internal/db"
-	"github.com/loopzero/loopzero/api/internal/routes"
+	"github.com/loopzero/loopzero/api/internal/domain"
+	loopzeroerrors "github.com/loopzero/loopzero/pkg/errors"
 )
 
 // WorkflowCanceller cancels Argo Workflows by ID.
@@ -29,7 +31,9 @@ type ArgoSyncer interface {
 type ProjectDeleterDeps struct {
 	BuildStore        db.BuildStore
 	EnvTargetStore    db.EnvironmentTargetStore
+	ReleaseStore      db.ReleaseStore // nil-safe: when nil, skips release cascade-cancel (legacy callers)
 	ProjectStore      ProjectDeleteProjectStore
+	ScalingStore      db.ScalingStore // nil-safe: when nil, skips app_scaling_config cascade
 	Locker            EnvironmentLocker
 	GitOps            GitOpsPusher
 	WorkflowCanceller WorkflowCanceller // nil-safe: skips workflow cancel if not set
@@ -37,7 +41,8 @@ type ProjectDeleterDeps struct {
 }
 
 // ProjectDeleteProjectStore defines the project store operations needed by ProjectDeleter.
-// Separate from routes.ProjectStore to avoid circular dependency.
+// Narrow store interface — separate from the broader project store consumed by
+// the routes layer (ISP).
 type ProjectDeleteProjectStore interface {
 	DeleteProject(ctx context.Context, tenantID, projectID string) error
 }
@@ -46,7 +51,9 @@ type ProjectDeleteProjectStore interface {
 type ProjectDeleter struct {
 	buildStore        db.BuildStore
 	envTargetStore    db.EnvironmentTargetStore
+	releaseStore      db.ReleaseStore
 	projectStore      ProjectDeleteProjectStore
+	scalingStore      db.ScalingStore
 	locker            EnvironmentLocker
 	gitops            GitOpsPusher
 	workflowCanceller WorkflowCanceller
@@ -58,7 +65,9 @@ func NewProjectDeleter(deps ProjectDeleterDeps) *ProjectDeleter {
 	return &ProjectDeleter{
 		buildStore:        deps.BuildStore,
 		envTargetStore:    deps.EnvTargetStore,
+		releaseStore:      deps.ReleaseStore,
 		projectStore:      deps.ProjectStore,
+		scalingStore:      deps.ScalingStore,
 		locker:            deps.Locker,
 		gitops:            deps.GitOps,
 		workflowCanceller: deps.WorkflowCanceller,
@@ -79,8 +88,8 @@ func NewProjectDeleter(deps ProjectDeleterDeps) *ProjectDeleter {
 //  1. ListByProject -> get all envs
 //  2. For each env: single-env flow
 //  3. If all envs removed: delete project from projects table
-func (d *ProjectDeleter) Delete(ctx context.Context, req routes.ProjectDeleteInput) (*routes.ProjectDeleteOutput, error) {
-	result := &routes.ProjectDeleteOutput{
+func (d *ProjectDeleter) Delete(ctx context.Context, req domain.ProjectDeleteInput) (*domain.ProjectDeleteOutput, error) {
+	result := &domain.ProjectDeleteOutput{
 		ProjectName:         req.ProjectName,
 		DeletedEnvironments: []string{},
 	}
@@ -143,17 +152,48 @@ func (d *ProjectDeleter) Delete(ctx context.Context, req routes.ProjectDeleteInp
 			}
 			// Always trigger ArgoCD sync after fallback — even if gitops.Remove
 			// returned error, there may be orphaned K8s resources to prune.
+			// finding-2026-05-26-dogfood-cleanup-prove-death-race: if a previous
+			// broken Rollout left the app's operationState=Failed, the first
+			// TriggerSync will hit ErrSyncOperationInProgress; terminate stuck
+			// op + retry once so the prune actually executes.
 			if d.sync != nil {
 				argoAppName := req.TenantID + "-production"
 				syncCtx, syncCancel := context.WithTimeout(ctx, 30*time.Second)
 				defer syncCancel()
-				if syncErr := d.sync.TriggerSync(syncCtx, argoAppName); syncErr != nil {
+				syncErr := d.sync.TriggerSync(syncCtx, argoAppName)
+				if syncErr != nil && errors.Is(syncErr, loopzeroerrors.ErrSyncOperationInProgress) {
+					slog.Warn("argocd sync stuck on fallback — terminating + retry",
+						"app", argoAppName)
+					type terminator interface {
+						TerminateOperation(ctx context.Context, appName string) error
+					}
+					if t, ok := d.sync.(terminator); ok {
+						if termErr := t.TerminateOperation(syncCtx, argoAppName); termErr == nil {
+							time.Sleep(1 * time.Second)
+							syncErr = d.sync.TriggerSync(syncCtx, argoAppName)
+						}
+					}
+				}
+				if syncErr != nil {
 					slog.Warn("argocd sync after fallback delete failed",
 						"app", argoAppName, "error", syncErr)
 				} else {
 					slog.Info("argocd sync triggered after fallback gitops remove",
 						"app", argoAppName, "project", req.ProjectName)
 				}
+			}
+		}
+
+		// Cascade: remove all app_scaling_config rows for this project so a
+		// future project of the same name does not inherit replicas/HPA state
+		// from its predecessor (which would surface as REPLICAS_EXCEED_PLAN
+		// on a clean redeploy). nil-safe — legacy callers without ScalingStore
+		// keep their existing behavior.
+		if d.scalingStore != nil {
+			scalingProjectID := projectNameForQueries
+			if err := d.scalingStore.DeleteByProject(ctx, nil, req.TenantID, scalingProjectID); err != nil {
+				slog.Warn("failed to delete scaling configs (non-fatal, may leave orphan rows)",
+					"project_id", scalingProjectID, "error", err)
 			}
 		}
 
@@ -169,7 +209,7 @@ func (d *ProjectDeleter) Delete(ctx context.Context, req routes.ProjectDeleteInp
 
 // deleteEnvironment deletes a single environment for a project.
 // Returns the number of cancelled builds.
-func (d *ProjectDeleter) deleteEnvironment(ctx context.Context, req routes.ProjectDeleteInput, env string) (int, error) {
+func (d *ProjectDeleter) deleteEnvironment(ctx context.Context, req domain.ProjectDeleteInput, env string) (int, error) {
 	var cancelledBuilds int
 	var workflowIDs []string
 
@@ -182,7 +222,7 @@ func (d *ProjectDeleter) deleteEnvironment(ctx context.Context, req routes.Proje
 		buildProjectID = req.ProjectID // fallback to UUID if name unavailable
 	}
 
-	// Phase 1 (Lock): Cancel active builds + delete environment target
+	// Phase 1 (Lock): Cancel active builds + cascade-cancel releases + delete environment target
 	err := d.locker.WithLock(ctx, req.TenantID, buildProjectID, env, func(tx db.DBTX) error {
 		// Cancel active builds inside the lock (Rule 6)
 		cancelled, wfIDs, err := d.buildStore.CancelActiveBuilds(ctx, tx, req.TenantID, buildProjectID, env)
@@ -191,6 +231,21 @@ func (d *ProjectDeleter) deleteEnvironment(ctx context.Context, req routes.Proje
 		}
 		cancelledBuilds = cancelled
 		workflowIDs = wfIDs
+
+		// Cascade-cancel non-terminal releases. Without this, ACTIVE/PENDING rows
+		// linger in DB after the workload is gone — promote/rollback would resolve
+		// to those zombie rows on the next deploy and use stale git commits.
+		if d.releaseStore != nil {
+			cancelledReleases, releaseErr := d.releaseStore.CancelAllByEnv(ctx, tx, req.TenantID, buildProjectID, env)
+			if releaseErr != nil {
+				return fmt.Errorf("cancel releases cascade: %w", releaseErr)
+			}
+			if cancelledReleases > 0 {
+				slog.Info("project delete: cancelled releases via state-machine cascade",
+					"tenant_id", req.TenantID, "project", buildProjectID, "environment", env,
+					"cancelled", cancelledReleases)
+			}
+		}
 
 		// Delete environment target (uses project name, not UUID — same as builds)
 		if err := d.envTargetStore.DeleteTarget(ctx, tx, req.TenantID, buildProjectID, env); err != nil {
@@ -232,15 +287,71 @@ func (d *ProjectDeleter) deleteEnvironment(ctx context.Context, req routes.Proje
 	if d.sync != nil {
 		// Trigger ArgoCD sync with prune to remove K8s resources after gitops manifests
 		// were deleted. Without this, manual-sync ArgoCD won't detect the removal.
+		//
+		// Plan 2026-05-19-drill-skills-rigor-restoration Bug D fix:
+		// Previously this was `slog.Warn` (silent degradation) — caller received 200 OK
+		// even when sync failed (e.g., DEPLOY_SERVICE_AUTH_FAILED), leaving zombie K8s
+		// resources that drove ongoing infra bill until manual cleanup. Per CLAUDE.md
+		// "gitops.Remove failure is FATAL" principle: sync failure is equally FATAL
+		// because manifests-removed-from-Git + resources-still-running is identically
+		// broken state (ArgoCD detect drift, can't reconcile).
+		//
+		// Fix: 3-attempt exponential backoff (1s/3s/9s ≈ 13s total) to ride out
+		// transient auth/network blips; if still failing, return error → caller emits
+		// 5xx + user sees "delete partially failed, retry".
 		argoAppName := req.TenantID + "-" + env
 		syncCtx, syncCancel := context.WithTimeout(ctx, 30*time.Second)
 		defer syncCancel()
-		if syncErr := d.sync.TriggerSync(syncCtx, argoAppName); syncErr != nil {
-			slog.Warn("argocd sync after delete failed (resources may remain until next manual sync)",
-				"app", argoAppName, "error", syncErr)
-		} else {
-			slog.Info("argocd sync triggered after gitops remove",
-				"app", argoAppName, "project", req.ProjectName, "environment", env)
+
+		var lastErr error
+		for attempt := 1; attempt <= 3; attempt++ {
+			lastErr = d.sync.TriggerSync(syncCtx, argoAppName)
+			if lastErr == nil {
+				slog.Info("argocd sync triggered after gitops remove",
+					"app", argoAppName, "project", req.ProjectName, "environment", env,
+					"attempt", attempt)
+				break
+			}
+			// MEET-2026-03-29-019 + finding-2026-05-26-dogfood-cleanup-prove-death-race:
+			// when ArgoCD app has a stuck operation (e.g., previous broken
+			// Rollout left operationState=Failed), TriggerSync returns
+			// ErrSyncOperationInProgress and retry alone hits the same wall.
+			// Terminate stuck op BEFORE retrying so prune can proceed and
+			// orphan K8s resources for THIS project get cleaned up.
+			if errors.Is(lastErr, loopzeroerrors.ErrSyncOperationInProgress) {
+				slog.Warn("argocd sync stuck — terminating operation before retry",
+					"app", argoAppName, "attempt", attempt)
+				type terminator interface {
+					TerminateOperation(ctx context.Context, appName string) error
+				}
+				if t, ok := d.sync.(terminator); ok {
+					if termErr := t.TerminateOperation(syncCtx, argoAppName); termErr != nil {
+						slog.Error("failed to terminate stuck argocd operation",
+							"app", argoAppName, "error", termErr)
+					} else {
+						slog.Info("terminated stuck argocd operation",
+							"app", argoAppName)
+					}
+				}
+			} else {
+				slog.Warn("argocd sync attempt failed",
+					"app", argoAppName, "attempt", attempt, "error", lastErr)
+			}
+			if attempt < 3 {
+				backoff := time.Duration(1<<uint(attempt-1)) * 3 * time.Second // 3s, 6s
+				if attempt == 1 {
+					backoff = 1 * time.Second // 1s, 3s, 9s — fast first retry
+				}
+				select {
+				case <-syncCtx.Done():
+					lastErr = syncCtx.Err()
+				case <-time.After(backoff):
+				}
+			}
+		}
+		if lastErr != nil {
+			return cancelledBuilds, fmt.Errorf("project delete: argocd sync failed after 3 attempts for %s (gitops manifests removed but K8s resources remain — retry delete or sync ArgoCD app %s manually): %w",
+				argoAppName, argoAppName, lastErr)
 		}
 	}
 

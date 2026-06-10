@@ -44,6 +44,22 @@ export function lookupExistingVpc(name: string): string | undefined {
   return vpc?.id;
 }
 
+/**
+ * Lookup the existing DigitalOcean Container Registry. Returns the registry
+ * name (which doubles as the Pulumi import ID for `digitalocean.ContainerRegistry`)
+ * or undefined if no registry is provisioned in the account.
+ *
+ * DigitalOcean allows ONE registry per account, so we don't filter by name —
+ * we return whatever the account already has. This is the canonical adoption
+ * source per ADR-0015 (Pre-bootstrap Adopt-or-Create Policy).
+ */
+export function lookupExistingRegistry(): string | undefined {
+  const token = process.env.DIGITALOCEAN_TOKEN;
+  if (!token) return undefined;
+  const data = httpGet("https://api.digitalocean.com/v2/registry", token);
+  return data?.registry?.name;
+}
+
 /** Lookup an existing CDN by origin domain. Returns CDN ID or undefined. */
 export function lookupExistingCdn(originDomain: string): string | undefined {
   const token = process.env.DIGITALOCEAN_TOKEN;
@@ -160,6 +176,7 @@ export function lookupExistingWorkerRoute(
 
 export interface OrphanLookupResult {
   vpcId?: string;
+  registryImportId?: string;
   tunnelImportId?: string;
   kvNamespaceImportId?: string;
   dnsRecordImportId?: string;
@@ -186,6 +203,7 @@ export function resolveOrphans(opts: {
 }): OrphanLookupResult {
   return {
     vpcId: lookupExistingVpc(opts.vpcName),
+    registryImportId: lookupExistingRegistry(),
     tunnelImportId: lookupExistingTunnel(opts.tunnelName, opts.cfAccountId),
     kvNamespaceImportId: lookupExistingKvNamespace(opts.kvTitle, opts.cfAccountId),
     dnsRecordImportId: lookupExistingDnsRecord(opts.cfZoneId, opts.dnsWildcard, "CNAME"),

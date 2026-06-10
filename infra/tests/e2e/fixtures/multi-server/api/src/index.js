@@ -1,0 +1,16 @@
+const express = require("express");
+const app = express();
+const port = process.env.PORT || 3001;
+
+app.get("/", (req, res) => res.json({
+  app: "api",
+  project: "multi-server",
+  message: "Hello from multi-server api",
+}));
+app.get("/health", (req, res) => res.json({ status: "ok" }));
+app.get("/ready", (req, res) => res.json({ status: "ready" }));
+
+const server = app.listen(port, () => console.log(`api listening on ${port}`));
+const shutdown = (sig) => { console.log(`${sig}`); server.close(() => process.exit(0)); setTimeout(() => process.exit(1), 10000); };
+process.on("SIGTERM", () => shutdown("SIGTERM"));
+process.on("SIGINT", () => shutdown("SIGINT"));

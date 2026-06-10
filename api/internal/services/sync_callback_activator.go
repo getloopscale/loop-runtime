@@ -12,6 +12,7 @@ import (
 	"time"
 
 	"github.com/loopzero/loopzero/api/internal/db"
+	"github.com/loopzero/loopzero/pkg/naming"
 )
 
 // SyncCallbackActivator processes ArgoCD sync completion callbacks.
@@ -29,6 +30,60 @@ type SyncCallbackActivator struct {
 	}
 	baseDomain string
 	logger     *slog.Logger
+	// Sprint B B3 (closes code-005): optional label-based lookup. When wired,
+	// OnSyncCompleted reads `loopzero.io/tenant` + `loopzero.io/environment` labels off
+	// the ArgoCD App CR instead of LastIndex-parsing the app name. Falls back
+	// to ParseArgoAppName when reader is nil OR labels are absent/empty.
+	appLabelReader ArgoAppLabelReader
+}
+
+// WithAppLabelReader wires a label-based tenant/env lookup that bypasses the
+// legacy LastIndex parser. Production code passes
+// NewDynamicArgoAppLabelReader(mgmtDynamic, "argocd") in setup_orchestrator.go.
+// Tests pass an in-memory fake.
+//
+// Backward-compat: if reader is nil OR returns no labels OR returns a label
+// pair with empty tenant/env, OnSyncCompleted falls through to
+// ParseArgoAppName. This means existing apps that pre-date commit `8854f64e`
+// (which started emitting loopzero.io/environment on rendered Apps) keep working
+// unchanged. Closure of code-005 lands progressively as old apps re-render.
+func (a *SyncCallbackActivator) WithAppLabelReader(r ArgoAppLabelReader) *SyncCallbackActivator {
+	a.appLabelReader = r
+	return a
+}
+
+// lookupTenantEnv tries the label-based path first, falls back to the
+// LastIndex parser for backward compat. Returns ok=false only when BOTH
+// paths fail (label reader missing AND parser ambiguous).
+//
+// The label path is preferred because LastIndex-parse is structurally
+// ambiguous when tenant ID and env name both contain hyphens (e.g.
+// `tn-loopzero-j-rollout-a` → tenant=tn-loopzero-j-rollout, env=a — WRONG).
+// The labels are populated authoritatively by the operator that creates
+// the ArgoCD App CR (commit `8854f64e` plumbing in real_provisioner.go).
+func (a *SyncCallbackActivator) lookupTenantEnv(ctx context.Context, appName string) (tenantID, env string, ok bool) {
+	if a.appLabelReader != nil {
+		labels, err := a.appLabelReader.GetAppLabels(ctx, appName)
+		if err == nil && labels != nil {
+			tenantID = labels[naming.LabelTenant]
+			env = labels[naming.LabelEnvironment]
+			if tenantID != "" && env != "" {
+				return tenantID, env, true
+			}
+		}
+		// Label reader configured but App has no labels OR fetch failed —
+		// fall through to legacy parser silently. The failure is non-fatal
+		// because legacy apps without labels are still served correctly by
+		// LastIndex when env doesn't contain hyphens. Log at INFO so the
+		// fall-through is observable when debugging.
+		if a.logger != nil {
+			a.logger.Info("sync callback: label-based lookup miss, falling back to LastIndex parser",
+				"app", appName,
+				"err", err,
+			)
+		}
+	}
+	return ParseArgoAppName(appName)
 }
 
 // NewSyncCallbackActivator creates a new SyncCallbackActivator.
@@ -62,17 +117,28 @@ type PendingReleaseByTenantEnvFinder interface {
 // The appName is in format "{tenantID}-{environment}" (e.g., "tn-loopzero-production").
 // It finds all PENDING releases matching that tenant+environment and activates them.
 func (a *SyncCallbackActivator) OnSyncCompleted(appName, revision string) error {
-	// ARCH-006 fix: Use a timeout context derived from the server shutdown context
-	// would be ideal, but since this is called from an HTTP handler that already
-	// has a request context with timeout (argocd_callback.go), we use a bounded
-	// background context as fallback.
+	// T6.6 of deep-review-remediation-plan (closes find_code_007 / CODE-007 LOW):
+	// the original "ARCH-006 fix" comment referenced an ARCH-006 ID that does
+	// not exist in the architecture review (current ARCH-006 is the unrelated
+	// CustomStrategy.DockerfileStep finding). The intent is real: callback
+	// activation must NOT be cancelled by the inbound HTTP request context
+	// (which is short-lived and may close before activation finishes,
+	// orphaning the release in PENDING). A bounded 30s context.Background()
+	// is the simplest correct choice.
+	//
+	// TODO(T6.4 + T1.3): once OTel trace propagation is wired through the
+	// ArgoCD callback handler, replace context.Background() with a context
+	// derived from the inbound trace so spans correlate end-to-end.
 	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 	defer cancel()
 
-	// Parse tenantID and environment from app name: "{tenant}-{env}"
-	tenantID, env, ok := ParseArgoAppName(appName)
+	// Sprint B B3 (closes code-005): prefer label-based lookup on the live
+	// ArgoCD App CR; fall back to LastIndex parser when labels are absent.
+	// The label path eliminates the hyphen ambiguity that the parser exhibits
+	// when tenant+env both contain hyphens (e.g. `tn-loopzero-j-rollout-a`).
+	tenantID, env, ok := a.lookupTenantEnv(ctx, appName)
 	if !ok {
-		return fmt.Errorf("sync callback: invalid app name %q (expected {tenant}-{env})", appName)
+		return fmt.Errorf("sync callback: invalid app name %q (expected {tenant}-{env} or labeled App CR)", appName)
 	}
 
 	// CODE-SCAN-001 fix: Use tenant+env-filtered query when available,
@@ -102,7 +168,13 @@ func (a *SyncCallbackActivator) OnSyncCompleted(appName, revision string) error 
 		return fmt.Errorf("sync callback: find pending releases: %w", err)
 	}
 
+	// T1.7 of deep-review-2026-05-10-remediation-plan (find_callback_false_success HIGH):
+	// collect per-release activation errors so a partial failure surfaces
+	// as HTTP 500 → ArgoCD retries. Pre-T1.7 the function returned nil
+	// even when 1/N activations failed, causing the release to stay
+	// PENDING with no retry signal.
 	activated := 0
+	var failedReleases []string
 	for _, release := range releases {
 		// MEET-2026-03-31-024 BUG-03 defense-in-depth: if GitCommit is empty,
 		// do NOT activate via callback — let the convergence loop handle it.
@@ -124,6 +196,7 @@ func (a *SyncCallbackActivator) OnSyncCompleted(appName, revision string) error 
 		if err := a.activateRelease(ctx, &release); err != nil {
 			a.logger.Error("sync callback: activation failed",
 				"release_id", release.ID, "error", err)
+			failedReleases = append(failedReleases, release.ID)
 			continue
 		}
 		activated++
@@ -132,6 +205,11 @@ func (a *SyncCallbackActivator) OnSyncCompleted(appName, revision string) error 
 	if activated > 0 {
 		a.logger.Info("sync callback: releases activated",
 			"app", appName, "count", activated, "revision", revision)
+	}
+
+	if len(failedReleases) > 0 {
+		return fmt.Errorf("sync callback: %d release(s) failed to activate: %v (ArgoCD should retry)",
+			len(failedReleases), failedReleases)
 	}
 
 	return nil

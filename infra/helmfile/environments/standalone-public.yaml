@@ -1,0 +1,101 @@
+# Helmfile environment: standalone-public
+# T2.2 of plan 2026-05-29-dashboard-public-integration-canonicalization
+#
+# Variant of `standalone-multi` for local k3d clusters fronted by Caddy on
+# a droplet/host with PUBLIC DNS (app/cloud/auth.loopzero.example). Caddy
+# terminates Let's Encrypt TLS and reverse-proxies into kubectl port-forwards
+# pointing at the in-cluster services.
+#
+# Differences vs `standalone-multi`:
+#   - publicAuthUrl + publicCloudUrl + cookieDomain set → Kratos renders
+#     serve.public.base_url, CORS, session.cookie.domain, allowed_return_urls.
+#   - corsAllowedOrigins includes the public app/cloud hosts.
+#   - allowedReturnUrls covers ?return_to=... callback patterns.
+#   - dashboardRoute defaults aligned with cloud/dashboard/src/app.tsx.
+#
+# Intended for: paulo@droplet 165.227.121.20 (or any operator with `caddy:up`
+# + `port-forward:public-dashboard` running) demoing the dashboard flow end-to-end
+# without DOKS provisioning costs.
+
+domain: loopzero.local
+dnsZone: loopzero.local
+
+# clusterRole=cloud-local: triggers loopzero-cloud + loopzero-api install via helmfile
+# (rather than tilt local). The local Caddy edge proxies their services to
+# the public app/cloud/auth.loopzero.example hostnames. T3.1 of plan.
+clusterRole: cloud-local
+clusterTopology: multi-cluster
+
+replicas:
+  api: 2
+  controller: 1
+  argocd: 1
+  gitea: 1
+  harbor: 1
+
+resources:
+  default:
+    requests:
+      cpu: 50m
+      memory: 64Mi
+    limits:
+      cpu: 250m
+      memory: 256Mi
+
+certIssuer:
+  kind: ClusterIssuer
+  name: selfsigned-issuer
+
+registries:
+  docrPrefix: "harbor.loopzero.local/loopzero-platform/"
+  harborPrefix: "harbor.loopzero.local/loopzero-platform/"
+  additionalPrefixes:
+    - "k3d-loopzero-registry:5000/"
+
+loki:
+  maxGlobalStreamsPerUser: 50000
+  pushUrl: http://172.18.0.3:30094/loki/api/v1/push
+
+policyMode: warn
+inClusterPostgres: true
+underlyingStorageClass: ""
+
+crossCluster:
+  argoApi: "http://host.k3d.internal:30093"
+  lokiGateway: "http://host.k3d.internal:30094"
+  giteaApi: "http://host.k3d.internal:3000"
+  harborApi: "http://host.k3d.internal:30002"
+  prometheusApi: "http://host.k3d.internal:9090"
+
+velero:
+  bucket: velero-backups
+  region: us-east-1
+  s3Url: http://minio.loopzero-system.svc:9000
+
+# UI: dashboard served by vite dev (5173) behind Caddy on https://app.loopzero.example
+uiBaseUrl: "https://app.loopzero.example"
+dashboardOrigin: "https://cloud.loopzero.example"
+
+# T2.2 — public-flow canonical values for the local-Caddy demo droplet.
+# The Caddy edge maps:
+#   https://app.loopzero.example   → localhost:5173 (vite dev)
+#   https://cloud.loopzero.example → localhost:13002 (kubectl port-forward loopzero-cloud)
+#   https://auth.loopzero.example  → localhost:14433 (kubectl port-forward ory-kratos-public)
+publicAuthUrl: "https://auth.loopzero.example"
+publicCloudUrl: "https://cloud.loopzero.example"
+cookieDomain: "loopzero.example"
+corsAllowedOrigins:
+  - "https://app.loopzero.example"
+  - "https://cloud.loopzero.example"
+allowedReturnUrls:
+  - "https://app.loopzero.example"
+  - "https://app.loopzero.example/"
+  - "https://cloud.loopzero.example"
+  - "https://cloud.loopzero.example/"
+dashboardRoute:
+  login: /login
+  register: /register
+  recovery: /recovery
+  verification: /verification
+  settings: /settings
+  error: /login

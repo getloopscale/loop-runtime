@@ -6,13 +6,17 @@ package services
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"log/slog"
+	"strings"
 	"sync"
+	"sync/atomic"
 	"time"
 
 	"github.com/loopzero/loopzero/api/internal/db"
 	"github.com/loopzero/loopzero/api/internal/metrics"
+	loopzeroerrors "github.com/loopzero/loopzero/pkg/errors"
 	"github.com/loopzero/loopzero/pkg/statemachine"
 )
 
@@ -116,11 +120,8 @@ func NewReleaseConvergenceLoop(
 	}
 }
 
-// WithPGClaims attaches PG-backed dedup to the convergence loop.
-// Same pattern as BuildReconcileLoop.WithPGClaims.
-func (r *ReleaseConvergenceLoop) WithPGClaims(dedup *PGClaimDedup) {
-	r.pgDedup = dedup
-}
+// Quality-Gate Phase 2: WithPGClaims removed — fluent setter was never
+// invoked; PG dedup is wired via constructor when needed.
 
 // Start runs the convergence loop until context is cancelled.
 func (r *ReleaseConvergenceLoop) Start(ctx context.Context) {
@@ -161,15 +162,18 @@ func (r *ReleaseConvergenceLoop) cellID() string {
 }
 
 func (r *ReleaseConvergenceLoop) tick(ctx context.Context) {
-	// MEET-2026-03-31-023 T1-8: Record successful tick timestamp and pending count.
-	metrics.ReconcileLoopLastSuccess.WithLabelValues("release").SetToCurrentTime()
-
+	// T4.3 of deep-review-2026-05-10-remediation-plan (find_obs_metric_premature MEDIUM):
+	// `ReconcileLoopLastSuccess` was being set BEFORE the DB query — so
+	// the "last successful reconcile" gauge updated even when the query
+	// failed seconds later. Now we only set it AFTER the query returns
+	// successfully (real evidence the loop reached the reconcile pass).
 	releases, err := r.releaseStore.FindPendingReleases(ctx, r.cellID())
 	if err != nil {
 		r.logger.Error("release convergence: failed to find pending releases", "error", err)
 		return
 	}
 
+	metrics.ReconcileLoopLastSuccess.WithLabelValues("release").SetToCurrentTime()
 	metrics.ReleasesPending.Set(float64(len(releases)))
 
 	for _, rel := range releases {
@@ -193,7 +197,14 @@ func (r *ReleaseConvergenceLoop) tick(ctx context.Context) {
 					<-r.sem
 					r.active.Delete(release.ID)
 					if r.pgDedup != nil {
-						r.pgDedup.Release(ctx, "releases", release.ID)
+						// T0.2 of deep-review-2026-05-10-remediation-plan
+						// (CRITICAL): use independent context for cleanup so
+						// graceful shutdown (parent ctx cancelled) cannot
+						// orphan the pgDedup claim. 5s is generous for a
+						// single DELETE against PG.
+						cleanupCtx, cleanupCancel := context.WithTimeout(context.Background(), 5*time.Second)
+						defer cleanupCancel()
+						r.pgDedup.Release(cleanupCtx, "releases", release.ID)
 					}
 				}()
 				r.verifyRelease(ctx, &release)
@@ -214,18 +225,15 @@ func (r *ReleaseConvergenceLoop) verifyRelease(ctx context.Context, release *db.
 			"elapsed", elapsed, "timeout", r.cfg.SyncTimeout)
 		// MEET-2026-03-29-019: Terminate stuck ArgoCD operation so the next deploy
 		// can proceed. Without this, the stuck operation persists and blocks all future syncs.
+		// Sprint B T1.1: TerminateOperation is now part of the SyncClient interface
+		// (was a duck-typed assertion pre-ADR D1).
 		argoApp := fmt.Sprintf("%s-%s", release.TenantID, release.Environment)
-		type terminator interface {
-			TerminateOperation(ctx context.Context, appName string) error
-		}
-		if t, ok := r.sync_.(terminator); ok {
-			if termErr := t.TerminateOperation(ctx, argoApp); termErr != nil {
-				r.logger.Error("release convergence: failed to terminate stuck operation",
-					"app", argoApp, "error", termErr)
-			} else {
-				r.logger.Info("release convergence: terminated stuck operation on timeout",
-					"app", argoApp, "release_id", release.ID)
-			}
+		if termErr := r.sync_.TerminateOperation(ctx, argoApp); termErr != nil {
+			r.logger.Error("release convergence: failed to terminate stuck operation",
+				"app", argoApp, "error", termErr)
+		} else {
+			r.logger.Info("release convergence: terminated stuck operation on timeout",
+				"app", argoApp, "release_id", release.ID)
 		}
 		r.failRelease(ctx, release, "Sync timeout: service did not become healthy within the time limit")
 		return
@@ -247,7 +255,14 @@ func (r *ReleaseConvergenceLoop) verifyRelease(ctx context.Context, release *db.
 		if app.Rendering == "static" {
 			continue
 		}
-		deployedAppNames = append(deployedAppNames, app.Name)
+		// Achado #20 fix: K8s Deployment name is `<project>-<app>` post
+		// Achado #17 (manifests/renderer_helpers.go:resourceName). Passing
+		// `app.Name` raw causes the per-resource health filter in
+		// argocd/sync_client.go to never match — release stuck SYNC_FAILED
+		// even when the cluster is Healthy. Discovered live during
+		// journey-06 (CHG-2026-04-29-DOGFOOD-REAL-E2E).
+		deployedAppNames = append(deployedAppNames,
+			fmt.Sprintf("%s-%s", release.ProjectID, app.Name))
 	}
 
 	synced, healthy, err := r.checkSync(ctx, argoAppName, deployedAppNames)
@@ -264,6 +279,46 @@ func (r *ReleaseConvergenceLoop) verifyRelease(ctx context.Context, release *db.
 		if !synced && elapsed > 30*time.Second {
 			r.retriggerSyncIfNeeded(ctx, release, argoAppName)
 		}
+
+		// V9 L22: detect "ArgoCD controller queue-stuck" — release has been
+		// PENDING for >2min, TriggerSync calls returned 200 OK, but
+		// Application.status.operationState never advances (controller
+		// internal workqueue stopped processing).
+		//
+		// Recovery: PATCH App with refresh=hard annotation via ForceReconcile.
+		// ArgoCD watches for the annotation and triggers immediate
+		// reconciliation regardless of workqueue state. Idempotent — calling
+		// ForceReconcile multiple times for the same App is safe.
+		//
+		// Discovered via cleanroom-fresh dogfood 2026-05-30: 4 journey
+		// failures cascaded after ArgoCD controllers entered queue-stuck
+		// state. L21 (TerminateOperation on SYNC_OPERATION_IN_PROGRESS)
+		// did NOT fire because TriggerSync was succeeding — the lock
+		// wasn't stuck, the controller's workqueue was empty/stalled.
+		//
+		// We use the existing syncRetriggers counter as the threshold —
+		// after 3 retriggers with no progress, escalate to ForceReconcile.
+		// This is one-shot per maxSyncRetriggers cycle to avoid spamming
+		// ArgoCD.
+		if !synced && elapsed > 2*time.Minute {
+			if loaded, ok := r.syncRetriggers.Load(release.ID); ok {
+				counter := loaded.(*atomic.Int32)
+				if counter.Load() >= int32(maxSyncRetriggers) {
+					// Sprint B T1.1: ForceReconcile is now part of the SyncClient
+					// interface (was a duck-typed assertion pre-ADR D1).
+					if frErr := r.sync_.ForceReconcile(ctx, argoAppName); frErr != nil {
+						r.logger.Error("release convergence: ForceReconcile failed (L22 recovery)",
+							"release_id", release.ID, "app", argoAppName, "error", frErr)
+					} else {
+						r.logger.Info("release convergence: triggered ForceReconcile (L22 — controller queue-stuck recovery)",
+							"release_id", release.ID, "app", argoAppName, "retriggers_exhausted", counter.Load())
+						// Reset counter so subsequent ticks can retry TriggerSync
+						// after the controller picks up the refresh annotation.
+						counter.Store(0)
+					}
+				}
+			}
+		}
 		return // Not ready yet, will check on next tick
 	}
 
@@ -272,25 +327,22 @@ func (r *ReleaseConvergenceLoop) verifyRelease(ctx context.Context, release *db.
 	// via the convergence path. The callback activator already has this check
 	// (sync_callback_activator.go:108-114); convergence loop must match.
 	if release.GitCommit != "" {
-		type revisionChecker interface {
-			GetSyncRevision(ctx context.Context, appName string) (string, error)
+		// Sprint B T1.1: GetSyncRevision is now part of the SyncClient interface
+		// (was a duck-typed assertion pre-ADR D1).
+		revision, revErr := r.sync_.GetSyncRevision(ctx, argoAppName)
+		if revErr != nil {
+			r.logger.Warn("release convergence: revision check failed",
+				"release_id", release.ID, "error", revErr)
+			return // Retry on next tick
 		}
-		if checker, ok := r.sync_.(revisionChecker); ok {
-			revision, revErr := checker.GetSyncRevision(ctx, argoAppName)
-			if revErr != nil {
-				r.logger.Warn("release convergence: revision check failed",
-					"release_id", release.ID, "error", revErr)
-				return // Retry on next tick
-			}
-			if revision != "" && revision != release.GitCommit {
-				metrics.RevisionMismatchTotal.Inc()
-				r.logger.Warn("release convergence: revision mismatch — retriggering sync",
-					"release_id", release.ID, "expected", release.GitCommit, "actual", revision)
-				// ArgoCD synced a different revision (from a previous deploy).
-				// Retrigger sync so ArgoCD picks up the new gitops commit.
-				r.retriggerSyncIfNeeded(ctx, release, argoAppName)
-				return // Will check again on next tick after sync completes
-			}
+		if revision != "" && revision != release.GitCommit {
+			metrics.RevisionMismatchTotal.Inc()
+			r.logger.Warn("release convergence: revision mismatch — retriggering sync",
+				"release_id", release.ID, "expected", release.GitCommit, "actual", revision)
+			// ArgoCD synced a different revision (from a previous deploy).
+			// Retrigger sync so ArgoCD picks up the new gitops commit.
+			r.retriggerSyncIfNeeded(ctx, release, argoAppName)
+			return // Will check again on next tick after sync completes
 		}
 	}
 
@@ -303,21 +355,10 @@ func (r *ReleaseConvergenceLoop) checkSync(ctx context.Context, appName string, 
 	// We poll externally via the convergence loop, so we don't want WaitForSync to block.
 	// Instead, just check status once.
 
-	// Type-assert to access getAppStatus if available, otherwise fall back to
-	// a single-iteration WaitForSync with minimal timeout.
-	type statusChecker interface {
-		GetAppStatus(ctx context.Context, appName string, deployedApps []string) (bool, bool, error)
-	}
-	if checker, ok := r.sync_.(statusChecker); ok {
-		return checker.GetAppStatus(ctx, appName, deployedApps)
-	}
-
-	// Fallback: use WaitForSync with 1-second timeout (one poll)
-	err = r.sync_.WaitForSync(ctx, appName, 1*time.Second, deployedApps)
-	if err != nil {
-		return false, false, nil // timeout = not ready yet
-	}
-	return true, true, nil
+	// Sprint B T1.1: GetAppStatus is now part of the SyncClient interface
+	// (was a duck-typed assertion pre-ADR D1). The WaitForSync fallback is no
+	// longer reachable because every implementer must satisfy GetAppStatus.
+	return r.sync_.GetAppStatus(ctx, appName, deployedApps)
 }
 
 func (r *ReleaseConvergenceLoop) activateRelease(ctx context.Context, release *db.Release) {
@@ -340,7 +381,7 @@ func (r *ReleaseConvergenceLoop) activateRelease(ctx context.Context, release *d
 
 func (r *ReleaseConvergenceLoop) failRelease(ctx context.Context, release *db.Release, reason string) {
 	err := r.locker.WithLock(ctx, release.TenantID, release.ProjectID, release.Environment, func(tx db.DBTX) error {
-		_, err := r.releaseStore.UpdateStatus(ctx, tx, release.ID, string(statemachine.ReleaseSyncFailed_))
+		_, err := r.releaseStore.UpdateStatus(ctx, tx, release.ID, string(statemachine.RPEventSyncFailed))
 		return err
 	})
 
@@ -362,8 +403,77 @@ func (r *ReleaseConvergenceLoop) failRelease(ctx context.Context, release *db.Re
 		r.logger.Error("failed to emit deploy.sync_failed event", "release_id", release.ID, "error", err)
 	}
 
+	// T0.3 of deep-review-remediation-plan (closes find_flow_001 CRITICAL).
+	// Per CLAUDE.md, Argo Rollouts is the default workload primitive when
+	// LOOPZERO_PROGRESSIVE_DELIVERY=true (the default). For Rollout-backed
+	// releases, the canonical terminal SSE event is rollout.aborted (not
+	// deploy.sync_failed). The CLI deploy command handles both as terminal
+	// (cli/src/commands/deploy.ts:603), so emitting both is safe — but the
+	// canary-specific event surfaces reason + weight + step for Pro/Team
+	// canary visibility.
+	if isRolloutBackedRelease(release) {
+		abortReason := classifyAbortReason(reason)
+		abortedEv := RolloutAbortedEvent{
+			Reason:  abortReason,
+			Message: reason,
+		}
+		if emitErr := EmitRolloutAborted(ctx, r.logger, r.eventStore, release.BuildID, abortedEv); emitErr != nil {
+			// Logged inside EmitRolloutAborted; intentionally not failing
+			// the failRelease path because deploy.sync_failed was already
+			// emitted above as backwards-compat terminal.
+			r.logger.Warn("failed to emit rollout.aborted (deploy.sync_failed already emitted)",
+				"release_id", release.ID, "error", emitErr)
+		}
+	}
+
 	// MEET-2026-03-31-024: Clean up syncRetriggers entry to prevent memory leak.
 	r.syncRetriggers.Delete(release.ID)
+}
+
+// isRolloutBackedRelease — true if the release was rendered with progressive
+// delivery (Argo Rollouts), as opposed to a static-only release. Heuristic:
+// any app in the release whose Rendering is not "static" is assumed Rollout-backed
+// when LOOPZERO_PROGRESSIVE_DELIVERY is enabled (default per CLAUDE.md).
+//
+// Per ADR T0.3: emitting an extra rollout.aborted on edge cases (e.g.,
+// progressive delivery disabled but app non-static) is benign — CLI treats
+// either terminal event as exit 3.
+func isRolloutBackedRelease(release *db.Release) bool {
+	if release == nil || release.Apps == nil {
+		return false
+	}
+	var apps []db.BuildAppSpec
+	if err := json.Unmarshal(release.Apps, &apps); err != nil {
+		// On parse failure, assume Rollout-backed so the canary event still
+		// fires. Failing closed here keeps T0.3 closed even if Apps JSON is
+		// malformed (which would be a separate bug).
+		return true
+	}
+	for _, app := range apps {
+		if app.Rendering != "static" {
+			return true
+		}
+	}
+	return false
+}
+
+// classifyAbortReason — maps a free-text reason from the convergence loop to
+// the documented rollout.aborted reason enum (analysis-failed | pod-unhealthy |
+// user-aborted | progress-deadline-exceeded). Best-effort; default is
+// pod-unhealthy because the convergence loop's primary failure path is
+// "release did not become healthy within sync timeout".
+func classifyAbortReason(reason string) string {
+	r := strings.ToLower(reason)
+	switch {
+	case strings.Contains(r, "analysis"):
+		return "analysis-failed"
+	case strings.Contains(r, "deadline") || strings.Contains(r, "progress"):
+		return "progress-deadline-exceeded"
+	case strings.Contains(r, "user") || strings.Contains(r, "cancel") || strings.Contains(r, "abort"):
+		return "user-aborted"
+	default:
+		return "pod-unhealthy"
+	}
 }
 
 // maxSyncRetriggers bounds the number of times the convergence loop will
@@ -374,13 +484,21 @@ const maxSyncRetriggers = 3
 // sync operation in ArgoCD. With manual sync policy, a failed initial TriggerSync
 // means ArgoCD will never auto-sync from Gitea, leaving the release stuck.
 // MEET-2026-03-31-023 T1-5.
+//
+// T5.5 of deep-review-2026-05-10-remediation-plan (find_arch_sync_retrigger_race MEDIUM):
+// pre-T5.5 the counter pattern was LoadOrStore(0) → read → Store(count+1).
+// Two concurrent reconciliations of the same release could both read 0
+// then both Store(1), losing one increment. Now we use atomic.Int32 via
+// LoadOrStore (returning the SAME pointer for repeat lookups) and
+// `(*atomic.Int32).Add(1)` so concurrent increments are serialized.
 func (r *ReleaseConvergenceLoop) retriggerSyncIfNeeded(ctx context.Context, release *db.Release, argoAppName string) {
-	// Check retrigger count
-	val, _ := r.syncRetriggers.LoadOrStore(release.ID, 0)
-	count := val.(int)
-	if count >= maxSyncRetriggers {
+	// Atomic counter: LoadOrStore returns the existing *atomic.Int32 (or
+	// the freshly-stored one) so subsequent goroutines hit the same cell.
+	loaded, _ := r.syncRetriggers.LoadOrStore(release.ID, new(atomic.Int32))
+	counter := loaded.(*atomic.Int32)
+	if counter.Load() >= int32(maxSyncRetriggers) {
 		r.logger.Warn("release convergence: max sync retriggers reached",
-			"release_id", release.ID, "retriggers", count)
+			"release_id", release.ID, "retriggers", counter.Load())
 		return
 	}
 
@@ -388,12 +506,55 @@ func (r *ReleaseConvergenceLoop) retriggerSyncIfNeeded(ctx context.Context, rele
 	if err := r.sync_.TriggerSync(ctx, argoAppName); err != nil {
 		r.logger.Warn("release convergence: sync retrigger failed",
 			"release_id", release.ID, "app", argoAppName, "error", err)
+
+		// V9 L21: when TriggerSync fails with SYNC_OPERATION_IN_PROGRESS
+		// repeatedly, the ArgoCD app has a stale operation lock — typically
+		// caused by a controller restart mid-sync. Without intervention,
+		// every subsequent retrigger fails until the release sync-timeouts
+		// (5min) at which point the release is failed. We can short-circuit
+		// this by calling TerminateOperation after 2 consecutive failures
+		// to clear the stale lock, then the NEXT retrigger succeeds.
+		//
+		// Detection: errors.Is against ErrSyncOperationInProgress matches
+		// both the wrapped and unwrapped forms produced by sync_client.go.
+		//
+		// Discovered LIVE via cleanroom-fresh dogfood 2026-05-30 (audit
+		// 2026-05-30-V9-cleanroom-fresh): after a manual controller restart
+		// during initial TLS handshake recovery, 4 journeys cascaded into
+		// release ACTIVE timeout because their syncs were never re-tried
+		// successfully — the loop logged "sync retrigger failed" every poll
+		// for the full 5min sync_timeout window without ever calling
+		// TerminateOperation. The existing timeout-side TerminateOperation
+		// (line ~230) fires only AFTER failure; this new pre-failure path
+		// recovers without losing the release.
+		if errors.Is(err, loopzeroerrors.ErrSyncOperationInProgress) {
+			// Count this specific failure mode in the retrigger counter.
+			// After 2 consecutive failures (counter increments to 2 after
+			// the first failed retrigger gets the counter to 1, this
+			// second time gets it to 2), attempt termination.
+			//
+			// Why 2: a single transient race is normal (operation completes
+			// between the check and the retrigger). 2 consecutive
+			// failures = the operation is stuck.
+			counter.Add(1)
+			if counter.Load() >= 2 {
+				// Sprint B T1.1: TerminateOperation is now part of the SyncClient
+				// interface (was a duck-typed assertion pre-ADR D1).
+				if termErr := r.sync_.TerminateOperation(ctx, argoAppName); termErr != nil {
+					r.logger.Error("release convergence: failed to terminate stuck sync operation",
+						"release_id", release.ID, "app", argoAppName, "error", termErr)
+				} else {
+					r.logger.Info("release convergence: terminated stuck sync operation (L21 — pre-timeout recovery)",
+						"release_id", release.ID, "app", argoAppName, "consecutive_failures", counter.Load())
+				}
+			}
+		}
 		return
 	}
 
-	r.syncRetriggers.Store(release.ID, count+1)
+	attempt := counter.Add(1)
 	r.logger.Info("release convergence: retriggered sync for stalled release",
-		"release_id", release.ID, "app", argoAppName, "attempt", count+1)
+		"release_id", release.ID, "app", argoAppName, "attempt", attempt)
 }
 
 // healthCheckActiveReleases checks ACTIVE releases against ArgoCD health.
@@ -425,7 +586,9 @@ func (r *ReleaseConvergenceLoop) healthCheckActiveReleases(ctx context.Context) 
 			if app.Rendering == "static" {
 				continue
 			}
-			deployedAppNames = append(deployedAppNames, app.Name)
+			// Achado #20: same project-scoped resource name as above.
+			deployedAppNames = append(deployedAppNames,
+				fmt.Sprintf("%s-%s", rel.ProjectID, app.Name))
 		}
 
 		_, healthy, checkErr := r.checkSync(ctx, argoAppName, deployedAppNames)

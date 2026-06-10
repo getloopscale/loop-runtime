@@ -5,6 +5,7 @@ package services
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"log/slog"
 	"strings"
@@ -12,7 +13,6 @@ import (
 
 	"github.com/loopzero/loopzero/api/internal/db"
 	"github.com/loopzero/loopzero/api/internal/domain"
-	"github.com/loopzero/loopzero/api/internal/routes"
 	loopzeroerrors "github.com/loopzero/loopzero/pkg/errors"
 )
 
@@ -65,9 +65,15 @@ type PreviewServiceDeps struct {
 	BaseDomain     string
 	DefaultTTL     time.Duration
 	Logger         *slog.Logger
+	// Locker is optional — when set, CreatePreview wraps the Store/CR
+	// write path in `pg_advisory_xact_lock(tenant, project, branch)` so a
+	// rapid double-webhook for the same PR cannot race into two preview
+	// rows. T1.2 of deep-review-2026-05-10-remediation-plan
+	// (find_conc_preview_no_lock HIGH).
+	Locker         EnvironmentLocker
 }
 
-// PreviewService implements routes.PreviewService and, additionally,
+// PreviewService implements domain.PreviewService and, additionally,
 // provides webhook-driven hooks for the GitHub PR flow (T3.1).
 type PreviewService struct {
 	deps PreviewServiceDeps
@@ -88,7 +94,7 @@ func NewPreviewService(deps PreviewServiceDeps) (*PreviewService, error) {
 	return &PreviewService{deps: deps}, nil
 }
 
-// CreatePreview implements routes.PreviewService.CreatePreview.
+// CreatePreview implements domain.PreviewService.CreatePreview.
 //
 // Steps (per ADR D3 / D4):
 //   1. Validate request fields.
@@ -103,7 +109,7 @@ func NewPreviewService(deps PreviewServiceDeps) (*PreviewService, error) {
 // preview row is the source of truth for the API and the controller will
 // retry on its own. This is the same resilience principle as the deploy
 // flow (ARCH-002 fix in build_orchestrator).
-func (s *PreviewService) CreatePreview(ctx context.Context, req routes.CreatePreviewRequest) (*domain.Preview, error) {
+func (s *PreviewService) CreatePreview(ctx context.Context, req domain.CreatePreviewRequest) (*domain.Preview, error) {
 	if err := s.validate(req); err != nil {
 		return nil, err
 	}
@@ -139,8 +145,24 @@ func (s *PreviewService) CreatePreview(ctx context.Context, req routes.CreatePre
 	}
 
 	// Step 2: persist. Create() runs UPSERT semantics for repeat PR pushes.
-	if err := s.deps.Store.Create(ctx, nil, rec); err != nil {
-		return nil, fmt.Errorf("preview service: persist failed: %w", err)
+	//
+	// T1.2 of deep-review-2026-05-10-remediation-plan: wrap the persist
+	// in the environment lock when a Locker is wired. Lock key uses the
+	// branch as the env equivalent — concurrent webhooks for different
+	// PRs (different branches) of the same project run in parallel; the
+	// same PR re-firing serializes. Falls back to non-locked path when
+	// Locker is nil (test scope).
+	persist := func(_ db.DBTX) error {
+		return s.deps.Store.Create(ctx, nil, rec)
+	}
+	var persistErr error
+	if s.deps.Locker != nil {
+		persistErr = s.deps.Locker.WithLock(ctx, req.TenantID(), req.ProjectID, req.Branch, persist)
+	} else {
+		persistErr = persist(nil)
+	}
+	if persistErr != nil {
+		return nil, fmt.Errorf("preview service: persist failed: %w", persistErr)
 	}
 
 	// Step 3: ensure CR. Best-effort.
@@ -237,7 +259,7 @@ func (s *PreviewService) OnBuildCompleted(ctx context.Context, previewID, buildI
 // validate enforces the same invariants the HTTP handler enforces.
 // Re-checked here so non-HTTP entry points (webhook, internal callers) are
 // also safe.
-func (s *PreviewService) validate(req routes.CreatePreviewRequest) error {
+func (s *PreviewService) validate(req domain.CreatePreviewRequest) error {
 	if strings.TrimSpace(req.TenantID()) == "" {
 		return loopzeroerrors.ErrMissingField.Wrap("tenant_id is required")
 	}
@@ -275,9 +297,9 @@ func previewEnvName(prNumber int) string {
 // isPreviewNotFound centralizes the typed-error check so callers don't
 // import errors directly.
 func isPreviewNotFound(err error) bool {
-	return err != nil && (err == loopzeroerrors.ErrPreviewNotFound || strings.Contains(err.Error(), "preview environment not found"))
+	return err != nil && (errors.Is(err, loopzeroerrors.ErrPreviewNotFound) || strings.Contains(err.Error(), "preview environment not found"))
 }
 
 // Compile-time assertion: PreviewService satisfies the route handler's
 // PreviewService interface.
-var _ routes.PreviewService = (*PreviewService)(nil)
+var _ domain.PreviewService = (*PreviewService)(nil)

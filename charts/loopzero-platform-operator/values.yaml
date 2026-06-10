@@ -1,0 +1,117 @@
+global:
+  registry: registry.digitalocean.com/loopzero-system
+  imagePullSecrets: []
+
+image:
+  repository: loopzero-platform-operator
+  tag: dev
+  pullPolicy: IfNotPresent
+
+replicaCount: 2
+revisionHistoryLimit: 3
+priorityClassName: system-cluster-critical
+
+nameOverride: ""
+fullnameOverride: ""
+
+podLabels: {}
+podAnnotations: {}
+
+service:
+  type: ClusterIP
+  healthPort: 8081
+  metricsPort: 8443
+
+# Operator configuration (environment variables via ConfigMap)
+config:
+  argocdNamespace: "argocd"
+
+# Operator binary arguments
+args:
+  leaderElect: true
+  healthProbeBindAddress: ":8081"
+  metricsBindAddress: ":8443"
+
+resources:
+  requests:
+    cpu: 50m
+    memory: 32Mi
+  limits:
+    cpu: 200m
+    memory: 128Mi
+
+serviceAccount:
+  create: true
+  name: ""
+  automountServiceAccountToken: true
+
+rbac:
+  create: true
+
+startupProbe:
+  enabled: true
+  path: /healthz
+  port: health
+  failureThreshold: 30
+  periodSeconds: 2
+
+livenessProbe:
+  httpGet:
+    path: /healthz
+    port: health
+  initialDelaySeconds: 10
+  periodSeconds: 10
+  timeoutSeconds: 5
+
+readinessProbe:
+  httpGet:
+    path: /readyz
+    port: health
+  initialDelaySeconds: 5
+  periodSeconds: 5
+  timeoutSeconds: 3
+
+metrics:
+  serviceMonitor:
+    enabled: false
+    port: metrics
+    interval: 30s
+    scrapeTimeout: 10s
+
+networkPolicy:
+  enabled: true
+  ingress:
+    # Prometheus scraping metrics
+    - from:
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: monitoring
+      ports:
+        - protocol: TCP
+          port: 8443
+  extraEgress:
+    # Kubernetes API server.
+    # Bug #24 LIVE fix (2026-05-17 iter 17): DOKS exposes K8s API on port
+    # 443 (ClusterIP 10.245.0.1:443), NOT 6443. Local k3d uses 6443.
+    # Allow BOTH so this chart works on k3d, DOKS, EKS, GKE uniformly.
+    - ports:
+        - protocol: TCP
+          port: 6443
+        - protocol: TCP
+          port: 443
+    # Gitea (for reachability check)
+    - ports:
+        - protocol: TCP
+          port: 3000
+      to:
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: gitea
+
+topologySpreadConstraints:
+  enabled: false
+
+affinity: {}
+
+tolerations: []
+nodeSelector: {}

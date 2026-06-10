@@ -1,16 +1,30 @@
 // SPDX-License-Identifier: Apache-2.0
 // Copyright 2025-2026 The LoopZero Authors
 
-// Cloudflare Tunnel provisioning (Sprint 10, updated for Custom Domains).
-// Creates: Tunnel, ingress config, DNS CNAMEs, cloudflared K8s Deployment.
-// All runtime traffic is routed through the CF Tunnel — zero public IPs.
-// Custom domains: users CNAME their domain to cname.{baseDomain}, which resolves
-// to the tunnel. The catch-all ingress rule sends ALL traffic to Traefik,
-// which handles hostname matching via IngressRoute Host() rules.
+// Cloudflare Tunnel provisioning (L1 / Pulumi).
+// CHG-2026-04-28-LAYERED-BOOTSTRAP — ADR D9.
+//
+// L1 (Pulumi, this file): Tunnel resource + ingress config + DNS CNAME on the
+//                          Cloudflare API. Zero K8s resources.
+// L2 (Helmfile, infra/helm/cloudflared/): cloudflared Deployment + Secret
+//                          inside the runtime cluster. Token is consumed via
+//                          env var LOOPZERO_CF_TUNNEL_TOKEN sourced from
+//                          `pulumi stack output cfTunnelToken --show-secrets`.
+//
+// Why this split: when the runtime cluster is destroyed, the cloudflared
+// Deployment + Secret in the old design became zombies in the Pulumi state
+// (pulumi-kubernetes Issue #2517). Moving them to L2 makes destroy safe.
+//
+// Custom domains: tenants can attach their own domains via the v2 Custom
+// Domains flow (CF Zone Mgmt + NS change by user, see api/internal/cfzone/).
+// The wildcard CNAME `*.{baseDomain} → {tunnelId}.cfargotunnel.com` covers
+// the platform's own subdomains; per-tenant custom domains create their own
+// CF Zone, separate from this tunnel resource. See MEET-2026-04-05-033 for
+// the architecture decision (custom domains do NOT route through this tunnel —
+// they have dedicated CF resources to avoid blast radius coupling).
 
 import * as pulumi from "@pulumi/pulumi";
 import * as cloudflare from "@pulumi/cloudflare";
-import * as k8s from "@pulumi/kubernetes";
 
 export interface TunnelConfig {
   /** Cloudflare account ID */
@@ -21,10 +35,6 @@ export interface TunnelConfig {
   readonly environment: string;
   /** Base domain (e.g., "dev.loopzero.example") — wildcard CNAME points to tunnel */
   readonly baseDomain: string;
-  /** K8s provider for the runtime cluster (where cloudflared runs) */
-  readonly runtimeProvider: k8s.Provider;
-  /** Namespace for cloudflared deployment */
-  readonly namespace: string;
   /** Traefik service address inside the runtime cluster */
   readonly traefikService: string;
   /** Import IDs for adopt-or-create pattern (orphan resolution). */
@@ -37,16 +47,18 @@ export interface TunnelConfig {
 export interface TunnelOutput {
   /** Tunnel ID */
   readonly tunnelId: pulumi.Output<string>;
-  /** Tunnel token (for cloudflared --token) */
+  /** Tunnel token (for cloudflared --token; consumed by Helmfile L2). */
   readonly tunnelToken: pulumi.Output<string>;
 }
 
 /**
- * Provisions the Cloudflare Tunnel stack:
- * 1. Tunnel resource
- * 2. Tunnel ingress config (wildcard → Traefik)
- * 3. DNS CNAME record (*.{baseDomain} → tunnel.cfargotunnel.com)
- * 4. cloudflared Deployment in runtime cluster
+ * Provisions the Cloudflare Tunnel stack at L1 (zero K8s resources):
+ *   1. Tunnel resource
+ *   2. Tunnel ingress config (wildcard → Traefik)
+ *   3. DNS CNAME record (*.{baseDomain} → tunnel.cfargotunnel.com)
+ *
+ * The cloudflared Deployment + Secret are created at L2 (Helmfile) using the
+ * tunnelToken returned here.
  */
 export function createTunnel(config: TunnelConfig): TunnelOutput {
   // 1. Stable tunnel secret — read from Pulumi config.
@@ -65,7 +77,7 @@ export function createTunnel(config: TunnelConfig): TunnelOutput {
     tunnelSecret: tunnelSecret,
     configSrc: "cloudflare",
   }, {
-    // Ignore tunnelSecret changes — the provider detects drift when
+    // Ignore tunnelSecret changes — provider detects drift when
     // cloudflare:apiToken is added/changed, triggering a replace that
     // fails because the tunnel has active cloudflared connections.
     // The secret is stable (set once via pulumi config) and never changes.
@@ -74,13 +86,6 @@ export function createTunnel(config: TunnelConfig): TunnelOutput {
   });
 
   // 2. Tunnel ingress config — route ALL traffic to Traefik
-  // The catch-all rule sends every hostname to Traefik, which handles
-  // routing via IngressRoute Host() rules. This supports:
-  //   - Platform subdomains: *.{baseDomain} (auto-generated app URLs)
-  //   - Custom domains: any FQDN that CNAMEs to cname.{baseDomain}
-  // Unknown hostnames receive Traefik's default 404 — safe behavior.
-  // MEET-2026-04-05-033: Changed catch-all from http_status:404 to Traefik
-  // to enable custom domain traffic routing.
   new cloudflare.ZeroTrustTunnelCloudflaredConfig(
     "loopzero-tunnel-config",
     {
@@ -90,36 +95,22 @@ export function createTunnel(config: TunnelConfig): TunnelOutput {
       config: {
         ingresses: [
           {
-            // Platform wildcard — explicit rule for observability (shows in CF dashboard)
             hostname: `*.${config.baseDomain}`,
             service: config.traefikService,
-            originRequest: {
-              noTlsVerify: true, // Traefik uses self-signed cert internally
-            },
+            originRequest: { noTlsVerify: true },
           },
           {
             // Catch-all — routes ALL other hostnames to Traefik.
-            // Enables custom domains: user CNAMEs api.example.com → cname.{baseDomain},
-            // traffic arrives here, Traefik matches via IngressRoute Host() rule.
-            // Required by Cloudflare (must be last rule, no hostname field).
             service: config.traefikService,
-            originRequest: {
-              noTlsVerify: true,
-            },
+            originRequest: { noTlsVerify: true },
           },
         ],
       },
     },
-    {
-      dependsOn: [tunnel],
-    },
+    { dependsOn: [tunnel] },
   );
 
   // 3. DNS — wildcard CNAME for all platform subdomains
-  // The wildcard *.{baseDomain} covers ALL subdomains including cname.{baseDomain}.
-  // No separate cname.{baseDomain} record needed — CF rejects explicit CNAME
-  // when a wildcard already exists for the same host.
-  // Custom domains: users CNAME to cname.{baseDomain} which resolves via wildcard.
   new cloudflare.DnsRecord("loopzero-tunnel-dns", {
     zoneId: config.zoneId,
     name: `*.${config.baseDomain}`,
@@ -131,6 +122,7 @@ export function createTunnel(config: TunnelConfig): TunnelOutput {
 
   // 4. Build the tunnel token (base64 JSON with account_id, tunnel_id, tunnel_secret).
   // This is the format cloudflared expects with `tunnel run --token`.
+  // It is exported from the stack and consumed by Helmfile L2.
   const tunnelToken = pulumi.all([tunnel.id, tunnelSecret]).apply(([tunnelId, secret]) => {
     const tokenPayload = JSON.stringify({
       a: config.accountId,
@@ -139,86 +131,6 @@ export function createTunnel(config: TunnelConfig): TunnelOutput {
     });
     return Buffer.from(tokenPayload).toString("base64");
   });
-
-  // Store tunnel token in a K8s Secret instead of passing as pod arg.
-  // REVIEW-2026-03-30: Fixes HIGH-03 (token was visible via kubectl describe pod).
-  const tunnelTokenSecret = new k8s.core.v1.Secret(
-    "cloudflared-tunnel-token",
-    {
-      metadata: {
-        name: "cloudflared-tunnel-token",
-        namespace: config.namespace,
-      },
-      stringData: {
-        "tunnel-token": tunnelToken,
-      },
-    },
-    { provider: config.runtimeProvider },
-  );
-
-  new k8s.apps.v1.Deployment(
-    "cloudflared",
-    {
-      metadata: {
-        name: "cloudflared",
-        namespace: config.namespace,
-        labels: { app: "cloudflared" },
-      },
-      spec: {
-        replicas: 2,
-        selector: { matchLabels: { app: "cloudflared" } },
-        template: {
-          metadata: { labels: { app: "cloudflared" } },
-          spec: {
-            // REVIEW-2026-03-30: Fixes MED-11 (missing securityContext, probes).
-            securityContext: {
-              runAsNonRoot: true,
-              runAsUser: 65532,
-              fsGroup: 65532,
-            },
-            containers: [
-              {
-                name: "cloudflared",
-                image: "cloudflare/cloudflared:2024.12.2",
-                args: ["tunnel", "--no-autoupdate", "--metrics", "0.0.0.0:2000", "run", "--token", "$(TUNNEL_TOKEN)"],
-                env: [
-                  {
-                    name: "TUNNEL_TOKEN",
-                    valueFrom: {
-                      secretKeyRef: {
-                        name: "cloudflared-tunnel-token",
-                        key: "tunnel-token",
-                      },
-                    },
-                  },
-                ],
-                resources: {
-                  requests: { cpu: "50m", memory: "64Mi" },
-                  limits: { cpu: "200m", memory: "256Mi" },
-                },
-                livenessProbe: {
-                  httpGet: { path: "/ready", port: 2000 },
-                  initialDelaySeconds: 10,
-                  periodSeconds: 15,
-                },
-                readinessProbe: {
-                  httpGet: { path: "/ready", port: 2000 },
-                  initialDelaySeconds: 5,
-                  periodSeconds: 10,
-                },
-                securityContext: {
-                  allowPrivilegeEscalation: false,
-                  readOnlyRootFilesystem: true,
-                  capabilities: { drop: ["ALL"] },
-                },
-              },
-            ],
-          },
-        },
-      },
-    },
-    { provider: config.runtimeProvider, dependsOn: [tunnelTokenSecret] },
-  );
 
   return {
     tunnelId: tunnel.id,

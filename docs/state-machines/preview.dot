@@ -1,0 +1,24 @@
+digraph PreviewEnvironment {
+	rankdir=LR;
+	node [shape=circle, fontsize=10];
+	edge [fontsize=8];
+
+	"Active" [shape=circle];
+	"CleanupFailed" [shape=circle];
+	"Creating" [shape=circle];
+	"Deleted" [shape=doublecircle];
+	"Deleting" [shape=circle];
+	"Expiring" [shape=circle];
+	"Failed" [shape=circle];
+
+	"Active" -> "Deleting" [label="DeletionTriggered"];
+	"Active" -> "Expiring" [label="ExpirationTriggered"];
+	"CleanupFailed" -> "Deleted" [label="GarbageCollected"];
+	"Creating" -> "Active" [label="CreationCompleted"];
+	"Creating" -> "Failed" [label="CreationFailed"];
+	"Deleting" -> "Deleted" [label="CleanupCompleted"];
+	"Deleting" -> "CleanupFailed" [label="CleanupFailed"];
+	"Expiring" -> "Deleted" [label="CleanupCompleted"];
+	"Expiring" -> "CleanupFailed" [label="CleanupFailed"];
+	"Failed" -> "Deleting" [label="DeletionTriggered"];
+}

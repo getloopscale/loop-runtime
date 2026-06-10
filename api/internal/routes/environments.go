@@ -13,6 +13,7 @@ import (
 
 	"github.com/go-chi/chi/v5"
 
+	"github.com/loopzero/loopzero/api/internal/domain"
 	"github.com/loopzero/loopzero/api/internal/middleware"
 	loopzeroerrors "github.com/loopzero/loopzero/pkg/errors"
 )
@@ -26,26 +27,14 @@ var reservedEnvironmentNames = map[string]bool{
 	"monitoring":  true,
 }
 
-// EnvironmentEntry is the summary representation of an environment.
-type EnvironmentEntry struct {
-	Name   string `json:"name"`
-	Status string `json:"status"`
-}
-
-// EnvironmentDetail is the detailed representation of an environment.
-type EnvironmentDetail struct {
-	Name      string           `json:"name"`
-	Status    string           `json:"status"`
-	CreatedAt string           `json:"created_at,omitempty"`
-	Projects  []EnvProjectInfo `json:"projects,omitempty"`
-}
-
-// EnvProjectInfo describes a project deployed in an environment.
-type EnvProjectInfo struct {
-	Name          string `json:"name"`
-	ActiveRelease string `json:"active_release,omitempty"`
-	URL           string `json:"url,omitempty"`
-}
+// T1.3 of deep-review-remediation-plan (closes find_arch_001 + find_dep_routes_type_hub partial):
+// canonical types live in domain/. Aliases preserve back-compat with
+// handler code in this file.
+type (
+	EnvironmentEntry  = domain.EnvironmentEntry
+	EnvironmentDetail = domain.EnvironmentDetail
+	EnvProjectInfo    = domain.EnvProjectInfo
+)
 
 // EnvironmentManager abstracts environment operations on the Tenant CRD.
 // In production, this is the TenantCRManager. In tests, a fake.

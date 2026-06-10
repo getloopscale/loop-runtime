@@ -13,6 +13,48 @@ import (
 	"github.com/loopzero/loopzero/pkg/statemachine"
 )
 
+// fakeEnvTargetStoreStatic is a test double for EnvironmentTargetStore.
+type fakeEnvTargetStoreStatic struct {
+	desired map[string]string
+	active  map[string]string
+}
+
+func newFakeEnvTargetStoreStatic() *fakeEnvTargetStoreStatic {
+	return &fakeEnvTargetStoreStatic{
+		desired: make(map[string]string),
+		active:  make(map[string]string),
+	}
+}
+
+func (f *fakeEnvTargetStoreStatic) SetDesired(_ context.Context, _ db.DBTX, tenant, project, env, releaseID, _, _ string) error {
+	f.desired[tenant+"-"+project+"-"+env] = releaseID
+	return nil
+}
+
+func (f *fakeEnvTargetStoreStatic) SetActive(_ context.Context, _ db.DBTX, tenant, project, env, releaseID string) error {
+	f.active[tenant+"-"+project+"-"+env] = releaseID
+	return nil
+}
+
+func (f *fakeEnvTargetStoreStatic) Get(_ context.Context, _, _, _ string) (*db.EnvironmentTarget, error) {
+	return nil, nil
+}
+
+func (f *fakeEnvTargetStoreStatic) ListByProject(_ context.Context, _, _ string) ([]db.EnvironmentTarget, error) {
+	return nil, nil
+}
+
+func (f *fakeEnvTargetStoreStatic) DeleteTarget(_ context.Context, _ db.DBTX, _, _, _ string) error {
+	return nil
+}
+
+// fakeLockerStatic is a no-op locker for tests.
+type fakeLockerStatic struct{}
+
+func (f *fakeLockerStatic) WithLock(_ context.Context, _, _, _ string, fn func(tx db.DBTX) error) error {
+	return fn(nil)
+}
+
 // =============================================================================
 // PGClaimDedup tests (previously 0% coverage)
 // =============================================================================
@@ -92,6 +134,10 @@ func (f *fakeReleaseConvergenceStoreForCallback) GetByIDTx(_ context.Context, _ 
 		}
 	}
 	return nil, nil
+}
+
+func (f *fakeReleaseConvergenceStoreForCallback) CancelAllByEnv(_ context.Context, _ db.DBTX, _, _, _ string) (int, error) {
+	return 0, nil
 }
 
 func TestNewSyncCallbackActivator(t *testing.T) {
@@ -239,30 +285,6 @@ func TestParseArgoAppName_MultipleHyphens(t *testing.T) {
 	}
 	if env != "staging" {
 		t.Errorf("env = %q, want staging", env)
-	}
-}
-
-// =============================================================================
-// StaticDeliveryActivator — Rollback with unmarshal error
-// =============================================================================
-
-func TestStaticDeliveryActivator_Rollback_InvalidAppsJSON(t *testing.T) {
-	activator := NewStaticDeliveryActivator(StaticDeliveryDeps{
-		KVClient: nil, // Will fail before KV check because of nil kv
-	})
-
-	err := activator.Rollback(context.Background(), RollbackDeliveryRequest{
-		TenantID:    "tn-acme",
-		ProjectID:   "web",
-		Environment: "production",
-		TargetRelease: &db.Release{
-			ID:      "rel-old",
-			BuildID: "bld-old",
-			Apps:    json.RawMessage(`not-valid-json`),
-		},
-	})
-	if err == nil {
-		t.Fatal("expected error for nil KV client")
 	}
 }
 

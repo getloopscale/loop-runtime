@@ -14,7 +14,7 @@ import { BatchSpanProcessor } from '@opentelemetry/sdk-trace-node';
 import { OTLPTraceExporter } from '@opentelemetry/exporter-trace-otlp-http';
 import { Resource } from '@opentelemetry/resources';
 import { ATTR_SERVICE_NAME, ATTR_SERVICE_VERSION } from '@opentelemetry/semantic-conventions';
-import { trace, context, SpanStatusCode } from '@opentelemetry/api';
+import { trace, SpanStatusCode } from '@opentelemetry/api';
 
 // eslint-disable-next-line @typescript-eslint/no-require-imports
 const { version: CLI_VERSION } = require('../../package.json');
@@ -76,4 +76,4 @@ export function getTracer() {
   return trace.getTracer('loopzero-cli', CLI_VERSION);
 }
 
-export { trace, context, SpanStatusCode };
+export { trace, SpanStatusCode };

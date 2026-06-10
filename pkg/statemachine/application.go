@@ -6,13 +6,16 @@ package statemachine
 // T3.6 / ARCH-002: LoopZeroApplication lifecycle state machine.
 //
 // String values match operators/api/v1.ApplicationPhase constants
-// (Progressing, Serving, Reachable, Degraded, Down) so the controller
-// can cast Transition results directly to ApplicationPhase.
+// (Progressing, Serving, Reachable, Degraded, Down, Cleaned) so the
+// controller can cast Transition results directly to ApplicationPhase.
 //
 // Unlike most LoopZero state machines (Build, Tenant, Preview), the
 // Application machine is CYCLIC — apps can move Reachable → Degraded
-// → Reachable across many reconciles in their lifetime. It has no
-// terminal state.
+// → Reachable across many reconciles in their lifetime. The Cleaned
+// state IS terminal (added 2026-05-03 by fix-all-platform-issues-plan
+// T2.2 reaper); it represents an orphan CR garbage-collected by the
+// application_reaper after grace period when the GitOps source no
+// longer carries the manifest.
 //
 // States:
 //   Progressing — newly created or rolling update in progress
@@ -20,6 +23,8 @@ package statemachine
 //   Reachable   — route probe succeeded; the app is user-facing
 //   Degraded    — was Reachable, now route probe fails; recoverable
 //   Down        — was Serving/Reachable, endpoints dropped to zero
+//   Cleaned     — terminal: GitOps source removed manifest; CR scheduled
+//                  for finalizer removal by reaper (no further reconcile).
 const (
 	ApplicationEmpty       State = ""
 	ApplicationProgressing State = "Progressing"
@@ -27,6 +32,7 @@ const (
 	ApplicationReachable   State = "Reachable"
 	ApplicationDegraded    State = "Degraded"
 	ApplicationDown        State = "Down"
+	ApplicationCleaned     State = "Cleaned"
 )
 
 // LoopZeroApplication events.
@@ -37,6 +43,7 @@ const (
 	ApplicationRouteOK          Event = "RouteOK"          // ExposedRoute is Reachable
 	ApplicationRouteFail        Event = "RouteFail"        // ExposedRoute probe failed
 	ApplicationUpdate           Event = "Update"           // Spec changed, rolling update
+	ApplicationOrphaned         Event = "Orphaned"         // Reaper detected: GitOps source removed manifest + grace period elapsed
 )
 
 // NewApplicationMachine returns the LoopZeroApplication state machine.
@@ -80,7 +87,19 @@ func NewApplicationMachine() *Machine {
 			// Down → Progressing (recovery — endpoints came back)
 			{From: ApplicationDown, Event: ApplicationEndpointsReady, To: ApplicationProgressing},
 			{From: ApplicationDown, Event: ApplicationUpdate, To: ApplicationProgressing},
+
+			// Reaper-driven orphan cleanup (fix-all-platform-issues-plan T2.2).
+			// Triggered when GitOps source removed the manifest AND grace period
+			// (default 1h, configurable via LOOPZERO_REAPER_GRACE_PERIOD_SECONDS)
+			// elapsed. Allowed from EVERY non-terminal state because an app can
+			// be orphaned at any point in its lifecycle (e.g., user removed it
+			// from the gitops repo while Reachable).
+			{From: ApplicationProgressing, Event: ApplicationOrphaned, To: ApplicationCleaned},
+			{From: ApplicationServing, Event: ApplicationOrphaned, To: ApplicationCleaned},
+			{From: ApplicationReachable, Event: ApplicationOrphaned, To: ApplicationCleaned},
+			{From: ApplicationDegraded, Event: ApplicationOrphaned, To: ApplicationCleaned},
+			{From: ApplicationDown, Event: ApplicationOrphaned, To: ApplicationCleaned},
 		},
-		// No terminal state — apps cycle until deletion.
+		Terminal: []State{ApplicationCleaned},
 	})
 }

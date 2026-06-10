@@ -1,0 +1,102 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://loopzero.platform/schemas/postgresql/values.schema.json",
+  "title": "PostgreSQL LoopZero wrapper values schema",
+  "description": "Plan 2026-05-20 T2.5 ext — fail-fast on PG bootstrap config drift. Catches B19/B21 (Bitnami legacy image rename), B27 (per-component DB creation), B29 (primary.initdb.scripts location post chart 18.x) at lint time instead of pod CrashLoopBackOff time.",
+  "type": "object",
+  "properties": {
+    "image": {
+      "type": "object",
+      "required": ["registry", "repository"],
+      "properties": {
+        "registry": {
+          "type": "string",
+          "minLength": 1,
+          "description": "Image registry. Default 'docker.io' for Bitnami chart. Production may override to a private mirror."
+        },
+        "repository": {
+          "type": "string",
+          "minLength": 1,
+          "pattern": "^[a-z0-9]+([._-][a-z0-9]+)*(/[a-z0-9]+([._-][a-z0-9]+)*)*$",
+          "description": "Image repository. B19/B21: Bitnami migrated free-tier tags to 'bitnamilegacy/*' mid-2025. Pattern anchored to OCI image ref syntax."
+        },
+        "tag": {
+          "type": "string",
+          "description": "Optional pin. Default: chart appVersion. Avoid pinning unless verified to exist on registry."
+        }
+      }
+    },
+    "auth": {
+      "type": "object",
+      "required": ["username", "password", "database"],
+      "properties": {
+        "username": {
+          "type": "string",
+          "minLength": 1,
+          "pattern": "^[a-z_][a-z0-9_]*$",
+          "description": "PG username. Lowercase + underscore (PG identifier convention). Empty/missing = chart picks 'postgres' default = security risk."
+        },
+        "password": {
+          "type": "string",
+          "minLength": 1,
+          "description": "PG password. MUST be set (no auto-generated). Production overrides via Pulumi/SOPS Secret. Empty = chart auto-gens but loses across restarts."
+        },
+        "database": {
+          "type": "string",
+          "minLength": 1,
+          "pattern": "^[a-z_][a-z0-9_]*$",
+          "description": "Initial database name. PG identifier convention (lowercase + underscore)."
+        }
+      }
+    },
+    "primary": {
+      "type": "object",
+      "description": "B29 fix (CHG-2026-04-30-INFRA-PARITY): bitnami postgresql 18.x expects 'primary.initdb.scripts', NOT top-level 'initdb.scripts'. Schema validates the correct nesting.",
+      "properties": {
+        "initdb": {
+          "type": "object",
+          "properties": {
+            "scripts": {
+              "type": "object",
+              "description": "Map of script-name → SQL. B27 requires CREATE DATABASE for gitea/kratos/hydra/harbor here."
+            }
+          }
+        },
+        "pdb": {
+          "type": "object",
+          "properties": {
+            "create": {
+              "type": "boolean",
+              "description": "Bitnami chart-owned PDB. B2 (cleanroom dogfood 2026-05-05): Tiltfile installs separate PDB; disable bitnami-owned to prevent conflict."
+            }
+          }
+        },
+        "persistence": {
+          "type": "object",
+          "properties": {
+            "enabled": { "type": "boolean" },
+            "size": {
+              "type": "string",
+              "pattern": "^[0-9]+(\\.[0-9]+)?(Ki|Mi|Gi|Ti|Pi)$",
+              "description": "PVC size — Kubernetes resource quantity (e.g., '10Gi'). Pattern enforces unit suffix to avoid silent parsing failure."
+            }
+          }
+        }
+      }
+    },
+    "metrics": {
+      "type": "object",
+      "properties": {
+        "enabled": { "type": "boolean" },
+        "serviceMonitor": {
+          "type": "object",
+          "properties": {
+            "enabled": { "type": "boolean" }
+          }
+        }
+      }
+    }
+  },
+  "required": ["image", "auth"],
+  "additionalProperties": true
+}

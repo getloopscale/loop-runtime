@@ -1,0 +1,44 @@
+# Let's Encrypt Production — for drill + prod environments
+#
+# Plan 2026-05-19-drill-skills-rigor-restoration Bug A fix:
+# letsencrypt-prod ClusterIssuer estava ausente em drill bootstrap. Certificate
+# loopzero-api-tls travada em "DoesNotExist" 93min durante LIVE Phase 4 (descoberto
+# via dogfood-drill quando curl detectou `TRAEFIK DEFAULT CERT` self-signed).
+#
+# Includes dnsZones for both loopzero.example (prod) AND loopzero-drill.example (drill)
+# — drift caught: previous letsencrypt-staging.yaml only listed loopzero.example,
+# making it useless against drill stack.
+#
+# Issuer trusted by browsers — use only in prod/drill, not in CI experiments
+# (Let's Encrypt prod rate limit: 50 certs/registered domain/week).
+#
+# Requires Secret `cloudflare-api-token-secret` em namespace `cert-manager`
+# com chave `api-token` contendo CF API token zoneapi-edit permission.
+# Bootstrap drill-helmfile-bootstrap.sh cria automaticamente.
+apiVersion: cert-manager.io/v1
+kind: ClusterIssuer
+metadata:
+  name: letsencrypt-prod
+  annotations:
+    loopzero.io/purpose: "Production Let's Encrypt — drill + prod TLS"
+    loopzero.io/rotation: "automatic via cert-manager (90-day cert TTL)"
+spec:
+  acme:
+    server: https://acme-v02.api.letsencrypt.org/directory
+    email: admin@loopzero.example
+    privateKeySecretRef:
+      name: letsencrypt-prod-account-key
+    solvers:
+    - dns01:
+        cloudflare:
+          apiTokenSecretRef:
+            key: api-token
+            name: cloudflare-api-token-secret
+      selector:
+        dnsZones:
+        - loopzero.example
+        - loopzero-drill.example
+    - http01:
+        ingress:
+          class: traefik
+      selector: {}

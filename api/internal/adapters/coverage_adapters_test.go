@@ -42,23 +42,11 @@ func TestPgxRowsAdapter_Delegates(t *testing.T) {
 // =============================================================================
 
 // fakeSubmitOrchestrator captures SubmitBuild calls for testing app normalization.
+// Quality-Gate Phase 2: methods removed; test exercises BuildOrchestratorAdapter
+// via the real orchestrator path (line below), so the fake's interface methods
+// were never invoked and tripped deadcode.
 type fakeSubmitOrchestrator struct {
-	captured *services.SubmitBuildRequest
-	resp     *services.SubmitBuildResponse
-	err      error
-}
-
-func (f *fakeSubmitOrchestrator) SubmitBuild(_ context.Context, req services.SubmitBuildRequest) (*services.SubmitBuildResponse, error) {
-	f.captured = &req
-	return f.resp, f.err
-}
-
-func (f *fakeSubmitOrchestrator) OnBuildCompleted(_ context.Context, _ string, _ services.BuildCallbackRequest) error {
-	return nil
-}
-
-func (f *fakeSubmitOrchestrator) CancelBuild(_ context.Context, _ string) error {
-	return nil
+	resp *services.SubmitBuildResponse
 }
 
 func TestBuildOrchestratorAdapter_SubmitBuild_DefaultAppType(t *testing.T) {
@@ -290,6 +278,19 @@ type fakeBuildStoreWithGetError struct {
 
 func (f *fakeBuildStoreWithGetError) GetByID(_ context.Context, _ string) (*db.Build, error) {
 	return nil, f.err
+}
+
+// GetByIDForTenant — T0.4 of deep-review-2026-05-10-remediation-plan.
+// Emulates the production SQL filter for the unit-test scope.
+func (f *fakeBuildStoreWithGetError) GetByIDForTenant(ctx context.Context, tenantID, buildID string) (*db.Build, error) {
+	b, err := f.GetByID(ctx, buildID)
+	if err != nil || b == nil {
+		return b, err
+	}
+	if b.TenantID != tenantID {
+		return nil, nil
+	}
+	return b, nil
 }
 
 func TestBuildOrchestratorAdapter_IsBuildTerminal_Cancelling(t *testing.T) {

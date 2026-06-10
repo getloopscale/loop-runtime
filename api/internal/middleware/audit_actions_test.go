@@ -137,6 +137,25 @@ func TestExtractResourceType_PromoteConnect(t *testing.T) {
 	}
 }
 
+// CHG-2026-05-06-AUDIT-RESOURCE-ID: extractResourceID returns "" for
+// endpoints whose resource lives in the body or query string (the URL
+// only names the collection). The audit middleware now compensates by
+// snooping the body and query — this guard asserts the path-only side
+// continues to return "" so the enrichment fallback is exercised.
+func TestExtractResourceID_BodyOnlyEndpointsReturnEmpty(t *testing.T) {
+	cases := []string{
+		"/api/v1/builds",
+		"/api/v1/secrets",
+		"/api/v1/domains",
+	}
+	for _, path := range cases {
+		if got := extractResourceID(path); got != "" {
+			t.Errorf("extractResourceID(%s) = %q, want %q (no ID in URL path)",
+				path, got, "")
+		}
+	}
+}
+
 // AUDIT-19: extractResourceID on these paths should still return the
 // project name (positioned after "projects"), so audit trails remain
 // queryable by project. Regression guard.
@@ -150,6 +169,42 @@ func TestExtractResourceID_PromoteConnect(t *testing.T) {
 	for _, tc := range cases {
 		if got := extractResourceID(tc.path); got != tc.want {
 			t.Errorf("extractResourceID(%s) = %q, want %q", tc.path, got, tc.want)
+		}
+	}
+}
+
+// CHG-2026-04-29-DOGFOOD-REAL-E2E iter 13 / Achado #27.
+// Preview create/delete + admin tenants evict were silently falling through
+// to "unknown.<METHOD>.<segment>" in audit_log because the path segments
+// weren't in deriveAction's switch / knownCollections set. Dogfood journeys
+// 09/11 had no audit entries to assert.
+func TestDeriveAction_PreviewAndAdmin(t *testing.T) {
+	cases := []struct {
+		method, path, want string
+	}{
+		{"POST", "/api/v1/projects/myapp/previews", "preview.created"},
+		{"DELETE", "/api/v1/projects/myapp/previews/prev-123", "preview.deleted"},
+		{"POST", "/api/v1/admin/tenants/evict", "admin.tenants_evicted"},
+	}
+	for _, tc := range cases {
+		got := deriveAction(tc.method, tc.path)
+		if got != tc.want {
+			t.Errorf("deriveAction(%s, %s) = %q, want %q", tc.method, tc.path, got, tc.want)
+		}
+	}
+}
+
+func TestExtractResourceType_PreviewAndAdmin(t *testing.T) {
+	cases := []struct {
+		path, want string
+	}{
+		{"/api/v1/projects/myapp/previews", "preview"},
+		{"/api/v1/projects/myapp/previews/prev-123", "preview"},
+		{"/api/v1/admin/tenants/evict", "admin"},
+	}
+	for _, tc := range cases {
+		if got := extractResourceType(tc.path); got != tc.want {
+			t.Errorf("extractResourceType(%s) = %q, want %q", tc.path, got, tc.want)
 		}
 	}
 }

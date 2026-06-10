@@ -1,0 +1,53 @@
+# Branch protection config for Quality Gates Required Status Checks.
+# Plan 2026-05-21-comprehensive-quality-gates v1.1 T7.4 (EC-1 fix).
+#
+# Status check names MUST match exactly the GitHub Actions workflow job
+# `name:` field (case-sensitive). Verify via Actions UI before activation.
+#
+# Phased rollout:
+#   1. Operator runs: BRANCH=develop bash infra/scripts/ci/branch-protection-update.sh
+#   2. Wait 7 days advisory mode; monitor false-positive rate
+#   3. Operator runs: BRANCH=main bash infra/scripts/ci/branch-protection-update.sh
+
+branches:
+  develop:
+    required_status_checks:
+      # Phase 1 (coverage tooling)
+      - "Quality Gates - Coverage Report / Coverage Report (Go + CLI)"
+      - "Quality Gates - Coverage Report / Coverage scripts hermetic tests"
+
+      # Phase 2 (coverage gates)
+      - "Quality Gates - Coverage Diff Gate"
+      - "Quality Gates - Baseline Regression Gate"
+
+      # Phase 5 (PR discipline)
+      - "Quality Gates - PR Template Compliance"
+      - "Quality Gates - Bug-fix Regression Test Gate"
+      - "Quality Gates - Test Deletion Audit"
+
+      # Phase 6 (runtime + flaky + pyramid + mocks + skip)
+      - "Quality Gates - Runtime SLO"
+      - "Quality Gates - Test Pyramid"
+      - "Quality Gates - Mock Budget"
+      - "Quality Gates - Skip-Link Enforcement"
+
+      # Existing checks preserved
+      - "Helm Charts / Render-time tests (Plan 2026-05-20 T4.1)"
+      - "drill-hermetic-tests / drill-hermetic-tests"
+
+  main:
+    # Same checks as develop — activated AFTER 7-day soak on develop
+    required_status_checks:
+      - "Quality Gates - Coverage Report / Coverage Report (Go + CLI)"
+      - "Quality Gates - Coverage Report / Coverage scripts hermetic tests"
+      - "Quality Gates - Coverage Diff Gate"
+      - "Quality Gates - Baseline Regression Gate"
+      - "Quality Gates - PR Template Compliance"
+      - "Quality Gates - Bug-fix Regression Test Gate"
+      - "Quality Gates - Test Deletion Audit"
+      - "Quality Gates - Runtime SLO"
+      - "Quality Gates - Test Pyramid"
+      - "Quality Gates - Mock Budget"
+      - "Quality Gates - Skip-Link Enforcement"
+      - "Helm Charts / Render-time tests (Plan 2026-05-20 T4.1)"
+      - "drill-hermetic-tests / drill-hermetic-tests"

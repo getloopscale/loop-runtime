@@ -19,7 +19,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/loopzero/loopzero/api/internal/routes"
+	"github.com/loopzero/loopzero/api/internal/domain"
 )
 
 // Client queries Grafana Loki for build logs via the HTTP API.
@@ -40,8 +40,8 @@ func NewClient(baseURL string, httpClient *http.Client, logger *slog.Logger) *Cl
 }
 
 // QueryBuildLogs queries Loki for logs of a specific build workflow.
-// Implements routes.LogQuerier.
-func (c *Client) QueryBuildLogs(ctx context.Context, buildID string, opts routes.LogQueryOpts) ([]routes.LogEntry, error) {
+// Implements domain.LogQuerier.
+func (c *Client) QueryBuildLogs(ctx context.Context, buildID string, opts domain.LogQueryOpts) ([]domain.LogEntry, error) {
 	// SEC-005 fix: Validate buildID and step to prevent LogQL injection.
 	// Only allow alphanumeric, hyphens, and underscores.
 	if !isValidLogParam(buildID) {
@@ -64,12 +64,25 @@ func (c *Client) QueryBuildLogs(ctx context.Context, buildID string, opts routes
 		limit = opts.Limit
 	}
 
+	// Time window for the Loki query_range call.
+	//   - Default: last 7 days (matches the chart's default retention,
+	//     and the operator's mental model "show me recent build logs").
+	//   - Beta Logs Gate Criterion 7: opts.SinceSeconds > 0 overrides
+	//     so `loopzero logs --since 30d` works for older builds (subject
+	//     to the cluster's actual Loki retention).
+	var startNano int64
+	if opts.SinceSeconds > 0 {
+		startNano = time.Now().Add(-time.Duration(opts.SinceSeconds) * time.Second).UnixNano()
+	} else {
+		startNano = time.Now().Add(-7 * 24 * time.Hour).UnixNano()
+	}
+
 	// Query Loki API: GET /loki/api/v1/query_range
 	params := url.Values{
 		"query":     {query},
 		"limit":     {strconv.Itoa(limit)},
 		"direction": {"forward"},
-		"start":     {strconv.FormatInt(time.Now().Add(-7*24*time.Hour).UnixNano(), 10)},
+		"start":     {strconv.FormatInt(startNano, 10)},
 		"end":       {strconv.FormatInt(time.Now().UnixNano(), 10)},
 	}
 
@@ -118,8 +131,8 @@ type lokiStream struct {
 }
 
 // parseLokiStreams converts Loki stream results into LogEntry slices.
-func parseLokiStreams(resp lokiQueryResponse) []routes.LogEntry {
-	var entries []routes.LogEntry
+func parseLokiStreams(resp lokiQueryResponse) []domain.LogEntry {
+	var entries []domain.LogEntry
 
 	for _, stream := range resp.Data.Result {
 		step := stream.Stream["step"]
@@ -137,7 +150,7 @@ func parseLokiStreams(resp lokiQueryResponse) []routes.LogEntry {
 
 			ts := parseNanosecondTimestamp(nsTimestamp)
 
-			entries = append(entries, routes.LogEntry{
+			entries = append(entries, domain.LogEntry{
 				Step:      step,
 				Stream:    streamType,
 				Content:   content,
@@ -163,29 +176,69 @@ func isValidLogParam(s string) bool {
 	return len(s) <= 128 && logParamRegex.MatchString(s)
 }
 
+// buildRuntimeLogQL parses a runtime queryKey and constructs the LogQL
+// selector. Extracted from QueryBuildLogsSince so the LogQL shape is
+// testable without an HTTP round-trip to Loki.
+//
+// Accepts BOTH the legacy 4-segment form (runtime:tenant:env:project)
+// and the 5-segment form (runtime:tenant:env:project:app) added 2026-
+// 05-13 for Beta Logs Gate per-app filtering.
+//
+// Empty {app} segment in the 5-segment form is treated as "no filter"
+// (functionally identical to the 4-segment form). This keeps the
+// HTTP handler from having to branch on empty values.
+func buildRuntimeLogQL(queryKey string) (string, error) {
+	parts := strings.SplitN(queryKey, ":", 5)
+	if len(parts) < 4 {
+		return "", fmt.Errorf("loki: invalid runtime query key: %q", queryKey)
+	}
+	tenant, env, project := parts[1], parts[2], parts[3]
+	var app string
+	if len(parts) == 5 {
+		app = parts[4]
+	}
+	if !isValidLogParam(tenant) || !isValidLogParam(env) || !isValidLogParam(project) {
+		return "", fmt.Errorf("loki: invalid runtime query parameters")
+	}
+	// project is currently unused in the LogQL — LoopZero's tenant
+	// namespace convention is `loopzero-{tenant}-{env}` (no per-project
+	// namespace). Project is part of the queryKey for forward-compat
+	// (we may eventually scope per-project, e.g. via a label).
+	_ = project
+	namespace := fmt.Sprintf("loopzero-%s-%s", tenant, env)
+	if app != "" {
+		if !isValidLogParam(app) {
+			return "", fmt.Errorf("loki: invalid app filter parameter")
+		}
+		return fmt.Sprintf(`{namespace="%s", app="%s", container=~".+"}`, namespace, app), nil
+	}
+	return fmt.Sprintf(`{namespace="%s", container=~".+"}`, namespace), nil
+}
+
 // QueryBuildLogsSince queries Loki for logs newer than sinceNano (nanosecond timestamp).
 // Used by the log streaming handler for incremental polling.
-// Implements routes.StreamLogQuerier.
+// Implements domain.StreamLogQuerier.
 //
 // The queryKey can be:
 //   - A build ID (e.g., "bld-abc123") for build logs
 //   - A runtime key "runtime:{tenant}:{env}:{project}" for runtime logs
-func (c *Client) QueryBuildLogsSince(ctx context.Context, queryKey string, sinceNano int64, limit int) ([]routes.LogEntry, error) {
+//     (legacy 4-segment form — kept for backward compatibility)
+//   - A runtime key "runtime:{tenant}:{env}:{project}:{app}" with an
+//     optional 5th segment (Beta Logs Gate Criterion 3) — when {app}
+//     is non-empty the LogQL selector includes `app="<value>"`.
+func (c *Client) QueryBuildLogsSince(ctx context.Context, queryKey string, sinceNano int64, limit int) ([]domain.LogEntry, error) {
 	var query string
 
-	// Parse runtime key format: "runtime:{tenant}:{env}:{project}"
+	// Parse runtime key format: "runtime:{tenant}:{env}:{project}" or
+	// "runtime:{tenant}:{env}:{project}:{app}" (5-segment form added
+	// 2026-05-13 for per-app filtering).
 	if strings.HasPrefix(queryKey, "runtime:") {
-		parts := strings.SplitN(queryKey, ":", 4)
-		if len(parts) != 4 {
-			return nil, fmt.Errorf("loki: invalid runtime query key: %q", queryKey)
+		var qerr error
+		query, qerr = buildRuntimeLogQL(queryKey)
+		if qerr != nil {
+			return nil, qerr
 		}
-		tenant, env, project := parts[1], parts[2], parts[3]
-		if !isValidLogParam(tenant) || !isValidLogParam(env) || !isValidLogParam(project) {
-			return nil, fmt.Errorf("loki: invalid runtime query parameters")
-		}
-		// Runtime logs: query by namespace (LoopZero naming convention)
-		namespace := fmt.Sprintf("loopzero-%s-%s", tenant, env)
-		query = fmt.Sprintf(`{namespace="%s", container=~".+"}`, namespace)
+		_ = query // silence unused-variable warning if removed later
 	} else {
 		// Build logs: query by workflow name containing buildID
 		if !isValidLogParam(queryKey) {

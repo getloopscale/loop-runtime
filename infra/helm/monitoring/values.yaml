@@ -28,8 +28,8 @@ prometheus:
         static_configs:
           - targets:
               # Build cluster LB IP on k3d-loopzero-build network.
-              # Updated by: bash infra/scripts/update-cross-cluster-ips.sh
-              - "172.18.0.10:30090"
+              # Updated by: bash infra/scripts/local/update-cross-cluster-ips.sh
+              - "10.0.5.8:30090"
             labels:
               cluster: build
               component: argo-workflows
@@ -40,8 +40,8 @@ prometheus:
         static_configs:
           - targets:
               # Workload cluster LB IP on k3d-loopzero-workload network.
-              # Updated by: bash infra/scripts/update-cross-cluster-ips.sh
-              - "172.18.0.14:30091"
+              # Updated by: bash infra/scripts/local/update-cross-cluster-ips.sh
+              - "10.0.5.11:30091"
             labels:
               cluster: workload
               component: traefik
@@ -52,9 +52,10 @@ prometheus:
 grafana:
   securityContext:
     runAsNonRoot: true
-  # LOCAL DEV ONLY — Pulumi production does not set adminPassword; Grafana chart
-  # auto-generates a random one stored in K8s Secret "grafana" (key admin-password).
-  adminPassword: loopzero-dev-password
+  # T1.3 (plan 2026-05-21-deep-review-remediation): empty → Grafana chart
+  # auto-generates random one stored in K8s Secret "grafana" (admin-password).
+  # Operator reads via: kubectl -n monitoring get secret grafana -o jsonpath='{.data.admin-password}' | base64 -d
+  adminPassword: ""
   additionalDataSources:
     - name: Loki
       type: loki

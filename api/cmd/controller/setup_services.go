@@ -38,8 +38,15 @@ type controllerDeps struct {
 // fatal errors (e.g. unable to create the workflow submitter).
 func setupServices(cfg config.Config, dbAdapter *db.PgxAdapter, logger *slog.Logger) controllerDeps {
 	// ---- Stores ----
-	buildStore := db.NewPostgresBuildStore(dbAdapter)
-	releaseStore := db.NewPostgresReleaseStore(dbAdapter)
+	// T1.2b (plan 2026-05-29-sqlc-migration v1.3): sqlc-backed wrapper.
+	// Satisfies db.BuildStore interface 1:1 — service field types
+	// unchanged. State-machine SafeTransition + concurrent-deploy
+	// rejection preserved at store layer (D4).
+	buildStore := db.NewBuildStoreSqlc(dbAdapter)
+	// T1.1c2c (plan 2026-05-29-sqlc-migration v1.3): sqlc-backed wrapper.
+	// Satisfies db.ReleaseStore interface 1:1 — service field types
+	// unchanged. State-machine SafeTransition runs at store layer (D4).
+	releaseStore := db.NewReleaseStoreSqlc(dbAdapter)
 	envTargetStore := db.NewPostgresEnvironmentTargetStore(dbAdapter, dbAdapter)
 	pgEventStore := sse.NewPostgresEventStore(dbAdapter, dbAdapter)
 	domainStore := &db.PostgresDomainStore{DB: dbAdapter}
@@ -49,11 +56,16 @@ func setupServices(cfg config.Config, dbAdapter *db.PgxAdapter, logger *slog.Log
 
 	// ---- Build cluster (Argo) ----
 	rawWorkflowSubmitter, err := argo.NewWorkflowSubmitter(argo.WorkflowSubmitterConfig{
-		Kubeconfig:       cfg.BuildKubeconfig,
-		Context:          cfg.BuildKubeContext,
-		RegistryURL:      cfg.RegistryURL,
-		RegistryInsecure: cfg.RegistryInsecure,
-		BaseDomain:       cfg.BaseDomain,
+		Kubeconfig:          cfg.BuildKubeconfig,
+		Context:             cfg.BuildKubeContext,
+		RegistryURL:         cfg.RegistryURL,
+		RegistryInsecure:    cfg.RegistryInsecure,
+		BaseDomain:          cfg.BaseDomain,
+		CosignKeyless:       cfg.CosignKeyless,       // v1.1 EC-3 wire env var
+		CosignAttestEnabled: cfg.CosignAttestEnabled, // v1.1 EC-3 wire env var
+		CosignFulcioURL:     cfg.CosignFulcioURL,
+		CosignRekorURL:      cfg.CosignRekorURL,
+		CosignInsecureSkipSCT: cfg.CosignInsecureSkipSCT, // T1.2 CR-1 fix
 	})
 	if err != nil {
 		logger.Error("failed to create workflow submitter", "error", err)
@@ -96,7 +108,7 @@ func setupServices(cfg config.Config, dbAdapter *db.PgxAdapter, logger *slog.Log
 	gitopsPusher := gitops.NewGiteaGitOpsPusher(gitops.GiteaGitOpsPusherConfig{
 		BaseURL: cfg.GiteaURL,
 		Token:   cfg.GiteaToken,
-		OrgName: "loopzero",
+		OrgName: cfg.GiteaOrg, // B77: was hardcoded "loopzero"
 	})
 
 	// ---- k8s managers (mgmt cluster) ----
@@ -137,7 +149,8 @@ func setupServices(cfg config.Config, dbAdapter *db.PgxAdapter, logger *slog.Log
 			Interval:           cfg.ReconcileInterval,
 			RegistryURL:        cfg.RegistryURL,
 			BaseDomain:         cfg.BaseDomain,
-			ClusterIssuer:      cfg.ClusterIssuer, // B14 (MEET-2026-04-23-058)
+			ClusterIssuer:      cfg.ClusterIssuer,     // B14 (MEET-2026-04-23-058)
+			PrometheusAddress:  cfg.PrometheusAddress, // argo-rollouts-progressive-delivery-plan T1.2 (D6)
 			MaxConcurrent:      cfg.MaxConcurrentBuildsPerCell,
 			MaxBuildsPerTenant: cfg.MaxBuildsPerTenant,
 			CellID:             cellID(cfg),

@@ -1,0 +1,357 @@
+# Ory Kratos — Identity Management for LoopZero Cloud
+# Chart: ory/kratos v0.59.0 (app: Kratos v1.3.1)
+#
+# LOCAL DEV ONLY — production overrides via Pulumi secrets.
+# DSN is overridden by Pulumi in DigitalOcean environments.
+
+kratos:
+  automigration:
+    enabled: true
+    type: initContainer
+
+  config:
+    # T1.3 (plan 2026-05-21-deep-review-remediation): DSN templated via helmfile
+    # env. LOOPZERO_DB_PASSWORD required (set by task setup OR generate-secrets.sh).
+    # Pulumi prod overrides this entire DSN via Secret reference.
+    # EC-02 of plan 2026-05-22 v1.1 — single-quoted YAML allows unescaped
+    # double quotes inside gotmpl template literal. Previous `"..."` form
+    # with `\"` escape failed helmfile template render with
+    # `unexpected "\\" in operand`. Cleanroom bug discovered 2026-05-21.
+    dsn: 'postgres://loopzero:{{ requiredEnv "LOOPZERO_DB_PASSWORD" }}@postgresql.loopzero-system.svc.cluster.local:5432/kratos?sslmode=disable'
+
+    # --- Identity ---
+    identity:
+      default_schema_id: default
+      schemas:
+        - id: default
+          url: file:///etc/config/identity.default.schema.json
+
+    # --- Serve (T2.1 of plan 2026-05-29-dashboard-public-integration-canonicalization) ---
+    # Public-facing config. When .Values.publicAuthUrl is set, the Kratos
+    # public HTTP server presents itself at that URL (browser-visible redirects,
+    # absolute URLs in flow responses) and CORS is enabled for the dashboard
+    # origin. When unset, Kratos uses its in-cluster cluster-DNS hostname
+    # (default behaviour — local dev / standalone).
+    #
+    # v1.1 EC-05: `trimSuffix "/"` makes the template robust against operator
+    # input style (with or without trailing slash). v1.1 EC-06: the JSON
+    # schema (values.schema.json) requires `corsAllowedOrigins` non-empty
+    # whenever `publicAuthUrl` is set — without that constraint, CORS gets
+    # enabled with zero origins and silently 403s every browser XHR.
+    {{- if hasKey .Values "publicAuthUrl" }}
+    serve:
+      public:
+        base_url: "{{ .Values.publicAuthUrl | trimSuffix "/" }}/"
+        cors:
+          enabled: true
+          allowed_origins:
+          {{- range .Values.corsAllowedOrigins }}
+            - {{ . | quote }}
+          {{- end }}
+          allowed_methods: [GET, POST, PUT, PATCH, DELETE, OPTIONS]
+          allowed_headers: [Authorization, Content-Type, Cookie, X-Session-Token]
+          exposed_headers: [Content-Type, Set-Cookie]
+          allow_credentials: true
+    {{- end }}
+
+    # --- Self-Service Flows ---
+    selfservice:
+      default_browser_return_url: "{{ .Values.uiBaseUrl | trimSuffix "/" | default "http://localhost:4455" }}/"
+      # v1.1 EC-S1: allowed_return_urls is enforced by Kratos when the request
+      # URL carries ?return_to=... Without these prefixes registered, the browser
+      # gets bounced to the default URL on every callback. When publicAuthUrl is
+      # set, the env yaml MUST also set allowedReturnUrls (validated by schema).
+      {{- if hasKey .Values "allowedReturnUrls" }}
+      allowed_return_urls:
+        {{- range .Values.allowedReturnUrls }}
+        - {{ . | quote }}
+        {{- end }}
+      {{- end }}
+
+      methods:
+        password:
+          enabled: true
+          config:
+            min_password_length: 10
+            identifier_similarity_check_enabled: true
+            haveibeenpwned_enabled: true
+            # Don't block registration if HIBP API is unreachable
+            ignore_network_errors: true
+
+        totp:
+          enabled: true
+          config:
+            issuer: "LoopZero Platform"
+
+        lookup_secret:
+          enabled: true
+
+        oidc:
+          enabled: true
+          config:
+            # Account linking: when a user signs in with a social provider and
+            # the email already exists, link the accounts automatically.
+            # v1.1 EC-05: trimSuffix prevents `//` in OIDC callback URLs.
+            base_redirect_uri: "{{ if hasKey .Values "publicAuthUrl" }}{{ .Values.publicAuthUrl | trimSuffix "/" }}{{ else }}{{ .Values.uiBaseUrl | default "http://localhost:4455" | trimSuffix "/" }}{{ end }}/"
+            providers:
+              # GitHub OAuth — reads from LOOPZERO_GITHUB_CLIENT_ID / SECRET env vars
+              # (canonical source: /home/paulo/loopzero/.env locally; Pulumi Secret in
+              # prod/drill). Empty strings disable the provider gracefully —
+              # Kratos won't crash, the button just won't work.
+              # Per "100% functional" mandate 2026-06-01.
+              - id: github
+                provider: github
+                client_id: "{{ env "LOOPZERO_GITHUB_CLIENT_ID" | default "REPLACE_VIA_PULUMI" }}"
+                client_secret: "{{ env "LOOPZERO_GITHUB_CLIENT_SECRET" | default "REPLACE_VIA_PULUMI" }}"
+                mapper_url: "base64://bG9jYWwgY2xhaW1zID0gc3RkLmV4dFZhcignY2xhaW1zJyk7CnsKICBpZGVudGl0eTogewogICAgdHJhaXRzOiB7CiAgICAgIGVtYWlsOiBjbGFpbXMuZW1haWwsCiAgICAgIFtpZiBzdGQub2JqZWN0SGFzKGNsYWltcywgJ25hbWUnKSAmJiBjbGFpbXMubmFtZSAhPSBudWxsIHRoZW4gJ25hbWUnXTogY2xhaW1zLm5hbWUsCiAgICB9LAogIH0sCn0K"
+                scope:
+                  - user:email
+              # Google OAuth — reads from LOOPZERO_GOOGLE_CLIENT_ID / SECRET env vars.
+              - id: google
+                provider: google
+                client_id: "{{ env "LOOPZERO_GOOGLE_CLIENT_ID" | default "REPLACE_VIA_PULUMI" }}"
+                client_secret: "{{ env "LOOPZERO_GOOGLE_CLIENT_SECRET" | default "REPLACE_VIA_PULUMI" }}"
+                mapper_url: "base64://bG9jYWwgY2xhaW1zID0gc3RkLmV4dFZhcignY2xhaW1zJyk7CnsKICBpZGVudGl0eTogewogICAgdHJhaXRzOiB7CiAgICAgIGVtYWlsOiBjbGFpbXMuZW1haWwsCiAgICAgIFtpZiBzdGQub2JqZWN0SGFzKGNsYWltcywgJ25hbWUnKSAmJiBjbGFpbXMubmFtZSAhPSBudWxsIHRoZW4gJ25hbWUnXTogY2xhaW1zLm5hbWUsCiAgICB9LAogIH0sCn0K"
+                scope:
+                  - email
+                  - profile
+
+      # T2.1 of plan 2026-05-29-dashboard-public-integration-canonicalization.
+      # `$ui` captures the trimmed UI base URL once; dashboardRoute map provides
+      # per-flow paths (defaults match the React routes in cloud/dashboard/src/app.tsx).
+      # v1.1 EC-05: trimSuffix prevents double slash when env yaml ships
+      # `uiBaseUrl: "https://app.loopzero.example/"`. v1.1 dashboardRoute map prevents
+      # the /registration-vs-/register mismatch that caused 404 on signup in
+      # the 2026-05-29 LIVE session.
+      flows:
+        registration:
+          enabled: true
+          ui_url: "{{ .Values.uiBaseUrl | trimSuffix "/" | default "http://localhost:4455" }}{{ dig "dashboardRoute" "register" "/register" .Values }}"
+          after:
+            password:
+              hooks:
+                - hook: session
+            oidc:
+              hooks:
+                - hook: session
+
+        login:
+          ui_url: "{{ .Values.uiBaseUrl | trimSuffix "/" | default "http://localhost:4455" }}{{ dig "dashboardRoute" "login" "/login" .Values }}"
+          # NOTE: login.after hooks are NOT supported in Kratos v26.
+          # Kratos creates sessions automatically on successful login.
+
+        verification:
+          enabled: true
+          ui_url: "{{ .Values.uiBaseUrl | trimSuffix "/" | default "http://localhost:4455" }}{{ dig "dashboardRoute" "verification" "/verification" .Values }}"
+
+        recovery:
+          enabled: true
+          ui_url: "{{ .Values.uiBaseUrl | trimSuffix "/" | default "http://localhost:4455" }}{{ dig "dashboardRoute" "recovery" "/recovery" .Values }}"
+
+        settings:
+          ui_url: "{{ .Values.uiBaseUrl | trimSuffix "/" | default "http://localhost:4455" }}{{ dig "dashboardRoute" "settings" "/settings" .Values }}"
+
+        error:
+          # Dashboard has no /error route — fall back to /login. v1.1 of plan.
+          ui_url: "{{ .Values.uiBaseUrl | trimSuffix "/" | default "http://localhost:4455" }}{{ dig "dashboardRoute" "error" "/login" .Values }}"
+
+        logout:
+          after:
+            default_browser_return_url: "{{ .Values.uiBaseUrl | trimSuffix "/" | default "http://localhost:4455" }}{{ dig "dashboardRoute" "login" "/login" .Values }}"
+
+    # --- Security ---
+    security:
+      account_enumeration:
+        # Prevents attackers from discovering which emails have accounts.
+        # Registration: "check your email" instead of "email already exists"
+        # Login: same error for wrong email and wrong password
+        # Recovery: always "check your email" even if email doesn't exist
+        mitigate: true
+
+    # --- Courier (Email via HTTP API) ---
+    # MEET-2026-04-06-036: DigitalOcean blocks SMTP ports (25, 465, 587).
+    # Uses Resend HTTP API instead.
+    #
+    # The API key is sourced from the operator env var LOOPZERO_RESEND_API_KEY
+    # at helmfile-template time. Kratos v26 does NOT perform env
+    # interpolation on string values inside its config YAML (validated
+    # 2026-06-01: courier with `Authorization: "Bearer ${RESEND_API_KEY}"`
+    # produced 400 "API key is invalid" from Resend — header was sent
+    # literal). We substitute at template-time instead so the rendered
+    # ConfigMap holds the real key. Trade-off: key lands in ConfigMap
+    # (loopzero-auth namespace, RBAC-restricted) instead of Secret-only — same
+    # blast radius as the Secret in practice since both require `get` on
+    # the namespace. Cleaner state via init container + envsubst is a
+    # follow-up refactor.
+    #
+    # If LOOPZERO_RESEND_API_KEY is unset, the placeholder produces a 400 from
+    # Resend on first send (loud failure, visible in courier logs),
+    # NEVER silent.
+    courier:
+      delivery_strategy: http
+      http:
+        request_config:
+          url: https://api.resend.com/emails
+          method: POST
+          headers:
+            Content-Type: "application/json"
+            Authorization: "Bearer {{ env "LOOPZERO_RESEND_API_KEY" | default "REPLACE_VIA_LOOPZERO_RESEND_API_KEY" }}"
+          # Jsonnet template: ctx.recipient, ctx.subject, ctx.html_body (lowercase snake_case)
+          body: "base64://ZnVuY3Rpb24oY3R4KSB7CiAgZnJvbTogIlRoZW8gPG5vcmVwbHlAdXNldGhlby5kZXY+IiwKICB0bzogW2N0eC5yZWNpcGllbnRdLAogIHN1YmplY3Q6IGN0eC5zdWJqZWN0LAogIGh0bWw6IGN0eC5odG1sX2JvZHksCn0="
+
+    # --- Cookies (CSRF + Session shared domain) ---
+    # Top-level `cookies.domain` applies to BOTH the anti-CSRF cookie and the
+    # session cookie. Without this, CSRF cookie defaults to host-only scope
+    # (no Domain attribute), and breaks when init flow runs via app.loopzero.example
+    # (Caddy proxy) but form-action POSTs to auth.loopzero.example: browser stores
+    # cookie under app.loopzero.example, doesn't send to auth.loopzero.example, Kratos
+    # rejects with "Cookie header empty".
+    # session.cookie.domain (below) overrides this for the session cookie
+    # specifically — kept for backwards-compat with existing session
+    # configuration; functional result is identical (both = cookieDomain).
+    # 2026-06-01 security-first fix.
+    {{- if hasKey .Values "cookieDomain" }}
+    cookies:
+      domain: "{{ .Values.cookieDomain }}"
+      same_site: "Lax"
+    {{- end }}
+
+    # --- Session ---
+    session:
+      lifespan: "24h"
+      cookie:
+        same_site: "Lax"
+        # T2.1 of plan 2026-05-29-dashboard-public-integration-canonicalization.
+        # When cookieDomain is set, the session cookie is scoped to that domain
+        # (eTLD+1 of app/cloud/auth), letting cloud.loopzero.example and
+        # app.loopzero.example read the cookie that auth.loopzero.example set. When unset
+        # (local dev), cookie defaults to the request host. Schema enforces
+        # cookieDomain ↔ publicAuthUrl coupling.
+        {{- if hasKey .Values "cookieDomain" }}
+        domain: "{{ .Values.cookieDomain }}"
+        {{- end }}
+
+    # --- Logging ---
+    log:
+      level: info
+      format: json
+      leak_sensitive_values: false
+
+    # --- Security ---
+    secrets:
+      # LOCAL DEV ONLY — production overrides via Pulumi.
+      cookie:
+        - "loopzero-dev-cookie-secret-32chars!!"
+      cipher:
+        - "loopzero-dev-cipher-secret-32chars!!"
+
+    # --- Hashers ---
+    hashers:
+      argon2:
+        parallelism: 1
+        memory: "128MB"
+        iterations: 2
+        salt_length: 16
+        key_length: 16
+
+  # --- Identity Schema (mounted as file inside /etc/config/) ---
+  identitySchemas:
+    "identity.default.schema.json": |
+      {
+        "$id": "https://schemas.loopzero.example/identity.schema.json",
+        "$schema": "http://json-schema.org/draft-07/schema#",
+        "title": "LoopZero Identity",
+        "type": "object",
+        "properties": {
+          "traits": {
+            "type": "object",
+            "properties": {
+              "email": {
+                "type": "string",
+                "format": "email",
+                "title": "Email",
+                "ory.sh/kratos": {
+                  "credentials": {
+                    "password": { "identifier": true }
+                  },
+                  "recovery": { "via": "email" },
+                  "verification": { "via": "email" }
+                }
+              },
+              "name": {
+                "type": "string",
+                "title": "Name"
+              }
+            },
+            "required": ["email"],
+            "additionalProperties": false
+          }
+        }
+      }
+
+# --- Service ---
+service:
+  public:
+    enabled: true
+    type: ClusterIP
+    port: 80
+  admin:
+    enabled: true
+    type: ClusterIP
+    port: 80
+
+# --- Resources ---
+resources:
+  requests:
+    cpu: "50m"
+    memory: "128Mi"
+  limits:
+    cpu: "300m"
+    memory: "256Mi"
+
+# --- Security Context (INF-G08 + plan ADR D7 hardened) ---
+podSecurityContext:
+  runAsNonRoot: true
+  runAsUser: 65534
+  runAsGroup: 65534
+  fsGroup: 65534
+  seccompProfile:
+    type: RuntimeDefault
+
+securityContext:
+  runAsNonRoot: true
+  runAsUser: 65534
+  runAsGroup: 65534
+  readOnlyRootFilesystem: true
+  allowPrivilegeEscalation: false
+  capabilities:
+    drop:
+      - ALL
+
+deployment:
+  # Optional envFrom from the ory-kratos-resend Secret (RESEND_API_KEY).
+  # The Resend key is currently injected via helmfile template substitution
+  # into the courier config (see "courier:" block above), so this envFrom
+  # is not strictly required. Kept wired in case we migrate to an
+  # init-container + envsubst pattern later — the Secret already exists
+  # and is consumed; switching the source of truth becomes a one-line
+  # change. Comment-out if the Secret is not deployed in your env.
+  environmentSecretsName: ory-kratos-resend
+  podSecurityContext:
+    runAsNonRoot: true
+    runAsUser: 65534
+    runAsGroup: 65534
+    seccompProfile:
+      type: RuntimeDefault
+  containerSecurityContext:
+    readOnlyRootFilesystem: true
+    allowPrivilegeEscalation: false
+    runAsNonRoot: true
+    capabilities:
+      drop:
+        - ALL
+
+# StatefulSet hosts the courier process (separate from the Deployment that
+# serves public+admin APIs). Same env wiring as above.
+statefulSet:
+  environmentSecretsName: ory-kratos-resend

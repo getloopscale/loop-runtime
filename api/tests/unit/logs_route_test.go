@@ -41,6 +41,18 @@ func (f *fakeLogBuildStore) GetByID(ctx context.Context, buildID string) (*route
 	return f.build, nil
 }
 
+// GetByIDForTenant — T0.4 of deep-review-2026-05-10-remediation-plan.
+// Emulates the production SQL filter for the unit-test scope.
+func (f *fakeLogBuildStore) GetByIDForTenant(_ context.Context, tenantID, _ string) (*routes.LogBuild, error) {
+	if f.err != nil {
+		return nil, f.err
+	}
+	if f.build == nil || f.build.TenantID != tenantID {
+		return nil, nil
+	}
+	return f.build, nil
+}
+
 // newLogsRequest creates a GET request with chi URL params and optional auth context.
 func newLogsRequest(buildID string, query string, authenticated bool) *http.Request {
 	url := "/api/v1/builds/" + buildID + "/logs"

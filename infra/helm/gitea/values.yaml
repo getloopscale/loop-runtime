@@ -3,9 +3,26 @@
 # Use --set gitea.admin.password=<secure-value> or a values override file.
 gitea:
   admin:
-    username: gitea_admin
-    password: loopzero-gitea-dev-2026  # LOCAL DEV ONLY — matches provision-api-tokens.sh defaults
+    # Admin creds come from the canonical gitea-admin secret (minted by
+    # generate-secrets.sh pre-sync, keys: username + password). Earlier this was
+    # an empty inline password → Gitea generated a random admin password that
+    # diverged from gitea-admin.password, breaking the later token-registration
+    # bootstrap step. existingSecret keeps Gitea + the secret in sync by
+    # construction. Fix: finding-2026-05-22-pg-password-divergence (same T1.3 class).
+    existingSecret: gitea-admin
     email: admin@loopzero.local
+  # DB password injected from the canonical loopzero-db-credentials secret. Gitea's
+  # environment-to-ini step (init container) reads GITEA__database__PASSWD and
+  # writes it into app.ini before `gitea migrate` runs in configure-gitea.
+  # Earlier config.database.PASSWD was "" expecting a never-wired helmfile
+  # $LOOPZERO_DB_PASSWORD override → configure-gitea crashed with SASL auth failure
+  # (same T1.3 regression as postgresql/kratos). See finding-2026-05-22-pg-password-divergence.
+  additionalConfigFromEnvs:
+    - name: GITEA__database__PASSWD
+      valueFrom:
+        secretKeyRef:
+          name: loopzero-db-credentials
+          key: password
   livenessProbe:
     enabled: true
   readinessProbe:
@@ -16,7 +33,7 @@ gitea:
       HOST: postgresql.loopzero-system.svc.cluster.local:5432
       NAME: gitea
       USER: loopzero
-      PASSWD: loopzero-dev-password  # LOCAL DEV ONLY — override for production
+      PASSWD: ""  # T1.3: empty → Gitea startup fails fast with explicit DB auth error; override via helmfile inline or --set gitea.config.database.PASSWD=$LOOPZERO_DB_PASSWORD
       SSL_MODE: disable
       MAX_OPEN_CONNS: "8"        # Bug #44 HA: 8 pods × 8 = 64 conns — under DO PG default 50 headroom
       MAX_IDLE_CONNS: "4"
@@ -32,15 +49,23 @@ gitea:
     # Bug #44 HA config (per Gitea Enterprise HA docs + helm-gitea/ha-setup.md).
     # Without these, session/cache/queue use in-memory per-pod → auth cache
     # misses race across pods, producing 401 mid-stream. Redis shares state.
+    # Redis is the bitnami `gitea-redis` Helmfile release (standalone), whose
+    # primary Service is `gitea-redis-master:6379`. The CHG-2026-05-05 attempt to
+    # ship a custom `gitea-redis`-named Service via infra/helm/gitea/templates/
+    # redis.yaml is DEAD: the gitea release uses the REMOTE gitea-charts/gitea
+    # chart, so that local template is never rendered. Pointing at the bare
+    # `gitea-redis` made gitea crash with "lookup gitea-redis: no such host"
+    # (finding-2026-05-22-pg-password-divergence § gitea-redis). Use the bitnami
+    # primary service name. Prod parity: same bitnami release runs in dev/prod.
     session:
       PROVIDER: redis
-      PROVIDER_CONFIG: "network=tcp,addr=gitea-redis:6379,db=0,pool_size=100,idle_timeout=180s"
+      PROVIDER_CONFIG: "network=tcp,addr=gitea-redis-master:6379,db=0,pool_size=100,idle_timeout=180s"
     cache:
       ADAPTER: redis
-      HOST: "network=tcp,addr=gitea-redis:6379,db=1,pool_size=100,idle_timeout=180s"
+      HOST: "network=tcp,addr=gitea-redis-master:6379,db=1,pool_size=100,idle_timeout=180s"
     queue:
       TYPE: redis
-      CONN_STR: "network=tcp,addr=gitea-redis:6379,db=2,pool_size=100,idle_timeout=180s"
+      CONN_STR: "network=tcp,addr=gitea-redis-master:6379,db=2,pool_size=100,idle_timeout=180s"
     # Bleve repo indexer breaks HA — disable for multi-pod
     indexer:
       ISSUE_INDEXER_TYPE: db

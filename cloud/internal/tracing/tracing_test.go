@@ -39,7 +39,7 @@ func TestInit_DisabledViaZero(t *testing.T) {
 
 func TestInit_EnabledByDefault(t *testing.T) {
 	// Clear the env var to test default behavior
-	os.Unsetenv("LOOPZERO_TRACING_ENABLED")
+	_ = os.Unsetenv("LOOPZERO_TRACING_ENABLED")
 	// Point to an unreachable endpoint so Init succeeds but export silently fails
 	t.Setenv("OTEL_EXPORTER_OTLP_ENDPOINT", "localhost:0")
 
@@ -74,7 +74,7 @@ func TestIsEnabled(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			if tt.envValue == "" {
-				os.Unsetenv("LOOPZERO_TRACING_ENABLED")
+				_ = os.Unsetenv("LOOPZERO_TRACING_ENABLED")
 			} else {
 				t.Setenv("LOOPZERO_TRACING_ENABLED", tt.envValue)
 			}
@@ -86,7 +86,7 @@ func TestIsEnabled(t *testing.T) {
 }
 
 func TestGetEnv(t *testing.T) {
-	os.Unsetenv("LOOPZERO_ENV")
+	_ = os.Unsetenv("LOOPZERO_ENV")
 	if got := getEnv(); got != "development" {
 		t.Errorf("getEnv() = %q, want %q", got, "development")
 	}

@@ -1,0 +1,31 @@
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: allow-sigstore-to-ctlog
+  namespace: {{ .Values.namespaces.ctlog }}
+  labels:
+    app.kubernetes.io/name: ctlog
+    app.kubernetes.io/managed-by: {{ .Release.Service }}
+    app.kubernetes.io/instance: {{ .Release.Name }}
+    loopzero.io/purpose: sigstore-ingress-from-fulcio
+spec:
+  podSelector:
+    matchLabels:
+      app.kubernetes.io/name: ctlog
+  policyTypes:
+    - Ingress
+  ingress:
+    # T3.1 (CR-7) review: CTLog has NO tenant-facing ingress. cosign sign
+    # talks to Fulcio (which is podSelector-narrowed); Fulcio then talks
+    # internally to CTLog. All pods in fulcio-system are operator-managed
+    # Sigstore components — there is no attacker pivot worth a podSelector.
+    # Keeping namespaceSelector-only here is the right choice; the
+    # sigstore-extras-podselector_test.sh test below treats CTLog as
+    # exempt from the podSelector contract per the same reasoning.
+    - from:
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: {{ .Values.namespaces.fulcio }}
+      ports:
+        - protocol: TCP
+          port: {{ .Values.ports.ctlogHttp }}

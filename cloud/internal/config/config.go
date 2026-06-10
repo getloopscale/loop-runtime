@@ -1,6 +1,8 @@
 // SPDX-License-Identifier: Apache-2.0
 // Copyright 2025-2026 The LoopZero Authors
 
+// Package config loads and validates the cloud control-plane configuration
+// from the environment, enforcing production-safety invariants at startup.
 package config
 
 import (
@@ -8,6 +10,7 @@ import (
 	"encoding/hex"
 	"fmt"
 	"os"
+	"strconv"
 )
 
 // Secret is a string that redacts itself in logs, fmt output, and JSON serialization.
@@ -90,10 +93,25 @@ type Config struct {
 	// Env: LOOPZERO_SERVICE_AUTH_SECRET (must match the engine's value)
 	ServiceAuthSecret Secret
 
+	// ThemoryBaseURL is the OSS TheMemory REST URL (Plan 1 of dashboard-memory-section).
+	// Env: THEMORY_BASE_URL (default: "http://themory:3000" — operator overrides in prod)
+	ThemoryBaseURL string
+
+	// ThemoryAPIKey is the master Bearer the Go proxy uses to authenticate
+	// against TheMemory. NEVER returned to the customer (Plan 1 D1 + CLAUDE.md Invariant 3).
+	// Env: THEMORY_API_KEY (required when ThemoryBaseURL is set in prod)
+	ThemoryAPIKey Secret
+
 	// SessionTokenSecretPrevious is the previous HMAC key for zero-downtime rotation (§2.2).
 	// Tokens signed with this key are accepted during the rotation window.
 	// Env: SESSION_TOKEN_SECRET_PREVIOUS (optional)
 	SessionTokenSecretPrevious Secret
+
+	// BFFKeyTTLHours sets the lifetime of BFF-minted loopzero_live_* keys for the
+	// /v1/dashboard/memory/* route family (Plan dashboard-memory-bff v1.2 § ADR D3).
+	// Range: [1, 168] hours (1h floor for tight prod ops; 168h ceiling = 1 week).
+	// Env: LOOPZEROCLOUD_BFF_KEY_TTL_HOURS (default: 24)
+	BFFKeyTTLHours int
 }
 
 // Load reads configuration from environment variables with sensible defaults.
@@ -114,9 +132,15 @@ func Load() Config {
 	cfg.StripeWebhookSecret = Secret(envOr("STRIPE_WEBHOOK_SECRET", ""))
 	cfg.BillingReturnURL = envOr("BILLING_RETURN_URL", "http://localhost:3000")
 	cfg.DatabaseURL = envOr("DATABASE_URL", "")
-	cfg.SessionTokenSecret = Secret(envOr("SESSION_TOKEN_SECRET", generateDevSecret()))
+	// Secrets are auto-generated only in non-production. In production they MUST
+	// be set explicitly — a per-pod random secret breaks multi-replica auth
+	// non-deterministically (different replicas reject each other's tokens).
+	cfg.SessionTokenSecret = Secret(envOr("SESSION_TOKEN_SECRET", devSecretFor(cfg.Environment)))
 	cfg.SessionTokenSecretPrevious = Secret(envOr("SESSION_TOKEN_SECRET_PREVIOUS", ""))
-	cfg.ServiceAuthSecret = Secret(envOr("LOOPZERO_SERVICE_AUTH_SECRET", generateDevSecret()))
+	cfg.ServiceAuthSecret = Secret(envOr("LOOPZERO_SERVICE_AUTH_SECRET", devSecretFor(cfg.Environment)))
+	cfg.ThemoryBaseURL = envOr("THEMORY_BASE_URL", "")
+	cfg.ThemoryAPIKey = Secret(envOr("THEMORY_API_KEY", ""))
+	cfg.BFFKeyTTLHours = envOrInt("LOOPZEROCLOUD_BFF_KEY_TTL_HOURS", 24)
 	return cfg
 }
 
@@ -141,6 +165,15 @@ func (c Config) Validate() error {
 		if len(c.SessionTokenSecret.Value()) < 32 {
 			return fmt.Errorf("SESSION_TOKEN_SECRET must be at least 32 characters in production")
 		}
+		if len(c.ServiceAuthSecret.Value()) < 32 {
+			return fmt.Errorf("LOOPZERO_SERVICE_AUTH_SECRET must be set (>=32 chars) in production — a per-pod random secret breaks multi-replica auth")
+		}
+		if c.KratosAdminURL == "" {
+			return fmt.Errorf("KRATOS_ADMIN_URL is required in production")
+		}
+		if c.HydraAdminURL == "" {
+			return fmt.Errorf("HYDRA_ADMIN_URL is required in production")
+		}
 	}
 	return nil
 }
@@ -150,6 +183,32 @@ func envOr(key, fallback string) string {
 		return v
 	}
 	return fallback
+}
+
+// envOrInt reads an integer env var; on parse failure or absent, returns fallback.
+// Used by BFFKeyTTLHours (plan dashboard-memory-bff v1.2 § ADR D3).
+// Validation of the value range is the responsibility of the consumer
+// (e.g., NewBFFKeyVault rejects values outside [1, 168]).
+func envOrInt(key string, fallback int) int {
+	v := os.Getenv(key)
+	if v == "" {
+		return fallback
+	}
+	n, err := strconv.Atoi(v)
+	if err != nil {
+		return fallback
+	}
+	return n
+}
+
+// devSecretFor returns an auto-generated secret in non-production environments,
+// and an empty string in production (forcing Validate() to require an explicit
+// secret). This prevents per-pod random secrets in multi-replica production.
+func devSecretFor(environment string) string {
+	if environment == "prod" {
+		return ""
+	}
+	return generateDevSecret()
 }
 
 // generateDevSecret creates a random secret for development.

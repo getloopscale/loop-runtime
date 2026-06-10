@@ -1,0 +1,36 @@
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: allow-{{ .Values.sourceNamespace }}-to-fulcio
+  namespace: {{ .Values.namespaces.fulcio }}
+  labels:
+    app.kubernetes.io/name: fulcio
+    app.kubernetes.io/managed-by: {{ .Release.Service }}
+    app.kubernetes.io/instance: {{ .Release.Name }}
+    loopzero.io/purpose: sigstore-ingress-from-{{ .Values.sourceNamespace }}
+spec:
+  podSelector:
+    matchLabels:
+      app.kubernetes.io/name: fulcio
+  policyTypes:
+    - Ingress
+  ingress:
+    # T3.1 (CR-7): namespaceSelector AND podSelector inside the SAME
+    # `from` array entry = AND semantics. Only Argo Workflow-spawned
+    # pods (those labeled by the controller) in the source namespace
+    # may reach Fulcio — a debug pod in `argo` is rejected.
+    - from:
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: {{ .Values.sourceNamespace }}
+          podSelector:
+            matchExpressions:
+              - key: {{ .Values.ingress.podLabel.key }}
+                operator: {{ .Values.ingress.podLabel.operator }}
+      ports:
+        - protocol: TCP
+          port: {{ .Values.ports.fulcioHttp }}
+        - protocol: TCP
+          port: {{ .Values.ports.fulcioGrpc }}
+        - protocol: TCP
+          port: {{ .Values.ports.metrics }}

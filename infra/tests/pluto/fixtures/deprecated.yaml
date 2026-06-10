@@ -1,0 +1,15 @@
+# Fixture: manifest with API removed in K8s v1.25
+# Used to validate that Pluto correctly detects removed APIs.
+# Manually invoke: pluto detect-files -d infra/tests/pluto/fixtures/ \
+#                    --target-versions k8s=v1.25.0 --only-show-removed=false
+# Expected: exit code != 0 (FATAL deprecation detected)
+apiVersion: policy/v1beta1  # REMOVED in v1.25 (replacement: policy/v1)
+kind: PodDisruptionBudget
+metadata:
+  name: example-pdb
+  namespace: default
+spec:
+  minAvailable: 1
+  selector:
+    matchLabels:
+      app: example

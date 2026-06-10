@@ -20,7 +20,7 @@ import (
 
 	"github.com/go-chi/chi/v5"
 	chimw "github.com/go-chi/chi/v5/middleware"
-	_ "github.com/lib/pq"
+	_ "github.com/jackc/pgx/v5/stdlib"
 	"go.opentelemetry.io/contrib/instrumentation/net/http/otelhttp"
 	"go.opentelemetry.io/otel/trace"
 
@@ -32,7 +32,10 @@ import (
 	"github.com/loopzero/loopzero/cloud/internal/consent"
 	"github.com/loopzero/loopzero/cloud/internal/metering"
 	cloudmetrics "github.com/loopzero/loopzero/cloud/internal/metrics"
+	"github.com/loopzero/loopzero/cloud/internal/ratelimit"
+	"github.com/loopzero/loopzero/cloud/internal/memory_webhook_worker"
 	"github.com/loopzero/loopzero/cloud/internal/routes"
+	"github.com/loopzero/loopzero/cloud/internal/themory"
 	"github.com/loopzero/loopzero/cloud/internal/tracing"
 )
 
@@ -58,7 +61,7 @@ func main() {
 	var db *sql.DB
 	if cfg.DatabaseURL != "" {
 		var err error
-		db, err = sql.Open("postgres", cfg.DatabaseURL)
+		db, err = sql.Open("pgx", cfg.DatabaseURL)
 		if err != nil {
 			logger.Error("failed to open database", "error", err)
 			os.Exit(1)
@@ -134,10 +137,99 @@ func main() {
 	// Universal JWT auth middleware (RSA + HMAC — one path for all)
 	requireJWT := auth.RequireJWT(jwtValidator, sessIssuer)
 
+	// Rate limiters (find_sec_007). Device endpoints are pre-auth → keyed on
+	// client IP (chimw.RealIP already resolves the real client behind the proxy).
+	// Device token is polled (~12/min legitimately) so its limit is generous.
+	// Billing mutations are per authenticated user.
+	deviceLimiter := ratelimit.NewInMemoryLimiter(60, time.Minute)
+	billingLimiter := ratelimit.NewInMemoryLimiter(30, time.Minute)
+	ipKey := func(r *http.Request) string { return ratelimit.Key("", r.RemoteAddr) }
+	userKey := func(r *http.Request) string {
+		if u := auth.GetUser(r.Context()); u != nil {
+			return ratelimit.Key(u.Subject, r.RemoteAddr)
+		}
+		return ratelimit.Key("", r.RemoteAddr)
+	}
+
 	// Handlers
 	deviceHandler := routes.NewDeviceHandler(hydra, cfg.BillingReturnURL)
 	meHandler := routes.NewMeHandler()
-	consentHandler := consent.NewHandler(hydra, tenantProvisioner, cfg.KratosPublicURL, cfg.KratosInternalURL, logger)
+	consentHandler := consent.NewHandler(hydra, tenantProvisioner, cfg.KratosPublicURL, cfg.KratosInternalURL, cfg.KratosAdminURL, logger)
+
+	// Plan 0 of dashboard-memory-section-roadmap.md: unified loopzero_live_* API keys.
+	// D8 dispatch: /v1/api-keys/* uses RequireJWT (PaaS session cookie), NOT
+	// RequireScope. The scope-checked Bearer surface is the consumer side
+	// (memory + future verticals), registered in subsequent plans.
+	apiKeysHandler := routes.NewAPIKeysHandler(db, logger)
+
+	// Plan 1 of dashboard-memory-section-roadmap.md: Memory Shell — Go proxy to
+	// OSS TheMemory. Only instantiated when THEMORY_BASE_URL is configured,
+	// matching the same opt-in pattern as billing (BillingHandler is nil when
+	// Stripe is not configured). Operators must set THEMORY_BASE_URL +
+	// THEMORY_API_KEY before /v1/memory/* routes are usable.
+	var memoryHandler *routes.MemoryHandler
+	var memoryWebhooksHandler *routes.MemoryWebhooksHandler
+	var memoryExportsHandler *routes.MemoryExportsHandler
+	if cfg.ThemoryBaseURL != "" {
+		themoryHTTP := &http.Client{
+			Timeout:   30 * time.Second,
+			Transport: otelhttp.NewTransport(http.DefaultTransport), // D4 W3C trace propagation
+		}
+		themoryClient := themory.NewClient(cfg.ThemoryBaseURL, cfg.ThemoryAPIKey.Value(), themoryHTTP)
+		// Memory Webhook Delivery plan T5.6: wire the event publisher so
+		// `memory.forgotten` mutations fan out to active webhooks.
+		webhookEventPublisher := routes.NewMemoryWebhookEventPublisher(db, logger)
+		memoryHandler = routes.NewMemoryHandler(themoryClient, logger).WithEventPublisher(webhookEventPublisher)
+		logger.Info("memory proxy enabled", "themory_base_url", cfg.ThemoryBaseURL)
+
+		// Plan 3 — Memory Operations (exports + webhooks).
+		// Webhooks need only the DB; exports need DB + TheMemory client +
+		// a worker-output directory. Both stay nil if Memory itself is
+		// disabled, so the /v1/memory/exports/* and /v1/memory/webhooks/*
+		// blocks below also remain unregistered when off.
+		exportDir := os.Getenv("LOOPZERO_EXPORT_DIR")
+		if exportDir == "" {
+			exportDir = "/tmp/loopzero-exports"
+		}
+		workerDelay := 3 * time.Second
+		if d := os.Getenv("EXPORT_WORKER_DELAY_MS"); d != "" {
+			if parsed, perr := time.ParseDuration(d + "ms"); perr == nil {
+				workerDelay = parsed
+			}
+		}
+		memoryWebhooksHandler = routes.NewMemoryWebhooksHandler(db, logger)
+		memoryExportsHandler = routes.NewMemoryExportsHandler(db, themoryClient, logger, exportDir, workerDelay)
+	} else {
+		logger.Warn("THEMORY_BASE_URL not set — /v1/memory/* endpoints disabled")
+	}
+
+	// Memory Webhook Delivery plan T5.5 — background dispatcher worker.
+	// Only started when both memory proxy AND DB are configured (worker
+	// needs both to poll + dispatch).
+	var memoryWebhookDeliveriesHandler *routes.MemoryWebhookDeliveriesHandler
+	if memoryHandler != nil && db != nil {
+		memoryWebhookDeliveriesHandler = routes.NewMemoryWebhookDeliveriesHandler(db, logger)
+	}
+
+	// Plan dashboard-memory-bff-server-side-key-vault v1.2 § T3.1.
+	// BFFKeyVault + DashboardMemoryHandler: browser-trust route family
+	// /v1/dashboard/memory/* — JWT-auth then internally mints server-side
+	// loopzero_live_* (NEVER touches browser per ADR D1).
+	// F-rearch-1 absorbed (2026-06-08): single vault instance shared between
+	// handler + cleanup cron (was: two independent vaults with separate
+	// in-memory caches — wasteful + cohesion smell).
+	var dashboardMemoryHandler *routes.DashboardMemoryHandler
+	var bffVault *auth.BFFKeyVault
+	if memoryHandler != nil && db != nil {
+		var vErr error
+		bffVault, vErr = auth.NewBFFKeyVault(db, cfg.BFFKeyTTLHours)
+		if vErr != nil {
+			logger.Error("BFFKeyVault init failed", "error", vErr)
+			os.Exit(1)
+		}
+		dashboardMemoryHandler = routes.NewDashboardMemoryHandler(bffVault, memoryHandler, logger)
+		logger.Info("BFF memory dashboard enabled", "ttl_hours", cfg.BFFKeyTTLHours)
+	}
 
 	// Router
 	r := chi.NewRouter()
@@ -196,7 +288,7 @@ func main() {
 			status = "degraded"
 		}
 
-		json.NewEncoder(w).Encode(map[string]string{
+		_ = json.NewEncoder(w).Encode(map[string]string{
 			"status": status,
 			"db":     dbStatus,
 		})
@@ -207,13 +299,27 @@ func main() {
 
 	// Auth endpoints (no auth — these ARE the auth flow)
 	r.Route("/v1/auth", func(r chi.Router) {
-		r.Post("/device/authorize", deviceHandler.Authorize)
-		r.Post("/device/token", deviceHandler.Token)
-		r.Post("/token/refresh", deviceHandler.Refresh)
-		r.Post("/session/token", sessionTokenHandler.Exchange) // Dashboard: Kratos session → JWT
+		// Device endpoints are unauthenticated — rate-limit per client IP to
+		// blunt brute force / abuse (find_sec_007).
+		r.With(ratelimit.Middleware(deviceLimiter, 60, ipKey)).Post("/device/authorize", deviceHandler.Authorize)
+		r.With(ratelimit.Middleware(deviceLimiter, 60, ipKey)).Post("/device/token", deviceHandler.Token)
+		r.With(ratelimit.Middleware(deviceLimiter, 60, ipKey)).Post("/token/refresh", deviceHandler.Refresh)
+		r.Post("/session/token", sessionTokenHandler.Exchange) // Dashboard: Kratos session → JWT (rate-limited inside the handler)
 
 		// /me requires JWT
 		r.With(requireJWT).Get("/me", meHandler.Get)
+	})
+
+	// Telemetry — T1.2 of plan 2026-05-27-backend-frontend-integration v1.1.
+	// PUBLIC (no JWT) — sendBeacon API cannot set custom Authorization
+	// headers, so requiring auth would silently drop every beacon. Body cap
+	// 64 KiB (EC-03) defends against OOM via hostile / buggy clients.
+	telemetryHandler := routes.NewTelemetryHandler(logger)
+	r.Route("/v1/telemetry", func(r chi.Router) {
+		r.Post("/errors", telemetryHandler.Errors)
+		r.Post("/web-vitals", telemetryHandler.WebVitals)
+		r.Post("/events", telemetryHandler.Events)
+		r.Post("/interactions", telemetryHandler.Interactions)
 	})
 
 	// Hydra consent/login callbacks (browser redirects)
@@ -222,13 +328,110 @@ func main() {
 	r.Get("/auth/consent", consentHandler.Consent)
 	r.Get("/auth/device", consentHandler.DeviceVerify)
 
+	// Plan 0 — Platform API Keys (/v1/api-keys/*).
+	// D8 dispatch lockdown: this route group uses requireJWT (session cookie
+	// from Ory Hydra OIDC). It does NOT use RequireScope — that middleware
+	// gates SDK-consumer routes (/v1/memory/* in Plan 1, future verticals
+	// thereafter). Mixing the two on the same route would either create a
+	// bootstrap loop (Bearer key needs CRUD via Bearer key) or leak the key-
+	// management surface to production agents.
+	r.Route("/v1/api-keys", func(r chi.Router) {
+		r.Use(requireJWT)
+		// Per-user rate limit reuses the billingLimiter pool (30 rpm).
+		// API key CRUD is a low-volume operation by definition.
+		r.Use(ratelimit.Middleware(billingLimiter, 30, userKey))
+		r.Get("/list", apiKeysHandler.ListKeys)
+		r.Post("/", apiKeysHandler.CreateKey)
+		r.Delete("/{id}", apiKeysHandler.RevokeKey)
+		// API Key Rotation plan T6.3 (closes Plan 0 D6 deferral).
+		r.Post("/{id}/rotate", apiKeysHandler.RotateKey)
+		// API Key Lineage View plan T7.3 (closes API Key Rotation OOS #4).
+		r.Get("/{id}/lineage", apiKeysHandler.LineageKey)
+	})
+
+	// Plan 1 — Memory Shell (/v1/memory/*).
+	// D8 dispatch + D2 scope mapping: each route uses RequireScope(db, scope)
+	// — the SDK-consumer surface authenticated by loopzero_live_* Bearer keys.
+	// /v1/api-keys/* (above) and /v1/memory/* (here) intentionally use
+	// distinct middleware so a customer can never CRUD keys via Bearer or
+	// query memory via session cookie (closes both directions of the loop).
+	if memoryHandler != nil {
+		r.Route("/v1/memory", func(r chi.Router) {
+			r.With(auth.RequireScope(db, "memory:read")).Get("/list", memoryHandler.List)
+			r.With(auth.RequireScope(db, "memory:read")).Get("/metrics", memoryHandler.Metrics)
+			r.With(auth.RequireScope(db, "memory:delete")).Delete("/forget/{memoryID}", memoryHandler.Forget)
+			// Plan 2 (Memory Insights) — entities aggregated by scope.
+			// Same scope as List + Metrics per D2 (no per-feature scope explosion).
+			r.With(auth.RequireScope(db, "memory:read")).Get("/entities", memoryHandler.Entities)
+
+			// Plan 3 (Memory Operations) — webhooks + exports.
+			// All gated by memory:admin per least-privilege (these affect
+			// downstream consumers + can exfiltrate data).
+			if memoryWebhooksHandler != nil {
+				r.With(auth.RequireScope(db, "memory:admin")).Post("/webhooks", memoryWebhooksHandler.Create)
+				r.With(auth.RequireScope(db, "memory:admin")).Get("/webhooks/list", memoryWebhooksHandler.List)
+				r.With(auth.RequireScope(db, "memory:admin")).Delete("/webhooks/{id}", memoryWebhooksHandler.Delete)
+			}
+			if memoryExportsHandler != nil {
+				r.With(auth.RequireScope(db, "memory:admin")).Post("/exports", memoryExportsHandler.Create)
+				r.With(auth.RequireScope(db, "memory:admin")).Get("/exports/{id}/status", memoryExportsHandler.Status)
+				r.With(auth.RequireScope(db, "memory:admin")).Get("/exports/{id}/download", memoryExportsHandler.Download)
+			}
+
+			// Memory Webhook Delivery plan T5.7 — deliveries history per webhook.
+			if memoryWebhookDeliveriesHandler != nil {
+				r.With(auth.RequireScope(db, "memory:admin")).Get("/webhooks/{id}/deliveries", memoryWebhookDeliveriesHandler.List)
+				// Delivery Replay plan T8.3 — manual re-trigger for a failed delivery.
+				// Distinct path-param names ({webhook_id}, {delivery_id}) match the
+				// handler's chi.URLParam reads.
+				r.With(auth.RequireScope(db, "memory:admin")).Post(
+					"/webhooks/{webhook_id}/deliveries/{delivery_id}/replay",
+					memoryWebhookDeliveriesHandler.Replay,
+				)
+			}
+		})
+	}
+
+	// Plan dashboard-memory-bff-server-side-key-vault v1.2 § T3.1.
+	// Browser-trust BFF route family — JWT-auth (not loopzero_live_*).
+	if dashboardMemoryHandler != nil {
+		r.Route("/v1/dashboard/memory", func(r chi.Router) {
+			r.Use(requireJWT)
+			// F-rev-7 (fix-cycle 2026-06-08): per-user rate-limit on BFF surface.
+			// Same pool + window as /v1/billing siblings (30 rpm). BFF is higher
+			// risk than billing (mint-or-fetch + TheMemory upstream per call), so
+			// matching the sibling limiter is the floor not ceiling.
+			r.Use(ratelimit.Middleware(billingLimiter, 30, userKey))
+			r.Get("/list", dashboardMemoryHandler.List)
+			r.Get("/metrics", dashboardMemoryHandler.Metrics)
+			r.Delete("/forget/{memoryID}", dashboardMemoryHandler.Forget)
+			r.Get("/entities", dashboardMemoryHandler.Entities)
+			// F-rev-8 (fix-cycle 2026-06-08): canonical RESTful verb is DELETE
+			// /session (Stripe / AWS Console pattern). Handler is idempotent +
+			// returns 204. Kept old POST /revoke-on-logout for one release as
+			// deprecation alias — remove in v0.next.
+			r.Delete("/session", dashboardMemoryHandler.RevokeOnLogout)
+			r.Post("/revoke-on-logout", dashboardMemoryHandler.RevokeOnLogout) // DEPRECATED, remove next release
+		})
+	}
+
+	// Memory Webhook Delivery plan T5.5: the dispatcher worker is started
+	// below alongside the metering scheduler, sharing the schedulerCtx for
+	// graceful shutdown. See the `if db != nil && stripeClient != nil`
+	// block + adjacent worker spawn.
+
 	// Billing endpoints (JWT required via middleware, except webhook)
 	if billingHandler != nil {
 		r.Route("/v1/billing", func(r chi.Router) {
 			r.Use(requireJWT)
+			// Per-user rate limit on billing endpoints (find_sec_007).
+			r.Use(ratelimit.Middleware(billingLimiter, 30, userKey))
+			// Reading billing status is allowed for any member of the team.
 			r.Get("/", billingHandler.GetBilling)
-			r.Get("/portal", billingHandler.Portal)
-			r.Post("/checkout", billingHandler.Checkout)
+			// Mutating billing (opening the Stripe portal, starting checkout) is
+			// owner-only. Role is resolved from the DB (S2.3), never the token.
+			r.With(auth.RequireRole(tenantProvisioner, "owner")).Get("/portal", billingHandler.Portal)
+			r.With(auth.RequireRole(tenantProvisioner, "owner")).Post("/checkout", billingHandler.Checkout)
 		})
 		// Webhook — NO JWT (Stripe signs with its own secret)
 		r.Post("/v1/webhooks/stripe", billingHandler.Webhook)
@@ -239,6 +442,30 @@ func main() {
 	// Dashboard has HMAC tokens, so cloud authenticates to engine via X-Service-Auth.
 	engineURL := cfg.EngineAPIURL
 	serviceSecret := string(cfg.ServiceAuthSecret)
+
+	// Dual-control Ed25519 signer (ADR 2026-05-13). The cloud proxy
+	// signs the canonical payload (user, tenant, ts, nonce, method+path)
+	// in addition to sending the shared secret. Phase 1: signer is
+	// optional — if LOOPZERO_SERVICE_AUTH_ED25519_PRIVATE_KEY is empty, the
+	// proxy degrades gracefully to single-control. The engine middleware
+	// counts present-vs-absent and the operator flips to Phase 2 when
+	// the 7-day coverage soak hits 100% (RFC Q3).
+	var serviceSigner *auth.ServiceSigner
+	if ed25519Key := os.Getenv("LOOPZERO_SERVICE_AUTH_ED25519_PRIVATE_KEY"); ed25519Key != "" {
+		serviceSigner, err = auth.NewServiceSignerFromBase64(ed25519Key)
+		if err != nil {
+			// Per RFC Q5 fail-closed: a misconfigured key MUST NOT silently
+			// degrade to single-control. Crash at startup so the readiness
+			// probe stops the rollout instead of accepting traffic without
+			// the dual-control gate.
+			logger.Error("service-auth Ed25519 signer init failed", "error", err)
+			os.Exit(1)
+		}
+		logger.Info("service-auth Ed25519 dual-control signer enabled")
+	} else {
+		logger.Warn("service-auth Ed25519 private key not configured — Phase 1 single-control only; set LOOPZERO_SERVICE_AUTH_ED25519_PRIVATE_KEY to enable dual-control")
+	}
+
 	engineClient := &http.Client{
 		Timeout:   30 * time.Second,
 		Transport: otelhttp.NewTransport(http.DefaultTransport),
@@ -252,11 +479,12 @@ func main() {
 				targetPath = "/"
 			}
 
+			// #nosec G704 -- authenticated reverse proxy (requireJWT); host is the operator-configured EngineAPIURL, only the path is forwarded by design.
 			proxyReq, err := http.NewRequestWithContext(r.Context(), r.Method, engineURL+targetPath, r.Body)
 			if err != nil {
 				w.Header().Set("Content-Type", "application/json")
 				w.WriteHeader(http.StatusBadGateway)
-				json.NewEncoder(w).Encode(map[string]string{"code": "SERVICE_ERROR", "message": "Service temporarily unavailable. Try again."})
+				_ = json.NewEncoder(w).Encode(map[string]string{"code": "SERVICE_ERROR", "message": "Service temporarily unavailable. Try again."})
 				return
 			}
 			// Forward query params, content type, and correlation ID
@@ -279,16 +507,32 @@ func main() {
 				proxyReq.Header.Set("X-LoopZero-Tenant", user.TenantID)
 				proxyReq.Header.Set("X-LoopZero-Email", user.Email)
 				// X-LoopZero-Role intentionally NOT sent — engine resolves from DB (S2.3)
+
+				// Dual-control Ed25519 (ADR 2026-05-13). Attach AFTER identity
+				// headers are set — Attach hashes user+tenant+method+path into
+				// the canonical payload. A signing failure (missing identity,
+				// nonce-rng exhaustion) returns 502 to dashboard caller rather
+				// than silently proceeding without the signature.
+				if serviceSigner != nil {
+					if sErr := serviceSigner.Attach(proxyReq); sErr != nil {
+						logger.Warn("service-auth signature attach failed", "error", sErr, "path", targetPath)
+						w.Header().Set("Content-Type", "application/json")
+						w.WriteHeader(http.StatusBadGateway)
+						json.NewEncoder(w).Encode(map[string]string{"code": "SERVICE_AUTH_SIGN_FAILED", "message": "Service authentication failure. Try again."})
+						return
+					}
+				}
 			}
 
+			// #nosec G704 -- authenticated reverse proxy (requireJWT); destination host is the operator-configured EngineAPIURL, not attacker-controlled.
 			resp, err := engineClient.Do(proxyReq)
 			if err != nil {
 				w.Header().Set("Content-Type", "application/json")
 				w.WriteHeader(http.StatusBadGateway)
-				json.NewEncoder(w).Encode(map[string]string{"code": "SERVICE_UNAVAILABLE", "message": "Service temporarily unavailable. Try again."})
+				_ = json.NewEncoder(w).Encode(map[string]string{"code": "SERVICE_UNAVAILABLE", "message": "Service temporarily unavailable. Try again."})
 				return
 			}
-			defer resp.Body.Close()
+			defer func() { _ = resp.Body.Close() }()
 
 			// Copy response headers and body
 			for k, v := range resp.Header {
@@ -297,7 +541,7 @@ func main() {
 				}
 			}
 			w.WriteHeader(resp.StatusCode)
-			io.Copy(w, resp.Body)
+			_, _ = io.Copy(w, resp.Body)
 		})
 	})
 
@@ -307,6 +551,75 @@ func main() {
 		reporter := metering.NewReporter(db, stripeClient, logger)
 		reconciler := metering.NewReconciler(db, logger)
 		go metering.StartScheduler(schedulerCtx, reporter, reconciler, logger)
+	}
+
+	// Memory Webhook Delivery plan T5.5 — dispatcher worker goroutine.
+	// Sharing schedulerCtx ensures graceful shutdown on SIGTERM. The
+	// worker drains in-flight dispatches before exiting Run().
+	if memoryHandler != nil && db != nil {
+		webhookWorker := memory_webhook_worker.New(db, logger, nil)
+		go webhookWorker.Run(schedulerCtx)
+		logger.Info("memory webhook dispatcher started")
+	}
+
+	// F-rev-4 (fix-cycle 2026-06-08): BFF cleanup ticker — wires the
+	// CleanupExpired path (orphan PG rows + TTL-expired keys) into the
+	// background scheduler so Sub-goal 6 of plan v1.2 is empirically met.
+	// Cadence: hourly (matches ADR D3); shares schedulerCtx for graceful
+	// SIGTERM shutdown. Pattern matches sibling memory_webhook_worker.
+	// F-rearch-1 absorbed: reuses the single bffVault instance instead of
+	// allocating a second one (was wasteful — separate LRU caches).
+	if bffVault != nil {
+		go func() {
+			ticker := time.NewTicker(1 * time.Hour)
+			defer ticker.Stop()
+			for {
+				select {
+				case <-schedulerCtx.Done():
+					return
+				case <-ticker.C:
+					n, err := bffVault.CleanupExpired(schedulerCtx)
+					if err != nil {
+						logger.Warn("BFF cleanup: cron sweep failed", "error", err)
+						continue
+					}
+					if n > 0 {
+						logger.Info("BFF cleanup: swept expired keys", "count", n)
+					}
+				}
+			}
+		}()
+		logger.Info("BFF cleanup cron started", "interval", "1h")
+	}
+
+	// T1.9 production deployment: start cost aggregator if Prometheus
+	// is configured. Opt-in via LOOPZERO_PROMETHEUS_URL — when unset, the
+	// aggregator stays disabled and cost_counters remain empty (the API
+	// middleware fails-open). Interval defaults to 5 min, overridable
+	// via LOOPZERO_COST_AGGREGATOR_INTERVAL.
+	if db != nil {
+		if promURL := strings.TrimSpace(os.Getenv("LOOPZERO_PROMETHEUS_URL")); promURL != "" {
+			prom, perr := billing.NewHTTPPromQuerier(promURL, logger)
+			if perr != nil {
+				logger.Error("cost aggregator: prometheus client init failed; aggregator disabled",
+					"error", perr,
+					"prometheus_url", promURL)
+			} else {
+				interval := 5 * time.Minute
+				if iv := os.Getenv("LOOPZERO_COST_AGGREGATOR_INTERVAL"); iv != "" {
+					if parsed, perr := time.ParseDuration(iv); perr == nil && parsed > 0 {
+						interval = parsed
+					}
+				}
+				aggregator := billing.NewCostAggregator(db, prom, logger)
+				go aggregator.Run(schedulerCtx, interval)
+				logger.Info("cost aggregator started",
+					"prometheus_url", promURL,
+					"interval", interval.String())
+			}
+		} else {
+			logger.Info("cost aggregator disabled (LOOPZERO_PROMETHEUS_URL not set)")
+		}
 	}
 
 	// Start server
@@ -327,14 +640,14 @@ func main() {
 		schedulerCancel() // Stop background metering jobs
 		ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 		defer cancel()
-		srv.Shutdown(ctx)
+		_ = srv.Shutdown(ctx)
 		if tracingShutdown != nil {
 			if err := tracingShutdown(ctx); err != nil {
 				logger.Warn("tracing shutdown error", "error", err)
 			}
 		}
 		if db != nil {
-			db.Close()
+			_ = db.Close()
 		}
 	}()
 

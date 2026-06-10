@@ -59,6 +59,14 @@ type CircuitBreakerSyncClient struct {
 	openedAt       time.Time
 }
 
+// Compile-time assertion that *CircuitBreakerSyncClient satisfies the full
+// SyncClient interface declared in build_orchestrator.go. Sprint B T1.1
+// (ADR D1) — moves the L22-class regression detector from runtime
+// (duck-typed assertions in release_convergence_loop.go that fail silently)
+// to build time. If a future refactor accidentally drops one of the 6 methods,
+// the package fails to compile here rather than silently no-op in production.
+var _ SyncClient = (*CircuitBreakerSyncClient)(nil)
+
 // NewCircuitBreakerSyncClient creates an in-memory circuit breaker wrapping a SyncClient.
 func NewCircuitBreakerSyncClient(inner SyncClient, cfg CircuitBreakerConfig, logger *slog.Logger) *CircuitBreakerSyncClient {
 	return &CircuitBreakerSyncClient{
@@ -120,6 +128,33 @@ func (cb *CircuitBreakerSyncClient) TerminateOperation(ctx context.Context, appN
 	return nil
 }
 
+// ForceReconcile delegates to the inner SyncClient.
+// V9 L22 fix 2026-05-31: ReleaseConvergenceLoop performs a type assertion
+// `r.sync_.(forceReconciler)` to call ForceReconcile when retriggerSync has
+// exhausted (counter >= maxSyncRetriggers) AND the release has been stuck
+// for >2min. Without this wrapper method the assertion FAILS silently — the
+// inner *argocd.SyncClient has the method but `cb.inner` is typed as the
+// SyncClient interface (only TriggerSync + WaitForSync). The L22 escalation
+// path was a no-op for all wrapped sync clients, which is the actual
+// production wiring (workflows.SyncClient is *CircuitBreakerSyncClient per
+// setup_workflows.go). Discovered LIVE in cleanroom-fresh dogfood 2026-05-31:
+// J04 Scale release rel-30b7cc1ae4556e55 hit max retriggers + sync_timeout
+// without L22 ever firing.
+//
+// Like the other delegating methods, this re-asserts the interface on the
+// inner client so it works whether the inner is a real *argocd.SyncClient
+// or another wrapper. No circuit-breaker pre-check: ForceReconcile is a
+// recovery path; we want it to run even when the breaker is half-open.
+func (cb *CircuitBreakerSyncClient) ForceReconcile(ctx context.Context, appName string) error {
+	type forceReconciler interface {
+		ForceReconcile(ctx context.Context, appName string) error
+	}
+	if fr, ok := cb.inner.(forceReconciler); ok {
+		return fr.ForceReconcile(ctx, appName)
+	}
+	return nil
+}
+
 // GetSyncRevision delegates to the inner SyncClient.
 // Read-only operation — no circuit breaker needed.
 // Required so that the commit SHA verification type assertion succeeds
@@ -172,7 +207,7 @@ func (cb *CircuitBreakerSyncClient) recordResult(err error) {
 	if err != nil && errors.Is(err, loopzeroerrors.ErrDeployServiceAuthFailed) {
 		metrics.ArgoCDAuthFailures.Inc()
 		cb.logger.Error("argocd auth failure — not counted toward circuit breaker",
-			"suggestion", "check ARGOCD_TOKEN or see docs/runbooks/argocd-token-regeneration.md")
+			"suggestion", "check ARGOCD_TOKEN validity and regenerate if expired")
 		return
 	}
 	// MEET-2026-03-29-019: 409 "operation in progress" is NOT a transient failure —

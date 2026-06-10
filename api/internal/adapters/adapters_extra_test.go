@@ -16,13 +16,10 @@ import (
 
 // --- RollbackServiceAdapter tests ---
 
+// Quality-Gate Phase 2: Rollback method removed; test exercises the type
+// translation inline (RollbackOrchestrator is concrete, not interface).
 type fakeRollbackOrchestrator struct {
 	result *services.RollbackResult
-	err    error
-}
-
-func (f *fakeRollbackOrchestrator) Rollback(_ context.Context, _ services.RollbackRequest) (*services.RollbackResult, error) {
-	return f.result, f.err
 }
 
 func TestRollbackServiceAdapter_Rollback_Success(t *testing.T) {
@@ -117,6 +114,19 @@ type fakeBuildStoreWithError struct {
 
 func (f *fakeBuildStoreWithError) GetByID(_ context.Context, _ string) (*db.Build, error) {
 	return nil, f.err
+}
+
+// GetByIDForTenant — T0.4 of deep-review-2026-05-10-remediation-plan.
+// Emulates the production SQL filter for the unit-test scope.
+func (f *fakeBuildStoreWithError) GetByIDForTenant(ctx context.Context, tenantID, buildID string) (*db.Build, error) {
+	b, err := f.GetByID(ctx, buildID)
+	if err != nil || b == nil {
+		return b, err
+	}
+	if b.TenantID != tenantID {
+		return nil, nil
+	}
+	return b, nil
 }
 
 // --- LogBuildStoreAdapter error ---

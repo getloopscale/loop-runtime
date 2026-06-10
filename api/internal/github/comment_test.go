@@ -284,7 +284,7 @@ func TestUpsertPreviewComment_RejectsMissingRequiredParams(t *testing.T) {
 		{"trailing slash", func(p *PreviewCommentParams) { p.OwnerRepo = "owner/" }},
 	}
 	for _, tc := range cases {
-		tc := tc
+		// Go 1.22+: per-iteration loop variable; no shadow needed.
 		t.Run(tc.name, func(t *testing.T) {
 			p := newCommentParams()
 			tc.mod(&p)

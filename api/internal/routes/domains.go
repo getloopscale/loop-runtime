@@ -47,7 +47,7 @@ type (
 
 // domainMachine is the formal domain state machine (CRIT-02 fix).
 // Replaces ad-hoc map with pkg/statemachine convention.
-var domainMachine = statemachine.NewDomainMachine()
+var domainMachine = statemachine.NewDomainTypedMachine()
 
 // canRemove checks if a domain can transition to "removing" from its current state.
 // Uses the formal state machine — does not panic on invalid transitions.
@@ -58,8 +58,8 @@ func canRemove(currentStatus string) bool {
 			ok = false
 		}
 	}()
-	result := domainMachine.Transition(statemachine.State(currentStatus), statemachine.DomainRemove)
-	return ok && result == statemachine.DomainRemoving
+	result := domainMachine.Transition(statemachine.DomainPhase(currentStatus), statemachine.DPEventRemove)
+	return ok && result == statemachine.DPhRemoving
 }
 
 // DomainHandler provides HTTP handlers for custom domain operations.

@@ -54,7 +54,7 @@ func (f *fakeConvergenceReleaseStore) UpdateStatus(_ context.Context, _ db.DBTX,
 	m := statemachine.NewReleaseMachine()
 	current := f.statuses[id]
 	if current == "" {
-		current = string(statemachine.ReleasePending)
+		current = string(statemachine.RPhPending)
 	}
 	newState, err := safeTransitionRelease(m, statemachine.State(current), statemachine.Event(event))
 	if err != nil {
@@ -74,7 +74,7 @@ func (f *fakeConvergenceReleaseStore) GetByIDTx(_ context.Context, _ db.DBTX, id
 	status := f.statuses[id]
 	f.mu.Unlock()
 	if status == "" {
-		status = string(statemachine.ReleasePending)
+		status = string(statemachine.RPhPending)
 	}
 	for _, r := range f.pending {
 		if r.ID == id {
@@ -83,6 +83,10 @@ func (f *fakeConvergenceReleaseStore) GetByIDTx(_ context.Context, _ db.DBTX, id
 		}
 	}
 	return &db.Release{ID: id, Status: status}, nil
+}
+
+func (f *fakeConvergenceReleaseStore) CancelAllByEnv(_ context.Context, _ db.DBTX, _, _, _ string) (int, error) {
+	return 0, nil
 }
 
 func safeTransitionRelease(m *statemachine.Machine, current statemachine.State, event statemachine.Event) (newState statemachine.State, err error) {
@@ -147,6 +151,20 @@ func (f *fakeConvergenceSyncClient) GetAppStatus(_ context.Context, _ string, _ 
 	defer f.mu.Unlock()
 	return f.synced, f.healthy, f.err
 }
+
+// Sprint B T1.1 (ADR D1): stub methods to satisfy the widened SyncClient
+// interface. tests/unit convergence regressions don't exercise these
+// recovery paths; dedicated tests in internal/services do.
+func (f *fakeConvergenceSyncClient) ForceReconcile(_ context.Context, _ string) error {
+	return nil
+}
+func (f *fakeConvergenceSyncClient) GetSyncRevision(_ context.Context, _ string) (string, error) {
+	return "", nil
+}
+func (f *fakeConvergenceSyncClient) TerminateOperation(_ context.Context, _ string) error {
+	return nil
+}
+
 func (f *fakeConvergenceSyncClient) setStatus(synced, healthy bool) {
 	f.mu.Lock()
 	defer f.mu.Unlock()

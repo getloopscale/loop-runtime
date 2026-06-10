@@ -1,0 +1,227 @@
+version: "3"
+
+# taskfiles/db.yml — Database lifecycle: migrate, reset, seed, port-forward, shell.
+# Migration target: db:*, dev:seed:*, dev:ensure-project.
+
+tasks:
+  db:port-forward:
+    desc: Open a persistent port-forward to PostgreSQL (port {{.PG_PORT}})
+    cmds:
+      - |
+        # Check if port is already in use (e.g., by tilt)
+        if ss -tlnp 2>/dev/null | grep -q ":{{.PG_PORT}} " || lsof -i :{{.PG_PORT}} >/dev/null 2>&1; then
+          echo "Port {{.PG_PORT}} is already in use (likely by tilt or another port-forward)."
+          echo "You can connect directly:"
+          echo "  PGPASSWORD={{.PG_PASS}} psql -h {{.PG_HOST}} -p {{.PG_PORT}} -U {{.PG_USER}} -d {{.PG_DB}}"
+          exit 0
+        fi
+        echo "Port-forwarding PostgreSQL to localhost:{{.PG_PORT}}"
+        echo "Connect with: PGPASSWORD={{.PG_PASS}} psql -h {{.PG_HOST}} -p {{.PG_PORT}} -U {{.PG_USER}} -d {{.PG_DB}}"
+        echo "Press Ctrl+C to stop."
+        kubectl --context {{.MGMT_CONTEXT}} port-forward -n loopzero-system svc/postgresql {{.PG_PORT}}:5432
+
+  db:shell:
+    desc: Open an interactive psql shell to the database
+    interactive: true
+    cmds:
+      - |
+        POD=$(kubectl --context "{{.MGMT_CONTEXT}}" -n loopzero-system get pod -l app.kubernetes.io/name=postgresql -o jsonpath='{.items[0].metadata.name}')
+        kubectl --context "{{.MGMT_CONTEXT}}" -n loopzero-system exec -it "$POD" -c postgresql -- \
+          env PGPASSWORD="{{.PG_PASS}}" psql -U "{{.PG_USER}}" -d "{{.PG_DB}}"
+
+  db:status:
+    desc: Show database health — tables, row counts, connections, last migration
+    cmds:
+      - |
+        POD=$(kubectl --context "{{.MGMT_CONTEXT}}" -n loopzero-system get pod -l app.kubernetes.io/name=postgresql -o jsonpath='{.items[0].metadata.name}')
+        PG="kubectl --context {{.MGMT_CONTEXT}} -n loopzero-system exec -i $POD -c postgresql -- env PGPASSWORD={{.PG_PASS}} psql -U {{.PG_USER}} -d {{.PG_DB}}"
+
+        echo "=== Database Connection ==="
+        $PG -t -c "SELECT 'Connected to ' || current_database() || ' as ' || current_user || ' (version: ' || split_part(version(), ' ', 2) || ')';" 2>/dev/null \
+          || { echo "Cannot connect to database"; exit 1; }
+
+        echo ""
+        echo "=== Active Connections ==="
+        $PG -c "
+          SELECT datname, usename, state, count(*) as count
+          FROM pg_stat_activity
+          WHERE datname = '{{.PG_DB}}'
+          GROUP BY datname, usename, state
+          ORDER BY count DESC;
+        " 2>/dev/null
+
+        echo ""
+        echo "=== Tables and Row Counts ==="
+        $PG -c "
+          SELECT schemaname || '.' || relname AS table_name,
+                 n_live_tup AS row_count
+          FROM pg_stat_user_tables
+          ORDER BY n_live_tup DESC;
+        " 2>/dev/null
+
+        echo ""
+        echo "=== Migration Files Applied ==="
+        echo "  Migration files in api/internal/db/migrations/:"
+        ls -1 api/internal/db/migrations/*.up.sql 2>/dev/null | while read f; do echo "    $(basename "$f")"; done
+
+        echo ""
+        echo "=== Advisory Locks (active) ==="
+        $PG -c "
+          SELECT pid, classid, objid, granted
+          FROM pg_locks
+          WHERE locktype = 'advisory'
+          ORDER BY pid;
+        " 2>/dev/null
+
+  db:reset:
+    desc: Reset database to clean state (drop + recreate + migrate)
+    prompt: This will DROP and recreate the '{{.PG_DB}}' database. Are you sure?
+    cmds:
+      - |
+        POD=$(kubectl --context "{{.MGMT_CONTEXT}}" -n loopzero-system get pod -l app.kubernetes.io/name=postgresql -o jsonpath='{.items[0].metadata.name}')
+        PG="kubectl --context {{.MGMT_CONTEXT}} -n loopzero-system exec -i $POD -c postgresql -- env PGPASSWORD={{.PG_PASS}} psql -U {{.PG_USER}}"
+
+        echo "Dropping and recreating database..."
+        $PG -d postgres -c "
+          SELECT pg_terminate_backend(pid) FROM pg_stat_activity WHERE datname = '{{.PG_DB}}' AND pid <> pg_backend_pid();
+          DROP DATABASE IF EXISTS {{.PG_DB}};
+          CREATE DATABASE {{.PG_DB}} OWNER {{.PG_USER}};
+        "
+
+        echo "Running migrations..."
+        for f in $(ls api/internal/db/migrations/*.up.sql | sort); do
+          echo "  Applying $(basename $f)..."
+          $PG -d "{{.PG_DB}}" < "$f"
+        done
+
+        echo "Database reset complete."
+
+  db:reset:seed:
+    desc: Reset database + seed dev data
+    cmds:
+      - task: db:reset
+      - task: dev:seed
+  db:migrate:
+    desc: Run database migrations against PostgreSQL via golang-migrate canonical
+    # F-1 (dogfood-2026-05-08-fixes T1.2/T1.3, ADR D1):
+    # Replaces the previous `for f in *.up.sql; do psql < $f` loop that
+    # lacked version tracking and silently re-applied migrations every run.
+    # Calls infra/scripts/production/run-migrations.sh which uses the `migrate` binary
+    # already inside the loopzero-api image (api/Dockerfile copies migrations
+    # to /migrations and installs migrate to /usr/local/bin/migrate).
+    cmds:
+      - MGMT_CONTEXT={{.MGMT_CONTEXT}} PG_USER={{.PG_USER}} PG_PASS={{.PG_PASS}} PG_DB={{.PG_DB}} bash infra/scripts/production/run-migrations.sh
+
+  # ---------------------------------------------------------------------------
+  # S1: Development seed data
+  # ---------------------------------------------------------------------------
+  dev:seed:
+    desc: Seed database with a dev user + tenant for manual testing
+    vars:
+      GITHUB_USER: '{{.GITHUB_USER | default "getloopscale"}}'
+      GITHUB_EMAIL: '{{.GITHUB_EMAIL | default "getloopscale@users.noreply.github.com"}}'
+      GITHUB_ID: '{{.GITHUB_ID | default "241186089"}}'
+      TENANT: '{{.TENANT | default "acme"}}'
+      PLAN: '{{.PLAN | default "starter"}}'
+    cmds:
+      - |
+        POD=$(kubectl --context "{{.MGMT_CONTEXT}}" -n loopzero-system get pod -l app.kubernetes.io/name=postgresql -o jsonpath='{.items[0].metadata.name}')
+        kubectl --context "{{.MGMT_CONTEXT}}" -n loopzero-system exec -i "$POD" -c postgresql -- \
+          env PGPASSWORD="{{.PG_PASS}}" psql -U "{{.PG_USER}}" -d "{{.PG_DB}}" <<SQL
+        -- Set audit context for RLS and audit triggers (migration 000009)
+        SELECT set_config('app.tenant_id', '{{.TENANT}}', false);
+        SELECT set_config('app.correlation_id', 'seed-' || extract(epoch from now())::text, false);
+        SELECT set_config('app.current_user', 'system', false);
+
+        -- Idempotent: uses ON CONFLICT DO NOTHING
+        INSERT INTO users (id, email, github_id, display_name)
+        VALUES ('github-{{.GITHUB_USER}}', '{{.GITHUB_EMAIL}}', {{.GITHUB_ID}}, '{{.GITHUB_USER}}')
+        ON CONFLICT (id) DO NOTHING;
+
+        INSERT INTO tenants (id, display_name, slug, owner_id)
+        VALUES ('{{.TENANT}}', '{{.TENANT}}', '{{.TENANT}}', 'github-{{.GITHUB_USER}}')
+        ON CONFLICT (id) DO NOTHING;
+
+        INSERT INTO tenant_members (tenant_id, user_id, role)
+        VALUES ('{{.TENANT}}', 'github-{{.GITHUB_USER}}', 'owner')
+        ON CONFLICT (tenant_id, user_id) DO NOTHING;
+
+        SELECT '✓ User: github-{{.GITHUB_USER}} (' || '{{.GITHUB_EMAIL}}' || ')';
+        SELECT '✓ Tenant: {{.TENANT}} (plan: {{.PLAN}})';
+        SELECT '✓ Membership: owner of {{.TENANT}}';
+        SQL
+
+  dev:ensure-project:
+    desc: Create default project via API (triggers Tenant CR + ArgoCD Application)
+    cmds:
+      - bash infra/scripts/ci/ensure-project.sh
+
+  # ---------------------------------------------------------------------------
+  # sqlc migration (T0.2 of plan 2026-05-29-sqlc-migration v1.2)
+  # ---------------------------------------------------------------------------
+  db:render-schema:
+    desc: Render api/internal/db/schema.gen.sql via ephemeral PG 16 + golang-migrate replay (deterministic; EC-4 trap + EC-17 random port + EC-2 sqlc pre-flight)
+    cmds:
+      - bash infra/scripts/ci/render-schema-gen-sql.sh
+
+  db:generate:
+    desc: Regenerate api/internal/db/generated/*.go from queries/*.sql via sqlc v1.31.1
+    cmds:
+      - |
+        cd api/internal/db
+        if ! command -v sqlc >/dev/null; then
+          echo "[FAIL] sqlc not installed — run 'task doctor' for install instructions"
+          exit 1
+        fi
+        VERSION="$(sqlc version)"
+        if [ "$VERSION" != "v1.31.1" ]; then
+          echo "[FAIL] sqlc version mismatch: $VERSION (expected v1.31.1)"
+          echo "       Reinstall: go install github.com/sqlc-dev/sqlc/cmd/sqlc@v1.31.1"
+          exit 1
+        fi
+        sqlc generate
+        echo "[PASS] sqlc generate completed; verify api/internal/db/generated/ and commit any diff"
+
+  db:verify-sync:
+    desc: Verify committed api/internal/db/generated/ is in-sync with a fresh `sqlc generate` (pkg/quality/sqlcsync gate; CI runs this too)
+    cmds:
+      - |
+        if ! command -v sqlc >/dev/null; then
+          echo "[FAIL] sqlc not installed"
+          exit 1
+        fi
+        TMPDIR=$(mktemp -d)
+        trap 'rm -rf "$TMPDIR"' EXIT
+        cp -r api/internal/db/queries "$TMPDIR/"
+        cp api/internal/db/sqlc.yaml "$TMPDIR/"
+        cp api/internal/db/schema.gen.sql "$TMPDIR/"
+        cd "$TMPDIR"
+        sqlc generate
+        cd - >/dev/null
+        if diff -r api/internal/db/generated "$TMPDIR/generated" >/dev/null; then
+          echo "[PASS] generated/ in-sync with sqlc generate"
+        else
+          echo "[FAIL] generated/ out-of-sync — run 'task db:generate' && commit"
+          diff -r api/internal/db/generated "$TMPDIR/generated" | head -30
+          exit 1
+        fi
+
+  # ---------------------------------------------------------------------------
+  # S2: E2E seed data
+  # ---------------------------------------------------------------------------
+  dev:seed:e2e:
+    desc: Seed E2E test data (tenant, user, project) and wait for reconciliation
+    cmds:
+      - |
+        # E2E seed needs a Go script with DATABASE_URL — port-forward required
+        kubectl --context "{{.MGMT_CONTEXT}}" port-forward -n loopzero-system svc/postgresql "{{.PG_PORT}}":5432 &
+        PF_PID=$!
+        sleep 2
+        DATABASE_URL="postgres://{{.PG_USER}}:{{.PG_PASS}}@{{.PG_HOST}}:{{.PG_PORT}}/{{.PG_DB}}?sslmode=disable" \
+        API_URL="http://localhost:{{.API_PORT}}" \
+          go run infra/scripts/seed_e2e.go
+        kill $PF_PID 2>/dev/null; wait $PF_PID 2>/dev/null || true
+
+  # ---------------------------------------------------------------------------
+  # S0.6: Cross-cluster networking + API tokens
+  # ---------------------------------------------------------------------------

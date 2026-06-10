@@ -107,9 +107,19 @@ export function bootstrapGitea(
                 env: [
                   {
                     name: "GITEA_ADMIN_PASS_ENV",
-                    value: config.giteaAdminPassword
-                      ? pulumi.interpolate`${config.giteaAdminPassword}`
-                      : GITEA_ADMIN_PASSWORD_DEFAULT,
+                    // T1.4 (plan 2026-05-21-deep-review-remediation): no
+                    // hardcoded fallback. Pulumi up fails fast if config
+                    // not set (matches mgmt-platform-services.ts pattern).
+                    value: (() => {
+                      if (!config.giteaAdminPassword) {
+                        throw new Error(
+                          "giteaAdminPassword Pulumi config secret is required for Gitea bootstrap — " +
+                            "set via: `pulumi config set --secret giteaAdminPassword <value>`. " +
+                            "See docs/operations/credentials-required.md.",
+                        );
+                      }
+                      return pulumi.interpolate`${config.giteaAdminPassword}`;
+                    })(),
                   },
                 ],
                 command: ["bash", "-c"],

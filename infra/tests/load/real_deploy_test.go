@@ -7,6 +7,7 @@ import (
 	"context"
 	"fmt"
 	"os"
+	"strconv"
 	"sync"
 	"sync/atomic"
 	"testing"
@@ -449,6 +450,155 @@ func TestRealDeploy_L3_100Tenants(t *testing.T) {
 	maxFailures := int64(tenantCount) / 200 // 0.5% of 100 = 0
 	if int64(tenantCount)-successCnt > maxFailures {
 		t.Errorf("L3 FAIL: %d/%d succeeded (target: >= 99.5%%)", successCnt, tenantCount)
+	}
+
+	// Cleanup
+	t.Log("--- Cleanup ---")
+	for _, id := range identities {
+		harness.CleanupTenant(ctx, id)
+	}
+}
+
+// TestRealDeploy_L3Realistic_100Tenants runs 100 real deploys against the
+// dogfood-monorepo fixture — a representative full-stack SaaS layout
+// (NestJS API + Next.js web + Express gateway + Node worker + 2 shared
+// packages, Turborepo). This validates that LoopZero cell capacity holds for
+// realistic workloads, not just the hello-server smoke. Sprint 8 / CHG-002b
+// stabilization deliverable: hello-server only proved "the platform accepts
+// 100 trivial servers"; L3-realistic proves "the platform deploys 100 real
+// SaaS stacks".
+//
+// Trade-offs vs L3 hello-server:
+//   - 4 apps per tenant (vs 1) → up to 400 concurrent build images
+//   - Concurrency capped at 15 (vs 30) so build cluster does not saturate
+//     beyond observed L3 ceiling. Bump via LOOPZERO_L3REAL_CONCURRENCY.
+//   - Verify URL targets gateway (Express public ingress) by default; use
+//     LOOPZERO_VERIFY_APP_NAME=api/web/gateway to switch.
+//
+// Gated on LOOPZERO_REAL_DEPLOY=1 + LOOPZERO_LOAD_LEVEL=l3-realistic.
+// Default fixture: ../e2e/fixtures/dogfood-monorepo (override via
+// LOOPZERO_FIXTURE_PATH).
+func TestRealDeploy_L3Realistic_100Tenants(t *testing.T) {
+	if os.Getenv("LOOPZERO_REAL_DEPLOY") != "1" {
+		t.Skip("skipping real deploy test: set LOOPZERO_REAL_DEPLOY=1")
+	}
+	if os.Getenv("LOOPZERO_LOAD_LEVEL") != "l3-realistic" && os.Getenv("LOOPZERO_LOAD_LEVEL") != "all" {
+		t.Skip("skipping L3-realistic: set LOOPZERO_LOAD_LEVEL=l3-realistic or LOOPZERO_LOAD_LEVEL=all")
+	}
+
+	apiURL := os.Getenv("LOOPZERO_API_URL")
+	if apiURL == "" {
+		t.Fatal("LOOPZERO_API_URL required")
+	}
+	appDomain := os.Getenv("LOOPZERO_APP_DOMAIN")
+	if appDomain == "" {
+		t.Fatal("LOOPZERO_APP_DOMAIN required")
+	}
+	serviceAuth := os.Getenv("LOOPZERO_SERVICE_AUTH")
+	if serviceAuth == "" {
+		t.Fatal("LOOPZERO_SERVICE_AUTH required")
+	}
+
+	const tenantCount = 100
+	concurrency := 15
+	if v := os.Getenv("LOOPZERO_L3REAL_CONCURRENCY"); v != "" {
+		if n, err := strconv.Atoi(v); err == nil && n > 0 {
+			concurrency = n
+		}
+	}
+	ctx, cancel := context.WithTimeout(context.Background(), 4*time.Hour)
+	defer cancel()
+
+	// Default to gateway (the Express HTTP entry point that proxies to api
+	// and serves health on root). hello-server's `api` does not exist in
+	// dogfood-monorepo's URL space; gateway is the public-facing app.
+	if os.Getenv("LOOPZERO_VERIFY_APP_NAME") == "" {
+		t.Setenv("LOOPZERO_VERIFY_APP_NAME", "gateway")
+	}
+
+	harness, err := NewRealDeployHarness(RealDeployConfig{
+		APIURL:      apiURL,
+		AppDomain:   appDomain,
+		ServiceAuth: serviceAuth,
+		FixturePath: envOr("LOOPZERO_FIXTURE_PATH", "../e2e/fixtures/dogfood-monorepo"),
+	})
+	if err != nil {
+		t.Fatalf("harness: %v", err)
+	}
+
+	t.Logf("=== REAL DEPLOY L3-realistic — %d tenants × dogfood-monorepo (4 apps), concurrency %d ===", tenantCount, concurrency)
+
+	// Phase 1: Provision
+	identities := make([]TenantIdentity, tenantCount)
+	for i := 0; i < tenantCount; i++ {
+		identities[i] = NewTenantIdentity("l3r", i)
+	}
+
+	t.Log("--- Provisioning tenants ---")
+	provSem := make(chan struct{}, 10)
+	var provWg sync.WaitGroup
+	for i, id := range identities {
+		provWg.Add(1)
+		go func(idx int, tenant TenantIdentity) {
+			defer provWg.Done()
+			provSem <- struct{}{}
+			defer func() { <-provSem }()
+			harness.ProvisionTenant(ctx, tenant)
+		}(i, id)
+	}
+	provWg.Wait()
+	t.Log("  All tenants provisioned")
+
+	// Phase 2: Deploy all tenants. No noisy neighbor here — the fixture's
+	// 4-app DAG already exercises the per-tenant build admission gate
+	// because each deploy submits 4 build images concurrently.
+	t.Log("--- Deploying full-stack tenants ---")
+
+	var (
+		successCnt int64
+		liveCnt    int64
+	)
+
+	sem := make(chan struct{}, concurrency)
+	var wg sync.WaitGroup
+
+	for i, id := range identities {
+		wg.Add(1)
+		go func(idx int, tenant TenantIdentity) {
+			defer wg.Done()
+			sem <- struct{}{}
+			defer func() { <-sem }()
+			r := harness.RealDeploy(ctx, tenant)
+			if r.Success {
+				atomic.AddInt64(&successCnt, 1)
+			}
+			if r.AppLive {
+				atomic.AddInt64(&liveCnt, 1)
+			}
+			if !r.Success {
+				t.Logf("  tn-%d: FAILED %s", idx, r.Error)
+			}
+		}(i, id)
+	}
+	wg.Wait()
+
+	// Phase 3: Report
+	t.Log("")
+	t.Log("═══════════════════════════════════════════════════════")
+	t.Logf("  REAL DEPLOY L3-realistic — %d FULL-STACK TENANTS — RESULTS", tenantCount)
+	t.Log("═══════════════════════════════════════════════════════")
+	t.Logf("  Succeeded:     %d / %d", successCnt, tenantCount)
+	t.Logf("  Apps Live:     %d / %d (HTTP 200 verified on %s)", liveCnt, tenantCount, os.Getenv("LOOPZERO_VERIFY_APP_NAME"))
+	t.Log("═══════════════════════════════════════════════════════")
+
+	// L3-realistic accepts >= 95% (Sprint 8 / ADR-0010 Gate #1 progress
+	// metric). hello-server L3 demands 99.5% because its DAG is trivial;
+	// realistic 4-app builds add legitimate failure surface (npm registry
+	// flakes, transient OOMs on Next.js build). 95% is the documented
+	// gate threshold — tighten as we drive root causes out.
+	maxFailures := int64(tenantCount) * 5 / 100 // 5%
+	if int64(tenantCount)-successCnt > maxFailures {
+		t.Errorf("L3-realistic FAIL: %d/%d succeeded (target: >= 95%%)", successCnt, tenantCount)
 	}
 
 	// Cleanup

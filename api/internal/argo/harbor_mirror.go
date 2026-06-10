@@ -50,9 +50,9 @@ func harborMirrorTemplate(appName, sourceTag, harborTag string) *forge.Container
 			Limits:   forge.ResourceList{CPU: "200m", Memory: "256Mi"},
 		},
 		SecurityContext: &model.SecurityContext{
-			RunAsNonRoot: ptr(true),
-			RunAsUser:    ptr(int64(65534)),
-			RunAsGroup:   ptr(int64(65534)),
+			RunAsNonRoot: forge.Ptr(true),
+			RunAsUser:    forge.Ptr(int64(65534)),
+			RunAsGroup:   forge.Ptr(int64(65534)),
 		},
 	}
 }

@@ -61,10 +61,24 @@ func (o *BuildOrchestrator) SubmitBuild(ctx context.Context, req SubmitBuildRequ
 			return loopzeroerrors.ErrDeployInProgress
 		}
 
+		// Step 2.2: B40 — resolve scaling from app_scaling_config DB rows BEFORE
+		// plan-cap enforcement. Per D1 (DB > loopzero.yaml when row exists), this
+		// closes the hole MEET-2026-04-23-059 Constraint 6 — plan caps must
+		// operate on the config that becomes K8s state, not on user-supplied
+		// yaml. Resolve runs inside the tx scope (serializable isolation
+		// guarantees no torn reads). Race condition with concurrent scale
+		// upsert is acceptable per eventual consistency (T2.1 Deep Dives).
+		resolvedApps, err := o.resolveScaling(ctx, req.TenantID, req.ProjectID, req.Environment, req.Apps)
+		if err != nil {
+			return fmt.Errorf("submit build: resolve scaling: %w", err)
+		}
+		req.Apps = resolvedApps
+
 		// Step 2.3: B15 scaling validation + plan-cap enforcement.
 		// This is the authoritative gate covering BOTH the CLI deploy path and
 		// the GitHub App auto-deploy path — bypass here means a plan-cap
-		// enforcement hole (MEET-2026-04-23-059 Constraint 6).
+		// enforcement hole (MEET-2026-04-23-059 Constraint 6). Operates on
+		// resolved AppSpec per B40 fix above.
 		if err := enforceScaling(req.Apps, o.planCap, req.TenantID, o.kedaEnabled); err != nil {
 			return err
 		}
@@ -185,7 +199,7 @@ func (o *BuildOrchestrator) SubmitBuild(ctx context.Context, req SubmitBuildRequ
 	}
 
 	// Transition QUEUED -> RUNNING
-	if _, err := o.buildStore.UpdateStatus(ctx, nil, buildID, string(statemachine.BuildStarted)); err != nil {
+	if _, err := o.buildStore.UpdateStatus(ctx, nil, buildID, string(statemachine.BPEventStarted)); err != nil {
 		slog.Error("submit build: failed to transition to RUNNING",
 			"build_id", buildID, "error", err)
 		// Non-fatal: reconcile loop handles EC-N (QUEUED build with completed workflow).
@@ -243,10 +257,12 @@ func enforceScaling(apps []AppSpec, checker PlanCapChecker, tenantID string, ked
 			// B15: observe mutual-exclusion rejections under the same metric so
 			// dashboards show a single plan-enforcement signal.
 			metrics.PlanLimitViolations.WithLabelValues("scaling_ambiguous", "").Inc()
+			// Stage C of T2.3: HTTPStatus is resolved by errorshttp.Status()
+			// from the registered code; the int param is ignored.
 			return loopzeroerrors.NewLoopZeroError(
 				loopzeroerrors.ErrScalingAmbiguous.Code,
 				fmt.Sprintf("App '%s': %s", a.Name, loopzeroerrors.ErrScalingAmbiguous.Message),
-				loopzeroerrors.ErrScalingAmbiguous.HTTPStatus,
+				0,
 			)
 		}
 		if checker == nil {
@@ -281,7 +297,7 @@ func enforceScaling(apps []AppSpec, checker PlanCapChecker, tenantID string, ked
 // fails. This runs OUTSIDE the advisory lock using the connection pool directly.
 // REVIEW-BLOCKER-1: ensures the environment is immediately unblocked on submit failure.
 func (o *BuildOrchestrator) failQueuedBuild(ctx context.Context, buildID string, reason string) {
-	if _, err := o.buildStore.UpdateStatus(ctx, nil, buildID, string(statemachine.BuildFailedEvent)); err != nil {
+	if _, err := o.buildStore.UpdateStatus(ctx, nil, buildID, string(statemachine.BPEventFailed)); err != nil {
 		slog.Error("submit build: failed to mark QUEUED build as FAILED",
 			"build_id", buildID, "error", err)
 		return

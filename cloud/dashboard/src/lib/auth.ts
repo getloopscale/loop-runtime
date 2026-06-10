@@ -4,10 +4,19 @@
 // No Hydra, no PKCE, no tokens. Just HTTP-only session cookies.
 //
 // Hydra is only used for the CLI (Device Code Flow).
+//
+// SW INVARIANT (T4.2 + EC-04): Service Worker at vite.config.ts MUST never
+// cache auth/session endpoints (/api/v1/auth/*, /sessions/*, /self-service/*,
+// /oauth2/*). Stale token = security hole (UI shows logged-in but session is
+// gone). Always NetworkOnly handler for these patterns.
 
-// MEET-040: Same-origin — relative URLs. Runtime config via /__config.js.
-import { API_URL } from './config';
-const KRATOS_URL = API_URL;
+// AUTH_URL is the dedicated Kratos URL. Falls back to API_URL when AUTH_URL
+// isn't set (dev / same-origin). Production with split domains (Kratos at
+// accounts.loopzero.dev vs API at api.loopzero.dev) requires AUTH_URL set explicitly
+// via /__config.js — without this fallback the auth flow breaks silently.
+import { API_URL, AUTH_URL } from './config';
+import { mocksEnabled, getMockSession } from './dev-mocks';
+const KRATOS_URL = AUTH_URL || API_URL;
 
 export interface VerifiableAddress {
   value: string;
@@ -66,17 +75,47 @@ export function isEmailVerified(session: Session): boolean {
   return false;
 }
 
-/** Check if user has an active session. Returns session or null. */
+/** Check if user has an active session. Returns session or null.
+ *
+ * SECURITY (2026-06-01): Calls Kratos directly via cross-subdomain XHR with
+ * credentials:include. Cookie is scoped Domain=loopzero.example so it travels on
+ * same-site (eTLD+1) requests; SameSite=Lax allows this per RFC6265bis §5.5.7.
+ * CORS Access-Control-Allow-Origin includes the dashboard origin.
+ *
+ * If 401 with a stale cookie or missing cookie, returns null and caller
+ * (useRequireAuth) routes to /login. Console diagnostics emitted to make
+ * "why am I being kicked to /login" actionable in DevTools.
+ */
 export async function getSession(): Promise<Session | null> {
+  // Visual-validation mock layer (dev-only, gated by VITE_USE_MOCKS env var,
+  // dead-code-eliminated in production builds). See lib/dev-mocks.ts.
+  if (mocksEnabled()) return getMockSession();
+
   try {
     const resp = await fetch(`${KRATOS_URL}/sessions/whoami`, {
       credentials: 'include',
       headers: { Accept: 'application/json' },
     });
-    if (!resp.ok) return null;
+    if (!resp.ok) {
+      // eslint-disable-next-line no-console
+      console.warn(
+        `[auth] getSession: Kratos returned HTTP ${resp.status} (no active session). ` +
+          `If you just registered/logged in but see this, the session cookie may not have been ` +
+          `set (open DevTools → Application → Cookies → loopzero.example and look for ory_kratos_session). ` +
+          `Clear cookies and re-login to reset.`,
+      );
+      return null;
+    }
     const session = await resp.json();
-    return session.active ? session : null;
-  } catch {
+    if (!session.active) {
+      // eslint-disable-next-line no-console
+      console.warn('[auth] getSession: Kratos returned session but active=false', session);
+      return null;
+    }
+    return session;
+  } catch (err) {
+    // eslint-disable-next-line no-console
+    console.error('[auth] getSession: network/parse error', err);
     return null;
   }
 }

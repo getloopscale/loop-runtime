@@ -15,9 +15,11 @@ import (
 
 	"github.com/go-chi/chi/v5"
 
+	"github.com/loopzero/loopzero/api/internal/correlation"
 	"github.com/loopzero/loopzero/api/internal/domain"
 	"github.com/loopzero/loopzero/api/internal/middleware"
 	loopzeroerrors "github.com/loopzero/loopzero/pkg/errors"
+	errorshttp "github.com/loopzero/loopzero/pkg/errors/http"
 )
 
 var (
@@ -218,7 +220,7 @@ func (h *ProjectHandler) Delete(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	correlationID := r.Header.Get("Correlation-ID")
+	correlationID := correlation.Read(r) // T6.1 uniform read via helper
 
 	result, err := h.deleter.Delete(ctx, ProjectDeleteInput{
 		TenantID:      uc.TenantID,
@@ -274,7 +276,7 @@ func (h *ProjectHandler) DeleteEnvironment(w http.ResponseWriter, r *http.Reques
 		return
 	}
 
-	correlationID := r.Header.Get("Correlation-ID")
+	correlationID := correlation.Read(r) // T6.1 uniform read via helper
 
 	result, err := h.deleter.Delete(ctx, ProjectDeleteInput{
 		TenantID:      uc.TenantID,
@@ -300,8 +302,18 @@ func writeJSON(w http.ResponseWriter, status int, data interface{}) {
 }
 
 // writeLoopZeroError writes a LoopZeroError as a JSON response with the correct HTTP status.
+//
+// Per ADR-0030 + T2.3 closure: emits RFC 9457 problem+json shape via
+// errorshttp.WriteJSON. The CLI reads `body.code` (preserved across
+// formats) so backward compat is maintained for clients that only
+// inspect the code field.
+//
+// The legacy ToJSON shape is no longer emitted from production
+// handlers; pkg/errors.LoopZeroError.ToJSON remains for audit-log /
+// internal-tool callers that don't need RFC 9457 transport semantics.
 func writeLoopZeroError(w http.ResponseWriter, err *loopzeroerrors.LoopZeroError) {
-	w.Header().Set("Content-Type", "application/json")
-	w.WriteHeader(err.HTTPStatus)
-	_ = json.NewEncoder(w).Encode(err.ToJSON())
+	// Pass nil for *http.Request — instance field is omitted by
+	// WriteJSON when r is nil. Future refactor can thread r through
+	// the call sites to populate instance with r.URL.Path.
+	errorshttp.WriteJSON(w, nil, err)
 }

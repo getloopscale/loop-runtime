@@ -24,6 +24,8 @@ function createMockDeps(overrides: Partial<DeployDeps> = {}): DeployDeps {
         },
       },
     }),
+    // Plan v1.1 T1.2 — services.json discovery for upload payload.
+    findServicesJson: jest.fn().mockReturnValue({ path: '/project/.loopzero/services.json' }),
     hasGitRepo: jest.fn().mockReturnValue(true),
     hasLockfile: jest.fn().mockReturnValue(true),
     getSourceIdentifier: jest.fn().mockReturnValue('abc1234'),
@@ -2254,6 +2256,107 @@ describe('DeployCommand', () => {
       const apiApp = submitCall.apps.find((a: { name: string }) => a.name === 'api');
       expect(apiApp.replicas).toBeUndefined();
       expect(apiApp.autoscaling).toBeUndefined();
+    });
+  });
+
+  // argo-rollouts-progressive-delivery-plan T4.2 — canary progress events.
+  describe('canary progress (rollout.step / rollout.aborted)', () => {
+    it('shows canary weight progression when rollout.step events arrive', async () => {
+      const deps = createMockDeps({
+        connectSSE: jest.fn().mockImplementation(
+          (_buildId: string, onEvent: (event: SSEEvent) => void) => {
+            onEvent({
+              type: 'rollout.step',
+              data: { weight: 20, step: 1, total_steps: 5, status: 'progressing' },
+            });
+            onEvent({
+              type: 'rollout.step',
+              data: { weight: 50, step: 3, total_steps: 5, status: 'paused' },
+            });
+            onEvent({
+              type: 'deploy.completed',
+              data: {
+                deploy_id: 'd-1', status: 'success', duration_seconds: 60,
+                apps: [{ name: 'api', status: 'deployed', url: 'https://api.example.com' }],
+              },
+            });
+            return { close: jest.fn() };
+          },
+        ),
+      });
+      const cmd = new DeployCommand(deps);
+      const exitCode = await cmd.execute({});
+
+      expect(exitCode).toBe(0);
+      // Both progress events should have been written via writeTo
+      const allWrites = (deps.writeTo as jest.Mock).mock.calls.flat().join(' ');
+      expect(allWrites).toContain('20%');
+      expect(allWrites).toContain('50%');
+      // Rule 3: never expose internal terms in canary output
+      expect(allWrites.toLowerCase()).not.toContain('rollout');
+      expect(allWrites.toLowerCase()).not.toContain('argo');
+      expect(allWrites.toLowerCase()).not.toContain('traefikservice');
+    });
+
+    it('exits with code 3 and shows error when rollout.aborted event received', async () => {
+      const deps = createMockDeps({
+        connectSSE: jest.fn().mockImplementation(
+          (_buildId: string, onEvent: (event: SSEEvent) => void) => {
+            onEvent({
+              type: 'rollout.step',
+              data: { weight: 20, step: 1, total_steps: 5, status: 'progressing' },
+            });
+            onEvent({
+              type: 'rollout.aborted',
+              data: {
+                reason: 'analysis-failed', step: 3, weight: 20,
+                message: 'success-rate dropped below 0.90 threshold',
+              },
+            });
+            return { close: jest.fn() };
+          },
+        ),
+      });
+      const cmd = new DeployCommand(deps);
+      const exitCode = await cmd.execute({});
+
+      expect(exitCode).toBe(3);
+      const allErrors = (deps.writeError as jest.Mock).mock.calls.flat().join(' ');
+      expect(allErrors).toContain('Canary deployment aborted');
+      expect(allErrors).toContain('20%');
+      expect(allErrors).toContain('loopzero logs --build');
+      // Rule 3: zero internal terms
+      expect(allErrors.toLowerCase()).not.toContain('rollout');
+      expect(allErrors.toLowerCase()).not.toContain('argo');
+    });
+
+    it('outputs JSON with exit_code 3 on rollout.aborted with --json', async () => {
+      const deps = createMockDeps({
+        connectSSE: jest.fn().mockImplementation(
+          (_buildId: string, onEvent: (event: SSEEvent) => void) => {
+            onEvent({
+              type: 'rollout.aborted',
+              data: { reason: 'pod-unhealthy', step: 2, weight: 50, message: 'pods crashed' },
+            });
+            return { close: jest.fn() };
+          },
+        ),
+      });
+      const cmd = new DeployCommand(deps);
+      const exitCode = await cmd.execute({ json: true });
+
+      expect(exitCode).toBe(3);
+      const outputs = (deps.writeTo as jest.Mock).mock.calls.flat();
+      const jsonLine = outputs.find((s: string) => {
+        try {
+          const o = JSON.parse(s);
+          return o.code === 'CANARY_ABORTED';
+        } catch { return false; }
+      });
+      expect(jsonLine).toBeDefined();
+      const parsed = JSON.parse(jsonLine);
+      expect(parsed.exit_code).toBe(3);
+      expect(parsed.weight).toBe(50);
     });
   });
 });

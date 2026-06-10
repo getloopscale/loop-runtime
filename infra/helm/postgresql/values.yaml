@@ -6,23 +6,63 @@
 # Local dev uses whatever the chart default provides (currently PG 18.x).
 image:
   registry: docker.io
-  repository: bitnami/postgresql
+  # B19/B21 (CHG-2026-04-28-LAYERED-BOOTSTRAP) — Bitnami migrated free
+  # tier image tags to bitnamilegacy/* in mid-2025. Chart 18.6.2's
+  # default `bitnami/postgresql` tag may not exist on Docker Hub.
+  # Override repo to the legacy mirror, which Bitnami pledges to keep
+  # available indefinitely for users on free tier.
+  repository: bitnamilegacy/postgresql
   # tag: defaults to chart appVersion (verified available on Docker Hub)
 
 auth:
   username: loopzero
-  password: loopzero-dev-password  # LOCAL DEV ONLY — override for production
+  # Password is NOT set here. The helmfile postgresql release sets
+  # auth.existingSecret=loopzero-db-credentials (minted by generate-secrets.sh
+  # pre-sync) so PG initializes the `loopzero` user with the SAME password
+  # kratos/hydra/loopzero-api read. An inline value here would diverge from that
+  # secret. Earlier this was "" expecting a never-wired $LOOPZERO_DB_PASSWORD
+  # override → Bitnami auto-generated a random password → kratos SASL auth
+  # failed (finding-2026-05-22-pg-password-divergence). See docs/operations/credentials-required.md.
+  password: ""
   database: loopzero
 
 # Create additional databases required by platform components.
 # The 'loopzero' database is created by auth.database above.
-# Gitea needs its own database to avoid SQLite limitations (E-06).
-initdb:
-  scripts:
-    create-gitea-db.sql: |
-      CREATE DATABASE gitea OWNER loopzero;
+#
+# B27 (CHG-2026-04-28-LAYERED-BOOTSTRAP) — Each stateful component gets
+# its own DB for blast radius isolation:
+#   - gitea  : Gitea metadata (E-06 — avoid SQLite limitations)
+#   - kratos : Ory Kratos identities + sessions
+#   - hydra  : Ory Hydra OAuth2 clients + tokens
+#   - harbor : Harbor registry metadata
+# Without these, kratos/hydra/harbor crash with "database does not exist"
+# on first start.
+#
+# Achado #29 (CHG-2026-04-30-INFRA-PARITY) — bitnami postgresql 18.6.2 expects
+# `primary.initdb.scripts`, NOT top-level `initdb.scripts` (older chart schema).
+# The old schema was silently ignored: postgres came up clean but kratos/
+# hydra/harbor init containers crashed with "database does not exist".
+# Discovered live during T5.1 virgin install on 2026-04-30.
 
 primary:
+  initdb:
+    scripts:
+      create-platform-dbs.sql: |
+        CREATE DATABASE gitea OWNER loopzero;
+        CREATE DATABASE kratos OWNER loopzero;
+        CREATE DATABASE hydra OWNER loopzero;
+        CREATE DATABASE harbor OWNER loopzero;
+  # B2 (real-paas-cleanroom-dogfood-loop-plan iter 2, 2026-05-05) — disable
+  # Bitnami's chart-owned PDB. The Tiltfile applies a PDB at
+  # infra/helm/postgresql/templates/pdb.yaml with `minAvailable: 1`. Bitnami
+  # 18.6.2 ships its own PDB with `maxUnavailable: 1`. K8s rejects PDBs with
+  # both fields set, so the merged result on apply was rejected with
+  # `minAvailable and maxUnavailable cannot be both set` — discovered LIVE
+  # during cleanroom Phase 3 (tilt ci) which exited in 9 seconds. Sole-owner
+  # rule: Tilt manages the PDB; Bitnami stops creating one. Fix applied here
+  # (in scope: infra/helm/**) instead of Tiltfile (out of scope).
+  pdb:
+    create: false
   livenessProbe:
     enabled: true
   readinessProbe:
@@ -35,9 +75,26 @@ primary:
       cpu: "100m"
       memory: "128Mi"
   podSecurityContext:
+    enabled: true
     runAsNonRoot: true
+    runAsUser: 1001
+    runAsGroup: 1001
+    fsGroup: 1001
+    seccompProfile:
+      type: RuntimeDefault
+  # PG primary writes to /bitnami/postgresql data dir which is mounted as PVC.
+  # readOnlyRootFilesystem: true is compatible because the data dir is a separate
+  # mount; the / FS is read-only.
   containerSecurityContext:
+    enabled: true
     runAsNonRoot: true
+    runAsUser: 1001
+    runAsGroup: 1001
+    readOnlyRootFilesystem: true
+    allowPrivilegeEscalation: false
+    capabilities:
+      drop:
+        - ALL
   persistence:
     size: 1Gi
   service:
@@ -47,12 +104,17 @@ primary:
 
 metrics:
   enabled: true
+  # B23 (CHG-2026-04-28-LAYERED-BOOTSTRAP) — ServiceMonitor requires the
+  # Prometheus Operator CRDs (`monitoring.coreos.com/v1`). Our monitoring
+  # stack uses `prometheus-community/prometheus` (standalone), NOT
+  # `kube-prometheus-stack`, so the Operator and its CRDs are not present.
+  # Disable ServiceMonitor until we adopt the Operator (Sprint 9).
+  # Plain Prometheus scrape works via static config or annotations.
   serviceMonitor:
-    enabled: true
-    namespace: monitoring
-    labels:
-      release: monitoring
-    interval: 15s
+    enabled: false
+  # Bitnami legacy image mirror (B19/B21).
+  image:
+    repository: bitnamilegacy/postgres-exporter
   resources:
     limits:
       cpu: "100m"

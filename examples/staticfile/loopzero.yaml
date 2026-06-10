@@ -1,6 +1,0 @@
-project: static-site
-
-apps:
-  static-site:
-    path: .
-    framework: custom

@@ -1,6 +1,12 @@
 // SPDX-License-Identifier: Apache-2.0
 // Copyright 2025-2026 The LoopZero Authors
 
+// Package sse implements the Server-Sent-Events stream that delivers
+// build + deploy + rollout progress to CLI/dashboard clients in
+// real time. Hub multiplexes per-environment subscriptions; pruner
+// reaps stale events from the in-memory ring buffer. SSE events are
+// the only `--json` contract observable mid-flight (`build.event`,
+// `release.event`, `rollout.step`, `rollout.aborted` etc.).
 package sse
 
 import (

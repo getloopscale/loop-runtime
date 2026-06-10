@@ -1,0 +1,220 @@
+#!/usr/bin/env bash
+# SPDX-License-Identifier: Apache-2.0
+# Copyright 2025-2026 The LoopZero Authors
+#
+# T3.3 of plan 2026-05-26-maturity-3-62-to-4-0-roadmap-plan.md
+# Enforces ADR 2026-05-12 hard deadline for cosign keyed → keyless cutover.
+#
+# Reads:
+#   - ConfigMap loopzero-system/loopzero-cosign-config: mode + cutover_deadline keys
+#   - Current date (UTC)
+#
+# Exit codes:
+#   0 = OK (within window OR keyless mode active)
+#   1 = BLOCK (past deadline AND still in keyed mode)
+#   2 = ERROR (kubectl/parse error; operator must inspect)
+#
+# Emergency override (EC-7 of edge-case-review):
+#   --emergency-override="<reason>" forces exit 0 + audit_log entry
+#   Requires post-hoc Change Governor review within 24h.
+
+set -euo pipefail
+
+CONFIG_NS="${COSIGN_CONFIG_NS:-loopzero-system}"
+CONFIG_NAME="${COSIGN_CONFIG_NAME:-loopzero-cosign-config}"
+DRY_RUN="${DRY_RUN:-0}"
+
+EMERGENCY_REASON=""
+while [[ $# -gt 0 ]]; do
+  case "$1" in
+    --emergency-override=*)
+      EMERGENCY_REASON="${1#--emergency-override=}"
+      shift
+      ;;
+    --dry-run)
+      DRY_RUN=1
+      shift
+      ;;
+    -h|--help)
+      cat <<USAGE
+Usage: $0 [--emergency-override="<reason>"] [--dry-run]
+
+Verifies the cosign mode against the keyless cutover deadline.
+
+Exit codes:
+  0 = OK
+  1 = BLOCK (past deadline + keyed mode)
+  2 = ERROR (config unreadable)
+
+Environment:
+  COSIGN_CONFIG_NS    ConfigMap namespace (default: loopzero-system)
+  COSIGN_CONFIG_NAME  ConfigMap name (default: loopzero-cosign-config)
+  DRY_RUN=1           Print intended action without changing state
+USAGE
+      exit 0
+      ;;
+    *)
+      echo "ERROR: unknown arg: $1" >&2
+      exit 2
+      ;;
+  esac
+done
+
+log() {
+  echo "[check-cosign-cutover-deadline] $*"
+}
+
+audit_log() {
+  local action="$1"
+  local reason="$2"
+  if [[ "$DRY_RUN" == "1" ]]; then
+    log "DRY-RUN: would write audit_log entry: action=$action reason='$reason'"
+    return 0
+  fi
+  if ! command -v psql >/dev/null 2>&1; then
+    log "WARN: psql not found; audit_log entry skipped (action=$action)"
+    return 0
+  fi
+  local actor="${USER:-unknown}"
+  psql -v ON_ERROR_STOP=1 -c "INSERT INTO audit_log (action, actor, target, metadata, timestamp) VALUES (
+    '$action',
+    '$actor',
+    'cosign-cutover',
+    '{\"reason\":\"$reason\",\"script\":\"check-cosign-cutover-deadline.sh\"}',
+    NOW()
+  )" >/dev/null 2>&1 || log "WARN: audit_log write failed (continuing)"
+}
+
+read_cm_field() {
+  local key="$1"
+  if [[ "$DRY_RUN" == "1" ]]; then
+    case "$key" in
+      mode) echo "keyed" ;;
+      cutover_deadline) echo "2026-08-10T00:00:00Z" ;;
+      *) echo "" ;;
+    esac
+    return 0
+  fi
+  kubectl get cm "$CONFIG_NAME" -n "$CONFIG_NS" \
+    -o jsonpath="{.data.$key}" 2>/dev/null
+}
+
+# Emergency override path
+if [[ -n "$EMERGENCY_REASON" ]]; then
+  log "WARN: EMERGENCY OVERRIDE engaged. reason='$EMERGENCY_REASON'"
+  log "WARN: post-hoc Change Governor review required within 24h"
+  audit_log "cosign_deadline_override" "$EMERGENCY_REASON"
+  exit 0
+fi
+
+# --- T0.2 of plan 2026-05-28-meet-001-engineering-closure v1.1: cosign v3
+# upgrade deadline check (ADR-2026-05-28-cosign-v2.4.3-deadline). Runs BEFORE
+# mode check because v3 upgrade is orthogonal to keyed/keyless mode (the v3
+# upgrade lock-in concern stands even when keyless mode is active).
+# Reads ConfigMap `loopzero-cosign-version-config` with REQUIRED fields:
+#   - target_version (e.g., "v3"). Absent → PASS (no upgrade pending).
+#   - set_at (YYYY-MM-DD). REQUIRED when target_version=v3.
+# EC-1 fix: set_at is mandatory to prevent operator rewriting the ConfigMap
+# to reset the clock.
+V3_CM_NS="${COSIGN_V3_CONFIG_NS:-loopzero-system}"
+V3_CM_NAME="${COSIGN_V3_CONFIG_NAME:-loopzero-cosign-version-config}"
+
+v3_read_field() {
+  local key="$1"
+  if [[ "$DRY_RUN" == "1" ]]; then echo ""; return 0; fi
+  kubectl get cm "$V3_CM_NAME" -n "$V3_CM_NS" \
+    -o jsonpath="{.data.$key}" 2>/dev/null
+}
+
+V3_TARGET="$(v3_read_field target_version || true)"
+if [[ -n "$V3_TARGET" ]]; then
+  V3_SET_AT="$(v3_read_field set_at || true)"
+  if [[ -z "$V3_SET_AT" ]]; then
+    log "FAIL: ConfigMap $V3_CM_NS/$V3_CM_NAME has target_version=$V3_TARGET but missing required 'set_at' field; refusing ambiguous deadline (ADR-2026-05-28-cosign-v2.4.3-deadline)"
+    exit 1
+  fi
+  # Parse set_at as epoch
+  if ! V3_SET_AT_EPOCH=$(date -u -d "$V3_SET_AT" +%s 2>/dev/null); then
+    if ! V3_SET_AT_EPOCH=$(date -u -j -f "%Y-%m-%d" "$V3_SET_AT" +%s 2>/dev/null); then
+      log "FAIL: cannot parse set_at='$V3_SET_AT' (expected YYYY-MM-DD)"
+      exit 1
+    fi
+  fi
+  NOW_EPOCH_V3=$(date -u +%s)
+  AGE_DAYS=$(( (NOW_EPOCH_V3 - V3_SET_AT_EPOCH) / 86400 ))
+  if (( AGE_DAYS > 90 )); then
+    log "FAIL: cosign v3 upgrade deadline T0+90d crossed (target=$V3_TARGET, set_at=$V3_SET_AT, age=${AGE_DAYS}d)"
+    log "      Operator must complete cosign v2.4.3 → v3 upgrade per ADR-2026-05-28-cosign-v2.4.3-deadline"
+    exit 1
+  elif (( AGE_DAYS > 60 )); then
+    REMAINING_DAYS=$((90 - AGE_DAYS))
+    log "WARN: cosign v3 upgrade deadline T0+60d crossed (target=$V3_TARGET, set_at=$V3_SET_AT, age=${AGE_DAYS}d, ${REMAINING_DAYS}d to T0+90d FAIL)" >&2
+  fi
+fi
+# --- end v3 deadline check ---
+
+# Read mode
+MODE="$(read_cm_field mode || true)"
+if [[ -z "$MODE" ]]; then
+  log "ERROR: cannot read mode from ConfigMap $CONFIG_NS/$CONFIG_NAME"
+  log "       Ensure ConfigMap exists and has data.mode key"
+  exit 2
+fi
+
+# Keyless: no deadline check needed
+if [[ "$MODE" == "keyless" ]]; then
+  log "OK: mode=keyless (deadline check N/A)"
+  exit 0
+fi
+
+if [[ "$MODE" != "keyed" ]]; then
+  log "ERROR: unexpected mode=$MODE (expected 'keyed' or 'keyless')"
+  exit 2
+fi
+
+# Read deadline
+DEADLINE_STR="$(read_cm_field cutover_deadline || true)"
+if [[ -z "$DEADLINE_STR" ]]; then
+  log "ERROR: cannot read cutover_deadline from ConfigMap"
+  exit 2
+fi
+
+# Compare epoch seconds (portable across GNU date + BSD date)
+NOW_EPOCH=$(date -u +%s)
+if ! DEADLINE_EPOCH=$(date -u -d "$DEADLINE_STR" +%s 2>/dev/null); then
+  # macOS BSD date fallback
+  if ! DEADLINE_EPOCH=$(date -u -j -f "%Y-%m-%dT%H:%M:%SZ" "$DEADLINE_STR" +%s 2>/dev/null); then
+    log "ERROR: cannot parse cutover_deadline='$DEADLINE_STR'"
+    log "       Expected ISO-8601 UTC format (e.g., 2026-08-10T00:00:00Z)"
+    exit 2
+  fi
+fi
+
+# Decide
+if (( NOW_EPOCH > DEADLINE_EPOCH )); then
+  DAYS_PAST=$(( (NOW_EPOCH - DEADLINE_EPOCH) / 86400 ))
+  log "FAIL: mode=keyed AND deadline passed ${DAYS_PAST} days ago (deadline=$DEADLINE_STR)"
+  log "      Migration to keyless mode required per ADR 2026-05-12"
+  log "      Override (emergency only): $0 --emergency-override=\"<reason>\""
+  exit 1
+fi
+
+DAYS_LEFT=$(( (DEADLINE_EPOCH - NOW_EPOCH) / 86400 ))
+
+# T2.2 progressive warnings as cutover approaches. Operator should
+# trigger Sigstore Scaffolding provisioning (infra/pulumi-platform/src/services/sigstore.ts)
+# at T-30d so the 16h engineering window + soak completes before deadline.
+if (( DAYS_LEFT <= 7 )); then
+  log "URGENT: mode=keyed, only ${DAYS_LEFT} days remaining until cutover deadline ($DEADLINE_STR)"
+  log "        Sigstore provisioning MUST start NOW or cosign signing will FAIL CLOSED"
+  log "        Enable infra/pulumi-platform/src/services/sigstore.ts (T2.2)"
+elif (( DAYS_LEFT <= 15 )); then
+  log "WARN: mode=keyed, ${DAYS_LEFT} days remaining until cutover deadline ($DEADLINE_STR)"
+  log "      T-15d: confirm sponsor approved T2.2 Sigstore Scaffolding deployment"
+elif (( DAYS_LEFT <= 30 )); then
+  log "NOTICE: mode=keyed, ${DAYS_LEFT} days remaining until cutover deadline ($DEADLINE_STR)"
+  log "        T-30d: time to schedule T2.2 Change Governor meeting"
+else
+  log "OK: mode=keyed, ${DAYS_LEFT} days remaining until cutover deadline ($DEADLINE_STR)"
+fi
+exit 0

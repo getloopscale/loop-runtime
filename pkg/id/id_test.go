@@ -50,3 +50,92 @@ func TestGenerateReleaseID(t *testing.T) {
 		}
 	})
 }
+
+// IsValid* validators per ADR-0028 supporting facilities and PKG-G06.
+
+func TestIsValidBuildID(t *testing.T) {
+	cases := []struct {
+		name string
+		in   string
+		want bool
+	}{
+		{"canonical", "build-abcdef0123456789", true},
+		{"generated", GenerateBuildID(), true},
+		{"wrong prefix", "rel-abcdef0123456789", false},
+		{"short hex", "build-abc", false},
+		{"long hex", "build-abcdef01234567899", false},
+		{"uppercase hex", "build-ABCDEF0123456789", false},
+		{"non-hex chars", "build-abcdefghijk12345", false},
+		{"empty", "", false},
+		{"prefix only", "build-", false},
+	}
+	for _, c := range cases {
+		t.Run(c.name, func(t *testing.T) {
+			if got := IsValidBuildID(c.in); got != c.want {
+				t.Errorf("IsValidBuildID(%q) = %v, want %v", c.in, got, c.want)
+			}
+		})
+	}
+}
+
+func TestIsValidReleaseID(t *testing.T) {
+	cases := []struct {
+		name string
+		in   string
+		want bool
+	}{
+		{"canonical", "rel-abcdef0123456789", true},
+		{"generated", GenerateReleaseID(), true},
+		{"wrong prefix", "build-abcdef0123456789", false},
+		{"short", "rel-abc", false},
+		{"uppercase", "rel-ABCDEF0123456789", false},
+		{"empty", "", false},
+	}
+	for _, c := range cases {
+		t.Run(c.name, func(t *testing.T) {
+			if got := IsValidReleaseID(c.in); got != c.want {
+				t.Errorf("IsValidReleaseID(%q) = %v, want %v", c.in, got, c.want)
+			}
+		})
+	}
+}
+
+func TestIsValidPreviewID(t *testing.T) {
+	cases := []struct {
+		name string
+		in   string
+		want bool
+	}{
+		{"canonical", "prev-abcdef0123456789", true},
+		{"generated", GeneratePreviewID(), true},
+		{"wrong prefix", "rel-abcdef0123456789", false},
+		{"empty", "", false},
+	}
+	for _, c := range cases {
+		t.Run(c.name, func(t *testing.T) {
+			if got := IsValidPreviewID(c.in); got != c.want {
+				t.Errorf("IsValidPreviewID(%q) = %v, want %v", c.in, got, c.want)
+			}
+		})
+	}
+}
+
+func TestIsValidAppAttestationID(t *testing.T) {
+	cases := []struct {
+		name string
+		in   string
+		want bool
+	}{
+		{"canonical", "raa-abcdef0123456789", true},
+		{"generated", GenerateAppAttestationID(), true},
+		{"wrong prefix", "build-abcdef0123456789", false},
+		{"empty", "", false},
+	}
+	for _, c := range cases {
+		t.Run(c.name, func(t *testing.T) {
+			if got := IsValidAppAttestationID(c.in); got != c.want {
+				t.Errorf("IsValidAppAttestationID(%q) = %v, want %v", c.in, got, c.want)
+			}
+		})
+	}
+}

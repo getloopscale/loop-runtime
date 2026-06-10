@@ -2,9 +2,10 @@
 // All flows go through the public Kratos API (accounts.{domain}).
 // No internal terms (Kratos, Ory) are exposed to users.
 
-// MEET-040: Kratos is same-origin (cloud.{domain}/self-service/*). Relative URLs.
-import { API_URL } from './config';
-const ACCOUNTS_URL = API_URL;
+// Prefer dedicated ACCOUNTS_URL (Kratos may live at accounts.loopzero.dev in prod
+// while API lives at api.loopzero.dev). Falls back to API_URL for same-origin dev.
+import { API_URL, ACCOUNTS_URL as CONFIG_ACCOUNTS_URL } from './config';
+const ACCOUNTS_URL = CONFIG_ACCOUNTS_URL || API_URL;
 
 export interface FlowNode {
   type: string;
@@ -88,13 +89,56 @@ export function getCsrfToken(flow: Flow): string {
   return node?.attributes.value || '';
 }
 
-/** Extract flow-level error messages. */
+/** Extract flow-level error messages. Tolerates Kratos error responses
+ * that don't have a `ui` field (e.g., 422 with redirect_browser_to). */
 export function getFlowMessages(flow: Flow): string[] {
-  return (flow.ui.messages || []).map(m => m.text);
+  return (flow?.ui?.messages || []).map(m => m.text);
 }
 
-/** Extract field-level error messages for a specific input. */
+/** Extract field-level error messages for a specific input. Null-safe. */
 export function getFieldErrors(flow: Flow, fieldName: string): string[] {
-  const node = flow.ui.nodes.find(n => n.attributes.name === fieldName);
+  const node = flow?.ui?.nodes?.find(n => n.attributes.name === fieldName);
   return (node?.messages || []).filter(m => m.type === 'error').map(m => m.text);
+}
+
+/**
+ * T0.1 EC-02 — enrich generic Kratos error messages with TCIA action context.
+ *
+ * Kratos sometimes returns generic phrases ("An unexpected error occurred",
+ * "Internal server error") that lack the Action step required by sponsor
+ * critério #6. This helper detects generic phrases and appends a context-
+ * specific Action sentence. Specific Kratos messages (e.g., "Invalid email")
+ * pass through unchanged — they're already actionable.
+ */
+const GENERIC_KRATOS_PHRASES = [
+  'an unexpected error occurred',
+  'internal server error',
+  'something went wrong',
+  'an error occurred',
+];
+
+type KratosErrorContext = 'login' | 'recovery' | 'verification' | 'registration';
+
+const ACTION_BY_CONTEXT: Record<KratosErrorContext, string> = {
+  login: 'Check your credentials and retry, or contact support@loopzero.example if it persists.',
+  recovery: 'Check your email address and network connection, then retry.',
+  verification: 'Request a new verification link from the sign-in page.',
+  registration: 'Check your inputs and retry, or contact support if it persists.',
+};
+
+export function enrichKratosError(rawMessage: string, context: KratosErrorContext): string {
+  if (!rawMessage) return rawMessage;
+  const lower = rawMessage.toLowerCase();
+
+  // EC-2 / D8 (J-04 plan 2026-06-05): Kratos `identifier_similarity_check_enabled`
+  // produces messages like "the password is too similar to the user identifier".
+  // Replace with product-language WITHOUT leaking "identifier similarity" /
+  // "Kratos" / "credential" to UI (Rule 3).
+  if (lower.includes('similar to the user identifier') || lower.includes('identifier similarity')) {
+    return "Choose a password that doesn't contain your email or username.";
+  }
+
+  const isGeneric = GENERIC_KRATOS_PHRASES.some((p) => lower.includes(p));
+  if (!isGeneric) return rawMessage;
+  return `${rawMessage}. ${ACTION_BY_CONTEXT[context]}`;
 }

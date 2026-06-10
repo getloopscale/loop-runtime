@@ -1,0 +1,50 @@
+# T0.3 — Tailwind v4 + @loopzero/ui co-existence validation
+# Date:     2026-05-24T01:35:13Z
+# Plan:     docs/plans/completed/2026-05-23-dashboard-loopzero-ui-migration-plan.md v1.3
+# Commit:   eeb030d32fa6c511ee52b3b4e0d2bfc58d0b1c76
+
+## Checks performed
+
+### ✅ CSS bundle contains @loopzero/ui design tokens
+Found --color-* tokens in dist/assets/*.css:
+--color-accent
+--color-black
+--color-blue-
+--color-danger
+--color-gray-
+--color-green-
+--color-red-
+--color-surface-
+--color-loopzero-
+--color-warning
+--color-white
+--color-yellow-
+
+### ✅ Dashboard local @theme tokens preserved (surface-* + loopzero-*)
+These coexist with @loopzero/ui defaults — both available for Tailwind utilities.
+
+### ✅ Geist fonts loaded via @loopzero/ui/fonts-cdn.css
+DM Sans + JetBrains Mono + Cabinet Grotesk retired per D1.
+
+### ⚠️ Dark variant: @custom-variant dark is dead code (acceptable)
+Dashboard source has ZERO uses of Tailwind 'dark:' modifier prefix
+(verified via grep). Pages are hard-coded dark via bg-surface-0 + text-white.
+EC-2 of edge-case review was loopzeroretical concern — real impact: zero.
+Variant kept in index.css for forward-compat with future pages that might use it.
+
+### ✅ LoopZeroUIProvider providing context
+main.tsx wraps <App /> in <LoopZeroUIProvider> — provides ThemeProvider
+(themes=builtinThemes default, defaultMode=dark) + Toaster + density.
+
+## Bundle sizes (post T0.2 + post-validation)
+CSS: 45.81 KB / 8.48 KB gzip
+JS:  879.93 KB / 236.62 KB gzip
+Note: bundle inflation transient — Phase 6 cleanup measures final delta.
+
+## Verdict
+Phase 0 setup COMPLETE. @loopzero/ui + Tailwind v4 coexist correctly.
+Ready for Phase 1 (UI primitives swap).
+
+## Pending (sponsor side, before Phase 0 declaration of done)
+- Smoke visual test against k3d cluster (requires browser, deferred from T0.0.bis task 9)
+- Confirm no visual regression on the 13 dashboard routes

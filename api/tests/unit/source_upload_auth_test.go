@@ -1,0 +1,225 @@
+// SPDX-License-Identifier: Apache-2.0
+// Copyright 2025-2026 The LoopZero Authors
+//
+// Plan v1.2 T1.1 (cutover-deep-review-hardening): defensive regression tests
+// asserting that POST /api/v1/source/upload requires JWT Bearer authentication
+// via middleware.Auth — NOT just handler self-check.
+//
+// Context: Deep review 2026-06-05 raised C1 "endpoint outside auth group".
+// Architecture re-audit T0.1 (2026-06-06) confirmed FALSE POSITIVE — the
+// route is registered via `registerProtectedRoutes(r, ...)` which is called
+// inside `r.Group(func(r chi.Router) { r.Use(middleware.Auth) ... })` and
+// chi router scope inheritance correctly applies auth. This test file
+// EXPLICITLY proves the protection so any future regression (e.g., moving
+// registration outside the protected closure) breaks CI immediately.
+
+package unit
+
+import (
+	"bytes"
+	"context"
+	"log/slog"
+	"mime/multipart"
+	"net/http"
+	"net/http/httptest"
+	"os"
+	"testing"
+
+	"github.com/loopzero/loopzero/api/internal/middleware"
+	"github.com/loopzero/loopzero/api/internal/routes"
+	"github.com/loopzero/loopzero/api/internal/server"
+)
+
+// newSourceUploadMultipartReq builds a minimal valid-shape multipart request
+// (services_json + bundle). Content is throwaway since the handler will
+// reject at auth boundary before parsing.
+func newSourceUploadMultipartReq(t *testing.T, auth string) *http.Request {
+	t.Helper()
+	body := &bytes.Buffer{}
+	w := multipart.NewWriter(body)
+	if err := w.WriteField("services_json", `{"version":1,"services":[]}`); err != nil {
+		t.Fatal(err)
+	}
+	part, err := w.CreateFormFile("bundle", "bundle.git")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := part.Write([]byte("fake bundle")); err != nil {
+		t.Fatal(err)
+	}
+	if err := w.Close(); err != nil {
+		t.Fatal(err)
+	}
+	req := httptest.NewRequest(http.MethodPost, "/api/v1/source/upload", body)
+	req.Header.Set("Content-Type", w.FormDataContentType())
+	if auth != "" {
+		req.Header.Set("Authorization", auth)
+	}
+	return req
+}
+
+// TestSourceUpload_Unauthenticated_Returns401 — EC-baseline of Plan T1.1.
+// POST without Authorization header must return 401 BEFORE reaching the
+// handler. Proves middleware.Auth is in the chain.
+func TestSourceUpload_Unauthenticated_Returns401(t *testing.T) {
+	t.Setenv("LOOPZERO_ADMIN_API", "true")
+	logger := slog.New(slog.NewTextHandler(os.Stderr, &slog.HandlerOptions{Level: slog.LevelError}))
+
+	cfg := server.Config{
+		Port:                 "0",
+		Logger:               logger,
+		DB:                   &stubDBHealthChecker{},
+		TokenValidator:       &stubTokenValidator{},
+		MemberStore:          &stubMemberStore{},
+		ProjectStore:         &stubProjectStore{},
+		TenantCRMgr:          &stubTenantCRManager{},
+		SourceStore:          &stubSourceStore{},
+		IdempotencyStore:     &stubIdempotencyStore{},
+		EventStore:           &stubEventStore{},
+		BuildStoreReader:     &stubBuildReader{},
+		BootstrapStore:       &stubBootstrapStore{},
+		BootstrapSecret:      "test-bootstrap-secret",
+		BuildHandler:         routes.NewBuildHandler(nil, logger),
+		LogsHandler:          routes.NewLogsHandler(nil, nil),
+		RollbackHandler:      routes.NewRollbackHandler(nil, nil, "test.local"),
+		StatusHandler:        routes.NewStatusHandler(nil, nil, nil, "test.local"),
+		BuildListHandler:     routes.NewBuildListHandler(nil),
+		EnvironmentHandler:   routes.NewEnvironmentHandler(nil),
+		TeamHandler:          routes.NewTeamHandler(nil),
+		DomainHandler:        routes.NewDomainHandler(nil, nil, nil, "test.local"),
+		RepositoryHandler:    routes.NewRepositoryHandler(nil),
+		AuditHandler:         routes.NewAuditHandler(nil),
+		ArgoCallbackHandler:  routes.NewArgoCallbackHandler(&stubReleaseActivator{}, logger, "test-secret"),
+		LogStreamHandler:     routes.NewLogStreamHandler(nil, nil, routes.LogStreamHandlerOpts{}),
+		GitHubWebhookHandler: &stubGitHubWebhookHandler{},
+		TenantDeletionStore:  &stubTenantDeletionStore{},
+		AdminEvictor:         &stubTenantEvictor{},
+	}
+
+	router := server.NewRouter(cfg)
+	req := newSourceUploadMultipartReq(t, "")
+	rec := httptest.NewRecorder()
+	router.ServeHTTP(rec, req)
+
+	if rec.Code != http.StatusUnauthorized {
+		t.Errorf("expected 401 Unauthorized, got %d: %s", rec.Code, rec.Body.String())
+	}
+}
+
+// TestSourceUpload_InvalidBearerToken_Returns401 — EC-6 (v1.1) variant.
+// POST with malformed Bearer token must return 401 via middleware.Auth
+// JWT validation, NOT via handler self-check.
+func TestSourceUpload_InvalidBearerToken_Returns401(t *testing.T) {
+	t.Setenv("LOOPZERO_ADMIN_API", "true")
+	logger := slog.New(slog.NewTextHandler(os.Stderr, &slog.HandlerOptions{Level: slog.LevelError}))
+
+	// Use a TokenValidator that rejects everything.
+	rejectingValidator := &stubRejectingTokenValidator{}
+
+	cfg := server.Config{
+		Port:                 "0",
+		Logger:               logger,
+		DB:                   &stubDBHealthChecker{},
+		TokenValidator:       rejectingValidator,
+		MemberStore:          &stubMemberStore{},
+		ProjectStore:         &stubProjectStore{},
+		TenantCRMgr:          &stubTenantCRManager{},
+		SourceStore:          &stubSourceStore{},
+		IdempotencyStore:     &stubIdempotencyStore{},
+		EventStore:           &stubEventStore{},
+		BuildStoreReader:     &stubBuildReader{},
+		BootstrapStore:       &stubBootstrapStore{},
+		BootstrapSecret:      "test-bootstrap-secret",
+		BuildHandler:         routes.NewBuildHandler(nil, logger),
+		LogsHandler:          routes.NewLogsHandler(nil, nil),
+		RollbackHandler:      routes.NewRollbackHandler(nil, nil, "test.local"),
+		StatusHandler:        routes.NewStatusHandler(nil, nil, nil, "test.local"),
+		BuildListHandler:     routes.NewBuildListHandler(nil),
+		EnvironmentHandler:   routes.NewEnvironmentHandler(nil),
+		TeamHandler:          routes.NewTeamHandler(nil),
+		DomainHandler:        routes.NewDomainHandler(nil, nil, nil, "test.local"),
+		RepositoryHandler:    routes.NewRepositoryHandler(nil),
+		AuditHandler:         routes.NewAuditHandler(nil),
+		ArgoCallbackHandler:  routes.NewArgoCallbackHandler(&stubReleaseActivator{}, logger, "test-secret"),
+		LogStreamHandler:     routes.NewLogStreamHandler(nil, nil, routes.LogStreamHandlerOpts{}),
+		GitHubWebhookHandler: &stubGitHubWebhookHandler{},
+		TenantDeletionStore:  &stubTenantDeletionStore{},
+		AdminEvictor:         &stubTenantEvictor{},
+	}
+
+	router := server.NewRouter(cfg)
+	req := newSourceUploadMultipartReq(t, "Bearer invalid-malformed-token-xxx")
+	rec := httptest.NewRecorder()
+	router.ServeHTTP(rec, req)
+
+	// middleware.Auth either rejects with 401 (invalid token claim) OR 503
+	// (validator service error). Both prove the middleware was invoked;
+	// 200 / 400 would prove bypass (handler reached without auth).
+	if rec.Code != http.StatusUnauthorized && rec.Code != http.StatusServiceUnavailable {
+		t.Errorf("expected 401 or 503 via middleware.Auth (proves middleware in chain), got %d: %s",
+			rec.Code, rec.Body.String())
+	}
+}
+
+// TestSourceUpload_XServiceAuthHeader_DoesNotBypass — EC-6 (v1.1).
+// POST with X-Service-Auth header but NO Authorization Bearer must return
+// 401. middleware.Auth on /source/upload must NOT have any code path
+// that accepts X-Service-Auth (those are for admin endpoints in
+// /api/v1/admin/* with separate middleware).
+func TestSourceUpload_XServiceAuthHeader_DoesNotBypass(t *testing.T) {
+	t.Setenv("LOOPZERO_ADMIN_API", "true")
+	logger := slog.New(slog.NewTextHandler(os.Stderr, &slog.HandlerOptions{Level: slog.LevelError}))
+
+	cfg := server.Config{
+		Port:                 "0",
+		Logger:               logger,
+		DB:                   &stubDBHealthChecker{},
+		TokenValidator:       &stubTokenValidator{},
+		MemberStore:          &stubMemberStore{},
+		ProjectStore:         &stubProjectStore{},
+		TenantCRMgr:          &stubTenantCRManager{},
+		SourceStore:          &stubSourceStore{},
+		IdempotencyStore:     &stubIdempotencyStore{},
+		EventStore:           &stubEventStore{},
+		BuildStoreReader:     &stubBuildReader{},
+		BootstrapStore:       &stubBootstrapStore{},
+		BootstrapSecret:      "test-bootstrap-secret",
+		BuildHandler:         routes.NewBuildHandler(nil, logger),
+		LogsHandler:          routes.NewLogsHandler(nil, nil),
+		RollbackHandler:      routes.NewRollbackHandler(nil, nil, "test.local"),
+		StatusHandler:        routes.NewStatusHandler(nil, nil, nil, "test.local"),
+		BuildListHandler:     routes.NewBuildListHandler(nil),
+		EnvironmentHandler:   routes.NewEnvironmentHandler(nil),
+		TeamHandler:          routes.NewTeamHandler(nil),
+		DomainHandler:        routes.NewDomainHandler(nil, nil, nil, "test.local"),
+		RepositoryHandler:    routes.NewRepositoryHandler(nil),
+		AuditHandler:         routes.NewAuditHandler(nil),
+		ArgoCallbackHandler:  routes.NewArgoCallbackHandler(&stubReleaseActivator{}, logger, "test-secret"),
+		LogStreamHandler:     routes.NewLogStreamHandler(nil, nil, routes.LogStreamHandlerOpts{}),
+		GitHubWebhookHandler: &stubGitHubWebhookHandler{},
+		TenantDeletionStore:  &stubTenantDeletionStore{},
+		AdminEvictor:         &stubTenantEvictor{},
+	}
+
+	router := server.NewRouter(cfg)
+	req := newSourceUploadMultipartReq(t, "")
+	req.Header.Set("X-Service-Auth", "fake-admin-token")
+	rec := httptest.NewRecorder()
+	router.ServeHTTP(rec, req)
+
+	if rec.Code != http.StatusUnauthorized {
+		t.Errorf("X-Service-Auth header MUST NOT bypass user auth on /source/upload; got %d: %s",
+			rec.Code, rec.Body.String())
+	}
+}
+
+// stubRejectingTokenValidator rejects all tokens — for invalid-bearer tests.
+type stubRejectingTokenValidator struct{}
+
+func (s *stubRejectingTokenValidator) ValidateToken(_ context.Context, _ string) (*middleware.TokenValidationResult, error) {
+	return nil, &validationError{msg: "invalid token"}
+}
+
+type validationError struct{ msg string }
+
+func (e *validationError) Error() string { return e.msg }

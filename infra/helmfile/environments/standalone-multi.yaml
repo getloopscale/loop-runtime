@@ -1,0 +1,99 @@
+# Helmfile environment: standalone-multi (3-cluster local validation)
+# end-to-end-deploy-validation-plan T0.3
+#
+# Variant of `standalone` for local E2E validation with 3 separate k3d
+# clusters (loopzero-mgmt + loopzero-build + loopzero-workload). Used by:
+#   - infra/tests/e2e/deploy_e2e_test.go (TestE2EDeployHappyPath)
+#
+# Differences vs `standalone`:
+#   - clusterTopology: multi-cluster (cross-cluster service DNS via
+#     host.k3d.internal:NodePort instead of in-cluster .svc.cluster.local)
+#   - In-cluster Postgres still in mgmt; build+workload connect via NodePort
+#   - cosign-signing-key Secret in build cluster (not mgmt)
+#   - cf-tunnel-credentials in workload cluster with replicas:0 (no real CF)
+
+domain: loopzero.local
+
+# Phase 3.4 of plan 2026-06-02-loopzero-api-vault-integration v1.8 (D11 ESO).
+# Opt-in flag: when true, mgmt.helmfile installs ESO operator +
+# loopzero-external-secrets CRs (pulls secrets from loopzero-vault cluster).
+# Default false → secrets continue via legacy env var / K8s Secret pattern.
+# Set to true ONLY after loopzero-vault cluster up + openbao-init Job ran +
+# ClusterSecretStore loopzero-vault-secrets applied (Phase 3.1 manifests).
+vaultEnabled: false
+dnsZone: loopzero.local
+
+clusterRole: standalone
+clusterTopology: multi-cluster
+
+replicas:
+  # MEET-ASYNC-AMENDMENT-2026-05-12-003 Option A (RATIFIED 2026-05-12)
+  # unblocked multi-replica:
+  #   - main.go now starts HTTP server before leader election
+  #     (passive standby pods serve /healthz while waiting for lock)
+  #   - loopzero-api Deployment uses RollingUpdate when replicaCount>=2
+  # 2 replicas validates chaos scenario 1 (recover within 120s) +
+  # delivers true HA in production. Local k3d resource footprint
+  # acceptable (~256Mi×2 = 512Mi for loopzero-api).
+  api: 2
+  controller: 1
+  argocd: 1
+  gitea: 1
+  harbor: 1
+
+resources:
+  default:
+    requests:
+      cpu: 50m
+      memory: 64Mi
+    limits:
+      cpu: 250m
+      memory: 256Mi
+
+certIssuer:
+  kind: ClusterIssuer
+  name: selfsigned-issuer
+
+registries:
+  docrPrefix: "harbor.loopzero.local/loopzero-platform/"
+  harborPrefix: "harbor.loopzero.local/loopzero-platform/"
+  # CHG-2026-04-29-DOGFOOD iter 9 — k3d-loopzero-registry serves images
+  # built locally by the build pipeline (no DOCR/Harbor in dev). The
+  # tenant-id segment is intentionally NOT pinned: LoopZero names images
+  # `<registry>/<tenant>/<project>-<app>:<sha>`, so the prefix needs
+  # to cover all tenants in this k3d cluster.
+  additionalPrefixes:
+    - "k3d-loopzero-registry:5000/"
+
+loki:
+  maxGlobalStreamsPerUser: 50000
+  # Audit M08 #18 / §6.C.4b — promtail cross-cluster push target (env-specific).
+  pushUrl: http://172.18.0.3:30094/loki/api/v1/push
+
+policyMode: warn
+
+# In-cluster Postgres ENABLED on mgmt only. Build+workload connect via NodePort.
+inClusterPostgres: true
+
+# Underlying storage class empty → cluster default (local-path on k3d).
+underlyingStorageClass: ""
+
+# Cross-cluster URLs (loopzero-platform-topology ConfigMap). Used by loopzero-api
+# to reach Argo, Loki, etc. across clusters via the host network.
+crossCluster:
+  argoApi: "http://host.k3d.internal:30093"
+  lokiGateway: "http://host.k3d.internal:30094"
+  giteaApi: "http://host.k3d.internal:3000"
+  harborApi: "http://host.k3d.internal:30002"
+  prometheusApi: "http://host.k3d.internal:9090"
+
+# velero-backup-dr-plan v1.0 / T0.2 + ADR D5 — Velero BSL targets in-cluster
+# MinIO. Bucket pre-created by MinIO Helm values (EC-4).
+velero:
+  bucket: velero-backups
+  region: us-east-1
+  s3Url: http://minio.loopzero-system.svc:9000
+
+# Plan v1.2 T2.3 / D4 — kratos+hydra UI base URL placeholder
+uiBaseUrl: "http://localhost:4455"
+dashboardOrigin: "http://localhost:3000"

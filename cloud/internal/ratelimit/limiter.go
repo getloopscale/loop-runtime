@@ -6,6 +6,7 @@
 package ratelimit
 
 import (
+	"encoding/json"
 	"fmt"
 	"net/http"
 	"sync"
@@ -83,4 +84,27 @@ func SetHeaders(w http.ResponseWriter, limit, remaining int, resetAt time.Time) 
 	w.Header().Set("X-RateLimit-Limit", fmt.Sprintf("%d", limit))
 	w.Header().Set("X-RateLimit-Remaining", fmt.Sprintf("%d", remaining))
 	w.Header().Set("X-RateLimit-Reset", fmt.Sprintf("%d", resetAt.Unix()))
+}
+
+// Middleware returns chi middleware that rate-limits requests using a key
+// derived by keyFn. keyFn lets the caller choose the identity source — the
+// authenticated user for protected routes, or the client IP for pre-auth routes.
+// This keeps the ratelimit package decoupled from the auth package.
+func Middleware(l Limiter, limit int, keyFn func(*http.Request) string) func(http.Handler) http.Handler {
+	return func(next http.Handler) http.Handler {
+		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			allowed, remaining, resetAt := l.Allow(keyFn(r))
+			SetHeaders(w, limit, remaining, resetAt)
+			if !allowed {
+				w.Header().Set("Content-Type", "application/json")
+				w.WriteHeader(http.StatusTooManyRequests)
+				_ = json.NewEncoder(w).Encode(map[string]string{
+					"code":    "RATE_LIMITED",
+					"message": "Too many requests. Please wait a moment and try again.",
+				})
+				return
+			}
+			next.ServeHTTP(w, r)
+		})
+	}
 }

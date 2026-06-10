@@ -37,7 +37,7 @@ func (t *Tracker) RecordBuildCompletion(tenantID string, durationSeconds int) er
 	if err != nil {
 		return fmt.Errorf("begin tx: %w", err)
 	}
-	defer tx.Rollback() // no-op after Commit — standard Go tx pattern
+	defer func() { _ = tx.Rollback() }() // no-op after Commit — standard Go tx pattern
 
 	// Increment builds count
 	if err := t.upsertUsage(tx, tenantID, "builds", 1, periodStart, periodEnd); err != nil {
@@ -106,7 +106,7 @@ func (t *Tracker) GetUsageSummary(tenantID string) (map[string]int, error) {
 	if err != nil {
 		return nil, fmt.Errorf("query usage: %w", err)
 	}
-	defer rows.Close()
+	defer func() { _ = rows.Close() }()
 
 	result := make(map[string]int)
 	for rows.Next() {
@@ -116,6 +116,9 @@ func (t *Tracker) GetUsageSummary(tenantID string) (map[string]int, error) {
 			continue
 		}
 		result[metric] = qty
+	}
+	if err := rows.Err(); err != nil {
+		return nil, fmt.Errorf("iterate usage: %w", err)
 	}
 	return result, nil
 }

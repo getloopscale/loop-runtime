@@ -10,16 +10,23 @@ import (
 	"github.com/loopzero/loopzero/api/internal/adapters"
 	"github.com/loopzero/loopzero/api/internal/admission"
 	"github.com/loopzero/loopzero/api/internal/config"
+	"github.com/loopzero/loopzero/pkg/correlation"
 	"github.com/loopzero/loopzero/api/internal/db"
 	"github.com/loopzero/loopzero/api/internal/k8s"
 	"github.com/loopzero/loopzero/api/internal/routes"
 	"github.com/loopzero/loopzero/api/internal/services"
 )
 
-// buildStoreAdmissionQuerier bridges *db.PostgresBuildStore to the
+// buildStoreAdmissionQuerier bridges the db.BuildStore interface to the
 // admission gate's ActiveBuildsQuerier contract. Roadmap 07.
+//
+// T1.2b (plan 2026-05-29-sqlc-migration v1.3): field type widened from
+// concrete *PostgresBuildStore (now deleted) to db.BuildStore interface
+// so BuildStoreSqlc + any future implementation drops in without churn.
+// Only FindActiveBuilds is consumed here — interface stays minimal at
+// the seam.
 type buildStoreAdmissionQuerier struct {
-	store *db.PostgresBuildStore
+	store db.BuildStore
 }
 
 func (q *buildStoreAdmissionQuerier) ActiveBuilds(ctx context.Context, cellID string) (admission.ActiveBuildsSnapshot, error) {
@@ -43,13 +50,17 @@ type appCRAdapter struct {
 }
 
 func (a *appCRAdapter) EnsureLoopZeroApplication(ctx context.Context, input services.ApplicationCRInput) error {
+	// Audit gap M08 #10 / §6.C.1: propagate the originating correlation_id
+	// from ctx into the CR annotation so the operator reconcile can attach
+	// it back into audit_log rows + structured logs.
 	return a.mgr.EnsureLoopZeroApplication(ctx, k8s.LoopZeroApplicationInput{
-		TenantID:    input.TenantID,
-		Project:     input.Project,
-		Environment: input.Environment,
-		AppName:     input.AppName,
-		ServiceName: input.ServiceName,
-		ServicePort: input.ServicePort,
+		TenantID:      input.TenantID,
+		Project:       input.Project,
+		Environment:   input.Environment,
+		AppName:       input.AppName,
+		ServiceName:   input.ServiceName,
+		ServicePort:   input.ServicePort,
+		CorrelationID: correlation.IDFromContext(ctx),
 	})
 }
 
@@ -65,7 +76,11 @@ func (a *appCRAdapter) EnsureLoopZeroApplication(ctx context.Context, input serv
 // shouldn't prevent the API from starting. A startup log line makes the
 // degraded mode explicit.
 func buildAdminEvictor(cfg config.Config, dbAdapter *db.PgxAdapter) routes.TenantEvictor {
-	store := &db.PostgresTenantStore{DB: dbAdapter}
+	// T1.4 (plan 2026-05-29-sqlc-migration v1.3): sqlc-backed admin
+	// tenant store. ListTenantIDsByPattern + 8-step FK-ordered
+	// eviction cascade preserved verbatim; all queries are
+	// tenantpredicate:exempt per the admin path (LOOPZERO_ADMIN_API gate).
+	store := db.NewTenantStoreSqlc(dbAdapter)
 	dbDeleter := &adapters.TenantDBDeleterAdapter{Store: store}
 
 	k8sEv, err := k8s.NewTenantK8sEvictor(

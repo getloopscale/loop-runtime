@@ -84,7 +84,10 @@ func startNonLeaderReelection(leaderConn *pgxpool.Conn, shutdownCtx context.Cont
 				return
 			case <-ticker.C:
 				var acquired bool
-				reelCtx, reelCancel := context.WithTimeout(context.Background(), 5*time.Second)
+				// Derive from shutdownCtx so shutdown cancels in-flight
+				// pg_try_advisory_lock attempts. Was context.Background()
+				// which leaked the attempt past shutdown signal.
+				reelCtx, reelCancel := context.WithTimeout(shutdownCtx, 5*time.Second)
 				if err := leaderConn.QueryRow(reelCtx,
 					"SELECT pg_try_advisory_lock($1)", leaderLockID).Scan(&acquired); err != nil {
 					reelCancel()
@@ -101,53 +104,47 @@ func startNonLeaderReelection(leaderConn *pgxpool.Conn, shutdownCtx context.Cont
 	}()
 }
 
-// setupCellRouter creates the cell placement router (dynamic or static).
+// setupCellRouter creates the DynamicRouter — the ONE router used in
+// production. There is no single-cell mode, no PassthroughRouter, no
+// StaticRouter fallback. If ClusterCredential discovery returns 0 cells
+// the API fails fast on boot — there is nowhere to route requests.
+//
+// CHG-2026-04-30-DELETE-SINGLE-CELL: removed cfg.SingleCell + cfg.DynamicRouter
+// toggles. Single-cell is the degenerate case of multi-cell with 1 CC
+// discovered. N CCs = router distributes; pre-release governance:
+// no feature flags, no rollback paths.
 func setupCellRouter(
 	cfg config.Config,
 	shutdownCtx context.Context,
 	bgWg *sync.WaitGroup,
 	logger *slog.Logger,
 ) placement.Router {
-	if cfg.SingleCell {
-		logger.Warn("cell router: LOOPZERO_SINGLE_CELL=true — forced single-cell mode (rollback)")
-		return placement.NewPassthroughRouter(placement.CellConfig{CellID: placement.DefaultCellID})
-	}
-
-	if cfg.DynamicRouter {
-		k8sCellStore, k8sErr := placement.NewK8sCellStore(nil, "loopzero-system")
-		if k8sErr == nil {
-			dynRouter := placement.NewDynamicRouter(k8sCellStore, 60*time.Second, logger)
-			cells, loadErr := k8sCellStore.LoadCells(context.Background())
-			if loadErr == nil && len(cells) > 0 {
-				bgWg.Add(1)
-				go func() {
-					defer bgWg.Done()
-					dynRouter.Start(shutdownCtx)
-				}()
-				logger.Info("cell router: DynamicRouter active", "cells_discovered", len(cells))
-				return dynRouter
-			}
-			logger.Info("cell router: no ClusterCredentials found, falling back to StaticRouter",
-				"load_err", loadErr, "cells_found", len(cells))
-		} else {
-			logger.Warn("cell router: K8sCellStore init failed, falling back to StaticRouter", "error", k8sErr)
-		}
-	}
-
-	staticRouter, err := placement.NewStaticRouter([]placement.CellConfig{{
-		CellID:        placement.DefaultCellID,
-		KubeConfig:    cfg.RuntimeKubeconfig,
-		KubeContext:   cfg.RuntimeKubeContext,
-		ArgocdURL:     cfg.ArgocdURL,
-		ArgocdToken:   cfg.ArgocdToken,
-		IngressDomain: cfg.BaseDomain,
-	}})
-	if err != nil {
-		logger.Error("failed to create cell router", "error", err)
+	k8sCellStore, k8sErr := placement.NewK8sCellStore(nil, "loopzero-system")
+	if k8sErr != nil {
+		logger.Error("cell router: K8sCellStore init failed — fatal, no fallback by design",
+			"error", k8sErr)
 		os.Exit(1)
 	}
-	logger.Info("cell router: StaticRouter with cell-default (single cell)")
-	return staticRouter
+	dynRouter := placement.NewDynamicRouter(k8sCellStore, 60*time.Second, logger)
+	cells, loadErr := k8sCellStore.LoadCells(context.Background())
+	if loadErr != nil {
+		logger.Error("cell router: initial cell load failed — fatal, no fallback by design",
+			"error", loadErr)
+		os.Exit(1)
+	}
+	if len(cells) == 0 {
+		logger.Error("cell router: 0 ClusterCredentials discovered — fatal, no fallback by design",
+			"hint", "create at least one ClusterCredential CR with status.connected=true in loopzero-system",
+			"hint_docs", "create at least one ClusterCredential CR with status.connected=true")
+		os.Exit(1)
+	}
+	bgWg.Add(1)
+	go func() {
+		defer bgWg.Done()
+		dynRouter.Start(shutdownCtx)
+	}()
+	logger.Info("cell router: DynamicRouter active", "cells_discovered", len(cells))
+	return dynRouter
 }
 
 // DomainDeps holds domain-related components created during background setup.
@@ -180,10 +177,11 @@ func setupDomains(
 		stores.DomainStore, stores.ReleaseStore, stores.BuildStore,
 		workflows.GitOpsPusher, stores.Locker, logger,
 		services.DomainProvisionerConfig{
-			Interval:      30 * time.Second,
-			BaseDomain:    cfg.BaseDomain,
-			RegistryURL:   cfg.RegistryURL,
-			ClusterIssuer: cfg.ClusterIssuer, // B14 (MEET-2026-04-23-058)
+			Interval:          30 * time.Second,
+			BaseDomain:        cfg.BaseDomain,
+			RegistryURL:       cfg.RegistryURL,
+			ClusterIssuer:     cfg.ClusterIssuer,     // B14 (MEET-2026-04-23-058)
+			PrometheusAddress: cfg.PrometheusAddress, // argo-rollouts-progressive-delivery-plan T1.2 (D6)
 		},
 	)
 	if cfg.CFZoneManagement && cfZoneClient != nil {
@@ -238,7 +236,8 @@ func createCoreLoops(
 			Interval:           cfg.ReconcileInterval,
 			RegistryURL:        cfg.RegistryURL,
 			BaseDomain:         cfg.BaseDomain,
-			ClusterIssuer:      cfg.ClusterIssuer, // B14 (MEET-2026-04-23-058)
+			ClusterIssuer:      cfg.ClusterIssuer,     // B14 (MEET-2026-04-23-058)
+			PrometheusAddress:  cfg.PrometheusAddress, // argo-rollouts-progressive-delivery-plan T1.2 (D6)
 			MaxBuildsPerTenant: cfg.MaxBuildsPerTenant,
 		},
 	)
@@ -294,6 +293,12 @@ func createCoreLoops(
 	buildGC := services.NewBuildGC(
 		&db.PostgresBuildGCStore{DB: dbAdapter}, logger, 1*time.Hour, 30*24*time.Hour, 10,
 	)
+	// Quality-Gate Phase 2: wire AuditLogPruner — ADR-0047 audit_log retention
+	// (1 year default). Was implemented but never wired, leaving audit_log to
+	// grow unbounded. PruneOnce runs nightly at 02:00 local via Start().
+	auditLogPruner := services.NewAuditLogPruner(dbAdapter.Pool, services.AuditLogPrunerOpts{
+		Logger: logger,
+	})
 
 	loops := []bgLoop{
 		{"build-reconcile", reconcileLoop.Start},
@@ -306,6 +311,7 @@ func createCoreLoops(
 		{"domain-provisioner", domainProvisioner.Start},
 		{"domain-health-checker", domainHealthChecker.Start},
 		{"build-gc", buildGC.Start},
+		{"audit-log-pruner", auditLogPruner.Start},
 	}
 
 	// OrphanDetector (conditional on CellLister + OrphanedTenantQuerier)

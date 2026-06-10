@@ -389,90 +389,70 @@ func TestDomains_Delete_HappyPath(t *testing.T) {
 	}
 }
 
-func TestDomains_Delete_NotFound(t *testing.T) {
-	store := &fakeDomainStore{domain: nil}
-	h := NewDomainHandler(store, &fakeDomainVerifier{}, &fakeDomainValidator{}, "apps.dev.loopzero.example")
-
-	req := httptest.NewRequest(http.MethodDelete, "/api/v1/domains/nonexistent.com", nil)
-	req = withAuth(req, defaultUserContext())
-	req = withChiParam(req, "domain", "nonexistent.com")
-	w := httptest.NewRecorder()
-
-	h.Delete(w, req)
-
-	if w.Code != http.StatusNotFound {
-		t.Fatalf("want 404, got %d body=%s", w.Code, w.Body.String())
+// TestDomains_Delete_AuthorizationAndStateMatrix consolidates 5 near-clone
+// tests for DomainHandler.Delete authorization + state-validation paths.
+// Phase 3 helper: each case previously had a ~14-line scaffold differing
+// only in (store-setup, auth context, expected HTTP status).
+func TestDomains_Delete_AuthorizationAndStateMatrix(t *testing.T) {
+	cases := []struct {
+		name      string
+		store     *fakeDomainStore
+		setupAuth func(req *http.Request) *http.Request // nil for unauthenticated
+		wantCode  int
+	}{
+		{
+			name:      "NotFound",
+			store:     &fakeDomainStore{domain: nil},
+			setupAuth: func(req *http.Request) *http.Request { return withAuth(req, defaultUserContext()) },
+			wantCode:  http.StatusNotFound,
+		},
+		{
+			name:      "MemberForbidden",
+			store:     &fakeDomainStore{domain: &CustomDomain{Domain: "example.com", Status: "active"}},
+			setupAuth: func(req *http.Request) *http.Request { return withAuth(req, memberUserContext()) },
+			wantCode:  http.StatusForbidden,
+		},
+		{
+			name: "ConcurrentModification",
+			store: &fakeDomainStore{
+				domain:   &CustomDomain{Domain: "example.com", Status: "active"},
+				transErr: errors.New("concurrent modification"),
+			},
+			setupAuth: func(req *http.Request) *http.Request { return withAuth(req, defaultUserContext()) },
+			wantCode:  http.StatusConflict,
+		},
+		{
+			name:      "InvalidState",
+			store:     &fakeDomainStore{domain: &CustomDomain{Domain: "example.com", Status: "removing"}},
+			setupAuth: func(req *http.Request) *http.Request { return withAuth(req, defaultUserContext()) },
+			wantCode:  http.StatusConflict,
+		},
+		{
+			name:      "Unauthenticated",
+			store:     &fakeDomainStore{},
+			setupAuth: nil,
+			wantCode:  http.StatusUnauthorized,
+		},
+	}
+	for _, c := range cases {
+		t.Run(c.name, func(t *testing.T) {
+			h := NewDomainHandler(c.store, &fakeDomainVerifier{}, &fakeDomainValidator{}, "apps.dev.loopzero.example")
+			req := httptest.NewRequest(http.MethodDelete, "/api/v1/domains/example.com", nil)
+			if c.setupAuth != nil {
+				req = c.setupAuth(req)
+			}
+			req = withChiParam(req, "domain", "example.com")
+			w := httptest.NewRecorder()
+			h.Delete(w, req)
+			if w.Code != c.wantCode {
+				t.Fatalf("want %d, got %d body=%s", c.wantCode, w.Code, w.Body.String())
+			}
+		})
 	}
 }
 
-func TestDomains_Delete_MemberForbidden(t *testing.T) {
-	store := &fakeDomainStore{
-		domain: &CustomDomain{Domain: "example.com", Status: "active"},
-	}
-	h := NewDomainHandler(store, &fakeDomainVerifier{}, &fakeDomainValidator{}, "apps.dev.loopzero.example")
-
-	req := httptest.NewRequest(http.MethodDelete, "/api/v1/domains/example.com", nil)
-	req = withAuth(req, memberUserContext())
-	req = withChiParam(req, "domain", "example.com")
-	w := httptest.NewRecorder()
-
-	h.Delete(w, req)
-
-	if w.Code != http.StatusForbidden {
-		t.Fatalf("want 403, got %d body=%s", w.Code, w.Body.String())
-	}
-}
-
-func TestDomains_Delete_ConcurrentModification(t *testing.T) {
-	store := &fakeDomainStore{
-		domain:   &CustomDomain{Domain: "example.com", Status: "active"},
-		transErr: errors.New("concurrent modification"),
-	}
-	h := NewDomainHandler(store, &fakeDomainVerifier{}, &fakeDomainValidator{}, "apps.dev.loopzero.example")
-
-	req := httptest.NewRequest(http.MethodDelete, "/api/v1/domains/example.com", nil)
-	req = withAuth(req, defaultUserContext())
-	req = withChiParam(req, "domain", "example.com")
-	w := httptest.NewRecorder()
-
-	h.Delete(w, req)
-
-	if w.Code != http.StatusConflict {
-		t.Fatalf("want 409, got %d body=%s", w.Code, w.Body.String())
-	}
-}
-
-func TestDomains_Delete_InvalidState(t *testing.T) {
-	store := &fakeDomainStore{
-		domain: &CustomDomain{Domain: "example.com", Status: "removing"},
-	}
-	h := NewDomainHandler(store, &fakeDomainVerifier{}, &fakeDomainValidator{}, "apps.dev.loopzero.example")
-
-	req := httptest.NewRequest(http.MethodDelete, "/api/v1/domains/example.com", nil)
-	req = withAuth(req, defaultUserContext())
-	req = withChiParam(req, "domain", "example.com")
-	w := httptest.NewRecorder()
-
-	h.Delete(w, req)
-
-	if w.Code != http.StatusConflict {
-		t.Fatalf("want 409 for invalid state, got %d body=%s", w.Code, w.Body.String())
-	}
-}
-
-func TestDomains_Delete_Unauthenticated(t *testing.T) {
-	h := NewDomainHandler(&fakeDomainStore{}, &fakeDomainVerifier{}, &fakeDomainValidator{}, "apps.dev.loopzero.example")
-
-	req := httptest.NewRequest(http.MethodDelete, "/api/v1/domains/example.com", nil)
-	req = withChiParam(req, "domain", "example.com")
-	w := httptest.NewRecorder()
-
-	h.Delete(w, req)
-
-	if w.Code != http.StatusUnauthorized {
-		t.Fatalf("want 401, got %d body=%s", w.Code, w.Body.String())
-	}
-}
+// Original TestDomains_Delete_Unauthenticated consolidated into
+// TestDomains_Delete_AuthorizationAndStateMatrix/Unauthenticated (Phase 3 v28).
 
 func TestDomains_List_Unauthenticated(t *testing.T) {
 	h := NewDomainHandler(&fakeDomainStore{}, &fakeDomainVerifier{}, &fakeDomainValidator{}, "apps.dev.loopzero.example")

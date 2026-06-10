@@ -16,7 +16,7 @@
 #   CF_API_TOKEN          Cloudflare API token (required for DNS snapshot)
 #   STACK_CONFIRM         Must match "DESTROY-{stack}" exactly (set at runtime only)
 #
-# Plan: docs/plans/50k-immediate-focus.md, docs/runbooks/infra-destroy.md (future)
+# Plan: docs/plans/50k-immediate-focus.md
 
 set -euo pipefail
 

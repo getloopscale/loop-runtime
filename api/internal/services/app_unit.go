@@ -9,23 +9,33 @@ import "fmt"
 // This is the normalization boundary: before AppUnit, data comes from parsing and heuristics.
 // After AppUnit, everything is deterministic.
 type AppUnit struct {
-	Name       string            `json:"name"`
-	Type       string            `json:"type"`                        // "server", "worker", "frontend"
-	Path       string            `json:"path"`
-	Framework  string            `json:"framework"`
+	Name string `json:"name"`
+	Type string `json:"type"` // "server", "worker", "frontend"
+	Path string `json:"path"`
+
+	// Framework (legacy loopzero.yaml) and Runtime (new services.json) coexist
+	// during the transition window per ADR D7. Plan B v3.1 T-B.5 (2026-06-05)
+	// added Runtime — `python` | `node` from services.json. Callers should
+	// prefer Runtime; Framework is retained for backwards compat reading of
+	// existing `apps_spec` JSONB rows. Strategy dispatch falls back from
+	// Runtime → Framework, and emits E-010 when both are empty.
+	Framework string `json:"framework,omitempty"`
+	Runtime   string `json:"runtime,omitempty"`
+
 	Port       int               `json:"port"`
-	Build      string            `json:"build"`                       // "dockerfile", "buildpack", "custom"
-	Dockerfile string            `json:"dockerfile,omitempty"`        // resolved Dockerfile path (relative to app path)
-	Rendering  string            `json:"rendering,omitempty"`         // "static" or "server" (MEET-009)
-	Env        map[string]string `json:"env,omitempty"`               // build-time environment variables
+	Build      string            `json:"build"`                // "dockerfile", "buildpack", "custom"
+	Dockerfile string            `json:"dockerfile,omitempty"` // resolved Dockerfile path (relative to app path)
+	Rendering  string            `json:"rendering,omitempty"`  // "static" or "server" (MEET-009)
+	Env        map[string]string `json:"env,omitempty"`        // build-time environment variables
 	Secrets    []string          `json:"secrets,omitempty"`
 }
 
-// MEET-2026-03-29-016: Remix removed — SSR-first framework, classified as server.
-var frontendFrameworks = map[string]bool{
-	"nextjs": true, "vite": true,
-	"react": true, "vue": true, "svelte": true, "astro": true, "angular": true,
-}
+// Plan B v3.1 T-B.1 (2026-06-05) — `frontendFrameworks` map removed post
+// LoopZeroKit-only cutover. Apps now declare `type` explicitly em
+// `.loopzero/services.json` (or via the legacy `services_json` form-field path
+// during transition). The framework-string heuristic no longer participates
+// em type inference; absent type defaults to "server" as the safe choice
+// (frontends are CDN-static per ADR D5 + explicit em services manifest).
 
 // NormalizeApp resolves a raw AppSpec into a fully populated AppUnit.
 // Returns error if the combination is invalid (e.g., server without port).
@@ -33,11 +43,9 @@ func NormalizeApp(name string, raw AppSpec) (AppUnit, error) {
 	// Resolve type
 	appType := raw.Type
 	if appType == "" {
-		if frontendFrameworks[raw.Framework] {
-			appType = "frontend"
-		} else {
-			appType = "server"
-		}
+		// Default "server" — frontends are explicitly tagged em services.json
+		// or carry `type: "frontend"` em legacy AppSpec migrations.
+		appType = "server"
 	}
 	if appType != "server" && appType != "worker" && appType != "frontend" {
 		return AppUnit{}, fmt.Errorf("app '%s': invalid type '%s'", name, appType)

@@ -266,3 +266,64 @@ func TestWithEnvironmentLock_DifferentTenantsSameProjectEnv(t *testing.T) {
 	close(release)
 	wg.Wait()
 }
+
+// TestWithEnvironmentLock_TimeoutBoundedAt5Seconds — T3.3 of
+// deep-review-remediation-plan (closes find_test_004 MEDIUM).
+//
+// The existing TestWithEnvironmentLock_Timeout asserts that contention
+// produces ErrLockTimeout. T3.3 asserts the timeout WINDOW: the timeout
+// must fire within 5s ± 1s. If the underlying SET LOCAL lock_timeout
+// drifts (e.g., a future contributor changes "5s" to "30s" or removes
+// the SET LOCAL entirely), this test catches it via wall-clock measurement.
+func TestWithEnvironmentLock_TimeoutBoundedAt5Seconds(t *testing.T) {
+	pool := testPool(t)
+	ctx := context.Background()
+
+	// Arrange: goroutine A acquires + holds lock for 10s (longer than the
+	// 5s timeout window — contender B MUST give up before A releases).
+	const holderDuration = 10 * time.Second
+	lockAcquired := make(chan struct{})
+	done := make(chan struct{})
+
+	go func() {
+		defer close(done)
+		_, _ = lock.WithEnvironmentLock(ctx, pool, "tenant-bound", "project-bound", "prod",
+			func(tx lock.Tx) (struct{}, error) {
+				close(lockAcquired)
+				time.Sleep(holderDuration)
+				return struct{}{}, nil
+			},
+		)
+	}()
+
+	<-lockAcquired
+
+	// Act: contender B tries to acquire. Measure wall clock.
+	start := time.Now()
+	_, err := lock.WithEnvironmentLock(ctx, pool, "tenant-bound", "project-bound", "prod",
+		func(tx lock.Tx) (string, error) {
+			return "should-not-reach", nil
+		},
+	)
+	elapsed := time.Since(start)
+
+	// Assert: error is timeout.
+	if !errors.Is(err, loopzeroerrors.ErrLockTimeout) {
+		t.Fatalf("expected ErrLockTimeout, got: %v", err)
+	}
+
+	// Assert: timeout fired within 5s ± 1s window.
+	// Lower bound: 4.5s — if it's faster than this, the SET LOCAL was
+	// shortened or the assertion is comparing against the wrong timer.
+	// Upper bound: 6s — if it's slower, lock_timeout is being ignored or
+	// the test machine is severely overloaded.
+	if elapsed < 4500*time.Millisecond {
+		t.Errorf("contender returned ErrLockTimeout too fast: %v (expected >= 4.5s)", elapsed)
+	}
+	if elapsed > 6*time.Second {
+		t.Errorf("contender returned ErrLockTimeout too slow: %v (expected <= 6s)", elapsed)
+	}
+
+	// Cleanup
+	<-done
+}

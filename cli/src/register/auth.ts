@@ -5,7 +5,8 @@ import { ApiClient, ApiError } from '../api/client';
 import { LoginCommand } from '../commands/login';
 import { LogoutCommand } from '../commands/logout';
 import { WhoamiCommand } from '../commands/whoami';
-import { executeDeviceCodeFlow } from '../auth/device-flow';
+import { AuthRefreshCommand } from '../commands/auth-refresh';
+import { executeDeviceCodeFlow, refreshAccessToken } from '../auth/device-flow';
 import { openBrowser } from '../auth/open-browser';
 import { promptConfirm } from '../output/prompt-confirm';
 import { CommandDeps } from './types';
@@ -19,6 +20,20 @@ export function registerAuthCommands(deps: CommandDeps): void {
     .description('Authenticate with your account')
     .option('--token <token>', 'Authentication token')
     .option('--team <team>', 'Select team')
+    // 2026-05-13 T2 amendment (finding-2026-05-13-e2e-token-refresh-divergence):
+    // Companion flags to --token for CI / automation flows that already hold
+    // a refresh_token (e.g., dogfood seed script). When both are present,
+    // configStore captures the full {access, refresh, expires_in} bundle so
+    // ensureFreshToken can renew silently on 401 — matching the device-flow
+    // path's behavior. Both flags are optional; omitting them preserves the
+    // legacy --token-only behavior (access-only, no auto-refresh).
+    .option('--refresh-token <token>', 'OAuth2 refresh_token paired with --token (enables auto-refresh)')
+    .option('--expires-in <seconds>', 'Lifetime in seconds of the --token value (informs auto-refresh timing)', (v) => parseInt(v, 10))
+    // Plan J-05 — explicit Device Code Flow opt-in. The implicit "no --token
+    // + non-CI" path keeps working; this flag makes the intent discoverable
+    // and works in CI too (sponsor caught LIVE 2026-06-05 that the flag was
+    // unknown — DoD references `loopzero login --device-flow` directly).
+    .option('--device-flow', 'Authenticate via OAuth2 Device Code Flow (RFC 8628) — browser-based')
     .action(async (cmdOpts) => {
       const globalOpts = getGlobalOpts();
 
@@ -34,8 +49,9 @@ export function registerAuthCommands(deps: CommandDeps): void {
           sleep: (ms: number) => new Promise(r => setTimeout(r, ms)),
         }),
         validateToken: async (token: string) => {
-          // Try cloud service /v1/auth/me first (for Hydra JWTs)
-          // Falls back to engine API /api/v1/auth/whoami (for GitHub PATs)
+          // Try cloud service /v1/auth/me first (Hydra JWTs from platform
+          // sign-up). Falls back to engine API /api/v1/auth/whoami for
+          // service tokens issued internally.
           try {
             const cloudResp = await globalThis.fetch(`${cloudUrl}/v1/auth/me`, {
               headers: { Authorization: `Bearer ${token}` },
@@ -89,6 +105,9 @@ export function registerAuthCommands(deps: CommandDeps): void {
         token: cmdOpts.token,
         team: cmdOpts.team,
         json: globalOpts.json,
+        refreshToken: cmdOpts.refreshToken,
+        expiresIn: cmdOpts.expiresIn,
+        deviceFlow: Boolean(cmdOpts.deviceFlow),
       });
       process.exitCode = exitCode;
     });
@@ -103,6 +122,9 @@ export function registerAuthCommands(deps: CommandDeps): void {
 
       const logoutCmd = new LogoutCommand({
         clearToken: () => configStore.clearToken(),
+        // F-06 (CHG-2026-04-29-DOGFOOD T1.2) — passar checagem de sessão
+        // para que LogoutCommand distinga "cancelled" de "no session".
+        hasToken: () => Boolean(configStore.getToken()),
         writeTo,
         // CHG-2026-04-23-AUDIT-9: shared promptConfirm with non-TTY safety.
         confirm: (message: string) => promptConfirm(message + ' '),
@@ -155,4 +177,34 @@ export function registerAuthCommands(deps: CommandDeps): void {
       });
       process.exitCode = exitCode;
     });
+
+  // --- auth refresh ---
+  // F-01 + F-03 fix from /dogfood full report (2026-05-06): operators
+  // re-authenticate via refresh token without going through the device
+  // flow again, eliminating the "JWT TTL=1h friction loop".
+  program
+    .command('auth')
+    .description('Authentication maintenance (refresh tokens)')
+    .addCommand(
+      program
+        .createCommand('refresh')
+        .description('Exchange the stored refresh token for a fresh access token')
+        .action(async () => {
+          const globalOpts = getGlobalOpts();
+          const refreshCmd = new AuthRefreshCommand({
+            getRefreshToken: () => configStore.getRefreshToken(),
+            saveToken: (token, email, team, refreshToken, expiresIn) =>
+              configStore.saveToken(token, email, team, refreshToken, expiresIn),
+            getEmail: () => configStore.getEmail(),
+            getTeam: () => configStore.getTeam(),
+            refreshFn: (refreshToken) =>
+              refreshAccessToken(globalThis.fetch, cloudUrl, refreshToken),
+            writeTo,
+            writeError,
+          });
+          process.exitCode = await refreshCmd.execute({
+            json: globalOpts.json,
+          });
+        }),
+    );
 }

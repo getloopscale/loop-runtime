@@ -239,8 +239,15 @@ func (c *APIClient) EnsureOrg(ctx context.Context, token, orgName string) error 
 // --- Repository Management ---
 
 // RepoInfo represents a Gitea repository response.
+//
+// CHG-002b 2026-04-28 — `Archived` is needed because tenant deletion soft-
+// deletes (archives) the gitops repo. When the same tenant name is created
+// again (test churn, reprovisioning), EnsureRepo must detect the archived
+// state and unarchive the repo BEFORE returning success — otherwise every
+// subsequent `git-receive-pack` returns 403 and gitops push fails forever.
 type RepoInfo struct {
 	CloneURL string `json:"clone_url"`
+	Archived bool   `json:"archived"`
 }
 
 // GetRepo fetches a repository by org and name. Returns nil if not found.
@@ -318,28 +325,40 @@ func (c *APIClient) CreateRepo(ctx context.Context, token, orgName string, repoR
 
 // ArchiveRepo archives (soft-deletes) a repository (idempotent).
 func (c *APIClient) ArchiveRepo(ctx context.Context, token, orgName, repoName string) error {
-	bodyBytes, marshalErr := json.Marshal(map[string]interface{}{"archived": true})
+	return c.setArchived(ctx, token, orgName, repoName, true)
+}
+
+// UnarchiveRepo flips a repository's archived flag to false (idempotent).
+//
+// CHG-002b 2026-04-28 — needed because Gitea rejects `git-receive-pack`
+// (push) on archived repos. EnsureRepo invokes this when a stale archived
+// repo is reused on tenant recreation.
+func (c *APIClient) UnarchiveRepo(ctx context.Context, token, orgName, repoName string) error {
+	return c.setArchived(ctx, token, orgName, repoName, false)
+}
+
+func (c *APIClient) setArchived(ctx context.Context, token, orgName, repoName string, archived bool) error {
+	bodyBytes, marshalErr := json.Marshal(map[string]interface{}{"archived": archived})
 	if marshalErr != nil {
-		return fmt.Errorf("gitea: marshal archive request: %w", marshalErr)
+		return fmt.Errorf("gitea: marshal archived=%v request: %w", archived, marshalErr)
 	}
 	req, err := http.NewRequestWithContext(ctx, http.MethodPatch,
 		c.apiV1("repos", orgName, repoName), strings.NewReader(string(bodyBytes)))
 	if err != nil {
-		return fmt.Errorf("gitea: archive repo %s request: %w", repoName, err)
+		return fmt.Errorf("gitea: set archived=%v on repo %s request: %w", archived, repoName, err)
 	}
 	req.Header.Set("Authorization", "token "+token)
 	req.Header.Set("Content-Type", "application/json")
 
 	resp, err := c.client.Do(req)
 	if err != nil {
-		return fmt.Errorf("gitea: archive repo %s: %w", repoName, err)
+		return fmt.Errorf("gitea: set archived=%v on repo %s: %w", archived, repoName, err)
 	}
 	defer func() { _ = resp.Body.Close() }()
-	// Drain body for connection reuse.
 	_, _ = io.ReadAll(resp.Body)
 
 	if resp.StatusCode != http.StatusOK && resp.StatusCode != http.StatusNotFound {
-		return fmt.Errorf("gitea: archive repo %s: status %d", repoName, resp.StatusCode)
+		return fmt.Errorf("gitea: set archived=%v on repo %s: status %d", archived, repoName, resp.StatusCode)
 	}
 	return nil
 }

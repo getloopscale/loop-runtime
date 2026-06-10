@@ -12,14 +12,27 @@ import (
 	"net/http/httptest"
 	"testing"
 
-	"github.com/loopzero/loopzero/api/internal/placement"
 	"github.com/loopzero/loopzero/api/internal/routes"
 )
+
+// stubCellEngine implements routes.CellPlacementEngine for tests.
+// CHG-2026-04-30-DELETE-SINGLE-CELL: replaces deleted placement.DefaultEngine.
+// Always returns "cell-default" — same semantics, but production code has
+// no single-cell engine to drift back to.
+type stubCellEngine struct{}
+
+func (stubCellEngine) AssignCell(_ context.Context) (string, error) {
+	return "cell-default", nil
+}
+
+func (stubCellEngine) AssignAndExecute(ctx context.Context, fn func(context.Context, string) error) error {
+	return fn(ctx, "cell-default")
+}
 
 func TestBootstrapRoute(t *testing.T) {
 	t.Run("POST /internal/bootstrap → 200 creates records", func(t *testing.T) {
 		store := routes.NewInMemoryBootstrapStore()
-		handler := routes.NewBootstrapHandler(store, "", placement.NewDefaultEngine())
+		handler := routes.NewBootstrapHandler(store, "", stubCellEngine{})
 
 		body := map[string]string{
 			"admin_github_id":     "123456",
@@ -60,7 +73,7 @@ func TestBootstrapRoute(t *testing.T) {
 
 	t.Run("POST /internal/bootstrap → 200 idempotent on second call", func(t *testing.T) {
 		store := routes.NewInMemoryBootstrapStore()
-		handler := routes.NewBootstrapHandler(store, "", placement.NewDefaultEngine())
+		handler := routes.NewBootstrapHandler(store, "", stubCellEngine{})
 
 		body := map[string]string{
 			"admin_github_id":     "123456",
@@ -103,7 +116,7 @@ func TestBootstrapRoute(t *testing.T) {
 
 	t.Run("POST /internal/bootstrap → 400 missing admin_github_id", func(t *testing.T) {
 		store := routes.NewInMemoryBootstrapStore()
-		handler := routes.NewBootstrapHandler(store, "", placement.NewDefaultEngine())
+		handler := routes.NewBootstrapHandler(store, "", stubCellEngine{})
 
 		body := map[string]string{
 			"admin_login":         "paulo",
@@ -122,18 +135,20 @@ func TestBootstrapRoute(t *testing.T) {
 			t.Fatalf("expected 400, got %d: %s", rec.Code, rec.Body.String())
 		}
 
-		var errBody map[string]string
+		// Stage C T2.3 migration: response is RFC 9457 problem+json which
+		// includes int `status` field; decode as map[string]any.
+		var errBody map[string]any
 		if err := json.NewDecoder(rec.Body).Decode(&errBody); err != nil {
 			t.Fatalf("failed to decode error: %v", err)
 		}
-		if errBody["code"] != "MISSING_FIELD" {
-			t.Errorf("expected code=MISSING_FIELD, got %q", errBody["code"])
+		if code, _ := errBody["code"].(string); code != "MISSING_FIELD" {
+			t.Errorf("expected code=MISSING_FIELD, got %q", code)
 		}
 	})
 
 	t.Run("POST /internal/bootstrap → 400 missing admin_login", func(t *testing.T) {
 		store := routes.NewInMemoryBootstrapStore()
-		handler := routes.NewBootstrapHandler(store, "", placement.NewDefaultEngine())
+		handler := routes.NewBootstrapHandler(store, "", stubCellEngine{})
 
 		body := map[string]string{
 			"admin_github_id":     "123456",
@@ -155,7 +170,7 @@ func TestBootstrapRoute(t *testing.T) {
 
 	t.Run("POST /internal/bootstrap → 400 missing tenant_slug", func(t *testing.T) {
 		store := routes.NewInMemoryBootstrapStore()
-		handler := routes.NewBootstrapHandler(store, "", placement.NewDefaultEngine())
+		handler := routes.NewBootstrapHandler(store, "", stubCellEngine{})
 
 		body := map[string]string{
 			"admin_github_id":     "123456",
@@ -177,7 +192,7 @@ func TestBootstrapRoute(t *testing.T) {
 
 	t.Run("POST /internal/bootstrap → 400 invalid JSON body", func(t *testing.T) {
 		store := routes.NewInMemoryBootstrapStore()
-		handler := routes.NewBootstrapHandler(store, "", placement.NewDefaultEngine())
+		handler := routes.NewBootstrapHandler(store, "", stubCellEngine{})
 
 		req := httptest.NewRequest(http.MethodPost, "/internal/bootstrap", bytes.NewReader([]byte("not json")))
 		req.Header.Set("Content-Type", "application/json")
@@ -192,7 +207,7 @@ func TestBootstrapRoute(t *testing.T) {
 
 	t.Run("POST /internal/bootstrap → tenant_id uses tn- prefix", func(t *testing.T) {
 		store := routes.NewInMemoryBootstrapStore()
-		handler := routes.NewBootstrapHandler(store, "", placement.NewDefaultEngine())
+		handler := routes.NewBootstrapHandler(store, "", stubCellEngine{})
 
 		body := map[string]string{
 			"admin_github_id":     "999",
@@ -226,7 +241,7 @@ func TestBootstrapRoute(t *testing.T) {
 
 	t.Run("POST /internal/bootstrap → defaults plan to starter when empty", func(t *testing.T) {
 		store := routes.NewInMemoryBootstrapStore()
-		handler := routes.NewBootstrapHandler(store, "", placement.NewDefaultEngine())
+		handler := routes.NewBootstrapHandler(store, "", stubCellEngine{})
 
 		body := map[string]string{
 			"admin_github_id":     "123456",
@@ -250,7 +265,7 @@ func TestBootstrapRoute(t *testing.T) {
 
 	t.Run("POST /internal/bootstrap → assigns cell_id from PlacementEngine", func(t *testing.T) {
 		store := routes.NewInMemoryBootstrapStore()
-		handler := routes.NewBootstrapHandler(store, "", placement.NewDefaultEngine())
+		handler := routes.NewBootstrapHandler(store, "", stubCellEngine{})
 
 		body := map[string]string{
 			"admin_github_id":     "123456",

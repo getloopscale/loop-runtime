@@ -64,6 +64,20 @@ func (f *fakeStreamBuildStore) GetByID(_ context.Context, _ string) (*LogBuild, 
 	return &b, nil
 }
 
+// GetByIDForTenant — T0.4 of deep-review-2026-05-10-remediation-plan.
+// Emulates the production SQL filter (WHERE id=$1 AND tenant_id=$2):
+// returns nil when the build belongs to a different tenant.
+func (f *fakeStreamBuildStore) GetByIDForTenant(ctx context.Context, tenantID, buildID string) (*LogBuild, error) {
+	b, err := f.GetByID(ctx, buildID)
+	if err != nil || b == nil {
+		return b, err
+	}
+	if b.TenantID != tenantID {
+		return nil, nil
+	}
+	return b, nil
+}
+
 // --- Tests ---
 
 func TestStreamBuildLogs_EmitsSSEEvents(t *testing.T) {

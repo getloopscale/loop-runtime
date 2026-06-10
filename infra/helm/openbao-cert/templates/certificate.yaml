@@ -1,0 +1,36 @@
+{{/* SPDX-License-Identifier: Apache-2.0 */}}
+{{/* cert-manager Certificate for OpenBao HTTPS listener.
+     Issuer creates Secret with tls.crt + tls.key + ca.crt.
+     OpenBao chart mounts via extraVolumes -> /openbao/userconfig/openbao-tls/ */}}
+apiVersion: cert-manager.io/v1
+kind: Certificate
+metadata:
+  name: openbao
+  namespace: {{ .Release.Namespace }}
+  labels:
+    app.kubernetes.io/name: openbao-cert
+    app.kubernetes.io/managed-by: {{ .Release.Service }}
+spec:
+  secretName: {{ .Values.secretName | quote }}
+  duration: {{ .Values.duration }}
+  renewBefore: {{ .Values.renewBefore }}
+  issuerRef:
+    name: {{ .Values.issuerRef.name | quote }}
+    kind: {{ .Values.issuerRef.kind | quote }}
+  dnsNames:
+    {{- range .Values.dnsNames }}
+    - {{ . | quote }}
+    {{- end }}
+  {{- with .Values.ipAddresses }}
+  ipAddresses:
+    {{- range . }}
+    - {{ . | quote }}
+    {{- end }}
+  {{- end }}
+  usages:
+    - server auth
+    - client auth
+  privateKey:
+    algorithm: ECDSA
+    size: 256
+    rotationPolicy: Always

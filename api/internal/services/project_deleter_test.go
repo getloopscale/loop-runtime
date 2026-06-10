@@ -9,7 +9,7 @@ import (
 	"testing"
 
 	"github.com/loopzero/loopzero/api/internal/db"
-	"github.com/loopzero/loopzero/api/internal/routes"
+	"github.com/loopzero/loopzero/api/internal/domain"
 )
 
 // --- Test doubles for ProjectDeleter ---
@@ -23,6 +23,19 @@ type fakeBuildStoreDeleter struct {
 func (f *fakeBuildStoreDeleter) Create(_ context.Context, _ db.DBTX, _ *db.Build) error { return nil }
 func (f *fakeBuildStoreDeleter) GetByID(_ context.Context, _ string) (*db.Build, error) {
 	return nil, nil
+}
+
+// GetByIDForTenant — T0.4 of deep-review-2026-05-10-remediation-plan.
+// Emulates the production SQL filter for the unit-test scope.
+func (f *fakeBuildStoreDeleter) GetByIDForTenant(ctx context.Context, tenantID, buildID string) (*db.Build, error) {
+	b, err := f.GetByID(ctx, buildID)
+	if err != nil || b == nil {
+		return b, err
+	}
+	if b.TenantID != tenantID {
+		return nil, nil
+	}
+	return b, nil
 }
 func (f *fakeBuildStoreDeleter) HasActiveBuild(_ context.Context, _ db.DBTX, _, _, _ string) (bool, error) {
 	return false, nil
@@ -125,6 +138,65 @@ func (f *fakeSyncDeleter) TriggerSync(_ context.Context, _ string) error {
 	return nil
 }
 
+// fakeReleaseStoreDeleter records every CancelAllByEnv call so tests can assert
+// the cascade fires inside the project-delete lock. Implements db.ReleaseStore;
+// only CancelAllByEnv is exercised, the rest return zero values.
+type fakeReleaseStoreDeleter struct {
+	cancelCalls    []cancelAllCall
+	cancelledCount int
+	cancelErr      error
+}
+
+type cancelAllCall struct {
+	tenantID  string
+	projectID string
+	env       string
+}
+
+func (f *fakeReleaseStoreDeleter) Create(_ context.Context, _ db.DBTX, _ *db.Release) error {
+	return nil
+}
+func (f *fakeReleaseStoreDeleter) GetByID(_ context.Context, _ string) (*db.Release, error) {
+	return nil, nil
+}
+func (f *fakeReleaseStoreDeleter) UpdateStatus(_ context.Context, _ db.DBTX, _, _ string) (*db.Release, error) {
+	return nil, nil
+}
+func (f *fakeReleaseStoreDeleter) SetGitCommit(_ context.Context, _ db.DBTX, _, _ string) error {
+	return nil
+}
+func (f *fakeReleaseStoreDeleter) GetActiveByEnv(_ context.Context, _, _, _ string) (*db.Release, error) {
+	return nil, nil
+}
+func (f *fakeReleaseStoreDeleter) GetActiveByEnvTx(_ context.Context, _ db.DBTX, _, _, _ string) (*db.Release, error) {
+	return nil, nil
+}
+func (f *fakeReleaseStoreDeleter) GetPreviousRelease(_ context.Context, _, _, _ string) (*db.Release, error) {
+	return nil, nil
+}
+func (f *fakeReleaseStoreDeleter) GetByIDForTenant(_ context.Context, _, _ string) (*db.Release, error) {
+	return nil, nil
+}
+func (f *fakeReleaseStoreDeleter) ListByEnv(_ context.Context, _, _, _ string, _ int) ([]db.Release, error) {
+	return nil, nil
+}
+func (f *fakeReleaseStoreDeleter) GetLatestByBuildID(_ context.Context, _ string) (*db.Release, error) {
+	return nil, nil
+}
+func (f *fakeReleaseStoreDeleter) FindPendingReleases(_ context.Context, _ string) ([]db.Release, error) {
+	return nil, nil
+}
+func (f *fakeReleaseStoreDeleter) FindActiveReleases(_ context.Context, _ string) ([]db.Release, error) {
+	return nil, nil
+}
+func (f *fakeReleaseStoreDeleter) GetByIDTx(_ context.Context, _ db.DBTX, _ string) (*db.Release, error) {
+	return nil, nil
+}
+func (f *fakeReleaseStoreDeleter) CancelAllByEnv(_ context.Context, _ db.DBTX, tenantID, projectID, env string) (int, error) {
+	f.cancelCalls = append(f.cancelCalls, cancelAllCall{tenantID, projectID, env})
+	return f.cancelledCount, f.cancelErr
+}
+
 // --- Tests ---
 
 func TestProjectDeleter_SingleEnv_FullCascade(t *testing.T) {
@@ -145,7 +217,7 @@ func TestProjectDeleter_SingleEnv_FullCascade(t *testing.T) {
 		Sync:              sync,
 	})
 
-	result, err := deleter.Delete(context.Background(), routes.ProjectDeleteInput{
+	result, err := deleter.Delete(context.Background(), domain.ProjectDeleteInput{
 		TenantID:      "tn-1",
 		ProjectID:     "proj-uuid",
 		ProjectName:   "my-app",
@@ -198,7 +270,7 @@ func TestProjectDeleter_AllEnvs_DeletesProjectRecord(t *testing.T) {
 		GitOps:         gitops,
 	})
 
-	result, err := deleter.Delete(context.Background(), routes.ProjectDeleteInput{
+	result, err := deleter.Delete(context.Background(), domain.ProjectDeleteInput{
 		TenantID:    "tn-1",
 		ProjectID:   "proj-uuid",
 		ProjectName: "my-app",
@@ -227,7 +299,7 @@ func TestProjectDeleter_GitOpsRemoveFails_ReturnsFatalError(t *testing.T) {
 		GitOps:         gitops,
 	})
 
-	_, err := deleter.Delete(context.Background(), routes.ProjectDeleteInput{
+	_, err := deleter.Delete(context.Background(), domain.ProjectDeleteInput{
 		TenantID:    "tn-1",
 		ProjectID:   "proj-uuid",
 		ProjectName: "my-app",
@@ -255,7 +327,7 @@ func TestProjectDeleter_NoEnvTargets_FallbackGitOpsCleanup(t *testing.T) {
 		Sync:           sync,
 	})
 
-	result, err := deleter.Delete(context.Background(), routes.ProjectDeleteInput{
+	result, err := deleter.Delete(context.Background(), domain.ProjectDeleteInput{
 		TenantID:    "tn-1",
 		ProjectID:   "proj-uuid",
 		ProjectName: "orphan-app",
@@ -288,7 +360,7 @@ func TestProjectDeleter_NilWorkflowCanceller_DoesNotPanic(t *testing.T) {
 		Sync:              nil,  // nil-safe
 	})
 
-	_, err := deleter.Delete(context.Background(), routes.ProjectDeleteInput{
+	_, err := deleter.Delete(context.Background(), domain.ProjectDeleteInput{
 		TenantID:    "tn-1",
 		ProjectID:   "proj-uuid",
 		ProjectName: "my-app",
@@ -312,7 +384,7 @@ func TestProjectDeleter_UsesProjectNameForGitOps(t *testing.T) {
 		GitOps:         gitops,
 	})
 
-	_, err := deleter.Delete(context.Background(), routes.ProjectDeleteInput{
+	_, err := deleter.Delete(context.Background(), domain.ProjectDeleteInput{
 		TenantID:    "tn-1",
 		ProjectID:   "550e8400-e29b-41d4-a716-446655440000", // UUID
 		ProjectName: "my-real-app",                          // name
@@ -325,4 +397,73 @@ func TestProjectDeleter_UsesProjectNameForGitOps(t *testing.T) {
 	if !gitops.removeCalled {
 		t.Error("expected gitops remove to be called")
 	}
+}
+
+// CHG-2026-04-29-DOGFOOD-REAL-E2E iter 13 — cascade-cancel regression test.
+// Without ReleaseStore.CancelAllByEnv, a re-deploy after `loopzero project delete`
+// finds the prior ACTIVE release row via GetActiveByEnv and uses its stale
+// git commit when promoting. This test asserts the cascade fires for every
+// environment passed to Delete.
+func TestProjectDeleter_CascadesReleaseCancel(t *testing.T) {
+	rs := &fakeReleaseStoreDeleter{cancelledCount: 3}
+	ets := &fakeEnvTargetStoreDeleter{
+		targets: []db.EnvironmentTarget{
+			{TenantID: "tn-1", ProjectID: "my-app", Environment: "production"},
+			{TenantID: "tn-1", ProjectID: "my-app", Environment: "staging"},
+		},
+	}
+	deleter := NewProjectDeleter(ProjectDeleterDeps{
+		BuildStore:     &fakeBuildStoreDeleter{},
+		EnvTargetStore: ets,
+		ReleaseStore:   rs,
+		ProjectStore:   &fakeProjectStoreDeleter{},
+		Locker:         &fakeLockerDeleter{},
+		GitOps:         &fakeGitOpsDeleter{},
+	})
+
+	_, err := deleter.Delete(context.Background(), domain.ProjectDeleteInput{
+		TenantID:    "tn-1",
+		ProjectID:   "my-app",
+		ProjectName: "my-app",
+	})
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if got, want := len(rs.cancelCalls), 2; got != want {
+		t.Fatalf("expected %d CancelAllByEnv calls (one per env), got %d: %+v", want, got, rs.cancelCalls)
+	}
+	envs := map[string]bool{}
+	for _, c := range rs.cancelCalls {
+		envs[c.env] = true
+		if c.tenantID != "tn-1" || c.projectID != "my-app" {
+			t.Errorf("cascade called with wrong identifiers: %+v", c)
+		}
+	}
+	if !envs["production"] || !envs["staging"] {
+		t.Errorf("cascade missed an environment: %+v", envs)
+	}
+}
+
+// Cascade must not break the delete flow when ReleaseStore is nil — preserves
+// backward compatibility for tests/contexts that wire only the legacy deps.
+func TestProjectDeleter_NilReleaseStore_NoPanic(t *testing.T) {
+	deleter := NewProjectDeleter(ProjectDeleterDeps{
+		BuildStore:     &fakeBuildStoreDeleter{},
+		EnvTargetStore: &fakeEnvTargetStoreDeleter{},
+		ProjectStore:   &fakeProjectStoreDeleter{},
+		Locker:         &fakeLockerDeleter{},
+		GitOps:         &fakeGitOpsDeleter{},
+		// ReleaseStore deliberately nil
+	})
+	if _, err := deleter.Delete(context.Background(), domain.ProjectDeleteInput{
+		TenantID: "tn-1", ProjectID: "p", ProjectName: "p", Environment: "production",
+	}); err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+}
+
+
+// AppendSideEffect — fix-all-platform-issues-plan T4.1 stub.
+func (f *fakeReleaseStoreDeleter) AppendSideEffect(_ context.Context, _ db.DBTX, _ string, _ map[string]any) error {
+	return nil
 }

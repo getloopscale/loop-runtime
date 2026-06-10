@@ -15,6 +15,7 @@ import (
 	"github.com/prometheus/client_golang/prometheus/promhttp"
 
 	"github.com/loopzero/loopzero/api/internal/config"
+	"github.com/loopzero/loopzero/pkg/correlation"
 	"github.com/loopzero/loopzero/api/internal/db"
 	"github.com/loopzero/loopzero/api/internal/k8s"
 	"github.com/loopzero/loopzero/api/internal/leader"
@@ -67,13 +68,20 @@ type appCRAdapter struct {
 }
 
 func (a *appCRAdapter) EnsureLoopZeroApplication(ctx context.Context, input services.ApplicationCRInput) error {
+	// Audit gap M08 #10 / §6.C.1: propagate correlation_id from ctx into
+	// the CR annotation. For controller-binary callers (post-build reconcile
+	// loops) the ctx typically does NOT carry a correlation ID — those are
+	// reconcile-internal flows. correlation.IDFromContext returns empty
+	// string in that case, which LoopZeroApplicationInput interprets as "omit
+	// the annotation" rather than "store empty value".
 	return a.mgr.EnsureLoopZeroApplication(ctx, k8s.LoopZeroApplicationInput{
-		TenantID:    input.TenantID,
-		Project:     input.Project,
-		Environment: input.Environment,
-		AppName:     input.AppName,
-		ServiceName: input.ServiceName,
-		ServicePort: input.ServicePort,
+		TenantID:      input.TenantID,
+		Project:       input.Project,
+		Environment:   input.Environment,
+		AppName:       input.AppName,
+		ServiceName:   input.ServiceName,
+		ServicePort:   input.ServicePort,
+		CorrelationID: correlation.IDFromContext(ctx),
 	})
 }
 

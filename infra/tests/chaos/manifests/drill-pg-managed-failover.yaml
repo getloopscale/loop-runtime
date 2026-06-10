@@ -1,0 +1,50 @@
+# Chaos Experiment: simulate DO Managed PostgreSQL failover via network partition
+#
+# Drill-specific scenario (NEW for /chaos-test-drill plan 2026-05-18-drill-skills-trio).
+# Local k3d uses bitnami postgresql with instant pod restart; drill prod-parity uses
+# DO Managed PG with real failover semantics (~30-60s primary→standby switch).
+#
+# Hypothesis: API circuit breaker engages at >90% pool saturation. loopzero-api
+# rejects mutations with HTTP 503 (no DB crash). After network heals + DO
+# Managed PG primary recovers (~30s), API resumes normal operation within 60s.
+#
+# Steady-state SLO:
+#   - API /api/v1/health continues returning 200 during partition (uses cached state)
+#   - Mutating endpoints (POST/PUT/DELETE) return 503 within 5s during partition
+#   - Sustained traffic 5xx rate <5% (read endpoints unaffected)
+#   - Recovery time (last 503 to first 2xx after heal) <60s
+#   - Zero database connection corruption (pg_locks healthy post-recovery)
+---
+apiVersion: chaos-mesh.org/v1alpha1
+kind: NetworkChaos
+metadata:
+  name: drill-pg-managed-failover
+  namespace: loopzero-system
+  annotations:
+    loopzero.io/plan: "2026-05-18-drill-skills-trio"
+    loopzero.io/scenario-id: "drill-pg-managed-failover"
+    loopzero.io/dod-test: "API resumes normal operation within 60s post-heal; pool saturation circuit breaker engages during partition"
+    loopzero.io/hypothesis: "Circuit breaker rejects mutations with 503 during PG partition; reads continue from connection pool cache"
+    loopzero.io/slo-query: |
+      # 503 rate spikes during partition window, recovers post-heal
+      rate(loopzero_api_requests_total{status=~"5.."}[1m]) < 0.05
+      and
+      # Circuit breaker engaged (loopzero_circuit_breaker_state metric)
+      loopzero_circuit_breaker_state{name="pg"} == 1
+    loopzero.io/recovery-budget-seconds: "60"
+spec:
+  action: partition
+  mode: all
+  selector:
+    namespaces:
+      - loopzero-system
+    labelSelectors:
+      "app": "loopzero-api"
+  direction: to
+  externalTargets:
+    # DO Managed PG host pattern. The chaos-daemon blocks connections to
+    # `*.db.ondigitalocean.com` resolving DSN target. Drill stack's actual
+    # host populated dynamically by orchestrator (drill-chaos-orchestrator.sh
+    # substitutes via envsubst or kubectl apply -f -).
+    - "${DRILL_PG_HOST_PATTERN:-loopzero-drill-pg-do-user-*.db.ondigitalocean.com}"
+  duration: "60s"

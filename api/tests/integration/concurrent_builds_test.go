@@ -126,8 +126,8 @@ func (a *buildOrchestratorAdapter) IsBuildTerminal(ctx context.Context, buildID 
 	if err != nil {
 		return false, err
 	}
-	switch statemachine.State(build.Status) {
-	case statemachine.BuildSucceeded, statemachine.BuildFailed, statemachine.BuildCancelled:
+	switch statemachine.BuildPhase(build.Status) {
+	case statemachine.BPhSucceeded, statemachine.BPhFailed, statemachine.BPhCancelled:
 		return true, nil
 	}
 	return false, nil
@@ -177,6 +177,25 @@ func (f *fakeSyncClient) WaitForSync(ctx context.Context, appName string, timeou
 	return nil
 }
 
+// Sprint B T1.1 (ADR D1): stub methods to satisfy the widened SyncClient
+// interface. Integration concurrent-builds tests exercise only the
+// HTTP-layer lock semantics; ArgoCD-side recovery is out of scope here.
+func (f *fakeSyncClient) ForceReconcile(ctx context.Context, appName string) error {
+	return nil
+}
+
+func (f *fakeSyncClient) GetSyncRevision(ctx context.Context, appName string) (string, error) {
+	return "", nil
+}
+
+func (f *fakeSyncClient) TerminateOperation(ctx context.Context, appName string) error {
+	return nil
+}
+
+func (f *fakeSyncClient) GetAppStatus(ctx context.Context, appName string, deployedApps []string) (bool, bool, error) {
+	return true, true, nil
+}
+
 // --- Fake auth for HTTP layer ---
 
 type fakeTokenValidator struct{}
@@ -224,8 +243,8 @@ func setupIntegrationTest(t *testing.T) *testIntegrationSetup {
 
 	// Create real stores backed by the pool
 	adapter := &db.PgxAdapter{Pool: pool}
-	buildStore := db.NewPostgresBuildStore(adapter)
-	releaseStore := db.NewPostgresReleaseStore(adapter)
+	buildStore := db.NewBuildStoreSqlc(adapter) // T1.2b
+	releaseStore := db.NewReleaseStoreSqlc(adapter) // T1.1c2c (plan 2026-05-29-sqlc-migration v1.3)
 	envTargetStore := db.NewPostgresEnvironmentTargetStore(adapter, adapter)
 	eventStore := sse.NewPostgresEventStore(adapter, adapter)
 	idempotencyStore := &db.PostgresIdempotencyStore{DB: adapter}
@@ -452,7 +471,7 @@ func TestConcurrentBuildSubmission(t *testing.T) {
 			defer wg.Done()
 			<-ready // Wait for barrier
 
-			resp, err := doPost(setup.server.URL, "/api/v1/builds", reqBody, nil)
+			resp, err := doPost(setup.server.URL, "/api/v1/builds", reqBody, nil) //nolint:bodyclose // closed via readBody helper below
 			if err != nil {
 				t.Errorf("goroutine %d: request failed: %v", idx, err)
 				return
@@ -540,7 +559,7 @@ func TestIdempotencyReplay(t *testing.T) {
 	}
 
 	// First call
-	resp1, err := doPost(setup.server.URL, "/api/v1/builds", reqBody, headers)
+	resp1, err := doPost(setup.server.URL, "/api/v1/builds", reqBody, headers) //nolint:bodyclose // closed via readBody helper below
 	if err != nil {
 		t.Fatalf("first request failed: %v", err)
 	}
@@ -551,7 +570,7 @@ func TestIdempotencyReplay(t *testing.T) {
 	}
 
 	// Second call with same key + same payload
-	resp2, err := doPost(setup.server.URL, "/api/v1/builds", reqBody, headers)
+	resp2, err := doPost(setup.server.URL, "/api/v1/builds", reqBody, headers) //nolint:bodyclose // closed via readBody helper below
 	if err != nil {
 		t.Fatalf("second request failed: %v", err)
 	}
@@ -620,7 +639,7 @@ func TestIdempotencyMismatch(t *testing.T) {
 	}
 
 	// First call with payload A
-	resp1, err := doPost(setup.server.URL, "/api/v1/builds", payloadA, headers)
+	resp1, err := doPost(setup.server.URL, "/api/v1/builds", payloadA, headers) //nolint:bodyclose // closed via readBody helper below
 	if err != nil {
 		t.Fatalf("first request failed: %v", err)
 	}
@@ -631,7 +650,7 @@ func TestIdempotencyMismatch(t *testing.T) {
 	}
 
 	// Second call with payload B (different payload, same key)
-	resp2, err := doPost(setup.server.URL, "/api/v1/builds", payloadB, headers)
+	resp2, err := doPost(setup.server.URL, "/api/v1/builds", payloadB, headers) //nolint:bodyclose // closed via readBody helper below
 	if err != nil {
 		t.Fatalf("second request failed: %v", err)
 	}
@@ -667,7 +686,7 @@ func TestLockReleasedAfterBuildCompletes(t *testing.T) {
 	}
 
 	// Submit build 1
-	resp1, err := doPost(setup.server.URL, "/api/v1/builds", reqBody, nil)
+	resp1, err := doPost(setup.server.URL, "/api/v1/builds", reqBody, nil) //nolint:bodyclose // closed via readBody helper below
 	if err != nil {
 		t.Fatalf("first build request failed: %v", err)
 	}
@@ -697,7 +716,7 @@ func TestLockReleasedAfterBuildCompletes(t *testing.T) {
 	_, err = setup.pool.Exec(ctx,
 		`UPDATE builds SET status = $1, finished_at = NOW()
 		 WHERE id = $2`,
-		string(statemachine.BuildSucceeded), buildID,
+		string(statemachine.BPhSucceeded), buildID,
 	)
 	if err != nil {
 		t.Fatalf("failed to transition build to SUCCEEDED: %v", err)
@@ -711,12 +730,12 @@ func TestLockReleasedAfterBuildCompletes(t *testing.T) {
 	if err != nil {
 		t.Fatalf("failed to read build status: %v", err)
 	}
-	if status != string(statemachine.BuildSucceeded) {
+	if status != string(statemachine.BPhSucceeded) {
 		t.Fatalf("expected build status SUCCEEDED, got %s", status)
 	}
 
 	// Submit build 2: should succeed because build 1 is no longer active
-	resp2, err := doPost(setup.server.URL, "/api/v1/builds", reqBody, nil)
+	resp2, err := doPost(setup.server.URL, "/api/v1/builds", reqBody, nil) //nolint:bodyclose // closed via readBody helper below
 	if err != nil {
 		t.Fatalf("second build request failed: %v", err)
 	}

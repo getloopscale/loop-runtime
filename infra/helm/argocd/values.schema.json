@@ -1,0 +1,106 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://loopzero.platform/schemas/argocd/values.schema.json",
+  "title": "ArgoCD LoopZero wrapper values schema",
+  "description": "Plan 2026-05-20 T2.5 ext — fail-fast on ArgoCD bootstrap config drift. Protects: B17 (notifications.notifiers vs deprecated services key), T-05 (controller.replicas=3 for L3+ scale), fix-all-platform-issues T3.1 (duplicate ARGOCD_CONTROLLER_REPLICAS env var). Catches typos that silently break notifications + sync.",
+  "type": "object",
+  "properties": {
+    "global": {
+      "type": "object",
+      "properties": {
+        "image": {
+          "type": "object",
+          "properties": {
+            "tag": {
+              "type": "string",
+              "minLength": 1,
+              "pattern": "^v?[0-9]+(\\.[0-9]+){2}(-[a-z0-9.-]+)?$",
+              "description": "ArgoCD image tag, SemVer with optional 'v' prefix (e.g., 'v2.13.3'). Avoid 'latest' — drill DOCR rejects (Bug #16)."
+            }
+          }
+        }
+      }
+    },
+    "server": {
+      "type": "object",
+      "properties": {
+        "containerSecurityContext": {
+          "type": "object",
+          "properties": {
+            "runAsNonRoot": {
+              "type": "boolean",
+              "const": true,
+              "description": "INF-G08 invariant: ArgoCD server MUST run as non-root."
+            }
+          }
+        },
+        "service": {
+          "type": "object",
+          "properties": {
+            "type": {
+              "type": "string",
+              "enum": ["ClusterIP", "NodePort", "LoadBalancer"]
+            },
+            "nodePortHttp": {
+              "type": "integer",
+              "minimum": 30000,
+              "maximum": 32767,
+              "description": "NodePort range per K8s default (30000-32767). Outside range = silent rejection by K8s."
+            }
+          }
+        },
+        "metrics": {
+          "type": "object",
+          "properties": {
+            "enabled": { "type": "boolean" },
+            "serviceMonitor": {
+              "type": "object",
+              "properties": {
+                "enabled": { "type": "boolean" },
+                "additionalLabels": {
+                  "type": "object",
+                  "description": "Prometheus operator needs release label to discover. Without it, scraping silently fails."
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "controller": {
+      "type": "object",
+      "properties": {
+        "replicas": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 10,
+          "description": "T-05: 3 replicas with sharding distributes Applications by hash. Single controller saturates at L3+ (100+ Apps). >10 = diminishing returns + sharding stability concerns."
+        }
+      }
+    },
+    "notificationsController": {
+      "type": "object",
+      "properties": {
+        "enabled": { "type": "boolean" }
+      }
+    },
+    "notifications": {
+      "type": "object",
+      "description": "B17 protection: argo-cd chart v7.x uses 'notifiers' key (NOT 'services' — silently ignored). Schema enforces correct key name.",
+      "properties": {
+        "notifiers": {
+          "type": "object",
+          "description": "B17 correct key. argo-cd v7.x silently ignores 'services'. Each subkey is service.<type>.<name> mapping to YAML config."
+        }
+      },
+      "not": {
+        "anyOf": [
+          {
+            "required": ["services"]
+          }
+        ]
+      }
+    }
+  },
+  "additionalProperties": true
+}

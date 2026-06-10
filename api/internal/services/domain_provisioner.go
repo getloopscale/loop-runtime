@@ -12,7 +12,7 @@ import (
 	"github.com/loopzero/loopzero/api/internal/db"
 	"github.com/loopzero/loopzero/api/internal/manifests"
 	"github.com/loopzero/loopzero/api/internal/metrics"
-	"github.com/loopzero/loopzero/api/internal/routes"
+	"github.com/loopzero/loopzero/api/internal/domain"
 
 	"go.opentelemetry.io/otel"
 	"go.opentelemetry.io/otel/attribute"
@@ -21,9 +21,9 @@ import (
 
 // DomainProvisionerStore abstracts the domain persistence needed by the provisioner.
 type DomainProvisionerStore interface {
-	FindAndClaimVerified(ctx context.Context) ([]routes.CustomDomain, error)
-	FindRemoving(ctx context.Context) ([]routes.CustomDomain, error)
-	ListActiveByApp(ctx context.Context, tenantID, project, app, env string) ([]routes.CustomDomain, error)
+	FindAndClaimVerified(ctx context.Context) ([]domain.CustomDomain, error)
+	FindRemoving(ctx context.Context) ([]domain.CustomDomain, error)
+	ListActiveByApp(ctx context.Context, tenantID, project, app, env string) ([]domain.CustomDomain, error)
 	UpdateStatus(ctx context.Context, domain, status string) error
 	TransitionStatus(ctx context.Context, domain, expectedStatus, newStatus string) error
 	UpdateCFZoneStatus(ctx context.Context, domain, cfZoneStatus string) error
@@ -31,8 +31,8 @@ type DomainProvisionerStore interface {
 	Delete(ctx context.Context, domain string) error
 
 	// v2: CF Zone Management
-	FindPendingNS(ctx context.Context) ([]routes.CustomDomain, error)
-	FindNSActive(ctx context.Context) ([]routes.CustomDomain, error)
+	FindPendingNS(ctx context.Context) ([]domain.CustomDomain, error)
+	FindNSActive(ctx context.Context) ([]domain.CustomDomain, error)
 }
 
 // CFZoneStatusChecker checks CF zone activation status.
@@ -68,16 +68,18 @@ type DomainProvisioner struct {
 	baseDomain     string
 	registryURL    string
 	clusterIssuer  string // B14 (MEET-2026-04-23-058): required for manifest rendering
+	prometheusAddr string // argo-rollouts-progressive-delivery-plan T1.2 (D6)
 	interval       time.Duration
 	cfZone         CFZoneStatusChecker // nil = v1 only, non-nil = v2 CF Zone polling
 }
 
 // DomainProvisionerConfig holds configuration for the domain provisioner.
 type DomainProvisionerConfig struct {
-	Interval      time.Duration
-	BaseDomain    string
-	RegistryURL   string
-	ClusterIssuer string // B14: ClusterIssuer for Certificate CRs
+	Interval          time.Duration
+	BaseDomain        string
+	RegistryURL       string
+	ClusterIssuer     string // B14: ClusterIssuer for Certificate CRs
+	PrometheusAddress string // argo-rollouts-progressive-delivery-plan T1.2 (D6)
 }
 
 // DefaultDomainProvisionerConfig returns sensible defaults.
@@ -108,10 +110,11 @@ func NewDomainProvisioner(
 		gitops:        gitops,
 		locker:        locker,
 		logger:        logger,
-		baseDomain:    cfg.BaseDomain,
-		registryURL:   cfg.RegistryURL,
-		clusterIssuer: cfg.ClusterIssuer, // B14
-		interval:      interval,
+		baseDomain:     cfg.BaseDomain,
+		registryURL:    cfg.RegistryURL,
+		clusterIssuer:  cfg.ClusterIssuer, // B14
+		prometheusAddr: cfg.PrometheusAddress, // argo-rollouts-progressive-delivery-plan T1.2
+		interval:       interval,
 	}
 }
 
@@ -269,7 +272,7 @@ func (p *DomainProvisioner) processVerified(ctx context.Context) {
 // provisionDomain renders manifests with the custom domain and pushes to gitops.
 // F-002 fix: Lock (fetch + render) → Unlock → Push → Update status.
 // Pattern matches deploy flow in ContainerDeliveryActivator.
-func (p *DomainProvisioner) provisionDomain(ctx context.Context, d routes.CustomDomain) {
+func (p *DomainProvisioner) provisionDomain(ctx context.Context, d domain.CustomDomain) {
 	ctx, span := otel.Tracer("loopzero-api").Start(ctx, "loopzero.api.domain.provision",
 		trace.WithAttributes(
 			attribute.String("loopzero.tenant", d.TenantID),
@@ -312,6 +315,17 @@ func (p *DomainProvisioner) provisionDomain(ctx context.Context, d routes.Custom
 			return fmt.Errorf("build apps lookup failed: %w", err)
 		}
 
+		// CHG-2026-04-29-DOGFOOD iter 8 — manifest builder agora exige
+		// digest per-app (supply-chain VAP rejeita tag refs). Em domain
+		// provisioner único path disponível é release.ImageDigest, que
+		// é populado por phaseACreateRelease para Apps[0] apenas (per
+		// ADR-0014). Multi-app custom domains não emitidos aqui — fail
+		// explicit em vez de produzir manifest com imagem errada.
+		appDigests := make(map[string]string, len(apps))
+		if release.ImageDigest != nil && *release.ImageDigest != "" && len(apps) > 0 {
+			appDigests[apps[0].Name] = *release.ImageDigest
+		}
+
 		// F-010: shared manifest building function
 		manifestApps, err := BuildManifestApps(ctx, BuildManifestAppsInput{
 			RegistryURL: p.registryURL,
@@ -320,13 +334,16 @@ func (p *DomainProvisioner) provisionDomain(ctx context.Context, d routes.Custom
 			Environment: d.Environment,
 			CommitSHA:   build.CommitSHA,
 			Apps:        apps,
+			AppDigests:  appDigests,
 			DomainStore: p.store,
 		})
 		if err != nil {
 			return err
 		}
 
-		rendered = manifests.Render(manifests.RenderInput{
+		// Plan v1.2 T3.1 — propagate Render error inside the lock so the
+		// caller can fail the domain provisioning gracefully.
+		renderedYAML, renderErr := manifests.Render(manifests.RenderInput{
 			TenantID:          d.TenantID,
 			ProjectID:         d.ProjectName,
 			Environment:       d.Environment,
@@ -335,7 +352,14 @@ func (p *DomainProvisioner) provisionDomain(ctx context.Context, d routes.Custom
 			BaseDomain:        p.baseDomain,
 			ClusterIssuerName: p.clusterIssuer, // B14
 			Apps:              manifestApps,
+			// argo-rollouts-progressive-delivery-plan T1.2.
+			PrometheusAddress:   p.prometheusAddr,
+			ProgressiveDelivery: manifests.ProgressiveDeliveryEnabled(),
 		})
+		if renderErr != nil {
+			return fmt.Errorf("manifests.Render: %w", renderErr)
+		}
+		rendered = renderedYAML
 
 		pushOpts = GitOpsPushOpts{
 			TenantID:      d.TenantID,
@@ -401,7 +425,7 @@ func (p *DomainProvisioner) processRemoving(ctx context.Context) {
 
 // removeDomain re-renders manifests WITHOUT the removed domain, pushes to gitops,
 // then deletes the DB row. F-002 fix: uses withEnvironmentLock for render phase.
-func (p *DomainProvisioner) removeDomain(ctx context.Context, d routes.CustomDomain) {
+func (p *DomainProvisioner) removeDomain(ctx context.Context, d domain.CustomDomain) {
 	ctx, span := otel.Tracer("loopzero-api").Start(ctx, "loopzero.api.domain.remove",
 		trace.WithAttributes(
 			attribute.String("loopzero.tenant", d.TenantID),
@@ -439,6 +463,15 @@ func (p *DomainProvisioner) removeDomain(ctx context.Context, d routes.CustomDom
 			return fmt.Errorf("build apps lookup failed: %w", err)
 		}
 
+		// CHG-2026-04-29-DOGFOOD iter 8 — manifest builder agora exige
+		// digest per-app (supply-chain VAP rejeita tag refs). No remove
+		// flow vale a mesma restrição do provisionDomain: o digest vem
+		// de release.ImageDigest e cobre apenas Apps[0] (per ADR-0014).
+		appDigests := make(map[string]string, len(apps))
+		if release.ImageDigest != nil && *release.ImageDigest != "" && len(apps) > 0 {
+			appDigests[apps[0].Name] = *release.ImageDigest
+		}
+
 		// F-010: shared manifest building — excludes the domain being removed
 		manifestApps, err := BuildManifestApps(ctx, BuildManifestAppsInput{
 			RegistryURL:   p.registryURL,
@@ -447,6 +480,7 @@ func (p *DomainProvisioner) removeDomain(ctx context.Context, d routes.CustomDom
 			Environment:   d.Environment,
 			CommitSHA:     build.CommitSHA,
 			Apps:          apps,
+			AppDigests:    appDigests,
 			DomainStore:   p.store,
 			ExcludeDomain: d.Domain,
 		})
@@ -454,7 +488,8 @@ func (p *DomainProvisioner) removeDomain(ctx context.Context, d routes.CustomDom
 			return err
 		}
 
-		rendered := manifests.Render(manifests.RenderInput{
+		// Plan v1.2 T3.1 — propagate Render error from the domain-removal path.
+		rendered, renderErr := manifests.Render(manifests.RenderInput{
 			TenantID:          d.TenantID,
 			ProjectID:         d.ProjectName,
 			Environment:       d.Environment,
@@ -463,7 +498,13 @@ func (p *DomainProvisioner) removeDomain(ctx context.Context, d routes.CustomDom
 			BaseDomain:        p.baseDomain,
 			ClusterIssuerName: p.clusterIssuer, // B14
 			Apps:              manifestApps,
+			// argo-rollouts-progressive-delivery-plan T1.2.
+			PrometheusAddress:   p.prometheusAddr,
+			ProgressiveDelivery: manifests.ProgressiveDeliveryEnabled(),
 		})
+		if renderErr != nil {
+			return fmt.Errorf("manifests.Render (domain remove): %w", renderErr)
+		}
 
 		pushOpts = GitOpsPushOpts{
 			TenantID:      d.TenantID,

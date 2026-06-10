@@ -12,10 +12,13 @@ import (
 func buildDeployment(ri RenderInput, app AppManifestInput, port int) k8sDeployment {
 	ns := namespace(ri.TenantID, ri.Environment)
 	labels := commonLabels(ri, app)
+	resName := resourceName(ri.ProjectID, app.Name)
+	// Selector must use the project-scoped `app` label so two projects with
+	// an app of the same name never share pods (Achado #17).
 	selectorLabels := map[string]string{
-		"app":              app.Name,
-		"loopzero.io/tenant":   ri.TenantID,
-		"loopzero.io/project":  ri.ProjectID,
+		"app":             resName,
+		"loopzero.io/tenant":  ri.TenantID,
+		"loopzero.io/project": ri.ProjectID,
 	}
 
 	falseVal := false
@@ -95,8 +98,10 @@ func buildDeployment(ri RenderInput, app AppManifestInput, port int) k8sDeployme
 	//   - If scale-to-zero (KEDA): replicas = 0 (KEDA manages lifecycle)
 	//   - If autoscaling with MinReplicas >= 1: use minReplicas as baseline (HPA manages scaling)
 	//   - If explicit replicas configured, use that
-	//   - Otherwise default to 1
-	replicas := 1
+	//   - Otherwise default to 2 (HA — per /chaos-test C03 fix 2026-05-14;
+	//     single-replica tenant pods fail chaos C03 with 0% availability
+	//     during pod-kill chaos. To opt out set replicas: 1 in loopzero.yaml).
+	replicas := 2
 	if app.Autoscaling != nil {
 		if isScaleToZero(app.Autoscaling) {
 			replicas = 0
@@ -115,7 +120,7 @@ func buildDeployment(ri RenderInput, app AppManifestInput, port int) k8sDeployme
 		APIVersion: "apps/v1",
 		Kind:       "Deployment",
 		Metadata: k8sMetadata{
-			Name:      app.Name,
+			Name:      resName,
 			Namespace: ns,
 			Labels:    labels,
 			Annotations: map[string]string{
@@ -178,19 +183,28 @@ func buildHPA(ri RenderInput, app AppManifestInput) k8sHPA {
 		targetCPU = 80
 	}
 
+	resName := resourceName(ri.ProjectID, app.Name)
+	// argo-rollouts-progressive-delivery-plan T3.1 — Target Rollout when
+	// progressive delivery is enabled, Deployment otherwise (D8 fallback).
+	scaleAPIVersion := "apps/v1"
+	scaleKind := "Deployment"
+	if ri.ProgressiveDelivery {
+		scaleAPIVersion = "argoproj.io/v1alpha1"
+		scaleKind = "Rollout"
+	}
 	return k8sHPA{
 		APIVersion: "autoscaling/v2",
 		Kind:       "HorizontalPodAutoscaler",
 		Metadata: k8sMetadata{
-			Name:      app.Name,
+			Name:      resName,
 			Namespace: ns,
 			Labels:    labels,
 		},
 		Spec: k8sHPASpec{
 			ScaleTargetRef: k8sScaleTargetRef{
-				APIVersion: "apps/v1",
-				Kind:       "Deployment",
-				Name:       app.Name,
+				APIVersion: scaleAPIVersion,
+				Kind:       scaleKind,
+				Name:       resName,
 			},
 			MinReplicas: minR,
 			MaxReplicas: maxR,
@@ -228,16 +242,39 @@ func buildScaledObject(ri RenderInput, app AppManifestInput) kedaScaledObject {
 		cooldown = 300
 	}
 
+	resName := resourceName(ri.ProjectID, app.Name)
+
+	// argo-rollouts-progressive-delivery-plan T3.1 — KEDA ScaledObject must
+	// reference Rollout (kind+apiVersion) when progressive delivery is on.
+	// Without explicit kind, KEDA defaults to Deployment which doesn't exist
+	// in the progressive-delivery rendering.
+	scaleTarget := kedaScaleTargetRef{Name: resName}
+	if ri.ProgressiveDelivery {
+		scaleTarget.Kind = "Rollout"
+		scaleTarget.APIVersion = "argoproj.io/v1alpha1"
+	}
+
+	// EC-5 fix: when progressive delivery is on, ScaledObject takes ownership
+	// of HPA scaling AFTER the Rollout finishes its canary steps. The
+	// transfer-hpa-ownership annotation lets KEDA assume the HPA that Argo
+	// Rollouts creates internally for the Rollout, instead of generating a
+	// new conflicting HPA.
+	annotations := map[string]string{}
+	if ri.ProgressiveDelivery {
+		annotations["scaledobject.keda.sh/transfer-hpa-ownership"] = "true"
+	}
+
 	return kedaScaledObject{
 		APIVersion: "keda.sh/v1alpha1",
 		Kind:       "ScaledObject",
 		Metadata: k8sMetadata{
-			Name:      app.Name + "-scaledobject",
-			Namespace: namespace(ri.TenantID, ri.Environment),
-			Labels:    commonLabels(ri, app),
+			Name:        resName + "-scaledobject",
+			Namespace:   namespace(ri.TenantID, ri.Environment),
+			Labels:      commonLabels(ri, app),
+			Annotations: annotations,
 		},
 		Spec: kedaScaledObjectSpec{
-			ScaleTargetRef:  kedaScaleTargetRef{Name: app.Name},
+			ScaleTargetRef:  scaleTarget,
 			MinReplicaCount: 0,
 			MaxReplicaCount: maxR,
 			CooldownPeriod:  cooldown,
@@ -278,11 +315,21 @@ func buildHTTPScaledObject(ri RenderInput, app AppManifestInput) kedaHTTPScaledO
 		cooldown = 300
 	}
 
+	resName := resourceName(ri.ProjectID, app.Name)
+	// argo-rollouts-progressive-delivery-plan T3.1 / EC-1 — when progressive
+	// delivery is enabled, the canonical app Service no longer exists (replaced
+	// by -stable / -canary). HTTPScaledObject must point its Service field at
+	// the -stable Service so the interceptor proxies to running pods. The
+	// Name (Rollout target) stays the same.
+	serviceName := resName
+	if ri.ProgressiveDelivery {
+		serviceName = resName + "-stable"
+	}
 	return kedaHTTPScaledObject{
 		APIVersion: "http.keda.sh/v1alpha1",
 		Kind:       "HTTPScaledObject",
 		Metadata: k8sMetadata{
-			Name:      app.Name + "-httpso",
+			Name:      resName + "-httpso",
 			Namespace: namespace(ri.TenantID, ri.Environment),
 			Labels:    commonLabels(ri, app),
 		},
@@ -290,8 +337,8 @@ func buildHTTPScaledObject(ri RenderInput, app AppManifestInput) kedaHTTPScaledO
 			Hosts:                 hosts,
 			TargetPendingRequests: 100,
 			ScaleTargetRef: kedaHTTPScaleTargetRef{
-				Name:    app.Name,
-				Service: app.Name,
+				Name:    resName,
+				Service: serviceName,
 				Port:    port,
 			},
 			Replicas:        &kedaHTTPReplicas{Min: 0, Max: maxR},
@@ -304,8 +351,9 @@ func buildHTTPScaledObject(ri RenderInput, app AppManifestInput) kedaHTTPScaledO
 func buildPDB(ri RenderInput, app AppManifestInput) k8sPDB {
 	ns := namespace(ri.TenantID, ri.Environment)
 	labels := commonLabels(ri, app)
+	resName := resourceName(ri.ProjectID, app.Name)
 	selectorLabels := map[string]string{
-		"app":             app.Name,
+		"app":             resName,
 		"loopzero.io/tenant":  ri.TenantID,
 		"loopzero.io/project": ri.ProjectID,
 	}
@@ -314,7 +362,7 @@ func buildPDB(ri RenderInput, app AppManifestInput) k8sPDB {
 		APIVersion: "policy/v1",
 		Kind:       "PodDisruptionBudget",
 		Metadata: k8sMetadata{
-			Name:      app.Name + "-pdb",
+			Name:      resName + "-pdb",
 			Namespace: ns,
 			Labels:    labels,
 		},

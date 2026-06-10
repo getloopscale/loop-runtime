@@ -4,27 +4,21 @@
 package routes
 
 import (
-	"context"
 	"encoding/json"
 	"log/slog"
 	"net/http"
 
 	"github.com/go-chi/chi/v5"
+
+	"github.com/loopzero/loopzero/api/internal/domain"
 )
 
-// AttestationInfo describes the supply chain attestation for a build's releases.
-type AttestationInfo struct {
-	BuildID        string `json:"build_id"`
-	ImageDigest    string `json:"image_digest,omitempty"`
-	ImageSignature string `json:"image_signature,omitempty"`
-	SignedAt       string `json:"signed_at,omitempty"`
-	Signed         bool   `json:"signed"`
-}
-
-// AttestationStore is the minimal contract for reading attestation data.
-type AttestationStore interface {
-	GetBuildAttestation(ctx context.Context, buildID string) (*AttestationInfo, error)
-}
+// T1.3 of deep-review-remediation-plan (closes find_arch_001 partial):
+// canonical types live in domain/. Aliases preserve back-compat.
+type (
+	AttestationInfo  = domain.AttestationInfo
+	AttestationStore = domain.AttestationStore
+)
 
 // BuildAttestationHandler serves GET /api/v1/builds/:id/attestation.
 type BuildAttestationHandler struct {

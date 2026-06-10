@@ -10,6 +10,7 @@ import (
 	"time"
 
 	"github.com/loopzero/loopzero/api/internal/db"
+	"github.com/loopzero/loopzero/api/internal/domain"
 )
 
 // WorkflowStatus represents the external state of a build workflow.
@@ -55,8 +56,6 @@ type WorkflowSpec struct {
 	Namespace     string // Target namespace for the workflow (e.g., "build-acme")
 }
 
-// AppSpec describes a single app from loopzero.yaml as received from the CLI.
-// This is the raw input -- use NormalizeApp() to resolve into a fully populated AppUnit.
 // AppAutoscalingSpec holds HPA configuration from loopzero.yaml.
 type AppAutoscalingSpec struct {
 	MinReplicas    int `json:"min,omitempty"`
@@ -65,6 +64,8 @@ type AppAutoscalingSpec struct {
 	CooldownPeriod int `json:"cooldown,omitempty"` // Seconds before scale-to-zero (default: 300)
 }
 
+// AppSpec describes a single app from loopzero.yaml as received from the CLI.
+// This is the raw input -- use NormalizeApp() to resolve into a fully populated AppUnit.
 type AppSpec struct {
 	Name        string              `json:"name"`
 	Type        string              `json:"type"`                        // "server", "worker", "frontend"
@@ -138,14 +139,55 @@ type AppRelease struct {
 	SBOMS3Key          string `json:"sbom_s3_key,omitempty"`
 	SBOMFormat         string `json:"sbom_format,omitempty"`
 	SBOMComponentCount int    `json:"sbom_component_count,omitempty"`
+
+	// T2.1 of plan 2026-05-27-tenant-build-pipeline-gaps-closure
+	// (SLSA L3 SBOM-to-image attestation linking).
+	// Rekor entry URL produced by `cosign attest --predicate <sbom>` step.
+	// Empty when CosignAttestEnabled=false (default until Sigstore active)
+	// OR when attest step failed (build also fails per ADR D1 — no continueOn).
+	// Backed by nullable releases.image_attestation_rekor_url DB column
+	// (migration 000019 — forward-only per pre-release governance).
+	ImageAttestationRekorURL string `json:"image_attestation_rekor_url,omitempty"`
 }
 
 // SyncClient abstracts ArgoCD sync operations (DIP).
+//
+// Sprint B T1.1 (plan 2026-06-01-p2-interface-contracts-robustness, ADR D1):
+// interface widened from 2 to 6 methods. The 4 added methods were previously
+// invoked via duck-typed assertions in release_convergence_loop.go
+// (`r.sync_.(forceReconciler)` etc.). The L22 incident (commit 098b6846)
+// proved that duck typing silently fails when an outer wrapper omits the
+// delegation — assertion returns ok=false at runtime, becomes a no-op,
+// undetected at compile time. Declaring the methods on the interface
+// forces every wrapper (e.g. CircuitBreakerSyncClient) to satisfy the
+// full surface OR fail to compile.
+//
+// Every implementer MUST satisfy these 6 methods:
+//   - *argocd.SyncClient (production, api/internal/argocd/sync_client.go)
+//   - *CircuitBreakerSyncClient (production wrapper, pg_circuit_breaker.go)
+//   - test fakes in *_test.go
 type SyncClient interface {
 	TriggerSync(ctx context.Context, appName string) error
 	// WaitForSync polls until the ArgoCD Application is synced and the specified
 	// deployedApps are healthy. If deployedApps is empty, checks global Application health.
 	WaitForSync(ctx context.Context, appName string, timeout time.Duration, deployedApps []string) error
+	// ForceReconcile annotates the ArgoCD Application with refresh=hard, bypassing
+	// the controller workqueue. Used by ReleaseConvergenceLoop as L22 recovery
+	// when TriggerSync returns 200 but operationState never advances.
+	ForceReconcile(ctx context.Context, appName string) error
+	// GetSyncRevision returns the last commit SHA actually synced by ArgoCD
+	// (Application.status.sync.revision). Used to detect revision mismatch
+	// between a release.GitCommit and what ArgoCD just synced — guards against
+	// rapid sequential deploys activating the wrong release.
+	GetSyncRevision(ctx context.Context, appName string) (string, error)
+	// TerminateOperation kills an in-flight ArgoCD sync operation. Used as
+	// L21 recovery when the operation lock is stuck (SYNC_OPERATION_IN_PROGRESS
+	// repeated >=2 consecutive ticks) and on sync-timeout to free the next deploy.
+	TerminateOperation(ctx context.Context, appName string) error
+	// GetAppStatus returns (synced, healthy) without blocking. Used by the
+	// convergence loop's single-shot status poll (external polling cadence).
+	// If deployedApps is empty, returns global Application health.
+	GetAppStatus(ctx context.Context, appName string, deployedApps []string) (synced, healthy bool, err error)
 }
 
 // EnvironmentLocker abstracts the advisory lock acquisition (DIP for testability).
@@ -181,7 +223,6 @@ type BuildCallbackRequest struct {
 	Manifests string       `json:"manifests,omitempty"` // raw K8s YAML from generate-manifests step
 }
 
-// BuildOrchestratorDeps holds all dependencies for BuildOrchestrator.
 // ProjectEnsurer guarantees a project exists in the projects table.
 // Used by the deploy flow so that deleted-then-redeployed projects
 // reappear in `loopzero project list`.
@@ -200,6 +241,7 @@ type PlanCapChecker interface {
 	CheckReplicasValue(tenantID string, requested int) (allowed bool, plan string, limit int)
 }
 
+// BuildOrchestratorDeps holds all dependencies for BuildOrchestrator.
 type BuildOrchestratorDeps struct {
 	BuildStore     db.BuildStore
 	ReleaseStore   db.ReleaseStore
@@ -221,10 +263,21 @@ type BuildOrchestratorDeps struct {
 	PlanCap PlanCapChecker
 	// KEDAEnabled gates scale-to-zero (MinReplicas=0). When false, min:0 is rejected.
 	KEDAEnabled bool
+	// B40: ScalingResolver merges yaml AppSpecs with persisted scaling config
+	// (app_scaling_config). When non-nil, Submit calls Resolve before
+	// enforceScaling + BuildAppSpec persistence so DB rows take precedence
+	// (D1) and plan caps operate on resolved config (MEET-2026-04-23-059
+	// Constraint 6). Nil = disabled (yaml-only — backward-compat).
+	ScalingResolver ScalingResolver
 	// Sprint 6 / T3.1: per-app attestation store. When non-nil, the
 	// container delivery activator persists per-app signature + SBOM
 	// metadata to release_app_attestations.
 	AppAttestationStore db.AppAttestationStore
+	// AuditLogger persists supply-chain audit events. When non-nil and
+	// the build callback reports SUCCEEDED, the orchestrator emits one
+	// `image.signed` audit entry per app with a cosign signature
+	// (T1.2 mitigation #3 of MEET-2026-05-12). Nil-safe.
+	AuditLogger domain.AuditLogger
 }
 
 // BuildOrchestrator orchestrates the entire deploy flow:
@@ -255,8 +308,10 @@ type BuildOrchestrator struct {
 	argocdSyncTimeout time.Duration
 	kvClient          StaticRoutingClient // CF KV client for static frontend routing
 	baseDomain        string
-	planCap           PlanCapChecker // B15: nil = enforcement disabled
-	kedaEnabled       bool           // gates scale-to-zero (min=0)
+	planCap           PlanCapChecker  // B15: nil = enforcement disabled
+	kedaEnabled       bool            // gates scale-to-zero (min=0)
+	scalingResolver   ScalingResolver // B40: nil = yaml-only (backward-compat)
+	auditLogger       domain.AuditLogger // T1.2 mitigation #3: per-sign cosign audit
 }
 
 // defaultArgocdSyncTimeout is used when no timeout is configured.
@@ -308,7 +363,30 @@ func NewBuildOrchestrator(deps BuildOrchestratorDeps) *BuildOrchestrator {
 		baseDomain:        deps.BaseDomain,
 		planCap:           deps.PlanCap, // B15: optional plan-cap enforcement
 		kedaEnabled:       deps.KEDAEnabled,
+		scalingResolver:   deps.ScalingResolver, // B40: nil-safe (resolveScaling handles)
+		auditLogger:       deps.AuditLogger,     // T1.2 mitigation #3: nil = no-op
 	}
+}
+
+// resolveScaling delegates to scalingResolver when wired; otherwise returns
+// apps unchanged. This nil-safe accessor keeps existing tests working without
+// requiring the resolver to be set (backward-compat per T1.2 Deep Dives).
+//
+// Per D1: when DB row exists, it overrides yaml; when absent, yaml preserved.
+// Race condition (T2.1 Deep Dive): resolve runs inside the submit transaction.
+// A concurrent `loopzero scale` Upsert running between resolve start and tx commit
+// produces a stale BuildAppSpec snapshot — acceptable per eventual consistency
+// (next deploy picks up the newer state). The serializable isolation level
+// guarantees no torn reads within this transaction.
+func (o *BuildOrchestrator) resolveScaling(
+	ctx context.Context,
+	tenantID, projectID, environment string,
+	apps []AppSpec,
+) ([]AppSpec, error) {
+	if o.scalingResolver == nil {
+		return apps, nil
+	}
+	return o.scalingResolver.Resolve(ctx, tenantID, projectID, environment, apps)
 }
 
 // FindReleaseForBuild returns the most recent release for a build, or nil if none exists.

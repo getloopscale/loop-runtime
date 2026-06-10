@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: Apache-2.0
 // Copyright 2025-2026 The LoopZero Authors
 
-import * as fs from 'fs';
+import { promises as fsPromises } from 'fs';
 import * as path from 'path';
 import { ApiError } from '../api/client';
 import { UPLOAD_TIMEOUT_MS } from '../config/constants';
@@ -14,32 +14,46 @@ export interface UploadResult {
 /**
  * Create a Blob from a file by reading it into memory.
  *
- * readFileSync is used instead of openAsBlob (Node 20.8+ streaming)
- * because openAsBlob's lazy file handle can cause intermittent
- * multipart upload failures (422) when the file handle becomes
- * unavailable during fetch. Git bundles are bounded by MAX_BUNDLE_SIZE_BYTES
- * (500MB), which is within memory limits for modern systems.
+ * Plan v1.2 T5.2 (M5) — uses await fs.promises.readFile so the event loop
+ * is not blocked while large bundles (up to MAX_BUNDLE_SIZE_BYTES, 500MB)
+ * are loaded. openAsBlob (Node 20.8+ streaming) is intentionally still
+ * avoided because its lazy file handle can cause intermittent multipart
+ * upload failures (422) when the file handle becomes unavailable during
+ * fetch. Plan v1.2 T5.3 audited this on Node 22 and the upstream issue is
+ * still open as of 2026-06-06 — keep the buffered approach until the
+ * Node bug is fixed.
  */
-function fileBlob(filePath: string, contentType: string): Blob {
-  const data = fs.readFileSync(filePath);
+async function fileBlob(filePath: string, contentType: string): Promise<Blob> {
+  const data = await fsPromises.readFile(filePath);
   return new Blob([data], { type: contentType });
 }
 
+/**
+ * Plan B v3.1 T-B.3 (2026-06-05) — `loopzeroYamlPath` parameter renamed to
+ * `servicesJsonPath`; multipart form field `loopzero_yaml` renamed to
+ * `services_json` per ADR D4. Caller passes the path to the
+ * `.loopzero/services.json` emitted by `loopzerokit build` (Plan A v2.2 thin
+ * adapter). API-side payload inspection (per blueprint v2 D8) keeps
+ * legacy `loopzero_yaml` field rejected with actionable E-009 error during
+ * the transition window.
+ */
 export async function uploadSource(
   baseURL: string,
   token: string | null,
   bundlePath: string,
-  loopzeroYamlPath: string,
+  servicesJsonPath: string,
 ): Promise<UploadResult> {
-  const bundleBlob = fileBlob(bundlePath, 'application/octet-stream');
-
-  // loopzero.yaml is always small — readFileSync is fine
-  const loopzeroYamlContent = fs.readFileSync(loopzeroYamlPath, 'utf-8');
-  const yamlBlob = new Blob([loopzeroYamlContent], { type: 'text/yaml' });
+  // Plan v1.2 EC-5 (multipart field order): services_json MUST be appended
+  // BEFORE bundle. Node's fetch + FormData preserves insertion order; the
+  // API parses via ParseMultipartForm which is technically order-agnostic
+  // but downstream debuggers + ADR D9 wire spec rely on this convention.
+  const servicesJsonContent = await fsPromises.readFile(servicesJsonPath, 'utf-8');
+  const jsonBlob = new Blob([servicesJsonContent], { type: 'application/json' });
+  const bundleBlob = await fileBlob(bundlePath, 'application/octet-stream');
 
   const formData = new FormData();
+  formData.append('services_json', jsonBlob, 'services.json');
   formData.append('bundle', bundleBlob, path.basename(bundlePath));
-  formData.append('loopzero_yaml', yamlBlob, 'loopzero.yaml');
 
   const headers: Record<string, string> = {};
   if (token) {
@@ -60,10 +74,13 @@ export async function uploadSource(
       (err instanceof Error && err.name === 'TimeoutError');
 
     if (isTimeout) {
+      // Plan v1.2 T5.1 — preserve cause chain so LOOPZERO_DEBUG can surface it.
       throw new ApiError(
         'Upload timed out. Check your connection and try again.',
         3,
         0,
+        'UPLOAD_TIMEOUT',
+        err,
       );
     }
 
@@ -81,6 +98,8 @@ export async function uploadSource(
         'Could not reach the server. Check your connection and try again.',
         3,
         0,
+        'CONNECTION_REFUSED',
+        err,
       );
     }
 
@@ -88,6 +107,8 @@ export async function uploadSource(
       'Upload failed. Check your connection and try again.',
       3,
       0,
+      'UPLOAD_FAILED',
+      err,
     );
   }
 

@@ -37,7 +37,6 @@ spec:
               This was the leading indicator of bug #44 (c=30 saturation).
               Expected: HPA scales up gitea replicas. If HPA at max,
               either bump maxReplicas or investigate DB/Redis backend.
-              Runbook: docs/runbooks/alerts/gitea-auth-latency-high.md
 
         # Alert 2: Argo workflow 403 rate — ResourceQuota exceeded
         # (bug #41). Cell is saturated at current quota; either bump

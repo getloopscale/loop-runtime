@@ -126,5 +126,5 @@ const (
 const (
 	// DORegistryCredentialsURL is the DigitalOcean API endpoint for generating
 	// Docker registry credentials. The expiry_seconds parameter is appended dynamically.
-	DORegistryCredentialsURL = "https://api.digitalocean.com/v2/registry/docker-credentials"
+	DORegistryCredentialsURL = "https://api.digitalocean.com/v2/registry/docker-credentials" //nolint:gosec // G101 false positive: API endpoint URL, not credential value
 )

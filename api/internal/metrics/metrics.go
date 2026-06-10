@@ -141,6 +141,24 @@ var (
 		Name: "loopzero_argocd_auth_failures_total",
 		Help: "Total ArgoCD authentication failures (401/403). Indicates invalid or expired token.",
 	})
+
+	// ArgoCDTokenAgeSeconds is the age in seconds of the currently active
+	// ArgoCD API token used by loopzero-api. -1 sentinel = unknown / no token
+	// minted yet. Self-healing token provider exposes this so Prometheus
+	// can alert on tokens that aren't being rotated as expected.
+	// CHG-2026-04-30-DOGFOOD-LOCAL-HEAL NEW-15.
+	ArgoCDTokenAgeSeconds = promauto.NewGauge(prometheus.GaugeOpts{
+		Name: "loopzero_argocd_token_age_seconds",
+		Help: "Seconds since the active ArgoCD API token was last minted by KubeMintingTokenProvider. -1 = unknown.",
+	})
+
+	// ArgoCDTokenRefreshesTotal counts token mint attempts by trigger and
+	// outcome. trigger ∈ {startup, startup_empty, proactive, proactive_empty,
+	// auth_failure, manual}. outcome ∈ {success, error, skipped}.
+	ArgoCDTokenRefreshesTotal = promauto.NewCounterVec(prometheus.CounterOpts{
+		Name: "loopzero_argocd_token_refreshes_total",
+		Help: "Total ArgoCD token mint attempts. Labels: trigger (proactive|auth_failure|...), outcome (success|error|skipped).",
+	}, []string{"trigger", "outcome"})
 )
 
 // Lock contention metrics — emitted by withEnvironmentLock.
@@ -313,6 +331,78 @@ var (
 		Name: "loopzero_orphaned_tenants",
 		Help: "Number of tenants assigned to cells not currently discovered by the router.",
 	})
+
+	// CellRoutingDecisions tracks every decision made by DynamicRouter.Resolve()
+	// labelled by cell + outcome. CHG-2026-04-30-INFRA-NORMALIZE / Phase 5
+	// T5.4 (ADR D6 mandate: observability BEFORE feature ships) +
+	// MEET-INFRA-NORMALIZE-T3-multi-cell condition C19 (cell-unavailable
+	// handled deterministically, returns 503 not 500).
+	//
+	// Decision values:
+	//   "assigned"   — cell found, request routed normally
+	//   "fallback"   — primary cell unavailable, default-cell substituted
+	//   "error"      — cell_id empty or unknown, no fallback possible
+	//
+	// Alert MultiCellRouterErrorRate fires when
+	// rate(loopzero_cell_routing_decisions_total{decision="error"}[5m]) > 0.01.
+	CellRoutingDecisions = promauto.NewCounterVec(prometheus.CounterOpts{
+		Name: "loopzero_cell_routing_decisions_total",
+		Help: "Routing decisions made by DynamicRouter, labelled by cell + outcome (assigned|fallback|error).",
+	}, []string{"cell", "decision"})
+
+	// CellHealth is 1 if the cell's ClusterCredential reports
+	// status.connected=true AND its kubeconfig responds to a probe within
+	// the refresh interval, else 0. Aggregates the connectivity SoT (CC
+	// CRD) into a single boolean for alerting.
+	//
+	// Alert CellUnhealthy fires when loopzero_cell_health == 0 for any cell
+	// for 2 consecutive minutes. Pages on-call.
+	CellHealth = promauto.NewGaugeVec(prometheus.GaugeOpts{
+		Name: "loopzero_cell_health",
+		Help: "1 if cell's ClusterCredential is connected and reachable, 0 otherwise.",
+	}, []string{"cell"})
+
+	// CellCapacityPods tracks the number of pods (across all tenant
+	// namespaces) currently scheduled on each cell. Feeds capacity
+	// planning + the `cells.capacity_tenants_max` gate (when consumer
+	// in placement layer ships, T5.5 follow-up). Updated by a periodic
+	// collector (planned: every 60s, mirroring CellDiscoveryCount).
+	CellCapacityPods = promauto.NewGaugeVec(prometheus.GaugeOpts{
+		Name: "loopzero_cell_capacity_pods",
+		Help: "Number of pods currently scheduled on each cell (sum across tenant namespaces).",
+	}, []string{"cell"})
+
+	// ClusterCredentialStatus mirrors ClusterCredential CR
+	// status.connected as a per-cell gauge. Lets alerts trigger on
+	// connectivity flapping without polling K8s API directly. Audit
+	// T0.1 action item A5.
+	//
+	// Distinct from CellHealth: this is the RAW CC status; CellHealth
+	// adds active probing (a CC may report connected=true but the API
+	// server became unreachable in the last 60s).
+	ClusterCredentialStatus = promauto.NewGaugeVec(prometheus.GaugeOpts{
+		Name: "loopzero_cluster_credential_status",
+		Help: "1 if ClusterCredential.status.connected=true, 0 otherwise. Per-cell.",
+	}, []string{"cell", "connected"})
+
+	// PulumiArchivesTotal tracks the number of Pulumi state archives
+	// in s3://loopzero-archive/pulumi-state/. CHG-2026-04-30-INFRA-NORMALIZE
+	// Phase 3 condition C20. Updated by the quarterly archive scan
+	// (.github/workflows/pulumi-archive.yml). Alert
+	// PulumiArchiveStaleness fires when no archive in 90d.
+	PulumiArchivesTotal = promauto.NewGauge(prometheus.GaugeOpts{
+		Name: "loopzero_pulumi_archives_total",
+		Help: "Number of Pulumi state archives currently in S3 (loopzero-archive/pulumi-state/).",
+	})
+
+	// PulumiStacksTotal tracks the number of live Pulumi stacks across
+	// the canonical project. C20 + monitors paralelas-stack
+	// re-introduction (any stack outside the canonical name set →
+	// PulumiOrphanStackDetected alert).
+	PulumiStacksTotal = promauto.NewGauge(prometheus.GaugeOpts{
+		Name: "loopzero_pulumi_stacks_total",
+		Help: "Number of live Pulumi stacks in the canonical project (loopzero-infra).",
+	})
 )
 
 // Leader election metrics — MEET-2026-04-04-029 P1.
@@ -355,10 +445,16 @@ var (
 		Buckets: []float64{10, 30, 60, 120, 300, 600},
 	}, []string{"result"})
 
+	// Cardinality cap (audit gap M08 #19): the `tenant` label was removed
+	// to bound series count at N (domains) instead of N×M (domains×tenants).
+	// Tenant attribution remains forensically recoverable by joining on
+	// `loopzero_custom_domains_total{tenant=...}` or querying audit_log by
+	// domain. Operators that previously consumed `tenant` in alert
+	// descriptions are migrated below to reference the audit trail.
 	DomainTLSExpiryDays = promauto.NewGaugeVec(prometheus.GaugeOpts{
 		Name: "loopzero_domain_tls_expiry_days",
 		Help: "Days until TLS certificate expires for a custom domain.",
-	}, []string{"domain", "tenant"})
+	}, []string{"domain"})
 
 	DomainVerificationFailures = promauto.NewCounterVec(prometheus.CounterOpts{
 		Name: "loopzero_domain_verification_failures_total",
@@ -514,4 +610,94 @@ var (
 		Name: "loopzero_retry_amplification_total",
 		Help: "Total retry attempts by operation type.",
 	}, []string{"operation"})
+
+	// SecretExternalSecretTotal counts ExternalSecret CR create/update calls
+	// from SecretK8sManager (workload-cluster path).
+	//
+	// dogfood-2026-05-08-fixes T2.3 (F-2 instrumentation, ADR D3).
+	//
+	// Cardinality: ONLY label is `result` ∈ {success, fail, skip} — 3 series
+	// total. NO tenant label (would be unbounded with N tenants); per EC-3
+	// of the edge-case review.
+	//
+	// Use:
+	//   - "success" — ExternalSecret CR created or updated successfully
+	//   - "fail" — runtime client returned error (RBAC, network, etc.)
+	//   - "skip" — manager nil at boot (RUNTIME_KUBECONFIG missing) so the
+	//     entire path was bypassed. THIS IS THE INVISIBLE-FAILURE SIGNAL
+	//     that F-2 was originally caused by.
+	//
+	// Alert opportunity: rate(loopzero_secret_externalsecret_total{result="skip"}[5m]) > 0
+	// indicates the API silently no-ops `loopzero secret set` calls.
+	SecretExternalSecretTotal = promauto.NewCounterVec(prometheus.CounterOpts{
+		Name: "loopzero_secret_externalsecret_total",
+		Help: "ExternalSecret CR create/update outcomes from loopzero-api workload sync path.",
+	}, []string{"result"})
+
+	// WorkqueueTerminalWriteFailTotal counts cases where the workqueue
+	// consumer's terminal-state write (Complete or Fail) FAILED — the
+	// underlying DB INSERT/UPDATE returned error. Without this metric,
+	// such failures are silent: handler.Complete fails → item stays
+	// InFlight → re-dequeued → handler runs twice → duplicate side-effects.
+	//
+	// T1.7 of deep-review-remediation-plan (closes find_workqueue_silent_db_errors HIGH).
+	//
+	// Label `terminal` ∈ {complete, fail} indicates which path failed:
+	//   - "complete" — successful handler followed by FAILED Complete write
+	//                  (most dangerous: leads to duplicate handler invocation)
+	//   - "fail"     — failed handler followed by FAILED Fail write
+	//                  (orphan rows accumulate in workqueue table)
+	//
+	// Alert opportunity: sum(rate(loopzero_workqueue_terminal_write_fail_total[5m])) > 0
+	// indicates the queue is in an at-least-once-becomes-at-most-once degenerate
+	// state and operators should investigate immediately.
+	WorkqueueTerminalWriteFailTotal = promauto.NewCounterVec(prometheus.CounterOpts{
+		Name: "loopzero_workqueue_terminal_write_fail_total",
+		Help: "Workqueue consumer terminal-state DB write failures (Complete/Fail).",
+	}, []string{"terminal"})
+
+	// CellPinnerCRPatchFailTotal counts CellPinner.Pin operations where the
+	// PostgreSQL UPDATE on tenants.cell_id succeeded but the subsequent
+	// Tenant CR MergePatch FAILED. Result: DB and CR diverged. The operator
+	// reads tenant.Spec.CellID from the CR (not the DB) for new
+	// EnvironmentReconciler operations, so until the CR is patched manually
+	// the tenant's new environments land on the OLD cell.
+	//
+	// T1.5 of deep-review-remediation-plan (closes find_arch_005 MEDIUM).
+	//
+	// Alert opportunity: any non-zero rate over 5min indicates divergence.
+	CellPinnerCRPatchFailTotal = promauto.NewCounter(prometheus.CounterOpts{
+		Name: "loopzero_cell_pinner_cr_patch_fail_total",
+		Help: "CellPinner DB-updated-but-CR-patch-failed events (DB↔CR divergence window).",
+	})
+
+	// ReleaseAppAttestationSaveFailTotal counts failures to persist per-app
+	// attestation rows during ContainerDelivery.handle. The release proceeds
+	// (best-effort), but the cosign + SBOM provenance is missing from the DB
+	// for the affected release. Operators need this signal to detect a
+	// regression in the attestation pipeline; previously the error was
+	// discarded by `_ = saveErr` (find_code_005 / CODE-005 MEDIUM).
+	//
+	// T6.5 of deep-review-remediation-plan.
+	ReleaseAppAttestationSaveFailTotal = promauto.NewCounterVec(prometheus.CounterOpts{
+		Name: "loopzero_release_attestation_save_fail_total",
+		Help: "Per-app attestation persistence failures during release container delivery.",
+	}, []string{"environment"})
+
+	// AuditLogPrunerDeletedTotal counts the audit_log rows the retention pruner
+	// has DELETEd since process start. T7.3 of deep-review-remediation-plan +
+	// ADR-0047. Use rate() to derive prunes/sec; sum() over scrape window to
+	// see total volume. Healthy state: trend in flat steps every nightly run.
+	AuditLogPrunerDeletedTotal = promauto.NewCounter(prometheus.CounterOpts{
+		Name: "loopzero_audit_log_pruner_deleted_total",
+		Help: "audit_log rows deleted by the retention pruner (1-year window per ADR-0047).",
+	})
+
+	// AuditLogPrunerFailTotal counts pruner runs that errored during a batch
+	// (DB error, missing trigger bypass var, deadlock). Alert opportunity:
+	//   increase(loopzero_audit_log_pruner_fail_total[24h]) > 0
+	AuditLogPrunerFailTotal = promauto.NewCounter(prometheus.CounterOpts{
+		Name: "loopzero_audit_log_pruner_fail_total",
+		Help: "audit_log pruner run failures (per batch).",
+	})
 )

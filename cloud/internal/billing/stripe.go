@@ -115,10 +115,16 @@ func (c *StripeClient) CreateCheckoutSession(customerID, priceID, successURL, ca
 		"cancel_url":               {cancelURL},
 	}
 
-	// Scoped to a 1-hour window: prevents duplicate sessions from rapid double-clicks
-	// but allows retry after a canceled/expired session (new hour = new key).
-	hourBucket := time.Now().UTC().Truncate(time.Hour).Unix()
-	idempotencyKey := fmt.Sprintf("checkout-%s-%s-%d", tenantID, priceID, hourBucket)
+	// Scoped to a 60-second window: protects double-click (sequential POST latency
+	// is sub-second) without trapping retries after a session is paid/canceled/
+	// expired. A 1-hour bucket would silently return the cached URL for an entire
+	// hour after first creation — Stripe Idempotency-Key responses are cached for
+	// 24h, so the first call's response is replayed even if the user already paid
+	// or canceled that session in the meantime. Multiple Checkout sessions never
+	// generate duplicate charges (Stripe only charges on payment), so coarser
+	// windows offer no protection in exchange for blocking legitimate retries.
+	minuteBucket := time.Now().UTC().Truncate(time.Minute).Unix()
+	idempotencyKey := fmt.Sprintf("checkout-%s-%s-%d", tenantID, priceID, minuteBucket)
 
 	var session CheckoutSession
 	if err := c.post("/checkout/sessions", data, &session, idempotencyKey); err != nil {
@@ -150,7 +156,11 @@ func (c *StripeClient) ReportUsage(subscriptionItemID string, quantity int64, ti
 	}
 
 	path := fmt.Sprintf("/subscription_items/%s/usage_records", subscriptionItemID)
-	return c.post(path, data, nil, "")
+	// Deterministic idempotency key: a given (subscription item, period) increment
+	// is applied at most once even if the reporter retries (e.g., on a transient
+	// network error or a multi-replica re-run). Stripe dedupes server-side.
+	idempotencyKey := fmt.Sprintf("usage-%s-%d", subscriptionItemID, timestamp)
+	return c.post(path, data, nil, idempotencyKey)
 }
 
 func (c *StripeClient) post(path string, data url.Values, result interface{}, idempotencyKey string) error {
@@ -168,7 +178,7 @@ func (c *StripeClient) post(path string, data url.Values, result interface{}, id
 	if err != nil {
 		return err
 	}
-	defer resp.Body.Close()
+	defer func() { _ = resp.Body.Close() }()
 
 	body, _ := io.ReadAll(resp.Body)
 	if resp.StatusCode >= 400 {

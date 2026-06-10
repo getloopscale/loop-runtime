@@ -1,0 +1,129 @@
+# Platform Operator — manages ClusterCredential, GitRepositoryBinding, PlatformBootstrap CRDs
+# Split from monolithic operator-deployment.yaml for independent scaling and faster dev loops.
+---
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: platform-operator
+  namespace: loopzero-system
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: platform-operator
+rules:
+  # --- LoopZero CRDs: ClusterCredential, GitRepositoryBinding, PlatformBootstrap lifecycle ---
+  - apiGroups: ["loopzero.io"]
+    resources: ["clustercredentials", "gitrepositorybindings", "platformbootstraps"]
+    verbs: ["get", "list", "watch", "create", "update", "patch", "delete"]
+  - apiGroups: ["loopzero.io"]
+    resources: ["clustercredentials/status", "gitrepositorybindings/status", "platformbootstraps/status"]
+    verbs: ["get", "update", "patch"]
+  - apiGroups: ["loopzero.io"]
+    resources: ["clustercredentials/finalizers", "gitrepositorybindings/finalizers", "platformbootstraps/finalizers"]
+    verbs: ["update"]
+
+  # --- Secrets: full CRUD for ArgoCD cluster secrets and credential management ---
+  - apiGroups: [""]
+    resources: ["secrets"]
+    verbs: ["get", "list", "watch", "create", "update", "patch", "delete"]
+
+  # --- Events: emit Kubernetes events for observability ---
+  - apiGroups: [""]
+    resources: ["events"]
+    verbs: ["create"]
+
+  # --- Leader election: coordination lease ---
+  - apiGroups: ["coordination.k8s.io"]
+    resources: ["leases"]
+    verbs: ["get", "list", "watch", "create", "update", "patch", "delete"]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRoleBinding
+metadata:
+  name: platform-operator
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: ClusterRole
+  name: platform-operator
+subjects:
+  - kind: ServiceAccount
+    name: platform-operator
+    namespace: loopzero-system
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: platform-operator
+  namespace: loopzero-system
+  labels:
+    app: platform-operator
+    app.kubernetes.io/component: loopzero-operator
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: platform-operator
+      app.kubernetes.io/component: loopzero-operator
+  template:
+    metadata:
+      labels:
+        app: platform-operator
+        app.kubernetes.io/component: loopzero-operator
+    spec:
+      serviceAccountName: platform-operator
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 1000
+        fsGroup: 1000
+      containers:
+        - name: operator
+          image: loopzero-platform-operator
+          args:
+            - "--leader-elect=false"
+            - "--health-probe-bind-address=:8081"
+            - "--metrics-bind-address=:8080"
+          env:
+            - name: ARGOCD_NAMESPACE
+              value: "argocd"
+          ports:
+            - containerPort: 8081
+              name: health
+              protocol: TCP
+            - containerPort: 8080
+              name: metrics
+              protocol: TCP
+          readinessProbe:
+            httpGet:
+              path: /readyz
+              port: 8081
+            initialDelaySeconds: 5
+            periodSeconds: 5
+          livenessProbe:
+            httpGet:
+              path: /healthz
+              port: 8081
+            initialDelaySeconds: 10
+            periodSeconds: 10
+          resources:
+            limits:
+              cpu: "200m"
+              memory: "128Mi"
+            requests:
+              cpu: "50m"
+              memory: "32Mi"
+          volumeMounts:
+            - name: tmp
+              mountPath: /tmp
+          securityContext:
+            runAsNonRoot: true
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+            capabilities:
+              drop:
+                - ALL
+            seccompProfile:
+              type: RuntimeDefault
+      volumes:
+        - name: tmp
+          emptyDir: {}

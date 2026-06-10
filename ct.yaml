@@ -1,0 +1,28 @@
+# chart-testing config — Phase 3 of charts-sota-implementation-plan + ADR-0039.
+# Tests Helm charts via `ct lint` + `ct install` against a Kind cluster matrix.
+
+chart-dirs:
+  - charts
+
+# Repos required by published charts (loopzero-* charts depend on loopzero-common file://).
+chart-repos: []
+
+# Test values overlay (optional).
+test-values: []
+
+# K8s version matrix — ADR-0039 N-1, N, N+1 cobre janela DOKS upgrade.
+# DOKS production: 1.32.13. Update cadence: each K8s upstream release.
+kubernetes-versions:
+  - v1.30.0
+  - v1.31.0
+  - v1.32.0
+
+validate-maintainers: true
+check-version-increment: true
+validate-chart-schema: true
+
+# Helm install timeout (some charts need CRDs ready before install).
+helm-extra-args: --timeout 600s
+
+# Skip-clean-up false: clean up test namespaces after each install.
+debug: false

@@ -1,0 +1,182 @@
+# Ory Hydra — OAuth2 Server for LoopZero Cloud
+# Chart: ory/hydra v0.59.0 (app: Hydra v2.3.0)
+#
+# LOCAL DEV ONLY — production overrides via Pulumi secrets.
+# DSN and secrets are overridden by Pulumi in DigitalOcean environments.
+
+hydra:
+  automigration:
+    enabled: true
+    type: initContainer
+
+  # LOCAL DEV ONLY — enables HTTP issuer URLs (production requires HTTPS).
+  # Production overrides via Pulumi set real HTTPS issuer and remove --dev.
+  dev: true
+
+  config:
+    # T1.3 (plan 2026-05-21-deep-review-remediation): DSN templated via helmfile
+    # env. LOOPZERO_DB_PASSWORD required (set by task setup OR generate-secrets.sh).
+    # Pulumi prod overrides this entire DSN via Secret reference.
+    # EC-02 of plan 2026-05-22 v1.1 — single-quoted YAML allows unescaped
+    # double quotes inside gotmpl template literal. Previous `"..."` form
+    # with `\"` escape failed helmfile template render with
+    # `unexpected "\\" in operand`. Cleanroom bug discovered 2026-05-21.
+    dsn: 'postgres://loopzero:{{ requiredEnv "LOOPZERO_DB_PASSWORD" }}@postgresql.loopzero-system.svc.cluster.local:5432/hydra?sslmode=disable'
+
+    # --- URLs ---
+    urls:
+      self:
+        # Plan 2026-05-19-drill-skills-rigor-restoration T2.1 PROD-PARITY fix:
+        # Previous default was "http://localhost:4444/" with comment "production
+        # overridden by Pulumi" — BUT Pulumi NEVER overrode (verified via grep
+        # across infra/pulumi*/). PROD Hydra was emitting JWT with iss=localhost
+        # which couldn't match anything real, breaking JWT validation system-wide
+        # had any prod canary actually exercised the flow end-to-end (was
+        # mascarado por Bug #24 no drill, nunca testado em prod). Cross-namespace
+        # FQDN: Hydra em loopzero-auth ns, loopzero-api em loopzero-system ns, ambos
+        # resolvem via cluster.local. Works for local k3d (CoreDNS) + drill
+        # (DOKS) + prod (DOKS). Single source of truth — overlays env-specific
+        # apenas para casos especiais (e.g., external HTTPS gateway).
+        issuer: "http://ory-hydra-public.loopzero-auth.svc.cluster.local:4444/"
+      # Plan 2026-05-19-drill-skills-rigor-restoration T2.1 — KNOWN GAP:
+      # login/consent/logout URLs apontam para localhost:4455 (k3d port-forward
+      # do Kratos UI) — funciona LOCAL apenas. Em drill/prod NÃO existe Ingress
+      # para Kratos UI atualmente (verificado via kubectl get ingressroute -A em
+      # drill 2026-05-19), então OAuth auth-code flow (browser redirect) NÃO
+      # FUNCIONA em drill/prod. Para dogfood-drill que usa client_credentials
+      # grant (machine-to-machine, sem browser), este gap é IRRELEVANTE.
+      # Para customer-facing OAuth flow: criar IngressRoute para Kratos UI +
+      # override estes URLs em values-hydra-{drill,prod}.yaml.gotmpl com FQDN
+      # público HTTPS (e.g., https://auth.loopzero-drill.example/login). Fix
+      # documentado como follow-up gap (não bloqueia dogfood-drill).
+      login: "{{ .Values.uiBaseUrl | default "http://localhost:4455" }}/login"
+      consent: "{{ .Values.uiBaseUrl | default "http://localhost:4455" }}/consent"
+      logout: "{{ .Values.uiBaseUrl | default "http://localhost:4455" }}/logout"
+      # Plan 2026-06-05-dashboard-journey-j05-device-success T2.1 D1:
+      # Device flow consent redirect — browser termina em dashboard custom.
+      # FIX 2026-06-07: Hydra v26.2.0 schema rejects `post_device_done_url`
+      # (additionalProperties not allowed). Commenting out until either Hydra
+      # version downgraded OR chart updated to use the canonical field name
+      # (e.g. `device_success_url` or similar). Device flow will use Hydra
+      # default redirect until this is reconciled.
+      # post_device_done_url: "{{ trimSuffix "/" (.Values.uiBaseUrl | default "http://localhost:4455") }}/device-success"
+
+    # --- OAuth2 ---
+    oauth2:
+      expose_internal_errors: false
+
+    # --- Serve ---
+    serve:
+      public:
+        cors:
+          enabled: true
+          # Plan v1.2 T2.3 / D4 — CORS origins. uiBaseUrl is the auth UI
+          # (Kratos), dashboardOrigin is the LoopZero dashboard (local port 3000
+          # in dev; same host as uiBaseUrl in drill/prod). Env files override
+          # both per environment.
+          allowed_origins:
+            - "{{ .Values.uiBaseUrl | default "http://localhost:4455" }}"
+            - "{{ .Values.dashboardOrigin | default "http://localhost:3000" }}"
+          allowed_methods:
+            - GET
+            - POST
+            - PUT
+            - DELETE
+            - OPTIONS
+          allowed_headers:
+            - Authorization
+            - Content-Type
+          allow_credentials: true
+      admin:
+        cors:
+          enabled: false
+
+    # --- Logging ---
+    log:
+      level: info
+      format: json
+      leak_sensitive_values: false
+
+    # --- Secrets ---
+    secrets:
+      # LOCAL DEV ONLY — production overrides via Pulumi.
+      system:
+        - "loopzero-dev-hydra-system-secret!!"
+      cookie:
+        - "loopzero-dev-hydra-cookie-secret!!"
+
+    # --- TTLs ---
+    # 2026-05-09: bumped access_token + id_token from 1h → 24h for LOCAL k3d
+    # bootstrap dev. Production (Pulumi) overrides with the conservative
+    # 1h TTL — the longer window is OK locally because:
+    #   1. Local Hydra is firewalled to k3d cluster + dev developer.
+    #   2. Cleanroom journey suites legitimately run >1h end-to-end and
+    #      previously hit 7 false-fail "Authentication failed" because
+    #      the JWT seeded at task setup expired mid-run.
+    # If you flip this back to 1h, also re-design the journey suite to
+    # mint+rotate JWT every N specs (more invasive than the bump).
+    ttl:
+      access_token: "24h"
+      refresh_token: "720h"
+      id_token: "24h"
+      auth_code: "10m"
+
+    # --- Strategies ---
+    strategies:
+      access_token: "jwt"
+      jwt:
+        scope_claim: "list"
+
+# --- Service ---
+service:
+  public:
+    enabled: true
+    type: ClusterIP
+    port: 4444
+  admin:
+    enabled: true
+    type: ClusterIP
+    port: 4445
+
+# --- Resources ---
+resources:
+  requests:
+    cpu: "50m"
+    memory: "128Mi"
+  limits:
+    cpu: "300m"
+    memory: "256Mi"
+
+# --- Security Context (INF-G08 + plan ADR D7 hardened) ---
+podSecurityContext:
+  runAsNonRoot: true
+  runAsUser: 65534
+  runAsGroup: 65534
+  fsGroup: 65534
+  seccompProfile:
+    type: RuntimeDefault
+
+securityContext:
+  runAsNonRoot: true
+  runAsUser: 65534
+  runAsGroup: 65534
+  readOnlyRootFilesystem: true
+  allowPrivilegeEscalation: false
+  capabilities:
+    drop:
+      - ALL
+
+deployment:
+  podSecurityContext:
+    runAsNonRoot: true
+    runAsUser: 65534
+    runAsGroup: 65534
+    seccompProfile:
+      type: RuntimeDefault
+  containerSecurityContext:
+    readOnlyRootFilesystem: true
+    allowPrivilegeEscalation: false
+    runAsNonRoot: true
+    capabilities:
+      drop:
+        - ALL

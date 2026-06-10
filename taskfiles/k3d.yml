@@ -1,0 +1,243 @@
+version: "3"
+
+# taskfiles/k3d.yml — k3d cluster lifecycle + heal + cluster operations.
+# Per Plan T1.3, this file extracts the `k3d:*`, `clusters:*`, `registry:*`
+# domains from the monolithic Taskfile.yml.
+#
+# Migration status: STUB — actual task migration pending iteration 2 of
+# infra-sota-hardening-plan.md. This stub establishes the includes contract.
+
+tasks:
+  # Migration target: extract from Taskfile.yml lines around 641-697 (registry,
+  # clusters), 1320-1352 (k3d:bootstrap-workload, k3d:heal).
+  # Until migration: tasks remain in Taskfile.yml. Adding new k3d:* tasks here
+  # works because Task v3 includes merge namespaces.
+
+  registry:create:
+    desc: |
+      Create shared container registry for local development.
+
+      B6/B7 fix (real-paas-cleanroom-dogfood-loop-plan iter 6→7→7b, 2026-05-05):
+      registry is a plain registry:2 (read/write) for local image pushes
+      (loopzero-clone-runner, loopzero-packs-runner, etc. via `task images:build`).
+      It is NOT in pull-through proxy mode — registry:2 in proxy mode
+      REJECTS pushes with `error from registry: unsupported`, breaking
+      local builds. Discovered LIVE during iter 7.
+
+      Docker Hub bypass is implemented at the containerd layer instead
+      (see infra/k3d/*-cluster.yaml `registries.config`): each cluster
+      points `docker.io` and `registry-1.docker.io` mirror endpoints
+      directly at https://mirror.gcr.io (Google's free, rate-limit-free
+      anonymous mirror of public Docker Hub images). Pulls of third-party
+      images go directly mirror.gcr.io → containerd. Pushes of our own
+      images go to k3d-loopzero-registry:5000 unchanged. No interference.
+
+      Architecture invariant preserved: "local cleanroom does not depend
+      on Docker Hub" — true at the containerd resolution layer.
+    cmds:
+      - k3d registry list -o json | grep -q '"name":"k3d-loopzero-registry"' || k3d registry create loopzero-registry --port 5000
+
+  clusters:create:
+    desc: Create all 4 k3d clusters (mgmt, build, workload, runtime-2)
+    # Finding 2026-05-13 (k3d agent timeout): naive sequential create allowed
+    # the next cluster to begin while the previous k3s server was still
+    # provisioning addons (CoreDNS, metrics-server, local-path-provisioner).
+    # Under cumulative IO load the subsequent agent could miss the 120s
+    # registration window. Fix (Rule 6 — zero workaround):
+    #   1. After each create, wait for kubectl `nodes Ready` BEFORE the next
+    #      cluster create begins. Deterministic gate, not a timeout bump.
+    #   2. Pre-flight kernel inotify limits — 4 k3d clusters require ≥1024
+    #      max_user_instances; default 128 produces silent "Unimplemented
+    #      runtime.v1.RuntimeService" inside the agent's containerd.
+    #   3. Keep create commands idempotent via `cluster list | grep -q`.
+    cmds:
+      # Pre-flight inotify gate — fail loud BEFORE the first cluster create
+      # so the operator gets a single clear remediation step instead of a
+      # cryptic agent-timeout 120s into the run.
+      - |
+        REQUIRED_INSTANCES=1024
+        REQUIRED_WATCHES=524288
+        ACTUAL_INSTANCES=$(cat /proc/sys/fs/inotify/max_user_instances 2>/dev/null || echo 0)
+        ACTUAL_WATCHES=$(cat /proc/sys/fs/inotify/max_user_watches 2>/dev/null || echo 0)
+        if [ "$ACTUAL_INSTANCES" -lt "$REQUIRED_INSTANCES" ] || [ "$ACTUAL_WATCHES" -lt "$REQUIRED_WATCHES" ]; then
+          echo "ERROR: kernel inotify limits insufficient for 4 k3d clusters." >&2
+          echo "  fs.inotify.max_user_instances = $ACTUAL_INSTANCES  (need >= $REQUIRED_INSTANCES)" >&2
+          echo "  fs.inotify.max_user_watches   = $ACTUAL_WATCHES  (need >= $REQUIRED_WATCHES)" >&2
+          echo "" >&2
+          echo "Fix once (persists across reboots):" >&2
+          echo "  sudo bash infra/scripts/local/setup-host-inotify-limits.sh" >&2
+          echo "" >&2
+          echo "Rationale: .claude/knowledge-base/concepts/operations/finding-2026-05-13-k3d-agent-timeout.md" >&2
+          exit 1
+        fi
+        echo "  [PASS] inotify limits OK (instances=$ACTUAL_INSTANCES, watches=$ACTUAL_WATCHES)"
+      - k3d cluster list -o json | grep -q '"name":"loopzero-mgmt"' || k3d cluster create --config infra/k3d/mgmt-cluster.yaml
+      - kubectl --context {{.MGMT_CONTEXT}} wait --for=condition=Ready node --all --timeout=120s
+      - k3d cluster list -o json | grep -q '"name":"loopzero-build"' || k3d cluster create --config infra/k3d/build-cluster.yaml
+      - kubectl --context {{.BUILD_CONTEXT}} wait --for=condition=Ready node --all --timeout=120s
+      - k3d cluster list -o json | grep -q '"name":"loopzero-workload"' || k3d cluster create --config infra/k3d/workload-cluster.yaml
+      - kubectl --context {{.WORKLOAD_CONTEXT}} wait --for=condition=Ready node --all --timeout=120s
+      # cell-2-activation-plan T0.1: loopzero-runtime-2 maps to cells.cell_id='cell-2'.
+      # Idempotent: skips if already exists (per memory feedback_no_tribal_knowledge.md).
+      - k3d cluster list -o json | grep -q '"name":"loopzero-runtime-2"' || k3d cluster create --config infra/k3d/runtime-2-cluster.yaml
+      - kubectl --context {{.RUNTIME2_CONTEXT}} wait --for=condition=Ready node --all --timeout=120s
+      - task: clusters:verify
+
+  clusters:verify:
+    desc: Verify all clusters are reachable
+    cmds:
+      - kubectl --context {{.MGMT_CONTEXT}} cluster-info
+      - kubectl --context {{.BUILD_CONTEXT}} cluster-info
+      - kubectl --context {{.WORKLOAD_CONTEXT}} cluster-info
+      - kubectl --context {{.RUNTIME2_CONTEXT}} cluster-info
+
+  k3d:recover-degraded:
+    desc: |
+      Recover the mgmt cluster from a degraded state (stuck Terminating pods +
+      Deployments with 0 ready replicas) caused by apiserver overload OR
+      kubelet sandbox issues. Used after `kubectl set env`/`kubectl patch` start
+      returning `context deadline exceeded`.
+
+      Per T0.2 of plan 2026-05-29-dashboard-public-integration-canonicalization.
+
+      Idempotent. Pass DRY_RUN=1 to preview without modification.
+
+      WARNING: --force --grace-period=0 will drop in-flight requests on pods
+      in normal Terminating state. Use only when cluster is degraded.
+    cmds:
+      - bash infra/scripts/local/recover-mgmt-degraded.sh {{if eq .DRY_RUN "1"}}--dry-run{{end}}
+
+  k3d:regen-scoped:
+    desc: |
+      Regenerate scoped SA kubeconfigs for every ClusterCredential except
+      cell-default (which is bootstrap-managed by bootstrap-cell-default-cc.sh).
+      Plan: 2026-05-13-corrections-txt-definitive-fix-sprint T2.1 (item N).
+
+      Idempotent. Use after node-pool changes that invalidate prior SA tokens.
+      flock-protected (concurrent operators get exit 1 with retry message).
+
+      Pass DRY_RUN=1 to preview without modification.
+    cmds:
+      - bash infra/scripts/local/regen-all-scoped-kubeconfigs.sh
+
+  clusters:delete:
+    desc: Delete all k3d clusters
+    cmds:
+      - k3d cluster delete loopzero-mgmt || true
+      - k3d cluster delete loopzero-build || true
+      - k3d cluster delete loopzero-workload || true
+      - k3d cluster delete loopzero-runtime-2 || true
+
+  clusters:recreate:
+    desc: Recreate a single k3d cluster (e.g., task clusters:recreate -- workload)
+    cmds:
+      - |
+        CLUSTER="{{.CLI_ARGS}}"
+        if [ -z "$CLUSTER" ]; then
+          echo "Usage: task clusters:recreate -- <mgmt|build|workload|runtime-2>"
+          exit 1
+        fi
+        case "$CLUSTER" in
+          mgmt)       CONFIG="infra/k3d/mgmt-cluster.yaml";       INSTALL_TASK="infra:install:mgmt" ;;
+          build)      CONFIG="infra/k3d/build-cluster.yaml";      INSTALL_TASK="infra:install:build" ;;
+          workload)   CONFIG="infra/k3d/workload-cluster.yaml";   INSTALL_TASK="infra:install:workload" ;;
+          runtime-2)  CONFIG="infra/k3d/runtime-2-cluster.yaml";  INSTALL_TASK="infra:install:workload" ;;
+          *)          echo "Unknown cluster: $CLUSTER. Use mgmt, build, workload, or runtime-2."; exit 1 ;;
+        esac
+        echo "Recreating loopzero-${CLUSTER}..."
+        k3d cluster delete "loopzero-${CLUSTER}" 2>/dev/null || true
+        k3d cluster create --config "$CONFIG"
+        echo "Installing components..."
+        task "$INSTALL_TASK"
+        echo "Done. loopzero-${CLUSTER} recreated."
+
+  # ---------------------------------------------------------------------------
+  # VK — Vault K3d local cluster (T3 validation for vault cluster isolation)
+  # Per sponsor-direct decision 2026-06-02. Opt-in (not part of default
+  # `task setup` flow). Used to validate vault cluster topology + cross-cluster
+  # auth pattern before provisioning DOKS loopzero-vault-prod.
+  # ---------------------------------------------------------------------------
+
+  k3d:vault:create:
+    desc: |
+      Create the loopzero-vault k3d cluster (single-node, kubeAPI=6447).
+      Idempotent — skips if cluster already exists.
+      Bootstrap OpenBao after via `task k3d:vault:bootstrap`.
+    cmds:
+      # Pre-flight inotify gate — same as clusters:create
+      - |
+        REQUIRED_INSTANCES=1024
+        ACTUAL_INSTANCES=$(cat /proc/sys/fs/inotify/max_user_instances 2>/dev/null || echo 0)
+        if [ "$ACTUAL_INSTANCES" -lt "$REQUIRED_INSTANCES" ]; then
+          echo "ERROR: inotify limits insufficient. Run: sudo bash infra/scripts/local/setup-host-inotify-limits.sh" >&2
+          exit 1
+        fi
+      - task: registry:create
+      - k3d cluster list -o json | grep -q '"name":"loopzero-vault"' || k3d cluster create --config infra/k3d/vault-cluster.yaml
+      - kubectl --context k3d-loopzero-vault wait --for=condition=Ready node --all --timeout=120s
+      - kubectl --context k3d-loopzero-vault cluster-info
+      - echo "[OK] loopzero-vault cluster ready. Next:- task k3d:vault:bootstrap"
+
+  k3d:vault:destroy:
+    desc: |
+      Destroy loopzero-vault cluster. State is lost (in-memory devMode).
+      Use this when iterating on cluster config or testing fresh cleanroom.
+    cmds:
+      - k3d cluster delete loopzero-vault
+      - echo "[OK] loopzero-vault destroyed."
+
+  k3d:vault:bootstrap:
+    desc: |
+      Bootstrap OpenBao on loopzero-vault cluster: cert-manager + cluster-issuer +
+      openbao-cert + openbao (official chart, HA Raft PRODLIKE.2). Idempotent.
+      Pre-requisite:- task k3d:vault:create.
+
+      BUG8.E LIVE pivot 2026-06-02: removed bank-vaults-operator step.
+      Now using openbao/openbao official chart direct (zero operator layer).
+
+      Phase A revalidation 2026-06-03 (post k3d-loopzero-vault destruction during
+      trio clean:deep): added openbao-cert step — without it the Secret
+      openbao-tls is never created and openbao-0 pod is stuck in
+      ContainerCreating with FailedMount. Description updated from "devMode"
+      to PRODLIKE.2 (HA Raft + Shamir 5/3 manual init via bao operator init —
+      no auto-unseal) matching the actual chart values.
+
+      Post-bootstrap manual operator steps (NOT in this task, follow
+      docs/operations/openbao-init-runbook.md):
+        bao operator init -key-shares=5 -key-threshold=3 -format=json
+        bao operator unseal <shard1> <shard2> <shard3>
+        kubectl create secret generic openbao-init-token --from-literal=BAO_TOKEN=<root>
+        helmfile sync --selector name=openbao-init  # T5.1-T5.9 provisioning
+    cmds:
+      - |
+        kubectl --context k3d-loopzero-vault get nodes >/dev/null 2>&1 || {
+          echo "ERROR: loopzero-vault cluster not running. Run: task k3d:vault:create" >&2
+          exit 1
+        }
+      - helmfile -f infra/helmfile/vault.helmfile.yaml.gotmpl -e vault-local --kube-context k3d-loopzero-vault --selector name=cert-manager sync
+      - kubectl --context k3d-loopzero-vault -n cert-manager wait --for=condition=Available deployment --all --timeout=180s
+      - helmfile -f infra/helmfile/vault.helmfile.yaml.gotmpl -e vault-local --kube-context k3d-loopzero-vault --selector name=cluster-issuer sync
+      - helmfile -f infra/helmfile/vault.helmfile.yaml.gotmpl -e vault-local --kube-context k3d-loopzero-vault --selector name=openbao-cert sync
+      - kubectl --context k3d-loopzero-vault -n vault-system wait --for=condition=Ready certificate/openbao --timeout=120s
+      - helmfile -f infra/helmfile/vault.helmfile.yaml.gotmpl -e vault-local --kube-context k3d-loopzero-vault --selector name=openbao sync
+      - echo "[OK] OpenBao bootstrapped (HA Raft PRODLIKE.2, sealed). Next:- bao operator init + unseal (see docs/operations/openbao-init-runbook.md). Validate:- task k3d:vault:status"
+
+  k3d:vault:status:
+    desc: |
+      Show loopzero-vault cluster status: pods, services, OpenBao seal state.
+    cmds:
+      - kubectl --context k3d-loopzero-vault get pods -A | grep -E 'NAMESPACE|vault|cert-manager' || true
+      - kubectl --context k3d-loopzero-vault -n vault-system get svc 2>/dev/null || echo "vault-system namespace not present yet"
+      - |
+        if kubectl --context k3d-loopzero-vault -n vault-system get pod openbao-0 >/dev/null 2>&1; then
+          echo "--- OpenBao seal status ---"
+          kubectl --context k3d-loopzero-vault -n vault-system exec openbao-0 -- bao status 2>/dev/null || echo "bao CLI not yet ready"
+        fi
+
+  # ---------------------------------------------------------------------------
+  # S0.3: Infrastructure install
+  # ---------------------------------------------------------------------------
+
+  # ---------------------------------------------------------------------------
+  # S0.5: Database
+  # ---------------------------------------------------------------------------

@@ -1,0 +1,10 @@
+apiVersion: v2
+name: cloudflared
+description: |
+  Cloudflare Tunnel agent (cloudflared) — runtime cluster Deployment.
+  CHG-2026-04-28-LAYERED-BOOTSTRAP / ADR D9 — migrated from Pulumi tunnel.ts.
+  Tunnel token is consumed via env var TUNNEL_TOKEN sourced from
+  Secret `cloudflared-tunnel-token` (created by generate-runtime-secrets.sh).
+type: application
+version: 0.1.0
+appVersion: "2024.12.2"

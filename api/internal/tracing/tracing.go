@@ -6,13 +6,18 @@
 //
 // Conditions applied:
 //   - C5: export timeout 1s, retry disabled, bounded queue 2048
-//   - C7: feature flag LOOPZERO_TRACING_ENABLED (default true dev, false prod)
+//   - C7: feature flag LOOPZERO_TRACING_ENABLED — default TRUE everywhere
+//     (dev + prod). Local Tilt YAML + bootstrap chart explicitly set
+//     false; production default-tracing-enabled is gated downstream by
+//     the OTel collector / Tempo (find_obs_007 alignment).
 //   - C2: trace-id is separate from correlation-id (no format change)
 package tracing
 
 import (
 	"context"
+	"fmt"
 	"log/slog"
+	"net"
 	"os"
 	"strings"
 	"time"
@@ -24,6 +29,46 @@ import (
 	sdktrace "go.opentelemetry.io/otel/sdk/trace"
 	semconv "go.opentelemetry.io/otel/semconv/v1.32.0"
 )
+
+// preCheckOTelEndpoint resolves the hostname portion of the OTel collector
+// endpoint via net.LookupHost. Returns nil on success; non-nil error means
+// DNS resolution failed and the caller SHOULD register a no-op exporter
+// instead of letting the gRPC client retry forever (F-S3-01).
+//
+// Plan T3.1 D9 — endpoint format examples accepted:
+//   - "otel-collector.loopzero-system.svc.cluster.local:4317"
+//   - "otel-collector:4317"
+//   - "http://otel-collector:4317" (scheme stripped)
+//   - "otel-collector" (no port)
+func preCheckOTelEndpoint(endpoint string) error {
+	if endpoint == "" {
+		return fmt.Errorf("endpoint is empty")
+	}
+	host := endpoint
+	host = strings.TrimPrefix(host, "http://")
+	host = strings.TrimPrefix(host, "https://")
+	if idx := strings.IndexByte(host, '/'); idx >= 0 {
+		host = host[:idx]
+	}
+	if h, _, err := net.SplitHostPort(host); err == nil {
+		host = h
+	}
+	if host == "" {
+		return fmt.Errorf("could not parse hostname from %q", endpoint)
+	}
+	// Use a short-timeout resolver to avoid blocking startup.
+	resolver := &net.Resolver{}
+	resolveCtx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
+	defer cancel()
+	addrs, err := resolver.LookupHost(resolveCtx, host)
+	if err != nil {
+		return fmt.Errorf("LookupHost %q: %w", host, err)
+	}
+	if len(addrs) == 0 {
+		return fmt.Errorf("no addresses for %q", host)
+	}
+	return nil
+}
 
 const (
 	// DefaultEndpoint is the in-cluster OTel Collector address.
@@ -56,6 +101,17 @@ func Init(ctx context.Context, serviceName string) (shutdown func(context.Contex
 	endpoint := os.Getenv("OTEL_EXPORTER_OTLP_ENDPOINT")
 	if endpoint == "" {
 		endpoint = DefaultEndpoint
+	}
+
+	// Plan T3.1 D9 — DNS pre-check. If the endpoint hostname is unresolvable,
+	// register no-op exporter and log SINGLE warn instead of letting the
+	// upstream OTel client retry forever (which spams "name resolver error:
+	// produced zero addresses" every 5s — F-S3-01).
+	if err := preCheckOTelEndpoint(endpoint); err != nil {
+		slog.Warn("tracing disabled: OTel endpoint unresolvable",
+			"endpoint", endpoint, "error", err,
+			"hint", "set OTEL_EXPORTER_OTLP_ENDPOINT to a reachable collector or unset LOOPZERO_TRACING_ENABLED")
+		return func(context.Context) error { return nil }, nil
 	}
 
 	// C5: Export timeout 1s, retry disabled.
@@ -113,11 +169,20 @@ func Init(ctx context.Context, serviceName string) (shutdown func(context.Contex
 }
 
 // isEnabled checks the LOOPZERO_TRACING_ENABLED feature flag (C7).
-// Default: "true" unless explicitly set to "false".
+//
+// Default: "true" unless explicitly set to "false" or "0".
+//
+// T-OBS-007 of deep-review-remediation-plan: previously the package header
+// comment said "default true dev, false prod" but production gets the
+// SAME default-true behavior as dev — production has to explicitly set
+// LOOPZERO_TRACING_ENABLED=false to disable. Per dogfood-2026-05-08-fixes
+// T0.1, the local Tilt YAML + bootstrap chart explicitly set false; the
+// PRODUCTION default remains tracing-enabled (the OTel collector
+// downstream gates whether spans actually flow).
 func isEnabled() bool {
 	v := os.Getenv("LOOPZERO_TRACING_ENABLED")
 	if v == "" {
-		return true // Default enabled — prod sets false via env
+		return true // Default enabled in BOTH dev and prod — local Tilt + bootstrap chart explicitly disable.
 	}
 	return !strings.EqualFold(v, "false") && v != "0"
 }

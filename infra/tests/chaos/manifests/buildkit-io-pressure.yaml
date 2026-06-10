@@ -1,0 +1,54 @@
+# Chaos Experiment: IOChaos BuildKit disk pressure (T1.3 of chaos plan,
+# §3.B.3 of active-execution-plan).
+#
+# Per ADR D2 of original plan (preserved in active-execution-plan): use
+# IOChaos (filesystem latency injection) for BuildKit disk pressure, not
+# StressChaos (CPU/memory). BuildKit writes layer cache + build context
+# to /var/lib/buildkit; disk I/O latency is the realistic failure mode
+# for "disk saturated" — I/O operations hang/slow. StressChaos would
+# only stress CPU/memory, missing the actual disk path.
+#
+# 500ms delay on 100% of FS operations simulates degraded disk without
+# filling it. Duration 120s = enough for ~2 build attempts to overlap
+# the chaos window.
+#
+# Hypothesis:
+#   - Build completes successfully (BuildKit retry strategy absorbs latency)
+#   - p99 build duration < 10min (acceptable degradation, not stall)
+#   - No "context deadline exceeded" errors from Argo Workflow CR
+---
+apiVersion: chaos-mesh.org/v1alpha1
+kind: IOChaos
+metadata:
+  name: buildkit-io-pressure
+  namespace: chaos-mesh
+  annotations:
+    loopzero.io/plan: active-execution-plan
+    loopzero.io/section: "3.B.3"
+    loopzero.io/hypothesis: "500ms I/O latency on BuildKit: builds slow but complete"
+    loopzero.io/dod-test: "TestChaos_BuildKitIOPressure"
+    loopzero.io/slo-query: |
+      # Build duration p99 stays under 10 min
+      histogram_quantile(0.99,
+        sum by (le) (rate(loopzero_build_duration_seconds_bucket[5m]))
+      ) < 600
+spec:
+  action: latency
+  mode: all
+  selector:
+    namespaces:
+      - argo
+    labelSelectors:
+      "app": "buildkitd"
+  # All filesystem operations under /var/lib/buildkit get 500ms delay.
+  # 100% chosen so the chaos is observable in build duration; lower
+  # percentages produce noisier signal in p99 latency.
+  delay: "500ms"
+  percent: 100
+  # Mount path matches BuildKit's default cache + workspace location.
+  # If loopzero-chaos-mesh values override this, update here in lockstep.
+  volumePath: "/var/lib/buildkit"
+  # IOChaos hooks via fuse-overlayfs at the daemon level; requires
+  # privileged=true on chaos daemon (set in infra/helm/chaos-mesh/
+  # values.yaml line 19 per project convention).
+  duration: "120s"

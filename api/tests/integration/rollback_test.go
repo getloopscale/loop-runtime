@@ -66,7 +66,7 @@ func seedRollbackData(t *testing.T, pool db.DBTX, testID string) (r1ID, r2ID, bu
 		`INSERT INTO builds (id, tenant_id, project_id, environment, status, correlation_id, created_by)
 		 VALUES ($1, $2, $3, $4, $5, $6, $7)
 		 ON CONFLICT (id) DO NOTHING`,
-		buildID, tenantID, projectID, env, string(statemachine.BuildSucceeded), "corr-rollback", "user-test",
+		buildID, tenantID, projectID, env, string(statemachine.BPhSucceeded), "corr-rollback", "user-test",
 	)
 	if err != nil {
 		t.Fatalf("failed to seed build: %v", err)
@@ -77,7 +77,7 @@ func seedRollbackData(t *testing.T, pool db.DBTX, testID string) (r1ID, r2ID, bu
 		`INSERT INTO releases (id, build_id, tenant_id, project_id, environment, status, correlation_id, created_by, git_commit, created_at)
 		 VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, NOW() - INTERVAL '10 minutes')
 		 ON CONFLICT (id) DO NOTHING`,
-		r2ID, buildID, tenantID, projectID, env, string(statemachine.ReleaseSuperseded), "corr-rollback", "user-test", "commit-r2",
+		r2ID, buildID, tenantID, projectID, env, string(statemachine.RPhSuperseded), "corr-rollback", "user-test", "commit-r2",
 	)
 	if err != nil {
 		t.Fatalf("failed to seed release R2 (SUPERSEDED): %v", err)
@@ -88,7 +88,7 @@ func seedRollbackData(t *testing.T, pool db.DBTX, testID string) (r1ID, r2ID, bu
 		`INSERT INTO releases (id, build_id, tenant_id, project_id, environment, status, correlation_id, created_by, git_commit, created_at)
 		 VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, NOW())
 		 ON CONFLICT (id) DO NOTHING`,
-		r1ID, buildID, tenantID, projectID, env, string(statemachine.ReleaseActive), "corr-rollback", "user-test", "commit-r1",
+		r1ID, buildID, tenantID, projectID, env, string(statemachine.RPhActive), "corr-rollback", "user-test", "commit-r1",
 	)
 	if err != nil {
 		t.Fatalf("failed to seed release R1 (ACTIVE): %v", err)
@@ -160,7 +160,7 @@ func TestRollback_SupersedesPreviousActiveRelease(t *testing.T) {
 	r1ID, r2ID, _ := seedRollbackData(t, adapter, testID)
 
 	// Create real stores
-	releaseStore := db.NewPostgresReleaseStore(adapter)
+	releaseStore := db.NewReleaseStoreSqlc(adapter) // T1.1c2c (plan 2026-05-29-sqlc-migration v1.3)
 	envTargetStore := db.NewPostgresEnvironmentTargetStore(adapter, adapter)
 	locker := &adapters.PoolEnvironmentLocker{Pool: pool}
 
@@ -204,8 +204,8 @@ func TestRollback_SupersedesPreviousActiveRelease(t *testing.T) {
 	if err != nil {
 		t.Fatalf("failed to fetch R1: %v", err)
 	}
-	if r1.Status != string(statemachine.ReleaseRolledBack) {
-		t.Fatalf("expected R1 status %s, got %s", statemachine.ReleaseRolledBack, r1.Status)
+	if r1.Status != string(statemachine.RPhRolledBack) {
+		t.Fatalf("expected R1 status %s, got %s", statemachine.RPhRolledBack, r1.Status)
 	}
 
 	// Assert: R2 status is ACTIVE
@@ -213,8 +213,8 @@ func TestRollback_SupersedesPreviousActiveRelease(t *testing.T) {
 	if err != nil {
 		t.Fatalf("failed to fetch R2: %v", err)
 	}
-	if r2.Status != string(statemachine.ReleaseActive) {
-		t.Fatalf("expected R2 status %s, got %s", statemachine.ReleaseActive, r2.Status)
+	if r2.Status != string(statemachine.RPhActive) {
+		t.Fatalf("expected R2 status %s, got %s", statemachine.RPhActive, r2.Status)
 	}
 
 	// Assert: environment_target active_release_id points to R2
@@ -266,14 +266,14 @@ func TestConcurrentRollbacks_ExactlyOneSucceeds(t *testing.T) {
 		 VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, NOW() - INTERVAL '20 minutes')
 		 ON CONFLICT (id) DO NOTHING`,
 		r3ID, buildID, "tenant-test", "proj-test1234", "production",
-		string(statemachine.ReleaseSuperseded), "corr-rollback", "user-test", "commit-r3",
+		string(statemachine.RPhSuperseded), "corr-rollback", "user-test", "commit-r3",
 	)
 	if err != nil {
 		t.Fatalf("failed to seed release R3: %v", err)
 	}
 
 	// Create shared stores
-	releaseStore := db.NewPostgresReleaseStore(adapter)
+	releaseStore := db.NewReleaseStoreSqlc(adapter) // T1.1c2c (plan 2026-05-29-sqlc-migration v1.3)
 	envTargetStore := db.NewPostgresEnvironmentTargetStore(adapter, adapter)
 	locker := &adapters.PoolEnvironmentLocker{Pool: pool}
 
@@ -364,7 +364,7 @@ func TestConcurrentRollbacks_ExactlyOneSucceeds(t *testing.T) {
 	if err != nil {
 		t.Fatalf("failed to fetch R1: %v", err)
 	}
-	if r1.Status == string(statemachine.ReleaseActive) {
+	if r1.Status == string(statemachine.RPhActive) {
 		t.Fatal("R1 should not be ACTIVE after rollback — lock serialization failed")
 	}
 
@@ -385,7 +385,7 @@ func TestConcurrentRollbacks_ExactlyOneSucceeds(t *testing.T) {
 	if err != nil {
 		t.Fatalf("failed to fetch active release from env_target pointer: %v", err)
 	}
-	if activeRelease.Status != string(statemachine.ReleaseActive) {
+	if activeRelease.Status != string(statemachine.RPhActive) {
 		t.Fatalf("environment_target points to release %s with status %s (expected ACTIVE)",
 			activeRelease.ID, activeRelease.Status)
 	}

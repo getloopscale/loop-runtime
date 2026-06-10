@@ -48,32 +48,21 @@ export interface PlatformConfig {
   };
 
   profile: 'minimal' | 'production';
-}
 
-/**
- * Helm release definition for a prerequisite or component.
- */
-export interface HelmRelease {
-  name: string;
-  chart: string;        // chart ref (repo/chart or oci://)
-  version: string;
-  namespace: string;
-  createNamespace?: boolean;
-  values?: Record<string, unknown>;
-  valuesFile?: string;
-  waitReady?: boolean;
-  timeout?: string;
-  order: number;        // Installation order (lower = first)
-}
-
-/**
- * Step result for progress reporting.
- */
-export interface StepResult {
-  name: string;
-  status: 'success' | 'skipped' | 'failed';
-  duration: number;     // milliseconds
-  error?: string;
+  // CHG-2026-04-28-LAYERED-BOOTSTRAP / T3.1 — optional `provider` flag.
+  // When set, `loopzero platform install` provisions cloud infra (clusters, DB,
+  // storage, registry) via Pulumi L1 BEFORE running Helmfile L2.
+  // When unset, assumes the cluster already exists (self-hosting profile).
+  provider?: 'digitalocean' | 'aws' | 'k3d';
+  providerConfig?: {
+    region?: string;
+    cfAccountId?: string;
+    cfZoneId?: string;
+    cfApiToken?: string;
+    digitaloceanToken?: string;
+    spacesAccessKey?: string;
+    spacesSecretKey?: string;
+  };
 }
 
 /**
@@ -93,7 +82,7 @@ export interface PlatformStatus {
   phase: 'NotInstalled' | 'Installing' | 'Ready' | 'Degraded' | 'Failed';
   version?: string;
   components: ComponentStatus[];
-  crdsInstalled: number;
+  platformDefinitions: number;
   endpoints: {
     api?: string;
     dashboard?: string;

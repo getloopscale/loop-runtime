@@ -46,9 +46,11 @@ func (f *fakeSourceStore) PushBundle(_ context.Context, tenantID, projectID stri
 	return source.PushResult{SourceID: f.CommitSHA}, nil
 }
 
-// newMultipartRequest creates a multipart/form-data request with optional bundle and loopzero_yaml fields.
-// loopzero_yaml is sent as a text field (WriteField).
-func newMultipartRequest(t *testing.T, bundleContent []byte, loopzeroYAML string) *http.Request {
+// Plan B v3.1 T-B.3 (2026-06-05) — wire field renamed `loopzero_yaml` →
+// `services_json`. Helpers updated to send the JSON payload as either
+// text field or file upload (mirroring CLI behavior). Parameter names
+// preserved for diff cleanliness; semantics now point at services.json.
+func newMultipartRequest(t *testing.T, bundleContent []byte, servicesJSON string) *http.Request {
 	t.Helper()
 
 	body := &bytes.Buffer{}
@@ -65,8 +67,8 @@ func newMultipartRequest(t *testing.T, bundleContent []byte, loopzeroYAML string
 		}
 	}
 
-	if loopzeroYAML != "" {
-		err := writer.WriteField("loopzero_yaml", loopzeroYAML)
+	if servicesJSON != "" {
+		err := writer.WriteField("services_json", servicesJSON)
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -82,10 +84,9 @@ func newMultipartRequest(t *testing.T, bundleContent []byte, loopzeroYAML string
 	return req
 }
 
-// newMultipartRequestWithFileYAML creates a multipart/form-data request where
-// loopzero_yaml is sent as a file upload (CreateFormFile) rather than a text field.
-// This matches how the CLI sends it via FormData.append('loopzero_yaml', blob, 'loopzero.yaml').
-func newMultipartRequestWithFileYAML(t *testing.T, bundleContent []byte, loopzeroYAML string) *http.Request {
+// Plan B v3.1 T-B.3 — file-upload helper updated for services_json wire field.
+// Matches CLI behavior: `formData.append('services_json', blob, 'services.json')`.
+func newMultipartRequestWithFileYAML(t *testing.T, bundleContent []byte, servicesJSON string) *http.Request {
 	t.Helper()
 
 	body := &bytes.Buffer{}
@@ -102,12 +103,12 @@ func newMultipartRequestWithFileYAML(t *testing.T, bundleContent []byte, loopzer
 		}
 	}
 
-	if loopzeroYAML != "" {
-		part, err := writer.CreateFormFile("loopzero_yaml", "loopzero.yaml")
+	if servicesJSON != "" {
+		part, err := writer.CreateFormFile("services_json", "services.json")
 		if err != nil {
 			t.Fatal(err)
 		}
-		_, err = part.Write([]byte(loopzeroYAML))
+		_, err = part.Write([]byte(servicesJSON))
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -124,17 +125,36 @@ func newMultipartRequestWithFileYAML(t *testing.T, bundleContent []byte, loopzer
 }
 
 func TestSourceUpload(t *testing.T) {
-	validLoopZeroYAML := `
-name: my-saas
-apps:
-  api:
-    type: server
-    port: 3000
-    path: ./api
-  worker:
-    type: worker
-    path: ./worker
-`
+	// Plan B v3.1 T-B.3 — services.json equivalent of the legacy validLoopZeroYAML.
+	// Two services: an HTTP server-shaped app + a worker-shaped app (mapped to
+	// the services.json shape via runtime/port/proxy/healthcheck).
+	validLoopZeroYAML := `{
+  "version": 1,
+  "services": [
+    {
+      "name": "api",
+      "runtime": "node",
+      "port": 3000,
+      "proxy": "/api",
+      "dev": "node dev.js",
+      "start": "node prod.js",
+      "healthcheck": "/health",
+      "cors": false,
+      "passSetCookie": false
+    },
+    {
+      "name": "worker",
+      "runtime": "node",
+      "port": 4001,
+      "proxy": "/worker",
+      "dev": "node worker.js",
+      "start": "node worker.js",
+      "healthcheck": "/health",
+      "cors": false,
+      "passSetCookie": false
+    }
+  ]
+}`
 
 	t.Run("upload valid bundle returns 200 with commit_sha and apps list", func(t *testing.T) {
 		// Arrange
@@ -173,9 +193,13 @@ apps:
 			}
 		}
 
-		// Verify bundle was stored (key = tenantID:projectName from loopzero.yaml)
-		if _, ok := store.Bundles["acme:my-saas"]; !ok {
-			t.Error("expected bundle to be stored in fake store")
+		// Plan B v3.1 T-B.3 — services.json is platform-neutral (no top-level
+		// name field per ADR-0015). The validator now emits a stable
+		// `"services-bundle"` placeholder name; production callers resolve the
+		// real project name from the build context (project ID / git remote).
+		// Test asserts the stable name appears in the storage key.
+		if _, ok := store.Bundles["acme:services-bundle"]; !ok {
+			t.Errorf("expected bundle to be stored under acme:services-bundle, got keys: %v", store.Bundles)
 		}
 	})
 
@@ -204,6 +228,9 @@ apps:
 	})
 
 	t.Run("invalid loopzero_yaml with missing name returns 422", func(t *testing.T) {
+		// Plan B v3.1 T-B.3 — services.json has no top-level `name` field
+		// (platform-neutral manifest per ADR-0015). Skipped: legacy behavior.
+		t.Skip("legacy loopzero.yaml flow removed post Plan B v3.1 T-B.3 cutover")
 		// Arrange
 		store := newFakeSourceStore("abc123")
 		handler := routes.NewSourceHandler(store)
@@ -234,6 +261,11 @@ apps:
 	})
 
 	t.Run("0 apps in loopzero_yaml returns 422 with no apps message", func(t *testing.T) {
+		// Plan B v3.1 T-B.3 (2026-06-05) — skipped: this subtest validates the
+		// legacy loopzero.yaml `0 apps` message which no longer exists. The
+		// equivalent services.json validation (empty `services[]`) is covered
+		// in `api/internal/source/validator_services_test.go`.
+		t.Skip("legacy loopzero.yaml flow removed post Plan B v3.1 T-B.3 cutover")
 		// Arrange
 		store := newFakeSourceStore("abc123")
 		handler := routes.NewSourceHandler(store)
@@ -262,6 +294,9 @@ apps: {}
 	})
 
 	t.Run("app type ambiguous (no port and no worker/frontend type) returns 422", func(t *testing.T) {
+		// Plan B v3.1 T-B.3 — services.json schema requires `port` (minimum
+		// 1024) on every service; ambiguity contract differs. Skipped: legacy.
+		t.Skip("legacy loopzero.yaml flow removed post Plan B v3.1 T-B.3 cutover")
 		// Arrange
 		store := newFakeSourceStore("abc123")
 		handler := routes.NewSourceHandler(store)
@@ -344,6 +379,10 @@ apps:
 	})
 
 	t.Run("valid app with type worker (no port needed) returns 200", func(t *testing.T) {
+		// Plan B v3.1 T-B.3 — services.json doesn't model worker type
+		// (sidecar shape only). Worker semantics now expressed via dedicated
+		// loopzerokit primitive (`defineJob`) outside the deploy bundle. Skipped.
+		t.Skip("legacy loopzero.yaml worker-type flow removed post Plan B v3.1")
 		// Arrange
 		store := newFakeSourceStore("sha-worker-ok")
 		handler := routes.NewSourceHandler(store)
@@ -378,6 +417,10 @@ apps:
 	})
 
 	t.Run("server type without port returns 422", func(t *testing.T) {
+		// Plan B v3.1 T-B.3 — services.json schema enforces `port` as required
+		// (1024-65535) at the JSON Schema layer. Validator tests in
+		// `validator_services_test.go` cover the equivalent contract.
+		t.Skip("legacy loopzero.yaml port-validation flow removed post Plan B v3.1")
 		// Arrange
 		store := newFakeSourceStore("abc123")
 		handler := routes.NewSourceHandler(store)
@@ -473,6 +516,10 @@ apps:
 	})
 
 	t.Run("valid app with type frontend (no port needed) returns 200", func(t *testing.T) {
+		// Plan B v3.1 T-B.3 — services.json doesn't model frontend type
+		// (CDN-static frontends are loopzerokit-build emitted separately; the
+		// services.json payload only models polyglot sidecars). Skipped.
+		t.Skip("legacy loopzero.yaml frontend-type flow removed post Plan B v3.1")
 		// Arrange
 		store := newFakeSourceStore("sha-frontend-ok")
 		handler := routes.NewSourceHandler(store)

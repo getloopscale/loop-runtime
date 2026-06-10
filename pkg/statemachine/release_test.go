@@ -5,103 +5,106 @@ package statemachine
 
 import "testing"
 
-func TestReleaseMachine_HappyPath(t *testing.T) {
-	m := NewReleaseMachine()
-
-	// READY -> PENDING -> ACTIVE -> SUPERSEDED
-	state := m.Transition(ReleaseReady, ReleaseGitMirrorCompleted)
-	assertState(t, state, ReleasePending)
-
-	state = m.Transition(state, ReleaseSyncCompleted)
-	assertState(t, state, ReleaseActive)
-
-	state = m.Transition(state, ReleaseNewActivated)
-	assertState(t, state, ReleaseSuperseded)
-}
-
-func TestReleaseMachine_GitMirrorFailedThenRetry(t *testing.T) {
-	m := NewReleaseMachine()
-
-	state := m.Transition(ReleaseReady, ReleaseGitMirrorFailed_)
-	assertState(t, state, ReleaseGitMirrorFailed)
-
-	state = m.Transition(state, ReleaseGitMirrorRetried)
-	assertState(t, state, ReleasePending)
-}
-
-func TestReleaseMachine_GitPushTimeout(t *testing.T) {
-	m := NewReleaseMachine()
-
-	state := m.Transition(ReleaseReady, ReleaseGitPushTimeout)
-	assertState(t, state, ReleaseGitMirrorFailed)
-}
-
-func TestReleaseMachine_SyncFailedThenRetry(t *testing.T) {
-	m := NewReleaseMachine()
-
-	state := m.Transition(ReleaseReady, ReleaseGitMirrorCompleted)
-	state = m.Transition(state, ReleaseSyncFailed_)
-	assertState(t, state, ReleaseSyncFailed)
-
-	state = m.Transition(state, ReleaseSyncRetry)
-	assertState(t, state, ReleasePending)
-}
-
-func TestReleaseMachine_SyncExhaustedToDriftAlert(t *testing.T) {
-	m := NewReleaseMachine()
-
-	state := m.Transition(ReleaseReady, ReleaseGitMirrorCompleted)
-	state = m.Transition(state, ReleaseSyncFailed_)
-	state = m.Transition(state, ReleaseSyncExhausted)
-	assertState(t, state, ReleaseDriftAlert)
-}
-
-func TestReleaseMachine_SyncTimeout(t *testing.T) {
-	m := NewReleaseMachine()
-
-	state := m.Transition(ReleaseReady, ReleaseGitMirrorCompleted)
-	state = m.Transition(state, ReleaseSyncTimeout)
-	assertState(t, state, ReleaseSyncFailed)
-}
-
-func TestReleaseMachine_PendingCancelled(t *testing.T) {
-	m := NewReleaseMachine()
-
-	state := m.Transition(ReleaseReady, ReleaseGitMirrorCompleted)
-	state = m.Transition(state, ReleaseCancelledEvent)
-	assertState(t, state, ReleaseCancelled)
-}
-
-func TestReleaseMachine_RollbackHappyPath(t *testing.T) {
-	m := NewReleaseMachine()
-
-	state := m.Transition(ReleaseReady, ReleaseGitMirrorCompleted)
-	state = m.Transition(state, ReleaseSyncCompleted)
-	state = m.Transition(state, ReleaseRollbackStarted)
-	assertState(t, state, ReleaseRollingBack)
-
-	state = m.Transition(state, ReleaseRollbackCompleted)
-	assertState(t, state, ReleaseRolledBack)
-}
-
-func TestReleaseMachine_RollbackFailed(t *testing.T) {
-	m := NewReleaseMachine()
-
-	state := m.Transition(ReleaseReady, ReleaseGitMirrorCompleted)
-	state = m.Transition(state, ReleaseSyncCompleted)
-	state = m.Transition(state, ReleaseRollbackStarted)
-	state = m.Transition(state, ReleaseRollbackFailed_)
-	assertState(t, state, ReleaseRollbackFailed)
-}
-
-func TestReleaseMachine_RollbackTimeout(t *testing.T) {
-	m := NewReleaseMachine()
-
-	state := m.Transition(ReleaseReady, ReleaseGitMirrorCompleted)
-	state = m.Transition(state, ReleaseSyncCompleted)
-	state = m.Transition(state, ReleaseRollbackStarted)
-	state = m.Transition(state, ReleaseRollbackTimeout)
-	assertState(t, state, ReleaseRollbackFailed)
+// TestReleaseMachine_TransitionSequences exercises every valid ReleaseMachine
+// transition chain starting from ReleaseReady. Phase 3 helper: collapses 10
+// near-clone test functions into one table-driven test (same pattern as
+// TestBuildMachine_TransitionSequences).
+func TestReleaseMachine_TransitionSequences(t *testing.T) {
+	type step struct {
+		event    Event
+		expected State
+	}
+	cases := []struct {
+		name  string
+		steps []step // applied in order, starting from ReleaseReady
+	}{
+		{
+			name: "HappyPath_ReadyToSuperseded",
+			steps: []step{
+				{ReleaseGitMirrorCompleted, ReleasePending},
+				{ReleaseSyncCompleted, ReleaseActive},
+				{ReleaseNewActivated, ReleaseSuperseded},
+			},
+		},
+		{
+			name: "GitMirrorFailedThenRetry",
+			steps: []step{
+				{ReleaseGitMirrorFailed_, ReleaseGitMirrorFailed},
+				{ReleaseGitMirrorRetried, ReleasePending},
+			},
+		},
+		{
+			name:  "GitPushTimeout",
+			steps: []step{{ReleaseGitPushTimeout, ReleaseGitMirrorFailed}},
+		},
+		{
+			name: "SyncFailedThenRetry",
+			steps: []step{
+				{ReleaseGitMirrorCompleted, ReleasePending},
+				{ReleaseSyncFailed_, ReleaseSyncFailed},
+				{ReleaseSyncRetry, ReleasePending},
+			},
+		},
+		{
+			name: "SyncExhaustedToDriftAlert",
+			steps: []step{
+				{ReleaseGitMirrorCompleted, ReleasePending},
+				{ReleaseSyncFailed_, ReleaseSyncFailed},
+				{ReleaseSyncExhausted, ReleaseDriftAlert},
+			},
+		},
+		{
+			name: "SyncTimeout",
+			steps: []step{
+				{ReleaseGitMirrorCompleted, ReleasePending},
+				{ReleaseSyncTimeout, ReleaseSyncFailed},
+			},
+		},
+		{
+			name: "PendingCancelled",
+			steps: []step{
+				{ReleaseGitMirrorCompleted, ReleasePending},
+				{ReleaseCancelledEvent, ReleaseCancelled},
+			},
+		},
+		{
+			name: "RollbackHappyPath",
+			steps: []step{
+				{ReleaseGitMirrorCompleted, ReleasePending},
+				{ReleaseSyncCompleted, ReleaseActive},
+				{ReleaseRollbackStarted, ReleaseRollingBack},
+				{ReleaseRollbackCompleted, ReleaseRolledBack},
+			},
+		},
+		{
+			name: "RollbackFailed",
+			steps: []step{
+				{ReleaseGitMirrorCompleted, ReleasePending},
+				{ReleaseSyncCompleted, ReleaseActive},
+				{ReleaseRollbackStarted, ReleaseRollingBack},
+				{ReleaseRollbackFailed_, ReleaseRollbackFailed},
+			},
+		},
+		{
+			name: "RollbackTimeout",
+			steps: []step{
+				{ReleaseGitMirrorCompleted, ReleasePending},
+				{ReleaseSyncCompleted, ReleaseActive},
+				{ReleaseRollbackStarted, ReleaseRollingBack},
+				{ReleaseRollbackTimeout, ReleaseRollbackFailed},
+			},
+		},
+	}
+	for _, c := range cases {
+		t.Run(c.name, func(t *testing.T) {
+			m := NewReleaseMachine()
+			state := ReleaseReady
+			for _, s := range c.steps {
+				state = m.Transition(state, s.event)
+				assertState(t, state, s.expected)
+			}
+		})
+	}
 }
 
 func TestReleaseMachine_InvalidEventsRejectFromNonActiveStates(t *testing.T) {
@@ -140,8 +143,9 @@ func TestReleaseMachine_IsTerminal(t *testing.T) {
 		}
 	}
 
-	// Only CANCELLED is truly terminal (cannot be recovered).
-	terminal := []State{ReleaseCancelled}
+	// CANCELLED + ARCHIVED are truly terminal (cannot be recovered).
+	// ARCHIVED added by T4.5 of plan 2026-05-26-maturity-3-62-to-4-0-roadmap.
+	terminal := []State{ReleaseCancelled, ReleaseArchived}
 	for _, s := range terminal {
 		if !m.IsTerminal(s) {
 			t.Errorf("state %q should be terminal", s)
@@ -216,11 +220,13 @@ func TestIsReleaseTerminal(t *testing.T) {
 	m := NewReleaseMachine()
 
 	// IsReleaseTerminal must be consistent with Machine.IsTerminal.
+	// ARCHIVED added 2026-05-27 per T4.5 of plan 2026-05-26-maturity-3-62-to-4-0-roadmap.
 	allStates := []State{
 		ReleaseReady, ReleasePending, ReleaseActive,
 		ReleaseGitMirrorFailed, ReleaseSyncFailed, ReleaseDriftAlert,
 		ReleaseRollingBack, ReleaseRollbackFailed,
 		ReleaseSuperseded, ReleaseRolledBack, ReleaseCancelled,
+		ReleaseArchived,
 	}
 
 	for _, s := range allStates {
@@ -253,6 +259,7 @@ func TestIsReleaseReapable(t *testing.T) {
 		{ReleaseDriftAlert, false},
 		{ReleaseRollingBack, false},
 		{ReleaseRollbackFailed, false},
+		{ReleaseArchived, false}, // T4.5: terminal, not reapable
 		{"UNKNOWN", false},
 	}
 
@@ -260,5 +267,89 @@ func TestIsReleaseReapable(t *testing.T) {
 		if got := IsReleaseReapable(tt.state); got != tt.want {
 			t.Errorf("IsReleaseReapable(%s) = %v, want %v", tt.state, got, tt.want)
 		}
+	}
+}
+
+// TestReleaseMachine_ArchiveTransitions exercises T4.5 of plan
+// 2026-05-26-maturity-3-62-to-4-0-roadmap — every non-terminal state that
+// migration 000008 archives (SUPERSEDED/ROLLED_BACK/failed) must accept
+// ReleaseArchiveEvent and land in ARCHIVED. CANCELLED is excluded because
+// it is already terminal — its archive happens via raw SQL UPDATE.
+func TestReleaseMachine_ArchiveTransitions(t *testing.T) {
+	m := NewReleaseMachine()
+	archivable := []State{
+		ReleaseSuperseded,
+		ReleaseRolledBack,
+		ReleaseGitMirrorFailed,
+		ReleaseSyncFailed,
+		ReleaseRollbackFailed,
+		ReleaseDriftAlert,
+	}
+	for _, from := range archivable {
+		t.Run(string(from), func(t *testing.T) {
+			next := m.Transition(from, ReleaseArchiveEvent)
+			if next != ReleaseArchived {
+				t.Errorf("Transition(%s, ReleaseArchiveEvent) = %s, want ARCHIVED", from, next)
+			}
+		})
+	}
+}
+
+// TestReleaseMachine_ArchiveFromCancelled_Rejected — CANCELLED is terminal;
+// archiver service must use raw UPDATE for it (per migration 000008
+// approach). This test guards the spec invariant.
+func TestReleaseMachine_ArchiveFromCancelled_Rejected(t *testing.T) {
+	m := NewReleaseMachine()
+	defer func() {
+		if r := recover(); r == nil {
+			t.Error("expected panic archiving CANCELLED via Transition (terminal sink)")
+		}
+	}()
+	m.Transition(ReleaseCancelled, ReleaseArchiveEvent)
+}
+
+// TestReleaseMachine_ArchiveFromActive_Rejected guarantees ACTIVE releases
+// cannot be archived without first cycling through CANCELLED/SUPERSEDED.
+func TestReleaseMachine_ArchiveFromActive_Rejected(t *testing.T) {
+	m := NewReleaseMachine()
+	defer func() {
+		if r := recover(); r == nil {
+			t.Error("expected panic archiving ACTIVE release directly")
+		}
+	}()
+	m.Transition(ReleaseActive, ReleaseArchiveEvent)
+}
+
+// TestReleaseMachine_ArchivedIsTerminal_NoReactivation enforces that
+// ARCHIVED is a sink — no event recovers it.
+func TestReleaseMachine_ArchivedIsTerminal_NoReactivation(t *testing.T) {
+	m := NewReleaseMachine()
+	if !m.IsTerminal(ReleaseArchived) {
+		t.Fatal("ARCHIVED should be terminal")
+	}
+	// Try to reactivate — should panic (no transition out of ARCHIVED).
+	defer func() {
+		if r := recover(); r == nil {
+			t.Error("expected panic on ARCHIVED -> Reactivated")
+		}
+	}()
+	m.Transition(ReleaseArchived, ReleaseReactivated)
+}
+
+// TestReleaseMachine_LoadArchivedFromDB ensures that loading an ARCHIVED row
+// from PG (via migration 000008 backfill) parses cleanly into the typed
+// machine. EC-14 of edge-case-review.
+func TestReleaseMachine_LoadArchivedFromDB(t *testing.T) {
+	m := NewReleaseTypedMachine()
+	// DB stores raw string "ARCHIVED" — MustParseState must not panic.
+	phase := m.MustParseState("ARCHIVED")
+	if phase != RPhArchived {
+		t.Errorf("MustParseState(\"ARCHIVED\") = %s, want %s", phase, RPhArchived)
+	}
+	if !m.IsTerminal(phase) {
+		t.Error("loaded ARCHIVED should be terminal")
+	}
+	if !m.IsKnownState(phase) {
+		t.Error("loaded ARCHIVED should be known")
 	}
 }

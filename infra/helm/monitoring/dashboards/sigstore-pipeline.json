@@ -1,0 +1,258 @@
+{
+  "title": "LoopZero — Sigstore Pipeline",
+  "uid": "loopzero-sigstore-pipeline",
+  "tags": [
+    "loopzero",
+    "sigstore",
+    "supply-chain",
+    "cosign"
+  ],
+  "timezone": "browser",
+  "schemaVersion": 39,
+  "version": 1,
+  "refresh": "30s",
+  "time": {
+    "from": "now-3h",
+    "to": "now"
+  },
+  "editable": true,
+  "graphTooltip": 1,
+  "description": "T4.3 of plan 2026-05-28-meet-001-engineering-closure-plan.md. CR-8 SRE: Sigstore brownout detection. Driven by the 8 metrics in api/internal/metrics/sigstore_metrics.go.",
+  "templating": {
+    "list": [
+      {
+        "name": "DS_PROMETHEUS",
+        "type": "datasource",
+        "query": "prometheus",
+        "hide": 0,
+        "current": {
+          "selected": false,
+          "text": "Prometheus",
+          "value": "Prometheus"
+        }
+      }
+    ]
+  },
+  "panels": [
+    {
+      "id": 1,
+      "type": "row",
+      "title": "Cosign sign — latency + throughput",
+      "collapsed": false,
+      "gridPos": {"h": 1, "w": 24, "x": 0, "y": 0}
+    },
+    {
+      "id": 2,
+      "type": "timeseries",
+      "title": "Cosign sign duration P50 / P95 / P99 (s)",
+      "description": "Driven by loopzero_cosign_sign_duration_seconds histogram. Alert LoopZeroCosignSignSlow fires when P99 > 60s for 10m.",
+      "datasource": {"type": "prometheus", "uid": "${DS_PROMETHEUS}"},
+      "gridPos": {"h": 8, "w": 12, "x": 0, "y": 1},
+      "targets": [
+        {
+          "refId": "P50",
+          "expr": "histogram_quantile(0.50, rate(loopzero_cosign_sign_duration_seconds_bucket[5m]))",
+          "legendFormat": "P50 keyless={{keyless}}"
+        },
+        {
+          "refId": "P95",
+          "expr": "histogram_quantile(0.95, rate(loopzero_cosign_sign_duration_seconds_bucket[5m]))",
+          "legendFormat": "P95 keyless={{keyless}}"
+        },
+        {
+          "refId": "P99",
+          "expr": "histogram_quantile(0.99, rate(loopzero_cosign_sign_duration_seconds_bucket[5m]))",
+          "legendFormat": "P99 keyless={{keyless}}"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "s",
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {"value": null, "color": "green"},
+              {"value": 30, "color": "yellow"},
+              {"value": 60, "color": "red"}
+            ]
+          }
+        }
+      }
+    },
+    {
+      "id": 3,
+      "type": "timeseries",
+      "title": "Cosign sign attempts/s by result",
+      "description": "loopzero_cosign_sign_total counter — denominator for LoopZeroCosignSignErrorRate.",
+      "datasource": {"type": "prometheus", "uid": "${DS_PROMETHEUS}"},
+      "gridPos": {"h": 8, "w": 12, "x": 12, "y": 1},
+      "targets": [
+        {
+          "refId": "Total",
+          "expr": "sum(rate(loopzero_cosign_sign_total[5m])) by (result)",
+          "legendFormat": "{{result}}"
+        }
+      ],
+      "fieldConfig": {"defaults": {"unit": "reqps"}}
+    },
+    {
+      "id": 10,
+      "type": "row",
+      "title": "Cosign attest — latency + throughput",
+      "collapsed": false,
+      "gridPos": {"h": 1, "w": 24, "x": 0, "y": 9}
+    },
+    {
+      "id": 11,
+      "type": "timeseries",
+      "title": "Cosign attest duration P50 / P95 / P99 (s)",
+      "description": "Driven by loopzero_cosign_attest_duration_seconds histogram.",
+      "datasource": {"type": "prometheus", "uid": "${DS_PROMETHEUS}"},
+      "gridPos": {"h": 8, "w": 12, "x": 0, "y": 10},
+      "targets": [
+        {
+          "refId": "P50",
+          "expr": "histogram_quantile(0.50, rate(loopzero_cosign_attest_duration_seconds_bucket[5m]))",
+          "legendFormat": "P50 keyless={{keyless}}"
+        },
+        {
+          "refId": "P95",
+          "expr": "histogram_quantile(0.95, rate(loopzero_cosign_attest_duration_seconds_bucket[5m]))",
+          "legendFormat": "P95 keyless={{keyless}}"
+        },
+        {
+          "refId": "P99",
+          "expr": "histogram_quantile(0.99, rate(loopzero_cosign_attest_duration_seconds_bucket[5m]))",
+          "legendFormat": "P99 keyless={{keyless}}"
+        }
+      ],
+      "fieldConfig": {"defaults": {"unit": "s"}}
+    },
+    {
+      "id": 12,
+      "type": "timeseries",
+      "title": "Cosign attest attempts/s by result",
+      "description": "loopzero_cosign_attest_total counter — denominator for attest error-rate.",
+      "datasource": {"type": "prometheus", "uid": "${DS_PROMETHEUS}"},
+      "gridPos": {"h": 8, "w": 12, "x": 12, "y": 10},
+      "targets": [
+        {
+          "refId": "Total",
+          "expr": "sum(rate(loopzero_cosign_attest_total[5m])) by (result)",
+          "legendFormat": "{{result}}"
+        }
+      ],
+      "fieldConfig": {"defaults": {"unit": "reqps"}}
+    },
+    {
+      "id": 20,
+      "type": "row",
+      "title": "Error attribution + Rekor URL SLI",
+      "collapsed": false,
+      "gridPos": {"h": 1, "w": 24, "x": 0, "y": 18}
+    },
+    {
+      "id": 21,
+      "type": "timeseries",
+      "title": "Sign errors by component (stacked)",
+      "description": "loopzero_cosign_sign_errors_total grouped by component. Use to root-cause LoopZeroCosignSignErrorRate alert.",
+      "datasource": {"type": "prometheus", "uid": "${DS_PROMETHEUS}"},
+      "gridPos": {"h": 8, "w": 12, "x": 0, "y": 19},
+      "targets": [
+        {
+          "refId": "Errors",
+          "expr": "sum(rate(loopzero_cosign_sign_errors_total[5m])) by (component)",
+          "legendFormat": "{{component}}"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "ops",
+          "custom": {"stacking": {"mode": "normal"}}
+        }
+      }
+    },
+    {
+      "id": 22,
+      "type": "timeseries",
+      "title": "Attest errors by component (stacked)",
+      "description": "loopzero_cosign_attest_errors_total grouped by component.",
+      "datasource": {"type": "prometheus", "uid": "${DS_PROMETHEUS}"},
+      "gridPos": {"h": 8, "w": 12, "x": 12, "y": 19},
+      "targets": [
+        {
+          "refId": "Errors",
+          "expr": "sum(rate(loopzero_cosign_attest_errors_total[5m])) by (component)",
+          "legendFormat": "{{component}}"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "ops",
+          "custom": {"stacking": {"mode": "normal"}}
+        }
+      }
+    },
+    {
+      "id": 30,
+      "type": "row",
+      "title": "Rekor URL persistence SLI + Fulcio",
+      "collapsed": false,
+      "gridPos": {"h": 1, "w": 24, "x": 0, "y": 27}
+    },
+    {
+      "id": 31,
+      "type": "timeseries",
+      "title": "Rekor URL null rate (%)",
+      "description": "Drives the LoopZeroReleaseAttestationRekorURLNullRate alert. CR-5/CR-9 LIVE bug class.",
+      "datasource": {"type": "prometheus", "uid": "${DS_PROMETHEUS}"},
+      "gridPos": {"h": 8, "w": 12, "x": 0, "y": 28},
+      "targets": [
+        {
+          "refId": "NullRate",
+          "expr": "rate(loopzero_release_attestation_rekor_url_null_total{result=\"null\"}[5m]) / clamp_min(rate(loopzero_release_attestation_rekor_url_null_total{result=\"null\"}[5m]) + rate(loopzero_release_attestation_rekor_url_null_total{result=\"populated\"}[5m]), 0.01)",
+          "legendFormat": "null rate"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "percentunit",
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {"value": null, "color": "green"},
+              {"value": 0.005, "color": "yellow"},
+              {"value": 0.01, "color": "red"}
+            ]
+          }
+        }
+      }
+    },
+    {
+      "id": 32,
+      "type": "timeseries",
+      "title": "Fulcio cert issuance duration P50/P95/P99 (s)",
+      "description": "Isolates Fulcio call latency from end-to-end sign. Use to split LoopZeroCosignSignSlow root cause.",
+      "datasource": {"type": "prometheus", "uid": "${DS_PROMETHEUS}"},
+      "gridPos": {"h": 8, "w": 12, "x": 12, "y": 28},
+      "targets": [
+        {
+          "refId": "P50",
+          "expr": "histogram_quantile(0.50, rate(loopzero_fulcio_cert_issuance_duration_seconds_bucket[5m]))",
+          "legendFormat": "P50"
+        },
+        {
+          "refId": "P95",
+          "expr": "histogram_quantile(0.95, rate(loopzero_fulcio_cert_issuance_duration_seconds_bucket[5m]))",
+          "legendFormat": "P95"
+        },
+        {
+          "refId": "P99",
+          "expr": "histogram_quantile(0.99, rate(loopzero_fulcio_cert_issuance_duration_seconds_bucket[5m]))",
+          "legendFormat": "P99"
+        }
+      ],
+      "fieldConfig": {"defaults": {"unit": "s"}}
+    }
+  ]
+}

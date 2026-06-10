@@ -42,6 +42,19 @@ func (f *fakeBuildStoreReaper) GetByID(_ context.Context, id string) (*db.Build,
 	}
 	return b, nil
 }
+
+// GetByIDForTenant — T0.4 of deep-review-2026-05-10-remediation-plan.
+// Emulates the production SQL filter for the unit-test scope.
+func (f *fakeBuildStoreReaper) GetByIDForTenant(ctx context.Context, tenantID, buildID string) (*db.Build, error) {
+	b, err := f.GetByID(ctx, buildID)
+	if err != nil || b == nil {
+		return b, err
+	}
+	if b.TenantID != tenantID {
+		return nil, nil
+	}
+	return b, nil
+}
 func (f *fakeBuildStoreReaper) HasActiveBuild(_ context.Context, _ db.DBTX, _, _, _ string) (bool, error) {
 	return false, nil
 }
@@ -153,7 +166,7 @@ func TestBuildReaper_ReapsStaleQueuedBuild(t *testing.T) {
 
 	checker := &fakeStaleChecker{
 		result: []StaleBuild{
-			{ID: "build-1", State: statemachine.BuildQueued, Event: statemachine.BuildQueueTimeout},
+			{ID: "build-1", State: statemachine.BPhQueued, Event: statemachine.BPEventQueueTimeout},
 		},
 	}
 	es := &fakeEventStoreReaper{}
@@ -166,8 +179,8 @@ func TestBuildReaper_ReapsStaleQueuedBuild(t *testing.T) {
 	if reaped != 1 {
 		t.Fatalf("expected 1 reaped, got %d", reaped)
 	}
-	if bs.lastStatus["build-1"] != string(statemachine.BuildQueueTimeout) {
-		t.Errorf("expected status event %s, got %s", statemachine.BuildQueueTimeout, bs.lastStatus["build-1"])
+	if bs.lastStatus["build-1"] != string(statemachine.BPEventQueueTimeout) {
+		t.Errorf("expected status event %s, got %s", statemachine.BPEventQueueTimeout, bs.lastStatus["build-1"])
 	}
 	if bs.lastError["build-1"] == "" {
 		t.Error("expected error message to be set")
@@ -186,7 +199,7 @@ func TestBuildReaper_SkipsTerminalBuilds(t *testing.T) {
 
 	checker := &fakeStaleChecker{
 		result: []StaleBuild{
-			{ID: "build-1", State: statemachine.BuildQueued, Event: statemachine.BuildQueueTimeout},
+			{ID: "build-1", State: statemachine.BPhQueued, Event: statemachine.BPEventQueueTimeout},
 		},
 	}
 
@@ -209,7 +222,7 @@ func TestBuildReaper_SkipsBuildBeingReconciled(t *testing.T) {
 
 	checker := &fakeStaleChecker{
 		result: []StaleBuild{
-			{ID: "build-1", State: statemachine.BuildQueued, Event: statemachine.BuildQueueTimeout},
+			{ID: "build-1", State: statemachine.BPhQueued, Event: statemachine.BPEventQueueTimeout},
 		},
 	}
 
@@ -234,7 +247,7 @@ func TestBuildReaper_SkipsActiveWorkflow(t *testing.T) {
 
 	checker := &fakeStaleChecker{
 		result: []StaleBuild{
-			{ID: "build-1", State: statemachine.BuildRunning, Event: statemachine.BuildTimeout},
+			{ID: "build-1", State: statemachine.BPhRunning, Event: statemachine.BPEventTimeout},
 		},
 	}
 

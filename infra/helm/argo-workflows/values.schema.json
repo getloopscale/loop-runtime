@@ -1,0 +1,95 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://loopzero.platform/schemas/argo-workflows/values.schema.json",
+  "title": "Argo Workflows LoopZero wrapper values schema",
+  "description": "Plan 2026-05-20 T2.5 ext — fail-fast on Argo Workflows build cluster config drift. Protects controller scale (workflowWorkers/podWorkers under 50+ concurrent build load), images.cloneRunner SHA pin (supply chain), sourceBucket (S3 build artifact location).",
+  "type": "object",
+  "properties": {
+    "images": {
+      "type": "object",
+      "required": ["cloneRunner"],
+      "properties": {
+        "cloneRunner": {
+          "type": "string",
+          "minLength": 5,
+          "pattern": "^[a-z0-9][a-z0-9.-]*(/[a-z0-9._-]+)+:[a-zA-Z0-9._-]+$",
+          "description": "Clone-runner image (LoopZero custom). MUST be registry+repo+tag format. Empty/garbage = workflow can't start init container."
+        }
+      }
+    },
+    "sourceBucket": {
+      "type": "string",
+      "minLength": 1,
+      "pattern": "^[a-z0-9][a-z0-9-]*[a-z0-9]$|^[a-z0-9]$",
+      "description": "S3 bucket name (LoopZero SOURCE_BUCKET). MUST match Pulumi-created bucket + loopzero-api env var. RFC 1123: lowercase + dashes, no leading/trailing dash."
+    },
+    "controller": {
+      "type": "object",
+      "properties": {
+        "securityContext": {
+          "type": "object",
+          "properties": {
+            "runAsNonRoot": {
+              "type": "boolean",
+              "const": true,
+              "description": "INF-G08: controller MUST run as non-root."
+            }
+          }
+        },
+        "workflowWorkers": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 128,
+          "description": "Max concurrent workflow reconciliations. Default 32 sized for 50+ concurrent builds. <1 = no progress. >128 = controller OOM risk."
+        },
+        "podWorkers": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 128,
+          "description": "Max concurrent pod reconciliations. Default 32. Same bounds as workflowWorkers."
+        },
+        "resources": {
+          "type": "object",
+          "required": ["limits", "requests"],
+          "properties": {
+            "limits": {
+              "type": "object",
+              "required": ["cpu", "memory"]
+            },
+            "requests": {
+              "type": "object",
+              "required": ["cpu", "memory"]
+            }
+          }
+        },
+        "metricsConfig": {
+          "type": "object",
+          "properties": {
+            "enabled": { "type": "boolean" },
+            "port": {
+              "type": "integer",
+              "minimum": 1024,
+              "maximum": 65535,
+              "description": "Metrics port. <1024 = privileged port (would fail non-root). Default 9090."
+            },
+            "path": {
+              "type": "string",
+              "pattern": "^/[a-zA-Z0-9._/-]*$",
+              "description": "Metrics HTTP path — MUST start with /."
+            }
+          }
+        }
+      }
+    },
+    "workflow": {
+      "type": "object",
+      "description": "Workflow execution defaults pass-through."
+    },
+    "server": {
+      "type": "object",
+      "description": "Argo Workflows UI server pass-through (typically disabled in build cluster — UI is admin tool)."
+    }
+  },
+  "required": ["images", "sourceBucket"],
+  "additionalProperties": true
+}

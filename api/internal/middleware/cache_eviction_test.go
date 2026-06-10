@@ -144,7 +144,7 @@ func TestEvictCache_ConcurrentAccess_NoDataRace(t *testing.T) {
 
 	// Concurrent reads.
 	for i := 0; i < goroutines; i++ {
-		i := i
+		// Go 1.22+: per-iteration loop variable.
 		go func() {
 			defer wg.Done()
 			key := fmt.Sprintf("token-%d", i)
@@ -154,7 +154,7 @@ func TestEvictCache_ConcurrentAccess_NoDataRace(t *testing.T) {
 
 	// Concurrent writes.
 	for i := 0; i < goroutines; i++ {
-		i := i
+		// Go 1.22+: per-iteration loop variable.
 		go func() {
 			defer wg.Done()
 			key := fmt.Sprintf("new-token-%d", i)
@@ -195,7 +195,7 @@ func TestValidateWithCache_ConcurrentRequests_NoDataRace(t *testing.T) {
 	wg.Add(goroutines)
 
 	for i := 0; i < goroutines; i++ {
-		i := i
+		// Go 1.22+: per-iteration loop variable.
 		go func() {
 			defer wg.Done()
 			// Use unique tokens to fill the cache, and some repeated tokens for cache hits.

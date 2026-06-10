@@ -50,8 +50,13 @@ export class ApiError extends Error {
   public readonly statusCode: number;
   public readonly code: string;
 
-  constructor(message: string, exitCode: number, statusCode: number, code?: string) {
-    super(message);
+  /**
+   * Plan v1.2 T5.1 (M4) — preserve the underlying error chain so verbose
+   * mode (`LOOPZERO_DEBUG=1`) can render the root cause without losing
+   * stack/context. Mirrors the Error.cause shape introduced in Node 16.9.
+   */
+  constructor(message: string, exitCode: number, statusCode: number, code?: string, cause?: unknown) {
+    super(message, cause !== undefined ? { cause } : undefined);
     this.name = 'ApiError';
     this.exitCode = exitCode;
     this.statusCode = statusCode;
@@ -100,6 +105,16 @@ export class ApiError extends Error {
         return new ApiError(
           serverMessage || 'Authentication service is temporarily unavailable. Try again in a moment.',
           4, status, 'AUTH_SERVICE_UNAVAILABLE',
+        );
+      }
+      // Sprint 8 v3.2 / CHG-002a / D-7 — explicit MAINTENANCE_MODE handling.
+      // Distinct from generic 503 because the CLI should NOT silently retry
+      // (operator-initiated, can last minutes for PG resize). Show the
+      // operator's message verbatim so users understand the planned downtime.
+      if (serverCode === 'MAINTENANCE_MODE') {
+        return new ApiError(
+          serverMessage || 'LoopZero is in maintenance mode. Mutations are temporarily disabled.',
+          3, status, 'MAINTENANCE_MODE',
         );
       }
       return new ApiError(
@@ -247,6 +262,14 @@ export class ApiClient {
 
           const apiError = this.mapError(res.status, errorBody);
 
+          // Sprint 8 v3.2 / CHG-002a / D-7: MAINTENANCE_MODE is operator-initiated
+          // and can persist for minutes during PG resize / mgmt rolling upgrade.
+          // Skip the retry loop — surface the message immediately so the user
+          // understands the planned downtime instead of seeing 5 silent retries.
+          if (apiError.code === 'MAINTENANCE_MODE') {
+            throw apiError;
+          }
+
           // Only retry on transient server errors (502, 503, 504)
           if (RETRYABLE_STATUS_CODES.has(res.status) && attempt < this.maxRetries) {
             lastError = apiError;
@@ -297,8 +320,14 @@ export class ApiClient {
 
   private mapError(
     status: number,
-    body?: { code?: string; message?: string } | null,
+    body?: { code?: string; message?: string; error?: string } | null,
   ): ApiError {
-    return ApiError.fromHttpStatus(status, body?.message, body?.code);
+    // Some legacy routes (e.g. /api/v1/domains) respond with {"error": "..."}
+    // instead of the canonical {"code", "message"} shape. We accept either so
+    // the CLI surfaces the specific server-side message instead of falling
+    // back to "Request failed (HTTP 400). Check your command arguments." —
+    // a Rule 8 (fail-clear) violation observed during dogfood iter 13.
+    const message = body?.message ?? body?.error;
+    return ApiError.fromHttpStatus(status, message, body?.code);
   }
 }

@@ -31,7 +31,7 @@ func (r *BuildReconcileLoop) reconcileBuild(ctx context.Context, build *db.Build
 	defer span.End()
 
 	// RELEASING builds: Phase 1 done, Phase 2 needs retry (MEET-2026-03-26-008)
-	if build.Status == string(statemachine.BuildReleasing) {
+	if build.Status == string(statemachine.BPhReleasing) {
 		r.retryReleaseActivation(ctx, build)
 		return
 	}

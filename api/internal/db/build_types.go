@@ -1,0 +1,134 @@
+// SPDX-License-Identifier: Apache-2.0
+// Copyright 2025-2026 The LoopZero Authors
+
+package db
+
+// build_types.go — public types for the builds domain that survive the
+// T1.2b deletion of the legacy hand-rolled `build_store.go`,
+// `build_store_list.go`, and `build_store_reconcile.go`. Per plan
+// docs/plans/2026-05-29-sqlc-migration-plan.md v1.3 § T1.2b, this file
+// carries:
+//
+//   - Build struct (public type consumed by services + tests)
+//   - BuildAppSpec / BuildAppAutoscaling (app spec types for reconcile)
+//   - BuildStore interface (service field types depend on it)
+//   - buildMachine singleton (state-machine SafeTransition target;
+//     used by BuildStoreSqlc.UpdateStatus)
+//   - CellDefault constant (cross-store; both build + release stores
+//     consume it as the single-cell backward-compat default)
+//
+// The sqlc-backed implementation (BuildStoreSqlc) lives in
+// build_wrapper.go and satisfies BuildStore 1:1.
+
+import (
+	"context"
+	"encoding/json"
+	"time"
+
+	"github.com/loopzero/loopzero/pkg/statemachine"
+)
+
+// buildMachine is the build state machine singleton. Used to validate
+// all status transitions.
+//
+// Phase 5 caller migration of ADR `2026-05-15-T6-1-typed-state-machines.md`
+// (iter 37): switched from untyped `NewBuildMachine() *Machine` to the
+// typed wrapper `NewBuildTypedMachine() *BuildMachine`. The wrapper
+// carries the panic-trapping `SafeTransition` method which the
+// store-layer (build_wrapper.go UpdateStatus) invokes per D4 invariant.
+//
+// Wire format unchanged: `string(BPhX) == string(BuildX)` for every
+// constant (verified by TestBuildTypedMachine_WireFormatCompatibility),
+// so DB rows persisted under the untyped path read back identically.
+// No migration of `builds.status` column needed.
+var buildMachine = statemachine.NewBuildTypedMachine()
+
+// CellDefault is the cell identifier used by single-cell deployments
+// and as the default for any row created without an explicit cell
+// assignment. Kept as a local constant to avoid a db→placement package
+// dependency; placement.DefaultCellID is the authoritative value and
+// must match.
+const CellDefault = "cell-default"
+
+// Build represents a build record in the database.
+type Build struct {
+	ID              string          `json:"id"`
+	TenantID        string          `json:"tenant_id"`
+	ProjectID       string          `json:"project_id"`
+	Environment     string          `json:"environment"`
+	Status          string          `json:"status"`
+	CommitSHA       string          `json:"commit_sha,omitempty"`
+	CorrelationID   string          `json:"correlation_id"`
+	CreatedBy       string          `json:"created_by"`
+	CreatedAt       time.Time       `json:"created_at"`
+	StartedAt       *time.Time      `json:"started_at,omitempty"`
+	FinishedAt      *time.Time      `json:"finished_at,omitempty"`
+	ErrorMessage    string          `json:"error_message,omitempty"`
+	DurationSeconds *int            `json:"duration_seconds,omitempty"`
+	WorkflowID      string          `json:"workflow_id,omitempty"`
+	AppsSpec        json.RawMessage `json:"apps_spec,omitempty"` // App specs from submission (name, type, port, secrets)
+	// BundleDigest is the SHA256 hex of the source bundle uploaded by
+	// the CLI. Computed at upload time + verified by the clone-runner
+	// workflow step. T2.2 of deep-review-2026-05-10-remediation-plan
+	// (find_sec_no_bundle_integrity HIGH). Nullable for backward
+	// compat with pre-T2.2 builds.
+	BundleDigest string `json:"bundle_digest,omitempty"`
+}
+
+// BuildAppAutoscaling holds HPA configuration persisted with the build.
+type BuildAppAutoscaling struct {
+	MinReplicas int `json:"min,omitempty"`
+	MaxReplicas int `json:"max,omitempty"`
+	TargetCPU   int `json:"target_cpu,omitempty"`
+}
+
+// BuildAppSpec is a single app spec stored at build submission time.
+// Used by the reconcile loop to generate manifests and compute image
+// refs.
+type BuildAppSpec struct {
+	Name        string               `json:"name"`
+	Type        string               `json:"type"`
+	Rendering   string               `json:"rendering,omitempty"` // "static" or "server" (Sprint 10)
+	Port        int                  `json:"port"`
+	Secrets     []string             `json:"secrets,omitempty"`
+	Replicas    int                  `json:"replicas,omitempty"`
+	Autoscaling *BuildAppAutoscaling `json:"autoscaling,omitempty"`
+}
+
+// BuildStore defines the interface for build persistence operations.
+//
+// Implemented by *BuildStoreSqlc (build_wrapper.go) as of T1.2b of plan
+// 2026-05-29-sqlc-migration v1.3. Previously implemented by
+// *PostgresBuildStore in build_store.go / build_store_list.go /
+// build_store_reconcile.go — those files were deleted in T1.2b after
+// the 3 prod call sites switched to NewBuildStoreSqlc.
+type BuildStore interface {
+	Create(ctx context.Context, tx DBTX, build *Build) error
+	// GetByID returns a build by ID with NO tenant filter. Reserved
+	// for internal callers (convergence loops, reaper,
+	// domain_provisioner) that have already authenticated via a
+	// different gate.
+	//
+	// HTTP handlers MUST NOT call GetByID — use GetByIDForTenant
+	// instead. T0.4 of deep-review-2026-05-10-remediation-plan
+	// (find_sec_idor_buildstore).
+	GetByID(ctx context.Context, id string) (*Build, error)
+	// GetByIDForTenant is the tenant-scoped variant. Returns
+	// ErrBuildNotFound when the build exists but belongs to a
+	// different tenant — closing the IDOR vector that handler-level
+	// checks left as a single point of failure.
+	GetByIDForTenant(ctx context.Context, tenantID, id string) (*Build, error)
+	HasActiveBuild(ctx context.Context, tx DBTX, tenantID, projectID, env string) (bool, error)
+	UpdateStatus(ctx context.Context, tx DBTX, id string, event string) (*Build, error)
+	SetErrorMessage(ctx context.Context, tx DBTX, id string, errorMessage string) error
+	SetWorkflowID(ctx context.Context, tx DBTX, id string, workflowID string) error
+	SetAppsSpec(ctx context.Context, tx DBTX, id string, apps []BuildAppSpec) error
+	GetBuildApps(ctx context.Context, buildID string) ([]BuildAppSpec, error)
+	ListByProject(ctx context.Context, tenantID, projectID string, limit, offset int) ([]Build, error)
+	ListByProjectAndEnv(ctx context.Context, tenantID, projectID, env string, limit, offset int) ([]Build, int, error)
+	// FindActiveBuilds returns QUEUED/RUNNING/RELEASING builds
+	// belonging to the given cell (roadmap 03). Pass CellDefault for
+	// single-cell / backward compatible behavior.
+	FindActiveBuilds(ctx context.Context, cellID string) ([]Build, error)
+	CancelActiveBuilds(ctx context.Context, tx DBTX, tenantID, projectID, env string) (int, []string, error)
+}

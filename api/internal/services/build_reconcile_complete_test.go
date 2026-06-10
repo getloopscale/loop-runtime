@@ -281,3 +281,74 @@ func TestEnrichAppReleases_BothSignatureAndSBOM_MultiApp(t *testing.T) {
 		t.Error("worker signature must still be populated")
 	}
 }
+
+// M07 Ralph iter 5: attest-image step writes "rekor-url" output parameter.
+// enrichAppReleasesWithAttestation MUST populate
+// BuildAppOutputs.ImageAttestationRekorURL so container_delivery.go can
+// persist it into releases.image_attestation_rekor_url (migration 000019).
+//
+// Plan 2026-05-28-M07-fulcio-cacert-keyless-LIVE v1.6 DoD item 9:
+// "Runtime-metric proof — releases.image_attestation_rekor_url populated
+// LIVE in Phase 4 = runtime evidence".
+func TestEnrichAppReleasesWithAttestation_PopulatesRekorURL(t *testing.T) {
+	apps := []AppRelease{{Name: "api", URL: "https://api.example.com"}}
+	status := &WorkflowStatus{
+		Phase: "Succeeded",
+		Outputs: map[string]map[string]string{
+			"sign-image-api": {
+				"signature": "registry/api:abc@sha256:dead",
+				"digest":    "sha256:dead",
+			},
+			"attest-image-api": {
+				"rekor-url": "https://rekor.sigstore.dev/api/v1/log/entries?logIndex=12345",
+			},
+		},
+	}
+
+	enrichAppReleasesWithAttestation(apps, status)
+
+	want := "https://rekor.sigstore.dev/api/v1/log/entries?logIndex=12345"
+	if apps[0].ImageAttestationRekorURL != want {
+		t.Errorf("ImageAttestationRekorURL: got %q, want %q",
+			apps[0].ImageAttestationRekorURL, want)
+	}
+}
+
+// "unknown" is the cosign_attest.go fallback when sed pattern doesn't match.
+// Persisting "unknown" pollutes the DB — must stay empty.
+func TestEnrichAppReleasesWithAttestation_RekorURLUnknown_LeavesEmpty(t *testing.T) {
+	apps := []AppRelease{{Name: "api"}}
+	status := &WorkflowStatus{
+		Phase: "Succeeded",
+		Outputs: map[string]map[string]string{
+			"attest-image-api": {"rekor-url": "unknown"},
+		},
+	}
+
+	enrichAppReleasesWithAttestation(apps, status)
+
+	if apps[0].ImageAttestationRekorURL != "" {
+		t.Errorf("ImageAttestationRekorURL: got %q, expected empty when 'unknown'",
+			apps[0].ImageAttestationRekorURL)
+	}
+}
+
+// Missing attest step output (e.g., keyed mode without attest, or attest
+// step failed and never wrote the param) MUST leave the field empty —
+// downstream container_delivery.go gates on empty before persisting.
+func TestEnrichAppReleasesWithAttestation_AttestStepMissing_NoOp(t *testing.T) {
+	apps := []AppRelease{{Name: "api", ImageAttestationRekorURL: ""}}
+	status := &WorkflowStatus{
+		Phase: "Succeeded",
+		Outputs: map[string]map[string]string{
+			"sign-image-api": {"signature": "registry/api@sha256:x", "digest": "sha256:x"},
+		},
+	}
+
+	enrichAppReleasesWithAttestation(apps, status)
+
+	if apps[0].ImageAttestationRekorURL != "" {
+		t.Errorf("ImageAttestationRekorURL: got %q, expected empty when attest step absent",
+			apps[0].ImageAttestationRekorURL)
+	}
+}

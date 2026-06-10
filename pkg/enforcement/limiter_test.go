@@ -4,6 +4,7 @@
 package enforcement
 
 import (
+	"database/sql"
 	"log/slog"
 	"net/http"
 	"net/http/httptest"
@@ -15,6 +16,49 @@ import (
 
 func testLogger() *slog.Logger {
 	return slog.New(slog.NewTextHandler(os.Stderr, &slog.HandlerOptions{Level: slog.LevelError}))
+}
+
+// setupPlanLimitMocks returns a sqlmock-backed *sql.DB pre-configured to
+// answer the canonical PlanLimiter probe pair:
+//   - SELECT plan FROM subscriptions WHERE tenant_id=tenant → plan
+//   - SELECT hard_limit, soft_limit FROM plan_limits WHERE plan, feature → (hard, soft)
+//
+// Phase 3 helper: collapses ~12 inline copies of the 9-line sqlmock setup
+// across CheckLimit_* test functions.
+func setupPlanLimitMocks(t *testing.T, tenant, plan, feature string, hardLimit int, softLimit interface{}) (*sql.DB, sqlmock.Sqlmock) {
+	t.Helper()
+	db, mock := setupSubscriptionMock(t, tenant, plan)
+	mock.ExpectQuery("SELECT hard_limit, soft_limit FROM plan_limits").
+		WithArgs(plan, feature).
+		WillReturnRows(sqlmock.NewRows([]string{"hard_limit", "soft_limit"}).AddRow(hardLimit, softLimit))
+	return db, mock
+}
+
+// setupPlanLimitMocksNoRow is setupPlanLimitMocks for the "plan_limits row
+// missing" path — the second query returns an empty rowset, exercising the
+// fail-closed branch in PlanLimiter.
+func setupPlanLimitMocksNoRow(t *testing.T, tenant, plan, feature string) (*sql.DB, sqlmock.Sqlmock) {
+	t.Helper()
+	db, mock := setupSubscriptionMock(t, tenant, plan)
+	mock.ExpectQuery("SELECT hard_limit, soft_limit FROM plan_limits").
+		WithArgs(plan, feature).
+		WillReturnRows(sqlmock.NewRows([]string{"hard_limit", "soft_limit"}))
+	return db, mock
+}
+
+// setupSubscriptionMock primes only the subscription-plan query, leaving
+// the caller to set up plan_limits expectations as needed.
+func setupSubscriptionMock(t *testing.T, tenant, plan string) (*sql.DB, sqlmock.Sqlmock) {
+	t.Helper()
+	db, mock, err := sqlmock.New()
+	if err != nil {
+		t.Fatalf("sqlmock: %v", err)
+	}
+	t.Cleanup(func() { _ = db.Close() })
+	mock.ExpectQuery("SELECT plan FROM subscriptions").
+		WithArgs(tenant).
+		WillReturnRows(sqlmock.NewRows([]string{"plan"}).AddRow(plan))
+	return db, mock
 }
 
 // ---------------------------------------------------------------------------
@@ -75,23 +119,9 @@ func TestCheckLimit_EnterprisePlan_AlwaysAllowed(t *testing.T) {
 // ---------------------------------------------------------------------------
 
 func TestCheckLimit_StarterPlan_UnderLimit_Allowed(t *testing.T) {
-	db, mock, err := sqlmock.New()
-	if err != nil {
-		t.Fatalf("sqlmock: %v", err)
-	}
-	defer func() { _ = db.Close() }()
-
-	mock.ExpectQuery("SELECT plan FROM subscriptions").
-		WithArgs("tn-starter").
-		WillReturnRows(sqlmock.NewRows([]string{"plan"}).AddRow("starter"))
-
-	mock.ExpectQuery("SELECT hard_limit, soft_limit FROM plan_limits").
-		WithArgs("starter", "projects").
-		WillReturnRows(sqlmock.NewRows([]string{"hard_limit", "soft_limit"}).AddRow(1, nil))
-
+	db, _ := setupPlanLimitMocks(t, "tn-starter", "starter", "projects", 1, nil)
 	limiter := NewPlanLimiter(db, testLogger())
 	result := limiter.CheckLimit("tn-starter", "projects", 0)
-
 	if !result.Allowed {
 		t.Error("starter with 0 projects should be allowed (limit=1)")
 	}
@@ -104,23 +134,9 @@ func TestCheckLimit_StarterPlan_UnderLimit_Allowed(t *testing.T) {
 }
 
 func TestCheckLimit_StarterPlan_AtLimit_Blocked(t *testing.T) {
-	db, mock, err := sqlmock.New()
-	if err != nil {
-		t.Fatalf("sqlmock: %v", err)
-	}
-	defer func() { _ = db.Close() }()
-
-	mock.ExpectQuery("SELECT plan FROM subscriptions").
-		WithArgs("tn-starter").
-		WillReturnRows(sqlmock.NewRows([]string{"plan"}).AddRow("starter"))
-
-	mock.ExpectQuery("SELECT hard_limit, soft_limit FROM plan_limits").
-		WithArgs("starter", "projects").
-		WillReturnRows(sqlmock.NewRows([]string{"hard_limit", "soft_limit"}).AddRow(1, nil))
-
+	db, _ := setupPlanLimitMocks(t, "tn-starter", "starter", "projects", 1, nil)
 	limiter := NewPlanLimiter(db, testLogger())
 	result := limiter.CheckLimit("tn-starter", "projects", 1)
-
 	if result.Allowed {
 		t.Error("starter at limit (1/1) should be blocked")
 	}
@@ -137,46 +153,18 @@ func TestCheckLimit_StarterPlan_AtLimit_Blocked(t *testing.T) {
 // ---------------------------------------------------------------------------
 
 func TestCheckLimit_ProPlan_UnderLimit_Allowed(t *testing.T) {
-	db, mock, err := sqlmock.New()
-	if err != nil {
-		t.Fatalf("sqlmock: %v", err)
-	}
-	defer func() { _ = db.Close() }()
-
-	mock.ExpectQuery("SELECT plan FROM subscriptions").
-		WithArgs("tn-pro").
-		WillReturnRows(sqlmock.NewRows([]string{"plan"}).AddRow("pro"))
-
-	mock.ExpectQuery("SELECT hard_limit, soft_limit FROM plan_limits").
-		WithArgs("pro", "projects").
-		WillReturnRows(sqlmock.NewRows([]string{"hard_limit", "soft_limit"}).AddRow(3, nil))
-
+	db, _ := setupPlanLimitMocks(t, "tn-pro", "pro", "projects", 3, nil)
 	limiter := NewPlanLimiter(db, testLogger())
 	result := limiter.CheckLimit("tn-pro", "projects", 2)
-
 	if !result.Allowed {
 		t.Error("pro with 2/3 projects should be allowed")
 	}
 }
 
 func TestCheckLimit_ProPlan_AtLimit_Blocked(t *testing.T) {
-	db, mock, err := sqlmock.New()
-	if err != nil {
-		t.Fatalf("sqlmock: %v", err)
-	}
-	defer func() { _ = db.Close() }()
-
-	mock.ExpectQuery("SELECT plan FROM subscriptions").
-		WithArgs("tn-pro").
-		WillReturnRows(sqlmock.NewRows([]string{"plan"}).AddRow("pro"))
-
-	mock.ExpectQuery("SELECT hard_limit, soft_limit FROM plan_limits").
-		WithArgs("pro", "projects").
-		WillReturnRows(sqlmock.NewRows([]string{"hard_limit", "soft_limit"}).AddRow(3, nil))
-
+	db, _ := setupPlanLimitMocks(t, "tn-pro", "pro", "projects", 3, nil)
 	limiter := NewPlanLimiter(db, testLogger())
 	result := limiter.CheckLimit("tn-pro", "projects", 3)
-
 	if result.Allowed {
 		t.Error("pro at limit (3/3) should be blocked")
 	}
@@ -217,23 +205,9 @@ func TestCheckLimit_BuildsPerMonth_Enforced(t *testing.T) {
 // ---------------------------------------------------------------------------
 
 func TestCheckLimit_SeatsLimit_Enforced(t *testing.T) {
-	db, mock, err := sqlmock.New()
-	if err != nil {
-		t.Fatalf("sqlmock: %v", err)
-	}
-	defer func() { _ = db.Close() }()
-
-	mock.ExpectQuery("SELECT plan FROM subscriptions").
-		WithArgs("tn-team").
-		WillReturnRows(sqlmock.NewRows([]string{"plan"}).AddRow("team"))
-
-	mock.ExpectQuery("SELECT hard_limit, soft_limit FROM plan_limits").
-		WithArgs("team", "seats").
-		WillReturnRows(sqlmock.NewRows([]string{"hard_limit", "soft_limit"}).AddRow(10, nil))
-
+	db, _ := setupPlanLimitMocks(t, "tn-team", "team", "seats", 10, nil)
 	limiter := NewPlanLimiter(db, testLogger())
 	result := limiter.CheckLimit("tn-team", "seats", 10)
-
 	if result.Allowed {
 		t.Error("at seats limit should be blocked")
 	}
@@ -244,46 +218,18 @@ func TestCheckLimit_SeatsLimit_Enforced(t *testing.T) {
 // ---------------------------------------------------------------------------
 
 func TestCheckLimit_EnvironmentsLimit_Enforced(t *testing.T) {
-	db, mock, err := sqlmock.New()
-	if err != nil {
-		t.Fatalf("sqlmock: %v", err)
-	}
-	defer func() { _ = db.Close() }()
-
-	mock.ExpectQuery("SELECT plan FROM subscriptions").
-		WithArgs("tn-test").
-		WillReturnRows(sqlmock.NewRows([]string{"plan"}).AddRow("starter"))
-
-	mock.ExpectQuery("SELECT hard_limit, soft_limit FROM plan_limits").
-		WithArgs("starter", "environments").
-		WillReturnRows(sqlmock.NewRows([]string{"hard_limit", "soft_limit"}).AddRow(2, nil))
-
+	db, _ := setupPlanLimitMocks(t, "tn-test", "starter", "environments", 2, nil)
 	limiter := NewPlanLimiter(db, testLogger())
 	result := limiter.CheckLimit("tn-test", "environments", 2)
-
 	if result.Allowed {
 		t.Error("at environments limit should be blocked")
 	}
 }
 
 func TestCheckLimit_EnvironmentsLimit_UnderLimit(t *testing.T) {
-	db, mock, err := sqlmock.New()
-	if err != nil {
-		t.Fatalf("sqlmock: %v", err)
-	}
-	defer func() { _ = db.Close() }()
-
-	mock.ExpectQuery("SELECT plan FROM subscriptions").
-		WithArgs("tn-test").
-		WillReturnRows(sqlmock.NewRows([]string{"plan"}).AddRow("pro"))
-
-	mock.ExpectQuery("SELECT hard_limit, soft_limit FROM plan_limits").
-		WithArgs("pro", "environments").
-		WillReturnRows(sqlmock.NewRows([]string{"hard_limit", "soft_limit"}).AddRow(5, nil))
-
+	db, _ := setupPlanLimitMocks(t, "tn-test", "pro", "environments", 5, nil)
 	limiter := NewPlanLimiter(db, testLogger())
 	result := limiter.CheckLimit("tn-test", "environments", 3)
-
 	if !result.Allowed {
 		t.Error("under environments limit should be allowed")
 	}
@@ -294,24 +240,10 @@ func TestCheckLimit_EnvironmentsLimit_UnderLimit(t *testing.T) {
 // ---------------------------------------------------------------------------
 
 func TestCheckLimit_SoftLimit_OverageAllowed(t *testing.T) {
-	db, mock, err := sqlmock.New()
-	if err != nil {
-		t.Fatalf("sqlmock: %v", err)
-	}
-	defer func() { _ = db.Close() }()
-
-	mock.ExpectQuery("SELECT plan FROM subscriptions").
-		WithArgs("tn-team").
-		WillReturnRows(sqlmock.NewRows([]string{"plan"}).AddRow("team"))
-
-	// Hard limit 10, soft limit 8 — at 8, allowed but SoftOver
-	mock.ExpectQuery("SELECT hard_limit, soft_limit FROM plan_limits").
-		WithArgs("team", "seats").
-		WillReturnRows(sqlmock.NewRows([]string{"hard_limit", "soft_limit"}).AddRow(10, 8))
-
+	// Hard limit 10, soft limit 8 — at 9, allowed but SoftOver=true.
+	db, _ := setupPlanLimitMocks(t, "tn-team", "team", "seats", 10, 8)
 	limiter := NewPlanLimiter(db, testLogger())
 	result := limiter.CheckLimit("tn-team", "seats", 9)
-
 	if !result.Allowed {
 		t.Error("soft over should still be allowed")
 	}
@@ -325,24 +257,14 @@ func TestCheckLimit_SoftLimit_OverageAllowed(t *testing.T) {
 // ---------------------------------------------------------------------------
 
 func TestCheckLimit_NegativeHardLimit_Unlimited(t *testing.T) {
-	db, mock, err := sqlmock.New()
-	if err != nil {
-		t.Fatalf("sqlmock: %v", err)
-	}
-	defer func() { _ = db.Close() }()
-
-	mock.ExpectQuery("SELECT plan FROM subscriptions").
-		WithArgs("tn-test").
-		WillReturnRows(sqlmock.NewRows([]string{"plan"}).AddRow("pro"))
-
-	// hard_limit NULL → parsed as -1 → unlimited
+	// hard_limit NULL → parsed as -1 → unlimited. setupPlanLimitMocks
+	// passes nil for hardLimit via interface{} sentinel.
+	db, mock := setupSubscriptionMock(t, "tn-test", "pro")
 	mock.ExpectQuery("SELECT hard_limit, soft_limit FROM plan_limits").
 		WithArgs("pro", "builds_per_month").
 		WillReturnRows(sqlmock.NewRows([]string{"hard_limit", "soft_limit"}).AddRow(nil, nil))
-
 	limiter := NewPlanLimiter(db, testLogger())
 	result := limiter.CheckLimit("tn-test", "builds_per_month", 999)
-
 	if !result.Allowed {
 		t.Error("NULL hard limit should mean unlimited")
 	}
@@ -391,24 +313,9 @@ func TestCheckLimit_MissingSubscription_FallbackStarter(t *testing.T) {
 // ---------------------------------------------------------------------------
 
 func TestCheckLimit_MissingLimitsRow_DeniedByDefault(t *testing.T) {
-	db, mock, err := sqlmock.New()
-	if err != nil {
-		t.Fatalf("sqlmock: %v", err)
-	}
-	defer func() { _ = db.Close() }()
-
-	mock.ExpectQuery("SELECT plan FROM subscriptions").
-		WithArgs("tn-test").
-		WillReturnRows(sqlmock.NewRows([]string{"plan"}).AddRow("starter"))
-
-	// No plan_limits row → returns empty
-	mock.ExpectQuery("SELECT hard_limit, soft_limit FROM plan_limits").
-		WithArgs("starter", "unknown_metric").
-		WillReturnRows(sqlmock.NewRows([]string{"hard_limit", "soft_limit"}))
-
+	db, _ := setupPlanLimitMocksNoRow(t, "tn-test", "starter", "unknown_metric")
 	limiter := NewPlanLimiter(db, testLogger())
 	result := limiter.CheckLimit("tn-test", "unknown_metric", 0)
-
 	if result.Allowed {
 		t.Error("missing plan_limits row should deny by default (fail closed)")
 	}
@@ -435,47 +342,18 @@ func TestGetBuildTimeout_NilDB(t *testing.T) {
 }
 
 func TestGetBuildTimeout_FromDB(t *testing.T) {
-	db, mock, err := sqlmock.New()
-	if err != nil {
-		t.Fatalf("sqlmock: %v", err)
-	}
-	defer func() { _ = db.Close() }()
-
-	mock.ExpectQuery("SELECT plan FROM subscriptions").
-		WithArgs("tn-pro").
-		WillReturnRows(sqlmock.NewRows([]string{"plan"}).AddRow("pro"))
-
-	mock.ExpectQuery("SELECT hard_limit, soft_limit FROM plan_limits").
-		WithArgs("pro", "build_timeout_seconds").
-		WillReturnRows(sqlmock.NewRows([]string{"hard_limit", "soft_limit"}).AddRow(3600, nil))
-
+	db, _ := setupPlanLimitMocks(t, "tn-pro", "pro", "build_timeout_seconds", 3600, nil)
 	limiter := NewPlanLimiter(db, testLogger())
 	timeout := limiter.GetBuildTimeout("tn-pro")
-
 	if timeout != 3600 {
 		t.Errorf("timeout = %d, want 3600", timeout)
 	}
 }
 
 func TestGetBuildTimeout_MissingRow_Default(t *testing.T) {
-	db, mock, err := sqlmock.New()
-	if err != nil {
-		t.Fatalf("sqlmock: %v", err)
-	}
-	defer func() { _ = db.Close() }()
-
-	mock.ExpectQuery("SELECT plan FROM subscriptions").
-		WithArgs("tn-test").
-		WillReturnRows(sqlmock.NewRows([]string{"plan"}).AddRow("starter"))
-
-	// No row for build_timeout_seconds
-	mock.ExpectQuery("SELECT hard_limit, soft_limit FROM plan_limits").
-		WithArgs("starter", "build_timeout_seconds").
-		WillReturnRows(sqlmock.NewRows([]string{"hard_limit", "soft_limit"}))
-
+	db, _ := setupPlanLimitMocksNoRow(t, "tn-test", "starter", "build_timeout_seconds")
 	limiter := NewPlanLimiter(db, testLogger())
 	timeout := limiter.GetBuildTimeout("tn-test")
-
 	if timeout != 1800 {
 		t.Errorf("timeout = %d, want 1800 (default)", timeout)
 	}

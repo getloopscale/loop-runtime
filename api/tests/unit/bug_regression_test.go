@@ -171,7 +171,7 @@ func TestBUG04_SyncRetriggersCleanedUpOnFailure(t *testing.T) {
 
 	// Poll until release transitions to SYNC_FAILED.
 	deadline := time.After(5 * time.Second)
-	for releaseStore.getStatus("rel-bug04-b") != string(statemachine.ReleaseSyncFailed) {
+	for releaseStore.getStatus("rel-bug04-b") != string(statemachine.RPhSyncFailed) {
 		select {
 		case <-deadline:
 			t.Fatalf("timeout waiting for SYNC_FAILED, got %q", releaseStore.getStatus("rel-bug04-b"))
@@ -180,7 +180,7 @@ func TestBUG04_SyncRetriggersCleanedUpOnFailure(t *testing.T) {
 		}
 	}
 
-	if releaseStore.getStatus("rel-bug04-b") != string(statemachine.ReleaseSyncFailed) {
+	if releaseStore.getStatus("rel-bug04-b") != string(statemachine.RPhSyncFailed) {
 		t.Errorf("expected release SYNC_FAILED, got %q", releaseStore.getStatus("rel-bug04-b"))
 	}
 

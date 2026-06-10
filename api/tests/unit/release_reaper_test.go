@@ -34,7 +34,7 @@ func TestReleaseReaper_ReapsReadyRelease(t *testing.T) {
 		TenantID:    "acme",
 		ProjectID:   "proj1",
 		Environment: "production",
-		Status:      string(statemachine.ReleaseReady),
+		Status:      string(statemachine.RPhReady),
 		CreatedAt:   time.Now().Add(-10 * time.Minute),
 	}
 
@@ -42,8 +42,8 @@ func TestReleaseReaper_ReapsReadyRelease(t *testing.T) {
 		releases: []services.StaleRelease{
 			{
 				ID:          "rel-stale-ready",
-				State:       statemachine.ReleaseReady,
-				Event:       statemachine.ReleaseGitPushTimeout,
+				State:       statemachine.RPhReady,
+				Event:       statemachine.RPEventGitPushTimeout,
 				TenantID:    "acme",
 				ProjectID:   "proj1",
 				Environment: "production",
@@ -71,7 +71,7 @@ func TestReleaseReaper_ReapsReadyRelease(t *testing.T) {
 	}
 
 	release := releaseStore.releases["rel-stale-ready"]
-	if release.Status != string(statemachine.ReleaseGitMirrorFailed) {
+	if release.Status != string(statemachine.RPhGitMirrorFailed) {
 		t.Errorf("expected release status GIT_MIRROR_FAILED, got %s", release.Status)
 	}
 
@@ -93,7 +93,7 @@ func TestReleaseReaper_ReapsPendingRelease(t *testing.T) {
 		TenantID:    "acme",
 		ProjectID:   "proj1",
 		Environment: "staging",
-		Status:      string(statemachine.ReleasePending),
+		Status:      string(statemachine.RPhPending),
 		CreatedAt:   time.Now().Add(-10 * time.Minute),
 	}
 
@@ -101,8 +101,8 @@ func TestReleaseReaper_ReapsPendingRelease(t *testing.T) {
 		releases: []services.StaleRelease{
 			{
 				ID:          "rel-stale-pending",
-				State:       statemachine.ReleasePending,
-				Event:       statemachine.ReleaseSyncTimeout,
+				State:       statemachine.RPhPending,
+				Event:       statemachine.RPEventSyncTimeout,
 				TenantID:    "acme",
 				ProjectID:   "proj1",
 				Environment: "staging",
@@ -126,7 +126,7 @@ func TestReleaseReaper_ReapsPendingRelease(t *testing.T) {
 	}
 
 	release := releaseStore.releases["rel-stale-pending"]
-	if release.Status != string(statemachine.ReleaseSyncFailed) {
+	if release.Status != string(statemachine.RPhSyncFailed) {
 		t.Errorf("expected release status SYNC_FAILED, got %s", release.Status)
 	}
 
@@ -148,7 +148,7 @@ func TestReleaseReaper_SkipsTerminalReleases(t *testing.T) {
 		TenantID:    "acme",
 		ProjectID:   "proj1",
 		Environment: "production",
-		Status:      string(statemachine.ReleaseSuperseded),
+		Status:      string(statemachine.RPhSuperseded),
 		CreatedAt:   time.Now().Add(-10 * time.Minute),
 	}
 
@@ -156,8 +156,8 @@ func TestReleaseReaper_SkipsTerminalReleases(t *testing.T) {
 		releases: []services.StaleRelease{
 			{
 				ID:          "rel-done",
-				State:       statemachine.ReleaseReady,
-				Event:       statemachine.ReleaseGitPushTimeout,
+				State:       statemachine.RPhReady,
+				Event:       statemachine.RPEventGitPushTimeout,
 				TenantID:    "acme",
 				ProjectID:   "proj1",
 				Environment: "production",
@@ -212,7 +212,7 @@ func TestReleaseReaper_SkipsAlreadyAdvancedRelease(t *testing.T) {
 		TenantID:    "acme",
 		ProjectID:   "proj1",
 		Environment: "production",
-		Status:      string(statemachine.ReleaseActive), // already advanced
+		Status:      string(statemachine.RPhActive), // already advanced
 		CreatedAt:   time.Now().Add(-10 * time.Minute),
 	}
 
@@ -220,8 +220,8 @@ func TestReleaseReaper_SkipsAlreadyAdvancedRelease(t *testing.T) {
 		releases: []services.StaleRelease{
 			{
 				ID:          "rel-advanced",
-				State:       statemachine.ReleasePending,
-				Event:       statemachine.ReleaseSyncTimeout,
+				State:       statemachine.RPhPending,
+				Event:       statemachine.RPEventSyncTimeout,
 				TenantID:    "acme",
 				ProjectID:   "proj1",
 				Environment: "production",
@@ -245,7 +245,7 @@ func TestReleaseReaper_SkipsAlreadyAdvancedRelease(t *testing.T) {
 
 	// Verify release was not modified
 	release := releaseStore.releases["rel-advanced"]
-	if release.Status != string(statemachine.ReleaseActive) {
+	if release.Status != string(statemachine.RPhActive) {
 		t.Errorf("expected release to remain ACTIVE, got %s", release.Status)
 	}
 }

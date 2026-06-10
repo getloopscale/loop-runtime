@@ -176,8 +176,22 @@ export class ScaleCommand {
       }
     }
     this.deps.writeTo('');
-    this.deps.writeTo('Scaling configuration acknowledged. Changes take effect on the next deploy.');
-    this.deps.writeTo('Update autoscaling in loopzero.yaml, then run `loopzero deploy`.');
+    // Plan T2.4: distinguish persisted/applied path from legacy stub.
+    // API now returns status="applied" (200) or "no_change" (200) for the real
+    // persistence path. Legacy "acknowledged" (202) remains for backward compat
+    // until all bootstrap call sites pass a real ScaleApplyFunc.
+    switch (response.status) {
+      case 'applied':
+        this.deps.writeTo('Scaling configuration applied. Changes are now active.');
+        break;
+      case 'no_change':
+        this.deps.writeTo('No change — configuration matches current state.');
+        break;
+      default:
+        // Legacy "acknowledged" path.
+        this.deps.writeTo('Scaling configuration acknowledged. Changes take effect on the next deploy.');
+        this.deps.writeTo('Update autoscaling in loopzero.yaml, then run `loopzero deploy`.');
+    }
 
     return 0;
   }

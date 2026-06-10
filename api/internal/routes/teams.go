@@ -138,7 +138,6 @@ func (h *TeamHandler) Add(w http.ResponseWriter, r *http.Request) {
 		writeLoopZeroError(w, &loopzeroerrors.LoopZeroError{
 			Code:       "USER_NOT_FOUND",
 			Message:    "user '" + req.Username + "' not found — they must run `loopzero login` first",
-			HTTPStatus: http.StatusNotFound,
 		})
 		return
 	}
@@ -308,7 +307,6 @@ func (h *TeamHandler) UpdateRole(w http.ResponseWriter, r *http.Request) {
 		writeLoopZeroError(w, &loopzeroerrors.LoopZeroError{
 			Code:       "MEMBER_NOT_FOUND",
 			Message:    "member '" + username + "' not found in this team",
-			HTTPStatus: http.StatusNotFound,
 		})
 		return
 	}
@@ -331,7 +329,6 @@ func (h *TeamHandler) UpdateRole(w http.ResponseWriter, r *http.Request) {
 			writeLoopZeroError(w, &loopzeroerrors.LoopZeroError{
 				Code:       "MEMBER_NOT_FOUND",
 				Message:    "member '" + username + "' not found in this team",
-				HTTPStatus: http.StatusNotFound,
 			})
 			return
 		}

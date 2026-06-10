@@ -16,6 +16,9 @@ var _ Provisioner = (*CircuitBreakerClient)(nil)
 // CircuitBreakerClient wraps a Harbor Provisioner with circuit breaker
 // protection for external Harbor API calls. MEET-052: prevents retry storms
 // when Harbor is saturated during bulk tenant provisioning or deletion.
+//
+// Migrated to circuitbreaker.Execute (ADR-0031 + PKG-G16): context
+// cancellation no longer falsely advances the failure counter.
 type CircuitBreakerClient struct {
 	inner  Provisioner
 	cb     *circuitbreaker.Breaker
@@ -33,60 +36,60 @@ func NewCircuitBreakerClient(inner Provisioner, cb *circuitbreaker.Breaker, logg
 
 // EnsureProject delegates to the inner provisioner with circuit breaker protection.
 func (c *CircuitBreakerClient) EnsureProject(ctx context.Context, name string, opts ProjectOpts) error {
-	if err := c.cb.PreCheck(); err != nil {
+	_, err := circuitbreaker.Execute(ctx, c.cb, func(ctx context.Context) (struct{}, error) {
+		return struct{}{}, c.inner.EnsureProject(ctx, name, opts)
+	})
+	if err != nil && c.cb.State() == circuitbreaker.Open {
 		c.logger.WarnContext(ctx, "harbor circuit breaker open, skipping EnsureProject",
 			"project", name, "cb_state", c.cb.State().String())
-		return err
 	}
-	err := c.inner.EnsureProject(ctx, name, opts)
-	c.cb.RecordResult(err)
 	return err
 }
 
 // DeleteProject delegates to the inner provisioner with circuit breaker protection.
 func (c *CircuitBreakerClient) DeleteProject(ctx context.Context, name string) error {
-	if err := c.cb.PreCheck(); err != nil {
+	_, err := circuitbreaker.Execute(ctx, c.cb, func(ctx context.Context) (struct{}, error) {
+		return struct{}{}, c.inner.DeleteProject(ctx, name)
+	})
+	if err != nil && c.cb.State() == circuitbreaker.Open {
 		c.logger.WarnContext(ctx, "harbor circuit breaker open, skipping DeleteProject",
 			"project", name, "cb_state", c.cb.State().String())
-		return err
 	}
-	err := c.inner.DeleteProject(ctx, name)
-	c.cb.RecordResult(err)
 	return err
 }
 
 // EnsureRobotAccount delegates to the inner provisioner with circuit breaker protection.
 func (c *CircuitBreakerClient) EnsureRobotAccount(ctx context.Context, projectName string, opts RobotAccountOpts) (*RobotCredentials, error) {
-	if err := c.cb.PreCheck(); err != nil {
+	creds, err := circuitbreaker.Execute(ctx, c.cb, func(ctx context.Context) (*RobotCredentials, error) {
+		return c.inner.EnsureRobotAccount(ctx, projectName, opts)
+	})
+	if err != nil && c.cb.State() == circuitbreaker.Open {
 		c.logger.WarnContext(ctx, "harbor circuit breaker open, skipping EnsureRobotAccount",
 			"project", projectName, "robot", opts.Name, "cb_state", c.cb.State().String())
-		return nil, err
 	}
-	creds, err := c.inner.EnsureRobotAccount(ctx, projectName, opts)
-	c.cb.RecordResult(err)
 	return creds, err
 }
 
 // DeleteRobotAccount delegates to the inner provisioner with circuit breaker protection.
 func (c *CircuitBreakerClient) DeleteRobotAccount(ctx context.Context, projectName string, robotName string) error {
-	if err := c.cb.PreCheck(); err != nil {
+	_, err := circuitbreaker.Execute(ctx, c.cb, func(ctx context.Context) (struct{}, error) {
+		return struct{}{}, c.inner.DeleteRobotAccount(ctx, projectName, robotName)
+	})
+	if err != nil && c.cb.State() == circuitbreaker.Open {
 		c.logger.WarnContext(ctx, "harbor circuit breaker open, skipping DeleteRobotAccount",
 			"project", projectName, "robot", robotName, "cb_state", c.cb.State().String())
-		return err
 	}
-	err := c.inner.DeleteRobotAccount(ctx, projectName, robotName)
-	c.cb.RecordResult(err)
 	return err
 }
 
 // Healthy delegates to the inner provisioner with circuit breaker protection.
 func (c *CircuitBreakerClient) Healthy(ctx context.Context) error {
-	if err := c.cb.PreCheck(); err != nil {
+	_, err := circuitbreaker.Execute(ctx, c.cb, func(ctx context.Context) (struct{}, error) {
+		return struct{}{}, c.inner.Healthy(ctx)
+	})
+	if err != nil && c.cb.State() == circuitbreaker.Open {
 		c.logger.WarnContext(ctx, "harbor circuit breaker open, skipping Healthy",
 			"cb_state", c.cb.State().String())
-		return err
 	}
-	err := c.inner.Healthy(ctx)
-	c.cb.RecordResult(err)
 	return err
 }

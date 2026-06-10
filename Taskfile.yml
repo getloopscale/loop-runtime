@@ -8,15 +8,60 @@ shell:
   - --norc
   - -c
 
-# Load .env.local if present — allows overriding dev credentials without editing Taskfile.
-# Copy .env.example to .env.local and customize. See .env.example for available variables.
+# Load credentials from .env files (precedence: later file overrides earlier).
+# Operator stores D7' drill credentials in .env per user directive 2026-05-16
+# (iter 10 — drill-l2-unlock plan); .env.local allows local-only overrides.
+# See concepts/operations/operator-handoff-2026-05-16-drill-l2-phase4.md.
 dotenv:
+  - .env
   - .env.local
+
+# Plan T1.3 — Taskfile split via includes (foundation iter 1; per-domain migration ongoing).
+# Each include's tasks are merged into the root namespace by Task v3 (no namespace prefix
+# unless the included file uses prefixes itself like `parity:foo:`).
+# `_legacy` namespace is reserved during transition; remove when domain stubs are populated.
+includes:
+  testfile:
+    taskfile: ./taskfiles/test.yml
+    flatten: true
+  helmfile:
+    taskfile: ./taskfiles/helm.yml
+    flatten: true
+  infrafile:
+    taskfile: ./taskfiles/infra.yml
+    flatten: true
+  devfile:
+    taskfile: ./taskfiles/dev.yml
+    flatten: true
+  dbfile:
+    taskfile: ./taskfiles/db.yml
+    flatten: true
+  k3dfile:
+    taskfile: ./taskfiles/k3d.yml
+    flatten: true
+  securityfile:
+    taskfile: ./taskfiles/security.yml
+    flatten: true
+  observabilityfile:
+    taskfile: ./taskfiles/observability.yml
+    flatten: true
+  drill:
+    taskfile: ./taskfiles/drill.yml
+    optional: false
+  quality:
+    taskfile: ./taskfiles/quality.yml
 
 vars:
   MGMT_CONTEXT: k3d-loopzero-mgmt
   BUILD_CONTEXT: k3d-loopzero-build
   WORKLOAD_CONTEXT: k3d-loopzero-workload
+  # cell-2-activation-plan T0.1 — second runtime cluster mapped to cells.cell_id='cell-2'.
+  # Provisioned by infra/k3d/runtime-2-cluster.yaml. Cluster name `loopzero-runtime-2`
+  # matches production wire-clusters.sh + Pulumi convention (LOOPZERO_RUNTIME2_KUBECONFIG).
+  # ClusterCredential CR is named `cell-2` with spec.clusterName=loopzero-runtime-2.
+  # Status starts 'maintenance' in cells SQL table (migration 000006); migration
+  # 000007 flips to 'active' after cell-2 activation invariants pass (now Ginkgo: ginkgo --label-filter=parity --focus='Cell-2 Activation', migrated from cell2-activation-gates.sh TB1.1 2026-05-24).
+  RUNTIME2_CONTEXT: k3d-loopzero-runtime-2
   # Standardized port-forward ports (avoid conflicts between tasks)
   PG_PORT: 15432
   PG_HOST: localhost
@@ -36,1239 +81,128 @@ tasks:
   # QA Tooling — Environment verification and diagnostics
   # ===========================================================================
 
-  doctor:
-    desc: Check all prerequisites and environment health (run this first!)
-    cmds:
-      - |
-        PASS=0
-        FAIL=0
-        WARN=0
-
-        check() {
-          local name="$1" cmd="$2" install_hint="$3"
-          if eval "$cmd" >/dev/null 2>&1; then
-            echo "  [PASS] $name"
-            PASS=$((PASS+1))
-          else
-            echo "  [FAIL] $name — $install_hint"
-            FAIL=$((FAIL+1))
-          fi
-        }
-
-        check_warn() {
-          local name="$1" cmd="$2" hint="$3"
-          if eval "$cmd" >/dev/null 2>&1; then
-            echo "  [PASS] $name"
-            PASS=$((PASS+1))
-          else
-            echo "  [WARN] $name — $hint"
-            WARN=$((WARN+1))
-          fi
-        }
-
-        echo "=== Required Tools ==="
-        check "go (1.22+)"           "go version"                       "https://go.dev/dl/"
-        check "node (20+)"           "node --version"                   "https://nodejs.org/"
-        check "docker"               "docker info"                      "https://docs.docker.com/get-docker/"
-        check "kubectl"              "kubectl version --client"         "https://kubernetes.io/docs/tasks/tools/"
-        check "helm"                 "helm version"                     "https://helm.sh/docs/intro/install/"
-        check "k3d"                  "k3d version"                      "https://k3d.io/#installation"
-        check "task"                 "task --version"                   "https://taskfile.dev/installation/"
-        check "psql"                 "psql --version"                   "sudo apt install postgresql-client"
-        check "jq"                   "jq --version"                     "sudo apt install jq"
-        check "curl"                 "curl --version"                   "sudo apt install curl"
-
-        echo ""
-        echo "=== Optional Tools ==="
-        check_warn "tilt"               "tilt version"                     "https://docs.tilt.dev/install.html"
-        check_warn "kubeconform"        "kubeconform -v"                   "go install github.com/yannh/kubeconform/cmd/kubeconform@latest"
-        check_warn "golangci-lint"      "golangci-lint version"            "https://golangci-lint.run/welcome/install/"
-        check_warn "setup-envtest"      "which setup-envtest"              "go install sigs.k8s.io/controller-runtime/tools/setup-envtest@latest"
-        check_warn "gotestsum"          "which gotestsum"                  "go install gotest.tools/gotestsum@latest (enables JUnit reports)"
-        check_warn "ginkgo"             "which ginkgo"                     "go install github.com/onsi/ginkgo/v2/ginkgo@latest"
-
-        echo ""
-        echo "=== System Limits ==="
-        INOTIFY_INSTANCES=$(cat /proc/sys/fs/inotify/max_user_instances 2>/dev/null || echo 0)
-        if [ "$INOTIFY_INSTANCES" -ge 512 ]; then
-          echo "  [PASS] inotify max_user_instances: $INOTIFY_INSTANCES (>= 512)"
-          PASS=$((PASS+1))
-        else
-          echo "  [FAIL] inotify max_user_instances: $INOTIFY_INSTANCES (need >= 512 for 3 k3d clusters)"
-          echo "         Fix: sudo sysctl fs.inotify.max_user_instances=512"
-          FAIL=$((FAIL+1))
-        fi
-
-        echo ""
-        echo "=== k3d Clusters ==="
-        for CLUSTER in loopzero-mgmt loopzero-build loopzero-workload; do
-          if k3d cluster list -o json 2>/dev/null | grep -q "\"name\":\"$CLUSTER\""; then
-            echo "  [PASS] $CLUSTER cluster exists"
-            PASS=$((PASS+1))
-          else
-            echo "  [FAIL] $CLUSTER cluster not found — run: task setup"
-            FAIL=$((FAIL+1))
-          fi
-        done
-
-        echo ""
-        echo "=== Cluster Connectivity ==="
-        for CTX in k3d-loopzero-mgmt k3d-loopzero-build k3d-loopzero-workload; do
-          if kubectl --context "$CTX" cluster-info >/dev/null 2>&1; then
-            echo "  [PASS] $CTX reachable"
-            PASS=$((PASS+1))
-          else
-            echo "  [FAIL] $CTX unreachable"
-            FAIL=$((FAIL+1))
-          fi
-        done
-
-        echo ""
-        echo "=== API Tokens ==="
-        # ArgoCD token check (optional — not needed until Sprint 2)
-        ARGOCD_TOKEN=$(kubectl --context {{.MGMT_CONTEXT}} get secret loopzero-api-tokens -n loopzero-system -o jsonpath='{.data.argocd-token}' 2>/dev/null | base64 -d 2>/dev/null)
-        if [ -z "$ARGOCD_TOKEN" ]; then
-          echo "  [WARN] ArgoCD token — not provisioned (required from Sprint 2)"
-          WARN=$((WARN+1))
-        else
-          TOKEN_STATUS=$(echo "$ARGOCD_TOKEN" | cut -d. -f2 | base64 -d 2>/dev/null | python3 -c "
-        import sys, json, datetime
-        try:
-          data = json.load(sys.stdin)
-          exp = data.get('exp')
-          if exp and datetime.datetime.fromtimestamp(exp) < datetime.datetime.now():
-            print('EXPIRED')
-          elif exp is None:
-            print('NEVER_EXPIRES')
-          else:
-            print('VALID')
-        except:
-          print('UNKNOWN')
-        " 2>/dev/null)
-          if [ "$TOKEN_STATUS" = "EXPIRED" ]; then
-            echo "  [FAIL] ArgoCD token — EXPIRED! Run: task tokens:provision"
-            FAIL=$((FAIL+1))
-          elif [ "$TOKEN_STATUS" = "NEVER_EXPIRES" ]; then
-            echo "  [PASS] ArgoCD token — valid (never expires)"
-            PASS=$((PASS+1))
-          elif [ "$TOKEN_STATUS" = "VALID" ]; then
-            echo "  [PASS] ArgoCD token — valid (has expiration, not yet expired)"
-            PASS=$((PASS+1))
-          else
-            echo "  [WARN] ArgoCD token — could not verify expiration"
-            WARN=$((WARN+1))
-          fi
-        fi
-        # Gitea token check
-        GITEA_TOKEN=$(kubectl --context {{.MGMT_CONTEXT}} get secret loopzero-api-tokens -n loopzero-system -o jsonpath='{.data.gitea-token}' 2>/dev/null | base64 -d 2>/dev/null)
-        if [ -n "$GITEA_TOKEN" ]; then
-          echo "  [PASS] Gitea token — present (${#GITEA_TOKEN} chars)"
-          PASS=$((PASS+1))
-        else
-          echo "  [FAIL] Gitea token — not provisioned. Run: task tokens:provision"
-          FAIL=$((FAIL+1))
-        fi
-
-        echo ""
-        echo "=== Ory Auth Services (mgmt cluster) ==="
-        for SVC in ory-kratos-public ory-kratos-admin ory-hydra-public ory-hydra-admin; do
-          NS="loopzero-system"
-          if kubectl --context {{.MGMT_CONTEXT}} -n "$NS" get svc "$SVC" >/dev/null 2>&1; then
-            READY=$(kubectl --context {{.MGMT_CONTEXT}} -n "$NS" get endpoints "$SVC" -o jsonpath='{.subsets[0].addresses}' 2>/dev/null)
-            if [ -n "$READY" ]; then
-              echo "  [PASS] $SVC ($NS) — endpoints ready"
-              PASS=$((PASS+1))
-            else
-              echo "  [WARN] $SVC ($NS) — service exists but no ready endpoints"
-              WARN=$((WARN+1))
-            fi
-          else
-            echo "  [WARN] $SVC ($NS) — not installed (required for cloud auth)"
-            WARN=$((WARN+1))
-          fi
-        done
-
-        echo ""
-        echo "=== Core Services (mgmt cluster) ==="
-        for SVC in postgresql gitea-http minio argocd-server; do
-          NS="loopzero-system"
-          if [ "$SVC" = "argocd-server" ]; then NS="argocd"; fi
-          # minio and argocd-server are optional until Sprint 2
-          IS_OPTIONAL=false
-          if [ "$SVC" = "minio" ] || [ "$SVC" = "argocd-server" ]; then IS_OPTIONAL=true; fi
-          if kubectl --context {{.MGMT_CONTEXT}} -n "$NS" get svc "$SVC" >/dev/null 2>&1; then
-            READY=$(kubectl --context {{.MGMT_CONTEXT}} -n "$NS" get endpoints "$SVC" -o jsonpath='{.subsets[0].addresses}' 2>/dev/null)
-            if [ -n "$READY" ]; then
-              echo "  [PASS] $SVC ($NS) — endpoints ready"
-              PASS=$((PASS+1))
-            else
-              echo "  [WARN] $SVC ($NS) — service exists but no ready endpoints"
-              WARN=$((WARN+1))
-            fi
-          elif [ "$IS_OPTIONAL" = true ]; then
-            echo "  [WARN] $SVC ($NS) — not installed yet (required from Sprint 2)"
-            WARN=$((WARN+1))
-          else
-            echo "  [FAIL] $SVC ($NS) — not found. Run: task infra:install:mgmt"
-            FAIL=$((FAIL+1))
-          fi
-        done
-
-        echo ""
-        echo "=== API Health ==="
-        if curl -sf http://localhost:{{.API_PORT}}/api/v1/health >/dev/null 2>&1; then
-          echo "  [PASS] API /health reachable at localhost:{{.API_PORT}}"
-          PASS=$((PASS+1))
-        else
-          echo "  [FAIL] API /health not reachable at localhost:{{.API_PORT}} — run: tilt up"
-          FAIL=$((FAIL+1))
-        fi
-
-        echo ""
-        echo "=== Summary ==="
-        echo "  PASS: $PASS  |  WARN: $WARN  |  FAIL: $FAIL"
-        if [ "$FAIL" -gt 0 ]; then
-          echo ""
-          echo "  Fix the FAILed checks above before proceeding."
-          echo "  Quick start: task setup  (creates clusters + installs everything)"
-          exit 1
-        elif [ "$WARN" -gt 0 ]; then
-          echo ""
-          echo "  Environment is functional. Warnings are for optional tools."
-        else
-          echo ""
-          echo "  All checks passed! Environment is ready."
-        fi
-
-  status:
-    desc: Show environment health at a glance (clusters, pods, DB, API)
-    cmds:
-      - |
-        echo "=== k3d Clusters ==="
-        k3d cluster list 2>/dev/null || echo "k3d not available or no clusters"
-
-        echo ""
-        echo "=== Pod Status (loopzero-system) ==="
-        kubectl --context {{.MGMT_CONTEXT}} -n loopzero-system get pods -o wide 2>/dev/null \
-          || echo "Cannot reach mgmt cluster"
-
-        echo ""
-        echo "=== Pod Status (argocd) ==="
-        kubectl --context {{.MGMT_CONTEXT}} -n argocd get pods 2>/dev/null \
-          || echo "ArgoCD namespace not found"
-
-        echo ""
-        echo "=== Pod Status (argo — build cluster) ==="
-        kubectl --context {{.BUILD_CONTEXT}} -n argo get pods 2>/dev/null \
-          || echo "Cannot reach build cluster"
-
-        echo ""
-        echo "=== Pod Status (traefik — workload cluster) ==="
-        kubectl --context {{.WORKLOAD_CONTEXT}} -n traefik get pods 2>/dev/null \
-          || echo "Cannot reach workload cluster"
-
-        echo ""
-        echo "=== LoopZero CRDs ==="
-        kubectl --context {{.MGMT_CONTEXT}} get crd 2>/dev/null | grep -E "loopzero\.io" \
-          || echo "No LoopZero CRDs found. Run: task crds:install"
-
-        echo ""
-        echo "=== API Health ==="
-        if curl -sf http://localhost:{{.API_PORT}}/api/v1/health >/dev/null 2>&1; then
-          curl -sf http://localhost:{{.API_PORT}}/api/v1/health | jq . 2>/dev/null \
-            || echo "API healthy (but jq not available for pretty output)"
-        else
-          echo "API not reachable at localhost:{{.API_PORT}}"
-          echo "  Hint: run 'tilt up' or check loopzero-api pod"
-        fi
-
-        echo ""
-        echo "=== Monitoring ==="
-        if curl -sf http://localhost:{{.PROMETHEUS_PORT}}/api/v1/status/config >/dev/null 2>&1; then
-          TARGETS_UP=$(curl -sf http://localhost:{{.PROMETHEUS_PORT}}/api/v1/targets | jq '[.data.activeTargets[] | select(.health=="up")] | length' 2>/dev/null || echo "?")
-          TARGETS_DOWN=$(curl -sf http://localhost:{{.PROMETHEUS_PORT}}/api/v1/targets | jq '[.data.activeTargets[] | select(.health!="up")] | length' 2>/dev/null || echo "?")
-          echo "Prometheus: reachable | targets up: $TARGETS_UP | targets down: $TARGETS_DOWN"
-        else
-          echo "Prometheus not reachable at localhost:{{.PROMETHEUS_PORT}}"
-        fi
-        if curl -sf -u REDACTED_SECRET_056 http://localhost:{{.GRAFANA_PORT}}/api/health >/dev/null 2>&1; then
-          echo "Grafana: reachable"
-        else
-          echo "Grafana: not reachable at localhost:{{.GRAFANA_PORT}}"
-        fi
-
-  test:smoke:
-    desc: Quick smoke test — verify platform is alive (<30s)
-    cmds:
-      - |
-        PASS=0
-        FAIL=0
-
-        smoke() {
-          local name="$1"
-          shift
-          if "$@" >/dev/null 2>&1; then
-            echo "  [PASS] $name"
-            PASS=$((PASS+1))
-          else
-            echo "  [FAIL] $name"
-            FAIL=$((FAIL+1))
-          fi
-        }
-
-        echo "=== Smoke Tests ==="
-
-        # 1. Clusters respond
-        smoke "mgmt cluster reachable"     kubectl --context {{.MGMT_CONTEXT}} cluster-info
-        smoke "build cluster reachable"    kubectl --context {{.BUILD_CONTEXT}} cluster-info
-        smoke "workload cluster reachable" kubectl --context {{.WORKLOAD_CONTEXT}} cluster-info
-
-        # 2. Core pods running
-        smoke "postgresql pod running" kubectl --context {{.MGMT_CONTEXT}} -n loopzero-system \
-          wait --for=condition=ready pod -l app.kubernetes.io/name=postgresql --timeout=5s
-        smoke "gitea pod running" kubectl --context {{.MGMT_CONTEXT}} -n loopzero-system \
-          wait --for=condition=ready pod -l app.kubernetes.io/name=gitea --timeout=5s
-        smoke "minio pod running" kubectl --context {{.MGMT_CONTEXT}} -n loopzero-system \
-          wait --for=condition=ready pod -l app=minio --field-selector=status.phase=Running --timeout=5s
-
-        # 3. CRDs installed
-        smoke "Tenant CRD exists" kubectl --context {{.MGMT_CONTEXT}} get crd tenants.loopzero.io
-
-        # 4. API health (required for deploy flows)
-        smoke "API /health returns 200" curl -sf http://localhost:{{.API_PORT}}/api/v1/health
-        smoke "API /health/deep returns 200" curl -sf http://localhost:{{.API_PORT}}/api/v1/health/deep
-
-        # 5. API tokens present
-        smoke "ArgoCD token provisioned" sh -c 'kubectl --context {{.MGMT_CONTEXT}} get secret loopzero-api-tokens -n loopzero-system -o jsonpath="{.data.argocd-token}" 2>/dev/null | grep -q .'
-        smoke "Gitea token provisioned" sh -c 'kubectl --context {{.MGMT_CONTEXT}} get secret loopzero-api-tokens -n loopzero-system -o jsonpath="{.data.gitea-token}" 2>/dev/null | grep -q .'
-
-        echo ""
-        echo "=== Result: $PASS passed, $FAIL failed ==="
-        if [ "$FAIL" -gt 0 ]; then
-          echo "Platform is NOT healthy. Run 'task doctor' for diagnostics."
-          exit 1
-        else
-          echo "Platform is healthy. Ready for testing."
-        fi
-
-  # ===========================================================================
-  # QA Tooling — Logs and debugging
-  # ===========================================================================
-
-  logs:api:
-    desc: Tail loopzero-api logs (live)
-    cmds:
-      - kubectl --context {{.MGMT_CONTEXT}} -n loopzero-system logs -f deployment/loopzero-api --tail=100
-
-  logs:operator:
-    desc: Tail tenant-controller logs (live)
-    cmds:
-      - kubectl --context {{.MGMT_CONTEXT}} -n loopzero-system logs -f deployment/tenant-controller --tail=100
-
-  logs:builds:
-    desc: Show recent build workflow pods and their status
-    cmds:
-      - |
-        echo "=== Recent Build Pods (build cluster) ==="
-        kubectl --context {{.BUILD_CONTEXT}} get pods --all-namespaces \
-          --sort-by=.metadata.creationTimestamp \
-          -o custom-columns='NAMESPACE:.metadata.namespace,NAME:.metadata.name,STATUS:.status.phase,AGE:.metadata.creationTimestamp' \
-          2>/dev/null | tail -20
-
-  build:cleanup:
-    desc: Clean up completed/failed Argo Workflow pods in build cluster
-    cmds:
-      - |
-        echo "Cleaning up completed workflow pods..."
-
-        for PHASE in Succeeded Failed; do
-          kubectl --context {{.BUILD_CONTEXT}} get pods -A \
-            --field-selector="status.phase=${PHASE}" \
-            -o jsonpath='{range .items[*]}{.metadata.namespace}{" "}{.metadata.name}{"\n"}{end}' \
-            2>/dev/null | while read -r NS NAME; do
-              [ -n "$NS" ] && kubectl --context {{.BUILD_CONTEXT}} -n "$NS" delete pod "$NAME" 2>/dev/null && echo "  deleted ${NS}/${NAME}"
-            done
-        done
-
-        echo "Cleanup complete."
-
-  # ===========================================================================
-  # QA Tooling — Database management
-  # ===========================================================================
-
-  db:port-forward:
-    desc: Open a persistent port-forward to PostgreSQL (port {{.PG_PORT}})
-    cmds:
-      - |
-        # Check if port is already in use (e.g., by tilt)
-        if ss -tlnp 2>/dev/null | grep -q ":{{.PG_PORT}} " || lsof -i :{{.PG_PORT}} >/dev/null 2>&1; then
-          echo "Port {{.PG_PORT}} is already in use (likely by tilt or another port-forward)."
-          echo "You can connect directly:"
-          echo "  PGPASSWORD={{.PG_PASS}} psql -h {{.PG_HOST}} -p {{.PG_PORT}} -U {{.PG_USER}} -d {{.PG_DB}}"
-          exit 0
-        fi
-        echo "Port-forwarding PostgreSQL to localhost:{{.PG_PORT}}"
-        echo "Connect with: PGPASSWORD={{.PG_PASS}} psql -h {{.PG_HOST}} -p {{.PG_PORT}} -U {{.PG_USER}} -d {{.PG_DB}}"
-        echo "Press Ctrl+C to stop."
-        kubectl --context {{.MGMT_CONTEXT}} port-forward -n loopzero-system svc/postgresql {{.PG_PORT}}:5432
-
-  db:shell:
-    desc: Open an interactive psql shell to the database
-    interactive: true
-    cmds:
-      - |
-        POD=$(kubectl --context "{{.MGMT_CONTEXT}}" -n loopzero-system get pod -l app.kubernetes.io/name=postgresql -o jsonpath='{.items[0].metadata.name}')
-        kubectl --context "{{.MGMT_CONTEXT}}" -n loopzero-system exec -it "$POD" -c postgresql -- \
-          env PGPASSWORD="{{.PG_PASS}}" psql -U "{{.PG_USER}}" -d "{{.PG_DB}}"
-
-  db:status:
-    desc: Show database health — tables, row counts, connections, last migration
-    cmds:
-      - |
-        POD=$(kubectl --context "{{.MGMT_CONTEXT}}" -n loopzero-system get pod -l app.kubernetes.io/name=postgresql -o jsonpath='{.items[0].metadata.name}')
-        PG="kubectl --context {{.MGMT_CONTEXT}} -n loopzero-system exec -i $POD -c postgresql -- env PGPASSWORD={{.PG_PASS}} psql -U {{.PG_USER}} -d {{.PG_DB}}"
-
-        echo "=== Database Connection ==="
-        $PG -t -c "SELECT 'Connected to ' || current_database() || ' as ' || current_user || ' (version: ' || split_part(version(), ' ', 2) || ')';" 2>/dev/null \
-          || { echo "Cannot connect to database"; exit 1; }
-
-        echo ""
-        echo "=== Active Connections ==="
-        $PG -c "
-          SELECT datname, usename, state, count(*) as count
-          FROM pg_stat_activity
-          WHERE datname = '{{.PG_DB}}'
-          GROUP BY datname, usename, state
-          ORDER BY count DESC;
-        " 2>/dev/null
-
-        echo ""
-        echo "=== Tables and Row Counts ==="
-        $PG -c "
-          SELECT schemaname || '.' || relname AS table_name,
-                 n_live_tup AS row_count
-          FROM pg_stat_user_tables
-          ORDER BY n_live_tup DESC;
-        " 2>/dev/null
-
-        echo ""
-        echo "=== Migration Files Applied ==="
-        echo "  Migration files in api/internal/db/migrations/:"
-        ls -1 api/internal/db/migrations/*.up.sql 2>/dev/null | while read f; do echo "    $(basename "$f")"; done
-
-        echo ""
-        echo "=== Advisory Locks (active) ==="
-        $PG -c "
-          SELECT pid, classid, objid, granted
-          FROM pg_locks
-          WHERE locktype = 'advisory'
-          ORDER BY pid;
-        " 2>/dev/null
-
-  db:reset:
-    desc: Reset database to clean state (drop + recreate + migrate)
-    prompt: This will DROP and recreate the '{{.PG_DB}}' database. Are you sure?
-    cmds:
-      - |
-        POD=$(kubectl --context "{{.MGMT_CONTEXT}}" -n loopzero-system get pod -l app.kubernetes.io/name=postgresql -o jsonpath='{.items[0].metadata.name}')
-        PG="kubectl --context {{.MGMT_CONTEXT}} -n loopzero-system exec -i $POD -c postgresql -- env PGPASSWORD={{.PG_PASS}} psql -U {{.PG_USER}}"
-
-        echo "Dropping and recreating database..."
-        $PG -d postgres -c "
-          SELECT pg_terminate_backend(pid) FROM pg_stat_activity WHERE datname = '{{.PG_DB}}' AND pid <> pg_backend_pid();
-          DROP DATABASE IF EXISTS {{.PG_DB}};
-          CREATE DATABASE {{.PG_DB}} OWNER {{.PG_USER}};
-        "
-
-        echo "Running migrations..."
-        for f in $(ls api/internal/db/migrations/*.up.sql | sort); do
-          echo "  Applying $(basename $f)..."
-          $PG -d "{{.PG_DB}}" < "$f"
-        done
-
-        echo "Database reset complete."
-
-  db:reset:seed:
-    desc: Reset database + seed dev data
-    cmds:
-      - task: db:reset
-      - task: dev:seed
 
   # ===========================================================================
   # QA Tooling — E2E test preparation
   # ===========================================================================
 
-  test:e2e:setup:
-    desc: Prepare environment for E2E tests (smoke + tokens + seed + verify)
-    deps: [test:smoke]
+  install:sops:
+    desc: "Plan v1.2 T7.1 — install sops + age + helm-secrets plugin for secrets-in-git encryption (D6)"
     cmds:
       - |
-        echo ""
-        echo "=== Step 2/4: Provision API tokens ==="
-        bash infra/scripts/provision-api-tokens.sh
-      - |
-        echo ""
-        echo "=== Step 3/4: Seed E2E data ==="
-        kubectl --context "{{.MGMT_CONTEXT}}" port-forward -n loopzero-system svc/postgresql "{{.PG_PORT}}":5432 &
-        PF_PID=$!
-        sleep 2
-        DATABASE_URL="postgres://{{.PG_USER}}:{{.PG_PASS}}@{{.PG_HOST}}:{{.PG_PORT}}/{{.PG_DB}}?sslmode=disable" \
-          go run infra/scripts/seed_e2e.go
-        kill $PF_PID 2>/dev/null; wait $PF_PID 2>/dev/null || true
-      - |
-        echo ""
-        echo "=== Step 4/4: Verify API health ==="
-        if curl -sf http://localhost:{{.API_PORT}}/api/v1/health/deep >/dev/null 2>&1; then
-          echo "API deep health: OK"
+        set -e
+        echo "[install:sops] Installing sops + age..."
+        if command -v sops >/dev/null && command -v age >/dev/null; then
+          echo "[install:sops] sops + age already installed."
+        elif command -v brew >/dev/null; then
+          brew install sops age
+        elif command -v apt-get >/dev/null; then
+          sudo apt-get install -y age
+          curl -fsSL https://github.com/getsops/sops/releases/latest/download/sops-v3.10.2.linux.amd64 -o /tmp/sops
+          sudo install /tmp/sops /usr/local/bin/sops
         else
-          echo "WARNING: API deep health check failed. E2E tests may skip."
-          echo "  Is tilt running? Try: tilt up"
-        fi
-
-        echo ""
-        echo "=== E2E setup complete ==="
-        echo "Run E2E tests with: task test:e2e"
-
-  # ===========================================================================
-  # QA Tooling — Cleanup
-  # ===========================================================================
-
-  clean:
-    desc: Clean test artifacts and temporary files
-    cmds:
-      - |
-        echo "Cleaning test artifacts..."
-        rm -rf {{.REPORT_DIR}} 2>/dev/null || true
-        rm -rf /tmp/loopzero-e2e-* 2>/dev/null || true
-
-        # Kill any leftover PostgreSQL port-forwards (scoped to loopzero-system)
-        pkill -f "kubectl.*port-forward.*loopzero-system.*postgresql" 2>/dev/null || true
-
-        # Clean Go test cache
-        go clean -testcache 2>/dev/null || true
-
-        echo "Clean complete."
-
-  clean:all:
-    desc: Full teardown — delete clusters, registry, and all artifacts
-    cmds:
-      - task: clean
-      - |
-        echo ""
-        echo "Deleting k3d clusters and registry..."
-      - task: clusters:delete
-      - k3d registry delete loopzero-registry 2>/dev/null || true
-      - echo "Full teardown complete. Run 'task setup' to start fresh."
-
-  # ===========================================================================
-  # QA Tooling — Test reports (JUnit XML for CI/QA tools)
-  # ===========================================================================
-
-  test:report:
-    desc: Run all tests with JUnit XML reports (output in .test-reports/)
-    cmds:
-      - mkdir -p {{.REPORT_DIR}}
-      - task: test:report:unit
-      - |
-        echo ""
-        echo "=== Reports generated in {{.REPORT_DIR}}/ ==="
-        ls -la {{.REPORT_DIR}}/
-
-  test:report:unit:
-    desc: Run unit tests with JUnit XML output
-    env:
-      KUBEBUILDER_ASSETS:
-        sh: 'setup-envtest use -p path 2>/dev/null || { echo "ERROR: setup-envtest not installed. Run: go install sigs.k8s.io/controller-runtime/tools/setup-envtest@latest" >&2; exit 1; }'
-    cmds:
-      - mkdir -p {{.REPORT_DIR}}
-      - |
-        # Go tests — use gotestsum if available, fallback to go test
-        ROOT="$(pwd)"
-        if command -v gotestsum >/dev/null 2>&1; then
-          echo "Using gotestsum for JUnit output..."
-          (cd pkg && gotestsum --junitfile "${ROOT}/{{.REPORT_DIR}}/pkg-unit.xml" -- ./... -short)
-          (cd operators && gotestsum --junitfile "${ROOT}/{{.REPORT_DIR}}/operators-unit.xml" -- ./... -short)
-          (cd api && gotestsum --junitfile "${ROOT}/{{.REPORT_DIR}}/api-unit.xml" -- ./... -short)
-          (cd infra/tests && gotestsum --junitfile "${ROOT}/{{.REPORT_DIR}}/infra-unit.xml" -- ./unit/... -short)
-        else
-          echo "gotestsum not found — running go test (no JUnit output)"
-          echo "  Install: go install gotest.tools/gotestsum@latest"
-          (cd pkg && go test ./... -short -v)
-          (cd operators && go test ./... -short -v)
-          (cd api && go test ./... -short -v)
-          (cd infra/tests && go test ./unit/... -short -v)
-        fi
-      - |
-        # CLI tests — Jest supports JUnit via --reporters
-        cd cli && npx jest --reporters=default --reporters=jest-junit 2>/dev/null \
-          || npm test
-        # Move JUnit if created
-        [ -f cli/junit.xml ] && mv cli/junit.xml {{.REPORT_DIR}}/cli-unit.xml 2>/dev/null || true
-
-  test:report:e2e:
-    desc: Run E2E tests with JUnit XML output
-    env:
-      LOOPZERO_E2E: "1"
-    cmds:
-      - mkdir -p {{.REPORT_DIR}}
-      - |
-        if command -v gotestsum >/dev/null 2>&1; then
-          cd infra/tests && gotestsum --junitfile ../../{{.REPORT_DIR}}/e2e.xml -- ./e2e/... -v -timeout 15m
-        else
-          cd infra/tests && go test ./e2e/... -v -timeout 15m
-        fi
-
-  # ---------------------------------------------------------------------------
-  # S0.2: Cluster lifecycle
-  # ---------------------------------------------------------------------------
-  registry:create:
-    desc: Create shared container registry for local development
-    cmds:
-      - k3d registry list -o json | grep -q '"name":"k3d-loopzero-registry"' || k3d registry create loopzero-registry --port 5000
-
-  clusters:create:
-    desc: Create all 3 k3d clusters (mgmt, build, workload)
-    cmds:
-      - k3d cluster list -o json | grep -q '"name":"loopzero-mgmt"' || k3d cluster create --config infra/k3d/mgmt-cluster.yaml
-      - k3d cluster list -o json | grep -q '"name":"loopzero-build"' || k3d cluster create --config infra/k3d/build-cluster.yaml
-      - k3d cluster list -o json | grep -q '"name":"loopzero-workload"' || k3d cluster create --config infra/k3d/workload-cluster.yaml
-      - task: clusters:verify
-
-  clusters:verify:
-    desc: Verify all clusters are reachable
-    cmds:
-      - kubectl --context {{.MGMT_CONTEXT}} cluster-info
-      - kubectl --context {{.BUILD_CONTEXT}} cluster-info
-      - kubectl --context {{.WORKLOAD_CONTEXT}} cluster-info
-
-  clusters:delete:
-    desc: Delete all k3d clusters
-    cmds:
-      - k3d cluster delete loopzero-mgmt || true
-      - k3d cluster delete loopzero-build || true
-      - k3d cluster delete loopzero-workload || true
-
-  clusters:recreate:
-    desc: Recreate a single k3d cluster (e.g., task clusters:recreate -- workload)
-    cmds:
-      - |
-        CLUSTER="{{.CLI_ARGS}}"
-        if [ -z "$CLUSTER" ]; then
-          echo "Usage: task clusters:recreate -- <mgmt|build|workload>"
+          echo "[install:sops] ERROR: install brew or apt first; or install sops + age manually." >&2
           exit 1
         fi
-        case "$CLUSTER" in
-          mgmt)     CONFIG="infra/k3d/mgmt-cluster.yaml";     INSTALL_TASK="infra:install:mgmt" ;;
-          build)    CONFIG="infra/k3d/build-cluster.yaml";     INSTALL_TASK="infra:install:build" ;;
-          workload) CONFIG="infra/k3d/workload-cluster.yaml";  INSTALL_TASK="infra:install:workload" ;;
-          *)        echo "Unknown cluster: $CLUSTER. Use mgmt, build, or workload."; exit 1 ;;
-        esac
-        echo "Recreating loopzero-${CLUSTER}..."
-        k3d cluster delete "loopzero-${CLUSTER}" 2>/dev/null || true
-        k3d cluster create --config "$CONFIG"
-        echo "Installing components..."
-        task "$INSTALL_TASK"
-        echo "Done. loopzero-${CLUSTER} recreated."
-
-  # ---------------------------------------------------------------------------
-  # S0.3: Infrastructure install
-  # ---------------------------------------------------------------------------
-  helm:repos:
-    desc: Add all required Helm repositories
-    cmds:
-      - helm repo add bitnami https://charts.bitnami.com/bitnami || true
-      - helm repo add gitea-charts https://dl.gitea.com/charts/ || true
-      - helm repo add minio https://charts.min.io/ || true
-      - helm repo add argo https://argoproj.github.io/argo-helm || true
-      - helm repo add traefik https://traefik.github.io/charts || true
-      - helm repo add jetstack https://charts.jetstack.io || true
-      - helm repo add prometheus-community https://prometheus-community.github.io/helm-charts || true
-      - helm repo add open-telemetry https://open-telemetry.github.io/opentelemetry-helm-charts || true
-      - helm repo add grafana https://grafana.github.io/helm-charts || true
-      - helm repo add external-secrets https://charts.external-secrets.io || true
-      - helm repo add ory https://k8s.ory.sh/helm/charts || true
-      - helm repo update
-
-  infra:install:mgmt:
-    desc: Install platform components in mgmt cluster
-    deps: [helm:repos]
-    cmds:
-      - >-
-        helm upgrade --install postgresql bitnami/postgresql
-        --kube-context {{.MGMT_CONTEXT}}
-        --namespace loopzero-system --create-namespace
-        --version 18.5.14
-        -f infra/helm/postgresql/values.yaml
-        --wait --timeout 5m
-      # Ensure gitea database exists (initdb.scripts may not re-run on PV reuse)
-      - |
-        echo "Ensuring gitea database exists..."
-        POD=$(kubectl --context {{.MGMT_CONTEXT}} -n loopzero-system get pod -l app.kubernetes.io/name=postgresql -o jsonpath='{.items[0].metadata.name}')
-        PG_ADMIN_PASS=$(kubectl --context {{.MGMT_CONTEXT}} -n loopzero-system get secret postgresql -o jsonpath='{.data.postgres-password}' | base64 -d)
-        kubectl --context {{.MGMT_CONTEXT}} -n loopzero-system exec -i "$POD" -c postgresql -- \
-          env PGPASSWORD="$PG_ADMIN_PASS" psql -U postgres -tc "SELECT 1 FROM pg_database WHERE datname='gitea'" | grep -q 1 || \
-        kubectl --context {{.MGMT_CONTEXT}} -n loopzero-system exec -i "$POD" -c postgresql -- \
-          env PGPASSWORD="$PG_ADMIN_PASS" psql -U postgres -c "CREATE DATABASE gitea OWNER {{.PG_USER}}"
-        echo "gitea database: ensured"
-      # Redis (session/cache/queue backend for Gitea HA) — StatefulSet + PDB + NetworkPolicy.
-      # Gitea values.yaml hardcodes `gitea-redis:6379` as session/cache/queue addr; without this
-      # Service the gitea pod CrashLoopBackOffs on `cache.Init failed: lookup gitea-redis ... no such host`.
-      # Applied BEFORE `helm install gitea` so the Service is reachable when the pod boots.
-      - kubectl --context {{.MGMT_CONTEXT}} apply -f infra/helm/gitea/templates/redis.yaml
-      - kubectl --context {{.MGMT_CONTEXT}} -n loopzero-system rollout status statefulset/gitea-redis --timeout=3m
-      - >-
-        helm upgrade --install gitea gitea-charts/gitea
-        --kube-context {{.MGMT_CONTEXT}}
-        --namespace loopzero-system
-        --version 10.6.0
-        -f infra/helm/gitea/values.yaml
-        --wait --timeout 3m
-      - >-
-        helm upgrade --install minio minio/minio
-        --kube-context {{.MGMT_CONTEXT}}
-        --namespace loopzero-system
-        --version 5.4.0
-        -f infra/helm/minio/values.yaml
-        --wait --timeout 3m
-      # MinIO lifecycle rules (cache expiration) — delete-and-recreate (Job spec is immutable)
-      - kubectl --context {{.MGMT_CONTEXT}} delete job minio-lifecycle-setup -n loopzero-system --ignore-not-found 2>/dev/null
-      - kubectl --context {{.MGMT_CONTEXT}} apply -f infra/helm/minio/lifecycle-job.yaml
-      # Ensure kratos and hydra databases exist (Ory services need separate databases)
-      - |
-        echo "Ensuring kratos and hydra databases exist..."
-        POD=$(kubectl --context {{.MGMT_CONTEXT}} -n loopzero-system get pod -l app.kubernetes.io/name=postgresql -o jsonpath='{.items[0].metadata.name}')
-        PG_ADMIN_PASS=$(kubectl --context {{.MGMT_CONTEXT}} -n loopzero-system get secret postgresql -o jsonpath='{.data.postgres-password}' | base64 -d)
-        for DB in kratos hydra; do
-          kubectl --context {{.MGMT_CONTEXT}} -n loopzero-system exec -i "$POD" -c postgresql -- \
-            env PGPASSWORD="$PG_ADMIN_PASS" psql -U postgres -tc "SELECT 1 FROM pg_database WHERE datname='$DB'" | grep -q 1 || \
-          kubectl --context {{.MGMT_CONTEXT}} -n loopzero-system exec -i "$POD" -c postgresql -- \
-            env PGPASSWORD="$PG_ADMIN_PASS" psql -U postgres -c "CREATE DATABASE $DB OWNER {{.PG_USER}}"
-          echo "$DB database: ensured"
-        done
-      # Ory Kratos — identity management (signup, login, recovery)
-      - >-
-        helm upgrade --install ory-kratos ory/kratos
-        --kube-context {{.MGMT_CONTEXT}}
-        --namespace loopzero-system
-        --version 0.61.0
-        -f infra/helm/ory-kratos/values.yaml
-        --wait --timeout 5m
-      # Ory Hydra — OAuth2 server (JWT, Device Code Flow, PKCE)
-      - >-
-        helm upgrade --install ory-hydra ory/hydra
-        --kube-context {{.MGMT_CONTEXT}}
-        --namespace loopzero-system
-        --version 0.61.0
-        -f infra/helm/ory-hydra/values.yaml
-        --wait --timeout 5m
-      - >-
-        helm upgrade --install argocd argo/argo-cd
-        --kube-context {{.MGMT_CONTEXT}}
-        --namespace argocd --create-namespace
-        --version 7.3.11
-        -f infra/helm/argocd/values.yaml
-        --wait --timeout 5m
-      # PodDisruptionBudgets: Helm charts create their own PDBs.
-      # Manual apply removed — conflicts with chart-managed PDBs (minAvailable vs maxUnavailable).
-      # NetworkPolicies for loopzero-system namespace
-      - kubectl --context {{.MGMT_CONTEXT}} apply -f infra/helm/network-policies/loopzero-system.yaml
-
-  infra:install:build:
-    desc: Install platform components in build cluster
-    deps: [helm:repos]
-    cmds:
-      - >-
-        helm upgrade --install argo-workflows argo/argo-workflows
-        --kube-context {{.BUILD_CONTEXT}}
-        --namespace argo --create-namespace
-        --version 1.0.5
-        -f infra/helm/argo-workflows/values.yaml
-        --wait --timeout 3m
-      # MinIO credentials Secret for cache CWTs (envFrom.secretRef)
-      # CWTs read credentials from this Secret instead of workflow parameters.
-      - kubectl --context {{.BUILD_CONTEXT}} apply -f infra/helm/minio/minio-credentials-secret.yaml
-      # BuildKit registry config (insecure k3d registry)
-      - |
-        kubectl --context {{.BUILD_CONTEXT}} -n argo create secret generic buildkit-registry-config \
-          --from-literal=config.json='{"auths":{}}' \
-          --from-literal=buildkitd.toml='[registry."k3d-loopzero-registry:5000"]
-          http = true
-          insecure = true' \
-          --dry-run=client -o yaml | kubectl --context {{.BUILD_CONTEXT}} apply -f -
-      # Render CWTs via Helm template (CWT files contain Helm directives like
-      # {{- if .Values.minio.insecure }} that must be rendered before applying).
-      # Local dev overrides clone-runner image to use k3d registry.
-      - >-
-        helm template loopzero-cwts infra/helm/argo-workflows/
-        -f infra/helm/argo-workflows/values.yaml
-        --set images.cloneRunner=k3d-loopzero-registry:5000/loopzero-clone-runner:latest
-        | kubectl --context {{.BUILD_CONTEXT}} apply -f -
-
-  infra:install:workload:
-    desc: Install platform components in workload cluster
-    deps: [helm:repos]
-    cmds:
-      # cert-manager must be in the workload cluster (same cluster as Traefik + IngressRoutes)
-      - >-
-        helm upgrade --install cert-manager jetstack/cert-manager
-        --kube-context {{.WORKLOAD_CONTEXT}}
-        --namespace cert-manager --create-namespace
-        --version v1.14.5
-        -f infra/helm/cert-manager/values.yaml
-        --wait --timeout 3m
-      # Self-signed CA chain (issuers only — wildcard cert + TLSStore applied after Traefik)
-      - kubectl --context {{.WORKLOAD_CONTEXT}} apply -f infra/helm/cert-manager/cluster-issuer.yaml
-      # Traefik ingress controller with TLS, HA (2 replicas), and PDB
-      - >-
-        helm upgrade --install traefik traefik/traefik
-        --kube-context {{.WORKLOAD_CONTEXT}}
-        --namespace traefik --create-namespace
-        --version 28.3.0
-        -f infra/helm/traefik/values.yaml
-        --wait --timeout 3m
-      # Traefik middlewares: rate-limit, body-limit, security-headers
-      - kubectl --context {{.WORKLOAD_CONTEXT}} apply -f infra/helm/traefik/middlewares.yaml
-      # Wildcard cert + TLSStore (requires Traefik CRDs + namespace — must come after Traefik install)
-      - kubectl --context {{.WORKLOAD_CONTEXT}} apply -f infra/helm/cert-manager/traefik-tls.yaml
-
-  infra:install:monitoring:
-    desc: Install Prometheus + Grafana + OTel in mgmt cluster
-    deps: [helm:repos]
-    cmds:
-      - >-
-        helm upgrade --install monitoring prometheus-community/kube-prometheus-stack
-        --kube-context {{.MGMT_CONTEXT}}
-        --namespace monitoring --create-namespace
-        --version 82.15.1
-        -f infra/helm/monitoring/values.yaml
-        --wait --timeout 8m
-      - >-
-        helm upgrade --install otel-collector open-telemetry/opentelemetry-collector
-        --kube-context {{.MGMT_CONTEXT}}
-        --namespace monitoring
-        --version 0.108.0
-        -f infra/helm/otel/values.yaml
-        --wait --timeout 3m
-      - task: dashboards:install
-      - task: infra:install:loki
-
-  infra:install:loki:
-    desc: Install Grafana Loki (log aggregation) in mgmt cluster + Promtail in build cluster
-    deps: [helm:repos]
-    cmds:
-      - >-
-        helm upgrade --install loki grafana/loki
-        --kube-context {{.MGMT_CONTEXT}}
-        --namespace monitoring --create-namespace
-        --version 6.24.0
-        -f infra/helm/loki/values.yaml
-        --wait --timeout 5m
-      - >-
-        kubectl --context {{.MGMT_CONTEXT}}
-        apply -f infra/helm/loki/nodeport-service.yaml
-      # Promtail DaemonSet — scrape config filters for Argo Workflow pods ONLY (`workflows_argoproj_io_workflow` label).
-      # At setup time, no workflows exist yet, so promtail's `/ready` endpoint returns 500 ("Unable to find any logs to tail").
-      # `--wait` would timeout every bootstrap; readiness converges automatically once the first build runs.
-      - >-
-        helm upgrade --install promtail grafana/promtail
-        --kube-context {{.BUILD_CONTEXT}}
-        --namespace monitoring --create-namespace
-        --version 6.16.6
-        -f infra/helm/promtail/values.yaml
-        --timeout 3m
-
-  dashboards:install:
-    desc: Install LoopZero Grafana dashboards and ServiceMonitors
-    cmds:
-      # Server-side apply — dashboard bundle exceeds 256KB `last-applied-configuration` annotation limit.
-      # `--force-conflicts` ensures ownership transfer across reruns (field manager: loopzero-task).
-      - >-
-        kubectl --context {{.MGMT_CONTEXT}} -n monitoring
-        create configmap loopzero-grafana-dashboards
-        --from-file=infra/helm/monitoring/dashboards/
-        --dry-run=client -o yaml |
-        kubectl --context {{.MGMT_CONTEXT}} label -f - --local --dry-run=client -o yaml
-        grafana_dashboard=1 |
-        kubectl --context {{.MGMT_CONTEXT}} apply --server-side --force-conflicts
-        --field-manager=loopzero-task -f -
-      # ServiceMonitors for mgmt cluster components (loopzero-api, gitea, minio, tenant-controller)
-      - >-
-        kubectl --context {{.MGMT_CONTEXT}} apply
-        -f infra/helm/monitoring/manifests/servicemonitor.yaml
-        -f infra/helm/monitoring/manifests/servicemonitor-gitea.yaml
-        -f infra/helm/monitoring/manifests/servicemonitor-minio.yaml
-        -f infra/helm/monitoring/manifests/servicemonitor-tenant-controller.yaml
-      # Cross-cluster metrics services (NodePort for Prometheus to scrape via additionalScrapeConfigs)
-      - >-
-        kubectl --context {{.BUILD_CONTEXT}} apply
-        -f infra/helm/monitoring/manifests/metrics-service-argo-workflows.yaml
-      - >-
-        kubectl --context {{.WORKLOAD_CONTEXT}} apply
-        -f infra/helm/monitoring/manifests/metrics-service-traefik.yaml
-      # Alerting rules
-      - >-
-        kubectl --context {{.MGMT_CONTEXT}} apply
-        -f infra/helm/monitoring/manifests/prometheusrule-critical.yaml
-        -f infra/helm/monitoring/manifests/prometheusrule-warning.yaml
-
-  infra:install:monitoring-crds:
-    desc: Install Prometheus CRDs + monitoring namespace on ALL clusters (required before charts that create ServiceMonitors/PodMonitors/PrometheusRules)
-    deps: [helm:repos]
-    cmds:
-      # CRDs must exist in every cluster where a chart creates a ServiceMonitor / PrometheusRule / PodMonitor.
-      # mgmt → kube-prometheus-stack owners; workload → cert-manager + traefik; build → argo-workflows.
-      # Prometheus Operator CRs are cluster-scoped by kind but reference objects in specific clusters,
-      # so each cluster needs the type registered independently before its charts install.
-      - |
-        for CTX in {{.MGMT_CONTEXT}} {{.BUILD_CONTEXT}} {{.WORKLOAD_CONTEXT}}; do
-          echo "=== Installing Prometheus CRDs + monitoring namespace on $CTX ==="
-          kubectl --context "$CTX" create namespace monitoring --dry-run=client -o yaml \
-            | kubectl --context "$CTX" apply -f -
-          kubectl --context "$CTX" apply --server-side \
-            -f https://raw.githubusercontent.com/prometheus-operator/prometheus-operator/main/example/prometheus-operator-crd/monitoring.coreos.com_servicemonitors.yaml \
-            -f https://raw.githubusercontent.com/prometheus-operator/prometheus-operator/main/example/prometheus-operator-crd/monitoring.coreos.com_prometheusrules.yaml \
-            -f https://raw.githubusercontent.com/prometheus-operator/prometheus-operator/main/example/prometheus-operator-crd/monitoring.coreos.com_podmonitors.yaml
-        done
-
-  infra:install:
-    desc: Install all platform components via Helm
-    cmds:
-      - task: infra:install:monitoring-crds
-      - task: infra:install:mgmt
-      - task: infra:install:build
-      - task: infra:install:workload
-      - task: infra:install:monitoring
-
-  # ---------------------------------------------------------------------------
-  # S0.4: CRDs
-  # ---------------------------------------------------------------------------
-  crds:install:
-    desc: Install CRDs into mgmt cluster
-    cmds:
-      - kubectl --context {{.MGMT_CONTEXT}} apply -f operators/config/crd/bases/
-
-  # ---------------------------------------------------------------------------
-  # Cloud Auth: Ory Kratos + Hydra (Sprint 11)
-  # ---------------------------------------------------------------------------
-  cloud:setup:
-    desc: Install Ory Kratos + Hydra for auth (idempotent)
-    deps: [helm:repos]
-    cmds:
-      - |
-        echo "=== Ensuring kratos and hydra databases ==="
-        POD=$(kubectl --context {{.MGMT_CONTEXT}} -n loopzero-system get pod -l app.kubernetes.io/name=postgresql -o jsonpath='{.items[0].metadata.name}')
-        PG_ADMIN_PASS=$(kubectl --context {{.MGMT_CONTEXT}} -n loopzero-system get secret postgresql -o jsonpath='{.data.postgres-password}' | base64 -d)
-        for DB in kratos hydra; do
-          kubectl --context {{.MGMT_CONTEXT}} -n loopzero-system exec -i "$POD" -c postgresql -- \
-            env PGPASSWORD="$PG_ADMIN_PASS" psql -U postgres -tc "SELECT 1 FROM pg_database WHERE datname='$DB'" | grep -q 1 || \
-          kubectl --context {{.MGMT_CONTEXT}} -n loopzero-system exec -i "$POD" -c postgresql -- \
-            env PGPASSWORD="$PG_ADMIN_PASS" psql -U postgres -c "CREATE DATABASE $DB OWNER {{.PG_USER}}"
-          echo "$DB database: ensured"
-        done
-      - >-
-        helm upgrade --install ory-kratos ory/kratos
-        --kube-context {{.MGMT_CONTEXT}}
-        --namespace loopzero-system
-        --version 0.61.0
-        -f infra/helm/ory-kratos/values.yaml
-        --wait --timeout 5m
-      - >-
-        helm upgrade --install ory-hydra ory/hydra
-        --kube-context {{.MGMT_CONTEXT}}
-        --namespace loopzero-system
-        --version 0.61.0
-        -f infra/helm/ory-hydra/values.yaml
-        --wait --timeout 5m
-      - task: cloud:health
-
-  cloud:health:
-    desc: Check Ory Kratos + Hydra health
-    cmds:
-      - |
-        PASS=0
-        FAIL=0
-        echo "=== Ory Health ==="
-
-        # Kratos health via kubectl port-forward (quick check)
-        KRATOS_POD=$(kubectl --context {{.MGMT_CONTEXT}} -n loopzero-system get pod -l app.kubernetes.io/name=kratos -o jsonpath='{.items[0].metadata.name}' 2>/dev/null)
-        if [ -n "$KRATOS_POD" ]; then
-          STATUS=$(kubectl --context {{.MGMT_CONTEXT}} -n loopzero-system get pod "$KRATOS_POD" -o jsonpath='{.status.phase}')
-          if [ "$STATUS" = "Running" ]; then
-            echo "  [PASS] Ory Kratos — pod Running ($KRATOS_POD)"
-            PASS=$((PASS+1))
-          else
-            echo "  [FAIL] Ory Kratos — pod $STATUS ($KRATOS_POD)"
-            FAIL=$((FAIL+1))
-          fi
+        echo "[install:sops] Installing helm-secrets plugin..."
+        if helm plugin list 2>/dev/null | grep -q secrets; then
+          echo "[install:sops] helm-secrets plugin already installed."
         else
-          echo "  [FAIL] Ory Kratos — no pod found"
-          FAIL=$((FAIL+1))
+          helm plugin install https://github.com/jkroepke/helm-secrets || true
         fi
-
-        # Hydra health
-        HYDRA_POD=$(kubectl --context {{.MGMT_CONTEXT}} -n loopzero-system get pod -l app.kubernetes.io/name=hydra -o jsonpath='{.items[0].metadata.name}' 2>/dev/null)
-        if [ -n "$HYDRA_POD" ]; then
-          STATUS=$(kubectl --context {{.MGMT_CONTEXT}} -n loopzero-system get pod "$HYDRA_POD" -o jsonpath='{.status.phase}')
-          if [ "$STATUS" = "Running" ]; then
-            echo "  [PASS] Ory Hydra — pod Running ($HYDRA_POD)"
-            PASS=$((PASS+1))
-          else
-            echo "  [FAIL] Ory Hydra — pod $STATUS ($HYDRA_POD)"
-            FAIL=$((FAIL+1))
-          fi
-        else
-          echo "  [FAIL] Ory Hydra — no pod found"
-          FAIL=$((FAIL+1))
-        fi
-
-        # Hydra OIDC discovery (via kubectl exec — no port-forward needed)
-        if [ -n "$HYDRA_POD" ]; then
-          DISC=$(kubectl --context {{.MGMT_CONTEXT}} -n loopzero-system exec "$HYDRA_POD" -- wget -qO- http://localhost:4444/.well-known/openid-configuration 2>/dev/null)
-          if echo "$DISC" | grep -q "device_authorization_endpoint" 2>/dev/null; then
-            echo "  [PASS] Hydra OIDC discovery — device_authorization_endpoint present"
-            PASS=$((PASS+1))
-          else
-            echo "  [FAIL] Hydra OIDC discovery — device_authorization_endpoint missing"
-            FAIL=$((FAIL+1))
-          fi
-        fi
-
+        echo "[install:sops] Verify:"
+        sops --version
+        age --version
+        helm secrets --version
         echo ""
-        echo "  PASS: $PASS  |  FAIL: $FAIL"
-        if [ "$FAIL" -gt 0 ]; then exit 1; fi
+        echo "[install:sops] Next: generate age keypair + update .sops.yaml recipients:"
+        echo "  age-keygen -o ~/.config/sops/age/keys.txt"
+        echo "  age-keygen -y ~/.config/sops/age/keys.txt   # public key for .sops.yaml"
 
-  cloud:register-client:
-    desc: Register the loopzero-cli OAuth2 client in Hydra (idempotent)
+  audit:secrets:
+    desc: "Plan v1.2 T7.2 — audit repo for plaintext secrets that should be SOPS-encrypted"
     cmds:
       - |
-        HYDRA_POD=$(kubectl --context {{.MGMT_CONTEXT}} -n loopzero-system get pod -l app.kubernetes.io/name=hydra -o jsonpath='{.items[0].metadata.name}' 2>/dev/null)
-        if [ -z "$HYDRA_POD" ]; then
-          echo "Hydra not running. Run: task cloud:setup"
+        set -e
+        echo "[audit:secrets] Scanning for plaintext private keys + suspicious patterns..."
+        # Patterns: BEGIN PRIVATE KEY, api_key, secret_key inline (not in tests/docs)
+        HITS=$(grep -rE "BEGIN [A-Z ]*PRIVATE KEY|api[_-]?key:\s+['\"]?[a-zA-Z0-9]{20,}|secret[_-]?key:\s+['\"]?[a-zA-Z0-9]{20,}" \
+          --include='*.yaml' --include='*.yml' --include='*.json' \
+          infra/ charts/ 2>&1 \
+          | grep -vE "(_test\.|/test/|/__tests__/|REPLACE_|placeholder|stub|example)" \
+          | grep -vE "schema|\.lock" \
+          | head -30 || true)
+        if [[ -n "$HITS" ]]; then
+          echo "[audit:secrets] ⚠ Potential plaintext secrets found:"
+          echo "$HITS"
+          echo ""
+          echo "[audit:secrets] Encrypt them: source infra/scripts/lib/sops.sh && sops_encrypt FILE"
           exit 1
+        else
+          echo "[audit:secrets] ✓ No plaintext secrets detected in tracked YAML/JSON."
         fi
-        # Check if client exists
-        EXISTS=$(kubectl --context {{.MGMT_CONTEXT}} -n loopzero-system exec "$HYDRA_POD" -c hydra -- \
-          wget -qO- http://localhost:4445/admin/clients/loopzero-cli 2>/dev/null | grep -c "loopzero-cli" || true)
-        if [ "$EXISTS" -gt 0 ]; then
-          echo "OAuth2 client 'loopzero-cli' already registered"
+
+  audit:security-context:
+    desc: "INF-G08 audit — pod/container securityContext hardening"
+    # Local task home for scripts/audit-security-context.sh --gate. (Was also
+    # an infra-gates.yml CI step until GitHub Actions was removed 2026-05-23;
+    # this task is now the canonical runner — wire it into the real CI if any.)
+    cmds:
+      - bash scripts/audit-security-context.sh --gate
+
+  audit:action-pinning:
+    desc: "INF-G18 audit — GitHub Action SHA pinning (matches infra-gates.yml CI gate)"
+    # 2026-05-20 CI/local parity. Operator can now run locally before push.
+    # Same exit semantics as CI INF-G18 action-pinning job.
+    cmds:
+      - |
+        if [ -f scripts/check-action-pinning.sh ]; then
+          bash scripts/check-action-pinning.sh
+        else
+          echo "[audit:action-pinning] WARN: scripts/check-action-pinning.sh not present"
           exit 0
         fi
-        # Register public client with device_code + refresh_token grants
-        kubectl --context {{.MGMT_CONTEXT}} -n loopzero-system exec "$HYDRA_POD" -c hydra -- \
-          wget -qO- --post-data='{"client_id":"loopzero-cli","client_name":"LoopZero CLI","grant_types":["urn:ietf:params:oauth:grant-type:device_code","refresh_token","authorization_code"],"response_types":["code"],"scope":"openid offline_access","token_endpoint_auth_method":"none","redirect_uris":["http://localhost:9876/auth"]}' \
-          --header="Content-Type: application/json" \
-          http://localhost:4445/admin/clients 2>/dev/null
-        echo "OAuth2 client 'loopzero-cli' registered"
 
-  # ---------------------------------------------------------------------------
-  # S0.5: Database
-  # ---------------------------------------------------------------------------
-  db:migrate:
-    desc: Run database migrations against PostgreSQL
+  audit:divergence-matrix:
+    desc: "Plan T5.2 audit — local↔prod divergence matrix integrity (matches infra-gates.yml CI gate)"
+    # Per ADR D5: every code marker `LOCAL ONLY (LP-NNN)` must have a matrix entry.
+    # T5.3 of plan 2026-05-22: migrated from check-divergence-matrix.sh to pure-Go gate.
+    cmds:
+      - cd cmd/loopzero-ops && go run . quality divergence-matrix --root "{{.ROOT_DIR}}"
+
+  audit:charts-schema-present:
+    desc: "INF-G17 audit — values.schema.json presence on every OCI chart (matches infra-gates.yml CI gate)"
+    # Mirrors infra-gates.yml 'INF-G17: Chart schema validation' step.
+    # Library chart loopzero-common is exempt (per CI convention).
     cmds:
       - |
-        # Apply migrations via kubectl exec — no port-forward needed, no orphan processes
-        POD=$(kubectl --context "{{.MGMT_CONTEXT}}" -n loopzero-system get pod -l app.kubernetes.io/name=postgresql -o jsonpath='{.items[0].metadata.name}')
-        for f in $(ls api/internal/db/migrations/*.up.sql | sort); do
-          echo "Applying $f..."
-          kubectl --context "{{.MGMT_CONTEXT}}" -n loopzero-system exec -i "$POD" -- \
-            env PGPASSWORD="{{.PG_PASS}}" psql -U "{{.PG_USER}}" -d "{{.PG_DB}}" < "$f"
-        done
-
-  # ---------------------------------------------------------------------------
-  # S1: Development seed data
-  # ---------------------------------------------------------------------------
-  dev:seed:
-    desc: Seed database with a dev user + tenant for manual testing
-    vars:
-      GITHUB_USER: '{{.GITHUB_USER | default "getloopscale"}}'
-      GITHUB_EMAIL: '{{.GITHUB_EMAIL | default "getloopscale@users.noreply.github.com"}}'
-      GITHUB_ID: '{{.GITHUB_ID | default "241186089"}}'
-      TENANT: '{{.TENANT | default "acme"}}'
-      PLAN: '{{.PLAN | default "starter"}}'
-    cmds:
-      - |
-        POD=$(kubectl --context "{{.MGMT_CONTEXT}}" -n loopzero-system get pod -l app.kubernetes.io/name=postgresql -o jsonpath='{.items[0].metadata.name}')
-        kubectl --context "{{.MGMT_CONTEXT}}" -n loopzero-system exec -i "$POD" -c postgresql -- \
-          env PGPASSWORD="{{.PG_PASS}}" psql -U "{{.PG_USER}}" -d "{{.PG_DB}}" <<SQL
-        -- Set audit context for RLS and audit triggers (migration 000009)
-        SELECT set_config('app.tenant_id', '{{.TENANT}}', false);
-        SELECT set_config('app.correlation_id', 'seed-' || extract(epoch from now())::text, false);
-        SELECT set_config('app.current_user', 'system', false);
-
-        -- Idempotent: uses ON CONFLICT DO NOTHING
-        INSERT INTO users (id, email, github_id, display_name)
-        VALUES ('github-{{.GITHUB_USER}}', '{{.GITHUB_EMAIL}}', {{.GITHUB_ID}}, '{{.GITHUB_USER}}')
-        ON CONFLICT (id) DO NOTHING;
-
-        INSERT INTO tenants (id, display_name, slug, owner_id)
-        VALUES ('{{.TENANT}}', '{{.TENANT}}', '{{.TENANT}}', 'github-{{.GITHUB_USER}}')
-        ON CONFLICT (id) DO NOTHING;
-
-        INSERT INTO tenant_members (tenant_id, user_id, role)
-        VALUES ('{{.TENANT}}', 'github-{{.GITHUB_USER}}', 'owner')
-        ON CONFLICT (tenant_id, user_id) DO NOTHING;
-
-        SELECT '✓ User: github-{{.GITHUB_USER}} (' || '{{.GITHUB_EMAIL}}' || ')';
-        SELECT '✓ Tenant: {{.TENANT}} (plan: {{.PLAN}})';
-        SELECT '✓ Membership: owner of {{.TENANT}}';
-        SQL
-
-  dev:ensure-project:
-    desc: Create default project via API (triggers Tenant CR + ArgoCD Application)
-    cmds:
-      - bash infra/scripts/ensure-project.sh
-
-  # ---------------------------------------------------------------------------
-  # S2: E2E seed data
-  # ---------------------------------------------------------------------------
-  dev:seed:e2e:
-    desc: Seed E2E test data (tenant, user, project) and wait for reconciliation
-    cmds:
-      - |
-        # E2E seed needs a Go script with DATABASE_URL — port-forward required
-        kubectl --context "{{.MGMT_CONTEXT}}" port-forward -n loopzero-system svc/postgresql "{{.PG_PORT}}":5432 &
-        PF_PID=$!
-        sleep 2
-        DATABASE_URL="postgres://{{.PG_USER}}:{{.PG_PASS}}@{{.PG_HOST}}:{{.PG_PORT}}/{{.PG_DB}}?sslmode=disable" \
-        API_URL="http://localhost:{{.API_PORT}}" \
-          go run infra/scripts/seed_e2e.go
-        kill $PF_PID 2>/dev/null; wait $PF_PID 2>/dev/null || true
-
-  # ---------------------------------------------------------------------------
-  # S0.6: Cross-cluster networking + API tokens
-  # ---------------------------------------------------------------------------
-  networking:setup:
-    desc: Connect k3d cluster networks so mgmt can reach workload/build clusters
-    cmds:
-      - bash infra/scripts/setup-cross-cluster-networking.sh
-      - bash infra/scripts/update-cross-cluster-ips.sh
-
-  tokens:provision:
-    desc: Provision API tokens (Gitea + ArgoCD) and build cluster kubeconfig
-    cmds:
-      - bash infra/scripts/provision-api-tokens.sh
-      - |
-        echo ""
-        if kubectl --context {{.MGMT_CONTEXT}} -n loopzero-system get deployment/loopzero-api >/dev/null 2>&1; then
-          echo "Restarting API to pick up new tokens..."
-          kubectl --context {{.MGMT_CONTEXT}} -n loopzero-system rollout restart deployment/loopzero-api
-          kubectl --context {{.MGMT_CONTEXT}} -n loopzero-system rollout status deployment/loopzero-api --timeout=60s
-        else
-          echo "API deployment not found (not running yet — tokens will be picked up on first start)."
-        fi
-      # ArgoCD repo-server caches repo credentials at startup.
-      # After updating the repo secret with Gitea credentials, restart it.
-      - |
-        if kubectl --context {{.MGMT_CONTEXT}} -n argocd get deployment/argocd-repo-server >/dev/null 2>&1; then
-          echo "Restarting ArgoCD repo-server to pick up new credentials..."
-          kubectl --context {{.MGMT_CONTEXT}} -n argocd rollout restart deployment/argocd-repo-server
-          kubectl --context {{.MGMT_CONTEXT}} -n argocd rollout status deployment/argocd-repo-server --timeout=60s
-        fi
-
-  tokens:verify:
-    desc: Verify API tokens are valid (non-expired) and services are reachable
-    cmds:
-      - |
-        echo "=== Token Verification ==="
-        PASS=0
-        FAIL=0
-
-        # Check ArgoCD token
-        ARGOCD_TOKEN=$(kubectl --context {{.MGMT_CONTEXT}} get secret loopzero-api-tokens -n loopzero-system -o jsonpath='{.data.argocd-token}' 2>/dev/null | base64 -d 2>/dev/null)
-        if [ -z "$ARGOCD_TOKEN" ]; then
-          echo "  [FAIL] ArgoCD token — not found in secret loopzero-api-tokens"
-          FAIL=$((FAIL+1))
-        else
-          # Check if token has expiration
-          EXP=$(echo "$ARGOCD_TOKEN" | cut -d. -f2 | base64 -d 2>/dev/null | python3 -c "
-        import sys, json, datetime
-        try:
-          data = json.load(sys.stdin)
-          exp = data.get('exp')
-          sub = data.get('sub', 'unknown')
-          if exp:
-            remaining = datetime.datetime.fromtimestamp(exp) - datetime.datetime.now()
-            if remaining.total_seconds() < 0:
-              print(f'EXPIRED|{sub}|expired {-remaining.days}d ago')
-            elif remaining.days < 7:
-              print(f'EXPIRING|{sub}|expires in {remaining.days}d')
-            else:
-              print(f'OK|{sub}|expires in {remaining.days}d')
-          else:
-            print(f'OK|{sub}|never expires')
-        except:
-          print('ERROR|unknown|cannot parse token')
-        " 2>/dev/null)
-          STATUS=$(echo "$EXP" | cut -d'|' -f1)
-          SUBJECT=$(echo "$EXP" | cut -d'|' -f2)
-          DETAIL=$(echo "$EXP" | cut -d'|' -f3)
-          if [ "$STATUS" = "OK" ]; then
-            echo "  [PASS] ArgoCD token — $SUBJECT ($DETAIL)"
-            PASS=$((PASS+1))
-          elif [ "$STATUS" = "EXPIRING" ]; then
-            echo "  [WARN] ArgoCD token — $SUBJECT ($DETAIL) — run: task tokens:provision"
-            FAIL=$((FAIL+1))
-          else
-            echo "  [FAIL] ArgoCD token — $SUBJECT ($DETAIL) — run: task tokens:provision"
-            FAIL=$((FAIL+1))
+        MISSING=()
+        for chart in charts/*/; do
+          chart_name=$(basename "$chart")
+          if [ "$chart_name" = "loopzero-common" ]; then continue; fi
+          if [ ! -f "$chart/values.schema.json" ]; then
+            MISSING+=("$chart_name")
           fi
-        fi
-
-        # Check Gitea token
-        GITEA_TOKEN=$(kubectl --context {{.MGMT_CONTEXT}} get secret loopzero-api-tokens -n loopzero-system -o jsonpath='{.data.gitea-token}' 2>/dev/null | base64 -d 2>/dev/null)
-        if [ -z "$GITEA_TOKEN" ]; then
-          echo "  [FAIL] Gitea token — not found"
-          FAIL=$((FAIL+1))
-        else
-          echo "  [PASS] Gitea token — ${#GITEA_TOKEN} chars"
-          PASS=$((PASS+1))
-        fi
-
-        # Check API can reach ArgoCD
-        if curl -sf http://localhost:{{.API_PORT}}/api/v1/health/deep >/dev/null 2>&1; then
-          echo "  [PASS] API health — database connected"
-          PASS=$((PASS+1))
-        else
-          echo "  [FAIL] API health — not reachable or DB down"
-          FAIL=$((FAIL+1))
-        fi
-
-        echo ""
-        echo "  PASS: $PASS  |  FAIL: $FAIL"
-        if [ "$FAIL" -gt 0 ]; then
-          echo "  Fix: task tokens:provision"
+        done
+        if [ ${#MISSING[@]} -gt 0 ]; then
+          echo "[audit:charts-schema-present] ⚠ Charts MISSING values.schema.json:"
+          for m in "${MISSING[@]}"; do echo "  - $m"; done
           exit 1
         fi
+        echo "[audit:charts-schema-present] ✓ All OCI charts (excl. loopzero-common library) have values.schema.json"
 
-  # ---------------------------------------------------------------------------
-  # S0.13: Build pipeline tooling images
-  # ---------------------------------------------------------------------------
-  images:build:
-    desc: Build and push tooling images (clone-runner, packs-runner, syft-scanner) to local k3d registry
-    cmds:
-      - |
-        echo "=== Building loopzero-clone-runner ==="
-        docker build -t localhost:5000/loopzero-clone-runner:latest infra/images/clone-runner/
-        docker push localhost:5000/loopzero-clone-runner:latest
-        echo "  Pushed: localhost:5000/loopzero-clone-runner:latest"
-      - |
-        echo "=== Building loopzero-packs-runner ==="
-        docker build -t localhost:5000/loopzero-packs-runner:latest infra/images/packs-runner/
-        docker push localhost:5000/loopzero-packs-runner:latest
-        echo "  Pushed: localhost:5000/loopzero-packs-runner:latest"
-      - |
-        echo "=== Building loopzero-syft-scanner (Sprint 6 / T0.2) ==="
-        docker build -t localhost:5000/loopzero-syft-scanner:latest infra/images/syft-scanner/
-        docker push localhost:5000/loopzero-syft-scanner:latest
-        echo "  Pushed: localhost:5000/loopzero-syft-scanner:latest"
-
-  # ---------------------------------------------------------------------------
-  # S0.14: Composite tasks
-  # ---------------------------------------------------------------------------
   setup:
-    desc: Full setup from scratch — clusters + infra + networking + CRDs + DB + tokens + images
+    desc: |
+      Full setup from scratch — clusters + infra + networking + CRDs + DB + tokens + standalone bootstrap.
+
+      Per T3.2 of docs/plans/completed/2026-05-22-shell-script-strategic-plan.md v1.3:
+      `task setup` builds the PLATFORM (one-shot install). The DEV LOOP is `tilt up`.
+      See docs/operations/dev-loop.md for the canonical developer workflow.
     cmds:
+      # T3.2 deprecation notice — operators should run `tilt up` after `task setup`
+      # to enter the dev loop. `task setup` only PROVISIONS; it does not iterate.
+      - echo "[NOTICE] task setup creates platform infrastructure. Dev loop is via 'tilt up'."
+      - echo "[NOTICE] See docs/operations/dev-loop.md for canonical workflow."
       - task: registry:create
       - task: clusters:create
       - task: images:build
@@ -1278,12 +212,184 @@ tasks:
       - task: db:migrate
       - task: dev:seed
       - task: tokens:provision
+      - task: bootstrap:standalone
+
+  bootstrap:standalone:
+    desc: |
+      Standalone-mode bootstrap that closes gaps left by `task setup` for
+      cleanroom dogfood. Production helmfile sync runs all of these as
+      post-sync hooks; standalone (k3d) does not, so we run them explicitly.
+
+      Full B-patch index (B9-B82+) lives in CHANGELOG.md under
+      "Cleanroom Dogfood Loop" / "Drill L2 Phase 2 (drill-l2-phase2)"
+      sections. Each step below corresponds to one or more codified patches
+      from those loops. T5.5 (plan 2026-05-21-deep-review-remediation)
+      replaced the stale partial B9-B24 enumeration that used to live here
+      with this canonical pointer — the comment was missing 80%+ of the
+      actual patches (B14, B15, B17-19, B22, B23, B25-82+).
+    cmds:
+      - bash infra/helmfile/scripts/generate-secrets.sh standalone mgmt
+      - task: k3d:bootstrap-workload
+      - bash infra/helmfile/scripts/bootstrap-eso-cluster-secret-store.sh
+      - HYDRA_NAMESPACE=loopzero-auth bash infra/helmfile/scripts/bootstrap-oauth-clients.sh
+      - bash infra/scripts/production/provision-api-tokens.sh
+      # T5.3 (plan 2026-05-21-deep-review-remediation): extracted 4 inline
+      # B-patches to named scripts so each can be re-run individually if
+      # only that slice needs fixing during cleanroom debugging.
+      # Run order matters — each script depends on its predecessor.
+      - bash infra/helmfile/scripts/bootstrap-patch-argocd-gitea-creds.sh
+      - bash infra/helmfile/scripts/bootstrap-patch-argocd-repo-server-restart.sh
+      - |
+        kubectl config use-context k3d-loopzero-build >/dev/null 2>&1
+        bash infra/helmfile/scripts/generate-build-secrets.sh standalone
+        kubectl config use-context k3d-loopzero-mgmt >/dev/null 2>&1
+      - bash infra/helmfile/scripts/bootstrap-patch-sigstore-policy-controller.sh
+      - bash infra/helmfile/scripts/bootstrap-patch-admission-policies.sh
+      # M07 LIVE keyless GREEN (Ralph iter 5 2026-05-28): Sigstore local stack
+      # for cosign keyless signing (Fulcio + Rekor + CTLog + sigstore-extras
+      # NetworkPolicies + dynamic K3s CACert config). Opt-out via env
+      # SKIP_SIGSTORE_LOCAL=1 (e.g., for fast iteration without M07 path).
+      # Idempotent: re-running on existing state is safe. Adds ~5min to setup.
+      - |
+        if [ "${SKIP_SIGSTORE_LOCAL:-0}" != "1" ]; then
+          bash infra/scripts/local/bootstrap-sigstore-local.sh || \
+            echo "[WARN] bootstrap-sigstore-local.sh failed — M07 LIVE keyless path will not work. Continuing."
+        else
+          echo "[NOTICE] SKIP_SIGSTORE_LOCAL=1 — skipping Sigstore LOCAL stack bootstrap"
+        fi
+      # 2026-05-14 (plan T0.2): provision runtime-2 platform BEFORE the
+      # CC bootstrap so cell-2 has a reachable workload destination.
+      - task: k3d:bootstrap-runtime-2
+      # 2026-05-14 (plan T0.1): bootstrap all three cells atomically
+      # (cell-default + cell-1 + cell-2). Closes CTO Golden Rule #1 gap.
+      - task: k3d:bootstrap-cells
+      - HYDRA_NAMESPACE=loopzero-auth bash infra/helmfile/scripts/seed-local-user.sh
+      - bash infra/scripts/local/bootstrap-seed-tenant-cr.sh
 
   dev:up:
     desc: Boot dev environment (clusters + Helm deps). Run `tilt up` separately for the dev loop.
     cmds:
       - task: setup
       - echo "Clusters and dependencies are ready. Run 'tilt up' to start the dev loop."
+
+  k3d:bootstrap-workload:
+    desc: |
+      Bootstrap the workload (k3d-loopzero-workload) cluster with cert-manager +
+      traefik + external-secrets + argo-rollouts via helmfile. Idempotent —
+      `helmfile sync` no-ops if releases match desired state. Required after
+      fresh `k3d cluster create loopzero-workload` (the runtime helmfile usually
+      only runs in production cells).
+      Discovered LIVE 2026-04-30: ArgoCD app sync to runtime fails with
+      "Certificate CRD not found" until this is run.
+
+      F-21 fix (2026-05-07, argo-rollouts-progressive-delivery-plan T0.2):
+      argo-rollouts MUST be in this list. Without it, fresh cleanroom
+      bootstrap leaves the workload cluster without the Rollouts CRD, so
+      every `loopzero deploy` (default-on progressive delivery) fails to
+      apply the Rollout manifest and the journey suite cannot run.
+
+      D-FF-03 fix (2026-05-27, /dogfood live): cluster-issuer MUST be in
+      this list. Without it, `loopzero deploy` succeeds at build but fails at
+      ArgoCD sync with "Referenced ClusterIssuer not found: loopzero-ca-issuer"
+      — every Certificate stays in Issuing forever and ArgoCD app stays
+      OutOfSync/Missing waiting for healthy state. Discovered LIVE during
+      dogfood 2026-05-27: 5 of 8 Ginkgo journey failures all root-caused
+      to missing ClusterIssuer.
+    cmds:
+      - helmfile -f infra/helmfile/runtime.helmfile.yaml.gotmpl -e standalone-multi --kube-context k3d-loopzero-workload --selector name=cert-manager sync
+      - helmfile -f infra/helmfile/runtime.helmfile.yaml.gotmpl -e standalone-multi --kube-context k3d-loopzero-workload --selector name=cluster-issuer sync
+      - helmfile -f infra/helmfile/runtime.helmfile.yaml.gotmpl -e standalone-multi --kube-context k3d-loopzero-workload --selector name=traefik sync
+      - helmfile -f infra/helmfile/runtime.helmfile.yaml.gotmpl -e standalone-multi --kube-context k3d-loopzero-workload --selector name=external-secrets sync
+      - helmfile -f infra/helmfile/runtime.helmfile.yaml.gotmpl -e standalone-multi --kube-context k3d-loopzero-workload --selector name=argo-rollouts sync
+
+  k3d:bootstrap-build-cert-manager:
+    desc: |
+      Bootstrap cert-manager + cluster-issuer em loopzero-build cluster.
+      Required ANTES de Pulumi up Sigstore stack (per plan 2026-05-27-M07).
+      Sigstore Fulcio/Rekor/CTLog precisam TLS internos via loopzero-ca-issuer.
+      Idempotente — helmfile sync no-ops se já deployed.
+    cmds:
+      - helmfile -f infra/helmfile/runtime.helmfile.yaml.gotmpl -e standalone-multi --kube-context k3d-loopzero-build --selector name=cert-manager sync
+      - helmfile -f infra/helmfile/runtime.helmfile.yaml.gotmpl -e standalone-multi --kube-context k3d-loopzero-build --selector name=cluster-issuer sync
+
+  k3d:bootstrap-runtime-2:
+    desc: |
+      Bootstrap the runtime-2 (k3d-loopzero-runtime-2) cluster with cert-manager
+      + traefik + external-secrets + argo-rollouts via helmfile. Mirrors
+      `k3d:bootstrap-workload` but targets the runtime-2 cluster.
+
+      Plan: 2026-05-14-dogfood-findings-and-multi-cell-coverage T0.2
+      Closes CTO Golden Rule #1 gap (cleanroom must be multi-cell by default).
+
+      EC-1 pre-step: H4 hostAlias must be applied to runtime-2 nodes so
+      helmfile can pull loopzero-packs/cosign/syft images from the local k3d
+      registry. Without this, pods land in ImagePullBackOff. The
+      `task k3d:heal` invocation below also covers runtime-2 (extended
+      2026-05-14).
+
+      D-FF-03 fix (2026-05-27, /dogfood live): cluster-issuer MUST be in
+      this list — same reason as k3d:bootstrap-workload above. Otherwise
+      tenants pinned to cell-2 have no ClusterIssuer for cert-manager.
+
+      Idempotent: helmfile sync no-ops if releases match desired state.
+    cmds:
+      - task: k3d:heal
+      - helmfile -f infra/helmfile/runtime.helmfile.yaml.gotmpl -e standalone-multi --kube-context k3d-loopzero-runtime-2 --selector name=cert-manager sync
+      - helmfile -f infra/helmfile/runtime.helmfile.yaml.gotmpl -e standalone-multi --kube-context k3d-loopzero-runtime-2 --selector name=cluster-issuer sync
+      - helmfile -f infra/helmfile/runtime.helmfile.yaml.gotmpl -e standalone-multi --kube-context k3d-loopzero-runtime-2 --selector name=traefik sync
+      - helmfile -f infra/helmfile/runtime.helmfile.yaml.gotmpl -e standalone-multi --kube-context k3d-loopzero-runtime-2 --selector name=external-secrets sync
+      - helmfile -f infra/helmfile/runtime.helmfile.yaml.gotmpl -e standalone-multi --kube-context k3d-loopzero-runtime-2 --selector name=argo-rollouts sync
+
+  k3d:bootstrap-cells:
+    desc: |
+      Bootstrap the three ClusterCredential CRs (cell-default, cell-1, cell-2)
+      atomically. cell-default + cell-1 map to k3d-loopzero-workload; cell-2 maps
+      to k3d-loopzero-runtime-2 (real multi-cell placement).
+
+      Plan: 2026-05-14-dogfood-findings-and-multi-cell-coverage T0.1.
+      Idempotent. Failures (cluster missing) abort early with clear msg.
+
+      Sprint A 2026-06-01 post-cleanroom finding: Each `bootstrap-cell-cc.sh`
+      invocation creates an ArgoCD `cluster` Secret via kubectl apply. When
+      these three Secrets land sequentially AFTER the argocd-application-controller
+      statefulset is already Running (controller.replicas=3 with consistent-hashing
+      sharding per `infra/helm/argocd/values.yaml`), the controllers can read
+      intermediate Secret-set state and end up with shards permanently mis-
+      assigned. Symptom: every Application's status.sync = "" forever, with
+      "Ignoring cluster" log spam. LIVE-validated in fresh cleanroom 2026-06-01:
+      `tn-e2etest-production` App stuck EMPTY/EMPTY until restart, restart
+      converged to Synced+Healthy in <30s with zero "Ignoring" logs.
+      Fix: restart the statefulset AFTER all 3 Secrets exist, so all 3
+      controller replicas boot with the final Secret set in their informer
+      cache. Idempotent (safe to re-run; no-op if no Secret changes).
+    cmds:
+      # Plan v1.2 T4.2: consolidated bootstrap-cell-cc.sh --cell --env
+      - bash infra/helmfile/scripts/bootstrap-cell-cc.sh --cell default --env standalone-multi
+      - bash infra/helmfile/scripts/bootstrap-cell-cc.sh --cell 1 --env standalone-multi
+      - bash infra/helmfile/scripts/bootstrap-cell-cc.sh --cell 2 --env standalone-multi
+      # Sprint A 2026-06-01 — refresh app-controller informer cache so all
+      # 3 replicas see the final set of cluster Secrets at boot.
+      - kubectl --context k3d-loopzero-mgmt -n argocd rollout restart statefulset/argocd-application-controller
+      - kubectl --context k3d-loopzero-mgmt -n argocd rollout status statefulset/argocd-application-controller --timeout=180s
+
+  k3d:heal:
+    desc: |
+      Idempotent recovery of cross-cluster connectivity in local k3d standalone-multi
+      after `k3d cluster stop/start` cycles. Codifies the 9 manual workarounds
+      (H1-H9) discovered LIVE during dogfood E2E unblock 2026-04-30:
+        H1 — reattach build/runtime nodes to shared k3d-loopzero network
+        H2 — refresh loopzero-cluster-kubeconfigs Secret with current IPs (insecure-skip-tls)
+        H3 — recreate ArgoCD cluster Secrets (force discovery cache invalidate)
+        H4 — add k3d-loopzero-registry hostAlias to /etc/hosts on build + runtime nodes
+        H5 — bind kube-system:default SA to cluster-admin in build + runtime (LOCAL-ONLY)
+        H6 — empty buildkit-registry-config when DOCR creds absent
+        H7 — loopzero-minio-credentials with mgmt NodePort URL
+        H8 — LOOPZERO_*_IMAGE env overrides on loopzero-api Deployment
+        H9 — loopzero-build-cwts release with images.cloneRunner local registry override
+      Production has scoped SAs + permanent helmfile values; this is a LOCAL-DEV recovery only.
+      Safe to re-run after every restart.
+    cmds:
+      - bash infra/scripts/local/k3d-cross-cluster-heal.sh
 
   cli:link:
     desc: Symlink 'loopzero' CLI to PATH (makes `loopzero` available globally)
@@ -1297,6 +403,11 @@ tasks:
     cmds:
       - cd cli && npm run build
 
+  fulcio:diagnose:
+    desc: "Diagnose Fulcio K8s OIDC trust chain (M07 keyless — plan 2026-05-28)"
+    cmds:
+      - bash infra/scripts/local/fulcio-oidc-diagnose.sh {{.CLI_ARGS}}
+
   test:
     desc: Run all tests (unit + lint + manifest validation)
     cmds:
@@ -1304,487 +415,7 @@ tasks:
       - task: lint
       - task: validate:manifests
 
-  test:all:
-    desc: Run everything — unit + integration + E2E (requires running clusters)
-    cmds:
-      - task: test:unit
-      - task: test:integration
-      - task: lint
-      - task: validate:manifests
-      - task: test:e2e
+  # parity:* + validate:matrix* migrated to taskfiles/test.yml (plan T1.3 iter 1).
 
-  test:unit:
-    desc: Run all unit tests
-    env:
-      KUBEBUILDER_ASSETS:
-        sh: 'setup-envtest use -p path 2>/dev/null || { echo "ERROR: setup-envtest not installed. Run: go install sigs.k8s.io/controller-runtime/tools/setup-envtest@latest" >&2; exit 1; }'
-    cmds:
-      - cd pkg && go test ./... -short
-      - cd operators && go test ./... -short
-      - cd api && go test ./... -short
-      - cd infra/tests && go test ./unit/... -short
-      - cd cli && npm test
-
-  test:integration:
-    desc: Run integration tests (requires running clusters)
-    env:
-      KUBEBUILDER_ASSETS:
-        sh: 'setup-envtest use -p path 2>/dev/null || { echo "ERROR: setup-envtest not installed. Run: go install sigs.k8s.io/controller-runtime/tools/setup-envtest@latest" >&2; exit 1; }'
-    cmds:
-      - cd operators && go test ./... -tags=integration -v -timeout 5m
-      - cd api && go test ./... -tags=integration -v -timeout 5m
-
-  test:e2e:
-    desc: Run E2E tests (requires running clusters + tilt up)
-    env:
-      LOOPZERO_E2E: "1"
-      KUBEBUILDER_ASSETS:
-        sh: 'setup-envtest use -p path 2>/dev/null || { echo "ERROR: setup-envtest not installed. Run: go install sigs.k8s.io/controller-runtime/tools/setup-envtest@latest" >&2; exit 1; }'
-    cmds:
-      - |
-        set -euo pipefail
-        OUTPUT_FILE="$(mktemp)"
-        trap 'rm -f "$OUTPUT_FILE"' EXIT
-        (cd infra/tests && go test ./e2e/... -v -timeout 15m) | tee "$OUTPUT_FILE"
-        if grep -q "Deploy Happy Path E2E Suite" "$OUTPUT_FILE" && grep -Eq "Ran[[:space:]]+0[[:space:]]+of[[:space:]]+5[[:space:]]+Specs" "$OUTPUT_FILE"; then
-          echo "E2E deploy suite was fully skipped (0/5 specs). Failing to avoid false green."
-          exit 1
-        fi
-
-  test:e2e:chaos:
-    desc: Run chaos engineering tests
-    env:
-      LOOPZERO_E2E: "1"
-    cmds:
-      - cd infra/tests && go test ./e2e/... -v -run "Chaos" -timeout 15m
-
-  test:coverage:
-    desc: Run all tests with coverage reports (HTML per component)
-    env:
-      KUBEBUILDER_ASSETS:
-        sh: 'setup-envtest use -p path 2>/dev/null || echo "/tmp"'
-    cmds:
-      - echo "Generating coverage reports..."
-      - cd pkg && go test ./... -short -coverprofile=coverage.out && go tool cover -html=coverage.out -o coverage.html 2>/dev/null || true
-      - cd api && go test ./... -short -coverprofile=coverage.out && go tool cover -html=coverage.out -o coverage.html 2>/dev/null || true
-      - cd operators && go test ./... -short -coverprofile=coverage.out && go tool cover -html=coverage.out -o coverage.html 2>/dev/null || true
-      - cd cli && npm test -- --coverage 2>/dev/null || true
-      - echo "Coverage reports generated:"
-      - echo "  pkg/coverage.html"
-      - echo "  api/coverage.html"
-      - echo "  operators/coverage.html"
-      - echo "  cli/coverage/"
-
-  test:coverage:summary:
-    desc: Show per-package coverage summary (no HTML)
-    cmds:
-      - echo "=== pkg/ ===" && cd pkg && go test ./... -short -coverprofile=/dev/stderr 2>&1 | grep "^ok" || true
-      - echo "=== api/ ===" && cd api && go test ./... -short -cover 2>&1 | grep "^ok" || true
-      - echo "=== operators/ ===" && cd operators && go test ./... -short -cover 2>&1 | grep "^ok" || true
-
-  # ─────────────────────────────────────────────
-  # k6 Load Testing (Grafana k6, industry standard)
-  # Replaces the previous shell-script smoke runners.
-  # See infra/tests/k6/README.md for details.
-  # ─────────────────────────────────────────────
-
-  test:load:l1:
-    desc: k6 load test — 10 tenants smoke (L1, ~15 min)
-    cmds:
-      - infra/tests/runner/run-k6.sh scripts/l1-10-tenants.js l1 10
-
-  test:load:l2:
-    desc: k6 load test — 50 tenants sustained (L2, ~35 min)
-    cmds:
-      - infra/tests/runner/run-k6.sh scripts/l2-50-tenants.js l2 50
-
-  test:load:l3:
-    desc: k6 load test — 100 tenants sustained (L3, ~65 min)
-    cmds:
-      - infra/tests/runner/run-k6.sh scripts/l3-100-tenants.js l3 100
-
-  test:load:stress:
-    desc: k6 stress test — ramp to break point (~15 min)
-    cmds:
-      - infra/tests/runner/run-k6.sh scripts/stress-break-point.js stress 50
-
-  # ─────────────────────────────────────────────
-  # Chaos Engineering (Chaos Mesh, CNCF incubating)
-  # Replaces the previous Ginkgo PIt stubs with real fault injection.
-  # See infra/tests/chaos/manifests/README.md for details.
-  # ─────────────────────────────────────────────
-
-  test:chaos:controller-kill:
-    desc: Chaos — kill loopzero-controller pod, verify recovery (~2 min)
-    cmds:
-      - infra/tests/runner/run-chaos.sh pod-kill-controller.yaml
-
-  test:chaos:api-leader-kill:
-    desc: Chaos — kill loopzero-api leader, verify failover (~1 min)
-    cmds:
-      - infra/tests/runner/run-chaos.sh pod-kill-api-leader.yaml
-
-  test:chaos:pg-latency:
-    desc: Chaos — 500ms PG latency, verify graceful degradation (~3 min)
-    cmds:
-      - infra/tests/runner/run-chaos.sh pg-network-latency.yaml
-
-  test:chaos:pg-saturation:
-    desc: Chaos — saturate PG pool, verify circuit breaker (~2 min)
-    cmds:
-      - infra/tests/runner/run-chaos.sh pg-connection-storm.yaml
-
-  test:chaos:argocd-crash:
-    desc: Chaos — kill ArgoCD server, verify blast radius (~1.5 min)
-    cmds:
-      - infra/tests/runner/run-chaos.sh argocd-crash.yaml
-
-  test:chaos:gitea-outage:
-    desc: Chaos — drop Gitea traffic, verify fast-fail (~2 min)
-    cmds:
-      - infra/tests/runner/run-chaos.sh gitea-outage.yaml
-
-  test:chaos:all:
-    desc: Run all Chaos Mesh experiments sequentially (~12 min)
-    cmds:
-      - task: test:chaos:api-leader-kill
-      - task: test:chaos:controller-kill
-      - task: test:chaos:pg-latency
-      - task: test:chaos:pg-saturation
-      - task: test:chaos:argocd-crash
-      - task: test:chaos:gitea-outage
-
-  lint:
-    desc: Lint all components
-    cmds:
-      - |
-        if command -v golangci-lint >/dev/null 2>&1; then
-          cd pkg && golangci-lint run ./...
-        else
-          echo "SKIP: golangci-lint not installed — install: https://golangci-lint.run/welcome/install/"
-        fi
-      - |
-        if command -v golangci-lint >/dev/null 2>&1; then
-          cd operators && golangci-lint run ./...
-        else
-          echo "SKIP: golangci-lint not installed — install: https://golangci-lint.run/welcome/install/"
-        fi
-      - |
-        if command -v golangci-lint >/dev/null 2>&1; then
-          cd api && golangci-lint run ./...
-        else
-          echo "SKIP: golangci-lint not installed — install: https://golangci-lint.run/welcome/install/"
-        fi
-      - cd cli && npx eslint src/
-
-  validate:manifests:
-    desc: Validate all K8s manifests with kubeconform
-    cmds:
-      - kubeconform --strict --skip CustomResourceDefinition operators/config/
-      - kubeconform --strict infra/tilt/api-deployment.yaml infra/tilt/operator-deployment.yaml
-      # ArgoCD templates use CRD kinds (AppProject, Application) — skip those
-      - kubeconform --strict --skip AppProject,Application infra/helm/argocd/templates/
-      # PodDisruptionBudgets
-      - kubeconform --strict infra/helm/postgresql/templates/pdb.yaml
-      - kubeconform --strict infra/helm/gitea/templates/pdb.yaml
-      - kubeconform --strict infra/helm/argocd/templates/pdb.yaml
-      # NetworkPolicies
-      - kubeconform --strict infra/helm/network-policies/loopzero-system.yaml
-      # Monitoring manifests (ServiceMonitor, PrometheusRule are CRD kinds — skip those)
-      - kubeconform --strict --skip ServiceMonitor,PrometheusRule infra/helm/monitoring/manifests/
-      # infra/helm/argo-workflows/templates/ contains Go template syntax ({{ }}) — requires helm template to validate
 
   # ---------------------------------------------------------------------------
-  # Monitoring
-  # ---------------------------------------------------------------------------
-  monitoring:install:
-    desc: Install full monitoring stack (Prometheus + Grafana + OTel + ServiceMonitors + dashboards)
-    cmds:
-      - task: infra:install:monitoring
-
-  monitoring:validate-targets:
-    desc: Validate all Prometheus scrape targets are UP
-    cmds:
-      - |
-        echo "Checking Prometheus targets..."
-        TARGETS=$(curl -sf http://localhost:{{.PROMETHEUS_PORT}}/api/v1/targets | jq -r '.data.activeTargets[] | "\(.labels.job) \(.health)"' 2>/dev/null)
-        if [ -z "$TARGETS" ]; then
-          echo "ERROR: Cannot reach Prometheus at localhost:{{.PROMETHEUS_PORT}}"
-          exit 1
-        fi
-        echo "$TARGETS" | sort | uniq -c | sort -rn
-        echo ""
-        DOWN=$(echo "$TARGETS" | grep -c "down" || true)
-        if [ "$DOWN" -gt 0 ]; then
-          echo "WARNING: $DOWN target(s) are DOWN:"
-          echo "$TARGETS" | grep "down"
-          exit 1
-        fi
-        echo "All targets are UP."
-
-  monitoring:status:
-    desc: Show monitoring stack status (targets, alerts, dashboards)
-    cmds:
-      - |
-        echo "=== Prometheus Targets ==="
-        curl -sf http://localhost:{{.PROMETHEUS_PORT}}/api/v1/targets | jq -r '.data.activeTargets[] | "\(.labels.job)\t\(.health)\t\(.lastScrape)"' 2>/dev/null | column -t || echo "Prometheus not reachable at localhost:{{.PROMETHEUS_PORT}}"
-        echo ""
-        echo "=== Active Alerts ==="
-        curl -sf http://localhost:{{.PROMETHEUS_PORT}}/api/v1/alerts | jq -r '.data.alerts[] | "\(.labels.alertname)\t\(.state)\t\(.labels.severity)"' 2>/dev/null | column -t || echo "No alerts or Prometheus not reachable"
-        echo ""
-        echo "=== Grafana Dashboards ==="
-        curl -sf -u REDACTED_SECRET_056 http://localhost:{{.GRAFANA_PORT}}/api/search?type=dash-db | jq -r '.[].title' 2>/dev/null || echo "Grafana not reachable at localhost:{{.GRAFANA_PORT}}"
-
-  # =========================================================================
-  # MEET-055: Post-Stress-Test Operational Tasks
-  # =========================================================================
-
-  loadtest:run:
-    desc: Run load test at specified LEVEL (l1-l5). Uses Go E2E harness.
-    vars:
-      LEVEL: '{{.LEVEL | default "l1"}}'
-    cmds:
-      - |
-        cd infra/tests/load
-        if [ ! -f run-tests.sh ]; then
-          echo "ERROR: run-tests.sh not found in infra/tests/load/"
-          exit 1
-        fi
-        echo "=== Load Test Level: {{.LEVEL}} ==="
-        bash run-tests.sh {{.LEVEL}}
-
-  api:hotfix:
-    desc: Sanctioned fast-path for API image hotfix (build, push, rollout restart with audit)
-    vars:
-      TAG: '{{.TAG | default "homolog"}}'
-      CONTEXT: '{{.CONTEXT | default "do-nyc3-loopzero-infra-homolog-nyc3-mgmt"}}'
-    cmds:
-      - |
-        set -euo pipefail
-        echo "=== API Hotfix ==="
-        echo "  Operator: $(whoami)"
-        echo "  Time:     $(date -u +%Y-%m-%dT%H:%M:%SZ)"
-        echo "  Tag:      {{.TAG}}"
-        echo "  Context:  {{.CONTEXT}}"
-        echo ""
-        echo "Building API image..."
-        docker build -f api/Dockerfile -t registry.digitalocean.com/loopzero-system/loopzero-api:{{.TAG}} .
-        echo "Pushing..."
-        docker push registry.digitalocean.com/loopzero-system/loopzero-api:{{.TAG}}
-        echo "Rolling out..."
-        kubectl --context={{.CONTEXT}} -n loopzero-system rollout restart deploy/loopzero-api
-        kubectl --context={{.CONTEXT}} -n loopzero-system rollout restart deploy/loopzero-controller
-        echo ""
-        echo "✅ Hotfix applied. Rollout status:"
-        kubectl --context={{.CONTEXT}} -n loopzero-system rollout status deploy/loopzero-api --timeout=120s
-        echo ""
-        echo "⚠️  Do NOT use 'kubectl set image'. This task is the sanctioned fast-path."
-
-  infra:drift:
-    desc: Check Pulumi drift (expect no changes). Run locally or in CI.
-    cmds:
-      - |
-        cd infra/pulumi
-        echo "=== Pulumi Drift Check ==="
-        echo "  Time: $(date -u +%Y-%m-%dT%H:%M:%SZ)"
-        npx pulumi preview --stack homolog --expect-no-changes --non-interactive 2>&1 || {
-          echo ""
-          echo "🚨 DRIFT DETECTED! Review changes above."
-          echo "   If intentional (hotfix): reconcile via 'pulumi up' within 24h."
-          echo "   If unauthorized: investigate and revert."
-          exit 1
-        }
-        echo "✅ No drift detected."
-
-  infra:state-delete:
-    desc: Wrapper for 'pulumi state delete' with audit trail. Use ONLY when necessary.
-    vars:
-      URN: '{{.URN}}'
-      REASON: '{{.REASON | default "no reason provided"}}'
-    cmds:
-      - |
-        set -euo pipefail
-        if [ -z "{{.URN}}" ]; then
-          echo "ERROR: URN is required. Usage: task infra:state-delete URN=<urn> REASON='why'"
-          exit 1
-        fi
-        echo "=== Pulumi State Delete (AUDITED) ==="
-        echo "  Operator: $(whoami)"
-        echo "  Time:     $(date -u +%Y-%m-%dT%H:%M:%SZ)"
-        echo "  URN:      {{.URN}}"
-        echo "  Reason:   {{.REASON}}"
-        echo ""
-        echo "⚠️  WARNING: This removes the resource from Pulumi state."
-        echo "⚠️  The REAL resource in the cloud is NOT deleted."
-        echo "⚠️  You MUST delete the real resource FIRST (doctl/aws/cf)."
-        echo ""
-        read -p "Have you already deleted the real resource? [y/N] " -n 1 -r
-        echo
-        if [[ ! $REPLY =~ ^[Yy]$ ]]; then
-          echo "Aborted. Delete the real resource first, then retry."
-          exit 1
-        fi
-        cd infra/pulumi
-        npx pulumi state delete --stack homolog "{{.URN}}" --force
-        echo "✅ Resource removed from state."
-
-  break-glass:
-    desc: Issue time-boxed cluster-admin access for emergency operations (MEET-055 M3)
-    vars:
-      CONTEXT: '{{.CONTEXT | default "do-nyc3-loopzero-infra-homolog-nyc3-mgmt"}}'
-      TTL: '{{.TTL | default "4"}}'
-      REASON: '{{.REASON | default ""}}'
-    cmds:
-      - bash infra/scripts/break-glass.sh {{.CONTEXT}} {{.TTL}} "{{.REASON}}"
-
-  # ===========================================================================
-  # Observability — Blackbox, pprof, Sloth
-  # ===========================================================================
-
-  pprof:api:
-    desc: Port-forward to API pprof endpoint (http://localhost:6060/debug/pprof/)
-    cmds:
-      - kubectl --context {{.MGMT_CONTEXT}} -n loopzero-system port-forward deploy/loopzero-api 6060:6060
-
-  pprof:operators:
-    desc: Port-forward to Operator pprof endpoint (http://localhost:6061/debug/pprof/)
-    cmds:
-      - kubectl --context {{.MGMT_CONTEXT}} -n loopzero-system port-forward deploy/loopzero-controller 6061:6061
-
-  blackbox:status:
-    desc: Check blackbox exporter health and probe results
-    cmds:
-      - |
-        echo "=== Blackbox Pod ==="
-        kubectl --context {{.MGMT_CONTEXT}} -n loopzero-system get pods -l app.kubernetes.io/name=prometheus-blackbox-exporter 2>/dev/null || echo "Blackbox pod not found"
-        echo ""
-        echo "=== Probe CRDs ==="
-        kubectl --context {{.MGMT_CONTEXT}} -n monitoring get probes 2>/dev/null || echo "No Probe resources found"
-        echo ""
-        echo "=== PrometheusRules ==="
-        kubectl --context {{.MGMT_CONTEXT}} -n monitoring get prometheusrules loopzero-probe-alerts 2>/dev/null || echo "PrometheusRule not found"
-
-  sloth:generate:
-    desc: Generate PrometheusRules from Sloth SLO specs
-    preconditions:
-      - sh: command -v sloth
-        msg: "sloth CLI not found. Install: go install github.com/slok/sloth/cmd/sloth@latest"
-    cmds:
-      - sloth generate -i infra/sloth/*.yaml -o infra/helm/monitoring/manifests/prometheusrule-slo-generated.yaml
-      - echo "✅ SLO rules generated at infra/helm/monitoring/manifests/prometheusrule-slo-generated.yaml"
-
-  sloth:validate:
-    desc: Validate Sloth SLO spec files
-    preconditions:
-      - sh: command -v sloth
-        msg: "sloth CLI not found. Install: go install github.com/slok/sloth/cmd/sloth@latest"
-    cmds:
-      - |
-        for f in infra/sloth/*.yaml; do
-          echo "Validating $f..."
-          sloth validate -i "$f"
-        done
-        echo "✅ All SLO specs valid"
-
-  tempo:status:
-    desc: Check Tempo health, ServiceMonitor, and PrometheusRules (MEET-020)
-    cmds:
-      - |
-        echo "=== Tempo Pod ==="
-        kubectl --context k3d-loopzero-mgmt -n loopzero-system get pods -l app.kubernetes.io/name=tempo 2>/dev/null || echo "Tempo pod not found"
-        echo ""
-        echo "=== ServiceMonitor ==="
-        kubectl --context k3d-loopzero-mgmt -n monitoring get servicemonitor loopzero-tempo 2>/dev/null || echo "ServiceMonitor not found"
-        echo ""
-        echo "=== PrometheusRules ==="
-        kubectl --context k3d-loopzero-mgmt -n monitoring get prometheusrules loopzero-tracing 2>/dev/null || echo "PrometheusRule not found"
-
-  # ---------------------------------------------------------------------------
-  # Helm chart operations (charts/)
-  # ---------------------------------------------------------------------------
-
-  helm:lint:
-    desc: Lint all Helm charts
-    cmds:
-      - |
-        FAILED=0
-        for chart in charts/*/; do
-          echo "Linting $chart..."
-          if ! helm lint "$chart" 2>&1; then
-            FAILED=1
-          fi
-        done
-        if [ "$FAILED" -ne 0 ]; then
-          echo "FAILED: one or more charts failed lint"
-          exit 1
-        fi
-        echo "All charts passed lint"
-
-  helm:template:
-    desc: Render all chart templates (dry-run)
-    cmds:
-      - helm template loopzero charts/loopzero-platform
-
-  helm:template:dev:
-    desc: Render templates with dev profile
-    cmds:
-      - helm template loopzero charts/loopzero-platform -f charts/loopzero-platform/profiles/dev.yaml
-
-  helm:template:prod:
-    desc: Render templates with prod profile
-    cmds:
-      - helm template loopzero charts/loopzero-platform -f charts/loopzero-platform/profiles/prod.yaml
-
-  helm:dep:update:
-    desc: Update dependencies for all charts (regenerates Chart.lock)
-    cmds:
-      - |
-        for chart in charts/*/; do
-          if [ -f "$chart/Chart.yaml" ] && grep -q "dependencies:" "$chart/Chart.yaml"; then
-            echo "Updating deps for $chart..."
-            helm dependency update "$chart"
-          fi
-        done
-        echo "All dependencies updated"
-
-  helm:sync-crds:
-    desc: Sync CRDs from operators/config/crd/bases/ to charts/loopzero-crds/templates/
-    cmds:
-      - |
-        SRC="operators/config/crd/bases"
-        DST="charts/loopzero-crds/templates"
-        COUNT=0
-        for crd_file in "$SRC"/loopzero.io_*.yaml; do
-          base=$(basename "$crd_file" .yaml)
-          short=${base#loopzero.io_}
-          template_file="$DST/${short}.yaml"
-          crd_name=$(grep "^  name:" "$crd_file" | head -1 | awk '{print $2}')
-          spec_content=$(sed -n '/^spec:/,$p' "$crd_file")
-          cat > "$template_file" << TMPL_EOF
-        {{- if .Values.crds.${short}.enabled }}
-        apiVersion: apiextensions.k8s.io/v1
-        kind: CustomResourceDefinition
-        metadata:
-          name: ${crd_name}
-          labels:
-            {{- include "loopzero-common.labels" . | nindent 4 }}
-          annotations:
-            "helm.sh/resource-policy": keep
-            controller-gen.kubebuilder.io/version: {{ .Values.controllerGenVersion | default "v0.17.2" }}
-        ${spec_content}
-        {{- end }}
-        TMPL_EOF
-          COUNT=$((COUNT + 1))
-        done
-        echo "Synced $COUNT CRDs from $SRC to $DST"
-
-  helm:install:dev:
-    desc: Install umbrella chart with dev profile on k3d
-    cmds:
-      - helm upgrade --install loopzero-crds charts/loopzero-crds -n loopzero-system --create-namespace
-      - helm upgrade --install loopzero charts/loopzero-platform -n loopzero-system -f charts/loopzero-platform/profiles/dev.yaml
-
-  helm:install:test:
-    desc: Run helm test hooks post-install
-    cmds:
-      - helm test loopzero -n loopzero-system

@@ -1,0 +1,50 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://loopzero.platform/schemas/cluster-issuer/values.schema.json",
+  "title": "cluster-issuer chart values schema",
+  "description": "Plan 2026-05-20 T2.5 ext — fail-fast on issuer config drift. cert-manager rejects an issuer with missing ACME fields silently (issuer enters Failed state, certs never issued). Schema catches at helmfile lint.",
+  "type": "object",
+  "properties": {
+    "issuerKind": {
+      "type": "string",
+      "enum": ["selfsigned", "acme"],
+      "description": "Issuer kind: selfsigned (local dev) | acme (Let's Encrypt prod/drill). No other values supported."
+    },
+    "acme": {
+      "type": "object",
+      "properties": {
+        "email": {
+          "type": "string",
+          "pattern": "^[^@\\s]+@[^@\\s]+\\.[^@\\s]+$",
+          "description": "ACME account email — MUST match basic email pattern (anything@anything.anything, no spaces). Let's Encrypt sends expiry warnings here. Note: schema uses pattern (always enforced) instead of format:email (only enforced when consumer passes FormatChecker — not the case in helm/helmfile lint)."
+        },
+        "server": {
+          "type": "string",
+          "enum": [
+            "https://acme-v02.api.letsencrypt.org/directory",
+            "https://acme-staging-v02.api.letsencrypt.org/directory"
+          ],
+          "description": "ACME server URL. Prod = letsencrypt.org/directory (5 cert/week rate limit). Staging = acme-staging (no rate limit, untrusted CA). Other URLs rejected to prevent accidental third-party ACME provider. Note: format:uri removed (silently permissive in default jsonschema) — enum is the load-bearing constraint here, format is redundant."
+        },
+        "privateKeySecretRef": {
+          "type": "string",
+          "minLength": 1,
+          "description": "Secret name holding ACME account private key. Empty = cert-manager auto-generates (acceptable for dev; not for prod where key continuity matters)."
+        }
+      }
+    },
+    "loopzeroCaIssuerName": {
+      "type": "string",
+      "minLength": 1,
+      "description": "Name of the always-created LoopZero CA issuer for local fallback (loopzero-ca-issuer). Used by services that lack ACME-reachable DNS."
+    }
+  },
+  "required": ["issuerKind"],
+  "allOf": [
+    {
+      "if": { "properties": { "issuerKind": { "const": "acme" } } },
+      "then": { "required": ["acme"] }
+    }
+  ],
+  "additionalProperties": true
+}

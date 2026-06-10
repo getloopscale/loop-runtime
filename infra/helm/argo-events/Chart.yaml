@@ -1,0 +1,20 @@
+apiVersion: v2
+name: argo-events
+description: T0.2 Cenário B POC — Argo Events controller + EventBus (JetStream NATS) for webhook-driven Workflow triggers per ADR-2026-05-27-T0.2-RATIFIED D1.
+version: 0.1.0
+appVersion: "2.4.4"
+type: application
+keywords:
+  - loopzero
+  - ci
+  - argo-events
+  - eventbus
+maintainers:
+  - name: loopzero-platform
+home: https://github.com/getloopscale/loopzero
+dependencies:
+  # Pinned upstream chart version. Renovate auto-bumps patches.
+  # 2.4.x is the stable line as of 2026-05.
+  - name: argo-events
+    version: 2.4.4
+    repository: https://argoproj.github.io/argo-helm

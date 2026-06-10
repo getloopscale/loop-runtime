@@ -1,0 +1,50 @@
+# Chaos Experiment: cert-manager Let's Encrypt re-issue under CF DNS-01 network fault
+#
+# Drill-specific scenario (NEW for /chaos-test-drill plan 2026-05-18-drill-skills-trio).
+# Local k3d uses self-signed CA (instant issue); drill prod-parity uses Let's Encrypt
+# prod with CF DNS-01 challenge — real ACME flow + DNS propagation + rate limits.
+#
+# Hypothesis: cert-manager retry policy survives transient DNS-01 challenge failure.
+# Certificate issuance completes within 10min after network heal. CF DNS-01 challenge
+# records cleaned up correctly. Rate limit not exceeded (Let's Encrypt allows 5
+# duplicate certs/week — challenge retries don't count if successful).
+#
+# Steady-state SLO:
+#   - Certificate.status.conditions[type=Ready].status transitions to True within 10min post-heal
+#   - Zero rate-limit errors in cert-manager logs
+#   - Final cert is valid Let's Encrypt prod (not expired, not staging)
+#   - CF zone has zero leftover _acme-challenge TXT records post-issue
+---
+apiVersion: chaos-mesh.org/v1alpha1
+kind: NetworkChaos
+metadata:
+  name: drill-cert-renewal-under-network-fault
+  namespace: cert-manager
+  annotations:
+    loopzero.io/plan: "2026-05-18-drill-skills-trio"
+    loopzero.io/scenario-id: "drill-cert-renewal-under-network-fault"
+    loopzero.io/dod-test: "Certificate issuance completes within 10min post-heal; CF zone cleaned up"
+    loopzero.io/hypothesis: "cert-manager retries DNS-01 challenge after transient CF API fault; final cert valid LE prod"
+    loopzero.io/slo-query: |
+      # Certificate Ready condition transitions to True
+      certmanager_certificate_ready_status{condition="Ready"} == 1
+      and
+      # No rate-limit errors in last 15min
+      rate(certmanager_certificate_request_errors_total{reason="ratelimit"}[15m]) == 0
+    loopzero.io/recovery-budget-seconds: "600"
+spec:
+  action: partition
+  mode: all
+  selector:
+    namespaces:
+      - cert-manager
+    labelSelectors:
+      "app.kubernetes.io/name": "cert-manager"
+  direction: to
+  # Block egress to CF API + ACME server for 30s — simulates transient cloud
+  # provider API outage during DNS-01 challenge. cert-manager retry policy
+  # (default backoff 30s/1m/5m) should survive this.
+  externalTargets:
+    - "api.cloudflare.com"
+    - "acme-v02.api.letsencrypt.org"
+  duration: "30s"

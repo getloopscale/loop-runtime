@@ -5,14 +5,14 @@ import { ApiError } from '../api/client';
 import { classifyNetworkError } from '../output/error-message';
 import type { LoopZeroYamlResult } from '../adapters/loopzero-yaml';
 
-interface LogEntry {
+export interface LogEntry {
   step: string;
   stream: string;
   content: string;
   timestamp: string;
 }
 
-interface LogsApiResponse {
+export interface LogsApiResponse {
   build_id: string;
   status: string;
   entries: LogEntry[];
@@ -38,13 +38,33 @@ export type StreamLogsFn = (
   onClose: () => void,
 ) => { close: () => void };
 
+/**
+ * Callback to connect to the runtime SSE log stream. Returns a disconnect
+ * function. Beta Logs Gate Criterion 3 — per-app filter via `app` arg
+ * (empty string = all apps in the namespace).
+ */
+export type StreamRuntimeLogsFn = (
+  project: string,
+  env: string,
+  app: string,
+  onLine: (event: StreamLogEvent) => void,
+  onError: (err: Error) => void,
+  onClose: () => void,
+) => { close: () => void };
+
 export interface LogsDeps {
   getToken: () => string | null;
   findLoopZeroYaml: () => LoopZeroYamlResult | null;
-  getLogs: (buildID: string, opts: { tail?: number; step?: string }) => Promise<LogsApiResponse>;
+  getLogs: (buildID: string, opts: { tail?: number; step?: string; since?: string }) => Promise<LogsApiResponse>;
   getProjectStatus?: (project: string, env: string) => Promise<StatusResponse>;
   /** SSE streaming function for --follow mode. Optional: if absent, --follow is unsupported. */
   streamLogs?: StreamLogsFn;
+  /**
+   * SSE streaming function for `loopzero logs --runtime` mode.
+   * Optional: when absent, --runtime returns an error rather than
+   * silently no-op.
+   */
+  streamRuntimeLogs?: StreamRuntimeLogsFn;
   writeTo: (msg: string) => void;
   writeError: (msg: string) => void;
 }
@@ -54,9 +74,30 @@ export interface LogsOptions {
   tail?: number;
   step?: string;
   env?: string;
+  /** Plan T2.3 D6 — explicit project override; otherwise inferred from loopzero.yaml */
+  project?: string;
   json?: boolean;
   /** Follow mode: stream logs in real-time via SSE. */
   follow?: boolean;
+  /**
+   * Beta Logs Gate Criterion 3 — runtime mode. When true, stream
+   * runtime pod logs from the workload namespace instead of build
+   * pod logs. Requires --env; supports optional --app filter.
+   */
+  runtime?: boolean;
+  /**
+   * Filter runtime logs to a single app within the project. Empty
+   * (default) means "all apps in the namespace". Only meaningful
+   * when runtime is true.
+   */
+  app?: string;
+  /**
+   * Beta Logs Gate Criterion 7 — restrict to entries newer than
+   * NOW - <duration>. Accepts "24h", "7d", "30m", or raw seconds.
+   * Default (when omitted): server uses 7d window. The API
+   * normalizes "d" shorthand and Go duration syntax.
+   */
+  since?: string;
 }
 
 export class LogsCommand {
@@ -72,21 +113,34 @@ export class LogsCommand {
       return this.exitWithError(opts, 'Not authenticated. Run: loopzero login', 4, 'AUTH_REQUIRED');
     }
 
+    // Beta Logs Gate Criterion 3 — runtime mode bypasses build-id
+    // resolution and routes to a different SSE endpoint that streams
+    // pod logs from the workload namespace. Requires --env; --app is
+    // optional (empty = all apps in namespace).
+    if (opts.runtime) {
+      return this.executeRuntime(opts);
+    }
+
     // 2. Resolve build ID — explicit --build or infer from last build
     if (!opts.build) {
-      // F-03: Infer from project status when --build not provided
-      const yaml = this.deps.findLoopZeroYaml();
-      if (!yaml?.content?.project) {
-        return this.exitWithError(opts, 'No loopzero.yaml found. Specify --build <id> or run from a project directory.', 1, 'MISSING_CONFIG');
+      // F-03: Infer from project status when --build not provided.
+      // Plan T2.3 D6 — --project flag overrides loopzero.yaml lookup.
+      let projectName: string | undefined = opts.project;
+      if (!projectName) {
+        const yaml = this.deps.findLoopZeroYaml();
+        if (!yaml?.content?.project) {
+          return this.exitWithError(opts, 'No loopzero.yaml found. Specify --build <id>, run from a project directory, or pass --project <name>.', 1, 'MISSING_CONFIG');
+        }
+        projectName = yaml.content.project;
       }
       if (!this.deps.getProjectStatus) {
         return this.exitWithError(opts, 'Build ID is required. Usage: loopzero logs --build <id>', 1, 'MISSING_BUILD_ID');
       }
       try {
         const env = opts.env ?? 'production';
-        const status = await this.deps.getProjectStatus(yaml.content.project, env);
+        const status = await this.deps.getProjectStatus(projectName, env);
         if (!status?.last_build?.id) {
-          return this.exitWithError(opts, `No builds found for project "${yaml.content.project}" in ${env}.`, 1, 'NO_BUILDS');
+          return this.exitWithError(opts, `No builds found for project "${projectName}" in ${env}.`, 1, 'NO_BUILDS');
         }
         opts.build = status.last_build.id;
       } catch {
@@ -105,6 +159,7 @@ export class LogsCommand {
       response = await this.deps.getLogs(opts.build!, {
         tail: opts.tail,
         step: opts.step,
+        since: opts.since,
       });
     } catch (err) {
       return this.handleError(opts, err);
@@ -137,6 +192,53 @@ export class LogsCommand {
     }
 
     return 0;
+  }
+
+  private executeRuntime(opts: LogsOptions): Promise<number> {
+    if (!this.deps.streamRuntimeLogs) {
+      return Promise.resolve(
+        this.exitWithError(opts, 'Runtime log streaming is not available in this build.', 1, 'STREAM_UNAVAILABLE'),
+      );
+    }
+    const yaml = this.deps.findLoopZeroYaml();
+    if (!yaml?.content?.project) {
+      return Promise.resolve(
+        this.exitWithError(opts, 'No loopzero.yaml found. Run from a project directory.', 1, 'MISSING_CONFIG'),
+      );
+    }
+    const env = opts.env ?? 'production';
+    const app = opts.app ?? '';
+
+    return new Promise<number>((resolve) => {
+      let streamErrored = false;
+      const stream = this.deps.streamRuntimeLogs!(
+        yaml.content.project!,
+        env,
+        app,
+        (event: StreamLogEvent) => {
+          if (opts.json) {
+            this.deps.writeTo(JSON.stringify(event));
+          } else {
+            const ts = event.timestamp ? `${event.timestamp} ` : '';
+            this.deps.writeTo(`${ts}${event.line}`);
+          }
+        },
+        (err: Error) => {
+          streamErrored = true;
+          this.deps.writeError(`Runtime stream error: ${err.message}`);
+        },
+        () => {
+          resolve(streamErrored ? 3 : 0);
+        },
+      );
+
+      const cleanup = () => {
+        stream.close();
+        resolve(0);
+      };
+      process.once('SIGINT', cleanup);
+      process.once('SIGTERM', cleanup);
+    });
   }
 
   private executeFollow(opts: LogsOptions): Promise<number> {

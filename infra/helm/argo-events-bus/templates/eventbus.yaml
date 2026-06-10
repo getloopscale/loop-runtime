@@ -1,0 +1,37 @@
+# T0.2 Cenário B POC — EventBus (JetStream NATS) CR.
+# Per ADR-2026-05-27-T0.2-RATIFIED D1.
+#
+# Deployed AFTER argo-events upstream chart (Helmfile needs: ordering)
+# so CRDs are registered before this CR is applied. WITHOUT this
+# split, helm install would error:
+#   "no matches for kind EventBus in version argoproj.io/v1alpha1"
+# discovered LIVE during cleanroom 2026-05-27.
+apiVersion: argoproj.io/v1alpha1
+kind: EventBus
+metadata:
+  name: default
+  namespace: argo-events
+  labels:
+    app.kubernetes.io/name: argo-events-bus
+    app.kubernetes.io/managed-by: {{ .Release.Service | quote }}
+    loopzero.io/component: ci
+spec:
+  jetstream:
+    version: latest  # Renovate-pinned via upstream chart
+    replicas: {{ .Values.eventBus.replicas }}
+    {{- if .Values.eventBus.persistence.enabled }}
+    persistence:
+      # K8s semantics: storageClassName UNSET → use cluster default class.
+      # storageClassName: "" (empty string) DISABLES dynamic provisioning and
+      # requires a static pre-bound PV. We want the cluster default, so omit
+      # the field entirely when no override is set. Discovered LIVE during
+      # cleanroom 2026-05-27: EventBus PVC stuck Pending with empty SC.
+      {{- with .Values.eventBus.persistence.storageClassName }}
+      storageClassName: {{ . | quote }}
+      {{- end }}
+      accessMode: ReadWriteOnce
+      volumeSize: {{ .Values.eventBus.persistence.size }}
+    {{- end }}
+    containerTemplate:
+      resources:
+        {{- toYaml .Values.eventBus.resources | nindent 8 }}

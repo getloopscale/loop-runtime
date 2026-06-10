@@ -7,7 +7,11 @@ image:
   tag: dev
   pullPolicy: IfNotPresent
 
-replicaCount: 1
+# HA default per CTO mandate 2026-05-14 + /chaos-test C01 resilience gap.
+# Multi-replica activates leader election fail-over + PodDisruptionBudget
+# (via loopzero-common.pdb library — see templates/pdb.yaml). Sustains chaos
+# test C01 hypothesis: "surviving pod never restarts during leader kill".
+replicaCount: 2
 revisionHistoryLimit: 3
 priorityClassName: system-cluster-critical
 
@@ -71,8 +75,39 @@ serviceAccount:
   name: ""
   automountServiceAccountToken: true
 
+# T5.11 of plan 2026-06-02-openbao-adoption v1.3 — Vault K8s auth config.
+# When enabled, the Deployment mounts a projected SA token with bounded
+# audience + expiration, and pkg/vault.Client uses K8s auth login instead
+# of static token env var. Disabled by default (vault stack opt-in per env).
+vault:
+  enabled: false
+  # Vault endpoint reachable from loopzero-api (mgmt cluster).
+  addr: "https://openbao.vault-system.svc.cluster.local:8200"
+  # K8s auth mount name (matches infra/helm/openbao-init T5.1).
+  authMount: "k8s-mgmt"
+  # Role name on that mount (matches T5.5 role: loopzero-api).
+  role: "loopzero-api"
+  # Token audience — TokenReviewer on Vault side validates this claim
+  # cryptographically; mismatched audience → auth fails fast.
+  audience: "vault.loopzero.io"
+  # Projected token expiration. Kubelet auto-rotates before expiry.
+  tokenExpirationSeconds: 3600
+  # SPKI pin populated by ESO from openbao SPKI extractor CronJob
+  # (T2.5). When empty, pkg/vault.CachedClient skips SPKI pin
+  # verification (still validates CA bundle).
+  spkiPinSecretName: "vault-spki-pin"
+  spkiPinSecretKey: "spki_hash"
+
 rbac:
   create: true
+  # T5.13 of plan 2026-06-02-openbao-adoption v1.3 — closes deep review
+  # finding #1 (cluster-wide secrets/configmaps grant = catastrophic blast
+  # radius). When true (default backward compat for unreleased clusters),
+  # loopzero-api retains cluster-wide secrets/configmaps RBAC for existing
+  # deploys. Flip to false only AFTER per-tenant Role rollout via
+  # tenant-controller reconcile (see operators/internal/tenant/tenant_rbac.go).
+  # Phased cutover: Day 0 deploy keeps current behavior; Day N flip to false.
+  legacyClusterWideSecrets: true
 
 startupProbe:
   enabled: true

@@ -14,6 +14,7 @@ import (
 	"testing"
 
 	loopzeroerrors "github.com/loopzero/loopzero/pkg/errors"
+	errorshttp "github.com/loopzero/loopzero/pkg/errors/http"
 )
 
 // fakePlanCapChecker lets tests drive plan-cap decisions without a real DB.
@@ -79,8 +80,8 @@ func TestSubmitBuild_StarterPlan_ReplicasExceedCap_Returns422(t *testing.T) {
 	if loopzeroErr.Code != "REPLICAS_EXCEED_PLAN" {
 		t.Errorf("expected code REPLICAS_EXCEED_PLAN, got %q (msg: %s)", loopzeroErr.Code, loopzeroErr.Message)
 	}
-	if loopzeroErr.HTTPStatus != 422 {
-		t.Errorf("expected HTTP 422, got %d", loopzeroErr.HTTPStatus)
+	if got := errorshttp.Status(loopzeroErr); got != 422 {
+		t.Errorf("expected HTTP 422, got %d", got)
 	}
 
 	// Build must NOT be persisted.
@@ -270,8 +271,8 @@ func TestSubmitBuild_ReplicasAndAutoscalingSet_Returns422Ambiguous(t *testing.T)
 	if loopzeroErr.Code != "SCALING_AMBIGUOUS" {
 		t.Errorf("expected SCALING_AMBIGUOUS, got %q (msg: %s)", loopzeroErr.Code, loopzeroErr.Message)
 	}
-	if loopzeroErr.HTTPStatus != 422 {
-		t.Errorf("expected HTTP 422, got %d", loopzeroErr.HTTPStatus)
+	if got := errorshttp.Status(loopzeroErr); got != 422 {
+		t.Errorf("expected HTTP 422, got %d", got)
 	}
 	if len(bs.builds) != 0 {
 		t.Errorf("no build should have been created on ambiguous scaling; got %d", len(bs.builds))

@@ -1,0 +1,87 @@
+# Plan 2026-06-04-dev-public-docr-fix-forward T2.2.
+# Minimal override for env dev-public.
+# Chart defaults (charts/loopzero-tenant-operator/values.yaml) canonical:
+#   global.registry: registry.digitalocean.com/loopzero-system
+#   image.{repository,tag,pullPolicy}: loopzero-tenant-operator / dev / IfNotPresent
+#   replicaCount: 2 (HA)
+#   config.insecureSkipTls: "false"  ← we override to "true" because the env
+#       uses selfsigned-issuer (declared in environments/dev-public.yaml).
+
+global:
+  imagePullSecrets:
+    - name: do-registry
+
+image:
+  # Always so each rollout pulls the latest :dev push from DOCR.
+  pullPolicy: Always
+
+config:
+  giteaUrl: "http://gitea-http.loopzero-system.svc.cluster.local:3000"
+  baseDomain: "{{ .Values.domain }}"
+  argocdNamespace: argocd
+  # workloadClusterUrl populated by wire-clusters.sh post-bootstrap; leaving
+  # blank lets the operator discover via in-cluster ClusterCredential.
+  ingressNamespace: traefik
+  # Tenant-internal TLS uses the selfsigned-issuer declared in the env;
+  # tenant operator skipping its verification is consistent with that design.
+  insecureSkipTls: "true"
+
+secrets:
+  # Chart would emit an empty GITEA_TOKEN if create=true. Instead we use
+  # the externally-provisioned `loopzero-tenant-operator` Secret created by
+  # generate-secrets.sh (which propagates the canonical gitea-token from
+  # loopzero-api-tokens). See T3.1 of plan 2026-06-04-dev-public-docr-fix-forward.
+  create: false
+  existingSecret: loopzero-tenant-operator
+
+kubeconfig:
+  build:
+    existingConfigMap: loopzero-build-kubeconfig
+  runtime:
+    existingConfigMap: loopzero-runtime-kubeconfig
+
+# dev-public env-specific NetworkPolicy override: helmfile installs Gitea
+# in `loopzero-system` namespace (NOT a dedicated `gitea` ns like the chart
+# default assumes). Same for ArgoCD (canonical = `argocd` ns, already OK).
+# Without this override, tenant-operator egress is blocked → circuit
+# breaker opens → tenants stuck in Provisioning forever.
+networkPolicy:
+  enabled: true
+  ingress:
+    - from:
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: monitoring
+      ports:
+        - protocol: TCP
+          port: 8443
+  extraEgress:
+    - ports:
+        - protocol: TCP
+          port: 6443
+        - protocol: TCP
+          port: 443
+    # Gitea — in dev-public this is in loopzero-system, not gitea namespace
+    - ports:
+        - protocol: TCP
+          port: 3000
+      to:
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: loopzero-system
+    # ArgoCD
+    - ports:
+        - protocol: TCP
+          port: 8080
+      to:
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: argocd
+    # MinIO
+    - ports:
+        - protocol: TCP
+          port: 9000
+      to:
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: loopzero-system

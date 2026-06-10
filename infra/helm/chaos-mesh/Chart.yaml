@@ -1,0 +1,15 @@
+# SPDX-License-Identifier: Apache-2.0
+# Sprint 8 v3.2 / CHG-002a / T0.3 — Chaos Mesh wrapper for Phase 5 chaos tests.
+# Pinned to 2.7.0 per ADR-0010 deliverable #8 (chaos validation gate).
+
+apiVersion: v2
+name: loopzero-chaos-mesh
+description: Chaos Mesh wrapper for LoopZero platform chaos testing (Phase 5)
+type: application
+version: 0.1.0
+appVersion: "2.7.0"
+
+dependencies:
+  - name: chaos-mesh
+    version: 2.7.0
+    repository: https://charts.chaos-mesh.org

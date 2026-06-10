@@ -6,7 +6,7 @@
 #
 # Size: ~50MB (Alpine + cosign binary)
 # Security: runs as non-root user 1000, no privilege escalation
-FROM alpine:3.21.3
+FROM mirror.gcr.io/library/alpine:3.21.3
 
 LABEL org.opencontainers.image.source="https://github.com/loopzero/loopzero"
 LABEL org.opencontainers.image.title="loopzero-cosign-signer"
@@ -14,8 +14,14 @@ LABEL org.opencontainers.image.description="Cosign image signer for LoopZero bui
 
 # cosign version and checksum — update both when upgrading.
 # Get checksum: wget -q <url> -O cosign && sha256sum cosign
-ARG COSIGN_VERSION=v3.0.6
-ARG COSIGN_SHA256=c956e5dfcac53d52bcf058360d579472f0c1d2d9b69f55209e256fe7783f4c74
+#
+# 2026-05-28 Ralph iter 3: downgraded v3.0.6 → v2.6.3 because cosign v3
+# does client-side token validation rejection after Fulcio GetConfiguration,
+# without ever hitting CreateSigningCertificate. v2.6.3 uses simpler API:
+# SIGSTORE_ID_TOKEN env + SIGSTORE_FULCIO_URL → POST /api/v2/signingCert.
+# See: docs/plans/2026-05-28-M07-fulcio-cacert-keyless-LIVE-plan.md v1.2
+ARG COSIGN_VERSION=v2.4.3
+ARG COSIGN_SHA256=caaad125acef1cb81d58dcdc454a1e429d09a750d1e9e2b3ed1aed8964454708
 
 RUN apk add --no-cache ca-certificates \
     && wget -q "https://github.com/sigstore/cosign/releases/download/${COSIGN_VERSION}/cosign-linux-amd64" \

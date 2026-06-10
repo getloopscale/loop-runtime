@@ -6,10 +6,12 @@ package middleware
 import (
 	"context"
 	"crypto/sha256"
+	"crypto/subtle"
 	"encoding/hex"
 	"encoding/json"
 	"errors"
 	"net/http"
+	"os"
 	"strings"
 	"sync"
 	"sync/atomic"
@@ -110,32 +112,86 @@ var AdminAPIKeyPrevious string
 
 // validateServiceAuth checks the X-Service-Auth header against current and previous secrets.
 // S1.2: Dual-key rotation — accepts current OR previous during rotation window.
+//
+// T2.2 of deep-review-remediation-plan (closes find_sec_002 HIGH): uses
+// subtle.ConstantTimeCompare to prevent timing-oracle byte-by-byte brute-force.
+// Empty AdminAPIKey/ServiceAuthSecret returns false BEFORE constant-time compare
+// so attacker cannot probe for "service has no key configured".
 func validateServiceAuth(provided string) bool {
 	if ServiceAuthSecret == "" {
 		return false
 	}
-	if provided == ServiceAuthSecret {
-		return true
-	}
-	if ServiceAuthSecretPrevious != "" && provided == ServiceAuthSecretPrevious {
-		return true
-	}
-	return false
+	current := subtle.ConstantTimeCompare([]byte(provided), []byte(ServiceAuthSecret)) == 1
+	prev := ServiceAuthSecretPrevious != "" &&
+		subtle.ConstantTimeCompare([]byte(provided), []byte(ServiceAuthSecretPrevious)) == 1
+	return current || prev
 }
 
-// validateAdminAPIKey checks the provided key against current and previous admin API keys.
+// ValidateAdminAPIKey checks the provided key against current and previous admin API keys.
 // MEET-052: Dual-key rotation for zero-downtime key rotation.
-func validateAdminAPIKey(provided string) bool {
+//
+// T0.2 of deep-review-remediation-plan (closes find_sec_001 CRITICAL): exported
+// (was validateAdminAPIKey) so handlers serving dual-mode self-service + admin
+// (e.g., tenants.Delete) can validate the X-Admin-Key value instead of just
+// checking presence. Bypass attack: previous code used header-presence check
+// (`r.Header.Get("X-Admin-Key") != ""`) which any authenticated user could
+// trivially spoof.
+//
+// T2.2 (closes find_sec_002 HIGH): uses subtle.ConstantTimeCompare to prevent
+// timing-oracle byte-by-byte brute-force attack against AdminAPIKey.
+func ValidateAdminAPIKey(provided string) bool {
 	if AdminAPIKey == "" {
 		return false
 	}
-	if provided == AdminAPIKey {
-		return true
-	}
-	if AdminAPIKeyPrevious != "" && provided == AdminAPIKeyPrevious {
-		return true
-	}
-	return false
+	current := subtle.ConstantTimeCompare([]byte(provided), []byte(AdminAPIKey)) == 1
+	prev := AdminAPIKeyPrevious != "" &&
+		subtle.ConstantTimeCompare([]byte(provided), []byte(AdminAPIKeyPrevious)) == 1
+	return current || prev
+}
+
+// RequireAdminService is a middleware that requires a valid service-auth
+// secret in the X-Service-Auth header for ALL /api/v1/admin/* operations.
+//
+// T2.1 of deep-review-2026-05-10-remediation-plan (find_sec_admin_secrets_divergent HIGH):
+// pre-T2.1 admin_pin_cell.go + admin_evict.go each inlined their own
+// subtle.ConstantTimeCompare reading TWO different env vars
+// (LOOPZERO_ADMIN_SERVICE_AUTH_SECRET vs LOOPZERO_SERVICE_AUTH_SECRET). The
+// divergence made the secret impossible to audit/rotate consistently —
+// this middleware enforces a single auth gate.
+//
+// Secret lookup order (first non-empty wins):
+//  1. LOOPZERO_ADMIN_SERVICE_AUTH_SECRET (canonical, per ADR D3)
+//  2. LOOPZERO_SERVICE_AUTH_SECRET (legacy fallback during migration window)
+//
+// Both support dual-key rotation via *_PREVIOUS counterparts.
+//
+// Uses subtle.ConstantTimeCompare for timing-attack resistance.
+func RequireAdminService(next http.Handler) http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		provided := r.Header.Get("X-Service-Auth")
+		if provided == "" {
+			emitAuthFailure(r, AuthFailureServiceMismatch, "missing X-Service-Auth header on admin endpoint", nil)
+			writeError(w, http.StatusForbidden, "FORBIDDEN",
+				"Admin service authentication required. Set X-Service-Auth header.")
+			return
+		}
+		canonical := os.Getenv("LOOPZERO_ADMIN_SERVICE_AUTH_SECRET")
+		legacy := os.Getenv("LOOPZERO_SERVICE_AUTH_SECRET")
+		canonicalPrev := os.Getenv("LOOPZERO_ADMIN_SERVICE_AUTH_SECRET_PREVIOUS")
+		legacyPrev := os.Getenv("LOOPZERO_SERVICE_AUTH_SECRET_PREVIOUS")
+
+		match := func(expected string) bool {
+			return expected != "" &&
+				subtle.ConstantTimeCompare([]byte(provided), []byte(expected)) == 1
+		}
+		if match(canonical) || match(canonicalPrev) || match(legacy) || match(legacyPrev) {
+			next.ServeHTTP(w, r)
+			return
+		}
+		emitAuthFailure(r, AuthFailureServiceMismatch, "invalid X-Service-Auth secret on admin endpoint", nil)
+		writeError(w, http.StatusForbidden, "FORBIDDEN",
+			"Invalid admin service-auth secret.")
+	})
 }
 
 // RequireAdmin is a middleware that requires a valid admin API key in the
@@ -145,10 +201,12 @@ func RequireAdmin(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		key := r.Header.Get("X-Admin-Key")
 		if key == "" {
+			emitAuthFailure(r, AuthFailureAdminMismatch, "missing X-Admin-Key header", nil)
 			writeError(w, http.StatusForbidden, "FORBIDDEN", "Admin API key required. Set X-Admin-Key header.")
 			return
 		}
-		if !validateAdminAPIKey(key) {
+		if !ValidateAdminAPIKey(key) {
+			emitAuthFailure(r, AuthFailureAdminMismatch, "invalid X-Admin-Key", nil)
 			writeError(w, http.StatusForbidden, "FORBIDDEN", "Invalid admin API key")
 			return
 		}
@@ -167,12 +225,45 @@ func AuthWithTTL(validator TokenValidator, store MembershipStore, cacheTTL time.
 			// Internal service auth: cloud proxy sends X-Service-Auth + identity headers.
 			// S2.3: Engine resolves role from DB, not from headers. Proxy sends only
 			// identity (user ID, tenant, email). Role is NEVER trusted from headers.
+			//
+			// 2026-05-13 (ADR `decisions/2026-05-13-service-auth-ed25519-adoption.md`):
+			// dual-control via Ed25519 signature is layered on top of the shared
+			// secret. Phase 1 (accept-both): unsigned requests still proceed via
+			// the legacy shared-secret path; signed requests get the additional
+			// signature verification. Phase 2 (require-signed) flips the
+			// ServiceAuthRequireSignature flag and unsigned requests are rejected.
 			if serviceAuth := r.Header.Get("X-Service-Auth"); serviceAuth != "" {
 				if validateServiceAuth(serviceAuth) {
 					userID := r.Header.Get("X-LoopZero-User-ID")
 					tenantID := r.Header.Get("X-LoopZero-Tenant")
 					email := r.Header.Get("X-LoopZero-Email")
 					if userID != "" && tenantID != "" {
+						// Dual-control: Ed25519 signature gate (Phase 1 + Phase 2 logic).
+						sigPresent := hasServiceAuthSignatureHeaders(r)
+						if sigPresent {
+							serviceAuthSignaturePresent.WithLabelValues("present").Inc()
+							ok, reason := verifyServiceAuthSignature(r, userID, tenantID)
+							if !ok {
+								serviceAuthSignatureRejected.WithLabelValues(string(reason)).Inc()
+								emitAuthFailure(r, AuthFailureServiceMismatch,
+									"service-auth signature rejected: "+string(reason),
+									map[string]any{"requested_tenant": tenantID, "user_id": userID, "reject_reason": string(reason)})
+								writeError(w, http.StatusUnauthorized, "UNAUTHORIZED", "Invalid service authentication")
+								return
+							}
+						} else {
+							serviceAuthSignaturePresent.WithLabelValues("absent").Inc()
+							if ServiceAuthRequireSignature {
+								// Phase 2+ — unsigned no longer accepted.
+								emitAuthFailure(r, AuthFailureServiceMismatch,
+									"service-auth signature required (Phase 2)",
+									map[string]any{"requested_tenant": tenantID, "user_id": userID, "reject_reason": "signature_missing"})
+								writeError(w, http.StatusUnauthorized, "UNAUTHORIZED", "Invalid service authentication")
+								return
+							}
+							// Phase 1 — fall through to legacy single-control path.
+						}
+
 						// Resolve role from DB — same authority as Bearer path
 						memberships, mErr := store.GetMemberships(r.Context(), userID)
 						if mErr != nil {
@@ -187,6 +278,9 @@ func AuthWithTTL(validator TokenValidator, store MembershipStore, cacheTTL time.
 							}
 						}
 						if role == "" {
+							emitAuthFailure(r, AuthFailureTenantNotFound,
+								"service-auth user not a member of requested tenant",
+								map[string]any{"requested_tenant": tenantID, "user_id": userID})
 							writeError(w, http.StatusForbidden, "TENANT_NOT_FOUND", "You are not a member of the requested team")
 							return
 						}
@@ -201,6 +295,7 @@ func AuthWithTTL(validator TokenValidator, store MembershipStore, cacheTTL time.
 					}
 				}
 				// Invalid service auth — reject immediately, do not fall through
+				emitAuthFailure(r, AuthFailureServiceMismatch, "invalid X-Service-Auth on Bearer endpoint", nil)
 				writeError(w, http.StatusUnauthorized, "UNAUTHORIZED", "Invalid service authentication")
 				return
 			}
@@ -208,6 +303,7 @@ func AuthWithTTL(validator TokenValidator, store MembershipStore, cacheTTL time.
 			// Extract token
 			authHeader := r.Header.Get("Authorization")
 			if authHeader == "" || !strings.HasPrefix(authHeader, "Bearer ") {
+				emitAuthFailure(r, AuthFailureTokenInvalid, "missing or malformed Authorization header", nil)
 				writeError(w, http.StatusUnauthorized, "UNAUTHORIZED", "Missing or invalid Authorization header. Use: Authorization: Bearer <token>")
 				return
 			}
@@ -226,8 +322,14 @@ func AuthWithTTL(validator TokenValidator, store MembershipStore, cacheTTL time.
 				span.SetStatus(codes.Error, err.Error())
 				span.End()
 				if errors.Is(err, ErrInvalidToken) {
+					// Emit audit: token rejected by validator. Reason includes the
+					// validator's error string (sanitized — pkg/jwt returns
+					// structured "expired" vs "invalid signature" etc).
+					emitAuthFailure(r, AuthFailureTokenInvalid, err.Error(), nil)
 					writeError(w, http.StatusUnauthorized, "UNAUTHORIZED", "Invalid or expired token")
 				} else {
+					// Transient infra failure (JWKS down etc) — NOT a security
+					// signal. Skip audit emission to avoid alert fatigue.
 					writeError(w, http.StatusServiceUnavailable, "AUTH_SERVICE_UNAVAILABLE", "Authentication service is temporarily unavailable")
 				}
 				return
@@ -249,6 +351,9 @@ func AuthWithTTL(validator TokenValidator, store MembershipStore, cacheTTL time.
 
 			switch len(memberships) {
 			case 0:
+				emitAuthFailure(r, AuthFailureTenantNotFound,
+					"authenticated user has zero tenant memberships",
+					map[string]any{"user_id": result.UserID})
 				writeError(w, http.StatusForbidden, "NO_TENANT", "No team associated with this account")
 				return
 			case 1:
@@ -270,6 +375,9 @@ func AuthWithTTL(validator TokenValidator, store MembershipStore, cacheTTL time.
 					}
 				}
 				if !found {
+					emitAuthFailure(r, AuthFailureTenantNotFound,
+						"Bearer user not a member of X-LoopZero-Tenant",
+						map[string]any{"requested_tenant": requestedTenant, "user_id": result.UserID})
 					writeError(w, http.StatusForbidden, "TENANT_NOT_FOUND", "You are not a member of the requested team")
 					return
 				}

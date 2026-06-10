@@ -8,11 +8,33 @@ resources:
 
 securityContext:
   runAsNonRoot: true
+  runAsUser: 1000
+  runAsGroup: 1000
+  fsGroup: 1000
+  seccompProfile:
+    type: RuntimeDefault
+
+# Container-level hardening (cert-manager v1.14+ pattern).
+# INF-G08 + plan ADR D7: hardened defaults uniformly across pod-bearing charts.
+containerSecurityContext:
+  readOnlyRootFilesystem: true
+  allowPrivilegeEscalation: false
+  runAsNonRoot: true
+  capabilities:
+    drop:
+      - ALL
 
 installCRDs: true
 
-# Prometheus metrics for cert-manager (certificate expiry, issuance latency)
+# Prometheus metrics for cert-manager (certificate expiry, issuance latency).
+# CHG-2026-04-28-LAYERED-BOOTSTRAP iter 7 — ServiceMonitor disabled by default
+# because cert-manager installs at sync wave -3 (before Prometheus Operator CRDs
+# are registered at wave 0). Prod environment overlays re-enable via:
+#   set:
+#     - name: prometheus.servicemonitor.enabled
+#       value: "true"
+# Or apply ServiceMonitor manually via `kubectl apply` after Prometheus is up.
 prometheus:
   enabled: true
   servicemonitor:
-    enabled: true
+    enabled: false

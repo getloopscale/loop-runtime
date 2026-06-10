@@ -26,46 +26,33 @@ import (
 	. "github.com/onsi/ginkgo/v2"
 )
 
-// internalTerms lists user-facing leaks forbidden by Rule 3 (CLAUDE.md).
-// Case-insensitive match; matched via regex word boundaries where applicable.
-var internalTerms = []string{
-	"ArgoCD",
-	"argocd",
-	"GitOps",
-	"gitops-push",
-	"CRD",
-	"tenant_id",
-	"advisory lock",
-	"pg_advisory",
-	"Gitea",
-	"MinIO",
-	"kubebuilder",
-	"envtest",
-	"Kaniko",
-}
+// internalTerms references the canonical list from constants_test.go.
+// Kept as alias for backward compatibility with existing tests.
+var internalTerms = forbiddenInternalTerms
 
-// allowedExitCodes lists the only exit codes LoopZero CLI is allowed to produce
-// per Rule 4 (CLAUDE.md). Any other code is a contract violation.
-var allowedExitCodes = map[int]string{
-	0: "success",
-	1: "usage error",
-	2: "build failure",
-	3: "deploy failure",
-	4: "auth error",
-	5: "partial failure",
-}
+// allowedExitCodes references the canonical map from constants_test.go.
+// Kept as alias for backward compatibility with existing tests.
+var allowedExitCodes = allowedExitCodesMap
 
 // runLoopZero executes `loopzero <args...>` with E2E env vars and captures
-// stdout/stderr/exitCode. The token is injected from LOOPZERO_TOKEN env or empty
-// (callers wanting unauthenticated runs explicitly clear it).
+// stdout/stderr/exitCode.
+//
+// T2 amendment 2026-05-13 (finding-2026-05-13-e2e-token-refresh-divergence):
+// auth comes from the per-suite XDG_CONFIG_HOME populated by BeforeSuite via
+// `loopzero login --token`, NOT from LOOPZERO_TOKEN env injection. The CLI reads the
+// token from configStore (production parity per Rule 10).
+//
+// LOOPZERO_TOKEN env is intentionally NOT forwarded — if it's set in the parent
+// process it would silently override configStore (configStore.getToken()
+// checks env first), defeating the refactor. Callers that need to override
+// the resolved token should write to the test XDG configStore directly.
 func runLoopZero(args ...string) (stdout, stderr string, exitCode int) {
 	cmd := exec.Command("loopzero", args...)
 	cmd.Env = append(os.Environ(),
 		"LOOPZERO_API_URL="+apiURL(),
+		// Hard-strip the parent LOOPZERO_TOKEN so configStore is the only source.
+		"LOOPZERO_TOKEN=",
 	)
-	if token := os.Getenv("LOOPZERO_TOKEN"); token != "" {
-		cmd.Env = append(cmd.Env, "LOOPZERO_TOKEN="+token)
-	}
 
 	var outBuf, errBuf strings.Builder
 	cmd.Stdout = &outBuf
@@ -85,15 +72,50 @@ func runLoopZero(args ...string) (stdout, stderr string, exitCode int) {
 
 // runLoopZeroWithStdin runs `loopzero <args...>` and pipes `stdin` into the process
 // stdin. Used to exercise interactive-prompt paths (e.g., logout confirmation).
+// Auth resolves from configStore (XDG_CONFIG_HOME populated in BeforeSuite),
+// per T2 amendment 2026-05-13. See runLoopZero for rationale.
 func runLoopZeroWithStdin(stdin string, args ...string) (stdout, stderr string, exitCode int) {
 	cmd := exec.Command("loopzero", args...)
 	cmd.Env = append(os.Environ(),
 		"LOOPZERO_API_URL="+apiURL(),
+		"LOOPZERO_TOKEN=",
 	)
-	if token := os.Getenv("LOOPZERO_TOKEN"); token != "" {
-		cmd.Env = append(cmd.Env, "LOOPZERO_TOKEN="+token)
-	}
 	cmd.Stdin = strings.NewReader(stdin)
+
+	var outBuf, errBuf strings.Builder
+	cmd.Stdout = &outBuf
+	cmd.Stderr = &errBuf
+
+	err := cmd.Run()
+	exitCode = 0
+	if err != nil {
+		if exitErr, ok := err.(*exec.ExitError); ok {
+			exitCode = exitErr.ExitCode()
+		} else {
+			exitCode = -1
+		}
+	}
+	return outBuf.String(), errBuf.String(), exitCode
+}
+
+// runLoopZeroInDir executes `loopzero <args...>` with the given working directory.
+// Used for commands like `validate`, `project delete`, `deploy` that operate on cwd.
+//
+// Migrated from cli_validate_test.go on 2026-05-25 when that file (and 50
+// other cli_*_test.go specs) was deleted per user mandate to absorb only
+// journey-relevant tests. LOOPZERO_API_TIMEOUT is bumped to 120s (vs CLI
+// default 30s in cli/src/config/constants.ts:53) because project delete
+// cascades through cancel builds + gitops remove + ArgoCD sync and exceeds
+// 30s on LIVE k3d. Auth via configStore (XDG_CONFIG_HOME from BeforeSuite),
+// matching runLoopZero per T2 amendment 2026-05-13.
+func runLoopZeroInDir(dir string, args ...string) (stdout, stderr string, exitCode int) {
+	cmd := exec.Command("loopzero", args...)
+	cmd.Dir = dir
+	cmd.Env = append(os.Environ(),
+		"LOOPZERO_API_URL="+apiURL(),
+		"LOOPZERO_API_TIMEOUT=120000",
+		"LOOPZERO_TOKEN=",
+	)
 
 	var outBuf, errBuf strings.Builder
 	cmd.Stdout = &outBuf
@@ -113,11 +135,25 @@ func runLoopZeroWithStdin(stdin string, args ...string) (stdout, stderr string, 
 
 // runLoopZeroNoToken runs `loopzero <args...>` with LOOPZERO_TOKEN deliberately empty.
 // Used to exercise auth-failure paths.
+//
+// Plan 2026-05-19-drill-skills-rigor-restoration: per T2 amendment 2026-05-13
+// (finding-2026-05-13-e2e-token-refresh-divergence), CLI now reads token from
+// configStore (XDG_CONFIG_HOME) populated by BeforeSuite. Setting LOOPZERO_TOKEN=""
+// alone is NOT enough — configStore would still have a token. Fix: point
+// XDG_CONFIG_HOME to a temp empty dir for this invocation so configStore is
+// also empty. This restores intended auth-failure path coverage.
 func runLoopZeroNoToken(args ...string) (stdout, stderr string, exitCode int) {
 	cmd := exec.Command("loopzero", args...)
+	emptyXDG, xdgErr := os.MkdirTemp("", "loopzero-e2e-noauth-")
+	if xdgErr != nil {
+		emptyXDG = "/tmp/loopzero-e2e-noauth-fallback"
+		_ = os.MkdirAll(emptyXDG, 0o755)
+	}
+	defer os.RemoveAll(emptyXDG)
 	cmd.Env = append(os.Environ(),
 		"LOOPZERO_API_URL="+apiURL(),
 		"LOOPZERO_TOKEN=",
+		"XDG_CONFIG_HOME="+emptyXDG,
 	)
 
 	var outBuf, errBuf strings.Builder
@@ -145,6 +181,22 @@ func expectNoInternalTerms(text string, context string) {
 		if strings.Contains(lowered, strings.ToLower(term)) {
 			Fail(fmt.Sprintf(
 				"Rule 3 violation: %q found in %s output\n--- output ---\n%s\n",
+				term, context, text,
+			))
+		}
+	}
+}
+
+// expectNoConcurrencyTerms asserts that `text` does not contain any forbidden
+// term from the stricter concurrencyForbiddenTerms list (Rule 3 + concurrency
+// hardening). Used by concurrent-deploy rejection tests where leaking "lock"
+// or "advisory" would expose internal locking primitives.
+func expectNoConcurrencyTerms(text string, context string) {
+	lowered := strings.ToLower(text)
+	for _, term := range concurrencyForbiddenTerms {
+		if strings.Contains(lowered, strings.ToLower(term)) {
+			Fail(fmt.Sprintf(
+				"Rule 3 (concurrency) violation: %q found in %s output\n--- output ---\n%s\n",
 				term, context, text,
 			))
 		}

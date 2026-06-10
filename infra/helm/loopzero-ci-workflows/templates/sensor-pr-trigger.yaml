@@ -1,0 +1,86 @@
+# T0.2 Cenário B POC — Sensor dispatching quality-gate Workflow on PR events.
+# Per ADR-2026-05-27-T0.2-RATIFIED D1.
+#
+# Subscribes to gitea-webhook EventSource via default EventBus.
+# Creates Workflow CR from quality-gate WorkflowTemplate, parameterized
+# with PR metadata.
+#
+# Idempotency (EC-2 absorbed): Workflow name suffix = commit SHA →
+# repeated webhook events for same SHA produce same Workflow name →
+# K8s rejects duplicate create → noop (no race).
+apiVersion: argoproj.io/v1alpha1
+kind: Sensor
+metadata:
+  name: pr-trigger
+  namespace: {{ .Values.namespace }}
+  labels:
+    app.kubernetes.io/name: loopzero-ci-workflows
+    app.kubernetes.io/managed-by: {{ .Release.Service | quote }}
+    loopzero.io/component: ci
+spec:
+  eventBusName: default
+  template:
+    serviceAccountName: {{ .Values.serviceAccountName }}
+  dependencies:
+    - name: pr-event
+      eventSourceName: gitea-webhook
+      eventName: pr-events
+  triggers:
+    - template:
+        name: dispatch-quality-gate
+        # K8s API trigger creates a Workflow CR from the quality-gate template.
+        k8s:
+          operation: create
+          source:
+            resource:
+              apiVersion: argoproj.io/v1alpha1
+              kind: Workflow
+              metadata:
+                # Idempotent name: pr-<number>-<short-sha>.
+                # Same SHA = same name = noop on duplicate webhook.
+                generateName: pr-
+                namespace: {{ .Values.namespace }}
+                labels:
+                  loopzero.io/component: ci
+                  loopzero.io/source: gitea-pr
+              spec:
+                workflowTemplateRef:
+                  name: quality-gate
+                arguments:
+                  parameters:
+                    - name: pr-number
+                      value: "0"  # overridden by parameters below
+                    - name: commit-sha
+                      value: "unknown"
+                    - name: head-branch
+                      value: "unknown"
+                    - name: base-branch
+                      value: "main"
+          # Parameter mapping: extract PR metadata from webhook payload.
+          # Gitea PR event schema: see https://docs.gitea.io/en-us/webhooks/
+          parameters:
+            - src:
+                dependencyName: pr-event
+                dataKey: body.number
+              dest: spec.arguments.parameters.0.value  # pr-number
+            - src:
+                dependencyName: pr-event
+                dataKey: body.pull_request.head.sha
+              dest: spec.arguments.parameters.1.value  # commit-sha
+            - src:
+                dependencyName: pr-event
+                dataKey: body.pull_request.head.ref
+              dest: spec.arguments.parameters.2.value  # head-branch
+            - src:
+                dependencyName: pr-event
+                dataKey: body.pull_request.base.ref
+              dest: spec.arguments.parameters.3.value  # base-branch
+            # Labels for traceability (PR number + SHA).
+            - src:
+                dependencyName: pr-event
+                dataKey: body.number
+              dest: metadata.labels.loopzero\.io/ci-pr-number
+            - src:
+                dependencyName: pr-event
+                dataKey: body.pull_request.head.sha
+              dest: metadata.labels.loopzero\.io/ci-commit-sha

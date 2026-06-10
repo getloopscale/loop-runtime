@@ -1,0 +1,19 @@
+# Plan T3.2 D10 + EC-9 — k3d/k3s override for chaos-daemon container runtime socket.
+#
+# k3s ships containerd at /run/k3s/containerd/containerd.sock (not the
+# upstream default /run/containerd/containerd.sock). chaos-daemon mounts the
+# host's /run as /host-run inside the container; socketPath is relative to
+# that mount.
+#
+# This file is applied ON TOP of values.yaml when deploying to k3d:
+#
+#   helm upgrade --install chaos-mesh infra/helm/chaos-mesh \
+#     --kube-context k3d-loopzero-mgmt -n chaos-mesh --create-namespace \
+#     -f infra/helm/chaos-mesh/values.yaml \
+#     -f infra/helm/chaos-mesh/values-k3d.yaml
+#
+# Production DOKS/EKS/GKE deployments use only values.yaml (default socket).
+
+chaos-mesh:
+  chaosDaemon:
+    socketPath: /run/k3s/containerd/containerd.sock

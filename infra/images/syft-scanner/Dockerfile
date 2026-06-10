@@ -8,7 +8,7 @@
 # Output: CycloneDX JSON written to /tmp (caller uploads to S3).
 # Size: ~50MB (Alpine + syft binary + aws-cli)
 # Security: runs as non-root user 1000, no privilege escalation
-FROM alpine:3.21.3
+FROM mirror.gcr.io/library/alpine:3.21.3
 
 LABEL org.opencontainers.image.source="https://github.com/loopzero/loopzero"
 LABEL org.opencontainers.image.title="loopzero-syft-scanner"

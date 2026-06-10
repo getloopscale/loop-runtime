@@ -16,13 +16,18 @@ import (
 )
 
 // newHTTPTestSyncClient creates a SyncClient pointing at a test server.
-// The server's transport is used directly, bypassing TLS and OTel wrapping.
+// Uses NewSyncClient so the serializer + every constructor-managed invariant
+// is in place (vs struct-literal bypass that breaks subsequent invariant
+// additions — caught regression iter Ralph 1 commit 088c721d). The httptest
+// server is plain HTTP so cfg.Insecure / CACertPath don't matter.
 func newHTTPTestSyncClient(serverURL string) *SyncClient {
-	return &SyncClient{
-		baseURL:       serverURL,
-		tokenProvider: NewStaticTokenProvider("test-token"),
-		client:        &http.Client{Timeout: 5 * time.Second},
-	}
+	return NewSyncClient(SyncClientConfig{
+		BaseURL: serverURL,
+		Token:   "test-token",
+		Timeout: 5 * time.Second,
+		// HTTPClient deliberately nil — let NewSyncClient build the default
+		// (with serializer + OTel transport wired correctly).
+	})
 }
 
 func TestTriggerSync_HappyPath(t *testing.T) {
@@ -204,6 +209,68 @@ func TestGetAppStatus_PerResourceHealth(t *testing.T) {
 	}
 	if healthy2 {
 		t.Error("api is Progressing, should report healthy=false")
+	}
+}
+
+// TestGetAppStatus_RolloutCounted_AsWorkloadPrimitive locks in the F-19
+// fix: per-resource health must accept BOTH Deployment (legacy) AND
+// Rollout (progressive delivery, default-on per
+// argo-rollouts-progressive-delivery-plan T1.3). Without this, releases
+// backed by Rollouts stay PENDING forever — observed during the post-
+// canary-plan dogfood gate run as J05/J06 timeout failures.
+func TestGetAppStatus_RolloutCounted_AsWorkloadPrimitive(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		_ = json.NewEncoder(w).Encode(map[string]any{
+			"status": map[string]any{
+				"sync":   map[string]any{"status": "Synced"},
+				"health": map[string]any{"status": "Healthy"},
+				"resources": []map[string]any{
+					{"kind": "Rollout", "name": "myproj-api", "health": map[string]any{"status": "Healthy"}},
+					{"kind": "Service", "name": "myproj-api-stable"},
+					{"kind": "TraefikService", "name": "myproj-api"},
+				},
+			},
+		})
+	}))
+	defer srv.Close()
+
+	client := newHTTPTestSyncClient(srv.URL)
+	synced, healthy, err := client.GetAppStatus(context.Background(), "my-app", []string{"myproj-api"})
+	if err != nil {
+		t.Fatalf("expected no error, got %v", err)
+	}
+	if !synced {
+		t.Error("expected synced=true")
+	}
+	if !healthy {
+		t.Error("Rollout myproj-api is Healthy → release should be considered healthy=true")
+	}
+}
+
+// TestGetAppStatus_RolloutDegraded_BlocksHealthy verifies a Rollout in
+// Degraded state correctly blocks release activation (mirror of the
+// Deployment Progressing case in TestGetAppStatus_PerResourceHealth).
+func TestGetAppStatus_RolloutDegraded_BlocksHealthy(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		_ = json.NewEncoder(w).Encode(map[string]any{
+			"status": map[string]any{
+				"sync":   map[string]any{"status": "Synced"},
+				"health": map[string]any{"status": "Degraded"},
+				"resources": []map[string]any{
+					{"kind": "Rollout", "name": "bad-app-api", "health": map[string]any{"status": "Degraded"}},
+				},
+			},
+		})
+	}))
+	defer srv.Close()
+
+	client := newHTTPTestSyncClient(srv.URL)
+	_, healthy, err := client.GetAppStatus(context.Background(), "my-app", []string{"bad-app-api"})
+	if err != nil {
+		t.Fatalf("expected no error, got %v", err)
+	}
+	if healthy {
+		t.Error("Rollout bad-app-api is Degraded → release must NOT be considered healthy")
 	}
 }
 

@@ -18,17 +18,17 @@ import (
 	"github.com/loopzero/loopzero/pkg/statemachine"
 )
 
+// GitManifestReader abstracts reading manifests from git history (DIP for rollback).
+type GitManifestReader interface {
+	GetManifestsAtCommit(ctx context.Context, tenantID, projectID, env, commitSHA string) ([]byte, error)
+}
+
 // ContainerDeliveryActivator implements DeliveryActivator for container-based
 // deployments (Kubernetes pods via Gitea + ArgoCD).
 //
 // This is the existing delivery model extracted into the interface pattern
 // (MEET-2026-03-26-009 Fase 0). The 5-phase activation and rollback logic
 // are identical to the pre-refactoring code — zero behavior change.
-// GitManifestReader abstracts reading manifests from git history (DIP for rollback).
-type GitManifestReader interface {
-	GetManifestsAtCommit(ctx context.Context, tenantID, projectID, env, commitSHA string) ([]byte, error)
-}
-
 type ContainerDeliveryActivator struct {
 	releaseStore   db.ReleaseStore
 	envTargetStore db.EnvironmentTargetStore
@@ -242,6 +242,16 @@ func (c *ContainerDeliveryActivator) phaseACreateRelease(ctx context.Context, bu
 			if first.ImageSignedAt != nil && first.ImageSignature != "" {
 				release.ImageSignedAt = first.ImageSignedAt
 			}
+			// T2.1 of plan 2026-05-27-tenant-build-pipeline-gaps-closure.
+			// Per ADR D1: SLSA L3 attestation chain — Rekor URL of
+			// cosign-attest step persisted alongside signature for
+			// downstream verification (loopzero deploy --verify-attestation).
+			// Empty when CosignAttestEnabled=false (default) or attest
+			// step never ran. Empty release column stays NULL.
+			if first.ImageAttestationRekorURL != "" {
+				url := first.ImageAttestationRekorURL
+				release.ImageAttestationRekorURL = &url
+			}
 		}
 
 		if err := c.releaseStore.Create(ctx, tx, release); err != nil {
@@ -298,14 +308,22 @@ func (c *ContainerDeliveryActivator) phaseACreateRelease(ctx context.Context, bu
 				).Inc()
 			}
 			if len(atts) > 0 {
-				// Best-effort: a per-app store error must NOT block the
-				// release. Log via metric and proceed.
-				if saveErr := c.appAttestationStore.SaveAppAttestations(
-					ctx, release.ID, build.TenantID, atts,
+				// Plan T2.4 D7 — pass tx so release + attestations commit atomically.
+				// Previously SaveAppAttestations ran on a separate connection and
+				// raced ahead of the release commit, producing FK violation
+				// SQLSTATE 23503 in dogfood logs (F-S2-01). Now both rows live in
+				// the same transaction; if attestation insert fails the release
+				// rollback prevents orphaned rows.
+				if saveErr := c.appAttestationStore.SaveAppAttestationsTx(
+					ctx, tx, release.ID, build.TenantID, atts,
 				); saveErr != nil {
-					// Capture as observability — wraps build errors are
-					// already logged elsewhere; here we just continue.
-					_ = saveErr
+					metrics.ReleaseAppAttestationSaveFailTotal.WithLabelValues(build.Environment).Inc()
+					slog.Warn("attestation persist failed (non-blocking) — release proceeds without per-app attestation rows",
+						"release_id", release.ID,
+						"tenant_id", build.TenantID,
+						"environment", build.Environment,
+						"attestation_count", len(atts),
+						"error", saveErr)
 				}
 			}
 			// Sprint 6 / T3.2: SBOM generation counter. One increment
@@ -362,7 +380,7 @@ func (c *ContainerDeliveryActivator) phaseCRecordResult(ctx context.Context, bui
 				"error", pushErr,
 			)
 
-			if _, err := c.releaseStore.UpdateStatus(ctx, tx, release.ID, string(statemachine.ReleaseGitMirrorFailed_)); err != nil {
+			if _, err := c.releaseStore.UpdateStatus(ctx, tx, release.ID, string(statemachine.RPEventGitMirrorFailed)); err != nil {
 				return fmt.Errorf("activate release: transition to GIT_MIRROR_FAILED: %w", err)
 			}
 
@@ -389,7 +407,7 @@ func (c *ContainerDeliveryActivator) phaseCRecordResult(ctx context.Context, bui
 			}
 		}
 
-		if _, err := c.releaseStore.UpdateStatus(ctx, tx, release.ID, string(statemachine.ReleaseGitMirrorCompleted)); err != nil {
+		if _, err := c.releaseStore.UpdateStatus(ctx, tx, release.ID, string(statemachine.RPEventGitMirrorCompleted)); err != nil {
 			return fmt.Errorf("activate release: transition to PENDING: %w", err)
 		}
 
@@ -418,7 +436,7 @@ func (c *ContainerDeliveryActivator) phaseEFinalize(ctx context.Context, build *
 	logger := slog.With("release_id", release.ID, "build_id", build.ID)
 	return c.locker.WithLock(ctx, build.TenantID, build.ProjectID, build.Environment, func(tx db.DBTX) error {
 		if verifyFailed {
-			if _, err := c.releaseStore.UpdateStatus(ctx, tx, release.ID, string(statemachine.ReleaseSyncFailed_)); err != nil {
+			if _, err := c.releaseStore.UpdateStatus(ctx, tx, release.ID, string(statemachine.RPEventSyncFailed)); err != nil {
 				return fmt.Errorf("activate release: transition to SYNC_FAILED: %w", err)
 			}
 
@@ -451,21 +469,46 @@ func (c *ContainerDeliveryActivator) phaseEFinalize(ctx context.Context, build *
 }
 
 func (c *ContainerDeliveryActivator) triggerSyncWithRetry(ctx context.Context, appName string) error {
-	const maxAttempts = 3
+	// V9 dogfood 2026-05-29 unblock: per-error-type budget. Recoverable
+	// errors (ErrSyncOperationInProgress) get 8 attempts with linear
+	// backoff (let app-level lock queue drain naturally during dogfood
+	// concurrency); non-recoverable errors keep the 3-attempt budget
+	// (faster fail for genuine failures, preserves test contracts).
+	const (
+		maxAttempts = 3 // for non-recoverable errors (fail-fast on connection-refused etc)
+		// V9 dogfood 2026-05-30 final tuning: 8 attempts × 5s linear
+		// backoff = 40s per activation budget. Combined with reaper
+		// maxActivationAttempts=10 × Interval=30s tick: ~5min total
+		// in-flight budget per build. The SyncSerializer already
+		// serializes per-app at the API layer; this budget covers
+		// cumulative wait for upstream in-flight syncs.
+		maxAttemptsSyncInProgress  = 8
+		opInProgressLinearBackoffS = 5
+	)
 	var lastErr error
-	for attempt := 0; attempt < maxAttempts; attempt++ {
+	for attempt := 0; ; attempt++ {
 		err := c.sync.TriggerSync(ctx, appName)
 		if err == nil {
 			return nil
 		}
 		lastErr = err
 
-		// MEET-2026-03-29-019: If ArgoCD has a stuck operation, terminate it
-		// before retrying. Without this, all 3 retries hit the same 409 wall.
-		if errors.Is(err, loopzeroerrors.ErrSyncOperationInProgress) {
-			slog.Warn("argocd sync operation in progress — terminating stuck operation before retry",
+		isOpInProgress := errors.Is(err, loopzeroerrors.ErrSyncOperationInProgress)
+		budget := maxAttempts
+		if isOpInProgress {
+			budget = maxAttemptsSyncInProgress
+		}
+		if attempt+1 >= budget {
+			break
+		}
+
+		// MEET-2026-03-29-019 + V9 concurrency-aware: for stuck
+		// operations only terminate on the SECOND-TO-LAST attempt
+		// (earlier attempts back off and let queue drain without
+		// canceling a peer's sync; final attempt fails fast).
+		if isOpInProgress && attempt == budget-2 {
+			slog.Warn("argocd sync operation in progress — terminating stuck operation before final retry",
 				"app", appName, "attempt", attempt+1)
-			// Type-assert to access TerminateOperation (interface may not expose it)
 			type terminator interface {
 				TerminateOperation(ctx context.Context, appName string) error
 			}
@@ -478,12 +521,24 @@ func (c *ContainerDeliveryActivator) triggerSyncWithRetry(ctx context.Context, a
 						"app", appName)
 				}
 			}
+		} else if isOpInProgress {
+			slog.Info("argocd sync operation in progress — backing off to let queue drain",
+				"app", appName, "attempt", attempt+1)
 		} else {
 			slog.Warn("argocd trigger sync failed, retrying",
 				"app", appName, "attempt", attempt+1, "error", err)
 		}
 
-		backoff := time.Duration(1<<uint(attempt)) * time.Second
+		var backoff time.Duration
+		if isOpInProgress {
+			// Linear backoff (predictable cadence): 5s, 5s, 5s, 5s, 5s, 5s, 5s
+			// Total budget: ~35s for 8 attempts = fits in 60s service timeout
+			// budget while letting an ArgoCD sync queue of ~5-7 syncs drain.
+			backoff = time.Duration(opInProgressLinearBackoffS) * time.Second
+		} else {
+			// Exponential backoff (existing behavior): 1s, 2s, 4s
+			backoff = time.Duration(1<<uint(attempt)) * time.Second
+		}
 		select {
 		case <-ctx.Done():
 			return ctx.Err()

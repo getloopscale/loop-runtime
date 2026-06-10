@@ -1,0 +1,51 @@
+# iter 19: smoke-test now uses kubectl image (alpine + kubectl) so it can
+# call the K8s API for Phase 1 (workload readiness checks). curl is also
+# available in bitnami/kubectl images so Phase 2 (endpoint probes) still works.
+#
+# B44 (CHG-2026-04-28-LAYERED-BOOTSTRAP) — Bitnami removed legacy image
+# tags. Use bitnamilegacy/kubectl mirror until Sprint 9 supply-chain
+# work mirrors all images to DO Registry.
+#
+# B47 (CHG-2026-04-28-LAYERED-BOOTSTRAP) — `bitnamilegacy/kubectl` does
+# NOT include curl (different toolchain from `bitnami/kubectl`), so
+# Phase 2 endpoint probes failed with `command not found`. Switched to
+# `alpine/k8s` which bundles kubectl + curl + helm + other K8s tools.
+# Detected on standalone smoke-test 2026-04-28.
+image:
+  repository: alpine/k8s
+  tag: "1.32.5"
+  pullPolicy: IfNotPresent
+
+# Namespaces to scan for workload readiness (Phase 1 of the Job).
+# iter 19 — closes the gap where ImagePullBackOff went undetected by curl-only
+# probe. Smoke-test asserts every Deployment/StatefulSet here has all replicas
+# Ready before declaring success.
+namespaces:
+  - loopzero-system
+  - loopzero-auth
+  - argocd
+  - monitoring
+  - traefik
+  - cert-manager
+
+# Endpoints to probe (rendered into the Job script).
+# Use service-DNS to keep the test cluster-internal.
+endpoints:
+  - name: loopzero-api
+    # B40: loopzero-api Service port is 3001 (was 8080 — fixed).
+    url: http://loopzero-api.loopzero-system.svc.cluster.local:3001/api/v1/health
+  - name: gitea
+    url: http://gitea-http.loopzero-system.svc.cluster.local:3000/api/v1/version
+  - name: argocd
+    # B48 (CHG-2026-04-28-LAYERED-BOOTSTRAP) — ArgoCD `server.insecure: true`
+    # serves HTTP on port 80 (TLS termination at Traefik IngressRoute, not
+    # ArgoCD itself). Probing https:// triggers TLS handshake reset. In LoopZero
+    # Cloud the same Service is fronted by Traefik with proper TLS.
+    url: http://argocd-server.argocd.svc.cluster.local/api/version
+
+# How many times to retry each endpoint
+retries: 12
+retryIntervalSec: 5
+
+# Job TTL after success
+ttlSecondsAfterFinished: 300

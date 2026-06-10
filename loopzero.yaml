@@ -1,0 +1,34 @@
+version: 1
+project: loopzero
+
+apps:
+  api:
+    path: api
+    framework: custom
+    type: server
+    build: dockerfile
+
+  cli:
+    path: cli
+    framework: node
+    type: server
+    build: buildpack
+    port: 3000
+
+  cloud:
+    path: cloud
+    framework: custom
+    type: server
+    build: dockerfile
+
+  operators:
+    path: operators
+    framework: custom
+    type: server
+    build: dockerfile
+
+  pkg:
+    path: pkg
+    framework: custom
+    type: server
+    build: dockerfile

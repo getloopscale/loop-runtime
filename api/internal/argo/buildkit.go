@@ -1,6 +1,12 @@
 // SPDX-License-Identifier: Apache-2.0
 // Copyright 2025-2026 The LoopZero Authors
 
+// Package argo builds the Argo Workflow specs that drive every LoopZero
+// build: BuildKit image build, cosign signing, syft SBOM generation,
+// language-strategy dispatch, and supply-chain admission. Built atop
+// the loopzero-forge SDK and the LanguageStrategy interface
+// (`ResolveStrategyForApp`). See CHANGELOG.md "Build Mode Dispatch"
+// + finding-2026-05-08-build-mode-dispatch.
 package argo
 
 import (
@@ -19,49 +25,24 @@ import (
 )
 
 // buildkitParams holds the resolved parameters for a BuildKit build container.
-// Both buildkitTemplateForApp and buildkitTemplateFromPlan resolve their inputs
-// into this common struct, which buildkitContainer uses to generate the template.
+// buildkitTemplateFromPlan resolves AppBuildPlan inputs into this common struct,
+// which buildkitContainer uses to generate the template. T1.3 deleted the
+// legacy buildkitTemplateForApp peer.
 type buildkitParams struct {
 	AppName        string
 	ImageTag       string
 	DockerfilePath string
 	ContextPath    string
 	CacheRef       string
-	BuildArgs      map[string]string // nil for legacy (no build args)
+	BuildArgs      map[string]string
 	NoCache        bool
 }
 
-// buildkitTemplateForApp generates a single-container BuildKit template for a single app.
-//
-// Architecture (MEET-2026-03-26-007): Single container runs both buildkitd (background daemon)
-// and buildctl (foreground client) via rootlesskit. This eliminates the sidecar pattern and
-// its associated false-failure problem (sidecar exit code 1 on SIGTERM causing Argo to mark
-// successful builds as Failed).
-//
-// Security: rootlesskit requires seccompProfile: Unconfined + AppArmor: unconfined for user
-// namespace creation on managed Kubernetes (DOKS, EKS, GKE). buildctl args are not
-// user-injectable (constructed programmatically). See MEET-2026-03-26-007 security review.
-func (b *WorkflowBuilder) buildkitTemplateForApp(spec services.WorkflowSpec, app services.AppSpec) *forge.Container {
-	// Image path: {registry}/{tenant}/{project}-{app}:{sha}
-	// Flattened to 2 levels to stay within DO Container Registry nesting limit.
-	// Previously 3 levels ({tenant}/{project}/{app}) caused 403 on DO.
-	// ARCH-001 fix: single source of truth for image tag format
-	destination := naming.ImageTag(b.infraParams.RegistryURL, spec.TenantID, spec.ProjectID, app.Name, spec.CommitSHA)
-	cacheRef := fmt.Sprintf("%s/%s/%s-%s:buildcache",
-		b.infraParams.RegistryURL, spec.TenantID, spec.ProjectID, app.Name)
-
-	// Per-app Dockerfile naming — single source of truth (MEET-2026-03-29-018).
-	dockerfile := dockerfilePathForApp(app.Name, len(spec.Apps))
-
-	return b.buildkitContainer(buildkitParams{
-		AppName:        app.Name,
-		ImageTag:       destination,
-		DockerfilePath: dockerfile,
-		ContextPath:    workspaceMountPath,
-		CacheRef:       cacheRef,
-		NoCache:        spec.NoCache,
-	})
-}
+// buildkitTemplateForApp was the legacy single-arg BuildKit template generator
+// that derived imageTag/cacheRef/dockerfile from spec.Apps inline. Deleted in
+// T1.3 (CR-2 of MEET-2026-05-28-001) along with all spec.Apps fallback paths
+// in WorkflowBuilder. The only emission path now is buildkitTemplateFromPlan,
+// which consumes resolved AppBuildPlan fields produced by services.CreateBuildPlan.
 
 // buildkitTemplateFromPlan generates a single-container BuildKit template using resolved
 // fields from AppBuildPlan. Same architecture as buildkitTemplateForApp (MEET-2026-03-26-007)
@@ -125,7 +106,7 @@ func (b *WorkflowBuilder) buildkitContainer(p buildkitParams) *forge.Container {
 	}
 
 	return &forge.Container{
-		Name:  fmt.Sprintf("build-image-%s", p.AppName),
+		Name:  naming.BuildImageStepName(p.AppName),
 		Image: imageBuildKit,
 		// rootlesskit sets up user namespace, then runs the entrypoint script.
 		// Script starts buildkitd background, waits for socket, runs buildctl "$@".
@@ -157,9 +138,9 @@ func (b *WorkflowBuilder) buildkitContainer(p buildkitParams) *forge.Container {
 			Limits:   forge.ResourceList{CPU: "2000m", Memory: "4Gi"},
 		},
 		SecurityContext: &model.SecurityContext{
-			RunAsUser:    ptr(rootlessUID),
-			RunAsGroup:   ptr(rootlessUID),
-			RunAsNonRoot: ptr(true),
+			RunAsUser:    forge.Ptr(rootlessUID),
+			RunAsGroup:   forge.Ptr(rootlessUID),
+			RunAsNonRoot: forge.Ptr(true),
 			// Seccomp Unconfined required for rootlesskit to create user namespaces
 			// on managed Kubernetes (DOKS, EKS, GKE).
 			SeccompProfile: &model.SeccompProfile{Type: "Unconfined"},
@@ -174,7 +155,17 @@ func (b *WorkflowBuilder) buildkitContainer(p buildkitParams) *forge.Container {
 		// (image layer pulls + dependency install + build). Bump MaxDuration
 		// to 900s (15 min) — happy path remains 2-3min. Budget covers 3 retries
 		// with exponential backoff 10s, 20s, 40s.
-		RetryStrategy: retryStrategy(3, "10s", "2", "900s"),
+		RetryStrategy: forge.NewRetryOnFailure(3, "10s", "2", "900s"),
+		// Sprint B T3.1 (plan 2026-06-01-p2-interface-contracts-robustness,
+		// ADR D3): hard cap at 1800s (30min) aligned with the DB reaper's
+		// RunningTimeout (services/build_reaper.go). Without this cap, the
+		// retry budget above (3 × 900s ≈ 45min cumulative) outlasts the
+		// reaper by 15min — the DB row transitions to FAILED while the
+		// workflow keeps running, an orphan-execution window.
+		// Builds legitimately requiring >30min must request an SLA bump
+		// (future tenant-plan field); for pre-release, 30min is the
+		// documented per-build SLA.
+		ActiveDeadlineSeconds: forge.Ptr(1800),
 	}
 }
 

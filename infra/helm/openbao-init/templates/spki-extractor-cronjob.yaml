@@ -1,0 +1,151 @@
+{{- if .Values.spkiExtractor.enabled }}
+# T2.5 of openbao-adoption v1.3 — SPKI cert pin extractor CronJob.
+#
+# Per EC-09 amendment: MUST be CronJob (NOT one-shot Job). cert-manager
+# auto-renews Vault TLS cert every 60-90d; without periodic re-extraction,
+# loopzero-api pins stale SPKI and Vault auth fails when cert rotates.
+#
+# Behavior:
+#   1. Mount openbao-tls Secret (tls.crt key)
+#   2. openssl extract SPKI hash from cert
+#   3. bao kv put secret/data/loopzero/<env>/platform/secrets/vault-spki-pin/spki_hash
+#   4. ESO mgmt-side reads path → materializes K8s Secret vault-spki-pin
+#      in loopzero-system NS → loopzero-api consumes via LOOPZERO_VAULT_SPKI_PIN env
+#
+# Idempotent: re-running with same cert produces same hash (KV-v2 bumps
+# version but content-identity preserved). Operator can scale schedule via
+# Helmfile values override.
+---
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: vault-spki-extractor
+  namespace: {{ .Release.Namespace }}
+  labels:
+    app.kubernetes.io/name: vault-spki-extractor
+    app.kubernetes.io/component: spki-extractor
+    app.kubernetes.io/part-of: openbao-init
+---
+apiVersion: batch/v1
+kind: CronJob
+metadata:
+  name: vault-spki-extractor
+  namespace: {{ .Release.Namespace }}
+  labels:
+    app.kubernetes.io/name: vault-spki-extractor
+    app.kubernetes.io/component: spki-extractor
+    app.kubernetes.io/part-of: openbao-init
+spec:
+  schedule: {{ .Values.spkiExtractor.schedule | quote }}
+  concurrencyPolicy: Forbid  # never overlap runs
+  successfulJobsHistoryLimit: 3
+  failedJobsHistoryLimit: 5
+  jobTemplate:
+    spec:
+      backoffLimit: 2
+      activeDeadlineSeconds: 120
+      ttlSecondsAfterFinished: 300
+      template:
+        spec:
+          restartPolicy: OnFailure
+          serviceAccountName: vault-spki-extractor
+          securityContext:
+            runAsNonRoot: true
+            runAsUser: 65532
+            runAsGroup: 65532
+            fsGroup: 65532
+            seccompProfile:
+              type: RuntimeDefault
+          volumes:
+            - name: vault-tls
+              secret:
+                secretName: {{ .Values.spkiExtractor.vaultTlsSecret | quote }}
+                items:
+                  - key: {{ .Values.spkiExtractor.vaultTlsSecretKey | quote }}
+                    path: tls.crt
+            - name: tmp
+              emptyDir:
+                sizeLimit: 16Mi
+            {{- if .Values.openbao.tlsCASecret }}
+            - name: bao-ca
+              secret:
+                secretName: {{ .Values.openbao.tlsCASecret | quote }}
+                items:
+                  - key: {{ .Values.openbao.tlsCASecretKey | quote }}
+                    path: {{ .Values.openbao.tlsCASecretKey | quote }}
+            {{- end }}
+          containers:
+            - name: extractor
+              image: "{{ .Values.image.repository }}:{{ .Values.image.tag }}"
+              imagePullPolicy: {{ .Values.image.pullPolicy }}
+              command: ["/bin/sh", "-c"]
+              args:
+                - |
+                  set -euo pipefail
+                  echo "[SPKI-EXTRACTOR] starting at $(date -Is)"
+
+                  # 1. Login via Kubernetes auth (vault-spki-extractor SA)
+                  SA_JWT=$(cat /var/run/secrets/kubernetes.io/serviceaccount/token)
+                  BAO_TOKEN=$(bao write -field=token \
+                    auth/kubernetes/login \
+                    role=spki-extractor \
+                    jwt="$SA_JWT")
+                  export BAO_TOKEN
+
+                  # 2. Extract SPKI hash from cert
+                  # Standard SPKI pin format: base64(SHA256(SubjectPublicKeyInfo))
+                  SPKI_HASH=$(openssl x509 -in /vault-tls/tls.crt -pubkey -noout \
+                    | openssl pkey -pubin -outform DER \
+                    | openssl dgst -sha256 -binary \
+                    | base64)
+
+                  if [ -z "$SPKI_HASH" ]; then
+                    echo "[SPKI-EXTRACTOR] ERROR: empty SPKI hash extracted"
+                    exit 1
+                  fi
+                  echo "[SPKI-EXTRACTOR] computed SPKI hash: $SPKI_HASH (length=${#SPKI_HASH})"
+
+                  # 3. Write to Vault KV
+                  ENV_NAME="{{ .Values.spkiExtractor.envName }}"
+                  KV_PATH="secret/data/loopzero/${ENV_NAME}/platform/secrets/vault-spki-pin/spki_hash"
+                  echo "[SPKI-EXTRACTOR] writing to ${KV_PATH}"
+
+                  if bao kv put \
+                      "secret/loopzero/${ENV_NAME}/platform/secrets/vault-spki-pin/spki_hash" \
+                      "spki_hash=${SPKI_HASH}" \
+                      "extracted_at=$(date -Is)" >/dev/null; then
+                    echo "[SPKI-EXTRACTOR] write OK"
+                  else
+                    echo "[SPKI-EXTRACTOR] ERROR: bao kv put returned non-zero"
+                    exit 2
+                  fi
+
+                  echo "[SPKI-EXTRACTOR] done"
+              env:
+                - name: BAO_ADDR
+                  value: "{{ .Values.openbao.scheme }}://{{ .Values.openbao.serviceName }}.{{ .Values.openbao.serviceNamespace }}:{{ .Values.openbao.port }}"
+                {{- if .Values.openbao.tlsCASecret }}
+                - name: BAO_CACERT
+                  value: "/etc/openbao/ca/{{ .Values.openbao.tlsCASecretKey }}"
+                {{- end }}
+                - name: HOME
+                  value: /tmp
+              volumeMounts:
+                - name: vault-tls
+                  mountPath: /vault-tls
+                  readOnly: true
+                - name: tmp
+                  mountPath: /tmp
+                {{- if .Values.openbao.tlsCASecret }}
+                - name: bao-ca
+                  mountPath: /etc/openbao/ca
+                  readOnly: true
+                {{- end }}
+              resources:
+                {{- toYaml .Values.spkiExtractor.resources | nindent 16 }}
+              securityContext:
+                allowPrivilegeEscalation: false
+                readOnlyRootFilesystem: true
+                capabilities:
+                  drop: ["ALL"]
+{{- end }}

@@ -1,7 +1,7 @@
 {
   "name": "@loopzero/cli",
   "version": "0.1.0",
-  "description": "CLI-first Kubernetes PaaS for monorepo deployments",
+  "description": "CLI-first Kubernetes LoopZeroCloud for monorepo deployments",
   "main": "dist/index.js",
   "bin": {
     "loopzero": "./bin/loopzero"
@@ -31,10 +31,11 @@
     "@typescript-eslint/parser": "^8.57.0",
     "eslint": "^9.39.4",
     "jest": "^29.7.0",
+    "knip": "^6.11.0",
     "ts-jest": "^29.2.0",
     "typescript": "^5.5.0"
   },
-  "license": "Apache-2.0",
+  "license": "UNLICENSED",
   "engines": {
     "node": ">=20.0.0"
   }

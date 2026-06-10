@@ -415,38 +415,71 @@ func TestCertSecretName_empty_hostname_returns_error(t *testing.T) {
 }
 
 // ---------------------------------------------------------------------------
-// Labels
+// Labels (deprecated free function) — REMOVED per audit gap M04 #23.
+//
+// The legacy `Labels(tenant, project, env)` free function is gone; the
+// canonical API is `StandardLabels{...}.AsMap()`. Its dedicated tests
+// (TestLabels_contains_required_keys + TestLabels_empty_values_are_allowed
+// + TestStandardLabels_AsMap_is_compatible_with_legacy_Labels) were deleted
+// with the function. The required-keys invariant is now exercised by
+// TestStandardLabels_AsMap_returns_canonical_shape below.
 // ---------------------------------------------------------------------------
 
-func TestLabels_contains_required_keys(t *testing.T) {
-	labels := Labels("acme", "backend", "production")
-	expected := map[string]string{
-		"loopzero.io/tenant":      "acme",
-		"loopzero.io/project":     "backend",
-		"loopzero.io/environment": "production",
-		"loopzero.io/managed-by":  "loopzero",
+// ---------------------------------------------------------------------------
+// StandardLabels (T1.5 — typed labels per gate PKG-G02)
+// ---------------------------------------------------------------------------
+
+func TestLabel_constants_match_canonical_keys(t *testing.T) {
+	cases := []struct {
+		got, want string
+		name      string
+	}{
+		{LabelTenant, "loopzero.io/tenant", "LabelTenant"},
+		{LabelProject, "loopzero.io/project", "LabelProject"},
+		{LabelEnvironment, "loopzero.io/environment", "LabelEnvironment"},
+		{LabelManagedBy, "loopzero.io/managed-by", "LabelManagedBy"},
+		{ManagedByValue, "loopzero", "ManagedByValue"},
 	}
-	for k, v := range expected {
-		got, ok := labels[k]
-		if !ok {
-			t.Errorf("missing label %q", k)
-			continue
-		}
-		if got != v {
-			t.Errorf("label %q = %q, want %q", k, got, v)
+	for _, c := range cases {
+		if c.got != c.want {
+			t.Errorf("%s = %q, want %q (canonical regression guard)", c.name, c.got, c.want)
 		}
 	}
 }
 
-func TestLabels_empty_values_are_allowed(t *testing.T) {
-	labels := Labels("acme", "", "")
-	if labels["loopzero.io/tenant"] != "acme" {
-		t.Errorf("tenant label should be set")
+func TestStandardLabels_AsMap_returns_canonical_shape(t *testing.T) {
+	sl := StandardLabels{Tenant: "acme", Project: "backend", Environment: "production"}
+	got := sl.AsMap()
+
+	expected := map[string]string{
+		LabelTenant:      "acme",
+		LabelProject:     "backend",
+		LabelEnvironment: "production",
+		LabelManagedBy:   "loopzero",
 	}
-	if labels["loopzero.io/project"] != "" {
-		t.Errorf("project label should be empty")
+	if len(got) != len(expected) {
+		t.Errorf("AsMap() returned %d keys, want %d", len(got), len(expected))
+	}
+	for k, want := range expected {
+		if got[k] != want {
+			t.Errorf("AsMap()[%q] = %q, want %q", k, got[k], want)
+		}
 	}
 }
+
+func TestStandardLabels_AsMap_independent_from_struct(t *testing.T) {
+	// Mutating the returned map MUST NOT affect future calls.
+	sl := StandardLabels{Tenant: "acme", Project: "backend", Environment: "production"}
+	m1 := sl.AsMap()
+	m1[LabelTenant] = "EVIL"
+	m2 := sl.AsMap()
+	if m2[LabelTenant] != "acme" {
+		t.Errorf("AsMap() leaked mutation: m2[tenant] = %q, want %q", m2[LabelTenant], "acme")
+	}
+}
+
+// TestStandardLabels_AsMap_is_compatible_with_legacy_Labels was deleted
+// with the deprecated Labels() function (audit gap M04 #23 closure).
 
 // ---------------------------------------------------------------------------
 // GitRepoBindingName
@@ -607,6 +640,48 @@ func TestImageTag_deterministic(t *testing.T) {
 		if got != "reg/tenant/proj-app:sha256" {
 			t.Fatalf("ImageTag not deterministic on iteration %d: %q", i, got)
 		}
+	}
+}
+
+// CHG-2026-04-29-DOGFOOD iter 8 — ImageDigestRef MUST produce a digest-pinned
+// reference required by the supply-chain VAP. Live discovery: pods got
+// Forbidden in standalone-multi when manifest used `image:tag`.
+func TestImageDigestRef_addsSha256Prefix(t *testing.T) {
+	const bareDigest = "8f0a1b2c3d4e5f6789abcdef0123456789abcdef0123456789abcdef01234567"
+	got := ImageDigestRef("reg.io", "tn", "p", "api", bareDigest)
+	want := "reg.io/tn/p-api@sha256:" + bareDigest
+	if got != want {
+		t.Errorf("got %q, want %q", got, want)
+	}
+}
+
+func TestImageDigestRef_acceptsPrefixedDigest(t *testing.T) {
+	const prefixed = "sha256:8f0a1b2c3d4e5f6789abcdef0123456789abcdef0123456789abcdef01234567"
+	got := ImageDigestRef("reg.io", "tn", "p", "api", prefixed)
+	want := "reg.io/tn/p-api@" + prefixed
+	if got != want {
+		t.Errorf("got %q, want %q", got, want)
+	}
+}
+
+func TestImageDigestRef_doesNotDoubleSha256Prefix(t *testing.T) {
+	const prefixed = "sha256:abc123"
+	got := ImageDigestRef("r", "t", "p", "a", prefixed)
+	// MUST NOT produce "sha256:sha256:abc123".
+	if want := "r/t/p-a@sha256:abc123"; got != want {
+		t.Errorf("got %q, want %q", got, want)
+	}
+}
+
+func TestImageDigestRef_emptyDigestFailsLoud(t *testing.T) {
+	// Empty digest → reference is syntactically valid but admission
+	// rejects (no signature). Caller error, not a silent fallback.
+	got := ImageDigestRef("r", "t", "p", "a", "")
+	if got == ImageTag("r", "t", "p", "a", "") {
+		t.Errorf("empty digest must NOT collapse to ImageTag form (would lose admission protection): %q", got)
+	}
+	if !strings.Contains(got, "@sha256:") {
+		t.Errorf("empty digest fallback must still use @sha256: anchor: %q", got)
 	}
 }
 

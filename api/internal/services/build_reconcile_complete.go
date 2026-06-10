@@ -12,6 +12,7 @@ import (
 	"github.com/loopzero/loopzero/api/internal/db"
 	"github.com/loopzero/loopzero/api/internal/manifests"
 	"github.com/loopzero/loopzero/api/internal/metrics"
+	"github.com/loopzero/loopzero/pkg/naming"
 	"github.com/loopzero/loopzero/pkg/statemachine"
 )
 
@@ -62,6 +63,18 @@ func (r *BuildReconcileLoop) onWorkflowSucceeded(ctx context.Context, build *db.
 
 	// F-010: shared manifest building function (includes custom domains).
 	// CODE-002: errors are fatal — prevents silent IngressRoute erasure.
+	//
+	// CHG-2026-04-29-DOGFOOD iter 8: forward digest map from buildApps
+	// (populated by enrichAppReleasesWithAttestation just above) so the
+	// manifest renders use `image@sha256:...` instead of `image:tag`.
+	// Mutable tag refs are rejected by VAP `loopzero-require-image-signature`
+	// in tenant namespaces — pods would be Forbidden at admission time.
+	digests := make(map[string]string, len(buildApps))
+	for _, ar := range buildApps {
+		if ar.ImageDigestSHA256 != "" {
+			digests[ar.Name] = ar.ImageDigestSHA256
+		}
+	}
 	manifestApps, err = BuildManifestApps(ctx, BuildManifestAppsInput{
 		RegistryURL: r.cfg.RegistryURL,
 		TenantID:    build.TenantID,
@@ -69,6 +82,7 @@ func (r *BuildReconcileLoop) onWorkflowSucceeded(ctx context.Context, build *db.
 		Environment: build.Environment,
 		CommitSHA:   build.CommitSHA,
 		Apps:        apps,
+		AppDigests:  digests,
 		DomainStore: r.domainStore,
 	})
 	if err != nil {
@@ -78,7 +92,10 @@ func (r *BuildReconcileLoop) onWorkflowSucceeded(ctx context.Context, build *db.
 	}
 
 	// Generate manifests in the API (C-02 fix: control plane generates manifests)
-	renderedManifests := manifests.Render(manifests.RenderInput{
+	// Plan v1.2 T3.1 — Render now returns (string, error). Empty ClusterIssuerName
+	// (config wiring bug) used to panic the reconcile loop; now we fail the build
+	// gracefully so the platform can recover.
+	renderedManifests, renderErr := manifests.Render(manifests.RenderInput{
 		TenantID:          build.TenantID,
 		ProjectID:         build.ProjectID,
 		Environment:       build.Environment,
@@ -87,7 +104,19 @@ func (r *BuildReconcileLoop) onWorkflowSucceeded(ctx context.Context, build *db.
 		BaseDomain:        r.cfg.BaseDomain,
 		ClusterIssuerName: r.cfg.ClusterIssuer, // B14
 		Apps:              manifestApps,
+		// argo-rollouts-progressive-delivery-plan T1.2 — Progressive delivery wiring.
+		// Plan defaults to "starter" inside the renderer when empty (V1: tenant
+		// plan lookup is YAGNI — fixed conservative steps work for all tiers
+		// until real plan-aware behavior is needed). PrometheusAddress and
+		// ProgressiveDelivery come from Config.
+		PrometheusAddress:   r.cfg.PrometheusAddress,
+		ProgressiveDelivery: manifests.ProgressiveDeliveryEnabled(),
 	})
+	if renderErr != nil {
+		r.logger.Error("reconcile loop: manifests.Render failed", "build_id", build.ID, "error", renderErr)
+		r.failBuild(ctx, build, "Failed to render manifests — platform configuration error")
+		return
+	}
 
 	// Ensure LoopZeroApplication CRs exist on mgmt cluster (non-fatal).
 	// Enables hostname assignment, ExposedRoute creation, TLS monitoring, reachability probes.
@@ -131,10 +160,10 @@ func (r *BuildReconcileLoop) completeBuild(ctx context.Context, build *db.Build)
 		if err != nil {
 			return err
 		}
-		if statemachine.IsBuildTerminal(statemachine.State(current.Status)) {
+		if statemachine.IsBuildPhaseTerminal(statemachine.BuildPhase(current.Status)) {
 			return nil // Already finalized
 		}
-		if _, err := r.buildStore.UpdateStatus(ctx, tx, build.ID, string(statemachine.BuildReleaseCompleted)); err != nil {
+		if _, err := r.buildStore.UpdateStatus(ctx, tx, build.ID, string(statemachine.BPEventReleaseCompleted)); err != nil {
 			return fmt.Errorf("complete build: transition to SUCCEEDED: %w", err)
 		}
 		return nil
@@ -201,9 +230,9 @@ func enrichAppReleasesWithAttestation(apps []AppRelease, status *WorkflowStatus)
 		return
 	}
 	for i, app := range apps {
-		signStep := "sign-image-" + app.Name
-		buildStep := "build-image-" + app.Name
-		sbomStep := "sbom-" + app.Name
+		signStep := naming.SignStepName(app.Name)
+		buildStep := naming.BuildImageStepName(app.Name)
+		sbomStep := naming.SBOMStepName(app.Name)
 
 		if signOutputs, ok := status.Outputs[signStep]; ok {
 			if sig := signOutputs["signature"]; sig != "" {
@@ -242,5 +271,77 @@ func enrichAppReleasesWithAttestation(apps []AppRelease, status *WorkflowStatus)
 				}
 			}
 		}
+
+		// M07 Ralph iter 5 (plan 2026-05-28-M07-fulcio-cacert-keyless-LIVE v1.6
+		// DoD item 9): attest-image step writes Rekor entry URL/index to
+		// `rekor-url` output parameter (see cosign_attest.go outRekorURLPath).
+		// Persist into BuildAppOutputs so container_delivery.go can write to
+		// releases.image_attestation_rekor_url (migration 000019). Empty or
+		// literal "unknown" (cosign output parser fallback) stays NULL —
+		// downstream code already gates on empty before persisting.
+		attestStep := naming.AttestStepName(app.Name)
+		var rekorURL string
+		if attestOutputs, ok := status.Outputs[attestStep]; ok {
+			if url := attestOutputs["rekor-url"]; url != "" && url != "unknown" {
+				apps[i].ImageAttestationRekorURL = url
+				rekorURL = url
+			}
+		}
+
+		// T4.1 (CR-8) of plan 2026-05-28-meet-001-engineering-closure v1.1:
+		// emit Sigstore observability counters from the enrichment.
+		// Duration histograms are intentionally NOT emitted here — they
+		// require the cosign scripts to surface `sign_duration_ms` /
+		// `attest_duration_ms` output params (plan T4.1 tasks #3+#4,
+		// operator follow-up). The counters below are derived from the
+		// existing outputs map and give immediate SLO signal.
+		emitSigstoreObservations(status, app.Name, rekorURL)
 	}
+}
+
+// emitSigstoreObservations is the metric-emission half of the
+// enrichment. Split out so the unit tests in
+// build_reconcile_complete_failure_test.go can keep asserting pure
+// enrichment behavior while sigstore_observations_test.go pins the
+// metric side-effects independently. EC-NEW (plan T4.1) guard: the
+// duration histogram observation is skipped here entirely until
+// `*_duration_ms` outputs land — emitting `Observe(0)` would create
+// a misleading bucket-0 spike.
+func emitSigstoreObservations(status *WorkflowStatus, appName, rekorURL string) {
+	if status == nil {
+		return
+	}
+	// sign_total: success when the sign-image step produced a signature.
+	signStep := naming.SignStepName(appName)
+	signOK := false
+	var signComponent string
+	if out, ok := status.Outputs[signStep]; ok {
+		if out["signature"] != "" {
+			signOK = true
+		} else {
+			// Sign step ran but produced no signature → Fulcio failure
+			// most likely (the cert issue step is where signless aborts
+			// almost always originate). Operators can refine via the
+			// step's exit code if surfaced.
+			signComponent = "fulcio"
+		}
+	}
+	metrics.ObserveCosignSign(true /* keyless */, 0, signOK, signComponent)
+
+	// attest_total: success when the attest step produced a non-null URL.
+	// Empty / "unknown" URL counts as failure with Rekor attribution.
+	attestStep := naming.AttestStepName(appName)
+	attestOK := false
+	var attestComponent string
+	if _, ok := status.Outputs[attestStep]; ok {
+		if rekorURL != "" {
+			attestOK = true
+		} else {
+			attestComponent = "rekor"
+		}
+	}
+	metrics.ObserveCosignAttest(true /* keyless */, 0, attestOK, attestComponent)
+
+	// rekor_url null/populated SLI counter.
+	metrics.ObserveRekorURLPersist(rekorURL)
 }

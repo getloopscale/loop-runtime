@@ -1,0 +1,61 @@
+# velero-backup-dr-plan v1.0 / T3.1 — Velero backup freshness alerting.
+#
+# Replaces the ORPHAN `LoopZeroGiteaBackupStale` rule that referenced a metric
+# never emitted (loopzero_gitea_last_backup_timestamp). Velero exports its own
+# metrics natively at :8085/metrics and Phase 3.2 wires the scrape job.
+#
+# 4 alerts cover the full lifecycle:
+#   - BackupStale     critical 12h     — schedule didn't run / partial run
+#   - BackupFailing   critical 0m      — any backup failed in the last 6h
+#   - ServerDown      critical 2m      — velero deployment unhealthy
+#   - BackupPartial   warning  0m      — backup completed but missed items
+
+apiVersion: monitoring.coreos.com/v1
+kind: PrometheusRule
+metadata:
+  name: loopzero-velero-alerts
+  namespace: monitoring
+  labels:
+    release: monitoring
+spec:
+  groups:
+    - name: loopzero.velero
+      rules:
+        # Substitui o ORPHAN LoopZeroGiteaBackupStale: cobre TODOS os schedules
+        # do LoopZero (loopzero-*-backup) com janela de 12 horas — RPO conservador
+        # para schedules de 6h e safety net para o full backup semanal.
+        - alert: LoopZeroVeleroBackupStale
+          expr: time() - velero_backup_last_successful_timestamp{schedule=~"loopzero-.*"} > 43200
+          for: 5m
+          labels:
+            severity: critical
+          annotations:
+            summary: "Velero backup '{{ $labels.schedule }}' is stale (>12h)"
+            description: "Last successful run of schedule {{ $labels.schedule }} is older than 12 hours. RPO exceeded — risk of data loss in case of cluster failure."
+
+        - alert: LoopZeroVeleroBackupFailing
+          expr: increase(velero_backup_failure_total{schedule=~"loopzero-.*"}[6h]) > 0
+          for: 0m
+          labels:
+            severity: critical
+          annotations:
+            summary: "Velero backup '{{ $labels.schedule }}' is failing"
+            description: "Schedule {{ $labels.schedule }} produced one or more failed backups in the last 6 hours."
+
+        - alert: LoopZeroVeleroServerDown
+          expr: up{job="velero"} == 0
+          for: 2m
+          labels:
+            severity: critical
+          annotations:
+            summary: "Velero server is down"
+            description: "Velero deployment has been unreachable for >2 minutes. No backups will run while the server is down."
+
+        - alert: LoopZeroVeleroBackupPartial
+          expr: velero_backup_partial_failure_total{schedule=~"loopzero-.*"} > 0
+          for: 0m
+          labels:
+            severity: warning
+          annotations:
+            summary: "Velero backup '{{ $labels.schedule }}' completed with partial failures"
+            description: "Schedule {{ $labels.schedule }} finished but some items were skipped. Inspect `velero backup describe` to identify missed resources."

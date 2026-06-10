@@ -29,13 +29,15 @@ type Handler struct {
 	tenantProvisioner *auth.TenantProvisioner
 	kratosPublicURL   string // Browser-facing URL (for redirects)
 	kratosInternalURL string // Cluster-internal URL (for server-to-server calls)
+	kratosAdminURL    string // Cluster-internal Kratos admin API (identity lookups)
 	kratosClient      *http.Client
 	logger            *slog.Logger
 }
 
 // NewHandler creates a consent handler.
-// kratosPublicURL is used for browser redirects, kratosInternalURL for server-to-server (whoami).
-func NewHandler(hydra *auth.HydraClient, tenantProv *auth.TenantProvisioner, kratosPublicURL, kratosInternalURL string, logger *slog.Logger) *Handler {
+// kratosPublicURL is used for browser redirects, kratosInternalURL for server-to-server (whoami),
+// kratosAdminURL for identity-trait lookups on the Kratos admin API.
+func NewHandler(hydra *auth.HydraClient, tenantProv *auth.TenantProvisioner, kratosPublicURL, kratosInternalURL, kratosAdminURL string, logger *slog.Logger) *Handler {
 	if kratosInternalURL == "" {
 		kratosInternalURL = kratosPublicURL
 	}
@@ -44,6 +46,7 @@ func NewHandler(hydra *auth.HydraClient, tenantProv *auth.TenantProvisioner, kra
 		tenantProvisioner: tenantProv,
 		kratosPublicURL:   kratosPublicURL,
 		kratosInternalURL: kratosInternalURL,
+		kratosAdminURL:    kratosAdminURL,
 		kratosClient: &http.Client{
 			Timeout:   5 * time.Second,
 			Transport: otelhttp.NewTransport(http.DefaultTransport),
@@ -78,6 +81,7 @@ func (h *Handler) Login(w http.ResponseWriter, r *http.Request) {
 			http.Error(w, "Authentication service error", http.StatusBadGateway)
 			return
 		}
+		// #nosec G710 -- redirectTo is the post-auth continuation URL computed by our own Hydra OAuth server (AcceptLogin), not attacker-controlled input.
 		http.Redirect(w, r, redirectTo, http.StatusFound)
 		return
 	}
@@ -117,6 +121,7 @@ func (h *Handler) LoginComplete(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "Authentication service error", http.StatusBadGateway)
 		return
 	}
+	// #nosec G710 -- redirectTo is the post-auth continuation URL computed by our own Hydra OAuth server (AcceptLogin), not attacker-controlled input.
 	http.Redirect(w, r, redirectTo, http.StatusFound)
 }
 
@@ -139,7 +144,7 @@ func (h *Handler) getKratosSessionSubject(r *http.Request) (string, error) {
 	if err != nil {
 		return "", fmt.Errorf("kratos whoami request failed: %w", err)
 	}
-	defer resp.Body.Close()
+	defer func() { _ = resp.Body.Close() }()
 
 	if resp.StatusCode != http.StatusOK {
 		return "", fmt.Errorf("no active kratos session (status %d)", resp.StatusCode)
@@ -163,21 +168,31 @@ func (h *Handler) getKratosSessionSubject(r *http.Request) (string, error) {
 }
 
 // fetchIdentityClaims fetches Kratos identity traits (email, name) for JWT claims.
-func (h *Handler) fetchIdentityClaims(subject string) map[string]interface{} {
+// ctx is the request context — it carries the OTel span, deadline, and cancellation
+// so the identity lookup and tenant provisioning are tied to the consent request
+// (MEDIUM-003), instead of a detached context.Background().
+func (h *Handler) fetchIdentityClaims(ctx context.Context, subject string) map[string]interface{} {
 	claims := map[string]interface{}{}
 
 	// Fetch identity from Kratos admin API (server-to-server).
 	// Admin API has /admin/identities endpoint; public API doesn't.
-	kratosAdmin := h.kratosInternalURL // Same cluster, admin is on separate port
-	// Try admin URL pattern: replace "public" with "admin" in service name
-	kratosAdmin = strings.Replace(kratosAdmin, "kratos-public", "kratos-admin", 1)
+	// Use the explicitly configured admin URL — never derive it by string-replacing
+	// the public URL (that silently breaks when service names don't match the heuristic,
+	// issuing JWTs without tenant_id).
+	kratosAdmin := strings.TrimRight(h.kratosAdminURL, "/")
 	identityURL := fmt.Sprintf("%s/admin/identities/%s", kratosAdmin, subject)
-	resp, err := h.kratosClient.Get(identityURL)
+	// #nosec G704 -- host is the operator-configured Kratos admin URL (T1.2); subject is a server-validated Kratos session identity, not free-form attacker input.
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, identityURL, nil)
+	if err != nil {
+		h.logger.Warn("failed to build identity request", "subject", subject, "error", err)
+		return claims
+	}
+	resp, err := h.kratosClient.Do(req)
 	if err != nil {
 		h.logger.Warn("failed to fetch identity for claims", "subject", subject, "error", err)
 		return claims
 	}
-	defer resp.Body.Close()
+	defer func() { _ = resp.Body.Close() }()
 
 	if resp.StatusCode != 200 {
 		h.logger.Warn("identity fetch returned non-200", "subject", subject, "status", resp.StatusCode)
@@ -209,7 +224,6 @@ func (h *Handler) fetchIdentityClaims(subject string) map[string]interface{} {
 	// silently falling back to a "default" tenant.
 	// This decouples authentication availability from DB availability.
 	if h.tenantProvisioner != nil && identity.Traits.Email != "" {
-		ctx := context.Background()
 		tenantID, _, err := h.tenantProvisioner.EnsureTenant(ctx, subject, identity.Traits.Email)
 		if err == nil && tenantID != "" {
 			claims["tenant_id"] = tenantID
@@ -243,8 +257,17 @@ func (h *Handler) Consent(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	// Auto-approval is ONLY for the first-party trusted client. Any other
+	// registered Hydra client (including a rogue client registered via the
+	// admin API) must NOT receive auto-approved scopes and tenant_id claims.
+	if consentReq.ClientID != h.hydra.ClientID() {
+		h.logger.Warn("consent rejected — untrusted client", "client", consentReq.ClientID, "subject", consentReq.Subject)
+		http.Error(w, "Unauthorized client", http.StatusForbidden)
+		return
+	}
+
 	// Fetch user identity from Kratos to include email/name in JWT.
-	tokenClaims := h.fetchIdentityClaims(consentReq.Subject)
+	tokenClaims := h.fetchIdentityClaims(r.Context(), consentReq.Subject)
 
 	// Auto-approve — LoopZero CLI is a first-party trusted client.
 	// Forward requested audience so Hydra sets aud in the token.
@@ -255,13 +278,36 @@ func (h *Handler) Consent(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	// Do NOT log token claims (email, tenant_id) — they are PII. Log only
+	// non-identifying metadata for operational visibility.
+	_, hasTenant := tokenClaims["tenant_id"]
 	h.logger.Info("consent auto-approved",
 		"client", consentReq.ClientID,
 		"subject", consentReq.Subject,
-		"scopes", consentReq.RequestedScope,
-		"claims", tokenClaims,
+		"scope_count", len(consentReq.RequestedScope),
+		"has_tenant", hasTenant,
 	)
+	// #nosec G710 -- redirectTo is the post-consent continuation URL computed by our own Hydra OAuth server (AcceptConsent), not attacker-controlled input.
 	http.Redirect(w, r, redirectTo, http.StatusFound)
+}
+
+// sanitizeDeviceReturnTo builds a safe, relative return_to path for the device
+// verification flow from validated query parameters only, discarding any
+// attacker-controlled scheme/host in the original request URL. The result is
+// always a relative "/auth/device" path, so it cannot redirect off-origin.
+func sanitizeDeviceReturnTo(r *http.Request) string {
+	q := url.Values{}
+	if c := r.URL.Query().Get("device_challenge"); c != "" {
+		q.Set("device_challenge", c)
+	}
+	if uc := r.URL.Query().Get("user_code"); uc != "" {
+		q.Set("user_code", uc)
+	}
+	rt := "/auth/device"
+	if enc := q.Encode(); enc != "" {
+		rt += "?" + enc
+	}
+	return rt
 }
 
 // DeviceVerify handles the device authorization challenge from Hydra.
@@ -279,8 +325,10 @@ func (h *Handler) DeviceVerify(w http.ResponseWriter, r *http.Request) {
 	subject, err := h.getKratosSessionSubject(r)
 	if err != nil {
 		h.logger.Warn("device verify: no session, redirecting to login", "error", err)
-		// Redirect to Kratos login with return_to back to this device verify URL
-		returnTo := r.URL.String()
+		// Redirect to Kratos login with return_to back to this device verify URL.
+		// Rebuild return_to as a relative path from validated query params only —
+		// never echo the raw request URL (open-redirect / host-injection guard).
+		returnTo := sanitizeDeviceReturnTo(r)
 		loginURL := fmt.Sprintf("%s/self-service/login/browser?return_to=%s",
 			h.kratosPublicURL, url.QueryEscape(returnTo))
 		http.Redirect(w, r, loginURL, http.StatusFound)
@@ -298,11 +346,12 @@ func (h *Handler) DeviceVerify(w http.ResponseWriter, r *http.Request) {
 	h.logger.Info("device authorized", "subject", subject, "user_code", userCode)
 
 	if redirectTo != "" {
+		// #nosec G710 -- redirectTo is the post-device-grant continuation URL computed by our own Hydra OAuth server (AcceptDeviceChallenge), not attacker-controlled input.
 		http.Redirect(w, r, redirectTo, http.StatusFound)
 		return
 	}
 
 	// Success — show confirmation
 	w.Header().Set("Content-Type", "text/html")
-	fmt.Fprint(w, `<!DOCTYPE html><html><body style="font-family:system-ui;display:flex;align-items:center;justify-content:center;height:100vh;background:#0a0a0a;color:#fff;margin:0"><div style="text-align:center"><h2>CLI authorized</h2><p style="color:#888">You can close this tab and return to your terminal.</p></div></body></html>`)
+	_, _ = fmt.Fprint(w, `<!DOCTYPE html><html><body style="font-family:system-ui;display:flex;align-items:center;justify-content:center;height:100vh;background:#0a0a0a;color:#fff;margin:0"><div style="text-align:center"><h2>CLI authorized</h2><p style="color:#888">You can close this tab and return to your terminal.</p></div></body></html>`)
 }

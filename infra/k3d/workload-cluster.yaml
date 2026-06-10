@@ -2,10 +2,12 @@ apiVersion: k3d.io/v1alpha5
 kind: Simple
 metadata:
   name: loopzero-workload
-# Pin to match production DOKS 1.32.13 (Rule 10: local equals production)
+# Pin to match production DOKS 1.32.13 (Rule 10: local equals production).
+# end-to-end-deploy-validation-plan T0.2 — sized for ~3GB total memory
+# (1 server + 1 agent) so 3-cluster local topology fits in 16GB.
 image: rancher/k3s:v1.32.13-k3s1
 servers: 1
-agents: 2
+agents: 1
 kubeAPI:
   hostPort: "6444"
 ports:
@@ -27,6 +29,16 @@ network: k3d-loopzero
 registries:
   use:
     - k3d-loopzero-registry:5000
+  # B6 fix (cleanroom iter 6, 2026-05-05): mirror docker.io via pull-through
+  # cache in k3d-loopzero-registry. See mgmt-cluster.yaml for full rationale.
+  config: |
+    mirrors:
+      "docker.io":
+        endpoint:
+          - https://mirror.gcr.io
+      "registry-1.docker.io":
+        endpoint:
+          - https://mirror.gcr.io
 options:
   k3d:
     wait: true

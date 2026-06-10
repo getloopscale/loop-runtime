@@ -1,0 +1,54 @@
+# T0.2 POC overlay: enable Gitea Actions runner (DISABLED-BY-DEFAULT).
+#
+# Per ADR-2026-05-27-T0.2 (`.claude/knowledge-base/decisions/2026-05-27-T0.2-ci-platform-choice.md`).
+# Sponsor renames `.disabled` → `.yaml` after Cenário A meeting approval, then
+# adds this file to helmfile values list in `infra/helmfile/mgmt.helmfile.yaml.gotmpl`
+# under the gitea release.
+#
+# Why Cenário A: reuses LoopZero's existing Gitea install (zero new infra cost),
+# GitHub Actions YAML compatibility (curve zero for operator), K8s-native
+# runner scale-to-zero via KEDA already deployed in build cluster.
+#
+# Engineering ready engineering — sponsor sign-off opens path to:
+#   1. Branch protection enforces `task quality:gates` PASS as required check
+#   2. Drill watchdog cron + weekly soaks become scheduled Gitea Actions workflows
+#   3. CI eliminates "operator must remember to run gates" gap (M12 audit)
+
+gitea:
+  # Enable Gitea Actions (server-side feature flag). Requires v1.21+ chart.
+  actions:
+    enabled: true
+
+# Runner pod spec. Runs Gitea's `act_runner` (compatible with GitHub Actions
+# YAML syntax). Polls Gitea API for queued workflows + executes them.
+# Resource limits sized for `task quality:gates` workload (~3min wall clock,
+# 1 vCPU + 1GB RAM peak observed in operator manual runs).
+runners:
+  enabled: true
+  replicas: 2 # 1 minimum + 1 hot standby; KEDA scales 0→N on queue depth
+  image:
+    repository: gitea/act_runner
+    tag: 0.2.11  # pin; Renovate auto-bumps patches
+    pullPolicy: IfNotPresent
+  resources:
+    requests:
+      cpu: 100m
+      memory: 256Mi
+    limits:
+      cpu: 1000m
+      memory: 1Gi
+  # Token from gitea-actions-runner-token Secret (mint via gitea admin CLI:
+  # `gitea actions generate-runner-token` post-install, operator runbook).
+  registrationToken:
+    existingSecret: gitea-actions-runner-token
+    key: token
+
+  # KEDA ScaledObject so runner scales 0 when queue empty (saves cluster cost
+  # in off-hours). Pattern reused from existing buildkit runner config.
+  scaling:
+    enabled: true
+    triggers:
+      - type: gitea-actions-queue
+        metadata:
+          giteaURL: http://gitea-http.gitea-system.svc.cluster.local:3000
+          targetQueueLength: "1"  # 1 queued job = 1 runner pod

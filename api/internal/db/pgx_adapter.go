@@ -10,7 +10,20 @@ import (
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgconn"
 	"github.com/jackc/pgx/v5/pgxpool"
+
+	"github.com/loopzero/loopzero/api/internal/db/generated"
 )
+
+// SqlcBridge is the bridge interface from the internal db.DBTX abstraction to
+// the pgx-native generated.DBTX expected by sqlc-generated query methods.
+// Concrete adapters that wrap a real *pgxpool.Pool or pgx.Tx implement this
+// by exposing the underlying pgx-native handle. Test fakes that satisfy
+// db.DBTX without holding a real pgx connection do NOT implement this — by
+// design, sqlc-backed stores require pgxmock or a real PG instance for tests
+// (per T0.6 reshape matrix of plan 2026-05-29-sqlc-migration v1.3).
+type SqlcBridge interface {
+	GeneratedDB() generated.DBTX
+}
 
 // PgxAdapter wraps a pgxpool.Pool to implement QueryExecutor and ExecQueryExecutor.
 // This adapter translates pgx-specific types to our domain interfaces,
@@ -69,6 +82,13 @@ func (a *PgxAdapter) Close() {
 	a.Pool.Close()
 }
 
+// GeneratedDB returns the underlying pgxpool.Pool as a generated.DBTX
+// (sqlc-emitted pgx-native interface). Bridges PgxAdapter into sqlc-backed
+// stores per T1.1c2b of plan 2026-05-29-sqlc-migration v1.3.
+func (a *PgxAdapter) GeneratedDB() generated.DBTX {
+	return a.Pool
+}
+
 // PgxTxAdapter wraps a pgx.Tx to implement DBTX.
 // MEET-053 D-01: Used by the placement serializer to inject a transaction
 // into the bootstrap store, fixing the TOCTOU race between AssignCell and
@@ -96,6 +116,30 @@ func (a *PgxTxAdapter) Exec(ctx context.Context, sql string, args ...any) (ExecR
 func (a *PgxTxAdapter) QueryRow(ctx context.Context, sql string, args ...any) Row {
 	return &pgxRow{row: a.Tx.QueryRow(ctx, sql, args...)}
 }
+
+// GeneratedDB returns the underlying pgx.Tx as a generated.DBTX (sqlc-
+// emitted pgx-native interface). Bridges PgxTxAdapter into sqlc-backed
+// stores per T1.1c2b of plan 2026-05-29-sqlc-migration v1.3.
+func (a *PgxTxAdapter) GeneratedDB() generated.DBTX {
+	return a.Tx
+}
+
+// Compile-time assertion that BOTH PgxAdapter and PgxTxAdapter satisfy
+// db.DBTX AND db.SqlcBridge. Mirror of the assertions in
+// api/internal/adapters/pgx_adapter.go for the lock-side PgxTxDBTX
+// adapter. The two adapters target the same surface (pgx.Tx →
+// db.DBTX bridge with sqlc dispatch capability); both must remain
+// in lockstep.
+//
+// LIVE 2026-05-29 cleanroom dogfood retry surfaced that the lock-
+// side adapter was missing the SqlcBridge implementation while the
+// placement-side adapter (this one) had it. The compile-time
+// assertions on the lock-side now PREVENT that class of recurrence
+// — and these on the placement-side prevent the inverse.
+var _ DBTX = (*PgxAdapter)(nil)
+var _ SqlcBridge = (*PgxAdapter)(nil)
+var _ DBTX = (*PgxTxAdapter)(nil)
+var _ SqlcBridge = (*PgxTxAdapter)(nil)
 
 // pgxRows wraps pgx.Rows to implement our Rows interface.
 type pgxRows struct {

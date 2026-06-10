@@ -61,17 +61,13 @@ spec:
             description: "Gitea has been unreachable for more than 2 minutes. Builds cannot clone source code. GitOps pushes will fail."
             runbook: "Check Gitea pod status. Verify PVC is bound. Check pod logs. If data loss, restore from MinIO backup (RPO: 6h)."
 
-        # T1.2 / VAL-001: loopzero_gitea_last_backup_timestamp not emitted
-        # (Gitea backup cron lacks Prometheus exporter integration).
-        - alert: LoopZeroGiteaBackupStale
-          expr: vector(0) > 1  # ORPHAN: loopzero_gitea_last_backup_timestamp not emitted
-          for: 0m
-          labels:
-            severity: critical
-          annotations:
-            summary: "Gitea backup is stale (>7h)"
-            description: "Last Gitea git bundle backup is older than 7 hours. RPO exceeded."
-            runbook: "Check Gitea backup CronJob. Verify MinIO connectivity. Trigger manual git bundle."
+        # ORPHAN alert removed by velero-backup-dr-plan v1.0 / T3.1.
+        # The legacy `LoopZeroGiteaBackupStale` rule referenced a metric
+        # (`loopzero_gitea_last_backup_timestamp`) that was never emitted.
+        # Replaced by `LoopZeroVeleroBackupStale` in
+        # infra/helm/monitoring/manifests/prometheusrule-velero.yaml,
+        # which covers Gitea AND every other scheduled scope (CRDs,
+        # ArgoCD, Secrets, full snapshot) via velero_backup_*.
 
         - alert: LoopZeroArgoCDCircuitOpen
           expr: loopzero_argocd_circuit_state == 1
@@ -83,57 +79,6 @@ spec:
             description: "ArgoCD health gate tripped after 3 consecutive failures. New deployments are rejected with 503."
             runbook: "Check ArgoCD server and controller health. Once ArgoCD recovers, circuit will close after 2 consecutive successful checks."
 
-        # T1.2 / VAL-001: depends on loopzero_git_desired_state_divergence and
-        # loopzero_git_mirror_status — neither emitted by any code.
-        - alert: LoopZeroGitMirrorExhausted
-          expr: vector(0) > 1  # ORPHAN: loopzero_git_desired_state_divergence + loopzero_git_mirror_status not emitted
-          for: 3h
-          labels:
-            severity: critical
-          annotations:
-            summary: "Git mirror retry exhausted for {{ $labels.tenant }}/{{ $labels.env }}"
-            description: "Git desired state diverges AND mirror has been FAILED for 3+ hours. All retries exhausted."
-            runbook: "Fix Gitea. Then trigger manual mirror sync via API. If Gitea is up, investigate why mirror push fails."
-
-        # T1.2 / VAL-001: depends on loopzero_fallback_active and
-        # loopzero_git_mirror_status — neither emitted. Fallback feature deferred.
-        - alert: LoopZeroFallbackStuck
-          expr: vector(0) > 1  # ORPHAN: loopzero_fallback_active + loopzero_git_mirror_status not emitted
-          for: 3h
-          labels:
-            severity: critical
-          annotations:
-            summary: "Fallback stuck for {{ $labels.tenant }}/{{ $labels.env }}"
-            description: "Emergency fallback deployment is active but Git mirror has been FAILED for 3+ hours."
-            runbook: "Fix Gitea. Retry mirror. Once mirror succeeds, auto-sync re-enables and fallback clears automatically."
-
-        # T1.2 / VAL-001: loopzero_build_egress_connectivity not emitted —
-        # build NP creation reconcile would need to register and emit.
-        # See ADR D5(b) for plan to wire emission alongside build NP.
-        - alert: LoopZeroBuildEgressStale
-          expr: vector(0) > 1  # ORPHAN: loopzero_build_egress_connectivity not emitted
-          for: 5m
-          labels:
-            severity: critical
-          annotations:
-            summary: "Build pods cannot reach required services"
-            description: "Build pods failing DNS/connection to Gitea/MinIO/registry for 5+ minutes."
-            runbook: "Check NetworkPolicy in build namespace. Verify Service endpoints for Gitea, MinIO, and registry."
-
-        # T1.2 / VAL-001: break-glass session feature not implemented;
-        # loopzero_break_glass_sessions_active not emitted by any code.
-        - alert: LoopZeroBreakGlassAccess
-          expr: vector(0) > 1  # ORPHAN: loopzero_break_glass_sessions_active not emitted
-          for: 0m
-          labels:
-            severity: critical
-          annotations:
-            summary: "Break-glass access session active"
-            description: "Emergency direct cluster access is in use. Requires post-incident review within 24 hours."
-            runbook: "Verify the break-glass session is authorized. Document the incident. Schedule post-incident review."
-
-        # MEET-040: Traefik is the single entry point for all platform traffic.
-        # Down Traefik = all services unreachable.
         - alert: LoopZeroTraefikDown
           expr: absent(up{job=~".*traefik.*"} == 1)
           for: 1m
@@ -165,4 +110,3 @@ spec:
             severity: critical
           annotations:
             summary: "Cloudflare Tunnel disconnected — all user traffic blocked"
-            runbook: "docs/runbooks/alerts/LoopZeroCFTunnelDisconnected.md"

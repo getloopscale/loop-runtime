@@ -1,0 +1,62 @@
+{
+  "$schema": "https://docs.renovatebot.com/renovate-schema.json",
+  "extends": [
+    "config:recommended",
+    ":dependencyDashboard",
+    ":semanticCommits"
+  ],
+  "description": "Renovate config for loopzero. INF-G18 mandates SHA pinning for all GitHub Actions; this config enforces pinDigests + helpful PR descriptions with SHA -> version mapping.",
+
+  "pinDigests": true,
+
+  "labels": ["dependencies"],
+
+  "packageRules": [
+    {
+      "description": "GitHub Actions: SHA-pin and group bumps to reduce PR noise.",
+      "matchManagers": ["github-actions"],
+      "groupName": "github-actions",
+      "automerge": false,
+      "schedule": ["before 6am on Monday"],
+      "commitMessageTopic": "GitHub Action {{depName}}",
+      "commitMessageExtra": "to {{newDigest}} ({{newVersion}})"
+    },
+    {
+      "description": "Helm chart deps: SHA-pin via OCI digests where supported.",
+      "matchManagers": ["helmv3", "helm-values", "helmfile"],
+      "groupName": "helm",
+      "automerge": false,
+      "schedule": ["before 6am on Monday"]
+    },
+    {
+      "description": "Go modules: minor + patch auto-merge if tests pass.",
+      "matchManagers": ["gomod"],
+      "matchUpdateTypes": ["minor", "patch"],
+      "automerge": false,
+      "schedule": ["before 6am on Monday"]
+    },
+    {
+      "description": "npm: minor + patch auto-merge if tests pass.",
+      "matchManagers": ["npm"],
+      "matchUpdateTypes": ["minor", "patch"],
+      "automerge": false,
+      "schedule": ["before 6am on Monday"]
+    },
+    {
+      "description": "Major bumps require human review.",
+      "matchUpdateTypes": ["major"],
+      "automerge": false,
+      "schedule": ["before 6am on Monday"]
+    }
+  ],
+
+  "vulnerabilityAlerts": {
+    "enabled": true,
+    "labels": ["security", "priority/critical"]
+  },
+
+  "prHourlyLimit": 4,
+  "prConcurrentLimit": 10,
+
+  "configMigration": true
+}

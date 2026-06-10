@@ -59,11 +59,11 @@ func TestGitOpsPush_StaleLeaderOverwritten(t *testing.T) {
 	// Step 3: Leader A (STALE, gen=1) pushes stale manifests.
 	// In production this happens during the split-brain window (11-90s)
 	// when the old leader's PG connection hasn't been detected as dead yet.
-	manifestA2_stale := "apiVersion: apps/v1\nkind: Deployment\nmetadata:\n  name: app-x\n  labels:\n    leader-generation: \"1\"\nspec:\n  replicas: 1\n  # stale push from zombie leader\n"
-	store.push(env, leaderA, manifestA2_stale)
+	manifestA2Stale := "apiVersion: apps/v1\nkind: Deployment\nmetadata:\n  name: app-x\n  labels:\n    leader-generation: \"1\"\nspec:\n  replicas: 1\n  # stale push from zombie leader\n"
+	store.push(env, leaderA, manifestA2Stale)
 
 	// At this point HEAD is WRONG — it has leader A's stale content.
-	if head := store.head(env); head.content != manifestA2_stale {
+	if head := store.head(env); head.content != manifestA2Stale {
 		t.Fatalf("step 3: HEAD should be leader A's stale manifest (this is the bug state)")
 	}
 

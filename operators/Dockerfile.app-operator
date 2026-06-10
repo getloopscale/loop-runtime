@@ -1,0 +1,37 @@
+FROM golang:1.25.10-alpine3.22 AS builder
+WORKDIR /workspace
+
+ENV GOWORK=off
+
+COPY pkg/go.mod ./pkg/go.mod
+COPY operators/go.mod operators/go.sum ./operators/
+
+RUN --mount=type=cache,target=/root/go/pkg/mod \
+    cd operators && go mod download
+
+COPY pkg/ ./pkg/
+COPY operators/ ./operators/
+
+RUN --mount=type=cache,target=/root/go/pkg/mod \
+    --mount=type=cache,target=/root/.cache/go-build \
+    cd operators && CGO_ENABLED=0 go build -trimpath -ldflags="-s -w" -o /loopzero-app-operator ./cmd/app-operator/main.go
+
+FROM gcr.io/distroless/static-debian12:nonroot
+
+LABEL org.opencontainers.image.source="https://github.com/loopzero/loopzero"
+LABEL org.opencontainers.image.title="loopzero-app-operator"
+LABEL org.opencontainers.image.description="LoopZero PaaS Application+Exposure operator"
+
+COPY --from=builder /loopzero-app-operator /usr/local/bin/loopzero-app-operator
+EXPOSE 8080 8081
+
+# T8.1 of deep-review-remediation-plan (closes find_infra_001 HIGH).
+# Distroless static has no shell — HEALTHCHECK invokes the operator binary
+# itself with --healthcheck-probe (impl in pkg/healthcheck/probe.go).
+# K8s uses its own liveness/readiness probes against /healthz; this directive
+# is for `docker run` (local dev) and image scanners that respect HEALTHCHECK.
+HEALTHCHECK --interval=30s --timeout=5s --start-period=10s --retries=3 \
+  CMD ["/usr/local/bin/loopzero-app-operator", "--healthcheck-probe"]
+
+ENTRYPOINT ["loopzero-app-operator"]
+CMD ["--leader-elect=true"]

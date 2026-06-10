@@ -32,6 +32,17 @@ type LoopZeroApplicationInput struct {
 	AppName     string
 	ServiceName string
 	ServicePort int32
+
+	// CorrelationID propagates the originating HTTP request's correlation
+	// ID into the CR metadata as the `loopzero.io/correlation-id` annotation
+	// (audit M08 #10 / §6.C.1). When the operator reconciles this CR, it
+	// reads the annotation and injects the value into the reconcile
+	// context via correlation.WithID, so audit_log rows + logs emitted
+	// by downstream subsystems can trace back to the originating HTTP
+	// call. Empty string means "no correlation context available"
+	// (background goroutines, recovery loops) and the annotation is
+	// omitted instead of stored as empty.
+	CorrelationID string
 }
 
 // ApplicationCRManager manages LoopZeroApplication custom resources on the mgmt cluster.
@@ -117,20 +128,30 @@ func buildLoopZeroApplicationCR(namespace string, input LoopZeroApplicationInput
 		port = 80
 	}
 
+	metadata := map[string]interface{}{
+		"name":      loopzeroApplicationCRName(input.TenantID, input.Project, input.AppName, input.Environment),
+		"namespace": namespace,
+		"labels": map[string]interface{}{
+			"loopzero.io/tenant":      input.TenantID,
+			"loopzero.io/project":     input.Project,
+			"loopzero.io/environment": input.Environment,
+			"loopzero.io/app":         input.AppName,
+		},
+	}
+	// Audit gap M08 #10 / §6.C.1: correlation_id annotation when present.
+	// Operator reconciles read this back into the ctx via correlation.WithID
+	// so the trace persists across the API→K8s→controller boundary.
+	if input.CorrelationID != "" {
+		metadata["annotations"] = map[string]interface{}{
+			"loopzero.io/correlation-id": input.CorrelationID,
+		}
+	}
+
 	return &unstructured.Unstructured{
 		Object: map[string]interface{}{
 			"apiVersion": "loopzero.io/v1",
 			"kind":       "LoopZeroApplication",
-			"metadata": map[string]interface{}{
-				"name":      loopzeroApplicationCRName(input.TenantID, input.Project, input.AppName, input.Environment),
-				"namespace": namespace,
-				"labels": map[string]interface{}{
-					"loopzero.io/tenant":      input.TenantID,
-					"loopzero.io/project":     input.Project,
-					"loopzero.io/environment": input.Environment,
-					"loopzero.io/app":         input.AppName,
-				},
-			},
+			"metadata":   metadata,
 			"spec": map[string]interface{}{
 				"tenantRef":   input.TenantID,
 				"project":     input.Project,

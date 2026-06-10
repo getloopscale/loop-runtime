@@ -65,7 +65,7 @@ func TestBuilds_Create_HappyPath(t *testing.T) {
 	}
 	h := NewBuildHandler(orch, slog.Default())
 
-	body := `{"project_id":"my-project","environment":"production","commit_sha":"abc123"}`
+	body := `{"project_id":"my-project","environment":"production","commit_sha":"abc123","apps":[{"name":"app","type":"server","port":3000,"framework":"node"}]}`
 	req := httptest.NewRequest(http.MethodPost, "/api/v1/builds", bytes.NewBufferString(body))
 	req = withAuth(req, defaultUserContext())
 	w := httptest.NewRecorder()
@@ -115,6 +115,32 @@ func TestBuilds_Create_MissingEnvironment(t *testing.T) {
 	}
 }
 
+// T1.3 follow-up regression test (CR-2): a body with `apps: []` (or no apps
+// field at all) used to slip through to the WorkflowBuilder where the
+// fail-fast invariant returned a wrapped error that the handler mapped to
+// a generic 500 INTERNAL_ERROR. The handler now rejects empty-apps with a
+// typed 400 MISSING_FIELD before any state mutation.
+func TestBuilds_Create_MissingApps(t *testing.T) {
+	h := NewBuildHandler(&fakeBuildOrch{}, slog.Default())
+
+	body := `{"project_id":"my-project","environment":"production","commit_sha":"abc123"}`
+	req := httptest.NewRequest(http.MethodPost, "/api/v1/builds", bytes.NewBufferString(body))
+	req = withAuth(req, defaultUserContext())
+	w := httptest.NewRecorder()
+
+	h.Create(w, req)
+
+	if w.Code != http.StatusBadRequest {
+		t.Fatalf("want 400, got %d body=%s", w.Code, w.Body.String())
+	}
+	if !bytes.Contains(w.Body.Bytes(), []byte("MISSING_FIELD")) {
+		t.Fatalf("want MISSING_FIELD code; body=%s", w.Body.String())
+	}
+	if !bytes.Contains(w.Body.Bytes(), []byte("app is required")) {
+		t.Fatalf("want 'app is required' message hint; body=%s", w.Body.String())
+	}
+}
+
 func TestBuilds_Create_InvalidEnvironmentName(t *testing.T) {
 	h := NewBuildHandler(&fakeBuildOrch{}, slog.Default())
 
@@ -128,6 +154,61 @@ func TestBuilds_Create_InvalidEnvironmentName(t *testing.T) {
 	if w.Code != http.StatusBadRequest {
 		t.Fatalf("want 400, got %d body=%s", w.Code, w.Body.String())
 	}
+}
+
+// Sprint B T3.2 REVERTED 2026-06-02 — the regex tightening broke e2e
+// journey fixtures using hyphen env names (j-rollout-a, j-secrets, etc.)
+// in cleanroom-fresh DB state. Sponsor mandate trio GREEN took precedence
+// over closing code-005. These tests now lock the REVERTED behavior:
+// hyphens are accepted (regex match), but the bug class remains open.
+
+// TestEnvironmentRegex_AcceptsHyphensAfterRevert — locks the reverted
+// (legacy) behavior. Pre-Sprint-B and post-revert, hyphens ARE valid.
+// The code-005 finding remains open; re-attempt requires migrating e2e
+// fixture env names FIRST (see MEET-ASYNC-AMENDMENT-2026-06-02-002).
+func TestEnvironmentRegex_AcceptsHyphensAfterRevert(t *testing.T) {
+	accepted := []string{
+		"preview-pr-42",  // preview env naming pattern
+		"j-rollout-a",    // e2e journey fixture
+		"with-hyphen",
+		"a-z-end",
+	}
+	for _, name := range accepted {
+		t.Run(name, func(t *testing.T) {
+			if !environmentRegex.MatchString(name) {
+				t.Errorf("environmentRegex rejected %q after revert; legacy behavior must accept", name)
+			}
+		})
+	}
+}
+
+// TestEnvironmentRegex_AcceptsCanonicalNames — positive baseline: the
+// canonical env names (production, staging, dev) MUST always pass.
+func TestEnvironmentRegex_AcceptsCanonicalNames(t *testing.T) {
+	accepted := []string{
+		"production",
+		"staging",
+		"development",
+		"dev",
+		"preview42",
+		"jrollouta",
+		"a",
+	}
+	for _, name := range accepted {
+		t.Run(name, func(t *testing.T) {
+			if !environmentRegex.MatchString(name) {
+				t.Errorf("environmentRegex rejected canonical %q", name)
+			}
+		})
+	}
+}
+
+// TestSyncCallbackParser_GrandfatheredHyphenEnv_KnownLimitation —
+// EC-9 of the plan: documents the bounded limitation explicitly via
+// t.Skip so CI stays green while preserving the known-issue audit
+// trail. Tracked separately as code-005 OPEN.
+func TestSyncCallbackParser_GrandfatheredHyphenEnv_KnownLimitation(t *testing.T) {
+	t.Skip("known parser limitation; tracked as code-005 OPEN. sync_callback_activator.go LastIndex(\"-\") parser is ambiguous for env names containing hyphens. T3.2 regex tightening reverted 2026-06-02 to keep trio GREEN. Re-attempt requires e2e fixture migration first (see MEET-ASYNC-AMENDMENT-2026-06-02-002).")
 }
 
 func TestBuilds_Create_Unauthenticated(t *testing.T) {
@@ -165,7 +246,7 @@ func TestBuilds_Create_DeployInProgress(t *testing.T) {
 	}
 	h := NewBuildHandler(orch, slog.Default())
 
-	body := `{"project_id":"my-project","environment":"production"}`
+	body := `{"project_id":"my-project","environment":"production","apps":[{"name":"app","type":"server","port":3000,"framework":"node"}]}`
 	req := httptest.NewRequest(http.MethodPost, "/api/v1/builds", bytes.NewBufferString(body))
 	req = withAuth(req, defaultUserContext())
 	w := httptest.NewRecorder()

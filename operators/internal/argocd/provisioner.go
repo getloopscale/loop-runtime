@@ -1,6 +1,11 @@
 // SPDX-License-Identifier: Apache-2.0
 // Copyright 2025-2026 The LoopZero Authors
 
+// Package argocd provides the operator-side client wrapper for
+// ArgoCD's REST API plus a circuit-breaker decorator. Used by
+// PlatformBootstrap + Tenant controllers to create/sync/delete
+// AppProjects and Applications without coupling the controllers to
+// raw HTTP error handling.
 package argocd
 
 import "context"
@@ -35,6 +40,16 @@ type ApplicationSpec struct {
 	// ADR-0008 Phase 1: The provisioner resolves CellID to the correct ArgoCD instance.
 	// Phase 0: empty or "cell-default" — uses the single ArgoCD instance.
 	CellID string
+
+	// Environment is the env name (e.g., "production", "staging", "j-rollout-a").
+	// Sprint B B3 prep (code-005 architectural follow-up): populating this enables
+	// adding the `loopzero.io/environment` label to the rendered ArgoCD Application.
+	// Future activator iteration can switch from ParseArgoAppName(LastIndex("-"))
+	// to label-based lookup, closing the hyphen-ambiguity finding without breaking
+	// existing fixtures (MEET-ASYNC-AMENDMENT-2026-06-02-002 documented why the
+	// regex tightening path was reverted). Empty string is tolerated for backward
+	// compat — the label is only emitted when this field is non-empty.
+	Environment string
 }
 
 // AppProjectSpec defines the desired state of an ArgoCD AppProject for tenant RBAC isolation.
@@ -59,7 +74,17 @@ type AppProjectSpec struct {
 	// SEC-007: Replaces wildcard `server: *` with explicit server URL to prevent
 	// cross-cluster deployment via ArgoCD when multiple clusters are registered.
 	// If empty, defaults to "*" for backward compatibility.
+	// CHG-2026-04-30-DELETE-SINGLE-CELL: ignored when CellID is set to a
+	// non-default cell (eg. "cell-2") — destinations switch to `name: cellID`.
 	DestinationServer string
+
+	// CellID is the cell identifier (matches ClusterCredential CR name +
+	// ArgoCD cluster Secret label). When non-empty AND not "cell-default",
+	// AppProject destinations use `name: <CellID>` instead of `server: URL`,
+	// so ArgoCD resolves via its cluster registry (handles k3d IP rotation
+	// transparently and is the same idiomatic mechanism Argo recommends
+	// for multi-cluster).
+	CellID string
 }
 
 // Provisioner manages ArgoCD Application and AppProject CRs.

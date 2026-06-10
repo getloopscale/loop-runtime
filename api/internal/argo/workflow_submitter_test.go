@@ -12,6 +12,7 @@ import (
 	forge "github.com/getloopscale/loopzero-forge"
 
 	corev1 "k8s.io/api/core/v1"
+	apiextclientset "k8s.io/apiextensions-apiserver/pkg/client/clientset/clientset"
 	k8serrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/client-go/kubernetes"
@@ -55,6 +56,22 @@ func skipIfNoBuildCluster(t *testing.T) string {
 	defer cancel()
 	if _, err := clientset.CoreV1().Namespaces().List(ctx, metav1.ListOptions{Limit: 1}); err != nil {
 		t.Skipf("build cluster not reachable: %v", err)
+	}
+
+	// 2026-04-30 LIVE finding: a build cluster with valid kubeconfig but
+	// missing Argo Workflows CRDs (e.g., after a k3d cluster stop/start
+	// where etcd wasn't persisted, or before bootstrap completes) caused
+	// these tests to fail confusingly with `the server could not find the
+	// requested resource` instead of skipping. The skip protocol promises
+	// "tests are skipped — not faked". Probe the CRD before proceeding.
+	apiextClient, err := apiextclientset.NewForConfig(cfg)
+	if err != nil {
+		t.Skipf("apiext client failed: %v", err)
+	}
+	if _, err := apiextClient.ApiextensionsV1().CustomResourceDefinitions().Get(
+		ctx, "workflows.argoproj.io", metav1.GetOptions{},
+	); err != nil {
+		t.Skipf("Argo Workflows CRD not installed in build cluster: %v", err)
 	}
 
 	return kubeconfig
@@ -115,6 +132,9 @@ func TestWorkflowSubmitter_SubmitCreatesWorkflow(t *testing.T) {
 	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 	defer cancel()
 
+	apps := []services.AppSpec{
+		{Name: "api", Type: "server", Port: 3000},
+	}
 	workflowID, err := submitter.Submit(ctx, services.WorkflowSpec{
 		BuildID:     "test-build-001",
 		TenantID:    "acme",
@@ -122,9 +142,8 @@ func TestWorkflowSubmitter_SubmitCreatesWorkflow(t *testing.T) {
 		Environment: "production",
 		CommitSHA:   "abc123def456",
 		Namespace:   "build-acme",
-		Apps: []services.AppSpec{
-			{Name: "api", Type: "server", Port: 3000},
-		},
+		Apps:        apps,
+		Plan:        planFromApps(apps),
 	})
 	if err != nil {
 		t.Fatalf("Submit failed: %v", err)
@@ -151,6 +170,9 @@ func TestWorkflowSubmitter_CancelWorkflow(t *testing.T) {
 	defer cancel()
 
 	// Submit a workflow
+	apps := []services.AppSpec{
+		{Name: "web", Type: "frontend", Port: 0, Rendering: "static"},
+	}
 	workflowID, err := submitter.Submit(ctx, services.WorkflowSpec{
 		BuildID:     "test-cancel-001",
 		TenantID:    "acme",
@@ -158,9 +180,8 @@ func TestWorkflowSubmitter_CancelWorkflow(t *testing.T) {
 		Environment: "staging",
 		CommitSHA:   "def456",
 		Namespace:   "build-acme",
-		Apps: []services.AppSpec{
-			{Name: "web", Type: "frontend", Port: 0},
-		},
+		Apps:        apps,
+		Plan:        planFromApps(apps),
 	})
 	if err != nil {
 		t.Fatalf("Submit failed: %v", err)
@@ -183,6 +204,11 @@ func TestWorkflowSubmitter_SubmitWithMultipleApps(t *testing.T) {
 	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 	defer cancel()
 
+	apps := []services.AppSpec{
+		{Name: "api", Type: "server", Port: 3000},
+		{Name: "web", Type: "frontend", Port: 0, Rendering: "static"},
+		{Name: "worker", Type: "worker", Port: 0},
+	}
 	workflowID, err := submitter.Submit(ctx, services.WorkflowSpec{
 		BuildID:     "test-multi-001",
 		TenantID:    "acme",
@@ -190,11 +216,8 @@ func TestWorkflowSubmitter_SubmitWithMultipleApps(t *testing.T) {
 		Environment: "production",
 		CommitSHA:   "789abc",
 		Namespace:   "build-acme",
-		Apps: []services.AppSpec{
-			{Name: "api", Type: "server", Port: 3000},
-			{Name: "web", Type: "frontend", Port: 0},
-			{Name: "worker", Type: "worker", Port: 0},
-		},
+		Apps:        apps,
+		Plan:        planFromApps(apps),
 	})
 	if err != nil {
 		t.Fatalf("Submit failed: %v", err)
@@ -429,7 +452,7 @@ func TestExtractStepOutputs_DefensiveAgainstMissingFields(t *testing.T) {
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
 			got := extractStepOutputs(tc.obj)
-			if got != nil && len(got) != 0 {
+			if len(got) != 0 {
 				t.Errorf("expected nil/empty for %q, got %#v", tc.name, got)
 			}
 		})

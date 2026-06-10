@@ -5,6 +5,7 @@ package server
 
 import (
 	"context"
+	"errors"
 	"log/slog"
 	"net/http"
 	"os"
@@ -14,9 +15,11 @@ import (
 
 	"github.com/loopzero/loopzero/api/internal/middleware"
 	"github.com/loopzero/loopzero/api/internal/routes"
+	"github.com/loopzero/loopzero/api/internal/services"
 	"github.com/loopzero/loopzero/api/internal/source"
 	"github.com/loopzero/loopzero/api/internal/sse"
 	"github.com/loopzero/loopzero/pkg/enforcement"
+	pkglogging "github.com/loopzero/loopzero/pkg/logging"
 )
 
 // Config holds the server configuration.
@@ -24,6 +27,15 @@ type Config struct {
 	Port               string
 	MetricsPort        string
 	Logger             *slog.Logger
+	// ContextLogger is the request-scoped enriched logger factory used by
+	// the RequestLogger middleware. When set, every HTTP handler can call
+	// `pkglogging.LoggerFromContext(r.Context())` and the returned logger
+	// automatically carries `correlation_id` + trace context.
+	//
+	// nil is tolerated — RequestLogger becomes a no-op and handlers
+	// fall back to slog.Default. Production wiring in api/cmd/main.go
+	// SHOULD set this (Beta Logs Gate requirement).
+	ContextLogger      *pkglogging.ContextLogger
 	DB                 routes.DBHealthChecker
 	HealthServices     []routes.ServiceHealthChecker
 	TokenValidator     middleware.TokenValidator
@@ -56,6 +68,10 @@ type Config struct {
 	BuildSBOMHandler *routes.BuildSBOMHandler
 	ArgoCallbackHandler *routes.ArgoCallbackHandler
 	RateLimiter        *middleware.RateLimiter
+	// IPRateLimit is the optional pre-auth IP-based rate limiter (T2.4).
+	// When non-nil, mounted as the FIRST middleware so brute-force attempts
+	// on /api/v1/auth/* are dropped at the edge.
+	IPRateLimit        *middleware.IPRateLimiter
 	// HTTP server timeouts (configurable via env vars)
 	ReadHeaderTimeout  time.Duration
 	ReadTimeout        time.Duration
@@ -74,11 +90,22 @@ type Config struct {
 	ScaleHandler            *routes.ScaleHandler
 	BuildListHandler        *routes.BuildListHandler
 	SecretK8sSync           routes.SecretK8sSync
+	// SecretEnvLocker injects the environment lock into SecretHandler so
+	// Set/DeleteSecret serialize with concurrent `loopzero deploy` flows.
+	// Sprint A T1.1 (closes comp-001 CRITICAL — secret mutations were
+	// running without the advisory lock). Wired from cmd/setup_server.go
+	// using the same *adapters.PoolEnvironmentLocker injected into build
+	// orchestrators. nil-safe: when nil, SecretHandler falls back to
+	// the legacy non-locked path (test-friendly).
+	SecretEnvLocker         routes.SecretEnvLocker
 	EnvironmentHandler      *routes.EnvironmentHandler
 	TeamHandler             *routes.TeamHandler
 	// AUDIT-10: narrow store for /whoami username lookup. Nil is legal (handler
 	// omits username field). Implemented by db.PostgresTeamStore.
 	AuthUserLookup          routes.UsernameLookup
+	// Plan T2.5 D8 full: persistent active-team selection. Nil is legal
+	// (handler degrades to JWT middleware heuristic; /team/switch returns 501).
+	ActiveTeamStore         routes.ActiveTeamStore
 	DomainHandler           *routes.DomainHandler
 	GitHubWebhookHandler    http.Handler
 	RepositoryHandler       *routes.RepositoryHandler
@@ -87,8 +114,25 @@ type Config struct {
 	AuditWriter             middleware.AuditWriter
 	AuditHandler            *routes.AuditHandler
 	TenantDeletionStore     routes.TenantDeletionStore
+	// BillingHandler — T1.6 of deep-review-remediation-plan (closes
+	// find_billing_route_not_wired HIGH). Wires GET /api/v1/billing and
+	// POST /api/v1/billing/portal. Nil-safe: when nil, the routes are
+	// skipped and CLI returns its own error rather than 404.
+	BillingHandler *routes.BillingHandler
 	AdminEvictor            routes.TenantEvictor
+	AdminPinner             routes.CellPinner // CHG-2026-04-30-DELETE-SINGLE-CELL
+	// T4.4 of plan 2026-05-28-meet-001-engineering-closure: diagnostic
+	// read-only endpoint for on-call. Nil-safe — when unset, the route
+	// is not mounted and the handler answers 404 like the other admin
+	// routes. Wired by api/cmd/setup_server.go.
+	ReleaseInspector services.ReleaseInspector
 	PlanLimiter             *enforcement.PlanLimiter
+	// CostEnforcer gates quantity-style metrics (egress bytes, registry pulls,
+	// build minutes) against per-plan caps from cost_counters (migration 000017).
+	// Distinct from PlanLimiter which gates rate-style limits (builds/month,
+	// concurrent deploys). Nil-safe — when unset, the middleware pass-through.
+	// Wired by api/cmd/setup_server.go::setupCostEnforcer (T1.9 production wiring).
+	CostEnforcer *middleware.CostEnforcer
 	UpgradeURL              string
 	PGPoolStatsFunc              func() (inUse int32, total int32)
 	PGCircuitBreakerThresholdPct int
@@ -149,7 +193,7 @@ func Run(cfg Config) error {
 	case sig := <-shutdown:
 		cfg.Logger.Info("shutdown signal received", "signal", sig.String())
 	case err := <-errCh:
-		if err != nil && err != http.ErrServerClosed {
+		if err != nil && !errors.Is(err, http.ErrServerClosed) {
 			return err
 		}
 	}

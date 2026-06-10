@@ -27,6 +27,8 @@ import {
   exitWithError,
   handleError,
 } from './deploy-helpers';
+import { maybeRenderAutoTail } from './deploy-auto-tail';
+import { EXIT_CODES, buildStateToExitCode } from '../lib/exit-codes';
 
 // Re-export types so existing consumers (tests, index.ts) keep working
 export type { DeployDeps, DeployOptions } from './deploy-types';
@@ -34,7 +36,7 @@ export type { DeployDeps, DeployOptions } from './deploy-types';
 /** Result of validatePrerequisites — carries validated state needed by subsequent phases. */
 interface PrerequisiteResult {
   config: { project: string; apps: Record<string, unknown> };
-  yamlPath: string;
+  servicesJsonPath: string;
   environment: string;
   selectedApps: string[];
   appUnits: ReturnType<typeof normalizeApps>;
@@ -58,12 +60,12 @@ export class DeployCommand {
       return prereqResult;
     }
 
-    const { config, yamlPath, selectedApps, appUnits } = prereqResult;
+    const { config, servicesJsonPath, selectedApps, appUnits } = prereqResult;
 
     // Phase 2: Create source bundle and upload (traced)
     const uploadResult = await tracer.startActiveSpan('loopzero.cli.deploy.bundle', async (span) => {
       try {
-        const result = await this.createAndUploadBundle(opts, config, yamlPath);
+        const result = await this.createAndUploadBundle(opts, config, servicesJsonPath);
         if (typeof result === 'number') {
           span.setStatus({ code: SpanStatusCode.ERROR, message: `exit ${result}` });
         }
@@ -170,7 +172,68 @@ export class DeployCommand {
       return secretsError;
     }
 
-    return { config, yamlPath: yamlResult.path, environment, selectedApps, appUnits };
+    // Plan v1.1 T1.2 — discover `.loopzero/services.json` for the upload payload.
+    // Pre-v1.1 the code passed `yamlResult.path` here, so the adapter was
+    // shipping YAML bytes inside the `services_json` form field — Plan B v3.1
+    // cutover gap. T3.1 wires auto-build into the null branch; for now we
+    // surface an actionable error.
+    if (!this.deps.findServicesJson) {
+      return exitWithError(
+        this.deps,
+        opts,
+        'Internal: findServicesJson dep missing (deploy registration regression).',
+        2,
+        'INTERNAL_DEPENDENCY_MISSING',
+      );
+    }
+    let servicesJsonResult: { path: string } | null;
+    try {
+      servicesJsonResult = this.deps.findServicesJson(opts.servicesJson);
+    } catch (err) {
+      return exitWithError(this.deps, opts, (err as Error).message, 1, 'SERVICES_JSON_OVERRIDE_INVALID');
+    }
+    // Plan v1.1 T3.1 — auto-build branch. When services.json is missing AND
+    // --skip-build / --prebuilt was NOT passed AND a runLoopZerokitBuild dep was
+    // injected (deploy registration site), invoke it and re-discover.
+    if (servicesJsonResult === null && opts.skipBuild !== true && this.deps.runLoopZerokitBuild) {
+      if (!opts.json) {
+        this.deps.writeTo('Building project with loopzerokit...');
+      }
+      try {
+        await this.deps.runLoopZerokitBuild({ cwd: process.cwd(), target: 'loopzero-cloud' });
+      } catch (err) {
+        return handleError(this.deps, opts, err, 'loopzerokit build failed');
+      }
+      try {
+        servicesJsonResult = this.deps.findServicesJson(opts.servicesJson);
+      } catch (err) {
+        return exitWithError(this.deps, opts, (err as Error).message, 1, 'SERVICES_JSON_OVERRIDE_INVALID');
+      }
+      // EC-10 absorbed — loopzerokit build returned 0 but emitted nothing.
+      if (servicesJsonResult === null) {
+        return exitWithError(
+          this.deps,
+          opts,
+          'loopzerokit build exit 0 but no .loopzero/services.json was written. This is a bug in loopzerokit — file with output of: loopzerokit doctor',
+          1,
+          'LOOPZEROKIT_BUILD_EMPTY',
+        );
+      }
+    }
+    if (servicesJsonResult === null) {
+      const hint = opts.skipBuild === true
+        ? 'No `.loopzero/services.json` found and --skip-build/--prebuilt was passed. Run `loopzerokit build --target loopzero-cloud` first.'
+        : 'No `.loopzero/services.json` found. Run `loopzerokit build --target loopzero-cloud` first.';
+      return exitWithError(this.deps, opts, hint, 1, 'SERVICES_JSON_NOT_FOUND');
+    }
+
+    return {
+      config,
+      servicesJsonPath: servicesJsonResult.path,
+      environment,
+      selectedApps,
+      appUnits,
+    };
   }
 
   /**
@@ -220,7 +283,7 @@ export class DeployCommand {
   private async createAndUploadBundle(
     opts: import('./deploy-types').DeployOptions,
     config: { apps: Record<string, unknown> },
-    yamlPath: string,
+    servicesJsonPath: string,
   ): Promise<import('./deploy-types').UploadResult | number> {
     // 8. Warn about uncommitted changes (only relevant for git projects)
     if (this.deps.hasGitRepo() && this.deps.hasUncommittedChanges()) {
@@ -293,7 +356,7 @@ export class DeployCommand {
     // 11. Upload source
     let uploadResult: import('./deploy-types').UploadResult;
     try {
-      uploadResult = await this.deps.uploadSource(bundlePath, yamlPath);
+      uploadResult = await this.deps.uploadSource(bundlePath, servicesJsonPath);
     } catch (err) {
       this.deps.cleanupFile(bundlePath);
       return handleError(this.deps, opts, err, 'Upload rejected');
@@ -428,17 +491,14 @@ export class DeployCommand {
         resolved = true;
         clearTimeout(activityTimeout);
 
-        // BLOCKER-1: On stream-related failures, verify actual build state
-        if (exitCode === 3 && this.deps.getBuildStatus) {
+        // BLOCKER-1: On stream-related failures, verify actual build state.
+        // Plan T1.2 D3 — use EXIT_CODES + state-mapper instead of literals.
+        if (exitCode === EXIT_CODES.DEPLOY_FAILED && this.deps.getBuildStatus) {
           try {
             const buildStatus = await this.deps.getBuildStatus(buildResult.build_id);
-            if (buildStatus.status === 'SUCCEEDED') {
-              exitCode = 0;
-            } else if (buildStatus.status === 'FAILED') {
-              exitCode = 2;
-              if (!opts.json) {
-                this.deps.writeError(`Build failed: ${buildStatus.error_message ?? 'unknown error'}`);
-              }
+            exitCode = buildStateToExitCode(buildStatus.status);
+            if (exitCode === EXIT_CODES.BUILD_FAILED && !opts.json) {
+              this.deps.writeError(`Build failed: ${buildStatus.error_message ?? 'unknown error'}`);
             }
           } catch {
             // Can't reach API either — keep original exit code
@@ -462,14 +522,22 @@ export class DeployCommand {
         // Reset activity timeout on every received event (A-04)
         resetTimeout();
 
-        const handled = this.handleSSEEvent(event, opts, buildResult, selectedApps, deployStartTime, renderer, finish);
-        if (!handled) {
-          // Render intermediate progress events via DeployRenderer
-          const progressLine = renderer.onEvent({ type: event.type, data: event.data as Record<string, unknown> });
-          if (progressLine) {
-            this.deps.writeTo(progressLine);
-          }
-        }
+        // handleSSEEvent is async because terminal failure branches
+        // may await the best-effort auto-tail (Beta Logs Gate Criterion 4 UX).
+        // Fire-and-forget: SSE callback is sync, so we kick off the
+        // promise and let it resolve in the background. The activity
+        // timeout is reset above so the auto-tail's 5s window doesn't
+        // trigger a false timeout.
+        void this.handleSSEEvent(event, opts, buildResult, selectedApps, deployStartTime, renderer, finish)
+          .then((handled) => {
+            if (!handled) {
+              // Render intermediate progress events via DeployRenderer
+              const progressLine = renderer.onEvent({ type: event.type, data: event.data as Record<string, unknown> });
+              if (progressLine) {
+                this.deps.writeTo(progressLine);
+              }
+            }
+          });
       });
     });
   }
@@ -477,8 +545,11 @@ export class DeployCommand {
   /**
    * Handle a single SSE event. Returns true if the event was a terminal event
    * (deploy.completed, build.failed, etc.), false if it was a progress event.
+   *
+   * Async because failure branches may await the best-effort auto-tail
+   * (Beta Logs Gate Criterion 4 UX) — bounded by AUTO_TAIL_TIMEOUT_MS.
    */
-  private handleSSEEvent(
+  private async handleSSEEvent(
     event: SSEEvent,
     opts: import('./deploy-types').DeployOptions,
     buildResult: import('./deploy-types').SubmitBuildResult,
@@ -486,7 +557,7 @@ export class DeployCommand {
     deployStartTime: number,
     renderer: DeployRenderer,
     finish: (exitCode: number) => void,
-  ): boolean {
+  ): Promise<boolean> {
     if (event.type === 'deploy.completed') {
       const payload = event.data as DeployCompletedPayload;
 
@@ -536,6 +607,15 @@ export class DeployCommand {
       const reason = sanitizeBuildError(rawReason);
       const suggestion = `Run: loopzero logs --build ${buildResult.build_id}`;
       const errorMsg = /^Build\s+(failed|error)/i.test(reason) ? reason : `Build failed: ${reason}`;
+      // Beta Logs Gate Criterion 4 (UX) — best-effort auto-tail.
+      // Non-blocking 5s timeout; if Loki has indexed any output for
+      // this build, the operator sees recent context inline.
+      const tailLines = await maybeRenderAutoTail(
+        this.deps.fetchRecentBuildLogs,
+        buildResult.build_id,
+        this.deps.writeTo,
+        { jsonMode: opts.json },
+      );
       if (opts.json) {
         this.deps.writeTo(JSON.stringify({
           code: 'BUILD_FAILED',
@@ -543,6 +623,7 @@ export class DeployCommand {
           exit_code: 2,
           build_id: buildResult.build_id,
           suggestion,
+          recent_logs: tailLines,
         }));
       } else {
         this.deps.writeError(`${errorMsg}. ${suggestion}`);
@@ -555,6 +636,12 @@ export class DeployCommand {
       const data = event.data as Record<string, unknown>;
       const rawReason = String(data.reason ?? 'sync failed');
       const userMessage = mapSyncFailureReason(rawReason, buildResult.build_id);
+      const tailLines = await maybeRenderAutoTail(
+        this.deps.fetchRecentBuildLogs,
+        buildResult.build_id,
+        this.deps.writeTo,
+        { jsonMode: opts.json },
+      );
       if (opts.json) {
         this.deps.writeTo(JSON.stringify({
           code: 'DEPLOY_FAILED',
@@ -563,9 +650,99 @@ export class DeployCommand {
           exit_code: 3,
           deploy_id: data.deploy_id ?? null,
           build_id: buildResult.build_id,
+          recent_logs: tailLines,
         }));
       } else {
         this.deps.writeError(userMessage);
+      }
+      finish(3);
+      return true;
+    }
+
+    // T4.1 of deep-review-2026-05-10-remediation-plan (find_cli_missing_event_handler HIGH):
+    // The API emits `deploy.delivery_failed` when manifests are built and
+    // signed but cannot be delivered (Gitea push fail, ArgoCD App create
+    // fail, etc). Pre-T4.1 the CLI ignored the event and hung waiting for
+    // a `deploy.completed` that never came. Now we surface it with exit 3
+    // (deploy failure per Rule 4) and a product-language message.
+    if (event.type === 'deploy.delivery_failed') {
+      const data = event.data as Record<string, unknown>;
+      const reason = String(data.reason ?? 'manifests could not be delivered to the cluster');
+      const userMessage = `Deploy failed: ${reason}. Build artifacts were created but the cluster could not be updated.`;
+      const tailLines = await maybeRenderAutoTail(
+        this.deps.fetchRecentBuildLogs,
+        buildResult.build_id,
+        this.deps.writeTo,
+        { jsonMode: opts.json },
+      );
+      if (opts.json) {
+        this.deps.writeTo(JSON.stringify({
+          code: 'DEPLOY_FAILED',
+          error: userMessage,
+          reason,
+          exit_code: 3,
+          deploy_id: data.deploy_id ?? null,
+          build_id: buildResult.build_id,
+          recent_logs: tailLines,
+        }));
+      } else {
+        this.deps.writeError(userMessage);
+      }
+      finish(3);
+      return true;
+    }
+
+    // argo-rollouts-progressive-delivery-plan T4.2 — Canary progress events.
+    //
+    // rollout.step is a progress event (NON-terminal). Stream stays open;
+    // CLI shows current canary weight/step. The renderer uses product
+    // language only (Rule 3): "Canary deployment" / "Progressive deploy" —
+    // never "Rollout", "Argo Rollouts", "TraefikService".
+    if (event.type === 'rollout.step') {
+      const data = event.data as Record<string, unknown>;
+      const weight = typeof data.weight === 'number' ? data.weight : 0;
+      const step = typeof data.step === 'number' ? data.step : 0;
+      const totalSteps = typeof data.total_steps === 'number' ? data.total_steps : 0;
+      const status = typeof data.status === 'string' ? data.status : 'progressing';
+      // JSON mode: stream a progress event line per Rule 5.
+      if (opts.json) {
+        this.deps.writeTo(JSON.stringify({
+          event: 'canary.progress',
+          weight,
+          step,
+          total_steps: totalSteps,
+          status,
+        }));
+      } else {
+        // Human mode: spinner-friendly progress line.
+        const stepLabel = totalSteps > 0 ? `step ${step}/${totalSteps}` : `step ${step}`;
+        this.deps.writeTo(`Canary deployment: ${weight}% (${stepLabel}) — ${status}`);
+      }
+      return false; // non-terminal: keep stream open.
+    }
+
+    // rollout.aborted is TERMINAL: canary was auto-aborted (analysis failed,
+    // pod unhealthy, or user-aborted). CLI exits with code 3 (deploy failure).
+    if (event.type === 'rollout.aborted') {
+      const data = event.data as Record<string, unknown>;
+      const reason = typeof data.reason === 'string' ? data.reason : 'unknown';
+      const message = typeof data.message === 'string' ? data.message : '';
+      const weight = typeof data.weight === 'number' ? data.weight : 0;
+      const userMessage = message
+        ? `Canary deployment aborted at ${weight}%: ${message}`
+        : `Canary deployment aborted at ${weight}% (reason: ${reason})`;
+      if (opts.json) {
+        this.deps.writeTo(JSON.stringify({
+          code: 'CANARY_ABORTED',
+          error: userMessage,
+          reason,
+          weight,
+          exit_code: 3,
+          build_id: buildResult.build_id,
+        }));
+      } else {
+        this.deps.writeError(userMessage);
+        this.deps.writeError(`Run: loopzero logs --build ${buildResult.build_id}`);
       }
       finish(3);
       return true;

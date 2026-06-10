@@ -27,6 +27,22 @@ export interface LoginOptions {
   token?: string;
   team?: string;
   json?: boolean;
+  // Companion flags to --token for CI / automation scenarios where the caller
+  // already has a refresh_token in hand (e.g., minted out-of-band via Hydra
+  // admin API for dogfood tests). When both are present, behavior matches the
+  // device-flow path: configStore stores access + refresh + expires_in, and
+  // the existing `onUnauthorized → ensureFreshToken` pipeline can renew the
+  // access_token silently on 401 without re-running `loopzero login`.
+  // Added 2026-05-13 per CTO-mandate T2 amendment (test↔prod auth-refresh
+  // parity, finding-2026-05-13-e2e-token-refresh-divergence.md).
+  refreshToken?: string;
+  expiresIn?: number;
+  // Plan J-05 — explicit opt-in to the OAuth2 Device Code Flow (RFC 8628).
+  // The implicit "no --token + non-CI" path is preserved; this flag adds
+  // discoverability so `loopzero login --device-flow` is a documented public
+  // contract referenced in the J-05 DoD. Honored in CI too (operator opts
+  // in deliberately) — bypasses the "use --token in CI" guard.
+  deviceFlow?: boolean;
 }
 
 export class LoginCommand {
@@ -37,12 +53,28 @@ export class LoginCommand {
   }
 
   async execute(opts: LoginOptions): Promise<number> {
+    // Plan J-05 — explicit --device-flow flag wins. Honored even in CI
+    // (the operator deliberately opted in), so the "must use --token in CI"
+    // guard below is skipped on this branch.
+    if (opts.deviceFlow) {
+      if (!this.deps.executeDeviceFlow) {
+        return this.exitWithError(
+          opts,
+          'Device authentication is not available in this build. ' +
+          'Use: loopzero login --token <token>',
+          4,
+          'DEVICE_FLOW_UNAVAILABLE'
+        );
+      }
+      return this.executeDeviceFlow(opts);
+    }
+
     if (!opts.token) {
       if (this.deps.isCI) {
         return this.exitWithError(opts, 'In CI mode, use: loopzero login --token <token>', 1, 'MISSING_TOKEN');
       }
 
-      // Device Code Flow — interactive browser-based login
+      // Device Code Flow — interactive browser-based login (legacy implicit path).
       if (this.deps.executeDeviceFlow) {
         return this.executeDeviceFlow(opts);
       }
@@ -56,17 +88,6 @@ export class LoginCommand {
       );
     }
 
-    // Deprecation warning for GitHub PAT tokens
-    // JWT tokens (3 dot-separated segments) are the new standard.
-    // PAT tokens (ghp_, gho_, github_pat_) are deprecated.
-    if (this.isGitHubPAT(opts.token) && !this.isSuppressed() && !opts.json) {
-      this.deps.writeError(
-        'Warning: Token-based authentication is deprecated.\n' +
-        'Run `loopzero login` (without --token) to switch to the new login flow.\n' +
-        'Token support will be removed in a future version.'
-      );
-    }
-
     const result = await this.deps.validateToken(opts.token);
 
     if (!result.valid || !result.email) {
@@ -76,9 +97,7 @@ export class LoginCommand {
         return this.exitWithError(
           opts,
           'Authentication failed. Your token may be expired, revoked, or missing required scopes.\n' +
-          'LoopZero requires a GitHub token with read:user scope (Classic PAT) or a GitHub OAuth token.\n' +
-          'Create a Classic PAT at: https://github.com/settings/tokens/new?scopes=read:user\n' +
-          'Then run: loopzero login --token <new-token>',
+          'Sign up or sign in at https://app.dev.loopzero.example to obtain a token, then run: loopzero login --token <token>',
           4,
           'AUTH_FAILED'
         );
@@ -90,7 +109,7 @@ export class LoginCommand {
       return this.handleTeamResolutionFailure(opts, result.teams, opts.team);
     }
 
-    this.deps.saveToken(opts.token, result.email, team);
+    this.deps.saveToken(opts.token, result.email, team, opts.refreshToken, opts.expiresIn);
 
     if (opts.json) {
       this.deps.writeTo(
@@ -200,14 +219,6 @@ export class LoginCommand {
     }
 
     return this.exitWithError(opts, 'No teams available for this account.', 1, 'NO_TEAMS');
-  }
-
-  private isGitHubPAT(token: string): boolean {
-    return token.startsWith('ghp_') || token.startsWith('gho_') || token.startsWith('github_pat_');
-  }
-
-  private isSuppressed(): boolean {
-    return process.env.LOOPZERO_SUPPRESS_DEPRECATION === '1';
   }
 
   private exitWithError(opts: LoginOptions, message: string, exitCode: number, code: string): number {

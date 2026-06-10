@@ -1,6 +1,6 @@
 apiVersion: v2
 name: loopzero-dashboard
-description: LoopZero PaaS dashboard (Vite React frontend)
+description: LoopZeroCloud dashboard (Vite React frontend)
 type: application
 version: 0.2.0
 appVersion: "dev"

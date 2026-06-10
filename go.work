@@ -1,8 +1,9 @@
-go 1.25.0
+go 1.25.10
 
 use (
 	./api
 	./cloud
+	./cmd/loopzero-ops
 	./infra/scripts
 	./infra/tests
 	./operators

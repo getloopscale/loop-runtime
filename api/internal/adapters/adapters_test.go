@@ -83,6 +83,19 @@ func (f *fakeBuildStore) GetByID(_ context.Context, id string) (*db.Build, error
 	return nil, db.ErrNoRows
 }
 
+// GetByIDForTenant — T0.4 of deep-review-2026-05-10-remediation-plan.
+// Emulates the production SQL filter for the unit-test scope.
+func (f *fakeBuildStore) GetByIDForTenant(ctx context.Context, tenantID, buildID string) (*db.Build, error) {
+	b, err := f.GetByID(ctx, buildID)
+	if err != nil || b == nil {
+		return b, err
+	}
+	if b.TenantID != tenantID {
+		return nil, nil
+	}
+	return b, nil
+}
+
 func (f *fakeBuildStore) GetBuildApps(_ context.Context, _ string) ([]db.BuildAppSpec, error) {
 	return f.apps, nil
 }
@@ -200,17 +213,60 @@ func TestBuildOrchestratorAdapter_GetBuildStatus_NilTimestamps(t *testing.T) {
 	}
 }
 
-func TestBuildOrchestratorAdapter_GetBuildStatus_NotFound(t *testing.T) {
-	// Arrange: no build in store
-	store := &fakeBuildStore{}
-	adapter := &BuildOrchestratorAdapter{BuildStore: store}
-
-	// Act
-	_, err := adapter.GetBuildStatus(context.Background(), "bld-nonexistent")
-
-	// Assert
-	if !errors.Is(err, db.ErrNoRows) {
-		t.Errorf("expected db.ErrNoRows, got %v", err)
+// TestAdapters_EmptyStore_ReturnsErrNoRows exercises every Getter method on
+// every Adapter wrapping fakeBuildStore against an EMPTY store. Each must
+// return db.ErrNoRows (the canonical "not found" sentinel). Phase 3 helper:
+// consolidates 5 near-clone test functions across 4 different adapter types
+// + 5 different method names into one table-driven test.
+func TestAdapters_EmptyStore_ReturnsErrNoRows(t *testing.T) {
+	type getterCall func(store *fakeBuildStore) error
+	cases := []struct {
+		name string
+		call getterCall
+	}{
+		{
+			name: "BuildOrchestratorAdapter_GetBuildStatus",
+			call: func(store *fakeBuildStore) error {
+				_, err := (&BuildOrchestratorAdapter{BuildStore: store}).GetBuildStatus(context.Background(), "bld-nope")
+				return err
+			},
+		},
+		{
+			name: "BuildOrchestratorAdapter_IsBuildTerminal",
+			call: func(store *fakeBuildStore) error {
+				_, err := (&BuildOrchestratorAdapter{BuildStore: store}).IsBuildTerminal(context.Background(), "bld-nope")
+				return err
+			},
+		},
+		{
+			name: "BuildOrchestratorAdapter_GetBuildTenantID",
+			call: func(store *fakeBuildStore) error {
+				_, err := (&BuildOrchestratorAdapter{BuildStore: store}).GetBuildTenantID(context.Background(), "bld-nope")
+				return err
+			},
+		},
+		{
+			name: "BuildStoreReaderAdapter_GetByID",
+			call: func(store *fakeBuildStore) error {
+				_, err := (&BuildStoreReaderAdapter{Store: store}).GetByID(context.Background(), "bld-nope")
+				return err
+			},
+		},
+		{
+			name: "LogBuildStoreAdapter_GetByID",
+			call: func(store *fakeBuildStore) error {
+				_, err := (&LogBuildStoreAdapter{Store: store}).GetByID(context.Background(), "bld-nope")
+				return err
+			},
+		},
+	}
+	for _, c := range cases {
+		t.Run(c.name, func(t *testing.T) {
+			store := &fakeBuildStore{}
+			if err := c.call(store); !errors.Is(err, db.ErrNoRows) {
+				t.Errorf("expected db.ErrNoRows, got %v", err)
+			}
+		})
 	}
 }
 
@@ -409,6 +465,9 @@ func (f *fakeStatusReleaseStore) FindPendingReleases(_ context.Context, _ string
 func (f *fakeStatusReleaseStore) FindActiveReleases(_ context.Context, _ string) ([]db.Release, error) {
 	return nil, nil
 }
+func (f *fakeStatusReleaseStore) CancelAllByEnv(_ context.Context, _ db.DBTX, _, _, _ string) (int, error) {
+	return 0, nil
+}
 func (f *fakeStatusReleaseStore) FindPendingReleasesByTenantEnv(_ context.Context, _, _ string) ([]db.Release, error) {
 	return nil, nil
 }
@@ -417,6 +476,9 @@ func (f *fakeStatusReleaseStore) ListByEnv(_ context.Context, _, _, _ string, _ 
 }
 func (f *fakeStatusReleaseStore) GetLatestByBuildID(_ context.Context, _ string) (*db.Release, error) {
 	return nil, nil
+}
+func (f *fakeStatusReleaseStore) AppendSideEffect(_ context.Context, _ db.DBTX, _ string, _ map[string]any) error {
+	return nil
 }
 
 // fakeBuildListStore implements ListByProjectAndEnv for BuildListStoreAdapter tests.
@@ -499,15 +561,9 @@ func TestBuildOrchestratorAdapter_IsBuildTerminal_Cancelled(t *testing.T) {
 	}
 }
 
-func TestBuildOrchestratorAdapter_IsBuildTerminal_NotFound(t *testing.T) {
-	store := &fakeBuildStore{}
-	adapter := &BuildOrchestratorAdapter{BuildStore: store}
-
-	_, err := adapter.IsBuildTerminal(context.Background(), "bld-nope")
-	if !errors.Is(err, db.ErrNoRows) {
-		t.Errorf("expected db.ErrNoRows, got %v", err)
-	}
-}
+// IsBuildTerminal/GetBuildTenantID/BuildStoreReaderAdapter/LogBuildStoreAdapter
+// NotFound cases consolidated into TestAdapters_EmptyStore_ReturnsErrNoRows
+// above (Phase 3 v26 refactor).
 
 // --- GetBuildTenantID ---
 
@@ -526,39 +582,7 @@ func TestBuildOrchestratorAdapter_GetBuildTenantID(t *testing.T) {
 	}
 }
 
-func TestBuildOrchestratorAdapter_GetBuildTenantID_NotFound(t *testing.T) {
-	store := &fakeBuildStore{}
-	adapter := &BuildOrchestratorAdapter{BuildStore: store}
-
-	_, err := adapter.GetBuildTenantID(context.Background(), "bld-nope")
-	if !errors.Is(err, db.ErrNoRows) {
-		t.Errorf("expected db.ErrNoRows, got %v", err)
-	}
-}
-
-// --- BuildStoreReaderAdapter not found ---
-
-func TestBuildStoreReaderAdapter_GetByID_NotFound(t *testing.T) {
-	store := &fakeBuildStore{}
-	adapter := &BuildStoreReaderAdapter{Store: store}
-
-	_, err := adapter.GetByID(context.Background(), "bld-nope")
-	if !errors.Is(err, db.ErrNoRows) {
-		t.Errorf("expected db.ErrNoRows, got %v", err)
-	}
-}
-
-// --- LogBuildStoreAdapter not found ---
-
-func TestLogBuildStoreAdapter_GetByID_NotFound(t *testing.T) {
-	store := &fakeBuildStore{}
-	adapter := &LogBuildStoreAdapter{Store: store}
-
-	_, err := adapter.GetByID(context.Background(), "bld-nope")
-	if !errors.Is(err, db.ErrNoRows) {
-		t.Errorf("expected db.ErrNoRows, got %v", err)
-	}
-}
+// Consolidated into TestAdapters_EmptyStore_ReturnsErrNoRows above.
 
 // --- StatusReleaseStoreAdapter error ---
 

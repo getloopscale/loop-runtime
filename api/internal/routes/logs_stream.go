@@ -19,12 +19,10 @@ import (
 	"github.com/loopzero/loopzero/pkg/statemachine"
 )
 
-// StreamLogQuerier abstracts incremental log retrieval from Loki (DIP).
-// Unlike LogQuerier which fetches a batch, this supports streaming by
-// querying logs since a given nanosecond timestamp.
-type StreamLogQuerier interface {
-	QueryBuildLogsSince(ctx context.Context, buildID string, sinceNano int64, limit int) ([]LogEntry, error)
-}
+// StreamLogQuerier — alias to domain.StreamLogQuerier (T1.3 of
+// deep-review-remediation-plan). The type is canonically defined in
+// domain/logs.go; the alias was promoted to the same routes/logs.go file
+// to keep existing handler call sites working without churn.
 
 // LogStreamHandlerOpts configures the log streaming handler.
 type LogStreamHandlerOpts struct {
@@ -91,13 +89,15 @@ func (h *LogStreamHandler) StreamBuildLogs(w http.ResponseWriter, r *http.Reques
 		return
 	}
 
-	// Verify build exists and enforce tenant isolation
-	build, err := h.builds.GetByID(r.Context(), buildID)
+	// Verify build exists and enforce tenant isolation.
+	// T0.4 of deep-review-2026-05-10-remediation-plan: tenant filter
+	// pushed to DB layer via GetByIDForTenant.
+	build, err := h.builds.GetByIDForTenant(r.Context(), uc.TenantID, buildID)
 	if err != nil {
 		writeLoopZeroError(w, loopzeroerrors.ErrInternalError)
 		return
 	}
-	if build == nil || build.TenantID != uc.TenantID {
+	if build == nil {
 		writeLoopZeroError(w, loopzeroerrors.ErrBuildNotFound)
 		return
 	}
@@ -128,8 +128,16 @@ func (h *LogStreamHandler) StreamBuildLogs(w http.ResponseWriter, r *http.Reques
 	h.streamLoop(r.Context(), w, flusher, buildID, sinceNano, true)
 }
 
-// StreamRuntimeLogs handles GET /api/v1/projects/{name}/logs/stream?env=<env>.
+// StreamRuntimeLogs handles GET /api/v1/projects/{name}/logs/stream?env=<env>[&app=<app>].
 // Streams runtime logs from the workload namespace via Loki.
+//
+// Query params:
+//   - env (required): environment name (e.g., "production")
+//   - app (optional, Beta Logs Gate Criterion 3): filter to a single
+//     app within the project. When omitted, returns logs from ALL
+//     apps in the namespace (legacy behavior). The app label is
+//     promoted by promtail's loopzero-pods scrape job from the pod's
+//     loopzero.io/app label.
 func (h *LogStreamHandler) StreamRuntimeLogs(w http.ResponseWriter, r *http.Request) {
 	uc := middleware.GetUserContext(r.Context())
 	if uc == nil {
@@ -148,6 +156,12 @@ func (h *LogStreamHandler) StreamRuntimeLogs(w http.ResponseWriter, r *http.Requ
 		writeLoopZeroError(w, loopzeroerrors.ErrMissingField.Wrap("env query parameter is required"))
 		return
 	}
+
+	// Beta Logs Gate Criterion 3: per-app filter. Empty = all apps in
+	// the project namespace (backward compatible). Non-empty value
+	// is passed through to Loki client which adds `app="<value>"`
+	// to the LogQL selector.
+	app := r.URL.Query().Get("app")
 
 	// Check for flusher support
 	flusher, ok := w.(http.Flusher)
@@ -173,8 +187,11 @@ func (h *LogStreamHandler) StreamRuntimeLogs(w http.ResponseWriter, r *http.Requ
 	}
 
 	// For runtime logs, the "buildID" is actually a namespace identifier
-	// that the Loki querier uses: "runtime:{tenant}:{env}:{project}"
-	runtimeKey := fmt.Sprintf("runtime:%s:%s:%s", uc.TenantID, env, projectName)
+	// that the Loki querier uses. App is appended as a 5th colon-
+	// segment when provided so the loki client can split it without
+	// growing the surface for empty-value handling — empty app field
+	// means "no filter" downstream.
+	runtimeKey := fmt.Sprintf("runtime:%s:%s:%s:%s", uc.TenantID, env, projectName, app)
 
 	h.streamLoop(r.Context(), w, flusher, runtimeKey, sinceNano, false)
 }
@@ -208,8 +225,13 @@ func (h *LogStreamHandler) streamLoop(
 			return
 		case <-deadline:
 			h.logger.Info("log stream: max duration reached", "key", queryKey)
+			// Beta Logs Gate Criterion 6 — enrich the timeout reason
+			// with a "why + next" so the operator doesn't think the
+			// stream died unexpectedly. 30 minutes is the platform
+			// cap to prevent forgotten `loopzero logs --follow` sessions
+			// from holding API resources indefinitely.
 			h.writeStreamEvent(w, flusher, "stream.timeout",
-				`{"reason":"Maximum stream duration reached. Reconnect to continue."}`)
+				`{"reason":"Stream open for 30 minutes — platform cap to prevent forgotten sessions from holding resources. Rerun `+"`"+`loopzero logs --build <id> --follow`+"`"+` to resume from the latest position; the stream picks up where this one ended."}`)
 			return
 		case <-pollTicker.C:
 			// Poll Loki for new logs
@@ -245,7 +267,9 @@ func (h *LogStreamHandler) streamLoop(
 				}
 			}
 
-			// For build logs: check if build is terminal and no more logs arriving
+			// For build logs: check if build is terminal and no more logs arriving.
+			// Internal polling loop AFTER auth gate; safe to use GetByID since
+			// the caller's tenant was already validated at handler entry.
 			if isBuild {
 				build, buildErr := h.builds.GetByID(ctx, queryKey)
 				if buildErr != nil {
@@ -254,7 +278,7 @@ func (h *LogStreamHandler) streamLoop(
 					}
 					continue
 				}
-				if build != nil && statemachine.IsBuildTerminal(statemachine.State(build.Status)) {
+				if build != nil && statemachine.IsBuildPhaseTerminal(statemachine.BuildPhase(build.Status)) {
 					if len(entries) == 0 {
 						emptyPollsAfterTerminal++
 					} else {
@@ -285,8 +309,12 @@ func (h *LogStreamHandler) writeSSELogEvent(w http.ResponseWriter, flusher http.
 }
 
 // writeStreamEvent writes a control SSE event (non-log).
+//
+// G705 false positive: SSE stream goes to JSON-parsing clients (CLI,
+// dashboard), not an HTML renderer; the `data` string is API-internal
+// event payload, never raw user input. Caller controls.
 func (h *LogStreamHandler) writeStreamEvent(w http.ResponseWriter, flusher http.Flusher, eventType string, data string) {
-	_, _ = fmt.Fprintf(w, "event: %s\ndata: %s\n\n", eventType, data)
+	_, _ = fmt.Fprintf(w, "event: %s\ndata: %s\n\n", eventType, data) //nolint:gosec // G705 false positive: SSE to JSON-parser clients
 	flusher.Flush()
 }
 

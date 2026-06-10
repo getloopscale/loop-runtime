@@ -6,6 +6,7 @@ package source
 import (
 	"bytes"
 	"context"
+	"errors"
 	"path/filepath"
 	"strings"
 	"testing"
@@ -206,14 +207,90 @@ func TestValidationError_Error(t *testing.T) {
 // --- sourceRepoName ---
 
 func TestSourceRepoName(t *testing.T) {
-	got := sourceRepoName("tn-acme", "my-app")
+	got, err := sourceRepoName("tn-acme", "my-app")
+	if err != nil {
+		t.Fatalf("sourceRepoName unexpected error: %v", err)
+	}
 	if got != "loopzero-source-tn-acme-my-app" {
 		t.Errorf("sourceRepoName = %q, want loopzero-source-tn-acme-my-app", got)
 	}
 
-	got2 := sourceRepoName("tn-acme", "")
+	got2, err := sourceRepoName("tn-acme", "")
+	if err != nil {
+		t.Fatalf("sourceRepoName (no project) unexpected error: %v", err)
+	}
 	if got2 != "loopzero-source-tn-acme" {
 		t.Errorf("sourceRepoName (no project) = %q, want loopzero-source-tn-acme", got2)
+	}
+}
+
+// Plan v1.2 T1.2 (cutover-deep-review-hardening): DNS-1123 validation tests.
+// Covers path traversal, null byte, Unicode, length overflow, uppercase.
+
+func TestSourceRepoName_PathTraversal_TenantID(t *testing.T) {
+	_, err := sourceRepoName("acme/../../etc/passwd", "valid")
+	if err == nil {
+		t.Fatal("expected error for path-traversal tenantID, got nil")
+	}
+	if !errors.Is(err, ErrInvalidTenantOrProject) {
+		t.Errorf("error must wrap ErrInvalidTenantOrProject, got: %v", err)
+	}
+	if !strings.Contains(err.Error(), "tenantID") {
+		t.Errorf("error must mention 'tenantID' field, got: %v", err)
+	}
+}
+
+func TestSourceRepoName_NullByte_ProjectID(t *testing.T) {
+	_, err := sourceRepoName("tn-acme", "proj\x00name")
+	if err == nil {
+		t.Fatal("expected error for null-byte projectID, got nil")
+	}
+	if !errors.Is(err, ErrInvalidTenantOrProject) {
+		t.Errorf("error must wrap ErrInvalidTenantOrProject, got: %v", err)
+	}
+	if !strings.Contains(err.Error(), "projectID") {
+		t.Errorf("error must mention 'projectID' field, got: %v", err)
+	}
+}
+
+func TestSourceRepoName_Unicode_TenantID(t *testing.T) {
+	_, err := sourceRepoName("ácme", "valid")
+	if err == nil {
+		t.Fatal("expected error for non-ASCII tenantID, got nil")
+	}
+}
+
+func TestSourceRepoName_UppercaseRejected_TenantID(t *testing.T) {
+	_, err := sourceRepoName("Acme", "valid")
+	if err == nil {
+		t.Fatal("expected error for uppercase tenantID, got nil")
+	}
+}
+
+func TestSourceRepoName_LengthExceeds_TenantID(t *testing.T) {
+	tenantID := strings.Repeat("a", 64) // 64 chars = over limit
+	_, err := sourceRepoName(tenantID, "valid")
+	if err == nil {
+		t.Fatalf("expected error for tenantID length=%d > 63, got nil", len(tenantID))
+	}
+}
+
+func TestSourceRepoName_ValidNames_OK(t *testing.T) {
+	cases := []struct{ tenant, project, want string }{
+		{"acme", "app1", "loopzero-source-acme-app1"},
+		{"tn-1", "p", "loopzero-source-tn-1-p"},
+		{"a", "b", "loopzero-source-a-b"},
+		{strings.Repeat("a", 63), "p", "loopzero-source-" + strings.Repeat("a", 63) + "-p"},
+	}
+	for _, c := range cases {
+		got, err := sourceRepoName(c.tenant, c.project)
+		if err != nil {
+			t.Errorf("sourceRepoName(%q, %q) unexpected error: %v", c.tenant, c.project, err)
+			continue
+		}
+		if got != c.want {
+			t.Errorf("sourceRepoName(%q, %q) = %q, want %q", c.tenant, c.project, got, c.want)
+		}
 	}
 }
 
@@ -261,91 +338,6 @@ func TestNewGiteaSourceStore_ValidConfig(t *testing.T) {
 	}
 }
 
-// --- GoGitSourceStore constructor ---
-
-func TestNewGoGitSourceStore_EmptyURL_ReturnsError(t *testing.T) {
-	_, err := NewGoGitSourceStore(GoGitSourceStoreConfig{
-		BaseURL: "",
-		Token:   "token",
-		OrgName: "loopzero",
-	})
-	if err == nil {
-		t.Error("expected error for empty base URL")
-	}
-}
-
-func TestNewGoGitSourceStore_ValidConfig(t *testing.T) {
-	store, err := NewGoGitSourceStore(GoGitSourceStoreConfig{
-		BaseURL: "http://gitea:3000",
-		Token:   "token",
-		OrgName: "loopzero",
-	})
-	if err != nil {
-		t.Fatalf("unexpected error: %v", err)
-	}
-	if store == nil {
-		t.Error("expected non-nil store")
-	}
-}
-
-// --- computeDirHashGogit ---
-
-func TestComputeDirHashGogit_Deterministic(t *testing.T) {
-	tmpDir := t.TempDir()
-	mustWriteFile(t, filepath.Join(tmpDir, "a.txt"), []byte("hello"))
-	mustWriteFile(t, filepath.Join(tmpDir, "b.txt"), []byte("world"))
-
-	h1, err := computeDirHashGogit(tmpDir)
-	if err != nil {
-		t.Fatalf("first hash: %v", err)
-	}
-	h2, err := computeDirHashGogit(tmpDir)
-	if err != nil {
-		t.Fatalf("second hash: %v", err)
-	}
-	if h1 != h2 {
-		t.Errorf("hashes differ: %s vs %s", h1, h2)
-	}
-}
-
-func TestComputeDirHashGogit_MatchesComputeDirHash(t *testing.T) {
-	tmpDir := t.TempDir()
-	mustWriteFile(t, filepath.Join(tmpDir, "app.go"), []byte("package main"))
-	mustWriteFile(t, filepath.Join(tmpDir, "go.mod"), []byte("module test"))
-
-	h1, err := computeDirHash(tmpDir)
-	if err != nil {
-		t.Fatalf("computeDirHash: %v", err)
-	}
-	h2, err := computeDirHashGogit(tmpDir)
-	if err != nil {
-		t.Fatalf("computeDirHashGogit: %v", err)
-	}
-	if h1 != h2 {
-		t.Errorf("hashes differ: computeDirHash=%s computeDirHashGogit=%s", h1, h2)
-	}
-}
-
-func TestComputeDirHashGogit_SkipsGitDir(t *testing.T) {
-	tmpDir := t.TempDir()
-	mustWriteFile(t, filepath.Join(tmpDir, "app.js"), []byte("code"))
-	hashWithout, err := computeDirHashGogit(tmpDir)
-	if err != nil {
-		t.Fatal(err)
-	}
-
-	mustMkdir(t, filepath.Join(tmpDir, ".git", "objects"))
-	mustWriteFile(t, filepath.Join(tmpDir, ".git", "HEAD"), []byte("ref: refs/heads/main"))
-	hashWith, err := computeDirHashGogit(tmpDir)
-	if err != nil {
-		t.Fatal(err)
-	}
-
-	if hashWithout != hashWith {
-		t.Errorf(".git directory changed hash: %s vs %s", hashWithout, hashWith)
-	}
-}
-
 func TestComputeDirHash_DifferentContent_DifferentHash(t *testing.T) {
 	dir1 := t.TempDir()
 	mustWriteFile(t, filepath.Join(dir1, "a.txt"), []byte("hello"))
@@ -381,26 +373,6 @@ func TestComputeDirHash_EmptyDir(t *testing.T) {
 
 func TestGiteaSourceStore_PushBundle_EmptyBundle(t *testing.T) {
 	store, err := NewGiteaSourceStore(GiteaSourceStoreConfig{
-		BaseURL: "http://localhost:3000",
-		Token:   "fake",
-		OrgName: "loopzero",
-	})
-	if err != nil {
-		t.Fatalf("unexpected error: %v", err)
-	}
-	_, err = store.PushBundle(context.Background(), "tenant", "project", bytes.NewReader([]byte{}))
-	if err == nil {
-		t.Fatal("expected error for empty bundle")
-	}
-	if !strings.Contains(err.Error(), "empty") {
-		t.Errorf("expected empty error, got: %v", err)
-	}
-}
-
-// --- GoGitSourceStore.PushBundle empty bundle ---
-
-func TestGoGitSourceStore_PushBundle_EmptyBundle(t *testing.T) {
-	store, err := NewGoGitSourceStore(GoGitSourceStoreConfig{
 		BaseURL: "http://localhost:3000",
 		Token:   "fake",
 		OrgName: "loopzero",
@@ -463,9 +435,8 @@ apps:
 // --- SourceStore interface ---
 
 func TestSourceStore_InterfaceCompliance(t *testing.T) {
-	// Compile-time check that both stores implement SourceStore
+	// Compile-time check that GiteaSourceStore implements SourceStore
 	var _ SourceStore = (*GiteaSourceStore)(nil)
-	var _ SourceStore = (*GoGitSourceStore)(nil)
 }
 
 // --- PushResult ---

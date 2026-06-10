@@ -4,367 +4,132 @@
 package db
 
 import (
-	"context"
-	"errors"
 	"testing"
-	"time"
-
-	"github.com/loopzero/loopzero/api/internal/domain"
 )
 
 // =============================================================================
-// Bootstrap Store tests (0% → covered)
+// Bootstrap Store tests — DELETED in T2.2 #3 of plan
+// 2026-05-29-sqlc-migration v1.3
 // =============================================================================
-
-func TestBootstrapStore_Bootstrap_HappyPath(t *testing.T) {
-	fake := &fakeDBTX{execResult: ExecResult{RowsAffected: 1}}
-	store := &PostgresBootstrapStore{DB: fake}
-
-	userID, tenantID, created, err := store.Bootstrap(context.Background(), domain.BootstrapRequest{
-		AdminLogin:        "octocat",
-		AdminGitHubID:     "12345",
-		TenantSlug:        "acme",
-		TenantDisplayName: "Acme Corp",
-		Plan:              "pro",
-		CellID:            "cell-sfo3",
-	})
-	if err != nil {
-		t.Fatalf("unexpected error: %v", err)
-	}
-	if userID != "github-octocat" {
-		t.Errorf("expected github-octocat, got: %s", userID)
-	}
-	if tenantID != "tn-acme" {
-		t.Errorf("expected tn-acme, got: %s", tenantID)
-	}
-	if !created {
-		t.Error("expected created=true when rows affected")
-	}
-}
-
-func TestBootstrapStore_Bootstrap_DefaultPlanAndCell(t *testing.T) {
-	fake := &fakeDBTX{execResult: ExecResult{RowsAffected: 1}}
-	store := &PostgresBootstrapStore{DB: fake}
-
-	_, _, _, err := store.Bootstrap(context.Background(), domain.BootstrapRequest{
-		AdminLogin:    "user1",
-		AdminGitHubID: "111",
-		TenantSlug:    "test",
-	})
-	if err != nil {
-		t.Fatalf("unexpected error: %v", err)
-	}
-}
-
-func TestBootstrapStore_Bootstrap_ExecError(t *testing.T) {
-	fake := &fakeDBTX{execErr: errors.New("connection refused")}
-	store := &PostgresBootstrapStore{DB: fake}
-
-	_, _, _, err := store.Bootstrap(context.Background(), domain.BootstrapRequest{
-		AdminLogin:    "user1",
-		AdminGitHubID: "111",
-		TenantSlug:    "test",
-	})
-	if err == nil {
-		t.Fatal("expected error")
-	}
-}
-
-func TestBootstrapStore_Bootstrap_Idempotent(t *testing.T) {
-	fake := &fakeDBTX{execResult: ExecResult{RowsAffected: 0}}
-	store := &PostgresBootstrapStore{DB: fake}
-
-	_, _, created, err := store.Bootstrap(context.Background(), domain.BootstrapRequest{
-		AdminLogin:    "user1",
-		AdminGitHubID: "111",
-		TenantSlug:    "test",
-	})
-	if err != nil {
-		t.Fatalf("unexpected error: %v", err)
-	}
-	if created {
-		t.Error("expected created=false when no rows affected (idempotent)")
-	}
-}
+//
+// 4 stub-class tests previously here (TestBootstrapStore_Bootstrap_
+// HappyPath/DefaultPlanAndCell/ExecError/Idempotent) used fakeDBTX
+// stub responses to verify PostgresBootstrapStore behaviors. With
+// T2.2 #3 migrating to sqlc-backed via SqlcBridge, the fake pattern
+// is incompatible.
+//
+// Classification per `.claude/knowledge-base/audits/2026-05-29-sqlc-
+// test-reshape-matrix.md` (coverage_boost_test.go MIXED):
+//
+//   - KEEP-INVARIANT preserved structurally by BootstrapStoreSqlc:
+//     * Idempotent 4-INSERT-ON-CONFLICT-DO-NOTHING chain
+//       (users, tenants, tenant_members, subscriptions)
+//     * Wrapper-side defaults (cellID='cell-default', plan='starter',
+//       displayName=TenantSlug) applied identically
+//     * anyCreated semantics: returns true if ANY of the 4 inserts
+//       took effect, false only when all 4 were no-ops
+//     * MEET-053 D-01 TxFromContext serializer-aware path preserved
+//       verbatim (count-and-pick + INSERT in same tx when placement
+//       lock is held)
+//
+//   - DELETE-SCHEMA-MIRROR-DUPLICATE subset: pure-pass-through stubs
+//     — sqlc compile-time + sqlcsync gate replace.
+//
+// Per matrix § Phase 2 reshape window: KEEP-INVARIANT subset moves
+// to real-PG-gated tests when pgxmock or LOOPZERO_E2E_DATABASE_URL
+// harness is wired (out of T2.2 #3 scope).
 
 // =============================================================================
-// Tenant Deletion Store tests (0% → covered)
+// Tenant Deletion Store tests — DELETED in T1.4 of plan
+// 2026-05-29-sqlc-migration v1.3
 // =============================================================================
+//
+// 6 sub-tests previously here (TestTenantDeletionStore_CancelDeletion_
+// Success/Error, _RequestDeletion_ExecError, _WriteTombstone_Success/
+// WithFailed/ExecError) ALL used fakeDBTX stub responses to verify
+// PostgresTenantDeletionStore behaviors. With T1.4 deleting
+// PostgresTenantDeletionStore and replacing it with
+// TenantDeletionStoreSqlc (sqlc-backed via SqlcBridge), the stub-based
+// pattern is incompatible.
+//
+// Classification per `.claude/knowledge-base/audits/2026-05-29-sqlc-
+// test-reshape-matrix.md` line 31 (coverage_boost_test.go MIXED):
+//
+//   - KEEP-INVARIANT preserved structurally by TenantDeletionStoreSqlc:
+//     * Idempotent CancelDeletion (DELETE-on-no-rows is a no-op via
+//       sqlc's :exec query shape)
+//     * Idempotent WriteTombstone (ON CONFLICT (tenant_id) DO NOTHING
+//       preserves the original record)
+//     * Error wrapping with "tenant deletion store:" prefix preserved
+//       verbatim in TenantDeletionStoreSqlc methods
+//
+//   - DELETE-SCHEMA-MIRROR-DUPLICATE subset: NotFoundReturnsNil,
+//     CancelDeletion_Success, _Error stub-pass-through tests — sqlc
+//     compile-time + sqlcsync gate replace.
+//
+// Per matrix § Phase 2 reshape window: KEEP-INVARIANT subset moves to
+// real-PG-gated tests when pgxmock or LOOPZERO_E2E_DATABASE_URL harness is
+// wired.
 
-func TestTenantDeletionStore_CancelDeletion_Success(t *testing.T) {
-	fake := &fakeDBTX{}
-	store := &PostgresTenantDeletionStore{DB: fake}
+// TestStores_Getters_NotFoundAndQueryError consolidates the canonical
+// {NotFound returns nil+nil, QueryError returns err} pair for read-side
+// Getter methods on PostgresRepositoryStore. Phase 3 helper.
+//
+// T1.4 (plan 2026-05-29-sqlc-migration v1.3): removed the
+// TenantDeletionStore_GetPendingDeletion case along with the legacy
+// PostgresTenantDeletionStore deletion. The KEEP-INVARIANT "NoRows →
+// (nil, nil) mapping" for GetPendingDeletion is preserved by
+// TenantDeletionStoreSqlc.GetPendingDeletion (explicit
+// `errors.Is(err, pgx.ErrNoRows)` check in tenant_wrapper.go); Phase
+// 2 reshape moves the behavioral test to a real-PG harness.
+// TestStores_Getters_NotFoundAndQueryError — DELETED in T2.1 #3.
+//
+// The consolidated read-side getter test became vacuous after T1.4
+// removed the TenantDeletionStore case and T2.1 #3 removes the
+// Repository cases (the only 2 cases that remained). The "NoRows →
+// (nil, nil) mapping" invariant is preserved structurally by each
+// migrated wrapper (explicit `errors.Is(err, pgx.ErrNoRows)` check).
+//
+// isNilPointer helper deleted along with this test (unused after the
+// function deletion).
 
-	err := store.CancelDeletion(context.Background(), "tn-acme")
-	if err != nil {
-		t.Fatalf("unexpected error: %v", err)
-	}
-}
 
-func TestTenantDeletionStore_CancelDeletion_Error(t *testing.T) {
-	fake := &fakeDBTX{execErr: errors.New("db down")}
-	store := &PostgresTenantDeletionStore{DB: fake}
-
-	err := store.CancelDeletion(context.Background(), "tn-acme")
-	if err == nil {
-		t.Fatal("expected error")
-	}
-}
-
-func TestTenantDeletionStore_GetPendingDeletion_NotFound(t *testing.T) {
-	fake := &fakeDBTX{}
-	store := &PostgresTenantDeletionStore{DB: fake}
-
-	record, err := store.GetPendingDeletion(context.Background(), "tn-nonexistent")
-	if err != nil {
-		t.Fatalf("unexpected error: %v", err)
-	}
-	if record != nil {
-		t.Error("expected nil record for nonexistent tenant")
-	}
-}
-
-func TestTenantDeletionStore_GetPendingDeletion_QueryError(t *testing.T) {
-	fake := &fakeDBTX{queryErr: errors.New("db down")}
-	store := &PostgresTenantDeletionStore{DB: fake}
-
-	_, err := store.GetPendingDeletion(context.Background(), "tn-test")
-	if err == nil {
-		t.Fatal("expected error")
-	}
-}
-
-func TestTenantDeletionStore_RequestDeletion_ExecError(t *testing.T) {
-	fake := &fakeDBTX{execErr: errors.New("constraint violation")}
-	store := &PostgresTenantDeletionStore{DB: fake}
-
-	grace := time.Now().Add(24 * time.Hour)
-	_, err := store.RequestDeletion(context.Background(), domain.DeletionRequest{
-		TenantID:    "tn-test",
-		RequestedBy: "user1",
-		Reason:      "test",
-		GraceUntil:  &grace,
-	})
-	if err == nil {
-		t.Fatal("expected error")
-	}
-}
-
-func TestTenantDeletionStore_WriteTombstone_Success(t *testing.T) {
-	fake := &fakeDBTX{}
-	store := &PostgresTenantDeletionStore{DB: fake}
-
-	err := store.WriteTombstone(context.Background(), domain.TombstoneRecord{
-		TenantID:         "tn-test",
-		TenantSlug:       "test",
-		RequestedBy:      "user1",
-		Reason:           "cleanup",
-		ResourcesCleaned: map[string]interface{}{"builds": 5, "releases": 3},
-	})
-	if err != nil {
-		t.Fatalf("unexpected error: %v", err)
-	}
-}
-
-func TestTenantDeletionStore_WriteTombstone_WithFailed(t *testing.T) {
-	fake := &fakeDBTX{}
-	store := &PostgresTenantDeletionStore{DB: fake}
-
-	err := store.WriteTombstone(context.Background(), domain.TombstoneRecord{
-		TenantID:         "tn-test",
-		TenantSlug:       "test",
-		RequestedBy:      "user1",
-		Reason:           "cleanup",
-		ResourcesCleaned: map[string]interface{}{"builds": 5},
-		ResourcesFailed:  map[string]interface{}{"namespaces": "timeout"},
-	})
-	if err != nil {
-		t.Fatalf("unexpected error: %v", err)
-	}
-}
-
-func TestTenantDeletionStore_WriteTombstone_ExecError(t *testing.T) {
-	fake := &fakeDBTX{execErr: errors.New("db down")}
-	store := &PostgresTenantDeletionStore{DB: fake}
-
-	err := store.WriteTombstone(context.Background(), domain.TombstoneRecord{
-		TenantID:         "tn-test",
-		TenantSlug:       "test",
-		ResourcesCleaned: map[string]interface{}{},
-	})
-	if err == nil {
-		t.Fatal("expected error")
-	}
-}
+// TestTenantDeletionStore_* (4 tests) — DELETED in T1.4 along with the
+// Tenant Deletion Store section block above. See tombstone block at
+// the top of this section for classification + Phase 2 reshape
+// obligation.
 
 // =============================================================================
-// Repository Store tests (0% → covered)
+// Repository Store tests — DELETED in T2.1 #3 of plan
+// 2026-05-29-sqlc-migration v1.3
 // =============================================================================
+//
+// 13 sub-tests previously here
+// (TestRepositoryStore_SaveInstallation_Success/Error,
+// _DeleteInstallation_Success/Error, _LinkRepository_Success/
+// UsesUpsertForIdempotency/Error, _UnlinkRepository_Success/
+// NotLinked/Error, _GetByProject_NotFound/QueryError) used fakeDBTX-
+// based stubs to verify PostgresRepositoryStore behaviors. With T2.1
+// #3 migrating to sqlc-backed via SqlcBridge, the fake pattern is
+// incompatible.
+//
+// KEEP-INVARIANT preserved structurally by repository_wrapper.go:
+//   - Idempotent UPSERT (ON CONFLICT (id) for installations;
+//     ON CONFLICT (repo_full_name) for project_repositories) lives in
+//     queries/repositories.sql
+//   - ErrRepositoryNotLinked sentinel (CHG-2026-04-23-AUDIT-21)
+//     returned by UnlinkRepository when rows-affected == 0
+//   - GetByRepo cross-tenant (webhook path; tenantpredicate:exempt)
+//   - GetByProject tenant-scoped (gate enforces tenant_id predicate)
+//
+// Per matrix § Phase 2 reshape window: behavioral subset moves to
+// real-PG-gated tests when pgxmock or LOOPZERO_E2E_DATABASE_URL harness
+// is wired.
+//
+// TestGenerateRepoID_HasPrefix + TestGenerateRepoID_IsUnique below
+// (lines 342 + 349 of the pre-T2.1#3 file) STILL PASS — they test
+// pure helper logic with no DBTX dependency.
 
-func TestRepositoryStore_SaveInstallation_Success(t *testing.T) {
-	fake := &fakeDBTX{}
-	store := &PostgresRepositoryStore{DB: fake}
-
-	err := store.SaveInstallation(context.Background(), 12345, "octocat", "User", nil)
-	if err != nil {
-		t.Fatalf("unexpected error: %v", err)
-	}
-}
-
-func TestRepositoryStore_SaveInstallation_Error(t *testing.T) {
-	fake := &fakeDBTX{execErr: errors.New("db down")}
-	store := &PostgresRepositoryStore{DB: fake}
-
-	err := store.SaveInstallation(context.Background(), 12345, "octocat", "User", nil)
-	if err == nil {
-		t.Fatal("expected error")
-	}
-}
-
-func TestRepositoryStore_GetInstallation_NotFound(t *testing.T) {
-	fake := &fakeDBTX{}
-	store := &PostgresRepositoryStore{DB: fake}
-
-	inst, err := store.GetInstallation(context.Background(), 99999)
-	if err != nil {
-		t.Fatalf("unexpected error: %v", err)
-	}
-	if inst != nil {
-		t.Error("expected nil for nonexistent installation")
-	}
-}
-
-func TestRepositoryStore_GetInstallation_QueryError(t *testing.T) {
-	fake := &fakeDBTX{queryErr: errors.New("db down")}
-	store := &PostgresRepositoryStore{DB: fake}
-
-	_, err := store.GetInstallation(context.Background(), 12345)
-	if err == nil {
-		t.Fatal("expected error")
-	}
-}
-
-func TestRepositoryStore_DeleteInstallation_Success(t *testing.T) {
-	fake := &fakeDBTX{}
-	store := &PostgresRepositoryStore{DB: fake}
-
-	err := store.DeleteInstallation(context.Background(), 12345)
-	if err != nil {
-		t.Fatalf("unexpected error: %v", err)
-	}
-}
-
-func TestRepositoryStore_DeleteInstallation_Error(t *testing.T) {
-	fake := &fakeDBTX{execErr: errors.New("db down")}
-	store := &PostgresRepositoryStore{DB: fake}
-
-	err := store.DeleteInstallation(context.Background(), 12345)
-	if err == nil {
-		t.Fatal("expected error")
-	}
-}
-
-func TestRepositoryStore_LinkRepository_Success(t *testing.T) {
-	fake := &fakeDBTX{}
-	store := &PostgresRepositoryStore{DB: fake}
-
-	err := store.LinkRepository(context.Background(), "tn-acme", "myapp", "octocat/myapp", 12345, "main")
-	if err != nil {
-		t.Fatalf("unexpected error: %v", err)
-	}
-}
-
-func TestRepositoryStore_LinkRepository_Error(t *testing.T) {
-	fake := &fakeDBTX{execErr: errors.New("constraint violation")}
-	store := &PostgresRepositoryStore{DB: fake}
-
-	err := store.LinkRepository(context.Background(), "tn-acme", "myapp", "octocat/myapp", 12345, "main")
-	if err == nil {
-		t.Fatal("expected error")
-	}
-}
-
-func TestRepositoryStore_UnlinkRepository_Success(t *testing.T) {
-	// AUDIT-21: success requires RowsAffected > 0. Zero rows -> ErrRepositoryNotLinked.
-	fake := &fakeDBTX{execResult: ExecResult{RowsAffected: 1}}
-	store := &PostgresRepositoryStore{DB: fake}
-
-	err := store.UnlinkRepository(context.Background(), "tn-acme", "myapp")
-	if err != nil {
-		t.Fatalf("unexpected error: %v", err)
-	}
-}
-
-// CHG-2026-04-23-AUDIT-21: previously UnlinkRepository returned nil regardless
-// of whether any row was deleted, causing DELETE /projects/{name}/connect to
-// return 200 OK even when there was nothing to disconnect. Now the store
-// returns ErrRepositoryNotLinked when RowsAffected == 0, letting the handler
-// surface 404 instead of a misleading success.
-func TestRepositoryStore_UnlinkRepository_NotLinked(t *testing.T) {
-	fake := &fakeDBTX{execResult: ExecResult{RowsAffected: 0}}
-	store := &PostgresRepositoryStore{DB: fake}
-
-	err := store.UnlinkRepository(context.Background(), "tn-acme", "myapp")
-	if !errors.Is(err, ErrRepositoryNotLinked) {
-		t.Fatalf("want ErrRepositoryNotLinked, got %v", err)
-	}
-}
-
-func TestRepositoryStore_UnlinkRepository_Error(t *testing.T) {
-	fake := &fakeDBTX{execErr: errors.New("db down")}
-	store := &PostgresRepositoryStore{DB: fake}
-
-	err := store.UnlinkRepository(context.Background(), "tn-acme", "myapp")
-	if err == nil {
-		t.Fatal("expected error")
-	}
-}
-
-func TestRepositoryStore_GetByRepo_NotFound(t *testing.T) {
-	fake := &fakeDBTX{}
-	store := &PostgresRepositoryStore{DB: fake}
-
-	repo, err := store.GetByRepo(context.Background(), "octocat/nonexistent")
-	if err != nil {
-		t.Fatalf("unexpected error: %v", err)
-	}
-	if repo != nil {
-		t.Error("expected nil for nonexistent repo")
-	}
-}
-
-func TestRepositoryStore_GetByRepo_QueryError(t *testing.T) {
-	fake := &fakeDBTX{queryErr: errors.New("db down")}
-	store := &PostgresRepositoryStore{DB: fake}
-
-	_, err := store.GetByRepo(context.Background(), "octocat/myapp")
-	if err == nil {
-		t.Fatal("expected error")
-	}
-}
-
-func TestRepositoryStore_GetByProject_NotFound(t *testing.T) {
-	fake := &fakeDBTX{}
-	store := &PostgresRepositoryStore{DB: fake}
-
-	repo, err := store.GetByProject(context.Background(), "tn-acme", "myapp")
-	if err != nil {
-		t.Fatalf("unexpected error: %v", err)
-	}
-	if repo != nil {
-		t.Error("expected nil for nonexistent project")
-	}
-}
-
-func TestRepositoryStore_GetByProject_QueryError(t *testing.T) {
-	fake := &fakeDBTX{queryErr: errors.New("db down")}
-	store := &PostgresRepositoryStore{DB: fake}
-
-	_, err := store.GetByProject(context.Background(), "tn-acme", "myapp")
-	if err == nil {
-		t.Fatal("expected error")
-	}
-}
 
 func TestGenerateRepoID_HasPrefix(t *testing.T) {
 	id := generateRepoID()
@@ -382,133 +147,42 @@ func TestGenerateRepoID_IsUnique(t *testing.T) {
 }
 
 // =============================================================================
-// Domain Store - CreateWithCFZone tests (0% → covered)
+// Domain Store - CreateWithCFZone tests — DELETED in T2.1 #9 of plan
+// 2026-05-29-sqlc-migration v1.3
 // =============================================================================
-
-func TestDomainStore_CreateWithCFZone_Success(t *testing.T) {
-	fake := &fakeDBTX{}
-	store := &PostgresDomainStore{DB: fake}
-
-	zoneID := "zone-123"
-	err := store.CreateWithCFZone(context.Background(), &domain.CustomDomain{
-		ID:       "dom-1",
-		TenantID: "tn-acme",
-		Domain:   "example.com",
-		Status:   "pending_ns",
-		CFZoneID: &zoneID,
-	})
-	if err != nil {
-		t.Fatalf("unexpected error: %v", err)
-	}
-}
-
-func TestDomainStore_CreateWithCFZone_ExecError(t *testing.T) {
-	fake := &fakeDBTX{execErr: errors.New("db down")}
-	store := &PostgresDomainStore{DB: fake}
-
-	err := store.CreateWithCFZone(context.Background(), &domain.CustomDomain{
-		ID:       "dom-1",
-		TenantID: "tn-acme",
-		Domain:   "example.com",
-	})
-	if err == nil {
-		t.Fatal("expected error")
-	}
-}
+//
+// 2 sub-tests previously here (CreateWithCFZone_Success +
+// CreateWithCFZone_ExecError) used fakeDBTX stubs against
+// PostgresDomainStore. Migrated to sqlc-backed via SqlcBridge in
+// T2.1 #9. See the broader Domain Store tombstone in stores_test.go
+// / stores_extra_test.go for classification.
 
 // =============================================================================
-// Release Store — FindPendingReleases/FindActiveReleases with explicit cellID
+// Release Store — DELETED in T1.1c2c of plan 2026-05-29-sqlc-migration
+// v1.3.
 // =============================================================================
-
-func TestReleaseStore_FindPendingReleases_WithCellID(t *testing.T) {
-	fake := &fakeDBTX{}
-	store := NewPostgresReleaseStore(fake)
-
-	releases, err := store.FindPendingReleases(context.Background(), "cell-sfo3")
-	if err != nil {
-		t.Fatalf("unexpected error: %v", err)
-	}
-	if len(releases) != 0 {
-		t.Errorf("expected empty, got %d", len(releases))
-	}
-}
-
-func TestReleaseStore_FindPendingReleases_QueryError(t *testing.T) {
-	fake := &fakeDBTX{queryErr: errors.New("db down")}
-	store := NewPostgresReleaseStore(fake)
-
-	_, err := store.FindPendingReleases(context.Background(), "cell-default")
-	if err == nil {
-		t.Fatal("expected error")
-	}
-}
-
-func TestReleaseStore_FindActiveReleases_WithCellID(t *testing.T) {
-	fake := &fakeDBTX{}
-	store := NewPostgresReleaseStore(fake)
-
-	releases, err := store.FindActiveReleases(context.Background(), "cell-sfo3")
-	if err != nil {
-		t.Fatalf("unexpected error: %v", err)
-	}
-	if len(releases) != 0 {
-		t.Errorf("expected empty, got %d", len(releases))
-	}
-}
-
-func TestReleaseStore_FindActiveReleases_QueryError(t *testing.T) {
-	fake := &fakeDBTX{queryErr: errors.New("db down")}
-	store := NewPostgresReleaseStore(fake)
-
-	_, err := store.FindActiveReleases(context.Background(), "cell-default")
-	if err == nil {
-		t.Fatal("expected error")
-	}
-}
-
-func TestReleaseStore_FindPendingReleasesByTenantEnv_QueryError(t *testing.T) {
-	fake := &fakeDBTX{queryErr: errors.New("db down")}
-	store := NewPostgresReleaseStore(fake)
-
-	_, err := store.FindPendingReleasesByTenantEnv(context.Background(), "t1", "prod")
-	if err == nil {
-		t.Fatal("expected error")
-	}
-}
-
-func TestReleaseStore_ListByEnv_QueryError(t *testing.T) {
-	fake := &fakeDBTX{queryErr: errors.New("db down")}
-	store := NewPostgresReleaseStore(fake)
-
-	_, err := store.ListByEnv(context.Background(), "t1", "p1", "prod", 10)
-	if err == nil {
-		t.Fatal("expected error")
-	}
-}
-
-func TestReleaseStore_GetLatestByBuildID_NotFound(t *testing.T) {
-	fake := &fakeDBTX{}
-	store := NewPostgresReleaseStore(fake)
-
-	release, err := store.GetLatestByBuildID(context.Background(), "bld-nonexistent")
-	if err != nil {
-		t.Fatalf("unexpected error: %v", err)
-	}
-	if release != nil {
-		t.Error("expected nil for nonexistent build")
-	}
-}
+//
+// The 7 release-store sub-tests previously here
+// (FindPendingReleases_WithCellID, FindPendingReleases_QueryError,
+// FindActiveReleases_WithCellID, FindActiveReleases_QueryError,
+// FindPendingReleasesByTenantEnv_QueryError, ListByEnv_QueryError,
+// GetLatestByBuildID_NotFound) ALL used `fakeDBTX` with empty / error
+// responses to verify that PostgresReleaseStore propagated the
+// query-error path and returned empty slices on no-result. Per T0.6
+// reshape matrix line 31, `coverage_boost_test.go` is classified MIXED
+// with "Mostly stub-error-path padding → DELETE-SCHEMA-MIRROR-DUPLICATE";
+// these 7 tests fall in that subset. The error-propagation invariant is
+// now structurally guaranteed by sqlc-generated code wrapping
+// `pgx.Conn.Query` (errors bubble up unmodified), and the "empty result
+// → empty slice" guarantee is preserved by ReleaseStoreSqlc.
+//
+// The cell-scoped routing invariant (cellID → WHERE cell_id = $1) is
+// covered by the static-content tests in cell_scoped_queries_test.go
+// against `queries/releases.sql` — a STRONGER invariant than runtime-
+// captured SQL since it scans the canonical SoT directly.
 
 // =============================================================================
-// Domain Store — ListByTenant query error
+// Domain Store ListByTenant_QueryError — DELETED in T2.1 #9 along
+// with the broader Domain Store tombstone block. See stores_test.go
+// for classification.
 // =============================================================================
-
-func TestDomainStore_ListByTenant_QueryError(t *testing.T) {
-	fake := &fakeDBTX{queryErr: errors.New("db down")}
-	store := &PostgresDomainStore{DB: fake}
-
-	_, _, err := store.ListByTenant(context.Background(), "tn-test", domain.DomainListFilter{})
-	if err == nil {
-		t.Fatal("expected error")
-	}
-}

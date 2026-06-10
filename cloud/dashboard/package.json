@@ -9,32 +9,110 @@
     "preview": "vite preview",
     "lint": "eslint .",
     "test": "vitest run",
-    "test:watch": "vitest"
+    "test:watch": "vitest",
+    "size": "size-limit",
+    "size:why": "size-limit --why",
+    "bundle:analyze": "vite build",
+    "storybook": "storybook dev -p 6006",
+    "storybook:build": "storybook build",
+    "tree-shake-check": "npm run build && if grep -q 'lib/mocks' dist/assets/*.js; then echo 'FAIL: mocks chunk leaked into prod bundle (T7.1 / EC-10 of plan 2026-05-27-backend-frontend-integration v1.1)'; exit 1; else echo 'PASS: mocks tree-shaken from prod bundle'; fi"
   },
+  "size-limit": [
+    {
+      "name": "01 \u2014 react-vendor (React 19 runtime)",
+      "path": "dist/assets/react-vendor-*.js",
+      "limit": "55 KB"
+    },
+    {
+      "name": "02 \u2014 @loopzerokit/ui (design system, post-0.10 per-component dist)",
+      "path": "dist/assets/loopzero-ui-*.js",
+      "limit": "18 KB"
+    },
+    {
+      "name": "03 \u2014 radix (transitive via @loopzerokit/ui)",
+      "path": "dist/assets/radix-*.js",
+      "limit": "26 KB"
+    },
+    {
+      "name": "04 \u2014 vendor (misc transitive deps)",
+      "path": "dist/assets/vendor-*.js",
+      "limit": "25 KB"
+    },
+    {
+      "name": "05 \u2014 router (react-router-dom)",
+      "path": "dist/assets/router-*.js",
+      "limit": "15 KB"
+    },
+    {
+      "name": "06 \u2014 lucide (icon set)",
+      "path": "dist/assets/lucide-*.js",
+      "limit": "5 KB"
+    },
+    {
+      "name": "07 \u2014 app entry (index)",
+      "path": "dist/assets/index-*.js",
+      "limit": "12 KB"
+    },
+    {
+      "name": "08 \u2014 per-route chunk hard cap (worst-case)",
+      "path": "dist/assets/register-*.js",
+      "limit": "10 KB"
+    },
+    {
+      "name": "TOTAL initial JS \u2014 HARD GATE (Sprint 2 CommandPalette cmdk bump, brotli)",
+      "path": "dist/assets/*.js",
+      "limit": "225 KB"
+    }
+  ],
   "dependencies": {
-    "@radix-ui/react-avatar": "^1.1.0",
-    "@radix-ui/react-dropdown-menu": "^2.1.0",
-    "@radix-ui/react-separator": "^1.1.0",
-    "@radix-ui/react-slot": "^1.1.0",
-    "@radix-ui/react-tooltip": "^1.1.0",
-    "class-variance-authority": "^0.7.0",
-    "clsx": "^2.1.0",
-    "framer-motion": "^11.15.0",
+    "@tanstack/react-query": "^5.100.14",
+    "@tanstack/react-query-devtools": "^5.100.14",
+    "@tanstack/react-virtual": "^3.13.26",
+    "@types/canvas-confetti": "^1.9.0",
+    "@loopzerokit/ui": "^0.14.3",
+    "canvas-confetti": "^1.9.4",
+    "cmdk": "^1.1.1",
     "lucide-react": "^0.460.0",
+    "nuqs": "^2.8.9",
     "react": "^19.0.0",
     "react-dom": "^19.0.0",
+    "react-error-boundary": "^4.1.2",
     "react-router-dom": "^7.0.0",
-    "tailwind-merge": "^2.6.0"
+    "web-vitals": "^5.2.0"
   },
   "devDependencies": {
+    "@eslint/js": "^10.0.1",
+    "@playwright/test": "^1.60.0",
+    "@size-limit/preset-app": "^12.1.0",
+    "@storybook/addon-essentials": "^8.6.14",
+    "@storybook/blocks": "^8.6.14",
+    "@storybook/react": "^8.6.18",
+    "@storybook/react-vite": "^8.6.18",
+    "@tailwindcss/postcss": "^4.3.0",
+    "@tailwindcss/vite": "^4.3.0",
+    "@testing-library/jest-dom": "^6.9.1",
+    "@testing-library/react": "^16.3.2",
+    "@testing-library/user-event": "^14.6.1",
+    "@types/node": "^22.10.5",
     "@types/react": "^19.0.0",
     "@types/react-dom": "^19.0.0",
     "@vitejs/plugin-react": "^4.3.0",
     "autoprefixer": "^10.4.0",
+    "babel-plugin-react-compiler": "^1.0.0",
+    "eslint-plugin-react-compiler": "^19.1.0-rc.2",
+    "globals": "^17.6.0",
+    "jsdom": "^29.1.1",
     "postcss": "^8.4.0",
-    "tailwindcss": "^3.4.0",
+    "rollup-plugin-visualizer": "^6.0.11",
+    "size-limit": "^12.1.0",
+    "storybook": "^8.6.18",
+    "tailwindcss": "^4.3.0",
     "typescript": "^5.6.0",
+    "typescript-eslint": "^8.60.0",
     "vite": "^6.0.0",
-    "vitest": "^4.1.2"
-  }
+    "vite-plugin-pwa": "^1.3.0",
+    "vitest": "^4.1.2",
+    "workbox-window": "^7.4.1"
+  },
+  "packageManager": "pnpm@11.1.0+sha512.0c44e842e5686b2c061a81adda8b2258bd8818e9704b2cf2c63d56b931a7b2e910092e085027003b96ca3911ab56a07f6df5abaed2be9925034cdd686a535b14"
 }

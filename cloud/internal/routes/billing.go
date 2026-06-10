@@ -7,6 +7,7 @@ import (
 	"database/sql"
 	"encoding/json"
 	"io"
+	"log/slog"
 	"net/http"
 	"time"
 
@@ -53,20 +54,27 @@ func (h *BillingHandler) GetBilling(w http.ResponseWriter, r *http.Request) {
 
 	tenantID := user.TenantID
 
-	// Lazy provisioning: ensure starter plan exists for this tenant
+	// Lazy provisioning: ensure starter plan exists for this tenant.
+	// Failure is non-fatal (we fall back to reading the existing row / starter
+	// defaults), but it MUST be observable — a silent DB failure here would leave
+	// the tenant without a subscription row indefinitely (MEDIUM-002).
 	if h.provisioner != nil {
-		_ = h.provisioner.ProvisionStarter(r.Context(), user.Subject, user.Email, tenantID)
+		if err := h.provisioner.ProvisionStarter(r.Context(), user.Subject, user.Email, tenantID); err != nil {
+			slog.Warn("lazy starter provisioning failed", "tenant", tenantID, "error", err)
+		}
 	}
 
 	// Determine plan from DB (fallback to starter)
 	plan := "starter"
 	var periodStart, periodEnd *time.Time
+	var subscriptionID string
 	if h.db != nil {
 		var ps, pe sql.NullTime
+		var sid sql.NullString
 		err := h.db.QueryRowContext(r.Context(),
-			"SELECT plan, current_period_start, current_period_end FROM subscriptions WHERE tenant_id = $1 AND status = 'active' LIMIT 1",
+			"SELECT plan, current_period_start, current_period_end, stripe_subscription_id FROM subscriptions WHERE tenant_id = $1 AND status = 'active' LIMIT 1",
 			tenantID,
-		).Scan(&plan, &ps, &pe)
+		).Scan(&plan, &ps, &pe, &sid)
 		if err != nil {
 			plan = "starter"
 		}
@@ -75,6 +83,9 @@ func (h *BillingHandler) GetBilling(w http.ResponseWriter, r *http.Request) {
 		}
 		if pe.Valid {
 			periodEnd = &pe.Time
+		}
+		if sid.Valid {
+			subscriptionID = sid.String
 		}
 	}
 
@@ -104,6 +115,9 @@ func (h *BillingHandler) GetBilling(w http.ResponseWriter, r *http.Request) {
 	if periodEnd != nil {
 		resp["period_end"] = periodEnd.Format(time.RFC3339)
 	}
+	if subscriptionID != "" {
+		resp["subscription_id"] = subscriptionID
+	}
 
 	writeJSON(w, http.StatusOK, resp)
 }
@@ -119,22 +133,33 @@ func (h *BillingHandler) Portal(w http.ResponseWriter, r *http.Request) {
 
 	tenantID := user.TenantID
 
-	if h.provisioner != nil && h.stripe != nil {
-		customerID, err := h.provisioner.EnsureStripeCustomer(r.Context(), tenantID, user.Email, user.Name)
-		if err == nil && customerID != "" {
-			session, err := h.stripe.CreatePortalSession(customerID, h.returnURL+"/billing")
-			if err == nil {
-				writeJSON(w, http.StatusOK, map[string]interface{}{
-					"url":     session.URL,
-					"message": "Manage your plan, payment methods, and billing history.",
-				})
-				return
-			}
-		}
+	// Billing not configured (e.g., dev without Stripe): return the dashboard
+	// billing page so the UI still works.
+	if h.provisioner == nil || h.stripe == nil {
+		writeJSON(w, http.StatusOK, map[string]interface{}{
+			"url":     h.returnURL + "/billing",
+			"message": "Manage your plan, payment methods, and billing history.",
+		})
+		return
 	}
 
+	// Billing IS configured: a Stripe failure must surface as an error, NOT a 200
+	// with a non-portal URL (MEDIUM-002) — otherwise the user clicks a link that
+	// isn't a real Stripe portal and nothing is logged/alerted.
+	customerID, err := h.provisioner.EnsureStripeCustomer(r.Context(), tenantID, user.Email, user.Name)
+	if err != nil || customerID == "" {
+		slog.Warn("portal: ensure stripe customer failed", "tenant", tenantID, "error", err)
+		writeError(w, http.StatusBadGateway, "BILLING_UNAVAILABLE", "Could not open the billing portal. Try again.")
+		return
+	}
+	session, err := h.stripe.CreatePortalSession(customerID, h.returnURL+"/billing")
+	if err != nil {
+		slog.Warn("portal: create stripe portal session failed", "tenant", tenantID, "error", err)
+		writeError(w, http.StatusBadGateway, "BILLING_UNAVAILABLE", "Could not open the billing portal. Try again.")
+		return
+	}
 	writeJSON(w, http.StatusOK, map[string]interface{}{
-		"url":     h.returnURL + "/billing",
+		"url":     session.URL,
 		"message": "Manage your plan, payment methods, and billing history.",
 	})
 }
@@ -217,7 +242,7 @@ func (h *BillingHandler) Webhook(w http.ResponseWriter, r *http.Request) {
 	}
 
 	w.WriteHeader(http.StatusOK)
-	w.Write([]byte(`{"received":true}`))
+	_, _ = w.Write([]byte(`{"received":true}`))
 }
 
 // getLimitsForPlan returns limits per metric. nil value = unlimited (§1.5).
@@ -236,7 +261,7 @@ func (h *BillingHandler) getLimitsForPlan(r *http.Request, plan string) map[stri
 	if err != nil {
 		return defaults
 	}
-	defer rows.Close()
+	defer func() { _ = rows.Close() }()
 
 	result := make(map[string]*int)
 	for rows.Next() {
@@ -251,6 +276,9 @@ func (h *BillingHandler) getLimitsForPlan(r *http.Request, plan string) map[stri
 		} else {
 			result[metric] = nil // NULL = unlimited
 		}
+	}
+	if err := rows.Err(); err != nil {
+		return defaults
 	}
 	if len(result) == 0 {
 		return defaults
@@ -272,7 +300,7 @@ func (h *BillingHandler) getUsageForTenant(r *http.Request, tenantID string) map
 	if err != nil {
 		return map[string]int{}
 	}
-	defer rows.Close()
+	defer func() { _ = rows.Close() }()
 
 	result := make(map[string]int)
 	for rows.Next() {
@@ -282,6 +310,9 @@ func (h *BillingHandler) getUsageForTenant(r *http.Request, tenantID string) map
 			continue
 		}
 		result[metric] = qty
+	}
+	if err := rows.Err(); err != nil {
+		return map[string]int{}
 	}
 	return result
 }

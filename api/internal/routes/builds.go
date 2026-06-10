@@ -15,12 +15,26 @@ import (
 
 	"github.com/go-chi/chi/v5"
 
+	"github.com/loopzero/loopzero/api/internal/argo"
+	"github.com/loopzero/loopzero/api/internal/correlation"
 	"github.com/loopzero/loopzero/api/internal/middleware"
 	"github.com/loopzero/loopzero/api/internal/validation"
 	loopzeroerrors "github.com/loopzero/loopzero/pkg/errors"
 )
 
 // environmentRegex validates environment names (DA-10).
+//
+// Sprint B T3.2 (plan 2026-06-01-p2-interface-contracts-robustness, ADR D4)
+// REVERTED 2026-06-02 after trio dogfood regression: tightening to reject
+// hyphens broke 11/66 journey specs that use env names like j-rollout-a,
+// j-secrets, j-domain. Those names existed pre-T3.2 in DB-warmed setups
+// (grandfathered) but cleanroom-fresh resets the DB, making every env
+// "new" — the regex then rejects them at creation. Sponsor mandate trio
+// GREEN took precedence over closing code-005 MEDIUM in this iteration.
+// Future re-attempt requires migrating the e2e journey fixture names
+// FIRST (jrollouta etc.), then tightening the regex. Tracked as
+// follow-up in MEET-ASYNC-AMENDMENT-2026-06-02-002 (created post-revert).
+//
 // Lowercase, starts with letter, alphanumeric + hyphens, max 63 chars.
 var environmentRegex = regexp.MustCompile(`^[a-z][a-z0-9-]{0,62}$`)
 
@@ -147,13 +161,23 @@ type CellResolver interface {
 // detected by the BuildReconcileLoop which polls Argo Workflow CRDs from the
 // control plane. The build cluster no longer calls the API.
 type BuildHandler struct {
-	orch         BuildOrchestratorService
-	logger       *slog.Logger
-	admission    AdmissionChecker // nil = disabled, no-op
-	cellResolver CellResolver     // MEET-053: resolves tenant → cell_id per-request
+	orch          BuildOrchestratorService
+	logger        *slog.Logger
+	admission     AdmissionChecker     // nil = disabled, no-op
+	cellResolver  CellResolver         // MEET-053: resolves tenant → cell_id per-request
+	envEnsurer    EnvironmentEnsurer   // Plan T2.2 D5: auto-create env on first deploy --env <novo>
+	secretResync  SecretResyncer       // V9 L20: resync PG secrets to workload K8s post-envEnsurer
 }
 
 // NewBuildHandler creates a new BuildHandler.
+// EnvironmentEnsurer ensures the requested environment exists (auto-create
+// on first deploy --env <novo>). Plan T2.2 D5. Implementations should be
+// idempotent: existing envs return nil immediately; new envs create the
+// Environment CR + namespace + ArgoCD app and wait for phase=Active.
+type EnvironmentEnsurer interface {
+	EnsureEnvironment(ctx context.Context, tenantID, envName string) error
+}
+
 func NewBuildHandler(orch BuildOrchestratorService, logger *slog.Logger) *BuildHandler {
 	return &BuildHandler{
 		orch:   orch,
@@ -167,6 +191,33 @@ func NewBuildHandler(orch BuildOrchestratorService, logger *slog.Logger) *BuildH
 func (h *BuildHandler) WithAdmission(a AdmissionChecker, resolver CellResolver) *BuildHandler {
 	h.admission = a
 	h.cellResolver = resolver
+	return h
+}
+
+// WithEnvironmentEnsurer wires an EnvironmentEnsurer so the build handler
+// auto-creates missing Environment CRs on first deploy --env <novo>. Plan
+// T2.2 D5. Nil ensurer (default) preserves legacy behavior (env must pre-exist).
+func (h *BuildHandler) WithEnvironmentEnsurer(e EnvironmentEnsurer) *BuildHandler {
+	h.envEnsurer = e
+	return h
+}
+
+// SecretResyncer (re)creates ExternalSecrets on the workload cluster for
+// all secrets in (tenant, project, env). V9 L20: called after
+// EnsureEnvironment so secrets set BEFORE the namespace existed get
+// repopulated on workload. Idempotent: existing ExternalSecrets get a
+// new resourceVersion-friendly Update; missing ones get Create.
+type SecretResyncer interface {
+	ResyncEnv(ctx context.Context, tenantID, projectID, env string) error
+}
+
+// WithSecretResyncer wires a SecretResyncer so the build handler closes
+// the "set secret BEFORE first deploy" race documented in audit
+// 2026-05-30-V9-L19-99percent. Nil resyncer preserves legacy behavior:
+// secrets only sync at POST /api/v1/secrets time (which fails silently
+// when the namespace doesn't yet exist).
+func (h *BuildHandler) WithSecretResyncer(r SecretResyncer) *BuildHandler {
+	h.secretResync = r
 	return h
 }
 
@@ -215,6 +266,22 @@ func (h *BuildHandler) Create(w http.ResponseWriter, r *http.Request) {
 		))
 		return
 	}
+	// T1.3 follow-up (CR-2 regression caught during cleanroom Final Phase
+	// 2026-05-29): an empty `apps` array used to be silently accepted —
+	// SubmitBuild would create a Build row, build an empty WorkflowSpec, and
+	// the legacy spec.Apps fallback in workflow_builder would emit a Workflow
+	// CR with zero steps that Argo "succeeded" trivially. T1.3 (commit
+	// 2b9f8040) removed the fallback and added an invariant guard, exposing
+	// the gap — empty bodies now reach the guard as 500 INTERNAL_ERROR.
+	// Fail fast at the system boundary with a typed 400 instead.
+	if len(req.Apps) == 0 {
+		writeLoopZeroError(w, loopzeroerrors.NewLoopZeroError(
+			"MISSING_FIELD",
+			"At least one app is required. Check your loopzero.yaml for an `apps:` section.",
+			400,
+		))
+		return
+	}
 
 	// Environment validation (DA-10): lowercase only
 	if !environmentRegex.MatchString(req.Environment) {
@@ -224,6 +291,52 @@ func (h *BuildHandler) Create(w http.ResponseWriter, r *http.Request) {
 			400,
 		))
 		return
+	}
+
+	// Plan T2.2 D5 — auto-create environment on first deploy --env <novo>.
+	// Closes F-S1-02 where LoopZeroApplication CR was created but Environment CR
+	// + workload namespace + ArgoCD App+AppProject were not, causing eternal
+	// SYNC_FAILED. When envEnsurer is wired, calling EnsureEnvironment is a
+	// no-op for existing envs and creates+waits for new ones.
+	if h.envEnsurer != nil {
+		if ensureErr := h.envEnsurer.EnsureEnvironment(ctx, uc.TenantID, req.Environment); ensureErr != nil {
+			// Wrap non-LoopZeroError errors so the handler emits a clean response.
+			var te *loopzeroerrors.LoopZeroError
+			if errors.As(ensureErr, &te) {
+				writeLoopZeroError(w, te)
+			} else {
+				writeLoopZeroError(w, loopzeroerrors.NewLoopZeroError(
+					"ENV_PROVISION_FAILED",
+					fmt.Sprintf("Failed to provision environment %q: %s", req.Environment, ensureErr.Error()),
+					500,
+				))
+			}
+			return
+		}
+	}
+
+	// V9 L20: Resync PG secrets to workload K8s ExternalSecrets. Closes
+	// the race where `loopzero secret set` ran BEFORE the namespace existed
+	// (first deploy --env <novo> creates the namespace, but the secret
+	// POST K8s sync at line ~234 of secrets.go silently failed with
+	// "namespaces ... not found"). Pod start would later fail with
+	// CreateContainerConfigError because the K8s Secret was never
+	// created on workload.
+	//
+	// Best-effort: log resync errors but don't fail the deploy — the
+	// pod-start failure will surface as a deploy timeout if any required
+	// secret is missing. Per-secret sync errors are also non-fatal in
+	// the resyncer (e.g., partial-success when only one secret has a
+	// transient issue).
+	if h.secretResync != nil {
+		if resyncErr := h.secretResync.ResyncEnv(ctx, uc.TenantID, req.ProjectID, req.Environment); resyncErr != nil {
+			slog.Warn("secret resync failed — pods may fail to start with CreateContainerConfigError",
+				"error", resyncErr,
+				"tenant_id", uc.TenantID,
+				"project", req.ProjectID,
+				"environment", req.Environment,
+			)
+		}
 	}
 
 	// SEC-3 fix: Validate app paths before they reach shell scripts in the build pipeline.
@@ -309,7 +422,7 @@ func (h *BuildHandler) Create(w http.ResponseWriter, r *http.Request) {
 		NoCache:       req.NoCache,
 		Apps:          req.Apps,
 		CreatedBy:     uc.UserID,
-		CorrelationID: r.Header.Get("Correlation-ID"), //nolint:contextcheck // header from original request
+		CorrelationID: correlation.Read(r), //nolint:contextcheck // header from original request (T6.1 uniform read via helper)
 	})
 	if err != nil {
 		mapBuildError(w, err)
@@ -422,21 +535,12 @@ func mapBuildError(w http.ResponseWriter, err error) {
 }
 
 // isUnknownFramework returns true if the framework is not in the known list.
-// Mirrors resolveLanguageStrategy() in services/build_plan.go — kept in sync.
-// V5: Server-side validation to reject unknown frameworks before pipeline.
+//
+// T5.4 of deep-review-2026-05-10-remediation-plan (find_arch_framework_dup MEDIUM):
+// the canonical list now lives in `api/internal/argo/languages.go`
+// (`argo.SupportedFrameworks()`). This wrapper exists so the route handler
+// reads from a single source — the previous inline switch could drift
+// silently from the build pipeline's view of supported frameworks.
 func isUnknownFramework(framework string) bool {
-	switch framework {
-	case "nextjs", "next", "vite", "remix", "nestjs", "express", "node",
-		"react", "vue", "svelte", "astro", "angular", "fastify",
-		"gin", "go",
-		"fastapi", "django", "python",
-		"sinatra", "rails", "ruby",
-		"spring", "spring-boot", "java",
-		"laravel", "slim", "php",
-		"axum", "actix", "rocket", "rust",
-		"custom", "unknown", "":
-		return false
-	default:
-		return true
-	}
+	return !argo.IsKnownFramework(framework)
 }

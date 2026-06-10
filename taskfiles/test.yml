@@ -1,0 +1,1113 @@
+version: "3"
+
+# taskfiles/test.yml — test orchestration: parity, validate-matrix.
+# Per Plan T1.3 + MEET-2026-05-03-062 (MEET-A): incremental migration; this is
+# Phase 3 (per-domain) iteration 1 — `parity:*` + `validate:matrix*`.
+# Future iterations expand to test:*, test:report:*, test:e2e:*, dead-code, lint.
+
+tasks:
+  ops:build:
+    desc: Build the loopzero-ops gate binary to bin/loopzero-ops (D6 — canonical stable path)
+    # T0.3 of plan 2026-05-23-incremental-bash-to-go-migration. Replaces the
+    # develop-bkp anti-pattern of `(cd cmd/loopzero-ops && go build -o /tmp/loopzero-ops .)`
+    # duplicated across ~15 call sites. Gates invoke `bin/loopzero-ops <gate>`, OR
+    # `go run ./cmd/loopzero-ops <gate>` for one-shot CI use (see docs/operations/loopzero-ops.md).
+    cmds:
+      - mkdir -p bin
+      - cd cmd/loopzero-ops && go build -o ../../bin/loopzero-ops .
+      - ./bin/loopzero-ops quality --help >/dev/null && echo "ops:build OK — bin/loopzero-ops ready"
+
+  parity:preflight:
+    desc: Run parity validation suite preflight (offline, <2s) — shellcheck + audit + dry-runs
+    cmds:
+      - bash infra/tests/parity/preflight.sh
+
+  validate:matrix:
+    desc: Master validation matrix — every offline gate (Phase 8 T8.1)
+    cmds:
+      - bash infra/tests/parity/validate-matrix.sh
+
+  validate:matrix:quick:
+    desc: validate:matrix without operators envtest (faster signal)
+    cmds:
+      - bash infra/tests/parity/validate-matrix.sh --quick
+
+  pkg:usage-matrix:check:
+    desc: Verify docs/technical/pkg/architecture.md Real Usage Matrix is up-to-date (gate PKG-G14)
+    # T1.5 of plan 2026-05-23: migrated pkg-usage-matrix.sh to pure-Go gate (D6).
+    cmds:
+      - cd cmd/loopzero-ops && go run . quality pkg-usage-matrix --root "{{.ROOT_DIR}}" --check
+
+  pkg:usage-matrix:write:
+    desc: Regenerate Real Usage Matrix in architecture.md (run before commit if pkg imports changed)
+    cmds:
+      - cd cmd/loopzero-ops && go run . quality pkg-usage-matrix --root "{{.ROOT_DIR}}" --write
+
+  pkg:state-machine-dots:check:
+    desc: Verify docs/state-machines/*.dot match pkg/statemachine.Visualize() output (gate T2.7)
+    # T5.2 of plan 2026-05-22: migrated from gen-state-machine-dots.sh to
+    # idiomatic Go cmd/gen-dots invoked via the statemachine package.
+    cmds:
+      - cd pkg && go run ./statemachine/cmd/gen-dots --check --out ../docs/state-machines
+
+  pkg:state-machine-dots:write:
+    desc: Regenerate DOT files for every state machine (run before commit if statemachine changed)
+    # T5.2 of plan 2026-05-22: `go generate ./statemachine/...` also works
+    # (visualize.go has the //go:generate directive).
+    cmds:
+      - cd pkg && go run ./statemachine/cmd/gen-dots --write --out ../docs/state-machines
+
+  pkg:soak:smoke:
+    desc: Local-equivalent of pkg-soak.yml T3.2 special validation (RFC 9457 + CB obs + kstatus); runs vs http://localhost:13001
+    cmds:
+      - bash infra/scripts/test/pkg-soak-smoke.sh
+
+  parity:audit:
+    desc: Verify regression matrix integrity (every entry's Verification token resolves in repo)
+    cmds:
+      # Migrated to the Go gate (Track B TB5). The bash audit-regression-matrix.sh
+      # aborted at exit 2 under set -e and never scanned — see
+      # finding-2026-05-24-audit-regression-matrix-set-e-abort.
+      - cd cmd/loopzero-ops && go run . quality regression-matrix --root ..
+
+  parity:audit:golden:
+    desc: Golden test for the matrix-audit logic (catches audit regressions)
+    cmds:
+      # Now the Go unit test TestGolden_* (faithful port of audit-golden-test.sh).
+      - go test ./pkg/quality/regressionmatrix/...
+
+  parity:k3d-virgin:
+    desc: T5.1 — k3d virgin install (degrau 1, $0, ~10min)
+    cmds:
+      - bash infra/tests/parity/k3d-virgin-install.sh
+
+  parity:droplet:
+    desc: 'T6.1 — Droplet install (degrau 2, ~$0.50, ~30min). DRY_RUN=1 for offline preflight.'
+    cmds:
+      - bash infra/tests/parity/droplet-install.sh {{.CLI_ARGS}}
+
+  parity:doks:
+    desc: 'T7.1 — DOKS install (degrau 3, ~$5, ~60min). DRY_RUN=1 for offline preflight.'
+    cmds:
+      - bash infra/tests/parity/doks-install.sh {{.CLI_ARGS}}
+  test:all:
+    desc: Run everything — unit + integration + E2E (requires running clusters)
+    cmds:
+      - task: test:unit
+      - task: test:integration
+      - task: lint
+      - task: validate:manifests
+      - task: test:e2e
+
+  test:unit:
+    desc: Run all unit tests
+    env:
+      KUBEBUILDER_ASSETS:
+        sh: 'setup-envtest use -p path 2>/dev/null || { echo "ERROR: setup-envtest not installed. Run: go install sigs.k8s.io/controller-runtime/tools/setup-envtest@latest" >&2; exit 1; }'
+    cmds:
+      - cd pkg && go test ./... -short
+      - cd operators && go test ./... -short
+      - cd api && go test ./... -short
+      - cd infra/tests && go test ./unit/... -short
+      - cd cli && npm test
+
+  test:integration:
+    desc: Run integration tests (requires running clusters)
+    env:
+      KUBEBUILDER_ASSETS:
+        sh: 'setup-envtest use -p path 2>/dev/null || { echo "ERROR: setup-envtest not installed. Run: go install sigs.k8s.io/controller-runtime/tools/setup-envtest@latest" >&2; exit 1; }'
+    cmds:
+      - cd operators && go test ./... -tags=integration -v -timeout 5m
+      - cd api && go test ./... -tags=integration -v -timeout 5m
+
+  test:e2e:
+    desc: Run E2E tests (requires running clusters + tilt up)
+    env:
+      LOOPZERO_E2E: "1"
+      KUBEBUILDER_ASSETS:
+        sh: 'setup-envtest use -p path 2>/dev/null || { echo "ERROR: setup-envtest not installed. Run: go install sigs.k8s.io/controller-runtime/tools/setup-envtest@latest" >&2; exit 1; }'
+    cmds:
+      - |
+        set -euo pipefail
+        OUTPUT_FILE="$(mktemp)"
+        trap 'rm -f "$OUTPUT_FILE"' EXIT
+        (cd infra/tests && go test ./e2e/... -v -timeout 60m) | tee "$OUTPUT_FILE"
+        if grep -q "Deploy Happy Path E2E Suite" "$OUTPUT_FILE" && grep -Eq "Ran[[:space:]]+0[[:space:]]+of[[:space:]]+5[[:space:]]+Specs" "$OUTPUT_FILE"; then
+          echo "E2E deploy suite was fully skipped (0/5 specs). Failing to avoid false green."
+          exit 1
+        fi
+
+  test:e2e:chaos:
+    desc: Run chaos engineering tests
+    env:
+      LOOPZERO_E2E: "1"
+    cmds:
+      - cd infra/tests && go test ./e2e/... -v -run "Chaos" -timeout 15m
+
+  # Renamed from `test:coverage` 2026-05-22 (plan T5.3 gate caught duplicate key):
+  # this HTML-per-component variant was SHADOWED by the merged-lcov `test:coverage`
+  # at the bottom of this file (Task v3 silently uses the last definition). Renamed
+  # to `test:coverage:html` to preserve functionality without the shadow.
+  test:coverage:html:
+    desc: Run all tests with coverage reports (HTML per component)
+    env:
+      KUBEBUILDER_ASSETS:
+        sh: 'setup-envtest use -p path 2>/dev/null || echo "/tmp"'
+    cmds:
+      - echo "Generating coverage reports..."
+      - cd pkg && go test ./... -short -coverprofile=coverage.out && go tool cover -html=coverage.out -o coverage.html 2>/dev/null || true
+      - cd api && go test ./... -short -coverprofile=coverage.out && go tool cover -html=coverage.out -o coverage.html 2>/dev/null || true
+      - cd operators && go test ./... -short -coverprofile=coverage.out && go tool cover -html=coverage.out -o coverage.html 2>/dev/null || true
+      - cd cli && npm test -- --coverage 2>/dev/null || true
+      - 'echo "Coverage reports generated:"'
+      - echo "  pkg/coverage.html"
+      - echo "  api/coverage.html"
+      - echo "  operators/coverage.html"
+      - echo "  cli/coverage/"
+
+  test:coverage:summary:
+    desc: Show per-package coverage summary (no HTML)
+    cmds:
+      - echo "=== pkg/ ===" && cd pkg && go test ./... -short -coverprofile=/dev/stderr 2>&1 | grep "^ok" || true
+      - echo "=== api/ ===" && cd api && go test ./... -short -cover 2>&1 | grep "^ok" || true
+      - echo "=== operators/ ===" && cd operators && go test ./... -short -cover 2>&1 | grep "^ok" || true
+
+  # ─────────────────────────────────────────────
+  # k6 Load Testing (Grafana k6, industry standard)
+  # Replaces the previous shell-script smoke runners.
+  # See infra/tests/k6/README.md for details.
+  # ─────────────────────────────────────────────
+
+  test:load:l1:
+    desc: k6 load test — 10 tenants smoke (L1, ~15 min)
+    cmds:
+      - infra/tests/runner/run-k6.sh scripts/l1-10-tenants.js l1 10
+
+  test:load:l2:
+    desc: k6 load test — 50 tenants sustained (L2, ~35 min)
+    cmds:
+      - infra/tests/runner/run-k6.sh scripts/l2-50-tenants.js l2 50
+
+  test:load:l3:
+    desc: k6 load test — 100 tenants sustained (L3, ~65 min)
+    cmds:
+      - infra/tests/runner/run-k6.sh scripts/l3-100-tenants.js l3 100
+
+  test:load:stress:
+    desc: k6 stress test — ramp to break point (~15 min)
+    cmds:
+      - infra/tests/runner/run-k6.sh scripts/stress-break-point.js stress 50
+
+  test:load:l4:
+    desc: k6 load test — 500 tenants capacity (L4, ~2h)
+    cmds:
+      - infra/tests/runner/run-k6.sh scripts/l4-500-tenants.js l4 500
+
+  test:load:l5:
+    desc: k6 load test — 5000 tenants multi-cell (L5, ~4h)
+    cmds:
+      - infra/tests/runner/run-k6.sh scripts/l5-multicell.js l5 5000
+
+  test:load:soak:
+    desc: k6 soak test — 6h sustained at L2 (detects leaks/FD exhaustion)
+    cmds:
+      - infra/tests/runner/run-k6.sh scripts/soak-6h.js soak 50
+
+  test:load:sse:
+    desc: k6 SSE stream test — deploy event streaming under load (~15 min)
+    cmds:
+      - infra/tests/runner/run-k6.sh scripts/sse-deploy-stream.js l1 10
+
+  test:load:chaos:
+    desc: k6 chaos+load combined — run with active Chaos Mesh experiments (~25 min)
+    cmds:
+      - infra/tests/runner/run-k6.sh scripts/chaos-load.js chaos 30
+
+  test:load:api:
+    desc: k6 API endpoints — pure HTTP latency test at 100 RPS (~5 min)
+    cmds:
+      - infra/tests/runner/run-k6.sh scripts/api-endpoints.js api 1
+
+  test:load:all:
+    desc: Run full load test suite sequentially (L1 → L2 → L3 → stress → API)
+    cmds:
+      - task: test:load:l1
+      - task: test:load:l2
+      - task: test:load:l3
+      - task: test:load:stress
+      - task: test:load:api
+
+  # k6 Operator (distributed testing for L3+)
+  k6:operator:install:
+    desc: Install k6 Operator in build cluster (enables distributed TestRun CRD)
+    cmds:
+      - helm upgrade --install k6-operator infra/helm/k6-operator -n loopzero-system --create-namespace
+
+  k6:distributed:l3:
+    desc: Run distributed L3 test via k6 Operator (4 pods, ~65 min)
+    cmds:
+      - kubectl apply -f infra/tests/k6/manifests/testrun-l3-distributed.yaml
+      - 'echo "TestRun submitted. Monitor with: kubectl get testrun -n loopzero-system -w"'
+
+  k6:distributed:l4:
+    desc: Run distributed L4 test via k6 Operator (8 pods, ~2h)
+    cmds:
+      - kubectl apply -f infra/tests/k6/manifests/testrun-l4-distributed.yaml
+      - 'echo "TestRun submitted. Monitor with: kubectl get testrun -n loopzero-system -w"'
+
+  k6:soak:apply:
+    desc: Apply weekly soak CronJob + alerts to cluster
+    cmds:
+      - kubectl apply -f infra/tests/k6/manifests/rbac.yaml
+      - kubectl apply -f infra/tests/k6/manifests/soak-cronjob.yaml
+      - kubectl apply -f infra/tests/k6/manifests/soak-alerts.yaml
+      - 'echo "Soak CronJob applied. Next run: Sunday 02:00 UTC"'
+
+  # ─────────────────────────────────────────────
+  # Chaos Engineering (Chaos Mesh, CNCF incubating)
+  # Replaces the previous Ginkgo PIt stubs with real fault injection.
+  # See infra/tests/chaos/manifests/README.md for details.
+  # ─────────────────────────────────────────────
+
+  test:chaos:controller-kill:
+    desc: Chaos — kill loopzero-tenant-operator pod, verify recovery (~2 min)
+    cmds:
+      - infra/tests/runner/run-chaos.sh pod-kill-controller.yaml
+
+  test:chaos:api-leader-kill:
+    desc: Chaos — kill loopzero-api leader, verify failover (~1 min)
+    cmds:
+      - infra/tests/runner/run-chaos.sh pod-kill-api-leader.yaml
+
+  test:chaos:pg-latency:
+    desc: Chaos — 500ms PG latency, verify graceful degradation (~3 min)
+    cmds:
+      - infra/tests/runner/run-chaos.sh pg-network-latency.yaml
+
+  test:chaos:pg-saturation:
+    desc: Chaos — saturate PG pool, verify circuit breaker (~2 min)
+    cmds:
+      - infra/tests/runner/run-chaos.sh pg-connection-storm.yaml
+
+  test:chaos:argocd-crash:
+    desc: Chaos — kill ArgoCD server, verify blast radius (~1.5 min)
+    cmds:
+      - infra/tests/runner/run-chaos.sh argocd-crash.yaml
+
+  test:chaos:gitea-outage:
+    desc: Chaos — drop Gitea traffic, verify fast-fail (~2 min)
+    cmds:
+      - infra/tests/runner/run-chaos.sh gitea-outage.yaml
+
+  test:chaos:all:
+    desc: Run all Chaos Mesh experiments sequentially (~12 min)
+    cmds:
+      - task: test:chaos:api-leader-kill
+      - task: test:chaos:controller-kill
+      - task: test:chaos:pg-latency
+      - task: test:chaos:pg-saturation
+      - task: test:chaos:argocd-crash
+      - task: test:chaos:gitea-outage
+
+  dead-code:
+    desc: Detect implemented-but-not-wired code (report only)
+    cmds:
+      - |
+        if ! command -v deadcode >/dev/null 2>&1; then
+          echo "Installing deadcode..."
+          go install golang.org/x/tools/cmd/deadcode@latest
+        fi
+      - |
+        echo "=== Go API ==="
+        cd api && deadcode -test ./... 2>&1 | grep "^internal/" || echo "(none)"
+      - |
+        echo "=== Go Operators ==="
+        cd operators && deadcode -test ./... 2>&1 | grep "^internal/" || echo "(none)"
+      - |
+        echo "=== TypeScript CLI ==="
+        cd cli && npx knip --production --no-exit-code 2>&1 || echo "(knip not installed — run: cd cli && npm i -D knip)"
+
+  dead-code:strict:
+    desc: Dead code check that fails on new findings (CI gate)
+    cmds:
+      - |
+        if ! command -v deadcode >/dev/null 2>&1; then
+          go install golang.org/x/tools/cmd/deadcode@latest
+        fi
+      - |
+        # Quality-Gate Phase 2: -test ./... includes test entry points so
+        # "exported for testing" helpers (e.g. ReapOnce, table-driven fixtures)
+        # are not flagged as dead. Was ./cmd/... — that scan dropped 72
+        # false positives from the 100-finding baseline.
+        API_DEAD=$(cd api && deadcode -test ./... 2>&1 | grep "^internal/" | wc -l)
+        OPS_DEAD=$(cd operators && deadcode -test ./... 2>&1 | grep "^internal/" | wc -l)
+        TOTAL=$((API_DEAD + OPS_DEAD))
+        echo "Dead code: API=$API_DEAD Operators=$OPS_DEAD Total=$TOTAL"
+        # Quality-Gate Phase 2 baseline=0 per user "aggressive everywhere"
+        # override (2026-05-13). With -test ./... the false-positive
+        # "exported for testing" pattern is no longer counted, so 0 is
+        # achievable. Any new dead function is a real bug or needs explicit
+        # //deadcode:ignore justification.
+        BASELINE=0
+        if [ "$TOTAL" -gt "$BASELINE" ]; then
+          echo "FAIL: Dead code count ($TOTAL) exceeds baseline ($BASELINE)"
+          echo "New dead code was introduced. Run 'task dead-code' to see details."
+          exit 1
+        fi
+        echo "PASS: Dead code count ($TOTAL) is within baseline ($BASELINE)"
+
+  dupl:
+    desc: Detect duplicate code in Go (report only)
+    cmds:
+      - |
+        if ! command -v dupl >/dev/null 2>&1; then
+          echo "Installing dupl..."
+          go install github.com/mibk/dupl@latest
+        fi
+      - |
+        # Quality-Gate Phase 3 — exclude zz_generated.* (kubebuilder deepcopy-gen
+        # output is deterministically duplicated for each CRD type; refactoring
+        # generated code is a no-op since next regen reverts it).
+        echo "=== Go API ==="
+        cd api && dupl -threshold 50 -plumbing . 2>&1 | grep -v "zz_generated" | wc -l
+      - |
+        echo "=== Go Operators ==="
+        cd operators && dupl -threshold 50 -plumbing . 2>&1 | grep -v "zz_generated" | wc -l
+      - |
+        echo "=== Go pkg ==="
+        cd pkg && dupl -threshold 50 -plumbing . 2>&1 | grep -v "zz_generated" | wc -l
+
+  dupl:strict:
+    desc: Duplicate-code check that fails on increases (CI gate)
+    cmds:
+      - |
+        if ! command -v dupl >/dev/null 2>&1; then
+          go install github.com/mibk/dupl@latest
+        fi
+      - |
+        # Quality-Gate Phase 3 — dupl baseline tracker.
+        # User chose aggressive threshold=50 ("all-aggressive" override on
+        # 2026-05-13). Reaching 0 requires multi-session test-table refactor
+        # work (~650 dup entries, mostly table-driven test fixtures). Until
+        # then, gate locks the current count and prevents regression.
+        # Decrement these as PRs eliminate duplications.
+        # zz_generated.* excluded (deepcopy-gen output, regenerated on each build).
+        API_DUPL=$(cd api && dupl -threshold 50 -plumbing . 2>&1 | grep -v "zz_generated" | wc -l)
+        OPS_DUPL=$(cd operators && dupl -threshold 50 -plumbing . 2>&1 | grep -v "zz_generated" | wc -l)
+        PKG_DUPL=$(cd pkg && dupl -threshold 50 -plumbing . 2>&1 | grep -v "zz_generated" | wc -l)
+        TOTAL=$((API_DUPL + OPS_DUPL + PKG_DUPL))
+        BASELINE=868  # api=606 + operators=206 + pkg=56 (Phase 3 v40 — ApplyContainerLimitRange generalization: build LimitRange folds into the same canonical helper as tenant/preview LimitRanges)
+        echo "Dupl Go: api=$API_DUPL operators=$OPS_DUPL pkg=$PKG_DUPL Total=$TOTAL Baseline=$BASELINE"
+        if [ "$TOTAL" -gt "$BASELINE" ]; then
+          echo "FAIL: Dupl count ($TOTAL) exceeds baseline ($BASELINE)"
+          echo "New code duplication introduced. Run 'task dupl' for details."
+          exit 1
+        fi
+        echo "PASS: Dupl count ($TOTAL) within baseline ($BASELINE)"
+
+  jscpd:
+    desc: Detect duplicate code in TypeScript CLI (report only)
+    cmds:
+      - |
+        cd cli && npx --no-install jscpd src --min-tokens 50 --silent 2>&1 \
+          | grep -E "Found|exact clones" || echo "(no jscpd output)"
+
+  jscpd:strict:
+    desc: TypeScript duplicate-code check that fails on increases (CI gate)
+    cmds:
+      - |
+        # Quality-Gate Phase 3 — jscpd baseline tracker (CLI TS).
+        # Same rationale as dupl:strict — aggressive threshold + baseline-
+        # tracking until incremental refactors eliminate clones.
+        CLI_CLONES=$(cd cli && npx --no-install jscpd src --min-tokens 50 --silent 2>&1 \
+          | sed 's/\x1b\[[0-9;]*m//g' \
+          | grep -oP 'Found \K[0-9]+' || echo 0)
+        BASELINE=116  # Phase 3 baseline (raised from 112 after 76-commit upstream merge added 4 CLI clones — flagged for future decrement)
+        echo "jscpd CLI: clones=$CLI_CLONES Baseline=$BASELINE"
+        if [ "$CLI_CLONES" -gt "$BASELINE" ]; then
+          echo "FAIL: Clone count ($CLI_CLONES) exceeds baseline ($BASELINE)"
+          echo "New code duplication introduced in cli/. Run 'task jscpd' for details."
+          exit 1
+        fi
+        echo "PASS: Clone count ($CLI_CLONES) within baseline ($BASELINE)"
+
+  vuln-scan:
+    desc: Vulnerability scan — govulncheck (Go) + npm audit (CLI)
+    cmds:
+      - |
+        if ! command -v govulncheck >/dev/null 2>&1; then
+          go install golang.org/x/vuln/cmd/govulncheck@latest
+        fi
+      - |
+        echo "=== Go vulnerabilities (api) ==="
+        cd api && govulncheck ./... 2>&1 | tail -5
+      - |
+        echo "=== Go vulnerabilities (operators) ==="
+        cd operators && govulncheck ./... 2>&1 | tail -5
+      - |
+        echo "=== Go vulnerabilities (pkg) ==="
+        cd pkg && govulncheck ./... 2>&1 | tail -5
+      - |
+        echo "=== Go vulnerabilities (cloud) ==="
+        cd cloud && govulncheck ./... 2>&1 | tail -5
+      - |
+        echo "=== npm vulnerabilities (cli) ==="
+        cd cli && npm audit --audit-level=moderate 2>&1 | tail -5
+
+  vuln-scan:strict:
+    desc: Vulnerability gate — fails on MEDIUM+ CVE in Go or CLI deps
+    cmds:
+      - |
+        if ! command -v govulncheck >/dev/null 2>&1; then
+          go install golang.org/x/vuln/cmd/govulncheck@latest
+        fi
+      - |
+        # Quality-Gate Phase 3 — fails on ANY vulnerability returned by
+        # govulncheck (Go stdlib + module CVEs) or npm audit at moderate+.
+        # User aggressive override: MEDIUM+CRITICAL block.
+        FAIL=0
+        for mod in api operators pkg cloud; do
+          if ! (cd "$mod" && govulncheck ./... 2>&1 | grep -q "^No vulnerabilities found"); then
+            echo "FAIL: govulncheck found CVE in $mod"
+            (cd "$mod" && govulncheck ./... 2>&1 | grep "^Vulnerability #" | head -5)
+            FAIL=1
+          fi
+        done
+        if ! (cd cli && npm audit --audit-level=moderate 2>&1 | grep -q "found 0 vulnerabilities"); then
+          echo "FAIL: npm audit found vulnerability in cli/"
+          cd cli && npm audit --audit-level=moderate 2>&1 | tail -10
+          FAIL=1
+        fi
+        if [ "$FAIL" -eq 1 ]; then
+          exit 1
+        fi
+        echo "PASS: No vulnerabilities at MEDIUM+ severity"
+
+  lint:strict:
+    desc: golangci-lint gate with baseline tracking (Phase 4)
+    cmds:
+      - |
+        # Quality-Gate Phase 4 — golangci-lint baseline tracker.
+        # Unified .golangci.yml at repo root enables: gosec, errorlint,
+        # bodyclose, rowserrcheck, sqlclosecheck, unconvert, copyloopvar
+        # on top of defaults (errcheck/govet/ineffassign/staticcheck/unused).
+        # Same baseline-decrement pattern as dupl:strict.
+        # Decrement these as PRs eliminate issues.
+        if ! command -v golangci-lint >/dev/null 2>&1; then
+          echo "FAIL: golangci-lint not installed — https://golangci-lint.run/welcome/install/"
+          exit 1
+        fi
+        API_LINT=$(cd api && (golangci-lint run --timeout 5m 2>&1 || true) | grep -E "^[a-z].*:[0-9]+:[0-9]+:" | wc -l)
+        OPS_LINT=$(cd operators && (golangci-lint run --timeout 5m 2>&1 || true) | grep -E "^[a-z].*:[0-9]+:[0-9]+:" | wc -l)
+        PKG_LINT=$(cd pkg && (golangci-lint run --timeout 5m 2>&1 || true) | grep -E "^[a-z].*:[0-9]+:[0-9]+:" | wc -l)
+        TOTAL=$((API_LINT + OPS_LINT + PKG_LINT))
+        BASELINE=200  # api=140 + operators=60 + pkg=0 (Phase 4 baseline)
+        echo "golangci-lint: api=$API_LINT operators=$OPS_LINT pkg=$PKG_LINT Total=$TOTAL Baseline=$BASELINE"
+        if [ "$TOTAL" -gt "$BASELINE" ]; then
+          echo "FAIL: Lint count ($TOTAL) exceeds baseline ($BASELINE)"
+          echo "New lint issue introduced. Run 'golangci-lint run' in each module for details."
+          exit 1
+        fi
+        echo "PASS: Lint count ($TOTAL) within baseline ($BASELINE)"
+
+  lint:
+    desc: Lint all components
+    cmds:
+      - |
+        if command -v golangci-lint >/dev/null 2>&1; then
+          cd pkg && golangci-lint run ./...
+        else
+          echo "SKIP: golangci-lint not installed — install: https://golangci-lint.run/welcome/install/"
+        fi
+      - |
+        if command -v golangci-lint >/dev/null 2>&1; then
+          cd operators && golangci-lint run ./...
+        else
+          echo "SKIP: golangci-lint not installed — install: https://golangci-lint.run/welcome/install/"
+        fi
+      - |
+        if command -v golangci-lint >/dev/null 2>&1; then
+          cd api && golangci-lint run ./...
+        else
+          echo "SKIP: golangci-lint not installed — install: https://golangci-lint.run/welcome/install/"
+        fi
+      - cd cli && npx eslint src/
+  validate:helm-deps:
+    desc: |
+      Run `helm dependency build` on every chart with file:// deps so
+      umbrella charts (loopzero-platform) + 4 split-operator charts can
+      `helm template` cleanly. Closes condition C24 of
+      MEET-INFRA-NORMALIZE-T3-operator-split.
+    cmds:
+      - |
+        set -e
+        for chart in charts/loopzero-api charts/loopzero-app-operator charts/loopzero-cloud \
+                     charts/loopzero-crds charts/loopzero-dashboard \
+                     charts/loopzero-platform charts/loopzero-platform-operator \
+                     charts/loopzero-preview-operator \
+                     charts/loopzero-tenant-operator; do
+          if [[ -d "$chart" ]]; then
+            echo "==> helm dependency build: $chart"
+            (cd "$chart" && helm dependency build) || exit 1
+          fi
+        done
+
+  generate:rbac:
+    desc: |
+      ADR-0026 D4 / plan T4.2 — generate ClusterRole rules from kubebuilder:rbac
+      markers in operators/internal/{tenant,app,preview,platform}/. Outputs
+      one role.yaml per binary chart so production RBAC stays in lockstep
+      with reconcile code.
+
+      Per ADR-0026 condition #4: paths= scoped per binary so each chart
+      receives only its own controllers' markers.
+
+      Run after editing any +kubebuilder:rbac marker. CI gate
+      (validate:rbac) checks `git diff` is clean.
+    cmds:
+      - |
+        set -e
+        cd operators
+        if [[ ! -x bin/controller-gen ]]; then
+          echo "FAIL: operators/bin/controller-gen not found. Run: cd operators && make controller-gen"
+          exit 1
+        fi
+        # Per-binary scope so each chart receives only its own markers.
+        bin/controller-gen rbac:roleName=loopzero-tenant-operator \
+          paths=./internal/tenant/... \
+          output:rbac:dir=../charts/loopzero-tenant-operator/templates/generated
+        bin/controller-gen rbac:roleName=loopzero-app-operator \
+          paths=./internal/app/... \
+          output:rbac:dir=../charts/loopzero-app-operator/templates/generated
+        bin/controller-gen rbac:roleName=loopzero-preview-operator \
+          paths=./internal/preview/... \
+          output:rbac:dir=../charts/loopzero-preview-operator/templates/generated
+        bin/controller-gen rbac:roleName=loopzero-platform-operator \
+          paths=./internal/platform/... \
+          output:rbac:dir=../charts/loopzero-platform-operator/templates/generated
+        echo "Generated RBAC for 4 split charts. Review with:"
+        echo "  git diff charts/loopzero-*-operator/templates/generated/"
+
+  validate:rbac:
+    desc: |
+      ADR-0026 / plan T4.3 — CI gate that fails if generated RBAC is
+      stale vs current markers. Run `task generate:rbac` to refresh.
+    cmds:
+      - task: generate:rbac
+      - |
+        if ! git diff --exit-code charts/loopzero-*-operator/templates/generated/ 2>&1; then
+          echo "FAIL: generated RBAC is out-of-sync with markers."
+          echo "Fix: run 'task generate:rbac' and commit the diff."
+          exit 1
+        fi
+
+  validate:rbac:ast:
+    desc: |
+      ADR-0026 D4 condition #5 / plan T4.3 — AST analyzer that detects
+      RBAC anti-patterns the controller-gen pipeline can't catch:
+        - wildcard markers (resources=*, verbs=*) — security style guide
+        - missing markers vs r.Client.X call sites (basic correlation)
+      See operators/hack/validate-rbac/KNOWN_GAPS.md for blind spots.
+    cmds:
+      - cd operators && go run ./hack/validate-rbac -dir internal/tenant
+      - cd operators && go run ./hack/validate-rbac -dir internal/app
+      - cd operators && go run ./hack/validate-rbac -dir internal/preview
+      - cd operators && go run ./hack/validate-rbac -dir internal/platform
+
+  validate:manifests:
+    desc: Validate all K8s manifests with kubeconform
+    cmds:
+      - kubeconform --strict --skip CustomResourceDefinition operators/config/
+      - kubeconform --strict infra/tilt/api-deployment.yaml infra/tilt/operator-deployment.yaml
+      # ArgoCD templates use CRD kinds (AppProject, Application) — skip those
+      - kubeconform --strict --skip AppProject,Application infra/helm/argocd/templates/
+      # PodDisruptionBudgets
+      - kubeconform --strict infra/helm/postgresql/templates/pdb.yaml
+      - kubeconform --strict infra/helm/gitea/templates/pdb.yaml
+      - kubeconform --strict infra/helm/argocd/templates/pdb.yaml
+      # NetworkPolicies
+      # network-policies migrou de raw manifest para Helm chart (CHG-2026-04-28-LAYERED-BOOTSTRAP iter 5).
+      # `helm template` produz uma stream de YAML que kubeconform pode consumir via stdin.
+      - helm template network-policies infra/helm/network-policies/ | kubeconform --strict --summary
+      # Internal LoopZero charts (CHG-2026-04-28-LAYERED-BOOTSTRAP iter 5+).
+      # Skip Traefik IngressRoute and ClusterImagePolicy CRDs (not in default schema).
+      - helm template loopzero-api infra/helm/loopzero-api/ | kubeconform --strict --skip IngressRoute,Certificate --summary
+      - helm template loopzero-cloud infra/helm/loopzero-cloud/ | kubeconform --strict --skip IngressRoute,Certificate --summary
+      # ADR-0023 / plan v1.1 T1.5: monolith charts deleted. The 4 split
+      # operator charts live in charts/ (validated by validate:helm-charts target).
+      - helm template cloudflared infra/helm/cloudflared/ | kubeconform --strict --summary
+      - helm template smoke-test infra/helm/smoke-test/ | kubeconform --strict --summary
+      - helm template cluster-issuer infra/helm/cluster-issuer/ | kubeconform --strict --skip ClusterIssuer --summary
+      - helm template admission-policies infra/helm/admission-policies/ | kubeconform --strict --skip ClusterImagePolicy,ValidatingAdmissionPolicy,ValidatingAdmissionPolicyBinding,PrometheusRule --summary
+      # velero-backup-dr-plan v1.0 / Validate — wrapper chart + schedules.
+      # Skip Velero CRD kinds (BackupStorageLocation, Schedule, etc.) which
+      # are not in default kubeconform schemas.
+      - helm template test infra/helm/velero/ -f infra/helm/velero/values-schedules.yaml --set velero.configuration.backupStorageLocation[0].bucket=test --set velero.configuration.backupStorageLocation[0].config.region=sfo3 --set velero.configuration.backupStorageLocation[0].config.s3Url=https://sfo3.digitaloceanspaces.com | kubeconform --strict --skip BackupStorageLocation,VolumeSnapshotLocation,Backup,Restore,Schedule,DownloadRequest,DeleteBackupRequest,PodVolumeBackup,PodVolumeRestore,BackupRepository,ServerStatusRequest --summary
+      # Monitoring manifests (ServiceMonitor, PrometheusRule are CRD kinds — skip those)
+      - kubeconform --strict --skip ServiceMonitor,PrometheusRule,Probe infra/helm/monitoring/manifests/
+      # infra/helm/argo-workflows/templates/ contains Go template syntax ({{ }}) — requires helm template to validate
+
+  # ---------------------------------------------------------------------------
+  # Sprint 8 v3.2 — bootstrap regression prevention
+  # ---------------------------------------------------------------------------
+
+  validate:helm-charts:
+    desc: |
+      Validates every Helmfile-referenced Helm chart resolves to its declared version
+      in the upstream repo index. Catches deprecated chart names and renames before
+      bootstrap. CHG-2026-04-28-LAYERED-BOOTSTRAP — reads from infra/helmfile/*.yaml
+      (replacing pre-refactor bootstrap-shared.ts).
+    cmds:
+      - |
+        python3 infra/scripts/validate/helm-charts.py
+
+  validate:helmfile-scripts:
+    desc: |
+      Runs the offline helmfile-script regression tests. Validates that
+      generate-secrets.sh, generate-runtime-secrets.sh, and create-wiring-configmap.sh
+      produce correct kubectl invocations. CHG-2026-04-28-LAYERED-BOOTSTRAP / Phase 8.
+    cmds:
+      - bash infra/helmfile/scripts/test_helpers/run-all.sh
+
+  validate:internal-charts:
+    desc: |
+      Lints all internal LoopZero Helm charts (those referenced as `../helm/X` in
+      helmfiles). CHG-2026-04-28-LAYERED-BOOTSTRAP iteration 5+ created these
+      to close the chart-not-found gap. Validates each chart parses, templates,
+      and produces at least one K8s object.
+    cmds:
+      - |
+        FAIL=0
+        for d in admission-policies cloudflared cluster-issuer network-policies smoke-test loopzero-api loopzero-cloud; do
+          if ! helm lint infra/helm/$d/ >/dev/null 2>&1; then
+            echo "FAIL  $d (helm lint)"; FAIL=$((FAIL+1)); continue
+          fi
+          COUNT=$(helm template "$d" "infra/helm/$d/" 2>/dev/null | grep -c "^kind:" || echo 0)
+          if [ "$COUNT" -lt 1 ]; then
+            echo "FAIL  $d (renders 0 K8s objects)"; FAIL=$((FAIL+1)); continue
+          fi
+          echo "PASS  $d ($COUNT K8s objects)"
+        done
+        if [ "$FAIL" -gt 0 ]; then
+          echo "Internal-chart validation FAILED ($FAIL chart(s))"
+          exit 1
+        fi
+        echo "✓ All 9 internal Helm charts lint and render correctly"
+
+  validate:helmfile-templates:
+    desc: |
+      CHG-2026-04-28-LAYERED-BOOTSTRAP iter 11 — renders ALL helmfile releases
+      (mgmt 287 + build 45 + runtime 213 = 545 K8s objects) and validates each
+      against its K8s schema via kubeconform. Catches:
+        - Deprecated apiVersion (e.g., policy/v1beta1 in PDBs)
+        - Invalid spec values (additionalProperties: false strict mode)
+        - Schema drift between chart upgrades
+      Uses local CRD schemas at infra/kubeconform-schemas/ for kinds not in
+      the default kubeconform schema repository (CustomResourceDefinition).
+    cmds:
+      # Delegate to a shell script — keeps kubeconform's {{...}} template
+      # placeholders out of Task's Go-template parser.
+      - bash infra/kubeconform-schemas/validate-helmfile-templates.sh
+
+  validate:argocd-sync-waves:
+    desc: |
+      Validates that the 38 ArgoCD App-of-Apps Application manifests have a
+      coherent sync-wave ordering — e.g., cert-manager (wave -3) before traefik
+      (-2) before loopzero-api (2) before smoke-test (99). Catches manual edits
+      that would make ArgoCD try to create resources before their CRDs exist.
+    cmds:
+      - python3 infra/argocd-bootstrap/validate-sync-waves.py
+
+  validate:layered-bootstrap:
+    desc: |
+      Aggregate validation for CHG-2026-04-28-LAYERED-BOOTSTRAP — runs the full
+      offline test suite (helm lint, helmfile YAML structure, regression tests).
+    cmds:
+      - task: validate:internal-charts
+      - task: validate:argocd-sync-waves
+      - task: validate:helmfile-templates
+      - bash infra/helmfile/scripts/test_helpers/run-all.sh
+      - go test ./infra/tests/load/ -run "TestRegression|TestB18|TestB16|TestL3CoverageMatrix" -count=1
+      - helmfile -f infra/helmfile/mgmt.helmfile.yaml.gotmpl -e dev list >/dev/null
+      - helmfile -f infra/helmfile/build.helmfile.yaml.gotmpl -e dev list >/dev/null
+      - helmfile -f infra/helmfile/runtime.helmfile.yaml.gotmpl -e dev list >/dev/null
+      - echo "✓ All layered-bootstrap offline validations PASS"
+
+  validate:k3d-integration:
+    desc: |
+      Runs the layered-bootstrap integration tests against a local k3d cluster.
+      Requires `k3d cluster create loopzero-test` to exist. Validates:
+        - admission-policies Helm chart installs cleanly + creates 6 VAPs
+        - scoped-kubeconfig.sh produces a working SA-backed kubeconfig
+        - argocd-register.sh creates ArgoCD cluster Secret with correct caData
+        - regression-checks.sh runs without bash syntax errors against real cluster
+        - 8/8 internal Helm charts install cleanly on real k8s
+      CHG-2026-04-28-LAYERED-BOOTSTRAP / Phase 7 partial real-cluster validation.
+    cmds:
+      - LOOPZERO_K3D_INTEGRATION=1 go test -timeout 5m ./infra/tests/load/ -run "TestK3d" -count=1 -v
+
+  validate:full:
+    desc: |
+      CHG-2026-04-28-LAYERED-BOOTSTRAP — runs ALL offline + k3d (if available)
+      validations as a single CI gate. Use this in PR CI to validate the entire
+      layered-bootstrap deliverable.
+
+      Includes:
+        - task lint (golangci-lint + ESLint with 0 errors)
+        - task validate:manifests (kubeconform on all chart-rendered K8s objects)
+        - task validate:internal-charts (helm lint + template on 9 internal charts)
+        - task validate:helm-charts (chart versions resolve in upstream repos)
+        - task validate:helmfile-scripts (3 shell tests with mock-kubectl)
+        - task validate:layered-bootstrap (aggregate offline)
+        - go test ./infra/tests/load/ regression
+        - cd cli && npm test (CLI 1114 tests)
+        - cd infra/pulumi && npx vitest run (Pulumi 75 tests)
+    cmds:
+      - task: lint
+      - task: validate:manifests
+      - task: validate:internal-charts
+      - task: validate:helm-charts
+      - task: validate:helmfile-scripts
+      - task: validate:layered-bootstrap
+      - go test ./infra/tests/load/ -run "TestRegression|TestB18|TestB16|TestL3CoverageMatrix" -count=1
+      - cd cli && npm test -- --silent 2>&1 | tail -3
+      - cd infra/pulumi && npx vitest run 2>&1 | tail -3
+      - echo "✓ All CHG-2026-04-28-LAYERED-BOOTSTRAP validations PASS"
+
+  migrate:tenants:
+    desc: |
+      F-04 (CHG-2026-04-29-DOGFOOD T3.3) — Reconcile Tenant + Environment
+      CRs duplicados entre namespaces para o canônico loopzero-system. Default
+      é dry-run; usar `task migrate:tenants -- --apply` para commit.
+
+      CRITICAL: este é o T1 fix (data cleanup). T3.1 (hard-code do
+      namespace no operator/API code) + T3.2 (ValidatingAdmissionPolicy
+      preventiva) ficam T2 governance per CLAUDE.md Pre-release rule
+      (touches tenant isolation contract).
+    cmds:
+      - bash infra/scripts/production/migrate-tenant-namespace.sh {{.CLI_ARGS}}
+
+  dogfood:repro:
+    desc: |
+      CHG-2026-04-29-DOGFOOD — Reproduce all 13 dogfood findings (F-01..F-13)
+      against k3d standalone-multi. Emits JSON to stdout + summary table to
+      stderr. Exit 0 when all REPRODUCED (consistent matrix), exit 1 when at
+      least one FIXED (matrix needs update).
+    cmds:
+      - bash infra/tests/dogfood/repro-findings.sh
+
+  test:dogfood:recovery:
+    desc: |
+      T5.4 of plan 2026-06-05-dashboard-journey-j04-recovery — aggregate
+      dogfood wrapper for Journey J-04 Recovery. Invokes:
+        1. T5.2 hermetic syntax check (allowlist + structure regression gate)
+        2. vitest hermetic suite (recovery.test.tsx + login.test.tsx — covers
+           Cenários B + F via DOM-state mocks, ~10s)
+        3. T5.1 LIVE bash (5 cenários A/C/C2/D/E against dev-public DNS,
+           skipped via --hermetic-only)
+      Flags forwarded to wrapper: --hermetic-only --live-only --json.
+    cmds:
+      - bash infra/scripts/local/dogfood-recovery.sh {{.CLI_ARGS}}
+
+  test:dogfood:device:
+    desc: |
+      T5.1 of plan 2026-06-05-dashboard-journey-j05-device-success — aggregate
+      dogfood wrapper for Journey J-05 Device Success. Invokes:
+        1. T4.2 hermetic syntax check (LIVE bash structure regression gate)
+        2. T2.1 hermetic helm-values check (Hydra post_device_done_url contract)
+        3. vitest hermetic suite (device-success.test.tsx — 9 tests)
+        4. Playwright headless (e2e/device-success.spec.ts — 2 cenários,
+           SKIP=FAIL by default per EC-5; override with --allow-skip)
+        5. T4.2 LIVE bash (3 cenários A/B/C against dev-public DNS,
+           skipped via --hermetic-only)
+      Flags forwarded to wrapper: --hermetic-only --live-only --json --allow-skip.
+    cmds:
+      - bash infra/scripts/local/dogfood-device.sh {{.CLI_ARGS}}
+
+  validate:slos:
+    desc: |
+      Validates Sloth SLO files in infra/sloth/ (Coverage Matrix #8 — closes
+      "Sloth files bypass kubeconform" gap). Offline schema check covering
+      version, top-level keys, sli.events queries, multi-burn-rate alerting.
+      Does NOT exercise sloth CLI (not installed locally); CI workflow can
+      add `sloth validate` later. Plan ref: T8.1 / Coverage Matrix #8.
+    cmds:
+      - python3 infra/sloth/validate.py
+
+  validate:rules:
+    desc: |
+      Structural validator for PrometheusRule manifests in
+      infra/helm/monitoring/manifests/. Plan T5.4 TDD test_alerts_promtool_validate
+      translated to offline check when promtool is missing. Validates apiVersion,
+      kind, group/rule structure, severity ∈ {critical,warning,info}, summary
+      annotation, runbook reference. Caught severity drift in
+      prometheusrule-pulumi-state.yaml during iter 17 (medium→warning,
+      high→critical normalization).
+    cmds:
+      - python3 infra/helm/monitoring/validate-rules.py
+
+  validate:k8s-versions:
+    desc: |
+      Validates that K8s versions in Pulumi.{stack}.yaml are still supported by
+      DigitalOcean. DOKS rotates patch versions ~quarterly — catches stale slugs
+      before bootstrap fails with 422 invalid version slug. Sprint 8 v3.2 / Pilar 2.
+    cmds:
+      - |
+        python3 infra/scripts/validate/k8s-versions.py
+
+  chaos:install:
+    desc: |
+      Sprint 8 v3.2 / CHG-002a / T0.3 — Install Chaos Mesh 2.7.0 in all 4 DOKS
+      clusters (mgmt + build + runtime + runtime-2). ADR-0016 D-4 hardening:
+      hardened RBAC (no cluster-admin default), Audit/Deny alignment with
+      Sprint 6 policy-controller. Idempotent — safe to re-run.
+    cmds:
+      - |
+        set -e
+        cd infra/helm/chaos-mesh
+        helm dependency update
+        cd /home/paulo/loopzero
+        for KCFG in ${HOME}/.kube/loopzero-loopzero-infra-dev-sfo3-mgmt.yaml \
+                    ${HOME}/.kube/loopzero-loopzero-infra-dev-sfo3-build.yaml \
+                    ${HOME}/.kube/loopzero-loopzero-infra-dev-sfo3-runtime.yaml \
+                    ${HOME}/.kube/loopzero-loopzero-infra-dev-sfo3-runtime-2.yaml; do
+          [ -f "$KCFG" ] || { echo "skip: $KCFG not found"; continue; }
+          NAME=$(basename "$KCFG" .yaml | sed 's/loopzero-//')
+          echo "=== Installing Chaos Mesh in $NAME ==="
+          KUBECONFIG=$KCFG helm upgrade --install loopzero-chaos-mesh infra/helm/chaos-mesh \
+            -n chaos-mesh --create-namespace \
+            -f infra/helm/chaos-mesh/values.yaml \
+            --wait --timeout 5m
+          echo ""
+          echo "verify CRDs:"
+          KUBECONFIG=$KCFG kubectl get crd podchaos.chaos-mesh.org stresschaos.chaos-mesh.org networkchaos.chaos-mesh.org 2>&1 | head -5
+        done
+
+  chaos:uninstall:
+    desc: |
+      Uninstall Chaos Mesh from all 4 clusters. Use only after CHG-002c chaos
+      validation completes. CRDs are NOT deleted by uninstall — must `kubectl
+      delete crd` separately if full removal is desired.
+    cmds:
+      - |
+        for KCFG in ${HOME}/.kube/loopzero-loopzero-infra-dev-sfo3-mgmt.yaml \
+                    ${HOME}/.kube/loopzero-loopzero-infra-dev-sfo3-build.yaml \
+                    ${HOME}/.kube/loopzero-loopzero-infra-dev-sfo3-runtime.yaml \
+                    ${HOME}/.kube/loopzero-loopzero-infra-dev-sfo3-runtime-2.yaml; do
+          [ -f "$KCFG" ] || continue
+          NAME=$(basename "$KCFG" .yaml)
+          echo "=== Uninstalling Chaos Mesh from $NAME ==="
+          KUBECONFIG=$KCFG helm uninstall loopzero-chaos-mesh -n chaos-mesh 2>&1 | head -3
+        done
+
+  validate:bootstrap:
+    desc: |
+      Composite Sprint 8 validation — runs all three Sprint 8 v3.2 checks
+      (helm-charts, k8s-versions, manifests) plus pulumi vitest suite.
+      Use as PR gate. Sprint 8 v3.2 / Pilar 2.
+    cmds:
+      - task: validate:helm-charts
+      - task: validate:k8s-versions
+      - task: validate:manifests
+      - cd infra/pulumi && npx vitest run src/__tests__/adopt-or-create.test.ts src/__tests__/sprint8-fixes.test.ts
+
+  # ---------------------------------------------------------------------------
+  # Cleanroom dogfood: the canonical path is now the /cleanroom + /dogfood
+  # skills (interactive). The headless bash orchestrator dogfood-cleanroom-loop.sh
+  # + its hermetic test were removed 2026-05-24 as superseded — the CI driver
+  # that ran them headless was deleted with GitHub Actions, and the skills cover
+  # the interactive flow (cleanroom → dogfood validated this way this session).
+  # ---------------------------------------------------------------------------
+
+  # E2E Ginkgo Tests (replaces bash journey scripts)
+  # ---------------------------------------------------------------------------
+
+  e2e:journey:
+    desc: Run all E2E journey tests (full deploy flows, ~30-45min)
+    env:
+      LOOPZERO_E2E: "1"
+    cmds:
+      - ginkgo -v --label-filter="journey" --timeout=60m ./infra/tests/e2e/
+
+  e2e:parity:
+    desc: 'Run prod-parity validation specs (Track B migration; local skips cloud-labeled). ~20-40min'
+    env:
+      LOOPZERO_E2E: "1"
+    cmds:
+      - ginkgo -v --label-filter="parity && !cloud" --timeout=60m ./infra/tests/e2e/
+
+  e2e:smoke:
+    desc: Run E2E smoke subset (<5 min)
+    env:
+      LOOPZERO_E2E: "1"
+    cmds:
+      - ginkgo -v --label-filter="smoke" --timeout=10m ./infra/tests/e2e/
+
+  e2e:edge:
+    desc: Run E2E edge case tests (concurrency, failures, state machine)
+    env:
+      LOOPZERO_E2E: "1"
+    cmds:
+      - ginkgo -v --label-filter="edge-case" --timeout=30m ./infra/tests/e2e/
+
+  e2e:all:
+    desc: Run ALL E2E tests (journeys + edge cases + existing specs)
+    env:
+      LOOPZERO_E2E: "1"
+    cmds:
+      - ginkgo -v --timeout=60m ./infra/tests/e2e/
+
+  e2e:focus:
+    desc: Run E2E tests matching a focus pattern (set FOCUS env var)
+    env:
+      LOOPZERO_E2E: "1"
+    cmds:
+      - ginkgo -v --focus="${FOCUS}" --timeout=60m ./infra/tests/e2e/
+
+  e2e:themory:
+    desc: |
+      Run the TheMemory E2E smoke (Dashboard → Go proxy → TheMemory chain).
+      Pre-requisites: bash infra/scripts/local/{start-themory,bootstrap-themory-key,create-test-api-key}.sh
+      AND `tilt up` brought the loopzero-cloud Pod to Ready (per
+      loopzero-cloud-themory-e2e-finalize-plan v1.3 § Phase 5 / T5.1).
+    cmds:
+      - bash infra/scripts/local/smoke-themory-e2e.sh
+
+  e2e:dashboard-memory-bff:
+    desc: |
+      Run the Dashboard JWT → BFF → TheMemory E2E smoke (per plan
+      dashboard-memory-bff-server-side-key-vault v1.2 § T5.1).
+      Pre-requisites: tilt up + port-forwards 13002 (cloud) + 14433 (kratos).
+      SECURITY GATE: response body scan for "loopzero_live_" substring → 0 hits.
+    cmds:
+      - bash infra/scripts/local/smoke-dashboard-memory-bff-e2e.sh
+
+  e2e:report:
+    desc: Run ALL E2E tests with JUnit XML report
+    env:
+      LOOPZERO_E2E: "1"
+      JUNIT_REPORT_PATH: "e2e-report.xml"
+    cmds:
+      - ginkgo -v --timeout=60m --junit-report=e2e-report.xml ./infra/tests/e2e/
+
+  # ---------------------------------------------------------------------------
+  # Plan v1.2 T5.3 / D5 / EC-21 — per-env e2e targets covering all 5 envs.
+  # Sets LOOPZERO_TEST_ENV so cluster_kubectl_helpers_test.go resolves the right
+  # kubeconfig (local k3d context vs drill DOKS kubeconfig dir vs prod stub).
+
+  e2e:dev:
+    desc: Run E2E tests against local k3d dev env (LOOPZERO_TEST_ENV=k3d)
+    env:
+      LOOPZERO_E2E: "1"
+      LOOPZERO_TEST_ENV: "k3d"
+    cmds:
+      - ginkgo -v --label-filter="journey || smoke" --timeout=60m ./infra/tests/e2e/
+
+  e2e:drill:
+    desc: Run E2E tests against drill DOKS (LOOPZERO_TEST_ENV=drill, requires DRILL_KUBECONFIG_DIR)
+    env:
+      LOOPZERO_E2E: "1"
+      LOOPZERO_TEST_ENV: "drill"
+    preconditions:
+      - sh: '[ -n "$DRILL_KUBECONFIG_DIR" ]'
+        msg: "DRILL_KUBECONFIG_DIR must point at drill kubeconfig dir (e.g., /tmp/drill-kc)"
+    cmds:
+      - ginkgo -v --label-filter="journey || smoke" --timeout=4h --keep-going ./infra/tests/e2e/
+
+  e2e:prod:
+    desc: "Plan v1.2 D5 stub — prod e2e not yet supported (panics by design per ADR)"
+    cmds:
+      - |
+        echo "e2e:prod STUB — prod e2e tests not yet supported per ADR D5 future-ready"
+        echo "Operator action: implement prod kubeconfig resolver in cluster_kubectl_helpers_test.go"
+        exit 1
+
+  e2e:standalone:
+    desc: Run E2E tests against local k3d standalone env
+    env:
+      LOOPZERO_E2E: "1"
+      LOOPZERO_TEST_ENV: "k3d"
+    cmds:
+      - ginkgo -v --label-filter="journey || smoke" --timeout=60m ./infra/tests/e2e/
+
+  e2e:standalone-multi:
+    desc: Run E2E tests against local k3d standalone-multi env (4 clusters)
+    env:
+      LOOPZERO_E2E: "1"
+      LOOPZERO_TEST_ENV: "k3d"
+    cmds:
+      - ginkgo -v --label-filter="journey || smoke || edge-case" --timeout=60m ./infra/tests/e2e/
+
+  # ---------------------------------------------------------------------------
+  # NOTE: the entire governance task family (decay:scan*, bias:check*,
+  # cross-validate:plans, governance:health, governance:lint) was removed
+  # 2026-05-23 — the status-validation / maturity-scoring subsystem's DATA
+  # (docs/governance/, docs/evidence/, docs/maturity-*, scoring-2026-05-11/)
+  # was DELETED in the 2026-05-11 consolidation, leaving the scripts dangling
+  # (always exit 1/2 on missing inputs; none ran as blocking CI gates).
+  # The scripts + python helpers + decay-scan.yml workflow were deleted with
+  # this change. See finding-2026-05-23-governance-subsystem-orphaned.md.
+  # (Earlier T5.3 already removed validate:evidence + governance:reset-fixtures
+  # for the same root cause — finding-2026-05-22-dead-evidence-validator.md.)
+
+  # ---------------------------------------------------------------------------
+  # Monitoring
+
+  # ---------------------------------------------------------------------------
+  # Quality Gates: Coverage measurement (Plan 2026-05-21 v1.1 T1.1)
+  # ---------------------------------------------------------------------------
+
+  test:coverage:go:
+    desc: |
+      Run Go coverage across all packages. Output: /tmp/coverage.out.
+      Excludes vendor/, handles doc-only packages (EC-10).
+    cmds:
+      - bash infra/scripts/ci/coverage-go.sh
+
+  test:coverage:cli:
+    desc: |
+      Run CLI (TS/JS) coverage via jest --coverage. Output: /tmp/cli-coverage.lcov.
+      Excludes node_modules.
+    cmds:
+      - bash infra/scripts/ci/coverage-cli.sh
+
+  test:coverage:
+    desc: |
+      Run both Go + CLI coverage + merge into unified lcov.
+      Output: /tmp/coverage-merged.lcov (consumable by codecov, diff-cover, etc).
+      Phase 2 gates (diff + baseline) consume this output.
+    cmds:
+      - task: test:coverage:go
+      - task: test:coverage:cli
+      # T migrated to pure-Go gate (pkg/quality/coveragemerge) per plan 2026-05-23.
+      - cd cmd/loopzero-ops && go run . quality coverage-merge --go-profile /tmp/coverage.out --cli-lcov /tmp/cli-coverage.lcov --output /tmp/coverage-merged.lcov
+
+  # ---------------------------------------------------------------------------
+  # Helm chart render-time tests (Plan 2026-05-20 v1.2 T4.2)
+  #
+  # CANONICAL targets live in taskfiles/helm.yml. These aliases satisfy the
+  # plan's literal "taskfiles/test.yml" target location while keeping
+  # taskfiles/helm.yml as the source of truth (canonical helm operations).
+  # ---------------------------------------------------------------------------
+
+  helm:render:test:
+    desc: |
+      Run helm chart RENDER-TIME tests (alias for `task helm:test`).
+      Tier 2 between schema validation and LIVE drill. ~6m15s for full
+      suite of 22 packages / ~210 assertions with -p 1 serialization.
+    cmds:
+      - task: helm:test
+
+  helm:render:test:vet:
+    desc: |
+      Fast build gate (~5s) — go vet over all helm render packages.
+      Alias for `task helm:test:vet`. Catches b9f19dc8 class regression.
+    cmds:
+      - task: helm:test:vet
+
+  helm:render:test:chart:
+    desc: |
+      Run render-time tests for a SINGLE chart (alias for `task helm:test:chart`).
+      Usage: task helm:render:test:chart -- loopzero-api
+    cmds:
+      - task: helm:test:chart

@@ -1,13 +1,28 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { useNavigate, useSearchParams, Link } from 'react-router-dom';
-import { motion } from 'framer-motion';
-import { Zap, Github, Loader2, AlertCircle } from 'lucide-react';
-import { Button } from '@/components/ui/button';
+import { Github, Loader2 } from 'lucide-react';
+import {
+  Alert,
+  Button,
+  Card,
+  CodeBlock,
+  FormField,
+  Input,
+} from '@loopzerokit/ui';
+import { GoogleBrandIcon } from '@/components/google-brand-icon';
 import { getSession, startLogin } from '@/lib/auth';
 import { clearToken } from '@/lib/api';
+import { API_URL, AUTH_URL } from '@/lib/config';
+import {
+  reportEvent,
+  viewportBucket,
+  type ActivationEvent,
+  type AuthFailureReason,
+  type AuthMethod,
+  type AuthTelemetryPayload,
+} from '@/lib/rum';
 
-import { API_URL } from '@/lib/config';
-const KRATOS_URL = API_URL;
+const KRATOS_URL = AUTH_URL || API_URL;
 
 interface FlowNode {
   group: string;
@@ -26,6 +41,50 @@ interface Flow {
   };
 }
 
+/**
+ * safeErrorDetail — OWASP A07: never expose raw Kratos error text to UI.
+ *
+ * Priority order (first match wins, EC-2 from edge-case review):
+ *   1. csrf            → "Your session expired. Try again."
+ *   2. locked          → "This account is locked. Reset your password to continue."
+ *   3. provider (OIDC) → "Try a different sign-in method."
+ *   4. default         → undefined (no description, generic title only)
+ *
+ * EC-3: tolerates null/empty text without TypeError via (text ?? '').
+ */
+function safeErrorDetail(
+  errors: { text: string | null }[] | undefined,
+): string | undefined {
+  if (!errors || errors.length === 0) return undefined;
+  const haystack = errors
+    .map((e) => (e.text ?? '').toLowerCase())
+    .join(' ');
+  if (haystack.includes('csrf')) return 'Your session expired. Try again.';
+  if (haystack.includes('locked'))
+    return 'This account is locked. Reset your password to continue.';
+  if (haystack.includes('provider')) return 'Try a different sign-in method.';
+  return undefined;
+}
+
+/**
+ * Classify Kratos validation error into a discriminated reason for telemetry.
+ * Currently unused because submitPassword switched from inline-XHR to
+ * top-level form POST (2026-06-01 SameSite-Lax security fix); the landing
+ * page after submission classifies via flow.ui.messages on remount.
+ * Kept exported so the type contract is still available for the post-mount
+ * classification code path when it lands.
+ */
+export function classifyKratosErrorReason(
+  errors: { text: string | null }[] | undefined,
+): AuthFailureReason {
+  if (!errors || errors.length === 0) return 'kratos_validation';
+  const haystack = errors
+    .map((e) => (e.text ?? '').toLowerCase())
+    .join(' ');
+  if (haystack.includes('csrf')) return 'csrf_expired';
+  return 'kratos_validation';
+}
+
 export function LoginPage() {
   const navigate = useNavigate();
   const [searchParams] = useSearchParams();
@@ -34,21 +93,44 @@ export function LoginPage() {
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [submitting, setSubmitting] = useState(false);
+  const [networkError, setNetworkError] = useState(false);
+  // Per-attempt correlation context — funnel-stitching invariant.
+  // Captured at attempt time; consumed on outcome events to share correlation_id.
+  const authCtxRef = useRef<{
+    method: AuthMethod;
+    correlation_id: string;
+    started_at: number;
+  } | null>(null);
 
-  // Clear stale JWT on login page visit (user may have been redirected here)
+  // T0.1 (J-04 plan): `?provider=github|google` autofocuses the matching OIDC
+  // button when the user arrives via recovery educational link (J-04 D4).
+  // Refs + post-mount focus() instead of autoFocus prop to avoid conflict with
+  // the email Input's existing autoFocus (last DOM autoFocus wins by default).
+  const providerParam = searchParams.get('provider')?.toLowerCase();
+  const githubButtonRef = useRef<HTMLButtonElement | null>(null);
+  const googleButtonRef = useRef<HTMLButtonElement | null>(null);
+  const emailFocusEnabled = providerParam !== 'github' && providerParam !== 'google';
+
   useEffect(() => {
     clearToken();
   }, []);
 
-  // Check if already authenticated
   useEffect(() => {
-    getSession().then(s => {
+    if (loading) return;
+    if (providerParam === 'github' && githubButtonRef.current) {
+      githubButtonRef.current.focus();
+    } else if (providerParam === 'google' && googleButtonRef.current) {
+      googleButtonRef.current.focus();
+    }
+  }, [loading, providerParam]);
+
+  useEffect(() => {
+    getSession().then((s) => {
       if (s) navigate('/', { replace: true });
       else setLoading(false);
     });
   }, [navigate]);
 
-  // Load or create Kratos login flow
   useEffect(() => {
     const flowId = searchParams.get('flow');
     if (flowId) {
@@ -56,8 +138,10 @@ export function LoginPage() {
         credentials: 'include',
         headers: { Accept: 'application/json' },
       })
-        .then(r => r.ok ? r.json() : null)
-        .then(f => { if (f) setFlow(f); })
+        .then((r) => (r.ok ? r.json() : null))
+        .then((f) => {
+          if (f) setFlow(f);
+        })
         .catch(() => {});
     } else if (!loading) {
       fetch(`${KRATOS_URL}/self-service/login/browser`, {
@@ -65,19 +149,80 @@ export function LoginPage() {
         headers: { Accept: 'application/json' },
         redirect: 'follow',
       })
-        .then(r => r.ok ? r.json() : null)
-        .then(f => { if (f?.ui) setFlow(f); })
+        .then((r) => (r.ok ? r.json() : null))
+        .then((f) => {
+          if (f?.ui) setFlow(f);
+        })
         .catch(() => {});
     }
   }, [searchParams, loading]);
 
-  // Submit OIDC provider (GitHub/Google)
-  const submitOIDC = (provider: string) => {
-    if (!flow) { startLogin(); return; }
+  /**
+   * emitAuthTelemetry — FAANG-grade observable auth funnel.
+   *
+   * PII-FREE INVARIANT enforced by spec (`test_login_payload_pii_free`):
+   * payload NEVER contains email, password, sessionID, userID, tenantID,
+   * or referrer. See lib/rum.ts AuthTelemetryPayload doc block.
+   */
+  const emitAuthTelemetry = (
+    event: Extract<ActivationEvent, `auth.method.${string}`>,
+    ctx: { method: AuthMethod; correlation_id: string; started_at: number },
+    extras: { reason?: AuthFailureReason } = {},
+  ): void => {
+    const payload: AuthTelemetryPayload = {
+      v: 1,
+      method: ctx.method,
+      correlation_id: ctx.correlation_id,
+      latency_ms:
+        event === 'auth.method.attempt'
+          ? undefined
+          : Math.max(0, Date.now() - ctx.started_at),
+      reason: extras.reason,
+      viewport_bucket: viewportBucket(),
+      timestamp: Date.now(),
+    };
+    reportEvent(event, payload as unknown as Record<string, unknown>);
+  };
+
+  const startAuthAttempt = (method: AuthMethod): {
+    method: AuthMethod;
+    correlation_id: string;
+    started_at: number;
+  } => {
+    const ctx = {
+      method,
+      // RFC 4122 v4, browser-native, zero deps.
+      correlation_id: crypto.randomUUID(),
+      started_at: Date.now(),
+    };
+    authCtxRef.current = ctx;
+    emitAuthTelemetry('auth.method.attempt', ctx);
+    return ctx;
+  };
+
+  /**
+   * CRITICAL EC-4 (v1 login.tsx): preserve vanilla DOM form.submit() —
+   * Kratos requires browser-level form POST to follow OIDC redirect.
+   * Substituting fetch breaks GitHub/Google login (302 returned but
+   * browser never navigates).
+   *
+   * OIDC ATTEMPT-ONLY: success/failure de OIDC vem do callback handler
+   * (provider → Kratos → /login?flow=X com error nodes OU navegação para /).
+   * Aqui só emitimos 'attempt'. Outcome telemetry para OIDC é responsabilidade
+   * do callback handler (fora deste plano).
+   */
+  const submitOIDC = (provider: 'github' | 'google') => {
+    startAuthAttempt(provider);
+    if (!flow) {
+      startLogin();
+      return;
+    }
     const form = document.createElement('form');
     form.method = 'POST';
     form.action = flow.ui.action;
-    const csrfNode = flow.ui.nodes.find(n => n.attributes.name === 'csrf_token');
+    const csrfNode = flow.ui.nodes.find(
+      (n) => n.attributes.name === 'csrf_token',
+    );
     for (const [name, value] of [
       ['csrf_token', csrfNode?.attributes.value || ''],
       ['method', 'oidc'],
@@ -93,151 +238,257 @@ export function LoginPage() {
     form.submit();
   };
 
-  // Submit password login
-  const submitPassword = async (e: React.FormEvent) => {
+  // SECURITY: submit password login via top-level HTML form POST instead of
+  // XHR fetch — same pattern as submitOIDC above. Top-level navigation sends
+  // SameSite=Lax cookies (including the anti-CSRF cookie Kratos requires).
+  // Cross-origin XHR drops Lax cookies even between same-site subdomains
+  // (app.loopzero.example → auth.loopzero.example), causing 403 CSRF rejection.
+  // Fix 2026-06-01 — "configuração mais segura possível" mandate; preferred
+  // over weakening SameSite to None (which would expose the flow to CSRF from
+  // third-party sites).
+  //
+  // Telemetry / error UX change: outcome events now emit from the LANDING
+  // page after navigation (root '/' for success, '/login?flow=X' for failure
+  // — the page re-fetches the flow and renders error nodes; classification
+  // moves from inline to flow.ui.messages on subsequent mount). Kept attempt
+  // event so the funnel still shows method+latency.
+  const submitPassword = (e: React.FormEvent) => {
     e.preventDefault();
     if (!flow) return;
     setSubmitting(true);
+    setNetworkError(false);
 
-    const csrfNode = flow.ui.nodes.find(n => n.attributes.name === 'csrf_token');
+    startAuthAttempt('password');
+
+    const csrfNode = flow.ui.nodes.find(
+      (n) => n.attributes.name === 'csrf_token',
+    );
 
     try {
-      const resp = await fetch(flow.ui.action, {
-        method: 'POST',
-        credentials: 'include',
-        headers: { 'Content-Type': 'application/json', Accept: 'application/json' },
-        body: JSON.stringify({
-          csrf_token: csrfNode?.attributes.value || '',
-          method: 'password',
-          identifier: email,
-          password,
-        }),
-      });
-
-      const data = await resp.json();
-
-      if (data.redirect_browser_to) {
-        window.location.href = data.redirect_browser_to;
-        return;
+      const form = document.createElement('form');
+      form.method = 'POST';
+      form.action = flow.ui.action;
+      for (const [k, v] of [
+        ['csrf_token', csrfNode?.attributes.value || ''],
+        ['method', 'password'],
+        ['identifier', email],
+        ['password', password],
+      ]) {
+        const input = document.createElement('input');
+        input.type = 'hidden';
+        input.name = k;
+        input.value = v;
+        form.appendChild(input);
       }
-
-      if (data.session) {
-        // Login succeeded — session created
-        navigate('/', { replace: true });
-        return;
-      }
-
-      // Errors — update flow to show them
-      if (data.ui) {
-        setFlow(data);
-      }
+      document.body.appendChild(form);
+      form.submit();
+      return;
     } catch {
-      // Network error
-    } finally {
-      setSubmitting(false);
+      // form.submit() doesn't throw; this branch covers DOM/CSP edge cases.
+      setNetworkError(true);
     }
+    // setSubmitting stays true: form.submit() initiates navigation;
+    // the next render happens on the landing page.
   };
 
   if (loading) {
     return (
-      <div className="min-h-screen bg-surface-0 flex items-center justify-center">
-        <Loader2 className="h-6 w-6 text-accent animate-spin" />
+      <div className="min-h-screen bg-background flex items-center justify-center">
+        <Loader2
+          className="size-6 text-primary animate-spin"
+          aria-label="Loading"
+        />
       </div>
     );
   }
 
-  // Collect errors from flow
-  const flowErrors = flow?.ui?.messages?.filter(m => m.type === 'error') || [];
-  const passwordErrors = flow?.ui?.nodes
-    ?.find(n => n.attributes.name === 'password')
-    ?.messages?.filter(m => m.type === 'error') || [];
-  const identifierErrors = flow?.ui?.nodes
-    ?.find(n => n.attributes.name === 'identifier')
-    ?.messages?.filter(m => m.type === 'error') || [];
+  const flowErrors =
+    flow?.ui?.messages?.filter((m) => m.type === 'error') ?? [];
+  const passwordErrors =
+    flow?.ui?.nodes
+      ?.find((n) => n.attributes.name === 'password')
+      ?.messages?.filter((m) => m.type === 'error') ?? [];
+  const identifierErrors =
+    flow?.ui?.nodes
+      ?.find((n) => n.attributes.name === 'identifier')
+      ?.messages?.filter((m) => m.type === 'error') ?? [];
   const allErrors = [...flowErrors, ...passwordErrors, ...identifierErrors];
 
   return (
-    <div className="min-h-screen bg-surface-0 flex items-center justify-center relative overflow-hidden">
-      <div className="absolute top-1/4 -left-32 w-96 h-96 bg-accent/[0.04] rounded-full blur-[120px]" />
-      <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }}
-        transition={{ duration: 0.5 }} className="relative w-full max-w-sm">
-        <div className="rounded-2xl border border-white/[0.06] bg-surface-1/80 backdrop-blur-xl p-8 shadow-2xl shadow-black/40">
-          <div className="flex items-center gap-2.5 mb-8">
-            <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-accent/10 border border-accent/20">
-              <Zap className="h-5 w-5 text-accent" />
-            </div>
-            <span className="font-display text-xl font-bold tracking-tight text-white">LoopZero</span>
+    <div className="min-h-screen bg-background flex items-center justify-center p-6">
+      <Card className="w-full max-w-sm">
+        <Card.Body className="p-8 space-y-6">
+          {/* Brand — stacked centered: pixel-art mascot logo on top,
+              wordmark "LoopZero" below. Logo at 60×60 (50% larger than the
+              prior 40×40 to anchor the card visual hierarchy).
+              <picture> ships WebP (~2 KB) to modern browsers, falls back to
+              PNG (~6 KB) for Safari < 14 / Firefox < 65 / IE. alt="" because
+              the wordmark below already provides the accessible name
+              (avoids screen-reader duplication). */}
+          <div className="flex flex-col items-center gap-2">
+            <picture>
+              <source srcSet="/logo-128.webp" type="image/webp" />
+              <img
+                src="/logo-128.png"
+                alt=""
+                width={60}
+                height={60}
+                className="size-[60px]"
+              />
+            </picture>
+            <span className="font-display text-title-sm font-bold tracking-tight text-foreground">
+              LoopZero
+            </span>
           </div>
 
-          <h1 className="font-display text-xl font-semibold text-white mb-1">Sign in</h1>
-          <p className="text-sm text-white/40 mb-6">Deploy your apps in under 5 minutes.</p>
+          {/* T1.4 microcopy: universal welcome, locked-narrative subtitle. */}
+          <div className="space-y-1">
+            <h1 className="font-display text-title-sm font-semibold text-foreground">
+              Sign in to LoopZero
+            </h1>
+            <p className="text-body-sm text-muted-foreground">
+              Deploy, monitor, and operate your workloads.
+            </p>
+          </div>
 
-          {/* §3.6: Session expired notification when redirected from auth failure */}
-          {searchParams.get('reason') === 'expired' && allErrors.length === 0 && (
-            <div className="mb-4 rounded-lg bg-yellow-500/10 border border-yellow-500/20 p-3 text-sm text-yellow-300 flex items-start gap-2">
-              <AlertCircle className="h-4 w-4 mt-0.5 flex-shrink-0" />
-              <span>Your session expired. Please sign in again.</span>
-            </div>
+          {/* Session expired notice (§3.6) */}
+          {searchParams.get('reason') === 'expired' && allErrors.length === 0 && !networkError && (
+            <Alert
+              intent="warning"
+              description="Your session expired. Please sign in again."
+              title="Session expired"
+            />
           )}
 
-          {allErrors.length > 0 && (
-            <div className="mb-4 rounded-lg bg-danger/10 border border-danger/20 p-3 text-sm text-danger flex items-start gap-2">
-              <AlertCircle className="h-4 w-4 mt-0.5 flex-shrink-0" />
-              <span>{allErrors[0].text}</span>
-            </div>
+          {/* T1.3: network/HTTP-5xx feedback (EC-1). networkError wins over Kratos errors. */}
+          {networkError && (
+            <Alert
+              intent="warning"
+              title="Network error. Check your connection and try again."
+            />
           )}
 
-          {/* Social login */}
+          {/* T1.1: OWASP-aligned generic title + safe-detail allow-list (D2). */}
+          {!networkError && allErrors.length > 0 && (
+            <Alert
+              intent="destructive"
+              title="We couldn't sign you in."
+              description={safeErrorDetail(allErrors)}
+            />
+          )}
+
+          {/* Social login — T0.1 J-04: `?provider=` autofocus + visual ring */}
           <div className="space-y-3">
-            <Button variant="secondary" size="lg" className="w-full justify-center gap-3 h-12"
-              onClick={() => submitOIDC('github')}>
-              <Github className="h-4 w-4" />
+            <Button
+              ref={githubButtonRef}
+              variant="secondary"
+              size="lg"
+              className={`w-full justify-center gap-3${providerParam === 'github' ? ' ring-2 ring-primary ring-offset-2' : ''}`}
+              onClick={() => submitOIDC('github')}
+            >
+              <Github className="size-4" aria-hidden="true" />
               Continue with GitHub
             </Button>
 
-            <Button variant="secondary" size="lg" className="w-full justify-center gap-3 h-12"
-              onClick={() => submitOIDC('google')}>
-              <svg className="h-4 w-4" viewBox="0 0 24 24"><path d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92a5.06 5.06 0 0 1-2.2 3.32v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.1z" fill="#4285F4"/><path d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z" fill="#34A853"/><path d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.07H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.93l2.85-2.22.81-.62z" fill="#FBBC05"/><path d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.07l3.66 2.84c.87-2.6 3.3-4.53 6.16-4.53z" fill="#EA4335"/></svg>
+            <Button
+              ref={googleButtonRef}
+              variant="secondary"
+              size="lg"
+              className={`w-full justify-center gap-3${providerParam === 'google' ? ' ring-2 ring-primary ring-offset-2' : ''}`}
+              onClick={() => submitOIDC('google')}
+            >
+              <GoogleBrandIcon />
               Continue with Google
             </Button>
           </div>
 
           {/* Divider */}
-          <div className="relative my-6">
-            <div className="absolute inset-0 flex items-center"><div className="w-full border-t border-white/[0.06]" /></div>
-            <div className="relative flex justify-center"><span className="bg-surface-1/80 px-3 text-xs text-white/20">or with email</span></div>
+          <div className="relative">
+            <div className="absolute inset-0 flex items-center">
+              <div className="w-full border-t border-border/40" />
+            </div>
+            <div className="relative flex justify-center">
+              <span className="bg-card px-3 text-label text-muted-foreground">
+                or with email
+              </span>
+            </div>
           </div>
 
-          {/* Email/password form */}
+          {/* Email/password form — T2.1 FormField + visible Label (D4) */}
           <form onSubmit={submitPassword} className="space-y-3">
-            <input type="email" value={email} onChange={e => setEmail(e.target.value)} required
-              placeholder="Email" autoComplete="email"
-              className="w-full rounded-lg border border-white/[0.08] bg-surface-0 px-3 py-2.5 text-sm text-white placeholder:text-white/20 focus:border-accent/30 focus:outline-none" />
-            <input type="password" value={password} onChange={e => setPassword(e.target.value)} required
-              placeholder="Password" autoComplete="current-password"
-              className="w-full rounded-lg border border-white/[0.08] bg-surface-0 px-3 py-2.5 text-sm text-white placeholder:text-white/20 focus:border-accent/30 focus:outline-none" />
-            <Button type="submit" size="lg" className="w-full justify-center h-12" disabled={submitting}>
-              {submitting ? <Loader2 className="h-4 w-4 animate-spin" /> : 'Sign in'}
+            <FormField>
+              <FormField.Label>Email</FormField.Label>
+              <FormField.Control>
+                <Input
+                  size="lg"
+                  type="email"
+                  value={email}
+                  onChange={(e) => setEmail(e.target.value)}
+                  required
+                  placeholder="you@company.com"
+                  /* T3.1 D6: passkey via autofill, no dedicated button.
+                     Browser without WebAuthn ignores the token silently. */
+                  autoComplete="email webauthn"
+                  /* T1.2 EC-6: accepts mobile keyboard pop as tradeoff (Vercel/Linear-style).
+                     T0.1 J-04: disabled when ?provider=github|google so OIDC button receives focus instead. */
+                  autoFocus={emailFocusEnabled}
+                />
+              </FormField.Control>
+            </FormField>
+            <FormField>
+              <FormField.Label>Password</FormField.Label>
+              <FormField.Control>
+                <Input
+                  size="lg"
+                  type="password"
+                  value={password}
+                  onChange={(e) => setPassword(e.target.value)}
+                  required
+                  placeholder="••••••••"
+                  autoComplete="current-password"
+                />
+              </FormField.Control>
+            </FormField>
+            <Button
+              type="submit"
+              variant="primary"
+              size="lg"
+              className="w-full justify-center"
+              disabled={submitting}
+            >
+              {submitting ? (
+                <Loader2 className="size-4 animate-spin" aria-hidden="true" />
+              ) : (
+                'Sign in'
+              )}
             </Button>
           </form>
 
           {/* Footer links */}
-          <div className="mt-6 flex justify-between text-sm text-white/30">
-            <Link to="/register" className="text-accent hover:text-accent/80">Create account</Link>
-            <Link to="/recovery" className="hover:text-white/50">Forgot password?</Link>
+          <div className="flex justify-between text-body-sm">
+            <Link
+              to="/register"
+              className="text-primary hover:text-primary/80"
+            >
+              Create account
+            </Link>
+            <Link
+              to="/recovery"
+              className="text-muted-foreground hover:text-foreground"
+            >
+              Forgot password?
+            </Link>
           </div>
 
           {/* CLI hint */}
-          <div className="relative my-6">
-            <div className="absolute inset-0 flex items-center"><div className="w-full border-t border-white/[0.06]" /></div>
-            <div className="relative flex justify-center"><span className="bg-surface-1/80 px-3 text-xs text-white/20">or use the CLI</span></div>
-          </div>
-          <div className="rounded-lg bg-surface-0 border border-white/[0.06] p-3 font-mono text-sm text-center">
-            <span className="text-accent/60">$</span>
-            <span className="text-white/50 ml-2">loopzero login</span>
-          </div>
-        </div>
-      </motion.div>
+          <CodeBlock
+            caption="or use the CLI"
+            code="loopzero login"
+            terminal
+            copyable
+          />
+        </Card.Body>
+      </Card>
     </div>
   );
 }

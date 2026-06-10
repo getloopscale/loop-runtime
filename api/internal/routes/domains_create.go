@@ -31,15 +31,15 @@ func (h *DomainHandler) Create(w http.ResponseWriter, r *http.Request) {
 	// SEC-002 fix: only owners and admins can manage custom domains
 	if uc.Role != "owner" && uc.Role != "admin" {
 		writeJSON(w, http.StatusForbidden, map[string]string{
-			"error": "Only team owners and admins can manage custom domains.",
-			"code":  "FORBIDDEN",
+			"code":    "FORBIDDEN",
+			"message": "Only team owners and admins can manage custom domains.",
 		})
 		return
 	}
 
 	var req domainCreateRequest
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "invalid request body"})
+		writeJSON(w, http.StatusBadRequest, map[string]string{"code": "INTERNAL_ERROR", "message": "invalid request body"})
 		return
 	}
 
@@ -56,7 +56,7 @@ func (h *DomainHandler) Create(w http.ResponseWriter, r *http.Request) {
 
 	// Validate domain format
 	if err := h.validator.Validate(req.Domain); err != nil {
-		writeJSON(w, http.StatusBadRequest, map[string]string{"error": err.Error()})
+		writeJSON(w, http.StatusBadRequest, map[string]string{"code": "INTERNAL_ERROR", "message": err.Error()})
 		return
 	}
 
@@ -65,7 +65,7 @@ func (h *DomainHandler) Create(w http.ResponseWriter, r *http.Request) {
 	count, err := h.store.CountByTenant(ctx, uc.TenantID)
 	if err != nil {
 		slog.ErrorContext(ctx, "domain count failed", "error", err)
-		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": "internal error"})
+		writeJSON(w, http.StatusInternalServerError, map[string]string{"code": "INTERNAL_ERROR", "message": "internal error"})
 		return
 	}
 	if count >= maxDomainsPerTenant {
@@ -100,13 +100,13 @@ func (h *DomainHandler) Create(w http.ResponseWriter, r *http.Request) {
 	if err := h.store.Create(ctx, domain); err != nil {
 		if errors.Is(err, ErrDomainExists) {
 			writeJSON(w, http.StatusConflict, map[string]string{
-				"error": "domain already registered",
-				"code":  "DOMAIN_ALREADY_EXISTS",
+				"code":    "DOMAIN_ALREADY_EXISTS",
+				"message": "domain already registered",
 			})
 			return
 		}
 		slog.ErrorContext(ctx, "domain create failed", "error", err)
-		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": "failed to register domain"})
+		writeJSON(w, http.StatusInternalServerError, map[string]string{"code": "INTERNAL_ERROR", "message": "failed to register domain"})
 		return
 	}
 

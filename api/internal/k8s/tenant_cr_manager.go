@@ -8,7 +8,6 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"os"
 
 	k8serrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -19,18 +18,17 @@ import (
 	"k8s.io/client-go/tools/clientcmd"
 	"k8s.io/client-go/util/retry"
 
-	"github.com/loopzero/loopzero/api/internal/routes"
+	"github.com/loopzero/loopzero/api/internal/domain"
 )
 
-// tenantNamespace is the Kubernetes namespace where Tenant CRs live.
-// Local dev and production: loopzero-system.
-// Configurable via TENANT_NAMESPACE env var.
-var tenantNamespace = func() string {
-	if ns := os.Getenv("TENANT_NAMESPACE"); ns != "" {
-		return ns
-	}
-	return "loopzero-system"
-}()
+// tenantNamespace is the canonical namespace for all Tenant + Environment CRs.
+//
+// ADR-0018 v2 (MEET-ADR-0018 condition C1): hard-coded `const`, NOT
+// `var`/env-overridable. The previous `TENANT_NAMESPACE` env var was the
+// misplacement vector that allowed iter 7-8 of dogfood to land Tenants in
+// `default`. Removed entirely; future multi-namespace topology requires a
+// new ADR superseding this one (ADR-0018 §Constraints C3).
+const tenantNamespace = "loopzero-system"
 
 var tenantCRGVR = schema.GroupVersionResource{
 	Group:    "loopzero.io",
@@ -39,7 +37,7 @@ var tenantCRGVR = schema.GroupVersionResource{
 }
 
 // TenantCRManager manages Tenant custom resources in Kubernetes.
-// It implements routes.TenantCRManager (DIP) using the dynamic client
+// It implements domain.TenantCRManager (DIP) using the dynamic client
 // to avoid importing the operator's typed SDK.
 type TenantCRManager struct {
 	Client dynamic.Interface
@@ -75,7 +73,7 @@ func NewTenantCRManager(kubeconfig, kubeContext string) (*TenantCRManager, error
 // It is idempotent: calling it multiple times with the same tenantID is safe.
 // If the CR already exists, it updates the spec to match the desired state.
 // It uses retry-on-conflict to handle concurrent modifications by the TenantController.
-func (m *TenantCRManager) EnsureTenant(ctx context.Context, tenantID string, spec routes.TenantCRSpec) error {
+func (m *TenantCRManager) EnsureTenant(ctx context.Context, tenantID string, spec domain.TenantCRSpec) error {
 	resource := m.Client.Resource(tenantCRGVR).Namespace(tenantNamespace)
 
 	return retry.RetryOnConflict(retry.DefaultRetry, func() error {
@@ -225,7 +223,7 @@ func (m *TenantCRManager) RemoveEnvironment(ctx context.Context, tenantID, envNa
 
 // ListEnvironments reads spec.environments[] from the Tenant CR and returns
 // them as EnvironmentEntry values with status "active".
-func (m *TenantCRManager) ListEnvironments(ctx context.Context, tenantID string) ([]routes.EnvironmentEntry, error) {
+func (m *TenantCRManager) ListEnvironments(ctx context.Context, tenantID string) ([]domain.EnvironmentEntry, error) {
 	resource := m.Client.Resource(tenantCRGVR).Namespace(tenantNamespace)
 
 	obj, err := resource.Get(ctx, tenantID, metav1.GetOptions{})
@@ -234,7 +232,7 @@ func (m *TenantCRManager) ListEnvironments(ctx context.Context, tenantID string)
 	}
 
 	envs := getEnvironments(obj)
-	result := make([]routes.EnvironmentEntry, 0, len(envs))
+	result := make([]domain.EnvironmentEntry, 0, len(envs))
 	for _, e := range envs {
 		entry, ok := e.(map[string]interface{})
 		if !ok {
@@ -244,7 +242,7 @@ func (m *TenantCRManager) ListEnvironments(ctx context.Context, tenantID string)
 		if name == "" {
 			continue
 		}
-		result = append(result, routes.EnvironmentEntry{
+		result = append(result, domain.EnvironmentEntry{
 			Name:   name,
 			Status: "active",
 		})
@@ -254,7 +252,7 @@ func (m *TenantCRManager) ListEnvironments(ctx context.Context, tenantID string)
 
 // GetEnvironmentDetail returns detail for a single environment from the Tenant CR.
 // Returns nil (without error) if the environment is not found.
-func (m *TenantCRManager) GetEnvironmentDetail(ctx context.Context, tenantID, envName string) (*routes.EnvironmentDetail, error) {
+func (m *TenantCRManager) GetEnvironmentDetail(ctx context.Context, tenantID, envName string) (*domain.EnvironmentDetail, error) {
 	resource := m.Client.Resource(tenantCRGVR).Namespace(tenantNamespace)
 
 	obj, err := resource.Get(ctx, tenantID, metav1.GetOptions{})
@@ -270,10 +268,10 @@ func (m *TenantCRManager) GetEnvironmentDetail(ctx context.Context, tenantID, en
 		}
 		name, _ := entry["name"].(string)
 		if name == envName {
-			return &routes.EnvironmentDetail{
+			return &domain.EnvironmentDetail{
 				Name:     name,
 				Status:   "active",
-				Projects: []routes.EnvProjectInfo{},
+				Projects: []domain.EnvProjectInfo{},
 			}, nil
 		}
 	}
@@ -283,7 +281,7 @@ func (m *TenantCRManager) GetEnvironmentDetail(ctx context.Context, tenantID, en
 
 // buildTenantCR constructs the unstructured Tenant CR matching the CRD schema
 // defined in operators/api/v1/tenant_types.go.
-func buildTenantCR(tenantID string, spec routes.TenantCRSpec) *unstructured.Unstructured {
+func buildTenantCR(tenantID string, spec domain.TenantCRSpec) *unstructured.Unstructured {
 	plan := spec.Plan
 	if plan == "" {
 		plan = "starter"

@@ -1,37 +1,102 @@
 import { useEffect, useState } from 'react';
 import { useSearchParams } from 'react-router-dom';
-import { motion } from 'framer-motion';
-import { CheckCircle2, Loader2, Mail, AlertCircle } from 'lucide-react';
-import { Button } from '@/components/ui/button';
+import { AlertCircle, CheckCircle2, Loader2, Mail } from 'lucide-react';
+import { Alert, Button, Card, PinInput } from '@loopzerokit/ui';
+import { API_URL, AUTH_URL } from '@/lib/config';
+import { enrichKratosError } from '@/lib/kratos';
 
-import { API_URL } from '@/lib/config';
-const KRATOS_URL = API_URL;
+const KRATOS_URL = AUTH_URL || API_URL;
+
+type Status = 'loading' | 'input' | 'success' | 'error';
 
 export function VerificationPage() {
   const [searchParams] = useSearchParams();
-  const [status, setStatus] = useState<'loading' | 'input' | 'success' | 'error'>('loading');
-  const [code, setCode] = useState(searchParams.get('code') || '');
+  const [status, setStatus] = useState<Status>('loading');
+  const [code, setCode] = useState(searchParams.get('code') ?? '');
   const [error, setError] = useState('');
 
   const flowId = searchParams.get('flow');
 
-  // Auto-submit if code is in URL (from email link)
   useEffect(() => {
     const urlCode = searchParams.get('code');
     if (flowId && urlCode) {
       submitCode(flowId, urlCode);
     } else if (flowId) {
-      setStatus('input');
+      // Browser-created flow is empty: Kratos hasn't queued an email yet
+      // because nobody submitted the email field. If the user has an active
+      // session, look up their email and submit it automatically so the
+      // courier dispatches a code BEFORE we show PinInput.
+      ensureCodeRequested(flowId).finally(() => setStatus('input'));
     } else {
-      // No flow — start one
       window.location.href = `${KRATOS_URL}/self-service/verification/browser`;
     }
+    // WAI-ARIA-equivalent: submitCode intentionally NOT in deps to avoid
+    // infinite re-render loop (function identity changes each render).
+    // flowId + searchParams are the actual change triggers per D-9 v1.2.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [flowId, searchParams]);
+
+  /**
+   * Ensure Kratos has queued a verification email for this flow.
+   *
+   * Kratos browser-mode creates an empty flow on GET; it only enqueues a
+   * mail after a POST that includes the `email` field. The dashboard UI
+   * surfaces PinInput directly (no email-prompt screen), so without this
+   * auto-POST users see an input box waiting for a code that was never
+   * sent. We pull the email from /sessions/whoami (set when the user is
+   * logged in) and submit it. If there is no session, we fall through
+   * silently — there is nothing to send the code to.
+   *
+   * Idempotent: re-POSTing the same email on a flow that already has a
+   * code pending is a no-op on Kratos's side (it returns the same flow
+   * with the code-input node).
+   */
+  const ensureCodeRequested = async (flow: string) => {
+    try {
+      const sessionResp = await fetch(`${KRATOS_URL}/sessions/whoami`, {
+        credentials: 'include',
+        headers: { Accept: 'application/json' },
+      });
+      if (!sessionResp.ok) return;
+      const session = await sessionResp.json();
+      const email: string | undefined = session?.identity?.traits?.email;
+      if (!email) return;
+
+      const flowResp = await fetch(
+        `${KRATOS_URL}/self-service/verification/flows?id=${flow}`,
+        { credentials: 'include', headers: { Accept: 'application/json' } },
+      );
+      if (!flowResp.ok) return;
+      const flowData = await flowResp.json();
+
+      // Skip if the flow is already past the email step (has a `code` node).
+      const hasCodeNode = flowData.ui?.nodes?.some(
+        (n: { attributes: { name?: string } }) => n.attributes.name === 'code',
+      );
+      if (hasCodeNode) return;
+
+      const csrfNode = flowData.ui?.nodes?.find(
+        (n: { attributes: { name?: string } }) => n.attributes.name === 'csrf_token',
+      );
+      await fetch(flowData.ui.action, {
+        method: 'POST',
+        credentials: 'include',
+        headers: { 'Content-Type': 'application/json', Accept: 'application/json' },
+        body: JSON.stringify({
+          csrf_token: csrfNode?.attributes?.value || '',
+          method: 'code',
+          email,
+        }),
+      });
+    } catch {
+      // Non-fatal: PinInput still renders, user can manually re-request via
+      // the "Resend" link below the submit button.
+    }
+  };
 
   const submitCode = async (flow: string, verificationCode: string) => {
     setStatus('loading');
     try {
-      // Get flow to find action URL and CSRF token
       const flowResp = await fetch(`${KRATOS_URL}/self-service/verification/flows?id=${flow}`, {
         credentials: 'include',
         headers: { Accept: 'application/json' },
@@ -42,9 +107,10 @@ export function VerificationPage() {
         return;
       }
       const flowData = await flowResp.json();
-      const csrfNode = flowData.ui?.nodes?.find((n: { attributes: { name?: string } }) => n.attributes.name === 'csrf_token');
+      const csrfNode = flowData.ui?.nodes?.find(
+        (n: { attributes: { name?: string } }) => n.attributes.name === 'csrf_token',
+      );
 
-      // Submit the code
       const resp = await fetch(flowData.ui.action, {
         method: 'POST',
         credentials: 'include',
@@ -62,14 +128,25 @@ export function VerificationPage() {
         setStatus('success');
       } else if (data.ui?.messages) {
         const errors = data.ui.messages.filter((m: { type: string }) => m.type === 'error');
-        setError(errors[0]?.text || 'Invalid code. Please try again.');
+        // EC-02: enrich generic Kratos messages com TCIA action context
+        setError(
+          enrichKratosError(
+            errors[0]?.text || 'Invalid code. Request a new verification link from the sign-in page.',
+            'verification',
+          ),
+        );
         setStatus('input');
       } else {
-        setError('Verification failed. Please try again.');
+        setError(
+          'Verification failed. Request a new verification link from the sign-in page, or contact support if it persists.',
+        );
         setStatus('input');
       }
     } catch {
-      setError('Something went wrong. Please try again.');
+      // T0.1 TCIA — sponsor critério #6
+      setError(
+        'Verification request failed. Your network may be unreachable or the link expired. Request a new verification link from the sign-in page.',
+      );
       setStatus('error');
     }
   };
@@ -80,61 +157,119 @@ export function VerificationPage() {
   };
 
   return (
-    <div className="min-h-screen bg-surface-0 flex items-center justify-center">
-      <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} className="w-full max-w-sm">
-        <div className="rounded-2xl border border-white/[0.06] bg-surface-1/80 backdrop-blur-xl p-8 shadow-2xl shadow-black/40 text-center">
-
+    <div className="min-h-screen bg-background flex items-center justify-center p-6">
+      <Card className="w-full max-w-sm">
+        <Card.Body className="p-8 text-center space-y-4">
           {status === 'loading' && (
             <>
-              <Loader2 className="h-8 w-8 text-accent animate-spin mx-auto mb-4" />
-              <p className="text-sm text-white/40">Verifying your email...</p>
+              <Loader2
+                className="size-8 text-primary animate-spin mx-auto"
+                aria-label="Verifying"
+              />
+              <p className="text-body-sm text-muted-foreground">
+                Verifying your email...
+              </p>
             </>
           )}
 
           {status === 'success' && (
             <>
-              <CheckCircle2 className="h-12 w-12 text-accent mx-auto mb-4" />
-              <h1 className="font-display text-xl font-semibold text-white mb-2">Email verified</h1>
-              <p className="text-sm text-white/40 mb-6">Your account is now fully active.</p>
-              <a href="/">
-                <Button size="lg" className="w-full justify-center h-12">Go to dashboard</Button>
-              </a>
+              <CheckCircle2
+                className="size-12 text-success mx-auto"
+                aria-hidden="true"
+              />
+              <div className="space-y-1">
+                <h1 className="font-display text-title-sm font-semibold text-foreground">
+                  Email verified
+                </h1>
+                <p className="text-body-sm text-muted-foreground">
+                  Your account is now fully active.
+                </p>
+              </div>
+              <Button asChild variant="primary" size="lg"
+ className="w-full justify-center">
+                <a href="/">Go to dashboard</a>
+              </Button>
             </>
           )}
 
           {status === 'error' && (
             <>
-              <AlertCircle className="h-12 w-12 text-danger mx-auto mb-4" />
-              <h1 className="font-display text-xl font-semibold text-white mb-2">Verification failed</h1>
-              <p className="text-sm text-white/40 mb-6">{error}</p>
-              <a href="/">
-                <Button size="lg" className="w-full justify-center h-12">Go to dashboard</Button>
-              </a>
+              <AlertCircle
+                className="size-12 text-destructive mx-auto"
+                aria-hidden="true"
+              />
+              <div className="space-y-1">
+                <h1 className="font-display text-title-sm font-semibold text-foreground">
+                  Verification failed
+                </h1>
+                <p className="text-body-sm text-muted-foreground">{error}</p>
+              </div>
+              <Button
+                variant="primary"
+                size="lg"
+                className="w-full justify-center"
+                onClick={() => {
+                  window.location.href = `${KRATOS_URL}/self-service/verification/browser`;
+                }}
+              >
+                Resend verification email
+              </Button>
+              <Button asChild variant="secondary" size="lg" className="w-full justify-center">
+                <a href="/">Go to dashboard</a>
+              </Button>
             </>
           )}
 
           {status === 'input' && (
             <>
-              <Mail className="h-12 w-12 text-accent/60 mx-auto mb-4" />
-              <h1 className="font-display text-xl font-semibold text-white mb-2">Enter verification code</h1>
-              <p className="text-sm text-white/40 mb-6">Check your email for a 6-digit code.</p>
-              {error && (
-                <div className="mb-4 rounded-lg bg-danger/10 border border-danger/20 p-3 text-sm text-danger">
-                  {error}
-                </div>
-              )}
+              <Mail className="size-12 text-primary mx-auto" aria-hidden="true" />
+              <div className="space-y-1">
+                <h1 className="font-display text-title-sm font-semibold text-foreground">
+                  Enter verification code
+                </h1>
+                <p className="text-body-sm text-muted-foreground">
+                  Check your email for a 6-digit code.
+                </p>
+              </div>
+              {error && <Alert intent="destructive" title={error} />}
               <form onSubmit={handleSubmit} className="space-y-4">
-                <input type="text" value={code} onChange={e => setCode(e.target.value)} required
-                  placeholder="Enter code" maxLength={6} autoFocus
-                  className="w-full rounded-lg border border-white/[0.08] bg-surface-0 px-3 py-2.5 text-sm text-white placeholder:text-white/20 focus:border-accent/30 focus:outline-none text-center tracking-widest text-lg" />
-                <Button type="submit" size="lg" className="w-full justify-center h-12">
+                {/* Brief #5 PinInput — 6-box OTP per DSS § 4 + Apple/Stripe/Clerk convention.
+                    Closes Deep Review § 2.12 P2. onComplete auto-submits when 6 digits typed. */}
+                <PinInput
+                  length={6}
+                  value={code}
+                  onChange={setCode}
+                  onComplete={(v) => flowId && submitCode(flowId, v)}
+                  inputMode="numeric"
+                  size="lg"
+                  autoFocus
+                  error={!!error}
+                  aria-label="Verification code"
+                />
+                <Button
+                  type="submit"
+                  variant="primary"
+                  size="lg"
+                  className="w-full justify-center"
+                  disabled={code.length !== 6}
+                >
                   Verify
                 </Button>
               </form>
+              <button
+                type="button"
+                onClick={() => {
+                  window.location.href = `${KRATOS_URL}/self-service/verification/browser`;
+                }}
+                className="text-label text-muted-foreground hover:text-foreground underline-offset-2 hover:underline mt-2"
+              >
+                Didn't receive the email? Resend
+              </button>
             </>
           )}
-        </div>
-      </motion.div>
+        </Card.Body>
+      </Card>
     </div>
   );
 }

@@ -20,7 +20,9 @@ import { Formatter } from './output/formatter';
 import { ensureFreshToken } from './auth/token-refresh';
 
 import { registerAuthCommands } from './register/auth';
-import { registerInitCommand } from './register/init';
+// Plan B v3.1 T-B.2 (2026-06-05) — `loopzero init` deleted post LoopZeroKit-only cutover.
+// All apps must use LoopZeroKit ≥0.5.0 + emit `.loopzero/services.json` via `loopzerokit build`.
+// import { registerInitCommand } from './register/init';
 import { registerDeployCommands } from './register/deploy';
 import { registerProjectCommands } from './register/project';
 import { registerTeamCommands } from './register/team';
@@ -30,6 +32,7 @@ import { registerInfraCommands } from './register/infra';
 import { registerPreviewCommands } from './register/preview';
 import { registerScaleCommands } from './register/scale';
 import { registerPlatformCommands } from './register/platform';
+import { registerDiagnosticsCommands } from './register/diagnostics';
 import type { CommandDeps } from './register/types';
 
 // --- Cleanup registry for graceful signal handling (B-09) ---
@@ -80,10 +83,16 @@ export function createProgram(): Command {
   program
     .name('loopzero')
     .version(cliVersion)
-    .description('CLI-first Kubernetes PaaS for monorepo deployments')
+    .description('CLI-first Kubernetes LoopZeroCloud for monorepo deployments')
     .option('--json', 'Output in JSON format');
 
   // F-05: Configure Commander to output JSON errors when --json is present.
+  // F-03 (CHG-2026-04-29-DOGFOOD T1.2): Commander's outputError fires for
+  // parse errors (unknown option/command, missing arg). We seta
+  // `process.exitCode = 1` here como guarantee — em algumas versões do
+  // Commander, exitOverride é silenciosamente engolido quando configureOutput
+  // está presente, então este é o mais confiável "ponto de set" para exit
+  // code 1 em parse errors.
   program.configureOutput({
     writeOut: (str: string) => process.stdout.write(str),
     writeErr: (str: string) => {
@@ -97,6 +106,8 @@ export function createProgram(): Command {
       } else {
         process.stderr.write(str);
       }
+      // F-03: Rule 4 mandates exit 1 for usage errors. Set exitCode here.
+      process.exitCode = 1;
     },
     outputError: (str: string, write: (s: string) => void) => write(str),
   });
@@ -150,7 +161,7 @@ export function createProgram(): Command {
 
   // Register all command groups
   registerAuthCommands(deps);
-  registerInitCommand(deps);
+  // Plan B v3.1 T-B.2 — `loopzero init` removed (LoopZeroKit-only cutover).
   registerDeployCommands(deps);
   registerProjectCommands(deps);
   registerTeamCommands(deps);
@@ -160,12 +171,32 @@ export function createProgram(): Command {
   registerPreviewCommands(deps);
   registerScaleCommands(deps);
   registerPlatformCommands(deps);
+  registerDiagnosticsCommands(deps);
 
-  // Handle case when no subcommand is given (e.g., `loopzero` or `loopzero --json`)
+  // Plan v1.1 T4.1 (loopzero-cli-vercel-like-ux) — zero-config delegation.
+  // `loopzero` with no positional subcommand and no --help/--version routes to
+  // `loopzero deploy` (Vercel-parity ergonomic). EC-8 absorbed: help/version
+  // flags ALWAYS win, regardless of argv position; Commander handles them
+  // via exitOverride before this action fires, but we also guard
+  // defensively in case the action is reached.
   program.argument('[args...]');
-  program.action((args: string[]) => {
+  program.action(async (args: string[]) => {
     const globalOpts = program.opts();
     const unknownCommand = args.length > 0 ? args[0] : null;
+
+    // EC-8 — explicit guard: never delegate when --help/-h/--version/-V is
+    // anywhere in argv. Commander typically handles these earlier; this is a
+    // belt-and-suspenders check.
+    const argv = process.argv.slice(2);
+    if (
+      argv.includes('--help') ||
+      argv.includes('-h') ||
+      argv.includes('--version') ||
+      argv.includes('-V')
+    ) {
+      program.help();
+      return;
+    }
 
     if (unknownCommand) {
       if (globalOpts.json) {
@@ -177,19 +208,56 @@ export function createProgram(): Command {
         writeError(`Unknown command: ${unknownCommand}. Run: loopzero --help`);
       }
       process.exitCode = 1;
-    } else {
-      if (globalOpts.json) {
-        const commandNames = program.commands.map((cmd) => cmd.name());
-        writeTo(JSON.stringify({
-          error: 'No command specified. Run: loopzero --help',
-          commands: commandNames,
-          exit_code: 1,
-        }));
-        process.exitCode = 1;
-      } else {
-        program.help();
-      }
+      return;
     }
+
+    // No positional subcommand → delegate to `loopzero deploy` per Plan v1.1 D3.
+    const deployCmd = program.commands.find((cmd) => cmd.name() === 'deploy');
+    if (deployCmd === undefined) {
+      // Defensive: deploy registration somehow missing. Fall back to help.
+      program.help();
+      return;
+    }
+    // Reconstruct argv with `deploy` injected as the subcommand so commander
+    // re-parses with the right action wired.
+    const newArgv = [process.argv[0], process.argv[1], 'deploy', ...argv];
+    try {
+      await program.parseAsync(newArgv);
+    } catch {
+      // parseAsync errors already surface via Commander's exitOverride hook.
+    }
+  });
+
+  // F-03 (CHG-2026-04-29-DOGFOOD T1.2) — exitOverride para parse errors
+  // (unknown option/command, missing required arg). Sem isso, Commander.js
+  // imprime "error: unknown option" no stderr mas o processo termina com
+  // exit 0, mascarando typos em scripts CI/CD com `set -e`. Rule 4 exige
+  // exit 1 para usage errors. Para help/version (também throw via
+  // exitOverride) precisamos exit 0 — não são erros, são modos legítimos.
+  // Para ambos os caminhos: silenciar a re-throw (parseAsync resolve
+  // limpo); para usage errors o exitCode=1 já foi setado via writeErr.
+  program.exitOverride((err) => {
+    // Help / version são exit 0 success cases. Não throw, deixa o caller
+    // resolver sem ruído de "Error: (outputHelp)" no stderr.
+    if (err.code === 'commander.helpDisplayed' || err.code === 'commander.version' || err.code === 'commander.help') {
+      return;
+    }
+    // Parse errors: exitCode=1 já foi setado por writeErr; re-throw para
+    // que parseAsync rejeite e o bin/loopzero .catch handle propagation.
+    const usageCodes = new Set([
+      'commander.unknownCommand',
+      'commander.unknownOption',
+      'commander.missingArgument',
+      'commander.missingMandatoryOptionValue',
+      'commander.optionMissingArgument',
+      'commander.invalidOptionArgument',
+      'commander.invalidArgument',
+      'commander.excessArguments',
+    ]);
+    if (usageCodes.has(err.code)) {
+      process.exitCode = 1;
+    }
+    throw err;
   });
 
   return program;
@@ -205,7 +273,10 @@ if (require.main === module) {
     await shutdownTracing();
   });
 
-  program.exitOverride();
+  // F-03 (CHG-2026-04-29-DOGFOOD T1.2) — exitOverride já é configurado em
+  // createProgram() com tratamento granular de codes de parse error.
+  // Removido o `program.exitOverride()` placeholder que sobrescrevia esse
+  // tratamento sem preservar o exit code 1 para usage errors.
 
   // Root span wrapping the entire CLI command execution.
   const commandName = process.argv.slice(2).find(a => !a.startsWith('-')) ?? 'unknown';

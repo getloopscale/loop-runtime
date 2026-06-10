@@ -1,0 +1,114 @@
+version: '3'
+
+# Quality gates — re-homed from .github/workflows (deleted 2026-05-23, GitHub
+# Actions is not the CI/CD platform). These are platform-agnostic: they run
+# locally for the operator and can be invoked by any real CI via `task quality:*`.
+#
+# Layers:
+#   quality:hermetic  — pure-Go gate unit tests + build (no repo state needed)
+#   quality:gates     — full-repo-scan gates (deterministic; no git diff)
+#   quality:diff      — PR-diff gates (need a BASE_REF; for CI/PR context)
+#   quality:all       — hermetic + gates (the standard local/CI suite)
+
+tasks:
+  build:
+    desc: Build the loopzero-ops quality binary to /tmp/loopzero-ops
+    cmds:
+      - cd cmd/loopzero-ops && go build -o /tmp/loopzero-ops .
+
+  hermetic:
+    desc: Run pkg/quality hermetic Go tests + verify both modules build
+    cmds:
+      - cd pkg && go test ./quality/...
+      - cd cmd/loopzero-ops && go build ./...
+
+  gates:
+    desc: Full-repo-scan quality gates (no git diff required)
+    deps: [build]
+    cmds:
+      - /tmp/loopzero-ops quality unhomed-logic --check
+      - /tmp/loopzero-ops quality script-count
+      - /tmp/loopzero-ops quality regression-matrix
+      - /tmp/loopzero-ops quality postgresql-pdb-config
+      - /tmp/loopzero-ops quality dockerfile-no-docker-hub
+      - /tmp/loopzero-ops quality advisory-lock-scope
+      - /tmp/loopzero-ops quality no-env-vault-secrets   # openbao-adoption T2.7 — forbid secrets-as-env-var regression (post D11 ESO migration)
+      - /tmp/loopzero-ops quality transit-coverage       # openbao-adoption T3.7 — enforce dispatcher invariant (Set/ListForResync use encryptForStore/decryptFromStore)
+      - /tmp/loopzero-ops quality cluster-role-no-secrets-star  # openbao-adoption T5.15 — forbid unconditional cluster-wide secrets/configmaps grants (deep review finding #1)
+      - /tmp/loopzero-ops quality no-legacy-sa-token-secret    # openbao-adoption T7.6 — forbid `type: kubernetes.io/service-account-token` Secret (post T7 dynamic SA tokens)
+      # T9.6 no-pulumi-inline-secrets — operator-gated; do NOT add to task quality:gates
+      # until T9 Vault provider migration runs. Gate is wired in loopzero-ops and can be
+      # invoked manually: `/tmp/loopzero-ops quality no-pulumi-inline-secrets`.
+      # Pre-migration FAIL is INTENTIONAL forcing-function (operator visibility).
+      - /tmp/loopzero-ops quality no-aes-remaining             # openbao-adoption T10.2 — calendar-gated; WARN until T+60d then FAIL on remaining AES code paths
+      - /tmp/loopzero-ops quality anonymous-auth
+      - /tmp/loopzero-ops quality correlation-header   # T6.1 of plan 2026-06-01-p3-infra-observability-test-debt
+      - /tmp/loopzero-ops quality helm-overlap-parity
+      - /tmp/loopzero-ops quality prod-image-digests
+      - /tmp/loopzero-ops quality trivy-scan
+      - /tmp/loopzero-ops quality trufflehog-scan
+      - /tmp/loopzero-ops quality dashboard-promtool
+      - /tmp/loopzero-ops quality cli-exit-codes
+      - /tmp/loopzero-ops quality shell-hygiene
+      - /tmp/loopzero-ops quality corrections-txt-closed
+      # sqlc T3 governance gates (T0.3-T0.5 of plan 2026-05-29-sqlc-
+      # migration v1.2). Phase 0 baseline: each gate trivially passes
+      # (empty queries/, no sqlc imports). Real exercise begins T1.1+.
+      - /tmp/loopzero-ops quality sqlc-sync           # T0.3: committed generated/ in-sync with codegen
+      - /tmp/loopzero-ops quality sqlc-tx-prop        # T0.4: pool-bound vs tx-bound inside withEnvironmentLock
+      - /tmp/loopzero-ops quality tenant-predicate    # T0.5: multi-tenant isolation predicate (security veto-backed)
+      # Bash security/governance gates re-homed 2026-05-24 (were unwired since
+      # GitHub Actions removal). TODO: migrate these to pkg/quality Go gates
+      # (strategic home) and drop the bash. Until then they run here = enforced.
+      - bash infra/tests/docs/pulumi-required-secrets_test.sh   # security: prod/staging/drill secrets externalized
+      - bash infra/tests/skills/skill-paths_test.sh             # governance: SKILL.md path resolution (declared BLOCKING)
+      - bash infra/tests/check-fulcio-oidc-diagnose_test.sh     # M07 keyless: Fulcio OIDC trust diagnose script (T0.2 plan 2026-05-28)
+      - bash infra/tests/check-seed-loopzero-secrets_test.sh        # vault-INT T8.1 EC-21: idempotent Vault seed script (plan 2026-06-02 v1.8)
+      - bash infra/tests/check-rotate-secret_test.sh            # vault-INT T8.1 EC-22: cross-binary atomic rotation script (plan 2026-06-02 v1.8)
+      - bash infra/tests/check-vault-sync_test.sh               # vault-INT Phase 9 T9.1: ESO sync status check (replaces loopzero_config_secret_source metric, plan 2026-06-02 v1.8 D11)
+      - bash infra/tests/check-vault-bootstrap-eso_test.sh      # vault-INT Runbook P1 codification: ESO ClusterSecretStore bootstrap (plan 2026-06-02 v1.8)
+      - bash infra/tests/check-enable-vault-backup_test.sh      # vault-INT Runbook P4 codification: enable snapshot-agent backup (plan 2026-06-02 v1.8)
+      - bash infra/tests/check-restore-vault-snapshot_test.sh   # vault-INT Runbook P5 DR codification: dry-run by default + --execute opt-in (plan 2026-06-02 v1.8)
+      - bash infra/tests/check-rotation-table-parity_test.sh    # vault-INT parity gate: rotate-secret.sh ROTATION_TABLE vs loopzero-external-secrets/values.yaml inventory (plan 2026-06-02 v1.8 iter 17)
+      - bash infra/tests/check-loopzero-external-secrets-creation-policy_test.sh   # vault-INT iter 20 P0 regression: creationPolicy=Orphan (NOT Owner) — prevents K8s GC cascade-delete on rollback
+      - bash infra/tests/check-loopzero-external-secrets-chart-sanity_test.sh      # vault-INT iter 23: comprehensive chart sanity (13 CRs + unique names + refresh intervals + per-env renders + vaultBinaryOverride positive/negative)
+      # openbao-adoption v1.5 hermetic tests (iter 28-34) — wired iter 35
+      - bash infra/tests/check-loopzero-api-no-cluster-secrets_test.sh             # openbao-adoption T5.13: legacyClusterWideSecrets backward-compat flag (deep review finding #1)
+      - bash infra/tests/check-openbao-init-auth-mounts_test.sh                # openbao-adoption T5.1-T5.9: 6 K8s auth mounts + per-binary roles + isolation invariants
+      - bash infra/tests/check-loopzero-api-vault-projected-token_test.sh          # openbao-adoption T5.11: projected SA token audience=vault.loopzero.io + dual-chart parity
+      - bash infra/tests/check-vault-prom-alerts_test.sh                       # openbao-adoption T8.4: 4 P1 alerts severity=critical + runbook_url + audit-log-must-flow invariant
+      - bash infra/tests/check-day30-day60-cronjobs_test.sh                    # openbao-adoption T10.1+T10.3: Day 30 + Day 60 CronJobs safety defaults + EC-12 filter
+      - bash infra/tests/check-scoped-kubeconfig-vault_test.sh                 # openbao-adoption T7.3: Vault kubernetes engine SA token fetch + legacy fallback
+      - bash infra/tests/check-loki-vault-retention_test.sh                    # openbao-adoption T8.2+T8.5: Loki per-NS retention 90d + DO Spaces archive cron
+      - bash infra/tests/check-promtail-vault-scrape_test.sh                   # openbao-adoption T8.1+T8.3: Promtail vault-system scrape + Grafana dashboard
+      # iter 34 trio compatibility regression tests (4 defensive-path locks)
+      - bash infra/tests/check-generate-secrets-vault-fallback_test.sh         # openbao-adoption iter 34: T6.5 cold-bootstrap fallback Vault-skipped path (cleanroom)
+      - bash infra/tests/check-scoped-kubeconfig-cold-bootstrap_test.sh        # openbao-adoption iter 34: T7.3 cold-bootstrap legacy SA-token Secret block (cell wiring)
+      - bash infra/tests/check-promtail-vault-empty-targets_test.sh            # openbao-adoption iter 34: T8.1 promtail filter when vault-system NS absent (dogfood compat)
+      - bash infra/tests/check-loki-retention-schema_test.sh                   # openbao-adoption iter 34: T8.2 Loki retention_stream schema valid (cleanroom Loki bootstrap)
+      - bash infra/tests/docs/credentials-sot_test.sh           # doc-sync: credentials-required.md enumerates bootstrap Secrets
+
+  diff:
+    desc: 'PR-diff quality gates (override base with BASE_REF=<ref>; default origin/main)'
+    deps: [build]
+    vars:
+      BASE_REF: '{{.BASE_REF | default "origin/main"}}'
+    cmds:
+      - /tmp/loopzero-ops quality no-new-bash --base-ref {{.BASE_REF}} --head-ref HEAD
+      - /tmp/loopzero-ops quality dangling-script-refs --base-ref {{.BASE_REF}} --head-ref HEAD
+      - /tmp/loopzero-ops quality dangling-data-refs --base-ref {{.BASE_REF}} --head-ref HEAD
+
+  dashboard-bundle:
+    desc: Dashboard bundle budget gate — size-limit per chunk + total brotli (MEET-ASYNC-002 v1.3)
+    dir: cloud/dashboard
+    cmds:
+      - npm run build
+      - npm run size
+
+  all:
+    desc: Standard quality suite — hermetic tests + full-scan gates
+    deps: [hermetic, gates]
+
+  all-with-frontend:
+    desc: Full quality suite including frontend bundle gate (slower; for pre-release)
+    deps: [hermetic, gates, dashboard-bundle]

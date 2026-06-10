@@ -24,6 +24,12 @@ type WebhookHandler struct {
 	logger        *slog.Logger
 }
 
+// dbExecer is the subset of database operations the event handlers need. Both
+// *sql.DB and *sql.Tx satisfy it, so handlers can run inside a transaction.
+type dbExecer interface {
+	Exec(query string, args ...any) (sql.Result, error)
+}
+
 // NewWebhookHandler creates a webhook event processor.
 func NewWebhookHandler(db *sql.DB, webhookSecret string, planConfig PlanConfig, logger *slog.Logger) *WebhookHandler {
 	return &WebhookHandler{db: db, webhookSecret: webhookSecret, planConfig: planConfig, logger: logger}
@@ -70,34 +76,83 @@ func (h *WebhookHandler) ProcessEvent(event StripeEvent) error {
 	// Compute payload hash for auditability
 	payloadHash := hashPayload(event.Data)
 
-	// Process the event
-	var processErr error
-	switch event.Type {
-	case "checkout.session.completed":
-		processErr = h.handleCheckoutCompleted(event)
-	case "customer.subscription.updated":
-		processErr = h.handleSubscriptionUpdated(event)
-	case "customer.subscription.deleted":
-		processErr = h.handleSubscriptionDeleted(event)
-	case "invoice.paid":
-		processErr = h.handleInvoicePaid(event)
-	case "invoice.payment_failed":
-		processErr = h.handlePaymentFailed(event)
-	default:
+	// Unhandled event types are recorded for audit but need no transaction.
+	if !isHandledEvent(event.Type) {
 		h.logger.Debug("unhandled webhook event type", "type", event.Type)
+		h.recordEvent(h.db, event, "skipped", nil, payloadHash)
 		return nil
 	}
 
-	// Record event with status (success or failure)
-	status := "processed"
-	var lastError *string
-	if processErr != nil {
-		status = "failed"
-		errStr := processErr.Error()
-		lastError = &errStr
+	// Process the business mutation and the event record ATOMICALLY. Stripe
+	// delivers at-least-once; without a transaction a crash between the mutation
+	// and the event record would let a retry re-apply the mutation.
+	tx, err := h.db.Begin()
+	if err != nil {
+		return fmt.Errorf("begin webhook tx: %w", err)
 	}
 
-	if _, err := h.db.Exec(
+	processErr := h.dispatch(tx, event)
+	if processErr != nil {
+		_ = tx.Rollback()
+		// Record the failure OUTSIDE the rolled-back tx so the attempt is audited
+		// and the event stays retryable (status='failed', never 'processed').
+		errStr := processErr.Error()
+		h.recordEvent(h.db, event, "failed", &errStr, payloadHash)
+		return processErr
+	}
+
+	// Success: record 'processed' in the SAME tx, then commit atomically.
+	h.recordEvent(tx, event, "processed", nil, payloadHash)
+	if err := tx.Commit(); err != nil {
+		return fmt.Errorf("commit webhook tx: %w", err)
+	}
+
+	h.logger.Info("webhook event processed", "type", event.Type, "id", event.ID)
+	return nil
+}
+
+// dispatch routes an event to its handler, executing DB writes on exec (a tx).
+func (h *WebhookHandler) dispatch(exec dbExecer, event StripeEvent) error {
+	switch event.Type {
+	case "checkout.session.completed":
+		return h.handleCheckoutCompleted(exec, event)
+	// 2026-06-01 fix: NEW subscriptions emit customer.subscription.created,
+	// not .updated. Without handling .created, plan stays "pending" forever
+	// on first-time signup (dashboard polls /v1/billing showing
+	// "Activating your subscription..." in a loop). Reuses the .updated
+	// handler since both carry the same Subscription object shape with
+	// items[0].price.id.
+	case "customer.subscription.created", "customer.subscription.updated":
+		return h.handleSubscriptionUpdated(exec, event)
+	case "customer.subscription.deleted":
+		return h.handleSubscriptionDeleted(exec, event)
+	case "invoice.paid":
+		return h.handleInvoicePaid(event)
+	case "invoice.payment_failed":
+		return h.handlePaymentFailed(event)
+	default:
+		return nil
+	}
+}
+
+// isHandledEvent reports whether the event type has a business handler.
+func isHandledEvent(t string) bool {
+	switch t {
+	case "checkout.session.completed",
+		"customer.subscription.created",
+		"customer.subscription.updated",
+		"customer.subscription.deleted",
+		"invoice.paid", "invoice.payment_failed":
+		return true
+	default:
+		return false
+	}
+}
+
+// recordEvent upserts an audit row for a received webhook event on the given
+// executor (db or tx). Recording failures are logged but never panic.
+func (h *WebhookHandler) recordEvent(exec dbExecer, event StripeEvent, status string, lastError *string, payloadHash string) {
+	if _, err := exec.Exec(
 		`INSERT INTO webhook_events (event_id, event_type, status, last_error, payload_hash, received_at, processed_at)
 		 VALUES ($1, $2, $3, $4, $5, now(), now())
 		 ON CONFLICT (event_id) DO UPDATE SET
@@ -109,22 +164,15 @@ func (h *WebhookHandler) ProcessEvent(event StripeEvent) error {
 	); err != nil {
 		h.logger.Error("failed to record webhook event", "event_id", event.ID, "error", err)
 	}
-
-	if processErr != nil {
-		return processErr
-	}
-
-	h.logger.Info("webhook event processed", "type", event.Type, "id", event.ID)
-	return nil
 }
 
 // hashPayload computes a SHA256 hash of the event data for audit trail.
 func hashPayload(data json.RawMessage) string {
 	h := sha256.Sum256(data)
-	return hex.EncodeToString(h[:16]) // 32-char hex
+	return hex.EncodeToString(h[:]) // full SHA-256 (64-char hex) for the audit trail
 }
 
-func (h *WebhookHandler) handleCheckoutCompleted(event StripeEvent) error {
+func (h *WebhookHandler) handleCheckoutCompleted(exec dbExecer, event StripeEvent) error {
 	var data StripeEventData
 	if err := json.Unmarshal(event.Data, &data); err != nil {
 		return fmt.Errorf("unmarshal checkout data: %w", err)
@@ -143,31 +191,38 @@ func (h *WebhookHandler) handleCheckoutCompleted(event StripeEvent) error {
 		return nil // Not a subscription checkout
 	}
 
-	// §1.3: Derive plan from the subscription's price ID via Stripe API metadata.
-	// For checkout.session.completed, the subscription.updated webhook will follow
-	// with the full subscription object including price. We set the plan from
-	// metadata if available, otherwise default to "pro" and let subscription.updated correct it.
-	plan := "pro" // Safe default — subscription.updated will refine this
-
-	_, err := h.db.Exec(
+	// Do NOT set `plan` here (find_data_006 / audit gap M10 #24). The
+	// checkout.session.completed event does not carry a price_id; defaulting to
+	// "pro" "until subscription.updated arrives" is fail-OPEN — if that follow-up
+	// event is delayed, lost, or attacker-induced-raced, the tenant ends up at Pro
+	// without having paid. Plan tier MUST only be derived from a confirmed
+	// price_id in subscription.updated. Here we only link the subscription id +
+	// flip status=active; the plan column retains its prior value (typically
+	// `starter`). exec is the in-flight transaction (T3.1 atomic ProcessEvent).
+	res, err := exec.Exec(
 		`UPDATE subscriptions
-		 SET stripe_subscription_id = $1, plan = $2, status = 'active', updated_at = now()
-		 WHERE stripe_customer_id = $3`,
-		session.Subscription, plan, session.Customer,
+		 SET stripe_subscription_id = $1, status = 'active', updated_at = now()
+		 WHERE stripe_customer_id = $2`,
+		session.Subscription, session.Customer,
 	)
 	if err != nil {
 		return fmt.Errorf("link subscription: %w", err)
 	}
+	// If no subscription row matched, the customer paid but has no row to link —
+	// return an error so Stripe retries instead of silently orphaning the plan.
+	rows, _ := res.RowsAffected()
+	if rows == 0 {
+		return fmt.Errorf("link subscription: no subscription row for customer %s", session.Customer)
+	}
 
-	h.logger.Info("checkout completed — subscription linked",
+	h.logger.Info("checkout completed — subscription linked (plan pending subscription.updated)",
 		"customer", session.Customer,
 		"subscription", session.Subscription,
-		"plan", plan,
 	)
 	return nil
 }
 
-func (h *WebhookHandler) handleSubscriptionUpdated(event StripeEvent) error {
+func (h *WebhookHandler) handleSubscriptionUpdated(exec dbExecer, event StripeEvent) error {
 	var data StripeEventData
 	if err := json.Unmarshal(event.Data, &data); err != nil {
 		return fmt.Errorf("unmarshal subscription data: %w", err)
@@ -181,6 +236,7 @@ func (h *WebhookHandler) handleSubscriptionUpdated(event StripeEvent) error {
 		CurrentPeriodEnd   int64  `json:"current_period_end"`
 		Items              struct {
 			Data []struct {
+				ID    string `json:"id"` // subscription ITEM id (si_xxx) — required for metered usage reporting
 				Price struct {
 					ID string `json:"id"`
 				} `json:"price"`
@@ -193,37 +249,54 @@ func (h *WebhookHandler) handleSubscriptionUpdated(event StripeEvent) error {
 
 	// §1.3: Derive plan from price ID (handles upgrade/downgrade via Customer Portal)
 	plan := ""
+	itemID := ""
 	if len(sub.Items.Data) > 0 {
-		priceID := sub.Items.Data[0].Price.ID
-		plan = h.planConfig.PlanForPriceID(priceID)
+		plan = h.planConfig.PlanForPriceID(sub.Items.Data[0].Price.ID)
+		itemID = sub.Items.Data[0].ID // si_xxx — used by the metering reporter (find_data_001)
 	}
 
+	// WHERE matches by stripe_subscription_id OR stripe_customer_id. Stripe does
+	// NOT guarantee ordering of webhook delivery: customer.subscription.created
+	// can arrive BEFORE checkout.session.completed has had a chance to link
+	// stripe_subscription_id onto the row. Matching by customer_id (which the
+	// row already has from EnsureStripeCustomer at checkout creation time) makes
+	// this handler idempotent across both arrival orders. We also SET
+	// stripe_subscription_id so a .created arriving first links the id; a later
+	// .updated remains a no-op for that column.
+	//
+	// COALESCE(NULLIF($,''), col) only overwrites stripe_subscription_item_id
+	// when the event carries an item id; otherwise the existing value is kept.
 	if plan != "" {
-		// Sync status AND plan
-		_, err := h.db.Exec(
-			`UPDATE subscriptions SET status = $1, plan = $2, current_period_start = $3, current_period_end = $4, updated_at = now()
-			 WHERE stripe_subscription_id = $5`,
-			sub.Status, plan,
+		_, err := exec.Exec(
+			`UPDATE subscriptions SET status = $1, plan = $2,
+			        stripe_subscription_id = $3,
+			        stripe_subscription_item_id = COALESCE(NULLIF($4, ''), stripe_subscription_item_id),
+			        current_period_start = $5, current_period_end = $6, updated_at = now()
+			 WHERE stripe_subscription_id = $3 OR stripe_customer_id = $7`,
+			sub.Status, plan, sub.ID, itemID,
 			time.Unix(sub.CurrentPeriodStart, 0),
 			time.Unix(sub.CurrentPeriodEnd, 0),
-			sub.ID,
+			sub.Customer,
 		)
 		return err
 	}
 
-	// No price mapping — sync status only
-	_, err := h.db.Exec(
-		`UPDATE subscriptions SET status = $1, current_period_start = $2, current_period_end = $3, updated_at = now()
-		 WHERE stripe_subscription_id = $4`,
-		sub.Status,
+	// No price mapping — sync status (and item id) only
+	_, err := exec.Exec(
+		`UPDATE subscriptions SET status = $1,
+		        stripe_subscription_id = $2,
+		        stripe_subscription_item_id = COALESCE(NULLIF($3, ''), stripe_subscription_item_id),
+		        current_period_start = $4, current_period_end = $5, updated_at = now()
+		 WHERE stripe_subscription_id = $2 OR stripe_customer_id = $6`,
+		sub.Status, sub.ID, itemID,
 		time.Unix(sub.CurrentPeriodStart, 0),
 		time.Unix(sub.CurrentPeriodEnd, 0),
-		sub.ID,
+		sub.Customer,
 	)
 	return err
 }
 
-func (h *WebhookHandler) handleSubscriptionDeleted(event StripeEvent) error {
+func (h *WebhookHandler) handleSubscriptionDeleted(exec dbExecer, event StripeEvent) error {
 	var data StripeEventData
 	if err := json.Unmarshal(event.Data, &data); err != nil {
 		return err
@@ -235,7 +308,7 @@ func (h *WebhookHandler) handleSubscriptionDeleted(event StripeEvent) error {
 		return err
 	}
 
-	_, err := h.db.Exec(
+	_, err := exec.Exec(
 		"UPDATE subscriptions SET status = 'canceled', updated_at = now() WHERE stripe_subscription_id = $1",
 		sub.ID,
 	)
@@ -314,14 +387,20 @@ func VerifySignature(payload []byte, sigHeader, secret string) error {
 		return fmt.Errorf("timestamp in the future")
 	}
 
-	// Compute expected signature
+	// Compute expected signature and compare on raw bytes (decoded from hex).
+	// Comparing raw bytes (not hex strings) is the idiomatic, constant-time
+	// pattern and avoids any length artifact from malformed hex input.
 	signedPayload := fmt.Sprintf("%s.%s", timestamp, string(payload))
 	mac := hmac.New(sha256.New, []byte(secret))
 	mac.Write([]byte(signedPayload))
-	expected := hex.EncodeToString(mac.Sum(nil))
+	expected := mac.Sum(nil)
 
 	for _, sig := range signatures {
-		if hmac.Equal([]byte(sig), []byte(expected)) {
+		sigRaw, err := hex.DecodeString(sig)
+		if err != nil {
+			continue // malformed hex signature — skip, do not leak via length
+		}
+		if hmac.Equal(sigRaw, expected) {
 			return nil
 		}
 	}

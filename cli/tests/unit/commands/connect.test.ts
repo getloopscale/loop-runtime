@@ -3,6 +3,10 @@
 
 import { ConnectCommand, DisconnectCommand, parseGitHubRepo } from '../../../src/commands/connect';
 
+// Partial<any> allows overrides to be jest mock fns whose `.mock` property
+// is accessed in assertions — jest.MockedFunction<typeof X> generics get
+// too verbose to thread through every dep, so the helper type stays loose.
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
 function createMockDeps(overrides: Partial<any> = {}) {
   return {
     getToken: jest.fn().mockReturnValue('test-token'),

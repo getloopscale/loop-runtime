@@ -15,6 +15,18 @@ import (
 	"github.com/loopzero/loopzero/pkg/logging"
 )
 
+// validAppDigest is a 64-hex sha256 used by tests that exercise
+// BuildManifestApps. The supply-chain VAP enforced by the manifest
+// builder (CHG-2026-04-29-DOGFOOD iter 8) requires a non-empty digest
+// per app — without it BuildManifestApps fails-loud.
+const validAppDigest = "sha256:0eadbeefcafef00d1234567890abcdef0123456789abcdef0123456789abcdef"
+
+// testAppDigests returns the digest map matching testApps() — keep this
+// in sync if testApps() ever returns more than one app.
+func testAppDigests() map[string]string {
+	return map[string]string{"api": validAppDigest}
+}
+
 // --- Fakes ---
 
 type fakeDomainProvisionerStore struct {
@@ -204,6 +216,7 @@ func TestProvisionDomain_GitopsPushSuccess_TransitionsToActive(t *testing.T) {
 		Environment: "production",
 		CommitSHA:   "abc123def",
 		Apps:        testApps(),
+		AppDigests:  testAppDigests(),
 		DomainStore: store,
 	})
 	if err != nil {
@@ -268,6 +281,7 @@ func TestRemoveDomain_BuildManifestApps_ExcludesDomain(t *testing.T) {
 		Environment:   "production",
 		CommitSHA:     "abc123",
 		Apps:          testApps(),
+		AppDigests:    testAppDigests(),
 		DomainStore:   store,
 		ExcludeDomain: "api.mycompany.com",
 	})
@@ -312,6 +326,7 @@ func TestBuildManifestApps_IncludesCustomDomains(t *testing.T) {
 		Environment: "production",
 		CommitSHA:   "abc123",
 		Apps:        testApps(),
+		AppDigests:  testAppDigests(),
 		DomainStore: store,
 	})
 	if err != nil {
@@ -337,6 +352,7 @@ func TestBuildManifestApps_CustomDomainQueryError_ReturnsError(t *testing.T) {
 		Environment: "production",
 		CommitSHA:   "abc123",
 		Apps:        testApps(),
+		AppDigests:  testAppDigests(), // valid digest so we hit the domain query path, not fail-loud digest check
 		DomainStore: store,
 	})
 	if err == nil {

@@ -1,6 +1,11 @@
 // SPDX-License-Identifier: Apache-2.0
 // Copyright 2025-2026 The LoopZero Authors
 
+// Package gitea provides the operator-side client wrapper for
+// Gitea's REST API plus a circuit-breaker decorator. Used by
+// PlatformBootstrap + Tenant controllers to create/manage the
+// per-tenant Gitea organization, repositories, and access tokens
+// that back the GitOps source-of-truth.
 package gitea
 
 import "context"
@@ -10,6 +15,10 @@ type GitRepoProvisioner interface {
 	EnsureRepo(ctx context.Context, name string, branch string) (repoURL string, err error)
 	RepoExists(ctx context.Context, name string) (bool, error)
 	ArchiveRepo(ctx context.Context, name string) error
+	// UnarchiveRepo flips a repo's archived flag back to false (idempotent).
+	// CHG-002b 2026-04-28 — required so EnsureRepo can recover from
+	// the tenant-delete-then-recreate cycle.
+	UnarchiveRepo(ctx context.Context, name string) error
 }
 
 // BootstrapClient defines the Gitea operations required by PlatformBootstrap.

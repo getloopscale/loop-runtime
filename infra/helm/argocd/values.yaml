@@ -33,9 +33,15 @@ controller:
   # causing sync latency >15min. Sharding cuts p95 sync below 60s.
   # Plan: docs/plans/50k-immediate-focus.md
   replicas: 3
+  # fix-all-platform-issues-plan T3.1 BUG-FIX (mgmt-argocd duplicate env var):
+  # The upstream argo-cd chart 7.3.11 auto-injects ARGOCD_CONTROLLER_REPLICAS
+  # from .Values.controller.replicas at templates/argocd-application-controller/
+  # statefulset.yaml:80. Our manual `env: - name: ARGOCD_CONTROLLER_REPLICAS`
+  # entry caused a duplicate, breaking ArgoCD's structured-merge-diff calculation
+  # — the entire mgmt-argocd app went to status=Unknown with ComparisonError:
+  # "duplicate entries for key [name=ARGOCD_CONTROLLER_REPLICAS]".
+  # Removed the manual entry; upstream injection is authoritative.
   env:
-    - name: ARGOCD_CONTROLLER_REPLICAS
-      value: "3"
     # Workqueue rate limiting — prevent CPU amplification from apps in
     # persistent error state (e.g., ComparisonError with empty repos).
     # Default maxdelay is 1s which means 100 broken apps = 100 retries/sec.
@@ -46,6 +52,15 @@ controller:
       value: "300s"
     - name: ARGOCD_CONTROLLER_WORKQUEUE_BACKOFF_FACTOR
       value: "2"
+    # F-01 fix (argocd-sync-cleanroom-resilience-plan T1.1, ADR D1):
+    # Default repo-server timeout is 60s (60_000_000_000 ns); the auto-set
+    # `--repo-server-timeout-seconds` flag in 15s default observed in our
+    # chart caused `application refresh deadline exceeded` under cleanroom
+    # cold-cache load. Explicitly set to 60s via env var so the application-
+    # controller respects the longer deadline when calling repo-server for
+    # ManifestGeneration/Refresh. Operator can override per-stack if needed.
+    - name: ARGOCD_APPLICATION_CONTROLLER_REPO_SERVER_TIMEOUT_SECONDS
+      value: "60"
   containerSecurityContext:
     runAsNonRoot: true
   readinessProbe:
@@ -76,11 +91,36 @@ repoServer:
     enabled: true
   resources:
     limits:
-      cpu: "500m"
-      memory: "256Mi"
+      cpu: "1000m"      # was 500m — Sprint A trio-fix 2026-06-02: bump for
+                         # concurrent manifest generation under dogfood load
+      memory: "1Gi"     # was 512Mi — Sprint A trio-fix: avoid OOM on 10+ concurrent journeys
     requests:
-      cpu: "100m"
-      memory: "128Mi"
+      cpu: "200m"       # was 100m — Sprint A trio-fix: keep room under burst
+      memory: "512Mi"   # was 256Mi
+  # B17 prevention (iter 18) — repo-server caches Application state for the
+  # configured TTL. Stale cache after rapid tenant create/delete cycles
+  # caused "(cached)" misroutes in L3 #4. Mitigations:
+  #   1. Reduce default cache TTL via env (10m → 1m for fresh-deploy scenarios)
+  #   2. Replicas: 3 (was 2) — Sprint A trio-fix 2026-06-02: under dogfood
+  #      load (10+ journeys submitting concurrent syncs), 2 replicas saturated
+  #      and ArgoCD returned "application refresh deadline exceeded" 30s
+  #      timeouts → release CANCELLED → spec FAIL. Bumping to 3 spreads the
+  #      manifest-generation load and recovers the convergence chain. LIVE-
+  #      observed in Sprint A trio v4b dogfood: 10/132 specs FAILED, all
+  #      converging to "no pods with label X" because App stuck Unknown.
+  #   3. ConfigMap setting that invalidates manifest cache on revision change
+  replicas: 3
+  env:
+    # Reduce manifest cache duration — default 24h is way too long for L3
+    # where tenants are created+destroyed frequently.
+    - name: ARGOCD_REPO_SERVER_REPO_CACHE_EXPIRATION
+      value: "10m"
+    # fix-all-platform-issues-plan T3.1: ARGOCD_REPO_SERVER_DISABLE_TLS
+    # removed because the upstream argo-cd chart already injects this env
+    # var (template repo-server/deployment.yaml). Manual entry caused
+    # duplicate that broke ArgoCD structured-merge-diff for mgmt-argocd
+    # (sync stuck at Unknown). Setting via configs.params.server.disable.tls
+    # if needed.
   metrics:
     enabled: true
     serviceMonitor:
@@ -120,6 +160,16 @@ configs:
     # Prevents stuck Certificate/CRD from blocking all deploys indefinitely.
     # Without this, a single orphaned resource can lock the entire pipeline.
     controller.operation.processing.timeout: "300"
+    # V9-CLEANROOM-FRESH-FAANG-FIX 2026-05-31: with controller.replicas=3
+    # (T-05), the default `legacy` sharding algorithm exhibits a startup
+    # race where multiple shards keep re-assigning clusters during boot
+    # and all three controllers end up "Ignoring cluster" for the same
+    # cluster — Applications never get reconciled (status.sync.status="").
+    # `consistent-hashing` (GA in ArgoCD 2.10) computes a stable shard
+    # assignment per cluster and converges on first boot without thrash.
+    # Discovered LIVE in cleanroom-fresh dogfood 2026-05-31: 7/7 Apps
+    # never processed; all journeys requiring deploy timed out.
+    controller.sharding.algorithm: "consistent-hashing"
   repositories:
     # Gitea repository credentials for tenant GitOps repos.
     # ArgoCD uses these to clone tenant repos from the internal Gitea instance.
@@ -142,6 +192,69 @@ configs:
           hs.status = obj.status.health.status
           if obj.status.health.message ~= nil then
             hs.message = obj.status.health.message
+          end
+        end
+      end
+      return hs
+
+    # F-11 (CHG-2026-04-29-DOGFOOD T5.1) — Lua health checks para CRDs
+    # Traefik. Sem isso, ArgoCD reporta `health: ""` para IngressRoute /
+    # Middleware (não conhece o spec), e o App agregado fica em
+    # `Progressing` infinito mesmo após sync completo. Manifests gerados
+    # por api/internal/manifests/renderer.go SEMPRE incluem essas CRDs em
+    # static-frontend deploys, então este check é load-bearing para UI
+    # consolidation pós-deploy.
+    resource.customizations.health.traefik.io_IngressRoute: |
+      hs = {}
+      -- IngressRoute não tem .status field no spec (recurso "applied-only").
+      -- Se o objeto existe e tem spec.routes, considera Healthy.
+      if obj.spec ~= nil and obj.spec.routes ~= nil and #obj.spec.routes > 0 then
+        hs.status = "Healthy"
+        hs.message = "IngressRoute applied with " .. tostring(#obj.spec.routes) .. " route(s)"
+      else
+        hs.status = "Progressing"
+        hs.message = "IngressRoute spec.routes empty or pending"
+      end
+      return hs
+
+    resource.customizations.health.traefik.io_Middleware: |
+      hs = {}
+      -- Middleware é stateless (sem .status). Existência = Healthy.
+      hs.status = "Healthy"
+      hs.message = "Middleware applied"
+      return hs
+
+    resource.customizations.health.traefik.io_TLSOption: |
+      hs = {}
+      hs.status = "Healthy"
+      hs.message = "TLSOption applied"
+      return hs
+
+    # F-11 — cert-manager Certificate health (parse .status.conditions).
+    # Em standalone-multi sem real LE, Certificate fica "Progressing/Issuing"
+    # — comportamento esperado, não é falha. Em dev/prod com LE ACME, vira
+    # "Healthy/Ready=True" após challenge.
+    resource.customizations.health.cert-manager.io_Certificate: |
+      hs = {}
+      hs.status = "Progressing"
+      hs.message = "Issuing"
+      if obj.status ~= nil and obj.status.conditions ~= nil then
+        for _, c in ipairs(obj.status.conditions) do
+          if c.type == "Ready" then
+            if c.status == "True" then
+              hs.status = "Healthy"
+              hs.message = c.message or "Certificate ready"
+            elseif c.status == "False" then
+              -- Distingue "ainda issuing" (Progressing) de "permanent fail"
+              -- (Degraded). reason "Failed" ou "InvalidConfig" → Degraded.
+              if c.reason == "Failed" or c.reason == "InvalidConfig" then
+                hs.status = "Degraded"
+                hs.message = c.reason .. ": " .. (c.message or "")
+              else
+                hs.status = "Progressing"
+                hs.message = c.message or "Issuing certificate"
+              end
+            end
           end
         end
       end

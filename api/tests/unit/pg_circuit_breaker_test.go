@@ -44,6 +44,17 @@ func (f *fakeInnerSync) GetSyncRevision(_ context.Context, _ string) (string, er
 	return "abc123", nil
 }
 
+// Sprint B T1.1 (ADR D1): stub methods to satisfy the widened SyncClient
+// interface. The CB unit tests cover preCheck/recordResult around
+// Trigger/Wait; ForceReconcile + TerminateOperation share the same
+// preCheck contract and are exercised in internal/services tests.
+func (f *fakeInnerSync) ForceReconcile(_ context.Context, _ string) error {
+	return f.triggerErr
+}
+func (f *fakeInnerSync) TerminateOperation(_ context.Context, _ string) error {
+	return f.triggerErr
+}
+
 // --- Helper ---
 
 func defaultCBConfig() services.CircuitBreakerConfig {

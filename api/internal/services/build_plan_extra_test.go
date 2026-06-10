@@ -7,42 +7,6 @@ import (
 	"testing"
 )
 
-func TestResolveLanguageStrategyPublic_KnownFrameworks(t *testing.T) {
-	tests := []struct {
-		framework string
-		expected  string
-	}{
-		{"express", "node"},
-		{"nextjs", "node"},
-		{"react", "node"},
-		{"vue", "node"},
-		{"svelte", "node"},
-		{"gin", "go"},
-		{"go", "go"},
-		{"fastapi", "python"},
-		{"django", "python"},
-		{"flask", "custom"},
-		{"rails", "ruby"},
-		{"spring-boot", "java"},
-		{"quarkus", "custom"},
-		{"actix", "rust"},
-		{"rocket", "rust"},
-		{"laravel", "php"},
-		{"custom", "custom"},
-		{"", "custom"},
-		{"unknown-framework", "custom"},
-	}
-
-	for _, tt := range tests {
-		t.Run(tt.framework, func(t *testing.T) {
-			got := ResolveLanguageStrategyPublic(tt.framework)
-			if got != tt.expected {
-				t.Errorf("ResolveLanguageStrategyPublic(%q) = %q, want %q", tt.framework, got, tt.expected)
-			}
-		})
-	}
-}
-
 func TestCreateBuildPlan_StaticDeliveryModel(t *testing.T) {
 	units := []AppUnit{
 		{

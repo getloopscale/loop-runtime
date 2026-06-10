@@ -6,7 +6,14 @@
 -- For existing databases with the old migration history, see UPGRADE.md.
 
 -- Extensions
-CREATE EXTENSION IF NOT EXISTS pg_stat_statements;
+-- pg_stat_statements is pre-loaded by Postgres via shared_preload_libraries
+-- (see infra/helm/postgresql/values.yaml + production DOKS PG configuration).
+-- CREATE EXTENSION here would require superuser; the application user `loopzero`
+-- does NOT have CREATE EXTENSION privilege. Removed in
+-- dogfood-2026-05-08-fixes T1.2 (golang-migrate adoption) — legacy psql
+-- loop silently swallowed the permission error; golang-migrate marks the
+-- migration dirty + aborts. The extension is provisioned at the cluster
+-- level, not at the app-schema level.
 
 -- ─────────────────────────────────────────────────────────────────────────────
 -- Functions (triggers depend on these)

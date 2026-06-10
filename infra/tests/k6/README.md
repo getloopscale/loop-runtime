@@ -1,118 +1,271 @@
 # LoopZero — k6 Load Testing Suite
 
 Industry-standard load testing for the LoopZero platform using
-[k6](https://k6.io), replacing the previous shell-script smoke tests
-that could not measure client-side latency distributions.
+[k6](https://k6.io). Covers deploy pipeline validation, API
+benchmarking, soak testing, SSE streaming, and chaos resilience.
 
-## Why k6
+## Architecture
 
-Previous approach: bash + curl + jq in a Kubernetes Job, looping
-sequentially through tenants. This produced a boolean pass/fail but
-NOT:
+Two complementary tools:
 
-- Latency distributions (p50, p95, p99) measured at the client
-- Coordinated-omission-safe scheduling (request rate independent of
-  response time — critical at L3+ where slow requests skew sequential
-  loops)
-- Virtual-user ramp-up / steady-state / ramp-down separation
-- Real-time Prometheus metrics via remote-write
-- Structured JSON / HTML reports
-- Thresholds enforced in the script so CI can fail fast
+| Tool | Purpose | Entry Point |
+|------|---------|-------------|
+| **k6** (this dir) | HTTP-level SLO testing: latency distributions, throughput, error rate | `task test:load:l1` |
+| **Go harness** (`../load/`) | Pipeline E2E tests: provision → build → deploy → verify | `task loadtest:run LEVEL=l1` |
 
-k6 gives us all of the above in a single ~10-line script, runs as a
-standalone binary or a Kubernetes Job, and its output integrates with
-our existing Grafana stack via the `xk6-output-prometheus-remote`
-extension.
+Why both? k6 measures coordinated-omission-safe latency distributions
+with open workload models. The Go harness exercises the full deploy
+pipeline end-to-end (real builds, real images, real ArgoCD sync). Each
+answers different questions.
 
-## Suite layout
+## Quick Start
+
+```bash
+# Install k6 (>= 0.52)
+brew install k6   # or: go install go.k6.io/k6@latest
+
+# Run L1 smoke against dev cluster (in-cluster Job)
+task test:load:l1
+
+# Run API benchmark locally
+export K6_API_URL=https://api.dev.loopzero.example
+export K6_SVC_AUTH=dev-service-auth-secret-default
+k6 run scripts/api-endpoints.js
+
+# Run soak test locally (6h — use screen/tmux)
+k6 run scripts/soak-6h.js
+```
+
+## Test Suite
+
+### Deploy Pipeline Tests (L1-L5)
+
+Progressive load levels validating the full deploy pipeline under
+increasing load.
+
+| Script | Level | Tenants | Duration | Executor | Purpose |
+|--------|:-----:|:-------:|:--------:|----------|---------|
+| `l1-10-tenants.js` | L1 | 10 | 15 min | per-vu-iterations | Smoke — every component works |
+| `l2-50-tenants.js` | L2 | 50 | 35 min | ramping-arrival-rate | Moderate — autoscaler responds |
+| `l3-100-tenants.js` | L3 | 100 | 65 min | ramping-arrival-rate | Scale — 99.5% success required |
+| `l4-500-tenants.js` | L4 | 500 | 2h | ramping-arrival-rate | Capacity — find bottlenecks |
+| `l5-multicell.js` | L5 | 5000 | 4h | ramping-arrival-rate | Multi-cell stress |
+
+### Specialized Tests
+
+| Script | Duration | Executor | Purpose |
+|--------|:--------:|----------|---------|
+| `stress-break-point.js` | 15 min | ramping-arrival-rate | Find breaking point — ramp 0→10 RPS until SLO breaks |
+| `soak-6h.js` | 6h | constant-arrival-rate | Detect memory leaks, FD exhaustion, pool starvation |
+| `sse-deploy-stream.js` | 15 min | constant-arrival-rate | Validate SSE streaming during deploys |
+| `chaos-load.js` | 25 min | ramping-arrival-rate | Measure resilience under active chaos experiments |
+| `api-endpoints.js` | 5 min | constant-arrival-rate | Pure HTTP latency benchmark at 100 RPS |
+
+### Shared Libraries
+
+| File | Purpose |
+|------|---------|
+| `lib/loopzero-api.js` | Shared API client (auth, request helpers, custom metrics) |
+| `lib/thresholds.js` | SLO thresholds derived from `cell-budget.md` |
+
+### Fixtures
+
+| File | Purpose |
+|------|---------|
+| `fixtures/bundle-builder.js` | Loads git bundle for upload (from `/fixtures/bundle.bin` or env) |
+
+## Thresholds (SLOs)
+
+Every script enforces thresholds derived from `docs/capacity/cell-budget.md`.
+A failed threshold fails the k6 exit code → fails the Job → fails CI.
+
+```js
+// Base thresholds (all levels)
+http_req_failed:            rate < 1%
+http_req_duration:          p50 < 2s, p95 < 10s, p99 < 30s
+loopzero_build_succeeded:       rate > 99%
+loopzero_app_verified:          rate > 99%
+loopzero_deploy_duration_ms:    p95 < 600s
+
+// API-specific (api-endpoints.js)
+loopzero_api_health_duration:   p99 < 100ms
+loopzero_api_projects_list:     p99 < 500ms
+loopzero_api_builds_get:        p99 < 200ms
+
+// SSE-specific (sse-deploy-stream.js)
+loopzero_sse_connect_duration:  p95 < 5000ms
+loopzero_sse_terminal_received: rate > 95%
+```
+
+## Coordinated Omission
+
+All sustained-load scripts (L2+) use **open workload models**
+(`constant-arrival-rate` or `ramping-arrival-rate`). This ensures:
+
+- Requests fire at a fixed rate regardless of response time
+- Slow responses don't "hide" latency of requests that should have been sent
+- Reported p99 reflects real response time, not service time
+
+L1 uses `per-vu-iterations` (acceptable for 10 VUs smoke test).
+
+Reference: Gil Tene, "How NOT to Measure Latency" — open workload is
+the only correct way to measure latency under sustained load.
+
+## Running In-Cluster
+
+### Job Template (L1-L3, stress)
+
+```bash
+# The run-k6.sh script handles ConfigMap creation, Job lifecycle, and log streaming
+task test:load:l1   # or l2, l3, stress, soak, sse, chaos, api
+```
+
+### k6 Operator (L3+ distributed)
+
+For L4/L5 level testing requiring multiple pods:
+
+```bash
+# Install k6 Operator (one-time)
+task k6:operator:install
+
+# Run distributed L3 (4 pods)
+task k6:distributed:l3
+
+# Run distributed L4 (8 pods)
+task k6:distributed:l4
+
+# Monitor
+kubectl -n loopzero-system get testrun -w
+```
+
+### Soak Test (Weekly CronJob)
+
+```bash
+# Apply CronJob + alerts (one-time)
+task k6:soak:apply
+
+# Manual trigger
+kubectl -n loopzero-system create job k6-soak-manual --from=cronjob/k6-soak-weekly
+
+# Check next schedule
+kubectl -n loopzero-system get cronjob k6-soak-weekly
+```
+
+## Observability
+
+### Prometheus Remote Write
+
+All scripts output metrics to Prometheus via `--out experimental-prometheus-rw`.
+Configuration:
+
+```
+K6_PROMETHEUS_RW_SERVER_URL=http://prometheus-server.loopzero-system.svc.cluster.local/api/v1/write
+K6_PROMETHEUS_RW_TREND_STATS=p(50),p(95),p(99)
+K6_PROMETHEUS_RW_PUSH_INTERVAL=5s  (30s for soak)
+```
+
+### Grafana Dashboard
+
+`load-test.json` (both `infra/helm/monitoring/dashboards/` and `charts/loopzero-monitoring/dashboards/`)
+shows:
+- Real-time: RPS, latency p50/p95/p99, error rate, VU count
+- Soak: memory RSS slope, FD count, goroutine count
+- Historical: trend per release (Grafana annotations)
+
+### Alerts (Soak)
+
+PrometheusRule `k6-soak-alerts` fires:
+- `LoopZeroSoakTestFailed` — Job exited non-zero (warning)
+- `LoopZeroAPIMemoryLeak` — RSS growing 2+ hours during soak (critical)
+- `LoopZeroAPIFDExhaustion` — FDs growing 2+ hours during soak (critical)
+
+Investigate: check k6 Job logs and API memory/FD metrics in Grafana.
+
+## Chaos + Load
+
+The `chaos-load.js` script is designed to run IN PARALLEL with Chaos Mesh
+experiments. Workflow:
+
+```bash
+# Terminal 1: Apply chaos experiment
+kubectl apply -f infra/tests/chaos/manifests/pg-network-latency.yaml
+
+# Terminal 2: Run chaos load test (measures impact)
+task test:load:chaos
+
+# After test: Remove chaos
+kubectl delete -f infra/tests/chaos/manifests/pg-network-latency.yaml
+```
+
+The script measures 3 phases:
+1. **Baseline** (5 min) — normal operation, establishes reference
+2. **Chaos** (15 min) — chaos active, measures degradation
+3. **Recovery** (5 min) — chaos removed, measures recovery speed
+
+## CI Integration
+
+| Trigger | What Runs | Gate |
+|---------|-----------|------|
+| PR (api/operators/pkg) | Go harness L1 smoke (8 min max) | Block merge on failure |
+| Weekly (Monday 06:00 UTC) | Go harness L0 baseline | Alert on regression |
+| Weekly (Sunday 02:00 UTC) | k6 soak 6h | Alert on leak/failure |
+| Manual (workflow_dispatch) | Any level L0-L4 | Informational |
+
+## All Task Commands
+
+```bash
+task test:load:l1        # L1 smoke (10 tenants, 15 min)
+task test:load:l2        # L2 sustained (50 tenants, 35 min)
+task test:load:l3        # L3 scale (100 tenants, 65 min)
+task test:load:l4        # L4 capacity (500 tenants, 2h)
+task test:load:l5        # L5 multi-cell (5000 tenants, 4h)
+task test:load:stress    # Break point (ramp to failure, 15 min)
+task test:load:soak      # 6h soak (memory/FD leak detection)
+task test:load:sse       # SSE streaming (deploy events, 15 min)
+task test:load:chaos     # Chaos + load combined (25 min)
+task test:load:api       # API latency benchmark (100 RPS, 5 min)
+task test:load:all       # Sequential: L1 → L2 → L3 → stress → API
+
+task k6:operator:install    # Install k6 Operator (one-time)
+task k6:distributed:l3      # Distributed L3 (4 pods)
+task k6:distributed:l4      # Distributed L4 (8 pods)
+task k6:soak:apply          # Apply soak CronJob + alerts
+```
+
+## File Layout
 
 ```
 k6/
-├── README.md                    ← this file
+├── README.md                          ← this file
 ├── scripts/
 │   ├── lib/
-│   │   ├── loopzero-api.js          ← shared API client (auth headers, retry)
-│   │   └── thresholds.js        ← SLO thresholds from docs/capacity/cell-budget.md
-│   ├── l1-10-tenants.js         ← L1 smoke (10 VUs, 5 min)
-│   ├── l2-50-tenants.js         ← L2 sustained (50 VUs, 30 min)
-│   ├── l3-100-tenants.js        ← L3 sustained (100 VUs, 60 min)
-│   ├── stress-break-point.js    ← Ramp 0→500 VUs until SLO breaks
-│   └── soak-l2-6h.js            ← 6-hour soak at L2 to catch leaks
+│   │   ├── loopzero-api.js                ← shared API client
+│   │   └── thresholds.js             ← SLO thresholds
+│   ├── l1-10-tenants.js              ← L1 smoke
+│   ├── l2-50-tenants.js              ← L2 sustained
+│   ├── l3-100-tenants.js             ← L3 scale
+│   ├── l4-500-tenants.js             ← L4 capacity
+│   ├── l5-multicell.js               ← L5 multi-cell
+│   ├── stress-break-point.js         ← Break point finder
+│   ├── soak-6h.js                    ← 6h soak (leak detection)
+│   ├── sse-deploy-stream.js          ← SSE streaming validation
+│   ├── chaos-load.js                 ← Chaos + load combined
+│   └── api-endpoints.js              ← Pure HTTP benchmark
 ├── fixtures/
-│   └── bundle-builder.js        ← Creates the tarball fixture each VU pushes
-└── job-template.yaml            ← k8s Job template for running in-cluster
+│   └── bundle-builder.js             ← Git bundle fixture loader
+├── manifests/
+│   ├── rbac.yaml                     ← ServiceAccount + Role
+│   ├── soak-cronjob.yaml            ← Weekly soak CronJob
+│   ├── soak-alerts.yaml             ← PrometheusRule (leak detection)
+│   ├── testrun-l3-distributed.yaml  ← k6 Operator TestRun (4 pods)
+│   └── testrun-l4-distributed.yaml  ← k6 Operator TestRun (8 pods)
+└── job-template.yaml                 ← Job template for run-k6.sh
 ```
-
-## Thresholds (from cell-budget.md)
-
-Every script enforces these thresholds in its `export const options`
-block. A failed threshold fails the k6 exit code, which fails the
-Kubernetes Job, which fails CI.
-
-```js
-thresholds: {
-  http_req_failed:   ['rate<0.01'],         // < 1% failure
-  http_req_duration: ['p(99)<600000'],      // p99 < 600s deploy budget
-  'build_ok_rate':   ['rate>0.99'],         // ≥ 99% builds succeed
-  'deploy_duration': ['p(95)<300000'],      // p95 < 5 min
-}
-```
-
-## Running
-
-### Locally (quick smoke)
-
-```bash
-# Dependency: k6 >= 0.52
-brew install k6   # or download from https://k6.io/docs/get-started/installation/
-
-export K6_API_URL=https://api.dev.loopzero.example
-export K6_SVC_AUTH=dev-service-auth-secret-default
-k6 run scripts/l1-10-tenants.js
-```
-
-### In-cluster (L2+)
-
-```bash
-# Apply the k6-operator CRD once per cluster
-kubectl apply -f https://raw.githubusercontent.com/grafana/k6-operator/main/bundle.yaml
-
-# Run L2 suite
-kubectl apply -f job-template.yaml
-kubectl logs -n loopzero-system -l app=k6-runner -f
-```
-
-### Continuous monitoring (soak test)
-
-```bash
-# 6-hour soak catches memory leaks + file-descriptor exhaustion
-kubectl apply -f manifests/soak-l2-cronjob.yaml
-```
-
-## Comparison vs previous shell-script approach
-
-| Capability | Shell + curl (old) | k6 (new) |
-|---|---|---|
-| p50 / p95 / p99 latency | ❌ | ✅ |
-| Coordinated omission | ❌ (sequential) | ✅ (arrival-rate scheduling) |
-| VU ramp-up / ramp-down | ❌ | ✅ (`stages`) |
-| Prometheus remote-write | ❌ | ✅ via xk6 |
-| Thresholds block CI | ❌ (boolean only) | ✅ (enforced exit code) |
-| JSON / HTML report | ❌ | ✅ `--out json` |
-| Resource cost per VU | High (1 shell process) | Low (1 goroutine) |
-| Typical concurrency ceiling | ~50 | ~10k |
-
-## Roadmap 100k DoD coverage
-
-- **Item 04** `TestL2_50Tenants` → `l2-50-tenants.js`
-- **Item 04** `TestArgoCD_100Apps_SyncTime` → `l3-100-tenants.js`
-- **Item 04** `TestBuildQueue_20Concurrent` → `stress-break-point.js` (first plateau)
-- **Item 07** `TestGracefulDegradation_150Percent` → `stress-break-point.js` (past red line)
-- **Item 08** L2/L3/L4/L5 → `l2/l3/l4/l5-*.js` (L4-L5 require 2nd cell, Item 05)
 
 ## References
 
-- k6 official docs: https://k6.io/docs/
-- xk6-output-prometheus-remote: https://github.com/grafana/xk6-output-prometheus-remote
-- Coordinated omission explained: https://redhatperf.github.io/post/coordinated-omission/
-- Argo Workflows stress tool: https://github.com/argoproj/argo-workflows/tree/main/test/stress
+- [k6 Official](https://k6.io/docs/) — Load testing for engineering teams
+- [k6 Operator](https://github.com/grafana/k6-operator) — Distributed testing via CRD
+- [Coordinated Omission](https://redhatperf.github.io/post/coordinated-omission/) — Why open model matters
+- [SOTA Research](../../docs/technical/load-testing-sota.md) — Full competitive analysis
+- [Plan](../../docs/plans/load-testing-professional-plan.md) — Implementation plan

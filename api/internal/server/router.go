@@ -1,6 +1,12 @@
 // SPDX-License-Identifier: Apache-2.0
 // Copyright 2025-2026 The LoopZero Authors
 
+// Package server assembles the HTTP router (chi) + middleware
+// pipeline + dependency wiring for the API binary. Routes are
+// declared per resource group (tenant, project, build, release,
+// etc.) and dispatched to services in `api/internal/services/`.
+// All mutating routes pass through `withEnvironmentLock` per
+// CLAUDE.md Rule 6.
 package server
 
 import (
@@ -16,9 +22,23 @@ import (
 	"github.com/loopzero/loopzero/pkg/enforcement"
 )
 
+// enforcementMetricBuildMinutes is the canonical metric label for the cost
+// cap gating the POST /api/v1/builds route. Distinct from PlanLimiter's
+// "builds_per_month" — see Wave 1 T1.9 for the SRP rationale.
+const enforcementMetricBuildMinutes = enforcement.MetricBuildMinutes
+
 // NewRouter creates a chi router with middleware and routes.
 func NewRouter(cfg Config) *chi.Mux {
 	r := chi.NewRouter()
+
+	// Pre-auth IP rate limit (T2.4 of deep-review-remediation-plan, ADR D4).
+	// Mounted FIRST so brute-force attempts on /api/v1/auth/* — or any other
+	// route — are rejected at the edge without consuming downstream resources.
+	// Trusted proxy CIDRs from env so production CF Tunnel can be honored
+	// while dev k3d defaults to "trust nobody".
+	if cfg.IPRateLimit != nil {
+		r.Use(cfg.IPRateLimit.Middleware)
+	}
 
 	// Security headers — before CORS so they are always present.
 	r.Use(middleware.SecurityHeaders)
@@ -27,10 +47,19 @@ func NewRouter(cfg Config) *chi.Mux {
 	// Must be early middleware so preflight OPTIONS get handled before auth.
 	r.Use(corsMiddleware(cfg.CORSAllowedOrigin, cfg.IsProduction))
 
-	// Middleware chain: metrics → otel-tracing → correlation-id → logging → backpressure
+	// Maintenance mode: block mutating requests during infrastructure operations
+	// (e.g., PG resize). Must come before auth so 503 is returned without token check.
+	r.Use(middleware.MaintenanceMode)
+
+	// Middleware chain: metrics → otel-tracing → correlation-id → request-logger → logging → backpressure
 	r.Use(metrics.HTTPMetrics)
 	r.Use(middleware.OtelHTTP)
 	r.Use(middleware.CorrelationID)
+	// Beta Logs Gate: RequestLogger MUST come after CorrelationID so the
+	// enrichment can read the id from ctx. Every handler's
+	// `pkglogging.LoggerFromContext` now returns a logger bound with
+	// correlation_id (+ trace_id when an extractor is configured).
+	r.Use(middleware.RequestLogger(cfg.ContextLogger))
 	r.Use(middleware.RequestLogging(cfg.Logger))
 
 	// PG backpressure: reject mutations when connection pool is near saturation.
@@ -65,6 +94,10 @@ func NewRouter(cfg Config) *chi.Mux {
 	}
 	r.Get("/api/v1/health", health.Health)
 	r.Get("/api/v1/health/deep", health.DeepHealth)
+	// F-07 (CHG-2026-04-29-DOGFOOD T5.2) — public endpoint, no auth.
+	// Returns binary metadata (version, commit, build_date, go_version, platform).
+	// Stable schema per Rule 5 (loopzero CLI --json contract analogue).
+	r.Get("/api/v1/version", routes.VersionHandler())
 
 	// Internal-only routes (no auth — called by platform controllers, not users)
 	if cfg.BootstrapStore != nil {
@@ -80,6 +113,25 @@ func NewRouter(cfg Config) *chi.Mux {
 		r.Post("/api/v1/webhooks/github", cfg.GitHubWebhookHandler.ServeHTTP)
 	}
 
+	// Admin endpoints — operator primitives, X-Service-Auth only (no user
+	// context). Handler enforces LOOPZERO_ADMIN_API=true + service-auth match
+	// itself (admin_evict.go:73-83). Sibling of /webhooks/github so it
+	// bypasses the user-auth middleware that requires identity headers.
+	if cfg.AdminEvictor != nil {
+		r.Post("/api/v1/admin/tenants/evict", routes.AdminEvictHandler(cfg.AdminEvictor))
+	}
+	// CHG-2026-04-30-DELETE-SINGLE-CELL: pin tenants to specific cell.
+	if cfg.AdminPinner != nil {
+		r.Post("/api/v1/admin/tenants/pin", routes.AdminPinCellHandler(cfg.AdminPinner))
+	}
+	// T4.4 of plan 2026-05-28-meet-001-engineering-closure-plan.md:
+	// diagnostic read-only endpoint for on-call to inspect a release's
+	// signing + attestation chain without source access. The handler
+	// enforces LOOPZERO_ADMIN_API + X-Service-Auth itself.
+	if cfg.ReleaseInspector != nil {
+		r.Get("/api/v1/admin/releases/{id}/inspect", routes.AdminReleaseInspectHandler(cfg.ReleaseInspector))
+	}
+
 	// Protected routes (auth required)
 	if cfg.TokenValidator != nil && cfg.MemberStore != nil {
 		r.Group(func(r chi.Router) {
@@ -89,13 +141,28 @@ func NewRouter(cfg Config) *chi.Mux {
 			// Auth routes
 			// AUDIT-10: pass UsernameLookup so Whoami can resolve display-friendly
 			// username from the users.username column (populated by migration 000037).
-			auth := routes.NewAuthHandler(cfg.AuthUserLookup)
+			// Plan T2.5 D8 lean: pass MemberStore so /whoami can list ALL of a
+			// user's tenant memberships + mark the active team explicitly
+			// (closes F-S2-02 silent team swap symptom).
+			// Plan T2.5 D8 full: pass ActiveTeamStore so /whoami reads the
+			// persistent users.active_tenant_id (migration 000018) and
+			// /team/switch can update it. EC-4 self-heal lives in Whoami.
+			auth := routes.NewAuthHandler(cfg.AuthUserLookup).
+				WithMembershipLookup(cfg.MemberStore)
+			if cfg.ActiveTeamStore != nil {
+				auth = auth.WithActiveTeamStore(cfg.ActiveTeamStore)
+			}
 			r.Get("/api/v1/auth/whoami", auth.Whoami)
 
 			// Rate limiting middleware chain — used for all mutation routes.
 			rateLimitMiddlewares := make([]func(http.Handler) http.Handler, 0, 1)
 			if cfg.RateLimiter != nil {
 				rateLimitMiddlewares = append(rateLimitMiddlewares, cfg.RateLimiter.Middleware())
+			}
+
+			// Plan T2.5 D8 full — POST /team/switch with rate limiting.
+			if cfg.ActiveTeamStore != nil {
+				r.With(rateLimitMiddlewares...).Post("/api/v1/auth/team/switch", auth.SwitchTeam)
 			}
 
 			// Idempotent mutation middleware chain — rate limiting + idempotency.
@@ -134,6 +201,12 @@ func NewRouter(cfg Config) *chi.Mux {
 				CountFn: enforcement.CountBuildsThisMonth(cfg.PlanLimiter),
 			}, tenantFromCtx, upgradeURL)
 
+			// T1.9 (Wave 1): cost cap gates the build route on build_minutes.
+			// Nil-safe: when CostEnforcer is unset (boot before wire, or
+			// missing cost_counters table), Middleware is pass-through.
+			// Distinct from buildEnforcement (rate-style builds/month).
+			buildCostGate := cfg.CostEnforcer.Middleware(enforcementMetricBuildMinutes)
+
 			envEnforcement := enforcement.Middleware(cfg.PlanLimiter, enforcement.OperationCheck{
 				Metric:  "environments",
 				CountFn: enforcement.CountRows(cfg.PlanLimiter, "SELECT COUNT(*) FROM environment_targets WHERE tenant_id = $1"),
@@ -145,7 +218,7 @@ func NewRouter(cfg Config) *chi.Mux {
 			}, tenantFromCtx, upgradeURL)
 
 			registerProtectedRoutes(r, cfg, rateLimitMiddlewares, idempotentMiddlewares,
-				projectEnforcement, buildEnforcement, envEnforcement, seatEnforcement)
+				projectEnforcement, buildEnforcement, envEnforcement, seatEnforcement, buildCostGate)
 		})
 	}
 
@@ -162,6 +235,7 @@ func registerProtectedRoutes(
 	rateLimitMiddlewares []func(http.Handler) http.Handler,
 	idempotentMiddlewares []func(http.Handler) http.Handler,
 	projectEnforcement, buildEnforcement, envEnforcement, seatEnforcement func(http.Handler) http.Handler,
+	buildCostGate func(http.Handler) http.Handler,
 ) {
 	// Source upload — auth + rate limiting, no idempotency.
 	if cfg.SourceStore != nil {
@@ -169,9 +243,9 @@ func registerProtectedRoutes(
 		if cfg.ObjectUploader != nil {
 			sourceOpts = append(sourceOpts, routes.WithObjectUploader(cfg.ObjectUploader))
 		}
-		if cfg.IsProduction {
-			sourceOpts = append(sourceOpts, routes.WithProductionMode())
-		}
+		// CHG-2026-04-29-DOGFOOD iter 9 — WithProductionMode removed:
+		// upload errors are now always fatal when an object store is
+		// configured. Local must equal production (Rule 10).
 		if cfg.SourceBucket != "" {
 			sourceOpts = append(sourceOpts, routes.WithSourceBucket(cfg.SourceBucket))
 		}
@@ -217,6 +291,12 @@ func registerProtectedRoutes(
 		if cfg.SecretK8sSync != nil {
 			secrets.SetK8sSync(cfg.SecretK8sSync)
 		}
+		// Sprint A T1.1 (closes comp-001 CRITICAL): wire the environment
+		// lock so Set/DeleteSecret serialize with concurrent `loopzero deploy`
+		// flows holding the same pg_advisory_xact_lock key.
+		if cfg.SecretEnvLocker != nil {
+			secrets.SetLocker(cfg.SecretEnvLocker)
+		}
 		r.Get("/api/v1/secrets", secrets.List)
 		r.With(rateLimitMiddlewares...).Post("/api/v1/secrets", secrets.Set)
 		r.With(rateLimitMiddlewares...).Delete("/api/v1/secrets/{name}", secrets.DeleteSecret)
@@ -225,7 +305,11 @@ func registerProtectedRoutes(
 	// Build routes — use the single BuildHandler from Config (C-08).
 	if cfg.BuildHandler != nil {
 		r.Get("/api/v1/builds/{id}", cfg.BuildHandler.Get)
-		r.With(append(idempotentMiddlewares, buildEnforcement)...).Post("/api/v1/builds", cfg.BuildHandler.Create)
+		// Wave 1 T1.9: chain is rate-limit → idempotency → rate cap (buildEnforcement)
+		// → cost cap (buildCostGate) → handler. Both enforcement layers can
+		// short-circuit with HTTP 402 — rate cap surfaces "builds/month exceeded",
+		// cost cap surfaces "build minutes exceeded" with different upgrade copy.
+		r.With(append(idempotentMiddlewares, buildEnforcement, buildCostGate)...).Post("/api/v1/builds", cfg.BuildHandler.Create)
 		r.With(rateLimitMiddlewares...).Post("/api/v1/builds/{id}/cancel", cfg.BuildHandler.Cancel)
 	}
 
@@ -282,6 +366,14 @@ func registerProtectedRoutes(
 		r.With(append(rateLimitMiddlewares, middleware.RequireAdmin)...).Post("/api/v1/tenants/bulk-delete", tenantHandler.Delete)
 	}
 
+	// Billing routes — T1.6 of deep-review-remediation-plan (closes
+	// find_billing_route_not_wired HIGH). CLI commands loopzero billing and
+	// loopzero billing portal hit silent 404 pre-T1.6.
+	if cfg.BillingHandler != nil {
+		r.Get("/api/v1/billing", cfg.BillingHandler.Get)
+		r.With(rateLimitMiddlewares...).Post("/api/v1/billing/portal", cfg.BillingHandler.Portal)
+	}
+
 	// Environment routes
 	if cfg.EnvironmentHandler != nil {
 		r.Get("/api/v1/environments", cfg.EnvironmentHandler.List)
@@ -320,11 +412,11 @@ func registerProtectedRoutes(
 	if cfg.AuditHandler != nil {
 		r.Get("/api/v1/audit", cfg.AuditHandler.List)
 	}
-
-	// Admin: bulk tenant eviction (T-02).
-	if cfg.AdminEvictor != nil {
-		r.Post("/api/v1/admin/tenants/evict", routes.AdminEvictHandler(cfg.AdminEvictor))
-	}
+	// NOTE: Admin endpoints are deliberately registered OUTSIDE this function
+	// (in registerRoutes, alongside the GitHub webhook). They use only
+	// X-Service-Auth — putting them under middleware.Auth (which requires
+	// X-LoopZero-User-ID/Tenant identity headers too) breaks operator CLI auth.
+	// See Achado #25 (CHG-2026-04-29-DOGFOOD iter 13).
 }
 
 // corsMiddleware adds CORS headers for the dashboard to call the API cross-origin.

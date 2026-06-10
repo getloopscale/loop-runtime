@@ -10,7 +10,7 @@ import (
 	"time"
 
 	"github.com/loopzero/loopzero/api/internal/db"
-	"github.com/loopzero/loopzero/api/internal/routes"
+	"github.com/loopzero/loopzero/api/internal/domain"
 )
 
 func TestDefaultDomainProvisionerConfig(t *testing.T) {
@@ -22,7 +22,7 @@ func TestDefaultDomainProvisionerConfig(t *testing.T) {
 
 func TestDomainProvisioner_NSActive_ProvisionsDomain(t *testing.T) {
 	store := newFakeDomainProvisionerStore()
-	store.nsActiveDomains = []routes.CustomDomain{
+	store.nsActiveDomains = []domain.CustomDomain{
 		{
 			ID: "dom-ns", Domain: "ns-active.com", TenantID: "tn-1",
 			ProjectName: "my-app", AppName: "api", Environment: "production",
@@ -35,6 +35,7 @@ func TestDomainProvisioner_NSActive_ProvisionsDomain(t *testing.T) {
 			"tn-1-my-app-production": {
 				ID: "rel-1", BuildID: "build-1", TenantID: "tn-1",
 				ProjectID: "my-app", Environment: "production",
+				ImageDigest: strPtr(validImageDigest),
 			},
 		},
 	}
@@ -81,7 +82,7 @@ func TestDomainProvisioner_NSActive_ProvisionsDomain(t *testing.T) {
 
 func TestDomainProvisioner_NSActive_NoRelease_Skips(t *testing.T) {
 	store := newFakeDomainProvisionerStore()
-	store.nsActiveDomains = []routes.CustomDomain{
+	store.nsActiveDomains = []domain.CustomDomain{
 		{
 			ID: "dom-ns2", Domain: "no-rel.com", TenantID: "tn-1",
 			ProjectName: "app", AppName: "api", Environment: "staging",
@@ -116,7 +117,7 @@ func TestDomainProvisioner_NSActive_NoRelease_Skips(t *testing.T) {
 func TestDomainProvisioner_PendingNS_StillPending_TriggersActivationCheck(t *testing.T) {
 	zoneID := "zone-pending"
 	store := newFakeDomainProvisionerStore()
-	store.pendingNSDomains = []routes.CustomDomain{
+	store.pendingNSDomains = []domain.CustomDomain{
 		{
 			ID: "dom-pns", Domain: "waiting.com", TenantID: "tn-1",
 			ProjectName: "app", CFZoneID: &zoneID, Status: "pending_ns",
@@ -146,7 +147,7 @@ func TestDomainProvisioner_PendingNS_StillPending_TriggersActivationCheck(t *tes
 
 func TestDomainProvisioner_PendingNS_NilZoneID_Skips(t *testing.T) {
 	store := newFakeDomainProvisionerStore()
-	store.pendingNSDomains = []routes.CustomDomain{
+	store.pendingNSDomains = []domain.CustomDomain{
 		{
 			ID: "dom-nil", Domain: "nil-zone.com", TenantID: "tn-1",
 			CFZoneID: nil, Status: "pending_ns",
@@ -175,7 +176,7 @@ func TestDomainProvisioner_PendingNS_NilZoneID_Skips(t *testing.T) {
 func TestDomainProvisioner_RemoveCFManaged_WithRelease_DeletesZone(t *testing.T) {
 	zoneID := "zone-del-2"
 	store := newFakeDomainProvisionerStore()
-	store.removingDomains = []routes.CustomDomain{
+	store.removingDomains = []domain.CustomDomain{
 		{
 			ID: "dom-rm", Domain: "rm-cf.com", TenantID: "tn-1",
 			ProjectName: "app", AppName: "api", Environment: "production",
@@ -188,6 +189,7 @@ func TestDomainProvisioner_RemoveCFManaged_WithRelease_DeletesZone(t *testing.T)
 			"tn-1-app-production": {
 				ID: "rel-1", BuildID: "build-1", TenantID: "tn-1",
 				ProjectID: "app", Environment: "production",
+				ImageDigest: strPtr(validImageDigest),
 			},
 		},
 	}

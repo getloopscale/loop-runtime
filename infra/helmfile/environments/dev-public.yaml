@@ -1,0 +1,126 @@
+# Helmfile environment: dev-public
+# T2.1 of plan 2026-06-04-dev-public-domain-canonicalization-plan.md
+#
+# Variant of `standalone-public` that uses *-dev.loopzero.example hostnames.
+# Per D1 of plan: reserves *.loopzero.example for future prod cutover; this env
+# is the canonical dev infra (paulo@droplet 165.227.121.20).
+#
+# Differences vs `standalone-public`:
+#   - publicAuthUrl / publicCloudUrl / uiBaseUrl / dashboardOrigin use the
+#     `-dev` subdomain (auth-dev / app-dev / cloud-dev . loopzero.example)
+#   - allowedReturnUrls + corsAllowedOrigins enumerate the dev hosts
+#   - cookieDomain stays `loopzero.example` (eTLD+1) — same shape as standalone-public
+#   - OAuth credentials read from LOOPZERO_*_DEV env vars (per T3.2 of plan) so
+#     dev OAuth apps coexist with prod ones in the same .env file
+#
+# Operator workflow on this droplet:
+#   1. ssh root@loopzero-e2e-runner (or git clone fresh)
+#   2. cd /home/paulo/loopzero
+#   3. export $(grep -E '^LOOPZERO_|^CLOUDFLARE_' .env | xargs)
+#   4. infra/scripts/local/setup-dev-public-dns.sh --verify
+#   5. infra/scripts/local/caddy-up-dev-public.sh --verify
+#   6. helmfile -e dev-public -f infra/helmfile/mgmt.helmfile.yaml.gotmpl sync
+#   7. task doctor (38/0)
+#   8. Browser: https://app-dev.loopzero.example/login
+
+domain: loopzero.local
+dnsZone: loopzero.local
+
+# clusterRole=cloud-local: triggers loopzero-cloud + loopzero-api install via helmfile
+# (rather than tilt local). The local Caddy edge proxies their services to
+# the public *-dev hostnames.
+clusterRole: cloud-local
+clusterTopology: multi-cluster
+
+replicas:
+  api: 2
+  controller: 1
+  argocd: 1
+  gitea: 1
+  harbor: 1
+
+resources:
+  default:
+    requests:
+      cpu: 50m
+      memory: 64Mi
+    limits:
+      cpu: 250m
+      memory: 256Mi
+
+certIssuer:
+  kind: ClusterIssuer
+  name: selfsigned-issuer
+
+# Plan 2026-06-04-dev-public-docr-fix-forward T1.2 — DOCR REAL for max prod
+# parity (sponsor decision P1 over P2 Harbor / P3 k3d-import workaround).
+# Platform images (loopzero-api, 4 operators) come from DOCR via `do-registry`
+# imagePullSecret provisioned by `task do-registry:provision` (T1.4).
+# Harbor local kept as SECONDARY (opt-in if operator runs Harbor in parallel).
+# k3d-loopzero-registry stays for BuildKit tenant builds (fast local iteration).
+registries:
+  docrPrefix: "registry.digitalocean.com/loopzero-system/"
+  harborPrefix: "harbor.loopzero.local/loopzero-platform/"
+  additionalPrefixes:
+    - "k3d-loopzero-registry:5000/"
+    - "harbor.loopzero.local/loopzero-platform/"
+
+loki:
+  maxGlobalStreamsPerUser: 50000
+  pushUrl: http://172.18.0.3:30094/loki/api/v1/push
+
+policyMode: warn
+inClusterPostgres: true
+underlyingStorageClass: ""
+
+crossCluster:
+  argoApi: "http://host.k3d.internal:30093"
+  lokiGateway: "http://host.k3d.internal:30094"
+  giteaApi: "http://host.k3d.internal:3000"
+  harborApi: "http://host.k3d.internal:30002"
+  prometheusApi: "http://host.k3d.internal:9090"
+
+velero:
+  bucket: velero-backups
+  region: us-east-1
+  s3Url: http://minio.loopzero-system.svc:9000
+
+# D1 of plan 2026-06-04: *-dev.loopzero.example hostnames
+# uiBaseUrl controla 4 URLs em Hydra: login, consent, logout,
+# post_device_done_url (device flow). Plan J-05 T2.2 D1.
+uiBaseUrl: "https://app-dev.loopzero.example"
+dashboardOrigin: "https://cloud-dev.loopzero.example"
+publicAuthUrl: "https://auth-dev.loopzero.example"
+publicCloudUrl: "https://cloud-dev.loopzero.example"
+cookieDomain: "loopzero.example"
+corsAllowedOrigins:
+  - "https://app-dev.loopzero.example"
+  - "https://cloud-dev.loopzero.example"
+allowedReturnUrls:
+  - "https://app-dev.loopzero.example"
+  - "https://app-dev.loopzero.example/"
+  - "https://cloud-dev.loopzero.example"
+  - "https://cloud-dev.loopzero.example/"
+dashboardRoute:
+  login: /login
+  register: /register
+  recovery: /recovery
+  verification: /verification
+  settings: /settings
+  error: /login
+
+# D5 of plan 2026-06-04 (operator decision 2026-06-04): OAuth apps were
+# reused (the legacy GitHub + Google clients had `auth-dev.loopzero.example/
+# self-service/methods/oidc/callback/{provider}` callback URLs added to
+# the SAME client_id rather than provisioning new dev-specific OAuth
+# apps). Consequence: dev + legacy prod share OAuth client_id. Cognitive
+# separation moves to URL/cookie space (auth-dev vs auth) only.
+#
+# Helm chart values.yaml.gotmpl already reads `{{ env "LOOPZERO_GITHUB_CLIENT_ID" }}`
+# (no _DEV suffix), so no chart override needed — same env var works for
+# both standalone-public and dev-public envs.
+#
+# Stripe webhook (T4.1) deviates: dev gets a SEPARATE webhook endpoint
+# (we_1TeVZFJF08yCtMK1RiMjeLc0) with its own whsec_*. Operator wires the
+# Secret `loopzero-stripe-webhook-dev` (created 2026-06-04) so loopzero-cloud
+# verifies dev events with the right signing key.

@@ -82,8 +82,8 @@ func (h *RepositoryHandler) Connect(w http.ResponseWriter, r *http.Request) {
 
 	if uc.Role != "owner" && uc.Role != "admin" {
 		writeJSON(w, http.StatusForbidden, map[string]string{
-			"error": "Only team owners and admins can connect repositories.",
-			"code":  "FORBIDDEN",
+			"code":    "FORBIDDEN",
+			"message": "Only team owners and admins can connect repositories.",
 		})
 		return
 	}
@@ -92,7 +92,7 @@ func (h *RepositoryHandler) Connect(w http.ResponseWriter, r *http.Request) {
 
 	var req connectRequest
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "invalid request body"})
+		writeJSON(w, http.StatusBadRequest, map[string]string{"code": "INTERNAL_ERROR", "message": "invalid request body"})
 		return
 	}
 
@@ -112,13 +112,13 @@ func (h *RepositoryHandler) Connect(w http.ResponseWriter, r *http.Request) {
 	existing, err := h.store.GetByRepo(ctx, req.Repo)
 	if err != nil {
 		slog.ErrorContext(ctx, "repository lookup failed", "error", err)
-		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": "internal error"})
+		writeJSON(w, http.StatusInternalServerError, map[string]string{"code": "INTERNAL_ERROR", "message": "internal error"})
 		return
 	}
 	if existing != nil && (existing.TenantID != uc.TenantID || existing.ProjectName != projectName) {
 		writeJSON(w, http.StatusConflict, map[string]string{
-			"error": "Repository is already connected to another project.",
-			"code":  "REPO_ALREADY_LINKED",
+			"code":    "REPO_ALREADY_LINKED",
+			"message": "Repository is already connected to another project.",
 		})
 		return
 	}
@@ -127,14 +127,14 @@ func (h *RepositoryHandler) Connect(w http.ResponseWriter, r *http.Request) {
 	tenantID := uc.TenantID
 	if err := h.store.SaveInstallation(ctx, req.InstallationID, "", "User", &tenantID); err != nil {
 		slog.ErrorContext(ctx, "save installation failed", "error", err)
-		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": "internal error"})
+		writeJSON(w, http.StatusInternalServerError, map[string]string{"code": "INTERNAL_ERROR", "message": "internal error"})
 		return
 	}
 
 	// Link (idempotent — if already linked to same project, no-op via unique constraint)
 	if err := h.store.LinkRepository(ctx, uc.TenantID, projectName, req.Repo, req.InstallationID, branch); err != nil {
 		slog.ErrorContext(ctx, "link repository failed", "error", err, "repo", req.Repo)
-		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": "failed to connect repository"})
+		writeJSON(w, http.StatusInternalServerError, map[string]string{"code": "INTERNAL_ERROR", "message": "failed to connect repository"})
 		return
 	}
 
@@ -160,8 +160,8 @@ func (h *RepositoryHandler) Disconnect(w http.ResponseWriter, r *http.Request) {
 
 	if uc.Role != "owner" && uc.Role != "admin" {
 		writeJSON(w, http.StatusForbidden, map[string]string{
-			"error": "Only team owners and admins can disconnect repositories.",
-			"code":  "FORBIDDEN",
+			"code":    "FORBIDDEN",
+			"message": "Only team owners and admins can disconnect repositories.",
 		})
 		return
 	}
@@ -178,7 +178,7 @@ func (h *RepositoryHandler) Disconnect(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 		slog.ErrorContext(ctx, "unlink repository failed", "error", err)
-		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": "failed to disconnect"})
+		writeJSON(w, http.StatusInternalServerError, map[string]string{"code": "INTERNAL_ERROR", "message": "failed to disconnect"})
 		return
 	}
 
@@ -204,13 +204,13 @@ func (h *RepositoryHandler) GetConnection(w http.ResponseWriter, r *http.Request
 	repo, err := h.store.GetByProject(ctx, uc.TenantID, projectName)
 	if err != nil {
 		slog.ErrorContext(ctx, "get connection failed", "error", err)
-		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": "internal error"})
+		writeJSON(w, http.StatusInternalServerError, map[string]string{"code": "INTERNAL_ERROR", "message": "internal error"})
 		return
 	}
 	if repo == nil {
 		writeJSON(w, http.StatusNotFound, map[string]string{
-			"error": "No repository connected to this project.",
-			"code":  "NOT_CONNECTED",
+			"code":    "NOT_CONNECTED",
+			"message": "No repository connected to this project.",
 		})
 		return
 	}

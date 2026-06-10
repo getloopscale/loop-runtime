@@ -1,42 +1,152 @@
-import { BrowserRouter, Routes, Route } from 'react-router-dom';
-import { Sidebar } from '@/components/sidebar';
-import { VerificationBanner } from '@/components/verification-banner';
-import { OverviewPage } from '@/pages/overview';
-import { ProjectsPage } from '@/pages/projects';
-import { EnvironmentsPage } from '@/pages/environments';
-import { TeamPage } from '@/pages/team';
-import { BillingPage } from '@/pages/billing';
-import { SettingsPage } from '@/pages/settings';
-import { ProfilePage } from '@/pages/profile';
-import { DomainsPage } from '@/pages/domains';
-import { LoginPage } from '@/pages/login';
-import { RegisterPage } from '@/pages/register';
-import { VerificationPage } from '@/pages/verification';
-import { DeviceSuccessPage } from '@/pages/device-success';
-import { useRequireAuth } from '@/hooks/use-auth';
-import { isEmailVerified } from '@/lib/auth';
-import { Loader2 } from 'lucide-react';
+import { lazy, Suspense, type ReactNode } from 'react';
+import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom';
+import { NuqsAdapter } from 'nuqs/adapters/react-router/v7';
+import {
+  Bell,
+  Link2,
+  Loader2,
+  Lock,
+  Receipt,
+  ShieldAlert,
+  Users,
+  Webhook,
+} from 'lucide-react';
+import { DashboardLayout } from '@/components/layout';
+import { SubPagePlaceholder } from '@/pages/sub-page-placeholder';
+import { RouteBoundary } from '@/components/error/route-boundary';
 
-function DashboardLayout({ children }: { children: React.ReactNode }) {
-  const session = useRequireAuth();
+/**
+ * T0.1: helper para wrap cada <Route element> em <RouteBoundary>.
+ * Crash em uma page só renderiza fallback nessa page — sidebar/topbar persistem.
+ * routePath é forwarded para telemetry (error reporter classifica por path).
+ */
+function Boundaried({ path, children }: { path: string; children: ReactNode }) {
+  return <RouteBoundary routePath={path}>{children}</RouteBoundary>;
+}
 
-  if (session === null) {
-    return (
-      <div className="dark bg-surface-0 min-h-screen text-white flex items-center justify-center">
-        <Loader2 className="h-6 w-6 text-accent animate-spin" />
-      </div>
-    );
-  }
+/**
+ * Route-level code-split via React.lazy + Suspense.
+ *
+ * Each page becomes its own chunk; initial bundle ships only the
+ * BrowserRouter + DashboardLayout shell + loading fallback. Pages load
+ * on-demand when route matches.
+ *
+ * Pages use named exports — wrapper converts to React.lazy default-export
+ * contract: `.then(m => ({ default: m.PageName }))`.
+ *
+ * Reduces initial bundle ≥30% for first paint (per T-H.3 attempt to meet
+ * D7 +30% gzip target).
+ */
+const OverviewPage = lazy(() =>
+  import('@/pages/overview').then((m) => ({ default: m.OverviewPage })),
+);
+const ProjectsPage = lazy(() =>
+  import('@/pages/projects').then((m) => ({ default: m.ProjectsPage })),
+);
+const EnvironmentsPage = lazy(() =>
+  import('@/pages/environments').then((m) => ({ default: m.EnvironmentsPage })),
+);
+const TeamPage = lazy(() =>
+  import('@/pages/team').then((m) => ({ default: m.TeamPage })),
+);
+const BillingPage = lazy(() =>
+  import('@/pages/billing').then((m) => ({ default: m.BillingPage })),
+);
+const SettingsPage = lazy(() =>
+  import('@/pages/settings').then((m) => ({ default: m.SettingsPage })),
+);
+const ProfilePage = lazy(() =>
+  import('@/pages/profile').then((m) => ({ default: m.ProfilePage })),
+);
+const DomainsPage = lazy(() =>
+  import('@/pages/domains').then((m) => ({ default: m.DomainsPage })),
+);
+const ApiKeysPage = lazy(() =>
+  import('@/pages/api-keys').then((m) => ({ default: m.ApiKeysPage })),
+);
+const MemoryPage = lazy(() =>
+  import('@/pages/memory').then((m) => ({ default: m.MemoryPage })),
+);
+const MemoryListPage = lazy(() =>
+  import('@/pages/memory/memories').then((m) => ({ default: m.MemoryListPage })),
+);
+const EntitiesPage = lazy(() =>
+  import('@/pages/memory/entities').then((m) => ({ default: m.EntitiesPage })),
+);
+const ExportsPage = lazy(() =>
+  import('@/pages/memory/exports').then((m) => ({ default: m.ExportsPage })),
+);
+const WebhooksPage = lazy(() =>
+  import('@/pages/memory/webhooks').then((m) => ({ default: m.WebhooksPage })),
+);
+const LoginPage = lazy(() =>
+  import('@/pages/login').then((m) => ({ default: m.LoginPage })),
+);
+const RegisterPage = lazy(() =>
+  import('@/pages/register').then((m) => ({ default: m.RegisterPage })),
+);
+const VerificationPage = lazy(() =>
+  import('@/pages/verification').then((m) => ({ default: m.VerificationPage })),
+);
+const RecoveryPage = lazy(() =>
+  import('@/pages/recovery').then((m) => ({ default: m.RecoveryPage })),
+);
+const DeviceSuccessPage = lazy(() =>
+  import('@/pages/device-success').then((m) => ({ default: m.DeviceSuccessPage })),
+);
+const ProjectDetailPage = lazy(() =>
+  import('@/pages/project-detail').then((m) => ({ default: m.ProjectDetailPage })),
+);
+const NotFoundPage = lazy(() =>
+  import('@/pages/not-found').then((m) => ({ default: m.NotFoundPage })),
+);
+const DeploymentsPage = lazy(() =>
+  import('@/pages/deployments').then((m) => ({ default: m.DeploymentsPage })),
+);
+const DeploymentDetailPage = lazy(() =>
+  import('@/pages/deployment-detail').then((m) => ({ default: m.DeploymentDetailPage })),
+);
+const BuildLogsPage = lazy(() =>
+  import('@/pages/build-logs').then((m) => ({ default: m.BuildLogsPage })),
+);
+const BuildSBOMPage = lazy(() =>
+  import('@/pages/build-sbom').then((m) => ({ default: m.BuildSBOMPage })),
+);
+const BuildAttestationPage = lazy(() =>
+  import('@/pages/build-attestation').then((m) => ({ default: m.BuildAttestationPage })),
+);
+const RuntimeLogsPage = lazy(() =>
+  import('@/pages/runtime-logs').then((m) => ({ default: m.RuntimeLogsPage })),
+);
+const ProjectStatusPage = lazy(() =>
+  import('@/pages/project-status').then((m) => ({ default: m.ProjectStatusPage })),
+);
+const SecretsPage = lazy(() =>
+  import('@/pages/secrets').then((m) => ({ default: m.SecretsPage })),
+);
+const PreviewsPage = lazy(() =>
+  import('@/pages/previews').then((m) => ({ default: m.PreviewsPage })),
+);
+const ProjectConnectPage = lazy(() =>
+  import('@/pages/project-connect').then((m) => ({ default: m.ProjectConnectPage })),
+);
+const AuditPage = lazy(() =>
+  import('@/pages/audit').then((m) => ({ default: m.AuditPage })),
+);
+const ProjectScalePage = lazy(() =>
+  import('@/pages/project-scale').then((m) => ({ default: m.ProjectScalePage })),
+);
+const ProjectReadinessPage = lazy(() =>
+  import('@/pages/project-readiness').then((m) => ({ default: m.ProjectReadinessPage })),
+);
 
-  const verified = isEmailVerified(session);
-
+function PageLoader() {
   return (
-    <div className="dark bg-surface-0 min-h-screen text-white">
-      <Sidebar />
-      <main className="ml-[220px] p-8 pt-6">
-        {!verified && <VerificationBanner />}
-        {children}
-      </main>
+    <div className="min-h-screen bg-background flex items-center justify-center">
+      <Loader2
+        className="size-6 text-primary animate-spin"
+        aria-label="Loading page"
+      />
     </div>
   );
 }
@@ -44,26 +154,213 @@ function DashboardLayout({ children }: { children: React.ReactNode }) {
 export default function App() {
   return (
     <BrowserRouter>
-      <Routes>
-        <Route path="/login" element={<LoginPage />} />
-        <Route path="/register" element={<RegisterPage />} />
-        <Route path="/verification" element={<VerificationPage />} />
-        <Route path="/device-success" element={<DeviceSuccessPage />} />
-        <Route path="*" element={
-          <DashboardLayout>
-            <Routes>
-              <Route path="/" element={<OverviewPage />} />
-              <Route path="/projects" element={<ProjectsPage />} />
-              <Route path="/environments" element={<EnvironmentsPage />} />
-              <Route path="/team" element={<TeamPage />} />
-              <Route path="/billing" element={<BillingPage />} />
-              <Route path="/domains" element={<DomainsPage />} />
-              <Route path="/settings" element={<SettingsPage />} />
-              <Route path="/profile" element={<ProfilePage />} />
-            </Routes>
-          </DashboardLayout>
-        } />
-      </Routes>
+      <NuqsAdapter>
+        <Suspense fallback={<PageLoader />}>
+          <Routes>
+          <Route path="/login" element={<Boundaried path="/login"><LoginPage /></Boundaried>} />
+          <Route path="/register" element={<Boundaried path="/register"><RegisterPage /></Boundaried>} />
+          <Route path="/verification" element={<Boundaried path="/verification"><VerificationPage /></Boundaried>} />
+          <Route path="/recovery" element={<Boundaried path="/recovery"><RecoveryPage /></Boundaried>} />
+          <Route path="/device-success" element={<Boundaried path="/device-success"><DeviceSuccessPage /></Boundaried>} />
+          <Route
+            path="*"
+            element={
+              <DashboardLayout>
+                <Suspense fallback={<PageLoader />}>
+                  <Routes>
+                    <Route path="/" element={<Boundaried path="/"><OverviewPage /></Boundaried>} />
+                    <Route path="/projects" element={<Boundaried path="/projects"><ProjectsPage /></Boundaried>} />
+                    <Route path="/projects/:name" element={<Boundaried path="/projects/:name"><ProjectDetailPage /></Boundaried>} />
+                    <Route
+                      path="/projects/:name/deployments"
+                      element={<Boundaried path="/projects/:name/deployments"><DeploymentsPage /></Boundaried>}
+                    />
+                    <Route
+                      path="/projects/:name/deployments/:id"
+                      element={<Boundaried path="/projects/:name/deployments/:id"><DeploymentDetailPage /></Boundaried>}
+                    />
+                    <Route
+                      path="/projects/:name/deployments/:id/logs"
+                      element={<Boundaried path="/projects/:name/deployments/:id/logs"><BuildLogsPage /></Boundaried>}
+                    />
+                    <Route
+                      path="/projects/:name/deployments/:id/sbom"
+                      element={<Boundaried path="/projects/:name/deployments/:id/sbom"><BuildSBOMPage /></Boundaried>}
+                    />
+                    <Route
+                      path="/projects/:name/deployments/:id/attestation"
+                      element={<Boundaried path="/projects/:name/deployments/:id/attestation"><BuildAttestationPage /></Boundaried>}
+                    />
+                    <Route
+                      path="/projects/:name/logs"
+                      element={<Boundaried path="/projects/:name/logs"><RuntimeLogsPage /></Boundaried>}
+                    />
+                    <Route
+                      path="/projects/:name/status"
+                      element={<Boundaried path="/projects/:name/status"><ProjectStatusPage /></Boundaried>}
+                    />
+                    <Route
+                      path="/projects/:name/secrets"
+                      element={<Boundaried path="/projects/:name/secrets"><SecretsPage /></Boundaried>}
+                    />
+                    <Route
+                      path="/projects/:name/previews"
+                      element={<Boundaried path="/projects/:name/previews"><PreviewsPage /></Boundaried>}
+                    />
+                    <Route
+                      path="/projects/:name/connect"
+                      element={<Boundaried path="/projects/:name/connect"><ProjectConnectPage /></Boundaried>}
+                    />
+                    <Route path="/audit" element={<Boundaried path="/audit"><AuditPage /></Boundaried>} />
+                    <Route
+                      path="/projects/:name/scale"
+                      element={<Boundaried path="/projects/:name/scale"><ProjectScalePage /></Boundaried>}
+                    />
+                    <Route
+                      path="/projects/:name/readiness"
+                      element={<Boundaried path="/projects/:name/readiness"><ProjectReadinessPage /></Boundaried>}
+                    />
+                    <Route path="/environments" element={<Boundaried path="/environments"><EnvironmentsPage /></Boundaried>} />
+                    <Route path="/team" element={<Boundaried path="/team"><TeamPage /></Boundaried>} />
+                    <Route path="/billing" element={<Boundaried path="/billing"><BillingPage /></Boundaried>} />
+                    <Route path="/domains" element={<Boundaried path="/domains"><DomainsPage /></Boundaried>} />
+                    {/* Canonical API token URL is /settings/tokens (sidebar → Settings → Developer
+                        → API Tokens). /api-keys kept as redirect for backward compat with bookmarks
+                        and any external link issued before the consolidation. */}
+                    <Route path="/api-keys" element={<Navigate to="/settings/tokens" replace />} />
+                    <Route path="/memory" element={<Boundaried path="/memory"><MemoryPage /></Boundaried>} />
+                    <Route path="/memory/memories" element={<Boundaried path="/memory/memories"><MemoryListPage /></Boundaried>} />
+                    <Route path="/memory/entities" element={<Boundaried path="/memory/entities"><EntitiesPage /></Boundaried>} />
+                    <Route path="/memory/exports" element={<Boundaried path="/memory/exports"><ExportsPage /></Boundaried>} />
+                    <Route path="/memory/webhooks" element={<Boundaried path="/memory/webhooks"><WebhooksPage /></Boundaried>} />
+                    <Route path="/settings" element={<Boundaried path="/settings"><SettingsPage /></Boundaried>} />
+                    <Route
+                      path="/settings/members"
+                      element={
+                        <Boundaried path="/settings/members">
+                          <SubPagePlaceholder
+                            title="Members"
+                            description="Manage workspace members, roles, and pending invites."
+                            icon={Users}
+                            cliCommand="loopzero team list"
+                          />
+                        </Boundaried>
+                      }
+                    />
+                    <Route
+                      path="/settings/billing"
+                      element={
+                        <Boundaried path="/settings/billing">
+                          <SubPagePlaceholder
+                            title="Billing settings"
+                            description="Payment method, invoices, and plan management."
+                            icon={Receipt}
+                            cliCommand="loopzero billing status"
+                          />
+                        </Boundaried>
+                      }
+                    />
+                    {/* API Tokens — canonical surface. Backed by ApiKeysPage which already
+                        ships the full Stripe-shape lifecycle: List + Create (typed scopes +
+                        optional expiration) + Revoke (typed confirmation) + Rotate (grace
+                        window) + Lineage (rotation timeline) + show-once secret reveal
+                        with EC-13 "I've copied my key safely" acknowledgement gate.
+                        Pre-fix the sidebar pointed here but the route was a placeholder
+                        suggesting a non-existent `loopzero token create` CLI. The canonical
+                        page was orphaned at /api-keys with no nav entry — consolidated
+                        to the sidebar-shaped Settings → Developer → API Tokens hierarchy. */}
+                    <Route
+                      path="/settings/tokens"
+                      element={<Boundaried path="/settings/tokens"><ApiKeysPage /></Boundaried>}
+                    />
+                    <Route
+                      path="/settings/webhooks"
+                      element={
+                        <Boundaried path="/settings/webhooks">
+                          <SubPagePlaceholder
+                            title="Webhooks"
+                            description="HTTP callbacks for deploy + build events."
+                            icon={Webhook}
+                            cliCommand="loopzero webhook list"
+                          />
+                        </Boundaried>
+                      }
+                    />
+                    <Route
+                      path="/settings/notifications"
+                      element={
+                        <Boundaried path="/settings/notifications">
+                          <SubPagePlaceholder
+                            title="Notifications"
+                            description="Email + integrations for build, deploy, and alert events."
+                            icon={Bell}
+                            cliCommand="loopzero notify list"
+                          />
+                        </Boundaried>
+                      }
+                    />
+                    <Route
+                      path="/settings/danger"
+                      element={
+                        <Boundaried path="/settings/danger">
+                          <SubPagePlaceholder
+                            title="Danger Zone"
+                            description="Destructive workspace actions: delete, transfer ownership."
+                            icon={ShieldAlert}
+                            cliCommand="loopzero team delete --confirm"
+                          />
+                        </Boundaried>
+                      }
+                    />
+                    <Route path="/profile" element={<Boundaried path="/profile"><ProfilePage /></Boundaried>} />
+                    <Route
+                      path="/profile/security"
+                      element={
+                        <Boundaried path="/profile/security">
+                          <SubPagePlaceholder
+                            title="Security"
+                            description="Password, MFA, and recovery options."
+                            icon={Lock}
+                            cliCommand="loopzero login --rotate-credentials"
+                          />
+                        </Boundaried>
+                      }
+                    />
+                    <Route
+                      path="/profile/sessions"
+                      element={
+                        <Boundaried path="/profile/sessions">
+                          <SubPagePlaceholder
+                            title="Active sessions"
+                            description="Devices and browsers currently signed in to your account."
+                            icon={Link2}
+                            cliCommand="loopzero session list"
+                          />
+                        </Boundaried>
+                      }
+                    />
+                    <Route
+                      path="/profile/danger"
+                      element={
+                        <Boundaried path="/profile/danger">
+                          <SubPagePlaceholder
+                            title="Danger Zone"
+                            description="Destructive account actions: delete account."
+                            icon={ShieldAlert}
+                            cliCommand="loopzero account delete --confirm"
+                          />
+                        </Boundaried>
+                      }
+                    />
+                    <Route path="*" element={<Boundaried path="*"><NotFoundPage /></Boundaried>} />
+                  </Routes>
+                </Suspense>
+              </DashboardLayout>
+            }
+          />
+          </Routes>
+        </Suspense>
+      </NuqsAdapter>
     </BrowserRouter>
   );
 }

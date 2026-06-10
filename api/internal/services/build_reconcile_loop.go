@@ -12,7 +12,7 @@ import (
 	"time"
 
 	"github.com/loopzero/loopzero/api/internal/db"
-	"github.com/loopzero/loopzero/api/internal/routes"
+	"github.com/loopzero/loopzero/api/internal/domain"
 )
 
 // BuildCompletionHandler abstracts the methods that BuildReconcileLoop calls on
@@ -41,6 +41,11 @@ type BuildReconcileLoopConfig struct {
 	// B14 (MEET-2026-04-23-058): required, no fallback default. Sourced from
 	// Config.ClusterIssuer (env LOOPZERO_CLUSTER_ISSUER).
 	ClusterIssuer string
+	// PrometheusAddress is the Prometheus URL canary AnalysisTemplate queries
+	// (argo-rollouts-progressive-delivery-plan T1.2 / D6). Empty disables
+	// Prometheus-based canary analysis steps. Sourced from
+	// Config.PrometheusAddress (env LOOPZERO_PROMETHEUS_ADDRESS).
+	PrometheusAddress string
 	// MaxConcurrent is the maximum number of builds reconciled concurrently.
 	// Bounds pressure on the Kubernetes API and Argo Workflow queries.
 	// Default: 10.
@@ -89,7 +94,7 @@ type CellLister interface {
 // CustomDomainQuerier queries active custom domains for manifest rendering.
 // MEET-2026-04-06-034 Block 0: both deploy and domain provisioner must include custom domains.
 type CustomDomainQuerier interface {
-	ListActiveByApp(ctx context.Context, tenantID, project, app, env string) ([]routes.CustomDomain, error)
+	ListActiveByApp(ctx context.Context, tenantID, project, app, env string) ([]domain.CustomDomain, error)
 }
 
 // ApplicationCREnsurer creates LoopZeroApplication CRs on the mgmt cluster.
@@ -109,6 +114,18 @@ type ApplicationCRInput struct {
 	ServicePort int32
 }
 
+// TenantPlanLookup resolves a tenant's subscription plan. Returns the
+// plan string ("starter", "pro", "team", "enterprise") or empty string +
+// nil error when no subscription row exists (caller treats as starter).
+//
+// T6.2 of deep-review-remediation-plan (closes find_code_006 / CODE-006 MEDIUM):
+// previously RenderInput.Plan was never populated by the retry path,
+// causing every Pro/Team/Enterprise tenant to silently receive Starter
+// canary steps (50/100 setWeight, no AnalysisRun).
+type TenantPlanLookup interface {
+	GetTenantPlan(ctx context.Context, tenantID string) (string, error)
+}
+
 type BuildReconcileLoop struct {
 	buildStore   db.BuildStore
 	workflow     WorkflowSubmitter
@@ -116,6 +133,9 @@ type BuildReconcileLoop struct {
 	locker       EnvironmentLocker
 	domainStore  CustomDomainQuerier // MEET-034: custom domains in manifests
 	appCRMgr     ApplicationCREnsurer
+	// T6.2: optional plan lookup. Nil-safe — falls back to empty string
+	// which RenderInput defaults to "starter" (most conservative canary).
+	planLookup TenantPlanLookup
 	eventStore interface {
 		Append(ctx context.Context, buildID string, eventType string, data json.RawMessage) (int64, error)
 	}
@@ -206,6 +226,32 @@ func (r *BuildReconcileLoop) WithPGClaims(dedup *PGClaimDedup) {
 // instead of only cfg.CellID. This ensures non-default cells are not abandoned.
 func (r *BuildReconcileLoop) WithCellLister(lister CellLister) {
 	r.cellLister = lister
+}
+
+// WithPlanLookup attaches an optional TenantPlanLookup. T6.2 of
+// deep-review-remediation-plan (closes find_code_006). When wired,
+// retry-path RenderInput.Plan is populated from the tenant's subscription
+// row so Pro/Team/Enterprise canary steps are honored. When nil, plan
+// stays empty and RenderInput defaults to "starter".
+func (r *BuildReconcileLoop) WithPlanLookup(lookup TenantPlanLookup) {
+	r.planLookup = lookup
+}
+
+// resolvePlan looks up the tenant plan if planLookup is wired, otherwise
+// returns "" (RenderInput defaults to starter). Errors are logged but
+// don't fail the build — degraded mode (use starter steps) is correct
+// fallback for an unrecoverable plan lookup.
+func (r *BuildReconcileLoop) resolvePlan(ctx context.Context, tenantID string) string {
+	if r.planLookup == nil {
+		return ""
+	}
+	plan, err := r.planLookup.GetTenantPlan(ctx, tenantID)
+	if err != nil {
+		r.logger.Warn("reconcile loop: plan lookup failed — falling back to starter canary steps",
+			"tenant_id", tenantID, "error", err)
+		return ""
+	}
+	return plan
 }
 
 // Start runs the reconcile loop until the context is cancelled.

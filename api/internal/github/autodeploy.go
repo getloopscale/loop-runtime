@@ -13,6 +13,7 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+	"time"
 
 	"gopkg.in/yaml.v3"
 
@@ -26,6 +27,17 @@ import (
 )
 
 // AutoDeployConfig holds configuration for auto-deploy on push.
+//
+// INVARIANT (cell-2-activation-plan T1.4 / ADR C11 path 3):
+// Auto-deploy MUST NOT set tenant.cell_id from webhook payload. Cell
+// placement is operator-only via POST /api/v1/admin/tenants/pin (see
+// MEET-INFRA-NORMALIZE-T3-multi-cell C8 + admin_pin_cell.go). The webhook
+// path inherits the tenant's CURRENT cell_id from the database — never
+// overrides it. Drift here lets any GitHub push silently re-pin a tenant
+// across cells, breaking placement layer's capacity gate semantics.
+// Verified by: TestAdminPinCell_AuthzInvariantC11Path3_NoCellIDInWebhookPath
+// (admin_pin_cell_test.go) + grep regression in cell2-activation-gates.sh
+// gate_c11.
 type AutoDeployConfig struct {
 	AppClient      *AppClient
 	SourceStore    SourcePusher
@@ -156,7 +168,9 @@ func (d *AutoDeployer) HandlePush(ctx context.Context, repoFullName, branch, com
 
 	// Step 5: Upload git bundle to S3 for build cluster
 	if d.cfg.ObjectStore != nil {
-		bundleFile, err := os.Open(bundlePath)
+		// G304 false positive: bundlePath comes from tarballToGitBundle
+		// which returns a path under os.MkdirTemp — never user-controlled.
+		bundleFile, err := os.Open(bundlePath) //nolint:gosec // G304 false positive: bundlePath is tmpdir-internal
 		if err != nil {
 			return fmt.Errorf("auto-deploy: open bundle: %w", err)
 		}
@@ -206,10 +220,17 @@ func (d *AutoDeployer) HandlePush(ctx context.Context, repoFullName, branch, com
 		log.Info("auto-deploy: build submitter not configured (webhook-only mode)")
 	}
 
-	// Step 6: Set commit status to pending
+	// Step 6: Set commit status to pending.
+	//
+	// G118 expected: this is a fire-and-forget side-effect that runs
+	// AFTER HandlePush returns. Inheriting the parent ctx would cancel
+	// the commit-status update the moment the HTTP handler returns,
+	// defeating the purpose. Use a separate 30s timeout so the
+	// goroutine cannot run forever.
 	if d.cfg.AppClient != nil {
-		go func() {
-			statusCtx := context.Background()
+		go func() { //nolint:gosec // G118 expected: detached fire-and-forget commit-status update
+			statusCtx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+			defer cancel()
 			if err := d.cfg.AppClient.SetCommitStatus(statusCtx, installationID, owner, repo, commitSHA, CommitStatus{
 				State:       "pending",
 				Description: "Deploying to production...",
@@ -246,8 +267,10 @@ func tarballToGitBundle(ctx context.Context, tarball io.Reader, commitSHA, commi
 	}
 
 	// Write tarball to disk for SafeExtractTarGz (needs seekable file).
+	// G304 false positive: tarPath is constructed from os.MkdirTemp +
+	// hardcoded suffix "source.tar.gz" — no user input on the path.
 	tarPath := filepath.Join(tmpDir, "source.tar.gz")
-	tarFile, err := os.Create(tarPath)
+	tarFile, err := os.Create(tarPath) //nolint:gosec // G304 false positive: tmpdir + literal filename
 	if err != nil {
 		_ = os.RemoveAll(tmpDir)
 		return "", fmt.Errorf("create tar file: %w", err)
@@ -262,7 +285,7 @@ func tarballToGitBundle(ctx context.Context, tarball io.Reader, commitSHA, commi
 	// SEC: Safe extraction with all protections + StripComponents=1
 	// to remove the GitHub "owner-repo-sha/" prefix directory.
 	repoDir := filepath.Join(tmpDir, "repo")
-	if err := os.MkdirAll(repoDir, 0755); err != nil {
+	if err := os.MkdirAll(repoDir, 0o750); err != nil {
 		_ = os.RemoveAll(tmpDir)
 		return "", fmt.Errorf("mkdir repo: %w", err)
 	}
