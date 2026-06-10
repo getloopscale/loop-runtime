@@ -4,7 +4,7 @@
     <strong>The managed runtime for AI agents and the apps around them.</strong>
   </p>
   <p align="center">
-    <em>The apex of the <a href="https://loopzero.example">loopzero</a> ecosystem — where LoopZeroCode, LoopZeroCreate and LoopZeroKit land in production.</em>
+    <em>The apex of the <a href="https://loopzero.example">loopzero</a> ecosystem — where LoopZeroKit and LoopZeroCloud land in production.</em>
   </p>
   <p align="center">
     <a href="#install">Install</a> &bull;
@@ -116,8 +116,8 @@ No infrastructure to manage. No build config required. Just push.
 </tr>
 <tr>
 <td><h3>Free</h3><em>For side projects and learning</em></td>
-<td><h3>$29/mo</h3><em>For professional developers</em></td>
-<td><h3>$99/mo</h3><em>For growing teams</em></td>
+<td><h3>$19/mo</h3><em>Starter — early production agents</em></td>
+<td><h3>$79/mo</h3><em>Growth — sustained traffic</em></td>
 <td><h3>Custom</h3><em>For organizations at scale</em></td>
 </tr>
 <tr><td colspan="4"><strong>Deploy & Operate</strong></td></tr>
