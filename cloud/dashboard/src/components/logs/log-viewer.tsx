@@ -66,6 +66,12 @@ export function LogViewer({
 }: LogViewerProps) {
   const [search, setSearch] = useState('');
   const [levelFilter, setLevelFilter] = useState<'all' | LogLevel>('all');
+  // J-19 T1.4 (R4) — empty-state 3s delay gate. The empty-state message
+  // ("No log lines yet…") should only appear AFTER 3s of empty-connected
+  // state — typical SSE handshake completes in 100-500ms, so showing the
+  // message immediately makes it flash briefly during normal startup.
+  // EC-7 covered: timer resets on reconnect (connected:false → true).
+  const [showEmptyState, setShowEmptyState] = useState(false);
   const scrollRef = useRef<HTMLDivElement>(null);
   const autoScrollRef = useRef(true);
 
@@ -75,6 +81,16 @@ export function LogViewer({
     if (!el || !autoScrollRef.current) return;
     el.scrollTop = el.scrollHeight;
   }, [lines]);
+
+  // 3s delay before showing "No log lines yet" — only when SSE connected
+  // AND buffer empty. Any first line arrival OR disconnect cancels.
+  useEffect(() => {
+    if (connected && lines.length === 0) {
+      const t = setTimeout(() => setShowEmptyState(true), 3000);
+      return () => clearTimeout(t);
+    }
+    setShowEmptyState(false);
+  }, [connected, lines.length]);
 
   const handleScroll = () => {
     const el = scrollRef.current;
@@ -167,9 +183,14 @@ export function LogViewer({
       >
         {filtered.length === 0 ? (
           // T0.2 D4 — empty state com what/why/action context
+          // J-19 T1.4 (R4) — "No log lines yet" branch gated by showEmptyState
+          // (3s delay). Filter-mismatch branch is immediate — user just
+          // applied a filter intentionally; no delay needed.
           <div className="px-4 py-12 text-center text-muted-foreground">
             {lines.length === 0
-              ? 'No log lines yet. Logs stream here as your app runs — trigger a request or wait for the next event.'
+              ? showEmptyState
+                ? 'No log lines yet. Logs stream here as your app runs — trigger a request or wait for the next event.'
+                : null
               : 'No lines match your filter. Clear search or change severity to see more lines.'}
           </div>
         ) : (
