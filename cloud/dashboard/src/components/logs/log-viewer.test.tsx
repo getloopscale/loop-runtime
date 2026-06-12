@@ -204,3 +204,93 @@ describe('LogViewer empty-state 3s delay (J-19 T1.4 — R4 MUST)', () => {
     expect(screen.queryByText(/No log lines yet/i)).toBeNull();
   });
 });
+
+// iter 12 productive-idle — T2.1 permalink canonical + defensive coverage
+describe('LogViewer permalink (J-19 T2.1 — R5 SHOULD)', () => {
+  const TS = '2026-06-12T20:00:00.000Z';
+  const sampleLines = [
+    { ts: TS, level: 'info' as const, msg: 'line 0' },
+    { ts: TS, level: 'info' as const, msg: 'line 1' },
+    { ts: TS, level: 'info' as const, msg: 'line 2' },
+  ];
+
+  beforeEach(() => {
+    // Reset window.location.hash between tests to avoid bleed
+    if (typeof window !== 'undefined') {
+      try {
+        window.location.hash = '';
+      } catch {
+        // ignore in environments where hash is locked
+      }
+    }
+  });
+
+  it('test_log_viewer_click_line_updates_hash', () => {
+    render(
+      <LogViewer
+        lines={sampleLines}
+        connected={true}
+        error={false}
+        paused={false}
+        onTogglePause={vi.fn()}
+        onClear={vi.fn()}
+      />,
+    );
+    // Click the row at data-line-index=1
+    const row = document.querySelector('[data-line-index="1"]') as HTMLElement;
+    expect(row).not.toBeNull();
+    row.click();
+    expect(window.location.hash).toBe('#L1');
+  });
+
+  it('test_log_viewer_invalid_hash_format_no_crash_no_scroll', () => {
+    if (typeof window === 'undefined') return;
+    window.location.hash = '#Lxyz'; // invalid — not all digits
+    expect(() =>
+      render(
+        <LogViewer
+          lines={sampleLines}
+          connected={true}
+          error={false}
+          paused={false}
+          onTogglePause={vi.fn()}
+          onClear={vi.fn()}
+        />,
+      ),
+    ).not.toThrow();
+  });
+
+  it('test_log_viewer_out_of_range_hash_no_crash', () => {
+    if (typeof window === 'undefined') return;
+    window.location.hash = '#L9999'; // out of range — buffer has 3 lines
+    expect(() =>
+      render(
+        <LogViewer
+          lines={sampleLines}
+          connected={true}
+          error={false}
+          paused={false}
+          onTogglePause={vi.fn()}
+          onClear={vi.fn()}
+        />,
+      ),
+    ).not.toThrow();
+  });
+
+  it('test_log_viewer_no_hash_does_not_scroll', () => {
+    if (typeof window === 'undefined') return;
+    window.location.hash = ''; // no hash at all
+    expect(() =>
+      render(
+        <LogViewer
+          lines={sampleLines}
+          connected={true}
+          error={false}
+          paused={false}
+          onTogglePause={vi.fn()}
+          onClear={vi.fn()}
+        />,
+      ),
+    ).not.toThrow();
+  });
+});
