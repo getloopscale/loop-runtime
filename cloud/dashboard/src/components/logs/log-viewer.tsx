@@ -2,6 +2,7 @@ import { useEffect, useRef, useState } from 'react';
 import { Pause, Play, Trash2 } from 'lucide-react';
 import { Badge, Button, Input } from '@loopzerokit/ui';
 import type { LogLine, LogLevel } from '@/lib/api/types';
+import { parseAnsi } from '@/lib/ansi';
 
 interface LogViewerProps {
   lines: LogLine[];
@@ -170,7 +171,7 @@ export function LogViewer({
                 </Badge>
               )}
               <span className={`flex-1 break-all ${LEVEL_COLOR[line.level]}`}>
-                {line.msg}
+                {parseAnsi(line.msg)}
               </span>
             </div>
           ))
