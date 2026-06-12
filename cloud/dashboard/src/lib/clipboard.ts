@@ -33,7 +33,7 @@ export async function copyToClipboard(text: string): Promise<boolean> {
   ta.style.left = '-9999px';
   document.body.appendChild(ta);
   ta.select();
-  let ok = false;
+  let ok: boolean;
   try {
     ok = document.execCommand('copy');
   } catch {
