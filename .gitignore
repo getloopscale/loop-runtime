@@ -193,3 +193,9 @@ __pycache__/
 # Operator-local files (not committed; T7.1 plan moved canonical Caddyfile to infra/local/)
 .local/
 api/.claude/
+
+# /implement halt-loop ephemera (per cycle-implement.md)
+.claude/halt-loop-prompts/
+.claude/agents/implement-*/
+.claude/knowledge-base/implementations/*/sepa-iterations/
+.claude/knowledge-base/implementations/*/.progress.json
