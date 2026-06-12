@@ -46,4 +46,64 @@ describe('LogViewer (J-19 T1.2 — R2 ANSI render integration)', () => {
     // Fast path: no extra span injected
     expect(document.querySelector('span[style*="color"]')).toBeNull();
   });
+
+  it('test_log_viewer_renders_dropped_indicator_when_count_gt_zero', () => {
+    render(
+      <LogViewer
+        lines={[]}
+        connected={true}
+        error={false}
+        paused={false}
+        droppedCount={42}
+        onTogglePause={vi.fn()}
+        onClear={vi.fn()}
+      />,
+    );
+    expect(screen.getByText(/42 older lines dropped/)).toBeInTheDocument();
+  });
+
+  it('test_log_viewer_renders_dropped_indicator_singular_for_one', () => {
+    render(
+      <LogViewer
+        lines={[]}
+        connected={true}
+        error={false}
+        paused={false}
+        droppedCount={1}
+        onTogglePause={vi.fn()}
+        onClear={vi.fn()}
+      />,
+    );
+    expect(screen.getByText('1 older line dropped from buffer')).toBeInTheDocument();
+  });
+
+  it('test_log_viewer_hides_dropped_indicator_when_count_zero', () => {
+    render(
+      <LogViewer
+        lines={[]}
+        connected={true}
+        error={false}
+        paused={false}
+        droppedCount={0}
+        onTogglePause={vi.fn()}
+        onClear={vi.fn()}
+      />,
+    );
+    expect(screen.queryByText(/older line.*dropped/)).toBeNull();
+  });
+
+  it('test_log_viewer_hides_dropped_indicator_when_prop_absent_backward_compat', () => {
+    // EC-6 — existing build-logs.tsx mounts without droppedCount; indicator must stay hidden
+    render(
+      <LogViewer
+        lines={[]}
+        connected={true}
+        error={false}
+        paused={false}
+        onTogglePause={vi.fn()}
+        onClear={vi.fn()}
+      />,
+    );
+    expect(screen.queryByText(/older line.*dropped/)).toBeNull();
+  });
 });

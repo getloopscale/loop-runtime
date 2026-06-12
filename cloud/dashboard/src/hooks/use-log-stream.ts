@@ -30,12 +30,14 @@ export function useLogStream(
   lines: LogLine[];
   connected: boolean;
   error: boolean;
+  droppedCount: number;
   clear: () => void;
 } {
   const { maxLines = 5000, paused = false } = options;
   const [lines, setLines] = useState<LogLine[]>([]);
   const [connected, setConnected] = useState(false);
   const [error, setError] = useState(false);
+  const [droppedCount, setDroppedCount] = useState(0);
   const pausedRef = useRef(paused);
   pausedRef.current = paused;
 
@@ -46,6 +48,7 @@ export function useLogStream(
     setLines([]);
     setError(false);
     setConnected(false);
+    setDroppedCount(0);
     bufferRef.current = [];
 
     let cancelled = false;
@@ -82,7 +85,12 @@ export function useLogStream(
         if (!parsed) return;
         bufferRef.current.push(parsed);
         if (bufferRef.current.length > maxLines) {
-          bufferRef.current.splice(0, bufferRef.current.length - maxLines);
+          // J-19 T1.3 (R3): track dropped lines so the viewer surfaces an
+          // explicit indicator instead of silently discarding (closes EC-8
+          // silent-drop gap from impl edge cases review).
+          const excess = bufferRef.current.length - maxLines;
+          bufferRef.current.splice(0, excess);
+          setDroppedCount((prev) => prev + excess);
         }
         if (!pausedRef.current) {
           setLines([...bufferRef.current]);
@@ -107,9 +115,11 @@ export function useLogStream(
     lines,
     connected,
     error,
+    droppedCount,
     clear: () => {
       bufferRef.current = [];
       setLines([]);
+      setDroppedCount(0);
     },
   };
 }

@@ -9,6 +9,11 @@ interface LogViewerProps {
   connected: boolean;
   error: boolean;
   paused: boolean;
+  /** J-19 T1.3 (R3) — number of older lines silently dropped from the
+   *  FIFO buffer (cap 5000). When > 0, the viewer surfaces an explicit
+   *  indicator at the top of the buffer. Optional for backward compat
+   *  with build-logs.tsx (existing caller without droppedCount). */
+  droppedCount?: number;
   onTogglePause: () => void;
   onClear: () => void;
 }
@@ -55,6 +60,7 @@ export function LogViewer({
   connected,
   error,
   paused,
+  droppedCount = 0,
   onTogglePause,
   onClear,
 }: LogViewerProps) {
@@ -136,6 +142,22 @@ export function LogViewer({
           </Button>
         </div>
       </div>
+
+      {/* J-19 T1.3 (R3) — dropped-lines indicator: explicit signal when
+          the FIFO buffer cap activated and silently discarded older
+          lines. Pluralizes (1 line vs N lines). Closes EC-8 silent-drop
+          gap from impl edge cases review. */}
+      {droppedCount > 0 && (
+        <div
+          role="status"
+          aria-live="polite"
+          className="border-b border-warning/20 bg-warning/10 px-4 py-1 text-label text-warning"
+        >
+          {droppedCount === 1
+            ? '1 older line dropped from buffer'
+            : `${droppedCount} older lines dropped from buffer`}
+        </div>
+      )}
 
       {/* Log lines */}
       <div
