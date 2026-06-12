@@ -1,8 +1,13 @@
 import { useEffect, useRef, useState } from 'react';
-import { Pause, Play, Trash2 } from 'lucide-react';
-import { Badge, Button, Input } from '@loopzerokit/ui';
+import { Copy } from 'lucide-react';
+import { Badge, Button } from '@loopzerokit/ui';
 import type { LogLine, LogLevel } from '@/lib/api/types';
 import { parseAnsi } from '@/lib/ansi';
+import { copyToClipboard } from '@/lib/clipboard';
+import { formatLocalTime } from '@/lib/format-ts';
+import { formatLineForExport } from '@/lib/log-download';
+import { DroppedLinesIndicator } from './dropped-lines-indicator';
+import { LogViewerToolbar } from './log-viewer-toolbar';
 
 interface LogViewerProps {
   lines: LogLine[];
@@ -36,13 +41,6 @@ const LEVEL_BADGE: Record<
   error: 'destructive',
   fatal: 'destructive',
 };
-
-const LEVELS: { value: 'all' | LogLevel; label: string }[] = [
-  { value: 'all', label: 'All' },
-  { value: 'info', label: 'Info' },
-  { value: 'warn', label: 'Warn' },
-  { value: 'error', label: 'Error' },
-];
 
 /**
  * LogViewer — Plan v1.0 T1.3 composite.
@@ -92,6 +90,26 @@ export function LogViewer({
     setShowEmptyState(false);
   }, [connected, lines.length]);
 
+  // J-19 T2.1 (R5) — per-line permalink (#L<index>). On mount, parse the
+  // hash; if `#L<n>` matches a valid line index, scroll to it. Q4
+  // resolved (plan v1.1): index-based for v0.1; correlation_id-based
+  // deferred to v0.2 (R12). If FIFO drops happen between click and
+  // reload, scroll jumps to the wrong line — droppedCount indicator
+  // (R3) makes this discoverable; user re-clicks.
+  useEffect(() => {
+    if (typeof window === 'undefined') return;
+    const m = window.location.hash.match(/^#L(\d+)$/);
+    if (!m) return;
+    const idx = Number.parseInt(m[1], 10);
+    if (!Number.isFinite(idx) || idx < 0 || idx >= lines.length) return;
+    const el = scrollRef.current?.querySelector<HTMLElement>(`[data-line-index="${idx}"]`);
+    el?.scrollIntoView({ block: 'center' });
+    // Disable auto-scroll so the targeted line stays visible
+    autoScrollRef.current = false;
+    // Run once after mount; intentional empty deps + lines.length probe
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
   const handleScroll = () => {
     const el = scrollRef.current;
     if (!el) return;
@@ -107,73 +125,21 @@ export function LogViewer({
 
   return (
     <div className="flex h-full flex-col">
-      {/* Toolbar */}
-      <div className="flex flex-wrap items-center gap-2 border-b border-border/60 px-4 py-2">
-        <Input
-          type="search"
-          placeholder="Search logs..."
-          aria-label="Search log lines"
-          value={search}
-          onChange={(e) => setSearch(e.target.value)}
-          className="h-8 w-48"
-        />
-        <div className="flex items-center gap-1" role="group" aria-label="Filter by level">
-          {LEVELS.map((l) => (
-            <Button
-              key={l.value}
-              size="sm"
-              variant={levelFilter === l.value ? 'primary' : 'ghost'}
-              onClick={() => setLevelFilter(l.value)}
-            >
-              {l.label}
-            </Button>
-          ))}
-        </div>
-        <div className="ml-auto flex items-center gap-2">
-          <Badge
-            variant={connected ? 'success' : error ? 'destructive' : 'outline'}
-            className="text-label uppercase"
-          >
-            {error ? 'Disconnected' : connected ? 'Live' : 'Connecting…'}
-          </Badge>
-          <Button
-            variant="ghost"
-            size="sm"
-            onClick={onTogglePause}
-            aria-label={paused ? 'Resume log stream' : 'Pause log stream'}
-          >
-            {paused ? (
-              <Play className="size-4" aria-hidden="true" />
-            ) : (
-              <Pause className="size-4" aria-hidden="true" />
-            )}
-          </Button>
-          <Button
-            variant="ghost"
-            size="sm"
-            onClick={onClear}
-            aria-label="Clear log buffer"
-          >
-            <Trash2 className="size-4" aria-hidden="true" />
-          </Button>
-        </div>
-      </div>
+      <LogViewerToolbar
+        lines={lines}
+        connected={connected}
+        error={error}
+        paused={paused}
+        search={search}
+        levelFilter={levelFilter}
+        onSearchChange={setSearch}
+        onLevelFilterChange={setLevelFilter}
+        onTogglePause={onTogglePause}
+        onClear={onClear}
+      />
 
-      {/* J-19 T1.3 (R3) — dropped-lines indicator: explicit signal when
-          the FIFO buffer cap activated and silently discarded older
-          lines. Pluralizes (1 line vs N lines). Closes EC-8 silent-drop
-          gap from impl edge cases review. */}
-      {droppedCount > 0 && (
-        <div
-          role="status"
-          aria-live="polite"
-          className="border-b border-warning/20 bg-warning/10 px-4 py-1 text-label text-warning"
-        >
-          {droppedCount === 1
-            ? '1 older line dropped from buffer'
-            : `${droppedCount} older lines dropped from buffer`}
-        </div>
-      )}
+      {/* J-19 T1.3 (R3) — extracted to DroppedLinesIndicator at T2.x batch */}
+      <DroppedLinesIndicator count={droppedCount} />
 
       {/* Log lines */}
       <div
@@ -197,11 +163,22 @@ export function LogViewer({
           filtered.map((line, i) => (
             <div
               key={`${line.ts}-${i}`}
-              className="flex items-start gap-3 border-b border-border/30 px-4 py-1.5"
+              data-line-index={i}
+              className="group flex items-start gap-3 border-b border-border/30 px-4 py-1.5 hover:bg-surface-2/40"
+              onClick={() => {
+                if (typeof window !== 'undefined') {
+                  window.location.hash = `#L${i}`;
+                }
+              }}
             >
-              <span className="shrink-0 tabular-nums text-muted-foreground">
-                {line.ts.slice(11, 19)}
-              </span>
+              {/* J-19 T2.5 (R9) — browser-local time + UTC tooltip */}
+              <time
+                className="shrink-0 tabular-nums text-muted-foreground"
+                dateTime={formatLocalTime(line.ts).iso}
+                title={formatLocalTime(line.ts).iso}
+              >
+                {formatLocalTime(line.ts).local}
+              </time>
               <Badge
                 variant={LEVEL_BADGE[line.level]}
                 className="shrink-0 text-label uppercase"
@@ -216,6 +193,19 @@ export function LogViewer({
               <span className={`flex-1 break-all ${LEVEL_COLOR[line.level]}`}>
                 {parseAnsi(line.msg)}
               </span>
+              {/* J-19 T2.2 (R6) — copy-to-clipboard on hover */}
+              <Button
+                variant="ghost"
+                size="sm"
+                aria-label={`Copy line ${i + 1}`}
+                className="shrink-0 opacity-0 group-hover:opacity-100"
+                onClick={(e) => {
+                  e.stopPropagation(); // don't trigger row's permalink handler
+                  void copyToClipboard(formatLineForExport(line));
+                }}
+              >
+                <Copy className="size-3" aria-hidden="true" />
+              </Button>
             </div>
           ))
         )}
