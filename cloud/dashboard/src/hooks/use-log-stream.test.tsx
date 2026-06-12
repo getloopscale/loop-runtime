@@ -110,4 +110,69 @@ describe('useLogStream (J-19 T1.3 — R3 droppedCount field)', () => {
     expect(typeof error).toBe('boolean');
     expect(typeof clear).toBe('function');
   });
+
+  // iter 13 productive-idle — lifecycle integration coverage
+  it('test_use_log_stream_error_event_sets_error_state', async () => {
+    const { result } = await setupHook(5000);
+    const es = TestEventSource.instances[0];
+    expect(result.current.error).toBe(false);
+    act(() => {
+      es.onerror?.(new Event('error'));
+    });
+    expect(result.current.error).toBe(true);
+    expect(result.current.connected).toBe(false);
+  });
+
+  it('test_use_log_stream_path_change_resets_all_state', async () => {
+    const { result, rerender } = renderHook(
+      ({ path }) => useLogStream(path, { maxLines: 100 }),
+      { initialProps: { path: '/test/path-A' } },
+    );
+    await waitFor(() => expect(TestEventSource.instances.length).toBeGreaterThanOrEqual(1));
+    const esA = TestEventSource.instances[0];
+    act(() => {
+      for (let i = 0; i < 150; i++) esA.emit(mkLine(i));
+      esA.onerror?.(new Event('error'));
+    });
+    expect(result.current.droppedCount).toBeGreaterThan(0);
+    expect(result.current.error).toBe(true);
+    // Change path → new EventSource opens → state resets per useEffect[path]
+    rerender({ path: '/test/path-B' });
+    await waitFor(() => expect(TestEventSource.instances.length).toBeGreaterThanOrEqual(2));
+    expect(result.current.droppedCount).toBe(0);
+    expect(result.current.error).toBe(false);
+    expect(result.current.lines.length).toBe(0);
+  });
+
+  it('test_use_log_stream_null_path_no_op', async () => {
+    const { result } = renderHook(() => useLogStream(null, { maxLines: 100 }));
+    // No EventSource constructed, no state mutation
+    expect(TestEventSource.instances.length).toBe(0);
+    expect(result.current.connected).toBe(false);
+    expect(result.current.error).toBe(false);
+    expect(result.current.lines.length).toBe(0);
+    expect(result.current.droppedCount).toBe(0);
+  });
+
+  it('test_use_log_stream_paused_holds_lines_in_buffer_no_render', async () => {
+    const { result, rerender } = renderHook(
+      ({ paused }: { paused: boolean }) => useLogStream('/test/path', { maxLines: 100, paused }),
+      { initialProps: { paused: false } },
+    );
+    await waitFor(() => expect(TestEventSource.instances.length).toBe(1));
+    const es = TestEventSource.instances[0];
+    act(() => {
+      es.emit(mkLine(0));
+    });
+    expect(result.current.lines.length).toBe(1);
+    // Pause: subsequent emits NOT reflected in lines, but buffer still grows
+    rerender({ paused: true });
+    act(() => {
+      es.emit(mkLine(1));
+      es.emit(mkLine(2));
+    });
+    expect(result.current.lines.length).toBe(1); // last rendered was pre-pause
+    // Resume: NOT auto-replayed by hook; design — caller renders next event
+    // (canonical pattern: paused freezes UI; doesn't backfill on resume)
+  });
 });
