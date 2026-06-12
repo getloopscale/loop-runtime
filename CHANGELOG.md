@@ -7,6 +7,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+### Added (2026-06-12 — J-19 / J-08f Runtime Logs Streaming Dashboard Polish — Phase 0)
+
+Per `.claude/knowledge-base/plans/j19-runtime-logs-streaming-plan.md` v1.2 (SHIPPABLE_WITH_CAVEATS 70.0).
+
+- **T0.1: `ansi-to-html` ^0.7 dep** — added to `cloud/dashboard/package.json` `dependencies` (pinned 0.7.2 via `--save-exact`) for runtime-logs ANSI escape sequence rendering (R2 blueprint MUST). Transitive: `entities@2.2.0` (BSD-2-Clause). License: MIT. Zero CVEs per OSV.dev (verified 2026-06-12 deps-audit PASS_WITH_CAVEATS). Bundle size delta at install time: **0KB** (tree-shaken until T1.2 imports it; budget per acceptance criterion ≤ 20KB).
+
 ### Added (2026-06-08 — Dashboard Memory BFF Server-Side Key Vault — closes architectural mismatch discovered during 2026-06-07 dogfood)
 
 Per `.claude/knowledge-base/plans/dashboard-memory-bff-server-side-key-vault-plan.md` v1.2 (SHIPPABLE_WITH_CAVEATS 70.0). 9 commits across 2 days (`3212b89d`..`<latest>`) close the Dashboard ↔ `/v1/memory/*` auth mismatch via FAANG-canonical Backend-For-Frontend pattern. The `loopzero_live_*` API key NEVER touches the browser. Pattern matches Google Cloud Console, AWS Console, Stripe Dashboard.
