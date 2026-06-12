@@ -37,6 +37,10 @@ build/
 cloud/dashboard/storybook-static/
 cloud/dashboard/referencia/
 
+# Knowledge-base reference clones (shallow git clones of OSS reference projects;
+# 265MB+; cloned by /discover-execute when blueprint research needs them)
+.claude/knowledge-base/references/
+
 # Composio plugin cache (per-machine, never tracked)
 .od/
 
