@@ -76,13 +76,15 @@ export function useLogStream(
 
       es.onmessage = (event: MessageEvent) => {
         if (cancelled) return;
-        let parsed: LogLine | null = null;
+        // Both try/catch branches assign — initial null was redundant
+        // (eslint no-useless-assignment). J-19 iter-11 productive-idle
+        // hygiene: tighten to declaration-only, both branches still cover.
+        let parsed: LogLine;
         try {
           parsed = JSON.parse(event.data) as LogLine;
         } catch {
           parsed = { ts: new Date().toISOString(), level: 'info', msg: String(event.data) };
         }
-        if (!parsed) return;
         bufferRef.current.push(parsed);
         if (bufferRef.current.length > maxLines) {
           // J-19 T1.3 (R3): track dropped lines so the viewer surfaces an
