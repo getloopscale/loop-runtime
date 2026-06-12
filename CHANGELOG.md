@@ -12,6 +12,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 Per `.claude/knowledge-base/plans/j19-runtime-logs-streaming-plan.md` v1.2 (SHIPPABLE_WITH_CAVEATS 70.0).
 
 - **T0.1: `ansi-to-html` ^0.7 dep** — added to `cloud/dashboard/package.json` `dependencies` (pinned 0.7.2 via `--save-exact`) for runtime-logs ANSI escape sequence rendering (R2 blueprint MUST). Transitive: `entities@2.2.0` (BSD-2-Clause). License: MIT. Zero CVEs per OSV.dev (verified 2026-06-12 deps-audit PASS_WITH_CAVEATS). Bundle size delta at install time: **0KB** (tree-shaken until T1.2 imports it; budget per acceptance criterion ≤ 20KB).
+- **T1.1: `<TimeRangePicker>` on runtime logs page** (R1 blueprint MUST) — 6 preset dropdown (5min/15min/1h/6h/24h/7d) wired into `/projects/:name/logs` page header. Selection emits `?since={value}` query param consumed by existing backend (Beta Logs Gate Criterion 7). Changing preset disconnects + reconnects SSE stream via `useEffect[path]` (intentional per ADR D3). Components: `cloud/dashboard/src/components/logs/time-range-picker.tsx` (NEW, 44 LoC) + `cloud/dashboard/src/pages/runtime-logs.tsx` (modify). EC-1 pre-flight grep verified `@loopzerokit/ui` Select primitive (radix-ui based) — no fallback needed. Pointer-event polyfills added to `cloud/dashboard/src/test/setup.ts` for jsdom (Radix Select uses `hasPointerCapture` which jsdom does not implement).
 
 ### Added (2026-06-08 — Dashboard Memory BFF Server-Side Key Vault — closes architectural mismatch discovered during 2026-06-07 dogfood)
 

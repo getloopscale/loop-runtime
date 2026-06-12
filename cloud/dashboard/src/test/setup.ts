@@ -35,3 +35,23 @@ if (typeof globalThis.ResizeObserver === 'undefined') {
 if (typeof Element !== 'undefined' && !Element.prototype.scrollIntoView) {
   Element.prototype.scrollIntoView = function () {};
 }
+
+// Polyfill PointerEvent methods for jsdom (Radix Select / DropdownMenu use them).
+// J-19 T1.1: TimeRangePicker uses @loopzerokit/ui Select (radix-ui based) — its
+// pointerdown handler invokes hasPointerCapture which jsdom does not implement.
+if (typeof Element !== 'undefined') {
+  if (!(Element.prototype as { hasPointerCapture?: unknown }).hasPointerCapture) {
+    (Element.prototype as { hasPointerCapture: (pid: number) => boolean }).hasPointerCapture =
+      function () {
+        return false;
+      };
+  }
+  if (!(Element.prototype as { releasePointerCapture?: unknown }).releasePointerCapture) {
+    (Element.prototype as { releasePointerCapture: (pid: number) => void }).releasePointerCapture =
+      function () {};
+  }
+  if (!(Element.prototype as { setPointerCapture?: unknown }).setPointerCapture) {
+    (Element.prototype as { setPointerCapture: (pid: number) => void }).setPointerCapture =
+      function () {};
+  }
+}
