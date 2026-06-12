@@ -66,18 +66,22 @@ DELETE FROM github_installations WHERE id = $1;
 -- branch fields and bumps updated_at. The pre-INSERT lookup in the
 -- route handler still rejects cross-tenant or cross-project re-links;
 -- this only handles the legitimate "same caller re-connects" path.
+--
+-- Plan J-09 T3.2 (2026-06-05): auto_deploy passed as $7 (was hardcoded
+-- to true). ON CONFLICT respects EXCLUDED so users can pause auto-deploy
+-- without unlink/relink.
 INSERT INTO project_repositories (
   id, tenant_id, project_name, provider, repo_full_name,
   installation_id, default_branch, auto_deploy, created_at, updated_at
 ) VALUES (
-  $1, $2, $3, 'github', $4, $5, $6, true, NOW(), NOW()
+  $1, $2, $3, 'github', $4, $5, $6, $7, NOW(), NOW()
 )
 ON CONFLICT (repo_full_name) DO UPDATE SET
   tenant_id = EXCLUDED.tenant_id,
   project_name = EXCLUDED.project_name,
   installation_id = EXCLUDED.installation_id,
   default_branch = EXCLUDED.default_branch,
-  auto_deploy = true,
+  auto_deploy = EXCLUDED.auto_deploy,
   updated_at = NOW();
 
 -- name: UnlinkProjectRepository :execrows

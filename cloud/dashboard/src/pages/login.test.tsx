@@ -96,9 +96,6 @@ describe('LoginPage', () => {
     mockFetch.mockResolvedValueOnce({ ok: true, json: async () => flowFixture() });
 
     const createElementSpy = vi.spyOn(document, 'createElement');
-    // Stub HTMLFormElement.prototype.submit so the test never triggers a real
-    // form POST. Spy is created for its install side-effect; handle name
-    // prefixed `_` documents the intentional no-read.
     const submitStub = vi
       .spyOn(HTMLFormElement.prototype, 'submit')
       .mockImplementation(() => undefined);
@@ -147,9 +144,6 @@ describe('LoginPage', () => {
     // EC-4 invariant: OIDC handler MUST use document.createElement('form') +
     // form.submit() — substituting fetch breaks the OIDC redirect chain.
     const createElementSpy = vi.spyOn(document, 'createElement');
-    // Stub HTMLFormElement.prototype.submit so the test never triggers a real
-    // form POST. Spy is created for its install side-effect; handle name
-    // prefixed `_` documents the intentional no-read.
     const submitStub = vi
       .spyOn(HTMLFormElement.prototype, 'submit')
       .mockImplementation(() => undefined);
@@ -335,7 +329,7 @@ describe('LoginPage', () => {
   });
 
   it('test_login_label_htmlfor_matches_input_id', async () => {
-    // EC-4: detect upstream @loopzerokit/ui regression
+    // EC-4: detect upstream @loopzero/ui regression
     mockFetch.mockResolvedValueOnce({ ok: true, json: async () => flowFixture() });
     render(<LoginPage />);
     await waitFor(() => {
@@ -463,10 +457,9 @@ describe('LoginPage', () => {
     // actually fires.
     mockFetch.mockResolvedValueOnce({ ok: true, json: async () => flowFixture() });
 
-    // Stub HTMLFormElement.prototype.submit so the test never triggers a real
-    // form POST. We don't read the spy handle in this test — the install
-    // side-effect (replacing submit with a no-op) is the entire contract.
-    vi.spyOn(HTMLFormElement.prototype, 'submit').mockImplementation(() => undefined);
+    vi.spyOn(HTMLFormElement.prototype, 'submit').mockImplementation(
+      () => undefined,
+    );
 
     const user = userEvent.setup();
     render(<LoginPage />);

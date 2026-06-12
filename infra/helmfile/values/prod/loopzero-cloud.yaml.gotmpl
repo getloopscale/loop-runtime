@@ -1,0 +1,29 @@
+# T1.2 of plan 2026-06-11-cleanroom-canonical-5-defense-layers v1.2.
+#
+# Canonical loopzero-cloud env contract for prod env per ADR D1 + D8. Closes
+# catch #20 from T6.2 session by declaratively splitting KRATOS_PUBLIC_URL
+# vs KRATOS_INTERNAL_URL.
+#
+# Per-env contract:
+#   - prod hosts: auth/app/cloud.loopzero.example (NO -dev suffix)
+#   - KRATOS_PUBLIC_URL: HTTPS public FQDN for browser redirects
+#   - KRATOS_INTERNAL_URL: cluster-internal HTTP for server-side admin calls
+#
+# Regression guard (T3.2): INTERNAL must NEVER be https (defeats split
+# purpose); overlay must NEVER leak *-dev hostnames into prod env vars.
+
+image:
+  repository: registry.digitalocean.com/loopzero-system/loopzero-cloud
+  tag: stable
+  pullPolicy: IfNotPresent
+
+imagePullSecrets:
+  - name: do-registry
+
+env:
+  GITHUB_APP_SLUG: "loopzero-platform"
+  APP_PUBLIC_URL: "https://app.loopzero.example"
+  AUTH_COOKIE_DOMAIN: "loopzero.example"
+
+  KRATOS_PUBLIC_URL: "https://auth.loopzero.example"
+  KRATOS_INTERNAL_URL: "http://kratos.loopzero-auth.svc.cluster.local:4433"

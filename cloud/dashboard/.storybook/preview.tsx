@@ -4,7 +4,7 @@
 import type { Preview } from '@storybook/react';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { MemoryRouter } from 'react-router-dom';
-import { LoopZeroUIProvider, violetForge } from '@loopzerokit/ui';
+import { LoopZeroUIProvider, violetForge } from '@loopzero/ui';
 import '../src/index.css';
 
 const queryClient = new QueryClient({

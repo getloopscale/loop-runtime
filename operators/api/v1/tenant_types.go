@@ -60,7 +60,20 @@ type TenantSpec struct {
 	Plan PlanTier `json:"plan"`
 
 	// Environments lists the environments available to this tenant.
-	// +kubebuilder:validation:MinItems=1
+	//
+	// Shape-only constraint (MinItems=0): the "tenant has production from
+	// day 1" business invariant lives in the API layer (T4.1 of plan
+	// 2026-06-09-m2-operator-canonical-fix — EnvironmentEnsurer auto-creates
+	// the production env immediately after CreateProject + EnsureTenant).
+	// Forcing MinItems=1 here previously required factories to pre-populate
+	// a hardcoded environments[] entry; combined with the T1.1 Project-required
+	// constraint this caused admission failures in the EnsureTenant call
+	// path (LIVE-caught 2026-06-09 during T6.1, per
+	// feedback_no_hardcode_gate_2026_06_09). The CRD validates SHAPE, the
+	// API enforces BUSINESS INVARIANT — separating those concerns lets
+	// EnsureTenant create an empty CR while the canonical T4.1 chain
+	// remains the single source of truth for env entries.
+	// +kubebuilder:validation:MinItems=0
 	Environments []TenantEnvironmentEntry `json:"environments"`
 
 	// GitOps configures the tenant's GitOps repository.
@@ -98,6 +111,30 @@ type TenantEnvironmentEntry struct {
 	// +kubebuilder:validation:MaxLength=63
 	// +kubebuilder:validation:Pattern=`^[a-z0-9]([-a-z0-9]*[a-z0-9])?$`
 	Cluster string `json:"cluster"`
+
+	// Project is the project segment of the canonical namespace formula
+	// `loopzero-<tenant>-<project>-<env>`. J-23 LIVE catch 2026-06-07
+	// (#69, sponsor verbatim "Atacar #69 fix tenant_gitops + CRD"): the
+	// renderer canonical refactor (commit cd6235fc) emits manifests with
+	// namespace `loopzero-<tenant>-<project>-<env>` for ALL envs. The API
+	// populates it when creating / updating the Tenant CR
+	// (api/internal/k8s/tenant_cr_manager.go), the operator reads it in
+	// reconcileArgoCDApp (tenant_gitops.go) to compute the canonical
+	// destination, and ArgoCD sync applies workloads into the correct
+	// namespace.
+	//
+	// T1.1 of plan 2026-06-09-m2-operator-canonical-fix v1.4: required +
+	// RFC 1123 Pattern at the CRD level. The Optional-with-fallback path
+	// (pre-#69 legacy two-segment naming) was eliminated by Phase 5
+	// migration (T5.1 of the same plan) running BEFORE this validation
+	// tightens per ADR D5. EC-2 absorption: Pattern catches non-RFC-1123
+	// slugs at the request boundary instead of leaving the Environment
+	// stuck Pending with a cryptic error surfaced by pkg/naming.
+	//
+	// +kubebuilder:validation:MinLength=1
+	// +kubebuilder:validation:MaxLength=63
+	// +kubebuilder:validation:Pattern=`^[a-z0-9]([-a-z0-9]*[a-z0-9])?$`
+	Project string `json:"project"`
 }
 
 // GitOpsSpec configures the tenant's GitOps repository in Gitea.

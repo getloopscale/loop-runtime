@@ -29,21 +29,51 @@ type BuildListItem struct {
 	FinishedAt      *time.Time
 	DurationSeconds *int
 	ErrorMessage    string
+	// T5.3 LIVE-bug iter 20 fix (2026-06-08): per-build apps snapshot was
+	// missing from builds list response, so the dashboard /projects/:name
+	// Apps card list rendered empty even when apps_spec was populated.
+	// Apps mirror the apps_spec JSONB column (minus internal fields).
+	// Reuses BuildAppInfo (declared in builds.go) — same shape used by
+	// the BuildStatusResponse for /builds/{id} singular endpoint.
+	Apps []BuildAppInfo
 }
 
 // BuildListStore abstracts build list retrieval (DIP).
 type BuildListStore interface {
 	ListByProjectAndEnv(ctx context.Context, tenantID, projectID, env string, limit, offset int) ([]BuildListItem, int, error)
+	// ListEnvsForProject returns the distinct set of environments the
+	// project has built into, ordered by most-recently-used. Empty
+	// slice (not nil) for cold projects. Post plan
+	// 2026-06-08-dashboard-screens-review-fixes T2.2 + ADR D3.
+	ListEnvsForProject(ctx context.Context, tenantID, projectName string) ([]string, error)
 }
 
 // BuildListHandler provides HTTP handlers for listing builds.
 type BuildListHandler struct {
 	builds BuildListStore
+	// projects is the EC-2 SEPA-CRITICAL cross-tenant gate. Nil
+	// disables the gate (legacy List path stays unchanged for callers
+	// constructed via NewBuildListHandler — the gate is a T2.2 addition
+	// only relevant for the new /build-envs endpoint).
+	projects ProjectStore
 }
 
-// NewBuildListHandler creates a new BuildListHandler.
+// NewBuildListHandler creates a new BuildListHandler (legacy constructor —
+// /build-envs not exposed because the cross-tenant gate is not wired).
 func NewBuildListHandler(builds BuildListStore) *BuildListHandler {
 	return &BuildListHandler{builds: builds}
+}
+
+// NewBuildListHandlerWithGate creates a BuildListHandler with the EC-2
+// SEPA-CRITICAL cross-tenant gate wired. Plan
+// 2026-06-08-dashboard-screens-review-fixes T2.2 DoD requires this
+// constructor to be used in production setup — `setup_server.go` MUST
+// pass the ProjectStore so /build-envs lookups go through GetByName
+// BEFORE the query is even attempted. Without the gate, a tenant could
+// probe `/api/v1/projects/<other-tenant-project>/build-envs` and
+// observe metadata (env names) that doesn't belong to them.
+func NewBuildListHandlerWithGate(builds BuildListStore, projects ProjectStore) *BuildListHandler {
+	return &BuildListHandler{builds: builds, projects: projects}
 }
 
 // buildListResponse is the JSON response for GET /api/v1/projects/{name}/builds.
@@ -92,6 +122,11 @@ func (h *BuildListHandler) List(w http.ResponseWriter, r *http.Request) {
 			CreatedAt:       b.CreatedAt.UTC().Format(time.RFC3339),
 			DurationSeconds: b.DurationSeconds,
 			ErrorMessage:    b.ErrorMessage,
+			// T5.3 LIVE-bug iter 20 (2026-06-08): copy the per-build apps
+			// snapshot. Adapter parses apps_spec JSONB into b.Apps; here we
+			// just forward the slice through. omitempty drops the key when
+			// the build's apps_spec was empty/missing.
+			Apps: b.Apps,
 		}
 		if b.StartedAt != nil {
 			item.StartedAt = b.StartedAt.UTC().Format(time.RFC3339)
@@ -103,6 +138,68 @@ func (h *BuildListHandler) List(w http.ResponseWriter, r *http.Request) {
 	}
 
 	writeJSON(w, http.StatusOK, resp)
+}
+
+// buildEnvsResponse is the JSON shape for GET /api/v1/projects/{name}/build-envs.
+type buildEnvsResponse struct {
+	Envs  []string `json:"envs"`
+	Total int      `json:"total"`
+}
+
+// BuildEnvs handles GET /api/v1/projects/{name}/build-envs.
+// Returns the distinct envs the project has built into, ordered by
+// most-recently-used. Feeds the dashboard /deployments env-filter chips
+// (replaces the hardcoded production/staging/preview/all literals per
+// ADR D3).
+//
+// EC-2 SEPA-CRITICAL: cross-tenant probes return 404 PROJECT_NOT_FOUND
+// (same shape as "project does not exist anywhere") to prevent
+// existence leak. The gate is applied BEFORE the build-envs query
+// runs — a tenant cannot even reach the underlying query if the project
+// does not belong to them.
+func (h *BuildListHandler) BuildEnvs(w http.ResponseWriter, r *http.Request) {
+	ctx, cancel := context.WithTimeout(r.Context(), 30*time.Second)
+	defer cancel()
+
+	uc := middleware.GetUserContext(ctx)
+	if uc == nil {
+		writeLoopZeroError(w, loopzeroerrors.ErrUnauthorized)
+		return
+	}
+
+	name := chi.URLParam(r, "name")
+	if name == "" {
+		writeLoopZeroError(w, loopzeroerrors.ErrMissingField.Wrap("project name is required"))
+		return
+	}
+
+	// EC-2 gate: project lookup. Nil = project does not belong to this
+	// tenant (or doesn't exist anywhere — same response shape).
+	if h.projects != nil {
+		project, err := h.projects.GetByName(ctx, uc.TenantID, name)
+		if err != nil {
+			writeLoopZeroError(w, loopzeroerrors.ErrInternalError)
+			return
+		}
+		if project == nil {
+			writeLoopZeroError(w, loopzeroerrors.NewProjectNotFound(name))
+			return
+		}
+	}
+
+	envs, err := h.builds.ListEnvsForProject(ctx, uc.TenantID, name)
+	if err != nil {
+		writeLoopZeroError(w, loopzeroerrors.ErrInternalError)
+		return
+	}
+	if envs == nil {
+		envs = []string{}
+	}
+
+	writeJSON(w, http.StatusOK, buildEnvsResponse{
+		Envs:  envs,
+		Total: len(envs),
+	})
 }
 
 // parseIntParam parses a string to int, returning defaultVal on failure or empty string.

@@ -2,8 +2,11 @@
 // Copyright 2025-2026 The LoopZero Authors
 
 // Memory Webhook Delivery plan, T5.2 + T5.3.
-// Structural validation of migrations 000027 (ADD COLUMN secret) +
-// 000028 (NEW memory_webhook_deliveries table).
+// Structural validation of migrations 000029 (ADD COLUMN secret) +
+// 000030 (NEW memory_webhook_deliveries table).
+// Renumbered 2026-06-07 from 000027/000028 after merge with develop —
+// preview_as_category + preview_slot_per_project (M2 refactor) own those
+// version slots LIVE in PG.
 
 package unit
 
@@ -15,8 +18,8 @@ import (
 )
 
 const (
-	pathMigration027 = "../../../api/internal/db/migrations/000027_memory_webhooks_add_secret.up.sql"
-	pathMigration028 = "../../../api/internal/db/migrations/000028_memory_webhook_deliveries.up.sql"
+	pathMigration029 = "../../../api/internal/db/migrations/000029_memory_webhooks_add_secret.up.sql"
+	pathMigration030 = "../../../api/internal/db/migrations/000030_memory_webhook_deliveries.up.sql"
 )
 
 func readWebhookDeliveryMigration(t *testing.T, rel string) string {
@@ -33,11 +36,11 @@ func readWebhookDeliveryMigration(t *testing.T, rel string) string {
 }
 
 // =============================================================================
-// 000027 — ALTER memory_webhooks ADD COLUMN secret
+// 000029 — ALTER memory_webhooks ADD COLUMN secret
 // =============================================================================
 
-func TestMigration027_AltersMemoryWebhooks(t *testing.T) {
-	sql := readWebhookDeliveryMigration(t, pathMigration027)
+func TestMigration029_AltersMemoryWebhooks(t *testing.T) {
+	sql := readWebhookDeliveryMigration(t, pathMigration029)
 	upper := strings.ToUpper(sql)
 	if !strings.Contains(upper, "ALTER TABLE") {
 		t.Fatal("must ALTER TABLE")
@@ -47,8 +50,8 @@ func TestMigration027_AltersMemoryWebhooks(t *testing.T) {
 	}
 }
 
-func TestMigration027_AddsSecretColumnNullable(t *testing.T) {
-	sql := readWebhookDeliveryMigration(t, pathMigration027)
+func TestMigration029_AddsSecretColumnNullable(t *testing.T) {
+	sql := readWebhookDeliveryMigration(t, pathMigration029)
 	upper := strings.ToUpper(sql)
 	if !strings.Contains(upper, "ADD COLUMN") {
 		t.Fatal("must ADD COLUMN")
@@ -69,8 +72,8 @@ func TestMigration027_AddsSecretColumnNullable(t *testing.T) {
 	}
 }
 
-func TestMigration027_CommentDocumentsV01Disclosure(t *testing.T) {
-	sql := readWebhookDeliveryMigration(t, pathMigration027)
+func TestMigration029_CommentDocumentsV01Disclosure(t *testing.T) {
+	sql := readWebhookDeliveryMigration(t, pathMigration029)
 	upper := strings.ToUpper(sql)
 	if !strings.Contains(upper, "COMMENT ON COLUMN") {
 		t.Error("COMMENT ON COLUMN required for operator documentation")
@@ -87,18 +90,18 @@ func TestMigration027_CommentDocumentsV01Disclosure(t *testing.T) {
 }
 
 // =============================================================================
-// 000028 — NEW memory_webhook_deliveries
+// 000030 — NEW memory_webhook_deliveries
 // =============================================================================
 
-func TestMigration028_TableCreated(t *testing.T) {
-	sql := readWebhookDeliveryMigration(t, pathMigration028)
+func TestMigration030_TableCreated(t *testing.T) {
+	sql := readWebhookDeliveryMigration(t, pathMigration030)
 	if !strings.Contains(sql, "CREATE TABLE") || !strings.Contains(sql, "memory_webhook_deliveries") {
 		t.Fatal("must CREATE TABLE memory_webhook_deliveries")
 	}
 }
 
-func TestMigration028_RequiredColumns(t *testing.T) {
-	sql := readWebhookDeliveryMigration(t, pathMigration028)
+func TestMigration030_RequiredColumns(t *testing.T) {
+	sql := readWebhookDeliveryMigration(t, pathMigration030)
 	required := []string{
 		"id ",
 		"webhook_id ",
@@ -120,8 +123,8 @@ func TestMigration028_RequiredColumns(t *testing.T) {
 	}
 }
 
-func TestMigration028_WebhookFKCascade(t *testing.T) {
-	sql := readWebhookDeliveryMigration(t, pathMigration028)
+func TestMigration030_WebhookFKCascade(t *testing.T) {
+	sql := readWebhookDeliveryMigration(t, pathMigration030)
 	if !strings.Contains(sql, "REFERENCES memory_webhooks(id)") {
 		t.Error("webhook_id must FK to memory_webhooks(id)")
 	}
@@ -130,8 +133,8 @@ func TestMigration028_WebhookFKCascade(t *testing.T) {
 	}
 }
 
-func TestMigration028_StatusCheckAll5Literals(t *testing.T) {
-	sql := readWebhookDeliveryMigration(t, pathMigration028)
+func TestMigration030_StatusCheckAll5Literals(t *testing.T) {
+	sql := readWebhookDeliveryMigration(t, pathMigration030)
 	// All 5 status literals MUST be in the CHECK clause exactly.
 	for _, lit := range []string{"'pending'", "'delivering'", "'delivered'", "'failed'", "'dead_letter'"} {
 		if !strings.Contains(sql, lit) {
@@ -140,15 +143,15 @@ func TestMigration028_StatusCheckAll5Literals(t *testing.T) {
 	}
 }
 
-func TestMigration028_PayloadJsonbType(t *testing.T) {
-	sql := readWebhookDeliveryMigration(t, pathMigration028)
+func TestMigration030_PayloadJsonbType(t *testing.T) {
+	sql := readWebhookDeliveryMigration(t, pathMigration030)
 	if !strings.Contains(strings.ToUpper(sql), "JSONB") {
 		t.Error("payload JSONB type required for indexed semantic querying")
 	}
 }
 
-func TestMigration028_DispatcherHotPathPartialIndex(t *testing.T) {
-	sql := readWebhookDeliveryMigration(t, pathMigration028)
+func TestMigration030_DispatcherHotPathPartialIndex(t *testing.T) {
+	sql := readWebhookDeliveryMigration(t, pathMigration030)
 	// Hot path = `WHERE next_attempt_at <= NOW() AND status IN ('pending','failed')`.
 	// Partial index on `(next_attempt_at)` with that predicate keeps it tight.
 	if !strings.Contains(sql, "idx_memory_webhook_deliveries_due") {
@@ -161,8 +164,8 @@ func TestMigration028_DispatcherHotPathPartialIndex(t *testing.T) {
 	}
 }
 
-func TestMigration028_WebhookHistoryIndex(t *testing.T) {
-	sql := readWebhookDeliveryMigration(t, pathMigration028)
+func TestMigration030_WebhookHistoryIndex(t *testing.T) {
+	sql := readWebhookDeliveryMigration(t, pathMigration030)
 	if !strings.Contains(sql, "idx_memory_webhook_deliveries_webhook") {
 		t.Error("webhook history index required for dashboard list")
 	}
@@ -175,8 +178,8 @@ func TestMigration028_WebhookHistoryIndex(t *testing.T) {
 // Forward-only invariant — no .down.sql for either migration.
 func TestMigrations_WebhookDelivery_NoDownFiles(t *testing.T) {
 	for _, rel := range []string{
-		"../../../api/internal/db/migrations/000027_memory_webhooks_add_secret.down.sql",
-		"../../../api/internal/db/migrations/000028_memory_webhook_deliveries.down.sql",
+		"../../../api/internal/db/migrations/000029_memory_webhooks_add_secret.down.sql",
+		"../../../api/internal/db/migrations/000030_memory_webhook_deliveries.down.sql",
 	} {
 		abs, _ := filepath.Abs(rel)
 		if _, err := os.Stat(abs); err == nil {

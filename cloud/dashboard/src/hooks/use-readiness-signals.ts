@@ -114,10 +114,10 @@ export function useReadinessSignals(projectName: string | undefined): {
             : status.replicas_ready === 0
               ? 'fail'
               : 'warning',
-      fixHref: status && status.replicas_ready === 0 && status.replicas_desired > 0
+      fixHref: status && status.replicas_ready === 0 && (status.replicas_desired ?? 0) > 0
         ? `/projects/${projectName}/status`
         : undefined,
-      fixLabel: status && status.replicas_ready === 0 && status.replicas_desired > 0
+      fixLabel: status && status.replicas_ready === 0 && (status.replicas_desired ?? 0) > 0
         ? 'View status'
         : undefined,
     },

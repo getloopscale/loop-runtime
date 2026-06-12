@@ -48,6 +48,22 @@ type EnvironmentCRSpec struct {
 	// +kubebuilder:validation:MinLength=1
 	Environment string `json:"environment"`
 
+	// Project is the project segment of the canonical namespace formula
+	// `loopzero-<tenant>-<project>-<env>`. T3.1 of plan
+	// 2026-06-09-m2-operator-canonical-fix v1.4: when populated by the
+	// TenantController (from TenantEnvironmentEntry.Project — which T1.1
+	// makes required at the CRD level), EnvironmentController computes the
+	// canonical M2 namespace from this field + Environment instead of
+	// trusting the Namespace.Name value. Optional at the EnvironmentCRSpec
+	// level for backward-compatibility with pre-T3.1 CRs whose namespace
+	// was hand-set via Spec.Namespace.Name; new CRs created by the
+	// post-T3.1 TenantController populate it unconditionally.
+	//
+	// +kubebuilder:validation:Optional
+	// +kubebuilder:validation:MaxLength=63
+	// +kubebuilder:validation:Pattern=`^([a-z0-9]([-a-z0-9]*[a-z0-9])?)?$`
+	Project string `json:"project,omitempty"`
+
 	// Namespace defines the target namespace for this environment.
 	Namespace NamespaceSpec `json:"namespace"`
 

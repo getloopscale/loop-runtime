@@ -217,12 +217,52 @@ func TestBuildNamespace_empty(t *testing.T) {
 // ---------------------------------------------------------------------------
 
 func TestPreviewNamespace_format(t *testing.T) {
+	// Canonical refactor 2026-06-07: PreviewNamespace routes through
+	// Namespace(tenant, project, "preview-pr-N") so all envs share the
+	// uniform "loopzero-<tenant>-<project>-<env>" formula (no special case).
 	got, err := PreviewNamespace("acme", "api", 42)
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
-	if got != "acme-api-pr-42" {
-		t.Errorf("got %q, want %q", got, "acme-api-pr-42")
+	want := "loopzero-acme-api-preview-pr-42"
+	if got != want {
+		t.Errorf("got %q, want %q", got, want)
+	}
+}
+
+// TestNamespace_canonical pins the uniform formula for all envs.
+func TestNamespace_canonical(t *testing.T) {
+	cases := []struct {
+		name      string
+		tenant    string
+		project   string
+		env       string
+		want      string
+		wantError bool
+	}{
+		{name: "production", tenant: "tn-x", project: "teste", env: "production", want: "loopzero-tn-x-teste-production"},
+		{name: "staging", tenant: "tn-x", project: "api", env: "staging", want: "loopzero-tn-x-api-staging"},
+		{name: "preview", tenant: "tn-x", project: "web", env: "preview-pr-7", want: "loopzero-tn-x-web-preview-pr-7"},
+		{name: "empty tenant", tenant: "", project: "p", env: "e", wantError: true},
+		{name: "empty project", tenant: "t", project: "", env: "e", wantError: true},
+		{name: "empty env", tenant: "t", project: "p", env: "", wantError: true},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			got, err := Namespace(tc.tenant, tc.project, tc.env)
+			if tc.wantError {
+				if err == nil {
+					t.Fatalf("expected error, got nil (result=%q)", got)
+				}
+				return
+			}
+			if err != nil {
+				t.Fatalf("unexpected error: %v", err)
+			}
+			if got != tc.want {
+				t.Errorf("got %q, want %q", got, tc.want)
+			}
+		})
 	}
 }
 
@@ -573,7 +613,7 @@ func TestDeterminism_all_functions(t *testing.T) {
 		}
 
 		pn, _ := PreviewNamespace("acme", "api", 42)
-		if pn != "acme-api-pr-42" {
+		if pn != "loopzero-acme-api-preview-pr-42" {
 			t.Fatalf("PreviewNamespace not deterministic on iteration %d", i)
 		}
 

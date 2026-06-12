@@ -173,3 +173,24 @@ WHERE tenant_id = $1
   AND environment = $3
   AND status IN ('QUEUED', 'RUNNING')
 RETURNING COALESCE(workflow_id, '') AS workflow_id;
+
+-- name: ListBuildEnvsForProject :many
+-- Returns distinct environments the project has at least one build for,
+-- ordered by most-recent build per env DESC. Feeds the dashboard
+-- /deployments env-filter chips (ADR D3) — replaces the hardcoded
+-- production/staging/preview/all literals so custom envs appear.
+--
+-- Per plan 2026-06-08-dashboard-screens-review-fixes T2.2 + EC-2:
+-- handler MUST gate via ProjectStore.GetByName BEFORE this query
+-- runs (cross-tenant existence-leak prevention). The query itself
+-- is tenant-scoped (only this caller's tenant_id), but a tenant
+-- could probe project names belonging to other tenants via the URL
+-- path — the EC-2 adapter rejects with 404 PROJECT_NOT_FOUND before
+-- this query is invoked.
+--
+-- Empty result → empty []string (not nil) per Rule 5 contract.
+SELECT environment
+FROM builds
+WHERE tenant_id = $1 AND project_id = $2
+GROUP BY environment
+ORDER BY MAX(created_at) DESC;

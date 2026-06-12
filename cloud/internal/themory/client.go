@@ -25,7 +25,6 @@
 package themory
 
 import (
-	"bytes"
 	"context"
 	"encoding/json"
 	"errors"
@@ -68,14 +67,6 @@ type ListOptions struct {
 	Category string // optional filter; empty means no filter
 	From     string // RFC3339; empty means no lower bound
 	To       string // RFC3339; empty means no upper bound
-	// Scope routes the upstream call to `/v1/scopes/{scope}/{userID}/memories`.
-	// Accepted values: "user" | "session" | "agent" | "repo". Empty defaults
-	// to "user" for backward-compatibility with all callers that pre-date
-	// the dashboard-memories-tab-standardization T3.2 BFF extension.
-	// Per plan v1.5 — TheMemory REST already supports all 4 scope types
-	// (T1.1/T2.1/T2.2 backend work); this field plumbs the dashboard's
-	// 4-tab UI through to the upstream contract.
-	Scope string
 }
 
 // MemoryRow is one entry in the List response. Field shape is a subset
@@ -119,157 +110,81 @@ type EntitiesResult struct {
 	Entities []Entity `json:"entities"`
 }
 
-// memoryItemUpstream mirrors TheMemory OSS /v1/scopes/{type}/{id}/memories
-// item shape (verified via /v1/openapi.json 2026-06-07). Internal adapter
-// type — public API stays MemoryRow.
-type memoryItemUpstream struct {
-	ID        string         `json:"id"`
-	Text      string         `json:"text"`
-	Hash      string         `json:"hash"`
-	Scope     map[string]any `json:"scope"`
-	Payload   map[string]any `json:"payload"`
-	CreatedAt string         `json:"createdAt"`
-	UpdatedAt string         `json:"updatedAt"`
-}
-
-type scopeMemoriesResponse struct {
-	Items      []memoryItemUpstream `json:"items"`
-	NextCursor string               `json:"nextCursor,omitempty"`
-}
-
-// List proxies GET /v1/scopes/user/{userID}/memories for the given user
-// subject. FIX 2026-06-07: adapt to actual OSS TheMemory contract (was
-// stubbed for non-existent /memories path). Translates upstream
-// {items:[{text,createdAt,...}]} into dashboard ListResult shape.
+// List proxies GET /memories for the given user subject.
 func (c *Client) List(ctx context.Context, userID string, opts ListOptions) (*ListResult, error) {
 	q := url.Values{}
 	if opts.Limit > 0 {
 		q.Set("limit", strconv.Itoa(opts.Limit))
 	}
-	// themory-category-filter-server-side T5.1 — forward Category to upstream
-	// REST `?category=` per the contract shipped in TheMemory T4.1. Empty
-	// strings are NOT forwarded (upstream's zod min(1) would 422; suppress here
-	// to keep the no-filter path clean).
+	if opts.Offset > 0 {
+		q.Set("offset", strconv.Itoa(opts.Offset))
+	}
 	if opts.Category != "" {
 		q.Set("category", opts.Category)
 	}
-	// TheMemory uses cursor-based pagination; Offset is not supported.
-	// From/To are dropped silently — upstream lacks these filters.
-	// Scope routes to the matching /v1/scopes/{scope}/{userID}/memories path.
-	// Empty/invalid scope falls back to "user" (backward-compat + safe default).
-	// dashboard-memories-tab-standardization v1.5 (T3.2): "repo" maps to "skill"
-	// per ADR-0010 (RepoScope exposed via Memory.skills(repoId), maps internally
-	// to skill scope). TheMemory REST returns 501 SKILL_LISTING_NOT_IMPLEMENTED
-	// for skill scope listing — Client.List degrades gracefully to empty list
-	// (200) instead of propagating 502 to Dashboard. The empty response is
-	// honest: the backend simply doesn't expose the listing primitive yet.
-	scope := opts.Scope
-	switch scope {
-	case "user", "session", "agent":
-		// allowed values; pass through
-	case "repo", "skill":
-		scope = "skill"
-	default:
-		scope = "user"
+	if opts.From != "" {
+		q.Set("from", opts.From)
 	}
-	path := "/v1/scopes/" + scope + "/" + url.PathEscape(userID) + "/memories"
-	var upstream scopeMemoriesResponse
-	if err := c.do(ctx, http.MethodGet, path, userID, q, nil, &upstream); err != nil {
-		// Graceful degrade: when scope=skill returns 501 (not implemented per
-		// ADR-0010), surface empty list. Dashboard EmptyState handles the UI.
-		if scope == "skill" && (IsSkillListingNotImplemented(err) || IsNotFound(err)) {
-			return &ListResult{Memories: []MemoryRow{}}, nil
-		}
+	if opts.To != "" {
+		q.Set("to", opts.To)
+	}
+	var out ListResult
+	if err := c.do(ctx, http.MethodGet, "/memories", userID, q, nil, &out); err != nil {
 		return nil, err
 	}
-	out := &ListResult{Memories: make([]MemoryRow, 0, len(upstream.Items))}
-	for _, item := range upstream.Items {
-		row := MemoryRow{
-			ID:        item.ID,
-			Content:   item.Text,
-			CreatedAt: item.CreatedAt,
-		}
-		// Category may live in payload (e.g., payload["category"]).
-		if c, ok := item.Payload["category"].(string); ok {
-			row.Category = c
-		}
-		out.Memories = append(out.Memories, row)
+	// D3 invariant: never return nil slice for empty result — pass-through
+	// from TheMemory would be `null` in some implementations.
+	if out.Memories == nil {
+		out.Memories = []MemoryRow{}
 	}
-	return out, nil
+	return &out, nil
 }
 
-// Metrics computes counts client-side via List (TheMemory OSS does not
-// expose a /metrics endpoint at v0.1.0-alpha — verified via /v1/openapi.json
-// 2026-06-07). D3 invariant preserved: zero-initialised numerics, never null.
-// FIX 2026-06-07: was stubbed for non-existent /metrics path; now derives
-// TotalMemories from a paginated list call. Other counters (RetrievalAPI
-// Usage, AddEvents, EntityCount) stay at 0 until upstream telemetry ships.
+// Metrics proxies GET /metrics for the given user subject. Empty data
+// returns zero-initialised values per D3 (NOT NaN, NOT null).
 func (c *Client) Metrics(ctx context.Context, userID string) (*MetricsResult, error) {
 	out := &MetricsResult{} // explicit zero values per D3
-	listed, err := c.List(ctx, userID, ListOptions{Limit: 100})
-	if err != nil {
-		return out, nil // honest fallback — return zeros instead of upstream error
+	if err := c.do(ctx, http.MethodGet, "/metrics", userID, nil, nil, out); err != nil {
+		return nil, err
 	}
-	out.TotalMemories = len(listed.Memories)
 	return out, nil
 }
 
-// Entities synthesizes the scope-grouped entity list from a List call
-// (TheMemory OSS does not expose /entities at v0.1.0-alpha — verified
-// via /v1/openapi.json 2026-06-07). FIX 2026-06-07: was stubbed with
-// D1 fallback for the absent endpoint; now derives the entity grouping
-// from upstream memories' `scope` field.
-//
-// For the dashboard's Insights page, this returns a single Entity row
-// per discovered scope.id within the requested scope type. Empty result
-// when the user has no memories — preserves D1 honest-empty contract.
+// Entities proxies GET /entities?scope=<type> for the given user subject.
+// Per Plan 2 D1, when TheMemory's /entities endpoint is absent (404), the
+// client surfaces an empty result so the handler / dashboard can either
+// fall back to client-side aggregation or render an empty state cleanly —
+// 404 is NOT propagated as an error from this method.
 func (c *Client) Entities(ctx context.Context, userID, scope string) (*EntitiesResult, error) {
-	// Strategy: list memories under the requested scope and aggregate.
-	// For scope="user", list directly under user/{userID}. For other
-	// scope types (session/agent), upstream needs a different path —
-	// returning empty until that's wired (handler stays graceful).
-	if scope != "user" && scope != "" {
+	q := url.Values{}
+	q.Set("scope", scope)
+	var out EntitiesResult
+	err := c.do(ctx, http.MethodGet, "/entities", userID, q, nil, &out)
+	if err != nil && errors.Is(err, ErrNotFound) {
+		// D1 fallback: TheMemory's /entities endpoint may not exist yet
+		// at the upstream OSS sibling's frozen P0. Empty result is the
+		// honest signal — handler can decide what to do next.
 		return &EntitiesResult{Entities: []Entity{}}, nil
 	}
-	listed, err := c.List(ctx, userID, ListOptions{Limit: 100})
 	if err != nil {
-		return &EntitiesResult{Entities: []Entity{}}, nil
+		return nil, err
 	}
-	// Single entity per user subject — Plan 2 surfaces user as the canonical
-	// entity at v0.1. Future expansion when upstream ships per-scope
-	// enumeration.
-	if len(listed.Memories) == 0 {
-		return &EntitiesResult{Entities: []Entity{}}, nil
+	if out.Entities == nil {
+		out.Entities = []Entity{}
 	}
-	return &EntitiesResult{Entities: []Entity{
-		{
-			ID:          userID,
-			ScopeType:   "user",
-			MemoryCount: len(listed.Memories),
-			LastSeenAt:  listed.Memories[0].CreatedAt,
-		},
-	}}, nil
+	return &out, nil
 }
 
-// Forget proxies POST /v1/forget with body {memoryId} for TheMemory.
-// FIX 2026-06-07: was stubbed for non-existent DELETE /memories/{id}
-// path; now uses the canonical POST /v1/forget with body shape per
-// /v1/openapi.json 2026-06-07.
+// Forget proxies DELETE /memories/{id} for the given user subject.
 // 404 from TheMemory surfaces as ErrNotFound — the handler relies on
-// this to return 404 on cross-tenant attempts.
+// this to return 404 on cross-tenant attempts (since TheMemory will
+// not find the memory under the wrong user-id).
 func (c *Client) Forget(ctx context.Context, userID, memoryID string) error {
 	if memoryID == "" {
 		return errors.New("memoryID required")
 	}
-	// hard:true matches dashboard "delete" UX (customer expects the row to
-	// disappear immediately). Soft-delete leaves tInvalid set but list still
-	// returns the row, which would confuse the customer ("I deleted it but
-	// it's still there"). FIX 2026-06-07.
-	payload, err := json.Marshal(map[string]any{"memoryId": memoryID, "hard": true})
-	if err != nil {
-		return fmt.Errorf("themory: marshal forget body: %w", err)
-	}
-	return c.do(ctx, http.MethodPost, "/v1/forget", userID, nil, bytes.NewReader(payload), nil)
+	path := "/memories/" + url.PathEscape(memoryID)
+	return c.do(ctx, http.MethodDelete, path, userID, nil, nil, nil)
 }
 
 // do is the shared request lifecycle. Sets the canonical headers
@@ -323,23 +238,6 @@ var ErrNotFound = errors.New("themory: not found")
 
 // IsNotFound reports whether err is or wraps ErrNotFound.
 func IsNotFound(err error) bool { return errors.Is(err, ErrNotFound) }
-
-// IsSkillListingNotImplemented reports whether err is a 501 from TheMemory's
-// scopes handler indicating skill scope listing is not exposed via REST
-// (ADR-0010 — `ScopedSkillMemory` has no `getAll()`; consumers use SDK
-// `Memory.skills(repoId).recall(...)` directly). Used by Client.List to
-// degrade scope=repo gracefully to an empty list instead of propagating 502
-// to the Dashboard. See dashboard-memories-tab-standardization v1.5 T3.2.
-func IsSkillListingNotImplemented(err error) bool {
-	var apiErr *Error
-	if !errors.As(err, &apiErr) {
-		return false
-	}
-	if apiErr.StatusCode != http.StatusNotImplemented {
-		return false
-	}
-	return strings.Contains(apiErr.Body, "SKILL_LISTING_NOT_IMPLEMENTED")
-}
 
 // Error is a typed wrapper for non-2xx responses other than 404.
 // Exposes the upstream status + body for slog without leaking secrets

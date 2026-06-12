@@ -74,7 +74,23 @@ export interface Project {
   apps?: App[];
   last_deploy?: string | null;     // ISO timestamp; null if never deployed
   last_deploy_status?: ProjectStatus;
-  environment?: string;
+  environment?: string;            // legacy singular (pre-M2); kept for backward compat
+  // T2.1 + ADR D2 (plan 2026-06-08-dashboard-screens-review-fixes):
+  // per-project total env count, derived server-side via LEFT JOIN
+  // LATERAL on environment_targets. The dashboard /projects table
+  // renders this as "Live envs" instead of the legacy singular
+  // `environment` field.
+  environment_count?: number;
+  // T2.1 additive completion (T5.3 LIVE-bug fix 2026-06-08): backend
+  // now populates these via the latest_build LATERAL join so the
+  // /projects table no longer shows "—" / 0 in Apps + Framework
+  // columns after the legacy apps[] array was dropped. T4.4 of plan
+  // 2026-06-11-code-review-remediation v1.2 — formalized in the type
+  // contract so future refactors keep the frontend↔backend shape in
+  // sync (eliminates the silent drift that caused the 2026-06-08
+  // LIVE catch).
+  latest_framework?: string;
+  apps_count?: number;
   created_at?: string;
 }
 
@@ -120,6 +136,38 @@ export type BuildStatus =
   | 'cancelled'
   | 'cancelling';
 
+/**
+ * Normalize a build status string returned by the API to the lowercase
+ * BuildStatus union the UI expects.
+ *
+ * LIVE bug caught 2026-06-06 J-17 dogfood: the backend stores statuses
+ * in CAPS ('QUEUED', 'RUNNING', 'RELEASING', 'SUCCEEDED', 'FAILED',
+ * 'CANCELLING', 'CANCELLED') and surfaces them as-is in the JSON
+ * responses. The TS type declared lowercase. Looking up
+ * STATUS_MAP['RUNNING'] then returned undefined and propagated to
+ * StatusDot which logged: `<StatusDot status="undefined" />`.
+ *
+ * Intermediate phases ('RELEASING') collapse to 'running' because the
+ * UI does not have a separate visual treatment for "build done,
+ * release activating" — both are "in flight".
+ */
+export function normalizeBuildStatus(s: string | undefined | null): BuildStatus {
+  if (!s) return 'queued';
+  const lower = s.toLowerCase();
+  if (lower === 'releasing') return 'running';
+  switch (lower) {
+    case 'queued':
+    case 'running':
+    case 'succeeded':
+    case 'failed':
+    case 'cancelled':
+    case 'cancelling':
+      return lower;
+    default:
+      return 'queued';
+  }
+}
+
 /** @see api/internal/routes/builds.go:BuildAppInfo / BuildCallbackApp */
 export interface BuildApp {
   name: string;
@@ -149,35 +197,38 @@ export interface BuildCreateResponse {
 // Build artifacts (SBOM + Attestation)
 // ============================================================================
 
-/** CycloneDX SBOM JSON (subset).
- * @see api/internal/routes/build_sbom.go */
+/** SBOM metadata response.
+ * LIVE bug 2026-06-06: prior TS shape declared inline CycloneDX
+ * payload. Backend (api/internal/routes/build_sbom.go) actually
+ * returns metadata per app + presigned MinIO download_url. The full
+ * CycloneDX JSON lives at download_url, not inline.
+ * @see api/internal/routes/build_sbom.go:BuildSBOMResponse */
 export interface BuildSBOM {
-  bomFormat: 'CycloneDX';
-  specVersion: string;
-  serialNumber?: string;
-  components: SBOMComponent[];
+  build_id: string;
+  apps: AppSBOMSummary[];
 }
 
-export interface SBOMComponent {
-  type: string;       // "library" | "application" | "framework"
-  'bom-ref'?: string;
-  name: string;
-  version: string;
-  purl?: string;
-  licenses?: { license: { id: string } }[];
+export interface AppSBOMSummary {
+  app_name: string;
+  sbom_format?: string;       // "cyclonedx-json"
+  component_count?: number;
+  generated_at?: string;      // ISO 8601
+  download_url?: string;      // presigned MinIO URL (~1h TTL)
 }
 
-/** Cosign attestation envelope.
- * @see api/internal/routes/build_attestation.go */
+/** Attestation metadata.
+ * LIVE bug 2026-06-06: prior TS shape declared a cosign envelope with
+ * payloadType + base64 payload + signatures[]. Backend (domain.AttestationInfo)
+ * actually returns a flat metadata record: digest, signature ref, signed flag,
+ * signed_at. The dashboard renders the digest + signed badge; the raw cosign
+ * envelope is not exposed via the BFF.
+ * @see api/internal/domain/attestation.go:AttestationInfo */
 export interface BuildAttestation {
-  payloadType: string;
-  payload: string;        // base64-encoded predicate
-  signatures: AttestationSignature[];
-}
-
-export interface AttestationSignature {
-  keyid: string;
-  sig: string;
+  build_id: string;
+  image_digest?: string;
+  image_signature?: string;
+  signed_at?: string;     // ISO 8601
+  signed: boolean;
 }
 
 // ============================================================================
@@ -209,10 +260,18 @@ export interface LogStreamEvent {
 export interface Environment {
   name: string;
   status?: string;
+  // M2 v1.2 (2026-06-07): per-(project, env) tuple. Empty string =
+  // legacy production entry (ADR D2 backward compat).
+  project?: string;
+  // Legacy counter — kept for backward compat with v1.0 dashboard
+  // surfaces that displayed an aggregate project count per env.
   projects?: number;
   protected?: boolean;
   domain?: string;
   created_at?: string;
+  // J-10 v1.1 LIVE KPI fields propagated from backend.
+  last_deploy?: string;
+  last_deploy_sha?: string;
 }
 
 export interface EnvironmentListResponse {
@@ -222,6 +281,9 @@ export interface EnvironmentListResponse {
 
 export interface EnvironmentCreateInput {
   name: string;
+  // M2 v1.2 T4.1: project is REQUIRED on POST /api/v1/environments.
+  // Missing → backend returns 400 MISSING_FIELD.
+  project: string;
   protected?: boolean;
 }
 
@@ -362,14 +424,40 @@ export interface PreviewCreateInput {
 export interface ProjectStatusDetail {
   project: string;
   environment: string;
-  replicas_ready: number;
-  replicas_desired: number;
-  deploy_status: BuildStatus;
-  build_status: BuildStatus;
-  traffic_5xx_pct_1h: number;
-  traffic_5xx_pct_24h: number;
-  alerts_active: number;
+  // The fields below are populated only when the project has at least
+  // one release in the requested environment. For a fresh project with
+  // last_build=null and active_release=null the backend OMITS them
+  // (Go zero-value -> JSON omitempty), so callers MUST treat them as
+  // optional. ProjectHealthCard renders "-" when missing.
+  replicas_ready?: number;
+  replicas_desired?: number;
+  deploy_status?: BuildStatus;
+  build_status?: BuildStatus;
+  traffic_5xx_pct_1h?: number;
+  traffic_5xx_pct_24h?: number;
+  alerts_active?: number;
   last_deploy_at?: string;
+  // Plan J-17 LIVE bug 2026-06-06: backend returns nested last_build +
+  // active_release objects; TS shape was missing them. Used by
+  // DeploymentsPage to highlight which build is currently serving prod.
+  last_build?: {
+    id: string;
+    status: BuildStatus | string;
+    commit_sha: string;
+    created_at: string;
+    finished_at?: string;
+    duration_seconds?: number;
+    error?: string;
+  };
+  active_release?: {
+    id: string;
+    build_id: string;
+    status: string;
+    git_commit?: string;
+    created_at: string;
+  };
+  sync_status?: string;
+  url?: string;
 }
 
 export interface ScaleInput {
@@ -409,16 +497,44 @@ export interface PromoteResponse {
 
 export interface ProjectConnection {
   connected: boolean;
+  // Plan J-09 T3.1 (2026-06-05) — backend returns `repo` (full_name slug like
+  // "owner/name"), NOT `repo_url`. The repo_url field below is legacy and kept
+  // only for backward compatibility during the migration window.
+  repo?: string;
   repo_url?: string;
   branch?: string;
   auto_deploy?: boolean;
   installation_id?: number;
+  provider?: string;
+  connected_at?: string;
 }
 
+// Plan J-09 T3.1 (2026-06-05) — canonical POST payload matches backend
+// connectRequest (api/internal/routes/repositories.go:60):
+//   { repo: "owner/name", installation_id: number, branch?: string, auto_deploy?: boolean }
+// Replaces the legacy { repo_url, branch, auto_deploy } shape which never
+// worked end-to-end (recon confirmed HTTP 400).
 export interface ProjectConnectInput {
-  repo_url: string;
+  repo: string;
+  installation_id: number;
   branch: string;
   auto_deploy: boolean;
+}
+
+// Plan J-09 T2.1 (2026-06-05) — sanitised repository from the engine
+// /api/v1/integrations/github/installations/{id}/repositories endpoint.
+// Field set MUST match engine.routes.InstallationRepository exactly --
+// anything else would round-trip via JSON.parse but never get used.
+export interface InstallationRepository {
+  full_name: string;
+  default_branch: string;
+  private: boolean;
+  language?: string;
+}
+
+// Wrapper envelope the engine returns (matches map[string]any{"repositories": ...}).
+export interface InstallationRepositoriesResponse {
+  repositories: InstallationRepository[];
 }
 
 // ============================================================================

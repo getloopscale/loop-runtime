@@ -16,8 +16,13 @@ import (
 //   - GetDetail returns (nil, nil) → env does NOT exist (TenantCRManager pattern)
 //   - GetDetail returns (_, non-nil err containing "not found") → does NOT exist
 //   - GetDetail returns (_, any other err) → propagate as Lister error
+// M2 v1.2 (2026-06-07): the Add closure carries the `project` argument
+// so the canonical Tenant CR spec.environments entry is populated with
+// the field needed to compute `loopzero-<tenant>-<project>-<env>`. The
+// GetDetail closure stays project-agnostic — the shallow existence
+// check is per-tenant by design.
 type envManagerAdapter struct {
-	Add       func(ctx context.Context, tenantID, envName string) error
+	Add       func(ctx context.Context, tenantID, project, envName string) error
 	GetDetail func(ctx context.Context, tenantID, envName string) (envDetail any, err error)
 }
 
@@ -25,8 +30,10 @@ type envManagerAdapter struct {
 // getDetail func returns (nonNilOpaqueDetail, nil) when env exists, or
 // (nil, nil) when absent (matches TenantCRManager.GetEnvironmentDetail
 // contract). Tests can pass any compatible func.
+//
+// M2 v1.2: `add` carries the project argument end-to-end.
 func NewEnvManagerAdapter(
-	add func(ctx context.Context, tenantID, envName string) error,
+	add func(ctx context.Context, tenantID, project, envName string) error,
 	getDetail func(ctx context.Context, tenantID, envName string) (any, error),
 ) (EnvironmentLister, EnvironmentAdder) {
 	a := &envManagerAdapter{Add: add, GetDetail: getDetail}
@@ -47,9 +54,9 @@ func (a *envManagerAdapter) HasEnvironment(ctx context.Context, tenantID, envNam
 	return false, err
 }
 
-// AddEnvironment — straight delegation.
-func (a *envManagerAdapter) AddEnvironment(ctx context.Context, tenantID, envName string) error {
-	return a.Add(ctx, tenantID, envName)
+// AddEnvironment — straight delegation. M2 v1.2 propagates project.
+func (a *envManagerAdapter) AddEnvironment(ctx context.Context, tenantID, project, envName string) error {
+	return a.Add(ctx, tenantID, project, envName)
 }
 
 // isNotFoundError matches "not found" anywhere in the error message,

@@ -48,6 +48,37 @@ func newTestAppClient(t *testing.T, server *httptest.Server) *AppClient {
 	}
 }
 
+// TestResolveGitHubAPIBase_DefaultsWhenEnvUnset — T2.4 of plan
+// 2026-06-11-code-review-remediation v1.2. Fallback path is DOcumented
+// in the public DefaultGitHubAPIBase constant.
+func TestResolveGitHubAPIBase_DefaultsWhenEnvUnset(t *testing.T) {
+	t.Setenv("GITHUB_API_BASE_URL", "")
+	if got := resolveGitHubAPIBase(); got != DefaultGitHubAPIBase {
+		t.Errorf("expected default %q, got %q", DefaultGitHubAPIBase, got)
+	}
+}
+
+// TestResolveGitHubAPIBase_HonorsEnvOverride — T2.4 closure invariant:
+// GHES operators MUST be able to point LoopZero at their appliance via the
+// canonical env var without forking. Per sponsor mandate 2026-06-11
+// "PROIBINDO CONFIGURAÇÃO HARDCODED".
+func TestResolveGitHubAPIBase_HonorsEnvOverride(t *testing.T) {
+	t.Setenv("GITHUB_API_BASE_URL", "https://github.acme.corp/api/v3")
+	if got := resolveGitHubAPIBase(); got != "https://github.acme.corp/api/v3" {
+		t.Errorf("env override ignored: got %q", got)
+	}
+}
+
+// TestAppClient_ApiBase_FallsBackOnZeroValue — defense-in-depth so
+// struct-literal construction without NewAppClient (test fixtures,
+// future shape changes) doesn't produce empty URL formatting.
+func TestAppClient_ApiBase_FallsBackOnZeroValue(t *testing.T) {
+	c := &AppClient{} // zero value — no baseURL set
+	if got := c.apiBase(); got != DefaultGitHubAPIBase {
+		t.Errorf("apiBase() on zero value must fall back: got %q", got)
+	}
+}
+
 func TestNewAppClient_ValidCredentials(t *testing.T) {
 	// Arrange
 	pemStr, _ := generateTestRSAKey(t)

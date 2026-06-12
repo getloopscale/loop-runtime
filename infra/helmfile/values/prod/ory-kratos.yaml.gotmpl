@@ -1,0 +1,26 @@
+# T1.6 of plan 2026-06-11-cleanroom-canonical-5-defense-layers v1.2.
+#
+# Canonical declarative ory-kratos cookie + allowed_return_urls contract for
+# prod env per ADR D1 + D8. Closes J-04 recovery + J-05 device-flow
+# cross-subdomain session continuity gaps.
+#
+# Per ADR D8 contract for prod:
+#   - cookieDomain: loopzero.example (eTLD+1 — apex shared by auth / app / cloud
+#     prod subdomains; ensures session cookie survives redirect chain)
+#   - allowed_return_urls: enumerate canonical prod post-auth redirect
+#     targets (Kratos rejects any return_to= query param NOT in allowlist)
+
+kratos:
+  config:
+    session:
+      cookie:
+        domain: loopzero.example
+        same_site: Lax
+
+    selfservice:
+      allowed_return_urls:
+        - https://app.loopzero.example
+        - https://app.loopzero.example/
+        - https://cloud.loopzero.example
+        - https://cloud.loopzero.example/
+        - https://auth.loopzero.example

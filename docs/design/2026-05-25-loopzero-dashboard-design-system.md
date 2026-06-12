@@ -2,7 +2,7 @@
 
 > **Slug:** `2026-05-25-loopzero-dashboard-design-system`
 > **Status:** DRAFT (awaiting sponsor ratification)
-> **Anchored to:** `@loopzerokit/ui@0.10.0-next.0` Violet Forge theme
+> **Anchored to:** `@loopzero/ui@0.10.0-next.0` Violet Forge theme
 > **Pattern source:** Open Design `design-templates/dashboard` SKILL +
 > Open Design `design-systems/{vercel,cal,linear-app,supabase}` DESIGN.md +
 > Refactoring UI (Wathan & Schoger) + Laws of UX (Yablonski) + WAI-ARIA APG
@@ -15,17 +15,17 @@
 
 This document is the **single source of truth** for visual + behavioral
 patterns of the LoopZeroCloud dashboard (`cloud/dashboard/`). It does NOT
-redefine tokens already shipped by `@loopzerokit/ui` Violet Forge — it
+redefine tokens already shipped by `@loopzero/ui` Violet Forge — it
 **applies** those tokens to dashboard-specific surfaces.
 
 **Rule of thumb**: if a token (color, spacing, radius, typescale entry)
-exists in `@loopzerokit/ui`, USE IT verbatim. Never hex-literal,
+exists in `@loopzero/ui`, USE IT verbatim. Never hex-literal,
 never px-literal in component classes. If a token doesn't exist,
 file a Brief to upstream (see Brief #4 precedent for the publishing-
-pipeline gap that became `@loopzerokit/ui@0.10.0`).
+pipeline gap that became `@loopzero/ui@0.10.0`).
 
 **Out of scope:**
-- @loopzerokit/ui primitive APIs themselves — read `node_modules/@loopzerokit/ui/dist/index.d.ts`
+- @loopzero/ui primitive APIs themselves — read `node_modules/@loopzero/ui/dist/index.d.ts`
 - Backend contracts — read `api/internal/`
 - Auth flows — locked in `lib/{auth,api,kratos}.ts` per CLAUDE.md "NÃO TOCAR"
 
@@ -74,7 +74,7 @@ Lazygit than to Stripe Atlas or Notion gallery.
 
 ## 2. Color Palette & Roles
 
-All colors below resolve to `@loopzerokit/ui` runtime CSS variables. Do
+All colors below resolve to `@loopzero/ui` runtime CSS variables. Do
 not write hex literals in component code; use the Tailwind utility
 that resolves to the token (e.g., `bg-primary`, `text-muted-foreground`).
 
@@ -137,8 +137,8 @@ Never solid saturated backgrounds for non-action elements.
 
 ## 3. Typography Rules
 
-`@loopzerokit/ui` ships Geist (display + body) + Geist Mono via
-`@import "@loopzerokit/ui/fonts-cdn.css"`. The Violet Forge typescale
+`@loopzero/ui` ships Geist (display + body) + Geist Mono via
+`@import "@loopzero/ui/fonts-cdn.css"`. The Violet Forge typescale
 exposes compound utilities (`text-display-2xl` ... `text-label`)
 with companion `--*--line-height`, `--*--letter-spacing`,
 `--*--font-weight` properties Tailwind v4 picks up automatically.
@@ -196,9 +196,9 @@ for micro-badges (≤10px) and code keywords inside CodeBlock.
 
 ## 4. Component Stylings
 
-These rules govern how `@loopzerokit/ui` primitives are USED on dashboard
+These rules govern how `@loopzero/ui` primitives are USED on dashboard
 surfaces. The primitives themselves are documented in `node_modules/
-@loopzerokit/ui/dist/index.d.ts`. Read that first when in doubt.
+@loopzero/ui/dist/index.d.ts`. Read that first when in doubt.
 
 ### 4.1 Buttons
 
@@ -230,7 +230,7 @@ actions.
 with `<Search />` icon prepended via `className="pl-9"` or `pl-8`.
 Smaller search inputs are conventional and OK to break the form-pair rule.
 
-**Forbidden**: native `<select>`. Use @loopzerokit/ui `<Select>` compound
+**Forbidden**: native `<select>`. Use @loopzero/ui `<Select>` compound
 (`Select.Trigger` + `Select.Value` + `Select.Content` + `Select.Item`).
 
 ### 4.3 Cards
@@ -245,7 +245,7 @@ Smaller search inputs are conventional and OK to break the form-pair rule.
 </Card>
 ```
 
-**Padding**: Card.Header + Card.Body inherit @loopzerokit/ui defaults.
+**Padding**: Card.Header + Card.Body inherit @loopzero/ui defaults.
 **Do not override** with `className="p-8"` or custom padding (the
 default is tuned for dashboard density). Only override when there's a
 true visual gap to fix.
@@ -280,7 +280,7 @@ true visual gap to fix.
 - First column = identifier (project name, domain, member email)
 - Last column = actions (icon buttons, status pills)
 - Sticky header for tables ≥10 rows
-- Row hover: subtle bg shift via @loopzerokit/ui default — don't override
+- Row hover: subtle bg shift via @loopzero/ui default — don't override
 
 **Density**: dashboard tables target **40-44px row height**. If a row
 shows secondary metadata (e.g., framework + last deploy under project
@@ -295,7 +295,7 @@ name), use 2-line cell at 56px max. Triple-line rows = redesign signal.
 <Badge variant="default">Idle</Badge>
 ```
 
-OR if @loopzerokit/ui ships StatusDot (it does):
+OR if @loopzero/ui ships StatusDot (it does):
 
 ```tsx
 <StatusDot status="live" label="Live" />
@@ -307,7 +307,7 @@ OR if @loopzerokit/ui ships StatusDot (it does):
 
 ### 4.6 Sidebar nav
 
-`@loopzerokit/ui` ships `Sidebar` + `Sidebar.Item`. Convention:
+`@loopzero/ui` ships `Sidebar` + `Sidebar.Item`. Convention:
 
 - 6-8 nav items maximum (Miller's Law: 7 ± 2 chunks)
 - Each item: icon (16px) + label
@@ -427,7 +427,7 @@ too much for dashboard density; arbitrary `gap-[18px]`.
 |-------|------|
 | `rounded-md` | Inputs, buttons, table cells (default) |
 | `rounded-lg` | Pills, status dots, icon containers |
-| `rounded-xl` | Cards (default from @loopzerokit/ui) |
+| `rounded-xl` | Cards (default from @loopzero/ui) |
 | `rounded-full` | Avatars, circular icon buttons, kpi-bar terminators |
 
 ---
@@ -483,7 +483,7 @@ Conventions:
 
 ### Do
 
-- **Use @loopzerokit/ui defaults first**. Override only with measured
+- **Use @loopzero/ui defaults first**. Override only with measured
   visual evidence (screenshot).
 - **Pair Button + Input sizes** within a single form (md↔md, lg↔lg).
 - **Title-case status labels** via `statusLabel()` helper.
@@ -519,7 +519,7 @@ Conventions:
 
 ## 8. Responsive Behavior
 
-`@loopzerokit/ui` ships Tailwind v4 breakpoints. Dashboard uses these
+`@loopzero/ui` ships Tailwind v4 breakpoints. Dashboard uses these
 breakpoints intentionally:
 
 | Breakpoint | Width | Dashboard behavior |
@@ -583,7 +583,7 @@ Auto-dismisses when verification completes.
 ### Quick reference
 
 - **Primary color uses**: sidebar active + 1 CTA per viewport. MAX 2.
-- **Card padding**: use @loopzerokit/ui defaults. Don't override `p-8` or `p-4`.
+- **Card padding**: use @loopzero/ui defaults. Don't override `p-8` or `p-4`.
 - **Spacing scale**: 4, 8, 12, 16, 24, 32. Skip 5, 10, 20.
 - **Status pills**: `<Badge variant={success|warning|destructive|default}>` with title-cased label.
 - **Numeric display**: `formatNumber(v, intent) + tabular-nums`.
@@ -644,8 +644,8 @@ Auto-dismisses when verification completes.
 
 ## 11. References
 
-- @loopzerokit/ui Violet Forge token source: `node_modules/@loopzerokit/ui/dist/tokens-v4.css`
-- @loopzerokit/ui primitive APIs: `node_modules/@loopzerokit/ui/dist/index.d.ts`
+- @loopzero/ui Violet Forge token source: `node_modules/@loopzero/ui/dist/tokens-v4.css`
+- @loopzero/ui primitive APIs: `node_modules/@loopzero/ui/dist/index.d.ts`
 - Open Design dashboard SKILL: `cloud/dashboard/referencia/open-design/design-templates/dashboard/SKILL.md`
 - Open Design DESIGN.md references: `vercel/`, `cal/`, `apple/`, `notion/`, `stripe/`
 - Refactoring UI (Adam Wathan, Steve Schoger) — § Hierarchy, § Color, § Density, § Whitespace
@@ -691,7 +691,7 @@ OR via Tailwind utilities (when motion duration utility is added — Phase 5 fol
 
 ## 11. Token Deprecation Policy (NEW v1.2 — ADR D13 / G13 FAANG gap)
 
-> Per FAANG best practice (Linear 4-tier deprecation + Material Design 3 versioning). Token changes are NOT silent — they follow explicit lifecycle stages so consumers (cloud/dashboard, future @loopzerokit/ui consumers) have migration runway.
+> Per FAANG best practice (Linear 4-tier deprecation + Material Design 3 versioning). Token changes are NOT silent — they follow explicit lifecycle stages so consumers (cloud/dashboard, future @loopzero/ui consumers) have migration runway.
 
 ### 4-tier lifecycle
 
@@ -711,7 +711,7 @@ OR via Tailwind utilities (when motion duration utility is added — Phase 5 fol
 ### Communication channels
 
 - DSS doc § change log mark `[DEPRECATED]` next to token name + target version
-- `@loopzerokit/ui` upstream CHANGELOG.md per release
+- `@loopzero/ui` upstream CHANGELOG.md per release
 - Consumer projects: `pkg/quality/deprecated-tokens` CI gate (future task; not yet implemented)
 
 ### Example (hypothetical)
@@ -728,7 +728,7 @@ None. DSS v1.0/v1.1/v1.2 was first formal version stack — no deprecations yet.
 ### Enforcement
 
 - **Author responsibility:** any DSS PR adding/renaming/removing token MUST update Change log + § 11 if Tier transition
-- **Consumer responsibility:** read CHANGELOG.md + DSS § 11 before bumping @loopzerokit/ui version
+- **Consumer responsibility:** read CHANGELOG.md + DSS § 11 before bumping @loopzero/ui version
 - **CI (future):** `pkg/quality/deprecated-tokens` scans consumer code for Tier 3 tokens, emits warning
 
 ## 12. Versioning

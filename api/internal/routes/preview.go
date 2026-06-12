@@ -38,11 +38,25 @@ type (
 	CreatePreviewRequest = domain.CreatePreviewRequest
 )
 
+// PreviewCRPhaseLookup resolves the LIVE PreviewEnvironment CR phase
+// (Creating/Active/Failed/Deleting/Deleted) per preview ID. Used to
+// keep the dashboard /previews row in sync with the operator without
+// requiring a PG writeback path.
+//
+// LIVE catch 2026-06-07 J-23 bug #5: operator brings CR to Active +
+// namespace + URL, but PreviewStore.UpdateStatus is never called →
+// dashboard shows perpetual "creating". Enrich-at-request via this
+// lookup avoids adding a new reconciler.
+type PreviewCRPhaseLookup interface {
+	GetPhases(ctx context.Context, previewIDs []string) (map[string]string, error)
+}
+
 // PreviewHandler handles preview environment API endpoints.
 type PreviewHandler struct {
-	store   PreviewStore
-	service PreviewService
-	logger  *slog.Logger
+	store       PreviewStore
+	service     PreviewService
+	logger      *slog.Logger
+	phaseLookup PreviewCRPhaseLookup
 }
 
 // NewPreviewHandler creates a new PreviewHandler. service may be nil if
@@ -52,6 +66,13 @@ func NewPreviewHandler(store PreviewStore, service PreviewService, logger *slog.
 		logger = slog.Default()
 	}
 	return &PreviewHandler{store: store, service: service, logger: logger}
+}
+
+// WithPhaseLookup wires the live CR phase lookup so List enriches each
+// preview row with the operator-observed phase. Fluent setter.
+func (h *PreviewHandler) WithPhaseLookup(p PreviewCRPhaseLookup) *PreviewHandler {
+	h.phaseLookup = p
+	return h
 }
 
 // requestTimeout is applied to every preview HTTP handler. Generous enough
@@ -96,6 +117,25 @@ func (h *PreviewHandler) List(w http.ResponseWriter, r *http.Request) {
 		)
 		writeLoopZeroError(w, loopzeroerrors.ErrInternalError)
 		return
+	}
+
+	// LIVE catch 2026-06-07 J-23 bug #5: enrich each row with the live
+	// CR phase (operator-observed). Tolerant: on lookup error, fall
+	// through with DB status — dashboard renders honest stale.
+	if h.phaseLookup != nil && len(previews) > 0 {
+		ids := make([]string, 0, len(previews))
+		for _, p := range previews {
+			ids = append(ids, p.ID)
+		}
+		if phases, lerr := h.phaseLookup.GetPhases(ctx, ids); lerr == nil {
+			for i, p := range previews {
+				if live, ok := phases[p.ID]; ok && live != "" {
+					previews[i].Status = strings.ToLower(live)
+				}
+			}
+		} else {
+			h.logger.Warn("preview phase lookup failed (using DB status)", "error", lerr)
+		}
 	}
 
 	writeJSON(w, http.StatusOK, map[string]any{

@@ -1,6 +1,6 @@
 import { useLocation, useNavigate, useParams } from 'react-router-dom';
-import { FolderKanban, Moon, Search, Sun } from 'lucide-react';
-import { Select, useTheme } from '@loopzerokit/ui';
+import { FolderKanban, Search } from 'lucide-react';
+import { Select } from '@loopzero/ui';
 import { useProjects } from '@/hooks/use-projects';
 
 interface TopBarProps {
@@ -38,7 +38,6 @@ export function TopBar({ showProjectSelector = true, onCommandPaletteOpen }: Top
   const location = useLocation();
   const navigate = useNavigate();
   const { name: routeProjectName } = useParams<{ name: string }>();
-  const { mode, toggleMode } = useTheme();
 
   // Hide selector on routes that don't make project sense
   const hideOnPaths = ['/settings', '/profile', '/billing'];
@@ -87,30 +86,12 @@ export function TopBar({ showProjectSelector = true, onCommandPaletteOpen }: Top
         </Select>
       )}
 
-      {/* Right slot — theme mode toggle + CommandPalette trigger.
-       * Mode toggle uses useTheme().toggleMode — provider already persists in
-       * localStorage + auto-detects OS preference on first visit
-       * (respectSystemMode true). Icon swaps Sun (when dark, "go to light") /
-       * Moon (when light, "go to dark") — show the destination, not the
-       * current state, per Vercel/Stripe convention.
+      {/* Right slot — Sprint 2 T2.6: CommandPalette trigger button.
        * EC-13: shortcut label adapts to platform (⌘K em Mac, Ctrl+K em Win/Linux).
        * Sized +25% vs original per sponsor feedback (px-3 py-1.5 text-label →
        * px-4 py-2 text-body-sm + larger icon + min-width). Bigger tap target +
        * stronger visual affordance — search é uma surface principal de produto. */}
-      <div className="ml-auto flex items-center gap-2">
-        <button
-          type="button"
-          onClick={toggleMode}
-          aria-label={`Switch to ${mode === 'dark' ? 'light' : 'dark'} mode`}
-          title={`Switch to ${mode === 'dark' ? 'light' : 'dark'} mode`}
-          className="inline-flex items-center justify-center size-9 rounded-md border border-border/40 text-muted-foreground hover:text-foreground hover:border-border transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary focus-visible:ring-offset-2 focus-visible:ring-offset-background"
-        >
-          {mode === 'dark' ? (
-            <Sun className="size-4" aria-hidden="true" />
-          ) : (
-            <Moon className="size-4" aria-hidden="true" />
-          )}
-        </button>
+      <div className="ml-auto">
         {onCommandPaletteOpen && (
           <button
             type="button"

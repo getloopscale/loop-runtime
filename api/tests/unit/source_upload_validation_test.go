@@ -103,7 +103,7 @@ func TestSourceUpload_PathTraversalTenant_Returns400(t *testing.T) {
 		BuildHandler:         routes.NewBuildHandler(nil, logger),
 		LogsHandler:          routes.NewLogsHandler(nil, nil),
 		RollbackHandler:      routes.NewRollbackHandler(nil, nil, "test.local"),
-		StatusHandler:        routes.NewStatusHandler(nil, nil, nil, "test.local"),
+		StatusHandler:        routes.NewStatusHandler(nil, nil, nil, "test.local", ""),
 		BuildListHandler:     routes.NewBuildListHandler(nil),
 		EnvironmentHandler:   routes.NewEnvironmentHandler(nil),
 		TeamHandler:          routes.NewTeamHandler(nil),

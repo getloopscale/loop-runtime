@@ -305,6 +305,18 @@ func (r *PreviewReconciler) reconcileCreating(ctx context.Context, preview *loop
 	conditions.SetCondition(&preview.Status.Conditions, conditions.TypePreviewLimitRangeReady,
 		metav1.ConditionTrue, "Ready", "Preview limit range applied", preview.Generation)
 
+	// J-23 (2026-06-07) — pods rendered by the API reference SA `loopzero-app`
+	// in their spec. Create the SA right after the isolation primitives so
+	// ArgoCD sync finds it on first apply. Ordering matters: SA must exist
+	// before the first deploy, otherwise pods CrashLoop with "serviceaccount
+	// loopzero-app not found" and the workload-readiness gate keeps requeuing.
+	if saErr := r.reconcilePreviewServiceAccount(ctx, nsName); saErr != nil {
+		r.failPreviewCondition(ctx, preview, conditions.TypePreviewServiceAccountReady, "ApplyFailed", saErr.Error(), "SA failure")
+		return ctrl.Result{}, saErr
+	}
+	conditions.SetCondition(&preview.Status.Conditions, conditions.TypePreviewServiceAccountReady,
+		metav1.ConditionTrue, "Ready", "Preview loopzero-app ServiceAccount provisioned", preview.Generation)
+
 	// Set URL eagerly so it's visible while the workload comes up.
 	preview.Status.URL = fmt.Sprintf("https://pr%d-%s.preview.%s",
 		preview.Spec.PRNumber, preview.Spec.ProjectID, r.BaseDomain)

@@ -497,6 +497,49 @@ var (
 		Buckets: []float64{0.5, 1, 2, 5, 10, 30},
 	}, []string{"phase"}) // phase: "download", "bundle", "upload", "submit", "total"
 
+	// Plan J-09 T4.2 (2026-06-05). Counts every webhook delivery the
+	// engine receives, labelled by GitHub event_type (push, ping, etc.)
+	// AND by handler outcome (status). SLO queries:
+	//   - "are pushes reaching us?"  rate(*{event_type='push'}[5m])
+	//   - "are pushes auto-deploying?" ratio of status='auto_deploy_triggered'
+	//     to event_type='push' totals.
+	// Distinct from WebhookPushTotal (above) which only counts push events
+	// that reach the auto-deployer -- deliveries_total counts the wire
+	// edge (the HMAC-validated payload arriving at the handler).
+	GitHubWebhookDeliveriesTotal = promauto.NewCounterVec(prometheus.CounterOpts{
+		Name: "loopzero_github_webhook_deliveries_total",
+		Help: "Total GitHub webhook deliveries received, labelled by event_type and handler outcome.",
+	}, []string{"event_type", "status"})
+
+	// Plan J-17 T1.3 (2026-06-06). Counts every Argo Workflow node phase
+	// transition that the argo_step_watcher service observed and emitted
+	// as an SSE event. Labels:
+	//   - step: one of pkg/events.CanonicalStepNames OR "other" (EC-16
+	//     cardinality guard — non-canonical step names like custom
+	//     Dockerfile steps land in "other" so the cardinality stays at
+	//     17 canonical + 1 "other" = 18 step values * 3 statuses = 54
+	//     series per cluster).
+	//   - status: started | succeeded | failed.
+	// SLO queries:
+	//   - "% builds with all steps succeeded": ratio of {status="failed"}
+	//     to {status="started"} grouped by step.
+	//   - "time-to-deploy p95": measured client-side via build.started ->
+	//     last build.step.succeeded distance (not via this counter).
+	DeploymentsStepEventsTotal = promauto.NewCounterVec(prometheus.CounterOpts{
+		Name: "loopzero_deployments_step_events_total",
+		Help: "Total deployment step events emitted to SSE, labelled by step name and outcome.",
+	}, []string{"step", "status"})
+
+	// EC-1 — Build cluster SA token expiry surface (Plan J-17 T1.1.bis).
+	// argo_step_watcher informer reconnects after a 401/403 from the
+	// build cluster API server bump this counter. Grafana alert
+	// rate(loopzero_argo_watcher_token_expired_total[5m]) > 0 pages the
+	// operator to rotate the SA token before events stop flowing.
+	ArgoWatcherTokenExpiredTotal = promauto.NewCounter(prometheus.CounterOpts{
+		Name: "loopzero_argo_watcher_token_expired_total",
+		Help: "Total times argo_step_watcher received 401/403 from the build cluster API.",
+	})
+
 	// ArgoCD convergence observability — MEET-044 P1.
 	RevisionMismatchTotal = promauto.NewCounter(prometheus.CounterOpts{
 		Name: "loopzero_release_revision_mismatch_total",
@@ -633,6 +676,28 @@ var (
 		Name: "loopzero_secret_externalsecret_total",
 		Help: "ExternalSecret CR create/update outcomes from loopzero-api workload sync path.",
 	}, []string{"result"})
+
+	// SecretAuditWriteFailedTotal counts cases where the broker secret-fetch
+	// audit write (SecretReadAuditAdapter.WriteAudit) returned error.
+	// T2.3 of plan 2026-06-10-j22-layer2-code-review-fixes (closes HIGH #16
+	// silent audit error on cross_tenant_attempt): the prior code path did
+	// `_ = AuditWriter.WriteAudit(...)` discarding the error on the most
+	// security-critical event (EC-07 violation). Without this counter, audit
+	// pipeline failures (e.g., audit_log INSERT timeout, advisory lock
+	// contention) would mask forensic evidence of cross-tenant attempts.
+	//
+	// Cardinality: ONLY label is `event_type` ∈ {secret_read_broker,
+	// cross_tenant_attempt} — 2 series total. NO tenant label
+	// (would be unbounded with N tenants).
+	//
+	// Alert opportunity:
+	//   rate(loopzero_secret_audit_write_failed_total{event_type="cross_tenant_attempt"}[5m]) > 0
+	//   indicates the security audit trail is breaking for the very events
+	//   it exists to record. Page immediately.
+	SecretAuditWriteFailedTotal = promauto.NewCounterVec(prometheus.CounterOpts{
+		Name: "loopzero_secret_audit_write_failed_total",
+		Help: "Broker secret-fetch audit write failures (T2.3 closes HIGH #16).",
+	}, []string{"event_type"})
 
 	// WorkqueueTerminalWriteFailTotal counts cases where the workqueue
 	// consumer's terminal-state write (Complete or Fail) FAILED — the

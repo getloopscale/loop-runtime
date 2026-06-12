@@ -18,11 +18,14 @@ import (
 	"k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
+	"k8s.io/apimachinery/pkg/types"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	crcontroller "sigs.k8s.io/controller-runtime/pkg/controller"
 	"sigs.k8s.io/controller-runtime/pkg/controller/controllerutil"
+	"sigs.k8s.io/controller-runtime/pkg/handler"
 	"sigs.k8s.io/controller-runtime/pkg/log"
+	"sigs.k8s.io/controller-runtime/pkg/reconcile"
 
 	loopzerov1 "github.com/loopzero/loopzero/operators/api/v1"
 	"github.com/loopzero/loopzero/operators/internal/argocd"
@@ -34,7 +37,6 @@ import (
 	miniop "github.com/loopzero/loopzero/operators/internal/minio"
 	"github.com/loopzero/loopzero/operators/internal/shared"
 	"github.com/loopzero/loopzero/pkg/correlation"
-	"github.com/loopzero/loopzero/pkg/naming"
 	"github.com/loopzero/loopzero/pkg/statemachine"
 )
 
@@ -326,7 +328,13 @@ func (r *TenantReconciler) reconcileEnvironmentCRs(ctx context.Context, tenant *
 	// Create/update loop — one Environment CR per spec entry.
 	for _, env := range tenant.Spec.Environments {
 		envCRName := fmt.Sprintf("%s-%s", tenant.Name, env.Name)
-		nsName, err := naming.EnvironmentNamespace(tenant.Name, env.Name)
+		// #69 LIVE catch 2026-06-07: the Environment CR carries the
+		// workload namespace name. Use the same canonical-with-fallback
+		// helper as tenant_gitops.go so envController->namespace creation
+		// matches the destination ArgoCD picks for sync. Without this,
+		// the namespace would be created at the legacy path and ArgoCD
+		// would fail to apply manifests targeting the canonical name.
+		nsName, err := canonicalDestNamespace(tenant.Name, env.Project, env.Name)
 		if err != nil {
 			return fmt.Errorf("invalid namespace name for env %s: %w", env.Name, err)
 		}
@@ -340,6 +348,12 @@ func (r *TenantReconciler) reconcileEnvironmentCRs(ctx context.Context, tenant *
 		_, err = controllerutil.CreateOrUpdate(ctx, r.Client, envCR, func() error {
 			envCR.Spec.TenantRef.Name = tenant.Name
 			envCR.Spec.Environment = env.Name
+			// T3.1 of plan 2026-06-09-m2-operator-canonical-fix v1.4:
+			// propagate Project from TenantEnvironmentEntry to the child
+			// Environment CR so EnvironmentController can compute the
+			// canonical M2 namespace independently and surface 63-char
+			// overflow via Status condition (EC-3 absorption).
+			envCR.Spec.Project = env.Project
 			envCR.Spec.Namespace.Name = nsName
 			envCR.Spec.Plan = tenant.Spec.Plan
 			envCR.Spec.NetworkPolicy = loopzerov1.NetworkPolicyConfig{Isolate: true}
@@ -408,9 +422,31 @@ func SetupTenantController(mgr ctrl.Manager, gitProvisioner gitea.GitRepoProvisi
 	if maxConcurrent <= 0 {
 		maxConcurrent = 5 // MEET-052: default backpressure for bulk deletion
 	}
+	// #70 LIVE catch 2026-06-07: tenant_gitops.reconcileArgoCDApp iterates
+	// PreviewEnvironment CRs and emits ArgoCD App + AppProject destinations
+	// for each active one. Without a watcher mapping PreviewEnv events back
+	// to the owning Tenant, the tenant-operator only reconciles on Tenant
+	// CR changes -- so a freshly-created PreviewEnv (PR opened) never gets
+	// an ArgoCD App until an operator runs `kubectl annotate` to force a
+	// reconcile. The watcher closes the gap: any change to a
+	// PreviewEnvironment enqueues a Reconcile request for its
+	// Spec.TenantID, ensuring the ArgoCD App appears within one reconcile
+	// of the CR being Active.
+	mapPreviewToTenant := handler.EnqueueRequestsFromMapFunc(func(ctx context.Context, obj client.Object) []reconcile.Request {
+		pe, ok := obj.(*loopzerov1.PreviewEnvironment)
+		if !ok || pe.Spec.TenantID == "" {
+			return nil
+		}
+		return []reconcile.Request{{NamespacedName: types.NamespacedName{
+			Name:      pe.Spec.TenantID,
+			Namespace: pe.Namespace,
+		}}}
+	})
+
 	return ctrl.NewControllerManagedBy(mgr).
 		For(&loopzerov1.Tenant{}, shared.ForOption()).
 		Owns(&loopzerov1.Environment{}).
+		Watches(&loopzerov1.PreviewEnvironment{}, mapPreviewToTenant).
 		Named("tenant").
 		WithOptions(crcontroller.Options{MaxConcurrentReconciles: maxConcurrent}).
 		Complete(&TenantReconciler{

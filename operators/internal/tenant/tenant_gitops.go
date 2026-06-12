@@ -16,8 +16,94 @@ import (
 	"github.com/loopzero/loopzero/operators/internal/conditions"
 	"github.com/loopzero/loopzero/operators/internal/constants"
 	"github.com/loopzero/loopzero/operators/internal/shared"
+	"github.com/loopzero/loopzero/pkg/domain"
 	"github.com/loopzero/loopzero/pkg/naming"
 )
+
+// canonicalDestNamespace returns the namespace name to use as an ArgoCD
+// App destination for a tenant environment. When projectSlug is set,
+// returns the canonical formula `loopzero-<tenant>-<project>-<env>` that
+// matches what the manifest renderer emits (renderer_helpers.go:
+// namespace). When projectSlug is empty (pre-#69 Tenant CRs created
+// before the API started populating env.Project), falls back to the
+// legacy two-segment `loopzero-<tenant>-<env>` formula so the controller
+// continues reconciling existing installations without manual repair.
+//
+// J-23 LIVE catch 2026-06-07 #69: the renderer canonical refactor
+// (commit cd6235fc) updated the manifest namespace to the canonical
+// three-segment formula, but tenant_gitops.go was emitting destinations
+// via the legacy two-segment formula because there was no place in the
+// CR spec for the project name. Result: ArgoCD destination mismatch ->
+// OutOfSync forever.
+//
+// T2.1 of plan 2026-06-09-m2-operator-canonical-fix v1.4: empty
+// projectSlug is now a CONTRACT VIOLATION rather than a silent fallback
+// to the legacy two-segment formula. T1.1 ships CRD-level enforcement
+// (TenantEnvironmentEntry.Project required + RFC 1123 Pattern) so every
+// caller in production code (tenant_gitops.go:143, :186 + tenant_controller.go:337)
+// is guaranteed to pass a non-empty project. Per `rules/loopzero-design.md`
+// § Error Philosophy the silent fallback was the smoking gun that caused
+// all 4 M2 LIVE workarounds — fail-fast with LoopZeroError is canonical
+// (feedback_m2_canonical_drift_operator_renderer memory).
+func canonicalDestNamespace(tenantSlug, projectSlug, envName string) (string, error) {
+	if projectSlug == "" {
+		return "", fmt.Errorf("canonicalDestNamespace: Project is required (T1.1 contract — empty projectSlug used to silently fall back to legacy two-segment namespace; that path is removed in T2.1)")
+	}
+	return naming.Namespace(tenantSlug, projectSlug, envName)
+}
+
+// buildAppProjectDestNamespaces returns the AppProject spec.destinations
+// namespace list for a tenant. T2.2 of plan 2026-06-09-m2-operator-canonical-fix
+// v1.4: extracted from reconcileArgoCDApp so the (project, env) iteration is
+// unit-testable without spinning up envtest, and so the previous silent
+// error-drop (`if nsErr == nil { append }`) is replaced with fail-loud
+// propagation per `rules/loopzero-design.md` § Error Philosophy.
+//
+// Inputs:
+//   - tenant.Spec.Environments contributes one destination per (Project, Name) tuple.
+//     With M2 Tenant CRs (T1.1 ships Project required), this is naturally the
+//     (project × env) Cartesian product because every Environments entry carries
+//     its own Project field. Multi-project tenants emit multiple destinations
+//     under the same AppProject — exactly the LIVE workaround manually applied
+//     in T6.1 testing of plan 2026-06-08-pre-release-test-rigor.
+//   - previewEnvs contributes one destination per active PreviewEnvironment CR,
+//     also in the canonical 3-segment form (PreviewController is M2-correct).
+//
+// Errors:
+//   - Any canonicalDestNamespace error propagates upward and aborts the
+//     AppProject reconcile (no partial destinations written). EC-15 absorption:
+//     better to fail-loud than emit an AppProject with missing destinations
+//     that would silently break sync for half the tenant's projects.
+func buildAppProjectDestNamespaces(tenant *loopzerov1.Tenant, previewEnvs []loopzerov1.PreviewEnvironment) ([]string, error) {
+	destNamespaces := make([]string, 0, len(tenant.Spec.Environments)+len(previewEnvs))
+	for _, env := range tenant.Spec.Environments {
+		destNS, nsErr := canonicalDestNamespace(tenant.Name, env.Project, env.Name)
+		if nsErr != nil {
+			return nil, fmt.Errorf("env (project=%q, name=%q): %w", env.Project, env.Name, nsErr)
+		}
+		destNamespaces = append(destNamespaces, destNS)
+	}
+	for _, pe := range previewEnvs {
+		// All envs (production, staging, preview-pr-N) share the SAME
+		// uniform namespace formula: "loopzero-<tenant>-<project>-<env>".
+		// Canonical refactor 2026-06-07 — no if/else branching on env type.
+		envName := fmt.Sprintf("preview-pr-%d", pe.Spec.PRNumber)
+		// T1.3.c of plan 2026-06-11-code-review-remediation v1.2 — call-site
+		// migration to the canonical EnvRef pattern per ADR D2. The
+		// NewEnvRef constructor enforces the same non-empty invariants
+		// pkg/naming.Namespace did, with stronger typing.
+		ref, refErr := domain.NewEnvRef(tenant.Name, pe.Spec.ProjectID, envName)
+		if refErr != nil {
+			return nil, fmt.Errorf("preview env (project=%q, pr=%d): %w", pe.Spec.ProjectID, pe.Spec.PRNumber, refErr)
+		}
+		destNS, nsErr := ref.Namespace()
+		if nsErr != nil {
+			return nil, fmt.Errorf("preview env (project=%q, pr=%d): %w", pe.Spec.ProjectID, pe.Spec.PRNumber, nsErr)
+		}
+		destNamespaces = append(destNamespaces, destNS)
+	}
+	return destNamespaces, nil
+}
 
 // assertRepoNameOwnedByTenant enforces that Spec.GitOps.RepoName carries
 // the tenant name as a delimited component — either as a prefix
@@ -96,12 +182,22 @@ func (r *TenantReconciler) reconcileArgoCDApp(ctx context.Context, tenant *loopz
 	// MOD-5: Ensure AppProject exists for tenant RBAC isolation before creating Applications.
 	// Each tenant gets its own AppProject that restricts source repos and destination namespaces.
 	// Collect destination namespaces from tenant environments for RBAC scoping.
-	destNamespaces := make([]string, 0, len(tenant.Spec.Environments))
-	for _, env := range tenant.Spec.Environments {
-		destNS, nsErr := naming.EnvironmentNamespace(tenant.Name, env.Name)
-		if nsErr == nil {
-			destNamespaces = append(destNamespaces, destNS)
-		}
+	//
+	// LIVE catch 2026-06-07 J-23 bug #6 (preview-pr-N visibility): also
+	// collect destination namespaces from PreviewEnvironment CRs of this
+	// tenant. ADR D5 keeps PreviewEnvironment OUT of Tenant.spec.environments
+	// (strict CRD separation), but they still need an ArgoCD Application
+	// + AppProject destination to be deployable. Emitting them here keeps
+	// the AppProject single-source-of-truth.
+	previewEnvs, perr := r.listPreviewEnvsForTenant(ctx, tenant.Name)
+	if perr != nil {
+		log.FromContext(ctx).Info("argocd: preview env list failed (proceeding without)",
+			"tenant", tenant.Name, "error", perr.Error())
+		previewEnvs = nil
+	}
+	destNamespaces, err := buildAppProjectDestNamespaces(tenant, previewEnvs)
+	if err != nil {
+		return fmt.Errorf("argocd appproject %s: build destinations: %w", tenant.Name, err)
 	}
 	projSpec := argocd.AppProjectSpec{
 		Name:                  tenant.Name,
@@ -124,7 +220,13 @@ func (r *TenantReconciler) reconcileArgoCDApp(ctx context.Context, tenant *loopz
 
 	for _, env := range tenant.Spec.Environments {
 		appName := fmt.Sprintf("%s-%s", tenant.Name, env.Name)
-		destNS, err := naming.EnvironmentNamespace(tenant.Name, env.Name)
+		// #69 LIVE catch 2026-06-07: same canonical-with-fallback helper
+		// as the destNamespaces loop above. The ArgoCD App destination
+		// MUST match the namespace embedded in the rendered manifests
+		// (renderer_helpers.go:namespace, which is canonical for all
+		// envs). Pre-#69 Tenant CRs without env.Project resolved fall
+		// back to legacy so the controller doesn't crash on rollout.
+		destNS, err := canonicalDestNamespace(tenant.Name, env.Project, env.Name)
 		if err != nil {
 			return fmt.Errorf("invalid namespace name for env %s: %w", env.Name, err)
 		}
@@ -162,7 +264,140 @@ func (r *TenantReconciler) reconcileArgoCDApp(ctx context.Context, tenant *loopz
 		log.FromContext(ctx).Info("argocd application reconciled", "application", appName)
 	}
 
+	// J-23 bug #6: also emit ArgoCD Application per active PreviewEnvironment
+	// CR. ADR D5: previews stay OUT of Tenant.spec.environments but DO need
+	// an ArgoCD App so the operator-created namespace receives the build
+	// manifests. The destNS naming mirrors `preview-pr-<N>` so the path in
+	// the gitops repo aligns with what the build pipeline writes.
+	for _, pe := range previewEnvs {
+		envName := fmt.Sprintf("preview-pr-%d", pe.Spec.PRNumber)
+		appName := fmt.Sprintf("%s-%s", tenant.Name, envName)
+		// T1.3.c of plan 2026-06-11-code-review-remediation v1.2 — canonical
+		// EnvRef pattern per ADR D2. Same uniform formula as regular envs.
+		ref, refErr := domain.NewEnvRef(tenant.Name, pe.Spec.ProjectID, envName)
+		if refErr != nil {
+			return fmt.Errorf("invalid EnvRef for preview env %s: %w", envName, refErr)
+		}
+		destNS, err := ref.Namespace()
+		if err != nil {
+			return fmt.Errorf("invalid namespace name for preview env %s: %w", envName, err)
+		}
+		cellID := tenant.Spec.CellID
+		if cellID == "" {
+			cellID = "cell-default"
+		}
+		spec := argocd.ApplicationSpec{
+			Name:           appName,
+			Namespace:      constants.DefaultArgoCDNamespace,
+			TenantID:       tenant.Name,
+			RepoURL:        repoURL,
+			TargetRevision: tenant.Spec.GitOps.Branch,
+			Path:           envName,
+			DestinationNS:  destNS,
+			DestinationURL: r.WorkloadClusterURL,
+			CellID:         cellID,
+			Environment:    envName,
+		}
+		if err := r.ArgoCDProvisioner.EnsureApplication(ctx, spec); err != nil {
+			return fmt.Errorf("argocd application %s (preview): %w", appName, err)
+		}
+		log.FromContext(ctx).Info("argocd application reconciled (preview)", "application", appName)
+	}
+
+	// #71 LIVE catch 2026-06-07 — prune orphan preview Apps.
+	//
+	// The emit loops above create/update Apps for the ACTIVE spec.environments
+	// and the ACTIVE PreviewEnvironments. They never delete Apps for closed
+	// PRs because the input set (previewEnvs) doesn't include deleted
+	// previews -- the "active preview" gate in listPreviewEnvsForTenant
+	// strips Deleted/Deleting phases before the loop ever sees them.
+	//
+	// Without a prune step, every PR ever opened against the tenant leaves
+	// behind an ArgoCD App stuck in OutOfSync/Missing forever after close.
+	// preview_controller.go:609 has a comment claiming "Application CR
+	// deletion is owned by the API (best-effort)" — but the API never wired
+	// it: PreviewService.DeletePreviewByPR only removes the PG row + the
+	// PreviewEnvironment CR. The canonical place to prune is here at the
+	// tenant operator because (a) this loop already knows the desired set,
+	// (b) the watcher (#70) fires reconcile on PreviewEnv delete events, so
+	// the prune naturally cascades from PR close → CR delete → tenant
+	// reconcile → orphan App removed.
+	if err := r.pruneOrphanPreviewApps(ctx, tenant, previewEnvs); err != nil {
+		// Soft-fail: pruning is best-effort housekeeping. Don't reset the
+		// ArgoCDAppReady condition or fail the whole reconcile because the
+		// active-Apps emit above already succeeded.
+		log.FromContext(ctx).Info("argocd prune: failed (continuing)",
+			"tenant", tenant.Name, "error", err.Error())
+	}
+
 	conditions.SetCondition(&tenant.Status.Conditions, conditions.TypeArgoCDAppReady,
 		metav1.ConditionTrue, "ApplicationsReady", "ArgoCD applications provisioned", tenant.Generation)
 	return nil
+}
+
+// pruneOrphanPreviewApps deletes ArgoCD Application CRs that belong to the
+// tenant but no longer correspond to an active PreviewEnvironment. The
+// "expected" set is built from the spec.environments names + the active
+// previewEnvs slice; any tenant-labeled App outside that set is considered
+// orphan and removed.
+//
+// #71 LIVE catch 2026-06-07 — the prune side of the preview lifecycle that
+// preview_controller.go:609 hand-waved to the API but the API never wired.
+func (r *TenantReconciler) pruneOrphanPreviewApps(
+	ctx context.Context,
+	tenant *loopzerov1.Tenant,
+	previewEnvs []loopzerov1.PreviewEnvironment,
+) error {
+	expected := make(map[string]bool, len(tenant.Spec.Environments)+len(previewEnvs))
+	for _, env := range tenant.Spec.Environments {
+		expected[fmt.Sprintf("%s-%s", tenant.Name, env.Name)] = true
+	}
+	for _, pe := range previewEnvs {
+		envName := fmt.Sprintf("preview-pr-%d", pe.Spec.PRNumber)
+		expected[fmt.Sprintf("%s-%s", tenant.Name, envName)] = true
+	}
+
+	existing, err := r.ArgoCDProvisioner.ListApplicationNames(ctx, tenant.Name)
+	if err != nil {
+		return fmt.Errorf("list applications for prune: %w", err)
+	}
+
+	for _, name := range existing {
+		if expected[name] {
+			continue
+		}
+		if err := r.ArgoCDProvisioner.DeleteApplication(ctx, name); err != nil {
+			// Continue on individual failures — best-effort cleanup.
+			log.FromContext(ctx).Info("argocd prune: delete failed (continuing)",
+				"application", name, "error", err.Error())
+			continue
+		}
+		log.FromContext(ctx).Info("argocd application pruned (orphan)", "application", name)
+	}
+	return nil
+}
+
+// listPreviewEnvsForTenant returns active PreviewEnvironment CRs that
+// belong to the given tenant. Filter is in-memory because the list is
+// expected to be small (tens of previews max per tenant). Soft-fails
+// to nil on error so the gitops reconcile can proceed without preview
+// destinations.
+func (r *TenantReconciler) listPreviewEnvsForTenant(ctx context.Context, tenantID string) ([]loopzerov1.PreviewEnvironment, error) {
+	var all loopzerov1.PreviewEnvironmentList
+	if err := r.List(ctx, &all); err != nil {
+		return nil, fmt.Errorf("list preview envs: %w", err)
+	}
+	out := make([]loopzerov1.PreviewEnvironment, 0)
+	for _, pe := range all.Items {
+		if pe.Spec.TenantID != tenantID {
+			continue
+		}
+		// Skip CRs in terminal/deleting state — no AppProject
+		// destination needed for those.
+		if pe.Status.Phase == loopzerov1.PreviewPhaseDeleted || pe.Status.Phase == loopzerov1.PreviewPhaseDeleting {
+			continue
+		}
+		out = append(out, pe)
+	}
+	return out, nil
 }

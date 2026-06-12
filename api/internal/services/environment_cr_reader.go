@@ -60,15 +60,21 @@ func NewEnvironmentCRReader(client dynamic.Interface, namespace string) *Environ
 }
 
 // IsReady returns (true, nil) if the Environment CR
-// `<tenantID>-<envName>` exists in mgmt namespace AND has
+// `<tenantID>[-<project>]-<envName>` exists in mgmt namespace AND has
 // `status.phase == "Active"`. Returns (false, nil) if the CR is absent
 // or has any other phase (Pending, Failed, "", etc). Errors are returned
 // for transient API errors (network, RBAC); the caller's poll loop should
 // continue.
 //
-// CR naming convention: `<tenantID>-<envName>` per
-// operators/internal/tenant/tenant_gitops.go reconcile loop (envSpec.Name).
-func (r *EnvironmentCRReader) IsReady(ctx context.Context, tenantID, envName string) (bool, error) {
+// CR naming convention (M2 v1.2, 2026-06-07):
+//   - canonical (post-M2): `<tenantID>-<project>-<envName>` — when
+//     project is non-empty. Per `pkg/naming.Namespace` semantics, this
+//     matches the workload-cluster namespace `loopzero-<tenant>-<project>-<env>`
+//     once the `loopzero-` prefix is stripped (CR names live in mgmt, no prefix).
+//   - legacy (pre-M2 / production): `<tenantID>-<envName>` — when
+//     project is empty (ADR D2 — backward compatibility for tenants whose
+//     production env was provisioned before the M2 migration).
+func (r *EnvironmentCRReader) IsReady(ctx context.Context, tenantID, project, envName string) (bool, error) {
 	if r == nil || r.Client == nil {
 		// Defensive: nil reader means "skip the extra check" (legacy behavior).
 		return true, nil
@@ -76,7 +82,7 @@ func (r *EnvironmentCRReader) IsReady(ctx context.Context, tenantID, envName str
 	if tenantID == "" || envName == "" {
 		return false, fmt.Errorf("env cr reader: tenantID and envName are required")
 	}
-	crName := fmt.Sprintf("%s-%s", tenantID, envName)
+	crName := envCRName(tenantID, project, envName)
 
 	// Bounded read timeout — environment-controller reconcile typically
 	// completes in <2s; 5s tolerates transient API server slowness.
@@ -102,6 +108,23 @@ func (r *EnvironmentCRReader) IsReady(ctx context.Context, tenantID, envName str
 		return false, nil
 	}
 	return phase == "Active", nil
+}
+
+// envCRName builds the Environment CR `metadata.name` for the given
+// (tenant, project, env) tuple. M2 v1.2 helper consumed by IsReady (and
+// any future direct-lookup callers).
+//
+//   - canonical (project != ""): "<tenant>-<project>-<env>"
+//   - legacy   (project == ""): "<tenant>-<env>"
+//
+// The legacy form preserves the pre-M2 naming so production envs that
+// landed on the cluster before the M2 migration continue to resolve
+// (ADR D2 — backward compatibility for the production-legacy entry).
+func envCRName(tenantID, project, envName string) string {
+	if project == "" {
+		return fmt.Sprintf("%s-%s", tenantID, envName)
+	}
+	return fmt.Sprintf("%s-%s-%s", tenantID, project, envName)
 }
 
 // unstructuredString reads a string field from a nested map[string]interface{}

@@ -133,10 +133,11 @@ describe('pages smoke — modules compile + export named function', () => {
     expect(typeof m.SecretsPage).toBe('function');
   });
 
-  it('exports PreviewsPage (plan v1.0 T3.2 — preview envs)', async () => {
-    const m = await import('./previews');
-    expect(typeof m.PreviewsPage).toBe('function');
-  });
+  // PreviewsPage smoke test deleted per plan
+  // 2026-06-08-dashboard-screens-review-fixes T1.1 + ADR D1 — page deleted,
+  // route now redirects to /environments?project=:name (see app.test.tsx
+  // "App routing — /previews → /environments redirect" suite for new
+  // regression coverage).
 
   it('exports ProjectConnectPage (plan v1.0 T3.3 — GitHub connect)', async () => {
     const m = await import('./project-connect');

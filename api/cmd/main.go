@@ -141,8 +141,21 @@ func main() {
 	var workflows *WorkflowDeps
 	var orchDeps *OrchestratorDeps
 	var ghDeps *GitHubDeps
+	// T2.5 wire-up (plan 2026-06-10-j22-openbao-transit-eso-sync v1.2):
+	// construct the OpenBao transit client BEFORE setupStores so the
+	// secret store boots with vault-backed dispatch. Returns nil when
+	// CryptoMode != "transit" (legacy AES/plaintext path). D6 ADR
+	// fail-loud: construction failure here is fatal — operator MUST
+	// fix the config before the API binds. config.Validate() already
+	// caught missing env vars; reaching here with a vault.Transit error
+	// means the constructor itself failed (bad URL, SPKI parse error).
+	transit, terr := setupTransitClient(cfg, logger)
+	if terr != nil {
+		logger.Error("openbao transit client constructor failed", "error", terr)
+		os.Exit(1)
+	}
 	if dbAdapter != nil {
-		stores, err = setupStores(dbAdapter, cfg, logger)
+		stores, err = setupStores(dbAdapter, cfg, transit, logger)
 		if err != nil {
 			logger.Error("failed to setup stores", "error", err)
 			os.Exit(1)
@@ -157,7 +170,16 @@ func main() {
 			planLimiter = dbDeps.PlanLimiter
 		}
 		orchDeps = setupOrchestrator(dbAdapter, stores, workflows, cfg, httpTransport, logger, planLimiter)
-		ghDeps = setupGitHub(dbAdapter, stores, orchDeps.Orchestrator, cfg, shutdownCtx, logger)
+		ghDeps = setupGitHub(dbAdapter, stores, orchDeps.Orchestrator, k8sDeps, cfg, shutdownCtx, logger)
+	}
+
+	// Plan J-17 T1.3 — start the Argo step watcher in a background
+	// goroutine so build.step.* events flow into the SSE journal as the
+	// build progresses. Non-fatal if the build cluster is unreachable
+	// (e.g., local dev without all clusters up); the watcher logs and
+	// disables itself. Cancelled with shutdownCtx on graceful stop.
+	if stores != nil {
+		startArgoStepWatcher(shutdownCtx, cfg, stores.EventStore, logger)
 	}
 
 	// CHG-2026-04-30-DELETE-SINGLE-CELL: cellRouter is always DynamicRouter
@@ -210,20 +232,52 @@ func main() {
 
 	buildHandler := setupBuildHandler(dbAdapter, orchDeps, cellStore, cfg, shutdownCtx, logger)
 
+	// T4.1 of plan 2026-06-09-m2-operator-canonical-fix v1.4 (ADR D4):
+	// hoisted outside the EnvironmentEnsurer-wiring block below so the
+	// same instance is also assigned to srvCfg.ProjectEnvEnsurer at line
+	// ~325. POST /api/v1/projects then auto-creates a `production` env
+	// without a second wire-up. nil when k8sDeps is unavailable (test or
+	// degraded boot) → server.Router falls back to pre-T4.1 behavior.
+	var projectEnvEnsurer routes.EnvironmentEnsurer
+
 	// Plan T2.2 D5 — wire EnvironmentEnsurer so loopzero deploy --env <novo>
 	// auto-creates the Environment CR + namespace + ArgoCD App on first
 	// use. Closes F-S1-02 (dogfood 2026-05-15). Wiring requires the
 	// TenantCRManager from k8sDeps; both ensurer + BuildHandler are
 	// composed here in main so we keep the dependency tree explicit.
 	if buildHandler != nil && k8sDeps != nil && k8sDeps.TenantCRMgr != nil {
+		// M2 v1.2 T3.3 (2026-06-07): method value
+		// k8sDeps.TenantCRMgr.AddEnvironment now carries the
+		// (tenantID, project, envName) signature — matches the
+		// NewEnvManagerAdapter closure type after T1.2.
+		//
+		// LIVE regression fix (2026-06-08, deploy hang debugging): the
+		// previous closure called GetEnvironmentDetail(tenantID, "", envName),
+		// but after T2.1 GetEnvironmentDetail filters by the (name, project)
+		// tuple — project="" only matches LEGACY entries (production with
+		// no project). Post-M2 entries with project=web silently failed the
+		// HasEnvironment shallow check, so EnsureEnvironment polled for 60s
+		// then timed out, hanging POST /api/v1/builds for ~30s → 500.
+		//
+		// Correct semantic: the Lister contract is project-AGNOSTIC by design
+		// (the comment on EnvironmentLister in services/environment_ensurer.go
+		// says "shallow existence check is per-tenant by design"). To honor
+		// that without breaking T2.1's tuple semantics, the closure now
+		// iterates ListEnvironments and matches by name only — any (project,
+		// envName) tuple with the matching name returns existence=true.
 		lister, adder := services.NewEnvManagerAdapter(
 			k8sDeps.TenantCRMgr.AddEnvironment,
 			func(ctx context.Context, tenantID, envName string) (any, error) {
-				detail, err := k8sDeps.TenantCRMgr.GetEnvironmentDetail(ctx, tenantID, envName)
-				if detail == nil {
+				envs, err := k8sDeps.TenantCRMgr.ListEnvironments(ctx, tenantID)
+				if err != nil {
 					return nil, err
 				}
-				return detail, err
+				for i := range envs {
+					if envs[i].Name == envName {
+						return &envs[i], nil
+					}
+				}
+				return nil, nil
 			},
 		)
 		// Sprint A trio-fix 2026-06-01: ReadinessChecker queries Environment
@@ -249,7 +303,11 @@ func main() {
 			logger.Info("env readiness checker SKIPPED — LOOPZERO_ENV_READINESS_CHECKER=false (H1 validation 2026-06-02)")
 		}
 		buildHandler = buildHandler.WithEnvironmentEnsurer(ensurer)
-		logger.Info("env ensurer wired — deploy --env <novo> will auto-create environments (T2.2 D5)")
+		// T4.1 of plan 2026-06-09-m2-operator-canonical-fix v1.4: capture
+		// the same instance so the project Create handler can also use it
+		// for ADR D4 production env auto-create (see srvCfg assignment below).
+		projectEnvEnsurer = ensurer
+		logger.Info("env ensurer wired — deploy --env <novo> will auto-create environments (T2.2 D5); also wired to project Create handler for ADR D4 production env auto-create (T4.1)")
 	}
 
 	// V9 L20: SecretResyncer wired post-envEnsurer in builds.go. Closes
@@ -290,6 +348,49 @@ func main() {
 		healthServices, authDeps.TokenValidator, rateLimiter,
 		shutdownCtx, shutdownCancel, logger)
 	srvCfg.IPRateLimit = ipRateLimiter
+	// T2.3+T2.5 (plan 2026-06-10-j22-openbao-transit-eso-sync v1.2): thread
+	// the OpenBao transit client into router so SecretHandler.Bulk encrypts
+	// every entry.Value via Encrypt BEFORE store.Set. The store ALSO
+	// dispatches through the SAME vault (handler-encrypted bytes carry the
+	// vault:v1: prefix → encryptForStore passes-through, no double-encrypt;
+	// reads via decryptFromStore detect the prefix → vault decrypt). nil
+	// when CryptoMode != "transit"; router's nil guard keeps the legacy
+	// path active in that case.
+	if transit != nil {
+		srvCfg.SecretTransit = transit
+	}
+	// Layer 2 ESO sync chain (plan 2026-06-10-j22-openbao-transit-eso-sync
+	// v1.2 D3): wire SecretFetchHandler for the broker endpoint
+	// /internal/v1/secret-fetch/{tenant_id}/{secret_name}. ESO running in
+	// mgmt cluster (Wave -1 of mgmt.helmfile) calls this endpoint via the
+	// webhook ClusterSecretStore to resolve user secrets — loopzero-api loads
+	// the vault:v1: ciphertext from PG + decrypts via OpenBao transit +
+	// returns plaintext_b64. Wires nil-safely: if any dep is missing the
+	// handler stays nil and router skips route registration. LIVE-caught
+	// gap closure 2026-06-10 J-22 walkthrough.
+	if transit != nil && dbAdapter != nil && cellStore != nil {
+		// Construct a fresh AuditLogger pointing at the same pool — the
+		// orchestrator uses the same shape inline (setup_orchestrator.go:101)
+		// rather than exposing it as a field. AuditLogger is a thin DB
+		// wrapper, so this is single-source-of-truth even when constructed
+		// twice (both writes go to the same audit_log table via WriteAuditLog).
+		auditLogger := &db.AuditLogger{DB: dbAdapter}
+		fetchDeps := setupSecretFetchDeps(dbAdapter.Pool, transit, cellStore, auditLogger)
+		brokerToken := os.Getenv("LOOPZERO_BROKER_TOKEN")
+		if fetchDeps != nil && brokerToken != "" {
+			rawHandler := routes.NewSecretFetchHandler(*fetchDeps)
+			srvCfg.SecretFetchHandler = brokerBearerMiddleware(brokerToken, rawHandler)
+		} else if fetchDeps != nil {
+			logger.Warn("secret-fetch broker disabled: LOOPZERO_BROKER_TOKEN not set", "component", "broker")
+		}
+	}
+	// T4.1 of plan 2026-06-09-m2-operator-canonical-fix v1.4: ADR D4 —
+	// every project gets a `production` env auto-created on POST
+	// /api/v1/projects. Same EnvironmentEnsurer that powers loopzero deploy
+	// --env <novo> (T2.2 D5); zero new infrastructure. nil-safe — when
+	// projectEnvEnsurer is nil (k8sDeps unavailable or test boot), the
+	// project Create handler falls back to pre-T4.1 behavior.
+	srvCfg.ProjectEnvEnsurer = projectEnvEnsurer
 
 	if err := server.Run(srvCfg); err != nil {
 		logger.Error("server failed", "error", err)

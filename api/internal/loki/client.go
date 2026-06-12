@@ -54,9 +54,22 @@ func (c *Client) QueryBuildLogs(ctx context.Context, buildID string, opts domain
 	// Build LogQL query
 	// Argo Workflow names contain the build ID plus a random suffix:
 	// "loopzero-build-{buildID}-{suffix}". Use regex match to find by build ID.
-	query := fmt.Sprintf(`{workflow=~".*%s.*"}`, buildID)
+	//
+	// Plan J-17 Layer 3 (2026-06-06): default (Debug=false) restricts
+	// the stream selector to lines that carry the `loopzero_phase` label —
+	// i.e. only lines emitted by the Argo pipeline's ::loopzero:: marker
+	// wrappers. This excludes container=wait/init (already dropped by
+	// Promtail) AND raw main-container stdout from the user view,
+	// surfacing only curated user-facing milestones. Debug=true
+	// bypasses the filter and returns everything Loki retained
+	// (operator-only — handler enforces auth gate).
+	selector := fmt.Sprintf(`workflow=~".*%s.*"`, buildID)
+	if !opts.Debug {
+		selector = selector + `, loopzero_phase=~".+"`
+	}
+	query := fmt.Sprintf(`{%s}`, selector)
 	if opts.Step != "" {
-		query = fmt.Sprintf(`{workflow=~".*%s.*", step="%s"}`, buildID, opts.Step)
+		query = fmt.Sprintf(`{%s, step="%s"}`, selector, opts.Step)
 	}
 
 	limit := 1000
@@ -200,19 +213,28 @@ func buildRuntimeLogQL(queryKey string) (string, error) {
 	if !isValidLogParam(tenant) || !isValidLogParam(env) || !isValidLogParam(project) {
 		return "", fmt.Errorf("loki: invalid runtime query parameters")
 	}
-	// project is currently unused in the LogQL — LoopZero's tenant
-	// namespace convention is `loopzero-{tenant}-{env}` (no per-project
-	// namespace). Project is part of the queryKey for forward-compat
-	// (we may eventually scope per-project, e.g. via a label).
-	_ = project
-	namespace := fmt.Sprintf("loopzero-%s-%s", tenant, env)
+	// T2.2 of plan 2026-06-11-code-review-remediation: post-M2 canonical
+	// namespace formula is `loopzero-{tenant}-{project}-{env}` per
+	// pkg/naming.Namespace (sponsor verbatim "TUDO DEVERIA esta separado
+	// por projeto" 2026-06-07). Pre-T2.2 this client emitted only the
+	// legacy `loopzero-{tenant}-{env}` form, so logs for any M2-shaped
+	// namespace silently disappeared from /logs queries.
+	//
+	// T2.2.a backward-compat: the selector uses an anchored regex OR
+	// (`^(canonical|legacy)$`) so historical logs from pre-M2 deployed
+	// namespaces remain visible alongside M2 namespaces. Anchoring on
+	// ^...$ avoids prefix-collision with downstream-namespaced labels
+	// (e.g. `loopzero-tn-acme-production-canary`).
+	canonical := fmt.Sprintf("loopzero-%s-%s-%s", tenant, project, env)
+	legacy := fmt.Sprintf("loopzero-%s-%s", tenant, env)
+	namespaceSelector := fmt.Sprintf(`namespace=~"^(%s|%s)$"`, canonical, legacy)
 	if app != "" {
 		if !isValidLogParam(app) {
 			return "", fmt.Errorf("loki: invalid app filter parameter")
 		}
-		return fmt.Sprintf(`{namespace="%s", app="%s", container=~".+"}`, namespace, app), nil
+		return fmt.Sprintf(`{%s, app="%s", container=~".+"}`, namespaceSelector, app), nil
 	}
-	return fmt.Sprintf(`{namespace="%s", container=~".+"}`, namespace), nil
+	return fmt.Sprintf(`{%s, container=~".+"}`, namespaceSelector), nil
 }
 
 // QueryBuildLogsSince queries Loki for logs newer than sinceNano (nanosecond timestamp).

@@ -12,3 +12,7 @@ data:
   # KRATOS_ADMIN_URL / HYDRA_ADMIN_URL live in the Secret (find_infra_007).
   ENGINE_API_URL: {{ .Values.config.engineApiUrl | quote }}
   LOOPZERO_ENV: {{ .Values.config.loopzeroEnv | quote }}
+  # Plan J-09 T1.1 (2026-06-05) — GitHub App install handshake.
+  GITHUB_APP_SLUG: {{ .Values.config.githubAppSlug | quote }}
+  APP_PUBLIC_URL: {{ .Values.config.appPublicUrl | quote }}
+  AUTH_COOKIE_DOMAIN: {{ .Values.config.authCookieDomain | quote }}

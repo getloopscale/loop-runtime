@@ -10,11 +10,13 @@ import (
 	"context"
 	"crypto/rsa"
 	"crypto/x509"
+	"encoding/base64"
 	"encoding/json"
 	"encoding/pem"
 	"fmt"
 	"io"
 	"net/http"
+	"os"
 	"strings"
 	"sync"
 	"time"
@@ -23,8 +25,25 @@ import (
 )
 
 const (
-	githubAPIBase = "https://api.github.com"
+	// DefaultGitHubAPIBase is the canonical github.com API root. Used as
+	// the fallback when GITHUB_API_BASE_URL is unset. Operators on
+	// GitHub Enterprise Server (GHES) override via env to point at
+	// their own appliance (e.g. https://github.acme.corp/api/v3).
+	DefaultGitHubAPIBase = "https://api.github.com"
 )
+
+// resolveGitHubAPIBase returns the GitHub API root URL, preferring
+// GITHUB_API_BASE_URL env var when set. T2.4 of plan
+// 2026-06-11-code-review-remediation v1.2 — closes the hardcoded
+// `githubAPIBase` constant that lived at module scope and blocked GHES
+// operators from using LoopZero without forking. Per sponsor mandate
+// 2026-06-11 "PROIBINDO CONFIGURAÇÃO HARDCODED".
+func resolveGitHubAPIBase() string {
+	if v := os.Getenv("GITHUB_API_BASE_URL"); v != "" {
+		return v
+	}
+	return DefaultGitHubAPIBase
+}
 
 // AppClient authenticates as a GitHub App and manages installation tokens.
 // Thread-safe: tokens are cached and refreshed automatically.
@@ -32,6 +51,7 @@ type AppClient struct {
 	appID      int64
 	privateKey *rsa.PrivateKey
 	httpClient *http.Client
+	baseURL    string // T2.4: resolved at construction from GITHUB_API_BASE_URL (defaults to DefaultGitHubAPIBase).
 
 	mu         sync.RWMutex
 	tokenCache map[int64]*cachedToken
@@ -63,8 +83,20 @@ func NewAppClient(appID int64, privateKeyPEM string) (*AppClient, error) {
 		appID:      appID,
 		privateKey: key,
 		httpClient: &http.Client{Timeout: 30 * time.Second},
+		baseURL:    resolveGitHubAPIBase(),
 		tokenCache: make(map[int64]*cachedToken),
 	}, nil
+}
+
+// apiBase returns the per-client GitHub API base URL. Falls back to
+// DefaultGitHubAPIBase when the field is zero — defense-in-depth so
+// struct-literal construction in tests (without NewAppClient) doesn't
+// produce empty URLs.
+func (c *AppClient) apiBase() string {
+	if c.baseURL == "" {
+		return DefaultGitHubAPIBase
+	}
+	return c.baseURL
 }
 
 // GetInstallationToken returns a valid installation access token.
@@ -87,7 +119,7 @@ func (c *AppClient) GetInstallationToken(ctx context.Context, installationID int
 	}
 
 	req, err := http.NewRequestWithContext(ctx, "POST",
-		fmt.Sprintf("%s/app/installations/%d/access_tokens", githubAPIBase, installationID), nil)
+		fmt.Sprintf("%s/app/installations/%d/access_tokens", c.apiBase(), installationID), nil)
 	if err != nil {
 		return "", fmt.Errorf("github app: create request: %w", err)
 	}
@@ -163,7 +195,7 @@ func (c *AppClient) doAuthenticated(ctx context.Context, installationID int64, m
 // DownloadSource downloads the source tarball for a specific commit.
 // Returns a ReadCloser that streams the tarball (caller must close).
 func (c *AppClient) DownloadSource(ctx context.Context, installationID int64, owner, repo, sha string) (io.ReadCloser, error) {
-	url := fmt.Sprintf("%s/repos/%s/%s/tarball/%s", githubAPIBase, owner, repo, sha)
+	url := fmt.Sprintf("%s/repos/%s/%s/tarball/%s", c.apiBase(), owner, repo, sha)
 	resp, err := c.doAuthenticated(ctx, installationID, "GET", url, nil)
 	if err != nil {
 		return nil, fmt.Errorf("github: download source: %w", err)
@@ -190,7 +222,7 @@ type CommitStatus struct {
 
 // SetCommitStatus updates the commit status on GitHub.
 func (c *AppClient) SetCommitStatus(ctx context.Context, installationID int64, owner, repo, sha string, status CommitStatus) error {
-	url := fmt.Sprintf("%s/repos/%s/%s/statuses/%s", githubAPIBase, owner, repo, sha)
+	url := fmt.Sprintf("%s/repos/%s/%s/statuses/%s", c.apiBase(), owner, repo, sha)
 
 	payload := fmt.Sprintf(`{"state":%q,"target_url":%q,"description":%q,"context":%q}`,
 		status.State, status.TargetURL, status.Description, status.Context)
@@ -212,7 +244,7 @@ func (c *AppClient) SetCommitStatus(ctx context.Context, installationID int64, o
 
 // CommentOnPR posts a comment on a pull request.
 func (c *AppClient) CommentOnPR(ctx context.Context, installationID int64, owner, repo string, prNumber int, body string) error {
-	url := fmt.Sprintf("%s/repos/%s/%s/issues/%d/comments", githubAPIBase, owner, repo, prNumber)
+	url := fmt.Sprintf("%s/repos/%s/%s/issues/%d/comments", c.apiBase(), owner, repo, prNumber)
 
 	payload := fmt.Sprintf(`{"body":%q}`, body)
 
@@ -233,4 +265,244 @@ func (c *AppClient) CommentOnPR(ctx context.Context, installationID int64, owner
 
 func stringReader(s string) io.Reader {
 	return strings.NewReader(s)
+}
+
+// Plan J-09 T5.1 + T2.1 (2026-06-05) — repo introspection helpers used by
+// the Connect handler (loopzero.yaml validation) and the dashboard repo picker.
+
+// BranchExists returns nil if the given ref exists on the repository, OR a
+// typed error indicating "branch not found" so the caller can distinguish
+// it from "file not found" (EC-10). Other HTTP errors propagate as-is.
+//
+// Calls GET /repos/{owner}/{repo}/branches/{ref} per the GitHub REST API.
+type BranchNotFoundError struct {
+	Owner, Repo, Ref string
+}
+
+func (e *BranchNotFoundError) Error() string {
+	return fmt.Sprintf("branch %q not found in %s/%s", e.Ref, e.Owner, e.Repo)
+}
+
+func (c *AppClient) BranchExists(ctx context.Context, installationID int64, owner, repo, ref string) error {
+	url := fmt.Sprintf("%s/repos/%s/%s/branches/%s", c.apiBase(), owner, repo, ref)
+	resp, err := c.doAuthenticated(ctx, installationID, http.MethodGet, url, nil)
+	if err != nil {
+		return fmt.Errorf("github branch check: %w", err)
+	}
+	defer func() { _ = resp.Body.Close() }()
+	switch resp.StatusCode {
+	case http.StatusOK:
+		return nil
+	case http.StatusNotFound:
+		return &BranchNotFoundError{Owner: owner, Repo: repo, Ref: ref}
+	default:
+		body, _ := io.ReadAll(resp.Body)
+		return fmt.Errorf("github branch check failed (status %d): %s", resp.StatusCode, body)
+	}
+}
+
+// FileNotFoundError is returned by GetFileContent when the path is absent
+// on the requested ref. Lets the Connect handler distinguish MISSING_LOOPZERO_YAML
+// from any other HTTP error class.
+type FileNotFoundError struct {
+	Owner, Repo, Ref, Path string
+}
+
+func (e *FileNotFoundError) Error() string {
+	return fmt.Sprintf("file %q not found at %s in %s/%s", e.Path, e.Ref, e.Owner, e.Repo)
+}
+
+// GetFileContent fetches the decoded raw bytes of a repository file at a
+// specific ref. Calls GET /repos/{owner}/{repo}/contents/{path}?ref={ref}.
+// GitHub returns base64-encoded content under .content; we decode it here
+// so callers receive a plain []byte ready for yaml.Unmarshal.
+//
+// Plan J-09 T5.1 — used by Connect handler to validate loopzero.yaml exists and
+// parses as YAML before writing the project↔repo link.
+func (c *AppClient) GetFileContent(ctx context.Context, installationID int64, owner, repo, ref, path string) ([]byte, error) {
+	url := fmt.Sprintf("%s/repos/%s/%s/contents/%s?ref=%s", c.apiBase(), owner, repo, path, ref)
+	resp, err := c.doAuthenticated(ctx, installationID, http.MethodGet, url, nil)
+	if err != nil {
+		return nil, fmt.Errorf("github file fetch: %w", err)
+	}
+	defer func() { _ = resp.Body.Close() }()
+	if resp.StatusCode == http.StatusNotFound {
+		return nil, &FileNotFoundError{Owner: owner, Repo: repo, Ref: ref, Path: path}
+	}
+	if resp.StatusCode != http.StatusOK {
+		body, _ := io.ReadAll(resp.Body)
+		return nil, fmt.Errorf("github file fetch failed (status %d): %s", resp.StatusCode, body)
+	}
+	var payload struct {
+		Encoding string `json:"encoding"`
+		Content  string `json:"content"`
+	}
+	body, err := io.ReadAll(resp.Body)
+	if err != nil {
+		return nil, fmt.Errorf("read github file body: %w", err)
+	}
+	if err := json.Unmarshal(body, &payload); err != nil {
+		return nil, fmt.Errorf("decode github file json: %w", err)
+	}
+	if payload.Encoding != "base64" {
+		return nil, fmt.Errorf("unexpected file encoding %q", payload.Encoding)
+	}
+	// GitHub wraps the base64 payload at 60-char boundaries; strip newlines.
+	clean := strings.ReplaceAll(payload.Content, "\n", "")
+	decoded, err := base64DecodeStrict(clean)
+	if err != nil {
+		return nil, fmt.Errorf("decode base64 file content: %w", err)
+	}
+	return decoded, nil
+}
+
+// HeadCommitInfo carries the minimal metadata the auto-deploy path needs to
+// synthesize a git bundle from a tarball: SHA + commit message + author login.
+// Per autodeploy.tarballToGitBundle signature (commitSHA + commitMessage +
+// author), these three fields are sufficient to reproduce a deterministic
+// bundle without an extra commits API round-trip.
+type HeadCommitInfo struct {
+	SHA           string
+	CommitMessage string
+	AuthorLogin   string
+}
+
+// GetHeadCommit returns the HEAD commit metadata of the given branch.
+// Used by the Connect handler (connect-then-deploy 2026-06-09) to trigger
+// an auto-deploy of the current HEAD immediately after a repository link,
+// matching Vercel-canonical UX (connecting a Git repo deploys it; user is
+// not forced to push an extra commit to see the first build).
+//
+// Calls GET /repos/{owner}/{repo}/branches/{branch} — the same endpoint
+// BranchExists uses, but parses out commit.sha + commit.commit.message +
+// commit.author.login from the response. Returns a typed BranchNotFoundError
+// when the branch is absent so the caller can distinguish "deploy skipped
+// because no branch" from a transient HTTP error.
+func (c *AppClient) GetHeadCommit(ctx context.Context, installationID int64, owner, repo, branch string) (*HeadCommitInfo, error) {
+	url := fmt.Sprintf("%s/repos/%s/%s/branches/%s", c.apiBase(), owner, repo, branch)
+	resp, err := c.doAuthenticated(ctx, installationID, http.MethodGet, url, nil)
+	if err != nil {
+		return nil, fmt.Errorf("github head commit fetch: %w", err)
+	}
+	defer func() { _ = resp.Body.Close() }()
+	if resp.StatusCode == http.StatusNotFound {
+		return nil, &BranchNotFoundError{Owner: owner, Repo: repo, Ref: branch}
+	}
+	if resp.StatusCode != http.StatusOK {
+		body, _ := io.ReadAll(resp.Body)
+		return nil, fmt.Errorf("github head commit fetch failed (status %d): %s", resp.StatusCode, body)
+	}
+	body, err := io.ReadAll(resp.Body)
+	if err != nil {
+		return nil, fmt.Errorf("read github head commit body: %w", err)
+	}
+	var payload struct {
+		Commit struct {
+			SHA    string `json:"sha"`
+			Commit struct {
+				Message string `json:"message"`
+			} `json:"commit"`
+			Author struct {
+				Login string `json:"login"`
+			} `json:"author"`
+		} `json:"commit"`
+	}
+	if err := json.Unmarshal(body, &payload); err != nil {
+		return nil, fmt.Errorf("decode github head commit json: %w", err)
+	}
+	return &HeadCommitInfo{
+		SHA:           payload.Commit.SHA,
+		CommitMessage: payload.Commit.Commit.Message,
+		AuthorLogin:   payload.Commit.Author.Login,
+	}, nil
+}
+
+// base64DecodeStrict is an indirection so tests can stub the decoder.
+var base64DecodeStrict = func(s string) ([]byte, error) {
+	return base64Decode(s)
+}
+
+func base64Decode(s string) ([]byte, error) {
+	return base64.StdEncoding.DecodeString(s)
+}
+
+// --- Installation repo listing (Plan J-09 T2.1) ---
+
+// InstallationRecord is the minimal persistence-side shape of a GitHub
+// App installation that the integrations handler needs for tenant
+// boundary checks. Kept here (not in the db package) so handlers wire
+// DIP without dragging the db import surface.
+type InstallationRecord struct {
+	ID       int64
+	TenantID *string
+}
+
+// InstallationRevokedError signals the GitHub App was uninstalled or the
+// installation token no longer grants access. The handler maps this to
+// HTTP 410 GONE so the dashboard can prompt a reinstall.
+type InstallationRevokedError struct {
+	InstallationID int64
+}
+
+func (e *InstallationRevokedError) Error() string {
+	return fmt.Sprintf("github installation %d revoked", e.InstallationID)
+}
+
+// InstallationRepository is the sanitised slice of /installation/repositories
+// the dashboard renders in the picker. We deliberately drop URLs, hooks, and
+// owner.email/owner.sites_admin so a compromised browser cannot exfiltrate
+// anything besides the org/repo names the user already typed.
+type InstallationRepository struct {
+	FullName      string `json:"full_name"`
+	DefaultBranch string `json:"default_branch"`
+	Private       bool   `json:"private"`
+	Language      string `json:"language,omitempty"`
+}
+
+// ListInstallationRepositories returns every repo the given installation has
+// access to, paginated up to 100 per page. The installation token is
+// minted/reused via GetInstallationToken (5min safety margin on the cache).
+// 404 from GitHub is normalised to InstallationRevokedError so callers map it
+// to HTTP 410 GONE.
+func (c *AppClient) ListInstallationRepositories(ctx context.Context, installationID int64, page int) ([]InstallationRepository, error) {
+	if page <= 0 {
+		page = 1
+	}
+	url := fmt.Sprintf("%s/installation/repositories?per_page=100&page=%d", c.apiBase(), page)
+	resp, err := c.doAuthenticated(ctx, installationID, http.MethodGet, url, nil)
+	if err != nil {
+		return nil, fmt.Errorf("github list installation repos: %w", err)
+	}
+	defer func() { _ = resp.Body.Close() }()
+	switch resp.StatusCode {
+	case http.StatusOK:
+		// fall through
+	case http.StatusNotFound, http.StatusForbidden, http.StatusUnauthorized:
+		return nil, &InstallationRevokedError{InstallationID: installationID}
+	default:
+		body, _ := io.ReadAll(resp.Body)
+		return nil, fmt.Errorf("github list installation repos failed (status %d): %s", resp.StatusCode, body)
+	}
+
+	var payload struct {
+		Repositories []struct {
+			FullName      string `json:"full_name"`
+			DefaultBranch string `json:"default_branch"`
+			Private       bool   `json:"private"`
+			Language      string `json:"language"`
+		} `json:"repositories"`
+	}
+	if err := json.NewDecoder(resp.Body).Decode(&payload); err != nil {
+		return nil, fmt.Errorf("decode github installation repos: %w", err)
+	}
+	out := make([]InstallationRepository, 0, len(payload.Repositories))
+	for _, r := range payload.Repositories {
+		out = append(out, InstallationRepository{
+			FullName:      r.FullName,
+			DefaultBranch: r.DefaultBranch,
+			Private:       r.Private,
+			Language:      r.Language,
+		})
+	}
+	return out, nil
 }

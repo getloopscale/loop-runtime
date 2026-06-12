@@ -84,6 +84,9 @@ func (f *fakeBuildStoreReaper) ListByProject(_ context.Context, _, _ string, _, 
 func (f *fakeBuildStoreReaper) ListByProjectAndEnv(_ context.Context, _, _, _ string, _, _ int) ([]db.Build, int, error) {
 	return nil, 0, nil
 }
+func (f *fakeBuildStoreReaper) ListEnvsForProject(_ context.Context, _, _ string) ([]string, error) {
+	return nil, nil
+}
 func (f *fakeBuildStoreReaper) FindActiveBuilds(_ context.Context, _ string) ([]db.Build, error) {
 	return nil, nil
 }

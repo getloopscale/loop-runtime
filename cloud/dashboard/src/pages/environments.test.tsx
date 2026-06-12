@@ -25,18 +25,17 @@ describe('EnvironmentsPage', () => {
     mockUseEngineApi.mockReturnValue({
       data: {
         environments: [
-          { name: 'prod', status: 'live', projects: 3, protected: true, domain: 'prod.loopzero.local' },
+          { name: 'prod', status: 'live', projects: 3, protected: true },
         ],
       },
       loading: false,
       error: false,
     });
     render(<EnvironmentsPage />);
-    // Table headers from EnvironmentsPage source: Name, Domain, Projects, Status, Protected.
-    // "Protected" appears twice (header + cell label for protected envs) — getAllByText.
+    // J-10 v1.1 + M2 v1.2 surface: Name, Health, Status, Protected (no
+    // Domain column — that was removed before J-10 v1.1 shipped).
     expect(screen.getByText('Name')).toBeInTheDocument();
-    expect(screen.getByText('Domain')).toBeInTheDocument();
-    expect(screen.getByText('Projects')).toBeInTheDocument();
+    expect(screen.getByText('Health')).toBeInTheDocument();
     expect(screen.getByText('Status')).toBeInTheDocument();
     expect(screen.getAllByText('Protected').length).toBeGreaterThanOrEqual(1);
     expect(screen.getByText('prod')).toBeInTheDocument();
@@ -77,36 +76,86 @@ describe('EnvironmentsPage', () => {
     expect(screen.getByText('Pending Verification')).toBeInTheDocument();
   });
 
-  it('test_environments_timestamp_relative_format', () => {
-    // EnvironmentsPage does not render timestamps in v1.2 (Domain column shown instead).
-    // Assertion: protected envs render Lock icon + "Protected" text per source line 119-122.
+  // J-10 v1.1 surface: protected envs render Lock + "Protected" label
+  // (the v1.0 Domain column was removed). This replaces the legacy
+  // test_environments_timestamp_relative_format placeholder.
+  it('test_environments_protected_env_renders_lock_indicator', () => {
     mockUseEngineApi.mockReturnValue({
       data: {
         environments: [
-          { name: 'prod', status: 'live', projects: 5, protected: true, domain: 'a.b.c' },
+          { name: 'prod', status: 'live', projects: 5, protected: true },
         ],
       },
       loading: false,
       error: false,
     });
     render(<EnvironmentsPage />);
-    expect(screen.getAllByText('Protected').length).toBeGreaterThanOrEqual(1);
-    expect(screen.getByText('a.b.c')).toBeInTheDocument();
+    // "Protected" appears as table header AND as cell indicator.
+    expect(screen.getAllByText('Protected').length).toBeGreaterThanOrEqual(2);
   });
 
-  it('test_environments_copy_button_copies_url', () => {
-    // EnvironmentsPage v1.2 does not expose CopyButton per row (table-only layout).
-    // Verify the domain cell renders the URL (consumer can copy via OS).
+  // Replaces the v1.0 copy-button test. Delete button is hidden for
+  // protected envs (J-10 source line 263-275); unprotected envs render
+  // it with aria-label `Delete <name>`.
+  it('test_environments_unprotected_env_renders_delete_button', () => {
     mockUseEngineApi.mockReturnValue({
       data: {
         environments: [
-          { name: 'prod', status: 'live', projects: 1, protected: false, domain: 'app.loopzero.local' },
+          { name: 'staging', status: 'live', projects: 1, protected: false },
         ],
       },
       loading: false,
       error: false,
     });
     render(<EnvironmentsPage />);
-    expect(screen.getByText('app.loopzero.local')).toBeInTheDocument();
+    expect(screen.getByLabelText('Delete staging')).toBeInTheDocument();
+  });
+
+  // ===========================================================================
+  // M2 v1.2 — T5.2 grouping by project
+  // Plan: 2026-06-07-runtime-envs-per-project-m2 v1.2
+  // ===========================================================================
+
+  it('test_M2_groups_envs_by_project', () => {
+    mockUseEngineApi.mockReturnValue({
+      data: {
+        environments: [
+          { name: 'staging', status: 'active', project: 'web', protected: false },
+          { name: 'production', status: 'active', project: 'web', protected: true },
+          { name: 'staging', status: 'active', project: 'api', protected: false },
+          { name: 'qa', status: 'active', project: 'api', protected: false },
+        ],
+      },
+      loading: false,
+      error: false,
+    });
+    render(<EnvironmentsPage />);
+    // Each project gets its own group header row keyed by name.
+    expect(screen.getByTestId('env-group-header-api')).toBeInTheDocument();
+    expect(screen.getByTestId('env-group-header-web')).toBeInTheDocument();
+    // The legacy bucket is absent when every entry has a project.
+    expect(screen.queryByTestId('env-group-header-legacy')).not.toBeInTheDocument();
+    // Same env name in two different projects coexists (the M2 unique
+    // key is project+name, not name alone).
+    const stagings = screen.getAllByText('staging');
+    expect(stagings.length).toBeGreaterThanOrEqual(2);
+  });
+
+  it('test_M2_renders_legacy_section_for_envs_without_project', () => {
+    mockUseEngineApi.mockReturnValue({
+      data: {
+        environments: [
+          { name: 'production', status: 'active', protected: true }, // no project → legacy
+          { name: 'staging', status: 'active', project: 'web', protected: false },
+        ],
+      },
+      loading: false,
+      error: false,
+    });
+    render(<EnvironmentsPage />);
+    expect(screen.getByTestId('env-group-header-legacy')).toBeInTheDocument();
+    expect(screen.getByTestId('env-group-header-web')).toBeInTheDocument();
+    // Legacy header surfaces the "no project" hint.
+    expect(screen.getByText(/no project/i)).toBeInTheDocument();
   });
 });

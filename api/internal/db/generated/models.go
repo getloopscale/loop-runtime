@@ -8,6 +8,7 @@ import (
 	"github.com/jackc/pgx/v5/pgtype"
 )
 
+// CHG-2026-05-03-SCALE-REAL — scaling config per app. Replaces loopzero.yaml-only path. Plan T2.1 of pre-launch-gaps-plan.md.
 type AppScalingConfig struct {
 	ID           pgtype.UUID        `json:"id"`
 	TenantID     string             `json:"tenant_id"`
@@ -20,7 +21,8 @@ type AppScalingConfig struct {
 	ScaleToZero  bool               `json:"scale_to_zero"`
 	UpdatedAt    pgtype.Timestamptz `json:"updated_at"`
 	UpdatedBy    string             `json:"updated_by"`
-	ConfigHash   string             `json:"config_hash"`
+	// sha256 of canonical (min,max,target_cpu_pct,scale_to_zero) for idempotency short-circuit.
+	ConfigHash string `json:"config_hash"`
 }
 
 type AuditLog struct {
@@ -54,7 +56,8 @@ type Build struct {
 	CreatedAt       pgtype.Timestamptz `json:"created_at"`
 	StartedAt       pgtype.Timestamptz `json:"started_at"`
 	FinishedAt      pgtype.Timestamptz `json:"finished_at"`
-	BundleDigest    *string            `json:"bundle_digest"`
+	// deep-review-2026-05-10 T2.2 — SHA256 hex of the uploaded source bundle, computed at upload time + verified by the clone-runner step. Mismatch indicates S3 substitution.
+	BundleDigest *string `json:"bundle_digest"`
 }
 
 type BuildApp struct {
@@ -70,11 +73,14 @@ type BuildApp struct {
 	UpdatedAt   pgtype.Timestamptz `json:"updated_at"`
 }
 
+// Operational source of truth for cell metadata (capacity, status, audit). Connectivity SoT remains ClusterCredential CRD. Two SoTs answer different questions.
 type Cell struct {
-	CellID             string             `json:"cell_id"`
-	DisplayName        string             `json:"display_name"`
-	Status             string             `json:"status"`
-	Region             string             `json:"region"`
+	CellID      string `json:"cell_id"`
+	DisplayName string `json:"display_name"`
+	// active=accept new pinning; draining=existing only; maintenance=reject all; retired=terminal.
+	Status string `json:"status"`
+	Region string `json:"region"`
+	// NULL=unlimited; 0=blocked transiently; positive=hard cap enforced by placement layer.
 	CapacityTenantsMax *int32             `json:"capacity_tenants_max"`
 	Notes              string             `json:"notes"`
 	CreatedAt          pgtype.Timestamptz `json:"created_at"`
@@ -92,6 +98,7 @@ type CircuitBreaker struct {
 	UpdatedAt    pgtype.Timestamptz `json:"updated_at"`
 }
 
+// Per-tenant cost cap enforcement state. T1.9 of MEET-2026-05-12 launch readiness. Separate from usage_records (billing history) per MEET-ASYNC-AMENDMENT-2026-05-12-001 A003.
 type CostCounter struct {
 	TenantID    string             `json:"tenant_id"`
 	PlanTier    string             `json:"plan_tier"`
@@ -134,6 +141,7 @@ type EnvironmentTarget struct {
 	UpdatedBy        string             `json:"updated_by"`
 	CorrelationID    string             `json:"correlation_id"`
 	UpdatedAt        pgtype.Timestamptz `json:"updated_at"`
+	Kind             string             `json:"kind"`
 }
 
 type GithubInstallation struct {
@@ -171,6 +179,29 @@ type LeaderGeneration struct {
 	HeartbeatAt  pgtype.Timestamptz `json:"heartbeat_at"`
 }
 
+type MemoryExport struct {
+	ID           string             `json:"id"`
+	Subject      string             `json:"subject"`
+	TenantID     string             `json:"tenant_id"`
+	DisplayName  *string            `json:"display_name"`
+	Status       string             `json:"status"`
+	FilePath     *string            `json:"file_path"`
+	ErrorMessage *string            `json:"error_message"`
+	CreatedAt    pgtype.Timestamptz `json:"created_at"`
+	CompletedAt  pgtype.Timestamptz `json:"completed_at"`
+}
+
+type MemoryWebhook struct {
+	ID        string             `json:"id"`
+	Subject   string             `json:"subject"`
+	TenantID  string             `json:"tenant_id"`
+	Url       string             `json:"url"`
+	Label     string             `json:"label"`
+	Events    []byte             `json:"events"`
+	CreatedAt pgtype.Timestamptz `json:"created_at"`
+	RevokedAt pgtype.Timestamptz `json:"revoked_at"`
+}
+
 type PlanLimit struct {
 	Plan      string `json:"plan"`
 	Metric    string `json:"metric"`
@@ -178,13 +209,15 @@ type PlanLimit struct {
 	SoftLimit *int32 `json:"soft_limit"`
 }
 
+// Preview environment metadata for API queries (Sprint 5, ADR D7). Operational state lives in the PreviewEnvironment CR.
 type PreviewEnvironment struct {
-	ID             string             `json:"id"`
-	TenantID       string             `json:"tenant_id"`
-	ProjectID      string             `json:"project_id"`
-	PrNumber       int32              `json:"pr_number"`
-	Branch         string             `json:"branch"`
-	CommitSha      string             `json:"commit_sha"`
+	ID        string `json:"id"`
+	TenantID  string `json:"tenant_id"`
+	ProjectID string `json:"project_id"`
+	PrNumber  int32  `json:"pr_number"`
+	Branch    string `json:"branch"`
+	CommitSha string `json:"commit_sha"`
+	// Lifecycle phase mirroring the state machine in pkg/statemachine/preview.go (stored lowercase here; Phase casing in the CR is "Creating"/"Active"/etc.).
 	Status         string             `json:"status"`
 	Url            *string            `json:"url"`
 	BuildID        *string            `json:"build_id"`
@@ -196,6 +229,16 @@ type PreviewEnvironment struct {
 	CreatedAt      pgtype.Timestamptz `json:"created_at"`
 	UpdatedAt      pgtype.Timestamptz `json:"updated_at"`
 	DeletedAt      pgtype.Timestamptz `json:"deleted_at"`
+}
+
+type PreviewSlot struct {
+	TenantID        string             `json:"tenant_id"`
+	ProjectID       string             `json:"project_id"`
+	ActivePrNumber  *int32             `json:"active_pr_number"`
+	ActiveBranch    *string            `json:"active_branch"`
+	ActiveReleaseID *string            `json:"active_release_id"`
+	Url             *string            `json:"url"`
+	UpdatedAt       pgtype.Timestamptz `json:"updated_at"`
 }
 
 type Project struct {
@@ -222,37 +265,42 @@ type ProjectRepository struct {
 }
 
 type Release struct {
-	ID                       string             `json:"id"`
-	BuildID                  string             `json:"build_id"`
-	TenantID                 string             `json:"tenant_id"`
-	ProjectID                string             `json:"project_id"`
-	Environment              string             `json:"environment"`
-	Status                   string             `json:"status"`
-	CorrelationID            string             `json:"correlation_id"`
-	CreatedBy                string             `json:"created_by"`
-	GitCommit                *string            `json:"git_commit"`
-	GitMirrorStatus          string             `json:"git_mirror_status"`
-	Artifacts                []byte             `json:"artifacts"`
-	SideEffects              []byte             `json:"side_effects"`
-	Apps                     []byte             `json:"apps"`
-	CellID                   string             `json:"cell_id"`
-	ProcessingBy             *string            `json:"processing_by"`
-	ProcessingSince          pgtype.Timestamptz `json:"processing_since"`
-	ImageDigest              *string            `json:"image_digest"`
-	ImageSignature           *string            `json:"image_signature"`
-	ImageSignedAt            pgtype.Timestamptz `json:"image_signed_at"`
-	CreatedAt                pgtype.Timestamptz `json:"created_at"`
-	ImageAttestationRekorUrl *string            `json:"image_attestation_rekor_url"`
+	ID              string             `json:"id"`
+	BuildID         string             `json:"build_id"`
+	TenantID        string             `json:"tenant_id"`
+	ProjectID       string             `json:"project_id"`
+	Environment     string             `json:"environment"`
+	Status          string             `json:"status"`
+	CorrelationID   string             `json:"correlation_id"`
+	CreatedBy       string             `json:"created_by"`
+	GitCommit       *string            `json:"git_commit"`
+	GitMirrorStatus string             `json:"git_mirror_status"`
+	Artifacts       []byte             `json:"artifacts"`
+	SideEffects     []byte             `json:"side_effects"`
+	Apps            []byte             `json:"apps"`
+	CellID          string             `json:"cell_id"`
+	ProcessingBy    *string            `json:"processing_by"`
+	ProcessingSince pgtype.Timestamptz `json:"processing_since"`
+	ImageDigest     *string            `json:"image_digest"`
+	ImageSignature  *string            `json:"image_signature"`
+	ImageSignedAt   pgtype.Timestamptz `json:"image_signed_at"`
+	CreatedAt       pgtype.Timestamptz `json:"created_at"`
+	// Rekor entry URL produced by cosign attest --predicate <sbom> step (SLSA L3 chain). Empty/NULL when CosignAttestEnabled=false or attest step never ran. Per ADR-2026-05-27-T2.2-OFFLINE-TUF + plan T2.1 of 2026-05-27-tenant-build-pipeline-gaps-closure.
+	ImageAttestationRekorUrl *string `json:"image_attestation_rekor_url"`
 }
 
+// Per-app supply-chain attestation (signature + SBOM metadata) sidecar for releases (Sprint 6, ADR-0014 fix for multi-app builds).
 type ReleaseAppAttestation struct {
-	ID                 string             `json:"id"`
-	ReleaseID          string             `json:"release_id"`
-	TenantID           string             `json:"tenant_id"`
-	AppName            string             `json:"app_name"`
-	ImageDigest        string             `json:"image_digest"`
-	ImageSignature     *string            `json:"image_signature"`
-	SignedAt           pgtype.Timestamptz `json:"signed_at"`
+	ID        string `json:"id"`
+	ReleaseID string `json:"release_id"`
+	TenantID  string `json:"tenant_id"`
+	AppName   string `json:"app_name"`
+	// OCI image digest (sha256:...). Same digest as in the Application CR.
+	ImageDigest string `json:"image_digest"`
+	// Pinned reference (registry/path:tag@sha256:...) used by cosign sign. NULL when the build pre-dates Sprint 6 cosign signing or signing failed.
+	ImageSignature *string            `json:"image_signature"`
+	SignedAt       pgtype.Timestamptz `json:"signed_at"`
+	// S3 object key pointing to the CycloneDX/SPDX SBOM (Sprint 6 syft step). NULL when SBOM generation is disabled or pre-dates Sprint 6.
 	SbomS3Key          *string            `json:"sbom_s3_key"`
 	SbomFormat         *string            `json:"sbom_format"`
 	SbomComponentCount *int32             `json:"sbom_component_count"`
@@ -287,16 +335,17 @@ type SseEvent struct {
 }
 
 type Subscription struct {
-	ID                   string             `json:"id"`
-	TenantID             string             `json:"tenant_id"`
-	StripeCustomerID     *string            `json:"stripe_customer_id"`
-	StripeSubscriptionID *string            `json:"stripe_subscription_id"`
-	Plan                 string             `json:"plan"`
-	Status               string             `json:"status"`
-	CurrentPeriodStart   pgtype.Timestamptz `json:"current_period_start"`
-	CurrentPeriodEnd     pgtype.Timestamptz `json:"current_period_end"`
-	CreatedAt            pgtype.Timestamptz `json:"created_at"`
-	UpdatedAt            pgtype.Timestamptz `json:"updated_at"`
+	ID                       string             `json:"id"`
+	TenantID                 string             `json:"tenant_id"`
+	StripeCustomerID         *string            `json:"stripe_customer_id"`
+	StripeSubscriptionID     *string            `json:"stripe_subscription_id"`
+	Plan                     string             `json:"plan"`
+	Status                   string             `json:"status"`
+	CurrentPeriodStart       pgtype.Timestamptz `json:"current_period_start"`
+	CurrentPeriodEnd         pgtype.Timestamptz `json:"current_period_end"`
+	CreatedAt                pgtype.Timestamptz `json:"created_at"`
+	UpdatedAt                pgtype.Timestamptz `json:"updated_at"`
+	StripeSubscriptionItemID *string            `json:"stripe_subscription_item_id"`
 }
 
 type Tenant struct {
@@ -340,6 +389,20 @@ type TenantsPendingDeletion struct {
 	LastErrorAt  pgtype.Timestamptz `json:"last_error_at"`
 }
 
+type LoopZeroApiKey struct {
+	ID         string             `json:"id"`
+	Subject    string             `json:"subject"`
+	TenantID   string             `json:"tenant_id"`
+	KeyName    string             `json:"key_name"`
+	KeyHash    string             `json:"key_hash"`
+	KeyPrefix  string             `json:"key_prefix"`
+	Scopes     []byte             `json:"scopes"`
+	ExpiresAt  pgtype.Timestamptz `json:"expires_at"`
+	LastUsedAt pgtype.Timestamptz `json:"last_used_at"`
+	CreatedAt  pgtype.Timestamptz `json:"created_at"`
+	RevokedAt  pgtype.Timestamptz `json:"revoked_at"`
+}
+
 type UsageRecord struct {
 	ID               string             `json:"id"`
 	TenantID         string             `json:"tenant_id"`
@@ -352,14 +415,15 @@ type UsageRecord struct {
 }
 
 type User struct {
-	ID             string             `json:"id"`
-	Email          string             `json:"email"`
-	GithubID       *int64             `json:"github_id"`
-	DisplayName    string             `json:"display_name"`
-	Username       string             `json:"username"`
-	CreatedAt      pgtype.Timestamptz `json:"created_at"`
-	UpdatedAt      pgtype.Timestamptz `json:"updated_at"`
-	ActiveTenantID *string            `json:"active_tenant_id"`
+	ID          string             `json:"id"`
+	Email       string             `json:"email"`
+	GithubID    *int64             `json:"github_id"`
+	DisplayName string             `json:"display_name"`
+	Username    string             `json:"username"`
+	CreatedAt   pgtype.Timestamptz `json:"created_at"`
+	UpdatedAt   pgtype.Timestamptz `json:"updated_at"`
+	// Plan T2.5 D8: explicit active-team selection for multi-tenant users. NULL = legacy JWT middleware heuristic. Updated via POST /api/v1/team/switch. ON DELETE SET NULL prevents dangling reference on tenant deletion.
+	ActiveTenantID *string `json:"active_tenant_id"`
 }
 
 type UserIdentityMap struct {

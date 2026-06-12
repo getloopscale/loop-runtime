@@ -11,6 +11,7 @@ describe('CLI config/constants', () => {
     delete process.env.LOOPZERO_URL;
     delete process.env.LOOPZERO_API_URL;
     delete process.env.LOOPZERO_CLOUD_URL;
+    delete process.env.LOOPZERO_DASHBOARD_URL;
   });
 
   afterEach(() => {
@@ -111,6 +112,42 @@ describe('CLI config/constants', () => {
       process.env.LOOPZERO_DEPLOY_TIMEOUT = '120000';
       const constants = loadConstants();
       expect(constants.DEPLOY_TIMEOUT_MS).toBe(120000);
+    });
+  });
+
+  describe('getDashboardUrl (T2.1 of plan 2026-06-11-code-review-remediation)', () => {
+    it('should return canonical dev-public fallback when no env override', () => {
+      const constants = loadConstants();
+      expect(constants.getDashboardUrl()).toBe('https://app-dev.loopzero.example');
+    });
+
+    it('should NOT contain the pre-T2.1 wrong pattern (app.dev with dot)', () => {
+      // R5 regression guard: the original hardcoded literal in login.ts
+      // was `https://app.dev.loopzero.example` which is NOT a real DNS name.
+      // Canonical pattern is `app-dev.loopzero.example` per
+      // dev-public-domain-canonicalization 2026-06-04.
+      const constants = loadConstants();
+      const url = constants.getDashboardUrl();
+      expect(url).not.toMatch(/app\.dev\.loopzero\.dev/);
+      expect(url).toMatch(/app-dev\.loopzero\.dev/);
+    });
+
+    it('should return LOOPZERO_DASHBOARD_URL override when set', () => {
+      process.env.LOOPZERO_DASHBOARD_URL = 'https://my-dashboard.example.com';
+      const constants = loadConstants();
+      expect(constants.getDashboardUrl()).toBe('https://my-dashboard.example.com');
+    });
+
+    it('should accept http:// URLs (local dev override)', () => {
+      process.env.LOOPZERO_DASHBOARD_URL = 'http://localhost:5173';
+      const constants = loadConstants();
+      expect(constants.getDashboardUrl()).toBe('http://localhost:5173');
+    });
+
+    it('should throw when override is missing protocol', () => {
+      process.env.LOOPZERO_DASHBOARD_URL = 'app-dev.loopzero.example';
+      const constants = loadConstants();
+      expect(() => constants.getDashboardUrl()).toThrow(/must start with http/);
     });
   });
 });

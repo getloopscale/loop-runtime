@@ -5,7 +5,9 @@ package routes
 
 import (
 	"context"
+	"crypto/subtle"
 	"net/http"
+	"os"
 	"regexp"
 	"strconv"
 	"strings"
@@ -17,6 +19,26 @@ import (
 	"github.com/loopzero/loopzero/api/internal/middleware"
 	loopzeroerrors "github.com/loopzero/loopzero/pkg/errors"
 )
+
+// isDebugAuthorized matches the admin endpoint pattern (admin_pin_cell,
+// admin_evict): LOOPZERO_ADMIN_API=true env gates the feature, and the
+// X-Service-Auth header must match LOOPZERO_ADMIN_SERVICE_AUTH_SECRET to
+// authorize the call. Dashboard user JWTs CANNOT enable debug — only
+// operator service-to-service callers (CLI with admin token, runbook
+// scripts) carry the secret.
+//
+// Plan J-17 Layer 3 (2026-06-06) gate for ?mode=debug on /logs.
+func isDebugAuthorized(r *http.Request) bool {
+	if os.Getenv("LOOPZERO_ADMIN_API") != "true" {
+		return false
+	}
+	expected := os.Getenv("LOOPZERO_ADMIN_SERVICE_AUTH_SECRET")
+	if expected == "" {
+		return false
+	}
+	got := strings.TrimSpace(r.Header.Get("X-Service-Auth"))
+	return subtle.ConstantTimeCompare([]byte(got), []byte(expected)) == 1
+}
 
 // parseSinceParam converts a `?since=<value>` query parameter into a
 // number of seconds. Accepts:
@@ -162,6 +184,19 @@ func (h *LogsHandler) Get(w http.ResponseWriter, r *http.Request) {
 		if secs := parseSinceParam(sinceStr); secs > 0 {
 			opts.SinceSeconds = secs
 		}
+	}
+
+	// Plan J-17 Layer 3 (2026-06-06): operator-only debug mode bypasses
+	// the user-facing filter. `?mode=debug` returns every container line
+	// including raw main-container stdout. Gated by the same LOOPZERO_ADMIN_API
+	// + X-Service-Auth pattern used by admin endpoints — a dashboard user
+	// JWT cannot enable it.
+	if r.URL.Query().Get("mode") == "debug" {
+		if !isDebugAuthorized(r) {
+			writeLoopZeroError(w, loopzeroerrors.ErrForbidden)
+			return
+		}
+		opts.Debug = true
 	}
 
 	// Query logs from Loki

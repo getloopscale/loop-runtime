@@ -42,11 +42,15 @@ type mockSecretReader struct {
 	err            error
 }
 
-func (m *mockSecretReader) ReadSecret(_ context.Context, tenantID, secretName string) ([]byte, error) {
+// T2.1 of plan 2026-06-10-j22-layer2-code-review-fixes: extended signature
+// to (tenantID, project, env, secretName) carrying the canonical composite
+// scope. plaintextByKey is keyed `tenantID:project:env:secretName` so tests
+// can pin specific composite combinations and verify cross-env isolation.
+func (m *mockSecretReader) ReadSecret(_ context.Context, tenantID, project, env, secretName string) ([]byte, error) {
 	if m.err != nil {
 		return nil, m.err
 	}
-	p, ok := m.plaintextByKey[tenantID+":"+secretName]
+	p, ok := m.plaintextByKey[tenantID+":"+project+":"+env+":"+secretName]
 	if !ok {
 		return nil, ErrSecretNotFound
 	}
@@ -155,7 +159,7 @@ func TestSecretFetch_HappyPath(t *testing.T) {
 	deps := SecretFetchHandlerDeps{
 		TenantBinding: &mockTenantBinding{cellByTenant: map[string]string{"tenant-a": "cell-default"}},
 		SecretReader: &mockSecretReader{
-			plaintextByKey: map[string][]byte{"tenant-a:MY_SECRET": []byte("hunter2")},
+			plaintextByKey: map[string][]byte{"tenant-a:testproj:production:MY_SECRET": []byte("hunter2")},
 		},
 		AuditWriter: &mockAuditWriter{},
 	}
@@ -168,7 +172,7 @@ func TestSecretFetch_HappyPath(t *testing.T) {
 	defer srv.Close()
 
 	req := newAuthedRequest(http.MethodPost,
-		srv.URL+"/internal/v1/secret-fetch/tenant-a/MY_SECRET", "cell-default")
+		srv.URL+"/internal/v1/secret-fetch/tenant-a/MY_SECRET.testproj.production", "cell-default")
 	resp, err := http.DefaultClient.Do(req)
 	if err != nil {
 		t.Fatal(err)
@@ -223,14 +227,25 @@ func TestSecretFetch_EC08_InvalidSecretName_400(t *testing.T) {
 			srv := newTestServerWithCrossCluster(t, deps, identity)
 			defer srv.Close()
 
-			// Pass via path param — chi.URLParam will return raw value.
-			url := srv.URL + "/internal/v1/secret-fetch/tenant-a/" + badName
+			// Pass via composite path param — chi.URLParam returns the
+			// raw `secretName.project.environment` triple; handler splits
+			// on '.' and runs EC-08 regex on segment[0]. T3.1 of plan
+			// 2026-06-11-code-review-remediation: aligned with the post-
+			// T2.1+ADR D2 (revised 2026-06-11) URL contract that collapsed
+			// the legacy 4-slot path into a single composite slot per ESO
+			// v1beta1 strict-decoder limitation. Pre-T3.1 the URL was
+			// shaped `tenant/{secret}/{project}/{env}` — chi short-circuited
+			// to 404 before reaching the handler, so the regex enforcement
+			// path was never actually exercised.
+			composite := badName + ".testproj.production"
+			url := srv.URL + "/internal/v1/secret-fetch/tenant-a/" + composite
 			req := newAuthedRequest(http.MethodPost, url, "cell-default")
 			resp, _ := http.DefaultClient.Do(req)
 			defer resp.Body.Close()
-			// "PATH/TRAVERSAL" + "../../../platform/master" cause routing to
-			// not match (404 from chi) — both are still safely rejected.
-			// All others should fail validation → 400.
+			// "PATH/TRAVERSAL" + "../../../platform/master" still cause
+			// chi to fail routing (path contains additional '/' segments)
+			// → 404 from the mux. All other names with no '/' must reach
+			// the handler regex and be rejected with 400.
 			if resp.StatusCode != http.StatusBadRequest && resp.StatusCode != http.StatusNotFound {
 				body, _ := readAll(resp.Body)
 				t.Errorf("want 400 or 404, got %d (body: %s)", resp.StatusCode, body)
@@ -244,7 +259,7 @@ func TestSecretFetch_EC07_CellTenantBindingMismatch_403(t *testing.T) {
 	// Tenant placed at cell-default but ESO claims X-Cell-ID=cell-1
 	deps := SecretFetchHandlerDeps{
 		TenantBinding: &mockTenantBinding{cellByTenant: map[string]string{"tenant-a": "cell-default"}},
-		SecretReader:  &mockSecretReader{plaintextByKey: map[string][]byte{"tenant-a:S": []byte("x")}},
+		SecretReader:  &mockSecretReader{plaintextByKey: map[string][]byte{"tenant-a:testproj:production:S": []byte("x")}},
 		AuditWriter:   &mockAuditWriter{},
 	}
 	identity := &middleware.TokenReviewResult{
@@ -256,7 +271,7 @@ func TestSecretFetch_EC07_CellTenantBindingMismatch_403(t *testing.T) {
 	defer srv.Close()
 
 	req := newAuthedRequest(http.MethodPost,
-		srv.URL+"/internal/v1/secret-fetch/tenant-a/S", "cell-1")
+		srv.URL+"/internal/v1/secret-fetch/tenant-a/S.testproj.production", "cell-1")
 	resp, _ := http.DefaultClient.Do(req)
 	defer resp.Body.Close()
 	if resp.StatusCode != http.StatusForbidden {
@@ -297,7 +312,7 @@ func TestSecretFetch_TenantNotFound_404(t *testing.T) {
 	defer srv.Close()
 
 	req := newAuthedRequest(http.MethodPost,
-		srv.URL+"/internal/v1/secret-fetch/tenant-missing/MY_SECRET", "cell-default")
+		srv.URL+"/internal/v1/secret-fetch/tenant-missing/MY_SECRET.testproj.production", "cell-default")
 	resp, _ := http.DefaultClient.Do(req)
 	defer resp.Body.Close()
 	if resp.StatusCode != http.StatusNotFound {
@@ -316,7 +331,7 @@ func TestSecretFetch_SecretNotFound_404(t *testing.T) {
 	defer srv.Close()
 
 	req := newAuthedRequest(http.MethodPost,
-		srv.URL+"/internal/v1/secret-fetch/tenant-a/MISSING", "cell-default")
+		srv.URL+"/internal/v1/secret-fetch/tenant-a/MISSING.testproj.production", "cell-default")
 	resp, _ := http.DefaultClient.Do(req)
 	defer resp.Body.Close()
 	if resp.StatusCode != http.StatusNotFound {
@@ -335,7 +350,7 @@ func TestSecretFetch_TenantBindingError_500(t *testing.T) {
 	defer srv.Close()
 
 	req := newAuthedRequest(http.MethodPost,
-		srv.URL+"/internal/v1/secret-fetch/tenant-a/MY_SECRET", "cell-default")
+		srv.URL+"/internal/v1/secret-fetch/tenant-a/MY_SECRET.testproj.production", "cell-default")
 	resp, _ := http.DefaultClient.Do(req)
 	defer resp.Body.Close()
 	if resp.StatusCode != http.StatusInternalServerError {
@@ -358,7 +373,7 @@ func TestSecretFetch_NoAuth_401(t *testing.T) {
 	defer srv.Close()
 
 	req, _ := http.NewRequest(http.MethodPost,
-		srv.URL+"/internal/v1/secret-fetch/tenant-a/MY_SECRET", nil)
+		srv.URL+"/internal/v1/secret-fetch/tenant-a/MY_SECRET.testproj.production", nil)
 	resp, _ := http.DefaultClient.Do(req)
 	defer resp.Body.Close()
 	if resp.StatusCode != http.StatusUnauthorized {

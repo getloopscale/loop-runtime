@@ -30,11 +30,20 @@ PID_FILE="${PID_FILE:-/tmp/loopzero-port-forward-public.pids}"
 LOG_DIR="${LOG_DIR:-/tmp}"
 
 # Each entry: namespace:resource:local_port:remote_port:log_suffix
+#
+# T2.4 of plan 2026-06-11-cleanroom-canonical-5-defense-layers v1.2:
+# extended with Hydra-admin (14445) for J-05 AcceptLogin/AcceptConsent flow
+# + dashboard vite dev server (5173) for app-dev local UI iteration.
+# Closes catch #15 from T6.2 session (memory j05-aprendizado-hydra-urls-
+# canonical-via-helmfile-overlay) — Hydra admin port-forward was missing
+# during sponsor walkthrough debug, requiring ad-hoc kubectl invocations.
 SERVICES=(
   "loopzero-system:svc/loopzero-cloud:13002:13002:cloud"
   "loopzero-auth:svc/ory-hydra-public:14444:4444:hydra-public"
+  "loopzero-auth:svc/ory-hydra-admin:14445:4445:hydra-admin"
   "loopzero-auth:svc/ory-kratos-public:14433:80:kratos-public"
   "loopzero-auth:svc/ory-kratos-admin:14434:80:kratos-admin"
+  "loopzero-dashboard:svc/loopzero-dashboard:5173:5173:dashboard-vite"
 )
 
 log() { printf '[port-fwd] %s\n' "$*" >&2; }

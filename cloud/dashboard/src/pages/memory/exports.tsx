@@ -11,7 +11,7 @@ import {
   EmptyState,
   PageShell,
   Timestamp,
-} from '@loopzerokit/ui';
+} from '@loopzero/ui';
 import { usePageMeta } from '@/hooks/use-page-meta';
 import { useRequireAuth } from '@/hooks/use-auth';
 import { cloudFetch, getApiBase } from '@/lib/api';
@@ -197,21 +197,14 @@ export function ExportsPage() {
     >
       {createMutation.isError ? (
         <Alert intent="warning" title="Could not start export">
-          The Memory service rejected the export request. Existing exports keep
-          downloading — only new exports are paused.
+          Try again in a moment.
         </Alert>
       ) : null}
       {exports.length === 0 ? (
         <EmptyState
           icon={Download}
-          title="Export your memories as a portable JSON file"
-          description="Useful for backup, migration to another workspace, or sharing context with another LoopZero agent. Exports run as background jobs; you can leave the page and come back when ready."
-          action={
-            <Button onClick={() => createMutation.mutate()} disabled={createMutation.isPending}>
-              <Plus className="size-4 mr-1" aria-hidden="true" />
-              Create export
-            </Button>
-          }
+          title="No exports yet"
+          description="Click Create export to dump your memories as JSON."
         />
       ) : (
         <Card>

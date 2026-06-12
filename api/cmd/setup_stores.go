@@ -14,6 +14,7 @@ import (
 	"github.com/loopzero/loopzero/api/internal/source"
 	"github.com/loopzero/loopzero/api/internal/sse"
 	s3uploader "github.com/loopzero/loopzero/api/internal/s3"
+	"github.com/loopzero/loopzero/pkg/vault"
 )
 
 // StoreDeps holds all store instances created from the database adapter.
@@ -25,10 +26,11 @@ import (
 // SecretStore, BootstrapStore are interfaces; DomainStore + CellStore
 // are still concrete pending their T1.x/T2.x sqlc migrations).
 type StoreDeps struct {
-	BuildStore     db.BuildStore
-	ReleaseStore   db.ReleaseStore
-	EnvTargetStore *db.PostgresEnvironmentTargetStore
-	EventStore     sse.EventStore
+	BuildStore       db.BuildStore
+	ReleaseStore     db.ReleaseStore
+	EnvTargetStore   *db.PostgresEnvironmentTargetStore
+	PreviewSlotStore *db.PostgresPreviewSlotStore // 2026-06-07 D2 — single-slot preview
+	EventStore       sse.EventStore
 	PgEventStore   *sse.PostgresEventStore
 	SecretStore    routes.SecretStore
 	BootstrapStore routes.BootstrapStore
@@ -43,7 +45,15 @@ type StoreDeps struct {
 }
 
 // setupStores creates all data stores from the database adapter and config.
-func setupStores(dbAdapter *db.PgxAdapter, cfg config.Config, logger *slog.Logger) (*StoreDeps, error) {
+//
+// T2.5 wire-up (plan 2026-06-10-j22-openbao-transit-eso-sync v1.2): the
+// transit parameter is threaded into setupSecretStore so the
+// PostgresSecretStore boots with vault-backed encrypt/decrypt dispatch.
+// nil-safe: when transit is nil (CryptoMode != "transit"), the store
+// falls back to the legacy AES path. The fail-loud contract lives in
+// the caller (main.go): if config demanded transit and constructor
+// failed, the process exits BEFORE setupStores ever runs.
+func setupStores(dbAdapter *db.PgxAdapter, cfg config.Config, transit vault.Transit, logger *slog.Logger) (*StoreDeps, error) {
 	// Sprint 2 stores
 	// T1.2b (plan 2026-05-29-sqlc-migration v1.3): sqlc-backed wrapper.
 	// Satisfies db.BuildStore interface 1:1 — service field types
@@ -55,10 +65,17 @@ func setupStores(dbAdapter *db.PgxAdapter, cfg config.Config, logger *slog.Logge
 	// unchanged. State-machine SafeTransition runs at store layer (D4).
 	releaseStore := db.NewReleaseStoreSqlc(dbAdapter)
 	envTargetStore := db.NewPostgresEnvironmentTargetStore(dbAdapter, dbAdapter)
+	// 2026-06-07 D2 — single-slot preview store (Netlify-style).
+	// Phase 1 of plan 2026-06-07-preview-as-category-single-slot-plan.md.
+	previewSlotStore := db.NewPostgresPreviewSlotStore(dbAdapter, dbAdapter)
 	pgEventStore := sse.NewPostgresEventStore(dbAdapter, dbAdapter)
 
 	// Secret store — SEC-001: encryption at rest when key is configured.
-	secretStore, err := setupSecretStore(dbAdapter, cfg.SecretEncryptionKey, logger)
+	// T2.5 wire-up (plan 2026-06-10-j22-openbao-transit-eso-sync v1.2):
+	// transit is non-nil only when cfg.CryptoMode()=="transit"; routes
+	// the store to NewPostgresSecretStoreWithVault for dual-path
+	// (vault:v1: prefix → transit decrypt; else → AES legacy).
+	secretStore, err := setupSecretStore(dbAdapter, cfg.SecretEncryptionKey, transit, logger)
 	if err != nil {
 		return nil, err
 	}
@@ -84,6 +101,7 @@ func setupStores(dbAdapter *db.PgxAdapter, cfg config.Config, logger *slog.Logge
 		BuildStore:       buildStore,
 		ReleaseStore:     releaseStore,
 		EnvTargetStore:   envTargetStore,
+		PreviewSlotStore: previewSlotStore,
 		EventStore:       pgEventStore,
 		PgEventStore:     pgEventStore,
 		SecretStore:      secretStore,
@@ -98,7 +116,22 @@ func setupStores(dbAdapter *db.PgxAdapter, cfg config.Config, logger *slog.Logge
 }
 
 // setupSecretStore creates the encrypted secret store.
-func setupSecretStore(dbAdapter *db.PgxAdapter, encKeyHex string, logger *slog.Logger) (routes.SecretStore, error) {
+//
+// T2.5 wire-up (plan 2026-06-10-j22-openbao-transit-eso-sync v1.2): when
+// transit is non-nil, the store boots via NewPostgresSecretStoreWithVault
+// so writes dispatch through vault.EncryptForTenant (storing vault:v1:...
+// prefixed bytes in encrypted_value) and reads dispatch via prefix
+// detection in decryptFromStore (vault:v1: → transit decrypt; else →
+// AES legacy). The legacy AES key is still passed through so existing
+// pre-transit rows remain readable during the migration window
+// (per the dual-read design in secret_wrapper.go decryptFromStore).
+//
+// nil-safe: transit==nil falls back to the legacy single-path AES store.
+// Caller (setupStores) decides which path to take based on
+// cfg.CryptoMode(); fail-loud refusal already fired upstream in
+// config.Validate() so reaching this function with the wrong combination
+// is a programming error, not a runtime error.
+func setupSecretStore(dbAdapter *db.PgxAdapter, encKeyHex string, transit vault.Transit, logger *slog.Logger) (routes.SecretStore, error) {
 	var encKey []byte
 	if encKeyHex != "" {
 		var err error
@@ -106,6 +139,16 @@ func setupSecretStore(dbAdapter *db.PgxAdapter, encKeyHex string, logger *slog.L
 		if err != nil {
 			return nil, err
 		}
+	}
+	if transit != nil {
+		adapter := adapters.NewVaultTransitAdapter(transit)
+		store, err := db.NewPostgresSecretStoreWithVault(dbAdapter, adapter, encKey)
+		if err != nil {
+			return nil, err
+		}
+		logger.Info("secret store wired with openbao transit dispatch",
+			"legacy_aes_key_present", len(encKey) > 0)
+		return store, nil
 	}
 	return db.NewPostgresSecretStore(dbAdapter, encKey)
 }

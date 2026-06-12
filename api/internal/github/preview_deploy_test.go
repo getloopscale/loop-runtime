@@ -11,7 +11,6 @@ import (
 	"github.com/loopzero/loopzero/api/internal/db"
 	"github.com/loopzero/loopzero/api/internal/domain"
 	"github.com/loopzero/loopzero/api/internal/github/webhook"
-	"github.com/loopzero/loopzero/api/internal/routes"
 )
 
 // =============================================================================
@@ -19,7 +18,7 @@ import (
 // =============================================================================
 
 type fakePreviewSvc struct {
-	createCalls []routes.CreatePreviewRequest
+	createCalls []domain.CreatePreviewRequest
 	deleteCalls []deleteCall
 	createErr   error
 	deleteErr   error
@@ -31,7 +30,7 @@ type deleteCall struct {
 	prNumber  int
 }
 
-func (f *fakePreviewSvc) CreatePreview(_ context.Context, req routes.CreatePreviewRequest) (*domain.Preview, error) {
+func (f *fakePreviewSvc) CreatePreview(_ context.Context, req domain.CreatePreviewRequest) (*domain.Preview, error) {
 	f.createCalls = append(f.createCalls, req)
 	if f.createErr != nil {
 		return nil, f.createErr

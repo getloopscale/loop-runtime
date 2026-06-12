@@ -211,7 +211,22 @@ func (s *PostgresSecretStore) decrypt(encrypted, aad []byte) ([]byte, error) {
 // When vault present → Transit encrypt per-tenant (canonical post-T10).
 // Otherwise → legacy AES-256-GCM. Sprint D D3: AES path now binds tenantID
 // via AAD so cross-tenant ciphertext transplant fails auth.
+//
+// T2.5 wire-up (plan 2026-06-10-j22-openbao-transit-eso-sync v1.2): the
+// Bulk handler MAY pre-encrypt via h.transitClient.Encrypt (T2.3 contract).
+// When that happens and the store ALSO has s.vault wired (canonical
+// production wire-path), encrypting again here would produce a vault:v1:
+// envelope around an already-vault:v1: payload — DOUBLE ENCRYPT — and
+// the read dispatcher would unwrap only the outer layer, surfacing the
+// inner vault:v1:... string as "plaintext". Defense: detect the
+// vault:v1: prefix on input and pass-through; the row already carries
+// canonical ciphertext.
 func (s *PostgresSecretStore) encryptForStore(ctx context.Context, tenantID string, plaintext []byte) ([]byte, error) {
+	if bytesHasPrefix(plaintext, vaultPrefix) {
+		// Caller already encrypted via vault.Transit (T2.3 handler-layer).
+		// Pass-through — no double-encrypt.
+		return plaintext, nil
+	}
 	if s.vault != nil {
 		ct, err := s.vault.EncryptForTenant(ctx, tenantID, plaintext)
 		if err != nil {

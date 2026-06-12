@@ -50,17 +50,20 @@ export function registerEnvCommands(deps: CommandDeps): void {
 
   envCmd
     .command('create <name>')
-    .description('Create a new environment')
-    .action(async (name: string) => {
+    .description('Create a new environment (M2: --project required)')
+    .option('--project <name>', 'Project slug the environment belongs to (M2 v1.2 T6.1; REQUIRED post-M2)')
+    .action(async (name: string, cmdOpts: { project?: string }) => {
       const globalOpts = getGlobalOpts();
       const apiClient = new ApiClient({ baseURL: apiUrl, token: configStore.getToken() ?? undefined, onUnauthorized: handleUnauthorized });
 
       const cmd = new EnvCreateCommand({
         getToken: () => configStore.getToken(),
-        createEnvironment: async (envName: string) => {
+        // M2 v1.2 T6.1: project propagates from --project flag into the
+        // POST body so the canonical 3-segment namespace lands.
+        createEnvironment: async (envName: string, project: string) => {
           return apiClient.post<{ name: string; status: string }>(
             '/api/v1/environments',
-            { name: envName }
+            { name: envName, project }
           );
         },
         writeTo,
@@ -68,7 +71,7 @@ export function registerEnvCommands(deps: CommandDeps): void {
       });
 
       process.exitCode = await withTimeout(
-        cmd.execute(name, { json: globalOpts.json }),
+        cmd.execute(name, { json: globalOpts.json, project: cmdOpts.project }),
         API_REQUEST_TIMEOUT_MS + 10_000,
         'Environment create timed out. Check your connection and try again.',
       ).catch((err: Error) => {
@@ -86,23 +89,32 @@ export function registerEnvCommands(deps: CommandDeps): void {
     .description('Delete an environment and its deployed resources')
     .option('--confirm <name>', 'Confirm deletion by repeating the environment name (safer)')
     .option('--yes', 'Skip confirmation prompt (CI/scripts; consistent with other delete commands)')
-    .action(async (name: string, cmdOpts: { confirm?: string; yes?: boolean }) => {
+    .option('--project <name>', 'Project slug the environment belongs to (M2 v1.2 T6.1 — required for non-legacy envs)')
+    .action(async (name: string, cmdOpts: { confirm?: string; yes?: boolean; project?: string }) => {
       const globalOpts = getGlobalOpts();
       const apiClient = new ApiClient({ baseURL: apiUrl, token: configStore.getToken() ?? undefined, onUnauthorized: handleUnauthorized });
 
       const cmd = new EnvDeleteCommand({
         getToken: () => configStore.getToken(),
-        deleteEnvironment: async (envName: string) => {
-          await apiClient.del<void>(
-            `/api/v1/environments/${encodeURIComponent(envName)}`
-          );
+        // M2 v1.2 T6.1 expanded: append `?project=<slug>` when set so
+        // the backend filters by the (name, project) tuple. Empty
+        // project preserves the legacy production-only lookup.
+        deleteEnvironment: async (envName: string, project: string) => {
+          const url = `/api/v1/environments/${encodeURIComponent(envName)}`;
+          const query = project ? `?project=${encodeURIComponent(project)}` : '';
+          await apiClient.del<void>(`${url}${query}`);
         },
         writeTo,
         writeError,
       });
 
       process.exitCode = await withTimeout(
-        cmd.execute(name, { confirm: cmdOpts.confirm, yes: cmdOpts.yes, json: globalOpts.json }),
+        cmd.execute(name, {
+          confirm: cmdOpts.confirm,
+          yes: cmdOpts.yes,
+          json: globalOpts.json,
+          project: cmdOpts.project,
+        }),
         API_REQUEST_TIMEOUT_MS + 10_000,
         'Environment delete timed out. Check your connection and try again.',
       ).catch((err: Error) => {

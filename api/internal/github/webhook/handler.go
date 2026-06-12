@@ -21,6 +21,8 @@ import (
 	"go.opentelemetry.io/otel"
 	"go.opentelemetry.io/otel/attribute"
 	"go.opentelemetry.io/otel/trace"
+
+	"github.com/loopzero/loopzero/api/internal/metrics"
 )
 
 const (
@@ -99,11 +101,27 @@ func (h *Handler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	eventType := r.Header.Get(eventHeader)
 	signature := r.Header.Get(signatureHeader)
 
-	log := h.logger.With("delivery_id", deliveryID, "event", eventType)
+	// Plan J-09 T4.1 (2026-06-05): wire X-GitHub-Delivery as the
+	// correlation_id so downstream logs (autodeploy, build submit,
+	// release activation) share a single key per delivery. Falls back
+	// to any X-Correlation-Id a front-proxy already injected.
+	correlationID := deliveryID
+	if correlationID == "" {
+		correlationID = r.Header.Get("X-Correlation-Id")
+	}
+	log := h.logger.With(
+		"delivery_id", deliveryID,
+		"event", eventType,
+		"correlation_id", correlationID,
+	)
 
 	// Validate signature presence
 	if signature == "" {
 		log.Warn("webhook: missing signature header")
+		// Plan J-09 T4.2: status=invalid_signature so SLO queries can
+		// surface attacker probes / misconfigured secret separately
+		// from real traffic.
+		metrics.GitHubWebhookDeliveriesTotal.WithLabelValues(eventType, "invalid_signature").Inc()
 		http.Error(w, "Missing signature", http.StatusUnauthorized)
 		return
 	}
@@ -112,6 +130,7 @@ func (h *Handler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	body, err := io.ReadAll(io.LimitReader(r.Body, maxBodySize))
 	if err != nil {
 		log.Error("webhook: read body failed", "error", err)
+		metrics.GitHubWebhookDeliveriesTotal.WithLabelValues(eventType, "read_error").Inc()
 		http.Error(w, "Bad request", http.StatusBadRequest)
 		return
 	}
@@ -119,6 +138,7 @@ func (h *Handler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	// Validate HMAC-SHA256
 	if !h.validateSignature(body, signature) {
 		log.Warn("webhook: invalid signature")
+		metrics.GitHubWebhookDeliveriesTotal.WithLabelValues(eventType, "invalid_signature").Inc()
 		http.Error(w, "Invalid signature", http.StatusForbidden)
 		return
 	}
@@ -139,6 +159,7 @@ func (h *Handler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 			log.Warn("webhook: dedup check failed (processing anyway)", "error", dedupErr)
 		} else if isDup {
 			log.Info("webhook: duplicate delivery, skipping")
+			metrics.GitHubWebhookDeliveriesTotal.WithLabelValues(eventType, "duplicate").Inc()
 			w.WriteHeader(http.StatusOK)
 			_, _ = fmt.Fprintf(w, `{"ok":true,"duplicate":true}`)
 			return
@@ -147,6 +168,7 @@ func (h *Handler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 
 	// Dispatch event (async — return 200 immediately)
 	// Errors are logged, not returned to GitHub.
+	metrics.GitHubWebhookDeliveriesTotal.WithLabelValues(eventType, "accepted").Inc()
 	go h.dispatch(eventType, body, log)
 
 	w.WriteHeader(http.StatusOK)

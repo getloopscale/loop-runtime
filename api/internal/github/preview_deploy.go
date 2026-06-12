@@ -43,9 +43,23 @@ type RepoLookup interface {
 // Rule: only repos where `auto_deploy = true` are processed. This is the
 // same gate auto-deploy on push uses, ensuring connect → disconnect
 // transitions are observed by both flows uniformly.
+// SourceBundlePreparer prepares the source bundle on S3 for a commit
+// before the preview build runs AND returns the parsed loopzero.yaml so
+// the preview deployer can pass apps with framework/path/build to the
+// build orchestrator (resolves LanguageStrategy to language-aware
+// step names; LIVE catch 2026-06-07 J-23 bug #3).
+//
+// nil LoopZeroYamlMinimal returned = no loopzero.yaml in repo (preview build
+// will fail noisily — log + warn upstream).
+// Subset of AutoDeployer; kept narrow for testability.
+type SourceBundlePreparer interface {
+	PrepareSourceBundle(ctx context.Context, repoFullName, commitSHA string, installationID int64, tenantID string) (*LoopZeroYamlMinimal, error)
+}
+
 type PreviewDeployer struct {
 	previewService PreviewLifecycleService
 	repoStore      RepoLookup
+	bundlePrep     SourceBundlePreparer // optional but required for real builds
 	logger         *slog.Logger
 }
 
@@ -59,6 +73,13 @@ func NewPreviewDeployer(svc PreviewLifecycleService, repoStore RepoLookup, logge
 		repoStore:      repoStore,
 		logger:         logger,
 	}
+}
+
+// WithBundlePreparer wires the SourceBundlePreparer dep so PR webhooks
+// upload the source bundle to S3 before the preview build runs.
+func (d *PreviewDeployer) WithBundlePreparer(p SourceBundlePreparer) *PreviewDeployer {
+	d.bundlePrep = p
+	return d
 }
 
 // HandlePR is registered as the webhook handler's OnPullRequest callback.
@@ -154,6 +175,28 @@ func (d *PreviewDeployer) handleCreate(
 		InstallationID: event.Installation.ID,
 	}
 	req.SetTenantID(repo.TenantID)
+
+	// LIVE catch 2026-06-07 J-23: pre-flight the source bundle upload to
+	// S3 BEFORE asking the preview service to submit the build. Without
+	// this, the build clone-repo step fails with "Object does not exist".
+	// ALSO returns the parsed loopzero.yaml so we can hand framework/path/build
+	// to the orchestrator (drives LanguageStrategy step naming).
+	if d.bundlePrep != nil {
+		loopzeroYaml, prepErr := d.bundlePrep.PrepareSourceBundle(ctx,
+			event.Repository.FullName, commit, event.Installation.ID, repo.TenantID,
+		)
+		if prepErr != nil {
+			log.Error("preview deploy: source bundle prep failed", "error", prepErr)
+			return fmt.Errorf("preview deploy bundle: %w", prepErr)
+		}
+		log.Info("preview deploy: source bundle uploaded", "commit", short(commit))
+		if loopzeroYaml != nil {
+			req.LoopZeroYamlApps = loopzeroYaml.Apps
+			log.Info("preview deploy: loopzero.yaml apps inherited", "apps", len(loopzeroYaml.Apps))
+		}
+	} else {
+		log.Warn("preview deploy: no bundle preparer wired; build will likely fail at clone-repo")
+	}
 
 	preview, err := d.previewService.CreatePreview(ctx, req)
 	if err != nil {

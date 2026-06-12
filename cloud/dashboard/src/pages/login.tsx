@@ -8,7 +8,7 @@ import {
   CodeBlock,
   FormField,
   Input,
-} from '@loopzerokit/ui';
+} from '@loopzero/ui';
 import { GoogleBrandIcon } from '@/components/google-brand-icon';
 import { getSession, startLogin } from '@/lib/auth';
 import { clearToken } from '@/lib/api';
@@ -87,7 +87,7 @@ export function classifyKratosErrorReason(
 
 export function LoginPage() {
   const navigate = useNavigate();
-  const [searchParams] = useSearchParams();
+  const [searchParams, setSearchParams] = useSearchParams();
   const [flow, setFlow] = useState<Flow | null>(null);
   const [loading, setLoading] = useState(true);
   const [email, setEmail] = useState('');
@@ -132,30 +132,71 @@ export function LoginPage() {
   }, [navigate]);
 
   useEffect(() => {
+    if (loading) return;
+
+    // T6.1 of plan 2026-06-08-pre-release-test-rigor — defense-in-depth flow
+    // hydration. Kratos rejects flows that are stale (TTL expired) OR whose
+    // CSRF cookie no longer matches (rotated config, cleared cookies, new
+    // browser session). When this happens, returning `null` from the fetch
+    // chain left the UI in a phantom state with no way to recover. Canonical
+    // FAANG fix: detect stale-flow responses (403 / 404 / 410 / 422 OR JSON
+    // without ui.action) and silently fall back to /self-service/login/browser
+    // which issues a fresh flow ID + new CSRF cookie. The stale `?flow=` in
+    // the URL is replaced so refreshes don't re-trigger the broken path.
     const flowId = searchParams.get('flow');
-    if (flowId) {
-      fetch(`${KRATOS_URL}/self-service/login/flows?id=${flowId}`, {
-        credentials: 'include',
-        headers: { Accept: 'application/json' },
-      })
-        .then((r) => (r.ok ? r.json() : null))
-        .then((f) => {
-          if (f) setFlow(f);
-        })
-        .catch(() => {});
-    } else if (!loading) {
-      fetch(`${KRATOS_URL}/self-service/login/browser`, {
+
+    const hydrateFresh = async () => {
+      const res = await fetch(`${KRATOS_URL}/self-service/login/browser`, {
         credentials: 'include',
         headers: { Accept: 'application/json' },
         redirect: 'follow',
-      })
-        .then((r) => (r.ok ? r.json() : null))
-        .then((f) => {
-          if (f?.ui) setFlow(f);
+      });
+      if (!res.ok) return null;
+      const body = (await res.json().catch(() => null)) as Flow | null;
+      if (body?.ui?.action && body.id) {
+        // Mirror the fresh flow id into the URL so reload doesn't re-hit the
+        // stale id. `replace: true` keeps history clean.
+        setSearchParams({ flow: body.id }, { replace: true });
+        return body;
+      }
+      return null;
+    };
+
+    const hydrate = async () => {
+      if (flowId) {
+        const res = await fetch(
+          `${KRATOS_URL}/self-service/login/flows?id=${flowId}`,
+          {
+            credentials: 'include',
+            headers: { Accept: 'application/json' },
+          },
+        );
+        // 403 CSRF / 404 not found / 410 expired / 422 OIDC validation —
+        // all signal "stale; rebuild from scratch".
+        if (res.ok) {
+          const body = (await res.json().catch(() => null)) as Flow | null;
+          if (body?.ui?.action) {
+            setFlow(body);
+            return;
+          }
+        }
+        const fresh = await hydrateFresh();
+        if (fresh) setFlow(fresh);
+        return;
+      }
+      const fresh = await hydrateFresh();
+      if (fresh) setFlow(fresh);
+    };
+
+    hydrate().catch(() => {
+      // Last-resort fallback: try once more without flow param.
+      hydrateFresh()
+        .then((fresh) => {
+          if (fresh) setFlow(fresh);
         })
         .catch(() => {});
-    }
-  }, [searchParams, loading]);
+    });
+  }, [searchParams, loading, setSearchParams]);
 
   /**
    * emitAuthTelemetry — FAANG-grade observable auth funnel.

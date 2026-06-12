@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from 'react';
-import { Pause, Play, Trash2 } from 'lucide-react';
-import { Badge, Button, Input } from '@loopzerokit/ui';
+import { Pause, Play, RefreshCw, Trash2 } from 'lucide-react';
+import { Badge, Button, Input } from '@loopzero/ui';
 import type { LogLine, LogLevel } from '@/lib/api/types';
 
 interface LogViewerProps {
@@ -10,6 +10,11 @@ interface LogViewerProps {
   paused: boolean;
   onTogglePause: () => void;
   onClear: () => void;
+  // J-17 pattern #5 canonical (lessons-learned 2026-06-06):
+  // REST + SSE coexistem; toda página com SSE expõe Refresh manual button.
+  // Optional para back-compat — sem props o botão simplesmente não renderiza.
+  onRefresh?: () => void;
+  refreshing?: boolean;
 }
 
 const LEVEL_COLOR: Record<LogLevel, string> = {
@@ -56,6 +61,8 @@ export function LogViewer({
   paused,
   onTogglePause,
   onClear,
+  onRefresh,
+  refreshing = false,
 }: LogViewerProps) {
   const [search, setSearch] = useState('');
   const [levelFilter, setLevelFilter] = useState<'all' | LogLevel>('all');
@@ -113,6 +120,29 @@ export function LogViewer({
           >
             {error ? 'Disconnected' : connected ? 'Live' : 'Connecting…'}
           </Badge>
+          {/* Refresh — explicit re-fetch of historical lines via REST.
+              SSE keeps streaming live lines in background; this button
+              forces a fresh GET /logs to re-snapshot retained chunks
+              (useful after backfill OR after build transitioned terminal
+              and the workflow Pod was reaped). Per J-17 pattern #5
+              canonical (lessons-learned 2026-06-06): REST + SSE coexistem;
+              Refresh manual obrigatório. Icon spins durante isFetching;
+              disabled prevents click storms. */}
+          {onRefresh && (
+            <Button
+              variant="ghost"
+              size="sm"
+              onClick={onRefresh}
+              disabled={refreshing}
+              aria-label="Refresh log buffer"
+              title="Refresh"
+            >
+              <RefreshCw
+                className={`size-4 ${refreshing ? 'animate-spin' : ''}`}
+                aria-hidden="true"
+              />
+            </Button>
+          )}
           <Button
             variant="ghost"
             size="sm"

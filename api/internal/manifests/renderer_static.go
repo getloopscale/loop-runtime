@@ -17,7 +17,7 @@ import "fmt"
 // The Middleware adds the S3 path prefix so nginx proxies to the correct build's assets.
 // SPA routing handled by nginx config (404 → index.html fallback).
 func renderStaticFrontendApp(ri RenderInput, app AppManifestInput) []string {
-	ns := namespace(ri.TenantID, ri.Environment)
+	ns := namespace(ri.TenantID, ri.ProjectID, ri.Environment)
 	labels := commonLabels(ri, app)
 	resName := resourceName(ri.ProjectID, app.Name)
 	// Same hostname format as container apps — NO static. prefix (DX VETO from MEET-011)

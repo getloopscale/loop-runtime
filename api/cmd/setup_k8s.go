@@ -16,6 +16,7 @@ import (
 // K8sDeps holds Kubernetes client managers used by the API server.
 type K8sDeps struct {
 	TenantCRMgr   *k8s.TenantCRManager
+	PreviewCRMgr  *k8s.PreviewCRManager
 	AppCRMgr      services.ApplicationCREnsurer
 	SecretK8sSync routes.SecretK8sSync
 }
@@ -44,8 +45,14 @@ func setupK8s(cfg config.Config, logger *slog.Logger) (*K8sDeps, error) {
 		secretK8sSync = mgr
 	}
 
+	// Preview CR manager — creates/queries PreviewEnvironment CRs on
+	// mgmt cluster. Shares the same dynamic client + namespace as
+	// TenantCRManager (both target loopzero-system in the mgmt cluster).
+	previewCRMgr := k8s.NewPreviewCRManager(tenantCRMgr.Client)
+
 	return &K8sDeps{
 		TenantCRMgr:   tenantCRMgr,
+		PreviewCRMgr:  previewCRMgr,
 		AppCRMgr:      appCRMgr,
 		SecretK8sSync: secretK8sSync,
 	}, nil

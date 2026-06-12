@@ -43,6 +43,15 @@ type Config struct {
 	ProjectStore       routes.ProjectStore
 	TenantCRMgr        routes.TenantCRManager
 	ProjectDeleter     routes.ProjectDeleter
+	// T4.1 of plan 2026-06-09-m2-operator-canonical-fix v1.4 (ADR D4):
+	// optional EnvironmentEnsurer wired into the project Create handler
+	// so every new project gets a `production` env auto-created. Reuses
+	// the same EnvironmentEnsurer interface (and concrete
+	// services.EnvironmentEnsurer implementation) already wired by the
+	// build handler — single source of truth for env creation / PG
+	// environments row writes. nil-safe: when nil, ProjectHandler.Create
+	// behaves identically to the pre-T4.1 handler (TestProjectCreate_BackwardCompatNoEnsurer).
+	ProjectEnvEnsurer  routes.EnvironmentEnsurer
 	IdempotencyStore   middleware.IdempotencyStore
 	SourceStore        source.SourceStore
 	ObjectUploader     routes.ObjectUploader // optional: upload bundles to S3/Spaces for build access
@@ -98,6 +107,31 @@ type Config struct {
 	// orchestrators. nil-safe: when nil, SecretHandler falls back to
 	// the legacy non-locked path (test-friendly).
 	SecretEnvLocker         routes.SecretEnvLocker
+	// SecretProjectChecker injects the cross-tenant binding check (T1.2 of
+	// plan 2026-06-10-j22-openbao-transit-eso-sync v1.2). When wired, Bulk
+	// resolves the requested project's owning tenant via the tenant-scoped
+	// GetByName and returns 404 PROJECT_NOT_FOUND for cross-tenant attempts
+	// AND for nonexistent projects — byte-identical response (EC-03
+	// existence-leak prevention / CWE-204 defense). nil-safe: when nil,
+	// Bulk skips the check (legacy/test path). Production wires the
+	// existing *db.PostgresProjectStore directly (signature matches).
+	SecretProjectChecker    routes.SecretProjectChecker
+	// SecretTransit injects the OpenBao transit encrypt path into the Bulk
+	// handler (T2.3+T2.5 of plan 2026-06-10-j22-openbao-transit-eso-sync
+	// v1.2). When wired, Bulk encrypts every entry.Value via Encrypt
+	// BEFORE invoking store.Set so PG never receives plaintext bytes —
+	// even if the store has its own vault dispatch (which it does in
+	// the canonical wire path), encryptForStore detects the vault:v1:
+	// prefix and passes through (no double-encrypt). Production wires
+	// the same *vault.TransitClient that the secret store dispatches
+	// through; nil disables the handler-layer encrypt (legacy AES path).
+	SecretTransit           routes.SecretTransit
+	// SecretFetchHandler exposes /internal/v1/secret-fetch/{tenant_id}/{name}
+	// for ESO ClusterSecretStore webhook backend to resolve secrets via
+	// loopzero-api (T4.1 of openbao-adoption v1.3). Wired by setup_secret_fetch.go
+	// in api/cmd/. nil-safe: when nil, route is not registered (LIVE 404 ⇒
+	// ESO retries with backoff — safer than registering a broken handler).
+	SecretFetchHandler      http.HandlerFunc
 	EnvironmentHandler      *routes.EnvironmentHandler
 	TeamHandler             *routes.TeamHandler
 	// AUDIT-10: narrow store for /whoami username lookup. Nil is legal (handler
@@ -109,6 +143,8 @@ type Config struct {
 	DomainHandler           *routes.DomainHandler
 	GitHubWebhookHandler    http.Handler
 	RepositoryHandler       *routes.RepositoryHandler
+	// Plan J-09 T2.1 (2026-06-05): dashboard repo picker source.
+	IntegrationsGitHubHandler *routes.IntegrationsGitHubHandler
 	PreviewHandler          *routes.PreviewHandler // Sprint 5 / T2.3 — preview environments
 	IsProduction            bool
 	AuditWriter             middleware.AuditWriter

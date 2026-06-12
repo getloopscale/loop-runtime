@@ -1,5 +1,5 @@
 import { Rocket } from 'lucide-react';
-import { Button, Card, CodeBlock, CopyButton } from '@loopzerokit/ui';
+import { Button, Card, CodeBlock, CopyButton } from '@loopzero/ui';
 
 /**
  * EmptyProjectsHero (Sprint 3 T3.3) — Vercel-style empty-state-as-onboarding.

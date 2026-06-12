@@ -9,6 +9,23 @@ import (
 	"context"
 )
 
+const countPermanentEnvironments = `-- name: CountPermanentEnvironments :one
+SELECT COUNT(DISTINCT environment)::int FROM environment_targets
+WHERE tenant_id = $1 AND kind = 'permanent'
+`
+
+// D5 (Bug A fix): enforcement-facing count. Returns the number of DISTINCT
+// permanent environments a tenant has across all projects. Used by
+// pkg/enforcement/limiter.go to gate POST /api/v1/environments against the
+// plan_limits.environments cap. Preview environments are NOT counted —
+// they are managed under the single-slot model (preview_slot table).
+func (q *Queries) CountPermanentEnvironments(ctx context.Context, db DBTX, tenantID string) (int32, error) {
+	row := db.QueryRow(ctx, countPermanentEnvironments, tenantID)
+	var column_1 int32
+	err := row.Scan(&column_1)
+	return column_1, err
+}
+
 const deleteEnvironmentTarget = `-- name: DeleteEnvironmentTarget :exec
 DELETE FROM environment_targets
 WHERE tenant_id = $1 AND project_id = $2 AND environment = $3
@@ -27,9 +44,33 @@ func (q *Queries) DeleteEnvironmentTarget(ctx context.Context, db DBTX, arg Dele
 	return err
 }
 
+const deleteEnvironmentTargetsByKind = `-- name: DeleteEnvironmentTargetsByKind :exec
+DELETE FROM environment_targets
+WHERE tenant_id = $1 AND project_id = $2 AND environment = $3 AND kind = $4
+`
+
+type DeleteEnvironmentTargetsByKindParams struct {
+	TenantID    string `json:"tenant_id"`
+	ProjectID   string `json:"project_id"`
+	Environment string `json:"environment"`
+	Kind        string `json:"kind"`
+}
+
+// D6 cleanup chain: used by PreviewService.DeletePreviewByPR to remove
+// preview rows on PR close. Idempotent (DELETE matches 0 or 1 row).
+func (q *Queries) DeleteEnvironmentTargetsByKind(ctx context.Context, db DBTX, arg DeleteEnvironmentTargetsByKindParams) error {
+	_, err := db.Exec(ctx, deleteEnvironmentTargetsByKind,
+		arg.TenantID,
+		arg.ProjectID,
+		arg.Environment,
+		arg.Kind,
+	)
+	return err
+}
+
 const getEnvironmentTarget = `-- name: GetEnvironmentTarget :one
 SELECT tenant_id, project_id, environment, desired_release_id,
-       active_release_id, updated_by, correlation_id, updated_at
+       active_release_id, updated_by, correlation_id, updated_at, kind
 FROM environment_targets
 WHERE tenant_id = $1 AND project_id = $2 AND environment = $3
 `
@@ -41,7 +82,9 @@ type GetEnvironmentTargetParams struct {
 }
 
 // Tenant-scoped lookup. NoRows → wrapper returns (nil, nil) per
-// legacy contract.
+// legacy contract. SELECT * to keep Row type aliased to
+// generated.EnvironmentTarget (sqlc inlines when select-list ==
+// table). Includes `kind` for D5 enforcement + D7 API merge.
 func (q *Queries) GetEnvironmentTarget(ctx context.Context, db DBTX, arg GetEnvironmentTargetParams) (EnvironmentTarget, error) {
 	row := db.QueryRow(ctx, getEnvironmentTarget, arg.TenantID, arg.ProjectID, arg.Environment)
 	var i EnvironmentTarget
@@ -54,13 +97,14 @@ func (q *Queries) GetEnvironmentTarget(ctx context.Context, db DBTX, arg GetEnvi
 		&i.UpdatedBy,
 		&i.CorrelationID,
 		&i.UpdatedAt,
+		&i.Kind,
 	)
 	return i, err
 }
 
 const listEnvironmentTargetsByProject = `-- name: ListEnvironmentTargetsByProject :many
 SELECT tenant_id, project_id, environment, desired_release_id,
-       active_release_id, updated_by, correlation_id, updated_at
+       active_release_id, updated_by, correlation_id, updated_at, kind
 FROM environment_targets
 WHERE tenant_id = $1 AND project_id = $2
 `
@@ -71,7 +115,8 @@ type ListEnvironmentTargetsByProjectParams struct {
 }
 
 // Tenant + project scoped listing. Empty result → empty slice (not
-// nil) per legacy contract.
+// nil) per legacy contract. SELECT includes `kind` (see
+// GetEnvironmentTarget rationale).
 func (q *Queries) ListEnvironmentTargetsByProject(ctx context.Context, db DBTX, arg ListEnvironmentTargetsByProjectParams) ([]EnvironmentTarget, error) {
 	rows, err := db.Query(ctx, listEnvironmentTargetsByProject, arg.TenantID, arg.ProjectID)
 	if err != nil {
@@ -90,10 +135,40 @@ func (q *Queries) ListEnvironmentTargetsByProject(ctx context.Context, db DBTX, 
 			&i.UpdatedBy,
 			&i.CorrelationID,
 			&i.UpdatedAt,
+			&i.Kind,
 		); err != nil {
 			return nil, err
 		}
 		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const listPermanentEnvironments = `-- name: ListPermanentEnvironments :many
+SELECT DISTINCT environment FROM environment_targets
+WHERE tenant_id = $1 AND kind = 'permanent'
+ORDER BY environment
+`
+
+// D7 helper (Bug B fix): dashboard /environments grid lists DISTINCT
+// permanent envs for a tenant. Preview slot is fetched via GetPreviewSlot
+// and merged on the API side into the {permanent[], preview{}} response.
+func (q *Queries) ListPermanentEnvironments(ctx context.Context, db DBTX, tenantID string) ([]string, error) {
+	rows, err := db.Query(ctx, listPermanentEnvironments, tenantID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []string
+	for rows.Next() {
+		var environment string
+		if err := rows.Scan(&environment); err != nil {
+			return nil, err
+		}
+		items = append(items, environment)
 	}
 	if err := rows.Err(); err != nil {
 		return nil, err
@@ -164,6 +239,48 @@ type UpsertEnvironmentTargetDesiredParams struct {
 // DO UPDATE clause (legacy duplicated $4-6 / $7-9 form preserved).
 func (q *Queries) UpsertEnvironmentTargetDesired(ctx context.Context, db DBTX, arg UpsertEnvironmentTargetDesiredParams) error {
 	_, err := db.Exec(ctx, upsertEnvironmentTargetDesired,
+		arg.TenantID,
+		arg.ProjectID,
+		arg.Environment,
+		arg.DesiredReleaseID,
+		arg.UpdatedBy,
+		arg.CorrelationID,
+	)
+	return err
+}
+
+const upsertPreviewEnvironmentTarget = `-- name: UpsertPreviewEnvironmentTarget :exec
+INSERT INTO environment_targets (
+  tenant_id, project_id, environment, kind,
+  desired_release_id, updated_by, correlation_id
+) VALUES (
+  $1, $2, $3, 'preview', $4, $5, $6
+)
+ON CONFLICT (tenant_id, project_id, environment)
+DO UPDATE SET
+  desired_release_id = $4,
+  updated_by         = $5,
+  correlation_id     = $6,
+  updated_at         = NOW()
+`
+
+type UpsertPreviewEnvironmentTargetParams struct {
+	TenantID         string `json:"tenant_id"`
+	ProjectID        string `json:"project_id"`
+	Environment      string `json:"environment"`
+	DesiredReleaseID string `json:"desired_release_id"`
+	UpdatedBy        string `json:"updated_by"`
+	CorrelationID    string `json:"correlation_id"`
+}
+
+// D2 (plan 2026-06-07-preview-as-category): explicit kind='preview' insert.
+// Used by PreviewService when the preview build commits a release. The
+// `kind` column is immutable post-create (D2 consequence) — repeat inserts
+// for the same (tenant, project, environment) update release tracking but
+// keep kind='preview'. Distinct from UpsertEnvironmentTargetDesired which
+// defaults kind='permanent'.
+func (q *Queries) UpsertPreviewEnvironmentTarget(ctx context.Context, db DBTX, arg UpsertPreviewEnvironmentTargetParams) error {
+	_, err := db.Exec(ctx, upsertPreviewEnvironmentTarget,
 		arg.TenantID,
 		arg.ProjectID,
 		arg.Environment,

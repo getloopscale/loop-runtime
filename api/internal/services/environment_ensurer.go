@@ -25,8 +25,13 @@ type EnvironmentLister interface {
 // creates the Environment on the Tenant CR (which triggers operator reconcile
 // to create namespace + ArgoCD App+AppProject).
 // Implemented by routes.EnvironmentManager (AddEnvironment).
+//
+// M2 v1.2 (2026-06-07): `project` is propagated end-to-end so the Tenant CR
+// spec.environments entry carries the field expected by the canonical
+// 3-segment namespace `loopzero-<tenant>-<project>-<env>`. Empty project
+// preserves the legacy 2-segment behaviour (ADR D2 — production legacy).
 type EnvironmentAdder interface {
-	AddEnvironment(ctx context.Context, tenantID, envName string) error
+	AddEnvironment(ctx context.Context, tenantID, project, envName string) error
 }
 
 // EnvironmentReadinessChecker is the deep-readiness side: queries the
@@ -46,7 +51,12 @@ type EnvironmentAdder interface {
 // destinations hadn't been updated by tenant-controller yet. See
 // environment_cr_reader.go for the canonical implementation.
 type EnvironmentReadinessChecker interface {
-	IsReady(ctx context.Context, tenantID, envName string) (bool, error)
+	// M2 v1.2: `project` selects the canonical 3-segment namespace
+	// `loopzero-<tenant>-<project>-<env>` whose Environment CR
+	// `status.phase` is probed. Empty project preserves the legacy
+	// 2-segment lookup (`loopzero-<tenant>-<env>`) for production-legacy
+	// tuples (ADR D2).
+	IsReady(ctx context.Context, tenantID, project, envName string) (bool, error)
 }
 
 // EnvironmentEnsurer auto-creates an Environment if it doesn't exist for
@@ -79,7 +89,7 @@ type EnvironmentEnsurer struct {
 //   - LoopZeroError(INVALID_ENV_NAME) if the name fails defensive validation
 //   - LoopZeroError(ENV_PROVISION_TIMEOUT) if operator doesn't reconcile in WaitTimeout
 //   - LoopZeroError(ENV_PROVISION_FAILED) wrapping the underlying error otherwise
-func (e *EnvironmentEnsurer) EnsureEnvironment(ctx context.Context, tenantID, envName string) error {
+func (e *EnvironmentEnsurer) EnsureEnvironment(ctx context.Context, tenantID, project, envName string) error {
 	if e == nil {
 		return nil
 	}
@@ -89,6 +99,11 @@ func (e *EnvironmentEnsurer) EnsureEnvironment(ctx context.Context, tenantID, en
 	}
 
 	// 1. Cheap existence check — idempotent no-op for pre-existing envs.
+	// M2 v1.2 NOTE: HasEnvironment signature carries env-only by design.
+	// The Lister (TenantCRManager.GetEnvironmentDetail-derived) returns
+	// existence for the tenant-wide env name; per-(project, env) tuple
+	// uniqueness is enforced at AddEnvironment via the operator (Tenant
+	// CR JSON patch). The shallow check is intentionally project-agnostic.
 	exists, err := e.Lister.HasEnvironment(ctx, tenantID, envName)
 	if err == nil && exists {
 		return nil
@@ -96,11 +111,14 @@ func (e *EnvironmentEnsurer) EnsureEnvironment(ctx context.Context, tenantID, en
 	// Lister error is non-fatal (we'll attempt create idempotently).
 	if err != nil && e.Logger != nil {
 		e.Logger.Warn("env ensurer: existence check failed (proceeding to create)",
-			"tenant_id", tenantID, "env", envName, "error", err)
+			"tenant_id", tenantID, "project", project, "env", envName, "error", err)
 	}
 
 	// 2. Create — idempotent at the Tenant CR layer (server-side merge).
-	if err := e.Adder.AddEnvironment(ctx, tenantID, envName); err != nil {
+	// M2 v1.2: project is propagated so the Tenant CR
+	// spec.environments entry carries the project field used by the
+	// operator to compute the canonical 3-segment namespace.
+	if err := e.Adder.AddEnvironment(ctx, tenantID, project, envName); err != nil {
 		// AddEnvironment may return a "already exists" sentinel; treat as success.
 		if isAlreadyExistsError(err) {
 			return nil
@@ -159,12 +177,12 @@ func (e *EnvironmentEnsurer) EnsureEnvironment(ctx context.Context, tenantID, en
 			if e.ReadinessChecker == nil {
 				return nil
 			}
-			ready, rerr := e.ReadinessChecker.IsReady(waitCtx, tenantID, envName)
+			ready, rerr := e.ReadinessChecker.IsReady(waitCtx, tenantID, project, envName)
 			if rerr != nil {
 				// Treat readiness errors as transient — keep polling.
 				if e.Logger != nil {
 					e.Logger.Warn("env ensurer: readiness check error (continuing poll)",
-						"tenant_id", tenantID, "env", envName, "error", rerr)
+						"tenant_id", tenantID, "project", project, "env", envName, "error", rerr)
 				}
 				continue
 			}
@@ -196,7 +214,7 @@ var _ environmentEnsurerContract = (*EnvironmentEnsurer)(nil)
 // here to avoid cyclic import; the signatures MUST match (verified via
 // the compile-time guard above).
 type environmentEnsurerContract interface {
-	EnsureEnvironment(ctx context.Context, tenantID, envName string) error
+	EnsureEnvironment(ctx context.Context, tenantID, project, envName string) error
 }
 
 // Sentinel error for tests + callers that want explicit detection.

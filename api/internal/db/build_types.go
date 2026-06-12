@@ -126,6 +126,11 @@ type BuildStore interface {
 	GetBuildApps(ctx context.Context, buildID string) ([]BuildAppSpec, error)
 	ListByProject(ctx context.Context, tenantID, projectID string, limit, offset int) ([]Build, error)
 	ListByProjectAndEnv(ctx context.Context, tenantID, projectID, env string, limit, offset int) ([]Build, int, error)
+	// ListEnvsForProject returns the distinct env names the project has
+	// at least one build for, ordered by most-recent build per env DESC.
+	// Empty slice (not nil) for cold projects. Post plan
+	// 2026-06-08-dashboard-screens-review-fixes T2.2 + ADR D3.
+	ListEnvsForProject(ctx context.Context, tenantID, projectName string) ([]string, error)
 	// FindActiveBuilds returns QUEUED/RUNNING/RELEASING builds
 	// belonging to the given cell (roadmap 03). Pass CellDefault for
 	// single-cell / backward compatible behavior.

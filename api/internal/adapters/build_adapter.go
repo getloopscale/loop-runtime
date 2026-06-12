@@ -10,6 +10,7 @@ import (
 	"github.com/loopzero/loopzero/api/internal/db"
 	"github.com/loopzero/loopzero/api/internal/routes"
 	"github.com/loopzero/loopzero/api/internal/services"
+	loopzeroerrors "github.com/loopzero/loopzero/pkg/errors"
 	"github.com/loopzero/loopzero/pkg/statemachine"
 )
 
@@ -147,4 +148,59 @@ func (a *BuildOrchestratorAdapter) GetBuildTenantID(ctx context.Context, buildID
 		return "", err
 	}
 	return build.TenantID, nil
+}
+
+// GetRedeploySource — Plan J-17 T6.4. Returns the params needed to
+// resubmit the source build as a redeploy. Verifies tenant ownership
+// AND that the source build reached a terminal state (otherwise the
+// dashboard would race the in-flight build's own concurrent-build
+// guard).
+//
+// The source's apps_spec is converted back to AppInput. Path /
+// Framework / Build cannot be recovered because the schema does not
+// persist them; loopzero-packs autodetect at build time covers the
+// single-app monorepo case (the dominant Vercel-grade use case).
+// Multi-app monorepos with non-root app paths need a schema migration
+// to persist Path — tracked as a follow-up.
+func (a *BuildOrchestratorAdapter) GetRedeploySource(ctx context.Context, tenantID, buildID string) (*routes.RedeploySource, error) {
+	build, err := a.BuildStore.GetByIDForTenant(ctx, tenantID, buildID)
+	if err != nil {
+		return nil, err
+	}
+	if !statemachine.IsBuildPhaseTerminal(statemachine.BuildPhase(build.Status)) {
+		return nil, loopzeroerrors.NewLoopZeroError(
+			"BUILD_NOT_TERMINAL",
+			"Cannot redeploy a build that is still in progress. Wait for it to finish first.",
+			409,
+		)
+	}
+	specs, specErr := a.BuildStore.GetBuildApps(ctx, buildID)
+	if specErr != nil {
+		return nil, specErr
+	}
+	apps := make([]routes.AppInput, 0, len(specs))
+	for _, s := range specs {
+		ai := routes.AppInput{
+			Name:      s.Name,
+			Type:      s.Type,
+			Port:      s.Port,
+			Rendering: s.Rendering,
+			Secrets:   s.Secrets,
+			Replicas:  s.Replicas,
+		}
+		if s.Autoscaling != nil {
+			ai.Autoscaling = &routes.AppAutoscalingInput{
+				Min:       s.Autoscaling.MinReplicas,
+				Max:       s.Autoscaling.MaxReplicas,
+				TargetCPU: s.Autoscaling.TargetCPU,
+			}
+		}
+		apps = append(apps, ai)
+	}
+	return &routes.RedeploySource{
+		ProjectID:   build.ProjectID,
+		Environment: build.Environment,
+		CommitSHA:   build.CommitSHA,
+		Apps:        apps,
+	}, nil
 }

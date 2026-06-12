@@ -212,6 +212,29 @@ func (f *FakeArgoCDProvisioner) DeleteAppProject(_ context.Context, tenantID str
 	return nil
 }
 
+// ListApplicationNames returns the names of every Application labeled with
+// the given tenantID. #71 fake mirror of RealProvisioner behaviour.
+func (f *FakeArgoCDProvisioner) ListApplicationNames(_ context.Context, tenantID string) ([]string, error) {
+	f.Mu.Lock()
+	defer f.Mu.Unlock()
+	names := make([]string, 0)
+	for name, app := range f.Applications {
+		if app.TenantID == tenantID {
+			names = append(names, name)
+		}
+	}
+	return names, nil
+}
+
+// DeleteApplication removes a SINGLE Application by name. Idempotent.
+// #71 fake mirror.
+func (f *FakeArgoCDProvisioner) DeleteApplication(_ context.Context, appName string) error {
+	f.Mu.Lock()
+	defer f.Mu.Unlock()
+	delete(f.Applications, appName)
+	return nil
+}
+
 // Compile-time interface compliance check.
 var _ miniop.CredentialProvisioner = (*FakeMinIOProvisioner)(nil)
 

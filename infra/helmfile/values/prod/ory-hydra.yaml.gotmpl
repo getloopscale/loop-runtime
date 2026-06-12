@@ -1,0 +1,33 @@
+# T1.1 of plan 2026-06-11-cleanroom-canonical-5-defense-layers v1.2.
+#
+# Canonical declarative ory-hydra URL contract for prod env per ADR D1 + D8.
+# Closes catches #14/#15/#16 from T6.2 session by enumerating URLs explicitly
+# instead of relying on chart-default template inference.
+#
+# Per-env contract:
+#   - prod hosts: auth / app / cloud . loopzero.example (NO -dev suffix)
+#   - issuer/public point at auth (Hydra's own FQDN)
+#   - device.verification + device.success point at app (dashboard UI)
+#   - login/consent point at cloud (cloud consent handler)
+#
+# Regression guard (T3.1 negative grep): this overlay MUST NEVER contain
+# any *-dev.loopzero.example hostname — those leak dev hostnames into prod and
+# break OAuth2 redirect-uri validation at the IdP boundary.
+#
+# Validated by: infra/tests/helm/ory-hydra-canonical-urls_test.sh (T3.1).
+
+hydra:
+  config:
+    urls:
+      self:
+        issuer: "https://auth.loopzero.example/"
+        public: "https://auth.loopzero.example/"
+
+      device:
+        verification: "https://app.loopzero.example/device-verify"
+        success: "https://app.loopzero.example/device-success"
+
+      login: "https://cloud.loopzero.example/auth/login"
+      consent: "https://cloud.loopzero.example/auth/consent"
+      logout: "https://app.loopzero.example/logout"
+      error: "https://app.loopzero.example/auth/error"

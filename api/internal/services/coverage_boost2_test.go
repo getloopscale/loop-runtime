@@ -48,6 +48,20 @@ func (f *fakeEnvTargetStoreStatic) DeleteTarget(_ context.Context, _ db.DBTX, _,
 	return nil
 }
 
+// 2026-06-07 D2/D5/D6/D7 — preview-as-category interface extensions.
+func (f *fakeEnvTargetStoreStatic) SetPreviewDesired(_ context.Context, _ db.DBTX, _, _, _, _, _, _ string) error {
+	return nil
+}
+func (f *fakeEnvTargetStoreStatic) CountPermanent(_ context.Context, _ string) (int, error) {
+	return 0, nil
+}
+func (f *fakeEnvTargetStoreStatic) ListPermanent(_ context.Context, _ string) ([]string, error) {
+	return []string{}, nil
+}
+func (f *fakeEnvTargetStoreStatic) DeleteByKind(_ context.Context, _ db.DBTX, _, _, _, _ string) error {
+	return nil
+}
+
 // fakeLockerStatic is a no-op locker for tests.
 type fakeLockerStatic struct{}
 

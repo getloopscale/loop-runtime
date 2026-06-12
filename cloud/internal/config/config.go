@@ -10,7 +10,6 @@ import (
 	"encoding/hex"
 	"fmt"
 	"os"
-	"strconv"
 )
 
 // Secret is a string that redacts itself in logs, fmt output, and JSON serialization.
@@ -107,11 +106,25 @@ type Config struct {
 	// Env: SESSION_TOKEN_SECRET_PREVIOUS (optional)
 	SessionTokenSecretPrevious Secret
 
-	// BFFKeyTTLHours sets the lifetime of BFF-minted loopzero_live_* keys for the
-	// /v1/dashboard/memory/* route family (Plan dashboard-memory-bff v1.2 § ADR D3).
-	// Range: [1, 168] hours (1h floor for tight prod ops; 168h ceiling = 1 week).
-	// Env: LOOPZEROCLOUD_BFF_KEY_TTL_HOURS (default: 24)
-	BFFKeyTTLHours int
+	// GitHubAppSlug is the slug of the LoopZero GitHub App (e.g. "loopzero-platform").
+	// Used to construct the install URL https://github.com/apps/{slug}/installations/new.
+	// Env: GITHUB_APP_SLUG (default: "loopzero-platform")
+	GitHubAppSlug string
+
+	// AppPublicURL is the user-facing dashboard origin
+	// (e.g. https://app-dev.loopzero.example). The GitHub App callback redirects
+	// the browser back to this origin + the return_to path.
+	// Env: APP_PUBLIC_URL (default: BillingReturnURL)
+	AppPublicURL string
+
+	// AuthCookieDomain is the explicit Domain= attribute for browser
+	// state cookies. Setting it host-only (Domain unset) is the safest
+	// default — see EC-2 of plan J-09 (subdomain cookie leak defense).
+	// In dev-public the dashboard and cloud share loopzero.example so the
+	// operator must set this to "loopzero.example"; locally we leave it
+	// empty so the cookie is host-only on localhost.
+	// Env: AUTH_COOKIE_DOMAIN (default: "")
+	AuthCookieDomain string
 }
 
 // Load reads configuration from environment variables with sensible defaults.
@@ -138,9 +151,13 @@ func Load() Config {
 	cfg.SessionTokenSecret = Secret(envOr("SESSION_TOKEN_SECRET", devSecretFor(cfg.Environment)))
 	cfg.SessionTokenSecretPrevious = Secret(envOr("SESSION_TOKEN_SECRET_PREVIOUS", ""))
 	cfg.ServiceAuthSecret = Secret(envOr("LOOPZERO_SERVICE_AUTH_SECRET", devSecretFor(cfg.Environment)))
+	// J-09 T1.1 — GitHub App install handshake.
+	cfg.GitHubAppSlug = envOr("GITHUB_APP_SLUG", "loopzero-platform")
+	cfg.AppPublicURL = envOr("APP_PUBLIC_URL", cfg.BillingReturnURL)
+	cfg.AuthCookieDomain = envOr("AUTH_COOKIE_DOMAIN", "")
+
 	cfg.ThemoryBaseURL = envOr("THEMORY_BASE_URL", "")
 	cfg.ThemoryAPIKey = Secret(envOr("THEMORY_API_KEY", ""))
-	cfg.BFFKeyTTLHours = envOrInt("LOOPZEROCLOUD_BFF_KEY_TTL_HOURS", 24)
 	return cfg
 }
 
@@ -183,22 +200,6 @@ func envOr(key, fallback string) string {
 		return v
 	}
 	return fallback
-}
-
-// envOrInt reads an integer env var; on parse failure or absent, returns fallback.
-// Used by BFFKeyTTLHours (plan dashboard-memory-bff v1.2 § ADR D3).
-// Validation of the value range is the responsibility of the consumer
-// (e.g., NewBFFKeyVault rejects values outside [1, 168]).
-func envOrInt(key string, fallback int) int {
-	v := os.Getenv(key)
-	if v == "" {
-		return fallback
-	}
-	n, err := strconv.Atoi(v)
-	if err != nil {
-		return fallback
-	}
-	return n
 }
 
 // devSecretFor returns an auto-generated secret in non-production environments,

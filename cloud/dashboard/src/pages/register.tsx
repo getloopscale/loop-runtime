@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react';
 import { useNavigate, useSearchParams, Link } from 'react-router-dom';
 import { Github, Loader2, Mail, Zap } from 'lucide-react';
-import { Alert, Button, Card, Input } from '@loopzerokit/ui';
+import { Alert, Button, Card, Input } from '@loopzero/ui';
 import { GoogleBrandIcon } from '@/components/google-brand-icon';
 import { getSession } from '@/lib/auth';
 import { API_URL, AUTH_URL } from '@/lib/config';

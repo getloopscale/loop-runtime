@@ -13,7 +13,7 @@ import (
 // TenantCRManager contract: (non-nil detail, nil err) → exists.
 func TestEnvManagerAdapter_HasEnvironment_ExistsWhenDetailNonNil(t *testing.T) {
 	lister, _ := NewEnvManagerAdapter(
-		func(_ context.Context, _, _ string) error { return nil },
+		func(_ context.Context, _, _, _ string) error { return nil }, // M2 v1.2: project arg added
 		func(_ context.Context, _, _ string) (any, error) {
 			return struct{ Name string }{"prod"}, nil
 		},
@@ -31,7 +31,7 @@ func TestEnvManagerAdapter_HasEnvironment_ExistsWhenDetailNonNil(t *testing.T) {
 // TenantCRManager contract: (nil detail, nil err) → does NOT exist.
 func TestEnvManagerAdapter_HasEnvironment_AbsentOnNilNilSemantic(t *testing.T) {
 	lister, _ := NewEnvManagerAdapter(
-		func(_ context.Context, _, _ string) error { return nil },
+		func(_ context.Context, _, _, _ string) error { return nil }, // M2 v1.2: project arg added
 		func(_ context.Context, _, _ string) (any, error) {
 			return nil, nil // env not present per TenantCRManager
 		},
@@ -49,7 +49,7 @@ func TestEnvManagerAdapter_HasEnvironment_AbsentOnNilNilSemantic(t *testing.T) {
 // defensive legacy semantic: error containing "not found" → absent (not error).
 func TestEnvManagerAdapter_HasEnvironment_AbsentOnNotFoundError(t *testing.T) {
 	lister, _ := NewEnvManagerAdapter(
-		func(_ context.Context, _, _ string) error { return nil },
+		func(_ context.Context, _, _, _ string) error { return nil }, // M2 v1.2: project arg added
 		func(_ context.Context, _, _ string) (any, error) {
 			return nil, errors.New("environment not found")
 		},
@@ -67,7 +67,7 @@ func TestEnvManagerAdapter_HasEnvironment_AbsentOnNotFoundError(t *testing.T) {
 // transient/auth errors (not "not found") propagate as Lister errors.
 func TestEnvManagerAdapter_HasEnvironment_PropagatesOtherErrors(t *testing.T) {
 	lister, _ := NewEnvManagerAdapter(
-		func(_ context.Context, _, _ string) error { return nil },
+		func(_ context.Context, _, _, _ string) error { return nil }, // M2 v1.2: project arg added
 		func(_ context.Context, _, _ string) (any, error) {
 			return nil, errors.New("forbidden")
 		},
@@ -82,20 +82,20 @@ func TestEnvManagerAdapter_HasEnvironment_PropagatesOtherErrors(t *testing.T) {
 }
 
 // TestEnvManagerAdapter_AddEnvironment_Delegates asserts AddEnvironment is
-// straight delegation.
+// straight delegation. M2 v1.2: project arg propagates verbatim.
 func TestEnvManagerAdapter_AddEnvironment_Delegates(t *testing.T) {
 	called := false
 	_, adder := NewEnvManagerAdapter(
-		func(_ context.Context, tenantID, envName string) error {
+		func(_ context.Context, tenantID, project, envName string) error {
 			called = true
-			if tenantID != "tn-1" || envName != "preview" {
-				t.Errorf("unexpected args: tenant=%q env=%q", tenantID, envName)
+			if tenantID != "tn-1" || project != "web" || envName != "preview" {
+				t.Errorf("unexpected args: tenant=%q project=%q env=%q", tenantID, project, envName)
 			}
 			return nil
 		},
 		func(_ context.Context, _, _ string) (any, error) { return nil, nil },
 	)
-	if err := adder.AddEnvironment(context.Background(), "tn-1", "preview"); err != nil {
+	if err := adder.AddEnvironment(context.Background(), "tn-1", "web", "preview"); err != nil {
 		t.Fatalf("unexpected err: %v", err)
 	}
 	if !called {

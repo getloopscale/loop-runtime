@@ -9,41 +9,70 @@ kind: ClusterRole
 metadata:
   name: loopzero-api
 rules:
-  # --- Tenant CRs: create/update via EnsureTenant (triggered during loopzero init) ---
-  - apiGroups: ["loopzero.io"]
-    resources: ["tenants"]
-    verbs: ["get", "create", "update"]
-  # --- LoopZeroApplication CRs: BuildReconcileLoop.ensureApplicationCRs after each release ---
-  # AUDIT-38: RBAC was missing — reconcile loop logged "forbidden" for every build
-  # and release stuck in SYNC_FAILED until operator-side fallback intervened.
-  - apiGroups: ["loopzero.io"]
-    resources: ["loopzeroapplications"]
-    verbs: ["get", "create", "update", "patch"]
-  # --- ClusterCredential CRs: K8sCellStore.LoadCells() polls every 60s.
-  # B3 fix (real-paas-cleanroom-dogfood-loop iter 22, 2026-05-05): without
-  # this rule, loopzero-api boot fails fatally with `cell router: initial cell
-  # load failed — fatal, no fallback by design`. Aligned with the chart at
-  # infra/helm/loopzero-api/templates/serviceaccount.yaml; Tilt applies this
-  # YAML directly so the chart's RBAC is not enough on its own.
-  - apiGroups: ["loopzero.io"]
-    resources: ["clustercredentials"]
-    verbs: ["get", "list", "watch"]
-  # --- Environment CRs: EnvironmentCRReader.IsReady (Sprint A trio-fix
-  # 2026-06-01, commit c892e355) polls status.phase==Active to gate the
-  # EnsureEnvironment poll loop. Without get permission, the readiness
-  # check returns RBAC-denied (treated as transient by the ensurer); the
-  # poll loop never sees ready=true and EnsureEnvironment times out at
-  # 60s → release CANCELLED, downstream specs FAIL. LIVE-observed during
-  # Sprint A trio v3b dogfood 2026-06-02: "env cr reader: get
-  # loopzero-system/e2e-tenant-j-rollout-a: environments.loopzero.io ... is forbidden".
-  - apiGroups: ["loopzero.io"]
-    resources: ["environments"]
-    verbs: ["get", "list", "watch"]
-  # --- Secrets in loopzero-system: argocd-refresh-credentials, loopzero-cluster-
-  # kubeconfigs, KubeMintingTokenProvider rotation, ESO sync.
-  - apiGroups: [""]
-    resources: ["secrets"]
-    verbs: ["get", "list", "watch", "create", "update", "patch"]
+- apiGroups:
+  - loopzero.io
+  resources:
+  - tenants
+  verbs:
+  - get
+  - create
+  - update
+- apiGroups:
+  - loopzero.io
+  resources:
+  - loopzeroapplications
+  verbs:
+  - get
+  - create
+  - update
+  - patch
+- apiGroups:
+  - loopzero.io
+  resources:
+  - clustercredentials
+  verbs:
+  - get
+  - list
+  - watch
+- apiGroups:
+  - loopzero.io
+  resources:
+  - environments
+  verbs:
+  - get
+  - list
+  - watch
+- apiGroups:
+  - loopzero.io
+  resources:
+  - previewenvironments
+  verbs:
+  - get
+  - list
+  - watch
+  - create
+  - update
+  - patch
+  - delete
+- apiGroups:
+  - loopzero.io
+  resources:
+  - previewenvironments/status
+  verbs:
+  - get
+  - update
+  - patch
+- apiGroups:
+  - ''
+  resources:
+  - secrets
+  verbs:
+  - get
+  - list
+  - watch
+  - create
+  - update
+  - patch
 ---
 apiVersion: rbac.authorization.k8s.io/v1
 kind: ClusterRoleBinding
@@ -54,9 +83,9 @@ roleRef:
   kind: ClusterRole
   name: loopzero-api
 subjects:
-  - kind: ServiceAccount
-    name: loopzero-api
-    namespace: loopzero-system
+- kind: ServiceAccount
+  name: loopzero-api
+  namespace: loopzero-system
 ---
 apiVersion: apps/v1
 kind: Deployment
@@ -66,22 +95,7 @@ metadata:
   labels:
     app: loopzero-api
 spec:
-  # HA default per /chaos-test C01 fix (2026-05-14): 2 replicas for pod-kill
-  # resilience (chaos C01 PASS with 100% success during pod-kill chaos vs
-  # 75% with replicas=1). Leader election (api/internal/leader/) ensures
-  # only one replica owns the lease; the other serves traffic during
-  # voluntary disruptions. Mirrors infra/helm/loopzero-api/values.yaml
-  # replicaCount=2.
   replicas: 2
-  # B23 fix (real-paas-cleanroom-dogfood-loop iter 22, 2026-05-05): use
-  # Recreate strategy because loopzero-api uses leader election. RollingUpdate
-  # creates the new pod alongside the old one; the new pod retries
-  # `leader lock held by another instance` 12 times then exits → CrashLoop
-  # → old pod (without env updates) keeps serving. Recreate kills the old
-  # pod first, frees the lease, then the new pod boots cleanly.
-  # NOTE: Recreate causes brief downtime on rollout (both pods killed
-  # before new pods start). Chaos resilience (pod-kill of ONE replica)
-  # is independent — surviving replica serves traffic during chaos.
   strategy:
     type: Recreate
   selector:
@@ -92,13 +106,10 @@ spec:
       labels:
         app: loopzero-api
         loopzero.io/component: control-plane
+      annotations:
+        checksum/config: tilt-managed-placeholder-T1.1.c
     spec:
       serviceAccountName: loopzero-api
-      # T8.4 of deep-review-remediation-plan (closes find_infra_006 MEDIUM):
-      # Tilt deployment now matches Helm chart security posture by setting
-      # seccompProfile: RuntimeDefault at pod level (was missing — Tilt had
-      # weaker PSA than the published chart). Enforces "Local equals
-      # production" per CLAUDE.md Rule 10.
       securityContext:
         runAsNonRoot: true
         runAsUser: 1000
@@ -106,197 +117,104 @@ spec:
         seccompProfile:
           type: RuntimeDefault
       containers:
-        - name: api
-          image: loopzero-api
-          env:
-            - name: PORT
-              value: "3001"
-            - name: DATABASE_URL
-              value: "postgres://loopzero:loopzero-dev-password@postgresql.loopzero-system.svc.cluster.local:5432/loopzero?sslmode=disable"
-            - name: LOOPZERO_ARGO_CALLBACK_SECRET
-              value: "dev-callback-secret"
-            - name: LOG_LEVEL
-              value: "debug"
-            # F-7 (dogfood-2026-05-08-fixes T0.1, ADR D7): OTel collector
-            # is not installed in local k3d (no Tempo Helm release). When
-            # LOOPZERO_TRACING_ENABLED is unset/true, tracing.go retries OTLP
-            # gRPC export to localhost:4317 every 5s and floods logs with
-            # `traces export: rpc error: code = Unavailable`. Disable by
-            # default in local; operator can override via
-            # `export LOOPZERO_TRACING_ENABLED=true && tilt up` once Tempo is
-            # running. Production charts (charts/loopzero-api) are unchanged.
-            - name: LOOPZERO_TRACING_ENABLED
-              value: "false"
-            - name: LOOPZERO_DISABLE_LEGACY_LOOPS
-              value: "false"
-            - name: MINIO_ENDPOINT
-              value: "http://minio.loopzero-system.svc.cluster.local:9000"
-            - name: MINIO_CROSS_CLUSTER_ENDPOINT
-              value: "http://10.0.5.2:32000"
-            - name: MINIO_ACCESS_KEY
-              value: "loopzero-admin"
-            - name: MINIO_SECRET_KEY
-              value: "loopzero-dev-password"
-            - name: GITEA_URL
-              value: "http://gitea-http.loopzero-system.svc.cluster.local:3000"
-            - name: GITEA_CROSS_CLUSTER_URL
-              value: "http://10.0.5.2:30000"
-            - name: API_CROSS_CLUSTER_URL
-              value: "http://10.0.5.2:30001"
-            - name: GITEA_TOKEN
-              valueFrom:
-                secretKeyRef:
-                  name: loopzero-api-tokens
-                  key: gitea-token
-                  optional: true
-            - name: ARGOCD_URL
-              value: "http://argocd-server.argocd.svc.cluster.local:80"
-            - name: ARGOCD_TOKEN
-              valueFrom:
-                secretKeyRef:
-                  name: loopzero-api-tokens
-                  key: argocd-token
-                  optional: true
-            - name: BUILD_KUBECONFIG
-              value: "/etc/loopzero/build-kubeconfig"
-            - name: BUILD_KUBE_CONTEXT
-              value: "build"
-            # CHG-2026-05-05-DOGFOOD-B34: SecretK8sManager needs a kubeconfig
-            # for the workload (runtime) cluster to create ExternalSecret CRs
-            # and the user-secrets Secret. Without this, `loopzero secret set`
-            # silently no-ops (logger.Warn only) and Pods later fail with
-            # CreateContainerConfigError ("secret X not found"). Mounted from
-            # loopzero-cluster-kubeconfigs Secret (key: runtime.kubeconfig)
-            # written by infra/scripts/local/k3d-cross-cluster-heal.sh.
-            - name: RUNTIME_KUBECONFIG
-              value: "/etc/loopzero/runtime/kubeconfig"
-            # B34 fix: the mounted kubeconfig (loopzero-cluster-kubeconfigs Secret /
-            # runtime.kubeconfig key) ships with a single context named
-            # "in-cluster". RUNTIME_KUBE_CONTEXT must match — was "runtime"
-            # which doesn't exist in the kubeconfig, causing
-            # `NewSecretK8sManager` to fail at boot and the secret K8s sync to
-            # be silently disabled (loopzero secret set persisted to PG but never
-            # created the ExternalSecret CR, so pods with `optional: false`
-            # envFrom remained CreateContainerConfigError).
-            - name: RUNTIME_KUBE_CONTEXT
-              value: "in-cluster"
-            - name: REGISTRY_URL
-              value: "k3d-loopzero-registry:5000"
-            - name: REGISTRY_INSECURE
-              value: "true"
-            # B22 fix (real-paas-cleanroom-dogfood-loop iter 22, 2026-05-05):
-            # all four image overrides set in YAML so Argo Workflow generated
-            # by API references the local k3d-loopzero-registry, not DOCR (which
-            # fails 401 in cleanroom because no DOCR creds).
-            #
-            # build-mode-dispatch-and-dockerfile-security-plan T3.2 (2026-05-07):
-            # LOOPZERO_PACKS_IMAGE pinned to v0.4.0 (canonical lenient contract).
-            # LOOPZERO_DOCKERFILE_LINT_IMAGE added for the new dockerfile-lint
-            # workflow step (fires only for apps with `build: dockerfile`).
-            - name: LOOPZERO_PACKS_IMAGE
-              value: "k3d-loopzero-registry:5000/loopzero-packs-runner:v0.4.0"
-            - name: LOOPZERO_DOCKERFILE_LINT_IMAGE
-              value: "k3d-loopzero-registry:5000/loopzero-dockerfile-lint:v0.1.0"
-            # T8.3 of deep-review-remediation-plan (closes find_infra_005 MEDIUM):
-            # pinned to specific tags matching production. Pipeline-step images
-            # (clone-runner, syft-scanner, cosign-signer) are batch jobs that
-            # change rarely — pinning prevents Tilt from accidentally pulling
-            # an :latest mutated by a developer's local rebuild. Tilt's
-            # live_update for loopzero-api/operators is unaffected (those keep
-            # floating tags by design).
-            - name: LOOPZERO_CLONE_IMAGE
-              value: "k3d-loopzero-registry:5000/loopzero-clone-runner:v0.1.0"
-            - name: LOOPZERO_SYFT_IMAGE
-              value: "k3d-loopzero-registry:5000/loopzero-syft-scanner:v0.1.0"
-            - name: LOOPZERO_COSIGN_IMAGE
-              value: "k3d-loopzero-registry:5000/loopzero-cosign-signer:v0.1.0"
-            # B14 fix (real-paas-cleanroom-dogfood-loop iter 22, 2026-05-05):
-            # service-auth secret for /api/v1/admin/* routes. Cleanroom-only
-            # placeholder; production sets via Pulumi mgmt-api.ts (random Output).
-            # Per T1.1 of plan 2026-05-29-dashboard-public-integration-canonicalization,
-            # the loopzero-service-auth K8s Secret created by generate-secrets.sh
-            # MUST carry the same value so cloud (which reads via envFrom) matches.
-            - name: LOOPZERO_SERVICE_AUTH_SECRET
-              value: "cleanroom-service-auth-secret-do-not-use-in-prod"
-            # CHG-2026-05-05-DOGFOOD-B38: enable admin API surface for
-            # journey-11 (admin tenant evict + cell pin). Both handlers
-            # gate on LOOPZERO_ADMIN_API=true (admin_evict.go:73, admin_pin_cell.go:78);
-            # without this they 404 with "Endpoint not available." even
-            # when X-Service-Auth is correct. Production sets via Pulumi
-            # mgmt-api.ts; standalone-multi previously skipped it.
-            - name: LOOPZERO_ADMIN_API
-              value: "true"
-            - name: WORKLOAD_INGRESS_URL
-              value: "http://10.0.5.11:80"
-            - name: BASE_DOMAIN
-              value: "loopzero.local"
-            - name: JWKS_URL
-              value: "http://ory-hydra-public.loopzero-auth.svc.cluster.local:4444/.well-known/jwks.json"
-            - name: JWT_ISSUER
-              value: "http://ory-hydra-public.loopzero-auth.svc.cluster.local:4444/"
-            - name: LOOPZERO_CLUSTER_ISSUER
-              value: "loopzero-ca-issuer"
-          ports:
-            - containerPort: 3001
-              name: http
-              protocol: TCP
-            - containerPort: 9090
-              name: metrics
-              protocol: TCP
-          readinessProbe:
-            httpGet:
-              path: /api/v1/health
-              port: 3001
-            initialDelaySeconds: 5
-            periodSeconds: 5
-          livenessProbe:
-            httpGet:
-              path: /api/v1/health
-              port: 3001
-            initialDelaySeconds: 10
-            periodSeconds: 10
-          resources:
-            limits:
-              cpu: "500m"
-              memory: "256Mi"
-            requests:
-              cpu: "100m"
-              memory: "64Mi"
-          volumeMounts:
-            - name: build-kubeconfig
-              mountPath: /etc/loopzero
-              readOnly: true
-            - name: runtime-kubeconfig
-              mountPath: /etc/loopzero/runtime
-              readOnly: true
-            - name: tmp
-              mountPath: /tmp
-          # T8.4 of deep-review-remediation-plan (closes find_infra_006 MEDIUM):
-          # capabilities.drop: [ALL] added to match published Helm chart.
-          securityContext:
-            runAsNonRoot: true
-            allowPrivilegeEscalation: false
-            readOnlyRootFilesystem: true
-            capabilities:
-              drop: [ALL]
-            seccompProfile:
-              type: RuntimeDefault
-      volumes:
-        - name: tmp
-          emptyDir:
-            sizeLimit: 512Mi
+      - name: api
+        image: loopzero-api
+        env:
+        - name: GITEA_TOKEN
+          valueFrom:
+            secretKeyRef:
+              name: loopzero-api-tokens
+              key: gitea-token
+              optional: true
+        - name: ARGOCD_TOKEN
+          valueFrom:
+            secretKeyRef:
+              name: loopzero-api-tokens
+              key: argocd-token
+              optional: true
+        - name: GITHUB_WEBHOOK_SECRET
+          valueFrom:
+            secretKeyRef:
+              name: loopzero-github-webhook
+              key: value
+              optional: true
+        - name: GITHUB_APP_PRIVATE_KEY
+          valueFrom:
+            secretKeyRef:
+              name: loopzero-api-github
+              key: GITHUB_APP_PRIVATE_KEY
+              optional: true
+        envFrom:
+        - secretRef:
+            name: loopzero-openbao-approle
+            optional: true
+        - secretRef:
+            name: loopzero-broker-token
+            optional: true
+        - configMapRef:
+            name: loopzero-api-runtime-config
+        - secretRef:
+            name: loopzero-api-runtime-secret
+        ports:
+        - containerPort: 3001
+          name: http
+          protocol: TCP
+        - containerPort: 9090
+          name: metrics
+          protocol: TCP
+        readinessProbe:
+          httpGet:
+            path: /api/v1/health
+            port: 3001
+          initialDelaySeconds: 5
+          periodSeconds: 5
+        livenessProbe:
+          httpGet:
+            path: /api/v1/health
+            port: 3001
+          initialDelaySeconds: 10
+          periodSeconds: 10
+        resources:
+          limits:
+            cpu: 500m
+            memory: 256Mi
+          requests:
+            cpu: 100m
+            memory: 64Mi
+        volumeMounts:
         - name: build-kubeconfig
-          configMap:
-            name: loopzero-build-kubeconfig
-            items:
-              - key: config
-                path: build-kubeconfig
+          mountPath: /etc/loopzero
+          readOnly: true
         - name: runtime-kubeconfig
-          secret:
-            secretName: loopzero-cluster-kubeconfigs
-            items:
-              - key: runtime.kubeconfig
-                path: kubeconfig
+          mountPath: /etc/loopzero/runtime
+          readOnly: true
+        - name: tmp
+          mountPath: /tmp
+        securityContext:
+          runAsNonRoot: true
+          allowPrivilegeEscalation: false
+          readOnlyRootFilesystem: true
+          capabilities:
+            drop:
+            - ALL
+          seccompProfile:
+            type: RuntimeDefault
+      volumes:
+      - name: tmp
+        emptyDir:
+          sizeLimit: 512Mi
+      - name: build-kubeconfig
+        configMap:
+          name: loopzero-build-kubeconfig
+          items:
+          - key: config
+            path: build-kubeconfig
+      - name: runtime-kubeconfig
+        secret:
+          secretName: loopzero-cluster-kubeconfigs
+          items:
+          - key: runtime.kubeconfig
+            path: kubeconfig
 ---
 apiVersion: v1
 kind: Service
@@ -310,12 +228,12 @@ spec:
   selector:
     app: loopzero-api
   ports:
-    - port: 3001
-      targetPort: 3001
-      nodePort: 30001
-      protocol: TCP
-      name: http
-    - port: 9090
-      targetPort: 9090
-      protocol: TCP
-      name: metrics
+  - port: 3001
+    targetPort: 3001
+    nodePort: 30001
+    protocol: TCP
+    name: http
+  - port: 9090
+    targetPort: 9090
+    protocol: TCP
+    name: metrics

@@ -31,10 +31,18 @@ type inMemoryEventStore struct {
 	mu     sync.Mutex
 	events []sse.SSEEvent
 	nextID int64
+	// Plan J-17 T2.3 — project membership for GetAfterForProject.
+	// Map buildID -> projectName; tenant by projectName.
+	projectMembership map[string]string
+	projectTenant     map[string]string
 }
 
 func newInMemoryEventStore() *inMemoryEventStore {
-	return &inMemoryEventStore{nextID: 1}
+	return &inMemoryEventStore{
+		nextID:            1,
+		projectMembership: map[string]string{},
+		projectTenant:     map[string]string{},
+	}
 }
 
 func (s *inMemoryEventStore) Append(_ context.Context, buildID string, eventType string, data json.RawMessage) (int64, error) {
@@ -60,6 +68,36 @@ func (s *inMemoryEventStore) GetAfter(_ context.Context, buildID string, afterID
 	var result []sse.SSEEvent
 	for _, ev := range s.events {
 		if ev.BuildID == buildID && ev.ID > afterID {
+			result = append(result, ev)
+		}
+	}
+	if result == nil {
+		result = []sse.SSEEvent{}
+	}
+	return result, nil
+}
+
+// GetAfterForProject — Plan J-17 T2.3 stub for in-memory store.
+// Filters events whose buildID is in the membership map below. The
+// memberships are seeded by the test (s.projectMembership[buildID] = projectName).
+// tenantID is matched against s.projectTenant[projectName] if set; otherwise
+// any tenantID matches (compat for legacy build-level tests).
+func (s *inMemoryEventStore) GetAfterForProject(_ context.Context, tenantID string, projectName string, afterID int64) ([]sse.SSEEvent, error) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+
+	if s.projectTenant != nil {
+		if want, ok := s.projectTenant[projectName]; ok && want != tenantID {
+			return []sse.SSEEvent{}, nil
+		}
+	}
+
+	var result []sse.SSEEvent
+	for _, ev := range s.events {
+		if s.projectMembership[ev.BuildID] != projectName {
+			continue
+		}
+		if ev.ID > afterID {
 			result = append(result, ev)
 		}
 	}
@@ -1184,5 +1222,159 @@ func TestStreamActiveStreamCountTracking(t *testing.T) {
 		default:
 			time.Sleep(1 * time.Millisecond) // intentional: tight poll for cleanup detection
 		}
+	}
+}
+
+// =============================================================================
+// ProjectStreamHandler tests — Plan J-17 T2.3
+// =============================================================================
+
+// serveProjectStreamWithChi wraps ProjectStreamHandler in a chi router with
+// auth injection at /api/v1/projects/{name}/builds/stream.
+func serveProjectStreamWithChi(handler http.HandlerFunc) *httptest.Server {
+	r := chi.NewRouter()
+	r.Use(injectUserContext(testTenantID))
+	r.Get("/api/v1/projects/{name}/builds/stream", handler)
+	return httptest.NewServer(r)
+}
+
+// serveProjectStreamWithChiNoAuth wraps without auth injection.
+func serveProjectStreamWithChiNoAuth(handler http.HandlerFunc) *httptest.Server {
+	r := chi.NewRouter()
+	r.Get("/api/v1/projects/{name}/builds/stream", handler)
+	return httptest.NewServer(r)
+}
+
+func TestStreamProjectBuilds_AuthRequired(t *testing.T) {
+	store := newInMemoryEventStore()
+	handler := sse.NewProjectStreamHandler(store)
+	srv := serveProjectStreamWithChiNoAuth(handler.ServeHTTP)
+	defer srv.Close()
+
+	resp, err := http.Get(srv.URL + "/api/v1/projects/foo/builds/stream")
+	if err != nil {
+		t.Fatalf("GET failed: %v", err)
+	}
+	defer func() { _ = resp.Body.Close() }()
+
+	if resp.StatusCode != http.StatusUnauthorized {
+		t.Fatalf("expected 401, got %d", resp.StatusCode)
+	}
+}
+
+func TestStreamProjectBuilds_FiltersToTenant(t *testing.T) {
+	store := newInMemoryEventStore()
+	// Project "foo" belongs to a DIFFERENT tenant; we should see no events.
+	store.projectTenant["foo"] = "OTHER_TENANT"
+	store.projectMembership["b-foreign"] = "foo"
+	ctx := context.Background()
+	_, _ = store.Append(ctx, "b-foreign", "build.started", json.RawMessage(`{"build_id":"b-foreign"}`))
+
+	handler := sse.NewProjectStreamHandler(
+		store,
+		sse.WithProjectHeartbeatInterval(50*time.Millisecond),
+		sse.WithProjectPollInterval(10*time.Millisecond),
+	)
+	srv := serveProjectStreamWithChi(handler.ServeHTTP)
+	defer srv.Close()
+
+	cctx, cancel := context.WithTimeout(context.Background(), 200*time.Millisecond)
+	defer cancel()
+	req, _ := http.NewRequestWithContext(cctx, http.MethodGet, srv.URL+"/api/v1/projects/foo/builds/stream", nil)
+	resp, err := http.DefaultClient.Do(req)
+	if err != nil {
+		t.Fatalf("GET failed: %v", err)
+	}
+	defer func() { _ = resp.Body.Close() }()
+
+	body := readFullBody(resp)
+	events := parseSSEEvents(body)
+	for _, ev := range events {
+		if ev.Event == "build.started" {
+			t.Fatalf("foreign-tenant event leaked into project stream: %+v", ev)
+		}
+	}
+}
+
+func TestStreamProjectBuilds_FiltersToProject(t *testing.T) {
+	store := newInMemoryEventStore()
+	store.projectMembership["b-foo-1"] = "foo"
+	store.projectMembership["b-bar-1"] = "bar"
+	ctx := context.Background()
+	_, _ = store.Append(ctx, "b-foo-1", "build.started", json.RawMessage(`{"build_id":"b-foo-1"}`))
+	_, _ = store.Append(ctx, "b-bar-1", "build.started", json.RawMessage(`{"build_id":"b-bar-1"}`))
+
+	handler := sse.NewProjectStreamHandler(
+		store,
+		sse.WithProjectHeartbeatInterval(50*time.Millisecond),
+		sse.WithProjectPollInterval(10*time.Millisecond),
+	)
+	srv := serveProjectStreamWithChi(handler.ServeHTTP)
+	defer srv.Close()
+
+	cctx, cancel := context.WithTimeout(context.Background(), 200*time.Millisecond)
+	defer cancel()
+	req, _ := http.NewRequestWithContext(cctx, http.MethodGet, srv.URL+"/api/v1/projects/foo/builds/stream", nil)
+	resp, err := http.DefaultClient.Do(req)
+	if err != nil {
+		t.Fatalf("GET failed: %v", err)
+	}
+	defer func() { _ = resp.Body.Close() }()
+
+	body := readFullBody(resp)
+	events := parseSSEEvents(body)
+
+	var sawFoo, sawBar bool
+	for _, ev := range events {
+		if strings.Contains(ev.Data, "b-foo-1") {
+			sawFoo = true
+		}
+		if strings.Contains(ev.Data, "b-bar-1") {
+			sawBar = true
+		}
+	}
+	if !sawFoo {
+		t.Fatalf("expected to see event for project foo, body=%q", body)
+	}
+	if sawBar {
+		t.Fatalf("event for project bar leaked into project foo stream, body=%q", body)
+	}
+}
+
+func TestStreamProjectBuilds_ResumeLastEventID(t *testing.T) {
+	store := newInMemoryEventStore()
+	store.projectMembership["b-1"] = "foo"
+	store.projectMembership["b-2"] = "foo"
+	ctx := context.Background()
+	id1, _ := store.Append(ctx, "b-1", "build.started", json.RawMessage(`{"build_id":"b-1"}`))
+	id2, _ := store.Append(ctx, "b-2", "build.started", json.RawMessage(`{"build_id":"b-2"}`))
+	_ = id1
+	_ = id2
+
+	handler := sse.NewProjectStreamHandler(
+		store,
+		sse.WithProjectHeartbeatInterval(50*time.Millisecond),
+		sse.WithProjectPollInterval(10*time.Millisecond),
+	)
+	srv := serveProjectStreamWithChi(handler.ServeHTTP)
+	defer srv.Close()
+
+	// Resume from id1: we expect to receive ONLY id2.
+	cctx, cancel := context.WithTimeout(context.Background(), 200*time.Millisecond)
+	defer cancel()
+	req, _ := http.NewRequestWithContext(cctx, http.MethodGet, srv.URL+"/api/v1/projects/foo/builds/stream", nil)
+	req.Header.Set("Last-Event-ID", fmt.Sprintf("%d", id1))
+	resp, err := http.DefaultClient.Do(req)
+	if err != nil {
+		t.Fatalf("GET failed: %v", err)
+	}
+	defer func() { _ = resp.Body.Close() }()
+
+	body := readFullBody(resp)
+	if strings.Contains(body, `"b-1"`) {
+		t.Fatalf("Last-Event-ID resume should have skipped id1 (b-1), body=%q", body)
+	}
+	if !strings.Contains(body, `"b-2"`) {
+		t.Fatalf("Last-Event-ID resume must still deliver id2 (b-2), body=%q", body)
 	}
 }

@@ -12,7 +12,6 @@ import {
   XCircle,
 } from 'lucide-react';
 import {
-  Alert,
   Badge,
   Button,
   Card,
@@ -20,16 +19,19 @@ import {
   PageShell,
   StatusDot,
   type StatusKind,
-} from '@loopzerokit/ui';
+} from '@loopzero/ui';
 import { useSetPageTitle } from '@/hooks/use-page-meta';
 import { useRequireAuth } from '@/hooks/use-auth';
 import { useDeployment } from '@/hooks/use-deployment';
-import { useCancelBuild } from '@/hooks/mutations/use-cancel-build';
-import { BuildTimeline } from '@/components/deploy/build-timeline';
+import { useProjectStatus } from '@/hooks/use-project-status';
+import { DeploymentVisitButton } from '@/components/project/deployment-visit-button';
+import { useEngineApi } from '@/hooks/use-api';
+import { BuildTimelineLive } from '@/components/deploy/build-timeline-live';
 import { RollbackDialog } from '@/components/dialogs/rollback-dialog';
 import { PromoteDialog } from '@/components/dialogs/promote-dialog';
-import { CardSkeleton } from '@/components/data/card-skeleton';
+import { CancelBuildDialog } from '@/components/dialogs/cancel-build-dialog';
 import { formatDate } from '@/lib/format';
+import { formatBuildError } from '@/lib/format-build-error-patterns';
 import type { BuildStatus } from '@/lib/api/types';
 
 const STATUS_MAP: Record<BuildStatus, StatusKind> = {
@@ -70,33 +72,47 @@ export function DeploymentDetailPage() {
   const { name = '', id = '' } = useParams<{ name: string; id: string }>();
   useSetPageTitle(`${name} · Deployment ${id.slice(0, 7)}`);
   const { build, loading, error } = useDeployment(id);
+  // T2.1 J-25 — Visit button anti-trap UX: hide on previous deploys.
+  // useProjectStatus delivers status.url + active_release.build_id used to
+  // gate Visit visibility (only the currently-serving build renders Visit).
+  const { status: projectStatus } = useProjectStatus(name);
   const [rollbackOpen, setRollbackOpen] = useState(false);
   const [promoteOpen, setPromoteOpen] = useState(false);
-  const cancelBuild = useCancelBuild();
-  const cancelling = cancelBuild.isPending;
+  // T4.4 finding 4.1 + EC-7 absorption: cancel build now goes through
+  // CancelBuildDialog (J-17 T6.2 canonical pattern). Direct mutate from
+  // the action button was the 2026-06-08 review finding "single-click
+  // destructive". The dialog also surfaces 409 race ("build already
+  // completed") as a toast instead of silently dropping.
+  const [cancelDialogOpen, setCancelDialogOpen] = useState(false);
+  // Plan J-10 v1.1 — PromoteDialog requires environments list for source/target
+  // dropdowns. Fetched here so deployment detail's "Promote" button can open
+  // the dialog with full env context.
+  const { data: envsData } = useEngineApi<{
+    environments: Array<{ name: string; status?: string }>;
+  }>('/api/v1/environments');
+  const environments = envsData?.environments ?? [];
 
-  // T1.3: useMutation onSuccess invalidates the build detail cache so the
-  // status badge re-renders to CANCELLED without window.location.reload.
-  const handleCancel = () => {
-    if (!build) return;
-    cancelBuild.mutate(build.build_id);
-  };
+  // T4.4 finding 4.4: STATUS_LABEL fallback. New BuildStatus values
+  // added to BuildState in pkg/statemachine (e.g. RELEASING) would
+  // previously render `undefined` here; fall back to the raw status
+  // string OR "Unknown" as last resort.
+  function safeStatusLabel(status: string): string {
+    return STATUS_LABEL[status as BuildStatus] ?? status ?? 'Unknown';
+  }
+  function safeStatusKind(status: string): StatusKind {
+    return STATUS_MAP[status as BuildStatus] ?? 'idle';
+  }
 
   if (loading) {
     return (
-      <PageShell
-        title={`Deployment · ${id.slice(0, 7)}`}
-        loading
-        loadingNode={
-          <div className="grid grid-cols-1 gap-6 lg:grid-cols-[1.5fr_1fr]">
-            <div className="flex flex-col gap-6">
-              <CardSkeleton withFooter />
-              <CardSkeleton />
-            </div>
-            <CardSkeleton />
-          </div>
-        }
-      />
+      <PageShell title="Deployment">
+        <div className="flex items-center justify-center py-12">
+          <Loader2
+            className="size-6 animate-spin text-muted-foreground"
+            aria-label="Loading deployment"
+          />
+        </div>
+      </PageShell>
     );
   }
 
@@ -106,12 +122,12 @@ export function DeploymentDetailPage() {
         <EmptyState
           icon={XCircle}
           title={`No build with id "${id}"`}
-          description="The build may have been pruned (builds older than 90 days are deleted automatically), or the URL is wrong. Older deployments remain visible in the deployments list until prune."
+          description="It may have been pruned, or the URL is wrong."
           action={
             <Button asChild variant="secondary">
               <Link
                 to={`/projects/${encodeURIComponent(name)}/deployments`}
-                className="inline-flex items-center gap-1"
+                className="inline-flex items-center gap-2"
               >
                 <ArrowLeft className="size-4" aria-hidden="true" />
                 Back to deployments
@@ -140,15 +156,18 @@ export function DeploymentDetailPage() {
         </Button>
       </div>
 
-      <div className="grid grid-cols-1 gap-6 lg:grid-cols-[1.5fr_1fr]">
+      {/* T4.4 finding 4.8: timeline column joins at md breakpoint
+          (was lg, leaving tablets in single-column with timeline at
+          the bottom — usability gap). */}
+      <div className="grid grid-cols-1 gap-6 md:grid-cols-[1.5fr_1fr]">
         <div className="space-y-6">
           <Card>
             <Card.Header>
               <div className="flex items-center justify-between gap-4">
                 <Card.Title>Build</Card.Title>
                 <StatusDot
-                  status={STATUS_MAP[build.status]}
-                  label={STATUS_LABEL[build.status]}
+                  status={safeStatusKind(build.status)}
+                  label={safeStatusLabel(build.status)}
                 />
               </div>
               <Card.Description>{build.environment}</Card.Description>
@@ -191,11 +210,7 @@ export function DeploymentDetailPage() {
               </dl>
 
               {build.error && (
-                <Alert intent="destructive" title="Build failed" className="mt-4">
-                  <pre className="font-mono text-label whitespace-pre-wrap break-words">
-                    {build.error}
-                  </pre>
-                </Alert>
+                <BuildErrorPanel raw={build.error} />
               )}
 
               {build.apps && build.apps.length > 0 && (
@@ -240,23 +255,32 @@ export function DeploymentDetailPage() {
                   View logs
                 </Link>
               </Button>
+              {/* T4.4 finding 4.1: cancel button now opens
+                  CancelBuildDialog (J-17 canonical confirm pattern)
+                  instead of single-click mutate. EC-7 absorption:
+                  dialog handles 409 race when build completes between
+                  opening + confirming. */}
               {canCancel && (
                 <Button
                   variant="destructive"
                   size="sm"
-                  onClick={handleCancel}
-                  disabled={cancelling}
+                  onClick={() => setCancelDialogOpen(true)}
                 >
-                  {cancelling ? (
-                    <Loader2 className="size-4 animate-spin" aria-hidden="true" />
-                  ) : (
-                    <XCircle className="size-4" aria-hidden="true" />
-                  )}
+                  <XCircle className="size-4" aria-hidden="true" />
                   Cancel build
                 </Button>
               )}
               {build.status === 'succeeded' && (
                 <>
+                  {/* T2.1 J-25 — Visit comes BEFORE Rollback so the most
+                      likely action pós-promote (open + inspect live URL) is
+                      visually primary. Component itself enforces anti-trap
+                      UX: rendered ONLY if this build is the active release. */}
+                  <DeploymentVisitButton
+                    buildStatus={build.status}
+                    isActiveRelease={projectStatus?.active_release?.build_id === id}
+                    url={projectStatus?.url}
+                  />
                   <Button
                     variant="ghost"
                     size="sm"
@@ -275,23 +299,54 @@ export function DeploymentDetailPage() {
                   </Button>
                 </>
               )}
-              <Button asChild variant="ghost" size="sm">
-                <Link
-                  to={`/projects/${encodeURIComponent(name)}/deployments/${id}/sbom`}
-                  className="inline-flex items-center gap-2"
-                >
-                  <FileText className="size-4" aria-hidden="true" />
-                  View SBOM
-                </Link>
+              {/* T4.4 finding 4.7: SBOM/Attestation buttons are
+                  meaningful only on succeeded builds — earlier states
+                  have no signed image to inspect. Disabled (not
+                  hidden) so the user discovers the affordance exists
+                  but understands the gate. */}
+              <Button
+                asChild={build.status === 'succeeded'}
+                variant="ghost"
+                size="sm"
+                disabled={build.status !== 'succeeded'}
+                aria-disabled={build.status !== 'succeeded'}
+              >
+                {build.status === 'succeeded' ? (
+                  <Link
+                    to={`/projects/${encodeURIComponent(name)}/deployments/${id}/sbom`}
+                    className="inline-flex items-center gap-2"
+                  >
+                    <FileText className="size-4" aria-hidden="true" />
+                    View SBOM
+                  </Link>
+                ) : (
+                  <span className="inline-flex items-center gap-2 opacity-50">
+                    <FileText className="size-4" aria-hidden="true" />
+                    View SBOM
+                  </span>
+                )}
               </Button>
-              <Button asChild variant="ghost" size="sm">
-                <Link
-                  to={`/projects/${encodeURIComponent(name)}/deployments/${id}/attestation`}
-                  className="inline-flex items-center gap-2"
-                >
-                  <ShieldCheck className="size-4" aria-hidden="true" />
-                  Attestation
-                </Link>
+              <Button
+                asChild={build.status === 'succeeded'}
+                variant="ghost"
+                size="sm"
+                disabled={build.status !== 'succeeded'}
+                aria-disabled={build.status !== 'succeeded'}
+              >
+                {build.status === 'succeeded' ? (
+                  <Link
+                    to={`/projects/${encodeURIComponent(name)}/deployments/${id}/attestation`}
+                    className="inline-flex items-center gap-2"
+                  >
+                    <ShieldCheck className="size-4" aria-hidden="true" />
+                    Attestation
+                  </Link>
+                ) : (
+                  <span className="inline-flex items-center gap-2 opacity-50">
+                    <ShieldCheck className="size-4" aria-hidden="true" />
+                    Attestation
+                  </span>
+                )}
               </Button>
             </Card.Body>
           </Card>
@@ -300,10 +355,17 @@ export function DeploymentDetailPage() {
         <Card>
           <Card.Header>
             <Card.Title>Timeline</Card.Title>
-            <Card.Description>Pipeline phase progress.</Card.Description>
+            <Card.Description>
+              Live pipeline step-by-step progress (SSE).
+            </Card.Description>
           </Card.Header>
           <Card.Body>
-            <BuildTimeline status={build.status} />
+            {/* T5.3 — realtime swap. The hook resumes via Last-Event-ID
+                so even mid-tab navigation never drops events. */}
+            <BuildTimelineLive
+              buildId={build.build_id}
+              projectName={name}
+            />
           </Card.Body>
         </Card>
       </div>
@@ -318,7 +380,54 @@ export function DeploymentDetailPage() {
         open={promoteOpen}
         onOpenChange={setPromoteOpen}
         projectName={name}
+        environments={environments}
+        initialFrom={build?.environment}
+      />
+      {/* T4.4 finding 4.1 + EC-7: cancel dialog mounted unconditionally
+          so the open/close transition animates smoothly. Dialog itself
+          gates open state via the prop. */}
+      <CancelBuildDialog
+        open={cancelDialogOpen}
+        onOpenChange={setCancelDialogOpen}
+        build={build}
       />
     </PageShell>
+  );
+}
+
+/**
+ * BuildErrorPanel — T4.4 finding 4.2 + T3.1 + EC-3 + EC-5.
+ *
+ * Sanitizes `build.error` through formatBuildError before rendering.
+ * The visible default is the product-language `summary`; raw operator
+ * output lives behind a "Show details" toggle (CLAUDE.md Rule 3 — no
+ * internal terms like ArgoCD/BuildKit/gyp/workspace paths leak to
+ * customers in the default view).
+ */
+function BuildErrorPanel({ raw }: { raw: string }) {
+  const [showDetails, setShowDetails] = useState(false);
+  const { summary, detail } = formatBuildError(raw);
+  return (
+    <div className="mt-4 rounded-md border border-destructive/40 bg-destructive/10 p-3">
+      <p className="text-label uppercase text-destructive">Error</p>
+      <p className="mt-1 text-body-sm text-destructive">{summary}</p>
+      {detail && detail !== summary && (
+        <>
+          <button
+            type="button"
+            className="mt-2 text-label text-destructive underline hover:no-underline"
+            onClick={() => setShowDetails((v) => !v)}
+            aria-expanded={showDetails}
+          >
+            {showDetails ? 'Hide details' : 'Show details'}
+          </button>
+          {showDetails && (
+            <pre className="mt-2 max-h-64 overflow-auto whitespace-pre-wrap rounded bg-destructive/5 p-2 font-mono text-label text-destructive/90">
+              {detail}
+            </pre>
+          )}
+        </>
+      )}
+    </div>
   );
 }

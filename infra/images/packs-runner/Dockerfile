@@ -11,7 +11,7 @@
 # T4.4 of deep-review-remediation-plan (closes find_infra_003 MEDIUM):
 # pinned to specific patch matching api/operators Dockerfiles for
 # reproducibility under SOURCE_DATE_EPOCH.
-FROM mirror.gcr.io/library/golang:1.25.9-alpine3.22 AS build
+FROM mirror.gcr.io/library/golang:1.26.1-alpine3.22 AS build
 
 RUN apk add --no-cache git
 WORKDIR /src

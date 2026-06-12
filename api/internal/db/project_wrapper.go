@@ -32,6 +32,8 @@ import (
 
 	"github.com/loopzero/loopzero/api/internal/db/generated"
 	"github.com/loopzero/loopzero/api/internal/domain"
+	"github.com/loopzero/loopzero/pkg/enforcement"
+	"github.com/loopzero/loopzero/pkg/statemachine"
 )
 
 // GenerateProjectID generates a project ID in the format
@@ -121,6 +123,57 @@ func (s *PostgresProjectStore) ListByTenant(ctx context.Context, tenantID string
 		}
 		if r.CreatedAt.Valid {
 			out.CreatedAt = r.CreatedAt.Time
+		}
+		results = append(results, out)
+	}
+	return results, nil
+}
+
+// ListByTenantWithSummary returns all projects for a tenant with
+// per-project summary fields (environment_count + last_deploy_status).
+// Single SQL round-trip via LEFT JOIN LATERAL (no N+1). Post plan
+// 2026-06-08-dashboard-screens-review-fixes T2.1 + ADR D2.
+// Raw build status from the latest build row is mapped to the 5-value
+// dashboard ProjectStatus enum via
+// pkg/enforcement.MapBuildStatusToProjectStatus (exhaustive 7-state
+// switch per EC-1 absorption).
+func (s *PostgresProjectStore) ListByTenantWithSummary(ctx context.Context, tenantID string) ([]domain.ProjectSummary, error) {
+	bridge, ok := s.DB.(SqlcBridge)
+	if !ok {
+		return nil, fmt.Errorf("project store: DBTX %T does not implement SqlcBridge", s.DB)
+	}
+	q := generated.New()
+
+	rows, err := q.ListProjectsWithSummaryByTenant(ctx, bridge.GeneratedDB(), tenantID)
+	if err != nil {
+		return nil, fmt.Errorf("project store: list by tenant with summary: %w", err)
+	}
+	results := make([]domain.ProjectSummary, 0, len(rows))
+	for _, r := range rows {
+		out := domain.ProjectSummary{
+			ID:               r.ID,
+			Name:             r.Name,
+			TeamID:           r.TenantID,
+			CreatedBy:        r.CreatedBy,
+			EnvironmentCount: r.EnvironmentCount,
+			LastDeployStatus: string(enforcement.MapBuildStatusToProjectStatus(
+				statemachine.State(r.LastDeployStatusRaw),
+			)),
+			// T5.3 LIVE-bug fix (2026-06-08): additive completion of T2.1's
+			// summary contract. AppsCount + LatestFramework feed the
+			// /projects table Apps + Framework columns (was always 0 / —).
+			AppsCount:       r.AppsCount,
+			LatestFramework: r.LatestFrameworkRaw,
+		}
+		if r.CreatedAt.Valid {
+			out.CreatedAt = r.CreatedAt.Time
+		}
+		// LastDeployAt is NULL when the project has zero builds — keep
+		// out.LastDeployAt as the zero time so `omitempty` JSON tag omits
+		// the field, and the dashboard's `p.last_deploy ? ... : '—'` guard
+		// renders the em-dash naturally.
+		if r.LastDeployAt.Valid {
+			out.LastDeployAt = r.LastDeployAt.Time
 		}
 		results = append(results, out)
 	}

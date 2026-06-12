@@ -17,10 +17,9 @@ import {
   Sheet,
   Timestamp,
   useToast,
-} from '@loopzerokit/ui';
+} from '@loopzero/ui';
 import { usePageMeta } from '@/hooks/use-page-meta';
 import { useRequireAuth } from '@/hooks/use-auth';
-import { TableSkeleton } from '@/components/data/table-skeleton';
 import { cloudFetch } from '@/lib/api';
 
 /**
@@ -193,20 +192,14 @@ export function WebhooksPage() {
       >
         {list.isError ? (
           <Alert intent="warning" title="Could not load webhooks">
-            The Memory service is not reachable right now. Try refreshing in a moment.
+            Try again in a moment.
           </Alert>
         ) : list.isLoading ? (
-          <Card><TableSkeleton rows={4} columns={5} /></Card>
+          <Card>Loading…</Card>
         ) : webhooks.length === 0 ? (
           <EmptyState
-            title="Register your first webhook"
-            description="Webhooks let your services react to memory events (remember / forget / promote) as they happen — useful for re-indexing search caches, syncing CRMs, or triggering downstream agents."
-            action={
-              <Button onClick={() => setCreateOpen(true)}>
-                <Plus className="size-4 mr-1" aria-hidden="true" />
-                Add webhook
-              </Button>
-            }
+            title="No webhooks yet"
+            description="Click Add webhook to register your first endpoint."
           />
         ) : (
           <Card>

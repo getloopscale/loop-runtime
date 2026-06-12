@@ -238,7 +238,8 @@ func TestEnvs_Create_ServiceError(t *testing.T) {
 	mgr := &fakeEnvMgr{addErr: errors.New("add failed")}
 	h := NewEnvironmentHandler(mgr)
 
-	body := `{"name":"staging"}`
+	// M2 v1.2: project field required (T4.1).
+	body := `{"name":"staging","project":"web"}`
 	req := httptest.NewRequest(http.MethodPost, "/api/v1/environments", bytes.NewBufferString(body))
 	req = withAuth(req, defaultUserContext())
 	w := httptest.NewRecorder()
@@ -339,21 +340,22 @@ func TestStubEnvMgr_ListEnvironments(t *testing.T) {
 
 func TestStubEnvMgr_AddEnvironment(t *testing.T) {
 	stub := &StubEnvironmentManager{}
-	if err := stub.AddEnvironment(context.Background(), "tn-test", "staging"); err != nil {
+	// M2 v1.2: signature carries `project`.
+	if err := stub.AddEnvironment(context.Background(), "tn-test", "web", "staging"); err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
 }
 
 func TestStubEnvMgr_RemoveEnvironment(t *testing.T) {
 	stub := &StubEnvironmentManager{}
-	if err := stub.RemoveEnvironment(context.Background(), "tn-test", "staging"); err != nil {
+	if err := stub.RemoveEnvironment(context.Background(), "tn-test", "web", "staging"); err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
 }
 
 func TestStubEnvMgr_GetEnvironmentDetail_Found(t *testing.T) {
 	stub := &StubEnvironmentManager{}
-	detail, err := stub.GetEnvironmentDetail(context.Background(), "tn-test", "production")
+	detail, err := stub.GetEnvironmentDetail(context.Background(), "tn-test", "", "production")
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -367,7 +369,7 @@ func TestStubEnvMgr_GetEnvironmentDetail_Found(t *testing.T) {
 
 func TestStubEnvMgr_GetEnvironmentDetail_NotFound(t *testing.T) {
 	stub := &StubEnvironmentManager{}
-	detail, err := stub.GetEnvironmentDetail(context.Background(), "tn-test", "staging")
+	detail, err := stub.GetEnvironmentDetail(context.Background(), "tn-test", "web", "staging")
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}

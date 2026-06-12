@@ -116,9 +116,6 @@ func (h *MemoryHandler) List(w http.ResponseWriter, r *http.Request) {
 		Category: q.Get("category"),
 		From:     q.Get("from"),
 		To:       q.Get("to"),
-		// dashboard-memories-tab-standardization T3.2 — plumb `?scope=` to BFF.
-		// Empty/invalid falls back to "user" inside Client.List for backward-compat.
-		Scope: q.Get("scope"),
 	}
 	if v := q.Get("limit"); v != "" {
 		if n, err := strconv.Atoi(v); err == nil && n > 0 && n <= 200 {
@@ -129,13 +126,6 @@ func (h *MemoryHandler) List(w http.ResponseWriter, r *http.Request) {
 		if n, err := strconv.Atoi(v); err == nil && n >= 0 {
 			opts.Offset = n
 		}
-	}
-
-	// red-team-full-system-fixes-cycle-1 T4.1 / F5 (LOW): validate from <= to
-	// when both are present. Strict > so same-day (from == to) is valid (EC-6).
-	if opts.From != "" && opts.To != "" && opts.From > opts.To {
-		writeError(w, http.StatusUnprocessableEntity, "INVALID_DATE_RANGE", `"from" must not be after "to"`)
-		return
 	}
 
 	result, err := h.client.List(r.Context(), user.Subject, opts)

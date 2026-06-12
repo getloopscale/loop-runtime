@@ -121,6 +121,36 @@ type Config struct {
 
 	WorkloadIngressURL   string
 	BaseDomain           string // Base domain for app hostnames (e.g., "loopzero.local", "loopzero.cloud")
+	// PreviewPublicDomain is the wildcard domain used to compose public
+	// preview URLs surfaced to users. When empty, falls back to BaseDomain
+	// (legacy behavior). Set to the Caddy/CF wildcard root in environments
+	// where previews are exposed via an edge proxy distinct from the
+	// internal IngressRoute SNI domain (e.g., dev-public:
+	// `preview-dev.loopzero.example` while BaseDomain stays `loopzero.local`).
+	//
+	// URL convention: <tenant>-<project>-<entryApp>-preview-pr-N.<PreviewPublicDomain>
+	// where <entryApp> is the first server/frontend app in loopzero.yaml — this
+	// matches the IngressRoute Host emitted by appHostname() so the Caddy
+	// wildcard block reverse-proxies cleanly to Traefik.
+	PreviewPublicDomain  string
+	// PublicDomain is the wildcard domain used to compose public app URLs
+	// surfaced to users for PERMANENT environments (production, staging,
+	// etc. — non-preview). When empty, status.url emit is suppressed and
+	// the dashboard renders "URL pending" badge (per ADR D3 of plan
+	// 2026-06-12-dashboard-journey-j25-live-url-discoverability).
+	// Set to the Caddy/CF wildcard root in environments where apps are
+	// exposed via an edge proxy distinct from the internal IngressRoute
+	// SNI domain (e.g., dev-public: `prod-dev.loopzero.example` while
+	// BaseDomain stays `loopzero.local`).
+	//
+	// URL convention: <tenant>-<project>-<entryApp>-<env>.<PublicDomain>
+	// where <entryApp> is the first server/frontend app in loopzero.yaml — this
+	// matches the IngressRoute Host emitted by appHostname() (single source
+	// of truth: pkg/naming.AppHostname) so the Caddy wildcard block
+	// reverse-proxies cleanly to Traefik. Mirror of PreviewPublicDomain
+	// for permanent envs (FAANG canonical J-25 sponsor walkthrough catch
+	// 2026-06-12 — closes catches #21+#22).
+	PublicDomain         string
 	// B14 (MEET-2026-04-23-058): cert-manager ClusterIssuer used for all app TLS
 	// Certificates. REQUIRED per-environment (prod: letsencrypt-prod; dev: loopzero-ca-issuer).
 	// Set via LOOPZERO_CLUSTER_ISSUER env var. Empty = Validate() fatal at startup.
@@ -143,6 +173,17 @@ type Config struct {
 	ArgoCallbackSecret    string
 	BootstrapSecret       string // SEC-003: shared secret for POST /internal/bootstrap
 	SecretEncryptionKey   string // SEC-001: 32-byte hex-encoded AES-256 key for secret encryption at rest
+
+	// T2.5 of plan 2026-06-10-j22-openbao-transit-eso-sync v1.2 —
+	// OpenBao transit encryption credentials. When OpenBaoTransitEnabled is
+	// true, ALL secret writes are encrypted via OpenBao transit BEFORE
+	// reaching PG (the SecretEncryptionKey AES path is ignored; an EC-05
+	// boot log records `crypto_mode=transit aes_key_ignored=true`).
+	OpenBaoTransitEnabled bool   // OPENBAO_TRANSIT_ENABLED — opt-in
+	OpenBaoVaultAddr      string // OPENBAO_VAULT_ADDR (e.g. https://openbao.vault-system.svc:8200)
+	OpenBaoVaultRoleID    string // OPENBAO_VAULT_ROLE_ID — AppRole role_id
+	OpenBaoVaultSecretID  string // OPENBAO_VAULT_SECRET_ID — AppRole secret_id
+	OpenBaoSPKIPinSHA256  string // OPENBAO_SPKI_PIN_SHA256 — hex-encoded SHA-256 of leaf cert SPKI (optional)
 
 	// Argo Workflows
 	ArgoNamespace string
@@ -355,6 +396,8 @@ func Load() Config {
 		CosignRekorURL:       os.Getenv("LOOPZERO_REKOR_URL"),
 		WorkloadIngressURL:   os.Getenv("WORKLOAD_INGRESS_URL"),
 		BaseDomain:           envOr("BASE_DOMAIN", "loopzero.local"),
+		PreviewPublicDomain:  os.Getenv("LOOPZERO_PREVIEW_PUBLIC_DOMAIN"),
+		PublicDomain:         os.Getenv("LOOPZERO_PUBLIC_DOMAIN"),
 		ClusterIssuer:        os.Getenv("LOOPZERO_CLUSTER_ISSUER"),
 		PrometheusAddress:    os.Getenv("LOOPZERO_PROMETHEUS_ADDRESS"),
 
@@ -366,6 +409,14 @@ func Load() Config {
 		ArgoCallbackSecret:  envOr("LOOPZERO_ARGO_CALLBACK_SECRET", devDefaultArgoCallbackSecret),
 		BootstrapSecret:     envOr("LOOPZERO_BOOTSTRAP_SECRET", devDefaultBootstrapSecret),
 		SecretEncryptionKey: os.Getenv("LOOPZERO_SECRET_ENCRYPTION_KEY"), // SEC-001: empty = no encryption (dev only)
+
+		// T2.5 of plan 2026-06-10-j22-openbao-transit-eso-sync v1.2 —
+		// OpenBao transit credentials (per D6 ADR fail-loud refusal).
+		OpenBaoTransitEnabled: envOr("OPENBAO_TRANSIT_ENABLED", "false") == "true",
+		OpenBaoVaultAddr:      os.Getenv("OPENBAO_VAULT_ADDR"),
+		OpenBaoVaultRoleID:    os.Getenv("OPENBAO_VAULT_ROLE_ID"),
+		OpenBaoVaultSecretID:  os.Getenv("OPENBAO_VAULT_SECRET_ID"),
+		OpenBaoSPKIPinSHA256:  os.Getenv("OPENBAO_SPKI_PIN_SHA256"),
 
 		// Argo Workflows
 		ArgoNamespace: envOr("ARGO_NAMESPACE", "argo"),
@@ -475,24 +526,72 @@ func isValidEnv(s string) bool {
 	return validEnvs[s]
 }
 
+// Validate runs the full configuration validation chain. T4.1 of plan
+// 2026-06-11-code-review-remediation v1.2 + ADR D6 — decomposed from the
+// pre-refactor CC=46 monolith into named sub-validators per concern.
+// Each helper is independently testable and stays well under CC=10.
+//
+// Order matters: earlier checks establish invariants (e.g. c.Env is
+// valid) that later checks assume. Mirrors the pre-refactor order
+// verbatim so behavior is byte-identical for the existing test suite.
 func (c Config) Validate() error {
-	// Sprint A T2.1 (2026-06-01, closes sec-008): LOOPZERO_ENV allowlist.
-	// Reject any non-canonical value to prevent case-bypass attacks on
-	// IsProduction()-gated security checks (CR-1 of MEET-2026-05-28-001).
-	// This check is FIRST so all downstream gates can trust c.Env.
+	if err := c.validateEnv(); err != nil {
+		return err
+	}
+	if err := c.validateClusterIssuer(); err != nil {
+		return err
+	}
+	if err := c.validateTimeouts(); err != nil {
+		return err
+	}
+	if err := c.validateSecretEncryptionKey(); err != nil {
+		return err
+	}
+	if err := c.validateTLSPosture(); err != nil {
+		return err
+	}
+	if err := c.validateProductionCredentials(); err != nil {
+		return err
+	}
+	if err := c.validateCORS(); err != nil {
+		return err
+	}
+	if err := c.validateDatabaseSSL(); err != nil {
+		return err
+	}
+	c.logFeatureGates()
+	if err := c.validateOpenBaoTransit(); err != nil {
+		return err
+	}
+	c.logCryptoMode()
+	return nil
+}
+
+// validateEnv enforces the LOOPZERO_ENV allowlist (Sprint A T2.1, closes
+// sec-008). MUST run first — all downstream IsProduction() checks
+// trust c.Env after this gate.
+func (c Config) validateEnv() error {
 	if !isValidEnv(c.Env) {
 		return fmt.Errorf("LOOPZERO_ENV=%q invalid; allowed: development, staging, production", c.Env)
 	}
+	return nil
+}
 
-	// B14 (MEET-2026-04-23-058): ClusterIssuer is required — no in-code default.
-	// Each environment (prod/staging/dev) MUST set LOOPZERO_CLUSTER_ISSUER explicitly.
-	// Prevents the "invisible default" footgun that caused B14.
+// validateClusterIssuer requires an explicit LOOPZERO_CLUSTER_ISSUER per
+// MEET-2026-04-23-058 B14 — no in-code default to avoid the invisible-
+// default footgun.
+func (c Config) validateClusterIssuer() error {
 	if c.ClusterIssuer == "" {
 		return fmt.Errorf("LOOPZERO_CLUSTER_ISSUER is required (prod: letsencrypt-prod, dev: loopzero-ca-issuer)")
 	}
+	return nil
+}
 
-	// MEET-2026-03-31-023 T2-13: Cross-field validation rules.
-	// These prevent silent misconfigurations that cause runtime failures.
+// validateTimeouts runs MEET-2026-03-31-023 T2-13 cross-field
+// timeout-ordering rules. Hard errors in production for release/sync
+// inversion (would reap before sync completes); soft warn for build
+// queue/run inversion (unusual but functional).
+func (c Config) validateTimeouts() error {
 	if c.DBMaxConns > 0 && c.DBMinConns > 0 && c.DBMaxConns < c.DBMinConns {
 		return fmt.Errorf("DB_MAX_CONNS (%d) must be >= DB_MIN_CONNS (%d)", c.DBMaxConns, c.DBMinConns)
 	}
@@ -508,73 +607,156 @@ func (c Config) Validate() error {
 		slog.Warn("BUILD_RUNNING_TIMEOUT is less than BUILD_QUEUE_TIMEOUT — unusual configuration",
 			"running_timeout", c.BuildRunningTimeout, "queue_timeout", c.BuildQueueTimeout)
 	}
+	return nil
+}
 
-	// Dev credential warnings (production check is done below as fatal)
+// validateSecretEncryptionKey enforces SEC-001 — encryption key is
+// mandatory in production. Also warns when dev callback secret is in
+// use outside production.
+func (c Config) validateSecretEncryptionKey() error {
 	if c.ArgoCallbackSecret == "loopzero-dev-callback-secret" && !c.IsProduction() {
 		slog.Warn("using default callback secret — only acceptable for local development")
 	}
-	// SEC-001: Warn if secret encryption is disabled.
 	if c.SecretEncryptionKey == "" {
 		if c.IsProduction() {
 			return fmt.Errorf("LOOPZERO_SECRET_ENCRYPTION_KEY is required in production — secrets must be encrypted at rest")
 		}
 		slog.Warn("LOOPZERO_SECRET_ENCRYPTION_KEY not set — secrets stored in plaintext (only acceptable for local development)")
 	}
-	// SEC-2: ARGOCD_INSECURE=true in production is a fatal error, not just a log.
-	// TLS skip allows MITM attacks on ArgoCD API calls.
+	return nil
+}
+
+// validateTLSPosture rejects insecure TLS knobs in production. Three
+// branches that share the same prod-gating shape (SEC-2 ArgoCD,
+// REVIEW-BLOCKER-2 registry, MEET-2026-05-28-001 CR-1 cosign).
+func (c Config) validateTLSPosture() error {
 	if c.ArgocdInsecure && c.IsProduction() {
 		return fmt.Errorf("ARGOCD_INSECURE=true is forbidden in production — TLS verification must be enabled")
 	}
-	// REVIEW-BLOCKER-2: REGISTRY_INSECURE=true in production is a fatal error.
-	// Without TLS, BuildKit pushes images over HTTP — MITM can replace images,
-	// rendering all supply chain security (cosign, SBOM) useless.
 	if c.RegistryInsecure && c.IsProduction() {
 		return fmt.Errorf("REGISTRY_INSECURE=true is forbidden in production — registry TLS verification must be enabled")
 	}
-	// T1.2 of plan 2026-05-28-meet-001-engineering-closure v1.1.
-	// CR-1 fix from MEET-2026-05-28-001: gate `--insecure-skip-verify` flag.
-	// Allowed in prod ONLY when TUF root pinned (operator ceremony complete).
-	// Without TUF root, skipping SCT verification = any compromised Fulcio
-	// can forge signatures undetectable by the SLSA L3 chain.
 	if c.CosignInsecureSkipSCT && c.IsProduction() && !c.CosignTUFRootPinned {
 		return fmt.Errorf("LOOPZERO_COSIGN_INSECURE_SKIP_SCT_VERIFY=true requires LOOPZERO_COSIGN_TUF_ROOT_PINNED=true in production — SCT verification skip without TUF root is a supply-chain compromise vector")
 	}
-	// H4: Default dev credentials in production are a fatal error, not just a warning.
-	// Without this, production deployments silently use the dev defaults declared
-	// as constants at the top of this file (devDefault* sentinels).
-	if c.MinIOAccessKey == devDefaultMinIOAccessKey && c.IsProduction() {
+	return nil
+}
+
+// validateProductionCredentials rejects the dev-default sentinels in
+// production (H4). Without these gates a misconfigured deploy would
+// silently use the constants at the top of this file.
+func (c Config) validateProductionCredentials() error {
+	if !c.IsProduction() {
+		return nil
+	}
+	if c.MinIOAccessKey == devDefaultMinIOAccessKey {
 		return fmt.Errorf("MINIO_ACCESS_KEY using default dev credentials in production — override via MINIO_ACCESS_KEY env var")
 	}
-	if c.MinIOSecretKey == devDefaultMinIOSecretKey && c.IsProduction() {
+	if c.MinIOSecretKey == devDefaultMinIOSecretKey {
 		return fmt.Errorf("MINIO_SECRET_KEY using default dev credentials in production — override via MINIO_SECRET_KEY env var")
 	}
-	if c.BootstrapSecret == devDefaultBootstrapSecret && c.IsProduction() {
+	if c.BootstrapSecret == devDefaultBootstrapSecret {
 		return fmt.Errorf("LOOPZERO_BOOTSTRAP_SECRET using default dev value in production — override via LOOPZERO_BOOTSTRAP_SECRET env var")
 	}
-	if c.ArgoCallbackSecret == devDefaultArgoCallbackSecret && c.IsProduction() {
+	if c.ArgoCallbackSecret == devDefaultArgoCallbackSecret {
 		return fmt.Errorf("LOOPZERO_ARGO_CALLBACK_SECRET using default dev value in production — override via LOOPZERO_ARGO_CALLBACK_SECRET env var")
 	}
-	// SEC: CORS_ALLOWED_ORIGIN must be set in production to prevent open CORS.
+	return nil
+}
+
+// validateCORS requires an explicit CORS_ALLOWED_ORIGIN in production
+// to prevent open-CORS deployment.
+func (c Config) validateCORS() error {
 	if c.CORSAllowedOrigin == "" && c.IsProduction() {
 		return fmt.Errorf("CORS_ALLOWED_ORIGIN must be set in production")
 	}
-	// H1: DATABASE_URL with sslmode=disable in production sends credentials and data in plaintext.
-	if c.DatabaseURL != "" && c.IsProduction() && strings.Contains(c.DatabaseURL, "sslmode=disable") {
+	return nil
+}
+
+// validateDatabaseSSL rejects sslmode=disable in DATABASE_URL +
+// LOOPZERO_WORKER_DATABASE_URL in production (H1 + ADR D3 of
+// 2026-06-01-p3-infra-observability-test-debt v1.1).
+func (c Config) validateDatabaseSSL() error {
+	if !c.IsProduction() {
+		return nil
+	}
+	if c.DatabaseURL != "" && strings.Contains(c.DatabaseURL, "sslmode=disable") {
 		return fmt.Errorf("DATABASE_URL contains sslmode=disable which is forbidden in production — use sslmode=require or sslmode=verify-full")
 	}
-	// T3.1 of plan 2026-06-01-p3-infra-observability-test-debt v1.1 ADR D3:
-	// LOOPZERO_WORKER_DATABASE_URL, when set, MUST also reject sslmode=disable
-	// in production for the same H1 reasoning. Empty value is allowed
-	// (falls back to DatabaseURL — legacy behavior, defense-in-depth gap
-	// is operator-tracked).
-	if c.WorkerDatabaseURL != "" && c.IsProduction() && strings.Contains(c.WorkerDatabaseURL, "sslmode=disable") {
+	if c.WorkerDatabaseURL != "" && strings.Contains(c.WorkerDatabaseURL, "sslmode=disable") {
 		return fmt.Errorf("LOOPZERO_WORKER_DATABASE_URL contains sslmode=disable which is forbidden in production — use sslmode=require or sslmode=verify-full")
 	}
-	// KEDA feature gate — informational log when enabled.
+	return nil
+}
+
+// logFeatureGates emits informational logs for runtime feature gates
+// the operator may want to confirm at boot (currently: KEDA scale-to-
+// zero). NOT an error path — pure observability.
+func (c Config) logFeatureGates() {
 	if c.KEDAEnabled {
 		slog.Warn("KEDA feature gate is enabled — scale-to-zero (min:0) autoscaling requests will be accepted")
 	}
+}
+
+// validateOpenBaoTransit enforces T2.5 + EC-05 of plan
+// 2026-06-10-j22-openbao-transit-eso-sync v1.2 — fail-loud refusal
+// when OpenBao transit is enabled but credentials are incomplete.
+func (c Config) validateOpenBaoTransit() error {
+	if !c.OpenBaoTransitEnabled {
+		return nil
+	}
+	if c.OpenBaoVaultAddr == "" {
+		return fmt.Errorf("OPENBAO_TRANSIT_ENABLED=true requires OPENBAO_VAULT_ADDR (e.g. https://openbao.vault-system.svc:8200)")
+	}
+	if c.OpenBaoVaultRoleID == "" {
+		return fmt.Errorf("OPENBAO_TRANSIT_ENABLED=true requires OPENBAO_VAULT_ROLE_ID (AppRole role_id)")
+	}
+	if c.OpenBaoVaultSecretID == "" {
+		return fmt.Errorf("OPENBAO_TRANSIT_ENABLED=true requires OPENBAO_VAULT_SECRET_ID (AppRole secret_id)")
+	}
 	return nil
+}
+
+// logCryptoMode emits the active crypto mode at boot per the precedence
+// `transit > aes-local > plaintext`. Defense-in-depth observability so
+// operators detect when they silently land on the wrong mode.
+func (c Config) logCryptoMode() {
+	switch {
+	case c.OpenBaoTransitEnabled:
+		aesIgnored := c.SecretEncryptionKey != ""
+		slog.Info("crypto_mode=transit",
+			"openbao_addr", c.OpenBaoVaultAddr,
+			"aes_key_ignored", aesIgnored,
+			"spki_pinned", c.OpenBaoSPKIPinSHA256 != "")
+	case c.SecretEncryptionKey != "":
+		slog.Info("crypto_mode=aes-local",
+			"openbao_transit_enabled", false)
+	default:
+		// plaintext mode is allowed only in dev (validateSecretEncryptionKey
+		// errored in prod on SecretEncryptionKey=""); emit an explicit log
+		// so operators do not silently land here.
+		slog.Warn("crypto_mode=plaintext",
+			"openbao_transit_enabled", false,
+			"aes_key_set", false,
+			"reason", "neither OPENBAO_TRANSIT_ENABLED nor LOOPZERO_SECRET_ENCRYPTION_KEY set — dev-only")
+	}
+}
+
+// CryptoMode returns the active secrets encryption strategy: "transit"
+// (OpenBao transit), "aes-local" (LOOPZERO_SECRET_ENCRYPTION_KEY AES path),
+// or "plaintext" (neither configured — dev-only).
+//
+// Precedence: transit > aes-local > plaintext. EC-05 absorption: caller
+// uses this to decide which encryption client to wire and to gate the
+// fail-loud refusal at boot.
+func (c *Config) CryptoMode() string {
+	if c.OpenBaoTransitEnabled {
+		return "transit"
+	}
+	if c.SecretEncryptionKey != "" {
+		return "aes-local"
+	}
+	return "plaintext"
 }
 
 // EffectiveWorkerDatabaseURL returns the connection string background

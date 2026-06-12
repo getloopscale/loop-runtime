@@ -93,22 +93,32 @@ if [[ "$LIVE_ONLY" -ne 1 ]]; then
   fi
 
   # ───────────────────────────────────────────────────────────────────────
-  # Suite 3: vitest hermetic (covers T1.1 + T1.2)
+  # Suite 3: vitest hermetic (T1.1 + T1.2 + iter-3 /device-verify page)
   # ───────────────────────────────────────────────────────────────────────
-  log "▶ Suite 3: vitest hermetic (device-success.test.tsx)"
-  if (cd "$REPO_ROOT/cloud/dashboard" && npx vitest run src/pages/device-success.test.tsx 2>&1 | tail -10) >/tmp/dogfood-device-vitest.log 2>&1; then
-    record "vitest-hermetic" "PASS" "device-success tests GREEN"
+  log "▶ Suite 3: vitest hermetic (device-success.test.tsx + device-verify.test.tsx)"
+  if (cd "$REPO_ROOT/cloud/dashboard" && npx vitest run src/pages/device-success.test.tsx src/pages/device-verify.test.tsx 2>&1 | tail -10) >/tmp/dogfood-device-vitest.log 2>&1; then
+    record "vitest-hermetic" "PASS" "device-success + device-verify tests GREEN"
   else
     record "vitest-hermetic" "FAIL" "see /tmp/dogfood-device-vitest.log"
   fi
 
   # ───────────────────────────────────────────────────────────────────────
-  # Suite 4: Playwright cenários (T4.1)
+  # Suite 3b: Go telemetry counter + Accept handler tests (iter-3 wired)
+  # ───────────────────────────────────────────────────────────────────────
+  log "▶ Suite 3b: Go cloud tests (TestTelemetry + TestAcceptDevice)"
+  if (cd "$REPO_ROOT/cloud" && go test ./tests/unit/ -run "TestTelemetry|TestAcceptDevice" 2>&1 | tail -3) >/tmp/dogfood-device-go.log 2>&1; then
+    record "go-cloud-tests" "PASS" "TestTelemetry + TestAcceptDevice GREEN"
+  else
+    record "go-cloud-tests" "FAIL" "see /tmp/dogfood-device-go.log"
+  fi
+
+  # ───────────────────────────────────────────────────────────────────────
+  # Suite 4: Playwright cenários (T4.1 + iter-3 /device-verify)
   # ───────────────────────────────────────────────────────────────────────
   if [[ -d "$REPO_ROOT/cloud/dashboard/node_modules/@playwright/test" ]]; then
-    log "▶ Suite 4: Playwright cenários (auto-close + Back link)"
-    if (cd "$REPO_ROOT/cloud/dashboard" && PW_DEV_URL=http://localhost:5173 npx playwright test e2e/device-success.spec.ts --project=chromium --reporter=list 2>&1 | tail -10) >/tmp/dogfood-device-playwright.log 2>&1; then
-      record "playwright-dom" "PASS" "2 cenários GREEN"
+    log "▶ Suite 4: Playwright cenários (device-success + device-verify)"
+    if (cd "$REPO_ROOT/cloud/dashboard" && PW_DEV_URL=http://localhost:5173 npx playwright test e2e/device-success.spec.ts e2e/device-verify.spec.ts --project=chromium --reporter=list 2>&1 | tail -10) >/tmp/dogfood-device-playwright.log 2>&1; then
+      record "playwright-dom" "PASS" "5 cenários GREEN (2 device-success + 3 device-verify)"
     else
       record "playwright-dom" "FAIL" "see /tmp/dogfood-device-playwright.log"
     fi

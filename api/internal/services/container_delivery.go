@@ -15,6 +15,7 @@ import (
 	"github.com/loopzero/loopzero/api/internal/db"
 	"github.com/loopzero/loopzero/api/internal/metrics"
 	loopzeroerrors "github.com/loopzero/loopzero/pkg/errors"
+	"github.com/loopzero/loopzero/pkg/naming"
 	"github.com/loopzero/loopzero/pkg/statemachine"
 )
 
@@ -420,8 +421,22 @@ func (c *ContainerDeliveryActivator) phaseCRecordResult(ctx context.Context, bui
 			return fmt.Errorf("activate release: emit deploy.delivering: %w", err)
 		}
 
-		if err := c.envTargetStore.SetDesired(ctx, tx, build.TenantID, build.ProjectID, build.Environment, release.ID, build.CreatedBy, build.CorrelationID); err != nil {
-			return fmt.Errorf("activate release: set desired: %w", err)
+		// D2 of plan 2026-06-07-preview-as-category-single-slot-plan.md:
+		// preview env_targets get kind='preview' so D5 enforcement
+		// (CountPermanentEnvironments) doesn't count them against the
+		// plan_limits.environments cap. Detection canonical via
+		// naming.IsPreviewEnv("preview-pr-N"). Without this branch,
+		// every preview build would still write kind='permanent' and
+		// the Phase 2 enforcement fix would be incomplete (Phase 2
+		// only filters COUNT; if rows are mis-kinded, counts are wrong).
+		if naming.IsPreviewEnv(build.Environment) {
+			if err := c.envTargetStore.SetPreviewDesired(ctx, tx, build.TenantID, build.ProjectID, build.Environment, release.ID, build.CreatedBy, build.CorrelationID); err != nil {
+				return fmt.Errorf("activate release: set preview desired: %w", err)
+			}
+		} else {
+			if err := c.envTargetStore.SetDesired(ctx, tx, build.TenantID, build.ProjectID, build.Environment, release.ID, build.CreatedBy, build.CorrelationID); err != nil {
+				return fmt.Errorf("activate release: set desired: %w", err)
+			}
 		}
 
 		return nil

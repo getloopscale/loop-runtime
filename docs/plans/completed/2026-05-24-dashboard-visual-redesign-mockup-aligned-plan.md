@@ -1,6 +1,6 @@
 # Plan: Dashboard Visual Redesign — Mockup-Aligned (Overview literal + design language)
 
-> **Version 1.2** — Redesign visual completo do `cloud/dashboard/` alinhado ao mockup canônico em `cloud/dashboard/design/loopzero_overview_dashboard_mockup.html` E coerente com a documentação canônica de `@loopzerokit/ui` em `cloud/dashboard/.llms.txt` (espelho local de `https://docs.loopzero.example/llms.txt`, v0.9.0-next.0). Implementa OverviewPage com **alta fidelidade ao mockup** (pixel-close), extrai design language em doc curado, e aplica o pattern nas outras 11 pages. Consome infraestrutura preparada pelo plano `2026-05-23-dashboard-loopzero-ui-migration v1.3` (Phase 0 ✅ DONE + Phase 1 mecânica próxima). **SUBSUME v1.3 Phases 2, 3, 4, 5**. Resultado: UX coerente com identidade visual Vercel-style + uso canônico das primitivas conforme `.llms.txt`.
+> **Version 1.2** — Redesign visual completo do `cloud/dashboard/` alinhado ao mockup canônico em `cloud/dashboard/design/loopzero_overview_dashboard_mockup.html` E coerente com a documentação canônica de `@loopzero/ui` em `cloud/dashboard/.llms.txt` (espelho local de `https://docs.loopzero.example/llms.txt`, v0.9.0-next.0). Implementa OverviewPage com **alta fidelidade ao mockup** (pixel-close), extrai design language em doc curado, e aplica o pattern nas outras 11 pages. Consome infraestrutura preparada pelo plano `2026-05-23-dashboard-loopzero-ui-migration v1.3` (Phase 0 ✅ DONE + Phase 1 mecânica próxima). **SUBSUME v1.3 Phases 2, 3, 4, 5**. Resultado: UX coerente com identidade visual Vercel-style + uso canônico das primitivas conforme `.llms.txt`.
 
 ## Source-of-truth references (consult ANTES de assumir API)
 
@@ -9,18 +9,18 @@ Per `.llms.txt` line 5: "Treat the bullets below as **non-negotiable contracts**
 Ordem de precedência:
 
 1. **`cloud/dashboard/.llms.txt`** (local mirror, sync 2026-05-24) — primary contract
-2. **`node_modules/@loopzerokit/ui/dist/index.d.ts`** — types as truth when llms.txt ambíguo
+2. **`node_modules/@loopzero/ui/dist/index.d.ts`** — types as truth when llms.txt ambíguo
 3. **`https://docs.loopzero.example/loopzeroui/{primitives,infra,code,agent}/{slug}`** — MDX pages with examples per component
-4. **`node_modules/@loopzerokit/ui/dist/index.js`** source — last resort
+4. **`node_modules/@loopzero/ui/dist/index.js`** source — last resort
 
 Anti-pattern desta sessão (corrigido v1.2): grep + node REPL probes ad-hoc sem consultar `.llms.txt` primeiro.
 
 ## Changelog
 
 - **v1.2 (2026-05-24, revisão coesa com .llms.txt)** — 10 divergências identificadas e corrigidas após download local do `.llms.txt` como referência canônica:
-  - **D-1 CSS imports**: T-A.0 (NEW) verifica se `@loopzerokit/ui/preset` único import substitui 3 imports atuais (`fonts-cdn.css` + `tokens.css` + `styles.css`); se preset.css inclui equivalente, simplificar src/index.css. Se NÃO (preset.css é só Tailwind v4 layer), manter 3 imports com justificativa documentada.
+  - **D-1 CSS imports**: T-A.0 (NEW) verifica se `@loopzero/ui/preset` único import substitui 3 imports atuais (`fonts-cdn.css` + `tokens.css` + `styles.css`); se preset.css inclui equivalente, simplificar src/index.css. Se NÃO (preset.css é só Tailwind v4 layer), manter 3 imports com justificativa documentada.
   - **D-2 Card sub-component naming**: v1.3 T1.3 (Card swap) DEVE renomear `CardHeader → Card.Header`, `CardContent → Card.Body`, `CardTitle → Card.Title`, `CardDescription → Card.Description` em todos os ~30 sites. Plano v1.2 referencia este pattern explicitamente em T-D.1, T-E.x onde Card aparece.
-  - **D-3 Bundled deps anti-pattern**: revisão de D4 v1.3 — `.llms.txt` line 72 explicita "Already bundled (do NOT install separately): @radix-ui/*, class-variance-authority, clsx, cmdk, lucide-react, tailwind-merge". v1.3 T6.1 (cleanup) deve remover TODOS esses do package.json direto, confiando em transitive de @loopzerokit/ui. Excepção: `framer-motion` permanece (NÃO bundled em @loopzerokit/ui).
+  - **D-3 Bundled deps anti-pattern**: revisão de D4 v1.3 — `.llms.txt` line 72 explicita "Already bundled (do NOT install separately): @radix-ui/*, class-variance-authority, clsx, cmdk, lucide-react, tailwind-merge". v1.3 T6.1 (cleanup) deve remover TODOS esses do package.json direto, confiando em transitive de @loopzero/ui. Excepção: `framer-motion` permanece (NÃO bundled em @loopzero/ui).
   - **D-4 LoopZeroUIProvider acknowledged superset**: `.llms.txt` line 84 documenta apenas `<ThemeProvider initial="violet-forge">`. Nosso T0.2 commit (eeb030d3) usa `<LoopZeroUIProvider>` (verificado via .d.ts — composes ThemeProvider+Toaster). Per `.llms.txt` line 268 "source files win" — LoopZeroUIProvider existe em source; .llms.txt é stale neste ponto. Plan v1.2 documenta isso explicitamente em ADR (NEW D9).
   - **D-5 Component count terminology**: "14 primitives" → "14 components (10 primitives + 4 composites)". Correção em changelog + cross-reference + texto de motivação.
   - **D-6 docs.loopzero.example MDX pages como spec autoritativa**: T-D.1 (Overview), T-C.1 (Sidebar/AccountMenu), T-E.* (composites) referenciam URLs específicas (`/loopzeroui/infra/account-menu`, `/loopzeroui/infra/usage-meter`, etc.) como segunda fonte ao lado de .llms.txt.
@@ -44,10 +44,10 @@ Anti-pattern desta sessão (corrigido v1.2): grep + node REPL probes ad-hoc sem 
 
 **Foundation técnica pronta** (commits da Phase 0 de v1.3):
 
-- `@loopzerokit/ui@0.9.0-next.0` instalado e pinado (commit `6534af96`)
+- `@loopzero/ui@0.9.0-next.0` instalado e pinado (commit `6534af96`)
 - Tailwind v4.3 migrado via codemod oficial (commit `4ec9f571`)
 - `LoopZeroUIProvider` envolvendo `<App />` em `main.tsx` (commit `eeb030d3`) — provê ThemeProvider (themes=builtinThemes, defaultMode=dark) + Toaster + density context
-- CSS imports em `src/index.css`: `@loopzerokit/ui/fonts-cdn.css` (Geist Sans + Mono) + `tokens.css` + `styles.css`
+- CSS imports em `src/index.css`: `@loopzero/ui/fonts-cdn.css` (Geist Sans + Mono) + `tokens.css` + `styles.css`
 - `class="dark"` removido de html + 2 divs em `app.tsx` (LoopZeroUIProvider gerencia)
 - Bundle baseline capturado em `docs/reviews/2026-05-23-dashboard-bundle-baseline.txt`
 
@@ -97,15 +97,15 @@ Regions identificadas: Sidebar (account header + search + nav + footer), Top bar
 ### O que motiva o trabalho
 
 1. **Sponsor explicit ask** (2026-05-24): "Você criou um plano para REFAZER A TELA CONFORME NO NOVO PADRÃO?" — apontou gap real onde v1.3 só MIGRA primitives sem redesenhar visual.
-2. **Mockup é a tese estratégica do projeto**: a decisão de adotar `@loopzerokit/ui` foi justamente para entregar este nível de polimento UX consistente.
+2. **Mockup é a tese estratégica do projeto**: a decisão de adotar `@loopzero/ui` foi justamente para entregar este nível de polimento UX consistente.
 3. **Sprint 9 gate**: "polish visual GA-ready" — sem mockup-aligned redesign, v1.3 entrega só "stack moderna", não "produto GA-ready visualmente".
 4. **YAGNI/anti-waste**: fazer v1.3 Phase 4-5 (1:1 migration) e DEPOIS redesenhar seria literalmente reescrever 8 pages duas vezes. Opção A do trade-off resolve isso direto.
 
-### Evidência da análise mockup ↔ inventário @loopzerokit/ui
+### Evidência da análise mockup ↔ inventário @loopzero/ui
 
-Walkthrough confirmou ~95% das regions do mockup têm primitive/composite direto em `@loopzerokit/ui@0.9.0-next.0`:
+Walkthrough confirmou ~95% das regions do mockup têm primitive/composite direto em `@loopzero/ui@0.9.0-next.0`:
 
-| Mockup region | @loopzerokit/ui component | Disponibilidade |
+| Mockup region | @loopzero/ui component | Disponibilidade |
 |---|---|---|
 | Sidebar shell (200px) | `Sidebar` (Header/Section/Item/Footer) | ✅ primitive |
 | Account header | `AccountMenu` + `PlanBadge` | ✅ composites (Brief #1) |
@@ -113,7 +113,7 @@ Walkthrough confirmou ~95% das regions do mockup têm primitive/composite direto
 | Nav items + active state | `Sidebar.Item` (icon/active/count props) | ✅ sub-component |
 | Top bar dropdown "All Projects ▾" | `Select` ou `ProjectSwitcher` | ✅ primitive |
 | Page title centralizado | `topnav` primitive | ✅ primitive |
-| Dots menu | DropdownMenu (Radix bundled) | ✅ via @loopzerokit/ui |
+| Dots menu | DropdownMenu (Radix bundled) | ✅ via @loopzero/ui |
 | Action bar Search | `Input` | ✅ primitive |
 | Filter icon button | `Button` (icon variant) | ✅ primitive |
 | "Add New ▾" purple | `Button` (primary) | ✅ primitive |
@@ -166,13 +166,13 @@ Metas mensuráveis:
 
 ### D3 — Reusable Layout components locais (`DashboardLayout`, `ActionBar`, `ContentGrid`)
 
-- **Decisão**: Criar 3 layout components LOCAIS em `src/components/layout/` que compõem primitives de `@loopzerokit/ui` em patterns dashboard-específicos. NÃO propor upstream em `@loopzerokit/ui` (são domain-specific demais para um design system framework-agnostic).
-- **Rationale**: `@loopzerokit/ui` ship primitives genéricas (Sidebar, Card, EmptyState). Mas patterns como "DashboardShell com sidebar+topbar+main já pré-cabeado" são opinionated para PaaS dashboards. Encapsular localmente evita repetição em cada page e mantém `@loopzerokit/ui` agnostic. Equivalente ao pattern shadcn-style "compor primitives na sua app".
+- **Decisão**: Criar 3 layout components LOCAIS em `src/components/layout/` que compõem primitives de `@loopzero/ui` em patterns dashboard-específicos. NÃO propor upstream em `@loopzero/ui` (são domain-specific demais para um design system framework-agnostic).
+- **Rationale**: `@loopzero/ui` ship primitives genéricas (Sidebar, Card, EmptyState). Mas patterns como "DashboardShell com sidebar+topbar+main já pré-cabeado" são opinionated para PaaS dashboards. Encapsular localmente evita repetição em cada page e mantém `@loopzero/ui` agnostic. Equivalente ao pattern shadcn-style "compor primitives na sua app".
 - **Consequences**:
   - ✅ Cada page consome `<DashboardLayout>` sem reconstruir
   - ✅ Mudanças no shell propagam automaticamente
-  - ✅ @loopzerokit/ui permanece composable, não opinionated
-  - ❌ Outros consumers de @loopzerokit/ui (futuros) não herdam esses patterns automaticamente
+  - ✅ @loopzero/ui permanece composable, não opinionated
+  - ❌ Outros consumers de @loopzero/ui (futuros) não herdam esses patterns automaticamente
 
 ### D4 — Snapshot tests ao invés de full visual regression
 
@@ -186,7 +186,7 @@ Metas mensuráveis:
 
 ### D5 — Auth pages seguem "clean form" pattern (não mockup pattern)
 
-- **Decisão**: Auth pages (Login/Register/Verification/Recovery/DeviceSuccess) NÃO usam DashboardLayout (não há sidebar pré-login). Usam `login-split` primitive de `@loopzerokit/ui` OU clean form layout (centered Card com brand header). Visual coerente com dashboard via typography + palette, mas estrutura diferente.
+- **Decisão**: Auth pages (Login/Register/Verification/Recovery/DeviceSuccess) NÃO usam DashboardLayout (não há sidebar pré-login). Usam `login-split` primitive de `@loopzero/ui` OU clean form layout (centered Card com brand header). Visual coerente com dashboard via typography + palette, mas estrutura diferente.
 - **Rationale**: Mockup mostra dashboard logado, não fluxo de auth. Sidebar pre-login não faz sentido (user ainda não tem account). `login-split` (50/50 layout com hero + form) é o pattern PaaS canônico (Vercel, Linear, etc.).
 - **Consequences**:
   - ✅ UX correta para fluxo de auth
@@ -195,7 +195,7 @@ Metas mensuráveis:
 
 ### D6 — VerificationBanner usa `Alert` primitive (Brief #3) em vez de custom div
 
-- **Decisão**: Substituir `components/verification-banner.tsx` (27 LOC custom) por `<Alert intent="warning" title="..." description="..." action={...} />` de `@loopzerokit/ui` (Brief #3, shipped 0.9.0-next.0).
+- **Decisão**: Substituir `components/verification-banner.tsx` (27 LOC custom) por `<Alert intent="warning" title="..." description="..." action={...} />` de `@loopzero/ui` (Brief #3, shipped 0.9.0-next.0).
 - **Rationale**: Alert primitive existe agora upstream. Substituição é trivial (~3 LOC) e ganha a11y proper (`role="status"` no warning, `role="alert"` se destructive).
 - **Consequences**:
   - ✅ Semantic coherence — Alert é o primitive correto para banner notice
@@ -204,7 +204,7 @@ Metas mensuráveis:
 
 ### D7 — Bundle target relaxado a +30% gzip vs T0.0 baseline (foi +10%)
 
-- **Decisão**: Relaxar bundle target final de "±10% gzip vs T0.0 baseline" (v1.3 original) para "≤+30% gzip vs T0.0 baseline". Justificativa: mockup-aligned implementation usa significativamente mais primitives de `@loopzerokit/ui` (Table, AccountMenu, UsageMeter, ProjectCard, Sidebar full composition) que adicionam código real útil.
+- **Decisão**: Relaxar bundle target final de "±10% gzip vs T0.0 baseline" (v1.3 original) para "≤+30% gzip vs T0.0 baseline". Justificativa: mockup-aligned implementation usa significativamente mais primitives de `@loopzero/ui` (Table, AccountMenu, UsageMeter, ProjectCard, Sidebar full composition) que adicionam código real útil.
 - **Rationale**: Original ±10% assumia "swap mínimo de primitives". Redesign real consome mais surface — comparable a "lá foi +5KB de Card; agora é +15KB de Sidebar+AccountMenu+UsageMeter+ProjectCard combinado". 30% é o budget honesto para o valor entregue. Em troca: gzip total estimado ~180KB vs baseline 139KB — ainda well-under FAANG benchmarks (Vercel dashboard ~250KB gzip).
 - **Consequences**:
   - ✅ Acceptance criteria honesto e atingível
@@ -214,7 +214,7 @@ Metas mensuráveis:
 
 ### D9 — `<LoopZeroUIProvider>` é superset não-documentado de `<ThemeProvider>` (per .llms.txt drift)
 
-- **Decisão**: Continuar usando `<LoopZeroUIProvider>` (commitado em T0.2 `eeb030d3`) como entrypoint, mesmo que `.llms.txt` line 84 só documente `<ThemeProvider initial="violet-forge">`. Verificado via `node_modules/@loopzerokit/ui/dist/index.d.ts` que LoopZeroUIProvider EXISTE e compõe ThemeProvider + Toaster + density context com defaults sãos.
+- **Decisão**: Continuar usando `<LoopZeroUIProvider>` (commitado em T0.2 `eeb030d3`) como entrypoint, mesmo que `.llms.txt` line 84 só documente `<ThemeProvider initial="violet-forge">`. Verificado via `node_modules/@loopzero/ui/dist/index.d.ts` que LoopZeroUIProvider EXISTE e compõe ThemeProvider + Toaster + density context com defaults sãos.
 - **Rationale**: `.llms.txt` line 268 declara explicitamente "If `llms.txt` disagrees with [the code/README/package.json#exports], the code wins — update this file via PR with a one-line rationale." Source files são autoritativos. LoopZeroUIProvider existe → uso válido. .llms.txt drift deve ser reportado upstream via PR (follow-up TODO documentado em comentário em main.tsx).
 - **Consequences**:
   - ✅ Boilerplate menor (Toaster + density automático)
@@ -242,7 +242,7 @@ v1.3 Phase 1 [pending] — Button/Badge/Card swap MECÂNICO
      │
      ▼
 Phase A — Foundation Handoff (2 tasks pós v1.2)
-     │  T-A.0 (NEW v1.2): verify @loopzerokit/ui/preset vs 3 imports — D-1
+     │  T-A.0 (NEW v1.2): verify @loopzero/ui/preset vs 3 imports — D-1
      │  T-A.1: verify v1.3 Phase 1 done + D-2 Card naming check
      │
      ▼
@@ -286,10 +286,10 @@ Core pages      Secondary        Auth pages
 ### T-A.0 — Verify CSS import strategy against `.llms.txt` canonical (NEW v1.2 D-1)
 
 #### Objective
-Confirmar se `@import "@loopzerokit/ui/preset"` (single import canônico per `.llms.txt` line 51) substitui adequadamente os 3 imports atuais (`fonts-cdn.css` + `tokens.css` + `styles.css`). Se sim, simplificar `src/index.css`. Se não, documentar o porquê de manter os 3 separados.
+Confirmar se `@import "@loopzero/ui/preset"` (single import canônico per `.llms.txt` line 51) substitui adequadamente os 3 imports atuais (`fonts-cdn.css` + `tokens.css` + `styles.css`). Se sim, simplificar `src/index.css`. Se não, documentar o porquê de manter os 3 separados.
 
 #### Evidence
-- `.llms.txt` line 51: `import "@loopzerokit/ui/preset";       // Tailwind v4 preset (zero-config)`
+- `.llms.txt` line 51: `import "@loopzero/ui/preset";       // Tailwind v4 preset (zero-config)`
 - T0.2 commit (`eeb030d3`) decidiu por 3 imports separados (`fonts-cdn.css`, `tokens.css`, `styles.css`) — predates `.llms.txt` local download
 - `package.json#exports` tem AMBOS `./preset` E os 3 separados — sinaliza que preset.css é provavelmente uma compilation curated, mas precisa verificar conteúdo
 
@@ -299,10 +299,10 @@ cloud/dashboard/src/index.css — possible simplification
 ```
 
 #### Tasks
-1. `cat node_modules/@loopzerokit/ui/dist/preset.css | head -50` para inspecionar conteúdo do preset
-2. Comparar com `cat node_modules/@loopzerokit/ui/dist/{fonts-cdn,tokens,styles}.css | wc -l`
+1. `cat node_modules/@loopzero/ui/dist/preset.css | head -50` para inspecionar conteúdo do preset
+2. Comparar com `cat node_modules/@loopzero/ui/dist/{fonts-cdn,tokens,styles}.css | wc -l`
 3. **Decisão**:
-   - Se `preset.css` é superset (inclui fonts + tokens + styles + Tailwind v4 layer): simplificar `index.css` para `@import "@loopzerokit/ui/preset";` único
+   - Se `preset.css` é superset (inclui fonts + tokens + styles + Tailwind v4 layer): simplificar `index.css` para `@import "@loopzero/ui/preset";` único
    - Se `preset.css` é só Tailwind v4 layer (sem fonts/tokens): manter 3 imports atuais, adicionar nota documentando por quê
 4. Build verde (`npm run build`)
 5. Smoke: dev server abre, Geist fonts renderizando, tokens resolvendo
@@ -320,14 +320,14 @@ VERIFY: npm run build && grep -c "@import" cloud/dashboard/src/index.css
 - [ ] Build verde
 
 #### DoD
-- [ ] Commit `chore(dashboard): align CSS imports with @loopzerokit/ui canonical preset (T-A.0)` se simplificou, ou `docs(dashboard): document CSS import strategy vs .llms.txt canonical (T-A.0)` se manteve
+- [ ] Commit `chore(dashboard): align CSS imports with @loopzero/ui canonical preset (T-A.0)` se simplificou, ou `docs(dashboard): document CSS import strategy vs .llms.txt canonical (T-A.0)` se manteve
 
 ---
 
 ### T-A.1 — Verify v1.3 Phase 1 deliverables consumed
 
 #### Objective
-Assegurar que toda page e componente do dashboard já importa `Button`, `Badge`, `Card` de `@loopzerokit/ui` (não de `@/components/ui/*`). Phase A NÃO inicia se v1.3 Phase 1 não estiver done.
+Assegurar que toda page e componente do dashboard já importa `Button`, `Badge`, `Card` de `@loopzero/ui` (não de `@/components/ui/*`). Phase A NÃO inicia se v1.3 Phase 1 não estiver done.
 
 #### Evidence
 - v1.3 Phase 1 specifica T1.1 (Button) + T1.2 (Badge) + T1.3 (Card) + T1.4 (/recovery route fix)
@@ -407,7 +407,7 @@ docs/design/2026-05-24-dashboard-design-language.md (NEW) — canonical pattern 
 3. **TopBar pattern** — `<TopBar>` com left slot (project selector via Select primitive), center slot (page title — usually omitido se sidebar já indica), right slot (icon menu via DropdownMenu)
 4. **ActionBar pattern** — `<ActionBar>` com search Input (flex-1) + filter icon Button (size-9 outline) + primary CTA Button (size-md primary variant) — right-aligned, mt-6 mb-8
 5. **ContentGrid pattern** — `<ContentGrid columns="1.2fr-1fr">` ou `<ContentGrid columns="3-equal">` — grid-cols custom para 2-col vs 3-equal vs 1-col
-6. **Card pattern** — usar primitive `Card` de @loopzerokit/ui (já tokenizado), padding p-5 default, header opcional com title + action right-aligned
+6. **Card pattern** — usar primitive `Card` de @loopzero/ui (já tokenizado), padding p-5 default, header opcional com title + action right-aligned
 7. **StatusDot pattern** — usar `StatusDot` primitive (Brief #2): live=success (green), pending=warning (amber/orange), failed=destructive (red), idle=muted
 8. **Typography pattern** — Geist Sans para body/headings, Geist Mono para identifiers/timestamps/code, `font-display text-display-md` para stat numbers, `text-label-caps` para section titles uppercase
 
@@ -440,7 +440,7 @@ VERIFY:  wc -l docs/design/2026-05-24-dashboard-design-language.md (target ≤30
 - [ ] 8 patterns documentados (Layout, Sidebar, TopBar, ActionBar, ContentGrid, Card, StatusDot, Typography)
 - [ ] LOC ≤300
 - [ ] Reference ao mockup file: `cloud/dashboard/design/loopzero_overview_dashboard_mockup.html`
-- [ ] Reference ao mapeamento ↔ @loopzerokit/ui primitives
+- [ ] Reference ao mapeamento ↔ @loopzero/ui primitives
 - [ ] Voice/tone follows CLAUDE.md design-principles.md (KISS, no jargon)
 
 #### DoD
@@ -467,7 +467,7 @@ cloud/dashboard/src/app.tsx — inline DashboardLayout replaced by import
 ```
 
 #### Deep file dependency analysis
-- `dashboard-layout.tsx` (NEW): imports `Sidebar` from `@loopzerokit/ui` + `TopBar` (T-C.2 NEW local) + uses `useRequireAuth` for session
+- `dashboard-layout.tsx` (NEW): imports `Sidebar` from `@loopzero/ui` + `TopBar` (T-C.2 NEW local) + uses `useRequireAuth` for session
 - `app.tsx`: deletes inline `DashboardLayout` function (lines 20-42), imports from `@/components/layout`
 - Downstream: all 8 dashboard pages stay unchanged (still wrapped via `<Routes>` parent in app.tsx)
 
@@ -478,7 +478,7 @@ API proposed:
 ```tsx
 // src/components/layout/dashboard-layout.tsx
 import type { ReactNode } from 'react';
-import { Sidebar } from '@loopzerokit/ui';
+import { Sidebar } from '@loopzero/ui';
 import { useRequireAuth } from '@/hooks/use-auth';
 import { isEmailVerified } from '@/lib/auth';
 import { Loader2 } from 'lucide-react';
@@ -736,7 +736,7 @@ export function AppSidebar({ session }: { session: Session }) {
 **NOTE on `as="a" href=...`**: Sidebar.Item supports `as="a" + href` per its source (`primitives/sidebar/sidebar.tsx`). Para SPA navigation via react-router, considerar wrap em `<Link>` — verificar em T-C.1 task 3 se Sidebar.Item aceita `as={Link}` ou se precisamos compose differently.
 
 #### Tasks
-1. Inspecionar `node_modules/@loopzerokit/ui/dist/index.d.ts` para confirmar `Sidebar.Item` polymorphism options (as="a", as="button", as={Component})
+1. Inspecionar `node_modules/@loopzero/ui/dist/index.d.ts` para confirmar `Sidebar.Item` polymorphism options (as="a", as="button", as={Component})
 2. **CRITICAL (EC-1 v1.1)**: react-router SPA navigation MUST be preserved. Se Sidebar.Item suporta `as={Link}` (polymorphic generic Component), usar:
    ```tsx
    import { Link } from 'react-router-dom';
@@ -765,7 +765,7 @@ VERIFY:  npm test -- app-sidebar
 ```
 
 #### Acceptance Criteria
-- [ ] AppSidebar uses `Sidebar` + `AccountMenu` + `Input` from @loopzerokit/ui
+- [ ] AppSidebar uses `Sidebar` + `AccountMenu` + `Input` from @loopzero/ui
 - [ ] 8 nav items mapped to 12 real routes (Overview, Projects, Environments, Domains, Team, Billing, Settings, Profile)
 - [ ] Active state reflects current route
 - [ ] Zero Vercel mockup-specific items (AI Gateway, Firewall, CDN, etc.) per D1
@@ -841,7 +841,7 @@ Invariants:
    }
    ```
 2. Implementar `top-bar.tsx` per API consumindo `useProjects()` no Select
-3. Verificar `Select` API real em @loopzerokit/ui (placeholder + items + onSelect)
+3. Verificar `Select` API real em @loopzero/ui (placeholder + items + onSelect)
 4. Verificar DropdownMenu API (pode ser via Radix bundled)
 5. TopBar consome `usePageMeta()` (de T-B.2) para renderizar pageTitle no center slot
 6. Build verde
@@ -1209,7 +1209,7 @@ VERIFY:  npm test -- domains
 ### T-E.5 — Substitute VerificationBanner with Alert primitive
 
 #### Objective
-Substituir `components/verification-banner.tsx` (27 LOC custom) por `<Alert intent="warning">` de @loopzerokit/ui (Brief #3).
+Substituir `components/verification-banner.tsx` (27 LOC custom) por `<Alert intent="warning">` de @loopzero/ui (Brief #3).
 
 #### Files to edit
 ```
@@ -1343,12 +1343,12 @@ cloud/dashboard/src/pages/login.tsx — rewrite (current 244 LOC → target 100,
 ```
 
 #### Deep Dives
-- Use `<LoginSplit>` primitive de @loopzerokit/ui (50/50 layout com brand on left, form on right) OR clean centered Card. Reference: `docs.loopzero.example/loopzeroui/auth/login-split` MDX page.
+- Use `<LoginSplit>` primitive de @loopzero/ui (50/50 layout com brand on left, form on right) OR clean centered Card. Reference: `docs.loopzero.example/loopzeroui/auth/login-split` MDX page.
 - `<SocialAuthRow providers={['github', 'google']}>` for OIDC buttons. Reference: `docs.loopzero.example/loopzeroui/auth/social-auth-row`.
 - `<FormField>` for email + password. Reference: `docs.loopzero.example/loopzeroui/primitives/form-field`.
 - `<Alert intent="warning">` for session-expired notice (Brief #3, shipped 0.9.0)
 - `<Alert intent="destructive">` for Kratos errors
-- **CRITICAL D-7 (v1.2)**: REMOVER SVG inline do Google logo de `login.tsx:200` (4 paths inline atualmente). Anti-pattern explícito per `.llms.txt` line 118: "Use `lucide-react` for icons. Never inline SVG." Substituir por `<SocialAuthRow>` primitive (que internamente usa Lucide icons) OU se SocialAuthRow não aceita Google direto, usar `<Button><Chrome /> Continue with Google</Button>` (Chrome icon Lucide é proxy aceitável; OR import `<GoogleIcon />` se @loopzerokit/ui exporta — verificar `.llms.txt` + `.d.ts`).
+- **CRITICAL D-7 (v1.2)**: REMOVER SVG inline do Google logo de `login.tsx:200` (4 paths inline atualmente). Anti-pattern explícito per `.llms.txt` line 118: "Use `lucide-react` for icons. Never inline SVG." Substituir por `<SocialAuthRow>` primitive (que internamente usa Lucide icons) OU se SocialAuthRow não aceita Google direto, usar `<Button><Chrome /> Continue with Google</Button>` (Chrome icon Lucide é proxy aceitável; OR import `<GoogleIcon />` se @loopzero/ui exporta — verificar `.llms.txt` + `.d.ts`).
 - CRITICAL: preserve `submitOIDC` vanilla DOM form.submit() per EC-4 v1.3 + EC-13
 
 #### TDD
@@ -1511,7 +1511,7 @@ VERIFY:  npm test -- device-success
    
    # Manual portal wraps (line 131 anti-pattern):
    grep -rnE 'createPortal|<Portal' cloud/dashboard/src/ --include='*.tsx'
-   # SHOULD be zero in OUR code (only @loopzerokit/ui internals)
+   # SHOULD be zero in OUR code (only @loopzero/ui internals)
    
    # Disabled lint rules without WAI-ARIA justification (line 132):
    grep -rnE 'eslint-disable|biome-ignore' cloud/dashboard/src/ --include='*.tsx' --include='*.ts'
@@ -1519,7 +1519,7 @@ VERIFY:  npm test -- device-success
    ```
 7. **NEW D-3 v1.2 — bundled deps check (coordena com v1.3 T6.1 cleanup)**:
    ```bash
-   # Per .llms.txt line 72, these are bundled by @loopzerokit/ui — should NOT be direct deps:
+   # Per .llms.txt line 72, these are bundled by @loopzero/ui — should NOT be direct deps:
    for dep in '@radix-ui/react-avatar' '@radix-ui/react-dropdown-menu' '@radix-ui/react-separator' '@radix-ui/react-slot' '@radix-ui/react-tooltip' 'class-variance-authority' 'cmdk'; do
      grep -q "\"$dep\":" cloud/dashboard/package.json && echo "REDUNDANT (per .llms.txt): $dep"
    done
@@ -1705,7 +1705,7 @@ S0/S1 → fix → re-run smoke. S2-S4 documented em `docs/reviews/2026-05-24-das
 | `ProjectCard` composite props requer fields que backend não retorna | EC-5 v1.3 já tratou — adapter com defaults |
 | Bundle exceeds D7 budget (+30% gzip) | Phase H decide swap LoopZeroUIProvider→ThemeProvider single-theme (D8) |
 | Mockup fidelity discordância (sponsor diz "não tá igual") | Sponsor é juiz final; iterate em pequenos commits per region |
-| `@loopzerokit/ui` v0.9.0-next.0 ship breaking change durante implementação | Plano pina exato `0.9.0-next.0` em v1.3 T0.1 — Renovate liberado só em Phase 6 |
+| `@loopzero/ui` v0.9.0-next.0 ship breaking change durante implementação | Plano pina exato `0.9.0-next.0` em v1.3 T0.1 — Renovate liberado só em Phase 6 |
 | LoginSplit primitive doesn't exist (eu assumi sem verificar) | T-G.1 task pre-flight verify; fallback documented |
 
 ## Alternativas rejeitadas

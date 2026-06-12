@@ -2,7 +2,10 @@
 // Copyright 2025-2026 The LoopZero Authors
 
 // API Key Rotation plan, T6.2.
-// Structural validation of migration 000029_loopzero_api_keys_rotated_from.
+// Structural validation of migration 000031_loopzero_api_keys_rotated_from.
+// Renumbered 2026-06-07 from 000029 after merge with develop — slots
+// 000027/000028 owned by preview_as_category + preview_slot_per_project
+// (M2 refactor LIVE in PG); 000029/000030 owned by memory_webhooks.
 
 package unit
 
@@ -13,13 +16,13 @@ import (
 	"testing"
 )
 
-const pathMigration029 = "../../../api/internal/db/migrations/000029_loopzero_api_keys_rotated_from.up.sql"
+const pathMigration031 = "../../../api/internal/db/migrations/000031_loopzero_api_keys_rotated_from.up.sql"
 
 func readRotationMigration(t *testing.T) string {
 	t.Helper()
-	abs, err := filepath.Abs(pathMigration029)
+	abs, err := filepath.Abs(pathMigration031)
 	if err != nil {
-		t.Fatalf("resolve %s: %v", pathMigration029, err)
+		t.Fatalf("resolve %s: %v", pathMigration031, err)
 	}
 	b, err := os.ReadFile(abs)
 	if err != nil {
@@ -28,7 +31,7 @@ func readRotationMigration(t *testing.T) string {
 	return string(b)
 }
 
-func TestMigration029_AltersLoopZeroApiKeys(t *testing.T) {
+func TestMigration031_AltersLoopZeroApiKeys(t *testing.T) {
 	sql := readRotationMigration(t)
 	upper := strings.ToUpper(sql)
 	if !strings.Contains(upper, "ALTER TABLE") {
@@ -39,7 +42,7 @@ func TestMigration029_AltersLoopZeroApiKeys(t *testing.T) {
 	}
 }
 
-func TestMigration029_AddsRotatedFromColumnNullable(t *testing.T) {
+func TestMigration031_AddsRotatedFromColumnNullable(t *testing.T) {
 	sql := readRotationMigration(t)
 	upper := strings.ToUpper(sql)
 	if !strings.Contains(upper, "ADD COLUMN") {
@@ -57,7 +60,7 @@ func TestMigration029_AddsRotatedFromColumnNullable(t *testing.T) {
 	}
 }
 
-func TestMigration029_ReferencesSelf(t *testing.T) {
+func TestMigration031_ReferencesSelf(t *testing.T) {
 	sql := readRotationMigration(t)
 	// Self-FK to loopzero_api_keys(id) so the audit pointer can't dangle.
 	if !strings.Contains(sql, "REFERENCES loopzero_api_keys(id)") {
@@ -65,7 +68,7 @@ func TestMigration029_ReferencesSelf(t *testing.T) {
 	}
 }
 
-func TestMigration029_CommentDocumentsAudit(t *testing.T) {
+func TestMigration031_CommentDocumentsAudit(t *testing.T) {
 	sql := readRotationMigration(t)
 	upper := strings.ToUpper(sql)
 	if !strings.Contains(upper, "COMMENT ON COLUMN") {
@@ -77,8 +80,8 @@ func TestMigration029_CommentDocumentsAudit(t *testing.T) {
 	}
 }
 
-func TestMigration029_NoDownFile(t *testing.T) {
-	abs, _ := filepath.Abs("../../../api/internal/db/migrations/000029_loopzero_api_keys_rotated_from.down.sql")
+func TestMigration031_NoDownFile(t *testing.T) {
+	abs, _ := filepath.Abs("../../../api/internal/db/migrations/000031_loopzero_api_keys_rotated_from.down.sql")
 	if _, err := os.Stat(abs); err == nil {
 		t.Errorf("forward-only convention violated: .down.sql exists at %s", abs)
 	}

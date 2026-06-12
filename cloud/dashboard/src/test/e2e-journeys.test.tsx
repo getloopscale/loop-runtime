@@ -61,9 +61,8 @@ vi.mock('@/hooks/use-secrets', () => ({
   useSecrets: () => ({ secrets: [], loading: false, error: false, refetch: () => {} }),
 }));
 
-vi.mock('@/hooks/use-previews', () => ({
-  usePreviews: () => ({ previews: [], loading: false, error: false, refetch: () => {} }),
-}));
+// use-previews mock removed per plan 2026-06-08-dashboard-screens-review-fixes
+// T1.1 — page deleted + redirect to /environments?project=:name.
 
 vi.mock('@/hooks/use-project-status', () => ({
   useProjectStatus: () => ({
@@ -154,7 +153,7 @@ describe('E2E journey smoke — Plan v1.0 Final Phase Dogfood QA', () => {
   // -------------------------------------------------------------------------
   it('journey_3_deployments_page_renders_empty_state', () => {
     render(<DeploymentsPage />, { initialEntries: ['/projects/acme-web/deployments'] });
-    expect(screen.getByText(/ship your first build/i)).toBeInTheDocument();
+    expect(screen.getByText(/no deployments yet/i)).toBeInTheDocument();
   });
 
   // -------------------------------------------------------------------------
@@ -170,11 +169,7 @@ describe('E2E journey smoke — Plan v1.0 Final Phase Dogfood QA', () => {
   // -------------------------------------------------------------------------
   it('journey_5_team_page_renders_invite_button', () => {
     render(<TeamPage />);
-    // PageShell primary + EmptyState CTA both surface an Invite button when the
-    // team has no members yet — at least one must be present.
-    expect(
-      screen.getAllByRole('button', { name: /invite/i }).length,
-    ).toBeGreaterThanOrEqual(1);
+    expect(screen.getByRole('button', { name: /invite/i })).toBeInTheDocument();
   });
 
   // -------------------------------------------------------------------------
@@ -182,10 +177,9 @@ describe('E2E journey smoke — Plan v1.0 Final Phase Dogfood QA', () => {
   // -------------------------------------------------------------------------
   it('journey_6_secrets_page_renders_with_add_button', () => {
     render(<SecretsPage />, { initialEntries: ['/projects/acme-web/secrets'] });
-    // PageShell primary + EmptyState CTA both surface an Add Secret button.
     expect(
-      screen.getAllByRole('button', { name: /add secret/i }).length,
-    ).toBeGreaterThanOrEqual(1);
+      screen.getByRole('button', { name: /add secret/i }),
+    ).toBeInTheDocument();
   });
 
   // -------------------------------------------------------------------------
@@ -203,17 +197,15 @@ describe('E2E journey smoke — Plan v1.0 Final Phase Dogfood QA', () => {
 
   it('journey_8_domains_renders_add_button', () => {
     render(<DomainsPage />);
-    // PageShell primary + EmptyState CTA both surface an Add Domain button.
     expect(
-      screen.getAllByRole('button', { name: /add domain/i }).length,
-    ).toBeGreaterThanOrEqual(1);
+      screen.getByRole('button', { name: /add domain/i }),
+    ).toBeInTheDocument();
   });
 
   it('journey_8b_environments_renders_new_button', () => {
     render(<EnvironmentsPage />);
-    // PageShell primary + EmptyState CTA both surface a New Environment button.
     expect(
-      screen.getAllByRole('button', { name: /new environment/i }).length,
-    ).toBeGreaterThanOrEqual(1);
+      screen.getByRole('button', { name: /new environment/i }),
+    ).toBeInTheDocument();
   });
 });

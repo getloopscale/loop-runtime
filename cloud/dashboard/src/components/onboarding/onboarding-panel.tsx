@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import { Check, ChevronDown, Rocket, X } from 'lucide-react';
-import { Button, CopyButton } from '@loopzerokit/ui';
+import { Button, CopyButton } from '@loopzero/ui';
 import { useOnboardingState } from '@/hooks/use-onboarding-state';
 import { reportEvent } from '@/lib/rum';
 
@@ -22,7 +22,7 @@ import { reportEvent } from '@/lib/rum';
  * - ❌ Tiny sidebar widget that competes with nav
  * - ❌ Persistent always-expanded panel (blocks content)
  *
- * EC-17: CopyButton from @loopzerokit/ui handles clipboard fallback (HTTPS vs HTTP).
+ * EC-17: CopyButton from @loopzero/ui handles clipboard fallback (HTTPS vs HTTP).
  */
 
 interface ChecklistStep {

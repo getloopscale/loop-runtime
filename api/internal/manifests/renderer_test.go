@@ -260,8 +260,9 @@ func TestRender_Namespace(t *testing.T) {
 
 	result, _ := Render(input)
 
-	if !strings.Contains(result, "namespace: loopzero-acme-production") {
-		t.Error("namespace should be loopzero-{tenantID}-{environment}")
+	// Canonical refactor 2026-06-07: namespace = loopzero-<tenant>-<project>-<env>.
+	if !strings.Contains(result, "namespace: loopzero-acme-webapp-production") {
+		t.Errorf("namespace should be loopzero-{tenant}-{project}-{env}; rendered:\n%s", result)
 	}
 }
 
@@ -538,7 +539,7 @@ func TestRender_Deployment_ZeroDowntimeRollingStrategy(t *testing.T) {
 		t.Errorf("maxUnavailable: got %d, want 0 (zero-downtime)", dep.Spec.Strategy.RollingUpdate.MaxUnavailable)
 	}
 	if dep.Spec.Strategy.RollingUpdate.MaxSurge != 1 {
-		t.Errorf("maxSurge: got %q, want 1", dep.Spec.Strategy.RollingUpdate.MaxSurge)
+		t.Errorf("maxSurge: got %d, want 1", dep.Spec.Strategy.RollingUpdate.MaxSurge)
 	}
 }
 

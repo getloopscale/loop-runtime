@@ -127,8 +127,9 @@ func TestRenderDeployment_WithHPA(t *testing.T) {
 	if hpa.Metadata.Name != "webapp-api" {
 		t.Errorf("HPA name: got %q, want webapp-api", hpa.Metadata.Name)
 	}
-	if hpa.Metadata.Namespace != "loopzero-acme-production" {
-		t.Errorf("HPA namespace: got %q, want loopzero-acme-production", hpa.Metadata.Namespace)
+	// Canonical refactor 2026-06-07: namespace = loopzero-<tenant>-<project>-<env>.
+	if hpa.Metadata.Namespace != "loopzero-acme-webapp-production" {
+		t.Errorf("HPA namespace: got %q, want loopzero-acme-webapp-production", hpa.Metadata.Namespace)
 	}
 	if hpa.Spec.MinReplicas != 2 {
 		t.Errorf("HPA minReplicas: got %d, want 2", hpa.Spec.MinReplicas)

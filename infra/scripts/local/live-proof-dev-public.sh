@@ -28,7 +28,19 @@
 #                      Layer3: courier_messages.status != 4 for last 5 messages
 #                              (status 1=queued, 2=sent — no recent abandoned)
 #
-# Default --check=all runs all three.
+#   --check=api-sanity (T3.1 of plan 2026-06-08-pre-release-test-rigor)
+#                      Layer3 ONLY: 4 endpoint response-shape assertions that
+#                      catch iter-20-class regressions (e.g., BuildListItem.Apps
+#                      gap where builds endpoint stopped serializing apps[]
+#                      from apps_spec). Endpoints:
+#                        1) /api/v1/projects                  — list shape
+#                        2) /api/v1/projects/{name}           — detail shape
+#                        3) /api/v1/projects/{name}/builds    — builds[].apps populated
+#                        4) /api/v1/projects/{name}/status    — active_release
+#                      The script uses the seeded admin@loopzero.example session cookie.
+#
+# Default --check=all runs oidc + stripe + resend (NOT api-sanity — api-sanity
+# requires a deployed fixture project from T2.1, so it's opt-in).
 #
 # Flags:
 #   --env=dev-public    (default) operates against *-dev.loopzero.example hosts
@@ -326,6 +338,187 @@ print(d.get('courier',{}).get('http',{}).get('request_config',{}).get('headers',
 }
 
 # ============================================================================
+# check_api_sanity — Layer 3 endpoint response-shape sanity (T3.1 of plan
+# 2026-06-08-pre-release-test-rigor v1.2)
+# ============================================================================
+# 4 endpoints asserted against the seeded admin@loopzero.example session:
+#   1) /api/v1/projects                      — list shape: projects[] has
+#      env_count + last_deploy_status fields
+#   2) /api/v1/projects/{name}                — detail shape: apps_count +
+#      latest_framework + last_deploy populated
+#   3) /api/v1/projects/{name}/builds          — builds[].apps populated
+#      when builds[].apps_spec exists. This would have caught the
+#      iter 20 BuildListItem.Apps regression where the builds endpoint
+#      stopped serializing apps[] from apps_spec.
+#   4) /api/v1/projects/{name}/status          — active_release shape
+#      consistent: deploy_status + replicas_ready presence.
+check_api_sanity() {
+  log "L3 (api-sanity) — endpoint response-shape sanity"
+
+  if [[ "$SKIP_LAYER3" -eq 1 ]]; then
+    log "L3 SKIPPED via --skip-layer3"
+    RESULTS["api-sanity.l3"]="SKIPPED"
+    return
+  fi
+
+  local session_file="${SESSION_FILE:-$HOME/.loopzero/admin-loopzero-dev-session.txt}"
+  if [[ ! -s "$session_file" ]]; then
+    bad "L3 admin@loopzero.example session file missing/empty at $session_file" "api-sanity.l3.preflight"
+    return
+  fi
+  local cookie
+  cookie="$(cat "$session_file")"
+  # CLOUD_HOST already includes the https:// prefix (set at script init).
+  local cloud_url="${PUBLIC_CLOUD_URL:-$CLOUD_HOST}"
+  local project_name="${PROJECT_NAME:-teste}"
+
+  # Exchange the Kratos cookie for a JWT — engine API uses Bearer auth, NOT
+  # cookie. The dashboard's session-token handler is at /v1/auth/session/token.
+  local jwt_resp jwt
+  jwt_resp="$(curl -fsS --max-time 5 -X POST \
+    -b "ory_kratos_session=${cookie}" \
+    -H "Origin: https://app-dev.loopzero.example" \
+    "${cloud_url}/v1/auth/session/token" 2>/dev/null || echo "")"
+  jwt="$(printf '%s' "$jwt_resp" | python3 -c '
+import json, sys
+try:
+  d = json.load(sys.stdin)
+  sys.stdout.write(d.get("token") or d.get("access_token") or d.get("session_token") or "")
+except Exception:
+  pass
+' 2>/dev/null || echo "")"
+
+  if [[ -z "$jwt" ]]; then
+    bad "L3 /v1/auth/session/token exchange failed — cannot reach engine API" "api-sanity.l3.exchange"
+    return
+  fi
+
+  local AUTH_HDR="Authorization: Bearer ${jwt}"
+
+  # --- endpoint 1: /api/v1/projects (list shape) -----------------------------
+  # NOTE: engine API is exposed at /engine/api/v1/... (not /api/v1/...).
+  local resp1
+  resp1="$(curl -fsS --max-time 5 -H "$AUTH_HDR" \
+    "${cloud_url}/engine/api/v1/projects" 2>/dev/null || echo "")"
+  if [[ -z "$resp1" ]]; then
+    bad "L3 endpoint 1 /api/v1/projects unreachable" "api-sanity.l3.endpoint1"
+  else
+    local has_env_count
+    has_env_count="$(printf '%s' "$resp1" | python3 -c '
+import json, sys
+try:
+  d = json.load(sys.stdin)
+  items = d if isinstance(d, list) else d.get("projects", d.get("items", []))
+  if items and any("env_count" in p or "environment_count" in p for p in items):
+    print("1")
+  else:
+    print("0")
+except Exception:
+  print("0")
+' 2>/dev/null || echo "0")"
+    if [[ "$has_env_count" == "1" ]]; then
+      ok "L3 endpoint 1 projects[] has env_count" "api-sanity.l3.endpoint1.env_count"
+    else
+      bad "L3 endpoint 1 projects[] missing env_count field" "api-sanity.l3.endpoint1.env_count"
+    fi
+  fi
+
+  # --- endpoint 2: /api/v1/projects/{name} (detail shape) --------------------
+  local resp2
+  resp2="$(curl -fsS --max-time 5 -H "$AUTH_HDR" \
+    "${cloud_url}/engine/api/v1/projects/${project_name}" 2>/dev/null || echo "")"
+  if [[ -z "$resp2" ]]; then
+    bad "L3 endpoint 2 /api/v1/projects/${project_name} unreachable" "api-sanity.l3.endpoint2"
+  else
+    local has_apps_count
+    has_apps_count="$(printf '%s' "$resp2" | python3 -c '
+import json, sys
+try:
+  d = json.load(sys.stdin)
+  if "apps_count" in d:
+    print("1")
+  else:
+    print("0")
+except Exception:
+  print("0")
+' 2>/dev/null || echo "0")"
+    if [[ "$has_apps_count" == "1" ]]; then
+      ok "L3 endpoint 2 detail has apps_count" "api-sanity.l3.endpoint2.apps_count"
+    else
+      bad "L3 endpoint 2 detail missing apps_count field" "api-sanity.l3.endpoint2.apps_count"
+    fi
+  fi
+
+  # --- endpoint 3: /api/v1/projects/{name}/builds (BuildListItem.Apps) ------
+  # Forensic anchor: this assertion would have caught iter 20 regression where
+  # BuildListItem.Apps stopped being serialized from apps_spec.
+  local resp3
+  resp3="$(curl -fsS --max-time 5 -H "$AUTH_HDR" \
+    "${cloud_url}/engine/api/v1/projects/${project_name}/builds" 2>/dev/null || echo "")"
+  if [[ -z "$resp3" ]]; then
+    bad "L3 endpoint 3 /builds unreachable" "api-sanity.l3.endpoint3"
+  else
+    local apps_populated
+    apps_populated="$(printf '%s' "$resp3" | python3 -c '
+import json, sys
+# Iter 20 BuildListItem.Apps gap defense: if any build has apps_spec but apps[]
+# is missing OR empty, this is the regression class we are defending against.
+try:
+  d = json.load(sys.stdin)
+  builds = d if isinstance(d, list) else d.get("builds", d.get("items", []))
+  for b in builds:
+    spec = b.get("apps_spec")
+    apps = b.get("apps")
+    # apps_spec present + apps missing/empty → regression. Empty list ok if no apps_spec.
+    if spec and not apps:
+      print("0")
+      sys.exit(0)
+  print("1")
+except Exception:
+  print("0")
+' 2>/dev/null || echo "0")"
+    if [[ "$apps_populated" == "1" ]]; then
+      ok "L3 endpoint 3 builds[].apps populated when apps_spec (iter 20 BuildListItem.Apps regression defense)" "api-sanity.l3.endpoint3.apps"
+    else
+      bad "L3 endpoint 3 builds[].apps EMPTY despite apps_spec — iter 20 BuildListItem.Apps regression class" "api-sanity.l3.endpoint3.apps"
+    fi
+  fi
+
+  # --- endpoint 4: /api/v1/projects/{name}/status (active_release) ----------
+  local resp4
+  resp4="$(curl -fsS --max-time 5 -H "$AUTH_HDR" \
+    "${cloud_url}/engine/api/v1/projects/${project_name}/status" 2>/dev/null || echo "")"
+  if [[ -z "$resp4" ]]; then
+    bad "L3 endpoint 4 /status unreachable" "api-sanity.l3.endpoint4"
+  else
+    local shape_consistent
+    shape_consistent="$(printf '%s' "$resp4" | python3 -c '
+import json, sys
+try:
+  d = json.load(sys.stdin)
+  # Shape rule: if active_release is non-null, deploy_status OR replicas_ready
+  # MUST be present. Catches the dashboard-screens-review-fixes T5.3 bug class
+  # where ProjectHealthCard rendered 4 orphan dashes because backend omitempty
+  # dropped signals for projects without active release.
+  active = d.get("active_release")
+  ds = d.get("deploy_status")
+  rr = d.get("replicas_ready")
+  if active and (ds is None and rr is None):
+    print("0")
+  else:
+    print("1")
+except Exception:
+  print("0")
+' 2>/dev/null || echo "0")"
+    if [[ "$shape_consistent" == "1" ]]; then
+      ok "L3 endpoint 4 status active_release shape consistent" "api-sanity.l3.endpoint4.shape"
+    else
+      bad "L3 endpoint 4 status: active_release set but no deploy_status/replicas_ready (T5.3 walkthrough regression class)" "api-sanity.l3.endpoint4.shape"
+    fi
+  fi
+}
+
+# ============================================================================
 # Main
 # ============================================================================
 log "starting (auth=$AUTH_HOST app=$APP_HOST cloud=$CLOUD_HOST)"
@@ -334,6 +527,7 @@ case "$CHECK" in
   oidc) check_oidc ;;
   stripe) check_stripe ;;
   resend) check_resend ;;
+  api-sanity) check_api_sanity ;;
   all) check_oidc; check_stripe; check_resend ;;
   *) printf 'unknown --check=%s\n' "$CHECK" >&2; exit 1 ;;
 esac

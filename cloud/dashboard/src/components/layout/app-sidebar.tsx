@@ -31,7 +31,7 @@ import {
   Users,
   Webhook,
 } from 'lucide-react';
-import { Input, Sidebar } from '@loopzerokit/ui';
+import { Input, Sidebar } from '@loopzero/ui';
 import type { Session } from '@/lib/auth';
 import { TeamSwitcher } from '@/components/team/team-switcher';
 import { useOnboardingState } from '@/hooks/use-onboarding-state';

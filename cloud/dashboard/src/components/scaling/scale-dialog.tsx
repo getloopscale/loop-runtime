@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react';
 import { Loader2 } from 'lucide-react';
-import { Alert, Button, Dialog, Input, Label } from '@loopzerokit/ui';
+import { Alert, Button, Dialog, Input, Label } from '@loopzero/ui';
 import { engineFetch } from '@/lib/api';
 import type { ScaleResponse } from '@/lib/api/types';
 

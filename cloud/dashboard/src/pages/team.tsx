@@ -10,13 +10,12 @@ import {
   PageShell,
   Select,
   Table,
-} from '@loopzerokit/ui';
+} from '@loopzero/ui';
 import { usePageMeta } from '@/hooks/use-page-meta';
 import { useEngineApi } from '@/hooks/use-api';
 import { useRequireAuth } from '@/hooks/use-auth';
 import { InviteMemberSheet } from "@/components/sheets/invite-member-sheet";
 import { useRemoveMember, useUpdateMemberRole } from '@/hooks/mutations/use-team';
-import { TableSkeleton } from '@/components/data/table-skeleton';
 import { formatDate } from '@/lib/format';
 
 interface Member {
@@ -101,22 +100,15 @@ export function TeamPage() {
         onClick: () => setInviteOpen(true),
       }}
       loading={loading}
-      loadingNode={<Card><TableSkeleton rows={5} columns={5} /></Card>}
       empty={
         !loading && filtered.length === 0
-          ? searchQuery
-            ? {
-                icon: Users,
-                title: 'No members match your search',
-                description: `No teammate name or email contains "${searchQuery}". Try a different term or clear the search.`,
-                action: { label: 'Clear search', onClick: () => setSearchQuery('') },
-              }
-            : {
-                icon: Users,
-                title: 'Invite your team to collaborate',
-                description: 'Teammates can view projects, trigger deploys, manage secrets, or roll back production based on their role (owner, admin, member). Invites go out by email; revoking access is one click.',
-                action: { label: 'Invite member', onClick: () => setInviteOpen(true) },
-              }
+          ? {
+              icon: Users,
+              title: searchQuery ? 'No matching members' : 'No team members',
+              description: searchQuery
+                ? 'Try a different search term.'
+                : 'Invite teammates to collaborate on your projects.',
+            }
           : undefined
       }
     >

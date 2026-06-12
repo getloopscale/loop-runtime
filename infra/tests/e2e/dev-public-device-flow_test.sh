@@ -82,11 +82,11 @@ scenario_c_preflight() {
   log "Cenário C: pre-flight HEALTHCHECK (cloud + auth + Hydra + dashboard)"
   local failed=0
 
-  if ! curl -fsS -o /dev/null -m 5 "$CLOUD_PUBLIC/healthz" 2>/dev/null; then
-    record_result "C-cloud-healthz" "FAIL" "$CLOUD_PUBLIC/healthz unreachable"
+  if ! curl -fsS -o /dev/null -m 5 "$CLOUD_PUBLIC/health" 2>/dev/null; then
+    record_result "C-cloud-health" "FAIL" "$CLOUD_PUBLIC/health unreachable"
     failed=1
   else
-    record_result "C-cloud-healthz" "PASS"
+    record_result "C-cloud-health" "PASS"
   fi
 
   if ! curl -fsS -o /dev/null -m 5 "$AUTH_PUBLIC/health/ready" 2>/dev/null; then
@@ -223,6 +223,51 @@ scenario_b_token_pending() {
 }
 
 # ──────────────────────────────────────────────────────────────────────────
+# Cenário D — accept endpoint contract (iter-3, after the verify UI landed)
+# ──────────────────────────────────────────────────────────────────────────
+# Asserts that POST /v1/auth/device/accept exists and rejects malformed
+# input with HTTP 400 + INVALID_REQUEST code. We can NOT validate a happy
+# path here without a real Hydra device_challenge (Hydra mints those only
+# during the browser redirect), so the contract pinned is the input
+# validation layer — enough to catch route un-wiring regressions.
+scenario_d_accept_contract() {
+  log "Cenário D: POST /v1/auth/device/accept input-validation contract"
+
+  # D.1 — empty body → 400.
+  local empty_status
+  empty_status=$(curl -sS -o /dev/null -w "%{http_code}" -m 10 -X POST \
+    -H "Content-Type: application/json" -d '{}' \
+    "$CLOUD_PUBLIC/v1/auth/device/accept" 2>&1)
+  if [[ "$empty_status" == "400" ]]; then
+    record_result "D-accept-empty-body-400" "PASS" "HTTP $empty_status"
+  else
+    record_result "D-accept-empty-body-400" "FAIL" "expected 400, got $empty_status"
+  fi
+
+  # D.2 — missing user_code → 400.
+  local partial_status
+  partial_status=$(curl -sS -o /dev/null -w "%{http_code}" -m 10 -X POST \
+    -H "Content-Type: application/json" -d '{"device_challenge":"x"}' \
+    "$CLOUD_PUBLIC/v1/auth/device/accept" 2>&1)
+  if [[ "$partial_status" == "400" ]]; then
+    record_result "D-accept-missing-user-code-400" "PASS" "HTTP $partial_status"
+  else
+    record_result "D-accept-missing-user-code-400" "FAIL" "expected 400, got $partial_status"
+  fi
+
+  # D.3 — malformed JSON → 400.
+  local bad_status
+  bad_status=$(curl -sS -o /dev/null -w "%{http_code}" -m 10 -X POST \
+    -H "Content-Type: application/json" -d '{not json' \
+    "$CLOUD_PUBLIC/v1/auth/device/accept" 2>&1)
+  if [[ "$bad_status" == "400" ]]; then
+    record_result "D-accept-malformed-json-400" "PASS" "HTTP $bad_status"
+  else
+    record_result "D-accept-malformed-json-400" "FAIL" "expected 400, got $bad_status"
+  fi
+}
+
+# ──────────────────────────────────────────────────────────────────────────
 # Driver
 # ──────────────────────────────────────────────────────────────────────────
 if [[ "$SKIP_LIVE" -eq 1 ]]; then
@@ -248,6 +293,10 @@ fi
 
 if [[ -z "$SINGLE_SCENARIO" || "$SINGLE_SCENARIO" == "B" ]]; then
   scenario_b_token_pending || true
+fi
+
+if [[ -z "$SINGLE_SCENARIO" || "$SINGLE_SCENARIO" == "D" ]]; then
+  scenario_d_accept_contract || true
 fi
 
 log ""

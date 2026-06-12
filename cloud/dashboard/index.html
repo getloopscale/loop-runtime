@@ -45,11 +45,7 @@
          hosted at app-dev.loopzero.example can complete the same flows against
          the dev-public Kratos/cloud. Stripe + Google + GitHub allowlists
          unchanged (same OAuth/Stripe apps shared between envs per D5). -->
-    <!-- dev-local: http://localhost:14433 added to connect-src + form-action so
-         Kratos login via port-forward works without CSP violation. Safe: only
-         reachable on the operator's machine; production builds override via
-         env-injected CSP or remove the localhost entry. -->
-    <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' 'unsafe-inline'; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src 'self' data: https://fonts.gstatic.com; img-src 'self' data: blob: https:; connect-src 'self' ws: wss: https://checkout.stripe.com https://*.stripe.com https://auth.loopzero.example https://auth-dev.loopzero.example https://cloud.loopzero.example https://cloud-dev.loopzero.example http://localhost:14433; form-action 'self' https://auth.loopzero.example https://auth-dev.loopzero.example https://accounts.google.com https://github.com http://localhost:14433; base-uri 'self'; object-src 'none'" />
+    <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' 'unsafe-inline'; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src 'self' data: https://fonts.gstatic.com; img-src 'self' data: blob: https:; connect-src 'self' ws: wss: https://checkout.stripe.com https://*.stripe.com https://auth.loopzero.example https://auth-dev.loopzero.example https://cloud.loopzero.example https://cloud-dev.loopzero.example; form-action 'self' https://auth.loopzero.example https://auth-dev.loopzero.example https://accounts.google.com https://github.com; base-uri 'self'; object-src 'none'" />
     <!-- LoopZero brand favicons. The PNG assets in public/ are the canonical
          LoopZero mascot (committed 2026-05-19); these <link> tags re-wire them
          after the previous inline-SVG placeholder (#3ecf8e raio) shadowed
@@ -61,19 +57,6 @@
     <link rel="apple-touch-icon" sizes="180x180" href="/apple-touch-icon.png" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <meta name="theme-color" content="#09090b" />
-    <!-- Geist + Geist Mono (Google Fonts CDN). Moved out of `@loopzerokit/ui/fonts-cdn.css`
-         because CSS spec forbids `@import url(...)` after non-import statements,
-         and `@import 'tailwindcss'` in src/index.css inlines thousands of rules
-         before any subsequent CSS @import block. The <link> path also avoids
-         render-blocking the critical CSS pipeline.
-         CSP `style-src https://fonts.googleapis.com` + `font-src https://fonts.gstatic.com`
-         already covers this (see the Content-Security-Policy meta above). -->
-    <link rel="preconnect" href="https://fonts.googleapis.com" />
-    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
-    <link
-      rel="stylesheet"
-      href="https://fonts.googleapis.com/css2?family=Geist:wght@100..900&family=Geist+Mono:wght@100..900&display=swap"
-    />
     <title>LoopZero — Dashboard</title>
   </head>
   <body>

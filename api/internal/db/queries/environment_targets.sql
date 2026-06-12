@@ -33,17 +33,20 @@ WHERE tenant_id = $2 AND project_id = $3 AND environment = $4;
 
 -- name: GetEnvironmentTarget :one
 -- Tenant-scoped lookup. NoRows → wrapper returns (nil, nil) per
--- legacy contract.
+-- legacy contract. SELECT * to keep Row type aliased to
+-- generated.EnvironmentTarget (sqlc inlines when select-list ==
+-- table). Includes `kind` for D5 enforcement + D7 API merge.
 SELECT tenant_id, project_id, environment, desired_release_id,
-       active_release_id, updated_by, correlation_id, updated_at
+       active_release_id, updated_by, correlation_id, updated_at, kind
 FROM environment_targets
 WHERE tenant_id = $1 AND project_id = $2 AND environment = $3;
 
 -- name: ListEnvironmentTargetsByProject :many
 -- Tenant + project scoped listing. Empty result → empty slice (not
--- nil) per legacy contract.
+-- nil) per legacy contract. SELECT includes `kind` (see
+-- GetEnvironmentTarget rationale).
 SELECT tenant_id, project_id, environment, desired_release_id,
-       active_release_id, updated_by, correlation_id, updated_at
+       active_release_id, updated_by, correlation_id, updated_at, kind
 FROM environment_targets
 WHERE tenant_id = $1 AND project_id = $2;
 
@@ -52,3 +55,46 @@ WHERE tenant_id = $1 AND project_id = $2;
 -- contract).
 DELETE FROM environment_targets
 WHERE tenant_id = $1 AND project_id = $2 AND environment = $3;
+
+-- name: UpsertPreviewEnvironmentTarget :exec
+-- D2 (plan 2026-06-07-preview-as-category): explicit kind='preview' insert.
+-- Used by PreviewService when the preview build commits a release. The
+-- `kind` column is immutable post-create (D2 consequence) — repeat inserts
+-- for the same (tenant, project, environment) update release tracking but
+-- keep kind='preview'. Distinct from UpsertEnvironmentTargetDesired which
+-- defaults kind='permanent'.
+INSERT INTO environment_targets (
+  tenant_id, project_id, environment, kind,
+  desired_release_id, updated_by, correlation_id
+) VALUES (
+  $1, $2, $3, 'preview', $4, $5, $6
+)
+ON CONFLICT (tenant_id, project_id, environment)
+DO UPDATE SET
+  desired_release_id = $4,
+  updated_by         = $5,
+  correlation_id     = $6,
+  updated_at         = NOW();
+
+-- name: CountPermanentEnvironments :one
+-- D5 (Bug A fix): enforcement-facing count. Returns the number of DISTINCT
+-- permanent environments a tenant has across all projects. Used by
+-- pkg/enforcement/limiter.go to gate POST /api/v1/environments against the
+-- plan_limits.environments cap. Preview environments are NOT counted —
+-- they are managed under the single-slot model (preview_slot table).
+SELECT COUNT(DISTINCT environment)::int FROM environment_targets
+WHERE tenant_id = $1 AND kind = 'permanent';
+
+-- name: ListPermanentEnvironments :many
+-- D7 helper (Bug B fix): dashboard /environments grid lists DISTINCT
+-- permanent envs for a tenant. Preview slot is fetched via GetPreviewSlot
+-- and merged on the API side into the {permanent[], preview{}} response.
+SELECT DISTINCT environment FROM environment_targets
+WHERE tenant_id = $1 AND kind = 'permanent'
+ORDER BY environment;
+
+-- name: DeleteEnvironmentTargetsByKind :exec
+-- D6 cleanup chain: used by PreviewService.DeletePreviewByPR to remove
+-- preview rows on PR close. Idempotent (DELETE matches 0 or 1 row).
+DELETE FROM environment_targets
+WHERE tenant_id = $1 AND project_id = $2 AND environment = $3 AND kind = $4;

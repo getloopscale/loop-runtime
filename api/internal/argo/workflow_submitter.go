@@ -33,11 +33,18 @@ const (
 	submitBaseDelay     = 1 * time.Second
 )
 
-var workflowGVR = schema.GroupVersionResource{
+// WorkflowGVR is the GroupVersionResource for Argo Workflows v1alpha1.
+// Exported so the argo_step_watcher service can reuse the same constant
+// instead of duplicating it (Plan J-17 T1.1).
+var WorkflowGVR = schema.GroupVersionResource{
 	Group:    "argoproj.io",
 	Version:  "v1alpha1",
 	Resource: "workflows",
 }
+
+// workflowGVR is kept as an unexported alias for backward compat with
+// the existing functions in this file. New callers should use WorkflowGVR.
+var workflowGVR = WorkflowGVR
 
 // WorkflowSubmitterConfig holds configuration for connecting to the build cluster.
 type WorkflowSubmitterConfig struct {

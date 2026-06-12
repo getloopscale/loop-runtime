@@ -1,6 +1,6 @@
 import { ErrorBoundary } from 'react-error-boundary';
 import { AlertTriangle } from 'lucide-react';
-import { Button } from '@loopzerokit/ui';
+import { Button } from '@loopzero/ui';
 import type { ReactNode } from 'react';
 import { reportError } from '@/lib/error-reporter';
 

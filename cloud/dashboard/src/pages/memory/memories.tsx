@@ -7,31 +7,17 @@ import {
   Badge,
   Button,
   Card,
-  CodeBlock,
   ConfirmDialog,
   DataTable,
   type DataTableColumn,
   EmptyState,
   Input,
   PageShell,
-  Tabs,
   Timestamp,
-} from '@loopzerokit/ui';
+} from '@loopzero/ui';
 import { usePageMeta } from '@/hooks/use-page-meta';
 import { useRequireAuth } from '@/hooks/use-auth';
-import { TableSkeleton } from '@/components/data/table-skeleton';
 import { cloudFetch } from '@/lib/api';
-
-/**
- * dashboard-memories-tab-standardization T3.2 — 4 scope tabs matching the
- * entities.tsx:54+ canonical pattern. URL state via useSearchParams('scope').
- * EC-8 defensive coerce: invalid `?scope=garbage` defaults to 'user'.
- * Plan v1.5 BFF passthrough: cloudFetch includes `&scope=` so the BFF
- * routes to `/v1/scopes/{scope}/{userID}/memories` upstream (T3.2 BFF
- * extension in cloud/internal/themory/client.go + cloud/internal/routes/memory.go).
- */
-const SCOPES = ['user', 'session', 'agent', 'repo'] as const;
-type Scope = (typeof SCOPES)[number];
 
 /**
  * Plan 1 of dashboard-memory-section-roadmap.md, T1.8.
@@ -68,26 +54,13 @@ export function MemoryListPage() {
   const queryClient = useQueryClient();
   const [searchParams, setSearchParams] = useSearchParams();
 
-  // URL-driven state — deep links carry filters + page offset + scope.
-  const scopeParam = searchParams.get('scope');
-  // EC-8 defensive coerce: invalid scope (e.g., ?scope=garbage) defaults
-  // to 'user' instead of throwing. Mirrors entities.tsx:57-58 pattern.
-  const activeScope: Scope =
-    SCOPES.includes(scopeParam as Scope) ? (scopeParam as Scope) : 'user';
+  // URL-driven state — deep links carry filters + page offset.
   const category = searchParams.get('category') ?? '';
   const from = searchParams.get('from') ?? '';
   const to = searchParams.get('to') ?? '';
   const offset = Number(searchParams.get('offset') ?? '0');
 
   const [pendingDelete, setPendingDelete] = useState<MemoryRow | null>(null);
-
-  const setScope = (next: Scope) => {
-    const params = new URLSearchParams(searchParams);
-    params.set('scope', next);
-    // Reset paging when scope changes — different scope, different result set.
-    params.delete('offset');
-    setSearchParams(params, { replace: true });
-  };
 
   const updateParam = (key: string, value: string) => {
     const next = new URLSearchParams(searchParams);
@@ -103,12 +76,10 @@ export function MemoryListPage() {
   };
 
   const query = useQuery({
-    queryKey: ['cloud', '/v1/memory/list', { activeScope, category, from, to, offset }] as const,
+    queryKey: ['cloud', '/v1/memory/list', { category, from, to, offset }] as const,
     queryFn: () => {
       const params = new URLSearchParams();
       params.set('limit', String(PAGE_SIZE));
-      // T3.2 BFF plumbing: scope routes BFF to the matching upstream path.
-      params.set('scope', activeScope);
       if (offset > 0) params.set('offset', String(offset));
       if (category) params.set('category', category);
       if (from) params.set('from', from);
@@ -127,29 +98,21 @@ export function MemoryListPage() {
 
   const memories = query.data?.memories ?? [];
 
-  // T3.3 standardized columns mirroring entities.tsx pattern + EC-9 scope_type
-  // Badge per row. scope_type is derived client-side from the URL `?scope=`
-  // filter (per plan EC-9 alternative — BFF projection does not include
-  // scope_type per-row at v0.1 since all rows in a single query share the
-  // active scope). Cross-row mixed scopes would require per-row projection
-  // upstream — tracked in follow-up cycle.
   const columns: DataTableColumn<MemoryRow>[] = [
-    {
-      key: 'id',
-      label: 'ID',
-      render: (row) => <span className="font-mono text-xs">{row.id.slice(0, 12)}…</span>,
-    },
     {
       key: 'content',
       label: 'Memory',
       render: (row) => <span className="text-sm">{row.content}</span>,
     },
     {
-      key: 'scope_type',
-      label: 'Scope',
-      render: () => (
-        <Badge variant="outline">{activeScope.toUpperCase()}</Badge>
-      ),
+      key: 'category',
+      label: 'Category',
+      render: (row) =>
+        row.category ? (
+          <Badge variant="outline">{row.category}</Badge>
+        ) : (
+          <span className="text-muted-foreground text-xs">—</span>
+        ),
     },
     {
       key: 'created_at',
@@ -182,17 +145,8 @@ export function MemoryListPage() {
     <>
       <PageShell
         title="Memories"
-        description="Every memory your agent has stored — grouped by scope. Pick a tab to slice."
+        description="Every memory your agent has stored. Use filters to slice by category or date."
       >
-        <Tabs value={activeScope} onValueChange={(v) => setScope(v as Scope)}>
-          <Tabs.List>
-            <Tabs.Trigger value="user">USER</Tabs.Trigger>
-            <Tabs.Trigger value="session">SESSION</Tabs.Trigger>
-            <Tabs.Trigger value="agent">AGENT</Tabs.Trigger>
-            <Tabs.Trigger value="repo">REPO</Tabs.Trigger>
-          </Tabs.List>
-        </Tabs>
-
         <Card>
           <div className="p-4 flex flex-wrap gap-3 items-end">
             <div>
@@ -237,53 +191,16 @@ export function MemoryListPage() {
             The Memory service is not reachable right now. Try refreshing in a moment.
           </Alert>
         ) : query.isLoading ? (
-          <Card><TableSkeleton rows={6} columns={4} /></Card>
+          <Card>Loading…</Card>
         ) : memories.length === 0 ? (
-          activeScope === 'repo' ? (
-            <EmptyState
-              title="Skills are queried, not browsed"
-              description="Repo-scope memories (skills) are exposed only via semantic search through the SDK. They are intentionally not listable over REST — your agent retrieves them by relevance, not as an inventory. See ADR-0010 for the rationale."
-            />
-          ) : category || from || to ? (
-            <EmptyState
-              title="No memories match the current filters"
-              description="Try widening the date range or clearing the category filter to see all memories under this scope."
-              action={
-                <Button variant="ghost" onClick={() => {
-                  // RED TEAM F7 fix: batch all 3 deletions into ONE setSearchParams
-                  // call. Sequential updateParam() calls each read from the same
-                  // React render snapshot (stale closure) — only the LAST call's
-                  // URLSearchParams mutation survives. Batching avoids the race.
-                  const next = new URLSearchParams(searchParams);
-                  next.delete('category');
-                  next.delete('from');
-                  next.delete('to');
-                  next.delete('offset');
-                  setSearchParams(next, { replace: true });
-                }}>
-                  Clear filters
-                </Button>
-              }
-            />
-          ) : (
-            <EmptyState
-              title={`Your agent has not stored ${activeScope} memories yet`}
-              description={
-                <div className="flex flex-col items-center gap-3">
-                  <span>
-                    Memories appear here as soon as your code calls{' '}
-                    <code className="font-mono text-xs">.remember()</code> on
-                    the {activeScope} scope. They become recallable by semantic
-                    search across future agent turns.
-                  </span>
-                  <CodeBlock
-                    language="typescript"
-                    code={`await memory.${activeScope}("${activeScope}_id").remember("Paulo prefers terse responses.");`}
-                  />
-                </div>
-              }
-            />
-          )
+          <EmptyState
+            title="No memories yet"
+            description={
+              category || from || to
+                ? 'No memories match the current filters. Try clearing them.'
+                : "Your agent hasn't stored any memories yet. Use the SDK to call remember()."
+            }
+          />
         ) : (
           <Card>
             <DataTable columns={columns} data={memories} rowKey={(row) => row.id} />

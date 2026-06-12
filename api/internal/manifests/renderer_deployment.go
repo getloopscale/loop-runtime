@@ -10,7 +10,7 @@ import (
 
 // buildDeployment creates a Deployment resource for an app.
 func buildDeployment(ri RenderInput, app AppManifestInput, port int) k8sDeployment {
-	ns := namespace(ri.TenantID, ri.Environment)
+	ns := namespace(ri.TenantID, ri.ProjectID, ri.Environment)
 	labels := commonLabels(ri, app)
 	resName := resourceName(ri.ProjectID, app.Name)
 	// Selector must use the project-scoped `app` label so two projects with
@@ -166,7 +166,7 @@ func buildDeployment(ri RenderInput, app AppManifestInput, port int) k8sDeployme
 // buildHPA creates a HorizontalPodAutoscaler for an app.
 // Only called when app.Autoscaling is non-nil.
 func buildHPA(ri RenderInput, app AppManifestInput) k8sHPA {
-	ns := namespace(ri.TenantID, ri.Environment)
+	ns := namespace(ri.TenantID, ri.ProjectID, ri.Environment)
 	labels := commonLabels(ri, app)
 
 	as := app.Autoscaling
@@ -269,7 +269,7 @@ func buildScaledObject(ri RenderInput, app AppManifestInput) kedaScaledObject {
 		Kind:       "ScaledObject",
 		Metadata: k8sMetadata{
 			Name:        resName + "-scaledobject",
-			Namespace:   namespace(ri.TenantID, ri.Environment),
+			Namespace:   namespace(ri.TenantID, ri.ProjectID, ri.Environment),
 			Labels:      commonLabels(ri, app),
 			Annotations: annotations,
 		},
@@ -330,7 +330,7 @@ func buildHTTPScaledObject(ri RenderInput, app AppManifestInput) kedaHTTPScaledO
 		Kind:       "HTTPScaledObject",
 		Metadata: k8sMetadata{
 			Name:      resName + "-httpso",
-			Namespace: namespace(ri.TenantID, ri.Environment),
+			Namespace: namespace(ri.TenantID, ri.ProjectID, ri.Environment),
 			Labels:    commonLabels(ri, app),
 		},
 		Spec: kedaHTTPScaledObjectSpec{
@@ -349,7 +349,7 @@ func buildHTTPScaledObject(ri RenderInput, app AppManifestInput) kedaHTTPScaledO
 
 // buildPDB creates a PodDisruptionBudget for an app.
 func buildPDB(ri RenderInput, app AppManifestInput) k8sPDB {
-	ns := namespace(ri.TenantID, ri.Environment)
+	ns := namespace(ri.TenantID, ri.ProjectID, ri.Environment)
 	labels := commonLabels(ri, app)
 	resName := resourceName(ri.ProjectID, app.Name)
 	selectorLabels := map[string]string{

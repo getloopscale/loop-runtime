@@ -587,3 +587,175 @@ func minProdConfig(t *testing.T) Config {
 		MinIOSecretKey:      "non-default-minio-secret",
 	}
 }
+
+// ============================================================================
+// T2.5 + EC-05 of plan 2026-06-10-j22-openbao-transit-eso-sync v1.2 —
+// fail-loud boot refusal when OpenBao transit is enabled but credentials
+// are missing, AND the crypto-mode precedence (transit > aes-local >
+// plaintext) is observable via the CryptoMode() method.
+// ============================================================================
+
+// TestCryptoMode_Transit — when OPENBAO_TRANSIT_ENABLED=true, CryptoMode
+// returns "transit" regardless of whether LOOPZERO_SECRET_ENCRYPTION_KEY is
+// set. Transit precedence is the EC-05 absorption invariant.
+func TestCryptoMode_Transit(t *testing.T) {
+	c := Config{
+		OpenBaoTransitEnabled: true,
+		SecretEncryptionKey:   "REDACTED_SECRET_010",
+	}
+	if got := c.CryptoMode(); got != "transit" {
+		t.Errorf("CryptoMode: got %q want transit (transit > aes-local precedence)", got)
+	}
+}
+
+// TestCryptoMode_AESLocal — only SecretEncryptionKey set → aes-local.
+func TestCryptoMode_AESLocal(t *testing.T) {
+	c := Config{
+		OpenBaoTransitEnabled: false,
+		SecretEncryptionKey:   "REDACTED_SECRET_010",
+	}
+	if got := c.CryptoMode(); got != "aes-local" {
+		t.Errorf("CryptoMode: got %q want aes-local", got)
+	}
+}
+
+// TestCryptoMode_Plaintext — neither configured → plaintext (dev only).
+func TestCryptoMode_Plaintext(t *testing.T) {
+	c := Config{
+		OpenBaoTransitEnabled: false,
+		SecretEncryptionKey:   "",
+	}
+	if got := c.CryptoMode(); got != "plaintext" {
+		t.Errorf("CryptoMode: got %q want plaintext", got)
+	}
+}
+
+// TestValidate_TransitEnabledRequiresAddr — fail-loud (D6 ADR): when
+// transit is enabled but OPENBAO_VAULT_ADDR is empty, Validate MUST
+// return an error mentioning the missing var so the operator can fix it.
+func TestValidate_TransitEnabledRequiresAddr(t *testing.T) {
+	c := minProdConfig(t)
+	c.OpenBaoTransitEnabled = true
+	c.OpenBaoVaultAddr = "" // missing
+	c.OpenBaoVaultRoleID = "rid"
+	c.OpenBaoVaultSecretID = "sid"
+
+	err := c.Validate()
+	if err == nil {
+		t.Fatal("Validate should fail when transit enabled + addr empty")
+	}
+	if !contains(err.Error(), "OPENBAO_VAULT_ADDR") {
+		t.Errorf("error should mention OPENBAO_VAULT_ADDR: %v", err)
+	}
+}
+
+// TestValidate_TransitEnabledRequiresRoleID — fail-loud on missing
+// OPENBAO_VAULT_ROLE_ID.
+func TestValidate_TransitEnabledRequiresRoleID(t *testing.T) {
+	c := minProdConfig(t)
+	c.OpenBaoTransitEnabled = true
+	c.OpenBaoVaultAddr = "https://openbao.vault-system.svc:8200"
+	c.OpenBaoVaultRoleID = "" // missing
+	c.OpenBaoVaultSecretID = "sid"
+
+	err := c.Validate()
+	if err == nil {
+		t.Fatal("Validate should fail when transit enabled + roleID empty")
+	}
+	if !contains(err.Error(), "OPENBAO_VAULT_ROLE_ID") {
+		t.Errorf("error should mention OPENBAO_VAULT_ROLE_ID: %v", err)
+	}
+}
+
+// TestValidate_TransitEnabledRequiresSecretID — fail-loud on missing
+// OPENBAO_VAULT_SECRET_ID.
+func TestValidate_TransitEnabledRequiresSecretID(t *testing.T) {
+	c := minProdConfig(t)
+	c.OpenBaoTransitEnabled = true
+	c.OpenBaoVaultAddr = "https://openbao.vault-system.svc:8200"
+	c.OpenBaoVaultRoleID = "rid"
+	c.OpenBaoVaultSecretID = "" // missing
+
+	err := c.Validate()
+	if err == nil {
+		t.Fatal("Validate should fail when transit enabled + secretID empty")
+	}
+	if !contains(err.Error(), "OPENBAO_VAULT_SECRET_ID") {
+		t.Errorf("error should mention OPENBAO_VAULT_SECRET_ID: %v", err)
+	}
+}
+
+// TestValidate_TransitConfigCompletePasses — happy path: all 3 transit
+// vars set + valid prod config → Validate passes. Confirms the validation
+// is NOT over-restrictive (a properly configured transit deploy boots).
+func TestValidate_TransitConfigCompletePasses(t *testing.T) {
+	c := minProdConfig(t)
+	c.OpenBaoTransitEnabled = true
+	c.OpenBaoVaultAddr = "https://openbao.vault-system.svc:8200"
+	c.OpenBaoVaultRoleID = "rid"
+	c.OpenBaoVaultSecretID = "sid"
+
+	if err := c.Validate(); err != nil {
+		t.Fatalf("Validate should pass with complete transit config; got %v", err)
+	}
+}
+
+// TestValidate_TransitDisabledIgnoresVaultVars — legacy path: when
+// OPENBAO_TRANSIT_ENABLED=false (default), missing vault vars MUST NOT
+// fail Validate. Backwards compat for environments not yet wired.
+func TestValidate_TransitDisabledIgnoresVaultVars(t *testing.T) {
+	c := minProdConfig(t)
+	c.OpenBaoTransitEnabled = false
+	// All three vault vars empty — must NOT fail validation.
+
+	if err := c.Validate(); err != nil {
+		t.Fatalf("Validate should pass when transit disabled + vault vars empty; got %v", err)
+	}
+}
+
+// TestLoad_OpenBaoTransitFromEnv — Load reads the 5 OpenBao env vars
+// correctly. Defaults: enabled=false, all strings empty.
+func TestLoad_OpenBaoTransitFromEnv(t *testing.T) {
+	t.Setenv("OPENBAO_TRANSIT_ENABLED", "true")
+	t.Setenv("OPENBAO_VAULT_ADDR", "https://openbao.vault-system.svc:8200")
+	t.Setenv("OPENBAO_VAULT_ROLE_ID", "rid-abc")
+	t.Setenv("OPENBAO_VAULT_SECRET_ID", "sid-xyz")
+	t.Setenv("OPENBAO_SPKI_PIN_SHA256", "deadbeef")
+
+	cfg := Load()
+
+	if !cfg.OpenBaoTransitEnabled {
+		t.Error("OpenBaoTransitEnabled: want true (parsed from env)")
+	}
+	if cfg.OpenBaoVaultAddr != "https://openbao.vault-system.svc:8200" {
+		t.Errorf("OpenBaoVaultAddr: got %q", cfg.OpenBaoVaultAddr)
+	}
+	if cfg.OpenBaoVaultRoleID != "rid-abc" {
+		t.Errorf("OpenBaoVaultRoleID: got %q", cfg.OpenBaoVaultRoleID)
+	}
+	if cfg.OpenBaoVaultSecretID != "sid-xyz" {
+		t.Errorf("OpenBaoVaultSecretID: got %q", cfg.OpenBaoVaultSecretID)
+	}
+	if cfg.OpenBaoSPKIPinSHA256 != "deadbeef" {
+		t.Errorf("OpenBaoSPKIPinSHA256: got %q", cfg.OpenBaoSPKIPinSHA256)
+	}
+}
+
+// TestLoad_OpenBaoTransitDefaultsDisabled — when env vars are unset,
+// transit is disabled and all credential fields are empty (zero-value).
+func TestLoad_OpenBaoTransitDefaultsDisabled(t *testing.T) {
+	t.Setenv("OPENBAO_TRANSIT_ENABLED", "")
+	t.Setenv("OPENBAO_VAULT_ADDR", "")
+	t.Setenv("OPENBAO_VAULT_ROLE_ID", "")
+	t.Setenv("OPENBAO_VAULT_SECRET_ID", "")
+
+	cfg := Load()
+
+	if cfg.OpenBaoTransitEnabled {
+		t.Error("OpenBaoTransitEnabled: want false (default)")
+	}
+	if cfg.OpenBaoVaultAddr != "" || cfg.OpenBaoVaultRoleID != "" || cfg.OpenBaoVaultSecretID != "" {
+		t.Errorf("vault vars: want all empty; got addr=%q roleID=%q secretID=%q",
+			cfg.OpenBaoVaultAddr, cfg.OpenBaoVaultRoleID, cfg.OpenBaoVaultSecretID)
+	}
+}

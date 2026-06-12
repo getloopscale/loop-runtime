@@ -1,4 +1,4 @@
-/* @loopzerokit/ui canonical consumer entry (T-A.0 v1.2 + 2026-05-26 visual fix).
+/* @loopzero/ui canonical consumer entry (T-A.0 v1.2 + 2026-05-26 visual fix).
  *
  * Imports ordered per CSS spec (@import MUST precede non-import rules):
  *   1. tailwindcss         — v4 core (preflight + utilities generator)
@@ -17,7 +17,7 @@
  *   - Gets button cursor: pointer (Tailwind v4 dropped the v3 preflight rule;
  *     without this, every native <button> renders with default arrow cursor —
  *     buttons LOOK and FEEL dead).
- *   - Uses themed border (`var(--border)`) instead of arbitrary
+ *   - Uses themed border (`hsl(var(--border))`) instead of arbitrary
  *     `border-white/6` (which produced inconsistent borders across composites).
  *   - Uses themed background + foreground via --background / --foreground vars
  *     instead of hard-coded surface-0 + white (which fought the Violet Forge
@@ -27,29 +27,10 @@
  *   - Focus ring is the themed violet --ring.
  *   - Scrollbar styled with theme --primary.
  */
-/* CSS spec: `@import` MUST precede any non-import statement (except @charset
- * or empty @layer). `fonts-cdn.css` inlines a Google Fonts CDN @import; if it
- * is listed LAST, after `preset.css` (which transitively brings in :root
- * declarations from tokens.css/tokens-v4.css), the compiled bundle ends up
- * with a CDN @import sandwiched between :root rules — Lightning CSS / vite:css
- * rejects this in dev mode (`@import must precede all other statements`).
- *
- * Fix: hoist `fonts-cdn.css` ABOVE `preset.css` so every transitive @import
- * appears in the bundle's import block, before any CSS statement. Production
- * build was silently tolerating it; dev mode is stricter.
- */
 @import 'tailwindcss';
-@import '@loopzerokit/ui/preset.css';
-@import '@loopzerokit/ui/components.css';
-/* Geist + Geist Mono are loaded via <link rel="stylesheet"> in index.html, NOT
- * via @import here. CSS spec requires every `@import` to precede non-import
- * statements; `@import 'tailwindcss'` expands inline into thousands of
- * declarations BEFORE the import block continues, so a downstream
- * `@import url("https://fonts.googleapis.com/...")` from `fonts-cdn.css` would
- * be rejected by Lightning CSS in dev mode. Serving Google Fonts CSS through
- * a real <link> in HTML is also faster (non-render-blocking, parallelizable
- * with the rest of the critical CSS).
- */
+@import '@loopzero/ui/preset.css';
+@import '@loopzero/ui/components.css';
+@import '@loopzero/ui/fonts-cdn.css';
 
 @custom-variant dark (&:is(.dark *));
 
@@ -125,7 +106,7 @@
   }
 }
 
-/* CRITICAL base layer — replicates @loopzerokit/ui/styles.css @layer base so we
+/* CRITICAL base layer — replicates @loopzero/ui/styles.css @layer base so we
  * inherit the same visual baseline as upstream consumers without taking the
  * full styles.css (which also pulls self-hosted fonts.css → font path resolve
  * issue per original comment). */
@@ -138,7 +119,7 @@
   ::before,
   ::backdrop,
   ::file-selector-button {
-    border-color: var(--border);
+    border-color: hsl(var(--border));
   }
 
   /* Tailwind v4 dropped the v3 button cursor preflight. Without this, every
@@ -157,8 +138,8 @@
   }
 
   body {
-    background-color: var(--background);
-    color: var(--foreground);
+    background-color: hsl(var(--background));
+    color: hsl(var(--foreground));
     /* OpenType ligatures (Geist 'liga' + 'ss01' is structural for the
      * Vercel-tight glyph combinations) + cv02/03/04/11 stylistic alternates */
     font-feature-settings:
@@ -196,15 +177,15 @@
    * component, inconsistent. Now uniform across all keyboard-focusable
    * elements. */
   :focus-visible {
-    outline: 2px solid var(--ring);
+    outline: 2px solid hsl(var(--ring));
     outline-offset: 2px;
   }
 
   /* Themed selection — was bg-accent/20 (green), now uses theme primary
    * (violet) for brand consistency. */
   ::selection {
-    background-color: color-mix(in oklch, var(--primary) 25%, transparent);
-    color: var(--foreground);
+    background-color: hsl(var(--primary) / 0.25);
+    color: hsl(var(--foreground));
   }
 
   /* Native scrollbar — themed with --primary. Used by elements that don't
@@ -217,24 +198,73 @@
     background: transparent;
   }
   *::-webkit-scrollbar-thumb {
-    background-color: color-mix(in oklch, var(--primary) 25%, transparent);
+    background-color: hsl(var(--primary) / 0.25);
     border: 2px solid transparent;
     background-clip: content-box;
     border-radius: 9999px;
     transition: background-color var(--motion-fast) var(--easing-standard);
   }
   *::-webkit-scrollbar-thumb:hover {
-    background-color: color-mix(in oklch, var(--primary) 50%, transparent);
+    background-color: hsl(var(--primary) / 0.5);
   }
   *::-webkit-scrollbar-thumb:active {
-    background-color: color-mix(in oklch, var(--primary) 75%, transparent);
+    background-color: hsl(var(--primary) / 0.75);
   }
   * {
     scrollbar-width: thin;
-    scrollbar-color: color-mix(in oklch, var(--primary) 30%, transparent) transparent;
+    scrollbar-color: hsl(var(--primary) / 0.3) transparent;
   }
 }
 
 @utility text-balance {
   text-wrap: balance;
+}
+
+/* ──────────────────────────────────────────────────────────────────────────
+ * CSS cascade tie-breaker — responsive table-cell utilities
+ *
+ * Plan ref: T5.3 LIVE-bug surfaced during sponsor browser walkthrough of
+ * /projects (2026-06-08-dashboard-screens-review-fixes-plan.md v1.2).
+ *
+ * Why this block exists:
+ *   `@loopzero/ui/components.css` ships precompiled Tailwind v4.3.0 output
+ *   which RE-DECLARES base utilities (including `.hidden { display: none }`)
+ *   inside `@layer utilities`. Because the components.css import comes
+ *   AFTER `@import 'tailwindcss'`, its `.hidden` rule lands LATER in source
+ *   order within the same cascade layer than the core's responsive variants
+ *   (`.md:table-cell`, `.sm:table-cell`). Per CSS cascade tie-break rules,
+ *   later same-specificity rule wins → `display: none` wins at every
+ *   viewport, even when the media query for `md:table-cell` should match.
+ *
+ *   Symptom: `<th class="hidden md:table-cell">Live envs</th>` invisible
+ *   at 1280px desktop. Validated via headless Chrome multi-viewport probe.
+ *
+ * Alternatives considered and rejected:
+ *   - `@import 'components.css' layer(components)`: fixes the .hidden
+ *     cascade but ALSO nests components.css's `@layer base { * { border-color: ... } }`
+ *     inside @layer components, demoting border-color theming. Caught LIVE
+ *     by sponsor: "Agora os componentes tem uma borda branca".
+ *   - Mass refactor 34 call-sites to `max-md:hidden`: works for <th> only
+ *     (relies on default `display: table-cell`); not portable to other tags.
+ *   - Patch components.css: modifying node_modules is fragile.
+ *
+ * Chosen fix: append the EXACT same responsive table-cell rules at the END
+ * of index.css. Same layer (`@layer utilities`), same specificity, but
+ * declared LATER in source than components.css's `.hidden` → cascade tie
+ * resolves in favor of these rules at md+/sm+ viewports.
+ *
+ * Inventory (grep on cloud/dashboard/src/): 32 × `hidden md:table-cell`,
+ * 2 × `hidden sm:table-cell`. Add new variants here if grep grows.
+ * ────────────────────────────────────────────────────────────────────────── */
+@layer utilities {
+  .md\:table-cell {
+    @media (width >= 48rem) {
+      display: table-cell;
+    }
+  }
+  .sm\:table-cell {
+    @media (width >= 40rem) {
+      display: table-cell;
+    }
+  }
 }

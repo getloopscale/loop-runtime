@@ -141,6 +141,13 @@ func (a *buildOrchestratorAdapter) GetBuildTenantID(ctx context.Context, buildID
 	return build.TenantID, nil
 }
 
+// GetRedeploySource — Plan J-17 T6.4. Stub for integration tests; not
+// exercised by concurrent-builds scenarios. The production adapter
+// (api/internal/adapters/build_adapter.go) carries the real impl.
+func (a *buildOrchestratorAdapter) GetRedeploySource(_ context.Context, _, _ string) (*routes.RedeploySource, error) {
+	return nil, nil
+}
+
 // --- Fake external services (Argo Workflows, Gitea, ArgoCD, health probes) ---
 
 type fakeWorkflowSubmitter struct{}

@@ -423,6 +423,189 @@ func (h *StreamHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	}
 }
 
+// =============================================================================
+// ProjectStreamHandler — Plan J-17 T2.3
+// =============================================================================
+//
+// Handles GET /api/v1/projects/{name}/builds/stream. Unlike the build-level
+// StreamHandler (which closes on a stream-terminal event), this handler stays
+// open for the lifetime of the connection: a project list is a perpetual
+// subscription. Stream-terminal events are NOT honored — when a build closes
+// here, the next build for the same project keeps the stream alive.
+//
+// SECURITY: tenant ownership is enforced inside EventStore.GetAfterForProject
+// itself. We additionally require an authenticated UserContext so anonymous
+// callers never reach the store (defense-in-depth, mirrors SEC-1 above).
+
+// ProjectStreamHandler streams every event for every build of a project.
+type ProjectStreamHandler struct {
+	eventStore           EventStore
+	logger               *slog.Logger
+	heartbeatInterval    time.Duration
+	pollInterval         time.Duration
+	maxConcurrentStreams int64
+	activeStreams        atomic.Int64
+}
+
+// ProjectStreamOption configures ProjectStreamHandler (used for testing).
+type ProjectStreamOption func(*ProjectStreamHandler)
+
+// WithProjectHeartbeatInterval overrides the default heartbeat interval.
+func WithProjectHeartbeatInterval(d time.Duration) ProjectStreamOption {
+	return func(h *ProjectStreamHandler) { h.heartbeatInterval = d }
+}
+
+// WithProjectPollInterval overrides the default poll interval.
+func WithProjectPollInterval(d time.Duration) ProjectStreamOption {
+	return func(h *ProjectStreamHandler) { h.pollInterval = d }
+}
+
+// WithProjectLogger sets a structured logger.
+func WithProjectLogger(l *slog.Logger) ProjectStreamOption {
+	return func(h *ProjectStreamHandler) { h.logger = l }
+}
+
+// WithProjectMaxConcurrentStreams overrides the maximum concurrent connections.
+func WithProjectMaxConcurrentStreams(n int64) ProjectStreamOption {
+	return func(h *ProjectStreamHandler) { h.maxConcurrentStreams = n }
+}
+
+// NewProjectStreamHandler constructs the handler with sensible defaults.
+func NewProjectStreamHandler(eventStore EventStore, opts ...ProjectStreamOption) *ProjectStreamHandler {
+	h := &ProjectStreamHandler{
+		eventStore:           eventStore,
+		logger:               slog.Default(),
+		heartbeatInterval:    15 * time.Second,
+		pollInterval:         1 * time.Second,
+		maxConcurrentStreams: defaultMaxConcurrentStreams,
+	}
+	for _, opt := range opts {
+		opt(h)
+	}
+	return h
+}
+
+// ActiveStreams returns the current number of active connections.
+func (h *ProjectStreamHandler) ActiveStreams() int64 {
+	return h.activeStreams.Load()
+}
+
+// ServeHTTP handles the SSE request for a project-level stream.
+func (h *ProjectStreamHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
+	projectName := chi.URLParam(r, "name")
+	if projectName == "" {
+		http.Error(w, `{"code":"MISSING_PARAM","message":"project name is required"}`, http.StatusBadRequest)
+		return
+	}
+
+	uc := middleware.GetUserContext(r.Context())
+	if uc == nil {
+		errorshttp.WriteJSON(w, r, loopzeroerrors.ErrUnauthorized)
+		return
+	}
+
+	current := h.activeStreams.Add(1)
+	if current > h.maxConcurrentStreams {
+		h.activeStreams.Add(-1)
+		h.logger.Warn("project stream: max concurrent streams reached, rejecting",
+			"project", projectName, "active", current-1, "max", h.maxConcurrentStreams)
+		http.Error(w, `{"code":"TOO_MANY_STREAMS","message":"Too many active streams. Try again shortly."}`, http.StatusServiceUnavailable)
+		return
+	}
+	defer h.activeStreams.Add(-1)
+
+	metrics.SSEConnectionsActive.Inc()
+	defer metrics.SSEConnectionsActive.Dec()
+
+	flusher, ok := w.(http.Flusher)
+	if !ok {
+		http.Error(w, `{"code":"INTERNAL_ERROR","message":"streaming not supported"}`, http.StatusInternalServerError)
+		return
+	}
+
+	w.Header().Set("Content-Type", "text/event-stream")
+	w.Header().Set("Cache-Control", "no-cache")
+	w.Header().Set("Connection", "keep-alive")
+	w.Header().Set("X-Accel-Buffering", "no")
+	w.WriteHeader(http.StatusOK)
+	flusher.Flush()
+
+	var lastEventID int64
+	if leID := r.Header.Get("Last-Event-ID"); leID != "" {
+		if parsed, parseErr := strconv.ParseInt(leID, 10, 64); parseErr == nil {
+			lastEventID = parsed
+		}
+	}
+
+	ctx := r.Context()
+
+	events, getErr := h.eventStore.GetAfterForProject(ctx, uc.TenantID, projectName, lastEventID)
+	if getErr != nil {
+		h.logger.Error("project stream: GetAfterForProject failed (replay)",
+			"project", projectName, "last_event_id", lastEventID, "error", getErr)
+		return
+	}
+	for _, ev := range events {
+		if writeErr := writeSSEEvent(w, flusher, fmt.Sprintf("%d", ev.ID), ev.EventType, ev.Data); writeErr != nil {
+			return
+		}
+		lastEventID = ev.ID
+	}
+
+	fallbackInterval := h.pollInterval * 5
+	if fallbackInterval < 3*time.Second {
+		fallbackInterval = 3 * time.Second
+	}
+	pollTicker := time.NewTicker(fallbackInterval)
+	heartbeatTicker := time.NewTicker(h.heartbeatInterval)
+	defer pollTicker.Stop()
+	defer heartbeatTicker.Stop()
+
+	var consecutivePollErrors int
+	for {
+		select {
+		case <-ctx.Done():
+			h.logger.Info("project stream: client disconnected",
+				"project", projectName, "reason", ctx.Err())
+			return
+		case <-heartbeatTicker.C:
+			if _, writeErr := fmt.Fprintf(w, ":heartbeat\n\n"); writeErr != nil {
+				h.logger.Info("project stream: heartbeat write failed (client gone)",
+					"project", projectName, "error", writeErr)
+				return
+			}
+			flusher.Flush()
+		case <-pollTicker.C:
+			newEvents, pollErr := h.eventStore.GetAfterForProject(ctx, uc.TenantID, projectName, lastEventID)
+			if pollErr != nil {
+				if ctx.Err() != nil {
+					return
+				}
+				consecutivePollErrors++
+				h.logger.Warn("project stream: poll failed, retrying",
+					"project", projectName, "error", pollErr,
+					"attempt", consecutivePollErrors, "max", maxPollRetries)
+				if consecutivePollErrors >= maxPollRetries {
+					h.logger.Error("project stream: max retries exhausted, closing",
+						"project", projectName, "error", pollErr)
+					_ = writeSSEEvent(w, flusher, "0", "stream.error", json.RawMessage(
+						`{"reason":"upstream poll failed repeatedly","action":"reconnect"}`))
+					return
+				}
+				continue
+			}
+			consecutivePollErrors = 0
+
+			for _, ev := range newEvents {
+				if writeErr := writeSSEEvent(w, flusher, fmt.Sprintf("%d", ev.ID), ev.EventType, ev.Data); writeErr != nil {
+					return
+				}
+				lastEventID = ev.ID
+			}
+		}
+	}
+}
+
 // writeSSEEvent writes a single SSE event in the standard format.
 // Returns an error if the write fails (e.g., client disconnected).
 func writeSSEEvent(w http.ResponseWriter, flusher http.Flusher, id string, eventType string, data json.RawMessage) error {

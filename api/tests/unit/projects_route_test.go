@@ -78,6 +78,34 @@ func splitKey(key string) [2]string {
 	return [2]string{key, ""}
 }
 
+// T2.1 + ADR D2: per-project summary variant. Mirrors ListByTenant
+// shape; summary fields default to zero (post-handler-test the production
+// route renders these in the response — these unit tests focus on the
+// shape/auth/error paths, not the summary semantics, which live in
+// status_mapper_test.go + integration tests).
+func (f *fakeProjectStore) ListByTenantWithSummary(_ context.Context, tenantID string) ([]routes.ProjectSummary, error) {
+	if f.listErr != nil {
+		return nil, f.listErr
+	}
+	var results []routes.ProjectSummary
+	for key := range f.projects {
+		parts := splitKey(key)
+		if parts[0] == tenantID {
+			results = append(results, routes.ProjectSummary{
+				ID:               "proj-12345678",
+				Name:             parts[1],
+				TeamID:           tenantID,
+				EnvironmentCount: 0,
+				LastDeployStatus: "idle",
+			})
+		}
+	}
+	if results == nil {
+		results = []routes.ProjectSummary{}
+	}
+	return results, nil
+}
+
 func (f *fakeProjectStore) DeleteProject(_ context.Context, _, _ string) error {
 	return nil
 }
@@ -499,6 +527,29 @@ func (f *threadSafeProjectStore) ListByTenant(_ context.Context, tenantID string
 	}
 	if results == nil {
 		results = []routes.ProjectResult{}
+	}
+	return results, nil
+}
+
+// T2.1 + ADR D2: thread-safe summary variant.
+func (f *threadSafeProjectStore) ListByTenantWithSummary(_ context.Context, tenantID string) ([]routes.ProjectSummary, error) {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	var results []routes.ProjectSummary
+	for key := range f.projects {
+		parts := splitKey(key)
+		if parts[0] == tenantID {
+			results = append(results, routes.ProjectSummary{
+				ID:               "proj-12345678",
+				Name:             parts[1],
+				TeamID:           tenantID,
+				EnvironmentCount: 0,
+				LastDeployStatus: "idle",
+			})
+		}
+	}
+	if results == nil {
+		results = []routes.ProjectSummary{}
 	}
 	return results, nil
 }

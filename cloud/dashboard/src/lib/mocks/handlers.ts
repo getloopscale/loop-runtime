@@ -229,24 +229,17 @@ function registerBuildHandlers() {
   });
 
   registerRoute('GET', '/api/v1/builds/{id}/sbom', async () => {
+    // LIVE bug 2026-06-06: shape updated to match backend (metadata
+    // per app + presigned download_url, not inline CycloneDX).
     const sbom: BuildSBOM = {
-      bomFormat: 'CycloneDX',
-      specVersion: '1.4',
-      serialNumber: 'urn:uuid:abc123',
-      components: [
+      build_id: 'b-mock',
+      apps: [
         {
-          type: 'library',
-          'bom-ref': 'next@14.0.0',
-          name: 'next',
-          version: '14.0.0',
-          purl: 'pkg:npm/next@14.0.0',
-        },
-        {
-          type: 'library',
-          'bom-ref': 'react@18.2.0',
-          name: 'react',
-          version: '18.2.0',
-          purl: 'pkg:npm/react@18.2.0',
+          app_name: 'api',
+          sbom_format: 'cyclonedx-json',
+          component_count: 949,
+          generated_at: new Date().toISOString(),
+          download_url: 'http://mock.local/sbom/api.cdx.json',
         },
       ],
     };
@@ -255,9 +248,11 @@ function registerBuildHandlers() {
 
   registerRoute('GET', '/api/v1/builds/{id}/attestation', async () => {
     const att: BuildAttestation = {
-      payloadType: 'application/vnd.in-toto+json',
-      payload: btoa(JSON.stringify({ _type: 'in-toto', predicateType: 'cosign' })),
-      signatures: [{ keyid: 'loopzero-keyless-rekor', sig: 'MEUCIQDxxxxxxxxxxxxxx' }],
+      build_id: 'b-mock',
+      image_digest: 'sha256:abcdef0123456789',
+      image_signature: 'mock-registry/teste/api:abc@sha256:abcdef',
+      signed_at: new Date().toISOString(),
+      signed: true,
     };
     return Response.json(att);
   });

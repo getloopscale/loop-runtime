@@ -144,7 +144,50 @@ func (a *BuildListStoreAdapter) ListByProjectAndEnv(ctx context.Context, tenantI
 			FinishedAt:      b.FinishedAt,
 			DurationSeconds: b.DurationSeconds,
 			ErrorMessage:    b.ErrorMessage,
+			// T5.3 LIVE-bug iter 20 (2026-06-08): parse apps_spec JSONB
+			// → []routes.BuildAppInfo. Empty/invalid JSON resolves to nil
+			// slice (omitempty drops it from the JSON response). Parse
+			// errors are silently swallowed because apps_spec is a
+			// best-effort denormalization for display — the build itself
+			// is the source of truth, and the dashboard renders empty
+			// apps lists gracefully via the appsFromBuild?.length guard.
+			Apps: decodeAppsSpecForListing(b.AppsSpec),
 		}
 	}
 	return result, total, nil
+}
+
+// decodeAppsSpecForListing parses a build's apps_spec JSONB column into
+// the route-level []routes.BuildAppInfo slice for serialization. Returns
+// nil on empty/invalid input so the omitempty JSON tag drops the field.
+// loopzero.yaml apps schema: [{ "name": "...", "type": "...", "port": N,
+// "rendering": "..." }] — we surface only name + type per the dashboard
+// Apps card contract (BuildAppInfo in api/internal/routes/builds.go).
+func decodeAppsSpecForListing(raw json.RawMessage) []routes.BuildAppInfo {
+	if len(raw) == 0 {
+		return nil
+	}
+	var parsed []struct {
+		Name string `json:"name"`
+		Type string `json:"type"`
+	}
+	if err := json.Unmarshal(raw, &parsed); err != nil {
+		return nil
+	}
+	if len(parsed) == 0 {
+		return nil
+	}
+	out := make([]routes.BuildAppInfo, len(parsed))
+	for i, p := range parsed {
+		out[i] = routes.BuildAppInfo{Name: p.Name, Type: p.Type}
+	}
+	return out
+}
+
+// ListEnvsForProject delegates to the underlying db.BuildStore. Post
+// plan 2026-06-08-dashboard-screens-review-fixes T2.2 + ADR D3 + EC-2.
+// The caller (BuildListHandler) is responsible for the cross-tenant
+// gate via ProjectStore.GetByName BEFORE invoking this method.
+func (a *BuildListStoreAdapter) ListEnvsForProject(ctx context.Context, tenantID, projectName string) ([]string, error) {
+	return a.Store.ListEnvsForProject(ctx, tenantID, projectName)
 }

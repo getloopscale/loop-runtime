@@ -1,0 +1,17 @@
+# T1.3 of plan 2026-06-11-cleanroom-canonical-5-defense-layers v1.2.
+#
+# Canonical declarative Promtail Loki sink for standalone-multi env per
+# ADR D1 + D8. Standalone-multi runs all components on the same k3d
+# control plane cluster — same-cluster ClusterIP Service is canonical.
+#
+# Per-env contract:
+#   - standalone-multi: in-cluster Service `loki.monitoring.svc:3100`
+#                       (NOT k3d localhost IP — stale post-network reIP)
+#
+# Validated by: infra/tests/helm/promtail-canonical-pipeline_test.sh (T3.3).
+
+config:
+  clients:
+    - url: http://loki.monitoring.svc:3100/loki/api/v1/push
+      batchwait: 5s
+      batchsize: 1048576

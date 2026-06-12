@@ -107,11 +107,53 @@ app-dev.loopzero.example {
     }
   }
 
+  # Plan J-09 T1.1 (2026-06-05) — GitHub App install handshake.
+  # The dashboard's "Install GitHub App" button uses a RELATIVE URL
+  # (/v1/integrations/github/install?return_to=...). Without this
+  # handle the request hits Vite and 404s, breaking the install flow.
+  # Proxy /v1/integrations/github/* to loopzero-cloud so install + callback
+  # both work from app-dev.loopzero.example. Cookies are set with Domain=
+  # loopzero.example (AUTH_COOKIE_DOMAIN) so they travel cross-subdomain
+  # back to cloud-dev when GitHub redirects.
+  handle /v1/integrations/github/* {
+    reverse_proxy localhost:13002 {
+      header_up Host cloud-dev.loopzero.example
+    }
+  }
+
+  # T6.2 follow-up canonical (2026-06-12 sponsor walkthrough catch): loopzero-cloud
+  # API endpoints (/v1/auth/me, /v1/auth/session/token, /v1/projects, /v1/billing,
+  # etc) accessed cross-origin from dashboard would require CORS, but loopzero-cloud
+  # has CORS disabled per MEET-040 (same-origin assumption). Mirror the existing
+  # /sessions/* + /self-service/* + /v1/integrations/github/* same-origin pattern
+  # for ALL /v1/* paths so dashboard fetches against relative URLs travel cookies
+  # canonical + CORS not needed. Aligns dev-public arch with MEET-040 via edge.
+  handle /v1/* {
+    reverse_proxy localhost:13002 {
+      header_up Host cloud-dev.loopzero.example
+    }
+  }
+
   reverse_proxy localhost:5173
   encode gzip
 }
 
 cloud-dev.loopzero.example {
+  # Plan J-09 T4.1 (2026-06-06) — GitHub webhook bypass cloud auth proxy.
+  # GitHub does NOT send JWT/cookie -- it signs the body with HMAC-SHA256
+  # using the App's webhook secret. loopzero-api validates that signature
+  # directly (api/internal/github/webhook/handler.go). Routing this path
+  # through the loopzero-cloud /engine proxy would require adding a public
+  # (no-JWT) route there, widening loopzero-cloud's attack surface for no
+  # benefit. Instead Caddy hands the request straight to loopzero-api:3001
+  # so the HMAC check is the single boundary -- defense in layers via
+  # TLS at edge + HMAC at app. loopzero-cloud stays JWT-only.
+  handle /api/v1/webhooks/github {
+    reverse_proxy localhost:13001 {
+      header_up Host loopzero-api.loopzero-system.svc.cluster.local
+    }
+  }
+
   reverse_proxy localhost:13002
   encode gzip
   request_body {
@@ -120,6 +162,114 @@ cloud-dev.loopzero.example {
 }
 
 auth-dev.loopzero.example {
+  # Plan J-05 (2026-06-05) — Hydra public routes. The device-flow
+  # verification_uri Hydra emits is https://auth-dev.loopzero.example/oauth2/device/verify,
+  # so browser must reach Hydra (port-forward localhost:14444), not Kratos.
+  # Same for the OIDC discovery document, JWKs, userinfo, and credentials
+  # endpoints that OIDC clients hit on auth-dev directly. handle blocks
+  # are first-match-wins, so the default Kratos proxy below catches the rest.
+  handle /oauth2/* {
+    reverse_proxy localhost:14444
+  }
+  handle /.well-known/* {
+    reverse_proxy localhost:14444
+  }
+  handle /userinfo {
+    reverse_proxy localhost:14444
+  }
+  handle /credentials {
+    reverse_proxy localhost:14444
+  }
+  handle /admin/* {
+    # Hydra admin should NEVER be exposed publicly; deny defense-in-depth.
+    respond "Not Found" 404
+  }
+  # Default: Kratos public (self-service flows, sessions, health, ui).
   reverse_proxy localhost:14433
+  encode gzip
+}
+
+# J-23 preview-dev wildcard — Vercel-like PR previews
+#
+# ONE Caddy block + ONE Cloudflare wildcard A record cover EVERY future
+# PR for every tenant + project automatically. Zero per-PR config.
+#
+# URL convention: <internal-sni>.preview-dev.loopzero.example
+#   where <internal-sni> is the IngressRoute Host match the manifest
+#   builder emits via appHostname(), e.g.,
+#   "tn-08fa2ecedc3c7e77-teste-api-preview-pr-1".
+#
+# The {http.request.host.labels.3} expression extracts the first label
+# from the public hostname (Caddy indexes labels RIGHT-to-LEFT, so for
+# `foo.preview-dev.loopzero.example` → labels.3 = "foo"). The Host header
+# forwarded to the workload Traefik LB substitutes the .loopzero.local
+# suffix, matching the IngressRoute exactly.
+#
+# Cloudflare DNS: wildcard A record `*.preview-dev.loopzero.example` →
+# 165.227.121.20 (proxied=false; preserves HTTP-01 challenge path).
+#
+# TLS — DNS-01 via Cloudflare (J-23 #68 of 4-task batch, 2026-06-07):
+# Per-host HTTP-01 against a wildcard hits LE's "50 certs/week per
+# Registered Domain" rate limit within a single dogfood session. Wildcard
+# cert via DNS-01 needs the `caddy-dns/cloudflare` plugin baked into the
+# binary (stock Caddy ships without DNS providers). Build path codified
+# in `infra/scripts/local/caddy-build-with-cloudflare.sh` — produces
+# `/usr/local/bin/caddy` with the cloudflare TXT-record updater wired.
+#
+# The CF API token MUST have Zone:DNS:Edit on loopzero.example (operator
+# provisions via `CF_API_TOKEN=…` env var); `task cloud:caddy:up` reads
+# it from the running process env. NEVER inline the token in this file —
+# the Caddyfile is checked into git.
+#
+# Pre-condition: a Caddy build that includes caddy-dns/cloudflare. Run
+#   bash infra/scripts/local/caddy-build-with-cloudflare.sh
+# once per host; idempotent. `caddy list-modules | grep dns.providers`
+# must show `dns.providers.cloudflare` for this block to issue certs.
+*.preview-dev.loopzero.example {
+  tls {
+    dns cloudflare {env.CF_API_TOKEN}
+    resolvers 1.1.1.1
+  }
+  reverse_proxy https://172.18.0.10:443 {
+    header_up Host {http.request.host.labels.3}.loopzero.local
+    transport http {
+      tls_insecure_skip_verify
+    }
+  }
+  encode gzip
+}
+
+# J-25 prod-dev wildcard — production deploy URLs (Vercel-canonical)
+# URL convention: <project>-<env>.prod-dev.loopzero.example
+# Per ADR D1 of plan 2026-06-12-dashboard-journey-j25-live-url-discoverability,
+# loopzero-api status.go:252 emits this format when BASE_DOMAIN=prod-dev.loopzero.example
+# (configured in infra/helm/loopzero-api/values-dev.yaml — Tilt-canonical for
+# dev-public per memory `feedback_tilt_owned_deployment_yaml_drift`).
+#
+# Pattern parallel to *.preview-dev.loopzero.example (J-23 delivered 2026-06-07):
+# Caddy rewrites external `<project>-<env>.prod-dev.loopzero.example` →
+# internal `<project>-<env>.loopzero.local` so Traefik IngressRoute matches.
+# labels.3 extracts the 3rd dot-separated label from the request host:
+#   `foo-production.prod-dev.loopzero.example` → labels.3 = "foo-production"
+#   `kitchensink-production.prod-dev.loopzero.example` → labels.3 = "kitchensink-production"
+#
+# Cloudflare DNS prerequisite: wildcard A record `*.prod-dev.loopzero.example`
+# → droplet IP (parallel to existing `*.preview-dev.loopzero.example` record).
+# Without this DNS step, the Caddy block is unreachable from the public
+# internet — operator MUST add the CF DNS record before sponsor walkthrough.
+#
+# TLS via Cloudflare DNS-01 challenge (LE prod). CF_API_TOKEN env var
+# canonical (same as preview block above).
+*.prod-dev.loopzero.example {
+  tls {
+    dns cloudflare {env.CF_API_TOKEN}
+    resolvers 1.1.1.1
+  }
+  reverse_proxy https://172.18.0.10:443 {
+    header_up Host {http.request.host.labels.3}.loopzero.local
+    transport http {
+      tls_insecure_skip_verify
+    }
+  }
   encode gzip
 }

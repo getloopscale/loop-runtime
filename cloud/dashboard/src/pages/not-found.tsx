@@ -1,6 +1,6 @@
 import { Link } from 'react-router-dom';
 import { SearchX } from 'lucide-react';
-import { Button, EmptyState, PageShell } from '@loopzerokit/ui';
+import { Button, EmptyState, PageShell } from '@loopzero/ui';
 import { useSetPageTitle } from '@/hooks/use-page-meta';
 
 /**
@@ -20,10 +20,10 @@ export function NotFoundPage() {
       <EmptyState
         icon={SearchX}
         title="That page doesn't exist"
-        description="Either the URL is wrong, or the page was moved or removed. The dashboard sections in the sidebar all work — head there to keep going."
+        description="Check the URL or head back to your dashboard."
         action={
           <Button asChild>
-            <Link to="/">Go to Overview</Link>
+            <Link to="/">Go home</Link>
           </Button>
         }
       />

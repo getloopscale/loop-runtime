@@ -156,12 +156,65 @@ docker_build(
     only=["api/", "pkg/", "go.work", "go.work.sum", "operators/go.mod", "operators/go.sum", "infra/tests/go.mod", "infra/tests/go.sum", "infra/scripts/"],
 )
 
+# T1.1.c (plan 2026-06-11-code-review-remediation-147-findings v1.2) per ADR D1:
+# Render loopzero-api ConfigMap+Secret from helm chart BEFORE applying Deployment.
+# Without this, the Deployment's envFrom: configMapRef/secretRef references resolve to
+# missing resources and Pod fails CrashLoopBackOff. Output written to .tilt-rendered/
+# (gitignored) — re-rendered on every values-dev.yaml or template edit.
+local_resource(
+    "loopzero-api-runtime",
+    cmd="mkdir -p .tilt-rendered && helm template loopzero-api infra/helm/loopzero-api -f infra/helm/loopzero-api/values-dev.yaml -s templates/configmap-runtime.yaml -s templates/secret-runtime.yaml -n loopzero-system > .tilt-rendered/loopzero-api-runtime.yaml",
+    deps=[
+        "infra/helm/loopzero-api/values-dev.yaml",
+        "infra/helm/loopzero-api/templates/configmap-runtime.yaml",
+        "infra/helm/loopzero-api/templates/secret-runtime.yaml",
+    ],
+    labels=["loopzero"],
+)
+k8s_yaml(".tilt-rendered/loopzero-api-runtime.yaml")
+
 k8s_yaml("infra/tilt/api-deployment.yaml")
 k8s_resource(
     "loopzero-api",
     # No port_forwards — k3d mgmt-cluster.yaml already maps localhost:3001 → NodePort 30001.
     # Adding port_forwards here would conflict with k3d's loadbalancer binding.
-    resource_deps=["db-migrate", "postgresql"],
+    # loopzero-api-runtime added as dep: Pod needs the ConfigMap+Secret rendered before envFrom can resolve.
+    resource_deps=["db-migrate", "postgresql", "loopzero-api-runtime"],
+    labels=["loopzero"],
+)
+
+# ---------------------------------------------------------------------------
+# loopzero-cloud — dashboard backend (session token exchange + billing portal)
+# ---------------------------------------------------------------------------
+# Per mgmt.helmfile.yaml.gotmpl "STANDALONE: tilt owns loopzero-cloud" comment —
+# helmfile SKIPS loopzero-cloud in standalone-multi env; tilt owns dual-build like
+# loopzero-api. Required by dev-public scenarios (Kratos session → JWT exchange at
+# /v1/auth/session/token, billing portal /v1/billing/portal). Added 2026-06-08
+# during T6.1 cleanroom-fresh execution per sponsor verbatim FAANG mandate.
+docker_build(
+    "loopzero-cloud",
+    context=".",
+    dockerfile="cloud/Dockerfile",
+    only=["cloud/", "pkg/", "go.work", "go.work.sum"],
+)
+
+# T1.1.c per ADR D1: render loopzero-cloud ConfigMap+Secret before Deployment apply.
+local_resource(
+    "loopzero-cloud-runtime",
+    cmd="mkdir -p .tilt-rendered && helm template loopzero-cloud infra/helm/loopzero-cloud -f infra/helm/loopzero-cloud/values-dev.yaml -s templates/configmap-runtime.yaml -s templates/secret-runtime.yaml -n loopzero-system > .tilt-rendered/loopzero-cloud-runtime.yaml",
+    deps=[
+        "infra/helm/loopzero-cloud/values-dev.yaml",
+        "infra/helm/loopzero-cloud/templates/configmap-runtime.yaml",
+        "infra/helm/loopzero-cloud/templates/secret-runtime.yaml",
+    ],
+    labels=["loopzero"],
+)
+k8s_yaml(".tilt-rendered/loopzero-cloud-runtime.yaml")
+
+k8s_yaml("infra/tilt/cloud-deployment.yaml")
+k8s_resource(
+    "loopzero-cloud",
+    resource_deps=["loopzero-api", "postgresql", "loopzero-cloud-runtime"],
     labels=["loopzero"],
 )
 

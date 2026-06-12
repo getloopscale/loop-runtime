@@ -70,7 +70,8 @@ func TestKstatusTypes_NoCollisionWithDetailTypes(t *testing.T) {
 		TypeServiceResolved, TypeIngressReady, TypeCertificateIssued, TypeRouteReachable, TypeApplicationHealthy,
 		TypeSecretNotFound, TypeConnected,
 		TypePreviewNamespaceReady, TypePreviewNetworkPolicyReady, TypePreviewResourceQuotaReady,
-		TypePreviewLimitRangeReady, TypePreviewBuildSubmitted, TypePreviewBuildCompleted,
+		TypePreviewLimitRangeReady, TypePreviewServiceAccountReady,
+		TypePreviewBuildSubmitted, TypePreviewBuildCompleted,
 		TypePreviewWorkloadHealthy, TypePreviewApplicationDeleted, TypePreviewNamespaceDeleted,
 		TypeTenantEnvironmentCleanup,
 	}

@@ -1,7 +1,7 @@
-# Brief: Add 4 PaaS-shape primitives to @loopzerokit/ui
+# Brief: Add 4 PaaS-shape primitives to @loopzero/ui
 
-> **Audience:** the `@loopzerokit/ui` maintainer team (or a Claude/Codex agent running in the `loopzero-ui` repo).
-> **Output:** 4 new primitives + tests + stories + barrel export, following existing `@loopzerokit/ui` conventions.
+> **Audience:** the `@loopzero/ui` maintainer team (or a Claude/Codex agent running in the `loopzero-ui` repo).
+> **Output:** 4 new primitives + tests + stories + barrel export, following existing `@loopzero/ui` conventions.
 > **Issued by:** LoopZeroCloud dashboard team (consumer), 2026-05-23.
 > **Tracking:** companion plan `loopzero/docs/plans/completed/2026-05-23-dashboard-loopzero-ui-migration-plan.md` (v1.1).
 
@@ -9,7 +9,7 @@
 
 ## Why this brief exists
 
-The `cloud/dashboard` (LoopZeroCloud's React SPA) is migrating to `@loopzerokit/ui@0.6.3-next.0` as canonical design system (see companion plan). Gap analysis against the reference mockup `cloud/dashboard/design/loopzero_overview_dashboard_mockup.html` (Vercel-style overview) revealed that **~95% of the mockup maps directly to existing primitives/composites**, but **4 PaaS-shape gaps** force consumers to either misuse agent-first primitives or build local components that should belong upstream.
+The `cloud/dashboard` (LoopZeroCloud's React SPA) is migrating to `@loopzero/ui@0.6.3-next.0` as canonical design system (see companion plan). Gap analysis against the reference mockup `cloud/dashboard/design/loopzero_overview_dashboard_mockup.html` (Vercel-style overview) revealed that **~95% of the mockup maps directly to existing primitives/composites**, but **4 PaaS-shape gaps** force consumers to either misuse agent-first primitives or build local components that should belong upstream.
 
 The current library is **agent-first** by design (intentional positioning per `loopzero-ui/PITCH.md`): `CostMeter` is single-metric in USD for token spend; `ProjectSwitcher` carries workspace+branch+agent-status context. PaaS dashboards (LoopZeroCloud, and future external consumers like Vercel/Fly/Railway look-alikes) need PaaS-shape equivalents.
 
@@ -434,7 +434,7 @@ Update `package.json` `"exports"` map:
 
 After implementation, the consumer (`cloud/dashboard`) will validate by:
 
-1. Installing the new version (`npm install @loopzerokit/ui@<next-version>`)
+1. Installing the new version (`npm install @loopzero/ui@<next-version>`)
 2. Replacing the `CostMeter` attempt in `pages/overview.tsx` with `<UsageMeter>`
 3. Replacing the local `<div className="dark bg-surface-1 ...">` sidebar with `<Sidebar.Header><AccountMenu plan="hobby" .../></Sidebar.Header>`
 4. Replacing custom `<Badge>` plan pills with `<PlanBadge plan="hobby" />`

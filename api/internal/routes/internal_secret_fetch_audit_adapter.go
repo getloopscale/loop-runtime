@@ -24,8 +24,10 @@ package routes
 import (
 	"context"
 	"fmt"
+	"log/slog"
 
 	"github.com/loopzero/loopzero/api/internal/db"
+	"github.com/loopzero/loopzero/api/internal/metrics"
 )
 
 // Canonical action strings — exported so tests don't drift.
@@ -46,9 +48,28 @@ func NewSecretReadAuditAdapter(logger *db.AuditLogger) *SecretReadAuditAdapter {
 }
 
 // WriteAudit satisfies SecretReadAuditWriter.
+//
+// T2.3 of plan 2026-06-10-j22-layer2-code-review-fixes (closes HIGH #16
+// silent audit error): on LogAudit failure we now (a) increment the
+// canonical Prometheus counter `loopzero_secret_audit_write_failed_total`
+// AND (b) log via slog.Error with structured fields. Callers may keep
+// the legacy `_ = WriteAudit(...)` posture (audit is best-effort and
+// MUST NOT fail the request); telemetry is observed via the metric +
+// log here, NOT at every call site. Single source of truth for the
+// audit failure signal.
 func (a *SecretReadAuditAdapter) WriteAudit(ctx context.Context, e SecretReadAuditEvent) error {
 	if a == nil || a.Logger == nil {
-		return fmt.Errorf("secret-read audit: logger not configured")
+		err := fmt.Errorf("secret-read audit: logger not configured")
+		metrics.SecretAuditWriteFailedTotal.WithLabelValues(metricEventLabel(e.EventType)).Inc()
+		slog.Error("secret-read audit failed",
+			"event_type", e.EventType,
+			"tenant_id", e.TenantID,
+			"secret_name", e.SecretName,
+			"project", e.Project,
+			"environment", e.Environment,
+			"actor", e.Actor,
+			"error", "logger_not_configured")
+		return err
 	}
 
 	action := e.EventType
@@ -64,11 +85,46 @@ func (a *SecretReadAuditAdapter) WriteAudit(ctx context.Context, e SecretReadAud
 		"event_type": e.EventType,
 		"actor_kind": "eso-broker", // distinguishes from operator-side audit entries
 	}
+	// T2.3: thread project + environment into the audit metadata so the
+	// forensic trace of cross_tenant_attempt records exactly which env
+	// the offending request targeted (T2.1 URL contract carries them).
+	if e.Project != "" {
+		metadata["project"] = e.Project
+	}
+	if e.Environment != "" {
+		metadata["environment"] = e.Environment
+	}
 	if e.Reason != "" {
 		metadata["reason"] = e.Reason
 	}
 	// LogAudit signature: ctx, tenantID, action, actor, resourceType, resourceID, correlationID, metadata
-	return a.Logger.LogAudit(ctx, e.TenantID, action, e.Actor, "secret", e.SecretName, "", metadata)
+	err := a.Logger.LogAudit(ctx, e.TenantID, action, e.Actor, "secret", e.SecretName, "", metadata)
+	if err != nil {
+		metrics.SecretAuditWriteFailedTotal.WithLabelValues(metricEventLabel(e.EventType)).Inc()
+		slog.Error("secret-read audit failed",
+			"event_type", e.EventType,
+			"tenant_id", e.TenantID,
+			"secret_name", e.SecretName,
+			"project", e.Project,
+			"environment", e.Environment,
+			"actor", e.Actor,
+			"error", err.Error())
+	}
+	return err
+}
+
+// metricEventLabel maps the human event_type to a Prometheus-safe label.
+// Underscore-only — never a free-form caller value to avoid label
+// cardinality explosion.
+func metricEventLabel(eventType string) string {
+	switch eventType {
+	case "secret.read.broker":
+		return "secret_read_broker"
+	case "cross_tenant_attempt":
+		return "cross_tenant_attempt"
+	default:
+		return "unknown"
+	}
 }
 
 // _ = db.AuditEntry{} // type-keep no-op (LogAudit takes flat args; we still

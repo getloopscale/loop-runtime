@@ -1,0 +1,35 @@
+# T1.3 of plan 2026-06-11-cleanroom-canonical-5-defense-layers v1.2.
+#
+# Canonical declarative Promtail Loki sink + pipeline_stages for dev-public env
+# per ADR D1 + D8. Closes catches #11/#12 from T6.2 session (memory
+# reference_t62_cleanroom_session_2026_06_11 + j17-aprendizado-promtail-loki-
+# pipeline-canonical-via-helmfile): default Promtail values reference stale
+# k3d localhost IPs that silently fail post-network reIP. Canonical fix:
+# explicit in-cluster Service FQDN per env.
+#
+# Per-env contract:
+#   - dev-public: Loki + Promtail co-located on build cluster monitoring ns
+#                 → in-cluster ClusterIP Service `loki.monitoring.svc:3100`
+#   - pipeline_stages canonical for J-17 ::loopzero:: marker filtering
+#
+# Validated by: infra/tests/helm/promtail-canonical-pipeline_test.sh (T3.3).
+
+config:
+  clients:
+    - url: http://loki.monitoring.svc:3100/loki/api/v1/push
+      batchwait: 5s
+      batchsize: 1048576
+
+  snippets:
+    # J-17 ::loopzero:: marker pipeline_stages canonical per memory
+    # j17-aprendizado-promtail-loki-pipeline-canonical-via-helmfile.
+    # loopzero-api emits ::loopzero:: phase=X step=Y level=Z msg=... via
+    # api/internal/argo/loopzero_log.go wrapper. LogQL consumers filter on
+    # loopzero_phase label to surface only curated milestones.
+    pipeline_stages:
+      - cri: {}
+      - json:
+          expressions:
+            correlation_id: correlation_id
+      - labels:
+          correlation_id:

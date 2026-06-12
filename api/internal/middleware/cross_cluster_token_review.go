@@ -70,6 +70,22 @@ func CrossClusterFromContext(ctx context.Context) (*TokenReviewResult, bool) {
 	return r, ok
 }
 
+// InjectCrossClusterResultForBroker injects a pre-validated TokenReviewResult
+// into ctx using the same private key that CrossClusterFromContext reads from.
+//
+// This helper exists so the broker endpoint's bearer-token middleware in
+// api/cmd/setup_secret_fetch.go can produce the same context shape the
+// existing handler expects, WITHOUT also having to live inside this
+// package. Callers MUST ensure the result is genuinely authenticated —
+// this function performs no verification of its own.
+//
+// Built 2026-06-10 J-22 walkthrough to wire the Phase 4 broker LIVE in
+// single-cluster dev-public, where the prod cross-cluster TokenReview
+// chain is not yet shipped.
+func InjectCrossClusterResultForBroker(ctx context.Context, result *TokenReviewResult) context.Context {
+	return context.WithValue(ctx, crossClusterCtxKey{}, result)
+}
+
 // CrossClusterMiddlewareConfig holds tunables.
 type CrossClusterMiddlewareConfig struct {
 	Reviewer  CrossClusterTokenReviewer

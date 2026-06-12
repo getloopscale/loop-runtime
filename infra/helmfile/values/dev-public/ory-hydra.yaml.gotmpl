@@ -1,0 +1,47 @@
+# T1.1 of plan 2026-06-11-cleanroom-canonical-5-defense-layers v1.2.
+#
+# Canonical declarative ory-hydra URL contract for dev-public env per ADR D1
+# + D8. Closes catches #14/#15/#16 from T6.2 session (memory
+# reference_t62_cleanroom_session_2026_06_11 + j05-aprendizado-hydra-urls-
+# canonical-via-helmfile-overlay): chart-default template logic that
+# computes URLs from `.Values.publicAuthUrl` works for `urls.self.public`
+# but leaves the OTHER `urls.*` (device verification, device success,
+# login, consent, logout) implicit. Cleanroom destroys runtime patches
+# applied to fix those — only this declarative overlay survives.
+#
+# Per-env contract:
+#   - dev-public hosts: auth-dev / app-dev / cloud-dev . loopzero.example
+#   - issuer/public point at auth-dev (Hydra's own FQDN)
+#   - device.verification + device.success point at app-dev (dashboard UI)
+#     because Hydra's built-in /oauth2/fallbacks/device is literally the
+#     "config missing" error page in Hydra v2.6 (caught LIVE 2026-06-05)
+#   - login/consent point at cloud-dev (cloud consent handler — Hydra
+#     redirects with login_challenge/consent_challenge; only the cloud
+#     handler knows how to call Hydra admin AcceptLogin/AcceptConsent)
+#
+# Validated by: infra/tests/helm/ory-hydra-canonical-urls_test.sh (T3.1).
+
+hydra:
+  config:
+    urls:
+      self:
+        issuer: "https://auth-dev.loopzero.example/"
+        public: "https://auth-dev.loopzero.example/"
+
+      # device-flow URLs — per memory j05-aprendizado-hydra-urls-canonical-via-helmfile-overlay
+      # + reference_hydra_v2_device_flow_complete_chain_2026_06_05.
+      # `urls.device.verification` is where Hydra redirects the user-agent
+      # AFTER the device_code is issued; MUST be a dashboard page that
+      # accepts user_code input + calls Hydra admin AcceptUserCodeRequest.
+      # `urls.device.success` is shown post-accept.
+      device:
+        verification: "https://app-dev.loopzero.example/device-verify"
+        success: "https://app-dev.loopzero.example/device-success"
+
+      # OAuth2 consent + login redirect URLs.
+      # Per Plan J-05 iter 4 amendment: cloud-dev (NOT app-dev) handles
+      # login_challenge/consent_challenge → Hydra admin AcceptLogin/AcceptConsent.
+      login: "https://cloud-dev.loopzero.example/auth/login"
+      consent: "https://cloud-dev.loopzero.example/auth/consent"
+      logout: "https://app-dev.loopzero.example/logout"
+      error: "https://app-dev.loopzero.example/auth/error"

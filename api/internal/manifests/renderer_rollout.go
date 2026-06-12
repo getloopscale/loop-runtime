@@ -31,7 +31,7 @@ import (
 // Server/frontend apps get full canary with TraefikService weighted
 // routing + Prometheus AnalysisTemplate when configured.
 func buildRollout(ri RenderInput, app AppManifestInput, port int) k8sRollout {
-	ns := namespace(ri.TenantID, ri.Environment)
+	ns := namespace(ri.TenantID, ri.ProjectID, ri.Environment)
 	labels := commonLabels(ri, app)
 	resName := resourceName(ri.ProjectID, app.Name)
 	selectorLabels := map[string]string{
@@ -206,7 +206,7 @@ func buildCanaryService(ri RenderInput, app AppManifestInput, port int) k8sServi
 }
 
 func buildRolloutService(ri RenderInput, app AppManifestInput, svcName string, port int) k8sService {
-	ns := namespace(ri.TenantID, ri.Environment)
+	ns := namespace(ri.TenantID, ri.ProjectID, ri.Environment)
 	labels := commonLabels(ri, app)
 	resName := resourceName(ri.ProjectID, app.Name)
 	selectorLabels := map[string]string{
@@ -241,7 +241,7 @@ func buildRolloutService(ri RenderInput, app AppManifestInput, svcName string, p
 // Initial state: stable=100, canary=0 (no traffic to canary until rollout
 // progresses).
 func buildTraefikService(ri RenderInput, app AppManifestInput, port int) traefikWeightedService {
-	ns := namespace(ri.TenantID, ri.Environment)
+	ns := namespace(ri.TenantID, ri.ProjectID, ri.Environment)
 	labels := commonLabels(ri, app)
 	resName := resourceName(ri.ProjectID, app.Name)
 	if port == 0 {
@@ -276,7 +276,7 @@ func buildTraefikService(ri RenderInput, app AppManifestInput, port int) traefik
 // empty (caller checks before emitting). The renderer skips emission of
 // the template doc in that case.
 func buildAnalysisTemplate(ri RenderInput, app AppManifestInput) analysisTemplate {
-	ns := namespace(ri.TenantID, ri.Environment)
+	ns := namespace(ri.TenantID, ri.ProjectID, ri.Environment)
 	labels := commonLabels(ri, app)
 	resName := resourceName(ri.ProjectID, app.Name)
 	canarySvcPattern := fmt.Sprintf("%s-%s-canary.*", ns, resName)

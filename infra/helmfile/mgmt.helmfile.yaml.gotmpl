@@ -95,6 +95,14 @@ repositories:
     url: https://charts.bitnami.com/bitnami
   - name: chaos-mesh
     url: https://charts.chaos-mesh.org
+  # Iter 44 of plan 2026-06-10-j22-openbao-transit-eso-sync v1.2
+  # (Option B per docs/operations/option-b-mgmt-helmfile-eso-deploy.md § B1).
+  # ESO controller in mgmt cluster enables full T4.1 6/6 LIVE scenarios
+  # (B+C+F depend on ESO read-path). Same version as runtime helmfile to
+  # prevent cross-cluster drift — locked by
+  # infra/tests/check-option-b-eso-deploy-doc_test.sh § E1.
+  - name: external-secrets
+    url: https://charts.external-secrets.io
   # Plan T7.2 (2026-05-22) — OpenCost adopted for cost attribution per tenant.
   # Materializes Anti-Pattern #8 ("adopt > reinvent"): no Go gate
   # reimplementation; external OpenCost chart adopted as-is.
@@ -642,6 +650,19 @@ releases:
   # installs when `installChaosMesh: true` in environment values. Default
   # false so prod + dev don't carry the controller unnecessarily; chaos
   # validation env opts in explicitly.
+  # Iter 44 of plan 2026-06-10-j22-openbao-transit-eso-sync v1.2
+  # (Option B per docs/operations/option-b-mgmt-helmfile-eso-deploy.md § B1).
+  # ESO controller in mgmt cluster enables full T4.1 6/6 LIVE scenarios.
+  # Same version (0.14.3) as runtime helmfile to prevent cross-cluster
+  # drift — locked by infra/tests/check-option-b-eso-deploy-doc_test.sh § E1.
+  # No `needs:` deps required — ESO has no transitive deps within mgmt chain.
+  - name: external-secrets
+    namespace: external-secrets
+    chart: external-secrets/external-secrets
+    version: 0.14.3
+    values:
+      - ../helm/external-secrets/values.yaml
+
   - name: chaos-mesh
     namespace: chaos-mesh
     chart: ../helm/chaos-mesh

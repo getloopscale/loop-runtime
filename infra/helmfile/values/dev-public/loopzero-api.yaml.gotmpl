@@ -39,6 +39,17 @@ env:
   # Override the chart default `letsencrypt-prod` so tenant manifests
   # reference an issuer that actually exists in the workload cluster.
   LOOPZERO_CLUSTER_ISSUER: "loopzero-ca-issuer"
+  # J-23 wildcard preview URL convention (sponsor verbatim 2026-06-07
+  # "Continuar com wildcard CF + Caddy wildcard block agora"): loopzero-api
+  # surfaces public preview URLs under the Caddy/CF wildcard root, NOT
+  # the internal BaseDomain. Caddy block `*.preview-dev.loopzero.example`
+  # reverse-proxies <internal-sni>.loopzero.local to Traefik (see
+  # infra/local/Caddyfile). The URL shape emitted by
+  # preview_service.previewURL is:
+  #   https://<tenant>-<project>-<entryApp>-preview-pr-N.preview-dev.loopzero.example
+  # which matches the IngressRoute Host emitted by appHostname() with
+  # only the domain suffix swapped — making the dashboard URL clickable.
+  LOOPZERO_PREVIEW_PUBLIC_DOMAIN: "preview-dev.loopzero.example"
   # Gitea is in `loopzero-system` ns (not chart-default `gitea` ns). Override
   # so loopzero-api connects to the right service for health checks + repo ops.
   GITEA_URL: "http://gitea-http.loopzero-system.svc.cluster.local:3000"
@@ -52,3 +63,46 @@ env:
   # dev-public must set it explicitly. Without it the admin journeys (B38)
   # get HTTP 404 "Endpoint not available." for any /admin/* call.
   LOOPZERO_ADMIN_API: "true"
+  # Plan J-09 T1.1 (2026-06-06): GitHub App credentials. App ID is public
+  # (visible at github.com/settings/apps/<slug>) so it lives here as a
+  # literal env var. GITHUB_APP_PRIVATE_KEY is the sensitive half --
+  # it lives in Secret `loopzero-api-github` (see infra/helm/loopzero-external-
+  # secrets/values.yaml entry for the ExternalSecret pulling it from
+  # Vault key github/app_private_key). Without GITHUB_APP_ID the
+  # setupGitHub flow leaves ghAppClient nil -> IntegrationsHandler nil
+  # -> /api/v1/integrations/github/installations/{id}/repositories 404s.
+  # If you rotate the App in github.com, update this value AND the Vault
+  # secret in tandem.
+  GITHUB_APP_ID: "3319955"
+  # J-25 Live URL Discoverability — FAANG canonical fix (sponsor walkthrough
+  # 2026-06-12 catches #21+#22, replaces v1 patch-the-symptom approach).
+  #
+  # SEPARATION OF CONCERNS (ADR D3 of plan 2026-06-12-dashboard-journey-j25):
+  #
+  #   BASE_DOMAIN        = cluster-internal SNI used by IngressRoute Host rule
+  #                        (Traefik matches against this). Caddy rewrites the
+  #                        public Host header to <sub>.loopzero.local before
+  #                        forwarding to Traefik — so IngressRoute Host MUST
+  #                        be emitted under loopzero.local for the rewrite chain
+  #                        to land. Same value used by renderer_helpers.go
+  #                        appHostname → pkg/naming.AppHostname.
+  #
+  #   LOOPZERO_PUBLIC_DOMAIN = wildcard root used to compose the user-facing URL
+  #                        emitted by status.url + dashboard "Visit" link.
+  #                        Caddy serves `*.prod-dev.loopzero.example` + reverse-
+  #                        proxies to Traefik with Host rewrite. The shape:
+  #                          https://<tenant>-<project>-<entryApp>-<env>.<LOOPZERO_PUBLIC_DOMAIN>
+  #                        matches IngressRoute Host under loopzero.local after
+  #                        Caddy rewrites — closing the J-25 #21 mismatch.
+  #
+  # Mirrors the LOOPZERO_PREVIEW_PUBLIC_DOMAIN/BaseDomain split already in place
+  # for J-23 previews (ADR D2). Single source of truth: pkg/naming.AppURL
+  # (T2.5 of plan 2026-06-11-code-review-remediation extracted PreviewURL;
+  # J-25 extracted AppURL with same shape).
+  #
+  # Cleanroom-survival: `task setup` applies helmfile sync automatically;
+  # this overlay survives `task clean:all` without operator intervention.
+  # Hermetic gate em infra/tests/helm/loopzero-api-base-domain-per-env_test.sh
+  # trava esta config contra regressão.
+  BASE_DOMAIN: "loopzero.local"
+  LOOPZERO_PUBLIC_DOMAIN: "prod-dev.loopzero.example"

@@ -175,7 +175,15 @@ func TestT2_1_MappingDocExists(t *testing.T) {
 // TestT2_3a_NoBareSelector_InInstallMgmt — install:mgmt should use master sync
 // (single `helmfile sync` without `--selector`). Per-release `--selector`
 // breaks `needs:` ordering — EC-01 mitigation requires master pattern.
-// Filters comments to avoid false positives when documentation mentions --selector.
+//
+// T3.5 of plan 2026-06-11-code-review-remediation v1.2: the original
+// end-marker `infra:install:build:` was too broad — a NEW sibling task
+// `infra:install:mgmt-dashboard-only:` (legitimately using --selector
+// profile=dashboard-only by design — that's its entire purpose) landed
+// in between, causing the gate to false-positive. Tightened endMarker
+// to the immediate next task header so we scan ONLY install:mgmt's
+// own block. Filters comments to avoid false positives when
+// documentation mentions --selector.
 func TestT2_3a_NoBareSelector_InInstallMgmt(t *testing.T) {
 	data, err := os.ReadFile(taskfilePath)
 	if err != nil {
@@ -184,7 +192,7 @@ func TestT2_3a_NoBareSelector_InInstallMgmt(t *testing.T) {
 	content := string(data)
 	// Find install:mgmt block boundaries
 	startMarker := "infra:install:mgmt:"
-	endMarker := "infra:install:build:"
+	endMarker := "infra:install:mgmt-dashboard-only:"
 	startIdx := strings.Index(content, startMarker)
 	endIdx := strings.Index(content, endMarker)
 	if startIdx == -1 || endIdx == -1 {

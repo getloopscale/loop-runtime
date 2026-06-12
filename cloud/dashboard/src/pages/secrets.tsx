@@ -1,93 +1,91 @@
 import { useState } from 'react';
-import { Link, useParams } from 'react-router-dom';
-import { ArrowLeft, KeyRound, Plus, Trash2 } from 'lucide-react';
-import {
-  Badge,
-  Button,
-  Card,
-  ConfirmDialog,
-  PageShell,
-  StatusDot,
-  Table,
-} from '@loopzerokit/ui';
+import { Link, useParams, useSearchParams } from 'react-router-dom';
+import { ArrowLeft, KeyRound, Plus, Upload } from 'lucide-react';
+import { Button, Card, PageShell } from '@loopzero/ui';
 import { useSetPageTitle } from '@/hooks/use-page-meta';
 import { useRequireAuth } from '@/hooks/use-auth';
 import { useSecrets } from '@/hooks/use-secrets';
-import { AddSecretSheet } from "@/components/sheets/add-secret-sheet";
-import { TableSkeleton } from '@/components/data/table-skeleton';
-import { engineFetch } from '@/lib/api';
-import { formatDate } from '@/lib/format';
+import { useEnvironments } from '@/hooks/use-environments';
+import { SecretsTable } from '@/components/secrets/secrets-table';
+import { AddSecretSheet } from '@/components/secrets/add-secret-sheet';
+import { RotateSecretDialog } from '@/components/secrets/rotate-secret-dialog';
+import { DeleteSecretDialog } from '@/components/secrets/delete-secret-dialog';
+import { BulkUploadSheet } from '@/components/secrets/bulk-upload-sheet';
 import type { Secret } from '@/lib/api/types';
+import { DEFAULT_PERMANENT_ENV } from '@/lib/domain';
 
 /**
- * SecretsPage — Plan v1.0 T3.1.
+ * SecretsPage — J-22 T4.1.
  *
- * Lists secrets (values never returned — name + metadata + ESO sync only).
- * Add via dialog, delete via per-row Trash button.
+ * Vercel-canonical: lists secrets (D1 masked); per-row Rotate + Delete
+ * dialogs; Add sheet + Bulk Upload sheet. Page-level integration of the
+ * components shipped in T3.1-T3.5.
  *
- * DESIGN.md §16 (danger zone choreography): destructive actions now go
- * through ConfirmDialog with typed confirmation phrase. Replacing a silent
- * delete that could break production at runtime on a misclick.
+ * URL state — T4.2 ties ?env= filter into useSecrets({env}).
+ *
+ * Plan 2026-06-11 T1.4 — env filter options now derived dynamically
+ * from useEnvironments(name). The previous hardcoded ENV_OPTIONS
+ * `['all', 'production', 'staging']` silently dropped custom envs like
+ * `staging-eu-1` or `preview-pr-42` from the filter chips, breaking
+ * J-22↔J-10 contract whenever a tenant departed from the default tier.
  */
+
 export function SecretsPage() {
   useRequireAuth();
   const { name = '' } = useParams<{ name: string }>();
+  const [searchParams, setSearchParams] = useSearchParams();
+  const envFilter = searchParams.get('env') ?? undefined;
   useSetPageTitle(`${name} · Secrets`);
-  const { secrets, loading, error, refetch } = useSecrets();
-  const [addOpen, setAddOpen] = useState(false);
-  const [pendingDelete, setPendingDelete] = useState<Secret | null>(null);
-  const [deleting, setDeleting] = useState(false);
+  const { secrets, loading } = useSecrets({ project: name, env: envFilter });
 
-  const handleConfirmDelete = async () => {
-    if (!pendingDelete) return;
-    setDeleting(true);
-    try {
-      await engineFetch(`/api/v1/secrets/${encodeURIComponent(pendingDelete.name)}`, {
-        method: 'DELETE',
-      });
-      refetch();
-      setPendingDelete(null);
-    } finally {
-      setDeleting(false);
+  // T1.4: env filter options derived from useEnvironments(name) instead
+  // of a hardcoded literal. Closes the J-22↔J-10 silent break.
+  // EC-5: hook already falls back to [DEFAULT_PERMANENT_ENV] on error.
+  const { envs: projectEnvs, error: envsError } = useEnvironments(name);
+  const ENV_OPTIONS = ['all', ...projectEnvs] as const;
+
+  // T4.2: URL is the source of truth — toggling filter calls
+  // setSearchParams which triggers useSecrets refetch (queryKey changes).
+  const handleEnvChange = (next: string) => {
+    const params = new URLSearchParams(searchParams);
+    if (next === 'all') {
+      params.delete('env');
+    } else {
+      params.set('env', next);
     }
+    setSearchParams(params, { replace: true });
   };
 
+  const [addOpen, setAddOpen] = useState(false);
+  const [bulkOpen, setBulkOpen] = useState(false);
+  const [rotateTarget, setRotateTarget] = useState<Secret | null>(null);
+  const [deleteTarget, setDeleteTarget] = useState<Secret | null>(null);
+
+  const defaultEnvs = envFilter ? [envFilter] : [DEFAULT_PERMANENT_ENV];
+
   return (
+    <>
     <PageShell
       title="Secrets"
-      description={`Environment variables for ${name}. Values are masked.`}
+      description={`Environment variables for ${name}. Values are encrypted at rest and masked in the UI.`}
       primaryAction={{
         label: 'Add secret',
         icon: Plus,
         onClick: () => setAddOpen(true),
       }}
       loading={loading}
-      loadingNode={<Card><TableSkeleton rows={5} columns={5} /></Card>}
-      error={
-        error
-          ? {
-              message:
-                'Could not load secrets. The secrets service may be temporarily unreachable.',
-              onRetry: refetch,
-            }
-          : undefined
-      }
       empty={
-        !loading && !error && secrets.length === 0
+        !loading && secrets.length === 0
           ? {
               icon: KeyRound,
-              title: 'Add your first secret',
+              title: 'No secrets yet',
               description:
-                'Secrets are encrypted at rest and exposed to your app as environment variables at runtime. Common uses: database URLs, third-party API keys, OAuth client secrets.',
-              action: {
-                label: 'Add secret',
-                onClick: () => setAddOpen(true),
-              },
+                'Add a secret to make it available to your apps at runtime.',
             }
           : undefined
       }
     >
-      <div className="mb-4">
+      <div className="mb-4 flex items-center justify-between gap-4 flex-wrap">
         <Button asChild variant="ghost" size="sm">
           <Link
             to={`/projects/${encodeURIComponent(name)}`}
@@ -97,119 +95,84 @@ export function SecretsPage() {
             <span>Back to project</span>
           </Link>
         </Button>
+        <div className="flex items-center gap-2">
+          <label htmlFor="env-filter" className="text-body-sm text-muted-foreground">
+            Environment
+          </label>
+          <select
+            id="env-filter"
+            value={envFilter ?? 'all'}
+            onChange={(e) => handleEnvChange(e.target.value)}
+            className="rounded-md border border-input bg-card text-body-sm px-2 py-1"
+            aria-describedby={envsError ? 'env-filter-error' : undefined}
+          >
+            {ENV_OPTIONS.map((opt) => (
+              <option key={opt} value={opt}>
+                {opt}
+              </option>
+            ))}
+          </select>
+          {envsError && (
+            <span
+              id="env-filter-error"
+              role="alert"
+              className="text-body-sm text-amber-600"
+            >
+              Showing default env only — couldn't load full list
+            </span>
+          )}
+          <Button variant="secondary" size="sm" onClick={() => setBulkOpen(true)}>
+            <Upload className="size-4" aria-hidden="true" />
+            Bulk upload .env
+          </Button>
+        </div>
       </div>
 
       <Card>
         <Card.Body className="p-0">
-          <Table>
-            <Table.Header>
-              <Table.Row>
-                <Table.HeaderCell>Key</Table.HeaderCell>
-                <Table.HeaderCell>Value</Table.HeaderCell>
-                <Table.HeaderCell className="hidden md:table-cell">
-                  Environments
-                </Table.HeaderCell>
-                <Table.HeaderCell className="hidden md:table-cell">
-                  Sync
-                </Table.HeaderCell>
-                <Table.HeaderCell className="hidden md:table-cell">
-                  Updated
-                </Table.HeaderCell>
-                <Table.HeaderCell align="right">
-                  <span className="sr-only">Delete</span>
-                </Table.HeaderCell>
-              </Table.Row>
-            </Table.Header>
-            <Table.Body>
-              {secrets.map((s) => (
-                <Table.Row key={s.name}>
-                  <Table.Cell>
-                    <span className="font-mono text-body-sm font-medium text-foreground">
-                      {s.name}
-                    </span>
-                  </Table.Cell>
-                  <Table.Cell>
-                    <span className="font-mono text-body-sm text-muted-foreground tracking-widest">
-                      ••••••••
-                    </span>
-                  </Table.Cell>
-                  <Table.Cell className="hidden md:table-cell">
-                    <div className="flex flex-wrap gap-1">
-                      {s.environments.map((env) => (
-                        <Badge key={env} variant="outline" className="text-label">
-                          {env}
-                        </Badge>
-                      ))}
-                    </div>
-                  </Table.Cell>
-                  <Table.Cell className="hidden md:table-cell">
-                    <StatusDot
-                      status={
-                        s.eso_sync_status === 'synced'
-                          ? 'live'
-                          : s.eso_sync_status === 'failed'
-                            ? 'failed'
-                            : 'building'
-                      }
-                      label={s.eso_sync_status ?? 'unknown'}
-                    />
-                  </Table.Cell>
-                  <Table.Cell className="hidden md:table-cell">
-                    <span className="text-body-sm text-muted-foreground tabular-nums">
-                      {s.updated_at ? formatDate(s.updated_at, 'relative') : '—'}
-                    </span>
-                  </Table.Cell>
-                  <Table.Cell align="right">
-                    <Button
-                      variant="ghost"
-                      size="sm"
-                      onClick={() => setPendingDelete(s)}
-                      aria-label={`Delete secret ${s.name}`}
-                    >
-                      <Trash2 className="size-4 text-destructive" aria-hidden="true" />
-                    </Button>
-                  </Table.Cell>
-                </Table.Row>
-              ))}
-            </Table.Body>
-          </Table>
+          <SecretsTable
+            secrets={secrets}
+            onRotate={(s) => setRotateTarget(s)}
+            onDelete={(s) => setDeleteTarget(s)}
+          />
         </Card.Body>
       </Card>
-
-      <AddSecretSheet
-        open={addOpen}
-        onOpenChange={setAddOpen}
-        onCreated={() => refetch()}
-      />
-
-      {pendingDelete ? (
-        <ConfirmDialog
-          open={pendingDelete !== null}
-          onOpenChange={(o) => !o && setPendingDelete(null)}
-          title={`Delete secret "${pendingDelete.name}"?`}
-          description={
-            <div className="space-y-2 text-sm">
-              <p>
-                Apps that read{' '}
-                <code className="font-mono text-xs">{pendingDelete.name}</code>{' '}
-                at runtime will get an empty value on their next deploy. If a
-                running container holds this value in memory, it keeps working
-                until the next restart.
-              </p>
-              <p className="text-muted-foreground">
-                The value is gone forever — re-creation requires the original
-                secret material. Type the key name to confirm.
-              </p>
-            </div>
-          }
-          confirmLabel={deleting ? 'Deleting…' : 'Delete secret'}
-          cancelLabel="Cancel"
-          intent="destructive"
-          confirmationPhrase={pendingDelete.name}
-          loading={deleting}
-          onConfirm={handleConfirmDelete}
-        />
-      ) : null}
     </PageShell>
+
+    {/* Sheets + Dialogs MUST live OUTSIDE PageShell — when PageShell
+        renders the empty state slot (secrets=[]), its `content` becomes
+        the EmptyState component and `children` are NOT rendered, which
+        previously meant clicking the primaryAction Add button fired
+        setAddOpen(true) but no Sheet ever mounted in the DOM. Sponsor
+        LIVE catch 2026-06-09 (iter 19 of /implement halt-loop). */}
+    <AddSecretSheet
+      open={addOpen}
+      onOpenChange={setAddOpen}
+      defaultEnvs={defaultEnvs}
+      project={name}
+    />
+
+    <BulkUploadSheet
+      open={bulkOpen}
+      onOpenChange={setBulkOpen}
+      project={name}
+      defaultEnvs={defaultEnvs}
+    />
+
+    <RotateSecretDialog
+      open={rotateTarget !== null}
+      onOpenChange={(open) => !open && setRotateTarget(null)}
+      secret={rotateTarget}
+      project={name}
+    />
+
+    <DeleteSecretDialog
+      open={deleteTarget !== null}
+      onOpenChange={(open) => !open && setDeleteTarget(null)}
+      secret={deleteTarget}
+      environment={deleteTarget?.environments?.[0]}
+      project={name}
+    />
+    </>
   );
 }

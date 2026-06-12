@@ -516,6 +516,65 @@ loopzero deploy (or git push)
 | CI/CD | GitHub Actions (48 workflows — verified 2026-05-21) |
 | Helm charts | 34 bootstrap (`infra/helm/`) + 13 published (`charts/`) — verified 2026-05-22 |
 
+### Edge Proxy vs Cluster Ingress (Caddy ↔ Traefik)
+
+**LoopZero coexiste DOIS proxies — nunca um trocou pelo outro. Servem camadas
+diferentes do request flow** (separation of concerns canonical, pattern
+FAANG: AWS ALB + NGINX Ingress, Cloudflare + Envoy/Istio).
+
+| Layer | Caddy (edge) | Traefik (cluster ingress) |
+|-------|--------------|---------------------------|
+| Onde roda | Host machine (VPS local OU dev workstation) | Dentro do workload cluster (K8s Deployment) |
+| Camada do request | L7 público — primeira parada após DNS | L7 interno — primeira parada após Caddy |
+| TLS público (Let's Encrypt) | ✅ Automático + grace renewal | ❌ Possível mas setup complexo |
+| Bind portas 80/443 do host | ✅ Naturalmente | ❌ K8s exige NodePort/LoadBalancer + port-forward |
+| Single binary, file config | ✅ Reload via `caddy reload` | ❌ Roda como Deployment + IngressRoute CRDs |
+| K8s native CRD | ❌ Não conhece K8s | ✅ IngressRoute operator nativo |
+| Argo Rollouts canary | ❌ | ✅ TrafficRouter `traefik.io/v1alpha1` (weighted services) |
+| Multi-tenant routing por Host header | Possível mas verboso | ✅ Natural via IngressRoute CRD |
+| Cert interno cluster (`.loopzero.local`) | ❌ | ✅ via cert-manager + ClusterIssuer |
+| HTTP-01 ACME challenge | ✅ Auto | ❌ Não é foco |
+
+#### Request flow live (J-23 preview example)
+
+```
+Browser
+  ↓ DNS (Cloudflare: pr1-teste.preview-dev.loopzero.example → host IP)
+  ↓
+Host machine porta 443
+  ↓
+Caddy
+  ├─ TLS termination (Let's Encrypt automático)
+  ├─ Block match: pr1-teste.preview-dev.loopzero.example
+  └─ reverse_proxy https://172.18.0.10:443
+       header_up Host tn-...-teste-api-preview-pr-1.loopzero.local
+  ↓
+Workload cluster Traefik LoadBalancer (172.18.0.10:443)
+  ↓
+Traefik IngressRoute (no namespace preview)
+  └─ match: Host(`tn-...-teste-api-preview-pr-1.loopzero.local`)
+  ↓
+K8s Service teste-api-stable / teste-api-canary
+  ↓
+Rollout Pod
+  ↓
+App responde
+```
+
+#### Local k3d ↔ Prod DOKS
+
+Em produção (DOKS), Caddy é substituído por **Cloudflare Tunnel** (zero
+public IPs, all runtime via CF edge). Traefik permanece dentro do cluster.
+
+```
+Local dev/test:                       Prod (DOKS):
+Internet → Caddy (host) → Traefik    Internet → CF Tunnel → Traefik
+                          (k8s)                              (k8s)
+```
+
+Caddy local é decisão pragmática: VPS com 1 binário ao invés de provisionar
+CF Tunnel + cluster reachability. Mesmo trade-off do `task setup` k3d vs DOKS.
+
 ### Helm Charts Inventory (`infra/helm/`, 34 dirs)
 
 Bootstrap charts installed via Helmfile L2. Counts and names verified 2026-05-22 via `ls infra/helm/`.

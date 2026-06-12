@@ -5,7 +5,6 @@ package routes
 
 import (
 	"context"
-	"fmt"
 	"net/http"
 	"time"
 
@@ -13,6 +12,7 @@ import (
 
 	"github.com/loopzero/loopzero/api/internal/middleware"
 	loopzeroerrors "github.com/loopzero/loopzero/pkg/errors"
+	"github.com/loopzero/loopzero/pkg/naming"
 )
 
 // StatusBuildStore abstracts build retrieval for the status handler (DIP).
@@ -54,6 +54,16 @@ type StatusRelease struct {
 	Status    string
 	GitCommit string
 	CreatedAt time.Time
+	// EntryApp is the name of the apps_spec's first server/frontend app, used
+	// to emit the canonical public URL (`<tenant>-<project>-<entryApp>-<env>.<publicDomain>`).
+	// Empty when the release has no rendered apps (rare). Populated by the
+	// StatusReleaseStore adapter (parses release.Apps json.RawMessage as
+	// []db.BuildAppSpec). FAANG canonical (J-25 sponsor walkthrough catch
+	// 2026-06-12): status.url was previously emitting a simplified formula
+	// `<project>-<env>.<baseDomain>` that did NOT match the real
+	// IngressRoute Host emitted by renderer_helpers.appHostname() — so the
+	// "Visit" link in the dashboard hero card never resolved to anything.
+	EntryApp string
 }
 
 // StatusProjectStore abstracts project lookup for the status handler (DIP).
@@ -63,19 +73,27 @@ type StatusProjectStore interface {
 
 // StatusHandler provides HTTP handlers for project status operations.
 type StatusHandler struct {
-	projects   StatusProjectStore
-	builds     StatusBuildStore
-	releases   StatusReleaseStore
-	baseDomain string
+	projects     StatusProjectStore
+	builds       StatusBuildStore
+	releases     StatusReleaseStore
+	baseDomain   string
+	publicDomain string // operator-configured public wildcard for status.url (FAANG canonical J-25; mirrors PreviewPublicDomain)
 }
 
 // NewStatusHandler creates a new StatusHandler.
-func NewStatusHandler(projects StatusProjectStore, builds StatusBuildStore, releases StatusReleaseStore, baseDomain string) *StatusHandler {
+//
+// publicDomain is the operator-configured wildcard root for the public URL
+// (e.g. `prod-dev.loopzero.example` for dev-public). When empty, the handler
+// falls back to baseDomain (internal hostname). Parallels PreviewPublicDomain
+// + BaseDomain split at PreviewService — closes catches #21+#22 from T6.2
+// session addendum 2026-06-12 (J-25 sponsor walkthrough LIVE catch).
+func NewStatusHandler(projects StatusProjectStore, builds StatusBuildStore, releases StatusReleaseStore, baseDomain, publicDomain string) *StatusHandler {
 	return &StatusHandler{
-		projects:   projects,
-		builds:     builds,
-		releases:   releases,
-		baseDomain: baseDomain,
+		projects:     projects,
+		builds:       builds,
+		releases:     releases,
+		baseDomain:   baseDomain,
+		publicDomain: publicDomain,
 	}
 }
 
@@ -153,10 +171,15 @@ func (h *StatusHandler) Get(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	// Backend defaults env to "production" so dashboard / CLI consumers
+	// can call /projects/{name}/status without remembering the canonical
+	// environment name. Callers querying preview / staging MUST pass
+	// ?env=<name> explicitly. The URL still answers the question
+	// "what's the live status of this project?" -- which in almost every
+	// deploy in the platform means production.
 	env := r.URL.Query().Get("env")
 	if env == "" {
-		writeLoopZeroError(w, loopzeroerrors.ErrMissingField.Wrap("environment is required"))
-		return
+		env = "production"
 	}
 
 	// Look up project by name to get projectID
@@ -242,9 +265,26 @@ func (h *StatusHandler) Get(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 
-	// Build URL
-	if h.baseDomain != "" {
-		resp.URL = fmt.Sprintf("https://%s-%s.%s", name, env, h.baseDomain)
+	// Build URL — FAANG canonical (J-25 sponsor walkthrough catch 2026-06-12).
+	//
+	// Per ADR D1 of plan 2026-06-12-dashboard-journey-j25-live-url-discoverability,
+	// status.url MUST emit the SAME hostname formula that the IngressRoute
+	// renderer (`renderer_helpers.appHostname` → `pkg/naming.AppHostname`) uses
+	// for Traefik routing: `<tenant>-<project>-<entryApp>-<env>.<domain>`.
+	//
+	// The previous simplified formula `<project>-<env>.<baseDomain>` was missing
+	// the tenant prefix and entryApp segment — Traefik returned 404 for every
+	// "Visit" click in the dashboard hero card because no IngressRoute matched.
+	//
+	// Resolution order for the public-facing wildcard domain:
+	//   1. h.publicDomain (operator-configured LOOPZERO_PUBLIC_DOMAIN, e.g.
+	//      `prod-dev.loopzero.example` for dev-public). When set + release exists +
+	//      entryApp resolved, emit the canonical public URL routed by Caddy
+	//      wildcard block to Traefik with Host rewrite.
+	//   2. Empty when no active release OR entryApp couldn't be resolved —
+	//      dashboard renders "URL pending" badge (per ADR D3).
+	if release != nil && release.EntryApp != "" && h.publicDomain != "" {
+		resp.URL = naming.AppURL(uc.TenantID, name, release.EntryApp, env, h.publicDomain)
 	}
 
 	writeJSON(w, http.StatusOK, resp)
