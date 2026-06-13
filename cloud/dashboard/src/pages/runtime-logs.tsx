@@ -22,7 +22,11 @@ export function RuntimeLogsPage() {
   const { name = '' } = useParams<{ name: string }>();
   useSetPageTitle(`${name} · Runtime logs`);
   const [paused, setPaused] = useState(false);
-  const [selectedRange, setSelectedRange] = useState('1h');
+  // 2026-06-13 LIVE J-19 walkthrough — sponsor canonical default '5m'.
+  // Recent-tail bias: fresh dashboard load shows last 5 min for newcomer
+  // engineers debugging a current incident. Longer windows opt-in via
+  // TimeRangePicker dropdown (15m / 1h / 6h / 24h / 7d).
+  const [selectedRange, setSelectedRange] = useState('5m');
 
   // 2026-06-13 LIVE J-19 walkthrough fix — backend StreamRuntimeLogs requires
   // `env` query parameter (returns 400 MISSING_FIELD otherwise). Default to
