@@ -1,5 +1,5 @@
 import { Download, Pause, Play, Trash2 } from 'lucide-react';
-import { Badge, Button, Input } from '@loopzerokit/ui';
+import { Badge, Button, Input } from '@loopzero/ui';
 import type { LogLine, LogLevel } from '@/lib/api/types';
 import { triggerLogDownload } from '@/lib/log-download';
 

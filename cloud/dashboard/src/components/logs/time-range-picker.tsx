@@ -1,4 +1,4 @@
-import { Select } from '@loopzerokit/ui';
+import { Select } from '@loopzero/ui';
 
 /**
  * TimeRangePicker — J-19 T1.1 (R1 blueprint MUST).
