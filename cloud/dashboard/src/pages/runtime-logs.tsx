@@ -24,8 +24,12 @@ export function RuntimeLogsPage() {
   const [paused, setPaused] = useState(false);
   const [selectedRange, setSelectedRange] = useState('1h');
 
+  // 2026-06-13 LIVE J-19 walkthrough fix — backend StreamRuntimeLogs requires
+  // `env` query parameter (returns 400 MISSING_FIELD otherwise). Default to
+  // `production` to match Beta Logs Gate canonical env. Future: derive from
+  // current environment context (when env-switcher ships v0.2).
   const streamPath = name
-    ? `/engine/api/v1/projects/${encodeURIComponent(name)}/logs/stream?since=${selectedRange}`
+    ? `/engine/api/v1/projects/${encodeURIComponent(name)}/logs/stream?env=production&since=${selectedRange}`
     : null;
   const { lines, connected, error, droppedCount, clear } = useLogStream(streamPath, { paused });
 

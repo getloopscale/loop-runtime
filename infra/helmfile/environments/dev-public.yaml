@@ -67,7 +67,12 @@ registries:
 
 loki:
   maxGlobalStreamsPerUser: 50000
-  pushUrl: http://172.18.0.3:30094/loki/api/v1/push
+  # 2026-06-13 LIVE J-19 walkthrough fix per [[j17-aprendizado-promtail-loki
+  # -pipeline-canonical-via-helmfile]]: pushUrl was hardcoded at mgmt LB IP
+  # (172.18.0.3) but Loki Service lives on BUILD cluster — mgmt:30094 returns
+  # connection-refused. Workload promtail must reach via build cluster LB
+  # (172.18.0.9) where loki Service is exposed at NodePort 30094.
+  pushUrl: http://172.18.0.9:30094/loki/api/v1/push
 
 policyMode: warn
 inClusterPostgres: true
