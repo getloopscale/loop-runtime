@@ -181,3 +181,4 @@ __pycache__/
 # T1.1.c (plan 2026-06-11-code-review-remediation-147-findings v1.2):
 # Tilt-rendered helm ConfigMap+Secret output — re-generated on each tilt up
 .tilt-rendered/
+infra/local/secrets/
