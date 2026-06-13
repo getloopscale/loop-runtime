@@ -110,6 +110,11 @@ spec:
         checksum/config: tilt-managed-placeholder-T1.1.c
     spec:
       serviceAccountName: loopzero-api
+      # T8.4 of deep-review-remediation-plan (closes find_infra_006 MEDIUM):
+      # Tilt deployment now matches Helm chart security posture by setting
+      # seccompProfile: RuntimeDefault at pod level (was missing — Tilt had
+      # weaker PSA than the published chart). Enforces "Local equals
+      # production" per CLAUDE.md Rule 10.
       securityContext:
         runAsNonRoot: true
         runAsUser: 1000

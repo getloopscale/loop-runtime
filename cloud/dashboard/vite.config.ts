@@ -138,6 +138,36 @@ export default defineConfig({
     alias: {
       '@': path.resolve(__dirname, './src'),
     },
+    // Force a single React instance across the dependency graph.
+    // Without this, pnpm's content-addressable store can resolve `react` and
+    // `react-dom` from `@loopzerokit/ui`'s own pkg dir (via its peer entry) while
+    // the app code resolves from the workspace root — producing two distinct
+    // module identities and the "Invalid hook call" runtime error from
+    // useContext returning null.
+    dedupe: ['react', 'react-dom'],
+  },
+  optimizeDeps: {
+    // Pre-bundle @loopzerokit/ui to a single optimized artifact so Vite doesn't
+    // re-discover it on every page (the heavy library was triggering serial
+    // re-optimizations and 504s on outdated optimize-dep). Listing it here
+    // pins the entry to the app's React, not @loopzerokit/ui's peer copy.
+    include: ['@loopzerokit/ui', 'react', 'react-dom', 'react-dom/client'],
+  },
+  // Dev-only: same-origin against the local loopzero-cloud + Kratos port-forwards
+  // via vite proxy (avoids browser CORS). In prod, the dashboard is served
+  // from cloud.{domain} (MEET-040). `allowedHosts` whitelists the public
+  // Caddy-fronted hostname so vite's DNS-rebinding guard doesn't 403 us.
+  server: {
+    host: true,
+    allowedHosts: ['localhost', 'app.loopzero.example', '.loopzero.example'],
+    proxy: {
+      '/v1':           { target: 'http://localhost:13002', changeOrigin: true },
+      '/engine':       { target: 'http://localhost:13002', changeOrigin: true },
+      '/auth':         { target: 'http://localhost:13002', changeOrigin: true },
+      '/self-service': { target: 'http://localhost:14433', changeOrigin: true },
+      '/sessions':     { target: 'http://localhost:14433', changeOrigin: true },
+      '/oauth2':       { target: 'http://localhost:14444', changeOrigin: true },
+    },
   },
   // Dev-only: same-origin against the local loopzero-cloud + Kratos port-forwards
   // via vite proxy (avoids browser CORS). In prod, the dashboard is served
