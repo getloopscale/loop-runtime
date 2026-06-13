@@ -178,11 +178,26 @@ func (h *LogStreamHandler) StreamRuntimeLogs(w http.ResponseWriter, r *http.Requ
 	w.WriteHeader(http.StatusOK)
 	flusher.Flush()
 
-	// Determine starting timestamp from Last-Event-ID
+	// Determine starting timestamp:
+	//  1. Last-Event-ID header (highest priority — SSE resume after reconnect)
+	//  2. ?since= query param (J-19 R1 TimeRangePicker — 2026-06-13 LIVE fix)
+	//  3. 0 (defaults to last 1h in QueryBuildLogsSince)
+	//
+	// J-19 plan v1.2 ADR D3 LIVE walkthrough fix: TimeRangePicker emits
+	// `?since=6h`/`?since=24h`/etc. but the runtime handler previously
+	// honored only Last-Event-ID. Result: user changed preset but stream
+	// always started from default 1h window. parseSinceParam reuses the
+	// same canonical accepted shapes as build-log handler (Beta Logs
+	// Gate Criterion 7): "Nh" / "Nm" / "Ns" / "Nd" / integer seconds.
 	var sinceNano int64
 	if leID := r.Header.Get("Last-Event-ID"); leID != "" {
 		if parsed, parseErr := strconv.ParseInt(leID, 10, 64); parseErr == nil {
 			sinceNano = parsed
+		}
+	}
+	if sinceNano == 0 {
+		if sinceSecs := parseSinceParam(r.URL.Query().Get("since")); sinceSecs > 0 {
+			sinceNano = time.Now().Add(-time.Duration(sinceSecs) * time.Second).UnixNano()
 		}
 	}
 
