@@ -129,7 +129,7 @@ Tornar o dashboard LoopZeroCloud uma experiência **Vercel-like 100% integrada**
 
 - [x] J-17 Deployments List + Detail — DELIVERED earlier (4-layer log markers + terminal state absorbente)
 - [ ] J-18 Status / Runtime Health — plan `j18-status-runtime-health-plan.md`, esforço 20h
-- [ ] J-19 Runtime Logs Streaming — plan `j19-runtime-logs-streaming-plan.md`, esforço 21h
+- [x] J-19 Runtime Logs Streaming — DELIVERED 2026-06-13 (v0.14.0; 5 LIVE walkthrough bugs caught + fixed during sponsor canonical chain; SSE Flusher proxy + named-event channel + StreamRuntimeLogs since-param fixes)
 - [ ] J-21 Readiness Score — plan `j21-readiness-plan.md`, esforço 14h
 
 **Dependencies:** M1, M2 (precisa de projetos + envs pra ter o que monitorar).
