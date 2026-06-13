@@ -541,6 +541,31 @@ func main() {
 				}
 			}
 			w.WriteHeader(resp.StatusCode)
+
+			// 2026-06-13 J-19 LIVE walkthrough fix — SSE responses
+			// (text/event-stream) must be flushed event-by-event to
+			// the client. Default io.Copy buffers until backend EOF,
+			// which for SSE never arrives (streams stay open). Result:
+			// client sees nothing for 30s, then connection closes,
+			// buffered events flush to dead client. Detect SSE +
+			// flushed copy when supported by underlying ResponseWriter.
+			if strings.HasPrefix(resp.Header.Get("Content-Type"), "text/event-stream") {
+				if flusher, ok := w.(http.Flusher); ok {
+					buf := make([]byte, 4096)
+					for {
+						n, rerr := resp.Body.Read(buf)
+						if n > 0 {
+							if _, werr := w.Write(buf[:n]); werr != nil {
+								return
+							}
+							flusher.Flush()
+						}
+						if rerr != nil {
+							return
+						}
+					}
+				}
+			}
 			_, _ = io.Copy(w, resp.Body)
 		})
 	})
