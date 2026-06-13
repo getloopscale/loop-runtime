@@ -549,18 +549,25 @@ func main() {
 			// client sees nothing for 30s, then connection closes,
 			// buffered events flush to dead client. Detect SSE +
 			// flushed copy when supported by underlying ResponseWriter.
-			if strings.HasPrefix(resp.Header.Get("Content-Type"), "text/event-stream") {
-				if flusher, ok := w.(http.Flusher); ok {
+			ctType := resp.Header.Get("Content-Type")
+			if strings.HasPrefix(ctType, "text/event-stream") {
+				flusher, ok := w.(http.Flusher)
+				logger.Info("engine proxy: SSE detected", "path", r.URL.Path, "content_type", ctType, "flusher_ok", ok)
+				if ok {
 					buf := make([]byte, 4096)
+					totalBytes := 0
 					for {
 						n, rerr := resp.Body.Read(buf)
 						if n > 0 {
 							if _, werr := w.Write(buf[:n]); werr != nil {
+								logger.Warn("engine proxy: SSE write failed", "path", r.URL.Path, "error", werr)
 								return
 							}
 							flusher.Flush()
+							totalBytes += n
 						}
 						if rerr != nil {
+							logger.Info("engine proxy: SSE stream ended", "path", r.URL.Path, "total_bytes", totalBytes, "reason", rerr.Error())
 							return
 						}
 					}
