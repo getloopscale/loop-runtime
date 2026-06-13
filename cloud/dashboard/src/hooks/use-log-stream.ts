@@ -74,14 +74,30 @@ export function useLogStream(
         if (!cancelled) setConnected(true);
       };
 
-      es.onmessage = (event: MessageEvent) => {
+      // 2026-06-13 J-19 LIVE walkthrough fix — loopzero-api SSE emits named
+       // events `event: log` + payload shape {timestamp, line, step}.
+       // EventSource.onmessage only fires for UNNAMED events; named events
+       // need addEventListener. Also map loopzero-api fields to LogLine shape
+       // (ts/level/msg). Build-logs SSE may continue emitting unnamed —
+       // keep onmessage as legacy fallback for backward compat.
+      const handleEvent = (event: MessageEvent) => {
         if (cancelled) return;
-        // Both try/catch branches assign — initial null was redundant
-        // (eslint no-useless-assignment). J-19 iter-11 productive-idle
-        // hygiene: tighten to declaration-only, both branches still cover.
         let parsed: LogLine;
         try {
-          parsed = JSON.parse(event.data) as LogLine;
+          const raw = JSON.parse(event.data) as Partial<LogLine> & {
+            timestamp?: string;
+            line?: string;
+            step?: string;
+          };
+          // Map loopzero-api runtime shape (timestamp/line/step) to LogLine
+          // (ts/level/msg) — fields may differ for build-logs (already
+          // emits ts/level/msg). Use ?? so legacy shape passes through.
+          parsed = {
+            ts: raw.ts ?? raw.timestamp ?? new Date().toISOString(),
+            level: raw.level ?? 'info',
+            msg: raw.msg ?? raw.line ?? '',
+            source: raw.source ?? raw.step,
+          };
         } catch {
           parsed = { ts: new Date().toISOString(), level: 'info', msg: String(event.data) };
         }
@@ -98,6 +114,9 @@ export function useLogStream(
           setLines([...bufferRef.current]);
         }
       };
+
+      es.onmessage = handleEvent; // unnamed events (build-logs legacy)
+      es.addEventListener('log', handleEvent); // loopzero-api named events (runtime-logs)
 
       es.onerror = () => {
         if (cancelled) return;
