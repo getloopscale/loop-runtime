@@ -8,29 +8,39 @@ import (
 	"testing"
 )
 
-// TestBuildRuntimeLogQL_LegacyFourSegmentForm — backward compat.
-// Callers still using the 4-segment form (runtime:tenant:env:project)
-// MUST produce the same LogQL as before (no app filter).
-func TestBuildRuntimeLogQL_LegacyFourSegmentForm(t *testing.T) {
+// TestBuildRuntimeLogQL_M2CanonicalAndLegacyMatched — T2.2 of plan
+// 2026-06-11-code-review-remediation. Post-M2 (2026-06-09) the canonical
+// namespace formula is `loopzero-{tenant}-{project}-{env}` per
+// pkg/naming.Namespace (sponsor verbatim "TUDO DEVERIA esta separado
+// por projeto" 2026-06-07). The Loki client was emitting the legacy
+// 3-segment form `loopzero-{tenant}-{env}`, so logs for any M2-shaped
+// namespace silently disappeared from /logs queries.
+//
+// T2.2.a backward-compat: the LogQL selector MUST cover BOTH shapes via
+// an anchored regex OR query, so historical logs from legacy-deployed
+// namespaces remain visible alongside post-M2 namespaces.
+func TestBuildRuntimeLogQL_M2CanonicalAndLegacyMatched(t *testing.T) {
 	got, err := buildRuntimeLogQL("runtime:tn-acme:production:my-project")
 	if err != nil {
 		t.Fatalf("legacy form rejected: %v", err)
 	}
-	want := `{namespace="loopzero-tn-acme-production", container=~".+"}`
+	// Anchored regex `^(M2|legacy)$` avoids prefix collisions with other
+	// namespaces (e.g. `loopzero-tn-acme-production-canary`).
+	want := `{namespace=~"^(loopzero-tn-acme-my-project-production|loopzero-tn-acme-production)$", container=~".+"}`
 	if got != want {
-		t.Errorf("legacy LogQL drift:\n  got:  %q\n  want: %q", got, want)
+		t.Errorf("LogQL drift (T2.2 + T2.2.a):\n  got:  %q\n  want: %q", got, want)
 	}
 }
 
-// TestBuildRuntimeLogQL_FiveSegmentFormWithApp — new Beta Logs Gate
-// shape. 5-segment with non-empty app produces a LogQL selector
-// containing `app="<value>"`. Drift here breaks per-app filtering.
+// TestBuildRuntimeLogQL_FiveSegmentFormWithApp — Beta Logs Gate +
+// T2.2/T2.2.a combined. 5-segment with non-empty app produces the
+// app="<value>" filter AND the M2/legacy OR namespace query.
 func TestBuildRuntimeLogQL_FiveSegmentFormWithApp(t *testing.T) {
 	got, err := buildRuntimeLogQL("runtime:tn-acme:production:my-project:web")
 	if err != nil {
 		t.Fatalf("5-segment form rejected: %v", err)
 	}
-	want := `{namespace="loopzero-tn-acme-production", app="web", container=~".+"}`
+	want := `{namespace=~"^(loopzero-tn-acme-my-project-production|loopzero-tn-acme-production)$", app="web", container=~".+"}`
 	if got != want {
 		t.Errorf("5-segment LogQL drift:\n  got:  %q\n  want: %q", got, want)
 	}
@@ -49,9 +59,32 @@ func TestBuildRuntimeLogQL_FiveSegmentFormWithEmptyApp(t *testing.T) {
 	if strings.Contains(got, `app=""`) {
 		t.Errorf("empty app must not produce an empty filter clause: %q", got)
 	}
-	want := `{namespace="loopzero-tn-acme-production", container=~".+"}`
+	want := `{namespace=~"^(loopzero-tn-acme-my-project-production|loopzero-tn-acme-production)$", container=~".+"}`
 	if got != want {
 		t.Errorf("empty-app LogQL drift:\n  got:  %q\n  want: %q", got, want)
+	}
+}
+
+// TestBuildRuntimeLogQL_M2CanonicalShapeIsCorrect_T22 — direct assertion
+// that the M2 form `loopzero-{tenant}-{project}-{env}` is the FIRST
+// alternative in the regex (so an exact equality on canonical
+// namespaces is fast-path-matched by Loki before falling through to
+// the legacy alternative).
+func TestBuildRuntimeLogQL_M2CanonicalShapeIsCorrect_T22(t *testing.T) {
+	got, err := buildRuntimeLogQL("runtime:tn-x:staging-eu-1:my-frontend")
+	if err != nil {
+		t.Fatalf("regression: %v", err)
+	}
+	// Canonical M2 namespace must be the FIRST alternative.
+	expectedM2 := "loopzero-tn-x-my-frontend-staging-eu-1"
+	if !strings.Contains(got, expectedM2) {
+		t.Errorf("expected M2 namespace %q in LogQL: got %q", expectedM2, got)
+	}
+	// Legacy must also appear as backward-compat (T2.2.a).
+	expectedLegacy := "loopzero-tn-x-staging-eu-1"
+	if !strings.Contains(got, expectedLegacy) {
+		t.Errorf("expected legacy namespace %q in LogQL (T2.2.a): got %q",
+			expectedLegacy, got)
 	}
 }
 

@@ -152,7 +152,7 @@ func setupOrchestrator(
 	// Status handler — wires project, build, and release stores (H6 status endpoint)
 	statusBuildStore := &adapters.StatusBuildStoreAdapter{Store: stores.BuildStore}
 	statusReleaseStore := &adapters.StatusReleaseStoreAdapter{Store: stores.ReleaseStore}
-	statusHandler := routes.NewStatusHandler(projectStore, statusBuildStore, statusReleaseStore, cfg.BaseDomain)
+	statusHandler := routes.NewStatusHandler(projectStore, statusBuildStore, statusReleaseStore, cfg.BaseDomain, cfg.PublicDomain)
 
 	// Scale handler — scaling configuration for apps (KEDA scale-to-zero gate).
 	// Plan T2.2: real persistence via PostgresScalingStore (was: stub-202 returning acknowledged).
@@ -192,8 +192,17 @@ func setupOrchestrator(
 	scaleHandler := routes.NewScaleHandler(projectStore, scaleApply, cfg.KEDAEnabled)
 	scaleHandler.EnsureProductionWired() // audit M02 #14: panic-on-regression guard
 
-	// Build list handler — lists builds for a project with optional env filter
-	buildListHandler := routes.NewBuildListHandler(&adapters.BuildListStoreAdapter{Store: stores.BuildStore})
+	// Build list handler — lists builds for a project with optional env
+	// filter PLUS exposes GET /api/v1/projects/{name}/build-envs (T2.2).
+	// Plan 2026-06-08-dashboard-screens-review-fixes T2.2 + EC-2
+	// SEPA-CRITICAL: NewBuildListHandlerWithGate wires the ProjectStore
+	// so the /build-envs endpoint can reject cross-tenant probes with
+	// 404 PROJECT_NOT_FOUND (existence-leak prevention) BEFORE the
+	// underlying ListEnvsForProject query runs.
+	buildListHandler := routes.NewBuildListHandlerWithGate(
+		&adapters.BuildListStoreAdapter{Store: stores.BuildStore},
+		projectStore,
+	)
 
 	// Project deleter — orchestrates project removal across DB, GitOps, and builds.
 	// WorkflowCanceller stops running Argo Workflows during deletion (DF-2.1).

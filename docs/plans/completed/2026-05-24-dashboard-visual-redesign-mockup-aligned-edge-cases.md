@@ -55,9 +55,9 @@
 
 - **Task afetada:** Phase D, E, F, G (todas as pages)
 - **Família:** Format
-- **Cenário:** Dashboard atual usa `text-white` literal em ~30+ sites (login.tsx:163-238, overview.tsx, app.tsx wrapper divs, etc.). @loopzerokit/ui design system expõe tokens semânticos como `text-foreground`, `text-card-foreground`, `text-muted-foreground`. Em Violet Forge dark, `text-foreground` resolve para branco-quase mas COM tonalidade do tema (não pure white). Mistura `text-white` (literal) + `text-foreground` (token) cria inconsistência sutil em qualquer mudança futura de tema.
+- **Cenário:** Dashboard atual usa `text-white` literal em ~30+ sites (login.tsx:163-238, overview.tsx, app.tsx wrapper divs, etc.). @loopzero/ui design system expõe tokens semânticos como `text-foreground`, `text-card-foreground`, `text-muted-foreground`. Em Violet Forge dark, `text-foreground` resolve para branco-quase mas COM tonalidade do tema (não pure white). Mistura `text-white` (literal) + `text-foreground` (token) cria inconsistência sutil em qualquer mudança futura de tema.
 - **Impacto:** Drift visual e drift de manutenibilidade. Se algum dia adicionar tema light, `text-white` fica ilegível em fundo claro enquanto `text-foreground` adapta.
-- **Fix sugerido:** Adicionar a CADA phase (D, E, F, G): "Substituir `text-white` por `text-foreground` em qualquer page editada. Substituir `bg-surface-0..4` (locais do Tailwind v4 @theme block) por equivalente `@loopzerokit/ui` token quando aplicável (bg-card, bg-background). T6.2 do v1.3 pruning já planejado mas tem que rodar APÓS este plano." OU adicionar à T-H.2 (Rule 3 audit): grep adicional por `text-white\|bg-surface-` deve retornar zero.
+- **Fix sugerido:** Adicionar a CADA phase (D, E, F, G): "Substituir `text-white` por `text-foreground` em qualquer page editada. Substituir `bg-surface-0..4` (locais do Tailwind v4 @theme block) por equivalente `@loopzero/ui` token quando aplicável (bg-card, bg-background). T6.2 do v1.3 pruning já planejado mas tem que rodar APÓS este plano." OU adicionar à T-H.2 (Rule 3 audit): grep adicional por `text-white\|bg-surface-` deve retornar zero.
 
 ### EC-7: T-D.1 search input não está wired com filter state
 
@@ -80,7 +80,7 @@
 ### EC-8: `LoginSplit` + `SocialAuthRow` real API verification
 
 - **Task afetada:** T-G.1, T-G.2
-- **Teste sugerido:** `test_login_split_renders_with_provider_array` — antes de implementar, ler `node_modules/@loopzerokit/ui/dist/index.d.ts` para confirmar (a) LoginSplit prop shape (provavelmente `brand`, `form` slots), (b) SocialAuthRow `providers` shape (array de strings vs objects). Adaptar exemplo no plano antes de codar para evitar retrabalho.
+- **Teste sugerido:** `test_login_split_renders_with_provider_array` — antes de implementar, ler `node_modules/@loopzero/ui/dist/index.d.ts` para confirmar (a) LoginSplit prop shape (provavelmente `brand`, `form` slots), (b) SocialAuthRow `providers` shape (array de strings vs objects). Adaptar exemplo no plano antes de codar para evitar retrabalho.
 
 ### EC-9: ProjectCard adapter (carry-over EC-5 do edge-case-review v1.3)
 
@@ -95,7 +95,7 @@
 ### EC-11: `UsageMeter` props match upstream Brief #1
 
 - **Task afetada:** T-D.1
-- **Teste sugerido:** `test_usage_meter_accepts_specced_props` — ler `node_modules/@loopzerokit/ui/dist/index.d.ts` para `UsageMeterProps`. Brief #1 specced `{ title, action, metrics: [{ label, value, max, unit, formatter? }] }`. Implementação upstream pode ter divergido. Adapt em T-D.1 antes de codar.
+- **Teste sugerido:** `test_usage_meter_accepts_specced_props` — ler `node_modules/@loopzero/ui/dist/index.d.ts` para `UsageMeterProps`. Brief #1 specced `{ title, action, metrics: [{ label, value, max, unit, formatter? }] }`. Implementação upstream pode ter divergido. Adapt em T-D.1 antes de codar.
 
 ### EC-12: Table cols layout em pages diferentes
 
@@ -117,7 +117,7 @@
 
 ### EC-15: Lucide React dual-instance bundle bloat risk
 
-- **Risco aceito:** D4 v1.3 manteve lucide-react como direct dep. @loopzerokit/ui também bundla lucide-react (per llms.txt "Already bundled"). Pode resultar em 2 versões coexistindo se versions divergirem. Bundle inflation max ~50KB (lucide é tree-shakeable mas core helper duplicado). Aceitar como debt; Phase 6 v1.3 (T6.1) pode revisar via `npm dedupe`. Não é blocker.
+- **Risco aceito:** D4 v1.3 manteve lucide-react como direct dep. @loopzero/ui também bundla lucide-react (per llms.txt "Already bundled"). Pode resultar em 2 versões coexistindo se versions divergirem. Bundle inflation max ~50KB (lucide é tree-shakeable mas core helper duplicado). Aceitar como debt; Phase 6 v1.3 (T6.1) pode revisar via `npm dedupe`. Não é blocker.
 
 ### EC-16: Bundle exceeds D7 threshold (+30% gzip)
 
@@ -135,7 +135,7 @@
 | ArgoCD notifiers not services | N/A (sem ArgoCD) | — |
 | Single ArgoCD App per tenant | N/A | — |
 | CF scan imports conflicting apex | N/A | — |
-| External lib API drift | Sim | EC-1, EC-8, EC-11, EC-12 — múltiplas APIs de @loopzerokit/ui assumidas sem leitura do .d.ts |
+| External lib API drift | Sim | EC-1, EC-8, EC-11, EC-12 — múltiplas APIs de @loopzero/ui assumidas sem leitura do .d.ts |
 | Backend endpoint shape assumption | Sim | EC-4 (/v1/billing), EC-5 (invoice history) |
 | Token/style migration incompleta | Sim | EC-6 (text-white legado coexiste com text-foreground novo) |
 

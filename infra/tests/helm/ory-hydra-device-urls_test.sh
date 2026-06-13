@@ -1,27 +1,28 @@
 #!/usr/bin/env bash
-# T2.1 of plan 2026-06-05-dashboard-journey-j05-device-success.
+# T2.1 of plan 2026-06-05-dashboard-journey-j05-device-success
+#                                      (amended 2026-06-05 after LIVE Hydra crash).
 #
 # Hermetic source-level assertion that `infra/helm/ory-hydra/values.yaml.gotmpl`
-# defines `urls.post_device_done_url` with the canonical gotmpl pattern.
+# routes `urls.self.issuer` via `publicAuthUrl` so dev-public / drill / prod
+# emit a public-FQDN issuer (the EC-10 contract: Hydra `verification_uri`
+# must NOT leak the cluster-internal `*.svc.cluster.local` URL — caught LIVE
+# 2026-06-05 against https://cloud-dev.loopzero.example).
 #
-# Why source-level (not `helm template`):
-#   `infra/helm/ory-hydra/` is a VALUES OVERLAY over the upstream `ory/hydra`
-#   chart (referenced in `infra/helmfile/mgmt.helmfile.yaml.gotmpl:463`). The
-#   overlay has no Chart.yaml of its own, so `helm template` direct against
-#   this directory exits non-zero. A `helmfile template` against a live
-#   environment would require kubectl context + network — not hermetic.
-#   Source-level grep covers the regression contract: the key is present
-#   and uses `trimSuffix "/"` to defend against trailing-slash drift (EC-8).
+# AMENDED 2026-06-05: original T2.1 attempted to set `urls.post_device_done_url`.
+# Hydra v2 schema rejects that key (`additionalProperties not allowed`),
+# crashing the rollout. Device-flow landing redirect is controlled by client
+# OAuth `redirect_uris` + Hydra's built-in consent-complete page, NOT a
+# server-level config. T2.1 D1 reduces to the `urls.self.issuer` override
+# — the LIVE bug EC-10 actually caught.
 #
 # Asserts:
-#   1. Key `post_device_done_url:` exists exactly once under `urls:`.
-#   2. Value uses `{{ trimSuffix "/" ... }}` to handle trailing-slash (EC-8).
-#   3. Value defaults to `http://localhost:4455` when uiBaseUrl is unset.
-#   4. Value resolves to `<uiBaseUrl>/device-success` template.
-#   5. Comment references plan ID + ADR for auditability.
-#
-# This defeats EC-2 silent-pass: a missing key OR a value without trimSuffix
-# OR a value without the /device-success suffix all fail LOUD here.
+#   1. `issuer:` key is present exactly once under `urls.self`.
+#   2. The issuer value resolves via `publicAuthUrl` gotmpl override.
+#   3. Fallback default is the cluster-internal FQDN.
+#   4. Trailing slash is appended (Hydra requires `iss` to end in `/`).
+#   5. Comment cites plan ID + EC-10 LIVE provenance for auditability.
+#   6. `post_device_done_url` is ABSENT (regression guard — adding it
+#      back would crash Hydra rollout).
 
 set -euo pipefail
 
@@ -50,55 +51,70 @@ assert_grep() {
   fi
 }
 
-assert_exact_count() {
-  local desc="$1" pattern="$2" expected="$3"
-  local actual
-  actual=$(grep -cE "$pattern" "$TARGET" || true)
-  if [[ "$actual" -eq "$expected" ]]; then
-    log "PASS [$desc] (count=$actual)"
-    pass=$((pass + 1))
-  else
-    log "FAIL [$desc]: expected count=$expected got=$actual for $pattern"
+assert_no_grep() {
+  local desc="$1" pattern="$2"
+  if grep -qE "$pattern" "$TARGET"; then
+    log "FAIL [$desc]: forbidden pattern matched: $pattern"
     fail=$((fail + 1))
+  else
+    log "PASS [$desc]"
+    pass=$((pass + 1))
   fi
 }
 
-# (1) Key is present exactly once — no shadowing or duplicate definition.
-assert_exact_count "single post_device_done_url key" \
-  '^[[:space:]]+post_device_done_url:' \
-  1
-
-# (2) EC-8 trimSuffix "/" gotmpl helper present in the same line.
-assert_grep "EC-8 trimSuffix / defense" \
-  'post_device_done_url:.*trimSuffix.*"/".*uiBaseUrl'
-
-# (3) Default fallback to localhost:4455 when uiBaseUrl unset.
-assert_grep "default uiBaseUrl localhost:4455" \
-  'post_device_done_url:.*default.*"http://localhost:4455"'
-
-# (4) The template ends with /device-success suffix.
-assert_grep "/device-success suffix" \
-  'post_device_done_url:.*device-success"'
-
-# (5) Comment references plan ID + ADR ID (auditability).
-assert_grep "comment cites plan ID" \
-  '# Plan 2026-06-05-dashboard-journey-j05-device-success T2.1 D1'
-
-# (6) Bonus regression: bash syntax sanity — render file with simple gotmpl
-#     stub substitutions to confirm the line is well-formed YAML keyspec.
-#     We do this by extracting the value and checking it parses as
-#     "key: <quoted-value>".
-extracted=$(grep -E '^[[:space:]]+post_device_done_url:' "$TARGET" || true)
-if [[ -z "$extracted" ]]; then
-  log "FAIL [yaml shape]: extraction failed (no key)"
-  fail=$((fail + 1))
-elif echo "$extracted" | grep -qE '^[[:space:]]+post_device_done_url:[[:space:]]+".*"$'; then
-  log "PASS [yaml shape]: key: \"value\" form well-formed"
+# (1) issuer key present exactly once.
+issuer_count=$(grep -cE '^[[:space:]]+issuer:' "$TARGET" || true)
+if [[ "$issuer_count" -eq 1 ]]; then
+  log "PASS [single issuer key] (count=$issuer_count)"
   pass=$((pass + 1))
 else
-  log "FAIL [yaml shape]: line not in 'key: \"value\"' form: $extracted"
+  log "FAIL [single issuer key]: expected 1 got $issuer_count"
   fail=$((fail + 1))
 fi
+
+# (2) issuer uses publicAuthUrl gotmpl override.
+assert_grep "issuer uses publicAuthUrl gotmpl override" \
+  'issuer:.*publicAuthUrl'
+
+# (3) Default fallback is the cluster-internal FQDN.
+assert_grep "issuer default fallback to cluster-internal FQDN" \
+  'issuer:.*default.*ory-hydra-public\.loopzero-auth\.svc\.cluster\.local'
+
+# (4) Trailing slash present in the value template.
+assert_grep "issuer ends with trailing slash" \
+  'issuer:.*}/"\s*$'
+
+# (5) Comment cites plan ID + EC-10 evidence.
+assert_grep "comment cites plan J-05 + EC-10" \
+  '# Plan J-05.*EC-10'
+
+# (6) post_device_done_url is ABSENT (regression guard — Hydra v2 schema rejects).
+assert_no_grep "no post_device_done_url key (Hydra v2 schema rejects)" \
+  '^[[:space:]]+post_device_done_url:'
+
+# (7) urls.self.public key present (required for verification_uri host).
+public_count=$(grep -cE '^[[:space:]]+public:[[:space:]]+"\{\{' "$TARGET" || true)
+if [[ "$public_count" -ge 1 ]]; then
+  log "PASS [urls.self.public key present] (count=$public_count)"
+  pass=$((pass + 1))
+else
+  log "FAIL [urls.self.public key present]: expected ≥1 got $public_count"
+  fail=$((fail + 1))
+fi
+
+# (8) urls.self.public also uses publicAuthUrl override (same FQDN as issuer).
+assert_grep "urls.self.public uses publicAuthUrl override" \
+  'public:.*publicAuthUrl.*default.*ory-hydra-public\.loopzero-auth\.svc\.cluster\.local'
+
+# (9) urls.device.verification points at dashboard /device-verify (NOT Hydra
+#     /oauth2/fallbacks/device — that page is literally the "config missing"
+#     error page in Hydra v2.6).
+assert_grep "urls.device.verification → dashboard /device-verify" \
+  'verification:.*uiBaseUrl.*device-verify'
+
+# (10) urls.device.success → dashboard /device-success.
+assert_grep "urls.device.success → dashboard /device-success" \
+  'success:.*uiBaseUrl.*device-success'
 
 log ""
 log "════════════════════════════════════════════════════════"

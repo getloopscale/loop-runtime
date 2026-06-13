@@ -1,7 +1,7 @@
 import { StrictMode, lazy, Suspense } from 'react';
 import { createRoot } from 'react-dom/client';
 import { QueryClientProvider } from '@tanstack/react-query';
-import { LoopZeroUIProvider, violetForge } from '@loopzerokit/ui';
+import { LoopZeroUIProvider, violetForge } from '@loopzero/ui';
 import App from './app';
 import { RouteBoundary } from './components/error/route-boundary';
 import { queryClient } from './lib/query-client';
@@ -50,7 +50,7 @@ if (import.meta.env.PROD) {
 }
 
 /**
- * LoopZeroUIProvider — canonical entry point per @loopzerokit/ui API
+ * LoopZeroUIProvider — canonical entry point per @loopzero/ui API
  * (replaces hand-wired ThemeProvider + Toaster from earlier iterations).
  *
  * Composes <ThemeProvider> + <Toaster> with the right defaults so every

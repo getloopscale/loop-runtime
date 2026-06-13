@@ -6,7 +6,11 @@ import { ApiError } from '../api/client';
 import { formatErrorMessage } from '../output/error-message';
 export interface EnvDeleteDeps {
   getToken: () => string | null;
-  deleteEnvironment: (name: string) => Promise<void>;
+  // M2 v1.2 T6.1 expanded (LIVE catch 2026-06-08): the closure carries
+  // `project` so DELETE /api/v1/environments/{name}?project=<slug>
+  // filters by the (name, project) tuple. Empty project preserves the
+  // legacy production-only lookup (ADR D2 backward compat).
+  deleteEnvironment: (name: string, project: string) => Promise<void>;
   writeTo: (msg: string) => void;
   writeError: (msg: string) => void;
 }
@@ -21,6 +25,17 @@ export interface EnvDeleteOptions {
    */
   yes?: boolean;
   json?: boolean;
+  /**
+   * M2 v1.2 T6.1 expanded (2026-06-08): symmetric `--project` flag with
+   * `loopzero env create`. Required for non-legacy envs (every env created
+   * post-M2 lives at an explicit (project, env) tuple); the legacy
+   * production env still resolves without it.
+   *
+   * LIVE catch 2026-06-08: `loopzero env delete staging` (no flag) returned
+   * 404 ENV_NOT_FOUND because the CLI sent DELETE without ?project=,
+   * so the backend's tuple lookup failed. This flag closes that gap.
+   */
+  project?: string;
 }
 
 /**
@@ -83,14 +98,23 @@ export class EnvDeleteCommand {
       );
     }
 
-    // 6. Call API
+    // 6. Call API. M2 v1.2: propagate `project` so the backend filters
+    // by (name, project) tuple. Empty string preserves the legacy
+    // production-only lookup (ADR D2). Whitespace-only is normalized
+    // to empty (defensive — same convention as env-create).
+    const project = (opts.project ?? '').trim();
     try {
-      await this.deps.deleteEnvironment(name);
+      await this.deps.deleteEnvironment(name, project);
 
       if (opts.json) {
-        this.deps.writeTo(JSON.stringify({ name, status: 'deleted' }));
+        const payload: Record<string, unknown> = { name, status: 'deleted' };
+        if (project) {
+          payload.project = project;
+        }
+        this.deps.writeTo(JSON.stringify(payload));
       } else {
-        this.deps.writeTo(`Environment ${name} deleted. All deployments in ${name} have been removed.`);
+        const where = project ? ` in project ${project}` : '';
+        this.deps.writeTo(`Environment ${name} deleted${where}. All deployments in ${name} have been removed.`);
       }
       return 0;
     } catch (err) {

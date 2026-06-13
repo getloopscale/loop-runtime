@@ -67,12 +67,17 @@ registries:
 
 loki:
   maxGlobalStreamsPerUser: 50000
-  # 2026-06-13 LIVE J-19 walkthrough fix per [[j17-aprendizado-promtail-loki
-  # -pipeline-canonical-via-helmfile]]: pushUrl was hardcoded at mgmt LB IP
-  # (172.18.0.3) but Loki Service lives on BUILD cluster — mgmt:30094 returns
-  # connection-refused. Workload promtail must reach via build cluster LB
-  # (172.18.0.9) where loki Service is exposed at NodePort 30094.
-  pushUrl: http://172.18.0.9:30094/loki/api/v1/push
+  # Canonical same-cluster ClusterIP URL (LIVE-caught 2026-06-09 sponsor
+  # walkthrough): Promtail + Loki both run on the build cluster monitoring
+  # namespace, so the canonical push path is the in-cluster Service —
+  # NOT a cross-cluster NodePort indirection. The previous literal
+  # http://172.18.0.3:30094 was a stale legacy IP from before the
+  # k3d-loopzero network re-IP (commit 4f37675b); Promtail was retrying
+  # forever with "connection refused" and zero logs reached Loki, so
+  # build pipeline logs showed empty in the dashboard. DNS name (no IP
+  # hardcode per feedback_no_hardcode_gate_2026_06_09) makes the wiring
+  # env-agnostic.
+  pushUrl: http://loki.monitoring.svc:3100/loki/api/v1/push
 
 policyMode: warn
 inClusterPostgres: true
@@ -129,3 +134,25 @@ dashboardRoute:
 # (we_1TeVZFJF08yCtMK1RiMjeLc0) with its own whsec_*. Operator wires the
 # Secret `loopzero-stripe-webhook-dev` (created 2026-06-04) so loopzero-cloud
 # verifies dev events with the right signing key.
+#
+# Plan J-09 T4.1 (2026-06-05) — GitHub App webhook secret. Operator wires
+# the `loopzero-github-webhook` Secret BEFORE bootstrapping dev-public so the
+# loopzero-api Deployment can mount GITHUB_WEBHOOK_SECRET via envFrom. Without
+# the secret the webhook handler stays unmounted (router nil-guards) and
+# auto-deploy never fires. The secret value is the SAME string configured
+# on the GitHub App webhook URL https://cloud-dev.loopzero.example/api/v1/webhooks/github
+# so HMAC validation succeeds end-to-end.
+#
+# Runbook:
+#   kubectl --namespace loopzero-system create secret generic loopzero-github-webhook \
+#     --from-literal=value="$(openssl rand -hex 32)" \
+#     --dry-run=client -o yaml | kubectl apply -f -
+#   # then paste the same value into the App config at github.com/settings/apps/loopzero-platform
+#
+# loopzero-api Deployment must reference the Secret via env:
+#   - name: GITHUB_WEBHOOK_SECRET
+#     valueFrom:
+#       secretKeyRef:
+#         name: loopzero-github-webhook
+#         key: value
+#         optional: true   # absent secret => webhook handler off, NOT crash

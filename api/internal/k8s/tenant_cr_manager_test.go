@@ -18,6 +18,7 @@ import (
 	"k8s.io/client-go/rest"
 	"k8s.io/client-go/tools/clientcmd"
 
+	"github.com/loopzero/loopzero/api/internal/domain"
 	"github.com/loopzero/loopzero/api/internal/routes"
 )
 
@@ -227,8 +228,10 @@ func TestTenantCRManager_AddEnvironment(t *testing.T) {
 		t.Fatalf("EnsureTenant failed: %v", err)
 	}
 
-	// Add a new environment
-	err = mgr.AddEnvironment(context.Background(), tenantID, "staging")
+	// Add a new environment. T5.1 of plan 2026-06-10-j22-layer2-code-review-fixes:
+	// post-M2-canonical-fix the CRD requires non-empty `spec.environments[].project`
+	// (operators/api/v1/tenant_types.go EC-1); use canonical test project.
+	err = mgr.AddEnvironment(context.Background(), tenantID, "testproj", "staging")
 	if err != nil {
 		t.Fatalf("AddEnvironment failed: %v", err)
 	}
@@ -265,11 +268,11 @@ func TestTenantCRManager_AddEnvironment_Idempotent(t *testing.T) {
 		t.Fatalf("EnsureTenant failed: %v", err)
 	}
 
-	// Add "staging" twice — second call should be a no-op
-	if err := mgr.AddEnvironment(context.Background(), tenantID, "staging"); err != nil {
+	// Add "staging" twice — second call should be a no-op. T5.1: canonical test project per M2 CRD invariant.
+	if err := mgr.AddEnvironment(context.Background(), tenantID, "testproj", "staging"); err != nil {
 		t.Fatalf("first AddEnvironment failed: %v", err)
 	}
-	if err := mgr.AddEnvironment(context.Background(), tenantID, "staging"); err != nil {
+	if err := mgr.AddEnvironment(context.Background(), tenantID, "testproj", "staging"); err != nil {
 		t.Fatalf("second AddEnvironment (idempotent) failed: %v", err)
 	}
 
@@ -303,11 +306,17 @@ func TestTenantCRManager_RemoveEnvironment(t *testing.T) {
 		t.Fatalf("EnsureTenant failed: %v", err)
 	}
 
-	// Add staging, then remove it
-	if err := mgr.AddEnvironment(context.Background(), tenantID, "staging"); err != nil {
+	// T5.1: post-M2-canonical-fix EnsureTenant starts with empty environments;
+	// add production first so removing staging doesn't trigger "at least one
+	// environment required" guard.
+	if err := mgr.AddEnvironment(context.Background(), tenantID, "testproj", "production"); err != nil {
+		t.Fatalf("AddEnvironment(production) failed: %v", err)
+	}
+	// Add staging, then remove it. T5.1: canonical test project per M2 CRD invariant.
+	if err := mgr.AddEnvironment(context.Background(), tenantID, "testproj", "staging"); err != nil {
 		t.Fatalf("AddEnvironment failed: %v", err)
 	}
-	if err := mgr.RemoveEnvironment(context.Background(), tenantID, "staging"); err != nil {
+	if err := mgr.RemoveEnvironment(context.Background(), tenantID, "testproj", "staging"); err != nil {
 		t.Fatalf("RemoveEnvironment failed: %v", err)
 	}
 
@@ -342,7 +351,7 @@ func TestTenantCRManager_RemoveEnvironment_NonExisting_ReturnsNotFound(t *testin
 	}
 
 	// Remove a non-existing environment — must return ErrEnvironmentNotFound.
-	err = mgr.RemoveEnvironment(context.Background(), tenantID, "does-not-exist")
+	err = mgr.RemoveEnvironment(context.Background(), tenantID, "", "does-not-exist")
 	if err == nil {
 		t.Fatalf("RemoveEnvironment (non-existing) must not succeed silently")
 	}
@@ -366,7 +375,7 @@ func TestTenantCRManager_RemoveEnvironment_RejectsLastEnvironment(t *testing.T) 
 	}
 
 	// Default tenant has only "production" — cannot remove last env
-	err = mgr.RemoveEnvironment(context.Background(), tenantID, "production")
+	err = mgr.RemoveEnvironment(context.Background(), tenantID, "", "production")
 	if err == nil {
 		t.Fatal("expected error when removing the last environment, got nil")
 	}
@@ -386,12 +395,20 @@ func TestTenantCRManager_ListEnvironments(t *testing.T) {
 		t.Fatalf("EnsureTenant failed: %v", err)
 	}
 
+	// T5.1 of plan 2026-06-10-j22-layer2-code-review-fixes: post-M2-canonical-fix
+	// EnsureTenant creates with empty environments []; the canonical T4.1 chain
+	// in routes/projects.go appends production via EnvironmentEnsurer. This test
+	// invokes the manager directly, so we replicate the chain here.
+	if err := mgr.AddEnvironment(context.Background(), tenantID, "testproj", "production"); err != nil {
+		t.Fatalf("AddEnvironment(production) failed: %v", err)
+	}
+
 	envs, err := mgr.ListEnvironments(context.Background(), tenantID)
 	if err != nil {
 		t.Fatalf("ListEnvironments failed: %v", err)
 	}
 
-	// Default tenant has "production"
+	// After explicit AddEnvironment, tenant has 1 production env
 	if len(envs) != 1 {
 		t.Fatalf("expected 1 environment, got %d: %v", len(envs), envs)
 	}
@@ -417,8 +434,13 @@ func TestTenantCRManager_GetEnvironmentDetail(t *testing.T) {
 		t.Fatalf("EnsureTenant failed: %v", err)
 	}
 
+	// T5.1: replicate the canonical T4.1 chain that EnsureTenant no longer does.
+	if err := mgr.AddEnvironment(context.Background(), tenantID, "testproj", "production"); err != nil {
+		t.Fatalf("AddEnvironment(production) failed: %v", err)
+	}
+
 	// Existing environment
-	detail, err := mgr.GetEnvironmentDetail(context.Background(), tenantID, "production")
+	detail, err := mgr.GetEnvironmentDetail(context.Background(), tenantID, "testproj", "production")
 	if err != nil {
 		t.Fatalf("GetEnvironmentDetail failed: %v", err)
 	}
@@ -434,11 +456,274 @@ func TestTenantCRManager_GetEnvironmentDetail(t *testing.T) {
 	}
 
 	// Non-existing environment
-	detail, err = mgr.GetEnvironmentDetail(context.Background(), tenantID, "nonexistent")
+	detail, err = mgr.GetEnvironmentDetail(context.Background(), tenantID, "testproj", "nonexistent")
 	if err != nil {
 		t.Fatalf("GetEnvironmentDetail (nonexistent) failed: %v", err)
 	}
 	if detail != nil {
 		t.Errorf("expected nil for nonexistent environment, got %+v", detail)
 	}
+}
+
+// =============================================================================
+// M2 v1.2 — T2.1 per-(project, env) tuple tests
+// Plan: 2026-06-07-runtime-envs-per-project-m2 v1.2
+// =============================================================================
+
+// TestTenantCRManager_AddEnvironment_WritesProjectInSpec asserts that the
+// canonical project field lands on the Tenant CR spec.environments entry
+// when the project argument is non-empty.
+func TestTenantCRManager_AddEnvironment_WritesProjectInSpec(t *testing.T) {
+	client := getDynamicClient(t)
+	tenantID := "m2-test-write-project"
+	cleanupTenant(t, client, tenantID)
+	t.Cleanup(func() { cleanupTenant(t, client, tenantID) })
+
+	mgr := &TenantCRManager{Client: client}
+	if err := mgr.EnsureTenant(context.Background(), tenantID, routes.TenantCRSpec{Plan: "starter"}); err != nil {
+		t.Fatalf("EnsureTenant failed: %v", err)
+	}
+
+	if err := mgr.AddEnvironment(context.Background(), tenantID, "web", "staging"); err != nil {
+		t.Fatalf("AddEnvironment(web, staging) failed: %v", err)
+	}
+
+	envs, err := mgr.ListEnvironments(context.Background(), tenantID)
+	if err != nil {
+		t.Fatalf("ListEnvironments failed: %v", err)
+	}
+	var found *domain.EnvironmentEntry
+	for i := range envs {
+		if envs[i].Name == "staging" && envs[i].Project == "web" {
+			found = &envs[i]
+			break
+		}
+	}
+	if found == nil {
+		t.Fatalf("expected entry (staging, project=web) in spec.environments, got %v", envs)
+	}
+}
+
+// TestTenantCRManager_AddEnvironment_SameNameDifferentProjectsBothPersist
+// asserts that the (name, project) tuple is the uniqueness key —
+// `staging+web` and `staging+api` coexist as 2 distinct entries.
+func TestTenantCRManager_AddEnvironment_SameNameDifferentProjectsBothPersist(t *testing.T) {
+	client := getDynamicClient(t)
+	tenantID := "m2-test-same-name-diff-proj"
+	cleanupTenant(t, client, tenantID)
+	t.Cleanup(func() { cleanupTenant(t, client, tenantID) })
+
+	mgr := &TenantCRManager{Client: client}
+	if err := mgr.EnsureTenant(context.Background(), tenantID, routes.TenantCRSpec{Plan: "growth"}); err != nil {
+		t.Fatalf("EnsureTenant failed: %v", err)
+	}
+
+	if err := mgr.AddEnvironment(context.Background(), tenantID, "web", "staging"); err != nil {
+		t.Fatalf("AddEnvironment(web, staging) failed: %v", err)
+	}
+	if err := mgr.AddEnvironment(context.Background(), tenantID, "api", "staging"); err != nil {
+		t.Fatalf("AddEnvironment(api, staging) failed: %v", err)
+	}
+
+	envs, _ := mgr.ListEnvironments(context.Background(), tenantID)
+	staging := 0
+	for _, e := range envs {
+		if e.Name == "staging" {
+			staging++
+		}
+	}
+	if staging != 2 {
+		t.Errorf("expected 2 staging entries (one per project), got %d", staging)
+	}
+}
+
+// TestTenantCRManager_RemoveEnvironment_OnlyRemovesMatchingProject asserts
+// that the filter is per-(name, project) tuple — removing `staging+web`
+// leaves `staging+api` untouched.
+func TestTenantCRManager_RemoveEnvironment_OnlyRemovesMatchingProject(t *testing.T) {
+	client := getDynamicClient(t)
+	tenantID := "m2-test-remove-tuple"
+	cleanupTenant(t, client, tenantID)
+	t.Cleanup(func() { cleanupTenant(t, client, tenantID) })
+
+	mgr := &TenantCRManager{Client: client}
+	if err := mgr.EnsureTenant(context.Background(), tenantID, routes.TenantCRSpec{Plan: "growth"}); err != nil {
+		t.Fatalf("EnsureTenant failed: %v", err)
+	}
+	if err := mgr.AddEnvironment(context.Background(), tenantID, "web", "staging"); err != nil {
+		t.Fatalf("AddEnvironment(web, staging) failed: %v", err)
+	}
+	if err := mgr.AddEnvironment(context.Background(), tenantID, "api", "staging"); err != nil {
+		t.Fatalf("AddEnvironment(api, staging) failed: %v", err)
+	}
+
+	if err := mgr.RemoveEnvironment(context.Background(), tenantID, "web", "staging"); err != nil {
+		t.Fatalf("RemoveEnvironment(web, staging) failed: %v", err)
+	}
+
+	envs, _ := mgr.ListEnvironments(context.Background(), tenantID)
+	for _, e := range envs {
+		if e.Name == "staging" && e.Project == "web" {
+			t.Errorf("(staging, web) should have been removed; envs=%v", envs)
+		}
+	}
+	// The (staging, api) tuple MUST remain.
+	apiKept := false
+	for _, e := range envs {
+		if e.Name == "staging" && e.Project == "api" {
+			apiKept = true
+			break
+		}
+	}
+	if !apiKept {
+		t.Errorf("(staging, api) should have been preserved; envs=%v", envs)
+	}
+}
+
+// TestTenantCRManager_GetEnvironmentDetail_FiltersByProject asserts that
+// lookup is per-(name, project) — same name in a different project does
+// not match.
+func TestTenantCRManager_GetEnvironmentDetail_FiltersByProject(t *testing.T) {
+	client := getDynamicClient(t)
+	tenantID := "m2-test-get-filter"
+	cleanupTenant(t, client, tenantID)
+	t.Cleanup(func() { cleanupTenant(t, client, tenantID) })
+
+	mgr := &TenantCRManager{Client: client}
+	if err := mgr.EnsureTenant(context.Background(), tenantID, routes.TenantCRSpec{Plan: "growth"}); err != nil {
+		t.Fatalf("EnsureTenant failed: %v", err)
+	}
+	if err := mgr.AddEnvironment(context.Background(), tenantID, "web", "staging"); err != nil {
+		t.Fatalf("AddEnvironment(web, staging) failed: %v", err)
+	}
+
+	got, err := mgr.GetEnvironmentDetail(context.Background(), tenantID, "web", "staging")
+	if err != nil {
+		t.Fatalf("GetEnvironmentDetail(web, staging) failed: %v", err)
+	}
+	if got == nil {
+		t.Fatal("expected non-nil detail for (web, staging)")
+	}
+	other, _ := mgr.GetEnvironmentDetail(context.Background(), tenantID, "api", "staging")
+	if other != nil {
+		t.Errorf("expected nil detail for (api, staging) — tuple not present, got %+v", other)
+	}
+}
+
+// TestTenantCRManager_ListEnvironments_ReturnsProjectPerEntry asserts
+// that the Project field of each EnvironmentEntry is populated from the
+// CR spec.
+func TestTenantCRManager_ListEnvironments_ReturnsProjectPerEntry(t *testing.T) {
+	client := getDynamicClient(t)
+	tenantID := "m2-test-list-project"
+	cleanupTenant(t, client, tenantID)
+	t.Cleanup(func() { cleanupTenant(t, client, tenantID) })
+
+	mgr := &TenantCRManager{Client: client}
+	if err := mgr.EnsureTenant(context.Background(), tenantID, routes.TenantCRSpec{Plan: "growth"}); err != nil {
+		t.Fatalf("EnsureTenant failed: %v", err)
+	}
+	if err := mgr.AddEnvironment(context.Background(), tenantID, "web", "dev"); err != nil {
+		t.Fatalf("AddEnvironment(web, dev) failed: %v", err)
+	}
+
+	envs, err := mgr.ListEnvironments(context.Background(), tenantID)
+	if err != nil {
+		t.Fatalf("ListEnvironments failed: %v", err)
+	}
+	var hit *domain.EnvironmentEntry
+	for i := range envs {
+		if envs[i].Name == "dev" {
+			hit = &envs[i]
+			break
+		}
+	}
+	if hit == nil {
+		t.Fatalf("expected entry (dev), got %v", envs)
+	}
+	if hit.Project != "web" {
+		t.Errorf("expected Project=web on (dev), got %q", hit.Project)
+	}
+}
+
+// TestTenantCRManager_AddEnvironment_RejectsCombinedNamespaceOver63Chars
+// asserts the EC-4 pre-flight guard: when the combined RFC 1123 namespace
+// `loopzero-<tenant>-<project>-<env>` would exceed 63 chars, AddEnvironment
+// fails BEFORE the apiserver round-trip.
+//
+// This test does NOT need a live cluster — the guard fires on the
+// `naming.Namespace` validator. We still use the integration harness
+// to keep the test next to its siblings; the cluster Get/Update is
+// never reached.
+func TestTenantCRManager_AddEnvironment_RejectsCombinedNamespaceOver63Chars(t *testing.T) {
+	client := getDynamicClient(t)
+	mgr := &TenantCRManager{Client: client}
+
+	// loopzero- (5) + tenant (15) + - (1) + project (30) + - (1) + env (15) = 67 chars > 63
+	tenantID := "tn-08fa2ecedc3c7e" // 16 chars
+	veryLongProject := "veryveryverylongprojectname-30"
+	envName := "staging-extra-12"
+
+	err := mgr.AddEnvironment(context.Background(), tenantID, veryLongProject, envName)
+	if err == nil {
+		t.Fatal("expected error for combined namespace > 63 chars, got nil")
+	}
+	// The error MUST mention the 63-char limit OR contain "exceeds".
+	msg := err.Error()
+	if !contains63HintInMessage(msg) {
+		t.Errorf("expected error to mention RFC 1123 / 63-char ceiling, got %q", msg)
+	}
+}
+
+// contains63HintInMessage reports whether the error message points the
+// operator at the 63-char ceiling that fired. Matches a few variants
+// emitted by pkg/naming.ValidateKubernetesName.
+func contains63HintInMessage(msg string) bool {
+	for _, hint := range []string{"63", "RFC 1123", "too long", "exceeds", "length"} {
+		if len(hint) > 0 && containsCI(msg, hint) {
+			return true
+		}
+	}
+	return false
+}
+
+// containsCI is a case-insensitive substring check (no extra dep).
+func containsCI(haystack, needle string) bool {
+	if needle == "" {
+		return true
+	}
+	if len(haystack) < len(needle) {
+		return false
+	}
+	// Cheap lowercasing avoids importing strings here (kept consistent
+	// with other tiny helpers in this file).
+	lowerH := make([]byte, len(haystack))
+	for i := 0; i < len(haystack); i++ {
+		c := haystack[i]
+		if c >= 'A' && c <= 'Z' {
+			c += 32
+		}
+		lowerH[i] = c
+	}
+	lowerN := make([]byte, len(needle))
+	for i := 0; i < len(needle); i++ {
+		c := needle[i]
+		if c >= 'A' && c <= 'Z' {
+			c += 32
+		}
+		lowerN[i] = c
+	}
+	for i := 0; i+len(lowerN) <= len(lowerH); i++ {
+		match := true
+		for j := 0; j < len(lowerN); j++ {
+			if lowerH[i+j] != lowerN[j] {
+				match = false
+				break
+			}
+		}
+		if match {
+			return true
+		}
+	}
+	return false
 }

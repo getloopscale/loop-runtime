@@ -1,0 +1,27 @@
+# T1.3 of plan 2026-06-11-cleanroom-canonical-5-defense-layers v1.2.
+#
+# Canonical declarative Promtail Loki sink for prod env per ADR D1 + D8.
+# In prod, Promtail (build/workload clusters) ships to Loki on mgmt cluster
+# via DOKS internal LB FQDN. Cross-cluster requires explicit FQDN — k3d
+# local IP defaults silently fail in DOKS (different network).
+#
+# Per-env contract:
+#   - prod: cross-cluster push to DOKS internal LB
+#           `loki.loopzero-platform.internal:3100` (resolves via VPC DNS)
+#   - pipeline_stages canonical inherits from chart-base scrapeConfigs
+#     which already includes ::loopzero:: marker extraction per J-17.
+
+config:
+  clients:
+    - url: http://loki.loopzero-platform.internal:3100/loki/api/v1/push
+      batchwait: 5s
+      batchsize: 1048576
+
+  snippets:
+    pipeline_stages:
+      - cri: {}
+      - json:
+          expressions:
+            correlation_id: correlation_id
+      - labels:
+          correlation_id:

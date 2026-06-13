@@ -107,6 +107,28 @@ func NewRouter(cfg Config) *chi.Mux {
 	if cfg.ArgoCallbackHandler != nil {
 		r.Post("/internal/argocd-callback", cfg.ArgoCallbackHandler.Handle)
 	}
+	// Layer 2 ESO sync broker (plan 2026-06-10-j22-openbao-transit-eso-sync
+	// v1.2 D3 + plan 2026-06-02-openbao-adoption v1.3 T4.1).
+	// /internal/v1/secret-fetch/{tenant_id}/{secret_name} is the endpoint
+	// the ESO ClusterSecretStore webhook backend calls to resolve user
+	// secrets — loopzero-api loads the vault:v1: ciphertext from PG +
+	// decrypts via OpenBao transit + returns plaintext_b64. The handler
+	// itself enforces secret_name regex (EC-08) + tenant↔cell binding
+	// (EC-07) + writes audit_log. Bearer-token auth is provided by the
+	// brokerBearerMiddleware wrap applied at construction in main.go.
+	// nil-safe: when transit/store/cellStore/token are missing the
+	// handler stays nil and the route is not registered — ESO sees 404
+	// and retries with backoff (safer than registering a broken handler).
+	if cfg.SecretFetchHandler != nil {
+		// T2.1 + ADR D2 of plan 2026-06-10-j22-layer2-code-review-fixes
+		// (revised 2026-06-11 LIVE catch — ESO v1beta1 CRD rejects
+		// `remoteRef.metadata` as unknown field): 2-segment URL where
+		// {secret_name} is a composite `secretName.projectID.envName`
+		// (EC-08 regex `^[A-Z][A-Z0-9_]*$` forbids `.` → safe delimiter).
+		// Handler splits property into 3 parts and scopes broker SQL by
+		// canonical composite unique key (closes HIGH #15 scope-drop).
+		r.Post("/internal/v1/secret-fetch/{tenant_id}/{secret_name}", cfg.SecretFetchHandler)
+	}
 
 	// GitHub webhook (no auth — GitHub validates via HMAC signature internally)
 	if cfg.GitHubWebhookHandler != nil {
@@ -207,9 +229,17 @@ func NewRouter(cfg Config) *chi.Mux {
 			// Distinct from buildEnforcement (rate-style builds/month).
 			buildCostGate := cfg.CostEnforcer.Middleware(enforcementMetricBuildMinutes)
 
+			// D5 of plan 2026-06-07-preview-as-category-single-slot-plan.md
+			// (Bug A fix): CountPermanentEnvironments filters by
+			// `kind = 'permanent'` so previews (single-slot model via
+			// preview_slot table) NEVER count against
+			// plan_limits.environments. Pre-2026-06-07 the inline query
+			// `SELECT COUNT(*) FROM environment_targets` mixed both kinds
+			// and a tenant with 1 permanent prod env + 2 preview-pr-N
+			// rows hit "current=3, max=3" PLAN_LIMIT_EXCEEDED on Pro.
 			envEnforcement := enforcement.Middleware(cfg.PlanLimiter, enforcement.OperationCheck{
 				Metric:  "environments",
-				CountFn: enforcement.CountRows(cfg.PlanLimiter, "SELECT COUNT(*) FROM environment_targets WHERE tenant_id = $1"),
+				CountFn: enforcement.CountPermanentEnvironments(cfg.PlanLimiter),
 			}, tenantFromCtx, upgradeURL)
 
 			seatEnforcement := enforcement.Middleware(cfg.PlanLimiter, enforcement.OperationCheck{
@@ -259,6 +289,14 @@ func registerProtectedRoutes(
 		if cfg.ProjectDeleter != nil {
 			projects.SetDeleter(cfg.ProjectDeleter)
 		}
+		// T4.1 of plan 2026-06-09-m2-operator-canonical-fix v1.4: auto-create
+		// `production` env on POST /api/v1/projects (ADR D4 — Vercel-style).
+		// nil-safe: when ProjectEnvEnsurer not wired, Create behaves
+		// identically to pre-T4.1 (TestProjectCreate_BackwardCompatNoEnsurer
+		// pins this contract).
+		if cfg.ProjectEnvEnsurer != nil {
+			projects.SetEnvEnsurer(cfg.ProjectEnvEnsurer)
+		}
 		r.Get("/api/v1/projects", projects.List)
 		r.Get("/api/v1/projects/{name}", projects.Get)
 		r.With(append(rateLimitMiddlewares, projectEnforcement)...).Post("/api/v1/projects", projects.Create)
@@ -283,6 +321,23 @@ func registerProtectedRoutes(
 		}
 		streamHandler := sse.NewStreamHandler(cfg.EventStore, cfg.BuildStoreReader, sseOpts...)
 		r.Get("/api/v1/builds/{id}/stream", streamHandler.ServeHTTP)
+
+		// Plan J-17 T2.3 — project-level SSE stream. Reuses the same poll /
+		// heartbeat / concurrency knobs as the build-level stream so operators
+		// configure one set of intervals. EventStore tenant isolation is the
+		// canonical authorization.
+		projectStreamOpts := []sse.ProjectStreamOption{sse.WithProjectLogger(cfg.Logger)}
+		if cfg.SSEHeartbeatInterval > 0 {
+			projectStreamOpts = append(projectStreamOpts, sse.WithProjectHeartbeatInterval(cfg.SSEHeartbeatInterval))
+		}
+		if cfg.SSEPollInterval > 0 {
+			projectStreamOpts = append(projectStreamOpts, sse.WithProjectPollInterval(cfg.SSEPollInterval))
+		}
+		if cfg.SSEMaxConcurrentStreams > 0 {
+			projectStreamOpts = append(projectStreamOpts, sse.WithProjectMaxConcurrentStreams(cfg.SSEMaxConcurrentStreams))
+		}
+		projectStreamHandler := sse.NewProjectStreamHandler(cfg.EventStore, projectStreamOpts...)
+		r.Get("/api/v1/projects/{name}/builds/stream", projectStreamHandler.ServeHTTP)
 	}
 
 	// Secret routes
@@ -297,9 +352,27 @@ func registerProtectedRoutes(
 		if cfg.SecretEnvLocker != nil {
 			secrets.SetLocker(cfg.SecretEnvLocker)
 		}
+		// T1.2 (plan 2026-06-10-j22-openbao-transit-eso-sync v1.2): wire
+		// the cross-tenant binding check (EC-03 absorption / CWE-204
+		// defense). Production injects *db.PostgresProjectStore directly.
+		if cfg.SecretProjectChecker != nil {
+			secrets.SetProjectChecker(cfg.SecretProjectChecker)
+		}
+		// T2.3+T2.5 (plan 2026-06-10-j22-openbao-transit-eso-sync v1.2):
+		// wire the OpenBao transit encrypt path into Bulk so plaintext
+		// never reaches PG. Production injects *vault.TransitClient via
+		// cmd/setup_transit.go; the secret store also dispatches through
+		// the SAME vault client (NewPostgresSecretStoreWithVault) so
+		// reads decrypt correctly. encryptForStore detects the
+		// vault:v1: prefix and passes through (no double-encrypt).
+		if cfg.SecretTransit != nil {
+			secrets.SetTransitClient(cfg.SecretTransit)
+		}
 		r.Get("/api/v1/secrets", secrets.List)
 		r.With(rateLimitMiddlewares...).Post("/api/v1/secrets", secrets.Set)
 		r.With(rateLimitMiddlewares...).Delete("/api/v1/secrets/{name}", secrets.DeleteSecret)
+		// J-22 T1.1: bulk endpoint POST /api/v1/secrets/bulk
+		r.With(rateLimitMiddlewares...).Post("/api/v1/secrets/bulk", secrets.Bulk)
 	}
 
 	// Build routes — use the single BuildHandler from Config (C-08).
@@ -342,6 +415,11 @@ func registerProtectedRoutes(
 	}
 	if cfg.BuildListHandler != nil {
 		r.Get("/api/v1/projects/{name}/builds", cfg.BuildListHandler.List)
+		// T2.2 + ADR D3 + EC-2: distinct envs the project has built into,
+		// feeds dashboard /deployments dynamic filter chips. The handler
+		// enforces the cross-tenant gate via the ProjectStore wired in
+		// NewBuildListHandlerWithGate (setup_orchestrator.go).
+		r.Get("/api/v1/projects/{name}/build-envs", cfg.BuildListHandler.BuildEnvs)
 	}
 	if cfg.RollbackHandler != nil {
 		r.With(rateLimitMiddlewares...).Post("/api/v1/projects/{name}/rollback", cfg.RollbackHandler.Create)
@@ -396,6 +474,14 @@ func registerProtectedRoutes(
 		r.Post("/api/v1/projects/{name}/connect", cfg.RepositoryHandler.Connect)
 		r.Delete("/api/v1/projects/{name}/connect", cfg.RepositoryHandler.Disconnect)
 		r.Get("/api/v1/projects/{name}/connect", cfg.RepositoryHandler.GetConnection)
+	}
+
+	// Plan J-09 T2.1 (2026-06-05): dashboard repo picker source.
+	// Lists every repo the given installation has authorised, sanitised to
+	// {full_name, default_branch, private, language}. Tenant-scoped via the
+	// installation row; cross-tenant returns 403.
+	if cfg.IntegrationsGitHubHandler != nil {
+		r.Get("/api/v1/integrations/github/installations/{id}/repositories", cfg.IntegrationsGitHubHandler.ListRepositories)
 	}
 
 	// Preview environment routes (Sprint 5 / T2.3).

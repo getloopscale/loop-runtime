@@ -39,9 +39,19 @@ spec:
   cellID: cell-default
   displayName: ${DISPLAY_NAME}
   plan: ${PLAN}
-  environments:
-    - name: production
-      cluster: workload
+  # Empty by construction — canonical post-M2 plan T1.1
+  # (2026-06-09-m2-operator-canonical-fix). The CRD schema requires
+  # spec.environments[].project as RFC-1123 string (minLength=1); the
+  # legacy {name: production, cluster: workload} entry without project
+  # was rejected at admission post-T1.1. Mirror is
+  # api/internal/k8s/tenant_cr_manager.go buildTenantCR() which emits
+  # an empty list and lets the canonical T4.1 chain in
+  # routes/projects.go append the production env via
+  # EnvironmentEnsurer when the user creates a project. The CRD
+  # constraint allows MinItems=0 so empty validates. See
+  # feedback_no_hardcode_gate_2026_06_09 — operator MUST NOT hardcode
+  # environments[].project in any seed/bootstrap path.
+  environments: []
   gitops:
     repoName: ${TENANT_ID}-gitops
     branch: main

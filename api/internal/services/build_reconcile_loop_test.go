@@ -161,6 +161,10 @@ func (f *fakeBuildStoreRL) ListByProjectAndEnv(_ context.Context, _, _, _ string
 	return nil, 0, nil
 }
 
+func (f *fakeBuildStoreRL) ListEnvsForProject(_ context.Context, _, _ string) ([]string, error) {
+	return nil, nil
+}
+
 func (f *fakeBuildStoreRL) FindActiveBuilds(_ context.Context, _ string) ([]db.Build, error) {
 	f.mu.Lock()
 	defer f.mu.Unlock()

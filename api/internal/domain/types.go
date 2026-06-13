@@ -209,9 +209,11 @@ type SecretStore interface {
 }
 
 // SecretK8sSync abstracts K8s Secret + ExternalSecret CR creation (DIP).
+// projectID is the canonical M2 namespace segment (per pkg/naming.Namespace);
+// the runtime ExternalSecret CR lives at loopzero-{tenantID}-{projectID}-{env}.
 type SecretK8sSync interface {
 	CreateSecret(ctx context.Context, tenantID, projectID, env, app, name, value string) error
-	DeleteSecret(ctx context.Context, tenantID, env, app, name string) error
+	DeleteSecret(ctx context.Context, tenantID, projectID, env, app, name string) error
 }
 
 // --- Projects ---
@@ -235,11 +237,53 @@ type ProjectResult struct {
 	CreatedAt time.Time `json:"created_at,omitempty"`
 }
 
+// ProjectSummary is the dashboard-facing per-project summary record
+// returned by GET /api/v1/projects post plan
+// 2026-06-08-dashboard-screens-review-fixes T2.1 (ADR D2). Wire-format
+// additive over ProjectResult — legacy consumers ignore the 2 new
+// trailing fields. LastDeployStatus is the 5-value enum from
+// pkg/enforcement.ProjectStatus (kept as string here to avoid a domain
+// → pkg/enforcement import edge; the wrapper layer is the SoT mapper).
+type ProjectSummary struct {
+	ID               string    `json:"id"`
+	Name             string    `json:"name"`
+	TeamID           string    `json:"team"`
+	CreatedBy        string    `json:"created_by,omitempty"`
+	CreatedAt        time.Time `json:"created_at,omitempty"`
+	EnvironmentCount int64     `json:"environment_count"`
+	// LastDeployStatus is one of: "live", "building", "failed", "idle",
+	// "queued" — derived from the latest build's status via
+	// pkg/enforcement.MapBuildStatusToProjectStatus.
+	LastDeployStatus string `json:"last_deploy_status"`
+	// LastDeployAt + AppsCount + LatestFramework — T5.3 LIVE-bug fix 2026-06-08.
+	// Plan 2026-06-08-dashboard-screens-review-fixes T2.1 originally dropped
+	// legacy `last_deploy` timestamp + `apps[]` array + `framework` fields
+	// from the listing response, leaving the dashboard /projects table
+	// rendering "—" / "0" in those columns despite the data being available
+	// via the latest_build LATERAL join. Sponsor walkthrough caught the
+	// regression; these fields are the additive completion of T2.1.
+	// LastDeployAt is the latest build's created_at timestamp (omitempty
+	// when the project has no builds yet — frontend renders "—").
+	LastDeployAt time.Time `json:"last_deploy,omitempty"`
+	// AppsCount = jsonb_array_length(latest_build.apps_spec); 0 when no
+	// builds OR empty apps_spec.
+	AppsCount int64 `json:"apps_count"`
+	// LatestFramework = latest_build.apps_spec[0].type — closest semantic
+	// to "framework" (the dashboard renders this as a Badge). Empty string
+	// when no builds OR apps_spec missing.
+	LatestFramework string `json:"latest_framework,omitempty"`
+}
+
 // ProjectStore abstracts project persistence (DIP).
 type ProjectStore interface {
 	CreateProject(ctx context.Context, input CreateProjectInput) (ProjectResult, error)
 	GetByName(ctx context.Context, tenantID, name string) (*ProjectResult, error)
 	ListByTenant(ctx context.Context, tenantID string) ([]ProjectResult, error)
+	// ListByTenantWithSummary returns the same set as ListByTenant but
+	// carries 2 additional fields (environment_count + last_deploy_status)
+	// derived via a single SQL round-trip (LEFT JOIN LATERAL). Post
+	// plan 2026-06-08-dashboard-screens-review-fixes T2.1.
+	ListByTenantWithSummary(ctx context.Context, tenantID string) ([]ProjectSummary, error)
 	DeleteProject(ctx context.Context, tenantID, projectID string) error
 }
 

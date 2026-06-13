@@ -70,6 +70,9 @@ func (f *fakeDeleteBuildStore) ListByProject(context.Context, string, string, in
 func (f *fakeDeleteBuildStore) ListByProjectAndEnv(context.Context, string, string, string, int, int) ([]db.Build, int, error) {
 	return nil, 0, nil
 }
+func (f *fakeDeleteBuildStore) ListEnvsForProject(context.Context, string, string) ([]string, error) {
+	return nil, nil
+}
 func (f *fakeDeleteBuildStore) FindActiveBuilds(context.Context, string) ([]db.Build, error) {
 	return nil, nil
 }
@@ -109,6 +112,20 @@ func (f *fakeDeleteEnvTargetStore) SetActive(context.Context, db.DBTX, string, s
 }
 func (f *fakeDeleteEnvTargetStore) Get(context.Context, string, string, string) (*db.EnvironmentTarget, error) {
 	return nil, nil
+}
+
+// 2026-06-07 D2/D5/D6/D7 — preview-as-category interface extensions.
+func (f *fakeDeleteEnvTargetStore) SetPreviewDesired(context.Context, db.DBTX, string, string, string, string, string, string) error {
+	return nil
+}
+func (f *fakeDeleteEnvTargetStore) CountPermanent(context.Context, string) (int, error) {
+	return 0, nil
+}
+func (f *fakeDeleteEnvTargetStore) ListPermanent(context.Context, string) ([]string, error) {
+	return []string{}, nil
+}
+func (f *fakeDeleteEnvTargetStore) DeleteByKind(context.Context, db.DBTX, string, string, string, string) error {
+	return nil
 }
 
 // fakeDeleteProjectStore implements services.ProjectDeleteProjectStore.

@@ -81,3 +81,29 @@ func (p *CircuitBreakerProvisioner) DeleteAppProject(ctx context.Context, tenant
 	p.cb.RecordResult(err)
 	return err
 }
+
+// ListApplicationNames delegates with circuit breaker protection.
+// #71 LIVE catch 2026-06-07.
+func (p *CircuitBreakerProvisioner) ListApplicationNames(ctx context.Context, tenantID string) ([]string, error) {
+	if err := p.cb.PreCheck(); err != nil {
+		p.logger.WarnContext(ctx, "argocd circuit breaker open, skipping ListApplicationNames",
+			"tenant", tenantID, "cb_state", p.cb.State().String())
+		return nil, err
+	}
+	names, err := p.inner.ListApplicationNames(ctx, tenantID)
+	p.cb.RecordResult(err)
+	return names, err
+}
+
+// DeleteApplication delegates with circuit breaker protection.
+// #71 LIVE catch 2026-06-07.
+func (p *CircuitBreakerProvisioner) DeleteApplication(ctx context.Context, appName string) error {
+	if err := p.cb.PreCheck(); err != nil {
+		p.logger.WarnContext(ctx, "argocd circuit breaker open, skipping DeleteApplication",
+			"app", appName, "cb_state", p.cb.State().String())
+		return err
+	}
+	err := p.inner.DeleteApplication(ctx, appName)
+	p.cb.RecordResult(err)
+	return err
+}

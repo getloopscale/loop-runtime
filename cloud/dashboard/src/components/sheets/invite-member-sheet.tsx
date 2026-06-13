@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import { Loader2 } from 'lucide-react';
-import { Alert, Button, Input, Label, Select, Sheet } from '@loopzerokit/ui';
+import { Alert, Button, Input, Label, Select, Sheet } from '@loopzero/ui';
 import { engineFetch } from '@/lib/api';
 import type { TeamMember, TeamRole } from '@/lib/api/types';
 

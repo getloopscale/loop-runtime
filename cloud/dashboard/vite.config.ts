@@ -1,7 +1,6 @@
 /// <reference types="vitest/config" />
 import { defineConfig } from 'vite';
 import react from '@vitejs/plugin-react';
-import tailwindcss from '@tailwindcss/vite';
 import { VitePWA } from 'vite-plugin-pwa';
 import { visualizer } from 'rollup-plugin-visualizer';
 import path from 'path';
@@ -9,7 +8,7 @@ import path from 'path';
 /**
  * Vite config with manualChunks vendor split (T-H.3 final optimization).
  *
- * Splits @loopzerokit/ui + Radix + Lucide into dedicated vendor chunk so the
+ * Splits @loopzero/ui + Radix + Lucide into dedicated vendor chunk so the
  * browser caches it independently of app code. Reduces re-download cost
  * on subsequent visits + parallelizes parsing.
  *
@@ -29,17 +28,6 @@ export default defineConfig({
         ],
       },
     }),
-    // Tailwind v4 — official Vite plugin. Replaces the legacy postcss.config.js
-    // chain (`@tailwindcss/postcss` + autoprefixer) because v4's compile model
-    // is built around CSS-first @theme directives that the Vite plugin handles
-    // natively, including HMR for token edits. Removed `postcss.config.js`
-    // as part of this migration — the old config tried to load
-    // `@tailwindcss/postcss/dist/index.js` (CJS) directly, but the package
-    // ships `"exports"` with conditional `import`/`require` only, and Vite's
-    // PostCSS loader in `type: module` projects ignored the conditional
-    // resolution path. The official `@tailwindcss/vite` plugin sidesteps
-    // PostCSS entirely.
-    tailwindcss(),
     // T-DR-5.5 v1.2 (Phase 5) — Bundle analyzer per-route attribution.
     // Outputs dist/bundle-stats.html on every build (open via npm run bundle:analyze).
     // Resolves G5 FAANG gap (Vercel bundle analyzer parity).
@@ -181,13 +169,29 @@ export default defineConfig({
       '/oauth2':       { target: 'http://localhost:14444', changeOrigin: true },
     },
   },
+  // Dev-only: same-origin against the local loopzero-cloud + Kratos port-forwards
+  // via vite proxy (avoids browser CORS). In prod, the dashboard is served
+  // from cloud.{domain} (MEET-040). `allowedHosts` whitelists the public
+  // Caddy-fronted hostname so vite's DNS-rebinding guard doesn't 403 us.
+  server: {
+    host: true,
+    allowedHosts: ['localhost', 'app.loopzero.example', '.loopzero.example'],
+    proxy: {
+      '/v1':           { target: 'http://localhost:13002', changeOrigin: true },
+      '/engine':       { target: 'http://localhost:13002', changeOrigin: true },
+      '/auth':         { target: 'http://localhost:13002', changeOrigin: true },
+      '/self-service': { target: 'http://localhost:14433', changeOrigin: true },
+      '/sessions':     { target: 'http://localhost:14433', changeOrigin: true },
+      '/oauth2':       { target: 'http://localhost:14444', changeOrigin: true },
+    },
+  },
   build: {
     outDir: 'dist',
     sourcemap: false,
     rollupOptions: {
       output: {
         manualChunks(id) {
-          if (id.includes('node_modules/@loopzerokit/ui')) return 'loopzero-ui';
+          if (id.includes('node_modules/@loopzero/ui')) return 'loopzero-ui';
           if (id.includes('node_modules/@radix-ui')) return 'radix';
           if (id.includes('node_modules/lucide-react')) return 'lucide';
           if (id.includes('node_modules/react/') || id.includes('node_modules/react-dom/')) return 'react-vendor';

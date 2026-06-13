@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react';
 import { useSearchParams } from 'react-router-dom';
 import { AlertCircle, CheckCircle2, Loader2, Mail } from 'lucide-react';
-import { Alert, Button, Card, PinInput } from '@loopzerokit/ui';
+import { Alert, Button, Card, PinInput } from '@loopzero/ui';
 import { API_URL, AUTH_URL } from '@/lib/config';
 import { enrichKratosError } from '@/lib/kratos';
 

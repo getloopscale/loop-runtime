@@ -115,6 +115,63 @@ func TestEncryptForStore_PropagatesVaultError(t *testing.T) {
 	}
 }
 
+// TestEncryptForStore_PassthroughWhenVaultPrefixPresent — T2.5 of plan
+// 2026-06-10-j22-openbao-transit-eso-sync v1.2. The Bulk handler
+// pre-encrypts via h.transitClient.Encrypt (T2.3 contract); when the
+// store ALSO has s.vault wired (canonical production), encrypting again
+// here would produce a vault:v1: envelope around an already-vault:v1:
+// payload — DOUBLE ENCRYPT — and reads would unwrap only the outer
+// layer, surfacing the inner string as "plaintext". The pass-through
+// defense detects the vault:v1: prefix on input and returns the bytes
+// unchanged, so the row carries canonical single-encrypt ciphertext.
+//
+// Sub-assertions:
+//   - returned bytes are byte-identical to input (no transformation)
+//   - mockVault.encryptCalls did NOT increment (no second-trip to OpenBao)
+func TestEncryptForStore_PassthroughWhenVaultPrefixPresent(t *testing.T) {
+	mv := &mockVault{}
+	s := &PostgresSecretStore{vault: mv}
+
+	// Simulate the Bulk-handler-encrypted payload that Set receives:
+	// the canonical OpenBao Transit shape, "vault:v1:" + opaque body.
+	preEncrypted := []byte("vault:v1:Hk3KcRTjpUz7n8xQ-already-encrypted")
+	got, err := s.encryptForStore(context.Background(), "tenant-A", preEncrypted)
+	if err != nil {
+		t.Fatalf("encryptForStore: %v", err)
+	}
+	if string(got) != string(preEncrypted) {
+		t.Errorf("encryptForStore mutated pre-encrypted input: want %q, got %q", preEncrypted, got)
+	}
+	if mv.encryptCalls != 0 {
+		t.Errorf("encryptForStore double-encrypted: vault was called %d times, want 0", mv.encryptCalls)
+	}
+}
+
+// TestEncryptForStore_PassthroughWhenNoVaultButPrefixPresent — defense
+// in depth: even when s.vault is nil, an input that already carries the
+// vault:v1: prefix MUST NOT be AES-encrypted on top. Such a payload
+// belongs to a previous canonical write (e.g., re-import workflow); the
+// store stays neutral and the read-path dispatcher handles decryption.
+func TestEncryptForStore_PassthroughWhenNoVaultButPrefixPresent(t *testing.T) {
+	key := make([]byte, 32)
+	for i := range key {
+		key[i] = byte(i)
+	}
+	s, err := NewPostgresSecretStore(nil, key)
+	if err != nil {
+		t.Fatalf("NewPostgresSecretStore: %v", err)
+	}
+
+	preEncrypted := []byte("vault:v1:Hk3KcRTjpUz7n8xQ-already-encrypted")
+	got, err := s.encryptForStore(context.Background(), "tenant-A", preEncrypted)
+	if err != nil {
+		t.Fatalf("encryptForStore: %v", err)
+	}
+	if string(got) != string(preEncrypted) {
+		t.Errorf("encryptForStore AES-wrapped vault:v1: input: want %q, got %q", preEncrypted, got)
+	}
+}
+
 func TestDecryptFromStore_DetectsVaultPrefix(t *testing.T) {
 	mv := &mockVault{}
 	s := &PostgresSecretStore{vault: mv}

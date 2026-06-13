@@ -8,6 +8,7 @@ import (
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
+	"strings"
 	"testing"
 	"time"
 )
@@ -71,9 +72,19 @@ func TestStatus_Get_HappyPath(t *testing.T) {
 			Status:    "ACTIVE",
 			GitCommit: "abc123",
 			CreatedAt: now,
+			// J-25 canonical (sponsor walkthrough 2026-06-12): EntryApp is
+			// the first server/frontend app in the rendered apps spec —
+			// resolved by StatusReleaseStoreAdapter via release.Apps json
+			// parse. status.url uses it to emit the same hostname formula
+			// as the IngressRoute (pkg/naming.AppHostname single source of
+			// truth).
+			EntryApp: "web",
 		},
 	}
-	h := NewStatusHandler(projects, builds, releases, "dev.loopzero.example")
+	// publicDomain non-empty triggers canonical URL emission per ADR D3.
+	// When empty, the dashboard renders "URL pending" badge — exercised by
+	// TestStatus_Get_NoBuildsNoRelease / scaling tests below that pass "".
+	h := NewStatusHandler(projects, builds, releases, "dev.loopzero.example", "dev.loopzero.example")
 
 	req := httptest.NewRequest(http.MethodGet, "/api/v1/projects/my-api/status?env=production", nil)
 	req = withAuth(req, defaultUserContext())
@@ -102,8 +113,13 @@ func TestStatus_Get_HappyPath(t *testing.T) {
 	if resp.ActiveRelease == nil {
 		t.Fatal("want active_release to be set")
 	}
-	if resp.URL != "https://my-api-production.dev.loopzero.example" {
-		t.Fatalf("want URL with base domain, got %s", resp.URL)
+	// Canonical formula per pkg/naming.AppHostname (single source of truth):
+	// `<tenantID>-<projectID>-<appName>-<envName>.<publicDomain>` — matches
+	// the IngressRoute Host emitted by appHostname() so Traefik routes
+	// the dashboard "Visit" click cleanly (J-25 sponsor walkthrough fix
+	// 2026-06-12 catches #21+#22).
+	if resp.URL != "https://tn-test-123-my-api-web-production.dev.loopzero.example" {
+		t.Fatalf("want canonical URL <tenant>-<project>-<entryApp>-<env>.<publicDomain>, got %s", resp.URL)
 	}
 }
 
@@ -113,6 +129,7 @@ func TestStatus_Get_ProjectNotFound(t *testing.T) {
 		&fakeStatusBuildStore{},
 		&fakeStatusReleaseStore{},
 		"dev.loopzero.example",
+		"",
 	)
 
 	req := httptest.NewRequest(http.MethodGet, "/api/v1/projects/nonexistent/status?env=production", nil)
@@ -127,12 +144,17 @@ func TestStatus_Get_ProjectNotFound(t *testing.T) {
 	}
 }
 
-func TestStatus_Get_MissingEnv(t *testing.T) {
+func TestStatus_Get_MissingEnv_DefaultsToProduction(t *testing.T) {
+	// 2026-06-05 J-09 dogfood Path B: backend defaults the env query
+	// parameter to "production" when absent (dashboard hook drops it
+	// on the project overview to keep URLs canonical). Callers
+	// targeting preview/staging still pass ?env=<name> explicitly.
 	h := NewStatusHandler(
 		&fakeStatusProjectStore{project: &ProjectResult{ID: "p1", Name: "my-api"}},
 		&fakeStatusBuildStore{},
 		&fakeStatusReleaseStore{},
 		"dev.loopzero.example",
+		"",
 	)
 
 	req := httptest.NewRequest(http.MethodGet, "/api/v1/projects/my-api/status", nil) // no ?env=
@@ -142,8 +164,11 @@ func TestStatus_Get_MissingEnv(t *testing.T) {
 
 	h.Get(w, req)
 
-	if w.Code != http.StatusBadRequest {
-		t.Fatalf("want 400, got %d body=%s", w.Code, w.Body.String())
+	if w.Code != http.StatusOK {
+		t.Fatalf("want 200 (env defaults to production), got %d body=%s", w.Code, w.Body.String())
+	}
+	if !strings.Contains(w.Body.String(), `"environment":"production"`) {
+		t.Fatalf("expected environment=production in response, got: %s", w.Body.String())
 	}
 }
 
@@ -153,6 +178,7 @@ func TestStatus_Get_Unauthenticated(t *testing.T) {
 		&fakeStatusBuildStore{},
 		&fakeStatusReleaseStore{},
 		"dev.loopzero.example",
+		"",
 	)
 
 	req := httptest.NewRequest(http.MethodGet, "/api/v1/projects/my-api/status?env=production", nil)
@@ -187,7 +213,7 @@ func TestStatus_Get_ScalingScaleToZero(t *testing.T) {
 			ID: "rel-1", Status: "ACTIVE", GitCommit: "abc", CreatedAt: now,
 		},
 	}
-	h := NewStatusHandler(projects, builds, releases, "dev.loopzero.example")
+	h := NewStatusHandler(projects, builds, releases, "dev.loopzero.example", "")
 
 	req := httptest.NewRequest(http.MethodGet, "/api/v1/projects/my-api/status?env=production", nil)
 	req = withAuth(req, defaultUserContext())
@@ -242,7 +268,7 @@ func TestStatus_Get_ScalingHPA(t *testing.T) {
 			ID: "rel-1", Status: "ACTIVE", GitCommit: "abc", CreatedAt: now,
 		},
 	}
-	h := NewStatusHandler(projects, builds, releases, "dev.loopzero.example")
+	h := NewStatusHandler(projects, builds, releases, "dev.loopzero.example", "")
 
 	req := httptest.NewRequest(http.MethodGet, "/api/v1/projects/my-api/status?env=production", nil)
 	req = withAuth(req, defaultUserContext())
@@ -283,7 +309,7 @@ func TestStatus_Get_NoScaling(t *testing.T) {
 			},
 		},
 	}
-	h := NewStatusHandler(projects, builds, &fakeStatusReleaseStore{}, "dev.loopzero.example")
+	h := NewStatusHandler(projects, builds, &fakeStatusReleaseStore{}, "dev.loopzero.example", "")
 
 	req := httptest.NewRequest(http.MethodGet, "/api/v1/projects/my-api/status?env=production", nil)
 	req = withAuth(req, defaultUserContext())
@@ -305,6 +331,7 @@ func TestStatus_Get_NoBuildsNoRelease(t *testing.T) {
 		&fakeStatusBuildStore{builds: []StatusBuild{}},
 		&fakeStatusReleaseStore{release: nil},
 		"dev.loopzero.example",
+		"",
 	)
 
 	req := httptest.NewRequest(http.MethodGet, "/api/v1/projects/my-api/status?env=production", nil)

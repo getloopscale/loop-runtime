@@ -53,12 +53,13 @@ fi
 assert_grep "scenario_a_authorize defined" '^scenario_a_authorize\(\)'
 assert_grep "scenario_b_token_pending defined" '^scenario_b_token_pending\(\)'
 assert_grep "scenario_c_preflight defined" '^scenario_c_preflight\(\)'
+assert_grep "scenario_d_accept_contract defined" '^scenario_d_accept_contract\(\)'
 
 # (3) Cleanup trap registered with EXIT INT TERM
 assert_grep "trap EXIT INT TERM" 'trap[[:space:]]+cleanup_state[[:space:]]+EXIT[[:space:]]+INT[[:space:]]+TERM'
 
 # (4) Pre-flight HEALTHCHECK references cloud + auth endpoints
-assert_grep "pre-flight checks cloud /healthz" 'CLOUD_PUBLIC.*/healthz'
+assert_grep "pre-flight checks cloud /health" 'CLOUD_PUBLIC.*/health'
 assert_grep "pre-flight checks auth /health/ready" 'AUTH_PUBLIC.*/health/ready'
 assert_grep "pre-flight checks dashboard /device-success" 'DASHBOARD.*/device-success'
 

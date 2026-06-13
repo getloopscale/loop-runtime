@@ -17,6 +17,7 @@ import (
 
 	"github.com/loopzero/loopzero/pkg/quality/advisorylock"
 	"github.com/loopzero/loopzero/pkg/quality/clusterrolenosecretsstar"
+	"github.com/loopzero/loopzero/pkg/quality/contractconsumers"
 	"github.com/loopzero/loopzero/pkg/quality/noaesremaining"
 	"github.com/loopzero/loopzero/pkg/quality/noenvvaultsecrets"
 	"github.com/loopzero/loopzero/pkg/quality/nolegacysatoken"
@@ -330,6 +331,8 @@ func runQuality(args []string) int {
 		return runTransitCoverage(args[1:])
 	case "advisory-lock-scope":
 		return runAdvisoryLockScope(args[1:])
+	case "contract-consumers":
+		return runContractConsumers(args[1:])
 	case "anonymous-auth":
 		return runAnonymousAuth(args[1:])
 	case "correlation-header":
@@ -807,6 +810,55 @@ func runAdvisoryLockScope(args []string) int {
 		return 1
 	}
 	fmt.Println("advisory-lock-scope: PASS — no session-scoped pg_advisory_lock( in production code")
+	return 0
+}
+
+// runContractConsumers detects backend response shape narrowing (Go struct
+// field with `json:"<tag>"` REMOVED in the PR diff) when at least one
+// consumer in cloud/dashboard/src/, cli/src/, or api/internal/ still reads
+// that field. See pkg/quality/contractconsumers/check.go package doc for
+// scope + non-scope + plan rationale. Sponsor mandate 2026-06-08: this
+// gate REDUCES the bug rate that reaches the sponsor walkthrough; sponsor
+// walkthrough remains the final visual gate.
+func runContractConsumers(args []string) int {
+	fs := flag.NewFlagSet("contract-consumers", flag.ContinueOnError)
+	root := fs.String("root", ".", "repo root directory")
+	baseRef := fs.String("base-ref", "origin/develop", "git ref the PR branches from")
+	headRef := fs.String("head-ref", "HEAD", "git ref of the PR HEAD")
+	if err := fs.Parse(args); err != nil {
+		return 1
+	}
+	if absRoot, err := os.Getwd(); err == nil && *root == "." {
+		*root = absRoot
+	}
+
+	outcome, err := contractconsumers.Check(contractconsumers.Config{
+		RepoRoot: *root,
+		BaseRef:  *baseRef,
+		HeadRef:  *headRef,
+	})
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "contract-consumers: %v\n", err)
+		return 5
+	}
+	if outcome.CommandError != "" {
+		fmt.Fprintf(os.Stderr, "contract-consumers: git/grep error: %s\n", outcome.CommandError)
+		return 5
+	}
+	if !outcome.Pass {
+		fmt.Fprintf(os.Stderr, "contract-consumers: FAIL — %d consumer reference(s) to dropped JSON tag(s) (between %s and %s):\n",
+			len(outcome.Findings), *baseRef, *headRef)
+		fmt.Fprint(os.Stderr, contractconsumers.FormatFindings(outcome.Findings))
+		fmt.Fprintln(os.Stderr, "")
+		fmt.Fprintf(os.Stderr, "Fix:\n  %s\n", contractconsumers.ActionableFix())
+		return 1
+	}
+	if len(outcome.DroppedTags) == 0 {
+		fmt.Println("contract-consumers: PASS — no JSON tag drops in tracked files")
+	} else {
+		fmt.Printf("contract-consumers: PASS — %d JSON tag(s) dropped + ZERO consumer reads found: %v\n",
+			len(outcome.DroppedTags), outcome.DroppedTags)
+	}
 	return 0
 }
 

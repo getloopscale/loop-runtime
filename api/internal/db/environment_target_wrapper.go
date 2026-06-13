@@ -175,9 +175,93 @@ func (s *PostgresEnvironmentTargetStore) DeleteTarget(ctx context.Context, tx DB
 	return nil
 }
 
+// SetPreviewDesired upserts an environment_targets row with
+// kind='preview'. D2 of plan 2026-06-07-preview-as-category.
+// PreviewService calls this after a preview build commits its
+// release. The kind column is immutable post-create — repeat inserts
+// for the same (tenant, project, environment) update release tracking
+// but keep kind='preview'.
+func (s *PostgresEnvironmentTargetStore) SetPreviewDesired(ctx context.Context, tx DBTX, tenantID, projectID, env, releaseID, updatedBy, correlationID string) error {
+	dbtx, err := s.resolveSqlcDBTX(tx)
+	if err != nil {
+		return err
+	}
+	q := generated.New()
+	if err := q.UpsertPreviewEnvironmentTarget(ctx, dbtx, generated.UpsertPreviewEnvironmentTargetParams{
+		TenantID:         tenantID,
+		ProjectID:        projectID,
+		Environment:      env,
+		DesiredReleaseID: releaseID,
+		UpdatedBy:        updatedBy,
+		CorrelationID:    correlationID,
+	}); err != nil {
+		return fmt.Errorf("environment target store: set preview desired: %w", err)
+	}
+	return nil
+}
+
+// CountPermanent returns the number of DISTINCT permanent envs for a
+// tenant across all projects. D5 (Bug A fix): used by the enforcement
+// limiter to gate POST /api/v1/environments against
+// plan_limits.environments cap. Preview envs are not counted.
+func (s *PostgresEnvironmentTargetStore) CountPermanent(ctx context.Context, tenantID string) (int, error) {
+	dbtx, err := s.queryBridge()
+	if err != nil {
+		return 0, err
+	}
+	q := generated.New()
+	n, err := q.CountPermanentEnvironments(ctx, dbtx, tenantID)
+	if err != nil {
+		return 0, fmt.Errorf("environment target store: count permanent: %w", err)
+	}
+	return int(n), nil
+}
+
+// ListPermanent returns the DISTINCT permanent envs for a tenant,
+// alphabetically sorted. D7 helper for the dashboard /environments
+// grid (Bug B fix).
+func (s *PostgresEnvironmentTargetStore) ListPermanent(ctx context.Context, tenantID string) ([]string, error) {
+	dbtx, err := s.queryBridge()
+	if err != nil {
+		return nil, err
+	}
+	q := generated.New()
+	rows, err := q.ListPermanentEnvironments(ctx, dbtx, tenantID)
+	if err != nil {
+		return nil, fmt.Errorf("environment target store: list permanent: %w", err)
+	}
+	// Empty result → empty slice (not nil) per legacy contract.
+	if rows == nil {
+		return []string{}, nil
+	}
+	return rows, nil
+}
+
+// DeleteByKind removes a single (tenant, project, environment) row
+// when its kind column matches. D6 cleanup chain: used by
+// PreviewService.DeletePreviewByPR. Idempotent.
+func (s *PostgresEnvironmentTargetStore) DeleteByKind(ctx context.Context, tx DBTX, tenantID, projectID, env, kind string) error {
+	dbtx, err := s.resolveSqlcDBTX(tx)
+	if err != nil {
+		return err
+	}
+	q := generated.New()
+	if err := q.DeleteEnvironmentTargetsByKind(ctx, dbtx, generated.DeleteEnvironmentTargetsByKindParams{
+		TenantID:    tenantID,
+		ProjectID:   projectID,
+		Environment: env,
+		Kind:        kind,
+	}); err != nil {
+		return fmt.Errorf("environment target store: delete by kind: %w", err)
+	}
+	return nil
+}
+
 // generatedEnvTargetToEnvTarget converts a sqlc-generated row into
 // the public type. pgtype.Timestamptz.Valid → time.Time (zero time
-// when invalid).
+// when invalid). The Get/ListByProject queries SELECT all columns
+// (including `kind`) so Row types alias to generated.EnvironmentTarget
+// — accepting that single type keeps this helper minimal.
 func generatedEnvTargetToEnvTarget(row generated.EnvironmentTarget) *EnvironmentTarget {
 	t := &EnvironmentTarget{
 		TenantID:         row.TenantID,
@@ -187,6 +271,7 @@ func generatedEnvTargetToEnvTarget(row generated.EnvironmentTarget) *Environment
 		ActiveReleaseID:  row.ActiveReleaseID,
 		UpdatedBy:        row.UpdatedBy,
 		CorrelationID:    row.CorrelationID,
+		Kind:             row.Kind,
 	}
 	if row.UpdatedAt.Valid {
 		t.UpdatedAt = row.UpdatedAt.Time

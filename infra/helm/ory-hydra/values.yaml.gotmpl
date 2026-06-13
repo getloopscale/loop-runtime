@@ -37,7 +37,21 @@ hydra:
         # resolvem via cluster.local. Works for local k3d (CoreDNS) + drill
         # (DOKS) + prod (DOKS). Single source of truth — overlays env-specific
         # apenas para casos especiais (e.g., external HTTPS gateway).
-        issuer: "http://ory-hydra-public.loopzero-auth.svc.cluster.local:4444/"
+        # Plan J-05 (2026-06-05) — LIVE bug caught by EC-10 contract test:
+        # without an env-specific override, Hydra emitted verification_uri
+        # pointing at the cluster-internal FQDN, breaking device-flow because
+        # the user's browser cannot reach `*.svc.cluster.local`. publicAuthUrl
+        # (already defined in dev-public.yaml + future drill/prod envs) is
+        # the canonical override; absent → fallback to in-cluster FQDN that
+        # works for service-to-service token validation.
+        issuer: "{{ if and (hasKey .Values "publicAuthUrl") (ne (.Values.publicAuthUrl | toString) "") }}{{ .Values.publicAuthUrl | trimSuffix "/" }}{{ else }}http://ory-hydra-public.loopzero-auth.svc.cluster.local:4444{{ end }}/"
+        # urls.self.public controls the base used to build device-flow
+        # verification_uri + discovery /.well-known endpoints. Must point at
+        # the SAME public FQDN as issuer — otherwise Hydra emits
+        # verification_uri with the cluster-internal host even when issuer
+        # is correct (LIVE failure caught 2026-06-05 against
+        # https://cloud-dev.loopzero.example/v1/auth/device/authorize).
+        public: "{{ if and (hasKey .Values "publicAuthUrl") (ne (.Values.publicAuthUrl | toString) "") }}{{ .Values.publicAuthUrl | trimSuffix "/" }}{{ else }}http://ory-hydra-public.loopzero-auth.svc.cluster.local:4444{{ end }}/"
       # Plan 2026-05-19-drill-skills-rigor-restoration T2.1 — KNOWN GAP:
       # login/consent/logout URLs apontam para localhost:4455 (k3d port-forward
       # do Kratos UI) — funciona LOCAL apenas. Em drill/prod NÃO existe Ingress
@@ -49,17 +63,43 @@ hydra:
       # override estes URLs em values-hydra-{drill,prod}.yaml.gotmpl com FQDN
       # público HTTPS (e.g., https://auth.loopzero-drill.example/login). Fix
       # documentado como follow-up gap (não bloqueia dogfood-drill).
-      login: "{{ .Values.uiBaseUrl | default "http://localhost:4455" }}/login"
-      consent: "{{ .Values.uiBaseUrl | default "http://localhost:4455" }}/consent"
+      # Plan J-05 iter 4 amendment (2026-06-05) — login/consent URLs MUST
+      # point at the cloud consent handler (cloud-dev.loopzero.example/auth/*),
+      # NOT the dashboard Kratos UI (app-dev.loopzero.example/login). Hydra
+      # redirects OAuth clients to these URLs WITH a challenge in the query;
+      # only the consent handler knows how to process login_challenge/
+      # consent_challenge by calling Hydra admin AcceptLogin / AcceptConsent.
+      # The dashboard /login page (Kratos UI) is the STANDALONE login flow
+      # for the dashboard itself (no Hydra involvement). Without this fix
+      # device-flow stalls on the polling step because Hydra never receives
+      # the AcceptLogin call (caught LIVE 2026-06-05 sponsor cross-device
+      # test — CLI on cloud shell, browser on personal laptop, timed out).
+      login: "{{ .Values.dashboardOrigin | default "http://localhost:13002" }}/auth/login"
+      consent: "{{ .Values.dashboardOrigin | default "http://localhost:13002" }}/auth/consent"
       logout: "{{ .Values.uiBaseUrl | default "http://localhost:4455" }}/logout"
-      # Plan 2026-06-05-dashboard-journey-j05-device-success T2.1 D1:
-      # Device flow consent redirect — browser termina em dashboard custom.
-      # FIX 2026-06-07: Hydra v26.2.0 schema rejects `post_device_done_url`
-      # (additionalProperties not allowed). Commenting out until either Hydra
-      # version downgraded OR chart updated to use the canonical field name
-      # (e.g. `device_success_url` or similar). Device flow will use Hydra
-      # default redirect until this is reconciled.
-      # post_device_done_url: "{{ trimSuffix "/" (.Values.uiBaseUrl | default "http://localhost:4455") }}/device-success"
+      # Plan J-05 T2.1 (2026-06-05, amended after a second LIVE debug cycle):
+      # Hydra v2.6 nests device-flow URLs under `urls.device.*` (NOT
+      # `urls.post_device_done_url`, which the schema rejects as
+      # `additionalProperties`). First LIVE crash:
+      #   `additionalProperties "post_device_done_url" not allowed`
+      # Second LIVE failure (HTML response from the verification redirect):
+      #   `urls.device.verification is not set` → Hydra refuses to render
+      #   the device-verify page because no UI was configured.
+      # Correct mapping:
+      #   - urls.device.verification → user_code prompt page (browser landing
+      #     after `verification_uri` redirect). Default = Hydra built-in
+      #     /oauth2/fallbacks/device page on the public host, which works as
+      #     long as Caddy routes /oauth2/* to Hydra public (see infra/local/Caddyfile).
+      #   - urls.device.success → post-consent landing. Maps to the dashboard
+      #     `/device-success` page implemented for J-05.
+      # urls.device.verification points at the dashboard `/device-verify` page
+      # the operator MUST host (Hydra v2.6's built-in /oauth2/fallbacks/device
+      # is literally the "config missing" error page — discovered LIVE 2026-06-05).
+      # The page reads ?device_challenge=&user_code= and submits to
+      # POST /v1/auth/device/accept (which calls Hydra admin AcceptDeviceChallenge).
+      device:
+        verification: "{{ trimSuffix "/" (.Values.uiBaseUrl | default "http://localhost:4455") }}/device-verify"
+        success: "{{ trimSuffix "/" (.Values.uiBaseUrl | default "http://localhost:4455") }}/device-success"
 
     # --- OAuth2 ---
     oauth2:

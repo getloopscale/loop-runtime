@@ -148,6 +148,20 @@ func (f *fakeSyncEnvTargetStore) Get(_ context.Context, _, _, _ string) (*db.Env
 	return nil, nil
 }
 
+// 2026-06-07 D2/D5/D6/D7 — preview-as-category interface extensions.
+func (f *fakeSyncEnvTargetStore) SetPreviewDesired(_ context.Context, _ db.DBTX, _, _, _, _, _, _ string) error {
+	return nil
+}
+func (f *fakeSyncEnvTargetStore) CountPermanent(_ context.Context, _ string) (int, error) {
+	return 0, nil
+}
+func (f *fakeSyncEnvTargetStore) ListPermanent(_ context.Context, _ string) ([]string, error) {
+	return []string{}, nil
+}
+func (f *fakeSyncEnvTargetStore) DeleteByKind(_ context.Context, _ db.DBTX, _, _, _, _ string) error {
+	return nil
+}
+
 type fakeSyncEventStore struct {
 	events []string
 }

@@ -12,13 +12,18 @@ interface EnvCreateResponse {
 
 export interface EnvCreateDeps {
   getToken: () => string | null;
-  createEnvironment: (name: string) => Promise<EnvCreateResponse>;
+  // M2 v1.2 T6.1: createEnvironment carries project so the canonical
+  // `loopzero-<tenant>-<project>-<env>` namespace lands on the workload cluster.
+  createEnvironment: (name: string, project: string) => Promise<EnvCreateResponse>;
   writeTo: (msg: string) => void;
   writeError: (msg: string) => void;
 }
 
 export interface EnvCreateOptions {
   json?: boolean;
+  // M2 v1.2 T6.1: project is REQUIRED post-M2. Empty/missing → exit 1
+  // with MISSING_FIELD pointing the user at `--project <name>` syntax.
+  project?: string;
 }
 
 const MAX_ENVIRONMENT_NAME_LENGTH = 63;
@@ -79,9 +84,20 @@ export class EnvCreateCommand {
       );
     }
 
-    // 5. Call API
+    // 5. M2 v1.2 T6.1: project is required.
+    const project = (opts.project ?? '').trim();
+    if (!project) {
+      return this.exitWithError(
+        opts,
+        'Project is required. Usage: loopzero env create <name> --project <project-name>',
+        1,
+        'MISSING_FIELD',
+      );
+    }
+
+    // 6. Call API
     try {
-      const result = await this.deps.createEnvironment(name);
+      const result = await this.deps.createEnvironment(name, project);
 
       if (opts.json) {
         this.deps.writeTo(JSON.stringify({ ...result, status: 'created' }));

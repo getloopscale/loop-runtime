@@ -47,19 +47,45 @@ func TestProperty_SessionIssuerRejectsEmptyToken(t *testing.T) {
 }
 
 // TestProperty_SessionIssuerRejectsTamperedSignature — issue a real
-// token, then flip random bytes anywhere. Validation MUST fail.
+// token, then flip random bytes ANYWHERE in the SIGNATURE segment.
+// Validation MUST fail. T3.4 of plan 2026-06-11-code-review-remediation
+// scopes the flip to the signature segment because flipping bytes in
+// the header/payload base64 regions can land on padding characters or
+// produce malformed JSON / unknown headers — the JWT library may
+// accept those as "structurally invalid" (error returned) OR may
+// repair them silently depending on the decoder; the test's intent is
+// signature-tamper detection, not parser-fragility coverage. Scoping
+// to the signature segment guarantees every mutation reaches HMAC
+// verification — the exact contract under test.
 func TestProperty_SessionIssuerRejectsTamperedSignature(t *testing.T) {
 	issuer := NewSessionTokenIssuer("test-secret", "test-iss", "test-aud", time.Hour)
 	token, _, err := issuer.Issue("user-1", "test@example.com", "Test User", "tenant-1")
 	if err != nil {
 		t.Fatalf("setup: Issue failed: %v", err)
 	}
+	// JWTs have shape "header.payload.signature" — find the signature
+	// segment as the slice after the last dot.
+	lastDot := strings.LastIndex(token, ".")
+	if lastDot < 0 || lastDot >= len(token)-1 {
+		t.Fatalf("malformed JWT under test: missing signature segment: %q", token)
+	}
+	sigStart := lastDot + 1
+	// Exclude the LAST signature character from the flip range.
+	// HMAC-SHA256 = 256 bits encoded in base64url = 43 chars without
+	// padding. The last char's lower 2 bits fall OUTSIDE the 256-bit
+	// HMAC (256/6 = 42.67 → only the top 4 bits of char 43 matter).
+	// XOR-flips affecting only those unused tail bits do NOT change
+	// the decoded HMAC and therefore validation legitimately succeeds.
+	// The contract under test is "any mutation in HMAC-encoded bits
+	// MUST fail validation" — excluding the last char keeps the test
+	// focused on that contract instead of probing base64 padding.
+	sigLen := len(token) - sigStart - 1
+	if sigLen <= 0 {
+		t.Fatalf("signature segment too short under test: %q", token)
+	}
 
 	f := func(offset uint16, flipByte byte) bool {
-		if len(token) == 0 {
-			return true
-		}
-		idx := int(offset) % len(token)
+		idx := sigStart + int(offset)%sigLen
 		buf := []byte(token)
 		original := buf[idx]
 		buf[idx] = flipByte ^ original // XOR-flip ensures actual mutation
@@ -70,7 +96,7 @@ func TestProperty_SessionIssuerRejectsTamperedSignature(t *testing.T) {
 		return valErr != nil
 	}
 	if err := quick.Check(f, &quick.Config{MaxCount: 2000}); err != nil {
-		t.Fatalf("tampered token must fail validation: %v", err)
+		t.Fatalf("tampered signature must fail validation: %v", err)
 	}
 }
 

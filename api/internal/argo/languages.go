@@ -515,11 +515,18 @@ func dockerfileStepTemplateName(s LanguageStrategy) string {
 // ---------------------------------------------------------------------------
 
 func buildContainer(name, image string, resources *forge.ResourceRequirements, script string) *forge.Container {
+	// Plan J-17 Layer 2 (2026-06-06) — every step that flows through
+	// buildContainer gets its script wrapped with user-facing log
+	// markers (::loopzero:: phase=X step=Y level=Z). Promtail extracts
+	// the phase/step/level into Loki labels; the API's default LogQL
+	// filter `{loopzero_phase=~".+"}` then surfaces only labeled lines
+	// to the dashboard "Logs" tab.
+	wrapped := wrapWithLoopZeroMarkers(name, script)
 	return &forge.Container{
 		Name:    name,
 		Image:   image,
 		Command: []string{"sh", "-c"},
-		Args:    []string{script},
+		Args:    []string{wrapped},
 		// REVIEW-LEVE-3: manifests mount removed — manifest generation moved to API (C-02).
 		VolumeMounts: []forge.VolumeBuilder{
 			&forge.EmptyDirVolume{BaseVolume: forge.BaseVolume{Name: volumeWorkspace, MountPath: workspaceMountPath}},

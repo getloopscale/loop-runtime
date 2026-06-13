@@ -27,7 +27,7 @@ import (
 func newTenant(name string, plan loopzerov1.PlanTier, envs []string) *loopzerov1.Tenant {
 	environments := make([]loopzerov1.TenantEnvironmentEntry, len(envs))
 	for i, e := range envs {
-		environments[i] = loopzerov1.TenantEnvironmentEntry{Name: e, Cluster: "workload"}
+		environments[i] = loopzerov1.TenantEnvironmentEntry{Name: e, Cluster: "workload", Project: "default-project"}
 	}
 	return &loopzerov1.Tenant{
 		ObjectMeta: metav1.ObjectMeta{
@@ -1847,8 +1847,8 @@ var _ = Describe("TenantController — Environment CR Garbage Collection", Order
 					Name: tenantName, Namespace: "default",
 				}, &t)).To(Succeed())
 				t.Spec.Environments = []loopzerov1.TenantEnvironmentEntry{
-					{Name: "production", Cluster: "workload"},
-					{Name: "staging", Cluster: "workload"},
+					{Name: "production", Cluster: "workload", Project: "default-project"},
+					{Name: "staging", Cluster: "workload", Project: "default-project"},
 				}
 				g.Expect(k8sClient.Update(ctx, &t)).To(Succeed())
 			}, "10s", "500ms").Should(Succeed())
@@ -1935,7 +1935,7 @@ var _ = Describe("TenantController — Environment CR Garbage Collection", Order
 				Name: tenantName, Namespace: "default",
 			}, &t)).To(Succeed())
 			t.Spec.Environments = []loopzerov1.TenantEnvironmentEntry{
-				{Name: "production", Cluster: "workload"},
+				{Name: "production", Cluster: "workload", Project: "default-project"},
 			}
 			Expect(k8sClient.Update(ctx, &t)).To(Succeed())
 

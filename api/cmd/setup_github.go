@@ -31,6 +31,9 @@ type GitHubDeps struct {
 	WebhookHandler http.Handler
 	RepoHandler    *routes.RepositoryHandler
 	AppClient      *github.AppClient
+	// Plan J-09 T2.1 (2026-06-05): dashboard repo picker source.
+	// Nil when the GitHub App client is not configured -- router guards.
+	IntegrationsHandler *routes.IntegrationsGitHubHandler
 }
 
 // setupGitHub configures the GitHub App webhook handler, auto-deployer,
@@ -47,6 +50,7 @@ func setupGitHub(
 	dbAdapter *db.PgxAdapter,
 	stores *StoreDeps,
 	orch *services.BuildOrchestrator,
+	k8sDeps *K8sDeps,
 	cfg config.Config,
 	shutdownCtx context.Context,
 	logger *slog.Logger,
@@ -79,6 +83,12 @@ func setupGitHub(
 	// Register commit status callbacks if GitHub App client is available —
 	// these are orthogonal to the webhook handler: they push statuses when
 	// builds succeed/fail, independent of incoming webhook delivery.
+	//
+	// Plan J-09 T2.1 (2026-06-05): also wire the IntegrationsGitHubHandler
+	// for the dashboard repo picker. Lives behind the ghAppClient nil
+	// guard because there is no way to list installation repos without an
+	// installation-token mint.
+	var integrationsHandler *routes.IntegrationsGitHubHandler
 	if ghAppClient != nil {
 		statusNotifier := github.NewStatusNotifier(ghAppClient, &repoLookupAdapter{store: repoStore}, &buildLookupAdapter{store: stores.BuildStore}, cfg.BaseDomain, logger)
 		if statusNotifier != nil {
@@ -86,6 +96,49 @@ func setupGitHub(
 			services.RegisterBuildFailedCallback(statusNotifier.OnBuildFailed)
 			logger.Info("github: commit status callbacks registered (global)")
 		}
+		integrationsHandler = routes.NewIntegrationsGitHubHandler(
+			&installationRepoListerAdapter{client: ghAppClient},
+			&installationLookupAdapter{store: repoStore},
+		)
+		logger.Info("github: integrations handler registered", "endpoint", "/api/v1/integrations/github/installations/{id}/repositories")
+	}
+
+	// Auto-deployer — handles push → download source → upload S3 → submit build.
+	// HOISTED 2026-06-09 (connect-then-deploy fix): created BEFORE the webhook
+	// secret guard so the RepositoryHandler can also use it for Vercel-canonical
+	// connect-time HEAD deploy. Without the hoist, autoDeployer existed only
+	// inside the webhook-secret-set branch and Connect had no way to dispatch
+	// a build on link → user saw empty deployments UI after connecting
+	// (sponsor walkthrough catch 2026-06-09).
+	var buildSub github.BuildSubmitter
+	if orch != nil {
+		buildSub = &buildSubmitterAdapter{
+			orchestrator: orch,
+			logger:       logger,
+		}
+	}
+	var autoDeployer *github.AutoDeployer
+	if ghAppClient != nil && buildSub != nil {
+		autoDeployer = github.NewAutoDeployer(github.AutoDeployConfig{
+			AppClient:      ghAppClient,
+			ObjectStore:    stores.ObjUploader,
+			BuildSubmitter: buildSub,
+			Logger:         logger,
+		})
+		// Wire connect-then-deploy onto the RepositoryHandler so POST
+		// /api/v1/projects/{name}/connect dispatches an immediate HEAD
+		// deploy after a successful link.
+		repoHandler = repoHandler.WithAutoDeployer(autoDeployer)
+	}
+
+	// Wire the GitHub App client as the RepositoryHandler's introspector
+	// (loopzero.yaml validation + GetHeadCommit for connect-then-deploy). The
+	// WithIntrospector method existed since Plan J-09 T5.1 but was never
+	// hooked in production wiring — caught 2026-06-09 sponsor walkthrough
+	// while wiring WithAutoDeployer (both now mandatory for Vercel-canonical
+	// connect UX).
+	if ghAppClient != nil {
+		repoHandler = repoHandler.WithIntrospector(ghAppClient)
 	}
 
 	// Webhook handler — requires the HMAC secret to validate inbound deliveries.
@@ -95,26 +148,26 @@ func setupGitHub(
 	if githubWebhookSecret == "" {
 		logger.Info("github webhook: GITHUB_WEBHOOK_SECRET not set, webhook disabled (RepositoryHandler still active)")
 		return &GitHubDeps{
-			WebhookHandler: nil,
-			RepoHandler:    repoHandler,
-			AppClient:      ghAppClient,
+			WebhookHandler:      nil,
+			RepoHandler:         repoHandler,
+			AppClient:           ghAppClient,
+			IntegrationsHandler: integrationsHandler,
 		}
 	}
 
-	// Auto-deployer — handles push → download source → upload S3 → submit build
-	var buildSub github.BuildSubmitter
-	if orch != nil {
-		buildSub = &buildSubmitterAdapter{
-			orchestrator: orch,
-			logger:       logger,
+	if autoDeployer == nil {
+		// Defensive: webhook handler below requires autoDeployer. If we got
+		// here with webhook-secret set but autoDeployer nil, it means
+		// ghAppClient OR buildSub were missing — log + skip webhook setup
+		// rather than nil-deref the goroutine.
+		logger.Warn("github webhook: autoDeployer unavailable (missing AppClient or BuildSubmitter) — webhook stays disabled")
+		return &GitHubDeps{
+			WebhookHandler:      nil,
+			RepoHandler:         repoHandler,
+			AppClient:           ghAppClient,
+			IntegrationsHandler: integrationsHandler,
 		}
 	}
-	autoDeployer := github.NewAutoDeployer(github.AutoDeployConfig{
-		AppClient:      ghAppClient,
-		ObjectStore:    stores.ObjUploader,
-		BuildSubmitter: buildSub,
-		Logger:         logger,
-	})
 
 	wh := ghwebhook.NewHandler(githubWebhookSecret, logger)
 	wh.OnPush(func(event ghwebhook.PushEvent) error {
@@ -185,13 +238,24 @@ func setupGitHub(
 	previewSvc, psErr := services.NewPreviewService(services.PreviewServiceDeps{
 		Store:      previewStore,
 		Builds:     orch,
-		BaseDomain: cfg.BaseDomain,
-		Logger:     logger,
+		BuildApps:  &previewAppsLookupAdapter{builds: stores.BuildStore},
+		// LIVE catch 2026-06-07 J-23 bug #4: PreviewCRCreator interface
+		// had no production wiring. Canonical manager lives in
+		// internal/k8s next to TenantCRManager, sharing the namespace
+		// constant + dynamic client.
+		CRCreator:           &previewCRCreatorAdapter{mgr: k8sDeps.PreviewCRMgr},
+		BaseDomain:          cfg.BaseDomain,
+		PreviewPublicDomain: cfg.PreviewPublicDomain,
+		Logger:              logger,
+		// 2026-06-07 D2/D3/D6: single-slot SOT + env_target preview kind.
+		SlotStore:  stores.PreviewSlotStore,
+		EnvTargets: stores.EnvTargetStore,
 	})
 	if psErr != nil {
 		logger.Error("preview service init failed (PR webhooks will be no-op)", "error", psErr)
 	}
-	previewDeployer := github.NewPreviewDeployer(previewSvc, repoStore, logger)
+	previewDeployer := github.NewPreviewDeployer(previewSvc, repoStore, logger).
+		WithBundlePreparer(autoDeployer) // shares the same bundle-prep logic
 	wh.OnPullRequest(previewDeployer.HandlePR)
 	wh.OnInstallation(func(event ghwebhook.InstallationEvent) error {
 		logger.Info("github webhook: installation event",
@@ -222,9 +286,10 @@ func setupGitHub(
 	logger.Info("github webhook: handler registered", "endpoint", "/api/v1/webhooks/github")
 
 	return &GitHubDeps{
-		WebhookHandler: wh,
-		RepoHandler:    repoHandler,
-		AppClient:      ghAppClient,
+		WebhookHandler:      wh,
+		RepoHandler:         repoHandler,
+		AppClient:           ghAppClient,
+		IntegrationsHandler: integrationsHandler,
 	}
 }
 

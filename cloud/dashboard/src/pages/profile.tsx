@@ -8,7 +8,7 @@ import {
   ConfirmDialog,
   DangerZone,
   PageShell,
-} from '@loopzerokit/ui';
+} from '@loopzero/ui';
 import { usePageMeta } from '@/hooks/use-page-meta';
 import { useRequireAuth } from '@/hooks/use-auth';
 import { logout } from '@/lib/auth';

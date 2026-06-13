@@ -54,10 +54,8 @@ describe('DomainsPage', () => {
       error: false,
     });
     render(<DomainsPage />);
-    // PageShell primary + EmptyState CTA both surface an Add Domain button.
-    expect(
-      screen.getAllByRole('button', { name: /add domain/i }).length,
-    ).toBeGreaterThanOrEqual(1);
+    // ActionBar.primaryAction renders "Add Domain" button (opens docs page per source line 100-102)
+    expect(screen.getByRole('button', { name: /add domain/i })).toBeInTheDocument();
   });
 
   it('test_domains_dns_record_copy_button_works', () => {

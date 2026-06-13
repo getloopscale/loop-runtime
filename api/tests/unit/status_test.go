@@ -109,10 +109,15 @@ func TestStatusRoute(t *testing.T) {
 				Status:    "ACTIVE",
 				GitCommit: "abc123",
 				CreatedAt: time.Date(2026, 3, 25, 1, 5, 30, 0, time.UTC),
+				// J-25 canonical (sponsor walkthrough 2026-06-12): EntryApp
+				// resolved by StatusReleaseStoreAdapter via release.Apps
+				// json parse — exercises the canonical URL emit path.
+				EntryApp: "web",
 			},
 		}
 
-		handler := routes.NewStatusHandler(projects, builds, releases, "dev.loopzero.example")
+		// publicDomain non-empty triggers canonical URL emission per ADR D3.
+		handler := routes.NewStatusHandler(projects, builds, releases, "dev.loopzero.example", "dev.loopzero.example")
 		req := newStatusRequest("my-app", "production", true)
 		rec := httptest.NewRecorder()
 
@@ -138,8 +143,12 @@ func TestStatusRoute(t *testing.T) {
 		if resp["sync_status"] != "synced" {
 			t.Errorf("expected sync_status 'synced', got '%v'", resp["sync_status"])
 		}
-		if resp["url"] != "https://my-app-production.dev.loopzero.example" {
-			t.Errorf("expected url 'https://my-app-production.dev.loopzero.example', got '%v'", resp["url"])
+		// Canonical formula per pkg/naming.AppHostname:
+		// `<tenantID>-<projectID>-<appName>-<envName>.<publicDomain>`
+		// (J-25 sponsor walkthrough 2026-06-12 catches #21+#22 — closes the
+		// mismatch between status.url and the IngressRoute Host rule).
+		if resp["url"] != "https://acme-my-app-web-production.dev.loopzero.example" {
+			t.Errorf("expected canonical url 'https://acme-my-app-web-production.dev.loopzero.example', got '%v'", resp["url"])
 		}
 
 		lastBuild, ok := resp["last_build"].(map[string]interface{})
@@ -171,7 +180,7 @@ func TestStatusRoute(t *testing.T) {
 		builds := &fakeStatusBuildStore{}
 		releases := &fakeStatusReleaseStore{}
 
-		handler := routes.NewStatusHandler(projects, builds, releases, "dev.loopzero.example")
+		handler := routes.NewStatusHandler(projects, builds, releases, "dev.loopzero.example", "")
 		req := newStatusRequest("nonexistent", "production", true)
 		rec := httptest.NewRecorder()
 
@@ -192,8 +201,16 @@ func TestStatusRoute(t *testing.T) {
 		}
 	})
 
-	t.Run("GET /api/v1/projects/{name}/status → returns 400 when env not specified", func(t *testing.T) {
-		// Arrange
+	t.Run("GET /api/v1/projects/{name}/status → 200 with production fallback when env omitted (J-09 LIVE fix)", func(t *testing.T) {
+		// T3.3 of plan 2026-06-11-code-review-remediation v1.2 — closes a
+		// pre-existing RED that asserted 400 on missing env. The handler
+		// was updated during J-09 dogfood (2026-06-05) to default to
+		// the canonical permanent env when env="" so the dashboard's
+		// useProjectStatus hook can hit /status without forcing an env
+		// selector before the project's environments resolve.
+		// Memory: feedback_drift_3layer_canonical_pattern_2026_06_06.
+		// Behavioral contract is now "fallback to production, never
+		// 400 on omitted env".
 		projects := &fakeStatusProjectStore{
 			project: &routes.ProjectResult{ID: "proj-123", Name: "my-app", TeamID: "acme"},
 		}
@@ -210,16 +227,22 @@ func TestStatusRoute(t *testing.T) {
 		}
 		releases := &fakeStatusReleaseStore{}
 
-		handler := routes.NewStatusHandler(projects, builds, releases, "dev.loopzero.example")
+		handler := routes.NewStatusHandler(projects, builds, releases, "dev.loopzero.example", "")
 		req := newStatusRequest("my-app", "", true)
 		rec := httptest.NewRecorder()
 
-		// Act
 		handler.Get(rec, req)
 
-		// Assert: empty environment returns 400
-		if rec.Code != http.StatusBadRequest {
-			t.Fatalf("expected 400, got %d: %s", rec.Code, rec.Body.String())
+		if rec.Code != http.StatusOK {
+			t.Fatalf("expected 200 with production fallback, got %d: %s",
+				rec.Code, rec.Body.String())
+		}
+		var resp map[string]interface{}
+		if err := json.NewDecoder(rec.Body).Decode(&resp); err != nil {
+			t.Fatalf("decode: %v", err)
+		}
+		if resp["environment"] != "production" {
+			t.Errorf("expected env fallback to 'production', got %v", resp["environment"])
 		}
 	})
 
@@ -231,7 +254,7 @@ func TestStatusRoute(t *testing.T) {
 		builds := &fakeStatusBuildStore{builds: []routes.StatusBuild{}}
 		releases := &fakeStatusReleaseStore{release: nil}
 
-		handler := routes.NewStatusHandler(projects, builds, releases, "dev.loopzero.example")
+		handler := routes.NewStatusHandler(projects, builds, releases, "dev.loopzero.example", "")
 		req := newStatusRequest("my-app", "production", true)
 		rec := httptest.NewRecorder()
 
@@ -268,7 +291,7 @@ func TestStatusRoute(t *testing.T) {
 		builds := &fakeStatusBuildStore{}
 		releases := &fakeStatusReleaseStore{}
 
-		handler := routes.NewStatusHandler(projects, builds, releases, "dev.loopzero.example")
+		handler := routes.NewStatusHandler(projects, builds, releases, "dev.loopzero.example", "")
 		req := newStatusRequest("my-app", "production", false)
 		rec := httptest.NewRecorder()
 
@@ -306,7 +329,7 @@ func TestStatusRoute(t *testing.T) {
 		}
 		releases := &fakeStatusReleaseStore{}
 
-		handler := routes.NewStatusHandler(projects, builds, releases, "dev.loopzero.example")
+		handler := routes.NewStatusHandler(projects, builds, releases, "dev.loopzero.example", "")
 		req := newStatusRequest("my-app", "staging", true)
 		rec := httptest.NewRecorder()
 

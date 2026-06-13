@@ -80,7 +80,7 @@ type WebhookBuildRequest struct {
 	Branch         string
 	CommitMessage  string
 	SenderLogin    string
-	LoopZeroYaml       *loopzeroYamlMinimal
+	LoopZeroYaml       *LoopZeroYamlMinimal
 }
 
 // AutoDeployer handles auto-deploy on push events.
@@ -186,6 +186,9 @@ func (d *AutoDeployer) HandlePush(ctx context.Context, repoFullName, branch, com
 		log.Info("auto-deploy: git bundle uploaded to S3")
 	}
 
+	// (Continues with cancel + submit below — those are push-flow-specific.)
+	// Bundle-prep ends here. Preview flow calls PrepareSourceBundle directly.
+
 	// Step 6: Cancel superseded QUEUED builds (MEET-044 P0).
 	// When a newer push arrives, older QUEUED builds for the same environment
 	// are cancelled. This ensures the LATEST push deploys, not the first.
@@ -246,9 +249,102 @@ func (d *AutoDeployer) HandlePush(ctx context.Context, repoFullName, branch, com
 	return nil
 }
 
+// PrepareSourceBundle downloads the repo tarball at the given commit,
+// converts it to a git bundle, and uploads to S3 under
+// `<tenantID>/source/<commit>.bundle`. Idempotent: re-running for the
+// same commit overwrites the bundle (safe — bundle is the same artifact).
+//
+// Shared between push auto-deploy (called inline by HandlePush) and
+// PR preview deploy (called by PreviewDeployer before triggering
+// CreatePreview). Without this, the build clone-repo step fails with
+// "Object does not exist" trying to fetch the bundle from S3.
+//
+// LIVE catch 2026-06-07 J-23: PR webhook flow was triggering
+// previewService.CreatePreview → SubmitBuild without first preparing
+// the source bundle, so preview builds always failed at clone-repo.
+//
+// Bonus return: the parsed loopzero.yaml — preview deploy uses it to populate
+// apps with framework/path/build so LanguageStrategy resolves the right
+// build steps (bug #3 of the J-23 LIVE chain). Caller may pass nil for
+// the LoopZeroYamlMinimal pointer when only the upload is needed.
+func (d *AutoDeployer) PrepareSourceBundle(ctx context.Context, repoFullName, commitSHA string, installationID int64, tenantID string) (*LoopZeroYamlMinimal, error) {
+	log := d.cfg.Logger.With(
+		"repo", repoFullName,
+		"sha", commitSHA,
+		"tenant", tenantID,
+	)
+
+	parts := strings.SplitN(repoFullName, "/", 2)
+	if len(parts) != 2 {
+		return nil, fmt.Errorf("invalid repo name: %s", repoFullName)
+	}
+	owner, repo := parts[0], parts[1]
+
+	log.Info("prepare-source-bundle: downloading tarball")
+	tarballReader, err := d.cfg.AppClient.DownloadSource(ctx, installationID, owner, repo, commitSHA)
+	if err != nil {
+		return nil, fmt.Errorf("prepare-source-bundle: download: %w", err)
+	}
+	defer func() { _ = tarballReader.Close() }()
+
+	tmpFile, err := os.CreateTemp("", "loopzero-preview-source-*.tar.gz")
+	if err != nil {
+		return nil, fmt.Errorf("prepare-source-bundle: tmp file: %w", err)
+	}
+	defer func() { _ = os.Remove(tmpFile.Name()) }()
+	defer func() { _ = tmpFile.Close() }()
+
+	if _, err := io.Copy(tmpFile, tarballReader); err != nil {
+		return nil, fmt.Errorf("prepare-source-bundle: save tarball: %w", err)
+	}
+
+	// Parse loopzero.yaml from tarball (best-effort — preview build will fail
+	// noisily later if it's missing, so we don't double-error here).
+	if _, seekErr := tmpFile.Seek(0, io.SeekStart); seekErr != nil {
+		return nil, fmt.Errorf("prepare-source-bundle: seek for parse: %w", seekErr)
+	}
+	loopzeroYaml, loopzeroYamlErr := extractLoopZeroYaml(tmpFile)
+	if loopzeroYamlErr != nil {
+		log.Warn("prepare-source-bundle: loopzero.yaml not found", "error", loopzeroYamlErr)
+		// loopzeroYaml stays nil; caller treats as "no apps inherited from source".
+	} else {
+		log.Info("prepare-source-bundle: loopzero.yaml parsed", "apps", len(loopzeroYaml.Apps))
+	}
+
+	if _, err := tmpFile.Seek(0, io.SeekStart); err != nil {
+		return nil, fmt.Errorf("prepare-source-bundle: seek for convert: %w", err)
+	}
+
+	bundlePath, err := tarballToGitBundle(ctx, tmpFile, commitSHA, "preview build", "loopzero-preview-service")
+	if err != nil {
+		return nil, fmt.Errorf("prepare-source-bundle: convert: %w", err)
+	}
+	defer func() { _ = os.Remove(bundlePath) }()
+
+	if d.cfg.ObjectStore == nil {
+		log.Warn("prepare-source-bundle: ObjectStore is nil — skipping upload (build will fail at clone-repo)")
+		return loopzeroYaml, nil
+	}
+	bundleFile, err := os.Open(bundlePath) //nolint:gosec // tmpdir-internal
+	if err != nil {
+		return nil, fmt.Errorf("prepare-source-bundle: open bundle: %w", err)
+	}
+	defer func() { _ = bundleFile.Close() }()
+	objKey := fmt.Sprintf("%s/source/%s.bundle", tenantID, commitSHA)
+	bucket := d.cfg.SourceBucket
+	if bucket == "" {
+		bucket = "loopzero-builds"
+	}
+	if err := d.cfg.ObjectStore.Upload(ctx, bucket, objKey, bundleFile); err != nil {
+		return nil, fmt.Errorf("prepare-source-bundle: upload: %w", err)
+	}
+	log.Info("prepare-source-bundle: uploaded", "bucket", bucket, "key", objKey)
+	return loopzeroYaml, nil
+}
+
 // --- loopzero.yaml extraction ---
 
-type loopzeroYamlMinimal struct {
+type LoopZeroYamlMinimal struct {
 	Project string                       `yaml:"project"`
 	Apps    map[string]map[string]interface{} `yaml:"apps"`
 }
@@ -336,7 +432,7 @@ func tarballToGitBundle(ctx context.Context, tarball io.Reader, commitSHA, commi
 
 // extractLoopZeroYaml reads loopzero.yaml from a GitHub tarball (.tar.gz).
 // GitHub tarballs have a top-level directory like "owner-repo-sha/".
-func extractLoopZeroYaml(r io.Reader) (*loopzeroYamlMinimal, error) {
+func extractLoopZeroYaml(r io.Reader) (*LoopZeroYamlMinimal, error) {
 	gz, err := gzip.NewReader(r)
 	if err != nil {
 		return nil, fmt.Errorf("gzip: %w", err)
@@ -362,7 +458,7 @@ func extractLoopZeroYaml(r io.Reader) (*loopzeroYamlMinimal, error) {
 			if err != nil {
 				return nil, fmt.Errorf("read loopzero.yaml: %w", err)
 			}
-			var cfg loopzeroYamlMinimal
+			var cfg LoopZeroYamlMinimal
 			if err := yaml.Unmarshal(data, &cfg); err != nil {
 				return nil, fmt.Errorf("parse loopzero.yaml: %w", err)
 			}

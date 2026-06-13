@@ -10,7 +10,7 @@ describe('EnvCreateCommand', () => {
   function makeDeps(overrides: Partial<EnvCreateDeps> = {}): EnvCreateDeps {
     return {
       getToken: () => 'test-token',
-      createEnvironment: async (name: string) => ({
+      createEnvironment: async (name: string, _project: string) => ({
         name,
         status: 'active',
       }),
@@ -28,7 +28,7 @@ describe('EnvCreateCommand', () => {
   describe('exit codes', () => {
     it('returns 0 on successful create', async () => {
       const cmd = new EnvCreateCommand(makeDeps());
-      const code = await cmd.execute('staging');
+      const code = await cmd.execute('staging', { project: 'web' });
       expect(code).toBe(0);
     });
 
@@ -37,13 +37,13 @@ describe('EnvCreateCommand', () => {
       const cmd = new EnvCreateCommand(makeDeps({
         createEnvironment: async () => { throw new ApiError('Conflict', 1, 409, 'CONFLICT'); },
       }));
-      const code = await cmd.execute('staging');
+      const code = await cmd.execute('staging', { project: 'web' });
       expect(code).toBe(0);
     });
 
     it('returns 4 when not authenticated', async () => {
       const cmd = new EnvCreateCommand(makeDeps({ getToken: () => null }));
-      const code = await cmd.execute('staging');
+      const code = await cmd.execute('staging', { project: 'web' });
       expect(code).toBe(4);
     });
 
@@ -70,7 +70,7 @@ describe('EnvCreateCommand', () => {
       const cmd = new EnvCreateCommand(makeDeps({
         createEnvironment: async () => { throw new ApiError('Unauthorized', 4, 401); },
       }));
-      const code = await cmd.execute('staging');
+      const code = await cmd.execute('staging', { project: 'web' });
       expect(code).toBe(4);
     });
 
@@ -78,7 +78,7 @@ describe('EnvCreateCommand', () => {
       const cmd = new EnvCreateCommand(makeDeps({
         createEnvironment: async () => { throw new Error('connection refused'); },
       }));
-      const code = await cmd.execute('staging');
+      const code = await cmd.execute('staging', { project: 'web' });
       expect(code).toBe(1);
     });
   });
@@ -106,13 +106,13 @@ describe('EnvCreateCommand', () => {
 
     it('accepts valid names with hyphens', async () => {
       const cmd = new EnvCreateCommand(makeDeps());
-      const code = await cmd.execute('pre-prod');
+      const code = await cmd.execute('pre-prod', { project: 'web' });
       expect(code).toBe(0);
     });
 
     it('accepts valid names with numbers', async () => {
       const cmd = new EnvCreateCommand(makeDeps());
-      const code = await cmd.execute('staging2');
+      const code = await cmd.execute('staging2', { project: 'web' });
       expect(code).toBe(0);
     });
   });
@@ -143,7 +143,7 @@ describe('EnvCreateCommand', () => {
   describe('human output', () => {
     it('shows success message with environment name', async () => {
       const cmd = new EnvCreateCommand(makeDeps());
-      await cmd.execute('staging');
+      await cmd.execute('staging', { project: 'web' });
       expect(output[0]).toBe('Environment staging created.');
     });
 
@@ -152,13 +152,13 @@ describe('EnvCreateCommand', () => {
       const cmd = new EnvCreateCommand(makeDeps({
         createEnvironment: async () => { throw new ApiError('Conflict', 1, 409); },
       }));
-      await cmd.execute('staging');
+      await cmd.execute('staging', { project: 'web' });
       expect(output[0]).toBe('Environment staging already exists.');
     });
 
     it('shows error message on auth failure', async () => {
       const cmd = new EnvCreateCommand(makeDeps({ getToken: () => null }));
-      await cmd.execute('staging');
+      await cmd.execute('staging', { project: 'web' });
       expect(errors[0]).toContain('Not authenticated');
       expect(errors[0]).toContain('loopzero login');
     });
@@ -167,7 +167,7 @@ describe('EnvCreateCommand', () => {
       const cmd = new EnvCreateCommand(makeDeps({
         createEnvironment: async () => { throw new Error('timeout'); },
       }));
-      await cmd.execute('staging');
+      await cmd.execute('staging', { project: 'web' });
       expect(errors[0]).toContain('Try again');
     });
   });
@@ -175,7 +175,7 @@ describe('EnvCreateCommand', () => {
   describe('--json output', () => {
     it('outputs JSON on success with status created', async () => {
       const cmd = new EnvCreateCommand(makeDeps());
-      const code = await cmd.execute('staging', { json: true });
+      const code = await cmd.execute('staging', { json: true, project: 'web' });
       expect(code).toBe(0);
       const parsed = JSON.parse(output[0]);
       expect(parsed.name).toBe('staging');
@@ -187,7 +187,7 @@ describe('EnvCreateCommand', () => {
       const cmd = new EnvCreateCommand(makeDeps({
         createEnvironment: async () => { throw new ApiError('Conflict', 1, 409); },
       }));
-      const code = await cmd.execute('staging', { json: true });
+      const code = await cmd.execute('staging', { json: true, project: 'web' });
       expect(code).toBe(0);
       const parsed = JSON.parse(output[0]);
       expect(parsed.name).toBe('staging');
@@ -196,7 +196,7 @@ describe('EnvCreateCommand', () => {
 
     it('outputs JSON on error', async () => {
       const cmd = new EnvCreateCommand(makeDeps({ getToken: () => null }));
-      const code = await cmd.execute('staging', { json: true });
+      const code = await cmd.execute('staging', { json: true, project: 'web' });
       expect(code).toBe(4);
       const parsed = JSON.parse(output[0]);
       expect(parsed.error).toBeDefined();
@@ -222,7 +222,7 @@ describe('EnvCreateCommand', () => {
 
     it('success output contains no internal terms', async () => {
       const cmd = new EnvCreateCommand(makeDeps());
-      await cmd.execute('staging');
+      await cmd.execute('staging', { project: 'web' });
       const allOutput = [...output, ...errors].join(' ');
       for (const term of FORBIDDEN_TERMS) {
         expect(allOutput).not.toContain(term);
@@ -231,11 +231,72 @@ describe('EnvCreateCommand', () => {
 
     it('error output contains no internal terms', async () => {
       const cmd = new EnvCreateCommand(makeDeps({ getToken: () => null }));
-      await cmd.execute('staging');
+      await cmd.execute('staging', { project: 'web' });
       const allOutput = [...output, ...errors].join(' ');
       for (const term of FORBIDDEN_TERMS) {
         expect(allOutput).not.toContain(term);
       }
     });
+  });
+});
+
+// =============================================================================
+// M2 v1.2 — T6.1 --project flag tests
+// Plan: 2026-06-07-runtime-envs-per-project-m2 v1.2
+// =============================================================================
+
+describe('M2 v1.2 T6.1 — --project flag', () => {
+  let output: string[];
+  let errors: string[];
+
+  const writeTo = (msg: string) => output.push(msg);
+  const writeError = (msg: string) => errors.push(msg);
+
+  const makeDeps = (over?: Partial<EnvCreateDeps>): EnvCreateDeps => ({
+    getToken: () => 'tok',
+    createEnvironment: async () => ({ name: 'staging', status: 'active' }),
+    writeTo,
+    writeError,
+    ...over,
+  });
+
+  beforeEach(() => {
+    output = [];
+    errors = [];
+  });
+
+  it('requires --project; missing → exit 1 with clear message', async () => {
+    const cmd = new EnvCreateCommand(makeDeps());
+    // Note: no project in options.
+    const code = await cmd.execute('staging', { json: true });
+    expect(code).toBe(1);
+    const parsed = JSON.parse(output[0]);
+    expect(parsed.code).toBe('MISSING_FIELD');
+    expect(parsed.error).toContain('Project is required');
+    expect(parsed.error).toContain('--project');
+  });
+
+  it('passes project to createEnvironment closure verbatim', async () => {
+    let capturedName: string | null = null;
+    let capturedProject: string | null = null;
+    const cmd = new EnvCreateCommand(makeDeps({
+      createEnvironment: async (name: string, project: string) => {
+        capturedName = name;
+        capturedProject = project;
+        return { name, status: 'active' };
+      },
+    }));
+    const code = await cmd.execute('staging', { project: 'web' });
+    expect(code).toBe(0);
+    expect(capturedName).toBe('staging');
+    expect(capturedProject).toBe('web');
+  });
+
+  it('rejects empty --project (whitespace-only) with MISSING_FIELD', async () => {
+    const cmd = new EnvCreateCommand(makeDeps());
+    const code = await cmd.execute('staging', { project: '   ', json: true });
+    expect(code).toBe(1);
+    const parsed = JSON.parse(output[0]);
+    expect(parsed.code).toBe('MISSING_FIELD');
   });
 });

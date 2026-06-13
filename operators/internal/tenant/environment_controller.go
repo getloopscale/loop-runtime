@@ -23,6 +23,7 @@ import (
 	"github.com/loopzero/loopzero/operators/internal/constants"
 	"github.com/loopzero/loopzero/operators/internal/shared"
 	"github.com/loopzero/loopzero/pkg/correlation"
+	"github.com/loopzero/loopzero/pkg/domain"
 	"github.com/loopzero/loopzero/pkg/statemachine"
 )
 
@@ -160,8 +161,70 @@ func (r *EnvironmentReconciler) Reconcile(ctx context.Context, req ctrl.Request)
 		)
 	}
 
-	nsName := env.Spec.Namespace.Name
 	tenantName := env.Spec.TenantRef.Name
+
+	// T3.1 of plan 2026-06-09-m2-operator-canonical-fix v1.4: compute the
+	// canonical M2 namespace from Spec.Project + Spec.Environment when
+	// Project is populated (post-T3.1 Tenant CRs from TenantController set
+	// it). Fall back to Spec.Namespace.Name for pre-T3.1 CRs whose
+	// namespace was hand-written by the upstream renderer/operator chain.
+	//
+	// EC-3 absorption (R7): if naming.Namespace returns an error (typically
+	// because the computed name exceeds the K8s 63-char limit per
+	// `pkg/naming/naming.go § MaxKubernetesNameLength`), set Status
+	// condition TypeEnvNamespaceReady=False Reason=NameTooLong with the
+	// length in the message and return ctrl.Result{} (no requeue). User
+	// sees an actionable error in the dashboard instead of an infinite
+	// reconcile-loop with a cryptic error per `rules/loopzero-design.md` §
+	// Error Philosophy.
+	nsName := env.Spec.Namespace.Name
+	if env.Spec.Project != "" {
+		// T1.3.e of plan 2026-06-11-code-review-remediation v1.2 —
+		// canonical EnvRef pattern per ADR D2. Construction-time
+		// validation (NewEnvRef) catches empty-required + reserved
+		// separator BEFORE the formula runs. The error chain stays
+		// fail-loud so the NameTooLong condition surfaces with the
+		// same actionable shape the dashboard already renders.
+		ref, refErr := domain.NewEnvRef(tenantName, env.Spec.Project, env.Spec.Environment)
+		if refErr != nil {
+			msg := fmt.Sprintf("EnvRef (tenant=%q, project=%q, env=%q): %v",
+				tenantName, env.Spec.Project, env.Spec.Environment, refErr)
+			conditions.SetCondition(&env.Status.Conditions, conditions.TypeEnvNamespaceReady,
+				metav1.ConditionFalse, "InvalidEnvRef", msg, env.Generation)
+			savedStatus := env.Status
+			if refetchErr := r.Get(ctx, req.NamespacedName, &env); refetchErr != nil {
+				logger.Error(refetchErr, "failed to re-fetch environment for InvalidEnvRef status")
+				return ctrl.Result{}, nil
+			}
+			env.Status = savedStatus
+			if statusErr := r.Status().Update(ctx, &env); statusErr != nil {
+				logger.Error(statusErr, "failed to persist InvalidEnvRef condition")
+				return ctrl.Result{}, nil
+			}
+			return ctrl.Result{}, nil
+		}
+		canonical, nsErr := ref.Namespace()
+		if nsErr != nil {
+			msg := fmt.Sprintf("namespace name (tenant=%q, project=%q, env=%q): %v",
+				tenantName, env.Spec.Project, env.Spec.Environment, nsErr)
+			conditions.SetCondition(&env.Status.Conditions, conditions.TypeEnvNamespaceReady,
+				metav1.ConditionFalse, "NameTooLong", msg, env.Generation)
+			savedStatus := env.Status
+			if refetchErr := r.Get(ctx, req.NamespacedName, &env); refetchErr != nil {
+				logger.Error(refetchErr, "failed to re-fetch environment for NameTooLong status")
+				return ctrl.Result{}, nil
+			}
+			env.Status = savedStatus
+			if statusErr := r.Status().Update(ctx, &env); statusErr != nil {
+				logger.Error(statusErr, "failed to update NameTooLong status")
+			}
+			// EC-3: do not requeue — name is structurally invalid until the
+			// user shortens Project or Environment. Re-reconcile only on CR
+			// update (controller-runtime watches handle that automatically).
+			return ctrl.Result{}, nil
+		}
+		nsName = canonical
+	}
 
 	// envStep pairs a condition type with its reconcile function and success message.
 	type envStep struct {

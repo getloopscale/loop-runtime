@@ -112,24 +112,14 @@ main() {
   log "bootstrap OAuth2 clients in Hydra ($NS_HYDRA/$HYDRA_ADMIN_SVC)"
 
   # Limpeza preventiva de port-forwards anteriores antes de abrir um novo.
-  # FIX 2026-06-07: pkill -f matches caller-shell command lines that contain
-  # the same substring (incl. CI / IDE wrappers). Use awk + targeted kill
-  # against process arg list to avoid self-suicide.
-  for pid in $(pgrep -f "kubectl"); do
-    if grep -q "port-forward.*ory-hydra-admin" /proc/$pid/cmdline 2>/dev/null; then
-      kill "$pid" 2>/dev/null || true
-    fi
-  done
+  pkill -f "kubectl.*port-forward.*ory-hydra-admin" 2>/dev/null || true
   sleep 1
 
   # Port-forward único, mantido por toda a execução do main.
-  # FIX 2026-06-07: log port-forward output to file for debugging instead
-  # of /dev/null swallowing silently.
-  kubectl -n "$NS_HYDRA" port-forward "svc/$HYDRA_ADMIN_SVC" "14445:$HYDRA_ADMIN_PORT" > /tmp/bootstrap-pf.log 2>&1 &
+  kubectl -n "$NS_HYDRA" port-forward "svc/$HYDRA_ADMIN_SVC" "14445:$HYDRA_ADMIN_PORT" >/dev/null 2>&1 &
   local pf_pid=$!
   trap "kill $pf_pid 2>/dev/null || true" EXIT
   sleep 4
-  log "port-forward log: $(cat /tmp/bootstrap-pf.log 2>&1 | head -3)"
 
   wait_for_hydra || exit 1
 

@@ -354,6 +354,28 @@ func (s *BuildStoreSqlc) ListByProjectAndEnv(ctx context.Context, tenantID, proj
 	return out, int(total), nil
 }
 
+// ListEnvsForProject returns the distinct env names the project has at
+// least one build for, ordered by most-recent build per env DESC. Empty
+// slice (not nil) for cold projects. Post plan
+// 2026-06-08-dashboard-screens-review-fixes T2.2 + ADR D3.
+// Caller MUST gate via ProjectStore.GetByName BEFORE invoking this method
+// (EC-2 SEPA-CRITICAL cross-tenant existence-leak prevention) — the
+// query itself is tenant-scoped but cannot detect cross-tenant probes.
+func (s *BuildStoreSqlc) ListEnvsForProject(ctx context.Context, tenantID, projectName string) ([]string, error) {
+	rows, err := s.q.ListBuildEnvsForProject(ctx, s.gen(nil), generated.ListBuildEnvsForProjectParams{
+		TenantID:  tenantID,
+		ProjectID: projectName,
+	})
+	if err != nil {
+		return nil, fmt.Errorf("build store: list envs for project: %w", err)
+	}
+	out := make([]string, 0, len(rows))
+	for _, env := range rows {
+		out = append(out, env)
+	}
+	return out, nil
+}
+
 // FindActiveBuilds returns up to 100 QUEUED/RUNNING/RELEASING builds
 // scoped to the given cell. Reaper path: intentionally cross-tenant
 // within the cell. Empty cellID defaults to CellDefault per multi-cell

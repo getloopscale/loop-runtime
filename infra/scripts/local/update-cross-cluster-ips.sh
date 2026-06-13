@@ -6,10 +6,14 @@
 # LB IPs are used for HTTP traffic (Traefik on workload).
 #
 # Components patched:
-#   - infra/tilt/api-deployment.yaml       (GITEA/API cross-cluster URLs, workload ingress)
-#   - infra/tilt/operator-deployment.yaml   (WORKLOAD_CLUSTER_URL for ArgoCD Applications)
+#   - K8s ConfigMap loopzero-api-runtime-config@loopzero-system on mgmt cluster:
+#       MINIO_CROSS_CLUSTER_ENDPOINT, GITEA_CROSS_CLUSTER_URL,
+#       API_CROSS_CLUSTER_URL, WORKLOAD_INGRESS_URL
+#       (post-T1.1.b commit 927588b1: api-deployment.yaml uses envFrom now)
+#   - infra/tilt/operator-deployment.yaml   (WORKLOAD_CLUSTER_URL — still inline)
 #   - Build cluster secrets                 (loopzero-minio-credentials MINIO_ENDPOINT)
 #   - infra/helm/monitoring/values.yaml     (scrape targets)
+#   - infra/helm/promtail/values.yaml       (Loki cross-cluster endpoint)
 #
 # ArgoCD cluster-workload secret and repo credentials are managed by
 # provision-api-tokens.sh (uses Docker hostnames, not IPs).
@@ -60,34 +64,90 @@ BUILD_LB=$(get_ip k3d-loopzero-build-serverlb)
 echo "  Build LB: $BUILD_LB (Argo metrics:30090)"
 
 # ---------------------------------------------------------------------------
-# Patch API deployment
+# Patch API runtime ConfigMap (loopzero-api-runtime-config)
+#
+# Pre-T1.1.b (commit 927588b1): these 4 envs were inline in
+# infra/tilt/api-deployment.yaml; this script sed-patched the file.
+#
+# Post-T1.1.b: the 4 envs migrated to envFrom: configMapRef:
+# loopzero-api-runtime-config (per code-review-remediation-147-findings
+# no-hardcode mandate). This script now patches the LIVE ConfigMap on
+# the mgmt cluster post-helmfile-sync, then triggers a rollout restart
+# so the API pod's envFrom re-reads.
+#
+# Idempotent: kubectl patch is no-op when target equals current. Robust
+# to docker network IP drift between runs (mgmt server's NodePort IP
+# may differ run-to-run).
 # ---------------------------------------------------------------------------
 echo ""
-echo "=== Patching $DEPLOYMENT ==="
+echo "=== Patching loopzero-api-runtime-config ConfigMap (mgmt cluster) ==="
 
-patch_env() {
-  local file="$1" env_name="$2" new_value="$3"
-  OLD=$(grep "${env_name}" -A1 "$file" | grep 'value:' | head -1 | sed 's/.*value: "\([^"]*\)".*/\1/')
-  if [ -n "$OLD" ] && [ "$OLD" != "$new_value" ]; then
-    sed -i "s|${OLD}|${new_value}|" "$file"
-    echo "  ${env_name}: $OLD → $new_value"
-  else
-    echo "  ${env_name}: already correct ($new_value)"
+MGMT_CTX="k3d-loopzero-mgmt"
+API_CM_NS="loopzero-system"
+API_CM_NAME="loopzero-api-runtime-config"
+
+# Helper: patch ConfigMap key idempotently (no-op when value unchanged).
+patch_cm_key() {
+  local key="$1" new_value="$2"
+  local current
+  current=$(kubectl --context "$MGMT_CTX" get configmap "$API_CM_NAME" -n "$API_CM_NS" \
+    -o jsonpath="{.data.${key}}" 2>/dev/null || true)
+  if [ "$current" = "$new_value" ]; then
+    echo "  ${key}: already correct ($new_value)"
+    return 0
   fi
+  # Use --type=merge with JSON body so we don't blow away other keys
+  kubectl --context "$MGMT_CTX" patch configmap "$API_CM_NAME" -n "$API_CM_NS" \
+    --type=merge -p "{\"data\":{\"${key}\":\"${new_value}\"}}" >/dev/null
+  echo "  ${key}: ${current:-<unset>} → ${new_value}"
 }
 
-patch_env "$DEPLOYMENT" "MINIO_CROSS_CLUSTER_ENDPOINT" "http://${MGMT_SERVER}:32000"
-patch_env "$DEPLOYMENT" "GITEA_CROSS_CLUSTER_URL" "http://${MGMT_SERVER}:30000"
-patch_env "$DEPLOYMENT" "API_CROSS_CLUSTER_URL" "http://${MGMT_SERVER}:30001"
-patch_env "$DEPLOYMENT" "WORKLOAD_INGRESS_URL" "http://${WORKLOAD_LB}:80"
+if kubectl --context "$MGMT_CTX" get configmap "$API_CM_NAME" -n "$API_CM_NS" >/dev/null 2>&1; then
+  patch_cm_key "MINIO_CROSS_CLUSTER_ENDPOINT" "http://${MGMT_SERVER}:32000"
+  patch_cm_key "GITEA_CROSS_CLUSTER_URL"      "http://${MGMT_SERVER}:30000"
+  patch_cm_key "API_CROSS_CLUSTER_URL"        "http://${MGMT_SERVER}:30001"
+  patch_cm_key "WORKLOAD_INGRESS_URL"         "http://${WORKLOAD_LB}:80"
+
+  # Trigger rollout restart so envFrom re-reads the ConfigMap.
+  # Idempotent: kubectl rollout restart adds a new annotation each call,
+  # but the pod is only respun if a deploy actually exists.
+  if kubectl --context "$MGMT_CTX" get deployment loopzero-api -n "$API_CM_NS" >/dev/null 2>&1; then
+    kubectl --context "$MGMT_CTX" rollout restart deployment loopzero-api -n "$API_CM_NS" >/dev/null
+    echo "  Triggered rollout restart of loopzero-api Deployment to pick up ConfigMap changes"
+  else
+    echo "  loopzero-api Deployment not yet present — Tilt will pick up ConfigMap on first apply"
+  fi
+else
+  echo "WARNING: ConfigMap ${API_CM_NAME} not found in ${API_CM_NS} on ${MGMT_CTX}"
+  echo "  Skipping API runtime URL patches — Tilt apply will create the ConfigMap separately"
+  echo "  (T1.1.b drift: ConfigMap source is now infra/helm/loopzero-api/templates/configmap-runtime.yaml)"
+fi
 
 # ---------------------------------------------------------------------------
-# Patch operator deployment
+# Patch operator deployment (still inline — operator-deployment.yaml was NOT
+# migrated by T1.1.b; remains Tilt-owned with inline value: for WORKLOAD_CLUSTER_URL)
 # ---------------------------------------------------------------------------
+patch_env_inline() {
+  local file="$1" env_name="$2" new_value="$3"
+  local OLD
+  # Defensive grep: || true prevents `set -e` exit when env_name absent.
+  OLD=$(grep "${env_name}" -A1 "$file" 2>/dev/null | grep 'value:' | head -1 | sed 's/.*value: "\([^"]*\)".*/\1/' || true)
+  if [ -z "$OLD" ]; then
+    echo "  ${env_name}: not found in $(basename "$file") (skipping)"
+    return 0
+  fi
+  if [ "$OLD" = "$new_value" ]; then
+    echo "  ${env_name}: already correct ($new_value)"
+    return 0
+  fi
+  sed -i "s|${OLD}|${new_value}|" "$file"
+  echo "  ${env_name}: $OLD → $new_value"
+}
+
 if [ -f "$OPERATOR_DEPLOYMENT" ]; then
   echo ""
   echo "=== Patching $OPERATOR_DEPLOYMENT ==="
-  patch_env "$OPERATOR_DEPLOYMENT" "WORKLOAD_CLUSTER_URL" "https://${WORKLOAD_SERVER}:6443"
+  patch_env_inline "$OPERATOR_DEPLOYMENT" "WORKLOAD_CLUSTER_URL" "https://${WORKLOAD_SERVER}:6443"
 fi
 
 # ---------------------------------------------------------------------------

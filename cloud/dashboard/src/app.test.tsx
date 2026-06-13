@@ -15,9 +15,35 @@
 // hiding the only platform-key UI again.
 
 import { describe, it, expect, vi, beforeEach } from 'vitest';
-import { Routes, Route, Navigate } from 'react-router-dom';
+import { Routes, Route, Navigate, useParams, useLocation } from 'react-router-dom';
 import { render, screen } from '@/test/render';
 import { ApiKeysPage } from './pages/api-keys';
+
+// Stub component used by the previews-redirect test below. Asserts on the
+// query string of the destination so the test can prove ?project=<slug> was
+// carried over by the redirect.
+function EnvironmentsStub() {
+  const loc = useLocation();
+  return (
+    <div>
+      <span>environments stub for redirect</span>
+      <span data-testid="search">{loc.search}</span>
+    </div>
+  );
+}
+
+// Mirrors the production PreviewsRedirect helper from app.tsx — kept inline
+// here so the test does not import the real component (the suite stays
+// independent of unrelated app.tsx churn).
+function PreviewsRedirect() {
+  const { name } = useParams();
+  return (
+    <Navigate
+      to={`/environments?project=${encodeURIComponent(name ?? '')}`}
+      replace
+    />
+  );
+}
 
 vi.mock('@/hooks/use-auth', () => ({
   useRequireAuth: () => ({
@@ -42,6 +68,8 @@ function RoutingHarness() {
     <Routes>
       <Route path="/api-keys" element={<Navigate to="/settings/tokens" replace />} />
       <Route path="/settings/tokens" element={<ApiKeysPage />} />
+      <Route path="/projects/:name/previews" element={<PreviewsRedirect />} />
+      <Route path="/environments" element={<EnvironmentsStub />} />
     </Routes>
   );
 }
@@ -71,5 +99,45 @@ describe('App routing — API tokens consolidation', () => {
     // via context not window.location; observing the rendered output is the
     // user-equivalent signal anyway.
     expect(await screen.findByText(/No API keys yet/i)).toBeInTheDocument();
+  });
+});
+
+describe('App routing — /previews → /environments redirect (post-M2 single-slot)', () => {
+  // Plan 2026-06-08-dashboard-screens-review-fixes T1.1 — ADR D1.
+  // Pre-M2 the /projects/:name/previews page rendered a multi-row preview
+  // table; post-M2 single-slot model (memory
+  // reference_preview_as_category_phase_0_7_engineering_complete) makes
+  // that table semantically obsolete because the preview is now a 1-slot
+  // substituted entity surfaced inline on /environments. Page deletion +
+  // 301-equivalent client redirect preserve any external bookmarks.
+
+  beforeEach(() => {
+    vi.clearAllMocks();
+  });
+
+  it('/projects/:name/previews redirects to /environments?project=:name', async () => {
+    render(<RoutingHarness />, {
+      initialEntries: ['/projects/teste/previews'],
+    });
+
+    // Destination page rendered: prove redirect landed.
+    expect(
+      await screen.findByText(/environments stub for redirect/i),
+    ).toBeInTheDocument();
+    // ?project=teste preserved in the query string.
+    expect(screen.getByTestId('search')).toHaveTextContent('?project=teste');
+  });
+
+  it('/projects/:name/previews carries non-trivial slug (encoded)', async () => {
+    render(<RoutingHarness />, {
+      initialEntries: ['/projects/my-app-staging-eu-1/previews'],
+    });
+
+    expect(
+      await screen.findByText(/environments stub for redirect/i),
+    ).toBeInTheDocument();
+    expect(screen.getByTestId('search')).toHaveTextContent(
+      '?project=my-app-staging-eu-1',
+    );
   });
 });

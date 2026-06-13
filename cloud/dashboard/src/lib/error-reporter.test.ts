@@ -13,14 +13,14 @@ describe('reportError', () => {
   it('test_does_not_throw_when_self_fails', () => {
     // Even if internal transport breaks, reportError must never throw — would
     // cascade boundary into infinite loop.
-    const original = globalThis.fetch;
-    globalThis.fetch = vi.fn(() => {
+    const original = global.fetch;
+    global.fetch = vi.fn(() => {
       throw new Error('network exploded');
-    }) as unknown as typeof globalThis.fetch;
+    }) as unknown as typeof global.fetch;
     try {
       expect(() => reportError(new Error('cascade test'), {})).not.toThrow();
     } finally {
-      globalThis.fetch = original;
+      global.fetch = original;
     }
   });
 

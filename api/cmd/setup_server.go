@@ -9,10 +9,12 @@ import (
 	"log/slog"
 	"os"
 	"strings"
+	"time"
 
 	"github.com/jackc/pgx/v5"
 	"k8s.io/client-go/dynamic"
 	"k8s.io/client-go/rest"
+	"k8s.io/client-go/tools/clientcmd"
 
 	"github.com/loopzero/loopzero/api/internal/config"
 	"github.com/loopzero/loopzero/api/internal/db"
@@ -21,6 +23,7 @@ import (
 	"github.com/loopzero/loopzero/api/internal/routes"
 	"github.com/loopzero/loopzero/api/internal/server"
 	"github.com/loopzero/loopzero/api/internal/services"
+	"github.com/loopzero/loopzero/api/internal/sse"
 	"github.com/loopzero/loopzero/pkg/enforcement"
 	pkglogging "github.com/loopzero/loopzero/pkg/logging"
 )
@@ -80,6 +83,13 @@ func buildServerConfig(
 		// into build orchestrators, so secret writes serialize with deploys
 		// on the same (tenant, project, env) key. Lock-domain parity EC-2.
 		SecretEnvLocker:              stores.Locker,
+		// T1.2 (plan 2026-06-10-j22-openbao-transit-eso-sync v1.2): inject
+		// the existing *db.PostgresProjectStore as the cross-tenant binding
+		// checker (EC-03 absorption — 404 byte-identical between cross-
+		// tenant attempts + nonexistent projects; CWE-204 defense). The
+		// PostgresProjectStore.GetByName signature already matches
+		// routes.SecretProjectChecker — no adapter needed.
+		SecretProjectChecker:         dbDeps.ProjectStore,
 		DomainHandler:                domainHandler,
 		BuildHandler:                 buildHandler,
 		// CHG-2026-04-25-ATTESTATION-WIRE Phase 6: wire concrete
@@ -99,7 +109,17 @@ func buildServerConfig(
 			cfg.SourceBucket,
 			logger,
 		),
-		EnvironmentHandler:           routes.NewEnvironmentHandler(k8sDeps.TenantCRMgr),
+		EnvironmentHandler: routes.NewEnvironmentHandler(k8sDeps.TenantCRMgr).
+			WithKPILookup(&envKPILookupPgx{pool: dbAdapter.Pool}).
+			WithPreviewSlotLookup(&previewSlotLookupAdapter{store: stores.PreviewSlotStore}).
+			// M2 v1.2 T4.1 (LIVE-caught wiring gap 2026-06-08): the
+			// EnvProjectLookup gate is REQUIRED in production so the
+			// EC-1 cross-tenant project check actually fires. Without
+			// this, the handler falls open (test-fixture mode) and a
+			// user from tenant A could create an env under a project
+			// owned by tenant B. The adapter scopes the lookup by
+			// tenant_id via the canonical GetByName query.
+			WithProjectLookup(&envProjectLookupAdapter{store: dbDeps.ProjectStore}),
 		ShutdownCtx:                  shutdownCtx,
 		ShutdownCancel:               shutdownCancel,
 		RateLimiter:                  rateLimiter,
@@ -172,6 +192,7 @@ func buildServerConfig(
 	if ghDeps != nil {
 		sc.GitHubWebhookHandler = ghDeps.WebhookHandler
 		sc.RepositoryHandler = ghDeps.RepoHandler
+		sc.IntegrationsGitHubHandler = ghDeps.IntegrationsHandler
 	}
 
 	if dbAdapter != nil {
@@ -278,10 +299,15 @@ func buildServerConfig(
 		var previewService *services.PreviewService
 		if orchDeps != nil && orchDeps.Orchestrator != nil {
 			ps, perr := services.NewPreviewService(services.PreviewServiceDeps{
-				Store:      previewStore,
-				Builds:     orchDeps.Orchestrator,
-				BaseDomain: cfg.BaseDomain,
-				Logger:     logger,
+				Store:               previewStore,
+				Builds:              orchDeps.Orchestrator,
+				BuildApps:           &previewAppsLookupAdapter{builds: stores.BuildStore},
+				BaseDomain:          cfg.BaseDomain,
+				PreviewPublicDomain: cfg.PreviewPublicDomain,
+				Logger:              logger,
+				// 2026-06-07 D2/D3/D6: single-slot SOT + env_target preview kind.
+				SlotStore:  stores.PreviewSlotStore,
+				EnvTargets: stores.EnvTargetStore,
 			})
 			if perr != nil {
 				logger.Error("preview service init failed (read-only mode)", "error", perr)
@@ -289,7 +315,13 @@ func buildServerConfig(
 				previewService = ps
 			}
 		}
-		sc.PreviewHandler = routes.NewPreviewHandler(previewStore, previewService, logger)
+		// LIVE catch 2026-06-07 J-23 bug #5: enrich /previews with CR
+		// phase so dashboard reflects operator-observed status. Manager
+		// is canonical (k8sDeps.PreviewCRMgr), not a per-handler
+		// adapter — same dynamic client + namespace const as Tenant CRs.
+		sc.PreviewHandler = routes.
+			NewPreviewHandler(previewStore, previewService, logger).
+			WithPhaseLookup(k8sDeps.PreviewCRMgr)
 		sc.CellPlacement = func() routes.CellPlacementEngine {
 			engine := placement.NewRoundRobinEngine(cellRouter, cellStore, cfg.MaxTenantsPerCell)
 			return engine.WithSerializer(placement.NewAdvisoryLockSerializer(dbAdapter.Pool))
@@ -444,4 +476,137 @@ func validateStripeKeyForEnv(env, stripeKey string) error {
 // constructing a full Config struct.
 func isProductionEnv(env string) bool {
 	return strings.EqualFold(env, "production")
+}
+
+// =============================================================================
+// startArgoStepWatcher — Plan J-17 T1.3 production wiring
+// =============================================================================
+//
+// Polls Argo Workflows on the build cluster every 2s, extracts Pod node
+// phase transitions, and emits build.step.{started,succeeded,failed}
+// events to the SSE journal (sse_events table). Without this goroutine
+// the dashboard's BuildTimelineLive shows zero step events even though
+// the workflow is running — the LIVE bug caught 2026-06-06 J-17 dogfood
+// (image loopzero-api:j17-iter1 missed this wiring on first roll-out).
+//
+// Failure modes are non-fatal: the watcher logs + skips a tick. EC-1
+// surfaces 401/403 to the dedicated counter so Grafana alerts fire
+// before silent token expiry breaks visibility.
+//
+// Lifecycle: started before the HTTP server, cancelled at shutdown.
+func startArgoStepWatcher(ctx context.Context, cfg config.Config, eventStore sse.EventStore, logger *slog.Logger) {
+	if eventStore == nil {
+		logger.Warn("argo step watcher: event store nil, skipping")
+		return
+	}
+
+	// Build a dynamic client connected to the build cluster, mirroring the
+	// pattern in argo.NewWorkflowSubmitter. clientcmd handles in-cluster
+	// SA token + ExplicitPath kubeconfig for local dev.
+	loadingRules := &clientcmd.ClientConfigLoadingRules{ExplicitPath: cfg.BuildKubeconfig}
+	overrides := &clientcmd.ConfigOverrides{}
+	if cfg.BuildKubeContext != "" {
+		overrides.CurrentContext = cfg.BuildKubeContext
+	}
+	restCfg, err := clientcmd.NewNonInteractiveDeferredLoadingClientConfig(loadingRules, overrides).ClientConfig()
+	if err != nil {
+		logger.Warn("argo step watcher: build cluster config failed, watcher disabled",
+			"error", err)
+		return
+	}
+	dyn, err := dynamic.NewForConfig(restCfg)
+	if err != nil {
+		logger.Warn("argo step watcher: dynamic.NewForConfig failed, watcher disabled",
+			"error", err)
+		return
+	}
+
+	// Empty namespace = all namespaces. Build pipelines run under per-tenant
+	// namespaces (tn-<tenantID>) so listing everything is the cheapest path.
+	source := services.NewK8sWorkflowNodeSource(dyn, "", 2*time.Second, logger)
+	// terminalIDs is nil — first-tick startup may emit duplicate step events
+	// for already-running workflows; the watcher's internal lastPhase dedup
+	// catches duplicates from tick 2 onwards. A future enhancement can wire
+	// a BuildStore-backed TerminalBuildIDStore for cleaner cold start.
+	watcher := services.NewArgoStepWatcher(source, eventStore, nil, logger)
+	source.WithWatchErrorHandler(watcher.ReportWatchError)
+
+	go func() {
+		if err := watcher.Start(ctx); err != nil && ctx.Err() == nil {
+			logger.Warn("argo step watcher: stopped unexpectedly", "error", err)
+		}
+	}()
+}
+
+// envKPILookupPgx implements routes.EnvKPILookup using direct pgx queries.
+// J-10 v1.1 LIVE catch 2026-06-07 — populates the dashboard
+// EnvironmentKPIRow with last_deploy timestamp + git commit SHA.
+//
+// DESIGN: one round-trip per List call (1 SQL). DISTINCT ON (environment)
+// returns the most recent ACTIVE release per env across all projects of
+// the tenant.
+type envKPILookupPgx struct {
+	pool interface {
+		Query(ctx context.Context, sql string, args ...any) (pgx.Rows, error)
+	}
+}
+
+func (l *envKPILookupPgx) LatestActivePerEnv(ctx context.Context, tenantID string) (map[string]routes.EnvKPI, error) {
+	const q = `
+		SELECT DISTINCT ON (environment)
+			environment, git_commit, created_at
+		FROM releases
+		WHERE tenant_id = $1 AND status = 'ACTIVE'
+		ORDER BY environment, created_at DESC
+	`
+	rows, err := l.pool.Query(ctx, q, tenantID)
+	if err != nil {
+		return nil, fmt.Errorf("envKPILookupPgx: %w", err)
+	}
+	defer rows.Close()
+	result := make(map[string]routes.EnvKPI)
+	for rows.Next() {
+		var env, sha string
+		var createdAt time.Time
+		if scanErr := rows.Scan(&env, &sha, &createdAt); scanErr != nil {
+			return nil, fmt.Errorf("envKPILookupPgx scan: %w", scanErr)
+		}
+		result[env] = routes.EnvKPI{
+			LastDeploy:    createdAt.UTC().Format(time.RFC3339),
+			LastDeploySha: sha,
+		}
+	}
+	if err := rows.Err(); err != nil {
+		return nil, fmt.Errorf("envKPILookupPgx rows: %w", err)
+	}
+	return result, nil
+}
+
+// previewSlotLookupAdapter implements routes.PreviewSlotLookup using
+// the db.PreviewSlotStore.
+//
+// 2026-06-07 per-project model (migration 000028): ListPreviewSlots
+// returns ALL slots for the tenant — one per project. Empty slice
+// when the tenant has no previews; never nil.
+type previewSlotLookupAdapter struct {
+	store *db.PostgresPreviewSlotStore
+}
+
+func (a *previewSlotLookupAdapter) ListPreviewSlots(ctx context.Context, tenantID string) ([]routes.PreviewSlotInfo, error) {
+	slots, err := a.store.ListByTenant(ctx, tenantID)
+	if err != nil {
+		return nil, err
+	}
+	out := make([]routes.PreviewSlotInfo, 0, len(slots))
+	for _, slot := range slots {
+		out = append(out, routes.PreviewSlotInfo{
+			ProjectID:       slot.ProjectID,
+			ActivePRNumber:  slot.ActivePRNumber,
+			ActiveBranch:    slot.ActiveBranch,
+			ActiveReleaseID: slot.ActiveReleaseID,
+			URL:             slot.URL,
+			UpdatedAt:       slot.UpdatedAt.UTC().Format(time.RFC3339),
+		})
+	}
+	return out, nil
 }

@@ -91,9 +91,53 @@ func TenantNamespace(tenantName string) (string, error) {
 	return composeName("tenant namespace", "loopzero-%s", tenantName)
 }
 
-// EnvironmentNamespace returns the namespace name for a tenant's environment.
-// tenantName is the K8s CRD resource name (e.g., "tn-loopzero").
-// Format: "loopzero-{tenantName}-{envName}" — maintains compatibility with deployed resources.
+// Namespace is the CANONICAL helper for ALL LoopZero workload namespaces.
+// Format: "loopzero-{tenant}-{project}-{env}". One formula for every env
+// type (production, staging, preview-pr-N, ...).
+//
+// The (tenant, project, env) triple is the real isolation boundary
+// in LoopZero, so the namespace reflects it uniformly. Sponsor-directed
+// canonical refactor 2026-06-07 (verbatim "TUDO DEVERIA esta separado
+// por projeto"): no special-case branches for previews vs envs.
+func Namespace(tenantSlug, projectSlug, envName string) (string, error) {
+	if tenantSlug == "" {
+		return "", fmt.Errorf("tenant slug must not be empty")
+	}
+	if projectSlug == "" {
+		return "", fmt.Errorf("project slug must not be empty")
+	}
+	if envName == "" {
+		return "", fmt.Errorf("env name must not be empty")
+	}
+	name := fmt.Sprintf("loopzero-%s-%s-%s", tenantSlug, projectSlug, envName)
+	if err := ValidateKubernetesName(name); err != nil {
+		return "", fmt.Errorf("namespace %q: %w", name, err)
+	}
+	return name, nil
+}
+
+// IsPreviewEnv reports whether an env name follows the canonical
+// preview-pr-N pattern. Used by the build complete path to decide
+// between SetDesired (kind='permanent') and SetPreviewDesired
+// (kind='preview') when persisting env_targets. D2 of plan
+// 2026-06-07-preview-as-category-single-slot-plan.md.
+//
+// Lives here (not preview_service.go) so non-service callers
+// (container_delivery, promotion, rollback) can detect previews
+// without importing services.
+func IsPreviewEnv(envName string) bool {
+	return strings.HasPrefix(envName, "preview-pr-")
+}
+
+// EnvironmentNamespace is DEPRECATED — kept only for callers that
+// haven't been migrated to the canonical Namespace yet. New code MUST
+// use Namespace(tenant, project, env) so multi-project tenants don't
+// collide on the same env name.
+//
+// Format: "loopzero-{tenantName}-{envName}" — preserved verbatim for
+// backward compatibility with pre-refactor deployed namespaces.
+//
+// Deprecated: use Namespace(tenant, project, env) instead.
 func EnvironmentNamespace(tenantName, envName string) (string, error) {
 	return composeName("environment namespace", "loopzero-%s-%s", tenantName, envName)
 }
@@ -104,8 +148,13 @@ func BuildNamespace(tenantSlug string) (string, error) {
 	return composeName("build namespace", "build-%s", tenantSlug)
 }
 
-// PreviewNamespace returns the namespace name for a preview environment.
-// Format: "{tenantSlug}-{projectSlug}-pr-{prNumber}"
+// PreviewNamespace is DEPRECATED — preview envs are now indistinguishable
+// from regular envs at the naming layer. Callers should compose the env
+// name as "preview-pr-{N}" and call Namespace(tenant, project, envName).
+//
+// Format (legacy, kept for back-compat): "{tenantSlug}-{projectSlug}-pr-{prNumber}".
+//
+// Deprecated: use Namespace(tenant, project, fmt.Sprintf("preview-pr-%d", n)).
 func PreviewNamespace(tenantSlug, projectSlug string, prNumber int) (string, error) {
 	if tenantSlug == "" {
 		return "", fmt.Errorf("tenant slug must not be empty")
@@ -116,11 +165,8 @@ func PreviewNamespace(tenantSlug, projectSlug string, prNumber int) (string, err
 	if prNumber <= 0 {
 		return "", fmt.Errorf("PR number must be positive, got %d", prNumber)
 	}
-	name := fmt.Sprintf("%s-%s-pr-%d", tenantSlug, projectSlug, prNumber)
-	if err := ValidateKubernetesName(name); err != nil {
-		return "", fmt.Errorf("preview namespace %q: %w", name, err)
-	}
-	return name, nil
+	envName := fmt.Sprintf("preview-pr-%d", prNumber)
+	return Namespace(tenantSlug, projectSlug, envName)
 }
 
 // RepoName returns the source code repository name.

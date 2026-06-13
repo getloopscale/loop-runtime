@@ -11,3 +11,31 @@ image:
 
 imagePullSecrets:
   - name: do-registry
+
+# Plan J-09 T1.1 (2026-06-05) — GitHub App install handshake env vars.
+# Merged into the chart's env: map (range $k, $v := .Values.env in
+# templates/deployment.yaml). All three must be right or the handshake
+# breaks:
+#   - GITHUB_APP_SLUG: public slug of the GitHub App so the install
+#     button redirects to https://github.com/apps/{slug}/installations/new
+#   - APP_PUBLIC_URL: dashboard origin the callback returns the browser
+#     to (with installation_id + setup_action preserved in the query).
+#   - AUTH_COOKIE_DOMAIN: explicit Domain= on the state cookie so it
+#     survives the GitHub redirect across subdomains. loopzero.example is the
+#     apex shared by app-dev/cloud-dev/auth-dev.
+env:
+  GITHUB_APP_SLUG: "loopzero-platform"
+  APP_PUBLIC_URL: "https://app-dev.loopzero.example"
+  AUTH_COOKIE_DOMAIN: "loopzero.example"
+
+  # T1.2 of plan 2026-06-11-cleanroom-canonical-5-defense-layers v1.2.
+  # Closes catch #20 from T6.2 session (memory j05-aprendizado-kratos-public-
+  # vs-internal-url-split): loopzero-cloud received Kratos public URL in handlers
+  # where INTERNAL was needed (and vice-versa) — J-05 device-flow redirect
+  # loops + J-04 cookie domain mismatch. Canonical split per ADR D8:
+  #   - KRATOS_PUBLIC_URL: HTTPS public FQDN — used for browser-facing
+  #     redirects (consent UI, settings UI links the user clicks)
+  #   - KRATOS_INTERNAL_URL: cluster-internal HTTP — used for server-side
+  #     admin API calls (CreateIdentity, GetSession, verify cookie)
+  KRATOS_PUBLIC_URL: "https://auth-dev.loopzero.example"
+  KRATOS_INTERNAL_URL: "http://kratos.loopzero-auth.svc.cluster.local:4433"

@@ -45,7 +45,7 @@ describe('EntitiesPage (/memory/entities)', () => {
   it('empty entities renders EmptyState (D3 inheritance — no broken table)', async () => {
     mockCloudFetch.mockResolvedValueOnce({ entities: [] });
     render(<EntitiesPage />);
-    expect(await screen.findByText(/will remember the first user/i)).toBeInTheDocument();
+    expect(await screen.findByText(/no entities/i)).toBeInTheDocument();
   });
 
   it('renders entity rows when backend returns data', async () => {

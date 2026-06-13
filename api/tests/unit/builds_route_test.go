@@ -98,6 +98,12 @@ func (f *fakeBuildOrchestrator) GetBuildTenantID(ctx context.Context, buildID st
 	return tenantID, nil
 }
 
+// GetRedeploySource — Plan J-17 T6.4. Stub for legacy builds_route_test.go
+// (redeploy paths are covered by api/internal/routes/builds_test.go).
+func (f *fakeBuildOrchestrator) GetRedeploySource(_ context.Context, _, _ string) (*routes.RedeploySource, error) {
+	return nil, nil
+}
+
 // --- Test helpers ---
 
 func newBuildHandler(orch *fakeBuildOrchestrator, callbackSecret string) *routes.BuildHandler {

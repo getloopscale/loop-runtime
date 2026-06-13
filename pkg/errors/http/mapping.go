@@ -37,9 +37,11 @@ var statusByCode = map[string]int{
 	"INVALID_TRANSITION":        http.StatusConflict,            // 409
 	"DEPLOY_IN_PROGRESS":        http.StatusConflict,            // 409
 	"BUILD_ALREADY_COMPLETED":   http.StatusConflict,            // 409
+	"BUILD_NOT_TERMINAL":        http.StatusConflict,            // 409 — Plan J-17 T6.4 redeploy guard
 	"PROJECT_EXISTS":            http.StatusConflict,            // 409
 	"SYNC_OPERATION_IN_PROGRESS": http.StatusConflict,           // 409
 	"CONCURRENT_ACTIVATION":     http.StatusConflict,            // 409 — partial unique index idx_releases_active_unique (migration 000022)
+	"ENV_ALREADY_EXISTS":        http.StatusConflict,            // 409 — M2 v1.2 T4.1 EC-5 duplicate (project, env) tuple
 
 	"TENANT_NOT_FOUND":     http.StatusNotFound,         // 404
 	"PROJECT_NOT_FOUND":    http.StatusNotFound,         // 404

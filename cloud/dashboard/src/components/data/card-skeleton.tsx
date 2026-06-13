@@ -1,7 +1,7 @@
-import { Skeleton } from '@loopzerokit/ui';
+import { Skeleton } from '@loopzero/ui';
 
 /**
- * CardSkeleton (T0.3) — card-shaped skeleton via @loopzerokit/ui Skeleton.
+ * CardSkeleton (T0.3) — card-shaped skeleton via @loopzero/ui Skeleton.
  * Mirrors Card title + body lines + optional footer.
  */
 

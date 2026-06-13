@@ -36,7 +36,7 @@ describe('ProjectReadinessPage (Sprint 1 T1.1)', () => {
       loading: false,
     });
     renderAtRoute('/projects/does-not-exist/readiness');
-    expect(screen.getByText(/no project named "does-not-exist"/i)).toBeInTheDocument();
+    expect(screen.getByText(/project not found/i)).toBeInTheDocument();
   });
 
   it('test_shows_loading_state_while_projects_query_pending', () => {

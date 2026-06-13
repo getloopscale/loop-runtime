@@ -120,6 +120,10 @@ func (f *fakeBuildStoreOrch) ListByProjectAndEnv(_ context.Context, _, _, _ stri
 	return nil, 0, nil
 }
 
+func (f *fakeBuildStoreOrch) ListEnvsForProject(_ context.Context, _, _ string) ([]string, error) {
+	return nil, nil
+}
+
 func (f *fakeBuildStoreOrch) FindActiveBuilds(_ context.Context, _ string) ([]db.Build, error) {
 	return nil, nil
 }

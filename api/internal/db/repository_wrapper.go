@@ -103,7 +103,11 @@ func (s *PostgresRepositoryStore) DeleteInstallation(ctx context.Context, instal
 
 // LinkRepository connects a LoopZero project to a GitHub repository.
 // Idempotent re-link per `loopzero connect` CLI contract.
-func (s *PostgresRepositoryStore) LinkRepository(ctx context.Context, tenantID, projectName, repoFullName string, installationID int64, defaultBranch string) error {
+//
+// Plan J-09 T3.2 (2026-06-05) — autoDeploy parameter (was hardcoded true
+// in the SQL). Caller passes the user's choice; default true at the route
+// handler boundary, not here.
+func (s *PostgresRepositoryStore) LinkRepository(ctx context.Context, tenantID, projectName, repoFullName string, installationID int64, defaultBranch string, autoDeploy bool) error {
 	bridge, ok := s.DB.(SqlcBridge)
 	if !ok {
 		return fmt.Errorf("repository store: DBTX %T does not implement SqlcBridge", s.DB)
@@ -117,6 +121,7 @@ func (s *PostgresRepositoryStore) LinkRepository(ctx context.Context, tenantID, 
 		RepoFullName:   repoFullName,
 		InstallationID: installationID,
 		DefaultBranch:  defaultBranch,
+		AutoDeploy:     autoDeploy,
 	}); err != nil {
 		return fmt.Errorf("repository store: link repository: %w", err)
 	}

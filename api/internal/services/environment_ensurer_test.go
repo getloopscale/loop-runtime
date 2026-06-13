@@ -28,10 +28,15 @@ type stubAdder struct {
 	callCount   atomic.Int32
 	onAddBecome bool // when true, marks lister as existing after AddEnvironment
 	lister      *stubLister
+	// M2 v1.2 T3.1 — capture (project, env) for propagation tests.
+	gotProject string
+	gotEnv     string
 }
 
-func (s *stubAdder) AddEnvironment(_ context.Context, _, _ string) error {
+func (s *stubAdder) AddEnvironment(_ context.Context, _, project, envName string) error {
 	s.callCount.Add(1)
+	s.gotProject = project
+	s.gotEnv = envName
 	if s.err != nil {
 		return s.err
 	}
@@ -50,7 +55,7 @@ func TestEnsureEnvironment_NoopWhenExists(t *testing.T) {
 	adder := &stubAdder{}
 	e := &EnvironmentEnsurer{Lister: lister, Adder: adder}
 
-	if err := e.EnsureEnvironment(context.Background(), "tn-1", "preview"); err != nil {
+	if err := e.EnsureEnvironment(context.Background(), "tn-1", "web", "preview"); err != nil {
 		t.Errorf("expected nil for existing env, got %v", err)
 	}
 	if adder.callCount.Load() != 0 {
@@ -72,7 +77,7 @@ func TestEnsureEnvironment_CreatesAndWaits(t *testing.T) {
 		PollInterval: 100 * time.Millisecond,
 	}
 
-	if err := e.EnsureEnvironment(context.Background(), "tn-1", "preview"); err != nil {
+	if err := e.EnsureEnvironment(context.Background(), "tn-1", "web", "preview"); err != nil {
 		t.Errorf("expected nil after create+wait, got %v", err)
 	}
 	if adder.callCount.Load() != 1 {
@@ -93,7 +98,7 @@ func TestEnsureEnvironment_TimeoutWhenOperatorSlow(t *testing.T) {
 		PollInterval: 50 * time.Millisecond,
 	}
 
-	err := e.EnsureEnvironment(context.Background(), "tn-1", "preview")
+	err := e.EnsureEnvironment(context.Background(), "tn-1", "web", "preview")
 	if err == nil {
 		t.Fatalf("expected timeout error, got nil")
 	}
@@ -115,7 +120,7 @@ func TestEnsureEnvironment_AlreadyExistsErrorIsSuccess(t *testing.T) {
 		PollInterval: 10 * time.Millisecond,
 	}
 
-	err := e.EnsureEnvironment(context.Background(), "tn-1", "preview")
+	err := e.EnsureEnvironment(context.Background(), "tn-1", "web", "preview")
 	if err != nil {
 		t.Errorf("expected nil for already-exists error, got %v", err)
 	}
@@ -126,7 +131,7 @@ func TestEnsureEnvironment_AlreadyExistsErrorIsSuccess(t *testing.T) {
 // Plan T2.2 RED #5.
 func TestEnsureEnvironment_NilStoreNoOp(t *testing.T) {
 	e := &EnvironmentEnsurer{}
-	if err := e.EnsureEnvironment(context.Background(), "tn-1", "preview"); err != nil {
+	if err := e.EnsureEnvironment(context.Background(), "tn-1", "web", "preview"); err != nil {
 		t.Errorf("expected nil for misconfigured ensurer (fail open), got %v", err)
 	}
 }
@@ -134,7 +139,7 @@ func TestEnsureEnvironment_NilStoreNoOp(t *testing.T) {
 // TestEnsureEnvironment_NilReceiver asserts a nil pointer also no-ops safely.
 func TestEnsureEnvironment_NilReceiver(t *testing.T) {
 	var e *EnvironmentEnsurer
-	if err := e.EnsureEnvironment(context.Background(), "tn-1", "preview"); err != nil {
+	if err := e.EnsureEnvironment(context.Background(), "tn-1", "web", "preview"); err != nil {
 		t.Errorf("expected nil for nil receiver, got %v", err)
 	}
 }
@@ -147,7 +152,7 @@ func TestEnsureEnvironment_AddFailReturnsLoopZeroError(t *testing.T) {
 	adder := &stubAdder{err: errors.New("permission denied")}
 	e := &EnvironmentEnsurer{Lister: lister, Adder: adder}
 
-	err := e.EnsureEnvironment(context.Background(), "tn-1", "preview")
+	err := e.EnsureEnvironment(context.Background(), "tn-1", "web", "preview")
 	if err == nil {
 		t.Fatalf("expected error from AddEnvironment failure, got nil")
 	}
@@ -162,10 +167,15 @@ type stubReadinessChecker struct {
 	ready     atomic.Bool
 	err       error
 	callCount atomic.Int32
+	// M2 v1.2 T3.1 — capture (project, env) for propagation tests.
+	gotProject string
+	gotEnv     string
 }
 
-func (s *stubReadinessChecker) IsReady(_ context.Context, _, _ string) (bool, error) {
+func (s *stubReadinessChecker) IsReady(_ context.Context, _, project, envName string) (bool, error) {
 	s.callCount.Add(1)
+	s.gotProject = project
+	s.gotEnv = envName
 	return s.ready.Load(), s.err
 }
 
@@ -190,7 +200,7 @@ func TestEnsureEnvironment_BlockedUntilReadinessActive(t *testing.T) {
 		PollInterval:     50 * time.Millisecond,
 	}
 
-	err := e.EnsureEnvironment(context.Background(), "tn-1", "preview")
+	err := e.EnsureEnvironment(context.Background(), "tn-1", "web", "preview")
 	if err == nil {
 		t.Fatalf("expected timeout because readiness never flips, got nil")
 	}
@@ -225,7 +235,7 @@ func TestEnsureEnvironment_ReturnsWhenBothReady(t *testing.T) {
 	}
 
 	start := time.Now()
-	err := e.EnsureEnvironment(context.Background(), "tn-1", "preview")
+	err := e.EnsureEnvironment(context.Background(), "tn-1", "web", "preview")
 	if err != nil {
 		t.Fatalf("expected nil when both checks pass, got %v", err)
 	}
@@ -252,7 +262,7 @@ func TestEnsureEnvironment_LegacyBehaviorWhenCheckerNil(t *testing.T) {
 		// ReadinessChecker intentionally nil
 	}
 
-	if err := e.EnsureEnvironment(context.Background(), "tn-1", "preview"); err != nil {
+	if err := e.EnsureEnvironment(context.Background(), "tn-1", "web", "preview"); err != nil {
 		t.Errorf("expected nil for existing env with no readiness check, got %v", err)
 	}
 }
@@ -276,7 +286,7 @@ func TestEnsureEnvironment_ReadinessErrorTreatedAsTransient(t *testing.T) {
 		PollInterval:     50 * time.Millisecond,
 	}
 
-	err := e.EnsureEnvironment(context.Background(), "tn-1", "preview")
+	err := e.EnsureEnvironment(context.Background(), "tn-1", "web", "preview")
 	// Expected: timeout (readiness check NEVER returned ready=true), but
 	// the loop should have retried multiple times (treated err as transient).
 	if err == nil {
@@ -288,5 +298,90 @@ func TestEnsureEnvironment_ReadinessErrorTreatedAsTransient(t *testing.T) {
 	if checker.callCount.Load() < 2 {
 		t.Errorf("expected IsReady polled multiple times (transient retry), got %d",
 			checker.callCount.Load())
+	}
+}
+
+// =============================================================================
+// M2 v1.2 — T3.1 propagation tests
+// Plan: 2026-06-07-runtime-envs-per-project-m2 v1.2
+// =============================================================================
+
+// TestEnsureEnvironment_PassesProjectToAdder asserts that the project
+// arg of EnsureEnvironment is forwarded verbatim to Adder.AddEnvironment.
+// Without this, T2.1 (TenantCRMgr writes project) would never receive
+// the project from the deploy hot path.
+func TestEnsureEnvironment_PassesProjectToAdder_M2(t *testing.T) {
+	lister := &stubLister{} // exists=false → create path
+	lister.exists.Store(false)
+	adder := &stubAdder{onAddBecome: true, lister: lister}
+	e := &EnvironmentEnsurer{
+		Lister:       lister,
+		Adder:        adder,
+		WaitTimeout:  250 * time.Millisecond,
+		PollInterval: 50 * time.Millisecond,
+	}
+
+	if err := e.EnsureEnvironment(context.Background(), "tn-1", "web", "staging"); err != nil {
+		t.Fatalf("EnsureEnvironment failed: %v", err)
+	}
+	if adder.gotProject != "web" {
+		t.Errorf("expected project=%q propagated to Adder.AddEnvironment, got %q", "web", adder.gotProject)
+	}
+	if adder.gotEnv != "staging" {
+		t.Errorf("expected env=%q propagated to Adder.AddEnvironment, got %q", "staging", adder.gotEnv)
+	}
+}
+
+// TestEnsureEnvironment_PassesProjectToReadiness asserts that the
+// project arg is forwarded verbatim to ReadinessChecker.IsReady so the
+// Environment CR lookup hits the canonical per-project name.
+func TestEnsureEnvironment_PassesProjectToReadiness_M2(t *testing.T) {
+	lister := &stubLister{}
+	lister.exists.Store(false)
+	adder := &stubAdder{onAddBecome: true, lister: lister}
+	checker := &stubReadinessChecker{}
+	checker.ready.Store(true) // become ready on first poll
+	e := &EnvironmentEnsurer{
+		Lister:           lister,
+		Adder:            adder,
+		ReadinessChecker: checker,
+		WaitTimeout:      250 * time.Millisecond,
+		PollInterval:     50 * time.Millisecond,
+	}
+
+	if err := e.EnsureEnvironment(context.Background(), "tn-1", "api", "preview-pr-7"); err != nil {
+		t.Fatalf("EnsureEnvironment failed: %v", err)
+	}
+	if checker.gotProject != "api" {
+		t.Errorf("expected project=%q propagated to ReadinessChecker.IsReady, got %q", "api", checker.gotProject)
+	}
+	if checker.gotEnv != "preview-pr-7" {
+		t.Errorf("expected env=%q propagated to ReadinessChecker.IsReady, got %q", "preview-pr-7", checker.gotEnv)
+	}
+}
+
+// TestEnsureEnvironment_EmptyProjectPreservesLegacyPath asserts the
+// backward-compat path: production-legacy callers (project="") still
+// land on the Adder.AddEnvironment with empty project so the operator
+// writes a legacy entry (ADR D2).
+func TestEnsureEnvironment_EmptyProjectPreservesLegacyPath_M2(t *testing.T) {
+	lister := &stubLister{}
+	lister.exists.Store(false)
+	adder := &stubAdder{onAddBecome: true, lister: lister}
+	e := &EnvironmentEnsurer{
+		Lister:       lister,
+		Adder:        adder,
+		WaitTimeout:  250 * time.Millisecond,
+		PollInterval: 50 * time.Millisecond,
+	}
+
+	if err := e.EnsureEnvironment(context.Background(), "tn-1", "", "production"); err != nil {
+		t.Fatalf("EnsureEnvironment(empty project) failed: %v", err)
+	}
+	if adder.gotProject != "" {
+		t.Errorf("expected empty project propagated for legacy path, got %q", adder.gotProject)
+	}
+	if adder.gotEnv != "production" {
+		t.Errorf("expected env=production propagated, got %q", adder.gotEnv)
 	}
 }

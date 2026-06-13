@@ -107,6 +107,17 @@ const (
 	TypePreviewNetworkPolicyReady   = "NetworkPolicyReady"
 	TypePreviewResourceQuotaReady   = "ResourceQuotaReady"
 	TypePreviewLimitRangeReady      = "LimitRangeReady"
+	// TypePreviewServiceAccountReady (J-23, 2026-06-07): the `loopzero-app`
+	// ServiceAccount the preview controller creates inside every preview
+	// namespace. Manifests rendered by the API set
+	// `pod.spec.serviceAccountName: loopzero-app` (renderer_deployment.go:146
+	// + renderer_rollout.go:400). Without the SA in the target namespace,
+	// ArgoCD sync succeeds but pods CrashLoop with
+	// `error looking up service account ...: serviceaccounts "loopzero-app"
+	// not found` — the failure surface that broke the very first LIVE
+	// preview. Mirrors TypeServiceAccountReady in tenant/environment land
+	// but scoped to preview's narrower SA shape (no deployer SA needed).
+	TypePreviewServiceAccountReady  = "ServiceAccountReady"
 	TypePreviewBuildSubmitted       = "BuildSubmitted"
 	TypePreviewBuildCompleted       = "BuildCompleted"
 	TypePreviewWorkloadHealthy      = "WorkloadHealthy"

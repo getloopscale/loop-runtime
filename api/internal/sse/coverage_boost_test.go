@@ -78,6 +78,10 @@ func (f *fakeEventStore) GetAfter(_ context.Context, _ string, _ int64) ([]SSEEv
 	return nil, f.getErr
 }
 
+func (f *fakeEventStore) GetAfterForProject(_ context.Context, _ string, _ string, _ int64) ([]SSEEvent, error) {
+	return nil, f.getErr
+}
+
 func (f *fakeEventStore) Prune(_ context.Context, _ time.Duration) (int64, error) {
 	return f.pruneCount, f.pruneErr
 }

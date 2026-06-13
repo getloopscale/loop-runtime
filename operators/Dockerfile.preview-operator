@@ -1,4 +1,4 @@
-FROM golang:1.25.10-alpine3.22 AS builder
+FROM golang:1.26.1-alpine3.22 AS builder
 WORKDIR /workspace
 
 ENV GOWORK=off

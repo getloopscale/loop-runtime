@@ -1,5 +1,5 @@
 import { lazy, Suspense, type ReactNode } from 'react';
-import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom';
+import { BrowserRouter, Routes, Route, Navigate, useParams } from 'react-router-dom';
 import { NuqsAdapter } from 'nuqs/adapters/react-router/v7';
 import {
   Bell,
@@ -14,6 +14,7 @@ import {
 import { DashboardLayout } from '@/components/layout';
 import { SubPagePlaceholder } from '@/pages/sub-page-placeholder';
 import { RouteBoundary } from '@/components/error/route-boundary';
+import { PlanLimitUpgradeModal } from '@/components/dialogs/plan-limit-upgrade-modal';
 
 /**
  * T0.1: helper para wrap cada <Route element> em <RouteBoundary>.
@@ -94,6 +95,9 @@ const RecoveryPage = lazy(() =>
 const DeviceSuccessPage = lazy(() =>
   import('@/pages/device-success').then((m) => ({ default: m.DeviceSuccessPage })),
 );
+const DeviceVerifyPage = lazy(() =>
+  import('@/pages/device-verify').then((m) => ({ default: m.DeviceVerifyPage })),
+);
 const ProjectDetailPage = lazy(() =>
   import('@/pages/project-detail').then((m) => ({ default: m.ProjectDetailPage })),
 );
@@ -106,6 +110,24 @@ const DeploymentsPage = lazy(() =>
 const DeploymentDetailPage = lazy(() =>
   import('@/pages/deployment-detail').then((m) => ({ default: m.DeploymentDetailPage })),
 );
+// Plan J-17 T5.1: layout + 4 tabs replace the 4 sibling routes below.
+const DeploymentDetailLayout = lazy(() =>
+  import('@/pages/deployment-detail-layout').then((m) => ({ default: m.DeploymentDetailLayout })),
+);
+const TimelineTab = lazy(() =>
+  import('@/pages/deployment-tabs/timeline-tab').then((m) => ({ default: m.TimelineTab })),
+);
+const LogsTab = lazy(() =>
+  import('@/pages/deployment-tabs/logs-tab').then((m) => ({ default: m.LogsTab })),
+);
+const SBOMTab = lazy(() =>
+  import('@/pages/deployment-tabs/sbom-tab').then((m) => ({ default: m.SBOMTab })),
+);
+const AttestationTab = lazy(() =>
+  import('@/pages/deployment-tabs/attestation-tab').then((m) => ({ default: m.AttestationTab })),
+);
+// Legacy pages kept as fallback for direct deep links (e.g., emails) —
+// nested routes below take precedence inside the new layout.
 const BuildLogsPage = lazy(() =>
   import('@/pages/build-logs').then((m) => ({ default: m.BuildLogsPage })),
 );
@@ -115,6 +137,11 @@ const BuildSBOMPage = lazy(() =>
 const BuildAttestationPage = lazy(() =>
   import('@/pages/build-attestation').then((m) => ({ default: m.BuildAttestationPage })),
 );
+// Suppress "unused" lints while the legacy pages exist as fallback.
+void BuildLogsPage;
+void BuildSBOMPage;
+void BuildAttestationPage;
+void DeploymentDetailPage;
 const RuntimeLogsPage = lazy(() =>
   import('@/pages/runtime-logs').then((m) => ({ default: m.RuntimeLogsPage })),
 );
@@ -124,9 +151,21 @@ const ProjectStatusPage = lazy(() =>
 const SecretsPage = lazy(() =>
   import('@/pages/secrets').then((m) => ({ default: m.SecretsPage })),
 );
-const PreviewsPage = lazy(() =>
-  import('@/pages/previews').then((m) => ({ default: m.PreviewsPage })),
-);
+// PreviewsPage deleted per plan 2026-06-08-dashboard-screens-review-fixes
+// T1.1 + ADR D1: the multi-row preview table is semantically obsolete
+// under the post-M2 single-slot preview model. /projects/:name/previews
+// now 301-equivalent client-redirects to /environments?project=:name where
+// the single preview slot is rendered inline via PreviewRow.
+function PreviewsRedirect() {
+  const { name } = useParams();
+  return (
+    <Navigate
+      to={`/environments?project=${encodeURIComponent(name ?? '')}`}
+      replace
+    />
+  );
+}
+
 const ProjectConnectPage = lazy(() =>
   import('@/pages/project-connect').then((m) => ({ default: m.ProjectConnectPage })),
 );
@@ -155,6 +194,12 @@ export default function App() {
   return (
     <BrowserRouter>
       <NuqsAdapter>
+        {/* Plan J-10 v1.1 T2.6 — top-level PlanLimitUpgradeModal listens for
+            loopzero:plan-limit window events emitted by the 402 interceptor in
+            lib/api.ts. Single mount covers every surface (envs / secrets /
+            projects / future verticals). Modal is closed by default; opens
+            only on 402. */}
+        <PlanLimitUpgradeModal />
         <Suspense fallback={<PageLoader />}>
           <Routes>
           <Route path="/login" element={<Boundaried path="/login"><LoginPage /></Boundaried>} />
@@ -162,6 +207,7 @@ export default function App() {
           <Route path="/verification" element={<Boundaried path="/verification"><VerificationPage /></Boundaried>} />
           <Route path="/recovery" element={<Boundaried path="/recovery"><RecoveryPage /></Boundaried>} />
           <Route path="/device-success" element={<Boundaried path="/device-success"><DeviceSuccessPage /></Boundaried>} />
+          <Route path="/device-verify" element={<Boundaried path="/device-verify"><DeviceVerifyPage /></Boundaried>} />
           <Route
             path="*"
             element={
@@ -175,22 +221,17 @@ export default function App() {
                       path="/projects/:name/deployments"
                       element={<Boundaried path="/projects/:name/deployments"><DeploymentsPage /></Boundaried>}
                     />
+                    {/* Plan J-17 T5.1: nested layout with Outlet replaces
+                        the four sibling routes. Index = TimelineTab. */}
                     <Route
                       path="/projects/:name/deployments/:id"
-                      element={<Boundaried path="/projects/:name/deployments/:id"><DeploymentDetailPage /></Boundaried>}
-                    />
-                    <Route
-                      path="/projects/:name/deployments/:id/logs"
-                      element={<Boundaried path="/projects/:name/deployments/:id/logs"><BuildLogsPage /></Boundaried>}
-                    />
-                    <Route
-                      path="/projects/:name/deployments/:id/sbom"
-                      element={<Boundaried path="/projects/:name/deployments/:id/sbom"><BuildSBOMPage /></Boundaried>}
-                    />
-                    <Route
-                      path="/projects/:name/deployments/:id/attestation"
-                      element={<Boundaried path="/projects/:name/deployments/:id/attestation"><BuildAttestationPage /></Boundaried>}
-                    />
+                      element={<Boundaried path="/projects/:name/deployments/:id"><DeploymentDetailLayout /></Boundaried>}
+                    >
+                      <Route index element={<TimelineTab />} />
+                      <Route path="logs" element={<LogsTab />} />
+                      <Route path="sbom" element={<SBOMTab />} />
+                      <Route path="attestation" element={<AttestationTab />} />
+                    </Route>
                     <Route
                       path="/projects/:name/logs"
                       element={<Boundaried path="/projects/:name/logs"><RuntimeLogsPage /></Boundaried>}
@@ -205,7 +246,7 @@ export default function App() {
                     />
                     <Route
                       path="/projects/:name/previews"
-                      element={<Boundaried path="/projects/:name/previews"><PreviewsPage /></Boundaried>}
+                      element={<PreviewsRedirect />}
                     />
                     <Route
                       path="/projects/:name/connect"

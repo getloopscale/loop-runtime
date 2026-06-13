@@ -389,6 +389,38 @@ func (p *RealProvisioner) DeleteApplications(ctx context.Context, tenantID strin
 	return nil
 }
 
+// ListApplicationNames returns the metadata.name of every ArgoCD Application
+// CR labeled with the given tenantID. #71 LIVE catch 2026-06-07: tenant_gitops
+// uses this to compute the set of Apps to prune after the active
+// PreviewEnvironment set shrinks (close-PR cleanup).
+func (p *RealProvisioner) ListApplicationNames(ctx context.Context, tenantID string) ([]string, error) {
+	list, err := p.client.Resource(applicationGVR).Namespace(p.namespace).List(ctx, metav1.ListOptions{
+		LabelSelector: fmt.Sprintf("%s=%s", constants.LabelTenant, tenantID),
+	})
+	if err != nil {
+		return nil, fmt.Errorf("argocd: list applications for tenant %s: %w", tenantID, err)
+	}
+	names := make([]string, 0, len(list.Items))
+	for _, app := range list.Items {
+		names = append(names, app.GetName())
+	}
+	return names, nil
+}
+
+// DeleteApplication removes a SINGLE ArgoCD Application CR by name. Idempotent
+// — NotFound is not an error (concurrent reconcile race). #71 LIVE catch
+// 2026-06-07.
+func (p *RealProvisioner) DeleteApplication(ctx context.Context, appName string) error {
+	err := p.client.Resource(applicationGVR).Namespace(p.namespace).Delete(ctx, appName, metav1.DeleteOptions{})
+	if err != nil {
+		if errors.IsNotFound(err) {
+			return nil
+		}
+		return fmt.Errorf("argocd: delete application %s: %w", appName, err)
+	}
+	return nil
+}
+
 // DeleteAppProject removes the ArgoCD AppProject CR for a tenant.
 func (p *RealProvisioner) DeleteAppProject(ctx context.Context, tenantID string) error {
 	err := p.client.Resource(appProjectGVR).Namespace(p.namespace).Delete(ctx, tenantID, metav1.DeleteOptions{})

@@ -824,6 +824,158 @@ tasks:
     cmds:
       - bash infra/scripts/local/dogfood-device.sh {{.CLI_ARGS}}
 
+  test:dogfood:project-connect:
+    desc: |
+      T6.2 of plan 2026-06-05-dashboard-journey-j09-project-connect — aggregate
+      dogfood wrapper for Journey J-09 Project Connect. Invokes:
+        1. T4.1 hermetic syntax check (LIVE bash structure regression gate)
+        2. vitest project-connect.test.tsx (T1.2 + T2.2 + T3.1 — 10 tests)
+        3. Go engine tests (TestListRepositories + TestRepositories_Connect)
+        4. Go cloud tests (TestInitiateInstall + TestCallback — 14 tests)
+        5. Go webhook tests (TestWebhook + counter + correlation_id)
+        6. Playwright headless (e2e/project-connect.spec.ts — 4 cenários,
+           SKIP=FAIL by default per EC-5; override with --allow-skip)
+        7. T4.1 LIVE bash (4 cenários A/B/C/D against dev-public GitHub
+           webhook endpoint; SKIP if LOOPZERO_GITHUB_WEBHOOK_SECRET unset;
+           full bypass via --hermetic-only)
+      Flags forwarded to wrapper: --hermetic-only --live-only --json --allow-skip.
+    cmds:
+      - bash infra/scripts/local/dogfood-project-connect.sh {{.CLI_ARGS}}
+
+  test:dogfood:deployments:
+    desc: |
+      T7.3 of plan 2026-06-06-dashboard-journey-j17-deployments-realtime —
+      aggregate dogfood wrapper for Journey J-17 Deployments. Invokes:
+        1. T7.2 hermetic syntax check (LIVE bash structure regression gate)
+        2. vitest J-17 hooks + pages (use-deployments-list-stream,
+           use-deployments, deployments.tsx — 7+4+4 tests)
+        3. Go API tests for the J-17 backend surface
+           (api/internal/argo + loki + routes — covers Layer 1+2+3 wrap,
+           LogQL filter, build_list + logs handlers)
+        4. T7.2 LIVE bash (4 cenários A/B/C/D against dev-public — REST
+           list + SSE wiring + Loki marker pipeline + preflight)
+      Flags forwarded to wrapper: --hermetic-only --live-only --json.
+    cmds:
+      - bash infra/scripts/local/dogfood-deployments.sh {{.CLI_ARGS}}
+
+  test:dogfood:secrets:
+    desc: |
+      T6.2 of plan 2026-06-06-dashboard-journey-j22-secrets-crud v1.2.1 —
+      aggregate dogfood wrapper for Journey J-22 Secrets CRUD. Invokes:
+        1. T5.4 hermetic syntax check (23 assertions on the LIVE bash shape)
+        2. vitest J-22 (35 specs / 9 files: dotenv parser + use-secrets
+           env filter + 4 mutations + SecretsTable D1 masking +
+           AddSecretSheet canonical + RotateSecretDialog EC-13
+           expected_version + DeleteSecretDialog EC-19 case-sensitive +
+           BulkUploadSheet preview invariant + page URL state)
+        3. Go SecretHandler.Bulk tests (5 specs covering T1.1 results-
+           length invariant + T1.2 audit-per-key + T1.3 plan-limit 402 +
+           EC-18 size cap 413 + T5.2 EC-14 duplicate-key 400)
+        4. T5.3 LIVE bash (4 scenarios A create / B rotate-upsert /
+           C bulk / D ESO sync) against dev-public
+      Flags forwarded to wrapper: --hermetic-only --live-only --json.
+    cmds:
+      - bash infra/scripts/local/dogfood-secrets.sh {{.CLI_ARGS}}
+
+  test:dogfood:secrets-openbao:
+    desc: |
+      T5.2 of plan 2026-06-10-j22-openbao-transit-eso-sync v1.2 —
+      aggregate dogfood wrapper for the J-22 OpenBao Transit + ESO Sync
+      chain. Invokes:
+        1. T4.2 hermetic syntax check (38 assertions on the T4.1 LIVE
+           script shape)
+        2. go test -race ./pkg/vault/... (31 specs: TransitClient base
+           + EC-04 singleflight + EC-06 auto-create + Zeroize + Redaction
+           + RateLimit + EC-08 LRU eviction)
+        3. go test -race ./api/internal/routes (14 TestSecretBulk specs
+           covering T1.1 k8sSync wire + T1.2 cross-tenant 404 + T2.3
+           transit Encrypt + EC-01 continue-best-effort + EC-02 per-env
+           sync_status + EC-03 byte-identical 404)
+        4. T4.1 LIVE 6-scenario zero-leak proof against dev-public
+           (A PG vault:v1: prefix / B workload K8s Secret / C pod printenv
+           / D kubectl logs no leak / E kubectl describe no value leak /
+           F sentinel only in tenant ns) — operator HARD STOP
+      Flags forwarded to wrapper: --hermetic-only --live-only --json.
+    cmds:
+      - bash infra/scripts/local/dogfood-secrets-openbao.sh {{.CLI_ARGS}}
+
+  test:dogfood:secrets-openbao:rehearsal:
+    desc: |
+      Iter 26 productive-idle of plan 2026-06-10-j22-openbao-transit-eso-sync
+      v1.2. LIVE preflight rehearsal — runs ~5 kubectl probes that
+      validate the wire chain is READY before the sponsor walkthrough
+      commits to the full encrypt path. Does NOT POST a probe secret,
+      does NOT exercise OpenBao encrypt/decrypt, does NOT touch PG.
+      Designed for the smoke-test phase of the cutover runbook §
+      Step 4.1 (sponsor + Claude side-by-side: confirm the wire is up
+      THEN commit to the destructive `loopzero deploy` walkthrough).
+
+      The 5 rehearsal probes:
+        R1: ESO controller pod Running in external-secrets ns
+            (validates `helmfile sync -l name=external-secrets` ran)
+        R2: ClusterSecretStore openbao-transit Ready=True
+            (validates ESO authenticated via AppRole successfully — if
+             this FAILs, the chain is broken somewhere between Secret /
+             role_id / OpenBao server reachability / TLS pin)
+        R3: Secret loopzero-openbao-approle in external-secrets ns
+            (validates runbook step 2.3.bis Secret was created in the
+             ESO controller ns, not just loopzero-system)
+        R4: Secret loopzero-openbao-approle in loopzero-system ns
+            (validates runbook step 2.1 ran — loopzero-api envFrom source)
+        R5: loopzero-api Deployment env has OPENBAO_TRANSIT_ENABLED=true
+            (validates runbook step 2.2 wired the env literal AND
+             helmfile -e dev-public apply ran with the dev-public
+             loopzero-api overlay containing the flag)
+
+      Each probe is a single kubectl call returning <1s; total rehearsal
+      runtime ~5s. Forwards env vars LOOPZERO_KUBE_CONTEXT to the wrapped
+      script for non-k3d-loopzero-mgmt cluster targeting.
+    cmds:
+      - bash infra/tests/e2e/dev-public-secrets-zero-leak_test.sh --rehearsal {{.CLI_ARGS}}
+
+  test:dogfood:environments:
+    desc: |
+      T5.1 of plan 2026-06-06-dashboard-journey-j10-environments v1.1 —
+      aggregate dogfood wrapper for Journey J-10 Environments. Invokes:
+        1. T4.4 hermetic syntax check (LIVE bash structure regression gate)
+        2. vitest J-10 dialogs + hooks + KPI + 402 modal (5 spec files,
+           26 specs: use-environments mutations, delete-environment-dialog,
+           promote-dialog canonical {from,to}, environment-kpi-row,
+           plan-limit-upgrade-modal)
+        3. Go API tests for the J-10 backend surface — promote handler
+           edge cases (11 tests: happy + 401 + 404 project + 400 from/to
+           missing + 404 no-active + 400 same-env + 409 lock + body code
+           assertions + RegressionV10BodyShape locking canonical
+           {from,to} vs v1.0 buggy {from_environment,to_environment})
+        4. T4.3 LIVE bash (4 cenários A create / B delete / C promote
+           canonical body shape / D preflight against dev-public)
+      Flags forwarded to wrapper: --hermetic-only --live-only --json.
+    cmds:
+      - bash infra/scripts/local/dogfood-environments.sh {{.CLI_ARGS}}
+
+  test:dogfood:preview:
+    desc: |
+      J-23 #64 of the 4-task batch (sponsor verbatim 2026-06-07
+      "Adicionar teste de PR preview ao dogfood wrapper") — aggregate
+      dogfood wrapper for the preview-canonical chain. Invokes:
+        1. Hermetic syntax check on the LIVE bash test
+        2. Go canonical-destination helper unit tests (#69 fix in
+           tenant_gitops.go + tenant_controller.go)
+        3. Ginkgo preview controller envtest specs (#67 SA on
+           canonical preview namespace) — skipped with --skip-envtest
+        4. LIVE bash scenarios A-E against the cluster:
+           A pre-flight tenant + project in PG
+           B RBAC #65 — tenant-operator SA can list previewenvironments
+           C SA #67 — loopzero-app on canonical preview ns + automount=false
+           D destination #69 — ArgoCD App namespace matches canonical
+              loopzero-<tenant>-<project>-<env> formula
+           E TLS #68 — HTTPS via wildcard *.preview-dev.loopzero.example
+              returns 200 with Let's Encrypt cert (DNS-01 issued)
+      Flags forwarded to wrapper: --hermetic-only --live-only --json
+      --skip-envtest.
+    cmds:
+      - bash infra/scripts/local/dogfood-preview.sh {{.CLI_ARGS}}
+
   validate:slos:
     desc: |
       Validates Sloth SLO files in infra/sloth/ (Coverage Matrix #8 — closes
@@ -964,24 +1116,6 @@ tasks:
     cmds:
       - ginkgo -v --focus="${FOCUS}" --timeout=60m ./infra/tests/e2e/
 
-  e2e:themory:
-    desc: |
-      Run the TheMemory E2E smoke (Dashboard → Go proxy → TheMemory chain).
-      Pre-requisites: bash infra/scripts/local/{start-themory,bootstrap-themory-key,create-test-api-key}.sh
-      AND `tilt up` brought the loopzero-cloud Pod to Ready (per
-      loopzero-cloud-themory-e2e-finalize-plan v1.3 § Phase 5 / T5.1).
-    cmds:
-      - bash infra/scripts/local/smoke-themory-e2e.sh
-
-  e2e:dashboard-memory-bff:
-    desc: |
-      Run the Dashboard JWT → BFF → TheMemory E2E smoke (per plan
-      dashboard-memory-bff-server-side-key-vault v1.2 § T5.1).
-      Pre-requisites: tilt up + port-forwards 13002 (cloud) + 14433 (kratos).
-      SECURITY GATE: response body scan for "loopzero_live_" substring → 0 hits.
-    cmds:
-      - bash infra/scripts/local/smoke-dashboard-memory-bff-e2e.sh
-
   e2e:report:
     desc: Run ALL E2E tests with JUnit XML report
     env:
@@ -1111,3 +1245,92 @@ tasks:
       Usage: task helm:render:test:chart -- loopzero-api
     cmds:
       - task: helm:test:chart
+
+  # ============================================================================
+  # Pre-release test rigor — plan 2026-06-08-pre-release-test-rigor v1.2
+  # Per ADR D1 (canonical entry) + ADR D8 (wall-clock 120 min budget).
+  # 4 Cenários extend cleanroom + dogfood + chaos-test + live-proof so the
+  # suite catches the 5 LIVE-only bugs that slipped past the prior gates
+  # (dashboard-screens-review-fixes T5.3 sponsor walkthrough).
+  # ============================================================================
+
+  test:pre-release-rigor:scenario-2:
+    desc: |
+      Cenário 2 (baseline match) — runs the cleanroom Phase 0 + Phase 5
+      baseline-capture + diff per T1.1 + T1.2. Verifies post-rebuild state
+      structurally matches the pre-rebuild snapshot (volatile fields EC-7
+      normalized). Internal budget ~45 min for full cleanroom; this task
+      assumes the cleanroom skill is invoked externally and only runs the
+      drift gate. Plan 2026-06-08-pre-release-test-rigor T1.1 + T1.2.
+    cmds:
+      - |
+        SNAP_PRE="${SNAP_PRE:-/tmp/baseline-pre-rebuild.json}"
+        SNAP_POST="${SNAP_POST:-/tmp/baseline-post-rebuild.json}"
+        if [ ! -f "$SNAP_PRE" ] ; then
+          echo "[scenario-2] capturing pre-rebuild snapshot"
+          DETERMINISTIC=1 bash infra/scripts/local/baseline-capture.sh --output "$SNAP_PRE"
+        fi
+        if [ ! -f "$SNAP_POST" ] ; then
+          echo "[scenario-2] capturing post-rebuild snapshot"
+          DETERMINISTIC=1 bash infra/scripts/local/baseline-capture.sh --output "$SNAP_POST"
+        fi
+        bash infra/scripts/local/baseline-diff.sh "$SNAP_PRE" "$SNAP_POST" --markdown
+
+  test:pre-release-rigor:scenario-1:
+    desc: |
+      Cenário 1 (webhook → autodeploy → HTTPS 200 chain) — runs T2.2 LIVE
+      bash chain. EC-13 absorption: when invoked standalone (without
+      scenario-2 having run first), the "baseline match" assertion is
+      SKIP — the chain validation still proceeds. Plan T2.2.
+      Internal budget 20 min wall-clock per ADR D8.
+    cmds:
+      - |
+        if [ ! -f /tmp/baseline-pre-rebuild.json ] ; then
+          echo "[scenario-1] EC-13 standalone mode — baseline-match assertion SKIP (no pre-rebuild snapshot); chain validation proceeds"
+        fi
+        bash infra/tests/e2e/dev-public-webhook-chain_test.sh
+
+  test:pre-release-rigor:scenario-4:
+    desc: |
+      Cenário 4 (dashboard API sanity via curl) — runs T3.1 live-proof
+      --check=api-sanity (4 endpoint shape assertions, catches iter-20
+      BuildListItem.Apps + T5.3 ProjectHealthCard regression classes).
+      Internal budget 5 min. Plan T3.1.
+    cmds:
+      - bash infra/scripts/local/live-proof-dev-public.sh --check=api-sanity
+
+  test:pre-release-rigor:scenario-3:
+    desc: |
+      Cenário 3 (chaos + webhook concurrent) — runs T4.1 C11 + T4.2 C12
+      sequentially. Internal budget 60 min per ADR D8 (25 min C11 + 30 min
+      C12 + 5 min cleanup margin). Plan T4.1 + T4.2.
+    cmds:
+      - bash infra/scripts/local/chaos-scenarios/c11-webhook-concurrent-podkill.sh
+      - bash infra/scripts/local/chaos-scenarios/c12-simul-prs-during-partition.sh
+
+  test:pre-release-rigor:
+    desc: |
+      Umbrella — runs all 4 Cenários of plan 2026-06-08-pre-release-test-rigor
+      in dependency order per ADR D1: scenario-2 (baseline) → scenario-1
+      (chain) → scenario-4 (api-sanity) → scenario-3 (chaos).
+
+      (EC-4 / ADR D8) wall-clock budget 120 min total — revised upward
+      per ADR D8 + EC-4 absorption from the prior plan estimate. Per-Cenário
+      internal budgets:
+        scenario-2 baseline   ~45 min cleanroom
+        scenario-1 chain      ~20 min webhook end-to-end
+        scenario-4 api-sanity ~5 min
+        scenario-3 chaos      ~60 min (C11 25 + C12 30 + margin)
+      = 130 min real worst case; 120 min documented budget assumes
+      scenario-3 + scenario-4 partial overlap is operator-driven.
+
+      Default Task semantics provide fail-fast — if any scenario exits
+      non-zero, the umbrella aborts (per ADR D6). No `ignore_error: true`
+      anywhere in this section.
+
+      Use against cleanroom-fresh dev-public infra for T6.1 evidence.
+    cmds:
+      - task: test:pre-release-rigor:scenario-2
+      - task: test:pre-release-rigor:scenario-1
+      - task: test:pre-release-rigor:scenario-4
+      - task: test:pre-release-rigor:scenario-3

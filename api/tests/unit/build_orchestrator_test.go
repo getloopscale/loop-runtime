@@ -142,6 +142,10 @@ func (f *fakeBuildStoreOrch) ListByProjectAndEnv(ctx context.Context, tenantID, 
 	return nil, 0, nil
 }
 
+func (f *fakeBuildStoreOrch) ListEnvsForProject(_ context.Context, _, _ string) ([]string, error) {
+	return nil, nil
+}
+
 func (f *fakeBuildStoreOrch) CancelActiveBuilds(ctx context.Context, tx db.DBTX, tenantID, projectID, env string) (int, []string, error) {
 	count := 0
 	var wfIDs []string
@@ -352,6 +356,20 @@ func (f *fakeEnvTargetStoreOrch) ListByProject(ctx context.Context, tenantID, pr
 }
 
 func (f *fakeEnvTargetStoreOrch) DeleteTarget(ctx context.Context, tx db.DBTX, tenantID, projectID, env string) error {
+	return nil
+}
+
+// 2026-06-07 D2/D5/D6/D7 — preview-as-category interface extensions.
+func (f *fakeEnvTargetStoreOrch) SetPreviewDesired(_ context.Context, _ db.DBTX, _, _, _, _, _, _ string) error {
+	return nil
+}
+func (f *fakeEnvTargetStoreOrch) CountPermanent(_ context.Context, _ string) (int, error) {
+	return 0, nil
+}
+func (f *fakeEnvTargetStoreOrch) ListPermanent(_ context.Context, _ string) ([]string, error) {
+	return []string{}, nil
+}
+func (f *fakeEnvTargetStoreOrch) DeleteByKind(_ context.Context, _ db.DBTX, _, _, _, _ string) error {
 	return nil
 }
 

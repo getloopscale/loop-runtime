@@ -232,3 +232,178 @@ func TestRefreshTokenMissingBody(t *testing.T) {
 		t.Fatalf("status = %d, want %d", w.Code, http.StatusBadRequest)
 	}
 }
+
+// Plan J-05 iter 3 (2026-06-05) — POST /v1/auth/device/accept tests.
+// Handler delegates to Hydra admin AcceptDeviceChallenge; on success it
+// returns {redirect_to}; on bad input → 400 INVALID_REQUEST; on Hydra
+// error → 502 AUTH_SERVICE_ERROR.
+
+// mockHydraAdmin simulates Hydra's admin device/accept endpoint.
+func mockHydraAdmin(t *testing.T, acceptOK bool) *httptest.Server {
+	t.Helper()
+	return httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.Method == "PUT" && strings.Contains(r.URL.Path, "/admin/oauth2/auth/requests/device/accept") {
+			w.Header().Set("Content-Type", "application/json")
+			if !acceptOK {
+				w.WriteHeader(http.StatusBadRequest)
+				_ = json.NewEncoder(w).Encode(map[string]interface{}{"error": "invalid_user_code"})
+				return
+			}
+			_ = json.NewEncoder(w).Encode(map[string]interface{}{
+				"redirect_to": "https://auth-dev.loopzero.example/oauth2/auth?login_challenge=next-step",
+			})
+			return
+		}
+		http.NotFound(w, r)
+	}))
+}
+
+func TestAcceptDevice_HappyPath(t *testing.T) {
+	srv := mockHydraAdmin(t, true)
+	defer srv.Close()
+
+	hydra := auth.NewHydraClient(srv.URL, srv.URL, "loopzero-cli")
+	handler := routes.NewDeviceHandler(hydra, "http://localhost:3000")
+
+	body := `{"device_challenge":"chal-123","user_code":"ABCD1234"}`
+	req := httptest.NewRequest("POST", "/v1/auth/device/accept", strings.NewReader(body))
+	w := httptest.NewRecorder()
+
+	handler.Accept(w, req)
+
+	if w.Code != http.StatusOK {
+		t.Fatalf("status = %d, want 200; body = %s", w.Code, w.Body.String())
+	}
+	var resp map[string]interface{}
+	_ = json.Unmarshal(w.Body.Bytes(), &resp)
+	if resp["redirect_to"] == nil {
+		t.Errorf("redirect_to missing in response: %s", w.Body.String())
+	}
+	if !strings.Contains(resp["redirect_to"].(string), "login_challenge=next-step") {
+		t.Errorf("redirect_to unexpected: %v", resp["redirect_to"])
+	}
+}
+
+func TestAcceptDevice_MissingChallenge(t *testing.T) {
+	srv := mockHydraAdmin(t, true)
+	defer srv.Close()
+
+	hydra := auth.NewHydraClient(srv.URL, srv.URL, "loopzero-cli")
+	handler := routes.NewDeviceHandler(hydra, "http://localhost:3000")
+
+	body := `{"user_code":"ABCD1234"}`
+	req := httptest.NewRequest("POST", "/v1/auth/device/accept", strings.NewReader(body))
+	w := httptest.NewRecorder()
+
+	handler.Accept(w, req)
+
+	if w.Code != http.StatusBadRequest {
+		t.Fatalf("status = %d, want 400", w.Code)
+	}
+	if !strings.Contains(w.Body.String(), "INVALID_REQUEST") {
+		t.Errorf("expected INVALID_REQUEST code, got: %s", w.Body.String())
+	}
+}
+
+func TestAcceptDevice_MissingUserCode(t *testing.T) {
+	srv := mockHydraAdmin(t, true)
+	defer srv.Close()
+
+	hydra := auth.NewHydraClient(srv.URL, srv.URL, "loopzero-cli")
+	handler := routes.NewDeviceHandler(hydra, "http://localhost:3000")
+
+	body := `{"device_challenge":"chal-123"}`
+	req := httptest.NewRequest("POST", "/v1/auth/device/accept", strings.NewReader(body))
+	w := httptest.NewRecorder()
+
+	handler.Accept(w, req)
+
+	if w.Code != http.StatusBadRequest {
+		t.Fatalf("status = %d, want 400", w.Code)
+	}
+}
+
+func TestAcceptDevice_MalformedJSON(t *testing.T) {
+	srv := mockHydraAdmin(t, true)
+	defer srv.Close()
+
+	hydra := auth.NewHydraClient(srv.URL, srv.URL, "loopzero-cli")
+	handler := routes.NewDeviceHandler(hydra, "http://localhost:3000")
+
+	req := httptest.NewRequest("POST", "/v1/auth/device/accept", strings.NewReader("{not json"))
+	w := httptest.NewRecorder()
+
+	handler.Accept(w, req)
+
+	if w.Code != http.StatusBadRequest {
+		t.Fatalf("status = %d, want 400", w.Code)
+	}
+}
+
+func TestAcceptDevice_HydraRejects(t *testing.T) {
+	srv := mockHydraAdmin(t, false) // Hydra refuses (bad user_code)
+	defer srv.Close()
+
+	hydra := auth.NewHydraClient(srv.URL, srv.URL, "loopzero-cli")
+	handler := routes.NewDeviceHandler(hydra, "http://localhost:3000")
+
+	body := `{"device_challenge":"chal-123","user_code":"BADCODE"}`
+	req := httptest.NewRequest("POST", "/v1/auth/device/accept", strings.NewReader(body))
+	w := httptest.NewRecorder()
+
+	handler.Accept(w, req)
+
+	if w.Code != http.StatusBadGateway {
+		t.Fatalf("status = %d, want 502; body = %s", w.Code, w.Body.String())
+	}
+	if !strings.Contains(w.Body.String(), "AUTH_SERVICE_ERROR") {
+		t.Errorf("expected AUTH_SERVICE_ERROR, got: %s", w.Body.String())
+	}
+	// Rule 3 — error message must not leak Hydra/Kratos/OAuth internals.
+	bodyStr := strings.ToLower(w.Body.String())
+	for _, term := range []string{"hydra", "kratos", "oauth2", "invalid_user_code"} {
+		if strings.Contains(bodyStr, term) {
+			t.Errorf("internal term %q leaked in user-facing error: %s", term, w.Body.String())
+		}
+	}
+}
+
+func TestAcceptDevice_Rule3InternalTermsSweep(t *testing.T) {
+	// Happy path response must also avoid internal terms — the redirect_to
+	// can legitimately contain `oauth2/auth?login_challenge=...` (that is
+	// the user-facing redirect URL Hydra emits); but our wrapper message
+	// fields, if any, must not surface internal vocabulary.
+	srv := mockHydraAdmin(t, true)
+	defer srv.Close()
+
+	hydra := auth.NewHydraClient(srv.URL, srv.URL, "loopzero-cli")
+	handler := routes.NewDeviceHandler(hydra, "http://localhost:3000")
+
+	body := `{"device_challenge":"chal-123","user_code":"ABCD1234"}`
+	req := httptest.NewRequest("POST", "/v1/auth/device/accept", strings.NewReader(body))
+	w := httptest.NewRecorder()
+	handler.Accept(w, req)
+
+	var resp map[string]interface{}
+	_ = json.Unmarshal(w.Body.Bytes(), &resp)
+	// Only `redirect_to` is allowed to contain protocol terms (it is a URL).
+	for k, v := range resp {
+		if k == "redirect_to" {
+			continue
+		}
+		s := strings.ToLower(strings.TrimSpace(strings.Trim(toString(v), `"`)))
+		for _, term := range []string{"hydra", "kratos"} {
+			if strings.Contains(s, term) {
+				t.Errorf("field %q leaks internal term %q: %v", k, term, v)
+			}
+		}
+	}
+}
+
+func toString(v interface{}) string {
+	if s, ok := v.(string); ok {
+		return s
+	}
+	b, _ := json.Marshal(v)
+	return string(b)
+}

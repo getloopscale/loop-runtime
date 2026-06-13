@@ -16,7 +16,7 @@
 
 ## Context (what triggered this plan)
 
-The visual validation tour after shipping `@loopzerokit/ui@0.10.0-next.0`
+The visual validation tour after shipping `@loopzero/ui@0.10.0-next.0`
 (commit `c3974557`) + mock layer (commit `2af9133c`) revealed **2
 real bugs** + **5 polish issues** that vitest jsdom tests cannot
 detect by design (jsdom doesn't render visually; behavioral assertions
@@ -32,7 +32,7 @@ layer to 13/13 coverage.
 
 ### Scope boundaries (what this plan does NOT do)
 
-- Does NOT change @loopzerokit/ui upstream primitives (those are Brief #5/#6 territory)
+- Does NOT change @loopzero/ui upstream primitives (those are Brief #5/#6 territory)
 - Does NOT add Storybook / Chromatic / Playwright visual regression
   (deferred to MEET-003 Lighthouse CI follow-up plan)
 - Does NOT touch the JWT/Kratos/CLAUDE.md "NÃO TOCAR" boundaries
@@ -48,7 +48,7 @@ layer to 13/13 coverage.
 
 | ID | Severity | Surface | Root cause hypothesis |
 |----|----------|---------|----------------------|
-| **B-1** | 🔴 HIGH | TopBar in 5 routes (`/`, `/projects`, `/environments`, `/domains`, `/team`) renders project list as inline text instead of Select dropdown | `top-bar.tsx` passes `<option>` children directly to `<Select>` without `<Select.Trigger>` wrapper — @loopzerokit/ui Select expects compound structure |
+| **B-1** | 🔴 HIGH | TopBar in 5 routes (`/`, `/projects`, `/environments`, `/domains`, `/team`) renders project list as inline text instead of Select dropdown | `top-bar.tsx` passes `<option>` children directly to `<Select>` without `<Select.Trigger>` wrapper — @loopzero/ui Select expects compound structure |
 | **B-2** | 🟠 MEDIUM | Overview usage card shows `0 / 100 GB` hardcoded instead of fixture values | `overview.tsx` doesn't call `useCloudApi<BillingResponse>('/v1/billing')`; UsageMeter props hardcoded for "shape demo" |
 
 ### Polish (cross-cutting consistency)
@@ -98,7 +98,7 @@ Current rendered HTML (from screenshot tour):
 
 Expected: dropdown trigger button labeled "All Projects" with caret
 icon; click opens popover listing the 5 projects + "All Projects"
-sentinel. Pattern from `@loopzerokit/ui` Select (Brief #1):
+sentinel. Pattern from `@loopzero/ui` Select (Brief #1):
 
 ```tsx
 <Select value={selected} onValueChange={setSelected}>
@@ -114,10 +114,10 @@ sentinel. Pattern from `@loopzerokit/ui` Select (Brief #1):
 </Select>
 ```
 
-Verify exact compound API by reading `node_modules/@loopzerokit/ui/dist/primitives/select/`
+Verify exact compound API by reading `node_modules/@loopzero/ui/dist/primitives/select/`
 or `.llms.txt` line ~150-200.
 
-**EC-12 note (DOCUMENT):** `@loopzerokit/ui` Select.Item handles long-name
+**EC-12 note (DOCUMENT):** `@loopzero/ui` Select.Item handles long-name
 overflow natively via CSS `text-overflow: ellipsis`. Project names ≤63
 chars (K8s limit) may visually truncate as `acme-very-long-project-...`
 in the popover — this is design-intended, not a bug. No action.
@@ -735,7 +735,7 @@ Open profile.png at 100% zoom. If avatar IS visually round (Chrome
 rendering — different from screenshot artifact), close as no-op.
 
 If genuinely square, check the Avatar primitive call site for missing
-className or wrong size variant. Possibly @loopzerokit/ui ships Avatar
+className or wrong size variant. Possibly @loopzero/ui ships Avatar
 with `rounded-md` default that needs `rounded-full` override.
 
 #### DoD
@@ -803,7 +803,7 @@ NOT a `?logged_out=true` query string.
 
 ### ADR-D3 — TopBar Select uses compound API, not native option children
 
-**Decision:** Use `<Select.Trigger>` + `<Select.Content>` + `<Select.Item>` per @loopzerokit/ui pattern.
+**Decision:** Use `<Select.Trigger>` + `<Select.Content>` + `<Select.Item>` per @loopzero/ui pattern.
 
 **Context:** B-1 root cause is missing compound structure.
 
@@ -813,7 +813,7 @@ NOT a `?logged_out=true` query string.
 - Custom Combobox — reinvents the wheel
 
 **Consequences:**
-- Compound structure is the documented @loopzerokit/ui pattern (consistent with Card.Header / DangerZone.Action)
+- Compound structure is the documented @loopzero/ui pattern (consistent with Card.Header / DangerZone.Action)
 - Accessibility: built-in keyboard nav + aria roles from Radix transitively
 
 ---
@@ -852,7 +852,7 @@ AC / TDD / Deep Dive sections above (see EC-N tags inline).
 | EC-9 | T-D.2 | SHOULD TEST | Multi-word snake_case title case; in TDD + Approach |
 | EC-10 | T-D.1 | SHOULD TEST | Multi-`@` email passthrough; in TDD + impl |
 | EC-11 | T-A.1 | SHOULD TEST | Long project name ellipsis verification; in TDD |
-| EC-12 | T-A.1 | DOCUMENT | @loopzerokit/ui handles overflow natively; Deep Dive note |
+| EC-12 | T-A.1 | DOCUMENT | @loopzero/ui handles overflow natively; Deep Dive note |
 | EC-13 | T-C.1 | DOCUMENT | ADR-D4 SI bytes 1000-base decision; full ADR added |
 | EC-14 | T-B.3 | DOCUMENT | Port 5173 conflict pre-step in workflow |
 
@@ -935,7 +935,7 @@ risk of EC-3 CI red + EC-1 dev tour break + EC-2 future-proofing.
 
 1. **Storybook + Chromatic visual regression** — permanent T-H.1 closure with pixel-diff baselines. ~3-4h setup + ongoing maintenance. Best after this polish plan ships and visuals are stable.
 2. **MEET-003 Lighthouse CI** — output-side perf gate (LCP/TBT/Performance score). Complements MEET-002 bundle gate which is input-side.
-3. **Brief #5 to @loopzerokit/ui** — if T-A.1 reveals additional Select primitive gaps (e.g., search-in-dropdown, multiselect, async loading), batch them in a brief.
+3. **Brief #5 to @loopzero/ui** — if T-A.1 reveals additional Select primitive gaps (e.g., search-in-dropdown, multiselect, async loading), batch them in a brief.
 4. **i18n infrastructure** — when product gets non-English customer (Stripe/billing copy too).
 
 ---

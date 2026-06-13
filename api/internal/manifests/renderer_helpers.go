@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"strings"
 
+	"github.com/loopzero/loopzero/pkg/naming"
 	sigsyaml "sigs.k8s.io/yaml"
 )
 
@@ -14,15 +15,17 @@ import (
 // Format: {tenant}-{project}-{app}-{env}.{baseDomain}
 // This produces a single-level subdomain under baseDomain, which is compatible
 // with wildcard TLS certificates (*.dev.loopzero.example covers all apps).
+//
+// FAANG canonical (J-25 sponsor walkthrough catch 2026-06-12): delegate to
+// pkg/naming.AppHostname so the IngressRoute Host emitter AND the public
+// URL emitter (status.go) share single source of truth for the formula.
+// Previously the in-line composition here was duplicated (and subtly
+// diverged) at api/internal/routes/status.go:252 — the simplified formula
+// at status.go did NOT match the IngressRoute Host emitted by this
+// renderer, so dashboard "Visit" URLs never matched any real Traefik
+// route. Single source of truth in pkg/naming closes that catch.
 func appHostname(tenantID, projectID, appName, environment, baseDomain string) string {
-	subdomain := fmt.Sprintf("%s-%s-%s-%s", tenantID, projectID, appName, environment)
-	// Sanitize: lowercase, max 63 chars, RFC 1123
-	if len(subdomain) > 63 {
-		subdomain = subdomain[:63]
-	}
-	// Remove trailing hyphens
-	subdomain = strings.TrimRight(subdomain, "-")
-	return fmt.Sprintf("%s.%s", subdomain, baseDomain)
+	return naming.AppHostname(tenantID, projectID, appName, environment, baseDomain)
 }
 
 // resourceName returns the namespace-unique name to use for K8s resources
@@ -66,8 +69,20 @@ func commonLabels(ri RenderInput, app AppManifestInput) map[string]string {
 // namespace returns the Kubernetes namespace for a tenant environment.
 func int64Ptr(v int64) *int64 { return &v }
 
-func namespace(tenantID, environment string) string {
-	return fmt.Sprintf("loopzero-%s-%s", tenantID, environment)
+// namespace returns the canonical Kubernetes namespace for a render
+// target. ONE formula for ALL environments (production, staging,
+// preview-pr-N, ...) — `loopzero-<tenant>-<project>-<env>`. The isolation
+// boundary in LoopZero is the (tenant, project, env) triple; the namespace
+// reflects that uniformly so no env type needs special-case branching.
+//
+// J-23 sponsor-directed canonical refactor 2026-06-07 (verbatim
+// "TUDO DEVERIA esta separado por projeto"): single uniform formula,
+// no if/else for previews. Thin wrapper over pkg/naming.Namespace so
+// the renderer is the only place that emits the namespace string;
+// downstream consumers (tenant_gitops, preview controller, ArgoCD
+// destination) call the same helper.
+func namespace(tenantID, projectID, environment string) string {
+	return fmt.Sprintf("loopzero-%s-%s-%s", tenantID, projectID, environment)
 }
 
 // marshalResource serializes a struct to YAML using sigs.k8s.io/yaml.

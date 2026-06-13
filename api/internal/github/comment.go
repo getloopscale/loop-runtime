@@ -149,7 +149,7 @@ func (c *PreviewCommentor) findExistingComment(
 	const perPage = 100
 	for page := 1; page <= 3; page++ {
 		url := fmt.Sprintf("%s/repos/%s/%s/issues/%d/comments?per_page=%d&page=%d",
-			githubAPIBase, owner, repo, prNumber, perPage, page)
+			c.app.apiBase(), owner, repo, prNumber, perPage, page)
 		resp, err := c.app.doAuthenticated(ctx, installationID, http.MethodGet, url, nil)
 		if err != nil {
 			return 0, err
@@ -190,7 +190,7 @@ func (c *PreviewCommentor) createComment(
 	body string,
 	installationID int64,
 ) error {
-	url := fmt.Sprintf("%s/repos/%s/%s/issues/%d/comments", githubAPIBase, owner, repo, prNumber)
+	url := fmt.Sprintf("%s/repos/%s/%s/issues/%d/comments", c.app.apiBase(), owner, repo, prNumber)
 	payload, _ := json.Marshal(map[string]string{"body": body})
 	resp, err := c.app.doAuthenticated(ctx, installationID, http.MethodPost, url, strings.NewReader(string(payload)))
 	if err != nil {
@@ -212,7 +212,7 @@ func (c *PreviewCommentor) updateComment(
 	body string,
 	installationID int64,
 ) error {
-	url := fmt.Sprintf("%s/repos/%s/%s/issues/comments/%d", githubAPIBase, owner, repo, commentID)
+	url := fmt.Sprintf("%s/repos/%s/%s/issues/comments/%d", c.app.apiBase(), owner, repo, commentID)
 	payload, _ := json.Marshal(map[string]string{"body": body})
 	resp, err := c.app.doAuthenticated(ctx, installationID, http.MethodPatch, url, strings.NewReader(string(payload)))
 	if err != nil {

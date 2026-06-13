@@ -92,7 +92,7 @@ kratos:
             # Account linking: when a user signs in with a social provider and
             # the email already exists, link the accounts automatically.
             # v1.1 EC-05: trimSuffix prevents `//` in OIDC callback URLs.
-            base_redirect_uri: "{{ if hasKey .Values "publicAuthUrl" }}{{ .Values.publicAuthUrl | trimSuffix "/" }}{{ else }}{{ .Values.uiBaseUrl | default "http://localhost:4455" | trimSuffix "/" }}{{ end }}/"
+            base_redirect_uri: "{{ if and (hasKey .Values "publicAuthUrl") (ne (.Values.publicAuthUrl | toString) "") }}{{ .Values.publicAuthUrl | trimSuffix "/" }}{{ else }}{{ .Values.uiBaseUrl | default "http://localhost:4455" | trimSuffix "/" }}{{ end }}/"
             providers:
               # GitHub OAuth — reads from LOOPZERO_GITHUB_CLIENT_ID / SECRET env vars
               # (canonical source: /home/paulo/loopzero/.env locally; Pulumi Secret in

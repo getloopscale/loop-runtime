@@ -211,26 +211,6 @@ func main() {
 		memoryWebhookDeliveriesHandler = routes.NewMemoryWebhookDeliveriesHandler(db, logger)
 	}
 
-	// Plan dashboard-memory-bff-server-side-key-vault v1.2 § T3.1.
-	// BFFKeyVault + DashboardMemoryHandler: browser-trust route family
-	// /v1/dashboard/memory/* — JWT-auth then internally mints server-side
-	// loopzero_live_* (NEVER touches browser per ADR D1).
-	// F-rearch-1 absorbed (2026-06-08): single vault instance shared between
-	// handler + cleanup cron (was: two independent vaults with separate
-	// in-memory caches — wasteful + cohesion smell).
-	var dashboardMemoryHandler *routes.DashboardMemoryHandler
-	var bffVault *auth.BFFKeyVault
-	if memoryHandler != nil && db != nil {
-		var vErr error
-		bffVault, vErr = auth.NewBFFKeyVault(db, cfg.BFFKeyTTLHours)
-		if vErr != nil {
-			logger.Error("BFFKeyVault init failed", "error", vErr)
-			os.Exit(1)
-		}
-		dashboardMemoryHandler = routes.NewDashboardMemoryHandler(bffVault, memoryHandler, logger)
-		logger.Info("BFF memory dashboard enabled", "ttl_hours", cfg.BFFKeyTTLHours)
-	}
-
 	// Router
 	r := chi.NewRouter()
 	r.Use(chimw.RequestID)
@@ -302,6 +282,7 @@ func main() {
 		// Device endpoints are unauthenticated — rate-limit per client IP to
 		// blunt brute force / abuse (find_sec_007).
 		r.With(ratelimit.Middleware(deviceLimiter, 60, ipKey)).Post("/device/authorize", deviceHandler.Authorize)
+		r.With(ratelimit.Middleware(deviceLimiter, 60, ipKey)).Post("/device/accept", deviceHandler.Accept)
 		r.With(ratelimit.Middleware(deviceLimiter, 60, ipKey)).Post("/device/token", deviceHandler.Token)
 		r.With(ratelimit.Middleware(deviceLimiter, 60, ipKey)).Post("/token/refresh", deviceHandler.Refresh)
 		r.Post("/session/token", sessionTokenHandler.Exchange) // Dashboard: Kratos session → JWT (rate-limited inside the handler)
@@ -327,6 +308,31 @@ func main() {
 	r.Get("/auth/login/complete", consentHandler.LoginComplete)
 	r.Get("/auth/consent", consentHandler.Consent)
 	r.Get("/auth/device", consentHandler.DeviceVerify)
+
+	// J-09 T1.1 — GitHub App install handshake (browser redirects).
+	// /v1/integrations/github/install sets a CSRF state cookie + 302s to GitHub.
+	// /v1/integrations/github/callback validates the state + bounces back to
+	// the dashboard, preserving installation_id so the next POST
+	// /api/v1/projects/{name}/connect can carry it through.
+	loginURL := cfg.AppPublicURL + "/login"
+	if cfg.KratosPublicURL != "" {
+		loginURL = cfg.KratosPublicURL + "/login"
+	}
+	ghIntegrations := routes.NewGitHubIntegrationsHandler(
+		cfg.GitHubAppSlug,
+		cfg.AppPublicURL,
+		loginURL,
+		cfg.AuthCookieDomain,
+		func(req *http.Request) bool {
+			// EC-15: cheap session check — we only need a valid Kratos
+			// browser session cookie to know the user can complete the
+			// connect flow without re-login. Token expiry is handled
+			// upstream by /v1/auth/session/token.
+			return req.Header.Get("Cookie") != ""
+		},
+	)
+	r.Get("/v1/integrations/github/install", ghIntegrations.InitiateInstall)
+	r.Get("/v1/integrations/github/callback", ghIntegrations.Callback)
 
 	// Plan 0 — Platform API Keys (/v1/api-keys/*).
 	// D8 dispatch lockdown: this route group uses requireJWT (session cookie
@@ -389,29 +395,6 @@ func main() {
 					memoryWebhookDeliveriesHandler.Replay,
 				)
 			}
-		})
-	}
-
-	// Plan dashboard-memory-bff-server-side-key-vault v1.2 § T3.1.
-	// Browser-trust BFF route family — JWT-auth (not loopzero_live_*).
-	if dashboardMemoryHandler != nil {
-		r.Route("/v1/dashboard/memory", func(r chi.Router) {
-			r.Use(requireJWT)
-			// F-rev-7 (fix-cycle 2026-06-08): per-user rate-limit on BFF surface.
-			// Same pool + window as /v1/billing siblings (30 rpm). BFF is higher
-			// risk than billing (mint-or-fetch + TheMemory upstream per call), so
-			// matching the sibling limiter is the floor not ceiling.
-			r.Use(ratelimit.Middleware(billingLimiter, 30, userKey))
-			r.Get("/list", dashboardMemoryHandler.List)
-			r.Get("/metrics", dashboardMemoryHandler.Metrics)
-			r.Delete("/forget/{memoryID}", dashboardMemoryHandler.Forget)
-			r.Get("/entities", dashboardMemoryHandler.Entities)
-			// F-rev-8 (fix-cycle 2026-06-08): canonical RESTful verb is DELETE
-			// /session (Stripe / AWS Console pattern). Handler is idempotent +
-			// returns 204. Kept old POST /revoke-on-logout for one release as
-			// deprecation alias — remove in v0.next.
-			r.Delete("/session", dashboardMemoryHandler.RevokeOnLogout)
-			r.Post("/revoke-on-logout", dashboardMemoryHandler.RevokeOnLogout) // DEPRECATED, remove next release
 		})
 	}
 
@@ -541,38 +524,6 @@ func main() {
 				}
 			}
 			w.WriteHeader(resp.StatusCode)
-
-			// 2026-06-13 J-19 LIVE walkthrough fix — SSE responses
-			// (text/event-stream) must be flushed event-by-event to
-			// the client. Default io.Copy buffers until backend EOF,
-			// which for SSE never arrives (streams stay open). Result:
-			// client sees nothing for 30s, then connection closes,
-			// buffered events flush to dead client. Detect SSE +
-			// flushed copy when supported by underlying ResponseWriter.
-			ctType := resp.Header.Get("Content-Type")
-			if strings.HasPrefix(ctType, "text/event-stream") {
-				flusher, ok := w.(http.Flusher)
-				logger.Info("engine proxy: SSE detected", "path", r.URL.Path, "content_type", ctType, "flusher_ok", ok)
-				if ok {
-					buf := make([]byte, 4096)
-					totalBytes := 0
-					for {
-						n, rerr := resp.Body.Read(buf)
-						if n > 0 {
-							if _, werr := w.Write(buf[:n]); werr != nil {
-								logger.Warn("engine proxy: SSE write failed", "path", r.URL.Path, "error", werr)
-								return
-							}
-							flusher.Flush()
-							totalBytes += n
-						}
-						if rerr != nil {
-							logger.Info("engine proxy: SSE stream ended", "path", r.URL.Path, "total_bytes", totalBytes, "reason", rerr.Error())
-							return
-						}
-					}
-				}
-			}
 			_, _ = io.Copy(w, resp.Body)
 		})
 	})
@@ -592,36 +543,6 @@ func main() {
 		webhookWorker := memory_webhook_worker.New(db, logger, nil)
 		go webhookWorker.Run(schedulerCtx)
 		logger.Info("memory webhook dispatcher started")
-	}
-
-	// F-rev-4 (fix-cycle 2026-06-08): BFF cleanup ticker — wires the
-	// CleanupExpired path (orphan PG rows + TTL-expired keys) into the
-	// background scheduler so Sub-goal 6 of plan v1.2 is empirically met.
-	// Cadence: hourly (matches ADR D3); shares schedulerCtx for graceful
-	// SIGTERM shutdown. Pattern matches sibling memory_webhook_worker.
-	// F-rearch-1 absorbed: reuses the single bffVault instance instead of
-	// allocating a second one (was wasteful — separate LRU caches).
-	if bffVault != nil {
-		go func() {
-			ticker := time.NewTicker(1 * time.Hour)
-			defer ticker.Stop()
-			for {
-				select {
-				case <-schedulerCtx.Done():
-					return
-				case <-ticker.C:
-					n, err := bffVault.CleanupExpired(schedulerCtx)
-					if err != nil {
-						logger.Warn("BFF cleanup: cron sweep failed", "error", err)
-						continue
-					}
-					if n > 0 {
-						logger.Info("BFF cleanup: swept expired keys", "count", n)
-					}
-				}
-			}
-		}()
-		logger.Info("BFF cleanup cron started", "interval", "1h")
 	}
 
 	// T1.9 production deployment: start cost aggregator if Prometheus

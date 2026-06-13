@@ -34,15 +34,16 @@ func (f *fakeEnvironmentManager) ListEnvironments(_ context.Context, _ string) (
 	return f.environments, nil
 }
 
-func (f *fakeEnvironmentManager) AddEnvironment(_ context.Context, _, _ string) error {
+// M2 v1.2 (2026-06-07): signatures carry `project`.
+func (f *fakeEnvironmentManager) AddEnvironment(_ context.Context, _, _, _ string) error {
 	return f.addErr
 }
 
-func (f *fakeEnvironmentManager) RemoveEnvironment(_ context.Context, _, _ string) error {
+func (f *fakeEnvironmentManager) RemoveEnvironment(_ context.Context, _, _, _ string) error {
 	return f.removeErr
 }
 
-func (f *fakeEnvironmentManager) GetEnvironmentDetail(_ context.Context, _, _ string) (*routes.EnvironmentDetail, error) {
+func (f *fakeEnvironmentManager) GetEnvironmentDetail(_ context.Context, _, _, _ string) (*routes.EnvironmentDetail, error) {
 	if f.getErr != nil {
 		return nil, f.getErr
 	}
@@ -144,7 +145,7 @@ func TestEnvironmentCreateRoute(t *testing.T) {
 		mgr := &fakeEnvironmentManager{}
 		handler := routes.NewEnvironmentHandler(mgr)
 
-		body := `{"name":"staging"}`
+		body := `{"name":"staging","project":"web"}`
 		req := httptest.NewRequest(http.MethodPost, "/api/v1/environments", bytes.NewBufferString(body)).
 			WithContext(makeAuthCtx("github-lucas", "acme", "owner"))
 		req.Header.Set("Content-Type", "application/json")
@@ -344,7 +345,7 @@ func TestEnvironmentCreateRoute(t *testing.T) {
 		}
 		handler := routes.NewEnvironmentHandler(mgr)
 
-		body := `{"name":"staging"}`
+		body := `{"name":"staging","project":"web"}`
 		req := httptest.NewRequest(http.MethodPost, "/api/v1/environments", bytes.NewBufferString(body)).
 			WithContext(makeAuthCtx("github-lucas", "acme", "owner"))
 		req.Header.Set("Content-Type", "application/json")

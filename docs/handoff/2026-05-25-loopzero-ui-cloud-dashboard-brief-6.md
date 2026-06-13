@@ -1,6 +1,6 @@
 # Brief #6: Brief #5 primitives consumed — shipped evidence + measured deltas
 
-> **Audience:** the `@loopzerokit/ui` maintainer team.
+> **Audience:** the `@loopzero/ui` maintainer team.
 > **Output:** *none requested* — this brief reports back the consumer-side outcome of Brief #5.
 > **Issued by:** LoopZeroCloud dashboard team (consumer), 2026-05-25.
 > **Priority:** INFORMATIONAL — no action required upstream.
@@ -11,7 +11,7 @@
 
 ## TL;DR
 
-`@loopzerokit/ui@0.11.0-next.0` shipped 3 dashboard primitives (PinInput, DataTable, PageShell) requested in Brief #5. LoopZeroCloud consumed all 3 across **5 page migrations** with **117/117 vitest GREEN** and **145.63 KB / 180 KB hard-gate brotli total** (34.37 KB headroom retained). No upstream patches needed. The post-0.10 per-component dist + Brief #4 subpath tree-shaking held under real consumer load.
+`@loopzero/ui@0.11.0-next.0` shipped 3 dashboard primitives (PinInput, DataTable, PageShell) requested in Brief #5. LoopZeroCloud consumed all 3 across **5 page migrations** with **117/117 vitest GREEN** and **145.63 KB / 180 KB hard-gate brotli total** (34.37 KB headroom retained). No upstream patches needed. The post-0.10 per-component dist + Brief #4 subpath tree-shaking held under real consumer load.
 
 ---
 
@@ -35,7 +35,7 @@ Measured after T-MIG-4 final commit on a clean `npm run build` + `npm run size`:
 | Chunk | Cap | Actual | Headroom | Note |
 |-------|-----|--------|----------|------|
 | `01 react-vendor` | 55 KB | 50.95 KB | 4.05 KB | unchanged from Brief #5 baseline |
-| `02 @loopzerokit/ui` | 18 KB | 16.19 KB | 1.81 KB | tree-shaking held — PageShell+DataTable+PinInput shared between consumers |
+| `02 @loopzero/ui` | 18 KB | 16.19 KB | 1.81 KB | tree-shaking held — PageShell+DataTable+PinInput shared between consumers |
 | `03 radix` | 26 KB | 22.03 KB | 3.97 KB | cap was raised 22→26 in `fbdfa327` to accommodate DropdownMenu transitive deps from DataTable rowActions |
 | `04 vendor` | 25 KB | 19.86 KB | 5.14 KB | — |
 | `05 router` | 15 KB | 11.98 KB | 3.02 KB | — |
@@ -78,7 +78,7 @@ The dedupe win compounds with page count and inline-state-machine surface. Team 
 
 ## Patterns we recommend for the Brief #5 storybook
 
-These emerged from consumer use — worth documenting in the @loopzerokit/ui storybook to save future consumers the discovery:
+These emerged from consumer use — worth documenting in the @loopzero/ui storybook to save future consumers the discovery:
 
 ### 1. PageShell.empty is render-instead, not conditional-render
 

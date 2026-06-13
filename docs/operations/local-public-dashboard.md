@@ -174,9 +174,44 @@ See [service-auth-rotation.md](./service-auth-rotation.md). Zero-downtime via
 - Caddy config: `infra/local/Caddyfile`
 - DNS bootstrap: `infra/scripts/local/setup-dev-public-dns.sh`
 - Caddy bootstrap: `infra/scripts/local/caddy-up-dev-public.sh`
+- Caddy DNS-01 build (preview wildcard TLS): `infra/scripts/local/caddy-build-with-cloudflare.sh`
 - Port-forward script: `infra/scripts/local/port-forward-public-dashboard.sh`
 - Seed script: `infra/scripts/local/seed-demo-data.sh`
 - Recovery script: `infra/scripts/local/recover-mgmt-degraded.sh`
+- Legacy-namespace migration: `infra/scripts/local/migrate-legacy-namespaces.sh`
+
+### Preview wildcard TLS (J-23 #68, 2026-06-07)
+
+The `*.preview-dev.loopzero.example` wildcard in `infra/local/Caddyfile` uses
+DNS-01 (Cloudflare TXT challenge) instead of HTTP-01. Per-host HTTP-01
+against a wildcard hits LE's "50 certs/week per Registered Domain" rate
+limit within a single dogfood session — DNS-01 is the only path that
+scales to per-PR previews.
+
+Stock Caddy ships without DNS providers. Build the augmented binary once:
+
+```bash
+bash infra/scripts/local/caddy-build-with-cloudflare.sh   # idempotent
+caddy list-modules | grep dns.providers.cloudflare       # must print module
+```
+
+At runtime, `CF_API_TOKEN` (Zone:DNS:Edit on loopzero.example) MUST be in the
+Caddy process env. Verify the token first:
+
+```bash
+curl -fsS https://api.cloudflare.com/client/v4/user/tokens/verify \
+  -H "Authorization: Bearer $CF_API_TOKEN"
+```
+
+Then export and reload:
+
+```bash
+export CF_API_TOKEN=…
+task cloud:caddy:up
+```
+
+LE issues a single wildcard cert that covers every existing AND future
+PR preview hostname — zero per-PR config thereafter.
 
 ---
 
@@ -259,3 +294,44 @@ After Phase 3+4 above:
    na inbox via Resend.
 4. Trio LIVE: `/cleanroom --env=dev-public` + `/dogfood --env=dev-public` +
    `/chaos-test --env=dev-public` + `/live-proof --env=dev-public` all GREEN.
+
+---
+
+## Canonical dev user — `admin@loopzero.example`
+
+Since 2026-06-05 (memory `project_canonical_dev_user`),
+`admin@loopzero.example` is the canonical user for all dev/dev-public/dogfood/
+live-proof/e2e validation against `*-dev.loopzero.example`.
+
+Seed (or re-seed, or re-mint the session) idempotently via:
+
+```bash
+# Full seed: ensures Kratos identity + 3 PG tables (tenant_members +
+# user_identity_map + active_tenant_id) + fresh session token; verifies
+# the session against /sessions/whoami and /engine/api/v1/projects.
+bash infra/scripts/local/seed-admin-loopzero-dev.sh --verify
+
+# Re-mint only: skips PG mutations + identity-create; just re-mints the
+# session token. Use this when a test hits 401 mid-run because the
+# session expired (lifespan 24h per Kratos config).
+bash infra/scripts/local/seed-admin-loopzero-dev.sh --refresh-only --verify
+```
+
+The session token is persisted to `~/.loopzero/admin-loopzero-dev-session.txt`
+(mode `0600`). Tests consume it via:
+
+```bash
+TOKEN=$(cat ~/.loopzero/admin-loopzero-dev-session.txt)
+curl -b "ory_kratos_session=${TOKEN}" https://cloud-dev.loopzero.example/engine/api/v1/projects
+# → 200 with the admin tenant's projects
+```
+
+If `/engine/api/v1/projects` returns **403 NO_ACTIVE_TENANT** after
+running the seed, the EC-3 auxiliary tables are out of sync — re-run
+`seed-admin-loopzero-dev.sh` without `--refresh-only` to rebuild them.
+
+T0.2 of plan
+`.claude/knowledge-base/plans/2026-06-08-pre-release-test-rigor-plan.md`
+v1.2 ships this seed as the canonical entry point that all Cenário 1-4
+test scripts depend on; the hermetic structural test lives at
+`infra/tests/check-seed-admin-loopzero-dev_test.sh` (31 asserts).

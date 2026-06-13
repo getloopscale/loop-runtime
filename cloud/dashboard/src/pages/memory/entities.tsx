@@ -6,7 +6,6 @@ import {
   Alert,
   Button,
   Card,
-  CodeBlock,
   ConfirmDialog,
   DataTable,
   type DataTableColumn,
@@ -14,10 +13,9 @@ import {
   PageShell,
   Tabs,
   Timestamp,
-} from '@loopzerokit/ui';
+} from '@loopzero/ui';
 import { usePageMeta } from '@/hooks/use-page-meta';
 import { useRequireAuth } from '@/hooks/use-auth';
-import { TableSkeleton } from '@/components/data/table-skeleton';
 import { cloudFetch } from '@/lib/api';
 
 /**
@@ -163,27 +161,15 @@ export function EntitiesPage() {
             The Memory service is not reachable right now. Try refreshing in a moment.
           </Alert>
         ) : query.isLoading ? (
-          <Card><TableSkeleton rows={5} columns={4} /></Card>
+          <Card>Loading…</Card>
         ) : entities.length === 0 ? (
           <EmptyState
             icon={UserIcon}
-            title={
-              activeScope === 'user'
-                ? 'Your agent will remember the first user it talks to'
-                : `No ${activeScope} entities recorded yet`
-            }
+            title={`No entities under ${activeScope}`}
             description={
-              <div className="flex flex-col items-center gap-3">
-                <span>
-                  Entities appear here automatically when your code calls{' '}
-                  <code className="font-mono text-xs">.remember()</code> with an
-                  entity id. Use the SDK from your application or agent runtime.
-                </span>
-                <CodeBlock
-                  language="typescript"
-                  code={`await memory.${activeScope}("${activeScope === 'user' ? 'user_123' : `${activeScope}_id`}").remember("…");`}
-                />
-              </div>
+              activeScope === 'user'
+                ? 'Your agent hasn\'t learned about any users yet.'
+                : `No ${activeScope} entities have been recorded yet.`
             }
           />
         ) : (

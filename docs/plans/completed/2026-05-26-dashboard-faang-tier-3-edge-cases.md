@@ -162,7 +162,7 @@
 
 ### EC-23: Brief #7 timing risk
 
-- **Risco aceito:** Phase 3 depends on @loopzerokit/ui Brief #7 turnaround. Brief #4 took 24h, Brief #5 took 72h. Brief #7 escopo maior (5+ primitives). Realistic: 1-2 weeks upstream. **Document:** Phase 3 timing estimate deve ter contingency: "se Brief #7 turnaround > 1 week, defer T-DR-3.1 (CommandPalette) + T-DR-3.4 (NotificationBell) para v1.1 e ship Phase 3 com remaining 7 tasks".
+- **Risco aceito:** Phase 3 depends on @loopzero/ui Brief #7 turnaround. Brief #4 took 24h, Brief #5 took 72h. Brief #7 escopo maior (5+ primitives). Realistic: 1-2 weeks upstream. **Document:** Phase 3 timing estimate deve ter contingency: "se Brief #7 turnaround > 1 week, defer T-DR-3.1 (CommandPalette) + T-DR-3.4 (NotificationBell) para v1.1 e ship Phase 3 com remaining 7 tasks".
 
 ---
 

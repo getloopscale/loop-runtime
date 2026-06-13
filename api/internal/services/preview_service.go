@@ -8,12 +8,14 @@ import (
 	"errors"
 	"fmt"
 	"log/slog"
+	"sort"
 	"strings"
 	"time"
 
 	"github.com/loopzero/loopzero/api/internal/db"
 	"github.com/loopzero/loopzero/api/internal/domain"
 	loopzeroerrors "github.com/loopzero/loopzero/pkg/errors"
+	"github.com/loopzero/loopzero/pkg/naming"
 )
 
 // PreviewBuildSubmitter is the minimal contract PreviewService needs from
@@ -26,6 +28,19 @@ import (
 //      up the full build pipeline.
 type PreviewBuildSubmitter interface {
 	SubmitBuild(ctx context.Context, req SubmitBuildRequest) (*SubmitBuildResponse, error)
+}
+
+// PreviewBuildAppsLookup resolves the AppSpec list to use when submitting
+// a preview build. Pattern: copy from the most recent SUCCEEDED build of
+// the same (tenant, project) — the preview is the same project at a
+// different commit, so the app structure (names/ports/types) is stable.
+//
+// LIVE catch 2026-06-07: without this, preview build submissions hit
+// `WorkflowSpec.Plan must be non-nil with at least one app` because the
+// PR webhook handler doesn't parse loopzero.yaml from the PR branch source
+// (only push webhooks do, via WebhookBuildRequest.LoopZeroYaml).
+type PreviewBuildAppsLookup interface {
+	LatestSucceededApps(ctx context.Context, tenantID, projectID string) ([]AppSpec, error)
 }
 
 // PreviewCRCreator is the optional contract for creating PreviewEnvironment
@@ -61,8 +76,17 @@ type PreviewCRSpec struct {
 type PreviewServiceDeps struct {
 	Store          db.PreviewStore
 	Builds         PreviewBuildSubmitter
+	// BuildApps is optional. When set, the preview service uses it to
+	// populate SubmitBuildRequest.Apps from the most recent SUCCEEDED
+	// build of the project. LIVE catch 2026-06-07 — without this the
+	// build orchestrator rejects with "WorkflowSpec.Plan must be non-nil".
+	BuildApps      PreviewBuildAppsLookup
 	CRCreator      PreviewCRCreator
 	BaseDomain     string
+	// PreviewPublicDomain is the wildcard root (Caddy/CF) for public
+	// preview URLs. Empty falls back to BaseDomain — see config.go
+	// PreviewPublicDomain doc for the canonical URL convention.
+	PreviewPublicDomain string
 	DefaultTTL     time.Duration
 	Logger         *slog.Logger
 	// Locker is optional — when set, CreatePreview wraps the Store/CR
@@ -71,6 +95,27 @@ type PreviewServiceDeps struct {
 	// rows. T1.2 of deep-review-2026-05-10-remediation-plan
 	// (find_conc_preview_no_lock HIGH).
 	Locker         EnvironmentLocker
+
+	// SlotStore is the single-slot SOT for preview deployments per tenant
+	// (D2/D3 of plan 2026-06-07-preview-as-category-single-slot-plan.md).
+	// When set, CreatePreview atomically substitutes the active PR via
+	// UpsertPreviewSlot (ON CONFLICT DO UPDATE on tenant_id) and
+	// DeletePreviewByPR clears the slot.
+	//
+	// Optional — when nil, preview lifecycle still works via PreviewStore
+	// + CR; the single-slot SOT is skipped (legacy fallback, used in
+	// tests that don't exercise the substitute behavior).
+	SlotStore db.PreviewSlotStore
+	// EnvTargets is the canonical env_targets store. When set,
+	// OnBuildCompleted (status=succeeded) writes a kind='preview' row
+	// for (tenant, project, preview-pr-N) so GitOps can render the
+	// preview manifests symmetric with permanent envs (D2). Without
+	// this, the env_target row is missing and the manifest renderer's
+	// downstream consumers cannot resolve the preview env.
+	//
+	// Optional — when nil, the env_target write is skipped (legacy
+	// fallback path used by tests).
+	EnvTargets db.EnvironmentTargetStore
 }
 
 // PreviewService implements domain.PreviewService and, additionally,
@@ -138,7 +183,13 @@ func (s *PreviewService) CreatePreview(ctx context.Context, req domain.CreatePre
 		iid := req.InstallationID
 		rec.InstallationID = &iid
 	}
-	url := s.previewURL(req.ProjectID, req.PRNumber)
+	// Entry app is picked from loopzero.yaml's apps map (first server/frontend
+	// in sorted key order). Without it, the URL omits the app segment —
+	// it surfaces a structurally valid public hostname but won't match an
+	// IngressRoute (proxy 404). Best-effort; the dashboard repolls if the
+	// app set updates after CR creation.
+	entryApp := entryAppFromLoopZeroYaml(req.LoopZeroYamlApps)
+	url := s.previewURL(req.TenantID(), req.ProjectID, entryApp, req.PRNumber)
 	if url != "" {
 		u := url
 		rec.URL = &u
@@ -163,6 +214,36 @@ func (s *PreviewService) CreatePreview(ctx context.Context, req domain.CreatePre
 	}
 	if persistErr != nil {
 		return nil, fmt.Errorf("preview service: persist failed: %w", persistErr)
+	}
+
+	// D3 (plan 2026-06-07-preview-as-category-single-slot-plan.md):
+	// substitute behavior. UPSERT preview_slot atomically with the new
+	// PR — ON CONFLICT (tenant_id) DO UPDATE replaces the previous
+	// active deployment. The slot is the single SOT for "this tenant's
+	// active preview deployment" — the dashboard reads from it; the
+	// dashboard's grid renders {permanent[], preview{}} where preview
+	// = this row when ActivePRNumber != NULL.
+	//
+	// Best-effort: failures are logged but do NOT fail the create. The
+	// preview_environments row already exists (step 2 succeeded); the
+	// slot is a denormalized cache for the dashboard. A missing slot
+	// row means the dashboard shows "No active branch" while the
+	// underlying preview still works.
+	if s.deps.SlotStore != nil {
+		urlForSlot := ""
+		if rec.URL != nil {
+			urlForSlot = *rec.URL
+		}
+		if upsertErr := s.deps.SlotStore.Upsert(ctx, nil,
+			rec.TenantID, rec.ProjectID,
+			int32(rec.PRNumber), rec.Branch, "", urlForSlot,
+		); upsertErr != nil {
+			s.deps.Logger.Error("preview service: preview_slot upsert failed (dashboard slot will be stale)",
+				"preview", rec.ID, "error", upsertErr)
+		} else {
+			s.deps.Logger.Info("preview service: preview_slot substituted (D3)",
+				"preview", rec.ID, "pr", rec.PRNumber, "branch", rec.Branch)
+		}
 	}
 
 	// Step 3: ensure CR. Best-effort.
@@ -190,6 +271,30 @@ func (s *PreviewService) CreatePreview(ctx context.Context, req domain.CreatePre
 			Environment: previewEnvName(rec.PRNumber),
 			CommitSHA:   rec.CommitSHA,
 			CreatedBy:   "preview-service",
+		}
+		// LIVE catch 2026-06-07 Option B: prefer apps parsed from the PR
+		// commit's loopzero.yaml (carries framework/path/build → drives
+		// LanguageStrategy). Fall back to BuildAppsLookup (persisted apps
+		// from latest SUCCEEDED build — no framework/path/build, fails
+		// language-aware step resolution).
+		if len(req.LoopZeroYamlApps) > 0 {
+			buildReq.Apps = appsFromLoopZeroYaml(req.LoopZeroYamlApps)
+			s.deps.Logger.Info("preview service: apps inherited from PR loopzero.yaml",
+				"preview", rec.ID, "apps", len(buildReq.Apps))
+		} else if s.deps.BuildApps != nil {
+			apps, lookupErr := s.deps.BuildApps.LatestSucceededApps(ctx, rec.TenantID, rec.ProjectID)
+			if lookupErr != nil {
+				s.deps.Logger.Warn("preview service: app-spec lookup failed",
+					"preview", rec.ID, "error", lookupErr)
+			} else if len(apps) == 0 {
+				s.deps.Logger.Warn("preview service: no prior SUCCEEDED build to copy apps from",
+					"preview", rec.ID, "project", rec.ProjectID,
+					"hint", "Deploy main branch at least once before opening a PR")
+			} else {
+				buildReq.Apps = apps
+				s.deps.Logger.Info("preview service: apps inherited from latest SUCCEEDED build (no loopzero.yaml in PR)",
+					"preview", rec.ID, "apps", len(apps))
+			}
 		}
 		resp, err := s.deps.Builds.SubmitBuild(ctx, buildReq)
 		if err != nil {
@@ -223,6 +328,30 @@ func (s *PreviewService) DeletePreviewByPR(ctx context.Context, tenantID, projec
 
 	if err := s.deps.Store.RequestDeletion(ctx, tenantID, preview.ID); err != nil {
 		return fmt.Errorf("preview service: request deletion failed: %w", err)
+	}
+
+	// D6 cleanup chain (plan 2026-06-07-preview-as-category-single-slot-
+	// plan.md): clear the single-slot SOT + delete the env_target
+	// preview row. Best-effort — failures are logged but do NOT fail
+	// the PR-close path. The preview_environments row was already
+	// marked for deletion above (step 1 of cleanup); the slot + env_target
+	// rows are secondary (dashboard + manifest renderer reads). Stale
+	// rows here cause cosmetic drift, not correctness bugs.
+	envName := previewEnvName(prNumber)
+	if s.deps.SlotStore != nil {
+		// 2026-06-07 per-project (migration 000028): clear only the
+		// slot of THIS project. Other projects of the same tenant
+		// keep their slots intact.
+		if err := s.deps.SlotStore.Clear(ctx, nil, tenantID, projectID); err != nil {
+			s.deps.Logger.Error("preview service: preview_slot clear failed (dashboard slot will be stale)",
+				"preview", preview.ID, "error", err)
+		}
+	}
+	if s.deps.EnvTargets != nil {
+		if err := s.deps.EnvTargets.DeleteByKind(ctx, nil, tenantID, projectID, envName, db.EnvironmentTargetKindPreview); err != nil {
+			s.deps.Logger.Error("preview service: env_target preview delete failed",
+				"preview", preview.ID, "env", envName, "error", err)
+		}
 	}
 
 	if s.deps.CRCreator != nil {
@@ -279,19 +408,72 @@ func (s *PreviewService) validate(req domain.CreatePreviewRequest) error {
 }
 
 // previewURL composes the public URL exposed to users for a preview.
-// Mirrors the shape used by the controller.
-func (s *PreviewService) previewURL(projectID string, prNumber int) string {
-	if s.deps.BaseDomain == "" {
-		return ""
+//
+// J-23 wildcard convention (sponsor verbatim 2026-06-07 "Continuar com
+// wildcard CF + Caddy wildcard block agora"): the URL mirrors the
+// IngressRoute Host emitted by appHostname() so the public wildcard
+// `*.<PreviewPublicDomain>` proxied by Caddy reverse-proxies cleanly to
+// Traefik on the workload cluster.
+//
+// Shape: https://<tenant>-<project>-<entryApp>-preview-pr-N.<publicDomain>
+//
+// When entryApp is unknown (no loopzero.yaml apps available, legacy callers)
+// the URL omits the app segment — the URL won't resolve to a Traefik
+// IngressRoute (404 at the proxy) but the architecture pattern is correct
+// and the dashboard surfaces a structurally valid URL.
+//
+// Public domain resolution: prefer PreviewPublicDomain (the Caddy/CF
+// wildcard root, e.g., `preview-dev.loopzero.example`); fall back to
+// BaseDomain when empty (legacy local behavior where Caddy is absent and
+// the internal SNI domain == public domain).
+// previewURL delegates to pkg/naming.PreviewURL — T2.5 of plan
+// 2026-06-11-code-review-remediation extracted the formula so the
+// canonical preview URL composition lives at one source of truth
+// next to pkg/naming.Namespace + IsPreviewEnv + PreviewEnvName.
+//
+// Public-domain resolution stays here because it is a service-wiring
+// concern (PreviewPublicDomain vs legacy BaseDomain), not a naming
+// concern.
+func (s *PreviewService) previewURL(tenantID, projectID, entryApp string, prNumber int) string {
+	publicDomain := s.deps.PreviewPublicDomain
+	if publicDomain == "" {
+		publicDomain = s.deps.BaseDomain
 	}
-	return fmt.Sprintf("https://pr%d-%s.preview.%s", prNumber, projectID, s.deps.BaseDomain)
+	return naming.PreviewURL(tenantID, projectID, entryApp, publicDomain, prNumber)
 }
 
-// previewEnvName returns the synthetic environment label used when
-// submitting a build for a preview. Distinguishes preview builds from
-// normal staging/production builds.
+// entryAppFromLoopZeroYaml picks the first server-class app from loopzero.yaml's
+// apps map — defined as the app that gets an IngressRoute (server or
+// frontend type, or unspecified type which defaults to server). Worker
+// apps are skipped because they receive no traffic. Returns "" when no
+// suitable app is found; callers fall back to the appless URL form.
+//
+// Ordering: iterates apps map in sorted key order so the choice is
+// deterministic across reconciles. Returns the first match.
+func entryAppFromLoopZeroYaml(apps map[string]map[string]interface{}) string {
+	if len(apps) == 0 {
+		return ""
+	}
+	keys := make([]string, 0, len(apps))
+	for k := range apps {
+		keys = append(keys, k)
+	}
+	sort.Strings(keys)
+	for _, name := range keys {
+		spec := apps[name]
+		appType, _ := spec["type"].(string)
+		switch appType {
+		case "", "server", "frontend":
+			return name
+		}
+	}
+	return ""
+}
+
+// previewEnvName delegates to pkg/naming.PreviewEnvName (T2.5).
+// The package-local wrapper is kept to minimize call-site churn.
 func previewEnvName(prNumber int) string {
-	return fmt.Sprintf("preview-pr-%d", prNumber)
+	return naming.PreviewEnvName(prNumber)
 }
 
 // isPreviewNotFound centralizes the typed-error check so callers don't
@@ -303,3 +485,69 @@ func isPreviewNotFound(err error) bool {
 // Compile-time assertion: PreviewService satisfies the route handler's
 // PreviewService interface.
 var _ domain.PreviewService = (*PreviewService)(nil)
+
+// appsFromLoopZeroYaml converts the raw loopzero.yaml apps map (as parsed from
+// the PR commit tarball) into []AppSpec carrying ALL fields the build
+// orchestrator needs to resolve LanguageStrategy: type, framework, path,
+// port, build, rendering, replicas, autoscaling.
+//
+// LIVE catch 2026-06-07 J-23 Option B: mirror of autodeploy_adapters.go
+// conversion logic so push-flow and PR-flow produce identical
+// SubmitBuildRequest.Apps for the same source code.
+func appsFromLoopZeroYaml(rawApps map[string]map[string]interface{}) []AppSpec {
+	out := make([]AppSpec, 0, len(rawApps))
+	for name, cfg := range rawApps {
+		app := AppSpec{Name: name}
+		if v, ok := cfg["type"].(string); ok {
+			app.Type = v
+		} else {
+			app.Type = "server"
+		}
+		if v, ok := cfg["framework"].(string); ok {
+			app.Framework = v
+		}
+		if v, ok := cfg["path"].(string); ok {
+			app.Path = v
+		}
+		if v, ok := cfg["port"].(int); ok {
+			app.Port = v
+		} else if v, ok := cfg["port"].(float64); ok {
+			app.Port = int(v)
+		}
+		if v, ok := cfg["build"].(string); ok {
+			app.Build = v
+		}
+		if v, ok := cfg["render"].(string); ok {
+			app.Rendering = v
+		}
+		if app.Type == "frontend" && app.Rendering == "" {
+			app.Rendering = "static"
+		}
+		if v, ok := cfg["replicas"].(int); ok {
+			app.Replicas = v
+		} else if v, ok := cfg["replicas"].(float64); ok {
+			app.Replicas = int(v)
+		}
+		if asRaw, ok := cfg["autoscaling"].(map[string]interface{}); ok {
+			as := &AppAutoscalingSpec{}
+			if v, ok := asRaw["min"].(int); ok {
+				as.MinReplicas = v
+			} else if v, ok := asRaw["min"].(float64); ok {
+				as.MinReplicas = int(v)
+			}
+			if v, ok := asRaw["max"].(int); ok {
+				as.MaxReplicas = v
+			} else if v, ok := asRaw["max"].(float64); ok {
+				as.MaxReplicas = int(v)
+			}
+			if v, ok := asRaw["targetCPU"].(int); ok {
+				as.TargetCPU = v
+			} else if v, ok := asRaw["targetCPU"].(float64); ok {
+				as.TargetCPU = int(v)
+			}
+			app.Autoscaling = as
+		}
+		out = append(out, app)
+	}
+	return out
+}

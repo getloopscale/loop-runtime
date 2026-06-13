@@ -1,6 +1,6 @@
 # Brief #5: 3 dashboard primitives that unblock measured Deep Review findings
 
-> **Audience:** the `@loopzerokit/ui` maintainer team (or a Claude/Codex agent in the `loopzero-ui` repo).
+> **Audience:** the `@loopzero/ui` maintainer team (or a Claude/Codex agent in the `loopzero-ui` repo).
 > **Output:** 3 new primitives + tests + stories + barrel exports + subpath exports + shadcn registry entries.
 > **Issued by:** LoopZeroCloud dashboard team (consumer), 2026-05-25.
 > **Priority:** MEDIUM — each primitive **closes a specific Deep Review finding** documented in `docs/reviews/2026-05-25-dashboard-deep-design-review.md` (42 findings, anchored to `docs/design/2026-05-25-loopzero-dashboard-design-system.md` v1.0). Ship when convenient — no blocker on consumer-side timeline.
@@ -11,7 +11,7 @@
 
 ## Why this brief exists
 
-`@loopzerokit/ui@0.10.0-next.0` shipped Brief #4 (subpath tree-shaking) in <24h — the velocity proved the upstream workflow scales. With the bundle now properly tree-shaking, the next bottleneck moved to **missing primitives that force us to either keep card-grid layouts or roll bespoke components**.
+`@loopzero/ui@0.10.0-next.0` shipped Brief #4 (subpath tree-shaking) in <24h — the velocity proved the upstream workflow scales. With the bundle now properly tree-shaking, the next bottleneck moved to **missing primitives that force us to either keep card-grid layouts or roll bespoke components**.
 
 I audited the 13-route LoopZeroCloud dashboard against our Design System v1.0 + Refactoring UI + Laws of UX + Nielsen Heuristics (42 findings logged in our Deep Review). The 3 primitives requested below **each map to a specific measured P1/P2 finding**. Without them, that finding stays open — no amount of dashboard-side composition fixes it.
 
@@ -81,7 +81,7 @@ export interface PinInputProps {
   onComplete?: (value: string) => void;
   /** Input mode for mobile keyboards. */
   inputMode?: "numeric" | "alphanumeric";
-  /** Visual size matching @loopzerokit/ui Input. */
+  /** Visual size matching @loopzero/ui Input. */
   size?: "sm" | "md" | "lg";
   /** Disabled state. */
   disabled?: boolean;
@@ -244,7 +244,7 @@ test("DataTable has no axe violations");
 ### Acceptance criteria
 
 - [ ] Sortable + sticky + expandable + actions + pagination all working independently
-- [ ] Compound API matches @loopzerokit/ui pattern (i.e., NOT `<DataTable.Header>` — single component with props)
+- [ ] Compound API matches @loopzero/ui pattern (i.e., NOT `<DataTable.Header>` — single component with props)
 - [ ] Type-safe via generics (`DataTable<Domain>`, `DataTable<Project>`)
 - [ ] Built on existing `<Table>` primitive (don't duplicate markup)
 - [ ] Reuses `<Pagination>`, `<EmptyState>`, `<Skeleton>`, `<DropdownMenu>` from prior briefs
@@ -482,7 +482,7 @@ If split (recommended for review):
 
 ## Bundle delta estimate (per Brief #4 empirical pattern)
 
-After @loopzerokit/ui@0.10 splitting, each primitive ships as its own chunk:
+After @loopzero/ui@0.10 splitting, each primitive ships as its own chunk:
 
 | Primitive | Estimated brotli (chunk only) | Note |
 |-----------|-------------------------------:|------|
@@ -502,22 +502,22 @@ I'll commit to publishing a Brief #6 with the empirically measured delta after s
 
 | Brief | Subject | Status |
 |-------|---------|--------|
-| #1 (2026-05-23) | 8 missing primitives | ✅ shipped in `@loopzerokit/ui@0.7.0` |
-| #2 (2026-05-23) | 4 more primitives (Table, Topnav, CodeBlock, …) | ✅ shipped in `@loopzerokit/ui@0.8.0-next.0` |
-| #3 (2026-05-23) | 2 deferred primitives (Alert, Pagination) | ✅ shipped in `@loopzerokit/ui@0.9.0-next.0` |
-| #4 (2026-05-24) | Subpath exports tree-shaking fix | ✅ shipped in `@loopzerokit/ui@0.10.0-next.0` — measured −26 KB brotli on LoopZeroCloud canary |
+| #1 (2026-05-23) | 8 missing primitives | ✅ shipped in `@loopzero/ui@0.7.0` |
+| #2 (2026-05-23) | 4 more primitives (Table, Topnav, CodeBlock, …) | ✅ shipped in `@loopzero/ui@0.8.0-next.0` |
+| #3 (2026-05-23) | 2 deferred primitives (Alert, Pagination) | ✅ shipped in `@loopzero/ui@0.9.0-next.0` |
+| #4 (2026-05-24) | Subpath exports tree-shaking fix | ✅ shipped in `@loopzero/ui@0.10.0-next.0` — measured −26 KB brotli on LoopZeroCloud canary |
 | #5 (this brief, 2026-05-25) | 3 dashboard primitives (PinInput, DataTable, PageShell) | ⏳ proposed |
 
 ---
 
 ## How LoopZeroCloud will use these (validation path post-ship)
 
-1. **Bump @loopzerokit/ui** to whatever version ships these primitives.
+1. **Bump @loopzero/ui** to whatever version ships these primitives.
 2. **Verification page redesign**: replace single text input with `<PinInput length={6} inputMode="numeric" ... />`. Verify via `/dashboard-design-check verification` skill (gate I built for this).
 3. **Domains redesign**: replace card-stack with `<DataTable columns={...} data={domains} expandable={(d) => d.status === "pending_verification" ? <DnsRecords /> : null} ... />`. Measure space savings via `/dashboard-density-audit domains`.
 4. **Projects redesign**: replace card-grid with `<DataTable>`. Same density audit.
 5. **All 13 pages**: migrate boilerplate to `<PageShell>` composite. Measure LOC reduction via `wc -l src/pages/`.
-6. **Publish Brief #6** with measured deltas (commit to writing this within 2 weeks of @loopzerokit/ui ship).
+6. **Publish Brief #6** with measured deltas (commit to writing this within 2 weeks of @loopzero/ui ship).
 
 The LoopZeroCloud dashboard is happy to be the canary consumer for all 3 primitives — `npm run build && npm run size` produces deterministic measurements your CI can grep.
 

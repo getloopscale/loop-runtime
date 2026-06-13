@@ -343,6 +343,53 @@ func (q *Queries) InsertBuild(ctx context.Context, db DBTX, arg InsertBuildParam
 	return i, err
 }
 
+const listBuildEnvsForProject = `-- name: ListBuildEnvsForProject :many
+SELECT environment
+FROM builds
+WHERE tenant_id = $1 AND project_id = $2
+GROUP BY environment
+ORDER BY MAX(created_at) DESC
+`
+
+type ListBuildEnvsForProjectParams struct {
+	TenantID  string `json:"tenant_id"`
+	ProjectID string `json:"project_id"`
+}
+
+// Returns distinct environments the project has at least one build for,
+// ordered by most-recent build per env DESC. Feeds the dashboard
+// /deployments env-filter chips (ADR D3) — replaces the hardcoded
+// production/staging/preview/all literals so custom envs appear.
+//
+// Per plan 2026-06-08-dashboard-screens-review-fixes T2.2 + EC-2:
+// handler MUST gate via ProjectStore.GetByName BEFORE this query
+// runs (cross-tenant existence-leak prevention). The query itself
+// is tenant-scoped (only this caller's tenant_id), but a tenant
+// could probe project names belonging to other tenants via the URL
+// path — the EC-2 adapter rejects with 404 PROJECT_NOT_FOUND before
+// this query is invoked.
+//
+// Empty result → empty []string (not nil) per Rule 5 contract.
+func (q *Queries) ListBuildEnvsForProject(ctx context.Context, db DBTX, arg ListBuildEnvsForProjectParams) ([]string, error) {
+	rows, err := db.Query(ctx, listBuildEnvsForProject, arg.TenantID, arg.ProjectID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []string
+	for rows.Next() {
+		var environment string
+		if err := rows.Scan(&environment); err != nil {
+			return nil, err
+		}
+		items = append(items, environment)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const listBuildsByProject = `-- name: ListBuildsByProject :many
 SELECT id, tenant_id, project_id, environment, status, correlation_id, created_by, commit_sha, apps_spec, workflow_id, error_message, duration_seconds, cell_id, processing_by, processing_since, created_at, started_at, finished_at, bundle_digest FROM builds
 WHERE tenant_id = $1 AND project_id = $2

@@ -97,3 +97,40 @@ velero:
 # Plan v1.2 T2.3 / D4 — kratos+hydra UI base URL placeholder
 uiBaseUrl: "http://localhost:4455"
 dashboardOrigin: "http://localhost:3000"
+
+# Plan J-05 (2026-06-06 cleanroom recovery) — publicAuthUrl / publicCloudUrl
+# / cookieDomain / corsAllowedOrigins / allowedReturnUrls / dashboardRoute
+# declared even on standalone-multi so the Go template
+# `{{ .Values.X | default Y }}` doesn't crash with "map has no entry for
+# key" (default kicks in for empty/zero values but the key MUST exist in
+# the env's values map — Go templates do NOT short-circuit `default` when
+# the parent map lookup itself fails).
+# Standalone-multi has no public auth — empty strings + minimal localhost
+# defaults so in-cluster fallback FQDNs are used.
+# publicAuthUrl + publicCloudUrl EMPTY for standalone-multi.
+# - Hydra template now checks `hasKey AND non-empty` (fix 2026-06-06):
+#   empty publicAuthUrl → Hydra uses cluster-internal issuer
+#   (http://ory-hydra-public.loopzero-auth.svc.cluster.local:4444/) which is
+#   what loopzero-api expects for JWT validation in standalone.
+# - Kratos template uses same hasKey AND non-empty pattern: falls back
+#   to uiBaseUrl for base_redirect_uri = http://localhost:4455/.
+publicAuthUrl: ""
+publicCloudUrl: ""
+cookieDomain: "localhost"
+corsAllowedOrigins:
+  - "http://localhost:3000"
+  - "http://localhost:4455"
+  - "http://localhost:13001"
+  - "http://localhost:13002"
+allowedReturnUrls:
+  - "http://localhost:3000"
+  - "http://localhost:3000/"
+  - "http://localhost:4455"
+  - "http://localhost:4455/"
+dashboardRoute:
+  login: /login
+  register: /register
+  recovery: /recovery
+  verification: /verification
+  settings: /settings
+  error: /login

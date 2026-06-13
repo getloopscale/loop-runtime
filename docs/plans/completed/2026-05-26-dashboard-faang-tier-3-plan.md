@@ -7,7 +7,7 @@
 - `docs/reviews/density-audit-2026-05-25/REPORT.md` — density audit DSS-based (2 P1 + 5 P2 + 4 P3 violations medidas em 13/13 rotas)
 - `docs/reviews/density-audit-2026-05-25/vercel-benchmark.md` — comparação 1:1 com Vercel real (8 V-gaps + validação de P1s)
 - `docs/design/2026-05-25-loopzero-dashboard-design-system.md` — DSS v1.0 (Violet Forge anchor, § 6.1 density targets, CC-3 empty state limit)
-- `cloud/dashboard/.llms.txt` — @loopzerokit/ui canonical component spec (v0.11.0-next.0 → upgrade-target 0.12.0-next.0)
+- `cloud/dashboard/.llms.txt` — @loopzero/ui canonical component spec (v0.11.0-next.0 → upgrade-target 0.12.0-next.0)
 - `CLAUDE.md` Voice/Tone section + Cross-Project Rule 9 — CLI-first product abstraction
 - `.claude/rules/pre-release-governance.md` — T3 classification + Plan Amendment Policy
 - `docs/handoff/2026-05-25-loopzero-ui-cloud-dashboard-brief-5.md` + `brief-6.md` — Brief #5 primitives consumption status
@@ -25,7 +25,7 @@
 
 **Dashboard funcional, design-system shipped:**
 - 13 routes ativas (overview, projects, environments, domains, billing, team, settings, profile, login, register, recovery, verification, device-success)
-- @loopzerokit/ui@0.11.0-next.0 pinned (npm `next` agora em 0.12.0-next.0 — additive doc-only, bump independente)
+- @loopzero/ui@0.11.0-next.0 pinned (npm `next` agora em 0.12.0-next.0 — additive doc-only, bump independente)
 - DSS v1.0 anchored to Violet Forge (`docs/design/2026-05-25-loopzero-dashboard-design-system.md`)
 - T-MIG-1..4 shipped (PinInput verification, DataTable expandable/sortable, PageShell × 5 content pages)
 - 117/117 vitest tests GREEN
@@ -80,11 +80,11 @@
 
 2. **Phase 2 (Polish + Microinteractions):** Adiciona motion system + transitions polidas + loading states ricos + empty states contextuais. Atinge "feels alive". **Inclui sub-task obrigatória `prefers-reduced-motion` (EC-3) + optimistic UI rollback path (EC-4) + empty state taxonomy 3-tier (G6 FAANG) + error boundaries per-section (G7 FAANG) + search UX patterns debounce+virtualization (G8 FAANG).** 1-2 weeks.
 
-3. **Phase 3 (Differentiation):** Implementa 8 features que concorrentes têm e LoopZero não: Command Palette, Breadcrumb, Notification Center, Sidebar Grouping, TopBar Kebab, Plan-Gating Inline, CLI Signature Integration, Real-time SSE wiring. **Requires Brief #7 to @loopzerokit/ui team** para primitives novos (CommandPalette, Breadcrumb, NotificationBell). **Inclui sub-tasks obrigatórias Rule 3 sanitize (EC-7), CLI command whitelist (EC-8), CodeBlock internal-terms hook (EC-9), cmd+k mount scope (EC-5), breadcrumb route labels (EC-6) + telemetry hooks (G12 FAANG).** 2-3 weeks.
+3. **Phase 3 (Differentiation):** Implementa 8 features que concorrentes têm e LoopZero não: Command Palette, Breadcrumb, Notification Center, Sidebar Grouping, TopBar Kebab, Plan-Gating Inline, CLI Signature Integration, Real-time SSE wiring. **Requires Brief #7 to @loopzero/ui team** para primitives novos (CommandPalette, Breadcrumb, NotificationBell). **Inclui sub-tasks obrigatórias Rule 3 sanitize (EC-7), CLI command whitelist (EC-8), CodeBlock internal-terms hook (EC-9), cmd+k mount scope (EC-5), breadcrumb route labels (EC-6) + telemetry hooks (G12 FAANG).** 2-3 weeks.
 
-4. **Phase 4 (Tier 4 Personalization, NEW v1.2 — reverte ADR D3 SKIP):** Implementa personalization features que Vercel/Linear têm: density-per-user toggle, theme-per-user (5 themes built-in via @loopzerokit/ui), sidebar reorder via drag-and-drop, recently-visited memory, saved filter presets. Resolve **G11 FAANG gap**. 1-2 weeks.
+4. **Phase 4 (Tier 4 Personalization, NEW v1.2 — reverte ADR D3 SKIP):** Implementa personalization features que Vercel/Linear têm: density-per-user toggle, theme-per-user (5 themes built-in via @loopzero/ui), sidebar reorder via drag-and-drop, recently-visited memory, saved filter presets. Resolve **G11 FAANG gap**. 1-2 weeks.
 
-5. **Phase 5 (FAANG-grade Infra, NEW v1.2):** Performance budget formal (Core Web Vitals per-page LCP/INP/CLS), Real User Monitoring (web-vitals npm pkg), Axe-core CI integration (jest-axe + vitest-axe enforced), Storybook/Ladle para dashboard pages (espelha @loopzerokit/ui upstream pattern), Bundle analyzer (rollup-plugin-visualizer per-route attribution), Design tokens deprecation strategy (semver + 4-tier policy), i18n primitives architecture (EN-only at launch mas hooks setup). Resolve **G1, G2, G3, G4, G5, G9, G13 FAANG gaps (4 CRITICAL + 3 MEDIUM)**. 1-2 weeks.
+5. **Phase 5 (FAANG-grade Infra, NEW v1.2):** Performance budget formal (Core Web Vitals per-page LCP/INP/CLS), Real User Monitoring (web-vitals npm pkg), Axe-core CI integration (jest-axe + vitest-axe enforced), Storybook/Ladle para dashboard pages (espelha @loopzero/ui upstream pattern), Bundle analyzer (rollup-plugin-visualizer per-route attribution), Design tokens deprecation strategy (semver + 4-tier policy), i18n primitives architecture (EN-only at launch mas hooks setup). Resolve **G1, G2, G3, G4, G5, G9, G13 FAANG gaps (4 CRITICAL + 3 MEDIUM)**. 1-2 weeks.
 
 **Total: 6-9 weeks (v1.2, Phase 4-5 added). Gate entre cada phase: re-run density audit + slop test + Lighthouse + Web Vitals per-page + axe-core report + manual UX review por sponsor.**
 
@@ -99,7 +99,7 @@
 - **Consequences:**
   - ✅ Brand-defensible — não temos "Vercel clone" liability
   - ✅ Alinha com CLAUDE.md Cross-Project Rule 9 + Voice/Tone
-  - ✅ Justifica Brief #7 ao @loopzerokit/ui (CommandPalette pattern serve outros consumers)
+  - ✅ Justifica Brief #7 ao @loopzero/ui (CommandPalette pattern serve outros consumers)
   - ❌ Mais work que Vercel-clone direto
   - ❌ Risk: "own voice" pode virar undefined sem rigor — mitigado por D4 (CLI integration mandatory pattern)
 
@@ -119,14 +119,14 @@
 - **Decision (v1.0):** Defer to v1.x pós-GA. Pre-release single-user customization é YAGNI.
 - **REVERSAL (v1.2):** "Best practices FAANG" revisão identifica que G11 (personalization) NÃO é Tier 4 wishlist — é Tier 3-equivalent FAANG signature. Vercel, Linear, Stripe TODOS shipam personalization day-1 (não 1000-user-feedback driven). Pre-release context não justifica skip — justifies escopo modesto (density toggle + theme switcher + sidebar reorder, sem custom workspace themes).
 - **Decision (v1.2):** Phase 4 NEW adiciona Tier 4 personalization com escopo modesto:
-  - Density toggle (compact/comfortable/spacious — already in @loopzerokit/ui ThemeProvider runtime)
-  - Theme switcher (5 themes already built-in via @loopzerokit/ui per CHANGELOG)
+  - Density toggle (compact/comfortable/spacious — already in @loopzero/ui ThemeProvider runtime)
+  - Theme switcher (5 themes already built-in via @loopzero/ui per CHANGELOG)
   - Sidebar reorder via drag-and-drop (Linear pattern)
   - Recently-visited memory (per-page localStorage)
   - Saved filter presets (Vercel pattern)
 - **Consequences:**
   - ✅ Atende G11 FAANG gap (Vercel sidebar customizable parity)
-  - ✅ Reusa @loopzerokit/ui ThemeProvider + density runtime (zero custom infra)
+  - ✅ Reusa @loopzero/ui ThemeProvider + density runtime (zero custom infra)
   - ✅ ~1-2 weeks adicionais (não-blocker pro core FAANG mas atinge "feels Linear")
   - ❌ Adiciona 4-5 tasks ao plano
 
@@ -176,10 +176,10 @@
   - ✅ Plus para developer-onboarding (descobrir commands via UI)
   - ❌ Mais content per page — risk de density violation. Mitigated por collapse-default
 
-### D5 — Phase 3 features que requerem novos primitives → Brief #7 ao @loopzerokit/ui
+### D5 — Phase 3 features que requerem novos primitives → Brief #7 ao @loopzero/ui
 
-- **Context:** CommandPalette, Breadcrumb, NotificationBell, Sidebar.Group component, plan-gating Alert variant não existem em @loopzerokit/ui@0.11/0.12.
-- **Decision:** Antes de Phase 3 começar, emit Brief #7 ao @loopzerokit/ui team (mesmo padrão Brief #5/#6). Ship features ↔ wait for primitives. Pode rodar parallel (consumer-side wait com mock primitives) mas plan task ordem: Brief #7 enviado em Phase 2 end, Phase 3 começa quando 0.13 release responde.
+- **Context:** CommandPalette, Breadcrumb, NotificationBell, Sidebar.Group component, plan-gating Alert variant não existem em @loopzero/ui@0.11/0.12.
+- **Decision:** Antes de Phase 3 começar, emit Brief #7 ao @loopzero/ui team (mesmo padrão Brief #5/#6). Ship features ↔ wait for primitives. Pode rodar parallel (consumer-side wait com mock primitives) mas plan task ordem: Brief #7 enviado em Phase 2 end, Phase 3 começa quando 0.13 release responde.
 - **Consequences:**
   - ✅ Reuse pattern Brief #4/#5/#6 (validated workflow)
   - ✅ Primitives shippped servem outros consumers (não só LoopZero)
@@ -663,12 +663,12 @@ Sem rollback, backend reject (409 email exists, 402 plan limit) deixa UI mostran
 
 ## Phase 3 — Differentiation Features
 
-**Objetivo:** Implementar 9 features que concorrentes têm. Requires Brief #7 primitives from @loopzerokit/ui. 2-3 weeks (depends on upstream timing).
+**Objetivo:** Implementar 9 features que concorrentes têm. Requires Brief #7 primitives from @loopzero/ui. 2-3 weeks (depends on upstream timing).
 
 ### T-DR-3.1 — Command Palette (cmd+k) integration
 
 **Files to edit:**
-- `cloud/dashboard/src/components/command-palette.tsx` (NEW) — wrap @loopzerokit/ui CommandPalette (post Brief #7)
+- `cloud/dashboard/src/components/command-palette.tsx` (NEW) — wrap @loopzero/ui CommandPalette (post Brief #7)
 - `cloud/dashboard/src/components/layout/dashboard-layout.tsx` — wire cmd+k global shortcut
 - Actions catalog: Navigate to {Overview, Projects, ...}, Recent projects, Deploy {project}, Open CLI docs, Sign out, ...
 
@@ -881,7 +881,7 @@ NUNCA copy raw state. Build command string strict from whitelist.
 - [ ] SSE live status badges
 - [ ] Re-run density audit + loopzero-ui audit + Lighthouse — all GREEN
 - [ ] Manual sponsor review — FAANG-tier achievement gate
-- [ ] Brief #8 emitted ao @loopzerokit/ui (consumer report) similar to Brief #6 pattern
+- [ ] Brief #8 emitted ao @loopzero/ui (consumer report) similar to Brief #6 pattern
 
 ## Global DoD (v1.2 expanded with FAANG best practices)
 
@@ -938,8 +938,8 @@ NUNCA copy raw state. Build command string strict from whitelist.
 | **Phase 0** | 3-5 days | Medium — backend gaps may require negotiation | 6 tasks: 5 backend verifications + 1 closure report; ZERO consumer code |
 | Phase 1 | 1 week (5 days) | Low — execution of documented findings + Phase 0 scope clarity | 10 commits closing 7 P1/P2 + 5 slop fails |
 | Phase 2 | 1-2 weeks | Medium — motion system + MUST FIX sub-tasks + cross-cutting (empty taxonomy + error boundaries + search UX) | DSS v1.1 + 7+ commits + Brief #7 draft |
-| Phase 3 | 2-3 weeks | Medium-High — depends on @loopzerokit/ui Brief #7 turnaround + 5 MUST FIX sub-tasks Rule 3 + telemetry hooks | 9+ commits + Brief #8 + final review |
-| **Phase 4 (NEW v1.2)** | **1-2 weeks** | **Low-Medium — reusa @loopzerokit/ui ThemeProvider density + theme runtime** | **5 tasks personalization (density toggle, theme switcher, sidebar reorder, recent pages, filter presets)** |
+| Phase 3 | 2-3 weeks | Medium-High — depends on @loopzero/ui Brief #7 turnaround + 5 MUST FIX sub-tasks Rule 3 + telemetry hooks | 9+ commits + Brief #8 + final review |
+| **Phase 4 (NEW v1.2)** | **1-2 weeks** | **Low-Medium — reusa @loopzero/ui ThemeProvider density + theme runtime** | **5 tasks personalization (density toggle, theme switcher, sidebar reorder, recent pages, filter presets)** |
 | **Phase 5 (NEW v1.2)** | **1-2 weeks** | **Low — infra setup tasks isoladas** | **7 tasks FAANG-grade infra (Lighthouse CI, RUM, Axe CI, Ladle, bundle analyzer, i18n, design tokens deprecation)** |
 | **Total** | **6-9 weeks** | — | 44 tasks (Phase 0: 6, Phase 1: 10, Phase 2: 7, Phase 3: 9, Phase 4: 5, Phase 5: 7) + 2 briefs sent + DSS bump v1.0→v1.2 + Lighthouse CI gates GREEN |
 
@@ -951,7 +951,7 @@ NUNCA copy raw state. Build command string strict from whitelist.
 
 **Files to edit:**
 - `cloud/dashboard/src/components/layout/account-menu.tsx` — add density submenu (Compact/Comfortable/Spacious)
-- Hook into existing `@loopzerokit/ui` ThemeProvider `defaultDensity` runtime (per CHANGELOG already supports)
+- Hook into existing `@loopzero/ui` ThemeProvider `defaultDensity` runtime (per CHANGELOG already supports)
 - `localStorage` key `loopzero:user:density`
 
 **TDD:**
@@ -965,7 +965,7 @@ NUNCA copy raw state. Build command string strict from whitelist.
 ### T-DR-4.2 — Theme switcher in user menu (closes G11 #2)
 
 **Files to edit:**
-- `cloud/dashboard/src/components/layout/account-menu.tsx` — add theme submenu (5 themes — Violet Forge default + 4 alternates per @loopzerokit/ui ships)
+- `cloud/dashboard/src/components/layout/account-menu.tsx` — add theme submenu (5 themes — Violet Forge default + 4 alternates per @loopzero/ui ships)
 - `localStorage` key `loopzero:user:theme`
 
 **TDD:**
@@ -1190,7 +1190,7 @@ Risks identificados pelo /edge-case-plan que NÃO viram MUST FIX nem SHOULD TEST
 
 ### EC-23 — Brief #7 timing risk (Phase 3 upstream dependency)
 
-- **Risco:** Phase 3 depends on @loopzerokit/ui Brief #7 turnaround. Brief #4 took 24h, Brief #5 took 72h. Brief #7 escopo maior (5+ primitives). Realistic: 1-2 weeks upstream.
+- **Risco:** Phase 3 depends on @loopzero/ui Brief #7 turnaround. Brief #4 took 24h, Brief #5 took 72h. Brief #7 escopo maior (5+ primitives). Realistic: 1-2 weeks upstream.
 - **Mitigação:** Contingency plan — se Brief #7 turnaround > 1 week, defer T-DR-3.1 (CommandPalette) + T-DR-3.4 (NotificationBell) para v1.1 e ship Phase 3 com remaining 7 tasks. Decision gate at end-of-Phase-2 com Brief #7 status check.
 
 ### EC-?? — Native browser notifications (T-DR-3.4 scope)
@@ -1234,7 +1234,7 @@ Risks identificados pelo /edge-case-plan que NÃO viram MUST FIX nem SHOULD TEST
 - All transitions audited via Lighthouse + manual review
 - **EC-3 verified: `prefers-reduced-motion` honored em matchMedia test**
 - **EC-4 verified: optimistic UI rollback tests GREEN**
-- Brief #7 sent to @loopzerokit/ui (early signal to upstream)
+- Brief #7 sent to @loopzero/ui (early signal to upstream)
 
 **Phase 3 → Phase 4 gate (NEW v1.2):**
 - Vercel benchmark closure (V-2..V-8)
@@ -1265,7 +1265,7 @@ Risks identificados pelo /edge-case-plan que NÃO viram MUST FIX nem SHOULD TEST
 - ❌ Implement Phase N before Phase N-1 gate cleared
 - ❌ Skip ADR for any of D1-D9 (D3 reverted v1.2)
 - ❌ Build features that backend doesn't support (e.g., notification center if audit_log endpoint missing)
-- ❌ Bumpar @loopzerokit/ui version mid-phase (do it antes de Phase 1 começar)
+- ❌ Bumpar @loopzero/ui version mid-phase (do it antes de Phase 1 começar)
 - ❌ Add new dependency without ADR (per Rule 9 "Don't Reinvent")
 - ❌ ~~Personalization features~~ — Tier 4 NOW INCLUDED per ADR D3 REVERTED v1.2 (Phase 4)
 - ❌ Skip FAANG infra discipline (Web Vitals + a11y CI + RUM) — v1.2 explicit (Phase 5)

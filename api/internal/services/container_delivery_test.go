@@ -114,6 +114,21 @@ func (f *fakeEnvTargetStoreContainer) ListByProject(_ context.Context, _, _ stri
 func (f *fakeEnvTargetStoreContainer) DeleteTarget(_ context.Context, _ db.DBTX, _, _, _ string) error {
 	return nil
 }
+// 2026-06-07 D2/D5/D6/D7 — preview-as-category interface extensions.
+func (f *fakeEnvTargetStoreContainer) SetPreviewDesired(_ context.Context, _ db.DBTX, t, p, e, rel, _, _ string) error {
+	// Same map as SetDesired; tests assert on key shape, not kind.
+	f.desired[t+"-"+p+"-"+e] = rel
+	return nil
+}
+func (f *fakeEnvTargetStoreContainer) CountPermanent(_ context.Context, _ string) (int, error) {
+	return 0, nil
+}
+func (f *fakeEnvTargetStoreContainer) ListPermanent(_ context.Context, _ string) ([]string, error) {
+	return []string{}, nil
+}
+func (f *fakeEnvTargetStoreContainer) DeleteByKind(_ context.Context, _ db.DBTX, _, _, _, _ string) error {
+	return nil
+}
 
 type fakeEventStoreContainer struct {
 	events []struct {

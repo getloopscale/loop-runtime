@@ -25,7 +25,9 @@ function envInt(name: string, defaultValue: number): number {
  *
  * Priority: LOOPZERO_URL > LOOPZERO_API_URL (deprecated) > fallback.
  * Local dev: port 8080 matches the Traefik-less direct API server.
- * Production: set LOOPZERO_URL=https://api.dev.loopzero.example
+ * Development cluster: set LOOPZERO_URL=https://api-dev.loopzero.example
+ * (note hyphen — canonical dev-public DNS pattern per the
+ * `dev-public-domain-canonicalization` plan 2026-06-04).
  */
 export const DEFAULT_API_URL_FALLBACK = 'http://localhost:8080';
 
@@ -46,6 +48,34 @@ export const API_REQUEST_TIMEOUT_MS = envInt('LOOPZERO_API_TIMEOUT', 30000);
 
 /** HTTP timeout for source bundle upload (ms). Override: LOOPZERO_UPLOAD_TIMEOUT */
 export const UPLOAD_TIMEOUT_MS = envInt('LOOPZERO_UPLOAD_TIMEOUT', 120000);
+
+// --- Dashboard URL (T2.1 of plan 2026-06-11-code-review-remediation) ---
+
+/**
+ * Default URL of the LoopZero dashboard (browser-facing) shown in CLI error
+ * messages that prompt the user to sign up or sign in. Canonical
+ * `dev-public-domain-canonicalization` pattern is `app-dev.loopzero.example`
+ * (note hyphen, NOT `app.dev` — that mistyped pattern lived in the
+ * AUTH_FAILED error message before T2.1).
+ *
+ * Sponsor mandate 2026-06-11 "PROIBINDO CONFIGURAÇÃO HARDCODED" required
+ * deriving this from env so operators in custom environments
+ * (self-hosted, on-prem, alt cloud cell) can override without forking.
+ *
+ * Override: LOOPZERO_DASHBOARD_URL=https://my-dashboard.example.com
+ */
+export const DEFAULT_DASHBOARD_URL_FALLBACK = 'https://app-dev.loopzero.example';
+
+/** Returns the user-facing dashboard URL with env override + validation. */
+export function getDashboardUrl(): string {
+  const url = process.env.LOOPZERO_DASHBOARD_URL || DEFAULT_DASHBOARD_URL_FALLBACK;
+  if (!url.startsWith('http://') && !url.startsWith('https://')) {
+    throw new Error(
+      `Invalid LOOPZERO_DASHBOARD_URL: must start with http:// or https://. Got: ${url}`,
+    );
+  }
+  return url;
+}
 
 // --- Cloud Service ---
 

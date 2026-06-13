@@ -1,6 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import {
-  HerokuStyleMockEventSource,
   MockEventSource,
   registerSSE,
   resetSSERegistrations,
@@ -110,73 +109,5 @@ describe('mocks/sse — EventSource shim', () => {
     es.addEventListener('message', listener);
     vi.runAllTimers();
     expect(listener).toHaveBeenCalled();
-  });
-});
-
-describe('HerokuStyleMockEventSource (J-19 T2.4 — R8 SHOULD)', () => {
-  beforeEach(() => {
-    vi.useFakeTimers();
-  });
-  afterEach(() => {
-    vi.useRealTimers();
-  });
-
-  it('test_mock_event_source_fires_onopen_immediately', () => {
-    const es = new HerokuStyleMockEventSource('/test/url');
-    const onOpen = vi.fn();
-    es.onopen = onOpen;
-    vi.runAllTimers();
-    expect(onOpen).toHaveBeenCalled();
-    expect(es.readyState).toBe(1); // OPEN
-  });
-
-  it('test_mock_event_source_fires_onerror_with_401_for_fail_url', () => {
-    const es = new HerokuStyleMockEventSource('/test/mock-fail-401');
-    const onError = vi.fn();
-    es.onerror = onError;
-    vi.runAllTimers();
-    expect(onError).toHaveBeenCalled();
-    const firstCall = onError.mock.calls[0][0] as Event & { code?: number };
-    expect(firstCall.code).toBe(401);
-  });
-
-  it('test_mock_event_source_fires_onmessage_with_fixture_per_pattern', () => {
-    const es = new HerokuStyleMockEventSource('/test/url');
-    const onMessage = vi.fn();
-    es.onmessage = onMessage;
-    vi.runAllTimers();
-    expect(onMessage).toHaveBeenCalled();
-    const firstMessage = onMessage.mock.calls[0][0] as MessageEvent;
-    expect(firstMessage.data).toContain('fixture');
-  });
-
-  it('test_mock_event_source_close_clears_pending_timers_no_bleed', () => {
-    const es = new HerokuStyleMockEventSource('/test/url');
-    const onOpen = vi.fn();
-    es.onopen = onOpen;
-    es.close(); // synchronous close BEFORE timers fire
-    vi.runAllTimers();
-    expect(onOpen).not.toHaveBeenCalled();
-    expect(es.readyState).toBe(2); // CLOSED
-  });
-
-  it('test_mock_event_source_scripted_events_override_url_dispatch', () => {
-    const es = new HerokuStyleMockEventSource('/anything', {
-      scriptedEvents: [
-        { type: 'open' },
-        { type: 'message', data: 'custom-1' },
-        { type: 'message', data: 'custom-2' },
-        { type: 'error', code: 500 },
-      ],
-    });
-    const onMessage = vi.fn();
-    const onError = vi.fn();
-    es.onmessage = onMessage;
-    es.onerror = onError;
-    vi.runAllTimers();
-    expect(onMessage).toHaveBeenCalledTimes(2);
-    expect(onError).toHaveBeenCalled();
-    const errCall = onError.mock.calls[0][0] as Event & { code?: number };
-    expect(errCall.code).toBe(500);
   });
 });

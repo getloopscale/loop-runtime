@@ -1,6 +1,6 @@
 import { Link } from 'react-router-dom';
 import { AlertTriangle, CheckCircle2, CircleDashed, XCircle } from 'lucide-react';
-import { Badge, Card } from '@loopzerokit/ui';
+import { Badge, Card } from '@loopzero/ui';
 
 /**
  * ReadinessChecklist (Sprint 1 T1.2) — production-fitness signals visualization.

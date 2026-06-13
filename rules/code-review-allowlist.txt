@@ -1,0 +1,19 @@
+# Code Review Allowlist — knowingly-deferred findings with sunset dates
+#
+# Per ADR D6 + T5.2 of plan 2026-06-11-code-review-remediation-147-findings v1.2.
+#
+# Pattern (mirror of rules/plan-confidence-allowlist.txt):
+#   - Each entry: <finding_id> | <category> | <sunset_date YYYY-MM-DD> | <rationale>
+#   - sunset_date: when this entry MUST be re-evaluated or removed (90d default)
+#   - rationale: WHY this finding is deferred + WHO owns the resolution
+#
+# Comments start with '#'. Blank lines OK.
+# T5.2.a CI gate (`task quality:gates`) FAILS when any sunset_date < today.
+# Today-sunset entries WARN (yellow); future-sunset PASS silently.
+#
+# Format (pipe-separated, 4 columns):
+#   finding_id | category | sunset_date | rationale
+
+# --- 2026-06-11 plan deferrals (knowingly-incomplete on first run) ---
+T1.3.c-f-deferred | refactor | 2026-09-09 | EnvRef Value Object migration across remaining 34 call sites of pkg/naming.Namespace deferred. T1.3.a (type) + T1.3.b (EnvRef.Namespace() canonical pattern method + tests) shipped; per-package call-site rewrite is mechanical, planned in follow-up per-PR slices.
+T5.1-low-maturity | maturity | 2026-09-09 | 25 LOW maturity findings batched into follow-up grooming sweep; none security-impacting per per-finding triage

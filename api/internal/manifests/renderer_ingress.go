@@ -10,7 +10,7 @@ import (
 
 // buildService creates a Service resource for an app.
 func buildService(ri RenderInput, app AppManifestInput, port int) k8sService {
-	ns := namespace(ri.TenantID, ri.Environment)
+	ns := namespace(ri.TenantID, ri.ProjectID, ri.Environment)
 	labels := commonLabels(ri, app)
 	resName := resourceName(ri.ProjectID, app.Name)
 
@@ -39,7 +39,7 @@ func buildService(ri RenderInput, app AppManifestInput, port int) k8sService {
 // The IngressRoute references the certificate secret for TLS termination.
 // Hostname format: {app}-{env}.{project}.{tenant}.{baseDomain}
 func buildIngressResources(ri RenderInput, app AppManifestInput, port int) []string {
-	ns := namespace(ri.TenantID, ri.Environment)
+	ns := namespace(ri.TenantID, ri.ProjectID, ri.Environment)
 	labels := commonLabels(ri, app)
 	resName := resourceName(ri.ProjectID, app.Name)
 	hostname := appHostname(ri.TenantID, ri.ProjectID, app.Name, ri.Environment, ri.BaseDomain)

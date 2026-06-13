@@ -11,20 +11,30 @@ loki:
   auth_enabled: false
   commonConfig:
     replication_factor: 1
+    # Filesystem path config required by chart v6.24+ when storage.type=filesystem.
+    path_prefix: /var/loki
+  # LIVE-caught 2026-06-09 sponsor walkthrough: the previous S3 storage
+  # config pointed at `minio.loopzero-system:9000` which is unreachable from
+  # the BUILD cluster (MinIO lives on MGMT cluster, no cross-cluster path
+  # wired in k3d serverlb mappings). The secret_access_key field was also
+  # left empty with a "T1.3: helmfile env or --set required" TODO that
+  # never got wired. Both gaps caused Loki ingester to fail flushing
+  # chunks (NoCredentialProviders → DNS lookup failure cascade), and
+  # query path returned "connection reset by peer" because Loki's internal
+  # state was broken. Switching to filesystem storage decouples build-cluster
+  # Loki from mgmt-cluster MinIO entirely — clean SoC: build-pipeline logs
+  # persist on the build cluster's local PV. Production (DOKS) gets cloud-
+  # native object storage (DO Spaces) which IS network-reachable from the
+  # build cluster — that wiring lives in pulumi-platform overrides, NOT in
+  # this dev-local chart. Per feedback_no_hardcode_gate_2026_06_09: removes
+  # the stale legacy MinIO endpoint literal and the never-wired credential
+  # TODO from the chart values.
   storage:
-    type: s3
-    # Required by Loki chart v6.24+ commonStorageConfig helper
+    type: filesystem
     bucketNames:
-      chunks: loopzero-logs
-      ruler: loopzero-logs
-      admin: loopzero-logs
-    s3:
-      endpoint: minio.loopzero-system:9000
-      bucketnames: loopzero-logs
-      access_key_id: loopzero-admin
-      secret_access_key: ""   # T1.3: empty triggers Loki S3 client fail-fast; helmfile env or --set required
-      s3ForcePathStyle: true
-      insecure: true                         # LOCAL DEV ONLY — MinIO without TLS
+      chunks: chunks
+      ruler: rules
+      admin: admin
   limits_config:
     retention_period: 168h                   # 7 days (default)
     # T8.2 of plan 2026-06-02-openbao-adoption v1.4 — Vault audit log
@@ -59,13 +69,24 @@ loki:
     configs:
       - from: "2026-01-01"
         store: tsdb
-        object_store: s3
+        # Switched to filesystem 2026-06-09 — see storage block above for
+        # rationale (cross-cluster MinIO unreachable; build-cluster Loki
+        # uses local PV). Production overrides this to "s3" via Pulumi
+        # against DO Spaces.
+        object_store: filesystem
         schema: v13
         index:
           prefix: loki_index_
           period: 24h
 
 # Single binary mode — sufficient for LoopZero's scale (<100 builds/day)
+#
+# Loki primary Service stays ClusterIP (in-cluster Promtail ingest path).
+# Cross-cluster query path uses the SEPARATE `loki-cross-cluster` NodePort
+# Service in nodeport-service.yaml — clean SoC: chart-default Service handles
+# same-cluster traffic; the standalone manifest exposes the cross-cluster
+# bridge. Sponsor verbatim approval 2026-06-09 "VOCE É AUTORIZADO A FAZER
+# ALTERAÇÕES FAANG LEVEL" gated the canonical persistence.
 deploymentMode: SingleBinary
 singleBinary:
   replicas: 1

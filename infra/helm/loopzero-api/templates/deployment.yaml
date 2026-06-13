@@ -254,6 +254,22 @@ spec:
             - secretRef:
                 name: loopzero-service-auth
                 optional: true
+            # T2.5 + T6.1 of plan 2026-06-10-j22-openbao-transit-eso-sync v1.2.
+            # AppRole secret_id is the only OpenBao credential that MUST come
+            # from a K8s Secret (per feedback_secret_canonical_no_hardcode).
+            # The 4 non-sensitive OpenBao env vars (TRANSIT_ENABLED, VAULT_ADDR,
+            # VAULT_ROLE_ID, SPKI_PIN_SHA256) flow through .Values.env as
+            # literals. Bootstrap the Secret via:
+            #   kubectl create secret generic loopzero-openbao-approle \
+            #     --from-literal=OPENBAO_VAULT_SECRET_ID="<from vault write>"
+            # See docs/operations/openbao-transit-cutover-runbook.md step 2.1.
+            # optional=true so dev/test envs without OpenBao still boot —
+            # config.Validate() fail-louds at startup IF transit was enabled
+            # but the secret_id env is missing, which is the canonical signal
+            # the secret wasn't created.
+            - secretRef:
+                name: loopzero-openbao-approle
+                optional: true
             # Phase 3.3 of plan 2026-06-02-loopzero-api-vault-integration v1.8 (D11 ESO).
             # 5 NEW Secrets created por ExternalSecret CRs (chart
             # loopzero-external-secrets) pulling from loopzero-vault. Keys são

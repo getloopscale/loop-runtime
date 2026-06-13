@@ -1,6 +1,8 @@
 // SPDX-License-Identifier: Apache-2.0
 // Copyright 2025-2026 The LoopZero Authors
 
+import { getDashboardUrl } from '../config/constants';
+
 export interface TokenValidationResult {
   valid: boolean;
   email: string | null;
@@ -97,7 +99,7 @@ export class LoginCommand {
         return this.exitWithError(
           opts,
           'Authentication failed. Your token may be expired, revoked, or missing required scopes.\n' +
-          'Sign up or sign in at https://app.dev.loopzero.example to obtain a token, then run: loopzero login --token <token>',
+          `Sign up or sign in at ${getDashboardUrl()} to obtain a token, then run: loopzero login --token <token>`,
           4,
           'AUTH_FAILED'
         );

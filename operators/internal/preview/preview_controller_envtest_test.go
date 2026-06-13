@@ -64,7 +64,12 @@ var _ = Describe("PreviewController", Ordered, func() {
 			tenantSlug  = "acme"
 			projectSlug = "api"
 			prNumber    = 101
-			expectedNS  = "acme-api-pr-101"
+			// J-23 canonical namespace formula 2026-06-07 (sponsor
+			// "Pense bem ao inves de um if PARA preview o TUDO DEVERIA
+			// esta separado por projeto"): uniformly
+			// `loopzero-<tenant>-<project>-<env>` for all envs including
+			// preview-pr-N (was `<tenant>-<project>-pr-N` pre-refactor).
+			expectedNS  = "loopzero-acme-api-preview-pr-101"
 		)
 
 		BeforeAll(func() {
@@ -129,6 +134,25 @@ var _ = Describe("PreviewController", Ordered, func() {
 					Name: "tenant-limits", Namespace: expectedNS,
 				}, &lr)).To(Succeed())
 				g.Expect(lr.Spec.Limits).NotTo(BeEmpty())
+			}, timeout, interval).Should(Succeed())
+		})
+
+		// J-23 2026-06-07: the `loopzero-app` ServiceAccount that rendered
+		// pods reference (renderer_deployment.go:146 + renderer_rollout.go
+		// :400). Without it ArgoCD sync succeeds but pods CrashLoop with
+		// "serviceaccount loopzero-app not found".
+		It("creates the loopzero-app ServiceAccount with AutomountServiceAccountToken=false", func() {
+			Eventually(func(g Gomega) {
+				var sa corev1.ServiceAccount
+				g.Expect(k8sClient.Get(ctx, types.NamespacedName{
+					Name: "loopzero-app", Namespace: expectedNS,
+				}, &sa)).To(Succeed())
+				g.Expect(sa.AutomountServiceAccountToken).NotTo(BeNil())
+				g.Expect(*sa.AutomountServiceAccountToken).To(BeFalse())
+				// constants.LabelManagedBy == "loopzero.io/managed-by"
+				// (LoopZero's namespaced label, NOT k8s standard
+				// "app.kubernetes.io/managed-by").
+				g.Expect(sa.Labels).To(HaveKeyWithValue("loopzero.io/managed-by", "preview-controller"))
 			}, timeout, interval).Should(Succeed())
 		})
 
@@ -238,7 +262,8 @@ var _ = Describe("PreviewController", Ordered, func() {
 			tenantSlug  = "acme"
 			projectSlug = "api"
 			prNumber    = 303
-			expectedNS  = "acme-api-pr-303"
+			// J-23 canonical namespace 2026-06-07.
+			expectedNS  = "loopzero-acme-api-preview-pr-303"
 		)
 
 		BeforeAll(func() {

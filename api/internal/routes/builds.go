@@ -109,6 +109,25 @@ type BuildOrchestratorService interface {
 	CancelBuild(ctx context.Context, buildID string) error
 	// GetBuildTenantID returns the tenant that owns a build — used for authorization.
 	GetBuildTenantID(ctx context.Context, buildID string) (string, error)
+	// GetRedeploySource — Plan J-17 T6.4. Returns the params needed to
+	// re-submit a build identical to the source: project_id, environment,
+	// commit_sha, and the persisted apps spec. Verifies tenant ownership
+	// inside. Returns ErrBuildNotTerminal if the source build is still
+	// in flight. Path/Framework/Build fields on the returned apps will
+	// be empty because the apps_spec column does not preserve them;
+	// loopzero-packs autodetects at build time for single-app monorepos,
+	// which is the common case. Multi-app monorepos with non-root paths
+	// need a schema migration (deferred).
+	GetRedeploySource(ctx context.Context, tenantID, buildID string) (*RedeploySource, error)
+}
+
+// RedeploySource — Plan J-17 T6.4. Snapshot of the params needed to
+// resubmit a build as a redeploy of an existing one.
+type RedeploySource struct {
+	ProjectID   string
+	Environment string
+	CommitSHA   string
+	Apps        []AppInput
 }
 
 // BuildAppInfo describes a built app in a build status response.
@@ -174,8 +193,13 @@ type BuildHandler struct {
 // on first deploy --env <novo>). Plan T2.2 D5. Implementations should be
 // idempotent: existing envs return nil immediately; new envs create the
 // Environment CR + namespace + ArgoCD app and wait for phase=Active.
+// M2 v1.2 (2026-06-07): `project` propagates end-to-end so the
+// canonical 3-segment namespace `loopzero-<tenant>-<project>-<env>` is
+// computed and the Tenant CR spec.environments entry carries the
+// project field. Empty project preserves the legacy 2-segment path
+// for production-legacy callers (ADR D2).
 type EnvironmentEnsurer interface {
-	EnsureEnvironment(ctx context.Context, tenantID, envName string) error
+	EnsureEnvironment(ctx context.Context, tenantID, project, envName string) error
 }
 
 func NewBuildHandler(orch BuildOrchestratorService, logger *slog.Logger) *BuildHandler {
@@ -228,6 +252,11 @@ type createBuildRequest struct {
 	CommitSHA   string     `json:"commit_sha,omitempty"`
 	NoCache     bool       `json:"no_cache,omitempty"` // Skip BuildKit layer cache (full rebuild)
 	Apps        []AppInput `json:"apps,omitempty"`
+	// Plan J-17 T6.4 — when set, the handler looks up the source build,
+	// verifies tenant ownership + terminal status, and copies project,
+	// environment, commit_sha, and apps from it. The body's own
+	// ProjectID/Environment/CommitSHA/Apps are ignored.
+	RedeployOf string `json:"redeploy_of,omitempty"`
 }
 
 // Create handles POST /api/v1/builds.
@@ -247,6 +276,24 @@ func (h *BuildHandler) Create(w http.ResponseWriter, r *http.Request) {
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
 		writeLoopZeroError(w, loopzeroerrors.ErrInvalidRequest)
 		return
+	}
+
+	// Plan J-17 T6.4 — redeploy_of short-circuit. Look up the source
+	// build, verify tenant + terminal status, copy its params. After
+	// this the rest of the handler treats the request as a normal
+	// build submission (validation, env ensure, secret resync, etc.).
+	if req.RedeployOf != "" {
+		src, srcErr := h.orch.GetRedeploySource(ctx, uc.TenantID, req.RedeployOf)
+		if srcErr != nil {
+			mapBuildError(w, srcErr)
+			return
+		}
+		req.ProjectID = src.ProjectID
+		req.Environment = src.Environment
+		req.CommitSHA = src.CommitSHA
+		req.Apps = src.Apps
+		// NoCache opt-in stays from the request; everything else
+		// comes from the source.
 	}
 
 	// Validate required fields
@@ -299,7 +346,11 @@ func (h *BuildHandler) Create(w http.ResponseWriter, r *http.Request) {
 	// SYNC_FAILED. When envEnsurer is wired, calling EnsureEnvironment is a
 	// no-op for existing envs and creates+waits for new ones.
 	if h.envEnsurer != nil {
-		if ensureErr := h.envEnsurer.EnsureEnvironment(ctx, uc.TenantID, req.Environment); ensureErr != nil {
+		// M2 v1.2 T3.2: propagate req.ProjectID so the operator
+		// computes the canonical `loopzero-<tenant>-<project>-<env>`
+		// namespace and writes the project field to spec.environments.
+		// req.ProjectID is already validated non-empty upstream.
+		if ensureErr := h.envEnsurer.EnsureEnvironment(ctx, uc.TenantID, req.ProjectID, req.Environment); ensureErr != nil {
 			// Wrap non-LoopZeroError errors so the handler emits a clean response.
 			var te *loopzeroerrors.LoopZeroError
 			if errors.As(ensureErr, &te) {

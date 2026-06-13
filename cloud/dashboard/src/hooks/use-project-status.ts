@@ -11,6 +11,7 @@ import { queryKeys } from '@/lib/api/query-keys';
  */
 export interface UseProjectStatusOptions {
   intervalMs?: number;
+  env?: string;
 }
 
 export function useProjectStatus(
@@ -20,15 +21,17 @@ export function useProjectStatus(
   status: ProjectStatusDetail | null;
   loading: boolean;
   error: boolean;
-  refetch: () => void;
 } {
-  const { intervalMs = 5000 } = options;
+  // Backend (api/internal/routes/status.go) defaults env to "production"
+  // when the query param is absent — clients only need to pass it when
+  // querying a non-prod environment (preview, staging).
+  const { intervalMs = 5000, env } = options;
+  const path = env
+    ? `/api/v1/projects/${encodeURIComponent(projectName!)}/status?env=${encodeURIComponent(env)}`
+    : `/api/v1/projects/${encodeURIComponent(projectName!)}/status`;
   const query = useQuery({
-    queryKey: queryKeys.projectStatus.detail(projectName),
-    queryFn: () =>
-      engineFetch<ProjectStatusDetail>(
-        `/api/v1/projects/${encodeURIComponent(projectName!)}/status`,
-      ),
+    queryKey: [...queryKeys.projectStatus.detail(projectName), env ?? 'production'],
+    queryFn: () => engineFetch<ProjectStatusDetail>(path),
     enabled: !!projectName,
     refetchInterval: intervalMs,
     refetchIntervalInBackground: false,
@@ -37,8 +40,5 @@ export function useProjectStatus(
     status: query.data ?? null,
     loading: query.isLoading,
     error: query.isError || (query.isFetched && query.data === null),
-    refetch: () => {
-      void query.refetch();
-    },
   };
 }

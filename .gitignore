@@ -37,23 +37,8 @@ build/
 cloud/dashboard/storybook-static/
 cloud/dashboard/referencia/
 
-# Knowledge-base reference clones (shallow git clones of OSS reference projects;
-# 265MB+; cloned by /discover-execute when blueprint research needs them)
-.claude/knowledge-base/references/
-
 # Composio plugin cache (per-machine, never tracked)
 .od/
-
-# TheMemory native-process dev-loop artifacts (per plan loopzero-cloud-themory-e2e-finalize T1.1)
-# .themory.pid          — PID of running themory server (start-themory.sh writes; stop-themory.sh removes)
-# .themory.log          — stdout/stderr of themory server process
-# .themory-bootstrap-token — random admin bootstrap token (chmod 600); consumed by bootstrap-themory-key.sh
-# .themory-master-key   — bootstrapped loopzero_live_* admin key (NEVER commit; cloud-side master, GO-TO CTO Invariant 3)
-infra/scripts/local/.themory.pid
-infra/scripts/local/.themory.log
-infra/scripts/local/.themory-bootstrap-token
-infra/scripts/local/.themory-master-key
-infra/scripts/local/.themory.env
 # Exempt the script module infra/scripts/build/ — it is hand-written sources,
 # not Node build output. Without this negation any NEW file added there would
 # be silently ignored (catastrophic — see line ~68).
@@ -192,10 +177,7 @@ __pycache__/
 
 # Operator-local files (not committed; T7.1 plan moved canonical Caddyfile to infra/local/)
 .local/
-api/.claude/
 
-# /implement halt-loop ephemera (per cycle-implement.md)
-.claude/halt-loop-prompts/
-.claude/agents/implement-*/
-.claude/knowledge-base/implementations/*/sepa-iterations/
-.claude/knowledge-base/implementations/*/.progress.json
+# T1.1.c (plan 2026-06-11-code-review-remediation-147-findings v1.2):
+# Tilt-rendered helm ConfigMap+Secret output — re-generated on each tilt up
+.tilt-rendered/

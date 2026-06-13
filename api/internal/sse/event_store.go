@@ -27,6 +27,13 @@ type SSEEvent struct {
 type EventStore interface {
 	Append(ctx context.Context, buildID string, eventType string, data json.RawMessage) (int64, error)
 	GetAfter(ctx context.Context, buildID string, afterID int64) ([]SSEEvent, error)
+	// GetAfterForProject returns sse_events for ALL builds owned by
+	// (tenantID, projectName) whose id > afterID. Plan J-17 T2.3 — backs
+	// the project-level stream that powers the realtime deployments list.
+	// Implementations MUST enforce tenant ownership in the SQL itself
+	// (defense-in-depth — handler also checks, but the store closes the
+	// vulnerability window between auth and query).
+	GetAfterForProject(ctx context.Context, tenantID string, projectName string, afterID int64) ([]SSEEvent, error)
 	Prune(ctx context.Context, olderThan time.Duration) (int64, error)
 }
 
@@ -82,6 +89,13 @@ func (s *PostgresEventStore) Append(ctx context.Context, buildID string, eventTy
 
 	// Send NOTIFY to wake up SSE listeners for this build.
 	// Best-effort: if NOTIFY fails, SSE handlers will fall back to polling.
+	//
+	// Plan J-17 EC-2 (2026-06-06): PostgreSQL pg_notify silently
+	// truncates payloads larger than 8000 bytes. The payload here is
+	// just `build_id` (~16 chars), so we are nowhere near the limit.
+	// NEVER expand this payload to include the event body — listeners
+	// already SELECT the event row after waking, so the body would
+	// duplicate the work AND risk silent truncation that loses events.
 	if _, err := s.execDB.Exec(ctx,
 		"SELECT pg_notify('sse_events', $1)",
 		buildID,
@@ -102,6 +116,44 @@ func (s *PostgresEventStore) GetAfter(ctx context.Context, buildID string, after
 	)
 	if err != nil {
 		return nil, fmt.Errorf("event store: get after failed: %w", err)
+	}
+	defer rows.Close()
+
+	events := make([]SSEEvent, 0)
+	for rows.Next() {
+		var ev SSEEvent
+		if err := rows.Scan(&ev.ID, &ev.BuildID, &ev.EventType, &ev.Data, &ev.CreatedAt); err != nil {
+			return nil, fmt.Errorf("event store: scan failed: %w", err)
+		}
+		events = append(events, ev)
+	}
+
+	if err := rows.Err(); err != nil {
+		return nil, fmt.Errorf("event store: rows error: %w", err)
+	}
+
+	return events, nil
+}
+
+// GetAfterForProject returns events for every build owned by
+// (tenantID, projectName) whose id is greater than afterID, ordered by id ASC.
+// Plan J-17 T2.3 — backs /api/v1/projects/{name}/builds/stream so the
+// dashboard list page sees new builds + status transitions without polling.
+//
+// SECURITY: tenantID is enforced inside the SQL — this is the canonical
+// authorization for project-level streaming and MUST NOT be relaxed.
+// builds.project_id stores the project NAME (CLAUDE.md convention).
+func (s *PostgresEventStore) GetAfterForProject(ctx context.Context, tenantID string, projectName string, afterID int64) ([]SSEEvent, error) {
+	rows, err := s.queryDB.Query(ctx, `
+		SELECT se.id, se.build_id, se.event_type, se.data, se.created_at
+		FROM sse_events se
+		JOIN builds b ON b.id = se.build_id
+		WHERE b.tenant_id = $1 AND b.project_id = $2 AND se.id > $3
+		ORDER BY se.id ASC
+		LIMIT 1000
+	`, tenantID, projectName, afterID)
+	if err != nil {
+		return nil, fmt.Errorf("event store: get after for project failed: %w", err)
 	}
 	defer rows.Close()
 

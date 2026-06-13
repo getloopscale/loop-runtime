@@ -164,21 +164,36 @@ func (c *HydraClient) RefreshToken(refreshToken string) (*TokenResponse, error) 
 	return &token, nil
 }
 
-// LoginRequest represents Hydra's login challenge.
-type LoginRequest struct {
-	Challenge string `json:"challenge"`
-	ClientID  string `json:"client_id"`
-	Subject   string `json:"subject"`
-	Skip      bool   `json:"skip"`
+// hydraClientRef is the nested client object Hydra v2 returns inside
+// login/consent challenge responses. ClientID is what we expose.
+type hydraClientRef struct {
+	ClientID string `json:"client_id"`
 }
 
-// ConsentRequest represents Hydra's consent challenge.
+// LoginRequest represents Hydra's login challenge.
+//
+// Plan J-05 iter 5 (2026-06-05) — Hydra v2 nests client_id under `client.client_id`.
+// The struct accepts BOTH flat `client_id` (legacy / Hydra v1) AND nested
+// `client.client_id` so that GetLoginRequest works regardless of upstream
+// version. A post-decode normalization step promotes the nested value
+// when the flat field is empty.
+type LoginRequest struct {
+	Challenge string         `json:"challenge"`
+	ClientID  string         `json:"client_id"`
+	Client    hydraClientRef `json:"client"`
+	Subject   string         `json:"subject"`
+	Skip      bool           `json:"skip"`
+}
+
+// ConsentRequest represents Hydra's consent challenge. Same nested-client
+// rationale as LoginRequest above.
 type ConsentRequest struct {
-	Challenge               string   `json:"challenge"`
-	ClientID                string   `json:"client_id"`
-	Subject                 string   `json:"subject"`
-	RequestedScope          []string `json:"requested_scope"`
-	RequestedAccessTokenAud []string `json:"requested_access_token_audience"`
+	Challenge               string         `json:"challenge"`
+	ClientID                string         `json:"client_id"`
+	Client                  hydraClientRef `json:"client"`
+	Subject                 string         `json:"subject"`
+	RequestedScope          []string       `json:"requested_scope"`
+	RequestedAccessTokenAud []string       `json:"requested_access_token_audience"`
 }
 
 // GetLoginRequest fetches the login challenge from Hydra admin.
@@ -195,6 +210,9 @@ func (c *HydraClient) GetLoginRequest(challenge string) (*LoginRequest, error) {
 		return nil, err
 	}
 	req.Challenge = challenge
+	if req.ClientID == "" && req.Client.ClientID != "" {
+		req.ClientID = req.Client.ClientID
+	}
 	return &req, nil
 }
 
@@ -246,6 +264,9 @@ func (c *HydraClient) GetConsentRequest(challenge string) (*ConsentRequest, erro
 		return nil, err
 	}
 	req.Challenge = challenge
+	if req.ClientID == "" && req.Client.ClientID != "" {
+		req.ClientID = req.Client.ClientID
+	}
 	return &req, nil
 }
 
@@ -347,6 +368,14 @@ func (c *HydraClient) RegisterClient(redirectURIs []string) error {
 		"scope":                      "openid offline_access",
 		"token_endpoint_auth_method": "none", // Public client
 		"redirect_uris":              redirectURIs,
+		// Plan J-05 iter 6 (2026-06-05) — LIVE bug F-03 caught during dogfood
+		// final scope. Without an explicit audience whitelist on the CLI client,
+		// Hydra rejects refresh_token grants with "Requested audience 'loopzero-cloud'
+		// has not been whitelisted by the OAuth 2.0 Client" because the original
+		// device-flow consent set aud=[loopzero-cloud,loopzero-engine] via
+		// grant_access_token_audience (AcceptConsent line 277). Refresh
+		// re-validates the audience contract against the client registration.
+		"audience": []string{"loopzero-cloud", "loopzero-engine"},
 	}
 	body, err := json.Marshal(payload)
 	if err != nil {

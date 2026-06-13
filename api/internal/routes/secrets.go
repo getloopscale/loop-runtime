@@ -44,12 +44,64 @@ type SecretEnvLocker interface {
 	WithLock(ctx context.Context, tenant, project, env string, fn func(tx db.DBTX) error) error
 }
 
+// SecretTransit — narrow interface (ISP) for the OpenBao transit encryption
+// adapter consumed by the Bulk write path (T2.3 of plan
+// 2026-06-10-j22-openbao-transit-eso-sync v1.2).
+//
+// When wired, Bulk MUST encrypt every entry.Value via Encrypt BEFORE
+// persisting to PG so the secrets.encrypted_value BYTEA column never
+// stores plaintext. Tenant-scoped (per-tenant transit key per D4 ADR).
+//
+// Production injects *adapters.VaultTransitAdapter (which wraps
+// *pkg/vault.TransitClient). Nil-safe: when transitClient is nil, Bulk
+// falls back to the legacy path where the existing AES key in
+// secret_wrapper.go encrypts at the store layer (legacy/test path).
+type SecretTransit interface {
+	Encrypt(ctx context.Context, tenantID string, plaintext []byte) (ciphertext string, err error)
+}
+
+// SecretProjectChecker — narrow interface (ISP) for the tenant-scoped
+// project existence check. T1.2 of plan
+// 2026-06-10-j22-openbao-transit-eso-sync v1.2: Bulk MUST resolve the
+// owning tenant of the requested project BEFORE invoking store.Set or
+// k8sSync so a JWT carrying tenant_id=tn-X cannot trick the API into
+// encrypting tenant_id=tn-Y's value with tn-X's transit key.
+//
+// EC-03 absorption: the tenant-scoped GetByName returns nil for both
+// "cross-tenant attempt" and "genuinely-nonexistent" paths — making the
+// 404 response byte-identical across both. This is the defense against
+// observable response discrepancy (CWE-204 / existence-leak).
+//
+// Production wires the existing *db.PostgresProjectStore via the same
+// `&db.PostgresProjectStore{DB:...}` shape (per project_types.go
+// constructor convention) — a project-checker adapter is NOT needed
+// because PostgresProjectStore.GetByName already matches this signature.
+type SecretProjectChecker interface {
+	GetByName(ctx context.Context, tenantID, name string) (*domain.ProjectResult, error)
+}
+
+// SecretPlanLimiter — narrow interface (ISP) for the plan-limit gate.
+// Production wires *enforcement.PlanLimiter via an adapter; tests pass a
+// fake. Returns:
+//   - allowed: false when adding `adding` secrets would exceed the cap
+//   - current: current secret count for the tenant
+//   - max: hard limit per the tenant's plan
+//   - plan: tenant's plan name ("free" / "pro" / "team" / "enterprise")
+//
+// J-22 T1.3.
+type SecretPlanLimiter interface {
+	IsAllowedToCreate(ctx context.Context, tenantID string, adding int) (allowed bool, current int, max int, plan string)
+}
+
 // SecretHandler provides HTTP handlers for secret operations.
 type SecretHandler struct {
-	store   SecretStore
-	k8sSync SecretK8sSync   // optional — nil disables K8s sync
-	audit   AuditLogger     // optional — nil disables audit logging
-	locker  SecretEnvLocker // optional — nil disables environment lock (legacy path)
+	store          SecretStore
+	k8sSync        SecretK8sSync        // optional — nil disables K8s sync
+	audit          AuditLogger          // optional — nil disables audit logging
+	locker         SecretEnvLocker      // optional — nil disables environment lock (legacy path)
+	planLimits     SecretPlanLimiter    // optional — nil disables plan-limit gate (legacy/test path)
+	projectChecker SecretProjectChecker // optional — nil disables T1.2 cross-tenant binding (legacy/test path)
+	transitClient  SecretTransit        // optional — nil disables T2.3 transit encrypt (legacy AES path)
 }
 
 // NewSecretHandler creates a new SecretHandler.
@@ -91,6 +143,45 @@ func (h *SecretHandler) SetLocker(locker SecretEnvLocker) {
 	h.locker = locker
 }
 
+// SetPlanLimiter configures the plan-limit gate for secret mutations.
+// J-22 T1.3: when wired, Bulk consults the gate BEFORE invoking store.Set;
+// denied requests return 402 PLAN_LIMIT_EXCEEDED without store/audit calls.
+// Nil-safe: when planLimits is nil, Bulk skips the check (legacy/test path).
+func (h *SecretHandler) SetPlanLimiter(limiter SecretPlanLimiter) {
+	h.planLimits = limiter
+}
+
+// SetTransitClient configures the OpenBao transit encrypt path (T2.3 of
+// plan 2026-06-10-j22-openbao-transit-eso-sync v1.2). When wired, the
+// Bulk handler encrypts every entry.Value via transit.Encrypt BEFORE
+// invoking store.Set so PG never receives plaintext bytes.
+//
+// Nil-safe: when transitClient is nil, Bulk falls back to the legacy
+// path where the existing AES-GCM wrapper in secret_wrapper.go encrypts
+// at the store layer (legacy/test path). D6 ADR fail-loud refusal at
+// boot time (T2.5) ensures production never lands on the legacy path
+// silently — operator must opt-in via LOOPZERO_DEV=true or set
+// OPENBAO_TRANSIT_ENABLED=true.
+func (h *SecretHandler) SetTransitClient(client SecretTransit) {
+	h.transitClient = client
+}
+
+// SetProjectChecker configures the cross-tenant binding check (T1.2 of plan
+// 2026-06-10-j22-openbao-transit-eso-sync v1.2). When wired, Bulk resolves
+// the requested project's owning tenant via the tenant-scoped GetByName
+// query; a nil result returns 404 PROJECT_NOT_FOUND with a body that is
+// BYTE-IDENTICAL between cross-tenant attempts (project exists for another
+// tenant) and genuinely-nonexistent paths (project missing entirely). This
+// is the EC-03 absorption defending against CWE-204 observable response
+// discrepancy / existence-leak.
+//
+// Nil-safe: when projectChecker is nil, Bulk skips the check (legacy/test
+// path). Production wiring MUST inject the real *db.PostgresProjectStore so
+// the cross-tenant guard fires before transit encryption ever begins.
+func (h *SecretHandler) SetProjectChecker(checker SecretProjectChecker) {
+	h.projectChecker = checker
+}
+
 // secretListResponse is the JSON response for GET /api/v1/secrets.
 type secretListResponse struct {
 	Secrets []SecretMetadata `json:"secrets"`
@@ -121,6 +212,351 @@ type secretDeleteResponse struct {
 
 // secretNameRegex validates secret names: uppercase letters, digits, underscores.
 var secretNameRegex = regexp.MustCompile(`^[A-Z][A-Z0-9_]*$`)
+
+// --- J-22 T1.1: bulk endpoint ---
+
+// secretBulkEntry is one entry in a bulk request — name + value + envs scope.
+type secretBulkEntry struct {
+	Name  string   `json:"name"`
+	Value string   `json:"value"`
+	Envs  []string `json:"envs"`
+}
+
+// secretBulkRequest is the JSON body for POST /api/v1/secrets/bulk.
+// Project is read from the body first, falling back to ?project= query.
+type secretBulkRequest struct {
+	Project string            `json:"project"`
+	Secrets []secretBulkEntry `json:"secrets"`
+}
+
+// secretBulkResult is a single per-key outcome inside the bulk response.
+//
+// Status (aggregate across envs for this key):
+//   - "created"       — at least one env's store.Set + k8sSync succeeded
+//   - "failed"        — all envs failed at store.Set
+//
+// SyncStatus (aggregate across envs):
+//   - "pending"  — k8sSync not wired (legacy behaviour)
+//   - "synced"   — every env's k8sSync succeeded
+//   - "partial"  — at least one env synced, at least one failed
+//   - "failed"   — all envs failed at k8sSync (or status itself == "failed")
+//
+// SyncStatusPerEnv (EC-02 absorption) — per-env granular state. Each env in
+// entry.Envs produces one entry: "synced" | "failed" | "pending". UI surfaces
+// this when SyncStatus == "partial".
+//
+// ErrorCode (EC-01 absorption) — populated when Status == "failed". Stable
+// machine identifier (e.g. "STORE_SET_FAILED", "INVALID_KEY") for UI to
+// disambiguate from the free-text Error.
+type secretBulkResult struct {
+	Name             string            `json:"name"`
+	Status           string            `json:"status"`
+	Error            string            `json:"error,omitempty"`
+	ErrorCode        string            `json:"error_code,omitempty"`
+	SyncStatus       string            `json:"sync_status"`
+	SyncStatusPerEnv map[string]string `json:"sync_status_per_env,omitempty"`
+}
+
+// secretBulkResponse holds the bulk POST response. Invariant per plan
+// 2026-06-06-dashboard-journey-j22-secrets-crud § T1.1: len(Results)
+// MUST equal len(request.Secrets), regardless of per-key success.
+type secretBulkResponse struct {
+	Results []secretBulkResult `json:"results"`
+}
+
+// secretBulkMaxKeys caps the size of a bulk request per EC-18. Matches
+// the Pro plan limit of 100 secrets so a single batch cannot bypass
+// plan enforcement.
+const secretBulkMaxKeys = 100
+
+// Bulk handles POST /api/v1/secrets/bulk?project={name}.
+//
+// Per plan T1.1, response shape MUST be {results: [{name, status,
+// error?, sync_status}]} with one entry per input key, enforcing
+// len(results) == len(request.secrets).
+//
+// EC-18 (size cap): > 100 keys returns 413 PAYLOAD_TOO_LARGE without
+// invoking the store.
+//
+// EC-16 (input validation): names violating secretNameRegex return
+// status="failed" without aborting the batch.
+//
+// EC absorptions deferred to subsequent iterations:
+// - EC-9 (per-key savepoint atomicity)
+// - EC-10 (pg_advisory_xact_lock race-safe limit gate via SecretEnvLocker)
+// - EC-11 (ESO sync_status polling)
+// - EC-12 (audit log atomicity)
+// - EC-14/15 (duplicate keys + whitespace preservation handled by Set)
+func (h *SecretHandler) Bulk(w http.ResponseWriter, r *http.Request) {
+	ctx, cancel := context.WithTimeout(r.Context(), 30*time.Second)
+	defer cancel()
+
+	uc := middleware.GetUserContext(ctx)
+	if uc == nil {
+		writeLoopZeroError(w, loopzeroerrors.ErrUnauthorized)
+		return
+	}
+
+	var req secretBulkRequest
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		writeLoopZeroError(w, loopzeroerrors.ErrMissingField.Wrap("invalid request body"))
+		return
+	}
+
+	if len(req.Secrets) > secretBulkMaxKeys {
+		writeJSON(w, http.StatusRequestEntityTooLarge, map[string]string{
+			"code":    "PAYLOAD_TOO_LARGE",
+			"message": fmt.Sprintf("bulk request exceeds %d keys; split into multiple uploads", secretBulkMaxKeys),
+		})
+		return
+	}
+
+	// EC-14 (backend defense in depth): reject 400 if a key appears more
+	// than once in the same batch. Browser-side parseDotenv (T3.5) also
+	// catches this pre-flight; backend rejects independently so API
+	// consumers cannot bypass.
+	seen := make(map[string]struct{}, len(req.Secrets))
+	for _, e := range req.Secrets {
+		if _, dup := seen[e.Name]; dup {
+			writeJSON(w, http.StatusBadRequest, map[string]string{
+				"code":    "DUPLICATE_KEY_IN_BATCH",
+				"message": fmt.Sprintf("key %q appears more than once in the same batch", e.Name),
+			})
+			return
+		}
+		seen[e.Name] = struct{}{}
+	}
+
+	project := req.Project
+	if project == "" {
+		project = r.URL.Query().Get("project")
+	}
+
+	// T1.2 (plan 2026-06-10-j22-openbao-transit-eso-sync v1.2) — cross-tenant
+	// binding check. Resolves the owning tenant of the requested project via
+	// the tenant-scoped GetByName query. EC-03 absorption: a nil result
+	// returns 404 PROJECT_NOT_FOUND with BYTE-IDENTICAL body whether the
+	// project belongs to another tenant OR does not exist at all. This is
+	// the canonical defense against CWE-204 (observable response
+	// discrepancy / existence-leak) — without it, an attacker could probe
+	// project names by distinguishing 403-vs-404 responses.
+	//
+	// Audit row distinction (cross_tenant_attempt vs project_not_found) is
+	// internal: with only the tenant-scoped lookup we cannot determine
+	// which case fired without a SECOND query, so we log a single
+	// PROJECT_LOOKUP_FAILED action with the requested project name +
+	// tenant_id; forensics can run `SELECT tenant_id FROM projects WHERE
+	// name='X'` to disambiguate post-hoc. A separate unscoped lookup adds
+	// timing-leak surface and is rejected on Don't Reinvent + KISS.
+	if h.projectChecker != nil && project != "" {
+		proj, err := h.projectChecker.GetByName(ctx, uc.TenantID, project)
+		if err != nil || proj == nil {
+			if h.audit != nil {
+				if auditErr := h.audit.LogAudit(ctx, uc.TenantID, "PROJECT_LOOKUP_FAILED",
+					uc.UserID, "secret", project, "",
+					map[string]any{"reason": "cross_tenant_or_not_found"}); auditErr != nil {
+					slog.Error("failed to write audit log for cross-tenant lookup",
+						"project", project, "error", auditErr)
+				}
+			}
+			writeJSON(w, http.StatusNotFound, map[string]string{
+				"code":    "PROJECT_NOT_FOUND",
+				"message": "project not found",
+			})
+			return
+		}
+	}
+
+	// J-22 T1.3 — plan-limit gate. EC-10 (pg_advisory_xact_lock race-safe)
+	// remains DEFERRED to a follow-up iteration; existing SecretEnvLocker
+	// pattern can be reused without redesigning the limiter contract.
+	if h.planLimits != nil {
+		// Counts each valid (key × env) tuple toward the cap. Invalid keys
+		// are subtracted later inside the loop (they don't materialize).
+		var adding int
+		for _, e := range req.Secrets {
+			if !secretNameRegex.MatchString(e.Name) {
+				continue
+			}
+			adding += len(e.Envs)
+		}
+		if adding > 0 {
+			allowed, current, max, plan := h.planLimits.IsAllowedToCreate(ctx, uc.TenantID, adding)
+			if !allowed {
+				writeJSON(w, http.StatusPaymentRequired, map[string]any{
+					"code":    "PLAN_LIMIT_EXCEEDED",
+					"message": fmt.Sprintf("plan %q allows %d secrets, currently at %d", plan, max, current),
+					"current": current,
+					"limit":   "secrets",
+					"max":     max,
+					"plan":    plan,
+				})
+				return
+			}
+		}
+	}
+
+	results := make([]secretBulkResult, 0, len(req.Secrets))
+	for _, entry := range req.Secrets {
+		results = append(results, h.bulkProcessEntry(ctx, uc, project, entry))
+	}
+
+	writeJSON(w, http.StatusOK, secretBulkResponse{Results: results})
+}
+
+// bulkEnvAggregates collects per-env outcomes for a single bulk entry.
+// Extracted from SecretHandler.Bulk so the entry-level + env-level
+// processing pipelines are independently legible + testable.
+// T4.2 of plan 2026-06-11-code-review-remediation v1.2 + ADR D6.
+type bulkEnvAggregates struct {
+	syncStatusPerEnv map[string]string
+	firstErr         error
+	storeFailures    int
+	syncFailures     int
+	syncSuccesses    int
+}
+
+// bulkProcessEntry handles one batch entry (one secret key, N envs).
+// Encapsulates the per-entry pipeline:
+//   1. Validate the key name; INVALID_KEY short-circuits without touching
+//      the store.
+//   2. Run the per-env transit-encrypt → store.Set → k8sSync triad
+//      (continue-best-effort per EC-01).
+//   3. Aggregate per-env outcomes into the entry's Status/SyncStatus
+//      following the union-state contract (EC-02).
+//   4. Emit one SECRET_CREATED audit row per successful entry.
+//
+// Returns a fully-populated secretBulkResult ready to append.
+func (h *SecretHandler) bulkProcessEntry(ctx context.Context, uc *middleware.UserContext, project string, entry secretBulkEntry) secretBulkResult {
+	result := secretBulkResult{
+		Name:       entry.Name,
+		Status:     "created",
+		SyncStatus: "pending",
+	}
+	if !secretNameRegex.MatchString(entry.Name) {
+		result.Status = "failed"
+		result.Error = "INVALID_KEY"
+		result.ErrorCode = "INVALID_KEY"
+		return result
+	}
+
+	aggs := h.bulkProcessEnvs(ctx, uc, project, entry)
+	h.bulkAggregateStatus(&result, entry, aggs)
+	result.SyncStatusPerEnv = aggs.syncStatusPerEnv
+
+	// Audit log per-key (T1.2 J-22 invariant): one row per logical
+	// SECRET_CREATED action when at least one env persisted to PG.
+	// INVALID_KEY short-circuit handled above; non-"created" Status
+	// implies storeFailures == len(entry.Envs) so no audit.
+	if h.audit != nil && result.Status == "created" {
+		if auditErr := h.audit.LogAudit(ctx, uc.TenantID, "SECRET_CREATED", uc.UserID,
+			"secret", entry.Name, "",
+			map[string]any{"envs": entry.Envs, "project": project}); auditErr != nil {
+			slog.Error("failed to write audit log for secret bulk",
+				"name", entry.Name, "error", auditErr)
+		}
+	}
+	return result
+}
+
+// bulkProcessEnvs runs the transit→store→k8sSync triad for every env
+// of one entry. Implements EC-01 continue-best-effort: a failure for
+// one env MUST NOT short-circuit the others. Returns the aggregates
+// the caller folds into the entry-level result.
+func (h *SecretHandler) bulkProcessEnvs(ctx context.Context, uc *middleware.UserContext, project string, entry secretBulkEntry) bulkEnvAggregates {
+	aggs := bulkEnvAggregates{
+		syncStatusPerEnv: make(map[string]string, len(entry.Envs)),
+	}
+	for _, env := range entry.Envs {
+		// T2.3 (plan 2026-06-10-j22-openbao-transit-eso-sync v1.2):
+		// when transit is wired, encrypt the plaintext via OpenBao
+		// BEFORE persisting to PG. On transit failure, MUST NOT
+		// persist plaintext — increment storeFailures + skip the
+		// store.Set + skip k8sSync for this env (continue-best-effort
+		// per EC-01 still respected; remaining envs unaffected).
+		valueBytes := []byte(entry.Value)
+		if h.transitClient != nil {
+			ct, terr := h.transitClient.Encrypt(ctx, uc.TenantID, valueBytes)
+			if terr != nil {
+				if aggs.firstErr == nil {
+					aggs.firstErr = terr
+				}
+				aggs.syncStatusPerEnv[env] = "failed"
+				aggs.storeFailures++
+				continue
+			}
+			valueBytes = []byte(ct)
+		}
+		if _, err := h.store.Set(ctx, uc.TenantID, project, env, "", entry.Name, valueBytes); err != nil {
+			if aggs.firstErr == nil {
+				aggs.firstErr = err
+			}
+			aggs.syncStatusPerEnv[env] = "failed"
+			aggs.storeFailures++
+			continue
+		}
+
+		// store.Set succeeded for this env; now invoke k8sSync per D2 ADR
+		// (k8sSync runs OUTSIDE lock; PG row is canonical even on sync
+		// failure — eventual consistency via ESO ExternalSecret CR).
+		if h.k8sSync == nil {
+			aggs.syncStatusPerEnv[env] = "pending"
+			continue
+		}
+		if syncErr := h.k8sSync.CreateSecret(ctx, uc.TenantID, project, env, "", entry.Name, entry.Value); syncErr != nil {
+			aggs.syncStatusPerEnv[env] = "failed"
+			aggs.syncFailures++
+			slog.Warn("k8sSync.CreateSecret failed for bulk entry env",
+				"name", entry.Name, "env", env, "tenant", uc.TenantID, "error", syncErr)
+			continue
+		}
+		aggs.syncStatusPerEnv[env] = "synced"
+		aggs.syncSuccesses++
+	}
+	return aggs
+}
+
+// bulkAggregateStatus folds per-env aggregates into the entry-level
+// Status + SyncStatus per the union-state contract (EC-02):
+//   - Status: "failed" iff EVERY env's store.Set failed; else "created"
+//     (PG row canonical in at least one env)
+//   - SyncStatus: "synced" / "partial" / "failed" / "pending"
+//   - Error/ErrorCode reflect the first failure for diagnostics
+func (h *SecretHandler) bulkAggregateStatus(result *secretBulkResult, entry secretBulkEntry, aggs bulkEnvAggregates) {
+	// Aggregate Status.
+	if aggs.storeFailures == len(entry.Envs) {
+		result.Status = "failed"
+		if aggs.firstErr != nil {
+			result.Error = aggs.firstErr.Error()
+		}
+		result.ErrorCode = "STORE_SET_FAILED"
+	} else if aggs.storeFailures > 0 {
+		// At least one env persisted to PG but at least one failed.
+		// Status stays "created" (consistent with prior contract: caller
+		// asked to create and we did create at least one), but Error
+		// surfaces the first store failure for diagnostics.
+		result.Status = "created"
+		if aggs.firstErr != nil {
+			result.Error = aggs.firstErr.Error()
+		}
+		result.ErrorCode = "STORE_SET_PARTIAL"
+	}
+
+	// Aggregate SyncStatus:
+	//   - k8sSync wired AND all envs synced → "synced"
+	//   - k8sSync wired AND any env failed  → "partial" or "failed"
+	//   - k8sSync NOT wired                  → "pending" (legacy)
+	switch {
+	case h.k8sSync == nil:
+		result.SyncStatus = "pending"
+	case aggs.syncFailures == 0 && aggs.storeFailures == 0:
+		result.SyncStatus = "synced"
+	case aggs.syncSuccesses == 0:
+		result.SyncStatus = "failed"
+	default:
+		result.SyncStatus = "partial"
+	}
+}
 
 // List handles GET /api/v1/secrets?env={env}&project={project}.
 // Returns secret names only — NEVER values.
@@ -347,7 +783,7 @@ func (h *SecretHandler) DeleteSecret(w http.ResponseWriter, r *http.Request) {
 
 	// Remove K8s Secret from mgmt + ExternalSecret CR from workload
 	if h.k8sSync != nil {
-		if syncErr := h.k8sSync.DeleteSecret(ctx, uc.TenantID, env, app, name); syncErr != nil {
+		if syncErr := h.k8sSync.DeleteSecret(ctx, uc.TenantID, project, env, app, name); syncErr != nil {
 			slog.Error("failed to delete secret from K8s", "name", name, "error", syncErr)
 		}
 	}

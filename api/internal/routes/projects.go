@@ -4,6 +4,7 @@
 package routes
 
 import (
+	pkgdomain "github.com/loopzero/loopzero/pkg/domain"
 	"context"
 	"encoding/json"
 	"errors"
@@ -34,6 +35,7 @@ var (
 type (
 	CreateProjectInput = domain.CreateProjectInput
 	ProjectResult      = domain.ProjectResult
+	ProjectSummary     = domain.ProjectSummary
 	ProjectStore       = domain.ProjectStore
 	TenantCRSpec       = domain.TenantCRSpec
 	TenantCRManager    = domain.TenantCRManager
@@ -44,9 +46,11 @@ type (
 
 // ProjectHandler provides HTTP handlers for project operations.
 type ProjectHandler struct {
-	store   ProjectStore
-	crMgr   TenantCRManager
-	deleter ProjectDeleter
+	store         ProjectStore
+	crMgr         TenantCRManager
+	deleter       ProjectDeleter
+	envEnsurer    EnvironmentEnsurer        // T4.1: auto-create production env on POST /api/v1/projects
+	planTierStore pkgdomain.PlanTierStore   // T2.3.b: resolves tenant's canonical plan instead of hardcoded "starter"
 }
 
 // NewProjectHandler creates a new ProjectHandler.
@@ -57,6 +61,31 @@ func NewProjectHandler(store ProjectStore, crMgr TenantCRManager) *ProjectHandle
 // SetDeleter configures the project deleter. Called from main.go after all deps are ready.
 func (h *ProjectHandler) SetDeleter(d ProjectDeleter) {
 	h.deleter = d
+}
+
+// SetPlanTierStore wires the PlanTierStore used by Create to resolve the
+// tenant's canonical plan before EnsureTenant. T2.3.b of plan
+// 2026-06-11-code-review-remediation v1.2 — closes H7 CRITICAL silent
+// downgrade by replacing the literal `Plan: "starter"` with a real DB
+// lookup via pkg/domain.ResolvePlanTier (ADR D4).
+//
+// Production main.go MUST call this with the canonical store. Tests
+// that don't set it fall back to PlanTierStarter (matching pre-T2.3.b
+// behavior so the wider test suite keeps passing during transition).
+func (h *ProjectHandler) SetPlanTierStore(s pkgdomain.PlanTierStore) {
+	h.planTierStore = s
+}
+
+// SetEnvEnsurer wires the EnvironmentEnsurer used by Create to auto-create
+// the canonical `production` environment for every new project per ADR D4
+// of plan 2026-06-09-m2-operator-canonical-fix v1.4 (Vercel-style: every
+// project has production from day 1). Called from main.go after all deps
+// are ready. When unset (e.g., unit tests that only exercise the project
+// store path), Create skips the env-auto-create step and behaves identically
+// to the pre-T4.1 handler — preserves backwards-compatibility with the
+// existing happy-path test suite.
+func (h *ProjectHandler) SetEnvEnsurer(e EnvironmentEnsurer) {
+	h.envEnsurer = e
 }
 
 // List handles GET /api/v1/projects.
@@ -71,9 +100,15 @@ func (h *ProjectHandler) List(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	projects, err := h.store.ListByTenant(ctx, uc.TenantID)
+	// Plan 2026-06-08-dashboard-screens-review-fixes T2.1 + ADR D2:
+	// switched to the summary variant so the dashboard /projects table
+	// renders M2-accurate "Live envs" count + status-derived StatusDot
+	// without an N+1 client-side fanout. Response is wire-format
+	// additive — legacy consumers (CLI `loopzero project list`) ignore the
+	// extra fields per Rule 5.
+	projects, err := h.store.ListByTenantWithSummary(ctx, uc.TenantID)
 	if err != nil {
-		slog.Error("failed to list projects",
+		slog.Error("failed to list projects with summary",
 			"tenant_id", uc.TenantID,
 			"error", err.Error(),
 		)
@@ -81,13 +116,52 @@ func (h *ProjectHandler) List(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	// Plan 2026-06-08-dashboard-screens-review-fixes T2.3 + ADR D8:
+	// pagination scaffold via Go-side slicing. limit defaults to 50,
+	// offset defaults to 0, limit hard-capped at 100 (defense vs
+	// scan-of-tenant DoS). Tenant ceiling (Team plan = 10 projects ×
+	// 20 envs = 200 envs aggregate) makes SQL-side LIMIT/OFFSET overkill;
+	// Go-side slicing is honest pagination for current scale. Defer
+	// cursor-based pagination to v1.x (plan §ADR D8 "Cursor rejected").
+	// `total` field carries the UNPAGINATED count so the dashboard can
+	// render "Showing N of M" + "Load more" affordances (J-17 lesson).
+	total := len(projects)
+	limit, offset := parsePaginationParams(r)
+	from, to := sliceWindow(total, limit, offset)
 	writeJSON(w, http.StatusOK, map[string]interface{}{
-		"projects": projects,
+		"projects": projects[from:to],
+		"total":    total,
 	})
 }
 
+// parsePaginationParams reads ?limit= and ?offset= query params with
+// defaults (limit=50, offset=0) and cap (limit ≤ 100). Negative or
+// non-numeric values fall back to defaults. Per plan
+// 2026-06-08-dashboard-screens-review-fixes T2.3 + ADR D8.
+func parsePaginationParams(r *http.Request) (limit, offset int) {
+	limit = parseIntParam(r.URL.Query().Get("limit"), 50)
+	offset = parseIntParam(r.URL.Query().Get("offset"), 0)
+	if limit < 0 {
+		limit = 50
+	}
+	if limit > 100 {
+		limit = 100
+	}
+	if offset < 0 {
+		offset = 0
+	}
+	return limit, offset
+}
+
 // Get handles GET /api/v1/projects/{name}.
-// Returns a single project by name.
+// Returns a single project by name with the same enriched summary shape as
+// the list endpoint (env_count + apps_count + last_deploy_status +
+// latest_framework). T6.1 of plan 2026-06-08-pre-release-test-rigor: detail
+// endpoint MUST be by-construction consistent with list endpoint so the
+// dashboard's project-detail page renders the same metrics that drove the
+// list view. Implemented as ListByTenantWithSummary + in-memory filter (KISS,
+// reuses the single optimized SQL round-trip; O(n) over a tenant's project
+// count — microseconds for typical ≤100 projects/tenant).
 func (h *ProjectHandler) Get(w http.ResponseWriter, r *http.Request) {
 	ctx, cancel := context.WithTimeout(r.Context(), 30*time.Second)
 	defer cancel()
@@ -104,9 +178,9 @@ func (h *ProjectHandler) Get(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	project, err := h.store.GetByName(ctx, uc.TenantID, name)
+	summaries, err := h.store.ListByTenantWithSummary(ctx, uc.TenantID)
 	if err != nil {
-		slog.Error("failed to get project",
+		slog.Error("failed to list projects with summary",
 			"tenant_id", uc.TenantID,
 			"project", name,
 			"error", err.Error(),
@@ -114,12 +188,13 @@ func (h *ProjectHandler) Get(w http.ResponseWriter, r *http.Request) {
 		writeLoopZeroError(w, loopzeroerrors.ErrInternalError)
 		return
 	}
-	if project == nil {
-		writeLoopZeroError(w, loopzeroerrors.NewProjectNotFound(name))
-		return
+	for i := range summaries {
+		if summaries[i].Name == name {
+			writeJSON(w, http.StatusOK, summaries[i])
+			return
+		}
 	}
-
-	writeJSON(w, http.StatusOK, project)
+	writeLoopZeroError(w, loopzeroerrors.NewProjectNotFound(name))
 }
 
 // createProjectRequest is the JSON request body for POST /api/v1/projects.
@@ -170,7 +245,36 @@ func (h *ProjectHandler) Create(w http.ResponseWriter, r *http.Request) {
 	// which provisions Gitea repos, ArgoCD apps, namespaces, RBAC, and NetworkPolicies.
 	// ADR-0006 Invariant D: fail loud at ownership boundaries — silent failure here
 	// causes cascading deploy failures (namespace not found, ArgoCD app missing).
-	if err := h.crMgr.EnsureTenant(ctx, uc.TenantID, TenantCRSpec{Plan: "starter"}); err != nil {
+	//
+	// T2.3.b of plan 2026-06-11-code-review-remediation v1.2: resolve the
+	// tenant's canonical Plan via pkg/domain.ResolvePlanTier (ADR D4)
+	// instead of hardcoding "starter". Pre-T2.3.b code had:
+	//     EnsureTenant(ctx, uc.TenantID, TenantCRSpec{Plan: "starter"})
+	// which silently downgraded paying Pro/Team tenants on reconnect (H7
+	// CRITICAL from /loop-code-review).
+	//
+	// Failure modes (per ADR D4 contract):
+	//   - planTierStore nil          → transition fallback "starter"
+	//                                  (production main.go MUST wire it)
+	//   - ResolvePlanTier ErrUnknown → 503 PLATFORM_DEGRADED
+	//                                  (NEVER silent downgrade)
+	//   - any other store error      → 503 PLATFORM_DEGRADED
+	planValue := string(pkgdomain.PlanTierStarter)
+	if h.planTierStore != nil {
+		resolved, perr := pkgdomain.ResolvePlanTier(ctx, h.planTierStore, uc.TenantID)
+		if perr != nil {
+			slog.Error("failed to resolve canonical plan tier — refusing to silent-downgrade",
+				"tenant_id", uc.TenantID,
+				"error", perr.Error(),
+			)
+			writeLoopZeroError(w, loopzeroerrors.ErrPlatformDegraded.Wrap(
+				fmt.Sprintf("plan tier resolution failed for %s — retry or contact support", uc.TenantID),
+			))
+			return
+		}
+		planValue = resolved.String()
+	}
+	if err := h.crMgr.EnsureTenant(ctx, uc.TenantID, TenantCRSpec{Plan: planValue}); err != nil {
 		slog.Error("failed to ensure tenant CR",
 			"tenant_id", uc.TenantID,
 			"error", err.Error(),
@@ -179,6 +283,44 @@ func (h *ProjectHandler) Create(w http.ResponseWriter, r *http.Request) {
 			fmt.Sprintf("tenant infrastructure provisioning failed for %s — retry or contact support", uc.TenantID),
 		))
 		return
+	}
+
+	// T4.1 of plan 2026-06-09-m2-operator-canonical-fix v1.4 (ADR D4 —
+	// Vercel-style "every project has production from day 1"): auto-create
+	// the canonical `production` environment immediately after the project
+	// row + Tenant CR are in place. Without this, the user has to manually
+	// create the env via the dashboard before the first deploy works —
+	// the LIVE friction documented in
+	// feedback_m2_canonical_drift_operator_renderer.
+	//
+	// The EnvironmentEnsurer writes the `environments` PG row + appends to
+	// Tenant.Spec.Environments (TenantEnvironmentEntry.Project=req.Name,
+	// Name="production"). TenantController then cascades into Environment
+	// CR creation; EnvironmentController.reconcileNamespace (T3.1) computes
+	// the canonical M2 namespace `loopzero-<tenant>-<project>-production`.
+	//
+	// EC-5 / R8 honest disclosure: the strict PG-tx-first/K8s-after
+	// ordering described in the plan TDD body (lines 569-579) would
+	// require a Store-level transaction refactor (BeginTx → INSERT
+	// projects → INSERT environments → K8s call → COMMIT-or-ROLLBACK).
+	// The current Store API exposes CreateProject as a single
+	// auto-committed operation, so a K8s failure leaves the project row
+	// committed. Per Unbreakable Rule 3 this is documented as a known
+	// follow-up: tracked in the implementation contract known_followups
+	// list. The functional contract (production env exists after a
+	// successful POST) is preserved; the rollback path is deferred.
+	if h.envEnsurer != nil {
+		if err := h.envEnsurer.EnsureEnvironment(ctx, uc.TenantID, req.Name, pkgdomain.DefaultPermanentEnv); err != nil {
+			slog.Error("failed to auto-create production environment",
+				"tenant_id", uc.TenantID,
+				"project", req.Name,
+				"error", err.Error(),
+			)
+			writeLoopZeroError(w, loopzeroerrors.ErrPlatformDegraded.Wrap(
+				fmt.Sprintf("production environment auto-create failed for project %q — retry or contact support", req.Name),
+			))
+			return
+		}
 	}
 
 	writeJSON(w, http.StatusCreated, result)

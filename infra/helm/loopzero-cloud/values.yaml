@@ -49,3 +49,40 @@ env:
   HYDRA_PUBLIC_URL: "http://ory-hydra-public.loopzero-auth.svc.cluster.local:4444"
   KRATOS_PUBLIC_URL: "http://ory-kratos-public.loopzero-auth.svc.cluster.local:80"
   KRATOS_ADMIN_URL: "http://ory-kratos-admin.loopzero-auth.svc.cluster.local:80"
+  # 2026-06-05 (J-09 dogfood): loopzero-cloud proxy /engine/* needs ENGINE_API_URL
+  # to reach the loopzero-api Service. Default in cloud/internal/config/config.go:111
+  # was "http://loopzero-api.loopzero-system:8080" but the Service exposes :3001 -- led
+  # to 502 -> SERVICE_UNAVAILABLE on every /engine/* request after the J-09
+  # rollout when the wiring ConfigMap drifted. Pin canonical URL here so it
+  # survives clean bootstrap.
+  ENGINE_API_URL: "http://loopzero-api.loopzero-system.svc.cluster.local:3001"
+  # Plan J-09 T1.1 (2026-06-05) — GitHub App install handshake.
+  # Operator overrides these per-env (dev-public, prod). Defaults below
+  # are safe-for-local (loopzero-platform slug, host-only cookie, dashboard
+  # at localhost). The cloud binary reads them via cloud/internal/config/config.go.
+  GITHUB_APP_SLUG: "loopzero-platform"
+  APP_PUBLIC_URL: "http://localhost:3000"
+  AUTH_COOKIE_DOMAIN: ""
+
+# ============================================================================
+# ADR D1 (decisions/2026-06-11-tilt-yaml-configmap-mount.md) — runtime config
+# Mounted via envFrom by Tilt-owned Deployment + production chart Deployment.
+# Closes 15 of 53 hardcoded literals identified in code-review-output/.
+# Override per-env via values-{dev,prod,standalone-multi}.yaml.
+# Sensitive values MUST live under runtimeSecrets (see secret-runtime.yaml).
+# ============================================================================
+runtimeConfig: {}
+  # Example dev keys (moved from infra/tilt/cloud-deployment.yaml):
+  #   CLOUD_LISTEN_ADDR: ":3002"
+  #   KRATOS_PUBLIC_URL: "http://ory-kratos-public.loopzero-auth.svc.cluster.local:80"
+  #   HYDRA_PUBLIC_URL: "http://ory-hydra-public.loopzero-auth.svc.cluster.local:4444"
+  #   APP_PUBLIC_URL: "https://app-dev.loopzero.example"
+  #   (...6 more — see infra/helm/loopzero-cloud/values-dev.yaml)
+
+runtimeSecrets: {}
+  # Example dev keys (moved from infra/tilt/cloud-deployment.yaml):
+  #   DATABASE_URL: "postgres://loopzero:loopzero-dev-password@..."
+  #   LOOPZERO_SERVICE_AUTH_SECRET: "..."
+  #   SESSION_TOKEN_SECRET: "..."
+  #   STRIPE_API_KEY: "rk_test_..."
+  #   STRIPE_WEBHOOK_SECRET: "whsec_..."

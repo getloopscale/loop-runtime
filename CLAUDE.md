@@ -61,6 +61,189 @@ See the ROADMAP doc § "Chain at a glance" for the visual chain. Summary:
 
 **When this mandate may change:** Only via explicit ADR signed by project owner. Any PR that softens an invariant above (renames a scope, lifts the M1 shared-tenancy model, exposes TheMemory key to customer, etc.) MUST cite the ADR. The grill-me session of 2026-06-06 is the foundational record; any subsequent change layers ADRs on top — never erases the original mandate.
 
+## Dashboard Journeys — 20 plans formalizados (locked 2026-06-06)
+
+> **Read this BEFORE editing any file under `cloud/dashboard/src/pages/` OR adding a new dashboard route — every journey already has a formal plan that locks decisions.**
+
+**Authorization:** project-owner directive 2026-06-06 — "Spawn TODOS os planos formais pendentes em escopo grande para centralizar decisões de design comuns." Resultado: 20 plans cobrindo TODAS as dashboard journeys ainda abertas (J-01..J-24, exceto J-04/J-05/J-09/J-17 já delivered).
+
+**Source of truth (DO NOT re-derive decisions ad-hoc — every PR cites the plan that locks them):**
+
+- **ROADMAP (sequência P0/P1/P2 + dependency graph + lessons-learned J-17):** [`docs/handoff/2026-06-05-dashboard-vercel-like-integration-roadmap.md`](docs/handoff/2026-06-05-dashboard-vercel-like-integration-roadmap.md) § 8
+- **20 planos individuais** em `.claude/knowledge-base/plans/2026-06-06-dashboard-journey-j{NN}-{slug}-plan.md`:
+
+| Prioridade | Journey | Esforço | Plano |
+|---|---|---:|---|
+| P0 | J-06 Overview | 12h | `j06-overview-plan.md` |
+| P0 | J-07 Projects List ✅ DELIVERED 2026-06-08 | 14h | `j07-projects-list-plan.md` + closed-via `2026-06-08-dashboard-screens-review-fixes-plan.md` T5.3 sponsor walkthrough commit `6f8f50b6` verbatim "Ficou ótimo, parabens!" |
+| P0 | J-08 Project Detail Overview ✅ DELIVERED 2026-06-08 | 10h | `j08-project-detail-overview-plan.md` + closed-via same dashboard-screens-review-fixes T5.3 (cd603c7b derive metrics from builds[] + 898e3e85 enriched summary endpoint) |
+| P0 | J-13 Billing (Stripe parity) | 12h | `j13-billing-stripe-parity-plan.md` |
+| P0 | J-18 Status / Runtime Health | 20h | `j18-status-runtime-health-plan.md` |
+| P0 | J-19 Runtime Logs Streaming | 21h | `j19-runtime-logs-streaming-plan.md` |
+| P0 | J-20 Scale | 18h | `j20-scale-plan.md` |
+| P0 | J-21 Readiness Score | 14h | `j21-readiness-plan.md` |
+| P0 | J-22 Secrets CRUD ✅ DELIVERED 2026-06-11 | 19h | `j22-secrets-crud-plan.md` + `2026-06-10-j22-openbao-transit-eso-sync-plan.md` v1.2 + `2026-06-10-j22-layer2-code-review-fixes-plan.md` v1.1 |
+| P0 | J-23 Previews (per-PR) ✅ DELIVERED 2026-06-07 | 25h | `j23-previews-plan.md` + refactor-via `2026-06-07-preview-as-category-single-slot-plan.md` (Netlify-style); 8 commits 2026-06-07 closing 9 LIVE bugs in sponsor-guided regression test session; dogfood-preview 9/9 PASS; cross-ref [[reference_j23_batch_2026_06_07]] |
+| P0 | J-24 Configuration (Monaco) | 24h | `j24-configuration-plan.md` |
+| P0 | J-25 Live URL Discoverability ✅ DELIVERED 2026-06-12 | 8h | `2026-06-12-dashboard-journey-j25-live-url-discoverability-plan.md` v1.2 SHIPPABLE 100.0 + FAANG canonical refactor closing T6.2 addendum catches #21+#22 via 5 commits (`f2d2106c` helmfile dev-public BASE_DOMAIN per-env + `46186e52` values-dev BASE_DOMAIN 4-layer Tilt-canonical + `6a3815e2` Caddyfile `*.prod-dev.loopzero.example` wildcard + `bfb21e0f` `pkg/naming.AppURL`/`AppHostname` canonical builder DRY (status.go + renderer_helpers delegate) + `6feb31e7` entry-app resolver prefers server over static-frontend); 11/11 hermetic helm gate + 6/6 resolver test + Cleanroom TOTAL ~34min + sponsor LIVE browser walkthrough JUNTOS validated canonical chain (CF DNS wildcard → Caddy `*.prod-dev.loopzero.example` → Host rewrite `<sub>.loopzero.local` → Traefik) |
+| P1 | J-01 Login polish | 12h | `j01-login-polish-plan.md` |
+| P1 | J-02 Register | 13h | `j02-register-plan.md` |
+| P1 | J-03 Verification | 8h | `j03-verification-plan.md` |
+| P1 | J-10 Environments ✅ DELIVERED 2026-06-07 | 12h | `j10-environments-plan.md` + baseline `docs/operations/baselines/2026-06-06-j10-delivery-engineering.md` (sponsor manual end-to-end CLOSED 2026-06-07 addendum) |
+| P1 | J-11 Domains | 10h | `j11-domains-plan.md` |
+| P1 | J-12 Team RBAC | 17h | `j12-team-rbac-plan.md` |
+| P1 | J-15 Profile | 15h | `j15-profile-plan.md` |
+| P1 | J-16 Settings workspace | 14h | `j16-settings-workspace-plan.md` |
+| P2 | J-14 Audit Log | 8h | `j14-audit-log-plan.md` |
+
+**Total: 20 plans, 3.268 LOC, ~280h delivery agregado.**
+
+**Inviolable patterns inherited from J-17 (any plan above MUST respect — see roadmap § 8 lessons-learned):**
+
+1. **Marker-based log filtering (4-layer)** — Promtail labels + Argo wrap + LogQL filter + Frontend parser. Reutilize para J-19 runtime logs e qualquer journey com structured logs.
+2. **Terminal status é absorvente em stream reducers** — succeeded/failed/cancelled NUNCA regridem para running via SSE replay. Aplicar em J-18 health, J-19 log levels, J-20 scale state, J-21 readiness gates, J-23 preview lifecycle.
+3. **useEffect deps refletindo lifecycle transitions** — `[id]` não basta; adicionar `isTerminal`, `isHealthy`, `isReady` quando conteúdo muda BETWEEN id changes.
+4. **Empty failure logs são bug de produto** — capturar stdout/stderr via tee + replay 50 últimas linhas como markers em error path (pattern em `api/internal/argo/loopzero_log.go`).
+5. **REST + SSE coexistem; Refresh manual obrigatório** — TODA página com SSE expõe Refresh button (RefreshCw + animate-spin durante isFetching).
+6. **Backend dirige UX paginação desde dia 1** — endpoint que retorna lista DEVE retornar `total`; UI ganha "Showing N of M" + "Load more" em 30 LOC. Cap server-side 50/request.
+7. **LIVE bash test é a ÚNICA defesa contra regressão de infra SSE/Caddy** — cada plan tem `infra/tests/e2e/dev-public-<journey>-flow_test.sh` + companion hermetic.
+8. **Dogfood wrapper aggregator é canonical** — `infra/scripts/local/dogfood-<journey>.sh` agrega 4-7 suites. Wire em `taskfiles/test.yml`.
+9. **JWT TTL ~12-60min — testes LIVE devem aceitar injeção** — env var ou arquivo `~/.loopzero/local-dogfood-token.txt`.
+10. **Sponsor scope-extension verbatim approval** — quando governance-gate bloqueia edit cross-domain (api/ + cloud/ + infra/ na mesma feature), estender escopo em `.claude/governance-gate.local.md` citando verbatim a autorização. Pattern J-09 + J-17.
+
+**Plan structure (CADA um dos 20 planos segue exatamente esta forma):**
+
+- Context (Estado HOJE + Gaps específicos)
+- Objective (DoD LIVE end-to-end em dev-public)
+- ADRs (3-6 decisões de design + rationale)
+- Phases 4-7 com tasks granulares T0.1..TN.N
+- Coverage Matrix (gap → task mapping)
+- Global DoD (vitest GREEN + LIVE bash + dogfood wrapper + manual sponsor)
+- Edge cases summary (6-15 EC-N)
+- Lessons-learned referência (12 patterns J-17)
+- Final Phase Dogfood QA (mandatory)
+
+**Implementation directive:** Quando spawnar `/implement` para qualquer dos 20 planos:
+- Plan está em estado SHIPPABLE_WITH_CAVEATS (não precisa re-validar com `/plan-confidence`)
+- Halt-loop pode rodar via `ralph-loop:ralph-loop` com `<promise>` = "PLAN_<JNN>_COMPLETE" gated por DoD do plano
+- Dogfood wrapper canonical executa antes do final `<promise>`
+- Sponsor LIVE manual gate (browser test em dev-public) é HARD STOP para emit promise
+
+**When these plans may change:** Plans podem evoluir via "Plan amendment policy" (`.claude/rules/pre-release-governance.md` § Plan Amendment Policy). DoD redefinition + Task deferral + Plan abandon exigem MEET record + new ADR + plan version bump. Trivial + Scope refinement seguem direct edit + commit explicando.
+
+**Delivered (histórico canonical — ordem cronológica de sponsor closure):**
+
+| Journey | Closure date | Evidência (baseline / plano arquivado) |
+|---|---|---|
+| **J-04 Recovery** | pré-2026-06-06 (auth chain pre-baseline-rule) | Plano arquivado `2026-06-05-dashboard-journey-j04-recovery-plan.md`; citado em CLAUDE.md narrative linha 68 "já delivered" |
+| **J-05 Device Success** | pré-2026-06-06 (auth chain pre-baseline-rule) | Plano arquivado `2026-06-05-dashboard-journey-j05-device-success-plan.md`; cross-ref [[reference_hydra_v2_device_flow_complete_chain_2026_06_05]] |
+| **J-09 Project Connect** | pré-2026-06-06 (GitHub App + auto-deploy chain) | Plano arquivado `2026-06-05-dashboard-journey-j09-project-connect-plan.md`; cross-ref [[reference_j09_live_e2e_complete_2026_06_06]] + [[reference_github_app_credentials_chain_2026_06_06]] |
+| **J-17 Deployments Realtime** | 2026-06-06 | Baseline `docs/operations/baselines/2026-06-06-post-merge-pre-j10.md` (capturado "post J-17 delivery + post-merge validation chain") |
+| **J-10 Environments** | 2026-06-07 sponsor manual end-to-end | Baseline `docs/operations/baselines/2026-06-06-j10-delivery-engineering.md` (Update "✅ CLOSED 2026-06-07" addendum: create env via UI + 402 modal + list refresh + ADR D5 strict CRD separation; 4 LIVE-caught fixes shipped during sponsor session) |
+| **J-23 Previews (per-PR)** | 2026-06-07 sponsor-guided regression test session | Plano refactor `2026-06-07-preview-as-category-single-slot-plan.md` (Netlify-style); 8 commits closing 9 LIVE bugs (`5a8132fc` RBAC+migration+SA+wildcard TLS + `01e7f185` canonical destination + `97d82a68` dogfood wrapper + `a9d6c431` RBAC+watcher + `e682e4d4` cleanup by label + `b21e9446` orphan prune + `347fdbc0` health endpoint); canonical formula locked `loopzero-<tenant>-<project>-<env>`; preview URL `<tenant>-<project>-<entryApp>-preview-pr-N.preview-dev.loopzero.example`; dogfood-preview 9/9 PASS; cross-ref [[reference_j23_batch_2026_06_07]] |
+| **J-07 Projects List** | 2026-06-08 sponsor walkthrough verbatim "Ficou ótimo, parabens!" | Plano `2026-06-08-dashboard-screens-review-fixes-plan.md` T5.3 commit `6f8f50b6` (scope cita `cloud/dashboard/src/pages/projects.tsx` 6 findings + `0d854f79` T2.1 additive last_deploy+apps_count+latest_framework + `c32214d0` T4.2 /projects 6 findings wire + `eee3e270` T4.5 Load more + ee516de6 T-MIG-3 page → DataTable) |
+| **J-08 Project Detail Overview** | 2026-06-08 sponsor walkthrough verbatim "Ficou ótimo, parabens!" | Plano `2026-06-08-dashboard-screens-review-fixes-plan.md` T5.3 commit `6f8f50b6` (scope cita `cloud/dashboard/src/pages/project-detail.tsx` + `cd603c7b` derive metrics from useDeployments builds[] + `898e3e85` enriched summary endpoint env_count+apps_count+last_deploy_* + `61d5148b` builds list canonical apps[] source) |
+| **J-22 Secrets CRUD** | 2026-06-11 sponsor verbatim "Confirmado" | Baseline `docs/operations/baselines/2026-06-11-j22-layer2-LIVE-walkthrough-green.md` (JOURNEY DELIVERY LIVE-GREEN end-to-end; broker round-trip 7ms 138× under SLO; ExternalSecret CR SecretSynced=True; K8s Secret materialized with correct plaintext) |
+| **J-25 Live URL Discoverability** | 2026-06-12 sponsor LIVE walkthrough JUNTOS — verbatim `https://tn-a22685191fb60b8f-j25demo-api-production.prod-dev.loopzero.example/ → 404 page not found` confirmou canonical chain end-to-end | Plan `2026-06-12-dashboard-journey-j25-live-url-discoverability-plan.md` v1.2 + closing dos T6.2 addendum catches #21 (preview-operator BASE_DOMAIN=loopzero.local) + #22 (loopzero-api PR check URL hardcoded). FAANG canonical fix replaced v1 patch-the-symptom (bending BASE_DOMAIN to carry public wildcard, which broke IngressRoute Host match) com canonical BASE/PUBLIC split: BASE_DOMAIN=loopzero.local (cluster-internal SNI for IngressRoute Host) + LOOPZERO_PUBLIC_DOMAIN=prod-dev.loopzero.example (wildcard root composed into status.url via `pkg/naming.AppURL`). 5 commits: `f2d2106c` helmfile overlay + `46186e52` values-dev Tilt-canonical + `6a3815e2` Caddyfile wildcard block (DNS-01 via CF) + `bfb21e0f` `pkg/naming` builder DRY (mirror of T2.5 `PreviewSubdomain`/`PreviewURL`) + `6feb31e7` entry-app 2-pass resolver (prefer server > non-static frontend, skip `rendering=static` CF Worker delivery apps). 11/11 hermetic helm gate locks canonical state against regression (A2/A3 BASE/PUBLIC split + A5/A5b status.go DRY delegation + A6 renderer_helpers DRY + A7/A8 4-layer Tilt-consumed values-dev canonical + A9/A10 Caddy wildcard block + Host rewrite). 6/6 resolver tests lock the exact LIVE-caught fixture (web-static FIRST + api-server SECOND must return "api"). Cleanroom TOTAL ~34min canonical survival validated. Sponsor LIVE walkthrough JUNTOS per `.claude/rules/cleanroom-up-live-test-mandate.md` INQUEBRÁVEL closed engineering-side + sponsor-side. Memorias canonical: `feedback_post_cleanroom_kratos_patch_dev_public` + `feedback_post_cleanroom_seed_admin_canonical` capturam os 2 gaps Cleanroom dev-public que requerem manual operator steps pós-`task setup`. |
+
+**Sequência recomendada (per roadmap § 8):** `J-17 ✅ → J-18 → J-19 → J-22 ✅ → J-20 → J-23 ✅ → J-24 → J-25 ✅ → J-21 → J-06 → J-07 ✅ + J-08 ✅ / J-13`. Pode paralelizar journeys independentes (ex: J-10 ✅ + J-11 não compartilham surfaces).
+
+## Dashboard Journeys — sponsor priority chain (locked 2026-06-08)
+
+> **Read this BEFORE invoking `/implement` on any of the 20 dashboard-journey plans.** The sponsor has locked a specific subset + ordering that supersedes the generic "Sequência recomendada (per roadmap § 8)" line above for the next implementation cycles.
+
+**Authorization:** sponsor verbatim directive 2026-06-08 — *"E nosso backlogo qual o proximo passo natual? secrets, domain, scale, Runtime logs, Production readiness (esses são itens que eu quero tratar com o MAXIMO de prioridade)"* + *"Deixe claro em nosso CLAUDE.md esse ROADMAP prioritario"*. The 5 journeys called out below + J-11 Domains form the MAX PRIORITY working set for the post-`2026-06-08-dashboard-screens-review-fixes` cycle.
+
+**Locked priority chain (foundation-first observability, then power-tools, then synthesis):**
+
+```
+1. J-19  Runtime logs streaming    (21h)  ← observability foundation
+2. J-22  Secrets CRUD              (19h)  ← runtime config foundation  ✅ DELIVERED 2026-06-11 (sponsor verbatim "Confirmado"; LIVE walkthrough GREEN; baseline `docs/operations/baselines/2026-06-11-j22-layer2-LIVE-walkthrough-green.md`)
+3. J-18  Status / Runtime Health   (20h)  ← runtime signals (replicas + deploy + 5xx + alerts)
+4. J-20  Scale                     (18h)  ← power-tool, depends on J-18 + J-19
+5. J-21  Readiness Score           (14h)  ← synthesis card, depends on ALL signals above
+                                          ──────
+                                          92h sequential
+
+   J-11  Domains                   (10h)  ← INDEPENDENT — parallel at any time
+```
+
+**Dependency rationale (why this order, not the original roadmap § 8 ordering):**
+
+| Journey | Why this position | Blocks |
+|---|---|---|
+| **J-19 Runtime Logs** | Without log streaming, debugging Scale/Secret/Readiness failures is blind. Logs are the cheapest fastest debug surface. | J-20, J-21 |
+| **J-22 Secrets** | Almost every non-trivial app needs env vars to start. Deploy without secrets = silent failure that J-19 reveals. | J-20 |
+| **J-18 Status / Runtime Health** | Synthesizes pod/replicas/restart/5xx/alerts signals into the surface that J-21 Readiness consumes. **Caught LIVE in dashboard-screens-review-fixes T5.3 walkthrough** when ProjectHealthCard rendered 4 orphan `—` pills because backend `omitempty` dropped signals for projects without active release — that empty-state UX is the J-18 surface. | J-20, J-21 |
+| **J-20 Scale** | Power-tool. Without J-18 health signals + J-19 logs, scaling is blind. Without J-22 secrets, scaled pods crash on missing env vars. | J-21 |
+| **J-21 Readiness** | **Synthesis card** — by design depends on ALL signals above being present + canonical. Designed to be last in the chain per its own plan v1.0 acceptance. | — |
+| **J-11 Domains** | Orthogonal to runtime — TLS + DNS layer, doesn't block or depend on the synthesis chain. Can be inserted at any iteration capacity-permitting. | — |
+
+**Inviolable invariants for this priority chain:**
+
+1. **Foundation-first**: J-19 + J-22 + J-18 ship BEFORE J-20 + J-21. Shipping Scale without observability = blind operations; shipping Readiness without underlying signals = empty card (the very bug T5.3 walkthrough caught + fixed).
+2. **Release between plans is FAANG-canonical** but NOT required — current branch already 254+ commits ahead post dashboard-screens-review-fixes; either release-first then implement, or stack with single bundled release at chain end.
+3. **Each plan ships its own dogfood wrapper + LIVE bash test + sponsor browser walkthrough** per the 12 lessons-learned patterns inherited from J-17 (§ Dashboard Journeys — 20 plans formalizados above).
+4. **Plan estado SHIPPABLE_WITH_CAVEATS** — todos os 6 já passaram `/plan-confidence`. NÃO precisam re-passar antes de `/implement {slug}`.
+5. **Sponsor LIVE browser walkthrough remains HARD STOP** for each plan's promise emit. T5.3 of dashboard-screens-review-fixes proved its value: caught 5 bugs that vitest + tsc + code-review missed (CSS cascade, border-color regression, Project Detail Overview, list page Apps/Framework/Last deploy from T2.1 SQL narrowing, ProjectHealthCard empty-state).
+6. **Domain mental-model lock** (sponsor verbatim confirmed 2026-06-08): `Tenant (account, billing unit) → Project (1 monorepo = 1 loopzero.yaml) → Apps (services declared in apps: map)`. All dashboard journeys MUST honor this. Apps card displays count of apps IN the monorepo, not number of projects.
+
+**Operational invocation per plan:**
+
+```
+/implement 2026-06-06-dashboard-journey-j19-runtime-logs-streaming
+/implement 2026-06-06-dashboard-journey-j22-secrets-crud
+/implement 2026-06-06-dashboard-journey-j18-status-runtime-health
+/implement 2026-06-06-dashboard-journey-j20-scale
+/implement 2026-06-06-dashboard-journey-j21-readiness
+/implement 2026-06-06-dashboard-journey-j11-domains   # parallel slot
+```
+
+Each invocation drives ralph-loop halt-loop with promise `PLAN_J<NN>_COMPLETE` gated by the plan's DoD + dogfood wrapper + sponsor LIVE browser walkthrough.
+
+**When this priority chain may change:** Only via explicit sponsor directive (verbatim citation required). Any PR that ships J-20/J-21 BEFORE J-19/J-22/J-18 violates the foundation-first invariant and MUST cite the ADR justifying the inversion.
+
+**Cross-reference:** the J-17 LIVE walkthrough lessons (§ "12 patterns inherited from J-17" above in the 20-plans section) apply to every plan in this chain — terminal-status absorption, marker-based log filtering, useEffect lifecycle deps, empty-state-as-design, scope-extension via governance gate, etc.
+
+## Steady-State Baseline — regra de milestones (locked 2026-06-06)
+
+> **Read this BEFORE declaring a journey complete OR cutting a release OR running `/cleanroom` / `/dogfood full` / `/chaos-test`.**
+
+**Authorization:** project-owner directive 2026-06-06 — "Coloque como regra o 'steady-state baseline' sempre que atingirmos um milestone."
+
+**Termo técnico canônico:** "steady-state baseline" (Netflix Chaos Engineering principles 2016 + Google SRE book ch. 25 "Configuration Management"). Snapshot timestamped do estado conhecido-bom do sistema em uma fronteira de milestone, servindo como **bisect anchor** quando uma regressão surge horas/dias depois.
+
+**Regra completa:** [`.claude/rules/steady-state-baseline.md`](.claude/rules/steady-state-baseline.md)
+
+**Triggers MANDATORY** (capturar baseline em CADA evento abaixo; nenhum é opcional):
+
+| Trigger | Por quê |
+|---|---|
+| Journey delivery (J-XX completed + LIVE-validated) | Locks proof of clean integration; próxima regressão é bounded por baseline + next commit |
+| Large merge (≥ 100 files OR ≥ 5.000 LOC) | Merges desse escopo sempre carregam surpresas runtime que compile-clean esconde |
+| Pre-validation (antes de `/cleanroom` / `/dogfood full` / `/chaos-test`) | Sem baseline pré, não dá pra distinguir "novo failure mode" de "sempre foi assim" |
+| Pre-release (cut release branch / pre-deploy prod) | Required by SRE practice — rollback target |
+| Operator intervention com efeito cluster-wide | `kubectl edit` manual, helm upgrade out-of-band, cell pin/evict — capture antes + depois |
+
+**O que capturar (4 LAYERS, minimum — omitir qualquer um invalida o baseline):**
+
+1. **Layer 1 — Code state**: `git rev-parse HEAD`, branch, ahead/behind, working tree
+2. **Layer 2 — Runtime state**: `helm list -A`, pods + images, CRDs, ArgoCD Apps, ClusterCredentials
+3. **Layer 3 — Config state**: ConfigMaps (Kratos/Hydra), schema_migrations, secret resourceVersion (não values)
+4. **Layer 4 — LIVE functional probes**: REST endpoints + SSE wiring + Prometheus counters + Loki marker integrity (the SLO floor)
+
+**Onde armazenar:** `docs/operations/baselines/<YYYY-MM-DD>-<context>.md` + entry no `docs/operations/baselines/index.md` (newest first).
+
+**Cross-linking mandatory:** baseline referenciado de (a) milestone artifact (plan/roadmap/release notes), (b) `index.md`, (c) commit body que fecha o milestone (`Baseline: docs/operations/baselines/<file>.md`).
+
+**Anti-patterns proibidos:**
+- Skip baseline "porque compila" — Layer 4 LIVE probes é o whole point
+- Capture APÓS suspeita de regressão — too late; bisect anchor já foi perdido
+- Hand-waved summaries — cada linha = command + output OR probe + measurement
+- Stale baselines — baseline mais velho que o milestone atual é archive, não reference
+
+**Validated reference example:** [`docs/operations/baselines/2026-06-06-post-merge-pre-j10.md`](docs/operations/baselines/2026-06-06-post-merge-pre-j10.md) — capturou pre-cleanroom + descobriu 4 bugs latentes (helmfile sync, .env malformed, Go template hasKey, CRD ownership) que `compile clean` + `vitest GREEN` mascaravam. Mostra exatamente o valor real da regra.
+
 ## What This Project Is
 
 LoopZero is a **CLI-first managed cloud (Kubernetes-backed)** for monorepo deployments. Vercel-quality DX for backends — `loopzero login`, `loopzero init`, `loopzero deploy`, and in under 5 minutes every service is live with TLS, preview environments on every PR, and rollback with one command. No Kubernetes. No infrastructure YAML.

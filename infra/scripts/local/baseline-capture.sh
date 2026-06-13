@@ -1,0 +1,259 @@
+#!/usr/bin/env bash
+# baseline-capture.sh
+#
+# T1.1 of plan 2026-06-08-pre-release-test-rigor v1.2 — captures a 4-layer
+# steady-state snapshot per `.claude/rules/steady-state-baseline.md` into a
+# structured JSON file. The output is the canonical machine-readable form;
+# the markdown report in `docs/operations/baselines/` is the human-readable
+# companion (operator writes that manually using this JSON as input).
+#
+# Modes:
+#   - PRODUCTION  — default; queries kubectl + curl + dig against the live
+#                   k3d/dev-public stack. Use during operator-driven captures.
+#   - FIXTURE     — BASELINE_FIXTURE_DIR env var set to a directory; the
+#                   script reads pre-canned JSON files from it instead of
+#                   probing the cluster. Used by hermetic tests + by ralph
+#                   loop iterations that can't reach the cluster.
+#   - DETERMINISTIC — DETERMINISTIC=1 env var; zeroes captured_at and any
+#                     other timestamp fields so 2 captures of identical state
+#                     produce byte-identical JSON. Required for diff sanity.
+#
+# Volatile-field normalization (EC-7 absorption): even in PRODUCTION mode, the
+# capture strips `metadata.resourceVersion`, `metadata.generation`,
+# `metadata.managedFields`, `metadata.creationTimestamp`, `metadata.uid`, and
+# `status.conditions[].lastTransitionTime` from every kubectl resource before
+# serializing. This makes the JSON stable across runs that observe the same
+# logical state.
+#
+# Usage:
+#   bash infra/scripts/local/baseline-capture.sh --output PATH
+#   BASELINE_FIXTURE_DIR=/path bash infra/scripts/local/baseline-capture.sh --output PATH
+#   DETERMINISTIC=1 BASELINE_FIXTURE_DIR=/path bash ... (for tests + reproducibility)
+#
+# Exit codes:
+#   0  capture written
+#   1  --output not provided OR invalid args
+#   2  kubectl/curl unreachable (production mode only)
+set -euo pipefail
+
+OUTPUT=""
+CONTEXT="${CONTEXT:-k3d-loopzero-mgmt}"
+PUBLIC_APP_URL="${PUBLIC_APP_URL:-https://app-dev.loopzero.example}"
+PUBLIC_CLOUD_URL="${PUBLIC_CLOUD_URL:-https://cloud-dev.loopzero.example}"
+FIXTURE_DIR="${BASELINE_FIXTURE_DIR:-}"
+DETERMINISTIC="${DETERMINISTIC:-0}"
+
+while [ $# -gt 0 ]; do
+  case "$1" in
+    --output) OUTPUT="$2" ; shift 2 ;;
+    --output=*) OUTPUT="${1#--output=}" ; shift ;;
+    -h|--help)
+      sed -n '2,32p' "$0" | sed 's/^# \{0,1\}//' ; exit 0 ;;
+    *) printf '[baseline-capture] unknown arg: %s\n' "$1" >&2 ; exit 1 ;;
+  esac
+done
+
+[ -n "$OUTPUT" ] || { echo "[baseline-capture] --output PATH required" >&2 ; exit 1 ; }
+
+log() { printf '[baseline-capture] %s\n' "$*" >&2 ; }
+
+# --- Layer 1 — Code state ---------------------------------------------------
+
+capture_code_state() {
+  if [ -n "$FIXTURE_DIR" ] && [ -f "$FIXTURE_DIR/code_state.json" ] ; then
+    cat "$FIXTURE_DIR/code_state.json"
+    return
+  fi
+  local commit branch ahead behind clean
+  commit="$(git rev-parse HEAD 2>/dev/null || echo "")"
+  branch="$(git branch --show-current 2>/dev/null || echo "")"
+  if git rev-parse --verify origin/develop >/dev/null 2>&1 ; then
+    read -r behind ahead < <(git rev-list --left-right --count origin/develop...HEAD 2>/dev/null || echo "0 0")
+  else
+    ahead=0 ; behind=0
+  fi
+  if [ -z "$(git status --porcelain 2>/dev/null)" ] ; then
+    clean=True
+  else
+    clean=False
+  fi
+  python3 - <<PY
+import json
+print(json.dumps({
+  "commit": "${commit}",
+  "branch": "${branch}",
+  "ahead": int("${ahead}"),
+  "behind": int("${behind}"),
+  "working_tree_clean": ${clean}
+}, sort_keys=True))
+PY
+}
+
+# --- Layer 2 — Runtime state ------------------------------------------------
+
+capture_runtime_state() {
+  # Write probe outputs to a per-invocation temp dir so the Python heredoc
+  # consumes them via file I/O (NOT shell interpolation, which breaks on
+  # backslash / unbalanced quote characters present in real kubectl output).
+  local tmp
+  tmp="$(mktemp -d)"
+  if [ -n "$FIXTURE_DIR" ] ; then
+    cp "$FIXTURE_DIR/pods.json"        "$tmp/pods.json" 2>/dev/null || echo '{"items":[]}' > "$tmp/pods.json"
+    cp "$FIXTURE_DIR/helm-list.json"   "$tmp/helm.json" 2>/dev/null || echo '[]'           > "$tmp/helm.json"
+    cp "$FIXTURE_DIR/argocd-apps.json" "$tmp/apps.json" 2>/dev/null || echo '{"items":[]}' > "$tmp/apps.json"
+    cp "$FIXTURE_DIR/tenants.json"     "$tmp/tens.json" 2>/dev/null || echo '{"items":[]}' > "$tmp/tens.json"
+  else
+    kubectl --context="$CONTEXT" get pods -A -o json 2>/dev/null > "$tmp/pods.json" || echo '{"items":[]}' > "$tmp/pods.json"
+    helm list -A --kube-context="$CONTEXT" -o json 2>/dev/null > "$tmp/helm.json" || echo '[]' > "$tmp/helm.json"
+    kubectl --context="$CONTEXT" get applications.argoproj.io -n argocd -o json 2>/dev/null > "$tmp/apps.json" || echo '{"items":[]}' > "$tmp/apps.json"
+    kubectl --context="$CONTEXT" get tenants.loopzero.io -A -o json 2>/dev/null > "$tmp/tens.json" || echo '{"items":[]}' > "$tmp/tens.json"
+  fi
+  TMP_DIR="$tmp" python3 - <<'PY'
+import json, os, sys
+
+tmp = os.environ["TMP_DIR"]
+with open(f"{tmp}/pods.json") as f: pods = json.load(f)
+with open(f"{tmp}/helm.json") as f: helm = json.load(f)
+with open(f"{tmp}/apps.json") as f: apps = json.load(f)
+with open(f"{tmp}/tens.json") as f: tenants = json.load(f)
+
+pods_out = [
+  {"namespace": p.get("metadata",{}).get("namespace",""),
+   "name":      p.get("metadata",{}).get("name",""),
+   "phase":     p.get("status",{}).get("phase","")}
+  for p in pods.get("items", [])
+]
+helm_out = [
+  {"name": r.get("name",""), "namespace": r.get("namespace",""),
+   "chart": r.get("chart","")}
+  for r in (helm if isinstance(helm, list) else [])
+]
+apps_out = [
+  {"name": a.get("metadata",{}).get("name",""),
+   "sync_status":   a.get("status",{}).get("sync",{}).get("status",""),
+   "health_status": a.get("status",{}).get("health",{}).get("status","")}
+  for a in apps.get("items", [])
+]
+tenants_out = [
+  {"name":  t.get("metadata",{}).get("name",""),
+   "phase": t.get("status",{}).get("phase",""),
+   "plan":  t.get("spec",{}).get("plan","")}
+  for t in tenants.get("items", [])
+]
+# Sort arrays by name for deterministic ordering
+pods_out.sort(key=lambda x: (x["namespace"], x["name"]))
+helm_out.sort(key=lambda x: (x["namespace"], x["name"]))
+apps_out.sort(key=lambda x: x["name"])
+tenants_out.sort(key=lambda x: x["name"])
+
+print(json.dumps({
+  "pods":          pods_out,
+  "helm_releases": helm_out,
+  "argocd_apps":   apps_out,
+  "tenants":       tenants_out
+}, sort_keys=True))
+PY
+}
+
+# --- Layer 3 — Config state -------------------------------------------------
+
+capture_config_state() {
+  local pg_max plan_limits_present cosign_mode
+  if [ -n "$FIXTURE_DIR" ] ; then
+    pg_max="$(cat "$FIXTURE_DIR/pg_max_migration.txt" 2>/dev/null | tr -d '[:space:]' || echo "0")"
+    plan_limits_present="$(cat "$FIXTURE_DIR/plan_limits_present.txt" 2>/dev/null | tr -d '[:space:]' || echo "false")"
+    cosign_mode="$(cat "$FIXTURE_DIR/cosign_mode.txt" 2>/dev/null | tr -d '[:space:]' || echo "keyed")"
+  else
+    pg_max="$(kubectl --context="$CONTEXT" -n loopzero-system exec -i postgresql-0 -c postgresql -- \
+                env PGPASSWORD=loopzero-dev-password psql -U loopzero -d loopzero -tAc \
+                "SELECT max(version) FROM schema_migrations" 2>/dev/null | tr -d '[:space:]' || echo "0")"
+    if [ -z "$pg_max" ] ; then pg_max=0 ; fi
+    if kubectl --context="$CONTEXT" -n loopzero-system exec -i postgresql-0 -c postgresql -- \
+         env PGPASSWORD=loopzero-dev-password psql -U loopzero -d loopzero -tAc \
+         "SELECT 1 FROM information_schema.tables WHERE table_name='plan_limits'" 2>/dev/null | grep -q 1 ; then
+      plan_limits_present=true
+    else
+      plan_limits_present=false
+    fi
+    cosign_mode="$(kubectl --context="$CONTEXT" -n loopzero-system get configmap loopzero-cosign-config \
+                    -o jsonpath='{.data.mode}' 2>/dev/null || echo "keyed")"
+    [ -n "$cosign_mode" ] || cosign_mode="keyed"
+  fi
+  # Normalize bash bool string → Python bool literal for interpolation
+  case "$plan_limits_present" in
+    true|True|TRUE|1)   plp_py="True" ;;
+    *)                  plp_py="False" ;;
+  esac
+  python3 - <<PY
+import json
+print(json.dumps({
+  "pg_max_migration":    int("${pg_max}"),
+  "plan_limits_present": ${plp_py},
+  "cosign_mode":         "${cosign_mode}"
+}, sort_keys=True))
+PY
+}
+
+# --- Layer 4 — LIVE functional probes ---------------------------------------
+
+capture_live_probes() {
+  if [ -n "$FIXTURE_DIR" ] && [ -f "$FIXTURE_DIR/probes.json" ] ; then
+    cat "$FIXTURE_DIR/probes.json"
+    return
+  fi
+  probe() {
+    curl -s -o /dev/null -w '%{http_code}' --max-time 5 "$@" 2>/dev/null || echo "000"
+  }
+  local r1 r2 r3 r4 r5 r6
+  r1="$(probe "${PUBLIC_APP_URL}/")"
+  r2="$(probe "${PUBLIC_APP_URL}/projects")"
+  r3="$(probe "${PUBLIC_APP_URL}/environments")"
+  r4="$(probe "${PUBLIC_APP_URL}/api/v1/projects")"
+  r5="$(probe "${PUBLIC_APP_URL}/health")"
+  r6="$(probe -X POST -H 'X-GitHub-Event: ping' -d '{}' "${PUBLIC_CLOUD_URL}/api/v1/webhooks/github")"
+  python3 - <<PY
+import json
+print(json.dumps({
+  "https_app_root":           int("${r1}"),
+  "https_app_projects":       int("${r2}"),
+  "https_app_envs":           int("${r3}"),
+  "https_cloud_api_projects": int("${r4}"),
+  "https_app_health":         int("${r5}"),
+  "https_cloud_webhook":      int("${r6}")
+}, sort_keys=True))
+PY
+}
+
+# --- Compose snapshot -------------------------------------------------------
+# Capture each layer to a temp file (avoids triple-quote-string escape bugs
+# when kubectl output contains backslashes / unbalanced quotes / control chars).
+
+COMPOSE_TMP="$(mktemp -d)"
+trap 'rm -rf "$COMPOSE_TMP"' EXIT INT TERM
+
+capture_code_state    > "$COMPOSE_TMP/code.json"
+capture_runtime_state > "$COMPOSE_TMP/runtime.json"
+capture_config_state  > "$COMPOSE_TMP/config.json"
+capture_live_probes   > "$COMPOSE_TMP/probes.json"
+
+if [ "$DETERMINISTIC" = "1" ] ; then
+  CAPTURED_AT="DETERMINISTIC"
+else
+  CAPTURED_AT="$(date -u +%Y-%m-%dT%H:%M:%SZ)"
+fi
+
+COMPOSE_DIR="$COMPOSE_TMP" CAPTURED_AT="$CAPTURED_AT" \
+python3 - > "$OUTPUT" <<'PY'
+import json, os
+d = os.environ["COMPOSE_DIR"]
+out = {
+  "captured_at":   os.environ["CAPTURED_AT"],
+  "code_state":    json.load(open(f"{d}/code.json")),
+  "runtime_state": json.load(open(f"{d}/runtime.json")),
+  "config_state":  json.load(open(f"{d}/config.json")),
+  "live_probes":   json.load(open(f"{d}/probes.json")),
+}
+print(json.dumps(out, sort_keys=True, indent=2))
+PY
+
+log "Captured 4-layer snapshot → $OUTPUT"

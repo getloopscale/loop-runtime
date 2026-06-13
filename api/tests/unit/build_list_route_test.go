@@ -44,6 +44,10 @@ func (f *fakeBuildListStore) ListByProjectAndEnv(ctx context.Context, tenantID, 
 	return f.builds, f.total, nil
 }
 
+func (f *fakeBuildListStore) ListEnvsForProject(_ context.Context, _, _ string) ([]string, error) {
+	return nil, nil
+}
+
 // Compile-time check
 var _ routes.BuildListStore = (*fakeBuildListStore)(nil)
 

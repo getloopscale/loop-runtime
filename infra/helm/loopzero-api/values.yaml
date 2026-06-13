@@ -157,3 +157,40 @@ serviceAuthEd25519:
   # `redis.loopzero-system:6379` (Bitnami chart, no auth) works as long
   # as a service-auth-isolated DB index is used.
   nonceRedisAddr: ""
+
+# T3.3 of plan 2026-06-10-j22-openbao-transit-eso-sync v1.2 — egress
+# NetworkPolicy scoped to loopzero-api pods that allows TCP/8200 ONLY to the
+# openbao pod(s) in vault-system. Disabled by default to preserve back-
+# wards compatibility with environments where network policy is not yet
+# enforced; flip to true once the default-deny-egress baseline ships.
+networkPolicy:
+  vaultEgress:
+    enabled: false
+    namespace: vault-system
+    podName: openbao
+    port: 8200
+
+# ============================================================================
+# ADR D1 (decisions/2026-06-11-tilt-yaml-configmap-mount.md) — runtime config
+# Mounted via envFrom by Tilt-owned Deployment + production chart Deployment.
+# Closes 34 of 53 hardcoded literals identified in code-review-output/.
+# Override per-env via values-{dev,prod,standalone-multi}.yaml.
+# Sensitive values MUST live under runtimeSecrets (see secret-runtime.yaml).
+# ============================================================================
+runtimeConfig: {}
+  # Defaults left empty — populated by values-dev.yaml or values-prod.yaml
+  # Example dev keys (moved from infra/tilt/api-deployment.yaml):
+  #   PORT: "3001"
+  #   LOG_LEVEL: "debug"
+  #   LOOPZERO_TRACING_ENABLED: "false"
+  #   MINIO_ENDPOINT: "http://minio.loopzero-system.svc.cluster.local:9000"
+  #   GITEA_URL: "http://gitea-http.loopzero-system.svc.cluster.local:3000"
+  #   (...30 more — see infra/helm/loopzero-api/values-dev.yaml)
+
+runtimeSecrets: {}
+  # Defaults left empty — populated by values-dev.yaml. Production uses ESO ExternalSecret.
+  # Example dev keys (moved from infra/tilt/api-deployment.yaml):
+  #   DATABASE_URL: "postgres://loopzero:loopzero-dev-password@..."
+  #   LOOPZERO_ARGO_CALLBACK_SECRET: "dev-callback-secret"
+  #   MINIO_SECRET_KEY: "loopzero-dev-password"
+  #   LOOPZERO_SERVICE_AUTH_SECRET: "..."

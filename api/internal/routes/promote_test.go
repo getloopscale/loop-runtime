@@ -226,4 +226,124 @@ func TestPromote_LockTimeout(t *testing.T) {
 	if w.Code != http.StatusConflict {
 		t.Fatalf("want 409, got %d body=%s", w.Code, w.Body.String())
 	}
+
+	// Body surfaces LOCK_TIMEOUT, not DEPLOY_IN_PROGRESS, because the
+	// handler's typed-error path (`errors.As(err, &loopzeroErr)`) runs BEFORE
+	// the `isPromoteLockTimeout` fallback at promote.go:148-160. The
+	// fallback's `DEPLOY_IN_PROGRESS` map is reachable ONLY when the
+	// service wraps the timeout without preserving the typed LoopZeroError —
+	// which is currently dead code. The dashboard's PromoteDialog mutation
+	// hook (J-10 v1.1) treats any 409 as DEPLOY_IN_PROGRESS via status
+	// code, so contract is preserved at the HTTP layer even though the
+	// body code differs. This test PINS the current truth so a future
+	// handler refactor doesn't silently break it.
+	var errBody map[string]any
+	if err := json.Unmarshal(w.Body.Bytes(), &errBody); err != nil {
+		t.Fatalf("decode lock-timeout body: %v", err)
+	}
+	got, _ := errBody["code"].(string)
+	if got != "LOCK_TIMEOUT" {
+		t.Errorf("want code LOCK_TIMEOUT (current truth), got %q body=%s", got, w.Body.String())
+	}
 }
+
+// TestPromote_SameEnvironment_SurfacesCode asserts the response body carries
+// `SAME_ENVIRONMENT` so the dashboard PromoteDialog can pre-flight reject
+// before submitting. Without this, the dialog would only see a generic 400
+// and the user would have no actionable feedback.
+func TestPromote_SameEnvironment_SurfacesCode(t *testing.T) {
+	projects := &fakePromoteProjectStore{
+		project: &ProjectResult{ID: "p1", Name: "my-api"},
+	}
+	svc := &fakePromoteService{err: loopzeroerrors.ErrSameEnvironment}
+	h := NewPromoteHandler(projects, svc, "dev.loopzero.example")
+
+	body := `{"from":"staging","to":"staging"}`
+	req := httptest.NewRequest(http.MethodPost, "/api/v1/projects/my-api/promote", bytes.NewBufferString(body))
+	req = withAuth(req, defaultUserContext())
+	req = withChiParam(req, "name", "my-api")
+	w := httptest.NewRecorder()
+
+	h.Create(w, req)
+
+	if w.Code != http.StatusBadRequest {
+		t.Fatalf("want 400, got %d body=%s", w.Code, w.Body.String())
+	}
+	var errBody map[string]any
+	if err := json.Unmarshal(w.Body.Bytes(), &errBody); err != nil {
+		t.Fatalf("decode same-env body: %v", err)
+	}
+	if got, _ := errBody["code"].(string); got != "SAME_ENVIRONMENT" {
+		t.Errorf("want code SAME_ENVIRONMENT, got %q", got)
+	}
+}
+
+// TestPromote_RegressionV10BodyShape locks the canonical request body shape
+// {from, to}. The v1.0 PromoteDialog sent {from_environment, to_environment}
+// which the backend silently ignored (no struct tag match) — the request
+// parsed cleanly, both fields landed empty, the handler returned
+// MISSING_FIELD, and the dashboard surfaced a confusing 400 from the
+// "wrong layer". This test pins the contract so the bug cannot return.
+func TestPromote_RegressionV10BodyShape(t *testing.T) {
+	projects := &fakePromoteProjectStore{
+		project: &ProjectResult{ID: "p1", Name: "my-api"},
+	}
+	svc := &fakePromoteService{
+		result: &PromoteOutput{
+			PromotionID: "should-not-reach",
+		},
+	}
+	h := NewPromoteHandler(projects, svc, "dev.loopzero.example")
+
+	cases := []struct {
+		name    string
+		body    string
+		want    int
+		wantMsg string
+	}{
+		{
+			name:    "v1.0_buggy_keys_from_environment_to_environment",
+			body:    `{"from_environment":"staging","to_environment":"production"}`,
+			want:    http.StatusBadRequest,
+			wantMsg: "'from' environment is required",
+		},
+		{
+			name:    "empty_body",
+			body:    `{}`,
+			want:    http.StatusBadRequest,
+			wantMsg: "'from' environment is required",
+		},
+		{
+			name:    "canonical_keys_pass_through",
+			body:    `{"from":"staging","to":"production"}`,
+			want:    http.StatusAccepted,
+			wantMsg: "",
+		},
+	}
+
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			req := httptest.NewRequest(http.MethodPost, "/api/v1/projects/my-api/promote", bytes.NewBufferString(tc.body))
+			req = withAuth(req, defaultUserContext())
+			req = withChiParam(req, "name", "my-api")
+			w := httptest.NewRecorder()
+
+			h.Create(w, req)
+
+			if w.Code != tc.want {
+				t.Fatalf("[%s] want %d, got %d body=%s", tc.name, tc.want, w.Code, w.Body.String())
+			}
+			if tc.wantMsg != "" {
+				var errBody map[string]any
+				if err := json.Unmarshal(w.Body.Bytes(), &errBody); err != nil {
+					t.Fatalf("[%s] decode: %v", tc.name, err)
+				}
+				gotMsg, _ := errBody["message"].(string)
+				if gotMsg == "" || !contains(gotMsg, tc.wantMsg) {
+					t.Errorf("[%s] want message containing %q, got %q", tc.name, tc.wantMsg, gotMsg)
+				}
+			}
+		})
+	}
+}
+

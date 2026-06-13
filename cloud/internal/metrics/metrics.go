@@ -75,6 +75,14 @@ var (
 		Help: "Subscription missing -- defaulted to starter.",
 	})
 
+	// Plan J-09 T1.1 (2026-06-05): GitHub App install + update callback counter.
+	// Labelled by setup_action (install | update) so SLOs can distinguish
+	// fresh provisioning from re-permission flows.
+	githubAppInstallations = prometheus.NewCounterVec(prometheus.CounterOpts{
+		Name: "loopzero_github_app_installations_total",
+		Help: "GitHub App install callback completions by setup_action.",
+	}, []string{"setup_action"})
+
 	// HTTP metrics (added with OTel instrumentation)
 	httpRequestDuration = prometheus.NewHistogramVec(prometheus.HistogramOpts{
 		Name:    "loopzero_cloud_http_request_duration_seconds",
@@ -95,6 +103,7 @@ func init() {
 		checkoutOps,
 		usageDrift,
 		subscriptionFallback,
+		githubAppInstallations,
 		httpRequestDuration,
 	)
 }
@@ -166,6 +175,19 @@ func IncUsageDrift() {
 // IncSubscriptionFallback increments when plan resolution falls back to starter (S1.4).
 func IncSubscriptionFallback() {
 	subscriptionFallback.Inc()
+}
+
+// IncGitHubAppInstallation increments the GitHub App callback counter
+// (Plan J-09 T1.1). setupAction MUST be one of "install" or "update";
+// the callback handler normalises the empty string to "install" before
+// invoking this (matches GitHub's documented default for first-time
+// installs). Unknown values are still recorded so dashboards surface
+// unexpected GitHub behaviour without losing the event.
+func IncGitHubAppInstallation(setupAction string) {
+	if setupAction == "" {
+		setupAction = "install"
+	}
+	githubAppInstallations.WithLabelValues(setupAction).Inc()
 }
 
 // ObserveHTTPRequest records an HTTP request duration.

@@ -4,7 +4,7 @@
     <strong>The managed runtime for AI agents and the apps around them.</strong>
   </p>
   <p align="center">
-    <em>The apex of the <a href="https://loopzero.example">loopzero</a> ecosystem — where LoopZeroKit and LoopZeroCloud land in production.</em>
+    <em>The apex of the <a href="https://loopzero.example">loopzero</a> ecosystem — where LoopZeroCode, LoopZeroCreate and LoopZeroKit land in production.</em>
   </p>
   <p align="center">
     <a href="#install">Install</a> &bull;
@@ -116,8 +116,8 @@ No infrastructure to manage. No build config required. Just push.
 </tr>
 <tr>
 <td><h3>Free</h3><em>For side projects and learning</em></td>
-<td><h3>$19/mo</h3><em>Starter — early production agents</em></td>
-<td><h3>$79/mo</h3><em>Growth — sustained traffic</em></td>
+<td><h3>$29/mo</h3><em>For professional developers</em></td>
+<td><h3>$99/mo</h3><em>For growing teams</em></td>
 <td><h3>Custom</h3><em>For organizations at scale</em></td>
 </tr>
 <tr><td colspan="4"><strong>Deploy & Operate</strong></td></tr>
@@ -515,6 +515,65 @@ loopzero deploy (or git push)
 | IaC | 5 Pulumi projetos (TS): `pulumi/` (L1 DO+CF), `pulumi-infra/` (multi-cluster topology), `pulumi-platform/` (L2 com 32 Helm releases), `pulumi-drill/` (DR drill prod-identical stack), `pulumi-shared/` (cross-project type contracts). Nota: `pulumi-control-plane/` foi deletado em 2026-05-15 (close-all-gaps T2.1) — control-plane workloads agora vivem em L2 Helmfile, não Pulumi, per MEET-2026-05-12 D3. |
 | CI/CD | GitHub Actions (48 workflows — verified 2026-05-21) |
 | Helm charts | 34 bootstrap (`infra/helm/`) + 13 published (`charts/`) — verified 2026-05-22 |
+
+### Edge Proxy vs Cluster Ingress (Caddy ↔ Traefik)
+
+**LoopZero coexiste DOIS proxies — nunca um trocou pelo outro. Servem camadas
+diferentes do request flow** (separation of concerns canonical, pattern
+FAANG: AWS ALB + NGINX Ingress, Cloudflare + Envoy/Istio).
+
+| Layer | Caddy (edge) | Traefik (cluster ingress) |
+|-------|--------------|---------------------------|
+| Onde roda | Host machine (VPS local OU dev workstation) | Dentro do workload cluster (K8s Deployment) |
+| Camada do request | L7 público — primeira parada após DNS | L7 interno — primeira parada após Caddy |
+| TLS público (Let's Encrypt) | ✅ Automático + grace renewal | ❌ Possível mas setup complexo |
+| Bind portas 80/443 do host | ✅ Naturalmente | ❌ K8s exige NodePort/LoadBalancer + port-forward |
+| Single binary, file config | ✅ Reload via `caddy reload` | ❌ Roda como Deployment + IngressRoute CRDs |
+| K8s native CRD | ❌ Não conhece K8s | ✅ IngressRoute operator nativo |
+| Argo Rollouts canary | ❌ | ✅ TrafficRouter `traefik.io/v1alpha1` (weighted services) |
+| Multi-tenant routing por Host header | Possível mas verboso | ✅ Natural via IngressRoute CRD |
+| Cert interno cluster (`.loopzero.local`) | ❌ | ✅ via cert-manager + ClusterIssuer |
+| HTTP-01 ACME challenge | ✅ Auto | ❌ Não é foco |
+
+#### Request flow live (J-23 preview example)
+
+```
+Browser
+  ↓ DNS (Cloudflare: pr1-teste.preview-dev.loopzero.example → host IP)
+  ↓
+Host machine porta 443
+  ↓
+Caddy
+  ├─ TLS termination (Let's Encrypt automático)
+  ├─ Block match: pr1-teste.preview-dev.loopzero.example
+  └─ reverse_proxy https://172.18.0.10:443
+       header_up Host tn-...-teste-api-preview-pr-1.loopzero.local
+  ↓
+Workload cluster Traefik LoadBalancer (172.18.0.10:443)
+  ↓
+Traefik IngressRoute (no namespace preview)
+  └─ match: Host(`tn-...-teste-api-preview-pr-1.loopzero.local`)
+  ↓
+K8s Service teste-api-stable / teste-api-canary
+  ↓
+Rollout Pod
+  ↓
+App responde
+```
+
+#### Local k3d ↔ Prod DOKS
+
+Em produção (DOKS), Caddy é substituído por **Cloudflare Tunnel** (zero
+public IPs, all runtime via CF edge). Traefik permanece dentro do cluster.
+
+```
+Local dev/test:                       Prod (DOKS):
+Internet → Caddy (host) → Traefik    Internet → CF Tunnel → Traefik
+                          (k8s)                              (k8s)
+```
+
+Caddy local é decisão pragmática: VPS com 1 binário ao invés de provisionar
+CF Tunnel + cluster reachability. Mesmo trade-off do `task setup` k3d vs DOKS.
 
 ### Helm Charts Inventory (`infra/helm/`, 34 dirs)
 

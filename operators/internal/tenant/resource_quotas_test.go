@@ -123,7 +123,7 @@ var _ = Describe("Golden: Resource Quotas", Ordered, func() {
 		BeforeAll(func() {
 			// Create tenant with explicit limits — these must be reflected in the quota.
 			environments := []loopzerov1.TenantEnvironmentEntry{
-				{Name: "production", Cluster: "workload"},
+				{Name: "production", Cluster: "workload", Project: "default-project"},
 			}
 			tenant := &loopzerov1.Tenant{
 				ObjectMeta: metav1.ObjectMeta{

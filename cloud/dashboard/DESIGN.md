@@ -85,7 +85,7 @@ Never destructive action with a `variant="primary"` Button — always `variant="
 
 ## 3. Design system as contract (not suggestion)
 
-The dashboard uses `@loopzerokit/ui@0.12.0-next.0+` as canonical component library.
+The dashboard uses `@loopzero/ui@0.12.0-next.0+` as canonical component library.
 
 ### 3.1 Hard rules
 
@@ -117,7 +117,7 @@ Any new recurring need becomes an upstream contribution (per ADR D3 of remediati
 
 | Token category | Source |
 |---|---|
-| Color | `@loopzerokit/ui/preset.css` + Violet Forge theme |
+| Color | `@loopzero/ui/preset.css` + Violet Forge theme |
 | Typography | Geist Sans + Geist Mono (via `fonts-cdn.css`) |
 | Spacing | Tailwind v4 default scale |
 | Radius | `rounded-{sm,md,lg,xl}` |
@@ -795,7 +795,7 @@ If they can't, the dashboard isn't done.
 - **Remediation plan:** `.claude/knowledge-base/plans/2026-05-25-dashboard-faang-remediation-plan.md` — how we get from current to contract.
 - **Edge case review:** `.claude/knowledge-base/plans/2026-05-25-dashboard-faang-remediation-edge-cases.md` — what can go wrong in implementation.
 - **Architecture:** `.claude/knowledge-base/architecture/dashboard/` — C4 docs (system-context / container / component / deep-dive).
-- **Composite library:** `@loopzerokit/ui@0.12.0-next.0` — required canonical components.
+- **Composite library:** `@loopzero/ui@0.12.0-next.0` — required canonical components.
 - **Voice rules:** root `CLAUDE.md` § Voice and Tone (technical-direct for dashboard; aspirational reserved for PITCH.md).
 
 ---

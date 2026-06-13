@@ -32,6 +32,14 @@ func TestPreviewReconciler_NamespaceName_Canonical(t *testing.T) {
 		errMatch string
 	}{
 		{
+			// J-23 canonical refactor 2026-06-07 (sponsor verbatim
+			// "Pense bem ao inves de um if PARA preview o TUDO DEVERIA
+			// esta separado por projeto"): namespace formula is uniformly
+			// `loopzero-<tenant>-<project>-<env>` for ALL envs including
+			// preview-pr-N. Pre-refactor was `<tenant>-<project>-pr-N`
+			// (no `loopzero-` prefix, no `preview-` env segment) — which
+			// collided with EnvironmentNamespace shape and broke ArgoCD
+			// destination matching. Tests aligned to canonical.
 			name: "happy path: tenant + project + PR number",
 			preview: &loopzerov1.PreviewEnvironment{
 				ObjectMeta: metav1.ObjectMeta{Name: "p"},
@@ -41,7 +49,7 @@ func TestPreviewReconciler_NamespaceName_Canonical(t *testing.T) {
 					PRNumber:  42,
 				},
 			},
-			want: "acme-api-pr-42",
+			want: "loopzero-acme-api-preview-pr-42",
 		},
 		{
 			name: "single-character slugs are RFC 1123 valid",
@@ -52,7 +60,7 @@ func TestPreviewReconciler_NamespaceName_Canonical(t *testing.T) {
 					PRNumber:  1,
 				},
 			},
-			want: "a-b-pr-1",
+			want: "loopzero-a-b-preview-pr-1",
 		},
 		{
 			name: "empty tenant slug returns error",

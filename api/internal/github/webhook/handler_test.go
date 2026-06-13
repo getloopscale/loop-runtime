@@ -255,3 +255,140 @@ func TestPushEvent_BranchHelpers(t *testing.T) {
 		t.Error("IsTag() should be true for tag ref")
 	}
 }
+
+// --- Plan J-09 T4.2 (counter) + T4.1 (correlation_id) ---
+
+func TestWebhook_CounterIncremented_AcceptedPath(t *testing.T) {
+	resetGitHubWebhookCounter()
+	h := NewHandler(testSecret, slog.Default())
+	body := `{"ref":"refs/heads/main","after":"abc123"}`
+	sig := sign(body, testSecret)
+
+	req := httptest.NewRequest("POST", "/webhooks/github", strings.NewReader(body))
+	req.Header.Set(signatureHeader, sig)
+	req.Header.Set(eventHeader, "push")
+	req.Header.Set(deliveryHeader, "delivery-counter-1")
+	w := httptest.NewRecorder()
+	h.ServeHTTP(w, req)
+
+	got := getCounter("push", "accepted")
+	if got != 1 {
+		t.Fatalf("counter push,accepted = %.0f, want 1", got)
+	}
+}
+
+func TestWebhook_CounterIncremented_InvalidSignature(t *testing.T) {
+	resetGitHubWebhookCounter()
+	h := NewHandler(testSecret, slog.Default())
+	req := httptest.NewRequest("POST", "/webhooks/github", strings.NewReader("{}"))
+	req.Header.Set(signatureHeader, "sha256=deadbeef")
+	req.Header.Set(eventHeader, "push")
+	w := httptest.NewRecorder()
+	h.ServeHTTP(w, req)
+
+	if got := getCounter("push", "invalid_signature"); got != 1 {
+		t.Fatalf("counter push,invalid_signature = %.0f, want 1", got)
+	}
+	if got := getCounter("push", "accepted"); got != 0 {
+		t.Fatalf("counter push,accepted = %.0f, want 0 (must NOT increment on invalid signature)", got)
+	}
+}
+
+func TestWebhook_CounterIncremented_MissingSignature(t *testing.T) {
+	resetGitHubWebhookCounter()
+	h := NewHandler(testSecret, slog.Default())
+	req := httptest.NewRequest("POST", "/webhooks/github", strings.NewReader("{}"))
+	req.Header.Set(eventHeader, "push")
+	w := httptest.NewRecorder()
+	h.ServeHTTP(w, req)
+
+	if got := getCounter("push", "invalid_signature"); got != 1 {
+		t.Fatalf("missing-sig counter push,invalid_signature = %.0f, want 1", got)
+	}
+}
+
+func TestWebhook_PropagatesGitHubDeliveryAsCorrelationID(t *testing.T) {
+	// Plan J-09 T4.1 — the handler's slog.Logger must carry
+	// correlation_id == X-GitHub-Delivery so downstream handlers
+	// inherit the same id. We capture log output and assert the
+	// attribute is present.
+	var buf strings.Builder
+	captureLogger := slog.New(slog.NewJSONHandler(&logWriter{w: &buf}, &slog.HandlerOptions{Level: slog.LevelInfo}))
+	h := NewHandler(testSecret, captureLogger)
+
+	body := `{"ref":"refs/heads/main","after":"abc123"}`
+	sig := sign(body, testSecret)
+	req := httptest.NewRequest("POST", "/webhooks/github", strings.NewReader(body))
+	req.Header.Set(signatureHeader, sig)
+	req.Header.Set(eventHeader, "push")
+	req.Header.Set(deliveryHeader, "uuid-abc-123")
+	w := httptest.NewRecorder()
+	h.ServeHTTP(w, req)
+
+	got := buf.String()
+	if !strings.Contains(got, `"correlation_id":"uuid-abc-123"`) {
+		t.Fatalf("expected correlation_id=uuid-abc-123 in log output, got: %s", got)
+	}
+}
+
+func TestWebhook_FallsBackToXCorrelationIDHeader_WhenDeliveryMissing(t *testing.T) {
+	// If GitHub did NOT send X-GitHub-Delivery (impossible in prod, but
+	// useful for replay tooling), use the X-Correlation-Id header so a
+	// front-proxy can still thread the id through.
+	var buf strings.Builder
+	captureLogger := slog.New(slog.NewJSONHandler(&logWriter{w: &buf}, &slog.HandlerOptions{Level: slog.LevelInfo}))
+	h := NewHandler(testSecret, captureLogger)
+
+	body := `{"ref":"refs/heads/main","after":"abc123"}`
+	sig := sign(body, testSecret)
+	req := httptest.NewRequest("POST", "/webhooks/github", strings.NewReader(body))
+	req.Header.Set(signatureHeader, sig)
+	req.Header.Set(eventHeader, "push")
+	req.Header.Set("X-Correlation-Id", "proxy-correlation-9")
+	w := httptest.NewRecorder()
+	h.ServeHTTP(w, req)
+
+	got := buf.String()
+	if !strings.Contains(got, `"correlation_id":"proxy-correlation-9"`) {
+		t.Fatalf("expected fallback correlation_id=proxy-correlation-9 in log output, got: %s", got)
+	}
+}
+
+// resetGitHubWebhookCounter clears the counter between tests. Counters
+// only support Add (not Reset) -- the cleanest hermetic strategy is to
+// re-register a fresh CounterVec. Since the metric uses promauto we
+// can't unregister cleanly; instead we record the delta vs baseline.
+var counterBaseline = map[string]float64{}
+
+func getCounter(eventType, status string) float64 {
+	key := eventType + "|" + status
+	val := readCounterValue(eventType, status)
+	return val - counterBaseline[key]
+}
+
+func resetGitHubWebhookCounter() {
+	// Snapshot current values so getCounter returns the delta for this
+	// test. Works under parallel tests too because t.Parallel is not
+	// used in this suite (each test gets fresh state by snapshotting).
+	for _, st := range []string{"accepted", "invalid_signature", "duplicate", "read_error"} {
+		for _, ev := range []string{"push", "pull_request", "ping", "installation"} {
+			counterBaseline[ev+"|"+st] = readCounterValue(ev, st)
+		}
+	}
+}
+
+// readCounterValue uses the prometheus testutil helper to extract the
+// current value from a labelled counter for a given (event_type, status).
+// We declare a thin wrapper so the test file does not need to depend on
+// testutil directly when the package is excluded from test builds.
+func readCounterValue(eventType, status string) float64 {
+	// metrics.GitHubWebhookDeliveriesTotal is a *CounterVec; obtain the
+	// concrete Counter for these labels and read it via promtest.
+	return promCounterValue(eventType, status)
+}
+
+// logWriter is a slog.Writer indirection -- writes to a strings.Builder
+// without violating the io.Writer contract (Builder's Write needs []byte).
+type logWriter struct{ w *strings.Builder }
+
+func (l *logWriter) Write(p []byte) (int, error) { return l.w.Write(p) }

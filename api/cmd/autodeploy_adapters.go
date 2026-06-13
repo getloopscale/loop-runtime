@@ -10,6 +10,7 @@ import (
 
 	"github.com/loopzero/loopzero/api/internal/db"
 	"github.com/loopzero/loopzero/api/internal/github"
+	"github.com/loopzero/loopzero/api/internal/k8s"
 	"github.com/loopzero/loopzero/api/internal/services"
 )
 
@@ -143,4 +144,80 @@ func (a *buildSubmitterAdapter) SubmitBuildFromWebhook(ctx context.Context, req 
 		"sha", req.CommitSHA,
 	)
 	return nil
+}
+
+// previewAppsLookupAdapter implements services.PreviewBuildAppsLookup by
+// copying Apps from the most recent SUCCEEDED build of the (tenant, project).
+// J-23 LIVE catch 2026-06-07: without this, preview builds fail with
+// "WorkflowSpec.Plan must be non-nil" because PR webhooks don't ship
+// parsed loopzero.yaml (only push webhooks do via WebhookBuildRequest).
+type previewAppsLookupAdapter struct {
+	builds db.BuildStore
+}
+
+func (a *previewAppsLookupAdapter) LatestSucceededApps(ctx context.Context, tenantID, projectID string) ([]services.AppSpec, error) {
+	// ListByProject newest first; iterate to find latest SUCCEEDED.
+	const lookbackLimit = 20
+	builds, err := a.builds.ListByProject(ctx, tenantID, projectID, lookbackLimit, 0)
+	if err != nil {
+		return nil, fmt.Errorf("preview apps lookup: list builds: %w", err)
+	}
+	var sourceBuildID string
+	for _, b := range builds {
+		if b.Status == "SUCCEEDED" {
+			sourceBuildID = b.ID
+			break
+		}
+	}
+	if sourceBuildID == "" {
+		return nil, nil // honest empty — preview service logs the hint
+	}
+	dbApps, err := a.builds.GetBuildApps(ctx, sourceBuildID)
+	if err != nil {
+		return nil, fmt.Errorf("preview apps lookup: get apps for %s: %w", sourceBuildID, err)
+	}
+	out := make([]services.AppSpec, 0, len(dbApps))
+	for _, da := range dbApps {
+		app := services.AppSpec{
+			Name:      da.Name,
+			Type:      da.Type,
+			Rendering: da.Rendering,
+			Port:      da.Port,
+			Secrets:   da.Secrets,
+			Replicas:  da.Replicas,
+		}
+		if da.Autoscaling != nil {
+			app.Autoscaling = &services.AppAutoscalingSpec{
+				MinReplicas: da.Autoscaling.MinReplicas,
+				MaxReplicas: da.Autoscaling.MaxReplicas,
+				TargetCPU:   da.Autoscaling.TargetCPU,
+			}
+		}
+		out = append(out, app)
+	}
+	return out, nil
+}
+
+// previewCRCreatorAdapter bridges services.PreviewCRCreator (services
+// package's spec type) to k8s.PreviewCRManager (k8s package's spec
+// type). Two spec types exist to avoid the k8s↔services import cycle;
+// fields are identical so the conversion is a flat copy.
+type previewCRCreatorAdapter struct {
+	mgr *k8s.PreviewCRManager
+}
+
+func (a *previewCRCreatorAdapter) EnsurePreviewCR(ctx context.Context, spec services.PreviewCRSpec) error {
+	return a.mgr.EnsurePreviewCR(ctx, k8s.PreviewCRSpec{
+		Name:      spec.Name,
+		TenantID:  spec.TenantID,
+		ProjectID: spec.ProjectID,
+		PRNumber:  spec.PRNumber,
+		Branch:    spec.Branch,
+		ReleaseID: spec.ReleaseID,
+		ExpiresAt: spec.ExpiresAt,
+	})
+}
+
+func (a *previewCRCreatorAdapter) DeletePreviewCR(ctx context.Context, tenantID, projectID string, prNumber int) error {
+	return a.mgr.DeletePreviewCR(ctx, tenantID, projectID, prNumber)
 }

@@ -107,6 +107,20 @@ func (f *fakeConvergenceEnvTargetStore) DeleteTarget(_ context.Context, _ db.DBT
 	return nil
 }
 
+// 2026-06-07 D2/D5/D6/D7 — preview-as-category interface extensions.
+func (f *fakeConvergenceEnvTargetStore) SetPreviewDesired(_ context.Context, _ db.DBTX, _, _, _, _, _, _ string) error {
+	return nil
+}
+func (f *fakeConvergenceEnvTargetStore) CountPermanent(_ context.Context, _ string) (int, error) {
+	return 0, nil
+}
+func (f *fakeConvergenceEnvTargetStore) ListPermanent(_ context.Context, _ string) ([]string, error) {
+	return []string{}, nil
+}
+func (f *fakeConvergenceEnvTargetStore) DeleteByKind(_ context.Context, _ db.DBTX, _, _, _, _ string) error {
+	return nil
+}
+
 type fakeConvergenceSyncClient struct {
 	synced  bool
 	healthy bool

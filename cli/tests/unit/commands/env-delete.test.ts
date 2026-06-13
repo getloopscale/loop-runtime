@@ -10,7 +10,7 @@ describe('EnvDeleteCommand', () => {
   function makeDeps(overrides: Partial<EnvDeleteDeps> = {}): EnvDeleteDeps {
     return {
       getToken: () => 'test-token',
-      deleteEnvironment: async () => {},
+      deleteEnvironment: async (_name: string, _project: string) => {},
       writeTo: (msg: string) => output.push(msg),
       writeError: (msg: string) => errors.push(msg),
       ...overrides,
@@ -64,7 +64,7 @@ describe('EnvDeleteCommand', () => {
     it('returns 0 when --yes is provided (no --confirm needed)', async () => {
       let called = false;
       const cmd = new EnvDeleteCommand(makeDeps({
-        deleteEnvironment: async () => { called = true; },
+        deleteEnvironment: async (_name: string, _project: string) => { called = true; },
       }));
       const code = await cmd.execute('staging', { yes: true });
       expect(code).toBe(0);
@@ -79,7 +79,7 @@ describe('EnvDeleteCommand', () => {
 
     it('returns 3 on delete failure', async () => {
       const cmd = new EnvDeleteCommand(makeDeps({
-        deleteEnvironment: async () => { throw new Error('server error'); },
+        deleteEnvironment: async (_name: string, _project: string) => { throw new Error('server error'); },
       }));
       const code = await cmd.execute('staging', { confirm: 'staging' });
       expect(code).toBe(3);
@@ -88,7 +88,7 @@ describe('EnvDeleteCommand', () => {
     it('returns 4 on 401 from API', async () => {
       const { ApiError } = await import('../../../src/api/client');
       const cmd = new EnvDeleteCommand(makeDeps({
-        deleteEnvironment: async () => { throw new ApiError('Unauthorized', 4, 401); },
+        deleteEnvironment: async (_name: string, _project: string) => { throw new ApiError('Unauthorized', 4, 401); },
       }));
       const code = await cmd.execute('staging', { confirm: 'staging' });
       expect(code).toBe(4);
@@ -97,7 +97,7 @@ describe('EnvDeleteCommand', () => {
     it('returns 1 on 404 from API', async () => {
       const { ApiError } = await import('../../../src/api/client');
       const cmd = new EnvDeleteCommand(makeDeps({
-        deleteEnvironment: async () => { throw new ApiError('Not found', 1, 404, 'NOT_FOUND'); },
+        deleteEnvironment: async (_name: string, _project: string) => { throw new ApiError('Not found', 1, 404, 'NOT_FOUND'); },
       }));
       const code = await cmd.execute('staging', { confirm: 'staging' });
       expect(code).toBe(1);
@@ -150,7 +150,7 @@ describe('EnvDeleteCommand', () => {
 
     it('shows actionable error on delete failure', async () => {
       const cmd = new EnvDeleteCommand(makeDeps({
-        deleteEnvironment: async () => { throw new Error('timeout'); },
+        deleteEnvironment: async (_name: string, _project: string) => { throw new Error('timeout'); },
       }));
       await cmd.execute('staging', { confirm: 'staging' });
       expect(errors[0]).toContain('Try again');
@@ -218,5 +218,87 @@ describe('EnvDeleteCommand', () => {
         expect(allOutput).not.toContain(term);
       }
     });
+  });
+});
+
+// =============================================================================
+// M2 v1.2 — T6.1 expanded --project flag on env delete
+// Plan: 2026-06-07-runtime-envs-per-project-m2 v1.2 (LIVE catch 2026-06-08)
+// =============================================================================
+
+describe('M2 v1.2 T6.1 expanded — --project flag on env delete', () => {
+  let output: string[];
+  let errors: string[];
+
+  const writeTo = (msg: string) => output.push(msg);
+  const writeError = (msg: string) => errors.push(msg);
+
+  const makeDeps = (over?: Partial<EnvDeleteDeps>): EnvDeleteDeps => ({
+    getToken: () => 'tok',
+    deleteEnvironment: async (_name: string, _project: string) => {},
+    writeTo,
+    writeError,
+    ...over,
+  });
+
+  beforeEach(() => {
+    output = [];
+    errors = [];
+  });
+
+  it('passes --project to deleteEnvironment closure verbatim (M2)', async () => {
+    let capturedName: string | null = null;
+    let capturedProject: string | null = null;
+    const cmd = new EnvDeleteCommand(makeDeps({
+      deleteEnvironment: async (name: string, project: string) => {
+        capturedName = name;
+        capturedProject = project;
+      },
+    }));
+    const code = await cmd.execute('staging', { yes: true, project: 'web' });
+    expect(code).toBe(0);
+    expect(capturedName).toBe('staging');
+    expect(capturedProject).toBe('web');
+  });
+
+  it('omits project (passes empty string) when --project flag absent — legacy path', async () => {
+    let capturedProject: string | null = null;
+    const cmd = new EnvDeleteCommand(makeDeps({
+      deleteEnvironment: async (_name: string, project: string) => {
+        capturedProject = project;
+      },
+    }));
+    const code = await cmd.execute('staging', { yes: true });
+    expect(code).toBe(0);
+    expect(capturedProject).toBe('');
+  });
+
+  it('JSON output includes project field when --project set (M2)', async () => {
+    const cmd = new EnvDeleteCommand(makeDeps());
+    const code = await cmd.execute('staging', { yes: true, json: true, project: 'web' });
+    expect(code).toBe(0);
+    const parsed = JSON.parse(output[0]);
+    expect(parsed).toMatchObject({ name: 'staging', project: 'web', status: 'deleted' });
+  });
+
+  it('JSON output omits project field when --project absent (back-compat)', async () => {
+    const cmd = new EnvDeleteCommand(makeDeps());
+    const code = await cmd.execute('staging', { yes: true, json: true });
+    expect(code).toBe(0);
+    const parsed = JSON.parse(output[0]);
+    expect(parsed).toMatchObject({ name: 'staging', status: 'deleted' });
+    expect(parsed.project).toBeUndefined();
+  });
+
+  it('whitespace-only --project normalized to empty (defensive)', async () => {
+    let capturedProject: string | null = null;
+    const cmd = new EnvDeleteCommand(makeDeps({
+      deleteEnvironment: async (_name: string, project: string) => {
+        capturedProject = project;
+      },
+    }));
+    const code = await cmd.execute('staging', { yes: true, project: '   ' });
+    expect(code).toBe(0);
+    expect(capturedProject).toBe('');
   });
 });

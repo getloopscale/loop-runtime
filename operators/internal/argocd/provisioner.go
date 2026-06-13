@@ -104,4 +104,17 @@ type Provisioner interface {
 	// DeleteAppProject removes the ArgoCD AppProject CR associated with a tenant.
 	// This operation is idempotent: calling it when no project exists is a no-op.
 	DeleteAppProject(ctx context.Context, tenantID string) error
+
+	// ListApplicationNames returns the metadata.name of every ArgoCD Application
+	// CR labeled with the given tenantID. Used by tenant_gitops to compute the
+	// set of Apps to prune after the active PreviewEnvironment set shrinks
+	// (close-PR cleanup). #71 LIVE catch 2026-06-07 — preview_controller.go:609
+	// comment claimed "Application CR deletion is owned by the API" but the
+	// API never wired it; the canonical fix is here at the tenant operator,
+	// not in the API.
+	ListApplicationNames(ctx context.Context, tenantID string) ([]string, error)
+
+	// DeleteApplication removes a SINGLE ArgoCD Application CR by name.
+	// Idempotent: NotFound is not an error. #71 LIVE catch 2026-06-07.
+	DeleteApplication(ctx context.Context, appName string) error
 }
