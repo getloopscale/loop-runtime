@@ -9,9 +9,19 @@ vi.mock('@/lib/api', () => ({
 }));
 
 /**
- * Minimal EventSource mock — J-19 T1.3 only needs onmessage emission.
- * T2.4 will adopt a richer Heroku-style MockEventSource canonical pattern.
+ * EventSource mock — extended for J-19 BLOCKER F-tests-2 closure (2026-06-13).
+ *
+ * SSE protocol distinguishes two channels:
+ *   - UNNAMED `data: {...}\n\n` → fires `onmessage`
+ *   - NAMED `event: log\ndata:{...}\n\n` → fires `addEventListener('log',...)`
+ *
+ * loopzero-api emits NAMED `event: log` (api/internal/routes/logs_stream.go
+ * writeSSELogEvent). useLogStream now subscribes to both channels per
+ * 2026-06-13 LIVE walkthrough fix (commit bfde4349). Hermetic tests
+ * MUST exercise BOTH paths to prevent regression of the LIVE catch.
  */
+type EventListenerEntry = (ev: MessageEvent) => void;
+
 class TestEventSource {
   static instances: TestEventSource[] = [];
   url: string;
@@ -19,6 +29,7 @@ class TestEventSource {
   onmessage: ((ev: MessageEvent) => void) | null = null;
   onerror: ((ev: Event) => void) | null = null;
   readyState = 0;
+  private namedListeners = new Map<string, EventListenerEntry[]>();
 
   constructor(url: string) {
     this.url = url;
@@ -30,9 +41,25 @@ class TestEventSource {
     });
   }
 
+  addEventListener(type: string, handler: EventListenerEntry) {
+    const arr = this.namedListeners.get(type) ?? [];
+    arr.push(handler);
+    this.namedListeners.set(type, arr);
+  }
+
   emit(line: LogLine) {
+    // Unnamed-event path (legacy / build-logs).
     const ev = new MessageEvent('message', { data: JSON.stringify(line) });
     this.onmessage?.(ev);
+  }
+
+  // F-tests-2 closure — named-event dispatch (loopzero-api runtime SSE).
+  // Accepts the canonical loopzero-api shape {timestamp, line, step} which
+  // useLogStream maps to LogLine {ts, level, msg, source}.
+  emitNamed(eventType: string, data: Record<string, unknown>) {
+    const ev = new MessageEvent(eventType, { data: JSON.stringify(data) });
+    const arr = this.namedListeners.get(eventType) ?? [];
+    arr.forEach((h) => h(ev));
   }
 
   close() {
@@ -174,5 +201,87 @@ describe('useLogStream (J-19 T1.3 — R3 droppedCount field)', () => {
     expect(result.current.lines.length).toBe(1); // last rendered was pre-pause
     // Resume: NOT auto-replayed by hook; design — caller renders next event
     // (canonical pattern: paused freezes UI; doesn't backfill on resume)
+  });
+
+  // 2026-06-13 LIVE walkthrough fix gates — BLOCKER F-tests-2 closure
+  // (commit bfde4349). loopzero-api emits NAMED event 'log' with payload shape
+  // {timestamp, line, step}. useLogStream now listens via addEventListener
+  // ('log', handler) + maps to LogLine {ts, msg, source}. Prior hermetic
+  // tests covered only onmessage (unnamed) path — missing this channel
+  // is the bug class that allowed sponsor to see "No log lines yet" with
+  // backend streaming successfully.
+  it('test_use_log_stream_renders_named_log_event_from_loopzero_api', async () => {
+    const { result } = await setupHook(100);
+    const es = TestEventSource.instances[0];
+    act(() => {
+      es.emitNamed('log', {
+        timestamp: '2026-06-13T10:30:00Z',
+        line: 'request status=200',
+        step: 'api',
+      });
+    });
+    expect(result.current.lines.length).toBe(1);
+    expect(result.current.lines[0].msg).toBe('request status=200');
+    expect(result.current.lines[0].ts).toBe('2026-06-13T10:30:00Z');
+    expect(result.current.lines[0].source).toBe('api');
+  });
+
+  it('test_use_log_stream_maps_loopzero_api_shape_timestamp_to_ts_line_to_msg_step_to_source', async () => {
+    // Field-name mapping regression gate: loopzero-api {timestamp,line,step}
+    // → LogLine {ts,level='info',msg,source}. Prevents future drift where
+    // payload uses {ts,msg,source} (legacy) vs {timestamp,line,step}
+    // (loopzero-api 2026-05-13 Beta Logs Gate shape).
+    const { result } = await setupHook(100);
+    const es = TestEventSource.instances[0];
+    act(() => {
+      es.emitNamed('log', {
+        timestamp: '2026-06-13T11:00:00Z',
+        line: '\x1b[31mERROR\x1b[0m connection refused',
+        step: 'pod-runtime',
+      });
+    });
+    expect(result.current.lines.length).toBe(1);
+    const got = result.current.lines[0];
+    expect(got.ts).toBe('2026-06-13T11:00:00Z');
+    expect(got.level).toBe('info'); // default when payload omits level
+    expect(got.msg).toContain('ERROR');
+    expect(got.source).toBe('pod-runtime');
+  });
+
+  it('test_use_log_stream_backward_compat_legacy_logline_shape_via_onmessage', async () => {
+    // build-logs handler still emits the legacy unnamed-event with
+    // LogLine shape {ts,level,msg,source}. Hook MUST keep onmessage path
+    // working for backward compat (cf. cloud/dashboard/src/pages/build-logs.tsx).
+    const { result } = await setupHook(100);
+    const es = TestEventSource.instances[0];
+    act(() => {
+      es.emit({
+        ts: '2026-06-13T12:00:00Z',
+        level: 'warn',
+        msg: 'legacy unnamed payload',
+        source: 'build',
+      });
+    });
+    expect(result.current.lines.length).toBe(1);
+    expect(result.current.lines[0].level).toBe('warn');
+    expect(result.current.lines[0].msg).toBe('legacy unnamed payload');
+  });
+
+  it('test_use_log_stream_named_and_unnamed_events_buffer_together', async () => {
+    // Mixed-source defensive: a single EventSource could in loopzerory receive
+    // both named + unnamed events. Buffer order MUST preserve arrival.
+    const { result } = await setupHook(100);
+    const es = TestEventSource.instances[0];
+    act(() => {
+      es.emit(mkLine(1));
+      es.emitNamed('log', {
+        timestamp: '2026-06-13T12:05:00Z',
+        line: 'second from named',
+        step: 'runtime',
+      });
+      es.emit(mkLine(2));
+    });
+    expect(result.current.lines.length).toBe(3);
+    expect(result.current.lines[1].msg).toBe('second from named');
   });
 });
