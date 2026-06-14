@@ -151,6 +151,15 @@ type Config struct {
 	// for permanent envs (FAANG canonical J-25 sponsor walkthrough catch
 	// 2026-06-12 — closes catches #21+#22).
 	PublicDomain         string
+	// GrafanaBaseURL is the deep-link root for Grafana dashboards surfaced from
+	// the J-18 Status / Runtime Health page. Templated by StatusHandler into
+	// statusResponse.MetricsRangeURL as
+	// `<GrafanaBaseURL>/d/loopzero-project?var-project=<name>&var-env=<env>`.
+	// Empty disables the affordance — dashboard renders "Open in Grafana" as
+	// disabled (honest, per ADR D2 of plan 2026-06-06-dashboard-journey-j18-
+	// status-runtime-health v1.1).
+	// Set via LOOPZERO_GRAFANA_BASE_URL env var.
+	GrafanaBaseURL       string
 	// B14 (MEET-2026-04-23-058): cert-manager ClusterIssuer used for all app TLS
 	// Certificates. REQUIRED per-environment (prod: letsencrypt-prod; dev: loopzero-ca-issuer).
 	// Set via LOOPZERO_CLUSTER_ISSUER env var. Empty = Validate() fatal at startup.
@@ -398,6 +407,7 @@ func Load() Config {
 		BaseDomain:           envOr("BASE_DOMAIN", "loopzero.local"),
 		PreviewPublicDomain:  os.Getenv("LOOPZERO_PREVIEW_PUBLIC_DOMAIN"),
 		PublicDomain:         os.Getenv("LOOPZERO_PUBLIC_DOMAIN"),
+		GrafanaBaseURL:       os.Getenv("LOOPZERO_GRAFANA_BASE_URL"),
 		ClusterIssuer:        os.Getenv("LOOPZERO_CLUSTER_ISSUER"),
 		PrometheusAddress:    os.Getenv("LOOPZERO_PROMETHEUS_ADDRESS"),
 

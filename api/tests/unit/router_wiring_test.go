@@ -178,7 +178,7 @@ func TestRouter_AllRoutesRegistered(t *testing.T) {
 	buildHandler := routes.NewBuildHandler(nil, logger)
 	logsHandler := routes.NewLogsHandler(nil, nil)
 	rollbackHandler := routes.NewRollbackHandler(nil, nil, "test.local")
-	statusHandler := routes.NewStatusHandler(nil, nil, nil, "test.local", "")
+	statusHandler := routes.NewStatusHandler(nil, nil, nil, "test.local", "", "")
 	buildListHandler := routes.NewBuildListHandler(nil)
 	environmentHandler := routes.NewEnvironmentHandler(nil)
 	teamHandler := routes.NewTeamHandler(nil)

@@ -7,6 +7,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+### Added (2026-06-14 J-18 Phase 1 T1.1 — Grafana deep-link + canonical prom_query_keys)
+
+- **`api/internal/routes/status.go` — additive response fields** — `statusResponse` gains `metrics_range_url` (Grafana deep-link templated as `<grafanaBaseURL>/d/loopzero-project?var-project=<name>&var-env=<env>` when operator configures `LOOPZERO_GRAFANA_BASE_URL`; empty otherwise so dashboard renders "Open in Grafana" disabled honest per ADR D2 of plan 2026-06-06-dashboard-journey-j18-status-runtime-health v1.1) + `prom_query_keys` (deterministic 8-name canonical list from T0.2 eight-signals catalog: uptime_24h, replicas_ready, p95_latency, error_rate, rps, status_terminal, alerts_active, last_deploy_time — names align with downstream Prometheus query templates that T1.2 metrics_proxy handler resolves).
+- **`NewStatusHandler` signature + `cfg.GrafanaBaseURL` wire** — adds `grafanaBaseURL string` as 6th constructor parameter. Production call site (`api/cmd/setup_orchestrator.go:155`) wires `cfg.GrafanaBaseURL` (NEW config field reading env var `LOOPZERO_GRAFANA_BASE_URL`). 13 test call sites updated to pass empty string preserving legacy behavior.
+- **`api/tests/unit/status_test.go TestStatusRoute_T11_MetricsRangeURLAndPromQueryKeys`** — 4 sub-tests asserting templated-when-set / empty-when-unset / canonical-8-names / canonical-regardless-of-grafana invariants. All 4 GREEN; existing 6 TestStatusRoute sub-tests still GREEN.
+
 ### Security (2026-06-10 J-22 Layer 2 code-review fixes — engineering-side closure)
 
 Closes the 74 findings of `/loop-code-review` against commits 572911de + a5fe7797 + 07e886df via plan `2026-06-10-j22-layer2-code-review-fixes` v1.1 (SHIPPABLE_WITH_CAVEATS 89.0 per `/plan-confidence`; PASS_WITH_CAVEATS per `/deps-audit`). 9 commits land 1 consensus-CRITICAL + 5 HIGH + 5 MEDIUM + 6 pre-existing RED + 7 EC absorptions. Bisect anchors: pre-fix `docs/operations/baselines/2026-06-10-j22-layer2-pre-fix.md` (07e886df), post-fix `docs/operations/baselines/2026-06-10-j22-layer2-post-fix.md` (eefa9fb2). Phase 6 LIVE sponsor walkthrough remains operator HARD STOP per `cleanroom-up-live-test-mandate`.
