@@ -182,3 +182,25 @@ __pycache__/
 # Tilt-rendered helm ConfigMap+Secret output — re-generated on each tilt up
 .tilt-rendered/
 infra/local/secrets/
+
+# --------------------------------------------
+# Housekeeping 2026-06-14 (post J-19 v0.14.0 delivery)
+# --------------------------------------------
+
+# Per-session ralph-loop driver prompts (canonical convention per discover-execute SKILL.md
+# "Write the substituted prompt from Step 3 to .claude/halt-loop-prompts/{slug}.md (gitignored)").
+# The canonical halt-loop drivers themselves live under .claude/skills/**/halt-loop-prompts/
+# (already exempted via lines 21-22 above for prompts/).
+.claude/halt-loop-prompts/
+
+# Vendored reference projects cloned for /discover-execute (large external repos, read-only).
+# The line-36 comment mentioned this category but the actual rule (line 170) covered only the
+# Portuguese-spelled `referencias/` directory. Adding the English-spelled path closes a 265MB
+# leak gap caught during 2026-06-14 housekeeping of flyctl/ + heroku-cli/ + vercel/ clones.
+.claude/knowledge-base/references/
+
+# Operator-private loop-state files (extends the `.local.md` convention beyond the 3 specific
+# paths at lines 165-167 to cover per-subproject session state like api/.claude/review-loop.local.md
+# caught untracked during 2026-06-14 housekeeping). Glob form catches future siblings.
+**/*.local.md
+api/.claude/
