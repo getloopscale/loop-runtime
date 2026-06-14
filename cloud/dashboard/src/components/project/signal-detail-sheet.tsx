@@ -134,7 +134,7 @@ export function SignalDetailSheet({
           {grafanaURL ? (
             <Button
               type="button"
-              variant="tertiary"
+              variant="ghost"
               size="sm"
               onClick={() => window.open(grafanaURL, '_blank', 'noopener,noreferrer')}
             >
@@ -144,7 +144,7 @@ export function SignalDetailSheet({
           ) : (
             <Button
               type="button"
-              variant="tertiary"
+              variant="ghost"
               size="sm"
               disabled
               aria-label="Grafana deep-link not configured"

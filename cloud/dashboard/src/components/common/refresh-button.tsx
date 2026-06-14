@@ -34,7 +34,7 @@ export function RefreshButton({
   return (
     <Button
       type="button"
-      variant="tertiary"
+      variant="ghost"
       size="sm"
       onClick={onRefresh}
       disabled={isFetching}
