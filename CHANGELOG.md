@@ -7,6 +7,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+### Added (2026-06-14 J-18 Phase 3 — UI components T3.1+T3.2+T3.3+T3.4)
+
+- **`cloud/dashboard/src/components/project/kpi-strip-status.tsx` NEW (T3.1)** — 5-card horizontal KPI strip (Replicas, Uptime 24h, p95 Latency, Error Rate, RPS) with tabular-nums alignment. Honest empty: null/undefined → `—` (NOT 0). Tone thresholds: uptime success ≥99.9%, warning ≥99.0%, destructive otherwise; error_rate success <1%, warning <5%, destructive ≥5%; p95 success <500ms, warning <1000ms, destructive ≥1000ms; replicas=0 → destructive. 12 hermetic tests GREEN.
+- **`cloud/dashboard/src/components/project/signal-grid.tsx` NEW (T3.2)** — 8 SignalPills in responsive grid (2/4 cols). Renders all 8 cells regardless of partial input (EC-7 absorption — never blanks). Each pill: icon + label + tabular-nums value + tone-by-state color. Click + Enter/Space keyboard activate `onDrillDown(signalName)` for accessibility. Pills are non-clickable when onDrillDown unset. 14 hermetic tests GREEN.
+- **`cloud/dashboard/src/components/project/signal-detail-sheet.tsx` NEW (T3.3)** — right-side drill-down sheet via @loopzero/ui Sheet primitive. Consumes `useMetricsRange` (T2.2) for 7d data + `buildGrafanaDeepLink` (T2.3) for external link. Honest states: EC-8 collecting renders `Coletando dados...` callout; EC-5 prometheus_unreachable renders destructive callout; happy path renders 20-row data table (chart rendering deferred to T3.3.b — table is functional scaffold). EC-13 absorption: Grafana button disabled when grafanaBaseURL empty. 7 hermetic tests GREEN.
+- **`cloud/dashboard/src/components/common/refresh-button.tsx` NEW (T3.4)** — manual refresh affordance per ADR D4 (J-17 lesson #5). RefreshCw icon + label + animate-spin when isFetching=true (disabled during fetch to prevent double-click). Custom label propagates to aria-label. 7 hermetic tests GREEN.
+
 ### Added (2026-06-14 J-18 Phase 2 — Frontend hooks T2.1+T2.2+T2.3)
 
 - **`cloud/dashboard/src/hooks/use-status-stream.ts` NEW (T2.1)** — exposes `applySignalEvent` reducer + `TERMINAL_ABSORBING_SIGNALS` (status, alerts_active) + `OSCILLATING_SIGNALS` (replicas, uptime_24h, p95_latency, error_rate, rps, last_deploy_time) per ADR D3 v1.1 dichotomy. Closes EC-4 absorption: J-17 terminal-absorbing pattern would freeze oscillating signals; v1.1 dichotomy splits 2 vs 6 signals so replicas/RPS/p95 stay always-latest while status/alerts_cleared lock terminal. Hook scaffold accepts `injectedEvents` for hermetic tests + future T1.3 SSE backend wire.
