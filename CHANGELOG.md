@@ -7,6 +7,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+### Added (2026-06-14 J-18 Phase 1 T1.2 — Prometheus query_range proxy with tenant scoping)
+
+- **`api/internal/routes/metrics_proxy.go` NEW handler — `GET /api/v1/projects/{name}/metrics?range=7d&signal=uptime_24h`** — proxies Prometheus `query_range` API for J-18 SignalDetailSheet histogram rendering. EC-2 absorption: tenant_id + project labels injected server-side from session ctx (NOT URL); cross-tenant project returns 404 NOT_FOUND per existence-leak-prevention. EC-5 absorption: 5s timeout via `context.WithTimeout`; Prometheus down → HTTP 504 `{"error":"prometheus_unreachable","retry_after":"30"}` honest (NOT silent 0). EC-8 absorption: empty histogram (project < 24h old) → HTTP 200 with `{"status":"collecting","collecting_hint":"Coletando dados..."}` so UI consumer renders honest collecting state. DIP boundary via `PrometheusQueryClient` interface enabling hermetic testing without live Prometheus.
+- **`api/internal/server/server.go ServerConfig.MetricsProxyHandler`** + **`router.go` Get registration at `/api/v1/projects/{name}/metrics`** — nil handler causes route registration skip; nil promClient causes handler to return 503 prometheus_not_configured (operator did not set LOOPZERO_PROMETHEUS_ADDRESS); both are honest degraded states.
+- **`api/cmd/setup_orchestrator.go` + `setup_server.go` wire** — constructs MetricsProxyHandler with `nil` promClient pending follow-up production HTTP adapter (T1.2-prod-adapter). Hermetic tests inject `fakePrometheusQueryClient`.
+- **`api/tests/unit/metrics_proxy_test.go TestMetricsProxy_T12`** — 8 sub-tests asserting EC-2 cross-tenant 404 + EC-2 PromQL label injection + EC-5 timeout 504 + EC-8 empty histogram collecting + happy path + nil-client 503 + missing auth 401 + signal/range defaults. All 8 GREEN.
+
 ### Added (2026-06-14 J-18 Phase 1 T1.1 — Grafana deep-link + canonical prom_query_keys)
 
 - **`api/internal/routes/status.go` — additive response fields** — `statusResponse` gains `metrics_range_url` (Grafana deep-link templated as `<grafanaBaseURL>/d/loopzero-project?var-project=<name>&var-env=<env>` when operator configures `LOOPZERO_GRAFANA_BASE_URL`; empty otherwise so dashboard renders "Open in Grafana" disabled honest per ADR D2 of plan 2026-06-06-dashboard-journey-j18-status-runtime-health v1.1) + `prom_query_keys` (deterministic 8-name canonical list from T0.2 eight-signals catalog: uptime_24h, replicas_ready, p95_latency, error_rate, rps, status_terminal, alerts_active, last_deploy_time — names align with downstream Prometheus query templates that T1.2 metrics_proxy handler resolves).

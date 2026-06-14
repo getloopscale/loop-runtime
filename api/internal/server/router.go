@@ -415,6 +415,14 @@ func registerProtectedRoutes(
 	if cfg.StatusHandler != nil {
 		r.Get("/api/v1/projects/{name}/status", cfg.StatusHandler.Get)
 	}
+	// T1.2 J-18 — Prometheus query_range proxy for J-18 SignalDetailSheet
+	// histogram rendering. Handler returns 503 prometheus_not_configured when
+	// MetricsProxyHandler is nil (operator did not configure
+	// LOOPZERO_PROMETHEUS_ADDRESS) — honest degraded UI per ADR D2 of plan
+	// 2026-06-06-dashboard-journey-j18-status-runtime-health v1.1.
+	if cfg.MetricsProxyHandler != nil {
+		r.Get("/api/v1/projects/{name}/metrics", cfg.MetricsProxyHandler.Get)
+	}
 	if cfg.ScaleHandler != nil {
 		r.With(rateLimitMiddlewares...).Post("/api/v1/projects/{name}/scale", cfg.ScaleHandler.Scale)
 	}
