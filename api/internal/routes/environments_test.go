@@ -531,6 +531,53 @@ func TestEnvs_Delete_WarnsOnActiveRelease_M2(t *testing.T) {
 	}
 }
 
+// TestEnvs_Delete_WarningRule3Compliant — T0.1 of plan
+// 2026-06-15-code-review-49-findings-remediation (R2-F1 BLOCKER).
+// User-facing warning emitted on active-release env delete MUST NOT
+// contain forbidden internal terms per Rule 3 (.claude/rules/cli-output.md
+// § Forbidden Internal Terms). Regression-defense for the
+// "ArgoCD App may persist briefly" string that shipped before T0.1.
+func TestEnvs_Delete_WarningRule3Compliant(t *testing.T) {
+	mgr := &fakeEnvMgr{}
+	rl := &fakeActiveReleaseLookup{active: true}
+	h := NewEnvironmentHandler(mgr).WithActiveReleaseLookup(rl)
+
+	req := httptest.NewRequest(http.MethodDelete,
+		"/api/v1/environments/staging?project=web", nil)
+	req = withChiParam(req, "name", "staging")
+	req = withAuth(req, defaultUserContext())
+	w := httptest.NewRecorder()
+
+	h.Delete(w, req)
+
+	if w.Code != http.StatusOK {
+		t.Fatalf("want 200, got %d body=%s", w.Code, w.Body.String())
+	}
+
+	body := w.Body.String()
+	// Forbidden internal terms per cli-output.md. Case-insensitive
+	// because user-facing strings should never reference these regardless
+	// of casing. Excludes terms that are acceptable in slog (argocd
+	// callback paths, k8s namespace names) — this assertion is scoped
+	// to the JSON response body, not to slog.
+	forbiddenTerms := []string{
+		"ArgoCD", "argocd", "Gitea", "gitea", "MinIO", "minio",
+		"CRD", "kubebuilder", "envtest", "Kaniko",
+		"pg_advisory", "advisory lock", "GitOps", "gitops-push",
+	}
+	for _, term := range forbiddenTerms {
+		if strings.Contains(body, term) {
+			t.Errorf("Rule 3 violation: response body contains forbidden internal term %q; body=%s",
+				term, body)
+		}
+	}
+
+	// Positive assertion — the canonical product-language warning IS present.
+	if !strings.Contains(body, "cleanup may take a few seconds") {
+		t.Errorf("expected canonical product-language warning ('cleanup may take a few seconds'); got body=%s", body)
+	}
+}
+
 func TestEnvs_Get_PropagatesProjectQuery_M2(t *testing.T) {
 	mgr := &fakeEnvMgr{detail: &EnvironmentDetail{Name: "staging", Status: "active"}}
 	h := NewEnvironmentHandler(mgr)

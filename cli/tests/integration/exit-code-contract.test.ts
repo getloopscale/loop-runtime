@@ -22,7 +22,7 @@
 // (port 1 é reserved/unreachable — provoca AUTH/SERVICE_UNAVAILABLE
 // rapidamente sem precisar de cluster k3d up).
 
-import { spawnSync } from 'child_process';
+import { spawn, spawnSync } from 'child_process';
 import * as path from 'path';
 import * as fs from 'fs';
 import * as os from 'os';
@@ -165,6 +165,90 @@ describe('CLI exit code contract (T1.2 / F-02)', () => {
       });
       expect(result.status).toBe(0);
       expect(result.stdout).toContain('Usage: loopzero deploy');
+    });
+  });
+
+  // T0.3 (plan 2026-06-15-code-review-49-findings-remediation, R3-F6 HIGH)
+  // — Rule 4 exit codes are permanent {0,1,2,3,4,5}. SIGINT/SIGTERM are
+  // sent by the OS to the foreground process; our signal handlers in
+  // `cli/src/index.ts:57-58` call `runCleanup()` then `process.exit(1)`.
+  // Before the T0.2 fix the handlers used `exit(130)` (SIGINT) and
+  // `exit(143)` (SIGTERM) — values OUTSIDE the canonical set. This test
+  // catches that regression class by spawning the CLI in a known-hang
+  // shape, sending the signal, and asserting the resulting exit code is
+  // in the canonical set.
+  //
+  // We use `child_process.spawn` (async) rather than `spawnSync` because
+  // signal-driven termination is inherently asynchronous: the parent
+  // must observe `exit` to know the code. `loopzero logs --follow` against
+  // an unreachable backend hangs in the SSE connect path long enough
+  // for us to deliver the signal cleanly.
+  describe('signal-driven exits honor Rule 4 (no exit outside {0..5})', () => {
+    const CANONICAL_EXITS = [0, 1, 2, 3, 4, 5];
+
+    interface SignalCase {
+      name: string;
+      signal: NodeJS.Signals;
+    }
+
+    const signalCases: SignalCase[] = [
+      { name: 'SIGINT (Ctrl-C)', signal: 'SIGINT' },
+      { name: 'SIGTERM (kill default)', signal: 'SIGTERM' },
+    ];
+
+    signalCases.forEach(({ name, signal }) => {
+      it(`${name} → exit code ∈ {0,1,2,3,4,5}`, (done) => {
+        // Spawn a long-running CLI invocation. `logs --follow` opens
+        // an SSE stream + retries on EOF; against LOOPZERO_URL=127.0.0.1:1
+        // (unreachable) it will spin in connect-retry without auth.
+        const child = spawn('node', [BIN_PATH, 'logs', '--follow'], {
+          env: {
+            ...process.env,
+            LOOPZERO_URL: 'http://127.0.0.1:1',
+            HOME: tmpHome,
+            XDG_CONFIG_HOME: tmpHome,
+            LOOPZERO_TOKEN: '',
+          },
+          stdio: ['ignore', 'pipe', 'pipe'],
+        });
+
+        let exited = false;
+        const cleanup = setTimeout(() => {
+          if (!exited) {
+            child.kill('SIGKILL');
+            done(new Error('child did not exit within 8s after signal'));
+          }
+        }, 8_000);
+
+        child.on('exit', (code, killedBySignal) => {
+          exited = true;
+          clearTimeout(cleanup);
+
+          // After T0.2 fix: handler calls process.exit(1), code=1.
+          // Without our handler, Node would exit with 128+signum
+          // (130 for SIGINT, 143 for SIGTERM) — which would fail this
+          // assertion. The test thus locks the Rule 4 contract.
+          if (code === null) {
+            // Killed by signal without our handler running.
+            // This is the regression-defense failure case.
+            done(new Error(
+              `process killed by signal ${killedBySignal} without exit code; ` +
+              `Rule 4 requires explicit process.exit(N) with N ∈ {0..5}. ` +
+              `Check cli/src/index.ts SIGINT/SIGTERM handlers.`,
+            ));
+            return;
+          }
+
+          expect(CANONICAL_EXITS).toContain(code);
+          done();
+        });
+
+        // Give the child a moment to start its event loop + start the
+        // SSE connect-retry; THEN deliver the signal.
+        setTimeout(() => {
+          child.kill(signal);
+        }, 250);
+      }, 10_000);
     });
   });
 });

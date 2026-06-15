@@ -16,6 +16,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 ### Removed
 
 ### Fixed
+- Rule 3 compliance: the warning emitted when deleting an environment with an active release no longer references internal infrastructure terminology — now reads "environment removed but cleanup may take a few seconds; run 'loopzero platform status' to verify" (#code-review-49-findings T0.1)
+- Rule 4 compliance: SIGINT (Ctrl-C) and SIGTERM no longer exit with codes 130/143 — both now exit with the canonical code 1, honoring the permanent set {0, 1, 2, 3, 4, 5} (#code-review-49-findings T0.2)
 
 ### Security
 

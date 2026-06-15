@@ -54,8 +54,12 @@ function runCleanup(): void {
   cleanupFns.length = 0;
 }
 
-process.on('SIGINT', () => { runCleanup(); process.exit(130); });
-process.on('SIGTERM', () => { runCleanup(); process.exit(143); });
+// Rule 4: exit codes are permanent — only {0, 1, 2, 3, 4, 5} permitted.
+// SIGINT/SIGTERM cleanup → exit 1 (treated as usage error: user canceled).
+// Plan: 2026-06-15-code-review-49-findings-remediation T0.2 (R3-F1 BLOCKER).
+// See .claude/rules/cli-output.md § Exit Codes (Rule 4 — Permanent).
+process.on('SIGINT', () => { runCleanup(); process.exit(1); });
+process.on('SIGTERM', () => { runCleanup(); process.exit(1); });
 
 async function withTimeout<T>(promise: Promise<T>, ms: number, message: string): Promise<T> {
   return new Promise<T>((resolve, reject) => {
