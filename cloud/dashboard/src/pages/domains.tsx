@@ -19,6 +19,10 @@ import { useEngineApi } from '@/hooks/use-api';
 import { useRequireAuth } from '@/hooks/use-auth';
 import { useDeleteDomain, useVerifyDomain } from '@/hooks/mutations/use-domains';
 import { formatDate } from '@/lib/format';
+import { NSInstructionsCard } from '@/components/domains/ns-instructions-card';
+import { ReverifyButton } from '@/components/domains/reverify-button';
+import { DomainTroubleshootSheet } from '@/components/domains/domain-troubleshoot-sheet';
+import type { DomainStatus } from '@/lib/api/types';
 
 interface Domain {
   id: string;
@@ -32,6 +36,9 @@ interface Domain {
   cname_target: string;
   created_at: string;
   verified_at?: string;
+  // J-11 v1.1 — backend already returns these (per ADR D6 EC-2 recon).
+  nameservers?: string[];
+  failure_mode?: string;
 }
 
 interface DomainsResponse {
@@ -146,6 +153,8 @@ export function DomainsPage() {
   }, [searchParams, setSearchParams]);
   // T2.2: ConfirmDialog substitui native confirm()
   const [deleteTarget, setDeleteTarget] = useState<string | null>(null);
+  // J-11 v1.1 T2.4: Troubleshoot sheet opens from clicking a failed status pill.
+  const [troubleshootTarget, setTroubleshootTarget] = useState<Domain | null>(null);
 
   const filtered = domains.filter((d) =>
     d.domain.toLowerCase().includes(searchQuery.toLowerCase()),
@@ -195,6 +204,31 @@ export function DomainsPage() {
           : undefined
       }
     >
+      {/*
+        J-11 v1.1 T2.1 — show NSInstructionsCard for the most recently
+        added pending domain. Helps first-time users complete the DNS
+        setup without re-opening the Add sheet.
+      */}
+      {(() => {
+        const pendingWithNS = filtered.find(
+          (d) =>
+            (d.status === 'pending_verification' ||
+              d.status === 'verified' ||
+              d.status === 'provisioning') &&
+            Array.isArray(d.nameservers) &&
+            d.nameservers.length > 0,
+        );
+        if (!pendingWithNS) return null;
+        return (
+          <div className="mb-6">
+            <NSInstructionsCard
+              nameservers={pendingWithNS.nameservers}
+              domainName={pendingWithNS.domain}
+            />
+          </div>
+        );
+      })()}
+
       <Card>
         <Card.Body className="p-0">
           <Table>
@@ -246,10 +280,28 @@ export function DomainsPage() {
                       </span>
                     </Table.Cell>
                     <Table.Cell>
-                      <StatusDot
-                        status={mapStatus(d.status)}
-                        label={statusLabel(d.status)}
-                      />
+                      {/*
+                        J-11 v1.1 T2.4 — clicking the status pill on a
+                        failed domain opens the troubleshoot sheet.
+                      */}
+                      {d.status === 'failed' ? (
+                        <button
+                          type="button"
+                          onClick={() => setTroubleshootTarget(d)}
+                          className="inline-flex items-center gap-1 hover:underline"
+                          aria-label={`View troubleshoot tips for ${d.domain}`}
+                        >
+                          <StatusDot
+                            status={mapStatus(d.status)}
+                            label={statusLabel(d.status)}
+                          />
+                        </button>
+                      ) : (
+                        <StatusDot
+                          status={mapStatus(d.status)}
+                          label={statusLabel(d.status)}
+                        />
+                      )}
                     </Table.Cell>
                     <Table.Cell className="hidden md:table-cell">
                       <span className="text-body-sm text-muted-foreground tabular-nums">
@@ -277,6 +329,16 @@ export function DomainsPage() {
                             Verify
                           </Button>
                         ) : null}
+                        {/*
+                          J-11 v1.1 T2.3 — ReverifyButton self-renders only
+                          for failed + verified statuses (ADR D3); no-op
+                          for active/provisioning/pending_verification (the
+                          existing Verify button above covers that path).
+                        */}
+                        <ReverifyButton
+                          domainName={d.domain}
+                          status={d.status as DomainStatus}
+                        />
                         <Button
                           size="sm"
                           variant="ghost"
@@ -302,6 +364,14 @@ export function DomainsPage() {
       </Card>
 
       <AddDomainSheet open={addOpen} onOpenChange={setAddOpen} />
+
+      {/* J-11 v1.1 T2.4 — DomainTroubleshootSheet opens from failed-pill click. */}
+      <DomainTroubleshootSheet
+        open={troubleshootTarget !== null}
+        onOpenChange={(open) => !open && setTroubleshootTarget(null)}
+        domainName={troubleshootTarget?.domain ?? ''}
+        failureMode={troubleshootTarget?.failure_mode}
+      />
 
       <ConfirmDialog
         open={deleteTarget !== null}
