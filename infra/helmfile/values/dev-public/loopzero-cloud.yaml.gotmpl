@@ -38,4 +38,13 @@ env:
   #   - KRATOS_INTERNAL_URL: cluster-internal HTTP — used for server-side
   #     admin API calls (CreateIdentity, GetSession, verify cookie)
   KRATOS_PUBLIC_URL: "https://auth-dev.loopzero.example"
-  KRATOS_INTERNAL_URL: "http://kratos.loopzero-auth.svc.cluster.local:4433"
+  # CANONICAL FIX 2026-06-15 dev-public Cleanroom: service name was wrong
+  # (referenced "kratos" but ory-kratos chart creates `ory-kratos-public`
+  # service on port 80, NOT `kratos` on 4433). LIVE diagnosis showed
+  # loopzero-cloud /v1/auth/session/token returned 502 AUTH_SERVICE_UNAVAILABLE
+  # because DNS lookup failed. Canonical Ory chart service convention:
+  #   - ory-kratos-public (port 80): self-service flows + whoami + verify
+  #   - ory-kratos-admin (port 80): CreateIdentity + ListIdentities
+  # loopzero-cloud server-side cookie verification uses the PUBLIC API
+  # (/sessions/whoami), so INTERNAL_URL → ory-kratos-public.
+  KRATOS_INTERNAL_URL: "http://ory-kratos-public.loopzero-auth.svc.cluster.local:80"
