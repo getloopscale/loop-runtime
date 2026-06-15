@@ -114,13 +114,11 @@ tasks:
       - bash infra/tests/check-dev-public-live-url-discoverability-syntax_test.sh  # T5.1 ORPHAN companion 3/4
       - bash infra/tests/check-dev-public-status-url-probe-syntax_test.sh          # T5.1 ORPHAN companion 4/4
       # T4.1 of plan 2026-06-15-code-review-49-findings-remediation (R1-F5 HIGH):
-      # shell-lint advisory. Runs shellcheck across the operator/CI script set
-      # WHEN installed; emits WARN + exits 0 when absent so first-landing here
-      # doesn't break unrelated CI flows. Install via `sudo apt install
-      # shellcheck` (Ubuntu) or `brew install shellcheck` (macOS). Once
-      # universally installed across dev + CI, flip the conditional to
-      # mandatory by removing the `command -v` guard.
-      - bash -c 'if command -v shellcheck >/dev/null 2>&1; then echo "[shellcheck] running across infra/scripts/local + infra/tests/check-*.sh + infra/tests/e2e/dev-public-*.sh"; shellcheck -e SC1091,SC2155,SC2086,SC2046 infra/scripts/local/*.sh infra/tests/check-*-syntax_test.sh infra/tests/e2e/dev-public-*.sh 2>&1 || { echo "[shellcheck] violations — failing gate"; exit 1; }; else echo "[shellcheck] WARN: shellcheck not installed — gate is advisory-only. Install via apt/brew/go to enable enforcement (R1-F5 T4.1)."; fi'
+      # shell-lint advisory — invokes infra/scripts/local/shellcheck-advisory.sh.
+      # Re-homed from inline `bash -c '...'` after that form broke YAML parsing
+      # (shell metachars + nested quotes). Script is conditional: runs
+      # shellcheck when installed; emits WARN + exits 0 when absent.
+      - bash infra/scripts/local/shellcheck-advisory.sh
 
   diff:
     desc: 'PR-diff quality gates (override base with BASE_REF=<ref>; default origin/main)'
