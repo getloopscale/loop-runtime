@@ -4,7 +4,6 @@
 package argo
 
 import (
-	"strings"
 	"testing"
 
 	forge "github.com/getloopscale/loopzero-forge"
@@ -114,44 +113,6 @@ func TestDockerfilePathForApp_MultiApp(t *testing.T) {
 	}
 }
 
-func TestLoopZeroPacksDockerfileStep_SingleApp(t *testing.T) {
-	// Single app (totalApps=1) → output is Dockerfile (no suffix)
-	apps := []services.AppSpec{{Name: "api", Type: "server", Port: 8080, Path: "apps/api"}}
-	c := loopzeroPacksDockerfileStep(apps, 1)
-
-	assertContainerShape(t, c, "generate-dockerfile", imageLoopZeroPacks)
-
-	script := extractContainerScript(t, c)
-	assertContains(t, script, "loopzeropacks-generate")
-	// CODE-001 defense-in-depth: values are now %q-quoted in the shell script
-	assertContains(t, script, `--app-path "apps/api"`)
-	assertContains(t, script, `--output "/workspace/Dockerfile"`)
-	// Must NOT contain .api suffix for single app
-	if strings.Contains(script, "Dockerfile.api") {
-		t.Error("single app should output Dockerfile, not Dockerfile.api")
-	}
-}
-
-func TestLoopZeroPacksDockerfileStep_MultipleApps(t *testing.T) {
-	// 2 apps same language (totalApps=2) → Dockerfile.{name}
-	apps := []services.AppSpec{
-		{Name: "api", Type: "server", Port: 3000, Path: "apps/api"},
-		{Name: "worker", Type: "worker", Path: "apps/worker"},
-	}
-	c := loopzeroPacksDockerfileStep(apps, 2)
-	script := extractContainerScript(t, c)
-	assertContains(t, script, "Dockerfile.api")
-	assertContains(t, script, "Dockerfile.worker")
-}
-
-func TestLoopZeroPacksDockerfileStep_MixedLanguageMonorepo(t *testing.T) {
-	// Go API group (1 app) but totalApps=2 → must use Dockerfile.api
-	goApps := []services.AppSpec{{Name: "api", Type: "server", Port: 8080, Path: "apps/api"}}
-	c := loopzeroPacksDockerfileStep(goApps, 2)
-	script := extractContainerScript(t, c)
-	assertContains(t, script, "Dockerfile.api")
-}
-
 func TestDockerfileNaming_GeneratorMatchesConsumer(t *testing.T) {
 	// Contract test: generator and consumer must agree on filenames
 	for _, tc := range []struct {
@@ -174,51 +135,6 @@ func TestDockerfileNaming_GeneratorMatchesConsumer(t *testing.T) {
 		})
 	}
 }
-
-// ---------------------------------------------------------------------------
-// GoStrategy
-// ---------------------------------------------------------------------------
-
-func TestGoStrategy_CacheKey(t *testing.T) {
-	s := &GoStrategy{}
-	if s.CacheKey() != "go-modules" {
-		t.Errorf("CacheKey() = %q, want go-modules", s.CacheKey())
-	}
-}
-
-func TestGoStrategy_CacheDirs(t *testing.T) {
-	s := &GoStrategy{}
-	dirs := s.CacheDirs()
-	if len(dirs) != 2 {
-		t.Errorf("CacheDirs() has %d dirs, want 2", len(dirs))
-	}
-}
-
-func TestGoStrategy_ValidateStep_UsesGoImage(t *testing.T) {
-	s := &GoStrategy{}
-	apps := []services.AppSpec{{Name: "api", Type: "server", Port: 8080, Framework: "go"}}
-	c := s.ValidateStep(apps)
-
-	assertContainerShape(t, c, "validate-workspace", "golang:1.22-alpine")
-
-	script := extractContainerScript(t, c)
-	assertContains(t, script, "go.mod")
-}
-
-func TestGoStrategy_BuildStep_UsesCGODisabled(t *testing.T) {
-	s := &GoStrategy{}
-	apps := []services.AppSpec{{Name: "api", Type: "server", Port: 8080, Path: "cmd/api"}}
-	c := s.BuildStep(apps)
-
-	script := extractContainerScript(t, c)
-	assertContains(t, script, "CGO_ENABLED=0")
-}
-
-// TestGoStrategy_DockerfileStep removed — replaced by TestLoopZeroPacksDockerfileStep.
-
-// ---------------------------------------------------------------------------
-// PythonStrategy
-// ---------------------------------------------------------------------------
 
 func TestPythonStrategy_CacheKey(t *testing.T) {
 	s := &PythonStrategy{}
@@ -243,41 +159,6 @@ func TestPythonStrategy_ValidateStep_ChecksPythonDeps(t *testing.T) {
 
 // ---------------------------------------------------------------------------
 // CustomStrategy
-// ---------------------------------------------------------------------------
-
-func TestCustomStrategy_CacheKey_Empty(t *testing.T) {
-	s := &CustomStrategy{}
-	if s.CacheKey() != "" {
-		t.Errorf("CacheKey() = %q, want empty", s.CacheKey())
-	}
-}
-
-func TestCustomStrategy_CacheDirs_Nil(t *testing.T) {
-	s := &CustomStrategy{}
-	if s.CacheDirs() != nil {
-		t.Errorf("CacheDirs() = %v, want nil", s.CacheDirs())
-	}
-}
-
-func TestCustomStrategy_ValidateStep_RequiresDockerfile(t *testing.T) {
-	s := &CustomStrategy{}
-	apps := []services.AppSpec{{Name: "api", Type: "server"}}
-	c := s.ValidateStep(apps)
-
-	script := extractContainerScript(t, c)
-	assertContains(t, script, "Dockerfile")
-}
-
-func TestCustomStrategy_InstallStep_IsNoop(t *testing.T) {
-	s := &CustomStrategy{}
-	c := s.InstallStep(nil)
-
-	script := extractContainerScript(t, c)
-	assertContains(t, script, "echo")
-}
-
-// ---------------------------------------------------------------------------
-// Helper: appPaths
 // ---------------------------------------------------------------------------
 
 func TestAppPaths_EmptyApps_ReturnsDot(t *testing.T) {

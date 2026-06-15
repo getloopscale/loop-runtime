@@ -101,27 +101,16 @@ func TestUserDockerfileStrategy_DockerfileStepReturnsLintContainer(t *testing.T)
 // and is superseded by TestNodeStrategy_DockerfileStep_UsesCanonical
 // (languages_canonical_test.go).
 
-func TestGoStrategy_DockerfileStepReturnsLoopZeroPacks(t *testing.T) {
-	s := &GoStrategy{}
-	apps := []services.AppSpec{{Name: "api", Path: ".", Framework: "go"}}
-	c := s.DockerfileStep(apps, 1)
-	if c.Name != "generate-dockerfile" {
-		t.Errorf("Go DockerfileStep().Name = %q, want generate-dockerfile", c.Name)
-	}
-}
+// T2.1 (plan simplify-deploy-loopzerokit-only v2.0): TestGoStrategy_DockerfileStepReturnsLoopZeroPacks
+// removed — Go is no longer a supported runtime (fixed node/python stack).
 
 func TestAllLanguageStrategiesImplementDockerfileStep(t *testing.T) {
-	apps := []services.AppSpec{{Name: "api", Path: "."}}
+	apps := []services.AppSpec{{Name: "api", Path: ".", Start: "x"}}
 	strategies := []LanguageStrategy{
 		&NodeStrategy{},
-		&GoStrategy{},
 		&PythonStrategy{},
-		&RubyStrategy{},
-		&JavaStrategy{},
-		&PHPStrategy{},
-		&RustStrategy{},
-		&CustomStrategy{},
 		&UserDockerfileStrategy{},
+		&unsupportedStrategy{framework: "go"},
 	}
 	for _, s := range strategies {
 		t.Run(s.Name(), func(t *testing.T) {

@@ -273,32 +273,6 @@ func TestWorkflowBuilder_Build_NodeStrategy_HasSaveCache(t *testing.T) {
 	}
 }
 
-func TestWorkflowBuilder_Build_CustomStrategy_NoSaveCache(t *testing.T) {
-	builder := NewWorkflowBuilder(testInfraParams())
-	spec := testSpec()
-	spec.Apps = []services.AppSpec{{Name: "api", Type: "server", Port: 3000, Framework: "custom"}}
-	spec.Plan = planFromApps(spec.Apps)
-	wf, err := builder.Build(spec)
-	if err != nil {
-		t.Fatalf("Build() error: %v", err)
-	}
-
-	// Custom strategy has no cache key/dirs, so finalize DAG should not exist at all.
-	// When there are no cache tasks, buildOnExitDAG returns nil and no finalize DAG is added.
-	for _, tmpl := range wf.Templates {
-		if dag, ok := tmpl.(*forge.DAG); ok && dag.Name == "finalize" {
-			t.Error("Custom strategy should NOT have a finalize DAG — no cache to save")
-		}
-	}
-	if wf.OnExit != "" {
-		t.Errorf("OnExit = %q, want empty string for custom strategy (no cache)", wf.OnExit)
-	}
-}
-
-// ---------------------------------------------------------------------------
-// CWT refs
-// ---------------------------------------------------------------------------
-
 func TestWorkflowBuilder_Build_CloneTask_UsesCWTRef(t *testing.T) {
 	builder := NewWorkflowBuilder(testInfraParams())
 	wf, err := builder.Build(testSpec())
