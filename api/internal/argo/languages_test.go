@@ -15,28 +15,25 @@ import (
 // ResolveStrategy
 // ---------------------------------------------------------------------------
 
-func TestResolveStrategy_NodeFrameworks(t *testing.T) {
-	nodeFrameworks := []string{"nextjs", "vite", "remix", "nestjs", "express", "node", ""}
-	for _, fw := range nodeFrameworks {
-		strategy := ResolveStrategy(fw)
-		if strategy.Name() != "node" {
-			t.Errorf("ResolveStrategy(%q) = %q, want node", fw, strategy.Name())
-		}
+// T1.1 (simplify-deploy-loopzerokit-runtime-wiring / F-dom-2): ResolveStrategy is
+// now keyed on the services.json `runtime` (python|node), NOT on legacy framework
+// strings. Only "node" and "python" resolve; everything else (incl. legacy
+// framework names like "express"/"nextjs"/"fastapi" and empty) fails closed (D4).
+func TestResolveStrategy_RuntimeKeyed(t *testing.T) {
+	if got := ResolveStrategy("node").Name(); got != "node" {
+		t.Errorf(`ResolveStrategy("node") = %q, want node`, got)
+	}
+	if got := ResolveStrategy("python").Name(); got != "python" {
+		t.Errorf(`ResolveStrategy("python") = %q, want python`, got)
 	}
 }
 
-// T2.1 (plan simplify-deploy-loopzerokit-only v2.0): Go/Ruby/Java/PHP/Rust/Custom
-// framework dispatch removed (fixed node/python stack). Former
-// TestResolveStrategy_GoFrameworks / _CustomFramework / _UnknownFrameworkFallsToCustom
-// asserted the removed behavior; superseded by TestResolveStrategy_NodePython_OK
-// and TestResolveStrategy_UnsupportedRuntime_FailsClosed (strategy_collapse_test.go).
-
-func TestResolveStrategy_PythonFrameworks(t *testing.T) {
-	pyFrameworks := []string{"fastapi", "django", "python"}
-	for _, fw := range pyFrameworks {
-		strategy := ResolveStrategy(fw)
-		if strategy.Name() != "python" {
-			t.Errorf("ResolveStrategy(%q) = %q, want python", fw, strategy.Name())
+// TestResolveStrategy_NonRuntimeFailsClosed: legacy framework strings + empty
+// runtime now fail closed — no Node default (D4), no framework mapping.
+func TestResolveStrategy_NonRuntimeFailsClosed(t *testing.T) {
+	for _, notRuntime := range []string{"", "express", "nextjs", "vite", "fastapi", "django", "go", "ruby", "custom"} {
+		if got := ResolveStrategy(notRuntime).Name(); got != "unsupported" {
+			t.Errorf("ResolveStrategy(%q) = %q, want unsupported (only python|node resolve — D1/D4)", notRuntime, got)
 		}
 	}
 }

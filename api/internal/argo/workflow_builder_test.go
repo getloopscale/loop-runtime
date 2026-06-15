@@ -28,7 +28,7 @@ func testInfraParams() InfraParams {
 // AFTER calling testSpec(), and may also overwrite spec.Apps independently.
 func testSpec() services.WorkflowSpec {
 	apps := []services.AppSpec{
-		{Name: "api", Type: "server", Port: 3000, Framework: "express"},
+		{Name: "api", Type: "server", Port: 3000, Framework: "express", Runtime: "node"},
 	}
 	return services.WorkflowSpec{
 		BuildID:       "build-001",
@@ -530,7 +530,7 @@ func TestWorkflowBuilder_Build_DAGDependencies(t *testing.T) {
 func TestWorkflowBuilder_Build_PythonStrategy_LanguageLabel(t *testing.T) {
 	builder := NewWorkflowBuilder(testInfraParams())
 	spec := testSpec()
-	spec.Apps = []services.AppSpec{{Name: "api", Type: "server", Port: 8000, Framework: "fastapi"}}
+	spec.Apps = []services.AppSpec{{Name: "api", Type: "server", Port: 8000, Framework: "fastapi", Runtime: "python"}}
 	spec.Plan = planFromApps(spec.Apps)
 	wf, err := builder.Build(spec)
 	if err != nil {
@@ -544,10 +544,10 @@ func TestWorkflowBuilder_Build_MultiApp_EndAtBuildImage(t *testing.T) {
 	builder := NewWorkflowBuilder(testInfraParams())
 	spec := testSpec()
 	spec.Apps = []services.AppSpec{
-		{Name: "api", Type: "server", Port: 3000, Path: "services/api", Framework: "express"},
+		{Name: "api", Type: "server", Port: 3000, Path: "services/api", Framework: "express", Runtime: "node"},
 		// T3.3: frontend removed — web is a node server (the LoopZeroKit shape).
-		{Name: "web", Type: "server", Port: 3001, Path: "apps/web", Framework: "nextjs"},
-		{Name: "worker", Type: "worker", Port: 0, Path: "services/worker", Framework: "node"},
+		{Name: "web", Type: "server", Port: 3001, Path: "apps/web", Framework: "nextjs", Runtime: "node"},
+		{Name: "worker", Type: "worker", Port: 0, Path: "services/worker", Framework: "node", Runtime: "node"},
 	}
 	spec.Plan = planFromApps(spec.Apps)
 	wf, err := builder.Build(spec)
@@ -625,7 +625,7 @@ func TestAppsJSON_EmptyApps(t *testing.T) {
 
 func TestAppsJSON_SingleApp(t *testing.T) {
 	apps := []services.AppSpec{
-		{Name: "api", Type: "server", Port: 3000, Path: ".", Framework: "express"},
+		{Name: "api", Type: "server", Port: 3000, Path: ".", Framework: "express", Runtime: "node"},
 	}
 	result := appsJSON(apps)
 	assertStringContains(t, result, `"name":"api"`)
@@ -943,8 +943,8 @@ func TestWorkflowBuilder_BuildKit_MultiApp_IndependentContainers(t *testing.T) {
 	builder := NewWorkflowBuilder(testInfraParams())
 	spec := testSpec()
 	spec.Apps = []services.AppSpec{
-		{Name: "api", Type: "server", Port: 3000, Framework: "express"},
-		{Name: "worker", Type: "worker", Port: 0, Framework: "node"},
+		{Name: "api", Type: "server", Port: 3000, Framework: "express", Runtime: "node"},
+		{Name: "worker", Type: "worker", Port: 0, Framework: "node", Runtime: "node"},
 	}
 	spec.Plan = planFromApps(spec.Apps)
 	wf, err := builder.Build(spec)
@@ -979,8 +979,8 @@ func TestWorkflowBuilder_BuildKit_MetadataFilePath(t *testing.T) {
 	// "build-image-{app}". The assertion here is about per-app metadata file
 	// paths in build-image containers, so both apps must be container-delivered.
 	spec.Apps = []services.AppSpec{
-		{Name: "api", Type: "server", Port: 3000, Framework: "express"},
-		{Name: "web", Type: "server", Port: 4000, Framework: "express"},
+		{Name: "api", Type: "server", Port: 3000, Framework: "express", Runtime: "node"},
+		{Name: "web", Type: "server", Port: 4000, Framework: "express", Runtime: "node"},
 	}
 	spec.Plan = planFromApps(spec.Apps)
 	wf, err := builder.Build(spec)
@@ -1110,6 +1110,7 @@ func testBuildPlan() *services.BuildPlan {
 				BuildArgs:        map[string]string{"NODE_ENV": "production", "COMMIT_SHA": "abc123", "APP_NAME": "api"},
 				CacheRef:         "reg.io/acme/my-app/api:buildcache",
 				LanguageStrategy: "node",
+				Runtime:          "node",
 				Build:            "buildpack",
 				AppType:          "server",
 				Port:             3000,
@@ -1315,7 +1316,7 @@ func TestWorkflowBuilder_Build_RejectsNilPlan(t *testing.T) {
 		Environment: "production",
 		CommitSHA:   "abc123",
 		Apps: []services.AppSpec{
-			{Name: "api", Type: "server", Port: 3000, Framework: "express"},
+			{Name: "api", Type: "server", Port: 3000, Framework: "express", Runtime: "node"},
 		},
 		Plan: nil, // legacy path — must be rejected
 	}

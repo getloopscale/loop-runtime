@@ -11,31 +11,30 @@ import (
 
 // build-mode-dispatch-and-dockerfile-security-plan T1.3 + T1.4 + T4.1.
 
-func TestResolveStrategyForApp_NoBuildDockerfile_RoutesByFramework(t *testing.T) {
+// T1.1 (simplify-deploy-loopzerokit-runtime-wiring / F-dom-2): ResolveStrategyForApp
+// routes by the services.json `runtime` (python|node), NOT framework. Only
+// python/node resolve; everything else fails closed (D1/D4). A populated
+// `framework` is IGNORED — runtime is the single key (this is what closes F-dom-2:
+// a python app with a stale framework still builds python).
+func TestResolveStrategyForApp_RoutesByRuntime(t *testing.T) {
 	cases := []struct {
-		framework string
+		runtime   string
+		framework string // must be ignored
 		want      string
 	}{
-		// T2.1: fixed node/python stack — everything else fails closed.
-		{"node", "node"},
-		{"express", "node"},
-		{"nextjs", "node"},
-		{"python", "python"},
-		{"fastapi", "python"},
-		{"", "node"},
-		{"go", "unsupported"},
-		{"ruby", "unsupported"},
-		{"java", "unsupported"},
-		{"php", "unsupported"},
-		{"rust", "unsupported"},
-		{"custom", "unsupported"},
+		{"node", "", "node"},
+		{"python", "", "python"},
+		{"node", "express", "node"},       // framework ignored
+		{"python", "express", "python"},   // runtime wins over a stale framework — the F-dom-2 fix
+		{"", "express", "unsupported"},    // empty runtime fails closed (D4), no Node default
+		{"go", "node", "unsupported"},     // non-stack runtime fails closed
 	}
 	for _, tc := range cases {
-		t.Run(tc.framework, func(t *testing.T) {
-			app := services.AppSpec{Name: "api", Framework: tc.framework, Build: ""}
+		t.Run(tc.runtime+"/"+tc.framework, func(t *testing.T) {
+			app := services.AppSpec{Name: "api", Runtime: tc.runtime, Framework: tc.framework, Build: ""}
 			s := ResolveStrategyForApp(app)
 			if s.Name() != tc.want {
-				t.Errorf("framework=%q Build='' → strategy=%q, want %q", tc.framework, s.Name(), tc.want)
+				t.Errorf("runtime=%q framework=%q → strategy=%q, want %q", tc.runtime, tc.framework, s.Name(), tc.want)
 			}
 		})
 	}
@@ -46,7 +45,7 @@ func TestAllLanguageStrategiesImplementDockerfileStep(t *testing.T) {
 	strategies := []LanguageStrategy{
 		&NodeStrategy{},
 		&PythonStrategy{},
-		&unsupportedStrategy{framework: "go"},
+		&unsupportedStrategy{runtime: "go"},
 	}
 	for _, s := range strategies {
 		t.Run(s.Name(), func(t *testing.T) {
