@@ -60,8 +60,17 @@ mkdir -p "$(dirname "$UNSEAL_FILE")"
 bao() { kubectl --context "$CONTEXT" -n "$NS" exec "$POD" -- env BAO_SKIP_VERIFY=true bao "$@"; }
 
 # === Step 2: init (idempotent — skip if already initialized) ===
+# CANONICAL FIX 2026-06-15 Phase 4 dev-public Cleanroom: `bao status` uses
+# exit-code SEMANTICS (rc=0 unsealed, rc=2 sealed-but-init, rc=1 error).
+# Mixing rc with `set -o pipefail` propagated rc=2 as PIPELINE FAILURE,
+# activating `|| echo "false"` fallback regardless of stdout JSON content.
+# Result: even when stdout JSON declared initialized=true, the fallback
+# lowercased the string, mismatching the "True" (Python-cap) compare below.
+# Fix: capture stdout first (always works because bao -format=json emits
+# JSON on both rc=0 AND rc=2), then parse independent of rc.
 log "Step 2: bao operator init (idempotent)"
-INIT_STATUS=$(bao status -format=json 2>/dev/null | python3 -c "import sys,json; print(json.load(sys.stdin).get('initialized', False))" 2>/dev/null || echo "false")
+BAO_STATUS_JSON=$(bao status -format=json 2>/dev/null || true)
+INIT_STATUS=$(echo "$BAO_STATUS_JSON" | python3 -c "import sys,json; d=json.loads(sys.stdin.read() or '{}'); print(d.get('initialized', False))" 2>/dev/null || echo "False")
 if [[ "$INIT_STATUS" != "True" ]]; then
   # LIVE bug fix (T6.2 Cleanroom TOTAL 2026-06-12): when OpenBao is fresh
   # (Initialized=false) post-Cleanroom destroy, any existing unseal file is
@@ -82,8 +91,15 @@ else
 fi
 
 # === Step 3: unseal (idempotent — skip if already unsealed) ===
+# CANONICAL FIX 2026-06-15 (same family as Step 2 above): pipefail + bao rc=2
+# (sealed-but-init normal exit code) was triggering `|| echo "true"` (lowercase)
+# that NEVER matched `"True"` (Python-capitalized) compare → unseal silently
+# SKIPPED on every fresh-init invocation. Vault stayed sealed forever; operator
+# had to manually `bao operator unseal $SHARD x3`. Sponsor "sem WORKAROUNDs"
+# explicit: capture stdout first, parse rc-independent, normalize to "True".
 log "Step 3: bao operator unseal × 3 (idempotent)"
-SEALED=$(bao status -format=json 2>/dev/null | python3 -c "import sys,json; print(json.load(sys.stdin).get('sealed', True))" 2>/dev/null || echo "true")
+BAO_STATUS_JSON=$(bao status -format=json 2>/dev/null || true)
+SEALED=$(echo "$BAO_STATUS_JSON" | python3 -c "import sys,json; d=json.loads(sys.stdin.read() or '{}'); print(d.get('sealed', True))" 2>/dev/null || echo "True")
 if [[ "$SEALED" == "True" ]]; then
   if [[ ! -f "$UNSEAL_FILE" ]]; then
     log "FAIL: $UNSEAL_FILE missing — cannot unseal without shards. Run init first OR restore from backup."

@@ -101,6 +101,7 @@ tasks:
       - bash infra/tests/check-rehearsal-mode-syntax_test.sh                     # iter 26 T4.1 --rehearsal flag shape + early-exit (26 assertions)
       - bash infra/tests/check-write-path-subset-syntax_test.sh                  # iter 31 Option A write-path subset shape (27 assertions)
       - bash infra/tests/check-option-b-eso-deploy-doc_test.sh                   # iter 33 Option B ESO deploy doc structure + version drift defense (25 assertions)
+      - bash infra/tests/check-vault-bootstrap-unseal-loop_test.sh               # 2026-06-15 dev-public Cleanroom unseal-loop canonical fix (16 assertions; pipefail+bao rc=2 regression guard)
       - bash infra/tests/check-openbao-transit-quality-gates-wired_test.sh       # iter 27 meta-gate: ensures the 6 above stay wired + uncommented + clustered (extended iter 33 → 6 tests)
       - bash infra/tests/check-allowlist-sunsets_test.sh                         # T5.2.a plan 2026-06-11-code-review-remediation: hermetic test for `.claude/scripts/check-allowlist-sunsets.py` (CI blocks past-sunset entries in rules/code-review-allowlist.txt)
       - python3 .claude/scripts/check-allowlist-sunsets.py rules/code-review-allowlist.txt  # T5.2.a CI gate itself: enforce sunset dates on every quality:gates run
