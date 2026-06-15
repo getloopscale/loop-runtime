@@ -4,6 +4,9 @@
 // Plan v1.1 T1.2 (loopzero-cli-vercel-like-ux) — deploy command consumes
 // findServicesJson for the upload payload (NOT findLoopZeroYaml).
 
+import * as fs from 'fs';
+import * as os from 'os';
+import * as path from 'path';
 import { DeployCommand } from '../../../src/commands/deploy';
 import type { DeployDeps } from '../../../src/commands/deploy-types';
 
@@ -134,5 +137,104 @@ describe('Plan v1.1 EC-9 — findServicesJson is optional in DeployDeps', () => 
       isCI: false,
     };
     expect(depsWithoutFindServicesJson.findServicesJson).toBeUndefined();
+  });
+});
+
+// simplify-deploy-loopzerokit-runtime-wiring T3.1a (F-dom-2) — the deploy build
+// payload MUST carry each app's services.json `runtime` (the API now dispatches
+// the build strategy on it). These tests use a REAL services.json on disk so the
+// enrichment block actually runs (the mocks above point at a non-existent path,
+// so the fs.readFileSync is swallowed — exactly the gap /review flagged).
+describe('T3.1a — deploy carries services.json runtime into the build payload', () => {
+  let tmpRoot: string;
+  let servicesJsonPath: string;
+
+  function writeServices(services: Array<{ name: string; runtime?: string }>): void {
+    fs.mkdirSync(path.join(tmpRoot, '.loopzero'), { recursive: true });
+    servicesJsonPath = path.join(tmpRoot, '.loopzero', 'services.json');
+    fs.writeFileSync(servicesJsonPath, JSON.stringify({ version: 2, project: 'my-saas', services }));
+  }
+
+  function depsWithLoopZeroApps(
+    apps: Record<string, { path: string; framework: string; type: string; port: number }>,
+    overrides: Partial<DeployDeps> = {},
+  ): DeployDeps {
+    return createMockDeps({
+      // projectRoot '/project' does NOT exist on disk → skipFs=true → validateConfig
+      // path-existence checks are skipped (same as the existing tests). Only the
+      // services.json path below is real, so the runtime-enrichment readFileSync runs.
+      findLoopZeroYaml: jest.fn().mockReturnValue({
+        path: '/project/loopzero.yaml',
+        content: { project: 'my-saas', apps },
+      }),
+      findServicesJson: jest.fn().mockReturnValue({ path: servicesJsonPath }),
+      uploadSource: jest.fn().mockResolvedValue({ commit_sha: 'sha', apps: Object.keys(apps) }),
+      hasGitRepo: jest.fn().mockReturnValue(true),
+      ...overrides,
+    });
+  }
+
+  beforeEach(() => {
+    tmpRoot = fs.mkdtempSync(path.join(os.tmpdir(), 'loopzero-rw-'));
+  });
+  afterEach(() => {
+    fs.rmSync(tmpRoot, { recursive: true, force: true });
+  });
+
+  it('enriches every app from services.json (all matched → no unmatched warning, human mode)', async () => {
+    // Both apps are present in services.json → the enrichment matches both and
+    // sets unit.runtime, so NO "no services.json runtime" warning fires. This is
+    // the inverse of the unmatched-warning test: it proves the match-and-enrich
+    // path runs against a REAL services.json (the gap /review flagged — the other
+    // mocks point at a non-existent path so the enrichment is silently caught).
+    writeServices([
+      { name: 'api', runtime: 'python' },
+      { name: 'web', runtime: 'node' },
+    ]);
+    const writeError = jest.fn();
+    const deps = depsWithLoopZeroApps(
+      {
+        api: { path: 'apps/api', framework: 'fastapi', type: 'server', port: 8000 },
+        web: { path: 'apps/web', framework: 'express', type: 'server', port: 3000 },
+      },
+      { writeError },
+    );
+    await new DeployCommand(deps).execute({ env: 'production' }); // human mode
+
+    const warned = writeError.mock.calls.map((c) => String(c[0])).join('\n');
+    expect(warned).not.toMatch(/no services\.json runtime/i);
+  });
+
+  it('warns (human mode) when a loopzero.yaml app has no matching services.json runtime', async () => {
+    writeServices([{ name: 'api', runtime: 'python' }]); // 'worker' is absent
+    const writeError = jest.fn();
+    const deps = depsWithLoopZeroApps(
+      {
+        api: { path: 'apps/api', framework: 'fastapi', type: 'server', port: 8000 },
+        worker: { path: 'apps/worker', framework: 'custom', type: 'worker', port: 0 },
+      },
+      { writeError },
+    );
+    await new DeployCommand(deps).execute({ env: 'production' }); // human mode (no json)
+
+    const warned = writeError.mock.calls.map((c) => String(c[0])).join('\n');
+    expect(warned).toMatch(/worker/);
+    expect(warned).toMatch(/services\.json runtime/i);
+  });
+
+  it('suppresses the unmatched-app warning under --json', async () => {
+    writeServices([{ name: 'api', runtime: 'python' }]);
+    const writeError = jest.fn();
+    const deps = depsWithLoopZeroApps(
+      {
+        api: { path: 'apps/api', framework: 'fastapi', type: 'server', port: 8000 },
+        worker: { path: 'apps/worker', framework: 'custom', type: 'worker', port: 0 },
+      },
+      { writeError },
+    );
+    await new DeployCommand(deps).execute({ env: 'production', json: true });
+
+    const warned = writeError.mock.calls.map((c) => String(c[0])).join('\n');
+    expect(warned).not.toMatch(/no services\.json runtime/i);
   });
 });

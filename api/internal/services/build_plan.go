@@ -168,8 +168,8 @@ func CreateBuildPlan(units []AppUnit, tenantID, projectID, commitSHA, registryUR
 	return BuildPlan{Apps: plans}
 }
 
-// resolveLanguageStrategy maps a runtime/framework string to a language
-// strategy name. Single source of truth for the dispatch.
+// resolveLanguageStrategy maps a services.json `runtime` to a language
+// strategy label. Single source of truth for the label on AppBuildPlan.
 //
 // simplify-deploy-loopzerokit-runtime-wiring T2.1 (F-dom-2): keyed on the
 // services.json `runtime` only (python|node). The legacy loopzero.yaml framework

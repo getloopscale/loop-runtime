@@ -157,12 +157,11 @@ func (a *BuildOrchestratorAdapter) GetBuildTenantID(ctx context.Context, buildID
 // dashboard would race the in-flight build's own concurrent-build
 // guard).
 //
-// The source's apps_spec is converted back to AppInput. Path /
-// Framework / Build cannot be recovered because the schema does not
-// persist them; loopzero-packs autodetect at build time covers the
-// single-app monorepo case (the dominant Vercel-grade use case).
-// Multi-app monorepos with non-root app paths need a schema migration
-// to persist Path — tracked as a follow-up.
+// The source's apps_spec is converted back to AppInput. Path / Build /
+// Runtime / Start ARE recovered from the persisted apps_spec (T0.2/T0.1 —
+// the schema persists them). The legacy `framework` field was removed
+// (simplify-deploy-loopzerokit-runtime-wiring / F-dom-2): the build strategy is
+// keyed on the persisted `runtime` (python|node).
 func (a *BuildOrchestratorAdapter) GetRedeploySource(ctx context.Context, tenantID, buildID string) (*routes.RedeploySource, error) {
 	build, err := a.BuildStore.GetByIDForTenant(ctx, tenantID, buildID)
 	if err != nil {

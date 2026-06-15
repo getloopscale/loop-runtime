@@ -113,11 +113,9 @@ type BuildOrchestratorService interface {
 	// re-submit a build identical to the source: project_id, environment,
 	// commit_sha, and the persisted apps spec. Verifies tenant ownership
 	// inside. Returns ErrBuildNotTerminal if the source build is still
-	// in flight. Path/Framework/Build fields on the returned apps will
-	// be empty because the apps_spec column does not preserve them;
-	// loopzero-packs autodetects at build time for single-app monorepos,
-	// which is the common case. Multi-app monorepos with non-root paths
-	// need a schema migration (deferred).
+	// in flight. Path/Build/Runtime/Start ARE preserved by the apps_spec
+	// column (T0.2/T0.1); the legacy `framework` field was removed
+	// (F-dom-2 — the build strategy is keyed on `runtime`).
 	GetRedeploySource(ctx context.Context, tenantID, buildID string) (*RedeploySource, error)
 }
 

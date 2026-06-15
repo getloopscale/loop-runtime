@@ -236,9 +236,26 @@ export class DeployCommand {
     // an empty runtime fails closed clearly at build time (D4).
     try {
       const runtimeByName = parseServicesRuntimes(fs.readFileSync(servicesJsonResult.path, 'utf-8'));
+      const unmatched: string[] = [];
       for (const unit of appUnits) {
         const rt = runtimeByName[unit.name];
-        if (rt) unit.runtime = rt;
+        if (rt) {
+          unit.runtime = rt;
+        } else {
+          unmatched.push(unit.name);
+        }
+      }
+      // F-dom-1 (review polish): warn EARLY when an app has no matching
+      // services.json runtime — otherwise the empty runtime is only caught after
+      // a full upload + build (fail-closed). The CLI holds both name spaces, so
+      // surface the mismatch in <1s. Suppressed in --json mode (machine output).
+      if (unmatched.length > 0 && !opts.json) {
+        const available = Object.keys(runtimeByName).sort().join(', ') || '(none)';
+        this.deps.writeError(
+          `Warning: no services.json runtime for app(s) [${unmatched.join(', ')}]. ` +
+            `Available services: [${available}]. The build will fail unless each app ` +
+            `has a matching service in .loopzero/services.json (run \`loopzerokit build\`).`,
+        );
       }
     } catch {
       // non-fatal — services.json was re-validated on upload; empty runtime
