@@ -47,9 +47,9 @@
 
 set -euo pipefail
 
-CLOUD_URL="${CLOUD_URL:-http://localhost:13001}"
+CLOUD_URL="${CLOUD_URL:-https://cloud-dev.loopzero.example}"
+API_PREFIX="${API_PREFIX:-/engine}"
 # Path prefix differs between standalone (no /engine) and dev-public (/engine)
-API_PREFIX="${API_PREFIX:-}"
 PROJECT_NAME="${PROJECT_NAME:-teste}"
 TEST_ENV="${TEST_ENV:-j10-test-$(date +%s)}"
 
@@ -175,7 +175,7 @@ scenario_a() {
     -X POST -m 10 \
     -H "Authorization: Bearer $jwt" \
     -H "Content-Type: application/json" \
-    -d "{\"name\":\"$TEST_ENV\"}" \
+    -d "{\"name\":\"$TEST_ENV\",\"project\":\"${PROJECT_NAME:-teste}\"}" \
     "$CLOUD_URL${API_PREFIX}/api/v1/environments")
   if [[ "$create_status" == "201" || "$create_status" == "200" ]]; then
     assert "POST /environments creates new env (HTTP $create_status)" 1
@@ -209,14 +209,14 @@ scenario_b() {
     -X POST \
     -H "Authorization: Bearer $jwt" \
     -H "Content-Type: application/json" \
-    -d "{\"name\":\"$TEST_ENV\"}" \
+    -d "{\"name\":\"$TEST_ENV\",\"project\":\"${PROJECT_NAME:-teste}\"}" \
     "$CLOUD_URL${API_PREFIX}/api/v1/environments" || true
   # Delete
   local del_status
   del_status=$(curl -sS -o /tmp/env-del.json -w '%{http_code}' \
     -X DELETE -m 10 \
     -H "Authorization: Bearer $jwt" \
-    "$CLOUD_URL${API_PREFIX}/api/v1/environments/$TEST_ENV")
+    "$CLOUD_URL${API_PREFIX}/api/v1/environments/$TEST_ENV?project=${PROJECT_NAME:-teste}")
   if [[ "$del_status" == "200" ]]; then
     assert "DELETE /environments/$TEST_ENV returns 200" 1
   else

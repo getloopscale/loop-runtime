@@ -7,9 +7,14 @@
 # and hardcodes `.Values.image.tag: latest` as default — so we must
 # override both explicitly here.
 
+# CANONICAL FIX 2026-06-15 (multi-audience JWT): local rebuild with
+# pkg/jwt NewValidatorWithAudiences accepting BOTH loopzero-engine AND
+# loopzero-cloud audiences (per api/cmd/setup_auth.go). Image pushed to
+# k3d-loopzero-registry so dev-public mgmt pulls the multi-aud-capable
+# binary. Mirrors the loopzero-cloud override (same family of fix).
 image:
-  repository: registry.digitalocean.com/loopzero-system/loopzero-api
-  tag: dev
+  repository: k3d-loopzero-registry:5000/loopzero-api
+  tag: multi-aud-fix
   # Always so each rollout pulls the latest :dev push from DOCR.
   pullPolicy: Always
 
