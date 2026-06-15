@@ -84,7 +84,7 @@ func TestStatus_Get_HappyPath(t *testing.T) {
 	// publicDomain non-empty triggers canonical URL emission per ADR D3.
 	// When empty, the dashboard renders "URL pending" badge — exercised by
 	// TestStatus_Get_NoBuildsNoRelease / scaling tests below that pass "".
-	h := NewStatusHandler(projects, builds, releases, "dev.loopzero.example", "dev.loopzero.example")
+	h := NewStatusHandler(projects, builds, releases, "dev.loopzero.example", "dev.loopzero.example", "")
 
 	req := httptest.NewRequest(http.MethodGet, "/api/v1/projects/my-api/status?env=production", nil)
 	req = withAuth(req, defaultUserContext())
@@ -130,6 +130,7 @@ func TestStatus_Get_ProjectNotFound(t *testing.T) {
 		&fakeStatusReleaseStore{},
 		"dev.loopzero.example",
 		"",
+		"",
 	)
 
 	req := httptest.NewRequest(http.MethodGet, "/api/v1/projects/nonexistent/status?env=production", nil)
@@ -155,6 +156,7 @@ func TestStatus_Get_MissingEnv_DefaultsToProduction(t *testing.T) {
 		&fakeStatusReleaseStore{},
 		"dev.loopzero.example",
 		"",
+		"",
 	)
 
 	req := httptest.NewRequest(http.MethodGet, "/api/v1/projects/my-api/status", nil) // no ?env=
@@ -178,6 +180,7 @@ func TestStatus_Get_Unauthenticated(t *testing.T) {
 		&fakeStatusBuildStore{},
 		&fakeStatusReleaseStore{},
 		"dev.loopzero.example",
+		"",
 		"",
 	)
 
@@ -213,7 +216,7 @@ func TestStatus_Get_ScalingScaleToZero(t *testing.T) {
 			ID: "rel-1", Status: "ACTIVE", GitCommit: "abc", CreatedAt: now,
 		},
 	}
-	h := NewStatusHandler(projects, builds, releases, "dev.loopzero.example", "")
+	h := NewStatusHandler(projects, builds, releases, "dev.loopzero.example", "", "")
 
 	req := httptest.NewRequest(http.MethodGet, "/api/v1/projects/my-api/status?env=production", nil)
 	req = withAuth(req, defaultUserContext())
@@ -268,7 +271,7 @@ func TestStatus_Get_ScalingHPA(t *testing.T) {
 			ID: "rel-1", Status: "ACTIVE", GitCommit: "abc", CreatedAt: now,
 		},
 	}
-	h := NewStatusHandler(projects, builds, releases, "dev.loopzero.example", "")
+	h := NewStatusHandler(projects, builds, releases, "dev.loopzero.example", "", "")
 
 	req := httptest.NewRequest(http.MethodGet, "/api/v1/projects/my-api/status?env=production", nil)
 	req = withAuth(req, defaultUserContext())
@@ -309,7 +312,7 @@ func TestStatus_Get_NoScaling(t *testing.T) {
 			},
 		},
 	}
-	h := NewStatusHandler(projects, builds, &fakeStatusReleaseStore{}, "dev.loopzero.example", "")
+	h := NewStatusHandler(projects, builds, &fakeStatusReleaseStore{}, "dev.loopzero.example", "", "")
 
 	req := httptest.NewRequest(http.MethodGet, "/api/v1/projects/my-api/status?env=production", nil)
 	req = withAuth(req, defaultUserContext())
@@ -331,6 +334,7 @@ func TestStatus_Get_NoBuildsNoRelease(t *testing.T) {
 		&fakeStatusBuildStore{builds: []StatusBuild{}},
 		&fakeStatusReleaseStore{release: nil},
 		"dev.loopzero.example",
+		"",
 		"",
 	)
 

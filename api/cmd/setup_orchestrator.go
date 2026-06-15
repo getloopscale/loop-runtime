@@ -43,6 +43,7 @@ type OrchestratorDeps struct {
 	PromoteHandler    *routes.PromoteHandler
 	StatusHandler       *routes.StatusHandler
 	MetricsProxyHandler *routes.MetricsProxyHandler // T1.2 J-18 — Prometheus query_range proxy (nil = degraded 503)
+	StatusSSEHandler    *routes.StatusSSEHandler    // T2.1 J-18 T1.3.b — SSE signal.changed stream
 	ScaleHandler        *routes.ScaleHandler
 	BuildListHandler  *routes.BuildListHandler
 	ProjectDeleter    routes.ProjectDeleter
@@ -163,6 +164,13 @@ func setupOrchestrator(
 	// Hermetic Go tests use httptest-backed fakePrometheusQueryClient.
 	metricsProxyHandler := routes.NewMetricsProxyHandler(projectStore, nil)
 
+	// T2.1 J-18 T1.3.b — SSE signal.changed stream handler.
+	// Wires canonical sse.EventStore (already constructed in setup_stores.go)
+	// to project-scoped SSE endpoint. Handler enforces tenant ownership +
+	// env validation + Flusher safety + Last-Event-ID dedup per plan
+	// 2026-06-15-j18-t1.3.b-sse-pg-notify-backend v1.1.
+	statusSSEHandler := routes.NewStatusSSEHandler(projectStore, stores.EventStore, routes.StatusSSEHandlerOpts{})
+
 	// Scale handler — scaling configuration for apps (KEDA scale-to-zero gate).
 	// Plan T2.2: real persistence via PostgresScalingStore (was: stub-202 returning acknowledged).
 	// The closure adapts routes.ScaleConfigInput ↔ db.ScalingConfig (avoids circular import).
@@ -260,6 +268,7 @@ func setupOrchestrator(
 		PromoteHandler:      promoteHandler,
 		StatusHandler:       statusHandler,
 		MetricsProxyHandler: metricsProxyHandler,
+		StatusSSEHandler:    statusSSEHandler,
 		ScaleHandler:        scaleHandler,
 		BuildListHandler:    buildListHandler,
 		ProjectDeleter:      projectDeleter,

@@ -475,16 +475,40 @@ export interface ProjectStatusDetail {
   };
 }
 
+// J-20 Scale plan v1.1 — wire shape mirrors api/internal/routes/scale.go
+// scaleRequest. The handler enforces mutual exclusion between `replicas`
+// (fixed) and `min`/`max`/`cpu`/`memory` (autoscaling) per ADR D2.
 export interface ScaleInput {
+  app: string;
+  environment?: string; // defaults to "production" server-side
   replicas?: number;
   min?: number;
   max?: number;
-  target_cpu?: number;
+  cpu?: number; // HPA cpu_target [10, 95]
+  memory?: number; // HPA memory_target [10, 90]
 }
 
+export interface ScaleAutoscaling {
+  min: number;
+  max: number;
+  cpu_target: number;
+  memory_target: number;
+  cooldown?: number; // present when scale-to-zero (min=0)
+}
+
+// J-20 Scale plan v1.1 — wire shape mirrors api/internal/routes/scale.go
+// scaleResponse. `monthly_cost_usd` is the server-authoritative cost
+// (replicas * podCostPerHour * 730); the dashboard preview MUST
+// reconcile to this value, not its local estimate (EC-2 absorption).
+// `plan_tier` echoes the tenant's resolved tier for upgrade-CTA gating.
 export interface ScaleResponse {
-  project: string;
-  applied: ScaleInput;
+  app: string;
+  environment: string;
+  replicas?: number;
+  autoscaling?: ScaleAutoscaling;
+  status: 'acknowledged' | 'applied' | 'no_change';
+  monthly_cost_usd: number;
+  plan_tier: string;
 }
 
 export interface RollbackInput {

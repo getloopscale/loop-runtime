@@ -19,6 +19,35 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ### Security
 
+## [0.16.0] - 2026-06-15
+
+### Added
+- Scale page at `/projects/:name/scale` — Vercel-style settings UI composing slider, HPA toggle, KEDA toggle, and type-to-confirm dialog with cost preview (#J-20)
+- Plan-tier-aware replicas slider that caps at Starter=2 / Pro=5 / Team=10 / Enterprise=50 (#J-20)
+- HPA Manual/Auto toggle with CPU and memory target inputs bounded 10-95% (CPU) and 10-90% (memory) for canonical Kubernetes-recommended ranges (#J-20)
+- KEDA scale-to-zero opt-in available on Pro plan and above, with in-app "Upgrade to Pro" call-to-action for Starter users (#J-20)
+- Type-to-confirm dialog (`scale <project-name>` phrase) showing replica delta, monthly cost estimate, and signed delta vs current spend before applying a scale change (#J-20)
+- Server-authoritative monthly cost estimate (`monthly_cost_usd`) returned by the scale endpoint so the dashboard reconciles its preview against the canonical value (#J-20)
+- New scale API request field `memory` for HPA memory-target percentage; existing `cpu` field continues to scope the CPU-target percentage (#J-20)
+- New typed error `PLAN_UPGRADE_REQUIRED` (HTTP 402) returned when a Starter tenant requests a feature gated to Pro and above (#J-20)
+- New typed error `HPA_TARGET_OUT_OF_BOUNDS` (HTTP 400) returned with field, min, max, and actual values when an HPA target falls outside the canonical bounds (#J-20)
+
+
+### Changed
+- Scale endpoint now enforces plan tier server-side for KEDA scale-to-zero opt-in — Starter requests are rejected at the API boundary even when the client UI is bypassed (#J-20)
+- Scale endpoint now validates HPA target bounds server-side and returns the structured `HPA_TARGET_OUT_OF_BOUNDS` body so the dashboard can highlight the specific input that violated the bound (#J-20)
+
+## [0.15.1] - 2026-06-15
+
+### Added (2026-06-15 J-18 T1.3.b — SSE pg_notify backend handler + frontend EventSource wire)
+
+Closes T1.3 deferral from J-18 v0.15.0 release. Backend SSE realtime path wires through canonical `api/internal/sse/` infrastructure (per "Don't reinvent the wheel"); frontend `useStatusStream` removes `connected: false` stub and consumes browser-native EventSource.
+
+- **`api/internal/db/release_wrapper.go` T1.1** — `ReleaseStoreSqlc` ctor gains REQUIRED non-nil `sseEventStore` (panics on nil per EC-1 absorption); `AppendSideEffect` emits `signal.changed` via `eventStore.Append` with structured `slog.Warn` on failure (EC-3 absorption — NOT silent `_, _` discard); `NoopEventStore{}` canonical sentinel for read-only callsites. 3 production callsites + 4 test callsites updated atomically. 6 hermetic tests GREEN.
+- **`api/internal/routes/status_sse.go` NEW T2.1** — `StatusSSEHandler` at `GET /api/v1/projects/{name}/signals/stream?env=<env>`. EC-2 filters event_type=signal.changed (skips J-17 deploy events); EC-5 Flusher comma-ok form returns 500 NOT panic; EC-7 cross-tenant 404 NOT 403; EC-9 Last-Event-ID dedup by id. 7 hermetic tests GREEN.
+- **`api/internal/server/server.go` + `router.go` T2.2** — `ServerConfig.StatusSSEHandler` field + route registration; constructed in `setup_orchestrator.go` with canonical `stores.EventStore` (reuses J-17 PostgresEventStore infrastructure).
+- **`cloud/dashboard/src/hooks/use-status-stream.ts` T3.1** — REMOVES `connected: false` stub; opens browser-native EventSource when projectName + env present; `addEventListener('signal.changed', handler)` per memory `feedback_eventsource_named_events_vs_onmessage_2026_06_13`; cleanup on unmount closes EventSource (EC-6); safe-degraded when undefined. 7 NEW vitest (vi.stubGlobal in beforeEach per EC-4 + MockEventSource); 17 existing reducer tests stay GREEN; total 24/24 PASS.
+
 ## [0.15.0] - 2026-06-15
 
 ### Added
