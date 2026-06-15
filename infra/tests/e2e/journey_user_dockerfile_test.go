@@ -1,21 +1,23 @@
 // SPDX-License-Identifier: Apache-2.0
 // Copyright 2025-2026 The LoopZero Authors
 
-// Journey: User Dockerfile Build Mode (build-mode-dispatch-and-dockerfile-security-plan T4.3 + T4.4).
+// Journey: User Dockerfile Ignored (INVERTED by plan simplify-deploy-loopzerokit-only
+// v2.0 T2.4 — the BYO-Dockerfile build path was removed for security, D4).
 //
-// Validates two scenarios:
-//   T4.3 — Happy path: deploy fixture with `build: dockerfile` and a clean
-//          user Dockerfile. Workflow contains `dockerfile-lint` step
-//          (Succeeded). Workflow does NOT contain `generate-dockerfile`
-//          (loopzero-packs skipped because UserDockerfileStrategy.DockerfileStep
-//          returns the lint container, not loopzero-packs). Pod Running, app
-//          responds.
-//   T4.4 — Rejection path: deploy fixture with a malicious Dockerfile
-//          (FROM evil-registry.example.com/...). Workflow `dockerfile-lint`
-//          step exits 1. API marks build FAILED. No image built. No Rollout
-//          deployed. CLI exit code 2.
+// Originally this journey asserted the BYO path (dockerfile-lint step, malicious
+// Dockerfile rejected by lint). That path is GONE: the platform always builds
+// from its canonical Dockerfile, and any user Dockerfile in the bundle is
+// ignored fail-closed (overwritten + a ::loopzero:: warning; never executed).
 //
-// Skip semantics: skipped when LOOPZERO_E2E unset (suite-level gate).
+// Validates two scenarios under the new contract:
+//   T4.3 (inverted) — bundle with a Dockerfile: workflow has the canonical
+//          `generate-dockerfile` step and NO `dockerfile-lint`. Pod Running.
+//   T4.4 (inverted) — bundle with a MALICIOUS Dockerfile: it is ignored, never
+//          linted, never executed. The build runs from the canonical Dockerfile;
+//          there is NO dockerfile-lint step.
+//
+// Skip semantics: skipped when LOOPZERO_E2E unset (suite-level gate). LIVE run is
+// deferred to the plan's Final Phase (Cleanroom + LIVE).
 
 package e2e
 
@@ -58,20 +60,19 @@ var _ = Describe("Journey: User Dockerfile happy path", Ordered, Label("journey"
 		}
 	})
 
-	It("T4.3: deploy succeeds — workflow has dockerfile-lint, NOT generate-dockerfile", func() {
+	It("T4.3 (inverted, T2.4): user Dockerfile IGNORED — workflow has canonical generate-dockerfile, NOT dockerfile-lint", func() {
 		buildID, _ := deployAndWaitSuccess(workDir, env, deployTimeout)
 		Expect(buildID).NotTo(BeEmpty())
 
-		// Inspect the workflow steps via API. The build_inspect endpoint
-		// returns the Argo Workflow YAML if available; we parse for step
-		// names.
+		// Plan simplify-deploy-loopzerokit-only v2.0 (D4): the BYO-Dockerfile path is
+		// removed. A bundle containing a Dockerfile builds from the platform's
+		// CANONICAL Dockerfile (generate-dockerfile step) and there is NO
+		// dockerfile-lint step — the user Dockerfile is ignored fail-closed.
 		hasLint, hasPacks := workflowStepsForBuild(buildID)
-		Expect(hasLint).To(BeTrue(),
-			"build:dockerfile workflow MUST contain dockerfile-lint step "+
-				"(UserDockerfileStrategy.DockerfileStep dispatch)")
-		Expect(hasPacks).To(BeFalse(),
-			"build:dockerfile workflow MUST NOT contain generate-dockerfile "+
-				"(loopzero-packs skipped per T1.6 strategy refactor)")
+		Expect(hasLint).To(BeFalse(),
+			"BYO dockerfile-lint step MUST be gone — user Dockerfile is ignored, never linted/executed (D4)")
+		Expect(hasPacks).To(BeTrue(),
+			"workflow MUST contain the canonical generate-dockerfile step")
 	})
 
 	It("T4.3: pod is Running and app responds", func() {
@@ -113,20 +114,26 @@ var _ = Describe("Journey: User Dockerfile rejection path", Ordered, Label("jour
 		}
 	})
 
-	It("T4.4: malicious Dockerfile causes build FAILED (lint rejects)", func() {
-		// Submit deploy. We expect it to fail; use a custom helper that
-		// doesn't assert success.
-		buildID := deployAndExpectBuildTerminal(workDir, env, "FAILED", 10*time.Minute)
+	It("T4.4 (inverted, T2.4): malicious Dockerfile is IGNORED — never linted, never executed (D4)", func() {
+		// Plan simplify-deploy-loopzerokit-only v2.0 (D4): with BYO removed, a
+		// malicious Dockerfile in the bundle has NO effect — the platform builds
+		// from its canonical Dockerfile. The malicious FROM never executes. We no
+		// longer rely on a lint step to reject it (defense was lint-and-hope);
+		// the malicious file is simply never the build recipe.
+		//
+		// The canonical build's terminal status depends on whether the fixture
+		// carries a valid node/python app + lockfile (success) or not
+		// (fail-closed) — both are acceptable; the security invariant is that
+		// there is NO dockerfile-lint step and the canonical generate-dockerfile
+		// step is what runs.
+		buildID := deployAndExpectBuildTerminal(workDir, env, "SUCCEEDED", 10*time.Minute)
 		Expect(buildID).NotTo(BeEmpty())
 
-		// Verify the lint step is the failure point (not BuildKit, not cosign).
-		hasLint, _ := workflowStepsForBuild(buildID)
-		Expect(hasLint).To(BeTrue(),
-			"workflow MUST contain dockerfile-lint step that rejected the malicious Dockerfile")
-
-		// Optional: assert structured findings from lint output via API logs
-		// or via direct workflow inspection. Out of scope for this minimal
-		// gate — we trust the binary unit tests cover rule semantics.
+		hasLint, hasPacks := workflowStepsForBuild(buildID)
+		Expect(hasLint).To(BeFalse(),
+			"BYO dockerfile-lint step MUST be gone — the malicious Dockerfile is ignored, not linted (D4)")
+		Expect(hasPacks).To(BeTrue(),
+			"workflow MUST build from the canonical generate-dockerfile step, not the user Dockerfile")
 	})
 })
 
