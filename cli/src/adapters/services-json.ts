@@ -65,3 +65,28 @@ export function findServicesJson(
     dir = path.dirname(dir);
   }
 }
+
+/**
+ * parseServicesRuntimes maps each services.json service `name` → its declared
+ * `runtime` (python|node). simplify-deploy-loopzerokit-runtime-wiring T3.1a (F-dom-2):
+ * the build pipeline dispatches the build strategy on `runtime`, so the deploy
+ * payload must carry it. A malformed services.json yields an empty map (callers
+ * treat enrichment as best-effort; the API re-validates on upload and an empty
+ * runtime fails closed at build time per D4).
+ */
+export function parseServicesRuntimes(jsonContent: string): Record<string, string> {
+  const out: Record<string, string> = {};
+  try {
+    const parsed = JSON.parse(jsonContent) as {
+      services?: Array<{ name?: string; runtime?: string }>;
+    };
+    for (const s of parsed.services ?? []) {
+      if (s.name && s.runtime) {
+        out[s.name] = s.runtime;
+      }
+    }
+  } catch {
+    // malformed JSON → empty map (best-effort; see doc comment)
+  }
+  return out;
+}

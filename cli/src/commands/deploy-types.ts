@@ -23,6 +23,7 @@ export interface AppInput {
   port: number | null;
   path: string;
   framework: string;
+  runtime?: string;                    // services.json runtime ("python" | "node") — the build-strategy key the API dispatches on (F-dom-2)
   build: string;                       // v2: "dockerfile" | "buildpack" | "custom"
   dockerfile: string | null;           // v2: Dockerfile path relative to app path
   rendering: string;                   // v2: "static" | "server" (Sprint 10)

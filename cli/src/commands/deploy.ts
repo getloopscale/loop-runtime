@@ -7,6 +7,7 @@ import {
   MAX_BUNDLE_SIZE_BYTES,
 } from '../config/constants';
 import { normalizeApps } from '../adapters/app-unit';
+import { parseServicesRuntimes } from '../adapters/services-json';
 import { validateConfig } from '../adapters/validate-config';
 import { getTracer, SpanStatusCode } from '../tracing';
 import * as fs from 'fs';
@@ -227,6 +228,23 @@ export class DeployCommand {
       return exitWithError(this.deps, opts, hint, 1, 'SERVICES_JSON_NOT_FOUND');
     }
 
+    // T3.1a (F-dom-2): the build pipeline dispatches the build strategy on the
+    // services.json `runtime` (python|node), not the legacy `framework`. Carry
+    // the declared runtime onto each AppUnit from the discovered services.json
+    // (matched by name) so it reaches the build submit payload. A local parse
+    // failure is non-fatal — the API re-validates services.json on upload, and
+    // an empty runtime fails closed clearly at build time (D4).
+    try {
+      const runtimeByName = parseServicesRuntimes(fs.readFileSync(servicesJsonResult.path, 'utf-8'));
+      for (const unit of appUnits) {
+        const rt = runtimeByName[unit.name];
+        if (rt) unit.runtime = rt;
+      }
+    } catch {
+      // non-fatal — services.json was re-validated on upload; empty runtime
+      // fails closed clearly at build time (D4)
+    }
+
     return {
       config,
       servicesJsonPath: servicesJsonResult.path,
@@ -399,6 +417,7 @@ export class DeployCommand {
         port: unit.port,
         path: unit.path,
         framework: unit.framework,
+        runtime: unit.runtime || undefined, // F-dom-2: the build-strategy key the API dispatches on
         build: unit.build,
         dockerfile: unit.dockerfile,
         rendering: unit.rendering,

@@ -21,6 +21,7 @@ export interface AppUnit {
   type: 'server' | 'worker' | 'frontend';
   path: string;
   framework: string;
+  runtime: string;                    // services.json runtime ("python" | "node") — the build-strategy key the API dispatches on (F-dom-2). Enriched from .loopzero/services.json at deploy time.
   port: number | null;
   build: BuildStrategy;
   dockerfile: string | null;          // resolved Dockerfile path (relative to app path)
@@ -104,6 +105,7 @@ export function normalizeApp(name: string, raw: LoopZeroYamlApp): AppUnit {
     type,
     path: raw.path || '.',
     framework: raw.framework || 'custom',
+    runtime: '', // enriched from .loopzero/services.json at deploy time (F-dom-2 — the build-strategy key)
     port: (type === 'server' || type === 'frontend') ? (raw.port ?? (type === 'server' ? 8080 : 80)) : null,
     build,
     dockerfile,
