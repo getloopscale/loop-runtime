@@ -903,6 +903,22 @@ tasks:
     cmds:
       - bash infra/scripts/local/dogfood-readiness.sh {{.CLI_ARGS}}
 
+  test:dogfood:scale:
+    desc: |
+      T1.4 of plan 2026-06-15-code-review-49-findings-remediation (R1-F1
+      BLOCKER closure) — aggregate dogfood wrapper for the J-20 Scale
+      slice. Lines up with the J-21 + J-11 + J-19 + J-22 + J-25 canonical
+      3-script triplet pattern that J-20 v1.1 was missing.
+      Invokes:
+        1. T1.2 hermetic syntax test for the LIVE bash test (24 assertions)
+        2. Go pkg/enforcement scale tests (EC-2 + EC-3 + EC-4 absorption)
+        3. vitest J-20 scale components + hooks
+        4. T1.1 LIVE bash dev-public-scale-flow scenarios A+B+C
+           (OPERATOR HARD STOP per ADR D5 + cleanroom-up-live-test-mandate.md)
+      Flags forwarded to wrapper: --hermetic-only --live-only --json.
+    cmds:
+      - bash infra/scripts/local/dogfood-scale.sh {{.CLI_ARGS}}
+
   test:dogfood:secrets-openbao:
     desc: |
       T5.2 of plan 2026-06-10-j22-openbao-transit-eso-sync v1.2 —

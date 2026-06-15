@@ -18,6 +18,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 ### Fixed
 - Rule 3 compliance: the warning emitted when deleting an environment with an active release no longer references internal infrastructure terminology — now reads "environment removed but cleanup may take a few seconds; run 'loopzero platform status' to verify" (#code-review-49-findings T0.1)
 - Rule 4 compliance: SIGINT (Ctrl-C) and SIGTERM no longer exit with codes 130/143 — both now exit with the canonical code 1, honoring the permanent set {0, 1, 2, 3, 4, 5} (#code-review-49-findings T0.2)
+- J-20 Scale dogfood pattern alignment: shipped the 3 missing canonical scripts (LIVE bash dev-public-scale-flow + hermetic syntax companion + dogfood-scale.sh aggregate runner) so the operator JUNTOS session has the same skeleton as J-21/J-11/J-19/J-22/J-25. New `task test:dogfood:scale` target. (#code-review-49-findings T1.1+T1.2+T1.3+T1.4)
 
 ### Security
 
