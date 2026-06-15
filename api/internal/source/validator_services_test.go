@@ -25,31 +25,42 @@ func TestValidateServicesJSON_ValidPayload(t *testing.T) {
 			}
 		]
 	}`
-	cfg, appNames, err := ValidateServicesJSON(content)
+	m, err := ValidateServicesJSONNative(content)
 	if err != nil {
 		t.Fatalf("expected nil err, got %v", err)
 	}
-	if cfg.Version != 1 {
-		t.Errorf("expected version 1, got %d", cfg.Version)
+	if m.Version != 1 {
+		t.Errorf("expected version 1, got %d", m.Version)
 	}
+	appNames := AppNamesFromManifest(m)
 	if len(appNames) != 1 || appNames[0] != "agent" {
 		t.Errorf("expected appNames=[agent], got %v", appNames)
 	}
-	app, ok := cfg.Apps["agent"]
-	if !ok {
-		t.Fatal("expected agent in cfg.Apps")
+	agent := findService(m, "agent")
+	if agent == nil {
+		t.Fatal("expected agent service in manifest")
 	}
-	if app.Framework != "python" {
-		t.Errorf("expected framework=python (runtime mapping), got %q", app.Framework)
+	if agent.Runtime != "python" {
+		t.Errorf("expected runtime=python, got %q", agent.Runtime)
 	}
-	if app.Port != 8001 {
-		t.Errorf("expected port 8001, got %d", app.Port)
+	if agent.Port != 8001 {
+		t.Errorf("expected port 8001, got %d", agent.Port)
 	}
+}
+
+// findService returns the service with the given name from a manifest, or nil.
+func findService(m *ServicesManifest, name string) *ServiceEntry {
+	for i := range m.Services {
+		if m.Services[i].Name == name {
+			return &m.Services[i]
+		}
+	}
+	return nil
 }
 
 // EC-B3-7 (v3.1) — truncated/empty payload returns E-008.
 func TestValidateServicesJSON_EmptyPayload_ReturnsE008(t *testing.T) {
-	_, _, err := ValidateServicesJSON("")
+	_, err := ValidateServicesJSONNative("")
 	if err == nil {
 		t.Fatal("expected validation error on empty payload")
 	}
@@ -60,7 +71,7 @@ func TestValidateServicesJSON_EmptyPayload_ReturnsE008(t *testing.T) {
 
 func TestValidateServicesJSON_TruncatedPayload_ReturnsE008(t *testing.T) {
 	// Mid-object truncation
-	_, _, err := ValidateServicesJSON(`{"version":1,"services":[`)
+	_, err := ValidateServicesJSONNative(`{"version":1,"services":[`)
 	if err == nil {
 		t.Fatal("expected validation error on truncated payload")
 	}
@@ -88,7 +99,7 @@ func TestValidateServicesJSON_InvalidField_ReturnsErrorWithFieldPath(t *testing.
 			}
 		]
 	}`
-	_, _, err := ValidateServicesJSON(content)
+	_, err := ValidateServicesJSONNative(content)
 	if err == nil {
 		t.Fatal("expected validation error on invalid port type")
 	}
@@ -116,7 +127,7 @@ func TestValidateServicesJSON_InvalidRuntime_ReturnsErrorWithEnum(t *testing.T) 
 			}
 		]
 	}`
-	_, _, err := ValidateServicesJSON(content)
+	_, err := ValidateServicesJSONNative(content)
 	if err == nil {
 		t.Fatal("expected validation error on invalid runtime enum")
 	}
@@ -153,10 +164,11 @@ func TestValidateServicesJSON_MultipleServices_PreservesNames(t *testing.T) {
 			}
 		]
 	}`
-	cfg, appNames, err := ValidateServicesJSON(content)
+	m, err := ValidateServicesJSONNative(content)
 	if err != nil {
 		t.Fatalf("expected nil err, got %v", err)
 	}
+	appNames := AppNamesFromManifest(m)
 	if len(appNames) != 2 {
 		t.Fatalf("expected 2 services, got %d", len(appNames))
 	}
@@ -164,7 +176,8 @@ func TestValidateServicesJSON_MultipleServices_PreservesNames(t *testing.T) {
 	if appNames[0] != "agent" || appNames[1] != "worker" {
 		t.Errorf("expected [agent worker], got %v", appNames)
 	}
-	if cfg.Apps["worker"].Framework != "node" {
-		t.Errorf("expected worker.framework=node, got %q", cfg.Apps["worker"].Framework)
+	worker := findService(m, "worker")
+	if worker == nil || worker.Runtime != "node" {
+		t.Errorf("expected worker.runtime=node, got %+v", worker)
 	}
 }

@@ -43,7 +43,7 @@ func validServicesJSONWithEnv(env map[string]string) string {
 func TestValidateServicesJSON_ReservedEnv_PATH_Rejected(t *testing.T) {
 	t.Setenv("LOOPZERO_ENV_BLOCKLIST_MODE", "enforce")
 	content := validServicesJSONWithEnv(map[string]string{"PATH": "/usr/bin"})
-	_, _, err := ValidateServicesJSON(content)
+	_, err := ValidateServicesJSONNative(content)
 	if err == nil {
 		t.Fatal("expected validation error for reserved env key PATH, got nil")
 	}
@@ -59,7 +59,7 @@ func TestValidateServicesJSON_ReservedEnv_PATH_Rejected(t *testing.T) {
 func TestValidateServicesJSON_ReservedEnv_LDLibraryPath_Rejected(t *testing.T) {
 	t.Setenv("LOOPZERO_ENV_BLOCKLIST_MODE", "enforce")
 	content := validServicesJSONWithEnv(map[string]string{"LD_LIBRARY_PATH": "/lib"})
-	_, _, err := ValidateServicesJSON(content)
+	_, err := ValidateServicesJSONNative(content)
 	if err == nil {
 		t.Fatal("expected validation error for LD_LIBRARY_PATH, got nil")
 	}
@@ -69,7 +69,7 @@ func TestValidateServicesJSON_ReservedEnv_LDLibraryPath_Rejected(t *testing.T) {
 func TestValidateServicesJSON_ReservedEnv_KubernetesPrefix_Rejected(t *testing.T) {
 	t.Setenv("LOOPZERO_ENV_BLOCKLIST_MODE", "enforce")
 	content := validServicesJSONWithEnv(map[string]string{"KUBERNETES_SERVICE_HOST": "10.0.0.1"})
-	_, _, err := ValidateServicesJSON(content)
+	_, err := ValidateServicesJSONNative(content)
 	if err == nil {
 		t.Fatal("expected validation error for KUBERNETES_SERVICE_HOST, got nil")
 	}
@@ -79,7 +79,7 @@ func TestValidateServicesJSON_ReservedEnv_KubernetesPrefix_Rejected(t *testing.T
 func TestValidateServicesJSON_ReservedEnv_LOOPZEROPrefix_Rejected(t *testing.T) {
 	t.Setenv("LOOPZERO_ENV_BLOCKLIST_MODE", "enforce")
 	content := validServicesJSONWithEnv(map[string]string{"LOOPZERO_AUDIT_KEY": "x"})
-	_, _, err := ValidateServicesJSON(content)
+	_, err := ValidateServicesJSONNative(content)
 	if err == nil {
 		t.Fatal("expected validation error for LOOPZERO_AUDIT_KEY, got nil")
 	}
@@ -93,12 +93,12 @@ func TestValidateServicesJSON_AppScopedEnv_DATABASE_URL_OK(t *testing.T) {
 		"API_KEY":      "secret",
 		"NODE_ENV":     "production",
 	})
-	cfg, _, err := ValidateServicesJSON(content)
+	m, err := ValidateServicesJSONNative(content)
 	if err != nil {
 		t.Fatalf("expected no error for app-scoped env, got: %v", err)
 	}
-	if cfg == nil {
-		t.Fatal("expected non-nil cfg")
+	if m == nil {
+		t.Fatal("expected non-nil manifest")
 	}
 }
 
@@ -106,7 +106,7 @@ func TestValidateServicesJSON_AppScopedEnv_DATABASE_URL_OK(t *testing.T) {
 func TestValidateServicesJSON_EnvSchema_LowercaseKey_Rejected(t *testing.T) {
 	t.Setenv("LOOPZERO_ENV_BLOCKLIST_MODE", "enforce")
 	content := validServicesJSONWithEnv(map[string]string{"database_url": "x"})
-	_, _, err := ValidateServicesJSON(content)
+	_, err := ValidateServicesJSONNative(content)
 	if err == nil {
 		t.Fatal("expected validation error for lowercase env key, got nil")
 	}
@@ -117,7 +117,7 @@ func TestValidateServicesJSON_EnvSchema_ValueTooLong_Rejected(t *testing.T) {
 	t.Setenv("LOOPZERO_ENV_BLOCKLIST_MODE", "enforce")
 	huge := strings.Repeat("x", 4097)
 	content := validServicesJSONWithEnv(map[string]string{"BIG": huge})
-	_, _, err := ValidateServicesJSON(content)
+	_, err := ValidateServicesJSONNative(content)
 	if err == nil {
 		t.Fatal("expected validation error for >4096 char env value, got nil")
 	}
@@ -131,7 +131,7 @@ func TestValidateServicesJSON_EnvSchema_TooManyKeys_Rejected(t *testing.T) {
 		env[fmt.Sprintf("VAR_%d", i)] = "v"
 	}
 	content := validServicesJSONWithEnv(env)
-	_, _, err := ValidateServicesJSON(content)
+	_, err := ValidateServicesJSONNative(content)
 	if err == nil {
 		t.Fatal("expected validation error for >64 env keys, got nil")
 	}
@@ -141,7 +141,7 @@ func TestValidateServicesJSON_EnvSchema_TooManyKeys_Rejected(t *testing.T) {
 func TestValidateServicesJSON_WarnMode_PathAccepted(t *testing.T) {
 	t.Setenv("LOOPZERO_ENV_BLOCKLIST_MODE", "warn")
 	content := validServicesJSONWithEnv(map[string]string{"PATH": "/usr/bin"})
-	_, _, err := ValidateServicesJSON(content)
+	_, err := ValidateServicesJSONNative(content)
 	if err != nil {
 		t.Fatalf("warn mode must accept reserved keys (with log), got error: %v", err)
 	}
@@ -152,7 +152,7 @@ func TestValidateServicesJSON_WarnMode_PathAccepted(t *testing.T) {
 func TestValidateServicesJSON_EmptyMode_DefaultsToEnforce(t *testing.T) {
 	t.Setenv("LOOPZERO_ENV_BLOCKLIST_MODE", "")
 	content := validServicesJSONWithEnv(map[string]string{"PATH": "/usr/bin"})
-	_, _, err := ValidateServicesJSON(content)
+	_, err := ValidateServicesJSONNative(content)
 	if err == nil {
 		t.Fatal("empty mode must default to enforce, expected error, got nil")
 	}

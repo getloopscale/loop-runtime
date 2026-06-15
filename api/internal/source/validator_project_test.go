@@ -52,30 +52,24 @@ func validV2ServicesJSON(project string) string {
 }
 
 func TestValidateServicesJSON_V2_Project_OK(t *testing.T) {
-	cfg, _, err := ValidateServicesJSON(validV2ServicesJSON("myapp"))
+	m, err := ValidateServicesJSONNative(validV2ServicesJSON("myapp"))
 	if err != nil {
 		t.Fatalf("expected v2 with valid project to validate, got: %v", err)
 	}
-	if cfg.Project != "myapp" {
-		t.Errorf("expected cfg.Project=myapp, got %q", cfg.Project)
-	}
-	if cfg.Name != "myapp" {
-		t.Errorf("expected cfg.Name=myapp (mirrors Project), got %q", cfg.Name)
+	if got := ProjectNameFromManifest(m); got != "myapp" {
+		t.Errorf("expected project=myapp, got %q", got)
 	}
 }
 
 // EC-2 absorbed: v1 fallback MUST stay "services-bundle" so live tenants
 // keep their Gitea repos intact (loopzero-source-{tenant}-services-bundle).
 func TestValidateServicesJSON_V1_NoProject_FallbackServicesBundle(t *testing.T) {
-	cfg, _, err := ValidateServicesJSON(validV1ServicesJSON())
+	m, err := ValidateServicesJSONNative(validV1ServicesJSON())
 	if err != nil {
 		t.Fatalf("expected v1 to validate (deprecation only), got: %v", err)
 	}
-	if cfg.Project != "services-bundle" {
-		t.Errorf("EC-2: v1 fallback MUST stay services-bundle (ADR D10), got %q", cfg.Project)
-	}
-	if cfg.Name != "services-bundle" {
-		t.Errorf("EC-2: v1 fallback Name MUST stay services-bundle, got %q", cfg.Name)
+	if got := ProjectNameFromManifest(m); got != "services-bundle" {
+		t.Errorf("EC-2: v1 fallback MUST stay services-bundle (ADR D10), got %q", got)
 	}
 }
 
@@ -96,7 +90,7 @@ func TestValidateServicesJSON_V2_ProjectMissing_Returns422(t *testing.T) {
 			}
 		]
 	}`
-	_, _, err := ValidateServicesJSON(content)
+	_, err := ValidateServicesJSONNative(content)
 	if err == nil {
 		t.Fatal("expected validation error for v2 without project, got nil")
 	}
@@ -118,7 +112,7 @@ func TestValidateServicesJSON_V2_ProjectInvalidDNS_Returns422(t *testing.T) {
 		strings.Repeat("a", 64), // too long
 	} {
 		content := validV2ServicesJSON(bad)
-		_, _, err := ValidateServicesJSON(content)
+		_, err := ValidateServicesJSONNative(content)
 		if err == nil {
 			t.Errorf("expected validation error for invalid project %q, got nil", bad)
 		}
@@ -150,7 +144,7 @@ func TestValidateServicesJSON_V1_WithProject_Accepted(t *testing.T) {
 			}
 		]
 	}`
-	_, _, err := ValidateServicesJSON(content)
+	_, err := ValidateServicesJSONNative(content)
 	if err == nil {
 		t.Fatal("expected v1 + project field to be rejected (must bump version to 2)")
 	}
