@@ -713,7 +713,19 @@ releases:
     # Drill validates via Phase 6 L2 harness directly.
     # STANDALONE: depends on the tilt-owned app tier (loopzero-api/cloud/operators),
     # so skip the helmfile smoke-test locally too. See finding-2026-05-22-pg-password-divergence.
-    installed: {{ and (ne .Environment.Name "drill") (ne (.Values | get "clusterRole" "dev") "standalone") }}
+    #
+    # DEV-PUBLIC (2026-06-15 canonical chain-gap closure): smoke-test is a
+    # Helm POST-INSTALL HOOK (`helm.sh/hook: post-install`), so `wait: false`
+    # does NOT bypass it (hooks always block helm install). The Job's
+    # `init-wait` container probes loopzero-api /health which is CrashLoopBackOff
+    # until LATER `task bootstrap:standalone` provisions argocd-refresh-credentials
+    # + ClusterCredentials. The Job fails with BackoffLimitExceeded, taking
+    # the whole helmfile sync with it. Canonical fix: skip smoke-test in
+    # dev-public too — `task doctor` validates post-bootstrap health (the
+    # same gate dogfood and chaos use). Matches the standalone reasoning.
+    # PROD keeps smoke-test installed (no bootstrap chain race: prod Secrets
+    # exist at sync time via External Secrets Operator + manual seeded SOPS).
+    installed: {{ and (ne .Environment.Name "drill") (ne .Environment.Name "dev-public") (ne (.Values | get "clusterRole" "dev") "standalone") }}
     needs:
       - loopzero-system/loopzero-api
 {{- if ne .Environment.Name "drill" }}
