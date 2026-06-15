@@ -181,3 +181,20 @@ func canonicalDockerfileStep(runtime string, apps []services.AppSpec, totalApps 
 	}
 	return buildContainer("generate-dockerfile", imageAlpine, forge.ResourcesTiny(), script.String()), nil
 }
+
+// canonicalDockerfileStepOrFail adapts canonicalDockerfileStep to the
+// LanguageStrategy.DockerfileStep signature (which returns no error). On a
+// generation error (missing start / secret env / unsupported runtime — all of
+// which should be caught upstream by validation) it returns a fail-closed
+// container that exits non-zero at build time with a clear message, rather than
+// panicking at plan time or silently falling back. The step name is preserved
+// so the DAG wiring + log marker stay intact.
+func canonicalDockerfileStepOrFail(runtime string, apps []services.AppSpec, totalApps int) *forge.Container {
+	c, err := canonicalDockerfileStep(runtime, apps, totalApps)
+	if err != nil {
+		msg := "loopzero: canonical Dockerfile generation failed: " + err.Error()
+		return buildContainer("generate-dockerfile", imageAlpine, forge.ResourcesTiny(),
+			fmt.Sprintf("echo %q >&2\nexit 1", msg))
+	}
+	return c
+}

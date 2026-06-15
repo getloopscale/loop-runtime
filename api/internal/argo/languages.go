@@ -175,7 +175,8 @@ func (s *NodeStrategy) ScanStep() *forge.Container {
 }
 
 func (s *NodeStrategy) DockerfileStep(apps []services.AppSpec, totalApps int) *forge.Container {
-	return loopzeroPacksDockerfileStep(apps, totalApps)
+	// T1.2: canonical platform Dockerfile (replaces loopzero-packs).
+	return canonicalDockerfileStepOrFail("node", apps, totalApps)
 }
 
 // ---------------------------------------------------------------------------
@@ -255,7 +256,8 @@ func (s *PythonStrategy) ScanStep() *forge.Container {
 }
 
 func (s *PythonStrategy) DockerfileStep(apps []services.AppSpec, totalApps int) *forge.Container {
-	return loopzeroPacksDockerfileStep(apps, totalApps)
+	// T1.2: canonical platform Dockerfile (replaces loopzero-packs).
+	return canonicalDockerfileStepOrFail("python", apps, totalApps)
 }
 
 // ---------------------------------------------------------------------------

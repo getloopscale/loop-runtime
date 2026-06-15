@@ -95,17 +95,11 @@ func TestUserDockerfileStrategy_DockerfileStepReturnsLintContainer(t *testing.T)
 	}
 }
 
-func TestNodeStrategy_DockerfileStepReturnsLoopZeroPacks(t *testing.T) {
-	s := &NodeStrategy{}
-	apps := []services.AppSpec{{Name: "api", Path: ".", Framework: "node"}}
-	c := s.DockerfileStep(apps, 1)
-	if c.Name != "generate-dockerfile" {
-		t.Errorf("Node DockerfileStep().Name = %q, want generate-dockerfile", c.Name)
-	}
-	if !strings.Contains(c.Args[0], "loopzeropacks-generate") {
-		t.Errorf("expected loopzeropacks-generate invocation, got: %s", c.Args[0])
-	}
-}
+// T1.2 (plan simplify-deploy-loopzerokit-only v2.0): NodeStrategy now emits the
+// canonical platform Dockerfile, not loopzero-packs. The former
+// TestNodeStrategy_DockerfileStepReturnsLoopZeroPacks asserted the removed behavior
+// and is superseded by TestNodeStrategy_DockerfileStep_UsesCanonical
+// (languages_canonical_test.go).
 
 func TestGoStrategy_DockerfileStepReturnsLoopZeroPacks(t *testing.T) {
 	s := &GoStrategy{}
