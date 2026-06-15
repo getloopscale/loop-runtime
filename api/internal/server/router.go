@@ -423,6 +423,11 @@ func registerProtectedRoutes(
 	if cfg.MetricsProxyHandler != nil {
 		r.Get("/api/v1/projects/{name}/metrics", cfg.MetricsProxyHandler.Get)
 	}
+	// T2.1 J-18 T1.3.b — SSE signal.changed stream for J-18 useStatusStream
+	// consumer; backed by canonical sse.EventStore infrastructure.
+	if cfg.StatusSSEHandler != nil {
+		r.Get("/api/v1/projects/{name}/signals/stream", cfg.StatusSSEHandler.Get)
+	}
 	if cfg.ScaleHandler != nil {
 		r.With(rateLimitMiddlewares...).Post("/api/v1/projects/{name}/scale", cfg.ScaleHandler.Scale)
 	}
