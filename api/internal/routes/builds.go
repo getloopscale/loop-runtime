@@ -54,6 +54,7 @@ type AppInput struct {
 	Port      int                  `json:"port,omitempty"`
 	Path      string               `json:"path,omitempty"`
 	Framework string               `json:"framework,omitempty"`  // "express", "go", "fastapi", etc.
+	Runtime   string               `json:"runtime,omitempty"`     // services.json runtime: "python" | "node" — the build-strategy key (T0.1, F-dom-2 wiring)
 	Build     string               `json:"build,omitempty"`       // "dockerfile", "buildpack", "custom"
 	Start     string               `json:"start,omitempty"`       // T0.2: declared services.json start command (canonical Dockerfile CMD)
 	Rendering string               `json:"rendering,omitempty"`   // "static" or "server" (Sprint 10)

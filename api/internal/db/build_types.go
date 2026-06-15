@@ -98,6 +98,7 @@ type BuildAppSpec struct {
 	Start       string               `json:"start,omitempty"`
 	Path        string               `json:"path,omitempty"`
 	Build       string               `json:"build,omitempty"`
+	Runtime     string               `json:"runtime,omitempty"` // T0.1 (F-dom-2 wiring): persisted services.json runtime (python|node)
 	Secrets     []string             `json:"secrets,omitempty"`
 	Replicas    int                  `json:"replicas,omitempty"`
 	Autoscaling *BuildAppAutoscaling `json:"autoscaling,omitempty"`

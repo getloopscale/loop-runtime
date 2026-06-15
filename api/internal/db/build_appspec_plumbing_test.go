@@ -17,12 +17,13 @@ import (
 func TestBuildAppSpec_PersistsStartPathBuild(t *testing.T) {
 	// Arrange
 	in := BuildAppSpec{
-		Name:  "api",
-		Type:  "worker",
-		Port:  8001,
-		Start: "node dist/worker.js",
-		Path:  "apps/api",
-		Build: "buildpack",
+		Name:    "api",
+		Type:    "worker",
+		Port:    8001,
+		Start:   "node dist/worker.js",
+		Path:    "apps/api",
+		Build:   "buildpack",
+		Runtime: "node", // T0.1 (F-dom-2): runtime persisted through JSONB
 	}
 	// Act — round-trip through JSON (the apps_spec column is JSONB)
 	raw, err := json.Marshal(in)
@@ -42,6 +43,9 @@ func TestBuildAppSpec_PersistsStartPathBuild(t *testing.T) {
 	}
 	if out.Build != "buildpack" {
 		t.Fatalf("Build dropped: got %q", out.Build)
+	}
+	if out.Runtime != "node" {
+		t.Fatalf("Runtime dropped: got %q", out.Runtime)
 	}
 }
 

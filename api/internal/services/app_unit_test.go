@@ -5,6 +5,22 @@ package services
 
 import "testing"
 
+// TestNormalizeApp_CopiesRuntime locks the T0.1 (F-dom-2) wiring: NormalizeApp
+// MUST carry the services.json `runtime` onto the AppUnit so the build-strategy
+// resolution (Phase 1) can dispatch on it. Given a raw AppSpec declaring
+// runtime "python", When normalized, Then AppUnit.Runtime == "python".
+func TestNormalizeApp_CopiesRuntime(t *testing.T) {
+	for _, rt := range []string{"python", "node"} {
+		unit, err := NormalizeApp("api", AppSpec{Path: ".", Runtime: rt, Port: 8080})
+		if err != nil {
+			t.Fatalf("runtime %q: unexpected error: %v", rt, err)
+		}
+		if unit.Runtime != rt {
+			t.Errorf("Runtime = %q, want %q (NormalizeApp must carry services.json runtime — T0.1/F-dom-2)", unit.Runtime, rt)
+		}
+	}
+}
+
 func TestNormalizeApp_ServerExpress(t *testing.T) {
 	unit, err := NormalizeApp("api", AppSpec{
 		Path: "apps/api", Framework: "express", Port: 3000,

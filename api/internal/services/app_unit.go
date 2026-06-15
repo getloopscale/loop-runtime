@@ -103,6 +103,7 @@ func NormalizeApp(name string, raw AppSpec) (AppUnit, error) {
 		Type:       appType,
 		Path:       path,
 		Framework:  framework,
+		Runtime:    raw.Runtime, // T0.1 (F-dom-2 wiring): carry services.json runtime to the build-strategy key
 		Port:       port,
 		Build:      build,
 		Start:      raw.Start, // T0.2b: declared start → canonical Dockerfile CMD

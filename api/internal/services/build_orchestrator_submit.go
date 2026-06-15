@@ -127,6 +127,7 @@ func (o *BuildOrchestrator) SubmitBuild(ctx context.Context, req SubmitBuildRequ
 				Start:     a.Start, // T0.2: persist declared start (canonical Dockerfile CMD)
 				Path:      a.Path,  // T0.2: persist app path (monorepo target)
 				Build:     a.Build, // T0.2: persist build mode
+				Runtime:   a.Runtime, // T0.1 (F-dom-2 wiring): persist services.json runtime
 				Secrets:   a.Secrets,
 				Replicas:  a.Replicas,
 			}

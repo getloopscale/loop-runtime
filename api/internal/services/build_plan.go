@@ -56,7 +56,8 @@ type AppBuildPlan struct {
 	ContextPath      string            // e.g., "/workspace" or "/workspace/apps/api"
 	BuildArgs        map[string]string // from AppUnit.Env + system vars (COMMIT_SHA, APP_NAME)
 	CacheRef         string            // OCI cache ref (e.g., "registry.do.com/tenant/project/api:buildcache")
-	LanguageStrategy string            // resolved strategy name (e.g., "node", "go", "python", "custom")
+	LanguageStrategy string            // resolved strategy name (e.g., "node", "python", "custom")
+	Runtime          string            // services.json runtime: "python" | "node" — the build-strategy key (T0.1, F-dom-2 wiring)
 	Build            string            // "dockerfile", "buildpack", "custom"
 
 	// Original AppUnit fields needed downstream (manifests, ArgoCD, Dockerfile generation)
@@ -157,6 +158,7 @@ func CreateBuildPlan(units []AppUnit, tenantID, projectID, commitSHA, registryUR
 			BuildArgs:        buildArgs,
 			CacheRef:         cacheRef,
 			LanguageStrategy: strategy,
+			Runtime:          unit.Runtime, // T0.1 (F-dom-2 wiring): carry runtime to workflow strategy resolution
 			Build:            unit.Build,
 			AppType:          unit.Type,
 			AppPath:          unit.Path,

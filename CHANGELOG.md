@@ -13,6 +13,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 - Deploy now supports only the fixed LoopZeroKit stack — Python + Node, service shapes `server`/`worker`. Builds use platform-controlled canonical Dockerfiles generated in-process; the declared `services.json` `start` command drives the container `CMD`. (simplify-deploy-loopzerokit-only v2.0 — ADR `decisions/2026-06-15-deploy-fixed-loopzerokit-stack.md`)
 - `services.json` `type` enum narrowed to `server | worker` (was `server | worker | frontend`); the contract is mirrored in the LoopZeroKit framework repo. (D5)
+- Build strategy is now selected from the declared `services.json` `runtime` (`python`/`node`) carried end-to-end, instead of the legacy `framework` field — so an app builds with the runtime it declares. (simplify-deploy-loopzerokit-runtime-wiring — closes review F-dom-2)
 
 ### Deprecated
 
