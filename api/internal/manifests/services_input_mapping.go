@@ -51,25 +51,14 @@ type ServiceEntry struct {
 	Env           map[string]string
 	DependsOn     []string
 	PassSetCookie bool
-
-	// Rendering bundles frontend-specific rendering options. EC-9 (v1.1):
-	// when Type=ServiceTypeFrontend, Rendering MUST be populated or the
-	// mapping returns an error.
-	Rendering *FrontendRendering
 }
 
-// FrontendRendering describes how a frontend service is delivered. v4.1 ships
-// the `static` path only — SSR / hybrid are reserved for later versions.
-type FrontendRendering struct {
-	Mode      string // "static" (v4.1) — required when Type=frontend
-	AssetsDir string // optional override; defaults to "dist" downstream
-}
-
-// Service type enum values mirror services.schema.json.
+// Service type enum values mirror services.schema.json (server | worker).
+// T3.3 (plan simplify-deploy-loopzerokit-only v2.0): ServiceTypeFrontend +
+// FrontendRendering removed — the fixed stack serves no static frontends.
 const (
-	ServiceTypeServer   = "server"
-	ServiceTypeWorker   = "worker"
-	ServiceTypeFrontend = "frontend"
+	ServiceTypeServer = "server"
+	ServiceTypeWorker = "worker"
 )
 
 // resolveServiceType applies the Go-side fallback to ServiceTypeServer when
@@ -144,17 +133,8 @@ func mapServicesToRenderInput(svc ServicesManifest, opts RenderOpts) (RenderInpu
 			return RenderInput{}, fmt.Errorf("service %q: %w", s.Name, err)
 		}
 
-		// Plan v1.2 T2.2 — propagate `type`; default to server when absent.
-		// EC-9 (v1.1): frontend services without rendering metadata are
-		// rejected with an actionable error so consumers can't silently
-		// fall through to the server emit path.
+		// Propagate `type`; default to server when absent (server|worker only).
 		svcType := resolveServiceType(s.Type)
-		if svcType == ServiceTypeFrontend && s.Rendering == nil {
-			return RenderInput{}, fmt.Errorf(
-				"service %q: frontend services require `rendering` metadata (v4.1: static path only)",
-				s.Name,
-			)
-		}
 
 		slog.Debug("manifests.mapServicesToRenderInput: service",
 			"name", s.Name,

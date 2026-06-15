@@ -499,13 +499,6 @@ func TestEntryAppFromLoopZeroYaml(t *testing.T) {
 			want: "backend",
 		},
 		{
-			name: "frontend acceptable as entry",
-			apps: map[string]map[string]interface{}{
-				"web": {"type": "frontend"},
-			},
-			want: "web",
-		},
-		{
 			name: "sorted iteration — deterministic across reconciles",
 			apps: map[string]map[string]interface{}{
 				"zeta":  {"type": "server"},

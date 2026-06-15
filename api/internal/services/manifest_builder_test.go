@@ -160,12 +160,10 @@ func TestBuildManifestApps_MultipleApps(t *testing.T) {
 		Apps: []db.BuildAppSpec{
 			{Name: "api", Type: "server", Port: 3000},
 			{Name: "worker", Type: "worker"},
-			{Name: "web", Type: "frontend", Rendering: "static"},
 		},
 		AppDigests: map[string]string{
 			"api":    digestFor("api"),
 			"worker": digestFor("worker"),
-			// web has no digest — frontend/static is skipped (S3+CF Worker path).
 		},
 		DomainStore: nil,
 	})
@@ -173,40 +171,14 @@ func TestBuildManifestApps_MultipleApps(t *testing.T) {
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
-	// web is skipped (frontend/static); api + worker render manifests.
+	// api + worker both render manifests (server|worker only stack).
 	if len(apps) != 2 {
-		t.Errorf("expected 2 apps (api + worker; web skipped as static frontend), got %d", len(apps))
+		t.Errorf("expected 2 apps (api + worker), got %d", len(apps))
 	}
 }
 
-// CHG-2026-04-29-DOGFOOD-FB iter 1 — static frontend apps go via S3+CF Worker,
-// not K8s manifests. They have no image digest. BuildManifestApps must skip
-// them silently (return result without that entry), NOT fail-loud.
-func TestBuildManifestApps_SkipsStaticFrontend(t *testing.T) {
-	apps, err := BuildManifestApps(context.Background(), BuildManifestAppsInput{
-		RegistryURL: "registry.example.com",
-		TenantID:    "tn-1",
-		ProjectID:   "my-app",
-		Environment: "production",
-		CommitSHA:   "abc123",
-		Apps: []db.BuildAppSpec{
-			{Name: "api", Type: "server", Port: 3001},
-			{Name: "web", Type: "frontend", Rendering: "static"},
-		},
-		// Only api has a digest — web is static, no digest expected.
-		AppDigests:  map[string]string{"api": digestFor("api")},
-		DomainStore: nil,
-	})
-	if err != nil {
-		t.Fatalf("unexpected error: %v", err)
-	}
-	if len(apps) != 1 {
-		t.Fatalf("expected 1 manifest entry (api only, web skipped), got %d: %+v", len(apps), apps)
-	}
-	if apps[0].Name != "api" {
-		t.Errorf("expected name 'api', got %q", apps[0].Name)
-	}
-}
+// T3.3 (plan simplify-deploy-loopzerokit-only v2.0): TestBuildManifestApps_SkipsStaticFrontend
+// removed — static-frontend delivery no longer exists; every app emits K8s manifests.
 
 // CHG-2026-04-29-DOGFOOD iter 8 — supply-chain VAP enforcement: a manifest
 // rendered without an image digest produces pods Forbidden by the
@@ -261,15 +233,5 @@ func TestBuildAppRelease_WorkerApp_NoURL(t *testing.T) {
 	rel := BuildAppRelease("registry.example.com", "tn-1", "my-app", "worker", "sha123", "production", "dev.loopzero.example", "worker", "container")
 	if rel.URL != "" {
 		t.Errorf("expected empty URL for worker app, got %q", rel.URL)
-	}
-}
-
-func TestBuildAppRelease_FrontendApp(t *testing.T) {
-	rel := BuildAppRelease("registry.example.com", "tn-1", "my-app", "web", "sha123", "production", "dev.loopzero.example", "frontend", "static")
-	if rel.URL == "" {
-		t.Error("expected URL for frontend app")
-	}
-	if rel.Rendering != "static" {
-		t.Errorf("expected rendering 'static', got %q", rel.Rendering)
 	}
 }

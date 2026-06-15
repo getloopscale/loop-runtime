@@ -463,7 +463,7 @@ func entryAppFromLoopZeroYaml(apps map[string]map[string]interface{}) string {
 		spec := apps[name]
 		appType, _ := spec["type"].(string)
 		switch appType {
-		case "", "server", "frontend":
+		case "", "server":
 			return name
 		}
 	}
@@ -520,9 +520,7 @@ func appsFromLoopZeroYaml(rawApps map[string]map[string]interface{}) []AppSpec {
 		if v, ok := cfg["render"].(string); ok {
 			app.Rendering = v
 		}
-		if app.Type == "frontend" && app.Rendering == "" {
-			app.Rendering = "static"
-		}
+		// T3.3: frontend/static delivery removed — no frontend default.
 		if v, ok := cfg["replicas"].(int); ok {
 			app.Replicas = v
 		} else if v, ok := cfg["replicas"].(float64); ok {

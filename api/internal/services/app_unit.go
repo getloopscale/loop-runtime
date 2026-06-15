@@ -41,15 +41,13 @@ type AppUnit struct {
 // NormalizeApp resolves a raw AppSpec into a fully populated AppUnit.
 // Returns error if the combination is invalid (e.g., server without port).
 func NormalizeApp(name string, raw AppSpec) (AppUnit, error) {
-	// Resolve type
+	// Resolve type — fixed stack is server|worker only (T3.3; default server).
 	appType := raw.Type
 	if appType == "" {
-		// Default "server" — frontends are explicitly tagged em services.json
-		// or carry `type: "frontend"` em legacy AppSpec migrations.
 		appType = "server"
 	}
-	if appType != "server" && appType != "worker" && appType != "frontend" {
-		return AppUnit{}, fmt.Errorf("app '%s': invalid type '%s'", name, appType)
+	if appType != "server" && appType != "worker" {
+		return AppUnit{}, fmt.Errorf("app '%s': invalid type '%s' (server|worker only)", name, appType)
 	}
 
 	// Resolve build strategy
@@ -75,9 +73,6 @@ func NormalizeApp(name string, raw AppSpec) (AppUnit, error) {
 	port := raw.Port
 	if appType == "server" && port <= 0 {
 		port = 8080
-	}
-	if appType == "frontend" && port <= 0 {
-		port = 80 // default for frontend servers (nginx, static file server)
 	}
 	if appType == "worker" {
 		port = 0
@@ -105,20 +100,10 @@ func NormalizeApp(name string, raw AppSpec) (AppUnit, error) {
 		secrets = []string{}
 	}
 
-	// Resolve rendering mode (MEET-2026-03-26-009, MEET-2026-03-29-016).
-	rendering := raw.Rendering
-	if rendering != "static" && rendering != "server" {
-		rendering = "server"
-	}
-	// Non-frontend types are always "server" (container delivery).
-	if appType != "frontend" {
-		rendering = "server"
-	}
-	// MEET-2026-03-29-016: Frontend apps MUST use static delivery (zero pods, CDN).
-	// No server-rendered frontends allowed. This is the authoritative enforcement point.
-	if appType == "frontend" && rendering != "static" {
-		return AppUnit{}, fmt.Errorf("app '%s': frontend apps must use static delivery (render: static). LoopZero serves frontends from CDN — server-side rendering is not supported. Add 'render: static' to your loopzero.yaml", name)
-	}
+	// T3.3 (plan simplify-deploy-loopzerokit-only v2.0): static-frontend delivery
+	// removed — all apps are container delivery ("server" rendering). The
+	// Rendering field is retained (always "server") for downstream compat.
+	rendering := "server"
 
 	return AppUnit{
 		Name:       name,

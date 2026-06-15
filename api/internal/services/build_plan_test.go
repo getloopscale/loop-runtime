@@ -182,20 +182,6 @@ func TestResolveLanguageStrategy_AllFrameworks(t *testing.T) {
 	}
 }
 
-func TestCreateBuildPlan_FrontendFramework_React(t *testing.T) {
-	units := []AppUnit{
-		{Name: "web", Type: "frontend", Path: "web", Framework: "react", Port: 80, Build: "buildpack", Rendering: "static", Env: map[string]string{}, Secrets: []string{}},
-	}
-	plan := CreateBuildPlan(units, "t", "p", "sha", "r")
-
-	if plan.Apps[0].LanguageStrategy != "node" {
-		t.Errorf("LanguageStrategy = %q, want node (react must map to node)", plan.Apps[0].LanguageStrategy)
-	}
-	if plan.Apps[0].DeliveryModel != "static" {
-		t.Errorf("DeliveryModel = %q, want static", plan.Apps[0].DeliveryModel)
-	}
-}
-
 func TestCreateBuildPlan_MixedLanguages(t *testing.T) {
 	units := []AppUnit{
 		{Name: "api", Type: "server", Path: "apps/api", Framework: "express", Port: 3000, Build: "buildpack", Env: map[string]string{}, Secrets: []string{}},
