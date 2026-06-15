@@ -48,3 +48,14 @@ env:
   # loopzero-cloud server-side cookie verification uses the PUBLIC API
   # (/sessions/whoami), so INTERNAL_URL → ory-kratos-public.
   KRATOS_INTERNAL_URL: "http://ory-kratos-public.loopzero-auth.svc.cluster.local:80"
+
+  # CANONICAL FIX 2026-06-15 dev-public LIVE auth chain: JWT_ISSUER MUST
+  # match the `iss` claim that Hydra sets at mint time. Hydra in dev-public
+  # is configured with `urls.self.issuer = https://auth-dev.loopzero.example/`
+  # (per dev-public/ory-hydra.yaml.gotmpl). The loopzero-cloud JWT validator
+  # default (`HydraPublicURL + "/"`) yields the internal cluster URL,
+  # which mismatches the public-URL iss claim in browser-minted JWTs.
+  # Override JWT_ISSUER explicitly so JWT validation accepts public-URL
+  # iss (matches what Hydra actually emits). HYDRA_PUBLIC_URL kept as
+  # internal for JWKS fetch (faster, no outbound TLS).
+  JWT_ISSUER: "https://auth-dev.loopzero.example/"
