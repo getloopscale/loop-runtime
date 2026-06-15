@@ -41,8 +41,9 @@ type OrchestratorDeps struct {
 	LogStreamHandler    *routes.LogStreamHandler
 	RollbackHandler   *routes.RollbackHandler
 	PromoteHandler    *routes.PromoteHandler
-	StatusHandler     *routes.StatusHandler
-	ScaleHandler      *routes.ScaleHandler
+	StatusHandler       *routes.StatusHandler
+	MetricsProxyHandler *routes.MetricsProxyHandler // T1.2 J-18 — Prometheus query_range proxy (nil = degraded 503)
+	ScaleHandler        *routes.ScaleHandler
 	BuildListHandler  *routes.BuildListHandler
 	ProjectDeleter    routes.ProjectDeleter
 	ArgoCallbackHandler *routes.ArgoCallbackHandler
@@ -152,7 +153,15 @@ func setupOrchestrator(
 	// Status handler — wires project, build, and release stores (H6 status endpoint)
 	statusBuildStore := &adapters.StatusBuildStoreAdapter{Store: stores.BuildStore}
 	statusReleaseStore := &adapters.StatusReleaseStoreAdapter{Store: stores.ReleaseStore}
-	statusHandler := routes.NewStatusHandler(projectStore, statusBuildStore, statusReleaseStore, cfg.BaseDomain, cfg.PublicDomain)
+	statusHandler := routes.NewStatusHandler(projectStore, statusBuildStore, statusReleaseStore, cfg.BaseDomain, cfg.PublicDomain, cfg.GrafanaBaseURL)
+
+	// T1.2 J-18 — Prometheus query_range proxy for Status page histogram
+	// rendering. Production adapter wiring deferred to follow-up (HTTP
+	// client targeting cfg.PrometheusAddress); for now ship with nil
+	// promClient so handler returns 503 prometheus_not_configured honestly
+	// (per plan v1.1 ADR D2 — degraded UI is the canonical disabled state).
+	// Hermetic Go tests use httptest-backed fakePrometheusQueryClient.
+	metricsProxyHandler := routes.NewMetricsProxyHandler(projectStore, nil)
 
 	// Scale handler — scaling configuration for apps (KEDA scale-to-zero gate).
 	// Plan T2.2: real persistence via PostgresScalingStore (was: stub-202 returning acknowledged).
@@ -250,6 +259,7 @@ func setupOrchestrator(
 		RollbackHandler:     rollbackHandler,
 		PromoteHandler:      promoteHandler,
 		StatusHandler:       statusHandler,
+		MetricsProxyHandler: metricsProxyHandler,
 		ScaleHandler:        scaleHandler,
 		BuildListHandler:    buildListHandler,
 		ProjectDeleter:      projectDeleter,

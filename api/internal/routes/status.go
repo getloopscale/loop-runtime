@@ -73,11 +73,12 @@ type StatusProjectStore interface {
 
 // StatusHandler provides HTTP handlers for project status operations.
 type StatusHandler struct {
-	projects     StatusProjectStore
-	builds       StatusBuildStore
-	releases     StatusReleaseStore
-	baseDomain   string
-	publicDomain string // operator-configured public wildcard for status.url (FAANG canonical J-25; mirrors PreviewPublicDomain)
+	projects        StatusProjectStore
+	builds          StatusBuildStore
+	releases        StatusReleaseStore
+	baseDomain      string
+	publicDomain    string // operator-configured public wildcard for status.url (FAANG canonical J-25; mirrors PreviewPublicDomain)
+	grafanaBaseURL  string // T1.1 of plan 2026-06-06-dashboard-journey-j18-status-runtime-health v1.1 — Grafana deep-link root (e.g. https://grafana.loopzero.local). Empty disables metrics_range_url emission.
 }
 
 // NewStatusHandler creates a new StatusHandler.
@@ -87,13 +88,21 @@ type StatusHandler struct {
 // falls back to baseDomain (internal hostname). Parallels PreviewPublicDomain
 // + BaseDomain split at PreviewService — closes catches #21+#22 from T6.2
 // session addendum 2026-06-12 (J-25 sponsor walkthrough LIVE catch).
-func NewStatusHandler(projects StatusProjectStore, builds StatusBuildStore, releases StatusReleaseStore, baseDomain, publicDomain string) *StatusHandler {
+//
+// grafanaBaseURL is the Grafana deep-link root (operator-configured via
+// LOOPZERO_GRAFANA_BASE_URL env var). When set, statusResponse.MetricsRangeURL
+// is populated with templated URL `${grafanaBaseURL}/d/loopzero-project?
+// var-project=<name>&var-env=<env>`. When empty, MetricsRangeURL is
+// empty and dashboard renders "Open in Grafana" link as disabled. T1.1
+// of plan 2026-06-06-dashboard-journey-j18-status-runtime-health v1.1.
+func NewStatusHandler(projects StatusProjectStore, builds StatusBuildStore, releases StatusReleaseStore, baseDomain, publicDomain, grafanaBaseURL string) *StatusHandler {
 	return &StatusHandler{
-		projects:     projects,
-		builds:       builds,
-		releases:     releases,
-		baseDomain:   baseDomain,
-		publicDomain: publicDomain,
+		projects:       projects,
+		builds:         builds,
+		releases:       releases,
+		baseDomain:     baseDomain,
+		publicDomain:   publicDomain,
+		grafanaBaseURL: grafanaBaseURL,
 	}
 }
 
@@ -155,6 +164,21 @@ type statusResponse struct {
 	//   - the release predates progressive delivery rollout (legacy data).
 	// argo-rollouts-progressive-delivery-plan T4.3.
 	Rollout *rolloutStatusResponse `json:"rollout,omitempty"`
+
+	// MetricsRangeURL is the Grafana deep-link templated URL for the J-18
+	// Status page "Open in Grafana" affordance. Format:
+	// `<grafanaBaseURL>/d/loopzero-project?var-project=<name>&var-env=<env>`.
+	// Empty when StatusHandler.grafanaBaseURL is unset (operator did not
+	// configure LOOPZERO_GRAFANA_BASE_URL). Dashboard renders the link as
+	// disabled when empty. T1.1 of plan 2026-06-06-dashboard-journey-j18-
+	// status-runtime-health v1.1.
+	MetricsRangeURL string `json:"metrics_range_url"`
+
+	// PromQueryKeys is the canonical list of signal names the dashboard
+	// can request via GET /api/v1/projects/{name}/metrics?signal=<key>.
+	// Order is deterministic (matches T0.2 eight-signals catalog). T1.1 of
+	// plan 2026-06-06-dashboard-journey-j18-status-runtime-health v1.1.
+	PromQueryKeys []string `json:"prom_query_keys"`
 }
 
 // Get handles GET /api/v1/projects/{name}/status?env={env}.
@@ -285,6 +309,31 @@ func (h *StatusHandler) Get(w http.ResponseWriter, r *http.Request) {
 	//      dashboard renders "URL pending" badge (per ADR D3).
 	if release != nil && release.EntryApp != "" && h.publicDomain != "" {
 		resp.URL = naming.AppURL(uc.TenantID, name, release.EntryApp, env, h.publicDomain)
+	}
+
+	// T1.1 of plan 2026-06-06-dashboard-journey-j18-status-runtime-health
+	// v1.1 — Grafana deep-link + canonical prom_query_keys list.
+	//
+	// MetricsRangeURL: templated only when operator configured grafanaBaseURL
+	// (LOOPZERO_GRAFANA_BASE_URL). Empty otherwise so dashboard renders "Open in
+	// Grafana" affordance as disabled honest (per ADR D2 + EC-1 absorption
+	// pattern — never silent empty values pretending things work).
+	if h.grafanaBaseURL != "" {
+		resp.MetricsRangeURL = h.grafanaBaseURL + "/d/loopzero-project?var-project=" + name + "&var-env=" + env
+	}
+
+	// PromQueryKeys: deterministic order from T0.2 eight-signals catalog.
+	// Names align with downstream Prometheus query templates the metrics_proxy
+	// handler (T1.2) will resolve.
+	resp.PromQueryKeys = []string{
+		"uptime_24h",
+		"replicas_ready",
+		"p95_latency",
+		"error_rate",
+		"rps",
+		"status_terminal",
+		"alerts_active",
+		"last_deploy_time",
 	}
 
 	writeJSON(w, http.StatusOK, resp)

@@ -96,6 +96,7 @@ type Config struct {
 	RollbackHandler         *routes.RollbackHandler
 	PromoteHandler          *routes.PromoteHandler
 	StatusHandler           *routes.StatusHandler
+	MetricsProxyHandler     *routes.MetricsProxyHandler // T1.2 J-18 — Prometheus query_range proxy
 	ScaleHandler            *routes.ScaleHandler
 	BuildListHandler        *routes.BuildListHandler
 	SecretK8sSync           routes.SecretK8sSync

@@ -117,7 +117,7 @@ func TestStatusRoute(t *testing.T) {
 		}
 
 		// publicDomain non-empty triggers canonical URL emission per ADR D3.
-		handler := routes.NewStatusHandler(projects, builds, releases, "dev.loopzero.example", "dev.loopzero.example")
+		handler := routes.NewStatusHandler(projects, builds, releases, "dev.loopzero.example", "dev.loopzero.example", "")
 		req := newStatusRequest("my-app", "production", true)
 		rec := httptest.NewRecorder()
 
@@ -180,7 +180,7 @@ func TestStatusRoute(t *testing.T) {
 		builds := &fakeStatusBuildStore{}
 		releases := &fakeStatusReleaseStore{}
 
-		handler := routes.NewStatusHandler(projects, builds, releases, "dev.loopzero.example", "")
+		handler := routes.NewStatusHandler(projects, builds, releases, "dev.loopzero.example", "", "")
 		req := newStatusRequest("nonexistent", "production", true)
 		rec := httptest.NewRecorder()
 
@@ -227,7 +227,7 @@ func TestStatusRoute(t *testing.T) {
 		}
 		releases := &fakeStatusReleaseStore{}
 
-		handler := routes.NewStatusHandler(projects, builds, releases, "dev.loopzero.example", "")
+		handler := routes.NewStatusHandler(projects, builds, releases, "dev.loopzero.example", "", "")
 		req := newStatusRequest("my-app", "", true)
 		rec := httptest.NewRecorder()
 
@@ -254,7 +254,7 @@ func TestStatusRoute(t *testing.T) {
 		builds := &fakeStatusBuildStore{builds: []routes.StatusBuild{}}
 		releases := &fakeStatusReleaseStore{release: nil}
 
-		handler := routes.NewStatusHandler(projects, builds, releases, "dev.loopzero.example", "")
+		handler := routes.NewStatusHandler(projects, builds, releases, "dev.loopzero.example", "", "")
 		req := newStatusRequest("my-app", "production", true)
 		rec := httptest.NewRecorder()
 
@@ -291,7 +291,7 @@ func TestStatusRoute(t *testing.T) {
 		builds := &fakeStatusBuildStore{}
 		releases := &fakeStatusReleaseStore{}
 
-		handler := routes.NewStatusHandler(projects, builds, releases, "dev.loopzero.example", "")
+		handler := routes.NewStatusHandler(projects, builds, releases, "dev.loopzero.example", "", "")
 		req := newStatusRequest("my-app", "production", false)
 		rec := httptest.NewRecorder()
 
@@ -329,7 +329,7 @@ func TestStatusRoute(t *testing.T) {
 		}
 		releases := &fakeStatusReleaseStore{}
 
-		handler := routes.NewStatusHandler(projects, builds, releases, "dev.loopzero.example", "")
+		handler := routes.NewStatusHandler(projects, builds, releases, "dev.loopzero.example", "", "")
 		req := newStatusRequest("my-app", "staging", true)
 		rec := httptest.NewRecorder()
 
@@ -352,6 +352,132 @@ func TestStatusRoute(t *testing.T) {
 		}
 		if lastBuild["id"] != "build-staging" {
 			t.Errorf("expected build id 'build-staging' (filtered by env), got '%v'", lastBuild["id"])
+		}
+	})
+}
+
+// TestStatusRoute_T11_MetricsRangeURLAndPromQueryKeys verifies T1.1 of plan
+// 2026-06-06-dashboard-journey-j18-status-runtime-health v1.1:
+//   - statusResponse.metrics_range_url is templated when grafanaBaseURL set
+//   - statusResponse.metrics_range_url is empty (honest disabled) when grafanaBaseURL empty
+//   - statusResponse.prom_query_keys always present with 8 canonical names in order
+func TestStatusRoute_T11_MetricsRangeURLAndPromQueryKeys(t *testing.T) {
+	t.Parallel()
+
+	projects := &fakeStatusProjectStore{
+		project: &routes.ProjectResult{
+			ID:     "proj-123",
+			Name:   "teste",
+			TeamID: "tn-acme",
+		},
+	}
+	builds := &fakeStatusBuildStore{builds: []routes.StatusBuild{}}
+	releases := &fakeStatusReleaseStore{}
+
+	t.Run("metrics_range_url is templated when grafanaBaseURL set", func(t *testing.T) {
+		handler := routes.NewStatusHandler(projects, builds, releases, "dev.loopzero.example", "", "https://grafana.loopzero.local")
+		req := newStatusRequest("teste", "production", true)
+		rec := httptest.NewRecorder()
+
+		handler.Get(rec, req)
+
+		if rec.Code != http.StatusOK {
+			t.Fatalf("expected 200, got %d: %s", rec.Code, rec.Body.String())
+		}
+
+		var resp map[string]interface{}
+		if err := json.NewDecoder(rec.Body).Decode(&resp); err != nil {
+			t.Fatalf("decode response: %v", err)
+		}
+
+		want := "https://grafana.loopzero.local/d/loopzero-project?var-project=teste&var-env=production"
+		if got, _ := resp["metrics_range_url"].(string); got != want {
+			t.Errorf("metrics_range_url mismatch: got %q, want %q", got, want)
+		}
+	})
+
+	t.Run("metrics_range_url is empty (honest) when grafanaBaseURL empty", func(t *testing.T) {
+		handler := routes.NewStatusHandler(projects, builds, releases, "dev.loopzero.example", "", "")
+		req := newStatusRequest("teste", "production", true)
+		rec := httptest.NewRecorder()
+
+		handler.Get(rec, req)
+
+		if rec.Code != http.StatusOK {
+			t.Fatalf("expected 200, got %d: %s", rec.Code, rec.Body.String())
+		}
+
+		var resp map[string]interface{}
+		if err := json.NewDecoder(rec.Body).Decode(&resp); err != nil {
+			t.Fatalf("decode response: %v", err)
+		}
+
+		if got, _ := resp["metrics_range_url"].(string); got != "" {
+			t.Errorf("metrics_range_url should be empty when grafanaBaseURL unset, got %q", got)
+		}
+	})
+
+	t.Run("prom_query_keys is always present with 8 canonical names in order", func(t *testing.T) {
+		handler := routes.NewStatusHandler(projects, builds, releases, "dev.loopzero.example", "", "")
+		req := newStatusRequest("teste", "production", true)
+		rec := httptest.NewRecorder()
+
+		handler.Get(rec, req)
+
+		if rec.Code != http.StatusOK {
+			t.Fatalf("expected 200, got %d: %s", rec.Code, rec.Body.String())
+		}
+
+		var resp map[string]interface{}
+		if err := json.NewDecoder(rec.Body).Decode(&resp); err != nil {
+			t.Fatalf("decode response: %v", err)
+		}
+
+		raw, ok := resp["prom_query_keys"].([]interface{})
+		if !ok {
+			t.Fatalf("prom_query_keys missing or not array, got %T", resp["prom_query_keys"])
+		}
+
+		want := []string{
+			"uptime_24h",
+			"replicas_ready",
+			"p95_latency",
+			"error_rate",
+			"rps",
+			"status_terminal",
+			"alerts_active",
+			"last_deploy_time",
+		}
+
+		if len(raw) != len(want) {
+			t.Fatalf("prom_query_keys length: got %d, want %d", len(raw), len(want))
+		}
+		for i, expected := range want {
+			got, _ := raw[i].(string)
+			if got != expected {
+				t.Errorf("prom_query_keys[%d]: got %q, want %q", i, got, expected)
+			}
+		}
+	})
+
+	t.Run("prom_query_keys is canonical even when grafanaBaseURL set", func(t *testing.T) {
+		// Defense: the prom_query_keys list is canonical and independent of
+		// grafanaBaseURL — dashboard consumers need the list to render
+		// signal pills regardless of whether Grafana link is available.
+		handler := routes.NewStatusHandler(projects, builds, releases, "dev.loopzero.example", "", "https://grafana.loopzero.local")
+		req := newStatusRequest("teste", "production", true)
+		rec := httptest.NewRecorder()
+
+		handler.Get(rec, req)
+
+		var resp map[string]interface{}
+		if err := json.NewDecoder(rec.Body).Decode(&resp); err != nil {
+			t.Fatalf("decode response: %v", err)
+		}
+
+		raw, _ := resp["prom_query_keys"].([]interface{})
+		if len(raw) != 8 {
+			t.Errorf("prom_query_keys length: got %d, want 8 (canonical regardless of grafana flag)", len(raw))
 		}
 	})
 }

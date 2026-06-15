@@ -42,7 +42,7 @@ func t61BaseCfg(logger *slog.Logger) server.Config {
 		BuildHandler:         routes.NewBuildHandler(nil, logger),
 		LogsHandler:          routes.NewLogsHandler(nil, nil),
 		RollbackHandler:      routes.NewRollbackHandler(nil, nil, "test.local"),
-		StatusHandler:        routes.NewStatusHandler(nil, nil, nil, "test.local", ""),
+		StatusHandler:        routes.NewStatusHandler(nil, nil, nil, "test.local", "", ""),
 		BuildListHandler:     routes.NewBuildListHandler(nil),
 		EnvironmentHandler:   routes.NewEnvironmentHandler(nil),
 		TeamHandler:          routes.NewTeamHandler(nil),
