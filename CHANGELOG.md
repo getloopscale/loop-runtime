@@ -11,13 +11,22 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ### Changed
 
+- Deploy now supports only the fixed LoopZeroKit stack — Python + Node, service shapes `server`/`worker`. Builds use platform-controlled canonical Dockerfiles generated in-process; the declared `services.json` `start` command drives the container `CMD`. (simplify-deploy-loopzerokit-only v2.0 — ADR `decisions/2026-06-15-deploy-fixed-loopzerokit-stack.md`)
+- `services.json` `type` enum narrowed to `server | worker` (was `server | worker | frontend`); the contract is mirrored in the LoopZeroKit framework repo. (D5)
+
 ### Deprecated
 
 ### Removed
 
+- Multi-framework monorepo build ("30 frameworks") and the `loopzero-packs` Dockerfile generator — replaced by canonical Python/Node Dockerfiles. (simplify-deploy-loopzerokit-only v2.0)
+- BYO-Dockerfile build mode (`build: dockerfile` → user-supplied Dockerfile). The platform always builds from its canonical Dockerfile. (D4)
+- Static-frontend delivery (`type: frontend` + `render: static`, S3/CF-Worker path). Service shapes are `server`/`worker` only. (D5)
+
 ### Fixed
 
 ### Security
+
+- User-supplied Dockerfiles in the uploaded source bundle are now ignored fail-closed (overwritten by the canonical Dockerfile + a `::loopzero::` warning; never executed). Removes a build-escape/RCE surface, since the build sandbox runs with unconfined seccomp/AppArmor. (D4)
 
 ## [0.16.0] - 2026-06-15
 
