@@ -104,6 +104,23 @@ tasks:
       - bash infra/tests/check-openbao-transit-quality-gates-wired_test.sh       # iter 27 meta-gate: ensures the 6 above stay wired + uncommented + clustered (extended iter 33 → 6 tests)
       - bash infra/tests/check-allowlist-sunsets_test.sh                         # T5.2.a plan 2026-06-11-code-review-remediation: hermetic test for `.claude/scripts/check-allowlist-sunsets.py` (CI blocks past-sunset entries in rules/code-review-allowlist.txt)
       - python3 .claude/scripts/check-allowlist-sunsets.py rules/code-review-allowlist.txt  # T5.2.a CI gate itself: enforce sunset dates on every quality:gates run
+      # Plan 2026-06-15-code-review-49-findings-remediation hermetic gates.
+      # Phase 1 (T1.2) — J-20 Scale LIVE bash syntax companion.
+      # Phase 5 (T5.1) — 4 ORPHAN companions for billing-portal + oidc-redirect
+      # + live-url-discoverability + status-url-probe (closes R1-F2 HIGH).
+      - bash infra/tests/check-dev-public-scale-syntax_test.sh                     # T1.2 J-20 scale flow companion
+      - bash infra/tests/check-dev-public-billing-portal-syntax_test.sh            # T5.1 ORPHAN companion 1/4
+      - bash infra/tests/check-dev-public-oidc-redirect-syntax_test.sh             # T5.1 ORPHAN companion 2/4
+      - bash infra/tests/check-dev-public-live-url-discoverability-syntax_test.sh  # T5.1 ORPHAN companion 3/4
+      - bash infra/tests/check-dev-public-status-url-probe-syntax_test.sh          # T5.1 ORPHAN companion 4/4
+      # T4.1 of plan 2026-06-15-code-review-49-findings-remediation (R1-F5 HIGH):
+      # shell-lint advisory. Runs shellcheck across the operator/CI script set
+      # WHEN installed; emits WARN + exits 0 when absent so first-landing here
+      # doesn't break unrelated CI flows. Install via `sudo apt install
+      # shellcheck` (Ubuntu) or `brew install shellcheck` (macOS). Once
+      # universally installed across dev + CI, flip the conditional to
+      # mandatory by removing the `command -v` guard.
+      - bash -c 'if command -v shellcheck >/dev/null 2>&1; then echo "[shellcheck] running across infra/scripts/local + infra/tests/check-*.sh + infra/tests/e2e/dev-public-*.sh"; shellcheck -e SC1091,SC2155,SC2086,SC2046 infra/scripts/local/*.sh infra/tests/check-*-syntax_test.sh infra/tests/e2e/dev-public-*.sh 2>&1 || { echo "[shellcheck] violations — failing gate"; exit 1; }; else echo "[shellcheck] WARN: shellcheck not installed — gate is advisory-only. Install via apt/brew/go to enable enforcement (R1-F5 T4.1)."; fi'
 
   diff:
     desc: 'PR-diff quality gates (override base with BASE_REF=<ref>; default origin/main)'

@@ -24,6 +24,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 - loopzero.yaml validator decomposed: the monolithic `validateConfig` function (cyclomatic complexity 95 — worst in the entire codebase) is now a thin orchestrator over 9 specialized validators (version + app-name + app-path + app-runtime + app-build + app-env + app-scaling + app-unknown-fields + project-constraints). All 69 existing test cases pass without modification. No user-visible behavior change; defense in depth against future complexity drift. (#code-review-49-findings T2.1)
 - ScaleHandler.Scale decomposed: cyclomatic complexity 37 → ≤ 11 across 9 helpers (parseScaleRequest + resolveTier + enforceLimits → enforceKEDA + enforceHPABounds → assertHPABounds + buildScaleResult + buildAutoscaling + applyAndLog). Each helper maps 1:1 to the ADR clauses (EC-2 cost / EC-3 KEDA tier / EC-4 HPA bounds / D4 default targets). All 17 existing TestScale_* tests pass without modification. (#code-review-49-findings T3.1)
 
+### Added
+- `npm run test:coverage` (CLI): jest now ships a coverage script with a 60% floor (branches/functions/lines/statements). The default `npm test` runs unchanged — coverage collection is opt-in. Regression-defense for adding new production code without tests. (#code-review-49-findings T4.3)
+- Phase-boundary mini-review CC delta gate: `mini_review.py` Step 4.7 now invokes `check_cc_delta.py` which runs gocyclo (Go) + lizard (TS) against `git diff origin/main...HEAD`. Functions over CC 15 fail the mini-review with severity HIGH. Would have caught today's J-20 ScaleHandler.Scale growth (CC 20 → 37) at phase boundary. Gate degrades gracefully when tools are missing (advisory INFO). (#code-review-49-findings T4.2)
+- 4 hermetic syntax companions for the ORPHAN dev-public LIVE bash scripts (billing-portal, oidc-redirect, live-url-discoverability, status-url-probe). All wired into `task quality:gates`. Locks regression defense via the canonical pairing pattern J-20/J-21/J-11/J-22/J-25 already follow. (#code-review-49-findings T5.1)
+- Shell-lint advisory step in `task quality:gates`: when shellcheck is installed, runs across `infra/scripts/local/*.sh` + `infra/tests/check-*.sh` + `infra/tests/e2e/dev-public-*.sh`. When absent, emits WARN + exits 0 (advisory-only until tool reaches universal install). (#code-review-49-findings T4.1)
+
 ### Security
 
 ## [0.18.0] - 2026-06-15

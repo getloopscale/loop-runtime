@@ -24,4 +24,25 @@ module.exports = {
   // pattern (mock-api-server port=0, mkdtemp, env restore) is rolled out across all flaky
   // integration tests.
   maxWorkers: 2,
+  // T4.3 of plan 2026-06-15-code-review-49-findings-remediation (R3-F5 HIGH):
+  // establish a coverage floor — engaged only via `npm run test:coverage`.
+  // The default suite (`npm test`) runs unchanged (no coverage collection).
+  // The 60% threshold at landing is conservative on purpose: existing 1,260
+  // test cases cover the canonical paths but lots of error branches are
+  // unmeasured today; bumping past 60% needs a deliberate fill-the-gaps
+  // sprint. The intent is regression-defense: adding new production code
+  // with zero tests drops the floor.
+  collectCoverageFrom: [
+    'src/**/*.{ts,tsx}',
+    '!src/**/*.d.ts',
+    '!src/**/index.ts',
+  ],
+  coverageThreshold: {
+    global: {
+      branches: 60,
+      functions: 60,
+      lines: 60,
+      statements: 60,
+    },
+  },
 };
