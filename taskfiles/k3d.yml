@@ -19,7 +19,7 @@ tasks:
 
       B6/B7 fix (real-paas-cleanroom-dogfood-loop-plan iter 6→7→7b, 2026-05-05):
       registry is a plain registry:2 (read/write) for local image pushes
-      (loopzero-clone-runner, loopzero-packs-runner, etc. via `task images:build`).
+      (loopzero-clone-runner, loopzero-syft-scanner, loopzero-cosign-signer, etc. via `task images:build`).
       It is NOT in pull-through proxy mode — registry:2 in proxy mode
       REJECTS pushes with `error from registry: unsupported`, breaking
       local builds. Discovered LIVE during iter 7.

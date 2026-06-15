@@ -33,8 +33,6 @@ runtimeConfig:
   LOKI_URL: "http://k3d-loopzero-build-serverlb:30094"
   REGISTRY_URL: "k3d-loopzero-registry:5000"
   REGISTRY_INSECURE: "true"
-  LOOPZERO_PACKS_IMAGE: "k3d-loopzero-registry:5000/loopzero-packs-runner:v0.4.0"
-  LOOPZERO_DOCKERFILE_LINT_IMAGE: "k3d-loopzero-registry:5000/loopzero-dockerfile-lint:v0.1.0"
   LOOPZERO_CLONE_IMAGE: "k3d-loopzero-registry:5000/loopzero-clone-runner:v0.1.0"
   LOOPZERO_SYFT_IMAGE: "k3d-loopzero-registry:5000/loopzero-syft-scanner:v0.1.0"
   LOOPZERO_COSIGN_IMAGE: "k3d-loopzero-registry:5000/loopzero-cosign-signer:v0.1.0"
