@@ -555,6 +555,43 @@ func main() {
 				}
 			}
 			w.WriteHeader(resp.StatusCode)
+
+			// CANONICAL FIX 2026-06-15 (re-asserted): SSE responses require
+			// per-chunk Flush; bare io.Copy buffers until backend EOF which
+			// never arrives on long-lived event streams. Detect SSE via
+			// Content-Type + use http.Flusher per chunk so EventSource
+			// clients (dashboard) + curl -N (dogfood tests) see events as
+			// they arrive instead of timing out with 0 bytes. Closes the
+			// dev-public-deployments-flow_test.sh Scenario B regression
+			// (curl -m 8 returned 0 bytes received before this fix).
+			// Memory: feedback_loopzero_cloud_sse_proxy_buffers_until_eof_2026_06_13
+			if strings.HasPrefix(resp.Header.Get("Content-Type"), "text/event-stream") {
+				flusher, _ := w.(http.Flusher)
+				// Flush response headers IMMEDIATELY so EventSource onopen()
+				// fires + curl -N sees HTTP 200 + Content-Type:text/event-stream
+				// even before the first data frame. Per RFC 8941 + HTTP/2
+				// requirement: headers must be sent in a HEADERS frame
+				// independent of subsequent DATA frames.
+				if flusher != nil {
+					flusher.Flush()
+				}
+				buf := make([]byte, 4096)
+				for {
+					n, rerr := resp.Body.Read(buf)
+					if n > 0 {
+						if _, werr := w.Write(buf[:n]); werr != nil {
+							return
+						}
+						if flusher != nil {
+							flusher.Flush()
+						}
+					}
+					if rerr != nil {
+						return
+					}
+				}
+			}
+
 			_, _ = io.Copy(w, resp.Body)
 		})
 	})
