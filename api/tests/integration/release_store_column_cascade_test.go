@@ -108,7 +108,7 @@ func TestReleaseStore_ColumnCascade_AllSelectsRoundTrip(t *testing.T) {
 	pool := setupHardeningTestDB(t)
 	requireRekorURLTriggers(t, pool)
 	adapter := &db.PgxAdapter{Pool: pool}
-	store := db.NewReleaseStoreSqlc(adapter) // T1.1c2c (plan 2026-05-29-sqlc-migration v1.3)
+	store := db.NewReleaseStoreSqlc(adapter, db.NoopEventStore{}) // T1.1c2c (plan 2026-05-29-sqlc-migration v1.3)
 	ctx := context.Background()
 	rel, wantURL := seedColumnCascadeRow(t, pool)
 
@@ -169,7 +169,7 @@ func TestReleaseStore_ColumnCascade_NullURL_NoFalseString(t *testing.T) {
 	pool := setupHardeningTestDB(t)
 	requireRekorURLTriggers(t, pool)
 	adapter := &db.PgxAdapter{Pool: pool}
-	store := db.NewReleaseStoreSqlc(adapter) // T1.1c2c (plan 2026-05-29-sqlc-migration v1.3)
+	store := db.NewReleaseStoreSqlc(adapter, db.NoopEventStore{}) // T1.1c2c (plan 2026-05-29-sqlc-migration v1.3)
 	ctx := context.Background()
 
 	suffix := fmt.Sprintf("%d", time.Now().UnixNano())

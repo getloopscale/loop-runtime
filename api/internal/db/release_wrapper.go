@@ -37,6 +37,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"log/slog"
 	"time"
 
 	"github.com/jackc/pgx/v5"
@@ -86,8 +87,33 @@ var _ ReleaseStore = (*ReleaseStoreSqlc)(nil)
 
 // ReleaseStoreSqlc is the sqlc-backed store wrapper for releases.
 type ReleaseStoreSqlc struct {
-	q    *generated.Queries
-	pool DBTX // default fallback for non-tx paths
+	q          *generated.Queries
+	pool       DBTX // default fallback for non-tx paths
+	eventStore sseEventStore
+}
+
+// sseEventStore is the minimal interface AppendSideEffect needs from
+// `sse.EventStore`. Declared locally (not imported) to avoid an import
+// cycle between `db` and `sse` (sse already depends on db). T1.1 of plan
+// 2026-06-15-j18-t1.3.b-sse-pg-notify-backend v1.1.
+type sseEventStore interface {
+	Append(ctx context.Context, buildID string, eventType string, data json.RawMessage) (int64, error)
+}
+
+// NoopEventStore is a no-op implementation of sseEventStore for read-only
+// store call-sites (e.g., ReleaseInspector) that never invoke
+// AppendSideEffect. T1.3.b v1.1 EC-1 absorption: the non-nil contract on
+// NewReleaseStoreSqlc surfaces mis-wired startups loud + fast, but
+// genuinely read-only consumers need a canonical no-op to satisfy it
+// without dragging the full PostgresEventStore dependency chain.
+type NoopEventStore struct{}
+
+// Append on NoopEventStore is a no-op returning (0, nil) — read-only
+// callers that wire NoopEventStore by design never reach
+// AppendSideEffect; if they do, the event is silently dropped (correct
+// behavior for the no-op contract).
+func (NoopEventStore) Append(_ context.Context, _ string, _ string, _ json.RawMessage) (int64, error) {
+	return 0, nil
 }
 
 // NewReleaseStoreSqlc constructs a sqlc-backed release store. `pool` is the
@@ -97,10 +123,21 @@ type ReleaseStoreSqlc struct {
 // implement SqlcBridge (PgxAdapter does); test fakes that don't will
 // produce nil generated.DBTX and panic at query time — a deliberate
 // failure mode to surface mis-wired tests early.
-func NewReleaseStoreSqlc(pool DBTX) *ReleaseStoreSqlc {
+//
+// `eventStore` is REQUIRED (non-nil) per T1.1 of plan
+// 2026-06-15-j18-t1.3.b-sse-pg-notify-backend v1.1 (EC-1 absorption):
+// AppendSideEffect emits `signal.changed` SSE events via this writer.
+// Panics on nil to surface mis-wired startups loud + fast — prevents
+// silent dead-feature where SSE realtime path appears installed but
+// emits zero events forever.
+func NewReleaseStoreSqlc(pool DBTX, eventStore sseEventStore) *ReleaseStoreSqlc {
+	if eventStore == nil {
+		panic("ReleaseStoreSqlc requires non-nil EventStore (canonical SSE infrastructure)")
+	}
 	return &ReleaseStoreSqlc{
-		q:    generated.New(),
-		pool: pool,
+		q:          generated.New(),
+		pool:       pool,
+		eventStore: eventStore,
 	}
 }
 
@@ -414,6 +451,21 @@ func (s *ReleaseStoreSqlc) AppendSideEffect(ctx context.Context, tx DBTX, id str
 	if err != nil {
 		return fmt.Errorf("sqlc: append side effect: %w", err)
 	}
+
+	// T1.1 of plan 2026-06-15-j18-t1.3.b-sse-pg-notify-backend v1.1:
+	// emit `signal.changed` SSE event via canonical EventStore so J-18
+	// useStatusStream consumer gets realtime updates. Best-effort emit
+	// (does NOT fail tx — release row already updated; SSE replay is
+	// at-least-once per EventStore contract). EC-3 absorption: structured
+	// slog.Warn on emit failure — NOT silent `_, _` discard which violates
+	// feedback_swallowed_silent_errors_pattern.
+	if _, emitErr := s.eventStore.Append(ctx, id, "signal.changed", patchJSON); emitErr != nil {
+		slog.Warn("AppendSideEffect: best-effort SSE emit failed",
+			"release_id", id,
+			"tenant_id", current.TenantID,
+			"err", emitErr)
+	}
+
 	return nil
 }
 
