@@ -64,6 +64,7 @@ type AppBuildPlan struct {
 	AppType       string // "server", "worker", "frontend"
 	AppPath       string // original app path from loopzero.yaml (e.g., "apps/api", ".")
 	Port          int
+	Start         string // T0.2b: declared services.json start command (canonical Dockerfile CMD)
 	Secrets       []string
 	DeliveryModel string // "container" or "static" (MEET-009). Resolved from AppUnit.Rendering.
 }
@@ -164,6 +165,7 @@ func CreateBuildPlan(units []AppUnit, tenantID, projectID, commitSHA, registryUR
 			AppType:          unit.Type,
 			AppPath:          unit.Path,
 			Port:             unit.Port,
+			Start:            unit.Start, // T0.2b: thread declared start to the build plan
 			Secrets:          unit.Secrets,
 			DeliveryModel:    deliveryModel,
 		})

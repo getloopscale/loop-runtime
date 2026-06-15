@@ -24,6 +24,7 @@ type AppUnit struct {
 
 	Port       int               `json:"port"`
 	Build      string            `json:"build"`                // "dockerfile", "buildpack", "custom"
+	Start      string            `json:"start,omitempty"`      // T0.2b: declared services.json start command (canonical Dockerfile CMD)
 	Dockerfile string            `json:"dockerfile,omitempty"` // resolved Dockerfile path (relative to app path)
 	Rendering  string            `json:"rendering,omitempty"`  // "static" or "server" (MEET-009)
 	Env        map[string]string `json:"env,omitempty"`        // build-time environment variables
@@ -126,6 +127,7 @@ func NormalizeApp(name string, raw AppSpec) (AppUnit, error) {
 		Framework:  framework,
 		Port:       port,
 		Build:      build,
+		Start:      raw.Start, // T0.2b: declared start → canonical Dockerfile CMD
 		Dockerfile: dockerfile,
 		Rendering:  rendering,
 		Env:        env,

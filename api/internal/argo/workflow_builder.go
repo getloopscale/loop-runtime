@@ -157,7 +157,7 @@ func (b *WorkflowBuilder) Build(spec services.WorkflowSpec) (*forge.Workflow, er
 		app := services.AppSpec{
 			Name: p.AppName, Type: p.AppType, Port: p.Port,
 			Path: p.AppPath, Framework: p.LanguageStrategy,
-			Build: p.Build, Secrets: p.Secrets,
+			Build: p.Build, Start: p.Start, Secrets: p.Secrets,
 		}
 		return ResolveStrategyForApp(app).Name(), app
 	})
@@ -427,7 +427,7 @@ func (b *WorkflowBuilder) buildMainDAG(spec services.WorkflowSpec, groups []lang
 		app := services.AppSpec{
 			Name: appPlan.AppName, Type: appPlan.AppType, Port: appPlan.Port,
 			Path: appPlan.AppPath, Framework: appPlan.LanguageStrategy,
-			Build: appPlan.Build,
+			Build: appPlan.Build, Start: appPlan.Start,
 		}
 		strategy := ResolveStrategyForApp(app)
 		suffix := suffixForStrategy(groups, strategy.Name())
