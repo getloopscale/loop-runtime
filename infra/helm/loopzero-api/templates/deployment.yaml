@@ -314,6 +314,21 @@ spec:
             - secretRef:
                 name: loopzero-openbao-approle
                 optional: true
+            # CANONICAL FIX 2026-06-15 (FAANG SEM WORKAROUND): loopzero-broker-token
+            # envFrom binding for the Layer 2 ESO sync broker (plan
+            # 2026-06-10-j22-openbao-transit-eso-sync v1.2 D3). The broker
+            # endpoint `/internal/v1/secret-fetch/{tenant_id}/{secret_name}`
+            # validates Bearer auth via const-time compare against
+            # LOOPZERO_BROKER_TOKEN; without this env var loopzero-api logs
+            # "secret-fetch broker disabled" + the route stays unregistered
+            # (router.go:122 guard), causing ESO ExternalSecret reconciles
+            # to 404 in tenant workload namespaces — blocks the entire
+            # J-22 secrets canonical chain. Mirrors tilt/api-deployment.yaml
+            # binding. Secret key MUST be `LOOPZERO_BROKER_TOKEN` (envFrom
+            # 1:1 mapping).
+            - secretRef:
+                name: loopzero-broker-token
+                optional: true
             # Phase 3.3 of plan 2026-06-02-loopzero-api-vault-integration v1.8 (D11 ESO).
             # 5 NEW Secrets created por ExternalSecret CRs (chart
             # loopzero-external-secrets) pulling from loopzero-vault. Keys são
