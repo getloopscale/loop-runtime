@@ -817,36 +817,6 @@ tasks:
         docker push localhost:5000/loopzero-clone-runner:v0.1.0
         echo "  Pushed: localhost:5000/loopzero-clone-runner:{latest,v0.1.0}"
 
-  images:build:packs-runner:
-    desc: Build + push loopzero-packs-runner (canonical lenient v0.4.0 via build-and-push-loopzero-packs.sh)
-    cmds:
-      - |
-        echo "=== Building loopzero-packs-runner (canonical, lenient v0.4.0) ==="
-        # build-mode-dispatch-and-dockerfile-security-plan T3.3 fix (2026-05-08):
-        # Use the canonical script — builds from /home/paulo/loopzero-packs/
-        # Dockerfile.generate (lenient contract — copies user Dockerfile
-        # verbatim, exits 0). Tags as :v0.4.0 AND :latest. Idempotent.
-        if [ -d /home/paulo/loopzero-packs ]; then
-          bash infra/scripts/build/build-and-push-loopzero-packs.sh
-        else
-          echo "  /home/paulo/loopzero-packs not present — fallback to legacy stub"
-          docker build -t localhost:5000/loopzero-packs-runner:latest infra/images/packs-runner/
-          docker push localhost:5000/loopzero-packs-runner:latest
-          echo "  Pushed: localhost:5000/loopzero-packs-runner:latest (legacy)"
-        fi
-
-  images:build:dockerfile-lint:
-    desc: Build + push loopzero-dockerfile-lint (security barrier for user Dockerfiles)
-    cmds:
-      - |
-        echo "=== Building loopzero-dockerfile-lint (build-mode-dispatch security barrier) ==="
-        # Enforces hard rejection rules (FROM allow-list, --privileged/
-        # --security=insecure RUN flags, bind-mount escape, reserved env
-        # keys, seccomp/apparmor unconfined) on user Dockerfiles BEFORE
-        # BuildKit consumes them. API env LOOPZERO_DOCKERFILE_LINT_IMAGE
-        # points to :v0.1.0. Idempotent.
-        bash infra/scripts/build/build-and-push-dockerfile-lint.sh
-
   images:build:syft-scanner:
     desc: Build + push loopzero-syft-scanner (Sprint 6 SBOM generation)
     cmds:
@@ -873,11 +843,12 @@ tasks:
         echo "  Pushed: localhost:5000/loopzero-cosign-signer:{latest,v0.1.0}"
 
   images:build:
-    desc: Build + push ALL tooling images (composite of 5 per-image tasks)
+    desc: Build + push ALL tooling images (composite of per-image tasks)
+    # T4.1 (simplify-deploy-loopzerokit-only v2.0): packs-runner + dockerfile-lint
+    # image builds removed — loopzero-packs generation (T2.1) and the BYO-Dockerfile
+    # lint path (T2.2) are gone; the build uses canonical in-process Dockerfiles.
     cmds:
       - task: images:build:clone-runner
-      - task: images:build:packs-runner
-      - task: images:build:dockerfile-lint
       - task: images:build:syft-scanner
       - task: images:build:cosign-signer
 
