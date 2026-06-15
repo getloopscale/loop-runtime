@@ -72,7 +72,6 @@ func SupportedFrameworks() map[string]bool {
 		"laravel": true, "slim": true, "php": true,
 		"axum": true, "actix": true, "rocket": true, "rust": true,
 		"custom":          true,
-		"user-dockerfile": true,
 		"unknown":         true, // legacy alias accepted by callers
 	}
 }
@@ -100,10 +99,6 @@ func ResolveStrategy(framework string) LanguageStrategy {
 		return &NodeStrategy{}
 	case "fastapi", "django", "python", "python-fastapi":
 		return &PythonStrategy{}
-	case "user-dockerfile":
-		// BYO-Dockerfile path — removed in T2.2 (security). Retained here only
-		// until that task deletes UserDockerfileStrategy.
-		return &UserDockerfileStrategy{}
 	default:
 		// T2.1 (plan simplify-deploy-loopzerokit-only v2.0): the fixed LoopZeroKit stack
 		// is python + node ONLY. Every other runtime fails closed at build time
@@ -143,21 +138,15 @@ func (s *unsupportedStrategy) DockerfileStep(_ []services.AppSpec, _ int) *forge
 	return s.failStep("generate-dockerfile")
 }
 
-// ResolveStrategyForApp returns the LanguageStrategy for an AppSpec, honoring
-// the orthogonal `build: dockerfile` axis: when the user opts into supplying
-// their own Dockerfile, dispatch to UserDockerfileStrategy regardless of the
-// declared framework.
+// ResolveStrategyForApp returns the LanguageStrategy for an AppSpec.
 //
-// build-mode-dispatch-and-dockerfile-security-plan T1.4 (2026-05-07) — closes
-// the architectural hole where MEET-2026-03-29-017 universalized loopzero-packs
-// invocation, ignoring `build: dockerfile`. The strategy resolver is the
-// idiomatic dispatch layer; pushing this decision into the orchestrator with
-// an `if app.Build == "dockerfile"` would leak strategy semantics out of the
-// pattern.
+// T2.2 (plan simplify-deploy-loopzerokit-only v2.0): the BYO-Dockerfile path
+// (`build: dockerfile` → UserDockerfileStrategy) is REMOVED — letting a user
+// supply their own Dockerfile is a build-escape/RCE surface (the build sandbox
+// runs unconfined). The platform now always uses its canonical Dockerfile; any
+// user Dockerfile in the bundle is ignored fail-closed (D4, enforced in the
+// build-context assembly — T2.3). Dispatch is purely runtime-based.
 func ResolveStrategyForApp(app services.AppSpec) LanguageStrategy {
-	if app.Build == "dockerfile" {
-		return &UserDockerfileStrategy{}
-	}
 	return ResolveStrategy(app.Framework)
 }
 
@@ -236,49 +225,6 @@ func (s *PythonStrategy) ScanStep() *forge.Container {
 func (s *PythonStrategy) DockerfileStep(apps []services.AppSpec, totalApps int) *forge.Container {
 	// T1.2: canonical platform Dockerfile (replaces loopzero-packs).
 	return canonicalDockerfileStepOrFail("python", apps, totalApps)
-}
-
-// ---------------------------------------------------------------------------
-// UserDockerfileStrategy — user opted into `build: dockerfile` in loopzero.yaml
-// ---------------------------------------------------------------------------
-//
-// build-mode-dispatch-and-dockerfile-security-plan T1.3 (2026-05-07):
-// distinct from CustomStrategy, which means `framework: custom` (user
-// declared no language). UserDockerfileStrategy means "I'm bringing my own
-// Dockerfile" — independent of language framework. LoopZero skips loopzero-packs
-// invocation entirely (saves ~30s per app) and runs loopzero-dockerfile-lint
-// against the user-supplied Dockerfile to enforce hard rejection rules
-// (FROM allow-list, RUN flag prohibitions, bind mount escape, reserved
-// env keys, seccomp/apparmor unconfined). Soft warnings audit-logged.
-
-type UserDockerfileStrategy struct{}
-
-func (s *UserDockerfileStrategy) Name() string                   { return "user-dockerfile" }
-func (s *UserDockerfileStrategy) CacheKey() string               { return "" }
-func (s *UserDockerfileStrategy) CacheDirs() []string            { return nil }
-
-func (s *UserDockerfileStrategy) ValidateStep(_ []services.AppSpec) *forge.Container {
-	return buildContainer("validate-workspace", imageAlpine, forge.ResourcesTiny(),
-		noopScript("user-dockerfile build mode — workspace validation skipped (user-managed Dockerfile)"))
-}
-
-func (s *UserDockerfileStrategy) InstallStep(_ []services.AppSpec) *forge.Container {
-	return buildContainer("install-deps", imageAlpine, forge.ResourcesTiny(),
-		noopScript("user-dockerfile build mode — dependencies installed inside Dockerfile"))
-}
-
-func (s *UserDockerfileStrategy) BuildStep(_ []services.AppSpec) *forge.Container {
-	return buildContainer("build-apps", imageAlpine, forge.ResourcesTiny(),
-		noopScript("user-dockerfile build mode — build happens inside Dockerfile"))
-}
-
-func (s *UserDockerfileStrategy) ScanStep() *forge.Container {
-	return buildContainer("security-scan", imageAlpine, forge.ResourcesTiny(),
-		noopScript("user-dockerfile build mode — security scan deferred to dockerfile-lint + post-build SBOM"))
-}
-
-func (s *UserDockerfileStrategy) DockerfileStep(apps []services.AppSpec, _ int) *forge.Container {
-	return dockerfileLintStep(apps)
 }
 
 // dockerfileStepTemplateName returns the template name a strategy's
