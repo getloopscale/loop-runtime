@@ -94,10 +94,18 @@ type SessionClaims struct {
 }
 
 // Validator validates JWT tokens against a JWKS endpoint.
+//
+// Audience handling per RFC 7519 § 4.1.3: validation succeeds when the
+// token's `aud` claim contains ANY of the configured `audiences`. This
+// supports services that legitimately accept multiple audiences (e.g.,
+// loopzero-cloud accepts BOTH `loopzero-cloud` for its own dashboard session
+// JWTs AND `loopzero-engine` for bootstrap/CLI JWTs proxied via /engine/*
+// paths into loopzero-api). Matches AWS Cognito + Auth0 + Okta + Google
+// Cloud Identity multi-audience canonical pattern.
 type Validator struct {
 	jwksURL    string
 	issuer     string
-	audience   string
+	audiences  []string // RFC 7519 § 4.1.3 — accept ANY of these
 	httpClient *http.Client
 
 	mu      sync.RWMutex
@@ -115,11 +123,40 @@ type Validator struct {
 // NewValidator creates a JWT validator that fetches JWKS from the given URL.
 // The audience parameter enforces strict audience validation on all tokens.
 // MEET-2026-04-07-039: B4 fix — audience is mandatory per service.
+//
+// For services that need to accept multiple audiences (e.g., loopzero-cloud
+// proxying both dashboard endpoints AND /engine/* paths into loopzero-api),
+// use NewValidatorWithAudiences instead. This single-audience constructor
+// is preserved for backward compatibility and delegates to the multi-aud
+// constructor with `[]string{audience}` so all callers go through the
+// same internal data path.
 func NewValidator(jwksURL, issuer, audience string) *Validator {
+	return NewValidatorWithAudiences(jwksURL, issuer, []string{audience})
+}
+
+// NewValidatorWithAudiences creates a JWT validator that accepts ANY of
+// the provided audiences (RFC 7519 § 4.1.3 — "If the principal processing
+// the claim does not identify itself with a value in the 'aud' claim
+// when this claim is present, then the JWT MUST be rejected").
+//
+// Canonical use case (2026-06-15): loopzero-cloud (cloud/cmd/main.go) needs to
+// accept BOTH `loopzero-cloud` (its own dashboard session JWTs) AND
+// `loopzero-engine` (bootstrap + CLI JWTs that proxy via /engine/* paths
+// into loopzero-api which validates `loopzero-engine`). Single-audience validation
+// forces the dogfood test harness to mint separate tokens for each path;
+// multi-audience validation collapses this into ONE token mint + a chain
+// of accepted audiences.
+//
+// Panics if audiences is empty (programming error — defense in depth
+// against the "B4 fix audience-is-mandatory" rule from MEET-2026-04-07-039).
+func NewValidatorWithAudiences(jwksURL, issuer string, audiences []string) *Validator {
+	if len(audiences) == 0 {
+		panic("loopzerojwt.NewValidatorWithAudiences: audiences must be non-empty (MEET-2026-04-07-039 B4)")
+	}
 	return &Validator{
-		jwksURL:  jwksURL,
-		issuer:   issuer,
-		audience: audience,
+		jwksURL:   jwksURL,
+		issuer:    issuer,
+		audiences: append([]string(nil), audiences...), // defensive copy
 		httpClient: &http.Client{
 			Timeout: 5 * time.Second,
 		},
@@ -187,7 +224,11 @@ func (v *Validator) Validate(tokenString string) (*Claims, error) {
 	},
 		goJWT.WithValidMethods(AllowedAccessAlgs),
 		goJWT.WithIssuer(v.issuer),
-		goJWT.WithAudience(v.audience),
+		// Multi-audience handling per RFC 7519 § 4.1.3: goJWT
+		// WithAudience matches when `aud` claim contains the value.
+		// For multi-aud validators we run signature + issuer + exp
+		// checks WITHOUT WithAudience (so signature is verified once),
+		// then assert audience match manually after parse.
 		goJWT.WithExpirationRequired(),
 	)
 
@@ -199,7 +240,31 @@ func (v *Validator) Validate(tokenString string) (*Claims, error) {
 	if !ok || !token.Valid {
 		return nil, fmt.Errorf("invalid token claims")
 	}
+
+	// RFC 7519 § 4.1.3 — accept ANY of the configured audiences.
+	// Claims.Audience is goJWT.ClaimStrings (string OR []string per RFC).
+	if !audienceMatchesAny(claims.Audience, v.audiences) {
+		return nil, fmt.Errorf("token validation failed: token has invalid audience, want any of %v, got %v", v.audiences, []string(claims.Audience))
+	}
+
 	return claims, nil
+}
+
+// audienceMatchesAny returns true when the token's `aud` claim
+// (which per RFC 7519 § 4.1.3 may be a single string OR array)
+// contains at least ONE of the validator's accepted audiences.
+//
+// Empty token audience always fails (defense in depth against
+// the MEET-2026-04-07-039 B4 "audience mandatory" rule).
+func audienceMatchesAny(tokenAud goJWT.ClaimStrings, accepted []string) bool {
+	for _, want := range accepted {
+		for _, got := range tokenAud {
+			if got == want {
+				return true
+			}
+		}
+	}
+	return false
 }
 
 // SessionTokenIssuer issues and validates HMAC-SHA256 session JWTs.

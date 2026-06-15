@@ -871,8 +871,8 @@ func TestNewValidator_DefaultFields(t *testing.T) {
 	if v.issuer != "iss" {
 		t.Errorf("issuer = %q", v.issuer)
 	}
-	if v.audience != "aud" {
-		t.Errorf("audience = %q", v.audience)
+	if len(v.audiences) != 1 || v.audiences[0] != "aud" {
+		t.Errorf("audiences = %v, want [aud]", v.audiences)
 	}
 	if v.ttl != 5*time.Minute {
 		t.Errorf("ttl = %v, want 5m", v.ttl)
@@ -1376,5 +1376,110 @@ func TestFetchJWKS_SkipsKeyWithInvalidRSAComponents(t *testing.T) {
 	}
 	if _, err := v.getKey("bad-n"); err == nil {
 		t.Error("bad-n key should NOT have been loaded into cache")
+	}
+}
+
+// TestNewValidatorWithAudiences_Multi covers the canonical multi-audience
+// constructor path (2026-06-15 dev-public dogfood fix).
+//
+// Asserts:
+//   1. backward compat: NewValidator(_,_, single) yields audiences=[single]
+//   2. multi-aud: NewValidatorWithAudiences(_,_, [a, b]) yields audiences=[a, b]
+//   3. defensive copy: caller mutation of input slice does NOT affect validator
+//   4. empty audiences panic (B4 defense)
+func TestNewValidatorWithAudiences_Multi(t *testing.T) {
+	t.Run("backward_compat_single_aud", func(t *testing.T) {
+		v := NewValidator("https://example.com/jwks", "iss", "loopzero-cloud")
+		if len(v.audiences) != 1 || v.audiences[0] != "loopzero-cloud" {
+			t.Errorf("single-aud constructor: audiences=%v, want [loopzero-cloud]", v.audiences)
+		}
+	})
+
+	t.Run("multi_aud_constructor", func(t *testing.T) {
+		v := NewValidatorWithAudiences("https://example.com/jwks", "iss",
+			[]string{"loopzero-cloud", "loopzero-engine"})
+		if len(v.audiences) != 2 {
+			t.Fatalf("multi-aud constructor: len(audiences)=%d, want 2", len(v.audiences))
+		}
+		if v.audiences[0] != "loopzero-cloud" || v.audiences[1] != "loopzero-engine" {
+			t.Errorf("multi-aud constructor: audiences=%v, want [loopzero-cloud loopzero-engine]", v.audiences)
+		}
+	})
+
+	t.Run("defensive_copy_caller_mutation_isolated", func(t *testing.T) {
+		input := []string{"loopzero-cloud", "loopzero-engine"}
+		v := NewValidatorWithAudiences("https://example.com/jwks", "iss", input)
+		input[0] = "tampered"
+		if v.audiences[0] != "loopzero-cloud" {
+			t.Errorf("validator audience mutated by caller: got %q, want loopzero-cloud",
+				v.audiences[0])
+		}
+	})
+
+	t.Run("empty_audiences_panics", func(t *testing.T) {
+		defer func() {
+			if r := recover(); r == nil {
+				t.Error("NewValidatorWithAudiences with empty audiences should panic")
+			}
+		}()
+		_ = NewValidatorWithAudiences("https://example.com/jwks", "iss", nil)
+	})
+}
+
+// TestAudienceMatchesAny covers the RFC 7519 § 4.1.3 audience match
+// helper. Asserts behavior across single-aud / multi-aud / empty
+// token-aud scenarios.
+func TestAudienceMatchesAny(t *testing.T) {
+	cases := []struct {
+		name     string
+		tokenAud []string
+		accepted []string
+		want     bool
+	}{
+		{
+			name:     "single_token_aud_matches",
+			tokenAud: []string{"loopzero-engine"},
+			accepted: []string{"loopzero-cloud", "loopzero-engine"},
+			want:     true,
+		},
+		{
+			name:     "single_token_aud_first_in_accepted",
+			tokenAud: []string{"loopzero-cloud"},
+			accepted: []string{"loopzero-cloud", "loopzero-engine"},
+			want:     true,
+		},
+		{
+			name:     "token_aud_not_in_accepted_rejected",
+			tokenAud: []string{"loopzero-other"},
+			accepted: []string{"loopzero-cloud", "loopzero-engine"},
+			want:     false,
+		},
+		{
+			name:     "multi_token_aud_any_match",
+			tokenAud: []string{"unrelated", "loopzero-engine"},
+			accepted: []string{"loopzero-cloud", "loopzero-engine"},
+			want:     true,
+		},
+		{
+			name:     "empty_token_aud_rejected",
+			tokenAud: nil,
+			accepted: []string{"loopzero-cloud"},
+			want:     false,
+		},
+		{
+			name:     "single_accepted_single_token_canonical",
+			tokenAud: []string{"loopzero-engine"},
+			accepted: []string{"loopzero-engine"},
+			want:     true,
+		},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			got := audienceMatchesAny(tc.tokenAud, tc.accepted)
+			if got != tc.want {
+				t.Errorf("audienceMatchesAny(tokenAud=%v, accepted=%v) = %v, want %v",
+					tc.tokenAud, tc.accepted, got, tc.want)
+			}
+		})
 	}
 }
