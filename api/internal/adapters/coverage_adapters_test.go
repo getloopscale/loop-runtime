@@ -69,8 +69,8 @@ func TestBuildOrchestratorAdapter_SubmitBuild_DefaultAppType(t *testing.T) {
 		Environment: "production",
 		CommitSHA:   "abc123",
 		Apps: []routes.AppInput{
-			{Name: "api", Path: ".", Port: 3000, Type: "server", Framework: "express"},
-			{Name: "web", Path: "./web", Type: "", Framework: "react"}, // empty type
+			{Name: "api", Path: ".", Port: 3000, Type: "server", Runtime: "node"},
+			{Name: "web", Path: "./web", Type: "", Runtime: "node"}, // empty type
 			{Name: "worker", Path: "./bg", Type: "worker", Port: 0},
 		},
 	}

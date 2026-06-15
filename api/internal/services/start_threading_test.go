@@ -12,7 +12,7 @@ import "testing"
 
 func TestNormalizeApp_CarriesStart(t *testing.T) {
 	// Arrange — a server AppSpec with a declared start command
-	raw := AppSpec{Name: "api", Type: "server", Port: 8080, Framework: "node", Start: "node dist/main.js"}
+	raw := AppSpec{Name: "api", Type: "server", Port: 8080, Runtime: "node", Start: "node dist/main.js"}
 	// Act
 	unit, err := NormalizeApp("api", raw)
 	// Assert

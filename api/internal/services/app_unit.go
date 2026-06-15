@@ -13,14 +13,11 @@ type AppUnit struct {
 	Type string `json:"type"` // "server", "worker", "frontend"
 	Path string `json:"path"`
 
-	// Framework (legacy loopzero.yaml) and Runtime (new services.json) coexist
-	// during the transition window per ADR D7. Plan B v3.1 T-B.5 (2026-06-05)
-	// added Runtime — `python` | `node` from services.json. Callers should
-	// prefer Runtime; Framework is retained for backwards compat reading of
-	// existing `apps_spec` JSONB rows. Strategy dispatch falls back from
-	// Runtime → Framework, and emits E-010 when both are empty.
-	Framework string `json:"framework,omitempty"`
-	Runtime   string `json:"runtime,omitempty"`
+	// Runtime is the services.json build-strategy key (`python` | `node`).
+	// The legacy `framework` field was removed (simplify-deploy-loopzerokit-
+	// runtime-wiring T2.1 / F-dom-2 — runtime is the single contract, no
+	// backward compatibility per D1/D2).
+	Runtime string `json:"runtime,omitempty"`
 
 	Port       int               `json:"port"`
 	Build      string            `json:"build"`                // "dockerfile", "buildpack", "custom"
@@ -77,12 +74,6 @@ func NormalizeApp(name string, raw AppSpec) (AppUnit, error) {
 		path = "."
 	}
 
-	// Resolve framework
-	framework := raw.Framework
-	if framework == "" {
-		framework = "custom"
-	}
-
 	env := raw.Env
 	if env == nil {
 		env = map[string]string{}
@@ -102,8 +93,7 @@ func NormalizeApp(name string, raw AppSpec) (AppUnit, error) {
 		Name:       name,
 		Type:       appType,
 		Path:       path,
-		Framework:  framework,
-		Runtime:    raw.Runtime, // T0.1 (F-dom-2 wiring): carry services.json runtime to the build-strategy key
+		Runtime:    raw.Runtime, // F-dom-2: carry services.json runtime — the build-strategy key
 		Port:       port,
 		Build:      build,
 		Start:      raw.Start, // T0.2b: declared start → canonical Dockerfile CMD

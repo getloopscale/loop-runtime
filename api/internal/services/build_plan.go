@@ -127,20 +127,16 @@ func CreateBuildPlan(units []AppUnit, tenantID, projectID, commitSHA, registryUR
 		buildArgs["COMMIT_SHA"] = commitSHA
 		buildArgs["APP_NAME"] = unit.Name
 
-		// Plan B v3.1 T-B.5 (2026-06-05) — strategy dispatch via services.json
-		// `runtime` first, with legacy `framework` fallback (ADR D7 transition
-		// window). EC-B3-2: warn when both empty (likely partial migration or
-		// data corruption) and fall through to "custom" via the default branch.
-		runtimeOrFramework := unit.Runtime
-		if runtimeOrFramework == "" {
-			runtimeOrFramework = unit.Framework
-		}
-		if runtimeOrFramework == "" {
-			slog.Warn("build plan: E-010 missing runtime+framework",
+		// simplify-deploy-loopzerokit-runtime-wiring T2.1 (F-dom-2): strategy is keyed
+		// on the services.json `runtime` ONLY (python|node). No legacy framework
+		// fallback (D1/D2). An empty runtime is a contract violation and fails
+		// closed downstream via argo.ResolveStrategy (D4).
+		if unit.Runtime == "" {
+			slog.Warn("build plan: missing runtime",
 				"app", unit.Name,
-				"hint", "likely partial migration or data corruption — falling back to custom strategy")
+				"hint", "services.json must declare runtime (python|node) — build will fail closed")
 		}
-		strategy := resolveLanguageStrategy(runtimeOrFramework)
+		strategy := resolveLanguageStrategy(unit.Runtime)
 
 		// T3.3 (simplify-deploy-loopzerokit-only): static-frontend delivery removed —
 		// every app is container delivery (AppUnit.Rendering is always "server").
@@ -175,35 +171,18 @@ func CreateBuildPlan(units []AppUnit, tenantID, projectID, commitSHA, registryUR
 // resolveLanguageStrategy maps a runtime/framework string to a language
 // strategy name. Single source of truth for the dispatch.
 //
-// Plan B v3.1 T-B.5 (2026-06-05) — accepts both the new services.json
-// `runtime` values ("python", "node") and the legacy loopzero.yaml `framework`
-// values (everything else). EC-B3-3 explicit cases ship at the top so the
-// runtime contract is unmistakable in code review; the legacy framework
-// cases follow during the transition window per ADR D7.
-func resolveLanguageStrategy(runtimeOrFramework string) string {
-	switch runtimeOrFramework {
-	// services.json runtime values (Plan B v3.1 T-B.5 EC-B3-3).
+// simplify-deploy-loopzerokit-runtime-wiring T2.1 (F-dom-2): keyed on the
+// services.json `runtime` only (python|node). The legacy loopzero.yaml framework
+// cases were deleted (D1/D2 — no backward compatibility). Anything else returns
+// "unsupported"; the actual build fails closed via argo.ResolveStrategy, which
+// is the authoritative dispatch (this label is informational on AppBuildPlan).
+func resolveLanguageStrategy(runtime string) string {
+	switch runtime {
 	case "node":
 		return "node"
 	case "python":
 		return "python"
-	// Legacy loopzero.yaml framework values — kept during transition (ADR D7).
-	case "nextjs", "next", "vite", "remix", "nestjs", "express",
-		"react", "vue", "svelte", "astro", "angular", "fastify":
-		return "node"
-	case "gin", "go":
-		return "go"
-	case "fastapi", "django":
-		return "python"
-	case "sinatra", "rails", "ruby":
-		return "ruby"
-	case "spring", "spring-boot", "java":
-		return "java"
-	case "laravel", "slim", "php":
-		return "php"
-	case "axum", "actix", "rocket", "rust":
-		return "rust"
 	default:
-		return "custom"
+		return "unsupported"
 	}
 }

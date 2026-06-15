@@ -20,7 +20,7 @@ func TestCreateBuildPlan_ContainerDeliveryModel(t *testing.T) {
 			Type:      "server",
 			Port:      3000,
 			Path:      "apps/api",
-			Framework: "express",
+			Runtime: "node",
 			Build:     "buildpack",
 			Rendering: "server",
 		},
@@ -48,7 +48,7 @@ func TestCreateBuildPlan_UserDockerfileIgnored_D4_Subpath(t *testing.T) {
 			Type:       "server",
 			Port:       3000,
 			Path:       "services/api",
-			Framework:  "express",
+			Runtime:  "node",
 			Build:      "dockerfile",
 			Dockerfile: "Dockerfile.prod",
 		},
@@ -66,8 +66,8 @@ func TestCreateBuildPlan_UserDockerfileIgnored_D4_Subpath(t *testing.T) {
 
 func TestCreateBuildPlan_MultiApp_DockerfileNaming(t *testing.T) {
 	units := []AppUnit{
-		{Name: "api", Type: "server", Port: 3000, Path: ".", Framework: "express", Build: "buildpack"},
-		{Name: "worker", Type: "worker", Path: ".", Framework: "node", Build: "buildpack"},
+		{Name: "api", Type: "server", Port: 3000, Path: ".", Runtime: "node", Build: "buildpack"},
+		{Name: "worker", Type: "worker", Path: ".", Runtime: "node", Build: "buildpack"},
 	}
 
 	plan := CreateBuildPlan(units, "tn-1", "my-app", "sha123", "registry.example.com")
@@ -91,7 +91,7 @@ func TestCreateBuildPlan_InvalidEnvKeySkipped(t *testing.T) {
 			Type:      "server",
 			Port:      3000,
 			Path:      ".",
-			Framework: "express",
+			Runtime: "node",
 			Build:     "buildpack",
 			Env: map[string]string{
 				"VALID_KEY":  "ok",

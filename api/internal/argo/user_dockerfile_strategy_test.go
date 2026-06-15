@@ -12,29 +12,24 @@ import (
 // build-mode-dispatch-and-dockerfile-security-plan T1.3 + T1.4 + T4.1.
 
 // T1.1 (simplify-deploy-loopzerokit-runtime-wiring / F-dom-2): ResolveStrategyForApp
-// routes by the services.json `runtime` (python|node), NOT framework. Only
-// python/node resolve; everything else fails closed (D1/D4). A populated
-// `framework` is IGNORED — runtime is the single key (this is what closes F-dom-2:
-// a python app with a stale framework still builds python).
+// routes by the services.json `runtime` (python|node) — the single build-strategy
+// key. Only python/node resolve; empty/unknown fails closed (D1/D4).
 func TestResolveStrategyForApp_RoutesByRuntime(t *testing.T) {
 	cases := []struct {
-		runtime   string
-		framework string // must be ignored
-		want      string
+		runtime string
+		want    string
 	}{
-		{"node", "", "node"},
-		{"python", "", "python"},
-		{"node", "express", "node"},       // framework ignored
-		{"python", "express", "python"},   // runtime wins over a stale framework — the F-dom-2 fix
-		{"", "express", "unsupported"},    // empty runtime fails closed (D4), no Node default
-		{"go", "node", "unsupported"},     // non-stack runtime fails closed
+		{"node", "node"},
+		{"python", "python"},
+		{"", "unsupported"},   // empty runtime fails closed (D4), no Node default
+		{"go", "unsupported"}, // non-stack runtime fails closed
 	}
 	for _, tc := range cases {
-		t.Run(tc.runtime+"/"+tc.framework, func(t *testing.T) {
-			app := services.AppSpec{Name: "api", Runtime: tc.runtime, Framework: tc.framework, Build: ""}
+		t.Run(tc.runtime, func(t *testing.T) {
+			app := services.AppSpec{Name: "api", Runtime: tc.runtime, Build: ""}
 			s := ResolveStrategyForApp(app)
 			if s.Name() != tc.want {
-				t.Errorf("runtime=%q framework=%q → strategy=%q, want %q", tc.runtime, tc.framework, s.Name(), tc.want)
+				t.Errorf("runtime=%q → strategy=%q, want %q", tc.runtime, s.Name(), tc.want)
 			}
 		})
 	}
@@ -71,7 +66,7 @@ func TestWorkflowBuilder_NodeApp_EmitsPacksNotLint(t *testing.T) {
 		BaseDomain:       "loopzero.local",
 	})
 	apps := []services.AppSpec{
-		{Name: "api", Path: ".", Framework: "node", Build: "", Type: "server", Port: 3000},
+		{Name: "api", Path: ".", Runtime: "node", Build: "", Type: "server", Port: 3000},
 	}
 	spec := services.WorkflowSpec{
 		BuildID:   "build-test",

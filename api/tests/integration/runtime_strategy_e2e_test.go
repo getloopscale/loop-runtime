@@ -18,22 +18,19 @@ import (
 
 func TestRuntimeStrategyEndToEnd(t *testing.T) {
 	cases := []struct {
-		name        string
-		runtime     string
-		staleFW     string // a framework value that MUST be ignored
-		wantStrat   string
+		name      string
+		runtime   string
+		wantStrat string
 	}{
-		{"python app", "python", "", "python"},
-		{"node app", "node", "", "node"},
-		{"python app with stale framework=express (F-dom-2 fix)", "python", "express", "python"},
-		{"node app with stale framework=fastapi (F-dom-2 fix)", "node", "fastapi", "node"},
+		{"python app", "python", "python"},
+		{"node app", "node", "node"},
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
 			// 1. services.json app (runtime-declared) → normalize
 			raw := services.AppSpec{
 				Name: "api", Type: "server", Port: 8080,
-				Runtime: tc.runtime, Framework: tc.staleFW, Start: "run-me",
+				Runtime: tc.runtime, Start: "run-me",
 			}
 			unit, err := services.NormalizeApp(raw.Name, raw)
 			if err != nil {
@@ -58,13 +55,13 @@ func TestRuntimeStrategyEndToEnd(t *testing.T) {
 			p := plan.Apps[0]
 			wfApp := services.AppSpec{
 				Name: p.AppName, Type: p.AppType, Port: p.Port,
-				Path: p.AppPath, Framework: p.LanguageStrategy, Runtime: p.Runtime,
+				Path: p.AppPath, Runtime: p.Runtime,
 				Build: p.Build, Start: p.Start,
 			}
 			got := argo.ResolveStrategyForApp(wfApp).Name()
 			if got != tc.wantStrat {
-				t.Errorf("ResolveStrategyForApp = %q, want %q (runtime %q must drive the build strategy regardless of framework %q)",
-					got, tc.wantStrat, tc.runtime, tc.staleFW)
+				t.Errorf("ResolveStrategyForApp = %q, want %q (runtime %q must drive the build strategy)",
+					got, tc.wantStrat, tc.runtime)
 			}
 		})
 	}

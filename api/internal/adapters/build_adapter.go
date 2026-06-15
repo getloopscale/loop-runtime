@@ -38,8 +38,7 @@ func (a *BuildOrchestratorAdapter) SubmitBuild(ctx context.Context, req routes.S
 			Type:      appType,
 			Port:      appPort,
 			Path:      app.Path,
-			Framework: app.Framework,
-			Runtime:   app.Runtime, // T0.1 (F-dom-2 wiring): carry services.json runtime
+			Runtime:   app.Runtime, // F-dom-2: services.json runtime is the build-strategy key
 			Build:     app.Build,
 			Start:     app.Start, // T0.2: declared start → canonical Dockerfile CMD
 			Rendering: app.Rendering,

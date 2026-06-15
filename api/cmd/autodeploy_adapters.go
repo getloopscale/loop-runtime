@@ -64,8 +64,8 @@ func (a *buildSubmitterAdapter) SubmitBuildFromWebhook(ctx context.Context, req 
 		} else {
 			app.Type = "server" // default
 		}
-		if v, ok := appCfg["framework"].(string); ok {
-			app.Framework = v
+		if v, ok := appCfg["runtime"].(string); ok {
+			app.Runtime = v // F-dom-2: runtime is the build-strategy key (framework removed)
 		}
 		if v, ok := appCfg["path"].(string); ok {
 			app.Path = v

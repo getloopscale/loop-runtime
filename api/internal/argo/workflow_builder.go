@@ -156,7 +156,7 @@ func (b *WorkflowBuilder) Build(spec services.WorkflowSpec) (*forge.Workflow, er
 	groups := groupApps(spec.Plan.Apps, func(p services.AppBuildPlan) (string, services.AppSpec) {
 		app := services.AppSpec{
 			Name: p.AppName, Type: p.AppType, Port: p.Port,
-			Path: p.AppPath, Framework: p.LanguageStrategy, Runtime: p.Runtime,
+			Path: p.AppPath, Runtime: p.Runtime,
 			Build: p.Build, Start: p.Start, Secrets: p.Secrets,
 		}
 		return ResolveStrategyForApp(app).Name(), app
@@ -426,7 +426,7 @@ func (b *WorkflowBuilder) buildMainDAG(spec services.WorkflowSpec, groups []lang
 		// so suffix and dockerfile-step name match the actual emitted templates.
 		app := services.AppSpec{
 			Name: appPlan.AppName, Type: appPlan.AppType, Port: appPlan.Port,
-			Path: appPlan.AppPath, Framework: appPlan.LanguageStrategy, Runtime: appPlan.Runtime,
+			Path: appPlan.AppPath, Runtime: appPlan.Runtime,
 			Build: appPlan.Build, Start: appPlan.Start,
 		}
 		strategy := ResolveStrategyForApp(app)

@@ -51,39 +51,10 @@ type LanguageStrategy interface {
 	Name() string
 }
 
-// SupportedFrameworks returns the canonical set of framework string values
-// the build pipeline understands. T5.4 of deep-review-2026-05-10-remediation-plan
-// (find_arch_framework_dup MEDIUM) — single source of truth, replaces the
-// duplicated `isUnknownFramework` switch that previously lived in
-// routes/builds.go and could drift silently.
-//
-// The empty string is implicitly supported (defaults to Node.js — see
-// ResolveStrategy fallback).
-func SupportedFrameworks() map[string]bool {
-	return map[string]bool{
-		"nextjs": true, "next": true, "vite": true, "remix": true,
-		"nestjs": true, "express": true, "node": true,
-		"react": true, "vue": true, "svelte": true, "astro": true,
-		"angular": true, "fastify": true,
-		"gin": true, "go": true,
-		"fastapi": true, "django": true, "python": true,
-		"sinatra": true, "rails": true, "ruby": true,
-		"spring": true, "spring-boot": true, "java": true,
-		"laravel": true, "slim": true, "php": true,
-		"axum": true, "actix": true, "rocket": true, "rust": true,
-		"custom":          true,
-		"unknown":         true, // legacy alias accepted by callers
-	}
-}
-
-// IsKnownFramework reports whether a framework string is in the
-// SupportedFrameworks set. Empty string is treated as known (Node.js default).
-func IsKnownFramework(framework string) bool {
-	if framework == "" {
-		return true
-	}
-	return SupportedFrameworks()[framework]
-}
+// SupportedFrameworks / IsKnownFramework removed (simplify-deploy-loopzerokit-
+// runtime-wiring T2.1 / F-dom-2): the build pipeline no longer validates or
+// dispatches on `framework`. The fixed LoopZeroKit stack is keyed on `runtime`
+// (python|node) via ResolveStrategy; anything else fails closed (D1/D4).
 
 // ResolveStrategy returns the LanguageStrategy for a `services.json` runtime
 // (`python` | `node`). This is the single build-strategy key (simplify-deploy-

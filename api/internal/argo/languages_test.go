@@ -142,7 +142,7 @@ func TestPythonStrategy_CacheKey(t *testing.T) {
 
 func TestPythonStrategy_ValidateStep_ChecksPythonDeps(t *testing.T) {
 	s := &PythonStrategy{}
-	apps := []services.AppSpec{{Name: "api", Type: "server", Port: 8000, Framework: "fastapi"}}
+	apps := []services.AppSpec{{Name: "api", Type: "server", Port: 8000, Runtime: "python"}}
 	c := s.ValidateStep(apps)
 
 	assertContainerShape(t, c, "validate-workspace", "python:3.12-alpine")
