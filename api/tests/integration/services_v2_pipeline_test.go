@@ -8,7 +8,6 @@
 package integration
 
 import (
-	"strings"
 	"testing"
 
 	"github.com/loopzero/loopzero/api/internal/manifests"
@@ -48,16 +47,14 @@ const v2ServicesJSON = `{
 
 func TestPhaseDE2E_V2Schema_PreservesProjectAndType(t *testing.T) {
 	t.Setenv("LOOPZERO_ENV_BLOCKLIST_MODE", "enforce")
-	cfg, appNames, err := source.ValidateServicesJSON(v2ServicesJSON)
+	m, err := source.ValidateServicesJSONNative(v2ServicesJSON)
 	if err != nil {
 		t.Fatalf("v2 services.json must validate, got: %v", err)
 	}
-	if cfg.Project != "checkout" {
-		t.Errorf("expected cfg.Project=checkout from v2 manifest, got %q", cfg.Project)
+	if got := source.ProjectNameFromManifest(m); got != "checkout" {
+		t.Errorf("expected project=checkout from v2 manifest, got %q", got)
 	}
-	if cfg.Name != "checkout" {
-		t.Errorf("expected cfg.Name=checkout (mirrors Project), got %q", cfg.Name)
-	}
+	appNames := source.AppNamesFromManifest(m)
 	if len(appNames) != 2 {
 		t.Fatalf("expected 2 services, got %d", len(appNames))
 	}
@@ -73,7 +70,7 @@ func TestPhaseDE2E_V2Schema_PreservesProjectAndType(t *testing.T) {
 	}
 	input, err := manifests.RenderFromServicesManifestInput(svc, manifests.RenderOpts{
 		TenantID:          "tenant-1",
-		ProjectID:         cfg.Project,
+		ProjectID:         source.ProjectNameFromManifest(m),
 		BaseDomain:        "test.local",
 		ClusterIssuerName: "letsencrypt-staging",
 		ImageRefDefault:   "registry.loopzero/app:v1",
@@ -110,16 +107,13 @@ func TestPhaseDE2E_V1Schema_FallsBackToServicesBundle(t *testing.T) {
 			}
 		]
 	}`
-	cfg, _, err := source.ValidateServicesJSON(v1)
+	m, err := source.ValidateServicesJSONNative(v1)
 	if err != nil {
 		t.Fatalf("v1 must validate (deprecated path), got: %v", err)
 	}
 	// EC-2 ADR D10: v1 fallback stays "services-bundle" to preserve Gitea
 	// repo lineage. Any drift to "default" silently orphans live ArgoCD Apps.
-	if cfg.Project != "services-bundle" {
-		t.Errorf("EC-2: v1 project fallback MUST be services-bundle (ADR D10), got %q", cfg.Project)
-	}
-	if !strings.HasPrefix(cfg.Project, "services-bundle") {
-		t.Errorf("EC-2: legacy project name signature drift, got %q", cfg.Project)
+	if got := source.ProjectNameFromManifest(m); got != "services-bundle" {
+		t.Errorf("EC-2: v1 project fallback MUST be services-bundle (ADR D10), got %q", got)
 	}
 }

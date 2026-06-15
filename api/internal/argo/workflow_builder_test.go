@@ -545,8 +545,8 @@ func TestWorkflowBuilder_Build_MultiApp_EndAtBuildImage(t *testing.T) {
 	spec := testSpec()
 	spec.Apps = []services.AppSpec{
 		{Name: "api", Type: "server", Port: 3000, Path: "services/api", Framework: "express"},
-		// NormalizeApp requires Rendering: "static" for frontends (CDN delivery).
-		{Name: "web", Type: "frontend", Port: 0, Path: "apps/web", Framework: "nextjs", Rendering: "static"},
+		// T3.3: frontend removed — web is a node server (the LoopZeroKit shape).
+		{Name: "web", Type: "server", Port: 3001, Path: "apps/web", Framework: "nextjs"},
 		{Name: "worker", Type: "worker", Port: 0, Path: "services/worker", Framework: "node"},
 	}
 	spec.Plan = planFromApps(spec.Apps)
