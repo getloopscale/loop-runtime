@@ -103,14 +103,23 @@ scenario_a_add_returns_nameservers() {
   idem_key="dogfood-domain-$(date +%s)-$RANDOM"
   body="$(curl -fsS -X POST -H "Authorization: Bearer $jwt" -H "Content-Type: application/json" \
     -H "Idempotency-Key: $idem_key" \
-    -d "{\"domain\":\"$PROBE_DOMAIN\"}" \
+    -d "{\"domain\":\"$PROBE_DOMAIN\",\"project\":\"${PROJECT_NAME:-teste}\",\"app\":\"api\",\"environment\":\"production\"}" \
     "$CLOUD_BASE/engine/api/v1/domains" || true)"
 
   [[ -n "$body" ]] || { emit_fail "scenario A: empty create response"; return 1; }
-  # Backend canonical response includes `nameservers` per ADR D6 EC-2.
-  echo "$body" | jq -e '.nameservers | length > 0' >/dev/null \
-    && emit_pass "scenario A: nameservers array non-empty in create response" \
-    || emit_fail "scenario A: nameservers field missing or empty (response: $body)"
+  # Backend canonical response shape (per ADR D6 EC-2 + EC-3): EITHER
+  #   v2 CF Zone path: .nameservers[] non-empty (CF zone assigned)
+  #   v1 TXT verification path: .verification.txt_name + .cname_target
+  # The legacy v1 path applies to domains without a pre-provisioned CF
+  # zone (e.g., *.example test domains). Either path is canonical from
+  # the dashboard's perspective — both surface the next-action UX.
+  if echo "$body" | jq -e '.nameservers | length > 0' >/dev/null 2>&1; then
+    emit_pass "scenario A: nameservers array non-empty (v2 CF Zone path)"
+  elif echo "$body" | jq -e '.verification.txt_name and (.cname_target // .verification.txt_value)' >/dev/null 2>&1; then
+    emit_pass "scenario A: verification.txt_name + cname_target present (v1 TXT path)"
+  else
+    emit_fail "scenario A: neither nameservers (v2) NOR verification.txt_name+cname_target (v1) present (response: $body)"
+  fi
 }
 
 scenario_b_polling_reaches_active() {

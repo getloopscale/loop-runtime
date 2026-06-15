@@ -150,14 +150,16 @@ scenario_b_keda_tier_gate() {
   local jwt
   jwt="$(<"$TOKEN_FILE")"
 
-  # Free-tier replicas cap is 2; replicas=11 must be rejected with
+  # Free-tier KEDA scale-to-zero opt-in (min=0) must be rejected with
   # 402 PLAN_UPGRADE_REQUIRED per pkg/enforcement.AssertKEDAAllowed (EC-3).
+  # Canonical KEDA trigger body shape per scale_test.go:390 — `min:0` is
+  # the wire signal that activates the tier gate.
   local body http_code response
   response="$(curl -sS -o /tmp/scale-b.json -w '%{http_code}' \
     -X POST \
     -H "Authorization: Bearer $jwt" \
     -H 'Content-Type: application/json' \
-    -d "{\"replicas\":11,\"app\":\"$APP_NAME\",\"environment\":\"$ENV_NAME\"}" \
+    -d "{\"app\":\"$APP_NAME\",\"environment\":\"$ENV_NAME\",\"min\":0,\"max\":5}" \
     "$(scale_endpoint)" || true)"
   body="$(cat /tmp/scale-b.json 2>/dev/null || echo '')"
   http_code="$response"
@@ -187,7 +189,7 @@ scenario_c_hpa_bounds() {
     -X POST \
     -H "Authorization: Bearer $jwt" \
     -H 'Content-Type: application/json' \
-    -d "{\"app\":\"$APP_NAME\",\"environment\":\"$ENV_NAME\",\"autoscaling\":{\"cpu_target\":5}}" \
+    -d "{\"app\":\"$APP_NAME\",\"environment\":\"$ENV_NAME\",\"min\":1,\"max\":5,\"cpu\":1}" \
     "$(scale_endpoint)" || true)"
   body="$(cat /tmp/scale-c.json 2>/dev/null || echo '')"
   http_code="$response"

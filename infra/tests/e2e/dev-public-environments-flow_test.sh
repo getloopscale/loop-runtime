@@ -334,7 +334,7 @@ scenario_e() {
       -X POST \
       -H "Authorization: Bearer $jwt" \
       -H "Content-Type: application/json" \
-      -d "{\"name\":\"$name\"}" \
+      -d "{\"name\":\"$name\",\"project\":\"${PROJECT_NAME:-teste}\"}" \
       "$CLOUD_URL${API_PREFIX}/api/v1/environments" 2>/dev/null || echo "000")
     last_status="$status"
     case "$status" in
@@ -347,7 +347,7 @@ scenario_e() {
   for name in "${burst_envs[@]}"; do
     curl -sS -o /dev/null -m 5 -X DELETE \
       -H "Authorization: Bearer $jwt" \
-      "$CLOUD_URL${API_PREFIX}/api/v1/environments/$name" 2>/dev/null || true
+      "$CLOUD_URL${API_PREFIX}/api/v1/environments/$name?project=${PROJECT_NAME:-teste}" 2>/dev/null || true
   done
   if [[ "$saw_402" -ge 1 ]]; then
     assert "402 PLAN_LIMIT_EXCEEDED observed (plan cap enforced)" 1
