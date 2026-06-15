@@ -253,16 +253,18 @@ func TestRender_Hostname(t *testing.T) {
 
 func TestRender_MultipleApps(t *testing.T) {
 	input := baseInput()
+	// Fixed LoopZeroKit stack: service shapes are server|worker only (the `frontend`
+	// type was pruned from the contract — simplify-deploy-loopzerokit-only D5/F-tests-2).
 	input.Apps = []AppManifestInput{
 		{Name: "api", Type: "server", Port: 8080, ImageRef: "reg:5000/acme/webapp:abc123"},
 		{Name: "worker", Type: "worker", ImageRef: "reg:5000/acme/webapp:abc123"},
-		{Name: "dashboard", Type: "frontend", Port: 80, ImageRef: "reg:5000/acme/webapp:abc123"},
+		{Name: "web", Type: "server", Port: 8080, ImageRef: "reg:5000/acme/webapp:abc123"},
 	}
 
 	result, _ := Render(input)
 	docs := strings.Split(result, "\n---\n")
 
-	// server=5 + worker=2 + frontend=5 = 12
+	// server=5 + worker=2 + server=5 = 12
 	if len(docs) != 12 {
 		t.Fatalf("expected 12 YAML documents, got %d", len(docs))
 	}

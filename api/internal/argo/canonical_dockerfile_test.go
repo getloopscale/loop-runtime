@@ -159,6 +159,49 @@ func TestCanonicalDockerfileStep_OverwritesAndWarns(t *testing.T) {
 	}
 }
 
+// TestCanonicalDockerfileStep_WarnLoopCoversAllVectors locks D4 coverage for the
+// file-shapes a user could smuggle a build recipe in (F-tests-1): the warn/find
+// loop must match Dockerfile, Containerfile, and *.dockerfile, and recurse into
+// subdirectories (monorepo apps) — not just the root. Given the generated step
+// script, When inspected, Then it finds all three name patterns at -maxdepth 3.
+func TestCanonicalDockerfileStep_WarnLoopCoversAllVectors(t *testing.T) {
+	c, err := canonicalDockerfileStep("node", []services.AppSpec{{Name: "web", Type: "server", Port: 8080, Start: "node x.js"}}, 1)
+	if err != nil {
+		t.Fatalf("canonicalDockerfileStep: %v", err)
+	}
+	script := strings.Join(c.Args, "\n")
+	for _, pat := range []string{"-iname 'Dockerfile'", "-iname 'Containerfile'", "-iname '*.dockerfile'"} {
+		if !strings.Contains(script, pat) {
+			t.Errorf("warn/find loop must cover %q (a user could smuggle a recipe in that shape); script:\n%s", pat, script)
+		}
+	}
+	if !strings.Contains(script, "-maxdepth 3") {
+		t.Errorf("find must recurse into app subdirs (monorepo) — expected -maxdepth 3; script:\n%s", script)
+	}
+}
+
+// TestCanonicalDockerfileStep_MultiApp_EachOverwritten locks that, for a monorepo
+// with multiple apps, EVERY app's canonical Dockerfile is written via a truncating
+// redirect to its distinct canonical path (F-tests-1 + F-dom-1 companion). No app
+// is left for BuildKit to read a user file. Given two apps, When the step is built,
+// Then both /workspace/Dockerfile.web and /workspace/Dockerfile.api are written.
+func TestCanonicalDockerfileStep_MultiApp_EachOverwritten(t *testing.T) {
+	apps := []services.AppSpec{
+		{Name: "web", Type: "server", Port: 8080, Start: "node web.js"},
+		{Name: "api", Type: "server", Port: 8081, Start: "node api.js"},
+	}
+	c, err := canonicalDockerfileStep("node", apps, len(apps))
+	if err != nil {
+		t.Fatalf("canonicalDockerfileStep: %v", err)
+	}
+	script := strings.Join(c.Args, "\n")
+	for _, p := range []string{`cat > "/workspace/Dockerfile.web"`, `cat > "/workspace/Dockerfile.api"`} {
+		if !strings.Contains(script, p) {
+			t.Errorf("each app must be overwritten at its canonical path; missing %q; script:\n%s", p, script)
+		}
+	}
+}
+
 func TestBaseImages_AreDigestPinned(t *testing.T) {
 	// C3 — base images MUST be @sha256: digest-pinned (reject tag-only).
 	re := regexp.MustCompile(`@sha256:[a-f0-9]{64}$`)
