@@ -97,7 +97,12 @@ scenario_a_add_returns_nameservers() {
   [[ $SKIP_LIVE -eq 1 ]] && { emit_pass "scenario A: SKIP --skip-live"; return 0; }
   local jwt body
   jwt="$(<"$TOKEN_FILE")"
+  # M2 contract requires Idempotency-Key header on POST /domains (per
+  # router.go:485 idempotentMiddlewares). Generate per-run unique key.
+  local idem_key
+  idem_key="dogfood-domain-$(date +%s)-$RANDOM"
   body="$(curl -fsS -X POST -H "Authorization: Bearer $jwt" -H "Content-Type: application/json" \
+    -H "Idempotency-Key: $idem_key" \
     -d "{\"domain\":\"$PROBE_DOMAIN\"}" \
     "$CLOUD_BASE/engine/api/v1/domains" || true)"
 

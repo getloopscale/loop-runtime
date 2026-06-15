@@ -500,6 +500,16 @@ func main() {
 			if rid := r.Header.Get("X-Request-Id"); rid != "" {
 				proxyReq.Header.Set("X-Request-Id", rid)
 			}
+			// CANONICAL FIX 2026-06-15: forward Idempotency-Key header. loopzero-api
+			// requires Idempotency-Key on mutating routes (POST/PATCH/DELETE per
+			// router.go idempotentMiddlewares — D/Domains/Secrets/Bulk/etc).
+			// Prior proxy implementation only forwarded Content-Type + correlation
+			// headers, causing dogfood --live-only tests that target /engine/*
+			// mutating paths to fail with MISSING_IDEMPOTENCY_KEY even when the
+			// client correctly set the header.
+			if ik := r.Header.Get("Idempotency-Key"); ik != "" {
+				proxyReq.Header.Set("Idempotency-Key", ik)
+			}
 
 			// Service-to-service auth: cloud authenticates to engine via shared secret.
 			// S2.3: Proxy sends identity only (user ID, tenant, email). Engine resolves
