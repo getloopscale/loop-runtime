@@ -7,14 +7,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
-### Added (2026-06-15 J-18 T1.3.b — SSE pg_notify backend handler + frontend EventSource wire)
-
-Closes T1.3 deferral from J-18 v0.15.0 release. Backend SSE realtime path wires through canonical `api/internal/sse/` infrastructure (per "Don't reinvent the wheel"); frontend `useStatusStream` removes `connected: false` stub and consumes browser-native EventSource.
-
-- **`api/internal/db/release_wrapper.go` T1.1** — `ReleaseStoreSqlc` ctor gains REQUIRED non-nil `sseEventStore` (panics on nil per EC-1 absorption); `AppendSideEffect` emits `signal.changed` via `eventStore.Append` with structured `slog.Warn` on failure (EC-3 absorption — NOT silent `_, _` discard); `NoopEventStore{}` canonical sentinel for read-only callsites. 3 production callsites + 4 test callsites updated atomically. 6 hermetic tests GREEN.
-- **`api/internal/routes/status_sse.go` NEW T2.1** — `StatusSSEHandler` at `GET /api/v1/projects/{name}/signals/stream?env=<env>`. EC-2 filters event_type=signal.changed (skips J-17 deploy events); EC-5 Flusher comma-ok form returns 500 NOT panic; EC-7 cross-tenant 404 NOT 403; EC-9 Last-Event-ID dedup by id. 7 hermetic tests GREEN.
-- **`api/internal/server/server.go` + `router.go` T2.2** — `ServerConfig.StatusSSEHandler` field + route registration; constructed in `setup_orchestrator.go` with canonical `stores.EventStore` (reuses J-17 PostgresEventStore infrastructure).
-- **`cloud/dashboard/src/hooks/use-status-stream.ts` T3.1** — REMOVES `connected: false` stub; opens browser-native EventSource when projectName + env present; `addEventListener('signal.changed', handler)` per memory `feedback_eventsource_named_events_vs_onmessage_2026_06_13`; cleanup on unmount closes EventSource (EC-6); safe-degraded when undefined. 7 NEW vitest (vi.stubGlobal in beforeEach per EC-4 + MockEventSource); 17 existing reducer tests stay GREEN; total 24/24 PASS.
+### Added
 
 ### Changed
 
@@ -25,6 +18,17 @@ Closes T1.3 deferral from J-18 v0.15.0 release. Backend SSE realtime path wires 
 ### Fixed
 
 ### Security
+
+## [0.15.1] - 2026-06-15
+
+### Added (2026-06-15 J-18 T1.3.b — SSE pg_notify backend handler + frontend EventSource wire)
+
+Closes T1.3 deferral from J-18 v0.15.0 release. Backend SSE realtime path wires through canonical `api/internal/sse/` infrastructure (per "Don't reinvent the wheel"); frontend `useStatusStream` removes `connected: false` stub and consumes browser-native EventSource.
+
+- **`api/internal/db/release_wrapper.go` T1.1** — `ReleaseStoreSqlc` ctor gains REQUIRED non-nil `sseEventStore` (panics on nil per EC-1 absorption); `AppendSideEffect` emits `signal.changed` via `eventStore.Append` with structured `slog.Warn` on failure (EC-3 absorption — NOT silent `_, _` discard); `NoopEventStore{}` canonical sentinel for read-only callsites. 3 production callsites + 4 test callsites updated atomically. 6 hermetic tests GREEN.
+- **`api/internal/routes/status_sse.go` NEW T2.1** — `StatusSSEHandler` at `GET /api/v1/projects/{name}/signals/stream?env=<env>`. EC-2 filters event_type=signal.changed (skips J-17 deploy events); EC-5 Flusher comma-ok form returns 500 NOT panic; EC-7 cross-tenant 404 NOT 403; EC-9 Last-Event-ID dedup by id. 7 hermetic tests GREEN.
+- **`api/internal/server/server.go` + `router.go` T2.2** — `ServerConfig.StatusSSEHandler` field + route registration; constructed in `setup_orchestrator.go` with canonical `stores.EventStore` (reuses J-17 PostgresEventStore infrastructure).
+- **`cloud/dashboard/src/hooks/use-status-stream.ts` T3.1** — REMOVES `connected: false` stub; opens browser-native EventSource when projectName + env present; `addEventListener('signal.changed', handler)` per memory `feedback_eventsource_named_events_vs_onmessage_2026_06_13`; cleanup on unmount closes EventSource (EC-6); safe-degraded when undefined. 7 NEW vitest (vi.stubGlobal in beforeEach per EC-4 + MockEventSource); 17 existing reducer tests stay GREEN; total 24/24 PASS.
 
 ## [0.15.0] - 2026-06-15
 
