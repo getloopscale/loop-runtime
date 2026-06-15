@@ -877,6 +877,19 @@ tasks:
     cmds:
       - bash infra/scripts/local/dogfood-secrets.sh {{.CLI_ARGS}}
 
+  test:dogfood:domains:
+    desc: |
+      T5.2 of plan 2026-06-06-dashboard-journey-j11-domains v1.1 SHIPPABLE
+      93.2 — aggregate dogfood wrapper for the J-11 Domains polish slice.
+      Invokes:
+        1. T4.3 hermetic syntax test for the LIVE bash test (19 assertions)
+        2. vitest J-11 hooks + components — 20 specs GREEN
+        3. T4.2 LIVE bash dev-public-domains scenarios A+B+C
+           (OPERATOR HARD STOP per ADR D5 + cleanroom-up-live-test-mandate.md)
+      Flags forwarded to wrapper: --hermetic-only --live-only --json.
+    cmds:
+      - bash infra/scripts/local/dogfood-domains.sh {{.CLI_ARGS}}
+
   test:dogfood:readiness:
     desc: |
       T5.2 of plan 2026-06-06-dashboard-journey-j21-readiness v1.1 SHIPPABLE

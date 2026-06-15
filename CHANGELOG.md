@@ -29,6 +29,19 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 - User-supplied Dockerfiles in the uploaded source bundle are now ignored fail-closed (overwritten by the canonical Dockerfile + a `::loopzero::` warning; never executed). Removes a build-escape/RCE surface, since the build sandbox runs with unconfined seccomp/AppArmor. (D4)
 - Build Dockerfile path is now single-sourced to the canonical location for every app, including monorepo subpath apps (`path != "."`). Previously a subpath app could point the builder at a user-controlled `Dockerfile`, re-opening the build-escape hole the D4 change closed. (simplify-deploy-loopzerokit-only review F-dom-1)
 
+## [0.18.0] - 2026-06-15
+
+### Added
+- Domains page polish: 3-step DNS setup card showing your Cloudflare-assigned nameservers with one-click copy per nameserver (#J-11)
+- Automatic status polling: domain status refreshes every 30 seconds while pending; stops automatically when status reaches Active, Failed, or Removing (#J-11)
+- Re-verify button on failed domains: forces an immediate re-check of DNS propagation and certificate issuance (#J-11)
+- Troubleshooting sheet opened from any failed domain — surfaces tailored tips per failure type (Cloudflare API issue, certificate problem, etc.) plus link to the documentation (#J-11)
+- Polling pauses automatically when the dashboard tab is in the background — saves battery and reduces API load (#J-11)
+
+
+### Changed
+- Re-verify button replaces the silent ad-hoc retry — clearly shows pending state, prevents double-firing on rapid clicks, and only renders for domains that actually need user action (#J-11)
+
 ## [0.17.0] - 2026-06-15
 
 ### Added
