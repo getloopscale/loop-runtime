@@ -20,6 +20,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 - Rule 4 compliance: SIGINT (Ctrl-C) and SIGTERM no longer exit with codes 130/143 — both now exit with the canonical code 1, honoring the permanent set {0, 1, 2, 3, 4, 5} (#code-review-49-findings T0.2)
 - J-20 Scale dogfood pattern alignment: shipped the 3 missing canonical scripts (LIVE bash dev-public-scale-flow + hermetic syntax companion + dogfood-scale.sh aggregate runner) so the operator JUNTOS session has the same skeleton as J-21/J-11/J-19/J-22/J-25. New `task test:dogfood:scale` target. (#code-review-49-findings T1.1+T1.2+T1.3+T1.4)
 
+### Changed
+- loopzero.yaml validator decomposed: the monolithic `validateConfig` function (cyclomatic complexity 95 — worst in the entire codebase) is now a thin orchestrator over 9 specialized validators (version + app-name + app-path + app-runtime + app-build + app-env + app-scaling + app-unknown-fields + project-constraints). All 69 existing test cases pass without modification. No user-visible behavior change; defense in depth against future complexity drift. (#code-review-49-findings T2.1)
+
 ### Security
 
 ## [0.18.0] - 2026-06-15
