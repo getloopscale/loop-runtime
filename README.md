@@ -276,7 +276,7 @@ LoopZero gives you Vercel-quality DX for everything Vercel can't deploy.
 |---|:---:|:---:|
 | Auto-deploy on `git push` | Yes | Yes (~4min) |
 | Static frontends (React, Vite) | Yes | Yes (CDN via CF Worker) |
-| API servers (Express, Go, Python) | Serverless only | Any framework (30 supported) |
+| API servers | Serverless only | Fixed LoopZeroKit stack: Python + Node (`server`/`worker`) |
 | Background workers | -- | Yes |
 | Multiple services per repo | -- | Yes (monorepo-native) |
 | Rollback in seconds | Yes | Yes (~3s) |
