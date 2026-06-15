@@ -25,19 +25,19 @@ func TestResolveStrategyForApp_NoBuildDockerfile_RoutesByFramework(t *testing.T)
 		framework string
 		want      string
 	}{
+		// T2.1: fixed node/python stack — everything else fails closed.
 		{"node", "node"},
 		{"express", "node"},
 		{"nextjs", "node"},
-		{"go", "go"},
-		{"gin", "go"},
 		{"python", "python"},
 		{"fastapi", "python"},
-		{"ruby", "ruby"},
-		{"java", "java"},
-		{"php", "php"},
-		{"rust", "rust"},
-		{"custom", "custom"},
 		{"", "node"},
+		{"go", "unsupported"},
+		{"ruby", "unsupported"},
+		{"java", "unsupported"},
+		{"php", "unsupported"},
+		{"rust", "unsupported"},
+		{"custom", "unsupported"},
 	}
 	for _, tc := range cases {
 		t.Run(tc.framework, func(t *testing.T) {

@@ -96,33 +96,52 @@ func IsKnownFramework(framework string) bool {
 // framework name is available (e.g., language-grouping by string key).
 func ResolveStrategy(framework string) LanguageStrategy {
 	switch framework {
-	case "nextjs", "vite", "remix", "nestjs", "express", "node":
+	case "nextjs", "vite", "remix", "nestjs", "express", "node", "node-hono", "":
+		// Empty framework defaults to Node (the dominant LoopZeroKit shape).
 		return &NodeStrategy{}
-	case "gin", "go":
-		return &GoStrategy{}
-	case "fastapi", "django", "python":
+	case "fastapi", "django", "python", "python-fastapi":
 		return &PythonStrategy{}
-	case "sinatra", "rails", "ruby":
-		return &RubyStrategy{}
-	case "spring", "spring-boot", "java":
-		return &JavaStrategy{}
-	case "laravel", "slim", "php":
-		return &PHPStrategy{}
-	case "axum", "actix", "rocket", "rust":
-		return &RustStrategy{}
-	case "custom":
-		return &CustomStrategy{}
 	case "user-dockerfile":
+		// BYO-Dockerfile path — removed in T2.2 (security). Retained here only
+		// until that task deletes UserDockerfileStrategy.
 		return &UserDockerfileStrategy{}
 	default:
-		// Empty framework defaults to Node.js for backwards compatibility.
-		if framework == "" {
-			return &NodeStrategy{}
-		}
-		slog.Warn("unrecognized framework, falling back to custom strategy",
-			"framework", framework)
-		return &CustomStrategy{}
+		// T2.1 (plan simplify-deploy-loopzerokit-only v2.0): the fixed LoopZeroKit stack
+		// is python + node ONLY. Every other runtime fails closed at build time
+		// — no loopzero-packs, no silent fallback.
+		slog.Warn("unsupported runtime for the fixed LoopZeroKit stack — failing closed",
+			"runtime", framework, "supported", "python, node")
+		return &unsupportedStrategy{framework: framework}
 	}
+}
+
+// unsupportedStrategy fails closed for any runtime outside the fixed LoopZeroKit
+// stack (python, node). Every step emits a container that exits non-zero with
+// a clear message, so a misrouted app fails fast at build time rather than
+// silently building something wrong.
+type unsupportedStrategy struct{ framework string }
+
+func (s *unsupportedStrategy) Name() string        { return "unsupported" }
+func (s *unsupportedStrategy) CacheKey() string    { return "" }
+func (s *unsupportedStrategy) CacheDirs() []string { return nil }
+
+func (s *unsupportedStrategy) failStep(name string) *forge.Container {
+	msg := fmt.Sprintf("loopzero: runtime %q is not supported — LoopZeroCloud deploys the fixed LoopZeroKit stack (python, node) only", s.framework)
+	return buildContainer(name, imageAlpine, forge.ResourcesTiny(), fmt.Sprintf("echo %q >&2\nexit 1", msg))
+}
+
+func (s *unsupportedStrategy) ValidateStep(_ []services.AppSpec) *forge.Container {
+	return s.failStep("validate-workspace")
+}
+func (s *unsupportedStrategy) InstallStep(_ []services.AppSpec) *forge.Container {
+	return s.failStep("install-deps")
+}
+func (s *unsupportedStrategy) BuildStep(_ []services.AppSpec) *forge.Container {
+	return s.failStep("build-apps")
+}
+func (s *unsupportedStrategy) ScanStep() *forge.Container { return s.failStep("security-scan") }
+func (s *unsupportedStrategy) DockerfileStep(_ []services.AppSpec, _ int) *forge.Container {
+	return s.failStep("generate-dockerfile")
 }
 
 // ResolveStrategyForApp returns the LanguageStrategy for an AppSpec, honoring

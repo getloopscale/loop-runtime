@@ -26,15 +26,11 @@ func TestResolveStrategy_NodeFrameworks(t *testing.T) {
 	}
 }
 
-func TestResolveStrategy_GoFrameworks(t *testing.T) {
-	goFrameworks := []string{"gin", "go"}
-	for _, fw := range goFrameworks {
-		strategy := ResolveStrategy(fw)
-		if strategy.Name() != "go" {
-			t.Errorf("ResolveStrategy(%q) = %q, want go", fw, strategy.Name())
-		}
-	}
-}
+// T2.1 (plan simplify-deploy-loopzerokit-only v2.0): Go/Ruby/Java/PHP/Rust/Custom
+// framework dispatch removed (fixed node/python stack). Former
+// TestResolveStrategy_GoFrameworks / _CustomFramework / _UnknownFrameworkFallsToCustom
+// asserted the removed behavior; superseded by TestResolveStrategy_NodePython_OK
+// and TestResolveStrategy_UnsupportedRuntime_FailsClosed (strategy_collapse_test.go).
 
 func TestResolveStrategy_PythonFrameworks(t *testing.T) {
 	pyFrameworks := []string{"fastapi", "django", "python"}
@@ -43,20 +39,6 @@ func TestResolveStrategy_PythonFrameworks(t *testing.T) {
 		if strategy.Name() != "python" {
 			t.Errorf("ResolveStrategy(%q) = %q, want python", fw, strategy.Name())
 		}
-	}
-}
-
-func TestResolveStrategy_CustomFramework(t *testing.T) {
-	strategy := ResolveStrategy("custom")
-	if strategy.Name() != "custom" {
-		t.Errorf("ResolveStrategy(custom) = %q, want custom", strategy.Name())
-	}
-}
-
-func TestResolveStrategy_UnknownFrameworkFallsToCustom(t *testing.T) {
-	strategy := ResolveStrategy("unknown-framework")
-	if strategy.Name() != "custom" {
-		t.Errorf("ResolveStrategy(unknown-framework) = %q, want custom", strategy.Name())
 	}
 }
 
