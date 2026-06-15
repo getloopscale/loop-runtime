@@ -903,6 +903,24 @@ tasks:
     cmds:
       - bash infra/scripts/local/dogfood-readiness.sh {{.CLI_ARGS}}
 
+  test:dogfood:all:
+    desc: |
+      Phase 3+6 of plan 2026-06-15-100pct-dashboard-coverage-roadmap —
+      umbrella runner that invokes EVERY per-journey dogfood wrapper.
+      Maps to sponsor goal "Dogfood --full → all 12 dogfood wrappers".
+
+      Modes (exactly one required, passed via CLI_ARGS):
+        --hermetic-only  CI-safe (no cluster needed, ~5min)
+        --live-only      Operator + sponsor JUNTOS gate
+                         (requires Cleanroom TOTAL precedence)
+
+      Currently aggregates 12 wrappers covering 12 delivered journeys
+      (J-04/J-05/J-09/J-10/J-11/J-17+J-19/J-20/J-21/J-22 x2/J-23/J-25).
+      Roadmap Phase 3 adds 11 more wrappers for backlog journeys
+      (J-01/J-02/J-03/J-06/J-12/J-13/J-14/J-15/J-16/J-18/J-24).
+    cmds:
+      - bash infra/scripts/local/dogfood-all.sh {{.CLI_ARGS}}
+
   test:dogfood:scale:
     desc: |
       T1.4 of plan 2026-06-15-code-review-49-findings-remediation (R1-F1
