@@ -60,15 +60,20 @@ func setupStores(dbAdapter *db.PgxAdapter, cfg config.Config, transit vault.Tran
 	// unchanged. State-machine SafeTransition + concurrent-deploy
 	// rejection (Rule 6 + ARCH-002) preserved at store layer (D4).
 	buildStore := db.NewBuildStoreSqlc(dbAdapter)
+	// T1.3.b of plan 2026-06-15-j18-t1.3.b-sse-pg-notify-backend v1.1:
+	// EventStore must be constructed BEFORE releaseStore so AppendSideEffect
+	// can emit signal.changed events via canonical SSE infrastructure.
+	pgEventStore := sse.NewPostgresEventStore(dbAdapter, dbAdapter)
 	// T1.1c2c (plan 2026-05-29-sqlc-migration v1.3): sqlc-backed wrapper.
 	// Satisfies db.ReleaseStore interface 1:1 — service field types
 	// unchanged. State-machine SafeTransition runs at store layer (D4).
-	releaseStore := db.NewReleaseStoreSqlc(dbAdapter)
+	// T1.3.b v1.1: 2nd param eventStore required non-nil (EC-1 absorption);
+	// panics on nil to surface mis-wired startups loud + fast.
+	releaseStore := db.NewReleaseStoreSqlc(dbAdapter, pgEventStore)
 	envTargetStore := db.NewPostgresEnvironmentTargetStore(dbAdapter, dbAdapter)
 	// 2026-06-07 D2 — single-slot preview store (Netlify-style).
 	// Phase 1 of plan 2026-06-07-preview-as-category-single-slot-plan.md.
 	previewSlotStore := db.NewPostgresPreviewSlotStore(dbAdapter, dbAdapter)
-	pgEventStore := sse.NewPostgresEventStore(dbAdapter, dbAdapter)
 
 	// Secret store — SEC-001: encryption at rest when key is configured.
 	// T2.5 wire-up (plan 2026-06-10-j22-openbao-transit-eso-sync v1.2):

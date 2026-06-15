@@ -140,26 +140,97 @@ export interface UseStatusStreamResult {
  * pathname `/engine/api/v1/projects/${name}/signals/stream?env=${env}` and
  * reduce via applySignalEvent on each received event.
  */
+/**
+ * useStatusStream — public hook (T1.3.b: backend wire-up complete).
+ *
+ * Opens a browser-native EventSource to the backend SSE endpoint at
+ * `/engine/api/v1/projects/${name}/signals/stream?env=${env}` (per T2.1 of
+ * plan 2026-06-15-j18-t1.3.b-sse-pg-notify-backend v1.1) when projectName
+ * AND env are provided. Falls back to safe-degraded (connected=false,
+ * empty signals) when either is missing.
+ *
+ * EC absorptions:
+ *  - EC-4 (vi.stubGlobal beforeEach): vitest tests stub EventSource via
+ *    beforeEach BEFORE renderHook so useEffect picks up the mock
+ *  - EC-6 (cleanup on unmount): useEffect cleanup calls es.close() to
+ *    prevent memory leak + zombie connection in dev hot-reload
+ *  - feedback_eventsource_named_events_vs_onmessage_2026_06_13: uses
+ *    `addEventListener('signal.changed', handler)` — NOT onmessage alone
+ *    which would silently drop named events
+ *
+ * `injectedEvents` seam preserved for hermetic tests of the dichotomy
+ * reducer without needing EventSource mock.
+ */
 export function useStatusStream(
-  _projectName: string | undefined,
-  _env: string | undefined,
+  projectName: string | undefined,
+  env: string | undefined,
   injectedEvents?: SignalEvent[],
 ): UseStatusStreamResult {
   const [signals, setSignals] = useState<SignalsMap>({});
+  const [connected, setConnected] = useState<boolean>(false);
 
-  // Apply injected events (test seam + future SSE source). Events arriving via
-  // a SSE EventSource would push through the same reducer path.
+  // Apply injected events (test seam + reducer-only hermetic tests).
+  // Backend SSE consumers below push through the same reducer path.
   useEffect(() => {
     if (!injectedEvents || injectedEvents.length === 0) return;
     setSignals((prev) => injectedEvents.reduce(applySignalEvent, prev));
   }, [injectedEvents]);
 
+  // T1.3.b backend EventSource wire — opens when projectName AND env present.
+  useEffect(() => {
+    if (!projectName || !env) {
+      // Safe-degraded: no project/env → no subscription
+      setConnected(false);
+      return;
+    }
+    // Avoid double-open in environments where EventSource isn't available
+    // (e.g., jsdom without polyfill) — fail-soft to keep tests deterministic.
+    if (typeof EventSource === 'undefined') {
+      setConnected(false);
+      return;
+    }
+
+    const url = `/engine/api/v1/projects/${encodeURIComponent(projectName)}/signals/stream?env=${encodeURIComponent(env)}`;
+    const es = new EventSource(url, { withCredentials: true });
+
+    const handleOpen = () => setConnected(true);
+    const handleError = () => setConnected(false);
+    const handleSignal = (rawEvent: MessageEvent) => {
+      try {
+        const payload = JSON.parse(rawEvent.data) as SignalEvent;
+        if (payload && payload.signal) {
+          setSignals((prev) => applySignalEvent(prev, payload));
+        }
+      } catch {
+        // Malformed event payload — silently skip. Backend emits canonical
+        // JSON per T2.1; corruption here would be wire-level which the
+        // browser's SSE parser already rejects upstream.
+      }
+    };
+
+    es.addEventListener('open', handleOpen);
+    es.addEventListener('error', handleError);
+    // EC absorption per memory feedback_eventsource_named_events_vs_onmessage:
+    // backend emits `event: signal.changed` named events; addEventListener
+    // is the canonical listener. onmessage alone would silently drop.
+    es.addEventListener('signal.changed', handleSignal as EventListener);
+
+    // EC-6 absorption: cleanup on unmount closes EventSource so dev
+    // hot-reload doesn't accumulate zombie connections.
+    return () => {
+      es.removeEventListener('open', handleOpen);
+      es.removeEventListener('error', handleError);
+      es.removeEventListener('signal.changed', handleSignal as EventListener);
+      es.close();
+    };
+  }, [projectName, env]);
+
   // Memoize so consumers re-render only on actual state change.
   return useMemo(
     () => ({
       signals,
-      connected: false, // T1.3 SSE backend wiring pending; expose stub
+      connected,
     }),
-    [signals],
+    [signals, connected],
   );
 }

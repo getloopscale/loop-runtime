@@ -185,6 +185,7 @@ func buildServerConfig(
 		sc.PromoteHandler = orchDeps.PromoteHandler
 		sc.StatusHandler = orchDeps.StatusHandler
 		sc.MetricsProxyHandler = orchDeps.MetricsProxyHandler
+		sc.StatusSSEHandler = orchDeps.StatusSSEHandler
 		sc.ScaleHandler = orchDeps.ScaleHandler
 		sc.BuildListHandler = orchDeps.BuildListHandler
 		sc.ProjectDeleter = orchDeps.ProjectDeleter
@@ -272,8 +273,12 @@ func buildServerConfig(
 		// T1.1c2c (plan 2026-05-29-sqlc-migration v1.3): sqlc-backed
 		// wrapper satisfies db.ReleaseStore 1:1; ReleaseInspector
 		// reads via the same interface.
+		// T1.3.b v1.1: NewReleaseStoreSqlc requires non-nil eventStore.
+		// ReleaseInspector is read-only path so AppendSideEffect emit
+		// never fires; pass a no-op eventStore that returns 0/nil to
+		// satisfy the non-nil contract without touching sse_events table.
 		sc.ReleaseInspector = services.NewReleaseInspector(
-			db.NewReleaseStoreSqlc(dbAdapter),
+			db.NewReleaseStoreSqlc(dbAdapter, db.NoopEventStore{}),
 			&db.PostgresAuditStore{DB: dbAdapter},
 			nil,
 		)
