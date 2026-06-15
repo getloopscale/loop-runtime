@@ -118,7 +118,7 @@ fi
 # === Step 6+7: approle + policy ===
 log "Step 6+7: approle + loopzero-api policy"
 export BAO_TOKEN="$ROOT_TOKEN"
-bao_auth() { kubectl --context "$CONTEXT" -n "$NS" exec "$POD" -- env BAO_TOKEN="$ROOT_TOKEN" bao "$@"; }
+bao_auth() { kubectl --context "$CONTEXT" -n "$NS" exec "$POD" -- env BAO_TOKEN="$ROOT_TOKEN" BAO_SKIP_VERIFY=true bao "$@"; }
 
 bao_auth auth enable approle 2>/dev/null || log "Skip: approle already enabled"
 
@@ -130,8 +130,12 @@ path "kv/data/loopzero/*" { capabilities = ["read"] }
 path "kv/metadata/loopzero/*" { capabilities = ["list"] }'
 
 if [[ "$DRY_RUN" -eq 0 ]]; then
+  # LIVE bug fix 2026-06-15 Phase 4 Cleanroom: `policy write` invocation
+  # via stdin pipe was missing BAO_SKIP_VERIFY=true; cert chain x509
+  # verification failed inside the pod (no CA bundle for openbao-tls).
+  # Mirrors the bao() / bao_auth() helper fixes.
   echo "$POLICY" | kubectl --context "$CONTEXT" -n "$NS" exec -i "$POD" -- \
-    env BAO_TOKEN="$ROOT_TOKEN" bao policy write loopzero-api - || true
+    env BAO_TOKEN="$ROOT_TOKEN" BAO_SKIP_VERIFY=true bao policy write loopzero-api - || true
   bao_auth write auth/approle/role/loopzero-api \
     token_policies=loopzero-api \
     token_ttl=24h \
