@@ -19,6 +19,24 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ### Security
 
+## [0.16.0] - 2026-06-15
+
+### Added
+- Scale page at `/projects/:name/scale` — Vercel-style settings UI composing slider, HPA toggle, KEDA toggle, and type-to-confirm dialog with cost preview (#J-20)
+- Plan-tier-aware replicas slider that caps at Starter=2 / Pro=5 / Team=10 / Enterprise=50 (#J-20)
+- HPA Manual/Auto toggle with CPU and memory target inputs bounded 10-95% (CPU) and 10-90% (memory) for canonical Kubernetes-recommended ranges (#J-20)
+- KEDA scale-to-zero opt-in available on Pro plan and above, with in-app "Upgrade to Pro" call-to-action for Starter users (#J-20)
+- Type-to-confirm dialog (`scale <project-name>` phrase) showing replica delta, monthly cost estimate, and signed delta vs current spend before applying a scale change (#J-20)
+- Server-authoritative monthly cost estimate (`monthly_cost_usd`) returned by the scale endpoint so the dashboard reconciles its preview against the canonical value (#J-20)
+- New scale API request field `memory` for HPA memory-target percentage; existing `cpu` field continues to scope the CPU-target percentage (#J-20)
+- New typed error `PLAN_UPGRADE_REQUIRED` (HTTP 402) returned when a Starter tenant requests a feature gated to Pro and above (#J-20)
+- New typed error `HPA_TARGET_OUT_OF_BOUNDS` (HTTP 400) returned with field, min, max, and actual values when an HPA target falls outside the canonical bounds (#J-20)
+
+
+### Changed
+- Scale endpoint now enforces plan tier server-side for KEDA scale-to-zero opt-in — Starter requests are rejected at the API boundary even when the client UI is bypassed (#J-20)
+- Scale endpoint now validates HPA target bounds server-side and returns the structured `HPA_TARGET_OUT_OF_BOUNDS` body so the dashboard can highlight the specific input that violated the bound (#J-20)
+
 ## [0.15.1] - 2026-06-15
 
 ### Added (2026-06-15 J-18 T1.3.b — SSE pg_notify backend handler + frontend EventSource wire)

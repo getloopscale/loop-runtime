@@ -53,4 +53,12 @@ export const queryKeys = {
     cascadePreview: (envName: string) =>
       ['environments', 'cascade-preview', envName] as const,
   },
+  // J-20 Scale plan v1.1 — scale queryKey canonical. The hook is a
+  // mutation (no list query yet) so only `all` is defined. Future read
+  // endpoints (e.g., GET current scaling state per env) attach here.
+  scale: {
+    all: ['scale'] as const,
+    detail: (project: string, env: string) =>
+      ['scale', project, env] as const,
+  },
 } as const;

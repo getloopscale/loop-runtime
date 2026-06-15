@@ -26,13 +26,37 @@ func (f *fakeScaleProjectStore) GetByName(_ context.Context, _, name string) (*P
 	return nil, nil
 }
 
+// --- Fake PlanTierStore for J-20 T1.1 EC-3 absorption tests ---
+
+type fakeScalePlanStore struct {
+	raw string
+	err error
+}
+
+func (s fakeScalePlanStore) GetTenantPlan(_ context.Context, _ string) (string, error) {
+	return s.raw, s.err
+}
+
+// scaleHandlerWithPlan wires a fake plan-tier store onto the handler so a
+// test can simulate a Pro/Team/Enterprise tenant. Starter is the default
+// when no override is supplied.
+func scaleHandlerWithPlan(projects ScaleProjectStore, apply ScaleApplyFunc, kedaEnabled bool, planRaw string) *ScaleHandler {
+	h := NewScaleHandler(projects, apply, kedaEnabled)
+	h.SetPlanTierStore(fakeScalePlanStore{raw: planRaw})
+	return h
+}
+
 // --- Tests ---
 
 func TestScale_HappyPath_Autoscaling(t *testing.T) {
 	projects := &fakeScaleProjectStore{
 		project: &ProjectResult{ID: "p1", Name: "my-api", TeamID: "tn-test-123"},
 	}
-	h := NewScaleHandler(projects, nil, true) // KEDA enabled
+	// J-20 v1.1 T1.1 EC-3 absorption: scale-to-zero (min=0) requires plan
+	// tier ≥ Pro. Inject pro to keep the happy path on the canonical
+	// scale-to-zero scenario; the dedicated rejection path is covered by
+	// TestScale_KEDARequires_Pro below.
+	h := scaleHandlerWithPlan(projects, nil, true, "pro") // KEDA enabled + Pro tier
 
 	body := `{"environment":"production","app":"api","min":0,"max":5,"cpu":80}`
 	req := httptest.NewRequest(http.MethodPost, "/api/v1/projects/my-api/scale", bytes.NewBufferString(body))
@@ -127,7 +151,10 @@ func TestScale_MinZeroWithoutKEDA(t *testing.T) {
 	projects := &fakeScaleProjectStore{
 		project: &ProjectResult{ID: "p1", Name: "my-api", TeamID: "tn-test-123"},
 	}
-	h := NewScaleHandler(projects, nil, false) // KEDA disabled
+	// J-20 v1.1 T1.1: tier check passes (Pro), but cluster KEDA disabled.
+	// Two-layer defense — Pro tenant on a cluster without KEDA still
+	// rejected at the cluster-feature gate (after tier gate passes).
+	h := scaleHandlerWithPlan(projects, nil, false, "pro") // Pro + KEDA disabled at cluster
 
 	min := 0
 	max := 5
@@ -343,4 +370,125 @@ func TestScaleHandler_EnsureProductionWired_NoPanicOnRealApply(t *testing.T) {
 	}()
 
 	h.EnsureProductionWired()
+}
+
+// --- J-20 Scale plan v1.1 T1.1 absorption tests ---
+
+// EC-3 absorption: Starter tenant requesting scale-to-zero MUST be rejected
+// at the handler boundary with HTTP 402 + PLAN_UPGRADE_REQUIRED code so the
+// dashboard / CLI surfaces the canonical upgrade CTA. Free user bypassing
+// the client UI via raw API lands here, not in the cluster-KEDA branch.
+func TestScale_KEDARequires_Pro_ReturnsUpgradePrompt(t *testing.T) {
+	projects := &fakeScaleProjectStore{
+		project: &ProjectResult{ID: "p1", Name: "my-api", TeamID: "tn-test-123"},
+	}
+	// Cluster has KEDA installed, but tenant is Starter — must be rejected
+	// on tier check BEFORE cluster check (deterministic order: tier first
+	// because upgrade is the actionable user surface).
+	h := scaleHandlerWithPlan(projects, nil, true, "starter")
+
+	body := `{"app":"api","min":0,"max":5}`
+	req := httptest.NewRequest(http.MethodPost, "/api/v1/projects/my-api/scale", bytes.NewBufferString(body))
+	req = withAuth(req, defaultUserContext())
+	req = withChiParam(req, "name", "my-api")
+	w := httptest.NewRecorder()
+
+	h.Scale(w, req)
+
+	if w.Code != http.StatusPaymentRequired {
+		t.Fatalf("want 402, got %d body=%s", w.Code, w.Body.String())
+	}
+	if !strings.Contains(w.Body.String(), "PLAN_UPGRADE_REQUIRED") {
+		t.Errorf("response missing PLAN_UPGRADE_REQUIRED code; got %s", w.Body.String())
+	}
+	if !strings.Contains(w.Body.String(), "Pro") {
+		t.Errorf("response missing Pro tier reference; got %s", w.Body.String())
+	}
+}
+
+// EC-4 absorption: HPA target below min bound (CPU=1%) is rejected with
+// HTTP 400 + HPA_TARGET_OUT_OF_BOUNDS code + field=cpu_target.
+func TestScale_HPATargetBelowMin_Returns400(t *testing.T) {
+	projects := &fakeScaleProjectStore{
+		project: &ProjectResult{ID: "p1", Name: "my-api", TeamID: "tn-test-123"},
+	}
+	h := scaleHandlerWithPlan(projects, nil, false, "pro")
+
+	body := `{"app":"api","min":1,"max":5,"cpu":1}`
+	req := httptest.NewRequest(http.MethodPost, "/api/v1/projects/my-api/scale", bytes.NewBufferString(body))
+	req = withAuth(req, defaultUserContext())
+	req = withChiParam(req, "name", "my-api")
+	w := httptest.NewRecorder()
+
+	h.Scale(w, req)
+
+	if w.Code != http.StatusBadRequest {
+		t.Fatalf("want 400, got %d body=%s", w.Code, w.Body.String())
+	}
+	if !strings.Contains(w.Body.String(), "HPA_TARGET_OUT_OF_BOUNDS") {
+		t.Errorf("response missing HPA_TARGET_OUT_OF_BOUNDS code; got %s", w.Body.String())
+	}
+	if !strings.Contains(w.Body.String(), "cpu_target") {
+		t.Errorf("response missing cpu_target field reference; got %s", w.Body.String())
+	}
+}
+
+// EC-4 absorption: HPA memory target above max bound (memory=99%) is
+// rejected with HTTP 400 + field=memory_target.
+func TestScale_HPAMemoryAboveMax_Returns400(t *testing.T) {
+	projects := &fakeScaleProjectStore{
+		project: &ProjectResult{ID: "p1", Name: "my-api", TeamID: "tn-test-123"},
+	}
+	h := scaleHandlerWithPlan(projects, nil, false, "pro")
+
+	body := `{"app":"api","min":1,"max":5,"memory":99}`
+	req := httptest.NewRequest(http.MethodPost, "/api/v1/projects/my-api/scale", bytes.NewBufferString(body))
+	req = withAuth(req, defaultUserContext())
+	req = withChiParam(req, "name", "my-api")
+	w := httptest.NewRecorder()
+
+	h.Scale(w, req)
+
+	if w.Code != http.StatusBadRequest {
+		t.Fatalf("want 400, got %d body=%s", w.Code, w.Body.String())
+	}
+	if !strings.Contains(w.Body.String(), "memory_target") {
+		t.Errorf("response missing memory_target field reference; got %s", w.Body.String())
+	}
+}
+
+// EC-2 absorption: server-authoritative monthly_cost_usd MUST be present in
+// every successful response so the dashboard can reconcile its preview
+// against the canonical computed value. plan_tier echoes the resolved
+// tier for downstream CTA (eligible/upgrade) rendering.
+func TestScale_ResponseCarriesMonthlyCostAndPlanTier(t *testing.T) {
+	projects := &fakeScaleProjectStore{
+		project: &ProjectResult{ID: "p1", Name: "my-api", TeamID: "tn-test-123"},
+	}
+	h := scaleHandlerWithPlan(projects, nil, false, "pro")
+
+	body := `{"app":"api","replicas":3}`
+	req := httptest.NewRequest(http.MethodPost, "/api/v1/projects/my-api/scale", bytes.NewBufferString(body))
+	req = withAuth(req, defaultUserContext())
+	req = withChiParam(req, "name", "my-api")
+	w := httptest.NewRecorder()
+
+	h.Scale(w, req)
+
+	if w.Code != http.StatusAccepted {
+		t.Fatalf("want 202, got %d body=%s", w.Code, w.Body.String())
+	}
+
+	var resp scaleResponse
+	if err := json.Unmarshal(w.Body.Bytes(), &resp); err != nil {
+		t.Fatalf("decode: %v", err)
+	}
+	// 3 replicas * $0.05/hr * 730hr/mo = $109.50/mo
+	want := 3.0 * DefaultPodCostPerHour * 730.0
+	if resp.MonthlyCostUSD != want {
+		t.Errorf("want monthly_cost_usd=%.4f, got %.4f", want, resp.MonthlyCostUSD)
+	}
+	if resp.PlanTier != "pro" {
+		t.Errorf("want plan_tier=pro, got %q", resp.PlanTier)
+	}
 }

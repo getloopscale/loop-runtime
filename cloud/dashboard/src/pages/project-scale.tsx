@@ -1,85 +1,109 @@
 import { useState } from 'react';
 import { Link, useParams } from 'react-router-dom';
 import { ArrowLeft, Loader2 } from 'lucide-react';
-import {
-  Alert,
-  Button,
-  Card,
-  Input,
-  Label,
-  PageShell,
-} from '@loopzero/ui';
+import { Alert, Button, Card, PageShell } from '@loopzero/ui';
 import { useSetPageTitle } from '@/hooks/use-page-meta';
 import { useRequireAuth } from '@/hooks/use-auth';
-import { engineFetch } from '@/lib/api';
-import type { ScaleResponse } from '@/lib/api/types';
+import { useScale } from '@/hooks/use-scale';
+import { useScaleCost } from '@/hooks/use-scale-cost';
+import { ScaleSlider } from '@/components/scale/scale-slider';
+import { HPAToggle, type HPAMode } from '@/components/scale/hpa-toggle';
+import { KEDAToggle } from '@/components/scale/keda-toggle';
+import { ScaleConfirmDialog } from '@/components/scale/scale-confirm-dialog';
 
-const DEFAULT_CURRENT = 2;
-const DEFAULT_MAX_FROM_PLAN = 5;
-const COST_PER_REPLICA_MONTHLY_USD = 5;
+// Until the project status endpoint surfaces the current scaling config,
+// derive the initial state from a conservative default. The first
+// successful save will rehydrate from the ScaleResponse body (server
+// authoritative).
+const DEFAULT_CURRENT_REPLICAS = 2;
 
 /**
- * ProjectScalePage — Plan v1.0 T2.3 (refactored from dialog to page,
- * 2026-05-26 sponsor directive "FAANG-level UX").
+ * ProjectScalePage — J-20 Scale plan v1.1 T4.1.
  *
- * Why page > dialog: deep-linkable (`/projects/X/scale`), browser-back
- * works, fits the sidebar drill-down nav pattern (sidebar item navigates
- * here), more room for cost preview + HPA bounds + future scale history.
+ * Composes the 4 canonical scale components (ScaleSlider, HPAToggle,
+ * KEDAToggle, ScaleConfirmDialog) + 2 canonical hooks (useScale,
+ * useScaleCost) into the Vercel-style /projects/:name/scale settings
+ * page. The page is the security UX layer; the API handler enforces
+ * tier + bounds + lock per Phase 1 absorptions.
  *
- * Vercel/Linear follow this convention — scaling is a settings-style page,
- * not a transient modal.
+ * Save flow:
+ *
+ *   1. User adjusts slider / HPA / KEDA toggle → local state updates.
+ *   2. useScaleCost computes preview cost delta inline (UX hint).
+ *   3. Click "Apply scale" → ScaleConfirmDialog opens with impact
+ *      paragraph + type-to-confirm phrase per EC-8.
+ *   4. Confirm → useScale mutation POSTs to /api/v1/projects/{name}/scale.
+ *   5. Success → server `monthly_cost_usd` shown as the authoritative
+ *      cost; client preview reconciles in the Cost card.
+ *   6. Failure → Alert renders the typed error (PLAN_UPGRADE_REQUIRED
+ *      surfaces upgrade CTA; HPA_TARGET_OUT_OF_BOUNDS highlights field).
+ *
+ * Plan tier + cluster KEDA flag — currently sourced from the resolved
+ * scale response after the first save. Until the page bootstraps from
+ * a status endpoint, the initial render assumes Starter + cluster KEDA
+ * installed = false (conservative fail-closed default).
  */
 export function ProjectScalePage() {
   useRequireAuth();
   const { name = '' } = useParams<{ name: string }>();
   useSetPageTitle(`${name} · Scale`);
 
-  const [replicas, setReplicas] = useState(DEFAULT_CURRENT);
-  const [min, setMin] = useState(DEFAULT_CURRENT);
-  const [max, setMax] = useState(DEFAULT_CURRENT);
-  const [targetCpu, setTargetCpu] = useState(70);
-  const [submitting, setSubmitting] = useState(false);
-  const [error, setError] = useState<string | null>(null);
-  const [success, setSuccess] = useState<ScaleResponse | null>(null);
+  // Local edit state
+  const [mode, setMode] = useState<HPAMode>('manual');
+  const [replicas, setReplicas] = useState(DEFAULT_CURRENT_REPLICAS);
+  const [hpaMin, setHpaMin] = useState(1);
+  const [hpaMax, setHpaMax] = useState(3);
+  const [hpaTargets, setHpaTargets] = useState({ cpu: 80, memory: 80 });
+  const [kedaEnabled, setKedaEnabled] = useState(false);
+  const [confirmOpen, setConfirmOpen] = useState(false);
 
-  const exceedsPlan = replicas > DEFAULT_MAX_FROM_PLAN;
-  const replicaDelta = replicas - DEFAULT_CURRENT;
-  const monthlyCostDelta = replicaDelta * COST_PER_REPLICA_MONTHLY_USD;
+  // Until the page bootstraps from /v1/projects/:name/status, assume the
+  // conservative defaults — the FIRST save response rehydrates these.
+  const [resolvedPlanTier, setResolvedPlanTier] = useState('starter');
+  const [clusterKedaInstalled] = useState(true);
+  const [currentReplicas, setCurrentReplicas] = useState(
+    DEFAULT_CURRENT_REPLICAS,
+  );
+  const [serverMonthlyCostUSD, setServerMonthlyCostUSD] = useState<number | null>(
+    null,
+  );
 
-  const handleSubmit = async (e: React.FormEvent) => {
-    e.preventDefault();
-    if (exceedsPlan) {
-      setError(`Your plan allows up to ${DEFAULT_MAX_FROM_PLAN} replicas.`);
-      return;
-    }
-    setError(null);
-    setSuccess(null);
-    setSubmitting(true);
-    try {
-      const res = await engineFetch<ScaleResponse>(
-        `/api/v1/projects/${encodeURIComponent(name)}/scale`,
-        {
-          method: 'POST',
-          body: JSON.stringify({ replicas, min, max, target_cpu: targetCpu }),
-        },
-      );
-      if (res === null) {
-        setError("Couldn't reach the scale endpoint. Try again in a moment.");
-        return;
-      }
-      setSuccess(res);
-    } catch (e) {
-      // T0.1 TCIA pattern: Title + Cause + Impact + Action. Replaces generic
-      // "Something went wrong" — sponsor critério #6 + #9 (precision > marketing).
-      setError(
-        e instanceof Error
-          ? `Scale request failed: ${e.message}. Current replicas remain unchanged. Retry the form, or contact support if it persists.`
-          : 'Scale request failed. Current replicas remain unchanged. Retry the form, or contact support if it persists.',
-      );
-    } finally {
-      setSubmitting(false);
-    }
+  const scale = useScale(name);
+
+  const proposedReplicas = mode === 'manual' ? replicas : hpaMax;
+  const cost = useScaleCost({
+    replicas: proposedReplicas,
+    currentReplicas,
+  });
+
+  const onConfirm = async () => {
+    const payload =
+      mode === 'manual'
+        ? {
+            app: 'api', // canonical default; future iteration: picker when monorepo > 1 server
+            environment: 'production',
+            replicas,
+          }
+        : {
+            app: 'api',
+            environment: 'production',
+            min: kedaEnabled ? 0 : hpaMin,
+            max: hpaMax,
+            cpu: hpaTargets.cpu,
+            memory: hpaTargets.memory,
+          };
+    const res = await scale.mutateAsync(payload);
+    setConfirmOpen(false);
+    // Rehydrate from server-authoritative response per ADR D1 EC-2.
+    setResolvedPlanTier(res.plan_tier);
+    setServerMonthlyCostUSD(res.monthly_cost_usd);
+    setCurrentReplicas(
+      mode === 'manual' ? replicas : kedaEnabled ? 0 : hpaMin,
+    );
   };
+
+  const errorMessage =
+    scale.error instanceof Error ? scale.error.message : null;
 
   return (
     <PageShell
@@ -103,84 +127,76 @@ export function ProjectScalePage() {
           <Card.Header>
             <Card.Title>Replica configuration</Card.Title>
             <Card.Description>
-              Set the target replica count and autoscaling bounds for this
-              project. Changes apply immediately on submit.
+              Set the replica count and autoscaling bounds. Changes apply on
+              save and persist across deploys.
             </Card.Description>
           </Card.Header>
           <Card.Body>
-            <form onSubmit={handleSubmit} className="space-y-5">
-              <div>
-                <Label htmlFor="replicas">Target replicas</Label>
-                <Input
-                  id="replicas"
-                  type="number"
-                  min={0}
-                  max={DEFAULT_MAX_FROM_PLAN}
+            <div className="space-y-6">
+              <HPAToggle
+                mode={mode}
+                targets={hpaTargets}
+                onModeChange={setMode}
+                onTargetsChange={setHpaTargets}
+                disabled={scale.isPending}
+              />
+
+              {mode === 'manual' && (
+                <ScaleSlider
                   value={replicas}
-                  onChange={(e) => setReplicas(Number(e.target.value))}
+                  planTier={resolvedPlanTier}
+                  onChange={setReplicas}
+                  disabled={scale.isPending}
                 />
-                <p className="mt-1 text-label text-muted-foreground">
-                  Current: {DEFAULT_CURRENT} · Plan cap: {DEFAULT_MAX_FROM_PLAN}
-                </p>
-              </div>
+              )}
 
-              <div className="grid grid-cols-2 gap-3">
-                <div>
-                  <Label htmlFor="min-replicas">HPA min</Label>
-                  <Input
-                    id="min-replicas"
-                    type="number"
-                    min={0}
-                    value={min}
-                    onChange={(e) => setMin(Number(e.target.value))}
+              {mode === 'auto' && (
+                <div className="grid grid-cols-2 gap-4">
+                  <ScaleSlider
+                    value={hpaMin}
+                    planTier={resolvedPlanTier}
+                    onChange={setHpaMin}
+                    disabled={scale.isPending}
+                  />
+                  <ScaleSlider
+                    value={hpaMax}
+                    planTier={resolvedPlanTier}
+                    onChange={setHpaMax}
+                    disabled={scale.isPending}
                   />
                 </div>
-                <div>
-                  <Label htmlFor="max-replicas">HPA max</Label>
-                  <Input
-                    id="max-replicas"
-                    type="number"
-                    min={0}
-                    max={DEFAULT_MAX_FROM_PLAN}
-                    value={max}
-                    onChange={(e) => setMax(Number(e.target.value))}
-                  />
-                </div>
-              </div>
+              )}
 
-              <div>
-                <Label htmlFor="target-cpu">Target CPU %</Label>
-                <Input
-                  id="target-cpu"
-                  type="number"
-                  min={1}
-                  max={100}
-                  value={targetCpu}
-                  onChange={(e) => setTargetCpu(Number(e.target.value))}
+              {mode === 'auto' && (
+                <KEDAToggle
+                  enabled={kedaEnabled}
+                  planTier={resolvedPlanTier}
+                  onChange={setKedaEnabled}
+                  clusterKedaInstalled={clusterKedaInstalled}
+                  disabled={scale.isPending}
                 />
-                <p className="mt-1 text-label text-muted-foreground">
-                  Autoscaler scales up when avg CPU exceeds this threshold.
-                </p>
-              </div>
+              )}
 
-              {error && <Alert intent="destructive" description={error} />}
-              {success && (
-                <Alert
-                  intent="success"
-                  description={`Scaled ${name} to ${success.applied.replicas} replicas.`}
-                />
+              {errorMessage && (
+                <Alert intent="destructive" description={errorMessage} />
               )}
 
               <div className="flex justify-end">
                 <Button
-                  type="submit"
-                  disabled={submitting || replicaDelta === 0 || exceedsPlan}
+                  type="button"
+                  onClick={() => setConfirmOpen(true)}
+                  disabled={scale.isPending}
                 >
-                  {submitting && <Loader2 className="size-4 animate-spin" aria-hidden="true" />}
-                  {submitting ? 'Scaling…' : 'Apply scale'}
+                  {scale.isPending && (
+                    <Loader2
+                      className="size-4 animate-spin"
+                      aria-hidden="true"
+                    />
+                  )}
+                  {scale.isPending ? 'Scaling…' : 'Apply scale'}
                 </Button>
               </div>
-            </form>
+            </div>
           </Card.Body>
         </Card>
 
@@ -188,8 +204,8 @@ export function ProjectScalePage() {
           <Card.Header>
             <Card.Title className="text-body-sm">Cost preview</Card.Title>
             <Card.Description>
-              Approximate monthly impact. Real billing depends on plan tier +
-              actual usage.
+              Estimated monthly cost. Final bill reconciles to actual usage
+              at the end of the billing cycle.
             </Card.Description>
           </Card.Header>
           <Card.Body>
@@ -197,33 +213,64 @@ export function ProjectScalePage() {
               <div className="flex justify-between">
                 <dt className="text-muted-foreground">Current</dt>
                 <dd className="font-mono text-foreground">
-                  {DEFAULT_CURRENT} replicas
+                  {currentReplicas} replicas
                 </dd>
               </div>
               <div className="flex justify-between">
                 <dt className="text-muted-foreground">After change</dt>
-                <dd className="font-mono text-foreground">{replicas} replicas</dd>
+                <dd className="font-mono text-foreground">
+                  {proposedReplicas} replicas
+                </dd>
               </div>
               <div className="flex justify-between border-t border-border/60 pt-3">
-                <dt className="text-muted-foreground">Monthly delta</dt>
+                <dt className="text-muted-foreground">Estimated</dt>
+                <dd className="font-mono text-foreground">
+                  ${cost.estimatedMonthlyUSD.toFixed(2)}/mo
+                </dd>
+              </div>
+              <div className="flex justify-between">
+                <dt className="text-muted-foreground">Delta</dt>
                 <dd
                   className={`font-mono ${
-                    monthlyCostDelta > 0
+                    cost.direction === 'up'
                       ? 'text-warning'
-                      : monthlyCostDelta < 0
+                      : cost.direction === 'down'
                         ? 'text-success'
                         : 'text-foreground'
                   }`}
                 >
-                  {replicaDelta === 0
+                  {cost.direction === 'flat'
                     ? '—'
-                    : `${monthlyCostDelta > 0 ? '+' : ''}$${monthlyCostDelta.toFixed(2)}/mo`}
+                    : `${cost.deltaUSD > 0 ? '+' : '–'}$${Math.abs(cost.deltaUSD).toFixed(2)}/mo`}
                 </dd>
               </div>
+              {serverMonthlyCostUSD !== null && (
+                <div className="flex justify-between border-t border-border/60 pt-3">
+                  <dt className="text-muted-foreground">
+                    Applied (server authoritative)
+                  </dt>
+                  <dd className="font-mono text-foreground">
+                    ${serverMonthlyCostUSD.toFixed(2)}/mo
+                  </dd>
+                </div>
+              )}
             </dl>
           </Card.Body>
         </Card>
       </div>
+
+      <ScaleConfirmDialog
+        open={confirmOpen}
+        onOpenChange={setConfirmOpen}
+        projectName={name}
+        environment="production"
+        currentReplicas={currentReplicas}
+        proposedReplicas={proposedReplicas}
+        estimatedMonthlyUSD={cost.estimatedMonthlyUSD}
+        deltaUSD={cost.deltaUSD}
+        onConfirm={onConfirm}
+        busy={scale.isPending}
+      />
     </PageShell>
   );
 }

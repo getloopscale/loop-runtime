@@ -67,6 +67,9 @@ var statusByCode = map[string]int{
 	"INVALID_TENANT_OR_PROJECT":  http.StatusBadRequest, // 400 (Plan v1.2 T1.2 — DNS-1123 validation)
 	"MULTIPART_FIELD_ORDER":      http.StatusBadRequest, // 400 (Plan v1.2 T6.1 — services_json must precede bundle)
 	"SERVICES_JSON_TOO_LARGE":    http.StatusRequestEntityTooLarge, // 413 (Plan v1.2 T6.1 — 256 KB cap)
+	"HPA_TARGET_OUT_OF_BOUNDS":   http.StatusBadRequest, // 400 (J-20 Scale plan v1.1 T1.3 + EC-4)
+
+	"PLAN_UPGRADE_REQUIRED": http.StatusPaymentRequired, // 402 (J-20 Scale plan v1.1 T1.2 + EC-3 — KEDA scale-to-zero requires Pro+)
 
 	"UNAUTHORIZED": http.StatusUnauthorized, // 401
 	"FORBIDDEN":    http.StatusForbidden,    // 403

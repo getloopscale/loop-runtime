@@ -543,3 +543,44 @@ func NewConcurrentActivation(tenantID, projectID, env string) *LoopZeroError {
 		),
 	}
 }
+
+// NewPlanUpgradeRequired creates a PLAN_UPGRADE_REQUIRED error returned when
+// a feature is gated to a higher plan tier than the tenant currently holds.
+// J-20 Scale plan v1.1 T1.2 + EC-3 (KEDA scale-to-zero requires Pro+).
+//
+// Maps to HTTP 402 "Payment Required" per ADR D3 — surfaces an upgrade CTA
+// in the CLI / dashboard. The wire body carries `{required_plan, current_plan,
+// feature}` so consumers can render a contextual upgrade prompt.
+//
+// Distinguished from REPLICAS_EXCEED_PLAN (422 — request shape is valid but
+// quantity exceeds cap): PLAN_UPGRADE_REQUIRED means the feature itself is
+// not available on this tier, not that a numeric cap was exceeded.
+func NewPlanUpgradeRequired(required, current, feature string) *LoopZeroError {
+	return &LoopZeroError{
+		Code: "PLAN_UPGRADE_REQUIRED",
+		Message: fmt.Sprintf(
+			"%s requires the %s plan or higher (your current plan is %s). Upgrade at https://loopzero.example/pricing.",
+			feature, displayPlanName(required), displayPlanName(current),
+		),
+	}
+}
+
+// NewHPATargetBoundsViolated creates an HPA_TARGET_OUT_OF_BOUNDS error
+// returned when a Horizontal Pod Autoscaler target falls outside the
+// permitted range. J-20 Scale plan v1.1 T1.3 + EC-4.
+//
+// Maps to HTTP 400 (validation). Bounds are pinned to canonical Kubernetes
+// recommendations: cpu_target ∈ [10,95], memory_target ∈ [10,90].
+//
+// `field` is the offending request key ("cpu_target" or "memory_target") so
+// the dashboard can highlight the specific input. `min`/`max`/`got` echo the
+// constants from pkg/enforcement.HPACPUTargetMin/Max + ...Memory equivalents.
+func NewHPATargetBoundsViolated(field string, minBound, maxBound, got int) *LoopZeroError {
+	return &LoopZeroError{
+		Code: "HPA_TARGET_OUT_OF_BOUNDS",
+		Message: fmt.Sprintf(
+			"HPA %s must be between %d%% and %d%% (got %d%%). Targets below the minimum trigger autoscaling before the pod warms up; above the maximum leave no headroom for transient spikes.",
+			field, minBound, maxBound, got,
+		),
+	}
+}
