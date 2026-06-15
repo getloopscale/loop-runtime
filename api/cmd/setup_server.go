@@ -184,6 +184,7 @@ func buildServerConfig(
 		sc.RollbackHandler = orchDeps.RollbackHandler
 		sc.PromoteHandler = orchDeps.PromoteHandler
 		sc.StatusHandler = orchDeps.StatusHandler
+		sc.MetricsProxyHandler = orchDeps.MetricsProxyHandler
 		sc.ScaleHandler = orchDeps.ScaleHandler
 		sc.BuildListHandler = orchDeps.BuildListHandler
 		sc.ProjectDeleter = orchDeps.ProjectDeleter

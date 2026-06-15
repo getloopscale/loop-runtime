@@ -458,6 +458,21 @@ export interface ProjectStatusDetail {
   };
   sync_status?: string;
   url?: string;
+  // T1.1 of plan 2026-06-06-dashboard-journey-j18-status-runtime-health v1.1:
+  // backend statusResponse adds Grafana deep-link templated URL + canonical
+  // prom_query_keys list. metrics_range_url is empty string when operator did
+  // not set LOOPZERO_GRAFANA_BASE_URL (honest disabled per ADR D2). prom_query_keys
+  // is the deterministic 8-name list consumers use for /metrics queries.
+  metrics_range_url?: string;
+  prom_query_keys?: string[];
+  // Scaling info from build app spec — present when last build had scaling
+  // declared. Used by J-18 KPIStripStatus to render the Replicas card.
+  scaling?: {
+    replicas: number;
+    min: number;
+    max: number;
+    scaled_to_zero: boolean;
+  };
 }
 
 export interface ScaleInput {

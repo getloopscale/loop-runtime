@@ -370,9 +370,14 @@ func registerProtectedRoutes(
 		}
 		r.Get("/api/v1/secrets", secrets.List)
 		r.With(rateLimitMiddlewares...).Post("/api/v1/secrets", secrets.Set)
-		r.With(rateLimitMiddlewares...).Delete("/api/v1/secrets/{name}", secrets.DeleteSecret)
-		// J-22 T1.1: bulk endpoint POST /api/v1/secrets/bulk
+		// J-22 T1.1: bulk endpoint POST /api/v1/secrets/bulk.
+		// Registered BEFORE /secrets/{name} so chi v5.2.5 radix tree resolves the
+		// literal `/bulk` prefix before the `{name}` wildcard. The reverse order
+		// causes chi to route POST /secrets/bulk through the {name} branch where
+		// only DELETE is registered → 405 METHOD_NOT_ALLOWED (caught LIVE 2026-06-13
+		// sponsor walkthrough post v0.14.0; loopzero-api log confirmed status=405).
 		r.With(rateLimitMiddlewares...).Post("/api/v1/secrets/bulk", secrets.Bulk)
+		r.With(rateLimitMiddlewares...).Delete("/api/v1/secrets/{name}", secrets.DeleteSecret)
 	}
 
 	// Build routes — use the single BuildHandler from Config (C-08).
@@ -409,6 +414,14 @@ func registerProtectedRoutes(
 	}
 	if cfg.StatusHandler != nil {
 		r.Get("/api/v1/projects/{name}/status", cfg.StatusHandler.Get)
+	}
+	// T1.2 J-18 — Prometheus query_range proxy for J-18 SignalDetailSheet
+	// histogram rendering. Handler returns 503 prometheus_not_configured when
+	// MetricsProxyHandler is nil (operator did not configure
+	// LOOPZERO_PROMETHEUS_ADDRESS) — honest degraded UI per ADR D2 of plan
+	// 2026-06-06-dashboard-journey-j18-status-runtime-health v1.1.
+	if cfg.MetricsProxyHandler != nil {
+		r.Get("/api/v1/projects/{name}/metrics", cfg.MetricsProxyHandler.Get)
 	}
 	if cfg.ScaleHandler != nil {
 		r.With(rateLimitMiddlewares...).Post("/api/v1/projects/{name}/scale", cfg.ScaleHandler.Scale)
