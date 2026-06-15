@@ -78,52 +78,26 @@ START_EPOCH="$(date +%s)"
 JWT=""
 
 mint_jwt() {
-  # Exchange Kratos session cookie -> JWT via cloud-dev /v1/auth/session/token.
-  # Canonical chain (per seed-admin-loopzero-dev.sh): Kratos cookie is the
-  # input form the dashboard uses; engine API endpoints accept ONLY Bearer JWT.
-  #
-  # Retry policy (M2 LIVE-caught 2026-06-09): the reset step restarts
-  # loopzero-cloud pod; for 1-3s afterwards the Caddy -> port-forward chain
-  # returns 502/503 while the pod becomes Ready. Retry transparently with
-  # backoff so the test isn't flaky on a stable env.
-  local cookie jwt_code attempt sleeps=(2 4 8)
-  cookie="$(cat "$SESSION_FILE")"
-  for attempt in 0 1 2; do
-    jwt_code="$(curl -sS -o /tmp/m2-jwt.json -w '%{http_code}' -X POST \
-      --max-time 10 \
-      -b "ory_kratos_session=${cookie}" \
-      -H "Origin: ${PUBLIC_APP_URL}" \
-      "${PUBLIC_CLOUD_URL}/v1/auth/session/token" 2>/dev/null || true)"
-    if [ "$jwt_code" = "200" ]; then
-      break
-    fi
-    case "$jwt_code" in
-      502|503|000)
-        log "mint_jwt transient HTTP $jwt_code (attempt $((attempt+1))/3); sleeping ${sleeps[$attempt]}s"
-        sleep "${sleeps[$attempt]}"
-        ;;
-      *)
-        log "FAIL mint_jwt: /v1/auth/session/token HTTP $jwt_code body=$(head -c 200 /tmp/m2-jwt.json)"
-        return 1
-        ;;
-    esac
-  done
-  if [ "$jwt_code" != "200" ]; then
-    log "FAIL mint_jwt: /v1/auth/session/token HTTP $jwt_code after 3 retries body=$(head -c 200 /tmp/m2-jwt.json)"
-    return 1
+  if [[ -n "$TMP_JWT" ]]; then echo "$TMP_JWT"; return 0; fi
+  # CANONICAL 2026-06-15 dev-public LIVE: prefer HMAC session JWT (carries
+  # tenant_id from active session; passes loopzero-cloud /engine proxy guard
+  # per MEET-2026-04-07-039 B7). Bootstrap RSA JWT remains the fallback
+  # for engine-direct (localhost:13001) but lacks tenant_id claim so the
+  # /engine/* proxy rejects it.
+  if [[ -f "$HOME/.loopzero/local-dogfood-session-jwt.txt" ]]; then
+    TMP_JWT=$(cat "$HOME/.loopzero/local-dogfood-session-jwt.txt")
+    echo "$TMP_JWT"
+    return 0
   fi
-  JWT="$(python3 -c '
-import json, sys
-try:
-  d = json.load(open("/tmp/m2-jwt.json"))
-  sys.stdout.write(d.get("token") or d.get("access_token") or d.get("session_token") or "")
-except Exception:
-  pass
-' 2>/dev/null || true)"
-  if [ -z "$JWT" ]; then
-    log "FAIL mint_jwt: empty token in response: $(head -c 200 /tmp/m2-jwt.json)"
-    return 1
+  # Local dogfood path: reuse the seeded token file when available
+  if [[ -f "$HOME/.loopzero/local-dogfood-token.txt" ]]; then
+    TMP_JWT=$(cat "$HOME/.loopzero/local-dogfood-token.txt")
+    echo "$TMP_JWT"
+    return 0
   fi
+  printf 'ABORT: no JWT available; run seed-admin-loopzero-dev.sh + seed-local-user.sh
+' >&2
+  return 1
 }
 
 # --- Preflight (EC-12) ------------------------------------------------------

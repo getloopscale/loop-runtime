@@ -97,12 +97,24 @@ skip() {
 TMP_JWT=""
 mint_jwt() {
   if [[ -n "$TMP_JWT" ]]; then echo "$TMP_JWT"; return 0; fi
+  # CANONICAL 2026-06-15 dev-public LIVE: prefer HMAC session JWT (carries
+  # tenant_id from active session; passes loopzero-cloud /engine proxy guard
+  # per MEET-2026-04-07-039 B7). Bootstrap RSA JWT remains the fallback
+  # for engine-direct (localhost:13001) but lacks tenant_id claim so the
+  # /engine/* proxy rejects it.
+  if [[ -f "$HOME/.loopzero/local-dogfood-session-jwt.txt" ]]; then
+    TMP_JWT=$(cat "$HOME/.loopzero/local-dogfood-session-jwt.txt")
+    echo "$TMP_JWT"
+    return 0
+  fi
+  # Local dogfood path: reuse the seeded token file when available
   if [[ -f "$HOME/.loopzero/local-dogfood-token.txt" ]]; then
     TMP_JWT=$(cat "$HOME/.loopzero/local-dogfood-token.txt")
     echo "$TMP_JWT"
     return 0
   fi
-  printf 'ABORT: no JWT available; run seed-admin-loopzero-dev.sh or set TMP_JWT\n' >&2
+  printf 'ABORT: no JWT available; run seed-admin-loopzero-dev.sh + seed-local-user.sh
+' >&2
   return 1
 }
 

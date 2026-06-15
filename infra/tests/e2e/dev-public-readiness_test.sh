@@ -70,7 +70,16 @@ emit_fail() {
 }
 
 CLOUD_BASE="${CLOUD_BASE:-https://cloud-dev.loopzero.example}"
-TOKEN_FILE="${TOKEN_FILE:-$HOME/.loopzero/local-dogfood-token.txt}"
+# CANONICAL 2026-06-15: prefer HMAC session JWT (carries tenant_id; passes
+# loopzero-cloud /engine proxy guard). Falls back to bootstrap RSA JWT for
+# engine-direct (localhost:13001) when no session JWT exists.
+if [ -z "${TOKEN_FILE:-}" ] ; then
+  if [ -f "$HOME/.loopzero/local-dogfood-session-jwt.txt" ] ; then
+    TOKEN_FILE="$HOME/.loopzero/local-dogfood-session-jwt.txt"
+  else
+    TOKEN_FILE="$HOME/.loopzero/local-dogfood-token.txt"
+  fi
+fi
 PROJECT_NAME="${PROJECT_NAME:-teste}"
 
 preflight() {
