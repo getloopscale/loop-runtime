@@ -7,27 +7,11 @@ import (
 	"testing"
 )
 
-func TestCreateBuildPlan_StaticDeliveryModel(t *testing.T) {
-	units := []AppUnit{
-		{
-			Name:      "web",
-			Type:      "frontend",
-			Path:      "apps/web",
-			Framework: "react",
-			Build:     "buildpack",
-			Rendering: "static",
-		},
-	}
-
-	plan := CreateBuildPlan(units, "tn-1", "my-app", "sha123", "registry.example.com")
-
-	if len(plan.Apps) != 1 {
-		t.Fatalf("expected 1 app, got %d", len(plan.Apps))
-	}
-	if plan.Apps[0].DeliveryModel != "static" {
-		t.Errorf("expected delivery model 'static', got %q", plan.Apps[0].DeliveryModel)
-	}
-}
+// TestCreateBuildPlan_StaticDeliveryModel removed (simplify-deploy-loopzerokit-only
+// T3.3/F-wire-2): static-frontend delivery was deleted, so DeliveryModel is
+// always "container". The `frontend` type + `static` rendering it exercised no
+// longer exist in the contract. TestCreateBuildPlan_ContainerDeliveryModel below
+// covers the only remaining delivery model.
 
 func TestCreateBuildPlan_ContainerDeliveryModel(t *testing.T) {
 	units := []AppUnit{

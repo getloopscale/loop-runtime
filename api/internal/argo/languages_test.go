@@ -199,24 +199,8 @@ func TestDefaultPort_FallbackWhenAllZero(t *testing.T) {
 	}
 }
 
-func TestSanitizeBinName(t *testing.T) {
-	tests := []struct {
-		input string
-		want  string
-	}{
-		{"", "app"},
-		{".", "app"},
-		{"cmd/api", "api"},
-		{"api", "api"},
-		{"services/internal/worker", "worker"},
-	}
-	for _, tt := range tests {
-		got := sanitizeBinName(tt.input)
-		if got != tt.want {
-			t.Errorf("sanitizeBinName(%q) = %q, want %q", tt.input, got, tt.want)
-		}
-	}
-}
+// TestSanitizeBinName removed — sanitizeBinName was deleted with the dead Go
+// build script (simplify-deploy-loopzerokit-only F-wire-1).
 
 // ---------------------------------------------------------------------------
 // Test helpers

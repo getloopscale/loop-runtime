@@ -141,13 +141,13 @@ func CreateBuildPlan(units []AppUnit, tenantID, projectID, commitSHA, registryUR
 		}
 		strategy := resolveLanguageStrategy(runtimeOrFramework)
 
-		// Resolve delivery model from rendering (MEET-009)
+		// T3.3 (simplify-deploy-loopzerokit-only): static-frontend delivery removed —
+		// every app is container delivery (AppUnit.Rendering is always "server").
+		// The "static" branch here was dead (F-wire-2). DeliveryModel is retained
+		// (always "container") for downstream-struct compatibility.
 		deliveryModel := "container"
-		if unit.Rendering == "static" {
-			deliveryModel = "static"
-		}
 		slog.Info("build plan: resolved delivery model",
-			"app", unit.Name, "rendering", unit.Rendering, "delivery_model", deliveryModel)
+			"app", unit.Name, "delivery_model", deliveryModel)
 
 		plans = append(plans, AppBuildPlan{
 			AppName:          unit.Name,
