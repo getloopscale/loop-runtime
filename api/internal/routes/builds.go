@@ -261,6 +261,11 @@ type createBuildRequest struct {
 
 // Create handles POST /api/v1/builds.
 // Auth required. Idempotency-Key middleware applied externally.
+//
+// Plan 2026-06-15-code-review-49-findings-remediation T5.4 (R2-F3 HIGH):
+// CC 29 → ≤ 12 via 5 helper extracts (resolveRedeploySource +
+// validateBuildRequiredFields + ensureEnvAndResyncSecrets + validateApps +
+// checkAdmission). Behavior preserved verbatim.
 func (h *BuildHandler) Create(w http.ResponseWriter, r *http.Request) {
 	// C-02: Enforce request deadline so handlers don't hang indefinitely.
 	ctx, cancel := context.WithTimeout(r.Context(), 150*time.Second)
@@ -278,191 +283,26 @@ func (h *BuildHandler) Create(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// Plan J-17 T6.4 — redeploy_of short-circuit. Look up the source
-	// build, verify tenant + terminal status, copy its params. After
-	// this the rest of the handler treats the request as a normal
-	// build submission (validation, env ensure, secret resync, etc.).
-	if req.RedeployOf != "" {
-		src, srcErr := h.orch.GetRedeploySource(ctx, uc.TenantID, req.RedeployOf)
-		if srcErr != nil {
-			mapBuildError(w, srcErr)
-			return
-		}
-		req.ProjectID = src.ProjectID
-		req.Environment = src.Environment
-		req.CommitSHA = src.CommitSHA
-		req.Apps = src.Apps
-		// NoCache opt-in stays from the request; everything else
-		// comes from the source.
-	}
-
-	// Validate required fields
-	if req.ProjectID == "" {
-		writeLoopZeroError(w, loopzeroerrors.NewLoopZeroError(
-			"MISSING_FIELD",
-			"Project name is required. Check your loopzero.yaml.",
-			400,
-		))
-		return
-	}
-	if req.Environment == "" {
-		writeLoopZeroError(w, loopzeroerrors.NewLoopZeroError(
-			"MISSING_FIELD",
-			"Environment is required",
-			400,
-		))
-		return
-	}
-	// T1.3 follow-up (CR-2 regression caught during cleanroom Final Phase
-	// 2026-05-29): an empty `apps` array used to be silently accepted —
-	// SubmitBuild would create a Build row, build an empty WorkflowSpec, and
-	// the legacy spec.Apps fallback in workflow_builder would emit a Workflow
-	// CR with zero steps that Argo "succeeded" trivially. T1.3 (commit
-	// 2b9f8040) removed the fallback and added an invariant guard, exposing
-	// the gap — empty bodies now reach the guard as 500 INTERNAL_ERROR.
-	// Fail fast at the system boundary with a typed 400 instead.
-	if len(req.Apps) == 0 {
-		writeLoopZeroError(w, loopzeroerrors.NewLoopZeroError(
-			"MISSING_FIELD",
-			"At least one app is required. Check your loopzero.yaml for an `apps:` section.",
-			400,
-		))
+	if !h.resolveRedeploySource(ctx, w, uc.TenantID, &req) {
 		return
 	}
 
-	// Environment validation (DA-10): lowercase only
-	if !environmentRegex.MatchString(req.Environment) {
-		writeLoopZeroError(w, loopzeroerrors.NewLoopZeroError(
-			"INVALID_ENVIRONMENT",
-			"Environment names must be lowercase.",
-			400,
-		))
+	if err := validateBuildRequiredFields(req); err != nil {
+		writeLoopZeroError(w, err)
 		return
 	}
 
-	// Plan T2.2 D5 — auto-create environment on first deploy --env <novo>.
-	// Closes F-S1-02 where LoopZeroApplication CR was created but Environment CR
-	// + workload namespace + ArgoCD App+AppProject were not, causing eternal
-	// SYNC_FAILED. When envEnsurer is wired, calling EnsureEnvironment is a
-	// no-op for existing envs and creates+waits for new ones.
-	if h.envEnsurer != nil {
-		// M2 v1.2 T3.2: propagate req.ProjectID so the operator
-		// computes the canonical `loopzero-<tenant>-<project>-<env>`
-		// namespace and writes the project field to spec.environments.
-		// req.ProjectID is already validated non-empty upstream.
-		if ensureErr := h.envEnsurer.EnsureEnvironment(ctx, uc.TenantID, req.ProjectID, req.Environment); ensureErr != nil {
-			// Wrap non-LoopZeroError errors so the handler emits a clean response.
-			var te *loopzeroerrors.LoopZeroError
-			if errors.As(ensureErr, &te) {
-				writeLoopZeroError(w, te)
-			} else {
-				writeLoopZeroError(w, loopzeroerrors.NewLoopZeroError(
-					"ENV_PROVISION_FAILED",
-					fmt.Sprintf("Failed to provision environment %q: %s", req.Environment, ensureErr.Error()),
-					500,
-				))
-			}
-			return
-		}
+	if !h.ensureEnvAndResyncSecrets(ctx, w, uc.TenantID, req) {
+		return
 	}
 
-	// V9 L20: Resync PG secrets to workload K8s ExternalSecrets. Closes
-	// the race where `loopzero secret set` ran BEFORE the namespace existed
-	// (first deploy --env <novo> creates the namespace, but the secret
-	// POST K8s sync at line ~234 of secrets.go silently failed with
-	// "namespaces ... not found"). Pod start would later fail with
-	// CreateContainerConfigError because the K8s Secret was never
-	// created on workload.
-	//
-	// Best-effort: log resync errors but don't fail the deploy — the
-	// pod-start failure will surface as a deploy timeout if any required
-	// secret is missing. Per-secret sync errors are also non-fatal in
-	// the resyncer (e.g., partial-success when only one secret has a
-	// transient issue).
-	if h.secretResync != nil {
-		if resyncErr := h.secretResync.ResyncEnv(ctx, uc.TenantID, req.ProjectID, req.Environment); resyncErr != nil {
-			slog.Warn("secret resync failed — pods may fail to start with CreateContainerConfigError",
-				"error", resyncErr,
-				"tenant_id", uc.TenantID,
-				"project", req.ProjectID,
-				"environment", req.Environment,
-			)
-		}
+	if err := validateApps(req.Apps); err != nil {
+		writeLoopZeroError(w, err)
+		return
 	}
 
-	// SEC-3 fix: Validate app paths before they reach shell scripts in the build pipeline.
-	// Prevents path traversal and command injection via crafted app.path values.
-	// CODE-001 fix: Also validate app names — they flow into shell scripts in
-	// loopzeroPacksDockerfileStep() and buildctl arguments.
-	for _, app := range req.Apps {
-		if err := validation.ValidateAppName(app.Name); err != nil {
-			writeLoopZeroError(w, loopzeroerrors.NewLoopZeroError(
-				"INVALID_APP_NAME",
-				fmt.Sprintf("Invalid name for app: %s", err.Error()),
-				400,
-			))
-			return
-		}
-		if err := validation.ValidateAppPath(app.Path); err != nil {
-			writeLoopZeroError(w, loopzeroerrors.NewLoopZeroError(
-				"INVALID_APP_PATH",
-				fmt.Sprintf("Invalid path for app %q: %s", app.Name, err.Error()),
-				400,
-			))
-			return
-		}
-	}
-
-	// V5: Server-side framework validation — reject unsupported frameworks before pipeline.
-	// Defense-in-depth: CLI validates first, but API is the final gate.
-	for _, app := range req.Apps {
-		if isUnknownFramework(app.Framework) && app.Build != "dockerfile" {
-			writeLoopZeroError(w, loopzeroerrors.NewLoopZeroError(
-				"UNSUPPORTED_FRAMEWORK",
-				fmt.Sprintf("App '%s': framework '%s' requires 'build: dockerfile'. Set build to 'dockerfile' and provide a Dockerfile, or use a supported framework.", app.Name, app.Framework),
-				422,
-			))
-			return
-		}
-	}
-
-	// Roadmap 07 — admission gate. Only consulted when configured
-	// (WithAdmission + LOOPZERO_ADMISSION_CONTROL=true). A nil checker
-	// means the feature is off, which is the pre-roadmap default.
-	if h.admission != nil {
-		// MEET-053 A-06: Resolve cell_id per-request from tenant's placement.
-		cellID := "cell-default" // fallback if resolver not set
-		if h.cellResolver != nil {
-			if resolved, resolveErr := h.cellResolver.GetTenantCellID(ctx, uc.TenantID); resolveErr == nil {
-				cellID = resolved
-			} else if h.logger != nil {
-				h.logger.Warn("cell resolver failed — using default",
-					"error", resolveErr,
-					"tenant_id", uc.TenantID,
-				)
-			}
-		}
-		admitted, retryAfter, code, message, adErr := h.admission.Check(ctx, cellID, uc.TenantID)
-		if adErr != nil {
-			// Fail-open: the gate is advisory, a query error must not
-			// penalize users by blocking builds. Log and continue.
-			if h.logger != nil {
-				h.logger.Warn("admission gate query failed — failing open",
-					"error", adErr,
-					"tenant_id", uc.TenantID,
-					"cell_id", cellID,
-				)
-			}
-		} else if !admitted {
-			// Roadmap 07 DoD: 429 with Retry-After header.
-			secs := int(retryAfter.Round(time.Second).Seconds())
-			if secs < 1 {
-				secs = 1
-			}
-			w.Header().Set("Retry-After", fmt.Sprintf("%d", secs))
-			writeLoopZeroError(w, loopzeroerrors.NewLoopZeroError(code, message, 429))
-			return
-		}
+	if !h.checkAdmission(ctx, w, uc.TenantID) {
+		return
 	}
 
 	resp, err := h.orch.SubmitBuild(ctx, SubmitBuildInput{
@@ -481,6 +321,165 @@ func (h *BuildHandler) Create(w http.ResponseWriter, r *http.Request) {
 	}
 
 	writeJSON(w, http.StatusAccepted, resp)
+}
+
+// resolveRedeploySource implements Plan J-17 T6.4 redeploy_of short-circuit.
+// When req.RedeployOf is set, look up the source build + copy its params.
+// Returns true to continue, false when mapBuildError wrote the response.
+func (h *BuildHandler) resolveRedeploySource(
+	ctx context.Context,
+	w http.ResponseWriter,
+	tenantID string,
+	req *createBuildRequest,
+) bool {
+	if req.RedeployOf == "" {
+		return true
+	}
+	src, srcErr := h.orch.GetRedeploySource(ctx, tenantID, req.RedeployOf)
+	if srcErr != nil {
+		mapBuildError(w, srcErr)
+		return false
+	}
+	req.ProjectID = src.ProjectID
+	req.Environment = src.Environment
+	req.CommitSHA = src.CommitSHA
+	req.Apps = src.Apps
+	// NoCache opt-in stays from the request; everything else comes from the source.
+	return true
+}
+
+// validateBuildRequiredFields enforces:
+//   - ProjectID non-empty (MISSING_FIELD 400)
+//   - Environment non-empty (MISSING_FIELD 400)
+//   - Apps non-empty (CR-2 regression defense — T1.3 follow-up)
+//   - environmentRegex matches (DA-10 lowercase only)
+func validateBuildRequiredFields(req createBuildRequest) *loopzeroerrors.LoopZeroError {
+	if req.ProjectID == "" {
+		return loopzeroerrors.NewLoopZeroError("MISSING_FIELD",
+			"Project name is required. Check your loopzero.yaml.", 400)
+	}
+	if req.Environment == "" {
+		return loopzeroerrors.NewLoopZeroError("MISSING_FIELD",
+			"Environment is required", 400)
+	}
+	if len(req.Apps) == 0 {
+		return loopzeroerrors.NewLoopZeroError("MISSING_FIELD",
+			"At least one app is required. Check your loopzero.yaml for an `apps:` section.", 400)
+	}
+	if !environmentRegex.MatchString(req.Environment) {
+		return loopzeroerrors.NewLoopZeroError("INVALID_ENVIRONMENT",
+			"Environment names must be lowercase.", 400)
+	}
+	return nil
+}
+
+// ensureEnvAndResyncSecrets implements Plan T2.2 D5 (auto-create env on
+// first deploy --env <novo>) + V9 L20 (PG → K8s ExternalSecret resync).
+// Returns true to continue, false when EnsureEnvironment failed and the
+// response was written. Secret resync errors are non-fatal (best-effort).
+func (h *BuildHandler) ensureEnvAndResyncSecrets(
+	ctx context.Context,
+	w http.ResponseWriter,
+	tenantID string,
+	req createBuildRequest,
+) bool {
+	if h.envEnsurer != nil {
+		if ensureErr := h.envEnsurer.EnsureEnvironment(ctx, tenantID, req.ProjectID, req.Environment); ensureErr != nil {
+			var te *loopzeroerrors.LoopZeroError
+			if errors.As(ensureErr, &te) {
+				writeLoopZeroError(w, te)
+			} else {
+				writeLoopZeroError(w, loopzeroerrors.NewLoopZeroError("ENV_PROVISION_FAILED",
+					fmt.Sprintf("Failed to provision environment %q: %s", req.Environment, ensureErr.Error()), 500))
+			}
+			return false
+		}
+	}
+	if h.secretResync != nil {
+		if resyncErr := h.secretResync.ResyncEnv(ctx, tenantID, req.ProjectID, req.Environment); resyncErr != nil {
+			slog.Warn("secret resync failed — pods may fail to start with CreateContainerConfigError",
+				"error", resyncErr,
+				"tenant_id", tenantID,
+				"project", req.ProjectID,
+				"environment", req.Environment,
+			)
+		}
+	}
+	return true
+}
+
+// validateApps enforces:
+//   - SEC-3 + CODE-001 app name + path validation (prevent shell injection)
+//   - V5 server-side framework validation (defense-in-depth post-CLI)
+//
+// Returns nil to continue OR a typed LoopZeroError to write.
+func validateApps(apps []AppInput) *loopzeroerrors.LoopZeroError {
+	for _, app := range apps {
+		if err := validation.ValidateAppName(app.Name); err != nil {
+			return loopzeroerrors.NewLoopZeroError("INVALID_APP_NAME",
+				fmt.Sprintf("Invalid name for app: %s", err.Error()), 400)
+		}
+		if err := validation.ValidateAppPath(app.Path); err != nil {
+			return loopzeroerrors.NewLoopZeroError("INVALID_APP_PATH",
+				fmt.Sprintf("Invalid path for app %q: %s", app.Name, err.Error()), 400)
+		}
+		if isUnknownFramework(app.Framework) && app.Build != "dockerfile" {
+			return loopzeroerrors.NewLoopZeroError("UNSUPPORTED_FRAMEWORK",
+				fmt.Sprintf("App '%s': framework '%s' requires 'build: dockerfile'. Set build to 'dockerfile' and provide a Dockerfile, or use a supported framework.", app.Name, app.Framework), 422)
+		}
+	}
+	return nil
+}
+
+// checkAdmission implements Roadmap 07 admission gate. Returns true to
+// continue, false when admission denied + 429 was written. Fail-open on
+// query error (the gate is advisory).
+func (h *BuildHandler) checkAdmission(
+	ctx context.Context,
+	w http.ResponseWriter,
+	tenantID string,
+) bool {
+	if h.admission == nil {
+		return true
+	}
+	cellID := h.resolveCellID(ctx, tenantID)
+	admitted, retryAfter, code, message, adErr := h.admission.Check(ctx, cellID, tenantID)
+	if adErr != nil {
+		if h.logger != nil {
+			h.logger.Warn("admission gate query failed — failing open",
+				"error", adErr, "tenant_id", tenantID, "cell_id", cellID)
+		}
+		return true
+	}
+	if admitted {
+		return true
+	}
+	secs := int(retryAfter.Round(time.Second).Seconds())
+	if secs < 1 {
+		secs = 1
+	}
+	w.Header().Set("Retry-After", fmt.Sprintf("%d", secs))
+	writeLoopZeroError(w, loopzeroerrors.NewLoopZeroError(code, message, 429))
+	return false
+}
+
+// resolveCellID returns the tenant's cell ID for admission gating.
+// MEET-053 A-06: per-request resolution; fallback to cell-default when
+// the resolver is unset OR errors transiently.
+func (h *BuildHandler) resolveCellID(ctx context.Context, tenantID string) string {
+	cellID := "cell-default"
+	if h.cellResolver == nil {
+		return cellID
+	}
+	resolved, resolveErr := h.cellResolver.GetTenantCellID(ctx, tenantID)
+	if resolveErr != nil {
+		if h.logger != nil {
+			h.logger.Warn("cell resolver failed — using default",
+				"error", resolveErr, "tenant_id", tenantID)
+		}
+		return cellID
+	}
+	return resolved
 }
 
 // Get handles GET /api/v1/builds/:id.

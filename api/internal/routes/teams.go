@@ -256,6 +256,10 @@ type updateRoleRequest struct {
 
 // UpdateRole handles PATCH /api/v1/teams/members/{username}.
 // Changes a member's role. Only the owner can change roles.
+//
+// Plan 2026-06-15-code-review-49-findings-remediation T5.4 (R2-F3 HIGH):
+// CC 16 → ≤ 12 via 3-helper split (authorizeOwnerOnly + parseRoleRequest +
+// resolveAndValidateTarget). Behavior preserved verbatim.
 func (h *TeamHandler) UpdateRole(w http.ResponseWriter, r *http.Request) {
 	ctx, cancel := context.WithTimeout(r.Context(), 30*time.Second)
 	defer cancel()
@@ -272,63 +276,28 @@ func (h *TeamHandler) UpdateRole(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// Authorization: only owner can change roles
-	callerMember, err := h.store.GetMember(ctx, uc.TenantID, uc.UserID)
-	if err != nil {
-		slog.Error("failed to get caller member", "error", err.Error())
-		writeLoopZeroError(w, loopzeroerrors.ErrInternalError)
-		return
-	}
-	if callerMember == nil || callerMember.Role != "owner" {
-		writeLoopZeroError(w, loopzeroerrors.ErrForbidden.Wrap("only the team owner can change member roles"))
+	if err := h.authorizeOwnerOnly(ctx, uc.TenantID, uc.UserID); err != nil {
+		writeLoopZeroError(w, err)
 		return
 	}
 
-	var req updateRoleRequest
-	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-		writeLoopZeroError(w, loopzeroerrors.ErrInvalidRequest)
+	role, perr := parseRoleRequest(r)
+	if perr != nil {
+		writeLoopZeroError(w, perr)
 		return
 	}
 
-	// Validate role — SECURITY: "owner" cannot be assigned via API (privilege escalation). R-01 fix.
-	if !validRoles[req.Role] || req.Role == "owner" {
-		writeLoopZeroError(w, loopzeroerrors.ErrInvalidRequest.Wrap("role must be one of: admin, member"))
+	targetUserID, terr := h.resolveAndValidateTarget(ctx, uc.TenantID, username)
+	if terr != nil {
+		writeLoopZeroError(w, terr)
 		return
 	}
 
-	// Look up target user (AUDIT-7: provider-agnostic — no "github-" assumption)
-	targetUser, err := h.store.GetUserByUsername(ctx, username)
-	if err != nil {
-		slog.Error("failed to look up target user", "error", err.Error())
-		writeLoopZeroError(w, loopzeroerrors.ErrInternalError)
-		return
-	}
-	if targetUser == nil {
-		writeLoopZeroError(w, &loopzeroerrors.LoopZeroError{
-			Code:       "MEMBER_NOT_FOUND",
-			Message:    "member '" + username + "' not found in this team",
-		})
-		return
-	}
-	targetUserID := targetUser.ID
-
-	// Owner protection: cannot change the owner's role
-	targetMember, err := h.store.GetMember(ctx, uc.TenantID, targetUserID)
-	if err != nil {
-		slog.Error("failed to get target member", "error", err.Error())
-		writeLoopZeroError(w, loopzeroerrors.ErrInternalError)
-		return
-	}
-	if targetMember != nil && targetMember.Role == "owner" {
-		writeLoopZeroError(w, loopzeroerrors.ErrForbidden.Wrap("the team owner's role cannot be changed"))
-		return
-	}
-
-	if err := h.store.UpdateMemberRole(ctx, uc.TenantID, targetUserID, req.Role); err != nil {
+	if err := h.store.UpdateMemberRole(ctx, uc.TenantID, targetUserID, role); err != nil {
 		if errors.Is(err, ErrMemberNotFound) {
 			writeLoopZeroError(w, &loopzeroerrors.LoopZeroError{
-				Code:       "MEMBER_NOT_FOUND",
-				Message:    "member '" + username + "' not found in this team",
+				Code:    "MEMBER_NOT_FOUND",
+				Message: "member '" + username + "' not found in this team",
 			})
 			return
 		}
@@ -343,6 +312,59 @@ func (h *TeamHandler) UpdateRole(w http.ResponseWriter, r *http.Request) {
 
 	writeJSON(w, http.StatusOK, map[string]interface{}{
 		"username": username,
-		"role":     req.Role,
+		"role":     role,
 	})
+}
+
+// authorizeOwnerOnly returns a LoopZeroError when the caller is not the team
+// owner. Used by UpdateRole to gate role-change permission.
+func (h *TeamHandler) authorizeOwnerOnly(ctx context.Context, tenantID, userID string) *loopzeroerrors.LoopZeroError {
+	callerMember, err := h.store.GetMember(ctx, tenantID, userID)
+	if err != nil {
+		slog.Error("failed to get caller member", "error", err.Error())
+		return loopzeroerrors.ErrInternalError
+	}
+	if callerMember == nil || callerMember.Role != "owner" {
+		return loopzeroerrors.ErrForbidden.Wrap("only the team owner can change member roles")
+	}
+	return nil
+}
+
+// parseRoleRequest decodes the JSON body and validates the role enum.
+// SECURITY: "owner" cannot be assigned via API (privilege escalation, R-01).
+func parseRoleRequest(r *http.Request) (string, *loopzeroerrors.LoopZeroError) {
+	var req updateRoleRequest
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		return "", loopzeroerrors.ErrInvalidRequest
+	}
+	if !validRoles[req.Role] || req.Role == "owner" {
+		return "", loopzeroerrors.ErrInvalidRequest.Wrap("role must be one of: admin, member")
+	}
+	return req.Role, nil
+}
+
+// resolveAndValidateTarget looks up the target user by username (AUDIT-7:
+// provider-agnostic) and enforces the owner-protection invariant (the
+// owner's role cannot be changed).
+func (h *TeamHandler) resolveAndValidateTarget(ctx context.Context, tenantID, username string) (string, *loopzeroerrors.LoopZeroError) {
+	targetUser, err := h.store.GetUserByUsername(ctx, username)
+	if err != nil {
+		slog.Error("failed to look up target user", "error", err.Error())
+		return "", loopzeroerrors.ErrInternalError
+	}
+	if targetUser == nil {
+		return "", &loopzeroerrors.LoopZeroError{
+			Code:    "MEMBER_NOT_FOUND",
+			Message: "member '" + username + "' not found in this team",
+		}
+	}
+	targetMember, err := h.store.GetMember(ctx, tenantID, targetUser.ID)
+	if err != nil {
+		slog.Error("failed to get target member", "error", err.Error())
+		return "", loopzeroerrors.ErrInternalError
+	}
+	if targetMember != nil && targetMember.Role == "owner" {
+		return "", loopzeroerrors.ErrForbidden.Wrap("the team owner's role cannot be changed")
+	}
+	return targetUser.ID, nil
 }
