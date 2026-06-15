@@ -27,6 +27,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 ### Security
 
 - User-supplied Dockerfiles in the uploaded source bundle are now ignored fail-closed (overwritten by the canonical Dockerfile + a `::loopzero::` warning; never executed). Removes a build-escape/RCE surface, since the build sandbox runs with unconfined seccomp/AppArmor. (D4)
+- Build Dockerfile path is now single-sourced to the canonical location for every app, including monorepo subpath apps (`path != "."`). Previously a subpath app could point the builder at a user-controlled `Dockerfile`, re-opening the build-escape hole the D4 change closed. (simplify-deploy-loopzerokit-only review F-dom-1)
+
 ## [0.17.0] - 2026-06-15
 
 ### Added

@@ -66,18 +66,24 @@ func TestNormalizeApp_WorkerExplicit(t *testing.T) {
 	}
 }
 
-func TestNormalizeApp_CustomDockerfile(t *testing.T) {
+// TestNormalizeApp_UserDockerfileIgnored_D4 locks the D4 security invariant
+// (plan simplify-deploy-loopzerokit-only): BYO is deleted, so a user-supplied
+// Build="dockerfile" + Dockerfile is NOT honored — NormalizeApp pins build to
+// the platform-canonical "buildpack" and clears the dockerfile path. Given a
+// raw app declaring a custom Dockerfile, When normalized, Then build is
+// "buildpack" and dockerfile is empty.
+func TestNormalizeApp_UserDockerfileIgnored_D4(t *testing.T) {
 	unit, err := NormalizeApp("api", AppSpec{
 		Path: ".", Framework: "custom", Build: "dockerfile", Dockerfile: "Dockerfile.prod",
 	})
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
-	if unit.Build != "dockerfile" {
-		t.Errorf("Build = %q, want dockerfile", unit.Build)
+	if unit.Build != "buildpack" {
+		t.Errorf("Build = %q, want buildpack (user Build=dockerfile must be ignored — D4)", unit.Build)
 	}
-	if unit.Dockerfile != "Dockerfile.prod" {
-		t.Errorf("Dockerfile = %q, want Dockerfile.prod", unit.Dockerfile)
+	if unit.Dockerfile != "" {
+		t.Errorf("Dockerfile = %q, want empty (user Dockerfile must be ignored — D4)", unit.Dockerfile)
 	}
 }
 
@@ -95,11 +101,11 @@ func TestNormalizeApp_DefaultsWhenEmpty(t *testing.T) {
 	if unit.Framework != "custom" {
 		t.Errorf("Framework = %q, want custom (default)", unit.Framework)
 	}
-	if unit.Build != "dockerfile" {
-		t.Errorf("Build = %q, want dockerfile (custom framework)", unit.Build)
+	if unit.Build != "buildpack" {
+		t.Errorf("Build = %q, want buildpack (fixed LoopZeroKit stack always uses the canonical platform Dockerfile — D4)", unit.Build)
 	}
-	if unit.Dockerfile != "Dockerfile" {
-		t.Errorf("Dockerfile = %q, want Dockerfile (default)", unit.Dockerfile)
+	if unit.Dockerfile != "" {
+		t.Errorf("Dockerfile = %q, want empty (no user Dockerfile path — D4)", unit.Dockerfile)
 	}
 	if unit.Port != 8080 {
 		t.Errorf("Port = %d, want 8080 (default server port)", unit.Port)

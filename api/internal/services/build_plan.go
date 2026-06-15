@@ -6,7 +6,6 @@ package services
 import (
 	"fmt"
 	"log/slog"
-	"path"
 	"regexp"
 
 	"github.com/loopzero/loopzero/pkg/naming"
@@ -81,29 +80,26 @@ func CreateBuildPlan(units []AppUnit, tenantID, projectID, commitSHA, registryUR
 		cacheRef := fmt.Sprintf("%s/%s/%s-%s:buildcache",
 			registryURL, tenantID, projectID, unit.Name)
 
-		// Resolve Dockerfile path in workspace
+		// Resolve Dockerfile path in workspace.
+		// T2.2/D4 (plan simplify-deploy-loopzerokit-only): the BYO user-Dockerfile
+		// path is DELETED. The Dockerfile is ALWAYS the platform-canonical file
+		// written by the generate-dockerfile step — a user-supplied build mode /
+		// dockerfile name / subpath is NEVER honored here. This single-sources the
+		// path with argo.dockerfilePathForApp (MEET-2026-03-29-018):
+		//   1 app  → /workspace/Dockerfile
+		//   N apps → /workspace/Dockerfile.{name}
+		// so the generator's write path and BuildKit's `--opt filename` can never
+		// diverge (which would otherwise let BuildKit build a user Dockerfile).
 		var dockerfilePath string
-		if unit.Build == "dockerfile" && unit.Dockerfile != "" {
-			// User-provided Dockerfile: relative to app path
-			dockerfilePath = path.Join("/workspace", unit.Path, unit.Dockerfile)
+		if len(units) > 1 {
+			dockerfilePath = fmt.Sprintf("/workspace/Dockerfile.%s", unit.Name)
 		} else {
-			// Buildpack-generated: the generate-dockerfile step creates it.
-			// Naming convention must match argo.dockerfilePathForApp() (MEET-2026-03-29-018).
-			if len(units) > 1 {
-				dockerfilePath = fmt.Sprintf("/workspace/Dockerfile.%s", unit.Name)
-			} else {
-				dockerfilePath = "/workspace/Dockerfile"
-			}
+			dockerfilePath = "/workspace/Dockerfile"
 		}
 
-		// Resolve context path.
-		// For buildpack-generated Dockerfiles: context is always /workspace (entire workspace)
-		// because the Dockerfile does COPY . . then WORKDIR /app/{appPath}.
-		// For user-provided Dockerfiles: context is the app's subdir.
+		// Context is ALWAYS the whole workspace: the canonical Dockerfile does
+		// COPY . . then WORKDIR into the app subdir. Never the user subpath.
 		contextPath := "/workspace"
-		if unit.Build == "dockerfile" && unit.Path != "." && unit.Path != "" {
-			contextPath = path.Join("/workspace", unit.Path)
-		}
 
 		// Build args: user env + system vars
 		// SEC-002 fix: validate env key names before they reach buildctl --opt.

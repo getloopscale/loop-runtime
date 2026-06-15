@@ -50,24 +50,17 @@ func NormalizeApp(name string, raw AppSpec) (AppUnit, error) {
 		return AppUnit{}, fmt.Errorf("app '%s': invalid type '%s' (server|worker only)", name, appType)
 	}
 
-	// Resolve build strategy
-	build := raw.Build
-	if build == "" {
-		if raw.Framework == "custom" || raw.Framework == "" || raw.Framework == "unknown" {
-			build = "dockerfile"
-		} else {
-			build = "buildpack"
-		}
-	}
-
-	// Resolve dockerfile
+	// Resolve build strategy.
+	// T2.2/D4 (plan simplify-deploy-loopzerokit-only): the BYO user-Dockerfile path
+	// is deleted. The fixed LoopZeroKit stack ALWAYS builds from the platform-
+	// generated canonical Dockerfile, so build is pinned to "buildpack"
+	// (platform-generated) and no user Dockerfile path is resolved. The legacy
+	// `build=="dockerfile"` default (which routed to a user-controlled path and
+	// reopened the D4 build-escape hole for monorepo subpaths) is removed.
+	// CreateBuildPlan resolves the canonical path regardless; this keeps the
+	// AppUnit consistent with that contract.
+	build := "buildpack"
 	dockerfile := ""
-	if build == "dockerfile" {
-		dockerfile = raw.Dockerfile
-		if dockerfile == "" {
-			dockerfile = "Dockerfile"
-		}
-	}
 
 	// Resolve port
 	port := raw.Port

@@ -67,18 +67,28 @@ func TestCreateBuildPlan_MultiApp_Monorepo(t *testing.T) {
 	}
 }
 
-func TestCreateBuildPlan_CustomDockerfile(t *testing.T) {
+// TestCreateBuildPlan_UserDockerfileIgnored_D4 locks the D4 security invariant
+// (plan simplify-deploy-loopzerokit-only): BYO user-Dockerfile is deleted, so a
+// user-supplied Build="dockerfile" + Dockerfile + Path MUST NOT influence the
+// resolved DockerfilePath. The path is ALWAYS the platform-canonical location
+// (matching argo.dockerfilePathForApp) so BuildKit can never be pointed at a
+// user-controlled Dockerfile. Given a monorepo subpath app declaring a custom
+// Dockerfile, When the plan is created, Then the Dockerfile path is the flat
+// canonical /workspace/Dockerfile and the context is the whole workspace.
+func TestCreateBuildPlan_UserDockerfileIgnored_D4(t *testing.T) {
 	units := []AppUnit{
-		{Name: "api", Type: "server", Path: ".", Framework: "custom", Port: 3000, Build: "dockerfile", Dockerfile: "Dockerfile.prod", Env: map[string]string{}, Secrets: []string{}},
+		{Name: "web", Type: "server", Path: "apps/web", Framework: "custom", Port: 3000, Build: "dockerfile", Dockerfile: "Dockerfile.prod", Env: map[string]string{}, Secrets: []string{}},
 	}
 	plan := CreateBuildPlan(units, "acme", "app", "sha1", "reg.io")
 
 	app := plan.Apps[0]
-	if app.DockerfilePath != "/workspace/Dockerfile.prod" {
-		t.Errorf("DockerfilePath = %q, want /workspace/Dockerfile.prod", app.DockerfilePath)
+	// D4: user path/dockerfile IGNORED — canonical flat path for a single app.
+	if app.DockerfilePath != "/workspace/Dockerfile" {
+		t.Errorf("DockerfilePath = %q, want /workspace/Dockerfile (user Dockerfile/path must be ignored — D4)", app.DockerfilePath)
 	}
-	if app.LanguageStrategy != "custom" {
-		t.Errorf("LanguageStrategy = %q, want custom", app.LanguageStrategy)
+	// Context is always the whole workspace, never the user subpath.
+	if app.ContextPath != "/workspace" {
+		t.Errorf("ContextPath = %q, want /workspace (canonical build never uses the user subpath — D4)", app.ContextPath)
 	}
 }
 

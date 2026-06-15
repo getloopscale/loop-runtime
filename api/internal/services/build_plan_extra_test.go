@@ -52,7 +52,12 @@ func TestCreateBuildPlan_ContainerDeliveryModel(t *testing.T) {
 	}
 }
 
-func TestCreateBuildPlan_UserProvidedDockerfile(t *testing.T) {
+// TestCreateBuildPlan_UserDockerfileIgnored_D4_Subpath locks the D4 invariant
+// for a monorepo subpath app: even with Build="dockerfile" + a user Dockerfile
+// + a non-root Path, the resolved DockerfilePath is the platform-canonical
+// path (single app → /workspace/Dockerfile) and the context is the whole
+// workspace — never the user subpath. This is the exact vector F-dom-1 flagged.
+func TestCreateBuildPlan_UserDockerfileIgnored_D4_Subpath(t *testing.T) {
 	units := []AppUnit{
 		{
 			Name:       "api",
@@ -67,11 +72,11 @@ func TestCreateBuildPlan_UserProvidedDockerfile(t *testing.T) {
 
 	plan := CreateBuildPlan(units, "tn-1", "my-app", "sha123", "registry.example.com")
 
-	if plan.Apps[0].DockerfilePath != "/workspace/services/api/Dockerfile.prod" {
-		t.Errorf("expected user dockerfile path, got %q", plan.Apps[0].DockerfilePath)
+	if plan.Apps[0].DockerfilePath != "/workspace/Dockerfile" {
+		t.Errorf("DockerfilePath = %q, want /workspace/Dockerfile (user Dockerfile/subpath must be ignored — D4)", plan.Apps[0].DockerfilePath)
 	}
-	if plan.Apps[0].ContextPath != "/workspace/services/api" {
-		t.Errorf("expected context path for user dockerfile, got %q", plan.Apps[0].ContextPath)
+	if plan.Apps[0].ContextPath != "/workspace" {
+		t.Errorf("ContextPath = %q, want /workspace (canonical build never uses the user subpath — D4)", plan.Apps[0].ContextPath)
 	}
 }
 
