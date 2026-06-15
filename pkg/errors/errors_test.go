@@ -481,3 +481,59 @@ func TestNewConcurrentActivation_DistinctInstances(t *testing.T) {
 		t.Errorf("Code MUST be deterministic: %q != %q", a.Code, b.Code)
 	}
 }
+
+// J-20 Scale plan v1.1 T1.2 + EC-3:
+// NewPlanUpgradeRequired produces the PLAN_UPGRADE_REQUIRED typed error
+// returned when KEDA scale-to-zero is opt-in'd by a Starter tenant.
+
+func TestNewPlanUpgradeRequired_CodeAndContext(t *testing.T) {
+	err := NewPlanUpgradeRequired("pro", "starter", "KEDA scale-to-zero")
+	if err.Code != "PLAN_UPGRADE_REQUIRED" {
+		t.Errorf("Code mismatch: got %q, want PLAN_UPGRADE_REQUIRED", err.Code)
+	}
+	// Message MUST mention both the required and current tier so the
+	// CLI / dashboard can render a contextual upgrade prompt.
+	for _, frag := range []string{"KEDA scale-to-zero", "Pro", "Starter", "pricing"} {
+		if !strings.Contains(err.Message, frag) {
+			t.Errorf("Message must include %q; got %q", frag, err.Message)
+		}
+	}
+	if err.Cause != nil {
+		t.Errorf("Cause must be nil; got %v", err.Cause)
+	}
+}
+
+func TestNewPlanUpgradeRequired_DistinctInstances(t *testing.T) {
+	a := NewPlanUpgradeRequired("pro", "starter", "KEDA")
+	b := NewPlanUpgradeRequired("pro", "starter", "KEDA")
+	if a == b {
+		t.Error("factory MUST return distinct pointers (no shared global)")
+	}
+}
+
+// J-20 Scale plan v1.1 T1.3 + EC-4:
+// NewHPATargetBoundsViolated produces the HPA_TARGET_OUT_OF_BOUNDS typed
+// error returned when cpu/memory target violates [min,max] range.
+
+func TestNewHPATargetBoundsViolated_CodeAndContext(t *testing.T) {
+	err := NewHPATargetBoundsViolated("cpu_target", 10, 95, 1)
+	if err.Code != "HPA_TARGET_OUT_OF_BOUNDS" {
+		t.Errorf("Code mismatch: got %q, want HPA_TARGET_OUT_OF_BOUNDS", err.Code)
+	}
+	// Message MUST include field + bounds + got so the dashboard input
+	// component can highlight the specific violation.
+	for _, frag := range []string{"cpu_target", "10%", "95%", "1%"} {
+		if !strings.Contains(err.Message, frag) {
+			t.Errorf("Message must include %q; got %q", frag, err.Message)
+		}
+	}
+}
+
+func TestNewHPATargetBoundsViolated_MemoryField(t *testing.T) {
+	err := NewHPATargetBoundsViolated("memory_target", 10, 90, 91)
+	for _, frag := range []string{"memory_target", "10%", "90%", "91%"} {
+		if !strings.Contains(err.Message, frag) {
+			t.Errorf("Message must include %q; got %q", frag, err.Message)
+		}
+	}
+}

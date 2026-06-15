@@ -101,3 +101,26 @@ func TestRegistry_CoversAllSentinelsCommonInAPI(t *testing.T) {
 		}
 	}
 }
+
+// J-20 Scale plan v1.1 T1.2 + T1.3:
+// PLAN_UPGRADE_REQUIRED MUST map to 402 (Payment Required) so dashboards
+// and CLIs can branch on the canonical upgrade-prompt surface.
+// HPA_TARGET_OUT_OF_BOUNDS MUST map to 400 (BadRequest validation).
+func TestStatus_J20ScaleErrors(t *testing.T) {
+	tests := []struct {
+		code string
+		want int
+	}{
+		{"PLAN_UPGRADE_REQUIRED", http.StatusPaymentRequired},
+		{"HPA_TARGET_OUT_OF_BOUNDS", http.StatusBadRequest},
+	}
+	for _, tc := range tests {
+		err := &loopzeroerrors.LoopZeroError{Code: tc.code, Message: "x"}
+		if got := Status(err); got != tc.want {
+			t.Errorf("Status(%s)=%d, want %d", tc.code, got, tc.want)
+		}
+		if !IsRegistered(tc.code) {
+			t.Errorf("registry must include %q (J-20 Scale)", tc.code)
+		}
+	}
+}
