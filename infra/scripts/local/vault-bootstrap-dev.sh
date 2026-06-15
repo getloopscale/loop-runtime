@@ -179,7 +179,14 @@ log "Step 10b: extract SPKI pin from openbao-tls cert"
 if [[ "$DRY_RUN" -eq 0 ]]; then
   TLS_CRT=$(kubectl --context "$CONTEXT" -n "$NS" get secret openbao-tls -o jsonpath='{.data.tls\.crt}' 2>/dev/null | base64 -d 2>/dev/null || true)
   if [[ -n "$TLS_CRT" ]]; then
-    SPKI=$(echo "$TLS_CRT" | openssl x509 -pubkey -noout 2>/dev/null | openssl pkey -pubin -outform DER 2>/dev/null | openssl dgst -sha256 -binary 2>/dev/null | base64 | tr -d '\n=' | tr '/+' '_-' || true)
+    # CANONICAL FIX 2026-06-15: pkg/vault/transit_client.go:199 expects
+    # HEX-encoded SHA-256 (via hex.DecodeString). Previous base64url
+    # encoding (`base64 | tr ...`) caused loopzero-api to crash on startup
+    # with "openbao transit client: vault: SPKIPinSHA256 hex decode:
+    # encoding/hex: invalid byte: U+0073 's'". `openssl dgst -sha256`
+    # with no `-binary` flag emits "SHA256(stdin)= <hex>" so we
+    # post-process to strip the prefix; equivalently use `-binary | xxd`.
+    SPKI=$(echo "$TLS_CRT" | openssl x509 -pubkey -noout 2>/dev/null | openssl pkey -pubin -outform DER 2>/dev/null | openssl dgst -sha256 -binary 2>/dev/null | xxd -p -c 999 | tr -d '\n' || true)
     if [[ -n "$SPKI" ]]; then
       kubectl --context "$CONTEXT" -n loopzero-system create secret generic openbao-spki-pin \
         --from-literal=OPENBAO_SPKI_PIN_SHA256="$SPKI" \

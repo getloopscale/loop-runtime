@@ -30,8 +30,18 @@
 set -uo pipefail
 
 SCRIPT_NAME=$(basename "$0")
-WEBHOOK_URL="${WEBHOOK_URL:-https://cloud-dev.loopzero.example/api/v1/webhooks/github}"
-METRICS_URL="${METRICS_URL:-https://cloud-dev.loopzero.example/metrics}"
+# CANONICAL 2026-06-15: dev-public routes /engine/api/v1/* through
+# loopzero-cloud proxy → loopzero-api (per cloud/cmd/main.go:477 route). The
+# webhook receiver lives on loopzero-api which is reachable only via the
+# /engine prefix from cloud-dev.loopzero.example.
+WEBHOOK_URL="${WEBHOOK_URL:-https://cloud-dev.loopzero.example/engine/api/v1/webhooks/github}"
+# Metrics port (9090) is intentionally NOT public-exposed (SECURITY note
+# in api/internal/server/validation.go:18 — auth-free /metrics endpoint
+# must stay behind ClusterIP + NetworkPolicy). Test port-forwards
+# dynamically to query the counter before/after the webhook POST.
+METRICS_LOCAL_PORT="${METRICS_LOCAL_PORT:-19090}"
+METRICS_URL="${METRICS_URL:-http://localhost:${METRICS_LOCAL_PORT}/metrics}"
+METRICS_PF_PID=""
 WEBHOOK_SECRET="${LOOPZERO_GITHUB_WEBHOOK_SECRET:-}"
 DELIVERY_ID_PREFIX="${DELIVERY_ID_PREFIX:-j09-test}"
 
@@ -90,8 +100,28 @@ preflight() {
     echo "[PRE] LOOPZERO_GITHUB_WEBHOOK_SECRET unset -- cannot sign payload" >&2
     return 2
   fi
-  if ! curl -fsS --max-time 5 -o /dev/null "$METRICS_URL"; then
-    echo "[PRE] $METRICS_URL unreachable" >&2
+  # CANONICAL FIX 2026-06-15: /metrics is ClusterIP-only (validation.go:18
+  # security note). Port-forward dynamically so the LIVE test can query
+  # the canonical loopzero_github_webhook_deliveries_total counter pre/post
+  # POST. Cleanup via trap on EXIT.
+  if ! command -v kubectl >/dev/null 2>&1; then
+    echo "[PRE] kubectl missing (needed for metrics port-forward)" >&2
+    return 2
+  fi
+  kubectl --context "${MGMT_CTX:-k3d-loopzero-mgmt}" -n loopzero-system port-forward svc/loopzero-api "${METRICS_LOCAL_PORT}:9090" >/dev/null 2>&1 &
+  METRICS_PF_PID=$!
+  trap 'kill $METRICS_PF_PID 2>/dev/null || true' EXIT INT TERM
+  # Wait for port-forward to be ready.
+  local pf_ready=0
+  for _ in 1 2 3 4 5; do
+    if curl -fsS --max-time 1 -o /dev/null "$METRICS_URL" 2>/dev/null; then
+      pf_ready=1
+      break
+    fi
+    sleep 1
+  done
+  if [[ $pf_ready -ne 1 ]]; then
+    echo "[PRE] $METRICS_URL unreachable after port-forward" >&2
     return 2
   fi
   if ! curl -fsS --max-time 5 -o /dev/null -X POST -H 'Content-Type: application/json' -d '{}' "$WEBHOOK_URL" 2>/dev/null; then

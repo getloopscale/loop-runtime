@@ -474,6 +474,63 @@ func main() {
 		Timeout:   30 * time.Second,
 		Transport: otelhttp.NewTransport(http.DefaultTransport),
 	}
+	// CANONICAL FIX 2026-06-15 (FAANG): GitHub webhook authenticates via
+	// HMAC signature (X-Hub-Signature-256 header) — NOT Bearer JWT. The
+	// requireJWT middleware was wrongly blocking webhook deliveries on
+	// the /engine path. Webhook subtree is exempted from JWT and proxied
+	// raw to loopzero-api where the canonical signature verification runs
+	// (api/cmd/setup_github.go reads GITHUB_WEBHOOK_SECRET). All other
+	// /engine/* paths still require JWT auth.
+	r.HandleFunc("/engine/api/v1/webhooks/*", func(w http.ResponseWriter, r *http.Request) {
+		targetPath := strings.TrimPrefix(r.URL.Path, "/engine")
+		// #nosec G404 — webhook endpoint authenticates via HMAC signature
+		// downstream (loopzero-api setup_github.go ConstantTimeCompare); cloud
+		// is a pass-through proxy here.
+		proxyReq, err := http.NewRequestWithContext(r.Context(), r.Method, engineURL+targetPath, r.Body)
+		if err != nil {
+			w.Header().Set("Content-Type", "application/json")
+			w.WriteHeader(http.StatusBadGateway)
+			_ = json.NewEncoder(w).Encode(map[string]string{"code": "SERVICE_ERROR", "message": "Service temporarily unavailable. Try again."})
+			return
+		}
+		proxyReq.URL.RawQuery = r.URL.RawQuery
+		// Preserve canonical webhook headers (signature + delivery + event)
+		// so loopzero-api can verify HMAC.
+		for _, h := range []string{
+			"Content-Type",
+			"X-Hub-Signature-256",
+			"X-Hub-Signature",
+			"X-GitHub-Event",
+			"X-GitHub-Delivery",
+			"User-Agent",
+			"X-Correlation-Id",
+			"X-Request-Id",
+		} {
+			if v := r.Header.Get(h); v != "" {
+				proxyReq.Header.Set(h, v)
+			}
+		}
+		// Internal service auth so loopzero-api accepts the proxied call
+		// without Bearer (sets X-LoopZero-User-ID="webhook" sentinel via
+		// engine's webhook auth bypass).
+		proxyReq.Header.Set("X-Service-Auth", serviceSecret)
+		resp, perr := engineClient.Do(proxyReq)
+		if perr != nil {
+			w.Header().Set("Content-Type", "application/json")
+			w.WriteHeader(http.StatusBadGateway)
+			_ = json.NewEncoder(w).Encode(map[string]string{"code": "SERVICE_UNAVAILABLE", "message": "Service temporarily unavailable. Try again."})
+			return
+		}
+		defer func() { _ = resp.Body.Close() }()
+		for k, v := range resp.Header {
+			for _, vv := range v {
+				w.Header().Add(k, vv)
+			}
+		}
+		w.WriteHeader(resp.StatusCode)
+		_, _ = io.Copy(w, resp.Body)
+	})
+
 	r.Route("/engine", func(r chi.Router) {
 		r.Use(requireJWT) // Dashboard must be authenticated
 		r.HandleFunc("/*", func(w http.ResponseWriter, r *http.Request) {

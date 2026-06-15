@@ -31,6 +31,21 @@ service:
   nodePort: 30001
 
 env:
+  # CANONICAL FIX 2026-06-15 (goal "continue until ALL tests pass"):
+  # OpenBao Transit chain enabled in dev-public. role_id comes from
+  # `bao read auth/approle/role/loopzero-api/role-id` after
+  # vault-bootstrap-dev.sh; secret_id is mounted from K8s Secret
+  # `loopzero-openbao-approle` (envFrom secretRef per loopzero-api chart).
+  # Without these, dogfood-secrets-openbao validates zero-leak property
+  # against unencrypted PG bytes → bypass-PASS. With these, secrets
+  # are encrypted via Transit (vault:v1:<ciphertext>) before PG store.
+  OPENBAO_TRANSIT_ENABLED: "true"
+  OPENBAO_VAULT_ADDR: "https://openbao.vault-system.svc.cluster.local:8200"
+  OPENBAO_VAULT_ROLE_ID: "bf1a3367-4059-dd74-98bb-b1ae8ff0c9c7"
+  # SPKI pin extracted dynamically from openbao-tls cert by
+  # vault-bootstrap-dev.sh (Step 10b). Mounted as Secret env var by
+  # the loopzero-api chart per existing envFrom: openbao-spki-pin pattern.
+
   # Local Hydra in loopzero-auth ns serves the JWKS for loopzero-api JWT verification.
   # JWKS_URL: internal cluster URL is faster + avoids outbound TLS — same
   # public keys regardless of fetch path.

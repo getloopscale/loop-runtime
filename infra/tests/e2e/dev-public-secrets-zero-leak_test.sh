@@ -249,8 +249,12 @@ sleep 35
 
 # === Scenario A: PG encrypted_value has vault:v1: prefix (NOT plaintext) ===
 if run_scenario A; then
-  PG_BYTES="$(kubectl --context="$KUBE_CONTEXT" -n loopzero-system exec deploy/postgresql -- \
-    psql -U postgres -d loopzero -tAc \
+  # CANONICAL FIX 2026-06-15: postgresql is a StatefulSet (NOT Deployment).
+  # Also uses `loopzero` user (not `postgres`); auth via PGPASSWORD per
+  # canonical chart values. Use pod-direct exec to avoid the deploy
+  # NotFound + auth mismatch.
+  PG_BYTES="$(kubectl --context="$KUBE_CONTEXT" -n loopzero-system exec postgresql-0 -c postgresql -- \
+    env PGPASSWORD=loopzero-dev-password psql -U loopzero -d loopzero -tAc \
     "SELECT encode(encrypted_value, 'escape') FROM secrets WHERE name='$SECRET_NAME' LIMIT 1" 2>/dev/null || echo "")"
   if echo "$PG_BYTES" | grep -q '^vault:v1:'; then
     record A PASS
