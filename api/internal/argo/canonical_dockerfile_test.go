@@ -135,6 +135,30 @@ func TestCanonicalDockerfile_Deterministic(t *testing.T) {
 	}
 }
 
+func TestCanonicalDockerfileStep_OverwritesAndWarns(t *testing.T) {
+	// T2.3/D4/EC-2: the generate-dockerfile step writes the canonical Dockerfile
+	// to the path BuildKit reads (dockerfilePathForApp), via a TRUNCATING redirect
+	// (`cat > path`) so any user Dockerfile extracted at the collision path is
+	// overwritten — fail-closed. It also WARNS when a user Dockerfile is present.
+	c, err := canonicalDockerfileStep("node", []services.AppSpec{{Name: "web", Type: "server", Port: 8080, Start: "node x.js"}}, 1)
+	if err != nil {
+		t.Fatalf("canonicalDockerfileStep: %v", err)
+	}
+	script := strings.Join(c.Args, "\n")
+	// Truncating redirect to the canonical single-app path (= /workspace/Dockerfile,
+	// the exact collision path a user bundle's /Dockerfile extracts to).
+	if !strings.Contains(script, `cat > "/workspace/Dockerfile"`) {
+		t.Errorf("must overwrite the canonical path via truncating redirect; script:\n%s", script)
+	}
+	if strings.Contains(script, `cat >> `) {
+		t.Error("must NOT append (>>) — that would not overwrite a user Dockerfile")
+	}
+	// Warn so the user knows their Dockerfile had no effect.
+	if !strings.Contains(script, "ignored user Dockerfile") {
+		t.Errorf("must warn that a user Dockerfile is ignored; script:\n%s", script)
+	}
+}
+
 func TestBaseImages_AreDigestPinned(t *testing.T) {
 	// C3 — base images MUST be @sha256: digest-pinned (reject tag-only).
 	re := regexp.MustCompile(`@sha256:[a-f0-9]{64}$`)

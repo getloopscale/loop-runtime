@@ -169,6 +169,16 @@ func assertEnvNotSecret(env map[string]string) error {
 func canonicalDockerfileStep(runtime string, apps []services.AppSpec, totalApps int) (*forge.Container, error) {
 	var script strings.Builder
 	script.WriteString("set -eu\n")
+	// T2.3/D4: any user-supplied Dockerfile in the bundle is IGNORED — the
+	// platform always builds from the canonical Dockerfile written below (which
+	// overwrites the collision path), and BuildKit reads ONLY that path via
+	// `--opt filename`. Warn so the user knows their file had no effect. This is
+	// observability, not the control — the control is the truncating `cat >` +
+	// the explicit BuildKit filename.
+	script.WriteString("for __loopzero_df in $(find " + workspaceMountPath +
+		" -maxdepth 3 \\( -iname 'Dockerfile' -o -iname 'Containerfile' -o -iname '*.dockerfile' \\) 2>/dev/null); do\n")
+	script.WriteString("  echo \"::loopzero:: phase=build step=generate-dockerfile level=warn message=ignored user Dockerfile ${__loopzero_df} (LoopZeroCloud uses a managed build)\" >&2\n")
+	script.WriteString("done\n")
 	for _, app := range apps {
 		df, err := canonicalDockerfile(runtime, app)
 		if err != nil {
