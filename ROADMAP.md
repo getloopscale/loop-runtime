@@ -128,7 +128,7 @@ Tornar o dashboard LoopZeroCloud uma experiência **Vercel-like 100% integrada**
 **Definition of done:**
 
 - [x] J-17 Deployments List + Detail — DELIVERED earlier (4-layer log markers + terminal state absorbente)
-- [x] J-18 Status / Runtime Health — DELIVERED 2026-06-15 (v0.15.0; foundation-first observability synthesis surface — KPI strip 5 cards + SignalGrid 8 pills + drill-down sheet + Grafana deep-link + Prometheus 7d history hooks + URL-state drill-down; 89 hermetic tests GREEN; ADR D3 v1.1 TERMINAL_ABSORBING vs OSCILLATING dichotomy reducer; T1.3 pgx LISTEN/NOTIFY backend SSE handler + operator-HARD-STOP T0.1b + T5.3 + T5.4 + T6.1 + T6.2 deferred with ADR rationale)
+- [x] J-18 Status / Runtime Health — DELIVERED 2026-06-15 (v0.15.0; foundation-first observability synthesis surface — KPI strip 5 cards + SignalGrid 8 pills + drill-down sheet + Grafana deep-link + Prometheus 7d history hooks + URL-state drill-down; 89 hermetic tests GREEN; ADR D3 v1.1 TERMINAL_ABSORBING vs OSCILLATING dichotomy reducer). **T1.3 follow-up CLOSED v0.15.1 2026-06-15** (SSE pg_notify backend handler + frontend EventSource wire; 38 NEW hermetic tests; plan `2026-06-15-j18-t1.3.b-sse-pg-notify-backend`). Operator-HARD-STOP deferrals remain: T0.1b live Prometheus probe + T5.3 LIVE bash test + T5.4 syntax test + T6.1+T6.2 dogfood wrapper per ADR D5 + `cleanroom-up-live-test-mandate.md` INQUEBRÁVEL — closed on next sponsor JUNTOS walkthrough.
 - [x] J-19 Runtime Logs Streaming — DELIVERED 2026-06-13 (v0.14.0; 5 LIVE walkthrough bugs caught + fixed during sponsor canonical chain; SSE Flusher proxy + named-event channel + StreamRuntimeLogs since-param fixes)
 - [ ] J-21 Readiness Score — plan `j21-readiness-plan.md`, esforço 14h
 
