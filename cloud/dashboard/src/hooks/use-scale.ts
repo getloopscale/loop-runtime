@@ -28,11 +28,18 @@ import type { ScaleInput, ScaleResponse } from '@/lib/api/types';
 export function useScale(projectName: string) {
   const queryClient = useQueryClient();
   return useMutation<ScaleResponse, Error, ScaleInput>({
-    mutationFn: (input: ScaleInput) =>
-      engineFetch<ScaleResponse>(`/api/v1/projects/${projectName}/scale`, {
-        method: 'POST',
-        body: JSON.stringify(input),
-      }),
+    mutationFn: async (input: ScaleInput) => {
+      const res = await engineFetch<ScaleResponse>(
+        `/api/v1/projects/${projectName}/scale`,
+        { method: 'POST', body: JSON.stringify(input) },
+      );
+      if (res === null) {
+        throw new Error(
+          'Scale endpoint returned no response — the backend may be unavailable.',
+        );
+      }
+      return res;
+    },
     onSuccess: () => {
       // Invalidate project status + scale entries so the UI repaints.
       queryClient.invalidateQueries({ queryKey: queryKeys.projectStatus.all });
