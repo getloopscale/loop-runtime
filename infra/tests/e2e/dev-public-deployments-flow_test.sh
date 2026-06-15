@@ -254,17 +254,13 @@ scenario_b() {
   else
     assert "Content-Type is text/event-stream" 0
   fi
-  # The stream yields events ONLY when builds are active. Empty
-  # Cleanroom has no builds — assertion is: connection open + headers
-  # received (HTTP 200 + text/event-stream). Event flow is asserted
-  # canonically once sponsor JUNTOS triggers a real build chain.
-  # Per ADR D1 of plan 2026-06-06-j17-deployments-realtime: empty-state
-  # is its own canonical signal (stream wired correctly; ready to emit
-  # when state changes).
+  # The stream should yield at least one event (any type) before the
+  # timeout. Empty body in ${TIMEOUT_SSE}s with HTTP 200 indicates either
+  # (a) Caddy/BFF buffering bug OR (b) no real builds emitting events.
+  # Both are CORRECTLY FAIL — the test asserts the real event flow,
+  # not just the wire shape.
   if [[ -s "$sse_tmp" ]] && grep -qE '^event:|^data:' "$sse_tmp"; then
     assert "at least one SSE event arrives within ${TIMEOUT_SSE}s" 1
-  elif [[ "$status" == "200" ]]; then
-    assert "canonical empty-state SSE: HTTP 200 + Content-Type wired (sponsor JUNTOS triggers populated events)" 1
   else
     assert "at least one SSE event arrives within ${TIMEOUT_SSE}s" 0
   fi
@@ -292,11 +288,7 @@ builds = d.get('builds', [])
 print(builds[0].get('build_id', '') if builds else '')
 " 2>/dev/null)
   if [[ -z "$build_id" ]]; then
-    # Canonical empty-state: no SUCCEEDED builds yet. Loki marker
-    # pipeline (Layer 1+2+3) is wired; sponsor JUNTOS triggers a real
-    # build that populates markers. Per cleanroom-up-live-test-mandate.md
-    # the Loki contract assertion runs once a build SUCCEEDS.
-    assert "canonical empty-state: no SUCCEEDED build yet (sponsor JUNTOS triggers populated state)" 1
+    assert "no SUCCEEDED build to validate" 0
     return 0
   fi
   log "  using build: $build_id"

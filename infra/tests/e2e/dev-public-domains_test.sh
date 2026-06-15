@@ -146,19 +146,48 @@ scenario_b_polling_reaches_active() {
 
 scenario_c_reverify_idempotent() {
   [[ $SKIP_LIVE -eq 1 ]] && { emit_pass "scenario C: SKIP --skip-live"; return 0; }
-  local jwt code
+  local jwt code body
   jwt="$(<"$TOKEN_FILE")"
-  # POST /verify must succeed (returns 200) OR return 429 if hit rate limit
-  # within the 30s window per ADR D7. Both are accepted as valid responses.
-  code="$(curl -s -o /dev/null -w '%{http_code}' -X POST \
+  # POST /verify must (a) succeed with a body that includes the verification
+  # state (status enum + verification.txt_* fields) OR (b) return 429 with
+  # rate-limit body per ADR D7. Status-code-only is bypass — we assert the
+  # response BODY carries the canonical verification shape.
+  body="$(curl -s -o /tmp/domain-verify.json -w '%{http_code}' -X POST \
     -H "Authorization: Bearer $jwt" \
     "$CLOUD_BASE/engine/api/v1/domains/$PROBE_DOMAIN/verify")"
+  code="$body"
+  body="$(cat /tmp/domain-verify.json 2>/dev/null || echo '{}')"
   case "$code" in
-    200|429)
-      emit_pass "scenario C: POST /verify returned $code (200 OK or 429 rate-limited per ADR D7)" ;;
+    200)
+      # On 200, body MUST include the canonical status enum reflecting
+      # post-verify state (still pending_verification for unverified TXT,
+      # or verified/active when DNS check resolved).
+      if echo "$body" | jq -e '.status | type == "string"' >/dev/null 2>&1; then
+        local status
+        status="$(echo "$body" | jq -r '.status')"
+        case "$status" in
+          pending_verification|verified|provisioning|active|failed)
+            emit_pass "scenario C: POST /verify returned 200 + canonical status='$status'" ;;
+          *)
+            emit_fail "scenario C: POST /verify 200 but unrecognized status='$status' body=$body" ;;
+        esac
+      else
+        emit_fail "scenario C: POST /verify 200 but body missing .status field: $body"
+      fi
+      ;;
+    429)
+      # On 429, body should include rate-limit error indication; we accept
+      # the canonical 429 contract (ADR D7) when body indicates rate limit.
+      if echo "$body" | jq -e '.code // .error // .message' >/dev/null 2>&1; then
+        emit_pass "scenario C: POST /verify returned 429 + canonical error body (ADR D7 rate-limit)"
+      else
+        emit_fail "scenario C: POST /verify 429 but body missing error indication: $body"
+      fi
+      ;;
     *)
-      emit_fail "scenario C: POST /verify returned unexpected $code" ;;
+      emit_fail "scenario C: POST /verify returned unexpected $code body=$body" ;;
   esac
+  rm -f /tmp/domain-verify.json
 }
 
 preflight || true

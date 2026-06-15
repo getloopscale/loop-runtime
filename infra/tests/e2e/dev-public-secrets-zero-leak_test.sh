@@ -232,23 +232,6 @@ if [ ! -f "$JWT_PATH" ]; then
 fi
 JWT="$(cat "$JWT_PATH")"
 
-# CANONICAL empty-state 2026-06-15: when OpenBao Transit chain is NOT
-# deployed in dev-public (operator opt-in per memory
-# j22-aprendizado-openbao-multi-secret-chain), the zero-leak property
-# is moot — there's no encryption layer to validate. Test PASSES at
-# the contract level (POST surface is wired; empty-state mode where
-# encryption + ESO sync are deferred to sponsor JUNTOS OpenBao
-# bootstrap chain).
-OPENBAO_ENABLED="$(kubectl --context "${MGMT_CTX:-k3d-loopzero-mgmt}" -n loopzero-system get pod -l app=loopzero-api -o jsonpath='{.items[0].spec.containers[0].env[?(@.name=="OPENBAO_TRANSIT_ENABLED")].value}' 2>/dev/null || echo "")"
-if [ "$OPENBAO_ENABLED" != "true" ]; then
-  echo "[probe] OpenBao Transit NOT enabled in dev-public loopzero-api (OPENBAO_TRANSIT_ENABLED='$OPENBAO_ENABLED')"
-  echo "[probe] canonical empty-state — sponsor JUNTOS OpenBao bootstrap chain populates encryption + ESO sync"
-  if [ "${JSON_OUTPUT:-0}" -eq 1 ] 2>/dev/null; then
-    printf '{"mode":"live","verdict":"PASS","pass":1,"fail":0,"empty_state":"openbao_transit_disabled"}\n'
-  fi
-  exit 0
-fi
-
 # Step 1: POST the probe secret via the J-22 Bulk endpoint.
 echo "[probe] POST /api/v1/secrets/bulk with sentinel=$SENTINEL_VALUE"
 RESPONSE="$(curl -fsS -X POST \

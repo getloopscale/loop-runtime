@@ -248,22 +248,51 @@ scenario_c() {
   # {from_environment, to_environment} which the backend silently
   # ignored, causing the promote to fail at the state-machine layer
   # rather than the request-parse layer.
-  local status body
-  body=$(curl -sS -o /tmp/promote.json -w '%{http_code}' \
+  local status response_body
+  status=$(curl -sS -o /tmp/promote.json -w '%{http_code}' \
     -X POST -m 10 \
     -H "Authorization: Bearer $jwt" \
     -H "Content-Type: application/json" \
     -d '{"from":"staging","to":"production"}' \
     "$CLOUD_URL${API_PREFIX}/api/v1/projects/$PROJECT_NAME/promote")
-  status="$body"
-  # Acceptable: 200 (project exists + promote scheduled), 404 (no project
-  # but request shape OK), 409 (no source release yet — also shape OK).
-  # Unacceptable: 400 (bad request body shape).
+  response_body=$(cat /tmp/promote.json 2>/dev/null || echo '{}')
+  # Status-code-only check is bypass. We assert BOTH:
+  #   1. HTTP status is one of the canonical responses
+  #   2. Response body carries the canonical error/success shape (NOT a
+  #      raw 400 "could not parse body" because backend silently ignored
+  #      the {from,to} body keys — that was the v1.0 regression)
   case "$status" in
-    200|404|409) assert "promote endpoint accepts canonical {from,to} body (HTTP $status)" 1 ;;
-    400) assert "promote endpoint accepts canonical {from,to} body" 0 ;;
-    *) assert "promote endpoint accepts canonical {from,to} body (HTTP $status)" 0 ;;
+    200)
+      # 200 expected to include {release_id, target_environment} per
+      # promote response contract.
+      if echo "$response_body" | jq -e '(.release_id // .id) and (.target_environment // .environment)' >/dev/null 2>&1; then
+        assert "promote 200 body carries canonical release fields" 1
+      else
+        assert "promote 200 body missing canonical release fields: $response_body" 0
+      fi
+      ;;
+    404)
+      # 404 expected with PROJECT_NOT_FOUND code (canonical empty-project).
+      if echo "$response_body" | jq -e '.code == "PROJECT_NOT_FOUND" or .code == "NOT_FOUND" or (.message // .detail // "" | tostring | test("project|not found"; "i"))' >/dev/null 2>&1; then
+        assert "promote 404 body carries canonical project-not-found error" 1
+      else
+        assert "promote 404 body missing canonical error code/message: $response_body" 0
+      fi
+      ;;
+    409)
+      # 409 — no source release; body must indicate the constraint violation.
+      if echo "$response_body" | jq -e '.code // .error // .message' >/dev/null 2>&1; then
+        assert "promote 409 body carries canonical constraint error" 1
+      else
+        assert "promote 409 body missing canonical error: $response_body" 0
+      fi
+      ;;
+    400)
+      assert "promote endpoint should accept canonical {from,to} body (got 400 — regression to v1.0 {from_environment,to_environment})" 0 ;;
+    *)
+      assert "promote endpoint unexpected HTTP $status body=$response_body" 0 ;;
   esac
+  rm -f /tmp/promote.json
 }
 
 # Scenario D: KPI signal shape on list
@@ -350,11 +379,32 @@ scenario_e() {
       "$CLOUD_URL${API_PREFIX}/api/v1/environments/$name?project=${PROJECT_NAME:-teste}" 2>/dev/null || true
   done
   if [[ "$saw_402" -ge 1 ]]; then
-    assert "402 PLAN_LIMIT_EXCEEDED observed (plan cap enforced)" 1
+    # Real enforcement triggered — fetch body of last 402 to validate error code.
+    # Re-issue ONE create to capture 402 body (the burst loop discarded it).
+    local probe_status probe_body
+    probe_status=$(curl -sS -o /tmp/env-402.json -w '%{http_code}' \
+      -X POST -m 10 \
+      -H "Authorization: Bearer $jwt" \
+      -H "Content-Type: application/json" \
+      -d "{\"name\":\"j10-burst-recheck-${TEST_ENV}\",\"project\":\"${PROJECT_NAME:-teste}\"}" \
+      "$CLOUD_URL${API_PREFIX}/api/v1/environments" 2>/dev/null || echo "000")
+    probe_body=$(cat /tmp/env-402.json 2>/dev/null || echo '{}')
+    if [[ "$probe_status" == "402" ]] && echo "$probe_body" | jq -e '.code == "PLAN_LIMIT_EXCEEDED" or .code == "ENVIRONMENT_LIMIT_EXCEEDED" or (.message // .detail // "" | tostring | test("limit|cap"; "i"))' >/dev/null 2>&1; then
+      assert "402 PLAN_LIMIT_EXCEEDED with canonical error code in body" 1
+    elif [[ "$probe_status" == "402" ]]; then
+      assert "402 returned but body missing canonical limit code: $probe_body" 0
+    else
+      assert "402 was seen in burst but recheck returned $probe_status (race)" 1
+    fi
+    rm -f /tmp/env-402.json
   elif [[ "$saw_201" -ge 1 ]]; then
-    # Degenerate-OK: tenant has high cap (e.g., dev tenant unlimited); the
-    # 402 path is unreachable today but the create surface is responding.
-    assert "create surface responsive (no 402 in burst; cap > 6 — degenerate OK; last=$last_status)" 1
+    # Test cannot validate enforcement when tenant cap > burst-budget (6).
+    # Per Rule 3 (Honest BLOCKED > false PASS): this is NOT a bypass-PASS;
+    # it's a documented test-coverage gap that needs a higher burst OR a
+    # starter-tier tenant to exercise the enforcement path. Caller MUST
+    # mark as inconclusive (assert 0 = FAIL until the test can actually
+    # validate behavior).
+    assert "plan-limit enforcement could not be validated — tenant cap exceeds burst budget 6 (REQUIRES starter-tier fixture)" 0
   else
     assert "create surface responsive (last=$last_status)" 0
   fi
@@ -383,7 +433,7 @@ scenario_f() {
   jwt=$(mint_jwt) || return 1
   local name="j10-race-$(date +%s%N | tail -c 8)"
   local body
-  body="{\"name\":\"$name\"}"
+  body="{\"name\":\"$name\",\"project\":\"${PROJECT_NAME:-teste}\"}"
   local tmpa=/tmp/env-race-a.code
   local tmpb=/tmp/env-race-b.code
   (curl -sS -o /dev/null -m 10 -w '%{http_code}' \
@@ -405,7 +455,9 @@ scenario_f() {
   local both_acceptable=1
   for code in "$a" "$b"; do
     case "$code" in
-      200|201|409|400) ;;
+      # 429 (Too Many Requests) is canonical — server enforced rate
+      # limit; controlled response per HTTP spec. NOT a server error.
+      200|201|400|409|429) ;;
       *) both_acceptable=0 ;;
     esac
   done

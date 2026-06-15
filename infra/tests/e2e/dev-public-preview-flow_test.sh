@@ -195,21 +195,12 @@ scenario_D() {
   while IFS='|' read -r tenant env_name env_project; do
     [[ -z "$tenant" || -z "$env_name" ]] && continue
     [[ -z "$env_project" ]] && continue  # skip pre-#69 envs with no Project field set
+    total=$((total+1))
     local app_name="${tenant}-${env_name}"
     local want_ns="loopzero-${tenant}-${env_project}-${env_name}"
     local got_ns
     got_ns=$(kubectl --context "$MGMT_CTX" get application "$app_name" -n argocd \
       -o jsonpath='{.spec.destination.namespace}' 2>/dev/null || true)
-    # Canonical empty-state: when no ArgoCD App exists yet (no deploys
-    # triggered for this env), there's nothing to assert. Test counts
-    # the env as ok if its App is absent (no deploys) OR present with
-    # the canonical destination. Sponsor JUNTOS browser walkthrough
-    # triggers real deploy which materializes the App.
-    if [[ -z "$got_ns" ]]; then
-      log "  env=${env_name} project=${env_project} has no ArgoCD App yet (empty-state — sponsor JUNTOS triggers populated state)"
-      continue
-    fi
-    total=$((total+1))
     if [[ "$got_ns" == "$want_ns" ]]; then
       ok=$((ok+1))
     else

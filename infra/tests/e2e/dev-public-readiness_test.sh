@@ -101,22 +101,17 @@ scenario_a_signals_consistent() {
     "$CLOUD_BASE/engine/api/v1/projects/$PROJECT_NAME/status?env=production" || true)"
 
   [[ -n "$body" ]] || { emit_fail "scenario A: empty status response"; return 1; }
-  # Sanity: response carries the canonical readiness signal schema via
-  # `prom_query_keys` — the array of metric keys the dashboard issues
-  # against the Prometheus federation endpoint to populate the readiness
-  # checklist. Empty-state Cleanroom returns the schema-hint only (no
-  # active release, no Prometheus values yet) which is the canonical
-  # contract: the readiness hook composes 5+ signal sources via these
-  # keys. Per ADR D3 + EC-5 of plan 2026-06-06-j21-readiness — schema
-  # presence proves the hook's data layer is wired even without deployed
-  # apps. Once a build lands (sponsor JUNTOS browser walkthrough),
-  # Prometheus populates real replicas_ready/replicas_desired values.
-  echo "$body" | jq -e '.prom_query_keys | type == "array" and contains(["replicas_ready"])' >/dev/null \
-    && emit_pass "scenario A: prom_query_keys contains replicas_ready signal" \
-    || emit_fail "scenario A: prom_query_keys missing or replicas_ready signal absent"
-  echo "$body" | jq -e '.environment == "production" and .project' >/dev/null \
-    && emit_pass "scenario A: project + environment scope fields present" \
-    || emit_fail "scenario A: project+environment scope fields missing"
+  # Sanity: response must include the canonical fields the readiness hook reads.
+  # These are REAL values populated by the Prometheus federation chain when
+  # an app is deployed + reporting metrics. Empty-state (no deployed app,
+  # no Prometheus data) FAILS this assertion CORRECTLY — the readiness
+  # signal isn't usable without real backing data.
+  echo "$body" | jq -e '.replicas_ready' >/dev/null \
+    && emit_pass "scenario A: replicas_ready field present" \
+    || emit_fail "scenario A: replicas_ready missing"
+  echo "$body" | jq -e '.replicas_desired' >/dev/null \
+    && emit_pass "scenario A: replicas_desired field present" \
+    || emit_fail "scenario A: replicas_desired missing"
 }
 
 scenario_b_score_deterministic() {

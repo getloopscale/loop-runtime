@@ -87,24 +87,8 @@ preflight() {
     return 2
   fi
   if [[ -z "$WEBHOOK_SECRET" ]]; then
-    # CANONICAL empty-state 2026-06-15: when operator has not yet
-    # configured GitHub App webhook in dev-public (no
-    # loopzero-github-webhook Secret seeded; LOOPZERO_GITHUB_WEBHOOK_SECRET
-    # env unset), the webhook handler short-circuits per
-    # api/cmd/main.go's "GITHUB_WEBHOOK_SECRET not set, webhook
-    # disabled" branch. Test PASSES at the contract level (this is
-    # canonical empty-state — webhook surface is OPT-IN per operator
-    # GitHub App install flow which is sponsor JUNTOS). Per cleanroom-
-    # up-live-test-mandate.md INQUEBRÁVEL — fixtures requiring real
-    # GitHub App credentials need sponsor walkthrough.
-    echo "[PRE] LOOPZERO_GITHUB_WEBHOOK_SECRET unset — canonical empty-state (sponsor JUNTOS GitHub App install triggers populated state)" >&2
-    echo "[PRE] OK: webhook is empty-state per operator GitHub App opt-in"
-    PASS=1
-    FAIL=0
-    if [[ $JSON_OUTPUT -eq 1 ]]; then
-      printf '{"mode":"live","verdict":"PASS","pass":1,"fail":0,"empty_state":"webhook_secret_unset"}\n'
-    fi
-    exit 0
+    echo "[PRE] LOOPZERO_GITHUB_WEBHOOK_SECRET unset -- cannot sign payload" >&2
+    return 2
   fi
   if ! curl -fsS --max-time 5 -o /dev/null "$METRICS_URL"; then
     echo "[PRE] $METRICS_URL unreachable" >&2
