@@ -1,14 +1,13 @@
 // SPDX-License-Identifier: Apache-2.0
 // Copyright 2025-2026 The LoopZero Authors
 //
-// Plan v1.2 T2.2 (cutover-deep-review-hardening): services.json `type` enum
-// propagation tests. Default-to-server fallback + EC-9 frontend-without-
-// rendering rejection.
+// services.json `type` enum propagation tests. Default-to-server fallback.
+// (Frontend type + EC-9 rendering rejection removed in
+// simplify-deploy-loopzerokit-only v2.0 T3.3 — server|worker only.)
 
 package manifests
 
 import (
-	"strings"
 	"testing"
 )
 
@@ -50,50 +49,6 @@ func TestMapServicesToRenderInput_TypeAbsent_DefaultsServer(t *testing.T) {
 	}
 	if input.Apps[0].Type != ServiceTypeServer {
 		t.Errorf("expected default Type=server, got %q", input.Apps[0].Type)
-	}
-}
-
-func TestMapServicesToRenderInput_TypeFrontend_WithRendering_OK(t *testing.T) {
-	svc := ServicesManifest{
-		Version: 2,
-		Services: []ServiceEntry{
-			{
-				Name:      "web",
-				Runtime:   "node",
-				Type:      ServiceTypeFrontend,
-				Port:      3000,
-				Proxy:     "/app",
-				Dev:       "x",
-				Start:     "x",
-				Healthcheck: "/h",
-				Rendering: &FrontendRendering{Mode: "static", AssetsDir: "dist"},
-			},
-		},
-	}
-	input, err := mapServicesToRenderInput(svc, baseRenderOpts())
-	if err != nil {
-		t.Fatalf("expected nil err for frontend with rendering, got %v", err)
-	}
-	if input.Apps[0].Type != ServiceTypeFrontend {
-		t.Errorf("expected Type=frontend preserved, got %q", input.Apps[0].Type)
-	}
-}
-
-// EC-9 (v1.1): frontend without rendering metadata MUST return an actionable
-// error, not silently fall through to server emit.
-func TestMapServicesToRenderInput_TypeFrontendWithoutRendering_ReturnsError(t *testing.T) {
-	svc := ServicesManifest{
-		Version: 2,
-		Services: []ServiceEntry{
-			{Name: "web", Runtime: "node", Type: ServiceTypeFrontend, Port: 3000, Proxy: "/app", Dev: "x", Start: "x", Healthcheck: "/h"},
-		},
-	}
-	_, err := mapServicesToRenderInput(svc, baseRenderOpts())
-	if err == nil {
-		t.Fatal("expected error for frontend without rendering, got nil")
-	}
-	if !strings.Contains(err.Error(), "frontend") || !strings.Contains(err.Error(), "rendering") {
-		t.Errorf("expected actionable error mentioning 'frontend' and 'rendering', got: %v", err)
 	}
 }
 
