@@ -19,6 +19,20 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ### Security
 
+## [0.17.0] - 2026-06-15
+
+### Added
+- Readiness Score page at `/projects/:name/readiness` — Vercel-style production readiness checklist with weighted 0-100 score composing 8 signals from existing project surfaces (#J-21)
+- Tristate Pass / Warn / Fail / Unknown per signal — when a measurement source is down, the signal renders "Not measurable right now" instead of leaking operational distress as a red "Fail" (#J-21)
+- Score Card with delta vs your previous visit — shows "+15" / "–20" badges so you see whether readiness is improving or degrading across sessions (#J-21)
+- 8-row readiness checklist with inline "Fix it" link per signal — clicking jumps to the page that resolves the gap (Scale, Secrets, Logs, etc.) (#J-21)
+- FAQ panel explaining each signal, with deep-link support (`?signal=hpa_configured` opens the matching row pre-expanded) (#J-21)
+- Canonical accessible status mapping — every status icon pairs with an aria-label ("Ready", "Needs attention", "Action required", "Not measurable right now") so screen readers announce the state independently of color (#J-21)
+
+
+### Changed
+- Replaced the legacy v0 readiness checklist (single-list, no score, no tristate, no a11y mapping) with the new canonical components at `cloud/dashboard/src/components/readiness/` (#J-21)
+
 ## [0.16.0] - 2026-06-15
 
 ### Added
