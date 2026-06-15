@@ -77,8 +77,11 @@ assert_grep "issuer uses publicAuthUrl gotmpl override" \
   'issuer:.*publicAuthUrl'
 
 # (3) Default fallback is the cluster-internal FQDN.
+# Implementation uses `{{ if ... }}{{ else }}http://ory-hydra-public...{{ end }}`
+# pattern (not the Helm `default` helper). Either pattern is valid Go template
+# fallback; assert the FALLBACK STRING is present on the same line as `issuer:`.
 assert_grep "issuer default fallback to cluster-internal FQDN" \
-  'issuer:.*default.*ory-hydra-public\.loopzero-auth\.svc\.cluster\.local'
+  'issuer:.*ory-hydra-public\.loopzero-auth\.svc\.cluster\.local'
 
 # (4) Trailing slash present in the value template.
 assert_grep "issuer ends with trailing slash" \
@@ -103,8 +106,10 @@ else
 fi
 
 # (8) urls.self.public also uses publicAuthUrl override (same FQDN as issuer).
+# Same Helm template if-else fallback pattern as (3); assert publicAuthUrl
+# reference + cluster-internal FQDN on the same `public:` line.
 assert_grep "urls.self.public uses publicAuthUrl override" \
-  'public:.*publicAuthUrl.*default.*ory-hydra-public\.loopzero-auth\.svc\.cluster\.local'
+  'public:.*publicAuthUrl.*ory-hydra-public\.loopzero-auth\.svc\.cluster\.local'
 
 # (9) urls.device.verification points at dashboard /device-verify (NOT Hydra
 #     /oauth2/fallbacks/device — that page is literally the "config missing"
