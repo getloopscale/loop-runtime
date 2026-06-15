@@ -86,10 +86,18 @@ type BuildAppAutoscaling struct {
 // Used by the reconcile loop to generate manifests and compute image
 // refs.
 type BuildAppSpec struct {
-	Name        string               `json:"name"`
-	Type        string               `json:"type"`
-	Rendering   string               `json:"rendering,omitempty"` // "static" or "server" (Sprint 10)
-	Port        int                  `json:"port"`
+	Name      string `json:"name"`
+	Type      string `json:"type"`
+	Rendering string `json:"rendering,omitempty"` // "static" or "server" (Sprint 10)
+	Port      int    `json:"port"`
+	// T0.2 (plan simplify-deploy-loopzerokit-only v2.0): persist the declared
+	// services.json start command + app path + build mode. Removing loopzero-packs
+	// (which auto-detected these at build time) means the canonical Dockerfile
+	// generator needs them from the stored spec, not from heuristics.
+	// JSONB back-compat: legacy rows omit these keys → decode as empty.
+	Start       string               `json:"start,omitempty"`
+	Path        string               `json:"path,omitempty"`
+	Build       string               `json:"build,omitempty"`
 	Secrets     []string             `json:"secrets,omitempty"`
 	Replicas    int                  `json:"replicas,omitempty"`
 	Autoscaling *BuildAppAutoscaling `json:"autoscaling,omitempty"`

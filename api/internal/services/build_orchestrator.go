@@ -73,6 +73,7 @@ type AppSpec struct {
 	Path        string              `json:"path,omitempty"`
 	Framework   string              `json:"framework,omitempty"`          // "nextjs", "express", "gin", "fastapi", "custom", etc.
 	Build       string              `json:"build,omitempty"`              // v2: "dockerfile", "buildpack", "custom"
+	Start       string              `json:"start,omitempty"`              // T0.2: declared services.json start command (canonical Dockerfile CMD)
 	Dockerfile  string              `json:"dockerfile,omitempty"`         // v2: Dockerfile path relative to app path
 	Rendering   string              `json:"rendering,omitempty"`          // v2: "static" or "server" (MEET-009)
 	Env         map[string]string   `json:"env,omitempty"`                // v2: build-time environment variables

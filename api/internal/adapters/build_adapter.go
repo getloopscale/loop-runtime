@@ -40,6 +40,7 @@ func (a *BuildOrchestratorAdapter) SubmitBuild(ctx context.Context, req routes.S
 			Path:      app.Path,
 			Framework: app.Framework,
 			Build:     app.Build,
+			Start:     app.Start, // T0.2: declared start → canonical Dockerfile CMD
 			Rendering: app.Rendering,
 			Secrets:   app.Secrets,
 			// B15 (CHG-2026-04-23-B15 / MEET-2026-04-23-059): forward scaling
@@ -184,6 +185,9 @@ func (a *BuildOrchestratorAdapter) GetRedeploySource(ctx context.Context, tenant
 			Name:      s.Name,
 			Type:      s.Type,
 			Port:      s.Port,
+			Path:      s.Path,  // T0.2: now persisted → redeploy preserves monorepo path
+			Build:     s.Build, // T0.2: now persisted → redeploy preserves build mode
+			Start:     s.Start, // T0.2: now persisted → redeploy preserves start command
 			Rendering: s.Rendering,
 			Secrets:   s.Secrets,
 			Replicas:  s.Replicas,

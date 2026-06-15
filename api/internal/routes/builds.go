@@ -55,6 +55,7 @@ type AppInput struct {
 	Path      string               `json:"path,omitempty"`
 	Framework string               `json:"framework,omitempty"`  // "express", "go", "fastapi", etc.
 	Build     string               `json:"build,omitempty"`       // "dockerfile", "buildpack", "custom"
+	Start     string               `json:"start,omitempty"`       // T0.2: declared services.json start command (canonical Dockerfile CMD)
 	Rendering string               `json:"rendering,omitempty"`   // "static" or "server" (Sprint 10)
 	Secrets   []string             `json:"secrets,omitempty"`
 	// B15: scaling config — either Replicas OR Autoscaling (never both).
