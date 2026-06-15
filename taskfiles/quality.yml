@@ -119,6 +119,10 @@ tasks:
       # (shell metachars + nested quotes). Script is conditional: runs
       # shellcheck when installed; emits WARN + exits 0 when absent.
       - bash infra/scripts/local/shellcheck-advisory.sh
+      # T-cov-1 of plan 2026-06-15-100pct-dashboard-coverage-roadmap Phase 2A
+      # (R2-F8 HIGH closure): every user-facing API route must be in the
+      # middleware.Auth group OR appear in the explicit public-allowlist.
+      - bash infra/tests/check-route-auth-coverage_test.sh
 
   diff:
     desc: 'PR-diff quality gates (override base with BASE_REF=<ref>; default origin/main)'
