@@ -11,10 +11,10 @@ import (
 	"log/slog"
 	"time"
 
-	"github.com/loopzero/loopzero/pkg/enforcement"
+	planpkg "github.com/loopzero/loopzero/pkg/plan"
 )
 
-// T1.9 of plans/2026-05-12-launch-readiness-waves-plan.md (v1.4).
+// T1.9 of plans/2026-05-12-launch-readiness-waves-planpkg.md (v1.4).
 //
 // CostAggregator runs every 5 minutes (per plan), reads Prometheus counters
 // for the three cost metrics, and UPSERTs `cost_counters` rows. The
@@ -79,10 +79,10 @@ func (a *CostAggregator) WithClock(now func() time.Time) *CostAggregator {
 // promQueries maps each canonical cost metric to its PromQL query. The
 // queries assume `loopzero_*` instrumentation already in place (see CLAUDE.md
 // observability section).
-var promQueries = map[enforcement.CostMetric]string{
-	enforcement.MetricEgressBytes:  `sum by (tenant) (loopzero_egress_bytes_total)`,
-	enforcement.MetricDOCRPulls:    `sum by (tenant) (loopzero_docr_pulls_total)`,
-	enforcement.MetricBuildMinutes: `sum by (tenant) (rate(loopzero_build_duration_seconds_sum[5m]) * 60)`,
+var promQueries = map[planpkg.CostMetric]string{
+	planpkg.MetricEgressBytes:  `sum by (tenant) (loopzero_egress_bytes_total)`,
+	planpkg.MetricDOCRPulls:    `sum by (tenant) (loopzero_docr_pulls_total)`,
+	planpkg.MetricBuildMinutes: `sum by (tenant) (rate(loopzero_build_duration_seconds_sum[5m]) * 60)`,
 }
 
 // Tick runs one aggregation pass: queries Prometheus, computes deltas,
@@ -93,7 +93,7 @@ var promQueries = map[enforcement.CostMetric]string{
 // read errors too — so a degraded aggregator never blocks production
 // traffic.
 func (a *CostAggregator) Tick(ctx context.Context) (int, error) {
-	periodStart, periodEnd := enforcement.CurrentPeriod(a.now())
+	periodStart, periodEnd := planpkg.CurrentPeriod(a.now())
 	updated := 0
 
 	for metric, query := range promQueries {
@@ -136,7 +136,7 @@ func (a *CostAggregator) Tick(ctx context.Context) (int, error) {
 // subsequent ticks compute correctly.
 //
 // Returns 0 on first-seen (previous absent — counter starts at current).
-func (a *CostAggregator) deltaSafe(tenantID string, metric enforcement.CostMetric, current float64) float64 {
+func (a *CostAggregator) deltaSafe(tenantID string, metric planpkg.CostMetric, current float64) float64 {
 	key := tenantID + "|" + string(metric)
 	previous, seen := a.previous[key]
 	a.previous[key] = current
@@ -164,7 +164,7 @@ func (a *CostAggregator) deltaSafe(tenantID string, metric enforcement.CostMetri
 // Reads plan_tier from subscriptions table inline to avoid a separate
 // store dependency at this layer; the column is a snapshot of the plan
 // at the time of write.
-func (a *CostAggregator) upsertCounter(ctx context.Context, tenantID string, metric enforcement.CostMetric, periodStart, periodEnd int64, delta int64) error {
+func (a *CostAggregator) upsertCounter(ctx context.Context, tenantID string, metric planpkg.CostMetric, periodStart, periodEnd int64, delta int64) error {
 	if a.db == nil {
 		return errors.New("cost_aggregator: db is nil")
 	}
@@ -178,7 +178,7 @@ func (a *CostAggregator) upsertCounter(ctx context.Context, tenantID string, met
 		if !errors.Is(err, sql.ErrNoRows) {
 			return fmt.Errorf("read plan: %w", err)
 		}
-		plan = string(enforcement.PlanStarter)
+		plan = string(planpkg.PlanStarter)
 	}
 
 	_, err = a.db.ExecContext(ctx, `

@@ -8,7 +8,7 @@ import (
 	"errors"
 	"testing"
 
-	"github.com/loopzero/loopzero/pkg/enforcement"
+	planpkg "github.com/loopzero/loopzero/pkg/plan"
 )
 
 // fakeLimitsStore satisfies enforcement.LimitsStore for PlanReader tests.
@@ -31,7 +31,7 @@ func (f *fakeLimitsStore) GetLimits(_ context.Context, _, _ string) (int, int, e
 
 func TestSQLCostStore_NilStore_ReturnsError(t *testing.T) {
 	var s *SQLCostStore // nil
-	_, found, err := s.GetCounter(context.Background(), "tn-1", enforcement.MetricEgressBytes)
+	_, found, err := s.GetCounter(context.Background(), "tn-1", planpkg.MetricEgressBytes)
 	if err == nil {
 		t.Error("nil store must return error (CapChecker treats as fail-open)")
 	}
@@ -42,7 +42,7 @@ func TestSQLCostStore_NilStore_ReturnsError(t *testing.T) {
 
 func TestSQLCostStore_NilDB_ReturnsError(t *testing.T) {
 	s := NewSQLCostStore(nil)
-	_, found, err := s.GetCounter(context.Background(), "tn-1", enforcement.MetricEgressBytes)
+	_, found, err := s.GetCounter(context.Background(), "tn-1", planpkg.MetricEgressBytes)
 	if err == nil {
 		t.Error("nil db must return error")
 	}
@@ -62,7 +62,7 @@ func TestPlanReader_ReturnsStarterDefaultOnEmpty(t *testing.T) {
 	if err != nil {
 		t.Errorf("empty plan should not return error, got %v", err)
 	}
-	if plan != enforcement.PlanStarter {
+	if plan != planpkg.PlanStarter {
 		t.Errorf("empty plan = %q, want starter (default)", plan)
 	}
 }
@@ -71,7 +71,7 @@ func TestPlanReader_ReturnsTypedPlan(t *testing.T) {
 	store := &fakeLimitsStore{plan: "pro"}
 	reader := NewPlanReader(store)
 	plan, _ := reader.GetTenantPlan(context.Background(), "tn-x")
-	if plan != enforcement.PlanPro {
+	if plan != planpkg.PlanPro {
 		t.Errorf("want pro, got %q", plan)
 	}
 }
@@ -84,7 +84,7 @@ func TestPlanReader_StorePropagatesError(t *testing.T) {
 		t.Error("expected store error to propagate")
 	}
 	// On error, returns conservative default (starter).
-	if plan != enforcement.PlanStarter {
+	if plan != planpkg.PlanStarter {
 		t.Errorf("error path = %q, want starter (conservative default)", plan)
 	}
 }

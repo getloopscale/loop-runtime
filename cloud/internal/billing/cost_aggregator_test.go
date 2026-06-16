@@ -10,7 +10,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/loopzero/loopzero/pkg/enforcement"
+	planpkg "github.com/loopzero/loopzero/pkg/plan"
 )
 
 // fakePromQuerier is a deterministic in-memory PromQuerier for tests.
@@ -59,38 +59,38 @@ func (f *fakePromQuerier) QueryCounterByTenant(_ context.Context, query string) 
 func TestCostAggregator_PrometheusRestart_HandlesCounterReset(t *testing.T) {
 	prom := newFakeProm()
 	// Tick 1: tenant tn-1 has accumulated 5 GB of egress.
-	prom.enqueue(promQueries[enforcement.MetricEgressBytes], map[string]float64{
+	prom.enqueue(promQueries[planpkg.MetricEgressBytes], map[string]float64{
 		"tn-1": 5 * 1024 * 1024 * 1024,
 	})
 	// Tick 2: PROMETHEUS RESTART — counter resets to 0 (well, less than the
 	// previous 5GB — say 100MB of fresh accumulation between restart and
 	// tick 2).
-	prom.enqueue(promQueries[enforcement.MetricEgressBytes], map[string]float64{
+	prom.enqueue(promQueries[planpkg.MetricEgressBytes], map[string]float64{
 		"tn-1": 100 * 1024 * 1024,
 	})
 	// Tick 3: post-restart accumulation continues — now at 200MB total.
-	prom.enqueue(promQueries[enforcement.MetricEgressBytes], map[string]float64{
+	prom.enqueue(promQueries[planpkg.MetricEgressBytes], map[string]float64{
 		"tn-1": 200 * 1024 * 1024,
 	})
 
 	agg := NewCostAggregator(nil, prom, slog.Default())
 
 	// Tick 1: first observation — deltaSafe returns 0 (baseline).
-	d := agg.deltaSafe("tn-1", enforcement.MetricEgressBytes, 5*1024*1024*1024)
+	d := agg.deltaSafe("tn-1", planpkg.MetricEgressBytes, 5*1024*1024*1024)
 	if d != 0 {
 		t.Errorf("tick 1 (first observation): want delta=0 (baseline), got %d", int64(d))
 	}
 
 	// Tick 2: PROM RESTART — current (100MB) < previous (5GB).
 	// MUST return 0 — NEVER subtract. EC-NEW-11.
-	d = agg.deltaSafe("tn-1", enforcement.MetricEgressBytes, 100*1024*1024)
+	d = agg.deltaSafe("tn-1", planpkg.MetricEgressBytes, 100*1024*1024)
 	if d != 0 {
 		t.Errorf("tick 2 (prom restart): want delta=0 (no subtraction), got %d", int64(d))
 	}
 
 	// Tick 3: post-restart accumulation — current (200MB) > previous (100MB).
 	// Legitimate +100MB delta. AGGREGATOR MUST RESUME correct accounting.
-	d = agg.deltaSafe("tn-1", enforcement.MetricEgressBytes, 200*1024*1024)
+	d = agg.deltaSafe("tn-1", planpkg.MetricEgressBytes, 200*1024*1024)
 	if d != 100*1024*1024 {
 		t.Errorf("tick 3 (post-restart): want delta=%d, got %d",
 			100*1024*1024, int64(d))
@@ -99,15 +99,15 @@ func TestCostAggregator_PrometheusRestart_HandlesCounterReset(t *testing.T) {
 
 func TestDeltaSafe_FirstObservationIsBaseline(t *testing.T) {
 	agg := NewCostAggregator(nil, newFakeProm(), slog.Default())
-	if d := agg.deltaSafe("tn-x", enforcement.MetricBuildMinutes, 42); d != 0 {
+	if d := agg.deltaSafe("tn-x", planpkg.MetricBuildMinutes, 42); d != 0 {
 		t.Errorf("first observation: want 0 (baseline), got %d", int64(d))
 	}
 }
 
 func TestDeltaSafe_NormalIncrement(t *testing.T) {
 	agg := NewCostAggregator(nil, newFakeProm(), slog.Default())
-	_ = agg.deltaSafe("tn-x", enforcement.MetricBuildMinutes, 100)
-	d := agg.deltaSafe("tn-x", enforcement.MetricBuildMinutes, 150)
+	_ = agg.deltaSafe("tn-x", planpkg.MetricBuildMinutes, 100)
+	d := agg.deltaSafe("tn-x", planpkg.MetricBuildMinutes, 150)
 	if d != 50 {
 		t.Errorf("normal increment: want 50, got %d", int64(d))
 	}
@@ -115,13 +115,13 @@ func TestDeltaSafe_NormalIncrement(t *testing.T) {
 
 func TestDeltaSafe_NegativeBecomesZero(t *testing.T) {
 	agg := NewCostAggregator(nil, newFakeProm(), slog.Default())
-	_ = agg.deltaSafe("tn-x", enforcement.MetricBuildMinutes, 999)
-	d := agg.deltaSafe("tn-x", enforcement.MetricBuildMinutes, 5)
+	_ = agg.deltaSafe("tn-x", planpkg.MetricBuildMinutes, 999)
+	d := agg.deltaSafe("tn-x", planpkg.MetricBuildMinutes, 5)
 	if d != 0 {
 		t.Errorf("negative delta: want 0 (EC-NEW-11), got %d", int64(d))
 	}
 	// Post-reset baseline must equal current observation (5).
-	d = agg.deltaSafe("tn-x", enforcement.MetricBuildMinutes, 12)
+	d = agg.deltaSafe("tn-x", planpkg.MetricBuildMinutes, 12)
 	if d != 7 {
 		t.Errorf("post-reset delta: want 7 (12 - 5), got %d", int64(d))
 	}
@@ -129,9 +129,9 @@ func TestDeltaSafe_NegativeBecomesZero(t *testing.T) {
 
 func TestDeltaSafe_PerTenantIsolation(t *testing.T) {
 	agg := NewCostAggregator(nil, newFakeProm(), slog.Default())
-	_ = agg.deltaSafe("tn-a", enforcement.MetricBuildMinutes, 100)
+	_ = agg.deltaSafe("tn-a", planpkg.MetricBuildMinutes, 100)
 	// Different tenant — must also start at baseline (0), not 100.
-	d := agg.deltaSafe("tn-b", enforcement.MetricBuildMinutes, 50)
+	d := agg.deltaSafe("tn-b", planpkg.MetricBuildMinutes, 50)
 	if d != 0 {
 		t.Errorf("tn-b first observation: want 0 (per-tenant baseline), got %d", int64(d))
 	}
@@ -139,8 +139,8 @@ func TestDeltaSafe_PerTenantIsolation(t *testing.T) {
 
 func TestDeltaSafe_PerMetricIsolation(t *testing.T) {
 	agg := NewCostAggregator(nil, newFakeProm(), slog.Default())
-	_ = agg.deltaSafe("tn-a", enforcement.MetricBuildMinutes, 100)
-	d := agg.deltaSafe("tn-a", enforcement.MetricEgressBytes, 999)
+	_ = agg.deltaSafe("tn-a", planpkg.MetricBuildMinutes, 100)
+	d := agg.deltaSafe("tn-a", planpkg.MetricEgressBytes, 999)
 	if d != 0 {
 		t.Errorf("egress baseline must be independent of minutes: want 0, got %d",
 			int64(d))
@@ -160,13 +160,13 @@ func TestDeltaSafe_PerMetricIsolation(t *testing.T) {
 func TestAggregator_5minPeriod(t *testing.T) {
 	prom := newFakeProm()
 	// Tick 1: tn-1 has 60 min built. First observation → delta=0, no upsert.
-	prom.enqueue(promQueries[enforcement.MetricBuildMinutes], map[string]float64{
+	prom.enqueue(promQueries[planpkg.MetricBuildMinutes], map[string]float64{
 		"tn-1": 60,
 	})
 	// Tick 2: tn-1 has 65 min built. Delta=5 — would upsert IF db were
 	// connected. Here db is nil so the upsert fails-open and the tick
 	// returns 0 updated (Tick logs the error and continues).
-	prom.enqueue(promQueries[enforcement.MetricBuildMinutes], map[string]float64{
+	prom.enqueue(promQueries[planpkg.MetricBuildMinutes], map[string]float64{
 		"tn-1": 65,
 	})
 

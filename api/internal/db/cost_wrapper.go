@@ -5,7 +5,7 @@ package db
 
 // cost_wrapper.go — sqlc-backed implementation of SQLCostStore.
 // T2.2 (Batch B #5) of plan
-// docs/plans/2026-05-29-sqlc-migration-plan.md v1.3.
+// docs/plans/2026-05-29-sqlc-migration-planpkg.md v1.3.
 //
 // T1.9 production wiring (Wave 1 of MEET-2026-05-12). Previous
 // cost_store.go used *sql.DB (database/sql legacy) for cost_counters
@@ -29,6 +29,7 @@ import (
 	"github.com/loopzero/loopzero/api/internal/db/generated"
 	"github.com/loopzero/loopzero/pkg/enforcement"
 	loopzeroerrors "github.com/loopzero/loopzero/pkg/errors"
+	planpkg "github.com/loopzero/loopzero/pkg/plan"
 )
 
 // SQLCostStore reads cost_counters rows from PostgreSQL via sqlc.
@@ -59,18 +60,18 @@ func NewSQLCostStore(db DBTX) *SQLCostStore {
 // Error semantics (preserved from legacy):
 //   - pgx.ErrNoRows → (zero, false, nil) (CapChecker = "no usage" = allow)
 //   - other err     → (zero, false, err) (CapChecker fails-open)
-func (s *SQLCostStore) GetCounter(ctx context.Context, tenantID string, metric enforcement.CostMetric) (enforcement.CostCounter, bool, error) {
+func (s *SQLCostStore) GetCounter(ctx context.Context, tenantID string, metric planpkg.CostMetric) (planpkg.CostCounter, bool, error) {
 	if s == nil || s.db == nil {
 		// Audit gap M02 #13 fix: typed LoopZeroError instead of generic errors.New.
 		// `nil SQLCostStore` indicates the cost-enforcement middleware was
 		// wired without a backing store — a programming error caught at the
 		// first request rather than at boot.
-		return enforcement.CostCounter{}, false, loopzeroerrors.ErrInternalError.Wrap("nil SQLCostStore")
+		return planpkg.CostCounter{}, false, loopzeroerrors.ErrInternalError.Wrap("nil SQLCostStore")
 	}
 
 	bridge, ok := s.db.(SqlcBridge)
 	if !ok {
-		return enforcement.CostCounter{}, false, fmt.Errorf("cost store: DBTX %T does not implement SqlcBridge", s.db)
+		return planpkg.CostCounter{}, false, fmt.Errorf("cost store: DBTX %T does not implement SqlcBridge", s.db)
 	}
 	q := generated.New()
 	row, err := q.GetActiveCostCounter(ctx, bridge.GeneratedDB(), generated.GetActiveCostCounterParams{
@@ -79,15 +80,15 @@ func (s *SQLCostStore) GetCounter(ctx context.Context, tenantID string, metric e
 	})
 	if errors.Is(err, pgx.ErrNoRows) {
 		// No counter row yet this period — caller treats as 0 usage.
-		return enforcement.CostCounter{}, false, nil
+		return planpkg.CostCounter{}, false, nil
 	}
 	if err != nil {
-		return enforcement.CostCounter{}, false, err
+		return planpkg.CostCounter{}, false, err
 	}
 
-	return enforcement.CostCounter{
+	return planpkg.CostCounter{
 		TenantID:    tenantID,
-		Plan:        enforcement.Plan(row.PlanTier),
+		Plan:        planpkg.Plan(row.PlanTier),
 		Metric:      metric,
 		PeriodStart: row.PeriodStartEpoch,
 		PeriodEnd:   row.PeriodEndEpoch,
@@ -96,11 +97,11 @@ func (s *SQLCostStore) GetCounter(ctx context.Context, tenantID string, metric e
 }
 
 // PlanReader adapts the existing enforcement.LimitsStore.GetTenantPlan
-// (returns string) into middleware.PlanReader (returns enforcement.Plan).
+// (returns string) into middleware.PlanReader (returns planpkg.Plan).
 //
 // Reuses the same SQL query (`SELECT plan FROM subscriptions ...`) as
 // PlanLimiter — no duplicated logic. The conversion is a 1:1 typed
-// cast since plan strings are the canonical enforcement.Plan values.
+// cast since plan strings are the canonical planpkg.Plan values.
 //
 // T2.2 Batch B #5: preserved verbatim (no SQL handwritten — only
 // delegates to LimitsStore which lives in pkg/enforcement/).
@@ -119,17 +120,17 @@ func NewPlanReader(store enforcement.LimitsStore) *PlanReader {
 // middleware fails-open on plan lookup error, so the conservative
 // starter default would only matter if the middleware were configured
 // fail-closed — currently it logs + skips enforcement.
-func (p *PlanReader) GetTenantPlan(ctx context.Context, tenantID string) (enforcement.Plan, error) {
+func (p *PlanReader) GetTenantPlan(ctx context.Context, tenantID string) (planpkg.Plan, error) {
 	if p == nil || p.store == nil {
 		// Audit gap M02 #13 fix: typed LoopZeroError instead of generic errors.New.
-		return enforcement.PlanStarter, loopzeroerrors.ErrInternalError.Wrap("nil PlanReader")
+		return planpkg.PlanStarter, loopzeroerrors.ErrInternalError.Wrap("nil PlanReader")
 	}
 	plan, err := p.store.GetTenantPlan(ctx, tenantID)
 	if err != nil {
-		return enforcement.PlanStarter, err
+		return planpkg.PlanStarter, err
 	}
 	if plan == "" {
-		return enforcement.PlanStarter, nil
+		return planpkg.PlanStarter, nil
 	}
-	return enforcement.Plan(plan), nil
+	return planpkg.Plan(plan), nil
 }

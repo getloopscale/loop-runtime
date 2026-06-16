@@ -52,7 +52,7 @@ type GetActiveCostCounterRow struct {
 //
 // Returns the active counter for (tenant, metric) where now() is
 // within the period window. Epoch seconds (bigint) returned for
-// direct mapping to enforcement.CostCounter int64 fields.
+// direct mapping to plan.CostCounter int64 fields.
 func (q *Queries) GetActiveCostCounter(ctx context.Context, db DBTX, arg GetActiveCostCounterParams) (GetActiveCostCounterRow, error) {
 	row := db.QueryRow(ctx, getActiveCostCounter, arg.TenantID, arg.Metric)
 	var i GetActiveCostCounterRow

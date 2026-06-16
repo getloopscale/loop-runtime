@@ -11,20 +11,20 @@ import (
 	"net/http/httptest"
 	"testing"
 
-	"github.com/loopzero/loopzero/pkg/enforcement"
+	planpkg "github.com/loopzero/loopzero/pkg/plan"
 )
 
 // fakeCostSource implements enforcement.CostStore for unit tests of
 // the T1.9 cost usage display path.
 type fakeCostSource struct {
 	// per metric → counter (or absent for found=false)
-	counters map[enforcement.CostMetric]enforcement.CostCounter
+	counters map[planpkg.CostMetric]planpkg.CostCounter
 	err      error
 }
 
-func (f *fakeCostSource) GetCounter(_ context.Context, _ string, metric enforcement.CostMetric) (enforcement.CostCounter, bool, error) {
+func (f *fakeCostSource) GetCounter(_ context.Context, _ string, metric planpkg.CostMetric) (planpkg.CostCounter, bool, error) {
 	if f.err != nil {
-		return enforcement.CostCounter{}, false, f.err
+		return planpkg.CostCounter{}, false, f.err
 	}
 	c, ok := f.counters[metric]
 	return c, ok, nil
@@ -35,9 +35,9 @@ func (f *fakeCostSource) GetCounter(_ context.Context, _ string, metric enforcem
 // the `usage` map with their current values + per-plan caps.
 func TestBilling_Get_WithCostSource_PopulatesUsage(t *testing.T) {
 	cost := &fakeCostSource{
-		counters: map[enforcement.CostMetric]enforcement.CostCounter{
-			enforcement.MetricBuildMinutes: {Value: 42},
-			enforcement.MetricEgressBytes:  {Value: 5 * 1024 * 1024 * 1024}, // 5 GB
+		counters: map[planpkg.CostMetric]planpkg.CostCounter{
+			planpkg.MetricBuildMinutes: {Value: 42},
+			planpkg.MetricEgressBytes:  {Value: 5 * 1024 * 1024 * 1024}, // 5 GB
 			// docr_pulls: absent → found=false → used=0
 		},
 	}
@@ -84,8 +84,8 @@ func TestBilling_Get_WithCostSource_PopulatesUsage(t *testing.T) {
 // every cap so the CLI prints "unlimited".
 func TestBilling_Get_EnterprisePlan_ShowsUnlimitedSentinel(t *testing.T) {
 	cost := &fakeCostSource{
-		counters: map[enforcement.CostMetric]enforcement.CostCounter{
-			enforcement.MetricBuildMinutes: {Value: 999999},
+		counters: map[planpkg.CostMetric]planpkg.CostCounter{
+			planpkg.MetricBuildMinutes: {Value: 999999},
 		},
 	}
 	h := NewBillingHandler(&fakeBillingPool{plan: "enterprise"}).WithCostSource(cost)

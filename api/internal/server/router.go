@@ -20,12 +20,13 @@ import (
 	"github.com/loopzero/loopzero/api/internal/routes"
 	"github.com/loopzero/loopzero/api/internal/sse"
 	"github.com/loopzero/loopzero/pkg/enforcement"
+	planpkg "github.com/loopzero/loopzero/pkg/plan"
 )
 
 // enforcementMetricBuildMinutes is the canonical metric label for the cost
 // cap gating the POST /api/v1/builds route. Distinct from PlanLimiter's
 // "builds_per_month" — see Wave 1 T1.9 for the SRP rationale.
-const enforcementMetricBuildMinutes = enforcement.MetricBuildMinutes
+const enforcementMetricBuildMinutes = planpkg.MetricBuildMinutes
 
 // NewRouter creates a chi router with middleware and routes.
 func NewRouter(cfg Config) *chi.Mux {
@@ -146,7 +147,7 @@ func NewRouter(cfg Config) *chi.Mux {
 	if cfg.AdminPinner != nil {
 		r.Post("/api/v1/admin/tenants/pin", routes.AdminPinCellHandler(cfg.AdminPinner))
 	}
-	// T4.4 of plan 2026-05-28-meet-001-engineering-closure-plan.md:
+	// T4.4 of plan 2026-05-28-meet-001-engineering-closure-planpkg.md:
 	// diagnostic read-only endpoint for on-call to inspect a release's
 	// signing + attestation chain without source access. The handler
 	// enforces LOOPZERO_ADMIN_API + X-Service-Auth itself.
@@ -229,7 +230,7 @@ func NewRouter(cfg Config) *chi.Mux {
 			// Distinct from buildEnforcement (rate-style builds/month).
 			buildCostGate := cfg.CostEnforcer.Middleware(enforcementMetricBuildMinutes)
 
-			// D5 of plan 2026-06-07-preview-as-category-single-slot-plan.md
+			// D5 of plan 2026-06-07-preview-as-category-single-slot-planpkg.md
 			// (Bug A fix): CountPermanentEnvironments filters by
 			// `kind = 'permanent'` so previews (single-slot model via
 			// preview_slot table) NEVER count against

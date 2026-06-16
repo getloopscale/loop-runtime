@@ -14,26 +14,27 @@ import (
 	"testing"
 
 	"github.com/loopzero/loopzero/pkg/enforcement"
+	planpkg "github.com/loopzero/loopzero/pkg/plan"
 )
 
 // fakeCostStore implements enforcement.CostStore in-memory.
 type fakeCostStore struct {
-	counter enforcement.CostCounter
+	counter planpkg.CostCounter
 	found   bool
 	err     error
 }
 
-func (f *fakeCostStore) GetCounter(_ context.Context, _ string, _ enforcement.CostMetric) (enforcement.CostCounter, bool, error) {
+func (f *fakeCostStore) GetCounter(_ context.Context, _ string, _ planpkg.CostMetric) (planpkg.CostCounter, bool, error) {
 	return f.counter, f.found, f.err
 }
 
 // stubPlanReader returns a static plan for any tenant.
 type stubPlanReader struct {
-	plan enforcement.Plan
+	plan planpkg.Plan
 	err  error
 }
 
-func (s *stubPlanReader) GetTenantPlan(_ context.Context, _ string) (enforcement.Plan, error) {
+func (s *stubPlanReader) GetTenantPlan(_ context.Context, _ string) (planpkg.Plan, error) {
 	return s.plan, s.err
 }
 
@@ -55,23 +56,23 @@ func withTenant(tenantID string) *http.Request {
 
 func TestEnforcement_RejectOnExceeded(t *testing.T) {
 	store := &fakeCostStore{
-		counter: enforcement.CostCounter{
+		counter: planpkg.CostCounter{
 			TenantID: "tn-1",
-			Plan:     enforcement.PlanStarter,
-			Metric:   enforcement.MetricBuildMinutes,
+			Plan:     planpkg.PlanStarter,
+			Metric:   planpkg.MetricBuildMinutes,
 			Value:    101, // over Starter's 100 cap
 		},
 		found: true,
 	}
 	checker := enforcement.NewCapChecker(store)
-	plans := &stubPlanReader{plan: enforcement.PlanStarter}
+	plans := &stubPlanReader{plan: planpkg.PlanStarter}
 	enforcer := NewCostEnforcer(checker, plans, slog.Default())
 
 	called := false
 	next := http.HandlerFunc(func(http.ResponseWriter, *http.Request) {
 		called = true
 	})
-	handler := enforcer.Middleware(enforcement.MetricBuildMinutes)(next)
+	handler := enforcer.Middleware(planpkg.MetricBuildMinutes)(next)
 
 	req := withTenant("tn-1")
 	w := httptest.NewRecorder()
@@ -87,20 +88,20 @@ func TestEnforcement_RejectOnExceeded(t *testing.T) {
 
 func TestEnforcement_402ResponseShape(t *testing.T) {
 	store := &fakeCostStore{
-		counter: enforcement.CostCounter{
+		counter: planpkg.CostCounter{
 			TenantID:    "tn-1",
-			Plan:        enforcement.PlanStarter,
-			Metric:      enforcement.MetricEgressBytes,
+			Plan:        planpkg.PlanStarter,
+			Metric:      planpkg.MetricEgressBytes,
 			Value:       200 * 1024 * 1024 * 1024,
 			PeriodStart: 1714521600,
 		},
 		found: true,
 	}
 	checker := enforcement.NewCapChecker(store)
-	plans := &stubPlanReader{plan: enforcement.PlanStarter}
+	plans := &stubPlanReader{plan: planpkg.PlanStarter}
 	enforcer := NewCostEnforcer(checker, plans, slog.Default())
 
-	handler := enforcer.Middleware(enforcement.MetricEgressBytes)(http.HandlerFunc(func(http.ResponseWriter, *http.Request) {}))
+	handler := enforcer.Middleware(planpkg.MetricEgressBytes)(http.HandlerFunc(func(http.ResponseWriter, *http.Request) {}))
 
 	req := withTenant("tn-1")
 	w := httptest.NewRecorder()
@@ -114,7 +115,7 @@ func TestEnforcement_402ResponseShape(t *testing.T) {
 	if body["code"] != "COST_CAP_EXCEEDED" {
 		t.Errorf("want code COST_CAP_EXCEEDED, got %v", body["code"])
 	}
-	if body["metric"] != string(enforcement.MetricEgressBytes) {
+	if body["metric"] != string(planpkg.MetricEgressBytes) {
 		t.Errorf("want metric=egress_bytes, got %v", body["metric"])
 	}
 	msg, _ := body["message"].(string)
@@ -134,16 +135,16 @@ func TestEnforcement_402ResponseShape(t *testing.T) {
 
 func TestEnforcement_AllowsUnderCap(t *testing.T) {
 	store := &fakeCostStore{
-		counter: enforcement.CostCounter{
+		counter: planpkg.CostCounter{
 			TenantID: "tn-1",
-			Plan:     enforcement.PlanStarter,
-			Metric:   enforcement.MetricBuildMinutes,
+			Plan:     planpkg.PlanStarter,
+			Metric:   planpkg.MetricBuildMinutes,
 			Value:    50, // under 100 cap
 		},
 		found: true,
 	}
 	checker := enforcement.NewCapChecker(store)
-	plans := &stubPlanReader{plan: enforcement.PlanStarter}
+	plans := &stubPlanReader{plan: planpkg.PlanStarter}
 	enforcer := NewCostEnforcer(checker, plans, slog.Default())
 
 	called := false
@@ -151,7 +152,7 @@ func TestEnforcement_AllowsUnderCap(t *testing.T) {
 		called = true
 		w.WriteHeader(http.StatusAccepted)
 	})
-	handler := enforcer.Middleware(enforcement.MetricBuildMinutes)(next)
+	handler := enforcer.Middleware(planpkg.MetricBuildMinutes)(next)
 
 	req := withTenant("tn-1")
 	w := httptest.NewRecorder()
@@ -171,7 +172,7 @@ func TestEnforcement_NilEnforcer_PassThrough(t *testing.T) {
 	next := http.HandlerFunc(func(http.ResponseWriter, *http.Request) {
 		called = true
 	})
-	handler := enforcer.Middleware(enforcement.MetricBuildMinutes)(next)
+	handler := enforcer.Middleware(planpkg.MetricBuildMinutes)(next)
 
 	req := withTenant("tn-x")
 	w := httptest.NewRecorder()
@@ -195,7 +196,7 @@ func TestEnforcement_PlanLookupFails_FailsOpen(t *testing.T) {
 	next := http.HandlerFunc(func(http.ResponseWriter, *http.Request) {
 		called = true
 	})
-	handler := enforcer.Middleware(enforcement.MetricBuildMinutes)(next)
+	handler := enforcer.Middleware(planpkg.MetricBuildMinutes)(next)
 
 	req := withTenant("tn-1")
 	w := httptest.NewRecorder()
@@ -209,23 +210,23 @@ func TestEnforcement_PlanLookupFails_FailsOpen(t *testing.T) {
 func TestEnforcement_Enterprise_AlwaysAllowed(t *testing.T) {
 	// Enterprise cap = Unlimited; even huge counter must pass.
 	store := &fakeCostStore{
-		counter: enforcement.CostCounter{
+		counter: planpkg.CostCounter{
 			TenantID: "tn-ent",
-			Plan:     enforcement.PlanEnterprise,
-			Metric:   enforcement.MetricEgressBytes,
+			Plan:     planpkg.PlanEnterprise,
+			Metric:   planpkg.MetricEgressBytes,
 			Value:    1024 * 1024 * 1024 * 1024 * 100, // 100 TB
 		},
 		found: true,
 	}
 	checker := enforcement.NewCapChecker(store)
-	plans := &stubPlanReader{plan: enforcement.PlanEnterprise}
+	plans := &stubPlanReader{plan: planpkg.PlanEnterprise}
 	enforcer := NewCostEnforcer(checker, plans, slog.Default())
 
 	called := false
 	next := http.HandlerFunc(func(http.ResponseWriter, *http.Request) {
 		called = true
 	})
-	handler := enforcer.Middleware(enforcement.MetricEgressBytes)(next)
+	handler := enforcer.Middleware(planpkg.MetricEgressBytes)(next)
 
 	req := withTenant("tn-ent")
 	w := httptest.NewRecorder()
@@ -239,10 +240,10 @@ func TestEnforcement_Enterprise_AlwaysAllowed(t *testing.T) {
 func TestEnforcement_Unauthenticated_Returns401(t *testing.T) {
 	store := &fakeCostStore{}
 	checker := enforcement.NewCapChecker(store)
-	plans := &stubPlanReader{plan: enforcement.PlanStarter}
+	plans := &stubPlanReader{plan: planpkg.PlanStarter}
 	enforcer := NewCostEnforcer(checker, plans, slog.Default())
 
-	handler := enforcer.Middleware(enforcement.MetricBuildMinutes)(http.HandlerFunc(func(http.ResponseWriter, *http.Request) {}))
+	handler := enforcer.Middleware(planpkg.MetricBuildMinutes)(http.HandlerFunc(func(http.ResponseWriter, *http.Request) {}))
 
 	// No UserContext attached.
 	req := httptest.NewRequest(http.MethodPost, "/api/v1/builds", nil)
@@ -258,19 +259,19 @@ func TestEnforcement_Unauthenticated_Returns401(t *testing.T) {
 func TestEnforcement_PlanDowngrade_AdditionalMessage(t *testing.T) {
 	// Counter 1.5× cap or more triggers the downgrade hint.
 	store := &fakeCostStore{
-		counter: enforcement.CostCounter{
+		counter: planpkg.CostCounter{
 			TenantID: "tn-down",
-			Plan:     enforcement.PlanStarter,
-			Metric:   enforcement.MetricBuildMinutes,
+			Plan:     planpkg.PlanStarter,
+			Metric:   planpkg.MetricBuildMinutes,
 			Value:    250, // 2.5× starter's 100 cap → suggests downgrade
 		},
 		found: true,
 	}
 	checker := enforcement.NewCapChecker(store)
-	plans := &stubPlanReader{plan: enforcement.PlanStarter}
+	plans := &stubPlanReader{plan: planpkg.PlanStarter}
 	enforcer := NewCostEnforcer(checker, plans, slog.Default())
 
-	handler := enforcer.Middleware(enforcement.MetricBuildMinutes)(http.HandlerFunc(func(http.ResponseWriter, *http.Request) {}))
+	handler := enforcer.Middleware(planpkg.MetricBuildMinutes)(http.HandlerFunc(func(http.ResponseWriter, *http.Request) {}))
 
 	req := withTenant("tn-down")
 	w := httptest.NewRecorder()

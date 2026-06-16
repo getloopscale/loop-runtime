@@ -12,13 +12,14 @@ import (
 	"strings"
 
 	"github.com/loopzero/loopzero/pkg/enforcement"
+	planpkg "github.com/loopzero/loopzero/pkg/plan"
 )
 
 // CostEnforcement is the HTTP middleware that consults a CapChecker
 // before allowing mutations. Returns HTTP 402 Payment Required when a
 // tenant has reached its per-metric cap.
 //
-// T1.9 of plans/2026-05-12-launch-readiness-waves-plan.md (v1.4).
+// T1.9 of plans/2026-05-12-launch-readiness-waves-planpkg.md (v1.4).
 //
 // Each protected route maps to a single metric:
 //
@@ -35,7 +36,7 @@ import (
 // PlanReader resolves the current plan for a tenant. Avoids tight coupling
 // to the subscriptions store at the middleware layer.
 type PlanReader interface {
-	GetTenantPlan(ctx context.Context, tenantID string) (enforcement.Plan, error)
+	GetTenantPlan(ctx context.Context, tenantID string) (planpkg.Plan, error)
 }
 
 // CostEnforcer composes a CapChecker with a PlanReader to make a
@@ -59,7 +60,7 @@ func NewCostEnforcer(checker *enforcement.CapChecker, plans PlanReader, logger *
 //
 // Nil-safe: when the receiver is nil, the middleware is a no-op pass-through.
 // This keeps boot-time wiring tolerant during the rollout window.
-func (e *CostEnforcer) Middleware(metric enforcement.CostMetric) func(http.Handler) http.Handler {
+func (e *CostEnforcer) Middleware(metric planpkg.CostMetric) func(http.Handler) http.Handler {
 	return func(next http.Handler) http.Handler {
 		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 			// nil receiver = pass-through. Lets cmd/setup_server.go wire
@@ -87,7 +88,7 @@ func (e *CostEnforcer) Middleware(metric enforcement.CostMetric) func(http.Handl
 			}
 
 			if err := e.checker.Check(r.Context(), uc.TenantID, plan, metric); err != nil {
-				var ex *enforcement.ExceededError
+				var ex *planpkg.ExceededError
 				if errors.As(err, &ex) {
 					writeCostExceeded(w, ex, e.logger)
 					return
@@ -109,7 +110,7 @@ func (e *CostEnforcer) Middleware(metric enforcement.CostMetric) func(http.Handl
 //
 // Message follows the upgrade-call-to-action pattern from PlanLimiter:
 // the user receives an actionable next step, not a technical dump.
-func writeCostExceeded(w http.ResponseWriter, ex *enforcement.ExceededError, logger *slog.Logger) {
+func writeCostExceeded(w http.ResponseWriter, ex *planpkg.ExceededError, logger *slog.Logger) {
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(http.StatusPaymentRequired)
 
@@ -133,16 +134,16 @@ func writeCostExceeded(w http.ResponseWriter, ex *enforcement.ExceededError, log
 // metric. Plan downgrade case (EC-NEW-13b T1.9 flavor) is mentioned only
 // when current > cap × 1.5 (heuristic — sustained overage suggests
 // downgrade, not in-period spike).
-func friendlyCostMessage(ex *enforcement.ExceededError) string {
+func friendlyCostMessage(ex *planpkg.ExceededError) string {
 	var b strings.Builder
 	b.WriteString("Your team has reached the ")
 
 	switch ex.Metric {
-	case enforcement.MetricEgressBytes:
+	case planpkg.MetricEgressBytes:
 		b.WriteString("egress bandwidth limit for the current billing period (")
-	case enforcement.MetricDOCRPulls:
+	case planpkg.MetricDOCRPulls:
 		b.WriteString("registry pull limit for the current billing period (")
-	case enforcement.MetricBuildMinutes:
+	case planpkg.MetricBuildMinutes:
 		b.WriteString("build minutes limit for the current billing period (")
 	default:
 		b.WriteString("usage limit for the current billing period (")

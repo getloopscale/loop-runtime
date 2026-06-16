@@ -242,7 +242,7 @@ type ProjectResult struct {
 // 2026-06-08-dashboard-screens-review-fixes T2.1 (ADR D2). Wire-format
 // additive over ProjectResult — legacy consumers ignore the 2 new
 // trailing fields. LastDeployStatus is the 5-value enum from
-// pkg/enforcement.ProjectStatus (kept as string here to avoid a domain
+// pkg/plan.ProjectStatus (kept as string here to avoid a domain
 // → pkg/enforcement import edge; the wrapper layer is the SoT mapper).
 type ProjectSummary struct {
 	ID               string    `json:"id"`

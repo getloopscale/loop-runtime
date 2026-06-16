@@ -32,6 +32,7 @@ import (
 	"github.com/loopzero/loopzero/api/internal/middleware"
 	"github.com/loopzero/loopzero/pkg/enforcement"
 	loopzeroerrors "github.com/loopzero/loopzero/pkg/errors"
+	planpkg "github.com/loopzero/loopzero/pkg/plan"
 )
 
 // BillingRow is the minimal interface to read scalar values from a query.
@@ -49,7 +50,7 @@ type BillingPool interface {
 
 // PortalSessionCreator is the port that BillingHandler.Portal depends
 // on for minting Stripe Customer Portal session URLs. T2.7 of
-// maturity-3-62-to-4-0-roadmap plan. Production wiring uses
+// maturity-3-62-to-4-0-roadmap planpkg. Production wiring uses
 // services.StripePortalSessionCreator (real SDK call). When the field
 // is nil, the handler falls back to the legacy placeholder URL — this
 // preserves back-compat for local dev + test environments without a
@@ -65,11 +66,11 @@ type PortalSessionCreator interface {
 
 // BillingHandler responds to GET /api/v1/billing + POST /api/v1/billing/portal.
 type BillingHandler struct {
-	pool           BillingPool
-	costSource     enforcement.CostStore // optional — T1.9 cost cap usage display
-	portalCreator  PortalSessionCreator  // optional — T2.7 Stripe SDK; nil falls back to placeholder
+	pool            BillingPool
+	costSource      enforcement.CostStore // optional — T1.9 cost cap usage display
+	portalCreator   PortalSessionCreator  // optional — T2.7 Stripe SDK; nil falls back to placeholder
 	portalReturnURL string                // optional — where Stripe sends customer post-portal-close
-	logger         *slog.Logger
+	logger          *slog.Logger
 }
 
 // NewBillingHandler constructs a billing handler that reads plan + usage
@@ -176,11 +177,11 @@ func (h *BillingHandler) buildUsage(ctx context.Context, tenantID, plan string) 
 		return usage
 	}
 
-	planTyped := enforcement.Plan(plan)
-	for _, metric := range []enforcement.CostMetric{
-		enforcement.MetricEgressBytes,
-		enforcement.MetricDOCRPulls,
-		enforcement.MetricBuildMinutes,
+	planTyped := planpkg.Plan(plan)
+	for _, metric := range []planpkg.CostMetric{
+		planpkg.MetricEgressBytes,
+		planpkg.MetricDOCRPulls,
+		planpkg.MetricBuildMinutes,
 	} {
 		counter, found, err := h.costSource.GetCounter(ctx, tenantID, metric)
 		if err != nil {
@@ -191,9 +192,9 @@ func (h *BillingHandler) buildUsage(ctx context.Context, tenantID, plan string) 
 			continue
 		}
 
-		cap := enforcement.CapFor(planTyped, metric)
+		cap := planpkg.CapFor(planTyped, metric)
 		limit := int(cap)
-		if cap == enforcement.Unlimited {
+		if cap == planpkg.Unlimited {
 			limit = unlimitedDisplay
 		}
 		used := 0
