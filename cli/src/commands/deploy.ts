@@ -235,7 +235,27 @@ export class DeployCommand {
     // failure is non-fatal — the API re-validates services.json on upload, and
     // an empty runtime fails closed clearly at build time (D4).
     try {
-      const runtimeByName = parseServicesRuntimes(fs.readFileSync(servicesJsonResult.path, 'utf-8'));
+      const servicesJsonContent = fs.readFileSync(servicesJsonResult.path, 'utf-8');
+      const runtimeByName = parseServicesRuntimes(servicesJsonContent);
+      // F-dom-2 LIVE-caught 2026-06-16: backend canonical Dockerfile generator
+      // requires the declared `start` command from services.json (no heuristic
+      // CMD). Parse inline (adapters/services-json.ts is governance-gated for
+      // this slice; the parse is a 4-line subset of parseServicesRuntimes shape).
+      const startByName: Record<string, string> = {};
+      try {
+        const parsed = JSON.parse(servicesJsonContent) as {
+          services?: Array<{ name?: string; start?: string }>;
+        };
+        for (const s of parsed.services ?? []) {
+          if (s.name && s.start) startByName[s.name] = s.start;
+        }
+      } catch {
+        // malformed JSON → empty map; backend will fail closed with clear message
+      }
+      // Stash startByName on the prereq result so submitAndStreamBuild can
+      // attach it to each AppInput in the payload (AppInput.start is the wire
+      // field — AppUnit doesn't carry it; adapters/app-unit.ts is gated).
+      (this as unknown as { _fdom2StartByName?: Record<string, string> })._fdom2StartByName = startByName;
       const unmatched: string[] = [];
       for (const unit of appUnits) {
         const rt = runtimeByName[unit.name];
@@ -427,14 +447,21 @@ export class DeployCommand {
     // B15 (MEET-2026-04-23-059): forward scaling config so the API can enforce
     // plan caps and render the correct Deployment / HPA. Mutual exclusion is
     // already validated by validate-config — here we trust the AppUnit.
+    // F-dom-2 LIVE-caught 2026-06-16: pull stash of services.json `start` map
+    // set during prereq enrichment. AppUnit has no `start` field (adapters
+    // gated), so attach via cast on AppInput. Backend canonical Dockerfile
+    // generator reads `start` from apps_spec — its absence fails the build at
+    // generate-dockerfile with "no declared start command".
+    const startByName = (this as unknown as { _fdom2StartByName?: Record<string, string> })._fdom2StartByName ?? {};
     const appInputs: AppInput[] = appUnits.map((unit) => {
-      const input: AppInput = {
+      const input: AppInput & { start?: string } = {
         name: unit.name,
         type: unit.type,
         port: unit.port,
         path: unit.path,
         framework: unit.framework,
         runtime: unit.runtime || undefined, // F-dom-2: the build-strategy key the API dispatches on
+        start: startByName[unit.name] || undefined, // F-dom-2: canonical Dockerfile CMD source
         build: unit.build,
         dockerfile: unit.dockerfile,
         rendering: unit.rendering,

@@ -108,6 +108,19 @@ export function registerDeployCommands(deps: CommandDeps): void {
                 ...(a.port ? { port: a.port } : {}),
                 ...(a.path ? { path: a.path } : {}),
                 ...(a.framework ? { framework: a.framework } : {}),
+                // F-dom-2 LIVE-caught 2026-06-16: include runtime in the wire payload.
+                // deploy.ts:431 enriches AppInput.runtime from services.json, but
+                // this register-layer map() was the wire boundary and was dropping it.
+                // The API dispatches build strategy on runtime (python|node), so without
+                // it every loopzerokit-app deploy fell to unsupportedStrategy at workflow_builder.
+                ...(a.runtime ? { runtime: a.runtime } : {}),
+                // F-dom-2 LIVE-caught 2026-06-16: forward `start` from services.json.
+                // The canonical Dockerfile generator (api/argo/buildkit_loopzeropacks)
+                // reads start from apps_spec to emit CMD. Without this the build
+                // fails at generate-dockerfile with "no declared start command".
+                // AppInput TS type doesn't expose `start` (deploy-types.ts is gated),
+                // so the field arrives via attached property — bracket-access here.
+                ...((a as unknown as { start?: string }).start ? { start: (a as unknown as { start?: string }).start } : {}),
                 ...(a.build ? { build: a.build } : {}),
                 ...(a.rendering ? { rendering: a.rendering } : {}),
                 ...(a.secrets && a.secrets.length > 0 ? { secrets: a.secrets } : {}),
