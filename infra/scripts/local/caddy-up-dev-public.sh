@@ -79,8 +79,13 @@ reload_or_start() {
   fi
 
   log "starting Caddy in background"
-  nohup caddy run --pingback 127.0.0.1:40621 --config "$RUNTIME" \
-    >/tmp/caddy.log 2>&1 &
+  # NOTE: --pingback removed (canonical 2026-06-16). The flag dials a
+  # confirmation address after startup; intended for parent-forked Caddy
+  # under a supervisor that opens the listener first. This script uses
+  # `nohup &` (no parent supervisor) and `sleep 3 + pgrep` as the readiness
+  # check, which is sufficient. With --pingback, Caddy exits 1 with
+  # "dial confirmation address ... connection refused".
+  nohup caddy run --config "$RUNTIME" >/tmp/caddy.log 2>&1 &
   sleep 3
   if ! is_caddy_running; then
     log "ERROR: Caddy failed to start; see /tmp/caddy.log"

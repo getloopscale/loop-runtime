@@ -139,6 +139,26 @@ run_step "8-seed-loki-cross-cluster" "bash $SCRIPT_DIR/seed-loki-cross-cluster.s
 # Step 9
 run_step "9-seed-tenant-fixture-canonical" "bash $SCRIPT_DIR/seed-tenant-fixture-canonical.sh"
 
+# Step 10 (NEW 2026-06-16) — admin-cli Hydra OAuth2 client.
+# Required for dogfood-login Suite 0 T5.4 (≥ 3 Hydra clients).
+# Complements bootstrap-oauth-clients.sh (which provisions loopzero-cli +
+# loopzero-bootstrap) with the admin-side client_credentials path.
+# Per reference_admin_cli_hydra_client_canonical memory.
+if [[ -x "$SCRIPT_DIR/seed-admin-hydra-client-canonical.sh" ]]; then
+  run_step "10-seed-admin-hydra-client-canonical" "bash $SCRIPT_DIR/seed-admin-hydra-client-canonical.sh $VERIFY_FLAG"
+else
+  skip_step "10-seed-admin-hydra-client-canonical" "script not yet present"
+fi
+
+# Step 11 (NEW 2026-06-16) — connect canonical fixture (project "teste" +
+# repo link). Required by LIVE wrappers that probe /projects/teste/* paths.
+# Depends on step 10 (admin Hydra client) only indirectly via session JWT.
+if [[ -x "$SCRIPT_DIR/connect-canonical-fixture.sh" ]]; then
+  run_step "11-connect-canonical-fixture" "bash $SCRIPT_DIR/connect-canonical-fixture.sh"
+else
+  skip_step "11-connect-canonical-fixture" "script not yet present"
+fi
+
 # Summary
 log ""
 log "=== canonical chain summary ==="

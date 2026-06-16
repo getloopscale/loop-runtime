@@ -303,7 +303,7 @@ scenario_c() {
       fi
       ;;
     400)
-      assert "promote endpoint should accept canonical {from,to} body (got 400 — regression to v1.0 {from_environment,to_environment})" 0 ;;
+      assert "promote endpoint should accept canonical {from,to} body (got 400 — regression to v1.0 dialog body shape per comment block above)" 0 ;;
     *)
       assert "promote endpoint unexpected HTTP $status body=$response_body" 0 ;;
   esac

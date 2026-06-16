@@ -14,9 +14,15 @@
 #      simulated as having NS propagated, the status transitions to
 #      Active within the polling window.
 #
-#   C. Reverify after simulated fail — POST /verify on a failed domain
-#      succeeds (re-checks CF + cert-manager) and resets status to
-#      provisioning. Idempotent + rate-limited at 1/30s (ADR D7).
+#   C. Reverify happy path — POST /verify (first call) returns 200 with
+#      canonical status enum. Single invariant per scenario (FAANG): we
+#      assert ONLY the success contract here, NOT also 429. The rate-limit
+#      contract is asserted in Scenario D.
+#
+#   D. Rate-limit enforcement (ADR D7) — second consecutive POST /verify
+#      within the 1/30s budget MUST return 429 with canonical RATE_LIMITED
+#      error body. This proves the rate-limit fires; without Scenario D the
+#      ADR D7 contract is hypothetical.
 #
 # Usage (operator-only):
 #
@@ -26,7 +32,7 @@
 #   --skip-live   Hermetic mode: structural assertions only, no curl. Used
 #                 by the companion hermetic test.
 #   --json        Machine-readable verdict for dogfood aggregator.
-#   --scenario=A  Run only scenario A (or B, C). Default: all three.
+#   --scenario=A  Run only scenario A (or B, C, D). Default: all four.
 
 set -euo pipefail
 
@@ -37,7 +43,7 @@ SCENARIO=""
 
 usage() {
   cat <<EOF
-Usage: $SCRIPT_NAME [--skip-live] [--json] [--scenario=A|B|C]
+Usage: $SCRIPT_NAME [--skip-live] [--json] [--scenario=A|B|C|D]
 
 J-11 Domains LIVE bash test. OPERATOR HARD STOP per
 .claude/rules/cleanroom-up-live-test-mandate.md INQUEBRÁVEL.
@@ -144,50 +150,67 @@ scenario_b_polling_reaches_active() {
   esac
 }
 
-scenario_c_reverify_idempotent() {
+scenario_c_reverify_happy_path() {
   [[ $SKIP_LIVE -eq 1 ]] && { emit_pass "scenario C: SKIP --skip-live"; return 0; }
   local jwt code body
   jwt="$(<"$TOKEN_FILE")"
-  # POST /verify must (a) succeed with a body that includes the verification
-  # state (status enum + verification.txt_* fields) OR (b) return 429 with
-  # rate-limit body per ADR D7. Status-code-only is bypass — we assert the
-  # response BODY carries the canonical verification shape.
-  body="$(curl -s -o /tmp/domain-verify.json -w '%{http_code}' -X POST \
+  # FAANG-canonical: ONE invariant per scenario. Scenario C asserts ONLY the
+  # success contract: first POST /verify under fresh rate-limit budget MUST
+  # return 200 + canonical status enum. The 429 contract is asserted in
+  # Scenario D (separate invariant). Accepting 200 OR 429 in one arm would
+  # mask either the happy path OR the rate-limit firing (anti-pattern
+  # catalogued in CLAUDE.md common-mistakes table).
+  code="$(curl -s -o /tmp/domain-verify.json -w '%{http_code}' -X POST \
     -H "Authorization: Bearer $jwt" \
     "$CLOUD_BASE/engine/api/v1/domains/$PROBE_DOMAIN/verify")"
-  code="$body"
   body="$(cat /tmp/domain-verify.json 2>/dev/null || echo '{}')"
-  case "$code" in
-    200)
-      # On 200, body MUST include the canonical status enum reflecting
-      # post-verify state (still pending_verification for unverified TXT,
-      # or verified/active when DNS check resolved).
-      if echo "$body" | jq -e '.status | type == "string"' >/dev/null 2>&1; then
-        local status
-        status="$(echo "$body" | jq -r '.status')"
-        case "$status" in
-          pending_verification|verified|provisioning|active|failed)
-            emit_pass "scenario C: POST /verify returned 200 + canonical status='$status'" ;;
-          *)
-            emit_fail "scenario C: POST /verify 200 but unrecognized status='$status' body=$body" ;;
-        esac
-      else
-        emit_fail "scenario C: POST /verify 200 but body missing .status field: $body"
-      fi
-      ;;
-    429)
-      # On 429, body should include rate-limit error indication; we accept
-      # the canonical 429 contract (ADR D7) when body indicates rate limit.
-      if echo "$body" | jq -e '.code // .error // .message' >/dev/null 2>&1; then
-        emit_pass "scenario C: POST /verify returned 429 + canonical error body (ADR D7 rate-limit)"
-      else
-        emit_fail "scenario C: POST /verify 429 but body missing error indication: $body"
-      fi
-      ;;
+  if [[ "$code" != "200" ]]; then
+    emit_fail "scenario C: POST /verify expected 200 (happy path) got $code body=$body"
+    rm -f /tmp/domain-verify.json
+    return
+  fi
+  # 200 body MUST carry canonical status enum.
+  if ! echo "$body" | jq -e '.status | type == "string"' >/dev/null 2>&1; then
+    emit_fail "scenario C: POST /verify 200 but body missing .status field: $body"
+    rm -f /tmp/domain-verify.json
+    return
+  fi
+  local status
+  status="$(echo "$body" | jq -r '.status')"
+  case "$status" in
+    pending_verification|verified|provisioning|active|failed)
+      emit_pass "scenario C: POST /verify returned 200 + canonical status='$status'" ;;
     *)
-      emit_fail "scenario C: POST /verify returned unexpected $code body=$body" ;;
+      emit_fail "scenario C: POST /verify 200 but unrecognized status='$status' body=$body" ;;
   esac
   rm -f /tmp/domain-verify.json
+}
+
+scenario_d_reverify_rate_limit_enforced() {
+  [[ $SKIP_LIVE -eq 1 ]] && { emit_pass "scenario D: SKIP --skip-live"; return 0; }
+  local jwt code body
+  jwt="$(<"$TOKEN_FILE")"
+  # ADR D7 — POST /verify is rate-limited at 1/30s per IP. Scenario C just
+  # consumed the budget; the IMMEDIATE second call from the same operator IP
+  # MUST return 429 with canonical RATE_LIMITED error body. Without this
+  # scenario the ADR D7 contract is hypothetical (Scenario C alone cannot
+  # prove the rate-limit fires — it only proves the happy path).
+  code="$(curl -s -o /tmp/domain-verify-2.json -w '%{http_code}' -X POST \
+    -H "Authorization: Bearer $jwt" \
+    "$CLOUD_BASE/engine/api/v1/domains/$PROBE_DOMAIN/verify")"
+  body="$(cat /tmp/domain-verify-2.json 2>/dev/null || echo '{}')"
+  if [[ "$code" != "429" ]]; then
+    emit_fail "scenario D: 2nd POST /verify expected 429 (rate-limit ADR D7) got $code body=$body"
+    rm -f /tmp/domain-verify-2.json
+    return
+  fi
+  # 429 body MUST carry a canonical error indication (code/error/message).
+  if echo "$body" | jq -e '.code // .error // .message' >/dev/null 2>&1; then
+    emit_pass "scenario D: 2nd POST /verify returned 429 + canonical error body (ADR D7 enforced)"
+  else
+    emit_fail "scenario D: 2nd POST /verify 429 but body missing error indication: $body"
+  fi
+  rm -f /tmp/domain-verify-2.json
 }
 
 preflight || true
@@ -195,13 +218,15 @@ preflight || true
 case "$SCENARIO" in
   A) scenario_a_add_returns_nameservers ;;
   B) scenario_b_polling_reaches_active ;;
-  C) scenario_c_reverify_idempotent ;;
+  C) scenario_c_reverify_happy_path ;;
+  D) scenario_d_reverify_rate_limit_enforced ;;
   "")
     scenario_a_add_returns_nameservers
     scenario_b_polling_reaches_active
-    scenario_c_reverify_idempotent
+    scenario_c_reverify_happy_path
+    scenario_d_reverify_rate_limit_enforced
     ;;
-  *) emit_fail "unknown scenario '$SCENARIO' (expected A, B, or C)" ;;
+  *) emit_fail "unknown scenario '$SCENARIO' (expected A, B, C, or D)" ;;
 esac
 
 if [[ $JSON_OUTPUT -eq 1 ]]; then

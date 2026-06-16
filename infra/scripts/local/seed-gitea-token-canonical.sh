@@ -121,12 +121,25 @@ kubectl --context "$MGMT_CONTEXT" -n "$LOOPZERO_NAMESPACE" \
   -p="[{\"op\":\"replace\",\"path\":\"/data/GITEA_TOKEN\",\"value\":\"$TOKEN_B64\"}]" >/dev/null
 log "Layer 3c: loopzero-tenant-operator.GITEA_TOKEN synced"
 
-# Layer 4 — restart consumers
-kubectl --context "$MGMT_CONTEXT" -n "$LOOPZERO_NAMESPACE" rollout restart deployment/loopzero-api >/dev/null
-kubectl --context "$MGMT_CONTEXT" -n "$LOOPZERO_NAMESPACE" rollout restart deployment/loopzero-tenant-operator >/dev/null
-kubectl --context "$MGMT_CONTEXT" -n "$LOOPZERO_NAMESPACE" rollout status deployment/loopzero-api --timeout=120s >/dev/null
-kubectl --context "$MGMT_CONTEXT" -n "$LOOPZERO_NAMESPACE" rollout status deployment/loopzero-tenant-operator --timeout=120s >/dev/null
-log "Layer 4: loopzero-api + loopzero-tenant-operator restarted"
+# Layer 4 — restart consumers (per-deployment existence guard, canonical 2026-06-16).
+# Deployments may not exist during Cleanroom dev-public bring-up (operator chart
+# sync happens AFTER CRDs land); the Secret sync in Layer 3 is what matters —
+# when the deployment IS eventually created, envFrom picks up the canonical
+# token automatically. Skip-with-INFO is canonical (consistent with the
+# secret_canonical_no_hardcode memory: resource-existence is a precondition, not
+# an invariant the seed enforces).
+restart_if_exists() {
+  local deploy="$1"
+  if kubectl --context "$MGMT_CONTEXT" -n "$LOOPZERO_NAMESPACE" get "deployment/$deploy" >/dev/null 2>&1; then
+    kubectl --context "$MGMT_CONTEXT" -n "$LOOPZERO_NAMESPACE" rollout restart "deployment/$deploy" >/dev/null
+    kubectl --context "$MGMT_CONTEXT" -n "$LOOPZERO_NAMESPACE" rollout status "deployment/$deploy" --timeout=120s >/dev/null
+    log "Layer 4: $deploy restarted"
+  else
+    log "Layer 4: $deploy not yet deployed — skip (Secret sync in Layer 3 will be picked up on first create)"
+  fi
+}
+restart_if_exists loopzero-api
+restart_if_exists loopzero-tenant-operator
 
 # Verify
 if [[ "$VERIFY" == "1" ]]; then
