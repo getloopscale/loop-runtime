@@ -10,7 +10,7 @@ import (
 	"testing"
 	"time"
 
-	planpkg "github.com/loopzero/loopzero/pkg/plan"
+	planpkg "github.com/getloopscale/loopzero-contracts/plan"
 )
 
 // fakePromQuerier is a deterministic in-memory PromQuerier for tests.

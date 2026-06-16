@@ -10,7 +10,7 @@ package enforcement
 // the mapping but does NOT re-derive it client-side.
 
 import (
-	"github.com/loopzero/loopzero/pkg/plan"
+	"github.com/getloopscale/loopzero-contracts/plan"
 	"github.com/loopzero/loopzero/pkg/statemachine"
 )
 

@@ -12,7 +12,7 @@ import (
 	"strings"
 
 	"github.com/loopzero/loopzero/pkg/enforcement"
-	planpkg "github.com/loopzero/loopzero/pkg/plan"
+	planpkg "github.com/getloopscale/loopzero-contracts/plan"
 )
 
 // CostEnforcement is the HTTP middleware that consults a CapChecker

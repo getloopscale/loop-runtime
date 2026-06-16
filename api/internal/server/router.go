@@ -20,7 +20,7 @@ import (
 	"github.com/loopzero/loopzero/api/internal/routes"
 	"github.com/loopzero/loopzero/api/internal/sse"
 	"github.com/loopzero/loopzero/pkg/enforcement"
-	planpkg "github.com/loopzero/loopzero/pkg/plan"
+	planpkg "github.com/getloopscale/loopzero-contracts/plan"
 )
 
 // enforcementMetricBuildMinutes is the canonical metric label for the cost

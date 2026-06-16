@@ -32,7 +32,7 @@ import (
 	"github.com/loopzero/loopzero/api/internal/middleware"
 	"github.com/loopzero/loopzero/pkg/enforcement"
 	loopzeroerrors "github.com/loopzero/loopzero/pkg/errors"
-	planpkg "github.com/loopzero/loopzero/pkg/plan"
+	planpkg "github.com/getloopscale/loopzero-contracts/plan"
 )
 
 // BillingRow is the minimal interface to read scalar values from a query.

@@ -11,7 +11,7 @@ import (
 	"net/http/httptest"
 	"testing"
 
-	planpkg "github.com/loopzero/loopzero/pkg/plan"
+	planpkg "github.com/getloopscale/loopzero-contracts/plan"
 )
 
 // fakeCostSource implements enforcement.CostStore for unit tests of

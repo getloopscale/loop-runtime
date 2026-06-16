@@ -29,7 +29,7 @@ import (
 	"github.com/loopzero/loopzero/api/internal/db/generated"
 	"github.com/loopzero/loopzero/pkg/enforcement"
 	loopzeroerrors "github.com/loopzero/loopzero/pkg/errors"
-	planpkg "github.com/loopzero/loopzero/pkg/plan"
+	planpkg "github.com/getloopscale/loopzero-contracts/plan"
 )
 
 // SQLCostStore reads cost_counters rows from PostgreSQL via sqlc.
