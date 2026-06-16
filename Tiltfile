@@ -184,39 +184,13 @@ k8s_resource(
 )
 
 # ---------------------------------------------------------------------------
-# loopzero-cloud — dashboard backend (session token exchange + billing portal)
+# loopzero-cloud — EXTRACTED to github.com/getloopscale/loopzero-cloud (M4, 2026-06-16).
 # ---------------------------------------------------------------------------
-# Per mgmt.helmfile.yaml.gotmpl "STANDALONE: tilt owns loopzero-cloud" comment —
-# helmfile SKIPS loopzero-cloud in standalone-multi env; tilt owns dual-build like
-# loopzero-api. Required by dev-public scenarios (Kratos session → JWT exchange at
-# /v1/auth/session/token, billing portal /v1/billing/portal). Added 2026-06-08
-# during T6.1 cleanroom-fresh execution per sponsor verbatim FAANG mandate.
-docker_build(
-    "loopzero-cloud",
-    context=".",
-    dockerfile="cloud/Dockerfile",
-    only=["cloud/", "pkg/", "go.work", "go.work.sum"],
-)
-
-# T1.1.c per ADR D1: render loopzero-cloud ConfigMap+Secret before Deployment apply.
-local_resource(
-    "loopzero-cloud-runtime",
-    cmd="mkdir -p .tilt-rendered && helm template loopzero-cloud infra/helm/loopzero-cloud -f infra/helm/loopzero-cloud/values-dev.yaml -s templates/configmap-runtime.yaml -s templates/secret-runtime.yaml -n loopzero-system > .tilt-rendered/loopzero-cloud-runtime.yaml",
-    deps=[
-        "infra/helm/loopzero-cloud/values-dev.yaml",
-        "infra/helm/loopzero-cloud/templates/configmap-runtime.yaml",
-        "infra/helm/loopzero-cloud/templates/secret-runtime.yaml",
-    ],
-    labels=["loopzero"],
-)
-k8s_yaml(".tilt-rendered/loopzero-cloud-runtime.yaml")
-
-k8s_yaml("infra/tilt/cloud-deployment.yaml")
-k8s_resource(
-    "loopzero-cloud",
-    resource_deps=["loopzero-api", "postgresql", "loopzero-cloud-runtime"],
-    labels=["loopzero"],
-)
+# The cloud-API + dashboard now live in the standalone loopzero-cloud repo with their
+# own dev loop (which assumes the engine + loopzero-data are running). The engine
+# Tiltfile no longer builds/deploys cloud from source. The deployed loopzero-cloud
+# SERVICE chart (infra/helm/loopzero-cloud) remains platform infra, sourced from the
+# loopzero-cloud repo's published image.
 
 # ---------------------------------------------------------------------------
 # Operator binaries — 4 independent deployments (multi-binary split)

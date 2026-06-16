@@ -419,9 +419,6 @@ tasks:
       - |
         echo "=== Go vulnerabilities (pkg) ==="
         cd pkg && govulncheck ./... 2>&1 | tail -5
-      - |
-        echo "=== Go vulnerabilities (cloud) ==="
-        cd cloud && govulncheck ./... 2>&1 | tail -5
 
   vuln-scan:strict:
     desc: Vulnerability gate — fails on MEDIUM+ CVE in Go or CLI deps
@@ -435,7 +432,7 @@ tasks:
         # govulncheck (Go stdlib + module CVEs) or npm audit at moderate+.
         # User aggressive override: MEDIUM+CRITICAL block.
         FAIL=0
-        for mod in api operators pkg cloud; do
+        for mod in api operators pkg; do
           if ! (cd "$mod" && govulncheck ./... 2>&1 | grep -q "^No vulnerabilities found"); then
             echo "FAIL: govulncheck found CVE in $mod"
             (cd "$mod" && govulncheck ./... 2>&1 | grep "^Vulnerability #" | head -5)

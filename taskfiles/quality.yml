@@ -135,20 +135,16 @@ tasks:
       - /tmp/loopzero-ops quality dangling-script-refs --base-ref {{.BASE_REF}} --head-ref HEAD
       - /tmp/loopzero-ops quality dangling-data-refs --base-ref {{.BASE_REF}} --head-ref HEAD
 
-  dashboard-bundle:
-    desc: Dashboard bundle budget gate — size-limit per chunk + total brotli (MEET-ASYNC-002 v1.3)
-    dir: cloud/dashboard
-    cmds:
-      - npm run build
-      - npm run size
+  # dashboard-bundle gate removed (M4): the dashboard moved to the standalone
+  # loopzero-cloud repo, which runs its own bundle-budget gate in CI.
 
   contract:
     desc: >
       Consumer-driven contract gates (M1.4 — plan m1-4-openapi-contract-tests):
-      engine OpenAPI spec conformance + cli<->engine + cloud<->loopzero-data.
+      engine OpenAPI spec conformance + cli<->engine. (cloud<->loopzero-data moved to
+      the standalone loopzero-cloud repo — M4.)
     cmds:
       - cd api && go test ./internal/contract/...
-      - cd cloud && go test ./internal/themory/...
 
   all:
     desc: Standard quality suite — hermetic tests + full-scan gates + contract
@@ -156,4 +152,4 @@ tasks:
 
   all-with-frontend:
     desc: Full quality suite including frontend bundle gate (slower; for pre-release)
-    deps: [hermetic, gates, contract, dashboard-bundle]
+    deps: [hermetic, gates, contract]
