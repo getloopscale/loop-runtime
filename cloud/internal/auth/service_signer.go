@@ -12,7 +12,7 @@ import (
 	"net/http"
 	"time"
 
-	"github.com/loopzero/loopzero/pkg/serviceauth"
+	"github.com/getloopscale/loopzero-contracts/serviceauth"
 )
 
 // ServiceSigner attaches the three dual-control headers

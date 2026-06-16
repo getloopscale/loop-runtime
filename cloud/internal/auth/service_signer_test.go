@@ -14,7 +14,7 @@ import (
 	"time"
 
 	"github.com/loopzero/loopzero/cloud/internal/auth"
-	"github.com/loopzero/loopzero/pkg/serviceauth"
+	"github.com/getloopscale/loopzero-contracts/serviceauth"
 )
 
 // TestServiceSigner_AttachAddsAllThreeHeaders — happy path: a configured

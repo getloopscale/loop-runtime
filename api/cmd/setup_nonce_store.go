@@ -12,7 +12,7 @@ import (
 	"github.com/redis/go-redis/v9"
 
 	"github.com/loopzero/loopzero/api/internal/middleware"
-	"github.com/loopzero/loopzero/pkg/serviceauth"
+	"github.com/getloopscale/loopzero-contracts/serviceauth"
 )
 
 // nonceStoreBootstrapTimeout caps how long bootstrap waits for the

@@ -13,7 +13,7 @@ import (
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/prometheus/client_golang/prometheus/promauto"
 
-	"github.com/loopzero/loopzero/pkg/serviceauth"
+	"github.com/getloopscale/loopzero-contracts/serviceauth"
 )
 
 // ServiceAuthEd25519PublicKeys is the trust set for Ed25519 signature
