@@ -17,14 +17,16 @@ import (
 // against per-plan caps. Both share the HTTP 402 "Payment Required"
 // surfacing pattern.
 //
-// M1.2 (plan m1-decouple-in-place D2/D4): the VALUE VOCABULARY (CostMetric,
-// Plan, CostCounter, CapFor, Unlimited, ExceededError, ErrCostCapExceeded)
-// moved to pkg/plan — the contracts-bound surface. The aliases below are
-// transitional re-exports (strangler-fig) so existing call-sites stay GREEN
-// while they migrate to pkg/plan directly; cap-enforcement LOGIC (CostStore,
-// CapChecker) stays here (ISP).
+// M1.2 (plan m1-decouple-in-place D2/D4, v1.2 amendment): the VALUE VOCABULARY
+// (CostMetric, Plan, CostCounter, CapFor, Unlimited, ExceededError,
+// ErrCostCapExceeded) moved to pkg/plan — the contracts-bound surface. All
+// EXTERNAL consumers import pkg/plan directly (Phase 3). The aliases below are
+// retained as enforcement-INTERNAL shorthand for this package's own cap-logic
+// (CostStore, CapChecker — which stay here per ISP); they are no longer a
+// re-export path for external code. A future cleanup may inline plan.X when
+// enforcement's internals/tests are next touched.
 
-// --- transitional vocabulary aliases (re-export from pkg/plan) ---
+// --- enforcement-internal vocabulary aliases (single source of truth: pkg/plan) ---
 
 // CostMetric identifies the kind of cost being tracked. Alias of plan.CostMetric.
 type CostMetric = plan.CostMetric
