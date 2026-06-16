@@ -147,6 +147,31 @@ tasks:
     cmds:
       - cd api && go test ./internal/contract/...
 
+  contract:cross-repo:
+    desc: >
+      M5 — run ALL decomposition seam contract tests across the umbrella repos in
+      one command (cli↔engine, cloud↔engine serviceauth, cloud↔loopzero-data themory).
+      Degrades gracefully (SKIP) when a sibling repo is absent. See
+      docs/cross-repo-contract-matrix.md. The CI platform invokes this target.
+    cmds:
+      - |
+        echo "=== seam engine OpenAPI + cli consumer (loopzero/api) ==="
+        cd api && go test ./internal/contract/...
+      - |
+        echo "=== seam cloud-themory + cloud-serviceauth ==="
+        if [ -d ../loopzero-cloud ]; then
+          (cd ../loopzero-cloud && go test ./internal/themory/... ./internal/auth/...)
+        else
+          echo "SKIP: loopzero-cloud sibling absent (umbrella layout required)"
+        fi
+      - |
+        echo "=== seam: cli↔engine (loopzero-cli engine-contract.test.ts) ==="
+        if [ -d ../loopzero-cli ]; then
+          (cd ../loopzero-cli && npm test --silent -- tests/contract/engine-contract.test.ts 2>&1 | tail -8)
+        else
+          echo "SKIP: loopzero-cli sibling absent (umbrella layout required)"
+        fi
+
   all:
     desc: Standard quality suite — hermetic tests + full-scan gates + contract
     deps: [hermetic, gates, contract]
