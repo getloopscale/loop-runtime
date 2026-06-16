@@ -9,10 +9,10 @@
 //     against algorithm confusion attacks; RFC 8725 §3.1).
 //   - typ header validation — only "JWT", "at+jwt", or absent are
 //     accepted (RFC 8725bis §2.6 cross-JWT confusion mitigation).
-//   - JWKS fetch wrapped by circuitbreaker.Execute (when configured)
-//     so that Hydra outages do not cascade into auth failures —
+//   - JWKS fetch guarded by an optional consumer-defined Breaker (when
+//     configured) so that Hydra outages do not cascade into auth failures —
 //     cached keys are served during the circuit-open window
-//     (gate PKG-G16 eat-your-own-dogfood).
+//     (gate PKG-G16 eat-your-own-dogfood; DIP per plan m1-decouple-in-place).
 package jwt
 
 import (
@@ -28,8 +28,21 @@ import (
 	"time"
 
 	goJWT "github.com/golang-jwt/jwt/v5"
-	"github.com/loopzero/loopzero/pkg/circuitbreaker"
 )
+
+// Breaker is the minimal circuit-breaker contract pkg/jwt depends on (DIP,
+// consumer-defined interface per plan m1-decouple-in-place D1). The concrete
+// pkg/circuitbreaker.Breaker satisfies it structurally; jwt does NOT import
+// circuitbreaker so the contracts surface stays free of engine-internal deps.
+//
+//   - PreCheck reports whether a call may proceed; a non-nil error means the
+//     circuit is open (or otherwise not ready) and the call MUST be skipped.
+//   - RecordResult feeds the outcome of the guarded call back to the breaker
+//     so it can trip / recover.
+type Breaker interface {
+	PreCheck() error
+	RecordResult(err error)
+}
 
 // AllowedAccessAlgs is the whitelist of signing algorithms acceptable
 // for access tokens issued by Ory Hydra. Hydra produces RS256 by
@@ -109,7 +122,7 @@ type Validator struct {
 	// protection. When the breaker is Open, fetchJWKS short-circuits
 	// without contacting the JWKS endpoint; cached keys are served
 	// instead via getKey (graceful degradation).
-	cb *circuitbreaker.Breaker
+	cb Breaker
 }
 
 // NewValidator creates a JWT validator that fetches JWKS from the given URL.
@@ -139,7 +152,7 @@ func NewValidator(jwksURL, issuer, audience string) *Validator {
 // Returns the Validator so callers can chain construction:
 //
 //	v := jwt.NewValidator(jwksURL, issuer, audience).WithCircuitBreaker(cb)
-func (v *Validator) WithCircuitBreaker(cb *circuitbreaker.Breaker) *Validator {
+func (v *Validator) WithCircuitBreaker(cb Breaker) *Validator {
 	v.cb = cb
 	return v
 }
@@ -363,25 +376,22 @@ func (v *Validator) fetchJWKS() error {
 	}
 	v.mu.RUnlock()
 
-	// Wrap actual HTTP fetch in circuit breaker when configured.
-	// gate PKG-G16: pkg/jwt eats its own dogfood (uses pkg/circuitbreaker).
-	doFetch := func(ctx context.Context) (struct{}, error) {
-		return struct{}{}, v.fetchJWKSLocked(ctx)
-	}
+	// Wrap the actual HTTP fetch in the circuit breaker when configured.
+	// DIP (plan m1-decouple-in-place T1.1): jwt depends on the Breaker
+	// interface, not the concrete pkg/circuitbreaker. The check-then-report
+	// split (PreCheck → fetch → RecordResult) mirrors the breaker's own
+	// Execute helper without importing it.
 	if v.cb != nil {
-		_, err := circuitbreaker.Execute(context.Background(), v.cb, doFetch)
-		if err != nil {
-			// Translate ErrCircuitOpen into our sentinel so getKey
-			// can decide to serve stale cache.
-			if errors.Is(err, circuitbreaker.ErrCircuitOpen) {
-				return errJWKSCircuitOpen
-			}
-			return err
+		if err := v.cb.PreCheck(); err != nil {
+			// Circuit open (or not ready): skip the fetch and signal getKey
+			// to serve whatever cache it has via our sentinel.
+			return errJWKSCircuitOpen
 		}
-		return nil
+		err := v.fetchJWKSLocked(context.Background())
+		v.cb.RecordResult(err)
+		return err
 	}
-	_, err := doFetch(context.Background())
-	return err
+	return v.fetchJWKSLocked(context.Background())
 }
 
 // fetchJWKSLocked performs the actual HTTP GET + parse + cache update

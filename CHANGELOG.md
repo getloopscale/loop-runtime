@@ -11,6 +11,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ### Changed
 
+- `pkg/jwt` now depends on a consumer-defined `Breaker` interface (2 methods: `PreCheck`/`RecordResult`) instead of the concrete `pkg/circuitbreaker`, so the JWT validator no longer drags an engine-internal package — first decouple toward the `loopzero-contracts` extraction. The concrete `*circuitbreaker.Breaker` still satisfies the interface structurally; behavior (open → serve cached keys) is unchanged. (M1.1 — plan m1-decouple-in-place; ADR `decisions/2026-06-16-monorepo-decomposition.md` D3)
 - Deploy now supports only the fixed LoopZeroKit stack — Python + Node, service shapes `server`/`worker`. Builds use platform-controlled canonical Dockerfiles generated in-process; the declared `services.json` `start` command drives the container `CMD`. (simplify-deploy-loopzerokit-only v2.0 — ADR `decisions/2026-06-15-deploy-fixed-loopzerokit-stack.md`)
 - `services.json` `type` enum narrowed to `server | worker` (was `server | worker | frontend`); the contract is mirrored in the LoopZeroKit framework repo. (D5)
 - Build strategy is now selected from the declared `services.json` `runtime` (`python`/`node`) carried end-to-end, instead of the legacy `framework` field — so an app builds with the runtime it declares. (simplify-deploy-loopzerokit-runtime-wiring — closes review F-dom-2)

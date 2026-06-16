@@ -8,6 +8,7 @@ import (
 	"crypto/rsa"
 	"encoding/base64"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"math/big"
 	"net/http"
@@ -1163,6 +1164,81 @@ func TestValidator_WithCircuitBreaker_ServesCachedKeysWhenOpen(t *testing.T) {
 	}
 	if _, err := v.Validate(signed); err != nil {
 		t.Errorf("expected stale-cache fallback to validate token; got: %v", err)
+	}
+}
+
+// ---------------------------------------------------------------------------
+// M1.1 — jwt.Breaker is a consumer-defined interface (DIP). The concrete
+// *circuitbreaker.Breaker satisfies it structurally (tests above prove that).
+// These tests prove the interface contract with a fake, so the unit boundary
+// no longer depends on the concrete breaker (plan m1-decouple-in-place T1.1).
+// ---------------------------------------------------------------------------
+
+// Compile-time guard (plan m1-decouple-in-place T1.2 / EC-3): the concrete
+// *circuitbreaker.Breaker MUST keep satisfying the consumer-defined jwt.Breaker
+// interface. If a future signature drift breaks this, the build fails here —
+// not in production. (No production composition root wires WithCircuitBreaker
+// yet; this assertion is the canonical guard until one does.)
+var _ Breaker = (*circuitbreaker.Breaker)(nil)
+
+type fakeBreaker struct {
+	preErr      error
+	recordCalls int
+	lastRecord  error
+}
+
+func (f *fakeBreaker) PreCheck() error        { return f.preErr }
+func (f *fakeBreaker) RecordResult(err error) { f.recordCalls++; f.lastRecord = err }
+
+func TestValidator_BreakerInterface_OpenSkipsFetch(t *testing.T) {
+	calls := 0
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		calls++
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = w.Write(jwksJSON(map[string]*rsa.PublicKey{"k1": &generateRSAKey(t).PublicKey}))
+	}))
+	t.Cleanup(srv.Close)
+
+	fb := &fakeBreaker{preErr: errors.New("open")}
+	v := NewValidator(srv.URL, "test-issuer", "test-audience").WithCircuitBreaker(fb)
+
+	err := v.fetchJWKS()
+	if !errors.Is(err, errJWKSCircuitOpen) {
+		t.Fatalf("expected errJWKSCircuitOpen when breaker PreCheck fails, got: %v", err)
+	}
+	if calls != 0 {
+		t.Errorf("breaker open MUST skip the HTTP fetch; got %d calls", calls)
+	}
+	if fb.recordCalls != 0 {
+		t.Errorf("RecordResult MUST NOT be called when PreCheck short-circuits; got %d", fb.recordCalls)
+	}
+}
+
+func TestValidator_BreakerInterface_ClosedRecordsOutcome(t *testing.T) {
+	key := generateRSAKey(t)
+	srv := serveJWKS(t, jwksJSON(map[string]*rsa.PublicKey{"k1": &key.PublicKey}))
+
+	fb := &fakeBreaker{preErr: nil}
+	v := NewValidator(srv.URL, "test-issuer", "test-audience").WithCircuitBreaker(fb)
+
+	if err := v.fetchJWKS(); err != nil {
+		t.Fatalf("closed breaker must allow fetch, got: %v", err)
+	}
+	if fb.recordCalls != 1 {
+		t.Errorf("RecordResult MUST be called exactly once on a closed-breaker fetch; got %d", fb.recordCalls)
+	}
+	if fb.lastRecord != nil {
+		t.Errorf("RecordResult MUST receive nil on a successful fetch; got %v", fb.lastRecord)
+	}
+}
+
+func TestValidator_NilBreaker_FetchesDirectly(t *testing.T) {
+	key := generateRSAKey(t)
+	srv := serveJWKS(t, jwksJSON(map[string]*rsa.PublicKey{"k1": &key.PublicKey}))
+
+	v := NewValidator(srv.URL, "test-issuer", "test-audience") // no WithCircuitBreaker
+	if err := v.fetchJWKS(); err != nil {
+		t.Fatalf("nil breaker must fetch directly without panic, got: %v", err)
 	}
 }
 
