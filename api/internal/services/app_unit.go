@@ -13,17 +13,15 @@ type AppUnit struct {
 	Type string `json:"type"` // "server", "worker", "frontend"
 	Path string `json:"path"`
 
-	// Framework (legacy loopzero.yaml) and Runtime (new services.json) coexist
-	// during the transition window per ADR D7. Plan B v3.1 T-B.5 (2026-06-05)
-	// added Runtime — `python` | `node` from services.json. Callers should
-	// prefer Runtime; Framework is retained for backwards compat reading of
-	// existing `apps_spec` JSONB rows. Strategy dispatch falls back from
-	// Runtime → Framework, and emits E-010 when both are empty.
-	Framework string `json:"framework,omitempty"`
-	Runtime   string `json:"runtime,omitempty"`
+	// Runtime is the services.json build-strategy key (`python` | `node`).
+	// The legacy `framework` field was removed (simplify-deploy-loopzerokit-
+	// runtime-wiring T2.1 / F-dom-2 — runtime is the single contract, no
+	// backward compatibility per D1/D2).
+	Runtime string `json:"runtime,omitempty"`
 
 	Port       int               `json:"port"`
 	Build      string            `json:"build"`                // "dockerfile", "buildpack", "custom"
+	Start      string            `json:"start,omitempty"`      // T0.2b: declared services.json start command (canonical Dockerfile CMD)
 	Dockerfile string            `json:"dockerfile,omitempty"` // resolved Dockerfile path (relative to app path)
 	Rendering  string            `json:"rendering,omitempty"`  // "static" or "server" (MEET-009)
 	Env        map[string]string `json:"env,omitempty"`        // build-time environment variables
@@ -40,43 +38,31 @@ type AppUnit struct {
 // NormalizeApp resolves a raw AppSpec into a fully populated AppUnit.
 // Returns error if the combination is invalid (e.g., server without port).
 func NormalizeApp(name string, raw AppSpec) (AppUnit, error) {
-	// Resolve type
+	// Resolve type — fixed stack is server|worker only (T3.3; default server).
 	appType := raw.Type
 	if appType == "" {
-		// Default "server" — frontends are explicitly tagged em services.json
-		// or carry `type: "frontend"` em legacy AppSpec migrations.
 		appType = "server"
 	}
-	if appType != "server" && appType != "worker" && appType != "frontend" {
-		return AppUnit{}, fmt.Errorf("app '%s': invalid type '%s'", name, appType)
+	if appType != "server" && appType != "worker" {
+		return AppUnit{}, fmt.Errorf("app '%s': invalid type '%s' (server|worker only)", name, appType)
 	}
 
-	// Resolve build strategy
-	build := raw.Build
-	if build == "" {
-		if raw.Framework == "custom" || raw.Framework == "" || raw.Framework == "unknown" {
-			build = "dockerfile"
-		} else {
-			build = "buildpack"
-		}
-	}
-
-	// Resolve dockerfile
+	// Resolve build strategy.
+	// T2.2/D4 (plan simplify-deploy-loopzerokit-only): the BYO user-Dockerfile path
+	// is deleted. The fixed LoopZeroKit stack ALWAYS builds from the platform-
+	// generated canonical Dockerfile, so build is pinned to "buildpack"
+	// (platform-generated) and no user Dockerfile path is resolved. The legacy
+	// `build=="dockerfile"` default (which routed to a user-controlled path and
+	// reopened the D4 build-escape hole for monorepo subpaths) is removed.
+	// CreateBuildPlan resolves the canonical path regardless; this keeps the
+	// AppUnit consistent with that contract.
+	build := "buildpack"
 	dockerfile := ""
-	if build == "dockerfile" {
-		dockerfile = raw.Dockerfile
-		if dockerfile == "" {
-			dockerfile = "Dockerfile"
-		}
-	}
 
 	// Resolve port
 	port := raw.Port
 	if appType == "server" && port <= 0 {
 		port = 8080
-	}
-	if appType == "frontend" && port <= 0 {
-		port = 80 // default for frontend servers (nginx, static file server)
 	}
 	if appType == "worker" {
 		port = 0
@@ -86,12 +72,6 @@ func NormalizeApp(name string, raw AppSpec) (AppUnit, error) {
 	path := raw.Path
 	if path == "" {
 		path = "."
-	}
-
-	// Resolve framework
-	framework := raw.Framework
-	if framework == "" {
-		framework = "custom"
 	}
 
 	env := raw.Env
@@ -104,28 +84,19 @@ func NormalizeApp(name string, raw AppSpec) (AppUnit, error) {
 		secrets = []string{}
 	}
 
-	// Resolve rendering mode (MEET-2026-03-26-009, MEET-2026-03-29-016).
-	rendering := raw.Rendering
-	if rendering != "static" && rendering != "server" {
-		rendering = "server"
-	}
-	// Non-frontend types are always "server" (container delivery).
-	if appType != "frontend" {
-		rendering = "server"
-	}
-	// MEET-2026-03-29-016: Frontend apps MUST use static delivery (zero pods, CDN).
-	// No server-rendered frontends allowed. This is the authoritative enforcement point.
-	if appType == "frontend" && rendering != "static" {
-		return AppUnit{}, fmt.Errorf("app '%s': frontend apps must use static delivery (render: static). LoopZero serves frontends from CDN — server-side rendering is not supported. Add 'render: static' to your loopzero.yaml", name)
-	}
+	// T3.3 (plan simplify-deploy-loopzerokit-only v2.0): static-frontend delivery
+	// removed — all apps are container delivery ("server" rendering). The
+	// Rendering field is retained (always "server") for downstream compat.
+	rendering := "server"
 
 	return AppUnit{
 		Name:       name,
 		Type:       appType,
 		Path:       path,
-		Framework:  framework,
+		Runtime:    raw.Runtime, // F-dom-2: carry services.json runtime — the build-strategy key
 		Port:       port,
 		Build:      build,
+		Start:      raw.Start, // T0.2b: declared start → canonical Dockerfile CMD
 		Dockerfile: dockerfile,
 		Rendering:  rendering,
 		Env:        env,

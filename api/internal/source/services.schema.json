@@ -61,8 +61,8 @@
         },
         "type": {
           "type": "string",
-          "enum": ["server", "worker", "frontend"],
-          "description": "Service shape. Plan v1.2 T2.2. Defaults to `server` when omitted (Go-side fallback — JSON Schema 7 doesn't apply default automatically)."
+          "enum": ["server", "worker"],
+          "description": "Service shape. server | worker. Defaults to `server` when omitted (Go-side fallback — JSON Schema 7 doesn't apply default automatically). `frontend` removed in plan simplify-deploy-loopzerokit-only v2.0 (D5) — LoopZeroKit serves no static frontends."
         },
         "port": {
           "type": "integer",

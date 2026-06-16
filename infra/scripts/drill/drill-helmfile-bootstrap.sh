@@ -820,9 +820,10 @@ kubectl -n loopzero-system set env deployment/loopzero-api \
   REGISTRY_URL=registry.digitalocean.com/loopzero-system \
   BASE_DOMAIN="$DRILL_BASE_DOMAIN" \
   SOURCE_BUCKET=loopzero-drill-builds-sfo3 \
-  MINIO_ENDPOINT="https://sfo3.digitaloceanspaces.com" \
-  LOOPZERO_PACKS_IMAGE="registry.digitalocean.com/loopzero-system/loopzero-packs-runner:$LOOPZERO_PACKS_TAG" >/dev/null
-log "  ✓ loopzero-api env: REGISTRY_URL/BASE_DOMAIN/MINIO_*/LOOPZERO_PACKS_IMAGE set"
+  MINIO_ENDPOINT="https://sfo3.digitaloceanspaces.com" >/dev/null
+# T4.1 (simplify-deploy-loopzerokit-only v2.0): LOOPZERO_PACKS_IMAGE removed — loopzero-api
+# no longer uses loopzero-packs (canonical in-process Dockerfile generation).
+log "  ✓ loopzero-api env: REGISTRY_URL/BASE_DOMAIN/MINIO_* set"
 
 # Bug #56 LIVE FIX (caught 2026-05-18 iter 44): generate-secrets.sh creates
 # SYNTHETIC in-cluster kubeconfigs assuming single-cluster topology. Drill

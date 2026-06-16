@@ -6,7 +6,6 @@ package services
 import (
 	"fmt"
 	"log/slog"
-	"path"
 	"regexp"
 
 	"github.com/loopzero/loopzero/pkg/naming"
@@ -57,13 +56,15 @@ type AppBuildPlan struct {
 	ContextPath      string            // e.g., "/workspace" or "/workspace/apps/api"
 	BuildArgs        map[string]string // from AppUnit.Env + system vars (COMMIT_SHA, APP_NAME)
 	CacheRef         string            // OCI cache ref (e.g., "registry.do.com/tenant/project/api:buildcache")
-	LanguageStrategy string            // resolved strategy name (e.g., "node", "go", "python", "custom")
+	LanguageStrategy string            // resolved strategy name (e.g., "node", "python", "custom")
+	Runtime          string            // services.json runtime: "python" | "node" — the build-strategy key (T0.1, F-dom-2 wiring)
 	Build            string            // "dockerfile", "buildpack", "custom"
 
 	// Original AppUnit fields needed downstream (manifests, ArgoCD, Dockerfile generation)
 	AppType       string // "server", "worker", "frontend"
 	AppPath       string // original app path from loopzero.yaml (e.g., "apps/api", ".")
 	Port          int
+	Start         string // T0.2b: declared services.json start command (canonical Dockerfile CMD)
 	Secrets       []string
 	DeliveryModel string // "container" or "static" (MEET-009). Resolved from AppUnit.Rendering.
 }
@@ -80,29 +81,26 @@ func CreateBuildPlan(units []AppUnit, tenantID, projectID, commitSHA, registryUR
 		cacheRef := fmt.Sprintf("%s/%s/%s-%s:buildcache",
 			registryURL, tenantID, projectID, unit.Name)
 
-		// Resolve Dockerfile path in workspace
+		// Resolve Dockerfile path in workspace.
+		// T2.2/D4 (plan simplify-deploy-loopzerokit-only): the BYO user-Dockerfile
+		// path is DELETED. The Dockerfile is ALWAYS the platform-canonical file
+		// written by the generate-dockerfile step — a user-supplied build mode /
+		// dockerfile name / subpath is NEVER honored here. This single-sources the
+		// path with argo.dockerfilePathForApp (MEET-2026-03-29-018):
+		//   1 app  → /workspace/Dockerfile
+		//   N apps → /workspace/Dockerfile.{name}
+		// so the generator's write path and BuildKit's `--opt filename` can never
+		// diverge (which would otherwise let BuildKit build a user Dockerfile).
 		var dockerfilePath string
-		if unit.Build == "dockerfile" && unit.Dockerfile != "" {
-			// User-provided Dockerfile: relative to app path
-			dockerfilePath = path.Join("/workspace", unit.Path, unit.Dockerfile)
+		if len(units) > 1 {
+			dockerfilePath = fmt.Sprintf("/workspace/Dockerfile.%s", unit.Name)
 		} else {
-			// Buildpack-generated: the generate-dockerfile step creates it.
-			// Naming convention must match argo.dockerfilePathForApp() (MEET-2026-03-29-018).
-			if len(units) > 1 {
-				dockerfilePath = fmt.Sprintf("/workspace/Dockerfile.%s", unit.Name)
-			} else {
-				dockerfilePath = "/workspace/Dockerfile"
-			}
+			dockerfilePath = "/workspace/Dockerfile"
 		}
 
-		// Resolve context path.
-		// For buildpack-generated Dockerfiles: context is always /workspace (entire workspace)
-		// because the Dockerfile does COPY . . then WORKDIR /app/{appPath}.
-		// For user-provided Dockerfiles: context is the app's subdir.
+		// Context is ALWAYS the whole workspace: the canonical Dockerfile does
+		// COPY . . then WORKDIR into the app subdir. Never the user subpath.
 		contextPath := "/workspace"
-		if unit.Build == "dockerfile" && unit.Path != "." && unit.Path != "" {
-			contextPath = path.Join("/workspace", unit.Path)
-		}
 
 		// Build args: user env + system vars
 		// SEC-002 fix: validate env key names before they reach buildctl --opt.
@@ -129,28 +127,24 @@ func CreateBuildPlan(units []AppUnit, tenantID, projectID, commitSHA, registryUR
 		buildArgs["COMMIT_SHA"] = commitSHA
 		buildArgs["APP_NAME"] = unit.Name
 
-		// Plan B v3.1 T-B.5 (2026-06-05) — strategy dispatch via services.json
-		// `runtime` first, with legacy `framework` fallback (ADR D7 transition
-		// window). EC-B3-2: warn when both empty (likely partial migration or
-		// data corruption) and fall through to "custom" via the default branch.
-		runtimeOrFramework := unit.Runtime
-		if runtimeOrFramework == "" {
-			runtimeOrFramework = unit.Framework
-		}
-		if runtimeOrFramework == "" {
-			slog.Warn("build plan: E-010 missing runtime+framework",
+		// simplify-deploy-loopzerokit-runtime-wiring T2.1 (F-dom-2): strategy is keyed
+		// on the services.json `runtime` ONLY (python|node). No legacy framework
+		// fallback (D1/D2). An empty runtime is a contract violation and fails
+		// closed downstream via argo.ResolveStrategy (D4).
+		if unit.Runtime == "" {
+			slog.Warn("build plan: missing runtime",
 				"app", unit.Name,
-				"hint", "likely partial migration or data corruption — falling back to custom strategy")
+				"hint", "services.json must declare runtime (python|node) — build will fail closed")
 		}
-		strategy := resolveLanguageStrategy(runtimeOrFramework)
+		strategy := resolveLanguageStrategy(unit.Runtime)
 
-		// Resolve delivery model from rendering (MEET-009)
+		// T3.3 (simplify-deploy-loopzerokit-only): static-frontend delivery removed —
+		// every app is container delivery (AppUnit.Rendering is always "server").
+		// The "static" branch here was dead (F-wire-2). DeliveryModel is retained
+		// (always "container") for downstream-struct compatibility.
 		deliveryModel := "container"
-		if unit.Rendering == "static" {
-			deliveryModel = "static"
-		}
 		slog.Info("build plan: resolved delivery model",
-			"app", unit.Name, "rendering", unit.Rendering, "delivery_model", deliveryModel)
+			"app", unit.Name, "delivery_model", deliveryModel)
 
 		plans = append(plans, AppBuildPlan{
 			AppName:          unit.Name,
@@ -160,10 +154,12 @@ func CreateBuildPlan(units []AppUnit, tenantID, projectID, commitSHA, registryUR
 			BuildArgs:        buildArgs,
 			CacheRef:         cacheRef,
 			LanguageStrategy: strategy,
+			Runtime:          unit.Runtime, // T0.1 (F-dom-2 wiring): carry runtime to workflow strategy resolution
 			Build:            unit.Build,
 			AppType:          unit.Type,
 			AppPath:          unit.Path,
 			Port:             unit.Port,
+			Start:            unit.Start, // T0.2b: thread declared start to the build plan
 			Secrets:          unit.Secrets,
 			DeliveryModel:    deliveryModel,
 		})
@@ -172,38 +168,21 @@ func CreateBuildPlan(units []AppUnit, tenantID, projectID, commitSHA, registryUR
 	return BuildPlan{Apps: plans}
 }
 
-// resolveLanguageStrategy maps a runtime/framework string to a language
-// strategy name. Single source of truth for the dispatch.
+// resolveLanguageStrategy maps a services.json `runtime` to a language
+// strategy label. Single source of truth for the label on AppBuildPlan.
 //
-// Plan B v3.1 T-B.5 (2026-06-05) — accepts both the new services.json
-// `runtime` values ("python", "node") and the legacy loopzero.yaml `framework`
-// values (everything else). EC-B3-3 explicit cases ship at the top so the
-// runtime contract is unmistakable in code review; the legacy framework
-// cases follow during the transition window per ADR D7.
-func resolveLanguageStrategy(runtimeOrFramework string) string {
-	switch runtimeOrFramework {
-	// services.json runtime values (Plan B v3.1 T-B.5 EC-B3-3).
+// simplify-deploy-loopzerokit-runtime-wiring T2.1 (F-dom-2): keyed on the
+// services.json `runtime` only (python|node). The legacy loopzero.yaml framework
+// cases were deleted (D1/D2 — no backward compatibility). Anything else returns
+// "unsupported"; the actual build fails closed via argo.ResolveStrategy, which
+// is the authoritative dispatch (this label is informational on AppBuildPlan).
+func resolveLanguageStrategy(runtime string) string {
+	switch runtime {
 	case "node":
 		return "node"
 	case "python":
 		return "python"
-	// Legacy loopzero.yaml framework values — kept during transition (ADR D7).
-	case "nextjs", "next", "vite", "remix", "nestjs", "express",
-		"react", "vue", "svelte", "astro", "angular", "fastify":
-		return "node"
-	case "gin", "go":
-		return "go"
-	case "fastapi", "django":
-		return "python"
-	case "sinatra", "rails", "ruby":
-		return "ruby"
-	case "spring", "spring-boot", "java":
-		return "java"
-	case "laravel", "slim", "php":
-		return "php"
-	case "axum", "actix", "rocket", "rust":
-		return "rust"
 	default:
-		return "custom"
+		return "unsupported"
 	}
 }

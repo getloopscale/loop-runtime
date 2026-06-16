@@ -7,27 +7,11 @@ import (
 	"testing"
 )
 
-func TestCreateBuildPlan_StaticDeliveryModel(t *testing.T) {
-	units := []AppUnit{
-		{
-			Name:      "web",
-			Type:      "frontend",
-			Path:      "apps/web",
-			Framework: "react",
-			Build:     "buildpack",
-			Rendering: "static",
-		},
-	}
-
-	plan := CreateBuildPlan(units, "tn-1", "my-app", "sha123", "registry.example.com")
-
-	if len(plan.Apps) != 1 {
-		t.Fatalf("expected 1 app, got %d", len(plan.Apps))
-	}
-	if plan.Apps[0].DeliveryModel != "static" {
-		t.Errorf("expected delivery model 'static', got %q", plan.Apps[0].DeliveryModel)
-	}
-}
+// TestCreateBuildPlan_StaticDeliveryModel removed (simplify-deploy-loopzerokit-only
+// T3.3/F-wire-2): static-frontend delivery was deleted, so DeliveryModel is
+// always "container". The `frontend` type + `static` rendering it exercised no
+// longer exist in the contract. TestCreateBuildPlan_ContainerDeliveryModel below
+// covers the only remaining delivery model.
 
 func TestCreateBuildPlan_ContainerDeliveryModel(t *testing.T) {
 	units := []AppUnit{
@@ -36,7 +20,7 @@ func TestCreateBuildPlan_ContainerDeliveryModel(t *testing.T) {
 			Type:      "server",
 			Port:      3000,
 			Path:      "apps/api",
-			Framework: "express",
+			Runtime: "node",
 			Build:     "buildpack",
 			Rendering: "server",
 		},
@@ -52,14 +36,19 @@ func TestCreateBuildPlan_ContainerDeliveryModel(t *testing.T) {
 	}
 }
 
-func TestCreateBuildPlan_UserProvidedDockerfile(t *testing.T) {
+// TestCreateBuildPlan_UserDockerfileIgnored_D4_Subpath locks the D4 invariant
+// for a monorepo subpath app: even with Build="dockerfile" + a user Dockerfile
+// + a non-root Path, the resolved DockerfilePath is the platform-canonical
+// path (single app → /workspace/Dockerfile) and the context is the whole
+// workspace — never the user subpath. This is the exact vector F-dom-1 flagged.
+func TestCreateBuildPlan_UserDockerfileIgnored_D4_Subpath(t *testing.T) {
 	units := []AppUnit{
 		{
 			Name:       "api",
 			Type:       "server",
 			Port:       3000,
 			Path:       "services/api",
-			Framework:  "express",
+			Runtime:  "node",
 			Build:      "dockerfile",
 			Dockerfile: "Dockerfile.prod",
 		},
@@ -67,18 +56,18 @@ func TestCreateBuildPlan_UserProvidedDockerfile(t *testing.T) {
 
 	plan := CreateBuildPlan(units, "tn-1", "my-app", "sha123", "registry.example.com")
 
-	if plan.Apps[0].DockerfilePath != "/workspace/services/api/Dockerfile.prod" {
-		t.Errorf("expected user dockerfile path, got %q", plan.Apps[0].DockerfilePath)
+	if plan.Apps[0].DockerfilePath != "/workspace/Dockerfile" {
+		t.Errorf("DockerfilePath = %q, want /workspace/Dockerfile (user Dockerfile/subpath must be ignored — D4)", plan.Apps[0].DockerfilePath)
 	}
-	if plan.Apps[0].ContextPath != "/workspace/services/api" {
-		t.Errorf("expected context path for user dockerfile, got %q", plan.Apps[0].ContextPath)
+	if plan.Apps[0].ContextPath != "/workspace" {
+		t.Errorf("ContextPath = %q, want /workspace (canonical build never uses the user subpath — D4)", plan.Apps[0].ContextPath)
 	}
 }
 
 func TestCreateBuildPlan_MultiApp_DockerfileNaming(t *testing.T) {
 	units := []AppUnit{
-		{Name: "api", Type: "server", Port: 3000, Path: ".", Framework: "express", Build: "buildpack"},
-		{Name: "worker", Type: "worker", Path: ".", Framework: "node", Build: "buildpack"},
+		{Name: "api", Type: "server", Port: 3000, Path: ".", Runtime: "node", Build: "buildpack"},
+		{Name: "worker", Type: "worker", Path: ".", Runtime: "node", Build: "buildpack"},
 	}
 
 	plan := CreateBuildPlan(units, "tn-1", "my-app", "sha123", "registry.example.com")
@@ -102,7 +91,7 @@ func TestCreateBuildPlan_InvalidEnvKeySkipped(t *testing.T) {
 			Type:      "server",
 			Port:      3000,
 			Path:      ".",
-			Framework: "express",
+			Runtime: "node",
 			Build:     "buildpack",
 			Env: map[string]string{
 				"VALID_KEY":  "ok",

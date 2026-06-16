@@ -7,7 +7,7 @@ import "testing"
 
 func TestCreateBuildPlan_SingleApp(t *testing.T) {
 	units := []AppUnit{
-		{Name: "api", Type: "server", Path: ".", Framework: "express", Port: 3000, Build: "buildpack", Env: map[string]string{}, Secrets: []string{}},
+		{Name: "api", Type: "server", Path: ".", Runtime: "node", Port: 3000, Build: "buildpack", Env: map[string]string{}, Secrets: []string{}},
 	}
 	plan := CreateBuildPlan(units, "acme", "my-app", "abc123", "registry.do.com")
 
@@ -41,8 +41,8 @@ func TestCreateBuildPlan_SingleApp(t *testing.T) {
 
 func TestCreateBuildPlan_MultiApp_Monorepo(t *testing.T) {
 	units := []AppUnit{
-		{Name: "api", Type: "server", Path: "apps/api", Framework: "express", Port: 3000, Build: "buildpack", Env: map[string]string{}, Secrets: []string{}},
-		{Name: "worker", Type: "worker", Path: "apps/worker", Framework: "node", Port: 0, Build: "buildpack", Env: map[string]string{}, Secrets: []string{}},
+		{Name: "api", Type: "server", Path: "apps/api", Runtime: "node", Port: 3000, Build: "buildpack", Env: map[string]string{}, Secrets: []string{}},
+		{Name: "worker", Type: "worker", Path: "apps/worker", Runtime: "node", Port: 0, Build: "buildpack", Env: map[string]string{}, Secrets: []string{}},
 	}
 	plan := CreateBuildPlan(units, "acme", "monorepo", "def456", "reg.io")
 
@@ -67,24 +67,34 @@ func TestCreateBuildPlan_MultiApp_Monorepo(t *testing.T) {
 	}
 }
 
-func TestCreateBuildPlan_CustomDockerfile(t *testing.T) {
+// TestCreateBuildPlan_UserDockerfileIgnored_D4 locks the D4 security invariant
+// (plan simplify-deploy-loopzerokit-only): BYO user-Dockerfile is deleted, so a
+// user-supplied Build="dockerfile" + Dockerfile + Path MUST NOT influence the
+// resolved DockerfilePath. The path is ALWAYS the platform-canonical location
+// (matching argo.dockerfilePathForApp) so BuildKit can never be pointed at a
+// user-controlled Dockerfile. Given a monorepo subpath app declaring a custom
+// Dockerfile, When the plan is created, Then the Dockerfile path is the flat
+// canonical /workspace/Dockerfile and the context is the whole workspace.
+func TestCreateBuildPlan_UserDockerfileIgnored_D4(t *testing.T) {
 	units := []AppUnit{
-		{Name: "api", Type: "server", Path: ".", Framework: "custom", Port: 3000, Build: "dockerfile", Dockerfile: "Dockerfile.prod", Env: map[string]string{}, Secrets: []string{}},
+		{Name: "web", Type: "server", Path: "apps/web", Runtime: "node", Port: 3000, Build: "dockerfile", Dockerfile: "Dockerfile.prod", Env: map[string]string{}, Secrets: []string{}},
 	}
 	plan := CreateBuildPlan(units, "acme", "app", "sha1", "reg.io")
 
 	app := plan.Apps[0]
-	if app.DockerfilePath != "/workspace/Dockerfile.prod" {
-		t.Errorf("DockerfilePath = %q, want /workspace/Dockerfile.prod", app.DockerfilePath)
+	// D4: user path/dockerfile IGNORED — canonical flat path for a single app.
+	if app.DockerfilePath != "/workspace/Dockerfile" {
+		t.Errorf("DockerfilePath = %q, want /workspace/Dockerfile (user Dockerfile/path must be ignored — D4)", app.DockerfilePath)
 	}
-	if app.LanguageStrategy != "custom" {
-		t.Errorf("LanguageStrategy = %q, want custom", app.LanguageStrategy)
+	// Context is always the whole workspace, never the user subpath.
+	if app.ContextPath != "/workspace" {
+		t.Errorf("ContextPath = %q, want /workspace (canonical build never uses the user subpath — D4)", app.ContextPath)
 	}
 }
 
 func TestCreateBuildPlan_WithEnv(t *testing.T) {
 	units := []AppUnit{
-		{Name: "api", Type: "server", Path: ".", Framework: "express", Port: 3000, Build: "buildpack",
+		{Name: "api", Type: "server", Path: ".", Runtime: "node", Port: 3000, Build: "buildpack",
 			Env: map[string]string{"NODE_ENV": "production", "LOG_LEVEL": "info"}, Secrets: []string{}},
 	}
 	plan := CreateBuildPlan(units, "acme", "app", "sha1", "reg.io")
@@ -102,20 +112,12 @@ func TestCreateBuildPlan_WithEnv(t *testing.T) {
 	}
 }
 
-func TestCreateBuildPlan_GoFramework(t *testing.T) {
-	units := []AppUnit{
-		{Name: "api", Type: "server", Path: ".", Framework: "gin", Port: 8080, Build: "buildpack", Env: map[string]string{}, Secrets: []string{}},
-	}
-	plan := CreateBuildPlan(units, "t", "p", "sha", "r")
+// TestCreateBuildPlan_GoFramework removed — go is not in the fixed LoopZeroKit
+// stack (simplify-deploy-loopzerokit-runtime-wiring T2.1 / F-dom-2).
 
-	if plan.Apps[0].LanguageStrategy != "go" {
-		t.Errorf("LanguageStrategy = %q, want go", plan.Apps[0].LanguageStrategy)
-	}
-}
-
-func TestCreateBuildPlan_PythonFramework(t *testing.T) {
+func TestCreateBuildPlan_PythonRuntime(t *testing.T) {
 	units := []AppUnit{
-		{Name: "api", Type: "server", Path: ".", Framework: "fastapi", Port: 8000, Build: "buildpack", Env: map[string]string{}, Secrets: []string{}},
+		{Name: "api", Type: "server", Path: ".", Runtime: "python", Port: 8000, Build: "buildpack", Env: map[string]string{}, Secrets: []string{}},
 	}
 	plan := CreateBuildPlan(units, "t", "p", "sha", "r")
 
@@ -124,83 +126,17 @@ func TestCreateBuildPlan_PythonFramework(t *testing.T) {
 	}
 }
 
-func TestResolveLanguageStrategy_AllFrameworks(t *testing.T) {
-	nodeFrameworks := []string{
-		"nextjs", "next", "vite", "remix", "nestjs", "express", "node",
-		"react", "vue", "svelte", "astro", "angular", "fastify",
-	}
-	for _, fw := range nodeFrameworks {
-		if got := resolveLanguageStrategy(fw); got != "node" {
-			t.Errorf("resolveLanguageStrategy(%q) = %q, want node", fw, got)
-		}
-	}
+// TestResolveLanguageStrategy_AllFrameworks removed — see runtime_compat_test.go
+// (TestResolveLanguageStrategy_RuntimePython/Node + _NonRuntime_Unsupported).
+// The fixed LoopZeroKit stack is python|node; go/ruby/java/php/rust dispatch was
+// deleted (simplify-deploy-loopzerokit-runtime-wiring T2.1 / F-dom-2).
 
-	goFrameworks := []string{"gin", "go"}
-	for _, fw := range goFrameworks {
-		if got := resolveLanguageStrategy(fw); got != "go" {
-			t.Errorf("resolveLanguageStrategy(%q) = %q, want go", fw, got)
-		}
-	}
-
-	pythonFrameworks := []string{"fastapi", "django", "python"}
-	for _, fw := range pythonFrameworks {
-		if got := resolveLanguageStrategy(fw); got != "python" {
-			t.Errorf("resolveLanguageStrategy(%q) = %q, want python", fw, got)
-		}
-	}
-
-	rubyFrameworks := []string{"sinatra", "rails", "ruby"}
-	for _, fw := range rubyFrameworks {
-		if got := resolveLanguageStrategy(fw); got != "ruby" {
-			t.Errorf("resolveLanguageStrategy(%q) = %q, want ruby", fw, got)
-		}
-	}
-
-	javaFrameworks := []string{"spring", "spring-boot", "java"}
-	for _, fw := range javaFrameworks {
-		if got := resolveLanguageStrategy(fw); got != "java" {
-			t.Errorf("resolveLanguageStrategy(%q) = %q, want java", fw, got)
-		}
-	}
-
-	phpFrameworks := []string{"laravel", "slim", "php"}
-	for _, fw := range phpFrameworks {
-		if got := resolveLanguageStrategy(fw); got != "php" {
-			t.Errorf("resolveLanguageStrategy(%q) = %q, want php", fw, got)
-		}
-	}
-
-	rustFrameworks := []string{"axum", "actix", "rocket", "rust"}
-	for _, fw := range rustFrameworks {
-		if got := resolveLanguageStrategy(fw); got != "rust" {
-			t.Errorf("resolveLanguageStrategy(%q) = %q, want rust", fw, got)
-		}
-	}
-
-	if got := resolveLanguageStrategy("unknown"); got != "custom" {
-		t.Errorf("resolveLanguageStrategy(unknown) = %q, want custom", got)
-	}
-}
-
-func TestCreateBuildPlan_FrontendFramework_React(t *testing.T) {
+// TestCreateBuildPlan_MixedRuntimes: a monorepo mixing the two supported
+// runtimes (node + python) resolves each app's strategy by its declared runtime.
+func TestCreateBuildPlan_MixedRuntimes(t *testing.T) {
 	units := []AppUnit{
-		{Name: "web", Type: "frontend", Path: "web", Framework: "react", Port: 80, Build: "buildpack", Rendering: "static", Env: map[string]string{}, Secrets: []string{}},
-	}
-	plan := CreateBuildPlan(units, "t", "p", "sha", "r")
-
-	if plan.Apps[0].LanguageStrategy != "node" {
-		t.Errorf("LanguageStrategy = %q, want node (react must map to node)", plan.Apps[0].LanguageStrategy)
-	}
-	if plan.Apps[0].DeliveryModel != "static" {
-		t.Errorf("DeliveryModel = %q, want static", plan.Apps[0].DeliveryModel)
-	}
-}
-
-func TestCreateBuildPlan_MixedLanguages(t *testing.T) {
-	units := []AppUnit{
-		{Name: "api", Type: "server", Path: "apps/api", Framework: "express", Port: 3000, Build: "buildpack", Env: map[string]string{}, Secrets: []string{}},
-		{Name: "worker", Type: "worker", Path: "apps/worker", Framework: "go", Port: 0, Build: "buildpack", Env: map[string]string{}, Secrets: []string{}},
-		{Name: "ml", Type: "worker", Path: "apps/ml", Framework: "fastapi", Port: 0, Build: "buildpack", Env: map[string]string{}, Secrets: []string{}},
+		{Name: "api", Type: "server", Path: "apps/api", Runtime: "node", Port: 3000, Build: "buildpack", Env: map[string]string{}, Secrets: []string{}},
+		{Name: "ml", Type: "worker", Path: "apps/ml", Runtime: "python", Port: 0, Build: "buildpack", Env: map[string]string{}, Secrets: []string{}},
 	}
 	plan := CreateBuildPlan(units, "acme", "mono", "sha", "reg.io")
 
@@ -208,12 +144,8 @@ func TestCreateBuildPlan_MixedLanguages(t *testing.T) {
 	for _, app := range plan.Apps {
 		strategies[app.AppName] = app.LanguageStrategy
 	}
-
 	if strategies["api"] != "node" {
 		t.Errorf("api strategy = %q, want node", strategies["api"])
-	}
-	if strategies["worker"] != "go" {
-		t.Errorf("worker strategy = %q, want go", strategies["worker"])
 	}
 	if strategies["ml"] != "python" {
 		t.Errorf("ml strategy = %q, want python", strategies["ml"])

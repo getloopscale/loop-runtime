@@ -11,9 +11,17 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ### Changed
 
+- Deploy now supports only the fixed LoopZeroKit stack — Python + Node, service shapes `server`/`worker`. Builds use platform-controlled canonical Dockerfiles generated in-process; the declared `services.json` `start` command drives the container `CMD`. (simplify-deploy-loopzerokit-only v2.0 — ADR `decisions/2026-06-15-deploy-fixed-loopzerokit-stack.md`)
+- `services.json` `type` enum narrowed to `server | worker` (was `server | worker | frontend`); the contract is mirrored in the LoopZeroKit framework repo. (D5)
+- Build strategy is now selected from the declared `services.json` `runtime` (`python`/`node`) carried end-to-end, instead of the legacy `framework` field — so an app builds with the runtime it declares. (simplify-deploy-loopzerokit-runtime-wiring — closes review F-dom-2)
+
 ### Deprecated
 
 ### Removed
+
+- Multi-framework monorepo build ("30 frameworks") and the `loopzero-packs` Dockerfile generator — replaced by canonical Python/Node Dockerfiles. (simplify-deploy-loopzerokit-only v2.0)
+- BYO-Dockerfile build mode (`build: dockerfile` → user-supplied Dockerfile). The platform always builds from its canonical Dockerfile. (D4)
+- Static-frontend delivery (`type: frontend` + `render: static`, S3/CF-Worker path). Service shapes are `server`/`worker` only. (D5)
 
 ### Fixed
 - Rule 3 compliance: the warning emitted when deleting an environment with an active release no longer references internal infrastructure terminology — now reads "environment removed but cleanup may take a few seconds; run 'loopzero platform status' to verify" (#code-review-49-findings T0.1)
@@ -36,6 +44,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 - Legacy dead code: `infra/tests/e2e/vertical_slice_test.go` — file was gated behind build tag `legacy_vertical_slice` with 9 compile errors under its own tag, API drift predates CHG-2026-04-26-PREVIEW-IMPL. Deleted per CLAUDE.md "Legacy code is an error. Delete it. Never patch legacy — replace it." Closes R1-F3 HIGH by removal. (#code-review-49-findings T5.2)
 
 ### Security
+
+- User-supplied Dockerfiles in the uploaded source bundle are now ignored fail-closed (overwritten by the canonical Dockerfile + a `::loopzero::` warning; never executed). Removes a build-escape/RCE surface, since the build sandbox runs with unconfined seccomp/AppArmor. (D4)
+- Build Dockerfile path is now single-sourced to the canonical location for every app, including monorepo subpath apps (`path != "."`). Previously a subpath app could point the builder at a user-controlled `Dockerfile`, re-opening the build-escape hole the D4 change closed. (simplify-deploy-loopzerokit-only review F-dom-1)
 
 ## [0.18.0] - 2026-06-15
 

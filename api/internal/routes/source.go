@@ -89,11 +89,6 @@ func WithObjectUploader(u ObjectUploader) func(*SourceHandler) {
 // Plan B v3.1 T-B.3 (2026-06-05): accepts multipart form with "bundle" (file)
 // and "services_json" (file or text field). The legacy "loopzero_yaml" field is
 // rejected with actionable E-009 error per ADR D4 + blueprint D8.
-//
-// Plan 2026-06-15-code-review-49-findings-remediation T5.4 (R2-F3 HIGH):
-// CC 34 → ≤ 12 via 5 helper extracts (parseAndValidateMultipart +
-// acceptServicesJSON + readServicesJSONField + streamBundleToTemp +
-// pushBundleToStore + uploadBundleToObjStore). Behavior preserved verbatim.
 func (h *SourceHandler) Upload(w http.ResponseWriter, r *http.Request) {
 	// C-02: Enforce request deadline so handlers don't hang indefinitely.
 	ctx, cancel := context.WithTimeout(r.Context(), 150*time.Second)
@@ -105,8 +100,39 @@ func (h *SourceHandler) Upload(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	if err := parseAndValidateMultipart(w, r); err != nil {
-		writeLoopZeroError(w, err)
+	// Check Content-Length before parsing body (fast reject for oversized requests).
+	if r.ContentLength > maxBundleSize {
+		writeLoopZeroError(w, loopzeroerrors.ErrPayloadTooLarge)
+		return
+	}
+
+	// Limit the request body to maxBundleSize to prevent reading oversized payloads.
+	r.Body = http.MaxBytesReader(w, r.Body, maxBundleSize)
+
+	// Plan v1.2 T6.1 (EC-5) — wire-protocol contract: the first multipart
+	// part MUST be `services_json` so the server can validate the manifest
+	// before accepting the (potentially huge) bundle stream. We peek the
+	// header via MultipartReader without consuming the body — ParseMultipartForm
+	// below re-reads from the same request.
+	if firstPartName, peekErr := peekFirstMultipartFieldName(r); peekErr == nil && firstPartName != "" {
+		if firstPartName != "services_json" {
+			writeLoopZeroError(w, &loopzeroerrors.LoopZeroError{
+				Code: "MULTIPART_FIELD_ORDER",
+				Message: "multipart field order violation: expected `services_json` first, got `" + firstPartName +
+					"`. Upgrade your LoopZeroKit CLI (≥0.5.0) — see https://loopzerocloud.dev/docs/api/source-upload-wire-protocol",
+			})
+			return
+		}
+	}
+
+	// Parse multipart form (up to maxInMemoryMultipart, rest goes to temp files).
+	if err := r.ParseMultipartForm(maxInMemoryMultipart); err != nil {
+		// MaxBytesReader returns a specific error when the body is too large.
+		if err.Error() == "http: request body too large" {
+			writeLoopZeroError(w, loopzeroerrors.ErrPayloadTooLarge)
+			return
+		}
+		writeLoopZeroError(w, loopzeroerrors.ErrInvalidRequest)
 		return
 	}
 	defer func() {
@@ -115,15 +141,100 @@ func (h *SourceHandler) Upload(w http.ResponseWriter, r *http.Request) {
 		}
 	}()
 
-	cfg, appNames, err := acceptServicesJSON(w, r)
-	if err != nil {
-		writeLoopZeroError(w, err)
+	// Plan B v3.1 T-B.3 (2026-06-05) — services_json is the canonical wire
+	// field post LoopZeroKit-only cutover. Accept both text field (FormValue)
+	// and file upload (FormFile). Legacy loopzero_yaml field is rejected with
+	// actionable E-009 error per ADR D4 + blueprint D8.
+	servicesJSONContent := r.FormValue("services_json")
+	if servicesJSONContent == "" {
+		// Fallback: try reading as file upload (how the CLI sends it)
+		if jsonFile, _, err := r.FormFile("services_json"); err == nil {
+			defer func() { _ = jsonFile.Close() }()
+			// Plan v1.2 T6.1 — apply per-field 256KB cap on the file-upload
+			// path. The text-field path is already bounded by 32MB form parse
+			// + the explicit size check that follows. Read +1 to detect
+			// truncation past the cap.
+			jsonBytes, readErr := io.ReadAll(io.LimitReader(jsonFile, maxServicesJSONSize+1))
+			if readErr == nil {
+				servicesJSONContent = string(jsonBytes)
+			}
+		}
+	}
+
+	// Plan v1.2 T6.1 (EC-4) — explicit per-field size check on services_json.
+	// Rejects payloads that would survive the form-level 32MB cap but blow up
+	// downstream validators / log lines / DB columns.
+	if int64(len(servicesJSONContent)) > maxServicesJSONSize {
+		writeLoopZeroError(w, &loopzeroerrors.LoopZeroError{
+			Code: "SERVICES_JSON_TOO_LARGE",
+			Message: fmt.Sprintf(
+				"services.json field exceeds the %d KB cap. Reduce env var count / value length per `loopzerokit migrate services-json-v1-to-v2`.",
+				maxServicesJSONSize/1024,
+			),
+		})
 		return
 	}
 
-	tmpFile, terr := streamBundleToTemp(w, r)
-	if terr != nil {
-		writeLoopZeroError(w, terr)
+	// EC-B3-7 (v3.1): legacy loopzero_yaml rejection with actionable migration hint.
+	// Uses VALIDATION_FAILED code so HTTP transport maps to 422 (E-009 + E-008
+	// codes from the plan are surfaced em the message body — the registry-
+	// driven status registry in pkg/errors/http only knows registered codes).
+	if servicesJSONContent == "" {
+		if legacy := r.FormValue("loopzero_yaml"); legacy != "" {
+			writeLoopZeroError(w, loopzeroerrors.NewLoopZeroError(
+				"VALIDATION_FAILED",
+				"E-009: legacy loopzero_yaml not supported. This API version requires `.loopzero/services.json` emitted by LoopZeroKit ≥0.5.0. "+
+					"Upgrade LoopZeroKit and re-run `loopzerokit build --target loopzero-cloud` to regenerate the bundle.",
+				422,
+			))
+			return
+		}
+		// EC-B3-7 (v3.1) — truncated/missing payload returns 422 with E-008 hint.
+		writeLoopZeroError(w, loopzeroerrors.NewLoopZeroError(
+			"VALIDATION_FAILED",
+			"E-008: services.json is required (multipart form field `services_json`).",
+			422,
+		))
+		return
+	}
+
+	// Validate services.json via the embedded JSON Schema 7 native validator.
+	// T3.1 (plan simplify-deploy-loopzerokit-only v2.0): replaces the deprecated
+	// *LoopZeroYAML bridge. The handler needs only project name + sorted app names,
+	// both derived from the native manifest below.
+	manifest, err := source.ValidateServicesJSONNative(servicesJSONContent)
+	if err != nil {
+		var ve *source.ValidationError
+		if errors.As(err, &ve) {
+			writeLoopZeroError(w, loopzeroerrors.NewLoopZeroError(
+				"VALIDATION_FAILED",
+				ve.Message,
+				422,
+			))
+			return
+		}
+		writeLoopZeroError(w, loopzeroerrors.ErrInternalError)
+		return
+	}
+
+	// Extract bundle file and stream to temp file (CODE-003 fix: avoids triple-buffering
+	// up to 1.5GB per request by writing once to disk instead of io.ReadAll).
+	bundleFile, _, err := r.FormFile("bundle")
+	if err != nil {
+		writeLoopZeroError(w, loopzeroerrors.NewLoopZeroError(
+			"MISSING_FIELD",
+			"Bundle file is required",
+			400,
+		))
+		return
+	}
+	defer func() { _ = bundleFile.Close() }()
+
+	// Write bundle to temp file once — Gitea and S3 read from disk, not memory.
+	tmpFile, err := os.CreateTemp("", "loopzero-bundle-*.tar.gz")
+	if err != nil {
+		slog.Error("source upload: failed to create temp file", "error", err)
+		writeLoopZeroError(w, loopzeroerrors.ErrInternalError)
 		return
 	}
 	defer func() {
@@ -131,14 +242,59 @@ func (h *SourceHandler) Upload(w http.ResponseWriter, r *http.Request) {
 		_ = os.Remove(tmpFile.Name())
 	}()
 
-	projectName := cfg.Project
-	if projectName == "" {
-		projectName = cfg.Name
+	if _, err := io.Copy(tmpFile, bundleFile); err != nil {
+		slog.Error("source upload: failed to write temp file", "error", err)
+		writeLoopZeroError(w, loopzeroerrors.ErrInternalError)
+		return
 	}
 
-	result, perr := h.pushBundleToStore(ctx, uc.TenantID, projectName, tmpFile)
-	if perr != nil {
-		writeLoopZeroError(w, perr)
+	// Project name + sorted app names derived from the native manifest (T3.1).
+	// ProjectNameFromManifest preserves the v1 "services-bundle" legacy fallback.
+	projectName := source.ProjectNameFromManifest(manifest)
+	appNames := source.AppNamesFromManifest(manifest)
+
+	// Rewind temp file for Gitea push
+	if _, err := tmpFile.Seek(0, io.SeekStart); err != nil {
+		writeLoopZeroError(w, loopzeroerrors.ErrInternalError)
+		return
+	}
+
+	// Push bundle to source store (Gitea) — repo: loopzero-source-{tenant}-{project}
+	result, err := h.store.PushBundle(ctx, uc.TenantID, projectName, tmpFile)
+	if err != nil {
+		// Plan v1.2 T1.2 (cutover-deep-review-hardening): DNS-1123 violation
+		// on tenantID/projectID — surface as 400 with field-specific message
+		// so the user can correct the input. Detected via errors.Is on the
+		// sentinel exported by internal/source.
+		if errors.Is(err, source.ErrInvalidTenantOrProject) {
+			slog.Info("source upload rejected: invalid tenant or project ID",
+				"team_id", uc.TenantID, "project", projectName, "error", err.Error())
+			writeLoopZeroError(w, &loopzeroerrors.LoopZeroError{
+				Code:    "INVALID_TENANT_OR_PROJECT",
+				Message: err.Error(),
+			})
+			return
+		}
+		// Plan T2.1 (2026-05-14, F-03 fix): when concurrent deploys race on
+		// the same project's source repo, gitea rejects the second push with
+		// "cannot lock ref" / "remote rejected" / "failed to update ref".
+		// This is the SAME root cause as a concurrent deploy already in
+		// progress — emit DEPLOY_IN_PROGRESS so the user sees one consistent
+		// error code instead of SOURCE_UPLOAD_FAILED + DEPLOY_IN_PROGRESS for
+		// the same race. Distinct from real upload failures (network, MinIO
+		// 503, malformed bundle) which keep SOURCE_UPLOAD_FAILED.
+		msg := err.Error()
+		if strings.Contains(msg, "cannot lock ref") ||
+			strings.Contains(msg, "remote rejected") ||
+			strings.Contains(msg, "failed to update ref") ||
+			strings.Contains(msg, "stale info") {
+			slog.Info("source upload race resolved as DEPLOY_IN_PROGRESS",
+				"team_id", uc.TenantID, "project", projectName, "error", msg)
+			writeLoopZeroError(w, loopzeroerrors.ErrDeployInProgress)
+			return
+		}
+		slog.Error("source upload failed", "error", err, "team_id", uc.TenantID)
+		writeLoopZeroError(w, loopzeroerrors.ErrSourceUploadFailed)
 		return
 	}
 
@@ -147,202 +303,56 @@ func (h *SourceHandler) Upload(w http.ResponseWriter, r *http.Request) {
 		defer func() { _ = os.RemoveAll(filepath.Dir(result.GitBundlePath)) }()
 	}
 
-	if oerr := h.uploadBundleToObjStore(ctx, uc.TenantID, result, tmpFile); oerr != nil {
-		writeLoopZeroError(w, oerr)
-		return
+	// Upload bundle to object storage (Spaces/MinIO) for build cluster access.
+	if h.objStore != nil {
+		objKey := fmt.Sprintf("%s/source/%s.bundle", uc.TenantID, result.SourceID)
+
+		// For tar.gz sources, PushBundle already created a git bundle (in GitBundlePath).
+		// For git bundle sources, reuse the original uploaded bundle.
+		var uploadReader io.Reader
+		if result.GitBundlePath != "" {
+			gitBundleFile, openErr := os.Open(result.GitBundlePath)
+			if openErr != nil {
+				writeLoopZeroError(w, loopzeroerrors.ErrInternalError)
+				return
+			}
+			defer func() { _ = gitBundleFile.Close() }()
+			uploadReader = gitBundleFile
+		} else {
+			if _, err := tmpFile.Seek(0, io.SeekStart); err != nil {
+				writeLoopZeroError(w, loopzeroerrors.ErrInternalError)
+				return
+			}
+			uploadReader = tmpFile
+		}
+
+		// CHG-2026-04-29-DOGFOOD iter 9 — when the object store is
+		// configured the upload is part of the build contract: the
+		// clone-repo step pulls the bundle from this exact key and a
+		// missing object causes opaque pipeline failures. The previous
+		// `non-fatal in dev` branch returned 200 to the CLI on upload
+		// failure, then the workflow failed on bundle download —
+		// silent-success is exactly what error-handling rules forbid.
+		// Local must equal production (Rule 10): the upload either
+		// succeeds or the request fails with ErrSourceUploadFailed.
+		if uploadErr := h.objStore.Upload(ctx, h.sourceBucket, objKey, uploadReader); uploadErr != nil {
+			slog.Error("object store upload failed", "error", uploadErr, "key", objKey)
+			writeLoopZeroError(w, loopzeroerrors.ErrSourceUploadFailed)
+			return
+		}
 	}
 
+	// Sort app names for deterministic output
 	sort.Strings(appNames)
+
 	resp := SourceUploadResponse{
 		CommitSHA: result.SourceID,
 		Apps:      appNames,
 	}
+
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(http.StatusOK)
 	_ = json.NewEncoder(w).Encode(resp)
-}
-
-// parseAndValidateMultipart performs the multipart pre-flight: Content-Length
-// fast reject + body size cap + EC-5 first-field-name peek + ParseMultipartForm.
-// Returns nil to continue OR a typed LoopZeroError to write.
-func parseAndValidateMultipart(w http.ResponseWriter, r *http.Request) *loopzeroerrors.LoopZeroError {
-	if r.ContentLength > maxBundleSize {
-		return loopzeroerrors.ErrPayloadTooLarge
-	}
-	r.Body = http.MaxBytesReader(w, r.Body, maxBundleSize)
-	// EC-5: services_json MUST be the first multipart part so the server
-	// validates the manifest before accepting the bundle stream.
-	if firstPartName, peekErr := peekFirstMultipartFieldName(r); peekErr == nil && firstPartName != "" {
-		if firstPartName != "services_json" {
-			return &loopzeroerrors.LoopZeroError{
-				Code: "MULTIPART_FIELD_ORDER",
-				Message: "multipart field order violation: expected `services_json` first, got `" + firstPartName +
-					"`. Upgrade your LoopZeroKit CLI (≥0.5.0) — see https://loopzerocloud.dev/docs/api/source-upload-wire-protocol",
-			}
-		}
-	}
-	if err := r.ParseMultipartForm(maxInMemoryMultipart); err != nil {
-		if err.Error() == "http: request body too large" {
-			return loopzeroerrors.ErrPayloadTooLarge
-		}
-		return loopzeroerrors.ErrInvalidRequest
-	}
-	return nil
-}
-
-// acceptServicesJSON reads + validates the services_json field. Returns
-// the parsed config + app names OR a typed LoopZeroError to write. Implements
-// the EC-B3-7 legacy loopzero_yaml rejection + per-field 256KB cap.
-func acceptServicesJSON(w http.ResponseWriter, r *http.Request) (*source.LoopZeroYAML, []string, *loopzeroerrors.LoopZeroError) {
-	servicesJSONContent := readServicesJSONField(r)
-	if int64(len(servicesJSONContent)) > maxServicesJSONSize {
-		return nil, nil, &loopzeroerrors.LoopZeroError{
-			Code: "SERVICES_JSON_TOO_LARGE",
-			Message: fmt.Sprintf(
-				"services.json field exceeds the %d KB cap. Reduce env var count / value length per `loopzerokit migrate services-json-v1-to-v2`.",
-				maxServicesJSONSize/1024,
-			),
-		}
-	}
-	if servicesJSONContent == "" {
-		if legacy := r.FormValue("loopzero_yaml"); legacy != "" {
-			return nil, nil, loopzeroerrors.NewLoopZeroError("VALIDATION_FAILED",
-				"E-009: legacy loopzero_yaml not supported. This API version requires `.loopzero/services.json` emitted by LoopZeroKit ≥0.5.0. "+
-					"Upgrade LoopZeroKit and re-run `loopzerokit build --target loopzero-cloud` to regenerate the bundle.",
-				422)
-		}
-		return nil, nil, loopzeroerrors.NewLoopZeroError("VALIDATION_FAILED",
-			"E-008: services.json is required (multipart form field `services_json`).",
-			422)
-	}
-	cfg, appNames, err := source.ValidateServicesJSON(servicesJSONContent)
-	if err != nil {
-		var ve *source.ValidationError
-		if errors.As(err, &ve) {
-			return nil, nil, loopzeroerrors.NewLoopZeroError("VALIDATION_FAILED", ve.Message, 422)
-		}
-		return nil, nil, loopzeroerrors.ErrInternalError
-	}
-	return cfg, appNames, nil
-}
-
-// readServicesJSONField returns the services_json content from either
-// the text field OR the file upload path. Honors the per-field 256KB
-// cap on the file path (text path is bounded by form-level 32MB).
-func readServicesJSONField(r *http.Request) string {
-	servicesJSONContent := r.FormValue("services_json")
-	if servicesJSONContent != "" {
-		return servicesJSONContent
-	}
-	jsonFile, _, err := r.FormFile("services_json")
-	if err != nil {
-		return ""
-	}
-	defer func() { _ = jsonFile.Close() }()
-	jsonBytes, readErr := io.ReadAll(io.LimitReader(jsonFile, maxServicesJSONSize+1))
-	if readErr != nil {
-		return ""
-	}
-	return string(jsonBytes)
-}
-
-// streamBundleToTemp reads the multipart `bundle` field + writes once to
-// a temp file (CODE-003 fix — avoids triple-buffering up to 1.5GB).
-// Caller MUST close + os.Remove the returned file.
-func streamBundleToTemp(w http.ResponseWriter, r *http.Request) (*os.File, *loopzeroerrors.LoopZeroError) {
-	bundleFile, _, err := r.FormFile("bundle")
-	if err != nil {
-		return nil, loopzeroerrors.NewLoopZeroError("MISSING_FIELD", "Bundle file is required", 400)
-	}
-	defer func() { _ = bundleFile.Close() }()
-
-	tmpFile, err := os.CreateTemp("", "loopzero-bundle-*.tar.gz")
-	if err != nil {
-		slog.Error("source upload: failed to create temp file", "error", err)
-		return nil, loopzeroerrors.ErrInternalError
-	}
-	if _, err := io.Copy(tmpFile, bundleFile); err != nil {
-		slog.Error("source upload: failed to write temp file", "error", err)
-		_ = tmpFile.Close()
-		_ = os.Remove(tmpFile.Name())
-		return nil, loopzeroerrors.ErrInternalError
-	}
-	if _, err := tmpFile.Seek(0, io.SeekStart); err != nil {
-		_ = tmpFile.Close()
-		_ = os.Remove(tmpFile.Name())
-		return nil, loopzeroerrors.ErrInternalError
-	}
-	return tmpFile, nil
-}
-
-// pushBundleToStore wraps the SourceStore.PushBundle call with the
-// canonical error categorization: ErrInvalidTenantOrProject (400) +
-// concurrent-race detection (DEPLOY_IN_PROGRESS) + generic upload
-// failure (ErrSourceUploadFailed).
-func (h *SourceHandler) pushBundleToStore(
-	ctx context.Context,
-	tenantID, projectName string,
-	tmpFile *os.File,
-) (source.PushResult, *loopzeroerrors.LoopZeroError) {
-	result, err := h.store.PushBundle(ctx, tenantID, projectName, tmpFile)
-	if err == nil {
-		return result, nil
-	}
-	if errors.Is(err, source.ErrInvalidTenantOrProject) {
-		slog.Info("source upload rejected: invalid tenant or project ID",
-			"team_id", tenantID, "project", projectName, "error", err.Error())
-		return source.PushResult{}, &loopzeroerrors.LoopZeroError{
-			Code:    "INVALID_TENANT_OR_PROJECT",
-			Message: err.Error(),
-		}
-	}
-	msg := err.Error()
-	if strings.Contains(msg, "cannot lock ref") ||
-		strings.Contains(msg, "remote rejected") ||
-		strings.Contains(msg, "failed to update ref") ||
-		strings.Contains(msg, "stale info") {
-		slog.Info("source upload race resolved as DEPLOY_IN_PROGRESS",
-			"team_id", tenantID, "project", projectName, "error", msg)
-		return source.PushResult{}, loopzeroerrors.ErrDeployInProgress
-	}
-	slog.Error("source upload failed", "error", err, "team_id", tenantID)
-	return source.PushResult{}, loopzeroerrors.ErrSourceUploadFailed
-}
-
-// uploadBundleToObjStore uploads the bundle to object storage (Spaces/
-// MinIO) for build cluster access. No-op when objStore is unwired.
-// Per CHG-2026-04-29-DOGFOOD iter 9, the upload is part of the build
-// contract — silent-success is forbidden (Rule 10 local = production).
-func (h *SourceHandler) uploadBundleToObjStore(
-	ctx context.Context,
-	tenantID string,
-	result source.PushResult,
-	tmpFile *os.File,
-) *loopzeroerrors.LoopZeroError {
-	if h.objStore == nil {
-		return nil
-	}
-	objKey := fmt.Sprintf("%s/source/%s.bundle", tenantID, result.SourceID)
-
-	var uploadReader io.Reader
-	if result.GitBundlePath != "" {
-		gitBundleFile, openErr := os.Open(result.GitBundlePath)
-		if openErr != nil {
-			return loopzeroerrors.ErrInternalError
-		}
-		defer func() { _ = gitBundleFile.Close() }()
-		uploadReader = gitBundleFile
-	} else {
-		if _, err := tmpFile.Seek(0, io.SeekStart); err != nil {
-			return loopzeroerrors.ErrInternalError
-		}
-		uploadReader = tmpFile
-	}
-	if uploadErr := h.objStore.Upload(ctx, h.sourceBucket, objKey, uploadReader); uploadErr != nil {
-		slog.Error("object store upload failed", "error", uploadErr, "key", objKey)
-		return loopzeroerrors.ErrSourceUploadFailed
-	}
-	return nil
 }
 
 // peekFirstMultipartFieldName clones the request body via http.Request.GetBody

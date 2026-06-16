@@ -45,19 +45,9 @@ func BuildManifestApps(ctx context.Context, input BuildManifestAppsInput) ([]man
 	var result []manifests.AppManifestInput
 
 	for _, app := range input.Apps {
-		// CHG-2026-04-29-DOGFOOD-FB iter 1 — static frontend apps are
-		// delivered via S3 + CF Worker (Sprint 10), NOT via K8s manifests.
-		// They have no image, no digest, no Deployment. Skip the digest
-		// check and the manifest emission entirely. Skipping here means
-		// the rendered manifest set excludes static apps — which is
-		// exactly what `manifests.Render` expects (it generates Deployment
-		// + Service + IngressRoute only for entries it receives).
-		// LoopZero enforces frontend == static in app_unit.go:NormalizeApp,
-		// so we use type=frontend as the skip predicate (safer than
-		// trusting Rendering field which may be "" in legacy specs).
-		if app.Type == "frontend" {
-			continue
-		}
+		// T3.3 (plan simplify-deploy-loopzerokit-only v2.0): the static-frontend
+		// skip predicate is removed — frontend/static delivery no longer exists
+		// (server|worker only). Every app emits K8s manifests.
 
 		// CHG-2026-04-29-DOGFOOD iter 8 — supply-chain VAP enforcement.
 		// Mutable tags are rejected by `loopzero-require-image-signature` em
@@ -122,7 +112,7 @@ func BuildManifestApps(ctx context.Context, input BuildManifestAppsInput) ([]man
 func BuildAppRelease(registryURL, tenantID, projectID, appName, commitSHA, environment, baseDomain, appType, rendering string) AppRelease {
 	imageRef := naming.ImageTag(registryURL, tenantID, projectID, appName, commitSHA)
 	url := ""
-	if appType == "server" || appType == "frontend" {
+	if appType == "server" {
 		url = fmt.Sprintf("https://%s-%s-%s-%s.%s", tenantID, projectID, appName, environment, baseDomain)
 	}
 	return AppRelease{

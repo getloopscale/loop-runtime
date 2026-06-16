@@ -175,7 +175,7 @@ func TestBuildOrchestrator_SubmitBuild_DeployInProgress(t *testing.T) {
 		TenantID:    "tn-1",
 		ProjectID:   "proj-1",
 		Environment: "production",
-		Apps:        []AppSpec{{Name: "api", Type: "server", Port: 3000, Framework: "express"}},
+		Apps:        []AppSpec{{Name: "api", Type: "server", Port: 3000, Runtime: "node"}},
 	})
 
 	if err == nil {
@@ -200,7 +200,7 @@ func TestBuildOrchestrator_SubmitBuild_WorkflowSubmitFails(t *testing.T) {
 		TenantID:    "tn-1",
 		ProjectID:   "proj-1",
 		Environment: "production",
-		Apps:        []AppSpec{{Name: "api", Type: "server", Port: 3000, Framework: "express"}},
+		Apps:        []AppSpec{{Name: "api", Type: "server", Port: 3000, Runtime: "node"}},
 	})
 
 	if err == nil {
@@ -724,7 +724,7 @@ func TestBuildOrchestrator_SubmitBuild_WithProjectEnsurer(t *testing.T) {
 		TenantID:    "tn-1",
 		ProjectID:   "proj-1",
 		Environment: "production",
-		Apps:        []AppSpec{{Name: "api", Type: "server", Port: 3000, Framework: "express"}},
+		Apps:        []AppSpec{{Name: "api", Type: "server", Port: 3000, Runtime: "node"}},
 		CreatedBy:   "user@test.com",
 	})
 

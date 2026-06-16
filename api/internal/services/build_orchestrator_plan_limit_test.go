@@ -66,7 +66,7 @@ func TestSubmitBuild_StarterPlan_ReplicasExceedCap_Returns422(t *testing.T) {
 		ProjectID:   "proj-1",
 		Environment: "production",
 		Apps: []AppSpec{
-			{Name: "api", Type: "server", Port: 3000, Framework: "express", Replicas: 3},
+			{Name: "api", Type: "server", Port: 3000, Runtime: "node", Replicas: 3},
 		},
 	})
 
@@ -113,7 +113,7 @@ func TestSubmitBuild_StarterPlan_AutoscalingMaxExceedsCap_Returns422(t *testing.
 		Environment: "production",
 		Apps: []AppSpec{
 			{
-				Name: "api", Type: "server", Port: 3000, Framework: "express",
+				Name: "api", Type: "server", Port: 3000, Runtime: "node",
 				Autoscaling: &AppAutoscalingSpec{MinReplicas: 1, MaxReplicas: 5, TargetCPU: 70},
 			},
 		},
@@ -152,7 +152,7 @@ func TestSubmitBuild_StarterPlan_ReplicasAtCap_Succeeds(t *testing.T) {
 		ProjectID:   "proj-1",
 		Environment: "production",
 		Apps: []AppSpec{
-			{Name: "api", Type: "server", Port: 3000, Framework: "express", Replicas: 2},
+			{Name: "api", Type: "server", Port: 3000, Runtime: "node", Replicas: 2},
 		},
 	})
 
@@ -191,7 +191,7 @@ func TestSubmitBuild_ProPlan_ReplicasAtCap_Succeeds(t *testing.T) {
 		ProjectID:   "proj-1",
 		Environment: "production",
 		Apps: []AppSpec{
-			{Name: "api", Type: "server", Port: 3000, Framework: "express", Replicas: 5},
+			{Name: "api", Type: "server", Port: 3000, Runtime: "node", Replicas: 5},
 		},
 	})
 
@@ -222,7 +222,7 @@ func TestSubmitBuild_ProPlan_ReplicasOverCap_Returns422(t *testing.T) {
 		ProjectID:   "proj-1",
 		Environment: "production",
 		Apps: []AppSpec{
-			{Name: "api", Type: "server", Port: 3000, Framework: "express", Replicas: 6},
+			{Name: "api", Type: "server", Port: 3000, Runtime: "node", Replicas: 6},
 		},
 	})
 
@@ -254,7 +254,7 @@ func TestSubmitBuild_ReplicasAndAutoscalingSet_Returns422Ambiguous(t *testing.T)
 		Environment: "production",
 		Apps: []AppSpec{
 			{
-				Name: "api", Type: "server", Port: 3000, Framework: "express",
+				Name: "api", Type: "server", Port: 3000, Runtime: "node",
 				Replicas:    2,
 				Autoscaling: &AppAutoscalingSpec{MinReplicas: 1, MaxReplicas: 3, TargetCPU: 70},
 			},
@@ -296,7 +296,7 @@ func TestSubmitBuild_NilPlanCapChecker_AllowsAll(t *testing.T) {
 		ProjectID:   "proj-1",
 		Environment: "production",
 		Apps: []AppSpec{
-			{Name: "api", Type: "server", Port: 3000, Framework: "express", Replicas: 99},
+			{Name: "api", Type: "server", Port: 3000, Runtime: "node", Replicas: 99},
 		},
 	})
 

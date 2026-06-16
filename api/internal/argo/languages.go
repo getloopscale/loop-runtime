@@ -11,7 +11,6 @@ package argo
 import (
 	"fmt"
 	"log/slog"
-	"os"
 
 	forge "github.com/getloopscale/loopzero-forge"
 	"github.com/getloopscale/loopzero-forge/model"
@@ -52,95 +51,74 @@ type LanguageStrategy interface {
 	Name() string
 }
 
-// SupportedFrameworks returns the canonical set of framework string values
-// the build pipeline understands. T5.4 of deep-review-2026-05-10-remediation-plan
-// (find_arch_framework_dup MEDIUM) — single source of truth, replaces the
-// duplicated `isUnknownFramework` switch that previously lived in
-// routes/builds.go and could drift silently.
-//
-// The empty string is implicitly supported (defaults to Node.js — see
-// ResolveStrategy fallback).
-func SupportedFrameworks() map[string]bool {
-	return map[string]bool{
-		"nextjs": true, "next": true, "vite": true, "remix": true,
-		"nestjs": true, "express": true, "node": true,
-		"react": true, "vue": true, "svelte": true, "astro": true,
-		"angular": true, "fastify": true,
-		"gin": true, "go": true,
-		"fastapi": true, "django": true, "python": true,
-		"sinatra": true, "rails": true, "ruby": true,
-		"spring": true, "spring-boot": true, "java": true,
-		"laravel": true, "slim": true, "php": true,
-		"axum": true, "actix": true, "rocket": true, "rust": true,
-		"custom":          true,
-		"user-dockerfile": true,
-		"unknown":         true, // legacy alias accepted by callers
-	}
-}
+// SupportedFrameworks / IsKnownFramework removed (simplify-deploy-loopzerokit-
+// runtime-wiring T2.1 / F-dom-2): the build pipeline no longer validates or
+// dispatches on `framework`. The fixed LoopZeroKit stack is keyed on `runtime`
+// (python|node) via ResolveStrategy; anything else fails closed (D1/D4).
 
-// IsKnownFramework reports whether a framework string is in the
-// SupportedFrameworks set. Empty string is treated as known (Node.js default).
-func IsKnownFramework(framework string) bool {
-	if framework == "" {
-		return true
-	}
-	return SupportedFrameworks()[framework]
-}
-
-// ResolveStrategy returns the appropriate LanguageStrategy for a framework string.
-// Framework values come from loopzero.yaml's app.framework field.
+// ResolveStrategy returns the LanguageStrategy for a `services.json` runtime
+// (`python` | `node`). This is the single build-strategy key (simplify-deploy-
+// loopzerokit-runtime-wiring D1, closing review F-dom-2).
 //
-// NOTE: build-mode-dispatch-and-dockerfile-security-plan T1.4 (2026-05-07) —
-// callers should prefer ResolveStrategyForApp(AppSpec) to honor the orthogonal
-// `build: dockerfile` axis. This function remains for the case where only a
-// framework name is available (e.g., language-grouping by string key).
-func ResolveStrategy(framework string) LanguageStrategy {
-	switch framework {
-	case "nextjs", "vite", "remix", "nestjs", "express", "node":
+// D4: there is NO empty-default-to-Node branch. `runtime` is required by the
+// services.json schema, so an empty/unknown runtime at build time is a contract
+// violation, not a "default to node" situation — it fails closed. Silent
+// defaulting is precisely how a python app could be built as node.
+func ResolveStrategy(runtime string) LanguageStrategy {
+	switch runtime {
+	case "node":
 		return &NodeStrategy{}
-	case "gin", "go":
-		return &GoStrategy{}
-	case "fastapi", "django", "python":
+	case "python":
 		return &PythonStrategy{}
-	case "sinatra", "rails", "ruby":
-		return &RubyStrategy{}
-	case "spring", "spring-boot", "java":
-		return &JavaStrategy{}
-	case "laravel", "slim", "php":
-		return &PHPStrategy{}
-	case "axum", "actix", "rocket", "rust":
-		return &RustStrategy{}
-	case "custom":
-		return &CustomStrategy{}
-	case "user-dockerfile":
-		return &UserDockerfileStrategy{}
 	default:
-		// Empty framework defaults to Node.js for backwards compatibility.
-		if framework == "" {
-			return &NodeStrategy{}
-		}
-		slog.Warn("unrecognized framework, falling back to custom strategy",
-			"framework", framework)
-		return &CustomStrategy{}
+		// Fixed LoopZeroKit stack is python + node ONLY. Empty or anything else
+		// fails closed at build time — no legacy framework mapping, no Node
+		// default, no loopzero-packs, no silent fallback (D1/D4).
+		slog.Warn("unsupported runtime for the fixed LoopZeroKit stack — failing closed",
+			"runtime", runtime, "supported", "python, node")
+		return &unsupportedStrategy{runtime: runtime}
 	}
 }
 
-// ResolveStrategyForApp returns the LanguageStrategy for an AppSpec, honoring
-// the orthogonal `build: dockerfile` axis: when the user opts into supplying
-// their own Dockerfile, dispatch to UserDockerfileStrategy regardless of the
-// declared framework.
+// unsupportedStrategy fails closed for any runtime outside the fixed LoopZeroKit
+// stack (python, node). Every step emits a container that exits non-zero with
+// a clear message, so a misrouted app fails fast at build time rather than
+// silently building something wrong.
+type unsupportedStrategy struct{ runtime string }
+
+func (s *unsupportedStrategy) Name() string        { return "unsupported" }
+func (s *unsupportedStrategy) CacheKey() string    { return "" }
+func (s *unsupportedStrategy) CacheDirs() []string { return nil }
+
+func (s *unsupportedStrategy) failStep(name string) *forge.Container {
+	msg := fmt.Sprintf("loopzero: runtime %q is not supported — LoopZeroCloud deploys the fixed LoopZeroKit stack (python, node) only", s.runtime)
+	return buildContainer(name, imageAlpine, forge.ResourcesTiny(), fmt.Sprintf("echo %q >&2\nexit 1", msg))
+}
+
+func (s *unsupportedStrategy) ValidateStep(_ []services.AppSpec) *forge.Container {
+	return s.failStep("validate-workspace")
+}
+func (s *unsupportedStrategy) InstallStep(_ []services.AppSpec) *forge.Container {
+	return s.failStep("install-deps")
+}
+func (s *unsupportedStrategy) BuildStep(_ []services.AppSpec) *forge.Container {
+	return s.failStep("build-apps")
+}
+func (s *unsupportedStrategy) ScanStep() *forge.Container { return s.failStep("security-scan") }
+func (s *unsupportedStrategy) DockerfileStep(_ []services.AppSpec, _ int) *forge.Container {
+	return s.failStep("generate-dockerfile")
+}
+
+// ResolveStrategyForApp returns the LanguageStrategy for an AppSpec.
 //
-// build-mode-dispatch-and-dockerfile-security-plan T1.4 (2026-05-07) — closes
-// the architectural hole where MEET-2026-03-29-017 universalized loopzero-packs
-// invocation, ignoring `build: dockerfile`. The strategy resolver is the
-// idiomatic dispatch layer; pushing this decision into the orchestrator with
-// an `if app.Build == "dockerfile"` would leak strategy semantics out of the
-// pattern.
+// T2.2 (plan simplify-deploy-loopzerokit-only v2.0): the BYO-Dockerfile path
+// (`build: dockerfile` → UserDockerfileStrategy) is REMOVED — letting a user
+// supply their own Dockerfile is a build-escape/RCE surface (the build sandbox
+// runs unconfined). The platform now always uses its canonical Dockerfile; any
+// user Dockerfile in the bundle is ignored fail-closed (D4, enforced in the
+// build-context assembly — T2.3). Dispatch is purely runtime-based.
 func ResolveStrategyForApp(app services.AppSpec) LanguageStrategy {
-	if app.Build == "dockerfile" {
-		return &UserDockerfileStrategy{}
-	}
-	return ResolveStrategy(app.Framework)
+	return ResolveStrategy(app.Runtime)
 }
 
 // ---------------------------------------------------------------------------
@@ -175,47 +153,8 @@ func (s *NodeStrategy) ScanStep() *forge.Container {
 }
 
 func (s *NodeStrategy) DockerfileStep(apps []services.AppSpec, totalApps int) *forge.Container {
-	return loopzeroPacksDockerfileStep(apps, totalApps)
-}
-
-// ---------------------------------------------------------------------------
-// GoStrategy — Go ecosystem
-// ---------------------------------------------------------------------------
-
-// GoStrategy handles Go builds (gin, standard Go apps, etc.).
-type GoStrategy struct{}
-
-func (s *GoStrategy) Name() string { return "go" }
-
-func (s *GoStrategy) CacheKey() string { return "go-modules" }
-
-// CacheDirs returns writable cache paths for Go module + build caches.
-// CODE-005 fix: containers run as uid 1000 — /root/.cache is inaccessible;
-// /workspace/.cache is writable by the build user.
-func (s *GoStrategy) CacheDirs() []string {
-	return []string{"/go/pkg/mod", "/workspace/.cache/go-build"}
-}
-
-func (s *GoStrategy) ValidateStep(apps []services.AppSpec) *forge.Container {
-	return buildContainer("validate-workspace", imageGolang, forge.ResourcesTiny(), scriptValidateGo(apps))
-}
-
-func (s *GoStrategy) InstallStep(apps []services.AppSpec) *forge.Container {
-	c := buildContainer("install-deps", imageGolang, forge.ResourcesMedium(), scriptInstallGo(apps))
-	c.RetryStrategy = forge.NewRetryOnFailure(3, "5s", "2", "60s")
-	return c
-}
-
-func (s *GoStrategy) BuildStep(apps []services.AppSpec) *forge.Container {
-	return buildContainer("build-apps", imageGolang, forge.ResourcesMedium(), scriptBuildGo(apps))
-}
-
-func (s *GoStrategy) ScanStep() *forge.Container {
-	return buildContainer("security-scan", imageGolang, forge.ResourcesSmall(), scriptScanGo())
-}
-
-func (s *GoStrategy) DockerfileStep(apps []services.AppSpec, totalApps int) *forge.Container {
-	return loopzeroPacksDockerfileStep(apps, totalApps)
+	// T1.2: canonical platform Dockerfile (replaces loopzero-packs).
+	return canonicalDockerfileStepOrFail("node", apps, totalApps)
 }
 
 // ---------------------------------------------------------------------------
@@ -255,243 +194,8 @@ func (s *PythonStrategy) ScanStep() *forge.Container {
 }
 
 func (s *PythonStrategy) DockerfileStep(apps []services.AppSpec, totalApps int) *forge.Container {
-	return loopzeroPacksDockerfileStep(apps, totalApps)
-}
-
-// ---------------------------------------------------------------------------
-// RubyStrategy — Ruby ecosystem (Bundler)
-// ---------------------------------------------------------------------------
-
-type RubyStrategy struct{}
-
-func (s *RubyStrategy) Name() string                        { return "ruby" }
-func (s *RubyStrategy) CacheKey() string                    { return "bundle-cache" }
-func (s *RubyStrategy) CacheDirs() []string                 { return []string{"/workspace/vendor/bundle"} }
-func (s *RubyStrategy) ValidateStep(apps []services.AppSpec) *forge.Container {
-	return buildContainer("validate-workspace", imageRuby, forge.ResourcesTiny(), scriptValidateFile(apps, "Gemfile"))
-}
-func (s *RubyStrategy) InstallStep(apps []services.AppSpec) *forge.Container {
-	return buildContainer("install-deps", imageRuby, forge.ResourcesSmall(), scriptInstallRuby(apps))
-}
-func (s *RubyStrategy) BuildStep(_ []services.AppSpec) *forge.Container {
-	return buildContainer("build-apps", imageRuby, forge.ResourcesTiny(), noopScript("Ruby — no compile step"))
-}
-func (s *RubyStrategy) ScanStep() *forge.Container {
-	return buildContainer("security-scan", imageRuby, forge.ResourcesTiny(), `set -euo pipefail
-cd /workspace
-gem install bundler-audit 2>/dev/null && bundle-audit check 2>/dev/null || echo "bundle-audit not available or scan failed — skipping"
-`)
-}
-func (s *RubyStrategy) DockerfileStep(apps []services.AppSpec, totalApps int) *forge.Container {
-	return loopzeroPacksDockerfileStep(apps, totalApps)
-}
-
-// ---------------------------------------------------------------------------
-// JavaStrategy — Java ecosystem (Maven/Gradle)
-// ---------------------------------------------------------------------------
-
-type JavaStrategy struct{}
-
-func (s *JavaStrategy) Name() string                        { return "java" }
-func (s *JavaStrategy) CacheKey() string                    { return "maven-cache" }
-func (s *JavaStrategy) CacheDirs() []string                 { return []string{"/workspace/.m2", "/workspace/.gradle"} }
-func (s *JavaStrategy) ValidateStep(apps []services.AppSpec) *forge.Container {
-	return buildContainer("validate-workspace", imageAlpine, forge.ResourcesTiny(), scriptValidateFileAny(apps, "pom.xml", "build.gradle", "build.gradle.kts"))
-}
-func (s *JavaStrategy) InstallStep(_ []services.AppSpec) *forge.Container {
-	return buildContainer("install-deps", imageAlpine, forge.ResourcesTiny(), noopScript("Java — deps installed during build"))
-}
-func (s *JavaStrategy) BuildStep(_ []services.AppSpec) *forge.Container {
-	return buildContainer("build-apps", imageAlpine, forge.ResourcesTiny(), noopScript("Java — build happens in Dockerfile (multi-stage)"))
-}
-func (s *JavaStrategy) ScanStep() *forge.Container {
-	return buildContainer("security-scan", imageAlpine, forge.ResourcesTiny(), noopScript("Java security scan — skipped (use Dockerfile-based scan)"))
-}
-func (s *JavaStrategy) DockerfileStep(apps []services.AppSpec, totalApps int) *forge.Container {
-	return loopzeroPacksDockerfileStep(apps, totalApps)
-}
-
-// ---------------------------------------------------------------------------
-// PHPStrategy — PHP ecosystem (Composer)
-// ---------------------------------------------------------------------------
-
-type PHPStrategy struct{}
-
-func (s *PHPStrategy) Name() string                        { return "php" }
-func (s *PHPStrategy) CacheKey() string                    { return "composer-cache" }
-func (s *PHPStrategy) CacheDirs() []string                 { return []string{"/workspace/vendor"} }
-func (s *PHPStrategy) ValidateStep(apps []services.AppSpec) *forge.Container {
-	return buildContainer("validate-workspace", imageAlpine, forge.ResourcesTiny(), scriptValidateFile(apps, "composer.json"))
-}
-func (s *PHPStrategy) InstallStep(_ []services.AppSpec) *forge.Container {
-	return buildContainer("install-deps", imageAlpine, forge.ResourcesTiny(), noopScript("PHP — deps installed in Dockerfile"))
-}
-func (s *PHPStrategy) BuildStep(_ []services.AppSpec) *forge.Container {
-	return buildContainer("build-apps", imageAlpine, forge.ResourcesTiny(), noopScript("PHP — no compile step"))
-}
-func (s *PHPStrategy) ScanStep() *forge.Container {
-	return buildContainer("security-scan", imageAlpine, forge.ResourcesTiny(), noopScript("PHP security scan — skipped"))
-}
-func (s *PHPStrategy) DockerfileStep(apps []services.AppSpec, totalApps int) *forge.Container {
-	return loopzeroPacksDockerfileStep(apps, totalApps)
-}
-
-// ---------------------------------------------------------------------------
-// RustStrategy — Rust ecosystem (Cargo)
-// ---------------------------------------------------------------------------
-
-type RustStrategy struct{}
-
-func (s *RustStrategy) Name() string                        { return "rust" }
-func (s *RustStrategy) CacheKey() string                    { return "cargo-cache" }
-func (s *RustStrategy) CacheDirs() []string                 { return []string{"/workspace/target"} }
-func (s *RustStrategy) ValidateStep(apps []services.AppSpec) *forge.Container {
-	return buildContainer("validate-workspace", imageAlpine, forge.ResourcesTiny(), scriptValidateFile(apps, "Cargo.toml"))
-}
-func (s *RustStrategy) InstallStep(_ []services.AppSpec) *forge.Container {
-	return buildContainer("install-deps", imageAlpine, forge.ResourcesTiny(), noopScript("Rust — deps built during cargo build"))
-}
-func (s *RustStrategy) BuildStep(_ []services.AppSpec) *forge.Container {
-	return buildContainer("build-apps", imageAlpine, forge.ResourcesTiny(), noopScript("Rust — build happens in Dockerfile (multi-stage)"))
-}
-func (s *RustStrategy) ScanStep() *forge.Container {
-	return buildContainer("security-scan", imageAlpine, forge.ResourcesTiny(), `set -euo pipefail
-cd /workspace
-cargo audit 2>/dev/null || echo "cargo-audit not available — skipping"
-`)
-}
-func (s *RustStrategy) DockerfileStep(apps []services.AppSpec, totalApps int) *forge.Container {
-	return loopzeroPacksDockerfileStep(apps, totalApps)
-}
-
-// ---------------------------------------------------------------------------
-// CustomStrategy — user provides their own Dockerfile
-// ---------------------------------------------------------------------------
-
-// CustomStrategy skips language-specific steps. Requires a user-provided Dockerfile.
-type CustomStrategy struct{}
-
-func (s *CustomStrategy) Name() string { return "custom" }
-
-func (s *CustomStrategy) CacheKey() string { return "" }
-
-func (s *CustomStrategy) CacheDirs() []string { return nil }
-
-func (s *CustomStrategy) ValidateStep(_ []services.AppSpec) *forge.Container {
-	return buildContainer("validate-workspace", imageAlpine, forge.ResourcesTiny(), scriptValidateCustom())
-}
-
-func (s *CustomStrategy) InstallStep(_ []services.AppSpec) *forge.Container {
-	return buildContainer("install-deps", imageAlpine, forge.ResourcesTiny(), noopScript("No install step for custom framework — user manages dependencies in Dockerfile"))
-}
-
-func (s *CustomStrategy) BuildStep(_ []services.AppSpec) *forge.Container {
-	return buildContainer("build-apps", imageAlpine, forge.ResourcesTiny(), noopScript("No build step for custom framework — build happens in Dockerfile"))
-}
-
-func (s *CustomStrategy) ScanStep() *forge.Container {
-	return buildContainer("security-scan", imageAlpine, forge.ResourcesTiny(), noopScript("No security scan for custom framework"))
-}
-
-// DockerfileStep — CustomStrategy means user manages everything in their
-// Dockerfile (framework: custom). loopzero-packs v0.4.0 (lenient canonical
-// contract) will copy the user-provided Dockerfile to the canonical output
-// path verbatim. The result is a no-op from the user's perspective: their
-// Dockerfile is what BuildKit consumes.
-//
-// T6.7 of deep-review-remediation-plan (closes find_arch_006 LOW). Previous
-// comment claimed "Defense in depth" without explaining what was being
-// defended; in reality loopzero-packs v0.4.0 is invariant under user Dockerfile
-// (no rewriting). Distinct from UserDockerfileStrategy below: that variant
-// runs loopzero-dockerfile-lint with hard rejection rules; CustomStrategy keeps
-// the legacy behavior (no lint) for opt-out users on `framework: custom`.
-func (s *CustomStrategy) DockerfileStep(apps []services.AppSpec, totalApps int) *forge.Container {
-	return loopzeroPacksDockerfileStep(apps, totalApps)
-}
-
-// ---------------------------------------------------------------------------
-// UserDockerfileStrategy — user opted into `build: dockerfile` in loopzero.yaml
-// ---------------------------------------------------------------------------
-//
-// build-mode-dispatch-and-dockerfile-security-plan T1.3 (2026-05-07):
-// distinct from CustomStrategy, which means `framework: custom` (user
-// declared no language). UserDockerfileStrategy means "I'm bringing my own
-// Dockerfile" — independent of language framework. LoopZero skips loopzero-packs
-// invocation entirely (saves ~30s per app) and runs loopzero-dockerfile-lint
-// against the user-supplied Dockerfile to enforce hard rejection rules
-// (FROM allow-list, RUN flag prohibitions, bind mount escape, reserved
-// env keys, seccomp/apparmor unconfined). Soft warnings audit-logged.
-
-type UserDockerfileStrategy struct{}
-
-func (s *UserDockerfileStrategy) Name() string                   { return "user-dockerfile" }
-func (s *UserDockerfileStrategy) CacheKey() string               { return "" }
-func (s *UserDockerfileStrategy) CacheDirs() []string            { return nil }
-
-func (s *UserDockerfileStrategy) ValidateStep(_ []services.AppSpec) *forge.Container {
-	return buildContainer("validate-workspace", imageAlpine, forge.ResourcesTiny(),
-		noopScript("user-dockerfile build mode — workspace validation skipped (user-managed Dockerfile)"))
-}
-
-func (s *UserDockerfileStrategy) InstallStep(_ []services.AppSpec) *forge.Container {
-	return buildContainer("install-deps", imageAlpine, forge.ResourcesTiny(),
-		noopScript("user-dockerfile build mode — dependencies installed inside Dockerfile"))
-}
-
-func (s *UserDockerfileStrategy) BuildStep(_ []services.AppSpec) *forge.Container {
-	return buildContainer("build-apps", imageAlpine, forge.ResourcesTiny(),
-		noopScript("user-dockerfile build mode — build happens inside Dockerfile"))
-}
-
-func (s *UserDockerfileStrategy) ScanStep() *forge.Container {
-	return buildContainer("security-scan", imageAlpine, forge.ResourcesTiny(),
-		noopScript("user-dockerfile build mode — security scan deferred to dockerfile-lint + post-build SBOM"))
-}
-
-func (s *UserDockerfileStrategy) DockerfileStep(apps []services.AppSpec, _ int) *forge.Container {
-	return dockerfileLintStep(apps)
-}
-
-// ---------------------------------------------------------------------------
-// Universal Dockerfile generation via loopzero-packs (MEET-2026-03-29-017)
-// ---------------------------------------------------------------------------
-
-// loopzeroPacksDockerfileStep returns a container template that runs the
-// loopzero-packs-runner image to analyze source code and generate an optimized
-// Dockerfile. This replaces all per-language DockerfileStep implementations.
-//
-// For each app, it runs: loopzeropacks-generate --source /workspace --app-path <path>
-//   --app-name <name> --output /workspace/Dockerfile.<name>
-//
-// If a user-provided Dockerfile exists, loopzeropacks-generate skips generation.
-// loopzeroPacksDockerfileStep generates Dockerfiles for apps in a language group.
-// totalApps is the count across ALL groups (for consistent naming with BuildKit consumer).
-func loopzeroPacksDockerfileStep(apps []services.AppSpec, totalApps int) *forge.Container {
-	script := "set -e\n"
-	for _, app := range apps {
-		appPath := app.Path
-		if appPath == "" {
-			appPath = "."
-		}
-		// Use shared naming function (MEET-2026-03-29-018).
-		output := dockerfilePathForApp(app.Name, totalApps)
-		// CODE-001 defense-in-depth: use %q for shell quoting of user-derived values.
-		// Primary defense is ValidateAppName at the API boundary (builds.go).
-		script += fmt.Sprintf(
-			"loopzeropacks-generate --source %q --app-path %q --app-name %q --output %q\n",
-			workspaceMountPath, appPath, app.Name, output,
-		)
-	}
-	return buildContainer("generate-dockerfile", loopzeroPacks(), forge.ResourcesSmall(), script)
-}
-
-// loopzeroPacks returns the loopzero-packs-runner image, allowing override via env var.
-// Local dev sets LOOPZERO_PACKS_IMAGE to use the k3d registry image.
-func loopzeroPacks() string {
-	if v := os.Getenv("LOOPZERO_PACKS_IMAGE"); v != "" {
-		return v
-	}
-	return imageLoopZeroPacks
+	// T1.2: canonical platform Dockerfile (replaces loopzero-packs).
+	return canonicalDockerfileStepOrFail("python", apps, totalApps)
 }
 
 // dockerfileStepTemplateName returns the template name a strategy's

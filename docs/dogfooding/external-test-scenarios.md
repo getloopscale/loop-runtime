@@ -30,9 +30,27 @@ Each scenario follows the same shape:
 
 ## 1. Environment Setup (one-time, ~15 min)
 
-### S-01 — Account creation
+### Canonical test credentials (SEMPRE use estas)
+
+For every scenario that needs login, use the **same canonical user** to keep audit trails consistent and avoid creating disposable accounts that pollute dev-public env:
+
+| Field | Value |
+|---|---|
+| **Email** | `admin@loopzero.example` |
+| **Password** | `loopzero-dev-password` |
+| **State** | active (LIVE-validated 2026-06-16 via Kratos public API) |
+
+> **Why a single canonical user:** mirrors the production "production canary" pattern — one well-known account whose behavior we recognize at a glance in audit logs / traces / Stripe. Multi-account testing is reserved for **CC-1 Multi-tenant isolation** (§ 10) where the *second* account is created intentionally for the isolation test, then deleted.
+
+> **If the canonical user does not exist or login fails** (e.g., after a Cleanroom reset): the seed script `bash infra/scripts/local/seed-admin-loopzero-dev.sh` creates the identity but does NOT attach a password (Kratos canonical drops plaintext `config.password` silently). Operator must follow up with the canonical PUT-with-bcrypt step documented in `feedback_post_cleanroom_seed_admin_canonical` + `project_canonical_dev_user_credentials` memory entries.
+
+> **NEVER hardcode these in source files.** They live in this dogfooding doc + `~/.loopzero/dev-credentials.json` (mode 0600) only. CI / production scripts read from the JSON file.
+
+### S-01 — Account creation (only for SM-1 first run OR after seed-admin reset)
 
 **Pre-conditions:** Browser (Chrome / Firefox / Safari latest). No prior LoopZero account.
+
+> **Note:** if the seeded `paulo@loopzero.test` account already exists (most common state), **skip S-01 entirely** and go straight to **SM-1**.
 
 **Steps:**
 1. Open `https://app-dev.loopzero.example/register`

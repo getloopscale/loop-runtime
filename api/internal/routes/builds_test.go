@@ -271,20 +271,10 @@ func TestBuilds_Create_DeployInProgress(t *testing.T) {
 	}
 }
 
-func TestBuilds_Create_UnsupportedFramework(t *testing.T) {
-	h := NewBuildHandler(&fakeBuildOrch{}, slog.Default())
-
-	body := `{"project_id":"my-project","environment":"production","apps":[{"name":"web","framework":"madeup-framework","build":"buildpack"}]}`
-	req := httptest.NewRequest(http.MethodPost, "/api/v1/builds", bytes.NewBufferString(body))
-	req = withAuth(req, defaultUserContext())
-	w := httptest.NewRecorder()
-
-	h.Create(w, req)
-
-	if w.Code != http.StatusUnprocessableEntity {
-		t.Fatalf("want 422, got %d body=%s", w.Code, w.Body.String())
-	}
-}
+// TestBuilds_Create_UnsupportedFramework removed — server-side framework
+// validation was deleted (simplify-deploy-loopzerokit-runtime-wiring T2.1 / F-dom-2):
+// the API no longer validates or dispatches on `framework`; an unsupported
+// runtime fails closed at build time via argo.ResolveStrategy, not with a 422.
 
 func TestBuilds_Get_Found(t *testing.T) {
 	orch := &fakeBuildOrch{

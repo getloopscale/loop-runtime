@@ -52,22 +52,6 @@ func TestRender_WorkerApp_ProducesTwoDocuments(t *testing.T) {
 	}
 }
 
-func TestRender_FrontendApp_ProducesFiveDocuments(t *testing.T) {
-	input := baseInput()
-	input.Apps = []AppManifestInput{
-		{Name: "dashboard", Type: "frontend", Port: 80, ImageRef: "reg:5000/acme/webapp:abc123"},
-	}
-
-	result, _ := Render(input)
-	docs := strings.Split(result, "\n---\n")
-
-	// Deployment + PDB + Service + Certificate + IngressRoute = 5
-	if len(docs) != 5 {
-		t.Fatalf("expected 5 YAML documents (Deployment, PDB, Service, Certificate, IngressRoute), got %d", len(docs))
-	}
-}
-
-// MOD-1: YAML special characters in env values must not corrupt the manifest.
 func TestRender_MOD1_SpecialCharsInEnvValues_ProducesValidYAML(t *testing.T) {
 	input := baseInput()
 	input.Apps = []AppManifestInput{
@@ -219,19 +203,6 @@ func TestRender_ServerApp_DefaultPort3000(t *testing.T) {
 	}
 }
 
-func TestRender_FrontendApp_DefaultPort80(t *testing.T) {
-	input := baseInput()
-	input.Apps = []AppManifestInput{
-		{Name: "dashboard", Type: "frontend", Port: 0, ImageRef: "reg:5000/acme/webapp:abc123"},
-	}
-
-	result, _ := Render(input)
-
-	if !strings.Contains(result, "containerPort: 80") {
-		t.Error("frontend app with port=0 should default to 80")
-	}
-}
-
 func TestRender_SecretsGenerateEnvFrom(t *testing.T) {
 	input := baseInput()
 	input.Apps = []AppManifestInput{
@@ -282,16 +253,18 @@ func TestRender_Hostname(t *testing.T) {
 
 func TestRender_MultipleApps(t *testing.T) {
 	input := baseInput()
+	// Fixed LoopZeroKit stack: service shapes are server|worker only (the `frontend`
+	// type was pruned from the contract — simplify-deploy-loopzerokit-only D5/F-tests-2).
 	input.Apps = []AppManifestInput{
 		{Name: "api", Type: "server", Port: 8080, ImageRef: "reg:5000/acme/webapp:abc123"},
 		{Name: "worker", Type: "worker", ImageRef: "reg:5000/acme/webapp:abc123"},
-		{Name: "dashboard", Type: "frontend", Port: 80, ImageRef: "reg:5000/acme/webapp:abc123"},
+		{Name: "web", Type: "server", Port: 8080, ImageRef: "reg:5000/acme/webapp:abc123"},
 	}
 
 	result, _ := Render(input)
 	docs := strings.Split(result, "\n---\n")
 
-	// server=5 + worker=2 + frontend=5 = 12
+	// server=5 + worker=2 + server=5 = 12
 	if len(docs) != 12 {
 		t.Fatalf("expected 12 YAML documents, got %d", len(docs))
 	}

@@ -10,6 +10,7 @@ import {
   Input,
 } from '@loopzero/ui';
 import { GoogleBrandIcon } from '@/components/google-brand-icon';
+import { useSetPageTitle } from '@/hooks/use-page-meta';
 import { getSession, startLogin } from '@/lib/auth';
 import { clearToken } from '@/lib/api';
 import { API_URL, AUTH_URL } from '@/lib/config';
@@ -86,6 +87,7 @@ export function classifyKratosErrorReason(
 }
 
 export function LoginPage() {
+  useSetPageTitle('Login');
   const navigate = useNavigate();
   const [searchParams, setSearchParams] = useSearchParams();
   const [flow, setFlow] = useState<Flow | null>(null);

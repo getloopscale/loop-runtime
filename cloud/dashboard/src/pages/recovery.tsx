@@ -3,6 +3,7 @@ import { useSearchParams, Link } from 'react-router-dom';
 import { CheckCircle2, Github, KeyRound } from 'lucide-react';
 import { Alert, Button, Card, Input } from '@loopzero/ui';
 import { GoogleBrandIcon } from '@/components/google-brand-icon';
+import { useSetPageTitle } from '@/hooks/use-page-meta';
 import {
   type Flow,
   getFlow,
@@ -83,6 +84,7 @@ function OidcEducationalLinks(): React.ReactElement {
 }
 
 export function RecoveryPage() {
+  useSetPageTitle('Recover account');
   const [searchParams] = useSearchParams();
   const [flow, setFlow] = useState<Flow | null>(null);
   const [phase, setPhase] = useState<Phase>('email');

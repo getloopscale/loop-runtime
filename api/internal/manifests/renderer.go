@@ -210,18 +210,12 @@ func RenderDocs(input RenderInput) ([]K8sDoc, error) {
 	}
 	var raw []string
 	for _, app := range input.Apps {
-		// Static frontends get S3 proxy instead of Deployment+Service (MEET-009).
-		if app.Type == "frontend" && app.Rendering == "static" {
-			raw = append(raw, renderStaticFrontendApp(input, app)...)
-			continue
-		}
+		// T3.3 (plan simplify-deploy-loopzerokit-only v2.0): frontend/static delivery
+		// removed — the fixed stack is server|worker only (D5). Unknown/empty
+		// types default to server.
 		switch app.Type {
-		case "server":
-			raw = append(raw, renderServerApp(input, app)...)
 		case "worker":
 			raw = append(raw, renderWorkerApp(input, app)...)
-		case "frontend":
-			raw = append(raw, renderFrontendApp(input, app)...)
 		default:
 			raw = append(raw, renderServerApp(input, app)...)
 		}

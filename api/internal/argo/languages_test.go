@@ -4,7 +4,6 @@
 package argo
 
 import (
-	"strings"
 	"testing"
 
 	forge "github.com/getloopscale/loopzero-forge"
@@ -16,47 +15,26 @@ import (
 // ResolveStrategy
 // ---------------------------------------------------------------------------
 
-func TestResolveStrategy_NodeFrameworks(t *testing.T) {
-	nodeFrameworks := []string{"nextjs", "vite", "remix", "nestjs", "express", "node", ""}
-	for _, fw := range nodeFrameworks {
-		strategy := ResolveStrategy(fw)
-		if strategy.Name() != "node" {
-			t.Errorf("ResolveStrategy(%q) = %q, want node", fw, strategy.Name())
+// T1.1 (simplify-deploy-loopzerokit-runtime-wiring / F-dom-2): ResolveStrategy is
+// now keyed on the services.json `runtime` (python|node), NOT on legacy framework
+// strings. Only "node" and "python" resolve; everything else (incl. legacy
+// framework names like "express"/"nextjs"/"fastapi" and empty) fails closed (D4).
+func TestResolveStrategy_RuntimeKeyed(t *testing.T) {
+	if got := ResolveStrategy("node").Name(); got != "node" {
+		t.Errorf(`ResolveStrategy("node") = %q, want node`, got)
+	}
+	if got := ResolveStrategy("python").Name(); got != "python" {
+		t.Errorf(`ResolveStrategy("python") = %q, want python`, got)
+	}
+}
+
+// TestResolveStrategy_NonRuntimeFailsClosed: legacy framework strings + empty
+// runtime now fail closed — no Node default (D4), no framework mapping.
+func TestResolveStrategy_NonRuntimeFailsClosed(t *testing.T) {
+	for _, notRuntime := range []string{"", "express", "nextjs", "vite", "fastapi", "django", "go", "ruby", "custom"} {
+		if got := ResolveStrategy(notRuntime).Name(); got != "unsupported" {
+			t.Errorf("ResolveStrategy(%q) = %q, want unsupported (only python|node resolve — D1/D4)", notRuntime, got)
 		}
-	}
-}
-
-func TestResolveStrategy_GoFrameworks(t *testing.T) {
-	goFrameworks := []string{"gin", "go"}
-	for _, fw := range goFrameworks {
-		strategy := ResolveStrategy(fw)
-		if strategy.Name() != "go" {
-			t.Errorf("ResolveStrategy(%q) = %q, want go", fw, strategy.Name())
-		}
-	}
-}
-
-func TestResolveStrategy_PythonFrameworks(t *testing.T) {
-	pyFrameworks := []string{"fastapi", "django", "python"}
-	for _, fw := range pyFrameworks {
-		strategy := ResolveStrategy(fw)
-		if strategy.Name() != "python" {
-			t.Errorf("ResolveStrategy(%q) = %q, want python", fw, strategy.Name())
-		}
-	}
-}
-
-func TestResolveStrategy_CustomFramework(t *testing.T) {
-	strategy := ResolveStrategy("custom")
-	if strategy.Name() != "custom" {
-		t.Errorf("ResolveStrategy(custom) = %q, want custom", strategy.Name())
-	}
-}
-
-func TestResolveStrategy_UnknownFrameworkFallsToCustom(t *testing.T) {
-	strategy := ResolveStrategy("unknown-framework")
-	if strategy.Name() != "custom" {
-		t.Errorf("ResolveStrategy(unknown-framework) = %q, want custom", strategy.Name())
 	}
 }
 
@@ -132,44 +110,6 @@ func TestDockerfilePathForApp_MultiApp(t *testing.T) {
 	}
 }
 
-func TestLoopZeroPacksDockerfileStep_SingleApp(t *testing.T) {
-	// Single app (totalApps=1) → output is Dockerfile (no suffix)
-	apps := []services.AppSpec{{Name: "api", Type: "server", Port: 8080, Path: "apps/api"}}
-	c := loopzeroPacksDockerfileStep(apps, 1)
-
-	assertContainerShape(t, c, "generate-dockerfile", imageLoopZeroPacks)
-
-	script := extractContainerScript(t, c)
-	assertContains(t, script, "loopzeropacks-generate")
-	// CODE-001 defense-in-depth: values are now %q-quoted in the shell script
-	assertContains(t, script, `--app-path "apps/api"`)
-	assertContains(t, script, `--output "/workspace/Dockerfile"`)
-	// Must NOT contain .api suffix for single app
-	if strings.Contains(script, "Dockerfile.api") {
-		t.Error("single app should output Dockerfile, not Dockerfile.api")
-	}
-}
-
-func TestLoopZeroPacksDockerfileStep_MultipleApps(t *testing.T) {
-	// 2 apps same language (totalApps=2) → Dockerfile.{name}
-	apps := []services.AppSpec{
-		{Name: "api", Type: "server", Port: 3000, Path: "apps/api"},
-		{Name: "worker", Type: "worker", Path: "apps/worker"},
-	}
-	c := loopzeroPacksDockerfileStep(apps, 2)
-	script := extractContainerScript(t, c)
-	assertContains(t, script, "Dockerfile.api")
-	assertContains(t, script, "Dockerfile.worker")
-}
-
-func TestLoopZeroPacksDockerfileStep_MixedLanguageMonorepo(t *testing.T) {
-	// Go API group (1 app) but totalApps=2 → must use Dockerfile.api
-	goApps := []services.AppSpec{{Name: "api", Type: "server", Port: 8080, Path: "apps/api"}}
-	c := loopzeroPacksDockerfileStep(goApps, 2)
-	script := extractContainerScript(t, c)
-	assertContains(t, script, "Dockerfile.api")
-}
-
 func TestDockerfileNaming_GeneratorMatchesConsumer(t *testing.T) {
 	// Contract test: generator and consumer must agree on filenames
 	for _, tc := range []struct {
@@ -193,51 +133,6 @@ func TestDockerfileNaming_GeneratorMatchesConsumer(t *testing.T) {
 	}
 }
 
-// ---------------------------------------------------------------------------
-// GoStrategy
-// ---------------------------------------------------------------------------
-
-func TestGoStrategy_CacheKey(t *testing.T) {
-	s := &GoStrategy{}
-	if s.CacheKey() != "go-modules" {
-		t.Errorf("CacheKey() = %q, want go-modules", s.CacheKey())
-	}
-}
-
-func TestGoStrategy_CacheDirs(t *testing.T) {
-	s := &GoStrategy{}
-	dirs := s.CacheDirs()
-	if len(dirs) != 2 {
-		t.Errorf("CacheDirs() has %d dirs, want 2", len(dirs))
-	}
-}
-
-func TestGoStrategy_ValidateStep_UsesGoImage(t *testing.T) {
-	s := &GoStrategy{}
-	apps := []services.AppSpec{{Name: "api", Type: "server", Port: 8080, Framework: "go"}}
-	c := s.ValidateStep(apps)
-
-	assertContainerShape(t, c, "validate-workspace", "golang:1.22-alpine")
-
-	script := extractContainerScript(t, c)
-	assertContains(t, script, "go.mod")
-}
-
-func TestGoStrategy_BuildStep_UsesCGODisabled(t *testing.T) {
-	s := &GoStrategy{}
-	apps := []services.AppSpec{{Name: "api", Type: "server", Port: 8080, Path: "cmd/api"}}
-	c := s.BuildStep(apps)
-
-	script := extractContainerScript(t, c)
-	assertContains(t, script, "CGO_ENABLED=0")
-}
-
-// TestGoStrategy_DockerfileStep removed — replaced by TestLoopZeroPacksDockerfileStep.
-
-// ---------------------------------------------------------------------------
-// PythonStrategy
-// ---------------------------------------------------------------------------
-
 func TestPythonStrategy_CacheKey(t *testing.T) {
 	s := &PythonStrategy{}
 	if s.CacheKey() != "pip-cache" {
@@ -247,7 +142,7 @@ func TestPythonStrategy_CacheKey(t *testing.T) {
 
 func TestPythonStrategy_ValidateStep_ChecksPythonDeps(t *testing.T) {
 	s := &PythonStrategy{}
-	apps := []services.AppSpec{{Name: "api", Type: "server", Port: 8000, Framework: "fastapi"}}
+	apps := []services.AppSpec{{Name: "api", Type: "server", Port: 8000, Runtime: "python"}}
 	c := s.ValidateStep(apps)
 
 	assertContainerShape(t, c, "validate-workspace", "python:3.12-alpine")
@@ -261,41 +156,6 @@ func TestPythonStrategy_ValidateStep_ChecksPythonDeps(t *testing.T) {
 
 // ---------------------------------------------------------------------------
 // CustomStrategy
-// ---------------------------------------------------------------------------
-
-func TestCustomStrategy_CacheKey_Empty(t *testing.T) {
-	s := &CustomStrategy{}
-	if s.CacheKey() != "" {
-		t.Errorf("CacheKey() = %q, want empty", s.CacheKey())
-	}
-}
-
-func TestCustomStrategy_CacheDirs_Nil(t *testing.T) {
-	s := &CustomStrategy{}
-	if s.CacheDirs() != nil {
-		t.Errorf("CacheDirs() = %v, want nil", s.CacheDirs())
-	}
-}
-
-func TestCustomStrategy_ValidateStep_RequiresDockerfile(t *testing.T) {
-	s := &CustomStrategy{}
-	apps := []services.AppSpec{{Name: "api", Type: "server"}}
-	c := s.ValidateStep(apps)
-
-	script := extractContainerScript(t, c)
-	assertContains(t, script, "Dockerfile")
-}
-
-func TestCustomStrategy_InstallStep_IsNoop(t *testing.T) {
-	s := &CustomStrategy{}
-	c := s.InstallStep(nil)
-
-	script := extractContainerScript(t, c)
-	assertContains(t, script, "echo")
-}
-
-// ---------------------------------------------------------------------------
-// Helper: appPaths
 // ---------------------------------------------------------------------------
 
 func TestAppPaths_EmptyApps_ReturnsDot(t *testing.T) {
@@ -336,24 +196,8 @@ func TestDefaultPort_FallbackWhenAllZero(t *testing.T) {
 	}
 }
 
-func TestSanitizeBinName(t *testing.T) {
-	tests := []struct {
-		input string
-		want  string
-	}{
-		{"", "app"},
-		{".", "app"},
-		{"cmd/api", "api"},
-		{"api", "api"},
-		{"services/internal/worker", "worker"},
-	}
-	for _, tt := range tests {
-		got := sanitizeBinName(tt.input)
-		if got != tt.want {
-			t.Errorf("sanitizeBinName(%q) = %q, want %q", tt.input, got, tt.want)
-		}
-	}
-}
+// TestSanitizeBinName removed — sanitizeBinName was deleted with the dead Go
+// build script (simplify-deploy-loopzerokit-only F-wire-1).
 
 // ---------------------------------------------------------------------------
 // Test helpers

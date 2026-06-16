@@ -8,8 +8,35 @@ import * as os from 'os';
 import * as path from 'path';
 import {
   findServicesJson,
+  parseServicesRuntimes,
   ServicesJsonOverrideError,
 } from '../../../src/adapters/services-json';
+
+// simplify-deploy-loopzerokit-runtime-wiring T3.1a (F-dom-2): the deploy payload
+// must carry the per-app runtime parsed from services.json, since the API now
+// dispatches the build strategy on `runtime` (not framework).
+describe('parseServicesRuntimes', () => {
+  it('maps each service name to its declared runtime', () => {
+    const json = JSON.stringify({
+      version: 2,
+      project: 'shop',
+      services: [
+        { name: 'api', runtime: 'python', type: 'server' },
+        { name: 'web', runtime: 'node', type: 'server' },
+        { name: 'queue', runtime: 'node', type: 'worker' },
+      ],
+    });
+    expect(parseServicesRuntimes(json)).toEqual({ api: 'python', web: 'node', queue: 'node' });
+  });
+
+  it('skips services missing name or runtime, and tolerates malformed JSON', () => {
+    expect(
+      parseServicesRuntimes(JSON.stringify({ services: [{ name: 'api' }, { runtime: 'node' }] })),
+    ).toEqual({});
+    expect(parseServicesRuntimes('not json {')).toEqual({});
+    expect(parseServicesRuntimes('{}')).toEqual({});
+  });
+});
 
 let tmpRoot: string;
 
