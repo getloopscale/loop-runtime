@@ -115,6 +115,28 @@ func specPathSetNormalized(t *testing.T) map[string]bool {
 	return set
 }
 
+// cliSrcPresent reports whether the CLI source tree is co-located in this repo.
+// M2 (F-4 / D4): after `loopzero-cli` is extracted and `cli/` removed from the
+// monorepo, the live re-grep tests SKIP (the drift guard moves to loopzero-cli's own
+// CI). The static presence check (TestCLIConsumer_AllPathsInSpec, which reads the
+// checked-in cli-consumed-paths.txt) keeps running regardless — so the engine
+// retains its consumer contract even after the split.
+func cliSrcPresent() bool {
+	info, err := os.Stat(cliSrcDir)
+	return err == nil && info.IsDir()
+}
+
+func TestCLIConsumer_SkipsLiveGuardWhenCliAbsent(t *testing.T) {
+	// Guard-logic unit check: a nonexistent path must report not-present.
+	saved := cliSrcDir
+	if cliSrcPresent() != (func() bool { _, e := os.Stat(saved); return e == nil }()) {
+		t.Fatalf("cliSrcPresent inconsistent for %q", saved)
+	}
+	if _, err := os.Stat("../../../definitely-not-here-xyz"); err == nil {
+		t.Fatal("sanity: bogus path should not exist")
+	}
+}
+
 // liveCLIPaths greps cli/src and returns the normalized set of /api/v1 paths.
 func liveCLIPaths(t *testing.T) map[string]bool {
 	t.Helper()
@@ -165,6 +187,9 @@ func TestCLIConsumer_AllPathsInSpec(t *testing.T) {
 
 // (2) the known consumer/producer gap is real + documented (CLI references it; spec does not).
 func TestCLIConsumer_KnownGapsAreReal(t *testing.T) {
+	if !cliSrcPresent() {
+		t.Skip("cli/ extracted — live known-gap check moved to loopzero-cli (M2 D4)")
+	}
 	live := liveCLIPaths(t)
 	spec := specPathSetNormalized(t)
 	for gap := range knownConsumerGaps {
@@ -179,6 +204,9 @@ func TestCLIConsumer_KnownGapsAreReal(t *testing.T) {
 
 // (3) drift guard: the checked-in list stays in sync with cli/src (minus known gaps).
 func TestCLIConsumer_ListMatchesSource(t *testing.T) {
+	if !cliSrcPresent() {
+		t.Skip("cli/ extracted — live drift guard moved to loopzero-cli (M2 D4)")
+	}
 	want := readCLIPathList(t)
 	live := liveCLIPaths(t)
 
