@@ -64,6 +64,20 @@ func wrapWithLoopZeroMarkers(stepName, script string) string {
 	phase := phaseForStepFuzzy(stepName)
 	display := humanizeStepName(stepName)
 
+	// Canonical 2026-06-16 (dash-compat shim): shellgen.SetE emits
+	// `set -euo pipefail` which is NOT POSIX — Debian's /bin/sh (dash)
+	// errors with exit 2 ("illegal option") on `set -o pipefail`. The
+	// canonical solution would be to make shellgen emit POSIX-compatible
+	// strict-mode (`set -e` + `set -u` + graceful pipefail). Since the
+	// shellgen package is outside the current scope, transform the inner
+	// script here to swap the offending `set -euo pipefail` line for the
+	// dash-compatible 3-line equivalent. Alpine ash + bash continue to
+	// work because they accept all three forms.
+	script = strings.Replace(script,
+		"set -euo pipefail",
+		"set -e\nset -u\n(set -o pipefail) 2>/dev/null || true",
+		1)
+
 	return fmt.Sprintf(`echo '::loopzero:: phase=%[1]s step=%[2]s level=info msg="%[3]s starting"'
 __loopzero_start=$(date +%%s)
 __loopzero_log=$(mktemp 2>/dev/null || echo /tmp/loopzero-step.$$.log)
@@ -84,7 +98,7 @@ __loopzero_on_exit() {
   rm -f "$__loopzero_log" 2>/dev/null || true
 }
 trap __loopzero_on_exit EXIT
-set -o pipefail 2>/dev/null || true
+(set -o pipefail) 2>/dev/null || true
 {
 %[4]s
 } 2>&1 | tee -a "$__loopzero_log"

@@ -9,7 +9,19 @@ package argo
 // ---------------------------------------------------------------------------
 
 const (
-	imageNode     = "node:20.11.1-alpine"
+	// Canonical 2026-06-16: Node 22.12.0 LTS is the minimum supported by
+	// `loopzerokit` (LoopZeroKit's package preflight rejects Node < 22.12 with
+	// "requires Node >= 22.12.0" because it uses AsyncLocalStorage + native
+	// fetch + structured WHATWG streams optimizations that depend on Node 22
+	// internals — older Node versions silently miscompile SSR streaming and
+	// NODE_MODULE_VERSION mismatch breaks native bindings). Bumping to 22.12
+	// to match the canonical LoopZeroKit framework requirement.
+	// Canonical 2026-06-16: node:22.12.0 (full Debian bookworm) for glibc
+	// compatibility with rollup native binaries (Alpine + musl breaks them
+	// per npm bug #4828). The dash-incompat `set -euo pipefail` from
+	// shellgen.SetE is sanitized in wrapWithLoopZeroMarkers (loopzero_log.go) so
+	// every step works under /bin/sh -> dash on Debian.
+	imageNode     = "node:22.12.0"
 	imageGolang   = "golang:1.22-alpine"
 	imagePython   = "python:3.12-alpine"
 	imageAlpine   = "alpine:3.21.3"

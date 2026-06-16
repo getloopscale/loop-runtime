@@ -34,7 +34,14 @@
 set -euo pipefail
 
 REPO_OWNER="${REPO_OWNER:-getloopscale}"
-REPO_NAME="${REPO_NAME:-loopzero-repotest}"
+# Canonical 2026-06-16: loopzerokit-example is the FAANG-canonical LoopZeroKit-native
+# fixture (scaffolded via `npm create loopzerokit@latest`; has `loopzero.config.ts`
+# v2 + canonical `apps:` map). The earlier `loopzero-repotest` was a
+# legacy `loopzero.yaml`-only fixture per Plan v1.1 transition window; user
+# mandate 2026-06-16 directed discard+delete in favor of the canonical
+# LoopZeroKit shape.
+REPO_NAME="${REPO_NAME:-loopzerokit-example}"
+DEFAULT_BRANCH="${DEFAULT_BRANCH:-develop}"
 PROJECT_NAME="${PROJECT_NAME:-teste}"
 SESSION_FILE="${SESSION_FILE:-$HOME/.loopzero/admin-loopzero-dev-session.txt}"
 PUBLIC_CLOUD_URL="${PUBLIC_CLOUD_URL:-https://cloud-dev.loopzero.example}"
@@ -362,7 +369,7 @@ except Exception:
     --max-time 15 \
     -H "Authorization: Bearer ${engine_jwt}" \
     -H "Content-Type: application/json" \
-    --data "{\"repo\":\"${REPO_OWNER}/${REPO_NAME}\",\"installation_id\":${installation_id},\"branch\":\"main\"}" \
+    --data "{\"repo\":\"${REPO_OWNER}/${REPO_NAME}\",\"installation_id\":${installation_id},\"branch\":\"${DEFAULT_BRANCH}\"}" \
     "${PUBLIC_CLOUD_URL}/engine/api/v1/projects/${PROJECT_NAME}/connect" 2>/dev/null || true)"
 
   case "$connect_code" in

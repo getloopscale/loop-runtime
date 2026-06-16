@@ -81,6 +81,14 @@ func (a *buildSubmitterAdapter) SubmitBuildFromWebhook(ctx context.Context, req 
 		if v, ok := appCfg["render"].(string); ok {
 			app.Rendering = v
 		}
+		// Canonical 2026-06-16: extract `start` field from loopzero.yaml apps map.
+		// The canonical Dockerfile generator (canonical_dockerfile.go) requires
+		// an explicit start command — without it, generate-dockerfile fails at
+		// build time with "app 'X' has no declared start command". The
+		// loopzerokit-example fixture declares `start: loopzerokit start`.
+		if v, ok := appCfg["start"].(string); ok {
+			app.Start = v
+		}
 
 		// Auto-infer: frontend → static
 		if app.Type == "frontend" && app.Rendering == "" {
